@@ -70,7 +70,6 @@
  */
 struct rpcrdma_mr;
 struct rpcrdma_ep {
-	struct kref		re_kref;
 	struct rdma_cm_id 	*re_id;
 	struct ib_pd		*re_pd;
 	unsigned int		re_max_rdma_segs;
@@ -100,6 +99,9 @@ struct rpcrdma_ep {
 	atomic_t		re_completion_ids;
 
 	char			re_write_pad[XDR_UNIT];
+
+	struct kref		re_kref;
+	struct work_struct	re_worker;
 };
 
 /* Pre-allocate extra Work Requests for handling reverse-direction
@@ -583,6 +585,7 @@ void xprt_rdma_format_addresses(struct rpc_xprt *xprt, struct sockaddr *sap);
 void xprt_rdma_free_addresses(struct rpc_xprt *xprt);
 void xprt_rdma_close(struct rpc_xprt *xprt);
 void xprt_rdma_print_stats(struct rpc_xprt *xprt, struct seq_file *seq);
+extern struct workqueue_struct *rpcrdma_release_wq;
 int xprt_rdma_init(void);
 void xprt_rdma_cleanup(void);
 

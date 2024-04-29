@@ -761,8 +761,12 @@ static struct xprt_class xprt_rdma = {
 	.netid			= { "rdma", "rdma6", "" },
 };
 
+struct workqueue_struct *rpcrdma_release_wq __read_mostly;
+
 void xprt_rdma_cleanup(void)
 {
+	struct workqueue_struct *wq;
+
 #if IS_ENABLED(CONFIG_SUNRPC_DEBUG)
 	if (sunrpc_table_header) {
 		unregister_sysctl_table(sunrpc_table_header);
@@ -772,18 +776,32 @@ void xprt_rdma_cleanup(void)
 
 	xprt_unregister_transport(&xprt_rdma);
 	xprt_unregister_transport(&xprt_rdma_bc);
+
+	wq = rpcrdma_release_wq;
+	rpcrdma_release_wq = NULL;
+	destroy_workqueue(wq);
 }
 
 int xprt_rdma_init(void)
 {
+	struct workqueue_struct *wq;
 	int rc;
 
+	/* provision a WQ that is always unbound and !mem_reclaim */
+	wq = alloc_workqueue("rpcrdma_release", WQ_UNBOUND, 0);
+	if (!wq)
+		return -ENOMEM;
+	rpcrdma_release_wq = wq;
+
 	rc = xprt_register_transport(&xprt_rdma);
-	if (rc)
+	if (rc) {
+		destroy_workqueue(wq);
 		return rc;
+	}
 
 	rc = xprt_register_transport(&xprt_rdma_bc);
 	if (rc) {
+		destroy_workqueue(wq);
 		xprt_unregister_transport(&xprt_rdma);
 		return rc;
 	}

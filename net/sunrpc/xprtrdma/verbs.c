@@ -73,7 +73,7 @@ static void rpcrdma_reps_unmap(struct rpcrdma_xprt *r_xprt);
 static void rpcrdma_mrs_create(struct rpcrdma_xprt *r_xprt);
 static void rpcrdma_mrs_destroy(struct rpcrdma_xprt *r_xprt);
 static void rpcrdma_ep_get(struct rpcrdma_ep *ep);
-static int rpcrdma_ep_put(struct rpcrdma_ep *ep);
+static void rpcrdma_ep_put(struct rpcrdma_ep *ep);
 static struct rpcrdma_regbuf *
 rpcrdma_regbuf_alloc_node(size_t size, enum dma_data_direction direction,
 			  int node);
@@ -234,15 +234,15 @@ rpcrdma_cm_event_handler(struct rdma_cm_id *id, struct rdma_cm_event *event)
 	case RDMA_CM_EVENT_ROUTE_RESOLVED:
 		ep->re_async_rc = 0;
 		complete(&ep->re_done);
-		return 0;
+		break;
 	case RDMA_CM_EVENT_ADDR_ERROR:
 		ep->re_async_rc = -EPROTO;
 		complete(&ep->re_done);
-		return 0;
+		break;
 	case RDMA_CM_EVENT_ROUTE_ERROR:
 		ep->re_async_rc = -ENETUNREACH;
 		complete(&ep->re_done);
-		return 0;
+		break;
 	case RDMA_CM_EVENT_DEVICE_REMOVAL:
 		pr_info("rpcrdma: removing device %s for %pISpc\n",
 			ep->re_id->device->name, sap);
@@ -269,12 +269,13 @@ rpcrdma_cm_event_handler(struct rdma_cm_id *id, struct rdma_cm_event *event)
 			ep->re_connect_status = -ENOTCONN;
 wake_connect_worker:
 		wake_up_all(&ep->re_connect_wait);
-		return 0;
+		break;
 	case RDMA_CM_EVENT_DISCONNECTED:
 		ep->re_connect_status = -ECONNABORTED;
 disconnected:
 		rpcrdma_force_disconnect(ep);
-		return rpcrdma_ep_put(ep);
+		rpcrdma_ep_put(ep);
+		fallthrough;
 	default:
 		break;
 	}
@@ -328,9 +329,13 @@ out:
 	return ERR_PTR(rc);
 }
 
-static void rpcrdma_ep_destroy(struct kref *kref)
+/* Delayed release of a connection's hardware resources. Releasing
+ * RDMA hardware resources is done in a !MEM_RECLAIM context because
+ * the RDMA core API functions are generally not reclaim-safe.
+ */
+static void rpcrdma_ep_destroy(struct work_struct *work)
 {
-	struct rpcrdma_ep *ep = container_of(kref, struct rpcrdma_ep, re_kref);
+	struct rpcrdma_ep *ep = container_of(work, struct rpcrdma_ep, re_worker);
 
 	if (ep->re_id->qp) {
 		rdma_destroy_qp(ep->re_id);
@@ -348,8 +353,20 @@ static void rpcrdma_ep_destroy(struct kref *kref)
 		ib_dealloc_pd(ep->re_pd);
 	ep->re_pd = NULL;
 
+	if (ep->re_id)
+		rdma_destroy_id(ep->re_id);
+	ep->re_id = NULL;
+
 	kfree(ep);
 	module_put(THIS_MODULE);
+}
+
+static void rpcrdma_ep_release(struct kref *kref)
+{
+	struct rpcrdma_ep *ep = container_of(kref, struct rpcrdma_ep, re_kref);
+
+	INIT_WORK(&ep->re_worker, rpcrdma_ep_destroy);
+	queue_work(rpcrdma_release_wq, &ep->re_worker);
 }
 
 static noinline void rpcrdma_ep_get(struct rpcrdma_ep *ep)
@@ -357,13 +374,9 @@ static noinline void rpcrdma_ep_get(struct rpcrdma_ep *ep)
 	kref_get(&ep->re_kref);
 }
 
-/* Returns:
- *     %0 if @ep still has a positive kref count, or
- *     %1 if @ep was destroyed successfully.
- */
-static noinline int rpcrdma_ep_put(struct rpcrdma_ep *ep)
+static noinline void rpcrdma_ep_put(struct rpcrdma_ep *ep)
 {
-	return kref_put(&ep->re_kref, rpcrdma_ep_destroy);
+	kref_put(&ep->re_kref, rpcrdma_ep_release);
 }
 
 static int rpcrdma_ep_create(struct rpcrdma_xprt *r_xprt)
@@ -475,7 +488,6 @@ static int rpcrdma_ep_create(struct rpcrdma_xprt *r_xprt)
 
 out_destroy:
 	rpcrdma_ep_put(ep);
-	rdma_destroy_id(id);
 	return rc;
 }
 
@@ -566,10 +578,8 @@ void rpcrdma_xprt_disconnect(struct rpcrdma_xprt *r_xprt)
 	rpcrdma_mrs_destroy(r_xprt);
 	rpcrdma_sendctxs_destroy(r_xprt);
 
-	if (rpcrdma_ep_put(ep))
-		rdma_destroy_id(id);
-
 	r_xprt->rx_ep = NULL;
+	rpcrdma_ep_put(ep);
 }
 
 /* Fixed-size circular FIFO queue. This implementation is wait-free and
