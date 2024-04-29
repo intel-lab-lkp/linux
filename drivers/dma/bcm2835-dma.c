@@ -899,7 +899,11 @@ static int bcm2835_dma_probe(struct platform_device *pdev)
 	if (!od)
 		return -ENOMEM;
 
-	dma_set_max_seg_size(&pdev->dev, 0x3FFFFFFF);
+	rc = dma_set_max_seg_size(&pdev->dev, 0x3FFFFFFF);
+	if (rc) {
+		dev_err(&pdev->dev, "Unable to set dma device segment size\n");
+		return rc;
+	}
 
 	base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(base))
