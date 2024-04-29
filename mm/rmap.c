@@ -1451,6 +1451,22 @@ static __always_inline void __folio_add_file_rmap(struct folio *folio,
 		mlock_vma_folio(folio, vma);
 }
 
+int __folio_add_file_rmap_ptes(struct folio *folio, struct page *page,
+		int nr_pages, struct vm_area_struct *vma)
+{
+	int nr, nr_pmdmapped = 0;
+
+	VM_WARN_ON_FOLIO(folio_test_anon(folio), folio);
+
+	nr = __folio_add_rmap(folio, page, nr_pages, RMAP_LEVEL_PTE,
+			      &nr_pmdmapped);
+
+	/* See comments in folio_add_anon_rmap_*() */
+	if (!folio_test_large(folio))
+		mlock_vma_folio(folio, vma);
+
+	return nr;
+}
 /**
  * folio_add_file_rmap_ptes - add PTE mappings to a page range of a folio
  * @folio:	The folio to add the mappings to

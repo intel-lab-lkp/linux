@@ -3501,14 +3501,15 @@ skip:
 
 static void filemap_set_pte_range(struct vm_fault *vmf, struct folio *folio,
 			struct page *page, unsigned int nr, unsigned long addr,
-			unsigned long *rss)
+			unsigned long *rss, int *nr_mapped)
 {
 	struct vm_area_struct *vma = vmf->vma;
 	pte_t entry;
 
 	entry = prepare_range_pte_entry(vmf, false, folio, page, nr, addr);
 
-	folio_add_file_rmap_ptes(folio, page, nr, vma);
+	*nr_mapped += __folio_add_file_rmap_ptes(folio, page, nr, vma);
+
 	set_ptes(vma->vm_mm, addr, vmf->pte, entry, nr);
 
 	/* no need to invalidate: a not-present page won't be cached */
@@ -3525,7 +3526,8 @@ static void filemap_set_pte_range(struct vm_fault *vmf, struct folio *folio,
 static vm_fault_t filemap_map_folio_range(struct vm_fault *vmf,
 			struct folio *folio, unsigned long start,
 			unsigned long addr, unsigned int nr_pages,
-			unsigned long *rss, unsigned int *mmap_miss)
+			unsigned long *rss, int *nr_mapped,
+			unsigned int *mmap_miss)
 {
 	vm_fault_t ret = 0;
 	struct page *page = folio_page(folio, start);
@@ -3558,7 +3560,8 @@ static vm_fault_t filemap_map_folio_range(struct vm_fault *vmf,
 		continue;
 skip:
 		if (count) {
-			filemap_set_pte_range(vmf, folio, page, count, addr, rss);
+			filemap_set_pte_range(vmf, folio, page, count, addr,
+					      rss, nr_mapped);
 			if (in_range(vmf->address, addr, count * PAGE_SIZE))
 				ret = VM_FAULT_NOPAGE;
 		}
@@ -3571,7 +3574,8 @@ skip:
 	} while (--nr_pages > 0);
 
 	if (count) {
-		filemap_set_pte_range(vmf, folio, page, count, addr, rss);
+		filemap_set_pte_range(vmf, folio, page, count, addr, rss,
+				      nr_mapped);
 		if (in_range(vmf->address, addr, count * PAGE_SIZE))
 			ret = VM_FAULT_NOPAGE;
 	}
@@ -3583,7 +3587,7 @@ skip:
 
 static vm_fault_t filemap_map_order0_folio(struct vm_fault *vmf,
 		struct folio *folio, unsigned long addr,
-		unsigned long *rss, unsigned int *mmap_miss)
+		unsigned long *rss, int *nr_mapped, unsigned int *mmap_miss)
 {
 	vm_fault_t ret = 0;
 	struct page *page = &folio->page;
@@ -3606,7 +3610,7 @@ static vm_fault_t filemap_map_order0_folio(struct vm_fault *vmf,
 	if (vmf->address == addr)
 		ret = VM_FAULT_NOPAGE;
 
-	filemap_set_pte_range(vmf, folio, page, 1, addr, rss);
+	filemap_set_pte_range(vmf, folio, page, 1, addr, rss, nr_mapped);
 
 	return ret;
 }
@@ -3646,6 +3650,7 @@ vm_fault_t filemap_map_pages(struct vm_fault *vmf,
 	folio_type = mm_counter_file(folio);
 	do {
 		unsigned long end;
+		int nr_mapped = 0;
 
 		addr += (xas.xa_index - last_pgoff) << PAGE_SHIFT;
 		vmf->pte += xas.xa_index - last_pgoff;
@@ -3655,11 +3660,15 @@ vm_fault_t filemap_map_pages(struct vm_fault *vmf,
 
 		if (!folio_test_large(folio))
 			ret |= filemap_map_order0_folio(vmf,
-					folio, addr, &rss, &mmap_miss);
+					folio, addr, &rss, &nr_mapped,
+					&mmap_miss);
 		else
 			ret |= filemap_map_folio_range(vmf, folio,
 					xas.xa_index - folio->index, addr,
-					nr_pages, &rss, &mmap_miss);
+					nr_pages, &rss, &nr_mapped,
+					&mmap_miss);
+
+		__lruvec_stat_mod_folio(folio, NR_FILE_MAPPED, nr_mapped);
 
 		folio_unlock(folio);
 		folio_put(folio);
