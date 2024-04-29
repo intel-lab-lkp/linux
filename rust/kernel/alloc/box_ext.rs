@@ -2,7 +2,7 @@
 
 //! Extensions to [`Box`] for fallible allocations.
 
-use super::Flags;
+use super::{AllocatorWithFlags, Flags};
 use alloc::boxed::Box;
 use core::alloc::AllocError;
 use core::mem::MaybeUninit;
@@ -19,6 +19,19 @@ pub trait BoxExt<T>: Sized {
     ///
     /// The allocation may fail, in which case an error is returned.
     fn new_uninit(flags: Flags) -> Result<Box<MaybeUninit<T>>, AllocError>;
+}
+
+/// Extensions to [`Box`].
+pub trait BoxExtAlloc<T, A: AllocatorWithFlags>: Sized {
+    /// Allocates a new box using a custom allocator.
+    ///
+    /// The allocation may fail, in which case an error is returned.
+    fn new_in(x: T, alloc: A, flags: Flags) -> Result<Self, AllocError>;
+
+    /// Allocates a new uninitialised box using a custom allocator..
+    ///
+    /// The allocation may fail, in which case an error is returned.
+    fn new_uninit_in(alloc: A, flags: Flags) -> Result<Box<MaybeUninit<T>>, AllocError>;
 }
 
 impl<T> BoxExt<T> for Box<T> {
@@ -47,6 +60,31 @@ impl<T> BoxExt<T> for Box<T> {
             if ptr.is_null() {
                 return Err(AllocError);
             }
+
+            ptr.cast::<MaybeUninit<T>>()
+        };
+
+        // SAFETY: For non-zero-sized types, we allocate above using the global allocator. For
+        // zero-sized types, we use `NonNull::dangling`.
+        Ok(unsafe { Box::from_raw(ptr) })
+    }
+
+}
+
+impl<T, A> BoxExtAlloc<T, A> for Box<T> where A: AllocatorWithFlags {
+    fn new_in(x: T, alloc: A, flags: Flags) -> Result<Self, AllocError> {
+        let b = <Self as BoxExtAlloc<_, A>>::new_uninit_in(alloc, flags)?;
+        Ok(Box::write(b, x))
+    }
+
+    fn new_uninit_in(alloc: A, flags: Flags) -> Result<Box<MaybeUninit<T>>, AllocError> {
+        let ptr = if core::mem::size_of::<MaybeUninit<T>>() == 0 {
+            core::ptr::NonNull::<_>::dangling().as_ptr()
+        } else {
+            let layout = core::alloc::Layout::new::<MaybeUninit<T>>();
+
+            let data = unsafe { alloc.alloc_flags(layout, flags)? };
+            let ptr = data.as_ptr();
 
             ptr.cast::<MaybeUninit<T>>()
         };
