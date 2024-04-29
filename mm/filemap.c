@@ -3499,6 +3499,25 @@ skip:
 	return NULL;
 }
 
+static void filemap_set_pte_range(struct vm_fault *vmf, struct folio *folio,
+			struct page *page, unsigned int nr, unsigned long addr,
+			unsigned long *rss)
+{
+	struct vm_area_struct *vma = vmf->vma;
+	pte_t entry;
+
+	entry = prepare_range_pte_entry(vmf, false, folio, page, nr, addr);
+
+	folio_add_file_rmap_ptes(folio, page, nr, vma);
+	set_ptes(vma->vm_mm, addr, vmf->pte, entry, nr);
+
+	/* no need to invalidate: a not-present page won't be cached */
+	update_mmu_cache_range(vmf, vma, addr, vmf->pte, nr);
+
+	*rss += nr;
+	folio_ref_add(folio, nr);
+}
+
 /*
  * Map page range [start_page, start_page + nr_pages) of folio.
  * start_page is gotten from start by folio_page(folio, start)
@@ -3539,9 +3558,7 @@ static vm_fault_t filemap_map_folio_range(struct vm_fault *vmf,
 		continue;
 skip:
 		if (count) {
-			set_pte_range(vmf, folio, page, count, addr);
-			*rss += count;
-			folio_ref_add(folio, count);
+			filemap_set_pte_range(vmf, folio, page, count, addr, rss);
 			if (in_range(vmf->address, addr, count * PAGE_SIZE))
 				ret = VM_FAULT_NOPAGE;
 		}
@@ -3554,9 +3571,7 @@ skip:
 	} while (--nr_pages > 0);
 
 	if (count) {
-		set_pte_range(vmf, folio, page, count, addr);
-		*rss += count;
-		folio_ref_add(folio, count);
+		filemap_set_pte_range(vmf, folio, page, count, addr, rss);
 		if (in_range(vmf->address, addr, count * PAGE_SIZE))
 			ret = VM_FAULT_NOPAGE;
 	}
@@ -3591,9 +3606,7 @@ static vm_fault_t filemap_map_order0_folio(struct vm_fault *vmf,
 	if (vmf->address == addr)
 		ret = VM_FAULT_NOPAGE;
 
-	set_pte_range(vmf, folio, page, 1, addr);
-	(*rss)++;
-	folio_ref_inc(folio);
+	filemap_set_pte_range(vmf, folio, page, 1, addr, rss);
 
 	return ret;
 }
