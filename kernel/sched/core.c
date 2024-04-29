@@ -7434,6 +7434,9 @@ int idle_cpu(int cpu)
  */
 int available_idle_cpu(int cpu)
 {
+	if (!cpu_online(cpu))
+		return 0;
+
 	if (!idle_cpu(cpu))
 		return 0;
 
