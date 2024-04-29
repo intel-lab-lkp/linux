@@ -20,6 +20,7 @@ fit into other categories.
    ics932s401
    isl29003
    lis3lv02d
+   mrvl_cn10k_dpi
    max6875
    oxsemi-tornado
    pci-endpoint-test
