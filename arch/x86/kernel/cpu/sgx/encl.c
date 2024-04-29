@@ -257,7 +257,8 @@ static struct sgx_encl_page *__sgx_encl_load_page(struct sgx_encl *encl,
 
 	/* Entry successfully located. */
 	if (entry->epc_page) {
-		if (entry->desc & SGX_ENCL_PAGE_BEING_RECLAIMED)
+		if (entry->desc & (SGX_ENCL_PAGE_BEING_RECLAIMED |
+				   SGX_ENCL_PAGE_BEING_REMOVED))
 			return ERR_PTR(-EBUSY);
 
 		return entry;

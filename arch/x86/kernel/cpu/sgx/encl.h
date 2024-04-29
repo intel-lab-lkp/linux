@@ -25,6 +25,9 @@
 /* 'desc' bit marking that the page is being reclaimed. */
 #define SGX_ENCL_PAGE_BEING_RECLAIMED	BIT(3)
 
+/* 'desc' bit marking that the page is being removed. */
+#define SGX_ENCL_PAGE_BEING_REMOVED	BIT(2)
+
 struct sgx_encl_page {
 	unsigned long desc;
 	unsigned long vm_max_prot_bits:8;
