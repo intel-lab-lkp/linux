@@ -496,48 +496,43 @@ static int csi2tx_get_resources(struct csi2tx_priv *csi2tx,
 static int csi2tx_check_lanes(struct csi2tx_priv *csi2tx)
 {
 	struct v4l2_fwnode_endpoint v4l2_ep = { .bus_type = 0 };
-	struct device_node *ep;
 	int ret, i;
+	struct device_node *ep __free(device_node) =
+		of_graph_get_endpoint_by_regs(csi2tx->dev->of_node, 0, 0);
 
-	ep = of_graph_get_endpoint_by_regs(csi2tx->dev->of_node, 0, 0);
 	if (!ep)
 		return -EINVAL;
 
 	ret = v4l2_fwnode_endpoint_parse(of_fwnode_handle(ep), &v4l2_ep);
 	if (ret) {
 		dev_err(csi2tx->dev, "Could not parse v4l2 endpoint\n");
-		goto out;
+		return ret;
 	}
 
 	if (v4l2_ep.bus_type != V4L2_MBUS_CSI2_DPHY) {
 		dev_err(csi2tx->dev, "Unsupported media bus type: 0x%x\n",
 			v4l2_ep.bus_type);
-		ret = -EINVAL;
-		goto out;
+		return -EINVAL;
 	}
 
 	csi2tx->num_lanes = v4l2_ep.bus.mipi_csi2.num_data_lanes;
 	if (csi2tx->num_lanes > csi2tx->max_lanes) {
 		dev_err(csi2tx->dev,
 			"Current configuration uses more lanes than supported\n");
-		ret = -EINVAL;
-		goto out;
+		return -EINVAL;
 	}
 
 	for (i = 0; i < csi2tx->num_lanes; i++) {
 		if (v4l2_ep.bus.mipi_csi2.data_lanes[i] < 1) {
 			dev_err(csi2tx->dev, "Invalid lane[%d] number: %u\n",
 				i, v4l2_ep.bus.mipi_csi2.data_lanes[i]);
-			ret = -EINVAL;
-			goto out;
+			return -EINVAL;
 		}
 	}
 
 	memcpy(csi2tx->lanes, v4l2_ep.bus.mipi_csi2.data_lanes,
 	       sizeof(csi2tx->lanes));
 
-out:
-	of_node_put(ep);
 	return ret;
 }
 
