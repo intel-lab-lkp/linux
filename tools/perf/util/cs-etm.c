@@ -113,6 +113,8 @@ struct cs_etm_queue {
 	struct cs_etm_traceid_queue **traceid_queues;
 	/* Conversion between traceID and metadata pointers */
 	struct intlist *traceid_list;
+	/* Same as traceid_list, but traceid_list may be a reference to another queue's */
+	struct intlist *own_traceid_list;
 };
 
 static int cs_etm__process_timestamped_queues(struct cs_etm_auxtrace *etm);
@@ -236,7 +238,16 @@ static int cs_etm__insert_trace_id_node(struct cs_etm_queue *etmq,
 		int err;
 
 		if (curr_cpu_data[CS_ETM_CPU] != cpu_metadata[CS_ETM_CPU]) {
-			pr_err("CS_ETM: map mismatch between HW_ID packet CPU and Trace ID\n");
+			/*
+			 * With > CORESIGHT_TRACE_IDS_MAX ETMs, overlapping IDs
+			 * are expected (but not supported) in per-thread mode,
+			 * rather than signifying an error.
+			 */
+			if (etmq->etm->per_thread_decoding)
+				pr_err("CS_ETM: overlapping Trace IDs aren't currently supported in per-thread mode\n");
+			else
+				pr_err("CS_ETM: map mismatch between HW_ID packet CPU and Trace ID\n");
+
 			return -EINVAL;
 		}
 
@@ -301,6 +312,92 @@ static int cs_etm__process_trace_id_v0(struct cs_etm_auxtrace *etm, int cpu,
 	 * the correct trace ID into the metadata for setting up decoders later.
 	 */
 	return cs_etm__metadata_set_trace_id(trace_chan_id, cpu_data);
+}
+
+static int cs_etm__process_trace_id_v0_1(struct cs_etm_auxtrace *etm, int this_cpu,
+					 u64 hw_id)
+{
+	struct auxtrace_queue *this_aq, *aq;
+	struct cs_etm_queue *this_etmq, *etmq;
+	int ret, cpu;
+	u8 trace_id;
+	u64 *cpu_data;
+	struct int_node *inode, *tmp;
+	struct intlist *old_list;
+
+	cpu = FIELD_GET(CS_AUX_HW_ID_V01_CPU_MASK, hw_id);
+	trace_id = FIELD_GET(CS_AUX_HW_ID_V01_TRACE_ID_MASK, hw_id);
+
+	/* In per thread mode (cpu == -1) there is only one queue and it's index 0 */
+	if (etm->queues.queue_array[0].cpu == -1)
+		this_aq = aq = &etm->queues.queue_array[0];
+	else {
+		aq = &etm->queues.queue_array[cpu];
+		this_aq = &etm->queues.queue_array[this_cpu];
+	}
+
+	this_etmq = this_aq->priv;
+	etmq = aq->priv;
+
+	/* Ignore HW_IDs on unformatted queues */
+	if (this_etmq->formatted_set && !this_etmq->formatted)
+		return 0;
+
+	cpu_data = get_cpu_data(etm, cpu);
+	ret = cs_etm__insert_trace_id_node(this_etmq, trace_id, cpu_data);
+	if (ret)
+		return ret;
+
+	ret = cs_etm__metadata_set_trace_id(trace_id, cpu_data);
+	if (ret)
+		return ret;
+
+	/*
+	 * With each HW_ID we can also deduce valid mappings that were not
+	 * published by the kernel because later events were not yet created.
+	 * For example below we see CPU 0 has valid mappings for buffer 0. Once
+	 * we receive a mapping linking CPU 1 to buffers 0 and 1, we know that
+	 * CPU 0's mappings also apply to buffer 1, even though we never
+	 * received an explicit mapping for it. Below we can also see HW_IDs
+	 * can be received incrementally, and the earlier ones don't contain all
+	 * 3 mappings:
+	 *
+	 * CPU 0 PERF_RECORD_AUX_OUTPUT_HW_ID hw_id: 0x100000000001010
+	 *
+	 * CPU 1 PERF_RECORD_AUX_OUTPUT_HW_ID hw_id: 0x100000000001012
+	 * CPU 1 PERF_RECORD_AUX_OUTPUT_HW_ID hw_id: 0x100000000011212
+	 *  - implied: CPU 0  PERF_RECORD_AUX_OUTPUT_HW_ID hw_id:
+	 *    0x100000000011212
+	 *
+	 * CPU 2 PERF_RECORD_AUX_OUTPUT_HW_ID hw_id: 0x100000000001014
+	 * CPU 2 PERF_RECORD_AUX_OUTPUT_HW_ID hw_id: 0x100000000011214
+	 * CPU 2 PERF_RECORD_AUX_OUTPUT_HW_ID hw_id: 0x100000000021414
+	 *
+	 */
+
+	/* Mapping was for this queue, or queues are already linked */
+	if (this_cpu == cpu || this_etmq->traceid_list == etmq->traceid_list)
+		return 0;
+
+	/*
+	 * Received a mapping for someone elses ETM signifying that the
+	 * sink is shared. Copy its entries into this queue, and then make
+	 * both queues use the same traceID map.
+	 */
+	intlist__for_each_entry(inode, etmq->traceid_list) {
+		ret = cs_etm__insert_trace_id_node(this_etmq, inode->i, inode->priv);
+		if (ret)
+			return ret;
+	}
+
+	old_list = etmq->traceid_list;
+	etmq->traceid_list = this_etmq->traceid_list;
+	etmq->own_traceid_list = NULL;
+	intlist__for_each_entry_safe(inode, tmp, old_list)
+		intlist__remove(old_list, inode);
+	intlist__delete(old_list);
+
+	return 0;
 }
 
 static int cs_etm__metadata_get_trace_id(u8 *trace_chan_id, u64 *cpu_metadata)
@@ -392,10 +489,10 @@ static int cs_etm__process_aux_output_hw_id(struct perf_session *session,
 
 	/* extract and parse the HW ID */
 	hw_id = event->aux_output_hw_id.hw_id;
-	version = FIELD_GET(CS_AUX_HW_ID_VERSION_MASK, hw_id);
+	version = FIELD_GET(CS_AUX_HW_ID_MAJOR_VERSION_MASK, hw_id);
 
 	/* check that we can handle this version */
-	if (version > CS_AUX_HW_ID_CURR_VERSION) {
+	if (version > CS_AUX_HW_ID_MAJOR_VERSION) {
 		pr_err("CS ETM Trace: PERF_RECORD_AUX_OUTPUT_HW_ID version %d not supported. Please update Perf.\n",
 		       version);
 		return -EINVAL;
@@ -420,7 +517,10 @@ static int cs_etm__process_aux_output_hw_id(struct perf_session *session,
 		return -EINVAL;
 	}
 
-	return cs_etm__process_trace_id_v0(etm, cpu, hw_id);
+	if (FIELD_GET(CS_AUX_HW_ID_MINOR_VERSION_MASK, hw_id) == 0)
+		return cs_etm__process_trace_id_v0(etm, cpu, hw_id);
+	else
+		return cs_etm__process_trace_id_v0_1(etm, cpu, hw_id);
 }
 
 void cs_etm__etmq_set_traceid_queue_timestamp(struct cs_etm_queue *etmq,
@@ -860,12 +960,14 @@ static void cs_etm__free_queue(void *priv)
 	cs_etm_decoder__free(etmq->decoder);
 	cs_etm__free_traceid_queues(etmq);
 
-	/* First remove all traceID/metadata nodes for the RB tree */
-	intlist__for_each_entry_safe(inode, tmp, etmq->traceid_list)
-		intlist__remove(etmq->traceid_list, inode);
+	if (etmq->own_traceid_list) {
+		/* First remove all traceID/metadata nodes for the RB tree */
+		intlist__for_each_entry_safe(inode, tmp, etmq->own_traceid_list)
+			intlist__remove(etmq->own_traceid_list, inode);
 
-	/* Then the RB tree itself */
-	intlist__delete(etmq->traceid_list);
+		/* Then the RB tree itself */
+		intlist__delete(etmq->own_traceid_list);
+	}
 
 	free(etmq);
 }
@@ -1059,7 +1161,7 @@ static struct cs_etm_queue *cs_etm__alloc_queue(void)
 	 * has to be made for each packet that gets decoded, optimizing access
 	 * in anything other than a sequential array is worth doing.
 	 */
-	etmq->traceid_list = intlist__new(NULL);
+	etmq->traceid_list = etmq->own_traceid_list = intlist__new(NULL);
 	if (!etmq->traceid_list)
 		goto out_free;
 
