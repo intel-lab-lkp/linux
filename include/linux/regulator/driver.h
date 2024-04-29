@@ -632,8 +632,6 @@ struct regulator_dev {
 
 	struct delayed_work disable_work;
 
-	void *reg_data;		/* regulator_dev data */
-
 	struct dentry *debugfs;
 
 	struct regulator_enable_gpio *ena_pin;
@@ -707,7 +705,11 @@ void regulator_irq_helper_cancel(void **handle);
 int regulator_irq_map_event_simple(int irq, struct regulator_irq_data *rid,
 				   unsigned long *dev_mask);
 
-void *rdev_get_drvdata(struct regulator_dev *rdev);
+static inline void *rdev_get_drvdata(const struct regulator_dev *rdev)
+{
+	return dev_get_drvdata(&rdev->dev);
+}
+
 struct device *rdev_get_dev(struct regulator_dev *rdev);
 struct regmap *rdev_get_regmap(struct regulator_dev *rdev);
 int rdev_get_id(struct regulator_dev *rdev);

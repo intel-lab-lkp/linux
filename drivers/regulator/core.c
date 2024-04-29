@@ -5630,7 +5630,7 @@ regulator_register(struct device *dev,
 	}
 
 	ww_mutex_init(&rdev->mutex, &regulator_ww_class);
-	rdev->reg_data = config->driver_data;
+	dev_set_drvdata(&rdev->dev, config->driver_data);
 	rdev->owner = regulator_desc->owner;
 	rdev->desc = regulator_desc;
 	if (config->regmap)
@@ -5894,19 +5894,6 @@ void regulator_has_full_constraints(void)
 	has_full_constraints = 1;
 }
 EXPORT_SYMBOL_GPL(regulator_has_full_constraints);
-
-/**
- * rdev_get_drvdata - get rdev regulator driver data
- * @rdev: regulator
- *
- * Get rdev regulator driver private data. This call can be used in the
- * regulator driver context.
- */
-void *rdev_get_drvdata(struct regulator_dev *rdev)
-{
-	return rdev->reg_data;
-}
-EXPORT_SYMBOL_GPL(rdev_get_drvdata);
 
 /**
  * rdev_get_id - get regulator ID

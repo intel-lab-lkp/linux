@@ -274,7 +274,7 @@ struct regulator_consumer_supply {
  * @num_consumer_supplies: Number of consumer device supplies.
  * @consumer_supplies: Consumer device supply configuration.
  *
- * @driver_data: Pointer copied to regulator_dev.reg_data.
+ * @driver_data: Pointer copied to regulator_dev's drvdata.
  */
 struct regulator_init_data {
 	const char *supply_regulator;        /* or NULL for system supply */
