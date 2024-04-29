@@ -1378,11 +1378,27 @@ static inline int vhost_get_avail_idx(struct vhost_virtqueue *vq)
 	return 1;
 }
 
-static inline int vhost_get_avail_head(struct vhost_virtqueue *vq,
-				       __virtio16 *head, int idx)
+static inline int vhost_get_avail_head(struct vhost_virtqueue *vq)
 {
-	return vhost_get_avail(vq, *head,
-			       &vq->avail->ring[idx & (vq->num - 1)]);
+	__virtio16 head;
+	int r;
+
+	r = vhost_get_avail(vq, head,
+			    &vq->avail->ring[vq->last_avail_idx & (vq->num - 1)]);
+	if (unlikely(r)) {
+		vq_err(vq, "Failed to read head: index %u address %p\n",
+		       vq->last_avail_idx,
+		       &vq->avail->ring[vq->last_avail_idx & (vq->num - 1)]);
+		return r;
+	}
+
+	r = vhost16_to_cpu(vq, head);
+	if (unlikely(r >= vq->num)) {
+		vq_err(vq, "Invalid head %d (%u)\n", r, vq->num);
+		return -EINVAL;
+	}
+
+	return r;
 }
 
 static inline int vhost_get_avail_flags(struct vhost_virtqueue *vq,
@@ -2579,9 +2595,8 @@ int vhost_get_vq_desc(struct vhost_virtqueue *vq,
 		      struct vhost_log *log, unsigned int *log_num)
 {
 	struct vring_desc desc;
-	unsigned int i, head, found = 0;
-	__virtio16 ring_head;
-	int ret, access;
+	unsigned int i, found = 0;
+	int head, ret, access;
 
 	if (vq->avail_idx == vq->last_avail_idx) {
 		ret = vhost_get_avail_idx(vq);
@@ -2592,23 +2607,10 @@ int vhost_get_vq_desc(struct vhost_virtqueue *vq,
 			return vq->num;
 	}
 
-	/* Grab the next descriptor number they're advertising, and increment
-	 * the index we've seen. */
-	if (unlikely(vhost_get_avail_head(vq, &ring_head, vq->last_avail_idx))) {
-		vq_err(vq, "Failed to read head: idx %d address %p\n",
-		       vq->last_avail_idx,
-		       &vq->avail->ring[vq->last_avail_idx % vq->num]);
-		return -EFAULT;
-	}
-
-	head = vhost16_to_cpu(vq, ring_head);
-
-	/* If their number is silly, that's an error. */
-	if (unlikely(head >= vq->num)) {
-		vq_err(vq, "Guest says index %u > %u is available",
-		       head, vq->num);
-		return -EINVAL;
-	}
+	/* Grab the next descriptor number they're advertising */
+	head = vhost_get_avail_head(vq);
+	if (unlikely(head < 0))
+		return head;
 
 	/* When we start there are none of either input nor output. */
 	*out_num = *in_num = 0;
