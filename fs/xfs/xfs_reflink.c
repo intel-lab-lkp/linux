@@ -784,7 +784,7 @@ xfs_reflink_end_cow_extent(
 	xfs_fileoff_t		end_fsb)
 {
 	struct xfs_iext_cursor	icur;
-	struct xfs_bmbt_irec	got, del;
+	struct xfs_bmbt_irec	got, remap;
 	struct xfs_mount	*mp = ip->i_mount;
 	struct xfs_trans	*tp;
 	struct xfs_ifork	*ifp = xfs_ifork_ptr(ip, XFS_COW_FORK);
@@ -820,7 +820,7 @@ xfs_reflink_end_cow_extent(
 	 * Only remap real extents that contain data.  With AIO, speculative
 	 * preallocations can leak into the range we are called upon, and we
 	 * need to skip them.  Preserve @got for the eventual CoW fork
-	 * deletion; from now on @del represents the mapping that we're
+	 * deletion; from now on @remap represents the mapping that we're
 	 * actually remapping.
 	 */
 	while (!xfs_bmap_is_written_extent(&got)) {
@@ -830,9 +830,9 @@ xfs_reflink_end_cow_extent(
 			goto out_cancel;
 		}
 	}
-	del = got;
-	xfs_trim_extent(&del, *offset_fsb, end_fsb - *offset_fsb);
-	trace_xfs_reflink_cow_remap_from(ip, &del);
+	remap = got;
+	xfs_trim_extent(&remap, *offset_fsb, end_fsb - *offset_fsb);
+	trace_xfs_reflink_cow_remap_from(ip, &remap);
 
 	error = xfs_iext_count_ensure(tp, ip, XFS_DATA_FORK,
 			XFS_IEXT_REFLINK_END_COW_CNT);
@@ -840,23 +840,24 @@ xfs_reflink_end_cow_extent(
 		goto out_cancel;
 
 	/* Unmap the old data. */
-	error = xfs_reflink_unmap_old_data(&tp, ip, del.br_startoff,
-			del.br_startoff + del.br_blockcount);
+	error = xfs_reflink_unmap_old_data(&tp, ip, remap.br_startoff,
+			remap.br_startoff + remap.br_blockcount);
 	if (error)
 		goto out_cancel;
 
 	/* Free the CoW orphan record. */
-	xfs_refcount_free_cow_extent(tp, del.br_startblock, del.br_blockcount);
+	xfs_refcount_free_cow_extent(tp, remap.br_startblock,
+			remap.br_blockcount);
 
 	/* Map the new blocks into the data fork. */
-	xfs_bmap_map_extent(tp, ip, XFS_DATA_FORK, &del);
+	xfs_bmap_map_extent(tp, ip, XFS_DATA_FORK, &remap);
 
 	/* Charge this new data fork mapping to the on-disk quota. */
 	xfs_trans_mod_dquot_byino(tp, ip, XFS_TRANS_DQ_DELBCOUNT,
-			(long)del.br_blockcount);
+			(long)remap.br_blockcount);
 
 	/* Remove the mapping from the CoW fork. */
-	xfs_bmap_del_extent_cow(ip, &icur, &got, &del);
+	xfs_bmap_del_extent_cow(ip, &icur, &got, &remap);
 
 	error = xfs_trans_commit(tp);
 	xfs_iunlock(ip, XFS_ILOCK_EXCL);
@@ -864,7 +865,7 @@ xfs_reflink_end_cow_extent(
 		return error;
 
 	/* Update the caller about how much progress we made. */
-	*offset_fsb = del.br_startoff + del.br_blockcount;
+	*offset_fsb = remap.br_startoff + remap.br_blockcount;
 	return 0;
 
 out_cancel:
