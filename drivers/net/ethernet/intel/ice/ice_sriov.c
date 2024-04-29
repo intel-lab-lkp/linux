@@ -864,6 +864,8 @@ static int ice_ena_vfs(struct ice_pf *pf, u16 num_vfs)
 	int total_vectors = pf->hw.func_caps.common_cap.num_msix_vectors;
 	struct device *dev = ice_pf_to_dev(pf);
 	struct ice_hw *hw = &pf->hw;
+	struct ice_vf *vf;
+	unsigned int bkt;
 	int ret;
 
 	pf->sriov_irq_bm = bitmap_zalloc(total_vectors, GFP_KERNEL);
@@ -877,24 +879,20 @@ static int ice_ena_vfs(struct ice_pf *pf, u16 num_vfs)
 	set_bit(ICE_OICR_INTR_DIS, pf->state);
 	ice_flush(hw);
 
-	ret = pci_enable_sriov(pf->pdev, num_vfs);
-	if (ret)
-		goto err_unroll_intr;
-
 	mutex_lock(&pf->vfs.table_lock);
 
 	ret = ice_set_per_vf_res(pf, num_vfs);
 	if (ret) {
 		dev_err(dev, "Not enough resources for %d VFs, err %d. Try with fewer number of VFs\n",
 			num_vfs, ret);
-		goto err_unroll_sriov;
+		goto err_unroll_intr;
 	}
 
 	ret = ice_create_vf_entries(pf, num_vfs);
 	if (ret) {
 		dev_err(dev, "Failed to allocate VF entries for %d VFs\n",
 			num_vfs);
-		goto err_unroll_sriov;
+		goto err_unroll_intr;
 	}
 
 	ice_eswitch_reserve_cp_queues(pf, num_vfs);
@@ -904,6 +902,10 @@ static int ice_ena_vfs(struct ice_pf *pf, u16 num_vfs)
 		ret = -EAGAIN;
 		goto err_unroll_vf_entries;
 	}
+
+	ret = pci_enable_sriov(pf->pdev, num_vfs);
+	if (ret)
+		goto err_unroll_start_vfs;
 
 	clear_bit(ICE_VF_DIS, pf->state);
 
@@ -915,12 +917,15 @@ static int ice_ena_vfs(struct ice_pf *pf, u16 num_vfs)
 
 	return 0;
 
+err_unroll_start_vfs:
+	ice_for_each_vf(pf, bkt, vf) {
+		ice_dis_vf_mappings(vf);
+		ice_vf_vsi_release(vf);
+	}
 err_unroll_vf_entries:
 	ice_free_vf_entries(pf);
-err_unroll_sriov:
-	mutex_unlock(&pf->vfs.table_lock);
-	pci_disable_sriov(pf->pdev);
 err_unroll_intr:
+	mutex_unlock(&pf->vfs.table_lock);
 	/* rearm interrupts here */
 	ice_irq_dynamic_ena(hw, NULL, NULL);
 	clear_bit(ICE_OICR_INTR_DIS, pf->state);
