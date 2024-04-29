@@ -93,7 +93,7 @@ void coresight_trace_id_put_cpu_id(int cpu, struct coresight_trace_id_map *id_ma
  *
  * return: current value, will be 0 if unallocated.
  */
-int coresight_trace_id_read_cpu_id(int cpu);
+int coresight_trace_id_read_cpu_id(int cpu, struct coresight_trace_id_map *id_map);
 
 /**
  * Allocate a CoreSight trace ID for a system component.
