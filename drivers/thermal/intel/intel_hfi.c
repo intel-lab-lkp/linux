@@ -43,6 +43,10 @@
 
 #include <asm/msr.h>
 
+#ifdef CONFIG_DEBUG_FS
+#include <linux/debugfs.h>
+#endif
+
 #include "intel_hfi.h"
 #include "thermal_interrupt.h"
 
@@ -168,6 +172,70 @@ static DEFINE_MUTEX(hfi_instance_lock);
 static struct workqueue_struct *hfi_updates_wq;
 #define HFI_UPDATE_DELAY		HZ
 #define HFI_MAX_THERM_NOTIFY_COUNT	16
+
+/* Keep this variable 8-byte aligned to get atomic accesses. */
+static unsigned long hfi_update_delay = HFI_UPDATE_DELAY;
+
+#ifdef CONFIG_DEBUG_FS
+static int hfi_update_delay_get(void *data, u64 *val)
+{
+	mutex_lock(&hfi_instance_lock);
+	*val = jiffies_to_msecs(hfi_update_delay);
+	mutex_unlock(&hfi_instance_lock);
+	return 0;
+}
+
+static int hfi_update_delay_set(void *data, u64 val)
+{
+	/*
+	 * The mutex only serializes access to the debugfs file.
+	 *
+	 * hfi_process_event() loads @hfi_update_delay from interrupt context.
+	 * We could have serialized accesses with a spinlock or a memory barrier.
+	 * But this is a debug feature, the store of @hfi_update_delay is
+	 * atomic, and will seldom change. A few loads of @hfi_update_delay may
+	 * see stale values but the updated value will be seen eventually.
+	 */
+	mutex_lock(&hfi_instance_lock);
+	hfi_update_delay = msecs_to_jiffies(val);
+	mutex_unlock(&hfi_instance_lock);
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(hfi_update_delay_fops, hfi_update_delay_get,
+			 hfi_update_delay_set, "%llu\n");
+
+static struct dentry *hfi_debugfs_dir;
+
+static void hfi_debugfs_unregister(void)
+{
+	debugfs_remove_recursive(hfi_debugfs_dir);
+	hfi_debugfs_dir = NULL;
+}
+
+static void hfi_debugfs_register(void)
+{
+	struct dentry *f;
+
+	hfi_debugfs_dir = debugfs_create_dir("intel_hfi", NULL);
+	if (!hfi_debugfs_dir)
+		return;
+
+	f = debugfs_create_file("update_delay_ms", 0644, hfi_debugfs_dir,
+				NULL, &hfi_update_delay_fops);
+	if (!f)
+		goto err;
+
+	return;
+err:
+	hfi_debugfs_unregister();
+}
+
+#else
+static void hfi_debugfs_register(void)
+{
+}
+#endif /* CONFIG_DEBUG_FS */
 
 static void get_hfi_caps(struct hfi_instance *hfi_instance,
 			 struct thermal_genl_cpu_caps *cpu_caps)
@@ -321,8 +389,13 @@ void intel_hfi_process_event(__u64 pkg_therm_status_msr_val)
 	raw_spin_unlock(&hfi_instance->table_lock);
 	raw_spin_unlock(&hfi_instance->event_lock);
 
+	/*
+	 * debugfs may atomically store @hfi_update_delay without locking. The
+	 * updated value may not be immediately observed. See note in
+	 * hfi_update_delay_set().
+	 */
 	queue_delayed_work(hfi_updates_wq, &hfi_instance->update_work,
-			   HFI_UPDATE_DELAY);
+			   hfi_update_delay);
 }
 
 static void init_hfi_cpu_index(struct hfi_cpu_info *info)
@@ -707,6 +780,8 @@ void __init intel_hfi_init(void)
 		goto err_nl_notif;
 
 	register_syscore_ops(&hfi_pm_ops);
+
+	hfi_debugfs_register();
 
 	return;
 
