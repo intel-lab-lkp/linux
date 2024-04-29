@@ -339,8 +339,12 @@ static int __init acpi_parse_cfmws(union acpi_subtable_headers *header,
 	 * window.
 	 */
 	modified = numa_fill_memblks(start, end);
-	if (modified != NUMA_NO_MEMBLK)
+	if (modified != NUMA_NO_MEMBLK) {
+		if (modified)
+			pr_info("CEDT: memblk extended [mem %#010Lx-%#010Lx]\n",
+				(unsigned long long) start, (unsigned long long) end - 1);
 		return 0;
+	}
 
 	/* No SRAT description. Create a new node. */
 	node = acpi_map_pxm_to_node(*fake_pxm);
@@ -355,7 +359,12 @@ static int __init acpi_parse_cfmws(union acpi_subtable_headers *header,
 		pr_warn("ACPI NUMA: Failed to add memblk for CFMWS node %d [mem %#llx-%#llx]\n",
 			node, start, end);
 	}
+
 	node_set(node, numa_nodes_parsed);
+
+	pr_info("CEDT: Node %u PXM %u [mem %#010Lx-%#010Lx]\n",
+		node, *fake_pxm,
+		(unsigned long long) start, (unsigned long long) end - 1);
 
 	/* Set the next available fake_pxm value */
 	(*fake_pxm)++;
