@@ -482,7 +482,8 @@ void etm_release_trace_id(struct etm_drvdata *drvdata)
 }
 
 static int etm_enable_perf(struct coresight_device *csdev,
-			   struct perf_event *event)
+			   struct perf_event *event,
+			   struct coresight_trace_id_map *id_map)
 {
 	struct etm_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
 	int trace_id;
@@ -501,8 +502,7 @@ static int etm_enable_perf(struct coresight_device *csdev,
 	 * with perf locks - we know the ID cannot change until perf shuts down
 	 * the session
 	 */
-	trace_id = coresight_trace_id_read_cpu_id(drvdata->cpu,
-						  coresight_trace_id_map_default());
+	trace_id = coresight_trace_id_read_cpu_id(drvdata->cpu, id_map);
 	if (!IS_VALID_CS_TRACE_ID(trace_id)) {
 		dev_err(&drvdata->csdev->dev, "Failed to set trace ID for %s on CPU%d\n",
 			dev_name(&drvdata->csdev->dev), drvdata->cpu);
@@ -555,7 +555,7 @@ unlock_enable_sysfs:
 }
 
 static int etm_enable(struct coresight_device *csdev, struct perf_event *event,
-		      enum cs_mode mode)
+		      enum cs_mode mode, struct coresight_trace_id_map *id_map)
 {
 	int ret;
 	struct etm_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
@@ -570,7 +570,7 @@ static int etm_enable(struct coresight_device *csdev, struct perf_event *event,
 		ret = etm_enable_sysfs(csdev);
 		break;
 	case CS_MODE_PERF:
-		ret = etm_enable_perf(csdev, event);
+		ret = etm_enable_perf(csdev, event, id_map);
 		break;
 	default:
 		ret = -EINVAL;
