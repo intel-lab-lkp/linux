@@ -393,7 +393,10 @@ static int msi_capability_init(struct pci_dev *dev, int nvec,
 	goto unlock;
 
 err:
-	pci_msi_unmask(entry, msi_multi_mask(entry));
+	/* Re-read the descriptor as it might have been freed */
+	entry = msi_first_desc(&dev->dev, MSI_DESC_ALL);
+	if (entry)
+		pci_msi_unmask(entry, msi_multi_mask(entry));
 	pci_free_msi_irqs(dev);
 fail:
 	dev->msi_enabled = 0;
