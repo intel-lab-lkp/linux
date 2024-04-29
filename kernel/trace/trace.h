@@ -1026,7 +1026,6 @@ static inline int ftrace_trace_task(struct trace_array *tr)
 	return this_cpu_read(tr->array_buffer.data->ftrace_ignore_pid) !=
 		FTRACE_PID_IGNORE;
 }
-extern int ftrace_is_dead(void);
 int ftrace_create_function_files(struct trace_array *tr,
 				 struct dentry *parent);
 void ftrace_destroy_function_files(struct trace_array *tr);
@@ -1046,7 +1045,6 @@ static inline int ftrace_trace_task(struct trace_array *tr)
 {
 	return 1;
 }
-static inline int ftrace_is_dead(void) { return 0; }
 static inline int
 ftrace_create_function_files(struct trace_array *tr,
 			     struct dentry *parent)

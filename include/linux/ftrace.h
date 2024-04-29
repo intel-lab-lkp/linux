@@ -399,6 +399,7 @@ int ftrace_lookup_symbols(const char **sorted_syms, size_t cnt, unsigned long *a
 #define register_ftrace_function(ops) ({ 0; })
 #define unregister_ftrace_function(ops) ({ 0; })
 static inline void ftrace_kill(void) { }
+static inline int ftrace_is_dead(void) { return 0; }
 static inline void ftrace_free_init_mem(void) { }
 static inline void ftrace_free_mem(struct module *mod, void *start, void *end) { }
 static inline int ftrace_lookup_symbols(const char **sorted_syms, size_t cnt, unsigned long *addrs)
@@ -914,6 +915,7 @@ static inline bool is_ftrace_trampoline(unsigned long addr)
 
 /* totally disable ftrace - can not re-enable after this */
 void ftrace_kill(void);
+int ftrace_is_dead(void);
 
 static inline void tracer_disable(void)
 {
