@@ -3115,8 +3115,9 @@ int cxl_add_to_region(struct cxl_port *root, struct cxl_endpoint_decoder *cxled)
 				p->res);
 	}
 
-	put_device(region_dev);
 out:
+	if (region_dev)
+		put_device(region_dev);
 	put_device(cxlrd_dev);
 	return rc;
 }
