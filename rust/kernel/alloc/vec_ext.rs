@@ -2,9 +2,10 @@
 
 //! Extensions to [`Vec`] for fallible allocations.
 
-use super::Flags;
+use super::{AllocatorWithFlags,Flags};
 use alloc::vec::Vec;
 use core::alloc::AllocError;
+use core::ptr;
 use core::result::Result;
 
 /// Extensions to [`Vec`].
@@ -74,6 +75,76 @@ pub trait VecExt<T>: Sized {
     /// # Ok::<(), Error>(())
     /// ```
     fn reserve(&mut self, additional: usize, flags: Flags) -> Result<(), AllocError>;
+}
+
+pub trait VecExtAlloc<T, A: AllocatorWithFlags>: Sized {
+    fn with_capacity_in(capacity: usize, alloc: A, flags: Flags) -> Result<Self, AllocError>;
+    fn extend_from_slice(&mut self, other: &[T], flags: Flags) -> Result<(), AllocError>
+    where
+        T: Clone;
+    fn reserve(&mut self, additional: usize, flags: Flags) -> Result<(), AllocError>;
+}
+
+impl<T, A> VecExtAlloc<T, A> for Vec<T, A> where A: AllocatorWithFlags {
+    fn with_capacity_in(capacity: usize, alloc: A, flags: Flags) -> Result<Self, AllocError> {
+        let mut v = Vec::new_in(alloc);
+        <Self as VecExtAlloc<_, A>>::reserve(&mut v, capacity, flags)?;
+        Ok(v)
+    }
+
+    fn extend_from_slice(&mut self, other: &[T], flags: Flags) -> Result<(), AllocError>
+    where
+        T: Clone,
+    {
+        <Self as VecExtAlloc<_, A>>::reserve(self, other.len(), flags)?;
+        for (slot, item) in core::iter::zip(self.spare_capacity_mut(), other) {
+            slot.write(item.clone());
+        }
+
+        // SAFETY: We just initialised the `other.len()` spare entries, so it is safe to increase
+        // the length by the same amount. We also know that the new length is <= capacity because
+        // of the previous call to `reserve` above.
+        unsafe { self.set_len(self.len() + other.len()) };
+        Ok(())
+    }
+
+    fn reserve(&mut self, additional: usize, flags: Flags) -> Result<(), AllocError> {
+        let len = self.len();
+        let cap = self.capacity();
+
+        if cap - len >= additional {
+            return Ok(());
+        }
+
+        if core::mem::size_of::<T>() == 0 {
+            // The capacity is already `usize::MAX` for SZTs, we can't go higher.
+            return Err(AllocError);
+        }
+
+        // We know cap is <= `isize::MAX` because `Layout::array` fails if the resulting byte size
+        // is greater than `isize::MAX`. So the multiplication by two won't overflow.
+        let new_cap = core::cmp::max(cap * 2, len.checked_add(additional).ok_or(AllocError)?);
+        let layout = core::alloc::Layout::array::<T>(new_cap).map_err(|_| AllocError)?;
+
+        let (ptr, len, cap, alloc) = destructure_alloc(self);
+
+        // We can't trust ptr to be a NULL pointer if cap is zero, hence explicitly assing a NULL
+        // pointer.
+        let ptr = match cap {
+            0 => ptr::null_mut(),
+            _ => ptr,
+        };
+
+        // SAFETY: `ptr` is valid because it's either NULL or comes from a previous call to
+        // `krealloc_aligned`. We also verified that the type is not a ZST.
+        let data = unsafe { alloc.realloc_flags(ptr.cast(), cap, layout, flags)? };
+        let new_ptr = data.as_ptr();
+
+        // SAFETY: `ptr` has been reallocated with the layout for `new_cap` elements. New cap
+        // is greater than `cap`, so it continues to be >= `len`.
+        unsafe { rebuild_alloc(self, alloc, new_ptr.cast::<T>(), len, new_cap) };
+        Ok(())
+    }
 }
 
 impl<T> VecExt<T> for Vec<T> {
@@ -173,5 +244,17 @@ fn destructure<T>(v: &mut Vec<T>) -> (*mut T, usize, usize) {
 unsafe fn rebuild<T>(v: &mut Vec<T>, ptr: *mut T, len: usize, cap: usize) {
     // SAFETY: The safety requirements from this function satisfy those of `from_raw_parts`.
     let mut tmp = unsafe { Vec::from_raw_parts(ptr, len, cap) };
+    core::mem::swap(&mut tmp, v);
+}
+
+fn destructure_alloc<T, A: AllocatorWithFlags>(v: &mut Vec<T, A>) -> (*mut T, usize, usize, A) {
+    let mut tmp: Vec<T, A> = unsafe { core::mem::transmute_copy(v) };
+    core::mem::swap(&mut tmp, v);
+    tmp.into_raw_parts_with_alloc()
+}
+
+unsafe fn rebuild_alloc<T, A: AllocatorWithFlags>(v: &mut Vec<T, A>, alloc: A, ptr: *mut T, len: usize, cap: usize) {
+    // SAFETY: The safety requirements from this function satisfy those of `from_raw_parts`.
+    let mut tmp = unsafe { Vec::from_raw_parts_in(ptr, len, cap, alloc) };
     core::mem::swap(&mut tmp, v);
 }
