@@ -3084,16 +3084,18 @@ int cxl_add_to_region(struct cxl_port *root, struct cxl_endpoint_decoder *cxled)
 	mutex_lock(&cxlrd->range_lock);
 	region_dev = device_find_child(&cxlrd->cxlsd.cxld.dev, hpa,
 				       match_region_by_range);
-	if (!region_dev) {
+	if (!region_dev)
 		cxlr = construct_region(cxlrd, cxled);
-		region_dev = &cxlr->dev;
-	} else
+	else
 		cxlr = to_cxl_region(region_dev);
 	mutex_unlock(&cxlrd->range_lock);
 
 	rc = PTR_ERR_OR_ZERO(cxlr);
 	if (rc)
 		goto out;
+
+	if (!region_dev)
+		region_dev = &cxlr->dev;
 
 	attach_target(cxlr, cxled, -1, TASK_UNINTERRUPTIBLE);
 
