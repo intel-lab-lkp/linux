@@ -232,14 +232,13 @@ static void free_event_data(struct work_struct *work)
 		if (!(IS_ERR_OR_NULL(*ppath))) {
 			struct coresight_device *sink = coresight_get_sink(*ppath);
 
-			coresight_trace_id_put_cpu_id(cpu, &sink->perf_id_map);
+			/* mark perf event as done for trace id allocator */
+			coresight_trace_id_perf_stop(&sink->perf_id_map);
+
 			coresight_release_path(*ppath);
 		}
 		*ppath = NULL;
 	}
-
-	/* mark perf event as done for trace id allocator */
-	coresight_trace_id_perf_stop();
 
 	free_percpu(event_data->path);
 	kfree(event_data);
@@ -328,9 +327,6 @@ static void *etm_setup_aux(struct perf_event *event, void **pages,
 		sink = user_sink = coresight_get_sink_by_id(id);
 	}
 
-	/* tell the trace ID allocator that a perf event is starting up */
-	coresight_trace_id_perf_start();
-
 	/* check if user wants a coresight configuration selected */
 	cfg_hash = (u32)((event->attr.config2 & GENMASK_ULL(63, 32)) >> 32);
 	if (cfg_hash) {
@@ -404,6 +400,7 @@ static void *etm_setup_aux(struct perf_event *event, void **pages,
 		}
 
 		/* ensure we can allocate a trace ID for this CPU */
+		coresight_trace_id_perf_start(&sink->perf_id_map);
 		trace_id = coresight_trace_id_get_cpu_id(cpu, &sink->perf_id_map);
 		if (!IS_VALID_CS_TRACE_ID(trace_id)) {
 			cpumask_clear_cpu(cpu, mask);
