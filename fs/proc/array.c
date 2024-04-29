@@ -409,6 +409,10 @@ static void task_cpus_allowed(struct seq_file *m, struct task_struct *task)
 		   cpumask_pr_args(&task->cpus_mask));
 	seq_printf(m, "Cpus_allowed_list:\t%*pbl\n",
 		   cpumask_pr_args(&task->cpus_mask));
+	seq_printf(m, "Cpus_user_allowed:\t%*pb\n",
+		   cpumask_pr_args(task->user_cpus_ptr));
+	seq_printf(m, "Cpus_user_allowed_list:\t%*pbl\n",
+		   cpumask_pr_args(task->user_cpus_ptr));
 }
 
 static inline void task_core_dumping(struct seq_file *m, struct task_struct *task)
