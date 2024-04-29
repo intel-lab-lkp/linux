@@ -51,7 +51,10 @@ static int drm_iommu_attach_device(struct drm_device *drm_dev,
 		return -EINVAL;
 	}
 
-	dma_set_max_seg_size(subdrv_dev, DMA_BIT_MASK(32));
+	ret = dma_set_max_seg_size(subdrv_dev, DMA_BIT_MASK(32));
+	if (ret)
+		return ret;
+
 	if (IS_ENABLED(CONFIG_ARM_DMA_USE_IOMMU)) {
 		/*
 		 * Keep the original DMA mapping of the sub-device and
