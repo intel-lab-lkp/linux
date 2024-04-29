@@ -650,7 +650,7 @@ regulator_get_suspend_state_check(struct regulator_dev *rdev, suspend_state_t st
 static ssize_t microvolts_show(struct device *dev,
 			       struct device_attribute *attr, char *buf)
 {
-	struct regulator_dev *rdev = dev_get_drvdata(dev);
+	struct regulator_dev *rdev = dev_to_rdev(dev);
 	int uV;
 
 	regulator_lock(rdev);
@@ -666,7 +666,7 @@ static DEVICE_ATTR_RO(microvolts);
 static ssize_t microamps_show(struct device *dev,
 			      struct device_attribute *attr, char *buf)
 {
-	struct regulator_dev *rdev = dev_get_drvdata(dev);
+	struct regulator_dev *rdev = dev_to_rdev(dev);
 
 	return sprintf(buf, "%d\n", _regulator_get_current_limit(rdev));
 }
@@ -675,7 +675,7 @@ static DEVICE_ATTR_RO(microamps);
 static ssize_t name_show(struct device *dev, struct device_attribute *attr,
 			 char *buf)
 {
-	struct regulator_dev *rdev = dev_get_drvdata(dev);
+	struct regulator_dev *rdev = dev_to_rdev(dev);
 
 	return sprintf(buf, "%s\n", rdev_get_name(rdev));
 }
@@ -704,7 +704,7 @@ static ssize_t regulator_print_opmode(char *buf, int mode)
 static ssize_t opmode_show(struct device *dev,
 			   struct device_attribute *attr, char *buf)
 {
-	struct regulator_dev *rdev = dev_get_drvdata(dev);
+	struct regulator_dev *rdev = dev_to_rdev(dev);
 
 	return regulator_print_opmode(buf, _regulator_get_mode(rdev));
 }
@@ -723,7 +723,7 @@ static ssize_t regulator_print_state(char *buf, int state)
 static ssize_t state_show(struct device *dev,
 			  struct device_attribute *attr, char *buf)
 {
-	struct regulator_dev *rdev = dev_get_drvdata(dev);
+	struct regulator_dev *rdev = dev_to_rdev(dev);
 	ssize_t ret;
 
 	regulator_lock(rdev);
@@ -737,7 +737,7 @@ static DEVICE_ATTR_RO(state);
 static ssize_t status_show(struct device *dev,
 			   struct device_attribute *attr, char *buf)
 {
-	struct regulator_dev *rdev = dev_get_drvdata(dev);
+	struct regulator_dev *rdev = dev_to_rdev(dev);
 	int status;
 	char *label;
 
@@ -784,7 +784,7 @@ static DEVICE_ATTR_RO(status);
 static ssize_t min_microamps_show(struct device *dev,
 				  struct device_attribute *attr, char *buf)
 {
-	struct regulator_dev *rdev = dev_get_drvdata(dev);
+	struct regulator_dev *rdev = dev_to_rdev(dev);
 
 	if (!rdev->constraints)
 		return sprintf(buf, "constraint not defined\n");
@@ -796,7 +796,7 @@ static DEVICE_ATTR_RO(min_microamps);
 static ssize_t max_microamps_show(struct device *dev,
 				  struct device_attribute *attr, char *buf)
 {
-	struct regulator_dev *rdev = dev_get_drvdata(dev);
+	struct regulator_dev *rdev = dev_to_rdev(dev);
 
 	if (!rdev->constraints)
 		return sprintf(buf, "constraint not defined\n");
@@ -808,7 +808,7 @@ static DEVICE_ATTR_RO(max_microamps);
 static ssize_t min_microvolts_show(struct device *dev,
 				   struct device_attribute *attr, char *buf)
 {
-	struct regulator_dev *rdev = dev_get_drvdata(dev);
+	struct regulator_dev *rdev = dev_to_rdev(dev);
 
 	if (!rdev->constraints)
 		return sprintf(buf, "constraint not defined\n");
@@ -820,7 +820,7 @@ static DEVICE_ATTR_RO(min_microvolts);
 static ssize_t max_microvolts_show(struct device *dev,
 				   struct device_attribute *attr, char *buf)
 {
-	struct regulator_dev *rdev = dev_get_drvdata(dev);
+	struct regulator_dev *rdev = dev_to_rdev(dev);
 
 	if (!rdev->constraints)
 		return sprintf(buf, "constraint not defined\n");
@@ -832,7 +832,7 @@ static DEVICE_ATTR_RO(max_microvolts);
 static ssize_t requested_microamps_show(struct device *dev,
 					struct device_attribute *attr, char *buf)
 {
-	struct regulator_dev *rdev = dev_get_drvdata(dev);
+	struct regulator_dev *rdev = dev_to_rdev(dev);
 	struct regulator *regulator;
 	int uA = 0;
 
@@ -849,7 +849,7 @@ static DEVICE_ATTR_RO(requested_microamps);
 static ssize_t num_users_show(struct device *dev, struct device_attribute *attr,
 			      char *buf)
 {
-	struct regulator_dev *rdev = dev_get_drvdata(dev);
+	struct regulator_dev *rdev = dev_to_rdev(dev);
 	return sprintf(buf, "%d\n", rdev->use_count);
 }
 static DEVICE_ATTR_RO(num_users);
@@ -857,7 +857,7 @@ static DEVICE_ATTR_RO(num_users);
 static ssize_t type_show(struct device *dev, struct device_attribute *attr,
 			 char *buf)
 {
-	struct regulator_dev *rdev = dev_get_drvdata(dev);
+	struct regulator_dev *rdev = dev_to_rdev(dev);
 
 	switch (rdev->desc->type) {
 	case REGULATOR_VOLTAGE:
@@ -872,7 +872,7 @@ static DEVICE_ATTR_RO(type);
 static ssize_t suspend_mem_microvolts_show(struct device *dev,
 					   struct device_attribute *attr, char *buf)
 {
-	struct regulator_dev *rdev = dev_get_drvdata(dev);
+	struct regulator_dev *rdev = dev_to_rdev(dev);
 
 	return sprintf(buf, "%d\n", rdev->constraints->state_mem.uV);
 }
@@ -881,7 +881,7 @@ static DEVICE_ATTR_RO(suspend_mem_microvolts);
 static ssize_t suspend_disk_microvolts_show(struct device *dev,
 					    struct device_attribute *attr, char *buf)
 {
-	struct regulator_dev *rdev = dev_get_drvdata(dev);
+	struct regulator_dev *rdev = dev_to_rdev(dev);
 
 	return sprintf(buf, "%d\n", rdev->constraints->state_disk.uV);
 }
@@ -890,7 +890,7 @@ static DEVICE_ATTR_RO(suspend_disk_microvolts);
 static ssize_t suspend_standby_microvolts_show(struct device *dev,
 					       struct device_attribute *attr, char *buf)
 {
-	struct regulator_dev *rdev = dev_get_drvdata(dev);
+	struct regulator_dev *rdev = dev_to_rdev(dev);
 
 	return sprintf(buf, "%d\n", rdev->constraints->state_standby.uV);
 }
@@ -899,7 +899,7 @@ static DEVICE_ATTR_RO(suspend_standby_microvolts);
 static ssize_t suspend_mem_mode_show(struct device *dev,
 				     struct device_attribute *attr, char *buf)
 {
-	struct regulator_dev *rdev = dev_get_drvdata(dev);
+	struct regulator_dev *rdev = dev_to_rdev(dev);
 
 	return regulator_print_opmode(buf,
 		rdev->constraints->state_mem.mode);
@@ -909,7 +909,7 @@ static DEVICE_ATTR_RO(suspend_mem_mode);
 static ssize_t suspend_disk_mode_show(struct device *dev,
 				      struct device_attribute *attr, char *buf)
 {
-	struct regulator_dev *rdev = dev_get_drvdata(dev);
+	struct regulator_dev *rdev = dev_to_rdev(dev);
 
 	return regulator_print_opmode(buf,
 		rdev->constraints->state_disk.mode);
@@ -919,7 +919,7 @@ static DEVICE_ATTR_RO(suspend_disk_mode);
 static ssize_t suspend_standby_mode_show(struct device *dev,
 					 struct device_attribute *attr, char *buf)
 {
-	struct regulator_dev *rdev = dev_get_drvdata(dev);
+	struct regulator_dev *rdev = dev_to_rdev(dev);
 
 	return regulator_print_opmode(buf,
 		rdev->constraints->state_standby.mode);
@@ -929,7 +929,7 @@ static DEVICE_ATTR_RO(suspend_standby_mode);
 static ssize_t suspend_mem_state_show(struct device *dev,
 				      struct device_attribute *attr, char *buf)
 {
-	struct regulator_dev *rdev = dev_get_drvdata(dev);
+	struct regulator_dev *rdev = dev_to_rdev(dev);
 
 	return regulator_print_state(buf,
 			rdev->constraints->state_mem.enabled);
@@ -939,7 +939,7 @@ static DEVICE_ATTR_RO(suspend_mem_state);
 static ssize_t suspend_disk_state_show(struct device *dev,
 				       struct device_attribute *attr, char *buf)
 {
-	struct regulator_dev *rdev = dev_get_drvdata(dev);
+	struct regulator_dev *rdev = dev_to_rdev(dev);
 
 	return regulator_print_state(buf,
 			rdev->constraints->state_disk.enabled);
@@ -949,7 +949,7 @@ static DEVICE_ATTR_RO(suspend_disk_state);
 static ssize_t suspend_standby_state_show(struct device *dev,
 					  struct device_attribute *attr, char *buf)
 {
-	struct regulator_dev *rdev = dev_get_drvdata(dev);
+	struct regulator_dev *rdev = dev_to_rdev(dev);
 
 	return regulator_print_state(buf,
 			rdev->constraints->state_standby.enabled);
@@ -959,7 +959,7 @@ static DEVICE_ATTR_RO(suspend_standby_state);
 static ssize_t bypass_show(struct device *dev,
 			   struct device_attribute *attr, char *buf)
 {
-	struct regulator_dev *rdev = dev_get_drvdata(dev);
+	struct regulator_dev *rdev = dev_to_rdev(dev);
 	const char *report;
 	bool bypass;
 	int ret;
@@ -983,7 +983,7 @@ static DEVICE_ATTR_RO(bypass);
 	{										\
 		int ret;								\
 		unsigned int flags;							\
-		struct regulator_dev *rdev = dev_get_drvdata(dev);			\
+		struct regulator_dev *rdev = dev_to_rdev(dev);				\
 		ret = _regulator_get_error_flags(rdev, &flags);				\
 		if (ret)								\
 			return ret;							\
@@ -5278,7 +5278,7 @@ static const struct attribute_group *regulator_dev_groups[] = {
 
 static void regulator_dev_release(struct device *dev)
 {
-	struct regulator_dev *rdev = dev_get_drvdata(dev);
+	struct regulator_dev *rdev = dev_to_rdev(dev);
 
 	debugfs_remove_recursive(rdev->debugfs);
 	kfree(rdev->constraints);
@@ -5588,7 +5588,6 @@ regulator_register(struct device *dev,
 		goto rinse;
 	}
 	device_initialize(&rdev->dev);
-	dev_set_drvdata(&rdev->dev, rdev);
 	rdev->dev.class = &regulator_class;
 	spin_lock_init(&rdev->err_lock);
 
