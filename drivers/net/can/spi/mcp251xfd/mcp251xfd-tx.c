@@ -198,7 +198,7 @@ netdev_tx_t mcp251xfd_start_xmit(struct sk_buff *skb,
 
 	return NETDEV_TX_OK;
 
- out_err:
+out_err:
 	netdev_err(priv->ndev, "ERROR in %s: %d\n", __func__, err);
 
 	return NETDEV_TX_OK;
