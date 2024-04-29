@@ -598,5 +598,5 @@ static void __exit lenovo_ec_exit(void)
 module_exit(lenovo_ec_exit);
 
 MODULE_AUTHOR("David Ober <dober@lenovo.com>");
-MODULE_DESCRIPTION("HWMON driver for sensors accesssible via EC in LENOVO motherboards");
+MODULE_DESCRIPTION("HWMON driver for sensors accessible via EC in LENOVO motherboards");
 MODULE_LICENSE("GPL");
