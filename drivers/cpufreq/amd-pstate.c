@@ -50,6 +50,7 @@
 
 #define AMD_PSTATE_TRANSITION_LATENCY	20000
 #define AMD_PSTATE_TRANSITION_DELAY	1000
+#define AMD_PSTATE_FAST_CPPC_TRANSITION_DELAY	600
 #define AMD_PSTATE_PREFCORE_THRESHOLD	166
 
 /*
@@ -868,7 +869,11 @@ static int amd_pstate_cpu_init(struct cpufreq_policy *policy)
 	}
 
 	policy->cpuinfo.transition_latency = AMD_PSTATE_TRANSITION_LATENCY;
-	policy->transition_delay_us = AMD_PSTATE_TRANSITION_DELAY;
+
+	if (cpu_feature_enabled(X86_FEATURE_FAST_CPPC))
+		policy->transition_delay_us = AMD_PSTATE_FAST_CPPC_TRANSITION_DELAY;
+	else
+		policy->transition_delay_us = AMD_PSTATE_TRANSITION_DELAY;
 
 	policy->min = min_freq;
 	policy->max = max_freq;
