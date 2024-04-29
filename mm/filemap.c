@@ -3615,6 +3615,20 @@ static vm_fault_t filemap_map_order0_folio(struct vm_fault *vmf,
 	return ret;
 }
 
+static void filemap_lruvec_stat_update(struct mem_cgroup *memcg,
+				       pg_data_t *pgdat, int nr)
+{
+	struct lruvec *lruvec;
+
+	if (!memcg) {
+		__mod_node_page_state(pgdat, NR_FILE_MAPPED, nr);
+		return;
+	}
+
+	lruvec = mem_cgroup_lruvec(memcg, pgdat);
+	__mod_lruvec_state(lruvec, NR_FILE_MAPPED, nr);
+}
+
 vm_fault_t filemap_map_pages(struct vm_fault *vmf,
 			     pgoff_t start_pgoff, pgoff_t end_pgoff)
 {
@@ -3628,6 +3642,9 @@ vm_fault_t filemap_map_pages(struct vm_fault *vmf,
 	vm_fault_t ret = 0;
 	unsigned long rss = 0;
 	unsigned int nr_pages = 0, mmap_miss = 0, mmap_miss_saved, folio_type;
+	struct mem_cgroup *memcg, *memcg_cur;
+	pg_data_t *pgdat, *pgdat_cur;
+	int nr_mapped = 0;
 
 	rcu_read_lock();
 	folio = next_uptodate_folio(&xas, mapping, end_pgoff);
@@ -3648,9 +3665,20 @@ vm_fault_t filemap_map_pages(struct vm_fault *vmf,
 	}
 
 	folio_type = mm_counter_file(folio);
+	memcg = folio_memcg(folio);
+	pgdat = folio_pgdat(folio);
 	do {
 		unsigned long end;
-		int nr_mapped = 0;
+
+		memcg_cur = folio_memcg(folio);
+		pgdat_cur = folio_pgdat(folio);
+
+		if (unlikely(memcg != memcg_cur || pgdat != pgdat_cur)) {
+			filemap_lruvec_stat_update(memcg, pgdat, nr_mapped);
+			nr_mapped = 0;
+			memcg = memcg_cur;
+			pgdat = pgdat_cur;
+		}
 
 		addr += (xas.xa_index - last_pgoff) << PAGE_SHIFT;
 		vmf->pte += xas.xa_index - last_pgoff;
@@ -3668,11 +3696,10 @@ vm_fault_t filemap_map_pages(struct vm_fault *vmf,
 					nr_pages, &rss, &nr_mapped,
 					&mmap_miss);
 
-		__lruvec_stat_mod_folio(folio, NR_FILE_MAPPED, nr_mapped);
-
 		folio_unlock(folio);
 		folio_put(folio);
 	} while ((folio = next_uptodate_folio(&xas, mapping, end_pgoff)) != NULL);
+	filemap_lruvec_stat_update(memcg, pgdat, nr_mapped);
 	add_mm_counter(vma->vm_mm, folio_type, rss);
 	pte_unmap_unlock(vmf->pte, vmf->ptl);
 out:
