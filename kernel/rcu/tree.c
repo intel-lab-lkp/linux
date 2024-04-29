@@ -2983,7 +2983,7 @@ static void rcutree_enqueue(struct rcu_data *rdp, struct rcu_head *head, rcu_cal
  * Handle any core-RCU processing required by a call_rcu() invocation.
  */
 static void call_rcu_core(struct rcu_data *rdp, struct rcu_head *head,
-			  rcu_callback_t func, unsigned long flags)
+			  rcu_callback_t func)
 {
 	rcutree_enqueue(rdp, head, func);
 	/*
@@ -2992,37 +2992,6 @@ static void call_rcu_core(struct rcu_data *rdp, struct rcu_head *head,
 	 */
 	if (!rcu_is_watching())
 		invoke_rcu_core();
-
-	/* If interrupts were disabled or CPU offline, don't invoke RCU core. */
-	if (irqs_disabled_flags(flags) || cpu_is_offline(smp_processor_id()))
-		return;
-
-	/*
-	 * Force the grace period if too many callbacks or too long waiting.
-	 * Enforce hysteresis, and don't invoke rcu_force_quiescent_state()
-	 * if some other CPU has recently done so.  Also, don't bother
-	 * invoking rcu_force_quiescent_state() if the newly enqueued callback
-	 * is the only one waiting for a grace period to complete.
-	 */
-	if (unlikely(rcu_segcblist_n_cbs(&rdp->cblist) >
-		     rdp->qlen_last_fqs_check + qhimark)) {
-
-		/* Are we ignoring a completed grace period? */
-		note_gp_changes(rdp);
-
-		/* Start a new grace period if one not already started. */
-		if (!rcu_gp_in_progress()) {
-			rcu_accelerate_cbs_unlocked(rdp->mynode, rdp);
-		} else {
-			/* Give the grace period a kick. */
-			rdp->blimit = DEFAULT_MAX_RCU_BLIMIT;
-			if (READ_ONCE(rcu_state.n_force_qs) == rdp->n_force_qs_snap &&
-			    rcu_segcblist_first_pend_cb(&rdp->cblist) != head)
-				rcu_force_quiescent_state();
-			rdp->n_force_qs_snap = READ_ONCE(rcu_state.n_force_qs);
-			rdp->qlen_last_fqs_check = rcu_segcblist_n_cbs(&rdp->cblist);
-		}
-	}
 }
 
 /*
@@ -3121,7 +3090,7 @@ __call_rcu_common(struct rcu_head *head, rcu_callback_t func, bool lazy_in)
 	if (unlikely(rcu_rdp_is_offloaded(rdp)))
 		call_rcu_nocb(rdp, head, func, flags, lazy);
 	else
-		call_rcu_core(rdp, head, func, flags);
+		call_rcu_core(rdp, head, func);
 	local_irq_restore(flags);
 }
 
