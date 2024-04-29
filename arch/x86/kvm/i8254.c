@@ -316,6 +316,8 @@ void kvm_pit_set_reinject(struct kvm_pit *pit, bool reinject)
 		kvm_unregister_irq_mask_notifier(kvm, 0, &pit->mask_notifier);
 	}
 
+	kvm->stat.pit_reinject_mode = reinject;
+
 	atomic_set(&ps->reinject, reinject);
 }
 
