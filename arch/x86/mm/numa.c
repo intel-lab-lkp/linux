@@ -950,15 +950,16 @@ static struct numa_memblk *numa_memblk_list[NR_NODE_MEMBLKS] __initdata;
  * address range @start-@end
  *
  * RETURNS:
- * 0		  : Success
- * NUMA_NO_MEMBLK : No memblks exist in address range @start-@end
+ * NUMA_NO_MEMBLK if no memblks exist in address range @start-@end,
+ * zero on success without blocks modified and non-zero positive
+ * values on success with blocks modified.
  */
 
 int __init numa_fill_memblks(u64 start, u64 end)
 {
 	struct numa_memblk **blk = &numa_memblk_list[0];
 	struct numa_meminfo *mi = &numa_meminfo;
-	int count = 0;
+	int count = 0, modified = 0;
 	u64 prev_end;
 
 	/*
@@ -981,25 +982,27 @@ int __init numa_fill_memblks(u64 start, u64 end)
 	/* Sort the list of pointers in memblk->start order */
 	sort(&blk[0], count, sizeof(blk[0]), cmp_memblk, NULL);
 
-	/* Make sure the first/last memblks include start/end */
-	blk[0]->start = min(blk[0]->start, start);
-	blk[count - 1]->end = max(blk[count - 1]->end, end);
-
 	/*
 	 * Fill any gaps by tracking the previous memblks
 	 * end address and backfilling to it if needed.
 	 */
-	prev_end = blk[0]->end;
-	for (int i = 1; i < count; i++) {
+	prev_end = start;
+	for (int i = 0; i < count; i++) {
 		struct numa_memblk *curr = blk[i];
 
-		if (prev_end >= curr->start) {
-			if (prev_end < curr->end)
-				prev_end = curr->end;
-		} else {
+		if (prev_end < curr->start) {
 			curr->start = prev_end;
-			prev_end = curr->end;
+			modified = 1;
 		}
+
+		if (prev_end < curr->end)
+			prev_end = curr->end;
 	}
-	return 0;
+
+	if (blk[count - 1]->end < end) {
+		blk[count - 1]->end = end;
+		modified = 1;
+	}
+
+	return modified;
 }

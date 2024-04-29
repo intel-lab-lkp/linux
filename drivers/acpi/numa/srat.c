@@ -326,7 +326,7 @@ static int __init acpi_parse_cfmws(union acpi_subtable_headers *header,
 	struct acpi_cedt_cfmws *cfmws;
 	int *fake_pxm = arg;
 	u64 start, end;
-	int node;
+	int node, modified;
 
 	cfmws = (struct acpi_cedt_cfmws *)header;
 	start = cfmws->base_hpa;
@@ -338,7 +338,8 @@ static int __init acpi_parse_cfmws(union acpi_subtable_headers *header,
 	 * found for any portion of the window to cover the entire
 	 * window.
 	 */
-	if (!numa_fill_memblks(start, end))
+	modified = numa_fill_memblks(start, end);
+	if (modified != NUMA_NO_MEMBLK)
 		return 0;
 
 	/* No SRAT description. Create a new node. */
