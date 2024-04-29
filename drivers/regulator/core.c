@@ -1747,7 +1747,7 @@ static int set_consumer_device_supply(struct regulator_dev *rdev,
 	new_node->supply = supply;
 
 	if (consumer_dev_name != NULL) {
-		new_node->dev_name = kstrdup(consumer_dev_name, GFP_KERNEL);
+		new_node->dev_name = kstrdup_const(consumer_dev_name, GFP_KERNEL);
 		if (new_node->dev_name == NULL) {
 			kfree(new_node);
 			return -ENOMEM;
@@ -1782,7 +1782,7 @@ static int set_consumer_device_supply(struct regulator_dev *rdev,
 
 fail:
 	mutex_unlock(&regulator_list_mutex);
-	kfree(new_node->dev_name);
+	kfree_const(new_node->dev_name);
 	kfree(new_node);
 	return -EBUSY;
 }
@@ -1794,7 +1794,7 @@ static void unset_regulator_supplies(struct regulator_dev *rdev)
 	list_for_each_entry_safe(node, n, &regulator_map_list, list) {
 		if (rdev == node->regulator) {
 			list_del(&node->list);
-			kfree(node->dev_name);
+			kfree_const(node->dev_name);
 			kfree(node);
 		}
 	}
