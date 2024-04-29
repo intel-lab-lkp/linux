@@ -438,18 +438,15 @@ static struct device_node *of_get_child_regulator(struct device_node *parent,
 
 	for_each_child_of_node(parent, child) {
 		regnode = of_parse_phandle(child, prop_name, 0);
+		if (regnode)
+			break;
 
-		if (!regnode) {
-			regnode = of_get_child_regulator(child, prop_name);
-			if (regnode)
-				goto err_node_put;
-		} else {
-			goto err_node_put;
-		}
+		regnode = of_get_child_regulator(child, prop_name);
+		if (regnode)
+			break;
 	}
-	return NULL;
 
-err_node_put:
+	/* Release the node if the loop was exited early. */
 	of_node_put(child);
 	return regnode;
 }
