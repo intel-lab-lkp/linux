@@ -397,7 +397,7 @@ static noinstr int mce_severity_intel(struct mce *m, struct pt_regs *regs, char 
 			continue;
 		if (s->excp && excp != s->excp)
 			continue;
-		if (s->cpu_vfm && boot_cpu_data.x86_model != s->cpu_vfm)
+		if (s->cpu_vfm && boot_cpu_data.x86_vfm != s->cpu_vfm)
 			continue;
 		if (s->cpu_minstepping && boot_cpu_data.x86_stepping < s->cpu_minstepping)
 			continue;
