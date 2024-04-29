@@ -837,6 +837,41 @@ static void mdtc_calc_avail(struct dirty_throttle_control *mdtc,
 	mdtc->avail = filepages + min(headroom, other_clean);
 }
 
+static inline void
+global_domain_dirty_avail(struct dirty_throttle_control *dtc, bool bg)
+{
+	dtc->avail = global_dirtyable_memory();
+	dtc->dirty = global_node_page_state(NR_FILE_DIRTY);
+	if (!bg)
+		dtc->dirty += global_node_page_state(NR_WRITEBACK);
+}
+
+static inline void
+wb_domain_dirty_avail(struct dirty_throttle_control *dtc, bool bg)
+{
+	unsigned long filepages = 0, headroom = 0, writeback = 0;
+
+	mem_cgroup_wb_stats(dtc->wb, &filepages, &headroom, &dtc->dirty,
+			    &writeback);
+	if (!bg)
+		dtc->dirty += writeback;
+	mdtc_calc_avail(dtc, filepages, headroom);
+}
+
+/*
+ * Dirty background will ignore pages being written as we're trying to
+ * decide whether to put more under writeback.
+ */
+static void domain_dirty_avail(struct dirty_throttle_control *dtc, bool bg)
+{
+	struct dirty_throttle_control *gdtc = mdtc_gdtc(dtc);
+
+	if (gdtc)
+		wb_domain_dirty_avail(dtc, bg);
+	else
+		global_domain_dirty_avail(dtc, bg);
+}
+
 /**
  * __wb_calc_thresh - @wb's share of dirty threshold
  * @dtc: dirty_throttle_context of interest
@@ -2119,14 +2154,8 @@ bool wb_over_bg_thresh(struct bdi_writeback *wb)
 	struct dirty_throttle_control * const mdtc = mdtc_valid(&mdtc_stor) ?
 						     &mdtc_stor : NULL;
 
-	/*
-	 * Similar to balance_dirty_pages() but ignores pages being written
-	 * as we're trying to decide whether to put more under writeback.
-	 */
-	gdtc->avail = global_dirtyable_memory();
-	gdtc->dirty = global_node_page_state(NR_FILE_DIRTY);
+	domain_dirty_avail(gdtc, true);
 	domain_dirty_limits(gdtc);
-
 	if (gdtc->dirty > gdtc->bg_thresh)
 		return true;
 
@@ -2135,13 +2164,8 @@ bool wb_over_bg_thresh(struct bdi_writeback *wb)
 		return true;
 
 	if (mdtc) {
-		unsigned long filepages, headroom, writeback;
-
-		mem_cgroup_wb_stats(wb, &filepages, &headroom, &mdtc->dirty,
-				    &writeback);
-		mdtc_calc_avail(mdtc, filepages, headroom);
+		domain_dirty_avail(mdtc, true);
 		domain_dirty_limits(mdtc);	/* ditto, ignore writeback */
-
 		if (mdtc->dirty > mdtc->bg_thresh)
 			return true;
 
