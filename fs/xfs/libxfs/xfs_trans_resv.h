@@ -95,6 +95,13 @@ struct xfs_trans_resv {
 #define	XFS_ITRUNCATE_LOG_COUNT_REFLINK	8
 #define	XFS_WRITE_LOG_COUNT_REFLINK	8
 
+/*
+ * This is the maximum number of deferred extent freeing item extents (EFIs)
+ * that we'll attach to a transaction without rolling the transaction to avoid
+ * overrunning a tr_itruncate reservation.
+ */
+#define XFS_MAX_ITRUNCATE_EFIS		128
+
 void xfs_trans_resv_calc(struct xfs_mount *mp, struct xfs_trans_resv *resp);
 uint xfs_allocfree_block_count(struct xfs_mount *mp, uint num_ops);
 

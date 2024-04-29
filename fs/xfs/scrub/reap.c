@@ -169,7 +169,7 @@ static inline bool xreap_want_roll(const struct xreap_state *rs)
 {
 	if (rs->force_roll)
 		return true;
-	if (rs->deferred > XREP_MAX_ITRUNCATE_EFIS)
+	if (rs->deferred > XFS_MAX_ITRUNCATE_EFIS)
 		return true;
 	if (rs->invalidated > XREAP_MAX_BINVAL)
 		return true;

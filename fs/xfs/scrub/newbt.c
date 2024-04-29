@@ -452,7 +452,7 @@ xrep_newbt_free(
 		}
 
 		freed += ret;
-		if (freed >= XREP_MAX_ITRUNCATE_EFIS) {
+		if (freed >= XFS_MAX_ITRUNCATE_EFIS) {
 			error = xrep_defer_finish(sc);
 			if (error)
 				goto junkit;
