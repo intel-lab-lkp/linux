@@ -42,7 +42,10 @@
 #define IS_VALID_CS_TRACE_ID(id)	\
 	((id > CORESIGHT_TRACE_ID_RES_0) && (id < CORESIGHT_TRACE_ID_RES_TOP))
 
-/* Allocate and release IDs for a single default trace ID map */
+/**
+ * Get the global map that's used by sysfs
+ */
+struct coresight_trace_id_map *coresight_trace_id_map_default(void);
 
 /**
  * Read and optionally allocate a CoreSight trace ID and associate with a CPU.
@@ -57,7 +60,7 @@
  *
  * return: CoreSight trace ID or -EINVAL if allocation impossible.
  */
-int coresight_trace_id_get_cpu_id(int cpu);
+int coresight_trace_id_get_cpu_id(int cpu, struct coresight_trace_id_map *id_map);
 
 /**
  * Release an allocated trace ID associated with the CPU.
@@ -70,7 +73,7 @@ int coresight_trace_id_get_cpu_id(int cpu);
  *
  * @cpu: The CPU index to release the associated trace ID.
  */
-void coresight_trace_id_put_cpu_id(int cpu);
+void coresight_trace_id_put_cpu_id(int cpu, struct coresight_trace_id_map *id_map);
 
 /**
  * Read the current allocated CoreSight Trace ID value for the CPU.

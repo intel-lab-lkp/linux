@@ -241,7 +241,8 @@ int etm4_read_alloc_trace_id(struct etmv4_drvdata *drvdata)
 	 * or return the one currently allocated.
 	 * The trace id function has its own lock
 	 */
-	trace_id = coresight_trace_id_get_cpu_id(drvdata->cpu);
+	trace_id = coresight_trace_id_get_cpu_id(drvdata->cpu,
+						 coresight_trace_id_map_default());
 	if (IS_VALID_CS_TRACE_ID(trace_id))
 		drvdata->trcid = (u8)trace_id;
 	else
@@ -253,7 +254,7 @@ int etm4_read_alloc_trace_id(struct etmv4_drvdata *drvdata)
 
 void etm4_release_trace_id(struct etmv4_drvdata *drvdata)
 {
-	coresight_trace_id_put_cpu_id(drvdata->cpu);
+	coresight_trace_id_put_cpu_id(drvdata->cpu, coresight_trace_id_map_default());
 }
 
 struct etm4_enable_arg {
