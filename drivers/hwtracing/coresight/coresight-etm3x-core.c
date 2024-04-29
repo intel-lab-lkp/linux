@@ -465,7 +465,8 @@ int etm_read_alloc_trace_id(struct etm_drvdata *drvdata)
 	 *
 	 * trace id function has its own lock
 	 */
-	trace_id = coresight_trace_id_get_cpu_id(drvdata->cpu);
+	trace_id = coresight_trace_id_get_cpu_id(drvdata->cpu,
+						 coresight_trace_id_map_default());
 	if (IS_VALID_CS_TRACE_ID(trace_id))
 		drvdata->traceid = (u8)trace_id;
 	else
@@ -477,7 +478,7 @@ int etm_read_alloc_trace_id(struct etm_drvdata *drvdata)
 
 void etm_release_trace_id(struct etm_drvdata *drvdata)
 {
-	coresight_trace_id_put_cpu_id(drvdata->cpu);
+	coresight_trace_id_put_cpu_id(drvdata->cpu, coresight_trace_id_map_default());
 }
 
 static int etm_enable_perf(struct coresight_device *csdev,

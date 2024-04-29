@@ -12,7 +12,7 @@
 
 #include "coresight-trace-id.h"
 
-/* Default trace ID map. Used on systems that don't require per sink mappings */
+/* Default trace ID map. Used in sysfs mode and for system sources */
 static struct coresight_trace_id_map id_map_default;
 
 /* maintain a record of the mapping of IDs and pending releases per cpu */
@@ -152,7 +152,7 @@ static void coresight_trace_id_release_all_pending(void)
 	DUMP_ID_MAP(id_map);
 }
 
-static int coresight_trace_id_map_get_cpu_id(int cpu, struct coresight_trace_id_map *id_map)
+int coresight_trace_id_get_cpu_id(int cpu, struct coresight_trace_id_map *id_map)
 {
 	unsigned long flags;
 	int id;
@@ -195,8 +195,9 @@ get_cpu_id_out_unlock:
 	DUMP_ID_MAP(id_map);
 	return id;
 }
+EXPORT_SYMBOL_GPL(coresight_trace_id_get_cpu_id);
 
-static void coresight_trace_id_map_put_cpu_id(int cpu, struct coresight_trace_id_map *id_map)
+void coresight_trace_id_put_cpu_id(int cpu, struct coresight_trace_id_map *id_map)
 {
 	unsigned long flags;
 	int id;
@@ -222,6 +223,7 @@ static void coresight_trace_id_map_put_cpu_id(int cpu, struct coresight_trace_id
 	DUMP_ID_CPU(cpu, id);
 	DUMP_ID_MAP(id_map);
 }
+EXPORT_SYMBOL_GPL(coresight_trace_id_put_cpu_id);
 
 static int coresight_trace_id_map_get_system_id(struct coresight_trace_id_map *id_map)
 {
@@ -250,19 +252,11 @@ static void coresight_trace_id_map_put_system_id(struct coresight_trace_id_map *
 	DUMP_ID_MAP(id_map);
 }
 
-/* API functions */
-
-int coresight_trace_id_get_cpu_id(int cpu)
+struct coresight_trace_id_map *coresight_trace_id_map_default(void)
 {
-	return coresight_trace_id_map_get_cpu_id(cpu, &id_map_default);
+	return &id_map_default;
 }
-EXPORT_SYMBOL_GPL(coresight_trace_id_get_cpu_id);
-
-void coresight_trace_id_put_cpu_id(int cpu)
-{
-	coresight_trace_id_map_put_cpu_id(cpu, &id_map_default);
-}
-EXPORT_SYMBOL_GPL(coresight_trace_id_put_cpu_id);
+EXPORT_SYMBOL_GPL(coresight_trace_id_map_default);
 
 int coresight_trace_id_read_cpu_id(int cpu)
 {
