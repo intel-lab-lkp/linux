@@ -1753,6 +1753,14 @@ static void domain_dirty_freerun(struct dirty_throttle_control *dtc,
 	dtc->freerun = dirty <= dirty_freerun_ceiling(thresh, bg_thresh);
 }
 
+static void balance_domain_limits(struct dirty_throttle_control *dtc,
+				  bool strictlimit)
+{
+	domain_dirty_avail(dtc, false);
+	domain_dirty_limits(dtc);
+	domain_dirty_freerun(dtc, strictlimit);
+}
+
 static void wb_dirty_freerun(struct dirty_throttle_control *dtc,
 			     bool strictlimit)
 {
@@ -1809,19 +1817,13 @@ static int balance_dirty_pages(struct bdi_writeback *wb,
 
 		nr_dirty = global_node_page_state(NR_FILE_DIRTY);
 
-		domain_dirty_avail(gdtc, false);
-		domain_dirty_limits(gdtc);
-		domain_dirty_freerun(gdtc, strictlimit);
-
-		if (mdtc) {
+		balance_domain_limits(gdtc, strictlimit);
+		if (mdtc)
 			/*
 			 * If @wb belongs to !root memcg, repeat the same
 			 * basic calculations for the memcg domain.
 			 */
-			domain_dirty_avail(mdtc, false);
-			domain_dirty_limits(mdtc);
-			domain_dirty_freerun(mdtc, strictlimit);
-		}
+			balance_domain_limits(mdtc, strictlimit);
 
 		/*
 		 * In laptop mode, we wait until hitting the higher threshold
