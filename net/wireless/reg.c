@@ -4214,7 +4214,8 @@ bool regulatory_pre_cac_allowed(struct wiphy *wiphy)
 		return pre_cac_allowed;
 	}
 
-	if (regd->dfs_region == wiphy_regd->dfs_region &&
+	if ((regd->dfs_region == wiphy_regd->dfs_region ||
+	     wiphy->regulatory_flags & REGULATORY_WIPHY_SELF_MANAGED) &&
 	    wiphy_regd->dfs_region == NL80211_DFS_ETSI)
 		pre_cac_allowed = true;
 
