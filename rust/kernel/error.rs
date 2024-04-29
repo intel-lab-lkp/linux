@@ -4,10 +4,11 @@
 //!
 //! C header: [`include/uapi/asm-generic/errno-base.h`](srctree/include/uapi/asm-generic/errno-base.h)
 
-use crate::{alloc::AllocError, str::CStr};
+use crate::str::CStr;
 
 use alloc::alloc::LayoutError;
 
+use core::alloc::AllocError;
 use core::convert::From;
 use core::fmt;
 use core::num::TryFromIntError;

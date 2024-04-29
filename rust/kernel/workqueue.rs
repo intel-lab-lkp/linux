@@ -132,9 +132,10 @@
 //!
 //! C header: [`include/linux/workqueue.h`](srctree/include/linux/workqueue.h)
 
-use crate::alloc::{AllocError, Flags};
+use crate::alloc::Flags;
 use crate::{bindings, prelude::*, sync::Arc, sync::LockClassKey, types::Opaque};
 use alloc::boxed::Box;
+use core::alloc::AllocError;
 use core::marker::PhantomData;
 use core::pin::Pin;
 

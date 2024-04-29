@@ -2,8 +2,9 @@
 
 //! Extensions to [`Box`] for fallible allocations.
 
-use super::{AllocError, Flags};
+use super::Flags;
 use alloc::boxed::Box;
+use core::alloc::AllocError;
 use core::mem::MaybeUninit;
 use core::result::Result;
 
