@@ -1263,21 +1263,22 @@ static inline void __user *__vhost_get_user(struct vhost_virtqueue *vq,
 	return __vhost_get_user_slow(vq, addr, size, type);
 }
 
-#define vhost_put_user(vq, x, ptr)		\
-({ \
-	int ret; \
-	if (!vq->iotlb) { \
-		ret = __put_user(x, ptr); \
-	} else { \
-		__typeof__(ptr) to = \
+#define vhost_put_user(vq, x, ptr)					\
+({									\
+	int ret;							\
+	if (!vq->iotlb) {						\
+		ret = __put_user(x, ptr);				\
+	} else {							\
+		__typeof__(ptr) to =					\
 			(__typeof__(ptr)) __vhost_get_user(vq, ptr,	\
-					  sizeof(*ptr), VHOST_ADDR_USED); \
-		if (to != NULL) \
-			ret = __put_user(x, to); \
-		else \
-			ret = -EFAULT;	\
-	} \
-	ret; \
+						sizeof(*ptr),		\
+						VHOST_ADDR_USED);	\
+		if (to != NULL)						\
+			ret = __put_user(x, to);			\
+		else							\
+			ret = -EFAULT;					\
+	}								\
+	ret;								\
 })
 
 static inline int vhost_put_avail_event(struct vhost_virtqueue *vq)
@@ -1308,22 +1309,21 @@ static inline int vhost_put_used_idx(struct vhost_virtqueue *vq)
 			      &vq->used->idx);
 }
 
-#define vhost_get_user(vq, x, ptr, type)		\
-({ \
-	int ret; \
-	if (!vq->iotlb) { \
-		ret = __get_user(x, ptr); \
-	} else { \
-		__typeof__(ptr) from = \
-			(__typeof__(ptr)) __vhost_get_user(vq, ptr, \
-							   sizeof(*ptr), \
-							   type); \
-		if (from != NULL) \
-			ret = __get_user(x, from); \
-		else \
-			ret = -EFAULT; \
-	} \
-	ret; \
+#define vhost_get_user(vq, x, ptr, type)				\
+({									\
+	int ret;							\
+	if (!vq->iotlb) {						\
+		ret = __get_user(x, ptr);				\
+	} else {							\
+		__typeof__(ptr) from =					\
+			(__typeof__(ptr)) __vhost_get_user(vq, ptr,	\
+						sizeof(*ptr), type);	\
+		if (from != NULL)					\
+			ret = __get_user(x, from);			\
+		else							\
+			ret = -EFAULT;					\
+	}								\
+	ret;								\
 })
 
 #define vhost_get_avail(vq, x, ptr) \
