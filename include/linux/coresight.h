@@ -289,6 +289,7 @@ struct coresight_device {
 	bool sysfs_sink_activated;
 	struct dev_ext_attribute *ea;
 	struct coresight_device *def_sink;
+	struct coresight_trace_id_map perf_id_map;
 	/* sysfs links between components */
 	int nr_links;
 	bool has_conns_grp;
