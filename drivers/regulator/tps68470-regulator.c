@@ -56,7 +56,7 @@ static const struct linear_range tps68470_core_ranges[] = {
 
 static int tps68470_regulator_enable(struct regulator_dev *rdev)
 {
-	struct tps68470_regulator_data *data = rdev->reg_data;
+	struct tps68470_regulator_data *data = rdev_get_drvdata(rdev);
 	int ret;
 
 	/* The Core buck regulator needs the PMIC's PLL to be enabled */
@@ -73,7 +73,7 @@ static int tps68470_regulator_enable(struct regulator_dev *rdev)
 
 static int tps68470_regulator_disable(struct regulator_dev *rdev)
 {
-	struct tps68470_regulator_data *data = rdev->reg_data;
+	struct tps68470_regulator_data *data = rdev_get_drvdata(rdev);
 
 	if (rdev->desc->id == TPS68470_CORE)
 		clk_disable_unprepare(data->clk);
