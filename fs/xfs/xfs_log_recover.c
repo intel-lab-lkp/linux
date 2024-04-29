@@ -3040,10 +3040,14 @@ xlog_do_recovery_pass(
 		 * Detect this condition here. Use lsunit for the buffer size as
 		 * long as this looks like the mkfs case. Otherwise, return an
 		 * error to avoid a buffer overrun.
+		 *
+		 * Reject the invalid size if the file system has new enough
+		 * features that require a fixed mkfs.
 		 */
 		h_size = be32_to_cpu(rhead->h_size);
 		h_len = be32_to_cpu(rhead->h_len);
-		if (h_len > h_size && h_len <= log->l_mp->m_logbsize &&
+		if (!xfs_has_reflink(log->l_mp) && xfs_has_reflink(log->l_mp) &&
+		    h_len > h_size && h_len <= log->l_mp->m_logbsize &&
 		    rhead->h_num_logops == cpu_to_be32(1)) {
 			xfs_warn(log->l_mp,
 		"invalid iclog size (%d bytes), using lsunit (%d bytes)",
