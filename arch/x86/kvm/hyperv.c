@@ -149,6 +149,8 @@ static void synic_update_vector(struct kvm_vcpu_hv_synic *synic,
 					 APICV_INHIBIT_REASON_HYPERV,
 					 !!hv->synic_auto_eoi_used);
 
+	vcpu->kvm->stat.synic_auto_eoi_used = !!hv->synic_auto_eoi_used;
+
 	up_write(&vcpu->kvm->arch.apicv_update_lock);
 }
 
