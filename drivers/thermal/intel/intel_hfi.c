@@ -175,6 +175,7 @@ static struct workqueue_struct *hfi_updates_wq;
 
 /* Keep this variable 8-byte aligned to get atomic accesses. */
 static unsigned long hfi_update_delay = HFI_UPDATE_DELAY;
+static int hfi_thermnl_caps_per_event = HFI_THERMNL_CAPS_PER_EVENT;
 
 #ifdef CONFIG_DEBUG_FS
 static int hfi_update_delay_get(void *data, u64 *val)
@@ -205,6 +206,25 @@ static int hfi_update_delay_set(void *data, u64 val)
 DEFINE_DEBUGFS_ATTRIBUTE(hfi_update_delay_fops, hfi_update_delay_get,
 			 hfi_update_delay_set, "%llu\n");
 
+static int hfi_thermnl_caps_per_event_get(void *data, u64 *val)
+{
+	mutex_lock(&hfi_instance_lock);
+	*val = hfi_thermnl_caps_per_event;
+	mutex_unlock(&hfi_instance_lock);
+	return 0;
+}
+
+static int hfi_thermnl_caps_per_event_set(void *data, u64 val)
+{
+	mutex_lock(&hfi_instance_lock);
+	hfi_thermnl_caps_per_event = val;
+	mutex_unlock(&hfi_instance_lock);
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(hfi_thermnl_caps_per_event_fops,
+			 hfi_thermnl_caps_per_event_get,
+			 hfi_thermnl_caps_per_event_set, "%llu\n");
 static struct dentry *hfi_debugfs_dir;
 
 static void hfi_debugfs_unregister(void)
@@ -223,6 +243,11 @@ static void hfi_debugfs_register(void)
 
 	f = debugfs_create_file("update_delay_ms", 0644, hfi_debugfs_dir,
 				NULL, &hfi_update_delay_fops);
+	if (!f)
+		goto err;
+
+	f = debugfs_create_file("thermnl_caps_per_event", 0644, hfi_debugfs_dir,
+				NULL, &hfi_thermnl_caps_per_event_fops);
 	if (!f)
 		goto err;
 
@@ -286,16 +311,15 @@ static void update_capabilities(struct hfi_instance *hfi_instance)
 
 	get_hfi_caps(hfi_instance, cpu_caps);
 
-	if (cpu_count < HFI_THERMNL_CAPS_PER_EVENT)
+	if (cpu_count < hfi_thermnl_caps_per_event)
 		goto last_cmd;
 
 	/* Process complete chunks of HFI_THERMNL_CAPS_PER_EVENT capabilities. */
 	for (i = 0;
-	     (i + HFI_THERMNL_CAPS_PER_EVENT) <= cpu_count;
-	     i += HFI_THERMNL_CAPS_PER_EVENT)
-		thermal_genl_cpu_capability_event(HFI_THERMNL_CAPS_PER_EVENT,
+	     (i + hfi_thermnl_caps_per_event) <= cpu_count;
+	     i += hfi_thermnl_caps_per_event)
+		thermal_genl_cpu_capability_event(hfi_thermnl_caps_per_event,
 						  &cpu_caps[i]);
-
 	cpu_count = cpu_count - i;
 
 last_cmd:
