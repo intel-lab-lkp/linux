@@ -5955,12 +5955,6 @@ struct regmap *rdev_get_regmap(struct regulator_dev *rdev)
 }
 EXPORT_SYMBOL_GPL(rdev_get_regmap);
 
-void *regulator_get_init_drvdata(struct regulator_init_data *reg_init_data)
-{
-	return reg_init_data->driver_data;
-}
-EXPORT_SYMBOL_GPL(regulator_get_init_drvdata);
-
 #ifdef CONFIG_DEBUG_FS
 static int supply_map_show(struct seq_file *sf, void *data)
 {
