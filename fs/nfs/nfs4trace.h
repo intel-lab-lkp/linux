@@ -2564,6 +2564,7 @@ DECLARE_EVENT_CLASS(nfs4_offload_class,
 			), \
 			TP_ARGS(args, error))
 DEFINE_NFS4_OFFLOAD_EVENT(nfs4_offload_cancel);
+DEFINE_NFS4_OFFLOAD_EVENT(nfs4_offload_status);
 
 DECLARE_EVENT_CLASS(nfs4_xattr_event,
 		TP_PROTO(

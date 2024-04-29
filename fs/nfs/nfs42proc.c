@@ -21,6 +21,7 @@
 
 #define NFSDBG_FACILITY NFSDBG_PROC
 static int nfs42_do_offload_cancel_async(struct file *dst, nfs4_stateid *std);
+static int nfs42_proc_offload_status(struct file *file, nfs4_stateid *stateid);
 
 static void nfs42_set_netaddr(struct file *filep, struct nfs42_netaddr *naddr)
 {
@@ -173,6 +174,9 @@ int nfs42_proc_deallocate(struct file *filep, loff_t offset, loff_t len)
 	return err;
 }
 
+/* Wait this long before checking progress on a COPY operation */
+#define NFS42_COPY_TIMEOUT	(7 * HZ)
+
 static int handle_async_copy(struct nfs42_copy_res *res,
 			     struct nfs_server *dst_server,
 			     struct nfs_server *src_server,
@@ -222,7 +226,9 @@ static int handle_async_copy(struct nfs42_copy_res *res,
 		spin_unlock(&src_server->nfs_client->cl_lock);
 	}
 
-	status = wait_for_completion_interruptible(&copy->completion);
+wait:
+	status = wait_for_completion_interruptible_timeout(&copy->completion,
+							   NFS42_COPY_TIMEOUT);
 	spin_lock(&dst_server->nfs_client->cl_lock);
 	list_del_init(&copy->copies);
 	spin_unlock(&dst_server->nfs_client->cl_lock);
@@ -231,12 +237,20 @@ static int handle_async_copy(struct nfs42_copy_res *res,
 		list_del_init(&copy->src_copies);
 		spin_unlock(&src_server->nfs_client->cl_lock);
 	}
-	if (status == -ERESTARTSYS) {
+	switch (status) {
+	case 0:
+		status = nfs42_proc_offload_status(src, src_stateid);
+		if (status && status != -EOPNOTSUPP)
+			goto wait;
+		break;
+	case -ERESTARTSYS:
 		goto out_cancel;
-	} else if (copy->flags || copy->error == NFS4ERR_PARTNER_NO_AUTH) {
-		status = -EAGAIN;
-		*restart = true;
-		goto out_cancel;
+	default:
+		if (copy->flags || copy->error == NFS4ERR_PARTNER_NO_AUTH) {
+			status = -EAGAIN;
+			*restart = true;
+			goto out_cancel;
+		}
 	}
 out:
 	res->write_res.count = copy->count;
@@ -578,6 +592,80 @@ static int nfs42_do_offload_cancel_async(struct file *dst,
 	status = rpc_wait_for_completion_task(task);
 	if (status == -ENOTSUPP)
 		dst_server->caps &= ~NFS_CAP_OFFLOAD_CANCEL;
+	rpc_put_task(task);
+	return status;
+}
+
+static void nfs42_offload_status_prepare(struct rpc_task *task, void *calldata)
+{
+	struct nfs42_offload_data *data = calldata;
+
+	nfs4_setup_sequence(data->seq_server->nfs_client,
+				&data->args.osa_seq_args,
+				&data->res.osr_seq_res, task);
+}
+
+static void nfs42_offload_status_done(struct rpc_task *task, void *calldata)
+{
+	struct nfs42_offload_data *data = calldata;
+
+	trace_nfs4_offload_status(&data->args, task->tk_status);
+	nfs41_sequence_done(task, &data->res.osr_seq_res);
+	if (task->tk_status &&
+		nfs4_async_handle_error(task, data->seq_server, NULL,
+			NULL) == -EAGAIN)
+		rpc_restart_call_prepare(task);
+}
+
+static const struct rpc_call_ops nfs42_offload_status_ops = {
+	.rpc_call_prepare = nfs42_offload_status_prepare,
+	.rpc_call_done = nfs42_offload_status_done,
+	.rpc_release = nfs42_free_offload_data,
+};
+
+static int nfs42_proc_offload_status(struct file *file, nfs4_stateid *stateid)
+{
+	struct nfs_open_context *ctx = nfs_file_open_context(file);
+	struct nfs_server *server = NFS_SERVER(file_inode(file));
+	struct nfs42_offload_data *data = NULL;
+	struct rpc_task *task;
+	struct rpc_message msg = {
+		.rpc_proc	= &nfs4_procedures[NFSPROC4_CLNT_OFFLOAD_STATUS],
+		.rpc_cred	= ctx->cred,
+	};
+	struct rpc_task_setup task_setup_data = {
+		.rpc_client	= server->client,
+		.rpc_message	= &msg,
+		.callback_ops	= &nfs42_offload_status_ops,
+		.workqueue	= nfsiod_workqueue,
+		.flags		= RPC_TASK_ASYNC | RPC_TASK_SOFTCONN,
+	};
+	int status;
+
+	if (!(server->caps & NFS_CAP_OFFLOAD_STATUS))
+		return -EOPNOTSUPP;
+
+	data = kzalloc(sizeof(struct nfs42_offload_data), GFP_KERNEL);
+	if (data == NULL)
+		return -ENOMEM;
+
+	data->seq_server = server;
+	data->args.osa_src_fh = NFS_FH(file_inode(file));
+	memcpy(&data->args.osa_stateid, stateid,
+		sizeof(data->args.osa_stateid));
+	msg.rpc_argp = &data->args;
+	msg.rpc_resp = &data->res;
+	task_setup_data.callback_data = data;
+	nfs4_init_sequence(&data->args.osa_seq_args, &data->res.osr_seq_res,
+			   1, 0);
+	task = rpc_run_task(&task_setup_data);
+	if (IS_ERR(task)) {
+		nfs42_free_offload_data(data);
+		return PTR_ERR(task);
+	}
+	status = rpc_wait_for_completion_task(task);
+	if (status == -ENOTSUPP)
+		server->caps &= ~NFS_CAP_OFFLOAD_STATUS;
 	rpc_put_task(task);
 	return status;
 }
