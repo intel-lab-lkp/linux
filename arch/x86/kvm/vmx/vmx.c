@@ -5657,6 +5657,8 @@ static int handle_apic_write(struct kvm_vcpu *vcpu)
 {
 	unsigned long exit_qualification = vmx_get_exit_qual(vcpu);
 
+	++vcpu->stat.apicv_unaccelerated_inj;
+
 	/*
 	 * APIC-write VM-Exit is trap-like, KVM doesn't need to advance RIP and
 	 * hardware has done any necessary aliasing, offset adjustments, etc...

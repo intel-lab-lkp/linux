@@ -1576,6 +1576,7 @@ struct kvm_vcpu_stat {
 	u64 guest_mode;
 	u64 notify_window_exits;
 	u64 apicv_active;
+	u64 apicv_unaccelerated_inj;
 };
 
 struct x86_instruction_info;

@@ -517,6 +517,8 @@ int avic_incomplete_ipi_interception(struct kvm_vcpu *vcpu)
 			kvm_apic_write_nodecode(vcpu, APIC_ICR);
 		else
 			kvm_apic_send_ipi(apic, icrl, icrh);
+
+		++vcpu->stat.apicv_unaccelerated_inj;
 		break;
 	case AVIC_IPI_FAILURE_TARGET_NOT_RUNNING:
 		/*
@@ -525,6 +527,8 @@ int avic_incomplete_ipi_interception(struct kvm_vcpu *vcpu)
 		 * vcpus. So, we just need to kick the appropriate vcpu.
 		 */
 		avic_kick_target_vcpus(vcpu->kvm, apic, icrl, icrh, index);
+
+		++vcpu->stat.apicv_unaccelerated_inj;
 		break;
 	case AVIC_IPI_FAILURE_INVALID_BACKING_PAGE:
 		WARN_ONCE(1, "Invalid backing page\n");
@@ -704,6 +708,9 @@ int avic_unaccelerated_access_interception(struct kvm_vcpu *vcpu)
 
 	trace_kvm_avic_unaccelerated_access(vcpu->vcpu_id, offset,
 					    trap, write, vector);
+
+	++vcpu->stat.apicv_unaccelerated_inj;
+
 	if (trap) {
 		/* Handling Trap */
 		WARN_ONCE(!write, "svm: Handling trap read.\n");
