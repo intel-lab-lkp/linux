@@ -56,10 +56,13 @@
 static bool dump_vma_snapshot(struct coredump_params *cprm);
 static void free_vma_snapshot(struct coredump_params *cprm);
 
+#define MAX_FILE_NOTE_SIZE (4*1024*1024)
+
 static int core_uses_pid;
 static unsigned int core_pipe_limit;
 static char core_pattern[CORENAME_MAX_SIZE] = "core";
 static int core_name_size = CORENAME_MAX_SIZE;
+unsigned int max_file_note_size = MAX_FILE_NOTE_SIZE;
 
 struct core_name {
 	char *corename;
