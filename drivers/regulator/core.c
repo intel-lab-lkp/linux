@@ -4872,11 +4872,7 @@ static int _notifier_call_chain(struct regulator_dev *rdev,
 int _regulator_bulk_get(struct device *dev, int num_consumers,
 			struct regulator_bulk_data *consumers, enum regulator_get_type get_type)
 {
-	int i;
-	int ret;
-
-	for (i = 0; i < num_consumers; i++)
-		consumers[i].consumer = NULL;
+	int ret, i;
 
 	for (i = 0; i < num_consumers; i++) {
 		consumers[i].consumer = _regulator_get(dev,
@@ -4885,7 +4881,6 @@ int _regulator_bulk_get(struct device *dev, int num_consumers,
 			ret = dev_err_probe(dev, PTR_ERR(consumers[i].consumer),
 					    "Failed to get supply '%s'",
 					    consumers[i].supply);
-			consumers[i].consumer = NULL;
 			goto err;
 		}
 
