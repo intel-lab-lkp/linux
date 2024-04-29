@@ -96,6 +96,11 @@ struct rpcrdma_ep {
 	unsigned int		re_inline_send;	/* negotiated */
 	unsigned int		re_inline_recv;	/* negotiated */
 
+	spinlock_t		re_mr_lock;
+	struct list_head	re_mrs;
+	struct list_head	re_all_mrs;
+	struct work_struct	re_refresh_worker;
+
 	atomic_t		re_completion_ids;
 
 	char			re_write_pad[XDR_UNIT];
@@ -253,7 +258,7 @@ struct rpcrdma_mr {
 		struct ib_reg_wr	mr_regwr;
 		struct ib_send_wr	mr_invwr;
 	};
-	struct rpcrdma_xprt	*mr_xprt;
+	struct rpcrdma_ep	*mr_ep;
 	u32			mr_handle;
 	u32			mr_length;
 	u64			mr_offset;
@@ -365,7 +370,6 @@ rpcrdma_mr_pop(struct list_head *list)
 struct rpcrdma_buffer {
 	spinlock_t		rb_lock;
 	struct list_head	rb_send_bufs;
-	struct list_head	rb_mrs;
 
 	unsigned long		rb_sc_head;
 	unsigned long		rb_sc_tail;
@@ -373,7 +377,6 @@ struct rpcrdma_buffer {
 	struct rpcrdma_sendctx	**rb_sc_ctxs;
 
 	struct list_head	rb_allreqs;
-	struct list_head	rb_all_mrs;
 	struct list_head	rb_all_reps;
 
 	struct llist_head	rb_free_reps;
@@ -383,8 +386,6 @@ struct rpcrdma_buffer {
 
 	u32			rb_bc_srv_max_requests;
 	u32			rb_bc_max_requests;
-
-	struct work_struct	rb_refresh_worker;
 };
 
 /*
@@ -533,7 +534,7 @@ rpcrdma_data_dir(bool writing)
  */
 void frwr_reset(struct rpcrdma_req *req);
 int frwr_query_device(struct rpcrdma_ep *ep, const struct ib_device *device);
-int frwr_mr_init(struct rpcrdma_xprt *r_xprt, struct rpcrdma_mr *mr);
+int frwr_mr_init(struct rpcrdma_ep *ep, struct rpcrdma_mr *mr);
 void frwr_mr_release(struct rpcrdma_mr *mr);
 struct rpcrdma_mr_seg *frwr_map(struct rpcrdma_xprt *r_xprt,
 				struct rpcrdma_mr_seg *seg,

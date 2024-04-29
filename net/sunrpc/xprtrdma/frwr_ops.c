@@ -112,15 +112,14 @@ void frwr_reset(struct rpcrdma_req *req)
 
 /**
  * frwr_mr_init - Initialize one MR
- * @r_xprt: controlling transport instance
+ * @ep: controlling transport instance
  * @mr: generic MR to prepare for FRWR
  *
  * Returns zero if successful. Otherwise a negative errno
  * is returned.
  */
-int frwr_mr_init(struct rpcrdma_xprt *r_xprt, struct rpcrdma_mr *mr)
+int frwr_mr_init(struct rpcrdma_ep *ep, struct rpcrdma_mr *mr)
 {
-	struct rpcrdma_ep *ep = r_xprt->rx_ep;
 	unsigned int depth = ep->re_max_fr_depth;
 	struct scatterlist *sg;
 	struct ib_mr *frmr;
@@ -134,7 +133,7 @@ int frwr_mr_init(struct rpcrdma_xprt *r_xprt, struct rpcrdma_mr *mr)
 	if (IS_ERR(frmr))
 		goto out_mr_err;
 
-	mr->mr_xprt = r_xprt;
+	mr->mr_ep = ep;
 	mr->mr_ibmr = frmr;
 	mr->mr_device = NULL;
 	INIT_LIST_HEAD(&mr->mr_list);
