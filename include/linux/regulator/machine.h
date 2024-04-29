@@ -274,8 +274,7 @@ struct regulator_consumer_supply {
  * @num_consumer_supplies: Number of consumer device supplies.
  * @consumer_supplies: Consumer device supply configuration.
  *
- * @regulator_init: Callback invoked when the regulator has been registered.
- * @driver_data: Data passed to regulator_init.
+ * @driver_data: Pointer copied to regulator_dev.reg_data.
  */
 struct regulator_init_data {
 	const char *supply_regulator;        /* or NULL for system supply */
@@ -285,9 +284,7 @@ struct regulator_init_data {
 	int num_consumer_supplies;
 	struct regulator_consumer_supply *consumer_supplies;
 
-	/* optional regulator machine specific init */
-	int (*regulator_init)(void *driver_data);
-	void *driver_data;	/* core does not touch this */
+	void *driver_data;
 };
 
 #ifdef CONFIG_REGULATOR
