@@ -1490,6 +1490,7 @@ struct nfs42_offload_status_res {
 	struct nfs4_sequence_res	osr_seq_res;
 	uint64_t			osr_count;
 	int				osr_status;
+	bool				completed;
 };
 
 struct nfs42_copy_notify_args {
