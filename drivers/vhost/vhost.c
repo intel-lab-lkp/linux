@@ -2580,7 +2580,6 @@ int vhost_get_vq_desc(struct vhost_virtqueue *vq,
 {
 	struct vring_desc desc;
 	unsigned int i, head, found = 0;
-	u16 last_avail_idx = vq->last_avail_idx;
 	__virtio16 ring_head;
 	int ret, access;
 
@@ -2595,10 +2594,10 @@ int vhost_get_vq_desc(struct vhost_virtqueue *vq,
 
 	/* Grab the next descriptor number they're advertising, and increment
 	 * the index we've seen. */
-	if (unlikely(vhost_get_avail_head(vq, &ring_head, last_avail_idx))) {
+	if (unlikely(vhost_get_avail_head(vq, &ring_head, vq->last_avail_idx))) {
 		vq_err(vq, "Failed to read head: idx %d address %p\n",
-		       last_avail_idx,
-		       &vq->avail->ring[last_avail_idx % vq->num]);
+		       vq->last_avail_idx,
+		       &vq->avail->ring[vq->last_avail_idx % vq->num]);
 		return -EFAULT;
 	}
 
