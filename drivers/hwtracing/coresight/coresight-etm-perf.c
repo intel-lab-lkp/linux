@@ -444,6 +444,46 @@ err:
 	goto out;
 }
 
+static void etm_output_hw_ids(struct perf_event *event,
+			      struct coresight_trace_id_map *id_map,
+			      int this_events_cpu)
+{
+	int cpu;
+	u8 this_events_trace_id = coresight_trace_id_read_cpu_id(this_events_cpu, id_map);
+
+	/*
+	 * This isn't optimal because we likely only have a couple of IDs
+	 * allocated per-sink, but we only currently track the used trace IDs as
+	 * a bitmask, rather than the used CPUs in each ID map. It would also
+	 * require some extra locking to iterate a used CPUs bitmask and then
+	 * output the ID from a different structure. So at the moment just
+	 * iterate all CPUs.
+	 */
+	for_each_possible_cpu(cpu) {
+		u64 hw_id;
+		u8 trace_id = coresight_trace_id_read_cpu_id(cpu, id_map);
+
+		if (!IS_VALID_CS_TRACE_ID(trace_id))
+			continue;
+
+		hw_id = FIELD_PREP(CS_AUX_HW_ID_MAJOR_VERSION_MASK,
+				   CS_AUX_HW_ID_MAJOR_VERSION);
+		hw_id |= FIELD_PREP(CS_AUX_HW_ID_MINOR_VERSION_MASK,
+				    CS_AUX_HW_ID_MINOR_VERSION);
+
+		/* Repeat sending the ID for this event so that it's backwards compatible */
+		hw_id |= FIELD_PREP(CS_AUX_HW_ID_TRACE_ID_MASK, this_events_trace_id);
+
+		/*
+		 * Output the V0.1 HW_ID info that shows which other ID mappings
+		 * are valid on this sink.
+		 */
+		hw_id |= FIELD_PREP(CS_AUX_HW_ID_V01_CPU_MASK, cpu);
+		hw_id |= FIELD_PREP(CS_AUX_HW_ID_V01_TRACE_ID_MASK, trace_id);
+		perf_report_aux_output_id(event, hw_id);
+	}
+}
+
 static void etm_event_start(struct perf_event *event, int flags)
 {
 	int cpu = smp_processor_id();
@@ -452,7 +492,6 @@ static void etm_event_start(struct perf_event *event, int flags)
 	struct perf_output_handle *handle = &ctxt->handle;
 	struct coresight_device *sink, *csdev = per_cpu(csdev_src, cpu);
 	struct list_head *path;
-	u64 hw_id;
 
 	if (!csdev)
 		goto fail;
@@ -519,11 +558,7 @@ static void etm_event_start(struct perf_event *event, int flags)
 	 */
 	if (!cpumask_test_cpu(cpu, &event_data->aux_hwid_done)) {
 		cpumask_set_cpu(cpu, &event_data->aux_hwid_done);
-		hw_id = FIELD_PREP(CS_AUX_HW_ID_VERSION_MASK,
-				   CS_AUX_HW_ID_CURR_VERSION);
-		hw_id |= FIELD_PREP(CS_AUX_HW_ID_TRACE_ID_MASK,
-				    coresight_trace_id_read_cpu_id(cpu, &sink->perf_id_map));
-		perf_report_aux_output_id(event, hw_id);
+		etm_output_hw_ids(event, &sink->perf_id_map, cpu);
 	}
 
 out:
