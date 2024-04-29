@@ -4678,19 +4678,11 @@ vm_fault_t do_set_pmd(struct vm_fault *vmf, struct page *page)
 }
 #endif
 
-/**
- * set_pte_range - Set a range of PTEs to point to pages in a folio.
- * @vmf: Fault decription.
- * @folio: The folio that contains @page.
- * @page: The first page to create a PTE for.
- * @nr: The number of PTEs to create.
- * @addr: The first address to create a PTE for.
- */
-void set_pte_range(struct vm_fault *vmf, struct folio *folio,
-		struct page *page, unsigned int nr, unsigned long addr)
+pte_t prepare_range_pte_entry(struct vm_fault *vmf, bool write,
+			      struct folio *folio, struct page *page,
+			      unsigned int nr, unsigned long addr)
 {
 	struct vm_area_struct *vma = vmf->vma;
-	bool write = vmf->flags & FAULT_FLAG_WRITE;
 	bool prefault = in_range(vmf->address, addr, nr * PAGE_SIZE);
 	pte_t entry;
 
@@ -4706,6 +4698,25 @@ void set_pte_range(struct vm_fault *vmf, struct folio *folio,
 		entry = maybe_mkwrite(pte_mkdirty(entry), vma);
 	if (unlikely(vmf_orig_pte_uffd_wp(vmf)))
 		entry = pte_mkuffd_wp(entry);
+
+	return entry;
+}
+
+/**
+ * set_pte_range - Set a range of PTEs to point to pages in a folio.
+ * @vmf: Fault description.
+ * @folio: The folio that contains @page.
+ * @page: The first page to create a PTE for.
+ * @nr: The number of PTEs to create.
+ * @addr: The first address to create a PTE for.
+ */
+void set_pte_range(struct vm_fault *vmf, struct folio *folio,
+		struct page *page, unsigned int nr, unsigned long addr)
+{
+	struct vm_area_struct *vma = vmf->vma;
+	bool write = vmf->flags & FAULT_FLAG_WRITE;
+	pte_t entry = prepare_range_pte_entry(vmf, write, folio, page, nr, addr);
+
 	/* copy-on-write page */
 	if (write && !(vma->vm_flags & VM_SHARED)) {
 		VM_BUG_ON_FOLIO(nr != 1, folio);

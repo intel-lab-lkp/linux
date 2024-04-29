@@ -1372,6 +1372,8 @@ static inline pte_t maybe_mkwrite(pte_t pte, struct vm_area_struct *vma)
 }
 
 vm_fault_t do_set_pmd(struct vm_fault *vmf, struct page *page);
+pte_t prepare_range_pte_entry(struct vm_fault *vmf, bool write, struct folio *folio,
+		struct page *page, unsigned int nr, unsigned long addr);
 void set_pte_range(struct vm_fault *vmf, struct folio *folio,
 		struct page *page, unsigned int nr, unsigned long addr);
 
