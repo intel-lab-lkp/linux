@@ -159,6 +159,7 @@ enum v4l2_mbus_type {
  * @bus.mipi_csi2: embedded &struct v4l2_mbus_config_mipi_csi2.
  *		   Used if the bus is MIPI Alliance's Camera Serial
  *		   Interface version 2 (MIPI CSI2).
+ * @link_freq: The link frequency. See also V4L2_CID_LINK_FREQ control.
  */
 struct v4l2_mbus_config {
 	enum v4l2_mbus_type type;
@@ -167,6 +168,7 @@ struct v4l2_mbus_config {
 		struct v4l2_mbus_config_mipi_csi1 mipi_csi1;
 		struct v4l2_mbus_config_mipi_csi2 mipi_csi2;
 	} bus;
+	u64 link_freq;
 };
 
 /**
