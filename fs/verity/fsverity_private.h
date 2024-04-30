@@ -155,8 +155,6 @@ static inline void fsverity_init_signature(void)
 
 /* verify.c */
 
-void __init fsverity_init_workqueue(void);
-
 int fsverity_read_merkle_tree_block(struct inode *inode,
 				    const struct merkle_tree_params *params,
 				    int level, u64 pos, unsigned long ra_bytes,

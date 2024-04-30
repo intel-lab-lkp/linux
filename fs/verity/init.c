@@ -66,7 +66,6 @@ static int __init fsverity_init(void)
 {
 	fsverity_check_hash_algs();
 	fsverity_init_info_cache();
-	fsverity_init_workqueue();
 	fsverity_init_sysctl();
 	fsverity_init_signature();
 	fsverity_init_bpf();
