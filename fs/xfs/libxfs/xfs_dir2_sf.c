@@ -34,7 +34,7 @@ static void xfs_dir2_sf_check(xfs_da_args_t *args);
 #define	xfs_dir2_sf_check(args)
 #endif /* DEBUG */
 
-static void xfs_dir2_sf_toino4(xfs_da_args_t *args);
+static void xfs_dir2_sf_toino4(struct xfs_da_args *args, bool remove);
 static void xfs_dir2_sf_toino8(xfs_da_args_t *args);
 
 int
@@ -936,6 +936,15 @@ xfs_dir2_sf_removename(
 	ASSERT(oldsize >= xfs_dir2_sf_hdr_size(sfp->i8count));
 
 	/*
+	 * If this is the last 8-byte, directly convert to the 4-byte format
+	 * and just skip the removed entry when building the new fork.
+	 */
+	if (args->inumber > XFS_DIR2_MAX_SHORT_INUM && sfp->i8count == 1) {
+		xfs_dir2_sf_toino4(args, true);
+		return 0;
+	}
+
+	/*
 	 * Loop over the old directory entries.
 	 * Find the one we're deleting.
 	 */
@@ -980,10 +989,8 @@ xfs_dir2_sf_removename(
 	 * Are we changing inode number size?
 	 */
 	if (args->inumber > XFS_DIR2_MAX_SHORT_INUM) {
-		if (sfp->i8count == 1)
-			xfs_dir2_sf_toino4(args);
-		else
-			sfp->i8count--;
+		ASSERT(sfp->i8count > 1);
+		sfp->i8count--;
 	}
 	xfs_dir2_sf_check(args);
 	xfs_trans_log_inode(args->trans, dp, XFS_ILOG_CORE | XFS_ILOG_DDATA);
@@ -1087,7 +1094,7 @@ xfs_dir2_sf_replace(
 		if (i == sfp->count) {
 			ASSERT(args->op_flags & XFS_DA_OP_OKNOENT);
 			if (i8elevated)
-				xfs_dir2_sf_toino4(args);
+				xfs_dir2_sf_toino4(args, false);
 			return -ENOENT;
 		}
 	}
@@ -1100,7 +1107,7 @@ xfs_dir2_sf_replace(
 		 * And the old count was one, so need to convert to small.
 		 */
 		if (sfp->i8count == 1)
-			xfs_dir2_sf_toino4(args);
+			xfs_dir2_sf_toino4(args, false);
 		else
 			sfp->i8count--;
 	}
@@ -1128,7 +1135,8 @@ xfs_dir2_sf_replace(
  */
 static void
 xfs_dir2_sf_toino4(
-	xfs_da_args_t		*args)		/* operation arguments */
+	struct xfs_da_args	*args,
+	bool			remove)
 {
 	struct xfs_inode	*dp = args->dp;
 	struct xfs_mount	*mp = dp->i_mount;
@@ -1148,6 +1156,8 @@ xfs_dir2_sf_toino4(
 	 * Compute the new inode size.
 	 */
 	newsize = oldsize - (oldsfp->count + 1) * XFS_INO64_DIFF;
+	if (remove)
+		newsize -= xfs_dir2_sf_entsize(mp, oldsfp, args->namelen);
 
 	dp->i_df.if_data = sfp = kmalloc(newsize, GFP_KERNEL | __GFP_NOFAIL);
 	dp->i_df.if_bytes = newsize;
@@ -1166,11 +1176,22 @@ xfs_dir2_sf_toino4(
 	     i < sfp->count;
 	     i++, sfep = xfs_dir2_sf_nextentry(mp, sfp, sfep),
 		  oldsfep = xfs_dir2_sf_nextentry(mp, oldsfp, oldsfep)) {
+		xfs_ino_t ino = xfs_dir2_sf_get_ino(mp, oldsfp, oldsfep);
+
+		/*
+		 * Just skip over the entry that is removed if there is one.
+		 */
+		if (remove && args->inumber == ino) {
+			oldsfep = xfs_dir2_sf_nextentry(mp, oldsfp, oldsfep);
+			sfp->count--;
+			if (++i == sfp->count)
+				break;
+		}
+
 		sfep->namelen = oldsfep->namelen;
 		memcpy(sfep->offset, oldsfep->offset, sizeof(sfep->offset));
 		memcpy(sfep->name, oldsfep->name, sfep->namelen);
-		xfs_dir2_sf_put_ino(mp, sfp, sfep,
-				xfs_dir2_sf_get_ino(mp, oldsfp, oldsfep));
+		xfs_dir2_sf_put_ino(mp, sfp, sfep, ino);
 		xfs_dir2_sf_put_ftype(mp, sfep,
 				xfs_dir2_sf_get_ftype(mp, oldsfep));
 	}
