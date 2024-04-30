@@ -38,6 +38,14 @@ properties:
 
   clock-frequency: true
 
+  resets:
+    items:
+      - description: Reset controller used for switch core reset (soft reset)
+
+  reset-names:
+    items:
+      - const: switch
+
 required:
   - compatible
   - reg
