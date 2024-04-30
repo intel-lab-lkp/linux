@@ -127,6 +127,39 @@ void irq_domain_free_fwnode(struct fwnode_handle *fwnode)
 }
 EXPORT_SYMBOL_GPL(irq_domain_free_fwnode);
 
+static int irq_domain_alloc_name(struct fwnode_handle *fwnode,
+				 struct irq_domain *domain,
+				 int unknown_domains, char *in_name)
+{
+	char *name;
+
+	if (fwnode == NULL) {
+		if (unknown_domains)
+			domain->name = kasprintf(GFP_KERNEL, "unknown-%d",
+						 unknown_domains);
+		else
+			domain->name = kstrdup(in_name, GFP_KERNEL);
+		if (!domain->name)
+			return -ENOMEM;
+		goto out;
+	}
+
+	/*
+	 * fwnode paths contain '/', which debugfs is legitimately
+	 * unhappy about. Replace them with ':', which does
+	 * the trick and is not as offensive as '\'...
+	 */
+	name = kasprintf(GFP_KERNEL, "%pfw", fwnode);
+	if (!name)
+		return -ENOMEM;
+
+	domain->name = strreplace(name, '/', ':');
+
+out:
+	domain->flags |= IRQ_DOMAIN_NAME_ALLOCATED;
+	return 0;
+}
+
 static struct irq_domain *__irq_domain_create(struct fwnode_handle *fwnode,
 					      unsigned int size,
 					      irq_hw_number_t hwirq_max,
@@ -151,53 +184,31 @@ static struct irq_domain *__irq_domain_create(struct fwnode_handle *fwnode,
 
 	if (is_fwnode_irqchip(fwnode)) {
 		fwid = container_of(fwnode, struct irqchip_fwid, fwnode);
+		domain->fwnode = fwnode;
 
 		switch (fwid->type) {
 		case IRQCHIP_FWNODE_NAMED:
 		case IRQCHIP_FWNODE_NAMED_ID:
-			domain->fwnode = fwnode;
-			domain->name = kstrdup(fwid->name, GFP_KERNEL);
-			if (!domain->name) {
-				kfree(domain);
-				return NULL;
-			}
-			domain->flags |= IRQ_DOMAIN_NAME_ALLOCATED;
+			if (irq_domain_alloc_name(NULL, domain, 0, fwid->name))
+				goto out_free_domain;
 			break;
 		default:
-			domain->fwnode = fwnode;
 			domain->name = fwid->name;
 			break;
 		}
 	} else if (is_of_node(fwnode) || is_acpi_device_node(fwnode) ||
 		   is_software_node(fwnode)) {
-		char *name;
-
-		/*
-		 * fwnode paths contain '/', which debugfs is legitimately
-		 * unhappy about. Replace them with ':', which does
-		 * the trick and is not as offensive as '\'...
-		 */
-		name = kasprintf(GFP_KERNEL, "%pfw", fwnode);
-		if (!name) {
-			kfree(domain);
-			return NULL;
-		}
-
-		domain->name = strreplace(name, '/', ':');
+		if (irq_domain_alloc_name(fwnode, domain, 0, NULL))
+			goto out_free_domain;
 		domain->fwnode = fwnode;
-		domain->flags |= IRQ_DOMAIN_NAME_ALLOCATED;
 	}
 
 	if (!domain->name) {
 		if (fwnode)
 			pr_err("Invalid fwnode type for irqdomain\n");
-		domain->name = kasprintf(GFP_KERNEL, "unknown-%d",
-					 atomic_inc_return(&unknown_domains));
-		if (!domain->name) {
-			kfree(domain);
-			return NULL;
-		}
-		domain->flags |= IRQ_DOMAIN_NAME_ALLOCATED;
+		if (irq_domain_alloc_name(NULL, domain,
+		    atomic_inc_return(&unknown_domains), NULL))
+			goto out_free_domain;
 	}
 
 	fwnode_handle_get(fwnode);
@@ -228,6 +239,10 @@ static struct irq_domain *__irq_domain_create(struct fwnode_handle *fwnode,
 	irq_domain_check_hierarchy(domain);
 
 	return domain;
+
+out_free_domain:
+	kfree(domain);
+	return NULL;
 }
 
 static void __irq_domain_publish(struct irq_domain *domain)
