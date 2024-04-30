@@ -1131,6 +1131,19 @@ bool blk_zone_plug_bio(struct bio *bio, unsigned int nr_segs)
 }
 EXPORT_SYMBOL_GPL(blk_zone_plug_bio);
 
+static void disk_zone_wplug_schedule_bio_work(struct gendisk *disk,
+					      struct blk_zone_wplug *zwplug)
+{
+	/*
+	 * Take a reference on the zone write plug and schedule the submission
+	 * of the next plugged BIO. blk_zone_wplug_bio_work() will release the
+	 * reference we take here.
+	 */
+	WARN_ON_ONCE(!(zwplug->flags & BLK_ZONE_WPLUG_PLUGGED));
+	atomic_inc(&zwplug->ref);
+	queue_work(disk->zone_wplugs_wq, &zwplug->bio_work);
+}
+
 static void disk_zone_wplug_unplug_bio(struct gendisk *disk,
 				       struct blk_zone_wplug *zwplug)
 {
@@ -1150,8 +1163,8 @@ static void disk_zone_wplug_unplug_bio(struct gendisk *disk,
 
 	/* Schedule submission of the next plugged BIO if we have one. */
 	if (!bio_list_empty(&zwplug->bio_list)) {
+		disk_zone_wplug_schedule_bio_work(disk, zwplug);
 		spin_unlock_irqrestore(&zwplug->lock, flags);
-		queue_work(disk->zone_wplugs_wq, &zwplug->bio_work);
 		return;
 	}
 
@@ -1251,14 +1264,14 @@ static void blk_zone_wplug_bio_work(struct work_struct *work)
 	if (!bio) {
 		zwplug->flags &= ~BLK_ZONE_WPLUG_PLUGGED;
 		spin_unlock_irqrestore(&zwplug->lock, flags);
-		return;
+		goto put_zwplug;
 	}
 
 	if (!blk_zone_wplug_prepare_bio(zwplug, bio)) {
 		/* Error recovery will decide what to do with the BIO. */
 		bio_list_add_head(&zwplug->bio_list, bio);
 		spin_unlock_irqrestore(&zwplug->lock, flags);
-		return;
+		goto put_zwplug;
 	}
 
 	spin_unlock_irqrestore(&zwplug->lock, flags);
@@ -1274,6 +1287,10 @@ static void blk_zone_wplug_bio_work(struct work_struct *work)
 	 */
 	if (bdev->bd_has_submit_bio)
 		blk_queue_exit(bdev->bd_disk->queue);
+
+put_zwplug:
+	/* Drop the reference we took in disk_zone_wplug_schedule_bio_work(). */
+	disk_put_zone_wplug(zwplug);
 }
 
 static unsigned int blk_zone_wp_offset(struct blk_zone *zone)
@@ -1353,8 +1370,7 @@ static void disk_zone_wplug_handle_error(struct gendisk *disk,
 
 	/* Restart BIO submission if we still have any BIO left. */
 	if (!bio_list_empty(&zwplug->bio_list)) {
-		WARN_ON_ONCE(!(zwplug->flags & BLK_ZONE_WPLUG_PLUGGED));
-		queue_work(disk->zone_wplugs_wq, &zwplug->bio_work);
+		disk_zone_wplug_schedule_bio_work(disk, zwplug);
 		goto unlock;
 	}
 
