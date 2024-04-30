@@ -57,6 +57,38 @@ static int adv748x_csi2_register_link(struct adv748x_csi2 *tx,
 	return 0;
 }
 
+static int adv748x_csi2_apply_routing(struct v4l2_subdev *sd,
+				      struct v4l2_subdev_state *state,
+				      struct v4l2_subdev_krouting *routing)
+{
+	struct v4l2_subdev_route *route;
+	int ret;
+
+	/* Only one route at the time can be active. */
+	if (routing->num_routes > 1)
+		return -EINVAL;
+
+	/*
+	 * Validate the route: sink pad and sink stream shall be 0 and only
+	 * 4 source streams are supported (one for each supported MIPI CSI-2
+	 * channel).
+	 */
+	route = &routing->routes[0];
+
+	if (route->sink_pad != ADV748X_CSI2_SINK || route->sink_stream)
+		return -EINVAL;
+	if (route->source_pad != ADV748X_CSI2_SOURCE ||
+	    route->source_stream > 4)
+		return -EINVAL;
+
+	ret = v4l2_subdev_routing_validate(sd, routing,
+					   V4L2_SUBDEV_ROUTING_ONLY_1_TO_1);
+	if (ret)
+		return ret;
+
+	return v4l2_subdev_set_routing(sd, state, routing);
+}
+
 /* -----------------------------------------------------------------------------
  * v4l2_subdev_internal_ops
  */
@@ -79,7 +111,7 @@ static int adv748x_csi2_init_state(struct v4l2_subdev *sd,
 		.routes = routes,
 	};
 
-	return v4l2_subdev_set_routing(sd, state, &routing);
+	return adv748x_csi2_apply_routing(sd, state, &routing);
 }
 
 /*
@@ -200,10 +232,19 @@ static int adv748x_csi2_get_mbus_config(struct v4l2_subdev *sd, unsigned int pad
 	return 0;
 }
 
+static int adv748x_csi2_set_routing(struct v4l2_subdev *sd,
+				    struct v4l2_subdev_state *state,
+				    enum v4l2_subdev_format_whence which,
+				    struct v4l2_subdev_krouting *routing)
+{
+	return adv748x_csi2_apply_routing(sd, state, routing);
+}
+
 static const struct v4l2_subdev_pad_ops adv748x_csi2_pad_ops = {
 	.get_fmt = v4l2_subdev_get_fmt,
 	.set_fmt = adv748x_csi2_set_format,
 	.get_mbus_config = adv748x_csi2_get_mbus_config,
+	.set_routing = adv748x_csi2_set_routing,
 };
 
 /* -----------------------------------------------------------------------------
