@@ -52,6 +52,8 @@ static int write_merkle_tree_block(struct inode *inode, const u8 *buf,
 {
 	struct fsverity_writemerkle req = {
 		.inode = inode,
+		.zero_digest = params->zero_digest,
+		.digest_size = params->digest_size,
 	};
 	u64 pos = (u64)index << params->log_blocksize;
 	int err;

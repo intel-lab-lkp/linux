@@ -425,6 +425,8 @@ int fsverity_read_merkle_tree_block(struct inode *inode,
 			.level = level,
 			.num_levels = params->num_levels,
 			.ra_bytes = ra_bytes,
+			.zero_digest = params->zero_digest,
+			.digest_size = params->digest_size,
 		};
 
 		err = vops->read_merkle_tree_block(&req, block);

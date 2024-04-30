@@ -63,12 +63,16 @@ struct fsverity_blockbuf {
  *		if the page at @block->offset isn't already cached.
  *		Implementations may ignore this argument; it's only a
  *		performance optimization.
+ * @zero_digest: the hash of a merkle block-sized buffer of zeroes
+ * @digest_size: size of zero_digest, in bytes
  */
 struct fsverity_readmerkle {
 	struct inode *inode;
 	unsigned long ra_bytes;
 	int level;
 	int num_levels;
+	const u8 *zero_digest;
+	unsigned int digest_size;
 };
 
 #define FSVERITY_STREAMING_READ	(-1)
@@ -76,9 +80,13 @@ struct fsverity_readmerkle {
 /**
  * struct fsverity_writemerkle - Request to write a Merkle Tree block buffer
  * @inode: the inode to read
+ * @zero_digest: the hash of a merkle block-sized buffer of zeroes
+ * @digest_size: size of zero_digest, in bytes
  */
 struct fsverity_writemerkle {
 	struct inode *inode;
+	const u8 *zero_digest;
+	unsigned int digest_size;
 };
 
 /* Verity operations for filesystems */
