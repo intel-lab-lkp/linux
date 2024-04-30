@@ -378,9 +378,7 @@ xfs_dir2_sf_addname(
 
 	ASSERT(xfs_dir2_sf_lookup(args) == -ENOENT);
 	ASSERT(dp->i_df.if_format == XFS_DINODE_FMT_LOCAL);
-	ASSERT(dp->i_disk_size >= offsetof(struct xfs_dir2_sf_hdr, parent));
 	ASSERT(dp->i_df.if_bytes == dp->i_disk_size);
-	ASSERT(sfp != NULL);
 	ASSERT(dp->i_disk_size >= xfs_dir2_sf_hdr_size(sfp->i8count));
 	/*
 	 * Compute entry (and change in) size.
@@ -855,9 +853,7 @@ xfs_dir2_sf_lookup(
 	xfs_dir2_sf_check(args);
 
 	ASSERT(dp->i_df.if_format == XFS_DINODE_FMT_LOCAL);
-	ASSERT(dp->i_disk_size >= offsetof(struct xfs_dir2_sf_hdr, parent));
 	ASSERT(dp->i_df.if_bytes == dp->i_disk_size);
-	ASSERT(sfp != NULL);
 	ASSERT(dp->i_disk_size >= xfs_dir2_sf_hdr_size(sfp->i8count));
 	/*
 	 * Special case for .
@@ -920,21 +916,19 @@ xfs_dir2_sf_removename(
 	struct xfs_inode	*dp = args->dp;
 	struct xfs_mount	*mp = dp->i_mount;
 	struct xfs_dir2_sf_hdr	*sfp = dp->i_df.if_data;
+	int			oldsize = dp->i_disk_size;
 	int			byteoff;	/* offset of removed entry */
 	int			entsize;	/* this entry's size */
 	int			i;		/* shortform entry index */
 	int			newsize;	/* new inode size */
-	int			oldsize;	/* old inode size */
 	xfs_dir2_sf_entry_t	*sfep;		/* shortform directory entry */
 
 	trace_xfs_dir2_sf_removename(args);
 
 	ASSERT(dp->i_df.if_format == XFS_DINODE_FMT_LOCAL);
-	oldsize = (int)dp->i_disk_size;
-	ASSERT(oldsize >= offsetof(struct xfs_dir2_sf_hdr, parent));
 	ASSERT(dp->i_df.if_bytes == oldsize);
-	ASSERT(sfp != NULL);
 	ASSERT(oldsize >= xfs_dir2_sf_hdr_size(sfp->i8count));
+
 	/*
 	 * Loop over the old directory entries.
 	 * Find the one we're deleting.
@@ -1028,9 +1022,7 @@ xfs_dir2_sf_replace(
 	trace_xfs_dir2_sf_replace(args);
 
 	ASSERT(dp->i_df.if_format == XFS_DINODE_FMT_LOCAL);
-	ASSERT(dp->i_disk_size >= offsetof(struct xfs_dir2_sf_hdr, parent));
 	ASSERT(dp->i_df.if_bytes == dp->i_disk_size);
-	ASSERT(sfp != NULL);
 	ASSERT(dp->i_disk_size >= xfs_dir2_sf_hdr_size(sfp->i8count));
 
 	/*

@@ -1105,12 +1105,8 @@ xfs_dir2_sf_to_block(
 	trace_xfs_dir2_sf_to_block(args);
 
 	ASSERT(ifp->if_format == XFS_DINODE_FMT_LOCAL);
-	ASSERT(dp->i_disk_size >= offsetof(struct xfs_dir2_sf_hdr, parent));
-
 	ASSERT(ifp->if_bytes == dp->i_disk_size);
-	ASSERT(oldsfp != NULL);
 	ASSERT(dp->i_disk_size >= xfs_dir2_sf_hdr_size(oldsfp->i8count));
-	ASSERT(dp->i_df.if_nextents == 0);
 
 	/*
 	 * Copy the directory into a temporary buffer.
