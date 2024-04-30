@@ -71,6 +71,7 @@ static int mcp9600_read_raw(struct iio_dev *indio_dev,
 		ret = mcp9600_read(data, chan, val);
 		if (ret)
 			return ret;
+
 		return IIO_VAL_INT;
 	case IIO_CHAN_INFO_SCALE:
 		*val = 62;
@@ -94,6 +95,7 @@ static int mcp9600_probe(struct i2c_client *client)
 	ret = i2c_smbus_read_byte_data(client, MCP9600_DEVICE_ID);
 	if (ret < 0)
 		return dev_err_probe(&client->dev, ret, "Failed to read device ID\n");
+
 	if (ret != MCP9600_DEVICE_ID_MCP9600)
 		dev_warn(&client->dev, "Expected ID %x, got %x\n",
 				MCP9600_DEVICE_ID_MCP9600, ret);
