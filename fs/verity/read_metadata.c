@@ -14,65 +14,54 @@
 
 static int fsverity_read_merkle_tree(struct inode *inode,
 				     const struct fsverity_info *vi,
-				     void __user *buf, u64 offset, int length)
+				     void __user *buf, u64 pos, int length)
 {
-	const struct fsverity_operations *vops = inode->i_sb->s_vop;
-	u64 end_offset;
-	unsigned int offs_in_page;
-	pgoff_t index, last_index;
+	const u64 end_pos = min(pos + length, vi->tree_params.tree_size);
+	struct backing_dev_info *bdi = inode->i_sb->s_bdi;
+	const u64 max_ra_bytes = min((u64)bdi->io_pages << PAGE_SHIFT,
+				     ULONG_MAX);
+	const struct merkle_tree_params *params = &vi->tree_params;
+	unsigned int offs_in_block = pos & (params->block_size - 1);
 	int retval = 0;
 	int err = 0;
 
-	end_offset = min(offset + length, vi->tree_params.tree_size);
-	if (offset >= end_offset)
-		return 0;
-	offs_in_page = offset_in_page(offset);
-	last_index = (end_offset - 1) >> PAGE_SHIFT;
-
 	/*
-	 * Iterate through each Merkle tree page in the requested range and copy
-	 * the requested portion to userspace.  Note that the Merkle tree block
-	 * size isn't important here, as we are returning a byte stream; i.e.,
-	 * we can just work with pages even if the tree block size != PAGE_SIZE.
+	 * Iterate through each Merkle tree block in the requested range and
+	 * copy the requested portion to userspace. Note that we are returning
+	 * a byte stream.
 	 */
-	for (index = offset >> PAGE_SHIFT; index <= last_index; index++) {
-		unsigned long num_ra_pages =
-			min_t(unsigned long, last_index - index + 1,
-			      inode->i_sb->s_bdi->io_pages);
-		unsigned int bytes_to_copy = min_t(u64, end_offset - offset,
-						   PAGE_SIZE - offs_in_page);
-		struct page *page;
-		const void *virt;
+	while (pos < end_pos) {
+		unsigned long ra_bytes;
+		unsigned int bytes_to_copy;
+		struct fsverity_blockbuf block = { };
 
-		page = vops->read_merkle_tree_page(inode, index, num_ra_pages);
-		if (IS_ERR(page)) {
-			err = PTR_ERR(page);
-			fsverity_err(inode,
-				     "Error %d reading Merkle tree page %lu",
-				     err, index);
+		ra_bytes = min_t(unsigned long, end_pos - pos, max_ra_bytes);
+		bytes_to_copy = min_t(u64, end_pos - pos,
+				      params->block_size - offs_in_block);
+
+		err = fsverity_read_merkle_tree_block(inode, &vi->tree_params,
+						      pos - offs_in_block,
+						      ra_bytes, &block);
+		if (err)
 			break;
-		}
 
-		virt = kmap_local_page(page);
-		if (copy_to_user(buf, virt + offs_in_page, bytes_to_copy)) {
-			kunmap_local(virt);
-			put_page(page);
+		if (copy_to_user(buf, block.kaddr + offs_in_block, bytes_to_copy)) {
+			fsverity_drop_merkle_tree_block(inode, &block);
 			err = -EFAULT;
 			break;
 		}
-		kunmap_local(virt);
-		put_page(page);
+		fsverity_drop_merkle_tree_block(inode, &block);
 
 		retval += bytes_to_copy;
 		buf += bytes_to_copy;
-		offset += bytes_to_copy;
+		pos += bytes_to_copy;
 
 		if (fatal_signal_pending(current))  {
 			err = -EINTR;
 			break;
 		}
 		cond_resched();
-		offs_in_page = 0;
+		offs_in_block = 0;
 	}
 	return retval ? retval : err;
 }

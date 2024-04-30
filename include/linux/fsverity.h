@@ -26,6 +26,25 @@
 /* Arbitrary limit to bound the kmalloc() size.  Can be changed. */
 #define FS_VERITY_MAX_DESCRIPTOR_SIZE	16384
 
+/**
+ * struct fsverity_blockbuf - Merkle Tree block buffer
+ * @context: filesystem private context
+ * @kaddr: virtual address of the block's data
+ * @pos: the position of the block in the Merkle tree (in bytes)
+ * @size: the Merkle tree block size
+ *
+ * Buffer containing a single Merkle Tree block.  When fs-verity wants to read
+ * merkle data from disk, it passes the filesystem a buffer with the @pos,
+ * @index, and @size fields filled out.  The filesystem sets @kaddr and
+ * @context.
+ */
+struct fsverity_blockbuf {
+	void *context;
+	void *kaddr;
+	loff_t pos;
+	unsigned int size;
+};
+
 /* Verity operations for filesystems */
 struct fsverity_operations {
 
