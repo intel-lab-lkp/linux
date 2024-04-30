@@ -26,11 +26,44 @@
 #define TPS6287X_CTRL2_VRANGE	GENMASK(3, 2)
 #define TPS6287X_CTRL3		0x03
 #define TPS6287X_STATUS		0x04
+#define TPS6287X_MAX_REGS	(TPS6287X_STATUS + 1)
+
+static bool tps6287x_writeable_reg(struct device *dev, unsigned int reg)
+{
+	switch (reg) {
+	case TPS6287X_VSET ... TPS6287X_CTRL3:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static bool tps6287x_readable_reg(struct device *dev, unsigned int reg)
+{
+	switch (reg) {
+	case TPS6287X_VSET ... TPS6287X_STATUS:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static bool tps6287x_volatile_reg(struct device *dev, unsigned int reg)
+{
+	if (reg == TPS6287X_STATUS)
+		return true;
+	return false;
+}
 
 static const struct regmap_config tps6287x_regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 8,
 	.max_register = TPS6287X_STATUS,
+	.num_reg_defaults_raw = TPS6287X_MAX_REGS,
+	.cache_type = REGCACHE_FLAT,
+	.writeable_reg = tps6287x_writeable_reg,
+	.readable_reg = tps6287x_readable_reg,
+	.volatile_reg = tps6287x_volatile_reg,
 };
 
 static const struct linear_range tps6287x_voltage_ranges[] = {
