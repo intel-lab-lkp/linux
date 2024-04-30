@@ -1133,36 +1133,25 @@ xfs_dir2_sf_toino4(
 	struct xfs_inode	*dp = args->dp;
 	struct xfs_mount	*mp = dp->i_mount;
 	struct xfs_dir2_sf_hdr	*oldsfp = dp->i_df.if_data;
-	char			*buf;		/* old dir's buffer */
+	int			oldsize = dp->i_df.if_bytes;
 	int			i;		/* entry index */
 	int			newsize;	/* new inode size */
 	xfs_dir2_sf_entry_t	*oldsfep;	/* old sf entry */
-	int			oldsize;	/* old inode size */
 	xfs_dir2_sf_entry_t	*sfep;		/* new sf entry */
 	xfs_dir2_sf_hdr_t	*sfp;		/* new sf directory */
 
 	trace_xfs_dir2_sf_toino4(args);
 
-	/*
-	 * Copy the old directory to the buffer.
-	 * Then nuke it from the inode, and add the new buffer to the inode.
-	 * Don't want xfs_idata_realloc copying the data here.
-	 */
-	oldsize = dp->i_df.if_bytes;
-	buf = kmalloc(oldsize, GFP_KERNEL | __GFP_NOFAIL);
 	ASSERT(oldsfp->i8count == 1);
-	memcpy(buf, oldsfp, oldsize);
+
 	/*
 	 * Compute the new inode size.
 	 */
 	newsize = oldsize - (oldsfp->count + 1) * XFS_INO64_DIFF;
-	xfs_idata_realloc(dp, -oldsize, XFS_DATA_FORK);
-	xfs_idata_realloc(dp, newsize, XFS_DATA_FORK);
-	/*
-	 * Reset our pointers, the data has moved.
-	 */
-	oldsfp = (xfs_dir2_sf_hdr_t *)buf;
-	sfp = dp->i_df.if_data;
+
+	dp->i_df.if_data = sfp = kmalloc(newsize, GFP_KERNEL | __GFP_NOFAIL);
+	dp->i_df.if_bytes = newsize;
+
 	/*
 	 * Fill in the new header.
 	 */
@@ -1185,10 +1174,8 @@ xfs_dir2_sf_toino4(
 		xfs_dir2_sf_put_ftype(mp, sfep,
 				xfs_dir2_sf_get_ftype(mp, oldsfep));
 	}
-	/*
-	 * Clean up the inode.
-	 */
-	kfree(buf);
+
+	kfree(oldsfp);
 	dp->i_disk_size = newsize;
 	xfs_trans_log_inode(args->trans, dp, XFS_ILOG_CORE | XFS_ILOG_DDATA);
 }
