@@ -8,7 +8,18 @@
 #include <linux/sched/clock.h>
 #include <linux/sched/idle.h>
 
+#ifdef CONFIG_ARM64
+/*
+ * POLL_IDLE_RELAX_COUNT determines how often we check for timeout
+ * while polling for TIF_NEED_RESCHED in thread_info->flags.
+ *
+ * Set this to a low value since arm64, instead of polling, uses a
+ * event based mechanism.
+ */
+#define POLL_IDLE_RELAX_COUNT	1
+#else
 #define POLL_IDLE_RELAX_COUNT	200
+#endif
 
 static int __cpuidle poll_idle(struct cpuidle_device *dev,
 			       struct cpuidle_driver *drv, int index)
