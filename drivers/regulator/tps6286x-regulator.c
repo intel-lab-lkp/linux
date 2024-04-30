@@ -19,13 +19,49 @@
 #define TPS6286X_CONTROL_FPWM	BIT(4)
 #define TPS6286X_CONTROL_SWEN	BIT(5)
 
+#define TPS6286X_STATUS		0x05
+#define TPS6286X_MAX_REGS	(TPS6286X_STATUS + 1)
+
 #define TPS6286X_MIN_MV		400
 #define TPS6286X_MAX_MV		1675
 #define TPS6286X_STEP_MV	5
 
+static bool tps6286x_writeable_reg(struct device *dev, unsigned int reg)
+{
+	switch (reg) {
+	case TPS6286X_VOUT1 ... TPS6286X_CONTROL:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static bool tps6286x_readable_reg(struct device *dev, unsigned int reg)
+{
+	switch (reg) {
+	case TPS6286X_VOUT1 ... TPS6286X_CONTROL:
+	case TPS6286X_STATUS:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static bool tps6286x_volatile_reg(struct device *dev, unsigned int reg)
+{
+	if (reg == TPS6286X_STATUS)
+		return true;
+	return false;
+}
+
 static const struct regmap_config tps6286x_regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 8,
+	.num_reg_defaults_raw = TPS6286X_MAX_REGS,
+	.cache_type = REGCACHE_FLAT,
+	.writeable_reg = tps6286x_writeable_reg,
+	.readable_reg = tps6286x_readable_reg,
+	.volatile_reg = tps6286x_volatile_reg,
 };
 
 static int tps6286x_set_mode(struct regulator_dev *rdev, unsigned int mode)
