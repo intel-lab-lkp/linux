@@ -152,6 +152,13 @@ static int __init housekeeping_setup(char *str, unsigned long flags)
 	if (cpumask_empty(non_housekeeping_mask))
 		goto free_housekeeping_staging;
 
+	if ((flags & HK_FLAG_KTHREAD) &&
+		cpumask_test_cpu(smp_processor_id(), non_housekeeping_mask)) {
+		pr_warn("Housekeeping: Clearing cpu %d from nohz_full range\n", smp_processor_id());
+		__cpumask_set_cpu(smp_processor_id(), housekeeping_staging);
+		__cpumask_clear_cpu(smp_processor_id(), non_housekeeping_mask);
+	}
+
 	if (!housekeeping.flags) {
 		/* First setup call ("nohz_full=" or "isolcpus=") */
 		enum hk_type type;
