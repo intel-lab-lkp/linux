@@ -803,7 +803,7 @@ static int ipu6_suspend(struct device *dev)
 	return 0;
 }
 
-static int ipu6_resume(struct device *dev)
+static int __maybe_unused ipu6_resume(struct device *dev)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
 	struct ipu6_device *isp = pci_get_drvdata(pdev);
@@ -860,8 +860,8 @@ static int ipu6_runtime_resume(struct device *dev)
 }
 
 static const struct dev_pm_ops ipu6_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(&ipu6_suspend, &ipu6_resume)
-	SET_RUNTIME_PM_OPS(&ipu6_suspend, &ipu6_runtime_resume, NULL)
+	SYSTEM_SLEEP_PM_OPS(&ipu6_suspend, &ipu6_resume)
+	RUNTIME_PM_OPS(&ipu6_suspend, &ipu6_runtime_resume, NULL)
 };
 
 MODULE_DEVICE_TABLE(pci, ipu6_pci_tbl);
