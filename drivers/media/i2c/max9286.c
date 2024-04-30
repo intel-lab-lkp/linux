@@ -1072,6 +1072,20 @@ static int max9286_set_fmt(struct v4l2_subdev *sd,
 	return ret;
 }
 
+static int max9286_get_mbus_config(struct v4l2_subdev *sd, unsigned int pad,
+				   struct v4l2_mbus_config *config)
+{
+	struct max9286_priv *priv = sd_to_max9286(sd);
+
+	if (pad != MAX9286_SRC_PAD)
+		return -EINVAL;
+
+	config->type = V4L2_MBUS_CSI2_DPHY;
+	config->bus.mipi_csi2.num_data_lanes = priv->csi2_data_lanes;
+
+	return 0;
+}
+
 static int max9286_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 				  struct v4l2_mbus_frame_desc *fd)
 {
@@ -1127,6 +1141,7 @@ static const struct v4l2_subdev_pad_ops max9286_pad_ops = {
 	.enum_mbus_code = max9286_enum_mbus_code,
 	.get_fmt	= v4l2_subdev_get_fmt,
 	.set_fmt	= max9286_set_fmt,
+	.get_mbus_config = max9286_get_mbus_config,
 	.get_frame_interval = v4l2_subdev_get_frame_interval,
 	.set_frame_interval = max9286_set_frame_interval,
 	.get_frame_desc	= max9286_get_frame_desc,
