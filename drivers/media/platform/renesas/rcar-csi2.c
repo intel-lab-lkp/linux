@@ -69,10 +69,7 @@ struct rcar_csi2;
 #define FLD_REG				0x1c
 #define FLD_FLD_NUM(n)			(((n) & 0xff) << 16)
 #define FLD_DET_SEL(n)			(((n) & 0x3) << 4)
-#define FLD_FLD_EN4			BIT(3)
-#define FLD_FLD_EN3			BIT(2)
-#define FLD_FLD_EN2			BIT(1)
-#define FLD_FLD_EN			BIT(0)
+#define FLD_FLD_EN(n)			BIT((n) & 0xf)
 
 /* Automatic Standby Control */
 #define ASTBY_REG			0x20
@@ -575,6 +572,16 @@ static const struct rcar_csi2_format *rcsi2_code_to_fmt(unsigned int code)
 	return NULL;
 }
 
+static const struct rcar_csi2_format *rcsi2_datatype_to_fmt(unsigned int dt)
+{
+	for (unsigned int i = 0; i < ARRAY_SIZE(rcar_csi2_formats); i++) {
+		if (rcar_csi2_formats[i].datatype == dt)
+			return &rcar_csi2_formats[i];
+	}
+
+	return NULL;
+}
+
 enum rcar_csi2_pads {
 	RCAR_CSI2_SINK,
 	RCAR_CSI2_SOURCE_VC0,
@@ -587,7 +594,8 @@ enum rcar_csi2_pads {
 struct rcar_csi2_info {
 	int (*init_phtw)(struct rcar_csi2 *priv, unsigned int mbps);
 	int (*phy_post_init)(struct rcar_csi2 *priv);
-	int (*start_receiver)(struct rcar_csi2 *priv);
+	int (*start_receiver)(struct rcar_csi2 *priv,
+			      struct v4l2_subdev_state *state);
 	void (*enter_standby)(struct rcar_csi2 *priv);
 	const struct rcsi2_mbps_reg *hsfreqrange;
 	unsigned int csi0clkfreqrange;
@@ -676,6 +684,32 @@ static int rcsi2_exit_standby(struct rcar_csi2 *priv)
 	return 0;
 }
 
+static int rcsi2_get_remote_frame_desc(struct rcar_csi2 *priv,
+				       struct v4l2_mbus_frame_desc *fd)
+{
+	struct media_pad *pad;
+	int ret;
+
+	if (!priv->remote)
+		return -ENOLINK;
+
+	pad = media_pad_remote_pad_unique(&priv->pads[RCAR_CSI2_SINK]);
+	if (IS_ERR(pad))
+		return PTR_ERR(pad);
+
+	ret = v4l2_subdev_call(priv->remote, pad, get_frame_desc,
+			       pad->index, fd);
+	if (ret)
+		return ret;
+
+	if (fd->type != V4L2_MBUS_FRAME_DESC_TYPE_CSI2) {
+		dev_err(priv->dev, "Frame desc does not describe a CSI-2 link");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static int rcsi2_wait_phy_start(struct rcar_csi2 *priv,
 				unsigned int lanes)
 {
@@ -726,41 +760,6 @@ static int rcsi2_set_phypll(struct rcar_csi2 *priv, unsigned int mbps)
 	return 0;
 }
 
-static int rcsi2_calc_mbps(struct rcar_csi2 *priv, unsigned int bpp,
-			   unsigned int lanes)
-{
-	struct v4l2_subdev *source;
-	struct v4l2_ctrl *ctrl;
-	u64 mbps;
-
-	if (!priv->remote)
-		return -ENODEV;
-
-	source = priv->remote;
-
-	/* Read the pixel rate control from remote. */
-	ctrl = v4l2_ctrl_find(source->ctrl_handler, V4L2_CID_PIXEL_RATE);
-	if (!ctrl) {
-		dev_err(priv->dev, "no pixel rate control in subdev %s\n",
-			source->name);
-		return -EINVAL;
-	}
-
-	/*
-	 * Calculate the phypll in mbps.
-	 * link_freq = (pixel_rate * bits_per_sample) / (2 * nr_of_lanes)
-	 * bps = link_freq * 2
-	 */
-	mbps = v4l2_ctrl_g_ctrl_int64(ctrl) * bpp;
-	do_div(mbps, lanes * 1000000);
-
-	/* Adjust for C-PHY, divide by 2.8. */
-	if (priv->cphy)
-		mbps = div_u64(mbps * 5, 14);
-
-	return mbps;
-}
-
 static int rcsi2_get_active_lanes(struct rcar_csi2 *priv,
 				  unsigned int *lanes)
 {
@@ -808,52 +807,146 @@ static int rcsi2_get_active_lanes(struct rcar_csi2 *priv,
 	return 0;
 }
 
-static int rcsi2_start_receiver_gen3(struct rcar_csi2 *priv)
+static int rcsi2_calc_mbps(struct rcar_csi2 *priv,
+			   struct v4l2_mbus_frame_desc *fd, unsigned int lanes)
 {
-	const struct rcar_csi2_format *format;
-	u32 phycnt, vcdt = 0, vcdt2 = 0, fld = 0;
-	unsigned int lanes;
-	unsigned int i;
-	int mbps, ret;
+	struct v4l2_subdev *source;
+	unsigned int bpp;
+	s64 link_freq;
+	u64 mbps;
 
-	dev_dbg(priv->dev, "Input size (%ux%u%c)\n",
-		priv->mf.width, priv->mf.height,
-		priv->mf.field == V4L2_FIELD_NONE ? 'p' : 'i');
+	if (!priv->remote)
+		return -ENODEV;
 
-	/* Code is validated in set_fmt. */
-	format = rcsi2_code_to_fmt(priv->mf.code);
-	if (!format)
-		return -EINVAL;
+	source = priv->remote;
 
 	/*
-	 * Enable all supported CSI-2 channels with virtual channel and
-	 * data type matching.
+	 * v4l2_get_link_freq() uses V4L2_CID_LINK_FREQ first, and falls back
+	 * to V4L2_CID_PIXEL_RATE if V4L2_CID_LINK_FREQ is not available.
 	 *
-	 * NOTE: It's not possible to get individual datatype for each
-	 *       source virtual channel. Once this is possible in V4L2
-	 *       it should be used here.
+	 * With multistream input there is no single pixel rate, and thus we
+	 * cannot use V4L2_CID_PIXEL_RATE, so we pass 0 as the bpp which
+	 * causes v4l2_get_link_freq() to return an error if it falls back to
+	 * V4L2_CID_PIXEL_RATE.
 	 */
-	for (i = 0; i < priv->info->num_channels; i++) {
-		u32 vcdt_part;
 
+	if (fd->num_entries > 1) {
+		bpp = 0;
+	} else {
+		struct v4l2_mbus_frame_desc_entry *entry = &fd->entry[0];
+		const struct rcar_csi2_format *format;
+
+		format = rcsi2_datatype_to_fmt(entry->bus.csi2.dt);
+		if (WARN_ON(!format))
+			return -EINVAL;
+
+		bpp = format->bpp;
+	}
+
+	/*
+	 * Calculate the phypll in mbps.
+	 * link_freq = (pixel_rate * bits_per_sample) / (2 * nr_of_lanes)
+	 * bps = link_freq * 2
+	 */
+	link_freq = v4l2_get_link_freq(source->ctrl_handler, bpp, 2 * lanes);
+	if (link_freq < 0) {
+		dev_err(priv->dev, "Failed to get remote subdev link freq\n");
+		return link_freq;
+	}
+
+	mbps = 2 * link_freq;
+	do_div(mbps, 1000000);
+
+	/* Adjust for C-PHY, divide by 2.8. */
+	if (priv->cphy)
+		mbps = div_u64(mbps * 5, 14);
+
+	return mbps;
+}
+
+static int rcsi2_start_receiver_gen3(struct rcar_csi2 *priv,
+				     struct v4l2_subdev_state *state)
+{
+	const struct v4l2_subdev_stream_configs *configs;
+	u32 phycnt, vcdt = 0, vcdt2 = 0, fld = 0;
+	struct v4l2_mbus_frame_desc fd;
+	unsigned int lanes;
+	int mbps, ret;
+
+	/* Get information about multiplexed link. */
+	ret = rcsi2_get_remote_frame_desc(priv, &fd);
+	if (ret)
+		return ret;
+
+	/*
+	 * Configure and enable the R-Car CSI-2 channels.
+	 *
+	 * The VC transmitted on the channel is configured by the [CSI-2->VIN]
+	 * link_setup operation, while the data type to match comes from the
+	 * remote subdevice.
+	 */
+	for (unsigned int i = 0; i < priv->info->num_channels; i++) {
+		struct v4l2_mbus_frame_desc_entry *entry = NULL;
+
+		/* CSI-2 channel disabled (not linked to any VIN). */
 		if (priv->channel_vc[i] < 0)
 			continue;
 
-		vcdt_part = VCDT_SEL_VC(priv->channel_vc[i]) | VCDT_VCDTN_EN |
-			VCDT_SEL_DTN_ON | VCDT_SEL_DT(format->datatype);
+		u32 vcdt_part = VCDT_SEL_VC(priv->channel_vc[i]) |
+				VCDT_VCDTN_EN | VCDT_SEL_DTN_ON;
+
+		/*
+		 * Search the entries that describe the data types on the
+		 * MIPI CSI-2 Virtual Channel assigned to this CSI-2 channel.
+		 */
+		for (unsigned int e = 0; e < fd.num_entries; e++) {
+			if (fd.entry[e].bus.csi2.vc != priv->channel_vc[i])
+				continue;
+
+			/*
+			 * If multiple data types are sent on the same MIPI
+			 * CSI-2 Virtual Channel, disable Data Type matching.
+			 */
+			if (entry) {
+				vcdt_part &= ~VCDT_SEL_DTN_ON;
+				break;
+			}
+
+			entry = &fd.entry[e];
+			vcdt_part |= VCDT_SEL_DT(entry->bus.csi2.dt);
+		}
+
+		if (!entry)
+			continue;
 
 		/* Store in correct reg and offset. */
 		if (i < 2)
 			vcdt |= vcdt_part << ((i % 2) * 16);
 		else
 			vcdt2 |= vcdt_part << ((i % 2) * 16);
+
+		dev_dbg(priv->dev, "channel %u: VC = %d, datatype = 0x%x\n",
+			i, priv->channel_vc[i], entry->bus.csi2.dt);
 	}
 
-	if (priv->mf.field == V4L2_FIELD_ALTERNATE) {
-		fld = FLD_DET_SEL(1) | FLD_FLD_EN4 | FLD_FLD_EN3 | FLD_FLD_EN2
-			| FLD_FLD_EN;
+	/*
+	 * Configure field handling inspecting the formats of the
+	 * sink pad streams.
+	 */
+	configs = &state->stream_configs;
+	for (unsigned int i = 0; i < configs->num_configs; ++i) {
+		const struct v4l2_subdev_stream_config *config = configs->configs;
 
-		if (priv->mf.height == 240)
+		if (config->pad != RCAR_CSI2_SINK)
+			continue;
+
+		if (config->fmt.field != V4L2_FIELD_ALTERNATE)
+			continue;
+
+		fld |= FLD_DET_SEL(1) | FLD_FLD_EN(config->stream);
+
+		/* PAL vs NTSC. */
+		if (config->fmt.height == 240)
 			fld |= FLD_FLD_NUM(0);
 		else
 			fld |= FLD_FLD_NUM(1);
@@ -870,7 +963,7 @@ static int rcsi2_start_receiver_gen3(struct rcar_csi2 *priv)
 	phycnt = PHYCNT_ENABLECLK;
 	phycnt |= (1 << lanes) - 1;
 
-	mbps = rcsi2_calc_mbps(priv, format->bpp, lanes);
+	mbps = rcsi2_calc_mbps(priv, &fd, lanes);
 	if (mbps < 0)
 		return mbps;
 
@@ -1049,23 +1142,24 @@ static int rcsi2_c_phy_setting_v4h(struct rcar_csi2 *priv, int msps)
 	return 0;
 }
 
-static int rcsi2_start_receiver_v4h(struct rcar_csi2 *priv)
+static int rcsi2_start_receiver_v4h(struct rcar_csi2 *priv,
+				    struct v4l2_subdev_state *state)
 {
-	const struct rcar_csi2_format *format;
+	struct v4l2_mbus_frame_desc fd;
 	unsigned int lanes;
 	int msps;
 	int ret;
 
 	/* Calculate parameters */
-	format = rcsi2_code_to_fmt(priv->mf.code);
-	if (!format)
-		return -EINVAL;
-
 	ret = rcsi2_get_active_lanes(priv, &lanes);
 	if (ret)
 		return ret;
 
-	msps = rcsi2_calc_mbps(priv, format->bpp, lanes);
+	ret = rcsi2_get_remote_frame_desc(priv, &fd);
+	if (ret)
+		return ret;
+
+	msps = rcsi2_calc_mbps(priv, &fd, lanes);
 	if (msps < 0)
 		return msps;
 
@@ -1114,7 +1208,7 @@ static int rcsi2_start_receiver_v4h(struct rcar_csi2 *priv)
 	return 0;
 }
 
-static int rcsi2_start(struct rcar_csi2 *priv)
+static int rcsi2_start(struct rcar_csi2 *priv, struct v4l2_subdev_state *state)
 {
 	int ret;
 
@@ -1122,7 +1216,7 @@ static int rcsi2_start(struct rcar_csi2 *priv)
 	if (ret < 0)
 		return ret;
 
-	ret = priv->info->start_receiver(priv);
+	ret = priv->info->start_receiver(priv, state);
 	if (ret) {
 		rcsi2_enter_standby(priv);
 		return ret;
@@ -1146,26 +1240,24 @@ static void rcsi2_stop(struct rcar_csi2 *priv)
 static int rcsi2_s_stream(struct v4l2_subdev *sd, int enable)
 {
 	struct rcar_csi2 *priv = sd_to_csi2(sd);
+	struct v4l2_subdev_state *state;
 	int ret = 0;
 
-	mutex_lock(&priv->lock);
+	if (!priv->remote)
+		return -ENODEV;
 
-	if (!priv->remote) {
-		ret = -ENODEV;
-		goto out;
-	}
+	state = v4l2_subdev_lock_and_get_active_state(&priv->subdev);
 
-	if (enable && priv->stream_count == 0) {
-		ret = rcsi2_start(priv);
-		if (ret)
-			goto out;
-	} else if (!enable && priv->stream_count == 1) {
+	if (enable && priv->stream_count == 0)
+		ret = rcsi2_start(priv, state);
+	else if (!enable && priv->stream_count == 1)
 		rcsi2_stop(priv);
-	}
+	if (ret)
+		goto out;
 
 	priv->stream_count += enable ? 1 : -1;
 out:
-	mutex_unlock(&priv->lock);
+	v4l2_subdev_unlock_state(state);
 
 	return ret;
 }
@@ -1310,14 +1402,17 @@ static irqreturn_t rcsi2_irq(int irq, void *data)
 
 static irqreturn_t rcsi2_irq_thread(int irq, void *data)
 {
+	struct v4l2_subdev_state *state;
 	struct rcar_csi2 *priv = data;
 
-	mutex_lock(&priv->lock);
+	state = v4l2_subdev_lock_and_get_active_state(&priv->subdev);
+
 	rcsi2_stop(priv);
 	usleep_range(1000, 2000);
-	if (rcsi2_start(priv))
+	if (rcsi2_start(priv, state))
 		dev_warn(priv->dev, "Failed to restart CSI-2 receiver\n");
-	mutex_unlock(&priv->lock);
+
+	v4l2_subdev_unlock_state(state);
 
 	return IRQ_HANDLED;
 }
@@ -1338,6 +1433,13 @@ static int rcsi2_notify_bound(struct v4l2_async_notifier *notifier,
 	if (pad < 0) {
 		dev_err(priv->dev, "Failed to find pad for %s\n", subdev->name);
 		return pad;
+	}
+
+	if (!v4l2_subdev_has_op(subdev, pad, get_frame_desc)) {
+		dev_err(priv->dev,
+			"Subdev %s bound failed: missing get_frame_desc()\n",
+			subdev->name);
+		return -EINVAL;
 	}
 
 	priv->remote = subdev;
