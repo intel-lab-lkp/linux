@@ -5891,16 +5891,6 @@ intel_dp_detect(struct drm_connector *connector,
 
 	intel_dp_print_rates(intel_dp);
 
-	if (intel_dp->is_mst) {
-		/*
-		 * If we are in MST mode then this connector
-		 * won't appear connected or have anything
-		 * with EDID on it
-		 */
-		status = connector_status_disconnected;
-		goto out;
-	}
-
 	/*
 	 * Some external monitors do not signal loss of link synchronization
 	 * with an IRQ_HPD, so force a link status check.
@@ -5909,6 +5899,16 @@ intel_dp_detect(struct drm_connector *connector,
 		ret = intel_dp_retrain_link(encoder, ctx);
 		if (ret)
 			return ret;
+	}
+
+	if (intel_dp->is_mst) {
+		/*
+		 * If we are in MST mode then this connector
+		 * won't appear connected or have anything
+		 * with EDID on it
+		 */
+		status = connector_status_disconnected;
+		goto out;
 	}
 
 	/*
