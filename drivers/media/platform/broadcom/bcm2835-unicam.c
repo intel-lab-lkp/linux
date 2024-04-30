@@ -2660,9 +2660,10 @@ static int unicam_probe(struct platform_device *pdev)
 	}
 
 	ret = platform_get_irq(pdev, 0);
-	if (ret <= 0) {
+	if (ret < 0) {
 		dev_err(&pdev->dev, "No IRQ resource\n");
-		ret = -EINVAL;
+		if (ret != -EPROBE_DEFER)
+			ret = -EINVAL;
 		goto err_unicam_put;
 	}
 
