@@ -440,6 +440,9 @@ void kernel_fpu_begin_mask(unsigned int kfpu_mask)
 
 	if (unlikely(kfpu_mask & KFPU_387) && boot_cpu_has(X86_FEATURE_FPU))
 		asm volatile ("fninit");
+
+	if (unlikely(kfpu_mask & KFPU_AMX) && boot_cpu_has(X86_FEATURE_AMX_TILE))
+		restore_fpregs_from_fpstate(&init_fpstate, XFEATURE_MASK_XTILE);
 }
 EXPORT_SYMBOL_GPL(kernel_fpu_begin_mask);
 
