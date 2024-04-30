@@ -325,4 +325,18 @@ int do_core_test(int cpu, struct device *dev);
 extern struct attribute *plat_ifs_attrs[];
 extern struct attribute *plat_ifs_array_attrs[];
 
+static inline void ifs_fpu_begin(void)
+{
+	/*
+	 * The AMX state must be initialized prior to executing In-Field
+	 * Scan tests, according to Intel SDM.
+	 */
+	kernel_fpu_begin_mask(KFPU_AMX);
+}
+
+static inline void ifs_fpu_end(void)
+{
+	kernel_fpu_end();
+}
+
 #endif

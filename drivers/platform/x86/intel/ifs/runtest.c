@@ -188,6 +188,9 @@ static int doscan(void *data)
 	/* Only the first logical CPU on a core reports result */
 	first = cpumask_first(cpu_smt_mask(cpu));
 
+	/* Prepare FPU state before entering the rendezvous loop*/
+	ifs_fpu_begin();
+
 	wait_for_sibling_cpu(&scan_cpus_in, NSEC_PER_SEC);
 
 	/*
@@ -199,6 +202,9 @@ static int doscan(void *data)
 	 * are processed in a single pass) before it retires.
 	 */
 	wrmsrl(MSR_ACTIVATE_SCAN, params->activate->data);
+
+	ifs_fpu_end();
+
 	rdmsrl(MSR_SCAN_STATUS, status.data);
 
 	trace_ifs_status(ifsd->cur_batch, start, stop, status.data);
