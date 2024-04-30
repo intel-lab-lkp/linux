@@ -7459,6 +7459,8 @@ static bool bnxt_rings_ok(struct bnxt *bp, struct bnxt_hw_rings *hwr)
 	       hwr->stat && (hwr->cp_p5 || !(bp->flags & BNXT_FLAG_CHIP_P5_PLUS));
 }
 
+static int bnxt_get_avail_msix(struct bnxt *bp, int num);
+
 static int __bnxt_reserve_rings(struct bnxt *bp)
 {
 	struct bnxt_hw_rings hwr = {0};
@@ -7471,7 +7473,7 @@ static int __bnxt_reserve_rings(struct bnxt *bp)
 	if (!bnxt_need_reserve_rings(bp))
 		return 0;
 
-	if (!bnxt_ulp_registered(bp->edev)) {
+	if (!bnxt_ulp_registered(bp->edev) && BNXT_NEW_RM(bp)) {
 		ulp_msix = bnxt_get_avail_msix(bp, bp->ulp_num_msix_want);
 		if (!ulp_msix)
 			bnxt_set_ulp_stat_ctxs(bp, 0);
@@ -10474,19 +10476,13 @@ unsigned int bnxt_get_avail_stat_ctxs_for_en(struct bnxt *bp)
 	return bnxt_get_max_func_stat_ctxs(bp) - bnxt_get_func_stat_ctxs(bp);
 }
 
-int bnxt_get_avail_msix(struct bnxt *bp, int num)
+/* Only called if BNXT_NEW_RM() is true to get the available MSIX to
+ * reserve ahead of time before RoCE is registered.
+ */
+static int bnxt_get_avail_msix(struct bnxt *bp, int num)
 {
-	int max_cp = bnxt_get_max_func_cp_rings(bp);
 	int max_irq = bnxt_get_max_func_irqs(bp);
 	int total_req = bp->cp_nr_rings + num;
-	int max_idx, avail_msix;
-
-	max_idx = bp->total_irqs;
-	if (!(bp->flags & BNXT_FLAG_CHIP_P5_PLUS))
-		max_idx = min_t(int, bp->total_irqs, max_cp);
-	avail_msix = max_idx - bp->cp_nr_rings;
-	if (!BNXT_NEW_RM(bp) || avail_msix >= num)
-		return avail_msix;
 
 	if (max_irq < total_req) {
 		num = max_irq - bp->cp_nr_rings;
@@ -10619,7 +10615,7 @@ int bnxt_reserve_rings(struct bnxt *bp, bool irq_re_init)
 	if (!bnxt_need_reserve_rings(bp))
 		return 0;
 
-	if (!bnxt_ulp_registered(bp->edev)) {
+	if (!bnxt_ulp_registered(bp->edev) && BNXT_NEW_RM(bp)) {
 		int ulp_msix = bnxt_get_avail_msix(bp, bp->ulp_num_msix_want);
 
 		if (ulp_msix > bp->ulp_num_msix_want)
