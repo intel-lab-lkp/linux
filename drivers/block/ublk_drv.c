@@ -2208,6 +2208,9 @@ static int ublk_ctrl_start_dev(struct ublk_device *ub, struct io_uring_cmd *cmd)
 		lim.max_zone_append_sectors = p->max_zone_append_sectors;
 	}
 
+	lim.max_segments = USHRT_MAX;
+	lim.max_segment_size = UINT_MAX;
+
 	if (wait_for_completion_interruptible(&ub->completion) != 0)
 		return -EINTR;
 
