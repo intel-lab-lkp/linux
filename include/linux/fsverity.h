@@ -56,6 +56,9 @@ struct fsverity_blockbuf {
 /**
  * struct fsverity_readmerkle - Request to read a Merkle Tree block buffer
  * @inode: the inode to read
+ * @level: expected level of the block; level 0 are the leaves.
+ * 		A value of FSVERITY_STREAMING_READ means a streaming read.
+ * @num_levels: number of levels in the tree total
  * @ra_bytes: The number of bytes that should be prefetched starting at pos
  *		if the page at @block->offset isn't already cached.
  *		Implementations may ignore this argument; it's only a
@@ -64,7 +67,11 @@ struct fsverity_blockbuf {
 struct fsverity_readmerkle {
 	struct inode *inode;
 	unsigned long ra_bytes;
+	int level;
+	int num_levels;
 };
+
+#define FSVERITY_STREAMING_READ	(-1)
 
 /* Verity operations for filesystems */
 struct fsverity_operations {

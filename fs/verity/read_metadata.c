@@ -40,6 +40,7 @@ static int fsverity_read_merkle_tree(struct inode *inode,
 				      params->block_size - offs_in_block);
 
 		err = fsverity_read_merkle_tree_block(inode, &vi->tree_params,
+						      FSVERITY_STREAMING_READ,
 						      pos - offs_in_block,
 						      ra_bytes, &block);
 		if (err)
