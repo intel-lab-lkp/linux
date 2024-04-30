@@ -481,6 +481,14 @@ test_ifs()
 		test_ifs_scan_available_imgs
 		test_ifs_same_cpu_loop "$IFS_SCAN_MODE" "$RANDOM_CPU" "$LOOP_TIMES"
 	fi
+
+	# SAPPHIRERAPID CPU could not support IFS ARRAY BIST scan
+	if [[ "$MODEL" == "$SAPPHIRERAPIDS_X" ]]; then
+		append_log "[$SKIP] SAPPHIRERAPID CPU, skip IFS ARRAY BIST scan"
+	else
+		ifs_test_cpus "$SIBLINGS" "$IFS_ARRAY_BIST_SCAN_MODE"
+		test_ifs_same_cpu_loop "$IFS_ARRAY_BIST_SCAN_MODE" "$RANDOM_CPU" "$LOOP_TIMES"
+	fi
 }
 
 trap ifs_cleanup SIGTERM SIGINT
