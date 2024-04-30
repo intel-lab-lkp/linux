@@ -38,6 +38,14 @@ properties:
       The first value specifies the positive input pin, the second
       specifies the negative input pin.
 
+  single-channel:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      When devices combine single and differential channels, allow the channel
+      for a single element to be specified, independent of reg (as for
+      differential channels). If this and diff-channels are not present reg
+      shall be used instead.
+
   settling-time-us:
     description:
       Time between enabling the channel and first stable readings.
