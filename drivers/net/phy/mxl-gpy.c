@@ -680,6 +680,7 @@ static int gpy_set_wol(struct phy_device *phydev,
 	struct net_device *attach_dev = phydev->attached_dev;
 	int ret;
 
+	phydev->wolopts = 0;
 	if (wol->wolopts & WAKE_MAGIC) {
 		/* MAC address - Byte0:Byte1:Byte2:Byte3:Byte4:Byte5
 		 * VPSPEC2_WOL_AD45 = Byte0:Byte1
@@ -725,6 +726,8 @@ static int gpy_set_wol(struct phy_device *phydev,
 		ret = phy_read(phydev, PHY_ISTAT);
 		if (ret < 0)
 			return ret;
+
+		phydev->wolopts |= WAKE_MAGIC;
 	} else {
 		/* Disable magic packet matching */
 		ret = phy_clear_bits_mmd(phydev, MDIO_MMD_VEND2,
@@ -747,6 +750,8 @@ static int gpy_set_wol(struct phy_device *phydev,
 
 		if (ret & (PHY_IMASK_MASK & ~PHY_IMASK_LSTC))
 			phy_trigger_machine(phydev);
+
+		phydev->wolopts |= WAKE_PHY;
 
 		return 0;
 	}

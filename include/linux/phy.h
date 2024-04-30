@@ -615,6 +615,7 @@ struct macsec_ops;
  *                 handling shall be postponed until PHY has resumed
  * @irq_rerun: Flag indicating interrupts occurred while PHY was suspended,
  *             requiring a rerun of the interrupt handler after resume
+ * @wolopts: User requested wake-on-lan configuration
  * @interface: enum phy_interface_t value
  * @possible_interfaces: bitmap if interface modes that the attached PHY
  *			 will switch between depending on media speed.
@@ -687,6 +688,7 @@ struct phy_device {
 
 	u32 dev_flags;
 
+	u32 wolopts;
 	phy_interface_t interface;
 	DECLARE_PHY_INTERFACE_MASK(possible_interfaces);
 

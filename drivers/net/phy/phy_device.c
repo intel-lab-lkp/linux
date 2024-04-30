@@ -2038,6 +2038,11 @@ int phy_suspend(struct phy_device *phydev)
 	if (phydev->suspended)
 		return 0;
 
+	if (phydev->wolopts) {
+		wol.wolopts = phydev->wolopts;
+		phy_ethtool_set_wol(phydev, &wol);
+	}
+
 	phy_ethtool_get_wol(phydev, &wol);
 	phydev->wol_enabled = wol.wolopts || (netdev && netdev->wol_enabled);
 	/* If the device has WOL enabled, we cannot suspend the PHY */
