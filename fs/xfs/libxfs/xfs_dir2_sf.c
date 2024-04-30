@@ -163,7 +163,7 @@ xfs_dir2_sf_put_ftype(
  * space currently present in the inode.  If it won't fit, the output
  * size is too big (but not accurate).
  */
-int						/* size for sf form */
+static int					/* size for sf form */
 xfs_dir2_block_sfsize(
 	xfs_inode_t		*dp,		/* incore inode pointer */
 	xfs_dir2_data_hdr_t	*hdr,		/* block directory data */
@@ -250,15 +250,12 @@ xfs_dir2_block_sfsize(
 }
 
 /*
- * Convert a block format directory to shortform.
- * Caller has already checked that it will fit, and built us a header.
+ * Try to convert a block format directory to shortform.
  */
 int						/* error */
-xfs_dir2_block_to_sf(
+xfs_dir2_try_block_to_sf(
 	struct xfs_da_args	*args,		/* operation arguments */
-	struct xfs_buf		*bp,
-	int			size,		/* shortform directory size */
-	struct xfs_dir2_sf_hdr	*sfhp)		/* shortform directory hdr */
+	struct xfs_buf		*bp)
 {
 	struct xfs_inode	*dp = args->dp;
 	struct xfs_mount	*mp = dp->i_mount;
@@ -267,8 +264,20 @@ xfs_dir2_block_to_sf(
 	struct xfs_dir2_sf_entry *sfep;		/* shortform entry */
 	struct xfs_dir2_sf_hdr	*sfp;		/* shortform directory header */
 	unsigned int		offset = args->geo->data_entry_offset;
+	struct xfs_dir2_sf_hdr	sfh;
+	int			size;
 	unsigned int		end;
 
+	/*
+	 * See if it would fit into the shortform format.  If not we are done.
+	 */
+	size = xfs_dir2_block_sfsize(dp, bp->b_addr, &sfh);
+	if (size > xfs_inode_data_fork_size(dp))
+		return 0;
+
+	/*
+	 * It would fit into the shortform formt, do the conversion now.
+	 */
 	trace_xfs_dir2_block_to_sf(args);
 
 	/*
@@ -277,7 +286,7 @@ xfs_dir2_block_to_sf(
 	 * the block and copy the formatted data into the inode literal area.
 	 */
 	sfp = kmalloc(mp->m_sb.sb_inodesize, GFP_KERNEL | __GFP_NOFAIL);
-	memcpy(sfp, sfhp, xfs_dir2_sf_hdr_size(sfhp->i8count));
+	memcpy(sfp, &sfh, xfs_dir2_sf_hdr_size(sfh.i8count));
 
 	/*
 	 * Loop over the active and unused entries.  Stop when we reach the

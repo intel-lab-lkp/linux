@@ -167,10 +167,7 @@ uint8_t xfs_dir2_sf_get_ftype(struct xfs_mount *mp,
 		struct xfs_dir2_sf_entry *sfep);
 struct xfs_dir2_sf_entry *xfs_dir2_sf_nextentry(struct xfs_mount *mp,
 		struct xfs_dir2_sf_hdr *hdr, struct xfs_dir2_sf_entry *sfep);
-extern int xfs_dir2_block_sfsize(struct xfs_inode *dp,
-		struct xfs_dir2_data_hdr *block, struct xfs_dir2_sf_hdr *sfhp);
-extern int xfs_dir2_block_to_sf(struct xfs_da_args *args, struct xfs_buf *bp,
-		int size, xfs_dir2_sf_hdr_t *sfhp);
+int xfs_dir2_try_block_to_sf(struct xfs_da_args *args, struct xfs_buf *bp);
 extern int xfs_dir2_sf_addname(struct xfs_da_args *args);
 extern int xfs_dir2_sf_create(struct xfs_da_args *args, xfs_ino_t pino);
 extern int xfs_dir2_sf_lookup(struct xfs_da_args *args);

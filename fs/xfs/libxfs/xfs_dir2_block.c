@@ -795,8 +795,6 @@ xfs_dir2_block_removename(
 	int			error;		/* error return value */
 	int			needlog;	/* need to log block header */
 	int			needscan;	/* need to fixup bestfree */
-	xfs_dir2_sf_hdr_t	sfh;		/* shortform header */
-	int			size;		/* shortform size */
 	xfs_trans_t		*tp;		/* transaction pointer */
 
 	trace_xfs_dir2_block_removename(args);
@@ -845,17 +843,8 @@ xfs_dir2_block_removename(
 	if (needlog)
 		xfs_dir2_data_log_header(args, bp);
 	xfs_dir3_data_check(dp, bp);
-	/*
-	 * See if the size as a shortform is good enough.
-	 */
-	size = xfs_dir2_block_sfsize(dp, hdr, &sfh);
-	if (size > xfs_inode_data_fork_size(dp))
-		return 0;
 
-	/*
-	 * If it works, do the conversion.
-	 */
-	return xfs_dir2_block_to_sf(args, bp, size, &sfh);
+	return xfs_dir2_try_block_to_sf(args, bp);
 }
 
 /*
@@ -944,7 +933,6 @@ xfs_dir2_leaf_to_block(
 	xfs_mount_t		*mp;		/* file system mount point */
 	int			needlog;	/* need to log data header */
 	int			needscan;	/* need to scan for bestfree */
-	xfs_dir2_sf_hdr_t	sfh;		/* shortform header */
 	int			size;		/* bytes used */
 	__be16			*tagp;		/* end of entry (tag) */
 	int			to;		/* block/leaf to index */
@@ -1058,15 +1046,7 @@ xfs_dir2_leaf_to_block(
 	error = xfs_da_shrink_inode(args, args->geo->leafblk, lbp);
 	if (error)
 		return error;
-
-	/*
-	 * Now see if the resulting block can be shrunken to shortform.
-	 */
-	size = xfs_dir2_block_sfsize(dp, hdr, &sfh);
-	if (size > xfs_inode_data_fork_size(dp))
-		return 0;
-
-	return xfs_dir2_block_to_sf(args, dbp, size, &sfh);
+	return xfs_dir2_try_block_to_sf(args, dbp);
 }
 
 /*

@@ -463,9 +463,7 @@ xfs_exchmaps_dir_to_sf(
 		.trans		= tp,
 		.owner		= xmi->xmi_ip2->i_ino,
 	};
-	struct xfs_dir2_sf_hdr	sfh;
 	struct xfs_buf		*bp;
-	int			size;
 	int			error = 0;
 
 	if (xfs_dir2_format(&args, &error) != XFS_DIR2_FMT_BLOCK)
@@ -475,11 +473,7 @@ xfs_exchmaps_dir_to_sf(
 	if (error)
 		return error;
 
-	size = xfs_dir2_block_sfsize(xmi->xmi_ip2, bp->b_addr, &sfh);
-	if (size > xfs_inode_data_fork_size(xmi->xmi_ip2))
-		return 0;
-
-	return xfs_dir2_block_to_sf(&args, bp, size, &sfh);
+	return xfs_dir2_try_block_to_sf(&args, bp);
 }
 
 /* Convert inode2's remote symlink target back to shortform, if possible. */
