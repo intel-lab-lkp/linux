@@ -339,6 +339,20 @@ void fsverity_verify_bio(struct bio *bio)
 EXPORT_SYMBOL_GPL(fsverity_verify_bio);
 #endif /* CONFIG_BLOCK */
 
+int fsverity_init_wq(struct super_block *sb, unsigned int wq_flags,
+		     int max_active)
+{
+	WARN_ON_ONCE(sb->s_verity_wq != NULL);
+
+	sb->s_verity_wq = alloc_workqueue("fsverity/%s", wq_flags, max_active,
+					  sb->s_id);
+	if (!sb->s_verity_wq)
+		return -ENOMEM;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(fsverity_init_wq);
+
 /**
  * fsverity_enqueue_verify_work() - enqueue work on the fs-verity workqueue
  * @work: the work to enqueue

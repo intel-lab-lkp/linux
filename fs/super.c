@@ -37,6 +37,7 @@
 #include <linux/user_namespace.h>
 #include <linux/fs_context.h>
 #include <uapi/linux/mount.h>
+#include <linux/fsverity.h>
 #include "internal.h"
 
 static int thaw_super_locked(struct super_block *sb, enum freeze_holder who);
@@ -636,6 +637,8 @@ void generic_shutdown_super(struct super_block *sb)
 			destroy_workqueue(sb->s_dio_done_wq);
 			sb->s_dio_done_wq = NULL;
 		}
+
+		fsverity_destroy_wq(sb);
 
 		if (sop->put_super)
 			sop->put_super(sb);
