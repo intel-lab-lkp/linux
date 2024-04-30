@@ -2477,8 +2477,11 @@ int cpufreq_start_governor(struct cpufreq_policy *policy)
 			return ret;
 	}
 
-	if (policy->governor->limits)
-		policy->governor->limits(policy);
+	if (policy->governor->limits) {
+		ret = policy->governor->limits(policy);
+		if (ret)
+			return ret;
+	}
 
 	return 0;
 }

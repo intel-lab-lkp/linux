@@ -871,17 +871,19 @@ static void sugov_stop(struct cpufreq_policy *policy)
 	}
 }
 
-static void sugov_limits(struct cpufreq_policy *policy)
+static int sugov_limits(struct cpufreq_policy *policy)
 {
 	struct sugov_policy *sg_policy = policy->governor_data;
+	int rc = 0;
 
 	if (!policy->fast_switch_enabled) {
 		mutex_lock(&sg_policy->work_lock);
-		cpufreq_policy_apply_limits(policy);
+		rc = cpufreq_policy_apply_limits(policy);
 		mutex_unlock(&sg_policy->work_lock);
 	}
 
 	sg_policy->limits_changed = true;
+	return rc;
 }
 
 struct cpufreq_governor schedutil_gov = {

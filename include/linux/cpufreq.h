@@ -579,7 +579,7 @@ struct cpufreq_governor {
 	void	(*exit)(struct cpufreq_policy *policy);
 	int	(*start)(struct cpufreq_policy *policy);
 	void	(*stop)(struct cpufreq_policy *policy);
-	void	(*limits)(struct cpufreq_policy *policy);
+	int	(*limits)(struct cpufreq_policy *policy);
 	ssize_t	(*show_setspeed)	(struct cpufreq_policy *policy,
 					 char *buf);
 	int	(*store_setspeed)	(struct cpufreq_policy *policy,
@@ -637,14 +637,15 @@ module_exit(__governor##_exit)
 struct cpufreq_governor *cpufreq_default_governor(void);
 struct cpufreq_governor *cpufreq_fallback_governor(void);
 
-static inline void cpufreq_policy_apply_limits(struct cpufreq_policy *policy)
+static inline int cpufreq_policy_apply_limits(struct cpufreq_policy *policy)
 {
 	if (policy->max < policy->cur)
-		__cpufreq_driver_target(policy, policy->max,
-					CPUFREQ_RELATION_HE);
+		return __cpufreq_driver_target(policy, policy->max,
+					       CPUFREQ_RELATION_HE);
 	else if (policy->min > policy->cur)
-		__cpufreq_driver_target(policy, policy->min,
-					CPUFREQ_RELATION_LE);
+		return __cpufreq_driver_target(policy, policy->min,
+					       CPUFREQ_RELATION_LE);
+	return 0;
 }
 
 /* Governor attribute set */

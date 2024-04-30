@@ -150,7 +150,7 @@ int cpufreq_dbs_governor_init(struct cpufreq_policy *policy);
 void cpufreq_dbs_governor_exit(struct cpufreq_policy *policy);
 int cpufreq_dbs_governor_start(struct cpufreq_policy *policy);
 void cpufreq_dbs_governor_stop(struct cpufreq_policy *policy);
-void cpufreq_dbs_governor_limits(struct cpufreq_policy *policy);
+int cpufreq_dbs_governor_limits(struct cpufreq_policy *policy);
 
 #define CPUFREQ_DBS_GOVERNOR_INITIALIZER(_name_)			\
 	{								\

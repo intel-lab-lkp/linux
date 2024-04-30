@@ -102,8 +102,9 @@ static void cpufreq_userspace_policy_stop(struct cpufreq_policy *policy)
 	mutex_unlock(&userspace->mutex);
 }
 
-static void cpufreq_userspace_policy_limits(struct cpufreq_policy *policy)
+static int cpufreq_userspace_policy_limits(struct cpufreq_policy *policy)
 {
+	int rc;
 	struct userspace_policy *userspace = policy->governor_data;
 
 	mutex_lock(&userspace->mutex);
@@ -112,16 +113,17 @@ static void cpufreq_userspace_policy_limits(struct cpufreq_policy *policy)
 		 policy->cpu, policy->min, policy->max, policy->cur, userspace->setspeed);
 
 	if (policy->max < userspace->setspeed)
-		__cpufreq_driver_target(policy, policy->max,
-					CPUFREQ_RELATION_H);
+		rc = __cpufreq_driver_target(policy, policy->max,
+					     CPUFREQ_RELATION_H);
 	else if (policy->min > userspace->setspeed)
-		__cpufreq_driver_target(policy, policy->min,
-					CPUFREQ_RELATION_L);
+		rc = __cpufreq_driver_target(policy, policy->min,
+					     CPUFREQ_RELATION_L);
 	else
-		__cpufreq_driver_target(policy, userspace->setspeed,
-					CPUFREQ_RELATION_L);
+		rc = __cpufreq_driver_target(policy, userspace->setspeed,
+					     CPUFREQ_RELATION_L);
 
 	mutex_unlock(&userspace->mutex);
+	return rc;
 }
 
 static struct cpufreq_governor cpufreq_gov_userspace = {
