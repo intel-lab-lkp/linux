@@ -2230,10 +2230,11 @@ static int __cmd_record(int argc, const char **argv)
 	const char *callgraph_args[] = {
 		"--call-graph", "fp," __stringify(CONTENTION_STACK_DEPTH),
 	};
-	unsigned int rec_argc, i, j, ret;
+	unsigned int rec_argc, i, j, dups = 0, ret;
 	unsigned int nr_tracepoints;
 	unsigned int nr_callgraph_args = 0;
 	const char **rec_argv;
+	char **to_free;
 	bool has_lock_stat = true;
 
 	for (i = 0; i < ARRAY_SIZE(lock_tracepoints); i++) {
@@ -2270,28 +2271,25 @@ setup_args:
 	/* factor of 2 is for -e in front of each tracepoint */
 	rec_argc += 2 * nr_tracepoints;
 
-	rec_argv = calloc(rec_argc + 1, sizeof(char *));
+	rec_argv = calloc(rec_argc + 1, sizeof(*rec_argv));
 	if (!rec_argv)
 		return -ENOMEM;
 
-	for (i = 0; i < ARRAY_SIZE(record_args); i++)
-		rec_argv[i] = strdup(record_args[i]);
+	to_free = calloc(rec_argc, sizeof(*to_free));
+	if (!to_free)
+		return -ENOMEM;
 
+
+	for (i = 0; i < ARRAY_SIZE(record_args);) {
+		to_free[dups] = strdup(record_args[i]);
+		rec_argv[i++] = to_free[dups++];
+	}
 	for (j = 0; j < nr_tracepoints; j++) {
-		const char *ev_name;
-
-		if (has_lock_stat)
-			ev_name = strdup(lock_tracepoints[j].name);
-		else
-			ev_name = strdup(contention_tracepoints[j].name);
-
-		if (!ev_name) {
-			free(rec_argv);
-			return -ENOMEM;
-		}
-
+		to_free[dups] = strdup(has_lock_stat
+				       ? lock_tracepoints[j].name
+				       : contention_tracepoints[j].name);
 		rec_argv[i++] = "-e";
-		rec_argv[i++] = ev_name;
+		rec_argv[i++] = to_free[dups++];
 	}
 
 	for (j = 0; j < nr_callgraph_args; j++, i++)
@@ -2302,7 +2300,17 @@ setup_args:
 
 	BUG_ON(i != rec_argc);
 
-	ret = cmd_record(i, rec_argv);
+	for (i = 0; i < dups; i++) {
+		if (to_free[i] == NULL) {
+			ret = -ENOMEM;
+			goto out;
+		}
+	}
+	ret = cmd_record(rec_argc, rec_argv);
+out:
+	for (i = 0; i < dups; i++)
+		zfree(&to_free[i]);
+	free(to_free);
 	free(rec_argv);
 	return ret;
 }
