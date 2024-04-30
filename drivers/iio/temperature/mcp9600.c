@@ -28,16 +28,16 @@ static const struct iio_chan_spec mcp9600_channels[] = {
 		.address = MCP9600_HOT_JUNCTION,
 		.channel2 = IIO_MOD_TEMP_OBJECT,
 		.modified = 1,
-		.info_mask_separate =
-			BIT(IIO_CHAN_INFO_RAW) | BIT(IIO_CHAN_INFO_SCALE),
+		.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),
+		.info_mask_shared_by_all = BIT(IIO_CHAN_INFO_SCALE),
 	},
 	{
 		.type = IIO_TEMP,
 		.address = MCP9600_COLD_JUNCTION,
 		.channel2 = IIO_MOD_TEMP_AMBIENT,
 		.modified = 1,
-		.info_mask_separate =
-			BIT(IIO_CHAN_INFO_RAW) | BIT(IIO_CHAN_INFO_SCALE),
+		.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),
+		.info_mask_shared_by_all = BIT(IIO_CHAN_INFO_SCALE),
 	},
 };
 
