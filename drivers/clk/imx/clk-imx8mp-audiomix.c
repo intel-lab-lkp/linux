@@ -217,6 +217,8 @@ struct clk_imx8mp_audiomix_priv {
 	struct clk_hw_onecell_data clk_data;
 };
 
+#ifdef CONFIG_PM
+
 static void clk_imx8mp_audiomix_save_restore(struct device *dev, bool save)
 {
 	struct clk_imx8mp_audiomix_priv *priv = dev_get_drvdata(dev);
@@ -231,6 +233,8 @@ static void clk_imx8mp_audiomix_save_restore(struct device *dev, bool save)
 			writel(priv->regs_save[i], base + audiomix_regs[i]);
 	}
 }
+
+#endif /* CONFIG_PM */
 
 static int clk_imx8mp_audiomix_probe(struct platform_device *pdev)
 {
@@ -353,6 +357,8 @@ static int clk_imx8mp_audiomix_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_PM
+
 static int clk_imx8mp_audiomix_runtime_suspend(struct device *dev)
 {
 	clk_imx8mp_audiomix_save_restore(dev, true);
@@ -366,6 +372,8 @@ static int clk_imx8mp_audiomix_runtime_resume(struct device *dev)
 
 	return 0;
 }
+
+#endif /* CONFIG_PM */
 
 static const struct dev_pm_ops clk_imx8mp_audiomix_pm_ops = {
 	SET_RUNTIME_PM_OPS(clk_imx8mp_audiomix_runtime_suspend,
