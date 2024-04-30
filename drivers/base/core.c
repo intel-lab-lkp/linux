@@ -2631,6 +2631,7 @@ static const char *dev_uevent_name(const struct kobject *kobj)
 static int dev_uevent(const struct kobject *kobj, struct kobj_uevent_env *env)
 {
 	const struct device *dev = kobj_to_dev(kobj);
+	struct device_driver *drv;
 	int retval = 0;
 
 	/* add device node properties if present */
@@ -2659,8 +2660,12 @@ static int dev_uevent(const struct kobject *kobj, struct kobj_uevent_env *env)
 	if (dev->type && dev->type->name)
 		add_uevent_var(env, "DEVTYPE=%s", dev->type->name);
 
-	if (dev->driver)
-		add_uevent_var(env, "DRIVER=%s", dev->driver->name);
+	/* dev->driver can change to NULL underneath us because of unbinding
+	 * or failing probe(), so be careful about accessing it.
+	 */
+	drv = READ_ONCE(dev->driver);
+	if (drv)
+		add_uevent_var(env, "DRIVER=%s", drv->name);
 
 	/* Add common DT information about the device */
 	of_device_uevent(dev, env);
