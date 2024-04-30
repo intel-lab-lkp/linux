@@ -281,9 +281,8 @@ xfs_dir2_try_block_to_sf(
 	trace_xfs_dir2_block_to_sf(args);
 
 	/*
-	 * Allocate a temporary destination buffer to format the data into.
-	 * Once we have formatted the data, we can free the block and copy the
-	 * formatted data into the inode literal area.
+	 * Allocate the shortform buffer now.  It will be transferred to the
+	 * inode fork once we are done.
 	 */
 	sfp = kmalloc(size, GFP_KERNEL | __GFP_NOFAIL);
 	memcpy(sfp, &sfh, xfs_dir2_sf_hdr_size(sfh.i8count));
@@ -341,25 +340,23 @@ xfs_dir2_try_block_to_sf(
 	error = xfs_dir2_shrink_inode(args, args->geo->datablk, bp);
 	if (error) {
 		ASSERT(error != -ENOSPC);
+		kfree(sfp);
 		goto out;
 	}
 
 	/*
-	 * The buffer is now unconditionally gone, whether
-	 * xfs_dir2_shrink_inode worked or not.
-	 *
-	 * Convert the inode to local format and copy the data in.
+	 * Update the data fork format and transfer buffer ownership to the
+	 * inode fork.
 	 */
-	ASSERT(dp->i_df.if_bytes == 0);
-	xfs_init_local_fork(dp, XFS_DATA_FORK, sfp, size);
 	dp->i_df.if_format = XFS_DINODE_FMT_LOCAL;
+	dp->i_df.if_data = sfp;
+	dp->i_df.if_bytes = size;
 	dp->i_disk_size = size;
 
 	logflags |= XFS_ILOG_DDATA;
 	xfs_dir2_sf_check(args);
 out:
 	xfs_trans_log_inode(args->trans, dp, logflags);
-	kfree(sfp);
 	return error;
 }
 
