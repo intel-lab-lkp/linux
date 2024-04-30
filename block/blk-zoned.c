@@ -520,8 +520,9 @@ static inline void disk_put_zone_wplug(struct blk_zone_wplug *zwplug)
 static inline bool disk_should_remove_zone_wplug(struct gendisk *disk,
 						 struct blk_zone_wplug *zwplug)
 {
-	/* If the zone is still busy, the plug cannot be removed. */
-	if (zwplug->flags & BLK_ZONE_WPLUG_BUSY)
+	/* If the zone write plug is still busy, it cannot be removed. */
+	if ((zwplug->flags & BLK_ZONE_WPLUG_BUSY) ||
+	    atomic_read(&zwplug->ref) > 2)
 		return false;
 
 	/* We can remove zone write plugs for zones that are empty or full. */
@@ -891,8 +892,9 @@ void blk_zone_write_plug_attempt_merge(struct request *req)
 	struct bio *bio;
 
 	/*
-	 * Completion of this request needs to be handled with
-	 * blk_zone_write_plug_complete_request().
+	 * Indicate that completion of this request needs to be handled with
+	 * blk_zone_write_plug_complete_request(), which will drop the reference
+	 * on the zone write plug we took above on entry to this function.
 	 */
 	req->rq_flags |= RQF_ZONE_WRITE_PLUGGING;
 
@@ -1221,6 +1223,9 @@ void blk_zone_write_plug_bio_endio(struct bio *bio)
 		spin_unlock_irqrestore(&zwplug->lock, flags);
 	}
 
+	/* Drop the reference we took when the BIO was issued. */
+	disk_put_zone_wplug(zwplug);
+
 	/*
 	 * For BIO-based devices, blk_zone_write_plug_complete_request()
 	 * is not called. So we need to schedule execution of the next
@@ -1229,8 +1234,7 @@ void blk_zone_write_plug_bio_endio(struct bio *bio)
 	if (bio->bi_bdev->bd_has_submit_bio)
 		disk_zone_wplug_unplug_bio(disk, zwplug);
 
-	/* Drop the reference we took when the BIO was issued. */
-	atomic_dec(&zwplug->ref);
+	/* Drop the reference we took when entering this function. */
 	disk_put_zone_wplug(zwplug);
 }
 
@@ -1244,13 +1248,15 @@ void blk_zone_write_plug_complete_request(struct request *req)
 
 	req->rq_flags &= ~RQF_ZONE_WRITE_PLUGGING;
 
-	disk_zone_wplug_unplug_bio(disk, zwplug);
-
 	/*
 	 * Drop the reference we took when the request was initialized in
 	 * blk_zone_write_plug_attempt_merge().
 	 */
-	atomic_dec(&zwplug->ref);
+	disk_put_zone_wplug(zwplug);
+
+	disk_zone_wplug_unplug_bio(disk, zwplug);
+
+	/* Drop the reference we took when entering this function. */
 	disk_put_zone_wplug(zwplug);
 }
 
