@@ -167,20 +167,21 @@ static int adv748x_csi2_set_format(struct v4l2_subdev *sd,
 				   struct v4l2_subdev_state *sd_state,
 				   struct v4l2_subdev_format *sdformat)
 {
-	struct v4l2_mbus_framefmt *mbusformat;
+	struct v4l2_mbus_framefmt *fmt;
 
-	mbusformat = v4l2_subdev_state_get_format(sd_state, sdformat->pad);
+	/*
+	 * The format set on the sink pad is propagated to the other end
+	 * of the active route.
+	 */
+	if (sdformat->pad == ADV748X_CSI2_SOURCE)
+		return -EINVAL;
 
-	/* Format on the source pad is always copied from the sink one. */
-	if (sdformat->pad == ADV748X_CSI2_SOURCE) {
-		const struct v4l2_mbus_framefmt *sink_fmt;
+	fmt = v4l2_subdev_state_get_format(sd_state, sdformat->pad);
+	*fmt = sdformat->format;
 
-		sink_fmt = v4l2_subdev_state_get_format(sd_state,
-							ADV748X_CSI2_SINK);
-		sdformat->format = *sink_fmt;
-	}
-
-	*mbusformat = sdformat->format;
+	fmt = v4l2_subdev_state_get_opposite_stream_format(sd_state,
+							   sdformat->pad, 0);
+	*fmt = sdformat->format;
 
 	return 0;
 }
