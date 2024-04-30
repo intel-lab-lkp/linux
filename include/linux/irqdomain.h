@@ -257,6 +257,22 @@ static inline struct fwnode_handle *irq_domain_alloc_fwnode(phys_addr_t *pa)
 }
 
 void irq_domain_free_fwnode(struct fwnode_handle *fwnode);
+struct irq_domain *irq_domain_alloc(struct fwnode_handle *fwnode, unsigned int size,
+				    irq_hw_number_t hwirq_max, int direct_max,
+				    const struct irq_domain_ops *ops,
+				    void *host_data);
+
+static inline struct irq_domain *irq_domain_alloc_linear(struct fwnode_handle *fwnode,
+							 unsigned int size,
+							 const struct irq_domain_ops *ops,
+							 void *host_data)
+{
+	return irq_domain_alloc(fwnode, size, size, 0, ops, host_data);
+}
+
+void irq_domain_free(struct irq_domain *domain);
+void irq_domain_publish(struct irq_domain *domain);
+void irq_domain_unpublish(struct irq_domain *domain);
 struct irq_domain *__irq_domain_add(struct fwnode_handle *fwnode, unsigned int size,
 				    irq_hw_number_t hwirq_max, int direct_max,
 				    const struct irq_domain_ops *ops,

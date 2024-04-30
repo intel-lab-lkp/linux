@@ -231,7 +231,38 @@ static struct irq_domain *__irq_domain_create(struct fwnode_handle *fwnode,
 	return domain;
 }
 
-static void __irq_domain_publish(struct irq_domain *domain)
+struct irq_domain *irq_domain_alloc(struct fwnode_handle *fwnode, unsigned int size,
+				    irq_hw_number_t hwirq_max, int direct_max,
+				    const struct irq_domain_ops *ops,
+				    void *host_data)
+{
+	return __irq_domain_create(fwnode, size, hwirq_max, direct_max, ops,
+				   host_data);
+}
+EXPORT_SYMBOL_GPL(irq_domain_alloc);
+
+/**
+ * irq_domain_free() - Free an irq domain.
+ * @domain: domain to free
+ *
+ * This routine is used to free an irq domain. The caller must ensure
+ * that the domain is not published.
+ */
+void irq_domain_free(struct irq_domain *domain)
+{
+	fwnode_dev_initialized(domain->fwnode, false);
+	fwnode_handle_put(domain->fwnode);
+	if (domain->flags & IRQ_DOMAIN_NAME_ALLOCATED)
+		kfree(domain->name);
+	kfree(domain);
+}
+EXPORT_SYMBOL_GPL(irq_domain_free);
+
+/**
+ * irq_domain_publish() - Publish an irq domain.
+ * @domain: domain to publish
+ */
+void irq_domain_publish(struct irq_domain *domain)
 {
 	mutex_lock(&irq_domain_mutex);
 	debugfs_add_domain_dir(domain);
@@ -240,6 +271,36 @@ static void __irq_domain_publish(struct irq_domain *domain)
 
 	pr_debug("Added domain %s\n", domain->name);
 }
+EXPORT_SYMBOL_GPL(irq_domain_publish);
+
+/**
+ * irq_domain_unpublish() - Unpublish an irq domain.
+ * @domain: domain to unpublish
+ *
+ * This routine is used to unpublish an irq domain. The caller must ensure
+ * that all mappings within the domain have been disposed of prior to
+ * use, depending on the revmap type.
+ */
+void irq_domain_unpublish(struct irq_domain *domain)
+{
+	mutex_lock(&irq_domain_mutex);
+	debugfs_remove_domain_dir(domain);
+
+	WARN_ON(!radix_tree_empty(&domain->revmap_tree));
+
+	list_del(&domain->link);
+
+	/*
+	 * If the going away domain is the default one, reset it.
+	 */
+	if (unlikely(irq_default_domain == domain))
+		irq_set_default_host(NULL);
+
+	mutex_unlock(&irq_domain_mutex);
+
+	pr_debug("Removed domain %s\n", domain->name);
+}
+EXPORT_SYMBOL_GPL(irq_domain_unpublish);
 
 /**
  * __irq_domain_add() - Allocate a new irq_domain data structure
@@ -264,7 +325,7 @@ struct irq_domain *__irq_domain_add(struct fwnode_handle *fwnode, unsigned int s
 	domain = __irq_domain_create(fwnode, size, hwirq_max, direct_max,
 				     ops, host_data);
 	if (domain)
-		__irq_domain_publish(domain);
+		irq_domain_publish(domain);
 
 	return domain;
 }
@@ -280,28 +341,8 @@ EXPORT_SYMBOL_GPL(__irq_domain_add);
  */
 void irq_domain_remove(struct irq_domain *domain)
 {
-	mutex_lock(&irq_domain_mutex);
-	debugfs_remove_domain_dir(domain);
-
-	WARN_ON(!radix_tree_empty(&domain->revmap_tree));
-
-	list_del(&domain->link);
-
-	/*
-	 * If the going away domain is the default one, reset it.
-	 */
-	if (unlikely(irq_default_domain == domain))
-		irq_set_default_host(NULL);
-
-	mutex_unlock(&irq_domain_mutex);
-
-	pr_debug("Removed domain %s\n", domain->name);
-
-	fwnode_dev_initialized(domain->fwnode, false);
-	fwnode_handle_put(domain->fwnode);
-	if (domain->flags & IRQ_DOMAIN_NAME_ALLOCATED)
-		kfree(domain->name);
-	kfree(domain);
+	irq_domain_unpublish(domain);
+	irq_domain_free(domain);
 }
 EXPORT_SYMBOL_GPL(irq_domain_remove);
 
@@ -1184,7 +1225,7 @@ struct irq_domain *irq_domain_create_hierarchy(struct irq_domain *parent,
 		domain->parent = parent;
 		domain->flags |= flags;
 
-		__irq_domain_publish(domain);
+		irq_domain_publish(domain);
 	}
 
 	return domain;
