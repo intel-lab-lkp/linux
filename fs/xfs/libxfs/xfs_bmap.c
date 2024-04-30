@@ -754,30 +754,31 @@ out_root_realloc:
 
 /*
  * Convert a local file to an extents file.
- * This code is out of bounds for data forks of regular files,
- * since the file data needs to get logged so things will stay consistent.
- * (The bmap-level manipulations are ok, though).
+ *
+ * Returns the content of the old data fork, which needs to be freed by the
+ * caller.
  */
-void
+void *
 xfs_bmap_local_to_extents_empty(
 	struct xfs_trans	*tp,
 	struct xfs_inode	*ip,
 	int			whichfork)
 {
 	struct xfs_ifork	*ifp = xfs_ifork_ptr(ip, whichfork);
+	void			*old_data = ifp->if_data;
 
 	ASSERT(whichfork != XFS_COW_FORK);
 	ASSERT(ifp->if_format == XFS_DINODE_FMT_LOCAL);
-	ASSERT(ifp->if_bytes == 0);
 	ASSERT(ifp->if_nextents == 0);
 
 	xfs_bmap_forkoff_reset(ip, whichfork);
 	ifp->if_data = NULL;
+	ifp->if_bytes = 0;
 	ifp->if_height = 0;
 	ifp->if_format = XFS_DINODE_FMT_EXTENTS;
 	xfs_trans_log_inode(tp, ip, XFS_ILOG_CORE);
+	return old_data;
 }
-
 
 int					/* error */
 xfs_bmap_local_to_extents(
