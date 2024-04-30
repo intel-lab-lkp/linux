@@ -790,9 +790,11 @@ out:
  *
  * Returns 0 on success or negative error code on failure
  */
-static int btrfs_write_merkle_tree_block(struct inode *inode, const void *buf,
-					 u64 pos, unsigned int size)
+static int btrfs_write_merkle_tree_block(const struct fsverity_writemerkle *req,
+					 const void *buf, u64 pos,
+					 unsigned int size)
 {
+	struct inode *inode = req->inode;
 	loff_t merkle_pos = merkle_file_pos(inode);
 
 	if (merkle_pos < 0)

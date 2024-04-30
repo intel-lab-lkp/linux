@@ -73,6 +73,14 @@ struct fsverity_readmerkle {
 
 #define FSVERITY_STREAMING_READ	(-1)
 
+/**
+ * struct fsverity_writemerkle - Request to write a Merkle Tree block buffer
+ * @inode: the inode to read
+ */
+struct fsverity_writemerkle {
+	struct inode *inode;
+};
+
 /* Verity operations for filesystems */
 struct fsverity_operations {
 
@@ -183,7 +191,7 @@ struct fsverity_operations {
 	/**
 	 * Write a Merkle tree block to the given inode.
 	 *
-	 * @inode: the inode for which the Merkle tree is being built
+	 * @req: write request; see struct fsverity_writemerkle
 	 * @buf: the Merkle tree block to write
 	 * @pos: the position of the block in the Merkle tree (in bytes)
 	 * @size: the Merkle tree block size (in bytes)
@@ -193,8 +201,9 @@ struct fsverity_operations {
 	 *
 	 * Return: 0 on success, -errno on failure
 	 */
-	int (*write_merkle_tree_block)(struct inode *inode, const void *buf,
-				       u64 pos, unsigned int size);
+	int (*write_merkle_tree_block)(const struct fsverity_writemerkle *req,
+				       const void *buf, u64 pos,
+				       unsigned int size);
 
 	/**
 	 * Release the reference to a Merkle tree block

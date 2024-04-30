@@ -382,9 +382,12 @@ static struct page *ext4_read_merkle_tree_page(struct inode *inode,
 	return folio_file_page(folio, index);
 }
 
-static int ext4_write_merkle_tree_block(struct inode *inode, const void *buf,
-					u64 pos, unsigned int size)
+static int ext4_write_merkle_tree_block(const struct fsverity_writemerkle *req,
+					const void *buf, u64 pos,
+					unsigned int size)
 {
+	struct inode *inode = req->inode;
+
 	pos += ext4_verity_metadata_pos(inode);
 
 	return pagecache_write(inode, buf, size, pos);
