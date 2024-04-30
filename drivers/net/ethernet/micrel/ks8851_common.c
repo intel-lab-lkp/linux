@@ -299,7 +299,7 @@ static void ks8851_rx_pkts(struct ks8851_net *ks)
 					ks8851_dbg_dumpkkt(ks, rxpkt);
 
 				skb->protocol = eth_type_trans(skb, ks->netdev);
-				__netif_rx(skb);
+				__skb_queue_tail(&ks->rxq, skb);
 
 				ks->netdev->stats.rx_packets++;
 				ks->netdev->stats.rx_bytes += rxlen;
@@ -329,8 +329,6 @@ static irqreturn_t ks8851_irq(int irq, void *_ks)
 	unsigned handled = 0;
 	unsigned long flags;
 	unsigned int status;
-
-	local_bh_disable();
 
 	ks8851_lock(ks, &flags);
 
@@ -408,7 +406,8 @@ static irqreturn_t ks8851_irq(int irq, void *_ks)
 	if (status & IRQ_LCI)
 		mii_check_link(&ks->mii);
 
-	local_bh_enable();
+	while (!skb_queue_empty(&ks->rxq))
+		netif_rx(__skb_dequeue(&ks->rxq));
 
 	return IRQ_HANDLED;
 }
@@ -1189,6 +1188,7 @@ int ks8851_probe_common(struct net_device *netdev, struct device *dev,
 						NETIF_MSG_PROBE |
 						NETIF_MSG_LINK);
 
+	__skb_queue_head_init(&ks->rxq);
 	skb_queue_head_init(&ks->txq);
 
 	netdev->ethtool_ops = &ks8851_ethtool_ops;

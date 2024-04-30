@@ -399,6 +399,7 @@ struct ks8851_net {
 
 	struct work_struct	rxctrl_work;
 
+	struct sk_buff_head	rxq;
 	struct sk_buff_head	txq;
 	unsigned int		queued_len;
 
