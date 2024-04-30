@@ -148,6 +148,12 @@ struct max9286_format_info {
 	u32 code;
 	/* The gmsl data format configuration. */
 	u8 gmsl_dt;
+	/*
+	 * gmsl_bpp is the pixel format bit-width per word as reported in
+	 * table 20. and it is used to calculate the GMSL bandwidth and CSI-2
+	 * link speed.
+	 */
+	u8 gmsl_bpp;
 	/* The format bpp, used for stride calculation. */
 	u8 bpp;
 	/* The Data Type identifier as defined by the MIPI CSI-2 standard. */
@@ -201,6 +207,7 @@ struct max9286_priv {
 
 	struct v4l2_ctrl_handler ctrls;
 	struct v4l2_ctrl *pixelrate_ctrl;
+	struct v4l2_ctrl *link_freq;
 	unsigned int pixelrate;
 
 	unsigned int nsources;
@@ -242,41 +249,49 @@ static const struct max9286_format_info max9286_formats[] = {
 	{
 		.code = MEDIA_BUS_FMT_UYVY8_1X16,
 		.gmsl_dt = MAX9286_DATATYPE_YUV422_8BIT,
+		.gmsl_bpp = 8,
 		.bpp = 16,
 		.mipi_dt = MIPI_CSI2_DT_YUV422_8B,
 	}, {
 		.code = MEDIA_BUS_FMT_VYUY8_1X16,
 		.gmsl_dt = MAX9286_DATATYPE_YUV422_8BIT,
+		.gmsl_bpp = 8,
 		.bpp = 16,
 		.mipi_dt = MIPI_CSI2_DT_YUV422_8B,
 	}, {
 		.code = MEDIA_BUS_FMT_YUYV8_1X16,
 		.gmsl_dt = MAX9286_DATATYPE_YUV422_8BIT,
+		.gmsl_bpp = 8,
 		.bpp = 16,
 		.mipi_dt = MIPI_CSI2_DT_YUV422_8B,
 	}, {
 		.code = MEDIA_BUS_FMT_YVYU8_1X16,
 		.gmsl_dt = MAX9286_DATATYPE_YUV422_8BIT,
+		.gmsl_bpp = 8,
 		.bpp = 16,
 		.mipi_dt = MIPI_CSI2_DT_YUV422_8B,
 	}, {
 		.code = MEDIA_BUS_FMT_SBGGR12_1X12,
 		.gmsl_dt = MAX9286_DATATYPE_RAW12,
+		.gmsl_bpp = 12,
 		.bpp = 12,
 		.mipi_dt = MIPI_CSI2_DT_RAW12,
 	}, {
 		.code = MEDIA_BUS_FMT_SGBRG12_1X12,
 		.gmsl_dt = MAX9286_DATATYPE_RAW12,
+		.gmsl_bpp = 12,
 		.bpp = 12,
 		.mipi_dt = MIPI_CSI2_DT_RAW12,
 	}, {
 		.code = MEDIA_BUS_FMT_SGRBG12_1X12,
 		.gmsl_dt = MAX9286_DATATYPE_RAW12,
+		.gmsl_bpp = 12,
 		.bpp = 12,
 		.mipi_dt = MIPI_CSI2_DT_RAW12,
 	}, {
 		.code = MEDIA_BUS_FMT_SRGGB12_1X12,
 		.gmsl_dt = MAX9286_DATATYPE_RAW12,
+		.gmsl_bpp = 12,
 		.bpp = 12,
 		.mipi_dt = MIPI_CSI2_DT_RAW12,
 	},
@@ -292,6 +307,60 @@ static const struct max9286_i2c_speed max9286_i2c_speeds[] = {
 	{ .rate = 533000, .mstbt = MAX9286_I2CMSTBT_533KBPS },
 	{ .rate = 837000, .mstbt = MAX9286_I2CMSTBT_837KBPS },
 };
+
+/*
+ * According to the chip manual the CSI-2 link frequency is calculated as:
+ *
+ *     f-CSI2 = pclk * ((width * channels) / lanes)
+ *
+ * Where:
+ *     pclk = serializer input word rate
+ *     width = pixel format bits per word (gmsl_bpp in max9286_format_info)
+ *     channels = number of enabled links
+ *     lanes = number of CSI-2 data lanes
+ *
+ * The following link frequencies have been computed by combining the following
+ * parameters:
+ *
+ * pixel_rates[] = { 44000000, 55000000 }; for RDACM20 and RDACM21
+ * bpps[] = { 8, 12 }; for the formats supported by the max9286 driver
+ * channels[] = { 1, 2, 3, 4 };
+ * lanes[] = { 1, 2, 3, 4 };
+ *
+ * and by filtering out all results that would lead to an invalid
+ * link_frequency, as the MAX9286 has a CSI-2 bandwidth limit of 1200Mbps per
+ * lane (600MHz clock frequency).
+ *
+ * If a new serializer with a different pixel rate, or a new image format with
+ * a different bpp is supported, the below table needs to be updated.
+ */
+static const s64 max9286_link_freqs[] = {
+	88000000,
+	110000000,
+	132000000,
+	165000000,
+	176000000,
+	220000000,
+	264000000,
+	275000000,
+	330000000,
+	352000000,
+	396000000,
+	440000000,
+	495000000,
+	528000000,
+	550000000,
+};
+
+static int max9286_get_link_freq_index(s64 link_freq)
+{
+	for (unsigned int i = 0; i < ARRAY_SIZE(max9286_link_freqs); ++i) {
+		if (max9286_link_freqs[i] == link_freq)
+			return i;
+	}
+
+	return -EINVAL;
+}
 
 /* -----------------------------------------------------------------------------
  * I2C IO
@@ -636,10 +705,18 @@ static void max9286_set_fsync_period(struct max9286_priv *priv,
  * V4L2 Subdev
  */
 
-static int max9286_set_pixelrate(struct max9286_priv *priv)
+static int max9286_set_pixelrate(struct max9286_priv *priv,
+				 struct v4l2_subdev_state *state,
+				 unsigned int link_index)
 {
+	const struct max9286_format_info *info;
 	struct max9286_source *source = NULL;
+	struct v4l2_mbus_framefmt *fmt;
+	unsigned int num_sources = 0;
+	int link_freq_index;
 	u64 pixelrate = 0;
+	s64 link_freq;
+	int ret;
 
 	for_each_source(priv, source) {
 		struct v4l2_ctrl *ctrl;
@@ -662,6 +739,8 @@ static int max9286_set_pixelrate(struct max9286_priv *priv)
 				"Unable to calculate pixel rate\n");
 			return -EINVAL;
 		}
+
+		num_sources++;
 	}
 
 	if (!pixelrate) {
@@ -670,14 +749,33 @@ static int max9286_set_pixelrate(struct max9286_priv *priv)
 		return -EINVAL;
 	}
 
-	priv->pixelrate = pixelrate;
+	fmt = v4l2_subdev_state_get_format(state, link_index);
+	info = max9286_get_format_info(fmt->code);
+	if (WARN_ON(!info))
+		return -EINVAL;
+
+	/*
+	 * Compute the link frequency and find the right index to update
+	 * the menu control with.
+	 */
+	link_freq = pixelrate * ((info->gmsl_bpp * num_sources) /
+		    priv->csi2_data_lanes);
+
+	link_freq_index = max9286_get_link_freq_index(link_freq);
+	if (WARN_ON(link_freq_index < 0))
+		return -EINVAL;
 
 	/*
 	 * The CSI-2 transmitter pixel rate is the single source rate multiplied
 	 * by the number of available sources.
 	 */
-	return v4l2_ctrl_s_ctrl_int64(priv->pixelrate_ctrl,
-				      pixelrate * priv->nsources);
+	ret = __v4l2_ctrl_s_ctrl_int64(priv->pixelrate_ctrl,
+				       pixelrate * priv->nsources);
+	if (ret)
+		return -EINVAL;
+	priv->pixelrate = pixelrate;
+
+	return __v4l2_ctrl_s_ctrl(priv->link_freq, link_freq_index);
 }
 
 static int max9286_notify_bound(struct v4l2_async_notifier *notifier,
@@ -687,6 +785,7 @@ static int max9286_notify_bound(struct v4l2_async_notifier *notifier,
 	struct max9286_priv *priv = sd_to_max9286(notifier->sd);
 	struct max9286_source *source = to_max9286_asd(asd)->source;
 	unsigned int index = to_index(priv, source);
+	struct v4l2_subdev_state *state;
 	unsigned int src_pad;
 	int ret;
 
@@ -739,7 +838,11 @@ static int max9286_notify_bound(struct v4l2_async_notifier *notifier,
 	max9286_check_config_link(priv, priv->source_mask);
 	max9286_configure_i2c(priv, false);
 
-	return max9286_set_pixelrate(priv);
+	state = v4l2_subdev_lock_and_get_active_state(notifier->sd);
+	ret = max9286_set_pixelrate(priv, state, index);
+	v4l2_subdev_unlock_state(state);
+
+	return ret;
 }
 
 static void max9286_notify_unbind(struct v4l2_async_notifier *notifier,
@@ -926,7 +1029,9 @@ static int max9286_set_fmt(struct v4l2_subdev *sd,
 			   struct v4l2_subdev_state *state,
 			   struct v4l2_subdev_format *format)
 {
+	struct max9286_priv *priv = sd_to_max9286(sd);
 	const struct max9286_format_info *info;
+	int ret;
 
 	/*
 	 * Disable setting format on the source pad: format is propagated
@@ -949,7 +1054,22 @@ static int max9286_set_fmt(struct v4l2_subdev *sd,
 	*v4l2_subdev_state_get_opposite_stream_format(state, format->pad, 0) =
 		format->format;
 
-	return 0;
+	/*
+	 * Update the pixel rate and link_rate controls. We cannot do that in
+	 * s_stream() as the receiver is likely fetching the frame_desc and
+	 * reading the link_rate control before calling this driver's s_stream.
+	 *
+	 * Update the controls here.
+	 *
+	 * TODO: Once the routing table will be made writable and links
+	 * can be enabled/disabled, the controls need to be updated there too.
+	 */
+	ret = max9286_set_pixelrate(priv, state, format->pad);
+	if (ret)
+		dev_err(&priv->client->dev,
+			"Unsupported format/lanes/channel combination: clock rate too high");
+
+	return ret;
 }
 
 static int max9286_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
@@ -1068,6 +1188,7 @@ static int max9286_s_ctrl(struct v4l2_ctrl *ctrl)
 {
 	switch (ctrl->id) {
 	case V4L2_CID_PIXEL_RATE:
+	case V4L2_CID_LINK_FREQ:
 		return 0;
 	default:
 		return -EINVAL;
@@ -1097,11 +1218,19 @@ static int max9286_v4l2_register(struct max9286_priv *priv)
 	priv->sd.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE |
 			  V4L2_SUBDEV_FL_STREAMS;
 
-	v4l2_ctrl_handler_init(&priv->ctrls, 1);
+	v4l2_ctrl_handler_init(&priv->ctrls, 2);
 	priv->pixelrate_ctrl = v4l2_ctrl_new_std(&priv->ctrls,
 						 &max9286_ctrl_ops,
 						 V4L2_CID_PIXEL_RATE,
 						 1, INT_MAX, 1, 50000000);
+
+	priv->link_freq =
+		v4l2_ctrl_new_int_menu(&priv->ctrls, &max9286_ctrl_ops,
+				       V4L2_CID_LINK_FREQ,
+				       ARRAY_SIZE(max9286_link_freqs) - 1, 0,
+				       max9286_link_freqs);
+	if (priv->link_freq)
+		priv->link_freq->flags |= V4L2_CTRL_FLAG_READ_ONLY;
 
 	priv->sd.ctrl_handler = &priv->ctrls;
 	ret = priv->ctrls.error;
