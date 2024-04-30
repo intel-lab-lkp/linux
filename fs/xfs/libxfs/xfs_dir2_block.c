@@ -1109,8 +1109,8 @@ xfs_dir2_sf_to_block(
 	/*
 	 * Compute size of block "tail" area.
 	 */
-	i = (uint)sizeof(*btp) +
-	    (sfp->count + 2) * (uint)sizeof(xfs_dir2_leaf_entry_t);
+	i = xfs_dir2_block_overhead(sfp->count);
+
 	/*
 	 * The whole thing is initialized to free by the init routine.
 	 * Say we're using the leaf and tail area.

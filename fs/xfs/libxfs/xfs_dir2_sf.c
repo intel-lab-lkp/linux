@@ -629,9 +629,7 @@ xfs_dir2_sf_addname_pick(
 	 * Calculate data bytes used excluding the new entry, if this
 	 * was a data block (block form directory).
 	 */
-	used = offset +
-	       (sfp->count + 3) * (uint)sizeof(xfs_dir2_leaf_entry_t) +
-	       (uint)sizeof(xfs_dir2_block_tail_t);
+	used = offset + xfs_dir2_block_overhead(sfp->count + 1);
 	/*
 	 * If it won't fit in a block form then we can't insert it,
 	 * we'll go back, convert to block, then try the insert and convert
@@ -691,9 +689,7 @@ xfs_dir2_sf_check(
 	}
 	ASSERT(i8count == sfp->i8count);
 	ASSERT((char *)sfep - (char *)sfp == dp->i_disk_size);
-	ASSERT(offset +
-	       (sfp->count + 2) * (uint)sizeof(xfs_dir2_leaf_entry_t) +
-	       (uint)sizeof(xfs_dir2_block_tail_t) <= args->geo->blksize);
+	ASSERT(offset + xfs_dir2_block_overhead(sfp->count));
 }
 #endif	/* DEBUG */
 
@@ -782,8 +778,8 @@ xfs_dir2_sf_verify(
 		return __this_address;
 
 	/* Make sure this whole thing ought to be in local format. */
-	if (offset + (sfp->count + 2) * (uint)sizeof(xfs_dir2_leaf_entry_t) +
-	    (uint)sizeof(xfs_dir2_block_tail_t) > mp->m_dir_geo->blksize)
+	if (offset + xfs_dir2_block_overhead(sfp->count) >
+	    mp->m_dir_geo->blksize)
 		return __this_address;
 
 	return NULL;

@@ -205,4 +205,16 @@ xfs_dahash_t xfs_dir2_hashname(struct xfs_mount *mp,
 enum xfs_dacmp xfs_dir2_compname(struct xfs_da_args *args,
 		const unsigned char *name, int len);
 
+/*
+ * Overhead if we converted a shortform directory to block format.
+ *
+ * The extra two entries are because "." and ".." don't have real entries in
+ * the shortform format.
+ */
+static inline unsigned int xfs_dir2_block_overhead(unsigned int count)
+{
+	return (count + 2) * sizeof(struct xfs_dir2_leaf_entry) +
+		sizeof(struct xfs_dir2_block_tail);
+}
+
 #endif /* __XFS_DIR2_PRIV_H__ */
