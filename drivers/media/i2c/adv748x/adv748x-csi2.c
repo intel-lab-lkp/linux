@@ -8,11 +8,50 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 
+#include <media/mipi-csi2.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-ioctl.h>
 
 #include "adv748x.h"
+
+struct adv748x_csi2_format_info {
+	u8 dt;
+	u8 bpp;
+};
+
+static int adv748x_csi2_get_format_info(struct adv748x_csi2 *tx, u32 mbus_code,
+					struct adv748x_csi2_format_info *fmt)
+{
+	switch (mbus_code) {
+	case MEDIA_BUS_FMT_YUYV8_1X16:
+		fmt->dt = MIPI_CSI2_DT_YUV422_8B;
+		fmt->bpp = 16;
+		break;
+	case MEDIA_BUS_FMT_YUYV10_1X20:
+		fmt->dt = MIPI_CSI2_DT_YUV422_10B;
+		fmt->bpp = 20;
+		break;
+	case MEDIA_BUS_FMT_RGB565_1X16:
+		fmt->dt = MIPI_CSI2_DT_RGB565;
+		fmt->bpp = 16;
+		break;
+	case MEDIA_BUS_FMT_RGB666_1X18:
+		fmt->dt = MIPI_CSI2_DT_RGB666;
+		fmt->bpp = 18;
+		break;
+	case MEDIA_BUS_FMT_RGB888_1X24:
+		fmt->dt = MIPI_CSI2_DT_RGB888;
+		fmt->bpp = 24;
+		break;
+	default:
+		dev_dbg(tx->state->dev,
+			"Unsupported media bus code: %u\n", mbus_code);
+		return -EINVAL;
+	}
+
+	return 0;
+}
 
 static int adv748x_csi2_set_virtual_channel(struct adv748x_csi2 *tx,
 					    unsigned int vc)
@@ -258,11 +297,58 @@ static int adv748x_csi2_set_routing(struct v4l2_subdev *sd,
 	return adv748x_csi2_apply_routing(sd, state, routing);
 }
 
+static int adv748x_csi2_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
+				       struct v4l2_mbus_frame_desc *fd)
+{
+	struct adv748x_csi2 *tx = adv748x_sd_to_csi2(sd);
+	struct adv748x_csi2_format_info info = {};
+	struct v4l2_mbus_frame_desc_entry *entry;
+	struct v4l2_subdev_route *route;
+	struct v4l2_subdev_state *state;
+	struct v4l2_mbus_framefmt *fmt;
+	int ret = -EINVAL;
+
+	if (pad != ADV748X_CSI2_SOURCE)
+		return -EINVAL;
+
+	state = v4l2_subdev_lock_and_get_active_state(sd);
+
+	/* A single route is available. */
+	route = &state->routing.routes[0];
+	fmt = v4l2_subdev_state_get_format(state, pad, route->source_stream);
+	if (!fmt)
+		goto err_unlock;
+
+	ret = adv748x_csi2_get_format_info(tx, fmt->code, &info);
+	if (ret)
+		goto err_unlock;
+
+	memset(fd, 0, sizeof(*fd));
+
+	/* A single stream is available. */
+	fd->num_entries = 1;
+	fd->type = V4L2_MBUS_FRAME_DESC_TYPE_CSI2;
+
+	entry = &fd->entry[0];
+	entry->stream = 0;
+	entry->flags = V4L2_MBUS_FRAME_DESC_FL_LEN_MAX;
+	entry->length = fmt->width * fmt->height * info.bpp / 8;
+	entry->pixelcode = fmt->code;
+	entry->bus.csi2.vc = route->source_stream;
+	entry->bus.csi2.dt = info.dt;
+
+err_unlock:
+	v4l2_subdev_unlock_state(state);
+
+	return ret;
+}
+
 static const struct v4l2_subdev_pad_ops adv748x_csi2_pad_ops = {
 	.get_fmt = v4l2_subdev_get_fmt,
 	.set_fmt = adv748x_csi2_set_format,
 	.get_mbus_config = adv748x_csi2_get_mbus_config,
 	.set_routing = adv748x_csi2_set_routing,
+	.get_frame_desc = adv748x_csi2_get_frame_desc,
 };
 
 /* -----------------------------------------------------------------------------
