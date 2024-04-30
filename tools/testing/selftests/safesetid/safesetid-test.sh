@@ -19,6 +19,7 @@ main_function()
 {
   check_root
   ./safesetid-test
+  errcode=$?
 }
 
 main_function
