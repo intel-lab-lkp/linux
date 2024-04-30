@@ -20,10 +20,21 @@ static bool is_hash_block_verified(struct inode *inode,
 				   struct fsverity_blockbuf *block,
 				   unsigned long hblock_idx)
 {
+	const struct fsverity_operations *vops = inode->i_sb->s_vop;
 	struct fsverity_info *vi = inode->i_verity_info;
-	struct page *hpage = (struct page *)block->context;
+	struct page *hpage;
 	unsigned int blocks_per_page;
 	unsigned int i;
+
+	/*
+	 * If the filesystem supplies Merkle tree content on a per-block basis,
+	 * rely on the implementation to retain verified status.
+	 */
+	if (vops->read_merkle_tree_block)
+		return block->verified;
+
+	/* Otherwise, the filesystem uses page-based caching. */
+	hpage = (struct page *)block->context;
 
 	/*
 	 * When the Merkle tree block size and page size are the same, then the
@@ -96,6 +107,7 @@ verify_data_block(struct inode *inode, struct fsverity_info *vi,
 		  const void *data, u64 data_pos, unsigned long max_ra_bytes)
 {
 	const struct merkle_tree_params *params = &vi->tree_params;
+	const struct fsverity_operations *vops = inode->i_sb->s_vop;
 	const unsigned int hsize = params->digest_size;
 	int level;
 	unsigned long ra_bytes;
@@ -204,7 +216,9 @@ descend:
 		 * idempotent, as the same hash block might be verified by
 		 * multiple threads concurrently.
 		 */
-		if (vi->hash_block_verified)
+		if (vops->read_merkle_tree_block)
+			block->verified = true;
+		else if (vi->hash_block_verified)
 			set_bit(hblock_idx, vi->hash_block_verified);
 		else
 			SetPageChecked((struct page *)block->context);
@@ -377,6 +391,19 @@ int fsverity_read_merkle_tree_block(struct inode *inode,
 
 	block->pos = pos;
 	block->size = params->block_size;
+	block->verified = false;
+
+	if (vops->read_merkle_tree_block) {
+		struct fsverity_readmerkle req = {
+			.inode = inode,
+			.ra_bytes = ra_bytes,
+		};
+
+		err = vops->read_merkle_tree_block(&req, block);
+		if (err)
+			goto bad;
+		return 0;
+	}
 
 	index = pos >> params->log_blocksize;
 	page_idx = round_down(index, params->blocks_per_page);
@@ -408,8 +435,14 @@ bad:
 void fsverity_drop_merkle_tree_block(struct inode *inode,
 				     struct fsverity_blockbuf *block)
 {
-	kunmap_local(block->kaddr);
-	put_page((struct page *)block->context);
+	const struct fsverity_operations *vops = inode->i_sb->s_vop;
+
+	if (vops->drop_merkle_tree_block) {
+		vops->drop_merkle_tree_block(block);
+	} else {
+		kunmap_local(block->kaddr);
+		put_page((struct page *)block->context);
+	}
 	block->kaddr = NULL;
 	block->context = NULL;
 }

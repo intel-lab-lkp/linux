@@ -180,8 +180,22 @@ static int compute_file_digest(const struct fsverity_hash_alg *hash_alg,
 struct fsverity_info *fsverity_create_info(const struct inode *inode,
 					   struct fsverity_descriptor *desc)
 {
+	const struct fsverity_operations *vops = inode->i_sb->s_vop;
 	struct fsverity_info *vi;
 	int err;
+
+	/*
+	 * If the filesystem implementation supplies Merkle tree content on a
+	 * per-block basis, it must implement both the read and drop functions.
+	 * If it supplies content on a per-page basis, neither should be
+	 * provided.
+	 */
+	if (vops->read_merkle_tree_page)
+		WARN_ON_ONCE(vops->read_merkle_tree_block != NULL ||
+			     vops->drop_merkle_tree_block != NULL);
+	else
+		WARN_ON_ONCE(vops->read_merkle_tree_block == NULL ||
+			     vops->drop_merkle_tree_block == NULL);
 
 	vi = kmem_cache_zalloc(fsverity_info_cachep, GFP_KERNEL);
 	if (!vi)
@@ -213,7 +227,13 @@ struct fsverity_info *fsverity_create_info(const struct inode *inode,
 	if (err)
 		goto fail;
 
-	if (vi->tree_params.block_size != PAGE_SIZE) {
+	/*
+	 * If the fs supplies Merkle tree content on a per-page basis and the
+	 * page size doesn't match the block size, fs-verity must use the
+	 * hash_block_verified bitmap instead of PG_checked.
+	 */
+	if (vops->read_merkle_tree_block == NULL &&
+	    vi->tree_params.block_size != PAGE_SIZE) {
 		/*
 		 * When the Merkle tree block size and page size differ, we use
 		 * a bitmap to keep track of which hash blocks have been

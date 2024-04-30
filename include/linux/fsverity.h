@@ -32,17 +32,38 @@
  * @kaddr: virtual address of the block's data
  * @pos: the position of the block in the Merkle tree (in bytes)
  * @size: the Merkle tree block size
+ * @verified: has this buffer been validated?
  *
  * Buffer containing a single Merkle Tree block.  When fs-verity wants to read
  * merkle data from disk, it passes the filesystem a buffer with the @pos,
- * @index, and @size fields filled out.  The filesystem sets @kaddr and
- * @context.
+ * @index, and @size fields filled out.  The filesystem sets @kaddr, @context,
+ * and @verified.
+ *
+ * While reading the tree, fs-verity calls ->read_merkle_tree_block followed by
+ * ->drop_merkle_tree_block to let filesystem know that memory can be freed.
+ *
+ * The context is optional. This field can be used by filesystem to pass
+ * through state from ->read_merkle_tree_block to ->drop_merkle_tree_block.
  */
 struct fsverity_blockbuf {
 	void *context;
 	void *kaddr;
 	loff_t pos;
 	unsigned int size;
+	unsigned int verified:1;
+};
+
+/**
+ * struct fsverity_readmerkle - Request to read a Merkle Tree block buffer
+ * @inode: the inode to read
+ * @ra_bytes: The number of bytes that should be prefetched starting at pos
+ *		if the page at @block->offset isn't already cached.
+ *		Implementations may ignore this argument; it's only a
+ *		performance optimization.
+ */
+struct fsverity_readmerkle {
+	struct inode *inode;
+	unsigned long ra_bytes;
 };
 
 /* Verity operations for filesystems */
@@ -120,11 +141,34 @@ struct fsverity_operations {
 	 *
 	 * Note that this must retrieve a *page*, not necessarily a *block*.
 	 *
+	 * If this function is implemented, do not implement
+	 * ->read_merkle_tree_block or ->drop_merkle_tree_block.
+	 *
 	 * Return: the page on success, ERR_PTR() on failure
 	 */
 	struct page *(*read_merkle_tree_page)(struct inode *inode,
 					      pgoff_t index,
 					      unsigned long num_ra_pages);
+
+	/**
+	 * Read a Merkle tree block of the given inode.
+	 * @req: read request; see struct fsverity_readmerkle
+	 * @block: block buffer for filesystem to point it to the block
+	 *
+	 * This can be called at any time on an open verity file.  It may be
+	 * called by multiple processes concurrently.
+	 *
+	 * Implementations may cache the @block->verified state in
+	 * ->drop_merkle_tree_block.  They must clear the @block->verified
+	 * flag for a cache miss.
+	 *
+	 * If this function is implemented, ->drop_merkle_tree_block must also
+	 * be implemented.
+	 *
+	 * Return: 0 on success, -errno on failure
+	 */
+	int (*read_merkle_tree_block)(const struct fsverity_readmerkle *req,
+				      struct fsverity_blockbuf *block);
 
 	/**
 	 * Write a Merkle tree block to the given inode.
@@ -141,6 +185,22 @@ struct fsverity_operations {
 	 */
 	int (*write_merkle_tree_block)(struct inode *inode, const void *buf,
 				       u64 pos, unsigned int size);
+
+	/**
+	 * Release the reference to a Merkle tree block
+	 *
+	 * @block: the block to release
+	 *
+	 * This is called when fs-verity is done with a block obtained with
+	 * ->read_merkle_tree_block().
+	 *
+	 * Implementations should cache a @block->verified==1 state to avoid
+	 * unnecessary revalidations during later accesses.
+	 *
+	 * If this function is implemented, ->read_merkle_tree_block must also
+	 * be implemented.
+	 */
+	void (*drop_merkle_tree_block)(struct fsverity_blockbuf *block);
 };
 
 #ifdef CONFIG_FS_VERITY
