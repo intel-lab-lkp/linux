@@ -35,7 +35,8 @@ static void xfs_dir2_sf_check(xfs_da_args_t *args);
 #endif /* DEBUG */
 
 static void xfs_dir2_sf_toino4(struct xfs_da_args *args, bool remove);
-static void xfs_dir2_sf_toino8(xfs_da_args_t *args);
+static void xfs_dir2_sf_toino8(struct xfs_da_args *args,
+		xfs_dir2_data_aoff_t offset);
 
 int
 xfs_dir2_sf_entsize(
@@ -450,6 +451,16 @@ xfs_dir2_sf_addname(
 	 */
 	if (args->op_flags & XFS_DA_OP_JUSTCHECK)
 		return 0;
+
+	/*
+	 * If we need convert to 8-byte inodes, piggy back adding the new entry
+	 * to the rewrite of the fork to fit the large inode number.
+	 */
+	if (objchange) {
+		xfs_dir2_sf_toino8(args, offset);
+		return 0;
+	}
+
 	/*
 	 * Do it the easy way - just add it at the end.
 	 */
@@ -461,8 +472,6 @@ xfs_dir2_sf_addname(
 	 */
 	else {
 		ASSERT(pick == 2);
-		if (objchange)
-			xfs_dir2_sf_toino8(args);
 		xfs_dir2_sf_addname_hard(args, objchange, new_isize);
 	}
 
@@ -622,6 +631,8 @@ xfs_dir2_sf_addname_pick(
 	for (i = 0; i < sfp->count; i++) {
 		if (!holefit)
 			holefit = offset + size <= xfs_dir2_sf_get_offset(sfep);
+		if (holefit)
+			*offsetp = offset;
 		offset = xfs_dir2_sf_get_offset(sfep) +
 			 xfs_dir2_data_entsize(mp, sfep->namelen);
 		sfep = xfs_dir2_sf_nextentry(mp, sfp, sfep);
@@ -1053,7 +1064,7 @@ xfs_dir2_sf_replace(
 		/*
 		 * Still fits, convert to 8-byte now.
 		 */
-		xfs_dir2_sf_toino8(args);
+		xfs_dir2_sf_toino8(args, 0);
 		i8elevated = 1;
 		sfp = dp->i_df.if_data;
 	} else
@@ -1205,7 +1216,8 @@ xfs_dir2_sf_toino4(
  */
 static void
 xfs_dir2_sf_toino8(
-	xfs_da_args_t		*args)		/* operation arguments */
+	struct xfs_da_args	*args,
+	xfs_dir2_data_aoff_t	new_offset)
 {
 	struct xfs_inode	*dp = args->dp;
 	struct xfs_mount	*mp = dp->i_mount;
@@ -1213,6 +1225,7 @@ xfs_dir2_sf_toino8(
 	int			oldsize = dp->i_df.if_bytes;
 	int			i;		/* entry index */
 	int			newsize;	/* new inode size */
+	unsigned int		newent_size;
 	xfs_dir2_sf_entry_t	*oldsfep;	/* old sf entry */
 	xfs_dir2_sf_entry_t	*sfep;		/* new sf entry */
 	xfs_dir2_sf_hdr_t	*sfp;		/* new sf directory */
@@ -1225,6 +1238,18 @@ xfs_dir2_sf_toino8(
 	 * Compute the new inode size (nb: entry count + 1 for parent)
 	 */
 	newsize = oldsize + (oldsfp->count + 1) * XFS_INO64_DIFF;
+	if (new_offset) {
+		/*
+		 * Account for the bytes actually used.
+		 */
+		newsize += xfs_dir2_sf_entsize(mp, oldsfp, args->namelen);
+
+		/*
+		 * But for the offset calculation use the bigger data entry
+		 * format.
+		 */
+		newent_size = xfs_dir2_data_entsize(mp, args->namelen);
+	}
 
 	dp->i_df.if_data = sfp = kmalloc(newsize, GFP_KERNEL | __GFP_NOFAIL);
 	dp->i_df.if_bytes = newsize;
@@ -1250,6 +1275,17 @@ xfs_dir2_sf_toino8(
 				xfs_dir2_sf_get_ino(mp, oldsfp, oldsfep));
 		xfs_dir2_sf_put_ftype(mp, sfep,
 				xfs_dir2_sf_get_ftype(mp, oldsfep));
+
+		/*
+		 * If there is a new entry to add it once we reach the specified
+		 * offset.
+		 */
+		if (new_offset &&
+		    new_offset == xfs_dir2_sf_get_offset(sfep) + newent_size) {
+			sfep = xfs_dir2_sf_nextentry(mp, sfp, sfep);
+			xfs_dir2_sf_addname_common(args, sfep, new_offset,
+					true);
+		}
 	}
 
 	kfree(oldsfp);
