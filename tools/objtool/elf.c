@@ -881,7 +881,8 @@ static struct reloc *elf_init_reloc(struct elf *elf, struct section *rsec,
 	return reloc;
 }
 
-struct reloc *elf_init_reloc_text_sym(struct elf *elf, struct section *sec,
+struct reloc *elf_init_reloc_text_sym(const char *origin,
+				      struct elf *elf, struct section *sec,
 				      unsigned long offset,
 				      unsigned int reloc_idx,
 				      struct section *insn_sec,
@@ -891,8 +892,8 @@ struct reloc *elf_init_reloc_text_sym(struct elf *elf, struct section *sec,
 	int addend = insn_off;
 
 	if (!(insn_sec->sh.sh_flags & SHF_EXECINSTR)) {
-		WARN("bad call to %s() for data symbol %s",
-		     __func__, sym->name);
+		WARN("bad call to %s() for %s symbol %s",
+		     __func__, origin, sym->name);
 		return NULL;
 	}
 

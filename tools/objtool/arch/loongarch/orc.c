@@ -110,7 +110,8 @@ int write_orc_entry(struct elf *elf, struct section *orc_sec,
 	memcpy(orc, o, sizeof(*orc));
 
 	/* populate reloc for ip */
-	if (!elf_init_reloc_text_sym(elf, ip_sec, idx * sizeof(int), idx,
+	if (!elf_init_reloc_text_sym("orc_list", elf, ip_sec,
+				     idx * sizeof(int), idx,
 				     insn_sec, insn_off))
 		return -1;
 

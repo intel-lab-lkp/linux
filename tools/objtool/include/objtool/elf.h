@@ -115,7 +115,8 @@ struct section *elf_create_section_pair(struct elf *elf, const char *name,
 
 struct symbol *elf_create_prefix_symbol(struct elf *elf, struct symbol *orig, long size);
 
-struct reloc *elf_init_reloc_text_sym(struct elf *elf, struct section *sec,
+struct reloc *elf_init_reloc_text_sym(const char *origin,
+				      struct elf *elf, struct section *sec,
 				      unsigned long offset,
 				      unsigned int reloc_idx,
 				      struct section *insn_sec,

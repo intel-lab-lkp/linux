@@ -111,7 +111,8 @@ int write_orc_entry(struct elf *elf, struct section *orc_sec,
 	orc->bp_offset = bswap_if_needed(elf, orc->bp_offset);
 
 	/* populate reloc for ip */
-	if (!elf_init_reloc_text_sym(elf, ip_sec, idx * sizeof(int), idx,
+	if (!elf_init_reloc_text_sym("orc_list", elf, ip_sec,
+				     idx * sizeof(int), idx,
 				     insn_sec, insn_off))
 		return -1;
 

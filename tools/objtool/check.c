@@ -701,7 +701,7 @@ static int create_static_call_sections(struct objtool_file *file)
 	list_for_each_entry(insn, &file->static_call_list, call_node) {
 
 		/* populate reloc for 'addr' */
-		if (!elf_init_reloc_text_sym(file->elf, sec,
+		if (!elf_init_reloc_text_sym("static_call_list", file->elf, sec,
 					     idx * sizeof(*site), idx * 2,
 					     insn->sec, insn->offset))
 			return -1;
@@ -782,7 +782,8 @@ static int create_retpoline_sites_sections(struct objtool_file *file)
 	idx = 0;
 	list_for_each_entry(insn, &file->retpoline_call_list, call_node) {
 
-		if (!elf_init_reloc_text_sym(file->elf, sec,
+		if (!elf_init_reloc_text_sym("retpoline_call_list",
+					     file->elf, sec,
 					     idx * sizeof(int), idx,
 					     insn->sec, insn->offset))
 			return -1;
@@ -820,7 +821,8 @@ static int create_return_sites_sections(struct objtool_file *file)
 	idx = 0;
 	list_for_each_entry(insn, &file->return_thunk_list, call_node) {
 
-		if (!elf_init_reloc_text_sym(file->elf, sec,
+		if (!elf_init_reloc_text_sym("return_thunk_list",
+					     file->elf, sec,
 					     idx * sizeof(int), idx,
 					     insn->sec, insn->offset))
 			return -1;
@@ -874,7 +876,8 @@ static int create_ibt_endbr_seal_sections(struct objtool_file *file)
 		     !strcmp(sym->name, "cleanup_module")))
 			WARN("%s(): not an indirect call target", sym->name);
 
-		if (!elf_init_reloc_text_sym(file->elf, sec,
+		if (!elf_init_reloc_text_sym("endbr_list",
+					     file->elf, sec,
 					     idx * sizeof(int), idx,
 					     insn->sec, insn->offset))
 			return -1;
@@ -922,7 +925,7 @@ static int create_cfi_sections(struct objtool_file *file)
 		if (strncmp(sym->name, "__cfi_", 6))
 			continue;
 
-		if (!elf_init_reloc_text_sym(file->elf, sec,
+		if (!elf_init_reloc_text_sym(".cfi_sites", file->elf, sec,
 					     idx * sizeof(unsigned int), idx,
 					     sym->sec, sym->offset))
 			return -1;
@@ -966,8 +969,10 @@ static int create_mcount_loc_sections(struct objtool_file *file)
 
 		struct reloc *reloc;
 
-		reloc = elf_init_reloc_text_sym(file->elf, sec, idx * addr_size, idx,
-					       insn->sec, insn->offset);
+		reloc = elf_init_reloc_text_sym("mcount_loc_list",
+						file->elf, sec,
+						idx * addr_size, idx,
+						insn->sec, insn->offset);
 		if (!reloc)
 			return -1;
 
@@ -1007,7 +1012,7 @@ static int create_direct_call_sections(struct objtool_file *file)
 	idx = 0;
 	list_for_each_entry(insn, &file->call_list, call_node) {
 
-		if (!elf_init_reloc_text_sym(file->elf, sec,
+		if (!elf_init_reloc_text_sym("call_list", file->elf, sec,
 					     idx * sizeof(unsigned int), idx,
 					     insn->sec, insn->offset))
 			return -1;
