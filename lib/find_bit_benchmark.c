@@ -146,6 +146,28 @@ static int __init test_find_next_and_bit(const void *bitmap,
 	return 0;
 }
 
+static int __init test_fns(void)
+{
+	const unsigned long round = 1000000;
+	s64 time[BITS_PER_LONG + 1];
+	unsigned int i, n;
+	volatile unsigned long x, y;
+
+	for (n = 0; n <= BITS_PER_LONG; n++) {
+		time[n] = ktime_get();
+		for (i = 0; i < round; i++) {
+			x = get_random_long();
+			y = fns(x, n);
+		}
+		time[n] = ktime_get() - time[n];
+	}
+
+	for (n = 0; n <= BITS_PER_LONG; n++)
+		pr_err("fns: n = %2u: %12lld ns\n", n, time[n]);
+
+	return 0;
+}
+
 static int __init find_bit_test(void)
 {
 	unsigned long nbits = BITMAP_LEN / SPARSE;
@@ -185,6 +207,9 @@ static int __init find_bit_test(void)
 	test_find_first_bit(bitmap, BITMAP_LEN);
 	test_find_first_and_bit(bitmap, bitmap2, BITMAP_LEN);
 	test_find_next_and_bit(bitmap, bitmap2, BITMAP_LEN);
+
+	pr_err("\nStart testing for fns()\n");
+	test_fns();
 
 	/*
 	 * Everything is OK. Return error just to let user run benchmark
