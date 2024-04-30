@@ -1097,8 +1097,7 @@ xfs_dir2_sf_to_block(
 	int			newoffset;	/* offset from current entry */
 	unsigned int		offset = geo->data_entry_offset;
 	xfs_dir2_sf_entry_t	*sfep;		/* sf entry pointer */
-	struct xfs_dir2_sf_hdr	*oldsfp = ifp->if_data;
-	xfs_dir2_sf_hdr_t	*sfp;		/* shortform header  */
+	struct xfs_dir2_sf_hdr	*sfp = ifp->if_data;
 	__be16			*tagp;		/* end of data entry */
 	struct xfs_name		name;
 
@@ -1106,17 +1105,10 @@ xfs_dir2_sf_to_block(
 
 	ASSERT(ifp->if_format == XFS_DINODE_FMT_LOCAL);
 	ASSERT(ifp->if_bytes == dp->i_disk_size);
-	ASSERT(dp->i_disk_size >= xfs_dir2_sf_hdr_size(oldsfp->i8count));
+	ASSERT(dp->i_disk_size >= xfs_dir2_sf_hdr_size(sfp->i8count));
 
-	/*
-	 * Copy the directory into a temporary buffer.
-	 * Then pitch the incore inode data so we can make extents.
-	 */
-	sfp = kmalloc(ifp->if_bytes, GFP_KERNEL | __GFP_NOFAIL);
-	memcpy(sfp, oldsfp, ifp->if_bytes);
+	sfp = xfs_bmap_local_to_extents_empty(tp, dp, XFS_DATA_FORK);
 
-	xfs_idata_realloc(dp, -ifp->if_bytes, XFS_DATA_FORK);
-	xfs_bmap_local_to_extents_empty(tp, dp, XFS_DATA_FORK);
 	dp->i_disk_size = 0;
 
 	/*
