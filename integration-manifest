@@ -1,0 +1,30 @@
+drm drm-fixes e67572cd2204894179d89bd7b984072f19313b03
+	Linux 6.9-rc6
+drm-misc drm-misc-fixes a37ef7613c00f2d72c8fc08bd83fb6cc76926c8c
+	drm/vmwgfx: Fix invalid reads in fence signaled events
+drm-intel drm-intel-fixes e67572cd2204894179d89bd7b984072f19313b03
+	Linux 6.9-rc6
+drm-xe drm-xe-fixes e3e989522ac9a6b7960c75b762e1e9568717b31e
+	drm/xe/guc: Fix arguments passed to relay G2H handlers
+drm drm-next 4a56c0ed5aa0bcbe1f5f7d755fb1fe1ebf48ae9c
+	Merge tag 'amd-drm-next-6.10-2024-04-26' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm-misc drm-misc-next-fixes 5d4e8ae6e57b025802aadf55a4775c55cceb75f1
+	nouveau/gsp: don't check devinit disable on GSP.
+drm-intel drm-intel-next-fixes 84b5ece64477df4394d362d494a2496bf0878985
+	drm/i915: Drop -Wstringop-overflow
+drm-xe drm-xe-next-fixes 4cece764965020c22cff7665b18a012006359095
+	Linux 6.9-rc1
+drm-misc drm-misc-next 13d56abef172e8ef793fbab58268b60687698f15
+	drm/vmwgfx: Remove duplicate vmwgfx_vkms.h header
+drm-intel drm-intel-next 10147937357706f5535383e156e72b128257b5ee
+	drm/i915: pass dev_priv explicitly to PIPE_WGC_C22
+drm-intel drm-intel-gt-next 4cfca03f76413db115c3cc18f4370debb1b81b2b
+	drm/i915/gt: Automate CCS Mode setting during engine resets
+drm-xe drm-xe-next e29a7a34c3cf140ceb2f994a8eae0b68d21e357e
+	drm/xe: Remove uninitialized end var from xe_gt_tlb_invalidation_range()
+drm-intel topic/core-for-CI 44909e5ed2f8e95a9a8576f44d570c68c76c44d6
+	ASoC: SOF: Core: Add remove_late() to  sof_init_environment failure path
+drm-xe topic/xe-for-CI bfcec151e1e732849facec2e6ac23edc0c7f20ba
+	drm/xe/huc: Define LNL HuC
+drm-intel topic/thunderbolt-next b8a730836c6b1788ca2fbd6bcc2ac99e97ef7de9
+	thunderbolt: Constify the struct device_type usage
