@@ -297,7 +297,8 @@ int fsverity_ioctl_read_metadata(struct file *filp, const void __user *uarg);
 
 bool fsverity_verify_blocks(struct folio *folio, size_t len, size_t offset);
 void fsverity_verify_bio(struct bio *bio);
-void fsverity_enqueue_verify_work(struct work_struct *work);
+void fsverity_enqueue_verify_work(struct super_block *sb,
+				  struct work_struct *work);
 
 int fsverity_init_wq(struct super_block *sb, unsigned int wq_flags,
 		       int max_active);
@@ -389,7 +390,8 @@ static inline void fsverity_verify_bio(struct bio *bio)
 	WARN_ON_ONCE(1);
 }
 
-static inline void fsverity_enqueue_verify_work(struct work_struct *work)
+static inline void fsverity_enqueue_verify_work(struct super_block *sb,
+						struct work_struct *work)
 {
 	WARN_ON_ONCE(1);
 }

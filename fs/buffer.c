@@ -327,13 +327,15 @@ static void decrypt_bh(struct work_struct *work)
 	err = fscrypt_decrypt_pagecache_blocks(bh->b_folio, bh->b_size,
 					       bh_offset(bh));
 	if (err == 0 && need_fsverity(bh)) {
+		struct super_block *sb = bh->b_folio->mapping->host->i_sb;
+
 		/*
 		 * We use different work queues for decryption and for verity
 		 * because verity may require reading metadata pages that need
 		 * decryption, and we shouldn't recurse to the same workqueue.
 		 */
 		INIT_WORK(&ctx->work, verify_bh);
-		fsverity_enqueue_verify_work(&ctx->work);
+		fsverity_enqueue_verify_work(sb, &ctx->work);
 		return;
 	}
 	end_buffer_async_read(bh, err == 0);
@@ -362,7 +364,8 @@ static void end_buffer_async_read_io(struct buffer_head *bh, int uptodate)
 				fscrypt_enqueue_decrypt_work(&ctx->work);
 			} else {
 				INIT_WORK(&ctx->work, verify_bh);
-				fsverity_enqueue_verify_work(&ctx->work);
+				fsverity_enqueue_verify_work(inode->i_sb,
+							     &ctx->work);
 			}
 			return;
 		}

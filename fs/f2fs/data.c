@@ -221,7 +221,7 @@ static void f2fs_verify_and_finish_bio(struct bio *bio, bool in_task)
 
 	if (ctx && (ctx->enabled_steps & STEP_VERITY)) {
 		INIT_WORK(&ctx->work, f2fs_verify_bio);
-		fsverity_enqueue_verify_work(&ctx->work);
+		fsverity_enqueue_verify_work(ctx->sbi->sb, &ctx->work);
 	} else {
 		f2fs_finish_read_bio(bio, in_task);
 	}

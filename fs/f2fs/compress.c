@@ -1811,7 +1811,8 @@ void f2fs_decompress_end_io(struct decompress_io_ctx *dic, bool failed,
 		 * file, and these metadata pages may be compressed.
 		 */
 		INIT_WORK(&dic->verity_work, f2fs_verify_cluster);
-		fsverity_enqueue_verify_work(&dic->verity_work);
+		fsverity_enqueue_verify_work(dic->inode->i_sb,
+					     &dic->verity_work);
 		return;
 	}
 
