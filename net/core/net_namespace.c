@@ -87,7 +87,7 @@ static int net_assign_generic(struct net *net, unsigned int id, void *data)
 
 	old_ng = rcu_dereference_protected(net->gen,
 					   lockdep_is_held(&pernet_ops_rwsem));
-	if (old_ng->s.len > id) {
+	if (old_ng && old_ng->s.len > id) {
 		old_ng->ptr[id] = data;
 		return 0;
 	}
@@ -107,8 +107,9 @@ static int net_assign_generic(struct net *net, unsigned int id, void *data)
 	 * the old copy for kfree after a grace period.
 	 */
 
-	memcpy(&ng->ptr[MIN_PERNET_OPS_ID], &old_ng->ptr[MIN_PERNET_OPS_ID],
-	       (old_ng->s.len - MIN_PERNET_OPS_ID) * sizeof(void *));
+	if (old_ng)
+		memcpy(&ng->ptr[MIN_PERNET_OPS_ID], &old_ng->ptr[MIN_PERNET_OPS_ID],
+		       (old_ng->s.len - MIN_PERNET_OPS_ID) * sizeof(void *));
 	ng->ptr[id] = data;
 
 	rcu_assign_pointer(net->gen, ng);
@@ -422,15 +423,10 @@ static struct workqueue_struct *netns_wq;
 static struct net *net_alloc(void)
 {
 	struct net *net = NULL;
-	struct net_generic *ng;
-
-	ng = net_alloc_generic();
-	if (!ng)
-		goto out;
 
 	net = kmem_cache_zalloc(net_cachep, GFP_KERNEL);
 	if (!net)
-		goto out_free;
+		goto out;
 
 #ifdef CONFIG_KEYS
 	net->key_domain = kzalloc(sizeof(struct key_tag), GFP_KERNEL);
@@ -439,7 +435,7 @@ static struct net *net_alloc(void)
 	refcount_set(&net->key_domain->usage, 1);
 #endif
 
-	rcu_assign_pointer(net->gen, ng);
+	rcu_assign_pointer(net->gen, NULL);
 out:
 	return net;
 
@@ -448,8 +444,6 @@ out_free_2:
 	kmem_cache_free(net_cachep, net);
 	net = NULL;
 #endif
-out_free:
-	kfree(ng);
 	goto out;
 }
 
