@@ -426,26 +426,16 @@ xfs_dir2_sf_addname(
 	}
 
 	new_isize = (int)dp->i_disk_size + incr_isize;
+
 	/*
-	 * Won't fit as shortform any more (due to size),
-	 * or the pick routine says it won't (due to offset values).
+	 * Too large to fit into the inode fork or too large offset?
 	 */
-	if (new_isize > xfs_inode_data_fork_size(dp) ||
-	    (pick =
-	     xfs_dir2_sf_addname_pick(args, objchange, &sfep, &offset)) == 0) {
-		/*
-		 * Just checking or no space reservation, it doesn't fit.
-		 */
-		if ((args->op_flags & XFS_DA_OP_JUSTCHECK) || args->total == 0)
-			return -ENOSPC;
-		/*
-		 * Convert to block form then add the name.
-		 */
-		error = xfs_dir2_sf_to_block(args);
-		if (error)
-			return error;
-		return xfs_dir2_block_addname(args);
-	}
+	if (new_isize > xfs_inode_data_fork_size(dp))
+		goto convert;
+	pick = xfs_dir2_sf_addname_pick(args, objchange, &sfep, &offset);
+	if (pick == 0)
+		goto convert;
+
 	/*
 	 * Just checking, it fits.
 	 */
@@ -479,6 +469,17 @@ xfs_dir2_sf_addname(
 	xfs_dir2_sf_check(args);
 	xfs_trans_log_inode(args->trans, dp, XFS_ILOG_CORE | XFS_ILOG_DDATA);
 	return 0;
+
+convert:
+	/*
+	 * Just checking or no space reservation, it doesn't fit.
+	 */
+	if ((args->op_flags & XFS_DA_OP_JUSTCHECK) || args->total == 0)
+		return -ENOSPC;
+	error = xfs_dir2_sf_to_block(args);
+	if (error)
+		return error;
+	return xfs_dir2_block_addname(args);
 }
 
 /*
