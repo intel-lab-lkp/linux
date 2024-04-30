@@ -23,6 +23,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
 
+#include <media/mipi-csi2.h>
 #include <media/v4l2-async.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
@@ -145,7 +146,12 @@
 
 struct max9286_format_info {
 	u32 code;
-	u8 datatype;
+	/* The gmsl data format configuration. */
+	u8 gmsl_dt;
+	/* The format bpp, used for stride calculation. */
+	u8 bpp;
+	/* The Data Type identifier as defined by the MIPI CSI-2 standard. */
+	u8 mipi_dt;
 };
 
 struct max9286_i2c_speed {
@@ -235,28 +241,44 @@ static inline struct max9286_priv *sd_to_max9286(struct v4l2_subdev *sd)
 static const struct max9286_format_info max9286_formats[] = {
 	{
 		.code = MEDIA_BUS_FMT_UYVY8_1X16,
-		.datatype = MAX9286_DATATYPE_YUV422_8BIT,
+		.gmsl_dt = MAX9286_DATATYPE_YUV422_8BIT,
+		.bpp = 16,
+		.mipi_dt = MIPI_CSI2_DT_YUV422_8B,
 	}, {
 		.code = MEDIA_BUS_FMT_VYUY8_1X16,
-		.datatype = MAX9286_DATATYPE_YUV422_8BIT,
+		.gmsl_dt = MAX9286_DATATYPE_YUV422_8BIT,
+		.bpp = 16,
+		.mipi_dt = MIPI_CSI2_DT_YUV422_8B,
 	}, {
 		.code = MEDIA_BUS_FMT_YUYV8_1X16,
-		.datatype = MAX9286_DATATYPE_YUV422_8BIT,
+		.gmsl_dt = MAX9286_DATATYPE_YUV422_8BIT,
+		.bpp = 16,
+		.mipi_dt = MIPI_CSI2_DT_YUV422_8B,
 	}, {
 		.code = MEDIA_BUS_FMT_YVYU8_1X16,
-		.datatype = MAX9286_DATATYPE_YUV422_8BIT,
+		.gmsl_dt = MAX9286_DATATYPE_YUV422_8BIT,
+		.bpp = 16,
+		.mipi_dt = MIPI_CSI2_DT_YUV422_8B,
 	}, {
 		.code = MEDIA_BUS_FMT_SBGGR12_1X12,
-		.datatype = MAX9286_DATATYPE_RAW12,
+		.gmsl_dt = MAX9286_DATATYPE_RAW12,
+		.bpp = 12,
+		.mipi_dt = MIPI_CSI2_DT_RAW12,
 	}, {
 		.code = MEDIA_BUS_FMT_SGBRG12_1X12,
-		.datatype = MAX9286_DATATYPE_RAW12,
+		.gmsl_dt = MAX9286_DATATYPE_RAW12,
+		.bpp = 12,
+		.mipi_dt = MIPI_CSI2_DT_RAW12,
 	}, {
 		.code = MEDIA_BUS_FMT_SGRBG12_1X12,
-		.datatype = MAX9286_DATATYPE_RAW12,
+		.gmsl_dt = MAX9286_DATATYPE_RAW12,
+		.bpp = 12,
+		.mipi_dt = MIPI_CSI2_DT_RAW12,
 	}, {
 		.code = MEDIA_BUS_FMT_SRGGB12_1X12,
-		.datatype = MAX9286_DATATYPE_RAW12,
+		.gmsl_dt = MAX9286_DATATYPE_RAW12,
+		.bpp = 12,
+		.mipi_dt = MIPI_CSI2_DT_RAW12,
 	},
 };
 
@@ -532,19 +554,23 @@ static int max9286_check_config_link(struct max9286_priv *priv,
 	return 0;
 }
 
+static const struct max9286_format_info *
+max9286_get_format_info(unsigned int code)
+{
+	for (unsigned int i = 0; i < ARRAY_SIZE(max9286_formats); ++i) {
+		if (max9286_formats[i].code == code)
+			return &max9286_formats[i];
+	}
+
+	return NULL;
+}
+
 static void max9286_set_video_format(struct max9286_priv *priv,
 				     const struct v4l2_mbus_framefmt *format)
 {
 	const struct max9286_format_info *info = NULL;
-	unsigned int i;
 
-	for (i = 0; i < ARRAY_SIZE(max9286_formats); ++i) {
-		if (max9286_formats[i].code == format->code) {
-			info = &max9286_formats[i];
-			break;
-		}
-	}
-
+	info = max9286_get_format_info(format->code);
 	if (WARN_ON(!info))
 		return;
 
@@ -559,7 +585,7 @@ static void max9286_set_video_format(struct max9286_priv *priv,
 	/* Enable CSI-2 Lane D0-D3 only, DBL mode. */
 	max9286_write(priv, 0x12, MAX9286_CSIDBL | MAX9286_DBL |
 		      MAX9286_CSILANECNT(priv->csi2_data_lanes) |
-		      info->datatype);
+		      info->gmsl_dt);
 
 	/*
 	 * Enable HS/VS encoding, use HS as line valid source, use D14/15 for
@@ -900,7 +926,7 @@ static int max9286_set_fmt(struct v4l2_subdev *sd,
 			   struct v4l2_subdev_state *state,
 			   struct v4l2_subdev_format *format)
 {
-	unsigned int i;
+	const struct max9286_format_info *info;
 
 	/*
 	 * Disable setting format on the source pad: format is propagated
@@ -910,12 +936,8 @@ static int max9286_set_fmt(struct v4l2_subdev *sd,
 		return -EINVAL;
 
 	/* Validate the format. */
-	for (i = 0; i < ARRAY_SIZE(max9286_formats); ++i) {
-		if (max9286_formats[i].code == format->format.code)
-			break;
-	}
-
-	if (i == ARRAY_SIZE(max9286_formats))
+	info = max9286_get_format_info(format->format.code);
+	if (!info)
 		format->format.code = max9286_formats[0].code;
 
 	*v4l2_subdev_state_get_format(state, format->pad, 0) = format->format;
@@ -930,6 +952,53 @@ static int max9286_set_fmt(struct v4l2_subdev *sd,
 	return 0;
 }
 
+static int max9286_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
+				  struct v4l2_mbus_frame_desc *fd)
+{
+	struct v4l2_subdev_route *route;
+	struct v4l2_subdev_state *state;
+	unsigned int num_routes = 0;
+	int ret = 0;
+
+	if (pad != MAX9286_SRC_PAD)
+		return -EINVAL;
+
+	state = v4l2_subdev_lock_and_get_active_state(sd);
+	for_each_active_route(&state->routing, route) {
+		struct v4l2_mbus_frame_desc_entry *entry;
+		const struct max9286_format_info *info;
+		struct v4l2_mbus_framefmt *fmt;
+
+		fmt = v4l2_subdev_state_get_format(state, route->sink_pad,
+						   route->sink_stream);
+		info = max9286_get_format_info(fmt->code);
+		if (WARN_ON(!info)) {
+			ret = -EINVAL;
+			goto err_unlock;
+		}
+
+		entry = &fd->entry[num_routes];
+		entry->stream = num_routes;
+		entry->flags = V4L2_MBUS_FRAME_DESC_FL_LEN_MAX;
+		entry->length = fmt->width * fmt->height * info->bpp / 8;
+		entry->pixelcode = fmt->code;
+
+		/* VC is set according to link ordering, see register 0x15. */
+		entry->bus.csi2.vc = route->sink_pad;
+		entry->bus.csi2.dt = info->mipi_dt;
+
+		num_routes++;
+	}
+
+	fd->num_entries = num_routes;
+	fd->type = V4L2_MBUS_FRAME_DESC_TYPE_CSI2;
+
+err_unlock:
+	v4l2_subdev_unlock_state(state);
+
+	return ret;
+}
+
 static const struct v4l2_subdev_video_ops max9286_video_ops = {
 	.s_stream	= max9286_s_stream,
 };
@@ -940,6 +1009,7 @@ static const struct v4l2_subdev_pad_ops max9286_pad_ops = {
 	.set_fmt	= max9286_set_fmt,
 	.get_frame_interval = v4l2_subdev_get_frame_interval,
 	.set_frame_interval = max9286_set_frame_interval,
+	.get_frame_desc	= max9286_get_frame_desc,
 };
 
 static const struct v4l2_subdev_ops max9286_subdev_ops = {
