@@ -942,24 +942,16 @@ xfs_attr_shortform_to_leaf(
 	struct xfs_da_args		*args)
 {
 	struct xfs_inode		*dp = args->dp;
-	struct xfs_ifork		*ifp = &dp->i_af;
-	struct xfs_attr_sf_hdr		*sf = ifp->if_data;
+	struct xfs_attr_sf_hdr		*sf;
 	struct xfs_attr_sf_entry	*sfe;
-	int				size = be16_to_cpu(sf->totsize);
 	struct xfs_da_args		nargs;
-	char				*tmpbuffer;
 	int				error, i;
 	xfs_dablk_t			blkno;
 	struct xfs_buf			*bp;
 
 	trace_xfs_attr_sf_to_leaf(args);
 
-	tmpbuffer = kmalloc(size, GFP_KERNEL | __GFP_NOFAIL);
-	memcpy(tmpbuffer, ifp->if_data, size);
-	sf = (struct xfs_attr_sf_hdr *)tmpbuffer;
-
-	xfs_idata_realloc(dp, -size, XFS_ATTR_FORK);
-	xfs_bmap_local_to_extents_empty(args->trans, dp, XFS_ATTR_FORK);
+	sf = xfs_bmap_local_to_extents_empty(args->trans, dp, XFS_ATTR_FORK);
 
 	bp = NULL;
 	error = xfs_da_grow_inode(args, &blkno);
@@ -1003,7 +995,7 @@ xfs_attr_shortform_to_leaf(
 	}
 	error = 0;
 out:
-	kfree(tmpbuffer);
+	kfree(sf);
 	return error;
 }
 
