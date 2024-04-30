@@ -1398,7 +1398,7 @@ dtbs: dtbs_prepare
 # dtbs_install depend on it as dtbs_install may run as root.
 dtbs_prepare: include/config/kernel.release scripts_dtc
 
-ifneq ($(filter dt_binding_check dtbs_check, $(MAKECMDGOALS)),)
+ifneq ($(filter dtbs_check, $(MAKECMDGOALS)),)
 export CHECK_DTBS=y
 endif
 
@@ -1415,6 +1415,10 @@ ifdef CONFIG_OF_EARLY_FLATTREE
 all: dtbs
 endif
 
+endif
+
+ifneq ($(filter dt_binding_check, $(MAKECMDGOALS)),)
+export CHECK_DTBS=y
 endif
 
 PHONY += scripts_dtc
