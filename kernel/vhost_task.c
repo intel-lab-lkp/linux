@@ -20,9 +20,9 @@ struct vhost_task {
 	struct completion exited;
 	unsigned long flags;
 	struct task_struct *task;
-	/* serialize SIGKILL and vhost_task_stop calls */
-	struct mutex exit_mutex;
 };
+
+static DEFINE_MUTEX(exit_mutex); //serialize SIGKILL and vhost_task_stop calls
 
 static int vhost_task_fn(void *data)
 {
@@ -51,7 +51,7 @@ static int vhost_task_fn(void *data)
 			schedule();
 	}
 
-	mutex_lock(&vtsk->exit_mutex);
+	mutex_lock(&exit_mutex);
 	/*
 	 * If a vhost_task_stop and SIGKILL race, we can ignore the SIGKILL.
 	 * When the vhost layer has called vhost_task_stop it's already stopped
@@ -62,7 +62,7 @@ static int vhost_task_fn(void *data)
 		vtsk->handle_sigkill(vtsk->data);
 	}
 	complete(&vtsk->exited);
-	mutex_unlock(&vtsk->exit_mutex);
+	mutex_unlock(&exit_mutex);
 
 	do_exit(0);
 }
@@ -88,12 +88,12 @@ EXPORT_SYMBOL_GPL(vhost_task_wake);
  */
 void vhost_task_stop(struct vhost_task *vtsk)
 {
-	mutex_lock(&vtsk->exit_mutex);
+	mutex_lock(&exit_mutex);
 	if (!test_bit(VHOST_TASK_FLAGS_KILLED, &vtsk->flags)) {
 		set_bit(VHOST_TASK_FLAGS_STOP, &vtsk->flags);
 		vhost_task_wake(vtsk);
 	}
-	mutex_unlock(&vtsk->exit_mutex);
+	mutex_unlock(&exit_mutex);
 
 	/*
 	 * Make sure vhost_task_fn is no longer accessing the vhost_task before
@@ -135,7 +135,6 @@ struct vhost_task *vhost_task_create(bool (*fn)(void *),
 	if (!vtsk)
 		return NULL;
 	init_completion(&vtsk->exited);
-	mutex_init(&vtsk->exit_mutex);
 	vtsk->data = arg;
 	vtsk->fn = fn;
 	vtsk->handle_sigkill = handle_sigkill;
