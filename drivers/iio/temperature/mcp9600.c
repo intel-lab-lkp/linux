@@ -88,19 +88,20 @@ static const struct iio_info mcp9600_info = {
 
 static int mcp9600_probe(struct i2c_client *client)
 {
+	struct device *dev = &client->dev;
 	struct iio_dev *indio_dev;
 	struct mcp9600_data *data;
 	int ret;
 
 	ret = i2c_smbus_read_byte_data(client, MCP9600_DEVICE_ID);
 	if (ret < 0)
-		return dev_err_probe(&client->dev, ret, "Failed to read device ID\n");
+		return dev_err_probe(dev, ret, "Failed to read device ID\n");
 
 	if (ret != MCP9600_DEVICE_ID_MCP9600)
-		dev_warn(&client->dev, "Expected ID %x, got %x\n",
-				MCP9600_DEVICE_ID_MCP9600, ret);
+		dev_warn(dev, "Expected ID %x, got %x\n",
+			 MCP9600_DEVICE_ID_MCP9600, ret);
 
-	indio_dev = devm_iio_device_alloc(&client->dev, sizeof(*data));
+	indio_dev = devm_iio_device_alloc(dev, sizeof(*data));
 	if (!indio_dev)
 		return -ENOMEM;
 
@@ -113,7 +114,7 @@ static int mcp9600_probe(struct i2c_client *client)
 	indio_dev->channels = mcp9600_channels;
 	indio_dev->num_channels = ARRAY_SIZE(mcp9600_channels);
 
-	return devm_iio_device_register(&client->dev, indio_dev);
+	return devm_iio_device_register(dev, indio_dev);
 }
 
 static const struct i2c_device_id mcp9600_id[] = {
