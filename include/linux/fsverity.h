@@ -243,6 +243,9 @@ int __fsverity_file_open(struct inode *inode, struct file *filp);
 int __fsverity_prepare_setattr(struct dentry *dentry, struct iattr *attr);
 void __fsverity_cleanup_inode(struct inode *inode);
 
+int fsverity_merkle_tree_geometry(struct inode *inode, unsigned int *block_size,
+				  u64 *tree_size);
+
 /**
  * fsverity_cleanup_inode() - free the inode's verity info, if present
  * @inode: an inode being evicted
@@ -324,6 +327,13 @@ static inline int __fsverity_prepare_setattr(struct dentry *dentry,
 
 static inline void fsverity_cleanup_inode(struct inode *inode)
 {
+}
+
+static inline int fsverity_merkle_tree_geometry(struct inode *inode,
+						unsigned int *block_size,
+						u64 *tree_size)
+{
+	return -EOPNOTSUPP;
 }
 
 /* read_metadata.c */
