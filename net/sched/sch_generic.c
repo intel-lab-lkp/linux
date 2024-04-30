@@ -506,18 +506,25 @@ static void dev_watchdog(struct timer_list *t)
 			unsigned int timedout_ms = 0;
 			unsigned int i;
 			unsigned long trans_start;
+			unsigned long next_check = 0;
+			unsigned long current_jiffies;
 
 			for (i = 0; i < dev->num_tx_queues; i++) {
 				struct netdev_queue *txq;
+				current_jiffies = jiffies;
 
 				txq = netdev_get_tx_queue(dev, i);
 				trans_start = READ_ONCE(txq->trans_start);
-				if (netif_xmit_stopped(txq) &&
-				    time_after(jiffies, (trans_start +
-							 dev->watchdog_timeo))) {
-					timedout_ms = jiffies_to_msecs(jiffies - trans_start);
-					atomic_long_inc(&txq->trans_timeout);
-					break;
+				if (netif_xmit_stopped(txq)) {
+					if (time_after(current_jiffies, (trans_start +
+								   dev->watchdog_timeo))) {
+						timedout_ms = jiffies_to_msecs(current_jiffies -
+										trans_start);
+						atomic_long_inc(&txq->trans_timeout);
+						break;
+					}
+					next_check = trans_start + dev->watchdog_timeo -
+									current_jiffies;
 				}
 			}
 
@@ -530,9 +537,11 @@ static void dev_watchdog(struct timer_list *t)
 				dev->netdev_ops->ndo_tx_timeout(dev, i);
 				netif_unfreeze_queues(dev);
 			}
+			if (!next_check)
+				next_check = dev->watchdog_timeo;
 			if (!mod_timer(&dev->watchdog_timer,
 				       round_jiffies(jiffies +
-						     dev->watchdog_timeo)))
+						     next_check)))
 				release = false;
 		}
 	}
