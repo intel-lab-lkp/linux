@@ -24,8 +24,11 @@
 #define RT5739_REG_NSEL1	0x01
 #define RT5739_REG_CNTL1	0x02
 #define RT5739_REG_ID1		0x03
+#define RT5739_REG_ID2		0x04
+#define RT5739_REG_MON		0x05
 #define RT5739_REG_CNTL2	0x06
 #define RT5739_REG_CNTL4	0x08
+#define RT5739_MAX_REGS		(RT5739_REG_CNTL4 + 1)
 
 #define RT5739_VSEL_MASK	GENMASK(7, 0)
 #define RT5739_MODEVSEL1_MASK	BIT(1)
@@ -236,11 +239,46 @@ static void rt5739_init_regulator_desc(struct regulator_desc *desc,
 	}
 }
 
+static bool rt5739_writeable_reg(struct device *dev, unsigned int reg)
+{
+	switch (reg) {
+	case RT5739_REG_NSEL0 ... RT5739_REG_CNTL1:
+	case RT5739_REG_CNTL2:
+	case RT5739_REG_CNTL4:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static bool rt5739_readable_reg(struct device *dev, unsigned int reg)
+{
+	switch (reg) {
+	case RT5739_REG_NSEL0 ... RT5739_REG_CNTL2:
+	case RT5739_REG_CNTL4:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static bool rt5739_volatile_reg(struct device *dev, unsigned int reg)
+{
+	if (reg == RT5739_REG_MON)
+		return true;
+	return false;
+}
+
 static const struct regmap_config rt5739_regmap_config = {
 	.name = "rt5739",
 	.reg_bits = 8,
 	.val_bits = 8,
 	.max_register = RT5739_REG_CNTL4,
+	.num_reg_defaults_raw = RT5739_MAX_REGS,
+	.cache_type = REGCACHE_FLAT,
+	.writeable_reg = rt5739_writeable_reg,
+	.readable_reg = rt5739_readable_reg,
+	.volatile_reg = rt5739_volatile_reg,
 };
 
 static int rt5739_probe(struct i2c_client *i2c)
