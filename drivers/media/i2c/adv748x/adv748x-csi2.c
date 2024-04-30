@@ -14,7 +14,8 @@
 
 #include "adv748x.h"
 
-int adv748x_csi2_set_virtual_channel(struct adv748x_csi2 *tx, unsigned int vc)
+static int adv748x_csi2_set_virtual_channel(struct adv748x_csi2 *tx,
+					    unsigned int vc)
 {
 	return tx_write(tx, ADV748X_CSI_VC_REF, vc << ADV748X_CSI_VC_REF_SHIFT);
 }
@@ -175,13 +176,30 @@ static const struct v4l2_subdev_internal_ops adv748x_csi2_internal_ops = {
 static int adv748x_csi2_s_stream(struct v4l2_subdev *sd, int enable)
 {
 	struct adv748x_csi2 *tx = adv748x_sd_to_csi2(sd);
+	struct v4l2_subdev_state *state;
 	struct v4l2_subdev *src;
+	int ret;
 
 	src = adv748x_get_remote_sd(&tx->pads[ADV748X_CSI2_SINK]);
 	if (!src)
 		return -EPIPE;
 
-	return v4l2_subdev_call(src, video, s_stream, enable);
+	state = v4l2_subdev_lock_and_get_active_state(sd);
+
+	if (enable) {
+		/* A single route is available. */
+		struct v4l2_subdev_route *route = &state->routing.routes[0];
+
+		ret = adv748x_csi2_set_virtual_channel(tx, route->source_stream);
+		if (ret)
+			goto unlock;
+	}
+
+	ret = v4l2_subdev_call(src, video, s_stream, enable);
+unlock:
+	v4l2_subdev_unlock_state(state);
+
+	return ret;
 }
 
 static const struct v4l2_subdev_video_ops adv748x_csi2_video_ops = {
