@@ -4,6 +4,7 @@
 
 use super::{AllocError, Flags};
 use alloc::vec::Vec;
+use core::ptr;
 use core::result::Result;
 
 /// Extensions to [`Vec`].
@@ -136,6 +137,15 @@ impl<T> VecExt<T> for Vec<T> {
         let layout = core::alloc::Layout::array::<T>(new_cap).map_err(|_| AllocError)?;
 
         let (ptr, len, cap) = destructure(self);
+
+        // We need to make sure that ptr is either NULL or comes from a previous call to
+        // `krealloc_aligned`. A `Vec<T>`'s `ptr` value is not guaranteed to be NULL and might be
+        // dangling after being created with `Vec::new`. Instead, we can rely on `Vec<T>'s capacity
+        // to be zero if no memory has been allocated yet.
+        let ptr = match cap {
+            0 => ptr::null_mut(),
+            _ => ptr,
+        };
 
         // SAFETY: `ptr` is valid because it's either NULL or comes from a previous call to
         // `krealloc_aligned`. We also verified that the type is not a ZST.
