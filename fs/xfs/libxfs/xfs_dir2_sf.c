@@ -360,6 +360,27 @@ out:
 	return error;
 }
 
+static void
+xfs_dir2_sf_addname_common(
+	struct xfs_da_args	*args,
+	struct xfs_dir2_sf_entry *sfep,
+	xfs_dir2_data_aoff_t	offset,
+	bool			objchange)
+{
+	struct xfs_inode	*dp = args->dp;
+	struct xfs_mount	*mp = dp->i_mount;
+	struct xfs_dir2_sf_hdr	*sfp = dp->i_df.if_data;
+
+	sfep->namelen = args->namelen;
+	xfs_dir2_sf_put_offset(sfep, offset);
+	memcpy(sfep->name, args->name, sfep->namelen);
+	xfs_dir2_sf_put_ino(mp, sfp, sfep, args->inumber);
+	xfs_dir2_sf_put_ftype(mp, sfep, args->filetype);
+	sfp->count++;
+	if (args->inumber > XFS_DIR2_MAX_SHORT_INUM && !objchange)
+		sfp->i8count++;
+}
+
 /*
  * Add a name to a shortform directory.
  * There are two algorithms, "easy" and "hard" which we decide on
@@ -476,21 +497,7 @@ xfs_dir2_sf_addname_easy(
 	 * Need to set up again due to realloc of the inode data.
 	 */
 	sfep = (xfs_dir2_sf_entry_t *)((char *)sfp + byteoff);
-	/*
-	 * Fill in the new entry.
-	 */
-	sfep->namelen = args->namelen;
-	xfs_dir2_sf_put_offset(sfep, offset);
-	memcpy(sfep->name, args->name, sfep->namelen);
-	xfs_dir2_sf_put_ino(mp, sfp, sfep, args->inumber);
-	xfs_dir2_sf_put_ftype(mp, sfep, args->filetype);
-
-	/*
-	 * Update the header and inode.
-	 */
-	sfp->count++;
-	if (args->inumber > XFS_DIR2_MAX_SHORT_INUM)
-		sfp->i8count++;
+	xfs_dir2_sf_addname_common(args, sfep, offset, false);
 	dp->i_disk_size = new_isize;
 	xfs_dir2_sf_check(args);
 }
@@ -562,17 +569,12 @@ xfs_dir2_sf_addname_hard(
 	nbytes = (int)((char *)oldsfep - (char *)oldsfp);
 	memcpy(sfp, oldsfp, nbytes);
 	sfep = (xfs_dir2_sf_entry_t *)((char *)sfp + nbytes);
+
 	/*
 	 * Fill in the new entry, and update the header counts.
 	 */
-	sfep->namelen = args->namelen;
-	xfs_dir2_sf_put_offset(sfep, offset);
-	memcpy(sfep->name, args->name, sfep->namelen);
-	xfs_dir2_sf_put_ino(mp, sfp, sfep, args->inumber);
-	xfs_dir2_sf_put_ftype(mp, sfep, args->filetype);
-	sfp->count++;
-	if (args->inumber > XFS_DIR2_MAX_SHORT_INUM && !objchange)
-		sfp->i8count++;
+	xfs_dir2_sf_addname_common(args, sfep, offset, objchange);
+
 	/*
 	 * If there's more left to copy, do that.
 	 */
