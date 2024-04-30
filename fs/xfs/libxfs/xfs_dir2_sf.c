@@ -465,6 +465,9 @@ xfs_dir2_sf_addname(
 			xfs_dir2_sf_toino8(args);
 		xfs_dir2_sf_addname_hard(args, objchange, new_isize);
 	}
+
+	dp->i_disk_size = new_isize;
+	xfs_dir2_sf_check(args);
 	xfs_trans_log_inode(args->trans, dp, XFS_ILOG_CORE | XFS_ILOG_DDATA);
 	return 0;
 }
@@ -498,8 +501,6 @@ xfs_dir2_sf_addname_easy(
 	 */
 	sfep = (xfs_dir2_sf_entry_t *)((char *)sfp + byteoff);
 	xfs_dir2_sf_addname_common(args, sfep, offset, false);
-	dp->i_disk_size = new_isize;
-	xfs_dir2_sf_check(args);
 }
 
 /*
@@ -583,8 +584,6 @@ xfs_dir2_sf_addname_hard(
 		memcpy(sfep, oldsfep, old_isize - nbytes);
 	}
 	kfree(buf);
-	dp->i_disk_size = new_isize;
-	xfs_dir2_sf_check(args);
 }
 
 /*
