@@ -109,13 +109,32 @@ static int panthor_heap_ctx_stride(struct panthor_device *ptdev)
 
 static int panthor_get_heap_ctx_offset(struct panthor_heap_pool *pool, int id)
 {
-	return panthor_heap_ctx_stride(pool->ptdev) * id;
+	/* ID 0 is reserved to encode 'no-tiler-heap', the valid range
+	 * is [1:MAX_HEAPS_PER_POOL], which we need to turn into a
+	 * [0:MAX_HEAPS_PER_POOL-1] context index, hence the minus one here.
+	 */
+	return panthor_heap_ctx_stride(pool->ptdev) * (id - 1);
 }
 
 static void *panthor_get_heap_ctx(struct panthor_heap_pool *pool, int id)
 {
 	return pool->gpu_contexts->kmap +
 	       panthor_get_heap_ctx_offset(pool, id);
+}
+
+static int panthor_get_heap_ctx_id(struct panthor_heap_pool *pool,
+				   u64 heap_ctx_gpu_va)
+{
+	u64 offset = heap_ctx_gpu_va - panthor_kernel_bo_gpuva(pool->gpu_contexts);
+	u32 heap_idx = (u32)offset / panthor_heap_ctx_stride(pool->ptdev);
+
+	if (offset > U32_MAX || heap_idx >= MAX_HEAPS_PER_POOL)
+		return -EINVAL;
+
+	/* ID 0 is reserved to encode 'no-tiler-heap', the valid range
+	 * is [1:MAX_HEAPS_PER_POOL], hence the plus one here.
+	 */
+	return heap_idx + 1;
 }
 
 static void panthor_free_heap_chunk(struct panthor_vm *vm,
@@ -364,14 +383,13 @@ int panthor_heap_return_chunk(struct panthor_heap_pool *pool,
 			      u64 heap_gpu_va,
 			      u64 chunk_gpu_va)
 {
-	u64 offset = heap_gpu_va - panthor_kernel_bo_gpuva(pool->gpu_contexts);
-	u32 heap_id = (u32)offset / panthor_heap_ctx_stride(pool->ptdev);
+	int heap_id = panthor_get_heap_ctx_id(pool, heap_gpu_va);
 	struct panthor_heap_chunk *chunk, *tmp, *removed = NULL;
 	struct panthor_heap *heap;
 	int ret;
 
-	if (offset > U32_MAX || heap_id >= MAX_HEAPS_PER_POOL)
-		return -EINVAL;
+	if (heap_id < 0)
+		return heap_id;
 
 	down_read(&pool->lock);
 	heap = xa_load(&pool->xa, heap_id);
@@ -427,14 +445,13 @@ int panthor_heap_grow(struct panthor_heap_pool *pool,
 		      u32 pending_frag_count,
 		      u64 *new_chunk_gpu_va)
 {
-	u64 offset = heap_gpu_va - panthor_kernel_bo_gpuva(pool->gpu_contexts);
-	u32 heap_id = (u32)offset / panthor_heap_ctx_stride(pool->ptdev);
+	int heap_id = panthor_get_heap_ctx_id(pool, heap_gpu_va);
 	struct panthor_heap_chunk *chunk;
 	struct panthor_heap *heap;
 	int ret;
 
-	if (offset > U32_MAX || heap_id >= MAX_HEAPS_PER_POOL)
-		return -EINVAL;
+	if (heap_id < 0)
+		return heap_id;
 
 	down_read(&pool->lock);
 	heap = xa_load(&pool->xa, heap_id);
