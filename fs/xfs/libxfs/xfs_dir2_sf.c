@@ -281,11 +281,11 @@ xfs_dir2_try_block_to_sf(
 	trace_xfs_dir2_block_to_sf(args);
 
 	/*
-	 * Allocate a temporary destination buffer the size of the inode to
-	 * format the data into.  Once we have formatted the data, we can free
-	 * the block and copy the formatted data into the inode literal area.
+	 * Allocate a temporary destination buffer to format the data into.
+	 * Once we have formatted the data, we can free the block and copy the
+	 * formatted data into the inode literal area.
 	 */
-	sfp = kmalloc(mp->m_sb.sb_inodesize, GFP_KERNEL | __GFP_NOFAIL);
+	sfp = kmalloc(size, GFP_KERNEL | __GFP_NOFAIL);
 	memcpy(sfp, &sfh, xfs_dir2_sf_hdr_size(sfh.i8count));
 
 	/*
