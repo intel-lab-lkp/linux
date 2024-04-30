@@ -162,4 +162,6 @@ int fsverity_read_merkle_tree_block(struct inode *inode,
 void fsverity_drop_merkle_tree_block(struct inode *inode,
 				     struct fsverity_blockbuf *block);
 
+#include <trace/events/fsverity.h>
+
 #endif /* _FSVERITY_PRIVATE_H */
