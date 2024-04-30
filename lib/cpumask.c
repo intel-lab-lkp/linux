@@ -154,6 +154,23 @@ unsigned int cpumask_local_spread(unsigned int i, int node)
 }
 EXPORT_SYMBOL(cpumask_local_spread);
 
+/*
+ * Task distribution within the cpumask feature disabled?
+ */
+static bool cpumask_pick_firstcpu __read_mostly;
+
+/*
+ * Disable Tasks distribution within the cpumask feature
+ */
+static int __init cpumask_pick_firstcpu_setup(char *str)
+{
+	cpumask_pick_firstcpu = 1;
+	pr_info("cpumask: Tasks distribution within cpumask is disabled.");
+	return 1;
+}
+
+__setup("sched_pick_firstcpu", cpumask_pick_firstcpu_setup);
+
 static DEFINE_PER_CPU(int, distribute_cpu_mask_prev);
 
 /**
@@ -170,6 +187,13 @@ unsigned int cpumask_any_and_distribute(const struct cpumask *src1p,
 			       const struct cpumask *src2p)
 {
 	unsigned int next, prev;
+
+	/*
+	 * Don't distribute, if tasks distribution
+	 * within cpumask feature is disabled
+	 */
+	if (cpumask_pick_firstcpu)
+		return cpumask_any_and(src1p, src2p);
 
 	/* NOTE: our first selection will skip 0. */
 	prev = __this_cpu_read(distribute_cpu_mask_prev);
