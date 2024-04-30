@@ -1738,7 +1738,7 @@ static void iwl_req_fw_callback(const struct firmware *ucode_raw, void *context)
 	 * or hangs loading.
 	 */
 	if (load_module)
-		request_module("%s", op->name);
+		request_module_nowait("%s", op->name);
 	failure = false;
 	goto free;
 
