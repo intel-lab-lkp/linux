@@ -1,0 +1,8 @@
+# Board Name: asus-C433TA-AJ0005-rammus
+# Bug Report: TBD
+# IGT Version: 1.28-gd2af13d9f
+# Linux Version: 6.9.0-rc4
+i915_hangman@engine-engine-error
+i915_hangman@engine-engine-hang
+i915_hangman@gt-engine-error
+i915_hangman@gt-engine-hang

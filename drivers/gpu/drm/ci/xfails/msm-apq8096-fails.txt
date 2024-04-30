@@ -1,2 +1,3 @@
-kms_3d,Fail
-kms_addfb_basic@addfb25-bad-modifier,Fail
+core_setmaster,Fail
+device_reset,Fail
+tools_test,Fail

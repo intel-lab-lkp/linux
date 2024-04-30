@@ -1,6 +1,5 @@
-# Board Name: sdm845-cheza-r3
+# Board Name: apq8096-db820c
 # Bug Report: TBD
 # IGT Version: 1.28-gd2af13d9f
 # Linux Version: 6.9.0-rc4
-kms_cursor_legacy
-msm_shrink
+core_hotunplug

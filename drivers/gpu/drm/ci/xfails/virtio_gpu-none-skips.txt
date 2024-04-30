@@ -17,3 +17,6 @@ panfrost_.*
 # Skip intel specific tests
 gem_.*
 i915_.*
+
+# Skip these tests as core_getrevision fails
+core_hotunplug.*

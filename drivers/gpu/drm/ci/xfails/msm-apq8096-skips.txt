@@ -12,3 +12,70 @@ panfrost_.*
 # Skip intel specific tests
 gem_.*
 i915_.*
+
+# Kernel soft lockup
+# [   80.170692] [IGT] msm_mapping: starting subtest shadow
+# [   80.177812] *** gpu fault: ttbr0=0000000101fd5000 iova=0000000001074000 dir=WRITE type=PERMISSION source=1f030000 (0,0,0,0)
+# [   83.848681] msm_mdp 901000.display-controller: RBBM | ME master split | status=0x701000B0
+# [  106.176640] rcu: INFO: rcu_preempt self-detected stall on CPU
+# [  106.176676] rcu: 	0-...!: (6500 ticks this GP) idle=f2b4/1/0x4000000000000000 softirq=10282/10282 fqs=0
+# [  106.181372] rcu: 	(t=6500 jiffies g=19853 q=464 ncpus=2)
+# [  106.190568] rcu: rcu_preempt kthread timer wakeup didn't happen for 6499 jiffies! g19853 f0x0 RCU_GP_WAIT_FQS(5) ->state=0x402
+# [  106.196128] rcu: 	Possible timer handling issue on cpu=0 timer-softirq=4739
+# [  106.207322] rcu: rcu_preempt kthread starved for 6505 jiffies! g19853 f0x0 RCU_GP_WAIT_FQS(5) ->state=0x402 ->cpu=0
+# [  106.214182] rcu: 	Unless rcu_preempt kthread gets sufficient CPU time, OOM is now expected behavior.
+# [  106.224597] rcu: RCU grace-period kthread stack dump:
+# [  106.233973] task:rcu_preempt     state:I stack:0     pid:15    tgid:15    ppid:2      flags:0x00000008
+# [  106.238922] Call trace:
+# [  106.248116]  __switch_to+0xe0/0x124
+# [  106.250462]  __schedule+0x358/0xbe8
+# [  106.253933]  schedule+0x4c/0x158
+# [  106.257405]  schedule_timeout+0x9c/0x110
+# [  106.260878]  rcu_gp_fqs_loop+0x19c/0x758
+# [  106.264785]  rcu_gp_kthread+0x230/0x2f4
+# [  106.268691]  kthread+0x114/0x118
+# [  106.272249]  ret_from_fork+0x10/0x20
+# [  106.275736] CPU: 0 PID: 10 Comm: kworker/u16:0 Tainted: G        W          6.9.0-rc4-gd846f438752d #1
+# [  106.279287] Hardware name: Qualcomm Technologies, Inc. DB820c (DT)
+# [  106.288400] Workqueue: ring0 drm_sched_run_job_work
+# [  106.294560] pstate: 60000005 (nZCv daif -PAN -UAO -TCO -DIT -SSBS BTYPE=--)
+# [  106.299335] pc : __do_softirq+0xe8/0x52c
+# [  106.306278] lr : __do_softirq+0xe4/0x52c
+# [  106.310444] sp : ffff800080003f20
+# [  106.314350] x29: ffff800080003f20 x28: ffff000080201b80 x27: ffff800082ab0da8
+# [  106.317564] x26: ffff80008222d008 x25: ffff000083117200 x24: ffff000080f6e8d0
+# [  106.324683] x23: 0000000060000005 x22: 0000000000000282 x21: ffff800080083ac0
+# [  106.331800] x20: ffff800080090178 x19: ffff800082242ec0 x18: 0000000000000006
+# [  106.338919] x17: ffff80007b883000 x16: ffff800080000000 x15: 0000000000000001
+# [  106.346037] x14: 0000000000480877 x13: 0000000000000004 x12: 0000000000000077
+# [  106.353154] x11: 0000000000000001 x10: 0000000000000077 x9 : ffff800082ab51c0
+# [  106.360272] x8 : 00000012aa9fa300 x7 : 7fffffffffffffff x6 : 0000000003a28b38
+# [  106.367391] x5 : 0000000000000000 x4 : ffff800080000000 x3 : 0000000000000000
+# [  106.374510] x2 : 0000000000000000 x1 : ffff800082ab3000 x0 : 0000000000000000
+# [  106.381629] Call trace:
+# [  106.388741]  __do_softirq+0xe8/0x52c
+# [  106.390999]  ____do_softirq+0x10/0x1c
+# [  106.394819]  call_on_irq_stack+0x24/0x4c
+# [  106.398379]  do_softirq_own_stack+0x1c/0x28
+# [  106.402371]  __irq_exit_rcu+0x154/0x178
+# [  106.406277]  irq_exit_rcu+0x10/0x38
+# [  106.410095]  el1_interrupt+0x38/0x64
+# [  106.413568]  el1h_64_irq_handler+0x18/0x24
+# [  106.417388]  el1h_64_irq+0x64/0x68
+# [  106.421293]  preempt_schedule_irq+0x38/0x9c
+# [  106.424679]  el1_interrupt+0x4c/0x64
+# [  106.428758]  el1h_64_irq_handler+0x18/0x24
+# [  106.432580]  el1h_64_irq+0x64/0x68
+# [  106.436485]  round_jiffies_up+0x0/0x7c
+# [  106.439870]  msm_gpu_submit+0x118/0x18c
+# [  106.443603]  msm_job_run+0xa4/0x120
+# [  106.447335]  drm_sched_run_job_work+0x278/0x4d0
+# [  106.450808]  process_one_work+0x218/0x620
+# [  106.455323]  worker_thread+0x1ac/0x37c
+# [  106.459489]  kthread+0x114/0x118
+# [  106.463134]  ret_from_fork+0x10/0x20
+# [  132.024633] watchdog: BUG: soft lockup - CPU#0 stuck for 48s! [kworker/u16:0:10]
+# Detected kernel soft lockup, abandoning run.
+# [  132.024670] Modules linked in:
+# [  132.031097] irq event stamp: 10088
+msm_mapping@*

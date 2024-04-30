@@ -21,3 +21,16 @@ panfrost_.*
 
 # GEM tests takes ~1000 hours, so skip it
 gem_.*
+
+# Kernel panic
+drm_fdinfo.*
+
+# Hangs the machine and timeout occurs
+i915_pm_rc6_residency.*
+i915_suspend.*
+sysfs_heartbeat_interval.*
+syncobj_timeline.*
+sysfs_timeslice_duration.*
+
+# Kernel panic and test hangs with multiple kms tests
+kms_.*

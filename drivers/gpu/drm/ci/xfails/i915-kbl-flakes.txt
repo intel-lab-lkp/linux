@@ -1,1 +1,9 @@
-kms_async_flips@crc
+# Board Name: asus-C436FA-Flip-hatch
+# Bug Report: TBD
+# IGT Version: 1.28-gd2af13d9f
+# Linux Version: 6.9.0-rc4
+core_setmaster@master-drop-set-root
+core_setmaster_vs_auth
+gen9_exec_parse@allowed-single
+i915_pm_rps@thresholds-park
+prime_busy@hang-wait

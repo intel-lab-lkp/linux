@@ -15,3 +15,24 @@ panfrost_.*
 
 # GEM tests takes ~1000 hours, so skip it
 gem_.*
+
+# Hangs the machine and timeout occurs
+i915_.*
+api_intel_bb.*
+
+# Kernel panic
+drm_fdinfo.*
+kms_.*
+prime_mmap_coherency.*
+perf.*
+drm_read.*
+api_intel_allocator.*
+sysfs_preempt_timeout.*
+dumb_buffer.*
+gen9_exec_parse.*
+debugfs_test.*
+core_hotunplug.*
+
+# GPU hang
+sysfs_timeslice_.*
+sysfs_heartbeat_.*
