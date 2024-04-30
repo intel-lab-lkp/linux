@@ -1287,6 +1287,51 @@ static int rcsi2_set_pad_format(struct v4l2_subdev *sd,
 	return 0;
 }
 
+static int rcsi2_apply_routing(struct v4l2_subdev *sd,
+			       struct v4l2_subdev_state *state,
+			       struct v4l2_subdev_krouting *routing)
+{
+	int ret;
+
+	ret = v4l2_subdev_routing_validate(sd, routing,
+					   V4L2_SUBDEV_ROUTING_ONLY_1_TO_1);
+	if (ret)
+		return ret;
+
+	/*
+	 * Routing is fixed for this device.
+	 *
+	 * Only routes in the form of CSI2:0/x->CSI2:x+1/0 are allowed.
+	 *
+	 * We have anyway to implement set_routing to mark the route as active.
+	 */
+	for (unsigned int i = 0; i < routing->num_routes; ++i) {
+		const struct v4l2_subdev_route *route = &routing->routes[i];
+		unsigned int pad = route->sink_stream + 1;
+
+		if (route->sink_pad != 0)
+			return -EINVAL;
+
+		if (route->source_pad != pad || route->source_stream != 0)
+			return -EINVAL;
+	}
+
+	return v4l2_subdev_set_routing(sd, state, routing);
+}
+
+static int rcsi2_set_routing(struct v4l2_subdev *sd,
+			     struct v4l2_subdev_state *state,
+			     enum v4l2_subdev_format_whence which,
+			     struct v4l2_subdev_krouting *routing)
+{
+	struct rcar_csi2 *priv = sd_to_csi2(sd);
+
+	if (which == V4L2_SUBDEV_FORMAT_ACTIVE && priv->stream_count)
+		return -EBUSY;
+
+	return rcsi2_apply_routing(sd, state, routing);
+}
+
 static const struct v4l2_subdev_video_ops rcar_csi2_video_ops = {
 	.s_stream = rcsi2_s_stream,
 };
@@ -1294,6 +1339,7 @@ static const struct v4l2_subdev_video_ops rcar_csi2_video_ops = {
 static const struct v4l2_subdev_pad_ops rcar_csi2_pad_ops = {
 	.set_fmt = rcsi2_set_pad_format,
 	.get_fmt = v4l2_subdev_get_fmt,
+	.set_routing = rcsi2_set_routing,
 };
 
 static const struct v4l2_subdev_ops rcar_csi2_subdev_ops = {
@@ -1353,7 +1399,7 @@ static int rcsi2_init_state(struct v4l2_subdev *sd,
 		.routes = routes,
 	};
 
-	return v4l2_subdev_set_routing(sd, state, &routing);
+	return rcsi2_apply_routing(sd, state, &routing);
 }
 
 static const struct v4l2_subdev_internal_ops rcar_csi2_internal_ops = {
