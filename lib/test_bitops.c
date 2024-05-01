@@ -50,6 +50,26 @@ static unsigned long order_comb_long[][2] = {
 };
 #endif
 
+static unsigned long buf[1000000];
+
+static int __init test_fns(void)
+{
+	unsigned int i, n;
+	ktime_t time;
+
+	get_random_bytes(buf, sizeof(buf));
+	time = ktime_get();
+
+	for (n = 0; n < BITS_PER_LONG; n++)
+		for (i = 0; i < 1000000; i++)
+			fns(buf[i], n);
+
+	time = ktime_get() - time;
+	pr_err("fns:  %18llu ns, %6d iterations\n", time, BITS_PER_LONG * 1000000);
+
+	return 0;
+}
+
 static int __init test_bitops_startup(void)
 {
 	int i, bit_set;
@@ -93,6 +113,8 @@ static int __init test_bitops_startup(void)
 	bit_set = find_first_bit(g_bitmap, BITOPS_LAST);
 	if (bit_set != BITOPS_LAST)
 		pr_err("ERROR: FOUND SET BIT %d\n", bit_set);
+
+	test_fns();
 
 	pr_info("Completed bitops test\n");
 
