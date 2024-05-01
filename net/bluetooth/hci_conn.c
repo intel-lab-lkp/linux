@@ -1277,6 +1277,10 @@ struct hci_conn *hci_connect_le(struct hci_dev *hdev, bdaddr_t *dst,
 		return ERR_PTR(-EOPNOTSUPP);
 	}
 
+	/* Check the mtu is valid */
+	if (hdev->le_mtu < HCI_MIN_LE_MTU || HCI_MAX_LE_MTU < hdev->le_mtu)
+		return ERR_PTR(-ECONNREFUSED);
+
 	/* Since the controller supports only one LE connection attempt at a
 	 * time, we return -EBUSY if there is any connection attempt running.
 	 */
