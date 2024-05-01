@@ -198,12 +198,30 @@ static const struct ath11k_pci_ops ath11k_ahb_pci_ops_wcn6750 = {
 
 static inline u32 ath11k_ahb_read32(struct ath11k_base *ab, u32 offset)
 {
-	return ioread32(ab->mem + offset);
+	switch (offset & ATH11K_REG_TYPE_MASK) {
+	case ATH11K_REG_TYPE_NORMAL:
+		return ioread32(ab->mem + FIELD_GET(ATH11K_REG_OFFSET_MASK, offset));
+	case ATH11K_REG_TYPE_CE:
+		return ioread32(ab->mem_ce + FIELD_GET(ATH11K_REG_OFFSET_MASK, offset));
+	default:
+		BUG();
+		return 0;
+	}
 }
 
 static inline void ath11k_ahb_write32(struct ath11k_base *ab, u32 offset, u32 value)
 {
-	iowrite32(value, ab->mem + offset);
+	switch (offset & ATH11K_REG_TYPE_MASK) {
+	case ATH11K_REG_TYPE_NORMAL:
+		iowrite32(value, ab->mem + FIELD_GET(ATH11K_REG_OFFSET_MASK, offset));
+		break;
+	case ATH11K_REG_TYPE_CE:
+		iowrite32(value, ab->mem_ce + FIELD_GET(ATH11K_REG_OFFSET_MASK, offset));
+		break;
+	default:
+		BUG();
+		break;
+	}
 }
 
 static void ath11k_ahb_kill_tasklets(struct ath11k_base *ab)
@@ -275,9 +293,9 @@ static void ath11k_ahb_ce_irq_enable(struct ath11k_base *ab, u16 ce_id)
 	const struct ce_ie_addr *ce_ie_addr = ab->hw_params.ce_ie_addr;
 	u32 ie1_reg_addr, ie2_reg_addr, ie3_reg_addr;
 
-	ie1_reg_addr = ce_ie_addr->ie1_reg_addr + ATH11K_CE_OFFSET(ab);
-	ie2_reg_addr = ce_ie_addr->ie2_reg_addr + ATH11K_CE_OFFSET(ab);
-	ie3_reg_addr = ce_ie_addr->ie3_reg_addr + ATH11K_CE_OFFSET(ab);
+	ie1_reg_addr = ce_ie_addr->ie1_reg_addr;
+	ie2_reg_addr = ce_ie_addr->ie2_reg_addr;
+	ie3_reg_addr = ce_ie_addr->ie3_reg_addr;
 
 	ce_attr = &ab->hw_params.host_ce_config[ce_id];
 	if (ce_attr->src_nentries)
@@ -296,9 +314,9 @@ static void ath11k_ahb_ce_irq_disable(struct ath11k_base *ab, u16 ce_id)
 	const struct ce_ie_addr *ce_ie_addr = ab->hw_params.ce_ie_addr;
 	u32 ie1_reg_addr, ie2_reg_addr, ie3_reg_addr;
 
-	ie1_reg_addr = ce_ie_addr->ie1_reg_addr + ATH11K_CE_OFFSET(ab);
-	ie2_reg_addr = ce_ie_addr->ie2_reg_addr + ATH11K_CE_OFFSET(ab);
-	ie3_reg_addr = ce_ie_addr->ie3_reg_addr + ATH11K_CE_OFFSET(ab);
+	ie1_reg_addr = ce_ie_addr->ie1_reg_addr;
+	ie2_reg_addr = ce_ie_addr->ie2_reg_addr;
+	ie3_reg_addr = ce_ie_addr->ie3_reg_addr;
 
 	ce_attr = &ab->hw_params.host_ce_config[ce_id];
 	if (ce_attr->src_nentries)

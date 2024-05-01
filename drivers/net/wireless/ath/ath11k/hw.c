@@ -2268,9 +2268,9 @@ const struct ce_ie_addr ath11k_ce_ie_addr_ipq8074 = {
 };
 
 const struct ce_ie_addr ath11k_ce_ie_addr_ipq5018 = {
-	.ie1_reg_addr = CE_HOST_IPQ5018_IE_ADDRESS - HAL_IPQ5018_CE_WFSS_REG_BASE,
-	.ie2_reg_addr = CE_HOST_IPQ5018_IE_2_ADDRESS - HAL_IPQ5018_CE_WFSS_REG_BASE,
-	.ie3_reg_addr = CE_HOST_IPQ5018_IE_3_ADDRESS - HAL_IPQ5018_CE_WFSS_REG_BASE,
+	.ie1_reg_addr = ATH11K_REG_TYPE_CE + CE_HOST_IPQ5018_IE_ADDRESS - HAL_IPQ5018_CE_WFSS_REG_BASE,
+	.ie2_reg_addr = ATH11K_REG_TYPE_CE + CE_HOST_IPQ5018_IE_2_ADDRESS - HAL_IPQ5018_CE_WFSS_REG_BASE,
+	.ie3_reg_addr = ATH11K_REG_TYPE_CE + CE_HOST_IPQ5018_IE_3_ADDRESS - HAL_IPQ5018_CE_WFSS_REG_BASE,
 };
 
 const struct ce_remap ath11k_ce_remap_ipq5018 = {
@@ -2801,13 +2801,13 @@ const struct ath11k_hw_regs ipq5018_regs = {
 	.hal_reo_status_hp = 0x00003070,
 
 	/* WCSS relative address */
-	.hal_seq_wcss_umac_ce0_src_reg = 0x08400000
+	.hal_seq_wcss_umac_ce0_src_reg = ATH11K_REG_TYPE_CE + 0x08400000
 		- HAL_IPQ5018_CE_WFSS_REG_BASE,
-	.hal_seq_wcss_umac_ce0_dst_reg = 0x08401000
+	.hal_seq_wcss_umac_ce0_dst_reg = ATH11K_REG_TYPE_CE + 0x08401000
 		- HAL_IPQ5018_CE_WFSS_REG_BASE,
-	.hal_seq_wcss_umac_ce1_src_reg = 0x08402000
+	.hal_seq_wcss_umac_ce1_src_reg = ATH11K_REG_TYPE_CE + 0x08402000
 		- HAL_IPQ5018_CE_WFSS_REG_BASE,
-	.hal_seq_wcss_umac_ce1_dst_reg = 0x08403000
+	.hal_seq_wcss_umac_ce1_dst_reg = ATH11K_REG_TYPE_CE + 0x08403000
 		- HAL_IPQ5018_CE_WFSS_REG_BASE,
 
 	/* WBM Idle address */
