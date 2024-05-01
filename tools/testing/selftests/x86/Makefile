@@ -72,10 +72,10 @@ all_64: $(BINARIES_64)
 
 EXTRA_CLEAN := $(BINARIES_32) $(BINARIES_64)
 
-$(BINARIES_32): $(OUTPUT)/%_32: %.c helpers.h
+$(BINARIES_32): $(OUTPUT)/%_32: %.c
 	$(CC) -m32 -o $@ $(CFLAGS) $(EXTRA_CFLAGS) $^ -lrt -ldl -lm
 
-$(BINARIES_64): $(OUTPUT)/%_64: %.c helpers.h
+$(BINARIES_64): $(OUTPUT)/%_64: %.c
 	$(CC) -m64 -o $@ $(CFLAGS) $(EXTRA_CFLAGS) $^ -lrt -ldl
 
 # x86_64 users should be encouraged to install 32-bit libraries
