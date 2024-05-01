@@ -1255,6 +1255,7 @@ static int pci_dev_wait(struct pci_dev *dev, char *reset_type, int timeout)
 	int delay = 1;
 	bool retrain = false;
 	struct pci_dev *bridge;
+	u32 vid = dev->vendor | dev->device << 16;
 
 	if (pci_is_pcie(dev)) {
 		bridge = pci_upstream_bridge(dev);
@@ -1268,17 +1269,22 @@ static int pci_dev_wait(struct pci_dev *dev, char *reset_type, int timeout)
 	 * responding to them with CRS completions.  The Root Port will
 	 * generally synthesize ~0 (PCI_ERROR_RESPONSE) data to complete
 	 * the read (except when CRS SV is enabled and the read was for the
-	 * Vendor ID; in that case it synthesizes 0x0001 data).
+	 * Vendor ID; in that case it synthesizes 0x0001 data, or if the device
+	 * is downstream a Broadcom switch, which syntesizes a fake device)
 	 *
 	 * Wait for the device to return a non-CRS completion.  Read the
-	 * Command register instead of Vendor ID so we don't have to
-	 * contend with the CRS SV value.
+	 * Command register instead of Vendor ID so we don't have to contend
+	 * with the CRS SV value. But, also read the Vendor and Device ID's
+	 * to defeat Broadcom switch's placeholder device.
 	 */
 	for (;;) {
-		u32 id;
+		u32 id, l;
 
+		pci_read_config_dword(dev, PCI_VENDOR_ID, &l);
 		pci_read_config_dword(dev, PCI_COMMAND, &id);
-		if (!PCI_POSSIBLE_ERROR(id))
+
+		if (!PCI_POSSIBLE_ERROR(id) && !PCI_POSSIBLE_ERROR(l) &&
+		    l == vid)
 			break;
 
 		if (delay > timeout) {
