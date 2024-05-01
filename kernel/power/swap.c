@@ -1489,15 +1489,17 @@ out_finish:
 		ret = snapshot_write_finalize(snapshot);
 		if (!ret && !snapshot_image_loaded(snapshot))
 			ret = -ENODATA;
-		if (!ret) {
-			if (swsusp_header->flags & SF_CRC32_MODE) {
-				if(handle->crc32 != swsusp_header->crc32) {
-					pr_err("Invalid image CRC32!\n");
-					ret = -ENODATA;
-				}
+	}
+	if (!ret) {
+		if (swsusp_header->flags & SF_CRC32_MODE) {
+			if (handle->crc32 != swsusp_header->crc32) {
+				pr_err("Invalid image CRC32, swsusp header CRC32: %u, handle CRC32: %u\n",
+					 swsusp_header->crc32, handle->crc32);
+				ret = -ENODATA;
 			}
 		}
 	}
+
 	swsusp_show_speed(start, stop, nr_to_read, "Read");
 out_clean:
 	hib_finish_batch(&hb);

@@ -703,6 +703,7 @@ static int load_image_and_restore(void)
 {
 	int error;
 	unsigned int flags;
+	int cnt = 0;
 
 	pm_pr_dbg("Loading hibernation image.\n");
 
@@ -713,7 +714,14 @@ static int load_image_and_restore(void)
 		goto Unlock;
 	}
 
+retry:
 	error = swsusp_read(&flags);
+	if (error && (cnt++ < 3)) {
+		pr_err("Failed to load hibernation image, trying to load again...\n");
+		swsusp_free();
+		goto retry;
+	}
+
 	swsusp_close();
 	if (!error)
 		error = hibernation_restore(flags & SF_PLATFORM_MODE);
