@@ -374,6 +374,12 @@ static bool is_zen3(uint32_t family, uint32_t model)
 	return family == 0x19 && model <= 0x0f;
 }
 
+static bool is_zen4(uint32_t family, uint32_t model)
+{
+	return family == 0x19 && ((model >= 0x10 && model <= 0x1f) ||
+		(model >= 0xa0 && model <= 0xaf));
+}
+
 /*
  * Determining AMD support for a PMU event requires consulting the AMD
  * PPR for the CPU or reference material derived therefrom. The AMD
@@ -390,7 +396,8 @@ static bool use_amd_pmu(void)
 	return host_cpu_is_amd &&
 		(is_zen1(family, model) ||
 		 is_zen2(family, model) ||
-		 is_zen3(family, model));
+		 is_zen3(family, model) ||
+		 is_zen4(family, model));
 }
 
 /*
