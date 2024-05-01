@@ -114,7 +114,7 @@ static void do_clear_cpu_cap(struct cpuinfo_x86 *c, unsigned int feature)
 	if (WARN_ON(feature >= MAX_FEATURE_BITS))
 		return;
 
-	if (boot_cpu_has(feature))
+	if (c && cpu_has(c, feature))
 		WARN_ON(alternatives_patched);
 
 	clear_feature(c, feature);
