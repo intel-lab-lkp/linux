@@ -1592,6 +1592,20 @@ noinstr void do_machine_check(struct pt_regs *regs)
 		else
 			queue_task_work(&m, msg, kill_me_maybe);
 
+	} else if (current->in_execve) {
+		/*
+		 * Cannot recover a task in execve() beyond point of no
+		 * return but stop further user memory accesses.
+		 */
+		if (m.kflags & MCE_IN_KERNEL_RECOV) {
+			if (!fixup_exception(regs, X86_TRAP_MC, 0, 0))
+				mce_panic("Failed kernel mode recovery", &m, msg);
+		}
+
+		if (!mce_usable_address(&m))
+			queue_task_work(&m, msg, kill_me_now);
+		else
+			queue_task_work(&m, msg, kill_me_maybe);
 	} else {
 		/*
 		 * Handle an MCE which has happened in kernel space but from

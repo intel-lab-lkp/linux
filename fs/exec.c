@@ -67,6 +67,7 @@
 #include <linux/time_namespace.h>
 #include <linux/user_events.h>
 #include <linux/rseq.h>
+#include <linux/task_work.h>
 
 #include <linux/uaccess.h>
 #include <asm/mmu_context.h>
@@ -1893,10 +1894,15 @@ out:
 	 * If past the point of no return ensure the code never
 	 * returns to the userspace process.  Use an existing fatal
 	 * signal if present otherwise terminate the process with
-	 * SIGSEGV.
+	 * SIGSEGV.  Run pending work before that in case it is
+	 * terminating the process with a different signal.
 	 */
-	if (bprm->point_of_no_return && !fatal_signal_pending(current))
-		force_fatal_sig(SIGSEGV);
+	if (bprm->point_of_no_return) {
+		task_work_run();
+
+		if (!fatal_signal_pending(current))
+			force_fatal_sig(SIGSEGV);
+	}
 
 	sched_mm_cid_after_execve(current);
 	current->fs->in_exec = 0;
