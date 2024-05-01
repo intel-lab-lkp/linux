@@ -37,8 +37,9 @@ ax25_dev *ax25_addr_ax25dev(ax25_address *addr)
 	for (ax25_dev = ax25_dev_list; ax25_dev != NULL; ax25_dev = ax25_dev->next)
 		if (ax25cmp(addr, (const ax25_address *)ax25_dev->dev->dev_addr) == 0) {
 			res = ax25_dev;
-			ax25_dev_hold(ax25_dev);
 		}
+	if (res)
+		ax25_dev_hold(res);
 	spin_unlock_bh(&ax25_dev_lock);
 
 	return res;
@@ -58,7 +59,6 @@ void ax25_dev_device_up(struct net_device *dev)
 		return;
 	}
 
-	refcount_set(&ax25_dev->refcount, 1);
 	dev->ax25_ptr     = ax25_dev;
 	ax25_dev->dev     = dev;
 	netdev_hold(dev, &ax25_dev->dev_tracker, GFP_KERNEL);
@@ -88,7 +88,7 @@ void ax25_dev_device_up(struct net_device *dev)
 	ax25_dev->next = ax25_dev_list;
 	ax25_dev_list  = ax25_dev;
 	spin_unlock_bh(&ax25_dev_lock);
-	ax25_dev_hold(ax25_dev);
+	refcount_set(&ax25_dev->refcount, 1);
 
 	ax25_register_dev_sysctl(ax25_dev);
 }
@@ -135,7 +135,6 @@ void ax25_dev_device_down(struct net_device *dev)
 
 unlock_put:
 	spin_unlock_bh(&ax25_dev_lock);
-	ax25_dev_put(ax25_dev);
 	dev->ax25_ptr = NULL;
 	netdev_put(dev, &ax25_dev->dev_tracker);
 	ax25_dev_put(ax25_dev);
@@ -208,7 +207,7 @@ void __exit ax25_dev_free(void)
 		s        = ax25_dev;
 		netdev_put(ax25_dev->dev, &ax25_dev->dev_tracker);
 		ax25_dev = ax25_dev->next;
-		kfree(s);
+		ax25_dev_put(s);
 	}
 	ax25_dev_list = NULL;
 	spin_unlock_bh(&ax25_dev_lock);
