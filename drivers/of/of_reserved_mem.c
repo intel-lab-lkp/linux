@@ -81,6 +81,7 @@ static void __init fdt_reserved_mem_save_node(unsigned long node, const char *un
 static int __init early_init_dt_reserve_memory(phys_addr_t base,
 					       phys_addr_t size, bool nomap)
 {
+	int err = 0;
 	if (nomap) {
 		/*
 		 * If the memory is already reserved (by another region), we
@@ -91,7 +92,10 @@ static int __init early_init_dt_reserve_memory(phys_addr_t base,
 		    memblock_is_region_reserved(base, size))
 			return -EBUSY;
 
-		return memblock_mark_nomap(base, size);
+
+		err = memblock_mark_nomap(base, size);
+		if (err)
+			return err;
 	}
 	return memblock_reserve(base, size);
 }
