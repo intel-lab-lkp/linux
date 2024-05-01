@@ -42,7 +42,7 @@
 static unsigned int dereference_seg_base(void)
 {
 	int ret;
-	asm volatile ("mov %" SEG ":(0), %0" : "=rm" (ret));
+	asm volatile ("mov %" SEG ":(0), %0" : "=r" (ret));
 	return ret;
 }
 
