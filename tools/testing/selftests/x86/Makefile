@@ -108,8 +108,9 @@ $(OUTPUT)/test_syscall_vdso_32: thunks_32.S
 # check_initial_reg_state is special: it needs a custom entry, and it
 # needs to be static so that its interpreter doesn't destroy its initial
 # state.
-$(OUTPUT)/check_initial_reg_state_32: CFLAGS += -Wl,-ereal_start -static
-$(OUTPUT)/check_initial_reg_state_64: CFLAGS += -Wl,-ereal_start -static
+CFLAGS2:=$(filter-out -no-pie,$(CFLAGS))
+$(OUTPUT)/check_initial_reg_state_32: CFLAGS2 += -Wl,-ereal_start -static
+$(OUTPUT)/check_initial_reg_state_64: CFLAGS2 += -Wl,-ereal_start -static
 
 $(OUTPUT)/nx_stack_32: CFLAGS += -Wl,-z,noexecstack
 $(OUTPUT)/nx_stack_64: CFLAGS += -Wl,-z,noexecstack
