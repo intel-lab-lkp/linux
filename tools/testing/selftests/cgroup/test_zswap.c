@@ -94,6 +94,19 @@ static int allocate_bytes(const char *cgroup, void *arg)
 	return 0;
 }
 
+static int allocate_random_bytes(const char *cgroup, void *arg)
+{
+	size_t size = (size_t)arg;
+	char *mem = (char *)malloc(size);
+
+	if (!mem)
+		return -1;
+	for (int i = 0; i < size; i++)
+		mem[i] = rand() % 128;
+	free(mem);
+	return 0;
+}
+
 static char *setup_test_group_1M(const char *root, const char *name)
 {
 	char *group_name = cg_name(root, name);
@@ -246,6 +259,74 @@ out:
 	cg_destroy(test_group);
 	free(test_group);
 	return ret;
+}
+
+/* Test to verify the zswap writeback path */
+static int test_zswap_writeback(const char *root, bool wb)
+{
+	int ret = KSFT_FAIL;
+	char *test_group;
+	long zswpwb_before, zswpwb_after;
+
+	test_group = cg_name(root,
+		wb ? "zswap_writeback_enabled_test" : "zswap_writeback_disabled_test");
+	if (!test_group)
+		goto out;
+	if (cg_create(test_group))
+		goto out;
+	if (cg_write(test_group, "memory.max", "8M"))
+		goto out;
+	if (cg_write(test_group, "memory.high", "2M"))
+		goto out;
+	if (cg_write(test_group, "memory.zswap.max", "2M"))
+		goto out;
+	if (cg_write(test_group, "memory.zswap.writeback", wb ? "1" : "0"))
+		goto out;
+
+	zswpwb_before = cg_read_key_long(test_group, "memory.stat", "zswpwb ");
+	if (zswpwb_before < 0) {
+		ksft_print_msg("failed to get zswpwb_before\n");
+		goto out;
+	}
+
+	/*
+	 * Allocate more than memory.high to push memory into zswap,
+	 * more than zswap.max to trigger writeback if enabled,
+	 * but less than memory.max so that OOM is not triggered
+	 */
+	if (cg_run(test_group, allocate_random_bytes, (void *)MB(3)))
+		goto out;
+
+	/* Verify that zswap writeback occurred only if writeback was enabled */
+	zswpwb_after = cg_read_key_long(test_group, "memory.stat", "zswpwb ");
+	if (wb) {
+		if (zswpwb_after <= zswpwb_before) {
+			ksft_print_msg("writeback enabled and zswpwb_after <= zswpwb_before\n");
+			goto out;
+		}
+	} else {
+		if (zswpwb_after != zswpwb_before) {
+			ksft_print_msg("writeback disabled and zswpwb_after != zswpwb_before\n");
+			goto out;
+		}
+	}
+
+	ret = KSFT_PASS;
+
+out:
+	cg_destroy(test_group);
+	free(test_group);
+	return ret;
+}
+
+static int test_zswap_writeback_enabled(const char *root)
+{
+	return test_zswap_writeback(root, true);
+}
+
+static int test_zswap_writeback_disabled(const char *root)
+{
+	return test_zswap_writeback(root, false);
 }
 
 /*
@@ -425,6 +506,8 @@ struct zswap_test {
 	T(test_zswap_usage),
 	T(test_swapin_nozswap),
 	T(test_zswapin),
+	T(test_zswap_writeback_enabled),
+	T(test_zswap_writeback_disabled),
 	T(test_no_kmem_bypass),
 	T(test_no_invasive_cgroup_shrink),
 };
