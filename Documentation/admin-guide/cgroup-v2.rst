@@ -1457,6 +1457,15 @@ PAGE_SIZE multiple when read back.
 	  zswapped
 		Amount of application memory swapped out to zswap.
 
+	  zswpin
+		Number of pages moved in to memory from zswap.
+
+	  zswpout
+		Number of pages moved out of memory to zswap.
+
+	  zswpwb
+		Number of pages written from zswap to swap.
+
 	  file_mapped
 		Amount of cached filesystem data mapped with mmap()
 
