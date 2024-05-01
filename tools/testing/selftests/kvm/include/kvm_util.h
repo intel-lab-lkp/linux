@@ -518,6 +518,72 @@ static inline uint64_t vm_get_stat(struct kvm_vm *vm, const char *stat_name)
 	return data;
 }
 
+/*
+ * Ensure that the sequence of the enum vcpu_stat_types matches the order of
+ * kvm_vcpu_stats_desc[].  Otherwise, vcpu_get_stat() may return incorrect data
+ * because __vcpu_get_stat() uses the enum type as an index to get the
+ * descriptor for a given stat and then uses read_stat_data() to get the stats
+ * from the descriptor.
+ */
+enum vcpu_stat_types {
+	HALT_SUCCESSFUL_POLL,
+	HALT_ATTEMPTED_POLL,
+	HALT_POLL_INVALID,
+	HALT_WAKEUP,
+	HALT_POLL_SUCCESS_NS,
+	HALT_POLL_FAIL_NS,
+	HALT_WAIT_NS,
+	HALT_POLL_SUCCESS_HIST,
+	HALT_POLL_FAIL_HIST,
+	HALT_WAIT_HIST,
+	BLOCKING,
+	PF_TAKEN,
+	PF_FIXED,
+	PF_EMULATE,
+	PF_SPURIOUS,
+	PF_FAST,
+	PF_MMIO_SPTE_CREATED,
+	PF_GUEST,
+	TLB_FLUSH,
+	INVLPG,
+	EXITS,
+	IO_EXITS,
+	MMIO_EXITS,
+	SIGNAL_EXITS,
+	IRQ_WINDOW_EXITS,
+	NMI_WINDOW_EXITS,
+	LD_FLUSH,
+	HALT_EXITS,
+	REQUEST_IRQ_EXITS,
+	IRQ_EXITS,
+	HOST_STATE_RELOAD,
+	FPU_RELOAD,
+	INSN_EMULATION,
+	INSN_EMULATION_FAIL,
+	HYPERCALLS,
+	IRQ_INJECTIONS,
+	NMI_INJECTIONS,
+	REQ_EVENT,
+	NESTED_RUN,
+	DIRECTED_YIELD_ATTEMPTED,
+	DIRECTED_YIELD_SUCCESSFUL,
+	PREEMPTION_REPORTED,
+	PREEMPTION_OTHER,
+	GUEST_MODE,
+	NOTIFY_WINDOW_EXITS,
+};
+
+void __vcpu_get_stat(struct kvm_vcpu *vcpu, enum vcpu_stat_types type, uint64_t *data,
+		   size_t max_elements);
+
+static inline uint64_t vcpu_get_stat(struct kvm_vcpu *vcpu, enum vcpu_stat_types type)
+{
+	uint64_t data;
+
+	__vcpu_get_stat(vcpu, type, &data, 1);
+	return data;
+}
+
 void vm_create_irqchip(struct kvm_vm *vm);
 
 static inline int __vm_create_guest_memfd(struct kvm_vm *vm, uint64_t size,
