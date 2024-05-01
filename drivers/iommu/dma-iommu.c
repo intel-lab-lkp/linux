@@ -607,7 +607,8 @@ static bool dev_use_swiotlb(struct device *dev, size_t size,
 {
 	return IS_ENABLED(CONFIG_SWIOTLB) &&
 		(dev_is_untrusted(dev) ||
-		 dma_kmalloc_needs_bounce(dev, size, dir));
+		 dma_kmalloc_needs_bounce(dev, size, dir) ||
+		 is_swiotlb_force_bounce(dev));
 }
 
 static bool dev_use_sg_swiotlb(struct device *dev, struct scatterlist *sg,
@@ -633,7 +634,7 @@ static bool dev_use_sg_swiotlb(struct device *dev, struct scatterlist *sg,
 				return true;
 	}
 
-	return false;
+	return is_swiotlb_force_bounce(dev);
 }
 
 /**
