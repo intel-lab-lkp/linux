@@ -210,15 +210,34 @@ struct ib_umem *ib_umem_get(struct ib_device *device, unsigned long addr,
 
 	while (npages) {
 		cond_resched();
-		pinned = pin_user_pages_fast(cur_base,
-					  min_t(unsigned long, npages,
-						PAGE_SIZE /
-						sizeof(struct page *)),
-					  gup_flags, page_list);
-		if (pinned < 0) {
+		pinned = -ENOMEM;
+		int attempts = 0;
+		/*
+		 * pin_user_pages_fast() can return -EAGAIN, due to falling back
+		 * to gup-slow and then failing to migrate pages out of
+		 * ZONE_MOVABLE due to a transient elevated page refcount.
+		 *
+		 * One retry is enough to avoid this problem, so far, but let's
+		 * use a slightly higher retry count just in case even larger
+		 * systems have a longer-lasting transient refcount problem.
+		 *
+		 */
+		static const int MAX_ATTEMPTS = 3;
+
+		while (pinned == -EAGAIN && attempts < MAX_ATTEMPTS) {
+			pinned = pin_user_pages_fast(cur_base,
+						     min_t(unsigned long,
+							npages, PAGE_SIZE /
+							sizeof(struct page *)),
+						     gup_flags, page_list);
 			ret = pinned;
-			goto umem_release;
+			attempts++;
+
+			if (pinned == -EAGAIN)
+				continue;
 		}
+		if (pinned < 0)
+			goto umem_release;
 
 		cur_base += pinned * PAGE_SIZE;
 		npages -= pinned;

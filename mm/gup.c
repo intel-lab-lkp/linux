@@ -2141,15 +2141,23 @@ static int migrate_longterm_unpinnable_pages(
 	}
 
 	if (!list_empty(movable_page_list)) {
+		int rc;
 		struct migration_target_control mtc = {
 			.nid = NUMA_NO_NODE,
 			.gfp_mask = GFP_USER | __GFP_NOWARN,
 		};
 
-		if (migrate_pages(movable_page_list, alloc_migration_target,
+		rc = migrate_pages(movable_page_list, alloc_migration_target,
 				  NULL, (unsigned long)&mtc, MIGRATE_SYNC,
-				  MR_LONGTERM_PIN, NULL)) {
-			ret = -ENOMEM;
+				  MR_LONGTERM_PIN, NULL);
+		if (rc) {
+			/*
+			 * Report any failure *except* -EAGAIN as "not enough
+			 * memory". -EAGAIN is valuable because callers further
+			 * up the call stack can benefit from a retry.
+			 */
+			if (rc != -EAGAIN)
+				ret = -ENOMEM;
 			goto err;
 		}
 	}
