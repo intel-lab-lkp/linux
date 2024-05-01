@@ -260,22 +260,20 @@ static int ad7923_read_raw(struct iio_dev *indio_dev,
 
 	switch (m) {
 	case IIO_CHAN_INFO_RAW:
-		ret = iio_device_claim_direct_mode(indio_dev);
-		if (ret)
-			return ret;
-		ret = ad7923_scan_direct(st, chan->address);
-		iio_device_release_direct_mode(indio_dev);
+		    iio_device_claim_direct_scoped(return -EBUSY, indio_dev) {         	
+			ret = ad7923_scan_direct(st, chan->address); 
+				
+			if (ret < 0)
+				return ret;
 
-		if (ret < 0)
-			return ret;
+			if (chan->address == EXTRACT(ret, 12, 4))
+				*val = EXTRACT(ret, 0, 12);
+			else
+				return -EIO;
 
-		if (chan->address == EXTRACT(ret, 12, 4))
-			*val = EXTRACT(ret, chan->scan_type.shift,
-				       chan->scan_type.realbits);
-		else
-			return -EIO;
-
-		return IIO_VAL_INT;
+			return IIO_VAL_INT;
+		}
+    	unreachable();
 	case IIO_CHAN_INFO_SCALE:
 		ret = ad7923_get_range(st);
 		if (ret < 0)
