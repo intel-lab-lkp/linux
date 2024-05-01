@@ -1007,7 +1007,7 @@ enum sctp_sstat_state {
  */
 struct sctp_assoc_ids {
 	__u32		gaids_number_of_ids;
-	sctp_assoc_t	gaids_assoc_id[];
+	sctp_assoc_t	gaids_assoc_id[] __counted_by(gaids_number_of_ids);
 };
 
 /*
