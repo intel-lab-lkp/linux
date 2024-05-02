@@ -999,7 +999,7 @@ struct file {
 	 */
 	spinlock_t		f_lock;
 	fmode_t			f_mode;
-	atomic_long_t		f_count;
+	refcount_long_t		f_count;
 	struct mutex		f_pos_lock;
 	loff_t			f_pos;
 	unsigned int		f_flags;
@@ -1036,7 +1036,7 @@ struct file_handle {
 
 static inline struct file *get_file(struct file *f)
 {
-	if (unlikely(!atomic_long_inc_not_zero(&f->f_count)))
+	if (unlikely(!refcount_long_inc_not_zero(&f->f_count)))
 		return NULL;
 	return f;
 }
@@ -1044,7 +1044,7 @@ static inline struct file *get_file(struct file *f)
 struct file *get_file_rcu(struct file __rcu **f);
 struct file *get_file_active(struct file **f);
 
-#define file_count(x)	atomic_long_read(&(x)->f_count)
+#define file_count(x)	refcount_long_read(&(x)->f_count)
 
 #define	MAX_NON_LFS	((1UL<<31) - 1)
 

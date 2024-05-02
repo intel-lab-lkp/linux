@@ -865,7 +865,7 @@ static struct file *__get_file_rcu(struct file __rcu **f)
 	if (!file)
 		return NULL;
 
-	if (unlikely(!atomic_long_inc_not_zero(&file->f_count)))
+	if (unlikely(!refcount_long_inc_not_zero(&file->f_count)))
 		return ERR_PTR(-EAGAIN);
 
 	file_reloaded = rcu_dereference_raw(*f);
@@ -987,7 +987,7 @@ static inline struct file *__fget_files_rcu(struct files_struct *files,
 		 * barrier. We only really need an 'acquire' one to
 		 * protect the loads below, but we don't have that.
 		 */
-		if (unlikely(!atomic_long_inc_not_zero(&file->f_count)))
+		if (unlikely(!refcount_long_inc_not_zero(&file->f_count)))
 			continue;
 
 		/*
