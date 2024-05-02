@@ -3500,29 +3500,66 @@ static int bnxt_alloc_ring(struct bnxt *bp, struct bnxt_ring_mem_info *rmem)
 	return 0;
 }
 
-static void bnxt_free_tpa_info(struct bnxt *bp)
+static void bnxt_free_tpa_info(struct bnxt *bp, struct bnxt_rx_ring_info *rxr)
 {
-	int i, j;
+	int i;
 
-	for (i = 0; i < bp->rx_nr_rings; i++) {
-		struct bnxt_rx_ring_info *rxr = &bp->rx_ring[i];
-
-		kfree(rxr->rx_tpa_idx_map);
-		rxr->rx_tpa_idx_map = NULL;
-		if (rxr->rx_tpa) {
-			for (j = 0; j < bp->max_tpa; j++) {
-				kfree(rxr->rx_tpa[j].agg_arr);
-				rxr->rx_tpa[j].agg_arr = NULL;
-			}
+	kfree(rxr->rx_tpa_idx_map);
+	rxr->rx_tpa_idx_map = NULL;
+	if (rxr->rx_tpa) {
+		for (i = 0; i < bp->max_tpa; i++) {
+			kfree(rxr->rx_tpa[i].agg_arr);
+			rxr->rx_tpa[i].agg_arr = NULL;
 		}
-		kfree(rxr->rx_tpa);
-		rxr->rx_tpa = NULL;
 	}
+	kfree(rxr->rx_tpa);
+	rxr->rx_tpa = NULL;
+}
+
+static int __bnxt_alloc_one_tpa_info(struct bnxt *bp, struct bnxt_rx_ring_info *rxr)
+{
+	struct rx_agg_cmp *agg;
+	int i, rc;
+
+	rxr->rx_tpa = kcalloc(bp->max_tpa, sizeof(struct bnxt_tpa_info),
+				GFP_KERNEL);
+	if (!rxr->rx_tpa)
+		return -ENOMEM;
+
+	if (!(bp->flags & BNXT_FLAG_CHIP_P5_PLUS))
+		return 0;
+
+	for (i = 0; i < bp->max_tpa; i++) {
+		agg = kcalloc(MAX_SKB_FRAGS, sizeof(*agg), GFP_KERNEL);
+		if (!agg) {
+			rc = -ENOMEM;
+			goto err_free;
+		}
+		rxr->rx_tpa[i].agg_arr = agg;
+	}
+	rxr->rx_tpa_idx_map = kzalloc(sizeof(*rxr->rx_tpa_idx_map),
+					GFP_KERNEL);
+	if (!rxr->rx_tpa_idx_map) {
+		rc = -ENOMEM;
+		goto err_free;
+	}
+
+	return 0;
+
+err_free:
+	while(i--) {
+		kfree(rxr->rx_tpa[i].agg_arr);
+		rxr->rx_tpa[i].agg_arr = NULL;
+	}
+	kfree(rxr->rx_tpa);
+	rxr->rx_tpa = NULL;
+
+	return rc;
 }
 
 static int bnxt_alloc_tpa_info(struct bnxt *bp)
 {
-	int i, j;
+	int i, rc;
 
 	bp->max_tpa = MAX_TPA;
 	if (bp->flags & BNXT_FLAG_CHIP_P5_PLUS) {
@@ -3533,27 +3570,18 @@ static int bnxt_alloc_tpa_info(struct bnxt *bp)
 
 	for (i = 0; i < bp->rx_nr_rings; i++) {
 		struct bnxt_rx_ring_info *rxr = &bp->rx_ring[i];
-		struct rx_agg_cmp *agg;
 
-		rxr->rx_tpa = kcalloc(bp->max_tpa, sizeof(struct bnxt_tpa_info),
-				      GFP_KERNEL);
-		if (!rxr->rx_tpa)
-			return -ENOMEM;
-
-		if (!(bp->flags & BNXT_FLAG_CHIP_P5_PLUS))
-			continue;
-		for (j = 0; j < bp->max_tpa; j++) {
-			agg = kcalloc(MAX_SKB_FRAGS, sizeof(*agg), GFP_KERNEL);
-			if (!agg)
-				return -ENOMEM;
-			rxr->rx_tpa[j].agg_arr = agg;
-		}
-		rxr->rx_tpa_idx_map = kzalloc(sizeof(*rxr->rx_tpa_idx_map),
-					      GFP_KERNEL);
-		if (!rxr->rx_tpa_idx_map)
-			return -ENOMEM;
+		rc = __bnxt_alloc_one_tpa_info(bp, rxr);
+		if (rc)
+			goto err_free;
 	}
 	return 0;
+
+err_free:
+	while (i--)
+		bnxt_free_tpa_info(bp, &bp->rx_ring[i]);
+
+	return rc;
 }
 
 static void bnxt_free_rx_rings(struct bnxt *bp)
@@ -3563,10 +3591,11 @@ static void bnxt_free_rx_rings(struct bnxt *bp)
 	if (!bp->rx_ring)
 		return;
 
-	bnxt_free_tpa_info(bp);
 	for (i = 0; i < bp->rx_nr_rings; i++) {
 		struct bnxt_rx_ring_info *rxr = &bp->rx_ring[i];
 		struct bnxt_ring_struct *ring;
+
+		bnxt_free_tpa_info(bp, rxr);
 
 		if (rxr->xdp_prog)
 			bpf_prog_put(rxr->xdp_prog);
