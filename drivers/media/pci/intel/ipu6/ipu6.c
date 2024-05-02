@@ -526,7 +526,7 @@ static int request_cpd_fw(const struct firmware **firmware_p, const char *name,
 	}
 
 	dst->size = fw->size;
-	dst->data = vmalloc(fw->size);
+	dst->data = kvmalloc(fw->size, GFP_KERNEL);
 	if (!dst->data) {
 		kfree(dst);
 		ret = -ENOMEM;
