@@ -291,9 +291,6 @@ TRACE_EVENT_CONDITION(btrfs_get_extent,
 		__field(	u64,  ino		)
 		__field(	u64,  start		)
 		__field(	u64,  len		)
-		__field(	u64,  orig_start	)
-		__field(	u64,  block_start	)
-		__field(	u64,  block_len		)
 		__field(	u32,  flags		)
 		__field(	int,  refs		)
 	),
@@ -303,23 +300,16 @@ TRACE_EVENT_CONDITION(btrfs_get_extent,
 		__entry->ino		= btrfs_ino(inode);
 		__entry->start		= map->start;
 		__entry->len		= map->len;
-		__entry->orig_start	= map->orig_start;
-		__entry->block_start	= map->block_start;
-		__entry->block_len	= map->block_len;
 		__entry->flags		= map->flags;
 		__entry->refs		= refcount_read(&map->refs);
 	),
 
 	TP_printk_btrfs("root=%llu(%s) ino=%llu start=%llu len=%llu "
-		  "orig_start=%llu block_start=%llu(%s) "
-		  "block_len=%llu flags=%s refs=%u",
+		  "flags=%s refs=%u",
 		  show_root_type(__entry->root_objectid),
 		  __entry->ino,
 		  __entry->start,
 		  __entry->len,
-		  __entry->orig_start,
-		  show_map_type(__entry->block_start),
-		  __entry->block_len,
 		  show_map_flags(__entry->flags),
 		  __entry->refs)
 );
@@ -861,7 +851,7 @@ TRACE_EVENT(btrfs_add_block_group,
 		{ BTRFS_DROP_DELAYED_REF,   "DROP_DELAYED_REF" },	\
 		{ BTRFS_ADD_DELAYED_EXTENT, "ADD_DELAYED_EXTENT" }, 	\
 		{ BTRFS_UPDATE_DELAYED_HEAD, "UPDATE_DELAYED_HEAD" })
-			
+
 
 DECLARE_EVENT_CLASS(btrfs_delayed_tree_ref,
 
@@ -873,7 +863,7 @@ DECLARE_EVENT_CLASS(btrfs_delayed_tree_ref,
 	TP_STRUCT__entry_btrfs(
 		__field(	u64,  bytenr		)
 		__field(	u64,  num_bytes		)
-		__field(	int,  action		) 
+		__field(	int,  action		)
 		__field(	u64,  parent		)
 		__field(	u64,  ref_root		)
 		__field(	int,  level		)
@@ -930,7 +920,7 @@ DECLARE_EVENT_CLASS(btrfs_delayed_data_ref,
 	TP_STRUCT__entry_btrfs(
 		__field(	u64,  bytenr		)
 		__field(	u64,  num_bytes		)
-		__field(	int,  action		) 
+		__field(	int,  action		)
 		__field(	u64,  parent		)
 		__field(	u64,  ref_root		)
 		__field(	u64,  owner		)
@@ -992,7 +982,7 @@ DECLARE_EVENT_CLASS(btrfs_delayed_ref_head,
 	TP_STRUCT__entry_btrfs(
 		__field(	u64,  bytenr		)
 		__field(	u64,  num_bytes		)
-		__field(	int,  action		) 
+		__field(	int,  action		)
 		__field(	int,  is_data		)
 	),
 
@@ -2615,7 +2605,6 @@ TRACE_EVENT(btrfs_extent_map_shrinker_remove_em,
 		__field(	u64,	root_id		)
 		__field(	u64,	start		)
 		__field(	u64,	len		)
-		__field(	u64,	block_start	)
 		__field(	u32,	flags		)
 	),
 
@@ -2624,15 +2613,12 @@ TRACE_EVENT(btrfs_extent_map_shrinker_remove_em,
 		__entry->root_id	= inode->root->root_key.objectid;
 		__entry->start		= em->start;
 		__entry->len		= em->len;
-		__entry->block_start	= em->block_start;
 		__entry->flags		= em->flags;
 	),
 
-	TP_printk_btrfs(
-"ino=%llu root=%llu(%s) start=%llu len=%llu block_start=%llu(%s) flags=%s",
+	TP_printk_btrfs("ino=%llu root=%llu(%s) start=%llu len=%llu flags=%s",
 			__entry->ino, show_root_type(__entry->root_id),
 			__entry->start, __entry->len,
-			show_map_type(__entry->block_start),
 			show_map_flags(__entry->flags))
 );
 

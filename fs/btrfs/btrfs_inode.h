@@ -19,7 +19,6 @@
 #include <uapi/linux/btrfs_tree.h>
 #include <trace/events/btrfs.h>
 #include "block-rsv.h"
-#include "btrfs_inode.h"
 #include "extent_map.h"
 #include "extent_io.h"
 #include "extent-io-tree.h"
@@ -444,9 +443,10 @@ int btrfs_check_sector_csum(struct btrfs_fs_info *fs_info, struct page *page,
 			    u32 pgoff, u8 *csum, const u8 * const csum_expected);
 bool btrfs_data_csum_ok(struct btrfs_bio *bbio, struct btrfs_device *dev,
 			u32 bio_offset, struct bio_vec *bv);
+
 noinline int can_nocow_extent(struct inode *inode, u64 offset, u64 *len,
-			      u64 *orig_start, u64 *orig_block_len,
-			      u64 *ram_bytes, bool nowait, bool strict);
+			      struct btrfs_file_extent *file_extent,
+			      bool nowait, bool strict);
 
 void btrfs_del_delalloc_inode(struct btrfs_inode *inode);
 struct inode *btrfs_lookup_dentry(struct inode *dir, struct dentry *dentry);

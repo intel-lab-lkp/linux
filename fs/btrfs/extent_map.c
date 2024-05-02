@@ -186,11 +186,19 @@ static struct rb_node *__tree_search(struct rb_root *root, u64 offset,
 	return NULL;
 }
 
+static inline u64 extent_map_block_len(const struct extent_map *em)
+{
+	if (extent_map_is_compressed(em))
+		return em->disk_num_bytes;
+	return em->len;
+}
+
 static inline u64 extent_map_block_end(const struct extent_map *em)
 {
-	if (em->block_start + em->block_len < em->block_start)
+	if (extent_map_block_start(em) + extent_map_block_len(em) <
+	    extent_map_block_start(em))
 		return (u64)-1;
-	return em->block_start + em->block_len;
+	return extent_map_block_start(em) + extent_map_block_len(em);
 }
 
 static bool can_merge_extent_map(const struct extent_map *em)
@@ -225,11 +233,92 @@ static bool mergeable_maps(const struct extent_map *prev, const struct extent_ma
 	if (prev->flags != next->flags)
 		return false;
 
-	if (next->block_start < EXTENT_MAP_LAST_BYTE - 1)
-		return next->block_start == extent_map_block_end(prev);
+	if (next->disk_bytenr < EXTENT_MAP_LAST_BYTE - 1)
+		return extent_map_block_start(next) == extent_map_block_end(prev);
 
 	/* HOLES and INLINE extents. */
-	return next->block_start == prev->block_start;
+	return next->disk_bytenr == prev->disk_bytenr;
+}
+
+/*
+ * Handle the ondisk data extents merge for @prev and @next.
+ *
+ * Only touches disk_bytenr/disk_num_bytes/offset/ram_bytes.
+ * For now only uncompressed regular extent can be merged.
+ *
+ * @prev and @next will be both updated to point to the new merged range.
+ * Thus one of them should be removed by the caller.
+ */
+static void merge_ondisk_extents(struct extent_map *prev, struct extent_map *next)
+{
+	u64 new_disk_bytenr;
+	u64 new_disk_num_bytes;
+	u64 new_offset;
+
+	/* @prev and @next should not be compressed. */
+	ASSERT(!extent_map_is_compressed(prev));
+	ASSERT(!extent_map_is_compressed(next));
+
+	/*
+	 * There are several different cases that @prev and @next can be merged.
+	 *
+	 * 1) They are referring to the same data extent
+	 * 2) Their ondisk data extents are adjacent and @prev is the tail
+	 *    and @next is the head of their data extents
+	 * 3) One of @prev/@next is referrring to a larger merged data extent.
+	 *    (test_case_3 of extent maps tests).
+	 *
+	 * The calculation here always merge the data extents first, then update
+	 * @offset using the new data extents.
+	 *
+	 * For case 1), the merged data extent would be the same.
+	 * For case 2), we just merge the two data extents into one.
+	 * For case 3), we just got the larger data extent.
+	 */
+	new_disk_bytenr = min(prev->disk_bytenr, next->disk_bytenr);
+	new_disk_num_bytes = max(prev->disk_bytenr + prev->disk_num_bytes,
+				 next->disk_bytenr + next->disk_num_bytes) -
+			     new_disk_bytenr;
+	new_offset = prev->disk_bytenr + prev->offset - new_disk_bytenr;
+
+	prev->disk_bytenr = new_disk_bytenr;
+	prev->disk_num_bytes = new_disk_num_bytes;
+	prev->ram_bytes = new_disk_num_bytes;
+	prev->offset = new_offset;
+
+	next->disk_bytenr = new_disk_bytenr;
+	next->disk_num_bytes = new_disk_num_bytes;
+	next->ram_bytes = new_disk_num_bytes;
+	next->offset = new_offset;
+}
+
+static void dump_extent_map(const char *prefix, struct extent_map *em)
+{
+	if (!IS_ENABLED(CONFIG_BTRFS_DEBUG))
+		return;
+	pr_crit("%s, start=%llu len=%llu disk_bytenr=%llu disk_num_bytes=%llu ram_bytes=%llu offset=%llu flags=0x%x\n",
+		prefix, em->start, em->len, em->disk_bytenr, em->disk_num_bytes,
+		em->ram_bytes, em->offset, em->flags);
+	ASSERT(0);
+}
+
+/* Internal sanity checks for btrfs debug builds. */
+static void validate_extent_map(struct extent_map *em)
+{
+	if (!IS_ENABLED(CONFIG_BTRFS_DEBUG))
+		return;
+	if (em->disk_bytenr < EXTENT_MAP_LAST_BYTE) {
+		if (em->disk_num_bytes == 0)
+			dump_extent_map("zero disk_num_bytes", em);
+		if (em->offset + em->len > em->ram_bytes)
+			dump_extent_map("ram_bytes too small", em);
+		if (em->offset + em->len > em->disk_num_bytes &&
+		    !extent_map_is_compressed(em))
+			dump_extent_map("disk_num_bytes too small", em);
+	} else {
+		if (em->offset)
+			dump_extent_map("non-zero offset for hole/inline", em);
+	}
 }
 
 static void try_merge_map(struct btrfs_inode *inode, struct extent_map *em)
@@ -258,13 +347,14 @@ static void try_merge_map(struct btrfs_inode *inode, struct extent_map *em)
 			merge = rb_entry(rb, struct extent_map, rb_node);
 		if (rb && can_merge_extent_map(merge) && mergeable_maps(merge, em)) {
 			em->start = merge->start;
-			em->orig_start = merge->orig_start;
 			em->len += merge->len;
-			em->block_len += merge->block_len;
-			em->block_start = merge->block_start;
 			em->generation = max(em->generation, merge->generation);
+
+			if (em->disk_bytenr < EXTENT_MAP_LAST_BYTE)
+				merge_ondisk_extents(merge, em);
 			em->flags |= EXTENT_FLAG_MERGED;
 
+			validate_extent_map(em);
 			rb_erase_cached(&merge->rb_node, &tree->map);
 			RB_CLEAR_NODE(&merge->rb_node);
 			free_extent_map(merge);
@@ -277,7 +367,9 @@ static void try_merge_map(struct btrfs_inode *inode, struct extent_map *em)
 		merge = rb_entry(rb, struct extent_map, rb_node);
 	if (rb && can_merge_extent_map(merge) && mergeable_maps(em, merge)) {
 		em->len += merge->len;
-		em->block_len += merge->block_len;
+		if (em->disk_bytenr < EXTENT_MAP_LAST_BYTE)
+			merge_ondisk_extents(em, merge);
+		validate_extent_map(em);
 		rb_erase_cached(&merge->rb_node, &tree->map);
 		RB_CLEAR_NODE(&merge->rb_node);
 		em->generation = max(em->generation, merge->generation);
@@ -389,6 +481,7 @@ static int add_extent_mapping(struct btrfs_inode *inode,
 
 	lockdep_assert_held_write(&tree->lock);
 
+	validate_extent_map(em);
 	ret = tree_insert(&tree->map, em);
 	if (ret)
 		return ret;
@@ -496,6 +589,9 @@ static void replace_extent_mapping(struct btrfs_inode *inode,
 
 	lockdep_assert_held_write(&tree->lock);
 
+	validate_extent_map(cur);
+	validate_extent_map(new);
+
 	WARN_ON(cur->flags & EXTENT_FLAG_PINNED);
 	ASSERT(extent_map_in_tree(cur));
 	if (!(cur->flags & EXTENT_FLAG_LOGGING))
@@ -561,11 +657,9 @@ static noinline int merge_extent_mapping(struct btrfs_inode *inode,
 	start_diff = start - em->start;
 	em->start = start;
 	em->len = end - start;
-	if (em->block_start < EXTENT_MAP_LAST_BYTE &&
-	    !extent_map_is_compressed(em)) {
-		em->block_start += start_diff;
-		em->block_len = em->len;
-	}
+	if (em->disk_bytenr < EXTENT_MAP_LAST_BYTE &&
+	    !extent_map_is_compressed(em))
+		em->offset += start_diff;
 	return add_extent_mapping(inode, em, 0);
 }
 
@@ -600,7 +694,7 @@ int btrfs_add_extent_mapping(struct btrfs_inode *inode,
 	 * Tree-checker should have rejected any inline extent with non-zero
 	 * file offset. Here just do a sanity check.
 	 */
-	if (em->block_start == EXTENT_MAP_INLINE)
+	if (em->disk_bytenr == EXTENT_MAP_INLINE)
 		ASSERT(em->start == 0);
 
 	ret = add_extent_mapping(inode, em, 0);
@@ -729,7 +823,6 @@ void btrfs_drop_extent_map_range(struct btrfs_inode *inode, u64 start, u64 end,
 		u64 gen;
 		unsigned long flags;
 		bool modified;
-		bool compressed;
 
 		if (em_end < end) {
 			next_em = next_extent_map(em);
@@ -763,7 +856,6 @@ void btrfs_drop_extent_map_range(struct btrfs_inode *inode, u64 start, u64 end,
 			goto remove_em;
 
 		gen = em->generation;
-		compressed = extent_map_is_compressed(em);
 
 		if (em->start < start) {
 			if (!split) {
@@ -775,22 +867,15 @@ void btrfs_drop_extent_map_range(struct btrfs_inode *inode, u64 start, u64 end,
 			split->start = em->start;
 			split->len = start - em->start;
 
-			if (em->block_start < EXTENT_MAP_LAST_BYTE) {
-				split->orig_start = em->orig_start;
-				split->block_start = em->block_start;
-
-				if (compressed)
-					split->block_len = em->block_len;
-				else
-					split->block_len = split->len;
-				split->orig_block_len = max(split->block_len,
-						em->orig_block_len);
+			if (em->disk_bytenr < EXTENT_MAP_LAST_BYTE) {
+				split->disk_bytenr = em->disk_bytenr;
+				split->disk_num_bytes = em->disk_num_bytes;
+				split->offset = em->offset;
 				split->ram_bytes = em->ram_bytes;
 			} else {
-				split->orig_start = split->start;
-				split->block_len = 0;
-				split->block_start = em->block_start;
-				split->orig_block_len = 0;
+				split->disk_bytenr = em->disk_bytenr;
+				split->disk_num_bytes = 0;
+				split->offset = 0;
 				split->ram_bytes = split->len;
 			}
 
@@ -810,30 +895,18 @@ void btrfs_drop_extent_map_range(struct btrfs_inode *inode, u64 start, u64 end,
 			}
 			split->start = end;
 			split->len = em_end - end;
-			split->block_start = em->block_start;
+			split->disk_bytenr = em->disk_bytenr;
 			split->flags = flags;
 			split->generation = gen;
 
-			if (em->block_start < EXTENT_MAP_LAST_BYTE) {
-				split->orig_block_len = max(em->block_len,
-						    em->orig_block_len);
-
+			if (em->disk_bytenr < EXTENT_MAP_LAST_BYTE) {
+				split->disk_num_bytes = em->disk_num_bytes;
+				split->offset = em->offset + end - em->start;
 				split->ram_bytes = em->ram_bytes;
-				if (compressed) {
-					split->block_len = em->block_len;
-					split->orig_start = em->orig_start;
-				} else {
-					const u64 diff = end - em->start;
-
-					split->block_len = split->len;
-					split->block_start += diff;
-					split->orig_start = em->orig_start;
-				}
 			} else {
+				split->disk_num_bytes = 0;
+				split->offset = 0;
 				split->ram_bytes = split->len;
-				split->orig_start = split->start;
-				split->block_len = 0;
-				split->orig_block_len = 0;
 			}
 
 			if (extent_map_in_tree(em)) {
@@ -976,7 +1049,7 @@ int split_extent_map(struct btrfs_inode *inode, u64 start, u64 len, u64 pre,
 
 	ASSERT(em->len == len);
 	ASSERT(!extent_map_is_compressed(em));
-	ASSERT(em->block_start < EXTENT_MAP_LAST_BYTE);
+	ASSERT(em->disk_bytenr < EXTENT_MAP_LAST_BYTE);
 	ASSERT(em->flags & EXTENT_FLAG_PINNED);
 	ASSERT(!(em->flags & EXTENT_FLAG_LOGGING));
 	ASSERT(!list_empty(&em->list));
@@ -987,10 +1060,9 @@ int split_extent_map(struct btrfs_inode *inode, u64 start, u64 len, u64 pre,
 	/* First, replace the em with a new extent_map starting from * em->start */
 	split_pre->start = em->start;
 	split_pre->len = pre;
-	split_pre->orig_start = split_pre->start;
-	split_pre->block_start = new_logical;
-	split_pre->block_len = split_pre->len;
-	split_pre->orig_block_len = split_pre->block_len;
+	split_pre->disk_bytenr = new_logical;
+	split_pre->disk_num_bytes = split_pre->len;
+	split_pre->offset = 0;
 	split_pre->ram_bytes = split_pre->len;
 	split_pre->flags = flags;
 	split_pre->generation = em->generation;
@@ -1005,10 +1077,9 @@ int split_extent_map(struct btrfs_inode *inode, u64 start, u64 len, u64 pre,
 	/* Insert the middle extent_map. */
 	split_mid->start = em->start + pre;
 	split_mid->len = em->len - pre;
-	split_mid->orig_start = split_mid->start;
-	split_mid->block_start = em->block_start + pre;
-	split_mid->block_len = split_mid->len;
-	split_mid->orig_block_len = split_mid->block_len;
+	split_mid->disk_bytenr = extent_map_block_start(em) + pre;
+	split_mid->disk_num_bytes = split_mid->len;
+	split_mid->offset = 0;
 	split_mid->ram_bytes = split_mid->len;
 	split_mid->flags = flags;
 	split_mid->generation = em->generation;

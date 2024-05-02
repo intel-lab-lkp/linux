@@ -1083,10 +1083,10 @@ static int btrfs_do_readpage(struct page *page, struct extent_map **em_cached,
 		iosize = min(extent_map_end(em) - cur, end - cur + 1);
 		iosize = ALIGN(iosize, blocksize);
 		if (compress_type != BTRFS_COMPRESS_NONE)
-			disk_bytenr = em->block_start;
+			disk_bytenr = em->disk_bytenr;
 		else
-			disk_bytenr = em->block_start + extent_offset;
-		block_start = em->block_start;
+			disk_bytenr = extent_map_block_start(em) + extent_offset;
+		block_start = extent_map_block_start(em);
 		if (em->flags & EXTENT_FLAG_PREALLOC)
 			block_start = EXTENT_MAP_HOLE;
 
@@ -1405,8 +1405,8 @@ static noinline_for_stack int __extent_writepage_io(struct btrfs_inode *inode,
 		ASSERT(IS_ALIGNED(em->start, fs_info->sectorsize));
 		ASSERT(IS_ALIGNED(em->len, fs_info->sectorsize));
 
-		block_start = em->block_start;
-		disk_bytenr = em->block_start + extent_offset;
+		block_start = extent_map_block_start(em);
+		disk_bytenr = extent_map_block_start(em) + extent_offset;
 
 		ASSERT(!extent_map_is_compressed(em));
 		ASSERT(block_start != EXTENT_MAP_HOLE);
@@ -1602,7 +1602,7 @@ static void set_btree_ioerr(struct extent_buffer *eb)
 	 * can be no longer dirty nor marked anymore for writeback (if a
 	 * subsequent modification to the extent buffer didn't happen before the
 	 * transaction commit), which makes filemap_fdata[write|wait]_range not
-	 * able to find the pages tagged with SetPageError at transaction
+	 * able to find the pages which contain errors at transaction
 	 * commit time. So if this happens we must abort the transaction,
 	 * otherwise we commit a super block with btree roots that point to
 	 * btree nodes/leafs whose content on disk is invalid - either garbage

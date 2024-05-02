@@ -138,9 +138,7 @@ static noinline int run_delalloc_cow(struct btrfs_inode *inode,
 				     u64 end, struct writeback_control *wbc,
 				     bool pages_dirty);
 static struct extent_map *create_io_em(struct btrfs_inode *inode, u64 start,
-				       u64 len, u64 orig_start, u64 block_start,
-				       u64 block_len, u64 orig_block_len,
-				       u64 ram_bytes, int compress_type,
+				       struct btrfs_file_extent *file_extent,
 				       int type);
 
 static int data_reloc_print_warning_inode(u64 inum, u64 offset, u64 num_bytes,
@@ -1152,6 +1150,7 @@ static void submit_one_async_extent(struct async_chunk *async_chunk,
 	struct btrfs_root *root = inode->root;
 	struct btrfs_fs_info *fs_info = root->fs_info;
 	struct btrfs_ordered_extent *ordered;
+	struct btrfs_file_extent file_extent = { 0 };
 	struct btrfs_key ins;
 	struct page *locked_page = NULL;
 	struct extent_state *cached = NULL;
@@ -1198,14 +1197,14 @@ static void submit_one_async_extent(struct async_chunk *async_chunk,
 	lock_extent(io_tree, start, end, &cached);
 
 	/* Here we're doing allocation and writeback of the compressed pages */
-	em = create_io_em(inode, start,
-			  async_extent->ram_size,	/* len */
-			  start,			/* orig_start */
-			  ins.objectid,			/* block_start */
-			  ins.offset,			/* block_len */
-			  ins.offset,			/* orig_block_len */
-			  async_extent->ram_size,	/* ram_bytes */
-			  async_extent->compress_type,
+	file_extent.disk_bytenr = ins.objectid;
+	file_extent.disk_num_bytes = ins.offset;
+	file_extent.ram_bytes = async_extent->ram_size;
+	file_extent.num_bytes = async_extent->ram_size;
+	file_extent.offset = 0;
+	file_extent.compression = async_extent->compress_type;
+
+	em = create_io_em(inode, start, &file_extent,
 			  BTRFS_ORDERED_COMPRESSED);
 	if (IS_ERR(em)) {
 		ret = PTR_ERR(em);
@@ -1213,14 +1212,8 @@ static void submit_one_async_extent(struct async_chunk *async_chunk,
 	}
 	free_extent_map(em);
 
-	ordered = btrfs_alloc_ordered_extent(inode, start,	/* file_offset */
-				       async_extent->ram_size,	/* num_bytes */
-				       async_extent->ram_size,	/* ram_bytes */
-				       ins.objectid,		/* disk_bytenr */
-				       ins.offset,		/* disk_num_bytes */
-				       0,			/* offset */
-				       1 << BTRFS_ORDERED_COMPRESSED,
-				       async_extent->compress_type);
+	ordered = btrfs_alloc_ordered_extent(inode, start, &file_extent,
+				       1 << BTRFS_ORDERED_COMPRESSED);
 	if (IS_ERR(ordered)) {
 		btrfs_drop_extent_map_range(inode, start, end, false);
 		ret = PTR_ERR(ordered);
@@ -1279,15 +1272,15 @@ static u64 get_extent_allocation_hint(struct btrfs_inode *inode, u64 start,
 		 * first block in this inode and use that as a hint.  If that
 		 * block is also bogus then just don't worry about it.
 		 */
-		if (em->block_start >= EXTENT_MAP_LAST_BYTE) {
+		if (em->disk_bytenr >= EXTENT_MAP_LAST_BYTE) {
 			free_extent_map(em);
 			em = search_extent_mapping(em_tree, 0, 0);
-			if (em && em->block_start < EXTENT_MAP_LAST_BYTE)
-				alloc_hint = em->block_start;
+			if (em && em->disk_bytenr < EXTENT_MAP_LAST_BYTE)
+				alloc_hint = extent_map_block_start(em);
 			if (em)
 				free_extent_map(em);
 		} else {
-			alloc_hint = em->block_start;
+			alloc_hint = extent_map_block_start(em);
 			free_extent_map(em);
 		}
 	}
@@ -1395,6 +1388,7 @@ static noinline int cow_file_range(struct btrfs_inode *inode,
 
 	while (num_bytes > 0) {
 		struct btrfs_ordered_extent *ordered;
+		struct btrfs_file_extent file_extent = { 0 };
 
 		cur_alloc_size = num_bytes;
 		ret = btrfs_reserve_extent(root, cur_alloc_size, cur_alloc_size,
@@ -1431,17 +1425,17 @@ static noinline int cow_file_range(struct btrfs_inode *inode,
 		extent_reserved = true;
 
 		ram_size = ins.offset;
+		file_extent.disk_bytenr = ins.objectid;
+		file_extent.disk_num_bytes = ins.offset;
+		file_extent.num_bytes = ins.offset;
+		file_extent.ram_bytes = ins.offset;
+		file_extent.offset = 0;
+		file_extent.compression = BTRFS_COMPRESS_NONE;
 
 		lock_extent(&inode->io_tree, start, start + ram_size - 1,
 			    &cached);
 
-		em = create_io_em(inode, start, ins.offset, /* len */
-				  start, /* orig_start */
-				  ins.objectid, /* block_start */
-				  ins.offset, /* block_len */
-				  ins.offset, /* orig_block_len */
-				  ram_size, /* ram_bytes */
-				  BTRFS_COMPRESS_NONE, /* compress_type */
+		em = create_io_em(inode, start, &file_extent,
 				  BTRFS_ORDERED_REGULAR /* type */);
 		if (IS_ERR(em)) {
 			unlock_extent(&inode->io_tree, start,
@@ -1451,10 +1445,8 @@ static noinline int cow_file_range(struct btrfs_inode *inode,
 		}
 		free_extent_map(em);
 
-		ordered = btrfs_alloc_ordered_extent(inode, start, ram_size,
-					ram_size, ins.objectid, cur_alloc_size,
-					0, 1 << BTRFS_ORDERED_REGULAR,
-					BTRFS_COMPRESS_NONE);
+		ordered = btrfs_alloc_ordered_extent(inode, start, &file_extent,
+					1 << BTRFS_ORDERED_REGULAR);
 		if (IS_ERR(ordered)) {
 			unlock_extent(&inode->io_tree, start,
 				      start + ram_size - 1, &cached);
@@ -1850,13 +1842,15 @@ struct can_nocow_file_extent_args {
 	 */
 	bool free_path;
 
-	/* Output fields. Only set when can_nocow_file_extent() returns 1. */
-
-	u64 disk_bytenr;
-	u64 disk_num_bytes;
-	u64 extent_offset;
-	/* Number of bytes that can be written to in NOCOW mode. */
+	/*
+	 * Output fields. Only set when can_nocow_file_extent() returns 1.
+	 *
+	 * Number of bytes that can be written to in NOCOW mode.
+	 */
 	u64 num_bytes;
+
+	/* The expected file extent for the NOCOW write. */
+	struct btrfs_file_extent file_extent;
 };
 
 /*
@@ -1878,6 +1872,7 @@ static int can_nocow_file_extent(struct btrfs_path *path,
 	struct btrfs_root *root = inode->root;
 	struct btrfs_file_extent_item *fi;
 	struct btrfs_root *csum_root;
+	u64 block_start;
 	u64 extent_end;
 	u8 extent_type;
 	int can_nocow = 0;
@@ -1891,9 +1886,7 @@ static int can_nocow_file_extent(struct btrfs_path *path,
 		goto out;
 
 	/* Can't access these fields unless we know it's not an inline extent. */
-	args->disk_bytenr = btrfs_file_extent_disk_bytenr(leaf, fi);
-	args->disk_num_bytes = btrfs_file_extent_disk_num_bytes(leaf, fi);
-	args->extent_offset = btrfs_file_extent_offset(leaf, fi);
+	args->file_extent.disk_bytenr = btrfs_file_extent_disk_bytenr(leaf, fi);
 
 	if (!(inode->flags & BTRFS_INODE_NODATACOW) &&
 	    extent_type == BTRFS_FILE_EXTENT_REG)
@@ -1910,7 +1903,7 @@ static int can_nocow_file_extent(struct btrfs_path *path,
 		goto out;
 
 	/* An explicit hole, must COW. */
-	if (args->disk_bytenr == 0)
+	if (args->file_extent.disk_bytenr == 0)
 		goto out;
 
 	/* Compressed/encrypted/encoded extents must be COWed. */
@@ -1921,6 +1914,11 @@ static int can_nocow_file_extent(struct btrfs_path *path,
 
 	extent_end = btrfs_file_extent_end(path);
 
+	args->file_extent.disk_num_bytes = btrfs_file_extent_disk_num_bytes(leaf, fi);
+	args->file_extent.ram_bytes = btrfs_file_extent_ram_bytes(leaf, fi);
+	args->file_extent.offset = btrfs_file_extent_offset(leaf, fi);
+	args->file_extent.compression = btrfs_file_extent_compression(leaf, fi);
+
 	/*
 	 * The following checks can be expensive, as they need to take other
 	 * locks and do btree or rbtree searches, so release the path to avoid
@@ -1929,8 +1927,8 @@ static int can_nocow_file_extent(struct btrfs_path *path,
 	btrfs_release_path(path);
 
 	ret = btrfs_cross_ref_exist(root, btrfs_ino(inode),
-				    key->offset - args->extent_offset,
-				    args->disk_bytenr, args->strict, path);
+				    key->offset - args->file_extent.offset,
+				    args->file_extent.disk_bytenr, args->strict, path);
 	WARN_ON_ONCE(ret > 0 && is_freespace_inode);
 	if (ret != 0)
 		goto out;
@@ -1951,18 +1949,20 @@ static int can_nocow_file_extent(struct btrfs_path *path,
 	    atomic_read(&root->snapshot_force_cow))
 		goto out;
 
-	args->disk_bytenr += args->extent_offset;
-	args->disk_bytenr += args->start - key->offset;
 	args->num_bytes = min(args->end + 1, extent_end) - args->start;
+
+	args->file_extent.num_bytes = args->num_bytes;
+	args->file_extent.offset += args->start - key->offset;
 
 	/*
 	 * Force COW if csums exist in the range. This ensures that csums for a
 	 * given extent are either valid or do not exist.
 	 */
+	block_start = args->file_extent.disk_bytenr + args->file_extent.num_bytes;
 
-	csum_root = btrfs_csum_root(root->fs_info, args->disk_bytenr);
-	ret = btrfs_lookup_csums_list(csum_root, args->disk_bytenr,
-				      args->disk_bytenr + args->num_bytes - 1,
+	csum_root = btrfs_csum_root(root->fs_info, block_start);
+	ret = btrfs_lookup_csums_list(csum_root, block_start,
+				      block_start + args->num_bytes - 1,
 				      NULL, nowait);
 	WARN_ON_ONCE(ret > 0 && is_freespace_inode);
 	if (ret != 0)
@@ -2021,7 +2021,6 @@ static noinline int run_delalloc_nocow(struct btrfs_inode *inode,
 		struct extent_buffer *leaf;
 		struct extent_state *cached_state = NULL;
 		u64 extent_end;
-		u64 ram_bytes;
 		u64 nocow_end;
 		int extent_type;
 		bool is_prealloc;
@@ -2100,7 +2099,6 @@ next_slot:
 			ret = -EUCLEAN;
 			goto error;
 		}
-		ram_bytes = btrfs_file_extent_ram_bytes(leaf, fi);
 		extent_end = btrfs_file_extent_end(path);
 
 		/*
@@ -2120,7 +2118,8 @@ next_slot:
 			goto must_cow;
 
 		ret = 0;
-		nocow_bg = btrfs_inc_nocow_writers(fs_info, nocow_args.disk_bytenr);
+		nocow_bg = btrfs_inc_nocow_writers(fs_info,
+				nocow_args.file_extent.disk_bytenr);
 		if (!nocow_bg) {
 must_cow:
 			/*
@@ -2161,15 +2160,10 @@ must_cow:
 
 		is_prealloc = extent_type == BTRFS_FILE_EXTENT_PREALLOC;
 		if (is_prealloc) {
-			u64 orig_start = found_key.offset - nocow_args.extent_offset;
 			struct extent_map *em;
 
-			em = create_io_em(inode, cur_offset, nocow_args.num_bytes,
-					  orig_start,
-					  nocow_args.disk_bytenr, /* block_start */
-					  nocow_args.num_bytes, /* block_len */
-					  nocow_args.disk_num_bytes, /* orig_block_len */
-					  ram_bytes, BTRFS_COMPRESS_NONE,
+			em = create_io_em(inode, cur_offset,
+					  &nocow_args.file_extent,
 					  BTRFS_ORDERED_PREALLOC);
 			if (IS_ERR(em)) {
 				unlock_extent(&inode->io_tree, cur_offset,
@@ -2182,12 +2176,9 @@ must_cow:
 		}
 
 		ordered = btrfs_alloc_ordered_extent(inode, cur_offset,
-				nocow_args.num_bytes, nocow_args.num_bytes,
-				nocow_args.disk_bytenr, nocow_args.num_bytes, 0,
-				is_prealloc
-				? (1 << BTRFS_ORDERED_PREALLOC)
-				: (1 << BTRFS_ORDERED_NOCOW),
-				BTRFS_COMPRESS_NONE);
+				&nocow_args.file_extent,
+				is_prealloc ? (1 << BTRFS_ORDERED_PREALLOC) :
+				(1 << BTRFS_ORDERED_NOCOW));
 		btrfs_dec_nocow_writers(nocow_bg);
 		if (IS_ERR(ordered)) {
 			if (is_prealloc) {
@@ -2681,7 +2672,7 @@ static int btrfs_find_new_delalloc_bytes(struct btrfs_inode *inode,
 		if (IS_ERR(em))
 			return PTR_ERR(em);
 
-		if (em->block_start != EXTENT_MAP_HOLE)
+		if (extent_map_block_start(em) != EXTENT_MAP_HOLE)
 			goto next;
 
 		em_len = em->len;
@@ -4967,11 +4958,9 @@ int btrfs_cont_expand(struct btrfs_inode *inode, loff_t oldsize, loff_t size)
 			}
 			hole_em->start = cur_offset;
 			hole_em->len = hole_size;
-			hole_em->orig_start = cur_offset;
 
-			hole_em->block_start = EXTENT_MAP_HOLE;
-			hole_em->block_len = 0;
-			hole_em->orig_block_len = 0;
+			hole_em->disk_bytenr = EXTENT_MAP_HOLE;
+			hole_em->disk_num_bytes = 0;
 			hole_em->ram_bytes = hole_size;
 			hole_em->generation = btrfs_get_fs_generation(fs_info);
 
@@ -6818,7 +6807,7 @@ struct extent_map *btrfs_get_extent(struct btrfs_inode *inode,
 	if (em) {
 		if (em->start > start || em->start + em->len <= start)
 			free_extent_map(em);
-		else if (em->block_start == EXTENT_MAP_INLINE && page)
+		else if (em->disk_bytenr == EXTENT_MAP_INLINE && page)
 			free_extent_map(em);
 		else
 			goto out;
@@ -6829,9 +6818,8 @@ struct extent_map *btrfs_get_extent(struct btrfs_inode *inode,
 		goto out;
 	}
 	em->start = EXTENT_MAP_HOLE;
-	em->orig_start = EXTENT_MAP_HOLE;
+	em->disk_bytenr = EXTENT_MAP_HOLE;
 	em->len = (u64)-1;
-	em->block_len = (u64)-1;
 
 	path = btrfs_alloc_path();
 	if (!path) {
@@ -6921,9 +6909,8 @@ next:
 
 		/* New extent overlaps with existing one */
 		em->start = start;
-		em->orig_start = start;
 		em->len = found_key.offset - start;
-		em->block_start = EXTENT_MAP_HOLE;
+		em->disk_bytenr = EXTENT_MAP_HOLE;
 		goto insert;
 	}
 
@@ -6947,7 +6934,7 @@ next:
 		 *
 		 * Other members are not utilized for inline extents.
 		 */
-		ASSERT(em->block_start == EXTENT_MAP_INLINE);
+		ASSERT(em->disk_bytenr == EXTENT_MAP_INLINE);
 		ASSERT(em->len == fs_info->sectorsize);
 
 		ret = read_inline_extent(inode, path, page);
@@ -6957,9 +6944,8 @@ next:
 	}
 not_found:
 	em->start = start;
-	em->orig_start = start;
 	em->len = len;
-	em->block_start = EXTENT_MAP_HOLE;
+	em->disk_bytenr = EXTENT_MAP_HOLE;
 insert:
 	ret = 0;
 	btrfs_release_path(path);
@@ -6989,35 +6975,55 @@ out:
 static struct extent_map *btrfs_create_dio_extent(struct btrfs_inode *inode,
 						  struct btrfs_dio_data *dio_data,
 						  const u64 start,
-						  const u64 len,
-						  const u64 orig_start,
-						  const u64 block_start,
-						  const u64 block_len,
-						  const u64 orig_block_len,
-						  const u64 ram_bytes,
+						  struct btrfs_file_extent *file_extent,
 						  const int type)
 {
 	struct extent_map *em = NULL;
 	struct btrfs_ordered_extent *ordered;
+	struct btrfs_file_extent tmp = { 0 };
 
 	if (type != BTRFS_ORDERED_NOCOW) {
-		em = create_io_em(inode, start, len, orig_start, block_start,
-				  block_len, orig_block_len, ram_bytes,
-				  BTRFS_COMPRESS_NONE, /* compress_type */
-				  type);
+		em = create_io_em(inode, start,
+				  file_extent, type);
 		if (IS_ERR(em))
 			goto out;
 	}
-	ordered = btrfs_alloc_ordered_extent(inode, start, len, len,
-					     block_start, block_len, 0,
+
+	/*
+	 * NOTE: I know the numbers are totally wrong for NOCOW/PREALLOC,
+	 * but it doesn't cause problem at least for now.
+	 *
+	 * For regular writes, we would have file_extent->offset as 0,
+	 * thus we really only need disk_bytenr, every other length
+	 * (disk_num_bytes/ram_bytes) would match @len and fe->num_bytes.
+	 * The current numbers are totally fine.
+	 *
+	 * For NOCOW, we don't really care about the numbers except @file_pos
+	 * and @num_bytes, as we won't insert a file extent item at all.
+	 *
+	 * For PREALLOC, we do not use ordered extent's member, but
+	 * btrfs_mark_extent_written() would handle everything.
+	 *
+	 * So here we intentionally go with pseudo numbers for the NOCOW/PREALLOC
+	 * OEs, or btrfs_extract_ordered_extent() would need a completely new
+	 * routine to handle NOCOW/PREALLOC splits, meanwhile result nothing
+	 * different.
+	 */
+	tmp.disk_bytenr = file_extent->disk_bytenr + file_extent->offset;
+	tmp.disk_num_bytes = file_extent->num_bytes;
+	tmp.num_bytes = file_extent->num_bytes;
+	tmp.ram_bytes = file_extent->num_bytes;
+	tmp.offset = 0;
+	tmp.compression = file_extent->compression;
+	ordered = btrfs_alloc_ordered_extent(inode, start,
+					     &tmp,
 					     (1 << type) |
-					     (1 << BTRFS_ORDERED_DIRECT),
-					     BTRFS_COMPRESS_NONE);
+					     (1 << BTRFS_ORDERED_DIRECT));
 	if (IS_ERR(ordered)) {
 		if (em) {
 			free_extent_map(em);
 			btrfs_drop_extent_map_range(inode, start,
-						    start + len - 1, false);
+				start + file_extent->num_bytes - 1, false);
 		}
 		em = ERR_CAST(ordered);
 	} else {
@@ -7035,6 +7041,7 @@ static struct extent_map *btrfs_new_extent_direct(struct btrfs_inode *inode,
 {
 	struct btrfs_root *root = inode->root;
 	struct btrfs_fs_info *fs_info = root->fs_info;
+	struct btrfs_file_extent file_extent = { 0 };
 	struct extent_map *em;
 	struct btrfs_key ins;
 	u64 alloc_hint;
@@ -7053,9 +7060,14 @@ again:
 	if (ret)
 		return ERR_PTR(ret);
 
-	em = btrfs_create_dio_extent(inode, dio_data, start, ins.offset, start,
-				     ins.objectid, ins.offset, ins.offset,
-				     ins.offset, BTRFS_ORDERED_REGULAR);
+	file_extent.disk_bytenr = ins.objectid;
+	file_extent.disk_num_bytes = ins.offset;
+	file_extent.num_bytes = ins.offset;
+	file_extent.ram_bytes = ins.offset;
+	file_extent.offset = 0;
+	file_extent.compression = BTRFS_COMPRESS_NONE;
+	em = btrfs_create_dio_extent(inode, dio_data, start,
+				     &file_extent, BTRFS_ORDERED_REGULAR);
 	btrfs_dec_block_group_reservations(fs_info, ins.objectid);
 	if (IS_ERR(em))
 		btrfs_free_reserved_extent(fs_info, ins.objectid, ins.offset,
@@ -7083,9 +7095,6 @@ static bool btrfs_extent_readonly(struct btrfs_fs_info *fs_info, u64 bytenr)
  * @offset:	File offset
  * @len:	The length to write, will be updated to the nocow writeable
  *		range
- * @orig_start:	(optional) Return the original file offset of the file extent
- * @orig_len:	(optional) Return the original on-disk length of the file extent
- * @ram_bytes:	(optional) Return the ram_bytes of the file extent
  * @strict:	if true, omit optimizations that might force us into unnecessary
  *		cow. e.g., don't trust generation number.
  *
@@ -7098,8 +7107,8 @@ static bool btrfs_extent_readonly(struct btrfs_fs_info *fs_info, u64 bytenr)
  *	 any ordered extents.
  */
 noinline int can_nocow_extent(struct inode *inode, u64 offset, u64 *len,
-			      u64 *orig_start, u64 *orig_block_len,
-			      u64 *ram_bytes, bool nowait, bool strict)
+			      struct btrfs_file_extent *file_extent,
+			      bool nowait, bool strict)
 {
 	struct btrfs_fs_info *fs_info = inode_to_fs_info(inode);
 	struct can_nocow_file_extent_args nocow_args = { 0 };
@@ -7149,8 +7158,6 @@ noinline int can_nocow_extent(struct inode *inode, u64 offset, u64 *len,
 
 	fi = btrfs_item_ptr(leaf, path->slots[0], struct btrfs_file_extent_item);
 	found_type = btrfs_file_extent_type(leaf, fi);
-	if (ram_bytes)
-		*ram_bytes = btrfs_file_extent_ram_bytes(leaf, fi);
 
 	nocow_args.start = offset;
 	nocow_args.end = offset + *len - 1;
@@ -7168,7 +7175,7 @@ noinline int can_nocow_extent(struct inode *inode, u64 offset, u64 *len,
 	}
 
 	ret = 0;
-	if (btrfs_extent_readonly(fs_info, nocow_args.disk_bytenr))
+	if (btrfs_extent_readonly(fs_info, nocow_args.file_extent.disk_bytenr))
 		goto out;
 
 	if (!(BTRFS_I(inode)->flags & BTRFS_INODE_NODATACOW) &&
@@ -7184,10 +7191,9 @@ noinline int can_nocow_extent(struct inode *inode, u64 offset, u64 *len,
 		}
 	}
 
-	if (orig_start)
-		*orig_start = key.offset - nocow_args.extent_offset;
-	if (orig_block_len)
-		*orig_block_len = nocow_args.disk_num_bytes;
+	if (file_extent)
+		memcpy(file_extent, &nocow_args.file_extent,
+		       sizeof(struct btrfs_file_extent));
 
 	*len = nocow_args.num_bytes;
 	ret = 1;
@@ -7291,9 +7297,7 @@ static int lock_extent_direct(struct inode *inode, u64 lockstart, u64 lockend,
 
 /* The callers of this must take lock_extent() */
 static struct extent_map *create_io_em(struct btrfs_inode *inode, u64 start,
-				       u64 len, u64 orig_start, u64 block_start,
-				       u64 block_len, u64 orig_block_len,
-				       u64 ram_bytes, int compress_type,
+				       struct btrfs_file_extent *file_extent,
 				       int type)
 {
 	struct extent_map *em;
@@ -7313,32 +7317,26 @@ static struct extent_map *create_io_em(struct btrfs_inode *inode, u64 start,
 
 	switch (type) {
 	case BTRFS_ORDERED_PREALLOC:
-		/* Uncompressed extents. */
-		ASSERT(block_len == len);
-
 		/* We're only referring part of a larger preallocated extent. */
-		ASSERT(block_len <= ram_bytes);
+		ASSERT(file_extent->num_bytes <= file_extent->ram_bytes);
 		break;
 	case BTRFS_ORDERED_REGULAR:
-		/* Uncompressed extents. */
-		ASSERT(block_len == len);
-
 		/* COW results a new extent matching our file extent size. */
-		ASSERT(orig_block_len == len);
-		ASSERT(ram_bytes == len);
+		ASSERT(file_extent->disk_num_bytes == file_extent->num_bytes);
+		ASSERT(file_extent->ram_bytes == file_extent->num_bytes);
 
 		/* Since it's a new extent, we should not have any offset. */
-		ASSERT(orig_start == start);
+		ASSERT(file_extent->offset == 0);
 		break;
 	case BTRFS_ORDERED_COMPRESSED:
 		/* Must be compressed. */
-		ASSERT(compress_type != BTRFS_COMPRESS_NONE);
+		ASSERT(file_extent->compression != BTRFS_COMPRESS_NONE);
 
 		/*
 		 * Encoded write can make us to refer to part of the
 		 * uncompressed extent.
 		 */
-		ASSERT(len <= ram_bytes);
+		ASSERT(file_extent->num_bytes <= file_extent->ram_bytes);
 		break;
 	}
 
@@ -7347,16 +7345,15 @@ static struct extent_map *create_io_em(struct btrfs_inode *inode, u64 start,
 		return ERR_PTR(-ENOMEM);
 
 	em->start = start;
-	em->orig_start = orig_start;
-	em->len = len;
-	em->block_len = block_len;
-	em->block_start = block_start;
-	em->orig_block_len = orig_block_len;
-	em->ram_bytes = ram_bytes;
+	em->len = file_extent->num_bytes;
+	em->disk_bytenr = file_extent->disk_bytenr;
+	em->disk_num_bytes = file_extent->disk_num_bytes;
+	em->ram_bytes = file_extent->ram_bytes;
 	em->generation = -1;
+	em->offset = file_extent->offset;
 	em->flags |= EXTENT_FLAG_PINNED;
 	if (type == BTRFS_ORDERED_COMPRESSED)
-		extent_map_set_compression(em, compress_type);
+		extent_map_set_compression(em, file_extent->compression);
 
 	ret = btrfs_replace_extent_map_range(inode, em, true);
 	if (ret) {
@@ -7377,9 +7374,10 @@ static int btrfs_get_blocks_direct_write(struct extent_map **map,
 {
 	const bool nowait = (iomap_flags & IOMAP_NOWAIT);
 	struct btrfs_fs_info *fs_info = inode_to_fs_info(inode);
+	struct btrfs_file_extent file_extent = { 0 };
 	struct extent_map *em = *map;
 	int type;
-	u64 block_start, orig_start, orig_block_len, ram_bytes;
+	u64 block_start;
 	struct btrfs_block_group *bg;
 	bool can_nocow = false;
 	bool space_reserved = false;
@@ -7398,16 +7396,16 @@ static int btrfs_get_blocks_direct_write(struct extent_map **map,
 	 */
 	if ((em->flags & EXTENT_FLAG_PREALLOC) ||
 	    ((BTRFS_I(inode)->flags & BTRFS_INODE_NODATACOW) &&
-	     em->block_start != EXTENT_MAP_HOLE)) {
+	     em->disk_bytenr != EXTENT_MAP_HOLE)) {
 		if (em->flags & EXTENT_FLAG_PREALLOC)
 			type = BTRFS_ORDERED_PREALLOC;
 		else
 			type = BTRFS_ORDERED_NOCOW;
 		len = min(len, em->len - (start - em->start));
-		block_start = em->block_start + (start - em->start);
+		block_start = extent_map_block_start(em) + (start - em->start);
 
-		if (can_nocow_extent(inode, start, &len, &orig_start,
-				     &orig_block_len, &ram_bytes, false, false) == 1) {
+		if (can_nocow_extent(inode, start, &len,
+				     &file_extent, false, false) == 1) {
 			bg = btrfs_inc_nocow_writers(fs_info, block_start);
 			if (bg)
 				can_nocow = true;
@@ -7432,10 +7430,8 @@ static int btrfs_get_blocks_direct_write(struct extent_map **map,
 		}
 		space_reserved = true;
 
-		em2 = btrfs_create_dio_extent(BTRFS_I(inode), dio_data, start, len,
-					      orig_start, block_start,
-					      len, orig_block_len,
-					      ram_bytes, type);
+		em2 = btrfs_create_dio_extent(BTRFS_I(inode), dio_data, start,
+					      &file_extent, type);
 		btrfs_dec_nocow_writers(bg);
 		if (type == BTRFS_ORDERED_PREALLOC) {
 			free_extent_map(em);
@@ -7635,7 +7631,7 @@ static int btrfs_dio_iomap_begin(struct inode *inode, loff_t start,
 	 * the generic code.
 	 */
 	if (extent_map_is_compressed(em) ||
-	    em->block_start == EXTENT_MAP_INLINE) {
+	    em->disk_bytenr == EXTENT_MAP_INLINE) {
 		free_extent_map(em);
 		/*
 		 * If we are in a NOWAIT context, return -EAGAIN in order to
@@ -7729,12 +7725,12 @@ static int btrfs_dio_iomap_begin(struct inode *inode, loff_t start,
 	 * We trim the extents (and move the addr) even though iomap code does
 	 * that, since we have locked only the parts we are performing I/O in.
 	 */
-	if ((em->block_start == EXTENT_MAP_HOLE) ||
+	if ((em->disk_bytenr == EXTENT_MAP_HOLE) ||
 	    ((em->flags & EXTENT_FLAG_PREALLOC) && !write)) {
 		iomap->addr = IOMAP_NULL_ADDR;
 		iomap->type = IOMAP_HOLE;
 	} else {
-		iomap->addr = em->block_start + (start - em->start);
+		iomap->addr = extent_map_block_start(em) + (start - em->start);
 		iomap->type = IOMAP_MAPPED;
 	}
 	iomap->offset = start;
@@ -9583,11 +9579,10 @@ static int __btrfs_prealloc_file_range(struct inode *inode, int mode,
 		}
 
 		em->start = cur_offset;
-		em->orig_start = cur_offset;
 		em->len = ins.offset;
-		em->block_start = ins.objectid;
-		em->block_len = ins.offset;
-		em->orig_block_len = ins.offset;
+		em->disk_bytenr = ins.objectid;
+		em->offset = 0;
+		em->disk_num_bytes = ins.offset;
 		em->ram_bytes = ins.offset;
 		em->flags |= EXTENT_FLAG_PREALLOC;
 		em->generation = trans->transid;
@@ -10050,7 +10045,7 @@ ssize_t btrfs_encoded_read(struct kiocb *iocb, struct iov_iter *iter,
 		goto out_unlock_extent;
 	}
 
-	if (em->block_start == EXTENT_MAP_INLINE) {
+	if (em->disk_bytenr == EXTENT_MAP_INLINE) {
 		u64 extent_start = em->start;
 
 		/*
@@ -10071,33 +10066,33 @@ ssize_t btrfs_encoded_read(struct kiocb *iocb, struct iov_iter *iter,
 	 */
 	encoded->len = min_t(u64, extent_map_end(em),
 			     inode->vfs_inode.i_size) - iocb->ki_pos;
-	if (em->block_start == EXTENT_MAP_HOLE ||
+	if (em->disk_bytenr == EXTENT_MAP_HOLE ||
 	    (em->flags & EXTENT_FLAG_PREALLOC)) {
 		disk_bytenr = EXTENT_MAP_HOLE;
 		count = min_t(u64, count, encoded->len);
 		encoded->len = count;
 		encoded->unencoded_len = count;
 	} else if (extent_map_is_compressed(em)) {
-		disk_bytenr = em->block_start;
+		disk_bytenr = em->disk_bytenr;
 		/*
 		 * Bail if the buffer isn't large enough to return the whole
 		 * compressed extent.
 		 */
-		if (em->block_len > count) {
+		if (em->disk_num_bytes > count) {
 			ret = -ENOBUFS;
 			goto out_em;
 		}
-		disk_io_size = em->block_len;
-		count = em->block_len;
+		disk_io_size = em->disk_num_bytes;
+		count = em->disk_num_bytes;
 		encoded->unencoded_len = em->ram_bytes;
-		encoded->unencoded_offset = iocb->ki_pos - em->orig_start;
+		encoded->unencoded_offset = iocb->ki_pos - em->start + em->offset;
 		ret = btrfs_encoded_io_compression_from_extent(fs_info,
 							       extent_map_compression(em));
 		if (ret < 0)
 			goto out_em;
 		encoded->compression = ret;
 	} else {
-		disk_bytenr = em->block_start + (start - em->start);
+		disk_bytenr = extent_map_block_start(em) + (start - em->start);
 		if (encoded->len > count)
 			encoded->len = count;
 		/*
@@ -10152,6 +10147,7 @@ ssize_t btrfs_do_encoded_write(struct kiocb *iocb, struct iov_iter *from,
 	struct extent_changeset *data_reserved = NULL;
 	struct extent_state *cached_state = NULL;
 	struct btrfs_ordered_extent *ordered;
+	struct btrfs_file_extent file_extent = { 0 };
 	int compression;
 	size_t orig_count;
 	u64 start, end;
@@ -10327,9 +10323,13 @@ ssize_t btrfs_do_encoded_write(struct kiocb *iocb, struct iov_iter *from,
 		goto out_delalloc_release;
 	extent_reserved = true;
 
-	em = create_io_em(inode, start, num_bytes,
-			  start - encoded->unencoded_offset, ins.objectid,
-			  ins.offset, ins.offset, ram_bytes, compression,
+	file_extent.disk_bytenr = ins.objectid;
+	file_extent.disk_num_bytes = ins.offset;
+	file_extent.num_bytes = num_bytes;
+	file_extent.ram_bytes = ram_bytes;
+	file_extent.offset = encoded->unencoded_offset;
+	file_extent.compression = compression;
+	em = create_io_em(inode, start, &file_extent,
 			  BTRFS_ORDERED_COMPRESSED);
 	if (IS_ERR(em)) {
 		ret = PTR_ERR(em);
@@ -10337,12 +10337,9 @@ ssize_t btrfs_do_encoded_write(struct kiocb *iocb, struct iov_iter *from,
 	}
 	free_extent_map(em);
 
-	ordered = btrfs_alloc_ordered_extent(inode, start, num_bytes, ram_bytes,
-				       ins.objectid, ins.offset,
-				       encoded->unencoded_offset,
+	ordered = btrfs_alloc_ordered_extent(inode, start, &file_extent,
 				       (1 << BTRFS_ORDERED_ENCODED) |
-				       (1 << BTRFS_ORDERED_COMPRESSED),
-				       compression);
+				       (1 << BTRFS_ORDERED_COMPRESSED));
 	if (IS_ERR(ordered)) {
 		btrfs_drop_extent_map_range(inode, start, end, false);
 		ret = PTR_ERR(ordered);
@@ -10632,12 +10629,12 @@ static int btrfs_swap_activate(struct swap_info_struct *sis, struct file *file,
 			goto out;
 		}
 
-		if (em->block_start == EXTENT_MAP_HOLE) {
+		if (em->disk_bytenr == EXTENT_MAP_HOLE) {
 			btrfs_warn(fs_info, "swapfile must not have holes");
 			ret = -EINVAL;
 			goto out;
 		}
-		if (em->block_start == EXTENT_MAP_INLINE) {
+		if (em->disk_bytenr == EXTENT_MAP_INLINE) {
 			/*
 			 * It's unlikely we'll ever actually find ourselves
 			 * here, as a file small enough to fit inline won't be
@@ -10655,12 +10652,12 @@ static int btrfs_swap_activate(struct swap_info_struct *sis, struct file *file,
 			goto out;
 		}
 
-		logical_block_start = em->block_start + (start - em->start);
+		logical_block_start = extent_map_block_start(em) + (start - em->start);
 		len = min(len, em->len - (start - em->start));
 		free_extent_map(em);
 		em = NULL;
 
-		ret = can_nocow_extent(inode, start, &len, NULL, NULL, NULL, false, true);
+		ret = can_nocow_extent(inode, start, &len, NULL, false, true);
 		if (ret < 0) {
 			goto out;
 		} else if (ret) {

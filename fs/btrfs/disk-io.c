@@ -635,10 +635,6 @@ struct extent_buffer *read_tree_block(struct btrfs_fs_info *fs_info, u64 bytenr,
 		free_extent_buffer_stale(buf);
 		return ERR_PTR(ret);
 	}
-	if (btrfs_check_eb_owner(buf, check->owner_root)) {
-		free_extent_buffer_stale(buf);
-		return ERR_PTR(-EUCLEAN);
-	}
 	return buf;
 
 }
@@ -3626,28 +3622,25 @@ ALLOW_ERROR_INJECTION(open_ctree, ERRNO);
 static void btrfs_end_super_write(struct bio *bio)
 {
 	struct btrfs_device *device = bio->bi_private;
-	struct bio_vec *bvec;
-	struct bvec_iter_all iter_all;
-	struct page *page;
+	struct folio_iter fi;
 
-	bio_for_each_segment_all(bvec, bio, iter_all) {
-		page = bvec->bv_page;
-
+	bio_for_each_folio_all(fi, bio) {
 		if (bio->bi_status) {
 			btrfs_warn_rl_in_rcu(device->fs_info,
-				"lost page write due to IO error on %s (%d)",
+				"lost sb write due to IO error on %s (%d)",
 				btrfs_dev_name(device),
 				blk_status_to_errno(bio->bi_status));
-			ClearPageUptodate(page);
-			SetPageError(page);
 			btrfs_dev_stat_inc_and_print(device,
 						     BTRFS_DEV_STAT_WRITE_ERRS);
-		} else {
-			SetPageUptodate(page);
+			/* Ensure failure if a primary sb fails */
+			if (bio->bi_opf & REQ_FUA)
+				atomic_set(&device->sb_wb_errors,
+						BTRFS_DEV_PRIMARY_ERROR);
+			else
+				atomic_inc(&device->sb_wb_errors);
 		}
-
-		put_page(page);
-		unlock_page(page);
+		folio_unlock(fi.folio);
+		folio_put(fi.folio);
 	}
 
 	bio_put(bio);
@@ -3749,9 +3742,10 @@ static int write_dev_supers(struct btrfs_device *device,
 	struct address_space *mapping = device->bdev->bd_inode->i_mapping;
 	SHASH_DESC_ON_STACK(shash, fs_info->csum_shash);
 	int i;
-	int errors = 0;
 	int ret;
 	u64 bytenr, bytenr_orig;
+
+	atomic_set(&device->sb_wb_errors, 0);
 
 	if (max_mirrors == 0)
 		max_mirrors = BTRFS_SUPER_MIRROR_MAX;
@@ -3759,9 +3753,10 @@ static int write_dev_supers(struct btrfs_device *device,
 	shash->tfm = fs_info->csum_shash;
 
 	for (i = 0; i < max_mirrors; i++) {
-		struct page *page;
+		struct folio *folio;
 		struct bio *bio;
 		struct btrfs_super_block *disk_super;
+		size_t offset;
 
 		bytenr_orig = btrfs_sb_offset(i);
 		ret = btrfs_sb_log_location(device, i, WRITE, &bytenr);
@@ -3771,7 +3766,7 @@ static int write_dev_supers(struct btrfs_device *device,
 			btrfs_err(device->fs_info,
 				"couldn't get super block location for mirror %d",
 				i);
-			errors++;
+			atomic_inc(&device->sb_wb_errors);
 			continue;
 		}
 		if (bytenr + BTRFS_SUPER_INFO_SIZE >=
@@ -3784,20 +3779,18 @@ static int write_dev_supers(struct btrfs_device *device,
 				    BTRFS_SUPER_INFO_SIZE - BTRFS_CSUM_SIZE,
 				    sb->csum);
 
-		page = find_or_create_page(mapping, bytenr >> PAGE_SHIFT,
-					   GFP_NOFS);
-		if (!page) {
+		folio = __filemap_get_folio(mapping, bytenr >> PAGE_SHIFT,
+				FGP_LOCK | FGP_ACCESSED | FGP_CREAT, GFP_NOFS);
+		if (IS_ERR(folio)) {
 			btrfs_err(device->fs_info,
 			    "couldn't get super block page for bytenr %llu",
 			    bytenr);
-			errors++;
+			atomic_inc(&device->sb_wb_errors);
 			continue;
 		}
 
-		/* Bump the refcount for wait_dev_supers() */
-		get_page(page);
-
-		disk_super = page_address(page);
+		offset = offset_in_folio(folio, bytenr);
+		disk_super = folio_address(folio) + offset;
 		memcpy(disk_super, sb, BTRFS_SUPER_INFO_SIZE);
 
 		/*
@@ -3811,8 +3804,7 @@ static int write_dev_supers(struct btrfs_device *device,
 		bio->bi_iter.bi_sector = bytenr >> SECTOR_SHIFT;
 		bio->bi_private = device;
 		bio->bi_end_io = btrfs_end_super_write;
-		__bio_add_page(bio, page, BTRFS_SUPER_INFO_SIZE,
-			       offset_in_page(bytenr));
+		bio_add_folio_nofail(bio, folio, BTRFS_SUPER_INFO_SIZE, offset);
 
 		/*
 		 * We FUA only the first super block.  The others we allow to
@@ -3824,9 +3816,9 @@ static int write_dev_supers(struct btrfs_device *device,
 		submit_bio(bio);
 
 		if (btrfs_advance_sb_log(device, i))
-			errors++;
+			atomic_inc(&device->sb_wb_errors);
 	}
-	return errors < i ? 0 : -1;
+	return atomic_read(&device->sb_wb_errors) < i ? 0 : -1;
 }
 
 /*
@@ -3848,7 +3840,7 @@ static int wait_dev_supers(struct btrfs_device *device, int max_mirrors)
 		max_mirrors = BTRFS_SUPER_MIRROR_MAX;
 
 	for (i = 0; i < max_mirrors; i++) {
-		struct page *page;
+		struct folio *folio;
 
 		ret = btrfs_sb_log_location(device, i, READ, &bytenr);
 		if (ret == -ENOENT) {
@@ -3863,29 +3855,19 @@ static int wait_dev_supers(struct btrfs_device *device, int max_mirrors)
 		    device->commit_total_bytes)
 			break;
 
-		page = find_get_page(device->bdev->bd_inode->i_mapping,
+		folio = filemap_get_folio(device->bdev->bd_inode->i_mapping,
 				     bytenr >> PAGE_SHIFT);
-		if (!page) {
-			errors++;
-			if (i == 0)
-				primary_failed = true;
+		/* If the folio has been removed, then we know it completed */
+		if (IS_ERR(folio))
 			continue;
-		}
-		/* Page is submitted locked and unlocked once the IO completes */
-		wait_on_page_locked(page);
-		if (PageError(page)) {
-			errors++;
-			if (i == 0)
-				primary_failed = true;
-		}
-
-		/* Drop our reference */
-		put_page(page);
-
-		/* Drop the reference from the writing run */
-		put_page(page);
+		/* Folio is unlocked once the IO completes */
+		folio_wait_locked(folio);
+		folio_put(folio);
 	}
 
+	errors += atomic_read(&device->sb_wb_errors);
+	if (errors >= BTRFS_DEV_PRIMARY_ERROR)
+		primary_failed = true;
 	/* log error, force error return */
 	if (primary_failed) {
 		btrfs_err(device->fs_info, "error writing primary super block to device %llu",
