@@ -125,7 +125,7 @@ static irqreturn_t ibmvscsi_handle_event(int irq, void *dev_instance)
 	struct ibmvscsi_host_data *hostdata =
 	    (struct ibmvscsi_host_data *)dev_instance;
 	vio_disable_interrupts(to_vio_dev(hostdata->dev));
-	tasklet_schedule(&hostdata->srp_task);
+	queue_work(system_bh_wq, &hostdata->srp_task);
 	return IRQ_HANDLED;
 }
 
@@ -145,7 +145,7 @@ static void ibmvscsi_release_crq_queue(struct crq_queue *queue,
 	long rc = 0;
 	struct vio_dev *vdev = to_vio_dev(hostdata->dev);
 	free_irq(vdev->irq, (void *)hostdata);
-	tasklet_kill(&hostdata->srp_task);
+	cancel_work_sync(&hostdata->srp_task);
 	do {
 		if (rc)
 			msleep(100);
@@ -367,8 +367,7 @@ static int ibmvscsi_init_crq_queue(struct crq_queue *queue,
 	queue->cur = 0;
 	spin_lock_init(&queue->lock);
 
-	tasklet_init(&hostdata->srp_task, (void *)ibmvscsi_task,
-		     (unsigned long)hostdata);
+	INIT_WORK(&hostdata->srp_task, ibmvscsi_work);
 
 	if (request_irq(vdev->irq,
 			ibmvscsi_handle_event,
@@ -387,7 +386,7 @@ static int ibmvscsi_init_crq_queue(struct crq_queue *queue,
 	return retrc;
 
       req_irq_failed:
-	tasklet_kill(&hostdata->srp_task);
+	cancel_work_sync(&hostdata->srp_task);
 	rc = 0;
 	do {
 		if (rc)
@@ -2194,9 +2193,10 @@ static int ibmvscsi_work_to_do(struct ibmvscsi_host_data *hostdata)
 	return rc;
 }
 
-static int ibmvscsi_work(void *data)
+static int ibmvscsi_work(struct work_struct *t)
 {
-	struct ibmvscsi_host_data *hostdata = data;
+	struct ibmvscsi_host_data *hostdata =
+		from_work(hostdata, t, srp_task);
 	int rc;
 
 	set_user_nice(current, MIN_NICE);
@@ -2371,7 +2371,7 @@ static int ibmvscsi_resume(struct device *dev)
 {
 	struct ibmvscsi_host_data *hostdata = dev_get_drvdata(dev);
 	vio_disable_interrupts(to_vio_dev(hostdata->dev));
-	tasklet_schedule(&hostdata->srp_task);
+	queue_work(system_bh_wq, &hostdata->srp_task);
 
 	return 0;
 }

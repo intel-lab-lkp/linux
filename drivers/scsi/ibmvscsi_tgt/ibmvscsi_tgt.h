@@ -18,6 +18,7 @@
 #define __H_IBMVSCSI_TGT
 
 #include <linux/interrupt.h>
+#include <linux/workqueue.h>
 #include "libsrp.h"
 
 #define SYS_ID_NAME_LEN		64
@@ -295,7 +296,7 @@ struct scsi_info {
 	struct vio_dev *dma_dev;
 	struct srp_target target;
 	struct ibmvscsis_tport tport;
-	struct tasklet_struct work_task;
+	struct work_struct work_task;
 	struct work_struct proc_work;
 };
 

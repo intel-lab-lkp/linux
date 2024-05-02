@@ -899,7 +899,7 @@ static void ibmvfc_release_crq_queue(struct ibmvfc_host *vhost)
 
 	ibmvfc_dbg(vhost, "Releasing CRQ\n");
 	free_irq(vdev->irq, vhost);
-	tasklet_kill(&vhost->tasklet);
+	cancel_work_sync(&vhost->work);
 	do {
 		if (rc)
 			msleep(100);
@@ -3767,21 +3767,21 @@ static irqreturn_t ibmvfc_interrupt(int irq, void *dev_instance)
 
 	spin_lock_irqsave(vhost->host->host_lock, flags);
 	vio_disable_interrupts(to_vio_dev(vhost->dev));
-	tasklet_schedule(&vhost->tasklet);
+	queue_work(system_bh_wq, &vhost->work);
 	spin_unlock_irqrestore(vhost->host->host_lock, flags);
 	return IRQ_HANDLED;
 }
 
 /**
- * ibmvfc_tasklet - Interrupt handler tasklet
+ * ibmvfc_work - Interrupt handler work
  * @data:		ibmvfc host struct
  *
  * Returns:
  *	Nothing
  **/
-static void ibmvfc_tasklet(void *data)
+static void ibmvfc_work(struct work_struct *t)
 {
-	struct ibmvfc_host *vhost = data;
+	struct ibmvfc_host *vhost = from_work(vhost, t, work);
 	struct vio_dev *vdev = to_vio_dev(vhost->dev);
 	struct ibmvfc_crq *crq;
 	struct ibmvfc_async_crq *async;
@@ -5883,7 +5883,7 @@ static int ibmvfc_init_crq(struct ibmvfc_host *vhost)
 
 	retrc = 0;
 
-	tasklet_init(&vhost->tasklet, (void *)ibmvfc_tasklet, (unsigned long)vhost);
+	INIT_WORK(&vhost->work, ibmvfc_work);
 
 	if ((rc = request_irq(vdev->irq, ibmvfc_interrupt, 0, IBMVFC_NAME, vhost))) {
 		dev_err(dev, "Couldn't register irq 0x%x. rc=%d\n", vdev->irq, rc);
@@ -5899,7 +5899,7 @@ static int ibmvfc_init_crq(struct ibmvfc_host *vhost)
 	return retrc;
 
 req_irq_failed:
-	tasklet_kill(&vhost->tasklet);
+	cancel_work_sync(&vhost->work);
 	do {
 		rc = plpar_hcall_norets(H_FREE_CRQ, vdev->unit_address);
 	} while (rc == H_BUSY || H_IS_LONG_BUSY(rc));
@@ -6470,7 +6470,7 @@ static int ibmvfc_resume(struct device *dev)
 
 	spin_lock_irqsave(vhost->host->host_lock, flags);
 	vio_disable_interrupts(vdev);
-	tasklet_schedule(&vhost->tasklet);
+	queue_work(system_bh_wq, &vhost->work);
 	spin_unlock_irqrestore(vhost->host->host_lock, flags);
 	return 0;
 }

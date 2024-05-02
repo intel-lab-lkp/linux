@@ -3821,15 +3821,15 @@ int megasas_irqpoll(struct irq_poll *irqpoll, int budget)
 
 /**
  * megasas_complete_cmd_dpc_fusion -	Completes command
- * @instance_addr:			Adapter soft state address
+ * @t:					pointer to the work_struct
  *
- * Tasklet to complete cmds
+ * Work to complete cmds
  */
 static void
-megasas_complete_cmd_dpc_fusion(unsigned long instance_addr)
+megasas_complete_cmd_dpc_fusion(struct work_struct *t)
 {
 	struct megasas_instance *instance =
-		(struct megasas_instance *)instance_addr;
+		from_work(instance, t, isr_work);
 	struct megasas_irq_context *irq_ctx = NULL;
 	u32 count, MSIxIndex;
 
@@ -4180,7 +4180,7 @@ megasas_wait_for_outstanding_fusion(struct megasas_instance *instance,
 	if (reason == MFI_IO_TIMEOUT_OCR) {
 		dev_info(&instance->pdev->dev,
 			"MFI command is timed out\n");
-		megasas_complete_cmd_dpc_fusion((unsigned long)instance);
+		megasas_complete_cmd_dpc_fusion(&instance->isr_work);
 		if (instance->snapdump_wait_time)
 			megasas_trigger_snap_dump(instance);
 		retval = 1;
@@ -4196,7 +4196,7 @@ megasas_wait_for_outstanding_fusion(struct megasas_instance *instance,
 				   "FW in FAULT state Fault code:0x%x subcode:0x%x func:%s\n",
 				   abs_state & MFI_STATE_FAULT_CODE,
 				   abs_state & MFI_STATE_FAULT_SUBCODE, __func__);
-			megasas_complete_cmd_dpc_fusion((unsigned long)instance);
+			megasas_complete_cmd_dpc_fusion(&instance->isr_work);
 			if (instance->requestorId && reason) {
 				dev_warn(&instance->pdev->dev, "SR-IOV Found FW in FAULT"
 				" state while polling during"
@@ -4240,7 +4240,7 @@ megasas_wait_for_outstanding_fusion(struct megasas_instance *instance,
 			}
 		}
 
-		megasas_complete_cmd_dpc_fusion((unsigned long)instance);
+		megasas_complete_cmd_dpc_fusion(&instance->isr_work);
 		outstanding = atomic_read(&instance->fw_outstanding);
 		if (!outstanding)
 			goto out;
@@ -5372,7 +5372,7 @@ struct megasas_instance_template megasas_instance_template_fusion = {
 	.adp_reset = megasas_adp_reset_fusion,
 	.check_reset = megasas_check_reset_fusion,
 	.service_isr = megasas_isr_fusion,
-	.tasklet = megasas_complete_cmd_dpc_fusion,
+	.work = megasas_complete_cmd_dpc_fusion,
 	.init_adapter = megasas_init_adapter_fusion,
 	.build_and_issue_cmd = megasas_build_and_issue_cmd_fusion,
 	.issue_dcmd = megasas_issue_dcmd_fusion,

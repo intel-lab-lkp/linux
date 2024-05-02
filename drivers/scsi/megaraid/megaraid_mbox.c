@@ -119,7 +119,7 @@ static void megaraid_mbox_prepare_epthru(adapter_t *, scb_t *,
 
 static irqreturn_t megaraid_isr(int, void *);
 
-static void megaraid_mbox_dpc(unsigned long);
+static void megaraid_mbox_dpc(struct work_struct *);
 
 static ssize_t megaraid_mbox_app_hndl_show(struct device *, struct device_attribute *attr, char *);
 static ssize_t megaraid_mbox_ld_show(struct device *, struct device_attribute *attr, char *);
@@ -879,9 +879,8 @@ megaraid_init_mbox(adapter_t *adapter)
 		}
 	}
 
-	// setup tasklet for DPC
-	tasklet_init(&adapter->dpc_h, megaraid_mbox_dpc,
-			(unsigned long)adapter);
+	/* Initialize the work for DPC */
+	INIT_WORK(&adapter->dpc_h, megaraid_mbox_dpc);
 
 	con_log(CL_DLEVEL1, (KERN_INFO
 		"megaraid mbox hba successfully initialized\n"));
@@ -917,7 +916,7 @@ megaraid_fini_mbox(adapter_t *adapter)
 	// flush all caches
 	megaraid_mbox_flush_cache(adapter);
 
-	tasklet_kill(&adapter->dpc_h);
+	cancel_work_sync(&adapter->dpc_h);
 
 	megaraid_sysfs_free_resources(adapter);
 
@@ -2127,7 +2126,7 @@ megaraid_ack_sequence(adapter_t *adapter)
 
 	// schedule the DPC if there is some work for it
 	if (handled)
-		tasklet_schedule(&adapter->dpc_h);
+		queue_work(system_bh_wq, &adapter->dpc_h);
 
 	return handled;
 }
@@ -2158,17 +2157,17 @@ megaraid_isr(int irq, void *devp)
 
 
 /**
- * megaraid_mbox_dpc - the tasklet to complete the commands from completed list
- * @devp	: pointer to HBA soft state
+ * megaraid_mbox_dpc - the work handler to complete the commands from completed list
+ * @t	: pointer to work_struct
  *
  * Pick up the commands from the completed list and send back to the owners.
  * This is a reentrant function and does not assume any locks are held while
  * it is being called.
  */
 static void
-megaraid_mbox_dpc(unsigned long devp)
+megaraid_mbox_dpc(struct work_struct *t)
 {
-	adapter_t		*adapter = (adapter_t *)devp;
+	adapter_t		*adapter = from_work(adapter, t, dpc_h);
 	mraid_device_t		*raid_dev;
 	struct list_head	clist;
 	struct scatterlist	*sgl;
@@ -3812,7 +3811,7 @@ megaraid_sysfs_free_resources(adapter_t *adapter)
  * megaraid_sysfs_get_ldmap_done - callback for get ldmap
  * @uioc	: completed packet
  *
- * Callback routine called in the ISR/tasklet context for get ldmap call
+ * Callback routine called in the ISR/BH context for get ldmap call
  */
 static void
 megaraid_sysfs_get_ldmap_done(uioc_t *uioc)

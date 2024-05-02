@@ -862,7 +862,7 @@ static void _pmcraid_fire_command(struct pmcraid_cmd *cmd)
 	/* Add this command block to pending cmd pool. We do this prior to
 	 * writting IOARCB to ioarrin because IOA might complete the command
 	 * by the time we are about to add it to the list. Response handler
-	 * (isr/tasklet) looks for cmd block in the pending pending list.
+	 * (isr/BH work) looks for cmd block in the pending list.
 	 */
 	spin_lock_irqsave(&pinstance->pending_pool_lock, lock_flags);
 	list_add_tail(&cmd->free_list, &pinstance->pending_cmd_pool);
@@ -1080,7 +1080,7 @@ static void pmcraid_identify_hrrq(struct pmcraid_cmd *cmd)
 
 	/* Subsequent commands require HRRQ identification to be successful.
 	 * Note that this gets called even during reset from SCSI mid-layer
-	 * or tasklet
+	 * or BH work
 	 */
 	pmcraid_send_cmd(cmd, done_function,
 			 PMCRAID_INTERNAL_TIMEOUT,
@@ -1846,7 +1846,7 @@ static void pmcraid_unregister_hcams(struct pmcraid_cmd *cmd)
 {
 	struct pmcraid_instance *pinstance = cmd->drv_inst;
 
-	/* During IOA bringdown, HCAM gets fired and tasklet proceeds with
+	/* During IOA bringdown, HCAM gets fired and BH work proceeds with
 	 * handling hcam response though it is not necessary. In order to
 	 * prevent this, set 'ignore', so that bring-down sequence doesn't
 	 * re-send any more hcams
@@ -1919,7 +1919,7 @@ static void pmcraid_soft_reset(struct pmcraid_cmd *cmd)
 	u32 doorbell;
 
 	/* There will be an interrupt when Transition to Operational bit is
-	 * set so tasklet would execute next reset task. The timeout handler
+	 * set so BH work would execute next reset task. The timeout handler
 	 * would re-initiate a reset
 	 */
 	cmd->cmd_done = pmcraid_ioa_reset;
@@ -2042,7 +2042,7 @@ static void pmcraid_fail_outstanding_cmds(struct pmcraid_instance *pinstance)
  * @cmd: pointer to the cmd block to be used for entire reset process
  *
  * This function executes most of the steps required for IOA reset. This gets
- * called by user threads (modprobe/insmod/rmmod) timer, tasklet and midlayer's
+ * called by user threads (modprobe/insmod/rmmod) timer, BH work and midlayer's
  * 'eh_' thread. Access to variables used for controlling the reset sequence is
  * synchronized using host lock. Various functions called during reset process
  * would make use of a single command block, pointer to which is also stored in
@@ -2202,7 +2202,7 @@ static void pmcraid_ioa_reset(struct pmcraid_cmd *cmd)
 		pinstance->ioa_state = IOA_STATE_IN_BRINGUP;
 
 		/* Initialization commands start with HRRQ identification. From
-		 * now on tasklet completes most of the commands as IOA is up
+		 * now on BH work completes most of the commands as IOA is up
 		 * and intrs are enabled
 		 */
 		pmcraid_identify_hrrq(cmd);
@@ -2264,7 +2264,7 @@ static void pmcraid_ioa_reset(struct pmcraid_cmd *cmd)
 
 /**
  * pmcraid_initiate_reset - initiates reset sequence. This is called from
- * ISR/tasklet during error interrupts including IOA unit check. If reset
+ * ISR/BH work during error interrupts including IOA unit check. If reset
  * is already in progress, it just returns, otherwise initiates IOA reset
  * to bring IOA up to operational state.
  *
@@ -2306,7 +2306,7 @@ static void pmcraid_initiate_reset(struct pmcraid_instance *pinstance)
  * @target_state: expected target state after reset
  *
  * Note: This command initiates reset and waits for its completion. Hence this
- * should not be called from isr/timer/tasklet functions (timeout handlers,
+ * should not be called from isr/timer/BH work functions (timeout handlers,
  * error response handlers and interrupt handlers).
  *
  * Return Value
@@ -2452,7 +2452,7 @@ static void pmcraid_request_sense(struct pmcraid_cmd *cmd)
 	ioadl->flags = IOADL_FLAGS_LAST_DESC;
 
 	/* request sense might be called as part of error response processing
-	 * which runs in tasklets context. It is possible that mid-layer might
+	 * which runs in works context. It is possible that mid-layer might
 	 * schedule queuecommand during this time, hence, writting to IOARRIN
 	 * must be protect by host_lock
 	 */
@@ -2569,7 +2569,7 @@ static void pmcraid_frame_auto_sense(struct pmcraid_cmd *cmd)
  * @cmd: pointer to pmcraid_cmd that has failed
  *
  * This function determines whether or not to initiate ERP on the affected
- * device. This is called from a tasklet, which doesn't hold any locks.
+ * device. This is called from a BH work, which doesn't hold any locks.
  *
  * Return value:
  *	 0 it caller can complete the request, otherwise 1 where in error
@@ -2828,7 +2828,7 @@ static int _pmcraid_io_done(struct pmcraid_cmd *cmd, int reslen, int ioasc)
  *
  * @cmd: pointer to pmcraid command struct
  *
- * This function is invoked by tasklet/mid-layer error handler to completing
+ * This function is invoked by BH work/mid-layer error handler to completing
  * the SCSI ops sent from mid-layer.
  *
  * Return value
@@ -3746,7 +3746,7 @@ static irqreturn_t pmcraid_isr_msix(int irq, void *dev_id)
 		}
 	}
 
-	tasklet_schedule(&(pinstance->isr_tasklet[hrrq_id]));
+	queue_work(system_bh_wq, &(pinstance->isr_work[hrrq_id]));
 
 	return IRQ_HANDLED;
 }
@@ -3814,8 +3814,8 @@ static irqreturn_t pmcraid_isr(int irq, void *dev_id)
 			ioread32(
 				pinstance->int_regs.ioa_host_interrupt_clr_reg);
 
-			tasklet_schedule(
-					&(pinstance->isr_tasklet[hrrq_id]));
+			queue_work(system_bh_wq,
+					&(pinstance->isr_work[hrrq_id]));
 		}
 	}
 
@@ -3921,14 +3921,14 @@ static void pmcraid_worker_function(struct work_struct *workp)
 }
 
 /**
- * pmcraid_tasklet_function - Tasklet function
+ * pmcraid_work_function - Work function
  *
- * @instance: pointer to msix param structure
+ * @t:  pointer to work_struct
  *
  * Return Value
  *	None
  */
-static void pmcraid_tasklet_function(unsigned long instance)
+static void pmcraid_work_function(struct work_struct *t)
 {
 	struct pmcraid_isr_param *hrrq_vector;
 	struct pmcraid_instance *pinstance;
@@ -3939,14 +3939,17 @@ static void pmcraid_tasklet_function(unsigned long instance)
 	int id;
 	u32 resp;
 
-	hrrq_vector = (struct pmcraid_isr_param *)instance;
-	pinstance = hrrq_vector->drv_inst;
+	/* FIXME: Since we don't know the index, we need a
+	 * mechanism to determine it or always use index 0
+	 */
+	pinstance = from_work(pinstance, t, isr_work[0]);
+	hrrq_vector = pinstance->hrrq_vector;
 	id = hrrq_vector->hrrq_id;
 	lockp = &(pinstance->hrrq_lock[id]);
 
 	/* loop through each of the commands responded by IOA. Each HRRQ buf is
 	 * protected by its own lock. Traversals must be done within this lock
-	 * as there may be multiple tasklets running on multiple CPUs. Note
+	 * as there may be multiple works running on multiple CPUs. Note
 	 * that the lock is held just for picking up the response handle and
 	 * manipulating hrrq_curr/toggle_bit values.
 	 */
@@ -4419,35 +4422,34 @@ static int pmcraid_allocate_config_buffers(struct pmcraid_instance *pinstance)
 }
 
 /**
- * pmcraid_init_tasklets - registers tasklets for response handling
+ * pmcraid_init_works - registers works for response handling
  *
  * @pinstance: pointer adapter instance structure
  *
  * Return value
  *	none
  */
-static void pmcraid_init_tasklets(struct pmcraid_instance *pinstance)
+static void pmcraid_init_works(struct pmcraid_instance *pinstance)
 {
 	int i;
 	for (i = 0; i < pinstance->num_hrrq; i++)
-		tasklet_init(&pinstance->isr_tasklet[i],
-			     pmcraid_tasklet_function,
-			     (unsigned long)&pinstance->hrrq_vector[i]);
+		INIT_WORK(&pinstance->isr_work[i],
+			     pmcraid_work_function);
 }
 
 /**
- * pmcraid_kill_tasklets - destroys tasklets registered for response handling
+ * pmcraid_kill_works - destroys works registered for response handling
  *
  * @pinstance: pointer to adapter instance structure
  *
  * Return value
  *	none
  */
-static void pmcraid_kill_tasklets(struct pmcraid_instance *pinstance)
+static void pmcraid_kill_works(struct pmcraid_instance *pinstance)
 {
 	int i;
 	for (i = 0; i < pinstance->num_hrrq; i++)
-		tasklet_kill(&pinstance->isr_tasklet[i]);
+		cancel_work_sync(&pinstance->isr_work[i]);
 }
 
 /**
@@ -4773,7 +4775,7 @@ static void pmcraid_remove(struct pci_dev *pdev)
 	pmcraid_disable_interrupts(pinstance, ~0);
 	flush_work(&pinstance->worker_q);
 
-	pmcraid_kill_tasklets(pinstance);
+	pmcraid_kill_works(pinstance);
 	pmcraid_unregister_interrupt_handler(pinstance);
 	pmcraid_release_buffers(pinstance);
 	iounmap(pinstance->mapped_dma_addr);
@@ -4797,7 +4799,7 @@ static int __maybe_unused pmcraid_suspend(struct device *dev)
 
 	pmcraid_shutdown(pdev);
 	pmcraid_disable_interrupts(pinstance, ~0);
-	pmcraid_kill_tasklets(pinstance);
+	pmcraid_kill_works(pinstance);
 	pmcraid_unregister_interrupt_handler(pinstance);
 
 	return 0;
@@ -4839,7 +4841,7 @@ static int __maybe_unused pmcraid_resume(struct device *dev)
 		goto release_host;
 	}
 
-	pmcraid_init_tasklets(pinstance);
+	pmcraid_init_works(pinstance);
 	pmcraid_enable_interrupts(pinstance, PMCRAID_PCI_INTERRUPTS);
 
 	/* Start with hard reset sequence which brings up IOA to operational
@@ -4853,14 +4855,14 @@ static int __maybe_unused pmcraid_resume(struct device *dev)
 	if (pmcraid_reset_bringup(pinstance)) {
 		dev_err(&pdev->dev, "couldn't initialize IOA\n");
 		rc = -ENODEV;
-		goto release_tasklets;
+		goto release_works;
 	}
 
 	return 0;
 
-release_tasklets:
+release_works:
 	pmcraid_disable_interrupts(pinstance, ~0);
-	pmcraid_kill_tasklets(pinstance);
+	pmcraid_kill_works(pinstance);
 	pmcraid_unregister_interrupt_handler(pinstance);
 
 release_host:
@@ -4872,7 +4874,7 @@ disable_device:
 }
 
 /**
- * pmcraid_complete_ioa_reset - Called by either timer or tasklet during
+ * pmcraid_complete_ioa_reset - Called by either timer or BH work during
  *				completion of the ioa reset
  * @cmd: pointer to reset command block
  */
@@ -5017,7 +5019,7 @@ static void pmcraid_init_res_table(struct pmcraid_cmd *cmd)
 
 	/* resource list is protected by pinstance->resource_lock.
 	 * init_res_table can be called from probe (user-thread) or runtime
-	 * reset (timer/tasklet)
+	 * reset (timer/BH work)
 	 */
 	spin_lock_irqsave(&pinstance->resource_lock, lock_flags);
 
@@ -5284,7 +5286,7 @@ static int pmcraid_probe(struct pci_dev *pdev,
 		goto out_scsi_host_put;
 	}
 
-	pmcraid_init_tasklets(pinstance);
+	pmcraid_init_works(pinstance);
 
 	/* allocate verious buffers used by LLD.*/
 	rc = pmcraid_init_buffers(pinstance);
@@ -5340,7 +5342,7 @@ out_release_bufs:
 	pmcraid_release_buffers(pinstance);
 
 out_unregister_isr:
-	pmcraid_kill_tasklets(pinstance);
+	pmcraid_kill_works(pinstance);
 	pmcraid_unregister_interrupt_handler(pinstance);
 
 out_scsi_host_put:

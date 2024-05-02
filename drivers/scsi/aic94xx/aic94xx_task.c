@@ -138,9 +138,9 @@ static void asd_unmap_scatterlist(struct asd_ascb *ascb)
 			     task->num_scatter, task->data_dir);
 }
 
-/* ---------- Task complete tasklet ---------- */
+/* ---------- Task complete BH work ---------- */
 
-static void asd_get_response_tasklet(struct asd_ascb *ascb,
+static void asd_get_response_work(struct asd_ascb *ascb,
 				     struct done_list_struct *dl)
 {
 	struct asd_ha_struct *asd_ha = ascb->ha;
@@ -194,7 +194,7 @@ static void asd_get_response_tasklet(struct asd_ascb *ascb,
 	asd_invalidate_edb(escb, edb_id);
 }
 
-static void asd_task_tasklet_complete(struct asd_ascb *ascb,
+static void asd_task_work_complete(struct asd_ascb *ascb,
 				      struct done_list_struct *dl)
 {
 	struct sas_task *task = ascb->uldd_task;
@@ -224,7 +224,7 @@ Again:
 	case TC_ATA_RESP:
 		ts->resp = SAS_TASK_COMPLETE;
 		ts->stat = SAS_PROTO_RESPONSE;
-		asd_get_response_tasklet(ascb, dl);
+		asd_get_response_work(ascb, dl);
 		break;
 	case TF_OPEN_REJECT:
 		ts->resp = SAS_TASK_UNDELIVERED;
@@ -392,7 +392,7 @@ static int asd_build_ata_ascb(struct asd_ascb *ascb, struct sas_task *task,
 
 		scb->ata_task.flags = 0;
 	}
-	ascb->tasklet_complete = asd_task_tasklet_complete;
+	ascb->work_complete = asd_task_work_complete;
 
 	if (likely(!task->ata_task.device_control_reg_update))
 		res = asd_map_scatterlist(task, scb->ata_task.sg_element,
@@ -440,7 +440,7 @@ static int asd_build_smp_ascb(struct asd_ascb *ascb, struct sas_task *task,
 	scb->smp_task.conn_handle = cpu_to_le16((u16)
 						(unsigned long)dev->lldd_dev);
 
-	ascb->tasklet_complete = asd_task_tasklet_complete;
+	ascb->work_complete = asd_task_work_complete;
 
 	return 0;
 }
@@ -490,7 +490,7 @@ static int asd_build_ssp_ascb(struct asd_ascb *ascb, struct sas_task *task,
 	scb->ssp_task.data_dir = data_dir_flags[task->data_dir];
 	scb->ssp_task.retry_count = scb->ssp_task.retry_count;
 
-	ascb->tasklet_complete = asd_task_tasklet_complete;
+	ascb->work_complete = asd_task_work_complete;
 
 	res = asd_map_scatterlist(task, scb->ssp_task.sg_element, gfp_flags);
 

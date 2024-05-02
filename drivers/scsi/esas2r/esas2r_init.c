@@ -401,9 +401,7 @@ int esas2r_init_adapter(struct Scsi_Host *host, struct pci_dev *pcid,
 		return 0;
 	}
 
-	tasklet_init(&a->tasklet,
-		     esas2r_adapter_tasklet,
-		     (unsigned long)a);
+	INIT_WORK(&a->work, esas2r_adapter_work);
 
 	/*
 	 * Disable chip interrupts to prevent spurious interrupts
@@ -441,7 +439,7 @@ static void esas2r_adapter_power_down(struct esas2r_adapter *a,
 	    &&  (!test_bit(AF_DEGRADED_MODE, &a->flags))) {
 		if (!power_management) {
 			del_timer_sync(&a->timer);
-			tasklet_kill(&a->tasklet);
+			cancel_work_sync(&a->work);
 		}
 		esas2r_power_down(a);
 
@@ -1346,7 +1344,7 @@ bool esas2r_init_adapter_hw(struct esas2r_adapter *a, bool init_poll)
 		u32 deltatime;
 
 		/*
-		 * Block Tasklets from getting scheduled and indicate this is
+		 * Block Works from getting scheduled and indicate this is
 		 * polled discovery.
 		 */
 		set_bit(AF_TASKLET_SCHEDULED, &a->flags);
@@ -1394,8 +1392,8 @@ bool esas2r_init_adapter_hw(struct esas2r_adapter *a, bool init_poll)
 				nexttick -= deltatime;
 
 			/* Do any deferred processing */
-			if (esas2r_is_tasklet_pending(a))
-				esas2r_do_tasklet_tasks(a);
+			if (esas2r_is_work_pending(a))
+				esas2r_do_work_tasks(a);
 
 		}
 
@@ -1463,7 +1461,7 @@ void esas2r_reset_adapter(struct esas2r_adapter *a)
 {
 	set_bit(AF_OS_RESET, &a->flags);
 	esas2r_local_reset_adapter(a);
-	esas2r_schedule_tasklet(a);
+	esas2r_schedule_work(a);
 }
 
 void esas2r_reset_chip(struct esas2r_adapter *a)

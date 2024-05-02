@@ -1543,10 +1543,10 @@ void esas2r_complete_request_cb(struct esas2r_adapter *a,
 	esas2r_free_request(a, rq);
 }
 
-/* Run tasklet to handle stuff outside of interrupt context. */
-void esas2r_adapter_tasklet(unsigned long context)
+/* Run BH work to handle stuff outside of interrupt context. */
+void esas2r_adapter_work(struct work_struct *t)
 {
-	struct esas2r_adapter *a = (struct esas2r_adapter *)context;
+	struct esas2r_adapter *a = from_work(a, t, work);
 
 	if (unlikely(test_bit(AF2_TIMER_TICK, &a->flags2))) {
 		clear_bit(AF2_TIMER_TICK, &a->flags2);
@@ -1558,14 +1558,14 @@ void esas2r_adapter_tasklet(unsigned long context)
 		esas2r_adapter_interrupt(a);
 	}
 
-	if (esas2r_is_tasklet_pending(a))
-		esas2r_do_tasklet_tasks(a);
+	if (esas2r_is_work_pending(a))
+		esas2r_do_work_tasks(a);
 
-	if (esas2r_is_tasklet_pending(a)
+	if (esas2r_is_work_pending(a)
 	    || (test_bit(AF2_INT_PENDING, &a->flags2))
 	    || (test_bit(AF2_TIMER_TICK, &a->flags2))) {
 		clear_bit(AF_TASKLET_SCHEDULED, &a->flags);
-		esas2r_schedule_tasklet(a);
+		esas2r_schedule_work(a);
 	} else {
 		clear_bit(AF_TASKLET_SCHEDULED, &a->flags);
 	}
@@ -1589,7 +1589,7 @@ static void esas2r_timer_callback(struct timer_list *t)
 
 	set_bit(AF2_TIMER_TICK, &a->flags2);
 
-	esas2r_schedule_tasklet(a);
+	esas2r_schedule_work(a);
 
 	esas2r_kickoff_timer(a);
 }

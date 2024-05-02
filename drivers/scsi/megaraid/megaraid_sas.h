@@ -2389,7 +2389,7 @@ struct megasas_instance {
 	atomic64_t high_iops_outstanding;
 
 	struct megasas_instance_template *instancet;
-	struct tasklet_struct isr_tasklet;
+	struct work_struct isr_work;
 	struct work_struct work_init;
 	struct delayed_work fw_fault_work;
 	struct workqueue_struct *fw_fault_work_q;
@@ -2551,7 +2551,7 @@ struct megasas_instance_template {
 	int (*check_reset)(struct megasas_instance *, \
 		struct megasas_register_set __iomem *);
 	irqreturn_t (*service_isr)(int irq, void *devp);
-	void (*tasklet)(unsigned long);
+	void (*work)(struct work_struct *);
 	u32 (*init_adapter)(struct megasas_instance *);
 	u32 (*build_and_issue_cmd) (struct megasas_instance *,
 				    struct scsi_cmnd *);

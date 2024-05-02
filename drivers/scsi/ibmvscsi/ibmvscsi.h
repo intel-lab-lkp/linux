@@ -19,6 +19,7 @@
 #include <linux/list.h>
 #include <linux/completion.h>
 #include <linux/interrupt.h>
+#include <linux/workqueue.h>
 #include <scsi/viosrp.h>
 
 struct scsi_cmnd;
@@ -90,7 +91,7 @@ struct ibmvscsi_host_data {
 	struct device *dev;
 	struct event_pool pool;
 	struct crq_queue queue;
-	struct tasklet_struct srp_task;
+	struct work_struct srp_task;
 	struct list_head sent;
 	struct Scsi_Host *host;
 	struct task_struct *work_thread;

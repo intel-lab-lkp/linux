@@ -234,7 +234,7 @@ megasas_init_adapter_mfi(struct megasas_instance *instance);
 u32
 megasas_build_and_issue_cmd(struct megasas_instance *instance,
 			    struct scsi_cmnd *scmd);
-static void megasas_complete_cmd_dpc(unsigned long instance_addr);
+static void megasas_complete_cmd_dpc(struct work_struct *t);
 int
 wait_and_poll(struct megasas_instance *instance, struct megasas_cmd *cmd,
 	int seconds);
@@ -615,7 +615,7 @@ static struct megasas_instance_template megasas_instance_template_xscale = {
 	.adp_reset = megasas_adp_reset_xscale,
 	.check_reset = megasas_check_reset_xscale,
 	.service_isr = megasas_isr,
-	.tasklet = megasas_complete_cmd_dpc,
+	.work = megasas_complete_cmd_dpc,
 	.init_adapter = megasas_init_adapter_mfi,
 	.build_and_issue_cmd = megasas_build_and_issue_cmd,
 	.issue_dcmd = megasas_issue_dcmd,
@@ -754,7 +754,7 @@ static struct megasas_instance_template megasas_instance_template_ppc = {
 	.adp_reset = megasas_adp_reset_xscale,
 	.check_reset = megasas_check_reset_ppc,
 	.service_isr = megasas_isr,
-	.tasklet = megasas_complete_cmd_dpc,
+	.work = megasas_complete_cmd_dpc,
 	.init_adapter = megasas_init_adapter_mfi,
 	.build_and_issue_cmd = megasas_build_and_issue_cmd,
 	.issue_dcmd = megasas_issue_dcmd,
@@ -895,7 +895,7 @@ static struct megasas_instance_template megasas_instance_template_skinny = {
 	.adp_reset = megasas_adp_reset_gen2,
 	.check_reset = megasas_check_reset_skinny,
 	.service_isr = megasas_isr,
-	.tasklet = megasas_complete_cmd_dpc,
+	.work = megasas_complete_cmd_dpc,
 	.init_adapter = megasas_init_adapter_mfi,
 	.build_and_issue_cmd = megasas_build_and_issue_cmd,
 	.issue_dcmd = megasas_issue_dcmd,
@@ -1095,7 +1095,7 @@ static struct megasas_instance_template megasas_instance_template_gen2 = {
 	.adp_reset = megasas_adp_reset_gen2,
 	.check_reset = megasas_check_reset_gen2,
 	.service_isr = megasas_isr,
-	.tasklet = megasas_complete_cmd_dpc,
+	.work = megasas_complete_cmd_dpc,
 	.init_adapter = megasas_init_adapter_mfi,
 	.build_and_issue_cmd = megasas_build_and_issue_cmd,
 	.issue_dcmd = megasas_issue_dcmd,
@@ -2274,18 +2274,18 @@ megasas_check_and_restore_queue_depth(struct megasas_instance *instance)
 
 /**
  * megasas_complete_cmd_dpc	 -	Returns FW's controller structure
- * @instance_addr:			Address of adapter soft state
+ * @t:					pointer to the work_struct
  *
- * Tasklet to complete cmds
+ * Work to complete cmds
  */
-static void megasas_complete_cmd_dpc(unsigned long instance_addr)
+static void megasas_complete_cmd_dpc(struct work_struct *t)
 {
 	u32 producer;
 	u32 consumer;
 	u32 context;
 	struct megasas_cmd *cmd;
 	struct megasas_instance *instance =
-				(struct megasas_instance *)instance_addr;
+				from_work(instance, t, isr_work);
 	unsigned long flags;
 
 	/* If we have already declared adapter dead, donot complete cmds */
@@ -2830,7 +2830,7 @@ static int megasas_wait_for_outstanding(struct megasas_instance *instance)
 			 * Call cmd completion routine. Cmd to be
 			 * be completed directly without depending on isr.
 			 */
-			megasas_complete_cmd_dpc((unsigned long)instance);
+			megasas_complete_cmd_dpc(&instance->isr_work);
 		}
 
 		msleep(1000);
@@ -4078,7 +4078,7 @@ megasas_deplete_reply_queue(struct megasas_instance *instance,
 		}
 	}
 
-	tasklet_schedule(&instance->isr_tasklet);
+	queue_work(system_bh_wq, &instance->isr_work);
 	return IRQ_HANDLED;
 }
 
@@ -6318,8 +6318,7 @@ static int megasas_init_fw(struct megasas_instance *instance)
 	dev_info(&instance->pdev->dev,
 		"RDPQ mode\t: (%s)\n", instance->is_rdpq ? "enabled" : "disabled");
 
-	tasklet_init(&instance->isr_tasklet, instance->instancet->tasklet,
-		(unsigned long)instance);
+	INIT_WORK(&instance->isr_work, instance->instancet->work);
 
 	/*
 	 * Below are default value for legacy Firmware.
@@ -7762,7 +7761,7 @@ megasas_suspend(struct device *dev)
 		instance->ev = NULL;
 	}
 
-	tasklet_kill(&instance->isr_tasklet);
+	cancel_work_sync(&instance->isr_work);
 
 	pci_set_drvdata(instance->pdev, instance);
 	instance->instancet->disable_intr(instance);
@@ -7870,8 +7869,7 @@ megasas_resume(struct device *dev)
 	if (megasas_get_ctrl_info(instance) != DCMD_SUCCESS)
 		goto fail_init_mfi;
 
-	tasklet_init(&instance->isr_tasklet, instance->instancet->tasklet,
-		     (unsigned long)instance);
+	INIT_WORK(&instance->isr_work, instance->instancet->work);
 
 	if (instance->msix_vectors ?
 			megasas_setup_irqs_msix(instance, 0) :
@@ -8002,7 +8000,7 @@ skip_firing_dcmds:
 	/* cancel all wait events */
 	wake_up_all(&instance->int_cmd_wait_q);
 
-	tasklet_kill(&instance->isr_tasklet);
+	cancel_work_sync(&instance->isr_work);
 
 	/*
 	 * Take the instance off the instance array. Note that we will not

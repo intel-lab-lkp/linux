@@ -20,6 +20,7 @@
 #include <net/netlink.h>
 #include <net/genetlink.h>
 #include <linux/connector.h>
+#include <linux/workqueue.h>
 /*
  * Driver name   : string representing the driver name
  * Device file   : /dev file to be used for management interfaces
@@ -752,8 +753,8 @@ struct pmcraid_instance {
 	spinlock_t free_pool_lock;		/* free pool lock */
 	spinlock_t pending_pool_lock;		/* pending pool lock */
 
-	/* Tasklet to handle deferred processing */
-	struct tasklet_struct isr_tasklet[PMCRAID_NUM_MSIX_VECTORS];
+	/* BH work to handle deferred processing */
+	struct work_struct isr_work[PMCRAID_NUM_MSIX_VECTORS];
 
 	/* Work-queue (Shared) for deferred reset processing */
 	struct work_struct worker_q;

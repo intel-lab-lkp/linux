@@ -64,7 +64,7 @@ static void get_lrate_mode(struct asd_phy *phy, u8 oob_mode)
 		phy->sas_phy.oob_mode = SATA_OOB_MODE;
 }
 
-static void asd_phy_event_tasklet(struct asd_ascb *ascb,
+static void asd_phy_event_work(struct asd_ascb *ascb,
 					 struct done_list_struct *dl)
 {
 	struct asd_ha_struct *asd_ha = ascb->ha;
@@ -215,7 +215,7 @@ static void asd_deform_port(struct asd_ha_struct *asd_ha, struct asd_phy *phy)
 	spin_unlock_irqrestore(&asd_ha->asd_ports_lock, flags);
 }
 
-static void asd_bytes_dmaed_tasklet(struct asd_ascb *ascb,
+static void asd_bytes_dmaed_work(struct asd_ascb *ascb,
 				    struct done_list_struct *dl,
 				    int edb_id, int phy_id)
 {
@@ -237,7 +237,7 @@ static void asd_bytes_dmaed_tasklet(struct asd_ascb *ascb,
 	sas_notify_port_event(&phy->sas_phy, PORTE_BYTES_DMAED, GFP_ATOMIC);
 }
 
-static void asd_link_reset_err_tasklet(struct asd_ascb *ascb,
+static void asd_link_reset_err_work(struct asd_ascb *ascb,
 				       struct done_list_struct *dl,
 				       int phy_id)
 {
@@ -290,7 +290,7 @@ out:
 	;
 }
 
-static void asd_primitive_rcvd_tasklet(struct asd_ascb *ascb,
+static void asd_primitive_rcvd_work(struct asd_ascb *ascb,
 				       struct done_list_struct *dl,
 				       int phy_id)
 {
@@ -361,7 +361,7 @@ static void asd_primitive_rcvd_tasklet(struct asd_ascb *ascb,
  *
  * After an EDB has been invalidated, if all EDBs in this ESCB have been
  * invalidated, the ESCB is posted back to the sequencer.
- * Context is tasklet/IRQ.
+ * Context is BH work/IRQ.
  */
 void asd_invalidate_edb(struct asd_ascb *ascb, int edb_id)
 {
@@ -396,7 +396,7 @@ void asd_invalidate_edb(struct asd_ascb *ascb, int edb_id)
 	}
 }
 
-static void escb_tasklet_complete(struct asd_ascb *ascb,
+static void escb_work_complete(struct asd_ascb *ascb,
 				  struct done_list_struct *dl)
 {
 	struct asd_ha_struct *asd_ha = ascb->ha;
@@ -546,21 +546,21 @@ static void escb_tasklet_complete(struct asd_ascb *ascb,
 	switch (sb_opcode) {
 	case BYTES_DMAED:
 		ASD_DPRINTK("%s: phy%d: BYTES_DMAED\n", __func__, phy_id);
-		asd_bytes_dmaed_tasklet(ascb, dl, edb, phy_id);
+		asd_bytes_dmaed_work(ascb, dl, edb, phy_id);
 		break;
 	case PRIMITIVE_RECVD:
 		ASD_DPRINTK("%s: phy%d: PRIMITIVE_RECVD\n", __func__,
 			    phy_id);
-		asd_primitive_rcvd_tasklet(ascb, dl, phy_id);
+		asd_primitive_rcvd_work(ascb, dl, phy_id);
 		break;
 	case PHY_EVENT:
 		ASD_DPRINTK("%s: phy%d: PHY_EVENT\n", __func__, phy_id);
-		asd_phy_event_tasklet(ascb, dl);
+		asd_phy_event_work(ascb, dl);
 		break;
 	case LINK_RESET_ERROR:
 		ASD_DPRINTK("%s: phy%d: LINK_RESET_ERROR\n", __func__,
 			    phy_id);
-		asd_link_reset_err_tasklet(ascb, dl, phy_id);
+		asd_link_reset_err_work(ascb, dl, phy_id);
 		break;
 	case TIMER_EVENT:
 		ASD_DPRINTK("%s: phy%d: TIMER_EVENT, lost dw sync\n",
@@ -600,7 +600,7 @@ int asd_init_post_escbs(struct asd_ha_struct *asd_ha)
 	int i;
 
 	for (i = 0; i < seq->num_escbs; i++)
-		seq->escb_arr[i]->tasklet_complete = escb_tasklet_complete;
+		seq->escb_arr[i]->work_complete = escb_work_complete;
 
 	ASD_DPRINTK("posting %d escbs\n", i);
 	return asd_post_escb_list(asd_ha, seq->escb_arr[0], seq->num_escbs);
@@ -613,7 +613,7 @@ int asd_init_post_escbs(struct asd_ha_struct *asd_ha)
 			    | CURRENT_OOB_ERROR)
 
 /**
- * control_phy_tasklet_complete -- tasklet complete for CONTROL PHY ascb
+ * control_phy_work_complete -- BH work complete for CONTROL PHY ascb
  * @ascb: pointer to an ascb
  * @dl: pointer to the done list entry
  *
@@ -623,7 +623,7 @@ int asd_init_post_escbs(struct asd_ha_struct *asd_ha)
  *  - if a device is connected to the LED, it is lit,
  *  - if no device is connected to the LED, is is dimmed (off).
  */
-static void control_phy_tasklet_complete(struct asd_ascb *ascb,
+static void control_phy_work_complete(struct asd_ascb *ascb,
 					 struct done_list_struct *dl)
 {
 	struct asd_ha_struct *asd_ha = ascb->ha;
@@ -758,9 +758,9 @@ static void set_speed_mask(u8 *speed_mask, struct asd_phy_desc *pd)
  *
  * This function builds a CONTROL PHY scb.  No allocation of any kind
  * is performed. @ascb is allocated with the list function.
- * The caller can override the ascb->tasklet_complete to point
+ * The caller can override the ascb->work_complete to point
  * to its own callback function.  It must call asd_ascb_free()
- * at its tasklet complete function.
+ * at its BH work complete function.
  * See the default implementation.
  */
 void asd_build_control_phy(struct asd_ascb *ascb, int phy_id, u8 subfunc)
@@ -806,14 +806,14 @@ void asd_build_control_phy(struct asd_ascb *ascb, int phy_id, u8 subfunc)
 
 	control_phy->conn_handle = cpu_to_le16(0xFFFF);
 
-	ascb->tasklet_complete = control_phy_tasklet_complete;
+	ascb->work_complete = control_phy_work_complete;
 }
 
 /* ---------- INITIATE LINK ADM TASK ---------- */
 
 #if 0
 
-static void link_adm_tasklet_complete(struct asd_ascb *ascb,
+static void link_adm_work_complete(struct asd_ascb *ascb,
 				      struct done_list_struct *dl)
 {
 	u8 opcode = dl->opcode;
@@ -842,7 +842,7 @@ void asd_build_initiate_link_adm_task(struct asd_ascb *ascb, int phy_id,
 	link_adm->sub_func = subfunc;
 	link_adm->conn_handle = cpu_to_le16(0xFFFF);
 
-	ascb->tasklet_complete = link_adm_tasklet_complete;
+	ascb->work_complete = link_adm_work_complete;
 }
 
 #endif  /*  0  */

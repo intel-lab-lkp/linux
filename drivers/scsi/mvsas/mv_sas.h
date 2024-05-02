@@ -23,6 +23,7 @@
 #include <linux/irq.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
+#include <linux/workqueue.h>
 #include <asm/unaligned.h>
 #include <scsi/libsas.h>
 #include <scsi/scsi.h>
@@ -402,7 +403,7 @@ struct mvs_prv_info{
 	u8 scan_finished;
 	u8 reserve;
 	struct mvs_info *mvi[2];
-	struct tasklet_struct mv_tasklet;
+	struct work_struct mv_work;
 };
 
 struct mvs_wq {
@@ -432,8 +433,8 @@ void mvs_set_sas_addr(struct mvs_info *mvi, int port_id, u32 off_lo,
 		      u32 off_hi, u64 sas_addr);
 void mvs_scan_start(struct Scsi_Host *shost);
 int mvs_scan_finished(struct Scsi_Host *shost, unsigned long time);
-int mvs_queue_command(struct sas_task *task, gfp_t gfp_flags);
-int mvs_abort_task(struct sas_task *task);
+int mvs_queue_command(struct sas_task *work, gfp_t gfp_flags);
+int mvs_abort_task(struct sas_task *work);
 void mvs_port_formed(struct asd_sas_phy *sas_phy);
 void mvs_port_deformed(struct asd_sas_phy *sas_phy);
 int mvs_dev_found(struct domain_device *dev);
@@ -441,7 +442,7 @@ void mvs_dev_gone(struct domain_device *dev);
 int mvs_lu_reset(struct domain_device *dev, u8 *lun);
 int mvs_slot_complete(struct mvs_info *mvi, u32 rx_desc, u32 flags);
 int mvs_I_T_nexus_reset(struct domain_device *dev);
-int mvs_query_task(struct sas_task *task);
+int mvs_query_task(struct sas_task *work);
 void mvs_release_task(struct mvs_info *mvi,
 			struct domain_device *dev);
 void mvs_do_release_task(struct mvs_info *mvi, int phy_no,
