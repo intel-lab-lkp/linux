@@ -18,6 +18,7 @@
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_vblank.h>
+#include <drm/drm_vblank_work.h>
 
 #include "mtk_crtc.h"
 #include "mtk_ddp_comp.h"
@@ -69,6 +70,9 @@ struct mtk_crtc {
 	/* lock for display hardware access */
 	struct mutex			hw_lock;
 	bool				config_updating;
+
+	struct mtk_ddp_comp		*crc_provider;
+	struct drm_vblank_work		crc_work;
 };
 
 struct mtk_crtc_state {
@@ -703,6 +707,71 @@ static void mtk_crtc_update_output(struct drm_crtc *crtc,
 	}
 }
 
+static void mtk_crtc_crc_work(struct kthread_work *base)
+{
+	struct drm_vblank_work *work = to_drm_vblank_work(base);
+	struct mtk_crtc *mtk_crtc =
+		container_of(work, typeof(*mtk_crtc), crc_work);
+
+	if (mtk_crtc->base.crc.opened) {
+		struct mtk_ddp_comp *comp = mtk_crtc->crc_provider;
+		u64 vblank = drm_crtc_vblank_count(&mtk_crtc->base);
+
+		comp->funcs->crc_read(comp->dev);
+
+		/* could take more than 50ms to finish */
+		drm_crtc_add_crc_entry(&mtk_crtc->base, true, vblank,
+				       comp->funcs->crc_entry(comp->dev));
+
+		drm_vblank_work_schedule(&mtk_crtc->crc_work, vblank + 1, true);
+	}
+}
+
+static int mtk_crtc_set_crc_source(struct drm_crtc *crtc, const char *src)
+{
+	struct mtk_crtc *mtk_crtc = to_mtk_crtc(crtc);
+
+	if (!src)
+		return -EINVAL;
+
+	if (strcmp(src, "auto") != 0) {
+		DRM_ERROR("%s(crtc-%d): unknown source '%s'\n",
+			  __func__, drm_crtc_index(crtc), src);
+		return -EINVAL;
+	}
+
+	/*
+	 * skip the first crc because the first frame (vblank + 1) is configured
+	 * by mtk_crtc_ddp_hw_init() when atomic enable
+	 */
+	drm_vblank_work_schedule(&mtk_crtc->crc_work,
+				 drm_crtc_vblank_count(crtc) + 2, false);
+	return 0;
+}
+
+static int mtk_crtc_verify_crc_source(struct drm_crtc *crtc, const char *src,
+				      size_t *cnt)
+{
+	struct mtk_crtc *mtk_crtc = to_mtk_crtc(crtc);
+	struct mtk_ddp_comp *comp = mtk_crtc->crc_provider;
+
+	if (!comp) {
+		DRM_ERROR("%s(crtc-%d): no crc provider\n",
+			  __func__, drm_crtc_index(crtc));
+		return -ENOENT;
+	}
+
+	if (src && strcmp(src, "auto") != 0) {
+		DRM_ERROR("%s(crtc-%d): unknown source '%s'\n",
+			  __func__, drm_crtc_index(crtc), src);
+		return -EINVAL;
+	}
+
+	*cnt = comp->funcs->crc_cnt(comp->dev);
+
+	return 0;
+}
+
 int mtk_crtc_plane_check(struct drm_crtc *crtc, struct drm_plane *plane,
 			 struct mtk_plane_state *state)
 {
@@ -751,6 +820,8 @@ static void mtk_crtc_atomic_enable(struct drm_crtc *crtc,
 
 	drm_crtc_vblank_on(crtc);
 	mtk_crtc->enabled = true;
+
+	drm_vblank_work_init(&mtk_crtc->crc_work, crtc, mtk_crtc_crc_work);
 }
 
 static void mtk_crtc_atomic_disable(struct drm_crtc *crtc,
@@ -840,6 +911,8 @@ static const struct drm_crtc_funcs mtk_crtc_funcs = {
 	.atomic_destroy_state	= mtk_crtc_destroy_state,
 	.enable_vblank		= mtk_crtc_enable_vblank,
 	.disable_vblank		= mtk_crtc_disable_vblank,
+	.set_crc_source		= mtk_crtc_set_crc_source,
+	.verify_crc_source	= mtk_crtc_verify_crc_source,
 };
 
 static const struct drm_crtc_helper_funcs mtk_crtc_helper_funcs = {
@@ -1033,6 +1106,11 @@ int mtk_crtc_create(struct drm_device *drm_dev, const unsigned int *path,
 
 			if (comp->funcs->ctm_set)
 				has_ctm = true;
+
+			if (comp->funcs->crc_cnt &&
+			    comp->funcs->crc_entry &&
+			    comp->funcs->crc_read)
+				mtk_crtc->crc_provider = comp;
 		}
 
 		mtk_ddp_comp_register_vblank_cb(comp, mtk_crtc_ddp_irq,
@@ -1136,3 +1214,185 @@ int mtk_crtc_create(struct drm_device *drm_dev, const unsigned int *path,
 
 	return 0;
 }
+
+void mtk_crtc_init_crc(struct mtk_crtc_crc *crc, const u32 *crc_offset_table,
+		       size_t crc_count, u32 reset_offset, u32 reset_mask)
+{
+	crc->ofs = crc_offset_table;
+	crc->cnt = crc_count;
+	crc->rst_ofs = reset_offset;
+	crc->rst_msk = reset_mask;
+	crc->va = kcalloc(crc->cnt, sizeof(*crc->va), GFP_KERNEL);
+	if (!crc->va) {
+		DRM_ERROR("failed to allocate memory for crc\n");
+		crc->cnt = 0;
+	}
+}
+
+void mtk_crtc_read_crc(struct mtk_crtc_crc *crc, void __iomem *reg)
+{
+	if (!crc->cnt || !crc->ofs || !crc->va)
+		return;
+
+#if IS_REACHABLE(CONFIG_MTK_CMDQ)
+	/* sync to see the most up-to-date copy of the DMA buffer */
+	dma_sync_single_for_cpu(crc->cmdq_client.chan->mbox->dev,
+				crc->pa, crc->cnt * sizeof(*crc->va),
+				DMA_FROM_DEVICE);
+#endif
+}
+
+void mtk_crtc_destroy_crc(struct mtk_crtc_crc *crc)
+{
+	if (!crc->cnt)
+		return;
+
+#if IS_REACHABLE(CONFIG_MTK_CMDQ)
+	if (crc->pa) {
+		dma_unmap_single(crc->cmdq_client.chan->mbox->dev,
+				 crc->pa, crc->cnt * sizeof(*crc->va),
+				 DMA_TO_DEVICE);
+		crc->pa = 0;
+	}
+	if (crc->cmdq_client.chan) {
+		mtk_drm_cmdq_pkt_destroy(&crc->cmdq_handle);
+		mbox_free_channel(crc->cmdq_client.chan);
+		crc->cmdq_client.chan = NULL;
+	}
+#endif
+	kfree(crc->va);
+	crc->va = NULL;
+	crc->cnt = 0;
+}
+
+#if IS_REACHABLE(CONFIG_MTK_CMDQ)
+/**
+ * mtk_crtc_create_crc_cmdq - Create a CMDQ thread for syncing the CRCs
+ * @dev: Kernel device node of the CRC provider
+ * @crc: Pointer of the CRC to init
+ *
+ * This function will create a looping thread on GCE (Global Command Engine) to
+ * keep the CRC up to date by monitoring the assigned event (usually the frame
+ * done event) of the CRC provider, and read the CRCs from the registers to a
+ * shared memory for the workqueue to read. To start/stop the looping thread,
+ * please call `mtk_crtc_start_crc_cmdq()` and `mtk_crtc_stop_crc_cmdq()`
+ * defined blow.
+ *
+ * The reason why we don't update the CRCs with CPU is that the front porch of
+ * 4K60 timing in CEA-861 is less than 60us, and register read/write speed is
+ * relatively unreliable comparing to GCE due to the bus design.
+ *
+ * We must create a new thread instead of using the original one for plane
+ * update is because:
+ * 1. We cannot add another wait-for-event command at the end of cmdq packet, or
+ *    the cmdq callback will delay for too long
+ * 2. Will get the CRC of the previous frame if using the existed wait-for-event
+ *    command which is at the beginning of the packet
+ */
+void mtk_crtc_create_crc_cmdq(struct device *dev, struct mtk_crtc_crc *crc)
+{
+	int i;
+
+	if (!crc->cnt) {
+		dev_warn(dev, "%s: not support\n", __func__);
+		goto cleanup;
+	}
+
+	if (!crc->ofs) {
+		dev_warn(dev, "%s: not defined\n", __func__);
+		goto cleanup;
+	}
+
+	crc->cmdq_client.client.dev = dev;
+	crc->cmdq_client.client.tx_block = false;
+	crc->cmdq_client.client.knows_txdone = true;
+	crc->cmdq_client.client.rx_callback = NULL;
+	crc->cmdq_client.chan = mbox_request_channel(&crc->cmdq_client.client, 0);
+	if (IS_ERR(crc->cmdq_client.chan)) {
+		dev_warn(dev, "%s: failed to create mailbox client\n", __func__);
+		crc->cmdq_client.chan = NULL;
+		goto cleanup;
+	}
+
+	if (mtk_drm_cmdq_pkt_create(&crc->cmdq_client, &crc->cmdq_handle, PAGE_SIZE)) {
+		dev_warn(dev, "%s: failed to create cmdq packet\n", __func__);
+		goto cleanup;
+	}
+
+	if (!crc->va) {
+		dev_warn(dev, "%s: no memory\n", __func__);
+		goto cleanup;
+	}
+
+	/* map the entry to get a dma address for cmdq to store the crc */
+	crc->pa = dma_map_single(crc->cmdq_client.chan->mbox->dev,
+				 crc->va, crc->cnt * sizeof(*crc->va),
+				 DMA_FROM_DEVICE);
+
+	if (dma_mapping_error(crc->cmdq_client.chan->mbox->dev, crc->pa)) {
+		dev_err(dev, "%s: failed to map dma\n", __func__);
+		goto cleanup;
+	}
+
+	if (crc->cmdq_event)
+		cmdq_pkt_wfe(&crc->cmdq_handle, crc->cmdq_event, true);
+
+	for (i = 0; i < crc->cnt; i++) {
+		/* put crc to spr1 register */
+		cmdq_pkt_read_s(&crc->cmdq_handle, crc->cmdq_reg->subsys,
+				crc->cmdq_reg->offset + crc->ofs[i],
+				CMDQ_THR_SPR_IDX1);
+
+		/* copy spr1 register to physical address of the crc */
+		cmdq_pkt_assign(&crc->cmdq_handle, CMDQ_THR_SPR_IDX0,
+				CMDQ_ADDR_HIGH(crc->pa + i * sizeof(*crc->va)));
+		cmdq_pkt_write_s(&crc->cmdq_handle, CMDQ_THR_SPR_IDX0,
+				 CMDQ_ADDR_LOW(crc->pa + i * sizeof(*crc->va)),
+				 CMDQ_THR_SPR_IDX1);
+	}
+	/* reset crc */
+	mtk_ddp_write_mask(&crc->cmdq_handle, ~0, crc->cmdq_reg, 0,
+			   crc->rst_ofs, crc->rst_msk);
+
+	/* clear reset bit */
+	mtk_ddp_write_mask(&crc->cmdq_handle, 0, crc->cmdq_reg, 0,
+			   crc->rst_ofs, crc->rst_msk);
+
+	/* jump to head of the cmdq packet */
+	cmdq_pkt_jump(&crc->cmdq_handle, crc->cmdq_handle.pa_base);
+
+	return;
+cleanup:
+	mtk_crtc_destroy_crc(crc);
+}
+
+/**
+ * mtk_crtc_start_crc_cmdq - Start the GCE looping thread for CRC update
+ * @crc: Pointer of the CRC information
+ */
+void mtk_crtc_start_crc_cmdq(struct mtk_crtc_crc *crc)
+{
+	if (!crc->cmdq_client.chan)
+		return;
+
+	dma_sync_single_for_device(crc->cmdq_client.chan->mbox->dev,
+				   crc->cmdq_handle.pa_base,
+				   crc->cmdq_handle.cmd_buf_size,
+				   DMA_TO_DEVICE);
+	mbox_send_message(crc->cmdq_client.chan, &crc->cmdq_handle);
+	mbox_client_txdone(crc->cmdq_client.chan, 0);
+}
+
+/**
+ * mtk_crtc_stop_crc_cmdq - Stop the GCE looping thread for CRC update
+ * @crc: Pointer of the CRC information
+ */
+void mtk_crtc_stop_crc_cmdq(struct mtk_crtc_crc *crc)
+{
+	if (!crc->cmdq_client.chan)
+		return;
+
+	/* remove all the commands from the cmdq packet */
+	mbox_flush(crc->cmdq_client.chan, 2000);
+}
+#endif
