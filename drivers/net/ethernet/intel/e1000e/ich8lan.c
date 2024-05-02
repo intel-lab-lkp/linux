@@ -1446,8 +1446,11 @@ static s32 e1000_check_for_copper_link_ich8lan(struct e1000_hw *hw)
 	/* First we want to see if the MII Status Register reports
 	 * link.  If so, then we want to get the current speed/duplex
 	 * of the PHY.
+	 * Some PHYs have link fluctuations with the instability of
+	 * Link Status bit (BMSR_LSTATUS) in MII Status Register.
+	 * Increase the iteration times and delay solves the problem.
 	 */
-	ret_val = e1000e_phy_has_link_generic(hw, 1, 0, &link);
+	ret_val = e1000e_phy_has_link_generic(hw, COPPER_LINK_UP_LIMIT, 100000, &link);
 	if (ret_val)
 		goto out;
 
