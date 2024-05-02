@@ -3307,9 +3307,8 @@ static void bnxt_free_tx_skbs(struct bnxt *bp)
 	}
 }
 
-static void bnxt_free_one_rx_ring_skbs(struct bnxt *bp, int ring_nr)
+static void bnxt_free_one_rx_ring_skbs(struct bnxt *bp, struct bnxt_rx_ring_info *rxr)
 {
-	struct bnxt_rx_ring_info *rxr = &bp->rx_ring[ring_nr];
 	struct pci_dev *pdev = bp->pdev;
 	struct bnxt_tpa_idx_map *map;
 	int i, max_idx, max_agg_idx;
@@ -3389,7 +3388,7 @@ static void bnxt_free_rx_skbs(struct bnxt *bp)
 		return;
 
 	for (i = 0; i < bp->rx_nr_rings; i++)
-		bnxt_free_one_rx_ring_skbs(bp, i);
+		bnxt_free_one_rx_ring_skbs(bp, &bp->rx_ring[i]);
 }
 
 static void bnxt_free_skbs(struct bnxt *bp)
@@ -4051,9 +4050,8 @@ static void bnxt_init_rxbd_pages(struct bnxt_ring_struct *ring, u32 type)
 	}
 }
 
-static int bnxt_alloc_one_rx_ring(struct bnxt *bp, int ring_nr)
+static int bnxt_alloc_one_rx_ring(struct bnxt *bp, struct bnxt_rx_ring_info *rxr)
 {
-	struct bnxt_rx_ring_info *rxr = &bp->rx_ring[ring_nr];
 	struct net_device *dev = bp->dev;
 	u32 prod;
 	int i;
@@ -4062,7 +4060,7 @@ static int bnxt_alloc_one_rx_ring(struct bnxt *bp, int ring_nr)
 	for (i = 0; i < bp->rx_ring_size; i++) {
 		if (bnxt_alloc_rx_data(bp, rxr, prod, GFP_KERNEL)) {
 			netdev_warn(dev, "init'ed rx ring %d with %d/%d skbs only\n",
-				    ring_nr, i, bp->rx_ring_size);
+				    rxr->bnapi->index, i, bp->rx_ring_size);
 			break;
 		}
 		prod = NEXT_RX(prod);
@@ -4076,7 +4074,7 @@ static int bnxt_alloc_one_rx_ring(struct bnxt *bp, int ring_nr)
 	for (i = 0; i < bp->rx_agg_ring_size; i++) {
 		if (bnxt_alloc_rx_page(bp, rxr, prod, GFP_KERNEL)) {
 			netdev_warn(dev, "init'ed rx ring %d with %d/%d pages only\n",
-				    ring_nr, i, bp->rx_ring_size);
+				    rxr->bnapi->index, i, bp->rx_ring_size);
 			break;
 		}
 		prod = NEXT_RX_AGG(prod);
@@ -4135,7 +4133,7 @@ static int bnxt_init_one_rx_ring(struct bnxt *bp, int ring_nr)
 		bnxt_init_rxbd_pages(ring, type);
 	}
 
-	return bnxt_alloc_one_rx_ring(bp, ring_nr);
+	return bnxt_alloc_one_rx_ring(bp, rxr);
 }
 
 static void bnxt_init_cp_rings(struct bnxt *bp)
@@ -13241,13 +13239,13 @@ static void bnxt_rx_ring_reset(struct bnxt *bp)
 			bnxt_reset_task(bp, true);
 			break;
 		}
-		bnxt_free_one_rx_ring_skbs(bp, i);
+		bnxt_free_one_rx_ring_skbs(bp, rxr);
 		rxr->rx_prod = 0;
 		rxr->rx_agg_prod = 0;
 		rxr->rx_sw_agg_prod = 0;
 		rxr->rx_next_cons = 0;
 		rxr->bnapi->in_reset = false;
-		bnxt_alloc_one_rx_ring(bp, i);
+		bnxt_alloc_one_rx_ring(bp, rxr);
 		cpr = &rxr->bnapi->cp_ring;
 		cpr->sw_stats.rx.rx_resets++;
 		if (bp->flags & BNXT_FLAG_AGG_RINGS)
@@ -14829,7 +14827,7 @@ static int bnxt_queue_start(struct net_device *dev, int idx, void *qmem)
 	struct bnxt_rx_ring_info *rxr = qmem;
 	struct bnxt *bp = netdev_priv(dev);
 
-	bnxt_alloc_one_rx_ring(bp, idx);
+	bnxt_alloc_one_rx_ring(bp, rxr);
 
 	if (bp->flags & BNXT_FLAG_AGG_RINGS)
 		bnxt_db_write(bp, &rxr->rx_agg_db, rxr->rx_agg_prod);
@@ -14852,8 +14850,8 @@ static int bnxt_queue_stop(struct net_device *dev, int idx, void **out_qmem)
 	if (rc)
 		return rc;
 
-	bnxt_free_one_rx_ring_skbs(bp, idx);
 	rxr = &bp->rx_ring[idx];
+	bnxt_free_one_rx_ring_skbs(bp, rxr);
 	rxr->rx_prod = 0;
 	rxr->rx_agg_prod = 0;
 	rxr->rx_sw_agg_prod = 0;
