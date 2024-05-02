@@ -323,7 +323,8 @@ int panthor_heap_create(struct panthor_heap_pool *pool,
 	if (!pool->vm) {
 		ret = -EINVAL;
 	} else {
-		ret = xa_alloc(&pool->xa, &id, heap, XA_LIMIT(1, MAX_HEAPS_PER_POOL), GFP_KERNEL);
+		ret = xa_alloc(&pool->xa, &id, heap,
+			       XA_LIMIT(0, MAX_HEAPS_PER_POOL - 1), GFP_KERNEL);
 		if (!ret) {
 			void *gpu_ctx = panthor_get_heap_ctx(pool, id);
 
