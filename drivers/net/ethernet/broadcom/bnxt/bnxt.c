@@ -3997,6 +3997,31 @@ static int bnxt_alloc_cp_rings(struct bnxt *bp)
 	return 0;
 }
 
+static void __bnxt_init_rx_ring_struct(struct bnxt *bp,
+				       struct bnxt_rx_ring_info *rxr)
+{
+	struct bnxt_ring_mem_info *rmem;
+	struct bnxt_ring_struct *ring;
+
+	ring = &rxr->rx_ring_struct;
+	rmem = &ring->ring_mem;
+	rmem->nr_pages = bp->rx_nr_pages;
+	rmem->page_size = HW_RXBD_RING_SIZE;
+	rmem->pg_arr = (void **)rxr->rx_desc_ring;
+	rmem->dma_arr = rxr->rx_desc_mapping;
+	rmem->vmem_size = SW_RXBD_RING_SIZE * bp->rx_nr_pages;
+	rmem->vmem = (void **)&rxr->rx_buf_ring;
+
+	ring = &rxr->rx_agg_ring_struct;
+	rmem = &ring->ring_mem;
+	rmem->nr_pages = bp->rx_agg_nr_pages;
+	rmem->page_size = HW_RXBD_RING_SIZE;
+	rmem->pg_arr = (void **)rxr->rx_agg_desc_ring;
+	rmem->dma_arr = rxr->rx_agg_desc_mapping;
+	rmem->vmem_size = SW_RXBD_AGG_RING_SIZE * bp->rx_agg_nr_pages;
+	rmem->vmem = (void **)&rxr->rx_agg_ring;
+}
+
 static void bnxt_init_ring_struct(struct bnxt *bp)
 {
 	int i, j;
@@ -4024,24 +4049,7 @@ static void bnxt_init_ring_struct(struct bnxt *bp)
 		rxr = bnapi->rx_ring;
 		if (!rxr)
 			goto skip_rx;
-
-		ring = &rxr->rx_ring_struct;
-		rmem = &ring->ring_mem;
-		rmem->nr_pages = bp->rx_nr_pages;
-		rmem->page_size = HW_RXBD_RING_SIZE;
-		rmem->pg_arr = (void **)rxr->rx_desc_ring;
-		rmem->dma_arr = rxr->rx_desc_mapping;
-		rmem->vmem_size = SW_RXBD_RING_SIZE * bp->rx_nr_pages;
-		rmem->vmem = (void **)&rxr->rx_buf_ring;
-
-		ring = &rxr->rx_agg_ring_struct;
-		rmem = &ring->ring_mem;
-		rmem->nr_pages = bp->rx_agg_nr_pages;
-		rmem->page_size = HW_RXBD_RING_SIZE;
-		rmem->pg_arr = (void **)rxr->rx_agg_desc_ring;
-		rmem->dma_arr = rxr->rx_agg_desc_mapping;
-		rmem->vmem_size = SW_RXBD_AGG_RING_SIZE * bp->rx_agg_nr_pages;
-		rmem->vmem = (void **)&rxr->rx_agg_ring;
+		__bnxt_init_rx_ring_struct(bp, rxr);
 
 skip_rx:
 		bnxt_for_each_napi_tx(j, bnapi, txr) {
