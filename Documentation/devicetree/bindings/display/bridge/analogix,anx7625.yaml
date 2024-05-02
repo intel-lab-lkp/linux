@@ -82,6 +82,10 @@ properties:
     type: boolean
     description: let the driver enable audio HDMI codec function or not.
 
+  no-shift-audio-data:
+    type: boolean
+    description: Disable the first audio data bit shift in the TDM settings.
+
   aux-bus:
     $ref: /schemas/display/dp-aux-bus.yaml#
 
