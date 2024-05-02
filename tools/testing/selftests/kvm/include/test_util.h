@@ -36,10 +36,26 @@ static inline int _no_printf(const char *format, ...) { return 0; }
 #endif
 
 void __printf(1, 2) print_skip(const char *fmt, ...);
-#define __TEST_REQUIRE(f, fmt, ...)				\
-do {								\
-	if (!(f))						\
-		ksft_exit_skip("- " fmt "\n", ##__VA_ARGS__);	\
+
+extern bool kvm_is_sub_test;
+
+/*
+ * Skip the test if a required capability/feature/whatever is not available,
+ * e.g. due to lack of support in the underlying hardware, running against an
+ * older kernel/KVM, etc.  Use ksft_test_result_skip() for sub-tests to avoid
+ * spuriously printing the summary of the entire test suite.  Note, sub-tests
+ * run in a child process, and so can exit() directly, e.g. don't need to
+ * longjmp() out or do something similar to avoid killing the test as a whole.
+ */
+#define __TEST_REQUIRE(f, fmt, ...)						\
+do {										\
+	if (!(f)) {								\
+		if (kvm_is_sub_test) {						\
+			ksft_test_result_skip("- " fmt "\n", ##__VA_ARGS__);	\
+			exit(KSFT_SKIP);					\
+		}								\
+		ksft_exit_skip("- " fmt "\n", ##__VA_ARGS__);			\
+	}									\
 } while (0)
 
 #define TEST_REQUIRE(f) __TEST_REQUIRE(f, "Requirement not met: %s", #f)

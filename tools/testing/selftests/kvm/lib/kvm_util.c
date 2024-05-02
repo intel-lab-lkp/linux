@@ -19,6 +19,8 @@
 
 #define KVM_UTIL_MIN_PFN	2
 
+bool kvm_is_sub_test;
+
 uint32_t guest_random_seed;
 struct guest_random_state guest_rng;
 

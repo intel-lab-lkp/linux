@@ -9,6 +9,7 @@
 #define SELFTEST_KVM_TEST_HARNESS_H
 
 #include "kselftest_harness.h"
+#include "test_util.h"
 
 #define KVM_ONE_VCPU_TEST_SUITE(name)					\
 	FIXTURE(name) {							\
@@ -29,7 +30,10 @@ static void __suite##_##test(struct kvm_vcpu *vcpu);			\
 TEST_F(suite, test)							\
 {									\
 	vcpu_arch_set_entry_point(self->vcpu, guestcode);		\
+									\
+	kvm_is_sub_test = true;						\
 	__suite##_##test(self->vcpu);					\
+	kvm_is_sub_test = NULL;						\
 }									\
 static void __suite##_##test(struct kvm_vcpu *vcpu)
 
