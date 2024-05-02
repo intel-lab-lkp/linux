@@ -30,6 +30,13 @@ static struct vfsmount *tracefs_mount;
 static int tracefs_mount_count;
 static bool tracefs_registered;
 
+/*
+ * Keep track of all tracefs_inodes in order to update their
+ * flags if necessary on a remount.
+ */
+static DEFINE_MUTEX(tracefs_inode_mutex);
+static LIST_HEAD(tracefs_inodes);
+
 static struct inode *tracefs_alloc_inode(struct super_block *sb)
 {
 	struct tracefs_inode *ti;
@@ -38,12 +45,22 @@ static struct inode *tracefs_alloc_inode(struct super_block *sb)
 	if (!ti)
 		return NULL;
 
+	mutex_lock(&tracefs_inode_mutex);
+	list_add(&ti->list, &tracefs_inodes);
+	mutex_unlock(&tracefs_inode_mutex);
+
 	return &ti->vfs_inode;
 }
 
 static void tracefs_free_inode(struct inode *inode)
 {
-	kmem_cache_free(tracefs_inode_cachep, get_tracefs(inode));
+	struct tracefs_inode *ti = get_tracefs(inode);
+
+	mutex_lock(&tracefs_inode_mutex);
+	list_del(&ti->list);
+	mutex_unlock(&tracefs_inode_mutex);
+
+	kmem_cache_free(tracefs_inode_cachep, ti);
 }
 
 static ssize_t default_read_file(struct file *file, char __user *buf,
@@ -313,6 +330,8 @@ static int tracefs_apply_options(struct super_block *sb, bool remount)
 	struct tracefs_fs_info *fsi = sb->s_fs_info;
 	struct inode *inode = d_inode(sb->s_root);
 	struct tracefs_mount_opts *opts = &fsi->mount_opts;
+	struct tracefs_inode *ti;
+	bool update_uid, update_gid;
 	umode_t tmp_mode;
 
 	/*
@@ -331,6 +350,25 @@ static int tracefs_apply_options(struct super_block *sb, bool remount)
 
 	if (!remount || opts->opts & BIT(Opt_gid))
 		inode->i_gid = opts->gid;
+
+	if (remount && (opts->opts & BIT(Opt_uid) || opts->opts & BIT(Opt_gid))) {
+		mutex_lock(&tracefs_inode_mutex);
+
+		update_uid = opts->opts & BIT(Opt_uid);
+		update_gid = opts->opts & BIT(Opt_gid);
+
+		list_for_each_entry(ti, &tracefs_inodes, list) {
+			if (update_uid)
+				ti->flags &= ~TRACEFS_UID_PERM_SET;
+
+			if (update_gid)
+				ti->flags &= ~TRACEFS_GID_PERM_SET;
+
+			if (ti->flags & TRACEFS_EVENT_INODE)
+				eventfs_remount(ti, update_uid, update_gid);
+		}
+		mutex_unlock(&tracefs_inode_mutex);
+	}
 
 	return 0;
 }
