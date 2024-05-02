@@ -1190,7 +1190,9 @@ PHONY += prepare archprepare
 
 archprepare: outputmakefile archheaders archscripts scripts include/config/kernel.release \
 	asm-generic $(version_h) include/generated/utsrelease.h \
-	include/generated/compile.h include/generated/autoconf.h remove-stale-files
+	include/generated/compile.h include/generated/autoconf.h \
+	include/generated/refcount-long.h \
+	remove-stale-files
 
 prepare0: archprepare
 	$(Q)$(MAKE) $(build)=scripts/mod
@@ -1261,6 +1263,13 @@ filechk_compile.h = $(srctree)/scripts/mkcompile_h \
 
 include/generated/compile.h: FORCE
 	$(call filechk,compile.h)
+
+include/generated/refcount-long.h: $(srctree)/include/linux/refcount-impl.h
+	$(Q)$(PERL) -pe 's/\b(atomic|(__)?refcount)_/\1_long_/g;	\
+			 s/ATOMIC_/ATOMIC_LONG_/g;			\
+			 s/(REFCOUNT)_(IMPL|INIT|MAX|SAT)/\1_LONG_\2/g;	\
+			 s/\b(U?)INT_/\1LONG_/g;			\
+			 s/\bint\b/long/g;' $< >$@
 
 PHONY += headerdep
 headerdep:

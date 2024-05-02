@@ -10,10 +10,8 @@
 
 #define REFCOUNT_WARN(str)	WARN_ONCE(1, "refcount_t: " str ".\n")
 
-void refcount_warn_saturate(refcount_t *r, enum refcount_saturation_type t)
+static void refcount_report_saturation(enum refcount_saturation_type t)
 {
-	refcount_set(r, REFCOUNT_SATURATED);
-
 	switch (t) {
 	case REFCOUNT_ADD_NOT_ZERO_OVF:
 		REFCOUNT_WARN("saturated; leaking memory");
@@ -34,7 +32,20 @@ void refcount_warn_saturate(refcount_t *r, enum refcount_saturation_type t)
 		REFCOUNT_WARN("unknown saturation event!?");
 	}
 }
+
+void refcount_warn_saturate(refcount_t *r, enum refcount_saturation_type t)
+{
+	refcount_set(r, REFCOUNT_SATURATED);
+	refcount_report_saturation(t);
+}
 EXPORT_SYMBOL(refcount_warn_saturate);
+
+void refcount_long_warn_saturate(refcount_long_t *r, enum refcount_saturation_type t)
+{
+	refcount_long_set(r, REFCOUNT_LONG_SATURATED);
+	refcount_report_saturation(t);
+}
+EXPORT_SYMBOL(refcount_long_warn_saturate);
 
 /**
  * refcount_dec_if_one - decrement a refcount if it is 1

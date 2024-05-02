@@ -16,4 +16,16 @@ typedef struct refcount_struct {
 	atomic_t refs;
 } refcount_t;
 
+/**
+ * typedef refcount_long_t - variant of atomic64_t specialized for reference counts
+ * @refs: atomic_long_t counter field
+ *
+ * The counter saturates at REFCOUNT_LONG_SATURATED and will not move once
+ * there. This avoids wrapping the counter and causing 'spurious'
+ * use-after-free bugs.
+ */
+typedef struct refcount_long_struct {
+	atomic_long_t refs;
+} refcount_long_t;
+
 #endif /* _LINUX_REFCOUNT_TYPES_H */
