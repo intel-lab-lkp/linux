@@ -46,6 +46,10 @@ struct mtk_mmsys_driver_data {
 	bool shadow_register;
 	unsigned int mmsys_id;
 	unsigned int mmsys_dev_num;
+
+	int max_width;
+	int min_width;
+	int min_height;
 };
 
 struct mtk_drm_private {
