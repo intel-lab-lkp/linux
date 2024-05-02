@@ -1045,7 +1045,7 @@ static int arch_timer_starting_cpu(unsigned int cpu)
 	return 0;
 }
 
-static int validate_timer_rate(void)
+static int __init validate_timer_rate(void)
 {
 	if (!arch_timer_rate)
 		return -EINVAL;
