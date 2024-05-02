@@ -47,7 +47,13 @@ static inline void __kvm_skip_instr(struct kvm_vcpu *vcpu)
  */
 static inline void kvm_skip_host_instr(void)
 {
+	u64 spsr = read_sysreg_el2(SYS_SPSR);
+
 	write_sysreg_el2(read_sysreg_el2(SYS_ELR) + 4, SYS_ELR);
+
+	spsr &= ~(PSR_BTYPE_MASK | DBG_SPSR_SS);
+
+	write_sysreg_el2(spsr, SYS_SPSR);
 }
 
 #endif
