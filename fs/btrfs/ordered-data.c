@@ -247,12 +247,15 @@ static void insert_ordered_extent(struct btrfs_ordered_extent *entry)
  *
  * @inode:           Inode that this extent is for.
  * @file_offset:     Logical offset in file where the extent starts.
+ * @flags:           Flags specifying type of extent (1 << BTRFS_ORDERED_*).
+ *
+ * The following members are from @file_extent:
+ *
  * @num_bytes:       Logical length of extent in file.
  * @ram_bytes:       Full length of unencoded data.
  * @disk_bytenr:     Offset of extent on disk.
  * @disk_num_bytes:  Size of extent on disk.
  * @offset:          Offset into unencoded data where file data starts.
- * @flags:           Flags specifying type of extent (1 << BTRFS_ORDERED_*).
  * @compress_type:   Compression algorithm used for data.
  *
  * Most of these parameters correspond to &struct btrfs_file_extent_item. The
@@ -263,17 +266,20 @@ static void insert_ordered_extent(struct btrfs_ordered_extent *entry)
  */
 struct btrfs_ordered_extent *btrfs_alloc_ordered_extent(
 			struct btrfs_inode *inode, u64 file_offset,
-			u64 num_bytes, u64 ram_bytes, u64 disk_bytenr,
-			u64 disk_num_bytes, u64 offset, unsigned long flags,
-			int compress_type)
+			struct btrfs_file_extent *file_extent,
+			unsigned long flags)
 {
 	struct btrfs_ordered_extent *entry;
 
 	ASSERT((flags & ~BTRFS_ORDERED_TYPE_FLAGS) == 0);
 
-	entry = alloc_ordered_extent(inode, file_offset, num_bytes, ram_bytes,
-				     disk_bytenr, disk_num_bytes, offset, flags,
-				     compress_type);
+	entry = alloc_ordered_extent(inode, file_offset,
+				     file_extent->num_bytes,
+				     file_extent->ram_bytes,
+				     file_extent->disk_bytenr,
+				     file_extent->disk_num_bytes,
+				     file_extent->offset, flags,
+				     file_extent->compression);
 	if (!IS_ERR(entry))
 		insert_ordered_extent(entry);
 	return entry;
@@ -292,6 +298,12 @@ void btrfs_add_ordered_sum(struct btrfs_ordered_extent *entry,
 	spin_lock_irq(&inode->ordered_tree_lock);
 	list_add_tail(&sum->list, &entry->list);
 	spin_unlock_irq(&inode->ordered_tree_lock);
+}
+
+void btrfs_mark_ordered_extent_error(struct btrfs_ordered_extent *ordered)
+{
+	if (!test_and_set_bit(BTRFS_ORDERED_IOERR, &ordered->flags))
+		mapping_set_error(ordered->inode->i_mapping, -EIO);
 }
 
 static void finish_ordered_fn(struct btrfs_work *work)
@@ -332,7 +344,7 @@ static bool can_finish_ordered_extent(struct btrfs_ordered_extent *ordered,
 	if (WARN_ON_ONCE(len > ordered->bytes_left)) {
 		btrfs_crit(fs_info,
 "bad ordered extent accounting, root=%llu ino=%llu OE offset=%llu OE len=%llu to_dec=%llu left=%llu",
-			   inode->root->root_key.objectid, btrfs_ino(inode),
+			   btrfs_root_id(inode->root), btrfs_ino(inode),
 			   ordered->file_offset, ordered->num_bytes,
 			   len, ordered->bytes_left);
 		ordered->bytes_left = 0;
