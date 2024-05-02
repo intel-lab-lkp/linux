@@ -1709,6 +1709,9 @@ static int anx7625_parse_dt(struct device *dev,
 	if (of_property_read_bool(np, "analogix,audio-enable"))
 		pdata->audio_en = 1;
 
+	if(!of_property_read_bool(np, "no-shift-audio-data"))
+		pdata->shift_audio_data = 1;
+
 	return 0;
 }
 
@@ -1865,6 +1868,11 @@ static int anx7625_audio_hw_params(struct device *dev, void *data,
 					   AUDIO_CHANNEL_STATUS_6,
 					   ~TDM_SLAVE_MODE,
 					   I2S_SLAVE_MODE);
+
+	if (!ctx->pdata.shift_audio_data)
+		ret |= anx7625_write_or(ctx, ctx->i2c.tx_p2_client,
+				       AUDIO_CONTROL_REGISTER,
+				       TDM_TIMING_MODE);
 
 	/* Word length */
 	switch (params->sample_width) {

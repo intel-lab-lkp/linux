@@ -441,6 +441,7 @@ struct anx7625_platform_data {
 	u8 lane1_reg_data[DP_TX_SWING_REG_CNT];
 	u32 low_power_mode;
 	struct device_node *mipi_host_node;
+	int shift_audio_data;
 };
 
 struct anx7625_i2c_client {
