@@ -389,7 +389,7 @@ nfsd_proc_create(struct svc_rqst *rqstp)
 		 * open(..., O_CREAT|O_TRUNC|O_WRONLY).
 		 */
 		attr->ia_valid &= ATTR_SIZE;
-		if (attr->ia_valid)
+		if (nfsd_attrs_valid(attr))
 			resp->status = nfsd_setattr(rqstp, newfhp, &attrs,
 						    NULL);
 	}
