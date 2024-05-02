@@ -14848,6 +14848,93 @@ static const struct netdev_stat_ops bnxt_stat_ops = {
 	.get_base_stats		= bnxt_get_base_stats,
 };
 
+static int __bnxt_alloc_rx_desc_ring(struct pci_dev *pdev, struct bnxt_ring_mem_info *rmem)
+{
+	int i, rc;
+
+	for (i = 0; i < rmem->nr_pages; i++) {
+		rmem->pg_arr[i] = dma_alloc_coherent(&pdev->dev,
+						     rmem->page_size,
+						     &rmem->dma_arr[i],
+						     GFP_KERNEL);
+		if (!rmem->pg_arr[i]) {
+			rc = -ENOMEM;
+			goto err_free;
+		}
+	}
+
+	return 0;
+
+err_free:
+	while (i--) {
+		dma_free_coherent(&pdev->dev, rmem->page_size,
+				  rmem->pg_arr[i], rmem->dma_arr[i]);
+		rmem->pg_arr[i] = NULL;
+	}
+	return rc;
+}
+
+static int bnxt_alloc_rx_ring_struct(struct bnxt *bp, struct bnxt_ring_struct *ring)
+{
+	struct bnxt_ring_mem_info *rmem;
+	int rc;
+
+	rmem = &ring->ring_mem;
+	rc = __bnxt_alloc_rx_desc_ring(bp->pdev, rmem);
+	if (rc)
+		return rc;
+
+	*rmem->vmem = vzalloc(rmem->vmem_size);
+	if (!(*rmem->vmem)) {
+		rc = -ENOMEM;
+		goto err_free;
+	}
+
+	return 0;
+
+err_free:
+	bnxt_free_ring(bp, rmem);
+	return rc;
+}
+
+static int bnxt_alloc_rx_agg_bmap(struct bnxt *bp, struct bnxt_rx_ring_info *rxr)
+{
+	u16 mem_size;
+
+	rxr->rx_agg_bmap_size = bp->rx_agg_ring_mask + 1;
+	mem_size = rxr->rx_agg_bmap_size / 8;
+	rxr->rx_agg_bmap = kzalloc(mem_size, GFP_KERNEL);
+	if (!rxr->rx_agg_bmap)
+		return -ENOMEM;
+
+	return 0;
+}
+
+static void bnxt_init_rx_ring_rxbd_pages(struct bnxt *bp, struct bnxt_rx_ring_info *rxr)
+{
+	struct bnxt_ring_struct *ring;
+	u32 type;
+
+	type = (bp->rx_buf_use_size << RX_BD_LEN_SHIFT) |
+		RX_BD_TYPE_RX_PACKET_BD | RX_BD_FLAGS_EOP;
+
+	if (NET_IP_ALIGN == 2)
+		type |= RX_BD_FLAGS_SOP;
+
+	ring = &rxr->rx_ring_struct;
+	ring->fw_ring_id = INVALID_HW_RING_ID;
+	bnxt_init_rxbd_pages(ring, type);
+
+	ring = &rxr->rx_agg_ring_struct;
+	ring->fw_ring_id = INVALID_HW_RING_ID;
+	if ((bp->flags & BNXT_FLAG_AGG_RINGS)) {
+		type = ((u32)BNXT_RX_PAGE_SIZE << RX_BD_LEN_SHIFT) |
+			RX_BD_TYPE_RX_AGG_BD | RX_BD_FLAGS_SOP;
+
+		bnxt_init_rxbd_pages(ring, type);
+	}
+}
+
 static void *bnxt_queue_mem_alloc(struct net_device *dev, int idx)
 {
 	struct bnxt *bp = netdev_priv(dev);
