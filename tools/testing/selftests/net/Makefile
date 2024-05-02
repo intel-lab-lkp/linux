@@ -84,6 +84,7 @@ TEST_GEN_FILES += sctp_hello
 TEST_GEN_FILES += csum
 TEST_GEN_FILES += ip_local_port_range
 TEST_GEN_FILES += bind_wildcard
+TEST_GEN_FILES += epoll_busy_poll
 TEST_PROGS += test_vxlan_mdb.sh
 TEST_PROGS += test_bridge_neigh_suppress.sh
 TEST_PROGS += test_vxlan_nolocalbypass.sh
