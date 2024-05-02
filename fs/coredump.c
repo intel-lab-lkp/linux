@@ -56,10 +56,16 @@
 static bool dump_vma_snapshot(struct coredump_params *cprm);
 static void free_vma_snapshot(struct coredump_params *cprm);
 
+#define MAX_FILE_NOTE_SIZE (4*1024*1024)
+/* Define a reasonable max cap */
+#define MAX_ALLOWED_NOTE_SIZE (16*1024*1024)
+
 static int core_uses_pid;
 static unsigned int core_pipe_limit;
 static char core_pattern[CORENAME_MAX_SIZE] = "core";
 static int core_name_size = CORENAME_MAX_SIZE;
+unsigned int core_file_note_size_max = MAX_FILE_NOTE_SIZE;
+unsigned int core_file_note_size_allowed = MAX_ALLOWED_NOTE_SIZE;
 
 struct core_name {
 	char *corename;
@@ -1019,6 +1025,15 @@ static struct ctl_table coredump_sysctls[] = {
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec,
+	},
+	{
+		.procname       = "core_file_note_size_max",
+		.data           = &core_file_note_size_max,
+		.maxlen         = sizeof(unsigned int),
+		.mode           = 0644,
+		.proc_handler	= proc_douintvec_minmax,
+		.extra1		= &core_file_note_size_max,
+		.extra2		= &core_file_note_size_allowed,
 	},
 };
 
