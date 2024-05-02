@@ -2383,14 +2383,8 @@ static int lan78xx_phy_init(struct lan78xx_net *dev)
 		netdev_err(dev->net, "can't attach PHY to %s\n",
 			   dev->mdiobus->id);
 		if (dev->chipid == ID_REV_CHIP_ID_7801_) {
-			if (phy_is_pseudo_fixed_link(phydev)) {
+			if (phy_is_pseudo_fixed_link(phydev))
 				fixed_phy_unregister(phydev);
-			} else {
-				phy_unregister_fixup_for_uid(PHY_KSZ9031RNX,
-							     0xfffffff0);
-				phy_unregister_fixup_for_uid(PHY_LAN8835,
-							     0xfffffff0);
-			}
 		}
 		return -EIO;
 	}
@@ -4459,6 +4453,14 @@ static int lan78xx_probe(struct usb_interface *intf,
 	  */
 	pm_runtime_set_autosuspend_delay(&udev->dev,
 					 DEFAULT_AUTOSUSPEND_DELAY);
+
+	/* Unregistering Fixup to avoid crash with multiple device
+	 * attach.
+	 */
+	phy_unregister_fixup_for_uid(PHY_KSZ9031RNX,
+				     0xfffffff0);
+	phy_unregister_fixup_for_uid(PHY_LAN8835,
+				     0xfffffff0);
 
 	return 0;
 
