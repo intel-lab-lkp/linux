@@ -407,6 +407,8 @@ static void early_init_intel(struct cpuinfo_x86 *c)
 	 */
 	if (cpu_has(c, X86_FEATURE_TME))
 		detect_tme_early(c);
+
+	init_ia32_feat_ctl(c);
 }
 
 static void bsp_init_intel(struct cpuinfo_x86 *c)
@@ -682,8 +684,6 @@ static void init_intel(struct cpuinfo_x86 *c)
 
 	/* Work around errata */
 	srat_detect_node(c);
-
-	init_ia32_feat_ctl(c);
 
 	init_intel_misc_features(c);
 
