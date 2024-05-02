@@ -340,13 +340,13 @@ static u16 exar_ee_read(struct exar8250 *priv, u8 ee_addr)
 	exar_ee_write_bit(priv, 0);
 
 	// Send address to read from
-	for (i = 1 << (UART_EXAR_REGB_EE_ADDR_SIZE - 1); i; i >>= 1)
-		exar_ee_write_bit(priv, (ee_addr & i));
+	for (i = UART_EXAR_REGB_EE_ADDR_SIZE - 1; i >= 0; i--)
+		exar_ee_write_bit(priv, ee_addr & BIT(i));
 
 	// Read data 1 bit at a time
 	for (i = 0; i <= UART_EXAR_REGB_EE_DATA_SIZE; i++) {
-		data <<= 1;
-		data |= exar_ee_read_bit(priv);
+		if (exar_ee_read_bit(priv))
+			data |= BIT(i);
 	}
 
 	exar_ee_deselect(priv);
