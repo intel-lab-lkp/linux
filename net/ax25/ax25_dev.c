@@ -208,7 +208,7 @@ void __exit ax25_dev_free(void)
 		s        = ax25_dev;
 		netdev_put(ax25_dev->dev, &ax25_dev->dev_tracker);
 		ax25_dev = ax25_dev->next;
-		kfree(s);
+		ax25_dev_put(s);
 	}
 	ax25_dev_list = NULL;
 	spin_unlock_bh(&ax25_dev_lock);
