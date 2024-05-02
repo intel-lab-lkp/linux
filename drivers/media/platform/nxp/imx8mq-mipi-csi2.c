@@ -917,8 +917,7 @@ cleanup:
 
 	media_entity_cleanup(&state->sd.entity);
 	v4l2_subdev_cleanup(&state->sd);
-	v4l2_async_nf_unregister(&state->notifier);
-	v4l2_async_nf_cleanup(&state->notifier);
+	v4l2_async_nf_unregister_cleanup(&state->notifier);
 	v4l2_async_unregister_subdev(&state->sd);
 icc:
 	imx8mq_mipi_csi_release_icc(pdev);
@@ -933,8 +932,7 @@ static void imx8mq_mipi_csi_remove(struct platform_device *pdev)
 	struct v4l2_subdev *sd = platform_get_drvdata(pdev);
 	struct csi_state *state = mipi_sd_to_csi2_state(sd);
 
-	v4l2_async_nf_unregister(&state->notifier);
-	v4l2_async_nf_cleanup(&state->notifier);
+	v4l2_async_nf_unregister_cleanup(&state->notifier);
 	v4l2_async_unregister_subdev(&state->sd);
 
 	pm_runtime_disable(&pdev->dev);

@@ -3639,12 +3639,6 @@ static int ub960_v4l2_notifier_register(struct ub960_data *priv)
 	return 0;
 }
 
-static void ub960_v4l2_notifier_unregister(struct ub960_data *priv)
-{
-	v4l2_async_nf_unregister(&priv->notifier);
-	v4l2_async_nf_cleanup(&priv->notifier);
-}
-
 static int ub960_create_subdev(struct ub960_data *priv)
 {
 	struct device *dev = &priv->client->dev;
@@ -3705,7 +3699,7 @@ static int ub960_create_subdev(struct ub960_data *priv)
 	return 0;
 
 err_unreg_notif:
-	ub960_v4l2_notifier_unregister(priv);
+	v4l2_async_nf_unregister_cleanup(&priv->notifier);
 err_subdev_cleanup:
 	v4l2_subdev_cleanup(&priv->sd);
 err_entity_cleanup:
@@ -3718,7 +3712,7 @@ err_free_ctrl:
 
 static void ub960_destroy_subdev(struct ub960_data *priv)
 {
-	ub960_v4l2_notifier_unregister(priv);
+	v4l2_async_nf_unregister_cleanup(&priv->notifier);
 	v4l2_async_unregister_subdev(&priv->sd);
 
 	v4l2_subdev_cleanup(&priv->sd);

@@ -1856,10 +1856,8 @@ void microchip_isc_subdev_cleanup(struct isc_device *isc)
 {
 	struct isc_subdev_entity *subdev_entity;
 
-	list_for_each_entry(subdev_entity, &isc->subdev_entities, list) {
-		v4l2_async_nf_unregister(&subdev_entity->notifier);
-		v4l2_async_nf_cleanup(&subdev_entity->notifier);
-	}
+	list_for_each_entry(subdev_entity, &isc->subdev_entities, list)
+		v4l2_async_nf_unregister_cleanup(&subdev_entity->notifier);
 
 	INIT_LIST_HEAD(&isc->subdev_entities);
 }

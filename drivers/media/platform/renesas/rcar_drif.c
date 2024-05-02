@@ -1361,8 +1361,7 @@ error:
 /* V4L2 SDR device remove */
 static void rcar_drif_sdr_remove(struct rcar_drif_sdr *sdr)
 {
-	v4l2_async_nf_unregister(&sdr->notifier);
-	v4l2_async_nf_cleanup(&sdr->notifier);
+	v4l2_async_nf_unregister_cleanup(&sdr->notifier);
 	v4l2_device_unregister(&sdr->v4l2_dev);
 }
 

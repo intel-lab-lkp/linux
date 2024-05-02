@@ -819,8 +819,7 @@ static int rzg2l_csi2_probe(struct platform_device *pdev)
 error_subdev:
 	v4l2_subdev_cleanup(&csi2->subdev);
 error_async:
-	v4l2_async_nf_unregister(&csi2->notifier);
-	v4l2_async_nf_cleanup(&csi2->notifier);
+	v4l2_async_nf_unregister_cleanup(&csi2->notifier);
 	media_entity_cleanup(&csi2->subdev.entity);
 error_pm:
 	pm_runtime_disable(&pdev->dev);
@@ -832,8 +831,7 @@ static void rzg2l_csi2_remove(struct platform_device *pdev)
 {
 	struct rzg2l_csi2 *csi2 = platform_get_drvdata(pdev);
 
-	v4l2_async_nf_unregister(&csi2->notifier);
-	v4l2_async_nf_cleanup(&csi2->notifier);
+	v4l2_async_nf_unregister_cleanup(&csi2->notifier);
 	v4l2_async_unregister_subdev(&csi2->subdev);
 	v4l2_subdev_cleanup(&csi2->subdev);
 	media_entity_cleanup(&csi2->subdev.entity);

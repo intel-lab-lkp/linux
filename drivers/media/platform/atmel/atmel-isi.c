@@ -1327,8 +1327,7 @@ static void atmel_isi_remove(struct platform_device *pdev)
 			isi->p_fb_descriptors,
 			isi->fb_descriptors_phys);
 	pm_runtime_disable(&pdev->dev);
-	v4l2_async_nf_unregister(&isi->notifier);
-	v4l2_async_nf_cleanup(&isi->notifier);
+	v4l2_async_nf_unregister_cleanup(&isi->notifier);
 	v4l2_device_unregister(&isi->v4l2_dev);
 }
 

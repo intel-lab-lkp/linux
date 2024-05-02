@@ -1802,8 +1802,7 @@ static void tegra_vi_graph_cleanup(struct tegra_vi *vi)
 
 	list_for_each_entry(chan, &vi->vi_chans, list) {
 		vb2_video_unregister_device(&chan->video);
-		v4l2_async_nf_unregister(&chan->notifier);
-		v4l2_async_nf_cleanup(&chan->notifier);
+		v4l2_async_nf_unregister_cleanup(&chan->notifier);
 	}
 }
 

@@ -1770,8 +1770,7 @@ static int cio2_pci_probe(struct pci_dev *pci_dev,
 	return 0;
 
 fail_clean_notifier:
-	v4l2_async_nf_unregister(&cio2->notifier);
-	v4l2_async_nf_cleanup(&cio2->notifier);
+	v4l2_async_nf_unregister_cleanup(&cio2->notifier);
 	cio2_queues_exit(cio2);
 fail_v4l2_device_unregister:
 	v4l2_device_unregister(&cio2->v4l2_dev);
@@ -1790,8 +1789,7 @@ static void cio2_pci_remove(struct pci_dev *pci_dev)
 	struct cio2_device *cio2 = pci_get_drvdata(pci_dev);
 
 	media_device_unregister(&cio2->media_dev);
-	v4l2_async_nf_unregister(&cio2->notifier);
-	v4l2_async_nf_cleanup(&cio2->notifier);
+	v4l2_async_nf_unregister_cleanup(&cio2->notifier);
 	cio2_queues_exit(cio2);
 	cio2_fbpt_exit_dummy(cio2);
 	v4l2_device_unregister(&cio2->v4l2_dev);

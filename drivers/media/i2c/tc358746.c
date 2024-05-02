@@ -1607,8 +1607,7 @@ static void tc358746_remove(struct i2c_client *client)
 	v4l2_subdev_cleanup(sd);
 	v4l2_ctrl_handler_free(&tc358746->ctrl_hdl);
 	v4l2_fwnode_endpoint_free(&tc358746->csi_vep);
-	v4l2_async_nf_unregister(&tc358746->notifier);
-	v4l2_async_nf_cleanup(&tc358746->notifier);
+	v4l2_async_nf_unregister_cleanup(&tc358746->notifier);
 	v4l2_async_unregister_subdev(sd);
 	media_entity_cleanup(&sd->entity);
 

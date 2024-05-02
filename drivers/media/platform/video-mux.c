@@ -471,8 +471,7 @@ static void video_mux_remove(struct platform_device *pdev)
 	struct video_mux *vmux = platform_get_drvdata(pdev);
 	struct v4l2_subdev *sd = &vmux->subdev;
 
-	v4l2_async_nf_unregister(&vmux->notifier);
-	v4l2_async_nf_cleanup(&vmux->notifier);
+	v4l2_async_nf_unregister_cleanup(&vmux->notifier);
 	v4l2_async_unregister_subdev(sd);
 	v4l2_subdev_cleanup(sd);
 	media_entity_cleanup(&sd->entity);

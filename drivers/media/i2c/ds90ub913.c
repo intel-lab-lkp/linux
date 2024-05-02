@@ -595,12 +595,6 @@ static int ub913_v4l2_notifier_register(struct ub913_data *priv)
 	return 0;
 }
 
-static void ub913_v4l2_nf_unregister(struct ub913_data *priv)
-{
-	v4l2_async_nf_unregister(&priv->notifier);
-	v4l2_async_nf_cleanup(&priv->notifier);
-}
-
 static int ub913_register_clkout(struct ub913_data *priv)
 {
 	struct device *dev = &priv->client->dev;
@@ -779,7 +773,7 @@ static int ub913_subdev_init(struct ub913_data *priv)
 	return 0;
 
 err_unreg_notif:
-	ub913_v4l2_nf_unregister(priv);
+	v4l2_async_nf_unregister_cleanup(&priv->notifier);
 err_subdev_cleanup:
 	v4l2_subdev_cleanup(&priv->sd);
 err_entity_cleanup:
@@ -791,7 +785,7 @@ err_entity_cleanup:
 static void ub913_subdev_uninit(struct ub913_data *priv)
 {
 	v4l2_async_unregister_subdev(&priv->sd);
-	ub913_v4l2_nf_unregister(priv);
+	v4l2_async_nf_unregister_cleanup(&priv->notifier);
 	v4l2_subdev_cleanup(&priv->sd);
 	fwnode_handle_put(priv->sd.fwnode);
 	media_entity_cleanup(&priv->sd.entity);

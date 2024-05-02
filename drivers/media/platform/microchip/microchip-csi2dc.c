@@ -750,8 +750,7 @@ static void csi2dc_remove(struct platform_device *pdev)
 	pm_runtime_disable(&pdev->dev);
 
 	v4l2_async_unregister_subdev(&csi2dc->csi2dc_sd);
-	v4l2_async_nf_unregister(&csi2dc->notifier);
-	v4l2_async_nf_cleanup(&csi2dc->notifier);
+	v4l2_async_nf_unregister_cleanup(&csi2dc->notifier);
 	media_entity_cleanup(&csi2dc->csi2dc_sd.entity);
 }
 

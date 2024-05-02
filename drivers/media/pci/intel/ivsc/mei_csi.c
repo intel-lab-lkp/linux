@@ -752,8 +752,7 @@ err_entity:
 
 err_ctrl_handler:
 	v4l2_ctrl_handler_free(&csi->ctrl_handler);
-	v4l2_async_nf_unregister(&csi->notifier);
-	v4l2_async_nf_cleanup(&csi->notifier);
+	v4l2_async_nf_unregister_cleanup(&csi->notifier);
 
 err_disable:
 	mei_cldev_disable(cldev);
@@ -768,8 +767,7 @@ static void mei_csi_remove(struct mei_cl_device *cldev)
 {
 	struct mei_csi *csi = mei_cldev_get_drvdata(cldev);
 
-	v4l2_async_nf_unregister(&csi->notifier);
-	v4l2_async_nf_cleanup(&csi->notifier);
+	v4l2_async_nf_unregister_cleanup(&csi->notifier);
 	v4l2_ctrl_handler_free(&csi->ctrl_handler);
 	v4l2_async_unregister_subdev(&csi->subdev);
 	v4l2_subdev_cleanup(&csi->subdev);

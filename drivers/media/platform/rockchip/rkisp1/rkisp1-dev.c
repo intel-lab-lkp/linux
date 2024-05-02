@@ -720,8 +720,7 @@ static void rkisp1_remove(struct platform_device *pdev)
 {
 	struct rkisp1_device *rkisp1 = platform_get_drvdata(pdev);
 
-	v4l2_async_nf_unregister(&rkisp1->notifier);
-	v4l2_async_nf_cleanup(&rkisp1->notifier);
+	v4l2_async_nf_unregister_cleanup(&rkisp1->notifier);
 
 	rkisp1_entities_unregister(rkisp1);
 	if (rkisp1_has_feature(rkisp1, MIPI_CSI2))

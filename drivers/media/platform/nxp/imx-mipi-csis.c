@@ -1513,8 +1513,7 @@ err_unregister_all:
 err_cleanup:
 	v4l2_subdev_cleanup(&csis->sd);
 	media_entity_cleanup(&csis->sd.entity);
-	v4l2_async_nf_unregister(&csis->notifier);
-	v4l2_async_nf_cleanup(&csis->notifier);
+	v4l2_async_nf_unregister_cleanup(&csis->notifier);
 	v4l2_async_unregister_subdev(&csis->sd);
 
 	return ret;
@@ -1526,8 +1525,7 @@ static void mipi_csis_remove(struct platform_device *pdev)
 	struct mipi_csis_device *csis = sd_to_mipi_csis_device(sd);
 
 	mipi_csis_debugfs_exit(csis);
-	v4l2_async_nf_unregister(&csis->notifier);
-	v4l2_async_nf_cleanup(&csis->notifier);
+	v4l2_async_nf_unregister_cleanup(&csis->notifier);
 	v4l2_async_unregister_subdev(&csis->sd);
 
 	if (!pm_runtime_enabled(&pdev->dev))

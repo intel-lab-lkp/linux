@@ -2266,8 +2266,7 @@ static void imx7_csi_remove(struct platform_device *pdev)
 
 	imx7_csi_media_cleanup(csi);
 
-	v4l2_async_nf_unregister(&csi->notifier);
-	v4l2_async_nf_cleanup(&csi->notifier);
+	v4l2_async_nf_unregister_cleanup(&csi->notifier);
 	v4l2_async_unregister_subdev(&csi->sd);
 }
 

@@ -345,10 +345,8 @@ out:
 
 static void rvin_group_notifier_cleanup(struct rvin_dev *vin)
 {
-	if (&vin->v4l2_dev == vin->group->notifier.v4l2_dev) {
-		v4l2_async_nf_unregister(&vin->group->notifier);
-		v4l2_async_nf_cleanup(&vin->group->notifier);
-	}
+	if (&vin->v4l2_dev == vin->group->notifier.v4l2_dev)
+		v4l2_async_nf_unregister_cleanup(&vin->group->notifier);
 }
 
 static int rvin_group_notifier_init(struct rvin_dev *vin, unsigned int port,
@@ -704,8 +702,7 @@ out:
 
 static void rvin_parallel_cleanup(struct rvin_dev *vin)
 {
-	v4l2_async_nf_unregister(&vin->notifier);
-	v4l2_async_nf_cleanup(&vin->notifier);
+	v4l2_async_nf_unregister_cleanup(&vin->notifier);
 }
 
 static int rvin_parallel_init(struct rvin_dev *vin)

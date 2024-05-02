@@ -1720,8 +1720,7 @@ static void vpif_remove(struct platform_device *device)
 	struct channel_obj *ch;
 	int i;
 
-	v4l2_async_nf_unregister(&vpif_obj.notifier);
-	v4l2_async_nf_cleanup(&vpif_obj.notifier);
+	v4l2_async_nf_unregister_cleanup(&vpif_obj.notifier);
 	v4l2_device_unregister(&vpif_obj.v4l2_dev);
 
 	kfree(vpif_obj.sd);

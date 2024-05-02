@@ -2052,8 +2052,7 @@ static void camss_remove(struct platform_device *pdev)
 {
 	struct camss *camss = platform_get_drvdata(pdev);
 
-	v4l2_async_nf_unregister(&camss->notifier);
-	v4l2_async_nf_cleanup(&camss->notifier);
+	v4l2_async_nf_unregister_cleanup(&camss->notifier);
 	camss_unregister_entities(camss);
 
 	if (atomic_read(&camss->ref_count) == 0)

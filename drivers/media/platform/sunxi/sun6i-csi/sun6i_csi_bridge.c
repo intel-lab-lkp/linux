@@ -863,8 +863,7 @@ void sun6i_csi_bridge_cleanup(struct sun6i_csi_device *csi_dev)
 	struct v4l2_subdev *subdev = &csi_dev->bridge.subdev;
 	struct v4l2_async_notifier *notifier = &csi_dev->bridge.notifier;
 
-	v4l2_async_nf_unregister(notifier);
-	v4l2_async_nf_cleanup(notifier);
+	v4l2_async_nf_unregister_cleanup(notifier);
 
 	v4l2_device_unregister_subdev(subdev);
 

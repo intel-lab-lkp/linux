@@ -2433,8 +2433,7 @@ static void pxa_camera_remove(struct platform_device *pdev)
 	dma_release_channel(pcdev->dma_chans[1]);
 	dma_release_channel(pcdev->dma_chans[2]);
 
-	v4l2_async_nf_unregister(&pcdev->notifier);
-	v4l2_async_nf_cleanup(&pcdev->notifier);
+	v4l2_async_nf_unregister_cleanup(&pcdev->notifier);
 
 	v4l2_device_unregister(&pcdev->v4l2_dev);
 

@@ -524,8 +524,7 @@ static void dcmipp_remove(struct platform_device *pdev)
 
 	pm_runtime_disable(&pdev->dev);
 
-	v4l2_async_nf_unregister(&dcmipp->notifier);
-	v4l2_async_nf_cleanup(&dcmipp->notifier);
+	v4l2_async_nf_unregister_cleanup(&dcmipp->notifier);
 
 	for (i = 0; i < dcmipp->pipe_cfg->num_ents; i++)
 		dcmipp->pipe_cfg->ents[i].release(dcmipp->entity[i]);

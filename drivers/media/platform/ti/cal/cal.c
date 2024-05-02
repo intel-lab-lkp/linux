@@ -902,12 +902,6 @@ error:
 	return ret;
 }
 
-static void cal_async_notifier_unregister(struct cal_dev *cal)
-{
-	v4l2_async_nf_unregister(&cal->notifier);
-	v4l2_async_nf_cleanup(&cal->notifier);
-}
-
 /* ------------------------------------------------------------------
  *	Media and V4L2 device handling
  * ------------------------------------------------------------------
@@ -952,7 +946,7 @@ static void cal_media_unregister(struct cal_dev *cal)
 	for (i = 0; i < cal->num_contexts; i++)
 		cal_ctx_v4l2_unregister(cal->ctx[i]);
 
-	cal_async_notifier_unregister(cal);
+	v4l2_async_nf_unregister_cleanup(&cal->notifier);
 	media_device_unregister(&cal->mdev);
 }
 

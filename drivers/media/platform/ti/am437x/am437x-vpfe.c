@@ -2485,8 +2485,7 @@ static void vpfe_remove(struct platform_device *pdev)
 
 	pm_runtime_disable(&pdev->dev);
 
-	v4l2_async_nf_unregister(&vpfe->notifier);
-	v4l2_async_nf_cleanup(&vpfe->notifier);
+	v4l2_async_nf_unregister_cleanup(&vpfe->notifier);
 	video_unregister_device(&vpfe->video_dev);
 	v4l2_device_unregister(&vpfe->v4l2_dev);
 }

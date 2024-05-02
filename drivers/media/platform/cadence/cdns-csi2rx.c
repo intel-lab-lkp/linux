@@ -722,8 +722,7 @@ static int csi2rx_probe(struct platform_device *pdev)
 err_free_state:
 	v4l2_subdev_cleanup(&csi2rx->subdev);
 err_cleanup:
-	v4l2_async_nf_unregister(&csi2rx->notifier);
-	v4l2_async_nf_cleanup(&csi2rx->notifier);
+	v4l2_async_nf_unregister_cleanup(&csi2rx->notifier);
 	media_entity_cleanup(&csi2rx->subdev.entity);
 err_free_priv:
 	kfree(csi2rx);
@@ -734,8 +733,7 @@ static void csi2rx_remove(struct platform_device *pdev)
 {
 	struct csi2rx_priv *csi2rx = platform_get_drvdata(pdev);
 
-	v4l2_async_nf_unregister(&csi2rx->notifier);
-	v4l2_async_nf_cleanup(&csi2rx->notifier);
+	v4l2_async_nf_unregister_cleanup(&csi2rx->notifier);
 	v4l2_async_unregister_subdev(&csi2rx->subdev);
 	v4l2_subdev_cleanup(&csi2rx->subdev);
 	media_entity_cleanup(&csi2rx->subdev.entity);

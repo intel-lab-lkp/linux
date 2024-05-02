@@ -303,8 +303,7 @@ static void rzg2l_cru_remove(struct platform_device *pdev)
 
 	pm_runtime_disable(&pdev->dev);
 
-	v4l2_async_nf_unregister(&cru->notifier);
-	v4l2_async_nf_cleanup(&cru->notifier);
+	v4l2_async_nf_unregister_cleanup(&cru->notifier);
 
 	rzg2l_cru_video_unregister(cru);
 	media_device_cleanup(&cru->mdev);

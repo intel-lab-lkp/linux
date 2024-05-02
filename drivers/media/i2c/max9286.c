@@ -781,8 +781,7 @@ static void max9286_v4l2_notifier_unregister(struct max9286_priv *priv)
 	if (!priv->nsources)
 		return;
 
-	v4l2_async_nf_unregister(&priv->notifier);
-	v4l2_async_nf_cleanup(&priv->notifier);
+	v4l2_async_nf_unregister_cleanup(&priv->notifier);
 }
 
 static int max9286_s_stream(struct v4l2_subdev *sd, int enable)

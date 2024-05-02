@@ -481,8 +481,7 @@ static void xvip_graph_cleanup(struct xvip_composite_device *xdev)
 	struct xvip_dma *dmap;
 	struct xvip_dma *dma;
 
-	v4l2_async_nf_unregister(&xdev->notifier);
-	v4l2_async_nf_cleanup(&xdev->notifier);
+	v4l2_async_nf_unregister_cleanup(&xdev->notifier);
 
 	list_for_each_entry_safe(dma, dmap, &xdev->dmas, list) {
 		xvip_dma_cleanup(dma);

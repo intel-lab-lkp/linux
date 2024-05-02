@@ -573,8 +573,7 @@ void sun6i_isp_proc_cleanup(struct sun6i_isp_device *isp_dev)
 	struct v4l2_async_notifier *notifier = &isp_dev->proc.notifier;
 	struct v4l2_subdev *subdev = &isp_dev->proc.subdev;
 
-	v4l2_async_nf_unregister(notifier);
-	v4l2_async_nf_cleanup(notifier);
+	v4l2_async_nf_unregister_cleanup(notifier);
 
 	v4l2_device_unregister_subdev(subdev);
 	media_entity_cleanup(&subdev->entity);

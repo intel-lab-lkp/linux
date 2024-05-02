@@ -1074,12 +1074,6 @@ static void ti_csi2rx_cleanup_v4l2(struct ti_csi2rx_dev *csi)
 	media_device_cleanup(&csi->mdev);
 }
 
-static void ti_csi2rx_cleanup_subdev(struct ti_csi2rx_dev *csi)
-{
-	v4l2_async_nf_unregister(&csi->notifier);
-	v4l2_async_nf_cleanup(&csi->notifier);
-}
-
 static void ti_csi2rx_cleanup_vb2q(struct ti_csi2rx_dev *csi)
 {
 	vb2_queue_release(&csi->vidq);
@@ -1129,7 +1123,7 @@ static int ti_csi2rx_probe(struct platform_device *pdev)
 	return 0;
 
 err_subdev:
-	ti_csi2rx_cleanup_subdev(csi);
+	v4l2_async_nf_unregister_cleanup(&csi->notifier);
 err_vb2q:
 	ti_csi2rx_cleanup_vb2q(csi);
 err_v4l2:
@@ -1148,7 +1142,7 @@ static void ti_csi2rx_remove(struct platform_device *pdev)
 	video_unregister_device(&csi->vdev);
 
 	ti_csi2rx_cleanup_vb2q(csi);
-	ti_csi2rx_cleanup_subdev(csi);
+	v4l2_async_nf_unregister_cleanup(&csi->notifier);
 	ti_csi2rx_cleanup_v4l2(csi);
 	ti_csi2rx_cleanup_dma(csi);
 

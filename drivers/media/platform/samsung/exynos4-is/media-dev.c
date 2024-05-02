@@ -1538,8 +1538,7 @@ static void fimc_md_remove(struct platform_device *pdev)
 		return;
 
 	fimc_md_unregister_clk_provider(fmd);
-	v4l2_async_nf_unregister(&fmd->subdev_notifier);
-	v4l2_async_nf_cleanup(&fmd->subdev_notifier);
+	v4l2_async_nf_unregister_cleanup(&fmd->subdev_notifier);
 
 	v4l2_device_unregister(&fmd->v4l2_dev);
 	device_remove_file(&pdev->dev, &dev_attr_subdev_conf_mode);

@@ -2089,8 +2089,7 @@ static void dcmi_remove(struct platform_device *pdev)
 
 	pm_runtime_disable(&pdev->dev);
 
-	v4l2_async_nf_unregister(&dcmi->notifier);
-	v4l2_async_nf_cleanup(&dcmi->notifier);
+	v4l2_async_nf_unregister_cleanup(&dcmi->notifier);
 	media_entity_cleanup(&dcmi->vdev->entity);
 	v4l2_device_unregister(&dcmi->v4l2_dev);
 	media_device_cleanup(&dcmi->mdev);

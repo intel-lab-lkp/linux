@@ -767,12 +767,6 @@ err_parse:
 	return ret;
 }
 
-static void isys_notifier_cleanup(struct ipu6_isys *isys)
-{
-	v4l2_async_nf_unregister(&isys->notifier);
-	v4l2_async_nf_cleanup(&isys->notifier);
-}
-
 static int isys_register_devices(struct ipu6_isys *isys)
 {
 	struct device *dev = &isys->adev->auxdev.dev;
@@ -942,7 +936,7 @@ static void isys_remove(struct auxiliary_device *auxdev)
 			       fwmsg, fwmsg->dma_addr, 0);
 
 	isys_unregister_devices(isys);
-	isys_notifier_cleanup(isys);
+	v4l2_async_nf_unregister_cleanup(&isys->notifier);
 
 	cpu_latency_qos_remove_request(&isys->pm_qos);
 

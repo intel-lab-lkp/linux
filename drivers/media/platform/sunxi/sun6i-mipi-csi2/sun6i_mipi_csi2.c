@@ -577,8 +577,7 @@ sun6i_mipi_csi2_bridge_cleanup(struct sun6i_mipi_csi2_device *csi2_dev)
 	struct v4l2_async_notifier *notifier = &csi2_dev->bridge.notifier;
 
 	v4l2_async_unregister_subdev(subdev);
-	v4l2_async_nf_unregister(notifier);
-	v4l2_async_nf_cleanup(notifier);
+	v4l2_async_nf_unregister_cleanup(notifier);
 	media_entity_cleanup(&subdev->entity);
 }
 

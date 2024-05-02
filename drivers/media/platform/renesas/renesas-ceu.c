@@ -1701,9 +1701,7 @@ static void ceu_remove(struct platform_device *pdev)
 
 	pm_runtime_disable(ceudev->dev);
 
-	v4l2_async_nf_unregister(&ceudev->notifier);
-
-	v4l2_async_nf_cleanup(&ceudev->notifier);
+	v4l2_async_nf_unregister_cleanup(&ceudev->notifier);
 
 	v4l2_device_unregister(&ceudev->v4l2_dev);
 

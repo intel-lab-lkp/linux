@@ -491,8 +491,7 @@ static int risp_probe(struct platform_device *pdev)
 
 	return 0;
 error_notifier:
-	v4l2_async_nf_unregister(&isp->notifier);
-	v4l2_async_nf_cleanup(&isp->notifier);
+	v4l2_async_nf_unregister_cleanup(&isp->notifier);
 error_pm:
 	pm_runtime_disable(&pdev->dev);
 error_mutex:
@@ -505,8 +504,7 @@ static void risp_remove(struct platform_device *pdev)
 {
 	struct rcar_isp *isp = platform_get_drvdata(pdev);
 
-	v4l2_async_nf_unregister(&isp->notifier);
-	v4l2_async_nf_cleanup(&isp->notifier);
+	v4l2_async_nf_unregister_cleanup(&isp->notifier);
 
 	v4l2_async_unregister_subdev(&isp->subdev);
 

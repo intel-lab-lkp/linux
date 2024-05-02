@@ -223,8 +223,7 @@ static void mxc_isi_v4l2_cleanup(struct mxc_isi_dev *isi)
 {
 	unsigned int i;
 
-	v4l2_async_nf_unregister(&isi->notifier);
-	v4l2_async_nf_cleanup(&isi->notifier);
+	v4l2_async_nf_unregister_cleanup(&isi->notifier);
 
 	v4l2_device_unregister(&isi->v4l2_dev);
 	media_device_unregister(&isi->media_dev);

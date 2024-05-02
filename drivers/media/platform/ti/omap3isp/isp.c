@@ -2001,8 +2001,7 @@ static void isp_remove(struct platform_device *pdev)
 {
 	struct isp_device *isp = platform_get_drvdata(pdev);
 
-	v4l2_async_nf_unregister(&isp->notifier);
-	v4l2_async_nf_cleanup(&isp->notifier);
+	v4l2_async_nf_unregister_cleanup(&isp->notifier);
 	isp_unregister_entities(isp);
 	isp_cleanup_modules(isp);
 	isp_xclk_cleanup(isp);

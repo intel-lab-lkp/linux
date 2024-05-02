@@ -1907,8 +1907,7 @@ int mccic_register(struct mcam_camera *cam)
 	return 0;
 
 out:
-	v4l2_async_nf_unregister(&cam->notifier);
-	v4l2_async_nf_cleanup(&cam->notifier);
+	v4l2_async_nf_unregister_cleanup(&cam->notifier);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(mccic_register);
@@ -1928,8 +1927,7 @@ void mccic_shutdown(struct mcam_camera *cam)
 	if (cam->buffer_mode == B_vmalloc)
 		mcam_free_dma_bufs(cam);
 	v4l2_ctrl_handler_free(&cam->ctrl_handler);
-	v4l2_async_nf_unregister(&cam->notifier);
-	v4l2_async_nf_cleanup(&cam->notifier);
+	v4l2_async_nf_unregister_cleanup(&cam->notifier);
 }
 EXPORT_SYMBOL_GPL(mccic_shutdown);
 

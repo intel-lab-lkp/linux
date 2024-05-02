@@ -811,12 +811,6 @@ static int ub953_v4l2_notifier_register(struct ub953_data *priv)
 	return 0;
 }
 
-static void ub953_v4l2_notifier_unregister(struct ub953_data *priv)
-{
-	v4l2_async_nf_unregister(&priv->notifier);
-	v4l2_async_nf_cleanup(&priv->notifier);
-}
-
 /*
  * Probing
  */
@@ -1277,7 +1271,7 @@ static int ub953_subdev_init(struct ub953_data *priv)
 	return 0;
 
 err_unreg_notif:
-	ub953_v4l2_notifier_unregister(priv);
+	v4l2_async_nf_unregister_cleanup(&priv->notifier);
 err_free_state:
 	v4l2_subdev_cleanup(&priv->sd);
 err_entity_cleanup:
@@ -1289,7 +1283,7 @@ err_entity_cleanup:
 static void ub953_subdev_uninit(struct ub953_data *priv)
 {
 	v4l2_async_unregister_subdev(&priv->sd);
-	ub953_v4l2_notifier_unregister(priv);
+	v4l2_async_nf_unregister_cleanup(&priv->notifier);
 	v4l2_subdev_cleanup(&priv->sd);
 	fwnode_handle_put(priv->sd.fwnode);
 	media_entity_cleanup(&priv->sd.entity);
