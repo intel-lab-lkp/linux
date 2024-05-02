@@ -50,7 +50,7 @@ static int get_zswap_stored_pages(size_t *value)
 	return read_int("/sys/kernel/debug/zswap/stored_pages", value);
 }
 
-static int get_cg_wb_count(const char *cg)
+static long get_cg_wb_count(const char *cg)
 {
 	return cg_read_key_long(cg, "memory.stat", "zswpwb");
 }
@@ -249,6 +249,127 @@ out:
 }
 
 /*
+ * Initate writeback with the following steps:
+ * 1. Allocate memory.
+ * 2. Reclaim memory equal to the amount that was allocated in step 1.
+      This will move it into zswap.
+ * 3. Save current zswap usage.
+ * 4. Move the memory allocated in step 1 back in from zswap.
+ * 5. Set zswap.max to half the amount that was recorded in step 3.
+ * 6. Attempt to reclaim memory equal to the amount that was allocated,
+      this will either trigger writeback if its enabled, or reclamation
+      will fail if writeback is disabled as there isn't enough zswap space.
+ */
+static int initiate_writeback(const char *cgroup, void *arg)
+{
+	char *test_group = arg;
+	size_t memsize = MB(4);
+	int ret = -1;
+	bool wb_enabled = cg_read_long(test_group, "memory.zswap.writeback");
+	long zswap_usage;
+
+	if (cg_write(test_group, "memory.max", "8M"))
+		return ret;
+
+	/* Allocate random memory to enusre high zswap memory usage */
+	char *mem = (char *)malloc(memsize);
+
+	if (!mem)
+		return ret;
+	for (int i = 0; i < memsize; i++)
+		mem[i] = rand() % 128;
+
+	/* Try and reclaim allocated memory */
+	if (cg_write(test_group, "memory.reclaim", "4M")) {
+		ksft_print_msg("Failed to reclaim all of the requested memory\n");
+		goto out;
+	}
+
+	zswap_usage = cg_read_long(test_group, "memory.zswap.current");
+
+	/* zswpin */
+	for (int i = 0; i < memsize; i++) {
+		if (mem[i] < 0 || mem[i] > 127) {
+			ksft_print_msg("invalid memory\n");
+			ret = -1;
+		}
+	}
+
+	if (cg_write_numeric(test_group, "memory.zswap.max", zswap_usage/2))
+		goto out;
+
+	/*
+	 * If writeback is enabled, trying to reclaim memory now will trigger a
+	 * writeback as zswap.max is half of what was needed when reclaim ran the first time.
+	 * If writeback is disabled, memory reclaim will fail as zswap is limited and
+	 * it can't writeback to swap.
+	 */
+	ret = cg_write(test_group, "memory.reclaim", "4M");
+	if (!wb_enabled && ret)
+		ret = 0;
+out:
+	free(mem);
+	return ret;
+}
+
+/* Test to verify the zswap writeback path */
+static int test_zswap_writeback(const char *root, bool wb)
+{
+	int ret = KSFT_FAIL;
+	char *test_group;
+	long zswpwb_before, zswpwb_after;
+
+	test_group = cg_name(root,
+		wb ? "zswap_writeback_enabled_test" : "zswap_writeback_disabled_test");
+	if (!test_group)
+		goto out;
+	if (cg_create(test_group))
+		goto out;
+	if (cg_write(test_group, "memory.zswap.writeback", wb ? "1" : "0"))
+		return ret;
+
+	zswpwb_before = get_cg_wb_count(test_group);
+	if (zswpwb_before < 0) {
+		ksft_print_msg("failed to get zswpwb_before\n");
+		goto out;
+	}
+
+	if (cg_run(test_group, initiate_writeback, (void *) test_group))
+		goto out;
+
+	/* Verify that zswap writeback occurred only if writeback was enabled */
+	zswpwb_after = get_cg_wb_count(test_group);
+	if (wb) {
+		if (zswpwb_after <= zswpwb_before) {
+			ksft_print_msg("writeback enabled and zswpwb_after <= zswpwb_before\n");
+			goto out;
+		}
+	} else {
+		if (zswpwb_after != zswpwb_before) {
+			ksft_print_msg("writeback disabled and zswpwb_after != zswpwb_before\n");
+			goto out;
+		}
+	}
+
+	ret = KSFT_PASS;
+
+out:
+	cg_destroy(test_group);
+	free(test_group);
+	return ret;
+}
+
+static int test_zswap_writeback_enabled(const char *root)
+{
+	return test_zswap_writeback(root, true);
+}
+
+static int test_zswap_writeback_disabled(const char *root)
+{
+	return test_zswap_writeback(root, false);
+}
+
+/*
  * When trying to store a memcg page in zswap, if the memcg hits its memory
  * limit in zswap, writeback should affect only the zswapped pages of that
  * memcg.
@@ -425,6 +546,8 @@ struct zswap_test {
 	T(test_zswap_usage),
 	T(test_swapin_nozswap),
 	T(test_zswapin),
+	T(test_zswap_writeback_enabled),
+	T(test_zswap_writeback_disabled),
 	T(test_no_kmem_bypass),
 	T(test_no_invasive_cgroup_shrink),
 };
