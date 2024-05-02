@@ -15027,8 +15027,6 @@ static int bnxt_queue_start(struct net_device *dev, int idx, void *qmem)
 	struct bnxt_rx_ring_info *rxr = qmem;
 	struct bnxt *bp = netdev_priv(dev);
 
-	bnxt_alloc_one_rx_ring(bp, rxr);
-
 	if (bp->flags & BNXT_FLAG_AGG_RINGS)
 		bnxt_db_write(bp, &rxr->rx_agg_db, rxr->rx_agg_prod);
 	bnxt_db_write(bp, &rxr->rx_db, rxr->rx_prod);
@@ -15041,26 +15039,56 @@ static int bnxt_queue_start(struct net_device *dev, int idx, void *qmem)
 
 static int bnxt_queue_stop(struct net_device *dev, int idx, void **out_qmem)
 {
+	struct bnxt_rx_ring_info *orig, *rplc;
 	struct bnxt *bp = netdev_priv(dev);
-	struct bnxt_rx_ring_info *rxr;
+	struct bnxt_ring_mem_info *rmem;
 	struct bnxt_cp_ring_info *cpr;
-	int rc;
+	int i, rc;
 
 	rc = bnxt_hwrm_rx_ring_reset(bp, idx);
 	if (rc)
 		return rc;
 
-	rxr = &bp->rx_ring[idx];
-	bnxt_free_one_rx_ring_skbs(bp, rxr);
-	rxr->rx_prod = 0;
-	rxr->rx_agg_prod = 0;
-	rxr->rx_sw_agg_prod = 0;
-	rxr->rx_next_cons = 0;
+	/* HW ring is registered w/ the original bnxt_rx_ring_info so we cannot
+	 * do a direct swap between orig and rplc. Instead, swap the
+	 * dynamically allocated queue memory and then update pg_tbl.
+	 */
+	orig = &bp->rx_ring[idx];
+	rplc = orig->rplc;
 
-	cpr = &rxr->bnapi->cp_ring;
+	swap(orig->rx_prod, rplc->rx_prod);
+	swap(orig->rx_agg_prod, rplc->rx_agg_prod);
+	swap(orig->rx_sw_agg_prod, rplc->rx_sw_agg_prod);
+	swap(orig->rx_next_cons, rplc->rx_next_cons);
+
+	for (i = 0; i < MAX_RX_PAGES; i++) {
+		swap(orig->rx_desc_ring[i], rplc->rx_desc_ring[i]);
+		swap(orig->rx_desc_mapping[i], rplc->rx_desc_mapping[i]);
+
+		swap(orig->rx_agg_desc_ring[i], rplc->rx_agg_desc_ring[i]);
+		swap(orig->rx_agg_desc_mapping[i], rplc->rx_agg_desc_mapping[i]);
+	}
+	swap(orig->rx_buf_ring, rplc->rx_buf_ring);
+	swap(orig->rx_agg_ring, rplc->rx_agg_ring);
+	swap(orig->rx_agg_bmap, rplc->rx_agg_bmap);
+	swap(orig->rx_agg_bmap_size, rplc->rx_agg_bmap_size);
+	swap(orig->rx_tpa, rplc->rx_tpa);
+	swap(orig->rx_tpa_idx_map, rplc->rx_tpa_idx_map);
+	swap(orig->page_pool, rplc->page_pool);
+
+	rmem = &orig->rx_ring_struct.ring_mem;
+	for (i = 0; i < rmem->nr_pages; i++)
+		rmem->pg_tbl[i] = cpu_to_le64(rmem->dma_arr[i]);
+
+	rmem = &rplc->rx_ring_struct.ring_mem;
+	for (i = 0; i < rmem->nr_pages; i++)
+		rmem->pg_tbl[i] = cpu_to_le64(rmem->dma_arr[i]);
+
+	cpr = &orig->bnapi->cp_ring;
 	cpr->sw_stats.rx.rx_resets++;
 
-	*out_qmem = rxr;
+	*out_qmem = rplc;
+	orig->rplc = NULL;
 
 	return 0;
 }
