@@ -305,6 +305,23 @@ void v4l2_async_nf_unregister(struct v4l2_async_notifier *notifier);
 void v4l2_async_nf_cleanup(struct v4l2_async_notifier *notifier);
 
 /**
+ * v4l2_async_nf_unregister_cleanup - unregister and clean up notifier resources
+ * @notifier: the notifier  the notifier to unregister and for which
+ *            the resources are to be cleaned up
+ *
+ * Unregister a subdevice asynchronous device and release memory resources
+ * related to a notifier.
+ * Convenient function to call v4l2_async_nf_unregister() and
+ * v4l2_async_nf_cleanup().
+ */
+static inline void
+v4l2_async_nf_unregister_cleanup(struct v4l2_async_notifier *notifier)
+{
+	v4l2_async_nf_unregister(notifier);
+	v4l2_async_nf_cleanup(notifier);
+};
+
+/**
  * v4l2_async_register_subdev - registers a sub-device to the asynchronous
  *	subdevice framework
  *
