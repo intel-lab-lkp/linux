@@ -140,12 +140,16 @@ static int do_map_benchmark(struct map_benchmark_data *map)
 
 	msleep_interruptible(map->bparam.seconds * 1000);
 
-	/* wait for the completion of benchmark threads */
+	/* wait for the completion of all started benchmark threads */
 	for (i = 0; i < threads; i++) {
-		ret = kthread_stop(tsk[i]);
-		if (ret)
-			goto out;
+		int kthread_ret = kthread_stop(tsk[i]);
+
+		if (kthread_ret)
+			ret = kthread_ret;
 	}
+
+	if (ret)
+		goto out;
 
 	loops = atomic64_read(&map->loops);
 	if (likely(loops > 0)) {
