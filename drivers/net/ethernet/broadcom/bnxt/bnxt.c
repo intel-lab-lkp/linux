@@ -14937,13 +14937,89 @@ static void bnxt_init_rx_ring_rxbd_pages(struct bnxt *bp, struct bnxt_rx_ring_in
 
 static void *bnxt_queue_mem_alloc(struct net_device *dev, int idx)
 {
+	struct bnxt_rx_ring_info *rxr, *clone;
 	struct bnxt *bp = netdev_priv(dev);
+	int rc;
 
-	return &bp->rx_ring[idx];
+	rxr = &bp->rx_ring[idx];
+	clone = kmemdup(rxr, sizeof(*rxr), GFP_KERNEL);
+	if (!clone)
+		return ERR_PTR(-ENOMEM);
+
+	clone->rx_prod = 0;
+	clone->rx_agg_prod = 0;
+	clone->rx_sw_agg_prod = 0;
+	clone->rx_next_cons = 0;
+
+	__bnxt_init_rx_ring_struct(bp, clone);
+
+	rc = bnxt_alloc_rx_page_pool(bp, clone, rxr->page_pool->p.nid);
+	if (rc)
+		goto err_free_clone;
+
+	rc = bnxt_alloc_rx_ring_struct(bp, &clone->rx_ring_struct);
+	if (rc)
+		goto err_free_page_pool;
+
+	if (bp->flags & BNXT_FLAG_AGG_RINGS) {
+		rc = bnxt_alloc_rx_ring_struct(bp, &clone->rx_agg_ring_struct);
+		if (rc)
+			goto err_free_rx_ring;
+
+		rc = bnxt_alloc_rx_agg_bmap(bp, clone);
+		if (rc)
+			goto err_free_rx_agg_ring;
+	}
+
+	if (bp->flags & BNXT_FLAG_TPA) {
+		rc = __bnxt_alloc_one_tpa_info(bp, clone);
+		if (rc)
+			goto err_free_rx_agg_bmap;
+	}
+
+	bnxt_init_rx_ring_rxbd_pages(bp, clone);
+	bnxt_alloc_one_rx_ring(bp, clone);
+
+	rxr->rplc = clone;
+
+	return clone;
+
+err_free_rx_agg_bmap:
+	kfree(clone->rx_agg_bmap);
+err_free_rx_agg_ring:
+	bnxt_free_ring(bp, &clone->rx_agg_ring_struct.ring_mem);
+err_free_rx_ring:
+	bnxt_free_ring(bp, &clone->rx_ring_struct.ring_mem);
+err_free_page_pool:
+	page_pool_destroy(clone->page_pool);
+	rxr->page_pool = NULL;
+err_free_clone:
+	kfree(clone);
+
+	return ERR_PTR(rc);
 }
 
 static void bnxt_queue_mem_free(struct net_device *dev, void *qmem)
 {
+	struct bnxt_rx_ring_info *rxr = qmem;
+	struct bnxt *bp = netdev_priv(dev);
+	struct bnxt_ring_struct *ring;
+
+	bnxt_free_tpa_info(bp, rxr);
+
+	page_pool_destroy(rxr->page_pool);
+	rxr->page_pool = NULL;
+
+	kfree(rxr->rx_agg_bmap);
+	rxr->rx_agg_bmap = NULL;
+
+	ring = &rxr->rx_ring_struct;
+	bnxt_free_ring(bp, &ring->ring_mem);
+
+	ring = &rxr->rx_agg_ring_struct;
+	bnxt_free_ring(bp, &ring->ring_mem);
+
+	kfree(rxr);
 }
 
 static int bnxt_queue_start(struct net_device *dev, int idx, void *qmem)

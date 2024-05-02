@@ -1076,6 +1076,8 @@ struct bnxt_rx_ring_info {
 	struct bnxt_ring_struct	rx_agg_ring_struct;
 	struct xdp_rxq_info	xdp_rxq;
 	struct page_pool	*page_pool;
+
+	struct bnxt_rx_ring_info	*rplc;
 };
 
 struct bnxt_rx_sw_stats {
