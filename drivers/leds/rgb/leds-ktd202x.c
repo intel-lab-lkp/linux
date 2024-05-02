@@ -572,21 +572,25 @@ static int ktd202x_probe(struct i2c_client *client)
 		return ret;
 	}
 
+	mutex_init(&chip->mutex);
+
 	ret = ktd202x_probe_fw(chip);
 	if (ret < 0) {
 		regulator_bulk_disable(ARRAY_SIZE(chip->regulators), chip->regulators);
-		return ret;
+		goto destroy_mutex;
 	}
 
 	ret = regulator_bulk_disable(ARRAY_SIZE(chip->regulators), chip->regulators);
 	if (ret) {
 		dev_err_probe(dev, ret, "Failed to disable regulators.\n");
-		return ret;
+		goto destroy_mutex;
 	}
 
-	mutex_init(&chip->mutex);
-
 	return 0;
+
+destroy_mutex:
+	mutex_destroy(&chip->mutex);
+	return ret;
 }
 
 static void ktd202x_remove(struct i2c_client *client)
