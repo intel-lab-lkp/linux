@@ -78,11 +78,39 @@
 
 #define LS_FS_OUTPUT_IMPEDANCE_MASK		GENMASK(3, 0)
 
-static const char * const qcom_snps_hsphy_vreg_names[] = {
-	"vdda-pll", "vdda33", "vdda18",
+
+struct qcom_snps_hsphy_regulator_data {
+	const char *name;
+	unsigned int enable_load;
+	unsigned int min_voltage;
+	unsigned int max_voltage;
 };
 
-#define SNPS_HS_NUM_VREGS		ARRAY_SIZE(qcom_snps_hsphy_vreg_names)
+static const struct qcom_snps_hsphy_regulator_data hsphy_vreg_l[] = {
+	{
+		.name = "vdda-pll",
+		.enable_load = 30000,
+		.min_voltage = 825000,
+		.max_voltage = 925000,
+	},
+
+	{
+		.name = "vdda18",
+		.enable_load = 19000,
+		.min_voltage = 1704000,
+		.max_voltage = 1800000
+	},
+
+	{
+		.name = "vdda33",
+		.enable_load = 16000,
+		.min_voltage = 3050000,
+		.max_voltage = 3300000
+	},
+
+};
+
+#define SNPS_HS_NUM_VREGS		ARRAY_SIZE(hsphy_vreg_l)
 
 struct override_param {
 	s32	value;
@@ -132,11 +160,89 @@ struct qcom_snps_hsphy {
 	struct clk_bulk_data *clks;
 	struct reset_control *phy_reset;
 	struct regulator_bulk_data vregs[SNPS_HS_NUM_VREGS];
+	const struct qcom_snps_hsphy_regulator_data *vreg_list;
 
 	bool phy_initialized;
 	enum phy_mode mode;
 	struct phy_override_seq update_seq_cfg[NUM_HSPHY_TUNING_PARAMS];
 };
+
+static int __vdda_phy_bulk_enable_disable(struct qcom_snps_hsphy *hsphy, bool on)
+{
+	int ret = 0;
+	int i;
+
+	if (!on)
+		goto disable_vdd;
+
+	for (i = 0; i < SNPS_HS_NUM_VREGS; i++) {
+
+		ret = regulator_set_load(hsphy->vregs[i].consumer,
+					 hsphy->vreg_list[i].enable_load);
+
+		if (ret < 0) {
+			dev_err(hsphy->dev, "unable to set HPM of %s %d\n",
+						hsphy->vregs[i].supply, ret);
+			goto err_vdd;
+		}
+	}
+
+	for (i = 0; i < SNPS_HS_NUM_VREGS; i++) {
+		ret = regulator_set_voltage(hsphy->vregs[i].consumer,
+					    hsphy->vreg_list[i].min_voltage,
+					    hsphy->vreg_list[i].max_voltage);
+		if (ret) {
+			dev_err(hsphy->dev,
+				"unable to set voltage of regulator %s %d\n",
+						hsphy->vregs[i].supply, ret);
+			goto put_vdd_lpm;
+		}
+	}
+
+	ret = regulator_bulk_enable(ARRAY_SIZE(hsphy->vregs), hsphy->vregs);
+	if (ret)
+		goto unconfig_vdd;
+
+	return ret;
+
+disable_vdd:
+	regulator_bulk_disable(ARRAY_SIZE(hsphy->vregs), hsphy->vregs);
+
+unconfig_vdd:
+	for (i = 0; i < SNPS_HS_NUM_VREGS; i++) {
+		ret = regulator_set_voltage(hsphy->vregs[i].consumer, 0,
+					    hsphy->vreg_list[i].max_voltage);
+		if (ret) {
+			dev_err(hsphy->dev,
+			"unable to set voltage of regulator %s %d\n",
+					hsphy->vregs[i].supply, ret);
+		}
+	}
+
+put_vdd_lpm:
+	for (i = 0; i < SNPS_HS_NUM_VREGS; i++) {
+		ret = regulator_set_load(hsphy->vregs[i].consumer, 0);
+
+		if (ret < 0) {
+			dev_err(hsphy->dev, "unable to set LPM of %s %d\n",
+						hsphy->vregs[i].supply, ret);
+		}
+	}
+
+err_vdd:
+	return ret;
+
+}
+
+static int vdda_phy_bulk_enable(struct qcom_snps_hsphy *hsphy)
+{
+	return __vdda_phy_bulk_enable_disable(hsphy, true);
+}
+
+static int vdda_phy_bulk_disable(struct qcom_snps_hsphy *hsphy)
+{
+	return __vdda_phy_bulk_enable_disable(hsphy, false);
+}
 
 static int qcom_snps_hsphy_clk_init(struct qcom_snps_hsphy *hsphy)
 {
@@ -390,7 +496,7 @@ static int qcom_snps_hsphy_init(struct phy *phy)
 
 	dev_vdbg(&phy->dev, "%s(): Initializing SNPS HS phy\n", __func__);
 
-	ret = regulator_bulk_enable(ARRAY_SIZE(hsphy->vregs), hsphy->vregs);
+	ret = vdda_phy_bulk_enable(hsphy);
 	if (ret)
 		return ret;
 
@@ -471,7 +577,7 @@ static int qcom_snps_hsphy_init(struct phy *phy)
 disable_clks:
 	clk_bulk_disable_unprepare(hsphy->num_clks, hsphy->clks);
 poweroff_phy:
-	regulator_bulk_disable(ARRAY_SIZE(hsphy->vregs), hsphy->vregs);
+	ret = vdda_phy_bulk_disable(hsphy);
 
 	return ret;
 }
@@ -482,7 +588,7 @@ static int qcom_snps_hsphy_exit(struct phy *phy)
 
 	reset_control_assert(hsphy->phy_reset);
 	clk_bulk_disable_unprepare(hsphy->num_clks, hsphy->clks);
-	regulator_bulk_disable(ARRAY_SIZE(hsphy->vregs), hsphy->vregs);
+	vdda_phy_bulk_disable(hsphy);
 	hsphy->phy_initialized = false;
 
 	return 0;
@@ -592,8 +698,9 @@ static int qcom_snps_hsphy_probe(struct platform_device *pdev)
 
 	num = ARRAY_SIZE(hsphy->vregs);
 	for (i = 0; i < num; i++)
-		hsphy->vregs[i].supply = qcom_snps_hsphy_vreg_names[i];
+		hsphy->vregs[i].supply = hsphy_vreg_l[i].name;
 
+	hsphy->vreg_list  = hsphy_vreg_l;
 	ret = devm_regulator_bulk_get(dev, num, hsphy->vregs);
 	if (ret)
 		return dev_err_probe(dev, ret,
