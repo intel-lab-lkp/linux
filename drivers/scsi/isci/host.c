@@ -220,7 +220,7 @@ irqreturn_t isci_msix_isr(int vec, void *data)
 	struct isci_host *ihost = data;
 
 	if (sci_controller_isr(ihost))
-		tasklet_schedule(&ihost->completion_tasklet);
+		queue_work(system_bh_wq, &ihost->completion_work);
 
 	return IRQ_HANDLED;
 }
@@ -610,7 +610,7 @@ irqreturn_t isci_intx_isr(int vec, void *data)
 
 	if (sci_controller_isr(ihost)) {
 		writel(SMU_ISR_COMPLETION, &ihost->smu_registers->interrupt_status);
-		tasklet_schedule(&ihost->completion_tasklet);
+		queue_work(system_bh_wq, &ihost->completion_work);
 		ret = IRQ_HANDLED;
 	} else if (sci_controller_error_isr(ihost)) {
 		spin_lock(&ihost->scic_lock);
@@ -1106,14 +1106,14 @@ void ireq_done(struct isci_host *ihost, struct isci_request *ireq, struct sas_ta
 /**
  * isci_host_completion_routine() - This function is the delayed service
  *    routine that calls the sci core library's completion handler. It's
- *    scheduled as a tasklet from the interrupt service routine when interrupts
+ *    scheduled as a BH work from the interrupt service routine when interrupts
  *    in use, or set as the timeout function in polled mode.
- * @data: This parameter specifies the ISCI host object
+ * @t: pointer to the work_struct
  *
  */
-void isci_host_completion_routine(unsigned long data)
+void isci_host_completion_routine(struct work_struct *t)
 {
-	struct isci_host *ihost = (struct isci_host *)data;
+	struct isci_host *ihost = from_work(ihost, t, completion_work);
 	u16 active;
 
 	spin_lock_irq(&ihost->scic_lock);

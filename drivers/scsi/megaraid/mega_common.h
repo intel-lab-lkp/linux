@@ -24,6 +24,7 @@
 #include <linux/list.h>
 #include <linux/moduleparam.h>
 #include <linux/dma-mapping.h>
+#include <linux/workqueue.h>
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>
 #include <scsi/scsi_device.h>
@@ -95,7 +96,7 @@ typedef struct {
 
 /**
  * struct adapter_t - driver's initialization structure
- * @aram dpc_h			: tasklet handle
+ * @aram dpc_h			: work handle
  * @pdev			: pci configuration pointer for kernel
  * @host			: pointer to host structure of mid-layer
  * @lock			: synchronization lock for mid-layer and driver
@@ -149,7 +150,7 @@ typedef struct {
 #define VERSION_SIZE	16
 
 typedef struct {
-	struct tasklet_struct	dpc_h;
+	struct work_struct	dpc_h;
 	struct pci_dev		*pdev;
 	struct Scsi_Host	*host;
 	spinlock_t		lock;

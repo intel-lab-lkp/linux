@@ -131,8 +131,8 @@ struct sci_port_configuration_agent {
  * @device_table: rni (hw remote node index) to remote device lookup table
  * @available_remote_nodes: rni allocator
  * @power_control: manage device spin up
- * @io_request_sequence: generation number for tci's (task contexts)
- * @task_context_table: hw task context table
+ * @io_request_sequence: generation number for tci's (bh contexts)
+ * @task_context_table: hw bh context table
  * @remote_node_context_table: hw remote node context table
  * @completion_queue: hw-producer driver-consumer communication ring
  * @completion_queue_get: tracks the driver 'head' of the ring to notify hw
@@ -203,7 +203,7 @@ struct isci_host {
 	#define IHOST_IRQ_ENABLED 2
 	unsigned long flags;
 	wait_queue_head_t eventq;
-	struct tasklet_struct completion_tasklet;
+	struct work_struct completion_work;
 	spinlock_t scic_lock;
 	struct isci_request *reqs[SCI_MAX_IO_REQUESTS];
 	struct isci_remote_device devices[SCI_MAX_REMOTE_DEVICES];
@@ -478,7 +478,7 @@ void isci_tci_free(struct isci_host *ihost, u16 tci);
 void ireq_done(struct isci_host *ihost, struct isci_request *ireq, struct sas_task *task);
 
 int isci_host_init(struct isci_host *);
-void isci_host_completion_routine(unsigned long data);
+void isci_host_completion_routine(struct work_struct *t);
 void isci_host_deinit(struct isci_host *);
 void sci_controller_disable_interrupts(struct isci_host *ihost);
 bool sci_controller_has_remote_devices_stopping(struct isci_host *ihost);

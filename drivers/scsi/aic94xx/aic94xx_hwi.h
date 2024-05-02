@@ -12,6 +12,7 @@
 #include <linux/interrupt.h>
 #include <linux/pci.h>
 #include <linux/dma-mapping.h>
+#include <linux/workqueue.h>
 
 #include <scsi/libsas.h>
 
@@ -117,7 +118,7 @@ struct asd_ascb {
 	struct asd_dma_tok dma_scb;
 	struct asd_dma_tok *sg_arr;
 
-	void (*tasklet_complete)(struct asd_ascb *, struct done_list_struct *);
+	void (*work_complete)(struct asd_ascb *, struct done_list_struct *);
 	u8     uldd_timer:1;
 
 	/* internally generated command */
@@ -152,7 +153,7 @@ struct asd_seq_data {
 	void *tc_index_bitmap;
 	int   tc_index_bitmap_bits;
 
-	struct tasklet_struct dl_tasklet;
+	struct work_struct dl_work;
 	struct done_list_struct *dl; /* array of done list entries, equals */
 	struct asd_dma_tok *actual_dl; /* actual_dl->vaddr */
 	int    dl_toggle;

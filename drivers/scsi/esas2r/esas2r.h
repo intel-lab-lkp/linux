@@ -900,7 +900,7 @@ struct esas2r_adapter {
 	struct esas2r_flash_context flash_context;
 	u32 num_targets_backend;
 	u32 ioctl_tunnel;
-	struct tasklet_struct tasklet;
+	struct work_struct work;
 	struct pci_dev *pcid;
 	struct Scsi_Host *host;
 	unsigned int index;
@@ -992,7 +992,7 @@ int esas2r_write_vda(struct esas2r_adapter *a, const char *buf, long off,
 int esas2r_read_fs(struct esas2r_adapter *a, char *buf, long off, int count);
 int esas2r_write_fs(struct esas2r_adapter *a, const char *buf, long off,
 		    int count);
-void esas2r_adapter_tasklet(unsigned long context);
+void esas2r_adapter_work(struct work_struct *work);
 irqreturn_t esas2r_interrupt(int irq, void *dev_id);
 irqreturn_t esas2r_msi_interrupt(int irq, void *dev_id);
 void esas2r_kickoff_timer(struct esas2r_adapter *a);
@@ -1022,7 +1022,7 @@ bool esas2r_init_adapter_hw(struct esas2r_adapter *a, bool init_poll);
 void esas2r_start_request(struct esas2r_adapter *a, struct esas2r_request *rq);
 bool esas2r_send_task_mgmt(struct esas2r_adapter *a,
 			   struct esas2r_request *rqaux, u8 task_mgt_func);
-void esas2r_do_tasklet_tasks(struct esas2r_adapter *a);
+void esas2r_do_work_tasks(struct esas2r_adapter *a);
 void esas2r_adapter_interrupt(struct esas2r_adapter *a);
 void esas2r_do_deferred_processes(struct esas2r_adapter *a);
 void esas2r_reset_bus(struct esas2r_adapter *a);
@@ -1283,7 +1283,7 @@ static inline void esas2r_rq_destroy_request(struct esas2r_request *rq,
 	rq->data_buf = NULL;
 }
 
-static inline bool esas2r_is_tasklet_pending(struct esas2r_adapter *a)
+static inline bool esas2r_is_work_pending(struct esas2r_adapter *a)
 {
 
 	return test_bit(AF_BUSRST_NEEDED, &a->flags) ||
@@ -1327,11 +1327,11 @@ static inline void esas2r_enable_chip_interrupts(struct esas2r_adapter *a)
 /* Schedule a TASKLET to perform non-interrupt tasks that may require delays
  * or long completion times.
  */
-static inline void esas2r_schedule_tasklet(struct esas2r_adapter *a)
+static inline void esas2r_schedule_work(struct esas2r_adapter *a)
 {
 	/* make sure we don't schedule twice */
 	if (!test_and_set_bit(AF_TASKLET_SCHEDULED, &a->flags))
-		tasklet_hi_schedule(&a->tasklet);
+		queue_work(system_bh_highpri_wq, &a->work);
 }
 
 static inline void esas2r_enable_heartbeat(struct esas2r_adapter *a)

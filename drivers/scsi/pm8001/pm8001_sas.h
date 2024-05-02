@@ -522,7 +522,7 @@ struct pm8001_hba_info {
 	int			number_of_intr;/*will be used in remove()*/
 	char			intr_drvname[PM8001_MAX_MSIX_VEC]
 				[PM8001_NAME_LENGTH+1+3+1];
-	struct tasklet_struct	tasklet[PM8001_MAX_MSIX_VEC];
+	struct work_struct	work[PM8001_MAX_MSIX_VEC];
 	u32			logging_level;
 	u32			link_rate;
 	u32			fw_status;

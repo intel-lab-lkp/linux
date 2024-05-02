@@ -15,13 +15,13 @@
 /* ---------- Internal enqueue ---------- */
 
 static int asd_enqueue_internal(struct asd_ascb *ascb,
-		void (*tasklet_complete)(struct asd_ascb *,
+		void (*work_complete)(struct asd_ascb *,
 					 struct done_list_struct *),
 				void (*timed_out)(struct timer_list *t))
 {
 	int res;
 
-	ascb->tasklet_complete = tasklet_complete;
+	ascb->work_complete = work_complete;
 	ascb->uldd_timer = 1;
 
 	ascb->timer.function = timed_out;
@@ -37,7 +37,7 @@ static int asd_enqueue_internal(struct asd_ascb *ascb,
 
 /* ---------- CLEAR NEXUS ---------- */
 
-struct tasklet_completion_status {
+struct work_completion_status {
 	int	dl_opcode;
 	int	tmf_state;
 	u8	tag_valid:1;
@@ -45,7 +45,7 @@ struct tasklet_completion_status {
 };
 
 #define DECLARE_TCS(tcs) \
-	struct tasklet_completion_status tcs = { \
+	struct work_completion_status tcs = { \
 		.dl_opcode = 0, \
 		.tmf_state = 0, \
 		.tag_valid = 0, \
@@ -53,10 +53,10 @@ struct tasklet_completion_status {
 	}
 
 
-static void asd_clear_nexus_tasklet_complete(struct asd_ascb *ascb,
+static void asd_clear_nexus_work_complete(struct asd_ascb *ascb,
 					     struct done_list_struct *dl)
 {
-	struct tasklet_completion_status *tcs = ascb->uldd_task;
+	struct work_completion_status *tcs = ascb->uldd_task;
 	ASD_DPRINTK("%s: here\n", __func__);
 	if (!del_timer(&ascb->timer)) {
 		ASD_DPRINTK("%s: couldn't delete timer\n", __func__);
@@ -71,7 +71,7 @@ static void asd_clear_nexus_tasklet_complete(struct asd_ascb *ascb,
 static void asd_clear_nexus_timedout(struct timer_list *t)
 {
 	struct asd_ascb *ascb = from_timer(ascb, t, timer);
-	struct tasklet_completion_status *tcs = ascb->uldd_task;
+	struct work_completion_status *tcs = ascb->uldd_task;
 
 	ASD_DPRINTK("%s: here\n", __func__);
 	tcs->dl_opcode = TMF_RESP_FUNC_FAILED;
@@ -98,7 +98,7 @@ static void asd_clear_nexus_timedout(struct timer_list *t)
 
 #define CLEAR_NEXUS_POST        \
 	ASD_DPRINTK("%s: POST\n", __func__); \
-	res = asd_enqueue_internal(ascb, asd_clear_nexus_tasklet_complete, \
+	res = asd_enqueue_internal(ascb, asd_clear_nexus_work_complete, \
 				   asd_clear_nexus_timedout);              \
 	if (res)                \
 		goto out_err;   \
@@ -245,14 +245,14 @@ static int asd_clear_nexus_index(struct sas_task *task)
 static void asd_tmf_timedout(struct timer_list *t)
 {
 	struct asd_ascb *ascb = from_timer(ascb, t, timer);
-	struct tasklet_completion_status *tcs = ascb->uldd_task;
+	struct work_completion_status *tcs = ascb->uldd_task;
 
 	ASD_DPRINTK("tmf timed out\n");
 	tcs->tmf_state = TMF_RESP_FUNC_FAILED;
 	complete(ascb->completion);
 }
 
-static int asd_get_tmf_resp_tasklet(struct asd_ascb *ascb,
+static int asd_get_tmf_resp_work(struct asd_ascb *ascb,
 				    struct done_list_struct *dl)
 {
 	struct asd_ha_struct *asd_ha = ascb->ha;
@@ -270,7 +270,7 @@ static int asd_get_tmf_resp_tasklet(struct asd_ascb *ascb,
 	struct ssp_response_iu   *ru;
 	int res = TMF_RESP_FUNC_FAILED;
 
-	ASD_DPRINTK("tmf resp tasklet\n");
+	ASD_DPRINTK("tmf resp BH work\n");
 
 	spin_lock_irqsave(&asd_ha->seq.tc_index_lock, flags);
 	escb = asd_tc_index_find(&asd_ha->seq,
@@ -298,21 +298,21 @@ static int asd_get_tmf_resp_tasklet(struct asd_ascb *ascb,
 	return res;
 }
 
-static void asd_tmf_tasklet_complete(struct asd_ascb *ascb,
+static void asd_tmf_work_complete(struct asd_ascb *ascb,
 				     struct done_list_struct *dl)
 {
-	struct tasklet_completion_status *tcs;
+	struct work_completion_status *tcs;
 
 	if (!del_timer(&ascb->timer))
 		return;
 
 	tcs = ascb->uldd_task;
-	ASD_DPRINTK("tmf tasklet complete\n");
+	ASD_DPRINTK("tmf BH work complete\n");
 
 	tcs->dl_opcode = dl->opcode;
 
 	if (dl->opcode == TC_SSP_RESP) {
-		tcs->tmf_state = asd_get_tmf_resp_tasklet(ascb, dl);
+		tcs->tmf_state = asd_get_tmf_resp_work(ascb, dl);
 		tcs->tag_valid = ascb->tag_valid;
 		tcs->tag = ascb->tag;
 	}
@@ -452,7 +452,7 @@ int asd_abort_task(struct sas_task *task)
 	scb->abort_task.index = cpu_to_le16((u16)tascb->tc_index);
 	scb->abort_task.itnl_to = cpu_to_le16(ITNL_TIMEOUT_CONST);
 
-	res = asd_enqueue_internal(ascb, asd_tmf_tasklet_complete,
+	res = asd_enqueue_internal(ascb, asd_tmf_work_complete,
 				   asd_tmf_timedout);
 	if (res)
 		goto out_free;
@@ -600,7 +600,7 @@ static int asd_initiate_ssp_tmf(struct domain_device *dev, u8 *lun,
 	if (tmf == TMF_QUERY_TASK)
 		scb->ssp_tmf.index = cpu_to_le16(index);
 
-	res = asd_enqueue_internal(ascb, asd_tmf_tasklet_complete,
+	res = asd_enqueue_internal(ascb, asd_tmf_work_complete,
 				   asd_tmf_timedout);
 	if (res)
 		goto out_err;

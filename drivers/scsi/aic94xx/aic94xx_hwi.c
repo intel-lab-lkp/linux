@@ -246,7 +246,7 @@ static void asd_get_max_scb_ddb(struct asd_ha_struct *asd_ha)
 
 /* ---------- Done List initialization ---------- */
 
-static void asd_dl_tasklet_handler(unsigned long);
+static void asd_dl_work_handler(struct work_struct *);
 
 static int asd_init_dl(struct asd_ha_struct *asd_ha)
 {
@@ -259,8 +259,7 @@ static int asd_init_dl(struct asd_ha_struct *asd_ha)
 	asd_ha->seq.dl = asd_ha->seq.actual_dl->vaddr;
 	asd_ha->seq.dl_toggle = ASD_DEF_DL_TOGGLE;
 	asd_ha->seq.dl_next = 0;
-	tasklet_init(&asd_ha->seq.dl_tasklet, asd_dl_tasklet_handler,
-		     (unsigned long) asd_ha);
+	INIT_WORK(&asd_ha->seq.dl_work, asd_dl_work_handler);
 
 	return 0;
 }
@@ -709,10 +708,9 @@ static void asd_chip_reset(struct asd_ha_struct *asd_ha)
 
 /* ---------- Done List Routines ---------- */
 
-static void asd_dl_tasklet_handler(unsigned long data)
+static void asd_dl_work_handler(struct work_struct *t)
 {
-	struct asd_ha_struct *asd_ha = (struct asd_ha_struct *) data;
-	struct asd_seq_data *seq = &asd_ha->seq;
+	struct asd_seq_data *seq = from_work(seq, t, dl_work);
 	unsigned long flags;
 
 	while (1) {
@@ -739,7 +737,7 @@ static void asd_dl_tasklet_handler(unsigned long data)
 		seq->pending--;
 		spin_unlock_irqrestore(&seq->pend_q_lock, flags);
 	out:
-		ascb->tasklet_complete(ascb, dl);
+		ascb->work_complete(ascb, dl);
 
 	next_1:
 		seq->dl_next = (seq->dl_next + 1) & (ASD_DL_SIZE-1);
@@ -756,7 +754,7 @@ static void asd_dl_tasklet_handler(unsigned long data)
  */
 static void asd_process_donelist_isr(struct asd_ha_struct *asd_ha)
 {
-	tasklet_schedule(&asd_ha->seq.dl_tasklet);
+	queue_work(system_bh_wq, &asd_ha->seq.dl_work);
 }
 
 /**

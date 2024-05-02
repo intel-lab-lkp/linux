@@ -797,7 +797,7 @@ struct scsi_host_template aic7xxx_driver_template = {
 	.target_destroy		= ahc_linux_target_destroy,
 };
 
-/**************************** Tasklet Handler *********************************/
+/**************************** Work Handler *********************************/
 
 
 static inline unsigned int ahc_build_scsiid(struct ahc_softc *ahc,

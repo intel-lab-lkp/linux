@@ -12,6 +12,7 @@
 
 #include <linux/list.h>
 #include <linux/types.h>
+#include <linux/workqueue.h>
 #include <scsi/viosrp.h>
 
 #define IBMVFC_NAME	"ibmvfc"
@@ -910,7 +911,7 @@ struct ibmvfc_host {
 	char partition_name[97];
 	void (*job_step) (struct ibmvfc_host *);
 	struct task_struct *work_thread;
-	struct tasklet_struct tasklet;
+	struct work_struct work;
 	struct work_struct rport_add_work_q;
 	wait_queue_head_t init_wait_q;
 	wait_queue_head_t work_wait_q;

@@ -97,7 +97,7 @@ irqreturn_t esas2r_interrupt(int irq, void *dev_id)
 		return IRQ_NONE;
 
 	set_bit(AF2_INT_PENDING, &a->flags2);
-	esas2r_schedule_tasklet(a);
+	esas2r_schedule_work(a);
 
 	return IRQ_HANDLED;
 }
@@ -162,7 +162,7 @@ irqreturn_t esas2r_msi_interrupt(int irq, void *dev_id)
 	if (likely(atomic_read(&a->disable_cnt) == 0))
 		esas2r_do_deferred_processes(a);
 
-	esas2r_do_tasklet_tasks(a);
+	esas2r_do_work_tasks(a);
 
 	return 1;
 }
@@ -327,8 +327,8 @@ void esas2r_do_deferred_processes(struct esas2r_adapter *a)
 
 	/* Clear off the completed list to be processed later. */
 
-	if (esas2r_is_tasklet_pending(a)) {
-		esas2r_schedule_tasklet(a);
+	if (esas2r_is_work_pending(a)) {
+		esas2r_schedule_work(a);
 
 		startreqs = 0;
 	}
@@ -476,7 +476,7 @@ static void esas2r_process_bus_reset(struct esas2r_adapter *a)
 	esas2r_trace_exit();
 }
 
-static void esas2r_chip_rst_needed_during_tasklet(struct esas2r_adapter *a)
+static void esas2r_chip_rst_needed_during_work(struct esas2r_adapter *a)
 {
 
 	clear_bit(AF_CHPRST_NEEDED, &a->flags);
@@ -558,7 +558,7 @@ static void esas2r_chip_rst_needed_during_tasklet(struct esas2r_adapter *a)
 	}
 }
 
-static void esas2r_handle_chip_rst_during_tasklet(struct esas2r_adapter *a)
+static void esas2r_handle_chip_rst_during_work(struct esas2r_adapter *a)
 {
 	while (test_bit(AF_CHPRST_DETECTED, &a->flags)) {
 		/*
@@ -614,15 +614,15 @@ static void esas2r_handle_chip_rst_during_tasklet(struct esas2r_adapter *a)
 
 
 /* Perform deferred tasks when chip interrupts are disabled */
-void esas2r_do_tasklet_tasks(struct esas2r_adapter *a)
+void esas2r_do_work_tasks(struct esas2r_adapter *a)
 {
 
 	if (test_bit(AF_CHPRST_NEEDED, &a->flags) ||
 	    test_bit(AF_CHPRST_DETECTED, &a->flags)) {
 		if (test_bit(AF_CHPRST_NEEDED, &a->flags))
-			esas2r_chip_rst_needed_during_tasklet(a);
+			esas2r_chip_rst_needed_during_work(a);
 
-		esas2r_handle_chip_rst_during_tasklet(a);
+		esas2r_handle_chip_rst_during_work(a);
 	}
 
 	if (test_bit(AF_BUSRST_NEEDED, &a->flags)) {

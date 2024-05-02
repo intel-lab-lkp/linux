@@ -129,14 +129,14 @@ static void mvs_free(struct mvs_info *mvi)
 	kfree(mvi);
 }
 
-#ifdef CONFIG_SCSI_MVSAS_TASKLET
-static void mvs_tasklet(unsigned long opaque)
+#ifdef CONFIG_SCSI_MVSAS_WORK
+static void mvs_work(struct work_struct *t)
 {
 	u32 stat;
 	u16 core_nr, i = 0;
 
-	struct mvs_info *mvi;
-	struct sas_ha_struct *sha = (struct sas_ha_struct *)opaque;
+	struct mvs_info *mvi = from_work(mvi, t, mv_work);
+	struct sas_ha_struct *sha = mvi->sha;
 
 	core_nr = ((struct mvs_prv_info *)sha->lldd_ha)->n_host;
 	mvi = ((struct mvs_prv_info *)sha->lldd_ha)->mvi[0];
@@ -163,7 +163,7 @@ static irqreturn_t mvs_interrupt(int irq, void *opaque)
 	u32 stat;
 	struct mvs_info *mvi;
 	struct sas_ha_struct *sha = opaque;
-#ifndef CONFIG_SCSI_MVSAS_TASKLET
+#ifndef CONFIG_SCSI_MVSAS_WORK
 	u32 i;
 	u32 core_nr;
 
@@ -174,20 +174,20 @@ static irqreturn_t mvs_interrupt(int irq, void *opaque)
 
 	if (unlikely(!mvi))
 		return IRQ_NONE;
-#ifdef CONFIG_SCSI_MVSAS_TASKLET
+#ifdef CONFIG_SCSI_MVSAS_WORK
 	MVS_CHIP_DISP->interrupt_disable(mvi);
 #endif
 
 	stat = MVS_CHIP_DISP->isr_status(mvi, irq);
 	if (!stat) {
-	#ifdef CONFIG_SCSI_MVSAS_TASKLET
+	#ifdef CONFIG_SCSI_MVSAS_WORK
 		MVS_CHIP_DISP->interrupt_enable(mvi);
 	#endif
 		return IRQ_NONE;
 	}
 
-#ifdef CONFIG_SCSI_MVSAS_TASKLET
-	tasklet_schedule(&((struct mvs_prv_info *)sha->lldd_ha)->mv_tasklet);
+#ifdef CONFIG_SCSI_MVSAS_WORK
+	queue_work(system_bh_wq, &((struct mvs_prv_info *)sha->lldd_ha)->mv_work);
 #else
 	for (i = 0; i < core_nr; i++) {
 		mvi = ((struct mvs_prv_info *)sha->lldd_ha)->mvi[i];
@@ -538,12 +538,11 @@ static int mvs_pci_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 		}
 		nhost++;
 	} while (nhost < chip->n_host);
-#ifdef CONFIG_SCSI_MVSAS_TASKLET
+#ifdef CONFIG_SCSI_MVSAS_WORK
 	{
 	struct mvs_prv_info *mpi = SHOST_TO_SAS_HA(shost)->lldd_ha;
 
-	tasklet_init(&(mpi->mv_tasklet), mvs_tasklet,
-		     (unsigned long)SHOST_TO_SAS_HA(shost));
+	INIT_WORK(&(mpi->mv_work), mvs_work);
 	}
 #endif
 
@@ -588,8 +587,8 @@ static void mvs_pci_remove(struct pci_dev *pdev)
 	core_nr = ((struct mvs_prv_info *)sha->lldd_ha)->n_host;
 	mvi = ((struct mvs_prv_info *)sha->lldd_ha)->mvi[0];
 
-#ifdef CONFIG_SCSI_MVSAS_TASKLET
-	tasklet_kill(&((struct mvs_prv_info *)sha->lldd_ha)->mv_tasklet);
+#ifdef CONFIG_SCSI_MVSAS_WORK
+	cancel_work_sync(&((struct mvs_prv_info *)sha->lldd_ha)->mv_work);
 #endif
 
 	sas_unregister_ha(sha);

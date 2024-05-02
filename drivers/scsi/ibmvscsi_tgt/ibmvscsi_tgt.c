@@ -2948,7 +2948,7 @@ static irqreturn_t ibmvscsis_interrupt(int dummy, void *data)
 	struct scsi_info *vscsi = data;
 
 	vio_disable_interrupts(vscsi->dma_dev);
-	tasklet_schedule(&vscsi->work_task);
+	queue_work(system_bh_wq, &scsi->work_task);
 
 	return IRQ_HANDLED;
 }
@@ -3309,7 +3309,7 @@ static int ibmvscsis_rdma(struct ibmvscsis_cmd *cmd, struct scatterlist *sg,
 
 /**
  * ibmvscsis_handle_crq() - Handle CRQ
- * @data:	Pointer to our adapter structure
+ * @t:	Pointer to work_struct
  *
  * Read the command elements from the command queue and copy the payloads
  * associated with the command elements to local memory and execute the
@@ -3317,9 +3317,9 @@ static int ibmvscsis_rdma(struct ibmvscsis_cmd *cmd, struct scatterlist *sg,
  *
  * Note: this is an edge triggered interrupt. It can not be shared.
  */
-static void ibmvscsis_handle_crq(unsigned long data)
+static void ibmvscsis_handle_crq(struct work_struct *t)
 {
-	struct scsi_info *vscsi = (struct scsi_info *)data;
+	struct scsi_info *vscsi = from_work(scsi, t, work_task);
 	struct viosrp_crq *crq;
 	long rc;
 	bool ack = true;
@@ -3530,8 +3530,7 @@ static int ibmvscsis_probe(struct vio_dev *vdev,
 	dev_dbg(&vscsi->dev, "probe hrc %ld, client partition num %d\n",
 		hrc, vscsi->client_data.partition_number);
 
-	tasklet_init(&vscsi->work_task, ibmvscsis_handle_crq,
-		     (unsigned long)vscsi);
+	INIT_WORK(&vscsi->work_task, ibmvscsis_handle_crq);
 
 	init_completion(&vscsi->wait_idle);
 	init_completion(&vscsi->unconfig);
@@ -3565,7 +3564,7 @@ unmap_buf:
 free_buf:
 	kfree(vscsi->map_buf);
 destroy_queue:
-	tasklet_kill(&vscsi->work_task);
+	cancel_work_sync(&vscsi->work_task);
 	ibmvscsis_unregister_command_q(vscsi);
 	ibmvscsis_destroy_command_q(vscsi);
 free_timer:
@@ -3602,7 +3601,7 @@ static void ibmvscsis_remove(struct vio_dev *vdev)
 	dma_unmap_single(&vdev->dev, vscsi->map_ioba, PAGE_SIZE,
 			 DMA_BIDIRECTIONAL);
 	kfree(vscsi->map_buf);
-	tasklet_kill(&vscsi->work_task);
+	cancel_work_sync(&vscsi->work_task);
 	ibmvscsis_destroy_command_q(vscsi);
 	ibmvscsis_freetimer(vscsi);
 	ibmvscsis_free_cmds(vscsi);

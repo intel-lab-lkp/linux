@@ -851,7 +851,7 @@ void esas2r_reset_bus(struct esas2r_adapter *a)
 		set_bit(AF_BUSRST_PENDING, &a->flags);
 		set_bit(AF_OS_RESET, &a->flags);
 
-		esas2r_schedule_tasklet(a);
+		esas2r_schedule_work(a);
 	}
 }
 
