@@ -98,7 +98,7 @@ TEST_GEN_FILES += $(BINARIES_64)
 endif
 else
 
-ifneq (,$(findstring $(ARCH),ppc64))
+ifneq (,$(filter $(ARCH),arm64 ppc64))
 TEST_GEN_FILES += protection_keys
 endif
 
