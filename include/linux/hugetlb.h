@@ -509,6 +509,7 @@ struct hugetlbfs_sb_info {
 	kuid_t	uid;
 	kgid_t	gid;
 	umode_t mode;
+	ushort	nommapfilesz;
 };
 
 static inline struct hugetlbfs_sb_info *HUGETLBFS_SB(struct super_block *sb)

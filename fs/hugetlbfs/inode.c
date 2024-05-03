@@ -58,6 +58,7 @@ struct hugetlbfs_fs_context {
 	kuid_t			uid;
 	kgid_t			gid;
 	umode_t			mode;
+	ushort			nommapfilesz;
 };
 
 int sysctl_hugetlb_shm_group;
@@ -70,6 +71,7 @@ enum hugetlb_param {
 	Opt_pagesize,
 	Opt_size,
 	Opt_uid,
+	Opt_nommapfilesz,
 };
 
 static const struct fs_parameter_spec hugetlb_fs_parameters[] = {
@@ -80,6 +82,7 @@ static const struct fs_parameter_spec hugetlb_fs_parameters[] = {
 	fsparam_string("pagesize",	Opt_pagesize),
 	fsparam_string("size",		Opt_size),
 	fsparam_u32   ("uid",		Opt_uid),
+	fsparam_flag  ("nommapfilesz",  Opt_nommapfilesz),
 	{}
 };
 
@@ -159,7 +162,12 @@ static int hugetlbfs_file_mmap(struct file *file, struct vm_area_struct *vma)
 		goto out;
 
 	ret = 0;
-	if (vma->vm_flags & VM_WRITE && inode->i_size < len)
+	/*
+	 * If filesystem is mounted with 'nommapfilesz' option, then
+	 * don't update file size.
+	 */
+	if (!(HUGETLBFS_SB(inode->i_sb)->nommapfilesz)
+			&& vma->vm_flags & VM_WRITE && inode->i_size < len)
 		i_size_write(inode, len);
 out:
 	inode_unlock(inode);
@@ -1166,6 +1174,8 @@ static int hugetlbfs_show_options(struct seq_file *m, struct dentry *root)
 		seq_printf(m, ",mode=%o", sbinfo->mode);
 	if (sbinfo->max_inodes != -1)
 		seq_printf(m, ",nr_inodes=%lu", sbinfo->max_inodes);
+	if (sbinfo->nommapfilesz)
+		seq_puts(m, ",nommapfilesz");
 
 	hpage_size /= 1024;
 	mod = 'K';
@@ -1427,6 +1437,11 @@ static int hugetlbfs_parse_param(struct fs_context *fc, struct fs_parameter *par
 			ctx->min_val_type = SIZE_PERCENT;
 		return 0;
 
+	case Opt_nommapfilesz:
+		/* don't update file size in mmap call */
+		ctx->nommapfilesz = 1;
+		return 0;
+
 	default:
 		return -EINVAL;
 	}
@@ -1484,6 +1499,7 @@ hugetlbfs_fill_super(struct super_block *sb, struct fs_context *fc)
 	sbinfo->uid		= ctx->uid;
 	sbinfo->gid		= ctx->gid;
 	sbinfo->mode		= ctx->mode;
+	sbinfo->nommapfilesz    = ctx->nommapfilesz;
 
 	/*
 	 * Allocate and initialize subpool if maximum or minimum size is
@@ -1555,6 +1571,7 @@ static int hugetlbfs_init_fs_context(struct fs_context *fc)
 	ctx->min_hpages	= -1; /* No default minimum size */
 	ctx->max_val_type = NO_SIZE;
 	ctx->min_val_type = NO_SIZE;
+	ctx->nommapfilesz = 0; /* allows file size update in mmap call */
 	fc->fs_private = ctx;
 	fc->ops	= &hugetlbfs_fs_context_ops;
 	return 0;
