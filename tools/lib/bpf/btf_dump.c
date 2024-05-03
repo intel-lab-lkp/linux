@@ -116,6 +116,11 @@ struct btf_dump {
 	 * data for typed display; allocated if needed.
 	 */
 	struct btf_dump_data *typed_dump;
+	/*
+	 * string with C attributes to be used in record
+	 * types.
+         */
+	const char *record_attrs_str;
 };
 
 static size_t str_hash_fn(long key, void *ctx)
@@ -294,6 +299,20 @@ int btf_dump__dump_type(struct btf_dump *d, __u32 id)
 		btf_dump_emit_type(d, d->emit_queue[i], 0 /*top-level*/);
 
 	return 0;
+}
+
+/* This is like btf_dump__dump_type but it gets a set of options.  */
+int btf_dump__dump_type_with_opts(struct btf_dump *d, __u32 id,
+				  const struct btf_dump_type_opts *opts)
+{
+	int ret;
+
+	if (!OPTS_VALID(opts, btf_dump_type_opts))
+		return libbpf_err(-EINVAL);
+	d->record_attrs_str = OPTS_GET(opts, record_attrs_str, 0);
+	ret = btf_dump__dump_type(d, id);
+	d->record_attrs_str = NULL;
+	return ret;
 }
 
 /*
@@ -1024,6 +1043,8 @@ static void btf_dump_emit_struct_def(struct btf_dump *d,
 	}
 	if (packed)
 		btf_dump_printf(d, " __attribute__((packed))");
+	if (d->record_attrs_str)
+		btf_dump_printf(d, " %s", d->record_attrs_str);
 }
 
 static const char *missing_base_types[][2] = {

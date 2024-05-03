@@ -249,6 +249,17 @@ LIBBPF_API void btf_dump__free(struct btf_dump *d);
 
 LIBBPF_API int btf_dump__dump_type(struct btf_dump *d, __u32 id);
 
+struct btf_dump_type_opts {
+	/* size of this struct, for forward/backward compatibility */
+	size_t sz;
+	const char *record_attrs_str;
+	size_t :0;
+};
+#define btf_dump_type_opts__last_field record_attrs_str
+
+LIBBPF_API int btf_dump__dump_type_with_opts(struct btf_dump *d, __u32 id,
+					     const struct btf_dump_type_opts *opts);
+
 struct btf_dump_emit_type_decl_opts {
 	/* size of this struct, for forward/backward compatiblity */
 	size_t sz;
