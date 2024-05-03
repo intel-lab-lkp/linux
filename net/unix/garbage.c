@@ -128,7 +128,7 @@ static void unix_update_graph(struct unix_vertex *vertex)
 	if (!vertex)
 		return;
 
-	unix_graph_state = UNIX_GRAPH_MAYBE_CYCLIC;
+	WRITE_ONCE(unix_graph_state, UNIX_GRAPH_MAYBE_CYCLIC);
 }
 
 static LIST_HEAD(unix_unvisited_vertices);
@@ -533,7 +533,8 @@ static void unix_walk_scc(struct sk_buff_head *hitlist)
 	list_replace_init(&unix_visited_vertices, &unix_unvisited_vertices);
 	swap(unix_vertex_unvisited_index, unix_vertex_grouped_index);
 
-	unix_graph_state = unix_graph_circles ? UNIX_GRAPH_CYCLIC : UNIX_GRAPH_NOT_CYCLIC;
+	WRITE_ONCE(unix_graph_state,
+		   unix_graph_circles ? UNIX_GRAPH_CYCLIC : UNIX_GRAPH_NOT_CYCLIC);
 }
 
 static void unix_walk_scc_fast(struct sk_buff_head *hitlist)
@@ -555,7 +556,7 @@ static void unix_walk_scc_fast(struct sk_buff_head *hitlist)
 
 		if (scc_dead) {
 			unix_collect_skb(&scc, hitlist);
-			unix_graph_circles--;
+			WRITE_ONCE(unix_graph_circles, unix_graph_circles - 1);
 		}
 
 		list_del(&scc);
@@ -564,7 +565,7 @@ static void unix_walk_scc_fast(struct sk_buff_head *hitlist)
 	list_replace_init(&unix_visited_vertices, &unix_unvisited_vertices);
 
 	if (!unix_graph_circles)
-		unix_graph_state = UNIX_GRAPH_NOT_CYCLIC;
+		WRITE_ONCE(unix_graph_state, UNIX_GRAPH_NOT_CYCLIC);
 }
 
 static bool gc_in_progress;
@@ -608,27 +609,38 @@ void unix_gc(void)
 	queue_work(system_unbound_wq, &unix_gc_work);
 }
 
-#define UNIX_INFLIGHT_TRIGGER_GC 16000
+#define UNIX_INFLIGHT_SANE_CIRCLES (1 << 10)
+#define UNIX_INFLIGHT_SANE_SOCKETS (1 << 14)
 #define UNIX_INFLIGHT_SANE_USER (SCM_MAX_FD * 8)
 
 static void __unix_schedule_gc(struct scm_fp_list *fpl)
 {
-	/* If number of inflight sockets is insane,
-	 * force a garbage collect right now.
-	 *
-	 * Paired with the WRITE_ONCE() in unix_inflight(),
-	 * unix_notinflight(), and __unix_gc().
+	unsigned char graph_state = READ_ONCE(unix_graph_state);
+	bool wait = false;
+
+	if (graph_state == UNIX_GRAPH_NOT_CYCLIC)
+		return;
+
+	/* If the number of inflight sockets or cyclic references
+	 * is insane, schedule garbage collector if not running.
 	 */
-	if (READ_ONCE(unix_tot_inflight) > UNIX_INFLIGHT_TRIGGER_GC &&
-	    !READ_ONCE(gc_in_progress))
-		unix_gc();
+	if (graph_state == UNIX_GRAPH_CYCLIC) {
+		if (READ_ONCE(unix_graph_circles) < UNIX_INFLIGHT_SANE_CIRCLES)
+			return;
+	} else {
+		if (READ_ONCE(unix_tot_inflight) < UNIX_INFLIGHT_SANE_SOCKETS)
+			return;
+	}
 
 	/* Penalise users who want to send AF_UNIX sockets
 	 * but whose sockets have not been received yet.
 	 */
-	if (READ_ONCE(fpl->user->unix_inflight) < UNIX_INFLIGHT_SANE_USER)
-		return;
+	if (READ_ONCE(fpl->user->unix_inflight) > UNIX_INFLIGHT_SANE_USER)
+		wait = true;
 
-	if (READ_ONCE(gc_in_progress))
+	if (!READ_ONCE(gc_in_progress))
+		unix_gc();
+
+	if (wait)
 		flush_work(&unix_gc_work);
 }
