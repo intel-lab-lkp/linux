@@ -289,11 +289,18 @@ struct ethtool_tunable {
 #define ETHTOOL_PHY_EDPD_NO_TX			0xfffe
 #define ETHTOOL_PHY_EDPD_DISABLE		0
 
+/*
+ *	BroadR-Reach Mode Control
+ */
+#define ETHTOOL_PHY_BRR_MODE_ON		1
+#define ETHTOOL_PHY_BRR_MODE_OFF	0
+
 enum phy_tunable_id {
 	ETHTOOL_PHY_ID_UNSPEC,
 	ETHTOOL_PHY_DOWNSHIFT,
 	ETHTOOL_PHY_FAST_LINK_DOWN,
 	ETHTOOL_PHY_EDPD,
+	ETHTOOL_PHY_BRR_MODE,
 	/*
 	 * Add your fresh new phy tunable attribute above and remember to update
 	 * phy_tunable_strings[] in net/ethtool/common.c
@@ -1790,7 +1797,7 @@ enum ethtool_link_mode_bit_indices {
 	ETHTOOL_LINK_MODE_10baseT1S_Full_BIT		 = 99,
 	ETHTOOL_LINK_MODE_10baseT1S_Half_BIT		 = 100,
 	ETHTOOL_LINK_MODE_10baseT1S_P2MP_Half_BIT	 = 101,
-
+	ETHTOOL_LINK_MODE_1BR10_BIT			 = 102,
 	/* must be last entry */
 	__ETHTOOL_LINK_MODE_MASK_NBITS
 };
