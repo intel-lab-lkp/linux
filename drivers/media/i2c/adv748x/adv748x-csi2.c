@@ -14,6 +14,13 @@
 
 #include "adv748x.h"
 
+static const struct v4l2_mbus_framefmt adv748x_csi2_default_fmt = {
+	.width = 1280,
+	.height = 720,
+	.code = MEDIA_BUS_FMT_YUYV8_1X16,
+	.field = V4L2_FIELD_NONE,
+};
+
 int adv748x_csi2_set_virtual_channel(struct adv748x_csi2 *tx, unsigned int vc)
 {
 	return tx_write(tx, ADV748X_CSI_VC_REF, vc << ADV748X_CSI_VC_REF_SHIFT);
@@ -310,6 +317,8 @@ int adv748x_csi2_init(struct adv748x_state *state, struct adv748x_csi2 *tx)
 				     tx->pads);
 	if (ret)
 		return ret;
+
+	tx->format = adv748x_csi2_default_fmt;
 
 	ret = v4l2_async_subdev_endpoint_add(&tx->sd,
 					     of_fwnode_handle(state->endpoints[tx->port]));
