@@ -681,6 +681,13 @@ void bmips_cpu_setup(void)
 		"	or	$8, $9\n"
 		"	.word	0x4088b008\n"	/* mtc0 $8, $22, 8 */
 		: : : "$8", "$9");
+
+		/* Disable RAC flush as not supported */
+		bmips_rac_flush_disable = true;
 		break;
+
+	default:
+		/* Disable RAC flush as not supported */
+		bmips_rac_flush_disable = true;
 	}
 }
