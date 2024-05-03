@@ -327,19 +327,18 @@ static void udbg_init_opal_common(void)
 
 void __init hvc_opal_init_early(void)
 {
-	struct device_node *stdout_node = of_node_get(of_stdout);
+	struct device_node *stdout_node __free(device_node) = of_node_get(of_stdout);
 	const __be32 *termno;
 	const struct hv_ops *ops;
 	u32 index;
 
 	/* If the console wasn't in /chosen, try /ibm,opal */
 	if (!stdout_node) {
-		struct device_node *opal, *np;
-
 		/* Current OPAL takeover doesn't provide the stdout
 		 * path, so we hard wire it
 		 */
-		opal = of_find_node_by_path("/ibm,opal/consoles");
+		struct device_node *opal __free(device_node) =
+			of_find_node_by_path("/ibm,opal/consoles");
 		if (opal) {
 			pr_devel("hvc_opal: Found consoles in new location\n");
 		} else {
@@ -350,13 +349,13 @@ void __init hvc_opal_init_early(void)
 		}
 		if (!opal)
 			return;
+		struct device_node *np;
 		for_each_child_of_node(opal, np) {
 			if (of_node_name_eq(np, "serial")) {
 				stdout_node = np;
 				break;
 			}
 		}
-		of_node_put(opal);
 	}
 	if (!stdout_node)
 		return;
@@ -382,13 +381,11 @@ void __init hvc_opal_init_early(void)
 		hvsilib_establish(&hvc_opal_boot_priv.hvsi);
 		pr_devel("hvc_opal: Found HVSI console\n");
 	} else
-		goto out;
+		return;
 	hvc_opal_boot_termno = index;
 	udbg_init_opal_common();
 	add_preferred_console("hvc", index, NULL);
 	hvc_instantiate(index, index, ops);
-out:
-	of_node_put(stdout_node);
 }
 
 #ifdef CONFIG_PPC_EARLY_DEBUG_OPAL_RAW
