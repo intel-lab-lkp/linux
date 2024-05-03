@@ -9,7 +9,6 @@ bool bmips_rac_flush_disable;
 
 void arch_sync_dma_for_cpu_all(void)
 {
-	void __iomem *cbr = BMIPS_GET_CBR();
 	u32 cfg;
 
 	if (boot_cpu_type() != CPU_BMIPS3300 &&
@@ -21,7 +20,7 @@ void arch_sync_dma_for_cpu_all(void)
 		return;
 
 	/* Flush stale data out of the readahead cache */
-	cfg = __raw_readl(cbr + BMIPS_RAC_CONFIG);
-	__raw_writel(cfg | 0x100, cbr + BMIPS_RAC_CONFIG);
-	__raw_readl(cbr + BMIPS_RAC_CONFIG);
+	cfg = __raw_readl(bmips_cbr_addr + BMIPS_RAC_CONFIG);
+	__raw_writel(cfg | 0x100, bmips_cbr_addr + BMIPS_RAC_CONFIG);
+	__raw_readl(bmips_cbr_addr + BMIPS_RAC_CONFIG);
 }

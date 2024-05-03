@@ -518,14 +518,12 @@ static void bmips_set_reset_vec(int cpu, u32 val)
 		info.val = val;
 		bmips_set_reset_vec_remote(&info);
 	} else {
-		void __iomem *cbr = BMIPS_GET_CBR();
-
 		if (cpu == 0)
-			__raw_writel(val, cbr + BMIPS_RELO_VECTOR_CONTROL_0);
+			__raw_writel(val, bmips_cbr_addr + BMIPS_RELO_VECTOR_CONTROL_0);
 		else {
 			if (current_cpu_type() != CPU_BMIPS4380)
 				return;
-			__raw_writel(val, cbr + BMIPS_RELO_VECTOR_CONTROL_1);
+			__raw_writel(val, bmips_cbr_addr + BMIPS_RELO_VECTOR_CONTROL_1);
 		}
 	}
 	__sync();
@@ -591,7 +589,6 @@ asmlinkage void __weak plat_wired_tlb_setup(void)
 
 void bmips_cpu_setup(void)
 {
-	void __iomem __maybe_unused *cbr = BMIPS_GET_CBR();
 	u32 __maybe_unused cfg;
 
 	switch (current_cpu_type()) {
@@ -607,17 +604,17 @@ void bmips_cpu_setup(void)
 		clear_c0_brcm_reset(BIT(16));
 
 		/* Flush and enable RAC */
-		cfg = __raw_readl(cbr + BMIPS_RAC_CONFIG);
-		__raw_writel(cfg | 0x100, cbr + BMIPS_RAC_CONFIG);
-		__raw_readl(cbr + BMIPS_RAC_CONFIG);
+		cfg = __raw_readl(bmips_cbr_addr + BMIPS_RAC_CONFIG);
+		__raw_writel(cfg | 0x100, bmips_cbr_addr + BMIPS_RAC_CONFIG);
+		__raw_readl(bmips_cbr_addr + BMIPS_RAC_CONFIG);
 
-		cfg = __raw_readl(cbr + BMIPS_RAC_CONFIG);
-		__raw_writel(cfg | 0xf, cbr + BMIPS_RAC_CONFIG);
-		__raw_readl(cbr + BMIPS_RAC_CONFIG);
+		cfg = __raw_readl(bmips_cbr_addr + BMIPS_RAC_CONFIG);
+		__raw_writel(cfg | 0xf, bmips_cbr_addr + BMIPS_RAC_CONFIG);
+		__raw_readl(bmips_cbr_addr + BMIPS_RAC_CONFIG);
 
-		cfg = __raw_readl(cbr + BMIPS_RAC_ADDRESS_RANGE);
-		__raw_writel(cfg | 0x0fff0000, cbr + BMIPS_RAC_ADDRESS_RANGE);
-		__raw_readl(cbr + BMIPS_RAC_ADDRESS_RANGE);
+		cfg = __raw_readl(bmips_cbr_addr + BMIPS_RAC_ADDRESS_RANGE);
+		__raw_writel(cfg | 0x0fff0000, bmips_cbr_addr + BMIPS_RAC_ADDRESS_RANGE);
+		__raw_readl(bmips_cbr_addr + BMIPS_RAC_ADDRESS_RANGE);
 		break;
 
 	case CPU_BMIPS4380:
@@ -627,9 +624,9 @@ void bmips_cpu_setup(void)
 		case 0x2a042:
 		case 0x2a044:
 		case 0x2a060:
-			cfg = __raw_readl(cbr + BMIPS_L2_CONFIG);
-			__raw_writel(cfg & ~0x07000000, cbr + BMIPS_L2_CONFIG);
-			__raw_readl(cbr + BMIPS_L2_CONFIG);
+			cfg = __raw_readl(bmips_cbr_addr + BMIPS_L2_CONFIG);
+			__raw_writel(cfg & ~0x07000000, bmips_cbr_addr + BMIPS_L2_CONFIG);
+			__raw_readl(bmips_cbr_addr + BMIPS_L2_CONFIG);
 		}
 
 		/* clear BHTD to enable branch history table */
