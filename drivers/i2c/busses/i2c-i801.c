@@ -1221,57 +1221,20 @@ static bool is_dell_system_with_lis3lv02d(void)
 }
 
 /*
- * Accelerometer's I2C address is not specified in DMI nor ACPI,
- * so it is needed to define mapping table based on DMI product names.
+ * Accelerometer's I2C address is not specified in DMI nor ACPI.
+ * With one exception all systems use address 0x29.
  */
-static const struct {
-	const char *dmi_product_name;
-	unsigned short i2c_addr;
-} dell_lis3lv02d_devices[] = {
-	/*
-	 * Dell platform team told us that these Latitude devices have
-	 * ST microelectronics accelerometer at I2C address 0x29.
-	 */
-	{ "Latitude E5250",     0x29 },
-	{ "Latitude E5450",     0x29 },
-	{ "Latitude E5550",     0x29 },
-	{ "Latitude E6440",     0x29 },
-	{ "Latitude E6440 ATG", 0x29 },
-	{ "Latitude E6540",     0x29 },
-	/*
-	 * Additional individual entries were added after verification.
-	 */
-	{ "Latitude 5480",      0x29 },
-	{ "Precision 3540",     0x29 },
-	{ "Vostro V131",        0x1d },
-	{ "Vostro 5568",        0x29 },
-	{ "XPS 15 7590",        0x29 },
-};
+static const unsigned short dell_lis3lv02d_addr_list[] = { 0x29, 0x1d, I2C_CLIENT_END };
 
 static void register_dell_lis3lv02d_i2c_device(struct i801_priv *priv)
 {
-	struct i2c_board_info info;
-	const char *dmi_product_name;
-	int i;
+	struct i2c_board_info info = { .type = "lis3lv02d" };
+	struct i2c_client *cl;
 
-	dmi_product_name = dmi_get_system_info(DMI_PRODUCT_NAME);
-	for (i = 0; i < ARRAY_SIZE(dell_lis3lv02d_devices); ++i) {
-		if (strcmp(dmi_product_name,
-			   dell_lis3lv02d_devices[i].dmi_product_name) == 0)
-			break;
-	}
-
-	if (i == ARRAY_SIZE(dell_lis3lv02d_devices)) {
+	cl = i2c_new_scanned_device(&priv->adapter, &info, dell_lis3lv02d_addr_list, NULL);
+	if (IS_ERR(cl))
 		dev_warn(&priv->pci_dev->dev,
-			 "Accelerometer lis3lv02d is present on SMBus but its"
-			 " address is unknown, skipping registration\n");
-		return;
-	}
-
-	memset(&info, 0, sizeof(struct i2c_board_info));
-	info.addr = dell_lis3lv02d_devices[i].i2c_addr;
-	strscpy(info.type, "lis3lv02d", I2C_NAME_SIZE);
-	i2c_new_client_device(&priv->adapter, &info);
+			 "Accelerometer is present, but couldn't be registered at any known address\n");
 }
 
 /* Register optional slaves */
