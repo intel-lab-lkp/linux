@@ -677,8 +677,7 @@ static void unix_release_sock(struct sock *sk, int embrion)
 	 *	  What the above comment does talk about? --ANK(980817)
 	 */
 
-	if (READ_ONCE(unix_tot_inflight))
-		unix_gc();		/* Garbage collect fds */
+	unix_schedule_gc();
 }
 
 static void init_peercred(struct sock *sk)

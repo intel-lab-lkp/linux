@@ -17,13 +17,12 @@ static inline struct unix_sock *unix_get_socket(struct file *filp)
 }
 #endif
 
-extern unsigned int unix_tot_inflight;
 void unix_add_edges(struct scm_fp_list *fpl, struct unix_sock *receiver);
 void unix_del_edges(struct scm_fp_list *fpl);
 void unix_update_edges(struct unix_sock *receiver);
 int unix_prepare_fpl(struct scm_fp_list *fpl);
 void unix_destroy_fpl(struct scm_fp_list *fpl);
-void unix_gc(void);
+void unix_schedule_gc(void);
 
 struct unix_vertex {
 	struct list_head edges;

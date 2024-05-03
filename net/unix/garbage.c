@@ -189,7 +189,7 @@ static void unix_free_vertices(struct scm_fp_list *fpl)
 }
 
 static DEFINE_SPINLOCK(unix_gc_lock);
-unsigned int unix_tot_inflight;
+static unsigned int unix_tot_inflight;
 
 void unix_add_edges(struct scm_fp_list *fpl, struct unix_sock *receiver)
 {
@@ -577,11 +577,6 @@ static void __unix_gc(struct work_struct *work)
 
 	spin_lock(&unix_gc_lock);
 
-	if (unix_graph_state == UNIX_GRAPH_NOT_CYCLIC) {
-		spin_unlock(&unix_gc_lock);
-		goto skip_gc;
-	}
-
 	__skb_queue_head_init(&hitlist);
 
 	if (unix_graph_state == UNIX_GRAPH_CYCLIC)
@@ -597,17 +592,11 @@ static void __unix_gc(struct work_struct *work)
 	}
 
 	__skb_queue_purge(&hitlist);
-skip_gc:
+
 	WRITE_ONCE(gc_in_progress, false);
 }
 
 static DECLARE_WORK(unix_gc_work, __unix_gc);
-
-void unix_gc(void)
-{
-	WRITE_ONCE(gc_in_progress, true);
-	queue_work(system_unbound_wq, &unix_gc_work);
-}
 
 #define UNIX_INFLIGHT_SANE_CIRCLES (1 << 10)
 #define UNIX_INFLIGHT_SANE_SOCKETS (1 << 14)
@@ -620,6 +609,9 @@ static void __unix_schedule_gc(struct scm_fp_list *fpl)
 
 	if (graph_state == UNIX_GRAPH_NOT_CYCLIC)
 		return;
+
+	if (!fpl)
+		goto schedule;
 
 	/* If the number of inflight sockets or cyclic references
 	 * is insane, schedule garbage collector if not running.
@@ -638,9 +630,17 @@ static void __unix_schedule_gc(struct scm_fp_list *fpl)
 	if (READ_ONCE(fpl->user->unix_inflight) > UNIX_INFLIGHT_SANE_USER)
 		wait = true;
 
-	if (!READ_ONCE(gc_in_progress))
-		unix_gc();
+schedule:
+	if (!READ_ONCE(gc_in_progress)) {
+		WRITE_ONCE(gc_in_progress, true);
+		queue_work(system_unbound_wq, &unix_gc_work);
+	}
 
 	if (wait)
 		flush_work(&unix_gc_work);
+}
+
+void unix_schedule_gc(void)
+{
+	__unix_schedule_gc(NULL);
 }
