@@ -774,8 +774,7 @@ static int exynos_sysmmu_probe(struct platform_device *pdev)
 
 	__sysmmu_get_version(data);
 
-	ret = iommu_device_sysfs_add(&data->iommu, &pdev->dev, NULL,
-				     dev_name(data->sysmmu));
+	ret = iommu_device_sysfs_add(&data->iommu, dev, NULL, dev_name(dev));
 	if (ret)
 		return ret;
 
@@ -806,7 +805,7 @@ static int exynos_sysmmu_probe(struct platform_device *pdev)
 	 * dma mapping operations on iommu page tables (cpu cache flush)
 	 */
 	if (!dma_dev)
-		dma_dev = &pdev->dev;
+		dma_dev = dev;
 
 	pm_runtime_enable(dev);
 
