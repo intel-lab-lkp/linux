@@ -1447,7 +1447,17 @@ static s32 e1000_check_for_copper_link_ich8lan(struct e1000_hw *hw)
 	 * link.  If so, then we want to get the current speed/duplex
 	 * of the PHY.
 	 */
-	ret_val = e1000e_phy_has_link_generic(hw, 1, 0, &link);
+	/* We've seen that I219-LM sometimes has link fluctuations
+	 * (link up -> link down -> link up) after hot-plugging the cable.
+	 * The problem is caused by the instability of the Link Status bit
+	 * (BMSR_LSTATUS) in MII Status Register. The average time between
+	 * the first link up and link down is between 3~4 ms.
+	 * Increasing the iteration times and setting up the delay to
+	 * 100ms (which is safe) solves the problem.
+	 * This behavior hasn't been seen on other NICs and also not being
+	 * documented in datasheet/errata.
+	 */
+	ret_val = e1000e_phy_has_link_generic(hw, COPPER_LINK_UP_LIMIT, 100000, &link);
 	if (ret_val)
 		goto out;
 
