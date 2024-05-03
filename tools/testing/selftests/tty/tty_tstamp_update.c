@@ -9,7 +9,7 @@
 #include <unistd.h>
 #include <linux/limits.h>
 
-#include "../kselftest.h"
+#include "../kselftest_harness.h"
 
 #define MIN_TTY_PATH_LEN 8
 
@@ -42,47 +42,42 @@ static int write_dev_tty(void)
 	return r;
 }
 
-int main(int argc, char **argv)
+TEST(tty_tstamp_update)
 {
 	int r;
 	char tty[PATH_MAX] = {};
 	struct stat st1, st2;
 
-	ksft_print_header();
-	ksft_set_plan(1);
+	ASSERT_GE(readlink("/proc/self/fd/0", tty, PATH_MAX), 0)
+		TH_LOG("readlink on /proc/self/fd/0 failed: %m");
 
-	r = readlink("/proc/self/fd/0", tty, PATH_MAX);
-	if (r < 0)
-		ksft_exit_fail_msg("readlink on /proc/self/fd/0 failed: %m\n");
+	ASSERT_TRUE(tty_valid(tty)) {
+		TH_LOG("SKIP: invalid tty path '%s'", tty);
+		_exit(KSFT_SKIP);
+	}
 
-	if (!tty_valid(tty))
-		ksft_exit_skip("invalid tty path '%s'\n", tty);
-
-	r = stat(tty, &st1);
-	if (r < 0)
-		ksft_exit_fail_msg("stat failed on tty path '%s': %m\n", tty);
+	ASSERT_GE(stat(tty, &st1), 0)
+		TH_LOG("stat failed on tty path '%s': %m", tty);
 
 	/* We need to wait at least 8 seconds in order to observe timestamp change */
 	/* https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=fbf47635315ab308c9b58a1ea0906e711a9228de */
 	sleep(10);
 
 	r = write_dev_tty();
-	if (r < 0)
-		ksft_exit_fail_msg("failed to write to /dev/tty: %s\n",
-				   strerror(-r));
+	ASSERT_GE(r, 0)
+		TH_LOG("failed to write to /dev/tty: %s", strerror(-r));
 
-	r = stat(tty, &st2);
-	if (r < 0)
-		ksft_exit_fail_msg("stat failed on tty path '%s': %m\n", tty);
+	ASSERT_GE(stat(tty, &st2), 0)
+		TH_LOG("stat failed on tty path '%s': %m", tty);
+
+	/* Validate unchanged atime under 'relatime' to ensure minimal disk I/O */
+	EXPECT_EQ(st1.st_atim.tv_sec, st2.st_atim.tv_sec);
 
 	/* We wrote to the terminal so timestamps should have been updated */
-	if (st1.st_atim.tv_sec == st2.st_atim.tv_sec &&
-	    st1.st_mtim.tv_sec == st2.st_mtim.tv_sec) {
-		ksft_test_result_fail("tty timestamps not updated\n");
-		ksft_exit_fail();
-	}
+	ASSERT_NE(st1.st_mtim.tv_sec, st2.st_mtim.tv_sec)
+		TH_LOG("tty timestamps not updated");
 
-	ksft_test_result_pass(
-		"timestamps of terminal '%s' updated after write to /dev/tty\n", tty);
-	return EXIT_SUCCESS;
+	TH_LOG("timestamps of terminal '%s' updated after write to /dev/tty",
+	       tty);
 }
+TEST_HARNESS_MAIN
