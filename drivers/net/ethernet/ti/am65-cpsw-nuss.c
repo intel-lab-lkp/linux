@@ -2554,6 +2554,13 @@ static int am65_cpsw_nuss_init_slave_ports(struct am65_cpsw_common *common)
 		if (strcmp(port_np->name, "port"))
 			continue;
 
+		if (!of_platform_device_create(port_np, NULL, NULL)) {
+			dev_err(dev, "%pOF error creating port platform device\n",
+				port_np);
+			ret = -ENODEV;
+			goto of_node_put;
+		}
+
 		ret = of_property_read_u32(port_np, "reg", &port_id);
 		if (ret < 0) {
 			dev_err(dev, "%pOF error reading port_id %d\n",
