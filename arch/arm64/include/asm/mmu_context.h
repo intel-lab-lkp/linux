@@ -15,12 +15,12 @@
 #include <linux/sched/hotplug.h>
 #include <linux/mm_types.h>
 #include <linux/pgtable.h>
+#include <linux/pkeys.h>
 
 #include <asm/cacheflush.h>
 #include <asm/cpufeature.h>
 #include <asm/daifflags.h>
 #include <asm/proc-fns.h>
-#include <asm-generic/mm_hooks.h>
 #include <asm/cputype.h>
 #include <asm/sysreg.h>
 #include <asm/tlbflush.h>
@@ -175,7 +175,34 @@ init_new_context(struct task_struct *tsk, struct mm_struct *mm)
 {
 	atomic64_set(&mm->context.id, 0);
 	refcount_set(&mm->context.pinned, 0);
+
+	/* pkey 0 is the default, so always reserve it. */
+	mm->context.pkey_allocation_map = 0x1;
+
 	return 0;
+}
+
+static inline void arch_dup_pkeys(struct mm_struct *oldmm,
+				  struct mm_struct *mm)
+{
+	/* Duplicate the oldmm pkey state in mm: */
+	mm->context.pkey_allocation_map = oldmm->context.pkey_allocation_map;
+}
+
+static inline int arch_dup_mmap(struct mm_struct *oldmm, struct mm_struct *mm)
+{
+	arch_dup_pkeys(oldmm, mm);
+
+	return 0;
+}
+
+static inline void arch_exit_mmap(struct mm_struct *mm)
+{
+}
+
+static inline void arch_unmap(struct mm_struct *mm,
+			unsigned long start, unsigned long end)
+{
 }
 
 #ifdef CONFIG_ARM64_SW_TTBR0_PAN
@@ -265,6 +292,28 @@ void arm64_mm_context_put(struct mm_struct *mm);
 static inline unsigned long mm_untag_mask(struct mm_struct *mm)
 {
 	return -1UL >> 8;
+}
+
+/*
+ * We only want to enforce protection keys on the current process
+ * because we effectively have no access to POR_EL0 for other
+ * processes or any way to tell *which * POR_EL0 in a threaded
+ * process we could use.
+ *
+ * So do not enforce things if the VMA is not from the current
+ * mm, or if we are in a kernel thread.
+ */
+static inline bool arch_vma_access_permitted(struct vm_area_struct *vma,
+		bool write, bool execute, bool foreign)
+{
+	if (!arch_pkeys_enabled())
+		return true;
+
+	/* allow access if the VMA is not one from this process */
+	if (foreign || vma_is_foreign(vma))
+		return true;
+
+	return por_el0_allows_pkey(vma_pkey(vma), write, execute);
 }
 
 #include <asm-generic/mmu_context.h>
