@@ -60,7 +60,8 @@ void page_counter_cancel(struct page_counter *counter,
 		new = 0;
 		atomic_long_set(&counter->usage[id], new);
 	}
-	propagate_protected_usage(counter, new);
+	if (counter->protection_support && id == 0)
+		propagate_protected_usage(counter, new);
 }
 
 /**
@@ -76,12 +77,14 @@ void page_counter_charge(struct page_counter *counter,
 			 unsigned long nr_pages)
 {
 	struct page_counter *c;
+	bool track_protection = counter->protection_support && (id == 0);
 
 	for (c = counter; c; c = c->parent) {
 		long new;
 
 		new = atomic_long_add_return(nr_pages, &c->usage[id]);
-		propagate_protected_usage(c, new);
+		if (track_protection)
+			propagate_protected_usage(c, new);
 		/*
 		 * This is indeed racy, but we can live with some
 		 * inaccuracy in the watermark.
@@ -107,6 +110,7 @@ bool page_counter_try_charge(struct page_counter *counter,
 			     struct page_counter **fail)
 {
 	struct page_counter *c;
+	bool track_protection = counter->protection_support && (id == 0);
 
 	for (c = counter; c; c = c->parent) {
 		long new;
@@ -136,7 +140,8 @@ bool page_counter_try_charge(struct page_counter *counter,
 			*fail = c;
 			goto failed;
 		}
-		propagate_protected_usage(c, new);
+		if (track_protection)
+			propagate_protected_usage(c, new);
 		/*
 		 * Just like with failcnt, we can live with some
 		 * inaccuracy in the watermark.
@@ -226,6 +231,8 @@ void page_counter_set_min(struct page_counter *counter, unsigned long nr_pages)
 {
 	struct page_counter *c;
 
+	WARN_ON_ONCE(!counter->protection_support);
+
 	WRITE_ONCE(counter->min, nr_pages);
 
 	for (c = counter; c; c = c->parent)
@@ -242,6 +249,8 @@ void page_counter_set_min(struct page_counter *counter, unsigned long nr_pages)
 void page_counter_set_low(struct page_counter *counter, unsigned long nr_pages)
 {
 	struct page_counter *c;
+
+	WARN_ON_ONCE(!counter->protection_support);
 
 	WRITE_ONCE(counter->low, nr_pages);
 

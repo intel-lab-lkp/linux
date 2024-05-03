@@ -62,6 +62,7 @@ struct page_counter {
 	/* Keep all the read most fields in a separete cacheline. */
 	CACHELINE_PADDING(_pad2_);
 
+	bool protection_support;
 	unsigned long min;
 	unsigned long low;
 	unsigned long high[__MCT_NR_ITEMS];
@@ -75,8 +76,12 @@ struct page_counter {
 #define PAGE_COUNTER_MAX (LONG_MAX / PAGE_SIZE)
 #endif
 
+/*
+ * Protection is supported only for the first counter (with id 0).
+ */
 static inline void page_counter_init(struct page_counter *counter,
-				     struct page_counter *parent)
+				     struct page_counter *parent,
+				     bool protection_support)
 {
 	int i;
 
@@ -86,6 +91,7 @@ static inline void page_counter_init(struct page_counter *counter,
 	}
 
 	counter->parent = parent;
+	counter->protection_support = protection_support;
 }
 
 static inline unsigned long page_counter_read(struct page_counter *counter,

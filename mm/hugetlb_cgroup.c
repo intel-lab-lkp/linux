@@ -79,7 +79,7 @@ static void hugetlb_cgroup_init(struct hugetlb_cgroup *h_cgroup,
 	int idx;
 
 	page_counter_init(&h_cgroup->res,
-			  parent_h_cgroup ? &parent_h_cgroup->res : NULL);
+			  parent_h_cgroup ? &parent_h_cgroup->res : NULL, false);
 
 	for (idx = 0; idx < HUGE_MAX_HSTATE; idx++) {
 		unsigned long limit;
