@@ -13,11 +13,17 @@
 #ifndef __LINUX_MCS_SPINLOCK_H
 #define __LINUX_MCS_SPINLOCK_H
 
+/*
+ * Save an encoded version of the current MCS lock owner CPU to the
+ * mcs_spinlock structure of the next lock owner.
+ */
+#define MCS_LOCKED	(smp_processor_id() + 1)
+
 #include <asm/mcs_spinlock.h>
 
 struct mcs_spinlock {
 	struct mcs_spinlock *next;
-	int locked; /* 1 if lock acquired */
+	int locked; /* non-zero if lock acquired */
 	int count;  /* nesting count, see qspinlock.c */
 };
 
@@ -42,7 +48,7 @@ do {									\
  * unlocking.
  */
 #define arch_mcs_spin_unlock_contended(l)				\
-	smp_store_release((l), 1)
+	smp_store_release((l), MCS_LOCKED)
 #endif
 
 /*
