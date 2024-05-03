@@ -112,6 +112,22 @@ config USER_DECRYPTED_DATA
 
 	  If you are unsure as to whether this is required, answer N.
 
+config DERIVED_KEYS
+	tristate "DERIVED KEYS"
+	depends on KEYS
+	depends on TCG_TPM
+	select CRYPTO
+	select CRYPTO_HMAC
+	select CRYPTO_SHA256
+	select CRYPTO_KDF800108_CTR
+	help
+	  This option provides support for deriving keys from a trust source
+	  in the kernel. Derived keys are instantiated using a KDF with a seed
+	  from a trust source, so are unique per system/trust source. These keys
+	  can always be recovered as long as the trust source is available.
+
+	  If you are unsure as to whether this is required, answer N.
+
 config KEY_DH_OPERATIONS
        bool "Diffie-Hellman operations on retained keys"
        depends on KEYS
