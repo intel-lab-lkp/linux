@@ -379,10 +379,13 @@ static int nf_tables_netdev_event(struct notifier_block *this,
 		.net	= dev_net(dev),
 	};
 
-	if (event != NETDEV_UNREGISTER &&
-	    event != NETDEV_REGISTER &&
-	    event != NETDEV_CHANGENAME)
+	if (event == NETDEV_CHANGENAME) {
+		nf_tables_netdev_event(this, NETDEV_UNREGISTER, ptr);
+		event = NETDEV_REGISTER;
+	} else if (event != NETDEV_UNREGISTER &&
+		   event != NETDEV_REGISTER) {
 		return NOTIFY_DONE;
+	}
 
 	nft_net = nft_pernet(ctx.net);
 	mutex_lock(&nft_net->commit_mutex);
