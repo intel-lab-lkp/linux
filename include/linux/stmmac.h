@@ -118,16 +118,18 @@ struct stmmac_axi {
 #define EST_GCL		1024
 struct stmmac_est {
 	struct mutex lock;
-	int enable;
-	u32 btr_reserve[2];
-	u32 btr_offset[2];
-	u32 btr[2];
-	u32 ctr[2];
-	u32 ter;
-	u32 gcl_unaligned[EST_GCL];
-	u32 gcl[EST_GCL];
-	u32 gcl_size;
-	u32 max_sdu[MTL_MAX_TX_QUEUES];
+	struct_group(init,
+		int enable;
+		u32 btr_reserve[2];
+		u32 btr_offset[2];
+		u32 btr[2];
+		u32 ctr[2];
+		u32 ter;
+		u32 gcl_unaligned[EST_GCL];
+		u32 gcl[EST_GCL];
+		u32 gcl_size;
+		u32 max_sdu[MTL_MAX_TX_QUEUES];
+	);
 };
 
 struct stmmac_rxq_cfg {

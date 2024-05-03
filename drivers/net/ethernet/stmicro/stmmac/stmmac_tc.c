@@ -1006,7 +1006,9 @@ static int tc_taprio_configure(struct stmmac_priv *priv,
 
 		mutex_init(&priv->plat->est->lock);
 	} else {
-		memset(plat->est, 0, sizeof(*plat->est));
+		mutex_lock(&priv->plat->est->lock);
+		memset(&plat->est->init, 0, sizeof(plat->est->init));
+		mutex_unlock(&priv->plat->est->lock);
 	}
 
 	size = qopt->num_entries;
