@@ -409,6 +409,10 @@ static void vmw_stdu_crtc_mode_set_nofb(struct drm_crtc *crtc)
 			  crtc->x, crtc->y);
 }
 
+static void vmw_stdu_crtc_helper_prepare(struct drm_crtc *crtc)
+{
+}
+
 static void vmw_stdu_crtc_atomic_disable(struct drm_crtc *crtc,
 					 struct drm_atomic_state *state)
 {
@@ -1463,6 +1467,7 @@ drm_plane_helper_funcs vmw_stdu_primary_plane_helper_funcs = {
 };
 
 static const struct drm_crtc_helper_funcs vmw_stdu_crtc_helper_funcs = {
+	.prepare = vmw_stdu_crtc_helper_prepare,
 	.mode_set_nofb = vmw_stdu_crtc_mode_set_nofb,
 	.atomic_check = vmw_du_crtc_atomic_check,
 	.atomic_begin = vmw_du_crtc_atomic_begin,
