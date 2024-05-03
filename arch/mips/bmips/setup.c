@@ -40,7 +40,6 @@
  * with "mips-cbr-reg" in the "cpus" node.
  */
 void __iomem *bmips_cbr_addr;
-extern bool bmips_rac_flush_disable;
 
 static const unsigned long kbase = VMLINUX_LOAD_ADDRESS & 0xfff00000;
 

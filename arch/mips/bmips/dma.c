@@ -11,11 +11,6 @@ void arch_sync_dma_for_cpu_all(void)
 {
 	u32 cfg;
 
-	if (boot_cpu_type() != CPU_BMIPS3300 &&
-	    boot_cpu_type() != CPU_BMIPS4350 &&
-	    boot_cpu_type() != CPU_BMIPS4380)
-		return;
-
 	if (unlikely(bmips_rac_flush_disable))
 		return;
 
