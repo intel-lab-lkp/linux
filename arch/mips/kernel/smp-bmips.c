@@ -620,6 +620,23 @@ void bmips_cpu_setup(void)
 		__raw_readl(cbr + BMIPS_RAC_ADDRESS_RANGE);
 		break;
 
+	case CPU_BMIPS4350:
+		u32 rac_addr = BMIPS_RAC_CONFIG_1;
+
+		if (!(read_c0_brcm_cmt_local() & (1 << 31)))
+			rac_addr = BMIPS_RAC_CONFIG;
+
+		/* Enable data RAC */
+		cfg = __raw_readl(bmips_cbr_addr + rac_addr);
+		__raw_writel(cfg | 0xf, bmips_cbr_addr + rac_addr);
+		__raw_readl(bmips_cbr_addr + rac_addr);
+
+		/* Flush stale data out of the readahead cache */
+		cfg = __raw_readl(bmips_cbr_addr + BMIPS_RAC_CONFIG);
+		__raw_writel(cfg | 0x100, bmips_cbr_addr + BMIPS_RAC_CONFIG);
+		__raw_readl(bmips_cbr_addr + BMIPS_RAC_CONFIG);
+		break;
+
 	case CPU_BMIPS4380:
 		/* CBG workaround for early BMIPS4380 CPUs */
 		switch (read_c0_prid()) {
