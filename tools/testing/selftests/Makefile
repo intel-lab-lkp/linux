@@ -80,6 +80,7 @@ TARGETS += riscv
 TARGETS += rlimits
 TARGETS += rseq
 TARGETS += rtc
+TARGETS += rtc/property
 TARGETS += rust
 TARGETS += seccomp
 TARGETS += sgx
