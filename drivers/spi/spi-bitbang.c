@@ -450,4 +450,4 @@ void spi_bitbang_stop(struct spi_bitbang *bitbang)
 EXPORT_SYMBOL_GPL(spi_bitbang_stop);
 
 MODULE_LICENSE("GPL");
-
+MODULE_DESCRIPTION("Utilities for Bitbanging SPI host controllers");
