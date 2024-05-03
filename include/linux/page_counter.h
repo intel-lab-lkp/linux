@@ -7,6 +7,14 @@
 #include <linux/limits.h>
 #include <asm/page.h>
 
+enum mem_counter_type {
+	MCT_MEMORY,		/* cgroup v1 and v2 */
+	MCT_SWAP,		/* cgroup v2 only */
+	MCT_MEMSW = MCT_SWAP,	/* cgroup v1 only */
+	MCT_KMEM,		/* cgroup v1 only */
+	MCT_TCPMEM,		/* cgroup v1 only */
+};
+
 struct page_counter {
 	/*
 	 * Make sure 'usage' does not share cacheline with any other field. The
