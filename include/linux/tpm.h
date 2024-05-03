@@ -35,6 +35,7 @@ struct trusted_key_options;
 enum tpm_algorithms {
 	TPM_ALG_ERROR		= 0x0000,
 	TPM_ALG_SHA1		= 0x0004,
+	TPM_ALG_HMAC		= 0x0005,
 	TPM_ALG_KEYEDHASH	= 0x0008,
 	TPM_ALG_SHA256		= 0x000B,
 	TPM_ALG_SHA384		= 0x000C,
@@ -209,6 +210,7 @@ enum tpm2_return_codes {
 	TPM2_RC_DISABLED	= 0x0120,
 	TPM2_RC_UPGRADE		= 0x012D,
 	TPM2_RC_COMMAND_CODE    = 0x0143,
+	TPM2_RC_OBJECT_MEMORY	= 0x0902,
 	TPM2_RC_TESTING		= 0x090A, /* RC_WARN */
 	TPM2_RC_REFERENCE_H0	= 0x0910,
 	TPM2_RC_RETRY		= 0x0922,
@@ -227,6 +229,7 @@ enum tpm2_command_codes {
 	TPM2_CC_CREATE		        = 0x0153,
 	TPM2_CC_LOAD		        = 0x0157,
 	TPM2_CC_SEQUENCE_UPDATE         = 0x015C,
+	TPM2_CC_SIGN		        = 0x015D,
 	TPM2_CC_UNSEAL		        = 0x015E,
 	TPM2_CC_CONTEXT_LOAD	        = 0x0161,
 	TPM2_CC_CONTEXT_SAVE	        = 0x0162,
@@ -234,6 +237,7 @@ enum tpm2_command_codes {
 	TPM2_CC_VERIFY_SIGNATURE        = 0x0177,
 	TPM2_CC_GET_CAPABILITY	        = 0x017A,
 	TPM2_CC_GET_RANDOM	        = 0x017B,
+	TPM2_CC_HASH	        	= 0x017D,
 	TPM2_CC_PCR_READ	        = 0x017E,
 	TPM2_CC_PCR_EXTEND	        = 0x0182,
 	TPM2_CC_EVENT_SEQUENCE_COMPLETE = 0x0185,
@@ -243,7 +247,8 @@ enum tpm2_command_codes {
 };
 
 enum tpm2_permanent_handles {
-	TPM2_RS_PW		= 0x40000009,
+	TPM2_RH_OWNER = 0x40000001,
+	TPM2_RS_PW    = 0x40000009,
 };
 
 enum tpm2_capabilities {
@@ -312,9 +317,12 @@ struct tpm_buf {
 };
 
 enum tpm2_object_attributes {
-	TPM2_OA_FIXED_TPM		= BIT(1),
-	TPM2_OA_FIXED_PARENT		= BIT(4),
-	TPM2_OA_USER_WITH_AUTH		= BIT(6),
+	TPM2_OA_FIXED_TPM 		= BIT(1),
+	TPM2_OA_FIXED_PARENT 		= BIT(4),
+	TPM2_OA_SENSITIVE_DATA_ORIGIN	= BIT(5),
+	TPM2_OA_USER_WITH_AUTH 		= BIT(6),
+	TPM2_OA_RESTRICTED 		= BIT(16),
+	TPM2_OA_SIGN 			= BIT(18),
 };
 
 enum tpm2_session_attributes {
