@@ -721,6 +721,8 @@ struct drm_bridge {
 	struct list_head chain_node;
 	/** @of_node: device node pointer to the bridge */
 	struct device_node *of_node;
+	/** @fwnode: fwnode pointer to the bridge */
+	struct fwnode_handle *fwnode;
 	/** @list: to keep track of all added bridges */
 	struct list_head list;
 	/**
@@ -796,6 +798,12 @@ static inline struct drm_bridge *of_drm_find_bridge(struct device_node *np)
 	return NULL;
 }
 #endif
+
+struct drm_bridge *
+drm_bridge_find_by_fwnode(struct fwnode_handle *fwnode);
+
+struct drm_bridge *
+drm_bridge_find_next_bridge_by_fwnode(struct fwnode_handle *fwnode, u32 port);
 
 /**
  * drm_bridge_get_next_bridge() - Get the next bridge in the chain
