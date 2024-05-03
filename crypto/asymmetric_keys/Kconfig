@@ -96,4 +96,14 @@ config FIPS_SIGNATURE_SELFTEST_RSA
 	depends on CRYPTO_SHA256=y || CRYPTO_SHA256=FIPS_SIGNATURE_SELFTEST
 	depends on CRYPTO_RSA=y || CRYPTO_RSA=FIPS_SIGNATURE_SELFTEST
 
+config FIPS_SIGNATURE_SELFTEST_ECDSA
+	bool "Include ECDSA selftests"
+	help
+	  This option includes the ECDSA selftests in the X.509+PKCS7 selftest
+	  code.  ECDSA and SHA-256 must be available when the selftests are
+	  executed; this is enforced by the dependencies.
+	depends on FIPS_SIGNATURE_SELFTEST
+	depends on CRYPTO_SHA256=y || CRYPTO_SHA256=FIPS_SIGNATURE_SELFTEST
+	depends on CRYPTO_ECDSA=y || CRYPTO_ECDSA=FIPS_SIGNATURE_SELFTEST
+
 endif # ASYMMETRIC_KEY_TYPE
