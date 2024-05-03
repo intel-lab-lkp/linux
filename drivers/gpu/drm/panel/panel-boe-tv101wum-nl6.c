@@ -1910,20 +1910,10 @@ static int boe_panel_probe(struct mipi_dsi_device *dsi)
 	return ret;
 }
 
-static void boe_panel_shutdown(struct mipi_dsi_device *dsi)
-{
-	struct boe_panel *boe = mipi_dsi_get_drvdata(dsi);
-
-	drm_panel_disable(&boe->base);
-	drm_panel_unprepare(&boe->base);
-}
-
 static void boe_panel_remove(struct mipi_dsi_device *dsi)
 {
 	struct boe_panel *boe = mipi_dsi_get_drvdata(dsi);
 	int ret;
-
-	boe_panel_shutdown(dsi);
 
 	ret = mipi_dsi_detach(dsi);
 	if (ret < 0)
@@ -1972,7 +1962,6 @@ static struct mipi_dsi_driver boe_panel_driver = {
 	},
 	.probe = boe_panel_probe,
 	.remove = boe_panel_remove,
-	.shutdown = boe_panel_shutdown,
 };
 module_mipi_dsi_driver(boe_panel_driver);
 
