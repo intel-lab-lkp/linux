@@ -282,6 +282,9 @@ static int nft_netdev_register_hooks(struct net *net,
 
 	j = 0;
 	list_for_each_entry(hook, hook_list, list) {
+		if (!hook->ops.dev)
+			continue;
+
 		err = nf_register_net_hook(net, &hook->ops);
 		if (err < 0)
 			goto err_register;
@@ -292,6 +295,9 @@ static int nft_netdev_register_hooks(struct net *net,
 
 err_register:
 	list_for_each_entry(hook, hook_list, list) {
+		if (!hook->ops.dev)
+			continue;
+
 		if (j-- <= 0)
 			break;
 
@@ -307,7 +313,10 @@ static void nft_netdev_unregister_hooks(struct net *net,
 	struct nft_hook *hook, *next;
 
 	list_for_each_entry_safe(hook, next, hook_list, list) {
-		nf_unregister_net_hook(net, &hook->ops);
+		if (hook->ops.dev) {
+			nf_unregister_net_hook(net, &hook->ops);
+			hook->ops.dev = NULL;
+		}
 		if (release_netdev) {
 			list_del(&hook->list);
 			kfree_rcu(hook, rcu);
@@ -2118,7 +2127,6 @@ void nf_tables_chain_destroy(struct nft_ctx *ctx)
 static struct nft_hook *nft_netdev_hook_alloc(struct net *net,
 					      const struct nlattr *attr)
 {
-	struct net_device *dev;
 	struct nft_hook *hook;
 	int err;
 
@@ -2134,17 +2142,10 @@ static struct nft_hook *nft_netdev_hook_alloc(struct net *net,
 	 * indirectly serializing all the other holders of the commit_mutex with
 	 * the rtnl_mutex.
 	 */
-	dev = __dev_get_by_name(net, hook->ifname);
-	if (!dev) {
-		err = -ENOENT;
-		goto err_hook_dev;
-	}
-	hook->ops.dev = dev;
+	hook->ops.dev = __dev_get_by_name(net, hook->ifname);
 
 	return hook;
 
-err_hook_dev:
-	kfree(hook);
 err_hook_alloc:
 	return ERR_PTR(err);
 }
@@ -8395,6 +8396,9 @@ static void nft_unregister_flowtable_hook(struct net *net,
 					  struct nft_flowtable *flowtable,
 					  struct nft_hook *hook)
 {
+	if (!hook->ops.dev)
+		return;
+
 	nf_unregister_net_hook(net, &hook->ops);
 	flowtable->data.type->setup(&flowtable->data, hook->ops.dev,
 				    FLOW_BLOCK_UNBIND);
@@ -8407,7 +8411,8 @@ static void __nft_unregister_flowtable_net_hooks(struct net *net,
 	struct nft_hook *hook, *next;
 
 	list_for_each_entry_safe(hook, next, hook_list, list) {
-		nf_unregister_net_hook(net, &hook->ops);
+		if (hook->ops.dev)
+			nf_unregister_net_hook(net, &hook->ops);
 		if (release_netdev) {
 			list_del(&hook->list);
 			kfree_rcu(hook, rcu);
@@ -8431,6 +8436,9 @@ static int nft_register_flowtable_net_hooks(struct net *net,
 	int err, i = 0;
 
 	list_for_each_entry(hook, hook_list, list) {
+		if (!hook->ops.dev)
+			continue;
+
 		list_for_each_entry(ft, &table->flowtables, list) {
 			if (!nft_is_active_next(net, ft))
 				continue;
@@ -8465,6 +8473,9 @@ static int nft_register_flowtable_net_hooks(struct net *net,
 
 err_unregister_net_hooks:
 	list_for_each_entry_safe(hook, next, hook_list, list) {
+		if (!hook->ops.dev)
+			continue;
+
 		if (i-- <= 0)
 			break;
 
@@ -9060,8 +9071,10 @@ static void nf_tables_flowtable_destroy(struct nft_flowtable *flowtable)
 
 	flowtable->data.type->free(&flowtable->data);
 	list_for_each_entry_safe(hook, next, &flowtable->hook_list, list) {
-		flowtable->data.type->setup(&flowtable->data, hook->ops.dev,
-					    FLOW_BLOCK_UNBIND);
+		if (hook->ops.dev)
+			flowtable->data.type->setup(&flowtable->data,
+						    hook->ops.dev,
+						    FLOW_BLOCK_UNBIND);
 		list_del_rcu(&hook->list);
 		kfree(hook);
 	}
@@ -9107,8 +9120,7 @@ static void nft_flowtable_event(unsigned long event, struct net_device *dev,
 
 		/* flow_offload_netdev_event() cleans up entries for us. */
 		nft_unregister_flowtable_hook(dev_net(dev), flowtable, hook);
-		list_del_rcu(&hook->list);
-		kfree_rcu(hook, rcu);
+		hook->ops.dev = NULL;
 		break;
 	}
 }
@@ -11348,27 +11360,6 @@ int nft_data_dump(struct sk_buff *skb, int attr, const struct nft_data *data,
 	return err;
 }
 EXPORT_SYMBOL_GPL(nft_data_dump);
-
-int __nft_release_basechain(struct nft_ctx *ctx)
-{
-	struct nft_rule *rule, *nr;
-
-	if (WARN_ON(!nft_is_base_chain(ctx->chain)))
-		return 0;
-
-	nf_tables_unregister_hook(ctx->net, ctx->chain->table, ctx->chain);
-	list_for_each_entry_safe(rule, nr, &ctx->chain->rules, list) {
-		list_del(&rule->list);
-		nft_use_dec(&ctx->chain->use);
-		nf_tables_rule_release(ctx, rule);
-	}
-	nft_chain_del(ctx->chain);
-	nft_use_dec(&ctx->table->use);
-	nf_tables_chain_destroy(ctx);
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(__nft_release_basechain);
 
 static void __nft_release_hook(struct net *net, struct nft_table *table)
 {
