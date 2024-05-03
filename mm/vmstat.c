@@ -114,7 +114,7 @@ static void sum_vm_events(unsigned long *ret)
 
 	memset(ret, 0, NR_VM_EVENT_ITEMS * sizeof(unsigned long));
 
-	for_each_online_cpu(cpu) {
+	for_each_possible_cpu(cpu) {
 		struct vm_event_state *this = &per_cpu(vm_event_states, cpu);
 
 		for (i = 0; i < NR_VM_EVENT_ITEMS; i++)
@@ -129,28 +129,9 @@ static void sum_vm_events(unsigned long *ret)
 */
 void all_vm_events(unsigned long *ret)
 {
-	cpus_read_lock();
 	sum_vm_events(ret);
-	cpus_read_unlock();
 }
 EXPORT_SYMBOL_GPL(all_vm_events);
-
-/*
- * Fold the foreign cpu events into our own.
- *
- * This is adding to the events on one processor
- * but keeps the global counts constant.
- */
-void vm_events_fold_cpu(int cpu)
-{
-	struct vm_event_state *fold_state = &per_cpu(vm_event_states, cpu);
-	int i;
-
-	for (i = 0; i < NR_VM_EVENT_ITEMS; i++) {
-		count_vm_events(i, fold_state->event[i]);
-		fold_state->event[i] = 0;
-	}
-}
 
 #endif /* CONFIG_VM_EVENT_COUNTERS */
 
