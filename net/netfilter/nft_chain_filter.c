@@ -318,19 +318,50 @@ static const struct nft_chain_type nft_chain_filter_netdev = {
 	},
 };
 
+static int nft_netdev_hook_dev_update(struct nft_hook *hook,
+				      struct net_device *dev)
+{
+	int ret = 0;
+
+	if (hook->ops.dev)
+		nf_unregister_net_hook(dev_net(hook->ops.dev), &hook->ops);
+
+	hook->ops.dev = dev;
+
+	if (dev) {
+		ret = nf_register_net_hook(dev_net(dev), &hook->ops);
+		if (ret < 0)
+			hook->ops.dev = NULL;
+	}
+
+	return ret;
+}
+
 static void nft_netdev_event(unsigned long event, struct net_device *dev,
 			     struct nft_ctx *ctx)
 {
 	struct nft_base_chain *basechain = nft_base_chain(ctx->chain);
 	struct nft_hook *hook;
 
-	if (event != NETDEV_UNREGISTER)
+	if (event != NETDEV_UNREGISTER &&
+	    event != NETDEV_REGISTER)
 		return;
 
 	list_for_each_entry(hook, &basechain->hook_list, list) {
-		if (hook->ops.dev == dev) {
-			nf_unregister_net_hook(ctx->net, &hook->ops);
-			hook->ops.dev = NULL;
+		switch (event) {
+		case NETDEV_UNREGISTER:
+			if (hook->ops.dev == dev)
+				nft_netdev_hook_dev_update(hook, NULL);
+			break;
+		case NETDEV_REGISTER:
+			if (hook->ops.dev ||
+			    strncmp(hook->ifname, dev->name, hook->ifnamelen))
+				break;
+			if (!nft_netdev_hook_dev_update(hook, dev))
+				return;
+
+			printk(KERN_ERR "chain %s: Can't hook into device %s\n",
+			       ctx->chain->name, dev->name);
 			break;
 		}
 	}
@@ -349,6 +380,7 @@ static int nf_tables_netdev_event(struct notifier_block *this,
 	};
 
 	if (event != NETDEV_UNREGISTER &&
+	    event != NETDEV_REGISTER &&
 	    event != NETDEV_CHANGENAME)
 		return NOTIFY_DONE;
 

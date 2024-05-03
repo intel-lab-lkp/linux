@@ -8403,6 +8403,27 @@ nft_flowtable_type_get(struct net *net, u8 family)
 	return ERR_PTR(-ENOENT);
 }
 
+static int nft_register_flowtable_hook(struct net *net,
+				       struct nft_flowtable *flowtable,
+				       struct nft_hook *hook)
+{
+	int err;
+
+	err = flowtable->data.type->setup(&flowtable->data,
+					  hook->ops.dev, FLOW_BLOCK_BIND);
+	if (err < 0)
+		return err;
+
+	err = nf_register_net_hook(net, &hook->ops);
+	if (err < 0) {
+		flowtable->data.type->setup(&flowtable->data,
+					    hook->ops.dev, FLOW_BLOCK_UNBIND);
+		return err;
+	}
+
+	return 0;
+}
+
 /* Only called from error and netdev event paths. */
 static void nft_unregister_flowtable_hook(struct net *net,
 					  struct nft_flowtable *flowtable,
@@ -8464,19 +8485,9 @@ static int nft_register_flowtable_net_hooks(struct net *net,
 			}
 		}
 
-		err = flowtable->data.type->setup(&flowtable->data,
-						  hook->ops.dev,
-						  FLOW_BLOCK_BIND);
+		err = nft_register_flowtable_hook(net, flowtable, hook);
 		if (err < 0)
 			goto err_unregister_net_hooks;
-
-		err = nf_register_net_hook(net, &hook->ops);
-		if (err < 0) {
-			flowtable->data.type->setup(&flowtable->data,
-						    hook->ops.dev,
-						    FLOW_BLOCK_UNBIND);
-			goto err_unregister_net_hooks;
-		}
 
 		i++;
 	}
@@ -9134,20 +9145,40 @@ nla_put_failure:
 	return -EMSGSIZE;
 }
 
-static void nft_flowtable_event(unsigned long event, struct net_device *dev,
-				struct nft_flowtable *flowtable)
+static int nft_flowtable_event(unsigned long event, struct net_device *dev,
+			       struct nft_flowtable *flowtable)
 {
 	struct nft_hook *hook;
 
 	list_for_each_entry(hook, &flowtable->hook_list, list) {
-		if (hook->ops.dev != dev)
-			continue;
+		switch (event) {
+		case NETDEV_UNREGISTER:
+			if (hook->ops.dev != dev)
+				break;
 
-		/* flow_offload_netdev_event() cleans up entries for us. */
-		nft_unregister_flowtable_hook(dev_net(dev), flowtable, hook);
-		hook->ops.dev = NULL;
-		break;
+			/* flow_offload_netdev_event() cleans up entries for us. */
+			nft_unregister_flowtable_hook(dev_net(dev),
+						      flowtable, hook);
+			hook->ops.dev = NULL;
+			return 1;
+		case NETDEV_REGISTER:
+			if (hook->ops.dev ||
+			    strncmp(hook->ifname, dev->name, hook->ifnamelen))
+				break;
+
+			hook->ops.dev = dev;
+			if (!nft_register_flowtable_hook(dev_net(dev),
+							 flowtable, hook))
+				return 1;
+
+			printk(KERN_ERR
+			       "flowtable %s: Can't hook into device %s\n",
+			       flowtable->name, dev->name);
+			hook->ops.dev = NULL;
+			break;
+		}
 	}
+	return 0;
 }
 
 static int nf_tables_flowtable_event(struct notifier_block *this,
@@ -9159,7 +9190,8 @@ static int nf_tables_flowtable_event(struct notifier_block *this,
 	struct nft_table *table;
 	struct net *net;
 
-	if (event != NETDEV_UNREGISTER)
+	if (event != NETDEV_UNREGISTER &&
+	    event != NETDEV_REGISTER)
 		return 0;
 
 	net = dev_net(dev);
@@ -9167,9 +9199,11 @@ static int nf_tables_flowtable_event(struct notifier_block *this,
 	mutex_lock(&nft_net->commit_mutex);
 	list_for_each_entry(table, &nft_net->tables, list) {
 		list_for_each_entry(flowtable, &table->flowtables, list) {
-			nft_flowtable_event(event, dev, flowtable);
+			if (nft_flowtable_event(event, dev, flowtable))
+				goto out_unlock;
 		}
 	}
+out_unlock:
 	mutex_unlock(&nft_net->commit_mutex);
 
 	return NOTIFY_DONE;
