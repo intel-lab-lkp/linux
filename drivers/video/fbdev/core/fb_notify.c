@@ -52,3 +52,6 @@ int fb_notifier_call_chain(unsigned long val, void *v)
 	return blocking_notifier_call_chain(&fb_notifier_list, val, v);
 }
 EXPORT_SYMBOL_GPL(fb_notifier_call_chain);
+
+MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("Frame buffer notifier support");
