@@ -435,7 +435,7 @@ out:
 		struct btrfs_inode *inode = BTRFS_I(dest_page->mapping->host);
 
 		btrfs_err(inode->root->fs_info,
-"zlib decompression failed, error %d root %llu inode %llu offset %llu decompresssed %lu expected %zu",
+"zlib decompression failed, error %d root %llu inode %llu offset %llu decompressed %lu expected %zu",
 			  ret, inode->root->root_key.objectid, btrfs_ino(inode),
 			  page_offset(dest_page), to_copy, destlen);
 		ret = -EIO;
