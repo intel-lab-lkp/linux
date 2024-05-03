@@ -187,16 +187,7 @@ struct mem_cgroup {
 	struct mem_cgroup_id id;
 
 	/* Accounted resources */
-	struct page_counter memory;		/* Both v1 & v2 */
-
-	union {
-		struct page_counter swap;	/* v2 only */
-		struct page_counter memsw;	/* v1 only */
-	};
-
-	/* Legacy consumer-oriented counters */
-	struct page_counter kmem;		/* v1 only */
-	struct page_counter tcpmem;		/* v1 only */
+	struct page_counter memory;
 
 	/* Range enforcement for interrupt charges */
 	struct work_struct high_work;
@@ -652,7 +643,7 @@ static inline bool mem_cgroup_below_low(struct mem_cgroup *target,
 		return false;
 
 	return READ_ONCE(memcg->memory.elow) >=
-		page_counter_read(&memcg->memory);
+		page_counter_read(&memcg->memory, MCT_MEMORY);
 }
 
 static inline bool mem_cgroup_below_min(struct mem_cgroup *target,
@@ -662,7 +653,7 @@ static inline bool mem_cgroup_below_min(struct mem_cgroup *target,
 		return false;
 
 	return READ_ONCE(memcg->memory.emin) >=
-		page_counter_read(&memcg->memory);
+		page_counter_read(&memcg->memory, MCT_MEMORY);
 }
 
 void mem_cgroup_commit_charge(struct folio *folio, struct mem_cgroup *memcg);

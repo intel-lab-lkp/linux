@@ -7,12 +7,35 @@
 #include <linux/limits.h>
 #include <asm/page.h>
 
+/*
+ * Page counters are used by memory and hugetlb cgroups.
+ * Memory cgroups are using up to 4 separate counters:
+ * memory, swap (memory + swap on cgroup v1), kmem and tcpmem.
+ * Hugetlb cgroups are using 2 * HUGE_MAX_HSTATE separate
+ * counters: for tracking the usage and reservations of each
+ * supported hugepage size.
+ */
+
+#ifdef CONFIG_CGROUP_HUGETLB
+#ifdef HUGE_MAX_HSTATE
+#define __MCT_HUGETLB_MAX (HUGE_MAX_HSTATE * 2 - 1)
+#else
+#define __MCT_HUGETLB_MAX 1
+#endif
+#endif /* CONFIG_CGROUP_HUGETLB */
+
 enum mem_counter_type {
+#ifdef CONFIG_MEMCG
 	MCT_MEMORY,		/* cgroup v1 and v2 */
 	MCT_SWAP,		/* cgroup v2 only */
 	MCT_MEMSW = MCT_SWAP,	/* cgroup v1 only */
 	MCT_KMEM,		/* cgroup v1 only */
 	MCT_TCPMEM,		/* cgroup v1 only */
+#endif
+#ifdef CONFIG_CGROUP_HUGETLB
+	MCT_HUGETLB_MAX = __MCT_HUGETLB_MAX,
+#endif
+	__MCT_NR_ITEMS,
 };
 
 struct page_counter {
@@ -20,7 +43,7 @@ struct page_counter {
 	 * Make sure 'usage' does not share cacheline with any other field. The
 	 * memcg->memory.usage is a hot member of struct mem_cgroup.
 	 */
-	atomic_long_t usage;
+	atomic_long_t usage[__MCT_NR_ITEMS];
 	CACHELINE_PADDING(_pad1_);
 
 	/* effective memory.min and memory.min usage tracking */
@@ -33,16 +56,16 @@ struct page_counter {
 	atomic_long_t low_usage;
 	atomic_long_t children_low_usage;
 
-	unsigned long watermark;
-	unsigned long failcnt;
+	unsigned long watermark[__MCT_NR_ITEMS];
+	unsigned long failcnt[__MCT_NR_ITEMS];
 
 	/* Keep all the read most fields in a separete cacheline. */
 	CACHELINE_PADDING(_pad2_);
 
 	unsigned long min;
 	unsigned long low;
-	unsigned long high;
-	unsigned long max;
+	unsigned long high[__MCT_NR_ITEMS];
+	unsigned long max[__MCT_NR_ITEMS];
 	struct page_counter *parent;
 } ____cacheline_internodealigned_in_smp;
 
@@ -55,38 +78,55 @@ struct page_counter {
 static inline void page_counter_init(struct page_counter *counter,
 				     struct page_counter *parent)
 {
-	atomic_long_set(&counter->usage, 0);
-	counter->max = PAGE_COUNTER_MAX;
+	int i;
+
+	for (i = 0; i < __MCT_NR_ITEMS; i++) {
+		atomic_long_set(&counter->usage[i], 0);
+		counter->max[i] = PAGE_COUNTER_MAX;
+	}
+
 	counter->parent = parent;
 }
 
-static inline unsigned long page_counter_read(struct page_counter *counter)
+static inline unsigned long page_counter_read(struct page_counter *counter,
+	enum mem_counter_type id)
 {
-	return atomic_long_read(&counter->usage);
+	return atomic_long_read(&counter->usage[id]);
 }
 
-void page_counter_cancel(struct page_counter *counter, unsigned long nr_pages);
-void page_counter_charge(struct page_counter *counter, unsigned long nr_pages);
+void page_counter_cancel(struct page_counter *counter,
+			 enum mem_counter_type id,
+			 unsigned long nr_pages);
+void page_counter_charge(struct page_counter *counter,
+			 enum mem_counter_type id,
+			 unsigned long nr_pages);
 bool page_counter_try_charge(struct page_counter *counter,
+			     enum mem_counter_type id,
 			     unsigned long nr_pages,
 			     struct page_counter **fail);
-void page_counter_uncharge(struct page_counter *counter, unsigned long nr_pages);
+void page_counter_uncharge(struct page_counter *counter,
+			   enum mem_counter_type id,
+			   unsigned long nr_pages);
 void page_counter_set_min(struct page_counter *counter, unsigned long nr_pages);
 void page_counter_set_low(struct page_counter *counter, unsigned long nr_pages);
 
 static inline void page_counter_set_high(struct page_counter *counter,
+					 enum mem_counter_type id,
 					 unsigned long nr_pages)
 {
-	WRITE_ONCE(counter->high, nr_pages);
+	WRITE_ONCE(counter->high[id], nr_pages);
 }
 
-int page_counter_set_max(struct page_counter *counter, unsigned long nr_pages);
+int page_counter_set_max(struct page_counter *counter,
+			 enum mem_counter_type id,
+			 unsigned long nr_pages);
 int page_counter_memparse(const char *buf, const char *max,
 			  unsigned long *nr_pages);
 
-static inline void page_counter_reset_watermark(struct page_counter *counter)
+static inline void page_counter_reset_watermark(struct page_counter *counter,
+						enum mem_counter_type id)
 {
-	counter->watermark = page_counter_read(counter);
+	counter->watermark[id] = page_counter_read(counter, id);
 }
 
 #endif /* _LINUX_PAGE_COUNTER_H */

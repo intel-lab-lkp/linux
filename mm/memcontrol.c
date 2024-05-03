@@ -465,7 +465,7 @@ static void mem_cgroup_remove_exceeded(struct mem_cgroup_per_node *mz,
 
 static unsigned long soft_limit_excess(struct mem_cgroup *memcg)
 {
-	unsigned long nr_pages = page_counter_read(&memcg->memory);
+	unsigned long nr_pages = page_counter_read(&memcg->memory, MCT_MEMORY);
 	unsigned long soft_limit = READ_ONCE(memcg->soft_limit);
 	unsigned long excess = 0;
 
@@ -1631,14 +1631,14 @@ static unsigned long mem_cgroup_margin(struct mem_cgroup *memcg)
 	unsigned long count;
 	unsigned long limit;
 
-	count = page_counter_read(&memcg->memory);
-	limit = READ_ONCE(memcg->memory.max);
+	count = page_counter_read(&memcg->memory, MCT_MEMORY);
+	limit = READ_ONCE(memcg->memory.max[MCT_MEMORY]);
 	if (count < limit)
 		margin = limit - count;
 
 	if (do_memsw_account()) {
-		count = page_counter_read(&memcg->memsw);
-		limit = READ_ONCE(memcg->memsw.max);
+		count = page_counter_read(&memcg->memory, MCT_MEMSW);
+		limit = READ_ONCE(memcg->memory.max[MCT_MEMSW]);
 		if (count < limit)
 			margin = min(margin, limit - count);
 		else
@@ -1896,19 +1896,23 @@ void mem_cgroup_print_oom_meminfo(struct mem_cgroup *memcg)
 	lockdep_assert_held(&oom_lock);
 
 	pr_info("memory: usage %llukB, limit %llukB, failcnt %lu\n",
-		K((u64)page_counter_read(&memcg->memory)),
-		K((u64)READ_ONCE(memcg->memory.max)), memcg->memory.failcnt);
+		K((u64)page_counter_read(&memcg->memory, MCT_MEMORY)),
+		K((u64)READ_ONCE(memcg->memory.max[MCT_MEMORY])),
+		memcg->memory.failcnt[MCT_MEMORY]);
 	if (cgroup_subsys_on_dfl(memory_cgrp_subsys))
 		pr_info("swap: usage %llukB, limit %llukB, failcnt %lu\n",
-			K((u64)page_counter_read(&memcg->swap)),
-			K((u64)READ_ONCE(memcg->swap.max)), memcg->swap.failcnt);
+			K((u64)page_counter_read(&memcg->memory, MCT_SWAP)),
+			K((u64)READ_ONCE(memcg->memory.max[MCT_SWAP])),
+			memcg->memory.failcnt[MCT_SWAP]);
 	else {
 		pr_info("memory+swap: usage %llukB, limit %llukB, failcnt %lu\n",
-			K((u64)page_counter_read(&memcg->memsw)),
-			K((u64)memcg->memsw.max), memcg->memsw.failcnt);
+			K((u64)page_counter_read(&memcg->memory, MCT_MEMSW)),
+			K((u64)memcg->memory.max[MCT_MEMSW]),
+			memcg->memory.failcnt[MCT_MEMSW]);
 		pr_info("kmem: usage %llukB, limit %llukB, failcnt %lu\n",
-			K((u64)page_counter_read(&memcg->kmem)),
-			K((u64)memcg->kmem.max), memcg->kmem.failcnt);
+			K((u64)page_counter_read(&memcg->memory, MCT_KMEM)),
+			K((u64)memcg->memory.max[MCT_KMEM]),
+			memcg->memory.failcnt[MCT_KMEM]);
 	}
 
 	pr_info("Memory cgroup stats for ");
@@ -1924,18 +1928,18 @@ void mem_cgroup_print_oom_meminfo(struct mem_cgroup *memcg)
  */
 unsigned long mem_cgroup_get_max(struct mem_cgroup *memcg)
 {
-	unsigned long max = READ_ONCE(memcg->memory.max);
+	unsigned long max = READ_ONCE(memcg->memory.max[MCT_MEMORY]);
 
 	if (do_memsw_account()) {
 		if (mem_cgroup_swappiness(memcg)) {
 			/* Calculate swap excess capacity from memsw limit */
-			unsigned long swap = READ_ONCE(memcg->memsw.max) - max;
+			unsigned long swap = READ_ONCE(memcg->memory.max[MCT_MEMSW]) - max;
 
 			max += min(swap, (unsigned long)total_swap_pages);
 		}
 	} else {
 		if (mem_cgroup_swappiness(memcg))
-			max += min(READ_ONCE(memcg->swap.max),
+			max += min(READ_ONCE(memcg->memory.max[MCT_SWAP]),
 				   (unsigned long)total_swap_pages);
 	}
 	return max;
@@ -1943,7 +1947,7 @@ unsigned long mem_cgroup_get_max(struct mem_cgroup *memcg)
 
 unsigned long mem_cgroup_size(struct mem_cgroup *memcg)
 {
-	return page_counter_read(&memcg->memory);
+	return page_counter_read(&memcg->memory, MCT_MEMORY);
 }
 
 static bool mem_cgroup_out_of_memory(struct mem_cgroup *memcg, gfp_t gfp_mask,
@@ -2497,9 +2501,9 @@ static void drain_stock(struct memcg_stock_pcp *stock)
 		return;
 
 	if (stock_pages) {
-		page_counter_uncharge(&old->memory, stock_pages);
+		page_counter_uncharge(&old->memory, MCT_MEMORY, stock_pages);
 		if (do_memsw_account())
-			page_counter_uncharge(&old->memsw, stock_pages);
+			page_counter_uncharge(&old->memory, MCT_MEMSW, stock_pages);
 
 		WRITE_ONCE(stock->nr_pages, 0);
 	}
@@ -2625,8 +2629,8 @@ static unsigned long reclaim_high(struct mem_cgroup *memcg,
 	do {
 		unsigned long pflags;
 
-		if (page_counter_read(&memcg->memory) <=
-		    READ_ONCE(memcg->memory.high))
+		if (page_counter_read(&memcg->memory, MCT_MEMORY) <=
+		    READ_ONCE(memcg->memory.high[MCT_MEMORY]))
 			continue;
 
 		memcg_memory_event(memcg, MEMCG_HIGH);
@@ -2727,8 +2731,8 @@ static u64 mem_find_max_overage(struct mem_cgroup *memcg)
 	u64 overage, max_overage = 0;
 
 	do {
-		overage = calculate_overage(page_counter_read(&memcg->memory),
-					    READ_ONCE(memcg->memory.high));
+		overage = calculate_overage(page_counter_read(&memcg->memory, MCT_MEMORY),
+					    READ_ONCE(memcg->memory.high[MCT_MEMORY]));
 		max_overage = max(overage, max_overage);
 	} while ((memcg = parent_mem_cgroup(memcg)) &&
 		 !mem_cgroup_is_root(memcg));
@@ -2741,8 +2745,8 @@ static u64 swap_find_max_overage(struct mem_cgroup *memcg)
 	u64 overage, max_overage = 0;
 
 	do {
-		overage = calculate_overage(page_counter_read(&memcg->swap),
-					    READ_ONCE(memcg->swap.high));
+		overage = calculate_overage(page_counter_read(&memcg->memory, MCT_SWAP),
+					    READ_ONCE(memcg->memory.high[MCT_SWAP]));
 		if (overage)
 			memcg_memory_event(memcg, MEMCG_SWAP_HIGH);
 		max_overage = max(overage, max_overage);
@@ -2905,16 +2909,15 @@ retry:
 		return 0;
 
 	if (!do_memsw_account() ||
-	    page_counter_try_charge(&memcg->memsw, batch, &counter)) {
-		if (page_counter_try_charge(&memcg->memory, batch, &counter))
+	    page_counter_try_charge(&memcg->memory, MCT_MEMSW, batch, &counter)) {
+		if (page_counter_try_charge(&memcg->memory, MCT_MEMORY, batch, &counter))
 			goto done_restock;
 		if (do_memsw_account())
-			page_counter_uncharge(&memcg->memsw, batch);
-		mem_over_limit = mem_cgroup_from_counter(counter, memory);
+			page_counter_uncharge(&memcg->memory, MCT_MEMSW, batch);
 	} else {
-		mem_over_limit = mem_cgroup_from_counter(counter, memsw);
 		reclaim_options &= ~MEMCG_RECLAIM_MAY_SWAP;
 	}
+	mem_over_limit = mem_cgroup_from_counter(counter, memory);
 
 	if (batch > nr_pages) {
 		batch = nr_pages;
@@ -3016,9 +3019,9 @@ force:
 	 * being freed very soon.  Allow memory usage go over the limit
 	 * temporarily by force charging it.
 	 */
-	page_counter_charge(&memcg->memory, nr_pages);
+	page_counter_charge(&memcg->memory, MCT_MEMORY, nr_pages);
 	if (do_memsw_account())
-		page_counter_charge(&memcg->memsw, nr_pages);
+		page_counter_charge(&memcg->memory, MCT_MEMSW, nr_pages);
 
 	return 0;
 
@@ -3038,10 +3041,10 @@ done_restock:
 	do {
 		bool mem_high, swap_high;
 
-		mem_high = page_counter_read(&memcg->memory) >
-			READ_ONCE(memcg->memory.high);
-		swap_high = page_counter_read(&memcg->swap) >
-			READ_ONCE(memcg->swap.high);
+		mem_high = page_counter_read(&memcg->memory, MCT_MEMORY) >
+			READ_ONCE(memcg->memory.high[MCT_MEMORY]);
+		swap_high = page_counter_read(&memcg->memory, MCT_SWAP) >
+			READ_ONCE(memcg->memory.high[MCT_SWAP]);
 
 		/* Don't bother a random interrupted task */
 		if (!in_task()) {
@@ -3101,9 +3104,9 @@ void mem_cgroup_cancel_charge(struct mem_cgroup *memcg, unsigned int nr_pages)
 	if (mem_cgroup_is_root(memcg))
 		return;
 
-	page_counter_uncharge(&memcg->memory, nr_pages);
+	page_counter_uncharge(&memcg->memory, MCT_MEMORY, nr_pages);
 	if (do_memsw_account())
-		page_counter_uncharge(&memcg->memsw, nr_pages);
+		page_counter_uncharge(&memcg->memory, MCT_MEMSW, nr_pages);
 }
 
 static void commit_charge(struct folio *folio, struct mem_cgroup *memcg)
@@ -3373,9 +3376,9 @@ static void memcg_account_kmem(struct mem_cgroup *memcg, int nr_pages)
 	mod_memcg_state(memcg, MEMCG_KMEM, nr_pages);
 	if (!cgroup_subsys_on_dfl(memory_cgrp_subsys)) {
 		if (nr_pages > 0)
-			page_counter_charge(&memcg->kmem, nr_pages);
+			page_counter_charge(&memcg->memory, MCT_KMEM, nr_pages);
 		else
-			page_counter_uncharge(&memcg->kmem, -nr_pages);
+			page_counter_uncharge(&memcg->memory, MCT_KMEM, -nr_pages);
 	}
 }
 
@@ -3877,7 +3880,7 @@ static int mem_cgroup_resize_max(struct mem_cgroup *memcg,
 	bool drained = false;
 	int ret;
 	bool limits_invariant;
-	struct page_counter *counter = memsw ? &memcg->memsw : &memcg->memory;
+	enum mem_counter_type id = memsw ? MCT_MEMSW : MCT_MEMORY;
 
 	do {
 		if (signal_pending(current)) {
@@ -3888,18 +3891,18 @@ static int mem_cgroup_resize_max(struct mem_cgroup *memcg,
 		mutex_lock(&memcg_max_mutex);
 		/*
 		 * Make sure that the new limit (memsw or memory limit) doesn't
-		 * break our basic invariant rule memory.max <= memsw.max.
+		 * break our basic invariant rule max[MCT_MEMORY] <= max[MCT_MEMSW].
 		 */
-		limits_invariant = memsw ? max >= READ_ONCE(memcg->memory.max) :
-					   max <= memcg->memsw.max;
+		limits_invariant = memsw ? max >= READ_ONCE(memcg->memory.max[MCT_MEMORY]) :
+					   max <= memcg->memory.max[MCT_MEMSW];
 		if (!limits_invariant) {
 			mutex_unlock(&memcg_max_mutex);
 			ret = -EINVAL;
 			break;
 		}
-		if (max > counter->max)
+		if (max > memcg->memory.max[id])
 			enlarge = true;
-		ret = page_counter_set_max(counter, max);
+		ret = page_counter_set_max(&memcg->memory, id, max);
 		mutex_unlock(&memcg_max_mutex);
 
 		if (!ret)
@@ -4021,7 +4024,7 @@ static int mem_cgroup_force_empty(struct mem_cgroup *memcg)
 	drain_all_stock(memcg);
 
 	/* try to free all pages in this cgroup */
-	while (nr_retries && page_counter_read(&memcg->memory)) {
+	while (nr_retries && page_counter_read(&memcg->memory, MCT_MEMORY)) {
 		if (signal_pending(current))
 			return -EINTR;
 
@@ -4077,10 +4080,7 @@ static unsigned long mem_cgroup_usage(struct mem_cgroup *memcg, bool swap)
 		if (swap)
 			val += total_swap_pages - get_nr_swap_pages();
 	} else {
-		if (!swap)
-			val = page_counter_read(&memcg->memory);
-		else
-			val = page_counter_read(&memcg->memsw);
+		val = page_counter_read(&memcg->memory, swap ? MCT_MEMSW : MCT_MEMORY);
 	}
 	return val;
 }
@@ -4097,38 +4097,22 @@ static u64 mem_cgroup_read_u64(struct cgroup_subsys_state *css,
 			       struct cftype *cft)
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
-	struct page_counter *counter;
-
-	switch (MEMFILE_TYPE(cft->private)) {
-	case MCT_MEMORY:
-		counter = &memcg->memory;
-		break;
-	case MCT_MEMSW:
-		counter = &memcg->memsw;
-		break;
-	case MCT_KMEM:
-		counter = &memcg->kmem;
-		break;
-	case MCT_TCPMEM:
-		counter = &memcg->tcpmem;
-		break;
-	default:
-		BUG();
-	}
+	enum mem_counter_type id = MEMFILE_TYPE(cft->private);
 
 	switch (MEMFILE_ATTR(cft->private)) {
 	case RES_USAGE:
-		if (counter == &memcg->memory)
+		if (id == MCT_MEMORY)
 			return (u64)mem_cgroup_usage(memcg, false) * PAGE_SIZE;
-		if (counter == &memcg->memsw)
+		else if (id == MCT_MEMSW)
 			return (u64)mem_cgroup_usage(memcg, true) * PAGE_SIZE;
-		return (u64)page_counter_read(counter) * PAGE_SIZE;
+		else
+			return (u64)page_counter_read(&memcg->memory, id) * PAGE_SIZE;
 	case RES_LIMIT:
-		return (u64)counter->max * PAGE_SIZE;
+		return memcg->memory.max[id] * PAGE_SIZE;
 	case RES_MAX_USAGE:
-		return (u64)counter->watermark * PAGE_SIZE;
+		return memcg->memory.watermark[id] * PAGE_SIZE;
 	case RES_FAILCNT:
-		return counter->failcnt;
+		return memcg->memory.failcnt[id];
 	case RES_SOFT_LIMIT:
 		return (u64)READ_ONCE(memcg->soft_limit) * PAGE_SIZE;
 	default:
@@ -4213,7 +4197,7 @@ static int memcg_update_tcp_max(struct mem_cgroup *memcg, unsigned long max)
 
 	mutex_lock(&memcg_max_mutex);
 
-	ret = page_counter_set_max(&memcg->tcpmem, max);
+	ret = page_counter_set_max(&memcg->memory, MCT_TCPMEM, max);
 	if (ret)
 		goto out;
 
@@ -4299,31 +4283,14 @@ static ssize_t mem_cgroup_reset(struct kernfs_open_file *of, char *buf,
 				size_t nbytes, loff_t off)
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
-	struct page_counter *counter;
-
-	switch (MEMFILE_TYPE(of_cft(of)->private)) {
-	case MCT_MEMORY:
-		counter = &memcg->memory;
-		break;
-	case MCT_MEMSW:
-		counter = &memcg->memsw;
-		break;
-	case MCT_KMEM:
-		counter = &memcg->kmem;
-		break;
-	case MCT_TCPMEM:
-		counter = &memcg->tcpmem;
-		break;
-	default:
-		BUG();
-	}
+	enum mem_counter_type id = MEMFILE_TYPE(of_cft(of)->private);
 
 	switch (MEMFILE_ATTR(of_cft(of)->private)) {
 	case RES_MAX_USAGE:
-		page_counter_reset_watermark(counter);
+		page_counter_reset_watermark(&memcg->memory, id);
 		break;
 	case RES_FAILCNT:
-		counter->failcnt = 0;
+		memcg->memory.failcnt[id] = 0;
 		break;
 	default:
 		BUG();
@@ -4531,8 +4498,8 @@ static void memcg1_stat_format(struct mem_cgroup *memcg, struct seq_buf *s)
 	/* Hierarchical information */
 	memory = memsw = PAGE_COUNTER_MAX;
 	for (mi = memcg; mi; mi = parent_mem_cgroup(mi)) {
-		memory = min(memory, READ_ONCE(mi->memory.max));
-		memsw = min(memsw, READ_ONCE(mi->memsw.max));
+		memory = min(memory, READ_ONCE(mi->memory.max[MCT_MEMORY]));
+		memsw = min(memsw, READ_ONCE(mi->memory.max[MCT_MEMSW]));
 	}
 	seq_buf_printf(s, "hierarchical_memory_limit %llu\n",
 		       (u64)memory * PAGE_SIZE);
@@ -5016,9 +4983,9 @@ void mem_cgroup_wb_stats(struct bdi_writeback *wb, unsigned long *pfilepages,
 
 	*pheadroom = PAGE_COUNTER_MAX;
 	while ((parent = parent_mem_cgroup(memcg))) {
-		unsigned long ceiling = min(READ_ONCE(memcg->memory.max),
-					    READ_ONCE(memcg->memory.high));
-		unsigned long used = page_counter_read(&memcg->memory);
+		unsigned long ceiling = min(READ_ONCE(memcg->memory.max[MCT_MEMORY]),
+					    READ_ONCE(memcg->memory.high[MCT_MEMORY]));
+		unsigned long used = page_counter_read(&memcg->memory, MCT_MEMORY);
 
 		*pheadroom = min(*pheadroom, ceiling - min(ceiling, used));
 		memcg = parent;
@@ -5783,30 +5750,22 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 	if (IS_ERR(memcg))
 		return ERR_CAST(memcg);
 
-	page_counter_set_high(&memcg->memory, PAGE_COUNTER_MAX);
+	page_counter_set_high(&memcg->memory, MCT_MEMORY, PAGE_COUNTER_MAX);
 	WRITE_ONCE(memcg->soft_limit, PAGE_COUNTER_MAX);
 #if defined(CONFIG_MEMCG_KMEM) && defined(CONFIG_ZSWAP)
 	memcg->zswap_max = PAGE_COUNTER_MAX;
 	WRITE_ONCE(memcg->zswap_writeback,
 		!parent || READ_ONCE(parent->zswap_writeback));
 #endif
-	page_counter_set_high(&memcg->swap, PAGE_COUNTER_MAX);
+	page_counter_set_high(&memcg->memory, MCT_SWAP, PAGE_COUNTER_MAX);
 	if (parent) {
 		WRITE_ONCE(memcg->swappiness, mem_cgroup_swappiness(parent));
 		WRITE_ONCE(memcg->oom_kill_disable, READ_ONCE(parent->oom_kill_disable));
-
 		page_counter_init(&memcg->memory, &parent->memory);
-		page_counter_init(&memcg->swap, &parent->swap);
-		page_counter_init(&memcg->kmem, &parent->kmem);
-		page_counter_init(&memcg->tcpmem, &parent->tcpmem);
 	} else {
 		init_memcg_stats();
 		init_memcg_events();
 		page_counter_init(&memcg->memory, NULL);
-		page_counter_init(&memcg->swap, NULL);
-		page_counter_init(&memcg->kmem, NULL);
-		page_counter_init(&memcg->tcpmem, NULL);
-
 		root_mem_cgroup = memcg;
 		return &memcg->css;
 	}
@@ -5949,16 +5908,17 @@ static void mem_cgroup_css_free(struct cgroup_subsys_state *css)
 static void mem_cgroup_css_reset(struct cgroup_subsys_state *css)
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
+	struct page_counter *c = &memcg->memory;
 
-	page_counter_set_max(&memcg->memory, PAGE_COUNTER_MAX);
-	page_counter_set_max(&memcg->swap, PAGE_COUNTER_MAX);
-	page_counter_set_max(&memcg->kmem, PAGE_COUNTER_MAX);
-	page_counter_set_max(&memcg->tcpmem, PAGE_COUNTER_MAX);
-	page_counter_set_min(&memcg->memory, 0);
-	page_counter_set_low(&memcg->memory, 0);
-	page_counter_set_high(&memcg->memory, PAGE_COUNTER_MAX);
+	page_counter_set_max(c, MCT_MEMORY, PAGE_COUNTER_MAX);
+	page_counter_set_max(c, MCT_SWAP, PAGE_COUNTER_MAX);
+	page_counter_set_max(c, MCT_KMEM, PAGE_COUNTER_MAX);
+	page_counter_set_max(c, MCT_TCPMEM, PAGE_COUNTER_MAX);
+	page_counter_set_min(c, 0);
+	page_counter_set_low(c, 0);
+	page_counter_set_high(c, MCT_MEMORY, PAGE_COUNTER_MAX);
 	WRITE_ONCE(memcg->soft_limit, PAGE_COUNTER_MAX);
-	page_counter_set_high(&memcg->swap, PAGE_COUNTER_MAX);
+	page_counter_set_high(c, MCT_SWAP, PAGE_COUNTER_MAX);
 	memcg_wb_domain_size_changed(memcg);
 }
 
@@ -6529,7 +6489,7 @@ static void __mem_cgroup_clear_mc(void)
 	if (mc.moved_swap) {
 		/* uncharge swap account from the old cgroup */
 		if (!mem_cgroup_is_root(mc.from))
-			page_counter_uncharge(&mc.from->memsw, mc.moved_swap);
+			page_counter_uncharge(&mc.from->memory, MCT_MEMSW, mc.moved_swap);
 
 		mem_cgroup_id_put_many(mc.from, mc.moved_swap);
 
@@ -6538,7 +6498,7 @@ static void __mem_cgroup_clear_mc(void)
 		 * should uncharge to->memory.
 		 */
 		if (!mem_cgroup_is_root(mc.to))
-			page_counter_uncharge(&mc.to->memory, mc.moved_swap);
+			page_counter_uncharge(&mc.to->memory, MCT_MEMORY, mc.moved_swap);
 
 		mc.moved_swap = 0;
 	}
@@ -6906,7 +6866,7 @@ static u64 memory_current_read(struct cgroup_subsys_state *css,
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
 
-	return (u64)page_counter_read(&memcg->memory) * PAGE_SIZE;
+	return (u64)page_counter_read(&memcg->memory, MCT_MEMORY) * PAGE_SIZE;
 }
 
 static u64 memory_peak_read(struct cgroup_subsys_state *css,
@@ -6914,7 +6874,7 @@ static u64 memory_peak_read(struct cgroup_subsys_state *css,
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
 
-	return (u64)memcg->memory.watermark * PAGE_SIZE;
+	return (u64)memcg->memory.watermark[MCT_MEMORY] * PAGE_SIZE;
 }
 
 static int memory_min_show(struct seq_file *m, void *v)
@@ -6966,7 +6926,7 @@ static ssize_t memory_low_write(struct kernfs_open_file *of,
 static int memory_high_show(struct seq_file *m, void *v)
 {
 	return seq_puts_memcg_tunable(m,
-		READ_ONCE(mem_cgroup_from_seq(m)->memory.high));
+		READ_ONCE(mem_cgroup_from_seq(m)->memory.high[MCT_MEMORY]));
 }
 
 static ssize_t memory_high_write(struct kernfs_open_file *of,
@@ -6983,10 +6943,10 @@ static ssize_t memory_high_write(struct kernfs_open_file *of,
 	if (err)
 		return err;
 
-	page_counter_set_high(&memcg->memory, high);
+	page_counter_set_high(&memcg->memory, MCT_MEMORY, high);
 
 	for (;;) {
-		unsigned long nr_pages = page_counter_read(&memcg->memory);
+		unsigned long nr_pages = page_counter_read(&memcg->memory, MCT_MEMORY);
 		unsigned long reclaimed;
 
 		if (nr_pages <= high)
@@ -7015,7 +6975,7 @@ static ssize_t memory_high_write(struct kernfs_open_file *of,
 static int memory_max_show(struct seq_file *m, void *v)
 {
 	return seq_puts_memcg_tunable(m,
-		READ_ONCE(mem_cgroup_from_seq(m)->memory.max));
+		READ_ONCE(mem_cgroup_from_seq(m)->memory.max[MCT_MEMORY]));
 }
 
 static ssize_t memory_max_write(struct kernfs_open_file *of,
@@ -7032,10 +6992,10 @@ static ssize_t memory_max_write(struct kernfs_open_file *of,
 	if (err)
 		return err;
 
-	xchg(&memcg->memory.max, max);
+	xchg(&memcg->memory.max[MCT_MEMORY], max);
 
 	for (;;) {
-		unsigned long nr_pages = page_counter_read(&memcg->memory);
+		unsigned long nr_pages = page_counter_read(&memcg->memory, MCT_MEMORY);
 
 		if (nr_pages <= max)
 			break;
@@ -7497,7 +7457,7 @@ void mem_cgroup_calculate_protection(struct mem_cgroup *root,
 	if (memcg == root)
 		return;
 
-	usage = page_counter_read(&memcg->memory);
+	usage = page_counter_read(&memcg->memory, MCT_MEMORY);
 	if (!usage)
 		return;
 
@@ -7509,7 +7469,7 @@ void mem_cgroup_calculate_protection(struct mem_cgroup *root,
 		return;
 	}
 
-	parent_usage = page_counter_read(&parent->memory);
+	parent_usage = page_counter_read(&parent->memory, MCT_MEMORY);
 
 	WRITE_ONCE(memcg->memory.emin, effective_protection(usage, parent_usage,
 			READ_ONCE(memcg->memory.min),
@@ -7669,9 +7629,9 @@ static void uncharge_batch(const struct uncharge_gather *ug)
 	unsigned long flags;
 
 	if (ug->nr_memory) {
-		page_counter_uncharge(&ug->memcg->memory, ug->nr_memory);
+		page_counter_uncharge(&ug->memcg->memory, MCT_MEMORY, ug->nr_memory);
 		if (do_memsw_account())
-			page_counter_uncharge(&ug->memcg->memsw, ug->nr_memory);
+			page_counter_uncharge(&ug->memcg->memory, MCT_MEMSW, ug->nr_memory);
 		if (ug->nr_kmem)
 			memcg_account_kmem(ug->memcg, -ug->nr_kmem);
 		memcg_oom_recover(ug->memcg);
@@ -7810,9 +7770,9 @@ void mem_cgroup_replace_folio(struct folio *old, struct folio *new)
 
 	/* Force-charge the new page. The old one will be freed soon */
 	if (!mem_cgroup_is_root(memcg)) {
-		page_counter_charge(&memcg->memory, nr_pages);
+		page_counter_charge(&memcg->memory, MCT_MEMORY, nr_pages);
 		if (do_memsw_account())
-			page_counter_charge(&memcg->memsw, nr_pages);
+			page_counter_charge(&memcg->memory, MCT_MEMSW, nr_pages);
 	}
 
 	css_get(&memcg->css);
@@ -7920,13 +7880,13 @@ bool mem_cgroup_charge_skmem(struct mem_cgroup *memcg, unsigned int nr_pages,
 	if (!cgroup_subsys_on_dfl(memory_cgrp_subsys)) {
 		struct page_counter *fail;
 
-		if (page_counter_try_charge(&memcg->tcpmem, nr_pages, &fail)) {
+		if (page_counter_try_charge(&memcg->memory, MCT_TCPMEM, nr_pages, &fail)) {
 			memcg->tcpmem_pressure = 0;
 			return true;
 		}
 		memcg->tcpmem_pressure = 1;
 		if (gfp_mask & __GFP_NOFAIL) {
-			page_counter_charge(&memcg->tcpmem, nr_pages);
+			page_counter_charge(&memcg->memory, MCT_TCPMEM, nr_pages);
 			return true;
 		}
 		return false;
@@ -7948,7 +7908,7 @@ bool mem_cgroup_charge_skmem(struct mem_cgroup *memcg, unsigned int nr_pages,
 void mem_cgroup_uncharge_skmem(struct mem_cgroup *memcg, unsigned int nr_pages)
 {
 	if (!cgroup_subsys_on_dfl(memory_cgrp_subsys)) {
-		page_counter_uncharge(&memcg->tcpmem, nr_pages);
+		page_counter_uncharge(&memcg->memory, MCT_TCPMEM, nr_pages);
 		return;
 	}
 
@@ -8082,12 +8042,12 @@ void mem_cgroup_swapout(struct folio *folio, swp_entry_t entry)
 	folio->memcg_data = 0;
 
 	if (!mem_cgroup_is_root(memcg))
-		page_counter_uncharge(&memcg->memory, nr_entries);
+		page_counter_uncharge(&memcg->memory, MCT_MEMORY, nr_entries);
 
 	if (memcg != swap_memcg) {
 		if (!mem_cgroup_is_root(swap_memcg))
-			page_counter_charge(&swap_memcg->memsw, nr_entries);
-		page_counter_uncharge(&memcg->memsw, nr_entries);
+			page_counter_charge(&swap_memcg->memory, MCT_MEMSW, nr_entries);
+		page_counter_uncharge(&memcg->memory, MCT_MEMSW, nr_entries);
 	}
 
 	/*
@@ -8137,7 +8097,7 @@ int __mem_cgroup_try_charge_swap(struct folio *folio, swp_entry_t entry)
 	memcg = mem_cgroup_id_get_online(memcg);
 
 	if (!mem_cgroup_is_root(memcg) &&
-	    !page_counter_try_charge(&memcg->swap, nr_pages, &counter)) {
+	    !page_counter_try_charge(&memcg->memory, MCT_SWAP, nr_pages, &counter)) {
 		memcg_memory_event(memcg, MEMCG_SWAP_MAX);
 		memcg_memory_event(memcg, MEMCG_SWAP_FAIL);
 		mem_cgroup_id_put(memcg);
@@ -8170,9 +8130,9 @@ void __mem_cgroup_uncharge_swap(swp_entry_t entry, unsigned int nr_pages)
 	if (memcg) {
 		if (!mem_cgroup_is_root(memcg)) {
 			if (do_memsw_account())
-				page_counter_uncharge(&memcg->memsw, nr_pages);
+				page_counter_uncharge(&memcg->memory, MCT_MEMSW, nr_pages);
 			else
-				page_counter_uncharge(&memcg->swap, nr_pages);
+				page_counter_uncharge(&memcg->memory, MCT_SWAP, nr_pages);
 		}
 		mod_memcg_state(memcg, MEMCG_SWAP, -nr_pages);
 		mem_cgroup_id_put_many(memcg, nr_pages);
@@ -8188,8 +8148,8 @@ long mem_cgroup_get_nr_swap_pages(struct mem_cgroup *memcg)
 		return nr_swap_pages;
 	for (; !mem_cgroup_is_root(memcg); memcg = parent_mem_cgroup(memcg))
 		nr_swap_pages = min_t(long, nr_swap_pages,
-				      READ_ONCE(memcg->swap.max) -
-				      page_counter_read(&memcg->swap));
+				      READ_ONCE(memcg->memory.max[MCT_SWAP]) -
+				      page_counter_read(&memcg->memory, MCT_SWAP));
 	return nr_swap_pages;
 }
 
@@ -8209,10 +8169,10 @@ bool mem_cgroup_swap_full(struct folio *folio)
 		return false;
 
 	for (; !mem_cgroup_is_root(memcg); memcg = parent_mem_cgroup(memcg)) {
-		unsigned long usage = page_counter_read(&memcg->swap);
+		unsigned long usage = page_counter_read(&memcg->memory, MCT_SWAP);
 
-		if (usage * 2 >= READ_ONCE(memcg->swap.high) ||
-		    usage * 2 >= READ_ONCE(memcg->swap.max))
+		if (usage * 2 >= READ_ONCE(memcg->memory.high[MCT_SWAP]) ||
+		    usage * 2 >= READ_ONCE(memcg->memory.max[MCT_SWAP]))
 			return true;
 	}
 
@@ -8237,7 +8197,7 @@ static u64 swap_current_read(struct cgroup_subsys_state *css,
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
 
-	return (u64)page_counter_read(&memcg->swap) * PAGE_SIZE;
+	return (u64)page_counter_read(&memcg->memory, MCT_SWAP) * PAGE_SIZE;
 }
 
 static u64 swap_peak_read(struct cgroup_subsys_state *css,
@@ -8245,13 +8205,13 @@ static u64 swap_peak_read(struct cgroup_subsys_state *css,
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
 
-	return (u64)memcg->swap.watermark * PAGE_SIZE;
+	return (u64)memcg->memory.watermark[MCT_SWAP] * PAGE_SIZE;
 }
 
 static int swap_high_show(struct seq_file *m, void *v)
 {
 	return seq_puts_memcg_tunable(m,
-		READ_ONCE(mem_cgroup_from_seq(m)->swap.high));
+		READ_ONCE(mem_cgroup_from_seq(m)->memory.high[MCT_SWAP]));
 }
 
 static ssize_t swap_high_write(struct kernfs_open_file *of,
@@ -8266,7 +8226,7 @@ static ssize_t swap_high_write(struct kernfs_open_file *of,
 	if (err)
 		return err;
 
-	page_counter_set_high(&memcg->swap, high);
+	page_counter_set_high(&memcg->memory, MCT_SWAP, high);
 
 	return nbytes;
 }
@@ -8274,7 +8234,7 @@ static ssize_t swap_high_write(struct kernfs_open_file *of,
 static int swap_max_show(struct seq_file *m, void *v)
 {
 	return seq_puts_memcg_tunable(m,
-		READ_ONCE(mem_cgroup_from_seq(m)->swap.max));
+		READ_ONCE(mem_cgroup_from_seq(m)->memory.max[MCT_SWAP]));
 }
 
 static ssize_t swap_max_write(struct kernfs_open_file *of,
@@ -8289,7 +8249,7 @@ static ssize_t swap_max_write(struct kernfs_open_file *of,
 	if (err)
 		return err;
 
-	xchg(&memcg->swap.max, max);
+	xchg(&memcg->memory.max[MCT_SWAP], max);
 
 	return nbytes;
 }
