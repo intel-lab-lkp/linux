@@ -600,6 +600,7 @@ nfqnl_build_packet_message(struct net *net, struct nfqnl_instance *queue,
 	case NFQNL_COPY_PACKET:
 		if (!(queue->flags & NFQA_CFG_F_GSO) &&
 		    entskb->ip_summed == CHECKSUM_PARTIAL &&
+		    (skb_csum_is_sctp(entskb) && skb_crc32c_csum_help(entskb)) &&
 		    skb_checksum_help(entskb))
 			return NULL;
 
