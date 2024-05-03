@@ -164,6 +164,7 @@ enum nft_list_attributes {
  * @NFTA_HOOK_PRIORITY: netfilter hook priority (NLA_U32)
  * @NFTA_HOOK_DEV: netdevice name (NLA_STRING)
  * @NFTA_HOOK_DEVS: list of netdevices (NLA_NESTED)
+ * @NFTA_HOOK_ACT_DEVS: list of active netdevices (NLA_NESTED)
  */
 enum nft_hook_attributes {
 	NFTA_HOOK_UNSPEC,
@@ -171,6 +172,7 @@ enum nft_hook_attributes {
 	NFTA_HOOK_PRIORITY,
 	NFTA_HOOK_DEV,
 	NFTA_HOOK_DEVS,
+	NFTA_HOOK_ACT_DEVS,
 	__NFTA_HOOK_MAX
 };
 #define NFTA_HOOK_MAX		(__NFTA_HOOK_MAX - 1)
@@ -1717,13 +1719,15 @@ enum nft_flowtable_attributes {
  *
  * @NFTA_FLOWTABLE_HOOK_NUM: netfilter hook number (NLA_U32)
  * @NFTA_FLOWTABLE_HOOK_PRIORITY: netfilter hook priority (NLA_U32)
- * @NFTA_FLOWTABLE_HOOK_DEVS: input devices this flow table is bound to (NLA_NESTED)
+ * @NFTA_FLOWTABLE_HOOK_DEVS: input devices this flow table is configured for (NLA_NESTED)
+ * @NFTA_FLOWTABLE_HOOK_ACT_DEVS: input devices this flow table is currently bound to (NLA_NESTED)
  */
 enum nft_flowtable_hook_attributes {
 	NFTA_FLOWTABLE_HOOK_UNSPEC,
 	NFTA_FLOWTABLE_HOOK_NUM,
 	NFTA_FLOWTABLE_HOOK_PRIORITY,
 	NFTA_FLOWTABLE_HOOK_DEVS,
+	NFTA_FLOWTABLE_HOOK_ACT_DEVS,
 	__NFTA_FLOWTABLE_HOOK_MAX
 };
 #define NFTA_FLOWTABLE_HOOK_MAX	(__NFTA_FLOWTABLE_HOOK_MAX - 1)

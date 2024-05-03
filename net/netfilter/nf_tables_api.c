@@ -1819,6 +1819,18 @@ static int nft_dump_basechain_hook(struct sk_buff *skb, int family,
 		    nla_put(skb, NFTA_HOOK_DEV,
 			    first->ifnamelen, first->ifname))
 			goto nla_put_failure;
+
+		nest_devs = nla_nest_start_noflag(skb, NFTA_HOOK_ACT_DEVS);
+		if (!nest_devs)
+			goto nla_put_failure;
+
+		list_for_each_entry(hook, hook_list, list) {
+			if (hook->ops.dev &&
+			    nla_put_string(skb, NFTA_DEVICE_NAME,
+					   hook->ops.dev->name))
+				goto nla_put_failure;
+		}
+		nla_nest_end(skb, nest_devs);
 	}
 	nla_nest_end(skb, nest);
 
@@ -8869,6 +8881,19 @@ static int nf_tables_fill_flowtable_info(struct sk_buff *skb, struct net *net,
 			goto nla_put_failure;
 	}
 	nla_nest_end(skb, nest_devs);
+
+	nest_devs = nla_nest_start_noflag(skb, NFTA_FLOWTABLE_HOOK_ACT_DEVS);
+	if (!nest_devs)
+		goto nla_put_failure;
+
+	list_for_each_entry_rcu(hook, hook_list, list) {
+		if (hook->ops.dev &&
+		    nla_put_string(skb, NFTA_DEVICE_NAME,
+				   hook->ops.dev->name))
+			goto nla_put_failure;
+	}
+	nla_nest_end(skb, nest_devs);
+
 	nla_nest_end(skb, nest);
 
 	nlmsg_end(skb, nlh);
