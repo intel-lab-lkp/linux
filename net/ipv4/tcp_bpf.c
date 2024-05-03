@@ -105,6 +105,9 @@ static int tcp_bpf_push(struct sock *sk, struct sk_msg *msg, u32 apply_bytes,
 
 		tcp_rate_check_app_limited(sk);
 retry:
+		if (size < sge->length && msg->sg.start != msg->sg.end)
+			flags |= MSG_SENDPAGE_NOTLAST;
+
 		has_tx_ulp = tls_sw_has_ctx_tx(sk);
 		if (has_tx_ulp) {
 			flags |= MSG_SENDPAGE_NOPOLICY;
