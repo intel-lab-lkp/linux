@@ -39,6 +39,10 @@
 #define GC2145_REG_ANALOG_MODE1	CCI_REG8(0x17)
 #define GC2145_REG_OUTPUT_FMT	CCI_REG8(0x84)
 #define GC2145_REG_SYNC_MODE	CCI_REG8(0x86)
+#define GC2145_SYNC_MODE_VSYNC_POL	BIT(0)
+#define GC2145_SYNC_MODE_HSYNC_POL	BIT(1)
+#define GC2145_SYNC_MODE_OPCLK_POL	BIT(2)
+#define GC2145_SYNC_MODE_OPCLK_GATE	BIT(3)
 #define GC2145_SYNC_MODE_COL_SWITCH	BIT(4)
 #define GC2145_SYNC_MODE_ROW_SWITCH	BIT(5)
 #define GC2145_REG_BYPASS_MODE	CCI_REG8(0x89)
@@ -598,6 +602,7 @@ struct gc2145 {
 	struct v4l2_subdev sd;
 	struct media_pad pad;
 
+	struct v4l2_fwnode_endpoint ep; /* the parsed DT endpoint info */
 	struct regmap *regmap;
 	struct clk *xclk;
 
@@ -773,6 +778,36 @@ static int gc2145_set_pad_format(struct v4l2_subdev *sd,
 	return 0;
 }
 
+static int gc2145_config_dvp_mode(struct gc2145 *gc2145,
+				  const struct gc2145_format *gc2145_format)
+{
+	int ret = 0;
+	u64 sync_mode;
+	int flags = gc2145->ep.bus.parallel.flags;
+
+	ret = cci_read(gc2145->regmap, GC2145_REG_SYNC_MODE, &sync_mode, NULL);
+	if (ret)
+		return ret;
+
+	sync_mode &= ~(GC2145_SYNC_MODE_VSYNC_POL |
+		       GC2145_SYNC_MODE_HSYNC_POL |
+		       GC2145_SYNC_MODE_OPCLK_POL);
+
+	if (flags & V4L2_MBUS_VSYNC_ACTIVE_LOW)
+		sync_mode |= GC2145_SYNC_MODE_VSYNC_POL;
+
+	if (flags & V4L2_MBUS_HSYNC_ACTIVE_LOW)
+		sync_mode |= GC2145_SYNC_MODE_HSYNC_POL;
+
+	if (flags & V4L2_MBUS_PCLK_SAMPLE_FALLING)
+		sync_mode |= GC2145_SYNC_MODE_OPCLK_POL;
+
+	cci_write(gc2145->regmap, GC2145_REG_SYNC_MODE, sync_mode, &ret);
+	cci_write(gc2145->regmap, GC2145_REG_PAD_IO, 0x0f, &ret);
+
+	return ret;
+}
+
 static const struct cci_reg_sequence gc2145_common_mipi_regs[] = {
 	{GC2145_REG_PAGE_SELECT, 0x03},
 	{GC2145_REG_DPHY_ANALOG_MODE1, GC2145_DPHY_MODE_PHY_CLK_EN |
@@ -895,10 +930,13 @@ static int gc2145_start_streaming(struct gc2145 *gc2145,
 		goto err_rpm_put;
 	}
 
-	/* Perform MIPI specific configuration */
-	ret = gc2145_config_mipi_mode(gc2145, gc2145_format);
+	/* Perform interface specific configuration */
+	if (gc2145->ep.bus_type == V4L2_MBUS_CSI2_DPHY)
+		ret = gc2145_config_mipi_mode(gc2145, gc2145_format);
+	else
+		ret = gc2145_config_dvp_mode(gc2145, gc2145_format);
 	if (ret) {
-		dev_err(&client->dev, "%s failed to write mipi conf\n",
+		dev_err(&client->dev, "%s failed to write interface conf\n",
 			__func__);
 		goto err_rpm_put;
 	}
@@ -924,6 +962,9 @@ static void gc2145_stop_streaming(struct gc2145 *gc2145)
 			GC2145_CSI2_MODE_EN | GC2145_CSI2_MODE_MIPI_EN, 0,
 			&ret);
 	cci_write(gc2145->regmap, GC2145_REG_PAGE_SELECT, 0x00, &ret);
+
+	/* Disable dvp streaming */
+	cci_write(gc2145->regmap, GC2145_REG_PAD_IO, 0x00, &ret);
 	if (ret)
 		dev_err(&client->dev, "%s failed to write regs\n", __func__);
 
@@ -1233,9 +1274,8 @@ error:
 static int gc2145_check_hwcfg(struct device *dev)
 {
 	struct fwnode_handle *endpoint;
-	struct v4l2_fwnode_endpoint ep_cfg = {
-		.bus_type = V4L2_MBUS_CSI2_DPHY
-	};
+	struct v4l2_subdev *sd = dev_get_drvdata(dev);
+	struct gc2145 *gc2145 = to_gc2145(sd);
 	int ret;
 
 	endpoint = fwnode_graph_get_next_endpoint(dev_fwnode(dev), NULL);
@@ -1244,36 +1284,55 @@ static int gc2145_check_hwcfg(struct device *dev)
 		return -EINVAL;
 	}
 
-	ret = v4l2_fwnode_endpoint_alloc_parse(endpoint, &ep_cfg);
+	gc2145->ep.bus_type = V4L2_MBUS_CSI2_DPHY;
+	ret = v4l2_fwnode_endpoint_alloc_parse(endpoint, &gc2145->ep);
+	if (ret) {
+		gc2145->ep.bus_type = V4L2_MBUS_PARALLEL;
+		ret = v4l2_fwnode_endpoint_alloc_parse(endpoint, &gc2145->ep);
+	}
 	fwnode_handle_put(endpoint);
-	if (ret)
+	if (ret) {
+		dev_err(dev, "could not parse endpoint\n");
 		return ret;
+	}
 
-	/* Check the number of MIPI CSI2 data lanes */
-	if (ep_cfg.bus.mipi_csi2.num_data_lanes != 2) {
-		dev_err(dev, "only 2 data lanes are currently supported\n");
+	switch (gc2145->ep.bus_type) {
+	case V4L2_MBUS_CSI2_DPHY:
+		/* Check the number of MIPI CSI2 data lanes */
+		if (gc2145->ep.bus.mipi_csi2.num_data_lanes != 2) {
+			dev_err(dev, "only 2 data lanes are currently supported\n");
+			ret = -EINVAL;
+			goto out;
+		}
+
+		/* Check the link frequency set in device tree */
+		if (!gc2145->ep.nr_of_link_frequencies) {
+			dev_err(dev, "link-frequencies property not found in DT\n");
+			ret = -EINVAL;
+			goto out;
+		}
+
+		if (gc2145->ep.nr_of_link_frequencies != 3 ||
+		    gc2145->ep.link_frequencies[0] != GC2145_640_480_LINKFREQ ||
+		    gc2145->ep.link_frequencies[1] != GC2145_1280_720_LINKFREQ ||
+		    gc2145->ep.link_frequencies[2] != GC2145_1600_1200_LINKFREQ) {
+			dev_err(dev, "Invalid link-frequencies provided\n");
+			ret = -EINVAL;
+			goto out;
+		}
+		break;
+	case V4L2_MBUS_PARALLEL:
+		break;
+	default:
+		dev_err(dev, "unsupported bus type %u\n", gc2145->ep.bus_type);
 		ret = -EINVAL;
 		goto out;
 	}
 
-	/* Check the link frequency set in device tree */
-	if (!ep_cfg.nr_of_link_frequencies) {
-		dev_err(dev, "link-frequency property not found in DT\n");
-		ret = -EINVAL;
-		goto out;
-	}
-
-	if (ep_cfg.nr_of_link_frequencies != 3 ||
-	    ep_cfg.link_frequencies[0] != GC2145_640_480_LINKFREQ ||
-	    ep_cfg.link_frequencies[1] != GC2145_1280_720_LINKFREQ ||
-	    ep_cfg.link_frequencies[2] != GC2145_1600_1200_LINKFREQ) {
-		dev_err(dev, "Invalid link-frequencies provided\n");
-		ret = -EINVAL;
-	}
+	return 0;
 
 out:
-	v4l2_fwnode_endpoint_free(&ep_cfg);
-
+	v4l2_fwnode_endpoint_free(&gc2145->ep);
 	return ret;
 }
 
@@ -1421,6 +1480,7 @@ static void gc2145_remove(struct i2c_client *client)
 	if (!pm_runtime_status_suspended(&client->dev))
 		gc2145_power_off(&client->dev);
 	pm_runtime_set_suspended(&client->dev);
+	v4l2_fwnode_endpoint_free(&gc2145->ep);
 }
 
 static const struct of_device_id gc2145_dt_ids[] = {
