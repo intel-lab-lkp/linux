@@ -249,6 +249,7 @@ static int cpufreq_get_requested_power(struct thermal_cooling_device *cdev,
 			load = 0;
 
 		total_load += load;
+		i++;
 	}
 
 	cpufreq_cdev->last_load = total_load;
