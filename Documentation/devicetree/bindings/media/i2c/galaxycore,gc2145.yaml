@@ -61,8 +61,38 @@ properties:
         properties:
           link-frequencies: true
 
+          bus-type:
+            enum:
+              - 4 # CSI-2 D-PHY
+              - 5 # Parallel
+            default: 4
+
+          bus-width:
+            const: 8
+
+          hsync-active:
+            enum: [0, 1]
+            default: 1
+
+          vsync-active:
+            enum: [0, 1]
+            default: 1
+
+          pclk-sample:
+            enum: [0, 1]
+            default: 1
+
         required:
-          - link-frequencies
+          - bus-type
+
+        allOf:
+          - if:
+              properties:
+                bus-type:
+                  const: 4
+            then:
+              required:
+                - link-frequencies
 
     required:
       - endpoint
@@ -84,6 +114,7 @@ additionalProperties: false
 
 examples:
   - |
+    #include <dt-bindings/media/video-interfaces.h>
     #include <dt-bindings/gpio/gpio.h>
 
     i2c {
@@ -103,8 +134,40 @@ examples:
             port {
                 endpoint {
                     remote-endpoint = <&mipid02_0>;
+                    bus-type = <MEDIA_BUS_TYPE_CSI2_DPHY>;
                     data-lanes = <1 2>;
                     link-frequencies = /bits/ 64 <120000000 192000000 240000000>;
+                };
+            };
+        };
+    };
+
+  - |
+    #include <dt-bindings/media/video-interfaces.h>
+    #include <dt-bindings/gpio/gpio.h>
+
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        camera@3c {
+            compatible = "galaxycore,gc2145";
+            reg = <0x3c>;
+            clocks = <&clk_ext_camera>;
+            iovdd-supply = <&scmi_v3v3_sw>;
+            avdd-supply = <&scmi_v3v3_sw>;
+            dvdd-supply = <&scmi_v3v3_sw>;
+            powerdown-gpios = <&mcp23017 3 (GPIO_ACTIVE_LOW | GPIO_PUSH_PULL)>;
+            reset-gpios = <&mcp23017 4 (GPIO_ACTIVE_LOW | GPIO_PUSH_PULL)>;
+
+            port {
+                endpoint {
+                    remote-endpoint = <&parallel_from_gc2145>;
+                    bus-type = <MEDIA_BUS_TYPE_PARALLEL>;
+                    bus-width = <8>;
+                    hsync-active = <1>;
+                    vsync-active = <1>;
+                    pclk-sample = <1>;
                 };
             };
         };
