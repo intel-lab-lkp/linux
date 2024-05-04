@@ -913,7 +913,7 @@ static int vega10_hwmgr_backend_init(struct pp_hwmgr *hwmgr)
 
 	data->total_active_cus = adev->gfx.cu_info.number;
 	if (!hwmgr->not_vf)
-		return result;
+		return -EINVAL;
 
 	/* Setup default Overdrive Fan control settings */
 	data->odn_fan_table.target_fan_speed =
@@ -936,7 +936,7 @@ static int vega10_hwmgr_backend_init(struct pp_hwmgr *hwmgr)
 			"Mem Channel Index Exceeded maximum!",
 			return -EINVAL);
 
-	return result;
+	return 0;
 }
 
 static int vega10_init_sclk_threshold(struct pp_hwmgr *hwmgr)
