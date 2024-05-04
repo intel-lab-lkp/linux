@@ -116,6 +116,8 @@ static int dump_config_tree(snd_config_t *top)
 	if (snd_config_save(top, out))
 		ksft_exit_fail_msg("config save\n");
 	snd_output_close(out);
+
+	return err;
 }
 
 snd_config_t *conf_load_from_file(const char *filename)
