@@ -164,6 +164,7 @@ static const struct xe_graphics_desc graphics_xelpg = {
 	.dma_mask_size = 46, \
 	.has_asid = 1, \
 	.has_flat_ccs = 1, \
+	.has_indirect_ring_state = true, \
 	.has_range_tlb_invalidation = 1, \
 	.has_usm = 1, \
 	.va_bits = 48, \
