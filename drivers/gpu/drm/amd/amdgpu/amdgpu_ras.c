@@ -2807,7 +2807,7 @@ static void amdgpu_ras_do_page_retirement(struct work_struct *work)
 static void amdgpu_ras_poison_creation_handler(struct amdgpu_device *adev,
 				uint32_t timeout_ms)
 {
-	int ret = 0;
+	int ret;
 	struct ras_ecc_log_info *ecc_log;
 	struct ras_query_if info;
 	uint32_t timeout = timeout_ms;
@@ -2836,8 +2836,7 @@ static void amdgpu_ras_poison_creation_handler(struct amdgpu_device *adev,
 		return;
 	}
 
-	if (!ret)
-		schedule_delayed_work(&ras->page_retirement_dwork, 0);
+	schedule_delayed_work(&ras->page_retirement_dwork, 0);
 }
 
 static int amdgpu_ras_poison_consumption_handler(struct amdgpu_device *adev,
