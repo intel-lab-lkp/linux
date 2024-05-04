@@ -337,6 +337,9 @@ xfs_exchange_range_checks(
 	if (IS_SWAPFILE(inode1) || IS_SWAPFILE(inode2))
 		return -ETXTBSY;
 
+	if (fxr->file1_offset < 0 || fxr->file2_offset < 0)
+		return -EINVAL;
+
 	size1 = i_size_read(inode1);
 	size2 = i_size_read(inode2);
 
