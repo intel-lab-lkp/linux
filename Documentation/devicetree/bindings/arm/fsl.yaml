@@ -609,6 +609,12 @@ properties:
               - kobo,librah2o
           - const: fsl,imx6sll
 
+      - description: i.IMX6SLL Kobo Clara variants
+        items:
+          - const: kobo,clarahd-b # variant wit different regulator setup
+          - const: kobo,clarahd
+          - const: fsl,imx6sll
+
       - description: i.MX6SX based Boards
         items:
           - enum:
