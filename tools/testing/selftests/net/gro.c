@@ -110,7 +110,8 @@ static void setup_sock_filter(int fd)
 	const int dport_off = tcp_offset + offsetof(struct tcphdr, dest);
 	const int ethproto_off = offsetof(struct ethhdr, h_proto);
 	int optlen = 0;
-	int ipproto_off, opt_ipproto_off;
+	int ipproto_off;
+	int opt_ipproto_off = 0;
 	int next_off;
 
 	if (proto == PF_INET)
