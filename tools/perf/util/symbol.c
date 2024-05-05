@@ -1266,7 +1266,24 @@ static int kcore_mapfn(u64 start, u64 len, u64 pgoff, void *data)
 	map__set_end(list_node->map, map__start(list_node->map) + len);
 	map__set_pgoff(list_node->map, pgoff);
 
-	list_add(&list_node->node, &md->maps);
+	/*
+	 * Kcore maps are ordered with:
+	 *   [_text.._end): Kernel text section
+	 *   [VMALLOC_START..VMALLOC_END): vmalloc
+	 *   ...
+	 *
+	 * On Arm64, the '_text' and 'VMALLOC_START' are the same values
+	 * but VMALLOC_END (~124TiB) is much bigger then the text end
+	 * address. So '_text' region is the subset of the vmalloc region.
+	 *
+	 * Afterwards, when dso__load_kcore() adjusts kernel maps, we must
+	 * process the kernel text size prior to handling vmalloc region.
+	 * This can avoid to using any inaccurate kernel text size when
+	 * extending maps with vmalloc region. For this reason, here it
+	 * always adds kcore maps to the tail of list to make sure the
+	 * sequential handling is in order.
+	 */
+	list_add_tail(&list_node->node, &md->maps);
 
 	return 0;
 }
