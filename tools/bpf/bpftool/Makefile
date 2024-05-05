@@ -133,6 +133,10 @@ CFLAGS += -DUSE_LIBCAP
 LIBS += -lcap
 endif
 
+ifneq ($(LLVM),)
+    CFLAGS += -Wno-unused-command-line-argument
+endif
+
 include $(wildcard $(OUTPUT)*.d)
 
 all: $(OUTPUT)bpftool
