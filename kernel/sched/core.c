@@ -5134,6 +5134,65 @@ static inline void balance_callbacks(struct rq *rq, struct balance_callback *hea
 
 #endif
 
+static inline void update_cpufreq_ctx_switch(struct rq *rq, struct task_struct *prev)
+{
+#ifdef CONFIG_CPU_FREQ
+	unsigned int flags = 0;
+
+#ifdef CONFIG_SMP
+	if (unlikely(current->sched_class == &stop_sched_class))
+		return;
+#endif
+
+	if (unlikely(current->sched_class == &idle_sched_class))
+		return;
+
+	if (unlikely(task_has_idle_policy(current)))
+		return;
+
+	if (likely(fair_policy(current->policy))) {
+
+		if (unlikely(current->in_iowait)) {
+			flags |= SCHED_CPUFREQ_IOWAIT | SCHED_CPUFREQ_FORCE_UPDATE;
+			goto force_update;
+		}
+
+#ifdef CONFIG_SMP
+		/*
+		 * Allow cpufreq updates once for every update_load_avg() decay.
+		 */
+		if (unlikely(rq->cfs.decayed)) {
+			rq->cfs.decayed = false;
+			goto force_update;
+		}
+#endif
+		return;
+	}
+
+	/*
+	 * RT and DL should always send a freq update. But we can do some
+	 * simple checks to avoid it when we know it's not necessary.
+	 */
+	if (rt_task(current) && rt_task(prev)) {
+#ifdef CONFIG_UCLAMP_TASK
+		unsigned long curr_uclamp_min = uclamp_eff_value(current, UCLAMP_MIN);
+		unsigned long prev_uclamp_min = uclamp_eff_value(prev, UCLAMP_MIN);
+
+		if (curr_uclamp_min == prev_uclamp_min)
+#endif
+			return;
+	} else if (dl_task(current) && current->dl.flags & SCHED_FLAG_SUGOV) {
+		/* Ignore sugov kthreads, they're responding to our requests */
+		return;
+	}
+
+	flags |= SCHED_CPUFREQ_FORCE_UPDATE;
+
+force_update:
+	cpufreq_update_util(rq, flags);
+#endif
+}
+
 static inline void
 prepare_lock_switch(struct rq *rq, struct task_struct *next, struct rq_flags *rf)
 {
@@ -5151,7 +5210,7 @@ prepare_lock_switch(struct rq *rq, struct task_struct *next, struct rq_flags *rf
 #endif
 }
 
-static inline void finish_lock_switch(struct rq *rq)
+static inline void finish_lock_switch(struct rq *rq, struct task_struct *prev)
 {
 	/*
 	 * If we are tracking spinlock dependencies then we have to
@@ -5160,6 +5219,11 @@ static inline void finish_lock_switch(struct rq *rq)
 	 */
 	spin_acquire(&__rq_lockp(rq)->dep_map, 0, 0, _THIS_IP_);
 	__balance_callbacks(rq);
+	/*
+	 * Request freq update after __balance_callbacks to take into account
+	 * any changes to rq.
+	 */
+	update_cpufreq_ctx_switch(rq, prev);
 	raw_spin_rq_unlock_irq(rq);
 }
 
@@ -5278,7 +5342,7 @@ static struct rq *finish_task_switch(struct task_struct *prev)
 	perf_event_task_sched_in(prev, current);
 	finish_task(prev);
 	tick_nohz_task_switch();
-	finish_lock_switch(rq);
+	finish_lock_switch(rq, prev);
 	finish_arch_post_lock_switch();
 	kcov_finish_switch(current);
 	/*
