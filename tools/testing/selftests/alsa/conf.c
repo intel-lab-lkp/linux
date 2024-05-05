@@ -105,19 +105,6 @@ static struct card_cfg_data *conf_data_by_card(int card, bool msg)
 	return NULL;
 }
 
-static int dump_config_tree(snd_config_t *top)
-{
-	snd_output_t *out;
-	int err;
-
-	err = snd_output_stdio_attach(&out, stdout, 0);
-	if (err < 0)
-		ksft_exit_fail_msg("stdout attach\n");
-	if (snd_config_save(top, out))
-		ksft_exit_fail_msg("config save\n");
-	snd_output_close(out);
-}
-
 snd_config_t *conf_load_from_file(const char *filename)
 {
 	snd_config_t *dst;
