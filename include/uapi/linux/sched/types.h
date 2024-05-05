@@ -116,6 +116,9 @@ struct sched_attr {
 	__u32 sched_util_min;
 	__u32 sched_util_max;
 
+	/* Latency sensitive flag */
+	__u32 sched_latency_sensi_flag;
+
 };
 
 #endif /* _UAPI_LINUX_SCHED_TYPES_H */

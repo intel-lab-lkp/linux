@@ -7763,6 +7763,9 @@ recheck:
 			return retval;
 	}
 
+	if (attr->sched_latency_sensi_flag > 1)
+		return -EINVAL;
+
 	/*
 	 * SCHED_DEADLINE bandwidth accounting relies on stable cpusets
 	 * information.
@@ -7804,6 +7807,8 @@ recheck:
 		if (attr->sched_flags & SCHED_FLAG_UTIL_CLAMP)
 			goto change;
 
+		if (attr->sched_flags & SCHED_FLAG_LATENCY_SENSITIVE)
+			p->latency_sensi_flag = attr->sched_latency_sensi_flag;
 		p->sched_reset_on_fork = reset_on_fork;
 		retval = 0;
 		goto unlock;
@@ -7907,6 +7912,9 @@ change:
 		set_next_task(rq, p);
 
 	check_class_changed(rq, p, prev_class, oldprio);
+
+	if (attr->sched_flags & SCHED_FLAG_LATENCY_SENSITIVE)
+		p->latency_sensi_flag = attr->sched_latency_sensi_flag;
 
 	/* Avoid rq from going away on us: */
 	preempt_disable();
@@ -8313,6 +8321,10 @@ SYSCALL_DEFINE4(sched_getattr, pid_t, pid, struct sched_attr __user *, uattr,
 			kattr.sched_flags |= SCHED_FLAG_RESET_ON_FORK;
 		get_params(p, &kattr);
 		kattr.sched_flags &= SCHED_FLAG_ALL;
+
+		kattr.sched_latency_sensi_flag = p->latency_sensi_flag;
+		if (kattr.sched_latency_sensi_flag)
+			kattr.sched_flags |= SCHED_FLAG_LATENCY_SENSITIVE;
 
 #ifdef CONFIG_UCLAMP_TASK
 		/*

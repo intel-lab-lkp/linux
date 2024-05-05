@@ -226,10 +226,10 @@ void __local_bh_enable_ip(unsigned long ip, unsigned int cnt)
 		goto out;
 
 	/*
-	 * If this was called from non preemptible context, wake up the
-	 * softirq daemon.
+	 * If this was called from non preemptible context, or current task is
+	 * sensitive to running latency, wake up the softirq daemon.
 	 */
-	if (!preempt_on) {
+	if (!preempt_on || current->latency_sensi_flag) {
 		wakeup_softirqd();
 		goto out;
 	}
@@ -375,11 +375,15 @@ void __local_bh_enable_ip(unsigned long ip, unsigned int cnt)
 	__preempt_count_sub(cnt - 1);
 
 	if (unlikely(!in_interrupt() && local_softirq_pending())) {
-		/*
-		 * Run softirq if any pending. And do it in its own stack
-		 * as we may be calling this deep in a task call stack already.
-		 */
-		do_softirq();
+		/* If task is sensitive to running latency, only wake up the softirq daemon. */
+		if (current->latency_sensi_flag)
+			wakeup_softirqd();
+		else
+			/*
+			 * Run softirq if any pending. And do it in its own stack
+			 * as we may be calling this deep in a task call stack already.
+			 */
+			do_softirq();
 	}
 
 	preempt_count_dec();
