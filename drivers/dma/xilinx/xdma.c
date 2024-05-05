@@ -61,6 +61,8 @@ struct xdma_desc_block {
  * @dir: Transferring direction of the channel
  * @cfg: Transferring config of the channel
  * @irq: IRQ assigned to the channel
+ * @last_interrupt: Completion variable to signal the last interrupt
+ * @stop_requested: Stop Requested flag of the channel
  */
 struct xdma_chan {
 	struct virt_dma_chan		vchan;
