@@ -244,12 +244,15 @@ rpcrdma_cm_event_handler(struct rdma_cm_id *id, struct rdma_cm_event *event)
 	case RDMA_CM_EVENT_DEVICE_REMOVAL:
 		pr_info("rpcrdma: removing device %s for %pISpc\n",
 			ep->re_id->device->name, sap);
-		fallthrough;
+		ep->re_connect_status = -ENODEV;
+		wake_up_all(&ep->re_connect_wait);
+		goto disconnected;
 	case RDMA_CM_EVENT_ADDR_CHANGE:
 		ep->re_connect_status = -ENODEV;
 		goto disconnected;
 	case RDMA_CM_EVENT_ESTABLISHED:
 		rpcrdma_ep_get(ep);
+		ep->re_connect_ref = true;
 		ep->re_connect_status = 1;
 		rpcrdma_update_cm_private(ep, &event->param.conn);
 		trace_xprtrdma_inline_thresh(ep);
@@ -272,7 +275,9 @@ wake_connect_worker:
 		ep->re_connect_status = -ECONNABORTED;
 disconnected:
 		rpcrdma_force_disconnect(ep);
-		return rpcrdma_ep_put(ep);
+		if (ep->re_connect_ref)
+			return rpcrdma_ep_put(ep);
+		return 0;
 	default:
 		break;
 	}
