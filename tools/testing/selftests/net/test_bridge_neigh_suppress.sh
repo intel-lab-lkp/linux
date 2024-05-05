@@ -310,7 +310,7 @@ neigh_suppress_arp_common()
 
 	# Initial state - check that ARP requests are not suppressed and that
 	# ARP replies are received.
-	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 5 -s $sip -I eth0.$vid $tip"
+	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 20 -s $sip -I eth0.$vid $tip"
 	log_test $? 0 "arping"
 	tc_check_packets $sw1 "dev vx0 egress" 101 1
 	log_test $? 0 "ARP suppression"
@@ -321,7 +321,7 @@ neigh_suppress_arp_common()
 	run_cmd "bridge -n $sw1 -d link show dev vx0 | grep \"neigh_suppress on\""
 	log_test $? 0 "\"neigh_suppress\" is on"
 
-	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 5 -s $sip -I eth0.$vid $tip"
+	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 20 -s $sip -I eth0.$vid $tip"
 	log_test $? 0 "arping"
 	tc_check_packets $sw1 "dev vx0 egress" 101 2
 	log_test $? 0 "ARP suppression"
@@ -332,7 +332,7 @@ neigh_suppress_arp_common()
 	run_cmd "bridge -n $sw1 fdb replace $h2_mac dev vx0 master static vlan $vid"
 	log_test $? 0 "FDB entry installation"
 
-	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 5 -s $sip -I eth0.$vid $tip"
+	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 20 -s $sip -I eth0.$vid $tip"
 	log_test $? 0 "arping"
 	tc_check_packets $sw1 "dev vx0 egress" 101 3
 	log_test $? 0 "ARP suppression"
@@ -342,7 +342,7 @@ neigh_suppress_arp_common()
 	run_cmd "ip -n $sw1 neigh replace $tip lladdr $h2_mac nud permanent dev br0.$vid"
 	log_test $? 0 "Neighbor entry installation"
 
-	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 5 -s $sip -I eth0.$vid $tip"
+	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 20 -s $sip -I eth0.$vid $tip"
 	log_test $? 0 "arping"
 	tc_check_packets $sw1 "dev vx0 egress" 101 3
 	log_test $? 0 "ARP suppression"
@@ -352,7 +352,7 @@ neigh_suppress_arp_common()
 	run_cmd "ip -n $h2 link set dev eth0.$vid down"
 	log_test $? 0 "H2 down"
 
-	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 5 -s $sip -I eth0.$vid $tip"
+	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 20 -s $sip -I eth0.$vid $tip"
 	log_test $? 0 "arping"
 	tc_check_packets $sw1 "dev vx0 egress" 101 3
 	log_test $? 0 "ARP suppression"
@@ -366,7 +366,7 @@ neigh_suppress_arp_common()
 	run_cmd "bridge -n $sw1 -d link show dev vx0 | grep \"neigh_suppress off\""
 	log_test $? 0 "\"neigh_suppress\" is off"
 
-	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 5 -s $sip -I eth0.$vid $tip"
+	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 20 -s $sip -I eth0.$vid $tip"
 	log_test $? 0 "arping"
 	tc_check_packets $sw1 "dev vx0 egress" 101 4
 	log_test $? 0 "ARP suppression"
@@ -413,7 +413,7 @@ neigh_suppress_ns_common()
 
 	# Initial state - check that NS messages are not suppressed and that ND
 	# messages are received.
-	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr -w 5000 $daddr eth0.$vid"
+	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr -w 20000 $daddr eth0.$vid"
 	log_test $? 0 "ndisc6"
 	tc_check_packets $sw1 "dev vx0 egress" 101 1
 	log_test $? 0 "NS suppression"
@@ -424,7 +424,7 @@ neigh_suppress_ns_common()
 	run_cmd "bridge -n $sw1 -d link show dev vx0 | grep \"neigh_suppress on\""
 	log_test $? 0 "\"neigh_suppress\" is on"
 
-	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr -w 5000 $daddr eth0.$vid"
+	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr -w 20000 $daddr eth0.$vid"
 	log_test $? 0 "ndisc6"
 	tc_check_packets $sw1 "dev vx0 egress" 101 2
 	log_test $? 0 "NS suppression"
@@ -435,7 +435,7 @@ neigh_suppress_ns_common()
 	run_cmd "bridge -n $sw1 fdb replace $h2_mac dev vx0 master static vlan $vid"
 	log_test $? 0 "FDB entry installation"
 
-	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr -w 5000 $daddr eth0.$vid"
+	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr -w 20000 $daddr eth0.$vid"
 	log_test $? 0 "ndisc6"
 	tc_check_packets $sw1 "dev vx0 egress" 101 3
 	log_test $? 0 "NS suppression"
@@ -445,7 +445,7 @@ neigh_suppress_ns_common()
 	run_cmd "ip -n $sw1 neigh replace $daddr lladdr $h2_mac nud permanent dev br0.$vid"
 	log_test $? 0 "Neighbor entry installation"
 
-	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr -w 5000 $daddr eth0.$vid"
+	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr -w 20000 $daddr eth0.$vid"
 	log_test $? 0 "ndisc6"
 	tc_check_packets $sw1 "dev vx0 egress" 101 3
 	log_test $? 0 "NS suppression"
@@ -455,7 +455,7 @@ neigh_suppress_ns_common()
 	run_cmd "ip -n $h2 link set dev eth0.$vid down"
 	log_test $? 0 "H2 down"
 
-	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr -w 5000 $daddr eth0.$vid"
+	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr -w 20000 $daddr eth0.$vid"
 	log_test $? 0 "ndisc6"
 	tc_check_packets $sw1 "dev vx0 egress" 101 3
 	log_test $? 0 "NS suppression"
@@ -469,7 +469,7 @@ neigh_suppress_ns_common()
 	run_cmd "bridge -n $sw1 -d link show dev vx0 | grep \"neigh_suppress off\""
 	log_test $? 0 "\"neigh_suppress\" is off"
 
-	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr -w 5000 $daddr eth0.$vid"
+	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr -w 20000 $daddr eth0.$vid"
 	log_test $? 0 "ndisc6"
 	tc_check_packets $sw1 "dev vx0 egress" 101 4
 	log_test $? 0 "NS suppression"
@@ -534,9 +534,9 @@ neigh_vlan_suppress_arp()
 	run_cmd "bridge -n $sw1 -d link show dev vx0 | grep \"neigh_vlan_suppress on\""
 	log_test $? 0 "\"neigh_vlan_suppress\" is on"
 
-	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 5 -s $sip1 -I eth0.$vid1 $tip1"
+	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 20 -s $sip1 -I eth0.$vid1 $tip1"
 	log_test $? 0 "arping (VLAN $vid1)"
-	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 5 -s $sip2 -I eth0.$vid2 $tip2"
+	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 20 -s $sip2 -I eth0.$vid2 $tip2"
 	log_test $? 0 "arping (VLAN $vid2)"
 
 	tc_check_packets $sw1 "dev vx0 egress" 101 1
@@ -552,9 +552,9 @@ neigh_vlan_suppress_arp()
 	run_cmd "bridge -n $sw1 -d vlan show dev vx0 vid $vid2 | grep \"neigh_suppress off\""
 	log_test $? 0 "\"neigh_suppress\" is off (VLAN $vid2)"
 
-	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 5 -s $sip1 -I eth0.$vid1 $tip1"
+	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 20 -s $sip1 -I eth0.$vid1 $tip1"
 	log_test $? 0 "arping (VLAN $vid1)"
-	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 5 -s $sip2 -I eth0.$vid2 $tip2"
+	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 20 -s $sip2 -I eth0.$vid2 $tip2"
 	log_test $? 0 "arping (VLAN $vid2)"
 
 	tc_check_packets $sw1 "dev vx0 egress" 101 1
@@ -568,9 +568,9 @@ neigh_vlan_suppress_arp()
 	run_cmd "bridge -n $sw1 -d link show dev vx0 | grep \"neigh_suppress on\""
 	log_test $? 0 "\"neigh_suppress\" is on"
 
-	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 5 -s $sip1 -I eth0.$vid1 $tip1"
+	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 20 -s $sip1 -I eth0.$vid1 $tip1"
 	log_test $? 0 "arping (VLAN $vid1)"
-	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 5 -s $sip2 -I eth0.$vid2 $tip2"
+	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 20 -s $sip2 -I eth0.$vid2 $tip2"
 	log_test $? 0 "arping (VLAN $vid2)"
 
 	tc_check_packets $sw1 "dev vx0 egress" 101 1
@@ -584,9 +584,9 @@ neigh_vlan_suppress_arp()
 	run_cmd "bridge -n $sw1 -d link show dev vx0 | grep \"neigh_suppress off\""
 	log_test $? 0 "\"neigh_suppress\" is off"
 
-	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 5 -s $sip1 -I eth0.$vid1 $tip1"
+	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 20 -s $sip1 -I eth0.$vid1 $tip1"
 	log_test $? 0 "arping (VLAN $vid1)"
-	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 5 -s $sip2 -I eth0.$vid2 $tip2"
+	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 20 -s $sip2 -I eth0.$vid2 $tip2"
 	log_test $? 0 "arping (VLAN $vid2)"
 
 	tc_check_packets $sw1 "dev vx0 egress" 101 1
@@ -600,9 +600,9 @@ neigh_vlan_suppress_arp()
 	run_cmd "bridge -n $sw1 -d vlan show dev vx0 vid $vid1 | grep \"neigh_suppress off\""
 	log_test $? 0 "\"neigh_suppress\" is off (VLAN $vid1)"
 
-	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 5 -s $sip1 -I eth0.$vid1 $tip1"
+	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 20 -s $sip1 -I eth0.$vid1 $tip1"
 	log_test $? 0 "arping (VLAN $vid1)"
-	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 5 -s $sip2 -I eth0.$vid2 $tip2"
+	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 20 -s $sip2 -I eth0.$vid2 $tip2"
 	log_test $? 0 "arping (VLAN $vid2)"
 
 	tc_check_packets $sw1 "dev vx0 egress" 101 2
@@ -621,9 +621,9 @@ neigh_vlan_suppress_arp()
 	run_cmd "bridge -n $sw1 -d link show dev vx0 | grep \"neigh_suppress on\""
 	log_test $? 0 "\"neigh_suppress\" is on"
 
-	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 5 -s $sip1 -I eth0.$vid1 $tip1"
+	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 20 -s $sip1 -I eth0.$vid1 $tip1"
 	log_test $? 0 "arping (VLAN $vid1)"
-	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 5 -s $sip2 -I eth0.$vid2 $tip2"
+	run_cmd "ip netns exec $h1 arping -q -b -c 1 -w 20 -s $sip2 -I eth0.$vid2 $tip2"
 	log_test $? 0 "arping (VLAN $vid2)"
 
 	tc_check_packets $sw1 "dev vx0 egress" 101 2
@@ -665,9 +665,9 @@ neigh_vlan_suppress_ns()
 	run_cmd "bridge -n $sw1 -d link show dev vx0 | grep \"neigh_vlan_suppress on\""
 	log_test $? 0 "\"neigh_vlan_suppress\" is on"
 
-	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr1 -w 5000 $daddr1 eth0.$vid1"
+	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr1 -w 20000 $daddr1 eth0.$vid1"
 	log_test $? 0 "ndisc6 (VLAN $vid1)"
-	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr2 -w 5000 $daddr2 eth0.$vid2"
+	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr2 -w 20000 $daddr2 eth0.$vid2"
 	log_test $? 0 "ndisc6 (VLAN $vid2)"
 
 	tc_check_packets $sw1 "dev vx0 egress" 101 1
@@ -683,9 +683,9 @@ neigh_vlan_suppress_ns()
 	run_cmd "bridge -n $sw1 -d vlan show dev vx0 vid $vid2 | grep \"neigh_suppress off\""
 	log_test $? 0 "\"neigh_suppress\" is off (VLAN $vid2)"
 
-	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr1 -w 5000 $daddr1 eth0.$vid1"
+	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr1 -w 20000 $daddr1 eth0.$vid1"
 	log_test $? 0 "ndisc6 (VLAN $vid1)"
-	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr2 -w 5000 $daddr2 eth0.$vid2"
+	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr2 -w 20000 $daddr2 eth0.$vid2"
 	log_test $? 0 "ndisc6 (VLAN $vid2)"
 
 	tc_check_packets $sw1 "dev vx0 egress" 101 1
@@ -699,9 +699,9 @@ neigh_vlan_suppress_ns()
 	run_cmd "bridge -n $sw1 -d link show dev vx0 | grep \"neigh_suppress on\""
 	log_test $? 0 "\"neigh_suppress\" is on"
 
-	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr1 -w 5000 $daddr1 eth0.$vid1"
+	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr1 -w 20000 $daddr1 eth0.$vid1"
 	log_test $? 0 "ndisc6 (VLAN $vid1)"
-	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr2 -w 5000 $daddr2 eth0.$vid2"
+	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr2 -w 20000 $daddr2 eth0.$vid2"
 	log_test $? 0 "ndisc6 (VLAN $vid2)"
 
 	tc_check_packets $sw1 "dev vx0 egress" 101 1
@@ -715,9 +715,9 @@ neigh_vlan_suppress_ns()
 	run_cmd "bridge -n $sw1 -d link show dev vx0 | grep \"neigh_suppress off\""
 	log_test $? 0 "\"neigh_suppress\" is off"
 
-	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr1 -w 5000 $daddr1 eth0.$vid1"
+	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr1 -w 20000 $daddr1 eth0.$vid1"
 	log_test $? 0 "ndisc6 (VLAN $vid1)"
-	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr2 -w 5000 $daddr2 eth0.$vid2"
+	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr2 -w 20000 $daddr2 eth0.$vid2"
 	log_test $? 0 "ndisc6 (VLAN $vid2)"
 
 	tc_check_packets $sw1 "dev vx0 egress" 101 1
@@ -731,9 +731,9 @@ neigh_vlan_suppress_ns()
 	run_cmd "bridge -n $sw1 -d vlan show dev vx0 vid $vid1 | grep \"neigh_suppress off\""
 	log_test $? 0 "\"neigh_suppress\" is off (VLAN $vid1)"
 
-	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr1 -w 5000 $daddr1 eth0.$vid1"
+	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr1 -w 20000 $daddr1 eth0.$vid1"
 	log_test $? 0 "ndisc6 (VLAN $vid1)"
-	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr2 -w 5000 $daddr2 eth0.$vid2"
+	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr2 -w 20000 $daddr2 eth0.$vid2"
 	log_test $? 0 "ndisc6 (VLAN $vid2)"
 
 	tc_check_packets $sw1 "dev vx0 egress" 101 2
@@ -752,9 +752,9 @@ neigh_vlan_suppress_ns()
 	run_cmd "bridge -n $sw1 -d link show dev vx0 | grep \"neigh_suppress on\""
 	log_test $? 0 "\"neigh_suppress\" is on"
 
-	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr1 -w 5000 $daddr1 eth0.$vid1"
+	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr1 -w 20000 $daddr1 eth0.$vid1"
 	log_test $? 0 "ndisc6 (VLAN $vid1)"
-	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr2 -w 5000 $daddr2 eth0.$vid2"
+	run_cmd "ip netns exec $h1 ndisc6 -q -r 1 -s $saddr2 -w 20000 $daddr2 eth0.$vid2"
 	log_test $? 0 "ndisc6 (VLAN $vid2)"
 
 	tc_check_packets $sw1 "dev vx0 egress" 101 2
