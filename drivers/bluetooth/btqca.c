@@ -108,10 +108,8 @@ static int qca_read_fw_build_info(struct hci_dev *hdev)
 		return err;
 	}
 
-	if (skb->len < sizeof(*edl)) {
-		err = -EILSEQ;
-		goto out;
-	}
+	if (skb->len < sizeof(*edl))
+		goto e_ilseq;
 
 	edl = (struct edl_event_hdr *)(skb->data);
 
@@ -123,17 +121,13 @@ static int qca_read_fw_build_info(struct hci_dev *hdev)
 		goto out;
 	}
 
-	if (skb->len < sizeof(*edl) + 1) {
-		err = -EILSEQ;
-		goto out;
-	}
+	if (skb->len < sizeof(*edl) + 1)
+		goto e_ilseq;
 
 	build_lbl_len = edl->data[0];
 
-	if (skb->len < sizeof(*edl) + 1 + build_lbl_len) {
-		err = -EILSEQ;
-		goto out;
-	}
+	if (skb->len < sizeof(*edl) + 1 + build_lbl_len)
+		goto e_ilseq;
 
 	build_label = kstrndup(&edl->data[1], build_lbl_len, GFP_KERNEL);
 	if (!build_label)
@@ -145,6 +139,10 @@ static int qca_read_fw_build_info(struct hci_dev *hdev)
 out:
 	kfree_skb(skb);
 	return err;
+
+e_ilseq:
+	err = -EILSEQ;
+	goto out;
 }
 
 static int qca_send_patch_config_cmd(struct hci_dev *hdev)
@@ -224,8 +222,7 @@ static int qca_read_fw_board_id(struct hci_dev *hdev, u16 *bid)
 	edl = skb_pull_data(skb, sizeof(*edl));
 	if (!edl) {
 		bt_dev_err(hdev, "QCA read board ID with no header");
-		err = -EILSEQ;
-		goto out;
+		goto e_ilseq;
 	}
 
 	if (edl->cresp != EDL_CMD_REQ_RES_EVT ||
@@ -235,10 +232,8 @@ static int qca_read_fw_board_id(struct hci_dev *hdev, u16 *bid)
 		goto out;
 	}
 
-	if (skb->len < 3) {
-		err = -EILSEQ;
-		goto out;
-	}
+	if (skb->len < 3)
+		goto e_ilseq;
 
 	*bid = (edl->data[1] << 8) + edl->data[2];
 	bt_dev_dbg(hdev, "%s: bid = %x", __func__, *bid);
@@ -246,6 +241,10 @@ static int qca_read_fw_board_id(struct hci_dev *hdev, u16 *bid)
 out:
 	kfree_skb(skb);
 	return err;
+
+e_ilseq:
+	err = -EILSEQ;
+	goto out;
 }
 
 int qca_send_pre_shutdown_cmd(struct hci_dev *hdev)
