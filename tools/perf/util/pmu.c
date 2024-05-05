@@ -1761,7 +1761,7 @@ static char *format_alias(char *buf, int len, const struct perf_pmu *pmu,
 {
 	struct parse_events_term *term;
 	int pmu_name_len = skip_duplicate_pmus
-		? pmu_name_len_no_suffix(pmu->name, /*num=*/NULL)
+		? pmu_name_len_no_suffix(pmu->name)
 		: (int)strlen(pmu->name);
 	int used = snprintf(buf, len, "%.*s/%s", pmu_name_len, pmu->name, alias->name);
 
@@ -1805,7 +1805,7 @@ int perf_pmu__for_each_event(struct perf_pmu *pmu, bool skip_duplicate_pmus,
 
 		info.pmu_name = event->pmu_name ?: pmu->name;
 		pmu_name_len = skip_duplicate_pmus
-			? pmu_name_len_no_suffix(info.pmu_name, /*num=*/NULL)
+			? pmu_name_len_no_suffix(info.pmu_name)
 			: (int)strlen(info.pmu_name);
 		info.alias = NULL;
 		if (event->desc) {
