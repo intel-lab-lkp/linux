@@ -882,11 +882,7 @@ __irq_get_desc_lock(unsigned int irq, unsigned long *flags, bool bus,
 
 	if (desc) {
 		if (check & _IRQ_DESC_CHECK) {
-			if ((check & _IRQ_DESC_PERCPU) &&
-			    !irq_settings_is_per_cpu_devid(desc))
-				return NULL;
-
-			if (!(check & _IRQ_DESC_PERCPU) &&
+			if (!!(check & _IRQ_DESC_PERCPU) !=
 			    irq_settings_is_per_cpu_devid(desc))
 				return NULL;
 		}
