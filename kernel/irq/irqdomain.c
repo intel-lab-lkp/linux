@@ -1613,21 +1613,14 @@ int irq_domain_push_irq(struct irq_domain *domain, int virq, void *arg)
 	 * to deadlock, so we just do a simple check before starting.
 	 */
 	desc = irq_to_desc(virq);
-	if (!desc)
+	if (!desc || !domain || !irq_data)
 		return -EINVAL;
+
 	if (WARN_ON(desc->action))
 		return -EBUSY;
 
-	if (domain == NULL)
-		return -EINVAL;
-
-	if (WARN_ON(!irq_domain_is_hierarchy(domain)))
-		return -EINVAL;
-
-	if (!irq_data)
-		return -EINVAL;
-
-	if (domain->parent != irq_data->domain)
+	if (WARN_ON(!irq_domain_is_hierarchy(domain)) ||
+	    domain->parent != irq_data->domain)
 		return -EINVAL;
 
 	parent_irq_data = kzalloc_node(sizeof(*parent_irq_data), GFP_KERNEL,
@@ -1694,16 +1687,10 @@ int irq_domain_pop_irq(struct irq_domain *domain, int virq)
 	 * deadlock, so we just do a simple check before starting.
 	 */
 	desc = irq_to_desc(virq);
-	if (!desc)
+	if (!desc || !domain || !irq_data)
 		return -EINVAL;
 	if (WARN_ON(desc->action))
 		return -EBUSY;
-
-	if (domain == NULL)
-		return -EINVAL;
-
-	if (!irq_data)
-		return -EINVAL;
 
 	tmp_irq_data = irq_domain_get_irq_data(domain, virq);
 
