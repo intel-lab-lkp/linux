@@ -32,7 +32,7 @@ struct max77620_therm_info {
 
 /**
  * max77620_thermal_read_temp: Read PMIC die temperatue.
- * @data:	Device specific data.
+ * @tz:		Device specific data.
  * @temp:	Temperature in millidegrees Celsius
  *
  * The actual temperature of PMIC die is not available from PMIC.
