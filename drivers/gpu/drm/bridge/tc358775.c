@@ -675,18 +675,12 @@ static int tc_probe(struct i2c_client *client)
 		return ret;
 
 	tc->vddio = devm_regulator_get(dev, "vddio");
-	if (IS_ERR(tc->vddio)) {
-		ret = PTR_ERR(tc->vddio);
-		dev_err(dev, "vddio-supply not found\n");
-		return ret;
-	}
+	if (IS_ERR(tc->vddio))
+		return PTR_ERR(tc->vddio);
 
 	tc->vdd = devm_regulator_get(dev, "vdd");
-	if (IS_ERR(tc->vdd)) {
-		ret = PTR_ERR(tc->vdd);
-		dev_err(dev, "vdd-supply not found\n");
-		return ret;
-	}
+	if (IS_ERR(tc->vdd))
+		return PTR_ERR(tc->vdd);
 
 	tc->stby_gpio = devm_gpiod_get_optional(dev, "stby", GPIOD_OUT_HIGH);
 	if (IS_ERR(tc->stby_gpio))
