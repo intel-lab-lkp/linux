@@ -349,6 +349,7 @@ config DRM_TOSHIBA_TC358775
 	select REGMAP_I2C
 	select DRM_PANEL
 	select DRM_MIPI_DSI
+	select GENERIC_PHY_MIPI_DPHY
 	help
 	  Toshiba TC358775 DSI/LVDS bridge chip driver.
 

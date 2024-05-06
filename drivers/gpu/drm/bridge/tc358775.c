@@ -19,6 +19,7 @@
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
+#include <linux/phy/phy-mipi-dphy.h>
 
 #include <asm/unaligned.h>
 
@@ -49,12 +50,14 @@
 
 /* DSI PPI Layer Registers */
 #define PPI_STARTPPI    0x0104  /* START control bit of PPI-TX function. */
-#define PPI_START_FUNCTION      1
+#define PPI_STARTPPI_STARTPPI	BIT(0)
 
 #define PPI_BUSYPPI     0x0108
 #define PPI_LINEINITCNT 0x0110  /* Line Initialization Wait Counter  */
 #define PPI_LPTXTIMECNT 0x0114
 #define PPI_LANEENABLE  0x0134  /* Enables each lane at the PPI layer. */
+#define LANEENABLE_CLEN	BIT(0)
+#define LANEENABLE_L0EN	BIT(1)
 #define PPI_TX_RX_TA    0x013C  /* DSI Bus Turn Around timing parameters */
 
 /* Analog timer function enable */
@@ -89,10 +92,7 @@
 #define PPI_CLRSIPO     0x01E4  /* Clear SIPO values, Slave mode use only. */
 #define HSTIMEOUT       0x01F0  /* HS Rx Time Out Counter */
 #define HSTIMEOUTENABLE 0x01F4  /* Enable HS Rx Time Out Counter */
-#define DSI_STARTDSI    0x0204  /* START control bit of DSI-TX function */
-#define DSI_RX_START	1
 
-#define DSI_BUSYDSI     0x0208
 #define DSI_LANEENABLE  0x0210  /* Enables each lane at the Protocol layer. */
 #define DSI_LANESTATUS0 0x0214  /* Displays lane is in HS RX mode. */
 #define DSI_LANESTATUS1 0x0218  /* Displays lane is in ULPS or STOP state */
@@ -174,20 +174,11 @@ enum {
 /* Chip ID and Revision ID Register */
 #define IDREG           0x0580
 
-#define LPX_PERIOD		4
-#define TTA_GET			0x40000
-#define TTA_SURE		6
-#define SINGLE_LINK		1
-#define DUAL_LINK		2
-
 #define TC358775XBG_ID  0x00007500
 
 /* Debug Registers */
 #define DEBUG00         0x05A0  /* Debug */
 #define DEBUG01         0x05A4  /* LVDS Data */
-
-#define DSI_CLEN_BIT		BIT(0)
-#define L0EN BIT(1)
 
 enum tc358775_ports {
 	TC358775_DSI_IN,
@@ -314,23 +305,42 @@ static const struct reg_sequence tc_lvmux_jeida18_24[] = {
 	{ LV_MX2427, LV_MX(LVI_HS, LVI_VS, LVI_DE, LVI_R0) },
 };
 
-static void tc358775_configure_dsi(struct tc_data *tc)
+/* All the DSI timing is counted by the HS byte clock internally */
+static uint32_t tc358775_ps_to_cnt(unsigned long long ps,
+				   struct phy_configure_opts_mipi_dphy *cfg)
 {
+	unsigned long hs_byte_clk = cfg->hs_clk_rate / 8;
+
+	return DIV_ROUND_UP(ps * hs_byte_clk, PSEC_PER_SEC);
+}
+
+static void tc358775_configure_dsi(struct tc_data *tc, unsigned int pixelclk)
+{
+	int bpp = mipi_dsi_pixel_format_to_bpp(tc->dsi->format);
+	struct phy_configure_opts_mipi_dphy cfg;
 	unsigned int val;
 
-	regmap_write(tc->regmap, PPI_TX_RX_TA, TTA_GET | TTA_SURE);
-	regmap_write(tc->regmap, PPI_LPTXTIMECNT, LPX_PERIOD);
-	regmap_write(tc->regmap, PPI_D0S_CLRSIPOCOUNT, 3);
-	regmap_write(tc->regmap, PPI_D1S_CLRSIPOCOUNT, 3);
-	regmap_write(tc->regmap, PPI_D2S_CLRSIPOCOUNT, 3);
-	regmap_write(tc->regmap, PPI_D3S_CLRSIPOCOUNT, 3);
+	phy_mipi_dphy_get_default_config(pixelclk * 1000, bpp,
+					 tc->num_dsi_lanes, &cfg);
 
-	val = ((L0EN << tc->num_dsi_lanes) - L0EN) | DSI_CLEN_BIT;
+	regmap_write(tc->regmap, PPI_TX_RX_TA,
+		     (tc358775_ps_to_cnt(cfg.ta_get, &cfg) << 16) |
+		     tc358775_ps_to_cnt(cfg.ta_sure, &cfg));
+	regmap_write(tc->regmap, PPI_LPTXTIMECNT,
+		     tc358775_ps_to_cnt(cfg.lpx, &cfg));
+
+	val = tc358775_ps_to_cnt(cfg.hs_settle, &cfg);
+	regmap_write(tc->regmap, PPI_D0S_CLRSIPOCOUNT, val);
+	regmap_write(tc->regmap, PPI_D1S_CLRSIPOCOUNT, val);
+	regmap_write(tc->regmap, PPI_D2S_CLRSIPOCOUNT, val);
+	regmap_write(tc->regmap, PPI_D3S_CLRSIPOCOUNT, val);
+
+	val = LANEENABLE_CLEN;
+	val |= (LANEENABLE_L0EN << tc->num_dsi_lanes) - LANEENABLE_L0EN;
 	regmap_write(tc->regmap, PPI_LANEENABLE, val);
 	regmap_write(tc->regmap, DSI_LANEENABLE, val);
 
-	regmap_write(tc->regmap, PPI_STARTPPI, PPI_START_FUNCTION);
-	regmap_write(tc->regmap, DSI_STARTDSI, DSI_RX_START);
+	regmap_write(tc->regmap, PPI_STARTPPI, PPI_STARTPPI_STARTPPI);
 }
 
 static void tc358775_configure_lvds_timings(struct tc_data *tc,
@@ -461,7 +471,7 @@ static void tc358775_bridge_enable(struct drm_bridge *bridge)
 		     SYS_RST_I2CM);
 	usleep_range(30000, 40000);
 
-	tc358775_configure_dsi(tc);
+	tc358775_configure_dsi(tc, mode->crtc_clock);
 	tc358775_configure_lvds_timings(tc, mode);
 	tc358775_configure_pll(tc, mode->crtc_clock);
 	tc358775_configure_color_mapping(tc, connector->display_info.bus_formats[0]);
