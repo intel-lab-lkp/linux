@@ -166,11 +166,12 @@ netdev_tx_t mcp251xfd_start_xmit(struct sk_buff *skb,
 				 struct net_device *ndev)
 {
 	struct mcp251xfd_priv *priv = netdev_priv(ndev);
+	struct net_device_stats *stats = &ndev->stats;
 	struct mcp251xfd_tx_ring *tx_ring = priv->tx;
 	struct mcp251xfd_tx_obj *tx_obj;
 	unsigned int frame_len;
+	int err, echo_err;
 	u8 tx_head;
-	int err;
 
 	if (can_dev_dropped_skb(ndev, skb))
 		return NETDEV_TX_OK;
@@ -188,18 +189,27 @@ netdev_tx_t mcp251xfd_start_xmit(struct sk_buff *skb,
 		netif_stop_queue(ndev);
 
 	frame_len = can_skb_get_frame_len(skb);
-	err = can_put_echo_skb(skb, ndev, tx_head, frame_len);
-	if (!err)
+	echo_err = can_put_echo_skb(skb, ndev, tx_head, frame_len);
+	if (!echo_err)
 		netdev_sent_queue(priv->ndev, frame_len);
 
 	err = mcp251xfd_tx_obj_write(priv, tx_obj);
-	if (err)
-		goto out_err;
+	if (err) {
+		tx_ring->head--;
 
-	return NETDEV_TX_OK;
+		if (!echo_err) {
+			can_free_echo_skb(ndev, tx_head, &frame_len);
+			netdev_completed_queue(ndev, 1, frame_len);
+		}
 
- out_err:
-	netdev_err(priv->ndev, "ERROR in %s: %d\n", __func__, err);
+		if (mcp251xfd_get_tx_free(tx_ring))
+			netif_wake_queue(ndev);
+
+		stats->tx_dropped++;
+		if (net_ratelimit())
+			netdev_err(priv->ndev,
+				   "ERROR in %s: %d\n", __func__, err);
+	}
 
 	return NETDEV_TX_OK;
 }
