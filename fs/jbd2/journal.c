@@ -423,11 +423,8 @@ repeat:
 	 * Did we need to do an escaping?  Now we've done all the
 	 * copying, we can finally do so.
 	 */
-	if (do_escape) {
-		mapped_data = kmap_local_folio(new_folio, new_offset);
-		*((unsigned int *)mapped_data) = 0;
-		kunmap_local(mapped_data);
-	}
+	if (do_escape)
+		*((unsigned int *)jh_in->b_frozen_data) = 0;
 
 	folio_set_bh(new_bh, new_folio, new_offset);
 	new_bh->b_size = bh_in->b_size;
