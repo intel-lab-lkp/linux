@@ -1608,8 +1608,8 @@ void v4l2_subdev_cleanup(struct v4l2_subdev *sd)
 EXPORT_SYMBOL_GPL(v4l2_subdev_cleanup);
 
 struct v4l2_mbus_framefmt *
-__v4l2_subdev_state_get_format(struct v4l2_subdev_state *state,
-			       unsigned int pad, u32 stream)
+____v4l2_subdev_state_get_format(struct v4l2_subdev_state *state,
+				 unsigned int pad, u32 stream)
 {
 	struct v4l2_subdev_stream_configs *stream_configs;
 	unsigned int i;
@@ -1639,11 +1639,11 @@ __v4l2_subdev_state_get_format(struct v4l2_subdev_state *state,
 
 	return NULL;
 }
-EXPORT_SYMBOL_GPL(__v4l2_subdev_state_get_format);
+EXPORT_SYMBOL_GPL(____v4l2_subdev_state_get_format);
 
 struct v4l2_rect *
-__v4l2_subdev_state_get_crop(struct v4l2_subdev_state *state, unsigned int pad,
-			     u32 stream)
+____v4l2_subdev_state_get_crop(struct v4l2_subdev_state *state, unsigned int pad,
+			       u32 stream)
 {
 	struct v4l2_subdev_stream_configs *stream_configs;
 	unsigned int i;
@@ -1673,11 +1673,11 @@ __v4l2_subdev_state_get_crop(struct v4l2_subdev_state *state, unsigned int pad,
 
 	return NULL;
 }
-EXPORT_SYMBOL_GPL(__v4l2_subdev_state_get_crop);
+EXPORT_SYMBOL_GPL(____v4l2_subdev_state_get_crop);
 
 struct v4l2_rect *
-__v4l2_subdev_state_get_compose(struct v4l2_subdev_state *state,
-				unsigned int pad, u32 stream)
+____v4l2_subdev_state_get_compose(struct v4l2_subdev_state *state,
+				  unsigned int pad, u32 stream)
 {
 	struct v4l2_subdev_stream_configs *stream_configs;
 	unsigned int i;
@@ -1707,11 +1707,11 @@ __v4l2_subdev_state_get_compose(struct v4l2_subdev_state *state,
 
 	return NULL;
 }
-EXPORT_SYMBOL_GPL(__v4l2_subdev_state_get_compose);
+EXPORT_SYMBOL_GPL(____v4l2_subdev_state_get_compose);
 
 struct v4l2_fract *
-__v4l2_subdev_state_get_interval(struct v4l2_subdev_state *state,
-				 unsigned int pad, u32 stream)
+____v4l2_subdev_state_get_interval(struct v4l2_subdev_state *state,
+				   unsigned int pad, u32 stream)
 {
 	struct v4l2_subdev_stream_configs *stream_configs;
 	unsigned int i;
@@ -1743,7 +1743,7 @@ __v4l2_subdev_state_get_interval(struct v4l2_subdev_state *state,
 
 	return NULL;
 }
-EXPORT_SYMBOL_GPL(__v4l2_subdev_state_get_interval);
+EXPORT_SYMBOL_GPL(____v4l2_subdev_state_get_interval);
 
 #if defined(CONFIG_VIDEO_V4L2_SUBDEV_API)
 

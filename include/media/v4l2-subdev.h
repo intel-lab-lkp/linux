@@ -1340,21 +1340,27 @@ void v4l2_subdev_cleanup(struct v4l2_subdev *sd);
  */
 /*
  * Wrap v4l2_subdev_state_get_format(), allowing the function to be called with
- * two or three arguments. The purpose of the __v4l2_subdev_state_get_format()
+ * two or three arguments. The purpose of the __v4l2_subdev_state_gen_call()
  * macro below is to come up with the name of the function or macro to call,
  * using the last two arguments (_stream and _pad). The selected function or
  * macro is then called using the arguments specified by the caller. A similar
  * arrangement is used for v4l2_subdev_state_crop() and
  * v4l2_subdev_state_compose() below.
  */
-#define v4l2_subdev_state_get_format(state, pad, ...)			\
-	__v4l2_subdev_state_gen_call(format, ##__VA_ARGS__, , _pad)	\
+#define v4l2_subdev_state_get_format(state, pad, ...)				\
+	__v4l2_subdev_state_gen_call(format, ##__VA_ARGS__, , _pad)		\
 		(state, pad, ##__VA_ARGS__)
-#define __v4l2_subdev_state_get_format_pad(state, pad)	\
+#define __v4l2_subdev_state_get_format_pad(state, pad)				\
 	__v4l2_subdev_state_get_format(state, pad, 0)
+#define __v4l2_subdev_state_get_format(state, pad, stream)			\
+	_Generic(state,								\
+		const struct v4l2_subdev_state *: ((const struct v4l2_mbus_framefmt *)	\
+			____v4l2_subdev_state_get_format((struct v4l2_subdev_state *)state, pad, stream)), \
+		default: ____v4l2_subdev_state_get_format((struct v4l2_subdev_state *)state, pad, stream) \
+	)
 struct v4l2_mbus_framefmt *
-__v4l2_subdev_state_get_format(struct v4l2_subdev_state *state,
-			       unsigned int pad, u32 stream);
+____v4l2_subdev_state_get_format(struct v4l2_subdev_state *state,
+				 unsigned int pad, u32 stream);
 
 /**
  * v4l2_subdev_state_get_crop() - Get pointer to a stream crop rectangle
@@ -1368,14 +1374,20 @@ __v4l2_subdev_state_get_format(struct v4l2_subdev_state *state,
  * For stream-unaware drivers the crop rectangle for the corresponding pad is
  * returned. If the pad does not exist, NULL is returned.
  */
-#define v4l2_subdev_state_get_crop(state, pad, ...)			\
-	__v4l2_subdev_state_gen_call(crop, ##__VA_ARGS__, , _pad)	\
+#define v4l2_subdev_state_get_crop(state, pad, ...)				\
+	__v4l2_subdev_state_gen_call(crop, ##__VA_ARGS__, , _pad)		\
 		(state, pad, ##__VA_ARGS__)
-#define __v4l2_subdev_state_get_crop_pad(state, pad)	\
+#define __v4l2_subdev_state_get_crop_pad(state, pad)				\
 	__v4l2_subdev_state_get_crop(state, pad, 0)
+#define __v4l2_subdev_state_get_crop(state, pad, stream)			\
+	_Generic(state,								\
+		const struct v4l2_subdev_state *: ((const struct v4l2_rect *)		\
+			____v4l2_subdev_state_get_crop((struct v4l2_subdev_state *)state, pad, stream)), \
+		default: ____v4l2_subdev_state_get_crop((struct v4l2_subdev_state *)state, pad, stream) \
+	)
 struct v4l2_rect *
-__v4l2_subdev_state_get_crop(struct v4l2_subdev_state *state, unsigned int pad,
-			     u32 stream);
+____v4l2_subdev_state_get_crop(struct v4l2_subdev_state *state, unsigned int pad,
+			       u32 stream);
 
 /**
  * v4l2_subdev_state_get_compose() - Get pointer to a stream compose rectangle
@@ -1389,14 +1401,20 @@ __v4l2_subdev_state_get_crop(struct v4l2_subdev_state *state, unsigned int pad,
  * For stream-unaware drivers the compose rectangle for the corresponding pad is
  * returned. If the pad does not exist, NULL is returned.
  */
-#define v4l2_subdev_state_get_compose(state, pad, ...)			\
-	__v4l2_subdev_state_gen_call(compose, ##__VA_ARGS__, , _pad)	\
+#define v4l2_subdev_state_get_compose(state, pad, ...)				\
+	__v4l2_subdev_state_gen_call(compose, ##__VA_ARGS__, , _pad)		\
 		(state, pad, ##__VA_ARGS__)
-#define __v4l2_subdev_state_get_compose_pad(state, pad)	\
+#define __v4l2_subdev_state_get_compose_pad(state, pad)				\
 	__v4l2_subdev_state_get_compose(state, pad, 0)
+#define __v4l2_subdev_state_get_compose(state, pad, stream)			\
+	_Generic(state,								\
+		const struct v4l2_subdev_state *: ((const struct v4l2_rect *)		\
+			____v4l2_subdev_state_get_compose((struct v4l2_subdev_state *)state, pad, stream)), \
+		default: ____v4l2_subdev_state_get_compose((struct v4l2_subdev_state *)state, pad, stream) \
+	)
 struct v4l2_rect *
-__v4l2_subdev_state_get_compose(struct v4l2_subdev_state *state,
-				unsigned int pad, u32 stream);
+____v4l2_subdev_state_get_compose(struct v4l2_subdev_state *state,
+				  unsigned int pad, u32 stream);
 
 /**
  * v4l2_subdev_state_get_interval() - Get pointer to a stream frame interval
@@ -1410,14 +1428,20 @@ __v4l2_subdev_state_get_compose(struct v4l2_subdev_state *state,
  * For stream-unaware drivers the frame interval for the corresponding pad is
  * returned. If the pad does not exist, NULL is returned.
  */
-#define v4l2_subdev_state_get_interval(state, pad, ...)			\
-	__v4l2_subdev_state_gen_call(interval, ##__VA_ARGS__, , _pad)	\
+#define v4l2_subdev_state_get_interval(state, pad, ...)				\
+	__v4l2_subdev_state_gen_call(interval, ##__VA_ARGS__, , _pad)		\
 		(state, pad, ##__VA_ARGS__)
-#define __v4l2_subdev_state_get_interval_pad(state, pad)	\
+#define __v4l2_subdev_state_get_interval_pad(state, pad)			\
 	__v4l2_subdev_state_get_interval(state, pad, 0)
+#define __v4l2_subdev_state_get_interval(state, pad, stream)			\
+	_Generic(state,								\
+		const struct v4l2_subdev_state *: ((const struct v4l2_frac *)		\
+			____v4l2_subdev_state_get_interval((struct v4l2_subdev_state *)state, pad, stream)), \
+		default: ____v4l2_subdev_state_get_interval((struct v4l2_subdev_state *)state, pad, stream) \
+	)
 struct v4l2_fract *
-__v4l2_subdev_state_get_interval(struct v4l2_subdev_state *state,
-				 unsigned int pad, u32 stream);
+____v4l2_subdev_state_get_interval(struct v4l2_subdev_state *state,
+				   unsigned int pad, u32 stream);
 
 #if defined(CONFIG_VIDEO_V4L2_SUBDEV_API)
 
