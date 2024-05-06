@@ -24,16 +24,18 @@
 #include <linux/watchdog.h>
 
 #define DEFAULT_PING_RATE	1
+#define DEFAULT_PING_COUNT	5
 
 int fd;
 const char v = 'V';
-static const char sopts[] = "bdehp:st:Tn:NLf:i";
+static const char sopts[] = "bdehp:c:st:Tn:NLf:i";
 static const struct option lopts[] = {
 	{"bootstatus",          no_argument, NULL, 'b'},
 	{"disable",             no_argument, NULL, 'd'},
 	{"enable",              no_argument, NULL, 'e'},
 	{"help",                no_argument, NULL, 'h'},
 	{"pingrate",      required_argument, NULL, 'p'},
+	{"pingcount",     required_argument, NULL, 'c'},
 	{"status",              no_argument, NULL, 's'},
 	{"timeout",       required_argument, NULL, 't'},
 	{"gettimeout",          no_argument, NULL, 'T'},
@@ -90,6 +92,8 @@ static void usage(char *progname)
 	printf(" -h, --help\t\tPrint the help message\n");
 	printf(" -p, --pingrate=P\tSet ping rate to P seconds (default %d)\n",
 	       DEFAULT_PING_RATE);
+	printf(" -c, --pingcount=C\tSet number of pings to C (default %d)\n",
+	       DEFAULT_PING_COUNT);
 	printf(" -t, --timeout=T\tSet timeout to T seconds\n");
 	printf(" -T, --gettimeout\tGet the timeout\n");
 	printf(" -n, --pretimeout=T\tSet the pretimeout to T seconds\n");
@@ -172,6 +176,7 @@ int main(int argc, char *argv[])
 {
 	int flags;
 	unsigned int ping_rate = DEFAULT_PING_RATE;
+	unsigned int ping_count = DEFAULT_PING_COUNT;
 	int ret;
 	int c;
 	int oneshot = 0;
@@ -247,6 +252,12 @@ int main(int argc, char *argv[])
 			if (!ping_rate)
 				ping_rate = DEFAULT_PING_RATE;
 			printf("Watchdog ping rate set to %u seconds.\n", ping_rate);
+			break;
+		case 'c':
+			ping_count = strtoul(optarg, NULL, 0);
+			if (!ping_count)
+				ping_count = DEFAULT_PING_COUNT;
+			printf("Number of pings set to %u.\n", ping_count);
 			break;
 		case 's':
 			flags = 0;
@@ -336,9 +347,10 @@ int main(int argc, char *argv[])
 
 	signal(SIGINT, term);
 
-	while (1) {
+	while (ping_count > 0) {
 		keep_alive();
 		sleep(ping_rate);
+		ping_count--;
 	}
 end:
 	/*
