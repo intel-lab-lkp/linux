@@ -410,6 +410,7 @@ Sample code::
 		}
 
 		if (FD_ISSET(fd, &rfds)) {
+			bzero(buf, SIZE);
 			cmd_len = read(fd, buf, BUF_LEN - 1);
 			printf("recv report:");
 			for (i = 0; i < cmd_len; i++)
@@ -419,6 +420,7 @@ Sample code::
 
 		if (FD_ISSET(STDIN_FILENO, &rfds)) {
 			memset(report, 0x0, sizeof(report));
+			bzero(buf, SIZE);
 			cmd_len = read(STDIN_FILENO, buf, BUF_LEN - 1);
 
 			if (cmd_len == 0)
