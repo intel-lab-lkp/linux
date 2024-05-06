@@ -332,6 +332,35 @@ deny
 force
     Force the huge option on for all - very useful for testing;
 
+Anonymous shmem can also use "multi-size THP" (mTHP) by adding a new sysfs knob
+to control mTHP allocation: /sys/kernel/mm/transparent_hugepage/hugepages-<size>kB/shmem_enabled.
+Its value for each mTHP is essentially consistent with the global setting, except
+for the addition of 'inherit' to ensure compatibility with the global settings.
+always
+    Attempt to allocate <size> huge pages every time we need a new page;
+
+inherit
+    Inherit the top-level "shmem_enabled" value. By default, PMD-sized hugepages
+    have enabled="inherit" and all other hugepage sizes have enabled="never";
+
+never
+    Do not allocate <size> huge pages;
+
+within_size
+    Only allocate <size> huge page if it will be fully within i_size.
+    Also respect fadvise()/madvise() hints;
+
+advise
+    Only allocate <size> huge pages if requested with fadvise()/madvise();
+
+deny
+    Has the same semantics as 'never', now mTHP allocation policy is only
+    used for anonymous shmem and no not override tmpfs.
+
+force
+    Has the same semantics as 'always', now mTHP allocation policy is only
+    used for anonymous shmem and no not override tmpfs.
+
 Need of application restart
 ===========================
 
