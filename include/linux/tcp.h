@@ -221,7 +221,7 @@ struct tcp_sock {
 	u32	lost_out;	/* Lost packets			*/
 	u32	sacked_out;	/* SACK'd packets			*/
 	u16	tcp_header_len;	/* Bytes of tcp header to send		*/
-	u8	scaling_ratio;	/* see tcp_win_from_space() */
+	u16	scaling_ratio;	/* see tcp_win_from_space() */
 	u8	chrono_type : 2,	/* current chronograph type */
 		repair      : 1,
 		tcp_usec_ts : 1, /* TSval values in usec */

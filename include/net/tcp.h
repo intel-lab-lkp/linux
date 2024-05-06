@@ -1513,7 +1513,7 @@ void tcp_select_initial_window(const struct sock *sk, int __space,
 			       __u32 *window_clamp, int wscale_ok,
 			       __u8 *rcv_wscale, __u32 init_rcv_wnd);
 
-static inline int __tcp_win_from_space(u8 scaling_ratio, int space)
+static inline int __tcp_win_from_space(u16 scaling_ratio, int space)
 {
 	s64 scaled_space = (s64)space * scaling_ratio;
 
@@ -1526,7 +1526,7 @@ static inline int tcp_win_from_space(const struct sock *sk, int space)
 }
 
 /* inverse of __tcp_win_from_space() */
-static inline int __tcp_space_from_win(u8 scaling_ratio, int win)
+static inline int __tcp_space_from_win(u16 scaling_ratio, int win)
 {
 	u64 val = (u64)win << TCP_RMEM_TO_WIN_SCALE;
 
