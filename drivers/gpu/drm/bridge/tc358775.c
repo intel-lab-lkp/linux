@@ -308,18 +308,30 @@ static const struct reg_sequence tc_lvmux_jeida18_24[] = {
 	{ LV_MX2427, LV_MX(LVI_HS, LVI_VS, LVI_DE, LVI_R0) },
 };
 
-static void tc_bridge_enable(struct drm_bridge *bridge)
+static void tc358775_configure_dsi(struct tc_data *tc)
 {
-	struct tc_data *tc = bridge_to_tc(bridge);
+	unsigned int val;
+
+	regmap_write(tc->regmap, PPI_TX_RX_TA, TTA_GET | TTA_SURE);
+	regmap_write(tc->regmap, PPI_LPTXTIMECNT, LPX_PERIOD);
+	regmap_write(tc->regmap, PPI_D0S_CLRSIPOCOUNT, 3);
+	regmap_write(tc->regmap, PPI_D1S_CLRSIPOCOUNT, 3);
+	regmap_write(tc->regmap, PPI_D2S_CLRSIPOCOUNT, 3);
+	regmap_write(tc->regmap, PPI_D3S_CLRSIPOCOUNT, 3);
+
+	val = ((L0EN << tc->num_dsi_lanes) - L0EN) | DSI_CLEN_BIT;
+	regmap_write(tc->regmap, PPI_LANEENABLE, val);
+	regmap_write(tc->regmap, DSI_LANEENABLE, val);
+
+	regmap_write(tc->regmap, PPI_STARTPPI, PPI_START_FUNCTION);
+	regmap_write(tc->regmap, DSI_STARTDSI, DSI_RX_START);
+}
+
+static void tc358775_configure_lvds_timings(struct tc_data *tc,
+					    struct drm_display_mode *mode)
+{
 	u32 hback_porch, hsync_len, hfront_porch, hactive, htime1, htime2;
 	u32 vback_porch, vsync_len, vfront_porch, vactive, vtime1, vtime2;
-	int bpp = mipi_dsi_pixel_format_to_bpp(tc->dsi->format);
-	int clkdiv;
-	unsigned int val = 0;
-	struct drm_display_mode *mode;
-	struct drm_connector *connector = get_connector(bridge->encoder);
-
-	mode = &bridge->encoder->crtc->state->adjusted_mode;
 
 	hback_porch = mode->htotal - mode->hsync_end;
 	hsync_len  = mode->hsync_end - mode->hsync_start;
@@ -336,30 +348,6 @@ static void tc_bridge_enable(struct drm_bridge *bridge)
 
 	htime2 = (hfront_porch << 16) + hactive;
 	vtime2 = (vfront_porch << 16) + vactive;
-
-	regmap_read(tc->regmap, IDREG, &val);
-
-	dev_info(tc->dev, "DSI2LVDS Chip ID.%02x Revision ID. %02x **\n",
-		 (val >> 8) & 0xFF, val & 0xFF);
-
-	regmap_write(tc->regmap, SYSRST,
-		     SYS_RST_REG | SYS_RST_DSIRX | SYS_RST_BM | SYS_RST_LCD |
-		     SYS_RST_I2CM);
-	usleep_range(30000, 40000);
-
-	regmap_write(tc->regmap, PPI_TX_RX_TA, TTA_GET | TTA_SURE);
-	regmap_write(tc->regmap, PPI_LPTXTIMECNT, LPX_PERIOD);
-	regmap_write(tc->regmap, PPI_D0S_CLRSIPOCOUNT, 3);
-	regmap_write(tc->regmap, PPI_D1S_CLRSIPOCOUNT, 3);
-	regmap_write(tc->regmap, PPI_D2S_CLRSIPOCOUNT, 3);
-	regmap_write(tc->regmap, PPI_D3S_CLRSIPOCOUNT, 3);
-
-	val = ((L0EN << tc->num_dsi_lanes) - L0EN) | DSI_CLEN_BIT;
-	regmap_write(tc->regmap, PPI_LANEENABLE, val);
-	regmap_write(tc->regmap, DSI_LANEENABLE, val);
-
-	regmap_write(tc->regmap, PPI_STARTPPI, PPI_START_FUNCTION);
-	regmap_write(tc->regmap, DSI_STARTDSI, DSI_RX_START);
 
 	/* Video event mode vs pulse mode bit, does not exist for tc358775 */
 	if (tc->type == TC358765)
@@ -381,20 +369,31 @@ static void tc_bridge_enable(struct drm_bridge *bridge)
 	regmap_write(tc->regmap, VTIM2, vtime2);
 
 	regmap_write(tc->regmap, VFUEN, VFUEN_EN);
+}
+
+static void tc358775_configure_pll(struct tc_data *tc, int pixelclk)
+{
 	regmap_write(tc->regmap, SYSRST, SYS_RST_LCD);
 	regmap_write(tc->regmap, LVPHY0, LV_PHY0_PRBS_ON(4) | LV_PHY0_ND(6));
+}
 
-	dev_dbg(tc->dev, "bus_formats %04x bpc %d\n",
-		connector->display_info.bus_formats[0],
-		tc->bpc);
-	if (connector->display_info.bus_formats[0] == MEDIA_BUS_FMT_RGB888_1X7X4_SPWG)
+static void tc358775_configure_color_mapping(struct tc_data *tc, u32 fmt)
+{
+	dev_dbg(tc->dev, "bus_formats %04x bpc %d\n", fmt, tc->bpc);
+
+	if (fmt == MEDIA_BUS_FMT_RGB888_1X7X4_SPWG)
 		regmap_multi_reg_write(tc->regmap, tc_lvmux_vesa24,
 				       ARRAY_SIZE(tc_lvmux_vesa24));
 	else
 		regmap_multi_reg_write(tc->regmap, tc_lvmux_jeida18_24,
 				       ARRAY_SIZE(tc_lvmux_jeida18_24));
+}
 
-	regmap_write(tc->regmap, VFUEN, VFUEN_EN);
+static void tc358775_configure_lvds_clock(struct tc_data *tc)
+{
+	int bpp = mipi_dsi_pixel_format_to_bpp(tc->dsi->format);
+	unsigned int val;
+	int clkdiv;
 
 	/* Configure LVDS clock */
 	clkdiv = bpp / tc->num_dsi_lanes;
@@ -407,9 +406,36 @@ static void tc_bridge_enable(struct drm_bridge *bridge)
 		val |= LVCFG_LVDLINK;
 
 	regmap_write(tc->regmap, LVCFG, val);
+}
+
+static void tc358775_bridge_enable(struct drm_bridge *bridge)
+{
+	struct tc_data *tc = bridge_to_tc(bridge);
+	unsigned int val = 0;
+	struct drm_display_mode *mode;
+	struct drm_connector *connector = get_connector(bridge->encoder);
+
+	mode = &bridge->encoder->crtc->state->adjusted_mode;
+
+	regmap_read(tc->regmap, IDREG, &val);
+
+	dev_info(tc->dev, "DSI2LVDS Chip ID.%02x Revision ID. %02x **\n",
+		 (val >> 8) & 0xFF, val & 0xFF);
+
+	regmap_write(tc->regmap, SYSRST,
+		     SYS_RST_REG | SYS_RST_DSIRX | SYS_RST_BM | SYS_RST_LCD |
+		     SYS_RST_I2CM);
+	usleep_range(30000, 40000);
+
+	tc358775_configure_dsi(tc);
+	tc358775_configure_lvds_timings(tc, mode);
+	tc358775_configure_pll(tc, mode->crtc_clock);
+	tc358775_configure_color_mapping(tc, connector->display_info.bus_formats[0]);
+	regmap_write(tc->regmap, VFUEN, VFUEN_EN);
+	tc358775_configure_lvds_clock(tc);
 
 	/* Finally, enable the LVDS transmitter */
-	regmap_write(tc->regmap, LVCFG, val | LVCFG_LVEN);
+	regmap_update_bits(tc->regmap, LVCFG, LVCFG_LVEN, LVCFG_LVEN);
 }
 
 /*
@@ -543,7 +569,7 @@ static int tc_bridge_attach(struct drm_bridge *bridge,
 static const struct drm_bridge_funcs tc_bridge_funcs = {
 	.attach = tc_bridge_attach,
 	.pre_enable = tc_bridge_pre_enable,
-	.enable = tc_bridge_enable,
+	.enable = tc358775_bridge_enable,
 	.mode_fixup = tc_mode_fixup,
 	.mode_valid = tc_mode_valid,
 	.post_disable = tc_bridge_post_disable,
