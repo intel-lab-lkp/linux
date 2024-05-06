@@ -21740,6 +21740,7 @@ R:	Laxman Dewangan <ldewangan@nvidia.com>
 R:	Krishna Yarlagadda <kyarlagadda@nvidia.com>
 S:	Supported
 F:	Documentation/misc-devices/tegra-cfg.rst
+F:	drivers/soc/tegra/tegra-cfg.c
 
 TEGRA PWM DRIVER
 M:	Thierry Reding <thierry.reding@gmail.com>
