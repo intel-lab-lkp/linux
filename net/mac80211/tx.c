@@ -4265,88 +4265,6 @@ void ieee80211_txq_schedule_start(struct ieee80211_hw *hw, u8 ac)
 }
 EXPORT_SYMBOL(ieee80211_txq_schedule_start);
 
-void __ieee80211_subif_start_xmit(struct sk_buff *skb,
-				  struct net_device *dev,
-				  u32 info_flags,
-				  u32 ctrl_flags,
-				  u64 *cookie)
-{
-	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
-	struct ieee80211_local *local = sdata->local;
-	struct sta_info *sta;
-	struct sk_buff *next;
-	int len = skb->len;
-
-	if (unlikely(!ieee80211_sdata_running(sdata) || skb->len < ETH_HLEN)) {
-		kfree_skb(skb);
-		return;
-	}
-
-	sk_pacing_shift_update(skb->sk, sdata->local->hw.tx_sk_pacing_shift);
-
-	rcu_read_lock();
-
-	if (ieee80211_vif_is_mesh(&sdata->vif) &&
-	    ieee80211_hw_check(&local->hw, SUPPORT_FAST_XMIT) &&
-	    ieee80211_mesh_xmit_fast(sdata, skb, ctrl_flags))
-		goto out;
-
-	if (ieee80211_lookup_ra_sta(sdata, skb, &sta))
-		goto out_free;
-
-	if (IS_ERR(sta))
-		sta = NULL;
-
-	skb_set_queue_mapping(skb, ieee80211_select_queue(sdata, sta, skb));
-	ieee80211_aggr_check(sdata, sta, skb);
-
-	if (sta) {
-		struct ieee80211_fast_tx *fast_tx;
-
-		fast_tx = rcu_dereference(sta->fast_tx);
-
-		if (fast_tx &&
-		    ieee80211_xmit_fast(sdata, sta, fast_tx, skb))
-			goto out;
-	}
-
-	/* the frame could be fragmented, software-encrypted, and other
-	 * things so we cannot really handle checksum or GSO offload.
-	 * fix it up in software before we handle anything else.
-	 */
-	skb = ieee80211_tx_skb_fixup(skb, 0);
-	if (!skb) {
-		len = 0;
-		goto out;
-	}
-
-	skb_list_walk_safe(skb, skb, next) {
-		skb_mark_not_on_list(skb);
-
-		if (skb->protocol == sdata->control_port_protocol)
-			ctrl_flags |= IEEE80211_TX_CTRL_SKIP_MPATH_LOOKUP;
-
-		skb = ieee80211_build_hdr(sdata, skb, info_flags,
-					  sta, ctrl_flags, cookie);
-		if (IS_ERR(skb)) {
-			kfree_skb_list(next);
-			goto out;
-		}
-
-		dev_sw_netstats_tx_add(dev, 1, skb->len);
-
-		ieee80211_xmit(sdata, sta, skb);
-	}
-	goto out;
- out_free:
-	kfree_skb(skb);
-	len = 0;
- out:
-	if (len)
-		ieee80211_tpt_led_trig_tx(local, len);
-	rcu_read_unlock();
-}
-
 static int ieee80211_change_da(struct sk_buff *skb, struct sta_info *sta)
 {
 	struct ethhdr *eth;
@@ -4727,6 +4645,88 @@ out:
 	rcu_read_unlock();
 
 	return NETDEV_TX_OK;
+}
+
+void __ieee80211_subif_start_xmit(struct sk_buff *skb,
+				  struct net_device *dev,
+				  u32 info_flags,
+				  u32 ctrl_flags,
+				  u64 *cookie)
+{
+	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
+	struct ieee80211_local *local = sdata->local;
+	struct sta_info *sta;
+	struct sk_buff *next;
+	int len = skb->len;
+
+	if (unlikely(!ieee80211_sdata_running(sdata) || skb->len < ETH_HLEN)) {
+		kfree_skb(skb);
+		return;
+	}
+
+	sk_pacing_shift_update(skb->sk, sdata->local->hw.tx_sk_pacing_shift);
+
+	rcu_read_lock();
+
+	if (ieee80211_vif_is_mesh(&sdata->vif) &&
+	    ieee80211_hw_check(&local->hw, SUPPORT_FAST_XMIT) &&
+	    ieee80211_mesh_xmit_fast(sdata, skb, ctrl_flags))
+		goto out;
+
+	if (ieee80211_lookup_ra_sta(sdata, skb, &sta))
+		goto out_free;
+
+	if (IS_ERR(sta))
+		sta = NULL;
+
+	skb_set_queue_mapping(skb, ieee80211_select_queue(sdata, sta, skb));
+	ieee80211_aggr_check(sdata, sta, skb);
+
+	if (sta) {
+		struct ieee80211_fast_tx *fast_tx;
+
+		fast_tx = rcu_dereference(sta->fast_tx);
+
+		if (fast_tx &&
+		    ieee80211_xmit_fast(sdata, sta, fast_tx, skb))
+			goto out;
+	}
+
+	/* the frame could be fragmented, software-encrypted, and other
+	 * things so we cannot really handle checksum or GSO offload.
+	 * fix it up in software before we handle anything else.
+	 */
+	skb = ieee80211_tx_skb_fixup(skb, 0);
+	if (!skb) {
+		len = 0;
+		goto out;
+	}
+
+	skb_list_walk_safe(skb, skb, next) {
+		skb_mark_not_on_list(skb);
+
+		if (skb->protocol == sdata->control_port_protocol)
+			ctrl_flags |= IEEE80211_TX_CTRL_SKIP_MPATH_LOOKUP;
+
+		skb = ieee80211_build_hdr(sdata, skb, info_flags,
+					  sta, ctrl_flags, cookie);
+		if (IS_ERR(skb)) {
+			kfree_skb_list(next);
+			goto out;
+		}
+
+		dev_sw_netstats_tx_add(dev, 1, skb->len);
+
+		ieee80211_xmit(sdata, sta, skb);
+	}
+	goto out;
+ out_free:
+	kfree_skb(skb);
+	len = 0;
+ out:
+	if (len)
+		ieee80211_tpt_led_trig_tx(local, len);
+	rcu_read_unlock();
 }
 
 struct sk_buff *
