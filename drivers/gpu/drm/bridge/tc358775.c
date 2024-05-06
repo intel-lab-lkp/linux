@@ -231,7 +231,7 @@ struct tc_data {
 	struct regulator	*vddio;
 	struct gpio_desc	*reset_gpio;
 	struct gpio_desc	*stby_gpio;
-	u8			lvds_link; /* single-link or dual-link */
+	bool			lvds_dual_link;
 	u8			bpc;
 
 	enum tc3587x5_type	type;
@@ -409,7 +409,7 @@ static void tc_bridge_enable(struct drm_bridge *bridge)
 	regmap_write(tc->regmap, VFUEN, VFUEN_EN);
 
 	val = LVCFG_LVEN_BIT;
-	if (tc->lvds_link == DUAL_LINK) {
+	if (tc->lvds_dual_link) {
 		val |= TC358775_LVCFG_LVDLINK(1);
 		val |= TC358775_LVCFG_PCLKDIV(DIVIDE_BY_6);
 	} else {
@@ -460,8 +460,8 @@ tc_mode_valid(struct drm_bridge *bridge,
 	 * Maximum pixel clock speed 135MHz for single-link
 	 * 270MHz for dual-link
 	 */
-	if ((mode->clock > 135000 && tc->lvds_link == SINGLE_LINK) ||
-	    (mode->clock > 270000 && tc->lvds_link == DUAL_LINK))
+	if ((mode->clock > 135000 && !tc->lvds_dual_link) ||
+	    (mode->clock > 270000 && tc->lvds_dual_link))
 		return MODE_CLOCK_HIGH;
 
 	switch (info->bus_formats[0]) {
@@ -516,7 +516,6 @@ static int tc358775_parse_dt(struct device_node *np, struct tc_data *tc)
 
 	of_node_put(tc->host_node);
 
-	tc->lvds_link = SINGLE_LINK;
 	endpoint = of_graph_get_endpoint_by_regs(tc->dev->of_node,
 						 TC358775_LVDS_OUT1, -1);
 	if (endpoint) {
@@ -525,13 +524,14 @@ static int tc358775_parse_dt(struct device_node *np, struct tc_data *tc)
 
 		if (remote) {
 			if (of_device_is_available(remote))
-				tc->lvds_link = DUAL_LINK;
+				tc->lvds_dual_link = true;
 			of_node_put(remote);
 		}
 	}
 
 	dev_dbg(tc->dev, "no.of dsi lanes: %d\n", tc->num_dsi_lanes);
-	dev_dbg(tc->dev, "operating in %d-link mode\n",	tc->lvds_link);
+	dev_dbg(tc->dev, "operating in %s-link mode\n",
+		tc->lvds_dual_link ? "dual" : "single");
 
 	return 0;
 }
