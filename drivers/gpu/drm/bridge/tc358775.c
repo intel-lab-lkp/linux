@@ -139,6 +139,12 @@ enum {
 };
 
 #define LVCFG           0x049C  /* LVDS Configuration  */
+#define LVCFG_LVEN	BIT(0)
+#define LVCFG_LVDLINK	BIT(1)
+#define LVCFG_PCLKDIV	GENMASK(7, 4)
+#define LVCFG_PCLKSEL	GENMASK(11, 10)
+#define PCLKSEL_HSRCK	0	/* DSI clock */
+
 #define LVPHY0          0x04A0  /* LVDS PHY 0 */
 #define LV_PHY0_RST(v)          FLD_VAL(v, 22, 22) /* PHY reset */
 #define LV_PHY0_IS(v)           FLD_VAL(v, 15, 14)
@@ -183,27 +189,7 @@ enum {
 #define DEBUG01         0x05A4  /* LVDS Data */
 
 #define DSI_CLEN_BIT		BIT(0)
-#define DIVIDE_BY_3		3 /* PCLK=DCLK/3 */
-#define DIVIDE_BY_6		6 /* PCLK=DCLK/6 */
-#define LVCFG_LVEN_BIT		BIT(0)
-
 #define L0EN BIT(1)
-
-#define TC358775_LVCFG_PCLKDIV__MASK	0x000000f0
-#define TC358775_LVCFG_PCLKDIV__SHIFT	4
-static inline u32 TC358775_LVCFG_PCLKDIV(uint32_t val)
-{
-	return ((val) << TC358775_LVCFG_PCLKDIV__SHIFT) &
-			TC358775_LVCFG_PCLKDIV__MASK;
-}
-
-#define TC358775_LVCFG_LVDLINK__MASK                         0x00000002
-#define TC358775_LVCFG_LVDLINK__SHIFT                        1
-static inline u32 TC358775_LVCFG_LVDLINK(uint32_t val)
-{
-	return ((val) << TC358775_LVCFG_LVDLINK__SHIFT) &
-			TC358775_LVCFG_LVDLINK__MASK;
-}
 
 enum tc358775_ports {
 	TC358775_DSI_IN,
@@ -327,6 +313,8 @@ static void tc_bridge_enable(struct drm_bridge *bridge)
 	struct tc_data *tc = bridge_to_tc(bridge);
 	u32 hback_porch, hsync_len, hfront_porch, hactive, htime1, htime2;
 	u32 vback_porch, vsync_len, vfront_porch, vactive, vtime1, vtime2;
+	int bpp = mipi_dsi_pixel_format_to_bpp(tc->dsi->format);
+	int clkdiv;
 	unsigned int val = 0;
 	struct drm_display_mode *mode;
 	struct drm_connector *connector = get_connector(bridge->encoder);
@@ -408,14 +396,20 @@ static void tc_bridge_enable(struct drm_bridge *bridge)
 
 	regmap_write(tc->regmap, VFUEN, VFUEN_EN);
 
-	val = LVCFG_LVEN_BIT;
-	if (tc->lvds_dual_link) {
-		val |= TC358775_LVCFG_LVDLINK(1);
-		val |= TC358775_LVCFG_PCLKDIV(DIVIDE_BY_6);
-	} else {
-		val |= TC358775_LVCFG_PCLKDIV(DIVIDE_BY_3);
-	}
+	/* Configure LVDS clock */
+	clkdiv = bpp / tc->num_dsi_lanes;
+	if (!tc->lvds_dual_link)
+		clkdiv /= 2;
+
+	val = u32_encode_bits(clkdiv, LVCFG_PCLKDIV);
+	val |= u32_encode_bits(PCLKSEL_HSRCK, LVCFG_PCLKSEL);
+	if (tc->lvds_dual_link)
+		val |= LVCFG_LVDLINK;
+
 	regmap_write(tc->regmap, LVCFG, val);
+
+	/* Finally, enable the LVDS transmitter */
+	regmap_write(tc->regmap, LVCFG, val | LVCFG_LVEN);
 }
 
 /*
