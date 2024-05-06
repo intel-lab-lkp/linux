@@ -242,18 +242,16 @@ static void tc358775_power_up(struct tc_data *tc)
 	ret = regulator_enable(tc->vddio);
 	if (ret < 0)
 		dev_err(dev, "regulator vddio enable failed, %d\n", ret);
-	usleep_range(10000, 11000);
 
 	ret = regulator_enable(tc->vdd);
 	if (ret < 0)
 		dev_err(dev, "regulator vdd enable failed, %d\n", ret);
-	usleep_range(10000, 11000);
 
 	gpiod_set_value(tc->stby_gpio, 0);
-	usleep_range(10000, 11000);
+	usleep_range(10, 20);
 
 	gpiod_set_value(tc->reset_gpio, 0);
-	usleep_range(10, 20);
+	usleep_range(200, 250);
 }
 
 static void tc358775_power_down(struct tc_data *tc)
@@ -265,17 +263,14 @@ static void tc358775_power_down(struct tc_data *tc)
 	usleep_range(10, 20);
 
 	gpiod_set_value(tc->stby_gpio, 1);
-	usleep_range(10000, 11000);
 
 	ret = regulator_disable(tc->vdd);
 	if (ret < 0)
 		dev_err(dev, "regulator vdd disable failed, %d\n", ret);
-	usleep_range(10000, 11000);
 
 	ret = regulator_disable(tc->vddio);
 	if (ret < 0)
 		dev_err(dev, "regulator vddio disable failed, %d\n", ret);
-	usleep_range(10000, 11000);
 }
 
 static void tc_bridge_pre_enable(struct drm_bridge *bridge)
