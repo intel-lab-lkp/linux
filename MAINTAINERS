@@ -21739,6 +21739,7 @@ M:	Thierry Reding <thierry.reding@gmail.com>
 R:	Laxman Dewangan <ldewangan@nvidia.com>
 R:	Krishna Yarlagadda <kyarlagadda@nvidia.com>
 S:	Supported
+F:	arch/arm64/boot/dts/nvidia/tegra234*cfg.dtsi
 F:	Documentation/devicetree/bindings/misc/nvidia,tegra-config-settings.yaml
 F:	Documentation/misc-devices/tegra-cfg.rst
 F:	drivers/soc/tegra/tegra-cfg.c
