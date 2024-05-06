@@ -245,6 +245,36 @@ static int try_to_disable_sept_ve(u64 features0, u64 td_attr)
 	return 0;
 }
 
+/*
+ * TDX 1.0 generates a #VE when accessing topology-related CPUID leafs (0xB and
+ * 0x1F) and the X2APIC_APICID MSR. The kernel returns all zeros on CPUID #VEs.
+ * In practice, this means that the kernel can only boot with a plain topology.
+ * Any complications will cause problems.
+ *
+ * The ENUM_TOPOLOGY feature allows the VMM to provide topology information.
+ * Enabling the feature  eliminates topology-related #VEs: the TDX module
+ * virtualizes accesses to the CPUID leafs and the MSR.
+ *
+ * Enable ENUM_TOPOLOGY if it is available.
+ */
+static void enable_cpu_topology_enumeration(u64 features0)
+{
+	u64 configured;
+
+	/* Does the TDX module support topology enumeration? */
+	if (!(features0 & TDX_FEATURES0_ENUM_TOPOLOGY))
+		return;
+
+	/* Has the VMM provided a valid topology configuration? */
+	if (tdg_vm_rd(TDCS_TOPOLOGY_ENUM_CONFIGURED, &configured) &&
+	    configured) {
+		pr_err("VMM did not configure X2APIC_IDs properly\n");
+		return;
+	}
+
+	tdg_vm_wr(TDCS_TD_CTLS, TD_CTLS_ENUM_TOPOLOGY, TD_CTLS_ENUM_TOPOLOGY);
+}
+
 static void tdx_setup(u64 *cc_mask)
 {
 	struct tdx_module_args args = {};
@@ -310,6 +340,8 @@ static void tdx_setup(u64 *cc_mask)
 		else
 			tdx_panic(msg);
 	}
+
+	enable_cpu_topology_enumeration(features0);
 }
 
 /*
