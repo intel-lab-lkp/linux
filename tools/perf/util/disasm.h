@@ -43,14 +43,18 @@ struct arch {
 
 struct ins {
 	const char     *name;
+	int	opcode;
 	struct ins_ops *ops;
 };
 
 struct ins_operands {
 	char	*raw;
+	int	raw_insn;
 	struct {
 		char	*raw;
 		char	*name;
+		int	opcode;
+		int	raw_insn;
 		struct symbol *sym;
 		u64	addr;
 		s64	offset;
@@ -62,6 +66,8 @@ struct ins_operands {
 		struct {
 			char	*raw;
 			char	*name;
+			int	opcode;
+			int	raw_insn;
 			u64	addr;
 			bool	multi_regs;
 		} source;

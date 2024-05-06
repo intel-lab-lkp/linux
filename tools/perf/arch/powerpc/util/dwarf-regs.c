@@ -98,3 +98,22 @@ int regs_query_register_offset(const char *name)
 			return roff->ptregs_offset;
 	return -EINVAL;
 }
+
+#define	PPC_OP(op)	(((op) >> 26) & 0x3F)
+#define PPC_RA(a)	(((a) >> 16) & 0x1f)
+#define PPC_RT(t)	(((t) >> 21) & 0x1f)
+
+int get_opcode_insn(unsigned int raw_insn)
+{
+	return PPC_OP(raw_insn);
+}
+
+int get_source_reg(unsigned int raw_insn)
+{
+	return PPC_RA(raw_insn);
+}
+
+int get_target_reg(unsigned int raw_insn)
+{
+	return PPC_RT(raw_insn);
+}

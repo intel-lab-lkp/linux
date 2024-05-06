@@ -43,7 +43,7 @@ static int call__scnprintf(struct ins *ins, char *bf, size_t size,
 			   struct ins_operands *ops, int max_ins_name);
 
 static void ins__sort(struct arch *arch);
-static int disasm_line__parse(char *line, const char **namep, char **rawp);
+static int disasm_line__parse(char *line, const char **namep, char **rawp, int *opcode, int *rawp_insn);
 
 static __attribute__((constructor)) void symbol__init_regexpr(void)
 {
@@ -512,7 +512,7 @@ static int lock__parse(struct arch *arch, struct ins_operands *ops, struct map_s
 	if (ops->locked.ops == NULL)
 		return 0;
 
-	if (disasm_line__parse(ops->raw, &ops->locked.ins.name, &ops->locked.ops->raw) < 0)
+	if (disasm_line__parse(ops->raw, &ops->locked.ins.name, &ops->locked.ops->raw, &ops->locked.ins.opcode, &ops->locked.ops->raw_insn) < 0)
 		goto out_free_ops;
 
 	ops->locked.ins.ops = ins__find(arch, ops->locked.ins.name);
@@ -815,11 +815,38 @@ static void disasm_line__init_ins(struct disasm_line *dl, struct arch *arch, str
 		dl->ins.ops = NULL;
 }
 
-static int disasm_line__parse(char *line, const char **namep, char **rawp)
+int __weak get_opcode_insn(unsigned int raw_insn __maybe_unused)
 {
-	char tmp, *name = skip_spaces(line);
+	return -1;
+}
 
-	if (name[0] == '\0')
+int __weak get_source_reg(unsigned int raw_insn __maybe_unused)
+{
+	return -1;
+}
+
+int __weak get_target_reg(unsigned int raw_insn __maybe_unused)
+{
+	return -1;
+}
+
+/*
+ * Parses the objdump result captured with --show-raw-insn.
+ * Example, objdump line from powerpc:
+ * line:    38 01 81 e8     ld      r4,312(r1)
+ * namep : ld
+ * rawp  : "ld r4,312(r1)"
+ * opcode: fetched from arch specific get_opcode_insn
+ * rawp_insn: e8810138
+ *
+ * rawp_insn is used later to extract the reg/offset fields
+ */
+static int disasm_line__parse(char *line, const char **namep, char **rawp, int *opcode, int *rawp_insn)
+{
+	char tmp, *tmp_opcode, *name_opcode = skip_spaces(line);
+	char *name = skip_spaces(name_opcode + 11);
+
+	if (name_opcode[0] == '\0')
 		return -1;
 
 	*rawp = name + 1;
@@ -829,13 +856,18 @@ static int disasm_line__parse(char *line, const char **namep, char **rawp)
 
 	tmp = (*rawp)[0];
 	(*rawp)[0] = '\0';
+	tmp_opcode = strdup(name_opcode);
+	tmp_opcode[11] = '\0';
+	remove_spaces(tmp_opcode);
 	*namep = strdup(name);
+	*opcode = get_opcode_insn(be32_to_cpu(strtol(tmp_opcode, NULL, 16)));
 
 	if (*namep == NULL)
 		goto out;
 
 	(*rawp)[0] = tmp;
 	*rawp = strim(*rawp);
+	*rawp_insn = be32_to_cpu(strtol(tmp_opcode, NULL, 16));
 
 	return 0;
 
@@ -896,7 +928,7 @@ struct disasm_line *disasm_line__new(struct annotate_args *args)
 		goto out_delete;
 
 	if (args->offset != -1) {
-		if (disasm_line__parse(dl->al.line, &dl->ins.name, &dl->ops.raw) < 0)
+		if (disasm_line__parse(dl->al.line, &dl->ins.name, &dl->ops.raw, &dl->ins.opcode, &dl->ops.raw_insn) < 0)
 			goto out_free_line;
 
 		disasm_line__init_ins(dl, args->arch, &args->ms);
@@ -1726,7 +1758,7 @@ int symbol__disassemble(struct symbol *sym, struct annotate_args *args)
 		 map__rip_2objdump(map, sym->start),
 		 map__rip_2objdump(map, sym->end),
 		 opts->show_linenr ? "-l" : "",
-		 opts->show_asm_raw ? "" : "--no-show-raw-insn",
+		 opts->show_asm_raw ? "" : "--show-raw-insn",
 		 opts->annotate_src ? "-S" : "",
 		 opts->prefix ? "--prefix " : "",
 		 opts->prefix ? '"' : ' ',

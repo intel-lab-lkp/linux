@@ -31,6 +31,15 @@ static inline int get_dwarf_regnum(const char *name __maybe_unused,
 }
 #endif
 
+/*
+ * get_opcode_insn - Return opcode from raw instruction
+ * get_source_reg - Return source reg from raw instruction
+ * get_target_reg - Return target reg from raw instruction
+ */
+int get_opcode_insn(unsigned int raw_insn);
+int get_source_reg(unsigned int raw_insn);
+int get_target_reg(unsigned int raw_insn);
+
 #ifdef HAVE_ARCH_REGS_QUERY_REGISTER_OFFSET
 /*
  * Arch should support fetching the offset of a register in pt_regs
