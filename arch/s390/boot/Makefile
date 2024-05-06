@@ -3,6 +3,8 @@
 # Makefile for the linux s390-specific parts of the memory manager.
 #
 
+# These must be disabled explicitly because this Makefile uses obj-y
+# for bootloader objects.
 KCOV_INSTRUMENT := n
 GCOV_PROFILE := n
 UBSAN_SANITIZE := n
