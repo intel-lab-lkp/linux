@@ -91,6 +91,8 @@ struct vmmouse_data {
 		"=d"(out4),				\
 		"=S"(__dummy1),				\
 		"=D"(__dummy2) :			\
+         [port] "i" (VMWARE_HYPERVISOR_PORT),		\
+         [mode] "m" (vmware_hypercall_mode),		\
 		"a"(VMMOUSE_PROTO_MAGIC),		\
 		"b"(in1),				\
 		"c"(VMMOUSE_PROTO_CMD_##cmd),		\
