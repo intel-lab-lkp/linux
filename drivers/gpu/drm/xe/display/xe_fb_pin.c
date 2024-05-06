@@ -112,9 +112,11 @@ static struct xe_bo *xe_fb_dpt_alloc(struct intel_framebuffer *fb)
 	return dpt;
 }
 
-static void xe_fb_dpt_free(struct i915_vma *vma)
+static void xe_fb_dpt_free(struct i915_vma *vma, struct intel_framebuffer *fb)
 {
-	xe_bo_put(vma->dpt);
+	if (!fb || cmpxchg((struct xe_bo **)&fb->dpt_vm, NULL, vma->dpt))
+		xe_bo_put(vma->dpt);
+
 	vma->dpt = NULL;
 }
 
@@ -152,10 +154,11 @@ out_put:
 static int
 xe_fb_dpt_alloc_pinned(struct i915_vma *vma, struct intel_framebuffer *fb)
 {
-	struct xe_bo *dpt;
+	struct xe_bo *dpt = (struct xe_bo *)xchg(&fb->dpt_vm, NULL);
 	int err;
 
-	dpt = xe_fb_dpt_alloc(fb);
+	if (!dpt)
+		dpt = xe_fb_dpt_alloc(fb);
 	if (IS_ERR(dpt))
 		return PTR_ERR(dpt);
 
@@ -171,17 +174,17 @@ xe_fb_dpt_alloc_pinned(struct i915_vma *vma, struct intel_framebuffer *fb)
 		ttm_bo_unreserve(&dpt->ttm);
 	}
 	if (err)
-		xe_fb_dpt_free(vma);
+		xe_fb_dpt_free(vma, fb);
 	return err;
 }
 
-static void xe_fb_dpt_unpin_free(struct i915_vma *vma)
+static void xe_fb_dpt_unpin_free(struct i915_vma *vma, struct intel_framebuffer *fb)
 {
 	ttm_bo_reserve(&vma->dpt->ttm, false, false, NULL);
 	ttm_bo_unpin(&vma->dpt->ttm);
 	ttm_bo_unreserve(&vma->dpt->ttm);
 
-	xe_fb_dpt_free(vma);
+	xe_fb_dpt_free(vma, fb);
 }
 
 static int __xe_pin_fb_vma_dpt(struct intel_framebuffer *fb,
@@ -237,7 +240,7 @@ static int __xe_pin_fb_vma_dpt(struct intel_framebuffer *fb,
 
 	ret = xe_fb_dpt_map_ggtt(dpt);
 	if (ret)
-		xe_fb_dpt_unpin_free(vma);
+		xe_fb_dpt_unpin_free(vma, fb);
 	return ret;
 }
 
@@ -399,14 +402,14 @@ err:
 	return ERR_PTR(ret);
 }
 
-static void __xe_unpin_fb_vma(struct i915_vma *vma)
+static void __xe_unpin_fb_vma(struct i915_vma *vma, struct intel_framebuffer *fb)
 {
 	struct xe_device *xe = to_xe_device(vma->bo->ttm.base.dev);
 	struct xe_ggtt *ggtt = xe_device_get_root_tile(xe)->mem.ggtt;
 
 	if (vma->dpt) {
 		xe_ggtt_remove_bo(ggtt, vma->dpt);
-		xe_fb_dpt_unpin_free(vma);
+		xe_fb_dpt_unpin_free(vma, fb);
 	} else {
 		if (!drm_mm_node_allocated(&vma->bo->ggtt_node) ||
 		    vma->bo->ggtt_node.start != vma->node.start)
@@ -433,7 +436,7 @@ intel_pin_and_fence_fb_obj(struct drm_framebuffer *fb,
 
 void intel_unpin_fb_vma(struct i915_vma *vma, unsigned long flags)
 {
-	__xe_unpin_fb_vma(vma);
+	__xe_unpin_fb_vma(vma, NULL);
 }
 
 int intel_plane_pin_fb(struct intel_plane_state *plane_state)
@@ -455,7 +458,7 @@ int intel_plane_pin_fb(struct intel_plane_state *plane_state)
 
 void intel_plane_unpin_fb(struct intel_plane_state *old_plane_state)
 {
-	__xe_unpin_fb_vma(old_plane_state->ggtt_vma);
+	__xe_unpin_fb_vma(old_plane_state->ggtt_vma, to_intel_framebuffer(old_plane_state->hw.fb));
 	old_plane_state->ggtt_vma = NULL;
 }
 
@@ -465,10 +468,12 @@ void intel_plane_unpin_fb(struct intel_plane_state *old_plane_state)
  */
 struct i915_address_space *intel_dpt_create(struct intel_framebuffer *fb)
 {
-	return NULL;
+	return (struct i915_address_space *)xe_fb_dpt_alloc(fb);
 }
 
 void intel_dpt_destroy(struct i915_address_space *vm)
 {
-	return;
+	struct xe_bo *bo = (struct xe_bo *)vm;
+
+	xe_bo_put(bo);
 }
