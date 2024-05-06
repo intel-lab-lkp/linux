@@ -98,6 +98,7 @@ struct kvmppc_ics {
 	arch_spinlock_t lock;
 	u16 icsid;
 	struct ics_irq_state irq_state[KVMPPC_XICS_IRQ_PER_ICS];
+	DECLARE_BITMAP(resend_map, KVMPPC_XICS_IRQ_PER_ICS);
 };
 
 struct kvmppc_xics {
