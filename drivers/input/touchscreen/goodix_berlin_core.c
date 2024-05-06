@@ -672,6 +672,44 @@ static void goodix_berlin_power_off_act(void *data)
 	goodix_berlin_power_off(cd);
 }
 
+static ssize_t goodix_berlin_registers_read(struct file *filp, struct kobject *kobj,
+	struct bin_attribute *bin_attr, char *buf, loff_t off, size_t count)
+{
+	struct goodix_berlin_core *cd;
+	struct device *dev;
+	int error;
+
+	dev = kobj_to_dev(kobj);
+	cd = dev_get_drvdata(dev);
+
+	error = regmap_raw_read(cd->regmap, (unsigned int)off,
+				buf, count);
+
+	return error ? error : count;
+}
+
+static ssize_t goodix_berlin_registers_write(struct file *filp, struct kobject *kobj,
+	struct bin_attribute *bin_attr, char *buf, loff_t off, size_t count)
+{
+	struct goodix_berlin_core *cd;
+	struct device *dev;
+	int error;
+
+	dev = kobj_to_dev(kobj);
+	cd = dev_get_drvdata(dev);
+
+	error = regmap_raw_write(cd->regmap, (unsigned int)off,
+				 buf, count);
+
+	return error ? error : count;
+}
+
+static struct bin_attribute goodix_berlin_registers_attr = {
+	.attr = {.name = "registers", .mode = 0600},
+	.read = goodix_berlin_registers_read,
+	.write = goodix_berlin_registers_write,
+};
+
 int goodix_berlin_probe(struct device *dev, int irq, const struct input_id *id,
 			struct regmap *regmap)
 {
@@ -743,12 +781,26 @@ int goodix_berlin_probe(struct device *dev, int irq, const struct input_id *id,
 
 	dev_set_drvdata(dev, cd);
 
+	error = sysfs_create_bin_file(&cd->dev->kobj,
+				      &goodix_berlin_registers_attr);
+
+	if (error) {
+		dev_err(dev, "unable to create sysfs file, err=%d\n", error);
+		return error;
+	}
+
 	dev_dbg(dev, "Goodix Berlin %s Touchscreen Controller",
 		cd->fw_version.patch_pid);
 
 	return 0;
 }
 EXPORT_SYMBOL_GPL(goodix_berlin_probe);
+
+void goodix_berlin_remove(struct device *dev)
+{
+	sysfs_remove_bin_file(&dev->kobj, &goodix_berlin_registers_attr);
+}
+EXPORT_SYMBOL_GPL(goodix_berlin_remove);
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Goodix Berlin Core Touchscreen driver");

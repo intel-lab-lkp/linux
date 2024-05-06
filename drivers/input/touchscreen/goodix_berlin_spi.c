@@ -150,6 +150,11 @@ static int goodix_berlin_spi_probe(struct spi_device *spi)
 	return 0;
 }
 
+static void goodix_berlin_spi_remove(struct spi_device *spi)
+{
+	goodix_berlin_remove(&spi->dev);
+}
+
 static const struct spi_device_id goodix_berlin_spi_ids[] = {
 	{ "gt9916" },
 	{ },
@@ -169,6 +174,7 @@ static struct spi_driver goodix_berlin_spi_driver = {
 		.pm = pm_sleep_ptr(&goodix_berlin_pm_ops),
 	},
 	.probe = goodix_berlin_spi_probe,
+	.remove = goodix_berlin_spi_remove,
 	.id_table = goodix_berlin_spi_ids,
 };
 module_spi_driver(goodix_berlin_spi_driver);

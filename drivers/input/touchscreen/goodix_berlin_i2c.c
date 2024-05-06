@@ -46,6 +46,11 @@ static int goodix_berlin_i2c_probe(struct i2c_client *client)
 	return 0;
 }
 
+static void goodix_berlin_i2c_remove(struct i2c_client *client)
+{
+	goodix_berlin_remove(&client->dev);
+}
+
 static const struct i2c_device_id goodix_berlin_i2c_id[] = {
 	{ "gt9916", 0 },
 	{ }
@@ -66,6 +71,7 @@ static struct i2c_driver goodix_berlin_i2c_driver = {
 		.pm = pm_sleep_ptr(&goodix_berlin_pm_ops),
 	},
 	.probe = goodix_berlin_i2c_probe,
+	.remove = goodix_berlin_i2c_remove,
 	.id_table = goodix_berlin_i2c_id,
 };
 module_i2c_driver(goodix_berlin_i2c_driver);
