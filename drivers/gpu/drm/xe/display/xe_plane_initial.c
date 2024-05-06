@@ -145,6 +145,7 @@ intel_alloc_initial_plane_obj(struct intel_crtc *crtc,
 	case I915_FORMAT_MOD_X_TILED:
 	case I915_FORMAT_MOD_Y_TILED:
 	case I915_FORMAT_MOD_4_TILED:
+	case I915_FORMAT_MOD_4_TILED_XE2_CCS:
 		break;
 	default:
 		drm_dbg(&dev_priv->drm,
