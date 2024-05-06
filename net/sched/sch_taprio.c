@@ -104,6 +104,7 @@ struct taprio_sched {
 	u32 max_sdu[TC_MAX_QUEUE]; /* save info from the user */
 	u32 fp[TC_QOPT_MAX_QUEUE]; /* only for dump and offloading */
 	u32 txtime_delay;
+	ktime_t offset;
 };
 
 struct __tc_taprio_qopt_offload {
@@ -168,6 +169,19 @@ static ktime_t sched_base_time(const struct sched_gate_list *sched)
 		return KTIME_MAX;
 
 	return ns_to_ktime(sched->base_time);
+}
+
+static ktime_t taprio_get_offset(const struct taprio_sched *q)
+{
+	enum tk_offsets tk_offset = READ_ONCE(q->tk_offset);
+	ktime_t time = ktime_get();
+
+	switch (tk_offset) {
+	case TK_OFFS_MAX:
+		return 0;
+	default:
+		return ktime_sub_ns(ktime_mono_to_any(time, tk_offset), time);
+	}
 }
 
 static ktime_t taprio_mono_to_any(const struct taprio_sched *q, ktime_t mono)
@@ -918,6 +932,7 @@ static enum hrtimer_restart advance_sched(struct hrtimer *timer)
 	int num_tc = netdev_get_num_tc(dev);
 	struct sched_entry *entry, *next;
 	struct Qdisc *sch = q->root;
+	ktime_t now_offset = taprio_get_offset(q);
 	ktime_t end_time;
 	int tc;
 
@@ -956,6 +971,14 @@ static enum hrtimer_restart advance_sched(struct hrtimer *timer)
 
 	end_time = ktime_add_ns(entry->end_time, next->interval);
 	end_time = min_t(ktime_t, end_time, oper->cycle_end_time);
+
+	if (q->offset != now_offset) {
+		ktime_t diff = ktime_sub_ns(now_offset, q->offset);
+
+		end_time = ktime_add_ns(end_time, diff);
+		oper->cycle_end_time = ktime_add_ns(oper->cycle_end_time, diff);
+		q->offset = now_offset;
+	}
 
 	for (tc = 0; tc < num_tc; tc++) {
 		if (next->gate_duration[tc] == oper->cycle_time)
@@ -1210,6 +1233,7 @@ static int taprio_get_start_time(struct Qdisc *sch,
 
 	base = sched_base_time(sched);
 	now = taprio_get_time(q);
+	q->offset = taprio_get_offset(q);
 
 	if (ktime_after(base, now)) {
 		*start = base;
