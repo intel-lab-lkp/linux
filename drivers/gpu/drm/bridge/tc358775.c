@@ -680,14 +680,14 @@ static int tc_probe(struct i2c_client *client)
 	if (ret)
 		return ret;
 
-	tc->vddio = devm_regulator_get(dev, "vddio-supply");
+	tc->vddio = devm_regulator_get(dev, "vddio");
 	if (IS_ERR(tc->vddio)) {
 		ret = PTR_ERR(tc->vddio);
 		dev_err(dev, "vddio-supply not found\n");
 		return ret;
 	}
 
-	tc->vdd = devm_regulator_get(dev, "vdd-supply");
+	tc->vdd = devm_regulator_get(dev, "vdd");
 	if (IS_ERR(tc->vdd)) {
 		ret = PTR_ERR(tc->vdd);
 		dev_err(dev, "vdd-supply not found\n");
