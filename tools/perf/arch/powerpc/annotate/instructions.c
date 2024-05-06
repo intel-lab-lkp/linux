@@ -1,6 +1,17 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/compiler.h>
 
+/*
+ * powerpc instruction nmemonic table to associate load/store instructions with
+ * move_ops. mov_ops is used to identify add/mr to do instruction tracking.
+ */
+static struct ins powerpc__instructions[] = {
+	{ .name = "mr",         .ops = &load_store_ops,  },
+	{ .name = "addi",       .ops = &load_store_ops,   },
+	{ .name = "addis",      .ops = &load_store_ops,  },
+	{ .name = "add",        .ops = &load_store_ops,  },
+};
+
 static struct ins_ops *powerpc__associate_instruction_ops(struct arch *arch, const char *name)
 {
 	int i;
@@ -75,6 +86,9 @@ static void update_insn_state_powerpc(struct type_state *state,
 	if (annotate_get_insn_location(dloc->arch, dl, &loc) < 0)
 		return;
 
+	if (!strncmp(dl->ins.name, "add", 3))
+		goto regs_check;
+
 	if (strncmp(dl->ins.name, "mr", 2))
 		return;
 
@@ -85,6 +99,7 @@ static void update_insn_state_powerpc(struct type_state *state,
 		dst->reg1 = src_reg;
 	}
 
+regs_check:
 	if (!has_reg_type(state, dst->reg1))
 		return;
 
@@ -115,6 +130,12 @@ static void update_insn_state_powerpc(struct type_state *state __maybe_unused, s
 static int powerpc__annotate_init(struct arch *arch, char *cpuid __maybe_unused)
 {
 	if (!arch->initialized) {
+		arch->nr_instructions = ARRAY_SIZE(powerpc__instructions);
+		arch->instructions = calloc(arch->nr_instructions, sizeof(struct ins));
+		if (!arch->instructions)
+			return -ENOMEM;
+		memcpy(arch->instructions, powerpc__instructions, sizeof(struct ins) * arch->nr_instructions);
+		arch->nr_instructions_allocated = arch->nr_instructions;
 		arch->initialized = true;
 		arch->associate_instruction_ops = powerpc__associate_instruction_ops;
 		arch->objdump.comment_char      = '#';
