@@ -59,6 +59,12 @@ struct netdev_name_node {
 	struct rcu_head rcu;
 };
 
+struct netdev_name_pat_node {
+	struct hlist_node hlist;
+	char name_pat[IFNAMSIZ];
+	unsigned long *inuse;
+};
+
 int netdev_get_name(struct net *net, char *name, int ifindex);
 int dev_change_name(struct net_device *dev, const char *newname);
 

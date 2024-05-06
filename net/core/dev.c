@@ -197,6 +197,14 @@ static inline struct hlist_head *dev_index_hash(struct net *net, int ifindex)
 	return &net->dev_index_head[ifindex & (NETDEV_HASHENTRIES - 1)];
 }
 
+static inline struct hlist_head *
+dev_name_pat_hash(struct net *net, const char *pat)
+{
+	unsigned int hash = full_name_hash(net, pat, strnlen(pat, IFNAMSIZ));
+
+	return &net->dev_name_pat_head[hash_32(hash, NETDEV_HASHBITS)];
+}
+
 static inline void rps_lock_irqsave(struct softnet_data *sd,
 				    unsigned long *flags)
 {
@@ -229,6 +237,64 @@ static inline void rps_unlock_irq_enable(struct softnet_data *sd)
 		spin_unlock_irq(&sd->input_pkt_queue.lock);
 	else if (!IS_ENABLED(CONFIG_PREEMPT_RT))
 		local_irq_enable();
+}
+
+static struct netdev_name_pat_node *
+netdev_name_pat_node_alloc(const char *pattern)
+{
+	struct netdev_name_pat_node *pat_node;
+	const int max_netdevices = 8*PAGE_SIZE;
+
+	pat_node = kmalloc(sizeof(*pat_node), GFP_KERNEL);
+	if (!pat_node)
+		return NULL;
+
+	pat_node->inuse = bitmap_zalloc(max_netdevices, GFP_ATOMIC);
+	if (!pat_node->inuse) {
+		kfree(pat_node);
+		return NULL;
+	}
+
+	INIT_HLIST_NODE(&pat_node->hlist);
+	strscpy(pat_node->name_pat, pattern, IFNAMSIZ);
+
+	return pat_node;
+}
+
+static void netdev_name_pat_node_free(struct netdev_name_pat_node *pat_node)
+{
+	bitmap_free(pat_node->inuse);
+	kfree(pat_node);
+}
+
+static void netdev_name_pat_node_add(struct net *net,
+				     struct netdev_name_pat_node *pat_node)
+{
+	hlist_add_head(&pat_node->hlist,
+		       dev_name_pat_hash(net, pat_node->name_pat));
+}
+
+static void netdev_name_pat_node_del(struct netdev_name_pat_node *pat_node)
+{
+	hlist_del_rcu(&pat_node->hlist);
+}
+
+static struct netdev_name_pat_node *
+netdev_name_pat_node_lookup(struct net *net, const char *pat)
+{
+	struct hlist_head *head = dev_name_pat_hash(net, pat);
+	struct netdev_name_pat_node *pat_node;
+
+	hlist_for_each_entry(pat_node, head, hlist) {
+		if (!strcmp(pat_node->name_pat, pat))
+			return pat_node;
+	}
+	return NULL;
+}
+
+static bool netdev_name_pat_in_use(struct net *net, const char *pat) // eth%d
+{
+	return netdev_name_pat_node_lookup(net, pat);
 }
 
 static struct netdev_name_node *netdev_name_node_alloc(struct net_device *dev,
@@ -1057,6 +1123,7 @@ EXPORT_SYMBOL(dev_valid_name);
 
 static int __dev_alloc_name(struct net *net, const char *name, char *res)
 {
+	struct netdev_name_pat_node *pat_node;
 	int i = 0;
 	const char *p;
 	const int max_netdevices = 8*PAGE_SIZE;
@@ -1071,10 +1138,21 @@ static int __dev_alloc_name(struct net *net, const char *name, char *res)
 	if (!p || p[1] != 'd' || strchr(p + 2, '%'))
 		return -EINVAL;
 
-	/* Use one page as a bit array of possible slots */
-	inuse = bitmap_zalloc(max_netdevices, GFP_ATOMIC);
-	if (!inuse)
+	pat_node = netdev_name_pat_node_lookup(net, name);
+	if (pat_node) {
+		i = find_first_zero_bit(pat_node->inuse, max_netdevices);
+		__set_bit(i, pat_node->inuse);
+		strscpy(buf, name, IFNAMSIZ);
+		snprintf(res, IFNAMSIZ, buf, i);
+
+		return i;
+	}
+
+	pat_node = netdev_name_pat_node_alloc(name);
+	if (!pat_node)
 		return -ENOMEM;
+	netdev_name_pat_node_add(net, pat_node);
+	inuse = pat_node->inuse;
 
 	for_each_netdev(net, d) {
 		struct netdev_name_node *name_node;
@@ -1082,6 +1160,7 @@ static int __dev_alloc_name(struct net *net, const char *name, char *res)
 		netdev_for_each_altname(d, name_node) {
 			if (!sscanf(name_node->name, name, &i))
 				continue;
+
 			if (i < 0 || i >= max_netdevices)
 				continue;
 
@@ -1102,13 +1181,14 @@ static int __dev_alloc_name(struct net *net, const char *name, char *res)
 	}
 
 	i = find_first_zero_bit(inuse, max_netdevices);
-	bitmap_free(inuse);
+	__set_bit(i, inuse);
 	if (i == max_netdevices)
 		return -ENFILE;
 
 	/* 'res' and 'name' could overlap, use 'buf' as an intermediate buffer */
 	strscpy(buf, name, IFNAMSIZ);
 	snprintf(res, IFNAMSIZ, buf, i);
+
 	return i;
 }
 
@@ -11464,12 +11544,20 @@ static int __net_init netdev_init(struct net *net)
 	if (net->dev_index_head == NULL)
 		goto err_idx;
 
+	net->dev_name_pat_head = netdev_create_hash();
+	if (net->dev_name_pat_head == NULL)
+		goto err_name_pat;
+
+	printk("%s head %px\n", __func__, net->dev_name_pat_head);
+
 	xa_init_flags(&net->dev_by_index, XA_FLAGS_ALLOC1);
 
 	RAW_INIT_NOTIFIER_HEAD(&net->netdev_chain);
 
 	return 0;
 
+err_name_pat:
+	kfree(net->dev_index_head);
 err_idx:
 	kfree(net->dev_name_head);
 err_name:
@@ -11563,6 +11651,7 @@ static void __net_exit netdev_exit(struct net *net)
 {
 	kfree(net->dev_name_head);
 	kfree(net->dev_index_head);
+	kfree(net->dev_name_pat_head);
 	xa_destroy(&net->dev_by_index);
 	if (net != &init_net)
 		WARN_ON_ONCE(!list_empty(&net->dev_base_head));
@@ -11610,6 +11699,12 @@ static void __net_exit default_device_exit_net(struct net *net)
 			BUG();
 		}
 	}
+/*
+	hlist_for_each(pat_node, head, hlist) {
+		netdev_name_pat_node_del(pat_node);
+		netdev_name_pat_node_free(pat_node);
+	}
+*/
 }
 
 static void __net_exit default_device_exit_batch(struct list_head *net_list)

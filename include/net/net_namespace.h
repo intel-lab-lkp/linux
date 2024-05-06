@@ -109,6 +109,7 @@ struct net {
 
 	struct hlist_head 	*dev_name_head;
 	struct hlist_head	*dev_index_head;
+	struct hlist_head 	*dev_name_pat_head;
 	struct xarray		dev_by_index;
 	struct raw_notifier_head	netdev_chain;
 
