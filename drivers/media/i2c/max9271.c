@@ -66,8 +66,10 @@ static int max9271_pclk_detect(struct max9271_device *dev)
 
 	for (i = 0; i < 100; i++) {
 		ret = max9271_read(dev, 0x15);
-		if (ret < 0)
-			return ret;
+		if (ret < 0) {
+			usleep_range(50, 100);
+			continue;
+		}
 
 		if (ret & MAX9271_PCLKDET)
 			return 0;
