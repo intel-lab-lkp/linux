@@ -1313,15 +1313,14 @@ struct page *f2fs_new_node_page(struct dnode_of_data *dn, unsigned int ofs)
 
 #ifdef CONFIG_F2FS_CHECK_FS
 	err = f2fs_get_node_info(sbi, dn->nid, &new_ni, false);
-	if (err) {
-		dec_valid_node_count(sbi, dn->inode, !ofs);
-		goto fail;
-	}
+	if (err)
+		goto out_dec;
+
 	if (unlikely(new_ni.blk_addr != NULL_ADDR)) {
 		err = -EFSCORRUPTED;
 		set_sbi_flag(sbi, SBI_NEED_FSCK);
 		f2fs_handle_error(sbi, ERROR_INVALID_BLKADDR);
-		goto fail;
+		goto out_dec;
 	}
 #endif
 	new_ni.nid = dn->nid;
@@ -1345,7 +1344,8 @@ struct page *f2fs_new_node_page(struct dnode_of_data *dn, unsigned int ofs)
 	if (ofs == 0)
 		inc_valid_inode_count(sbi);
 	return page;
-
+out_dec:
+	dec_valid_node_count(sbi, dn->inode, !ofs);
 fail:
 	clear_node_page_dirty(page);
 	f2fs_put_page(page, 1);
