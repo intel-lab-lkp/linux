@@ -13,6 +13,7 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/reset-controller.h>
 
 #include <dt-bindings/clock/imx8mp-clock.h>
 
@@ -34,6 +35,8 @@
 #define SAI_PLL_SSCG_CTL	0x40C
 #define SAI_PLL_MNIT_CTL	0x410
 #define IPG_LP_CTRL		0x504
+
+#define EARC_RESET_MASK		0x3
 
 #define SAIn_MCLK1_PARENT(n)						\
 static const struct clk_parent_data					\
@@ -212,6 +215,7 @@ static const u16 audiomix_regs[] = {
 struct clk_imx8mp_audiomix_priv {
 	void __iomem *base;
 	u32 regs_save[ARRAY_SIZE(audiomix_regs)];
+	struct reset_controller_dev rcdev;
 
 	/* Must be last */
 	struct clk_hw_onecell_data clk_data;
@@ -230,6 +234,80 @@ static void clk_imx8mp_audiomix_save_restore(struct device *dev, bool save)
 		for (i = 0; i < ARRAY_SIZE(audiomix_regs); i++)
 			writel(priv->regs_save[i], base + audiomix_regs[i]);
 	}
+}
+
+static int clk_imx8mp_audiomix_reset_set(struct reset_controller_dev *rcdev,
+					 unsigned long id, bool assert)
+{
+	struct clk_imx8mp_audiomix_priv *drvdata = container_of(rcdev,
+				struct clk_imx8mp_audiomix_priv, rcdev);
+	unsigned int mask = BIT(id);
+	u32 reg;
+
+	pm_runtime_get_sync(rcdev->dev);
+
+	/* bit = 0 reset, bit = 1 unreset */
+	reg = readl(drvdata->base + EARC);
+	if (assert)
+		writel(reg & ~mask, drvdata->base + EARC);
+	else
+		writel(reg | mask, drvdata->base + EARC);
+
+	pm_runtime_put_sync(rcdev->dev);
+
+	return 0;
+}
+
+static int clk_imx8mp_audiomix_reset_reset(struct reset_controller_dev *rcdev,
+					   unsigned long id)
+{
+	clk_imx8mp_audiomix_reset_set(rcdev, id, true);
+
+	return clk_imx8mp_audiomix_reset_set(rcdev, id, false);
+}
+
+static int clk_imx8mp_audiomix_reset_assert(struct reset_controller_dev *rcdev,
+					    unsigned long id)
+{
+	return clk_imx8mp_audiomix_reset_set(rcdev, id, true);
+}
+
+static int clk_imx8mp_audiomix_reset_deassert(struct reset_controller_dev *rcdev,
+					      unsigned long id)
+{
+	return clk_imx8mp_audiomix_reset_set(rcdev, id, false);
+}
+
+static int clk_imx8mp_audiomix_reset_xlate(struct reset_controller_dev *rcdev,
+					   const struct of_phandle_args *reset_spec)
+{
+	unsigned long id = reset_spec->args[0];
+
+	if (!(BIT(id) & EARC_RESET_MASK))
+		return -EINVAL;
+
+	return id;
+}
+
+static const struct reset_control_ops clk_imx8mp_audiomix_reset_ops = {
+	.reset		= clk_imx8mp_audiomix_reset_reset,
+	.assert		= clk_imx8mp_audiomix_reset_assert,
+	.deassert	= clk_imx8mp_audiomix_reset_deassert,
+};
+
+static int clk_imx8mp_audiomix_register_reset_controller(struct device *dev)
+{
+	struct clk_imx8mp_audiomix_priv *drvdata = dev_get_drvdata(dev);
+
+	drvdata->rcdev.owner     = THIS_MODULE;
+	drvdata->rcdev.nr_resets = fls(EARC_RESET_MASK);
+	drvdata->rcdev.ops       = &clk_imx8mp_audiomix_reset_ops;
+	drvdata->rcdev.of_node   = dev->of_node;
+	drvdata->rcdev.dev	 = dev;
+	drvdata->rcdev.of_reset_n_cells = 1;
+	drvdata->rcdev.of_xlate  = clk_imx8mp_audiomix_reset_xlate;
+
+	return devm_reset_controller_register(dev, &drvdata->rcdev);
 }
 
 static int clk_imx8mp_audiomix_probe(struct platform_device *pdev)
@@ -334,6 +412,10 @@ static int clk_imx8mp_audiomix_probe(struct platform_device *pdev)
 
 	ret = devm_of_clk_add_hw_provider(&pdev->dev, of_clk_hw_onecell_get,
 					  clk_hw_data);
+	if (ret)
+		goto err_clk_register;
+
+	ret = clk_imx8mp_audiomix_register_reset_controller(dev);
 	if (ret)
 		goto err_clk_register;
 
