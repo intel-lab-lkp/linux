@@ -442,5 +442,37 @@
 			};
 		};
 
+		mmc@3400000 {
+			config {
+
+				mmc-hs200 {
+					nvidia,num-tuning-iter = <0x2>;
+				};
+
+				uhs-sdr104 {
+					nvidia,num-tuning-iter = <0x2>;
+				};
+
+				uhs-sdr50 {
+					nvidia,num-tuning-iter = <0x4>;
+				};
+
+			};
+		};
+
+		mmc@3460000 {
+			config {
+
+				mmc-hs200 {
+					nvidia,num-tuning-iter = <0x2>;
+				};
+
+				mmc-hs400 {
+					nvidia,num-tuning-iter = <0x2>;
+				};
+
+			};
+		};
+
 	};
 };
