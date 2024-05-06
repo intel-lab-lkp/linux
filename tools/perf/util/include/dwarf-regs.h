@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 #ifndef _PERF_DWARF_REGS_H_
 #define _PERF_DWARF_REGS_H_
+#include "annotate.h"
 
 #define DWARF_REG_PC  0xd3af9c /* random number */
 #define DWARF_REG_FB  0xd3affb /* random number */
@@ -39,7 +40,8 @@ static inline int get_dwarf_regnum(const char *name __maybe_unused,
 int get_opcode_insn(unsigned int raw_insn);
 int get_source_reg(unsigned int raw_insn);
 int get_target_reg(unsigned int raw_insn);
-
+int get_offset_opcode(int raw_insn);
+void get_arch_regs(int raw_insn, int is_source, struct annotated_op_loc *op_loc);
 #ifdef HAVE_ARCH_REGS_QUERY_REGISTER_OFFSET
 /*
  * Arch should support fetching the offset of a register in pt_regs

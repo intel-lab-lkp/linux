@@ -2073,6 +2073,12 @@ static int extract_reg_offset(struct arch *arch, const char *str,
 	return 0;
 }
 
+__weak void get_arch_regs(int raw_insn __maybe_unused, int is_source __maybe_unused,
+		struct annotated_op_loc *op_loc __maybe_unused)
+{
+	return;
+}
+
 /**
  * annotate_get_insn_location - Get location of instruction
  * @arch: the architecture info
@@ -2117,10 +2123,12 @@ int annotate_get_insn_location(struct arch *arch, struct disasm_line *dl,
 	for_each_insn_op_loc(loc, i, op_loc) {
 		const char *insn_str = ops->source.raw;
 		bool multi_regs = ops->source.multi_regs;
+		bool mem_ref = ops->source.mem_ref;
 
 		if (i == INSN_OP_TARGET) {
 			insn_str = ops->target.raw;
 			multi_regs = ops->target.multi_regs;
+			mem_ref = ops->target.mem_ref;
 		}
 
 		/* Invalidate the register by default */
@@ -2130,7 +2138,19 @@ int annotate_get_insn_location(struct arch *arch, struct disasm_line *dl,
 		if (insn_str == NULL)
 			continue;
 
-		if (strchr(insn_str, arch->objdump.memory_ref_char)) {
+		/*
+		 * For powerpc, call get_arch_regs function which extracts the
+		 * required fields for op_loc, ie reg1, reg2, offset from the
+		 * raw instruction.
+		 */
+		if (arch__is(arch, "powerpc")) {
+			op_loc->mem_ref = mem_ref;
+			if ((!strchr(insn_str, '(')) && (i == INSN_OP_SOURCE))
+				op_loc->multi_regs = true;
+			get_arch_regs(ops->raw_insn, !i, op_loc);
+			if (op_loc->multi_regs)
+				op_loc->offset = 0;
+		} else if (strchr(insn_str, arch->objdump.memory_ref_char)) {
 			op_loc->mem_ref = true;
 			op_loc->multi_regs = multi_regs;
 			extract_reg_offset(arch, insn_str, op_loc);

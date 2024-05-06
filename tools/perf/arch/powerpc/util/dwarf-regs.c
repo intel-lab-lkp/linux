@@ -102,6 +102,9 @@ int regs_query_register_offset(const char *name)
 #define	PPC_OP(op)	(((op) >> 26) & 0x3F)
 #define PPC_RA(a)	(((a) >> 16) & 0x1f)
 #define PPC_RT(t)	(((t) >> 21) & 0x1f)
+#define PPC_RB(b)	(((b) >> 11) & 0x1f)
+#define PPC_D(D)	((D) & 0xfffe)
+#define PPC_DS(DS)	((DS) & 0xfffc)
 
 int get_opcode_insn(unsigned int raw_insn)
 {
@@ -116,4 +119,34 @@ int get_source_reg(unsigned int raw_insn)
 int get_target_reg(unsigned int raw_insn)
 {
 	return PPC_RT(raw_insn);
+}
+
+int get_offset_opcode(int raw_insn __maybe_unused)
+{
+	int opcode = PPC_OP(raw_insn);
+
+	/* DS- form */
+	if ((opcode == 58) || (opcode == 62))
+		return PPC_DS(raw_insn);
+	else
+		return PPC_D(raw_insn);
+}
+
+/*
+ * Fills the required fields for op_loc depending on if it
+ * is a source of target.
+ * D form: ins RT,D(RA) -> src_reg1 = RA, offset = D, dst_reg1 = RT
+ * DS form: ins RT,DS(RA) -> src_reg1 = RA, offset = DS, dst_reg1 = RT
+ * X form: ins RT,RA,RB -> src_reg1 = RA, src_reg2 = RB, dst_reg1 = RT
+ */
+void get_arch_regs(int raw_insn __maybe_unused, int is_source __maybe_unused, struct annotated_op_loc *op_loc __maybe_unused)
+{
+	if (is_source)
+		op_loc->reg1 = get_source_reg(raw_insn);
+	else
+		op_loc->reg1 = get_target_reg(raw_insn);
+	if (op_loc->multi_regs)
+		op_loc->reg2 = PPC_RB(raw_insn);
+	if (op_loc->mem_ref)
+		op_loc->offset = get_offset_opcode(raw_insn);
 }
