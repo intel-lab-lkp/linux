@@ -4,7 +4,7 @@
 
 #include "backend_lz4.h"
 
-static void *lz4_create(void)
+static void *lz4_create(struct zcomp_config *config)
 {
 	return vmalloc(LZ4_MEM_COMPRESS);
 }
