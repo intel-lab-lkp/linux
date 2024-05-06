@@ -2444,6 +2444,7 @@ static int post_relocation(struct module *mod, const struct load_info *info)
 }
 
 /* Call module constructors. */
+__nocfi
 static void do_mod_ctors(struct module *mod)
 {
 #ifdef CONFIG_CONSTRUCTORS
