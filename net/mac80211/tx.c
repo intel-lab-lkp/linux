@@ -4654,7 +4654,9 @@ void __ieee80211_subif_start_xmit(struct sk_buff *skb,
 				  u64 *cookie)
 {
 	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
+	struct ieee80211_sub_if_data *ap_sdata;
 	struct ieee80211_local *local = sdata->local;
+	struct ieee80211_key *key;
 	struct sta_info *sta;
 	struct sk_buff *next;
 	int len = skb->len;
@@ -4678,6 +4680,17 @@ void __ieee80211_subif_start_xmit(struct sk_buff *skb,
 
 	if (IS_ERR(sta))
 		sta = NULL;
+
+	if (sta && sdata->vif.type == NL80211_IFTYPE_AP_VLAN) {
+		ap_sdata = container_of(sdata->bss,
+					struct ieee80211_sub_if_data, u.ap);
+		if (ap_sdata->vif.offload_flags & IEEE80211_OFFLOAD_ENCAP_ENABLED &&
+		    !is_multicast_ether_addr(skb->data)) {
+			key = rcu_dereference(sta->ptk[sta->ptk_idx]);
+			ieee80211_8023_xmit(sdata, dev, sta, key, skb);
+			goto out;
+		}
+	}
 
 	skb_set_queue_mapping(skb, ieee80211_select_queue(sdata, sta, skb));
 	ieee80211_aggr_check(sdata, sta, skb);
