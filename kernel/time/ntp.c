@@ -65,6 +65,9 @@ static s64			time_offset;
 /* pll time constant:							*/
 static long			time_constant = 2;
 
+/* pll time constant increment:						*/
+static long			time_constant_inc = 4;
+
 /* maximum error (usecs):						*/
 static long			time_maxerror = NTP_PHASE_LIMIT;
 
@@ -734,10 +737,10 @@ static inline void process_adjtimex_modes(const struct __kernel_timex *txc,
 
 	if (txc->modes & ADJ_TIMECONST) {
 		time_constant = txc->constant;
-		if (!(time_status & STA_NANO))
-			time_constant += 4;
-		time_constant = min(time_constant, (long)MAXTC);
-		time_constant = max(time_constant, 0l);
+		if (!(time_status & STA_NANO) &&
+		    unlikely(LONG_MAX - time_constant_inc >= time_constant))
+			time_constant += time_constant_inc;
+		time_constant = clamp_t(long, time_constant, 0, MAXTC);
 	}
 
 	if (txc->modes & ADJ_TAI &&
