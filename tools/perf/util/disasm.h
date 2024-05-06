@@ -3,12 +3,16 @@
 #define __PERF_UTIL_DISASM_H
 
 #include "map_symbol.h"
+#include "dwarf-aux.h"
 
 struct annotation_options;
 struct disasm_line;
 struct ins;
 struct evsel;
 struct symbol;
+struct data_loc_info;
+struct type_state;
+struct disasm_line;
 
 struct arch {
 	const char	*name;
@@ -32,6 +36,9 @@ struct arch {
 		char memory_ref_char;
 		char imm_char;
 	} objdump;
+	void		(*update_insn_state)(struct type_state *state,
+				struct data_loc_info *dloc, Dwarf_Die *cu_die,
+				struct disasm_line *dl);
 };
 
 struct ins {
