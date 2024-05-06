@@ -239,6 +239,9 @@ static void tc358775_power_up(struct tc_data *tc)
 	struct device *dev = &tc->dsi->dev;
 	int ret;
 
+	if (tc->powered)
+		return;
+
 	ret = regulator_enable(tc->vddio);
 	if (ret < 0)
 		dev_err(dev, "regulator vddio enable failed, %d\n", ret);
@@ -252,6 +255,8 @@ static void tc358775_power_up(struct tc_data *tc)
 
 	gpiod_set_value(tc->reset_gpio, 0);
 	usleep_range(200, 250);
+
+	tc->powered = true;
 }
 
 static void tc358775_power_down(struct tc_data *tc)
@@ -271,20 +276,8 @@ static void tc358775_power_down(struct tc_data *tc)
 	ret = regulator_disable(tc->vddio);
 	if (ret < 0)
 		dev_err(dev, "regulator vddio disable failed, %d\n", ret);
-}
 
-static void tc_bridge_pre_enable(struct drm_bridge *bridge)
-{
-	struct tc_data *tc = bridge_to_tc(bridge);
-
-	tc358775_power_up(tc);
-}
-
-static void tc_bridge_post_disable(struct drm_bridge *bridge)
-{
-	struct tc_data *tc = bridge_to_tc(bridge);
-
-	tc358775_power_down(tc);
+	tc->powered = false;
 }
 
 /* helper function to access bus_formats */
@@ -474,12 +467,25 @@ static void tc358775_configure_lvds_clock(struct tc_data *tc)
 	regmap_write(tc->regmap, LVCFG, val);
 }
 
-static void tc358775_bridge_enable(struct drm_bridge *bridge)
+static void tc358775_dsi_lp11_notify(struct drm_bridge *bridge)
 {
 	struct tc_data *tc = bridge_to_tc(bridge);
-	unsigned int val = 0;
-	struct drm_display_mode *mode;
+
+	tc358775_power_up(tc);
+}
+
+static void tc358775_bridge_pre_enable(struct drm_bridge *bridge)
+{
 	struct drm_connector *connector = get_connector(bridge->encoder);
+	struct tc_data *tc = bridge_to_tc(bridge);
+	struct drm_display_mode *mode;
+	unsigned int val = 0;
+
+	/*
+	 * Legacy behavior, make sure this bridge is powered even if
+	 * drm_bridge_dsi_lp11_notify() isn't called by the DSI host
+	 */
+	tc358775_power_up(tc);
 
 	mode = &bridge->encoder->crtc->state->adjusted_mode;
 
@@ -488,20 +494,25 @@ static void tc358775_bridge_enable(struct drm_bridge *bridge)
 	dev_info(tc->dev, "DSI2LVDS Chip ID.%02x Revision ID. %02x **\n",
 		 (val >> 8) & 0xFF, val & 0xFF);
 
-	regmap_write(tc->regmap, SYSRST,
-		     SYS_RST_REG | SYS_RST_DSIRX | SYS_RST_BM | SYS_RST_LCD |
-		     SYS_RST_I2CM);
-	usleep_range(30000, 40000);
-
 	tc358775_configure_dsi(tc, mode->crtc_clock);
 	tc358775_configure_lvds_timings(tc, mode);
 	tc358775_configure_pll(tc, mode->crtc_clock);
 	tc358775_configure_color_mapping(tc, connector->display_info.bus_formats[0]);
-	regmap_write(tc->regmap, VFUEN, VFUEN_VFUEN);
 	tc358775_configure_lvds_clock(tc);
+}
 
-	/* Finally, enable the LVDS transmitter */
+static void tc358775_bridge_enable(struct drm_bridge *bridge)
+{
+	struct tc_data *tc = bridge_to_tc(bridge);
+
 	regmap_update_bits(tc->regmap, LVCFG, LVCFG_LVEN, LVCFG_LVEN);
+}
+
+static void tc358775_bridge_post_disable(struct drm_bridge *bridge)
+{
+	struct tc_data *tc = bridge_to_tc(bridge);
+
+	tc358775_power_down(tc);
 }
 
 /*
@@ -634,11 +645,12 @@ static int tc_bridge_attach(struct drm_bridge *bridge,
 
 static const struct drm_bridge_funcs tc_bridge_funcs = {
 	.attach = tc_bridge_attach,
-	.pre_enable = tc_bridge_pre_enable,
+	.dsi_lp11_notify = tc358775_dsi_lp11_notify,
+	.pre_enable = tc358775_bridge_pre_enable,
 	.enable = tc358775_bridge_enable,
+	.post_disable = tc358775_bridge_post_disable,
 	.mode_fixup = tc_mode_fixup,
 	.mode_valid = tc_mode_valid,
-	.post_disable = tc_bridge_post_disable,
 };
 
 static int tc_attach_host(struct tc_data *tc)
