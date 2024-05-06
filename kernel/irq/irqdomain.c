@@ -985,6 +985,29 @@ struct irq_desc *__irq_resolve_mapping(struct irq_domain *domain,
 }
 EXPORT_SYMBOL_GPL(__irq_resolve_mapping);
 
+enum xlate_type {
+	ONE_CELL	= 0,
+	ONE_TWO_CELL,
+};
+
+static inline int irq_domain_xlate_common(const u32 *intspec,
+					  unsigned int intsize,
+					  unsigned long *out_hwirq,
+					  unsigned int *out_type,
+					  enum xlate_type type)
+{
+	if (WARN_ON(intsize < 1))
+		return -EINVAL;
+
+	*out_hwirq = intspec[0];
+	*out_type = IRQ_TYPE_NONE;
+
+	if (type == ONE_TWO_CELL && intsize > 1)
+		*out_type = intspec[1] & IRQ_TYPE_SENSE_MASK;
+
+	return 0;
+}
+
 /**
  * irq_domain_xlate_onecell() - Generic xlate for direct one cell bindings
  *
@@ -995,11 +1018,8 @@ int irq_domain_xlate_onecell(struct irq_domain *d, struct device_node *ctrlr,
 			     const u32 *intspec, unsigned int intsize,
 			     unsigned long *out_hwirq, unsigned int *out_type)
 {
-	if (WARN_ON(intsize < 1))
-		return -EINVAL;
-	*out_hwirq = intspec[0];
-	*out_type = IRQ_TYPE_NONE;
-	return 0;
+	return irq_domain_xlate_common(intspec, intsize, out_hwirq,
+				       out_type, ONE_CELL);
 }
 EXPORT_SYMBOL_GPL(irq_domain_xlate_onecell);
 
@@ -1037,14 +1057,8 @@ int irq_domain_xlate_onetwocell(struct irq_domain *d,
 				const u32 *intspec, unsigned int intsize,
 				unsigned long *out_hwirq, unsigned int *out_type)
 {
-	if (WARN_ON(intsize < 1))
-		return -EINVAL;
-	*out_hwirq = intspec[0];
-	if (intsize > 1)
-		*out_type = intspec[1] & IRQ_TYPE_SENSE_MASK;
-	else
-		*out_type = IRQ_TYPE_NONE;
-	return 0;
+	return irq_domain_xlate_common(intspec, intsize, out_hwirq,
+				       out_type, ONE_TWO_CELL);
 }
 EXPORT_SYMBOL_GPL(irq_domain_xlate_onetwocell);
 
