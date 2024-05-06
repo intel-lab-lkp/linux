@@ -631,6 +631,17 @@ struct drm_bridge_funcs {
 	void (*hpd_disable)(struct drm_bridge *bridge);
 
 	/**
+	 * dsi_lp11_notify:
+	 *
+	 * Will be called by the DSI host driver while both the DSI clock
+	 * lane as well as the DSI data lanes are in LP-11 mode. Some bridges
+	 * need this state while releasing the reset, for example.
+	 * Not all DSI host drivers will support this. Therefore, the DSI
+	 * bridge driver must not rely on this op to be called.
+	 */
+	void (*dsi_lp11_notify)(struct drm_bridge *bridge);
+
+	/**
 	 * @debugfs_init:
 	 *
 	 * Allows bridges to create bridge-specific debugfs files.
@@ -898,6 +909,7 @@ void drm_bridge_hpd_enable(struct drm_bridge *bridge,
 void drm_bridge_hpd_disable(struct drm_bridge *bridge);
 void drm_bridge_hpd_notify(struct drm_bridge *bridge,
 			   enum drm_connector_status status);
+void drm_bridge_dsi_lp11_notify(struct drm_bridge *bridge);
 
 #ifdef CONFIG_DRM_PANEL_BRIDGE
 bool drm_bridge_is_panel(const struct drm_bridge *bridge);

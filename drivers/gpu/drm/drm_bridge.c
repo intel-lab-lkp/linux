@@ -1339,6 +1339,22 @@ void drm_bridge_hpd_notify(struct drm_bridge *bridge,
 }
 EXPORT_SYMBOL_GPL(drm_bridge_hpd_notify);
 
+/**
+ * drm_bridge_dsi_lp11_notify - notify clock/data lanes LP-11 mode
+ * @bridge: bridge control structure
+ *
+ * DSI host drivers shall call this function while the clock and data lanes
+ * are still in LP-11 mode.
+ *
+ * This function shall be called in a context that can sleep.
+ */
+void drm_bridge_dsi_lp11_notify(struct drm_bridge *bridge)
+{
+	if (bridge->funcs->dsi_lp11_notify)
+		bridge->funcs->dsi_lp11_notify(bridge);
+}
+EXPORT_SYMBOL_GPL(drm_bridge_dsi_lp11_notify);
+
 #ifdef CONFIG_OF
 /**
  * of_drm_find_bridge - find the bridge corresponding to the device node in
