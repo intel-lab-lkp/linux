@@ -119,6 +119,96 @@ properties:
       - const: rx
       - const: tx
 
+  config:
+    description: Config settings for I2C devices enlisted with I2C controller.
+      Config setting is the configuration based on chip/board/system
+      characterization on interface/controller settings. This is needed for
+      - making the controller internal configuration to better perform
+      - making the interface to work proper by setting drive strength, slew
+        rates etc
+      - making the low power leakage.
+      There are two types of recommended configuration settings
+      - Controller register specific for internal operation of controller.
+      - Pad control/Pinmux/pincontrol registers for interfacing.
+      These configurations can further be categorized as static and dynamic.
+      - Static config does not change until a controller is reset.
+      - Dynamic config changes based on mode or condition, controller is
+        operating in.
+      I2C has configuration based on clock speed and has below modes.
+      - common is set on all speeds and can be overridden by speed mode.
+      - high is set when clock mode is high speed.
+      - fastplus is set when clock mode is fast plus.
+      - fast is set when clock mode is fast mode.
+      - standard is set when clock mode is standard mode.
+    $ref: /schemas/misc/nvidia,tegra-config-settings.yaml
+    unevaluatedProperties: false
+    properties:
+      nvidia,i2c-clk-divisor-hs-mode:
+        description: I2C clock divisor for HS mode.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 0xffff
+      nvidia,i2c-clk-divisor-fs-mode:
+        description: I2C clock divisor for FS mode.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 0xffff
+      nvidia,i2c-hs-sclk-high-period:
+        description: I2C high speed sclk high period.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 0xffff
+      nvidia,i2c-hs-sclk-low-period:
+        description: I2C high speed sclk low period.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 0xffff
+      nvidia,i2c-hs-stop-setup-time:
+        description: I2C high speed stop setup time.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 0xffff
+      nvidia,i2c-hs-start-hold-time:
+        description: I2C high speed start hold time.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 0xffff
+      nvidia,i2c-hs-start-setup-time:
+        description: I2C high speed start setup time.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 0xffff
+      nvidia,i2c-sclk-high-period:
+        description: I2C sclk high period.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 0xffff
+      nvidia,i2c-sclk-low-period:
+        description: I2C sclk low period.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 0xffff
+      nvidia,i2c-bus-free-time:
+        description: I2C bus free time.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 0xffff
+      nvidia,i2c-stop-setup-time:
+        description: I2C stop setup time.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 0xffff
+      nvidia,i2c-start-hold-time:
+        description: I2C start hold time.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 0xffff
+      nvidia,i2c-start-setup-time:
+        description: I2C start setup time.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 0xffff
+
 allOf:
   - $ref: /schemas/i2c/i2c-controller.yaml
   - if:
@@ -189,4 +279,18 @@ examples:
 
         #address-cells = <1>;
         #size-cells = <0>;
+        config {
+            common {
+                nvidia,i2c-hs-sclk-high-period = <0x03>;
+                nvidia,i2c-hs-sclk-low-period = <0x08>;
+            };
+            fast {
+                nvidia,i2c-clk-divisor-fs-mode = <0x3c>;
+                nvidia,i2c-sclk-high-period = <0x02>;
+            };
+            fastplus {
+                nvidia,i2c-clk-divisor-fs-mode = <0x4f>;
+                nvidia,i2c-sclk-high-period = <0x07>;
+            };
+        };
     };
