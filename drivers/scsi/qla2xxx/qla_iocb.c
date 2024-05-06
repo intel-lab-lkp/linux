@@ -2749,9 +2749,8 @@ qla24xx_els_dcmd_iocb(scsi_qla_host_t *vha, int els_opcode,
 			    GFP_KERNEL);
 
 	if (!elsio->u.els_logo.els_logo_pyld) {
-		/* ref: INIT */
-		kref_put(&sp->cmd_kref, qla2x00_sp_release);
-		return QLA_FUNCTION_FAILED;
+		rval = QLA_FUNCTION_FAILED;
+		goto put_ref;
 	}
 
 	memset(&logo_pyld, 0, sizeof(struct els_logo_payload));
@@ -2773,9 +2772,8 @@ qla24xx_els_dcmd_iocb(scsi_qla_host_t *vha, int els_opcode,
 
 	rval = qla2x00_start_sp(sp);
 	if (rval != QLA_SUCCESS) {
-		/* ref: INIT */
-		kref_put(&sp->cmd_kref, qla2x00_sp_release);
-		return QLA_FUNCTION_FAILED;
+		rval = QLA_FUNCTION_FAILED;
+		goto put_ref;
 	}
 
 	ql_dbg(ql_dbg_io, vha, 0x3074,
@@ -2784,7 +2782,7 @@ qla24xx_els_dcmd_iocb(scsi_qla_host_t *vha, int els_opcode,
 	    fcport->d_id.b.area, fcport->d_id.b.al_pa);
 
 	wait_for_completion(&elsio->u.els_logo.comp);
-
+put_ref:
 	/* ref: INIT */
 	kref_put(&sp->cmd_kref, qla2x00_sp_release);
 	return rval;
