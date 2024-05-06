@@ -762,26 +762,14 @@ static int tc_probe(struct i2c_client *client)
 	tc->bridge.funcs = &tc_bridge_funcs;
 	tc->bridge.of_node = dev->of_node;
 	tc->bridge.pre_enable_prev_first = true;
-	drm_bridge_add(&tc->bridge);
+
+	ret = devm_drm_bridge_add(tc->dev, &tc->bridge);
+	if (ret)
+		return ret;
 
 	i2c_set_clientdata(client, tc);
 
-	ret = tc_attach_host(tc);
-	if (ret)
-		goto err_bridge_remove;
-
-	return 0;
-
-err_bridge_remove:
-	drm_bridge_remove(&tc->bridge);
-	return ret;
-}
-
-static void tc_remove(struct i2c_client *client)
-{
-	struct tc_data *tc = i2c_get_clientdata(client);
-
-	drm_bridge_remove(&tc->bridge);
+	return tc_attach_host(tc);
 }
 
 static const struct i2c_device_id tc358775_i2c_ids[] = {
@@ -805,7 +793,6 @@ static struct i2c_driver tc358775_driver = {
 	},
 	.id_table = tc358775_i2c_ids,
 	.probe = tc_probe,
-	.remove	= tc_remove,
 };
 module_i2c_driver(tc358775_driver);
 
