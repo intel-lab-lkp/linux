@@ -6,6 +6,7 @@
  */
 
 #include <linux/clk-provider.h>
+#include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/io.h>
 #include <linux/mod_devicetable.h>
@@ -360,6 +361,12 @@ static int clk_imx8mp_audiomix_runtime_suspend(struct device *dev)
 
 static int clk_imx8mp_audiomix_runtime_resume(struct device *dev)
 {
+	/*
+	 * According to the drivers/pmdomain/imx/gpcv2.c
+	 * need to wait for handshake request to propagate
+	 */
+	udelay(5);
+
 	clk_imx8mp_audiomix_save_restore(dev, false);
 
 	return 0;
