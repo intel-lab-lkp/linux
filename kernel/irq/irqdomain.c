@@ -661,8 +661,7 @@ unsigned int irq_create_direct_mapping(struct irq_domain *domain)
 	struct device_node *of_node;
 	unsigned int virq;
 
-	if (domain == NULL)
-		domain = irq_default_domain;
+	domain = domain ? : irq_default_domain;
 
 	of_node = irq_domain_get_of_node(domain);
 	virq = irq_alloc_desc_from(1, of_node_to_nid(of_node));
@@ -734,8 +733,7 @@ unsigned int irq_create_mapping_affinity(struct irq_domain *domain,
 	int virq;
 
 	/* Look for default domain if necessary */
-	if (domain == NULL)
-		domain = irq_default_domain;
+	domain = domain ? : irq_default_domain;
 	if (domain == NULL) {
 		WARN(1, "%s(, %lx) called with NULL domain\n", __func__, hwirq);
 		return 0;
@@ -953,8 +951,7 @@ struct irq_desc *__irq_resolve_mapping(struct irq_domain *domain,
 	struct irq_data *data;
 
 	/* Look for default domain if necessary */
-	if (domain == NULL)
-		domain = irq_default_domain;
+	domain = domain ? : irq_default_domain;
 	if (domain == NULL)
 		return desc;
 
@@ -1554,11 +1551,9 @@ int __irq_domain_alloc_irqs(struct irq_domain *domain, int irq_base,
 {
 	int ret;
 
-	if (domain == NULL) {
-		domain = irq_default_domain;
-		if (WARN(!domain, "domain is NULL; cannot allocate IRQ\n"))
-			return -EINVAL;
-	}
+	domain = domain ? : irq_default_domain;
+	if (WARN(!domain, "domain is NULL; cannot allocate IRQ\n"))
+		return -EINVAL;
 
 	mutex_lock(&domain->root->mutex);
 	ret = irq_domain_alloc_irqs_locked(domain, irq_base, nr_irqs, node, arg,
@@ -1962,11 +1957,9 @@ static int irq_domain_debug_show(struct seq_file *m, void *p)
 	struct irq_domain *d = m->private;
 
 	/* Default domain? Might be NULL */
-	if (!d) {
-		if (!irq_default_domain)
-			return 0;
-		d = irq_default_domain;
-	}
+	d = d ? : irq_default_domain;
+	if (!d)
+		return 0;
 	irq_domain_debug_show_one(m, d, 0);
 	return 0;
 }
