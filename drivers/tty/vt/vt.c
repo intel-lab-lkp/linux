@@ -308,7 +308,14 @@ static inline void scrolldelta(int lines)
 	/* FIXME */
 	/* scrolldelta needs some kind of consistency lock, but the BKL was
 	   and still is not protecting versus the scheduled back end */
-	scrollback_delta += lines;
+
+	/* saturate scrollback_delta so that it never wraps around */
+	if (lines > 0 && unlikely(INT_MAX - lines < scrollback_delta))
+		scrollback_delta = INT_MAX;
+	else if (lines < 0 && unlikely(INT_MIN - lines > scrollback_delta))
+		scrollback_delta = INT_MIN;
+	else
+		scrollback_delta += lines;
 	schedule_console_callback();
 }
 
