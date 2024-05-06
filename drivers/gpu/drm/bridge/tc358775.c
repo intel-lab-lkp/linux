@@ -557,14 +557,15 @@ static const struct drm_bridge_funcs tc_bridge_funcs = {
 
 static int tc_attach_host(struct tc_data *tc)
 {
+	const struct mipi_dsi_device_info info = {
+		.type = "tc358775",
+		.channel = 0,
+		.node = NULL,
+	};
 	struct device *dev = tc->dev;
 	struct mipi_dsi_host *host;
 	struct mipi_dsi_device *dsi;
 	int ret;
-	const struct mipi_dsi_device_info info = { .type = "tc358775",
-							.channel = 0,
-							.node = NULL,
-						};
 
 	host = of_find_mipi_dsi_host_by_node(tc->host_node);
 	if (!host)
