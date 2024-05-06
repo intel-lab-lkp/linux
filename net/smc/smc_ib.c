@@ -210,10 +210,11 @@ int smc_ib_find_route(struct net *net, __be32 saddr, __be32 daddr,
 		goto out;
 	if (rt->rt_uses_gateway && rt->rt_gw_family != AF_INET)
 		goto out;
-	neigh = rt->dst.ops->neigh_lookup(&rt->dst, NULL, &fl4.daddr);
+	neigh = dst_neigh_lookup(&rt->dst, &fl4.daddr);
 	if (neigh) {
 		memcpy(nexthop_mac, neigh->ha, ETH_ALEN);
 		*uses_gateway = rt->rt_uses_gateway;
+		neigh_release(neigh);
 		return 0;
 	}
 out:
