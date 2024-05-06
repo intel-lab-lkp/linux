@@ -871,6 +871,80 @@ static int io_buffer_account_pin(struct io_ring_ctx *ctx, struct page **pages,
 	return ret;
 }
 
+/*
+ * For coalesce to work, a buffer must be one or multiple
+ * folios, all the folios except the first and last one
+ * should be of the same size.
+ */
+static bool io_sqe_buffer_try_coalesce(struct page **pages,
+				       unsigned int nr_pages,
+				       struct io_imu_folio_stats *stats)
+{
+	struct folio	*folio = NULL, *first_folio = NULL;
+	unsigned int	page_cnt;
+	int		i, j;
+
+	if (nr_pages <= 1)
+		return false;
+
+	first_folio = page_folio(pages[0]);
+	stats->full_folio_pcnt = folio_nr_pages(first_folio);
+	if (stats->full_folio_pcnt == 1)
+		return false;
+
+	stats->folio_shift = folio_shift(first_folio);
+
+	folio = first_folio;
+	page_cnt = 1;
+	stats->nr_folios = 1;
+	/*
+	 * Check:
+	 * 1. Pages must be contiguous;
+	 * 2. All folios should have the same page count
+	 *    except the first and last one
+	 */
+	for (i = 1; i < nr_pages; i++) {
+		if (page_folio(pages[i]) != folio ||
+		   pages[i] != pages[i-1] + 1) {
+			if (folio == first_folio)
+				stats->first_folio_pcnt = page_cnt;
+			else if (page_cnt != stats->full_folio_pcnt)
+				return false;
+			folio = page_folio(pages[i]);
+			page_cnt = 1;
+			stats->nr_folios++;
+			continue;
+		}
+		page_cnt++;
+	}
+	if (folio == first_folio)
+		stats->first_folio_pcnt = page_cnt;
+
+	if (stats->first_folio_pcnt > 1)
+		/*
+		 * The pages are bound to the folio, it doesn't
+		 * actually unpin them but drops all but one reference,
+		 * which is usually put down by io_buffer_unmap().
+		 * Note, needs a better helper.
+		 */
+		unpin_user_pages(&pages[1], stats->first_folio_pcnt - 1);
+	j = stats->first_folio_pcnt;
+	nr_pages -= stats->first_folio_pcnt;
+	for (i = 1; i < stats->nr_folios; i++) {
+		unsigned int nr_unpin;
+
+		nr_unpin = min_t(unsigned int, nr_pages - 1,
+				stats->full_folio_pcnt - 1);
+		if (nr_unpin <= 1)
+			continue;
+		unpin_user_pages(&pages[j+1], nr_unpin);
+		j += stats->full_folio_pcnt;
+		nr_pages -= stats->full_folio_pcnt;
+	}
+
+	return true;
+}
+
 static int io_sqe_buffer_register(struct io_ring_ctx *ctx, struct iovec *iov,
 				  struct io_mapped_ubuf **pimu,
 				  struct page **last_hpage)
@@ -879,8 +953,9 @@ static int io_sqe_buffer_register(struct io_ring_ctx *ctx, struct iovec *iov,
 	struct page **pages = NULL;
 	unsigned long off;
 	size_t size;
-	int ret, nr_pages, i;
-	struct folio *folio = NULL;
+	int ret, nr_pages, nr_bvecs, i, j;
+	bool coalesced;
+	struct io_imu_folio_stats stats;
 
 	*pimu = (struct io_mapped_ubuf *)&dummy_ubuf;
 	if (!iov->iov_base)
@@ -895,39 +970,26 @@ static int io_sqe_buffer_register(struct io_ring_ctx *ctx, struct iovec *iov,
 		goto done;
 	}
 
-	/* If it's a huge page, try to coalesce them into a single bvec entry */
-	if (nr_pages > 1) {
-		folio = page_folio(pages[0]);
-		for (i = 1; i < nr_pages; i++) {
-			/*
-			 * Pages must be consecutive and on the same folio for
-			 * this to work
-			 */
-			if (page_folio(pages[i]) != folio ||
-			    pages[i] != pages[i - 1] + 1) {
-				folio = NULL;
-				break;
-			}
-		}
-		if (folio) {
-			/*
-			 * The pages are bound to the folio, it doesn't
-			 * actually unpin them but drops all but one reference,
-			 * which is usually put down by io_buffer_unmap().
-			 * Note, needs a better helper.
-			 */
-			unpin_user_pages(&pages[1], nr_pages - 1);
-			nr_pages = 1;
-		}
-	}
-
-	imu = kvmalloc(struct_size(imu, bvec, nr_pages), GFP_KERNEL);
+	/* If it's multiple huge pages, try to coalesce them into fewer bvec entries */
+	coalesced = io_sqe_buffer_try_coalesce(pages, nr_pages, &stats);
+	nr_bvecs = nr_pages;
+	if (coalesced)
+		nr_bvecs = stats.nr_folios;
+	imu = kvmalloc(struct_size(imu, bvec, nr_bvecs), GFP_KERNEL);
 	if (!imu)
 		goto done;
 
 	ret = io_buffer_account_pin(ctx, pages, nr_pages, imu, last_hpage);
 	if (ret) {
-		unpin_user_pages(pages, nr_pages);
+		if (coalesced) {
+			unpin_user_page(pages[0]);
+			j = stats.first_folio_pcnt;
+			for (i = 1; i < stats.nr_folios; i++) {
+				unpin_user_page(pages[j]);
+				j += stats.full_folio_pcnt;
+			}
+		} else
+			unpin_user_pages(pages, nr_pages);
 		goto done;
 	}
 
@@ -936,12 +998,29 @@ static int io_sqe_buffer_register(struct io_ring_ctx *ctx, struct iovec *iov,
 	/* store original address for later verification */
 	imu->ubuf = (unsigned long) iov->iov_base;
 	imu->ubuf_end = imu->ubuf + iov->iov_len;
-	imu->nr_bvecs = nr_pages;
+	imu->nr_bvecs = nr_bvecs;
+	imu->page_shift = PAGE_SHIFT;
+	imu->page_mask = PAGE_MASK;
+	if (coalesced) {
+		imu->page_shift = stats.folio_shift;
+		imu->page_mask = ~((1UL << stats.folio_shift) - 1);
+	}
 	*pimu = imu;
 	ret = 0;
 
-	if (folio) {
-		bvec_set_page(&imu->bvec[0], pages[0], size, off);
+	if (coalesced) {
+		size_t vec_len;
+
+		vec_len = min_t(size_t, size, PAGE_SIZE * stats.first_folio_pcnt - off);
+		bvec_set_page(&imu->bvec[0], pages[0], vec_len, off);
+		size -= vec_len;
+		j = stats.first_folio_pcnt;
+		for (i = 1; i < nr_bvecs; i++) {
+			vec_len = min_t(size_t, size, PAGE_SIZE * stats.full_folio_pcnt);
+			bvec_set_page(&imu->bvec[i], pages[j], vec_len, 0);
+			size -= vec_len;
+			j += stats.full_folio_pcnt;
+		}
 		goto done;
 	}
 	for (i = 0; i < nr_pages; i++) {
@@ -1049,7 +1128,7 @@ int io_import_fixed(int ddir, struct iov_iter *iter,
 		 * we know that:
 		 *
 		 * 1) it's a BVEC iter, we set it up
-		 * 2) all bvecs are PAGE_SIZE in size, except potentially the
+		 * 2) all bvecs are the same in size, except potentially the
 		 *    first and last bvec
 		 *
 		 * So just find our index, and adjust the iterator afterwards.
@@ -1061,11 +1140,6 @@ int io_import_fixed(int ddir, struct iov_iter *iter,
 		const struct bio_vec *bvec = imu->bvec;
 
 		if (offset < bvec->bv_len) {
-			/*
-			 * Note, huge pages buffers consists of one large
-			 * bvec entry and should always go this way. The other
-			 * branch doesn't expect non PAGE_SIZE'd chunks.
-			 */
 			iter->bvec = bvec;
 			iter->nr_segs = bvec->bv_len;
 			iter->count -= offset;
@@ -1075,12 +1149,12 @@ int io_import_fixed(int ddir, struct iov_iter *iter,
 
 			/* skip first vec */
 			offset -= bvec->bv_len;
-			seg_skip = 1 + (offset >> PAGE_SHIFT);
+			seg_skip = 1 + (offset >> imu->page_shift);
 
 			iter->bvec = bvec + seg_skip;
 			iter->nr_segs -= seg_skip;
 			iter->count -= bvec->bv_len + offset;
-			iter->iov_offset = offset & ~PAGE_MASK;
+			iter->iov_offset = offset & ~(imu->page_mask);
 		}
 	}
 

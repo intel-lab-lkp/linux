@@ -47,7 +47,16 @@ struct io_mapped_ubuf {
 	u64		ubuf_end;
 	unsigned int	nr_bvecs;
 	unsigned long	acct_pages;
+	unsigned int	page_shift;
+	unsigned long	page_mask;
 	struct bio_vec	bvec[] __counted_by(nr_bvecs);
+};
+
+struct io_imu_folio_stats {
+	unsigned int	first_folio_pcnt;
+	unsigned int	full_folio_pcnt;
+	unsigned int	nr_folios;
+	unsigned int	folio_shift;
 };
 
 void io_rsrc_node_ref_zero(struct io_rsrc_node *node);
