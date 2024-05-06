@@ -30,6 +30,7 @@
 #include <linux/kthread.h>
 #include <linux/ktime.h>
 #include <linux/compat.h>
+#include <linux/lockdep.h>
 #include <asm/processor.h>
 
 #include <media/dvb_frontend.h>
@@ -2760,66 +2761,70 @@ static __poll_t dvb_frontend_poll(struct file *file, struct poll_table_struct *w
 	return 0;
 }
 
-static int dvb_frontend_open(struct inode *inode, struct file *file)
+static int dvb_get_shared_frontend(struct dvb_adapter *adapter,
+				   struct dvb_device *dvbdev,
+				   struct file *file)
 {
-	struct dvb_device *dvbdev = file->private_data;
-	struct dvb_frontend *fe = dvbdev->priv;
-	struct dvb_frontend_private *fepriv = fe->frontend_priv;
-	struct dvb_adapter *adapter = fe->dvb;
-	int ret;
+	struct dvb_device *mfedev;
+	struct dvb_frontend *mfe;
+	struct dvb_frontend_private *mfepriv;
+	int mferetry;
 
-	dev_dbg(fe->dvb->device, "%s:\n", __func__);
-	if (fe->exit == DVB_FE_DEVICE_REMOVED)
-		return -ENODEV;
+	lockdep_assert_held(&adapter->mfe_lock);
 
 	if (adapter->mfe_shared == 2) {
-		mutex_lock(&adapter->mfe_lock);
 		if ((file->f_flags & O_ACCMODE) != O_RDONLY) {
 			if (adapter->mfe_dvbdev &&
 			    !adapter->mfe_dvbdev->writers) {
-				mutex_unlock(&adapter->mfe_lock);
 				return -EBUSY;
 			}
 			adapter->mfe_dvbdev = dvbdev;
 		}
-	} else if (adapter->mfe_shared) {
-		mutex_lock(&adapter->mfe_lock);
+		return 0;
+	}
 
-		if (!adapter->mfe_dvbdev)
-			adapter->mfe_dvbdev = dvbdev;
+	if (!adapter->mfe_dvbdev) {
+		adapter->mfe_dvbdev = dvbdev;
+		return 0;
+	}
 
-		else if (adapter->mfe_dvbdev != dvbdev) {
-			struct dvb_device
-				*mfedev = adapter->mfe_dvbdev;
-			struct dvb_frontend
-				*mfe = mfedev->priv;
-			struct dvb_frontend_private
-				*mfepriv = mfe->frontend_priv;
-			int mferetry = (dvb_mfe_wait_time << 1);
+	if (adapter->mfe_dvbdev == dvbdev)
+		return 0;
 
-			mutex_unlock(&adapter->mfe_lock);
-			while (mferetry-- && (mfedev->users != -1 ||
-					      mfepriv->thread)) {
-				if (msleep_interruptible(500)) {
-					if (signal_pending(current))
-						return -EINTR;
-				}
-			}
+	mfedev = adapter->mfe_dvbdev;
+	mfe = mfedev->priv;
+	mfepriv = mfe->frontend_priv;
+	mferetry = (dvb_mfe_wait_time << 1);
 
-			mutex_lock(&adapter->mfe_lock);
-			if (adapter->mfe_dvbdev != dvbdev) {
-				mfedev = adapter->mfe_dvbdev;
-				mfe = mfedev->priv;
-				mfepriv = mfe->frontend_priv;
-				if (mfedev->users != -1 ||
-				    mfepriv->thread) {
-					mutex_unlock(&adapter->mfe_lock);
-					return -EBUSY;
-				}
-				adapter->mfe_dvbdev = dvbdev;
+	mutex_unlock(&adapter->mfe_lock);
+	while (mferetry-- && (mfedev->users != -1 || mfepriv->thread)) {
+		if (msleep_interruptible(500)) {
+			if (signal_pending(current)) {
+				mutex_lock(&adapter->mfe_lock);
+				return -EINTR;
 			}
 		}
 	}
+	mutex_lock(&adapter->mfe_lock);
+
+	if (adapter->mfe_dvbdev != dvbdev) {
+		mfedev = adapter->mfe_dvbdev;
+		mfe = mfedev->priv;
+		mfepriv = mfe->frontend_priv;
+		if (mfedev->users != -1 || mfepriv->thread)
+			return -EBUSY;
+		adapter->mfe_dvbdev = dvbdev;
+	}
+
+	return 0;
+}
+
+static int __dvb_frontend_open(struct inode *inode, struct file *file)
+{
+	struct dvb_device *dvbdev = file->private_data;
+	struct dvb_frontend *fe = dvbdev->priv;
+	struct dvb_frontend_private *fepriv = fe->frontend_priv;
+	int ret;
 
 	if (dvbdev->users == -1 && fe->ops.ts_bus_ctrl) {
 		if ((ret = fe->ops.ts_bus_ctrl(fe, 1)) < 0)
@@ -2871,8 +2876,6 @@ static int dvb_frontend_open(struct inode *inode, struct file *file)
 
 	dvb_frontend_get(fe);
 
-	if (adapter->mfe_shared)
-		mutex_unlock(&adapter->mfe_lock);
 	return ret;
 
 err3:
@@ -2892,9 +2895,28 @@ err1:
 	if (dvbdev->users == -1 && fe->ops.ts_bus_ctrl)
 		fe->ops.ts_bus_ctrl(fe, 0);
 err0:
-	if (adapter->mfe_shared)
-		mutex_unlock(&adapter->mfe_lock);
 	return ret;
+}
+
+static int dvb_frontend_open(struct inode *inode, struct file *file)
+{
+	struct dvb_device *dvbdev = file->private_data;
+	struct dvb_frontend *fe = dvbdev->priv;
+	struct dvb_adapter *adapter = fe->dvb;
+	int ret;
+
+	dev_dbg(fe->dvb->device, "%s:\n", __func__);
+	if (fe->exit == DVB_FE_DEVICE_REMOVED)
+		return -ENODEV;
+
+	if (!adapter->mfe_shared)
+		return __dvb_frontend_open(inode, file);
+
+	guard(mutex)(&adapter->mfe_lock);
+	ret = dvb_get_shared_frontend(adapter, dvbdev, file);
+	if (ret)
+		return ret;
+	return __dvb_frontend_open(inode, file);
 }
 
 static int dvb_frontend_release(struct inode *inode, struct file *file)
