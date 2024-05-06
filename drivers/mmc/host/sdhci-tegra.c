@@ -28,6 +28,7 @@
 #include <linux/reset.h>
 
 #include <soc/tegra/common.h>
+#include <soc/tegra/tegra-cfg.h>
 
 #include "sdhci-cqhci.h"
 #include "sdhci-pltfm.h"
@@ -64,6 +65,7 @@
 #define SDHCI_TEGRA_DLLCAL_STA_ACTIVE			BIT(31)
 
 #define SDHCI_VNDR_TUN_CTRL0_0				0x1c0
+#define SDHCI_VNDR_TUN_CTRL0_CMD_CRC_ERR_EN		BIT(28)
 #define SDHCI_VNDR_TUN_CTRL0_TUN_HW_TAP			0x20000
 #define SDHCI_VNDR_TUN_CTRL0_START_TAP_VAL_MASK		0x03fc0000
 #define SDHCI_VNDR_TUN_CTRL0_START_TAP_VAL_SHIFT	18
@@ -74,6 +76,7 @@
 #define TRIES_128					2
 #define TRIES_256					4
 #define SDHCI_VNDR_TUN_CTRL0_TUN_WORD_SEL_MASK		0x7
+#define SDHCI_VNDR_TUN_CTRL0_DIV_N_MASK			GENMASK(5, 3)
 
 #define SDHCI_TEGRA_VNDR_TUN_CTRL1_0			0x1c4
 #define SDHCI_TEGRA_VNDR_TUN_STATUS0			0x1C8
@@ -134,6 +137,20 @@
 					 SDHCI_TRNS_BLK_CNT_EN | \
 					 SDHCI_TRNS_DMA)
 
+static const char * const cfg_device_states[] = {
+	"default",		/* MMC_TIMING_LEGACY */
+	"sd-mmc-highspeed",	/* MMC_TIMING_MMC_HS */
+	"sd-mmc-highspeed",	/* MMC_TIMING_SD_HS */
+	"uhs-sdr12",		/* MMC_TIMING_UHS_SDR12 */
+	"uhs-sdr25",		/* MMC_TIMING_UHS_SDR25 */
+	"uhs-sdr50",		/* MMC_TIMING_UHS_SDR50 */
+	"uhs-sdr104",		/* MMC_TIMING_UHS_SDR104 */
+	"uhs-ddr52",		/* MMC_TIMING_UHS_DDR50 */
+	"uhs-ddr52",		/* MMC_TIMING_MMC_DDR52 */
+	"mmc-hs200",		/* MMC_TIMING_MMC_HS200 */
+	"mmc-hs400",		/* MMC_TIMING_MMC_HS400 */
+};
+
 struct sdhci_tegra_soc_data {
 	const struct sdhci_pltfm_data *pdata;
 	u64 dma_mask;
@@ -156,6 +173,18 @@ struct sdhci_tegra_autocal_offsets {
 	u32 pull_down_sdr104;
 	u32 pull_up_hs400;
 	u32 pull_down_hs400;
+};
+
+static const struct tegra_cfg_field_desc sdhci_cfg_fields[] = {
+	TEGRA_CFG_FIELD("nvidia,num-tuning-iter",
+			SDHCI_VNDR_TUN_CTRL0_0,
+			SDHCI_VNDR_TUN_CTRL0_TUN_ITER_MASK),
+};
+
+static struct tegra_cfg_desc sdhci_cfg_desc = {
+	.num_regs = 0,
+	.num_fields = ARRAY_SIZE(sdhci_cfg_fields),
+	.fields = sdhci_cfg_fields,
 };
 
 struct sdhci_tegra {
@@ -183,6 +212,7 @@ struct sdhci_tegra {
 	unsigned long curr_clk_rate;
 	u8 tuned_tap_delay;
 	u32 stream_id;
+	struct tegra_cfg_list *list;
 };
 
 static u16 tegra_sdhci_readw(struct sdhci_host *host, int reg)
@@ -362,6 +392,30 @@ static void tegra_sdhci_set_tap(struct sdhci_host *host, unsigned int tap)
 	}
 }
 
+static void tegra_sdhci_write_cfg_settings(struct sdhci_host *host,
+					   const char *name)
+{
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_tegra *tegra_host = sdhci_pltfm_priv(pltfm_host);
+	struct tegra_cfg_reg *regs;
+	struct tegra_cfg *cfg;
+	unsigned int i;
+	u32 val;
+
+	cfg = tegra_cfg_get_by_name(mmc_dev(host->mmc),
+				    tegra_host->list, name);
+	if (!cfg)
+		return;
+
+	regs = cfg->regs;
+	for (i = 0; i < cfg->num_regs; ++i) {
+		val = sdhci_readl(host, regs[i].offset);
+		val &= ~regs[i].mask;
+		val |= regs[i].value;
+		sdhci_writel(host, val, regs[i].offset);
+	}
+}
+
 static void tegra_sdhci_reset(struct sdhci_host *host, u8 mask)
 {
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
@@ -373,6 +427,8 @@ static void tegra_sdhci_reset(struct sdhci_host *host, u8 mask)
 
 	if (!(mask & SDHCI_RESET_ALL))
 		return;
+
+	tegra_sdhci_write_cfg_settings(host, "common");
 
 	tegra_sdhci_set_tap(host, tegra_host->default_tap);
 
@@ -1011,6 +1067,7 @@ static void tegra_sdhci_set_uhs_signaling(struct sdhci_host *host,
 	bool set_default_tap = false;
 	bool set_dqs_trim = false;
 	bool do_hs400_dll_cal = false;
+	bool set_config = false;
 	u8 iter = TRIES_256;
 	u32 val;
 
@@ -1027,6 +1084,7 @@ static void tegra_sdhci_set_uhs_signaling(struct sdhci_host *host,
 		set_dqs_trim = true;
 		do_hs400_dll_cal = true;
 		iter = TRIES_128;
+		set_config = true;
 		break;
 	case MMC_TIMING_MMC_DDR52:
 	case MMC_TIMING_UHS_DDR50:
@@ -1059,6 +1117,9 @@ static void tegra_sdhci_set_uhs_signaling(struct sdhci_host *host,
 	else
 		tegra_sdhci_set_tap(host, tegra_host->default_tap);
 
+	if (set_config)
+		tegra_sdhci_write_cfg_settings(host,
+					       cfg_device_states[timing]);
 	if (set_dqs_trim)
 		tegra_sdhci_set_dqs_trim(host, tegra_host->dqs_trim);
 
@@ -1129,6 +1190,29 @@ static int sdhci_tegra_start_signal_voltage_switch(struct mmc_host *mmc,
 static int tegra_sdhci_init_pinctrl_info(struct device *dev,
 					 struct sdhci_tegra *tegra_host)
 {
+	unsigned int i, j, count;
+	const struct tegra_cfg_field_desc *fields;
+
+	count = 0;
+	fields = sdhci_cfg_fields;
+
+	for (i = 0; i < sdhci_cfg_desc.num_fields; i++) {
+		for (j = 0; j < i; j++)
+			if (fields[i].offset == fields[j].offset)
+				break;
+
+		if (i == j)
+			count++;
+	}
+
+	sdhci_cfg_desc.num_regs = count;
+	tegra_host->list = tegra_cfg_get(dev, NULL, &sdhci_cfg_desc);
+	if (IS_ERR(tegra_host->list)) {
+		dev_dbg(dev, "Config setting not available, err: %ld\n",
+			PTR_ERR(tegra_host->list));
+		tegra_host->list = NULL;
+	}
+
 	tegra_host->pinctrl_sdmmc = devm_pinctrl_get(dev);
 	if (IS_ERR(tegra_host->pinctrl_sdmmc)) {
 		dev_dbg(dev, "No pinctrl info, err: %ld\n",
