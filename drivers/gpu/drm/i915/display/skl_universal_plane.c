@@ -792,6 +792,7 @@ static u32 skl_plane_ctl_tiling(u64 fb_modifier)
 	case I915_FORMAT_MOD_Y_TILED:
 		return PLANE_CTL_TILED_Y;
 	case I915_FORMAT_MOD_4_TILED:
+	case I915_FORMAT_MOD_4_TILED_XE2_CCS:
 		return PLANE_CTL_TILED_4;
 	case I915_FORMAT_MOD_4_TILED_DG2_RC_CCS:
 		return PLANE_CTL_TILED_4 |
@@ -949,7 +950,8 @@ static u32 skl_plane_ctl(const struct intel_crtc_state *crtc_state,
 		plane_ctl |= adlp_plane_ctl_arb_slots(plane_state);
 
 	if (GRAPHICS_VER(dev_priv) >= 20 &&
-	    fb->modifier == I915_FORMAT_MOD_4_TILED) {
+	    (fb->modifier == I915_FORMAT_MOD_4_TILED ||
+	     fb->modifier == I915_FORMAT_MOD_4_TILED_XE2_CCS)) {
 		plane_ctl |= PLANE_CTL_RENDER_DECOMPRESSION_ENABLE;
 	}
 
