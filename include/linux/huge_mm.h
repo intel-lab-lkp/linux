@@ -106,6 +106,17 @@ extern struct kobj_attribute shmem_enabled_attr;
 #define HPAGE_PUD_MASK	(~(HPAGE_PUD_SIZE - 1))
 #define HPAGE_PUD_SIZE	((1UL) << HPAGE_PUD_SHIFT)
 
+static inline int highest_order(unsigned long orders)
+{
+	return fls_long(orders) - 1;
+}
+
+static inline int next_order(unsigned long *orders, int prev)
+{
+	*orders &= ~BIT(prev);
+	return highest_order(*orders);
+}
+
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 
 extern unsigned long transparent_hugepage_flags;
@@ -136,17 +147,6 @@ static inline bool hugepage_flags_enabled(void)
 	return hugepage_global_enabled() ||
 	       huge_anon_orders_always ||
 	       huge_anon_orders_madvise;
-}
-
-static inline int highest_order(unsigned long orders)
-{
-	return fls_long(orders) - 1;
-}
-
-static inline int next_order(unsigned long *orders, int prev)
-{
-	*orders &= ~BIT(prev);
-	return highest_order(*orders);
 }
 
 /*
