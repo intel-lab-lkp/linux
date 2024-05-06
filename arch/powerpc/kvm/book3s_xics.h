@@ -45,6 +45,7 @@ struct ics_irq_state {
 	u8  exists;
 	int intr_cpu;
 	u32 host_irq;
+	arch_spinlock_t lock;
 };
 
 /* Atomic ICP state, updated with a single compare & swap */
@@ -95,7 +96,6 @@ struct kvmppc_icp {
 };
 
 struct kvmppc_ics {
-	arch_spinlock_t lock;
 	u16 icsid;
 	struct ics_irq_state irq_state[KVMPPC_XICS_IRQ_PER_ICS];
 	DECLARE_BITMAP(resend_map, KVMPPC_XICS_IRQ_PER_ICS);
