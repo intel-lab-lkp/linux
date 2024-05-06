@@ -709,6 +709,7 @@ static void mtk_output_dsi_enable(struct mtk_dsi *dsi)
 
 	mtk_dsi_lane_ready(dsi);
 	mtk_dsi_set_mode(dsi);
+	drm_bridge_dsi_lp11_notify(dsi->next_bridge);
 	mtk_dsi_clk_hs_mode(dsi, 1);
 
 	dsi->enabled = true;
