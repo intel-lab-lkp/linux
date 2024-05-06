@@ -1165,7 +1165,7 @@ static int xiic_xfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 
 	err = xiic_start_xfer(i2c, msgs, num);
 	if (err < 0) {
-		dev_err(adap->dev.parent, "Error xiic_start_xfer\n");
+		dev_err(adap->dev.parent, "Error xiic_start_xfer: %d\n", err);
 		goto out;
 	}
 
