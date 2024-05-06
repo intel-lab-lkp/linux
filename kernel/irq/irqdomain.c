@@ -317,10 +317,8 @@ void irq_domain_update_bus_token(struct irq_domain *domain,
 	domain->bus_token = bus_token;
 
 	name = kasprintf(GFP_KERNEL, "%s-%d", domain->name, bus_token);
-	if (!name) {
-		mutex_unlock(&irq_domain_mutex);
-		return;
-	}
+	if (!name)
+		goto out;
 
 	debugfs_remove_domain_dir(domain);
 
@@ -332,6 +330,7 @@ void irq_domain_update_bus_token(struct irq_domain *domain,
 	domain->name = name;
 	debugfs_add_domain_dir(domain);
 
+out:
 	mutex_unlock(&irq_domain_mutex);
 }
 EXPORT_SYMBOL_GPL(irq_domain_update_bus_token);
@@ -672,17 +671,18 @@ unsigned int irq_create_direct_mapping(struct irq_domain *domain)
 	if (virq >= domain->hwirq_max) {
 		pr_err("ERROR: no free irqs available below %lu maximum\n",
 			domain->hwirq_max);
-		irq_free_desc(virq);
-		return 0;
+		goto out_free_desc;
 	}
 	pr_debug("create_direct obtained virq %d\n", virq);
 
-	if (irq_domain_associate(domain, virq, virq)) {
-		irq_free_desc(virq);
-		return 0;
-	}
+	if (irq_domain_associate(domain, virq, virq))
+		goto out_free_desc;
 
 	return virq;
+
+out_free_desc:
+	irq_free_desc(virq);
+	return 0;
 }
 EXPORT_SYMBOL_GPL(irq_create_direct_mapping);
 #endif
