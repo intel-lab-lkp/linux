@@ -28,6 +28,8 @@
 #include <linux/pm_runtime.h>
 #include <linux/reset.h>
 
+#include <soc/tegra/tegra-cfg.h>
+
 #define BYTES_PER_FIFO_WORD 4
 
 #define I2C_CNFG				0x000
@@ -108,8 +110,9 @@
 #define I2C_MST_CORE_CLKEN_OVR			BIT(0)
 
 #define I2C_INTERFACE_TIMING_0			0x094
-#define  I2C_INTERFACE_TIMING_THIGH		GENMASK(13, 8)
-#define  I2C_INTERFACE_TIMING_TLOW		GENMASK(5, 0)
+#define  I2C_INTERFACE_TIMING_THIGH		GENMASK(15, 8)
+#define  I2C_INTERFACE_TIMING_TLOW		GENMASK(7, 0)
+
 #define I2C_INTERFACE_TIMING_1			0x098
 #define  I2C_INTERFACE_TIMING_TBUF		GENMASK(29, 24)
 #define  I2C_INTERFACE_TIMING_TSU_STO		GENMASK(21, 16)
@@ -117,8 +120,9 @@
 #define  I2C_INTERFACE_TIMING_TSU_STA		GENMASK(5, 0)
 
 #define I2C_HS_INTERFACE_TIMING_0		0x09c
-#define  I2C_HS_INTERFACE_TIMING_THIGH		GENMASK(13, 8)
-#define  I2C_HS_INTERFACE_TIMING_TLOW		GENMASK(5, 0)
+#define  I2C_HS_INTERFACE_TIMING_THIGH		GENMASK(15, 8)
+#define  I2C_HS_INTERFACE_TIMING_TLOW		GENMASK(7, 0)
+
 #define I2C_HS_INTERFACE_TIMING_1		0x0a0
 #define  I2C_HS_INTERFACE_TIMING_TSU_STO	GENMASK(21, 16)
 #define  I2C_HS_INTERFACE_TIMING_THD_STA	GENMASK(13, 8)
@@ -227,6 +231,49 @@ struct tegra_i2c_hw_feature {
 };
 
 /**
+ * I2C register config fields.
+ */
+static const struct tegra_cfg_field_desc i2c_cfg_fields[] = {
+	TEGRA_CFG_FIELD("nvidia,i2c-clk-divisor-fs-mode",
+			I2C_CLK_DIVISOR, I2C_CLK_DIVISOR_STD_FAST_MODE),
+	TEGRA_CFG_FIELD("nvidia,i2c-clk-divisor-hs-mode",
+			I2C_CLK_DIVISOR, I2C_CLK_DIVISOR_HSMODE),
+	TEGRA_CFG_FIELD("nvidia,i2c-hs-sclk-high-period",
+			I2C_HS_INTERFACE_TIMING_0,
+			I2C_HS_INTERFACE_TIMING_THIGH),
+	TEGRA_CFG_FIELD("nvidia,i2c-hs-sclk-low-period",
+			I2C_HS_INTERFACE_TIMING_0,
+			I2C_HS_INTERFACE_TIMING_TLOW),
+	TEGRA_CFG_FIELD("nvidia,i2c-hs-stop-setup-time",
+			I2C_HS_INTERFACE_TIMING_1,
+			I2C_HS_INTERFACE_TIMING_TSU_STO),
+	TEGRA_CFG_FIELD("nvidia,i2c-hs-start-hold-time",
+			I2C_HS_INTERFACE_TIMING_1,
+			I2C_HS_INTERFACE_TIMING_THD_STA),
+	TEGRA_CFG_FIELD("nvidia,i2c-hs-start-setup-time",
+			I2C_HS_INTERFACE_TIMING_1,
+			I2C_HS_INTERFACE_TIMING_TSU_STA),
+	TEGRA_CFG_FIELD("nvidia,i2c-sclk-high-period",
+			I2C_INTERFACE_TIMING_0, I2C_INTERFACE_TIMING_THIGH),
+	TEGRA_CFG_FIELD("nvidia,i2c-sclk-low-period",
+			I2C_INTERFACE_TIMING_0, I2C_INTERFACE_TIMING_TLOW),
+	TEGRA_CFG_FIELD("nvidia,i2c-bus-free-time",
+			I2C_INTERFACE_TIMING_1, I2C_INTERFACE_TIMING_TBUF),
+	TEGRA_CFG_FIELD("nvidia,i2c-stop-setup-time",
+			I2C_INTERFACE_TIMING_1, I2C_INTERFACE_TIMING_TSU_STO),
+	TEGRA_CFG_FIELD("nvidia,i2c-start-hold-time",
+			I2C_INTERFACE_TIMING_1, I2C_INTERFACE_TIMING_THD_STA),
+	TEGRA_CFG_FIELD("nvidia,i2c-start-setup-time",
+			I2C_INTERFACE_TIMING_1, I2C_INTERFACE_TIMING_TSU_STA),
+};
+
+static struct tegra_cfg_desc i2c_cfg_desc = {
+	.num_regs = 0,
+	.num_fields = ARRAY_SIZE(i2c_cfg_fields),
+	.fields = i2c_cfg_fields,
+};
+
+/**
  * struct tegra_i2c_dev - per device I2C context
  * @dev: device reference for power management
  * @hw: Tegra I2C HW feature
@@ -288,6 +335,8 @@ struct tegra_i2c_dev {
 	dma_addr_t dma_phys;
 	void *dma_buf;
 
+	struct tegra_cfg_list *list;
+
 	bool multimaster_mode;
 	bool atomic_mode;
 	bool dma_mode;
@@ -338,6 +387,16 @@ static void i2c_writel(struct tegra_i2c_dev *i2c_dev, u32 val, unsigned int reg)
 static u32 i2c_readl(struct tegra_i2c_dev *i2c_dev, unsigned int reg)
 {
 	return readl_relaxed(i2c_dev->base + tegra_i2c_reg_addr(i2c_dev, reg));
+}
+
+static void i2c_update(struct tegra_i2c_dev *i2c_dev, u32 mask,
+		       u32 val, unsigned int reg)
+{
+	u32 rval;
+
+	rval = i2c_readl(i2c_dev, reg);
+	rval = (rval & ~mask) | val;
+	i2c_writel(i2c_dev, rval, reg);
 }
 
 static void i2c_writesl(struct tegra_i2c_dev *i2c_dev, void *data,
@@ -604,6 +663,48 @@ static int tegra_i2c_wait_for_config_load(struct tegra_i2c_dev *i2c_dev)
 	return 0;
 }
 
+static void tegra_i2c_write_cfg_settings(struct tegra_i2c_dev *i2c_dev,
+					 const char *name)
+{
+	struct tegra_cfg_reg *regs;
+	struct tegra_cfg *cfg;
+	unsigned int i;
+
+	cfg = tegra_cfg_get_by_name(i2c_dev->dev, i2c_dev->list, name);
+	if (!cfg)
+		return;
+
+	regs = cfg->regs;
+	for (i = 0; i < cfg->num_regs; i++) {
+		i2c_update(i2c_dev, regs[i].mask, regs[i].value,
+			   regs[i].offset);
+	}
+}
+
+static void tegra_i2c_config_cfg_settings(struct tegra_i2c_dev *i2c_dev)
+{
+	const char *name;
+
+	switch (i2c_dev->timings.bus_freq_hz) {
+	case I2C_MAX_FAST_MODE_PLUS_FREQ + 1 ... I2C_MAX_HIGH_SPEED_MODE_FREQ:
+		name = "high";
+		break;
+	case I2C_MAX_FAST_MODE_FREQ + 1 ... I2C_MAX_FAST_MODE_PLUS_FREQ:
+		name = "fastplus";
+		break;
+	case I2C_MAX_STANDARD_MODE_FREQ + 1 ... I2C_MAX_FAST_MODE_FREQ:
+		name = "fast";
+		break;
+	case 0 ... I2C_MAX_STANDARD_MODE_FREQ:
+	default:
+		name = "standard";
+		break;
+	}
+
+	tegra_i2c_write_cfg_settings(i2c_dev, "common");
+	tegra_i2c_write_cfg_settings(i2c_dev, name);
+}
+
 static void tegra_i2c_set_clk_params(struct tegra_i2c_dev *i2c_dev)
 {
 	u32 val, clk_divisor, tsu_thd, tlow, thigh, non_hs_mode;
@@ -712,7 +813,11 @@ static int tegra_i2c_init(struct tegra_i2c_dev *i2c_dev)
 	if (IS_VI(i2c_dev))
 		tegra_i2c_vi_init(i2c_dev);
 
-	tegra_i2c_set_clk_params(i2c_dev);
+	if (i2c_dev->list)
+		tegra_i2c_config_cfg_settings(i2c_dev);
+	else
+		tegra_i2c_set_clk_params(i2c_dev);
+
 	err = tegra_i2c_set_div_clk(i2c_dev);
 	if (err)
 		return err;
@@ -1774,6 +1879,8 @@ static int tegra_i2c_probe(struct platform_device *pdev)
 	struct tegra_i2c_dev *i2c_dev;
 	struct resource *res;
 	int err;
+	const struct tegra_cfg_field_desc *fields;
+	unsigned int count = 0, i, j;
 
 	i2c_dev = devm_kzalloc(&pdev->dev, sizeof(*i2c_dev), GFP_KERNEL);
 	if (!i2c_dev)
@@ -1809,6 +1916,23 @@ static int tegra_i2c_probe(struct platform_device *pdev)
 					dev_name(i2c_dev->dev), i2c_dev);
 	if (err)
 		return err;
+
+	fields = i2c_cfg_fields;
+
+	for (i = 0; i < i2c_cfg_desc.num_fields; i++) {
+		for (j = 0; j < i; j++)
+			if (fields[i].offset == fields[j].offset)
+				break;
+		if (i == j)
+			count++;
+	}
+	i2c_cfg_desc.num_regs = count;
+
+	i2c_dev->list = tegra_cfg_get(i2c_dev->dev, NULL, &i2c_cfg_desc);
+	if (IS_ERR_OR_NULL(i2c_dev->list)) {
+		dev_dbg(&pdev->dev, "Config setting not available\n");
+		i2c_dev->list = NULL;
+	}
 
 	tegra_i2c_parse_dt(i2c_dev);
 
