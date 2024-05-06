@@ -502,6 +502,37 @@ static void tc_bridge_enable(struct drm_bridge *bridge)
 	d2l_write(tc->i2c, LVCFG, val);
 }
 
+/*
+ * According to the datasheet, the horizontal back porch, front porch and sync
+ * length must be a multiple of 2 and the minimal horizontal pulse width is 8.
+ * To workaround this, we modify the back porch and the sync pulse width by
+ * adding enough pixels. These pixels will then be substracted from the front
+ * porch which is ignored by the bridge.  Hopefully, this marginal modified
+ * timing is tolerated by the panel. The alternative is either a black screen
+ * (if the sync pulse width is too short or a shifted picture if the lengths
+ * are not even).
+ */
+static bool tc_mode_fixup(struct drm_bridge *bridge,
+			  const struct drm_display_mode *mode,
+			  struct drm_display_mode *adj)
+{
+	u16 hsync_len, hback_porch;
+
+	hback_porch = adj->htotal - adj->hsync_end;
+	if (hback_porch & 1) {
+		adj->hsync_end -= 1;
+		adj->hsync_start -= 1;
+	}
+
+	hsync_len = adj->hsync_end - adj->hsync_start;
+	if (hsync_len < 8)
+		adj->hsync_start -= 8 - hsync_len;
+	else if (hsync_len & 1)
+		adj->hsync_start -= 1;
+
+	return adj->hsync_start >= adj->hdisplay;
+}
+
 static enum drm_mode_status
 tc_mode_valid(struct drm_bridge *bridge,
 	      const struct drm_display_info *info,
@@ -603,6 +634,7 @@ static const struct drm_bridge_funcs tc_bridge_funcs = {
 	.attach = tc_bridge_attach,
 	.pre_enable = tc_bridge_pre_enable,
 	.enable = tc_bridge_enable,
+	.mode_fixup = tc_mode_fixup,
 	.mode_valid = tc_mode_valid,
 	.post_disable = tc_bridge_post_disable,
 };
