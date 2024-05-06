@@ -345,7 +345,17 @@ struct bio_integrity_payload {
 
 	struct bvec_iter	bio_iter;	/* for rewinding parent bio */
 
-	struct work_struct	bip_work;	/* I/O completion */
+	union {
+		/*
+		 * bip_work is used only for block-layer sent integrity.
+		 * For user sent integrity, reuse the same memory.
+		 */
+		struct work_struct	bip_work;	/* I/O completion */
+		struct {
+			struct bio_vec	*copy_vec; /* pinned user memory */
+			unsigned short	copy_vcnt; /* # of bio_vecs for above */
+		};
+	};
 
 	struct bio_vec		*bip_vec;
 	struct bio_vec		bip_inline_vecs[];/* embedded bvec array */

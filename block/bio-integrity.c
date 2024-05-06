@@ -105,8 +105,8 @@ static void bio_integrity_unpin_bvec(struct bio_vec *bv, int nr_vecs,
 
 static void bio_integrity_uncopy_user(struct bio_integrity_payload *bip)
 {
-	unsigned short nr_vecs = bip->bip_max_vcnt - 1;
-	struct bio_vec *copy = &bip->bip_vec[1];
+	unsigned short nr_vecs = bip->copy_vcnt;
+	struct bio_vec *copy = bip->copy_vec;
 	size_t bytes = bip->bip_iter.bi_size;
 	struct iov_iter iter;
 	int ret;
@@ -116,6 +116,7 @@ static void bio_integrity_uncopy_user(struct bio_integrity_payload *bip)
 	WARN_ON_ONCE(ret != bytes);
 
 	bio_integrity_unpin_bvec(copy, nr_vecs, true);
+	kfree(copy);
 }
 
 static void bio_integrity_unmap_user(struct bio_integrity_payload *bip)
@@ -208,6 +209,7 @@ static int bio_integrity_copy_user(struct bio *bio, struct bio_vec *bvec,
 				   unsigned int direction, u32 seed)
 {
 	bool write = direction == ITER_SOURCE;
+	struct bio_vec *copy_vec = NULL;
 	struct bio_integrity_payload *bip;
 	struct iov_iter iter;
 	void *buf;
@@ -224,7 +226,7 @@ static int bio_integrity_copy_user(struct bio *bio, struct bio_vec *bvec,
 			goto free_buf;
 		}
 
-		bip = bio_integrity_alloc(bio, GFP_KERNEL, 1);
+		bio_integrity_unpin_bvec(bvec, nr_vecs, false);
 	} else {
 		memset(buf, 0, len);
 
@@ -232,18 +234,20 @@ static int bio_integrity_copy_user(struct bio *bio, struct bio_vec *bvec,
 		 * We need to preserve the original bvec and the number of vecs
 		 * in it for completion handling
 		 */
-		bip = bio_integrity_alloc(bio, GFP_KERNEL, nr_vecs + 1);
+		copy_vec = kcalloc(nr_vecs, sizeof(*bvec), GFP_KERNEL);
+		if (!copy_vec) {
+			ret = -ENOMEM;
+			goto free_buf;
+		}
+		memcpy(copy_vec, bvec, nr_vecs * sizeof(*bvec));
+
 	}
 
+	bip = bio_integrity_alloc(bio, GFP_KERNEL, 1);
 	if (IS_ERR(bip)) {
 		ret = PTR_ERR(bip);
-		goto free_buf;
+		goto free_copy;
 	}
-
-	if (write)
-		bio_integrity_unpin_bvec(bvec, nr_vecs, false);
-	else
-		memcpy(&bip->bip_vec[1], bvec, nr_vecs * sizeof(*bvec));
 
 	ret = bio_integrity_add_page(bio, virt_to_page(buf), len,
 				     offset_in_page(buf));
@@ -254,9 +258,13 @@ static int bio_integrity_copy_user(struct bio *bio, struct bio_vec *bvec,
 
 	bip->bip_flags |= BIP_INTEGRITY_USER | BIP_COPY_USER;
 	bip->bip_iter.bi_sector = seed;
+	bip->copy_vec = copy_vec;
+	bip->copy_vcnt = nr_vecs;
 	return 0;
 free_bip:
 	bio_integrity_free(bio);
+free_copy:
+	kfree(copy_vec);
 free_buf:
 	kfree(buf);
 	return ret;
