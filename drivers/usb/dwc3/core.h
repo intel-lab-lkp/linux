@@ -733,6 +733,18 @@ struct dwc3_ep {
 	struct list_head	pending_list;
 	struct list_head	started_list;
 
+	unsigned int irq_endpoint;
+
+	spinlock_t event_lock;
+	u32 ep_event_buffer[256];
+	int ep_event_w_index;
+	int ep_event_r_index;
+
+	int givebacks_current_turn;
+
+#define DWC3_EP_EVENT_OVERFLOW		BIT(0)
+	unsigned int ep_event_flags;
+
 	void __iomem		*regs;
 
 	struct dwc3_trb		*trb_pool;
@@ -1172,6 +1184,8 @@ struct dwc3 {
 
 	struct usb_gadget	*gadget;
 	struct usb_gadget_driver *gadget_driver;
+
+	struct irq_domain	*ep_irq_domain;
 
 	struct clk		*bus_clk;
 	struct clk		*ref_clk;

@@ -16,6 +16,9 @@
 #include <linux/pm_runtime.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
+#include <linux/irq.h>
+#include <linux/irqchip.h>
+#include <linux/irqdomain.h>
 #include <linux/list.h>
 #include <linux/dma-mapping.h>
 
@@ -1045,6 +1048,106 @@ static int __dwc3_gadget_ep_disable(struct dwc3_ep *dep)
 	}
 
 	return 0;
+}
+
+/* -------------------------------------------------------------------------- */
+
+static irqreturn_t dwc3_endpoint_irq(int irq, void *_dep)
+{
+	return IRQ_WAKE_THREAD;
+}
+
+static void dwc3_process_event_entry(struct dwc3 *dwc,
+				     const union dwc3_event *event);
+
+static irqreturn_t dwc3_endpoint_thread_irq(int irq, void *_dep)
+{
+	struct dwc3_ep *dep = _dep;
+	struct dwc3 *dwc = dep->dwc;
+	const union dwc3_event *event;
+	int count_processed = 0;
+	u32 event_raw;
+	unsigned long flags;
+
+	dep->givebacks_current_turn = 0;
+
+	spin_lock_irqsave(&dep->event_lock, flags);
+
+	if (dep->ep_event_flags & DWC3_EP_EVENT_OVERFLOW) {
+		dev_err(dwc->dev, "ep%d: event buffer overflow\n", dep->number);
+		dep->ep_event_flags &= ~DWC3_EP_EVENT_OVERFLOW;
+	}
+
+	while (dep->ep_event_r_index != dep->ep_event_w_index) {
+
+		event_raw = dep->ep_event_buffer[dep->ep_event_r_index];
+
+		/*
+		 * we have a copy of the event, so we can release the lock
+		 */
+		spin_unlock_irqrestore(&dep->event_lock, flags);
+
+		event = (const union dwc3_event *) &event_raw;
+
+		spin_lock(&dwc->lock);
+		dwc3_process_event_entry(dwc, event);
+		spin_unlock(&dwc->lock);
+
+		/*
+		 * we need to re-acquire the lock to update the read index
+		 */
+		spin_lock_irqsave(&dep->event_lock, flags);
+
+		dep->ep_event_r_index = (dep->ep_event_r_index + 1) %
+					 ARRAY_SIZE(dep->ep_event_buffer);
+
+		count_processed += 1;
+	}
+
+	spin_unlock_irqrestore(&dep->event_lock, flags);
+
+	return IRQ_HANDLED;
+}
+
+static int dwc3_gadget_init_endpoint_irq(struct dwc3 *dwc, struct dwc3_ep *dep)
+{
+	char *irq_name;
+	int ret = 0;
+
+	/* FIXME: endpoint.claimed would be better here, but somehow
+	 * the composite gadget layer is leaving the claimed value to 0
+	 * after calling usb_ep_autoconfig_reset after the final bind
+	 */
+	/* ep0in and ep0out share the same interrupt thread */
+	if (!dep->endpoint.address && dep->number)
+		return 0;
+
+	dep->irq_endpoint = irq_create_mapping(dwc->ep_irq_domain, dep->number);
+	if (dep->irq_endpoint < 0) {
+		ret = dep->irq_endpoint;
+
+		dev_err(dwc->dev, "failed to map irq for ep%d --> %d\n",
+				dep->number, ret);
+		return ret;
+	}
+
+	irq_name = kzalloc(16, GFP_KERNEL);
+	if (!dep->number)
+		snprintf(irq_name, 16, "ep0");
+	else
+		snprintf(irq_name, 16, "ep%d%s", dep->number >> 1, dep->direction ?
+			"in" : "out");
+
+	ret = request_threaded_irq(dep->irq_endpoint, dwc3_endpoint_irq,
+				   dwc3_endpoint_thread_irq, IRQF_SHARED,
+				   irq_name, dep);
+	if (ret) {
+		irq_dispose_mapping(irq_find_mapping(dwc->ep_irq_domain, dep->number));
+		dev_err(dwc->dev, "failed to request irq #%d --> %d\n",
+				dep->irq_endpoint, ret);
+	}
+
+	return ret;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -2939,6 +3042,7 @@ static int dwc3_gadget_start(struct usb_gadget *g,
 		struct usb_gadget_driver *driver)
 {
 	struct dwc3		*dwc = gadget_to_dwc(g);
+	u8			epnum;
 	unsigned long		flags;
 	int			ret;
 	int			irq;
@@ -2950,6 +3054,17 @@ static int dwc3_gadget_start(struct usb_gadget *g,
 		dev_err(dwc->dev, "failed to request irq #%d --> %d\n",
 				irq, ret);
 		return ret;
+	}
+
+	for (epnum = 0; epnum < dwc->num_eps; epnum++) {
+		int			ret;
+		/* ep0in and ep0out share the same interrupt thread */
+		if (epnum == 1)
+			continue;
+
+		ret = dwc3_gadget_init_endpoint_irq(dwc, dwc->eps[epnum]);
+		if (ret)
+			return ret;
 	}
 
 	spin_lock_irqsave(&dwc->lock, flags);
@@ -2972,6 +3087,7 @@ static void __dwc3_gadget_stop(struct dwc3 *dwc)
 static int dwc3_gadget_stop(struct usb_gadget *g)
 {
 	struct dwc3		*dwc = gadget_to_dwc(g);
+	u8			epnum;
 	unsigned long		flags;
 
 	if (dwc->sys_wakeup)
@@ -2981,6 +3097,18 @@ static int dwc3_gadget_stop(struct usb_gadget *g)
 	dwc->gadget_driver	= NULL;
 	dwc->max_cfg_eps = 0;
 	spin_unlock_irqrestore(&dwc->lock, flags);
+
+	for (epnum = 0; epnum < dwc->num_eps; epnum++) {
+		struct dwc3_ep		*dep;
+
+		if (epnum == 1)
+			continue;
+
+		dep = dwc->eps[epnum];
+
+		free_irq(dep->irq_endpoint, dwc->eps[epnum]);
+		irq_dispose_mapping(dep->irq_endpoint);
+	}
 
 	free_irq(dwc->irq_gadget, dwc->ev_buf);
 
@@ -3297,6 +3425,8 @@ static int dwc3_gadget_init_endpoint(struct dwc3 *dwc, u8 epnum)
 	INIT_LIST_HEAD(&dep->pending_list);
 	INIT_LIST_HEAD(&dep->started_list);
 	INIT_LIST_HEAD(&dep->cancelled_list);
+
+	spin_lock_init(&dep->event_lock);
 
 	dwc3_debugfs_create_endpoint_dir(dep);
 
@@ -4403,7 +4533,9 @@ static irqreturn_t dwc3_process_event_buf(struct dwc3_event_buffer *evt)
 {
 	struct dwc3 *dwc = evt->dwc;
 	irqreturn_t ret = IRQ_NONE;
+	unsigned long flags;
 	int left;
+	int i;
 
 	left = evt->count;
 
@@ -4412,10 +4544,36 @@ static irqreturn_t dwc3_process_event_buf(struct dwc3_event_buffer *evt)
 
 	while (left > 0) {
 		union dwc3_event event;
+		struct dwc3_ep *dep;
+		int epnum = 0;
 
 		event.raw = *(u32 *) (evt->cache + evt->lpos);
 
-		dwc3_process_event_entry(dwc, &event);
+		if (!event.type.is_devspec) {
+			struct dwc3_event_depevt *depevt = &event.depevt;
+
+			epnum = depevt->endpoint_number;
+			/* ep0in and ep0out share the same interrupt thread */
+			if (epnum <= 1)
+				epnum &= ~0x01;
+
+			if (epnum < 0 || epnum >= dwc->num_eps) {
+				dev_err(dwc->dev, "invalid epnum %d\n", epnum);
+				continue;
+			}
+		}
+
+		dep = dwc->eps[epnum];
+
+		spin_lock(&dep->event_lock);
+		dep->ep_event_buffer[dep->ep_event_w_index] = event.raw;
+		dep->ep_event_w_index = (dep->ep_event_w_index + 1) %
+					 ARRAY_SIZE(dep->ep_event_buffer);
+
+		if (dep->ep_event_w_index == dep->ep_event_r_index)
+			dep->ep_event_flags |= DWC3_EP_EVENT_OVERFLOW;
+
+		spin_unlock(&dep->event_lock);
 
 		/*
 		 * FIXME we wrap around correctly to the next entry as
@@ -4428,6 +4586,22 @@ static irqreturn_t dwc3_process_event_buf(struct dwc3_event_buffer *evt)
 		 */
 		evt->lpos = (evt->lpos + 4) % evt->length;
 		left -= 4;
+	}
+
+	for (i = 0; i < dwc->num_eps; i++) {
+		struct dwc3_ep *dep = dwc->eps[i];
+
+		/* ep0in and ep0out share the same interrupt thread */
+		if (i == 1)
+			continue;
+
+		spin_lock_irqsave(&dep->event_lock, flags);
+
+		// TODO: improve
+		if (dep->ep_event_r_index != dep->ep_event_w_index)
+			generic_handle_domain_irq_safe(dwc->ep_irq_domain, i);
+
+		spin_unlock_irqrestore(&dep->event_lock, flags);
 	}
 
 	evt->count = 0;
@@ -4553,6 +4727,22 @@ static void dwc_gadget_release(struct device *dev)
 	kfree(gadget);
 }
 
+static const struct irq_chip ep_irq_chip = {
+	.name = "dwc3-ep",
+};
+
+static int ep_irq_domain_map(struct irq_domain *d, unsigned int virq, irq_hw_number_t hwirq)
+{
+	irq_set_chip_and_handler(virq, &ep_irq_chip, handle_simple_irq);
+
+	return 0;
+}
+
+static const struct irq_domain_ops ep_irq_dom_ops = {
+	.map = ep_irq_domain_map,
+	.xlate = irq_domain_xlate_onetwocell,
+};
+
 /**
  * dwc3_gadget_init - initializes gadget related registers
  * @dwc: pointer to our controller context structure
@@ -4572,6 +4762,13 @@ int dwc3_gadget_init(struct dwc3 *dwc)
 	}
 
 	dwc->irq_gadget = irq;
+
+	dwc->ep_irq_domain = irq_domain_add_simple(NULL, dwc->num_eps, 0, &ep_irq_dom_ops, dwc);
+	if (!dwc->ep_irq_domain) {
+		dev_err(dwc->dev, "failed to create ep irq domain\n");
+		ret = -ENOMEM;
+		goto err0;
+	}
 
 	dwc->ep0_trb = dma_alloc_coherent(dwc->sysdev,
 					  sizeof(*dwc->ep0_trb) * 2,
@@ -4691,7 +4888,10 @@ void dwc3_gadget_exit(struct dwc3 *dwc)
 	if (!dwc->gadget)
 		return;
 
+	irq_domain_remove(dwc->ep_irq_domain);
+
 	dwc3_enable_susphy(dwc, false);
+
 	usb_del_gadget(dwc->gadget);
 	dwc3_gadget_free_endpoints(dwc);
 	usb_put_gadget(dwc->gadget);
