@@ -173,6 +173,11 @@ void rust_helper_rcu_read_unlock(void)
 EXPORT_SYMBOL_GPL(rust_helper_rcu_read_unlock);
 /* end rcu */
 
+int rust_helper_devm_add_action(struct device *dev, void (*action)(void *), void *data)
+{
+	return devm_add_action(dev, action, data);
+}
+
 /*
  * `bindgen` binds the C `size_t` type as the Rust `usize` type, so we can
  * use it in contexts where Rust expects a `usize` like slice (array) indices.
