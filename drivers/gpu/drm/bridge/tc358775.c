@@ -124,39 +124,15 @@
 #define LV_MX1619        0x0490  /* Bit 16 to 19 */
 #define LV_MX2023        0x0494  /* Bit 20 to 23 */
 #define LV_MX2427        0x0498  /* Bit 24 to 27 */
-#define LV_MX(b0, b1, b2, b3)	(FLD_VAL(b0, 4, 0) | FLD_VAL(b1, 12, 8) | \
-				FLD_VAL(b2, 20, 16) | FLD_VAL(b3, 28, 24))
+#define LV_MX(b0, b1, b2, b3) \
+	(((b3) << 24) | ((b2) << 16) | ((b1) << 8) | (b0))
 
 /* Input bit numbers used in mux registers */
 enum {
-	LVI_R0,
-	LVI_R1,
-	LVI_R2,
-	LVI_R3,
-	LVI_R4,
-	LVI_R5,
-	LVI_R6,
-	LVI_R7,
-	LVI_G0,
-	LVI_G1,
-	LVI_G2,
-	LVI_G3,
-	LVI_G4,
-	LVI_G5,
-	LVI_G6,
-	LVI_G7,
-	LVI_B0,
-	LVI_B1,
-	LVI_B2,
-	LVI_B3,
-	LVI_B4,
-	LVI_B5,
-	LVI_B6,
-	LVI_B7,
-	LVI_HS,
-	LVI_VS,
-	LVI_DE,
-	LVI_L0
+	LVI_R0, LVI_R1, LVI_R2, LVI_R3, LVI_R4, LVI_R5, LVI_R6, LVI_R7,
+	LVI_G0, LVI_G1, LVI_G2, LVI_G3, LVI_G4, LVI_G5, LVI_G6, LVI_G7,
+	LVI_B0, LVI_B1, LVI_B2, LVI_B3, LVI_B4, LVI_B5, LVI_B6, LVI_B7,
+	LVI_HS, LVI_VS, LVI_DE, LVI_L0
 };
 
 #define LVCFG           0x049C  /* LVDS Configuration  */
