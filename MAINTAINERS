@@ -21734,6 +21734,13 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/mtd/nvidia-tegra20-nand.txt
 F:	drivers/mtd/nand/raw/tegra_nand.c
 
+TEGRA CONFIG SETTINGS DRIVER
+M:	Thierry Reding <thierry.reding@gmail.com>
+R:	Laxman Dewangan <ldewangan@nvidia.com>
+R:	Krishna Yarlagadda <kyarlagadda@nvidia.com>
+S:	Supported
+F:	Documentation/misc-devices/tegra-cfg.rst
+
 TEGRA PWM DRIVER
 M:	Thierry Reding <thierry.reding@gmail.com>
 S:	Supported
