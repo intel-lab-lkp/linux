@@ -936,7 +936,14 @@ static __always_inline void io_req_commit_cqe(struct io_kiocb *req,
 
 static inline bool need_queue_group_members(struct io_kiocb *req)
 {
-	return req_is_group_leader(req) && !!req->grp_link;
+	if (likely(!(req->flags & REQ_F_SQE_GROUP)))
+		return false;
+
+	if (!(req->flags & REQ_F_SQE_GROUP_LEADER) ||
+			(req->flags & REQ_F_SQE_GROUP_DEP))
+		return false;
+
+	return !!req->grp_link;
 }
 
 /* Can only be called after this request is issued */
@@ -969,7 +976,7 @@ static void io_fail_group_members(struct io_kiocb *req)
 	req->grp_link = NULL;
 }
 
-static void io_queue_group_members(struct io_kiocb *req, bool async)
+void io_queue_group_members(struct io_kiocb *req, bool async)
 {
 	struct io_kiocb *member = req->grp_link;
 
@@ -980,13 +987,20 @@ static void io_queue_group_members(struct io_kiocb *req, bool async)
 		struct io_kiocb *next = member->grp_link;
 
 		member->grp_link = req;
-		trace_io_uring_submit_req(member);
-		if (async)
-			member->flags |= REQ_F_FORCE_ASYNC;
-		if (member->flags & REQ_F_FORCE_ASYNC)
-			io_req_task_queue(member);
-		else
-			io_queue_sqe(member);
+
+		/* members have to be failed if they depends on leader */
+		if (unlikely((req->flags & REQ_F_FAIL) &&
+			     (req->flags & REQ_F_SQE_GROUP_DEP))) {
+			io_req_task_queue_fail(member, -ECANCELED);
+		} else {
+			trace_io_uring_submit_req(member);
+			if (async)
+				member->flags |= REQ_F_FORCE_ASYNC;
+			if (member->flags & REQ_F_FORCE_ASYNC)
+				io_req_task_queue(member);
+			else
+				io_queue_sqe(member);
+		}
 		member = next;
 	}
 	req->grp_link = NULL;
@@ -1064,6 +1078,10 @@ static void io_req_complete_post(struct io_kiocb *req, unsigned issue_flags)
 		io_req_task_work_add(req);
 		return;
 	}
+
+	/* now queue members if they depends on this leader */
+	if (req_is_group_leader(req) && (req->flags & REQ_F_SQE_GROUP_DEP))
+		io_queue_group_members(req, true);
 
 	io_cq_lock(ctx);
 	if (!(req->flags & REQ_F_CQE_SKIP))

@@ -69,6 +69,7 @@ bool io_req_post_cqe(struct io_kiocb *req, s32 res, u32 cflags);
 void __io_commit_cqring_flush(struct io_ring_ctx *ctx);
 bool __io_complete_group_req(struct io_kiocb *req,
 			     struct io_kiocb *lead);
+void io_queue_group_members(struct io_kiocb *req, bool async);
 
 struct file *io_file_get_normal(struct io_kiocb *req, int fd);
 struct file *io_file_get_fixed(struct io_kiocb *req, int fd,
@@ -374,6 +375,8 @@ static inline void io_req_complete_defer(struct io_kiocb *req)
 	if (likely(!req_is_group_leader(req)) ||
 	    __io_complete_group_req(req, req))
 		wq_list_add_tail(&req->comp_list, &state->compl_reqs);
+	else if (req_is_group_leader(req) && (req->flags & REQ_F_SQE_GROUP_DEP))
+		io_queue_group_members(req, false);
 }
 
 static inline void io_commit_cqring_flush(struct io_ring_ctx *ctx)
