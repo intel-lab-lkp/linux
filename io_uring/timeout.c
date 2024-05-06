@@ -47,6 +47,9 @@ static inline void io_put_req(struct io_kiocb *req)
 {
 	if (req_ref_put_and_test(req)) {
 		io_queue_next(req);
+
+		/* we only want to free it, don't post CQEs */
+		req->flags |= REQ_F_CQE_SKIP;
 		io_free_req(req);
 	}
 }
