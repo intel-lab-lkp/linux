@@ -30,8 +30,6 @@
 #include <drm/drm_panel.h>
 #include <drm/drm_probe_helper.h>
 
-#define FLD_VAL(val, start, end) FIELD_PREP(GENMASK(start, end), val)
-
 /* Registers */
 
 /* DSI D-PHY Layer Registers */
@@ -146,10 +144,10 @@ enum {
 #define PCLKSEL_HSRCK	0	/* DSI clock */
 
 #define LVPHY0          0x04A0  /* LVDS PHY 0 */
-#define LV_PHY0_RST(v)          FLD_VAL(v, 22, 22) /* PHY reset */
-#define LV_PHY0_IS(v)           FLD_VAL(v, 15, 14)
-#define LV_PHY0_ND(v)           FLD_VAL(v, 4, 0) /* Frequency range select */
-#define LV_PHY0_PRBS_ON(v)      FLD_VAL(v, 20, 16) /* Clock/Data Flag pins */
+#define LVPHY0_LV_ND	GENMASK(4, 0)
+#define LVPHY0_LV_FS	GENMASK(6, 5)
+#define LVPHY0_LV_IS	GENMASK(15, 14) /* charge pump current */
+#define LVPHY0_LV_RST	BIT(22)
 
 #define LVPHY1          0x04A4  /* LVDS PHY 1 */
 #define SYSSTAT         0x0500  /* System Status  */
@@ -221,6 +219,14 @@ struct tc_data {
 	u8			bpc;
 
 	enum tc3587x5_type	type;
+};
+
+struct tc358775_pll_settings {
+	unsigned int min_khz;
+	unsigned int max_khz;
+	u8 fs;
+	u8 nd;
+	u8 is;
 };
 
 static inline struct tc_data *bridge_to_tc(struct drm_bridge *b)
@@ -371,10 +377,38 @@ static void tc358775_configure_lvds_timings(struct tc_data *tc,
 	regmap_write(tc->regmap, VFUEN, VFUEN_EN);
 }
 
-static void tc358775_configure_pll(struct tc_data *tc, int pixelclk)
+static const struct tc358775_pll_settings tc358775_pll_settings[] = {
+	{ 25000, 30000, 2, 27, 1 },
+	{ 30000, 60000, 1, 13, 1 },
+	{ 60000, 135000, 0, 6, 1 },
+	{}
+};
+
+static void tc358775_configure_pll(struct tc_data *tc, unsigned int pixelclk)
 {
+	const struct tc358775_pll_settings *settings;
+	unsigned int val;
+
+	if (tc->lvds_dual_link)
+		pixelclk /= 2;
+
+	for (settings = tc358775_pll_settings; settings->min_khz; settings++)
+		if (pixelclk > settings->min_khz &&
+		    pixelclk < settings->max_khz)
+			break;
+
+	if (!settings->min_khz)
+		return;
+
+	val = u32_encode_bits(settings->fs, LVPHY0_LV_FS);
+	val |= u32_encode_bits(settings->nd, LVPHY0_LV_ND);
+	val |= u32_encode_bits(settings->is, LVPHY0_LV_IS);
+
+	regmap_write(tc->regmap, LVPHY0, val | LVPHY0_LV_RST);
+	usleep_range(100, 150);
+	regmap_write(tc->regmap, LVPHY0, val);
+
 	regmap_write(tc->regmap, SYSRST, SYS_RST_LCD);
-	regmap_write(tc->regmap, LVPHY0, LV_PHY0_PRBS_ON(4) | LV_PHY0_ND(6));
 }
 
 static void tc358775_configure_color_mapping(struct tc_data *tc, u32 fmt)
