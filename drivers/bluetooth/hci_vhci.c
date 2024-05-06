@@ -392,7 +392,7 @@ static int __vhci_create_device(struct vhci_data *data, __u8 opcode)
 	/* bits 0-1 are dev_type (Primary or AMP) */
 	dev_type = opcode & 0x03;
 
-	if (dev_type != HCI_PRIMARY && dev_type != HCI_AMP)
+	if (dev_type != HCI_PRIMARY)
 		return -EINVAL;
 
 	/* bits 2-5 are reserved (must be zero) */
@@ -412,7 +412,6 @@ static int __vhci_create_device(struct vhci_data *data, __u8 opcode)
 	data->hdev = hdev;
 
 	hdev->bus = HCI_VIRTUAL;
-	hdev->dev_type = dev_type;
 	hci_set_drvdata(hdev, data);
 
 	hdev->open  = vhci_open_dev;
@@ -634,7 +633,7 @@ static void vhci_open_timeout(struct work_struct *work)
 	struct vhci_data *data = container_of(work, struct vhci_data,
 					      open_timeout.work);
 
-	vhci_create_device(data, amp ? HCI_AMP : HCI_PRIMARY);
+	vhci_create_device(data, HCI_PRIMARY);
 }
 
 static int vhci_open(struct inode *inode, struct file *file)
