@@ -363,8 +363,8 @@ repeat:
 		new_folio = virt_to_folio(jh_in->b_frozen_data);
 		new_offset = offset_in_folio(new_folio, jh_in->b_frozen_data);
 	} else {
-		new_folio = jh2bh(jh_in)->b_folio;
-		new_offset = offset_in_folio(new_folio, jh2bh(jh_in)->b_data);
+		new_folio = bh_in->b_folio;
+		new_offset = offset_in_folio(new_folio, bh_in->b_data);
 	}
 
 	mapped_data = kmap_local_folio(new_folio, new_offset);
