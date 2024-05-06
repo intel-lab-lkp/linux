@@ -73,6 +73,20 @@ static inline void tdcall(u64 fn, struct tdx_module_args *args)
 		panic("TDCALL %lld failed (Buggy TDX module!)\n", fn);
 }
 
+/* Read TD-scoped metadata */
+static inline u64 tdg_vm_rd(u64 field, u64 *value)
+{
+	struct tdx_module_args args = {
+		.rdx = field,
+	};
+	u64 ret;
+
+	ret = __tdcall_ret(TDG_VM_RD, &args);
+	*value = args.r8;
+
+	return ret;
+}
+
 /* Write TD-scoped metadata */
 static inline u64 tdg_vm_wr(u64 field, u64 value, u64 mask)
 {
@@ -83,6 +97,20 @@ static inline u64 tdg_vm_wr(u64 field, u64 value, u64 mask)
 	};
 
 	return __tdcall(TDG_VM_WR, &args);
+}
+
+/* Read system-wide TDX metadata */
+static inline u64 tdg_sys_rd(u64 field, u64 *value)
+{
+	struct tdx_module_args args = {
+		.rdx = field,
+	};
+	u64 ret;
+
+	ret = __tdcall_ret(TDG_SYS_RD, &args);
+	*value = args.r8;
+
+	return ret;
 }
 
 /**
@@ -175,11 +203,54 @@ static void __noreturn tdx_panic(const char *msg)
 		__tdx_hypercall(&args);
 }
 
+/*
+ * PENDING_EPT_VIOLATION_V2 feature allows TDX guest to control if it wants to
+ * receive SEPT violation #VEs.
+ *
+ * Check if the feature is available and disable SEPT #VE if possible.
+ */
+static int try_to_disable_sept_ve(u64 features0, u64 td_attr)
+{
+	u64 config, controls;
+
+	/* Does the TDX module support flexible SEPT #VE */
+	if (!(features0 & TDX_FEATURES0_PENDING_EPT_VIOLATION_V2))
+		return -EOPNOTSUPP;
+
+	/* Read TD config flags */
+	if (tdg_vm_rd(TDCS_CONFIG_FLAGS, &config))
+		return -EIO;
+
+	/* Is this TD allowed to disable SEPT #VE */
+	if (!(config & TDCS_CONFIG_FLEXIBLE_PENDING_VE))
+		return -EOPNOTSUPP;
+
+	if (tdg_vm_rd(TDCS_TD_CTLS, &controls))
+		return -EIO;
+
+	/* Check if SEPT #VE has been disabled before us */
+	if (controls & TD_CTLS_PENDING_VE_DISABLE)
+		return 0;
+
+	/* Keep #VE's enabled for splats in debugging environments */
+	if (td_attr & ATTR_DEBUG)
+		return -EOPNOTSUPP;
+
+	/* Try to disable */
+	if (tdg_vm_wr(TDCS_TD_CTLS, TD_CTLS_PENDING_VE_DISABLE,
+		      TD_CTLS_PENDING_VE_DISABLE)) {
+		return -EIO;
+	}
+
+	return 0;
+}
+
 static void tdx_setup(u64 *cc_mask)
 {
 	struct tdx_module_args args = {};
 	unsigned int gpa_width;
-	u64 td_attr;
+	u64 features0, td_attr;
+	bool sept_ve_disabled;
 
 	/*
 	 * TDINFO TDX module call is used to get the TD execution environment
@@ -200,19 +271,40 @@ static void tdx_setup(u64 *cc_mask)
 	gpa_width = args.rcx & GENMASK(5, 0);
 	*cc_mask = BIT_ULL(gpa_width - 1);
 
+	td_attr = args.rdx;
+
 	/* Kernel does not use NOTIFY_ENABLES and does not need random #VEs */
 	tdg_vm_wr(TDCS_NOTIFY_ENABLES, 0, -1ULL);
+
+	if (tdg_sys_rd(TDX_FEATURES0, &features0)) {
+		/*
+		 * TDX 1.0 does not have the field. No optional features are
+		 * supported.
+		 */
+		features0 = 0;
+	}
 
 	/*
 	 * The kernel can not handle #VE's when accessing normal kernel
 	 * memory.  Ensure that no #VE will be delivered for accesses to
 	 * TD-private memory.  Only VMM-shared memory (MMIO) will #VE.
+	 *
+	 * Try to disable SEPT #VE if possible.
 	 */
-	td_attr = args.rdx;
-	if (!(td_attr & ATTR_SEPT_VE_DISABLE)) {
-		const char *msg = "TD misconfiguration: SEPT_VE_DISABLE attribute must be set.";
+	if (!try_to_disable_sept_ve(features0, td_attr)) {
+		sept_ve_disabled = true;
+	} else {
+		/*
+		 * If SEPT #VE cannot be disabled from guest side, check
+		 * TD attribute if the #VE going to be delivered.
+		 */
+		sept_ve_disabled = td_attr & ATTR_SEPT_VE_DISABLE;
+	}
 
-		/* Relax SEPT_VE_DISABLE check for debug TD. */
+	if (!sept_ve_disabled) {
+		const char *msg = "TD misconfiguration: SEPT #VE has to be disabled";
+
+		/* Relax SEPT #VE disable check for debug TD. */
 		if (td_attr & ATTR_DEBUG)
 			pr_warn("%s\n", msg);
 		else
