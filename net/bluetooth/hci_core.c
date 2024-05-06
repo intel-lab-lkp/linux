@@ -3748,7 +3748,7 @@ static void hci_sched_acl_blk(struct hci_dev *hdev)
 
 	__check_timeout(hdev, cnt, type);
 
-	while (hdev->block_cnt > 0 &&
+	while (hdev->block_len > 0 && hdev->block_cnt > 0 &&
 	       (chan = hci_chan_sent(hdev, type, &quote))) {
 		u32 priority = (skb_peek(&chan->data_q))->priority;
 		while (quote > 0 && (skb = skb_peek(&chan->data_q))) {
