@@ -177,6 +177,37 @@ properties:
       operates at a 1.8 V fixed I/O voltage.
     $ref: /schemas/types.yaml#/definitions/flag
 
+  config:
+    description: Config settings for SDHCI devices.
+      Config setting is the configuration based on chip/board/system
+      characterization on interface/controller settings. This is needed for
+      - making the controller internal configuration to better perform
+      - making the interface to work proper by setting drive strength, slew
+        rates etc
+      - making the low power leakage.
+      SDHCI has configuration based on device speed modes.
+      - common is set on all speeds and can be overridden by speed mode.
+      - List of speed modes and their config name
+        "default", /* MMC_TIMING_LEGACY */
+        "sd-mmc-highspeed", /* MMC_TIMING_MMC_HS */
+        "sd-mmc-highspeed", /* MMC_TIMING_SD_HS */
+        "uhs-sdr12", /* MMC_TIMING_UHS_SDR12 */
+        "uhs-sdr25", /* MMC_TIMING_UHS_SDR25 */
+        "uhs-sdr50", /* MMC_TIMING_UHS_SDR50 */
+        "uhs-sdr104", /* MMC_TIMING_UHS_SDR104 */
+        "uhs-ddr52", /* MMC_TIMING_UHS_DDR50 */
+        "uhs-ddr52", /* MMC_TIMING_MMC_DDR52 */
+        "mmc-hs200", /* MMC_TIMING_MMC_HS200 */
+        "mmc-hs400", /* MMC_TIMING_MMC_HS400 */
+    type: object
+    unevaluatedProperties: true
+    properties:
+      nvidia,num-tuning-iter:
+        description: Specify DQS trim value for HS400 timing.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 0xffff
+
 required:
   - compatible
   - reg
@@ -278,6 +309,11 @@ examples:
         wp-gpios = <&gpio 57 0>; /* gpio PH1 */
         power-gpios = <&gpio 155 0>; /* gpio PT3 */
         bus-width = <8>;
+        config {
+            mmc-hs200 {
+                nvidia,num-tuning-iter = <0x2>;
+            };
+        };
     };
 
   - |
