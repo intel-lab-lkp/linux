@@ -1757,8 +1757,9 @@ qede_flow_parse_v6_common(struct netlink_ext_ack *extack,
 }
 
 static int
-qede_flow_parse_v4_common(struct qede_dev *edev, struct flow_rule *rule,
-			struct qede_arfs_tuple *t)
+qede_flow_parse_v4_common(struct netlink_ext_ack *extack,
+			  struct flow_rule *rule,
+			  struct qede_arfs_tuple *t)
 {
 	int err;
 
@@ -1768,7 +1769,8 @@ qede_flow_parse_v4_common(struct qede_dev *edev, struct flow_rule *rule,
 		flow_rule_match_ipv4_addrs(rule, &match);
 		if ((match.key->src && match.mask->src != htonl(U32_MAX)) ||
 		    (match.key->dst && match.mask->dst != htonl(U32_MAX))) {
-			DP_NOTICE(edev, "Do not support ipv4 prefix/masks\n");
+			NL_SET_ERR_MSG_MOD(extack,
+					   "Do not support ipv4 prefix/masks");
 			return -EINVAL;
 		}
 
@@ -1776,11 +1778,11 @@ qede_flow_parse_v4_common(struct qede_dev *edev, struct flow_rule *rule,
 		t->dst_ipv4 = match.key->dst;
 	}
 
-	err = qede_flow_parse_ports(NULL, rule, t);
+	err = qede_flow_parse_ports(extack, rule, t);
 	if (err)
 		return err;
 
-	return qede_set_v4_tuple_to_profile(NULL, t);
+	return qede_set_v4_tuple_to_profile(extack, t);
 }
 
 static int
@@ -1800,7 +1802,7 @@ qede_flow_parse_tcp_v4(struct qede_dev *edev, struct flow_rule *rule,
 	tuple->ip_proto = IPPROTO_TCP;
 	tuple->eth_proto = htons(ETH_P_IP);
 
-	return qede_flow_parse_v4_common(edev, rule, tuple);
+	return qede_flow_parse_v4_common(NULL, rule, tuple);
 }
 
 static int
@@ -1820,7 +1822,7 @@ qede_flow_parse_udp_v4(struct qede_dev *edev, struct flow_rule *rule,
 	tuple->ip_proto = IPPROTO_UDP;
 	tuple->eth_proto = htons(ETH_P_IP);
 
-	return qede_flow_parse_v4_common(edev, rule, tuple);
+	return qede_flow_parse_v4_common(NULL, rule, tuple);
 }
 
 static int
