@@ -53,6 +53,21 @@ progs/syscall.c-CFLAGS := -fno-strict-aliasing
 progs/test_pkt_md_access.c-CFLAGS := -fno-strict-aliasing
 progs/test_sk_lookup.c-CFLAGS := -fno-strict-aliasing
 progs/timer_crash.c-CFLAGS := -fno-strict-aliasing
+# In the following tests the strict aliasing rules are broken by the
+# __imm_insn macro, that do type-punning from `struct bpf_insn' to
+# long and then uses the value.  This triggers an "is used
+# uninitialized" warning in GCC.  This in theory may also lead to
+# broken programs, so it is better to disable strict aliasing than
+# inhibiting the warning.
+progs/verifier_ref_tracking.c := -fno-strict-aliasing
+progs/verifier_unpriv.c-CFLAGS := -fno-strict-aliasing
+progs/verifier_cgroup_storage.c-CFLAGS := -fno-strict-aliasing
+progs/verifier_ld_ind.c-CFLAGS := -fno-strict-aliasing
+progs/verifier_map_ret_val.c-CFLAGS := -fno-strict-aliasing
+progs/cpumask_failure.c-CFLAGS := -fno-strict-aliasing
+progs/verifier_spill_fill.c-CFLAGS := -fno-strict-aliasing
+progs/verifier_subprog_precision.c-CFLAGS := -fno-strict-aliasing
+progs/verifier_uninit.c-CFLAGS := -fno-strict-aliasing
 
 ifneq ($(LLVM),)
 # Silence some warnings when compiled with clang
