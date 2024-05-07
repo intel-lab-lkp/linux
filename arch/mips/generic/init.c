@@ -26,8 +26,12 @@ static __initconst const void *mach_match_data;
 
 void __init prom_init(void)
 {
+	fw_init_cmdline();
 	plat_get_fdt();
 	BUG_ON(!fdt);
+	if (mach && mach->fixup_fdt)
+		fdt = mach->fixup_fdt(fdt, mach_match_data);
+	__dt_setup_arch((void *)fdt);
 }
 
 void __init *plat_get_fdt(void)
@@ -101,11 +105,6 @@ void __init plat_fdt_relocated(void *new_location)
 
 void __init plat_mem_setup(void)
 {
-	if (mach && mach->fixup_fdt)
-		fdt = mach->fixup_fdt(fdt, mach_match_data);
-
-	fw_init_cmdline();
-	__dt_setup_arch((void *)fdt);
 }
 
 void __init device_tree_init(void)
