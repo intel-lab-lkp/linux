@@ -342,10 +342,12 @@ static void __unix_gc(struct work_struct *work)
 		scan_children(&u->sk, inc_inflight, &hitlist);
 
 #if IS_ENABLED(CONFIG_AF_UNIX_OOB)
+		unix_state_lock_nested(&u->sk, U_LOCK_GC_OOB);
 		if (u->oob_skb) {
 			kfree_skb(u->oob_skb);
 			u->oob_skb = NULL;
 		}
+		unix_state_unlock(&u->sk);
 #endif
 	}
 

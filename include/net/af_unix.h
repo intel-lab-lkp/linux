@@ -88,6 +88,7 @@ enum unix_socket_lock_class {
 	U_LOCK_GC_LISTENER, /* used for listening socket while determining gc
 			     * candidates to close a small race window.
 			     */
+	U_LOCK_GC_OOB, /* freeing oob_skb during GC. */
 };
 
 static inline void unix_state_lock_nested(struct sock *sk,
