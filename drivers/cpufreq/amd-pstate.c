@@ -348,6 +348,7 @@ static u32 amd_pstate_highest_perf_set(struct amd_cpudata *cpudata)
 {
 	u32 highest_perf;
 	int core_type;
+	struct cpuinfo_x86 *c = &cpu_data(0);
 
 	core_type = amd_pstate_get_cpu_type(cpudata->cpu);
 	pr_debug("core_type %d found\n", core_type);
@@ -355,6 +356,13 @@ static u32 amd_pstate_highest_perf_set(struct amd_cpudata *cpudata)
 	switch (core_type) {
 	case CPU_CORE_TYPE_NO_HETERO_SUP:
 		highest_perf = CPPC_HIGHEST_PERF_DEFAULT;
+		/*
+		 * For AMD CPUs with Family ID 19H and Model ID range 0x70 to 0x7F,
+		 * the highest performance level is set to 196.
+		 * https://bugzilla.kernel.org/show_bug.cgi?id=218759
+		 */
+		if (c->x86 == 0x19 && (c->x86_model >= 0x70 && c->x86_model <= 0x7F))
+			highest_perf = CPPC_HIGHEST_PERF_PERFORMANCE;
 		break;
 	case CPU_CORE_TYPE_PERFORMANCE:
 		highest_perf = CPPC_HIGHEST_PERF_PERFORMANCE;
