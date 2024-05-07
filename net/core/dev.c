@@ -10256,6 +10256,35 @@ static void netdev_do_free_pcpu_stats(struct net_device *dev)
 	}
 }
 
+int netdev_alloc_phy_link_topology(struct net_device *dev)
+{
+	struct phy_link_topology *topo;
+
+	topo = kzalloc(sizeof(*topo), GFP_KERNEL);
+	if (!topo)
+		return -ENOMEM;
+
+	xa_init_flags(&topo->phys, XA_FLAGS_ALLOC1);
+	topo->next_phy_index = 1;
+
+	dev->link_topo = topo;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(netdev_alloc_phy_link_topology);
+
+static void netdev_free_phy_link_topology(struct net_device *dev)
+{
+	struct phy_link_topology *topo = dev->link_topo;
+
+	if (!topo)
+		return;
+
+	xa_destroy(&topo->phys);
+	kfree(topo);
+	dev->link_topo = NULL;
+}
+
 /**
  * register_netdevice() - register a network device
  * @dev: device to register
@@ -10998,11 +11027,6 @@ struct net_device *alloc_netdev_mqs(int sizeof_priv, const char *name,
 #ifdef CONFIG_NET_SCHED
 	hash_init(dev->qdisc_hash);
 #endif
-	dev->link_topo = phy_link_topo_create(dev);
-	if (IS_ERR(dev->link_topo)) {
-		dev->link_topo = NULL;
-		goto free_all;
-	}
 
 	dev->priv_flags = IFF_XMIT_DST_RELEASE | IFF_XMIT_DST_RELEASE_PERM;
 	setup(dev);
@@ -11092,7 +11116,9 @@ void free_netdev(struct net_device *dev)
 	free_percpu(dev->xdp_bulkq);
 	dev->xdp_bulkq = NULL;
 
-	phy_link_topo_destroy(dev->link_topo);
+#if IS_ENABLED(CONFIG_PHYLIB)
+	netdev_free_phy_link_topology(dev);
+#endif
 
 	/*  Compatibility with error handling in drivers */
 	if (dev->reg_state == NETREG_UNINITIALIZED ||

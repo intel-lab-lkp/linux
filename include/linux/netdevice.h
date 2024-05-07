@@ -4569,6 +4569,8 @@ void __hw_addr_unsync_dev(struct netdev_hw_addr_list *list,
 					const unsigned char *));
 void __hw_addr_init(struct netdev_hw_addr_list *list);
 
+int netdev_alloc_phy_link_topology(struct net_device *dev);
+
 /* Functions used for device addresses handling */
 void dev_addr_mod(struct net_device *dev, unsigned int offset,
 		  const void *addr, size_t len);

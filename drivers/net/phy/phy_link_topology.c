@@ -12,29 +12,6 @@
 #include <linux/rtnetlink.h>
 #include <linux/xarray.h>
 
-struct phy_link_topology *phy_link_topo_create(struct net_device *dev)
-{
-	struct phy_link_topology *topo;
-
-	topo = kzalloc(sizeof(*topo), GFP_KERNEL);
-	if (!topo)
-		return ERR_PTR(-ENOMEM);
-
-	xa_init_flags(&topo->phys, XA_FLAGS_ALLOC1);
-	topo->next_phy_index = 1;
-
-	return topo;
-}
-
-void phy_link_topo_destroy(struct phy_link_topology *topo)
-{
-	if (!topo)
-		return;
-
-	xa_destroy(&topo->phys);
-	kfree(topo);
-}
-
 int phy_link_topo_add_phy(struct net_device *dev,
 			  struct phy_device *phy,
 			  enum phy_upstream upt, void *upstream)
@@ -42,6 +19,14 @@ int phy_link_topo_add_phy(struct net_device *dev,
 	struct phy_link_topology *topo = dev->link_topo;
 	struct phy_device_node *pdn;
 	int ret;
+
+	if (!topo) {
+		ret = netdev_alloc_phy_link_topology(dev);
+		if (ret)
+			return ret;
+
+		topo = dev->link_topo;
+	}
 
 	pdn = kzalloc(sizeof(*pdn), GFP_KERNEL);
 	if (!pdn)

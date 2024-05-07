@@ -32,10 +32,12 @@ struct phy_device_node {
 	struct phy_device *phy;
 };
 
-struct phy_link_topology {
-	struct xarray phys;
-	u32 next_phy_index;
-};
+#if IS_ENABLED(CONFIG_PHYLIB)
+int phy_link_topo_add_phy(struct net_device *dev,
+			  struct phy_device *phy,
+			  enum phy_upstream upt, void *upstream);
+
+void phy_link_topo_del_phy(struct net_device *dev, struct phy_device *phy);
 
 static inline struct phy_device
 *phy_link_topo_get_phy(struct net_device *dev, u32 phyindex)
@@ -53,13 +55,6 @@ static inline struct phy_device
 	return NULL;
 }
 
-#if IS_REACHABLE(CONFIG_PHYLIB)
-int phy_link_topo_add_phy(struct net_device *dev,
-			  struct phy_device *phy,
-			  enum phy_upstream upt, void *upstream);
-
-void phy_link_topo_del_phy(struct net_device *dev, struct phy_device *phy);
-
 #else
 static inline int phy_link_topo_add_phy(struct net_device *dev,
 					struct phy_device *phy,
@@ -71,6 +66,12 @@ static inline int phy_link_topo_add_phy(struct net_device *dev,
 static inline void phy_link_topo_del_phy(struct net_device *dev,
 					 struct phy_device *phy)
 {
+}
+
+static inline struct phy_device *
+phy_link_topo_get_phy(struct net_device *dev, u32 phyindex)
+{
+	return NULL;
 }
 #endif
 
