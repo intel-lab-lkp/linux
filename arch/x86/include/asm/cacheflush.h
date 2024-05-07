@@ -10,4 +10,7 @@
 
 void clflush_cache_range(void *addr, unsigned int size);
 
+void arch_clean_nonsnoop_dma(phys_addr_t phys, size_t length);
+#define arch_clean_nonsnoop_dma arch_clean_nonsnoop_dma
+
 #endif /* _ASM_X86_CACHEFLUSH_H */

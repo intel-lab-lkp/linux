@@ -34,6 +34,7 @@
 #include <asm/memtype.h>
 #include <asm/hyperv-tlfs.h>
 #include <asm/mshyperv.h>
+#include <asm/mtrr.h>
 
 #include "../mm_internal.h"
 
@@ -348,6 +349,93 @@ void arch_invalidate_pmem(void *addr, size_t size)
 }
 EXPORT_SYMBOL_GPL(arch_invalidate_pmem);
 #endif
+
+/*
+ * Flush pfn_valid() and !PageReserved() page
+ */
+static void clflush_page(struct page *page)
+{
+	const int size = boot_cpu_data.x86_clflush_size;
+	unsigned int i;
+	void *va;
+
+	va = kmap_local_page(page);
+
+	/* CLFLUSHOPT is unordered and requires full memory barrier */
+	mb();
+	for (i = 0; i < PAGE_SIZE; i += size)
+		clflushopt(va + i);
+	/* CLFLUSHOPT is unordered and requires full memory barrier */
+	mb();
+
+	kunmap_local(va);
+}
+
+/*
+ * Flush a reserved page or !pfn_valid() PFN.
+ * Flush is not performed if the PFN is accessed in uncacheable type. i.e.
+ * - PAT type is UC/UC-/WC when PAT is enabled
+ * - MTRR type is UC/WC/WT/WP when PAT is not enabled.
+ *   (no need to do CLFLUSH though WT/WP is cacheable).
+ */
+static void clflush_reserved_or_invalid_pfn(unsigned long pfn)
+{
+	const int size = boot_cpu_data.x86_clflush_size;
+	unsigned int i;
+	void *va;
+
+	if (!pat_enabled()) {
+		u64 start = PFN_PHYS(pfn), end = start + PAGE_SIZE;
+		u8 mtrr_type, uniform;
+
+		mtrr_type = mtrr_type_lookup(start, end, &uniform);
+		if (mtrr_type != MTRR_TYPE_WRBACK)
+			return;
+	} else if (pat_pfn_immune_to_uc_mtrr(pfn)) {
+		return;
+	}
+
+	va = memremap(pfn << PAGE_SHIFT, PAGE_SIZE, MEMREMAP_WB);
+	if (!va)
+		return;
+
+	/* CLFLUSHOPT is unordered and requires full memory barrier */
+	mb();
+	for (i = 0; i < PAGE_SIZE; i += size)
+		clflushopt(va + i);
+	/* CLFLUSHOPT is unordered and requires full memory barrier */
+	mb();
+
+	memunmap(va);
+}
+
+static inline void clflush_pfn(unsigned long pfn)
+{
+	if (pfn_valid(pfn) &&
+	    (!PageReserved(pfn_to_page(pfn)) || is_zero_pfn(pfn)))
+		return clflush_page(pfn_to_page(pfn));
+
+	clflush_reserved_or_invalid_pfn(pfn);
+}
+
+/**
+ * arch_clean_nonsnoop_dma - flush a cache range for non-coherent DMAs
+ *                           (DMAs that lack CPU cache snooping).
+ * @phys_addr:	physical address start
+ * @length:	number of bytes to flush
+ */
+void arch_clean_nonsnoop_dma(phys_addr_t phys_addr, size_t length)
+{
+	unsigned long nrpages, pfn;
+	unsigned long i;
+
+	pfn = PHYS_PFN(phys_addr);
+	nrpages = PAGE_ALIGN((phys_addr & ~PAGE_MASK) + length) >> PAGE_SHIFT;
+
+	for (i = 0; i < nrpages; i++, pfn++)
+		clflush_pfn(pfn);
+}
+EXPORT_SYMBOL_GPL(arch_clean_nonsnoop_dma);
 
 #ifdef CONFIG_ARCH_HAS_CPU_CACHE_INVALIDATE_MEMREGION
 bool cpu_cache_has_invalidate_memregion(void)

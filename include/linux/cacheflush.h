@@ -26,4 +26,10 @@ static inline void flush_icache_pages(struct vm_area_struct *vma,
 
 #define flush_icache_page(vma, page)	flush_icache_pages(vma, page, 1)
 
+#ifndef arch_clean_nonsnoop_dma
+static inline void arch_clean_nonsnoop_dma(phys_addr_t phys, size_t length)
+{
+}
+#endif
+
 #endif /* _LINUX_CACHEFLUSH_H */
