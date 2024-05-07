@@ -52,8 +52,7 @@ struct {
 __u32 ok;
 __u32 ok_sleepable;
 
-static int test_elem_callback(void *map, int *key,
-		int (callback_fn)(void *map, int *key, struct bpf_wq *wq))
+static int test_elem_callback(void *map, int *key, wq_callback_fn_t callback_fn)
 {
 	struct elem init = {}, *val;
 	struct bpf_wq *wq;
@@ -83,8 +82,7 @@ static int test_elem_callback(void *map, int *key,
 	return 0;
 }
 
-static int test_hmap_elem_callback(void *map, int *key,
-		int (callback_fn)(void *map, int *key, struct bpf_wq *wq))
+static int test_hmap_elem_callback(void *map, int *key, wq_callback_fn_t callback_fn)
 {
 	struct hmap_elem init = {}, *val;
 	struct bpf_wq *wq;
@@ -114,7 +112,7 @@ static int test_hmap_elem_callback(void *map, int *key,
 }
 
 /* callback for non sleepable workqueue */
-static int wq_callback(void *map, int *key, struct bpf_wq *work)
+static int wq_callback(struct bpf_map *map, int *key, struct bpf_wq *work)
 {
 	bpf_kfunc_common_test();
 	ok |= (1 << *key);
@@ -122,7 +120,7 @@ static int wq_callback(void *map, int *key, struct bpf_wq *work)
 }
 
 /* callback for sleepable workqueue */
-static int wq_cb_sleepable(void *map, int *key, struct bpf_wq *work)
+static int wq_cb_sleepable(struct bpf_map *map, int *key, struct bpf_wq *work)
 {
 	bpf_kfunc_call_test_sleepable();
 	ok_sleepable |= (1 << *key);
