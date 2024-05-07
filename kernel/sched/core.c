@@ -7512,13 +7512,7 @@ unsigned long effective_cpu_util(int cpu, unsigned long util_cfs,
 	}
 
 	if (min) {
-		/*
-		 * The minimum utilization returns the highest level between:
-		 * - the computed DL bandwidth needed with the IRQ pressure which
-		 *   steals time to the deadline task.
-		 * - The minimum performance requirement for CFS and/or RT.
-		 */
-		*min = max(irq + cpu_bw_dl(rq), uclamp_rq_get(rq, UCLAMP_MIN));
+		*min = irq + cpu_bw_dl(rq);
 
 		/*
 		 * When an RT task is runnable and uclamp is not used, we must
@@ -7537,12 +7531,8 @@ unsigned long effective_cpu_util(int cpu, unsigned long util_cfs,
 	util = util_cfs + cpu_util_rt(rq);
 	util += cpu_util_dl(rq);
 
-	/*
-	 * The maximum hint is a soft bandwidth requirement, which can be lower
-	 * than the actual utilization because of uclamp_max requirements.
-	 */
 	if (max)
-		*max = min(scale, uclamp_rq_get(rq, UCLAMP_MAX));
+		*max = scale;
 
 	if (util >= scale)
 		return scale;
