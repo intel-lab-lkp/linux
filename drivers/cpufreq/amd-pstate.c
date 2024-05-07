@@ -1698,6 +1698,17 @@ static bool amd_cppc_supported(void)
 		return false;
 	}
 
+	/*
+	 * If the CPPC flag is disabled in the BIOS for processors that support MSR-based CPPC
+	 * the AMD Pstate driver may not function correctly.
+	 */
+	if ((boot_cpu_data.x86 >= 0x19) && (boot_cpu_data.x86_model >= 0x40) &&
+			!cpu_feature_enabled(X86_FEATURE_CPPC)) {
+		pr_debug_once("The CPPC feature is supported but disabled by the BIOS. "
+						"Please enable it if your BIOS has the CPPC option.\n");
+		return false;
+	}
+
 	return true;
 }
 
