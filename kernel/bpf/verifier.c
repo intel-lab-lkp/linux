@@ -511,7 +511,6 @@ static bool is_dynptr_ref_function(enum bpf_func_id func_id)
 }
 
 static bool is_sync_callback_calling_kfunc(u32 btf_id);
-static bool is_async_callback_calling_kfunc(u32 btf_id);
 static bool is_callback_calling_kfunc(u32 btf_id);
 static bool is_bpf_throw_kfunc(struct bpf_insn *insn);
 
@@ -544,8 +543,7 @@ static bool is_sync_callback_calling_insn(struct bpf_insn *insn)
 
 static bool is_async_callback_calling_insn(struct bpf_insn *insn)
 {
-	return (bpf_helper_call(insn) && is_async_callback_calling_function(insn->imm)) ||
-	       (bpf_pseudo_kfunc_call(insn) && is_async_callback_calling_kfunc(insn->imm));
+	return bpf_helper_call(insn) && is_async_callback_calling_function(insn->imm);
 }
 
 static bool is_may_goto_insn(struct bpf_insn *insn)
@@ -9560,15 +9558,14 @@ static int push_callback_call(struct bpf_verifier_env *env, struct bpf_insn *ins
 		return -EFAULT;
 	}
 
-	if (is_async_callback_calling_insn(insn) || (kfunc_meta && kfunc_meta->async_cb.enabled)) {
+	if (kfunc_meta && kfunc_meta->async_cb.enabled) {
 		struct bpf_verifier_state *async_cb;
 
 		/* there is no real recursion here. timer and workqueue callbacks are async */
 		env->subprog_info[subprog].is_async_cb = true;
 		async_cb = push_async_cb(env, env->subprog_info[subprog].start,
 					 insn_idx, subprog,
-					 (is_bpf_wq_set_callback_impl_kfunc(insn->imm) ||
-					  (kfunc_meta && kfunc_meta->async_cb.sleepable)));
+					 kfunc_meta && kfunc_meta->async_cb.sleepable);
 		if (!async_cb)
 			return -EFAULT;
 		callee = async_cb->frame[0];
@@ -11534,11 +11531,6 @@ static bool is_sync_callback_calling_kfunc(u32 btf_id)
 	return btf_id == special_kfunc_list[KF_bpf_rbtree_add_impl];
 }
 
-static bool is_async_callback_calling_kfunc(u32 btf_id)
-{
-	return btf_id == special_kfunc_list[KF_bpf_wq_set_callback_impl];
-}
-
 static bool is_bpf_throw_kfunc(struct bpf_insn *insn)
 {
 	return bpf_pseudo_kfunc_call(insn) && insn->off == 0 &&
@@ -11552,8 +11544,7 @@ static bool is_bpf_wq_set_callback_impl_kfunc(u32 btf_id)
 
 static bool is_callback_calling_kfunc(u32 btf_id)
 {
-	return is_sync_callback_calling_kfunc(btf_id) ||
-	       is_async_callback_calling_kfunc(btf_id);
+	return is_sync_callback_calling_kfunc(btf_id);
 }
 
 static bool is_rbtree_lock_required_kfunc(u32 btf_id)
@@ -12458,16 +12449,6 @@ static int check_kfunc_call(struct bpf_verifier_env *env, struct bpf_insn *insn,
 	if (meta.func_id == special_kfunc_list[KF_bpf_rbtree_add_impl]) {
 		err = push_callback_call(env, insn, insn_idx, meta.subprogno,
 					 set_rbtree_add_callback_state, &meta);
-		if (err) {
-			verbose(env, "kfunc %s#%d failed callback verification\n",
-				func_name, meta.func_id);
-			return err;
-		}
-	}
-
-	if (is_bpf_wq_set_callback_impl_kfunc(meta.func_id)) {
-		err = push_callback_call(env, insn, insn_idx, meta.subprogno,
-					 set_timer_callback_state, &meta);
 		if (err) {
 			verbose(env, "kfunc %s#%d failed callback verification\n",
 				func_name, meta.func_id);
