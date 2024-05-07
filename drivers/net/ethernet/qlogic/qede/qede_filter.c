@@ -1952,6 +1952,7 @@ unlock:
 static int qede_flow_spec_validate(struct qede_dev *edev,
 				   struct flow_action *flow_action,
 				   struct qede_arfs_tuple *t,
+				   struct netlink_ext_ack *extack,
 				   __u32 location)
 {
 	int err;
@@ -1976,7 +1977,7 @@ static int qede_flow_spec_validate(struct qede_dev *edev,
 		return -EINVAL;
 	}
 
-	err = qede_parse_actions(edev, flow_action, NULL);
+	err = qede_parse_actions(edev, flow_action, extack);
 	if (err)
 		return err;
 
@@ -2023,7 +2024,7 @@ static int qede_flow_spec_to_rule(struct qede_dev *edev,
 
 	/* Make sure location is valid and filter isn't already set */
 	err = qede_flow_spec_validate(edev, &flow->rule->action, t,
-				      fs->location);
+				      &extack, fs->location);
 err_out:
 	if (extack._msg)
 		DP_NOTICE(edev, "%s\n", extack._msg);
