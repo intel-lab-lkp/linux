@@ -74,6 +74,7 @@ struct vfio_iommu {
 	bool			v2;
 	bool			nesting;
 	bool			dirty_page_tracking;
+	bool			has_noncoherent_domain;
 	struct list_head	emulated_iommu_groups;
 };
 
@@ -99,6 +100,7 @@ struct vfio_dma {
 	unsigned long		*bitmap;
 	struct mm_struct	*mm;
 	size_t			locked_vm;
+	bool			cache_flush_required; /* For noncoherent domain */
 };
 
 struct vfio_batch {
@@ -716,6 +718,9 @@ static long vfio_unpin_pages_remote(struct vfio_dma *dma, dma_addr_t iova,
 	long unlocked = 0, locked = 0;
 	long i;
 
+	if (dma->cache_flush_required)
+		arch_clean_nonsnoop_dma(pfn << PAGE_SHIFT, npage << PAGE_SHIFT);
+
 	for (i = 0; i < npage; i++, iova += PAGE_SIZE) {
 		if (put_pfn(pfn++, dma->prot)) {
 			unlocked++;
@@ -1099,6 +1104,8 @@ static long vfio_unmap_unpin(struct vfio_iommu *iommu, struct vfio_dma *dma,
 					    &iotlb_gather);
 	}
 
+	dma->cache_flush_required = false;
+
 	if (do_accounting) {
 		vfio_lock_acct(dma, -unlocked, true);
 		return 0;
@@ -1118,6 +1125,21 @@ static void vfio_remove_dma(struct vfio_iommu *iommu, struct vfio_dma *dma)
 		iommu->vaddr_invalid_count--;
 	kfree(dma);
 	iommu->dma_avail++;
+}
+
+static void vfio_update_noncoherent_domain_state(struct vfio_iommu *iommu)
+{
+	struct vfio_domain *domain;
+	bool has_noncoherent = false;
+
+	list_for_each_entry(domain, &iommu->domain_list, next) {
+		if (domain->enforce_cache_coherency)
+			continue;
+
+		has_noncoherent = true;
+		break;
+	}
+	iommu->has_noncoherent_domain = has_noncoherent;
 }
 
 static void vfio_update_pgsize_bitmap(struct vfio_iommu *iommu)
@@ -1455,6 +1477,12 @@ static int vfio_pin_map_dma(struct vfio_iommu *iommu, struct vfio_dma *dma,
 
 	vfio_batch_init(&batch);
 
+	/*
+	 * Record necessity to flush CPU cache to make sure CPU cache is flushed
+	 * for both pin & map and unmap & unpin (for unwind) paths.
+	 */
+	dma->cache_flush_required = iommu->has_noncoherent_domain;
+
 	while (size) {
 		/* Pin a contiguous chunk of memory */
 		npage = vfio_pin_pages_remote(dma, vaddr + dma->size,
@@ -1465,6 +1493,10 @@ static int vfio_pin_map_dma(struct vfio_iommu *iommu, struct vfio_dma *dma,
 			ret = (int)npage;
 			break;
 		}
+
+		if (dma->cache_flush_required)
+			arch_clean_nonsnoop_dma(pfn << PAGE_SHIFT,
+						npage << PAGE_SHIFT);
 
 		/* Map it! */
 		ret = vfio_iommu_map(iommu, iova + dma->size, pfn, npage,
@@ -1683,9 +1715,14 @@ static int vfio_iommu_replay(struct vfio_iommu *iommu,
 	for (; n; n = rb_next(n)) {
 		struct vfio_dma *dma;
 		dma_addr_t iova;
+		bool cache_flush_required;
 
 		dma = rb_entry(n, struct vfio_dma, node);
 		iova = dma->iova;
+		cache_flush_required = !domain->enforce_cache_coherency &&
+				       !dma->cache_flush_required;
+		if (cache_flush_required)
+			dma->cache_flush_required = true;
 
 		while (iova < dma->iova + dma->size) {
 			phys_addr_t phys;
@@ -1736,6 +1773,9 @@ static int vfio_iommu_replay(struct vfio_iommu *iommu,
 				phys = pfn << PAGE_SHIFT;
 				size = npage << PAGE_SHIFT;
 			}
+
+			if (cache_flush_required)
+				arch_clean_nonsnoop_dma(phys, size);
 
 			ret = iommu_map(domain->domain, iova, phys, size,
 					dma->prot | IOMMU_CACHE,
@@ -1801,6 +1841,7 @@ unwind:
 			vfio_unpin_pages_remote(dma, iova, phys >> PAGE_SHIFT,
 						size >> PAGE_SHIFT, true);
 		}
+		dma->cache_flush_required = false;
 	}
 
 	vfio_batch_fini(&batch);
@@ -1828,6 +1869,9 @@ static void vfio_test_domain_fgsp(struct vfio_domain *domain, struct list_head *
 	if (!pages)
 		return;
 
+	if (!domain->enforce_cache_coherency)
+		arch_clean_nonsnoop_dma(page_to_phys(pages), PAGE_SIZE * 2);
+
 	list_for_each_entry(region, regions, list) {
 		start = ALIGN(region->start, PAGE_SIZE * 2);
 		if (start >= region->end || (region->end - start < PAGE_SIZE * 2))
@@ -1846,6 +1890,9 @@ static void vfio_test_domain_fgsp(struct vfio_domain *domain, struct list_head *
 		}
 		break;
 	}
+
+	if (!domain->enforce_cache_coherency)
+		arch_clean_nonsnoop_dma(page_to_phys(pages), PAGE_SIZE * 2);
 
 	__free_pages(pages, order);
 }
@@ -2308,6 +2355,8 @@ static int vfio_iommu_type1_attach_group(void *iommu_data,
 
 	list_add(&domain->next, &iommu->domain_list);
 	vfio_update_pgsize_bitmap(iommu);
+	if (!domain->enforce_cache_coherency)
+		vfio_update_noncoherent_domain_state(iommu);
 done:
 	/* Delete the old one and insert new iova list */
 	vfio_iommu_iova_insert_copy(iommu, &iova_copy);
@@ -2508,6 +2557,8 @@ static void vfio_iommu_type1_detach_group(void *iommu_data,
 			}
 			iommu_domain_free(domain->domain);
 			list_del(&domain->next);
+			if (!domain->enforce_cache_coherency)
+				vfio_update_noncoherent_domain_state(iommu);
 			kfree(domain);
 			vfio_iommu_aper_expand(iommu, &iova_copy);
 			vfio_update_pgsize_bitmap(iommu);
