@@ -101,9 +101,21 @@ static bool kvm_is_mmio_pfn(kvm_pfn_t pfn)
 			 */
 			(!pat_enabled() || pat_pfn_immune_to_uc_mtrr(pfn));
 
+	/*
+	 * If the PFN is invalid and not RAM in raw e820 table, keep treating it
+	 * as MMIO.
+	 *
+	 * If the PFN is invalid and is RAM in raw e820 table,
+	 * - if PAT is not enabled, always treat the PFN as MMIO to avoid futher
+	 *   checking of MTRRs.
+	 * - if PAT is enabled, treat the PFN as MMIO if its PAT is UC/WC/UC- in
+	 *   primary MMU.
+	 * to prevent guest cacheable access to MMIO PFNs.
+	 */
 	return !e820__mapped_raw_any(pfn_to_hpa(pfn),
 				     pfn_to_hpa(pfn + 1) - 1,
-				     E820_TYPE_RAM);
+				     E820_TYPE_RAM) ? true :
+				     (!pat_enabled() || pat_pfn_immune_to_uc_mtrr(pfn));
 }
 
 /*
