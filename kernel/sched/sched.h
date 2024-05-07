@@ -2999,8 +2999,6 @@ static inline unsigned long cpu_util_rt(struct rq *rq)
 #endif
 
 #ifdef CONFIG_UCLAMP_TASK
-unsigned long uclamp_eff_value(struct task_struct *p, enum uclamp_id clamp_id);
-
 static inline unsigned long root_cfs_util_uclamp(struct rq *rq)
 {
 	long ret = READ_ONCE(rq->cfs.avg.util_avg);
@@ -3021,6 +3019,18 @@ static inline unsigned long root_cfs_util_uclamp(struct rq *rq)
 static inline bool uclamp_is_used(void)
 {
 	return static_branch_likely(&sched_uclamp_used);
+}
+
+static inline unsigned long uclamp_eff_value(struct task_struct *p,
+					     enum uclamp_id clamp_id)
+{
+	if (uclamp_is_used() && p->uclamp[clamp_id].active)
+		return p->uclamp[clamp_id].value;
+
+	if (clamp_id == UCLAMP_MIN)
+		return 0;
+
+	return SCHED_CAPACITY_SCALE;
 }
 
 static inline void util_bias_enqueue(struct sched_avg *avg,
