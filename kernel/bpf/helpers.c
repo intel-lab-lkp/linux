@@ -2725,9 +2725,9 @@ typedef int (*wq_callback_fn_t)(struct bpf_map *map, int *key, struct bpf_wq *wq
 __bpf_kfunc int bpf_wq_set_callback_impl(struct bpf_wq *wq,
 					 wq_callback_fn_t callback_fn__s_async,
 					 unsigned int flags,
-					 void *aux__ign)
+					 void *prog__aux)
 {
-	struct bpf_prog_aux *aux = (struct bpf_prog_aux *)aux__ign;
+	struct bpf_prog_aux *aux = (struct bpf_prog_aux *)prog__aux;
 	struct bpf_async_kern *async = (struct bpf_async_kern *)wq;
 
 	if (flags)
