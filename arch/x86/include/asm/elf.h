@@ -13,6 +13,40 @@
 #include <asm/auxvec.h>
 #include <asm/fsgsbase.h>
 
+struct xfeat_component {
+	u32 xfeat_type;
+	u32 xfeat_sz;
+	u32 xfeat_off;
+	u32 xfeat_flags;
+} __packed;
+
+_Static_assert(sizeof(struct xfeat_component)%4 == 0, "xfeat_component is not aligned");
+
+enum custom_feature {
+	FEATURE_XSAVE_FP = 0,
+	FEATURE_XSAVE_SSE = 1,
+	FEATURE_XSAVE_YMM = 2,
+	FEATURE_XSAVE_BNDREGS = 3,
+	FEATURE_XSAVE_BNDCSR = 4,
+	FEATURE_XSAVE_OPMASK = 5,
+	FEATURE_XSAVE_ZMM_Hi256 = 6,
+	FEATURE_XSAVE_Hi16_ZMM = 7,
+	FEATURE_XSAVE_PT = 8,
+	FEATURE_XSAVE_PKRU = 9,
+	FEATURE_XSAVE_PASID = 10,
+	FEATURE_XSAVE_CET_USER = 11,
+	FEATURE_XSAVE_CET_SHADOW_STACK = 12,
+	FEATURE_XSAVE_HDC = 13,
+	FEATURE_XSAVE_UINTR = 14,
+	FEATURE_XSAVE_LBR = 15,
+	FEATURE_XSAVE_HWP = 16,
+	FEATURE_XSAVE_XTILE_CFG = 17,
+	FEATURE_XSAVE_XTILE_DATA = 18,
+	FEATURE_MAX,
+	FEATURE_XSAVE_EXTENDED_START = FEATURE_XSAVE_YMM,
+	FEATURE_XSAVE_EXTENDED_END = FEATURE_XSAVE_XTILE_DATA,
+};
+
 typedef unsigned long elf_greg_t;
 
 #define ELF_NGREG (sizeof(struct user_regs_struct) / sizeof(elf_greg_t))

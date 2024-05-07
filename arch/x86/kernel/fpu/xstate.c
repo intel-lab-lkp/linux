@@ -13,6 +13,7 @@
 #include <linux/seq_file.h>
 #include <linux/proc_fs.h>
 #include <linux/vmalloc.h>
+#include <linux/coredump.h>
 
 #include <asm/fpu/api.h>
 #include <asm/fpu/regset.h>
@@ -86,6 +87,8 @@ static unsigned int xstate_flags[XFEATURE_MAX] __ro_after_init;
 
 #define XSTATE_FLAG_SUPERVISOR	BIT(0)
 #define XSTATE_FLAG_ALIGNED64	BIT(1)
+
+static const char owner_name[] = "LINUX";
 
 /*
  * Return whether the system supports a given xfeature.
@@ -1837,3 +1840,141 @@ int proc_pid_arch_status(struct seq_file *m, struct pid_namespace *ns,
 	return 0;
 }
 #endif /* CONFIG_PROC_PID_ARCH_STATUS */
+
+#ifdef CONFIG_COREDUMP
+static int get_sub_leaf(int custom_xfeat)
+{
+	switch (custom_xfeat) {
+	case FEATURE_XSAVE_YMM:			return XFEATURE_YMM;
+	case FEATURE_XSAVE_BNDREGS:		return XFEATURE_BNDREGS;
+	case FEATURE_XSAVE_BNDCSR:		return XFEATURE_BNDCSR;
+	case FEATURE_XSAVE_OPMASK:		return XFEATURE_OPMASK;
+	case FEATURE_XSAVE_ZMM_Hi256:		return XFEATURE_ZMM_Hi256;
+	case FEATURE_XSAVE_Hi16_ZMM:		return XFEATURE_Hi16_ZMM;
+	case FEATURE_XSAVE_PT:			return XFEATURE_PT_UNIMPLEMENTED_SO_FAR;
+	case FEATURE_XSAVE_PKRU:		return XFEATURE_PKRU;
+	case FEATURE_XSAVE_PASID:		return XFEATURE_PASID;
+	case FEATURE_XSAVE_CET_USER:		return XFEATURE_CET_USER;
+	case FEATURE_XSAVE_CET_SHADOW_STACK:	return XFEATURE_CET_KERNEL_UNUSED;
+	case FEATURE_XSAVE_HDC:			return XFEATURE_RSRVD_COMP_13;
+	case FEATURE_XSAVE_UINTR:		return XFEATURE_RSRVD_COMP_14;
+	case FEATURE_XSAVE_LBR:			return XFEATURE_LBR;
+	case FEATURE_XSAVE_HWP:			return XFEATURE_RSRVD_COMP_16;
+	case FEATURE_XSAVE_XTILE_CFG:		return XFEATURE_XTILE_CFG;
+	case FEATURE_XSAVE_XTILE_DATA:		return XFEATURE_XTILE_DATA;
+	default:
+		pr_warn_ratelimited("Not a valid XSAVE Feature.");
+		return 0;
+	}
+}
+
+/*
+ * Dump type, size, offset and flag values for every xfeature that is present.
+ */
+static int dump_xsave_layout_desc(struct coredump_params *cprm)
+{
+	u32 supported_features = 0;
+	struct xfeat_component xc;
+	u32 eax, ebx, ecx, edx;
+	int num_records = 0;
+	int sub_leaf = 0;
+	int i;
+
+	/* Find supported extended features */
+	cpuid_count(XSTATE_CPUID, 0, &eax, &ebx, &ecx, &edx);
+	supported_features = eax;
+
+	for (i = FEATURE_XSAVE_EXTENDED_START;
+			i <= FEATURE_XSAVE_EXTENDED_END; i++) {
+		sub_leaf = get_sub_leaf(i);
+		if (!sub_leaf)
+			continue;
+		if (supported_features & (1U << sub_leaf)) {
+			cpuid_count(XSTATE_CPUID, sub_leaf, &eax, &ebx, &ecx, &edx);
+			xc.xfeat_type = i;
+			xc.xfeat_sz = eax;
+			xc.xfeat_off = ebx;
+			/* Reserved for future use */
+			xc.xfeat_flags = 0;
+
+			if (!dump_emit(cprm, &xc,
+				       sizeof(struct xfeat_component)))
+				return 0;
+			num_records++;
+		}
+	}
+
+	return num_records;
+}
+
+static int get_xsave_desc_size(void)
+{
+	int supported_features = 0;
+	int xfeatures_count = 0;
+	u32 eax, ebx, ecx, edx;
+	int sub_leaf = 0;
+	int i;
+
+	/* Find supported extended features */
+	cpuid_count(XSTATE_CPUID, 0, &eax, &ebx, &ecx, &edx);
+	supported_features = eax;
+
+	for (i = FEATURE_XSAVE_EXTENDED_START;
+			i <= FEATURE_XSAVE_EXTENDED_END; i++) {
+		sub_leaf = get_sub_leaf(i);
+		if (!sub_leaf)
+			continue;
+		if (supported_features & (1U << sub_leaf))
+			xfeatures_count++;
+	}
+
+	return xfeatures_count * (sizeof(struct xfeat_component));
+}
+
+int elf_coredump_extra_notes_write(struct coredump_params *cprm)
+{
+	int num_records = 0;
+	struct elf_note en;
+
+	en.n_namesz = sizeof(owner_name);
+	en.n_descsz = get_xsave_desc_size();
+	en.n_type = NT_X86_XSAVE_LAYOUT;
+
+	if (!dump_emit(cprm, &en, sizeof(en)))
+		return 1;
+	if (!dump_emit(cprm, owner_name, en.n_namesz))
+		return 1;
+	if (!dump_align(cprm, 4))
+		return 1;
+
+	num_records = dump_xsave_layout_desc(cprm);
+	if (!num_records) {
+		pr_warn_ratelimited("Error adding XSTATE layout ELF note. XSTATE buffer in the core file will be unparseable.");
+		return 1;
+	}
+
+	/* Total size should be equal to the number of records */
+	if ((sizeof(struct xfeat_component) * num_records) != en.n_descsz) {
+		pr_warn_ratelimited("Error adding XSTATE layout ELF note. The size of the .note section does not match with the total size of the records.");
+		return 1;
+	}
+
+	return 0;
+}
+
+/*
+ * Return the size of new note.
+ */
+int elf_coredump_extra_notes_size(void)
+{
+	int size = 0;
+
+	/* NOTE Header */
+	size += sizeof(struct elf_note);
+	/* name + align */
+	size += roundup(sizeof(owner_name), 4);
+	size += get_xsave_desc_size();
+
+	return size;
+}
+#endif
