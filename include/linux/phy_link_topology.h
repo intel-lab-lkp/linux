@@ -12,11 +12,11 @@
 #define __PHY_LINK_TOPOLOGY_H
 
 #include <linux/ethtool.h>
+#include <linux/netdevice.h>
 #include <linux/phy_link_topology_core.h>
 
 struct xarray;
 struct phy_device;
-struct net_device;
 struct sfp_bus;
 
 struct phy_device_node {
@@ -37,11 +37,16 @@ struct phy_link_topology {
 	u32 next_phy_index;
 };
 
-static inline struct phy_device *
-phy_link_topo_get_phy(struct phy_link_topology *topo, u32 phyindex)
+static inline struct phy_device
+*phy_link_topo_get_phy(struct net_device *dev, u32 phyindex)
 {
-	struct phy_device_node *pdn = xa_load(&topo->phys, phyindex);
+	struct phy_link_topology *topo = dev->link_topo;
+	struct phy_device_node *pdn;
 
+	if (!topo)
+		return NULL;
+
+	pdn = xa_load(&topo->phys, phyindex);
 	if (pdn)
 		return pdn->phy;
 
@@ -49,21 +54,21 @@ phy_link_topo_get_phy(struct phy_link_topology *topo, u32 phyindex)
 }
 
 #if IS_REACHABLE(CONFIG_PHYLIB)
-int phy_link_topo_add_phy(struct phy_link_topology *topo,
+int phy_link_topo_add_phy(struct net_device *dev,
 			  struct phy_device *phy,
 			  enum phy_upstream upt, void *upstream);
 
-void phy_link_topo_del_phy(struct phy_link_topology *lt, struct phy_device *phy);
+void phy_link_topo_del_phy(struct net_device *dev, struct phy_device *phy);
 
 #else
-static inline int phy_link_topo_add_phy(struct phy_link_topology *topo,
+static inline int phy_link_topo_add_phy(struct net_device *dev,
 					struct phy_device *phy,
 					enum phy_upstream upt, void *upstream)
 {
 	return 0;
 }
 
-static inline void phy_link_topo_del_phy(struct phy_link_topology *topo,
+static inline void phy_link_topo_del_phy(struct net_device *dev,
 					 struct phy_device *phy)
 {
 }

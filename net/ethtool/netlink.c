@@ -170,7 +170,7 @@ int ethnl_parse_header_dev_get(struct ethnl_req_info *req_info,
 			struct nlattr *phy_id;
 
 			phy_id = tb[ETHTOOL_A_HEADER_PHY_INDEX];
-			phydev = phy_link_topo_get_phy(dev->link_topo,
+			phydev = phy_link_topo_get_phy(dev,
 						       nla_get_u32(phy_id));
 			if (!phydev) {
 				NL_SET_BAD_ATTR(extack, phy_id);

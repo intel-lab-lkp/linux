@@ -35,10 +35,11 @@ void phy_link_topo_destroy(struct phy_link_topology *topo)
 	kfree(topo);
 }
 
-int phy_link_topo_add_phy(struct phy_link_topology *topo,
+int phy_link_topo_add_phy(struct net_device *dev,
 			  struct phy_device *phy,
 			  enum phy_upstream upt, void *upstream)
 {
+	struct phy_link_topology *topo = dev->link_topo;
 	struct phy_device_node *pdn;
 	int ret;
 
@@ -90,10 +91,16 @@ err:
 }
 EXPORT_SYMBOL_GPL(phy_link_topo_add_phy);
 
-void phy_link_topo_del_phy(struct phy_link_topology *topo,
+void phy_link_topo_del_phy(struct net_device *dev,
 			   struct phy_device *phy)
 {
-	struct phy_device_node *pdn = xa_erase(&topo->phys, phy->phyindex);
+	struct phy_link_topology *topo = dev->link_topo;
+	struct phy_device_node *pdn;
+
+	if (!topo)
+		return;
+
+	pdn = xa_erase(&topo->phys, phy->phyindex);
 
 	/* We delete the PHY from the topology, however we don't re-set the
 	 * phy->phyindex field. If the PHY isn't gone, we can re-assign it the
