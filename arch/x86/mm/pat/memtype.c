@@ -705,7 +705,17 @@ static enum page_cache_mode lookup_memtype(u64 paddr)
  */
 bool pat_pfn_immune_to_uc_mtrr(unsigned long pfn)
 {
-	enum page_cache_mode cm = lookup_memtype(PFN_PHYS(pfn));
+	u64 paddr = PFN_PHYS(pfn);
+	enum page_cache_mode cm;
+
+	/*
+	 * Check MTRR type for untracked pat range since lookup_memtype() always
+	 * returns WB for this range.
+	 */
+	if (x86_platform.is_untracked_pat_range(paddr, paddr + PAGE_SIZE))
+		cm = pat_x_mtrr_type(paddr, paddr + PAGE_SIZE, _PAGE_CACHE_MODE_WB);
+	else
+		cm = lookup_memtype(paddr);
 
 	return cm == _PAGE_CACHE_MODE_UC ||
 	       cm == _PAGE_CACHE_MODE_UC_MINUS ||
