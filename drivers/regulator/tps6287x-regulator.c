@@ -154,20 +154,14 @@ static int tps6287x_i2c_probe(struct i2c_client *i2c)
 }
 
 static const struct of_device_id tps6287x_dt_ids[] = {
-	{ .compatible = "ti,tps62870", },
-	{ .compatible = "ti,tps62871", },
-	{ .compatible = "ti,tps62872", },
-	{ .compatible = "ti,tps62873", },
+	{ .compatible = "ti,tps6287x", },
 	{ }
 };
 
 MODULE_DEVICE_TABLE(of, tps6287x_dt_ids);
 
 static const struct i2c_device_id tps6287x_i2c_id[] = {
-	{ "tps62870", 0 },
-	{ "tps62871", 0 },
-	{ "tps62872", 0 },
-	{ "tps62873", 0 },
+	{ "tps6287x", 0 },
 	{},
 };
 
