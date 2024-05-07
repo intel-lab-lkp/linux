@@ -4524,7 +4524,13 @@ static ssize_t f2fs_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 	if (f2fs_should_use_dio(inode, iocb, to)) {
 		ret = f2fs_dio_read_iter(iocb, to);
 	} else {
+		bool do_opu = f2fs_lfs_mode(F2FS_I_SB(inode));
+
+		if (do_opu)
+			f2fs_down_read(&F2FS_I(inode)->i_opu_rwsem);
 		ret = filemap_read(iocb, to, 0);
+		if (do_opu)
+			f2fs_up_read(&F2FS_I(inode)->i_opu_rwsem);
 		if (ret > 0)
 			f2fs_update_iostat(F2FS_I_SB(inode), inode,
 						APP_BUFFERED_READ_IO, ret);
@@ -4749,14 +4755,22 @@ static ssize_t f2fs_dio_write_iter(struct kiocb *iocb, struct iov_iter *from,
 			ret = -EAGAIN;
 			goto out;
 		}
+		if (do_opu && !f2fs_down_write_trylock(&fi->i_opu_rwsem)) {
+			f2fs_up_read(&fi->i_gc_rwsem[READ]);
+			f2fs_up_read(&fi->i_gc_rwsem[WRITE]);
+			ret = -EAGAIN;
+			goto out;
+		}
 	} else {
 		ret = f2fs_convert_inline_inode(inode);
 		if (ret)
 			goto out;
 
 		f2fs_down_read(&fi->i_gc_rwsem[WRITE]);
-		if (do_opu)
+		if (do_opu) {
 			f2fs_down_read(&fi->i_gc_rwsem[READ]);
+			f2fs_down_write(&fi->i_opu_rwsem);
+		}
 	}
 
 	/*
@@ -4780,8 +4794,10 @@ static ssize_t f2fs_dio_write_iter(struct kiocb *iocb, struct iov_iter *from,
 		ret = iomap_dio_complete(dio);
 	}
 
-	if (do_opu)
+	if (do_opu) {
+		f2fs_up_write(&fi->i_opu_rwsem);
 		f2fs_up_read(&fi->i_gc_rwsem[READ]);
+	}
 	f2fs_up_read(&fi->i_gc_rwsem[WRITE]);
 
 	if (ret < 0)
