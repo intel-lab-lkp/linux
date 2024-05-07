@@ -293,7 +293,7 @@ static void bch2_sb_clean_to_text(struct printbuf *out, struct bch_sb *sb,
 	prt_newline(out);
 
 	for (entry = clean->start;
-	     entry != vstruct_end(&clean->field);
+	     entry < vstruct_end(&clean->field);
 	     entry = vstruct_next(entry)) {
 		if (entry->type == BCH_JSET_ENTRY_btree_keys &&
 		    !entry->u64s)
