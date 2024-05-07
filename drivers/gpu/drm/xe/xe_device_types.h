@@ -559,6 +559,15 @@ struct xe_file {
 		struct mutex lock;
 	} exec_queue;
 
+	/**
+	 * @runtime: hw engine class runtime in ticks for this drm client
+	 *
+	 * Only stats from xe_exec_queue->lrc[0] are accumulated. For multi-lrc
+	 * case, since all jobs run in parallel on the engines, only the stats
+	 * from lrc[0] are sufficient.
+	 */
+	u64 runtime[XE_ENGINE_CLASS_MAX];
+
 	/** @client: drm client */
 	struct xe_drm_client *client;
 };
