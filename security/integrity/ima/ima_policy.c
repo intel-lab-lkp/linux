@@ -51,9 +51,12 @@
 #define INVALID_PCR(a) (((a) < 0) || \
 	(a) >= (sizeof_field(struct ima_iint_cache, measured_pcrs) * 8))
 
+DECLARE_WAIT_QUEUE_HEAD(wait_queue_t);
+
 int ima_policy_flag;
 static int temp_ima_appraise;
 static int build_ima_appraise __ro_after_init;
+static int global_seqno;
 
 atomic_t ima_setxattr_allowed_hash_algorithms;
 
@@ -122,6 +125,7 @@ struct ima_rule_entry {
 	struct ima_rule_opt_list *keyrings; /* Measure keys added to these keyrings */
 	struct ima_rule_opt_list *label; /* Measure data grouped under this label */
 	struct ima_template_desc *template;
+	int seqno;
 };
 
 /*
@@ -442,6 +446,8 @@ static int ima_lsm_update_rule(struct ima_rule_entry *entry)
 	if (!nentry)
 		return -ENOMEM;
 
+	nentry->seqno++;
+
 	list_replace_rcu(&entry->list, &nentry->list);
 	synchronize_rcu();
 	/*
@@ -497,6 +503,8 @@ int ima_lsm_policy_change(struct notifier_block *nb, unsigned long event,
 		return NOTIFY_DONE;
 
 	ima_lsm_update_rules();
+	global_seqno++;
+	wake_up(&wait_queue_t);
 	return NOTIFY_OK;
 }
 
@@ -560,18 +568,16 @@ static bool ima_match_rule_data(struct ima_rule_entry *rule,
  * @mask: requested action (MAY_READ | MAY_WRITE | MAY_APPEND | MAY_EXEC)
  * @func_data: func specific data, may be NULL
  *
- * Returns true on rule match, false on failure.
+ * Returns 1 on rule match, 0 on mismatch, -ESTALE on stale policy.
  */
-static bool ima_match_rules(struct ima_rule_entry *rule,
-			    struct mnt_idmap *idmap,
-			    struct inode *inode, const struct cred *cred,
-			    u32 secid, enum ima_hooks func, int mask,
-			    const char *func_data)
+static int ima_match_rules(struct ima_rule_entry *rule,
+			   struct mnt_idmap *idmap,
+			   struct inode *inode, const struct cred *cred,
+			   u32 secid, enum ima_hooks func, int mask,
+			   const char *func_data)
 {
 	int i;
-	bool result = false;
 	struct ima_rule_entry *lsm_rule = rule;
-	bool rule_reinitialized = false;
 
 	if ((rule->flags & IMA_FUNC) &&
 	    (rule->func != func && func != POST_SETATTR))
@@ -642,7 +648,6 @@ static bool ima_match_rules(struct ima_rule_entry *rule,
 				return false;
 		}
 
-retry:
 		switch (i) {
 		case LSM_OBJ_USER:
 		case LSM_OBJ_ROLE:
@@ -663,27 +668,13 @@ retry:
 			break;
 		}
 
-		if (rc == -ESTALE && !rule_reinitialized) {
-			lsm_rule = ima_lsm_copy_rule(rule);
-			if (lsm_rule) {
-				rule_reinitialized = true;
-				goto retry;
-			}
-		}
-		if (!rc) {
-			result = false;
-			goto out;
-		}
+		if (!rc)
+			return false;
+		else if (rc == -ESTALE)
+			return rc;
 	}
-	result = true;
 
-out:
-	if (rule_reinitialized) {
-		for (i = 0; i < MAX_LSM_RULES; i++)
-			ima_filter_rule_free(lsm_rule->lsm[i].rule);
-		kfree(lsm_rule);
-	}
-	return result;
+	return true;
 }
 
 /*
@@ -741,12 +732,12 @@ int ima_match_policy(struct mnt_idmap *idmap, struct inode *inode,
 		     const char *func_data, unsigned int *allowed_algos)
 {
 	struct ima_rule_entry *entry;
-	int action = 0, actmask = flags | (flags << 1);
+	int action = 0, rc, actmask = flags | (flags << 1);
 	struct list_head *ima_rules_tmp;
 
 	if (template_desc && !*template_desc)
 		*template_desc = ima_template_desc_current();
-
+retry:
 	rcu_read_lock();
 	ima_rules_tmp = rcu_dereference(ima_rules);
 	list_for_each_entry_rcu(entry, ima_rules_tmp, list) {
@@ -754,9 +745,18 @@ int ima_match_policy(struct mnt_idmap *idmap, struct inode *inode,
 		if (!(entry->action & actmask))
 			continue;
 
-		if (!ima_match_rules(entry, idmap, inode, cred, secid,
-				     func, mask, func_data))
+		rc = ima_match_rules(entry, idmap, inode, cred, secid,
+				     func, mask, func_data);
+		if (!rc)
 			continue;
+		else if (rc == -ESTALE) {
+			rcu_read_unlock();
+
+			wait_event_interruptible(wait_queue_t,
+				(global_seqno == entry->seqno + 1));
+
+			goto retry;
+		}
 
 		action |= entry->flags & IMA_NONACTION_FLAGS;
 
@@ -1153,6 +1153,7 @@ static int ima_lsm_rule_init(struct ima_rule_entry *entry,
 			result = 0;
 	}
 
+	entry->seqno = global_seqno;
 	return result;
 }
 
