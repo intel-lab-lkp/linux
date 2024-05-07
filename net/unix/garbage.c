@@ -357,11 +357,10 @@ static void unix_collect_skb(struct list_head *scc, struct sk_buff_head *hitlist
 		u = edge->predecessor;
 		queue = &u->sk.sk_receive_queue;
 
-		spin_lock(&queue->lock);
-
 		if (u->sk.sk_state == TCP_LISTEN) {
 			struct sk_buff *skb;
 
+			spin_lock(&queue->lock);
 			skb_queue_walk(queue, skb) {
 				struct sk_buff_head *embryo_queue = &skb->sk->sk_receive_queue;
 
@@ -370,18 +369,21 @@ static void unix_collect_skb(struct list_head *scc, struct sk_buff_head *hitlist
 				skb_queue_splice_init(embryo_queue, hitlist);
 				spin_unlock(&embryo_queue->lock);
 			}
+			spin_unlock(&queue->lock);
 		} else {
+			spin_lock(&queue->lock);
 			skb_queue_splice_init(queue, hitlist);
+			spin_unlock(&queue->lock);
 
 #if IS_ENABLED(CONFIG_AF_UNIX_OOB)
+			unix_state_lock_nested(&u->sk, U_LOCK_GC_OOB);
 			if (u->oob_skb) {
 				kfree_skb(u->oob_skb);
 				u->oob_skb = NULL;
 			}
+			unix_state_unlock(&u->sk);
 #endif
 		}
-
-		spin_unlock(&queue->lock);
 	}
 }
 
