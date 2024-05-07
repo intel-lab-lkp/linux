@@ -754,7 +754,7 @@ bool __init_memblock memblock_validate_numa_coverage(unsigned long threshold_byt
 
 	/* calculate lose page */
 	for_each_mem_pfn_range(i, MAX_NUMNODES, &start_pfn, &end_pfn, &nid) {
-		if (nid == NUMA_NO_NODE)
+		if (nid == MAX_NUMNODES || nid == NUMA_NO_NODE)
 			nr_pages += end_pfn - start_pfn;
 	}
 
