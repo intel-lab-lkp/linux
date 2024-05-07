@@ -1989,6 +1989,7 @@ static int qede_flow_spec_to_rule(struct qede_dev *edev,
 {
 	struct ethtool_rx_flow_spec_input input = {};
 	struct ethtool_rx_flow_rule *flow;
+	struct netlink_ext_ack extack;
 	__be16 proto;
 	int err;
 
@@ -2016,7 +2017,7 @@ static int qede_flow_spec_to_rule(struct qede_dev *edev,
 	if (IS_ERR(flow))
 		return PTR_ERR(flow);
 
-	err = qede_parse_flow_attr(NULL, proto, flow->rule, t);
+	err = qede_parse_flow_attr(&extack, proto, flow->rule, t);
 	if (err)
 		goto err_out;
 
@@ -2024,6 +2025,8 @@ static int qede_flow_spec_to_rule(struct qede_dev *edev,
 	err = qede_flow_spec_validate(edev, &flow->rule->action, t,
 				      fs->location);
 err_out:
+	if (extack._msg)
+		DP_NOTICE(edev, "%s\n", extack._msg);
 	ethtool_rx_flow_rule_destroy(flow);
 	return err;
 
