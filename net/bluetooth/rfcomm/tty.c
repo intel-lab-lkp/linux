@@ -403,9 +403,12 @@ static int __rfcomm_create_dev(struct sock *sk, void __user *arg)
 		return -EPERM;
 
 	if (req.flags & (1 << RFCOMM_REUSE_DLC)) {
+		lock_sock(sk);
 		/* Socket must be connected */
-		if (sk->sk_state != BT_CONNECTED)
+		if (sk->sk_state != BT_CONNECTED) {
+			release_sock(sk);
 			return -EBADFD;
+		}
 
 		dlc = rfcomm_pi(sk)->dlc;
 		rfcomm_dlc_hold(dlc);
@@ -422,13 +425,13 @@ static int __rfcomm_create_dev(struct sock *sk, void __user *arg)
 	}
 
 	id = rfcomm_dev_add(&req, dlc);
-	if (id < 0)
-		return id;
 
 	if (req.flags & (1 << RFCOMM_REUSE_DLC)) {
 		/* DLC is now used by device.
 		 * Socket must be disconnected */
-		sk->sk_state = BT_CLOSED;
+		if (!(id < 0))
+			sk->sk_state = BT_CLOSED;
+		release_sock(sk);
 	}
 
 	return id;
