@@ -529,6 +529,7 @@ static int __kprobes do_page_fault(unsigned long far, unsigned long esr,
 	unsigned int mm_flags = FAULT_FLAG_DEFAULT;
 	unsigned long addr = untagged_addr(far);
 	struct vm_area_struct *vma;
+	unsigned int insn;
 
 	if (kprobe_page_fault(regs, esr))
 		return 0;
@@ -586,6 +587,24 @@ static int __kprobes do_page_fault(unsigned long far, unsigned long esr,
 	if (!vma)
 		goto lock_mmap;
 
+	if (mm_flags & (FAULT_FLAG_WRITE | FAULT_FLAG_INSTRUCTION))
+		goto continue_fault;
+
+	pagefault_disable();
+
+	if (get_user(insn, (unsigned int __user *) instruction_pointer(regs))) {
+		pagefault_enable();
+		goto continue_fault;
+	}
+
+	if (aarch64_insn_is_class_atomic(insn)) {
+		vm_flags = VM_WRITE;
+		mm_flags |= FAULT_FLAG_WRITE;
+	}
+
+	pagefault_enable();
+
+continue_fault:
 	if (!(vma->vm_flags & vm_flags)) {
 		vma_end_read(vma);
 		goto lock_mmap;
