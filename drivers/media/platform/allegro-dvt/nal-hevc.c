@@ -210,14 +210,9 @@ static void nal_hevc_rbsp_vps(struct rbsp *rbsp, struct nal_hevc_vps *vps)
 static void nal_hevc_rbsp_sub_layer_hrd_parameters(struct rbsp *rbsp,
 						   struct nal_hevc_sub_layer_hrd_parameters *hrd)
 {
-	unsigned int i;
-	unsigned int cpb_cnt = 1;
-
-	for (i = 0; i < cpb_cnt; i++) {
-		rbsp_uev(rbsp, &hrd->bit_rate_value_minus1[i]);
-		rbsp_uev(rbsp, &hrd->cpb_size_value_minus1[i]);
-		rbsp_bit(rbsp, &hrd->cbr_flag[i]);
-	}
+	rbsp_uev(rbsp, &hrd->bit_rate_value_minus1);
+	rbsp_uev(rbsp, &hrd->cpb_size_value_minus1);
+	rbsp_bit(rbsp, &hrd->cbr_flag);
 }
 
 static void nal_hevc_rbsp_hrd_parameters(struct rbsp *rbsp,

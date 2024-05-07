@@ -97,9 +97,9 @@ struct nal_hevc_vps {
 };
 
 struct nal_hevc_sub_layer_hrd_parameters {
-	unsigned int bit_rate_value_minus1[1];
-	unsigned int cpb_size_value_minus1[1];
-	unsigned int cbr_flag[1];
+	unsigned int bit_rate_value_minus1;
+	unsigned int cpb_size_value_minus1;
+	unsigned int cbr_flag;
 };
 
 struct nal_hevc_hrd_parameters {

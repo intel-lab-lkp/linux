@@ -1852,14 +1852,14 @@ static ssize_t allegro_hevc_write_sps(struct allegro_channel *channel,
 	hrd->dpb_output_delay_length_minus1 = 30;
 
 	hrd->bit_rate_scale = ffs(channel->bitrate_peak) - 6;
-	hrd->vcl_hrd[0].bit_rate_value_minus1[0] =
+	hrd->vcl_hrd[0].bit_rate_value_minus1 =
 		(channel->bitrate_peak >> (6 + hrd->bit_rate_scale)) - 1;
 
 	cpb_size = v4l2_ctrl_g_ctrl(channel->mpeg_video_cpb_size) * 1000;
 	hrd->cpb_size_scale = ffs(cpb_size) - 4;
-	hrd->vcl_hrd[0].cpb_size_value_minus1[0] = (cpb_size >> (4 + hrd->cpb_size_scale)) - 1;
+	hrd->vcl_hrd[0].cpb_size_value_minus1 = (cpb_size >> (4 + hrd->cpb_size_scale)) - 1;
 
-	hrd->vcl_hrd[0].cbr_flag[0] = !v4l2_ctrl_g_ctrl(channel->mpeg_video_frame_rc_enable);
+	hrd->vcl_hrd[0].cbr_flag = !v4l2_ctrl_g_ctrl(channel->mpeg_video_frame_rc_enable);
 
 	size = nal_hevc_write_sps(&dev->plat_dev->dev, dest, n, sps);
 
