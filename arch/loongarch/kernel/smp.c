@@ -243,6 +243,9 @@ irqreturn_t loongson_ipi_interrupt(int irq, void *dev)
 		per_cpu(irq_stat, cpu).ipi_irqs[IPI_CALL_FUNCTION]++;
 	}
 
+	if (action & SMP_CLEAR_VECT)
+		complete_irq_moving(NULL);
+
 	return IRQ_HANDLED;
 }
 
