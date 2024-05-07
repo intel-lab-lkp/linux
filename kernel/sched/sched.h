@@ -3095,6 +3095,24 @@ static inline bool uclamp_is_used(void)
 {
 	return static_branch_likely(&sched_uclamp_used);
 }
+
+static inline void util_bias_enqueue(struct sched_avg *avg,
+				     struct task_struct *p)
+{
+	int avg_val = READ_ONCE(avg->util_avg_bias);
+	int p_val = READ_ONCE(p->se.avg.util_avg_bias);
+
+	WRITE_ONCE(avg->util_avg_bias, avg_val + p_val);
+}
+
+static inline void util_bias_dequeue(struct sched_avg *avg,
+				     struct task_struct *p)
+{
+	int avg_val = READ_ONCE(avg->util_avg_bias);
+	int p_val = READ_ONCE(p->se.avg.util_avg_bias);
+
+	WRITE_ONCE(avg->util_avg_bias, avg_val - p_val);
+}
 #else /* CONFIG_UCLAMP_TASK */
 static inline unsigned long uclamp_eff_value(struct task_struct *p,
 					     enum uclamp_id clamp_id)
@@ -3129,6 +3147,16 @@ static inline void uclamp_rq_set(struct rq *rq, enum uclamp_id clamp_id,
 static inline bool uclamp_rq_is_idle(struct rq *rq)
 {
 	return false;
+}
+
+static inline void util_bias_enqueue(struct sched_avg *avg,
+				     struct task_struct *p)
+{
+}
+
+static inline void util_bias_dequeue(struct sched_avg *avg,
+				     struct task_struct *p)
+{
 }
 #endif /* CONFIG_UCLAMP_TASK */
 

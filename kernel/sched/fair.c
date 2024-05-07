@@ -1083,6 +1083,7 @@ void post_init_entity_util_avg(struct task_struct *p)
 	}
 
 	sa->runnable_avg = sa->util_avg;
+	sa->util_avg_bias = 0;
 }
 
 #else /* !CONFIG_SMP */
@@ -6801,6 +6802,9 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 
 	/* At this point se is NULL and we are at root level*/
 	add_nr_running(rq, 1);
+	util_bias_enqueue(&rq->cfs.avg, p);
+	/* XXX: We should skip the update above and only do it once here. */
+	cpufreq_update_util(rq, 0);
 
 	/*
 	 * Since new tasks are assigned an initial util_avg equal to
@@ -6892,6 +6896,9 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 
 	/* At this point se is NULL and we are at root level*/
 	sub_nr_running(rq, 1);
+	util_bias_dequeue(&rq->cfs.avg, p);
+	/* XXX: We should skip the update above and only do it once here. */
+	cpufreq_update_util(rq, 0);
 
 	/* balance early to pull high priority tasks */
 	if (unlikely(!was_sched_idle && sched_idle_rq(rq)))
@@ -6900,6 +6907,15 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 dequeue_throttle:
 	util_est_update(&rq->cfs, p, task_sleep);
 	hrtick_update(rq);
+
+#ifdef CONFIG_UCLAMP_TASK
+	if (rq->cfs.h_nr_running == 0) {
+		WARN_ONCE(rq->cfs.avg.util_avg_bias,
+			"0 tasks on CFS of CPU %d, but util_avg_bias is %d\n",
+			rq->cpu, rq->cfs.avg.util_avg_bias);
+		WRITE_ONCE(rq->cfs.avg.util_avg_bias, 0);
+	}
+#endif
 }
 
 #ifdef CONFIG_SMP
