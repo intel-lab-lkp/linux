@@ -272,6 +272,17 @@ struct pfn_batch {
 	unsigned int total_pfns;
 };
 
+static void iopt_cache_flush_pfn_batch(struct pfn_batch *batch)
+{
+	unsigned long cur, i;
+
+	for (cur = 0; cur < batch->end; cur++) {
+		for (i = 0; i < batch->npfns[cur]; i++)
+			arch_clean_nonsnoop_dma(PFN_PHYS(batch->pfns[cur] + i),
+						PAGE_SIZE);
+	}
+}
+
 static void batch_clear(struct pfn_batch *batch)
 {
 	batch->total_pfns = 0;
@@ -637,10 +648,18 @@ static void batch_unpin(struct pfn_batch *batch, struct iopt_pages *pages,
 	while (npages) {
 		size_t to_unpin = min_t(size_t, npages,
 					batch->npfns[cur] - first_page_off);
+		unsigned long pfn = batch->pfns[cur] + first_page_off;
+
+		/*
+		 * Lazily flushing CPU caches when a page is about to be
+		 * unpinned if the page was mapped into a noncoherent domain
+		 */
+		if (pages->cache_flush_required)
+			arch_clean_nonsnoop_dma(pfn << PAGE_SHIFT,
+						to_unpin << PAGE_SHIFT);
 
 		unpin_user_page_range_dirty_lock(
-			pfn_to_page(batch->pfns[cur] + first_page_off),
-			to_unpin, pages->writable);
+			pfn_to_page(pfn), to_unpin, pages->writable);
 		iopt_pages_sub_npinned(pages, to_unpin);
 		cur++;
 		first_page_off = 0;
@@ -1358,9 +1377,16 @@ int iopt_area_fill_domain(struct iopt_area *area, struct iommu_domain *domain)
 {
 	unsigned long done_end_index;
 	struct pfn_reader pfns;
+	bool cache_flush_required;
 	int rc;
 
 	lockdep_assert_held(&area->pages->mutex);
+
+	cache_flush_required = area->iopt->noncoherent_domain_cnt &&
+			       !area->pages->cache_flush_required;
+
+	if (cache_flush_required)
+		area->pages->cache_flush_required = true;
 
 	rc = pfn_reader_first(&pfns, area->pages, iopt_area_index(area),
 			      iopt_area_last_index(area));
@@ -1369,6 +1395,9 @@ int iopt_area_fill_domain(struct iopt_area *area, struct iommu_domain *domain)
 
 	while (!pfn_reader_done(&pfns)) {
 		done_end_index = pfns.batch_start_index;
+		if (cache_flush_required)
+			iopt_cache_flush_pfn_batch(&pfns.batch);
+
 		rc = batch_to_domain(&pfns.batch, domain, area,
 				     pfns.batch_start_index);
 		if (rc)
@@ -1413,6 +1442,7 @@ int iopt_area_fill_domains(struct iopt_area *area, struct iopt_pages *pages)
 	unsigned long unmap_index;
 	struct pfn_reader pfns;
 	unsigned long index;
+	bool cache_flush_required;
 	int rc;
 
 	lockdep_assert_held(&area->iopt->domains_rwsem);
@@ -1426,9 +1456,19 @@ int iopt_area_fill_domains(struct iopt_area *area, struct iopt_pages *pages)
 	if (rc)
 		goto out_unlock;
 
+	cache_flush_required = area->iopt->noncoherent_domain_cnt &&
+			       !pages->cache_flush_required;
+
+	if (cache_flush_required)
+		pages->cache_flush_required = true;
+
 	while (!pfn_reader_done(&pfns)) {
 		done_first_end_index = pfns.batch_end_index;
 		done_all_end_index = pfns.batch_start_index;
+
+		if (cache_flush_required)
+			iopt_cache_flush_pfn_batch(&pfns.batch);
+
 		xa_for_each(&area->iopt->domains, index, domain) {
 			rc = batch_to_domain(&pfns.batch, domain, area,
 					     pfns.batch_start_index);

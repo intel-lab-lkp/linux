@@ -53,6 +53,7 @@ struct io_pagetable {
 	struct rb_root_cached reserved_itree;
 	u8 disable_large_pages;
 	unsigned long iova_alignment;
+	unsigned int noncoherent_domain_cnt;
 };
 
 void iopt_init_table(struct io_pagetable *iopt);

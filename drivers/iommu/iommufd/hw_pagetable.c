@@ -14,12 +14,18 @@ void iommufd_hwpt_paging_destroy(struct iommufd_object *obj)
 		container_of(obj, struct iommufd_hwpt_paging, common.obj);
 
 	if (!list_empty(&hwpt_paging->hwpt_item)) {
+		struct io_pagetable *iopt = &hwpt_paging->ioas->iopt;
 		mutex_lock(&hwpt_paging->ioas->mutex);
 		list_del(&hwpt_paging->hwpt_item);
 		mutex_unlock(&hwpt_paging->ioas->mutex);
 
-		iopt_table_remove_domain(&hwpt_paging->ioas->iopt,
-					 hwpt_paging->common.domain);
+		iopt_table_remove_domain(iopt, hwpt_paging->common.domain);
+
+		if (!hwpt_paging->enforce_cache_coherency) {
+			down_write(&iopt->domains_rwsem);
+			iopt->noncoherent_domain_cnt--;
+			up_write(&iopt->domains_rwsem);
+		}
 	}
 
 	if (hwpt_paging->common.domain)
@@ -176,6 +182,12 @@ iommufd_hwpt_paging_alloc(struct iommufd_ctx *ictx, struct iommufd_ioas *ioas,
 			goto out_abort;
 	}
 
+	if (!hwpt_paging->enforce_cache_coherency) {
+		down_write(&ioas->iopt.domains_rwsem);
+		ioas->iopt.noncoherent_domain_cnt++;
+		up_write(&ioas->iopt.domains_rwsem);
+	}
+
 	rc = iopt_table_add_domain(&ioas->iopt, hwpt->domain);
 	if (rc)
 		goto out_detach;
@@ -183,6 +195,9 @@ iommufd_hwpt_paging_alloc(struct iommufd_ctx *ictx, struct iommufd_ioas *ioas,
 	return hwpt_paging;
 
 out_detach:
+	down_write(&ioas->iopt.domains_rwsem);
+	ioas->iopt.noncoherent_domain_cnt--;
+	up_write(&ioas->iopt.domains_rwsem);
 	if (immediate_attach)
 		iommufd_hw_pagetable_detach(idev);
 out_abort:

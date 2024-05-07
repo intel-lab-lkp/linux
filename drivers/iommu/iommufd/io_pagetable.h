@@ -198,6 +198,11 @@ struct iopt_pages {
 	void __user *uptr;
 	bool writable:1;
 	u8 account_mode;
+	/*
+	 * CPU cache flush is required before mapping the pages to or after
+	 * unmapping it from a noncoherent domain
+	 */
+	bool cache_flush_required:1;
 
 	struct xarray pinned_pfns;
 	/* Of iopt_pages_access::node */
