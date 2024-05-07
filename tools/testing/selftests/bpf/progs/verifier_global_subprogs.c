@@ -8,6 +8,11 @@
 #include "xdp_metadata.h"
 #include "bpf_kfuncs.h"
 
+/* The compiler may be able to detect the access to uninitialized
+   memory in the routines performing out of bound memory accesses and
+   emit warnings about it.  This is the case of GCC. */
+#pragma GCC diagnostic ignored "-Wuninitialized"
+
 int arr[1];
 int unkn_idx;
 const volatile bool call_dead_subprog = false;
