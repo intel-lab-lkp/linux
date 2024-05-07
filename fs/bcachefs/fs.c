@@ -27,6 +27,7 @@
 #include "super.h"
 #include "xattr.h"
 
+#include <uapi/linux/magic.h>
 #include <linux/aio.h>
 #include <linux/backing-dev.h>
 #include <linux/exportfs.h>

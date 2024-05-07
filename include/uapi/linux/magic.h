@@ -103,4 +103,6 @@
 #define SECRETMEM_MAGIC		0x5345434d	/* "SECM" */
 #define PID_FS_MAGIC		0x50494446	/* "PIDF" */
 
+#define BCACHEFS_STATFS_MAGIC		0xca451a4e
+
 #endif /* __LINUX_MAGIC_H__ */

@@ -1275,8 +1275,6 @@ enum bch_compression_opts {
 	UUID_INIT(0xc68573f6, 0x66ce, 0x90a9,				\
 		  0xd9, 0x6a, 0x60, 0xcf, 0x80, 0x3d, 0xf7, 0xef)
 
-#define BCACHEFS_STATFS_MAGIC		0xca451a4e
-
 #define JSET_MAGIC		__cpu_to_le64(0x245235c1a3625032ULL)
 #define BSET_MAGIC		__cpu_to_le64(0x90135c78b99e07f5ULL)
 
