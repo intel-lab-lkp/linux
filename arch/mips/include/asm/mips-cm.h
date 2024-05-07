@@ -30,7 +30,7 @@ extern void __iomem *mips_cm_l2sync_base;
  * and may be overridden by platforms which determine this address in a
  * different way by defining a function with the same prototype.
  */
-extern phys_addr_t mips_cm_phys_base(void);
+extern phys_addr_t __init mips_cm_phys_base(void);
 
 /**
  * mips_cm_l2sync_phys_base - retrieve the physical base address of the CM
@@ -43,7 +43,7 @@ extern phys_addr_t mips_cm_phys_base(void);
  * determine this address in a different way by defining a function with the
  * same prototype.
  */
-extern phys_addr_t mips_cm_l2sync_phys_base(void);
+extern phys_addr_t  __init mips_cm_l2sync_phys_base(void);
 
 /*
  * mips_cm_is64 - determine CM register width

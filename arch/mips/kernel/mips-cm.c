@@ -179,7 +179,7 @@ static char *cm3_causes[32] = {
 static DEFINE_PER_CPU_ALIGNED(spinlock_t, cm_core_lock);
 static DEFINE_PER_CPU_ALIGNED(unsigned long, cm_core_lock_flags);
 
-phys_addr_t __weak mips_cm_phys_base(void)
+phys_addr_t __init __weak mips_cm_phys_base(void)
 {
 	unsigned long cmgcr;
 
@@ -198,7 +198,7 @@ phys_addr_t __weak mips_cm_phys_base(void)
 	return (cmgcr & MIPS_CMGCRF_BASE) << (36 - 32);
 }
 
-phys_addr_t __weak mips_cm_l2sync_phys_base(void)
+phys_addr_t __init __weak mips_cm_l2sync_phys_base(void)
 {
 	u32 base_reg;
 
@@ -214,7 +214,7 @@ phys_addr_t __weak mips_cm_l2sync_phys_base(void)
 	return mips_cm_phys_base() + MIPS_CM_GCR_SIZE;
 }
 
-static void mips_cm_probe_l2sync(void)
+static void __init mips_cm_probe_l2sync(void)
 {
 	unsigned major_rev;
 	phys_addr_t addr;
@@ -237,7 +237,7 @@ static void mips_cm_probe_l2sync(void)
 	mips_cm_l2sync_base = ioremap(addr, MIPS_CM_L2SYNC_SIZE);
 }
 
-int mips_cm_probe(void)
+int __init mips_cm_probe(void)
 {
 	phys_addr_t addr;
 	u32 base_reg;
