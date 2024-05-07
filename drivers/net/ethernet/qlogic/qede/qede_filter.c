@@ -1722,7 +1722,8 @@ qede_flow_parse_ports(struct netlink_ext_ack *extack, struct flow_rule *rule,
 }
 
 static int
-qede_flow_parse_v6_common(struct qede_dev *edev, struct flow_rule *rule,
+qede_flow_parse_v6_common(struct netlink_ext_ack *extack,
+			  struct flow_rule *rule,
 			  struct qede_arfs_tuple *t)
 {
 	struct in6_addr zero_addr, addr;
@@ -1739,8 +1740,8 @@ qede_flow_parse_v6_common(struct qede_dev *edev, struct flow_rule *rule,
 		     memcmp(&match.mask->src, &addr, sizeof(addr))) ||
 		    (memcmp(&match.key->dst, &zero_addr, sizeof(addr)) &&
 		     memcmp(&match.mask->dst, &addr, sizeof(addr)))) {
-			DP_NOTICE(edev,
-				  "Do not support IPv6 address prefix/mask\n");
+			NL_SET_ERR_MSG_MOD(extack,
+					   "Do not support IPv6 address prefix/mask");
 			return -EINVAL;
 		}
 
@@ -1748,11 +1749,11 @@ qede_flow_parse_v6_common(struct qede_dev *edev, struct flow_rule *rule,
 		memcpy(&t->dst_ipv6, &match.key->dst, sizeof(addr));
 	}
 
-	err = qede_flow_parse_ports(NULL, rule, t);
+	err = qede_flow_parse_ports(extack, rule, t);
 	if (err)
 		return err;
 
-	return qede_set_v6_tuple_to_profile(NULL, t, &zero_addr);
+	return qede_set_v6_tuple_to_profile(extack, t, &zero_addr);
 }
 
 static int
@@ -1789,7 +1790,7 @@ qede_flow_parse_tcp_v6(struct qede_dev *edev, struct flow_rule *rule,
 	tuple->ip_proto = IPPROTO_TCP;
 	tuple->eth_proto = htons(ETH_P_IPV6);
 
-	return qede_flow_parse_v6_common(edev, rule, tuple);
+	return qede_flow_parse_v6_common(NULL, rule, tuple);
 }
 
 static int
@@ -1809,7 +1810,7 @@ qede_flow_parse_udp_v6(struct qede_dev *edev, struct flow_rule *rule,
 	tuple->ip_proto = IPPROTO_UDP;
 	tuple->eth_proto = htons(ETH_P_IPV6);
 
-	return qede_flow_parse_v6_common(edev, rule, tuple);
+	return qede_flow_parse_v6_common(NULL, rule, tuple);
 }
 
 static int
