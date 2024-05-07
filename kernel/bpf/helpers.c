@@ -2720,8 +2720,10 @@ __bpf_kfunc int bpf_wq_start(struct bpf_wq *wq, unsigned int flags)
 	return 0;
 }
 
+typedef int (*wq_callback_fn_t)(struct bpf_map *map, int *key, struct bpf_wq *wq);
+
 __bpf_kfunc int bpf_wq_set_callback_impl(struct bpf_wq *wq,
-					 int (callback_fn)(void *map, int *key, struct bpf_wq *wq),
+					 wq_callback_fn_t callback_fn__s_async,
 					 unsigned int flags,
 					 void *aux__ign)
 {
@@ -2731,7 +2733,7 @@ __bpf_kfunc int bpf_wq_set_callback_impl(struct bpf_wq *wq,
 	if (flags)
 		return -EINVAL;
 
-	return __bpf_async_set_callback(async, callback_fn, aux, flags, BPF_ASYNC_TYPE_WQ);
+	return __bpf_async_set_callback(async, callback_fn__s_async, aux, flags, BPF_ASYNC_TYPE_WQ);
 }
 
 __bpf_kfunc void bpf_preempt_disable(void)
