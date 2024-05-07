@@ -126,7 +126,6 @@ enum suspended_state {
 struct hci_conn_hash {
 	struct list_head list;
 	unsigned int     acl_num;
-	unsigned int     amp_num;
 	unsigned int     sco_num;
 	unsigned int     iso_num;
 	unsigned int     le_num;
@@ -347,14 +346,6 @@ struct adv_monitor {
 /* Default authenticated payload timeout 30s */
 #define DEFAULT_AUTH_PAYLOAD_TIMEOUT   0x0bb8
 
-struct amp_assoc {
-	__u16	len;
-	__u16	offset;
-	__u16	rem_len;
-	__u16	len_so_far;
-	__u8	data[HCI_MAX_AMP_ASSOC_SIZE];
-};
-
 #define HCI_MAX_PAGES	3
 
 struct hci_dev {
@@ -367,7 +358,6 @@ struct hci_dev {
 	unsigned long	flags;
 	__u16		id;
 	__u8		bus;
-	__u8		dev_type;
 	bdaddr_t	bdaddr;
 	bdaddr_t	setup_addr;
 	bdaddr_t	public_addr;
@@ -473,21 +463,6 @@ struct hci_dev {
 	__u16		sniff_min_interval;
 	__u16		sniff_max_interval;
 
-	__u8		amp_status;
-	__u32		amp_total_bw;
-	__u32		amp_max_bw;
-	__u32		amp_min_latency;
-	__u32		amp_max_pdu;
-	__u8		amp_type;
-	__u16		amp_pal_cap;
-	__u16		amp_assoc_size;
-	__u32		amp_max_flush_to;
-	__u32		amp_be_flush_to;
-
-	struct amp_assoc	loc_assoc;
-
-	__u8		flow_ctl_mode;
-
 	unsigned int	auto_accept_delay;
 
 	unsigned long	quirks;
@@ -506,11 +481,6 @@ struct hci_dev {
 	unsigned int	sco_pkts;
 	unsigned int	le_pkts;
 	unsigned int	iso_pkts;
-
-	__u16		block_len;
-	__u16		block_mtu;
-	__u16		num_blocks;
-	__u16		block_cnt;
 
 	unsigned long	acl_last_tx;
 	unsigned long	sco_last_tx;
@@ -786,7 +756,6 @@ struct hci_conn {
 	void		*l2cap_data;
 	void		*sco_data;
 	void		*iso_data;
-	struct amp_mgr	*amp_mgr;
 
 	struct list_head link_list;
 	struct hci_conn	*parent;
@@ -813,7 +782,6 @@ struct hci_chan {
 	struct sk_buff_head data_q;
 	unsigned int	sent;
 	__u8		state;
-	bool		amp;
 };
 
 struct hci_conn_params {
@@ -1022,9 +990,6 @@ static inline void hci_conn_hash_add(struct hci_dev *hdev, struct hci_conn *c)
 	case ACL_LINK:
 		h->acl_num++;
 		break;
-	case AMP_LINK:
-		h->amp_num++;
-		break;
 	case LE_LINK:
 		h->le_num++;
 		if (c->role == HCI_ROLE_SLAVE)
@@ -1051,9 +1016,6 @@ static inline void hci_conn_hash_del(struct hci_dev *hdev, struct hci_conn *c)
 	case ACL_LINK:
 		h->acl_num--;
 		break;
-	case AMP_LINK:
-		h->amp_num--;
-		break;
 	case LE_LINK:
 		h->le_num--;
 		if (c->role == HCI_ROLE_SLAVE)
@@ -1075,8 +1037,6 @@ static inline unsigned int hci_conn_num(struct hci_dev *hdev, __u8 type)
 	switch (type) {
 	case ACL_LINK:
 		return h->acl_num;
-	case AMP_LINK:
-		return h->amp_num;
 	case LE_LINK:
 		return h->le_num;
 	case SCO_LINK:
@@ -1093,7 +1053,7 @@ static inline unsigned int hci_conn_count(struct hci_dev *hdev)
 {
 	struct hci_conn_hash *c = &hdev->conn_hash;
 
-	return c->acl_num + c->amp_num + c->sco_num + c->le_num + c->iso_num;
+	return c->acl_num + c->sco_num + c->le_num + c->iso_num;
 }
 
 static inline bool hci_conn_valid(struct hci_dev *hdev, struct hci_conn *conn)
@@ -1620,10 +1580,6 @@ static inline void hci_conn_drop(struct hci_conn *conn)
 			} else {
 				timeo = 0;
 			}
-			break;
-
-		case AMP_LINK:
-			timeo = conn->disc_timeout;
 			break;
 
 		default:
