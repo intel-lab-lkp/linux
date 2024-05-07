@@ -35,6 +35,7 @@
 #include <linux/vga_switcheroo.h>
 
 #include <drm/drm_atomic.h>
+#include <drm/drm_crtc_helper.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_fb_helper.h>
 #include <drm/drm_fourcc.h>
@@ -2013,3 +2014,105 @@ void drm_fb_helper_output_poll_changed(struct drm_device *dev)
 	drm_fb_helper_hotplug_event(dev->fb_helper);
 }
 EXPORT_SYMBOL(drm_fb_helper_output_poll_changed);
+
+/*
+ * struct drm_client_funcs
+ */
+
+/**
+ * drm_fbdev_helper_client_unregister - Unregister callback for fbdev emulation
+ * @client: The fbdev client
+ *
+ * Implements struct drm_client_funcs.unregister for fbdev emulation. The
+ * helper destroys the framebuffer device and releases all resources. It
+ * further disables all outputs and clears the VGA switcheroo framebuffer
+ * info for PCI devices.
+ */
+void drm_fbdev_helper_client_unregister(struct drm_client_dev *client)
+{
+	struct drm_fb_helper *fb_helper = drm_fb_helper_from_client(client);
+	struct drm_device *dev = fb_helper->dev;
+
+	if (fb_helper->info) {
+		if (dev_is_pci(dev->dev))
+			vga_switcheroo_client_fb_set(to_pci_dev(dev->dev), NULL);
+		drm_fb_helper_unregister_info(fb_helper);
+		if (!drm_drv_uses_atomic_modeset(dev))
+			drm_helper_force_disable_all(dev);
+	} else {
+		drm_client_release(client);
+		drm_fb_helper_unprepare(fb_helper);
+		kfree(fb_helper);
+	}
+}
+EXPORT_SYMBOL(drm_fbdev_helper_client_unregister);
+
+/**
+ * drm_fbdev_helper_client_restore - Restore callback for fbdev emulation
+ * @client: The fbdev client
+ *
+ * Implements struct drm_client_funcs.restore for fbdev emulation. The
+ * helper restores the console output after the fbdev emulation's current
+ * configuration. It also informs VGA switcheroo about the change.
+ *
+ * Returns:
+ * 0 on success, or a negative errno code otherwise.
+ */
+int drm_fbdev_helper_client_restore(struct drm_client_dev *client)
+{
+	struct drm_device *dev = client->dev;
+
+	drm_fb_helper_lastclose(dev);
+
+	if (dev_is_pci(dev->dev))
+		vga_switcheroo_process_delayed_switch();
+
+	return 0;
+}
+EXPORT_SYMBOL(drm_fbdev_helper_client_restore);
+
+/**
+ * drm_fbdev_helper_client_hotplug - Hotplug callback for fbdev emulation
+ * @client: The fbdev client
+ *
+ * Implements struct drm_client_funcs.hotplug for fbdev emulation. The
+ * helper handles the hotplugging event by restoring the display output.
+ * If no output has been established yet, it instead performs an initial
+ * display configuration. On successful configuration, it installs the
+ * framebuffer info VGA switcheroo for PCI devices.
+ *
+ * Returns:
+ * 0 on success, or a negative errno code otherwise.
+ */
+int drm_fbdev_helper_client_hotplug(struct drm_client_dev *client)
+{
+	struct drm_fb_helper *fb_helper = drm_fb_helper_from_client(client);
+	struct drm_device *dev = client->dev;
+	int ret;
+
+	if (fb_helper->info)
+		return drm_fb_helper_hotplug_event(fb_helper);
+
+	ret = drm_fb_helper_init(dev, fb_helper);
+	if (ret)
+		goto err_drm_err;
+
+	if (!drm_drv_uses_atomic_modeset(dev))
+		drm_helper_disable_unused_functions(dev);
+
+	ret = drm_fb_helper_initial_config(fb_helper);
+	if (ret)
+		goto err_drm_fb_helper_fini;
+
+	if (dev_is_pci(dev->dev))
+		vga_switcheroo_client_fb_set(to_pci_dev(dev->dev), fb_helper->info);
+
+	return 0;
+
+err_drm_fb_helper_fini:
+	drm_fb_helper_fini(fb_helper);
+err_drm_err:
+	drm_err(dev, "Failed to setup fbdev emulation (ret=%d)\n", ret);
+	return ret;
+}
+EXPORT_SYMBOL(drm_fbdev_helper_client_hotplug);

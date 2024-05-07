@@ -407,4 +407,23 @@ static inline void drm_fb_helper_output_poll_changed(struct drm_device *dev)
 }
 #endif
 
+/*
+ * struct drm_client_funcs
+ */
+
+void drm_fbdev_helper_client_unregister(struct drm_client_dev *client);
+int drm_fbdev_helper_client_restore(struct drm_client_dev *client);
+int drm_fbdev_helper_client_hotplug(struct drm_client_dev *client);
+
+/**
+ * DRM_FBDEV_HELPER_CLIENT_FUNCS - Initializer macro for struct drm_client_funcs
+ *
+ * Initializes an instance of struct drm_client_funcs to default values
+ * for framebuffer emulation.
+ */
+#define DRM_FBDEV_HELPER_CLIENT_FUNCS \
+	.unregister	= drm_fbdev_helper_client_unregister, \
+	.restore	= drm_fbdev_helper_client_restore, \
+	.hotplug	= drm_fbdev_helper_client_hotplug
+
 #endif
