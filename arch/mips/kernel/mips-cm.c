@@ -5,6 +5,8 @@
  */
 
 #include <linux/errno.h>
+#include <linux/of_address.h>
+#include <linux/of_fdt.h>
 #include <linux/percpu.h>
 #include <linux/spinlock.h>
 
@@ -179,23 +181,67 @@ static char *cm3_causes[32] = {
 static DEFINE_PER_CPU_ALIGNED(spinlock_t, cm_core_lock);
 static DEFINE_PER_CPU_ALIGNED(unsigned long, cm_core_lock_flags);
 
+static int __init mips_cm_fdt_scan(unsigned long node, const char *uname,
+		int depth, void *data)
+{
+	unsigned long *cmgcr = data;
+
+	if (!of_flat_dt_is_compatible(node, "mti,mips-cm"))
+		return 0;
+
+	*cmgcr = of_flat_dt_translate_address(node);
+	if (*cmgcr == OF_BAD_ADDR)
+		*cmgcr = 0;
+
+	return 0;
+}
+
 phys_addr_t __init __weak mips_cm_phys_base(void)
 {
-	unsigned long cmgcr;
+	unsigned long gcr_reg = 0, gcr_dt = 0;
+
+	if (of_have_populated_dt()) {
+		int err;
+		struct resource res;
+		struct device_node *cm_node;
+
+		cm_node = of_find_compatible_node(of_root, NULL, "mti,mips-cm");
+		if (cm_node) {
+			err = of_address_to_resource(cm_node, 0, &res);
+			of_node_put(cm_node);
+			if (!err)
+				gcr_dt = res.start;
+		}
+	} else {
+		of_scan_flat_dt(mips_cm_fdt_scan, &gcr_dt);
+	}
 
 	/* Check the CMGCRBase register is implemented */
 	if (!(read_c0_config() & MIPS_CONF_M))
-		return 0;
+		return gcr_dt;
 
 	if (!(read_c0_config2() & MIPS_CONF_M))
-		return 0;
+		return gcr_dt;
 
 	if (!(read_c0_config3() & MIPS_CONF3_CMGCR))
-		return 0;
+		return gcr_dt;
 
 	/* Read the address from CMGCRBase */
-	cmgcr = read_c0_cmgcrbase();
-	return (cmgcr & MIPS_CMGCRF_BASE) << (36 - 32);
+	gcr_reg = read_c0_cmgcrbase();
+	gcr_reg = (gcr_reg & MIPS_CMGCRF_BASE) << (36 - 32);
+
+	/* If no of node, return straight away */
+	if (!gcr_dt)
+		return gcr_reg;
+
+	/* If the CMGCRBase mismatches with dt, remap it */
+	if (gcr_reg != gcr_dt) {
+		pr_info("Remapping CMGCRBase from 0x%08lx to 0x%08lx\n",
+			gcr_reg, gcr_dt);
+		change_gcr_base(CM_GCR_BASE_GCRBASE, gcr_dt);
+	}
+
+	return gcr_dt;
 }
 
 phys_addr_t __init __weak mips_cm_l2sync_phys_base(void)
