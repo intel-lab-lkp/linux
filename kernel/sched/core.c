@@ -2796,20 +2796,23 @@ __do_set_cpus_allowed(struct task_struct *p, struct affinity_context *ctx)
 }
 
 /*
- * Used for kthread_bind() and select_fallback_rq(), in both cases the user
- * affinity (if any) should be destroyed too.
+ * Used for kthread_bind() and select_fallback_rq().
+ * Destroy user affinity if no intersection with the new_mask.
  */
 void do_set_cpus_allowed(struct task_struct *p, const struct cpumask *new_mask)
 {
 	struct affinity_context ac = {
 		.new_mask  = new_mask,
 		.user_mask = NULL,
-		.flags     = SCA_USER,	/* clear the user requested mask */
+		.flags     = 0,
 	};
 	union cpumask_rcuhead {
 		cpumask_t cpumask;
 		struct rcu_head rcu;
 	};
+
+	if (p->user_cpus_ptr && !cpumask_intersects(p->user_cpus_ptr, new_mask))
+		ac.flags = SCA_USER;	/* clear the user requested mask */
 
 	__do_set_cpus_allowed(p, &ac);
 
