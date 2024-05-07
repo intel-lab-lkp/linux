@@ -38,7 +38,6 @@
 #include <linux/vga_switcheroo.h>
 
 #include <drm/drm_crtc.h>
-#include <drm/drm_crtc_helper.h>
 #include <drm/drm_fb_helper.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_gem_framebuffer_helper.h>
@@ -580,24 +579,8 @@ static int intel_fbdev_restore_mode(struct drm_i915_private *dev_priv)
 }
 
 /*
- * Fbdev client and struct drm_client_funcs
+ * struct drm_client_funcs
  */
-
-static void intel_fbdev_client_unregister(struct drm_client_dev *client)
-{
-	struct drm_fb_helper *fb_helper = drm_fb_helper_from_client(client);
-	struct drm_device *dev = fb_helper->dev;
-	struct pci_dev *pdev = to_pci_dev(dev->dev);
-
-	if (fb_helper->info) {
-		vga_switcheroo_client_fb_set(pdev, NULL);
-		drm_fb_helper_unregister_info(fb_helper);
-	} else {
-		drm_fb_helper_unprepare(fb_helper);
-		drm_client_release(&fb_helper->client);
-		kfree(fb_helper);
-	}
-}
 
 static int intel_fbdev_client_restore(struct drm_client_dev *client)
 {
@@ -644,7 +627,7 @@ err_drm_err:
 
 static const struct drm_client_funcs intel_fbdev_client_funcs = {
 	.owner		= THIS_MODULE,
-	.unregister	= intel_fbdev_client_unregister,
+	.unregister	= drm_fbdev_helper_client_unregister,
 	.restore	= intel_fbdev_client_restore,
 	.hotplug	= intel_fbdev_client_hotplug,
 };
