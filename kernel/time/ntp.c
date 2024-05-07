@@ -454,12 +454,12 @@ int second_overflow(time64_t secs)
 	}
 
 
-	/* Bump the maxerror field */
-	time_maxerror += MAXFREQ / NSEC_PER_USEC;
-	if (time_maxerror > NTP_PHASE_LIMIT) {
+	/* Bump the maxerror field, making sure not to exceed NTP_PHASE_LIMIT */
+	if (NTP_PHASE_LIMIT - NTP_MAXFREQ_USEC < time_maxerror) {
 		time_maxerror = NTP_PHASE_LIMIT;
 		time_status |= STA_UNSYNC;
-	}
+	} else
+		time_maxerror += NTP_MAXFREQ_USEC;
 
 	/* Compute the phase adjustment for the next second */
 	tick_length	 = tick_length_base;
