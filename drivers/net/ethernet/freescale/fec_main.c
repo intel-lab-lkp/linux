@@ -1397,12 +1397,11 @@ static void
 fec_enet_hwtstamp(struct fec_enet_private *fep, unsigned ts,
 	struct skb_shared_hwtstamps *hwtstamps)
 {
-	unsigned long flags;
 	u64 ns;
 
-	spin_lock_irqsave(&fep->tmreg_lock, flags);
-	ns = timecounter_cyc2time(&fep->tc, ts);
-	spin_unlock_irqrestore(&fep->tmreg_lock, flags);
+	scoped_guard(spinlock_irqsave, &fep->tmreg_lock) {
+		ns = timecounter_cyc2time(&fep->tc, ts);
+	}
 
 	memset(hwtstamps, 0, sizeof(*hwtstamps));
 	hwtstamps->hwtstamp = ns_to_ktime(ns);
@@ -2313,15 +2312,13 @@ static int fec_enet_clk_enable(struct net_device *ndev, bool enable)
 			return ret;
 
 		if (fep->clk_ptp) {
-			mutex_lock(&fep->ptp_clk_mutex);
-			ret = clk_prepare_enable(fep->clk_ptp);
-			if (ret) {
-				mutex_unlock(&fep->ptp_clk_mutex);
-				goto failed_clk_ptp;
-			} else {
-				fep->ptp_clk_on = true;
+			scoped_guard(mutex, &fep->ptp_clk_mutex) {
+				ret = clk_prepare_enable(fep->clk_ptp);
+				if (ret)
+					goto failed_clk_ptp;
+				else
+					fep->ptp_clk_on = true;
 			}
-			mutex_unlock(&fep->ptp_clk_mutex);
 		}
 
 		ret = clk_prepare_enable(fep->clk_ref);
@@ -2336,10 +2333,10 @@ static int fec_enet_clk_enable(struct net_device *ndev, bool enable)
 	} else {
 		clk_disable_unprepare(fep->clk_enet_out);
 		if (fep->clk_ptp) {
-			mutex_lock(&fep->ptp_clk_mutex);
-			clk_disable_unprepare(fep->clk_ptp);
-			fep->ptp_clk_on = false;
-			mutex_unlock(&fep->ptp_clk_mutex);
+			scoped_guard(mutex, &fep->ptp_clk_mutex) {
+				clk_disable_unprepare(fep->clk_ptp);
+				fep->ptp_clk_on = false;
+			}
 		}
 		clk_disable_unprepare(fep->clk_ref);
 		clk_disable_unprepare(fep->clk_2x_txclk);
@@ -2352,10 +2349,10 @@ failed_clk_2x_txclk:
 		clk_disable_unprepare(fep->clk_ref);
 failed_clk_ref:
 	if (fep->clk_ptp) {
-		mutex_lock(&fep->ptp_clk_mutex);
-		clk_disable_unprepare(fep->clk_ptp);
-		fep->ptp_clk_on = false;
-		mutex_unlock(&fep->ptp_clk_mutex);
+		scoped_guard(mutex, &fep->ptp_clk_mutex) {
+			clk_disable_unprepare(fep->clk_ptp);
+			fep->ptp_clk_on = false;
+		}
 	}
 failed_clk_ptp:
 	clk_disable_unprepare(fep->clk_enet_out);
