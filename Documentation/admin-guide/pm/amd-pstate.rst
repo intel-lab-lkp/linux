@@ -299,6 +299,10 @@ module which supports the new AMD P-States mechanism on most of the future AMD
 platforms. The AMD P-States mechanism is the more performance and energy
 efficiency frequency management method on AMD processors.
 
+When users attempt to switch from the acpi-cpufreq driver to the amd-pstate driver's working mode,
+it is recommended to reboot the system. This is to ensure that any low-level power management
+control states are properly switched to pstate control. By rebooting, the firmware can initialize
+with optimal power states, reducing the likelihood of unexpected issues.
 
 ``amd-pstate`` Driver Operation Modes
 ======================================
