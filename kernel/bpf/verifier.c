@@ -5288,8 +5288,7 @@ bad_type:
 
 static bool in_sleepable(struct bpf_verifier_env *env)
 {
-	return env->prog->sleepable ||
-	       (env->cur_state && env->cur_state->in_sleepable);
+	return env->cur_state ? env->cur_state->in_sleepable : env->prog->sleepable;
 }
 
 /* The non-sleepable programs and sleepable programs with explicit bpf_rcu_read_lock()
@@ -20722,6 +20721,7 @@ static int do_check_common(struct bpf_verifier_env *env, int subprog)
 	state->curframe = 0;
 	state->speculative = false;
 	state->branches = 1;
+	state->in_sleepable = env->prog->sleepable;
 	state->frame[0] = kzalloc(sizeof(struct bpf_func_state), GFP_KERNEL);
 	if (!state->frame[0]) {
 		kfree(state);
