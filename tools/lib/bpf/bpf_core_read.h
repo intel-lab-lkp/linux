@@ -89,7 +89,7 @@ enum bpf_enum_value_kind {
  */
 #define BPF_CORE_READ_BITFIELD(s, field) ({				      \
 	const void *p = (const void *)s + __CORE_RELO(s, field, BYTE_OFFSET); \
-	unsigned long long val;						      \
+	unsigned long long val = 0;					      \
 									      \
 	/* This is a so-called barrier_var() operation that makes specified   \
 	 * variable "a black box" for optimizing compiler.		      \
