@@ -1826,7 +1826,7 @@ qede_flow_parse_udp_v4(struct netlink_ext_ack *extack, struct flow_rule *rule,
 }
 
 static int
-qede_parse_flow_attr(struct qede_dev *edev, __be16 proto,
+qede_parse_flow_attr(struct netlink_ext_ack *extack, __be16 proto,
 		     struct flow_rule *rule, struct qede_arfs_tuple *tuple)
 {
 	struct flow_dissector *dissector = rule->match.dissector;
@@ -1841,14 +1841,15 @@ qede_parse_flow_attr(struct qede_dev *edev, __be16 proto,
 	      BIT_ULL(FLOW_DISSECTOR_KEY_BASIC) |
 	      BIT_ULL(FLOW_DISSECTOR_KEY_IPV6_ADDRS) |
 	      BIT_ULL(FLOW_DISSECTOR_KEY_PORTS))) {
-		DP_NOTICE(edev, "Unsupported key set:0x%llx\n",
-			  dissector->used_keys);
+		NL_SET_ERR_MSG_FMT_MOD(extack, "Unsupported key used: 0x%llx",
+				       dissector->used_keys);
 		return -EOPNOTSUPP;
 	}
 
 	if (proto != htons(ETH_P_IP) &&
 	    proto != htons(ETH_P_IPV6)) {
-		DP_NOTICE(edev, "Unsupported proto=0x%x\n", proto);
+		NL_SET_ERR_MSG_FMT_MOD(extack, "Unsupported proto=0x%x",
+				       proto);
 		return -EPROTONOSUPPORT;
 	}
 
@@ -1860,15 +1861,15 @@ qede_parse_flow_attr(struct qede_dev *edev, __be16 proto,
 	}
 
 	if (ip_proto == IPPROTO_TCP && proto == htons(ETH_P_IP))
-		rc = qede_flow_parse_tcp_v4(NULL, rule, tuple);
+		rc = qede_flow_parse_tcp_v4(extack, rule, tuple);
 	else if (ip_proto == IPPROTO_TCP && proto == htons(ETH_P_IPV6))
-		rc = qede_flow_parse_tcp_v6(NULL, rule, tuple);
+		rc = qede_flow_parse_tcp_v6(extack, rule, tuple);
 	else if (ip_proto == IPPROTO_UDP && proto == htons(ETH_P_IP))
-		rc = qede_flow_parse_udp_v4(NULL, rule, tuple);
+		rc = qede_flow_parse_udp_v4(extack, rule, tuple);
 	else if (ip_proto == IPPROTO_UDP && proto == htons(ETH_P_IPV6))
-		rc = qede_flow_parse_udp_v6(NULL, rule, tuple);
+		rc = qede_flow_parse_udp_v6(extack, rule, tuple);
 	else
-		DP_NOTICE(edev, "Invalid protocol request\n");
+		NL_SET_ERR_MSG_MOD(extack, "Invalid protocol request");
 
 	return rc;
 }
@@ -1889,7 +1890,7 @@ int qede_add_tc_flower_fltr(struct qede_dev *edev, __be16 proto,
 	}
 
 	/* parse flower attribute and prepare filter */
-	rc = qede_parse_flow_attr(edev, proto, f->rule, &t);
+	rc = qede_parse_flow_attr(extack, proto, f->rule, &t);
 	if (rc)
 		goto unlock;
 
@@ -2015,7 +2016,7 @@ static int qede_flow_spec_to_rule(struct qede_dev *edev,
 	if (IS_ERR(flow))
 		return PTR_ERR(flow);
 
-	err = qede_parse_flow_attr(edev, proto, flow->rule, t);
+	err = qede_parse_flow_attr(NULL, proto, flow->rule, t);
 	if (err)
 		goto err_out;
 
