@@ -1858,7 +1858,7 @@ nilfs_btree_commit_convert_and_insert(struct nilfs_bmap *btree,
 
 /**
  * nilfs_btree_convert_and_insert -
- * @bmap:
+ * @btree: bmap struct of btree
  * @key:
  * @ptr:
  * @keys:
