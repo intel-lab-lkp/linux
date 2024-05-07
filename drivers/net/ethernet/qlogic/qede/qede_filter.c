@@ -1786,13 +1786,13 @@ qede_flow_parse_v4_common(struct netlink_ext_ack *extack,
 }
 
 static int
-qede_flow_parse_tcp_v6(struct qede_dev *edev, struct flow_rule *rule,
-		     struct qede_arfs_tuple *tuple)
+qede_flow_parse_tcp_v6(struct netlink_ext_ack *extack, struct flow_rule *rule,
+		       struct qede_arfs_tuple *tuple)
 {
 	tuple->ip_proto = IPPROTO_TCP;
 	tuple->eth_proto = htons(ETH_P_IPV6);
 
-	return qede_flow_parse_v6_common(NULL, rule, tuple);
+	return qede_flow_parse_v6_common(extack, rule, tuple);
 }
 
 static int
@@ -1862,7 +1862,7 @@ qede_parse_flow_attr(struct qede_dev *edev, __be16 proto,
 	if (ip_proto == IPPROTO_TCP && proto == htons(ETH_P_IP))
 		rc = qede_flow_parse_tcp_v4(edev, rule, tuple);
 	else if (ip_proto == IPPROTO_TCP && proto == htons(ETH_P_IPV6))
-		rc = qede_flow_parse_tcp_v6(edev, rule, tuple);
+		rc = qede_flow_parse_tcp_v6(NULL, rule, tuple);
 	else if (ip_proto == IPPROTO_UDP && proto == htons(ETH_P_IP))
 		rc = qede_flow_parse_udp_v4(edev, rule, tuple);
 	else if (ip_proto == IPPROTO_UDP && proto == htons(ETH_P_IPV6))
