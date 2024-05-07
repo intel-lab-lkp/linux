@@ -6535,9 +6535,11 @@ static const struct attribute_group amdgpu_group = {
 static void amdgpu_dm_connector_unregister(struct drm_connector *connector)
 {
 	struct amdgpu_dm_connector *amdgpu_dm_connector = to_amdgpu_dm_connector(connector);
+	union dpcd_sink_ext_caps *ext_caps =
+		&amdgpu_dm_connector->dc_link->dpcd_sink_ext_caps;
 
 	if (connector->connector_type == DRM_MODE_CONNECTOR_eDP &&
-	    amdgpu_dm_abm_level < 0)
+	    amdgpu_dm_abm_level < 0 && !ext_caps->bits.oled)
 		sysfs_remove_group(&connector->kdev->kobj, &amdgpu_group);
 
 	drm_dp_aux_unregister(&amdgpu_dm_connector->dm_dp_aux.aux);
@@ -6642,10 +6644,12 @@ amdgpu_dm_connector_late_register(struct drm_connector *connector)
 {
 	struct amdgpu_dm_connector *amdgpu_dm_connector =
 		to_amdgpu_dm_connector(connector);
+	union dpcd_sink_ext_caps *ext_caps =
+		&amdgpu_dm_connector->dc_link->dpcd_sink_ext_caps;
 	int r;
 
 	if (connector->connector_type == DRM_MODE_CONNECTOR_eDP &&
-	    amdgpu_dm_abm_level < 0) {
+	    amdgpu_dm_abm_level < 0 && !ext_caps->bits.oled) {
 		r = sysfs_create_group(&connector->kdev->kobj,
 				       &amdgpu_group);
 		if (r)
