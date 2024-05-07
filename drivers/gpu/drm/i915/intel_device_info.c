@@ -232,10 +232,6 @@ static void intel_device_info_subplatform_init(struct drm_i915_private *i915)
 	} else if (find_devid(devid, subplatform_ulx_ids,
 			      ARRAY_SIZE(subplatform_ulx_ids))) {
 		mask = BIT(INTEL_SUBPLATFORM_ULX);
-		if (IS_HASWELL(i915) || IS_BROADWELL(i915)) {
-			/* ULX machines are also considered ULT. */
-			mask |= BIT(INTEL_SUBPLATFORM_ULT);
-		}
 	} else if (find_devid(devid, subplatform_portf_ids,
 			      ARRAY_SIZE(subplatform_portf_ids))) {
 		mask = BIT(INTEL_SUBPLATFORM_PORTF);
