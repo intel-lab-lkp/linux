@@ -30,21 +30,32 @@
 int fscrypt_file_open(struct inode *inode, struct file *filp)
 {
 	int err;
-	struct dentry *dir;
+	struct dentry *dentry, *dentry_parent;
+	struct inode *inode_parent;
 
 	err = fscrypt_require_key(inode);
 	if (err)
 		return err;
 
-	dir = dget_parent(file_dentry(filp));
-	if (IS_ENCRYPTED(d_inode(dir)) &&
-	    !fscrypt_has_permitted_context(d_inode(dir), inode)) {
+	dentry = file_dentry(filp);
+	rcu_read_lock();
+	dentry_parent = READ_ONCE(dentry->d_parent);
+	inode_parent = d_inode_rcu(dentry_parent);
+	if (inode_parent != NULL && !IS_ENCRYPTED(inode_parent)) {
+		rcu_read_unlock();
+		return 0;
+	}
+	rcu_read_unlock();
+
+	dentry_parent = dget_parent(dentry);
+	if (IS_ENCRYPTED(d_inode(dentry_parent)) &&
+	    !fscrypt_has_permitted_context(d_inode(dentry_parent), inode)) {
 		fscrypt_warn(inode,
 			     "Inconsistent encryption context (parent directory: %lu)",
-			     d_inode(dir)->i_ino);
+			     d_inode(dentry_parent)->i_ino);
 		err = -EPERM;
 	}
-	dput(dir);
+	dput(dentry_parent);
 	return err;
 }
 EXPORT_SYMBOL_GPL(fscrypt_file_open);
