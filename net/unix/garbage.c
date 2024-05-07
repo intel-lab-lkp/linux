@@ -342,10 +342,12 @@ static void __unix_gc(struct work_struct *work)
 		scan_children(&u->sk, inc_inflight, &hitlist);
 
 #if IS_ENABLED(CONFIG_AF_UNIX_OOB)
+		spin_lock(&u->sk.sk_receive_queue.lock);
 		if (u->oob_skb) {
-			kfree_skb(u->oob_skb);
+			WARN_ON_ONCE(skb_unref(u->oob_skb));
 			u->oob_skb = NULL;
 		}
+		spin_unlock(&u->sk.sk_receive_queue.lock);
 #endif
 	}
 
