@@ -10909,6 +10909,11 @@ static bool is_kfunc_arg_sleepable_async_cb(const struct btf *btf, const struct 
 	return btf_param_match_suffix(btf, arg, "__s_async");
 }
 
+static bool is_kfunc_arg_prog_aux(const struct btf *btf, const struct btf_param *arg)
+{
+	return btf_param_match_suffix(btf, arg, "__aux");
+}
+
 static bool is_kfunc_arg_scalar_with_name(const struct btf *btf,
 					  const struct btf_param *arg,
 					  const char *name)
@@ -11807,7 +11812,8 @@ static int check_kfunc_args(struct bpf_verifier_env *env, struct bpf_kfunc_call_
 
 		t = btf_type_skip_modifiers(btf, args[i].type, NULL);
 
-		if (is_kfunc_arg_ignore(btf, &args[i]))
+		if (is_kfunc_arg_ignore(btf, &args[i]) ||
+		    is_kfunc_arg_prog_aux(btf, &args[i]))
 			continue;
 
 		if (btf_type_is_scalar(t)) {
@@ -19950,6 +19956,38 @@ static int fixup_kfunc_call(struct bpf_verifier_env *env, struct bpf_insn *insn,
 		insn_buf[1] = ld_addrs[1];
 		insn_buf[2] = *insn;
 		*cnt = 3;
+	} else {
+		struct bpf_kfunc_call_arg_meta meta;
+		struct bpf_insn kfunc_insn = *insn;
+		const struct btf_param *args;
+		u32 i, nargs, prog_aux_arg;
+		const char *func_name;
+		int ret;
+
+		/* imm might not have func_id, so create a fake insn with the expected args */
+		kfunc_insn.imm = desc->func_id;
+
+		ret = fetch_kfunc_meta(env, &kfunc_insn, &meta, &func_name);
+		if (ret == 0) {
+			args = (const struct btf_param *)(meta.func_proto + 1);
+			nargs = btf_type_vlen(meta.func_proto);
+			prog_aux_arg = nargs;
+
+			for (i = 0; i < nargs; i++) {
+				if (is_kfunc_arg_prog_aux(meta.btf, &args[i]))
+					prog_aux_arg = i;
+			}
+
+			if (prog_aux_arg < nargs) {
+				struct bpf_insn ld_addrs[2] = { BPF_LD_IMM64(BPF_REG_1 + prog_aux_arg,
+								(long)env->prog->aux) };
+
+				insn_buf[0] = ld_addrs[0];
+				insn_buf[1] = ld_addrs[1];
+				insn_buf[2] = *insn;
+				*cnt = 3;
+			}
+		}
 	}
 	return 0;
 }
