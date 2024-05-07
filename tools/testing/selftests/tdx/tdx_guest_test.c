@@ -7,6 +7,7 @@
  * Author: Kuppuswamy Sathyanarayanan <sathyanarayanan.kuppuswamy@linux.intel.com>
  */
 
+#define _GNU_SOURCE
 #include <sys/ioctl.h>
 
 #include <errno.h>

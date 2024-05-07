@@ -5,6 +5,7 @@
  * Copyright (c) 2018 Alexandre Belloni <alexandre.belloni@bootlin.com>
  */
 
+#define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/rtc.h>

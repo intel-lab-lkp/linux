@@ -3,6 +3,7 @@
  * This test covers the PR_SET_NAME functionality of prctl calls
  */
 
+#define _GNU_SOURCE
 #include <errno.h>
 #include <sys/prctl.h>
 #include <string.h>

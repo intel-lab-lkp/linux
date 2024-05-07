@@ -5,6 +5,7 @@
  *
  * Copyright 2023 Ivan Orlov <ivan.orlov0322@gmail.com>
  */
+#define _GNU_SOURCE
 #include <string.h>
 #include <alsa/asoundlib.h>
 #include "../kselftest_harness.h"

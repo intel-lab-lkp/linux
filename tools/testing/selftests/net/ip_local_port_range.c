@@ -7,6 +7,7 @@
  * Don't run these directly but with ip_local_port_range.sh script.
  */
 
+#define _GNU_SOURCE
 #include <fcntl.h>
 #include <netinet/ip.h>
 

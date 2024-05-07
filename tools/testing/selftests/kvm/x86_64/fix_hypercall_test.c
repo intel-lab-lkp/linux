@@ -4,6 +4,7 @@
  *
  * Tests for KVM paravirtual feature disablement
  */
+#define _GNU_SOURCE
 #include <asm/kvm_para.h>
 #include <linux/kvm_para.h>
 #include <linux/stringify.h>

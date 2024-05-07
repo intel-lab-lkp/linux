@@ -3,6 +3,7 @@
  * This test covers the anonymous VMA naming functionality through prctl calls
  */
 
+#define _GNU_SOURCE
 #include <errno.h>
 #include <sys/prctl.h>
 #include <stdio.h>

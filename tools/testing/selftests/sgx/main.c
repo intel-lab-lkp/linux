@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*  Copyright(c) 2016-20 Intel Corporation. */
 
+#define _GNU_SOURCE
 #include <cpuid.h>
 #include <elf.h>
 #include <errno.h>

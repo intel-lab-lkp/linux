@@ -5,6 +5,7 @@
  * Copyright (c) 2021 Beau Belgrave <beaub@linux.microsoft.com>
  */
 
+#define _GNU_SOURCE
 #include <errno.h>
 #include <linux/user_events.h>
 #include <stdio.h>
