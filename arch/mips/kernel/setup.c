@@ -773,8 +773,8 @@ static void __init setup_rng_seed(void)
 void __init setup_arch(char **cmdline_p)
 {
 	cpu_probe();
-	mips_cm_probe();
 	prom_init();
+	mips_cm_probe();
 
 	setup_early_fdc_console();
 #ifdef CONFIG_EARLY_PRINTK
