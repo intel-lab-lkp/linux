@@ -9339,11 +9339,13 @@ static void clear_caller_saved_regs(struct bpf_verifier_env *env,
 typedef int (*set_callee_state_fn)(struct bpf_verifier_env *env,
 				   struct bpf_func_state *caller,
 				   struct bpf_func_state *callee,
-				   int insn_idx);
+				   int insn_idx,
+				   struct bpf_kfunc_call_arg_meta *meta);
 
 static int set_callee_state(struct bpf_verifier_env *env,
 			    struct bpf_func_state *caller,
-			    struct bpf_func_state *callee, int insn_idx);
+			    struct bpf_func_state *callee, int insn_idx,
+			    struct bpf_kfunc_call_arg_meta *meta);
 
 static int setup_func_entry(struct bpf_verifier_env *env, int subprog, int callsite,
 			    set_callee_state_fn set_callee_state_cb,
@@ -9381,7 +9383,7 @@ static int setup_func_entry(struct bpf_verifier_env *env, int subprog, int calls
 			subprog /* subprog number within this prog */);
 	/* Transfer references to the callee */
 	err = copy_reference_state(callee, caller);
-	err = err ?: set_callee_state_cb(env, caller, callee, callsite);
+	err = err ?: set_callee_state_cb(env, caller, callee, callsite, NULL);
 	if (err)
 		goto err_out;
 
@@ -9518,7 +9520,8 @@ static int btf_check_subprog_call(struct bpf_verifier_env *env, int subprog,
 
 static int push_callback_call(struct bpf_verifier_env *env, struct bpf_insn *insn,
 			      int insn_idx, int subprog,
-			      set_callee_state_fn set_callee_state_cb)
+			      set_callee_state_fn set_callee_state_cb,
+			      struct bpf_kfunc_call_arg_meta *kfunc_meta)
 {
 	struct bpf_verifier_state *state = env->cur_state, *callback_state;
 	struct bpf_func_state *caller, *callee;
@@ -9560,7 +9563,7 @@ static int push_callback_call(struct bpf_verifier_env *env, struct bpf_insn *ins
 		callee->async_entry_cnt = caller->async_entry_cnt + 1;
 
 		/* Convert bpf_timer_set_callback() args into timer callback args */
-		err = set_callee_state_cb(env, caller, callee, insn_idx);
+		err = set_callee_state_cb(env, caller, callee, insn_idx, kfunc_meta);
 		if (err)
 			return err;
 
@@ -9691,7 +9694,8 @@ int map_set_for_each_callback_args(struct bpf_verifier_env *env,
 
 static int set_callee_state(struct bpf_verifier_env *env,
 			    struct bpf_func_state *caller,
-			    struct bpf_func_state *callee, int insn_idx)
+			    struct bpf_func_state *callee, int insn_idx,
+			    struct bpf_kfunc_call_arg_meta *meta)
 {
 	int i;
 
@@ -9706,7 +9710,8 @@ static int set_callee_state(struct bpf_verifier_env *env,
 static int set_map_elem_callback_state(struct bpf_verifier_env *env,
 				       struct bpf_func_state *caller,
 				       struct bpf_func_state *callee,
-				       int insn_idx)
+				       int insn_idx,
+				       struct bpf_kfunc_call_arg_meta *meta)
 {
 	struct bpf_insn_aux_data *insn_aux = &env->insn_aux_data[insn_idx];
 	struct bpf_map *map;
@@ -9732,7 +9737,8 @@ static int set_map_elem_callback_state(struct bpf_verifier_env *env,
 static int set_loop_callback_state(struct bpf_verifier_env *env,
 				   struct bpf_func_state *caller,
 				   struct bpf_func_state *callee,
-				   int insn_idx)
+				   int insn_idx,
+				   struct bpf_kfunc_call_arg_meta *meta)
 {
 	/* bpf_loop(u32 nr_loops, void *callback_fn, void *callback_ctx,
 	 *	    u64 flags);
@@ -9754,7 +9760,8 @@ static int set_loop_callback_state(struct bpf_verifier_env *env,
 static int set_timer_callback_state(struct bpf_verifier_env *env,
 				    struct bpf_func_state *caller,
 				    struct bpf_func_state *callee,
-				    int insn_idx)
+				    int insn_idx,
+				    struct bpf_kfunc_call_arg_meta *meta)
 {
 	struct bpf_map *map_ptr = caller->regs[BPF_REG_1].map_ptr;
 
@@ -9784,7 +9791,8 @@ static int set_timer_callback_state(struct bpf_verifier_env *env,
 static int set_find_vma_callback_state(struct bpf_verifier_env *env,
 				       struct bpf_func_state *caller,
 				       struct bpf_func_state *callee,
-				       int insn_idx)
+				       int insn_idx,
+				       struct bpf_kfunc_call_arg_meta *meta)
 {
 	/* bpf_find_vma(struct task_struct *task, u64 addr,
 	 *               void *callback_fn, void *callback_ctx, u64 flags)
@@ -9812,7 +9820,8 @@ static int set_find_vma_callback_state(struct bpf_verifier_env *env,
 static int set_user_ringbuf_callback_state(struct bpf_verifier_env *env,
 					   struct bpf_func_state *caller,
 					   struct bpf_func_state *callee,
-					   int insn_idx)
+					   int insn_idx,
+					   struct bpf_kfunc_call_arg_meta *meta)
 {
 	/* bpf_user_ringbuf_drain(struct bpf_map *map, void *callback_fn, void
 	 *			  callback_ctx, u64 flags);
@@ -9835,7 +9844,8 @@ static int set_user_ringbuf_callback_state(struct bpf_verifier_env *env,
 static int set_rbtree_add_callback_state(struct bpf_verifier_env *env,
 					 struct bpf_func_state *caller,
 					 struct bpf_func_state *callee,
-					 int insn_idx)
+					 int insn_idx,
+					 struct bpf_kfunc_call_arg_meta *meta)
 {
 	/* void bpf_rbtree_add_impl(struct bpf_rb_root *root, struct bpf_rb_node *node,
 	 *                     bool (less)(struct bpf_rb_node *a, const struct bpf_rb_node *b));
@@ -10411,15 +10421,15 @@ static int check_helper_call(struct bpf_verifier_env *env, struct bpf_insn *insn
 		break;
 	case BPF_FUNC_for_each_map_elem:
 		err = push_callback_call(env, insn, insn_idx, meta.subprogno,
-					 set_map_elem_callback_state);
+					 set_map_elem_callback_state, NULL);
 		break;
 	case BPF_FUNC_timer_set_callback:
 		err = push_callback_call(env, insn, insn_idx, meta.subprogno,
-					 set_timer_callback_state);
+					 set_timer_callback_state, NULL);
 		break;
 	case BPF_FUNC_find_vma:
 		err = push_callback_call(env, insn, insn_idx, meta.subprogno,
-					 set_find_vma_callback_state);
+					 set_find_vma_callback_state, NULL);
 		break;
 	case BPF_FUNC_snprintf:
 		err = check_bpf_snprintf_call(env, regs);
@@ -10434,7 +10444,7 @@ static int check_helper_call(struct bpf_verifier_env *env, struct bpf_insn *insn
 			return err;
 		if (cur_func(env)->callback_depth < regs[BPF_REG_1].umax_value) {
 			err = push_callback_call(env, insn, insn_idx, meta.subprogno,
-						 set_loop_callback_state);
+						 set_loop_callback_state, NULL);
 		} else {
 			cur_func(env)->callback_depth = 0;
 			if (env->log.level & BPF_LOG_LEVEL2)
@@ -10537,7 +10547,7 @@ static int check_helper_call(struct bpf_verifier_env *env, struct bpf_insn *insn
 	}
 	case BPF_FUNC_user_ringbuf_drain:
 		err = push_callback_call(env, insn, insn_idx, meta.subprogno,
-					 set_user_ringbuf_callback_state);
+					 set_user_ringbuf_callback_state, NULL);
 		break;
 	}
 
@@ -12285,7 +12295,7 @@ static int check_kfunc_call(struct bpf_verifier_env *env, struct bpf_insn *insn,
 
 	if (meta.func_id == special_kfunc_list[KF_bpf_rbtree_add_impl]) {
 		err = push_callback_call(env, insn, insn_idx, meta.subprogno,
-					 set_rbtree_add_callback_state);
+					 set_rbtree_add_callback_state, &meta);
 		if (err) {
 			verbose(env, "kfunc %s#%d failed callback verification\n",
 				func_name, meta.func_id);
@@ -12295,7 +12305,7 @@ static int check_kfunc_call(struct bpf_verifier_env *env, struct bpf_insn *insn,
 
 	if (is_bpf_wq_set_callback_impl_kfunc(meta.func_id)) {
 		err = push_callback_call(env, insn, insn_idx, meta.subprogno,
-					 set_timer_callback_state);
+					 set_timer_callback_state, &meta);
 		if (err) {
 			verbose(env, "kfunc %s#%d failed callback verification\n",
 				func_name, meta.func_id);
