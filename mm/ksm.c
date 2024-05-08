@@ -162,7 +162,7 @@ struct ksm_stable_node {
 		struct rb_node node;	/* when node of stable tree */
 		struct {		/* when listed for migration */
 			struct list_head *head;
-			struct {
+			union {
 				struct hlist_node hlist_dup;
 				struct list_head list;
 			};
