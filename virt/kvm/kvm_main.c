@@ -1116,6 +1116,11 @@ static int kvm_create_vm_debugfs(struct kvm *kvm, const char *fdname)
 				    &stat_fops_per_vm);
 	}
 
+	debugfs_create_bool("override_halt_poll_ns", 0444, kvm->debugfs_dentry,
+			    &kvm->override_halt_poll_ns);
+	debugfs_create_u32("max_halt_poll_ns", 0644, kvm->debugfs_dentry,
+			   &kvm->max_halt_poll_ns);
+
 	kvm_arch_create_vm_debugfs(kvm);
 	return 0;
 out_err:
