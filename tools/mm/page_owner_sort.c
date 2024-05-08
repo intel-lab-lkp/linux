@@ -27,11 +27,13 @@
 #define true 1
 #define false 0
 #define TASK_COMM_LEN 16
+#define MODULE_NAME_LEN 64
 
 struct block_list {
 	char *txt;
 	char *comm; // task command name
 	char *stacktrace;
+	char *module;
 	__u64 ts_nsec;
 	int len;
 	int num;
@@ -43,14 +45,16 @@ struct block_list {
 enum FILTER_BIT {
 	FILTER_PID = 1<<1,
 	FILTER_TGID = 1<<2,
-	FILTER_COMM = 1<<3
+	FILTER_COMM = 1<<3,
+	FILTER_MODULE = 1<<4,
 };
 enum CULL_BIT {
 	CULL_PID = 1<<1,
 	CULL_TGID = 1<<2,
 	CULL_COMM = 1<<3,
 	CULL_STACKTRACE = 1<<4,
-	CULL_ALLOCATOR = 1<<5
+	CULL_ALLOCATOR = 1<<5,
+	CULL_MODULE = 1<<6,
 };
 enum ALLOCATOR_BIT {
 	ALLOCATOR_CMA = 1<<1,
@@ -60,7 +64,8 @@ enum ALLOCATOR_BIT {
 };
 enum ARG_TYPE {
 	ARG_TXT, ARG_COMM, ARG_STACKTRACE, ARG_ALLOC_TS, ARG_CULL_TIME,
-	ARG_PAGE_NUM, ARG_PID, ARG_TGID, ARG_UNKNOWN, ARG_ALLOCATOR
+	ARG_PAGE_NUM, ARG_PID, ARG_TGID, ARG_UNKNOWN, ARG_ALLOCATOR,
+	ARG_MODULE
 };
 enum SORT_ORDER {
 	SORT_ASC = 1,
@@ -80,9 +85,11 @@ struct filter_condition {
 	pid_t *pids;
 	pid_t *tgids;
 	char **comms;
+	char **modules;
 	int pids_size;
 	int tgids_size;
 	int comms_size;
+	int modules_size;
 };
 struct sort_condition {
 	int (**cmps)(const void *, const void *);
@@ -95,6 +102,7 @@ static regex_t order_pattern;
 static regex_t pid_pattern;
 static regex_t tgid_pattern;
 static regex_t comm_pattern;
+static regex_t module_pattern;
 static regex_t ts_nsec_pattern;
 static struct block_list *list;
 static int list_size;
@@ -179,6 +187,13 @@ static int compare_comm(const void *p1, const void *p2)
 	return strcmp(l1->comm, l2->comm);
 }
 
+static int compare_module(const void *p1, const void *p2)
+{
+	const struct block_list *l1 = p1, *l2 = p2;
+
+	return strcmp(l1->module, l2->module);
+}
+
 static int compare_ts(const void *p1, const void *p2)
 {
 	const struct block_list *l1 = p1, *l2 = p2;
@@ -200,6 +215,8 @@ static int compare_cull_condition(const void *p1, const void *p2)
 		return compare_comm(p1, p2);
 	if ((cull & CULL_ALLOCATOR) && compare_allocator(p1, p2))
 		return compare_allocator(p1, p2);
+	if ((cull & CULL_MODULE) && compare_module(p1, p2))
+		return compare_module(p1, p2);
 	return 0;
 }
 
@@ -372,15 +389,23 @@ static char *get_comm(char *buf)
 
 	memset(comm_str, 0, TASK_COMM_LEN);
 
-	search_pattern(&comm_pattern, comm_str, buf);
-	errno = 0;
-	if (errno != 0) {
+	if (search_pattern(&comm_pattern, comm_str, buf)) {
 		if (debug_on)
 			fprintf(stderr, "wrong comm in follow buf:\n%s\n", buf);
 		return NULL;
 	}
 
 	return comm_str;
+}
+
+static char *get_module(char *buf)
+{
+	char tmp[MODULE_NAME_LEN] = { 0 };
+
+	if (search_pattern(&module_pattern, tmp, buf))
+		return strdup("vmlinux");
+
+	return strdup(tmp);
 }
 
 static int get_arg_type(const char *arg)
@@ -399,6 +424,8 @@ static int get_arg_type(const char *arg)
 		return ARG_ALLOC_TS;
 	else if (!strcmp(arg, "allocator") || !strcmp(arg, "ator"))
 		return ARG_ALLOCATOR;
+	else if (!strcmp(arg, "module"))
+		return ARG_MODULE;
 	else {
 		return ARG_UNKNOWN;
 	}
@@ -449,20 +476,30 @@ static bool match_str_list(const char *str, char **list, int list_size)
 
 static bool is_need(char *buf)
 {
+	bool match;
+
 	if ((filter & FILTER_PID) && !match_num_list(get_pid(buf), fc.pids, fc.pids_size))
 		return false;
 	if ((filter & FILTER_TGID) &&
 		!match_num_list(get_tgid(buf), fc.tgids, fc.tgids_size))
 		return false;
 
-	char *comm = get_comm(buf);
-
-	if ((filter & FILTER_COMM) &&
-	!match_str_list(comm, fc.comms, fc.comms_size)) {
+	if (filter & FILTER_COMM) {
+		char *comm = get_comm(buf);
+		match = match_str_list(comm, fc.comms, fc.comms_size);
 		free(comm);
-		return false;
+		if (!match)
+			return false;
 	}
-	free(comm);
+
+	if (filter & FILTER_MODULE) {
+		char *module = get_module(buf);
+		match = match_str_list(module, fc.modules, fc.modules_size);
+		free(module);
+		if (!match)
+			return false;
+	}
+
 	return true;
 }
 
@@ -477,6 +514,7 @@ static bool add_list(char *buf, int len, char *ext_buf)
 	list[list_size].pid = get_pid(buf);
 	list[list_size].tgid = get_tgid(buf);
 	list[list_size].comm = get_comm(buf);
+	list[list_size].module = get_module(buf);
 	list[list_size].txt = malloc(len+1);
 	if (!list[list_size].txt) {
 		fprintf(stderr, "Out of memory\n");
@@ -522,6 +560,8 @@ static bool parse_cull_args(const char *arg_str)
 			cull |= CULL_STACKTRACE;
 		else if (arg_type == ARG_ALLOCATOR)
 			cull |= CULL_ALLOCATOR;
+		else if (arg_type == ARG_MODULE)
+			cull |= CULL_MODULE;
 		else {
 			free_explode(args, size);
 			return false;
@@ -649,10 +689,14 @@ static void usage(void)
 		"--name <cmdlist>\tSelect by command name. This selects the"
 		" information\n\t\t\tof blocks whose command name appears in"
 		" <cmdlist>.\n"
+		"--module <modlist>\tSelect by module name. This selects the"
+		" information\n\t\t\tof blocks whose stacktrace topmost module"
+		" appears in <modlist>.\n\t\t\t'vmlinux' is used if there isn't"
+		" module in the stacktrace\n"
 		"--cull <rules>\t\tCull by user-defined rules. <rules> is a "
 		"single\n\t\t\targument in the form of a comma-separated list "
 		"with some\n\t\t\tcommon fields predefined (pid, tgid, comm, "
-		"stacktrace, allocator)\n"
+		"stacktrace, allocator,\n\t\t\tmodule)\n"
 		"--sort <order>\t\tSpecify sort order as: [+|-]key[,[+|-]key[,...]]\n"
 	);
 }
@@ -661,7 +705,7 @@ int main(int argc, char **argv)
 {
 	FILE *fin, *fout;
 	char *buf, *ext_buf;
-	int i, count, compare_flag;
+	int i, count, compare_flag, rtn = 1;
 	struct stat st;
 	int opt;
 	struct option longopts[] = {
@@ -670,6 +714,7 @@ int main(int argc, char **argv)
 		{ "name", required_argument, NULL, 3 },
 		{ "cull",  required_argument, NULL, 4 },
 		{ "sort",  required_argument, NULL, 5 },
+		{ "module",  required_argument, NULL, 6 },
 		{ 0, 0, 0, 0},
 	};
 
@@ -737,6 +782,10 @@ int main(int argc, char **argv)
 				exit(1);
 			}
 			break;
+		case 6:
+			filter = filter | FILTER_MODULE;
+			fc.modules = explode(',', optarg, &fc.modules_size);
+			break;
 		default:
 			usage();
 			exit(1);
@@ -796,6 +845,8 @@ int main(int argc, char **argv)
 		goto out_tgid;
 	if (!check_regcomp(&comm_pattern, "tgid\\s*[0-9]*\\s*\\((.*)\\),\\s*ts"))
 		goto out_comm;
+	if (!check_regcomp(&module_pattern, "^ .*\\[(.*)\\]$"))
+		goto out_module;
 	if (!check_regcomp(&ts_nsec_pattern, "ts\\s*([0-9]*)\\s*ns"))
 		goto out_ts;
 
@@ -858,12 +909,15 @@ int main(int argc, char **argv)
 				fprintf(fout, ", ");
 				print_allocator(fout, list[i].allocator);
 			}
+			if (cull & CULL_MODULE)
+				fprintf(fout, ", module: %s", list[i].module);
 			if (cull & CULL_STACKTRACE)
 				fprintf(fout, ":\n%s", list[i].stacktrace);
 			fprintf(fout, "\n");
 		}
 	}
 
+	rtn = 0;
 out_free:
 	if (ext_buf)
 		free(ext_buf);
@@ -871,16 +925,18 @@ out_free:
 		free(buf);
 	if (list)
 		free(list);
-out_ts:
 	regfree(&ts_nsec_pattern);
-out_comm:
+out_ts:
+	regfree(&module_pattern);
+out_module:
 	regfree(&comm_pattern);
-out_tgid:
+out_comm:
 	regfree(&tgid_pattern);
-out_pid:
+out_tgid:
 	regfree(&pid_pattern);
-out_order:
+out_pid:
 	regfree(&order_pattern);
+out_order:
 
-	return 0;
+	return rtn;
 }
