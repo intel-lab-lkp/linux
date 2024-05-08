@@ -430,7 +430,8 @@ int sr_select_speed(struct cdrom_device_info *cdi, int speed)
 	Scsi_CD *cd = cdi->handle;
 	struct packet_command cgc;
 
-	if (speed == 0)
+	/* avoid exceeding the max speed or overflowing integer bounds */
+	if (speed == 0 || speed > 0xffff / 177)
 		speed = 0xffff;	/* set to max */
 	else
 		speed *= 177;	/* Nx to kbyte/s */
