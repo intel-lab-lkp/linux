@@ -657,7 +657,7 @@ static int dw_axi_dma_set_hw_desc(struct axi_dma_chan *chan,
 	size_t axi_block_ts;
 	size_t block_ts;
 	u32 ctllo, ctlhi;
-	u32 burst_len;
+	u32 burst_len, src_burst_trans_len, dst_burst_trans_len;
 
 	axi_block_ts = chan->chip->dw->hdata->block_size[chan->id];
 
@@ -721,8 +721,20 @@ static int dw_axi_dma_set_hw_desc(struct axi_dma_chan *chan,
 
 	hw_desc->lli->block_ts_lo = cpu_to_le32(block_ts - 1);
 
-	ctllo |= DWAXIDMAC_BURST_TRANS_LEN_4 << CH_CTL_L_DST_MSIZE_POS |
-		 DWAXIDMAC_BURST_TRANS_LEN_4 << CH_CTL_L_SRC_MSIZE_POS;
+	dst_burst_trans_len = chan->config.dst_maxburst ?
+				__ffs(chan->config.dst_maxburst) - 1 :
+				DWAXIDMAC_BURST_TRANS_LEN_4;
+	if (dst_burst_trans_len > DWAXIDMAC_BURST_TRANS_LEN_MAX)
+		return -EINVAL;
+	ctllo |= dst_burst_trans_len << CH_CTL_L_DST_MSIZE_POS;
+
+	src_burst_trans_len = chan->config.src_maxburst ?
+				__ffs(chan->config.src_maxburst) - 1 :
+				DWAXIDMAC_BURST_TRANS_LEN_4;
+	if (src_burst_trans_len > DWAXIDMAC_BURST_TRANS_LEN_MAX)
+		return -EINVAL;
+	ctllo |= src_burst_trans_len << CH_CTL_L_SRC_MSIZE_POS;
+
 	hw_desc->lli->ctl_lo = cpu_to_le32(ctllo);
 
 	set_desc_src_master(hw_desc);
