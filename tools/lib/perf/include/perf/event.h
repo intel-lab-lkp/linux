@@ -451,6 +451,39 @@ struct perf_record_compressed {
 	char			 data[];
 };
 
+struct perf_record_schedstat_cpu_v15 {
+#define CPU_FIELD(type, name)	type name;
+#include "schedstat-cpu-v15.h"
+#undef CPU_FIELD
+};
+
+struct perf_record_schedstat_cpu {
+	struct perf_event_header header;
+	__u16			 version;
+	__u64			 timestamp;
+	__u32			 cpu;
+	union {
+		struct perf_record_schedstat_cpu_v15 v15;
+	};
+};
+
+struct perf_record_schedstat_domain_v15 {
+#define DOMAIN_FIELD(type, name)	type name;
+#include "schedstat-domain-v15.h"
+#undef DOMAIN_FIELD
+};
+
+struct perf_record_schedstat_domain {
+	struct perf_event_header header;
+	__u16			 version;
+	__u64			 timestamp;
+	__u32			 cpu;
+	__u16			 domain;
+	union {
+		struct perf_record_schedstat_domain_v15 v15;
+	};
+};
+
 enum perf_user_event_type { /* above any possible kernel type */
 	PERF_RECORD_USER_TYPE_START		= 64,
 	PERF_RECORD_HEADER_ATTR			= 64,
@@ -472,6 +505,8 @@ enum perf_user_event_type { /* above any possible kernel type */
 	PERF_RECORD_HEADER_FEATURE		= 80,
 	PERF_RECORD_COMPRESSED			= 81,
 	PERF_RECORD_FINISHED_INIT		= 82,
+	PERF_RECORD_SCHEDSTAT_CPU		= 83,
+	PERF_RECORD_SCHEDSTAT_DOMAIN		= 84,
 	PERF_RECORD_HEADER_MAX
 };
 
@@ -512,6 +547,8 @@ union perf_event {
 	struct perf_record_time_conv		time_conv;
 	struct perf_record_header_feature	feat;
 	struct perf_record_compressed		pack;
+	struct perf_record_schedstat_cpu	schedstat_cpu;
+	struct perf_record_schedstat_domain	schedstat_domain;
 };
 
 #endif /* __LIBPERF_EVENT_H */

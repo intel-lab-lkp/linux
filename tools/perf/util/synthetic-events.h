@@ -122,4 +122,8 @@ int perf_event__synthesize_for_pipe(struct perf_tool *tool,
 				    struct perf_data *data,
 				    perf_event__handler_t process);
 
+int perf_event__synthesize_schedstat(struct perf_tool *tool,
+				     struct perf_session *session,
+				     struct machine *machine,
+				     perf_event__handler_t process);
 #endif // __PERF_SYNTHETIC_EVENTS_H

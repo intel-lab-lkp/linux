@@ -2430,3 +2430,173 @@ int parse_synth_opt(char *synth)
 
 	return ret;
 }
+
+static bool read_schedstat_cpu_v15(struct io *io,
+				   struct perf_record_schedstat_cpu *cs)
+{
+	char ch;
+
+	if (io__get_char(io) != 'p' || io__get_char(io) != 'u')
+		return false;
+
+	if (io__get_dec(io, (__u64 *) &cs->cpu) != ' ')
+		return false;
+
+#define CPU_FIELD(type, name)						\
+	do {								\
+		ch = io__get_dec(io, (__u64 *) &cs->v15.name);		\
+		if (ch != ' ' && ch != '\n')				\
+			return false;					\
+	} while (0);
+
+#include <perf/schedstat-cpu-v15.h>
+#undef CPU_FIELD
+
+	return true;
+}
+
+static bool read_schedstat_domain_v15(struct io *io,
+				      struct perf_record_schedstat_domain *ds)
+{
+	char ch;
+
+	if (io__get_char(io) != 'o' || io__get_char(io) != 'm' || io__get_char(io) != 'a' ||
+	    io__get_char(io) != 'i' || io__get_char(io) != 'n')
+		return false;
+
+	if (io__get_dec(io, (__u64 *) &ds->domain) != ' ')
+		return false;
+
+	while (io__get_char(io) != ' ');
+
+#define DOMAIN_FIELD(type, name)				\
+	do {							\
+		ch = io__get_dec(io, (__u64 *) &ds->v15.name);	\
+		if (ch != ' ' && ch != '\n')			\
+			return false;				\
+	} while (0);
+
+#include <perf/schedstat-domain-v15.h>
+#undef DOMAIN_FIELD
+
+	return true;
+}
+
+static union perf_event *__synthesize_schedstat_cpu_v15(struct io *io, __u16 *cpu,
+							__u64 timestamp,
+							struct machine *machine)
+{
+	union perf_event *event;
+	size_t size;
+
+	size = sizeof(struct perf_record_schedstat_cpu);
+	event = zalloc(size + machine->id_hdr_size);
+
+	if (!event)
+		return NULL;
+
+	event->schedstat_cpu.header.type = PERF_RECORD_SCHEDSTAT_CPU;
+	event->schedstat_cpu.version = 15;
+	event->schedstat_cpu.timestamp = timestamp;
+	event->schedstat_cpu.header.size = size + machine->id_hdr_size;
+
+	if (read_schedstat_cpu_v15(io, &event->schedstat_cpu)) {
+		*cpu = event->schedstat_cpu.cpu;
+	} else {
+		free(event);
+		return NULL;
+	}
+
+	return event;
+}
+
+static union perf_event *__synthesize_schedstat_domain_v15(struct io *io, __u16 cpu,
+							   __u64 timestamp,
+							   struct machine *machine)
+{
+	union perf_event *event;
+	size_t size;
+
+	size = sizeof(struct perf_record_schedstat_domain);
+	event = zalloc(size + machine->id_hdr_size);
+
+	if (!event)
+		return NULL;
+
+	event->schedstat_domain.header.type = PERF_RECORD_SCHEDSTAT_DOMAIN;
+	event->schedstat_domain.version = 15;
+	event->schedstat_domain.timestamp = timestamp;
+	event->schedstat_domain.header.size = size + machine->id_hdr_size;
+
+	if (read_schedstat_domain_v15(io, &event->schedstat_domain)) {
+		event->schedstat_domain.cpu = cpu;
+	} else {
+		free(event);
+		return NULL;
+	}
+
+	return event;
+}
+
+int perf_event__synthesize_schedstat(struct perf_tool *tool,
+				     struct perf_session *session __maybe_unused,
+				     struct machine *machine,
+				     perf_event__handler_t process)
+{
+	union perf_event *event = NULL;
+	size_t line_len = 0;
+	char *line = NULL;
+	char bf[BUFSIZ];
+	__u64 timestamp;
+	__u16 cpu = -1;
+	struct io io;
+	int ret = -1;
+	char ch;
+
+	io.fd = open("/proc/schedstat", O_RDONLY, 0);
+	if (io.fd < 0) {
+		pr_debug("Failed to open /proc/schedstat\n");
+		return -1;
+	}
+	io__init(&io, io.fd, bf, sizeof(bf));
+
+	if (io__getline(&io, &line, &line_len) < 0 || !line_len)
+		goto out;
+	if (strcmp(line, "version 15\n")) {
+		pr_debug("Unsupported /proc/schedstat version\n");
+		goto out_free_line;
+	}
+
+	if (io__getline(&io, &line, &line_len) < 0 || !line_len)
+		goto out_free_ev;
+	timestamp = atol(line + 10);
+
+	ch = io__get_char(&io);
+
+	while (!io.eof) {
+		if (ch == 'c') {
+			event = __synthesize_schedstat_cpu_v15(&io, &cpu, timestamp,
+							       machine);
+		} else if (ch == 'd') {
+			event = __synthesize_schedstat_domain_v15(&io, cpu, timestamp,
+								  machine);
+		}
+		if (!event)
+			goto out_free_line;
+
+		if (process(tool, event, NULL, NULL) < 0)
+			goto out_free_ev;
+
+		ch = io__get_char(&io);
+	}
+
+	ret = 0;
+
+out_free_ev:
+	free(event);
+out_free_line:
+	free(line);
+out:
+	close(io.fd);
+	return ret;
+}

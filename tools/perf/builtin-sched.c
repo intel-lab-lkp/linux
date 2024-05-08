@@ -19,6 +19,8 @@
 #include "util/string2.h"
 #include "util/callchain.h"
 #include "util/time-utils.h"
+#include "util/synthetic-events.h"
+#include "util/target.h"
 
 #include <subcmd/pager.h>
 #include <subcmd/parse-options.h>
@@ -229,7 +231,12 @@ struct perf_sched {
 	struct perf_time_interval ptime;
 	struct perf_time_interval hist_time;
 	volatile bool   thread_funcs_exit;
+
+	struct perf_session *session;
+	struct perf_data *data;
 };
+
+static struct perf_sched perf_sched;
 
 /* per thread run time data */
 struct thread_runtime {
@@ -3504,14 +3511,156 @@ static int __cmd_record(int argc, const char **argv)
 	return ret;
 }
 
+static int process_synthesized_event(struct perf_tool *tool __maybe_unused,
+				     union perf_event *event,
+				     struct perf_sample *sample __maybe_unused,
+				     struct machine *machine __maybe_unused)
+{
+	if (perf_data__write(perf_sched.data, event, event->header.size) <= 0) {
+		pr_err("failed to write perf data, error: %m\n");
+		return -1;
+	}
+
+	perf_sched.session->header.data_size += event->header.size;
+	return 0;
+}
+
+static void sighandler(int sig __maybe_unused)
+{
+}
+
 /* perf.data or any other output file name used by schedstat subcommand (only). */
 const char *output_name;
+static struct target target;
 
-static int perf_sched__schedstat_record(struct perf_sched *sched __maybe_unused,
-					int argc __maybe_unused,
-					const char **argv __maybe_unused)
+static int perf_sched__schedstat_record(struct perf_sched *sched,
+					int argc, const char **argv)
 {
-	return 0;
+	struct perf_session *session;
+	struct evlist *evlist;
+	int err = 0;
+	FILE *fp;
+	int flag;
+	char ch;
+	int fd;
+	struct perf_data data = {
+		.path  = output_name,
+		.mode  = PERF_DATA_MODE_WRITE,
+	};
+
+	signal(SIGINT, sighandler);
+	signal(SIGCHLD, sighandler);
+	signal(SIGTERM, sighandler);
+
+	evlist = evlist__new();
+	if (!evlist)
+		return -ENOMEM;
+
+	session = perf_session__new(&data, &sched->tool);
+	if (IS_ERR(session)) {
+		pr_err("Perf session creation failed.\n");
+		return PTR_ERR(session);
+	}
+
+	session->evlist = evlist;
+
+	perf_sched.session = session;
+	perf_sched.data = &data;
+
+	fd = perf_data__fd(&data);
+
+	/*
+	 * Capture all important metadata about the system. Although they
+	 * are not used by schedstat tool directly, they provide useful
+	 * information about profiled environment.
+	 */
+	perf_header__set_feat(&session->header, HEADER_HOSTNAME);
+	perf_header__set_feat(&session->header, HEADER_OSRELEASE);
+	perf_header__set_feat(&session->header, HEADER_VERSION);
+	perf_header__set_feat(&session->header, HEADER_ARCH);
+	perf_header__set_feat(&session->header, HEADER_NRCPUS);
+	perf_header__set_feat(&session->header, HEADER_CPUDESC);
+	perf_header__set_feat(&session->header, HEADER_CPUID);
+	perf_header__set_feat(&session->header, HEADER_TOTAL_MEM);
+	perf_header__set_feat(&session->header, HEADER_CMDLINE);
+	perf_header__set_feat(&session->header, HEADER_CPU_TOPOLOGY);
+	perf_header__set_feat(&session->header, HEADER_NUMA_TOPOLOGY);
+	perf_header__set_feat(&session->header, HEADER_CACHE);
+	perf_header__set_feat(&session->header, HEADER_MEM_TOPOLOGY);
+	perf_header__set_feat(&session->header, HEADER_CPU_PMU_CAPS);
+	perf_header__set_feat(&session->header, HEADER_HYBRID_TOPOLOGY);
+	perf_header__set_feat(&session->header, HEADER_PMU_CAPS);
+
+	err = perf_session__write_header(session, evlist, fd, false);
+	if (err < 0)
+		goto out;
+
+	/* FIXME. Quirk for evlist__prepare_workload() */
+	target.system_wide = true;
+
+	/* FIXME: -p <pid> support */
+	if (argc) {
+		err = evlist__prepare_workload(evlist, &target, argv, false, NULL);
+		if (err)
+			goto out;
+	}
+
+	err = perf_event__synthesize_schedstat(&(sched->tool), session,
+					       &session->machines.host /* machine */,
+					       process_synthesized_event);
+	if (err < 0)
+		goto out;
+
+	fp = fopen("/proc/sys/kernel/sched_schedstats", "w+");
+	if (!fp) {
+		printf("Failed to open /proc/sys/kernel/sched_schedstats");
+		goto out;
+	}
+
+	ch = getc(fp);
+	if (ch == '0') {
+		flag = 1;
+		rewind(fp);
+		putc('1', fp);
+		fclose(fp);
+	}
+
+	if (argc)
+		evlist__start_workload(evlist);
+
+	/* wait for signal */
+	pause();
+
+	err = perf_event__synthesize_schedstat(&(sched->tool), session,
+					       &session->machines.host /* machine */,
+					       process_synthesized_event);
+
+	if (flag == 1) {
+		fp = fopen("/proc/sys/kernel/sched_schedstats", "w");
+		if (!fp) {
+			printf("Failed to open /proc/sys/kernel/sched_schedstats");
+			goto out;
+		}
+
+		putc('0', fp);
+		fclose(fp);
+	}
+
+	if (err < 0)
+		goto out;
+
+	err = perf_session__write_header(session, evlist, fd, true);
+
+	if (!err)
+		fprintf(stderr, "[ perf sched schedstat: Wrote samples to %s ]\n", data.path);
+	else
+		fprintf(stderr, "[ perf sched schedstat: Failed !! ]\n");
+
+out:
+	close(fd);
+	perf_session__delete(session);
+
+	return err;
 }
 
 static int perf_sched__schedstat_report(struct perf_sched *sched __maybe_unused)
