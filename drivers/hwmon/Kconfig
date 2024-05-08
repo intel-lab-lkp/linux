@@ -1460,11 +1460,11 @@ config SENSORS_LM78
 	  will be called lm78.
 
 config SENSORS_LM80
-	tristate "National Semiconductor LM80 and LM96080"
+	tristate "National Semiconductor LM80, LM96080 and compatibles"
 	depends on I2C
 	help
 	  If you say yes here you get support for National Semiconductor
-	  LM80 and LM96080 sensor chips.
+	  LM80, LM96080 and Texas Instruments AMC80 sensor chips.
 
 	  This driver can also be built as a module. If so, the module
 	  will be called lm80.
