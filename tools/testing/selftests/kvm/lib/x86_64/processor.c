@@ -1074,7 +1074,9 @@ void kvm_get_cpu_address_width(unsigned int *pa_bits, unsigned int *va_bits)
 		*pa_bits = kvm_cpu_has(X86_FEATURE_PAE) ? 36 : 32;
 		*va_bits = 32;
 	} else {
-		*pa_bits = kvm_cpu_property(X86_PROPERTY_MAX_PHY_ADDR);
+		*pa_bits = kvm_cpu_property(X86_PROPERTY_MAX_GUEST_PHY_ADDR);
+		if (*pa_bits == 0)
+			*pa_bits = kvm_cpu_property(X86_PROPERTY_MAX_PHY_ADDR);
 		*va_bits = kvm_cpu_property(X86_PROPERTY_MAX_VIRT_ADDR);
 	}
 }
