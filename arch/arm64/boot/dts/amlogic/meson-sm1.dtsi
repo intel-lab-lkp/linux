@@ -162,7 +162,9 @@
 				 <&clkc CLKID_HIFI_PLL>,
 				 <&clkc CLKID_FCLK_DIV3>,
 				 <&clkc CLKID_FCLK_DIV4>,
-				 <&clkc CLKID_FCLK_DIV5>;
+				 <&clkc CLKID_FCLK_DIV5>,
+				 <0>, <0>, <0>, <0>, <0>, <0>, <0>, <0>, <0>, <0>,
+				 <0>, <0>, <0>, <0>, <0>, <0>, <0>, <0>, <0>, <0>;
 			clock-names = "pclk",
 				      "mst_in0",
 				      "mst_in1",
@@ -171,7 +173,27 @@
 				      "mst_in4",
 				      "mst_in5",
 				      "mst_in6",
-				      "mst_in7";
+				      "mst_in7",
+				      "slv_sclk0",
+				      "slv_sclk1",
+				      "slv_sclk2",
+				      "slv_sclk3",
+				      "slv_sclk4",
+				      "slv_sclk5",
+				      "slv_sclk6",
+				      "slv_sclk7",
+				      "slv_sclk8",
+				      "slv_sclk9",
+				      "slv_lrclk0",
+				      "slv_lrclk1",
+				      "slv_lrclk2",
+				      "slv_lrclk3",
+				      "slv_lrclk4",
+				      "slv_lrclk5",
+				      "slv_lrclk6",
+				      "slv_lrclk7",
+				      "slv_lrclk8",
+				      "slv_lrclk9";
 
 			resets = <&reset RESET_AUDIO>;
 		};
