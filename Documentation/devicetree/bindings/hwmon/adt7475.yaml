@@ -51,6 +51,30 @@ properties:
       enum: [0, 1]
       default: 1
 
+  adi,pwm-initial-duty-cycle:
+    description: |
+      Configures the initial duty cycle for the PWM outputs. The hardware
+      default is 100% but this may cause unwanted fan noise at startup. Set
+      this to a value from 0 (0% duty cycle) to 255 (100% duty cycle).
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 3
+    maxItems: 3
+    items:
+      minimum: 0
+      maximum: 255
+      default: 255
+
+  adi,pwm-initial-frequency:
+    description: |
+      Configures the initial frequency for the PWM outputs. A value of 0
+      will leave the PWM frequency as-is.
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 3
+    maxItems: 3
+    items:
+      enum: [0, 11, 14, 22, 29, 35, 44, 58, 88, 22500]
+      default: 35
+
 patternProperties:
   "^adi,bypass-attenuator-in[0-4]$":
     description: |
@@ -80,7 +104,6 @@ patternProperties:
       - therm#
       - smbalert#
       - gpio
-
 required:
   - compatible
   - reg
@@ -99,6 +122,8 @@ examples:
         adi,bypass-attenuator-in0 = <1>;
         adi,bypass-attenuator-in1 = <0>;
         adi,pwm-active-state = <1 0 1>;
+        adi,pwm-initial-duty-cycle = <128 0 128>;
+        adi,pwm-initial-frequency = <22500 0 22500>;
         adi,pin10-function = "smbalert#";
         adi,pin14-function = "tach4";
       };
