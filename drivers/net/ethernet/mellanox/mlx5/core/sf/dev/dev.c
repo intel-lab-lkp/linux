@@ -60,11 +60,6 @@ static const struct attribute_group sf_attr_group = {
 	.attrs = sf_device_attrs,
 };
 
-static const struct attribute_group *sf_attr_groups[2] = {
-	&sf_attr_group,
-	NULL
-};
-
 static void mlx5_sf_dev_release(struct device *device)
 {
 	struct auxiliary_device *adev = container_of(device, struct auxiliary_device, dev);
@@ -111,7 +106,6 @@ static void mlx5_sf_dev_add(struct mlx5_core_dev *dev, u16 sf_index, u16 fn_id, 
 	sf_dev->adev.name = MLX5_SF_DEV_ID_NAME;
 	sf_dev->adev.dev.release = mlx5_sf_dev_release;
 	sf_dev->adev.dev.parent = &pdev->dev;
-	sf_dev->adev.dev.groups = sf_attr_groups;
 	sf_dev->sfnum = sfnum;
 	sf_dev->parent_mdev = dev;
 	sf_dev->fn_id = fn_id;
@@ -127,18 +121,22 @@ static void mlx5_sf_dev_add(struct mlx5_core_dev *dev, u16 sf_index, u16 fn_id, 
 		goto add_err;
 	}
 
-	err = auxiliary_device_add(&sf_dev->adev);
+	err = auxiliary_device_add_with_irqs(&sf_dev->adev);
 	if (err) {
 		auxiliary_device_uninit(&sf_dev->adev);
 		goto add_err;
 	}
 
+	err = devm_device_add_group(&sf_dev->adev.dev, &sf_attr_group);
+	if (err)
+		goto add_group_err;
+
 	err = xa_insert(&table->devices, sf_index, sf_dev, GFP_KERNEL);
 	if (err)
-		goto xa_err;
+		goto add_group_err;
 	return;
 
-xa_err:
+add_group_err:
 	mlx5_sf_dev_remove_aux(dev, sf_dev);
 add_err:
 	mlx5_core_err(dev, "SF DEV: fail device add for index=%d sfnum=%d err=%d\n",
