@@ -2196,12 +2196,14 @@ struct ksm_rmap_item *unstable_tree_search_insert(struct ksm_rmap_item *rmap_ite
 {
 	struct rb_node **new;
 	struct rb_root *root;
-	struct rb_node *parent = NULL;
+	struct rb_node *parent;
 	int nid;
 
 	nid = get_kpfn_nid(page_to_pfn(page));
 	root = root_unstable_tree + nid;
+again:
 	new = &root->rb_node;
+	parent = NULL;
 
 	while (*new) {
 		struct ksm_rmap_item *tree_rmap_item;
@@ -2211,8 +2213,10 @@ struct ksm_rmap_item *unstable_tree_search_insert(struct ksm_rmap_item *rmap_ite
 		cond_resched();
 		tree_rmap_item = rb_entry(*new, struct ksm_rmap_item, node);
 		tree_page = get_mergeable_page(tree_rmap_item);
-		if (!tree_page)
-			return NULL;
+		if (!tree_page) {
+			remove_rmap_item_from_tree(tree_rmap_item);
+			goto again;
+		}
 
 		/*
 		 * Don't substitute a ksm page for a forked page.
