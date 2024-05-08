@@ -65,6 +65,7 @@
 #include "intel_crt.h"
 #include "intel_crtc.h"
 #include "intel_crtc_state_dump.h"
+#include "intel_cursor.h"
 #include "intel_ddi.h"
 #include "intel_de.h"
 #include "intel_display_driver.h"
@@ -6923,6 +6924,11 @@ static void intel_commit_modeset_disables(struct intel_atomic_state *state)
 			continue;
 
 		intel_crtc_disable_planes(state, crtc);
+
+		if(drm_vblank_has_pending_work(&crtc->base)) {
+			intel_crtc_wait_for_next_vblank(crtc);
+			drm_vblank_work_flush_all(&crtc->base);
+		}
 	}
 
 	/* Only disable port sync and MST slaves */
