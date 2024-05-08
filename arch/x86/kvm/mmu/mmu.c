@@ -716,11 +716,11 @@ static bool sp_has_gptes(struct kvm_mmu_page *sp);
 
 static gfn_t kvm_mmu_page_get_gfn(struct kvm_mmu_page *sp, int index)
 {
+	if (sp->shadowed_translation)
+		return sp->shadowed_translation[index] >> PAGE_SHIFT;
+
 	if (sp->role.passthrough)
 		return sp->gfn;
-
-	if (!sp->role.direct)
-		return sp->shadowed_translation[index] >> PAGE_SHIFT;
 
 	return sp->gfn + (index << ((sp->role.level - 1) * SPTE_LEVEL_BITS));
 }
@@ -733,7 +733,7 @@ static gfn_t kvm_mmu_page_get_gfn(struct kvm_mmu_page *sp, int index)
  */
 static u32 kvm_mmu_page_get_access(struct kvm_mmu_page *sp, int index)
 {
-	if (sp_has_gptes(sp))
+	if (sp->shadowed_translation)
 		return sp->shadowed_translation[index] & ACC_ALL;
 
 	/*
@@ -754,7 +754,7 @@ static u32 kvm_mmu_page_get_access(struct kvm_mmu_page *sp, int index)
 static void kvm_mmu_page_set_translation(struct kvm_mmu_page *sp, int index,
 					 gfn_t gfn, unsigned int access)
 {
-	if (sp_has_gptes(sp)) {
+	if (sp->shadowed_translation) {
 		sp->shadowed_translation[index] = (gfn << PAGE_SHIFT) | access;
 		return;
 	}
@@ -1688,7 +1688,7 @@ static void kvm_mmu_free_shadow_page(struct kvm_mmu_page *sp)
 	hlist_del(&sp->hash_link);
 	list_del(&sp->link);
 	free_page((unsigned long)sp->spt);
-	if (!sp->role.direct)
+	if (sp->shadowed_translation)
 		free_page((unsigned long)sp->shadowed_translation);
 	kmem_cache_free(mmu_page_header_cache, sp);
 }
@@ -1840,6 +1840,17 @@ static bool kvm_mmu_prepare_zap_page(struct kvm *kvm, struct kvm_mmu_page *sp,
 				     struct list_head *invalid_list);
 static void kvm_mmu_commit_zap_page(struct kvm *kvm,
 				    struct list_head *invalid_list);
+
+static bool sp_might_have_leaf_gptes(struct kvm_mmu_page *sp)
+{
+	if (sp->role.direct)
+		return false;
+
+	if (sp->role.level > KVM_MAX_HUGEPAGE_LEVEL)
+		return false;
+
+	return true;
+}
 
 static bool sp_has_gptes(struct kvm_mmu_page *sp)
 {
@@ -2191,7 +2202,8 @@ static struct kvm_mmu_page *kvm_mmu_alloc_shadow_page(struct kvm *kvm,
 
 	sp = kvm_mmu_memory_cache_alloc(caches->page_header_cache);
 	sp->spt = kvm_mmu_memory_cache_alloc(caches->shadow_page_cache);
-	if (!role.direct)
+	sp->role = role;
+	if (sp_might_have_leaf_gptes(sp))
 		sp->shadowed_translation = kvm_mmu_memory_cache_alloc(caches->shadowed_info_cache);
 
 	set_page_private(virt_to_page(sp->spt), (unsigned long)sp);
@@ -2208,7 +2220,6 @@ static struct kvm_mmu_page *kvm_mmu_alloc_shadow_page(struct kvm *kvm,
 	kvm_account_mmu_page(kvm, sp);
 
 	sp->gfn = gfn;
-	sp->role = role;
 	hlist_add_head(&sp->hash_link, sp_list);
 	if (sp_has_gptes(sp))
 		account_shadowed(kvm, sp);
