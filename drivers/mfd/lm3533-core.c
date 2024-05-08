@@ -21,6 +21,20 @@
 
 #include <linux/mfd/lm3533.h>
 
+struct lm3533_platform_data {
+	int gpio_hwen;
+
+	enum lm3533_boost_ovp boost_ovp;
+	enum lm3533_boost_freq boost_freq;
+
+	struct lm3533_als_platform_data *als;
+
+	struct lm3533_bl_platform_data *backlights;
+	int num_backlights;
+
+	struct lm3533_led_platform_data *leds;
+	int num_leds;
+};
 
 #define LM3533_BOOST_OVP_MASK		0x06
 #define LM3533_BOOST_OVP_SHIFT		1
@@ -473,15 +487,14 @@ static int lm3533_device_setup(struct lm3533 *lm3533,
 
 static int lm3533_device_init(struct lm3533 *lm3533)
 {
-	struct lm3533_platform_data *pdata = dev_get_platdata(lm3533->dev);
+	struct lm3533_platform_data *pdata;
 	int ret;
 
 	dev_dbg(lm3533->dev, "%s\n", __func__);
 
-	if (!pdata) {
-		dev_err(lm3533->dev, "no platform data\n");
-		return -EINVAL;
-	}
+	pdata = devm_kzalloc(lm3533->dev, sizeof(*pdata), GFP_KERNEL);
+	if (!pdata)
+		return -ENOMEM;
 
 	lm3533->gpio_hwen = pdata->gpio_hwen;
 
