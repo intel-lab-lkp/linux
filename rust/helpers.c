@@ -33,6 +33,7 @@
 #include <linux/spinlock.h>
 #include <linux/wait.h>
 #include <linux/workqueue.h>
+#include <linux/pci.h>
 
 __noreturn void rust_helper_BUG(void)
 {
@@ -176,6 +177,23 @@ EXPORT_SYMBOL_GPL(rust_helper_rcu_read_unlock);
 int rust_helper_devm_add_action(struct device *dev, void (*action)(void *), void *data)
 {
 	return devm_add_action(dev, action, data);
+}
+
+void rust_helper_pci_set_drvdata(struct pci_dev *pdev, void *data)
+{
+	pci_set_drvdata(pdev, data);
+}
+EXPORT_SYMBOL_GPL(rust_helper_pci_set_drvdata);
+
+void *rust_helper_pci_get_drvdata(struct pci_dev *pdev)
+{
+	return pci_get_drvdata(pdev);
+}
+EXPORT_SYMBOL_GPL(rust_helper_pci_get_drvdata);
+
+u64 rust_helper_pci_resource_len(struct pci_dev *pdev, int barnr)
+{
+	return pci_resource_len(pdev, barnr);
 }
 
 /*
