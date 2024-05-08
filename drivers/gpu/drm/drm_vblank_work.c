@@ -255,6 +255,30 @@ void drm_vblank_work_flush_all(struct drm_crtc *crtc)
 EXPORT_SYMBOL(drm_vblank_work_flush_all);
 
 /**
+ * drm_vblank_has_pending_work - Check if there are any currently pending vblank work on crtc.
+ * @crtc: crtc for which vblank work to flush
+ *
+ * Check if there are any pending vblank work on crtc, which are yet to be scheduled.
+ *
+ * Returns:
+ * %True if there are pending vblank workers, %false
+ * otherwise.
+ */
+bool drm_vblank_has_pending_work(struct drm_crtc *crtc)
+{
+	struct drm_device *dev = crtc->dev;
+	struct drm_vblank_crtc *vblank = &dev->vblank[drm_crtc_index(crtc)];
+	bool is_pending = false;
+
+	spin_lock_irq(&dev->event_lock);
+	is_pending = !list_empty(&vblank->pending_work);
+	spin_unlock_irq(&dev->event_lock);
+
+	return is_pending;
+}
+EXPORT_SYMBOL(drm_vblank_has_pending_work);
+
+/**
  * drm_vblank_work_init - initialize a vblank work item
  * @work: vblank work item
  * @crtc: CRTC whose vblank will trigger the work execution

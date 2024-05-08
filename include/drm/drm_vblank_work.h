@@ -69,5 +69,6 @@ void drm_vblank_work_init(struct drm_vblank_work *work, struct drm_crtc *crtc,
 bool drm_vblank_work_cancel_sync(struct drm_vblank_work *work);
 void drm_vblank_work_flush(struct drm_vblank_work *work);
 void drm_vblank_work_flush_all(struct drm_crtc *crtc);
+bool drm_vblank_has_pending_work(struct drm_crtc *crtc);
 
 #endif /* !_DRM_VBLANK_WORK_H_ */
