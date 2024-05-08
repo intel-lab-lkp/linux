@@ -35,6 +35,7 @@ static inline u8 *flag_buf_ptr(struct tty_buffer *b, unsigned int ofs)
 struct tty_bufhead {
 	struct tty_buffer *head;	/* Queue head */
 	struct work_struct work;
+	struct mutex	   flush_mtx;	/* For use in tty_buffer_flush() */
 	struct mutex	   lock;
 	atomic_t	   priority;
 	struct tty_buffer sentinel;

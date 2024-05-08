@@ -226,7 +226,7 @@ void tty_buffer_flush(struct tty_struct *tty, struct tty_ldisc *ld)
 
 	atomic_inc(&buf->priority);
 
-	mutex_lock(&buf->lock);
+	mutex_lock(&buf->flush_mtx);
 	/* paired w/ release in __tty_buffer_request_room; ensures there are
 	 * no pending memory accesses to the freed buffer
 	 */
@@ -241,7 +241,7 @@ void tty_buffer_flush(struct tty_struct *tty, struct tty_ldisc *ld)
 		ld->ops->flush_buffer(tty);
 
 	atomic_dec(&buf->priority);
-	mutex_unlock(&buf->lock);
+	mutex_unlock(&buf->flush_mtx);
 }
 
 /**
@@ -577,6 +577,7 @@ void tty_buffer_init(struct tty_port *port)
 {
 	struct tty_bufhead *buf = &port->buf;
 
+	mutex_init(&buf->flush_mtx);
 	mutex_init(&buf->lock);
 	tty_buffer_reset(&buf->sentinel, 0);
 	buf->head = &buf->sentinel;
