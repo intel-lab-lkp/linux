@@ -5,12 +5,17 @@
 //! C header: [`include/linux/pci.h`](../../../../include/linux/pci.h)
 
 use crate::{
-    bindings, container_of, device, driver,
+    alloc::flags::*,
+    bindings, container_of, device,
+    devres::Devres,
+    driver,
     error::{to_result, Result},
+    iomem::IoMem,
     str::CStr,
     types::{ARef, ForeignOwnable},
     ThisModule,
 };
+use core::ops::Deref;
 use kernel::prelude::*; // for pinned_drop
 
 /// An adapter for the registration of PCI drivers.
@@ -287,6 +292,104 @@ pub trait Driver {
 #[derive(Clone)]
 pub struct Device(ARef<device::Device>);
 
+/// A PCI BAR to perform IO-Operations on.
+pub struct Bar {
+    pdev: Device,
+    iomem: IoMem,
+    num: u8,
+}
+
+impl Bar {
+    fn new(pdev: Device, num: u8, name: &CStr) -> Result<Self> {
+        let barnr = num as i32;
+
+        let barlen = pdev.resource_len(num)?;
+        if barlen == 0 {
+            return Err(ENOMEM);
+        }
+
+        // SAFETY:
+        // `pdev` is always valid.
+        // `barnr` is checked for validity at the top of the function.
+        // `name` is always valid.
+        let ret = unsafe { bindings::pci_request_region(pdev.as_raw(), barnr, name.as_char_ptr()) };
+        if ret != 0 {
+            return Err(EBUSY);
+        }
+
+        // SAFETY:
+        // `pdev` is always valid.
+        // `barnr` is checked for validity at the top of the function.
+        // `name` is always valid.
+        let ioptr: usize = unsafe { bindings::pci_iomap(pdev.as_raw(), barnr, 0) } as usize;
+        if ioptr == 0 {
+            // SAFETY:
+            // `pdev` is always valid.
+            // `barnr` is checked for validity at the top of the function.
+            unsafe { bindings::pci_release_region(pdev.as_raw(), barnr) };
+            return Err(ENOMEM);
+        }
+
+        let iomem = match IoMem::new(ioptr, barlen as usize) {
+            Ok(iomem) => iomem,
+            Err(err) => {
+                // SAFETY:
+                // `pdev` is always valid.
+                // `ioptr` was created above, and `num` was checked at the top of the function.
+                unsafe { Self::do_release(&pdev, ioptr, num) };
+                return Err(err);
+            }
+        };
+
+        Ok(Bar { pdev, iomem, num })
+    }
+
+    fn index_is_valid(i: u8) -> bool {
+        // A pci_dev on the C side owns an array of resources with at most
+        // PCI_NUM_RESOURCES entries.
+        if i as i32 >= bindings::PCI_NUM_RESOURCES as i32 {
+            return false;
+        }
+
+        true
+    }
+
+    // SAFETY: The caller should ensure that `ioptr` is valid.
+    unsafe fn do_release(pdev: &Device, ioptr: usize, num: u8) {
+        // SAFETY:
+        // `pdev` is Rust data and guaranteed to be valid.
+        // A valid `ioptr` should be provided by the caller, but an invalid one
+        // does not cause faults on the C side.
+        // `num` is checked for validity above.
+        unsafe {
+            bindings::pci_iounmap(pdev.as_raw(), ioptr as _);
+            bindings::pci_release_region(pdev.as_raw(), num as i32);
+        }
+    }
+
+    fn release(&self) {
+        // SAFETY:
+        // Safe because `self` always contains a refcounted device that belongs
+        // to a pci::Device.
+        // `ioptr` and `num` are always valid because the Bar was created successfully.
+        unsafe { Self::do_release(&self.pdev, self.iomem.ioptr, self.num) };
+    }
+}
+
+impl Drop for Bar {
+    fn drop(&mut self) {
+        self.release();
+    }
+}
+
+impl Deref for Bar {
+    type Target = IoMem;
+
+    fn deref(&self) -> &Self::Target {
+        &self.iomem
+    }
+}
+
 impl Device {
     /// Create a PCI Device instance from an existing `device::Device`.
     ///
@@ -318,6 +421,24 @@ impl Device {
     pub fn set_master(&self) {
         // SAFETY: By the type invariants, we know that `self.ptr` is non-null and valid.
         unsafe { bindings::pci_set_master(self.as_raw()) };
+    }
+
+    /// Returns the size of the given PCI bar resource.
+    pub fn resource_len(&self, bar: u8) -> Result<bindings::resource_size_t> {
+        if !Bar::index_is_valid(bar) {
+            return Err(EINVAL);
+        }
+
+        // SAFETY: Safe as by the type invariant.
+        Ok(unsafe { bindings::pci_resource_len(self.as_raw(), bar.into()) })
+    }
+
+    /// Mapps an entire PCI-BAR after performing a region-request on it.
+    pub fn iomap_region(&mut self, barnr: u8, name: &CStr) -> Result<Devres<Bar>> {
+        let bar = Bar::new(self.clone(), barnr, name)?;
+        let devres = Devres::new(self.0.clone(), bar, GFP_KERNEL)?;
+
+        Ok(devres)
     }
 }
 

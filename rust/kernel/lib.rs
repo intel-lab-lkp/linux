@@ -54,6 +54,7 @@ pub mod workqueue;
 
 #[doc(hidden)]
 pub use bindings;
+mod iomem;
 pub use macros;
 #[cfg(all(CONFIG_PCI, CONFIG_PCI_MSI))]
 pub mod pci;
