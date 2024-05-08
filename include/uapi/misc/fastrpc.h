@@ -62,6 +62,8 @@ enum fastrpc_proc_attr {
 	FASTRPC_MODE_SYSTEM_PROCESS	= (1 << 5),
 	/* Macro for Prvileged Process */
 	FASTRPC_MODE_PRIVILEGED		= (1 << 6),
+	/* Macro for system unsigned PD */
+	FASTRPC_MODE_SYSTEM_UNSIGNED_PD	= (1 << 17),
 };
 
 /* Fastrpc attribute for memory protection of buffers */

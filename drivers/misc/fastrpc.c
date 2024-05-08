@@ -1441,10 +1441,17 @@ static int fastrpc_init_create_process(struct fastrpc_user *fl,
 	if (init.attrs & FASTRPC_MODE_UNSIGNED_MODULE)
 		fl->is_unsigned_pd = true;
 
+	/* Disregard any system unsigned PD attribute from userspace */
+	init.attrs &= (~FASTRPC_MODE_SYSTEM_UNSIGNED_PD);
+
 	if (is_session_rejected(fl, fl->is_unsigned_pd)) {
 		err = -EACCES;
 		goto err;
 	}
+
+	/* Trusted apps will be launched as system unsigned PDs */
+	if (!fl->untrusted_process && fl->is_unsigned_pd)
+		init.attrs |= FASTRPC_MODE_SYSTEM_UNSIGNED_PD;
 
 	if (init.filelen > INIT_FILELEN_MAX) {
 		err = -EINVAL;
