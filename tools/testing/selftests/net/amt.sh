@@ -77,6 +77,7 @@ readonly LISTENER=$(mktemp -u listener-XXXXXXXX)
 readonly GATEWAY=$(mktemp -u gateway-XXXXXXXX)
 readonly RELAY=$(mktemp -u relay-XXXXXXXX)
 readonly SOURCE=$(mktemp -u source-XXXXXXXX)
+readonly RESULT=$(mktemp -p /tmp amt-XXXXXXXX)
 ERR=4
 err=0
 
@@ -85,6 +86,10 @@ exit_cleanup()
 	for ns in "$@"; do
 		ip netns delete "${ns}" 2>/dev/null || true
 	done
+	rm $RESULT
+	smcpid=$(< $SMCROUTEDIR/amt.pid)
+	kill $smcpid
+	rm -rf $SMCROUTEDIR
 
 	exit $ERR
 }
@@ -167,7 +172,9 @@ setup_iptables()
 
 setup_mcast_routing()
 {
-	ip netns exec "${RELAY}" smcrouted
+	SMCROUTEDIR="$(mktemp -d)"
+
+	ip netns exec "${RELAY}" smcrouted -P $SMCROUTEDIR/amt.pid
 	ip netns exec "${RELAY}" smcroutectl a relay_src \
 		172.17.0.2 239.0.0.1 amtr
 	ip netns exec "${RELAY}" smcroutectl a relay_src \
@@ -210,40 +217,52 @@ check_features()
 
 test_ipv4_forward()
 {
-	RESULT4=$(ip netns exec "${LISTENER}" nc -w 1 -l -u 239.0.0.1 4000)
+	echo "" > $RESULT
+	bash -c "$(ip netns exec "${LISTENER}" \
+		timeout 10s nc -w 1 -l -u 239.0.0.1 4000 > $RESULT)"
+	RESULT4=$(< $RESULT)
 	if [ "$RESULT4" == "172.17.0.2" ]; then
 		printf "TEST: %-60s  [ OK ]\n" "IPv4 amt multicast forwarding"
-		exit 0
 	else
 		printf "TEST: %-60s  [FAIL]\n" "IPv4 amt multicast forwarding"
-		exit 1
 	fi
+
 }
 
 test_ipv6_forward()
 {
-	RESULT6=$(ip netns exec "${LISTENER}" nc -w 1 -l -u ff0e::5:6 6000)
+	echo "" > $RESULT
+	bash -c "$(ip netns exec "${LISTENER}" \
+		timeout 10s nc -w 1 -l -u ff0e::5:6 6000 > $RESULT)"
+	RESULT6=$(< $RESULT)
 	if [ "$RESULT6" == "2001:db8:3::2" ]; then
 		printf "TEST: %-60s  [ OK ]\n" "IPv6 amt multicast forwarding"
-		exit 0
 	else
 		printf "TEST: %-60s  [FAIL]\n" "IPv6 amt multicast forwarding"
-		exit 1
 	fi
+
 }
 
 send_mcast4()
 {
 	sleep 2
-	ip netns exec "${SOURCE}" bash -c \
-		'echo 172.17.0.2 | nc -w 1 -u 239.0.0.1 4000' &
+	for n in {0..10}; do
+		ip netns exec "${SOURCE}" bash -c \
+			'echo 172.17.0.2 | nc -w 1 -u 239.0.0.1 4000'
+		sleep 1
+	done
+
 }
 
 send_mcast6()
 {
 	sleep 2
-	ip netns exec "${SOURCE}" bash -c \
-		'echo 2001:db8:3::2 | nc -w 1 -u ff0e::5:6 6000' &
+	for n in {0..10}; do
+		ip netns exec "${SOURCE}" bash -c \
+			'echo 2001:db8:3::2 | nc -w 1 -u ff0e::5:6 6000'
+		sleep 1
+	done
+
 }
 
 check_features
@@ -259,19 +278,17 @@ setup_iptables
 setup_mcast_routing
 test_remote_ip
 test_ipv4_forward &
-pid=$!
-send_mcast4
-wait $pid || err=$?
-if [ $err -eq 1 ]; then
-	ERR=1
-fi
+spid=$!
+send_mcast4 &
+cpid=$!
+wait $spid
+kill $cpid
 test_ipv6_forward &
-pid=$!
-send_mcast6
-wait $pid || err=$?
-if [ $err -eq 1 ]; then
-	ERR=1
-fi
+spid=$!
+send_mcast6 &
+cpid=$!
+wait $spid
+kill $cpid
 send_mcast_torture4
 printf "TEST: %-60s  [ OK ]\n" "IPv4 amt traffic forwarding torture"
 send_mcast_torture6
