@@ -2226,6 +2226,18 @@ again:
 			return NULL;
 		}
 
+		/*
+		 * If tree_page has been migrated to another NUMA node and
+		 * across_nodes disabled, flush it out here and it will be
+		 * put in the right unstable tree next time. So we can retry
+		 * to insert our rmap_item successfully.
+		 */
+		if (!ksm_merge_across_nodes &&
+		    page_to_nid(tree_page) != nid) {
+			remove_rmap_item_from_tree(tree_rmap_item);
+			goto again;
+		}
+
 		ret = memcmp_pages(page, tree_page);
 
 		parent = *new;
@@ -2235,15 +2247,6 @@ again:
 		} else if (ret > 0) {
 			put_page(tree_page);
 			new = &parent->rb_right;
-		} else if (!ksm_merge_across_nodes &&
-			   page_to_nid(tree_page) != nid) {
-			/*
-			 * If tree_page has been migrated to another NUMA node,
-			 * it will be flushed out and put in the right unstable
-			 * tree next time: only merge with it when across_nodes.
-			 */
-			put_page(tree_page);
-			return NULL;
 		} else {
 			*tree_pagep = tree_page;
 			return tree_rmap_item;
