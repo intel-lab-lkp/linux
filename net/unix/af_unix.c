@@ -2224,7 +2224,7 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg,
 			goto out_err;
 	}
 
-	if (sk->sk_shutdown & SEND_SHUTDOWN)
+	if (READ_ONCE(sk->sk_shutdown) & SEND_SHUTDOWN)
 		goto pipe_err;
 
 	while (sent < len) {
@@ -2400,7 +2400,7 @@ int __unix_dgram_recvmsg(struct sock *sk, struct msghdr *msg, size_t size,
 		unix_state_lock(sk);
 		/* Signal EOF on disconnected non-blocking SEQPACKET socket. */
 		if (sk->sk_type == SOCK_SEQPACKET && err == -EAGAIN &&
-		    (sk->sk_shutdown & RCV_SHUTDOWN))
+		    (READ_ONCE(sk->sk_shutdown) & RCV_SHUTDOWN))
 			err = 0;
 		unix_state_unlock(sk);
 		goto out;
@@ -2520,7 +2520,7 @@ static long unix_stream_data_wait(struct sock *sk, long timeo,
 		if (tail != last ||
 		    (tail && tail->len != last_len) ||
 		    sk->sk_err ||
-		    (sk->sk_shutdown & RCV_SHUTDOWN) ||
+		    (READ_ONCE(sk->sk_shutdown) & RCV_SHUTDOWN) ||
 		    signal_pending(current) ||
 		    !timeo)
 			break;
@@ -2718,7 +2718,7 @@ again:
 			err = sock_error(sk);
 			if (err)
 				goto unlock;
-			if (sk->sk_shutdown & RCV_SHUTDOWN)
+			if (READ_ONCE(sk->sk_shutdown) & RCV_SHUTDOWN)
 				goto unlock;
 
 			unix_state_unlock(sk);
