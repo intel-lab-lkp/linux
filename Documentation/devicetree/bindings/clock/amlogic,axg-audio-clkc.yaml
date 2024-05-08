@@ -1,0 +1,115 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/amlogic,axg-audio-clkc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Amlogic AXG Audio Clock Controller
+
+maintainers:
+  - Neil Armstrong <neil.armstrong@linaro.org>
+  - Jerome Brunet <jbrunet@baylibre.com>
+
+description:
+  The Amlogic AXG audio clock controller generates and supplies clock to the
+  other elements of the audio subsystem, such as fifos, i2s, spdif and pdm
+  devices.
+
+properties:
+  compatible:
+    enum:
+      - amlogic,axg-audio-clkc
+      - amlogic,g12a-audio-clkc
+      - amlogic,sm1-audio-clkc
+
+  '#clock-cells':
+    const: 1
+
+  '#reset-cells':
+    const: 1
+
+  reg:
+    maxItems: 1
+
+  clocks:
+    maxItems: 28
+    items:
+      - description: main peripheral bus clock
+    additionalItems:
+      oneOf:
+        - description: mst_in[0-7] - input plls to generate clock signals
+        - description: slv_sclk[0-9] - slave bit clocks provided by external components
+        - description: slv_lrclk[0-9]- slave sample clocks provided by external components
+
+  clock-names:
+    maxItems: 28
+    items:
+      - const: pclk
+    additionalItems:
+      oneOf:
+        - pattern: "^mst_in[0-7]$"
+        - pattern: "^slv_sclk[0-9]$"
+        - pattern: "^slv_lrclk[0-9]$"
+
+  resets:
+    description: internal reset line
+
+required:
+  - compatible
+  - '#clock-cells'
+  - reg
+  - clocks
+  - clock-names
+  - resets
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - amlogic,g12a-audio-clkc
+              - amlogic,sm1-audio-clkc
+    then:
+      required:
+        - '#reset-cells'
+    else:
+      properties:
+        '#reset-cells': false
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/axg-clkc.h>
+    #include <dt-bindings/reset/amlogic,meson-axg-reset.h>
+    apb {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        clkc_audio: clock-controller@0 {
+            compatible = "amlogic,axg-audio-clkc";
+            reg = <0x0 0x0 0x0 0xb4>;
+            #clock-cells = <1>;
+
+            clocks = <&clkc CLKID_AUDIO>,
+                     <&clkc CLKID_MPLL0>,
+                     <&clkc CLKID_MPLL1>,
+                     <&clkc CLKID_MPLL2>,
+                     <&clkc CLKID_MPLL3>,
+                     <&clkc CLKID_HIFI_PLL>,
+                     <&clkc CLKID_FCLK_DIV3>,
+                     <&clkc CLKID_FCLK_DIV4>,
+                     <&clkc CLKID_GP0_PLL>;
+            clock-names = "pclk",
+                          "mst_in0",
+                          "mst_in1",
+                          "mst_in2",
+                          "mst_in3",
+                          "mst_in4",
+                          "mst_in5",
+                          "mst_in6",
+                          "mst_in7";
+            resets = <&reset RESET_AUDIO>;
+        };
+    };
