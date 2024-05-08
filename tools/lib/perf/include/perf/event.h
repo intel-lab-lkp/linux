@@ -452,7 +452,7 @@ struct perf_record_compressed {
 };
 
 struct perf_record_schedstat_cpu_v15 {
-#define CPU_FIELD(type, name)	type name;
+#define CPU_FIELD(type, name, desc, format, is_pct, pct_of)	type name;
 #include "schedstat-cpu-v15.h"
 #undef CPU_FIELD
 };
@@ -468,7 +468,7 @@ struct perf_record_schedstat_cpu {
 };
 
 struct perf_record_schedstat_domain_v15 {
-#define DOMAIN_FIELD(type, name)	type name;
+#define DOMAIN_FIELD(type, name, desc, format, is_jiffies)	type name;
 #include "schedstat-domain-v15.h"
 #undef DOMAIN_FIELD
 };

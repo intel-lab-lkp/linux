@@ -1,40 +1,121 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 
 #ifdef DOMAIN_FIELD
-DOMAIN_FIELD(__u32, idle_lb_count)
-DOMAIN_FIELD(__u32, idle_lb_balanced)
-DOMAIN_FIELD(__u32, idle_lb_failed)
-DOMAIN_FIELD(__u32, idle_lb_imbalance)
-DOMAIN_FIELD(__u32, idle_lb_gained)
-DOMAIN_FIELD(__u32, idle_lb_hot_gained)
-DOMAIN_FIELD(__u32, idle_lb_nobusyq)
-DOMAIN_FIELD(__u32, idle_lb_nobusyg)
-DOMAIN_FIELD(__u32, busy_lb_count)
-DOMAIN_FIELD(__u32, busy_lb_balanced)
-DOMAIN_FIELD(__u32, busy_lb_failed)
-DOMAIN_FIELD(__u32, busy_lb_imbalance)
-DOMAIN_FIELD(__u32, busy_lb_gained)
-DOMAIN_FIELD(__u32, busy_lb_hot_gained)
-DOMAIN_FIELD(__u32, busy_lb_nobusyq)
-DOMAIN_FIELD(__u32, busy_lb_nobusyg)
-DOMAIN_FIELD(__u32, newidle_lb_count)
-DOMAIN_FIELD(__u32, newidle_lb_balanced)
-DOMAIN_FIELD(__u32, newidle_lb_failed)
-DOMAIN_FIELD(__u32, newidle_lb_imbalance)
-DOMAIN_FIELD(__u32, newidle_lb_gained)
-DOMAIN_FIELD(__u32, newidle_lb_hot_gained)
-DOMAIN_FIELD(__u32, newidle_lb_nobusyq)
-DOMAIN_FIELD(__u32, newidle_lb_nobusyg)
-DOMAIN_FIELD(__u32, alb_count)
-DOMAIN_FIELD(__u32, alb_failed)
-DOMAIN_FIELD(__u32, alb_pushed)
-DOMAIN_FIELD(__u32, sbe_count)
-DOMAIN_FIELD(__u32, sbe_balanced)
-DOMAIN_FIELD(__u32, sbe_pushed)
-DOMAIN_FIELD(__u32, sbf_count)
-DOMAIN_FIELD(__u32, sbf_balanced)
-DOMAIN_FIELD(__u32, sbf_pushed)
-DOMAIN_FIELD(__u32, ttwu_wake_remote)
-DOMAIN_FIELD(__u32, ttwu_move_affine)
-DOMAIN_FIELD(__u32, ttwu_move_balance)
+#ifdef DOMAIN_CATEGORY
+DOMAIN_CATEGORY("<Category idle>")
 #endif
+DOMAIN_FIELD(__u32, idle_lb_count,
+	     "load_balance() count on cpu idle", "%11u", true)
+DOMAIN_FIELD(__u32, idle_lb_balanced,
+	     "load_balance() found balanced on cpu idle", "%11u", true)
+DOMAIN_FIELD(__u32, idle_lb_failed,
+	     "load_balance() move task failed on cpu idle", "%11u", true)
+DOMAIN_FIELD(__u32, idle_lb_imbalance,
+	     "imbalance sum on cpu idle", "%11u", false)
+DOMAIN_FIELD(__u32, idle_lb_gained,
+	     "pull_task() count on cpu idle", "%11u", false)
+DOMAIN_FIELD(__u32, idle_lb_hot_gained,
+	     "pull_task() when target task was cache-hot on cpu idle", "%11u", false)
+DOMAIN_FIELD(__u32, idle_lb_nobusyq,
+	     "load_balance() failed to find busier queue on cpu idle", "%11u", true)
+DOMAIN_FIELD(__u32, idle_lb_nobusyg,
+	     "load_balance() failed to find busier group on cpu idle", "%11u", true)
+#ifdef DERIVED_CNT_FIELD
+DERIVED_CNT_FIELD("load_balance() success count on cpu idle", "%11u",
+		  idle_lb_count, idle_lb_balanced, idle_lb_failed)
+#endif
+#ifdef DERIVED_AVG_FIELD
+DERIVED_AVG_FIELD("avg task pulled per successful lb attempt (cpu idle)", "%11.2Lf",
+		  idle_lb_count, idle_lb_balanced, idle_lb_failed, idle_lb_gained)
+#endif
+#ifdef DOMAIN_CATEGORY
+DOMAIN_CATEGORY("<Category busy>")
+#endif
+DOMAIN_FIELD(__u32, busy_lb_count,
+	     "load_balance() count on cpu busy", "%11u", true)
+DOMAIN_FIELD(__u32, busy_lb_balanced,
+	     "load_balance() found balanced on cpu busy", "%11u", true)
+DOMAIN_FIELD(__u32, busy_lb_failed,
+	     "load_balance() move task failed on cpu busy", "%11u", true)
+DOMAIN_FIELD(__u32, busy_lb_imbalance,
+	     "imbalance sum on cpu busy", "%11u", false)
+DOMAIN_FIELD(__u32, busy_lb_gained,
+	     "pull_task() count on cpu busy", "%11u", false)
+DOMAIN_FIELD(__u32, busy_lb_hot_gained,
+	     "pull_task() when target task was cache-hot on cpu busy", "%11u", false)
+DOMAIN_FIELD(__u32, busy_lb_nobusyq,
+	     "load_balance() failed to find busier queue on cpu busy", "%11u", true)
+DOMAIN_FIELD(__u32, busy_lb_nobusyg,
+	     "load_balance() failed to find busier group on cpu busy", "%11u", true)
+#ifdef DERIVED_CNT_FIELD
+DERIVED_CNT_FIELD("load_balance() success count on cpu busy", "%11u",
+		  busy_lb_count, busy_lb_balanced, busy_lb_failed)
+#endif
+#ifdef DERIVED_AVG_FIELD
+DERIVED_AVG_FIELD("avg task pulled per successful lb attempt (cpu busy)", "%11.2Lf",
+		  busy_lb_count, busy_lb_balanced, busy_lb_failed, busy_lb_gained)
+#endif
+#ifdef DOMAIN_CATEGORY
+DOMAIN_CATEGORY("<Category newidle>")
+#endif
+DOMAIN_FIELD(__u32, newidle_lb_count,
+	     "load_balance() count on cpu newly idle", "%11u", true)
+DOMAIN_FIELD(__u32, newidle_lb_balanced,
+	     "load_balance() found balanced on cpu newly idle", "%11u", true)
+DOMAIN_FIELD(__u32, newidle_lb_failed,
+	     "load_balance() move task failed on cpu newly idle", "%11u", true)
+DOMAIN_FIELD(__u32, newidle_lb_imbalance,
+	     "imbalance sum on cpu newly idle", "%11u", false)
+DOMAIN_FIELD(__u32, newidle_lb_gained,
+	     "pull_task() count on cpu newly idle", "%11u", false)
+DOMAIN_FIELD(__u32, newidle_lb_hot_gained,
+	     "pull_task() when target task was cache-hot on cpu newly idle", "%11u", false)
+DOMAIN_FIELD(__u32, newidle_lb_nobusyq,
+	     "load_balance() failed to find busier queue on cpu newly idle", "%11u", true)
+DOMAIN_FIELD(__u32, newidle_lb_nobusyg,
+	     "load_balance() failed to find busier group on cpu newly idle", "%11u", true)
+#ifdef DERIVED_CNT_FIELD
+DERIVED_CNT_FIELD("load_balance() success count on cpu newly idle", "%11u",
+		  newidle_lb_count, newidle_lb_balanced, newidle_lb_failed)
+#endif
+#ifdef DERIVED_AVG_FIELD
+DERIVED_AVG_FIELD("avg task pulled per successful lb attempt (cpu newly idle)", "%11.2Lf",
+		  newidle_lb_count, newidle_lb_balanced, newidle_lb_failed, newidle_lb_gained)
+#endif
+#ifdef DOMAIN_CATEGORY
+DOMAIN_CATEGORY("<Category active_load_balance()>")
+#endif
+DOMAIN_FIELD(__u32, alb_count,
+	     "active_load_balance() count", "%11u", false)
+DOMAIN_FIELD(__u32, alb_failed,
+	     "active_load_balance() move task failed", "%11u", false)
+DOMAIN_FIELD(__u32, alb_pushed,
+	     "active_load_balance() successfully moved a task", "%11u", false)
+#ifdef DOMAIN_CATEGORY
+DOMAIN_CATEGORY("<Category sched_balance_exec()>")
+#endif
+DOMAIN_FIELD(__u32, sbe_count,
+	     "sbe_count is not used", "%11u", false)
+DOMAIN_FIELD(__u32, sbe_balanced,
+	     "sbe_balanced is not used", "%11u", false)
+DOMAIN_FIELD(__u32, sbe_pushed,
+	     "sbe_pushed is not used", "%11u", false)
+#ifdef DOMAIN_CATEGORY
+DOMAIN_CATEGORY("<Category sched_balance_fork()>")
+#endif
+DOMAIN_FIELD(__u32, sbf_count,
+	     "sbf_count is not used", "%11u", false)
+DOMAIN_FIELD(__u32, sbf_balanced,
+	     "sbf_balanced is not used", "%11u", false)
+DOMAIN_FIELD(__u32, sbf_pushed,
+	     "sbf_pushed is not used", "%11u", false)
+#ifdef DOMAIN_CATEGORY
+DOMAIN_CATEGORY("<Wakeup Info>")
+#endif
+DOMAIN_FIELD(__u32, ttwu_wake_remote,
+	     "try_to_wake_up() awoke a task that last ran on a diff cpu", "%11u", false)
+DOMAIN_FIELD(__u32, ttwu_move_affine,
+	     "try_to_wake_up() moved task because cache-cold on own cpu", "%11u", false)
+DOMAIN_FIELD(__u32, ttwu_move_balance,
+	     "try_to_wake_up() started passive balancing", "%11u", false)
+#endif /* DOMAIN_FIELD */

@@ -597,7 +597,7 @@ static size_t __fprintf_schedstat_cpu_v15(union perf_event *event, FILE *fp)
 	size = fprintf(fp, "\ncpu%u ", event->schedstat_cpu.cpu);
 	csv15 = &event->schedstat_cpu.v15;
 
-#define CPU_FIELD(type, name)	\
+#define CPU_FIELD(type, name, desc, format, is_pct, pct_of)	\
 	size += fprintf(fp, "%" PRIu64 " ", (unsigned long)csv15->name);
 
 #include <perf/schedstat-cpu-v15.h>
@@ -623,7 +623,7 @@ static size_t __fprintf_schedstat_domain_v15(union perf_event *event, FILE *fp)
 	size = fprintf(fp, "\ndomain%u ", event->schedstat_domain.domain);
 	dsv15 = &event->schedstat_domain.v15;
 
-#define DOMAIN_FIELD(type, name)	\
+#define DOMAIN_FIELD(type, name, desc, format, is_jiffies)	\
 	size += fprintf(fp, "%" PRIu64 " ", (unsigned long)dsv15->name);
 
 #include <perf/schedstat-domain-v15.h>

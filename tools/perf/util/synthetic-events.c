@@ -2442,7 +2442,7 @@ static bool read_schedstat_cpu_v15(struct io *io,
 	if (io__get_dec(io, (__u64 *) &cs->cpu) != ' ')
 		return false;
 
-#define CPU_FIELD(type, name)						\
+#define CPU_FIELD(type, name, desc, format, is_pct, pct_of)		\
 	do {								\
 		ch = io__get_dec(io, (__u64 *) &cs->v15.name);		\
 		if (ch != ' ' && ch != '\n')				\
@@ -2469,7 +2469,7 @@ static bool read_schedstat_domain_v15(struct io *io,
 
 	while (io__get_char(io) != ' ');
 
-#define DOMAIN_FIELD(type, name)				\
+#define DOMAIN_FIELD(type, name, desc, format, is_jiffies)	\
 	do {							\
 		ch = io__get_dec(io, (__u64 *) &ds->v15.name);	\
 		if (ch != ' ' && ch != '\n')			\
