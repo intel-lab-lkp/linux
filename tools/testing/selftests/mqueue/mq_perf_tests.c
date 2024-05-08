@@ -323,7 +323,8 @@ void *fake_cont_thread(void *arg)
 void *cont_thread(void *arg)
 {
 	char buff[MSG_SIZE];
-	int i, priority;
+	int i;
+	unsigned int priority;
 
 	for (i = 0; i < num_cpus_to_pin; i++)
 		if (cpu_threads[i] == pthread_self())
@@ -373,27 +374,27 @@ void *cont_thread(void *arg)
 
 struct test {
 	char *desc;
-	void (*func)(int *);
+	void (*func)(unsigned int *prio);
 };
 
-void const_prio(int *prio)
+void const_prio(unsigned int *prio)
 {
 	return;
 }
 
-void inc_prio(int *prio)
+void inc_prio(unsigned int *prio)
 {
 	if (++*prio == mq_prio_max)
 		*prio = 0;
 }
 
-void dec_prio(int *prio)
+void dec_prio(unsigned int *prio)
 {
 	if (--*prio < 0)
 		*prio = mq_prio_max - 1;
 }
 
-void random_prio(int *prio)
+void random_prio(unsigned int *prio)
 {
 	*prio = random() % mq_prio_max;
 }
@@ -425,7 +426,7 @@ struct test test2[] = {
 void *perf_test_thread(void *arg)
 {
 	char buff[MSG_SIZE];
-	int prio_out, prio_in;
+	unsigned int prio_out, prio_in;
 	int i;
 	clockid_t clock;
 	pthread_t *t;
