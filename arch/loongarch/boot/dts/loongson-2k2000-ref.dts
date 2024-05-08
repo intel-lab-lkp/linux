@@ -39,6 +39,10 @@
 	};
 };
 
+&clk {
+	status = "okay";
+};
+
 &sata {
 	status = "okay";
 };
