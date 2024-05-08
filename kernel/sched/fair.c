@@ -8864,6 +8864,9 @@ struct lb_env {
 	unsigned int		loop_break;
 	unsigned int		loop_max;
 
+	unsigned int		num_detached;
+	unsigned int		detach_max;
+
 	enum fbq_type		fbq_type;
 	enum migration_type	migration_type;
 	struct list_head	tasks;
@@ -9144,11 +9147,11 @@ static int detach_tasks(struct lb_env *env)
 
 		env->loop++;
 		/*
-		 * We've more or less seen every task there is, call it quits
-		 * unless we haven't found any movable task yet.
+		 * Call it quits if we're going to exceed our search limit;
+		 * we can't search indefinitely even if we've not found a
+		 * migratable task yet.
 		 */
-		if (env->loop > env->loop_max &&
-		    !(env->flags & LBF_ALL_PINNED))
+		if (env->loop > env->loop_max)
 			break;
 
 		/* take a breather every nr_migrate tasks */
@@ -9216,6 +9219,9 @@ static int detach_tasks(struct lb_env *env)
 		list_add(&p->se.group_node, &env->tasks);
 
 		detached++;
+		env->num_detached++;
+		if (env->num_detached >= env->detach_max)
+			break;
 
 #ifdef CONFIG_PREEMPTION
 		/*
@@ -11346,6 +11352,9 @@ redo:
 	env.src_cpu = busiest->cpu;
 	env.src_rq = busiest;
 
+	env.num_detached = 0;
+	env.detach_max = sysctl_sched_nr_migrate;
+
 	ld_moved = 0;
 	/* Clear this flag as soon as we find a pullable task */
 	env.flags |= LBF_ALL_PINNED;
@@ -11356,7 +11365,7 @@ redo:
 		 * still unbalanced. ld_moved simply stays zero, so it is
 		 * correctly treated as an imbalance.
 		 */
-		env.loop_max  = min(sysctl_sched_nr_migrate, busiest->nr_running);
+		env.loop_max  = min(sysctl_sched_migrate_search_depth, busiest->nr_running);
 
 more_balance:
 		rq_lock_irqsave(busiest, &rf);

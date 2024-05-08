@@ -2549,6 +2549,7 @@ extern void wakeup_preempt(struct rq *rq, struct task_struct *p, int flags);
 
 extern const_debug unsigned int sysctl_sched_nr_migrate;
 extern const_debug unsigned int sysctl_sched_migration_cost;
+extern const_debug unsigned int sysctl_sched_migrate_search_depth;
 
 extern unsigned int sysctl_sched_base_slice;
 

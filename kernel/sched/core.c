@@ -145,10 +145,11 @@ __read_mostly int sysctl_resched_latency_warn_once = 1;
 #endif /* CONFIG_SCHED_DEBUG */
 
 /*
- * Number of tasks to iterate in a single balance run.
+ * Max number of tasks we can move/iterate in a single balance run.
  * Limited because this is done with IRQs disabled.
  */
 const_debug unsigned int sysctl_sched_nr_migrate = SCHED_NR_MIGRATE_BREAK;
+const_debug unsigned int sysctl_sched_migrate_search_depth = SCHED_NR_MIGRATE_BREAK;
 
 __read_mostly int scheduler_running;
 
