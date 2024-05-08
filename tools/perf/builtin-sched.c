@@ -3504,29 +3504,30 @@ static int __cmd_record(int argc, const char **argv)
 	return ret;
 }
 
+static const char default_sort_order[] = "avg, max, switch, runtime";
+static struct perf_sched perf_sched = {
+	.tool = {
+		.sample		 = perf_sched__process_tracepoint_sample,
+		.comm		 = perf_sched__process_comm,
+		.namespaces	 = perf_event__process_namespaces,
+		.lost		 = perf_event__process_lost,
+		.fork		 = perf_sched__process_fork_event,
+		.ordered_events = true,
+	},
+	.cmp_pid	      = LIST_HEAD_INIT(perf_sched.cmp_pid),
+	.sort_list	      = LIST_HEAD_INIT(perf_sched.sort_list),
+	.sort_order	      = default_sort_order,
+	.replay_repeat	      = 10,
+	.profile_cpu	      = -1,
+	.next_shortname1      = 'A',
+	.next_shortname2      = '0',
+	.skip_merge           = 0,
+	.show_callchain	      = 1,
+	.max_stack            = 5,
+};
+
 int cmd_sched(int argc, const char **argv)
 {
-	static const char default_sort_order[] = "avg, max, switch, runtime";
-	struct perf_sched sched = {
-		.tool = {
-			.sample		 = perf_sched__process_tracepoint_sample,
-			.comm		 = perf_sched__process_comm,
-			.namespaces	 = perf_event__process_namespaces,
-			.lost		 = perf_event__process_lost,
-			.fork		 = perf_sched__process_fork_event,
-			.ordered_events = true,
-		},
-		.cmp_pid	      = LIST_HEAD_INIT(sched.cmp_pid),
-		.sort_list	      = LIST_HEAD_INIT(sched.sort_list),
-		.sort_order	      = default_sort_order,
-		.replay_repeat	      = 10,
-		.profile_cpu	      = -1,
-		.next_shortname1      = 'A',
-		.next_shortname2      = '0',
-		.skip_merge           = 0,
-		.show_callchain	      = 1,
-		.max_stack            = 5,
-	};
 	const struct option sched_options[] = {
 	OPT_STRING('i', "input", &input_name, "file",
 		    "input file name"),
@@ -3534,31 +3535,31 @@ int cmd_sched(int argc, const char **argv)
 		    "be more verbose (show symbol address, etc)"),
 	OPT_BOOLEAN('D', "dump-raw-trace", &dump_trace,
 		    "dump raw trace in ASCII"),
-	OPT_BOOLEAN('f', "force", &sched.force, "don't complain, do it"),
+	OPT_BOOLEAN('f', "force", &perf_sched.force, "don't complain, do it"),
 	OPT_END()
 	};
 	const struct option latency_options[] = {
-	OPT_STRING('s', "sort", &sched.sort_order, "key[,key2...]",
+	OPT_STRING('s', "sort", &perf_sched.sort_order, "key[,key2...]",
 		   "sort by key(s): runtime, switch, avg, max"),
-	OPT_INTEGER('C', "CPU", &sched.profile_cpu,
+	OPT_INTEGER('C', "CPU", &perf_sched.profile_cpu,
 		    "CPU to profile on"),
-	OPT_BOOLEAN('p', "pids", &sched.skip_merge,
+	OPT_BOOLEAN('p', "pids", &perf_sched.skip_merge,
 		    "latency stats per pid instead of per comm"),
 	OPT_PARENT(sched_options)
 	};
 	const struct option replay_options[] = {
-	OPT_UINTEGER('r', "repeat", &sched.replay_repeat,
+	OPT_UINTEGER('r', "repeat", &perf_sched.replay_repeat,
 		     "repeat the workload replay N times (-1: infinite)"),
 	OPT_PARENT(sched_options)
 	};
 	const struct option map_options[] = {
-	OPT_BOOLEAN(0, "compact", &sched.map.comp,
+	OPT_BOOLEAN(0, "compact", &perf_sched.map.comp,
 		    "map output in compact mode"),
-	OPT_STRING(0, "color-pids", &sched.map.color_pids_str, "pids",
+	OPT_STRING(0, "color-pids", &perf_sched.map.color_pids_str, "pids",
 		   "highlight given pids in map"),
-	OPT_STRING(0, "color-cpus", &sched.map.color_cpus_str, "cpus",
+	OPT_STRING(0, "color-cpus", &perf_sched.map.color_cpus_str, "cpus",
                     "highlight given CPUs in map"),
-	OPT_STRING(0, "cpus", &sched.map.cpus_str, "cpus",
+	OPT_STRING(0, "cpus", &perf_sched.map.cpus_str, "cpus",
                     "display given CPUs in map"),
 	OPT_PARENT(sched_options)
 	};
@@ -3567,24 +3568,24 @@ int cmd_sched(int argc, const char **argv)
 		   "file", "vmlinux pathname"),
 	OPT_STRING(0, "kallsyms", &symbol_conf.kallsyms_name,
 		   "file", "kallsyms pathname"),
-	OPT_BOOLEAN('g', "call-graph", &sched.show_callchain,
+	OPT_BOOLEAN('g', "call-graph", &perf_sched.show_callchain,
 		    "Display call chains if present (default on)"),
-	OPT_UINTEGER(0, "max-stack", &sched.max_stack,
+	OPT_UINTEGER(0, "max-stack", &perf_sched.max_stack,
 		   "Maximum number of functions to display backtrace."),
 	OPT_STRING(0, "symfs", &symbol_conf.symfs, "directory",
 		    "Look for files with symbols relative to this directory"),
-	OPT_BOOLEAN('s', "summary", &sched.summary_only,
+	OPT_BOOLEAN('s', "summary", &perf_sched.summary_only,
 		    "Show only syscall summary with statistics"),
-	OPT_BOOLEAN('S', "with-summary", &sched.summary,
+	OPT_BOOLEAN('S', "with-summary", &perf_sched.summary,
 		    "Show all syscalls and summary with statistics"),
-	OPT_BOOLEAN('w', "wakeups", &sched.show_wakeups, "Show wakeup events"),
-	OPT_BOOLEAN('n', "next", &sched.show_next, "Show next task"),
-	OPT_BOOLEAN('M', "migrations", &sched.show_migrations, "Show migration events"),
-	OPT_BOOLEAN('V', "cpu-visual", &sched.show_cpu_visual, "Add CPU visual"),
-	OPT_BOOLEAN('I', "idle-hist", &sched.idle_hist, "Show idle events only"),
-	OPT_STRING(0, "time", &sched.time_str, "str",
+	OPT_BOOLEAN('w', "wakeups", &perf_sched.show_wakeups, "Show wakeup events"),
+	OPT_BOOLEAN('n', "next", &perf_sched.show_next, "Show next task"),
+	OPT_BOOLEAN('M', "migrations", &perf_sched.show_migrations, "Show migration events"),
+	OPT_BOOLEAN('V', "cpu-visual", &perf_sched.show_cpu_visual, "Add CPU visual"),
+	OPT_BOOLEAN('I', "idle-hist", &perf_sched.idle_hist, "Show idle events only"),
+	OPT_STRING(0, "time", &perf_sched.time_str, "str",
 		   "Time span for analysis (start,stop)"),
-	OPT_BOOLEAN(0, "state", &sched.show_state, "Show task state when sched-out"),
+	OPT_BOOLEAN(0, "state", &perf_sched.show_state, "Show task state when sched-out"),
 	OPT_STRING('p', "pid", &symbol_conf.pid_list_str, "pid[,pid...]",
 		   "analyze events only for given process id(s)"),
 	OPT_STRING('t', "tid", &symbol_conf.tid_list_str, "tid[,tid...]",
@@ -3645,31 +3646,31 @@ int cmd_sched(int argc, const char **argv)
 	} else if (strlen(argv[0]) > 2 && strstarts("record", argv[0])) {
 		return __cmd_record(argc, argv);
 	} else if (strlen(argv[0]) > 2 && strstarts("latency", argv[0])) {
-		sched.tp_handler = &lat_ops;
+		perf_sched.tp_handler = &lat_ops;
 		if (argc > 1) {
 			argc = parse_options(argc, argv, latency_options, latency_usage, 0);
 			if (argc)
 				usage_with_options(latency_usage, latency_options);
 		}
-		setup_sorting(&sched, latency_options, latency_usage);
-		return perf_sched__lat(&sched);
+		setup_sorting(&perf_sched, latency_options, latency_usage);
+		return perf_sched__lat(&perf_sched);
 	} else if (!strcmp(argv[0], "map")) {
 		if (argc) {
 			argc = parse_options(argc, argv, map_options, map_usage, 0);
 			if (argc)
 				usage_with_options(map_usage, map_options);
 		}
-		sched.tp_handler = &map_ops;
-		setup_sorting(&sched, latency_options, latency_usage);
-		return perf_sched__map(&sched);
+		perf_sched.tp_handler = &map_ops;
+		setup_sorting(&perf_sched, latency_options, latency_usage);
+		return perf_sched__map(&perf_sched);
 	} else if (strlen(argv[0]) > 2 && strstarts("replay", argv[0])) {
-		sched.tp_handler = &replay_ops;
+		perf_sched.tp_handler = &replay_ops;
 		if (argc) {
 			argc = parse_options(argc, argv, replay_options, replay_usage, 0);
 			if (argc)
 				usage_with_options(replay_usage, replay_options);
 		}
-		return perf_sched__replay(&sched);
+		return perf_sched__replay(&perf_sched);
 	} else if (!strcmp(argv[0], "timehist")) {
 		if (argc) {
 			argc = parse_options(argc, argv, timehist_options,
@@ -3677,13 +3678,13 @@ int cmd_sched(int argc, const char **argv)
 			if (argc)
 				usage_with_options(timehist_usage, timehist_options);
 		}
-		if ((sched.show_wakeups || sched.show_next) &&
-		    sched.summary_only) {
+		if ((perf_sched.show_wakeups || perf_sched.show_next) &&
+		    perf_sched.summary_only) {
 			pr_err(" Error: -s and -[n|w] are mutually exclusive.\n");
 			parse_options_usage(timehist_usage, timehist_options, "s", true);
-			if (sched.show_wakeups)
+			if (perf_sched.show_wakeups)
 				parse_options_usage(NULL, timehist_options, "w", true);
-			if (sched.show_next)
+			if (perf_sched.show_next)
 				parse_options_usage(NULL, timehist_options, "n", true);
 			return -EINVAL;
 		}
@@ -3691,7 +3692,7 @@ int cmd_sched(int argc, const char **argv)
 		if (ret)
 			return ret;
 
-		return perf_sched__timehist(&sched);
+		return perf_sched__timehist(&perf_sched);
 	} else {
 		usage_with_options(sched_usage, sched_options);
 	}
