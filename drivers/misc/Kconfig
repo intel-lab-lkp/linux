@@ -282,6 +282,7 @@ config QCOM_FASTRPC
 	depends on RPMSG
 	select DMA_SHARED_BUFFER
 	select QCOM_SCM
+	select QCOM_PDR_HELPERS
 	help
 	  Provides a communication mechanism that allows for clients to
 	  make remote method invocations across processor boundary to
