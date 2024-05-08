@@ -25,6 +25,8 @@
 #include <linux/crc16.h>
 #include <linux/dpll.h>
 
+#include "../tty/serial/8250/8250.h"
+
 #define PCI_VENDOR_ID_FACEBOOK			0x1d9b
 #define PCI_DEVICE_ID_FACEBOOK_TIMECARD		0x0400
 
@@ -4330,11 +4332,9 @@ ptp_ocp_symlink(struct ptp_ocp *bp, struct device *child, const char *link)
 }
 
 static void
-ptp_ocp_link_child(struct ptp_ocp *bp, const char *name, const char *link)
+ptp_ocp_link_child(struct ptp_ocp *bp, struct device *dev, const char *name, const char *link)
 {
-	struct device *dev, *child;
-
-	dev = &bp->pdev->dev;
+	struct device *child;
 
 	child = device_find_child_by_name(dev, name);
 	if (!child) {
@@ -4349,27 +4349,39 @@ ptp_ocp_link_child(struct ptp_ocp *bp, const char *name, const char *link)
 static int
 ptp_ocp_complete(struct ptp_ocp *bp)
 {
+	struct device *dev, *port_dev;
+	struct uart_8250_port *port;
 	struct pps_device *pps;
 	char buf[32];
 
+	dev = &bp->pdev->dev;
+
 	if (bp->gnss_port.line != -1) {
+		port = serial8250_get_port(bp->gnss_port.line);
+		port_dev = (struct device *)port->port.port_dev;
 		sprintf(buf, "ttyS%d", bp->gnss_port.line);
-		ptp_ocp_link_child(bp, buf, "ttyGNSS");
+		ptp_ocp_link_child(bp, port_dev, buf, "ttyGNSS");
 	}
 	if (bp->gnss2_port.line != -1) {
+		port = serial8250_get_port(bp->gnss2_port.line);
+		port_dev = (struct device *)port->port.port_dev;
 		sprintf(buf, "ttyS%d", bp->gnss2_port.line);
-		ptp_ocp_link_child(bp, buf, "ttyGNSS2");
+		ptp_ocp_link_child(bp, port_dev, buf, "ttyGNSS2");
 	}
 	if (bp->mac_port.line != -1) {
+		port = serial8250_get_port(bp->mac_port.line);
+		port_dev = (struct device *)port->port.port_dev;
 		sprintf(buf, "ttyS%d", bp->mac_port.line);
-		ptp_ocp_link_child(bp, buf, "ttyMAC");
+		ptp_ocp_link_child(bp, port_dev, buf, "ttyMAC");
 	}
 	if (bp->nmea_port.line != -1) {
+		port = serial8250_get_port(bp->nmea_port.line);
+		port_dev = (struct device *)port->port.port_dev;
 		sprintf(buf, "ttyS%d", bp->nmea_port.line);
-		ptp_ocp_link_child(bp, buf, "ttyNMEA");
+		ptp_ocp_link_child(bp, port_dev, buf, "ttyNMEA");
 	}
 	sprintf(buf, "ptp%d", ptp_clock_index(bp->ptp));
-	ptp_ocp_link_child(bp, buf, "ptp");
+	ptp_ocp_link_child(bp, dev, buf, "ptp");
 
 	pps = pps_lookup_dev(bp->ptp);
 	if (pps)
