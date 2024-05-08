@@ -1662,6 +1662,54 @@ static int adt7475_set_pwm_polarity(struct i2c_client *client)
 	return 0;
 }
 
+static int adt7475_set_pwm_initial_freq(struct i2c_client *client)
+{
+	int ret, out, i;
+	u32 freqs[ADT7475_PWM_COUNT];
+	int data;
+
+	ret = device_property_read_u32_array(&client->dev,
+					     "pwm-initial-frequency", freqs,
+					     ARRAY_SIZE(freqs));
+	if (ret)
+		return ret;
+
+	for (i = 0; i < ADT7475_PWM_COUNT; i++) {
+		out = find_closest(freqs[i], pwmfreq_table, ARRAY_SIZE(pwmfreq_table));
+		data = adt7475_read(TEMP_TRANGE_REG(i));
+		if (data < 0)
+			return data;
+		data &= ~0xf;
+		data |= out;
+
+		ret = i2c_smbus_write_byte_data(client, TEMP_TRANGE_REG(i), data);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+static int adt7475_set_pwm_initial_duty(struct i2c_client *client)
+{
+	int ret, i;
+	u32 dutys[ADT7475_PWM_COUNT];
+
+	ret = device_property_read_u32_array(&client->dev,
+					     "adi,pwm-initial-duty-cycle", dutys,
+					     ARRAY_SIZE(dutys));
+	if (ret)
+		return ret;
+
+	for (i = 0; i < ADT7475_PWM_COUNT; i++) {
+		ret = i2c_smbus_write_byte_data(client, PWM_MAX_REG(i), dutys[i] & 0xff);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
 static int adt7475_probe(struct i2c_client *client)
 {
 	enum chips chip;
@@ -1777,6 +1825,14 @@ static int adt7475_probe(struct i2c_client *client)
 	ret = adt7475_set_pwm_polarity(client);
 	if (ret && ret != -EINVAL)
 		dev_warn(&client->dev, "Error configuring pwm polarity\n");
+
+	ret = adt7475_set_pwm_initial_freq(client);
+	if (ret)
+		return ret;
+
+	ret = adt7475_set_pwm_initial_duty(client);
+	if (ret)
+		return ret;
 
 	/* Start monitoring */
 	switch (chip) {
