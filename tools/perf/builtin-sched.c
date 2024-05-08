@@ -3504,6 +3504,21 @@ static int __cmd_record(int argc, const char **argv)
 	return ret;
 }
 
+/* perf.data or any other output file name used by schedstat subcommand (only). */
+const char *output_name;
+
+static int perf_sched__schedstat_record(struct perf_sched *sched __maybe_unused,
+					int argc __maybe_unused,
+					const char **argv __maybe_unused)
+{
+	return 0;
+}
+
+static int perf_sched__schedstat_report(struct perf_sched *sched __maybe_unused)
+{
+	return 0;
+}
+
 static const char default_sort_order[] = "avg, max, switch, runtime";
 static struct perf_sched perf_sched = {
 	.tool = {
@@ -3593,6 +3608,13 @@ int cmd_sched(int argc, const char **argv)
 	OPT_STRING('C', "cpu", &cpu_list, "cpu", "list of cpus to profile"),
 	OPT_PARENT(sched_options)
 	};
+	const struct option schedstat_options[] = {
+	OPT_STRING('i', "input", &input_name, "file",
+		   "`schedstat report` with input filename"),
+	OPT_STRING('o', "output", &output_name, "file",
+		   "`schedstat record` with output filename"),
+	OPT_END()
+	};
 
 	const char * const latency_usage[] = {
 		"perf sched latency [<options>]",
@@ -3610,9 +3632,13 @@ int cmd_sched(int argc, const char **argv)
 		"perf sched timehist [<options>]",
 		NULL
 	};
+	const char *schedstat_usage[] = {
+		"perf sched schedstat {record|report} [<options>]",
+		NULL
+	};
 	const char *const sched_subcommands[] = { "record", "latency", "map",
 						  "replay", "script",
-						  "timehist", NULL };
+						  "timehist", "schedstat", NULL };
 	const char *sched_usage[] = {
 		NULL,
 		NULL
@@ -3693,6 +3719,26 @@ int cmd_sched(int argc, const char **argv)
 			return ret;
 
 		return perf_sched__timehist(&perf_sched);
+	} else if (!strcmp(argv[0], "schedstat")) {
+		const char *const schedstat_subcommands[] = {"record", "report", NULL};
+
+		argc = parse_options_subcommand(argc, argv, schedstat_options,
+						schedstat_subcommands,
+						schedstat_usage, 0);
+
+		if (argv[0] && !strcmp(argv[0], "record")) {
+			if (argc)
+				argc = parse_options(argc, argv, schedstat_options,
+						     schedstat_usage, 0);
+			ret = perf_sched__schedstat_record(&perf_sched, argc, argv);
+		} else if (argv[0] && !strcmp(argv[0], "report")) {
+			if (argc)
+				argc = parse_options(argc, argv, schedstat_options,
+						     schedstat_usage, 0);
+			ret = perf_sched__schedstat_report(&perf_sched);
+		} else {
+			usage_with_options(schedstat_usage, schedstat_options);
+		}
 	} else {
 		usage_with_options(sched_usage, sched_options);
 	}
