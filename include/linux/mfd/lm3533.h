@@ -16,6 +16,7 @@
 	DEVICE_ATTR(_name, S_IRUGO | S_IWUSR , show_##_name, store_##_name)
 
 struct device;
+struct gpio_desc;
 struct regmap;
 
 struct lm3533 {
@@ -23,7 +24,7 @@ struct lm3533 {
 
 	struct regmap *regmap;
 
-	int gpio_hwen;
+	struct gpio_desc *hwen;
 	int irq;
 
 	unsigned have_als:1;
