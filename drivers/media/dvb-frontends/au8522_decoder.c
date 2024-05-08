@@ -766,7 +766,7 @@ static void au8522_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id au8522_id[] = {
-	{"au8522", 0},
+	{ "au8522" },
 	{}
 };
 
