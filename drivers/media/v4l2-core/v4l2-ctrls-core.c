@@ -2518,11 +2518,7 @@ static void log_ctrl(const struct v4l2_ctrl_handler *hdl,
 
 	pr_info("%s%s%s: ", prefix, colon, ctrl->name);
 
-	if (ctrl->handler != hdl)
-		v4l2_ctrl_lock(ctrl);
 	ctrl->type_ops->log(ctrl);
-	if (ctrl->handler != hdl)
-		v4l2_ctrl_unlock(ctrl);
 
 	if (ctrl->flags & (V4L2_CTRL_FLAG_INACTIVE |
 			   V4L2_CTRL_FLAG_GRABBED |
