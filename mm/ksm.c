@@ -267,6 +267,9 @@ static unsigned long ksm_pages_unshared;
 /* The number of rmap_items in use: to calculate pages_volatile */
 static unsigned long ksm_rmap_items;
 
+/* The number of stable_node */
+static unsigned long ksm_stable_nodes;
+
 /* The number of stable_node chains */
 static unsigned long ksm_stable_node_chains;
 
@@ -584,12 +587,17 @@ static inline void free_rmap_item(struct ksm_rmap_item *rmap_item)
 
 static inline struct ksm_stable_node *alloc_stable_node(void)
 {
+	struct ksm_stable_node *node;
+
 	/*
 	 * The allocation can take too long with GFP_KERNEL when memory is under
 	 * pressure, which may lead to hung task warnings.  Adding __GFP_HIGH
 	 * grants access to memory reserves, helping to avoid this problem.
 	 */
-	return kmem_cache_alloc(stable_node_cache, GFP_KERNEL | __GFP_HIGH);
+	node = kmem_cache_alloc(stable_node_cache, GFP_KERNEL | __GFP_HIGH);
+	if (likely(node))
+		ksm_stable_nodes++;
+	return node;
 }
 
 static inline void free_stable_node(struct ksm_stable_node *stable_node)
@@ -597,6 +605,7 @@ static inline void free_stable_node(struct ksm_stable_node *stable_node)
 	VM_BUG_ON(stable_node->rmap_hlist_len &&
 		  !is_stable_node_chain(stable_node));
 	kmem_cache_free(stable_node_cache, stable_node);
+	ksm_stable_nodes--;
 }
 
 /*
@@ -3671,7 +3680,8 @@ static ssize_t general_profit_show(struct kobject *kobj,
 	long general_profit;
 
 	general_profit = (ksm_pages_sharing + get_ksm_zero_pages()) * PAGE_SIZE -
-				ksm_rmap_items * sizeof(struct ksm_rmap_item);
+				ksm_rmap_items * sizeof(struct ksm_rmap_item) -
+				ksm_stable_nodes * sizeof(struct ksm_stable_node);
 
 	return sysfs_emit(buf, "%ld\n", general_profit);
 }
