@@ -946,30 +946,59 @@ void pci_request_acs(void)
 }
 
 static const char *disable_acs_redir_param;
+static const char *config_acs_param;
 
-/**
- * pci_disable_acs_redir - disable ACS redirect capabilities
- * @dev: the PCI device
- *
- * For only devices specified in the disable_acs_redir parameter.
- */
-static void pci_disable_acs_redir(struct pci_dev *dev)
+static void __pci_config_acs(struct pci_dev *dev, const char *p,
+			     u16 mask, u16 flags)
 {
+	char *delimit;
 	int ret = 0;
-	const char *p;
-	int pos;
-	u16 ctrl;
+	u16 ctrl, pos;
 
-	if (!disable_acs_redir_param)
-		return;
-
-	p = disable_acs_redir_param;
 	while (*p) {
+		if (!mask) {
+			/* Check for ACS flags */
+			delimit = strstr(p, "@");
+			if (delimit) {
+				int end;
+				u32 shift = 0;
+
+				end = delimit - p - 1;
+
+				while (end > -1) {
+					if (*(p + end) == '0') {
+						mask |= 1 << shift;
+						shift++;
+						end--;
+					} else if (*(p + end) == '1') {
+						mask |= 1 << shift;
+						flags |= 1 << shift;
+						shift++;
+						end--;
+					} else if ((*(p + end) == 'x') || (*(p + end) == 'X')) {
+						shift++;
+						end--;
+					} else {
+						pci_err(dev, "Invalid ACS flags... Ignoring\n");
+						return;
+					}
+				}
+				p = delimit + 1;
+			} else {
+				pci_err(dev, "ACS Flags missing\n");
+				return;
+			}
+		}
+
+		if (mask & ~(PCI_ACS_SV | PCI_ACS_TB | PCI_ACS_RR | PCI_ACS_CR |
+			    PCI_ACS_UF | PCI_ACS_EC | PCI_ACS_DT)) {
+			pci_err(dev, "Invalid ACS flags specified\n");
+			return;
+		}
+
 		ret = pci_dev_str_match(dev, p, &p);
 		if (ret < 0) {
-			pr_info_once("PCI: Can't parse disable_acs_redir parameter: %s\n",
-				     disable_acs_redir_param);
-
+			pr_info_once("PCI: Can't parse acs command line parameter\n");
 			break;
 		} else if (ret == 1) {
 			/* Found a match */
@@ -991,18 +1020,60 @@ static void pci_disable_acs_redir(struct pci_dev *dev)
 
 	pos = dev->acs_cap;
 	if (!pos) {
-		pci_warn(dev, "cannot disable ACS redirect for this hardware as it does not have ACS capabilities\n");
+		pci_warn(dev, "cannot configure ACS for this hardware as it does not have ACS capabilities\n");
 		return;
 	}
 
+	pci_dbg(dev, "ACS mask  = 0x%X\n", mask);
+	pci_dbg(dev, "ACS flags = 0x%X\n", flags);
+
 	pci_read_config_word(dev, pos + PCI_ACS_CTRL, &ctrl);
-
-	/* P2P Request & Completion Redirect */
-	ctrl &= ~(PCI_ACS_RR | PCI_ACS_CR | PCI_ACS_EC);
-
+	ctrl &= ~mask;
+	ctrl |= flags;
 	pci_write_config_word(dev, pos + PCI_ACS_CTRL, ctrl);
 
-	pci_info(dev, "disabled ACS redirect\n");
+	pci_info(dev, "Configured ACS\n");
+}
+
+/**
+ * pci_disable_acs_redir - disable ACS redirect capabilities
+ * @dev: the PCI device
+ *
+ * For only devices specified in the disable_acs_redir parameter.
+ */
+static void pci_disable_acs_redir(struct pci_dev *dev)
+{
+	const char *p;
+	u16 mask = 0, flags = 0;
+
+	if (!disable_acs_redir_param)
+		return;
+
+	p = disable_acs_redir_param;
+
+	mask = PCI_ACS_RR | PCI_ACS_CR | PCI_ACS_EC;
+	flags = ~(PCI_ACS_RR | PCI_ACS_CR | PCI_ACS_EC);
+
+	__pci_config_acs(dev, p, mask, flags);
+}
+
+/**
+ * pci_config_acs - configure ACS capabilities
+ * @dev: the PCI device
+ *
+ * For only devices specified in the config_acs parameter.
+ */
+static void pci_config_acs(struct pci_dev *dev)
+{
+	const char *p;
+	u16 mask = 0, flags = 0;
+
+	if (!config_acs_param)
+		return;
+
+	p = config_acs_param;
+
+	__pci_config_acs(dev, p, mask, flags);
 }
 
 /**
@@ -1064,6 +1135,7 @@ disable_acs_redir:
 	 * preferences.
 	 */
 	pci_disable_acs_redir(dev);
+	pci_config_acs(dev);
 }
 
 /**
@@ -6740,6 +6812,8 @@ static int __init pci_setup(char *str)
 				pci_add_flags(PCI_SCAN_ALL_PCIE_DEVS);
 			} else if (!strncmp(str, "disable_acs_redir=", 18)) {
 				disable_acs_redir_param = str + 18;
+			} else if (!strncmp(str, "config_acs=", 11)) {
+				config_acs_param = str + 11;
 			} else {
 				pr_err("PCI: Unknown option `%s'\n", str);
 			}
@@ -6764,6 +6838,7 @@ static int __init pci_realloc_setup_params(void)
 	resource_alignment_param = kstrdup(resource_alignment_param,
 					   GFP_KERNEL);
 	disable_acs_redir_param = kstrdup(disable_acs_redir_param, GFP_KERNEL);
+	config_acs_param = kstrdup(config_acs_param, GFP_KERNEL);
 
 	return 0;
 }
