@@ -1404,6 +1404,16 @@ static int qdisc_change(struct Qdisc *sch, struct nlattr **tca,
 	struct qdisc_size_table *ostab, *stab = NULL;
 	int err = 0;
 
+	if (tca[TCA_STAB]) {
+		stab = qdisc_get_stab(tca[TCA_STAB], extack);
+		if (IS_ERR(stab))
+			return PTR_ERR(stab);
+	}
+
+	ostab = rtnl_dereference(sch->stab);
+	rcu_assign_pointer(sch->stab, stab);
+	qdisc_put_stab(ostab);
+
 	if (tca[TCA_OPTIONS]) {
 		if (!sch->ops->change) {
 			NL_SET_ERR_MSG(extack, "Change operation not supported by specified qdisc");
@@ -1417,16 +1427,6 @@ static int qdisc_change(struct Qdisc *sch, struct nlattr **tca,
 		if (err)
 			return err;
 	}
-
-	if (tca[TCA_STAB]) {
-		stab = qdisc_get_stab(tca[TCA_STAB], extack);
-		if (IS_ERR(stab))
-			return PTR_ERR(stab);
-	}
-
-	ostab = rtnl_dereference(sch->stab);
-	rcu_assign_pointer(sch->stab, stab);
-	qdisc_put_stab(ostab);
 
 	if (tca[TCA_RATE]) {
 		/* NB: ignores errors from replace_estimator
