@@ -488,4 +488,9 @@ void fsl_edma_free_chan_resources(struct dma_chan *chan);
 void fsl_edma_cleanup_vchan(struct dma_device *dmadev);
 void fsl_edma_setup_regs(struct fsl_edma_engine *edma);
 
+int __init fsl_edma_init(void);
+void __exit fsl_edma_exit(void);
+int __init mcf_edma_init(void);
+void __exit mcf_edma_exit(void);
+
 #endif /* _FSL_EDMA_COMMON_H_ */

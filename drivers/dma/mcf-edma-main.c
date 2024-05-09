@@ -284,17 +284,15 @@ bool mcf_edma_filter_fn(struct dma_chan *chan, void *param)
 }
 EXPORT_SYMBOL(mcf_edma_filter_fn);
 
-static int __init mcf_edma_init(void)
+int __init mcf_edma_init(void)
 {
 	return platform_driver_register(&mcf_edma_driver);
 }
-subsys_initcall(mcf_edma_init);
 
-static void __exit mcf_edma_exit(void)
+void __exit mcf_edma_exit(void)
 {
 	platform_driver_unregister(&mcf_edma_driver);
 }
-module_exit(mcf_edma_exit);
 
 MODULE_ALIAS("platform:mcf-edma");
 MODULE_DESCRIPTION("Freescale eDMA engine driver, ColdFire family");

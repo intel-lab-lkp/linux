@@ -888,4 +888,32 @@ void fsl_edma_setup_regs(struct fsl_edma_engine *edma)
 	}
 }
 
+static int __init fsl_edma_common_init(void)
+{
+	int ret;
+
+	ret = fsl_edma_init();
+	if (ret)
+		return ret;
+
+#ifdef CONFIG_MCF_EDMA
+	ret = mcf_edma_init();
+	if (ret)
+		return ret;
+#endif
+	return 0;
+}
+
+subsys_initcall(fsl_edma_common_init);
+
+static void __exit fsl_edma_common_exit(void)
+{
+	fsl_edma_exit();
+
+#ifdef CONFIG_MCF_EDMA
+	mcf_edma_exit();
+#endif
+}
+module_exit(fsl_edma_common_exit);
+
 MODULE_LICENSE("GPL v2");
