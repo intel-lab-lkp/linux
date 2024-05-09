@@ -939,7 +939,7 @@ static bool acpi_can_fallback_to_crs(struct acpi_device *adev,
 				     const char *con_id)
 {
 	/* Never allow fallback if the device has properties */
-	if (acpi_dev_has_props(adev) || adev->driver_gpios)
+	if (!adev || acpi_dev_has_props(adev) || adev->driver_gpios)
 		return false;
 
 	return con_id == NULL;
