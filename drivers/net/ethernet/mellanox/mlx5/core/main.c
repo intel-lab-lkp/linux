@@ -1690,7 +1690,7 @@ int mlx5_init_one_light(struct mlx5_core_dev *dev)
 	err = mlx5_query_hca_caps_light(dev);
 	if (err) {
 		mlx5_core_warn(dev, "mlx5_query_hca_caps_light err=%d\n", err);
-		goto query_hca_caps_err;
+		goto err_function_disable;
 	}
 
 	devl_lock(devlink);
@@ -1699,18 +1699,16 @@ int mlx5_init_one_light(struct mlx5_core_dev *dev)
 	err = mlx5_devlink_params_register(priv_to_devlink(dev));
 	if (err) {
 		mlx5_core_warn(dev, "mlx5_devlink_param_reg err = %d\n", err);
-		goto params_reg_err;
+		goto err_unregister;
 	}
 
 	devl_unlock(devlink);
 	return 0;
 
-params_reg_err:
+err_unregister:
 	devl_unregister(devlink);
 	devl_unlock(devlink);
-query_hca_caps_err:
-	devl_unregister(devlink);
-	devl_unlock(devlink);
+err_function_disable:
 	mlx5_function_disable(dev, true);
 out:
 	dev->state = MLX5_DEVICE_STATE_INTERNAL_ERROR;
