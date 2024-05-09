@@ -318,6 +318,14 @@ enum bch_bkey_fields {
 #define bkey_format_field(name, field)					\
 	[BKEY_FIELD_##name] = (sizeof(((struct bkey *) NULL)->field) * 8)
 
+#define BCH_BKEY_FIELDS()						\
+	x(INODE,        p.inode)					\
+	x(OFFSET,       p.offset)					\
+	x(SNAPSHOT,     p.snapshot)					\
+	x(SIZE,         size)						\
+	x(VERSION_HI,   version.hi)					\
+	x(VERSION_LO,   version.lo)	
+
 #define BKEY_FORMAT_CURRENT						\
 ((struct bkey_format) {							\
 	.key_u64s	= BKEY_U64s,					\
