@@ -1405,6 +1405,9 @@ struct intel_crtc_state {
 
 	/* for loading single buffered registers during vblank */
 	struct drm_vblank_work vblank_work;
+
+	/* LOBF flag */
+	bool has_lobf;
 };
 
 enum intel_pipe_crc_source {
@@ -1715,6 +1718,13 @@ struct intel_psr {
 	u8 entry_setup_frames;
 };
 
+enum alpm_mode {
+	ALPM_INVALID,
+	ALPM_AUX_WAKE,
+	ALPM_AUX_LESS,
+	ALPM_NOT_SUPPORTED
+};
+
 struct intel_dp {
 	i915_reg_t output_reg;
 	u32 DP;
@@ -1835,6 +1845,7 @@ struct intel_dp {
 		u8 fast_wake_lines;
 
 		/* LNL and beyond */
+		enum alpm_mode mode;
 		u8 check_entry_lines;
 		u8 silence_period_sym_clocks;
 		u8 lfps_half_cycle_num_of_syms;
