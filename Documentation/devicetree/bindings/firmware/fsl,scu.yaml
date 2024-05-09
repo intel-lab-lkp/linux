@@ -129,6 +129,11 @@ properties:
       RTC controller provided by the SCU
     $ref: /schemas/rtc/fsl,scu-rtc.yaml
 
+  secvio:
+    description:
+      Receive security violation from the SNVS via the SCU firmware
+    $ref: /schemas/arm/freescale/fsl,scu-secvio.yaml
+
   thermal-sensor:
     description:
       Thermal sensor provided by the SCU
@@ -195,6 +200,11 @@ examples:
 
             rtc {
                 compatible = "fsl,imx8qxp-sc-rtc";
+            };
+
+            secvio {
+                compatible = "fsl,imx-sc-secvio";
+                nvmem = <&ocotp>;
             };
 
             keys {
