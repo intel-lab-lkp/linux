@@ -176,6 +176,19 @@ unsigned int kvm_check_cap(long cap)
 	return (unsigned int)ret;
 }
 
+int kvm_get_api_version(void)
+{
+	int ret;
+	int kvm_fd;
+
+	kvm_fd = open_kvm_dev_path_or_exit();
+	ret = __kvm_ioctl(kvm_fd, KVM_GET_API_VERSION, NULL);
+
+	close(kvm_fd);
+
+	return ret;
+}
+
 void vm_enable_dirty_ring(struct kvm_vm *vm, uint32_t ring_size)
 {
 	if (vm_check_cap(vm, KVM_CAP_DIRTY_LOG_RING_ACQ_REL))
@@ -190,6 +203,7 @@ static void vm_open(struct kvm_vm *vm)
 	vm->kvm_fd = _open_kvm_dev_path_or_exit(O_RDWR);
 
 	TEST_REQUIRE(kvm_has_cap(KVM_CAP_IMMEDIATE_EXIT));
+	TEST_REQUIRE(kvm_get_api_version() == KVM_DEFAULT_API_VERSION);
 
 	vm->fd = __kvm_ioctl(vm->kvm_fd, KVM_CREATE_VM, (void *)vm->type);
 	TEST_ASSERT(vm->fd >= 0, KVM_IOCTL_ERROR(KVM_CREATE_VM, vm->fd));

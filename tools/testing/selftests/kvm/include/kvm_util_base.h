@@ -38,6 +38,7 @@
 #define kvm_static_assert(expr, ...) __kvm_static_assert(expr, ##__VA_ARGS__, #expr)
 
 #define KVM_DEV_PATH "/dev/kvm"
+#define KVM_DEFAULT_API_VERSION 12
 #define KVM_MAX_VCPUS 512
 
 #define NSEC_PER_SEC 1000000000L
@@ -274,6 +275,7 @@ int get_kvm_intel_param_integer(const char *param);
 int get_kvm_amd_param_integer(const char *param);
 
 unsigned int kvm_check_cap(long cap);
+int kvm_get_api_version(void);
 
 static inline bool kvm_has_cap(long cap)
 {
