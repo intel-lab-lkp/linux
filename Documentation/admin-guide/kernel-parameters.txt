@@ -4590,6 +4590,7 @@
 		norid		[S390] ignore the RID field and force use of
 				one PCI domain per PCI function
 		notph		[PCIE] Do not use PCIe TPH
+		nostmode	[PCIE] Force TPH to use No ST Mode
 
 	pcie_aspm=	[PCIE] Forcibly enable or ignore PCIe Active State Power
 			Management.

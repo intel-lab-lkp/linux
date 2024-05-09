@@ -160,6 +160,9 @@ static bool pcie_ats_disabled;
 /* If set, the PCIe TPH capability will not be used. */
 static bool pcie_tph_disabled;
 
+/* If TPH is enabled, "No ST Mode" will be enforced. */
+static bool pcie_tph_nostmode;
+
 /* If set, the PCI config space of each device is printed during boot. */
 bool pci_early_dump;
 
@@ -174,6 +177,12 @@ bool pci_tph_disabled(void)
 	return pcie_tph_disabled;
 }
 EXPORT_SYMBOL_GPL(pci_tph_disabled);
+
+bool pci_tph_nostmode(void)
+{
+	return pcie_tph_nostmode;
+}
+EXPORT_SYMBOL_GPL(pci_tph_nostmode);
 
 /* Disable bridge_d3 for all PCIe ports */
 static bool pci_bridge_d3_disable;
@@ -6719,6 +6728,9 @@ static int __init pci_setup(char *str)
 			} else if (!strcmp(str, "notph")) {
 				pr_info("PCIe: TPH is disabled\n");
 				pcie_tph_disabled = true;
+			} else if (!strcmp(str, "nostmode")) {
+				pr_info("PCIe: TPH No ST Mode is enabled\n");
+				pcie_tph_nostmode = true;
 			} else if (!strncmp(str, "cbiosize=", 9)) {
 				pci_cardbus_io_size = memparse(str + 9, &str);
 			} else if (!strncmp(str, "cbmemsize=", 10)) {

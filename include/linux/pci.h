@@ -1867,6 +1867,7 @@ static inline bool pci_aer_available(void) { return false; }
 
 bool pci_ats_disabled(void);
 bool pci_tph_disabled(void);
+bool pci_tph_nostmode(void);
 
 #ifdef CONFIG_PCIE_PTM
 int pci_enable_ptm(struct pci_dev *dev, u8 *granularity);
