@@ -88,7 +88,7 @@ generic_file_llseek_size(struct file *file, loff_t offset, int whence,
 {
 	switch (whence) {
 	case SEEK_END:
-		offset += eof;
+		offset = min_t(loff_t, offset, maxsize - eof) + eof;
 		break;
 	case SEEK_CUR:
 		/*
