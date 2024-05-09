@@ -49,6 +49,7 @@ int arena_list_add(void *ctx)
 
 	list_head = &global_head;
 
+	__compat_break
 	for (i = zero; i < cnt; cond_break, i++) {
 		struct elem __arena *n = bpf_alloc(sizeof(*n));
 

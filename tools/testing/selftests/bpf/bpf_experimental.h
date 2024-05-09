@@ -326,6 +326,17 @@ l_true:												\
        })
 #endif
 
+/* A `break' executed in the head of a `for' loop statement is bound
+   to the current loop in clang, but it is bound to the enclosing loop
+   in GCC.  Note both compilers optimize the outer loop out with -O1
+   and higher.  This macro shall be used to annotate any loop that
+   uses cond_break within its header.  */
+#ifdef __clang__
+#define __compat_break
+#else
+#define __compat_break for (int __control = 1; __control; --__control)
+#endif
+
 #ifdef __BPF_FEATURE_MAY_GOTO
 #define cond_break					\
 	({ __label__ l_break, l_continue;		\

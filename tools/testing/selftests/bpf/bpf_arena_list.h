@@ -29,10 +29,12 @@ static inline void *bpf_iter_num_new(struct bpf_iter_num *it, int i, int j) { re
 static inline void bpf_iter_num_destroy(struct bpf_iter_num *it) {}
 static inline bool bpf_iter_num_next(struct bpf_iter_num *it) { return true; }
 #define cond_break ({})
+#define __compat_break
 #endif
 
 /* Safely walk link list elements. Deletion of elements is allowed. */
 #define list_for_each_entry(pos, head, member)					\
+	__compat_break								\
 	for (void * ___tmp = (pos = list_entry_safe((head)->first,		\
 						    typeof(*(pos)), member),	\
 			      (void *)0);					\

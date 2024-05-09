@@ -318,6 +318,7 @@ int cond_break1(const void *ctx)
 	unsigned long i;
 	unsigned int sum = 0;
 
+	__compat_break
 	for (i = zero; i < ARR_SZ; cond_break, i++)
 		sum += i;
 	for (i = zero; i < ARR_SZ; i++) {
@@ -336,6 +337,7 @@ int cond_break2(const void *ctx)
 	int i, j;
 	int sum = 0;
 
+	__compat_break
 	for (i = zero; i < 1000; cond_break, i++)
 		for (j = zero; j < 1000; j++) {
 			sum += i + j;
@@ -349,6 +351,7 @@ static __noinline int loop(void)
 {
 	int i, sum = 0;
 
+	__compat_break
 	for (i = zero; i <= 1000000; i++, cond_break)
 		sum += i;
 
