@@ -1029,7 +1029,7 @@ static int null_flush_cache_page(struct nullb *nullb, struct nullb_page *c_page)
 	return 0;
 }
 
-static int null_make_cache_space(struct nullb *nullb, unsigned long n)
+static int null_make_cache_space(struct nullb *nullb, unsigned long n) __must_hold(&nullb->lock)
 {
 	int i, err, nr_pages;
 	struct nullb_page *c_pages[FREE_BATCH];
