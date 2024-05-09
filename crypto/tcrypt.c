@@ -68,6 +68,7 @@ static int mode;
 static u32 num_mb = 8;
 static unsigned int klen;
 static char *tvmem[TVMEMSIZE];
+static char speed_template[2];
 
 static const int block_sizes[] = { 16, 64, 128, 256, 1024, 1420, 4096, 0 };
 static const int aead_sizes[] = { 16, 64, 256, 512, 1024, 1420, 4096, 8192, 0 };
@@ -2807,6 +2808,18 @@ static int do_test(const char *alg, u32 type, u32 mask, int m, u32 num_mb)
 				       speed_template_16_32, num_mb);
 		break;
 
+	case 611:
+		speed_template[0] = klen;
+		if (alg)
+			test_mb_skcipher_speed(alg, ENCRYPT, sec, NULL, 0,
+					       speed_template, num_mb);
+		break;
+	case 612:
+		speed_template[0] = klen;
+		if (alg)
+			test_mb_skcipher_speed(alg, DECRYPT, sec, NULL, 0,
+					       speed_template, num_mb);
+		break;
 	}
 
 	return ret;
