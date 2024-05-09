@@ -195,8 +195,8 @@ static struct debug_obj *lookup_object(void *addr, struct debug_bucket *b)
 		if (obj->object == addr)
 			return obj;
 	}
-	if (cnt > debug_objects_maxchain)
-		debug_objects_maxchain = cnt;
+	if (cnt > READ_ONCE(debug_objects_maxchain))
+		WRITE_ONCE(debug_objects_maxchain, cnt);
 
 	return NULL;
 }
@@ -997,8 +997,8 @@ repeat:
 		}
 		raw_spin_unlock_irqrestore(&db->lock, flags);
 
-		if (cnt > debug_objects_maxchain)
-			debug_objects_maxchain = cnt;
+		if (cnt > READ_ONCE(debug_objects_maxchain))
+			WRITE_ONCE(debug_objects_maxchain, cnt);
 
 		objs_checked += cnt;
 	}
