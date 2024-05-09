@@ -1231,4 +1231,15 @@ static inline bool blk_req_can_dispatch_to_zone(struct request *rq)
 }
 #endif /* CONFIG_BLK_DEV_ZONED */
 
+#ifdef CONFIG_BLK_NODE_LATENCY
+int blk_nlat_enable(struct gendisk *disk);
+void blk_nlat_disable(struct gendisk *disk);
+u64 blk_nlat_latency(struct gendisk *disk, int node);
+int blk_nlat_init(struct gendisk *disk);
+#else
+static inline int blk_nlat_enable(struct gendisk *disk) { return 0; }
+static inline void blk_nlat_disable(struct gendisk *disk) {}
+static inline u64 blk_nlat_latency(struct gendisk *disk, int node) { return 0; }
+static inline int blk_nlat_init(struct gendisk *disk) { return -EOPNOTSUPP; }
+#endif
 #endif /* BLK_MQ_H */
