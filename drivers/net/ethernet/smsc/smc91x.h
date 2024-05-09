@@ -156,6 +156,11 @@ static inline void mcf_outsw(void *a, unsigned char *p, int l)
 		writew(*wp++, a);
 }
 
+static inline unsigned short _swapw(volatile unsigned short v)
+{
+	return ((v << 8) | (v >> 8));
+}
+
 #define SMC_inw(a, r)		_swapw(readw((a) + (r)))
 #define SMC_outw(lp, v, a, r)	writew(_swapw(v), (a) + (r))
 #define SMC_insw(a, r, p, l)	mcf_insw(a + r, p, l)
