@@ -2185,7 +2185,7 @@ static void get_tcp6_sock(struct seq_file *seq, struct sock *sp, int i)
 	const struct tcp_sock *tp = tcp_sk(sp);
 	const struct inet_connection_sock *icsk = inet_csk(sp);
 	const struct fastopen_queue *fastopenq = &icsk->icsk_accept_queue.fastopenq;
-	int rx_queue;
+	int rx_queue, tx_queue;
 	int state;
 
 	dest  = &sp->sk_v6_daddr;
@@ -2210,14 +2210,17 @@ static void get_tcp6_sock(struct seq_file *seq, struct sock *sp, int i)
 	}
 
 	state = inet_sk_state_load(sp);
-	if (state == TCP_LISTEN)
+	if (state == TCP_LISTEN) {
 		rx_queue = READ_ONCE(sp->sk_ack_backlog);
-	else
+		tx_queue = READ_ONCE(sp->sk_max_ack_backlog);
+	} else {
 		/* Because we don't lock the socket,
 		 * we might find a transient negative value.
 		 */
 		rx_queue = max_t(int, READ_ONCE(tp->rcv_nxt) -
 				      READ_ONCE(tp->copied_seq), 0);
+		tx_queue = READ_ONCE(tp->write_seq) - tp->snd_una;
+	}
 
 	seq_printf(seq,
 		   "%4d: %08X%08X%08X%08X:%04X %08X%08X%08X%08X:%04X "
@@ -2228,7 +2231,7 @@ static void get_tcp6_sock(struct seq_file *seq, struct sock *sp, int i)
 		   dest->s6_addr32[0], dest->s6_addr32[1],
 		   dest->s6_addr32[2], dest->s6_addr32[3], destp,
 		   state,
-		   READ_ONCE(tp->write_seq) - tp->snd_una,
+		   tx_queue,
 		   rx_queue,
 		   timer_active,
 		   jiffies_delta_to_clock_t(timer_expires - jiffies),
