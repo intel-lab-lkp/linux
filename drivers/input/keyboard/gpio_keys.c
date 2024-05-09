@@ -198,7 +198,8 @@ static void gpio_keys_enable_button(struct gpio_button_data *bdata)
  */
 static ssize_t gpio_keys_attr_show_helper(struct gpio_keys_drvdata *ddata,
 					  char *buf, unsigned int type,
-					  bool only_disabled)
+					  bool only_disabled,
+					  bool only_wakeup)
 {
 	int n_events = get_n_events_by_type(type);
 	unsigned long *bits;
@@ -216,6 +217,9 @@ static ssize_t gpio_keys_attr_show_helper(struct gpio_keys_drvdata *ddata,
 			continue;
 
 		if (only_disabled && !bdata->disabled)
+			continue;
+
+		if (only_wakeup && !bdata->button->wakeup)
 			continue;
 
 		__set_bit(*bdata->code, bits);
@@ -297,7 +301,7 @@ out:
 	return error;
 }
 
-#define ATTR_SHOW_FN(name, type, only_disabled)				\
+#define ATTR_SHOW_FN(name, type, only_disabled, only_wakeup)		\
 static ssize_t gpio_keys_show_##name(struct device *dev,		\
 				     struct device_attribute *attr,	\
 				     char *buf)				\
@@ -306,22 +310,26 @@ static ssize_t gpio_keys_show_##name(struct device *dev,		\
 	struct gpio_keys_drvdata *ddata = platform_get_drvdata(pdev);	\
 									\
 	return gpio_keys_attr_show_helper(ddata, buf,			\
-					  type, only_disabled);		\
+					  type, only_disabled,		\
+					  only_wakeup);			\
 }
 
-ATTR_SHOW_FN(keys, EV_KEY, false);
-ATTR_SHOW_FN(switches, EV_SW, false);
-ATTR_SHOW_FN(disabled_keys, EV_KEY, true);
-ATTR_SHOW_FN(disabled_switches, EV_SW, true);
+ATTR_SHOW_FN(keys, EV_KEY, false, false);
+ATTR_SHOW_FN(switches, EV_SW, false, false);
+ATTR_SHOW_FN(disabled_keys, EV_KEY, true, false);
+ATTR_SHOW_FN(disabled_switches, EV_SW, true, false);
+ATTR_SHOW_FN(wakeup_keys, EV_KEY, false, true);
 
 /*
  * ATTRIBUTES:
  *
  * /sys/devices/platform/gpio-keys/keys [ro]
  * /sys/devices/platform/gpio-keys/switches [ro]
+ * /sys/devices/platform/gpio-keys/wakeup_keys [ro]
  */
 static DEVICE_ATTR(keys, S_IRUGO, gpio_keys_show_keys, NULL);
 static DEVICE_ATTR(switches, S_IRUGO, gpio_keys_show_switches, NULL);
+static DEVICE_ATTR(wakeup_keys, S_IRUGO, gpio_keys_show_wakeup_keys, NULL);
 
 #define ATTR_STORE_FN(name, type)					\
 static ssize_t gpio_keys_store_##name(struct device *dev,		\
@@ -361,6 +369,7 @@ static struct attribute *gpio_keys_attrs[] = {
 	&dev_attr_switches.attr,
 	&dev_attr_disabled_keys.attr,
 	&dev_attr_disabled_switches.attr,
+	&dev_attr_wakeup_keys.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(gpio_keys);
