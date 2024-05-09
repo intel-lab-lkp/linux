@@ -17,22 +17,43 @@ description: |
 
 allOf:
   - $ref: spi-controller.yaml#
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: marvell,cn10-xspi-nor
+    then:
+      properties:
+        reg-names:
+          items:
+            - const: io
+            - const: sdma
+            - const: aux
+            - const: xferbase
+        reg:
+          items:
+            - description: address and length of the controller register set
+            - description: address and length of the Slave DMA data port
+            - description: address and length of the auxiliary registers
+            - description: address and length of the xfer registers
+    else:
+      properties:
+        reg-names:
+          items:
+            - const: io
+            - const: sdma
+            - const: aux
+        reg:
+          items:
+            - description: address and length of the controller register set
+            - description: address and length of the Slave DMA data port
+            - description: address and length of the auxiliary registers
 
 properties:
   compatible:
-    const: cdns,xspi-nor
-
-  reg:
-    items:
-      - description: address and length of the controller register set
-      - description: address and length of the Slave DMA data port
-      - description: address and length of the auxiliary registers
-
-  reg-names:
-    items:
-      - const: io
-      - const: sdma
-      - const: aux
+    enum:
+      - cdns,xspi-nor
+      - marvell,cn10-xspi-nor
 
   interrupts:
     maxItems: 1
@@ -59,6 +80,37 @@ examples:
                   <0x0 0xb0000000 0x0 0x1000>,
                   <0x0 0xa0020000 0x0 0x100>;
             reg-names = "io", "sdma", "aux";
+            interrupts = <0 90 IRQ_TYPE_LEVEL_HIGH>;
+            interrupt-parent = <&gic>;
+
+            flash@0 {
+                compatible = "jedec,spi-nor";
+                spi-max-frequency = <75000000>;
+                reg = <0>;
+            };
+
+            flash@1 {
+                compatible = "jedec,spi-nor";
+                spi-max-frequency = <75000000>;
+                reg = <1>;
+            };
+        };
+    };
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    bus {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        spi@d0010000 {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            compatible = "marvell,cn10-xspi-nor";
+            reg = <0x0 0xa0010000 0x0 0x1040>,
+                  <0x0 0xb0000000 0x0 0x1000>,
+                  <0x0 0xa0020000 0x0 0x100>,
+                  <0x0 0xa0090000 0x0 0x100>;
+            reg-names = "io", "sdma", "aux", "xferbase";
             interrupts = <0 90 IRQ_TYPE_LEVEL_HIGH>;
             interrupt-parent = <&gic>;
 
