@@ -158,6 +158,98 @@ static int tph_get_table_location(struct pci_dev *dev, u8 *loc_out)
 	return 0;
 }
 
+static u16 tph_extract_tag(enum tph_mem_type mem_type, u8 req_type,
+			   union st_info *st_tag)
+{
+	switch (req_type) {
+	case PCI_TPH_REQ_TPH_ONLY: /* 8 bit tags */
+		switch (mem_type) {
+		case TPH_MEM_TYPE_VM:
+			if (st_tag->vm_st_valid)
+				return st_tag->vm_st;
+			break;
+		case TPH_MEM_TYPE_PM:
+			if (st_tag->pm_st_valid)
+				return st_tag->pm_st;
+			break;
+		}
+		break;
+	case PCI_TPH_REQ_EXT_TPH: /* 16 bit tags */
+		switch (mem_type) {
+		case TPH_MEM_TYPE_VM:
+			if (st_tag->vm_xst_valid)
+				return st_tag->vm_xst;
+			break;
+		case TPH_MEM_TYPE_PM:
+			if (st_tag->pm_xst_valid)
+				return st_tag->pm_xst;
+			break;
+		}
+		break;
+	default:
+		pr_err("invalid steering tag in ACPI _DSM\n");
+		return 0;
+	}
+
+	return 0;
+}
+
+#define MIN_ST_DSM_REV		7
+#define ST_DSM_FUNC_INDEX	0xf
+static bool invoke_dsm(acpi_handle handle, u32 cpu_uid, u8 ph,
+		       u8 target_type, bool cache_ref_valid,
+		       u64 cache_ref, union st_info *st_out)
+{
+	union acpi_object in_obj, in_buf[3], *out_obj;
+
+	in_buf[0].integer.type = ACPI_TYPE_INTEGER;
+	in_buf[0].integer.value = 0; /* 0 => processor cache steering tags */
+
+	in_buf[1].integer.type = ACPI_TYPE_INTEGER;
+	in_buf[1].integer.value = cpu_uid;
+
+	in_buf[2].integer.type = ACPI_TYPE_INTEGER;
+	in_buf[2].integer.value = ph & 3;
+	in_buf[2].integer.value |= (target_type & 1) << 2;
+	in_buf[2].integer.value |= (cache_ref_valid & 1) << 3;
+	in_buf[2].integer.value |= (cache_ref << 32);
+
+	in_obj.type = ACPI_TYPE_PACKAGE;
+	in_obj.package.count = ARRAY_SIZE(in_buf);
+	in_obj.package.elements = in_buf;
+
+	out_obj = acpi_evaluate_dsm(handle, &pci_acpi_dsm_guid, MIN_ST_DSM_REV,
+				    ST_DSM_FUNC_INDEX, &in_obj);
+
+	if (!out_obj)
+		return false;
+
+	if (out_obj->type != ACPI_TYPE_BUFFER) {
+		pr_err("invalid return type %d from TPH _DSM\n",
+		       out_obj->type);
+		ACPI_FREE(out_obj);
+		return false;
+	}
+
+	st_out->value = *((u64 *)(out_obj->buffer.pointer));
+
+	ACPI_FREE(out_obj);
+
+	return true;
+}
+
+static acpi_handle root_complex_acpi_handle(struct pci_dev *dev)
+{
+	struct pci_dev *root_port;
+
+	root_port = pcie_find_root_port(dev);
+
+	if (!root_port || !root_port->bus || !root_port->bus->bridge)
+		return NULL;
+
+	return ACPI_HANDLE(root_port->bus->bridge);
+}
+
 static bool msix_nr_in_bounds(struct pci_dev *dev, int msix_nr)
 {
 	u16 tbl_sz;
@@ -423,7 +515,16 @@ bool pcie_tph_get_st(struct pci_dev *dev, unsigned int cpu,
 		    enum tph_mem_type mem_type, u8 req_type,
 		    u16 *tag)
 {
-	*tag = 0;
+	union st_info info;
+
+	if (!invoke_dsm(root_complex_acpi_handle(dev), cpu, 0, 0, false, 0,
+			&info)) {
+		*tag = 0;
+		return false;
+	}
+
+	*tag = tph_extract_tag(mem_type, req_type, &info);
+	pr_debug("%s: cpu=%d tag=%d\n", __func__, cpu, *tag);
 
 	return true;
 }
