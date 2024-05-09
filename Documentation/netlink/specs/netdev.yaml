@@ -439,6 +439,16 @@ attribute-sets:
           Number of the packets dropped by the device due to the transmit
           packets bitrate exceeding the device rate limit.
         type: uint
+      -
+        name: tx-stop
+        doc: |
+          Number of times the tx queue was stopped.
+        type: uint
+      -
+        name: tx-wake
+        doc: |
+          Number of times the tx queue was restarted.
+        type: uint
 
 operations:
   list:
