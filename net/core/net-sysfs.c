@@ -114,6 +114,7 @@ NETDEVICE_SHOW_RO(addr_len, fmt_dec);
 NETDEVICE_SHOW_RO(ifindex, fmt_dec);
 NETDEVICE_SHOW_RO(type, fmt_dec);
 NETDEVICE_SHOW_RO(link_mode, fmt_dec);
+NETDEVICE_SHOW_RO(max_mtu, fmt_dec);
 
 static ssize_t iflink_show(struct device *dev, struct device_attribute *attr,
 			   char *buf)
@@ -660,6 +661,7 @@ static struct attribute *net_class_attrs[] __ro_after_init = {
 	&dev_attr_ifalias.attr,
 	&dev_attr_carrier.attr,
 	&dev_attr_mtu.attr,
+	&dev_attr_max_mtu.attr,
 	&dev_attr_flags.attr,
 	&dev_attr_tx_queue_len.attr,
 	&dev_attr_gro_flush_timeout.attr,
