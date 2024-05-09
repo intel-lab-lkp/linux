@@ -10,6 +10,7 @@
 #include <linux/blkdev.h>
 #include <linux/bio.h>
 #include <linux/blktrace_api.h>
+#include <linux/cgroup.h>
 #include "blk.h"
 #include "blk-cgroup-rwstat.h"
 #include "blk-stat.h"
@@ -2365,6 +2366,49 @@ void blk_throtl_bio_endio(struct bio *bio)
 	}
 }
 #endif
+
+unsigned long blk_throttle_budgt(struct block_device *bdev)
+{
+	struct request_queue *q = bdev_get_queue(bdev);
+	struct blkcg *blkcg;
+	struct blkcg_gq *blkg;
+	struct throtl_grp *tg;
+	long long bytes_allowed = 0;
+	unsigned long jiffy_elapsed, jiffy_elapsed_rnd;
+	u64 bps_limit;
+
+	if (!q)
+		return U64_MAX;
+
+	rcu_read_lock();
+	spin_lock_irq(&q->queue_lock);
+	blkcg =	css_to_blkcg(task_css(current, io_cgrp_id));
+	if (!blkcg)
+		goto out;
+
+	blkg = blkg_lookup(blkcg, q);
+	if (!blkg || !blkg_tryget(blkg))
+		goto out;
+
+	tg = blkg_to_tg(blkg);
+	bps_limit = tg_bps_limit(tg, READ);
+	if (bps_limit == U64_MAX)
+		goto out;
+
+	jiffy_elapsed = jiffy_elapsed_rnd = jiffies - tg->slice_start[READ];
+	if (!jiffy_elapsed)
+		jiffy_elapsed_rnd = tg->td->throtl_slice;
+
+	jiffy_elapsed_rnd = roundup(jiffy_elapsed_rnd, tg->td->throtl_slice);
+	bytes_allowed = calculate_bytes_allowed(bps_limit, jiffy_elapsed_rnd) +
+			tg->carryover_bytes[READ];
+	blkg_put(blkg);
+out:
+	spin_unlock_irq(&q->queue_lock);
+	rcu_read_unlock();
+	return bytes_allowed;
+}
+
 
 int blk_throtl_init(struct gendisk *disk)
 {

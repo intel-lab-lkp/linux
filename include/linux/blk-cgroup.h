@@ -15,10 +15,12 @@
  */
 
 #include <linux/types.h>
+#include <linux/limits.h>
 
 struct bio;
 struct cgroup_subsys_state;
 struct gendisk;
+struct block_device;
 
 #define FC_APPID_LEN              129
 
@@ -45,6 +47,14 @@ static inline struct cgroup_subsys_state *bio_blkcg_css(struct bio *bio)
 }
 #endif	/* CONFIG_BLK_CGROUP */
 
+#ifdef CONFIG_BLK_DEV_THROTTLING
+unsigned long blk_throttle_budgt(struct block_device *bdev);
+#else
+static inline unsigned long blk_throttle_budgt(struct block_device *bdev)
+{
+	return U64_MAX;
+}
+#endif
 int blkcg_set_fc_appid(char *app_id, u64 cgrp_id, size_t app_id_len);
 char *blkcg_get_fc_appid(struct bio *bio);
 
