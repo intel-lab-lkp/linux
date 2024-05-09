@@ -1237,6 +1237,7 @@
 #define   VRR_CTL_VRR_ENABLE			REG_BIT(31)
 #define   VRR_CTL_IGN_MAX_SHIFT			REG_BIT(30)
 #define   VRR_CTL_FLIP_LINE_EN			REG_BIT(29)
+#define   VRR_CTL_CMRR_ENABLE			REG_BIT(27)
 #define   VRR_CTL_PIPELINE_FULL_MASK		REG_GENMASK(10, 3)
 #define   VRR_CTL_PIPELINE_FULL(x)		REG_FIELD_PREP(VRR_CTL_PIPELINE_FULL_MASK, (x))
 #define   VRR_CTL_PIPELINE_FULL_OVERRIDE	REG_BIT(0)
@@ -1327,6 +1328,15 @@
 #define VRR_VSYNC_END(vsync_end)	REG_FIELD_PREP(VRR_VSYNC_END_MASK, (vsync_end))
 #define VRR_VSYNC_START_MASK		REG_GENMASK(12, 0)
 #define VRR_VSYNC_START(vsync_start)	REG_FIELD_PREP(VRR_VSYNC_START_MASK, (vsync_start))
+
+#define	_TRANS_CMRR_M_LO_A		0x604F0
+#define	_TRANS_CMRR_M_HI_A		0x604F4
+#define	_TRANS_CMRR_N_LO_A		0x604F8
+#define	_TRANS_CMRR_N_HI_A		0x604FC
+#define	TRANS_CMRR_M_LO(trans)		_MMIO_TRANS2(dev_priv, trans, _TRANS_CMRR_M_LO_A)
+#define	TRANS_CMRR_M_HI(trans)		_MMIO_TRANS2(dev_priv, trans, _TRANS_CMRR_M_HI_A)
+#define	TRANS_CMRR_N_LO(trans)		_MMIO_TRANS2(dev_priv, trans, _TRANS_CMRR_N_LO_A)
+#define	TRANS_CMRR_N_HI(trans)		_MMIO_TRANS2(dev_priv, trans, _TRANS_CMRR_N_HI_A)
 
 /* VGA port control */
 #define ADPA			_MMIO(0x61100)
