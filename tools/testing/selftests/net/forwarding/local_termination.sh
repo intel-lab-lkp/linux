@@ -73,6 +73,10 @@ check_rcv()
 	local pattern=$3
 	local should_receive=$4
 	local should_fail=
+	local xfail_sw=$5
+
+	local kind=$(ip -j -d link show dev $if_name |
+			 jq -r '.[].linkinfo.info_kind')
 
 	[ $should_receive = true ] && should_fail=0 || should_fail=1
 	RET=0
@@ -81,7 +85,14 @@ check_rcv()
 
 	check_err_fail "$should_fail" "$?" "reception"
 
-	log_test "$if_name: $type"
+	# If not a SW interface, ignore the XFAIL allowance
+	[ "$kind" != veth ] && [ "$kind" != bridge ] && xfail_sw=
+
+	if [ $RET -ne 0 ] && [ "$xfail_sw" == true ]; then
+	    log_test_xfail "$if_name: $type"
+	else
+	    log_test "$if_name: $type"
+	fi
 }
 
 mc_route_prepare()
@@ -157,7 +168,7 @@ run_test()
 
 	check_rcv $rcv_if_name "Unicast IPv4 to unknown MAC address" \
 		"$smac > $UNKNOWN_UC_ADDR1, ethertype IPv4 (0x0800)" \
-		false
+		false true
 
 	check_rcv $rcv_if_name "Unicast IPv4 to unknown MAC address, promisc" \
 		"$smac > $UNKNOWN_UC_ADDR2, ethertype IPv4 (0x0800)" \
@@ -165,7 +176,7 @@ run_test()
 
 	check_rcv $rcv_if_name "Unicast IPv4 to unknown MAC address, allmulti" \
 		"$smac > $UNKNOWN_UC_ADDR3, ethertype IPv4 (0x0800)" \
-		false
+		false true
 
 	check_rcv $rcv_if_name "Multicast IPv4 to joined group" \
 		"$smac > $JOINED_MACV4_MC_ADDR, ethertype IPv4 (0x0800)" \
@@ -173,7 +184,7 @@ run_test()
 
 	check_rcv $rcv_if_name "Multicast IPv4 to unknown group" \
 		"$smac > $UNKNOWN_MACV4_MC_ADDR1, ethertype IPv4 (0x0800)" \
-		false
+		false true
 
 	check_rcv $rcv_if_name "Multicast IPv4 to unknown group, promisc" \
 		"$smac > $UNKNOWN_MACV4_MC_ADDR2, ethertype IPv4 (0x0800)" \
@@ -189,7 +200,7 @@ run_test()
 
 	check_rcv $rcv_if_name "Multicast IPv6 to unknown group" \
 		"$smac > $UNKNOWN_MACV6_MC_ADDR1, ethertype IPv6 (0x86dd)" \
-		false
+		false true
 
 	check_rcv $rcv_if_name "Multicast IPv6 to unknown group, promisc" \
 		"$smac > $UNKNOWN_MACV6_MC_ADDR2, ethertype IPv6 (0x86dd)" \
