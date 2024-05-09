@@ -998,7 +998,7 @@ static void fuse_readahead(struct readahead_control *rac)
 		struct fuse_io_args *ia;
 		struct fuse_args_pages *ap;
 
-		if (fc->num_background >= fc->congestion_threshold &&
+		if (READ_ONCE(fc->num_background) >= fc->congestion_threshold &&
 		    rac->ra->async_size >= readahead_count(rac))
 			/*
 			 * Congested and only async pages left, so skip the

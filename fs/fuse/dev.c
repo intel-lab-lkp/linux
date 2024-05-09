@@ -282,6 +282,7 @@ void fuse_request_end(struct fuse_req *req)
 	struct fuse_mount *fm = req->fm;
 	struct fuse_conn *fc = fm->fc;
 	struct fuse_iqueue *fiq = &fc->iq;
+	unsigned int num_background;
 
 	if (test_and_set_bit(FR_FINISHED, &req->flags))
 		goto put_request;
@@ -301,7 +302,8 @@ void fuse_request_end(struct fuse_req *req)
 	if (test_bit(FR_BACKGROUND, &req->flags)) {
 		spin_lock(&fc->bg_lock);
 		clear_bit(FR_BACKGROUND, &req->flags);
-		if (fc->num_background == fc->max_background) {
+		num_background = READ_ONCE(fc->num_background);
+		if (num_background == fc->max_background) {
 			fc->blocked = 0;
 			wake_up(&fc->blocked_waitq);
 		} else if (!fc->blocked) {
@@ -315,7 +317,7 @@ void fuse_request_end(struct fuse_req *req)
 				wake_up(&fc->blocked_waitq);
 		}
 
-		fc->num_background--;
+		WRITE_ONCE(fc->num_background, num_background - 1);
 		fc->active_background--;
 		flush_bg_queue(fc);
 		spin_unlock(&fc->bg_lock);
