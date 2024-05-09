@@ -2880,7 +2880,7 @@ static void get_tcp4_sock(struct sock *sk, struct seq_file *f, int i)
 	__be32 src = inet->inet_rcv_saddr;
 	__u16 destp = ntohs(inet->inet_dport);
 	__u16 srcp = ntohs(inet->inet_sport);
-	int rx_queue;
+	int rx_queue, tx_queue;
 	int state;
 
 	if (icsk->icsk_pending == ICSK_TIME_RETRANS ||
@@ -2900,19 +2900,22 @@ static void get_tcp4_sock(struct sock *sk, struct seq_file *f, int i)
 	}
 
 	state = inet_sk_state_load(sk);
-	if (state == TCP_LISTEN)
+	if (state == TCP_LISTEN) {
 		rx_queue = READ_ONCE(sk->sk_ack_backlog);
-	else
+		tx_queue = READ_ONCE(sk->sk_max_ack_backlog);
+	} else {
 		/* Because we don't lock the socket,
 		 * we might find a transient negative value.
 		 */
 		rx_queue = max_t(int, READ_ONCE(tp->rcv_nxt) -
 				      READ_ONCE(tp->copied_seq), 0);
+		tx_queue = READ_ONCE(tp->write_seq) - tp->snd_una;
+	}
 
 	seq_printf(f, "%4d: %08X:%04X %08X:%04X %02X %08X:%08X %02X:%08lX "
 			"%08X %5u %8d %lu %d %pK %lu %lu %u %u %d",
 		i, src, srcp, dest, destp, state,
-		READ_ONCE(tp->write_seq) - tp->snd_una,
+		tx_queue,
 		rx_queue,
 		timer_active,
 		jiffies_delta_to_clock_t(timer_expires - jiffies),
