@@ -14,6 +14,7 @@
 #include <linux/uio.h>
 #include <asm/byteorder.h>
 #include <asm/unaligned.h>
+#include <linux/overflow.h>
 #include <linux/scatterlist.h>
 
 struct bio_vec;
@@ -29,7 +30,7 @@ struct rpc_rqst;
 /*
  * Buffer adjustment
  */
-#define XDR_QUADLEN(l)		(((l) + 3) >> 2)
+#define XDR_QUADLEN(l)		(size_add(l, 3) >> 2)
 
 /*
  * Generic opaque `network object.'
