@@ -638,6 +638,13 @@ struct bkey_format bch2_bkey_format_done(struct bkey_format_state *s)
 	return ret;
 }
 
+static unsigned bch2_max_bits_per_field[] = {
+#define x(name, field) \
+	bkey_format_field(name, field),
+	BCH_BKEY_FIELDS()
+#undef x
+};
+
 int bch2_bkey_format_invalid(struct bch_fs *c,
 			     struct bkey_format *f,
 			     enum bkey_invalid_flags flags,
@@ -659,8 +666,14 @@ int bch2_bkey_format_invalid(struct bch_fs *c,
 		if (!c || c->sb.version_min >= bcachefs_metadata_version_snapshot) {
 			unsigned unpacked_bits = bch2_bkey_format_current.bits_per_field[i];
 			u64 unpacked_max = ~((~0ULL << 1) << (unpacked_bits - 1));
-			u64 packed_max = f->bits_per_field[i]
-				? ~((~0ULL << 1) << (f->bits_per_field[i] - 1))
+			unsigned bits_per_field = f->bits_per_field[i];
+			if (bits_per_field > bch2_max_bits_per_field[i]) {
+				prt_printf(err, "field %u uses more bits than allowed: %u > %u",
+						i, bits_per_field, bch2_max_bits_per_field[i]);
+				return -BCH_ERR_invalid;
+			}
+			u64 packed_max = bits_per_field
+				? ~((~0ULL << 1) << (bits_per_field - 1))
 				: 0;
 			u64 field_offset = le64_to_cpu(f->field_offset[i]);
 
