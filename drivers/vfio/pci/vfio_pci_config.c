@@ -1434,14 +1434,15 @@ static int vfio_ext_cap_len(struct vfio_pci_core_device *vdev, u16 ecap, u16 epo
 		if (ret)
 			return pcibios_err_to_errno(ret);
 
-		if ((dword & PCI_TPH_CAP_LOC_MASK) == PCI_TPH_LOC_CAP) {
+		if (((dword & PCI_TPH_CAP_LOC_MASK) >> PCI_TPH_CAP_LOC_SHIFT)
+			== PCI_TPH_LOC_CAP) {
 			int sts;
 
 			sts = dword & PCI_TPH_CAP_ST_MASK;
 			sts >>= PCI_TPH_CAP_ST_SHIFT;
-			return PCI_TPH_BASE_SIZEOF + (sts * 2) + 2;
+			return PCI_TPH_ST_TABLE + (sts * 2) + 2;
 		}
-		return PCI_TPH_BASE_SIZEOF;
+		return PCI_TPH_ST_TABLE;
 	case PCI_EXT_CAP_ID_DVSEC:
 		ret = pci_read_config_dword(pdev, epos + PCI_DVSEC_HEADER1, &dword);
 		if (ret)
