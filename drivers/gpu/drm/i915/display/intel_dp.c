@@ -250,8 +250,6 @@ static void intel_dp_set_dpcd_sink_rates(struct intel_dp *intel_dp)
 
 		if (uhbr_rates & DP_UHBR10)
 			intel_dp->sink_rates[i++] = 1000000;
-		if (uhbr_rates & DP_UHBR13_5)
-			intel_dp->sink_rates[i++] = 1350000;
 		if (uhbr_rates & DP_UHBR20)
 			intel_dp->sink_rates[i++] = 2000000;
 	}
