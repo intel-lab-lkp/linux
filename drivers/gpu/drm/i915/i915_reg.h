@@ -5151,6 +5151,10 @@ enum skl_power_gate {
 
 #define _MMIO_PLANE_GAMC(plane, i, a, b)  _MMIO(_PIPE(plane, a, b) + (i) * 4)
 
+/* SCLKGATE_DIS */
+#define SCLKGATE_DIS			_MMIO(0xc2020)
+#define  DPLS_GATING_DISABLE		REG_BIT(29)
+
 /* Plane CSC Registers */
 #define _PLANE_CSC_RY_GY_1_A	0x70210
 #define _PLANE_CSC_RY_GY_2_A	0x70310
