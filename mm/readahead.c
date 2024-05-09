@@ -128,6 +128,7 @@
 #include <linux/blk-cgroup.h>
 #include <linux/fadvise.h>
 #include <linux/sched/mm.h>
+#include <linux/minmax.h>
 
 #include "internal.h"
 
@@ -358,16 +359,23 @@ static unsigned long get_init_ra_size(unsigned long size, unsigned long max)
  *  Get the previous window size, ramp it up, and
  *  return it as the new window size.
  */
-static unsigned long get_next_ra_size(struct file_ra_state *ra,
+static unsigned long get_next_ra_size(struct readahead_control *ractl,
 				      unsigned long max)
 {
-	unsigned long cur = ra->size;
+	unsigned long cur = ractl->ra->size;
+	struct inode *inode = ractl->mapping->host;
+	unsigned long budgt = inode->i_sb->s_bdev ?
+			blk_throttle_budgt(inode->i_sb->s_bdev) : 0;
+	unsigned long val = max;
 
 	if (cur < max / 16)
-		return 4 * cur;
+		val = 4 * cur;
 	if (cur <= max / 2)
-		return 2 * cur;
-	return max;
+		val = 2 * cur;
+
+	val = budgt ? min(budgt / PAGE_SIZE, val) : val;
+
+	return val;
 }
 
 /*
@@ -437,6 +445,8 @@ static int try_context_readahead(struct address_space *mapping,
 				 unsigned long max)
 {
 	pgoff_t size;
+	unsigned long budgt = mapping->host->i_sb->s_bdev ?
+		blk_throttle_budgt(mapping->host->i_sb->s_bdev) : 0;
 
 	size = count_history_pages(mapping, index, max);
 
@@ -455,7 +465,7 @@ static int try_context_readahead(struct address_space *mapping,
 		size *= 2;
 
 	ra->start = index;
-	ra->size = min(size + req_size, max);
+	ra->size = min3(budgt / PAGE_SIZE, size + req_size, max);
 	ra->async_size = 1;
 
 	return 1;
@@ -552,6 +562,8 @@ static void ondemand_readahead(struct readahead_control *ractl,
 	pgoff_t index = readahead_index(ractl);
 	pgoff_t expected, prev_index;
 	unsigned int order = folio ? folio_order(folio) : 0;
+	unsigned long budgt = ractl->mapping->host->i_sb->s_bdev ?
+		blk_throttle_budgt(ractl->mapping->host->i_sb->s_bdev) : 0;
 
 	/*
 	 * If the request exceeds the readahead window, allow the read to
@@ -574,7 +586,7 @@ static void ondemand_readahead(struct readahead_control *ractl,
 			1UL << order);
 	if (index == expected || index == (ra->start + ra->size)) {
 		ra->start += ra->size;
-		ra->size = get_next_ra_size(ra, max_pages);
+		ra->size = get_next_ra_size(ractl, max_pages);
 		ra->async_size = ra->size;
 		goto readit;
 	}
@@ -599,7 +611,7 @@ static void ondemand_readahead(struct readahead_control *ractl,
 		ra->start = start;
 		ra->size = start - index;	/* old async_size */
 		ra->size += req_size;
-		ra->size = get_next_ra_size(ra, max_pages);
+		ra->size = get_next_ra_size(ractl, max_pages);
 		ra->async_size = ra->size;
 		goto readit;
 	}
@@ -631,6 +643,9 @@ static void ondemand_readahead(struct readahead_control *ractl,
 	 * standalone, small random read
 	 * Read as is, and do not pollute the readahead state.
 	 */
+	if (budgt)
+		req_size = min(budgt / PAGE_SIZE, req_size);
+
 	do_page_cache_ra(ractl, req_size, 0);
 	return;
 
@@ -647,7 +662,7 @@ readit:
 	 * Take care of maximum IO pages as above.
 	 */
 	if (index == ra->start && ra->size == ra->async_size) {
-		add_pages = get_next_ra_size(ra, max_pages);
+		add_pages = get_next_ra_size(ractl, max_pages);
 		if (ra->size + add_pages <= max_pages) {
 			ra->async_size = add_pages;
 			ra->size += add_pages;
