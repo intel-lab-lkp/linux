@@ -1,0 +1,186 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/firmware/fsl,imx-se.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: NXP i.MX HW Secure Enclave(s) EdgeLock Enclave
+
+maintainers:
+  - Pankaj Gupta <pankaj.gupta@nxp.com>
+
+description: |
+  NXP's SoC may contain one or multiple embedded secure-enclave HW
+  IP(s) like i.MX EdgeLock Enclave, V2X etc. These NXP's HW IP(s)
+  enables features like
+    - Hardware Security Module (HSM),
+    - Security Hardware Extension (SHE), and
+    - Vehicular to Anything (V2X)
+
+  Communication interface to the secure-enclaves is based on the
+  messaging unit(s).
+
+properties:
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 0
+
+  compatible:
+    enum:
+      - fsl,imx8ulp-ele
+      - fsl,imx93-ele
+
+patternProperties:
+  "^[0-9a-z]*-if@[0-9]+$":
+    type: object
+    description:
+      Communication interface to secure-enclave node, that defines hardware
+      properties to required to establish the communication. There can be
+      multiple interfaces to the same secure-enclave. Each interface is
+      enumerated with reg property. It optionally defines properties
+      depending on the compatible string and interface enum identifier.
+
+    properties:
+      reg:
+        maxItems: 1
+        description: Identifier of the communication interface to secure-enclave.
+
+      mboxes:
+        description: contain a list of phandles to mailboxes.
+        items:
+          - description: Specify the mailbox used to send message to se firmware
+          - description: Specify the mailbox used to receive message from se firmware
+
+      mbox-names:
+        items:
+          - const: tx
+          - const: rx
+          - const: txdb
+          - const: rxdb
+        minItems: 2
+
+      memory-region:
+        description: contains a list of phandles to reserved external memory.
+        items:
+          - description: It is used by secure-enclave firmware. It is an optional
+              property based on compatible and identifier to communication interface.
+              (see bindings/reserved-memory/reserved-memory.txt)
+
+      sram:
+        description: contains a list of phandles to sram.
+        $ref: /schemas/types.yaml#/definitions/phandle-array
+        items:
+          - description: Phandle to the device SRAM. It is an optional property
+              based on compatible and identifier to communication interface.
+
+    required:
+      - reg
+      - mboxes
+      - mbox-names
+
+allOf:
+  # memory-region
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - fsl,imx8ulp-ele
+              - fsl,imx93-ele
+    then:
+      patternProperties:
+        "^[0-9a-z]*-if@[0-9]+$":
+          allOf:
+            - if:
+                properties:
+                  reg:
+                    items:
+                      - enum:
+                          - 0
+              then:
+                required:
+                  - memory-region
+              else:
+                not:
+                  required:
+                    - memory-region
+  # sram
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - fsl,imx8ulp-ele
+    then:
+      patternProperties:
+        "^[0-9a-z]*-if@[0-9]+$":
+          allOf:
+            - if:
+                properties:
+                  reg:
+                    items:
+                      - enum:
+                          - 0
+              then:
+                required:
+                  - sram
+              else:
+                not:
+                  required:
+                    - sram
+
+additionalProperties: false
+
+examples:
+  - |
+    ele {
+      compatible = "fsl,imx8ulp-ele";
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      ele-if@0 {
+        reg = <0x0>;
+        mboxes = <&s4muap 0 0>, <&s4muap 1 0>;
+        mbox-names = "tx", "rx";
+        sram = <&sram0>;
+        memory-region = <&ele_reserved>;
+      };
+    };
+  - |
+    ele {
+      compatible = "fsl,imx93-ele";
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      ele-if@0 {
+        reg = <0x0>;
+        mboxes = <&s4muap 0 0>, <&s4muap 1 0>;
+        mbox-names = "tx", "rx";
+        memory-region = <&ele_reserved>;
+      };
+    };
+  - |
+    v2x {
+      compatible = "fsl,imx95-v2x";
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      v2x-if@0 {
+        reg = <0x0>;
+        mboxes = <&v2x_mu 0 0>, <&v2x_mu 1 0>;
+        mbox-names = "tx", "rx";
+      };
+      v2x-if@1 {
+        reg = <0x1>;
+        mboxes = <&v2x_mu6 0 0>, <&v2x_mu6 1 0>;
+        mbox-names = "txdb", "rxdb";
+      };
+      v2x-if@2 {
+        reg = <0x2>;
+        mboxes = <&v2x_mu7 0 0>, <&v2x_mu7 1 0>;
+        mbox-names = "tx", "rx";
+      };
+    };
+...
