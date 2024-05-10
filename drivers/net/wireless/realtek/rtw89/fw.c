@@ -6212,7 +6212,7 @@ void rtw89_hw_scan_complete(struct rtw89_dev *rtwdev, struct ieee80211_vif *vif,
 		.aborted = aborted,
 	};
 
-	if (!vif)
+	if (!vif || !rtwdev->scanning)
 		return;
 
 	rtw89_write32_mask(rtwdev,
@@ -6245,7 +6245,9 @@ void rtw89_hw_scan_abort(struct rtw89_dev *rtwdev, struct ieee80211_vif *vif)
 
 	ret = rtw89_hw_scan_offload(rtwdev, vif, false);
 	if (ret)
-		rtw89_hw_scan_complete(rtwdev, vif, true);
+		rtw89_warn(rtwdev, "rtw89_hw_scan_offload failed ret %d\n", ret);
+
+	rtw89_hw_scan_complete(rtwdev, vif, true);
 }
 
 static bool rtw89_is_any_vif_connected_or_connecting(struct rtw89_dev *rtwdev)
