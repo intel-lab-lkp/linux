@@ -122,6 +122,11 @@ struct netconsole_target {
 	struct netpoll		np;
 };
 
+static inline bool dynamic_netconsole_enabled(void)
+{
+	return IS_ENABLED(CONFIG_NETCONSOLE_DYNAMIC);
+}
+
 #ifdef	CONFIG_NETCONSOLE_DYNAMIC
 
 static struct configfs_subsystem netconsole_subsys;
@@ -1262,6 +1267,8 @@ static int __init init_netconsole(void)
 		while ((target_config = strsep(&input, ";"))) {
 			nt = alloc_param_target(target_config, count);
 			if (IS_ERR(nt)) {
+				if (dynamic_netconsole_enabled())
+					continue;
 				err = PTR_ERR(nt);
 				goto fail;
 			}
