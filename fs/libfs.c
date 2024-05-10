@@ -147,7 +147,9 @@ loff_t dcache_dir_lseek(struct file *file, loff_t offset, int whence)
 	struct dentry *dentry = file->f_path.dentry;
 	switch (whence) {
 		case 1:
-			offset += file->f_pos;
+			/* cannot represent offset with loff_t */
+			if (check_add_overflow(offset, file->f_pos, &offset))
+				return -EOVERFLOW;
 			fallthrough;
 		case 0:
 			if (offset >= 0)
@@ -422,7 +424,9 @@ static loff_t offset_dir_llseek(struct file *file, loff_t offset, int whence)
 {
 	switch (whence) {
 	case SEEK_CUR:
-		offset += file->f_pos;
+		/* cannot represent offset with loff_t */
+		if (check_add_overflow(offset, file->f_pos, &offset))
+			return -EOVERFLOW;
 		fallthrough;
 	case SEEK_SET:
 		if (offset >= 0)
