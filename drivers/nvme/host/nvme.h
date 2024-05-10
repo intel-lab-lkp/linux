@@ -440,6 +440,8 @@ struct nvme_ns_ids {
 	u8	csi;
 };
 
+#define NVME_MAX_PLIDS   (128)
+
 /*
  * Anchor structure for namespaces.  There is one for each namespace in a
  * NVMe subsystem that any of our controllers can see, and the namespace
@@ -457,6 +459,8 @@ struct nvme_ns_head {
 	bool			shared;
 	bool			passthru_err_log_enabled;
 	int			instance;
+	u16			nr_plids;
+	u16			plids[NVME_MAX_PLIDS];
 	struct nvme_effects_log *effects;
 	u64			nuse;
 	unsigned		ns_id;
