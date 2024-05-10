@@ -189,10 +189,7 @@ static int extlog_print(struct notifier_block *nb, unsigned long val,
 
 	tmp = (struct acpi_hest_generic_status *)elog_buf;
 
-	if (!ras_userspace_consumers()) {
-		print_extlog_rcd(NULL, tmp, cpu);
-		goto out;
-	}
+	print_extlog_rcd(NULL, tmp, cpu);
 
 	/* log event via trace */
 	err_seq++;
@@ -225,7 +222,6 @@ static int extlog_print(struct notifier_block *nb, unsigned long val,
 		}
 	}
 
-out:
 	mce->kflags |= MCE_HANDLED_EXTLOG;
 	return NOTIFY_OK;
 }
