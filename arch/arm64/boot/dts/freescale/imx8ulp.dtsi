@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 /*
- * Copyright 2021 NXP
+ * Copyright 2021, 2024 NXP
  */
 
 #include <dt-bindings/clock/imx8ulp-clock.h>
@@ -152,7 +152,7 @@
 		#clock-cells = <0>;
 	};
 
-	sram@2201f000 {
+	sram0: sram@2201f000 {
 		compatible = "mmio-sram";
 		reg = <0x0 0x2201f000 0x0 0x1000>;
 
@@ -182,6 +182,20 @@
 			scmi_sensor: protocol@15 {
 				reg = <0x15>;
 				#thermal-sensor-cells = <1>;
+			};
+		};
+
+		ele {
+			compatible = "fsl,imx8ulp-ele";
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			ele_if0: ele-if@0 {
+				reg = <0x0>;
+				mbox-names = "tx", "rx";
+				mboxes = <&s4muap 0 0>,
+					<&s4muap 1 0>;
+				sram = <&sram0>;
 			};
 		};
 	};
