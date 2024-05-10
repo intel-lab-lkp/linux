@@ -142,6 +142,8 @@ static void set_init_blocksize(struct block_device *bdev)
 		bsize <<= 1;
 	}
 	bdev->bd_inode->i_blkbits = blksize_bits(bsize);
+	mapping_set_folio_min_order(bdev->bd_inode->i_mapping,
+				    get_order(bsize));
 }
 
 int set_blocksize(struct block_device *bdev, int size)
@@ -158,6 +160,8 @@ int set_blocksize(struct block_device *bdev, int size)
 	if (bdev->bd_inode->i_blkbits != blksize_bits(size)) {
 		sync_blockdev(bdev);
 		bdev->bd_inode->i_blkbits = blksize_bits(size);
+		mapping_set_folio_min_order(bdev->bd_inode->i_mapping,
+					    get_order(size));
 		kill_bdev(bdev);
 	}
 	return 0;
