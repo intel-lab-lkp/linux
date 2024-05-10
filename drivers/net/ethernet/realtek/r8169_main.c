@@ -592,6 +592,7 @@ enum rtl_flag {
 	RTL_FLAG_TASK_RESET_PENDING,
 	RTL_FLAG_TASK_RESET_NO_QUEUE_WAKE,
 	RTL_FLAG_TASK_TX_TIMEOUT,
+	RTL_FLAG_IRQ_DISABLED,
 	RTL_FLAG_MAX
 };
 
@@ -4655,10 +4656,7 @@ static irqreturn_t rtl8169_interrupt(int irq, void *dev_instance)
 		rtl_schedule_task(tp, RTL_FLAG_TASK_RESET_PENDING);
 	}
 
-	if (napi_schedule_prep(&tp->napi)) {
-		rtl_irq_disable(tp);
-		__napi_schedule(&tp->napi);
-	}
+	napi_schedule(&tp->napi);
 out:
 	rtl_ack_events(tp, status);
 
@@ -4712,12 +4710,17 @@ static int rtl8169_poll(struct napi_struct *napi, int budget)
 	struct net_device *dev = tp->dev;
 	int work_done;
 
+	if (!test_and_set_bit(RTL_FLAG_IRQ_DISABLED, tp->wk.flags))
+		rtl_irq_disable(tp);
+
 	rtl_tx(dev, tp, budget);
 
 	work_done = rtl_rx(dev, tp, budget);
 
-	if (work_done < budget && napi_complete_done(napi, work_done))
+	if (work_done < budget && napi_complete_done(napi, work_done)) {
+		clear_bit(RTL_FLAG_IRQ_DISABLED, tp->wk.flags);
 		rtl_irq_enable(tp);
+	}
 
 	return work_done;
 }
