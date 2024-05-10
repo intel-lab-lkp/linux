@@ -6,6 +6,9 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdbool.h>
+#ifndef __USE_GNU
+#define __USE_GNU
+#endif
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
