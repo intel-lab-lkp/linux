@@ -381,13 +381,13 @@ put_clk_mux_np:
 static int pruss_clk_init(struct pruss *pruss, struct device_node *cfg_node)
 {
 	const struct pruss_private_data *data;
-	struct device_node *clks_np;
 	struct device *dev = pruss->dev;
 	int ret = 0;
 
 	data = of_device_get_match_data(dev);
 
-	clks_np = of_get_child_by_name(cfg_node, "clocks");
+	struct device_node *clks_np __free(device_node) =
+			of_get_child_by_name(cfg_node, "clocks");
 	if (!clks_np) {
 		dev_err(dev, "%pOF is missing its 'clocks' node\n", cfg_node);
 		return -ENODEV;
@@ -398,7 +398,7 @@ static int pruss_clk_init(struct pruss *pruss, struct device_node *cfg_node)
 					  "coreclk-mux", clks_np);
 		if (ret) {
 			dev_err(dev, "failed to setup coreclk-mux\n");
-			goto put_clks_node;
+			return ret;
 		}
 	}
 
@@ -406,13 +406,10 @@ static int pruss_clk_init(struct pruss *pruss, struct device_node *cfg_node)
 				  clks_np);
 	if (ret) {
 		dev_err(dev, "failed to setup iepclk-mux\n");
-		goto put_clks_node;
+		return ret;
 	}
 
-put_clks_node:
-	of_node_put(clks_np);
-
-	return ret;
+	return 0;
 }
 
 static struct regmap_config regmap_conf = {
@@ -424,26 +421,22 @@ static struct regmap_config regmap_conf = {
 static int pruss_cfg_of_init(struct device *dev, struct pruss *pruss)
 {
 	struct device_node *np = dev_of_node(dev);
-	struct device_node *child;
+	struct device_node *child __free(device_node) =
+			of_get_child_by_name(np, "cfg");
 	struct resource res;
 	int ret;
 
-	child = of_get_child_by_name(np, "cfg");
 	if (!child) {
 		dev_err(dev, "%pOF is missing its 'cfg' node\n", child);
 		return -ENODEV;
 	}
 
-	if (of_address_to_resource(child, 0, &res)) {
-		ret = -ENOMEM;
-		goto node_put;
-	}
+	if (of_address_to_resource(child, 0, &res))
+		return -ENOMEM;
 
 	pruss->cfg_base = devm_ioremap(dev, res.start, resource_size(&res));
-	if (!pruss->cfg_base) {
-		ret = -ENOMEM;
-		goto node_put;
-	}
+	if (!pruss->cfg_base)
+		return -ENOMEM;
 
 	regmap_conf.name = kasprintf(GFP_KERNEL, "%pOFn@%llx", child,
 				     (u64)res.start);
@@ -455,16 +448,13 @@ static int pruss_cfg_of_init(struct device *dev, struct pruss *pruss)
 	if (IS_ERR(pruss->cfg_regmap)) {
 		dev_err(dev, "regmap_init_mmio failed for cfg, ret = %ld\n",
 			PTR_ERR(pruss->cfg_regmap));
-		ret = PTR_ERR(pruss->cfg_regmap);
-		goto node_put;
+		return PTR_ERR(pruss->cfg_regmap);
 	}
 
 	ret = pruss_clk_init(pruss, child);
 	if (ret)
 		dev_err(dev, "pruss_clk_init failed, ret = %d\n", ret);
 
-node_put:
-	of_node_put(child);
 	return ret;
 }
 
@@ -472,7 +462,6 @@ static int pruss_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev_of_node(dev);
-	struct device_node *child;
 	struct pruss *pruss;
 	struct resource res;
 	int ret, i, index;
@@ -494,7 +483,8 @@ static int pruss_probe(struct platform_device *pdev)
 	pruss->dev = dev;
 	mutex_init(&pruss->lock);
 
-	child = of_get_child_by_name(np, "memories");
+	struct device_node *child __free(device_node) =
+			of_get_child_by_name(np, "memories");
 	if (!child) {
 		dev_err(dev, "%pOF is missing its 'memories' node\n", child);
 		return -ENODEV;
@@ -510,22 +500,17 @@ static int pruss_probe(struct platform_device *pdev)
 
 		index = of_property_match_string(child, "reg-names",
 						 mem_names[i]);
-		if (index < 0) {
-			of_node_put(child);
+		if (index < 0)
 			return index;
-		}
 
-		if (of_address_to_resource(child, index, &res)) {
-			of_node_put(child);
+		if (of_address_to_resource(child, index, &res))
 			return -EINVAL;
-		}
 
 		pruss->mem_regions[i].va = devm_ioremap(dev, res.start,
 							resource_size(&res));
 		if (!pruss->mem_regions[i].va) {
 			dev_err(dev, "failed to parse and map memory resource %d %s\n",
 				i, mem_names[i]);
-			of_node_put(child);
 			return -ENOMEM;
 		}
 		pruss->mem_regions[i].pa = res.start;
@@ -535,7 +520,6 @@ static int pruss_probe(struct platform_device *pdev)
 			mem_names[i], &pruss->mem_regions[i].pa,
 			pruss->mem_regions[i].size, pruss->mem_regions[i].va);
 	}
-	of_node_put(child);
 
 	platform_set_drvdata(pdev, pruss);
 
