@@ -156,8 +156,11 @@ static int nvme_map_user_request(struct request *req, u64 ubuffer,
 	return ret;
 
 out_unmap:
-	if (bio)
+	if (bio) {
+		if (bio_integrity(bio))
+			bio_integrity_unmap_free_user(bio);
 		blk_rq_unmap_user(bio);
+	}
 out:
 	blk_mq_free_request(req);
 	return ret;
@@ -194,8 +197,11 @@ static int nvme_submit_user_cmd(struct request_queue *q,
 	ret = nvme_execute_rq(req, false);
 	if (result)
 		*result = le64_to_cpu(nvme_req(req)->result.u64);
-	if (bio)
+	if (bio) {
+		if (bio_integrity(bio))
+			bio_integrity_unmap_free_user(bio);
 		blk_rq_unmap_user(bio);
+	}
 	blk_mq_free_request(req);
 
 	if (effects)
@@ -405,8 +411,11 @@ static void nvme_uring_task_cb(struct io_uring_cmd *ioucmd,
 {
 	struct nvme_uring_cmd_pdu *pdu = nvme_uring_cmd_pdu(ioucmd);
 
-	if (pdu->bio)
+	if (pdu->bio) {
+		if (bio_integrity(pdu->bio))
+			bio_integrity_unmap_free_user(pdu->bio);
 		blk_rq_unmap_user(pdu->bio);
+	}
 	io_uring_cmd_done(ioucmd, pdu->status, pdu->result, issue_flags);
 }
 
@@ -431,8 +440,11 @@ static enum rq_end_io_ret nvme_uring_cmd_end_io(struct request *req,
 	 * Otherwise, move the completion to task work.
 	 */
 	if (blk_rq_is_poll(req)) {
-		if (pdu->bio)
+		if (pdu->bio) {
+			if (bio_integrity(pdu->bio))
+				bio_integrity_unmap_free_user(pdu->bio);
 			blk_rq_unmap_user(pdu->bio);
+		}
 		io_uring_cmd_iopoll_done(ioucmd, pdu->result, pdu->status);
 	} else {
 		io_uring_cmd_do_in_task_lazy(ioucmd, nvme_uring_task_cb);
