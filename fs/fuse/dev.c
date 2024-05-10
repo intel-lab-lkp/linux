@@ -22,6 +22,9 @@
 #include <linux/splice.h>
 #include <linux/sched.h>
 
+#define CREATE_TRACE_POINTS
+#include "fuse_trace.h"
+
 MODULE_ALIAS_MISCDEV(FUSE_MINOR);
 MODULE_ALIAS("devname:fuse");
 
@@ -230,6 +233,7 @@ __releases(fiq->lock)
 		fuse_len_args(req->args->in_numargs,
 			      (struct fuse_arg *) req->args->in_args);
 	list_add_tail(&req->list, &fiq->pending);
+	trace_fuse_request_send(req);
 	fiq->ops->wake_pending_and_unlock(fiq);
 }
 
@@ -285,6 +289,8 @@ void fuse_request_end(struct fuse_req *req)
 
 	if (test_and_set_bit(FR_FINISHED, &req->flags))
 		goto put_request;
+
+	trace_fuse_request_end(req);
 
 	/*
 	 * test_and_set_bit() implies smp_mb() between bit
