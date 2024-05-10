@@ -1,0 +1,16 @@
+What:		/sys/bus/iio/devices/iio:deviceX/in_proximity<id>_ch<id>_raw
+Date:		May 2024
+KernelVersion:	6.9.0
+Contact:	Yasin Lee <yasin.lee.x@gmail>
+Description:
+		HX9031AS supports up to five sensor inputs, CS0, CS1, CS2,
+		CS3 and CS4. This chip supports 2 selectable I2C addresses, 
+		controlled by floating or grounding CS0(floating: 0x28 GND: 0x2C)
+
+		This chip has 5 CSs for sensing terminals and 5 logical channels
+		for data processing. Any sensing terminal can be mapped to these
+		five logical channels, and two sensing terminals can also be mapped
+		to the same logical channel to achieve differential data output.
+
+		The output of the node in_proximity<id>_ch<id>_raw is the
+		differential data of channel<id>.
