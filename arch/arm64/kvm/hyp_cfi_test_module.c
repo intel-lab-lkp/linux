@@ -20,9 +20,9 @@ static int set_guest_mode(const char *val, const struct kernel_param *kp);
 #define M_DESC \
 	"\n\t0: none" \
 	"\n\t1: built-in caller & built-in callee" \
-	"\n\t2: built-in caller & module callee" \
-	"\n\t3: module caller & built-in callee" \
-	"\n\t4: module caller & module callee"
+	"\n\t2: built-in caller & module callee (VHE only)" \
+	"\n\t3: module caller & built-in callee (VHE only)" \
+	"\n\t4: module caller & module callee (VHE only)"
 
 static unsigned int host_mode;
 module_param_call(host, set_host_mode, param_get_uint, &host_mode, 0644);
@@ -40,7 +40,7 @@ static void hyp_cfi_module2module_test_target(int);
 static void hyp_cfi_builtin2module_test_target(int);
 
 static int set_param_mode(const char *val, const struct kernel_param *kp,
-			 int (*register_cb)(void (*)(void)))
+			 int (*register_cb)(void (*)(void), void *))
 {
 	unsigned int *mode = kp->arg;
 	int err;
@@ -51,15 +51,17 @@ static int set_param_mode(const char *val, const struct kernel_param *kp,
 
 	switch (*mode) {
 	case 0:
-		return register_cb(NULL);
+		return register_cb(NULL, NULL);
 	case 1:
-		return register_cb(hyp_trigger_builtin_cfi_fault);
+		return register_cb(hyp_trigger_builtin_cfi_fault,
+				   kvm_nvhe_sym(hyp_trigger_builtin_cfi_fault));
 	case 2:
-		return register_cb((void *)hyp_cfi_builtin2module_test_target);
+		return register_cb((void *)hyp_cfi_builtin2module_test_target,
+				   NULL);
 	case 3:
-		return register_cb(trigger_module2builtin_cfi_fault);
+		return register_cb(trigger_module2builtin_cfi_fault, NULL);
 	case 4:
-		return register_cb(trigger_module2module_cfi_fault);
+		return register_cb(trigger_module2module_cfi_fault, NULL);
 	default:
 		return -EINVAL;
 	}
@@ -79,11 +81,11 @@ static void __exit exit_hyp_cfi_test(void)
 {
 	int err;
 
-	err = kvm_cfi_test_register_host_ctxt_cb(NULL);
+	err = kvm_cfi_test_register_host_ctxt_cb(NULL, NULL);
 	if (err)
 		pr_err("Failed to unregister host context trigger: %d\n", err);
 
-	err = kvm_cfi_test_register_guest_ctxt_cb(NULL);
+	err = kvm_cfi_test_register_guest_ctxt_cb(NULL, NULL);
 	if (err)
 		pr_err("Failed to unregister guest context trigger: %d\n", err);
 }
