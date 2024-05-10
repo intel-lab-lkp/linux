@@ -113,9 +113,6 @@ unsigned int irq_calc_affinity_vectors(unsigned int minvec, unsigned int maxvec,
 	unsigned int resv = affd->pre_vectors + affd->post_vectors;
 	unsigned int set_vecs;
 
-	if (resv > minvec)
-		return 0;
-
 	if (affd->calc_sets) {
 		set_vecs = maxvec - resv;
 	} else {
