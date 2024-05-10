@@ -310,8 +310,11 @@ void ext4_es_find_extent_range(struct inode *inode,
 			       ext4_lblk_t lblk, ext4_lblk_t end,
 			       struct extent_status *es)
 {
-	if (EXT4_SB(inode->i_sb)->s_mount_state & EXT4_FC_REPLAY)
+	if (EXT4_SB(inode->i_sb)->s_mount_state & EXT4_FC_REPLAY) {
+		/* Initialize extent to zero */
+		es->es_lblk = es->es_len = es->es_pblk = 0;
 		return;
+	}
 
 	trace_ext4_es_find_extent_range_enter(inode, lblk);
 

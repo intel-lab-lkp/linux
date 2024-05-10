@@ -4053,6 +4053,9 @@ static ext4_lblk_t ext4_ext_determine_insert_hole(struct inode *inode,
 	ext4_lblk_t hole_start, len;
 	struct extent_status es;
 
+	if (EXT4_SB(inode->i_sb)->s_mount_state & EXT4_FC_REPLAY)
+		return 0;
+
 	hole_start = lblk;
 	len = ext4_ext_find_hole(inode, path, &hole_start);
 again:
@@ -4227,7 +4230,8 @@ int ext4_ext_map_blocks(handle_t *handle, struct inode *inode,
 		len = ext4_ext_determine_insert_hole(inode, path, map->m_lblk);
 
 		map->m_pblk = 0;
-		map->m_len = min_t(unsigned int, map->m_len, len);
+		if (len > 0)
+			map->m_len = min_t(unsigned int, map->m_len, len);
 		goto out;
 	}
 
