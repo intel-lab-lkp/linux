@@ -851,6 +851,7 @@ struct f2fs_inode_info {
 	/* avoid racing between foreground op and gc */
 	struct f2fs_rwsem i_gc_rwsem[2];
 	struct f2fs_rwsem i_xattr_sem; /* avoid racing between reading and changing EAs */
+	struct f2fs_rwsem i_opu_rwsem;	/* avoid racing between buf read and opu dio write */
 
 	int i_extra_isize;		/* size of extra space located in i_addr */
 	kprojid_t i_projid;		/* id for project quota */
