@@ -65,4 +65,26 @@ config PROTECTED_NVHE_STACKTRACE
 
 	  If unsure, or not using protected nVHE (pKVM), say N.
 
+config HYP_CFI_TEST
+	tristate "KVM hypervisor kCFI test support"
+	depends on KVM
+	help
+	  Say Y or M here to build KVM with test hooks to support intentionally
+	  triggering hypervisor kCFI faults in guest or host context.
+
+	  Say M here to also build a module which registers callbacks triggering
+	  faults and selected by userspace through its parameters.
+
+	  Note that this feature is currently only supported in VHE mode.
+
+	  If unsure, say N.
+
+config HYP_SUPPORTS_CFI_TEST
+	def_bool y
+	depends on HYP_CFI_TEST
+
+config HYP_CFI_TEST_MODULE
+	def_tristate m if HYP_CFI_TEST = m
+	depends on HYP_CFI_TEST
+
 endif # VIRTUALIZATION
