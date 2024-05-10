@@ -39,6 +39,7 @@
 #include <linux/debugfs.h>
 #include <linux/if_bridge.h>
 #include <linux/filter.h>
+#include <net/netdev_queues.h>
 #include <net/page_pool/types.h>
 #include <net/pkt_sched.h>
 #include <net/xdp_sock_drv.h>
@@ -5282,6 +5283,148 @@ static bool mlx5e_tunnel_any_tx_proto_supported(struct mlx5_core_dev *mdev)
 	return (mlx5_vxlan_allowed(mdev->vxlan) || mlx5_geneve_tx_allowed(mdev));
 }
 
+static void mlx5e_get_queue_stats_rx(struct net_device *dev, int i,
+				     struct netdev_queue_stats_rx *stats)
+{
+	struct mlx5e_priv *priv = netdev_priv(dev);
+
+	if (mlx5e_is_uplink_rep(priv))
+		return;
+
+	struct mlx5e_channel_stats *channel_stats = priv->channel_stats[i];
+	struct mlx5e_rq_stats *xskrq_stats = &channel_stats->xskrq;
+	struct mlx5e_rq_stats *rq_stats = &channel_stats->rq;
+
+	stats->packets = rq_stats->packets + xskrq_stats->packets;
+	stats->bytes = rq_stats->bytes + xskrq_stats->bytes;
+	stats->alloc_fail = rq_stats->buff_alloc_err +
+			    xskrq_stats->buff_alloc_err;
+}
+
+static void mlx5e_get_queue_stats_tx(struct net_device *dev, int i,
+				     struct netdev_queue_stats_tx *stats)
+{
+	struct mlx5e_priv *priv = netdev_priv(dev);
+	struct net_device *netdev = priv->netdev;
+	struct mlx5e_txqsq *sq;
+	int j;
+
+	if (mlx5e_is_uplink_rep(priv))
+		return;
+
+	for (j = 0; j < netdev->num_tx_queues; j++) {
+		sq = priv->txq2sq[j];
+		if (sq->ch_ix == i) {
+			stats->packets = sq->stats->packets;
+			stats->bytes = sq->stats->bytes;
+			return;
+		}
+	}
+}
+
+static void mlx5e_get_base_stats(struct net_device *dev,
+				 struct netdev_queue_stats_rx *rx,
+				 struct netdev_queue_stats_tx *tx)
+{
+	struct mlx5e_priv *priv = netdev_priv(dev);
+	int i, j;
+
+	if (!mlx5e_is_uplink_rep(priv)) {
+		rx->packets = 0;
+		rx->bytes = 0;
+		rx->alloc_fail = 0;
+
+		/* compute stats for deactivated RX queues
+		 *
+		 * if priv->channels.num == 0 the device is down, so compute
+		 * stats for every queue.
+		 *
+		 * otherwise, compute only the queues which have been deactivated.
+		 */
+		if (priv->channels.num == 0)
+			i = 0;
+		else
+			i = priv->channels.params.num_channels;
+
+		for (; i < priv->stats_nch; i++) {
+			struct mlx5e_channel_stats *channel_stats = priv->channel_stats[i];
+			struct mlx5e_rq_stats *xskrq_stats = &channel_stats->xskrq;
+			struct mlx5e_rq_stats *rq_stats = &channel_stats->rq;
+
+			rx->packets += rq_stats->packets + xskrq_stats->packets;
+			rx->bytes += rq_stats->bytes + xskrq_stats->bytes;
+			rx->alloc_fail += rq_stats->buff_alloc_err +
+					  xskrq_stats->buff_alloc_err;
+		}
+
+		if (priv->rx_ptp_opened) {
+			struct mlx5e_rq_stats *rq_stats = &priv->ptp_stats.rq;
+
+			rx->packets += rq_stats->packets;
+			rx->bytes += rq_stats->bytes;
+		}
+	}
+
+	tx->packets = 0;
+	tx->bytes = 0;
+
+	/* three TX cases to handle:
+	 *
+	 * case 1: priv->channels.num == 0, get the stats for every TC
+	 *         on every queue.
+	 *
+	 * case 2: priv->channel.num > 0, so get the stats for every TC on
+	 *         every deactivated queue.
+	 *
+	 * case 3: the number of TCs has changed, so get the stats for the
+	 *         inactive TCs on active TX queues (handled in the second loop
+	 *         below).
+	 */
+	if (priv->channels.num == 0)
+		i = 0;
+	else
+		i = priv->channels.params.num_channels;
+
+	for (; i < priv->stats_nch; i++) {
+		struct mlx5e_channel_stats *channel_stats = priv->channel_stats[i];
+
+		for (j = 0; j < priv->max_opened_tc; j++) {
+			struct mlx5e_sq_stats *sq_stats = &channel_stats->sq[j];
+
+			tx->packets += sq_stats->packets;
+			tx->bytes += sq_stats->bytes;
+		}
+	}
+
+	/* Handle case 3 described above. */
+	for (i = 0; i < priv->channels.params.num_channels; i++) {
+		struct mlx5e_channel_stats *channel_stats = priv->channel_stats[i];
+		u8 dcb_num_tc = mlx5e_get_dcb_num_tc(&priv->channels.params);
+
+		for (j = dcb_num_tc; j < priv->max_opened_tc; j++) {
+			struct mlx5e_sq_stats *sq_stats = &channel_stats->sq[j];
+
+			tx->packets += sq_stats->packets;
+			tx->bytes += sq_stats->bytes;
+		}
+	}
+
+	if (priv->tx_ptp_opened) {
+		for (j = 0; j < priv->max_opened_tc; j++) {
+			struct mlx5e_sq_stats *sq_stats = &priv->ptp_stats.sq[j];
+
+			tx->packets    += sq_stats->packets;
+			tx->bytes      += sq_stats->bytes;
+		}
+	}
+}
+
+static const struct netdev_stat_ops mlx5e_stat_ops = {
+	.get_queue_stats_rx     = mlx5e_get_queue_stats_rx,
+	.get_queue_stats_tx     = mlx5e_get_queue_stats_tx,
+	.get_base_stats         = mlx5e_get_base_stats,
+};
+
 static void mlx5e_build_nic_netdev(struct net_device *netdev)
 {
 	struct mlx5e_priv *priv = netdev_priv(netdev);
@@ -5299,6 +5442,7 @@ static void mlx5e_build_nic_netdev(struct net_device *netdev)
 
 	netdev->watchdog_timeo    = 15 * HZ;
 
+	netdev->stat_ops          = &mlx5e_stat_ops;
 	netdev->ethtool_ops	  = &mlx5e_ethtool_ops;
 
 	netdev->vlan_features    |= NETIF_F_SG;
