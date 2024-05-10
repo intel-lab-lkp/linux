@@ -231,6 +231,23 @@ struct ath12k_vif_cache {
 	u32 bss_conf_changed;
 };
 
+#define ATH12K_IPV6_UC_TYPE     0
+#define ATH12K_IPV6_AC_TYPE     1
+
+#define ATH12K_IPV6_MAX_COUNT   16
+#define ATH12K_IPV4_MAX_COUNT   2
+
+struct ath12k_arp_ns_offload {
+	u8  ipv4_addr[ATH12K_IPV4_MAX_COUNT][4];
+	u32 ipv4_count;
+	u32 ipv6_count;
+	u8  ipv6_addr[ATH12K_IPV6_MAX_COUNT][16];
+	u8  self_ipv6_addr[ATH12K_IPV6_MAX_COUNT][16];
+	u8  ipv6_type[ATH12K_IPV6_MAX_COUNT];
+	bool ipv6_valid[ATH12K_IPV6_MAX_COUNT];
+	u8  mac_addr[ETH_ALEN];
+};
+
 struct ath12k_vif {
 	u32 vdev_id;
 	enum wmi_vdev_type vdev_type;
@@ -287,6 +304,7 @@ struct ath12k_vif {
 	u32 punct_bitmap;
 	bool ps;
 	struct ath12k_vif_cache *cache;
+	struct ath12k_arp_ns_offload *arp_ns_offload;
 };
 
 struct ath12k_vif_iter {
