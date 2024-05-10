@@ -361,10 +361,33 @@ static void smc_destruct(struct sock *sk)
 		return;
 }
 
+static void smc_sock_init(struct net *net, struct sock *sk, int protocol)
+{
+	struct smc_sock *smc = smc_sk(sk);
+
+	sk->sk_state = SMC_INIT;
+	sk->sk_protocol = protocol;
+	mutex_init(&smc->clcsock_release_lock);
+	WRITE_ONCE(sk->sk_sndbuf, 2 * READ_ONCE(net->smc.sysctl_wmem));
+	WRITE_ONCE(sk->sk_rcvbuf, 2 * READ_ONCE(net->smc.sysctl_rmem));
+	INIT_WORK(&smc->tcp_listen_work, smc_tcp_listen_work);
+	INIT_WORK(&smc->connect_work, smc_connect_work);
+	INIT_DELAYED_WORK(&smc->conn.tx_work, smc_tx_work);
+	INIT_LIST_HEAD(&smc->accept_q);
+	spin_lock_init(&smc->accept_q_lock);
+	spin_lock_init(&smc->conn.send_lock);
+	smc_init_saved_callbacks(smc);
+	smc->limit_smc_hs = net->smc.limit_smc_hs;
+	smc->use_fallback = false; /* assume rdma capability first */
+	smc->fallback_rsn = 0;
+
+	sk->sk_destruct = smc_destruct;
+	sk->sk_prot->hash(sk);
+}
+
 static struct sock *smc_sock_alloc(struct net *net, struct socket *sock,
 				   int protocol)
 {
-	struct smc_sock *smc;
 	struct proto *prot;
 	struct sock *sk;
 
@@ -374,21 +397,7 @@ static struct sock *smc_sock_alloc(struct net *net, struct socket *sock,
 		return NULL;
 
 	sock_init_data(sock, sk); /* sets sk_refcnt to 1 */
-	sk->sk_state = SMC_INIT;
-	sk->sk_destruct = smc_destruct;
-	sk->sk_protocol = protocol;
-	WRITE_ONCE(sk->sk_sndbuf, 2 * READ_ONCE(net->smc.sysctl_wmem));
-	WRITE_ONCE(sk->sk_rcvbuf, 2 * READ_ONCE(net->smc.sysctl_rmem));
-	smc = smc_sk(sk);
-	INIT_WORK(&smc->tcp_listen_work, smc_tcp_listen_work);
-	INIT_WORK(&smc->connect_work, smc_connect_work);
-	INIT_DELAYED_WORK(&smc->conn.tx_work, smc_tx_work);
-	INIT_LIST_HEAD(&smc->accept_q);
-	spin_lock_init(&smc->accept_q_lock);
-	spin_lock_init(&smc->conn.send_lock);
-	sk->sk_prot->hash(sk);
-	mutex_init(&smc->clcsock_release_lock);
-	smc_init_saved_callbacks(smc);
+	smc_sock_init(net, sk, protocol);
 
 	return sk;
 }
@@ -3321,6 +3330,31 @@ static const struct proto_ops smc_sock_ops = {
 	.splice_read	= smc_splice_read,
 };
 
+static int __smc_create_clcsk(struct net *net, struct sock *sk, int family)
+{
+	struct smc_sock *smc = smc_sk(sk);
+	int rc;
+
+	rc = sock_create_kern(net, family, SOCK_STREAM, IPPROTO_TCP,
+			      &smc->clcsock);
+	if (rc) {
+		sk_common_release(sk);
+		return rc;
+	}
+
+	/* smc_clcsock_release() does not wait smc->clcsock->sk's
+	 * destruction;  its sk_state might not be TCP_CLOSE after
+	 * smc->sk is close()d, and TCP timers can be fired later,
+	 * which need net ref.
+	 */
+	sk = smc->clcsock->sk;
+	__netns_tracker_free(net, &sk->ns_tracker, false);
+	sk->sk_net_refcnt = 1;
+	get_net_track(net, &sk->ns_tracker, GFP_KERNEL);
+	sock_inuse_add(net, 1);
+	return 0;
+}
+
 static int __smc_create(struct net *net, struct socket *sock, int protocol,
 			int kern, struct socket *clcsock)
 {
@@ -3346,35 +3380,12 @@ static int __smc_create(struct net *net, struct socket *sock, int protocol,
 
 	/* create internal TCP socket for CLC handshake and fallback */
 	smc = smc_sk(sk);
-	smc->use_fallback = false; /* assume rdma capability first */
-	smc->fallback_rsn = 0;
-
-	/* default behavior from limit_smc_hs in every net namespace */
-	smc->limit_smc_hs = net->smc.limit_smc_hs;
 
 	rc = 0;
-	if (!clcsock) {
-		rc = sock_create_kern(net, family, SOCK_STREAM, IPPROTO_TCP,
-				      &smc->clcsock);
-		if (rc) {
-			sk_common_release(sk);
-			goto out;
-		}
-
-		/* smc_clcsock_release() does not wait smc->clcsock->sk's
-		 * destruction;  its sk_state might not be TCP_CLOSE after
-		 * smc->sk is close()d, and TCP timers can be fired later,
-		 * which need net ref.
-		 */
-		sk = smc->clcsock->sk;
-		__netns_tracker_free(net, &sk->ns_tracker, false);
-		sk->sk_net_refcnt = 1;
-		get_net_track(net, &sk->ns_tracker, GFP_KERNEL);
-		sock_inuse_add(net, 1);
-	} else {
+	if (!clcsock)
+		rc = __smc_create_clcsk(net, sk, family);
+	else
 		smc->clcsock = clcsock;
-	}
-
 out:
 	return rc;
 }
