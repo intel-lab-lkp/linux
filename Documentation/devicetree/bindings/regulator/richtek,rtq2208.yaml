@@ -75,6 +75,13 @@ properties:
         description:
           regulator description for ldo[1-2].
 
+        properties:
+          richtek,fixed-microvolt:
+            description: |
+              If it exists, the voltage is unadjustable.
+              There is no risk-free method for software to determine whether the ldo vout is fixed or not.
+              Therefore, it can only be done in this way.
+
 required:
   - compatible
   - reg
@@ -177,6 +184,7 @@ examples:
             };
           };
           ldo1 {
+            richtek,fixed-microvolt = <1200000>;
             regulator-min-microvolt = <1200000>;
             regulator-max-microvolt = <1200000>;
             regulator-always-on;
