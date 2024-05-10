@@ -811,8 +811,13 @@ int ipu_bridge_init(struct device *dev,
 		bridge->data_lanes[i] = i + 1;
 
 	ret = ipu_bridge_connect_sensors(bridge);
-	if (ret || bridge->n_sensors == 0)
+	if (ret)
 		goto err_unregister_ipu;
+
+	if (bridge->n_sensors == 0) {
+		ret = -EINVAL;
+		goto err_unregister_ipu;
+	}
 
 	dev_info(dev, "Connected %d cameras\n", bridge->n_sensors);
 
