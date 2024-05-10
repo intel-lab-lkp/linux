@@ -34,6 +34,48 @@
  * during the lifetime of the driver, all the functions are fully concurrent
  * safe. But it is recommended to use managed resources only for resources that
  * change rarely, if ever, during the lifetime of the &drm_device instance.
+ *
+ * Note that the distinction between devm and drmm is important to get right.
+ * Consider some hotunplug scenarios, where it is valid for there to be multiple
+ * unplugged struct &drm_device instances each being kept alive by an open
+ * driver fd. The driver needs a clean separation between what needs to happen
+ * when the struct &device is removed and what needs to happen when a given
+ * struct &drm_device instance is released, as well as in some cases a more
+ * finer grained marking of critical sections that require hardware interaction.
+ * See below.
+ *
+ * devm
+ * ~~~~
+ * In general use devm for cleaning up anything hardware related. So removing
+ * pci mmaps, releasing interrupt handlers, basically anything hw related.  The
+ * devm release actions are called when the struct &device is removed, shortly
+ * after calling into the drivers struct &pci_driver.remove() callback, if this
+ * is a pci device.
+ *
+ * devm can be thought of as an alternative to putting all the hw related
+ * cleanup directly in the struct &pci_driver.remove() callback, where the
+ * correct ordering of the unwind steps needs to be manually done in the error
+ * path of the struct &pci_driver.probe() and again on the remove side.  With
+ * devm this is all done automatically.
+ *
+ * drmm
+ * ~~~~
+ * In general use this for cleaning up anything software related. So data
+ * structures and the like which are tied to the lifetime of a particular struct
+ * &drm_device instance.
+ *
+ * drmm can be thought of as an alternative to putting all the software related
+ * cleanup directly in the struct &drm_driver.release() callback, where again
+ * the correct ordering of the unwind steps needs to be done manually. As with
+ * devm this is instead done automatically.
+ *
+ * Sometimes there is no clean separation between software and hardware, which
+ * is where drm_dev_enter() comes in. For example, a driver might have some
+ * state tied to a struct &drm_device instance, for which the same cleanup path
+ * is called for both a plugged and unplugged device, and the cleanup itself
+ * might require talking to the device if it's still attached to this particular
+ * struct &drm_device. For that we instead mark the device sections.  See
+ * drm_dev_enter(), drm_dev_exit() and drm_dev_unplug().
  */
 
 struct drmres_node {
