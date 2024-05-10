@@ -63,6 +63,11 @@ MODULE_PARM_DESC(sgl_threshold,
 		"Use SGLs when average request segment size is larger or equal to "
 		"this size. Use 0 to disable SGLs.");
 
+static bool managed_irqs = true;
+module_param(managed_irqs, bool, 0444);
+MODULE_PARM_DESC(managed_irqs,
+		 "set to false for user controlled irq affinity");
+
 #define NVME_PCI_MIN_QUEUE_SIZE 2
 #define NVME_PCI_MAX_QUEUE_SIZE 4095
 static int io_queue_depth_set(const char *val, const struct kernel_param *kp);
@@ -456,7 +461,7 @@ static void nvme_pci_map_queues(struct blk_mq_tag_set *set)
 		 * affinity), so use the regular blk-mq cpu mapping
 		 */
 		map->queue_offset = qoff;
-		if (i != HCTX_TYPE_POLL && offset)
+		if (managed_irqs && i != HCTX_TYPE_POLL && offset)
 			blk_mq_pci_map_queues(map, to_pci_dev(dev->dev), offset);
 		else
 			blk_mq_map_queues(map);
@@ -2180,6 +2185,9 @@ static void nvme_calc_irq_sets(struct irq_affinity *affd, unsigned int nrirqs)
 	struct nvme_dev *dev = affd->priv;
 	unsigned int nr_read_queues, nr_write_queues = dev->nr_write_queues;
 
+	if (!nrirqs)
+		nrirqs = affd->post_vectors;
+
 	/*
 	 * If there is no interrupt available for queues, ensure that
 	 * the default queue is set to 1. The affinity set size is
@@ -2225,6 +2233,9 @@ static int nvme_setup_irqs(struct nvme_dev *dev, unsigned int nr_io_queues)
 	 */
 	poll_queues = min(dev->nr_poll_queues, nr_io_queues - 1);
 	dev->io_queues[HCTX_TYPE_POLL] = poll_queues;
+
+	if (!managed_irqs)
+		affd.post_vectors = nr_io_queues - poll_queues;
 
 	/*
 	 * Initialize for the single interrupt case, will be updated in
