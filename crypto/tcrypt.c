@@ -1454,6 +1454,8 @@ static int do_test(const char *alg, u32 type, u32 mask, int m, u32 num_mb)
 	int i;
 	int ret = 0;
 
+	u8 speed_template[2] = {klen, 0};
+
 	switch (m) {
 	case 0:
 		if (alg) {
@@ -2807,6 +2809,16 @@ static int do_test(const char *alg, u32 type, u32 mask, int m, u32 num_mb)
 				       speed_template_16_32, num_mb);
 		break;
 
+	case 611:
+		if (alg)
+			test_mb_skcipher_speed(alg, ENCRYPT, sec, NULL, 0,
+					       speed_template, num_mb);
+		break;
+	case 612:
+		if (alg)
+			test_mb_skcipher_speed(alg, DECRYPT, sec, NULL, 0,
+					       speed_template, num_mb);
+		break;
 	}
 
 	return ret;
