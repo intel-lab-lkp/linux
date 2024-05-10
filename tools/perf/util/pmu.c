@@ -1743,6 +1743,8 @@ size_t perf_pmu__num_events(struct perf_pmu *pmu)
 		 nr += pmu->loaded_json_aliases;
 	else if (pmu->events_table)
 		nr += pmu_events_table__num_events(pmu->events_table, pmu) - pmu->loaded_json_aliases;
+	else
+		nr += pmu->loaded_json_aliases;
 
 	return pmu->selectable ? nr + 1 : nr;
 }
