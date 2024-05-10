@@ -9,9 +9,9 @@ Supported chips:
 
     Addresses scanned: I2C 0x28 - 0x2f
 
-    Datasheet: Publicly available at the National Semiconductor website
+    Datasheet: Publicly available at the Texas Instruments website
 
-	       http://www.national.com/
+	       http://www.ti.com/product/LM80
 
   * National Semiconductor LM96080
 
@@ -19,10 +19,19 @@ Supported chips:
 
     Addresses scanned: I2C 0x28 - 0x2f
 
-    Datasheet: Publicly available at the National Semiconductor website
+    Datasheet: Publicly available at the Texas Instruments website
 
-	       http://www.national.com/
+	       http://www.ti.com/product/LM96080
 
+  * Texas Instruments AMC80
+
+    Prefix: "amc80"
+
+    Addresses scanned: I2C 0x28 - 0x2f
+
+    Datasheet: Publicly available at the Texas Instruments website
+
+        http://www.ti.com/product/AMC80
 
 Authors:
        - Frodo Looijaard <frodol@dds.nl>,
@@ -35,7 +44,8 @@ This driver implements support for the National Semiconductor LM80.
 It is described as a 'Serial Interface ACPI-Compatible Microprocessor
 System Hardware Monitor'. The LM96080 is a more recent incarnation,
 it is pin and register compatible, with a few additional features not
-yet supported by the driver.
+yet supported by the driver. The AMC80 is pin and register compatible
+with the LM96080 and only changes the manufacturer ID.
 
 The LM80 implements one temperature sensor, two fan rotation speed sensors,
 seven voltage sensors, alarms, and some miscellaneous stuff.
