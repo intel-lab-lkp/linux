@@ -140,7 +140,9 @@ enum ad3552r_ch_vref_select {
 };
 
 enum ad3542r_id {
+	AD3541R_ID = 0x400b,
 	AD3542R_ID = 0x4009,
+	AD3551R_ID = 0x400a,
 	AD3552R_ID = 0x4008,
 };
 
@@ -745,7 +747,8 @@ static void ad3552r_calc_gain_and_offset(struct ad3552r_desc *dac, s32 ch)
 	} else {
 		/* Normal range */
 		idx = dac->ch_data[ch].range;
-		if (dac->chip_id == AD3542R_ID) {
+		if (dac->chip_id == AD3541R_ID ||
+		    dac->chip_id == AD3542R_ID) {
 			v_min = ad3542r_ch_ranges[idx][0];
 			v_max = ad3542r_ch_ranges[idx][1];
 		} else {
@@ -780,7 +783,7 @@ static int ad3552r_find_range(u16 id, s32 *vals)
 	int i, len;
 	const s32 (*ranges)[2];
 
-	if (id == AD3542R_ID) {
+	if (id == AD3541R_ID || id == AD3542R_ID) {
 		len = ARRAY_SIZE(ad3542r_ch_ranges);
 		ranges = ad3542r_ch_ranges;
 	} else {
@@ -955,9 +958,10 @@ static int ad3552r_configure_device(struct ad3552r_desc *dac)
 			dev_err(dev, "mandatory reg property missing\n");
 			goto put_child;
 		}
-		if (ch >= AD3552R_NUM_CH) {
-			dev_err(dev, "reg must be less than %d\n",
-				AD3552R_NUM_CH);
+		if (ch >= AD3552R_NUM_CH ||
+			(dac->chip_id == AD3541R_ID && ch) ||
+			(dac->chip_id == AD3551R_ID && ch)) {
+			dev_err(dev, "channel %d is not supported\n", ch);
 			err = -EINVAL;
 			goto put_child;
 		}
@@ -987,9 +991,10 @@ static int ad3552r_configure_device(struct ad3552r_desc *dac)
 				goto put_child;
 
 			dac->ch_data[ch].range = val;
-		} else if (dac->chip_id == AD3542R_ID) {
+		} else if (dac->chip_id == AD3541R_ID ||
+			   dac->chip_id == AD3542R_ID) {
 			dev_err(dev,
-				"adi,output-range-microvolt is required for ad3542r\n");
+				"adi,output-range-microvolt is required for ad354xr\n");
 			err = -EINVAL;
 			goto put_child;
 		} else {
@@ -1088,10 +1093,20 @@ static int ad3552r_probe(struct spi_device *spi)
 		return err;
 
 	/* Config triggered buffer device */
-	if (dac->chip_id == AD3552R_ID)
-		indio_dev->name = "ad3552r";
-	else
+	switch (dac->chip_id) {
+	case AD3541R_ID:
+		indio_dev->name = "ad3541r";
+		break;
+	case AD3542R_ID:
 		indio_dev->name = "ad3542r";
+		break;
+	case AD3551R_ID:
+		indio_dev->name = "ad3551r";
+		break;
+	case AD3552R_ID:
+		indio_dev->name = "ad3552r";
+		break;
+	}
 	indio_dev->dev.parent = &spi->dev;
 	indio_dev->info = &ad3552r_iio_info;
 	indio_dev->num_channels = dac->num_ch;
@@ -1110,14 +1125,18 @@ static int ad3552r_probe(struct spi_device *spi)
 }
 
 static const struct spi_device_id ad3552r_id[] = {
+	{ "ad3541r", AD3541R_ID },
 	{ "ad3542r", AD3542R_ID },
+	{ "ad3551r", AD3551R_ID },
 	{ "ad3552r", AD3552R_ID },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, ad3552r_id);
 
 static const struct of_device_id ad3552r_of_match[] = {
+	{ .compatible = "adi,ad3541r"},
 	{ .compatible = "adi,ad3542r"},
+	{ .compatible = "adi,ad3551r"},
 	{ .compatible = "adi,ad3552r"},
 	{ }
 };
