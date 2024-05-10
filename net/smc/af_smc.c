@@ -54,6 +54,7 @@
 #include "smc_tracepoint.h"
 #include "smc_sysctl.h"
 #include "smc_loopback.h"
+#include "inet_smc.h"
 
 static DEFINE_MUTEX(smc_server_lgr_pending);	/* serialize link group
 						 * creation on server
@@ -3402,6 +3403,16 @@ static const struct net_proto_family smc_sock_family_ops = {
 	.create	= smc_create,
 };
 
+int smc_inet_init_sock(struct sock *sk)
+{
+	struct net *net = sock_net(sk);
+
+	/* init common smc sock */
+	smc_sock_init(net, sk, IPPROTO_SMC);
+	/* create clcsock */
+	return __smc_create_clcsk(net, sk, sk->sk_family);
+}
+
 static int smc_ulp_init(struct sock *sk)
 {
 	struct socket *tcp = sk->sk_socket;
@@ -3459,6 +3470,90 @@ static struct tcp_ulp_ops smc_ulp_ops __read_mostly = {
 	.init		= smc_ulp_init,
 	.clone		= smc_ulp_clone,
 };
+
+struct proto smc_inet_prot = {
+	.name			= "INET_SMC",
+	.owner			= THIS_MODULE,
+	.init			= smc_inet_init_sock,
+	.hash			= smc_hash_sk,
+	.unhash			= smc_unhash_sk,
+	.release_cb		= smc_release_cb,
+	.obj_size		= sizeof(struct smc_sock),
+	.h.smc_hash	= &smc_v4_hashinfo,
+	.slab_flags	= SLAB_TYPESAFE_BY_RCU,
+};
+
+const struct proto_ops smc_inet_stream_ops = {
+	.family		= PF_INET,
+	.owner		= THIS_MODULE,
+	.release	= smc_release,
+	.bind		= smc_bind,
+	.connect	= smc_connect,
+	.socketpair	= sock_no_socketpair,
+	.accept		= smc_accept,
+	.getname	= smc_getname,
+	.poll		= smc_poll,
+	.ioctl		= smc_ioctl,
+	.listen		= smc_listen,
+	.shutdown	= smc_shutdown,
+	.setsockopt	= smc_setsockopt,
+	.getsockopt	= smc_getsockopt,
+	.sendmsg	= smc_sendmsg,
+	.recvmsg	= smc_recvmsg,
+	.mmap		= sock_no_mmap,
+	.splice_read	= smc_splice_read,
+};
+
+struct inet_protosw smc_inet_protosw = {
+	.type       = SOCK_STREAM,
+	.protocol   = IPPROTO_SMC,
+	.prot   = &smc_inet_prot,
+	.ops    = &smc_inet_stream_ops,
+	.flags  = INET_PROTOSW_ICSK,
+};
+
+#if IS_ENABLED(CONFIG_IPV6)
+struct proto smc_inet6_prot = {
+	.name			= "INET6_SMC",
+	.owner			= THIS_MODULE,
+	.init			= smc_inet_init_sock,
+	.hash			= smc_hash_sk,
+	.unhash			= smc_unhash_sk,
+	.release_cb		= smc_release_cb,
+	.obj_size		= sizeof(struct smc_sock),
+	.h.smc_hash		= &smc_v6_hashinfo,
+	.slab_flags		= SLAB_TYPESAFE_BY_RCU,
+};
+
+const struct proto_ops smc_inet6_stream_ops = {
+	.family		= PF_INET6,
+	.owner		= THIS_MODULE,
+	.release	= smc_release,
+	.bind		= smc_bind,
+	.connect	= smc_connect,
+	.socketpair	= sock_no_socketpair,
+	.accept		= smc_accept,
+	.getname	= smc_getname,
+	.poll		= smc_poll,
+	.ioctl		= smc_ioctl,
+	.listen		= smc_listen,
+	.shutdown	= smc_shutdown,
+	.setsockopt	= smc_setsockopt,
+	.getsockopt	= smc_getsockopt,
+	.sendmsg	= smc_sendmsg,
+	.recvmsg	= smc_recvmsg,
+	.mmap		= sock_no_mmap,
+	.splice_read	= smc_splice_read,
+};
+
+struct inet_protosw smc_inet6_protosw = {
+	.type       = SOCK_STREAM,
+	.protocol   = IPPROTO_SMC,
+	.prot   = &smc_inet6_prot,
+	.ops    = &smc_inet6_stream_ops,
+	.flags  = INET_PROTOSW_ICSK,
+};
+#endif
 
 unsigned int smc_net_id;
 
@@ -3595,9 +3690,28 @@ static int __init smc_init(void)
 		goto out_lo;
 	}
 
+	rc = proto_register(&smc_inet_prot, 1);
+	if (rc) {
+		pr_err("%s: proto_register smc_inet_prot fails with %d\n", __func__, rc);
+		goto out_ulp;
+	}
+	inet_register_protosw(&smc_inet_protosw);
+#if IS_ENABLED(CONFIG_IPV6)
+	rc = proto_register(&smc_inet6_prot, 1);
+	if (rc) {
+		pr_err("%s: proto_register smc_inet6_prot fails with %d\n", __func__, rc);
+		goto out_inet_prot;
+	}
+	inet6_register_protosw(&smc_inet6_protosw);
+#endif
+
 	static_branch_enable(&tcp_have_smc);
 	return 0;
-
+out_inet_prot:
+	inet_unregister_protosw(&smc_inet_protosw);
+	proto_unregister(&smc_inet_prot);
+out_ulp:
+	tcp_unregister_ulp(&smc_ulp_ops);
 out_lo:
 	smc_loopback_exit();
 out_ib:
@@ -3634,6 +3748,10 @@ out_pernet_subsys:
 static void __exit smc_exit(void)
 {
 	static_branch_disable(&tcp_have_smc);
+	inet_unregister_protosw(&smc_inet_protosw);
+#if IS_ENABLED(CONFIG_IPV6)
+	inet6_unregister_protosw(&smc_inet6_protosw);
+#endif
 	tcp_unregister_ulp(&smc_ulp_ops);
 	sock_unregister(PF_SMC);
 	smc_core_exit();
@@ -3645,6 +3763,10 @@ static void __exit smc_exit(void)
 	destroy_workqueue(smc_hs_wq);
 	proto_unregister(&smc_proto6);
 	proto_unregister(&smc_proto);
+	proto_unregister(&smc_inet_prot);
+#if IS_ENABLED(CONFIG_IPV6)
+	proto_unregister(&smc_inet6_prot);
+#endif
 	smc_pnet_exit();
 	smc_nl_exit();
 	smc_clc_exit();
@@ -3661,4 +3783,9 @@ MODULE_DESCRIPTION("smc socket address family");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS_NETPROTO(PF_SMC);
 MODULE_ALIAS_TCP_ULP("smc");
+/* 263 for IPPROTO_SMC and 1 for SOCK_STREAM */
+MODULE_ALIAS_NET_PF_PROTO_TYPE(PF_INET, 263, 1);
+#if IS_ENABLED(CONFIG_IPV6)
+MODULE_ALIAS_NET_PF_PROTO_TYPE(PF_INET6, 263, 1);
+#endif
 MODULE_ALIAS_GENL_FAMILY(SMC_GENL_FAMILY_NAME);
