@@ -879,6 +879,7 @@ static void __init early_panic(char *msg)
 }
 
 static int userdef __initdata;
+static u64 userdef_mem_limit;
 
 /* The "mem=nopentium" boot option disables 4MB page tables on 32-bit kernels: */
 static int __init parse_memopt(char *p)
@@ -905,7 +906,10 @@ static int __init parse_memopt(char *p)
 	if (mem_size == 0)
 		return -EINVAL;
 
-	e820__range_remove(mem_size, ULLONG_MAX - mem_size, E820_TYPE_RAM, 1);
+	if (userdef_mem_limit)
+		userdef_mem_limit = min(userdef_mem_limit, mem_size);
+	else
+		userdef_mem_limit = mem_size;
 
 #ifdef CONFIG_MEMORY_HOTPLUG
 	max_mem_size = mem_size;
@@ -966,7 +970,10 @@ static int __init parse_memmap_one(char *p)
 		else
 			e820__range_remove(start_at, mem_size, 0, 0);
 	} else {
-		e820__range_remove(mem_size, ULLONG_MAX - mem_size, E820_TYPE_RAM, 1);
+		if (userdef_mem_limit)
+			userdef_mem_limit = min(userdef_mem_limit, mem_size);
+		else
+			userdef_mem_limit = mem_size;
 	}
 
 	return *p == '\0' ? 0 : -EINVAL;
@@ -1063,6 +1070,11 @@ void __init e820__reserve_setup_data(void)
 void __init e820__finish_early_params(void)
 {
 	if (userdef) {
+		if (userdef_mem_limit)
+			e820__range_remove(userdef_mem_limit,
+					ULLONG_MAX - userdef_mem_limit,
+					E820_TYPE_RAM, 1);
+
 		if (e820__update_table(e820_table) < 0)
 			early_panic("Invalid user supplied memory map");
 
