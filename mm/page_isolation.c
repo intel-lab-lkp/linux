@@ -260,6 +260,12 @@ static void unset_migratetype_isolate(struct page *page, int migratetype)
 	zone->nr_isolate_pageblock--;
 out:
 	spin_unlock_irqrestore(&zone->lock, flags);
+
+	/*
+	 * Check and flush for the pages that have been isolated.
+	 */
+	if (isolated_page)
+		check_flush_task_ugen();
 }
 
 static inline struct page *
