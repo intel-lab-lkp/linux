@@ -2842,6 +2842,74 @@ int __sock_cmsg_send(struct sock *sk, struct cmsghdr *cmsg,
 	case SCM_RIGHTS:
 	case SCM_CREDENTIALS:
 		break;
+	case SCM_ZC_NOTIFICATION: {
+		int ret, i = 0;
+		int cmsg_data_len, zc_info_elem_num;
+		void __user	*usr_addr;
+		struct zc_info_elem zc_info_kern[SOCK_ZC_INFO_MAX];
+		unsigned long flags;
+		struct sk_buff_head *q, local_q;
+		struct sk_buff *skb, *tmp;
+		struct sock_exterr_skb *serr;
+
+		if (!sock_flag(sk, SOCK_ZEROCOPY) || sk->sk_family == PF_RDS)
+			return -EINVAL;
+
+		cmsg_data_len = cmsg->cmsg_len - sizeof(struct cmsghdr);
+		if (cmsg_data_len % sizeof(struct zc_info_elem))
+			return -EINVAL;
+
+		zc_info_elem_num = cmsg_data_len / sizeof(struct zc_info_elem);
+		if (!zc_info_elem_num || zc_info_elem_num > SOCK_ZC_INFO_MAX)
+			return -EINVAL;
+
+		if (in_compat_syscall())
+			usr_addr = compat_ptr(*(compat_uptr_t *)CMSG_DATA(cmsg));
+		else
+			usr_addr = (void __user *)*(void **)CMSG_DATA(cmsg);
+		if (!access_ok(usr_addr, cmsg_data_len))
+			return -EFAULT;
+
+		q = &sk->sk_error_queue;
+		skb_queue_head_init(&local_q);
+		spin_lock_irqsave(&q->lock, flags);
+		skb = skb_peek(q);
+		while (skb && i < zc_info_elem_num) {
+			struct sk_buff *skb_next = skb_peek_next(skb, q);
+
+			serr = SKB_EXT_ERR(skb);
+			if (serr->ee.ee_errno == 0 &&
+			    serr->ee.ee_origin == SO_EE_ORIGIN_ZEROCOPY) {
+				zc_info_kern[i].hi = serr->ee.ee_data;
+				zc_info_kern[i].lo = serr->ee.ee_info;
+				zc_info_kern[i].zerocopy = !(serr->ee.ee_code
+								& SO_EE_CODE_ZEROCOPY_COPIED);
+				__skb_unlink(skb, q);
+				__skb_queue_tail(&local_q, skb);
+				i++;
+			}
+			skb = skb_next;
+		}
+		spin_unlock_irqrestore(&q->lock, flags);
+
+		ret = copy_to_user(usr_addr,
+				   zc_info_kern,
+					i * sizeof(struct zc_info_elem));
+
+		if (unlikely(ret)) {
+			spin_lock_irqsave(&q->lock, flags);
+			skb_queue_reverse_walk_safe(&local_q, skb, tmp) {
+				__skb_unlink(skb, &local_q);
+				__skb_queue_head(q, skb);
+			}
+			spin_unlock_irqrestore(&q->lock, flags);
+			return -EFAULT;
+		}
+
+		while ((skb = __skb_dequeue(&local_q)))
+			consume_skb(skb);
+		break;
+	}
 	default:
 		return -EINVAL;
 	}
