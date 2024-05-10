@@ -149,6 +149,14 @@
 #define MEM_DISCARD(sec) *(.mem##sec)
 #endif
 
+#if defined(CONFIG_ARCH_KEEP_MEMBLOCK)
+#define MEMBLOCK_KEEP(sec)    *(.mb##sec)
+#define MEMBLOCK_DISCARD(sec)
+#else
+#define MEMBLOCK_KEEP(sec)
+#define MEMBLOCK_DISCARD(sec) *(.mb##sec)
+#endif
+
 #ifndef CONFIG_HAVE_DYNAMIC_FTRACE_NO_PATCHABLE
 #define KEEP_PATCHABLE		KEEP(*(__patchable_function_entries))
 #define PATCHABLE_DISCARDS
@@ -358,6 +366,7 @@
 	*(.ref.data)							\
 	*(.data..shared_aligned) /* percpu related */			\
 	MEM_KEEP(init.data*)						\
+	MEMBLOCK_KEEP(init.data*)					\
 	*(.data.unlikely)						\
 	__start_once = .;						\
 	*(.data.once)							\
@@ -576,6 +585,7 @@
 		*(.ref.text)						\
 		*(.text.asan.* .text.tsan.*)				\
 	MEM_KEEP(init.text*)						\
+	MEMBLOCK_KEEP(init.text*)					\
 
 
 /* sched.text is aling to function alignment to secure we have same
@@ -683,6 +693,7 @@
 	KEEP(*(SORT(___kentry+*)))					\
 	*(.init.data .init.data.*)					\
 	MEM_DISCARD(init.data*)						\
+	MEMBLOCK_DISCARD(init.data*)					\
 	KERNEL_CTORS()							\
 	MCOUNT_REC()							\
 	*(.init.rodata .init.rodata.*)					\
@@ -709,7 +720,8 @@
 #define INIT_TEXT							\
 	*(.init.text .init.text.*)					\
 	*(.text.startup)						\
-	MEM_DISCARD(init.text*)
+	MEM_DISCARD(init.text*)						\
+	MEMBLOCK_DISCARD(init.text*)
 
 #define EXIT_DATA							\
 	*(.exit.data .exit.data.*)					\

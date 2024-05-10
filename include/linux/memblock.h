@@ -100,13 +100,13 @@ struct memblock {
 
 extern struct memblock memblock;
 
+#define __init_memblock        __section(".mbinit.text") __cold notrace \
+						  __latent_entropy
+#define __initdata_memblock    __section(".mbinit.data")
+
 #ifndef CONFIG_ARCH_KEEP_MEMBLOCK
-#define __init_memblock __meminit
-#define __initdata_memblock __meminitdata
 void memblock_discard(void);
 #else
-#define __init_memblock
-#define __initdata_memblock
 static inline void memblock_discard(void) {}
 #endif
 
