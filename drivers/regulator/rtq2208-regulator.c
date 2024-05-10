@@ -41,7 +41,9 @@
 #define RTQ2208_EN_DIS_MASK			BIT(0)
 #define RTQ2208_BUCK_RAMP_SEL_MASK		GENMASK(2, 0)
 #define RTQ2208_HD_INT_MASK			BIT(0)
+#define RTQ2208_LDO1_DISCHG_EN_MASK		BIT(4)
 #define RTQ2208_LDO1_VOSEL_SD_MASK		BIT(5)
+#define RTQ2208_LDO2_DISCHG_EN_MASK		BIT(6)
 #define RTQ2208_LDO2_VOSEL_SD_MASK		BIT(7)
 
 /* Size */
@@ -339,11 +341,12 @@ static irqreturn_t rtq2208_irq_handler(int irqno, void *devid)
 	.name = _name,							\
 	.base = RTQ2208_REG_LDO##_id##_CFG,				\
 	.enable_reg = RTQ2208_REG_LDO##_id##_CFG,			\
+	.dis_mask = RTQ2208_LDO##_id##_DISCHG_EN_MASK,			\
+	.dis_on = RTQ2208_LDO##_id##_DISCHG_EN_MASK,			\
 	.vsel_mask = RTQ2208_LDO##_id##_VOSEL_SD_MASK,			\
 }
 
 #define BUCK_RG_SHIFT(_base, _shift)	(_base + _shift)
-#define LDO_RG_SHIFT(_base, _shift)	(_base + _shift)
 #define	VSEL_SHIFT(_sel)	(_sel ? 3 : 1)
 #define MTP_SEL_MASK(_sel)	RTQ2208_BUCK_EN_NR_MTP_SEL##_sel##_MASK
 
@@ -422,9 +425,7 @@ static void rtq2208_init_regulator_desc(struct rtq2208_regulator_desc *rdesc, in
 	desc->owner = THIS_MODULE;
 	desc->type = REGULATOR_VOLTAGE;
 	desc->enable_mask = mtp_sel ? MTP_SEL_MASK(1) : MTP_SEL_MASK(0);
-	desc->active_discharge_on = RTQ2208_EN_DIS_MASK;
 	desc->active_discharge_off = 0;
-	desc->active_discharge_mask = RTQ2208_EN_DIS_MASK;
 	desc->enable_reg = curr_info->enable_reg;
 
 	rdesc->mode_mask = RTQ2208_BUCK_NRMODE_MASK;
@@ -438,8 +439,10 @@ static void rtq2208_init_regulator_desc(struct rtq2208_regulator_desc *rdesc, in
 		desc->linear_ranges = rtq2208_vout_range;
 		desc->n_linear_ranges = ARRAY_SIZE(rtq2208_vout_range);
 		desc->ramp_reg = BUCK_RG_SHIFT(curr_info->base, 5);
-		desc->active_discharge_reg = curr_info->base;
 		desc->of_map_mode = rtq2208_of_map_mode;
+		desc->active_discharge_reg = curr_info->dis_reg;
+		desc->active_discharge_on = RTQ2208_EN_DIS_MASK;
+		desc->active_discharge_mask = RTQ2208_EN_DIS_MASK;
 
 		rdesc->mode_reg = BUCK_RG_SHIFT(curr_info->base, 2);
 		rdesc->suspend_config_reg = BUCK_RG_SHIFT(curr_info->base, 4);
@@ -447,9 +450,11 @@ static void rtq2208_init_regulator_desc(struct rtq2208_regulator_desc *rdesc, in
 		rdesc->suspend_mode_mask = RTQ2208_BUCK_STRMODE_MASK;
 	} else {
 		/* init ldo desc */
-		desc->active_discharge_reg = LDO_RG_SHIFT(curr_info->base, 2);
 		desc->vsel_reg = RTQ2208_REG_LDO_DVS_CTRL;
 		desc->vsel_mask = curr_info->vsel_mask;
+		desc->active_discharge_reg = RTQ2208_REG_LDO_DVS_CTRL;
+		desc->active_discharge_on = curr_info->dis_on;
+		desc->active_discharge_mask = curr_info->dis_mask;
 
 		rdesc->suspend_config_reg = curr_info->base;
 		rdesc->suspend_enable_mask = RTQ2208_LDO_EN_STR_MASK;
