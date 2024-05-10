@@ -961,13 +961,11 @@ void pmu_add_cpu_aliases_table(struct perf_pmu *pmu, const struct pmu_events_tab
 
 static void pmu_add_cpu_aliases(struct perf_pmu *pmu)
 {
-	if (!pmu->events_table)
-		return;
-
 	if (pmu->cpu_aliases_added)
 		return;
 
-	pmu_add_cpu_aliases_table(pmu, pmu->events_table);
+	if (pmu->events_table)
+		pmu_add_cpu_aliases_table(pmu, pmu->events_table);
 	pmu->cpu_aliases_added = true;
 }
 
