@@ -117,16 +117,12 @@ void fsnotify_sb_free(struct super_block *sb)
  * parent cares.  Thus when an event happens on a child it can quickly tell
  * if there is a need to find a parent and send the event to the parent.
  */
-void __fsnotify_update_child_dentry_flags(struct inode *inode)
+void fsnotify_update_children_dentry_flags(struct inode *inode, bool watched)
 {
 	struct dentry *alias;
-	int watched;
 
 	if (!S_ISDIR(inode->i_mode))
 		return;
-
-	/* determine if the children should tell inode about their events */
-	watched = fsnotify_inode_watches_children(inode);
 
 	spin_lock(&inode->i_lock);
 	/* run all of the dentries associated with this inode.  Since this is a
@@ -152,6 +148,24 @@ void __fsnotify_update_child_dentry_flags(struct inode *inode)
 		spin_unlock(&alias->d_lock);
 	}
 	spin_unlock(&inode->i_lock);
+}
+
+/*
+ * Lazily clear false positive PARENT_WATCHED flag for child whose parent had
+ * stopped watching children.
+ */
+static void fsnotify_update_child_dentry_flags(struct inode *inode,
+					       struct dentry *dentry)
+{
+	spin_lock(&dentry->d_lock);
+	/*
+	 * d_lock is a sufficient barrier to prevent observing a non-watched
+	 * parent state from before the fsnotify_update_children_dentry_flags()
+	 * or fsnotify_update_flags() call that had set PARENT_WATCHED.
+	 */
+	if (!fsnotify_inode_watches_children(inode))
+		dentry->d_flags &= ~DCACHE_FSNOTIFY_PARENT_WATCHED;
+	spin_unlock(&dentry->d_lock);
 }
 
 /* Are inode/sb/mount interested in parent and name info with this event? */
@@ -228,7 +242,7 @@ int __fsnotify_parent(struct dentry *dentry, __u32 mask, const void *data,
 	p_inode = parent->d_inode;
 	p_mask = fsnotify_inode_watches_children(p_inode);
 	if (unlikely(parent_watched && !p_mask))
-		__fsnotify_update_child_dentry_flags(p_inode);
+		fsnotify_update_child_dentry_flags(p_inode, dentry);
 
 	/*
 	 * Include parent/name in notification either if some notification
