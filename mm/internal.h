@@ -1517,6 +1517,38 @@ void workingset_update_node(struct xa_node *node);
 extern struct list_lru shadow_nodes;
 
 #if defined(CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH)
+unsigned short int try_to_unmap_luf(void);
+void check_luf_flush(unsigned short int ugen);
+void luf_flush(void);
+
+/*
+ * Reset the indicator indicating there are no writable mappings at the
+ * beginning of every rmap traverse for unmap.  luf can work only when
+ * all the mappings are read-only.
+ */
+static inline void can_luf_init(void)
+{
+	current->can_luf = true;
+}
+
+/*
+ * Mark the folio is not applicable to luf once it found a writble or
+ * dirty pte during rmap traverse for unmap.
+ */
+static inline void can_luf_fail(void)
+{
+	current->can_luf = false;
+}
+
+/*
+ * Check if all the mappings are read-only and read-only mappings even
+ * exist.
+ */
+static inline bool can_luf_test(void)
+{
+	return current->can_luf && current->tlb_ubc_ro.flush_required;
+}
+
 static inline unsigned short int ugen_latest(unsigned short int a, unsigned short int b)
 {
 	if (!a || !b)
@@ -1546,10 +1578,7 @@ static inline unsigned short int hand_over_task_ugen(void)
 
 static inline void check_flush_task_ugen(void)
 {
-	/*
-	 * XXX: luf mechanism will handle this. For now, do nothing but
-	 * reset current's ugen to finalize this turn.
-	 */
+	check_luf_flush(current->ugen);
 	current->ugen = 0;
 }
 
@@ -1578,6 +1607,12 @@ static inline bool can_luf_folio(struct folio *f)
 	return can_luf;
 }
 #else /* CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH */
+static inline unsigned short int try_to_unmap_luf(void) { return 0; }
+static inline void check_luf_flush(unsigned short int ugen) {}
+static inline void luf_flush(void) {}
+static inline void can_luf_init(void) {}
+static inline void can_luf_fail(void) {}
+static inline bool can_luf_test(void) { return false; }
 static inline unsigned short int ugen_latest(unsigned short int a, unsigned short int b) { return 0; }
 static inline void update_task_ugen(unsigned short int ugen) {}
 static inline unsigned short int hand_over_task_ugen(void) { return 0; }

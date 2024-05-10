@@ -1271,6 +1271,14 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 			pkey = 0;
 	}
 
+	/*
+	 * This mmap may or may not be mapping to ones that is under
+	 * luf's control.  However, conservatively give up deferring tlb
+	 * flush just in case.
+	 */
+	if (prot & PROT_WRITE)
+		luf_flush();
+
 	/* Do simple checking here so the lower-level routines won't have
 	 * to. we assume access permissions have been handled by the open
 	 * of the memory object, so we don't do any here.

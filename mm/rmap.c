@@ -635,6 +635,270 @@ out:
 }
 
 #ifdef CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH
+static struct tlbflush_unmap_batch luf_ubc;
+static DEFINE_SPINLOCK(luf_lock);
+
+/*
+ * Don't be zero to distinguish from invalid ugen, 0.
+ */
+static unsigned short int ugen_next(unsigned short int a)
+{
+	return a + 1 ?: a + 2;
+}
+
+static bool ugen_before(unsigned short int a, unsigned short int b)
+{
+	return (short int)(a - b) < 0;
+}
+
+/*
+ * Need to synchronize between tlb flush and managing pending CPUs in
+ * luf_ubc.  Take a look at the following scenario, where CPU0 is in
+ * try_to_unmap_flush() and CPU1 is in migrate_pages_batch():
+ *
+ *	CPU0			CPU1
+ *	----			----
+ *	tlb flush
+ *				unmap folios (needing tlb flush)
+ *				add pending CPUs to luf_ubc
+ *				<-- not performed tlb flush needed by
+ *				    the unmap above yet but the request
+ *				    will be cleared by CPU0 shortly. bug!
+ *	clear the CPUs from luf_ubc
+ *
+ * The pending CPUs added in CPU1 should not be cleared from luf_ubc
+ * in CPU0 because the tlb flush for luf_ubc added in CPU1 has not
+ * been performed this turn.  To avoid this, using 'on_flushing'
+ * variable, prevent adding pending CPUs to luf_ubc and give up luf
+ * mechanism if someone is in the middle of tlb flush, like:
+ *
+ *	CPU0			CPU1
+ *	----			----
+ *	on_flushing++
+ *	tlb flush
+ *				unmap folios (needing tlb flush)
+ *				if on_flushing == 0:
+ *				   add pending CPUs to luf_ubc
+ *				else: <-- hit
+ *				   give up luf mechanism
+ *	clear the CPUs from luf_ubc
+ *	on_flushing--
+ *
+ * Only the following case would be allowed for luf mechanism to work:
+ *
+ *	CPU0			CPU1
+ *	----			----
+ *				unmap folios (needing tlb flush)
+ *				if on_flushing == 0: <-- hit
+ *				   add pending CPUs to luf_ubc
+ *				else:
+ *				   give up luf mechanism
+ *	on_flushing++
+ *	tlb flush
+ *	clear the CPUs from luf_ubc
+ *	on_flushing--
+ */
+static int on_flushing;
+
+/*
+ * When more than one thread enter check_luf_flush() at the same
+ * time, each should wait for the request on progress to be done to
+ * avoid the following scenario, where the both CPUs are in
+ * check_luf_flush():
+ *
+ *	CPU0			CPU1
+ *	----			----
+ *	if !luf_ubc.flush_required:
+ *	   return
+ *	luf_ubc.flush_required = false
+ *				if !luf_ubc.flush_requied: <-- hit
+ *				   return <-- not performed tlb flush
+ *				              needed yet but return. bug!
+ *				luf_ubc.flush_required = false
+ *				try_to_unmap_flush()
+ *				finalize
+ *	try_to_unmap_flush() <-- performs tlb flush needed
+ *	finalize
+ *
+ * So it should be handled:
+ *
+ *	CPU0			CPU1
+ *	----			----
+ *	atomically execute {
+ *	   if luf_on_flushing:
+ *	      wait for the completion
+ *	      return
+ *	   if !luf_ubc.flush_required:
+ *	      return
+ *	   luf_ubc.flush_required = false
+ *	   luf_on_flushing = true
+ *	}
+ *				atomically execute {
+ *				   if luf_on_flushing: <-- hit
+ *				      wait for the completion
+ *				      return <-- tlb flush needed is done
+ *				   if !luf_ubc.flush_requied:
+ *				      return
+ *				   luf_ubc.flush_required = false
+ *				   luf_on_flushing = true
+ *				}
+ *
+ *				try_to_unmap_flush()
+ *				luf_on_flushing = false
+ *				finalize
+ *	try_to_unmap_flush() <-- performs tlb flush needed
+ *	luf_on_flushing = false
+ *	finalize
+ */
+static bool luf_on_flushing;
+
+/*
+ * Generation number for the current request of deferred tlb flush.
+ */
+static unsigned short int luf_gen;
+
+/*
+ * Generation number for the next request.
+ */
+static unsigned short int luf_gen_next = 1;
+
+/*
+ * Generation number for the latest request handled.
+ */
+static unsigned short int luf_gen_done;
+
+unsigned short int try_to_unmap_luf(void)
+{
+	struct tlbflush_unmap_batch *tlb_ubc = &current->tlb_ubc;
+	struct tlbflush_unmap_batch *tlb_ubc_luf = &current->tlb_ubc_luf;
+	unsigned long flags;
+	unsigned short int ugen;
+
+	if (!spin_trylock_irqsave(&luf_lock, flags)) {
+		/*
+		 * Give up luf mechanism.  Just let tlb flush needed
+		 * handled by try_to_unmap_flush() at the caller side.
+		 */
+		fold_ubc(tlb_ubc, tlb_ubc_luf);
+		return 0;
+	}
+
+	if (on_flushing || luf_on_flushing) {
+		spin_unlock_irqrestore(&luf_lock, flags);
+
+		/*
+		 * Give up luf mechanism.  Just let tlb flush needed
+		 * handled by try_to_unmap_flush() at the caller side.
+		 */
+		fold_ubc(tlb_ubc, tlb_ubc_luf);
+		return 0;
+	}
+
+	fold_ubc(&luf_ubc, tlb_ubc_luf);
+	ugen = luf_gen = luf_gen_next;
+	spin_unlock_irqrestore(&luf_lock, flags);
+
+	return ugen;
+}
+
+static void rmap_flush_start(void)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&luf_lock, flags);
+	on_flushing++;
+	spin_unlock_irqrestore(&luf_lock, flags);
+}
+
+static void rmap_flush_end(struct tlbflush_unmap_batch *batch)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&luf_lock, flags);
+	if (arch_tlbbatch_done(&luf_ubc.arch, &batch->arch)) {
+		luf_ubc.flush_required = false;
+		luf_ubc.writable = false;
+	}
+	on_flushing--;
+	spin_unlock_irqrestore(&luf_lock, flags);
+}
+
+/*
+ * It must be guaranteed to have completed tlb flush requested on return.
+ */
+void check_luf_flush(unsigned short int ugen)
+{
+	struct tlbflush_unmap_batch *tlb_ubc = &current->tlb_ubc;
+	unsigned long flags;
+
+	/*
+	 * Nothing has been requested.  We are done.
+	 */
+	if (!ugen)
+		return;
+retry:
+	/*
+	 * We can see a larger value than or equal to luf_gen_done,
+	 * which means the tlb flush we need has been done.
+	 */
+	if (!ugen_before(READ_ONCE(luf_gen_done), ugen))
+		return;
+
+	spin_lock_irqsave(&luf_lock, flags);
+
+	/*
+	 * With luf_lock held, we might read luf_gen_done updated.
+	 */
+	if (ugen_next(luf_gen_done) != ugen) {
+		spin_unlock_irqrestore(&luf_lock, flags);
+		return;
+	}
+
+	/*
+	 * Others are already working for us.
+	 */
+	if (luf_on_flushing) {
+		spin_unlock_irqrestore(&luf_lock, flags);
+		goto retry;
+	}
+
+	if (!luf_ubc.flush_required) {
+		spin_unlock_irqrestore(&luf_lock, flags);
+		return;
+	}
+
+	fold_ubc(tlb_ubc, &luf_ubc);
+	luf_gen_next = ugen_next(luf_gen);
+	luf_on_flushing = true;
+	spin_unlock_irqrestore(&luf_lock, flags);
+
+	try_to_unmap_flush();
+
+	spin_lock_irqsave(&luf_lock, flags);
+	luf_on_flushing = false;
+
+	/*
+	 * luf_gen_done can be read by another with luf_lock not
+	 * held so use WRITE_ONCE() to prevent tearing.
+	 */
+	WRITE_ONCE(luf_gen_done, ugen);
+	spin_unlock_irqrestore(&luf_lock, flags);
+}
+
+void luf_flush(void)
+{
+	unsigned long flags;
+	unsigned short int ugen;
+
+	/*
+	 * Obtain the latest ugen number.
+	 */
+	spin_lock_irqsave(&luf_lock, flags);
+	ugen = luf_gen;
+	spin_unlock_irqrestore(&luf_lock, flags);
+
+	check_luf_flush(ugen);
+}
 
 void fold_ubc(struct tlbflush_unmap_batch *dst,
 	      struct tlbflush_unmap_batch *src)
@@ -666,13 +930,15 @@ void fold_ubc(struct tlbflush_unmap_batch *dst,
 void try_to_unmap_flush(void)
 {
 	struct tlbflush_unmap_batch *tlb_ubc = &current->tlb_ubc;
-	struct tlbflush_unmap_batch *tlb_ubc_ro = &current->tlb_ubc_ro;
+	struct tlbflush_unmap_batch *tlb_ubc_luf = &current->tlb_ubc_luf;
 
-	fold_ubc(tlb_ubc, tlb_ubc_ro);
+	fold_ubc(tlb_ubc, tlb_ubc_luf);
 	if (!tlb_ubc->flush_required)
 		return;
 
+	rmap_flush_start();
 	arch_tlbbatch_flush(&tlb_ubc->arch);
+	rmap_flush_end(tlb_ubc);
 	arch_tlbbatch_clear(&tlb_ubc->arch);
 	tlb_ubc->flush_required = false;
 	tlb_ubc->writable = false;
@@ -682,9 +948,9 @@ void try_to_unmap_flush(void)
 void try_to_unmap_flush_dirty(void)
 {
 	struct tlbflush_unmap_batch *tlb_ubc = &current->tlb_ubc;
-	struct tlbflush_unmap_batch *tlb_ubc_ro = &current->tlb_ubc_ro;
+	struct tlbflush_unmap_batch *tlb_ubc_luf = &current->tlb_ubc_luf;
 
-	if (tlb_ubc->writable || tlb_ubc_ro->writable)
+	if (tlb_ubc->writable || tlb_ubc_luf->writable)
 		try_to_unmap_flush();
 }
 
@@ -708,9 +974,15 @@ static void set_tlb_ubc_flush_pending(struct mm_struct *mm, pte_t pteval,
 	if (!pte_accessible(mm, pteval))
 		return;
 
-	if (pte_write(pteval))
+	if (pte_write(pteval)) {
 		tlb_ubc = &current->tlb_ubc;
-	else
+
+		/*
+		 * luf cannot work with the folio once it found a
+		 * writable or dirty mapping on it.
+		 */
+		can_luf_fail();
+	} else
 		tlb_ubc = &current->tlb_ubc_ro;
 
 	arch_tlbbatch_add_pending(&tlb_ubc->arch, mm, uaddr);
@@ -1976,11 +2248,23 @@ void try_to_unmap(struct folio *folio, enum ttu_flags flags)
 		.done = folio_not_mapped,
 		.anon_lock = folio_lock_anon_vma_read,
 	};
+	struct tlbflush_unmap_batch *tlb_ubc = &current->tlb_ubc;
+	struct tlbflush_unmap_batch *tlb_ubc_ro = &current->tlb_ubc_ro;
+	struct tlbflush_unmap_batch *tlb_ubc_luf = &current->tlb_ubc_luf;
+	bool can_luf;
+
+	can_luf_init();
 
 	if (flags & TTU_RMAP_LOCKED)
 		rmap_walk_locked(folio, &rwc);
 	else
 		rmap_walk(folio, &rwc);
+
+	can_luf = can_luf_folio(folio) && can_luf_test();
+	if (can_luf)
+		fold_ubc(tlb_ubc_luf, tlb_ubc_ro);
+	else
+		fold_ubc(tlb_ubc, tlb_ubc_ro);
 }
 
 /*
@@ -2325,6 +2609,10 @@ void try_to_migrate(struct folio *folio, enum ttu_flags flags)
 		.done = folio_not_mapped,
 		.anon_lock = folio_lock_anon_vma_read,
 	};
+	struct tlbflush_unmap_batch *tlb_ubc = &current->tlb_ubc;
+	struct tlbflush_unmap_batch *tlb_ubc_ro = &current->tlb_ubc_ro;
+	struct tlbflush_unmap_batch *tlb_ubc_luf = &current->tlb_ubc_luf;
+	bool can_luf;
 
 	/*
 	 * Migration always ignores mlock and only supports TTU_RMAP_LOCKED and
@@ -2349,10 +2637,18 @@ void try_to_migrate(struct folio *folio, enum ttu_flags flags)
 	if (!folio_test_ksm(folio) && folio_test_anon(folio))
 		rwc.invalid_vma = invalid_migration_vma;
 
+	can_luf_init();
+
 	if (flags & TTU_RMAP_LOCKED)
 		rmap_walk_locked(folio, &rwc);
 	else
 		rmap_walk(folio, &rwc);
+
+	can_luf = can_luf_folio(folio) && can_luf_test();
+	if (can_luf)
+		fold_ubc(tlb_ubc_luf, tlb_ubc_ro);
+	else
+		fold_ubc(tlb_ubc, tlb_ubc_ro);
 }
 
 #ifdef CONFIG_DEVICE_PRIVATE

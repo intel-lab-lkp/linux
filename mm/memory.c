@@ -3618,6 +3618,14 @@ static vm_fault_t do_wp_page(struct vm_fault *vmf)
 		folio = page_folio(vmf->page);
 
 	/*
+	 * The folio may or may not be one that is under luf's control
+	 * and might be about to change its permission to writable.
+	 * Conservatively give up deferring tlb flush just in case.
+	 */
+	if (folio)
+		luf_flush();
+
+	/*
 	 * Shared mapping: we are guaranteed to have VM_WRITE and
 	 * FAULT_FLAG_WRITE set at this point.
 	 */
