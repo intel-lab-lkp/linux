@@ -2236,6 +2236,13 @@ int memory_failure(unsigned long pfn, int flags)
 		goto unlock_mutex;
 	}
 
+	if (hwpoison_filter(p)) {
+		if (flags & MF_COUNT_INCREASED)
+			put_page(p);
+		res = -EOPNOTSUPP;
+		goto unlock_mutex;
+	}
+
 try_again:
 	res = try_memory_failure_hugetlb(pfn, flags, &hugetlb);
 	if (hugetlb)
@@ -2353,14 +2360,6 @@ try_again:
 	 * status correctly, we save a copy of the page flags at this time.
 	 */
 	page_flags = folio->flags;
-
-	if (hwpoison_filter(p)) {
-		ClearPageHWPoison(p);
-		folio_unlock(folio);
-		folio_put(folio);
-		res = -EOPNOTSUPP;
-		goto unlock_mutex;
-	}
 
 	/*
 	 * __munlock_folio() may clear a writeback folio's LRU flag without
