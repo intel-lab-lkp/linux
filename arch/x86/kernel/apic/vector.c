@@ -1035,6 +1035,15 @@ static void __vector_schedule_cleanup(struct apic_chip_data *apicd)
 			add_timer_on(&cl->timer, cpu);
 		}
 	} else {
+		/*
+		 * This call borrows from the comments and implementation
+		 * of apic_update_vector(): "If the target CPU is offline
+		 * then the regular release mechanism via the cleanup
+		 * vector is not possible and the vector can be immediately
+		 * freed in the underlying matrix allocator.".
+		 */
+		irq_matrix_free(vector_matrix, apicd->prev_cpu,
+				apicd->prev_vector, apicd->is_managed);
 		apicd->prev_vector = 0;
 	}
 	raw_spin_unlock(&vector_lock);
