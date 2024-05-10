@@ -43,13 +43,37 @@ static int ath12k_core_rfkill_config(struct ath12k_base *ab)
 	return ret;
 }
 
+/* Check if we need to continue with suspend/resume operation.
+ * Return:
+ *	a negative value: error happens and don't continue.
+ *	0:  no error but don't continue.
+ *	positive value: no error and do continue.
+ */
+static int ath12k_core_continue_suspend_resume(struct ath12k_base *ab)
+{
+	struct ath12k *ar;
+
+	if (!ab->hw_params->supports_suspend)
+		return -EOPNOTSUPP;
+
+	/* so far single_pdev_only chips have supports_suspend as true
+	 * so pass 0 as a dummy pdev_id here.
+	 */
+	ar = ab->pdevs[0].ar;
+	if (!ar || !ar->ah || ar->ah->state != ATH12K_HW_STATE_OFF)
+		return 0;
+
+	return 1;
+}
+
 int ath12k_core_suspend(struct ath12k_base *ab)
 {
 	struct ath12k *ar;
 	int ret, i;
 
-	if (!ab->hw_params->supports_suspend)
-		return -EOPNOTSUPP;
+	ret = ath12k_core_continue_suspend_resume(ab);
+	if (ret <= 0)
+		return ret;
 
 	rcu_read_lock();
 	for (i = 0; i < ab->num_radios; i++) {
@@ -84,8 +108,11 @@ EXPORT_SYMBOL(ath12k_core_suspend);
 
 int ath12k_core_suspend_late(struct ath12k_base *ab)
 {
-	if (!ab->hw_params->supports_suspend)
-		return -EOPNOTSUPP;
+	int ret;
+
+	ret = ath12k_core_continue_suspend_resume(ab);
+	if (ret <= 0)
+		return ret;
 
 	ath12k_hif_irq_disable(ab);
 	ath12k_hif_ce_irq_disable(ab);
@@ -100,8 +127,9 @@ int ath12k_core_resume_early(struct ath12k_base *ab)
 {
 	int ret;
 
-	if (!ab->hw_params->supports_suspend)
-		return -EOPNOTSUPP;
+	ret = ath12k_core_continue_suspend_resume(ab);
+	if (ret <= 0)
+		return ret;
 
 	reinit_completion(&ab->restart_completed);
 	ret = ath12k_hif_power_up(ab);
@@ -115,9 +143,11 @@ EXPORT_SYMBOL(ath12k_core_resume_early);
 int ath12k_core_resume(struct ath12k_base *ab)
 {
 	long time_left;
+	int ret;
 
-	if (!ab->hw_params->supports_suspend)
-		return -EOPNOTSUPP;
+	ret = ath12k_core_continue_suspend_resume(ab);
+	if (ret <= 0)
+		return ret;
 
 	time_left = wait_for_completion_timeout(&ab->restart_completed,
 						ATH12K_RESET_TIMEOUT_HZ);
