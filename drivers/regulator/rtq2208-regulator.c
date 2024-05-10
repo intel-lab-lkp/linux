@@ -26,6 +26,7 @@
 #define RTQ2208_REG_BUCK_H_CFG0			0xA2
 #define RTQ2208_REG_LDO1_CFG			0xB1
 #define RTQ2208_REG_LDO2_CFG			0xC1
+#define RTQ2208_REG_LDO_DVS_CTRL		0xD0
 
 /* Mask */
 #define RTQ2208_BUCK_NR_MTP_SEL_MASK		GENMASK(7, 0)
@@ -40,6 +41,8 @@
 #define RTQ2208_EN_DIS_MASK			BIT(0)
 #define RTQ2208_BUCK_RAMP_SEL_MASK		GENMASK(2, 0)
 #define RTQ2208_HD_INT_MASK			BIT(0)
+#define RTQ2208_LDO1_VOSEL_SD_MASK		BIT(5)
+#define RTQ2208_LDO2_VOSEL_SD_MASK		BIT(7)
 
 /* Size */
 #define RTQ2208_VOUT_MAXNUM			256
@@ -323,14 +326,23 @@ static irqreturn_t rtq2208_irq_handler(int irqno, void *devid)
 	return IRQ_HANDLED;
 }
 
-#define RTQ2208_REGULATOR_INFO(_name, _base) \
-{ \
-	.name = #_name, \
-	.base = _base, \
+#define BUCK_INFO(_name, _id)						\
+{									\
+	.name = _name,							\
+	.base = RTQ2208_REG_BUCK_##_id##_CFG0,				\
+	.enable_reg = BUCK_RG_SHIFT(RTQ2208_REG_BUCK_##_id##_CFG0, 2),	\
+	.dis_reg = RTQ2208_REG_BUCK_##_id##_CFG0,			\
 }
-#define BUCK_RG_BASE(_id)	RTQ2208_REG_BUCK_##_id##_CFG0
+
+#define LDO_INFO(_name, _id)						\
+{									\
+	.name = _name,							\
+	.base = RTQ2208_REG_LDO##_id##_CFG,				\
+	.enable_reg = RTQ2208_REG_LDO##_id##_CFG,			\
+	.vsel_mask = RTQ2208_LDO##_id##_VOSEL_SD_MASK,			\
+}
+
 #define BUCK_RG_SHIFT(_base, _shift)	(_base + _shift)
-#define LDO_RG_BASE(_id)	RTQ2208_REG_LDO##_id##_CFG
 #define LDO_RG_SHIFT(_base, _shift)	(_base + _shift)
 #define	VSEL_SHIFT(_sel)	(_sel ? 3 : 1)
 #define MTP_SEL_MASK(_sel)	RTQ2208_BUCK_EN_NR_MTP_SEL##_sel##_MASK
@@ -383,17 +395,22 @@ static void rtq2208_init_regulator_desc(struct rtq2208_regulator_desc *rdesc, in
 	static const struct {
 		char *name;
 		int base;
+		int enable_reg;
+		int dis_reg;
+		int dis_mask;
+		int dis_on;
+		int vsel_mask;
 	} regulator_info[] = {
-		RTQ2208_REGULATOR_INFO(buck-b, BUCK_RG_BASE(B)),
-		RTQ2208_REGULATOR_INFO(buck-c, BUCK_RG_BASE(C)),
-		RTQ2208_REGULATOR_INFO(buck-d, BUCK_RG_BASE(D)),
-		RTQ2208_REGULATOR_INFO(buck-a, BUCK_RG_BASE(A)),
-		RTQ2208_REGULATOR_INFO(buck-f, BUCK_RG_BASE(F)),
-		RTQ2208_REGULATOR_INFO(buck-g, BUCK_RG_BASE(G)),
-		RTQ2208_REGULATOR_INFO(buck-h, BUCK_RG_BASE(H)),
-		RTQ2208_REGULATOR_INFO(buck-e, BUCK_RG_BASE(E)),
-		RTQ2208_REGULATOR_INFO(ldo2, LDO_RG_BASE(2)),
-		RTQ2208_REGULATOR_INFO(ldo1, LDO_RG_BASE(1)),
+		BUCK_INFO("buck-b", B),
+		BUCK_INFO("buck-c", C),
+		BUCK_INFO("buck-d", D),
+		BUCK_INFO("buck-a", A),
+		BUCK_INFO("buck-f", F),
+		BUCK_INFO("buck-g", G),
+		BUCK_INFO("buck-h", H),
+		BUCK_INFO("buck-e", E),
+		LDO_INFO("ldo2", 2),
+		LDO_INFO("ldo1", 1),
 	}, *curr_info;
 
 	curr_info = regulator_info + idx;
@@ -408,12 +425,12 @@ static void rtq2208_init_regulator_desc(struct rtq2208_regulator_desc *rdesc, in
 	desc->active_discharge_on = RTQ2208_EN_DIS_MASK;
 	desc->active_discharge_off = 0;
 	desc->active_discharge_mask = RTQ2208_EN_DIS_MASK;
+	desc->enable_reg = curr_info->enable_reg;
 
 	rdesc->mode_mask = RTQ2208_BUCK_NRMODE_MASK;
 
 	if (idx >= RTQ2208_BUCK_B && idx <= RTQ2208_BUCK_E) {
 		/* init buck desc */
-		desc->enable_reg = BUCK_RG_SHIFT(curr_info->base, 2);
 		desc->ops = &rtq2208_regulator_buck_ops;
 		desc->vsel_reg = curr_info->base + VSEL_SHIFT(mtp_sel);
 		desc->vsel_mask = RTQ2208_BUCK_NR_MTP_SEL_MASK;
@@ -430,10 +447,9 @@ static void rtq2208_init_regulator_desc(struct rtq2208_regulator_desc *rdesc, in
 		rdesc->suspend_mode_mask = RTQ2208_BUCK_STRMODE_MASK;
 	} else {
 		/* init ldo desc */
-		desc->enable_reg = curr_info->base;
-		desc->ops = &rtq2208_regulator_ldo_ops;
-		desc->n_voltages = 1;
 		desc->active_discharge_reg = LDO_RG_SHIFT(curr_info->base, 2);
+		desc->vsel_reg = RTQ2208_REG_LDO_DVS_CTRL;
+		desc->vsel_mask = curr_info->vsel_mask;
 
 		rdesc->suspend_config_reg = curr_info->base;
 		rdesc->suspend_enable_mask = RTQ2208_LDO_EN_STR_MASK;
