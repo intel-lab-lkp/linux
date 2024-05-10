@@ -639,7 +639,7 @@ extern bool free_pages_prepare(struct page *page, unsigned int order);
 extern int user_min_free_kbytes;
 
 void free_unref_page(struct page *page, unsigned int order, unsigned short int ugen);
-void free_unref_folios(struct folio_batch *fbatch);
+void free_unref_folios(struct folio_batch *fbatch, unsigned short int ugen);
 
 extern void zone_pcp_reset(struct zone *zone);
 extern void zone_pcp_disable(struct zone *zone);

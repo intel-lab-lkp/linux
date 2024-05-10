@@ -163,11 +163,11 @@ void put_pages_list(struct list_head *pages)
 		/* LRU flag must be clear because it's passed using the lru */
 		if (folio_batch_add(&fbatch, folio) > 0)
 			continue;
-		free_unref_folios(&fbatch);
+		free_unref_folios(&fbatch, 0);
 	}
 
 	if (fbatch.nr)
-		free_unref_folios(&fbatch);
+		free_unref_folios(&fbatch, 0);
 	INIT_LIST_HEAD(pages);
 }
 EXPORT_SYMBOL(put_pages_list);
@@ -1029,7 +1029,7 @@ void folios_put_refs(struct folio_batch *folios, unsigned int *refs)
 
 	folios->nr = j;
 	mem_cgroup_uncharge_folios(folios);
-	free_unref_folios(folios);
+	free_unref_folios(folios, 0);
 }
 EXPORT_SYMBOL(folios_put_refs);
 
