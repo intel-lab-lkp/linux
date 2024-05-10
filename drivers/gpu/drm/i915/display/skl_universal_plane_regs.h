@@ -300,8 +300,8 @@
 	_MMIO_PLANE(plane, _PLANE_CSC_POSTOFF_HI_1(pipe) + (index) * 4, _PLANE_CSC_POSTOFF_HI_2(pipe) + (index) * 4)
 
 #define _PLANE_WM_1_A_0				0x70240
-#define   PLANE_WM_EN				(1 << 31)
-#define   PLANE_WM_IGNORE_LINES			(1 << 30)
+#define   PLANE_WM_EN				REG_BIT(31)
+#define   PLANE_WM_IGNORE_LINES			REG_BIT(30)
 #define   PLANE_WM_LINES_MASK			REG_GENMASK(26, 14)
 #define   PLANE_WM_BLOCKS_MASK			REG_GENMASK(11, 0)
 #define _PLANE_WM_1_B_0				0x71240
