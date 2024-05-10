@@ -889,11 +889,11 @@ int xe_guc_pc_stop(struct xe_guc_pc *pc)
 }
 
 /**
- * xe_guc_pc_fini - Finalize GuC's Power Conservation component
+ * xe_guc_pc_fini_hw - Finalize GuC's Power Conservation component
  * @drm: DRM device
  * @arg: opaque pointer that should point to Xe_GuC_PC instance
  */
-static void xe_guc_pc_fini(void *arg)
+static void xe_guc_pc_fini_hw(void *arg)
 {
 	struct xe_guc_pc *pc = arg;
 	struct xe_device *xe = pc_to_xe(pc);
@@ -941,5 +941,5 @@ int xe_guc_pc_init(struct xe_guc_pc *pc)
 
 	pc->bo = bo;
 
-	return devm_add_action_or_reset(xe->drm.dev, xe_guc_pc_fini, pc);
+	return devm_add_action_or_reset(xe->drm.dev, xe_guc_pc_fini_hw, pc);
 }
