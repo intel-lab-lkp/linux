@@ -495,4 +495,66 @@
 #define XGMAC_RDES3_TSD			BIT(6)
 #define XGMAC_RDES3_TSA			BIT(4)
 
+int dwxgmac2_dma_reset(void __iomem *ioaddr);
+void dwxgmac2_dma_init(void __iomem *ioaddr,
+		       struct stmmac_dma_cfg *dma_cfg, int atds);
+void dwxgmac2_dma_init_chan(struct stmmac_priv *priv,
+			    void __iomem *ioaddr,
+			    struct stmmac_dma_cfg *dma_cfg, u32 chan);
+void dwxgmac2_dma_init_rx_chan(struct stmmac_priv *priv,
+			       void __iomem *ioaddr,
+			       struct stmmac_dma_cfg *dma_cfg,
+			       dma_addr_t phy, u32 chan);
+void dwxgmac2_dma_init_tx_chan(struct stmmac_priv *priv,
+			       void __iomem *ioaddr,
+			       struct stmmac_dma_cfg *dma_cfg,
+			       dma_addr_t phy, u32 chan);
+void dwxgmac2_dma_axi(void __iomem *ioaddr, struct stmmac_axi *axi);
+void dwxgmac2_dma_dump_regs(struct stmmac_priv *priv,
+			    void __iomem *ioaddr, u32 *reg_space);
+void dwxgmac2_dma_rx_mode(struct stmmac_priv *priv, void __iomem *ioaddr,
+			  int mode, u32 channel, int fifosz, u8 qmode);
+void dwxgmac2_dma_tx_mode(struct stmmac_priv *priv, void __iomem *ioaddr,
+			  int mode, u32 channel, int fifosz, u8 qmode);
+void dwxgmac2_enable_dma_irq(struct stmmac_priv *priv,
+			     void __iomem *ioaddr, u32 chan,
+			     bool rx, bool tx);
+void dwxgmac2_disable_dma_irq(struct stmmac_priv *priv,
+			      void __iomem *ioaddr, u32 chan,
+			      bool rx, bool tx);
+void dwxgmac2_dma_start_tx(struct stmmac_priv *priv,
+			   void __iomem *ioaddr, u32 chan);
+void dwxgmac2_dma_stop_tx(struct stmmac_priv *priv, void __iomem *ioaddr,
+			  u32 chan);
+void dwxgmac2_dma_start_rx(struct stmmac_priv *priv,
+			   void __iomem *ioaddr, u32 chan);
+void dwxgmac2_dma_stop_rx(struct stmmac_priv *priv, void __iomem *ioaddr,
+			  u32 chan);
+int dwxgmac2_dma_interrupt(struct stmmac_priv *priv,
+			   void __iomem *ioaddr,
+			   struct stmmac_extra_stats *x, u32 chan,
+			   u32 dir);
+int dwxgmac2_get_hw_feature(void __iomem *ioaddr,
+			    struct dma_features *dma_cap);
+void dwxgmac2_rx_watchdog(struct stmmac_priv *priv, void __iomem *ioaddr,
+			  u32 riwt, u32 queue);
+void dwxgmac2_set_rx_ring_len(struct stmmac_priv *priv,
+			      void __iomem *ioaddr, u32 len, u32 chan);
+void dwxgmac2_set_tx_ring_len(struct stmmac_priv *priv,
+			      void __iomem *ioaddr, u32 len, u32 chan);
+void dwxgmac2_set_rx_tail_ptr(struct stmmac_priv *priv,
+			      void __iomem *ioaddr, u32 ptr, u32 chan);
+void dwxgmac2_set_tx_tail_ptr(struct stmmac_priv *priv,
+			      void __iomem *ioaddr, u32 ptr, u32 chan);
+void dwxgmac2_enable_tso(struct stmmac_priv *priv, void __iomem *ioaddr,
+			 bool en, u32 chan);
+void dwxgmac2_qmode(struct stmmac_priv *priv, void __iomem *ioaddr,
+		    u32 channel, u8 qmode);
+void dwxgmac2_set_bfsize(struct stmmac_priv *priv, void __iomem *ioaddr,
+			 int bfsize, u32 chan);
+void dwxgmac2_enable_sph(struct stmmac_priv *priv, void __iomem *ioaddr,
+			 bool en, u32 chan);
+int dwxgmac2_enable_tbs(struct stmmac_priv *priv, void __iomem *ioaddr,
+			bool en, u32 chan);
+
 #endif /* __STMMAC_DWXGMAC2_H__ */
