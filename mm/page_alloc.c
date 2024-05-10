@@ -565,9 +565,12 @@ void prep_compound_page(struct page *page, unsigned int order)
 	prep_compound_head(page, order);
 }
 
-static inline void set_buddy_order(struct page *page, unsigned int order)
+static inline void set_buddy_order_ugen(struct page *page,
+					unsigned int order,
+					unsigned short int ugen)
 {
-	set_page_private(page, order);
+	set_page_buddy_order(page, order);
+	set_page_buddy_ugen(page, order);
 	__SetPageBuddy(page);
 }
 
@@ -834,7 +837,7 @@ static inline void __free_one_page(struct page *page,
 	}
 
 done_merging:
-	set_buddy_order(page, order);
+	set_buddy_order_ugen(page, order, 0);
 
 	if (fpi_flags & FPI_TO_TAIL)
 		to_tail = true;
@@ -1344,7 +1347,7 @@ static inline void expand(struct zone *zone, struct page *page,
 			continue;
 
 		__add_to_free_list(&page[size], zone, high, migratetype, false);
-		set_buddy_order(&page[size], high);
+		set_buddy_order_ugen(&page[size], high, 0);
 		nr_added += size;
 	}
 	account_freepages(zone, nr_added, migratetype);
@@ -6802,7 +6805,7 @@ static void break_down_buddy_pages(struct zone *zone, struct page *page,
 			continue;
 
 		add_to_free_list(current_buddy, zone, high, migratetype, false);
-		set_buddy_order(current_buddy, high);
+		set_buddy_order_ugen(current_buddy, high, 0);
 	}
 }
 
