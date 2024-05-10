@@ -1963,11 +1963,10 @@ static bool nvme_update_disk_info(struct nvme_ns *ns, struct nvme_id_ns *id,
 	bool valid = true;
 
 	/*
-	 * The block layer can't support LBA sizes larger than the page size
-	 * or smaller than a sector size yet, so catch this early and don't
-	 * allow block I/O.
+	 * The block layer can't support LBA sizes smaller than a sector size,
+	 * so catch this early and don't allow block I/O.
 	 */
-	if (head->lba_shift > PAGE_SHIFT || head->lba_shift < SECTOR_SHIFT) {
+	if (head->lba_shift < SECTOR_SHIFT) {
 		bs = (1 << 9);
 		valid = false;
 	}
