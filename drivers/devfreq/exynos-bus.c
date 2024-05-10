@@ -34,7 +34,6 @@ struct exynos_bus {
 	unsigned long curr_freq;
 
 	int opp_token;
-	struct clk *clk;
 	unsigned int ratio;
 };
 
@@ -241,13 +240,14 @@ static int exynos_bus_parse_of(struct device_node *np,
 {
 	struct device *dev = bus->dev;
 	struct dev_pm_opp *opp;
+	struct clk *clk;
 	unsigned long rate;
 	int ret;
 
 	/* Get the clock to provide each bus with source clock */
-	bus->clk = devm_clk_get_enabled(dev, "bus");
-	if (IS_ERR(bus->clk))
-		return dev_err_probe(dev, PTR_ERR(bus->clk),
+	clk = devm_clk_get_enabled(dev, "bus");
+	if (IS_ERR(clk))
+		return dev_err_probe(dev, PTR_ERR(clk),
 				"failed to get bus clock\n");
 
 	/* Get the freq and voltage from OPP table to scale the bus freq */
@@ -257,7 +257,7 @@ static int exynos_bus_parse_of(struct device_node *np,
 		return ret;
 	}
 
-	rate = clk_get_rate(bus->clk);
+	rate = clk_get_rate(clk);
 
 	opp = devfreq_recommended_opp(dev, &rate, 0);
 	if (IS_ERR(opp)) {
