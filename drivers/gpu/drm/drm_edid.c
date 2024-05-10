@@ -2124,7 +2124,7 @@ static struct edid *edid_filter_invalid_blocks(struct edid *edid,
 
 #define DDC_SEGMENT_ADDR 0x30
 /**
- * drm_do_probe_ddc_edid() - get EDID information via I2C
+ * ddc_read_block() - get EDID information via I2C
  * @data: I2C device adapter
  * @buf: EDID data buffer to be filled
  * @block: 128 byte EDID block to start fetching from
@@ -2135,7 +2135,7 @@ static struct edid *edid_filter_invalid_blocks(struct edid *edid,
  * Return: 0 on success or -1 on failure.
  */
 static int
-drm_do_probe_ddc_edid(void *data, u8 *buf, unsigned int block, size_t len)
+ddc_read_block(void *data, u8 *buf, unsigned int block, size_t len)
 {
 	struct i2c_adapter *adapter = data;
 	unsigned char start = block * EDID_LENGTH;
@@ -2610,7 +2610,7 @@ drm_probe_ddc(struct i2c_adapter *adapter)
 {
 	unsigned char out;
 
-	return (drm_do_probe_ddc_edid(adapter, &out, 0, 1) == 0);
+	return ddc_read_block(adapter, &out, 0, 1) == 0;
 }
 EXPORT_SYMBOL(drm_probe_ddc);
 
@@ -2635,7 +2635,7 @@ struct edid *drm_get_edid(struct drm_connector *connector,
 	if (connector->force == DRM_FORCE_UNSPECIFIED && !drm_probe_ddc(adapter))
 		return NULL;
 
-	edid = _drm_do_get_edid(connector, drm_do_probe_ddc_edid, adapter, NULL);
+	edid = _drm_do_get_edid(connector, ddc_read_block, adapter, NULL);
 	drm_connector_update_edid_property(connector, edid);
 	return edid;
 }
@@ -2716,7 +2716,7 @@ const struct drm_edid *drm_edid_read_ddc(struct drm_connector *connector,
 	if (connector->force == DRM_FORCE_UNSPECIFIED && !drm_probe_ddc(adapter))
 		return NULL;
 
-	drm_edid = drm_edid_read_custom(connector, drm_do_probe_ddc_edid, adapter);
+	drm_edid = drm_edid_read_custom(connector, ddc_read_block, adapter);
 
 	/* Note: Do *not* call connector updates here. */
 
@@ -2877,7 +2877,7 @@ const struct drm_edid *drm_edid_read_base_block(struct i2c_adapter *adapter)
 	if (!base_block)
 		return NULL;
 
-	status = edid_block_read(base_block, 0, drm_do_probe_ddc_edid, adapter);
+	status = edid_block_read(base_block, 0, ddc_read_block, adapter);
 
 	edid_block_status_print(status, base_block, 0);
 
