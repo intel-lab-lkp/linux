@@ -28,45 +28,9 @@
 #include <linux/tty_flip.h>
 #include <linux/uaccess.h>
 
-#include <asm/cdmm.h>
 #include <asm/irq.h>
 
-/* Register offsets */
-#define REG_FDACSR	0x00	/* FDC Access Control and Status Register */
-#define REG_FDCFG	0x08	/* FDC Configuration Register */
-#define REG_FDSTAT	0x10	/* FDC Status Register */
-#define REG_FDRX	0x18	/* FDC Receive Register */
-#define REG_FDTX(N)	(0x20+0x8*(N))	/* FDC Transmit Register n (0..15) */
-
-/* Register fields */
-
-#define REG_FDCFG_TXINTTHRES_SHIFT	18
-#define REG_FDCFG_TXINTTHRES		(0x3 << REG_FDCFG_TXINTTHRES_SHIFT)
-#define REG_FDCFG_TXINTTHRES_DISABLED	(0x0 << REG_FDCFG_TXINTTHRES_SHIFT)
-#define REG_FDCFG_TXINTTHRES_EMPTY	(0x1 << REG_FDCFG_TXINTTHRES_SHIFT)
-#define REG_FDCFG_TXINTTHRES_NOTFULL	(0x2 << REG_FDCFG_TXINTTHRES_SHIFT)
-#define REG_FDCFG_TXINTTHRES_NEAREMPTY	(0x3 << REG_FDCFG_TXINTTHRES_SHIFT)
-#define REG_FDCFG_RXINTTHRES_SHIFT	16
-#define REG_FDCFG_RXINTTHRES		(0x3 << REG_FDCFG_RXINTTHRES_SHIFT)
-#define REG_FDCFG_RXINTTHRES_DISABLED	(0x0 << REG_FDCFG_RXINTTHRES_SHIFT)
-#define REG_FDCFG_RXINTTHRES_FULL	(0x1 << REG_FDCFG_RXINTTHRES_SHIFT)
-#define REG_FDCFG_RXINTTHRES_NOTEMPTY	(0x2 << REG_FDCFG_RXINTTHRES_SHIFT)
-#define REG_FDCFG_RXINTTHRES_NEARFULL	(0x3 << REG_FDCFG_RXINTTHRES_SHIFT)
-#define REG_FDCFG_TXFIFOSIZE_SHIFT	8
-#define REG_FDCFG_TXFIFOSIZE		(0xff << REG_FDCFG_TXFIFOSIZE_SHIFT)
-#define REG_FDCFG_RXFIFOSIZE_SHIFT	0
-#define REG_FDCFG_RXFIFOSIZE		(0xff << REG_FDCFG_RXFIFOSIZE_SHIFT)
-
-#define REG_FDSTAT_TXCOUNT_SHIFT	24
-#define REG_FDSTAT_TXCOUNT		(0xff << REG_FDSTAT_TXCOUNT_SHIFT)
-#define REG_FDSTAT_RXCOUNT_SHIFT	16
-#define REG_FDSTAT_RXCOUNT		(0xff << REG_FDSTAT_RXCOUNT_SHIFT)
-#define REG_FDSTAT_RXCHAN_SHIFT		4
-#define REG_FDSTAT_RXCHAN		(0xf << REG_FDSTAT_RXCHAN_SHIFT)
-#define REG_FDSTAT_RXE			BIT(3)	/* Rx Empty */
-#define REG_FDSTAT_RXF			BIT(2)	/* Rx Full */
-#define REG_FDSTAT_TXE			BIT(1)	/* Tx Empty */
-#define REG_FDSTAT_TXF			BIT(0)	/* Tx Full */
+#include "ejtag-fdc.h"
 
 /* Default channel for the early console */
 #define CONSOLE_CHANNEL      1
@@ -375,7 +339,7 @@ static int __init mips_ejtag_fdc_console_init(struct mips_ejtag_fdc_console *c)
 	if (c->initialised)
 		goto out;
 	/* Look for the FDC device */
-	regs = mips_cdmm_early_probe(0xfd);
+	regs = get_fdc_regs();
 	if (IS_ERR(regs)) {
 		ret = PTR_ERR(regs);
 		goto out;
@@ -664,7 +628,7 @@ static irqreturn_t mips_ejtag_fdc_isr(int irq, void *dev_id)
 		return IRQ_NONE;
 
 	/* If no FDC interrupt pending, it wasn't for us */
-	if (!(read_c0_cause() & CAUSEF_FDCI))
+	if (!is_fdc_interrupt())
 		return IRQ_NONE;
 
 	mips_ejtag_fdc_handle(priv);
@@ -882,7 +846,7 @@ int __weak get_c0_fdc_int(void)
 	return -1;
 }
 
-static int mips_ejtag_fdc_tty_probe(struct mips_cdmm_device *dev)
+int mips_ejtag_fdc_tty_probe(struct mips_cdmm_device *dev)
 {
 	int ret, nport;
 	struct mips_ejtag_fdc_tty_port *dport;
@@ -1045,7 +1009,7 @@ err_destroy_ports:
 	return ret;
 }
 
-static int mips_ejtag_fdc_tty_cpu_down(struct mips_cdmm_device *dev)
+int mips_ejtag_fdc_tty_cpu_down(struct mips_cdmm_device *dev)
 {
 	struct mips_ejtag_fdc_tty *priv = mips_cdmm_get_drvdata(dev);
 	unsigned int cfg;
@@ -1068,7 +1032,7 @@ static int mips_ejtag_fdc_tty_cpu_down(struct mips_cdmm_device *dev)
 	return 0;
 }
 
-static int mips_ejtag_fdc_tty_cpu_up(struct mips_cdmm_device *dev)
+int mips_ejtag_fdc_tty_cpu_up(struct mips_cdmm_device *dev)
 {
 	struct mips_ejtag_fdc_tty *priv = mips_cdmm_get_drvdata(dev);
 	unsigned int cfg;
@@ -1105,22 +1069,6 @@ static int mips_ejtag_fdc_tty_cpu_up(struct mips_cdmm_device *dev)
 out:
 	return ret;
 }
-
-static const struct mips_cdmm_device_id mips_ejtag_fdc_tty_ids[] = {
-	{ .type = 0xfd },
-	{ }
-};
-
-static struct mips_cdmm_driver mips_ejtag_fdc_tty_driver = {
-	.drv		= {
-		.name	= "mips_ejtag_fdc",
-	},
-	.probe		= mips_ejtag_fdc_tty_probe,
-	.cpu_down	= mips_ejtag_fdc_tty_cpu_down,
-	.cpu_up		= mips_ejtag_fdc_tty_cpu_up,
-	.id_table	= mips_ejtag_fdc_tty_ids,
-};
-builtin_mips_cdmm_driver(mips_ejtag_fdc_tty_driver);
 
 static int __init mips_ejtag_fdc_init_console(void)
 {
@@ -1166,7 +1114,7 @@ static void __iomem *kgdbfdc_setup(void)
 	regs = mips_ejtag_fdc_con.regs[cpu];
 	/* First console output on this CPU? */
 	if (!regs) {
-		regs = mips_cdmm_early_probe(0xfd);
+		regs = get_fdc_regs();
 		mips_ejtag_fdc_con.regs[cpu] = regs;
 	}
 	/* Already tried and failed to find FDC on this CPU? */
