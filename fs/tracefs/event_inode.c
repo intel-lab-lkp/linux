@@ -346,8 +346,7 @@ static struct eventfs_inode *eventfs_find_events(struct dentry *dentry)
 		 * doesn't matter.
 		 */
 		if (ei->is_freed) {
-			ei = NULL;
-			break;
+			return NULL;
 		}
 		// Walk upwards until you find the events inode
 	} while (!ei->is_events);
