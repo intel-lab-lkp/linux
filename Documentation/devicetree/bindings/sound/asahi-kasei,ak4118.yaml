@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/sound/asahi-kasei,ak4118.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: AK4118 S/PDIF transceiver
+
+allOf:
+  - $ref: dai-common.yaml#
+
+maintainers:
+  - Liam Girdwood <lgirdwood@gmail.com>
+  - Mark Brown <broonie@kernel.org>
+  - Rob Herring <robh@kernel.org>
+  - Krzysztof Kozlowski <krzk+dt@kernel.org>
+  - Conor Dooley <conor+dt@kernel.org>
+
+properties:
+  compatible:
+    const: asahi-kasei,ak4118
+
+  reg:
+    description: The I2C address of the device for I2C
+    maxItems: 1
+
+  "#sound-dai-cells":
+    const: 0    
+
+  reset-gpios:
+    description: A GPIO specifier for the reset pin
+    maxItems: 1
+
+  irq-gpios:
+    description: A GPIO specifier for the IRQ pin
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+  - reset-gpios
+  - irq-gpios
+
+additionalProperties: false
+
+examples:
+  - |
+   i2c {
+     #address-cells = <1>;
+     #size-cells = <0>;
+     ak4118@13 {
+       #sound-dai-cells = <0>;
+       compatible = "asahi-kasei,ak4118";
+       reg = <0x13>;
+       reset-gpios = <&gpio 0 0>;
+       irq-gpios = <&gpio 1 1>;
+     };
+   };
