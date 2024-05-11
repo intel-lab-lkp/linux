@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/sound/adi,ssm2602.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Analog Devices SSM2602, SSM2603 and SSM2604 I2S audio CODEC devices
+
+description:
+  SSM2602 support both I2C and SPI as the configuration interface,
+  
+  the selection is made by the MODE strap-in pin.
+
+  SSM2603 and SSM2604 only support I2C as the configuration interface.
+
+maintainers:
+  - Liam Girdwood <lgirdwood@gmail.com>
+  - Mark Brown <broonie@kernel.org>
+  - Rob Herring <robh@kernel.org>
+  - Krzysztof Kozlowski <krzk+dt@kernel.org>
+  - Conor Dooley <conor+dt@kernel.org>
+
+properties:
+  compatible:
+    description: One of "adi,ssm2602", "adi,ssm2603" or "adi,ssm2604"
+    enum:
+      - adi,ssm2602
+      - adi,ssm2603
+      - adi,ssm2604
+
+  reg:
+    description: the I2C address of the device for I2C, the chip select number for SPI.
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+   i2c {
+     #address-cells = <1>;
+     #size-cells = <0>;
+     ssm2602@1a {
+       compatible = "adi,ssm2602";
+       reg = <0x1a>;
+     };
+   };
