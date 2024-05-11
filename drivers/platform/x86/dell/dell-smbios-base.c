@@ -350,6 +350,12 @@ void dell_laptop_call_notifier(unsigned long action, void *data)
 }
 EXPORT_SYMBOL_GPL(dell_laptop_call_notifier);
 
+bool dell_laptop_check_supported_cmds(u16 class)
+{
+	return da_supported_commands & (1 << class);
+}
+EXPORT_SYMBOL_GPL(dell_laptop_check_supported_cmds);
+
 static void __init parse_da_table(const struct dmi_header *dm)
 {
 	/* Final token is a terminator, so we don't want to copy it */
