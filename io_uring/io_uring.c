@@ -114,7 +114,7 @@
 
 #define IO_REQ_CLEAN_FLAGS (REQ_F_BUFFER_SELECTED | REQ_F_NEED_CLEANUP | \
 				REQ_F_POLLED | REQ_F_INFLIGHT | REQ_F_CREDS | \
-				REQ_F_ASYNC_DATA)
+				REQ_F_ASYNC_DATA | REQ_F_GROUP_KBUF)
 
 #define IO_REQ_CLEAN_SLOW_FLAGS (REQ_F_REFCOUNT | REQ_F_LINK | REQ_F_HARDLINK |\
 				 IO_REQ_CLEAN_FLAGS)
@@ -380,6 +380,11 @@ static bool req_need_defer(struct io_kiocb *req, u32 seq)
 
 static void io_clean_op(struct io_kiocb *req)
 {
+	/* GROUP_KBUF is only available for REQ_F_SQE_GROUP_DEP */
+	if ((req->flags & (REQ_F_GROUP_KBUF | REQ_F_SQE_GROUP_DEP)) ==
+			(REQ_F_GROUP_KBUF | REQ_F_SQE_GROUP_DEP))
+		io_group_kbuf_drop(req);
+
 	if (req->flags & REQ_F_BUFFER_SELECTED) {
 		spin_lock(&req->ctx->completion_lock);
 		io_kbuf_drop(req);
@@ -982,9 +987,12 @@ void io_queue_group_members(struct io_kiocb *req, bool async)
 		return;
 
 	while (member) {
+		const struct io_issue_def *def = &io_issue_defs[member->opcode];
 		struct io_kiocb *next = member->grp_link;
 
 		member->grp_link = req;
+		if ((req->flags & REQ_F_GROUP_KBUF) && def->accept_group_kbuf)
+			member->flags |= REQ_F_GROUP_KBUF;
 		if (async)
 			member->flags |= REQ_F_FORCE_ASYNC;
 
