@@ -4207,16 +4207,19 @@ int vfs_rmdir(struct mnt_idmap *idmap, struct inode *dir,
 	if (error)
 		goto out;
 
-	shrink_dcache_parent(dentry);
 	dentry->d_inode->i_flags |= S_DEAD;
 	dont_mount(dentry);
 	detach_mounts(dentry);
+	inode_unlock(dentry->d_inode);
+
+	shrink_dcache_parent(dentry);
+	dput(dentry);
+	d_delete_notify(dir, dentry);
+	return 0;
 
 out:
 	inode_unlock(dentry->d_inode);
 	dput(dentry);
-	if (!error)
-		d_delete_notify(dir, dentry);
 	return error;
 }
 EXPORT_SYMBOL(vfs_rmdir);
