@@ -374,6 +374,8 @@ ath12k_dp_tx_htt_tx_complete_buf(struct ath12k_base *ab,
 	struct ieee80211_tx_info *info;
 	struct ath12k_skb_cb *skb_cb;
 	struct ath12k *ar;
+	bool db2dbm = test_bit(WMI_TLV_SERVICE_HW_DB2DBM_CONVERSION_SUPPORT,
+			       ab->wmi_ab.svc_map);
 
 	skb_cb = ATH12K_SKB_CB(msdu);
 	info = IEEE80211_SKB_CB(msdu);
@@ -393,8 +395,9 @@ ath12k_dp_tx_htt_tx_complete_buf(struct ath12k_base *ab,
 	if (ts->acked) {
 		if (!(info->flags & IEEE80211_TX_CTL_NO_ACK)) {
 			info->flags |= IEEE80211_TX_STAT_ACK;
-			info->status.ack_signal = ATH12K_DEFAULT_NOISE_FLOOR +
-						  ts->ack_rssi;
+			info->status.ack_signal = ts->ack_rssi;
+			if (!db2dbm)
+				info->status.ack_signal += ATH12K_DEFAULT_NOISE_FLOOR;
 			info->status.flags = IEEE80211_TX_STATUS_ACK_SIGNAL_VALID;
 		} else {
 			info->flags |= IEEE80211_TX_STAT_NOACK_TRANSMITTED;
@@ -451,6 +454,8 @@ static void ath12k_dp_tx_complete_msdu(struct ath12k *ar,
 	struct ath12k_hw *ah = ar->ah;
 	struct ieee80211_tx_info *info;
 	struct ath12k_skb_cb *skb_cb;
+	bool db2dbm = test_bit(WMI_TLV_SERVICE_HW_DB2DBM_CONVERSION_SUPPORT,
+			       ab->wmi_ab.svc_map);
 
 	if (WARN_ON_ONCE(ts->buf_rel_source != HAL_WBM_REL_SRC_MODULE_TQM)) {
 		/* Must not happen */
@@ -486,8 +491,9 @@ static void ath12k_dp_tx_complete_msdu(struct ath12k *ar,
 	case HAL_WBM_TQM_REL_REASON_FRAME_ACKED:
 		if (!(info->flags & IEEE80211_TX_CTL_NO_ACK)) {
 			info->flags |= IEEE80211_TX_STAT_ACK;
-			info->status.ack_signal = ATH12K_DEFAULT_NOISE_FLOOR +
-						  ts->ack_rssi;
+			info->status.ack_signal = ts->ack_rssi;
+			if (!db2dbm)
+				info->status.ack_signal += ATH12K_DEFAULT_NOISE_FLOOR;
 			info->status.flags = IEEE80211_TX_STATUS_ACK_SIGNAL_VALID;
 		}
 		break;
