@@ -701,6 +701,9 @@ static inline bool retain_dentry(struct dentry *dentry, bool locked)
 	if (unlikely(d_flags & DCACHE_DONTCACHE))
 		return false;
 
+	if (unlikely(dentry->d_flags & DCACHE_FILE_DELETED))
+		return false;
+
 	// At this point it looks like we ought to keep it.  We also might
 	// need to do something - put it on LRU if it wasn't there already
 	// and mark it referenced if it was on LRU, but not marked yet.
@@ -2392,6 +2395,7 @@ void d_delete(struct dentry * dentry)
 		spin_unlock(&dentry->d_lock);
 		spin_unlock(&inode->i_lock);
 	}
+	dentry->d_flags |= DCACHE_FILE_DELETED;
 }
 EXPORT_SYMBOL(d_delete);
 
