@@ -23,6 +23,7 @@ typedef __u16 __sum16;
 
 struct post_socket_opts {
 	const char *cc;
+	int map_fd;
 };
 
 struct network_helper_opts {

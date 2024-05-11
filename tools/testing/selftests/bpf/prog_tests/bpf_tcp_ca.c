@@ -49,25 +49,9 @@ static void do_test(const struct network_helper_opts *opts,
 	if (!ASSERT_NEQ(lfd, -1, "socket"))
 		return;
 
-	fd = socket(AF_INET6, SOCK_STREAM, 0);
-	if (!ASSERT_NEQ(fd, -1, "socket")) {
-		close(lfd);
-		return;
-	}
-
-	if (settcpca(fd, opts->cb_opts.cc))
-		goto done;
-
-	if (sk_stg_map) {
-		err = bpf_map_update_elem(bpf_map__fd(sk_stg_map), &fd,
-					  &expected_stg, BPF_NOEXIST);
-		if (!ASSERT_OK(err, "bpf_map_update_elem(sk_stg_map)"))
-			goto done;
-	}
-
 	/* connect to server */
-	err = connect_fd_to_fd(fd, lfd, 0);
-	if (!ASSERT_NEQ(err, -1, "connect"))
+	fd = connect_to_fd_opts(lfd, opts);
+	if (!ASSERT_NEQ(fd, -1, "connect_to_fd_opts"))
 		goto done;
 
 	if (sk_stg_map) {
@@ -120,11 +104,21 @@ static void test_cubic(void)
 	bpf_cubic__destroy(cubic_skel);
 }
 
+static int stg_post_socket_cb(int fd, const struct post_socket_opts *opts)
+{
+	int err;
+
+	err = cc_cb(fd, opts);
+	if (err)
+		return err;
+	return bpf_map_update_elem(opts->map_fd, &fd, &expected_stg, BPF_NOEXIST);
+}
+
 static void test_dctcp(void)
 {
 	struct network_helper_opts opts = {
 		.cb_opts.cc = "bpf_dctcp",
-		.post_socket_cb = cc_cb,
+		.post_socket_cb = stg_post_socket_cb,
 	};
 	struct bpf_dctcp *dctcp_skel;
 	struct bpf_link *link;
@@ -139,6 +133,7 @@ static void test_dctcp(void)
 		return;
 	}
 
+	opts.cb_opts.map_fd = bpf_map__fd(dctcp_skel->maps.sk_stg_map);
 	do_test(&opts, dctcp_skel->maps.sk_stg_map);
 	ASSERT_EQ(dctcp_skel->bss->stg_result, expected_stg, "stg_result");
 
