@@ -175,25 +175,26 @@ void tulip_parse_eeprom(struct net_device *dev)
 					dev->name);
 			return;
 		}
-	  /* Do a fix-up based on the vendor half of the station address prefix. */
-	  for (i = 0; eeprom_fixups[i].name; i++) {
-		  if (dev->dev_addr[0] == eeprom_fixups[i].addr0 &&
-		      dev->dev_addr[1] == eeprom_fixups[i].addr1 &&
-		      dev->dev_addr[2] == eeprom_fixups[i].addr2) {
-		  if (dev->dev_addr[2] == 0xE8 && ee_data[0x1a] == 0x55)
-			  i++;			/* An Accton EN1207, not an outlaw Maxtech. */
-		  memcpy(ee_data + 26, eeprom_fixups[i].newtable,
-				 sizeof(eeprom_fixups[i].newtable));
-		  pr_info("%s: Old format EEPROM on '%s' board.  Using substitute media control info\n",
-			  dev->name, eeprom_fixups[i].name);
-		  break;
+		/* Do a fix-up based on the vendor half of the station address prefix. */
+		for (i = 0; eeprom_fixups[i].name; i++) {
+			if (dev->dev_addr[0] == eeprom_fixups[i].addr0 &&
+			    dev->dev_addr[1] == eeprom_fixups[i].addr1 &&
+			    dev->dev_addr[2] == eeprom_fixups[i].addr2) {
+				if (dev->dev_addr[2] == 0xE8 && ee_data[0x1a] == 0x55)
+					i++; /* An Accton EN1207, not an outlaw Maxtech. */
+				memcpy(ee_data + 26, eeprom_fixups[i].newtable,
+				       sizeof(eeprom_fixups[i].newtable));
+				pr_info("%s: Old format EEPROM on '%s' board.  Using substitute media control info\n",
+					dev->name, eeprom_fixups[i].name);
+				break;
+			}
 		}
-	  }
-	  if (eeprom_fixups[i].name == NULL) { /* No fixup found. */
-		  pr_info("%s: Old style EEPROM with no media selection information\n",
-			  dev->name);
-		return;
-	  }
+		/* No fixup found. */
+		if (!eeprom_fixups[i].name) {
+			pr_info("%s: Old style EEPROM with no media selection information\n",
+				dev->name);
+			return;
+		}
 	}
 
 	controller_index = 0;
