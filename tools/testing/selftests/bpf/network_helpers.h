@@ -33,6 +33,7 @@ struct network_helper_opts {
 	int type;
 	int proto;
 	int (*post_socket_cb)(int fd, const struct post_socket_opts *opts);
+	int (*post_connect_cb)(int fd, const struct post_socket_opts *opts);
 	struct post_socket_opts cb_opts;
 };
 
