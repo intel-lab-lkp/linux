@@ -271,6 +271,14 @@ static const struct dmi_system_id video_detect_dmi_table[] = {
 		DMI_MATCH(DMI_PRODUCT_NAME, "PORTEGE R600"),
 		},
 	},
+	{
+	 .callback = video_detect_force_vendor,
+	 .ident = "KaiTian X1 G1d",
+	 .matches = {
+		DMI_MATCH(DMI_SYS_VENDOR, "KaiTian"),
+		DMI_MATCH(DMI_PRODUCT_NAME, "KaiTian X1 G1d"),
+		},
+	},
 
 	/*
 	 * Toshiba Portégé R100 has working both acpi_video and toshiba_acpi
