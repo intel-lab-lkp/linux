@@ -368,7 +368,10 @@ static inline void io_req_complete_defer(struct io_kiocb *req)
 
 	wq_list_add_tail(&req->comp_list, &state->compl_reqs);
 
-	/* members may not be issued when leader is completed */
+	/*
+	 * Members may not be issued when leader is completed, or members
+	 * depend on leader in case of REQ_F_SQE_GROUP_DEP
+	 */
 	if (unlikely(req_is_group_leader(req) && req->grp_link))
 		io_queue_group_members(req, false);
 }
