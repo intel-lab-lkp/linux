@@ -4166,21 +4166,7 @@ SYSCALL_DEFINE2(mkdir, const char __user *, pathname, umode_t, mode)
 	return do_mkdirat(AT_FDCWD, getname(pathname), mode);
 }
 
-/**
- * vfs_rmdir - remove directory
- * @idmap:	idmap of the mount the inode was found from
- * @dir:	inode of @dentry
- * @dentry:	pointer to dentry of the base directory
- *
- * Remove a directory.
- *
- * If the inode has been found through an idmapped mount the idmap of
- * the vfsmount must be passed through @idmap. This function will then take
- * care to map the inode according to @idmap before checking permissions.
- * On non-idmapped mounts or if permission checking is to be performed on the
- * raw inode simply pass @nop_mnt_idmap.
- */
-int vfs_rmdir(struct mnt_idmap *idmap, struct inode *dir,
+static int vfs_rmdir_raw(struct mnt_idmap *idmap, struct inode *dir,
 		     struct dentry *dentry)
 {
 	int error = may_delete(idmap, dir, dentry, 1);
@@ -4207,17 +4193,42 @@ int vfs_rmdir(struct mnt_idmap *idmap, struct inode *dir,
 	if (error)
 		goto out;
 
-	shrink_dcache_parent(dentry);
 	dentry->d_inode->i_flags |= S_DEAD;
 	dont_mount(dentry);
 	detach_mounts(dentry);
-
 out:
 	inode_unlock(dentry->d_inode);
 	dput(dentry);
-	if (!error)
-		d_delete_notify(dir, dentry);
 	return error;
+}
+
+static inline void vfs_rmdir_cleanup(struct inode *dir, struct dentry *dentry)
+{
+	shrink_dcache_parent(dentry);
+	d_delete_notify(dir, dentry);
+}
+
+/**
+ * vfs_rmdir - remove directory
+ * @idmap:	idmap of the mount the inode was found from
+ * @dir:	inode of @dentry
+ * @dentry:	pointer to dentry of the base directory
+ *
+ * Remove a directory.
+ *
+ * If the inode has been found through an idmapped mount the idmap of
+ * the vfsmount must be passed through @idmap. This function will then take
+ * care to map the inode according to @idmap before checking permissions.
+ * On non-idmapped mounts or if permission checking is to be performed on the
+ * raw inode simply pass @nop_mnt_idmap.
+ */
+int vfs_rmdir(struct mnt_idmap *idmap, struct inode *dir,
+		     struct dentry *dentry)
+{
+	int retval = vfs_rmdir_raw(idmap, dir, dentry);
+	if (!retval)
+		vfs_rmdir_cleanup(dir, dentry);
+	return retval;
 }
 EXPORT_SYMBOL(vfs_rmdir);
 
@@ -4262,7 +4273,17 @@ retry:
 	error = security_path_rmdir(&path, dentry);
 	if (error)
 		goto exit4;
-	error = vfs_rmdir(mnt_idmap(path.mnt), path.dentry->d_inode, dentry);
+	error = vfs_rmdir_raw(mnt_idmap(path.mnt), path.dentry->d_inode, dentry);
+	if (error)
+		goto exit4;
+	inode_unlock(path.dentry->d_inode);
+	mnt_drop_write(path.mnt);
+	vfs_rmdir_cleanup(path.dentry->d_inode, dentry);
+	dput(dentry);
+	path_put(&path);
+	putname(name);
+	return 0;
+
 exit4:
 	dput(dentry);
 exit3:
