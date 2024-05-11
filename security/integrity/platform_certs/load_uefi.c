@@ -97,7 +97,7 @@ static __init void *get_cert_list(efi_char16_t *name, efi_guid_t *guid,
  * load_moklist_certs() - Load MokList certs
  *
  * Load the certs contained in the UEFI MokListRT database into the
- * platform trusted keyring.
+ * machine keyring.
  *
  * This routine checks the EFI MOK config table first. If and only if
  * that fails, this routine uses the MokListRT ordinary UEFI variable.
