@@ -784,14 +784,13 @@ static struct dce_i2c_hw *dcn401_i2c_hw_create(
 
 #undef REG_STRUCT
 #define REG_STRUCT i2c_hw_regs
-		i2c_inst_regs_init(1),
-		i2c_inst_regs_init(2),
-		i2c_inst_regs_init(3),
-		i2c_inst_regs_init(4);
+	i2c_inst_regs_init(1),
+	i2c_inst_regs_init(2),
+	i2c_inst_regs_init(3),
+	i2c_inst_regs_init(4);
 
 	dcn2_i2c_hw_construct(dce_i2c_hw, ctx, inst,
-				    &i2c_hw_regs[inst], &i2c_shifts, &i2c_masks);
-
+			      &i2c_hw_regs[inst], &i2c_shifts, &i2c_masks);
 	return dce_i2c_hw;
 }
 
@@ -886,13 +885,13 @@ static struct hubp *dcn401_hubp_create(
 
 #undef REG_STRUCT
 #define REG_STRUCT hubp_regs
-		hubp_regs_init(0),
-		hubp_regs_init(1),
-		hubp_regs_init(2),
-		hubp_regs_init(3);
+	hubp_regs_init(0),
+	hubp_regs_init(1),
+	hubp_regs_init(2),
+	hubp_regs_init(3);
 
 	if (hubp401_construct(hubp2, ctx, inst,
-			&hubp_regs[inst], &hubp_shift, &hubp_mask))
+			      &hubp_regs[inst], &hubp_shift, &hubp_mask))
 		return &hubp2->base;
 
 	BREAK_TO_DEBUGGER();
@@ -1735,10 +1734,10 @@ static bool dcn401_resource_construct(
 
 #undef REG_STRUCT
 #define REG_STRUCT abm_regs
-		abm_regs_init(0),
-		abm_regs_init(1),
-		abm_regs_init(2),
-		abm_regs_init(3);
+	abm_regs_init(0),
+	abm_regs_init(1),
+	abm_regs_init(2),
+	abm_regs_init(3);
 
 #undef REG_STRUCT
 #define REG_STRUCT dccg_regs
