@@ -378,6 +378,7 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 			reg = <5>;
+			clock-frequency = <1000000>;
 
 			/* ATSHA204A-MAHDA-T crypto module */
 			crypto@64 {
