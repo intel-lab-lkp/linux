@@ -81,6 +81,12 @@ done:
 	close(fd);
 }
 
+static int cc_cb(int fd, const struct post_socket_opts *opts)
+{
+	return setsockopt(fd, SOL_TCP, TCP_CONGESTION, opts->cc,
+			  strlen(opts->cc) + 1);
+}
+
 static void test_cubic(void)
 {
 	struct bpf_cubic *cubic_skel;
@@ -172,7 +178,8 @@ static void test_dctcp_fallback(void)
 {
 	int err, lfd = -1, cli_fd = -1, srv_fd = -1;
 	struct network_helper_opts opts = {
-		.cc = "cubic",
+		.cb_opts.cc = "cubic",
+		.post_socket_cb = cc_cb,
 	};
 	struct bpf_dctcp *dctcp_skel;
 	struct bpf_link *link = NULL;

@@ -21,16 +21,18 @@ typedef __u16 __sum16;
 #define VIP_NUM 5
 #define MAGIC_BYTES 123
 
-struct post_socket_opts {};
+struct post_socket_opts {
+	const char *cc;
+};
 
 struct network_helper_opts {
-	const char *cc;
 	int timeout_ms;
 	bool must_fail;
 	bool noconnect;
 	int type;
 	int proto;
 	int (*post_socket_cb)(int fd, const struct post_socket_opts *opts);
+	struct post_socket_opts cb_opts;
 };
 
 /* ipv4 test vector */
