@@ -318,6 +318,8 @@ properties:
           - samsung,24ad0xd1
             # Samsung Exynos SoC SATA PHY I2C device
           - samsung,exynos-sataphy-i2c
+            # ScioSense ENS160 multi-gas sensor
+          - sciosense,ens160
             # Semtech sx1301 baseband processor
           - semtech,sx1301
             # Sensirion multi-pixel gas sensor with I2C interface
