@@ -524,9 +524,6 @@ static void a6xx_gmu_rpmh_init(struct a6xx_gmu *gmu)
 	uint32_t pdc_address_offset;
 	bool pdc_in_aop = false;
 
-	if (IS_ERR(pdcptr))
-		goto err;
-
 	if (adreno_is_a650(adreno_gpu) ||
 	    adreno_is_a660_family(adreno_gpu) ||
 	    adreno_is_a7xx(adreno_gpu))
@@ -540,8 +537,6 @@ static void a6xx_gmu_rpmh_init(struct a6xx_gmu *gmu)
 
 	if (!pdc_in_aop) {
 		seqptr = a6xx_gmu_get_mmio(pdev, "gmu_pdc_seq");
-		if (IS_ERR(seqptr))
-			goto err;
 	}
 
 	/* Disable SDE clock gating */
@@ -633,12 +628,6 @@ setup_pdc:
 	wmb();
 
 	a6xx_rpmh_stop(gmu);
-
-err:
-	if (!IS_ERR_OR_NULL(pdcptr))
-		devm_iounmap(&pdev->dev,pdcptr);
-	if (!IS_ERR_OR_NULL(seqptr))
-		devm_iounmap(&pdev->dev,seqptr);
 }
 
 /*
@@ -1635,7 +1624,6 @@ int a6xx_gmu_wrapper_init(struct a6xx_gpu *a6xx_gpu, struct device_node *node)
 	gmu->gxpd = dev_pm_domain_attach_by_name(gmu->dev, "gx");
 	if (IS_ERR(gmu->gxpd)) {
 		ret = PTR_ERR(gmu->gxpd);
-		goto err_mmio;
 	}
 
 	gmu->initialized = true;
@@ -1644,9 +1632,6 @@ int a6xx_gmu_wrapper_init(struct a6xx_gpu *a6xx_gpu, struct device_node *node)
 
 detach_cxpd:
 	dev_pm_domain_detach(gmu->cxpd, false);
-
-err_mmio:
-	devm_iounmap(gmu->dev ,gmu->mmio);
 
 	/* Drop reference taken in of_find_device_by_node */
 	put_device(gmu->dev);
@@ -1825,9 +1810,6 @@ detach_cxpd:
 	dev_pm_domain_detach(gmu->cxpd, false);
 
 err_mmio:
-	devm_iounmap(gmu->dev ,gmu->mmio);
-	if (platform_get_resource_byname(pdev, IORESOURCE_MEM, "rscc"))
-		devm_iounmap(gmu->dev ,gmu->rscc);
 	free_irq(gmu->gmu_irq, gmu);
 	free_irq(gmu->hfi_irq, gmu);
 
