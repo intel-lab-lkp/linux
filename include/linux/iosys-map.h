@@ -7,6 +7,7 @@
 #define __IOSYS_MAP_H__
 
 #include <linux/compiler_types.h>
+#include <linux/fs.h>
 #include <linux/io.h>
 #include <linux/string.h>
 
@@ -310,6 +311,29 @@ static inline void iosys_map_memcpy_from(void *dst, const struct iosys_map *src,
 		memcpy_fromio(dst, src->vaddr_iomem + src_offset, len);
 	else
 		memcpy(dst, src->vaddr + src_offset, len);
+}
+
+/**
+ * iosys_map_read_from - Copy data from iosys_map into user memory
+ * @to: the user space buffer to read to
+ * @count: the maximum number of bytes to read
+ * @ppos: the current position in the buffer
+ * @map: the iosys_map structure to read from
+ * @available: the size of the data in iosys_map
+ *
+ * Copies up to @count bytes from a iosys_map @map at offset @ppos into the user
+ * space address starting at @to.
+ *
+ * Return: On success, the number of bytes read is returned and the offset
+ * @ppos is advanced by this number, or negative value is returned on error.
+ */
+static inline ssize_t iosys_map_read_from(void __user *to, size_t count, loff_t *ppos,
+					  const struct iosys_map *map, size_t available)
+{
+	if (map->is_iomem)
+		return simple_read_from_iomem(to, count, ppos, map->vaddr_iomem, available);
+	else
+		return simple_read_from_buffer(to, count, ppos, map->vaddr, available);
 }
 
 /**
