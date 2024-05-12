@@ -217,6 +217,15 @@ On ARM, the function setup_machine_fdt() is responsible for early
 scanning of the device tree after selecting the correct machine_desc
 that supports the board.
 
+The bootargs property might be overridden by bootloaders on kernel load,
+in such scenario, bootargs-override might be used instead. With
+bootargs-override set, any value set in bootargs will be ignored.
+
+The bootargs-append can be used to append additional kernel arguments
+to the bootargs property. This can be useful in the context of a
+bootargs overridden by the bootloader that contains correct that but
+the kernel require additional one to be correctly setup.
+
 2.4 Device population
 ---------------------
 After the board has been identified, and after the early configuration data
