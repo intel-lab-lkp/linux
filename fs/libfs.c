@@ -15,6 +15,7 @@
 #include <linux/mutex.h>
 #include <linux/namei.h>
 #include <linux/exportfs.h>
+#include <linux/io.h>
 #include <linux/iversion.h>
 #include <linux/writeback.h>
 #include <linux/buffer_head.h> /* sync_mapping_buffers */
@@ -1039,6 +1040,55 @@ void simple_release_fs(struct vfsmount **mount, int *count)
 	mntput(mnt);
 }
 EXPORT_SYMBOL(simple_release_fs);
+
+/**
+ * simple_read_from_iomem - copy data from the I/O memory to user space
+ * @to: the user space buffer to read to
+ * @count: the maximum number of bytes to read
+ * @ppos: the current position in the buffer
+ * @from: the I/O memory to read from
+ * @available: the size of the iomem memory
+ *
+ * The simple_read_from_iomem() function reads up to @count bytes (but no
+ * more than %PAGE_SIZE bytes) from the I/O memory @from at offset @ppos
+ * into the user space address starting at @to.
+ *
+ * Return: On success, the number of bytes read is returned and the offset
+ * @ppos is advanced by this number, or negative value is returned on error.
+ */
+ssize_t simple_read_from_iomem(void __user *to, size_t count, loff_t *ppos,
+			       const volatile void __iomem *from, size_t available)
+{
+	loff_t pos = *ppos;
+	size_t ret;
+	void *buf;
+
+	if (pos < 0)
+		return -EINVAL;
+	if (pos >= available || !count)
+		return 0;
+	if (count > available - pos)
+		count = available - pos;
+	if (count > PAGE_SIZE)
+		count = PAGE_SIZE;
+
+	buf = kmalloc(count, GFP_NOWAIT | __GFP_NOWARN);
+	if (!buf)
+		return -ENOMEM;
+
+	memcpy_fromio(buf, from + pos, count);
+	ret = copy_to_user(to, buf, count);
+
+	kfree(buf);
+
+	if (ret == count)
+		return -EFAULT;
+
+	count -= ret;
+	*ppos = pos + count;
+	return count;
+}
+EXPORT_SYMBOL(simple_read_from_iomem);
 
 /**
  * simple_read_from_buffer - copy data from the buffer to user space

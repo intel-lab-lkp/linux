@@ -3331,6 +3331,9 @@ extern ssize_t simple_read_from_buffer(void __user *to, size_t count,
 extern ssize_t simple_write_to_buffer(void *to, size_t available, loff_t *ppos,
 		const void __user *from, size_t count);
 
+ssize_t simple_read_from_iomem(void __user *to, size_t count, loff_t *ppos,
+			       const volatile void __iomem *from, size_t available);
+
 struct offset_ctx {
 	struct maple_tree	mt;
 	unsigned long		next_offset;
