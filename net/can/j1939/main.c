@@ -344,6 +344,9 @@ int j1939_send_one(struct j1939_priv *priv, struct sk_buff *skb)
 	/* make it a full can frame again */
 	skb_put(skb, J1939_CAN_FTR + (8 - dlc));
 
+	/* initialize unused data  */
+	memset(cf->data + dlc, 0, 8 - dlc);
+
 	canid = CAN_EFF_FLAG |
 		(skcb->priority << 26) |
 		(skcb->addr.pgn << 8) |
