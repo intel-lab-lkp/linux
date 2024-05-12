@@ -538,11 +538,23 @@ static int __init bootcmdline_scan_chosen(unsigned long node, const char *uname,
 	    (strcmp(uname, "chosen") != 0 && strcmp(uname, "chosen@0") != 0))
 		return 0;
 
-	p = of_get_flat_dt_prop(node, "bootargs", &l);
+	/*
+	 * Retrieve command line
+	 * bootargs might be hardcoded and overwrite by bootloader on
+	 * kernel load.
+	 * Check if alternative bootargs-override is present instead
+	 * first.
+	 */
+	p = of_get_flat_dt_prop(node, "bootargs-override", &l);
+	if (p == NULL || l == 0)
+		p = of_get_flat_dt_prop(node, "bootargs", &l);
 	if (p != NULL && l > 0) {
 		bootcmdline_append(p, min(l, COMMAND_LINE_SIZE));
 		*dt_bootargs = true;
 	}
+	p = of_get_flat_dt_prop(node, "bootargs-append", &l);
+	if (p != NULL && l > 0)
+		bootcmdline_append(p, min_t(int, strlen(boot_command_line) + l, COMMAND_LINE_SIZE));
 
 	return 1;
 }
