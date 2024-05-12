@@ -8,6 +8,7 @@
 #include <drm/drm_debugfs.h>
 #include <drm/drm_managed.h>
 
+#include "xe_bo.h"
 #include "xe_device.h"
 #include "xe_gt.h"
 #include "xe_guc.h"
@@ -52,6 +53,29 @@ static const struct drm_info_list debugfs_list[] = {
 	{"guc_log", guc_log, 0},
 };
 
+static ssize_t guc_log_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
+{
+	struct dentry *dent = file_dentry(file);
+	struct dentry *uc_dent = dent->d_parent;
+	struct dentry *gt_dent = uc_dent->d_parent;
+	struct xe_gt *gt = gt_dent->d_inode->i_private;
+	struct xe_guc_log *log = &gt->uc.guc.log;
+	struct xe_device *xe = gt_to_xe(gt);
+	ssize_t ret;
+
+	xe_pm_runtime_get(xe);
+	ret = xe_map_read_from(xe, buf, count, pos, &log->bo->vmap, log->bo->size);
+	xe_pm_runtime_put(xe);
+
+	return ret;
+}
+
+static const struct file_operations guc_log_ops = {
+	.owner		= THIS_MODULE,
+	.read		= guc_log_read,
+	.llseek		= default_llseek,
+};
+
 void xe_guc_debugfs_register(struct xe_guc *guc, struct dentry *parent)
 {
 	struct drm_minor *minor = guc_to_xe(guc)->drm.primary;
@@ -72,4 +96,6 @@ void xe_guc_debugfs_register(struct xe_guc *guc, struct dentry *parent)
 	drm_debugfs_create_files(local,
 				 ARRAY_SIZE(debugfs_list),
 				 parent, minor);
+
+	debugfs_create_file("guc_log_raw", 0600, parent, NULL, &guc_log_ops);
 }
