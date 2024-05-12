@@ -32,7 +32,8 @@ enum bcm4377_chip {
 #define BCM4378_DEVICE_ID 0x5f69
 #define BCM4387_DEVICE_ID 0x5f71
 
-#define BCM4377_TIMEOUT 1000
+#define BCM4377_TIMEOUT msecs_to_jiffies(1000)
+#define BCM4377_BOOT_TIMEOUT msecs_to_jiffies(5000)
 
 /*
  * These devices only support DMA transactions inside a 32bit window
@@ -1857,7 +1858,7 @@ static int bcm4377_boot(struct bcm4377_data *bcm4377)
 	dev_dbg(&bcm4377->pdev->dev, "waiting for firmware to boot\n");
 
 	ret = wait_for_completion_interruptible_timeout(&bcm4377->event,
-							BCM4377_TIMEOUT);
+							BCM4377_BOOT_TIMEOUT);
 	if (ret == 0) {
 		ret = -ETIMEDOUT;
 		goto out_dma_free;
