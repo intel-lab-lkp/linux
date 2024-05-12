@@ -743,4 +743,12 @@ config EP93XX_TIMER
 	  Enables support for the Cirrus Logic timer block
 	  EP93XX.
 
+config LOONGSON_NODECNT
+	bool "Loongson Node Conunter timer driver"
+	default y if MIPS && MACH_LOONGSON64
+	depends on (MIPS && MACH_LOONGSON64) || COMPILE_TEST
+	depends on GENERIC_SCHED_CLOCK
+	help
+	  Enables support for the Loongson Node Counter timer.
+
 endmenu

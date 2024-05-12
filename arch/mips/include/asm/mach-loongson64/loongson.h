@@ -56,6 +56,9 @@ extern void *loongson_fdt_blob;
 extern void mach_irq_dispatch(unsigned int pending);
 extern int mach_i8259_irq(void);
 
+/* Time functions */
+extern int __init nodecnt_clocksource_init(void);
+
 /* We need this in some places... */
 #define delay() ({		\
 	int x;				\
