@@ -11,6 +11,9 @@
 
 #include <linux/bitfield.h>
 #include <linux/iio/iio.h>
+#include <linux/iio/trigger.h>
+#include <linux/iio/trigger_consumer.h>
+#include <linux/iio/triggered_buffer.h>
 #include <linux/module.h>
 #include <linux/regmap.h>
 
@@ -23,6 +26,11 @@
 #define ENS160_REG_PART_ID	0x00
 
 #define ENS160_REG_OPMODE	0x10
+
+#define ENS160_REG_CONFIG		0x11
+#define ENS160_REG_CONFIG_INTEN		BIT(0)
+#define ENS160_REG_CONFIG_INTDAT	BIT(1)
+#define ENS160_REG_CONFIG_INT_CFG	BIT(5)
 
 #define ENS160_REG_MODE_DEEP_SLEEP	0x00
 #define ENS160_REG_MODE_IDLE		0x01
@@ -48,6 +56,12 @@
 
 struct ens160_data {
 	struct regmap *regmap;
+	struct mutex mutex;
+	struct {
+		u16 chans[2];
+		s64 timestamp __aligned(8);
+	} scan;
+	int irq;
 };
 
 static const struct iio_chan_spec ens160_channels[] = {
@@ -58,6 +72,13 @@ static const struct iio_chan_spec ens160_channels[] = {
 		.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |
 				      BIT(IIO_CHAN_INFO_SCALE),
 		.address = ENS160_REG_DATA_TVOC,
+		.scan_index = 0,
+		.scan_type = {
+			.sign = 'u',
+			.realbits = 16,
+			.storagebits = 16,
+			.endianness = IIO_LE,
+		},
 	},
 	{
 		.type = IIO_CONCENTRATION,
@@ -66,7 +87,15 @@ static const struct iio_chan_spec ens160_channels[] = {
 		.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |
 				      BIT(IIO_CHAN_INFO_SCALE),
 		.address = ENS160_REG_DATA_ECO2,
+		.scan_index = 1,
+		.scan_type = {
+			.sign = 'u',
+			.realbits = 16,
+			.storagebits = 16,
+			.endianness = IIO_LE,
+		},
 	},
+	IIO_CHAN_SOFT_TIMESTAMP(2),
 };
 
 static int ens160_read_raw(struct iio_dev *indio_dev,
@@ -79,10 +108,19 @@ static int ens160_read_raw(struct iio_dev *indio_dev,
 
 	switch (mask) {
 	case IIO_CHAN_INFO_RAW:
-		ret = regmap_bulk_read(data->regmap, chan->address,
-					&buf, sizeof(buf));
+		ret = iio_device_claim_direct_mode(indio_dev);
 		if (ret)
 			return ret;
+		mutex_lock(&data->mutex);
+		ret = regmap_bulk_read(data->regmap, chan->address,
+					&buf, sizeof(buf));
+		if (ret) {
+			mutex_unlock(&data->mutex);
+			iio_device_release_direct_mode(indio_dev);
+			return ret;
+		}
+		mutex_unlock(&data->mutex);
+		iio_device_release_direct_mode(indio_dev);
 		*val = le16_to_cpu(buf);
 		return IIO_VAL_INT;
 
@@ -182,7 +220,104 @@ static const struct iio_info ens160_info = {
 	.read_raw = ens160_read_raw,
 };
 
-int ens160_core_probe(struct device *dev, struct regmap *regmap,
+static irqreturn_t ens160_irq_handler(int irq, void *private)
+{
+	struct iio_dev *indio_dev = private;
+
+	if (iio_buffer_enabled(indio_dev))
+		iio_trigger_poll(indio_dev->trig);
+
+	return IRQ_HANDLED;
+}
+
+static irqreturn_t ens160_trigger_handler(int irq, void *p)
+{
+	struct iio_poll_func *pf = p;
+	struct iio_dev *indio_dev = pf->indio_dev;
+	struct ens160_data *data = iio_priv(indio_dev);
+	__le16 val;
+	int ret, i, j = 0;
+
+	mutex_lock(&data->mutex);
+
+	for_each_set_bit(i, indio_dev->active_scan_mask,
+			 indio_dev->masklength) {
+		ret = regmap_bulk_read(data->regmap,
+				       ENS160_REG_DATA_TVOC + 2 * i, &val, 2U);
+		if (ret)
+			goto err;
+
+		data->scan.chans[j++] = val;
+	}
+
+	iio_push_to_buffers_with_timestamp(indio_dev, &data->scan,
+					   pf->timestamp);
+err:
+	mutex_unlock(&data->mutex);
+	iio_trigger_notify_done(indio_dev->trig);
+
+	return IRQ_HANDLED;
+}
+
+static int ens160_set_trigger_state(struct iio_trigger *trig, bool state)
+{
+	struct iio_dev *indio_dev = iio_trigger_get_drvdata(trig);
+	struct ens160_data *data = iio_priv(indio_dev);
+	unsigned int int_bits = ENS160_REG_CONFIG_INTEN |
+				ENS160_REG_CONFIG_INTDAT |
+				ENS160_REG_CONFIG_INT_CFG;
+	int ret;
+
+	if (state)
+		ret = regmap_set_bits(data->regmap, ENS160_REG_CONFIG,
+				      int_bits);
+	else
+		ret = regmap_clear_bits(data->regmap, ENS160_REG_CONFIG,
+					int_bits);
+
+	return ret;
+}
+
+static const struct iio_trigger_ops ens160_trigger_ops = {
+	.set_trigger_state = ens160_set_trigger_state,
+	.validate_device = iio_trigger_validate_own_device,
+};
+
+static int ens160_setup_trigger(struct iio_dev *indio_dev)
+{
+	struct ens160_data *data = iio_priv(indio_dev);
+	struct device *dev = indio_dev->dev.parent;
+	struct iio_trigger *trig;
+	int ret;
+
+	trig = devm_iio_trigger_alloc(dev, "%s-dev%d", indio_dev->name,
+				      iio_device_id(indio_dev));
+	if (!trig)
+		return dev_err_probe(dev, -ENOMEM,
+				     "failed to allocate trigger\n");
+
+	trig->ops = &ens160_trigger_ops;
+	iio_trigger_set_drvdata(trig, indio_dev);
+
+	ret = devm_iio_trigger_register(dev, trig);
+	if (ret)
+		return ret;
+
+	indio_dev->trig = iio_trigger_get(trig);
+
+	ret = devm_request_threaded_irq(dev, data->irq,
+					ens160_irq_handler,
+					NULL,
+					IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+					indio_dev->name,
+					indio_dev);
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to request irq\n");
+
+	return 0;
+}
+
+int ens160_core_probe(struct device *dev, struct regmap *regmap, int irq,
 		      const char *name)
 {
 	struct ens160_data *data;
@@ -196,6 +331,7 @@ int ens160_core_probe(struct device *dev, struct regmap *regmap,
 	data = iio_priv(indio_dev);
 	dev_set_drvdata(dev, indio_dev);
 	data->regmap = regmap;
+	data->irq = irq;
 
 	indio_dev->name = name;
 	indio_dev->info = &ens160_info;
@@ -203,11 +339,26 @@ int ens160_core_probe(struct device *dev, struct regmap *regmap,
 	indio_dev->channels = ens160_channels;
 	indio_dev->num_channels = ARRAY_SIZE(ens160_channels);
 
+	if (data->irq > 0) {
+		ret = ens160_setup_trigger(indio_dev);
+		if (ret)
+			return dev_err_probe(dev, ret,
+					     "failed to setup trigger\n");
+	}
+
 	ret = ens160_chip_init(data);
 	if (ret) {
 		dev_err_probe(dev, ret, "chip initialization failed\n");
 		return ret;
 	}
+
+	mutex_init(&data->mutex);
+
+	ret = devm_iio_triggered_buffer_setup(dev, indio_dev,
+					      iio_pollfunc_store_time,
+					      ens160_trigger_handler, NULL);
+	if (ret)
+		return ret;
 
 	return devm_iio_device_register(dev, indio_dev);
 }

@@ -2,7 +2,7 @@
 #ifndef ENS160_H_
 #define ENS160_H_
 
-int ens160_core_probe(struct device *dev, struct regmap *regmap,
+int ens160_core_probe(struct device *dev, struct regmap *regmap, int irq,
 		      const char *name);
 void ens160_core_remove(struct device *dev);
 

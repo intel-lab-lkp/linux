@@ -32,7 +32,7 @@ static int ens160_spi_probe(struct spi_device *spi)
 		return PTR_ERR(regmap);
 	}
 
-	return ens160_core_probe(&spi->dev, regmap, id->name);
+	return ens160_core_probe(&spi->dev, regmap, spi->irq, id->name);
 }
 
 static void ens160_spi_remove(struct spi_device *spi)

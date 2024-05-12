@@ -31,7 +31,7 @@ static int ens160_i2c_probe(struct i2c_client *client)
 		return PTR_ERR(regmap);
 	}
 
-	return ens160_core_probe(&client->dev, regmap, client->name);
+	return ens160_core_probe(&client->dev, regmap, client->irq, client->name);
 }
 
 static void ens160_i2c_remove(struct i2c_client *client)
