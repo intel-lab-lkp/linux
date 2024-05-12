@@ -1202,12 +1202,15 @@ void folio_move_anon_rmap(struct folio *folio, struct vm_area_struct *vma)
 	VM_BUG_ON_VMA(!anon_vma, vma);
 
 	anon_vma += PAGE_MAPPING_ANON;
+
 	/*
-	 * Ensure that anon_vma and the PAGE_MAPPING_ANON bit are written
-	 * simultaneously, so a concurrent reader (eg folio_referenced()'s
-	 * folio_test_anon()) will not see one without the other.
+	 * If anon_vma != folio->mapping ensure that anon_vma and the
+	 * PAGE_MAPPING_ANON bit are writtensimultaneously, so a concurrent
+	 * reader (eg folio_referenced()'s folio_test_anon()) will not see
+	 * one without the other.
 	 */
-	WRITE_ONCE(folio->mapping, anon_vma);
+	if (anon_vma != folio->mapping)
+		WRITE_ONCE(folio->mapping, anon_vma);
 }
 
 /**
