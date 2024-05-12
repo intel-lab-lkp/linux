@@ -92,40 +92,6 @@ static inline void dwmac_rane(void __iomem *ioaddr, u32 reg, bool restart)
 }
 
 /**
- * dwmac_ctrl_ane - To program the AN Control Register.
- * @ioaddr: IO registers pointer
- * @reg: Base address of the AN Control Register.
- * @ane: to enable the auto-negotiation
- * @srgmi_ral: to manage MAC-2-MAC SGMII connections.
- * @loopback: to cause the PHY to loopback tx data into rx path.
- * Description: this is the main function to configure the AN control register
- * and init the ANE, select loopback (usually for debugging purpose) and
- * configure SGMII RAL.
- */
-static inline void dwmac_ctrl_ane(void __iomem *ioaddr, u32 reg, bool ane,
-				  bool srgmi_ral, bool loopback)
-{
-	u32 value = readl(ioaddr + GMAC_AN_CTRL(reg));
-
-	/* Enable and restart the Auto-Negotiation */
-	if (ane)
-		value |= GMAC_AN_CTRL_ANE | GMAC_AN_CTRL_RAN;
-	else
-		value &= ~GMAC_AN_CTRL_ANE;
-
-	/* In case of MAC-2-MAC connection, block is configured to operate
-	 * according to MAC conf register.
-	 */
-	if (srgmi_ral)
-		value |= GMAC_AN_CTRL_SGMRAL;
-
-	if (loopback)
-		value |= GMAC_AN_CTRL_ELE;
-
-	writel(value, ioaddr + GMAC_AN_CTRL(reg));
-}
-
-/**
  * dwmac_get_adv_lp - Get ADV and LP cap
  * @ioaddr: IO registers pointer
  * @reg: Base address of the AN Control Register.
