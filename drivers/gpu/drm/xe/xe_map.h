@@ -44,6 +44,15 @@ static inline void xe_map_memset(struct xe_device *xe,
 	iosys_map_memset(dst, offset, value, len);
 }
 
+static inline ssize_t xe_map_read_from(struct xe_device *xe, void __user *to,
+				       size_t count, loff_t *ppos,
+				       const struct iosys_map *map,
+				       size_t available)
+{
+	xe_device_assert_mem_access(xe);
+	return iosys_map_read_from(to, count, ppos, map, available);
+}
+
 /* FIXME: We likely should kill these two functions sooner or later */
 static inline u32 xe_map_read32(struct xe_device *xe, struct iosys_map *map)
 {
