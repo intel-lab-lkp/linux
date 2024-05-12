@@ -1068,8 +1068,16 @@ int __init early_init_dt_scan_chosen(char *cmdline)
 				fdt_totalsize(initial_boot_params));
 	}
 
-	/* Retrieve command line */
-	p = of_get_flat_dt_prop(node, "bootargs", &l);
+	/*
+	 * Retrieve command line
+	 * bootargs might be hardcoded and overwrite by bootloader on
+	 * kernel load.
+	 * Check if alternative bootargs-override is present instead
+	 * first.
+	 */
+	p = of_get_flat_dt_prop(node, "bootargs-override", &l);
+	if (p == NULL || l == 0)
+		p = of_get_flat_dt_prop(node, "bootargs", &l);
 	if (p != NULL && l > 0)
 		strscpy(cmdline, p, min(l, COMMAND_LINE_SIZE));
 
