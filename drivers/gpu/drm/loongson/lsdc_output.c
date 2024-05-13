@@ -62,6 +62,30 @@ int lsdc_output_preinit(struct device *parent,
 	return 0;
 }
 
+static int lsdc_output_postinit(struct lsdc_output *output,
+				struct drm_device *ddev,
+				struct lsdc_display_pipe *dispipe,
+				unsigned int pipe)
+{
+	struct lsdc_device *ldev = to_lsdc(ddev);
+	const struct lsdc_kms_funcs *kms_funcs = ldev->descp->funcs;
+	struct i2c_adapter *ddc = NULL;
+	int ret;
+
+	if (dispipe->li2c)
+		ddc = &dispipe->li2c->adapter;
+
+	pipe = output->descp->pipe;
+
+	ret = kms_funcs->output_init(&ldev->base, output, ddc, pipe);
+	if (ret)
+		return ret;
+
+	dispipe->output = output;
+
+	return 0;
+}
+
 /*
  * dev stand for the port@0, port@1, ..., port@n of the dispplay controller
  */
@@ -69,6 +93,23 @@ static int lsdc_output_port_bind(struct device *dev,
 				 struct device *master,
 				 void *data)
 {
+	struct lsdc_output *output = dev_get_drvdata(dev);
+	struct drm_device *ddev = data;
+	struct lsdc_device *ldev = to_lsdc(ddev);
+	unsigned int pipe;
+	int ret;
+
+	pipe = output->descp->pipe;
+
+	ret = lsdc_output_postinit(output, ddev, &ldev->dispipe[pipe], pipe);
+	if (ret)
+		return ret;
+
+	ldev->num_output++;
+
+	drm_info(ddev, "Output port-%d bound, type: %s\n",
+		 pipe, output->descp->type);
+
 	return 0;
 }
 

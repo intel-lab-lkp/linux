@@ -72,31 +72,6 @@ static int lsdc_modeset_init(struct lsdc_device *ldev,
 	for (i = 0; i < num_crtc; i++) {
 		dispipe = &ldev->dispipe[i];
 
-		/* We need an index before crtc is initialized */
-		dispipe->index = i;
-
-		ret = funcs->create_i2c(ddev, dispipe, i);
-		if (ret)
-			return ret;
-	}
-
-	for (i = 0; i < num_crtc; i++) {
-		struct i2c_adapter *ddc = NULL;
-
-		dispipe = &ldev->dispipe[i];
-		if (dispipe->li2c)
-			ddc = &dispipe->li2c->adapter;
-
-		ret = funcs->output_init(ddev, dispipe, ddc, i);
-		if (ret)
-			return ret;
-
-		ldev->num_output++;
-	}
-
-	for (i = 0; i < num_crtc; i++) {
-		dispipe = &ldev->dispipe[i];
-
 		ret = funcs->primary_plane_init(ddev, &dispipe->primary.base, i);
 		if (ret)
 			return ret;
@@ -189,30 +164,17 @@ static int lsdc_get_dedicated_vram(struct lsdc_device *ldev,
 	return (size > SZ_1M) ? 0 : -ENODEV;
 }
 
-static struct lsdc_device *
-lsdc_create_device(struct pci_dev *pdev,
-		   const struct lsdc_desc *descp,
-		   const struct drm_driver *driver)
+static int lsdc_device_init(struct lsdc_device *ldev,
+			    const struct lsdc_desc *descp,
+			    const struct drm_driver *driver)
 {
-	struct lsdc_device *ldev;
-	struct drm_device *ddev;
+	struct drm_device *ddev = &ldev->base;
 	int ret;
 
-	ldev = devm_drm_dev_alloc(&pdev->dev, driver, struct lsdc_device, base);
-	if (IS_ERR(ldev))
-		return ldev;
-
-	ldev->dc = pdev;
-	ldev->descp = descp;
-
-	ddev = &ldev->base;
-
-	loongson_gfxpll_create(ddev, &ldev->gfxpll);
-
-	ret = lsdc_get_dedicated_vram(ldev, pdev, descp);
+	ret = lsdc_get_dedicated_vram(ldev, ldev->dc, ldev->descp);
 	if (ret) {
 		drm_err(ddev, "Init VRAM failed: %d\n", ret);
-		return ERR_PTR(ret);
+		return ret;
 	}
 
 	ret = drm_aperture_remove_conflicting_framebuffers(ldev->vram_base,
@@ -220,36 +182,25 @@ lsdc_create_device(struct pci_dev *pdev,
 							   driver);
 	if (ret) {
 		drm_err(ddev, "Remove firmware framebuffers failed: %d\n", ret);
-		return ERR_PTR(ret);
+		return ret;
 	}
 
 	ret = lsdc_ttm_init(ldev);
 	if (ret) {
 		drm_err(ddev, "Memory manager init failed: %d\n", ret);
-		return ERR_PTR(ret);
+		return ret;
 	}
 
 	lsdc_gem_init(ddev);
 
 	/* Bar 0 of the DC device contains the MMIO register's base address */
-	ldev->reg_base = pcim_iomap(pdev, 0, 0);
+	ldev->reg_base = pcim_iomap(ldev->dc, 0, 0);
 	if (!ldev->reg_base)
-		return ERR_PTR(-ENODEV);
+		return -ENODEV;
 
 	spin_lock_init(&ldev->reglock);
 
-	ret = lsdc_mode_config_init(ddev, descp);
-	if (ret)
-		return ERR_PTR(ret);
-
-	ret = lsdc_modeset_init(ldev, descp->num_of_crtc, descp->funcs,
-				loongson_vblank);
-	if (ret)
-		return ERR_PTR(ret);
-
-	drm_mode_config_reset(ddev);
-
-	return ldev;
+	return 0;
 }
 
 /* For multiple GPU driver instance co-exixt in the system */
@@ -261,20 +212,64 @@ static unsigned int lsdc_vga_set_decode(struct pci_dev *pdev, bool state)
 
 static int loongson_drm_master_bind(struct device *dev)
 {
+	struct lsdc_device *ldev = dev_get_drvdata(dev);
+	const struct lsdc_desc *descp = ldev->descp;
+	struct drm_device *ddev = &ldev->base;
 	int ret;
 
-	ret = component_bind_all(dev, NULL);
+	if (loongson_vblank) {
+		struct pci_dev *pdev = to_pci_dev(dev);
+
+		ret = drm_vblank_init(ddev, descp->num_of_crtc);
+		if (ret)
+			return ret;
+
+		ret = devm_request_irq(dev, pdev->irq,
+				       descp->funcs->irq_handler,
+				       IRQF_SHARED,
+				       dev_name(dev), ddev);
+		if (ret) {
+			drm_err(ddev, "Failed to register interrupt: %d\n", ret);
+			return ret;
+		}
+
+		drm_info(ddev, "registered irq: %u\n", pdev->irq);
+	}
+
+	ret = lsdc_mode_config_init(ddev, descp);
+	if (ret)
+		return ret;
+
+	ret = component_bind_all(dev, ddev);
 	if (ret) {
 		dev_err(dev, "master bind all failed: %d\n", ret);
 		return ret;
 	}
+
+	ret = lsdc_modeset_init(ldev, descp->num_of_crtc, descp->funcs,
+				loongson_vblank);
+	if (ret)
+		return ret;
+
+	drm_mode_config_reset(ddev);
+
+	drm_kms_helper_poll_init(ddev);
+
+	ret = drm_dev_register(ddev, 0);
+	if (ret)
+		return ret;
+
+	drm_fbdev_ttm_setup(ddev, 32);
 
 	return 0;
 }
 
 static void loongson_drm_master_unbind(struct device *dev)
 {
-	component_unbind_all(dev, NULL);
+	struct lsdc_device *ldev = dev_get_drvdata(dev);
+	struct drm_device *ddev = &ldev->base;
+
+	component_unbind_all(dev, ddev);
 
 	return;
 }
@@ -288,7 +283,6 @@ static int lsdc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	struct component_match *matches = NULL;
 	const struct lsdc_desc *descp;
-	struct drm_device *ddev;
 	struct lsdc_device *ldev;
 	int ret;
 	int i;
@@ -310,9 +304,30 @@ static int lsdc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	dev_info(&pdev->dev, "Found %s, revision: %u",
 		 to_loongson_gfx(descp)->model, pdev->revision);
 
-	ldev = lsdc_create_device(pdev, descp, &lsdc_drm_driver);
+	ldev = devm_drm_dev_alloc(&pdev->dev, &lsdc_drm_driver,
+				  struct lsdc_device, base);
 	if (IS_ERR(ldev))
 		return PTR_ERR(ldev);
+
+	pci_set_drvdata(pdev, ldev);
+
+	ldev->dc = pdev;
+	ldev->descp = descp;
+
+	loongson_gfxpll_create(&ldev->base, &ldev->gfxpll);
+
+	ret = lsdc_device_init(ldev, descp, &lsdc_drm_driver);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < descp->num_of_crtc; ++i) {
+		struct lsdc_display_pipe *dispipe = &ldev->dispipe[i];
+		const struct lsdc_kms_funcs *funcs = descp->funcs;
+
+		ret = funcs->create_i2c(&ldev->base, dispipe, i);
+		if (ret)
+			return ret;
+	}
 
 	for (i = 0; i < descp->num_of_crtc; ++i) {
 		ret = lsdc_output_preinit(&pdev->dev, descp, i,
@@ -333,44 +348,15 @@ static int lsdc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	dev_info(&pdev->dev, "loongson add component: %u\n", ret);
 
-	ddev = &ldev->base;
-
-	pci_set_drvdata(pdev, ddev);
-
 	vga_client_register(pdev, lsdc_vga_set_decode);
-
-	drm_kms_helper_poll_init(ddev);
-
-	if (loongson_vblank) {
-		ret = drm_vblank_init(ddev, descp->num_of_crtc);
-		if (ret)
-			return ret;
-
-		ret = devm_request_irq(&pdev->dev, pdev->irq,
-				       descp->funcs->irq_handler,
-				       IRQF_SHARED,
-				       dev_name(&pdev->dev), ddev);
-		if (ret) {
-			drm_err(ddev, "Failed to register interrupt: %d\n", ret);
-			return ret;
-		}
-
-		drm_info(ddev, "registered irq: %u\n", pdev->irq);
-	}
-
-	ret = drm_dev_register(ddev, 0);
-	if (ret)
-		return ret;
-
-	drm_fbdev_ttm_setup(ddev, 32);
 
 	return 0;
 }
 
 static void lsdc_pci_remove(struct pci_dev *pdev)
 {
-	struct drm_device *ddev = pci_get_drvdata(pdev);
-	struct lsdc_device *ldev = to_lsdc(ddev);
+	struct lsdc_device *ldev = pci_get_drvdata(pdev);
+	struct drm_device *ddev = &ldev->base;
 	unsigned int i;
 
 	drm_dev_unregister(ddev);
@@ -388,7 +374,10 @@ static void lsdc_pci_remove(struct pci_dev *pdev)
 
 static void lsdc_pci_shutdown(struct pci_dev *pdev)
 {
-	drm_atomic_helper_shutdown(pci_get_drvdata(pdev));
+	struct lsdc_device *ldev = pci_get_drvdata(pdev);
+	struct drm_device *ddev = &ldev->base;
+
+	drm_atomic_helper_shutdown(ddev);
 }
 
 static int lsdc_drm_freeze(struct drm_device *ddev)
@@ -442,7 +431,8 @@ static int lsdc_drm_freeze(struct drm_device *ddev)
 static int lsdc_drm_resume(struct device *dev)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
-	struct drm_device *ddev = pci_get_drvdata(pdev);
+	struct lsdc_device *ldev = pci_get_drvdata(pdev);
+	struct drm_device *ddev = &ldev->base;
 
 	return drm_mode_config_helper_resume(ddev);
 }
@@ -450,7 +440,8 @@ static int lsdc_drm_resume(struct device *dev)
 static int lsdc_pm_freeze(struct device *dev)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
-	struct drm_device *ddev = pci_get_drvdata(pdev);
+	struct lsdc_device *ldev = pci_get_drvdata(pdev);
+	struct drm_device *ddev = &ldev->base;
 
 	return lsdc_drm_freeze(ddev);
 }
