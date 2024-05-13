@@ -96,6 +96,7 @@ static void mctp_pcc_client_rx_callback(struct mbox_client *c, void *)
 	unsigned long buf_ptr_val;
 	struct mctp_pcc_ndev *mctp_pcc_dev = container_of(c, struct mctp_pcc_ndev, inbox_client);
 	void *skb_buf;
+	u32 flags;
 
 	mpp = (struct mctp_pcc_packet *)mctp_pcc_dev->pcc_comm_inbox_addr;
 	buf_ptr_val = (unsigned long)mpp;
@@ -115,6 +116,9 @@ static void mctp_pcc_client_rx_callback(struct mbox_client *c, void *)
 	cb->halen = 0;
 	skb->dev =  mctp_pcc_dev->mdev.dev;
 	netif_rx(skb);
+
+	flags = readl(&mpp->pcc_header.flags);
+	mctp_pcc_dev->in_chan->ack_rx = (flags & 1) > 0;
 }
 
 static netdev_tx_t mctp_pcc_tx(struct sk_buff *skb, struct net_device *ndev)
