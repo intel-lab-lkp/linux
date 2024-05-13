@@ -203,7 +203,7 @@
 	};
 
 	plat_regs: system-controller@17ffd000 {
-		compatible = "img,boston-platform-regs", "syscon";
+		compatible = "img,boston-platform-regs", "syscon", "simple-mfd";
 		reg = <0x17ffd000 0x1000>;
 
 		clk_boston: clock {
