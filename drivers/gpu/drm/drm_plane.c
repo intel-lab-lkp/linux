@@ -906,6 +906,7 @@ bool drm_plane_has_format(struct drm_plane *plane,
 
 	return true;
 }
+EXPORT_SYMBOL(drm_plane_has_format);
 
 static int __setplane_check(struct drm_plane *plane,
 			    struct drm_crtc *crtc,
