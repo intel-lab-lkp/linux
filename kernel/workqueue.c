@@ -5546,7 +5546,7 @@ static int init_rescuer(struct workqueue_struct *wq)
 	}
 
 	rescuer->rescue_wq = wq;
-	rescuer->task = kthread_create(rescuer_thread, rescuer, "kworker/R-%s", wq->name);
+	rescuer->task = kthread_create(rescuer_thread, rescuer, "kworker/R");
 	if (IS_ERR(rescuer->task)) {
 		ret = PTR_ERR(rescuer->task);
 		pr_err("workqueue: Failed to create a rescuer kthread for wq \"%s\": %pe",
@@ -5554,6 +5554,8 @@ static int init_rescuer(struct workqueue_struct *wq)
 		kfree(rescuer);
 		return ret;
 	}
+
+	snprintf(rescuer->desc, sizeof(rescuer->desc), "%s", wq->name);
 
 	wq->rescuer = rescuer;
 	if (wq->flags & WQ_UNBOUND)
@@ -6405,6 +6407,8 @@ void wq_worker_comm(char *buf, size_t size, struct task_struct *task)
 						  worker->desc);
 			}
 			raw_spin_unlock_irq(&pool->lock);
+		} else if (worker->desc[0] != '\0') {
+			scnprintf(buf + off, size - off, "-%s", worker->desc);
 		}
 	}
 
