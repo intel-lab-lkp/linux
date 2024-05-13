@@ -302,8 +302,9 @@ struct _scsi_io_transfer {
 
 /**
  * _scsih_set_debug_level - global setting of ioc->logging_level.
- * @val: ?
- * @kp: ?
+ * @val: the value of the parameter to be set
+ * @kp: a pointer to the kernel_param structure, containing information
+ *      such as the parameter's name, type, and permissions
  *
  * Note: The logging levels are defined in mpt3sas_debug.h.
  */
