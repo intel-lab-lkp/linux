@@ -134,6 +134,10 @@ int check_compaction(unsigned long mem_free, unsigned int hugepage_size)
 
 	/* We should have been able to request at least 1/3 rd of the memory in
 	   huge pages */
+	if (!atoi(nr_hugepages)) {
+		ksft_print_msg("ERROR: No memory is available as huge pages\n");
+		goto close_fd;
+	}
 	compaction_index = mem_free/(atoi(nr_hugepages) * hugepage_size);
 
 	lseek(fd, 0, SEEK_SET);
@@ -149,7 +153,7 @@ int check_compaction(unsigned long mem_free, unsigned int hugepage_size)
 		       atoi(nr_hugepages));
 
 	if (compaction_index > 3) {
-		ksft_print_msg("ERROR: Less that 1/%d of memory is available\n"
+		ksft_print_msg("ERROR: Less than 1/%d of memory is available\n"
 			       "as huge pages\n", compaction_index);
 		goto close_fd;
 	}
