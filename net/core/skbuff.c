@@ -7036,6 +7036,10 @@ nodefer:	__kfree_skb(skb);
 	if (READ_ONCE(sd->defer_count) >= defer_max)
 		goto nodefer;
 
+#ifdef CONFIG_XFRM
+	skb_ext_del(skb, SKB_EXT_SEC_PATH);
+#endif
+
 	spin_lock_bh(&sd->defer_lock);
 	/* Send an IPI every time queue reaches half capacity. */
 	kick = sd->defer_count == (defer_max >> 1);
