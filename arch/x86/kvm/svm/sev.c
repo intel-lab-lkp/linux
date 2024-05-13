@@ -4048,7 +4048,6 @@ static int snp_begin_ext_guest_req(struct kvm_vcpu *vcpu)
 	int vmm_ret = SNP_GUEST_VMM_ERR_GENERIC;
 	struct vcpu_svm *svm = to_svm(vcpu);
 	unsigned long data_npages;
-	sev_ret_code fw_err;
 	gpa_t data_gpa;
 
 	if (!sev_snp_guest(vcpu->kvm))
@@ -4075,7 +4074,7 @@ static int snp_begin_ext_guest_req(struct kvm_vcpu *vcpu)
 	return 0; /* forward request to userspace */
 
 abort_request:
-	ghcb_set_sw_exit_info_2(svm->sev_es.ghcb, SNP_GUEST_ERR(vmm_ret, fw_err));
+	ghcb_set_sw_exit_info_2(svm->sev_es.ghcb, SNP_GUEST_ERR(vmm_ret, 0));
 	return 1; /* resume guest */
 }
 
