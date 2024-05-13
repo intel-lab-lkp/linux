@@ -947,8 +947,8 @@ static int mlx90635_probe(struct i2c_client *client)
 				     "failed to allocate regmap\n");
 
 	regmap_ee = devm_regmap_init_i2c(client, &mlx90635_regmap_ee);
-	if (IS_ERR(regmap))
-		return dev_err_probe(&client->dev, PTR_ERR(regmap),
+	if (IS_ERR(regmap_ee))
+		return dev_err_probe(&client->dev, PTR_ERR(regmap_ee),
 				     "failed to allocate regmap\n");
 
 	mlx90635 = iio_priv(indio_dev);
