@@ -1622,9 +1622,21 @@ static int samsung_dsim_attach(struct drm_bridge *bridge,
 			       enum drm_bridge_attach_flags flags)
 {
 	struct samsung_dsim *dsi = bridge_to_dsi(bridge);
+	int ret;
 
-	return drm_bridge_attach(bridge->encoder, dsi->out_bridge, bridge,
-				 flags);
+	ret = pm_runtime_resume_and_get(dsi->dev);
+	if (ret < 0)
+		return ret;
+
+	ret = samsung_dsim_init(dsi);
+	if (ret < 0)
+		goto err;
+
+	ret = drm_bridge_attach(bridge->encoder, dsi->out_bridge, bridge,
+				flags);
+err:
+	pm_runtime_put_sync(dsi->dev);
+	return ret;
 }
 
 static const struct drm_bridge_funcs samsung_dsim_bridge_funcs = {
