@@ -3196,8 +3196,8 @@ static bool ext4_inode_datasync_dirty(struct inode *inode)
 	journal_t *journal = EXT4_SB(inode->i_sb)->s_journal;
 
 	if (journal) {
-		if (jbd2_transaction_committed(journal,
-			EXT4_I(inode)->i_datasync_tid))
+		if (tid_geq(journal->j_commit_sequence,
+			    EXT4_I(inode)->i_datasync_tid))
 			return false;
 		if (test_opt2(inode->i_sb, JOURNAL_FAST_COMMIT))
 			return !list_empty(&EXT4_I(inode)->i_fc_list);

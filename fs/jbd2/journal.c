@@ -786,23 +786,6 @@ int jbd2_fc_end_commit_fallback(journal_t *journal)
 }
 EXPORT_SYMBOL(jbd2_fc_end_commit_fallback);
 
-/* Return 1 when transaction with given tid has already committed. */
-int jbd2_transaction_committed(journal_t *journal, tid_t tid)
-{
-	int ret = 1;
-
-	read_lock(&journal->j_state_lock);
-	if (journal->j_running_transaction &&
-	    journal->j_running_transaction->t_tid == tid)
-		ret = 0;
-	if (journal->j_committing_transaction &&
-	    journal->j_committing_transaction->t_tid == tid)
-		ret = 0;
-	read_unlock(&journal->j_state_lock);
-	return ret;
-}
-EXPORT_SYMBOL(jbd2_transaction_committed);
-
 /*
  * When this function returns the transaction corresponding to tid
  * will be completed.  If the transaction has currently running, start
