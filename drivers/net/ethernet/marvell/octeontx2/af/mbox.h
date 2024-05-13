@@ -310,6 +310,7 @@ M(NIX_BANDPROF_GET_HWINFO, 0x801f, nix_bandprof_get_hwinfo, msg_req,		\
 				nix_bandprof_get_hwinfo_rsp)		    \
 M(NIX_READ_INLINE_IPSEC_CFG, 0x8023, nix_read_inline_ipsec_cfg,		\
 				msg_req, nix_inline_ipsec_cfg)		\
+M(NIX_TL1_RR_PRIO,	0x8025, nix_tl1_rr_prio, nix_tl1_rr_prio_req, msg_rsp) \
 M(NIX_MCAST_GRP_CREATE,	0x802b, nix_mcast_grp_create, nix_mcast_grp_create_req,	\
 				nix_mcast_grp_create_rsp)			\
 M(NIX_MCAST_GRP_DESTROY, 0x802c, nix_mcast_grp_destroy, nix_mcast_grp_destroy_req,	\
@@ -843,6 +844,7 @@ enum nix_af_status {
 	NIX_AF_ERR_CQ_CTX_WRITE_ERR  = -429,
 	NIX_AF_ERR_AQ_CTX_RETRY_WRITE  = -430,
 	NIX_AF_ERR_LINK_CREDITS  = -431,
+	NIX_AF_ERR_TL1_RR_PRIO_PERM_DENIED  = -433,
 	NIX_AF_ERR_INVALID_BPID         = -434,
 	NIX_AF_ERR_INVALID_BPID_REQ     = -435,
 	NIX_AF_ERR_INVALID_MCAST_GRP	= -436,
@@ -1362,6 +1364,11 @@ struct nix_bandprof_get_hwinfo_rsp {
 	struct mbox_msghdr hdr;
 	u16 prof_count[BAND_PROF_NUM_LAYERS];
 	u32 policer_timeunit;
+};
+
+struct nix_tl1_rr_prio_req {
+	struct mbox_msghdr hdr;
+	u8 tl1_rr_prio;
 };
 
 /* NPC mbox message structs */

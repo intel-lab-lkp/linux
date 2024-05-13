@@ -176,9 +176,9 @@ static void __otx2_qos_txschq_cfg(struct otx2_nic *pfvf,
 		/* check if node is root */
 		if (node->qid == OTX2_QOS_QID_INNER && !node->parent) {
 			cfg->reg[num_regs] = NIX_AF_TL2X_SCHEDULE(node->schq);
-			cfg->regval[num_regs] =  TXSCH_TL1_DFLT_RR_PRIO << 24 |
-						 mtu_to_dwrr_weight(pfvf,
-								    pfvf->tx_max_pktlen);
+			cfg->regval[num_regs] =
+				(hw->txschq_aggr_lvl_rr_prio << 24) |
+				 mtu_to_dwrr_weight(pfvf, pfvf->tx_max_pktlen);
 			num_regs++;
 			goto txschq_cfg_out;
 		}
@@ -1644,6 +1644,18 @@ root_destroy:
 	/* Free resources allocated */
 	otx2_qos_root_destroy(pfvf);
 }
+
+bool otx2_is_qos_configured(struct otx2_nic *pfvf)
+{
+	struct otx2_qos_node *root;
+
+	root = otx2_sw_node_find(pfvf, OTX2_QOS_ROOT_CLASSID);
+	if (!root)
+		return false;
+
+	return true;
+}
+EXPORT_SYMBOL(otx2_is_qos_configured);
 
 int otx2_setup_tc_htb(struct net_device *ndev, struct tc_htb_qopt_offload *htb)
 {
