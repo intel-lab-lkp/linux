@@ -9,8 +9,11 @@
 
 #define pr_fmt(fmt) "PKEY: "fmt
 #include <crypto/akcipher.h>
+#include <crypto/hash.h>
 #include <crypto/public_key.h>
 #include <crypto/sig.h>
+#include <crypto/sm2.h>
+#include <crypto/sm3.h>
 #include <keys/asymmetric-subtype.h>
 #include <linux/asn1.h>
 #include <linux/err.h>
@@ -388,6 +391,54 @@ error_free_key:
 	return ret;
 }
 
+#if IS_REACHABLE(CONFIG_CRYPTO_SM2)
+static int cert_sig_digest_update(const struct public_key_signature *sig,
+				  void *pkey, size_t pkey_len)
+{
+	struct crypto_shash *tfm;
+	struct shash_desc *desc;
+	size_t desc_size;
+	unsigned char dgst[SM3_DIGEST_SIZE];
+	int ret;
+
+	BUG_ON(!sig->data);
+
+	/* SM2 signatures always use the SM3 hash algorithm */
+	if (!sig->hash_algo || strcmp(sig->hash_algo, "sm3") != 0)
+		return -EINVAL;
+
+	tfm = crypto_alloc_shash(sig->hash_algo, 0, 0);
+	if (IS_ERR(tfm))
+		return PTR_ERR(tfm);
+
+	desc_size = crypto_shash_descsize(tfm) + sizeof(*desc);
+	desc = kzalloc(desc_size, GFP_KERNEL);
+	if (!desc) {
+		crypto_free_shash(tfm);
+		return -ENOMEM;
+	}
+
+	desc->tfm = tfm;
+
+	ret = crypto_shash_init(desc) ?:
+	      sm2_compute_z_digest(desc, pkey, pkey_len, dgst) ?:
+	      crypto_shash_init(desc) ?:
+	      crypto_shash_update(desc, dgst, SM3_DIGEST_SIZE) ?:
+	      crypto_shash_finup(desc, sig->data, sig->data_size, sig->digest);
+
+	kfree(desc);
+	crypto_free_shash(tfm);
+	return ret;
+}
+#else
+static inline int cert_sig_digest_update(
+	const struct public_key_signature *sig,
+	void *pkey, size_t pkey_len)
+{
+	return -ENOTSUPP;
+}
+#endif /* ! IS_REACHABLE(CONFIG_CRYPTO_SM2) */
+
 /*
  * Verify a signature using a public key.
  */
@@ -450,6 +501,12 @@ int public_key_verify_signature(const struct public_key *pkey,
 		ret = crypto_sig_set_pubkey(tfm, key, pkey->keylen);
 	if (ret)
 		goto error_free_key;
+
+	if (strcmp(pkey->pkey_algo, "sm2") == 0 && sig->data_size) {
+		ret = cert_sig_digest_update(sig, key, pkey->keylen);
+		if (ret)
+			goto error_free_key;
+	}
 
 	ret = crypto_sig_verify(tfm, sig->s, sig->s_size,
 				sig->digest, sig->digest_size);

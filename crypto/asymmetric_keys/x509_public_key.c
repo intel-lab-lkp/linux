@@ -32,6 +32,9 @@ int x509_get_sig_params(struct x509_certificate *cert)
 
 	pr_devel("==>%s()\n", __func__);
 
+	sig->data = cert->tbs;
+	sig->data_size = cert->tbs_size;
+
 	sig->s = kmemdup(cert->raw_sig, cert->raw_sig_size, GFP_KERNEL);
 	if (!sig->s)
 		return -ENOMEM;
@@ -64,21 +67,8 @@ int x509_get_sig_params(struct x509_certificate *cert)
 
 	desc->tfm = tfm;
 
-	if (strcmp(cert->pub->pkey_algo, "sm2") == 0) {
-		ret = strcmp(sig->hash_algo, "sm3") != 0 ? -EINVAL :
-		      crypto_shash_init(desc) ?:
-		      sm2_compute_z_digest(desc, cert->pub->key,
-					   cert->pub->keylen, sig->digest) ?:
-		      crypto_shash_init(desc) ?:
-		      crypto_shash_update(desc, sig->digest,
-					  sig->digest_size) ?:
-		      crypto_shash_finup(desc, cert->tbs, cert->tbs_size,
-					 sig->digest);
-	} else {
-		ret = crypto_shash_digest(desc, cert->tbs, cert->tbs_size,
-					  sig->digest);
-	}
-
+	ret = crypto_shash_digest(desc, cert->tbs, cert->tbs_size,
+				  sig->digest);
 	if (ret < 0)
 		goto error_2;
 
