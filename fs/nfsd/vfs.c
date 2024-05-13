@@ -499,6 +499,14 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	bool		size_change = (iap->ia_valid & ATTR_SIZE);
 	int		retries;
 
+	if (!(iap->ia_valid ||
+	      (attr->na_seclabel && attr->na_seclabel->len) ||
+	      (IS_ENABLED(CONFIG_FS_POSIX_ACL) && attr->na_pacl) ||
+	      (IS_ENABLED(CONFIG_FS_POSIX_ACL) &&
+	       !attr->na_aclerr && attr->na_dpacl && S_ISDIR(inode->i_mode))))
+		/* Don't bother with inode_lock() */
+		goto out;
+
 	if (iap->ia_valid & ATTR_SIZE) {
 		accmode |= NFSD_MAY_WRITE|NFSD_MAY_OWNER_OVERRIDE;
 		ftype = S_IFREG;
@@ -1418,14 +1426,7 @@ nfsd_create_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	if (!uid_eq(current_fsuid(), GLOBAL_ROOT_UID))
 		iap->ia_valid &= ~(ATTR_UID|ATTR_GID);
 
-	/*
-	 * Callers expect new file metadata to be committed even
-	 * if the attributes have not changed.
-	 */
-	if (nfsd_attrs_valid(attrs))
-		status = nfsd_setattr(rqstp, resfhp, attrs, NULL);
-	else
-		status = nfserrno(commit_metadata(resfhp));
+	status = nfsd_setattr(rqstp, resfhp, attrs, NULL);
 
 	/*
 	 * Transactional filesystems had a chance to commit changes
