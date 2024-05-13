@@ -802,7 +802,8 @@ static int intel_fbc_alloc_cfb(struct intel_fbc *fbc,
 		goto err_llb;
 	else if (ret > min_limit)
 		drm_info_once(&i915->drm,
-			      "Reducing the compressed framebuffer size. This may lead to less power savings than a non-reduced-size. Try to increase stolen memory size if available in BIOS.\n");
+			      "Reducing the compressed framebuffer size from %d bytes to %d bytes. This may lead to less power savings than a non-reduced-size. Try to increase stolen memory size if available in BIOS.\n",
+			      min_limit, ret);
 
 	fbc->limit = ret;
 
