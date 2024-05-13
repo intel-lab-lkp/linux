@@ -109,7 +109,7 @@ static struct arm_smmu_device *cavium_smmu_impl_init(struct arm_smmu_device *smm
 
 int arm_mmu500_reset(struct arm_smmu_device *smmu)
 {
-	u32 reg, major;
+	u32 reg, major, minor;
 	int i;
 	/*
 	 * On MMU-500 r2p0 onwards we need to clear ACR.CACHE_LOCK before
@@ -118,6 +118,7 @@ int arm_mmu500_reset(struct arm_smmu_device *smmu)
 	 */
 	reg = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_ID7);
 	major = FIELD_GET(ARM_SMMU_ID7_MAJOR, reg);
+	minor = FIELD_GET(ARM_SMMU_ID7_MINOR, reg);
 	reg = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_sACR);
 	if (major >= 2)
 		reg &= ~ARM_MMU500_ACR_CACHE_LOCK;
@@ -131,14 +132,18 @@ int arm_mmu500_reset(struct arm_smmu_device *smmu)
 	/*
 	 * Disable MMU-500's not-particularly-beneficial next-page
 	 * prefetcher for the sake of errata #841119 and #826419.
+	 * These errata only affect r0p0 through r2p1 (fixed in r2p2).
 	 */
-	for (i = 0; i < smmu->num_context_banks; ++i) {
-		reg = arm_smmu_cb_read(smmu, i, ARM_SMMU_CB_ACTLR);
-		reg &= ~ARM_MMU500_ACTLR_CPRE;
-		arm_smmu_cb_write(smmu, i, ARM_SMMU_CB_ACTLR, reg);
-		reg = arm_smmu_cb_read(smmu, i, ARM_SMMU_CB_ACTLR);
-		if (reg & ARM_MMU500_ACTLR_CPRE)
-			dev_warn_once(smmu->dev, "Failed to disable prefetcher [errata #841119 and #826419], check ACR.CACHE_LOCK\n");
+	if (major < 2 || (major == 2 && minor < 2)) {
+		for (i = 0; i < smmu->num_context_banks; ++i) {
+			reg = arm_smmu_cb_read(smmu, i, ARM_SMMU_CB_ACTLR);
+			reg &= ~ARM_MMU500_ACTLR_CPRE;
+			arm_smmu_cb_write(smmu, i, ARM_SMMU_CB_ACTLR, reg);
+			reg = arm_smmu_cb_read(smmu, i, ARM_SMMU_CB_ACTLR);
+			if (reg & ARM_MMU500_ACTLR_CPRE)
+				dev_warn_once(smmu->dev,
+					      "Failed to disable prefetcher [errata #841119 and #826419], check ACR.CACHE_LOCK\n");
+		}
 	}
 
 	return 0;
