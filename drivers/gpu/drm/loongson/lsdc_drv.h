@@ -173,11 +173,6 @@ struct lsdc_cursor {
 	struct lsdc_device *ldev;
 };
 
-struct lsdc_output {
-	struct drm_encoder encoder;
-	struct drm_connector connector;
-};
-
 static inline struct lsdc_output *
 connector_to_lsdc_output(struct drm_connector *connector)
 {
@@ -290,6 +285,7 @@ struct lsdc_device {
 	resource_size_t gtt_size;
 
 	struct lsdc_display_pipe dispipe[LSDC_NUM_CRTC];
+	struct platform_device *childs[LSDC_NUM_CRTC];
 
 	struct lsdc_gem gem;
 

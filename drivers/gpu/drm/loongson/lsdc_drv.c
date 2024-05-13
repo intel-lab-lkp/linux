@@ -3,7 +3,9 @@
  * Copyright (C) 2023 Loongson Technology Corporation Limited
  */
 
+#include <linux/component.h>
 #include <linux/pci.h>
+#include <linux/platform_device.h>
 #include <linux/vgaarb.h>
 
 #include <drm/drm_aperture.h>
@@ -257,12 +259,39 @@ static unsigned int lsdc_vga_set_decode(struct pci_dev *pdev, bool state)
 	return VGA_RSRC_NORMAL_IO | VGA_RSRC_NORMAL_MEM;
 }
 
+static int loongson_drm_master_bind(struct device *dev)
+{
+	int ret;
+
+	ret = component_bind_all(dev, NULL);
+	if (ret) {
+		dev_err(dev, "master bind all failed: %d\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+static void loongson_drm_master_unbind(struct device *dev)
+{
+	component_unbind_all(dev, NULL);
+
+	return;
+}
+
+const struct component_master_ops loongson_drm_master_ops = {
+	.bind = loongson_drm_master_bind,
+	.unbind = loongson_drm_master_unbind,
+};
+
 static int lsdc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
+	struct component_match *matches = NULL;
 	const struct lsdc_desc *descp;
 	struct drm_device *ddev;
 	struct lsdc_device *ldev;
 	int ret;
+	int i;
 
 	descp = lsdc_device_probe(pdev, ent->driver_data);
 	if (IS_ERR_OR_NULL(descp))
@@ -284,6 +313,25 @@ static int lsdc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	ldev = lsdc_create_device(pdev, descp, &lsdc_drm_driver);
 	if (IS_ERR(ldev))
 		return PTR_ERR(ldev);
+
+	for (i = 0; i < descp->num_of_crtc; ++i) {
+		ret = lsdc_output_preinit(&pdev->dev, descp, i,
+					  &ldev->childs[i]);
+		if (ret)
+			return ret;
+	}
+
+	for (i = 0; i < descp->num_of_crtc; ++i) {
+		component_match_add(&pdev->dev, &matches,
+				    component_compare_dev,
+				    &ldev->childs[i]->dev);
+	}
+
+	ret = component_master_add_with_match(&pdev->dev,
+					      &loongson_drm_master_ops,
+					      matches);
+
+	dev_info(&pdev->dev, "loongson add component: %u\n", ret);
 
 	ddev = &ldev->base;
 
@@ -322,9 +370,20 @@ static int lsdc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 static void lsdc_pci_remove(struct pci_dev *pdev)
 {
 	struct drm_device *ddev = pci_get_drvdata(pdev);
+	struct lsdc_device *ldev = to_lsdc(ddev);
+	unsigned int i;
 
 	drm_dev_unregister(ddev);
 	drm_atomic_helper_shutdown(ddev);
+
+	component_master_del(&pdev->dev, &loongson_drm_master_ops);
+
+	for (i = 0; i < ldev->descp->num_of_crtc; ++i) {
+		if (ldev->childs[i]) {
+			platform_device_unregister(ldev->childs[i]);
+			ldev->childs[i] = NULL;
+		}
+	}
 }
 
 static void lsdc_pci_shutdown(struct pci_dev *pdev)
