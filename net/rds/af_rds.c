@@ -37,9 +37,15 @@
 #include <linux/in.h>
 #include <linux/ipv6.h>
 #include <linux/poll.h>
+#include <linux/sched/mm.h>
 #include <net/sock.h>
 
 #include "rds.h"
+
+bool rds_force_noio;
+EXPORT_SYMBOL(rds_force_noio);
+module_param_named(force_noio, rds_force_noio, bool, 0444);
+MODULE_PARM_DESC(force_noio, "Force the use of GFP_NOIO (Y/N)");
 
 /* this is just used for stats gathering :/ */
 static DEFINE_SPINLOCK(rds_sock_lock);
@@ -60,6 +66,10 @@ static int rds_release(struct socket *sock)
 {
 	struct sock *sk = sock->sk;
 	struct rds_sock *rs;
+	unsigned int noio_flags;
+
+	if (rds_force_noio)
+		noio_flags = memalloc_noio_save();
 
 	if (!sk)
 		goto out;
@@ -90,6 +100,8 @@ static int rds_release(struct socket *sock)
 	sock->sk = NULL;
 	sock_put(sk);
 out:
+	if (rds_force_noio)
+		memalloc_noio_restore(noio_flags);
 	return 0;
 }
 
@@ -214,8 +226,12 @@ static __poll_t rds_poll(struct file *file, struct socket *sock,
 {
 	struct sock *sk = sock->sk;
 	struct rds_sock *rs = rds_sk_to_rs(sk);
+	unsigned int noio_flags;
 	__poll_t mask = 0;
 	unsigned long flags;
+
+	if (rds_force_noio)
+		noio_flags = memalloc_noio_save();
 
 	poll_wait(file, sk_sleep(sk), wait);
 
@@ -249,6 +265,8 @@ static __poll_t rds_poll(struct file *file, struct socket *sock,
 	if (mask)
 		rs->rs_seen_congestion = 0;
 
+	if (rds_force_noio)
+		memalloc_noio_restore(noio_flags);
 	return mask;
 }
 
@@ -294,7 +312,11 @@ static int rds_cancel_sent_to(struct rds_sock *rs, sockptr_t optval, int len)
 {
 	struct sockaddr_in6 sin6;
 	struct sockaddr_in sin;
+	unsigned int noio_flags;
 	int ret = 0;
+
+	if (rds_force_noio)
+		noio_flags = memalloc_noio_save();
 
 	/* racing with another thread binding seems ok here */
 	if (ipv6_addr_any(&rs->rs_bound_addr)) {
@@ -324,6 +346,8 @@ static int rds_cancel_sent_to(struct rds_sock *rs, sockptr_t optval, int len)
 
 	rds_send_drop_to(rs, &sin6);
 out:
+	if (rds_force_noio)
+		noio_flags = memalloc_noio_save();
 	return ret;
 }
 
@@ -485,7 +509,11 @@ static int rds_getsockopt(struct socket *sock, int level, int optname,
 {
 	struct rds_sock *rs = rds_sk_to_rs(sock->sk);
 	int ret = -ENOPROTOOPT, len;
+	unsigned int noio_flags;
 	int trans;
+
+	if (rds_force_noio)
+		noio_flags = memalloc_noio_save();
 
 	if (level != SOL_RDS)
 		goto out;
@@ -529,6 +557,8 @@ static int rds_getsockopt(struct socket *sock, int level, int optname,
 	}
 
 out:
+	if (rds_force_noio)
+		memalloc_noio_restore(noio_flags);
 	return ret;
 
 }
@@ -538,11 +568,15 @@ static int rds_connect(struct socket *sock, struct sockaddr *uaddr,
 {
 	struct sock *sk = sock->sk;
 	struct sockaddr_in *sin;
+	unsigned int noio_flags;
 	struct rds_sock *rs = rds_sk_to_rs(sk);
 	int ret = 0;
 
 	if (addr_len < offsetofend(struct sockaddr, sa_family))
 		return -EINVAL;
+
+	if (rds_force_noio)
+		noio_flags = memalloc_noio_save();
 
 	lock_sock(sk);
 
@@ -626,6 +660,8 @@ static int rds_connect(struct socket *sock, struct sockaddr *uaddr,
 	}
 
 	release_sock(sk);
+	if (rds_force_noio)
+		memalloc_noio_restore(noio_flags);
 	return ret;
 }
 
@@ -697,16 +733,28 @@ static int __rds_create(struct socket *sock, struct sock *sk, int protocol)
 static int rds_create(struct net *net, struct socket *sock, int protocol,
 		      int kern)
 {
+	unsigned int noio_flags;
 	struct sock *sk;
+	int ret;
 
 	if (sock->type != SOCK_SEQPACKET || protocol)
 		return -ESOCKTNOSUPPORT;
 
-	sk = sk_alloc(net, AF_RDS, GFP_KERNEL, &rds_proto, kern);
-	if (!sk)
-		return -ENOMEM;
+	if (rds_force_noio)
+		noio_flags = memalloc_noio_save();
 
-	return __rds_create(sock, sk, protocol);
+	sk = sk_alloc(net, AF_RDS, GFP_KERNEL, &rds_proto, kern);
+	if (!sk) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	ret = __rds_create(sock, sk, protocol);
+out:
+	if (rds_force_noio)
+		memalloc_noio_restore(noio_flags);
+
+	return ret;
 }
 
 void rds_sock_addref(struct rds_sock *rs)
@@ -895,7 +943,11 @@ u32 rds_gen_num;
 
 static int __init rds_init(void)
 {
+	unsigned int noio_flags;
 	int ret;
+
+	if (rds_force_noio)
+		noio_flags = memalloc_noio_save();
 
 	net_get_random_once(&rds_gen_num, sizeof(rds_gen_num));
 
@@ -947,6 +999,8 @@ out_conn:
 out_bind:
 	rds_bind_lock_destroy();
 out:
+	if (rds_force_noio)
+		memalloc_noio_restore(noio_flags);
 	return ret;
 }
 module_init(rds_init);
