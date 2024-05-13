@@ -464,7 +464,7 @@ int bch2_parse_mount_opts(struct bch_fs *c, struct bch_opts *opts,
 			  char *options)
 {
 	char *copied_opts, *copied_opts_start;
-	char *opt, *name, *val;
+	char *opt, *name, *val, opts_set = 0;
 	int ret, id;
 	struct printbuf err = PRINTBUF;
 	u64 v;
@@ -519,8 +519,11 @@ int bch2_parse_mount_opts(struct bch_fs *c, struct bch_opts *opts,
 			goto bad_val;
 
 		bch2_opt_set_by_id(opts, id, v);
+		opts_set = 1;
 	}
 
+	if (!opts_set)
+		goto bad_opt;
 	ret = 0;
 	goto out;
 
