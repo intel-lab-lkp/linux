@@ -1011,6 +1011,7 @@ struct tps6594 {
 	bool use_crc;
 	struct regmap *regmap;
 	int irq;
+	int irq_rtc;
 	struct regmap_irq_chip_data *irq_data;
 };
 

@@ -415,6 +415,8 @@ static int tps6594_rtc_probe(struct platform_device *pdev)
 	if (irq < 0)
 		return dev_err_probe(dev, irq, "Failed to get irq\n");
 
+	tps->irq_rtc = irq;
+
 	ret = devm_request_threaded_irq(dev, irq, NULL, tps6594_rtc_interrupt,
 					IRQF_ONESHOT, TPS6594_IRQ_NAME_ALARM,
 					dev);
@@ -434,6 +436,49 @@ static int tps6594_rtc_probe(struct platform_device *pdev)
 	return devm_rtc_register_device(rtc);
 }
 
+static int tps6594_rtc_resume(struct device *dev)
+{
+	struct tps6594 *tps = dev_get_drvdata(dev->parent);
+	struct rtc_device *rtc_dev = dev_get_drvdata(dev);
+	int ret;
+
+	ret = regmap_test_bits(tps->regmap, TPS6594_REG_INT_STARTUP,
+			       TPS6594_BIT_RTC_INT);
+	if (ret < 0) {
+		dev_err(dev, "failed to read REG_INT_STARTUP: %d\n", ret);
+		goto out;
+	}
+
+	if (ret > 0) {
+		/*
+		 * If the alarm bit is set, it means that the IRQ has been
+		 * fired. But, the kernel may not have woke up yet when it
+		 * happened. So, we have to clear it.
+		 */
+		ret = regmap_write(tps->regmap, TPS6594_REG_RTC_STATUS,
+				   TPS6594_BIT_ALARM);
+		if (ret < 0)
+			dev_err(dev, "error clearing alarm bit: %d", ret);
+
+		rtc_update_irq(rtc_dev, 1, RTC_IRQF | RTC_AF);
+	}
+out:
+	disable_irq_wake(tps->irq_rtc);
+
+	return 0;
+}
+
+static int tps6594_rtc_suspend(struct device *dev)
+{
+	struct tps6594 *tps = dev_get_drvdata(dev->parent);
+
+	enable_irq_wake(tps->irq_rtc);
+
+	return 0;
+}
+
+SIMPLE_DEV_PM_OPS(tps6594_rtc_pm_ops, tps6594_rtc_suspend, tps6594_rtc_resume);
+
 static const struct platform_device_id tps6594_rtc_id_table[] = {
 	{ "tps6594-rtc", },
 	{}
@@ -444,6 +489,7 @@ static struct platform_driver tps6594_rtc_driver = {
 	.probe		= tps6594_rtc_probe,
 	.driver		= {
 		.name	= "tps6594-rtc",
+		.pm = pm_sleep_ptr(&tps6594_rtc_pm_ops),
 	},
 	.id_table = tps6594_rtc_id_table,
 };
