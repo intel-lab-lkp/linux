@@ -5577,7 +5577,7 @@ ahd_handle_msg_reject(struct ahd_softc *ahd, struct ahd_devinfo *devinfo)
 		       "Using asynchronous transfers\n",
 		       ahd_name(ahd), devinfo->channel,
 		       devinfo->target, devinfo->lun);
-	} else if ((scb->hscb->control & SIMPLE_QUEUE_TAG) != 0) {
+	} else if (scb && (scb->hscb->control & SIMPLE_QUEUE_TAG)) {
 		int tag_type;
 		int mask;
 
