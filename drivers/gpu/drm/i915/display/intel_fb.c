@@ -10,6 +10,7 @@
 #include <linux/dma-resv.h>
 
 #include "i915_drv.h"
+#include "intel_atomic_plane.h"
 #include "intel_display.h"
 #include "intel_display_types.h"
 #include "intel_dpt.h"
@@ -1616,6 +1617,26 @@ bool intel_fb_supports_90_270_rotation(const struct intel_framebuffer *fb)
 	       fb->base.modifier == I915_FORMAT_MOD_Yf_TILED;
 }
 
+static unsigned int intel_fb_min_alignment(const struct drm_framebuffer *fb)
+{
+	struct drm_i915_private *i915 = to_i915(fb->dev);
+	struct intel_plane *plane;
+	unsigned int min_alignment = 0;
+
+	for_each_intel_plane(&i915->drm, plane) {
+		if (!drm_plane_has_format(&plane->base, fb->format->format, fb->modifier))
+			continue;
+
+		if (intel_plane_needs_physical(plane))
+			continue;
+
+		min_alignment = max(min_alignment,
+				    plane->min_alignment(plane, fb, 0));
+	}
+
+	return min_alignment;
+}
+
 int intel_fill_fb_info(struct drm_i915_private *i915, struct intel_framebuffer *fb)
 {
 	struct drm_i915_gem_object *obj = intel_fb_obj(&fb->base);
@@ -1697,6 +1718,8 @@ int intel_fill_fb_info(struct drm_i915_private *i915, struct intel_framebuffer *
 			    mul_u32_u32(max_size, tile_size), intel_bo_to_drm_bo(obj)->size);
 		return -EINVAL;
 	}
+
+	fb->min_alignment = intel_fb_min_alignment(&fb->base);
 
 	return 0;
 }

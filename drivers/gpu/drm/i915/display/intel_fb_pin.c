@@ -230,13 +230,36 @@ void intel_fb_unpin_vma(struct i915_vma *vma, unsigned long flags)
 	i915_vma_put(vma);
 }
 
+static bool gtt_view_is_per_plane(const struct intel_plane_state *plane_state)
+{
+	const struct intel_framebuffer *fb = to_intel_framebuffer(plane_state->hw.fb);
+
+	if (plane_state->view.gtt.type == I915_GTT_VIEW_REMAPPED &&
+	    intel_fb_needs_pot_stride_remap(fb))
+		return false;
+
+	return plane_state->view.gtt.type != I915_GTT_VIEW_NORMAL;
+}
+
 static unsigned int
 intel_plane_fb_min_alignment(const struct intel_plane_state *plane_state)
 {
 	struct intel_plane *plane = to_intel_plane(plane_state->uapi.plane);
-	const struct drm_framebuffer *fb = plane_state->hw.fb;
+	const struct intel_framebuffer *fb = to_intel_framebuffer(plane_state->hw.fb);
 
-	return plane->min_alignment(plane, fb, 0);
+	/*
+	 * Only use plane specific alignment for binding
+	 * a per-plane gtt view (remapped or rotated),
+	 * otherwise make sure the alignment is suitable
+	 * for all planes.
+	 */
+	if (!gtt_view_is_per_plane(plane_state))
+		return fb->min_alignment;
+
+	if (intel_plane_needs_physical(plane))
+		return 0;
+
+	return plane->min_alignment(plane, &fb->base, 0);
 }
 
 static unsigned int
