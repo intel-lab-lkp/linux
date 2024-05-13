@@ -57,6 +57,7 @@ properties:
               - hisilicon,pcie-sas-subctrl
               - hisilicon,peri-subctrl
               - hpe,gxp-sysreg
+              - img,boston-platform-regs
               - intel,lgm-syscon
               - loongson,ls1b-syscon
               - loongson,ls1c-syscon
