@@ -2341,6 +2341,9 @@ void mt7615_coredump_work(struct work_struct *work)
 	}
 
 	dump = vzalloc(MT76_CONNAC_COREDUMP_SZ);
+	if(!dump)
+		return;
+
 	data = dump;
 
 	while (true) {
