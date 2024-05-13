@@ -50,6 +50,10 @@ MODULE_LICENSE("Dual BSD/GPL");
 #define CMA_IBOE_PACKET_LIFETIME 16
 #define CMA_PREFERRED_ROCE_GID_TYPE IB_GID_TYPE_ROCE_UDP_ENCAP
 
+static bool cma_force_noio;
+module_param_named(force_noio, cma_force_noio, bool, 0444);
+MODULE_PARM_DESC(force_noio, "Force the use of GFP_NOIO (Y/N)");
+
 static const char * const cma_events[] = {
 	[RDMA_CM_EVENT_ADDR_RESOLVED]	 = "address resolved",
 	[RDMA_CM_EVENT_ADDR_ERROR]	 = "address error",
@@ -5424,6 +5428,10 @@ static struct pernet_operations cma_pernet_operations = {
 static int __init cma_init(void)
 {
 	int ret;
+	unsigned int noio_flags;
+
+	if (cma_force_noio)
+		noio_flags = memalloc_noio_save();
 
 	/*
 	 * There is a rare lock ordering dependency in cma_netdev_callback()
@@ -5439,8 +5447,10 @@ static int __init cma_init(void)
 	}
 
 	cma_wq = alloc_ordered_workqueue("rdma_cm", WQ_MEM_RECLAIM);
-	if (!cma_wq)
-		return -ENOMEM;
+	if (!cma_wq) {
+		ret = -ENOMEM;
+		goto out;
+	}
 
 	ret = register_pernet_subsys(&cma_pernet_operations);
 	if (ret)
@@ -5458,7 +5468,8 @@ static int __init cma_init(void)
 	if (ret)
 		goto err_ib;
 
-	return 0;
+	ret = 0;
+	goto out;
 
 err_ib:
 	ib_unregister_client(&cma_client);
@@ -5469,6 +5480,9 @@ err:
 	unregister_pernet_subsys(&cma_pernet_operations);
 err_wq:
 	destroy_workqueue(cma_wq);
+out:
+	if (cma_force_noio)
+		memalloc_noio_restore(noio_flags);
 	return ret;
 }
 
