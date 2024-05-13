@@ -817,8 +817,7 @@ void dm_kcopyd_copy(struct dm_kcopyd_client *kc, struct dm_io_region *from,
 	/*
 	 * If we need to write sequentially, errors cannot be ignored.
 	 */
-	if (job->flags & BIT(DM_KCOPYD_WRITE_SEQ) &&
-	    job->flags & BIT(DM_KCOPYD_IGNORE_ERROR))
+	if (job->flags & BIT(DM_KCOPYD_WRITE_SEQ))
 		job->flags &= ~BIT(DM_KCOPYD_IGNORE_ERROR);
 
 	if (from) {
