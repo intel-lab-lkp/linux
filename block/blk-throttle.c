@@ -491,6 +491,8 @@ static bool throtl_schedule_next_dispatch(struct throtl_service_queue *sq,
 
 static unsigned int tg_throtl_slice(struct throtl_grp *tg, int rw)
 {
+	if (tg->throtl_slice[rw])
+		return tg->throtl_slice[rw];
 	return tg->td->throtl_slice;
 }
 
@@ -1169,6 +1171,21 @@ static int tg_print_conf_uint(struct seq_file *sf, void *v)
 	return 0;
 }
 
+static void tg_set_throtl_slice(struct throtl_grp *tg)
+{
+	int rw;
+
+	for (rw = READ; rw <= WRITE; rw++) {
+		u32 limit = tg_iops_limit(tg, rw);
+
+		if (limit == UINT_MAX ||
+		    calculate_io_allowed(limit, tg->td->throtl_slice) != 0)
+			tg->throtl_slice[rw] = tg->td->throtl_slice;
+		else
+			tg->throtl_slice[rw] = MAX_THROTL_SLICE;
+	}
+}
+
 static void tg_conf_updated(struct throtl_grp *tg, bool global)
 {
 	struct throtl_service_queue *sq = &tg->service_queue;
@@ -1200,6 +1217,7 @@ static void tg_conf_updated(struct throtl_grp *tg, bool global)
 	}
 	rcu_read_unlock();
 
+	tg_set_throtl_slice(tg);
 	/*
 	 * We're already holding queue_lock and know @tg is valid.  Let's
 	 * apply the new config directly.

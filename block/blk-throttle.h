@@ -126,6 +126,12 @@ struct throtl_grp {
 
 	unsigned long last_check_time;
 
+	/*
+	 * This is usually td->throtl_slice, however, if iops limit is quite
+	 * low that allowed io in that slice is 0, throtl_slice in this tg will
+	 * be set to MAX_THROTL_SLICE.
+	 */
+	unsigned int throtl_slice[2];
 	/* When did we start a new slice */
 	unsigned long slice_start[2];
 	unsigned long slice_end[2];
