@@ -2721,8 +2721,15 @@ int kiocb_invalidate_pages(struct kiocb *iocb, size_t count)
 
 	if (iocb->ki_flags & IOCB_NOWAIT) {
 		/* we could block if there are any pages in the range */
-		if (filemap_range_has_page(mapping, pos, end))
+		if (filemap_range_has_page(mapping, pos, end)) {
+			if (mapping_needs_writeback(mapping)) {
+				__filemap_fdatawrite_range(mapping,
+						pos, end, WB_SYNC_NONE);
+			}
+			invalidate_mapping_pages(mapping,
+					pos >> PAGE_SHIFT, end >> PAGE_SHIFT);
 			return -EAGAIN;
+		}
 	} else {
 		ret = filemap_write_and_wait_range(mapping, pos, end);
 		if (ret)
