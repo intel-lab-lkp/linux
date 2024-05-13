@@ -56,6 +56,7 @@
 /* IPSEC Instruction opcodes */
 #define CN10K_IPSEC_MAJOR_OP_WRITE_SA 0x01UL
 #define CN10K_IPSEC_MINOR_OP_WRITE_SA 0x09UL
+#define CN10K_IPSEC_MAJOR_OP_OUTB_IPSEC 0x28UL
 
 enum cn10k_cpt_comp_e {
 	CN10K_CPT_COMP_E_NOTDONE = 0x00,
@@ -133,6 +134,16 @@ struct cn10k_tx_sa_s {
 	u64 hw_ctx[6];		/* W31 - W36 */
 };
 
+/* CPT instruction parameter-1 */
+#define CN10K_IPSEC_INST_PARAM1_DIS_L4_CSUM		0x1
+#define CN10K_IPSEC_INST_PARAM1_DIS_L3_CSUM		0x2
+#define CN10K_IPSEC_INST_PARAM1_CRYPTO_MODE		0x20
+#define CN10K_IPSEC_INST_PARAM1_IV_OFFSET_SHIFT		8
+
+/* CPT instruction parameter-2 */
+#define CN10K_IPSEC_INST_PARAM2_ENC_DATA_OFFSET_SHIFT	0
+#define CN10K_IPSEC_INST_PARAM2_AUTH_DATA_OFFSET_SHIFT	8
+
 /* CPT Instruction Structure */
 struct cpt_inst_s {
 	u64 nixtxl		: 3; /* W0 */
@@ -177,6 +188,15 @@ struct cpt_ctx_info_s {
 	dma_addr_t sa_iova;
 };
 
+/* CPT SG structure */
+struct cpt_sg_s {
+	u64 seg1_size	: 16;
+	u64 seg2_size	: 16;
+	u64 seg3_size	: 16;
+	u64 segs	: 2;
+	u64 rsvd_63_50	: 14;
+};
+
 /* CPT LF_INPROG Register */
 #define CPT_LF_INPROG_INFLIGHT	GENMASK_ULL(8, 0)
 #define CPT_LF_INPROG_GRB_CNT	GENMASK_ULL(39, 32)
@@ -199,6 +219,11 @@ struct cpt_ctx_info_s {
 int cn10k_ipsec_init(struct net_device *netdev);
 void cn10k_ipsec_clean(struct otx2_nic *pf);
 int cn10k_ipsec_ethtool_init(struct net_device *netdev, bool enable);
+bool otx2_sqe_add_sg_ipsec(struct otx2_nic *pfvf, struct otx2_snd_queue *sq,
+			   struct sk_buff *skb, int num_segs, int *offset);
+bool cn10k_ipsec_transmit(struct otx2_nic *pf, struct netdev_queue *txq,
+			  struct otx2_snd_queue *sq, struct sk_buff *skb,
+			  int num_segs, int size);
 #else
 static __maybe_unused inline int cn10k_ipsec_init(struct net_device *netdev)
 {
@@ -213,6 +238,21 @@ static __maybe_unused inline
 int cn10k_ipsec_ethtool_init(struct net_device *netdev, bool enable)
 {
 	return 0;
+}
+
+static __maybe_unused
+bool otx2_sqe_add_sg_ipsec(struct otx2_nic *pfvf, struct otx2_snd_queue *sq,
+			   struct sk_buff *skb, int num_segs, int *offset)
+{
+	return true;
+}
+
+static __maybe_unused
+bool cn10k_ipsec_transmit(struct otx2_nic *pf, struct netdev_queue *txq,
+			  struct otx2_snd_queue *sq, struct sk_buff *skb,
+			  int num_segs, int size)
+{
+	return true;
 }
 #endif
 #endif // CN10K_IPSEC_H
