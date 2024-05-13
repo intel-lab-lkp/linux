@@ -19,6 +19,12 @@ static void *int_seq_next(struct seq_file *f, void *v, loff_t *pos)
 	(*pos)++;
 	if (*pos > nr_irqs)
 		return NULL;
+
+	rcu_read_lock();
+	if (!irq_to_desc(*pos))
+		*pos = irq_get_next_irq(*pos);
+	rcu_read_unlock();
+
 	return pos;
 }
 
