@@ -2694,6 +2694,8 @@ sub process {
 
 	my $checklicenseline = 1;
 
+	my $symbol_link = 0;
+
 	sanitise_line_reset();
 	my $line;
 	foreach my $rawline (@rawlines) {
@@ -3564,6 +3566,11 @@ sub process {
 # ignore non-hunk lines and lines being removed
 		next if (!$hunk_line || $line =~ /^-/);
 
+# Check for symbol links
+		if ($line =~ /^new file mode 120000$/) {
+			$symbol_link = 1;
+		}
+
 #trailing whitespace
 		if ($line =~ /^\+.*\015/) {
 			my $herevet = "$here\n" . cat_vet($rawline) . "\n";
@@ -3756,7 +3763,8 @@ sub process {
 				}
 
 				if ($comment !~ /^$/ &&
-				    $rawline !~ m@^\+\Q$comment\E SPDX-License-Identifier: @) {
+				    $rawline !~ m@^\+\Q$comment\E SPDX-License-Identifier: @ &&
+				    $symbol_link =~ 1) {
 					WARN("SPDX_LICENSE_TAG",
 					     "Missing or malformed SPDX-License-Identifier tag in line $checklicenseline\n" . $herecurr);
 				} elsif ($rawline =~ /(SPDX-License-Identifier: .*)/) {
@@ -3867,7 +3875,8 @@ sub process {
 		}
 
 # check for adding lines without a newline.
-		if ($line =~ /^\+/ && defined $lines[$linenr] && $lines[$linenr] =~ /^\\ No newline at end of file/) {
+		if ($line =~ /^\+/ && defined $lines[$linenr] && $lines[$linenr] =~ /^\\ No newline at end of file/ &&
+		    $symbol_link =~ 1) {
 			if (WARN("MISSING_EOF_NEWLINE",
 			         "adding a line without newline at end of file\n" . $herecurr) &&
 			    $fix) {
