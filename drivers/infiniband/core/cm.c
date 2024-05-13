@@ -22,6 +22,7 @@
 #include <linux/workqueue.h>
 #include <linux/kdev_t.h>
 #include <linux/etherdevice.h>
+#include <linux/sched/mm.h>
 
 #include <rdma/ib_cache.h>
 #include <rdma/ib_cm.h>
@@ -35,6 +36,11 @@ MODULE_DESCRIPTION("InfiniBand CM");
 MODULE_LICENSE("Dual BSD/GPL");
 
 #define CM_DESTROY_ID_WAIT_TIMEOUT 10000 /* msecs */
+
+static bool cm_force_noio;
+module_param_named(force_noio, cm_force_noio, bool, 0444);
+MODULE_PARM_DESC(force_noio, "Force the use of GFP_NOIO (Y/N)");
+
 static const char * const ibcm_rej_reason_strs[] = {
 	[IB_CM_REJ_NO_QP]			= "no QP",
 	[IB_CM_REJ_NO_EEC]			= "no EEC",
@@ -4501,6 +4507,10 @@ static void cm_remove_one(struct ib_device *ib_device, void *client_data)
 static int __init ib_cm_init(void)
 {
 	int ret;
+	unsigned int noio_flags;
+
+	if (cm_force_noio)
+		noio_flags = memalloc_noio_save();
 
 	INIT_LIST_HEAD(&cm.device_list);
 	rwlock_init(&cm.device_lock);
@@ -4524,10 +4534,13 @@ static int __init ib_cm_init(void)
 	if (ret)
 		goto error3;
 
-	return 0;
+	goto error2;
 error3:
 	destroy_workqueue(cm.wq);
 error2:
+	if (cm_force_noio)
+		memalloc_noio_restore(noio_flags);
+
 	return ret;
 }
 
