@@ -2000,7 +2000,7 @@ static const struct clock_config stm32mp1_clock_cfg[] = {
 	KCLK(SDMMC3_K, "sdmmc3_k", sdmmc3_src, 0, G_SDMMC3, M_SDMMC3),
 	KCLK(FMC_K, "fmc_k", fmc_src, 0, G_FMC, M_FMC),
 	KCLK(QSPI_K, "qspi_k", qspi_src, 0, G_QSPI, M_QSPI),
-	KCLK(RNG1_K, "rng1_k", rng_src, 0, G_RNG1, M_RNG1),
+	KCLK(RNG1_K, "rng1_k", rng_src, CLK_IS_CRITICAL, G_RNG1, M_RNG1),
 	KCLK(RNG2_K, "rng2_k", rng_src, 0, G_RNG2, M_RNG2),
 	KCLK(USBPHY_K, "usbphy_k", usbphy_src, 0, G_USBPHY, M_USBPHY),
 	KCLK(STGEN_K, "stgen_k", stgen_src, CLK_IS_CRITICAL, G_STGEN, M_STGEN),

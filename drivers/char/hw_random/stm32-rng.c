@@ -395,6 +395,7 @@ static int __maybe_unused stm32_rng_suspend(struct device *dev)
 
 	writel_relaxed(priv->pm_conf.cr, priv->base + RNG_CR);
 
+	// Keeping the clock enabled across suspend/resume helps too
 	clk_disable_unprepare(priv->clk);
 
 	return 0;
@@ -426,6 +427,7 @@ static int __maybe_unused stm32_rng_resume(struct device *dev)
 	int err;
 	u32 reg;
 
+	// Keeping the clock enabled across suspend/resume helps too
 	err = clk_prepare_enable(priv->clk);
 	if (err)
 		return err;
