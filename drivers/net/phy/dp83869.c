@@ -42,6 +42,9 @@
 #define DP83869_IO_MUX_CFG	0x0170
 #define DP83869_OP_MODE		0x01df
 #define DP83869_FX_CTRL		0x0c00
+#define DP83869_FX_STS		0x0c01
+#define DP83869_FX_ANADV	0x0c04
+#define DP83869_FX_LPABL	0x0c05
 
 #define DP83869_SW_RESET	BIT(15)
 #define DP83869_SW_RESTART	BIT(14)
@@ -116,6 +119,39 @@
 #define DP83869_OP_MODE_MII			BIT(5)
 #define DP83869_SGMII_RGMII_BRIDGE		BIT(6)
 
+/* FX_CTRL bits */
+#define DP83869_CTRL0_SPEED_SEL_MSB		BIT(6)
+#define DP83869_CTRL0_DUPLEX_MODE		BIT(8)
+#define DP83869_CTRL0_RESTART_AN		BIT(9)
+#define DP83869_CTRL0_ISOLATE			BIT(10)
+#define DP83869_CTRL0_PWRDN			BIT(11)
+#define DP83869_CTRL0_ANEG_EN			BIT(12)
+#define DP83869_CTRL0_SPEED_SEL_LSB		BIT(13)
+#define DP83869_CTRL0_LOOPBACK			BIT(14)
+
+/* FX_STS bits */
+#define DP83869_STTS_LINK_STATUS		BIT(2)
+#define DP83869_STTS_ANEG_COMPLETE		BIT(5)
+
+/* FX_ANADV bits */
+#define DP83869_BP_FULL_DUPLEX			BIT(5)
+#define DP83869_BP_HALF_DUPLEX			BIT(6)
+#define DP83869_BP_PAUSE			BIT(7)
+#define DP83869_BP_ASYMMETRIC_PAUSE		BIT(8)
+
+/* FX_LPABL bits
+ * Bits 12:10 for RGMII-to-SGMII mode are undocumented and were determined
+ * through tests. It appears that, in this mode, the tx_config_Reg defined in
+ * the SGMII spec is copied to FX_LPABL after SGMII auto-negotiation.
+ */
+#define DP83869_LP_ABILITY_FULL_DUPLEX		BIT(5)
+#define DP83869_LP_ABILITY_PAUSE		BIT(7)
+#define DP83869_LP_ABILITY_ASYMMETRIC_PAUSE	BIT(8)
+#define DP83869_LP_ABILITY_SGMII_100		BIT(10)
+#define DP83869_LP_ABILITY_SGMII_1000		BIT(11)
+#define DP83869_LP_ABILITY_SGMII_DUPLEX		BIT(12)
+#define DP83869_LP_ABILITY_ACK			BIT(14)
+
 /* RXFCFG bits*/
 #define DP83869_WOL_MAGIC_EN		BIT(0)
 #define DP83869_WOL_PATTERN_EN		BIT(1)
@@ -154,19 +190,319 @@ struct dp83869_private {
 	int mode;
 };
 
+static int dp83869_fx_setup_forced(struct phy_device *phydev)
+{
+	struct dp83869_private *dp83869 = phydev->priv;
+	u16 ctl = 0;
+
+	phydev->pause = 0;
+	phydev->asym_pause = 0;
+
+	if (dp83869->mode == DP83869_RGMII_1000_BASE)
+		ctl |= DP83869_CTRL0_SPEED_SEL_MSB;
+
+	if (dp83869->mode == DP83869_RGMII_SGMII_BRIDGE) {
+		if (phydev->speed == SPEED_1000)
+			ctl |= DP83869_CTRL0_SPEED_SEL_MSB;
+		else if (phydev->speed == SPEED_100)
+			ctl |= DP83869_CTRL0_SPEED_SEL_LSB;
+
+		/* Contrary to the data sheet, there is NO need to clear
+		 * 10M_SGMII_RATE_ADAPT_DISABLE in 10M_SGMII_CFG for 10M SGMII.
+		 */
+	}
+
+	if (phydev->duplex == DUPLEX_FULL)
+		ctl |= DP83869_CTRL0_DUPLEX_MODE;
+
+	return phy_modify_mmd(phydev, DP83869_DEVADDR, DP83869_FX_CTRL,
+			      ~(u16)(DP83869_CTRL0_LOOPBACK |
+				      DP83869_CTRL0_ISOLATE |
+				      DP83869_CTRL0_PWRDN), ctl);
+}
+
+static int dp83869_fx_config_advert(struct phy_device *phydev)
+{
+	struct dp83869_private *dp83869 = phydev->priv;
+	int err, changed = 0;
+	u32 adv = 0;
+
+	if (dp83869->mode == DP83869_RGMII_1000_BASE) {
+		linkmode_and(phydev->advertising, phydev->advertising,
+			     phydev->supported);
+
+		if (linkmode_test_bit(ETHTOOL_LINK_MODE_1000baseX_Full_BIT,
+				      phydev->advertising))
+			adv |= DP83869_BP_FULL_DUPLEX;
+		if (linkmode_test_bit(ETHTOOL_LINK_MODE_Pause_BIT,
+				      phydev->advertising))
+			adv |= DP83869_BP_PAUSE;
+		if (linkmode_test_bit(ETHTOOL_LINK_MODE_Asym_Pause_BIT,
+				      phydev->advertising))
+			adv |= DP83869_BP_ASYMMETRIC_PAUSE;
+	}
+
+	if (dp83869->mode == DP83869_RGMII_SGMII_BRIDGE) {
+		/* As we cannot control the connected SGMII PHY, we force
+		 * advertising all speeds.
+		 */
+		linkmode_copy(phydev->advertising, phydev->supported);
+		adv |= DP83869_BP_HALF_DUPLEX;
+		adv |= DP83869_BP_FULL_DUPLEX;
+	}
+
+	err = phy_modify_mmd_changed(phydev, DP83869_DEVADDR, DP83869_FX_ANADV,
+				     DP83869_BP_HALF_DUPLEX |
+				     DP83869_BP_FULL_DUPLEX | DP83869_BP_PAUSE |
+				     DP83869_BP_ASYMMETRIC_PAUSE, adv);
+	if (err < 0)
+		return err;
+	if (err > 0)
+		changed = 1;
+
+	return changed;
+}
+
+static int dp83869_fx_restart_aneg(struct phy_device *phydev)
+{
+	return phy_modify_mmd(phydev, DP83869_DEVADDR, DP83869_FX_CTRL,
+			      DP83869_CTRL0_ISOLATE, DP83869_CTRL0_ANEG_EN |
+			      DP83869_CTRL0_RESTART_AN);
+}
+
+static int dp83869_fx_check_and_restart_aneg(struct phy_device *phydev,
+					     bool restart)
+{
+	int ret;
+
+	if (!restart) {
+		ret = phy_read_mmd(phydev, DP83869_DEVADDR, DP83869_FX_CTRL);
+		if (ret < 0)
+			return ret;
+
+		if (!(ret & DP83869_CTRL0_ANEG_EN) ||
+		    (ret & DP83869_CTRL0_ISOLATE))
+			restart = true;
+	}
+
+	if (restart)
+		return dp83869_fx_restart_aneg(phydev);
+
+	return 0;
+}
+
+static int dp83869_config_aneg(struct phy_device *phydev)
+{
+	struct dp83869_private *dp83869 = phydev->priv;
+	bool changed = false;
+	int err;
+
+	if (dp83869->mode != DP83869_RGMII_1000_BASE &&
+	    dp83869->mode != DP83869_RGMII_SGMII_BRIDGE)
+		return genphy_config_aneg(phydev);
+
+	if (phydev->autoneg != AUTONEG_ENABLE)
+		return dp83869_fx_setup_forced(phydev);
+
+	err = dp83869_fx_config_advert(phydev);
+	if (err < 0)
+		return err;
+	else if (err)
+		changed = true;
+
+	return dp83869_fx_check_and_restart_aneg(phydev, changed);
+}
+
+static int dp83869_aneg_done(struct phy_device *phydev)
+{
+	struct dp83869_private *dp83869 = phydev->priv;
+
+	if (dp83869->mode == DP83869_RGMII_1000_BASE ||
+	    dp83869->mode == DP83869_RGMII_SGMII_BRIDGE) {
+		int retval = phy_read_mmd(phydev, DP83869_DEVADDR,
+					  DP83869_FX_STS);
+
+		return (retval < 0) ? retval :
+				      (retval & DP83869_STTS_ANEG_COMPLETE);
+	} else {
+		return genphy_aneg_done(phydev);
+	}
+}
+
+static int dp83869_fx_update_link(struct phy_device *phydev)
+{
+	int status = 0, fx_ctrl;
+
+	fx_ctrl = phy_read_mmd(phydev, DP83869_DEVADDR, DP83869_FX_CTRL);
+	if (fx_ctrl < 0)
+		return fx_ctrl;
+
+	if (fx_ctrl & DP83869_CTRL0_RESTART_AN)
+		goto done;
+
+	if (!phy_polling_mode(phydev) || !phydev->link) {
+		status = phy_read_mmd(phydev, DP83869_DEVADDR, DP83869_FX_STS);
+		if (status < 0)
+			return status;
+		else if (status & DP83869_STTS_LINK_STATUS)
+			goto done;
+	}
+
+	status = phy_read_mmd(phydev, DP83869_DEVADDR, DP83869_FX_STS);
+	if (status < 0)
+		return status;
+ done:
+	phydev->link = status & DP83869_STTS_LINK_STATUS ? 1 : 0;
+	phydev->autoneg_complete = status & DP83869_STTS_ANEG_COMPLETE ? 1 : 0;
+
+	if (phydev->autoneg == AUTONEG_ENABLE && !phydev->autoneg_complete)
+		phydev->link = 0;
+
+	return 0;
+}
+
+static int dp83869_1000basex_read_lpa(struct phy_device *phydev)
+{
+	int fx_lpabl;
+
+	if (phydev->autoneg == AUTONEG_ENABLE) {
+		if (!phydev->autoneg_complete) {
+			mii_stat1000_mod_linkmode_lpa_t(phydev->lp_advertising,
+							0);
+			mii_lpa_mod_linkmode_lpa_t(phydev->lp_advertising, 0);
+			linkmode_mod_bit(ETHTOOL_LINK_MODE_1000baseX_Full_BIT,
+					 phydev->lp_advertising, 0);
+			return 0;
+		}
+
+		fx_lpabl = phy_read_mmd(phydev, DP83869_DEVADDR,
+					DP83869_FX_LPABL);
+		if (fx_lpabl < 0)
+			return fx_lpabl;
+
+		linkmode_mod_bit(ETHTOOL_LINK_MODE_1000baseX_Full_BIT,
+				 phydev->lp_advertising,
+				 fx_lpabl & DP83869_LP_ABILITY_FULL_DUPLEX);
+		linkmode_mod_bit(ETHTOOL_LINK_MODE_Pause_BIT,
+				 phydev->lp_advertising,
+				 fx_lpabl & DP83869_LP_ABILITY_PAUSE);
+		linkmode_mod_bit(ETHTOOL_LINK_MODE_Asym_Pause_BIT,
+				 phydev->lp_advertising,
+				 fx_lpabl &
+				 DP83869_LP_ABILITY_ASYMMETRIC_PAUSE);
+		linkmode_mod_bit(ETHTOOL_LINK_MODE_Autoneg_BIT,
+				 phydev->lp_advertising,
+				 fx_lpabl & DP83869_LP_ABILITY_ACK);
+
+	} else {
+		linkmode_zero(phydev->lp_advertising);
+	}
+
+	return 0;
+}
+
+static int dp83869_fx_read_status_fixed(struct phy_device *phydev)
+{
+	int fx_ctrl = phy_read_mmd(phydev, DP83869_DEVADDR, DP83869_FX_CTRL);
+
+	if (fx_ctrl < 0)
+		return fx_ctrl;
+
+	if (fx_ctrl & DP83869_CTRL0_DUPLEX_MODE)
+		phydev->duplex = DUPLEX_FULL;
+	else
+		phydev->duplex = DUPLEX_HALF;
+
+	if (fx_ctrl & DP83869_CTRL0_SPEED_SEL_MSB)
+		phydev->speed = SPEED_1000;
+	else if (fx_ctrl & DP83869_CTRL0_SPEED_SEL_LSB)
+		phydev->speed = SPEED_100;
+	else
+		phydev->speed = SPEED_10;
+
+	return 0;
+}
+
+static int dp83869_fx_read_status(struct phy_device *phydev)
+{
+	struct dp83869_private *dp83869 = phydev->priv;
+	int err, old_link = phydev->link;
+
+	err = dp83869_fx_update_link(phydev);
+	if (err)
+		return err;
+
+	if (phydev->autoneg == AUTONEG_ENABLE && old_link && phydev->link)
+		return 0;
+
+	phydev->master_slave_get = MASTER_SLAVE_CFG_UNSUPPORTED;
+	phydev->master_slave_state = MASTER_SLAVE_STATE_UNSUPPORTED;
+	phydev->speed = SPEED_UNKNOWN;
+	phydev->duplex = DUPLEX_UNKNOWN;
+	phydev->pause = 0;
+	phydev->asym_pause = 0;
+
+	if (dp83869->mode == DP83869_RGMII_1000_BASE) {
+		err = dp83869_1000basex_read_lpa(phydev);
+		if (err < 0)
+			return err;
+
+		if (phydev->autoneg == AUTONEG_ENABLE &&
+		    phydev->autoneg_complete) {
+			phy_resolve_aneg_linkmode(phydev);
+		} else if (phydev->autoneg == AUTONEG_DISABLE) {
+			err = dp83869_fx_read_status_fixed(phydev);
+			if (err < 0)
+				return err;
+		}
+	} else if (dp83869->mode == DP83869_RGMII_SGMII_BRIDGE) {
+		if (phydev->autoneg == AUTONEG_ENABLE &&
+		    phydev->autoneg_complete) {
+			int fx_lpabl;
+
+			fx_lpabl = phy_read_mmd(phydev, DP83869_DEVADDR,
+						DP83869_FX_LPABL);
+			if (fx_lpabl < 0)
+				return fx_lpabl;
+
+			if (fx_lpabl & DP83869_LP_ABILITY_SGMII_1000)
+				phydev->speed = SPEED_1000;
+			else if (fx_lpabl & DP83869_LP_ABILITY_SGMII_100)
+				phydev->speed = SPEED_100;
+			else
+				phydev->speed = SPEED_10;
+
+			if (fx_lpabl & DP83869_LP_ABILITY_SGMII_DUPLEX)
+				phydev->duplex = DUPLEX_FULL;
+			else
+				phydev->duplex = DUPLEX_HALF;
+		} else if (phydev->autoneg == AUTONEG_DISABLE) {
+			err = dp83869_fx_read_status_fixed(phydev);
+			if (err < 0)
+				return err;
+		}
+	}
+
+	return 0;
+}
+
 static int dp83869_read_status(struct phy_device *phydev)
 {
 	struct dp83869_private *dp83869 = phydev->priv;
 	int ret;
 
-	ret = genphy_read_status(phydev);
+	if (dp83869->mode == DP83869_RGMII_1000_BASE ||
+	    dp83869->mode == DP83869_RGMII_SGMII_BRIDGE)
+		ret = dp83869_fx_read_status(phydev);
+	else
+		ret = genphy_read_status(phydev);
+
 	if (ret)
 		return ret;
 
-	if (linkmode_test_bit(ETHTOOL_LINK_MODE_FIBRE_BIT, phydev->supported)) {
+	if (dp83869->mode == DP83869_RGMII_100_BASE) {
 		if (phydev->link) {
-			if (dp83869->mode == DP83869_RGMII_100_BASE)
-				phydev->speed = SPEED_100;
+			phydev->speed = SPEED_100;
 		} else {
 			phydev->speed = SPEED_UNKNOWN;
 			phydev->duplex = DUPLEX_UNKNOWN;
@@ -780,6 +1116,7 @@ static int dp83869_configure_mode(struct phy_device *phydev,
 
 		break;
 	case DP83869_RGMII_1000_BASE:
+		break;
 	case DP83869_RGMII_100_BASE:
 		ret = dp83869_configure_fiber(phydev, dp83869);
 		break;
@@ -874,6 +1211,49 @@ static int dp83869_probe(struct phy_device *phydev)
 	return dp83869_config_init(phydev);
 }
 
+static int dp83869_get_features(struct phy_device *phydev)
+{
+	struct dp83869_private *dp83869 = phydev->priv;
+	int err;
+
+	err = genphy_read_abilities(phydev);
+	if (err)
+		return err;
+
+	/* The PHY reports all speeds (10/100/1000BASE-T full/half-duplex and
+	 * 1000BASE-X) as supported independent of the selected mode. We clear
+	 * the settings that are nonsensical for each mode.
+	 */
+
+	if (dp83869->mode == DP83869_RGMII_SGMII_BRIDGE) {
+		linkmode_clear_bit(ETHTOOL_LINK_MODE_1000baseX_Full_BIT,
+				   phydev->supported);
+		linkmode_clear_bit(ETHTOOL_LINK_MODE_TP_BIT, phydev->supported);
+	}
+
+	if (dp83869->mode == DP83869_RGMII_1000_BASE) {
+		linkmode_set_bit(ETHTOOL_LINK_MODE_FIBRE_BIT,
+				 phydev->supported);
+		linkmode_clear_bit(ETHTOOL_LINK_MODE_TP_BIT, phydev->supported);
+		linkmode_clear_bit(ETHTOOL_LINK_MODE_MII_BIT,
+				   phydev->supported);
+		linkmode_clear_bit(ETHTOOL_LINK_MODE_10baseT_Half_BIT,
+				   phydev->supported);
+		linkmode_clear_bit(ETHTOOL_LINK_MODE_10baseT_Full_BIT,
+				   phydev->supported);
+		linkmode_clear_bit(ETHTOOL_LINK_MODE_100baseT_Half_BIT,
+				   phydev->supported);
+		linkmode_clear_bit(ETHTOOL_LINK_MODE_100baseT_Full_BIT,
+				   phydev->supported);
+		linkmode_clear_bit(ETHTOOL_LINK_MODE_1000baseT_Half_BIT,
+				   phydev->supported);
+		linkmode_clear_bit(ETHTOOL_LINK_MODE_1000baseT_Full_BIT,
+				   phydev->supported);
+	}
+
+	return 0;
+}
+
 static int dp83869_phy_reset(struct phy_device *phydev)
 {
 	int ret;
@@ -896,10 +1276,13 @@ static int dp83869_phy_reset(struct phy_device *phydev)
 	PHY_ID_MATCH_MODEL(_id),				\
 	.name		= (_name),				\
 	.probe          = dp83869_probe,			\
+	.get_features	= dp83869_get_features,			\
 	.config_init	= dp83869_config_init,			\
 	.soft_reset	= dp83869_phy_reset,			\
 	.config_intr	= dp83869_config_intr,			\
 	.handle_interrupt = dp83869_handle_interrupt,		\
+	.config_aneg	= dp83869_config_aneg,			\
+	.aneg_done	= dp83869_aneg_done,			\
 	.read_status	= dp83869_read_status,			\
 	.get_tunable	= dp83869_get_tunable,			\
 	.set_tunable	= dp83869_set_tunable,			\
