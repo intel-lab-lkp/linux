@@ -270,6 +270,14 @@ netdev_features_t vmxnet3_fix_features(struct net_device *netdev,
 	if (!(features & NETIF_F_RXCSUM))
 		features &= ~NETIF_F_LRO;
 
+	if ((features & NETIF_F_LRO) &&
+	    (adapter->disabledOffloads & VMXNET3_OFFLOAD_LRO))
+		features &= ~NETIF_F_LRO;
+
+	if ((features & (NETIF_F_TSO | NETIF_F_TSO6)) &&
+	    (adapter->disabledOffloads & VMXNET3_OFFLOAD_TSO))
+		features &= ~(NETIF_F_TSO | NETIF_F_TSO6);
+
 	/* If XDP is enabled, then LRO should not be enabled */
 	if (vmxnet3_xdp_enabled(adapter) && (features & NETIF_F_LRO)) {
 		netdev_err(netdev, "LRO is not supported with XDP");
