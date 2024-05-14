@@ -1181,7 +1181,6 @@ struct btrfs_ordered_extent *btrfs_split_ordered_extent(
 	/* One ref for the tree. */
 	refcount_inc(&new->refs);
 
-	spin_lock_irq(&root->ordered_extent_lock);
 	spin_lock(&inode->ordered_tree_lock);
 	/* Remove from tree once */
 	node = &ordered->rb_node;
@@ -1234,6 +1233,7 @@ struct btrfs_ordered_extent *btrfs_split_ordered_extent(
 			new->file_offset);
 	spin_unlock(&inode->ordered_tree_lock);
 
+	spin_lock_irq(&root->ordered_extent_lock);
 	list_add_tail(&new->root_extent_list, &root->ordered_extents);
 	root->nr_ordered_extents++;
 	spin_unlock_irq(&root->ordered_extent_lock);
