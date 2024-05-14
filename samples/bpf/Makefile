@@ -7,6 +7,7 @@ pound := \#
 
 # List of programs to build
 tprogs-y := test_lru_dist
+tprogs-y += sid_queue_stack
 tprogs-y += sock_example
 tprogs-y += fds_example
 tprogs-y += sockex1
@@ -98,6 +99,7 @@ ibumad-objs := ibumad_user.o
 hbm-objs := hbm.o $(CGROUP_HELPERS)
 
 xdp_router_ipv4-objs := xdp_router_ipv4_user.o $(XDP_SAMPLE)
+sid_queue_stack-objs := sid_queue_stack_user.o
 
 # Tell kbuild to always build the programs
 always-y := $(tprogs-y)
@@ -149,6 +151,7 @@ always-y += task_fd_query_kern.o
 always-y += ibumad_kern.o
 always-y += hbm_out_kern.o
 always-y += hbm_edt_kern.o
+always-y += sid_queue_stack_kern.o
 
 TPROGS_CFLAGS = $(TPROGS_USER_CFLAGS)
 TPROGS_LDFLAGS = $(TPROGS_USER_LDFLAGS)
