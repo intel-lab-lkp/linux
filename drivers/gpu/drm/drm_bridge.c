@@ -213,6 +213,23 @@ void drm_bridge_add(struct drm_bridge *bridge)
 }
 EXPORT_SYMBOL(drm_bridge_add);
 
+/**
+ * drm_bridge_add_with_dev - add the given bridge to the global bridge list
+ *
+ * @bridge: bridge control structure
+ * @dev: pointer to the kernel device that this bridge is backed.
+ */
+void drm_bridge_add_with_dev(struct drm_bridge *bridge, struct device *dev)
+{
+	if (dev) {
+		bridge->kdev = dev;
+		bridge->of_node = dev->of_node;
+	}
+
+	drm_bridge_add(bridge);
+}
+EXPORT_SYMBOL_GPL(drm_bridge_add_with_dev);
+
 static void drm_bridge_remove_void(void *bridge)
 {
 	drm_bridge_remove(bridge);
@@ -1334,6 +1351,27 @@ void drm_bridge_hpd_notify(struct drm_bridge *bridge,
 }
 EXPORT_SYMBOL_GPL(drm_bridge_hpd_notify);
 
+struct drm_bridge *drm_find_bridge_by_dev(struct device *kdev)
+{
+	struct drm_bridge *bridge;
+
+	if (!kdev)
+		return NULL;
+
+	mutex_lock(&bridge_lock);
+
+	list_for_each_entry(bridge, &bridge_list, list) {
+		if (bridge->kdev == kdev) {
+			mutex_unlock(&bridge_lock);
+			return bridge;
+		}
+	}
+
+	mutex_unlock(&bridge_lock);
+	return NULL;
+}
+EXPORT_SYMBOL_GPL(drm_find_bridge_by_dev);
+
 #ifdef CONFIG_OF
 /**
  * of_drm_find_bridge - find the bridge corresponding to the device node in
@@ -1361,6 +1399,7 @@ struct drm_bridge *of_drm_find_bridge(struct device_node *np)
 	return NULL;
 }
 EXPORT_SYMBOL(of_drm_find_bridge);
+
 #endif
 
 MODULE_AUTHOR("Ajay Kumar <ajaykumar.rs@samsung.com>");
