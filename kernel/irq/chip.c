@@ -1345,6 +1345,13 @@ int irq_chip_get_parent_state(struct irq_data *data,
 }
 EXPORT_SYMBOL_GPL(irq_chip_get_parent_state);
 
+static inline void irq_chip_do_common_parent(void (*chip_action)(struct irq_data *),
+					     struct irq_data *data)
+{
+	data = data->parent_data;
+	chip_action(data);
+}
+
 /**
  * irq_chip_enable_parent - Enable the parent interrupt (defaults to unmask if
  * NULL)
@@ -1352,11 +1359,8 @@ EXPORT_SYMBOL_GPL(irq_chip_get_parent_state);
  */
 void irq_chip_enable_parent(struct irq_data *data)
 {
-	data = data->parent_data;
-	if (data->chip->irq_enable)
-		data->chip->irq_enable(data);
-	else
-		data->chip->irq_unmask(data);
+	irq_chip_do_common_parent(data->chip->irq_enable ? : data->chip->irq_unmask,
+				  data);
 }
 EXPORT_SYMBOL_GPL(irq_chip_enable_parent);
 
@@ -1367,11 +1371,8 @@ EXPORT_SYMBOL_GPL(irq_chip_enable_parent);
  */
 void irq_chip_disable_parent(struct irq_data *data)
 {
-	data = data->parent_data;
-	if (data->chip->irq_disable)
-		data->chip->irq_disable(data);
-	else
-		data->chip->irq_mask(data);
+	irq_chip_do_common_parent(data->chip->irq_disable ? : data->chip->irq_mask,
+				  data);
 }
 EXPORT_SYMBOL_GPL(irq_chip_disable_parent);
 
@@ -1381,8 +1382,7 @@ EXPORT_SYMBOL_GPL(irq_chip_disable_parent);
  */
 void irq_chip_ack_parent(struct irq_data *data)
 {
-	data = data->parent_data;
-	data->chip->irq_ack(data);
+	irq_chip_do_common_parent(data->chip->irq_ack, data);
 }
 EXPORT_SYMBOL_GPL(irq_chip_ack_parent);
 
@@ -1392,8 +1392,7 @@ EXPORT_SYMBOL_GPL(irq_chip_ack_parent);
  */
 void irq_chip_mask_parent(struct irq_data *data)
 {
-	data = data->parent_data;
-	data->chip->irq_mask(data);
+	irq_chip_do_common_parent(data->chip->irq_mask, data);
 }
 EXPORT_SYMBOL_GPL(irq_chip_mask_parent);
 
@@ -1403,8 +1402,7 @@ EXPORT_SYMBOL_GPL(irq_chip_mask_parent);
  */
 void irq_chip_mask_ack_parent(struct irq_data *data)
 {
-	data = data->parent_data;
-	data->chip->irq_mask_ack(data);
+	irq_chip_do_common_parent(data->chip->irq_mask_ack, data);
 }
 EXPORT_SYMBOL_GPL(irq_chip_mask_ack_parent);
 
@@ -1414,8 +1412,7 @@ EXPORT_SYMBOL_GPL(irq_chip_mask_ack_parent);
  */
 void irq_chip_unmask_parent(struct irq_data *data)
 {
-	data = data->parent_data;
-	data->chip->irq_unmask(data);
+	irq_chip_do_common_parent(data->chip->irq_unmask, data);
 }
 EXPORT_SYMBOL_GPL(irq_chip_unmask_parent);
 
@@ -1425,8 +1422,7 @@ EXPORT_SYMBOL_GPL(irq_chip_unmask_parent);
  */
 void irq_chip_eoi_parent(struct irq_data *data)
 {
-	data = data->parent_data;
-	data->chip->irq_eoi(data);
+	irq_chip_do_common_parent(data->chip->irq_eoi, data);
 }
 EXPORT_SYMBOL_GPL(irq_chip_eoi_parent);
 
