@@ -129,8 +129,9 @@ static void hsr_dellink(struct net_device *dev, struct list_head *head)
 	struct hsr_priv *hsr = netdev_priv(dev);
 
 	del_timer_sync(&hsr->prune_timer);
-	del_timer_sync(&hsr->prune_proxy_timer);
 	del_timer_sync(&hsr->announce_timer);
+	if (hsr->redbox)
+		timer_delete_sync(&hsr->prune_proxy_timer);
 
 	hsr_debugfs_term(hsr);
 	hsr_del_ports(hsr);
