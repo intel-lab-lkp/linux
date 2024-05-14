@@ -4637,6 +4637,7 @@ static irqreturn_t rtl8169_interrupt(int irq, void *dev_instance)
 {
 	struct rtl8169_private *tp = dev_instance;
 	u32 status = rtl_get_events(tp);
+	int ret;
 
 	if ((status & 0xffff) == 0xffff || !(status & tp->irq_mask))
 		return IRQ_NONE;
@@ -4655,10 +4656,11 @@ static irqreturn_t rtl8169_interrupt(int irq, void *dev_instance)
 		rtl_schedule_task(tp, RTL_FLAG_TASK_RESET_PENDING);
 	}
 
-	if (napi_schedule_prep(&tp->napi)) {
+	ret = __napi_schedule_prep(&tp->napi);
+	if (ret >= 0)
 		rtl_irq_disable(tp);
+	if (ret > 0)
 		__napi_schedule(&tp->napi);
-	}
 out:
 	rtl_ack_events(tp, status);
 
