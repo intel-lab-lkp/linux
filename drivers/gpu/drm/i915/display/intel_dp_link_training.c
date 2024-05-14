@@ -1484,7 +1484,10 @@ void intel_dp_start_link_train(struct intel_dp *intel_dp,
 	else
 		passed = intel_dp_link_train_all_phys(intel_dp, crtc_state, lttpr_count);
 
-	if (passed) {
+	if (intel_dp->link_train.force_failure) {
+		intel_dp->link_train.force_failure--;
+		lt_dbg(intel_dp, DP_PHY_DPRX, "Forcing link training failure\n");
+	} else if (passed) {
 		intel_dp->link_train.seq_failures = 0;
 		intel_dp_queue_link_check(intel_dp, 2000);
 		return;
