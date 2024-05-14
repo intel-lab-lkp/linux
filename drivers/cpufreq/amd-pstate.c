@@ -1441,6 +1441,9 @@ free_cpudata1:
 
 static int amd_pstate_epp_cpu_exit(struct cpufreq_policy *policy)
 {
+	struct amd_cpudata *cpudata = policy->driver_data;
+
+	kfree(cpudata);
 	pr_debug("CPU %d exiting\n", policy->cpu);
 	return 0;
 }
