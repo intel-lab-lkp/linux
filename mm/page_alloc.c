@@ -1728,7 +1728,7 @@ bool move_freepages_block_isolate(struct zone *zone, struct page *page,
 
 		del_page_from_free_list(buddy, zone, order,
 					get_pfnblock_migratetype(buddy, pfn));
-		set_pageblock_migratetype(page, migratetype);
+		set_pageblock_migratetype(buddy, migratetype);
 		split_large_buddy(zone, buddy, pfn, order);
 		return true;
 	}
