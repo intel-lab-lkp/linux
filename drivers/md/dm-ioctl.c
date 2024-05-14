@@ -1445,6 +1445,8 @@ static int populate_table(struct dm_table *table,
 		return -EINVAL;
 	}
 
+	table->flush_pass_around = 1;
+
 	for (i = 0; i < param->target_count; i++) {
 		const char *nul_terminator;
 
@@ -2278,6 +2280,8 @@ int __init dm_early_create(struct dm_ioctl *dmi,
 	r = dm_table_create(&t, get_mode(dmi), dmi->target_count, md);
 	if (r)
 		goto err_hash_remove;
+
+	t->flush_pass_around = 1;
 
 	/* add targets */
 	for (i = 0; i < dmi->target_count; i++) {

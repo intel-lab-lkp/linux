@@ -738,6 +738,9 @@ int dm_table_add_target(struct dm_table *t, const char *type,
 	if (ti->limit_swap_bios && !static_key_enabled(&swap_bios_enabled.key))
 		static_branch_enable(&swap_bios_enabled);
 
+	if (ti->flush_pass_around == 0)
+		t->flush_pass_around = 0;
+
 	return 0;
 
  bad:

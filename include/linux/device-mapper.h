@@ -397,6 +397,11 @@ struct dm_target {
 	 * bio_set_dev(). NOTE: ideally a target should _not_ need this.
 	 */
 	bool needs_bio_set_dev:1;
+
+	/*
+	 * Set if the target supports flush optimization
+	 */
+	bool flush_pass_around:1;
 };
 
 void *dm_per_bio_data(struct bio *bio, size_t data_size);
