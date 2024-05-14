@@ -2141,15 +2141,25 @@ static int mcp251xfd_probe(struct spi_device *spi)
 	if (err)
 		goto out_free_candev;
 
+	priv->tx_work_obj = NULL;
+	priv->wq = alloc_workqueue("mcp251xfd_wq", WQ_FREEZABLE, 0);
+	if (!priv->wq) {
+		err = -ENOMEM;
+		goto out_can_rx_offload_del;
+	}
+	INIT_WORK(&priv->tx_work, mcp251xfd_tx_obj_write_sync);
+
 	err = mcp251xfd_register(priv);
 	if (err) {
 		dev_err_probe(&spi->dev, err, "Failed to detect %s.\n",
 			      mcp251xfd_get_model_str(priv));
-		goto out_can_rx_offload_del;
+		goto out_can_free_wq;
 	}
 
 	return 0;
 
+ out_can_free_wq:
+	destroy_workqueue(priv->wq);
  out_can_rx_offload_del:
 	can_rx_offload_del(&priv->offload);
  out_free_candev:
@@ -2165,6 +2175,7 @@ static void mcp251xfd_remove(struct spi_device *spi)
 	struct mcp251xfd_priv *priv = spi_get_drvdata(spi);
 	struct net_device *ndev = priv->ndev;
 
+	destroy_workqueue(priv->wq);
 	can_rx_offload_del(&priv->offload);
 	mcp251xfd_unregister(priv);
 	spi->max_speed_hz = priv->spi_max_speed_hz_orig;
