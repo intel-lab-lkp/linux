@@ -1773,6 +1773,8 @@ struct intel_dp {
 	u32 aux_busy_last_status;
 	u8 train_set[4];
 
+	struct delayed_work check_link_work;
+
 	struct intel_pps pps;
 
 	bool is_mst;
