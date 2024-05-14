@@ -1164,10 +1164,8 @@ static int intel_dp_get_link_train_fallback_values(struct intel_dp *intel_dp,
 		new_link_rate = intel_dp_max_common_rate(intel_dp);
 	}
 
-	if (new_lane_count < 0) {
-		drm_err(&i915->drm, "Link Training Unsuccessful\n");
+	if (new_lane_count < 0)
 		return -1;
-	}
 
 	if (intel_dp_is_edp(intel_dp) &&
 	    !intel_dp_can_link_train_fallback_for_edp(intel_dp, new_link_rate, new_lane_count)) {
@@ -1186,14 +1184,14 @@ static int intel_dp_get_link_train_fallback_values(struct intel_dp *intel_dp,
 	return 0;
 }
 
-static void intel_dp_schedule_fallback_link_training(struct intel_dp *intel_dp,
+static bool intel_dp_schedule_fallback_link_training(struct intel_dp *intel_dp,
 						     const struct intel_crtc_state *crtc_state)
 {
 	struct intel_encoder *encoder = &dp_to_dig_port(intel_dp)->base;
 
 	if (!intel_digital_port_connected(&dp_to_dig_port(intel_dp)->base)) {
 		lt_dbg(intel_dp, DP_PHY_DPRX, "Link Training failed on disconnected sink.\n");
-		return;
+		return true;
 	}
 
 	if (intel_dp->hobl_active) {
@@ -1201,11 +1199,13 @@ static void intel_dp_schedule_fallback_link_training(struct intel_dp *intel_dp,
 		       "Link Training failed with HOBL active, not enabling it from now on\n");
 		intel_dp->hobl_failed = true;
 	} else if (intel_dp_get_link_train_fallback_values(intel_dp, crtc_state)) {
-		return;
+		return false;
 	}
 
 	/* Schedule a Hotplug Uevent to userspace to start modeset */
 	intel_dp_queue_modeset_retry_for_link(encoder);
+
+	return true;
 }
 
 /* Perform the link training on all LTTPRs and the DPRX on a link. */
@@ -1513,7 +1513,15 @@ void intel_dp_start_link_train(struct intel_dp *intel_dp,
 		return;
 	}
 
-	intel_dp_schedule_fallback_link_training(intel_dp, crtc_state);
+	if (intel_dp_schedule_fallback_link_training(intel_dp, crtc_state))
+		return;
+
+	intel_dp->link_train.retrain_disabled = true;
+
+	if (!passed)
+		lt_err(intel_dp, DP_PHY_DPRX, "Can't reduce link training parameters after failure\n");
+	else
+		lt_dbg(intel_dp, DP_PHY_DPRX, "Can't reduce link training parameters after forced failure\n");
 }
 
 void intel_dp_128b132b_sdp_crc16(struct intel_dp *intel_dp,
