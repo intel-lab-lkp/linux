@@ -790,21 +790,15 @@ void handle_edge_irq(struct irq_desc *desc)
 
 	desc->istate &= ~(IRQS_REPLAY | IRQS_WAITING);
 
-	if (!irq_may_run(desc)) {
-		desc->istate |= IRQS_PENDING;
-		mask_ack_irq(desc);
-		goto out_unlock;
-	}
+	if (!irq_may_run(desc))
+		goto out_mask_ack;
 
 	/*
 	 * If its disabled or no action available then mask it and get
 	 * out of here.
 	 */
-	if (irqd_irq_disabled(&desc->irq_data) || !desc->action) {
-		desc->istate |= IRQS_PENDING;
-		mask_ack_irq(desc);
-		goto out_unlock;
-	}
+	if (irqd_irq_disabled(&desc->irq_data) || !desc->action)
+		goto out_mask_ack;
 
 	kstat_incr_irqs_this_cpu(desc);
 
@@ -833,6 +827,9 @@ void handle_edge_irq(struct irq_desc *desc)
 	} while ((desc->istate & IRQS_PENDING) &&
 		 !irqd_irq_disabled(&desc->irq_data));
 
+out_mask_ack:
+	desc->istate |= IRQS_PENDING;
+	mask_ack_irq(desc);
 out_unlock:
 	raw_spin_unlock(&desc->lock);
 }
