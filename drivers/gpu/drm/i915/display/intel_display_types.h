@@ -1769,6 +1769,7 @@ struct intel_dp {
 		/* Sequential failures after a passing LT */
 		int seq_failures;
 		int force_failure;
+		bool force_retrain;
 	} link_train;
 	bool reset_link_params;
 	int mso_link_count;
