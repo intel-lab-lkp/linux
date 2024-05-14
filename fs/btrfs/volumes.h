@@ -554,6 +554,26 @@ struct btrfs_io_context {
 	struct btrfs_io_stripe stripes[];
 };
 
+static inline void btrfs_dump_bioc(const struct btrfs_io_context *bioc)
+{
+	if (!IS_ENABLED(CONFIG_BTRFS_ASSERT))
+		return;
+
+	if (unlikely(!bioc)) {
+		pr_err("bioc=NULL\n");
+		return;
+	}
+	pr_info("bioc logical=%llu full_stripe=%llu size=%llu map_type=0x%llx mirror=%u replace_nr_stripes=%u replace_stripe_src=%d num_stripes=%u\n",
+		bioc->logical, bioc->full_stripe_logical, bioc->size,
+		bioc->map_type, bioc->mirror_num, bioc->replace_nr_stripes,
+		bioc->replace_stripe_src, bioc->num_stripes);
+	for (int i = 0; i < bioc->num_stripes; i++) {
+		pr_info("    nr=%d devid=%llu physical=%llu\n",
+			i, bioc->stripes[i].dev->devid,
+			bioc->stripes[i].physical);
+	}
+}
+
 struct btrfs_device_info {
 	struct btrfs_device *dev;
 	u64 dev_offset;
