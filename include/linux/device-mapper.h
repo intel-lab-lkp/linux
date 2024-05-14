@@ -169,6 +169,7 @@ struct dm_dev {
 	struct dax_device *dax_dev;
 	blk_mode_t mode;
 	char name[16];
+	struct list_head targets;
 };
 
 /*
@@ -297,6 +298,8 @@ struct target_type {
 struct dm_target {
 	struct dm_table *table;
 	struct target_type *type;
+
+	struct list_head list;
 
 	/* target limits */
 	sector_t begin;

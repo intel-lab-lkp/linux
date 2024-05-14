@@ -741,6 +741,8 @@ int dm_table_add_target(struct dm_table *t, const char *type,
 	if (ti->flush_pass_around == 0)
 		t->flush_pass_around = 0;
 
+	INIT_LIST_HEAD(&ti->list);
+
 	return 0;
 
  bad:
@@ -2131,6 +2133,25 @@ void dm_table_postsuspend_targets(struct dm_table *t)
 	suspend_targets(t, POSTSUSPEND);
 }
 
+static int dm_link_dev_to_target(struct dm_target *ti, struct dm_dev *dev,
+		sector_t start, sector_t len, void *data)
+{
+	struct list_head *targets = &dev->targets;
+	struct dm_target *pti;
+
+	if (!list_empty(targets)) {
+		list_for_each_entry(pti, targets, list) {
+			if (pti->type == ti->type)
+				return 0;
+		}
+	}
+
+	if (list_empty(&ti->list))
+		list_add_tail(&ti->list, targets);
+
+	return 0;
+}
+
 int dm_table_resume_targets(struct dm_table *t)
 {
 	unsigned int i;
@@ -2157,6 +2178,21 @@ int dm_table_resume_targets(struct dm_table *t)
 
 		if (ti->type->resume)
 			ti->type->resume(ti);
+	}
+
+	if (t->flush_pass_around) {
+		struct list_head *devices = &t->devices;
+		struct dm_dev_internal *dd;
+
+		list_for_each_entry(dd, devices, list)
+			INIT_LIST_HEAD(&dd->dm_dev->targets);
+
+		for (i = 0; i < t->num_targets; i++) {
+			struct dm_target *ti = dm_table_get_target(t, i);
+
+			if (ti->type->iterate_devices)
+				ti->type->iterate_devices(ti, dm_link_dev_to_target, NULL);
+		}
 	}
 
 	return 0;
