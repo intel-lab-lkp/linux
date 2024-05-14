@@ -4,9 +4,9 @@
  *
  * Earliest Deadline First (EDF) + Constant Bandwidth Server (CBS).
  *
- * Tasks that periodically executes their instances for less than their
+ * Tasks that periodically execute their instances for less than their
  * runtime won't miss any of their deadlines.
- * Tasks that are not periodic or sporadic or that tries to execute more
+ * Tasks that are not periodic or sporadic or that try to execute more
  * than their reserved bandwidth will be slowed down (and may potentially
  * miss some of their deadlines), and won't affect any other task.
  *
@@ -816,16 +816,16 @@ static inline void setup_new_dl_entity(struct sched_dl_entity *dl_se)
  * exhausting its runtime.
  *
  * Here we are interested in making runtime overrun possible, but we do
- * not want a entity which is misbehaving to affect the scheduling of all
+ * not want an entity which is misbehaving to affect the scheduling of all
  * other entities.
  * Therefore, a budgeting strategy called Constant Bandwidth Server (CBS)
  * is used, in order to confine each entity within its own bandwidth.
  *
  * This function deals exactly with that, and ensures that when the runtime
- * of a entity is replenished, its deadline is also postponed. That ensures
+ * of an entity is replenished, its deadline is also postponed. That ensures
  * the overrunning entity can't interfere with other entity in the system and
- * can't make them miss their deadlines. Reasons why this kind of overruns
- * could happen are, typically, a entity voluntarily trying to overcome its
+ * can't make them miss their deadlines. Reasons why this kind of overrun
+ * could happen are, typically, an entity voluntarily trying to overcome its
  * runtime, or it just underestimated it during sched_setattr().
  */
 static void replenish_dl_entity(struct sched_dl_entity *dl_se)
@@ -860,7 +860,7 @@ static void replenish_dl_entity(struct sched_dl_entity *dl_se)
 	 * At this point, the deadline really should be "in
 	 * the future" with respect to rq->clock. If it's
 	 * not, we are, for some reason, lagging too much!
-	 * Anyway, after having warn userspace abut that,
+	 * Anyway, after having warned userspace about that,
 	 * we still try to keep the things running by
 	 * resetting the deadline and the budget of the
 	 * entity.
@@ -896,8 +896,8 @@ static void replenish_dl_entity(struct sched_dl_entity *dl_se)
  *
  * IOW we can't recycle current parameters.
  *
- * Notice that the bandwidth check is done against the deadline. For
- * task with deadline equal to period this is the same of using
+ * Notice that the bandwidth check is done against the deadline. For a
+ * task with deadline equal to period this is the same as using
  * dl_period instead of dl_deadline in the equation above.
  */
 static bool dl_entity_overflow(struct sched_dl_entity *dl_se, u64 t)
@@ -930,8 +930,8 @@ static bool dl_entity_overflow(struct sched_dl_entity *dl_se, u64 t)
 }
 
 /*
- * Revised wakeup rule [1]: For self-suspending tasks, rather then
- * re-initializing task's runtime and deadline, the revised wakeup
+ * Revised wakeup rule [1]: For self-suspending tasks, rather than
+ * re-initializing the task's runtime and deadline, the revised wakeup
  * rule adjusts the task's runtime to avoid the task to overrun its
  * density.
  *
@@ -941,7 +941,7 @@ static bool dl_entity_overflow(struct sched_dl_entity *dl_se, u64 t)
  * Therefore, runtime can be adjusted to:
  *     runtime = (dl_runtime / dl_deadline) * (deadline - t)
  *
- * In such way that runtime will be equal to the maximum density
+ * This way the runtime will be equal to the maximum density
  * the task can use without breaking any rule.
  *
  * [1] Luca Abeni, Giuseppe Lipari, and Juri Lelli. 2015. Constant
@@ -987,9 +987,9 @@ static inline bool dl_is_implicit(struct sched_dl_entity *dl_se)
  * When the task is starting a new period, the Original CBS is used. In this
  * case, the runtime is replenished and a new absolute deadline is set.
  *
- * When a task is queued before the begin of the next period, using the
- * remaining runtime and deadline could make the entity to overflow, see
- * dl_entity_overflow() to find more about runtime overflow. When such case
+ * When a task is queued before the beginning of the next period, using the
+ * remaining runtime and deadline could make the entity overflow, see
+ * dl_entity_overflow() to find more about runtime overflow. When such a case
  * is detected, the runtime and deadline need to be updated.
  *
  * If the task has an implicit deadline, i.e., deadline == period, the Original
@@ -1002,7 +1002,7 @@ static inline bool dl_is_implicit(struct sched_dl_entity *dl_se)
  * runtime/deadline in a period. With deadline < period, the task would
  * overrun the runtime/period allowed bandwidth, breaking the admission test.
  *
- * In order to prevent this misbehave, the Revisited CBS is used for
+ * In order to prevent this misbehaviour, the Revisited CBS is used for
  * constrained deadline tasks when a runtime overflow is detected. In the
  * Revisited CBS, rather than replenishing & setting a new absolute deadline,
  * the remaining runtime of the task is reduced to avoid runtime overflow.
