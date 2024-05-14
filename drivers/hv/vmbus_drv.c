@@ -36,6 +36,7 @@
 #include <linux/syscore_ops.h>
 #include <linux/dma-map-ops.h>
 #include <linux/pci.h>
+#include <linux/of_irq.h>
 #include <clocksource/hyperv_timer.h>
 #include <asm/mshyperv.h>
 #include "hyperv_vmbus.h"
@@ -2316,6 +2317,34 @@ static int vmbus_acpi_add(struct platform_device *pdev)
 }
 #endif
 
+static int __maybe_unused vmbus_of_set_irq(struct device_node *np)
+{
+	struct irq_desc *desc;
+	int irq;
+
+	irq = of_irq_get(np, 0);
+	if (irq == 0) {
+		pr_err("VMBus interrupt mapping failure\n");
+		return -EINVAL;
+	}
+	if (irq < 0) {
+		pr_err("VMBus interrupt data can't be read from DeviceTree, error %d\n", irq);
+		return irq;
+	}
+
+	desc = irq_to_desc(irq);
+	if (!desc) {
+		pr_err("VMBus interrupt description can't be found for virq %d\n", irq);
+		return -ENODEV;
+	}
+
+	vmbus_irq = irq;
+	vmbus_interrupt = desc->irq_data.hwirq;
+	pr_debug("VMBus virq %d, hwirq %d\n", vmbus_irq, vmbus_interrupt);
+
+	return 0;
+}
+
 static int vmbus_device_add(struct platform_device *pdev)
 {
 	struct resource **cur_res = &hyperv_mmio;
@@ -2324,11 +2353,19 @@ static int vmbus_device_add(struct platform_device *pdev)
 	struct device_node *np = pdev->dev.of_node;
 	int ret;
 
+	pr_debug("VMBus is present in DeviceTree\n");
+
 	hv_dev = &pdev->dev;
 
 	ret = of_range_parser_init(&parser, np);
 	if (ret)
 		return ret;
+
+#ifndef HYPERVISOR_CALLBACK_VECTOR
+	ret = vmbus_of_set_irq(np);
+	if (ret)
+		return ret;
+#endif
 
 	for_each_of_range(&parser, &range) {
 		struct resource *res;
