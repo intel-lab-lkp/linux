@@ -1763,6 +1763,8 @@ struct intel_dp {
 		int max_lane_count;
 		/* Max rate for the current link */
 		int max_rate;
+		/* Sequential failures after a passing LT */
+		int seq_failures;
 	} link_train;
 	bool reset_link_params;
 	int mso_link_count;
