@@ -1109,11 +1109,37 @@ static bool intel_dp_can_link_train_fallback_for_edp(struct intel_dp *intel_dp,
 	return true;
 }
 
+static int reduce_link_rate(struct intel_dp *intel_dp, int current_rate)
+{
+	int rate_index;
+	int new_rate;
+
+	rate_index = intel_dp_rate_index(intel_dp->common_rates,
+					 intel_dp->num_common_rates,
+					 current_rate);
+
+	if (rate_index <= 0)
+		return -1;
+
+	new_rate = intel_dp_common_rate(intel_dp, rate_index - 1);
+
+	return new_rate;
+}
+
+static int reduce_lane_count(struct intel_dp *intel_dp, int current_lane_count)
+{
+	if (current_lane_count > 1)
+		return current_lane_count >> 1;
+
+	return -1;
+}
+
 static int intel_dp_get_link_train_fallback_values(struct intel_dp *intel_dp,
-						   int link_rate, u8 lane_count)
+						   const struct intel_crtc_state *crtc_state)
 {
 	struct drm_i915_private *i915 = dp_to_i915(intel_dp);
-	int index;
+	int new_link_rate;
+	int new_lane_count;
 
 	/*
 	 * TODO: Enable fallback on MST links once MST link compute can handle
@@ -1131,35 +1157,31 @@ static int intel_dp_get_link_train_fallback_values(struct intel_dp *intel_dp,
 		return 0;
 	}
 
-	index = intel_dp_rate_index(intel_dp->common_rates,
-				    intel_dp->num_common_rates,
-				    link_rate);
-	if (index > 0) {
-		if (intel_dp_is_edp(intel_dp) &&
-		    !intel_dp_can_link_train_fallback_for_edp(intel_dp,
-							      intel_dp_common_rate(intel_dp, index - 1),
-							      lane_count)) {
-			drm_dbg_kms(&i915->drm,
-				    "Retrying Link training for eDP with same parameters\n");
-			return 0;
-		}
-		intel_dp->link_train.max_rate = intel_dp_common_rate(intel_dp, index - 1);
-		intel_dp->link_train.max_lane_count = lane_count;
-	} else if (lane_count > 1) {
-		if (intel_dp_is_edp(intel_dp) &&
-		    !intel_dp_can_link_train_fallback_for_edp(intel_dp,
-							      intel_dp_max_common_rate(intel_dp),
-							      lane_count >> 1)) {
-			drm_dbg_kms(&i915->drm,
-				    "Retrying Link training for eDP with same parameters\n");
-			return 0;
-		}
-		intel_dp->link_train.max_rate = intel_dp_max_common_rate(intel_dp);
-		intel_dp->link_train.max_lane_count = lane_count >> 1;
-	} else {
+	new_lane_count = crtc_state->lane_count;
+	new_link_rate = reduce_link_rate(intel_dp, crtc_state->port_clock);
+	if (new_link_rate < 0) {
+		new_lane_count = reduce_lane_count(intel_dp, crtc_state->lane_count);
+		new_link_rate = intel_dp_max_common_rate(intel_dp);
+	}
+
+	if (new_lane_count < 0) {
 		drm_err(&i915->drm, "Link Training Unsuccessful\n");
 		return -1;
 	}
+
+	if (intel_dp_is_edp(intel_dp) &&
+	    !intel_dp_can_link_train_fallback_for_edp(intel_dp, new_link_rate, new_lane_count)) {
+		drm_dbg_kms(&i915->drm,
+			    "Retrying Link training for eDP with same parameters\n");
+		return 0;
+	}
+
+	drm_dbg_kms(&i915->drm, "Reducing link parameters from %dx%d to %dx%d\n",
+		    crtc_state->port_clock, crtc_state->lane_count,
+		    new_link_rate, new_lane_count);
+
+	intel_dp->link_train.max_rate = new_link_rate;
+	intel_dp->link_train.max_lane_count = new_lane_count;
 
 	return 0;
 }
@@ -1178,9 +1200,7 @@ static void intel_dp_schedule_fallback_link_training(struct intel_dp *intel_dp,
 		lt_dbg(intel_dp, DP_PHY_DPRX,
 		       "Link Training failed with HOBL active, not enabling it from now on\n");
 		intel_dp->hobl_failed = true;
-	} else if (intel_dp_get_link_train_fallback_values(intel_dp,
-							   crtc_state->port_clock,
-							   crtc_state->lane_count)) {
+	} else if (intel_dp_get_link_train_fallback_values(intel_dp, crtc_state)) {
 		return;
 	}
 
