@@ -148,7 +148,6 @@ int nand_onfi_detect(struct nand_chip *chip)
 	struct nand_memory_organization *memorg;
 	struct nand_onfi_params *p = NULL, *pbuf;
 	struct onfi_params *onfi;
-	bool use_datain = false;
 	int onfi_version = 0;
 	char id[4];
 	int i, ret, val;
@@ -166,25 +165,11 @@ int nand_onfi_detect(struct nand_chip *chip)
 	if (!pbuf)
 		return -ENOMEM;
 
-	if (!nand_has_exec_op(chip) || chip->controller->supported_op.data_only_read)
-		use_datain = true;
+	ret = nand_read_param_page_op(chip, 0, pbuf, sizeof(*pbuf) * ONFI_PARAM_PAGES);
+	if (ret)
+		return ret;
 
 	for (i = 0; i < ONFI_PARAM_PAGES; i++) {
-		if (!i)
-			ret = nand_read_param_page_op(chip, 0, &pbuf[i],
-						      sizeof(*pbuf));
-		else if (use_datain)
-			ret = nand_read_data_op(chip, &pbuf[i], sizeof(*pbuf),
-						true, false);
-		else
-			ret = nand_change_read_column_op(chip, sizeof(*pbuf) * i,
-							 &pbuf[i], sizeof(*pbuf),
-							 true);
-		if (ret) {
-			ret = 0;
-			goto free_onfi_param_page;
-		}
-
 		crc = onfi_crc16(ONFI_CRC_BASE, (u8 *)&pbuf[i], 254);
 		if (crc == le16_to_cpu(pbuf[i].crc)) {
 			p = &pbuf[i];
