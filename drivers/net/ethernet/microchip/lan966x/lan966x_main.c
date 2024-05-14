@@ -479,8 +479,10 @@ static int lan966x_port_hwtstamp_set(struct net_device *dev,
 		return err;
 
 	if (cfg->source == HWTSTAMP_SOURCE_NETDEV) {
-		if (!port->lan966x->ptp)
+		if (!port->lan966x->ptp) {
+			lan966x_ptp_del_traps(port);
 			return -EOPNOTSUPP;
+		}
 
 		err = lan966x_ptp_hwtstamp_set(port, cfg, extack);
 		if (err) {
