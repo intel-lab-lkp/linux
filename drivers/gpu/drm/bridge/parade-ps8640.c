@@ -663,7 +663,6 @@ static int ps8640_probe(struct i2c_client *client)
 		return PTR_ERR(ps_bridge->gpio_reset);
 
 	ps_bridge->bridge.funcs = &ps8640_bridge_funcs;
-	ps_bridge->bridge.of_node = dev->of_node;
 	ps_bridge->bridge.type = DRM_MODE_CONNECTOR_eDP;
 
 	/*
