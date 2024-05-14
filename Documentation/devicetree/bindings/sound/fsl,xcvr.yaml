@@ -22,6 +22,7 @@ properties:
     enum:
       - fsl,imx8mp-xcvr
       - fsl,imx93-xcvr
+      - fsl,imx95-xcvr
 
   reg:
     items:
@@ -44,18 +45,12 @@ properties:
     minItems: 1
 
   clocks:
-    items:
-      - description: Peripheral clock
-      - description: PHY clock
-      - description: SPBA clock
-      - description: PLL clock
+    minItems: 4
+    maxItems: 6
 
   clock-names:
-    items:
-      - const: ipg
-      - const: phy
-      - const: spba
-      - const: pll_ipg
+    minItems: 4
+    maxItems: 6
 
   dmas:
     items:
@@ -97,6 +92,46 @@ allOf:
       properties:
         interrupts:
           maxItems: 1
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - fsl,imx95-xcvr
+    then:
+      properties:
+        clocks:
+          items:
+            - description: Peripheral clock
+            - description: PHY clock
+            - description: SPBA clock
+            - description: PLL clock
+            - description: PLL clock source for 8kHz series
+            - description: PLL clock source for 11kHz series
+          minItems: 4
+        clock-names:
+          items:
+            - const: ipg
+            - const: phy
+            - const: spba
+            - const: pll_ipg
+            - const: pll8k
+            - const: pll11k
+          minItems: 4
+    else:
+      properties:
+        clocks:
+          items:
+            - description: Peripheral clock
+            - description: PHY clock
+            - description: SPBA clock
+            - description: PLL clock
+        clock-names:
+          items:
+            - const: ipg
+            - const: phy
+            - const: spba
+            - const: pll_ipg
 
 additionalProperties: false
 
