@@ -1316,6 +1316,215 @@ static const struct file_operations i915_dsc_bpc_fops = {
 	.write = i915_dsc_bpc_write
 };
 
+static struct intel_dp *intel_connector_to_intel_dp(struct intel_connector *connector)
+{
+	if (connector->mst_port)
+		return connector->mst_port;
+	else
+		return enc_to_intel_dp(intel_attached_encoder(connector));
+}
+
+static int i915_dp_requested_link_rate_show(struct seq_file *m, void *data)
+{
+	struct intel_connector *connector = to_intel_connector(m->private);
+	struct drm_i915_private *i915 = to_i915(connector->base.dev);
+	struct intel_dp *intel_dp;
+	int ret;
+	int i;
+
+	ret = drm_modeset_lock_single_interruptible(&i915->drm.mode_config.connection_mutex);
+	if (ret)
+		return ret;
+
+	intel_dp = intel_connector_to_intel_dp(connector);
+
+	seq_printf(m, "%sauto%s",
+		   intel_dp->requested_link_rate == 0 ? "[" : "",
+		   intel_dp->requested_link_rate == 0 ? "]" : "");
+
+	for (i = 0; i < intel_dp->num_source_rates; i++)
+		seq_printf(m, " %s%d%s%s",
+			   intel_dp->source_rates[i] == intel_dp->requested_link_rate ? "[" : "",
+			   intel_dp->source_rates[i],
+			   intel_dp->link_trained &&
+				intel_dp->source_rates[i] == intel_dp->link_rate ? "*" : "",
+			   intel_dp->source_rates[i] == intel_dp->requested_link_rate ? "]" : "");
+
+	drm_modeset_unlock(&i915->drm.mode_config.connection_mutex);
+
+	seq_putc(m, '\n');
+
+	return 0;
+}
+
+static int parse_link_rate(struct intel_dp *intel_dp, const char __user *ubuf, size_t len)
+{
+	char *kbuf;
+	const char *p;
+	int rate;
+	int ret = 0;
+
+	kbuf = memdup_user_nul(ubuf, len);
+	if (IS_ERR(kbuf))
+		return PTR_ERR(kbuf);
+
+	p = strim(kbuf);
+
+	if (!strcmp(p, "auto")) {
+		rate = 0;
+	} else {
+		ret = kstrtoint(p, 0, &rate);
+		if (ret < 0)
+			goto out_free;
+
+		if (intel_dp_rate_index(intel_dp->source_rates,
+					intel_dp->num_source_rates,
+					rate) < 0)
+			ret = -EINVAL;
+	}
+
+out_free:
+	kfree(kbuf);
+
+	return ret < 0 ? ret : rate;
+}
+
+static ssize_t i915_dp_requested_link_rate_write(struct file *file,
+						 const char __user *ubuf,
+						 size_t len, loff_t *offp)
+{
+	struct seq_file *m = file->private_data;
+	struct intel_connector *connector = to_intel_connector(m->private);
+	struct drm_i915_private *i915 = to_i915(connector->base.dev);
+	struct intel_dp *intel_dp = intel_connector_to_intel_dp(connector);
+	int rate;
+	int ret;
+
+	ret = drm_modeset_lock_single_interruptible(&i915->drm.mode_config.connection_mutex);
+	if (ret)
+		return ret;
+
+	intel_dp = intel_connector_to_intel_dp(connector);
+
+	rate = parse_link_rate(intel_dp, ubuf, len);
+	if (rate < 0) {
+		drm_modeset_unlock(&i915->drm.mode_config.connection_mutex);
+
+		return rate;
+	}
+
+	intel_dp_reset_link_train_params(intel_dp);
+	intel_dp->requested_link_rate = rate;
+
+	drm_modeset_unlock(&i915->drm.mode_config.connection_mutex);
+
+	*offp += len;
+
+	return len;
+}
+DEFINE_SHOW_STORE_ATTRIBUTE(i915_dp_requested_link_rate);
+
+static int i915_dp_requested_lane_count_show(struct seq_file *m, void *data)
+{
+	struct intel_connector *connector = to_intel_connector(m->private);
+	struct drm_i915_private *i915 = to_i915(connector->base.dev);
+	struct intel_dp *intel_dp;
+	int ret;
+	int i;
+
+	ret = drm_modeset_lock_single_interruptible(&i915->drm.mode_config.connection_mutex);
+	if (ret)
+		return ret;
+
+	intel_dp = intel_connector_to_intel_dp(connector);
+
+	seq_printf(m, "%sauto%s",
+		   intel_dp->requested_lane_count == 0 ? "[" : "",
+		   intel_dp->requested_lane_count == 0 ? "]" : "");
+
+	for (i = 1; i <= 4; i <<= 1)
+		seq_printf(m, " %s%d%s%s",
+			   i == intel_dp->requested_lane_count ? "[" : "",
+			   i,
+			   intel_dp->link_trained &&
+				i == intel_dp->lane_count ? "*" : "",
+			   i == intel_dp->requested_lane_count ? "]" : "");
+
+	drm_modeset_unlock(&i915->drm.mode_config.connection_mutex);
+
+	seq_putc(m, '\n');
+
+	return 0;
+}
+
+static int parse_lane_count(const char __user *ubuf, size_t len)
+{
+	char *kbuf;
+	const char *p;
+	int lane_count;
+	int ret = 0;
+
+	kbuf = memdup_user_nul(ubuf, len);
+	if (IS_ERR(kbuf))
+		return PTR_ERR(kbuf);
+
+	p = strim(kbuf);
+
+	if (!strcmp(p, "auto")) {
+		lane_count = 0;
+	} else {
+		ret = kstrtoint(p, 0, &lane_count);
+		if (ret < 0)
+			goto out_free;
+
+		switch (lane_count) {
+		case 1:
+		case 2:
+		case 4:
+			break;
+		default:
+			ret = -EINVAL;
+		}
+	}
+
+out_free:
+	kfree(kbuf);
+
+	return ret < 0 ? ret : lane_count;
+}
+
+static ssize_t i915_dp_requested_lane_count_write(struct file *file,
+						  const char __user *ubuf,
+						  size_t len, loff_t *offp)
+{
+	struct seq_file *m = file->private_data;
+	struct intel_connector *connector = to_intel_connector(m->private);
+	struct drm_i915_private *i915 = to_i915(connector->base.dev);
+	struct intel_dp *intel_dp;
+	int lane_count;
+	int ret;
+
+	lane_count = parse_lane_count(ubuf, len);
+	if (lane_count < 0)
+		return lane_count;
+
+	ret = drm_modeset_lock_single_interruptible(&i915->drm.mode_config.connection_mutex);
+	if (ret)
+		return ret;
+
+	intel_dp = intel_connector_to_intel_dp(connector);
+
+	intel_dp_reset_link_train_params(intel_dp);
+	intel_dp->requested_lane_count = lane_count;
+
+	drm_modeset_unlock(&i915->drm.mode_config.connection_mutex);
+
+	*offp += len;
+
+	return len;
+}
+DEFINE_SHOW_STORE_ATTRIBUTE(i915_dp_requested_lane_count);
+
 static int i915_dsc_output_format_show(struct seq_file *m, void *data)
 {
 	struct intel_connector *connector = m->private;
@@ -1521,6 +1730,15 @@ void intel_connector_debugfs_add(struct intel_connector *connector)
 	    connector_type == DRM_MODE_CONNECTOR_HDMIB) {
 		debugfs_create_file("i915_hdcp_sink_capability", 0444, root,
 				    connector, &i915_hdcp_sink_capability_fops);
+	}
+
+	if (connector_type == DRM_MODE_CONNECTOR_DisplayPort ||
+	    connector_type == DRM_MODE_CONNECTOR_eDP) {
+		debugfs_create_file("i915_dp_link_rate", 0644, root,
+				    connector, &i915_dp_requested_link_rate_fops);
+
+		debugfs_create_file("i915_dp_lane_count", 0644, root,
+				    connector, &i915_dp_requested_lane_count_fops);
 	}
 
 	if (DISPLAY_VER(i915) >= 11 &&

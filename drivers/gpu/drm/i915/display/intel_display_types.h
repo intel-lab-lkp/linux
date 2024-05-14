@@ -1758,6 +1758,8 @@ struct intel_dp {
 	/* intersection of source and sink rates */
 	int num_common_rates;
 	int common_rates[DP_MAX_SUPPORTED_RATES];
+	int requested_link_rate;
+	int requested_lane_count;
 	struct {
 		/* Max lane count for the current link */
 		int max_lane_count;

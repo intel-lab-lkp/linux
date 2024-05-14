@@ -1114,6 +1114,9 @@ static int reduce_link_rate(struct intel_dp *intel_dp, int current_rate)
 	int rate_index;
 	int new_rate;
 
+	if (intel_dp->requested_link_rate)
+		return -1;
+
 	rate_index = intel_dp_rate_index(intel_dp->common_rates,
 					 intel_dp->num_common_rates,
 					 current_rate);
@@ -1132,6 +1135,9 @@ static int reduce_link_rate(struct intel_dp *intel_dp, int current_rate)
 
 static int reduce_lane_count(struct intel_dp *intel_dp, int current_lane_count)
 {
+	if (intel_dp->requested_lane_count)
+		return -1;
+
 	if (current_lane_count > 1)
 		return current_lane_count >> 1;
 
