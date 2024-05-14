@@ -273,7 +273,7 @@ examples:
         #address-cells = <2>;
         #size-cells = <2>;
 
-        ufs@1d84000 {
+        ufshc@1d84000 {
             compatible = "qcom,sm8450-ufshc", "qcom,ufshc",
                          "jedec,ufs-2.0";
             reg = <0 0x01d84000 0 0x3000>;
