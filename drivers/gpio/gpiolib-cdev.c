@@ -20,6 +20,7 @@
 #include <linux/kfifo.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/nospec.h>
 #include <linux/overflow.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/poll.h>
@@ -2140,7 +2141,8 @@ static int lineevent_create(struct gpio_device *gdev, void __user *ip)
 	lflags = eventreq.handleflags;
 	eflags = eventreq.eventflags;
 
-	desc = gpio_device_get_desc(gdev, offset);
+	desc = gpio_device_get_desc(gdev,
+				array_index_nospec(offset, gdev->ngpio));
 	if (IS_ERR(desc))
 		return PTR_ERR(desc);
 
@@ -2447,7 +2449,8 @@ static int lineinfo_get_v1(struct gpio_chardev_data *cdev, void __user *ip,
 		return -EFAULT;
 
 	/* this doubles as a range check on line_offset */
-	desc = gpio_device_get_desc(cdev->gdev, lineinfo.line_offset);
+	desc = gpio_device_get_desc(cdev->gdev,
+				array_index_nospec(lineinfo.line_offset, cdev->gdev->ngpio));
 	if (IS_ERR(desc))
 		return PTR_ERR(desc);
 
@@ -2484,7 +2487,8 @@ static int lineinfo_get(struct gpio_chardev_data *cdev, void __user *ip,
 	if (memchr_inv(lineinfo.padding, 0, sizeof(lineinfo.padding)))
 		return -EINVAL;
 
-	desc = gpio_device_get_desc(cdev->gdev, lineinfo.offset);
+	desc = gpio_device_get_desc(cdev->gdev,
+				array_index_nospec(lineinfo.offset, cdev->gdev->ngpio));
 	if (IS_ERR(desc))
 		return PTR_ERR(desc);
 
