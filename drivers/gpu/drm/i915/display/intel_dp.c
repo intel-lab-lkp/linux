@@ -75,6 +75,7 @@
 #include "intel_hotplug_irq.h"
 #include "intel_lspcon.h"
 #include "intel_lvds.h"
+#include "intel_modeset_lock.h"
 #include "intel_panel.h"
 #include "intel_pch_display.h"
 #include "intel_pps.h"
@@ -5230,6 +5231,26 @@ int intel_dp_retrain_link(struct intel_encoder *encoder,
 	return 0;
 }
 
+static void intel_dp_link_check_work_fn(struct work_struct *work)
+{
+	struct intel_dp *intel_dp =
+		container_of(work, typeof(*intel_dp), check_link_work.work);
+	struct intel_encoder *encoder = &dp_to_dig_port(intel_dp)->base;
+	struct drm_modeset_acquire_ctx ctx;
+	int ret;
+
+	intel_modeset_lock_ctx_retry(&ctx, NULL, 0, ret)
+		ret = intel_dp_retrain_link(encoder, &ctx);
+}
+
+void intel_dp_queue_link_check(struct intel_dp *intel_dp, int delay_ms)
+{
+	struct drm_i915_private *i915 = dp_to_i915(intel_dp);
+
+	mod_delayed_work(i915->unordered_wq,
+			 &intel_dp->check_link_work, msecs_to_jiffies(delay_ms));
+}
+
 static int intel_dp_prep_phy_test(struct intel_dp *intel_dp,
 				  struct drm_modeset_acquire_ctx *ctx,
 				  u8 *pipe_mask)
@@ -6000,6 +6021,8 @@ void intel_dp_encoder_flush_work(struct drm_encoder *encoder)
 	struct intel_digital_port *dig_port = enc_to_dig_port(to_intel_encoder(encoder));
 	struct intel_dp *intel_dp = &dig_port->dp;
 
+	cancel_delayed_work_sync(&intel_dp->check_link_work);
+
 	intel_dp_mst_encoder_cleanup(dig_port);
 
 	intel_dp_tunnel_destroy(intel_dp);
@@ -6609,6 +6632,7 @@ intel_dp_init_connector(struct intel_digital_port *dig_port,
 
 	/* Initialize the work for modeset in case of link train failure */
 	intel_dp_init_modeset_retry_work(intel_connector);
+	INIT_DELAYED_WORK(&intel_dp->check_link_work, intel_dp_link_check_work_fn);
 
 	if (drm_WARN(dev, dig_port->max_lanes < 1,
 		     "Not enough lanes (%d) for DP on [ENCODER:%d:%s]\n",
