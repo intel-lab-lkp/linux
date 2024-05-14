@@ -15,7 +15,8 @@
 
 #include <dt-bindings/net/ti-dp83869.h>
 
-#define DP83869_PHY_ID		0x2000a0f1
+#define DP83869REV1_PHY_ID	0x2000a0f1
+#define DP83869REV3_PHY_ID	0x2000a0f3
 #define DP83561_PHY_ID		0x2000a1a4
 #define DP83869_DEVADDR		0x1f
 
@@ -909,14 +910,16 @@ static int dp83869_phy_reset(struct phy_device *phydev)
 }
 
 static struct phy_driver dp83869_driver[] = {
-	DP83869_PHY_DRIVER(DP83869_PHY_ID, "TI DP83869"),
+	DP83869_PHY_DRIVER(DP83869REV1_PHY_ID, "TI DP83869 Rev. 1"),
+	DP83869_PHY_DRIVER(DP83869REV3_PHY_ID, "TI DP83869 Rev. 3"),
 	DP83869_PHY_DRIVER(DP83561_PHY_ID, "TI DP83561-SP"),
 
 };
 module_phy_driver(dp83869_driver);
 
 static struct mdio_device_id __maybe_unused dp83869_tbl[] = {
-	{ PHY_ID_MATCH_MODEL(DP83869_PHY_ID) },
+	{ PHY_ID_MATCH_MODEL(DP83869REV1_PHY_ID) },
+	{ PHY_ID_MATCH_MODEL(DP83869REV3_PHY_ID) },
 	{ PHY_ID_MATCH_MODEL(DP83561_PHY_ID) },
 	{ }
 };
