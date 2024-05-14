@@ -2997,6 +2997,9 @@ void intel_dp_reset_link_train_params(struct intel_dp *intel_dp)
 	intel_dp->link_train.max_lane_count = intel_dp_max_common_lane_count(intel_dp);
 	intel_dp->link_train.max_rate = intel_dp_max_common_rate(intel_dp);
 	intel_dp->link_train.retrain_disabled = false;
+	intel_dp->link_train.train_count = 0;
+	intel_dp->link_train.retrain_count = 0;
+	intel_dp->link_train.all_failures = 0;
 	intel_dp->link_train.seq_failures = 0;
 }
 
@@ -5290,8 +5293,10 @@ static int intel_dp_retrain_link(struct intel_encoder *encoder,
 	}
 
 out:
-	if (ret != -EDEADLK)
+	if (ret != -EDEADLK) {
+		intel_dp->link_train.retrain_count++;
 		intel_dp->link_train.force_retrain = false;
+	}
 
 	return ret;
 }
