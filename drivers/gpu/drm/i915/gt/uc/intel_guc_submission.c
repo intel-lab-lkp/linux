@@ -1800,14 +1800,37 @@ __unwind_incomplete_requests(struct intel_context *ce)
 	spin_unlock_irqrestore(&sched_engine->lock, flags);
 }
 
+static void guc_reset_context_state(struct intel_context *ce, intel_engine_mask_t stalled)
+{
+	struct i915_request *rq;
+	bool guilty = false;
+	u32 head;
+
+	if (!intel_context_is_pinned(ce))
+		return;
+
+	rq = intel_context_get_active_request(ce);
+	if (!rq) {
+		head = ce->ring->tail;
+		goto out_replay;
+	}
+
+	if (i915_request_started(rq))
+		guilty = stalled & ce->engine->mask;
+
+	GEM_BUG_ON(i915_active_is_idle(&ce->active));
+	head = intel_ring_wrap(ce->ring, rq->head);
+
+	__i915_request_reset(rq, guilty);
+	i915_request_put(rq);
+out_replay:
+	guc_reset_state(ce, head, guilty);
+}
+
 static void __guc_reset_context(struct intel_context *ce, intel_engine_mask_t stalled)
 {
-	bool guilty;
-	struct i915_request *rq;
+	struct intel_context *child;
 	unsigned long flags;
-	u32 head;
-	int i, number_children = ce->parallel.number_children;
-	struct intel_context *parent = ce;
 
 	GEM_BUG_ON(intel_context_is_child(ce));
 
@@ -1826,34 +1849,13 @@ static void __guc_reset_context(struct intel_context *ce, intel_engine_mask_t st
 	 * For each context in the relationship find the hanging request
 	 * resetting each context / request as needed
 	 */
-	for (i = 0; i < number_children + 1; ++i) {
-		if (!intel_context_is_pinned(ce))
-			goto next_context;
-
-		guilty = false;
-		rq = intel_context_get_active_request(ce);
-		if (!rq) {
-			head = ce->ring->tail;
-			goto out_replay;
-		}
-
-		if (i915_request_started(rq))
-			guilty = stalled & ce->engine->mask;
-
-		GEM_BUG_ON(i915_active_is_idle(&ce->active));
-		head = intel_ring_wrap(ce->ring, rq->head);
-
-		__i915_request_reset(rq, guilty);
-		i915_request_put(rq);
-out_replay:
-		guc_reset_state(ce, head, guilty);
-next_context:
-		if (i != number_children)
-			ce = list_next_entry(ce, parallel.child_link);
+	guc_reset_context_state(ce, stalled);
+	for_each_child(ce, child) {
+		guc_reset_context_state(child, stalled);
 	}
 
-	__unwind_incomplete_requests(parent);
-	intel_context_put(parent);
+	__unwind_incomplete_requests(ce);
+	intel_context_put(ce);
 }
 
 void wake_up_all_tlb_invalidate(struct intel_guc *guc)
