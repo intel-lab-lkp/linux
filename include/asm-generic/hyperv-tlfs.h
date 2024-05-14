@@ -76,6 +76,13 @@
 #define HV_ACCESS_TSC_INVARIANT			BIT(15)
 
 /*
+ * This synthetic register is only accessible via the HVCALL_GET_VP_REGISTERS
+ * hvcall, and there is no an associated MSR on x86.
+ */
+#define	HV_REGISTER_VSM_VP_STATUS	0x000D0003
+#define	HV_VTL_MASK			GENMASK(3, 0)
+
+/*
  * Group B features.
  */
 #define HV_CREATE_PARTITIONS			BIT(0)
