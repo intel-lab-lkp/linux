@@ -54,8 +54,6 @@ void intel_dp_set_link_params(struct intel_dp *intel_dp,
 int intel_dp_get_active_pipes(struct intel_dp *intel_dp,
 			      struct drm_modeset_acquire_ctx *ctx,
 			      u8 *pipe_mask);
-int intel_dp_retrain_link(struct intel_encoder *encoder,
-			  struct drm_modeset_acquire_ctx *ctx);
 void intel_dp_check_link_state(struct intel_dp *intel_dp);
 void intel_dp_queue_link_check(struct intel_dp *intel_dp, int delay_ms);
 void intel_dp_set_power(struct intel_dp *intel_dp, u8 mode);
