@@ -2800,29 +2800,30 @@ void intel_dp_queue_modeset_retry_work(struct intel_connector *connector)
 		drm_connector_put(&connector->base);
 }
 
-void
-intel_dp_queue_modeset_retry_for_link(struct intel_atomic_state *state,
-				      struct intel_encoder *encoder,
-				      const struct intel_crtc_state *crtc_state)
+static bool intel_dp_has_connector(struct intel_dp *intel_dp,
+				   const struct drm_connector_state *conn_state);
+
+void intel_dp_queue_modeset_retry_for_link(struct intel_encoder *encoder)
 {
+	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
+	struct drm_connector_list_iter conn_iter;
 	struct intel_connector *connector;
-	struct intel_digital_connector_state *conn_state;
 	struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
-	int i;
 
-	if (!intel_crtc_has_type(crtc_state, INTEL_OUTPUT_DP_MST)) {
-		intel_dp_queue_modeset_retry_work(intel_dp->attached_connector);
+	drm_connector_list_iter_begin(&i915->drm, &conn_iter);
+	for_each_intel_connector_iter(connector, &conn_iter) {
+		struct drm_connector_state *conn_state =
+			connector->base.state;
 
-		return;
-	}
-
-	for_each_new_intel_connector_in_state(state, connector, conn_state, i) {
-		if (!conn_state->base.crtc)
+		if (!intel_dp_has_connector(intel_dp, conn_state))
 			continue;
 
-		if (connector->mst_port == intel_dp)
-			intel_dp_queue_modeset_retry_work(connector);
+		if (!conn_state->crtc)
+			continue;
+
+		intel_dp_queue_modeset_retry_work(connector);
 	}
+	drm_connector_list_iter_end(&conn_iter);
 }
 
 int

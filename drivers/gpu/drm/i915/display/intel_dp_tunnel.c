@@ -722,7 +722,7 @@ static void queue_retry_work(struct intel_atomic_state *state,
 		    encoder->base.base.id,
 		    encoder->base.name);
 
-	intel_dp_queue_modeset_retry_for_link(state, encoder, crtc_state);
+	intel_dp_queue_modeset_retry_for_link(encoder);
 }
 
 static void atomic_increase_bw(struct intel_atomic_state *state)
