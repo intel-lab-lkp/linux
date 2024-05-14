@@ -6032,21 +6032,21 @@ void __napi_schedule(struct napi_struct *n)
 EXPORT_SYMBOL(__napi_schedule);
 
 /**
- *	napi_schedule_prep - check if napi can be scheduled
+ *	__napi_schedule_prep - check if napi can be scheduled
  *	@n: napi context
  *
  * Test if NAPI routine is already running, and if not mark
  * it as running.  This is used as a condition variable to
- * insure only one NAPI poll instance runs.  We also make
- * sure there is no pending NAPI disable.
+ * insure only one NAPI poll instance runs. Return -1 if
+ * there is a pending NAPI disable.
  */
-bool napi_schedule_prep(struct napi_struct *n)
+int __napi_schedule_prep(struct napi_struct *n)
 {
 	unsigned long new, val = READ_ONCE(n->state);
 
 	do {
 		if (unlikely(val & NAPIF_STATE_DISABLE))
-			return false;
+			return -1;
 		new = val | NAPIF_STATE_SCHED;
 
 		/* Sets STATE_MISSED bit if STATE_SCHED was already set
@@ -6061,7 +6061,7 @@ bool napi_schedule_prep(struct napi_struct *n)
 
 	return !(val & NAPIF_STATE_SCHED);
 }
-EXPORT_SYMBOL(napi_schedule_prep);
+EXPORT_SYMBOL(__napi_schedule_prep);
 
 /**
  * __napi_schedule_irqoff - schedule for receive
