@@ -2701,6 +2701,67 @@ int wx_set_features(struct net_device *netdev, netdev_features_t features)
 }
 EXPORT_SYMBOL(wx_set_features);
 
+#define NETIF_VLAN_STRIPPING_FEATURES	(NETIF_F_HW_VLAN_CTAG_RX | \
+					 NETIF_F_HW_VLAN_STAG_RX)
+
+#define NETIF_VLAN_INSERTION_FEATURES	(NETIF_F_HW_VLAN_CTAG_TX | \
+					 NETIF_F_HW_VLAN_STAG_TX)
+
+#define NETIF_VLAN_FILTERING_FEATURES	(NETIF_F_HW_VLAN_CTAG_FILTER | \
+					 NETIF_F_HW_VLAN_STAG_FILTER)
+
+netdev_features_t wx_fix_features(struct net_device *netdev,
+				  netdev_features_t features)
+{
+	netdev_features_t changed = netdev->features ^ features;
+	struct wx *wx = netdev_priv(netdev);
+
+	if (changed & NETIF_VLAN_STRIPPING_FEATURES) {
+		if (features & NETIF_F_HW_VLAN_CTAG_RX &&
+		    features & NETIF_F_HW_VLAN_STAG_RX) {
+			features |= NETIF_VLAN_STRIPPING_FEATURES;
+		} else if (!(features & NETIF_F_HW_VLAN_CTAG_RX) &&
+			 !(features & NETIF_F_HW_VLAN_STAG_RX)) {
+			features &= ~NETIF_VLAN_STRIPPING_FEATURES;
+		} else {
+			features &= ~NETIF_VLAN_STRIPPING_FEATURES;
+			features |= netdev->features & NETIF_VLAN_STRIPPING_FEATURES;
+			wx_err(wx, "802.1Q and 802.1ad VLAN stripping must be either both on or both off.");
+		}
+	}
+
+	if (changed & NETIF_VLAN_INSERTION_FEATURES) {
+		if (features & NETIF_F_HW_VLAN_CTAG_TX &&
+		    features & NETIF_F_HW_VLAN_STAG_TX) {
+			features |= NETIF_VLAN_INSERTION_FEATURES;
+		} else if (!(features & NETIF_F_HW_VLAN_CTAG_TX) &&
+			 !(features & NETIF_F_HW_VLAN_STAG_TX)) {
+			features &= ~NETIF_VLAN_INSERTION_FEATURES;
+		} else {
+			features &= ~NETIF_VLAN_INSERTION_FEATURES;
+			features |= netdev->features & NETIF_VLAN_INSERTION_FEATURES;
+			wx_err(wx, "802.1Q and 802.1ad VLAN insertion must be either both on or both off.");
+		}
+	}
+
+	if (changed & NETIF_VLAN_FILTERING_FEATURES) {
+		if (features & NETIF_F_HW_VLAN_CTAG_FILTER &&
+		    features & NETIF_F_HW_VLAN_STAG_FILTER) {
+			features |= NETIF_VLAN_FILTERING_FEATURES;
+		} else if (!(features & NETIF_F_HW_VLAN_CTAG_FILTER) &&
+			 !(features & NETIF_F_HW_VLAN_STAG_FILTER)) {
+			features &= ~NETIF_VLAN_FILTERING_FEATURES;
+		} else {
+			features &= ~NETIF_VLAN_FILTERING_FEATURES;
+			features |= netdev->features & NETIF_VLAN_FILTERING_FEATURES;
+			wx_err(wx, "802.1Q and 802.1ad VLAN filtering must be either both on or both off.");
+		}
+	}
+
+	return features;
+}
+EXPORT_SYMBOL(wx_fix_features);
+
 void wx_set_ring(struct wx *wx, u32 new_tx_count,
 		 u32 new_rx_count, struct wx_ring *temp_ring)
 {
