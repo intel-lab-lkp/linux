@@ -1567,6 +1567,7 @@ static void __send_empty_flush(struct clone_info *ci)
 {
 	struct dm_table *t = ci->map;
 	struct bio flush_bio;
+	struct dm_target *ti;
 
 	/*
 	 * Use an on-stack bio for this, it's safe since we don't
@@ -1580,10 +1581,21 @@ static void __send_empty_flush(struct clone_info *ci)
 	ci->sector_count = 0;
 	ci->io->tio.clone.bi_iter.bi_size = 0;
 
-	for (unsigned int i = 0; i < t->num_targets; i++) {
-		struct dm_target *ti = dm_table_get_target(t, i);
+	if (!t->flush_pass_around) {
+		for (unsigned int i = 0; i < t->num_targets; i++) {
+			ti = dm_table_get_target(t, i);
+			__send_empty_flush_bios(t, ti, ci);
+		}
+	} else {
+		struct list_head *devices = dm_table_get_devices(t);
+		struct dm_dev_internal *dd;
 
-		__send_empty_flush_bios(t, ti, ci);
+		list_for_each_entry(dd, devices, list) {
+			struct list_head *targets = &dd->dm_dev->targets;
+
+			list_for_each_entry(ti, targets, list)
+				__send_empty_flush_bios(t, ti, ci);
+		}
 	}
 
 	/*
