@@ -2574,6 +2574,85 @@ static inline bool pos_same_folio(loff_t pos1, loff_t pos2, struct folio *folio)
 	return (pos1 >> shift == pos2 >> shift);
 }
 
+/*
+ * I can't be bothered to care about HIGHMEM for the fast read case
+ */
+#ifdef CONFIG_HIGHMEM
+#define filemap_fast_read(mapping, pos, buffer, size) 0
+#else
+
+/*
+ * Called under RCU with size limited to the file size and one
+ */
+static unsigned long filemap_folio_copy_rcu(struct address_space *mapping, loff_t pos, char *buffer, size_t size)
+{
+	XA_STATE(xas, &mapping->i_pages, pos >> PAGE_SHIFT);
+	struct folio *folio;
+	size_t offset;
+
+	xas_reset(&xas);
+	folio = xas_load(&xas);
+	if (xas_retry(&xas, folio))
+		return 0;
+
+	if (!folio || xa_is_value(folio))
+		return 0;
+
+	if (!folio_test_uptodate(folio))
+		return 0;
+
+	/* No fast-case if we are supposed to start readahead */
+	if (folio_test_readahead(folio))
+		return 0;
+	/* .. or mark it accessed */
+	if (!folio_test_referenced(folio))
+		return 0;
+
+	/* Do the data copy */
+	offset = pos & (folio_size(folio) - 1);
+	memcpy(buffer, folio_address(folio) + offset, size);
+
+	/* We should probably do some silly memory barrier here */
+	if (unlikely(folio != xas_reload(&xas)))
+		return 0;
+
+	return size;
+}
+
+/*
+ * Iff we can complete the read completely in one atomic go under RCU,
+ * do so here. Otherwise return 0 (no partial reads, please - this is
+ * purely for the trivial fast case).
+ */
+static unsigned long filemap_fast_read(struct address_space *mapping, loff_t pos, char *buffer, size_t size)
+{
+	struct inode *inode;
+	loff_t file_size;
+	unsigned long pgoff;
+
+	/* Don't even try for page-crossers */
+	pgoff = pos & ~PAGE_MASK;
+	if (pgoff + size > PAGE_SIZE)
+		return 0;
+
+	/* Limit it to the file size */
+	inode = mapping->host;
+	file_size = i_size_read(inode);
+	if (unlikely(pos >= file_size))
+		return 0;
+	file_size -= pos;
+	if (file_size < size)
+		size = file_size;
+
+	/* Let's see if we can just do the read under RCU */
+	rcu_read_lock();
+	size = filemap_folio_copy_rcu(mapping, pos, buffer, size);
+	rcu_read_unlock();
+
+	return size;
+}
+#endif /* !HIGHMEM */
+
 /**
  * filemap_read - Read data from the page cache.
  * @iocb: The iocb to read.
@@ -2594,7 +2673,10 @@ ssize_t filemap_read(struct kiocb *iocb, struct iov_iter *iter,
 	struct file_ra_state *ra = &filp->f_ra;
 	struct address_space *mapping = filp->f_mapping;
 	struct inode *inode = mapping->host;
-	struct folio_batch fbatch;
+	union {
+		struct folio_batch fbatch;
+		__DECLARE_FLEX_ARRAY(char, buffer);
+	} area;
 	int i, error = 0;
 	bool writably_mapped;
 	loff_t isize, end_offset;
@@ -2606,7 +2688,22 @@ ssize_t filemap_read(struct kiocb *iocb, struct iov_iter *iter,
 		return 0;
 
 	iov_iter_truncate(iter, inode->i_sb->s_maxbytes);
-	folio_batch_init(&fbatch);
+
+	if (iov_iter_count(iter) < sizeof(area)) {
+		unsigned long count = iov_iter_count(iter);
+
+		count = filemap_fast_read(mapping, iocb->ki_pos, area.buffer, count);
+		if (count) {
+			size_t copied = copy_to_iter(area.buffer, count, iter);
+			if (unlikely(!copied))
+				return already_read ? already_read : -EFAULT;
+			ra->prev_pos = iocb->ki_pos += copied;
+			file_accessed(filp);
+			return copied + already_read;
+		}
+	}
+
+	folio_batch_init(&area.fbatch);
 
 	do {
 		cond_resched();
@@ -2622,7 +2719,7 @@ ssize_t filemap_read(struct kiocb *iocb, struct iov_iter *iter,
 		if (unlikely(iocb->ki_pos >= i_size_read(inode)))
 			break;
 
-		error = filemap_get_pages(iocb, iter->count, &fbatch, false);
+		error = filemap_get_pages(iocb, iter->count, &area.fbatch, false);
 		if (error < 0)
 			break;
 
@@ -2650,11 +2747,11 @@ ssize_t filemap_read(struct kiocb *iocb, struct iov_iter *iter,
 		 * mark it as accessed the first time.
 		 */
 		if (!pos_same_folio(iocb->ki_pos, last_pos - 1,
-				    fbatch.folios[0]))
-			folio_mark_accessed(fbatch.folios[0]);
+				    area.fbatch.folios[0]))
+			folio_mark_accessed(area.fbatch.folios[0]);
 
-		for (i = 0; i < folio_batch_count(&fbatch); i++) {
-			struct folio *folio = fbatch.folios[i];
+		for (i = 0; i < folio_batch_count(&area.fbatch); i++) {
+			struct folio *folio = area.fbatch.folios[i];
 			size_t fsize = folio_size(folio);
 			size_t offset = iocb->ki_pos & (fsize - 1);
 			size_t bytes = min_t(loff_t, end_offset - iocb->ki_pos,
@@ -2685,9 +2782,9 @@ ssize_t filemap_read(struct kiocb *iocb, struct iov_iter *iter,
 			}
 		}
 put_folios:
-		for (i = 0; i < folio_batch_count(&fbatch); i++)
-			folio_put(fbatch.folios[i]);
-		folio_batch_init(&fbatch);
+		for (i = 0; i < folio_batch_count(&area.fbatch); i++)
+			folio_put(area.fbatch.folios[i]);
+		folio_batch_init(&area.fbatch);
 	} while (iov_iter_count(iter) && iocb->ki_pos < isize && !error);
 
 	file_accessed(filp);
