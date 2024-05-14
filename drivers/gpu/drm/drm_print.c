@@ -214,6 +214,15 @@ void __drm_printfn_err(struct drm_printer *p, struct va_format *vaf)
 }
 EXPORT_SYMBOL(__drm_printfn_err);
 
+void __drm_printfn_line(struct drm_printer *p, struct va_format *vaf)
+{
+	unsigned int line = (uintptr_t)(++p->prefix);
+	struct drm_printer *dp = p->arg;
+
+	drm_printf(dp, "%u: %pV", line, vaf);
+}
+EXPORT_SYMBOL(__drm_printfn_line);
+
 /**
  * drm_puts - print a const string to a &drm_printer stream
  * @p: the &drm printer

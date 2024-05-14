@@ -186,6 +186,7 @@ void __drm_puts_seq_file(struct drm_printer *p, const char *str);
 void __drm_printfn_info(struct drm_printer *p, struct va_format *vaf);
 void __drm_printfn_dbg(struct drm_printer *p, struct va_format *vaf);
 void __drm_printfn_err(struct drm_printer *p, struct va_format *vaf);
+void __drm_printfn_line(struct drm_printer *p, struct va_format *vaf);
 
 __printf(2, 3)
 void drm_printf(struct drm_printer *p, const char *f, ...);
@@ -355,6 +356,42 @@ static inline struct drm_printer drm_err_printer(struct drm_device *drm,
 		.prefix = prefix
 	};
 	return p;
+}
+
+/**
+ * drm_line_printer - construct a &drm_printer that prefixes outputs with line numbers
+ * @dp: the &struct drm_printer which actually generates the output
+ *
+ * This printer can be used to increase the robustness of the captured output
+ * to make sure we didn't lost any intermediate lines of the output. Helpful
+ * while capturing some crash data.
+ *
+ * For example::
+ *
+ *	void crash_dump(struct drm_device *drm)
+ *	{
+ *		struct drm_printer dp = drm_err_printer(drm, "crash");
+ *		struct drm_printer lp = drm_line_printer(&dp);
+ *
+ *		drm_printf(&lp, "foo");
+ *		drm_printf(&lp, "bar");
+ *	}
+ *
+ * Above code will print into the dmesg something like::
+ *
+ *	[ ] 0000:00:00.0: [drm] *ERROR* crash 1: foo
+ *	[ ] 0000:00:00.0: [drm] *ERROR* crash 2: bar
+ *
+ * RETURNS:
+ * The &drm_printer object
+ */
+static inline struct drm_printer drm_line_printer(struct drm_printer *dp)
+{
+	struct drm_printer lp = {
+		.printfn = __drm_printfn_line,
+		.arg = dp,
+	};
+	return lp;
 }
 
 /*
