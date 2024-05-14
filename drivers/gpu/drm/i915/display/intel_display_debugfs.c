@@ -1612,6 +1612,41 @@ DEFINE_DEBUGFS_ATTRIBUTE(i915_dp_force_link_retrain_fops,
 			 i915_dp_force_link_retrain_show,
 			 i915_dp_force_link_retrain_write, "%llu\n");
 
+static int i915_dp_link_training_info_show(struct seq_file *m, void *data)
+{
+	struct intel_connector *connector = to_intel_connector(m->private);
+	struct drm_i915_private *i915 = to_i915(connector->base.dev);
+	struct intel_dp *intel_dp;
+	int ret;
+
+	ret = drm_modeset_lock_single_interruptible(&i915->drm.mode_config.connection_mutex);
+	if (ret)
+		return ret;
+
+	intel_dp = intel_connector_to_intel_dp(connector);
+
+	seq_printf(m,
+		   "max_rate: %d\n"
+		   "max_lane_count: %d\n"
+		   "train_count: %d\n"
+		   "retrain_count: %d\n"
+		   "retrain_disabled: %s\n"
+		   "all_failures: %d\n"
+		   "seq_failures: %d\n",
+		   intel_dp->link_train.max_rate,
+		   intel_dp->link_train.max_lane_count,
+		   intel_dp->link_train.train_count,
+		   intel_dp->link_train.retrain_count,
+		   str_yes_no(intel_dp->link_train.retrain_disabled),
+		   intel_dp->link_train.all_failures,
+		   intel_dp->link_train.seq_failures);
+
+	drm_modeset_unlock(&i915->drm.mode_config.connection_mutex);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(i915_dp_link_training_info);
+
 static int i915_dsc_output_format_show(struct seq_file *m, void *data)
 {
 	struct intel_connector *connector = m->private;
@@ -1832,6 +1867,9 @@ void intel_connector_debugfs_add(struct intel_connector *connector)
 
 		debugfs_create_file("i915_dp_force_link_retrain", 0644, root,
 				    connector, &i915_dp_force_link_retrain_fops);
+
+		debugfs_create_file("i915_dp_link_training_info", 0444, root,
+				    connector, &i915_dp_link_training_info_fops);
 	}
 
 	if (DISPLAY_VER(i915) >= 11 &&
