@@ -2791,7 +2791,7 @@ intel_dp_audio_compute_config(struct intel_encoder *encoder,
 					intel_dp_is_uhbr(pipe_config);
 }
 
-void intel_dp_queue_modeset_retry_work(struct intel_connector *connector)
+static void intel_dp_queue_modeset_retry_work(struct intel_connector *connector)
 {
 	struct drm_i915_private *i915 = to_i915(connector->base.dev);
 
