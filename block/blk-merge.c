@@ -278,6 +278,7 @@ struct bio *bio_split_rw(struct bio *bio, const struct queue_limits *lim,
 	struct bio_vec bv, bvprv, *bvprvp = NULL;
 	struct bvec_iter iter;
 	unsigned nsegs = 0, bytes = 0;
+	unsigned bv_seg_lim = max(PAGE_SIZE, lim->max_segment_size);
 
 	bio_for_each_bvec(bv, bio, iter) {
 		/*
@@ -289,7 +290,7 @@ struct bio *bio_split_rw(struct bio *bio, const struct queue_limits *lim,
 
 		if (nsegs < lim->max_segments &&
 		    bytes + bv.bv_len <= max_bytes &&
-		    bv.bv_offset + bv.bv_len <= PAGE_SIZE) {
+		    bv.bv_offset + bv.bv_len <= bv_seg_lim) {
 			nsegs++;
 			bytes += bv.bv_len;
 		} else {
