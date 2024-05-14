@@ -5256,6 +5256,12 @@ void intel_dp_queue_link_check(struct intel_dp *intel_dp, int delay_ms)
 			 &intel_dp->check_link_work, msecs_to_jiffies(delay_ms));
 }
 
+void intel_dp_check_link_state(struct intel_dp *intel_dp)
+{
+	if (intel_dp_needs_link_retrain(intel_dp))
+		intel_dp_queue_link_check(intel_dp, 0);
+}
+
 static int intel_dp_prep_phy_test(struct intel_dp *intel_dp,
 				  struct drm_modeset_acquire_ctx *ctx,
 				  u8 *pipe_mask)
