@@ -1201,6 +1201,128 @@ out_failed:
 }
 
 /**
+ * mpi3mr_do_mini_dump - copy system logs associated with mrioc.
+ * @mrioc: Adapter instance reference
+ * @prev_offset: offset returned from previous operation
+ *
+ * Read system logs and search for pattern mpi3mr%d and copy the lines
+ * into driver diag buffer
+ *
+ * Return: next available location in driver diag buffer.
+ */
+static int mpi3mr_do_mini_dump(struct mpi3mr_ioc *mrioc)
+{
+	int n = 0, lines, pos_mini_dump = 0;
+	struct mpi3mr_kmsg_dumper dumper;
+	size_t len;
+	char buf[201];
+	char *mini_start = "<6> Minidump start\n";
+	char *mini_end = "<6> Minidump end\n";
+
+	struct mpi3_driver_buffer_header *drv_buff_header = NULL;
+
+	dumper = mrioc->dump;
+
+	kmsg_dump_rewind(&dumper.kdumper);
+	while (kmsg_dump_get_line(&dumper.kdumper, 1, NULL, 0, NULL))
+		n++;
+
+	lines = n;
+	kmsg_dump_rewind(&dumper.kdumper);
+
+	drv_buff_header = (struct mpi3_driver_buffer_header *)mrioc->drv_diag_buffer;
+	drv_buff_header->signature = 0x43495243;
+	drv_buff_header->logical_buffer_start = 0;
+	drv_buff_header->circular_buffer_size =
+		mrioc->drv_diag_buffer_sz - sizeof(struct mpi3_driver_buffer_header);
+	drv_buff_header->flags =
+		MPI3_DRIVER_DIAG_BUFFER_HEADER_FLAGS_CIRCULAR_BUF_FORMAT_ASCII;
+
+	if ((pos_mini_dump + strlen(mini_start)
+			    < mrioc->drv_diag_buffer_sz)) {
+		sprintf((char *)mrioc->drv_diag_buffer + pos_mini_dump,
+			"%s\n", mini_start);
+		pos_mini_dump += strlen(mini_start);
+	} else {
+		ioc_info(mrioc, "driver diag buffer is full. minidump is not started\n");
+		goto out;
+	}
+
+	while (kmsg_dump_get_line(&dumper.kdumper, 1, buf, sizeof(buf), &len)) {
+		if (!lines--)
+			break;
+		if (strstr(buf, mrioc->name) &&
+			((pos_mini_dump + len + strlen(mini_end))
+			    < mrioc->drv_diag_buffer_sz)) {
+			sprintf((char *)mrioc->drv_diag_buffer
+			    + pos_mini_dump, "%s", buf);
+			pos_mini_dump += len;
+		}
+	}
+
+	if ((pos_mini_dump + strlen(mini_end)
+			    < mrioc->drv_diag_buffer_sz)) {
+		sprintf((char *)mrioc->drv_diag_buffer + pos_mini_dump,
+			"%s\n", mini_end);
+		pos_mini_dump += strlen(mini_end);
+	}
+
+out:
+	drv_buff_header->logical_buffer_end =
+		pos_mini_dump - sizeof(struct mpi3_driver_buffer_header);
+
+	ioc_info(mrioc, "driver diag buffer base_address(including 4K header) 0x%016llx, end_address 0x%016llx\n",
+	    (unsigned long long)mrioc->drv_diag_buffer_dma,
+	    (unsigned long long)mrioc->drv_diag_buffer_dma +
+	    mrioc->drv_diag_buffer_sz);
+	ioc_info(mrioc, "logical_buffer end_address 0x%016llx, logical_buffer_end 0x%08x\n",
+	    (unsigned long long)mrioc->drv_diag_buffer_dma +
+	    drv_buff_header->logical_buffer_end,
+	    drv_buff_header->logical_buffer_end);
+
+	return pos_mini_dump;
+}
+
+/**
+ * mpi3mr_do_dump - copy system logs into driver diag buffer.
+ * @mrioc: Adapter instance reference
+ *
+ * Return: Nothing.
+ */
+static void mpi3mr_do_dump(struct mpi3mr_ioc *mrioc)
+{
+	int offset = 0;
+	size_t dump_size;
+	struct mpi3_driver_buffer_header *drv_buff_header = NULL;
+
+	if (!mrioc->drv_diag_buffer)
+		return;
+
+	memset(mrioc->drv_diag_buffer, 0, mrioc->drv_diag_buffer_sz);
+
+	if (drv_db_level == MRIOC_DRV_DB_DISABLED)
+		return;
+
+	/* Copy controller specific logs */
+	offset += mpi3mr_do_mini_dump(mrioc);
+	if (drv_db_level != MRIOC_DRV_DB_FULL)
+		return;
+
+	kmsg_dump_rewind(&mrioc->dump.kdumper);
+	kmsg_dump_get_buffer(&mrioc->dump.kdumper, true,
+		mrioc->drv_diag_buffer + offset,
+		mrioc->drv_diag_buffer_sz - offset, &dump_size);
+
+	drv_buff_header = (struct mpi3_driver_buffer_header *)
+	    mrioc->drv_diag_buffer;
+	drv_buff_header->logical_buffer_end += dump_size;
+	ioc_info(mrioc, "logical_buffer end_address(0x%016llx), logical_buffer_end(0x%08x)\n",
+	    (unsigned long long)mrioc->drv_diag_buffer_dma +
+	    drv_buff_header->logical_buffer_end,
+	    drv_buff_header->logical_buffer_end);
+}
+
+/**
  * mpi3mr_clear_reset_history - clear reset history
  * @mrioc: Adapter instance reference
  *
@@ -2767,6 +2889,7 @@ static void mpi3mr_watchdog_work(struct work_struct *work)
 		if (!mrioc->diagsave_timeout) {
 			mpi3mr_print_fault_info(mrioc);
 			ioc_warn(mrioc, "diag save in progress\n");
+			mpi3mr_do_dump(mrioc);
 		}
 		if ((mrioc->diagsave_timeout++) <= MPI3_SYSIF_DIAG_SAVE_TIMEOUT)
 			goto schedule_work;
@@ -5311,6 +5434,9 @@ int mpi3mr_soft_reset_handler(struct mpi3mr_ioc *mrioc,
 	mpi3mr_ioc_disable_intr(mrioc);
 
 	if (snapdump) {
+		dprint_reset(mrioc,
+		    "soft_reset_handler: saving snapdump\n");
+		mpi3mr_do_dump(mrioc);
 		mpi3mr_set_diagsave(mrioc);
 		retval = mpi3mr_issue_reset(mrioc,
 		    MPI3_SYSIF_HOST_DIAG_RESET_ACTION_DIAG_FAULT, reset_reason);

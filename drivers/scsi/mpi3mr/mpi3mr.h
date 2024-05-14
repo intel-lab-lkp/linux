@@ -226,6 +226,10 @@ extern atomic64_t event_counter;
 #define MPI3MR_WRITE_SAME_MAX_LEN_256_BLKS 256
 #define MPI3MR_WRITE_SAME_MAX_LEN_2048_BLKS 2048
 
+struct mpi3mr_kmsg_dumper {
+	struct kmsg_dump_iter kdumper;
+};
+
 /* Driver diag buffer levels */
 enum mpi3mr_drv_db_level {
 	MRIOC_DRV_DB_DISABLED = 0,
@@ -1331,6 +1335,7 @@ struct mpi3mr_ioc {
 	void *drv_diag_buffer;
 	dma_addr_t drv_diag_buffer_dma;
 	u32 drv_diag_buffer_sz;
+	struct mpi3mr_kmsg_dumper dump;
 };
 
 /**

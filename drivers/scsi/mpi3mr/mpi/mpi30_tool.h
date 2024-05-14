@@ -10,6 +10,8 @@
 #define MPI3_DIAG_BUFFER_TYPE_DRIVER	(0x10)
 #define MPI3_DIAG_BUFFER_ACTION_RELEASE	(0x01)
 
+#define MPI3_DRIVER_DIAG_BUFFER_HEADER_FLAGS_CIRCULAR_BUF_FORMAT_ASCII	(0x00000000)
+
 struct mpi3_diag_buffer_post_request {
 	__le16                     host_tag;
 	u8                         ioc_use_only02;
