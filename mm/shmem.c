@@ -1828,18 +1828,18 @@ static struct folio *shmem_alloc_hugefolio(gfp_t gfp,
 	return page_rmappable_folio(page);
 }
 
-static struct folio *shmem_alloc_folio(gfp_t gfp,
-		struct shmem_inode_info *info, pgoff_t index)
+static struct folio *shmem_alloc_folio(gfp_t gfp, struct shmem_inode_info *info,
+				       pgoff_t index, unsigned int order)
 {
 	struct mempolicy *mpol;
 	pgoff_t ilx;
 	struct page *page;
 
-	mpol = shmem_get_pgoff_policy(info, index, 0, &ilx);
-	page = alloc_pages_mpol(gfp, 0, mpol, ilx, numa_node_id());
+	mpol = shmem_get_pgoff_policy(info, index, order, &ilx);
+	page = alloc_pages_mpol(gfp, order, mpol, ilx, numa_node_id());
 	mpol_cond_put(mpol);
 
-	return (struct folio *)page;
+	return page_rmappable_folio(page);
 }
 
 static struct folio *shmem_alloc_and_add_folio(gfp_t gfp,
@@ -1848,6 +1848,7 @@ static struct folio *shmem_alloc_and_add_folio(gfp_t gfp,
 {
 	struct address_space *mapping = inode->i_mapping;
 	struct shmem_inode_info *info = SHMEM_I(inode);
+	unsigned int order = 0;
 	struct folio *folio;
 	long pages;
 	int error;
@@ -1856,7 +1857,6 @@ static struct folio *shmem_alloc_and_add_folio(gfp_t gfp,
 		huge = false;
 
 	if (huge) {
-		pages = HPAGE_PMD_NR;
 		index = round_down(index, HPAGE_PMD_NR);
 
 		/*
@@ -1875,11 +1875,12 @@ static struct folio *shmem_alloc_and_add_folio(gfp_t gfp,
 		if (!folio)
 			count_vm_event(THP_FILE_FALLBACK);
 	} else {
-		pages = 1;
-		folio = shmem_alloc_folio(gfp, info, index);
+		folio = shmem_alloc_folio(gfp, info, index, order);
 	}
 	if (!folio)
 		return ERR_PTR(-ENOMEM);
+
+	pages = folio_nr_pages(folio);
 
 	__folio_set_locked(folio);
 	__folio_set_swapbacked(folio);
@@ -1976,7 +1977,7 @@ static int shmem_replace_folio(struct folio **foliop, gfp_t gfp,
 	 */
 	gfp &= ~GFP_CONSTRAINT_MASK;
 	VM_BUG_ON_FOLIO(folio_test_large(old), old);
-	new = shmem_alloc_folio(gfp, info, index);
+	new = shmem_alloc_folio(gfp, info, index, folio_order(old));
 	if (!new)
 		return -ENOMEM;
 
@@ -2854,7 +2855,7 @@ int shmem_mfill_atomic_pte(pmd_t *dst_pmd,
 
 	if (!*foliop) {
 		ret = -ENOMEM;
-		folio = shmem_alloc_folio(gfp, info, pgoff);
+		folio = shmem_alloc_folio(gfp, info, pgoff, 0);
 		if (!folio)
 			goto out_unacct_blocks;
 
