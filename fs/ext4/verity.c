@@ -357,13 +357,14 @@ static int ext4_get_verity_descriptor(struct inode *inode, void *buf,
 	return desc_size;
 }
 
-static struct page *ext4_read_merkle_tree_page(struct inode *inode,
-					       pgoff_t index,
-					       unsigned long num_ra_pages)
+static int ext4_read_merkle_tree_block(const struct fsverity_readmerkle *req,
+				       struct fsverity_blockbuf *block)
 {
+	struct inode *inode = req->inode;
+	pgoff_t index = (req->pos +
+			 ext4_verity_metadata_pos(inode)) >> PAGE_SHIFT;
+	unsigned long num_ra_pages = req->ra_bytes >> PAGE_SHIFT;
 	struct folio *folio;
-
-	index += ext4_verity_metadata_pos(inode) >> PAGE_SHIFT;
 
 	folio = __filemap_get_folio(inode->i_mapping, index, FGP_ACCESSED, 0);
 	if (IS_ERR(folio) || !folio_test_uptodate(folio)) {
@@ -375,9 +376,10 @@ static struct page *ext4_read_merkle_tree_page(struct inode *inode,
 			page_cache_ra_unbounded(&ractl, num_ra_pages, 0);
 		folio = read_mapping_folio(inode->i_mapping, index, NULL);
 		if (IS_ERR(folio))
-			return ERR_CAST(folio);
+			return PTR_ERR(folio);
 	}
-	return folio_file_page(folio, index);
+	fsverity_set_block_page(req, block, folio_file_page(folio, index));
+	return 0;
 }
 
 static int ext4_write_merkle_tree_block(struct inode *inode, const void *buf,
@@ -389,9 +391,11 @@ static int ext4_write_merkle_tree_block(struct inode *inode, const void *buf,
 }
 
 const struct fsverity_operations ext4_verityops = {
+	.uses_page_based_merkle_caching = 1,
 	.begin_enable_verity	= ext4_begin_enable_verity,
 	.end_enable_verity	= ext4_end_enable_verity,
 	.get_verity_descriptor	= ext4_get_verity_descriptor,
-	.read_merkle_tree_page	= ext4_read_merkle_tree_page,
+	.read_merkle_tree_block	= ext4_read_merkle_tree_block,
+	.drop_merkle_tree_block	= fsverity_drop_page_merkle_tree_block,
 	.write_merkle_tree_block = ext4_write_merkle_tree_block,
 };

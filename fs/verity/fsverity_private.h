@@ -47,6 +47,9 @@ struct merkle_tree_params {
 	u64 tree_size;			/* Merkle tree size in bytes */
 	unsigned long tree_pages;	/* Merkle tree size in pages */
 
+	/* The hash of a merkle block-sized buffer of zeroes */
+	u8 zero_digest[FS_VERITY_MAX_DIGEST_SIZE];
+
 	/*
 	 * Starting block index for each tree level, ordered from leaf level (0)
 	 * to root level ('num_levels - 1')
@@ -61,7 +64,7 @@ struct merkle_tree_params {
  * and stored in ->i_verity_info; it remains until the inode is evicted.  It
  * caches information about the Merkle tree that's needed to efficiently verify
  * data read from the file.  It also caches the file digest.  The Merkle tree
- * pages themselves are not cached here, but the filesystem may cache them.
+ * blocks themselves are not cached here, but the filesystem may cache them.
  */
 struct fsverity_info {
 	struct merkle_tree_params tree_params;
@@ -151,6 +154,14 @@ static inline void fsverity_init_signature(void)
 #endif /* !CONFIG_FS_VERITY_BUILTIN_SIGNATURES */
 
 /* verify.c */
+
+int fsverity_read_merkle_tree_block(struct inode *inode,
+				    const struct merkle_tree_params *params,
+				    int level, u64 pos, unsigned long ra_bytes,
+				    struct fsverity_blockbuf *block);
+
+void fsverity_drop_merkle_tree_block(struct inode *inode,
+				     struct fsverity_blockbuf *block);
 
 void __init fsverity_init_workqueue(void);
 

@@ -12,6 +12,18 @@
 
 static struct kmem_cache *fsverity_info_cachep;
 
+/*
+ * If the filesystem caches Merkle tree blocks in the pagecache, and the Merkle
+ * tree block size differs from the page size, then a bitmap is needed to keep
+ * track of which hash blocks have been verified.
+ */
+static bool needs_bitmap(const struct inode *inode,
+			 const struct merkle_tree_params *params)
+{
+	return inode->i_sb->s_vop->uses_page_based_merkle_caching &&
+		params->block_size != PAGE_SIZE;
+}
+
 /**
  * fsverity_init_merkle_tree_params() - initialize Merkle tree parameters
  * @params: the parameters struct to initialize
@@ -126,10 +138,10 @@ int fsverity_init_merkle_tree_params(struct merkle_tree_params *params,
 	}
 
 	/*
-	 * With block_size != PAGE_SIZE, an in-memory bitmap will need to be
-	 * allocated to track the "verified" status of hash blocks.  Don't allow
-	 * this bitmap to get too large.  For now, limit it to 1 MiB, which
-	 * limits the file size to about 4.4 TB with SHA-256 and 4K blocks.
+	 * If an in-memory bitmap will need to be allocated to track the
+	 * "verified" status of hash blocks, don't allow this bitmap to get too
+	 * large.  For now, limit it to 1 MiB, which limits the file size to
+	 * about 4.4 TB with SHA-256 and 4K blocks.
 	 *
 	 * Together with the fact that the data, and thus also the Merkle tree,
 	 * cannot have more than ULONG_MAX pages, this implies that hash block
@@ -137,10 +149,18 @@ int fsverity_init_merkle_tree_params(struct merkle_tree_params *params,
 	 * explicitly check for that too.  Note, this is only for hash block
 	 * indices; data block indices might not fit in an 'unsigned long'.
 	 */
-	if ((params->block_size != PAGE_SIZE && offset > 1 << 23) ||
+	if ((needs_bitmap(inode, params) && offset > 1 << 23) ||
 	    offset > ULONG_MAX) {
 		fsverity_err(inode, "Too many blocks in Merkle tree");
 		err = -EFBIG;
+		goto out_err;
+	}
+
+	/* Calculate the digest of the all-zeroes block. */
+	err = fsverity_hash_block(params, inode, page_address(ZERO_PAGE(0)),
+				  params->zero_digest);
+	if (err) {
+		fsverity_err(inode, "Error %d computing zero digest", err);
 		goto out_err;
 	}
 
@@ -213,12 +233,10 @@ struct fsverity_info *fsverity_create_info(const struct inode *inode,
 	if (err)
 		goto fail;
 
-	if (vi->tree_params.block_size != PAGE_SIZE) {
+	if (needs_bitmap(inode, &vi->tree_params)) {
 		/*
-		 * When the Merkle tree block size and page size differ, we use
-		 * a bitmap to keep track of which hash blocks have been
-		 * verified.  This bitmap must contain one bit per hash block,
-		 * including alignment to a page boundary at the end.
+		 * The bitmap must contain one bit per hash block, including
+		 * alignment to a page boundary at the end.
 		 *
 		 * Eventually, to support extremely large files in an efficient
 		 * way, it might be necessary to make pages of this bitmap

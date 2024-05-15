@@ -701,29 +701,24 @@ int btrfs_get_verity_descriptor(struct inode *inode, void *buf, size_t buf_size)
 /*
  * fsverity op that reads and caches a merkle tree page.
  *
- * @inode:         inode to read a merkle tree page for
- * @index:         page index relative to the start of the merkle tree
- * @num_ra_pages:  number of pages to readahead. Optional, we ignore it
- *
  * The Merkle tree is stored in the filesystem btree, but its pages are cached
  * with a logical position past EOF in the inode's mapping.
- *
- * Returns the page we read, or an ERR_PTR on error.
  */
-static struct page *btrfs_read_merkle_tree_page(struct inode *inode,
-						pgoff_t index,
-						unsigned long num_ra_pages)
+static int btrfs_read_merkle_tree_block(const struct fsverity_readmerkle *req,
+					struct fsverity_blockbuf *block)
 {
+	struct inode *inode = req->inode;
 	struct folio *folio;
-	u64 off = (u64)index << PAGE_SHIFT;
+	u64 off = req->pos;
 	loff_t merkle_pos = merkle_file_pos(inode);
+	pgoff_t index;
 	int ret;
 
 	if (merkle_pos < 0)
-		return ERR_PTR(merkle_pos);
+		return merkle_pos;
 	if (merkle_pos > inode->i_sb->s_maxbytes - off - PAGE_SIZE)
-		return ERR_PTR(-EFBIG);
-	index += merkle_pos >> PAGE_SHIFT;
+		return -EFBIG;
+	index = (merkle_pos + off) >> PAGE_SHIFT;
 again:
 	folio = __filemap_get_folio(inode->i_mapping, index, FGP_ACCESSED, 0);
 	if (!IS_ERR(folio)) {
@@ -735,7 +730,7 @@ again:
 		if (!folio_test_uptodate(folio)) {
 			folio_unlock(folio);
 			folio_put(folio);
-			return ERR_PTR(-EIO);
+			return -EIO;
 		}
 		folio_unlock(folio);
 		goto out;
@@ -744,7 +739,7 @@ again:
 	folio = filemap_alloc_folio(mapping_gfp_constraint(inode->i_mapping, ~__GFP_FS),
 				    0);
 	if (!folio)
-		return ERR_PTR(-ENOMEM);
+		return -ENOMEM;
 
 	ret = filemap_add_folio(inode->i_mapping, folio, index, GFP_NOFS);
 	if (ret) {
@@ -752,7 +747,7 @@ again:
 		/* Did someone else insert a folio here? */
 		if (ret == -EEXIST)
 			goto again;
-		return ERR_PTR(ret);
+		return ret;
 	}
 
 	/*
@@ -765,7 +760,7 @@ again:
 			     folio_address(folio), PAGE_SIZE, &folio->page);
 	if (ret < 0) {
 		folio_put(folio);
-		return ERR_PTR(ret);
+		return ret;
 	}
 	if (ret < PAGE_SIZE)
 		folio_zero_segment(folio, ret, PAGE_SIZE);
@@ -774,7 +769,8 @@ again:
 	folio_unlock(folio);
 
 out:
-	return folio_file_page(folio, index);
+	fsverity_set_block_page(req, block, folio_file_page(folio, index));
+	return 0;
 }
 
 /*
@@ -802,9 +798,11 @@ static int btrfs_write_merkle_tree_block(struct inode *inode, const void *buf,
 }
 
 const struct fsverity_operations btrfs_verityops = {
+	.uses_page_based_merkle_caching = 1,
 	.begin_enable_verity     = btrfs_begin_enable_verity,
 	.end_enable_verity       = btrfs_end_enable_verity,
 	.get_verity_descriptor   = btrfs_get_verity_descriptor,
-	.read_merkle_tree_page   = btrfs_read_merkle_tree_page,
+	.read_merkle_tree_block  = btrfs_read_merkle_tree_block,
+	.drop_merkle_tree_block  = fsverity_drop_page_merkle_tree_block,
 	.write_merkle_tree_block = btrfs_write_merkle_tree_block,
 };
