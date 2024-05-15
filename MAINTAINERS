@@ -17418,9 +17418,10 @@ R:	Leo Yan <leo.yan@linux.dev>
 L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
 S:	Supported
 F:	tools/build/feature/test-libopencsd.c
-F:	tools/perf/arch/arm*/
-F:	tools/perf/pmu-events/arch/arm64/
-F:	tools/perf/util/arm-spe*
+F:	tools/perf/*/*/*arm*
+F:	tools/perf/*/*/*arm*/
+F:	tools/perf/*/*arm*
+F:	tools/perf/*/*arm*/
 F:	tools/perf/util/cs-etm*
 
 PERSONALITY HANDLING
