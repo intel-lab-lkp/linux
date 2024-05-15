@@ -76,6 +76,11 @@ int cpufreq_frequency_table_verify(struct cpufreq_policy_data *policy,
 	pr_debug("request for verification of policy (%u - %u kHz) for cpu %u\n",
 					policy->min, policy->max, policy->cpu);
 
+	if (policy->min > policy->max ||
+	    policy->max > policy->cpuinfo.max_freq ||
+	    policy->min < policy->cpuinfo.min_freq)
+		return -EINVAL;
+
 	cpufreq_verify_within_cpu_limits(policy);
 
 	cpufreq_for_each_valid_entry(pos, table) {
