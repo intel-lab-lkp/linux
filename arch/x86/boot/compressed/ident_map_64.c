@@ -122,6 +122,12 @@ void initialize_identity_maps(void *rmode)
 	mapping_info.kernpg_flag = _KERNPG_TABLE;
 
 	/*
+	 * Entries with the G bit require more elaborate TLB maintenance,
+	 * so avoid them for these early mappings.
+	 */
+	mapping_info.page_flag &= ~_PAGE_GLOBAL;
+
+	/*
 	 * It should be impossible for this not to already be true,
 	 * but since calling this a second time would rewind the other
 	 * counters, let's just make sure this is reset too.
