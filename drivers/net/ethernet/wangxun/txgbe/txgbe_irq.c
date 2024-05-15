@@ -7,6 +7,7 @@
 #include "../libwx/wx_type.h"
 #include "../libwx/wx_lib.h"
 #include "../libwx/wx_hw.h"
+#include "../libwx/wx_sriov.h"
 #include "txgbe_type.h"
 #include "txgbe_phy.h"
 #include "txgbe_irq.h"
@@ -176,6 +177,24 @@ static const struct irq_domain_ops txgbe_misc_irq_domain_ops = {
 	.map = txgbe_misc_irq_domain_map,
 };
 
+static irqreturn_t txgbe_irq_handler(int irq, void *data)
+{
+	struct txgbe *txgbe = data;
+	struct wx *wx = txgbe->wx;
+	u32 eicr;
+
+	eicr = wx_misc_isb(wx, WX_ISB_MISC) & TXGBE_PX_MISC_IEN_MASK;
+	if (!eicr)
+		return IRQ_NONE;
+	txgbe->eicr = eicr;
+	if (eicr & TXGBE_PX_MISC_IC_VF_MBOX) {
+		wx_msg_task(txgbe->wx);
+		wx_intr_enable(wx, TXGBE_INTR_MISC);
+	}
+
+	return IRQ_WAKE_THREAD;
+}
+
 static irqreturn_t txgbe_misc_irq_handle(int irq, void *data)
 {
 	struct txgbe *txgbe = data;
@@ -184,7 +203,7 @@ static irqreturn_t txgbe_misc_irq_handle(int irq, void *data)
 	unsigned int sub_irq;
 	u32 eicr;
 
-	eicr = wx_misc_isb(wx, WX_ISB_MISC);
+	eicr = txgbe->eicr;
 	if (eicr & TXGBE_PX_MISC_GPIO) {
 		sub_irq = irq_find_mapping(txgbe->misc.domain, TXGBE_IRQ_GPIO);
 		handle_nested_irq(sub_irq);
@@ -226,7 +245,7 @@ int txgbe_setup_misc_irq(struct txgbe *txgbe)
 	struct wx *wx = txgbe->wx;
 	int hwirq, err;
 
-	txgbe->misc.nirqs = 2;
+	txgbe->misc.nirqs = TXGBE_IRQ_MAX;
 	txgbe->misc.domain = irq_domain_add_simple(NULL, txgbe->misc.nirqs, 0,
 						   &txgbe_misc_irq_domain_ops, txgbe);
 	if (!txgbe->misc.domain)
@@ -241,7 +260,7 @@ int txgbe_setup_misc_irq(struct txgbe *txgbe)
 	else
 		txgbe->misc.irq = wx->pdev->irq;
 
-	err = request_threaded_irq(txgbe->misc.irq, NULL,
+	err = request_threaded_irq(txgbe->misc.irq, txgbe_irq_handler,
 				   txgbe_misc_irq_handle,
 				   IRQF_ONESHOT,
 				   wx->netdev->name, txgbe);
