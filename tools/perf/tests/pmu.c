@@ -106,8 +106,10 @@ static char *test_format_dir_get(char *dir, size_t sz)
 		if (!file)
 			return NULL;
 
-		if (1 != fwrite(format->value, strlen(format->value), 1, file))
+		if (1 != fwrite(format->value, strlen(format->value), 1, file)) {
+			fclose(file);
 			break;
+		}
 
 		fclose(file);
 	}
