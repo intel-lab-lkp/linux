@@ -1083,10 +1083,15 @@ static int ocfs2_xattr_find_entry(struct inode *inode, void *end,
 		cmp = name_index - ocfs2_xattr_get_type(entry);
 		if (!cmp)
 			cmp = name_len - entry->xe_name_len;
-		if (!cmp)
+		if (!cmp) {
+			if ((xs->base + le16_to_cpu(entry->xe_name_offset) + name_len) > end) {
+				ocfs2_error(inode->i_sb, "corrupted xattr entries");
+				return -EFSCORRUPTED;
+			}
 			cmp = memcmp(name, (xs->base +
 				     le16_to_cpu(entry->xe_name_offset)),
 				     name_len);
+		}
 		if (cmp == 0)
 			break;
 		entry += 1;
