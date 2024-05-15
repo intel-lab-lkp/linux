@@ -2129,7 +2129,7 @@ int cmd_kvm(int argc, const char **argv)
 		OPT_BOOLEAN(0, "guest", &perf_guest,
 			    "Collect guest os data"),
 		OPT_BOOLEAN(0, "host", &perf_host,
-			    "Collect host os data"),
+			   "Collect host os data. Host only with --host --no-guest"),
 		OPT_STRING(0, "guestmount", &symbol_conf.guestmount, "directory",
 			   "guest mount directory under which every guest os"
 			   " instance has a subdir"),
@@ -2150,16 +2150,23 @@ int cmd_kvm(int argc, const char **argv)
 						"buildid-list", "stat", NULL };
 	const char *kvm_usage[] = { NULL, NULL };
 
-	perf_host  = 0;
-	perf_guest = 1;
+	/*
+	 * tools/perf/Documentation/perf-kvm.txt
+	 *
+	 *    Default('')         ->  perf.data.guest
+	 *    --host              ->  perf.data.kvm
+	 *    --guest             ->  perf.data.guest
+	 *    --host --guest      ->  perf.data.kvm
+	 *    --host --no-guest   ->  perf.data.host
+	 */
+	perf_host = false;
+	perf_guest = true;
 
 	argc = parse_options_subcommand(argc, argv, kvm_options, kvm_subcommands, kvm_usage,
 					PARSE_OPT_STOP_AT_NON_OPTION);
-	if (!argc)
+	if (!argc || (!perf_host && !perf_guest))
 		usage_with_options(kvm_usage, kvm_options);
 
-	if (!perf_host)
-		perf_guest = 1;
 
 	if (!file_name) {
 		file_name = get_filename_for_perf_kvm();
