@@ -76,6 +76,8 @@ struct lpc_driver_ops {
 
 static struct lpc_driver_ops cros_ec_lpc_ops = { };
 
+static const struct lpc_driver_data *cros_ec_lpc_driver_data;
+
 /*
  * A generic instance of the read function of struct lpc_driver_ops, used for
  * the LPC EC.
@@ -435,7 +437,6 @@ static int cros_ec_lpc_probe(struct platform_device *pdev)
 	acpi_status status;
 	struct cros_ec_device *ec_dev;
 	struct cros_ec_lpc *ec_lpc;
-	struct lpc_driver_data *driver_data;
 	u8 buf[2] = {};
 	int irq, ret;
 	u32 quirks;
@@ -446,15 +447,15 @@ static int cros_ec_lpc_probe(struct platform_device *pdev)
 
 	ec_lpc->mmio_memory_base = EC_LPC_ADDR_MEMMAP;
 
-	driver_data = platform_get_drvdata(pdev);
-	if (driver_data) {
-		quirks = driver_data->quirks;
+	if (cros_ec_lpc_driver_data) {
+		quirks = cros_ec_lpc_driver_data->quirks;
 
 		if (quirks)
 			dev_info(dev, "loaded with quirks %8.08x\n", quirks);
 
 		if (quirks & CROS_EC_LPC_QUIRK_REMAP_MEMORY)
-			ec_lpc->mmio_memory_base = driver_data->quirk_mmio_memory_base;
+			ec_lpc->mmio_memory_base
+				= cros_ec_lpc_driver_data->quirk_mmio_memory_base;
 	}
 
 	/*
@@ -735,7 +736,10 @@ static int __init cros_ec_lpc_init(void)
 
 	dmi_match = dmi_first_match(cros_ec_lpc_dmi_table);
 
-	if (!cros_ec_lpc_acpi_device_found && !dmi_match) {
+	if (dmi_match) {
+		/* Pass the DMI match's driver data down to the platform device */
+		cros_ec_lpc_driver_data = dmi_match->driver_data;
+	} else if (!cros_ec_lpc_acpi_device_found) {
 		pr_err(DRV_NAME ": unsupported system.\n");
 		return -ENODEV;
 	}
@@ -748,9 +752,6 @@ static int __init cros_ec_lpc_init(void)
 	}
 
 	if (!cros_ec_lpc_acpi_device_found) {
-		/* Pass the DMI match's driver data down to the platform device */
-		platform_set_drvdata(&cros_ec_lpc_device, dmi_match->driver_data);
-
 		/* Register the device, and it'll get hooked up automatically */
 		ret = platform_device_register(&cros_ec_lpc_device);
 		if (ret) {
