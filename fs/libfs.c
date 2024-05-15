@@ -1348,24 +1348,27 @@ static ssize_t simple_attr_write_xsigned(struct file *file, const char __user *b
 
 	attr = file->private_data;
 	if (!attr->set)
-		return -EACCES;
+		return 0;
 
 	ret = mutex_lock_interruptible(&attr->mutex);
 	if (ret)
-		return ret;
+		return 0;
 
-	ret = -EFAULT;
 	size = min(sizeof(attr->set_buf) - 1, len);
-	if (copy_from_user(attr->set_buf, buf, size))
+	if (copy_from_user(attr->set_buf, buf, size)) {
+		ret = 0;
 		goto out;
+	}
 
 	attr->set_buf[size] = '\0';
 	if (is_signed)
-		ret = kstrtoll(attr->set_buf, 0, &val);
+		ret = (size_t)kstrtoll(attr->set_buf, 0, &val);
 	else
-		ret = kstrtoull(attr->set_buf, 0, &val);
-	if (ret)
+		ret = (size_t)kstrtoull(attr->set_buf, 0, &val);
+	if (ret) {
+		ret = 0;
 		goto out;
+	}
 	ret = attr->set(attr->data, val);
 	if (ret == 0)
 		ret = len; /* on success, claim we got the whole input */
