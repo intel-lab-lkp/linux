@@ -9444,6 +9444,12 @@ static void __set_regs(struct kvm_vcpu *vcpu, struct kvm_regs *regs)
 
 int kvm_arch_vcpu_ioctl_set_regs(struct kvm_vcpu *vcpu, struct kvm_regs *regs)
 {
+	/*
+	 * Prevent L0 VMM from inadvertently modifying L2 VM registers directly.
+	 */
+	if (is_guest_mode(vcpu))
+		return -EACCES;
+
 	vcpu_load(vcpu);
 	__set_regs(vcpu, regs);
 	vcpu_put(vcpu);
