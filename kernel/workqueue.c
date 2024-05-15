@@ -51,6 +51,7 @@
 #include <linux/uaccess.h>
 #include <linux/sched/isolation.h>
 #include <linux/sched/debug.h>
+#include <linux/sched/mm.h>
 #include <linux/nmi.h>
 #include <linux/kvm_para.h>
 #include <linux/delay.h>
@@ -3127,6 +3128,10 @@ __acquires(&pool->lock)
 	unsigned long work_data;
 	int lockdep_start_depth, rcu_start_depth;
 	bool bh_draining = pool->flags & POOL_BH_DRAINING;
+	bool use_noio_allocs = pwq->wq->flags & __WQ_NOIO;
+	bool use_nofs_allocs = pwq->wq->flags & __WQ_NOFS;
+	unsigned long noio_flags;
+	unsigned long nofs_flags;
 #ifdef CONFIG_LOCKDEP
 	/*
 	 * It is permissible to free the struct work_struct from
@@ -3139,6 +3144,12 @@ __acquires(&pool->lock)
 
 	lockdep_copy_map(&lockdep_map, &work->lockdep_map);
 #endif
+	/* Set inherited alloc flags */
+	if (use_noio_allocs)
+		noio_flags = memalloc_noio_save();
+	if (use_nofs_allocs)
+		nofs_flags = memalloc_nofs_save();
+
 	/* ensure we're on the correct CPU */
 	WARN_ON_ONCE(!(pool->flags & POOL_DISASSOCIATED) &&
 		     raw_smp_processor_id() != pool->cpu);
@@ -3275,6 +3286,12 @@ __acquires(&pool->lock)
 
 	/* must be the last step, see the function comment */
 	pwq_dec_nr_in_flight(pwq, work_data);
+
+	/* Restore alloc flags */
+	if (use_nofs_allocs)
+		memalloc_nofs_restore(nofs_flags);
+	if (use_noio_allocs)
+		memalloc_noio_restore(noio_flags);
 }
 
 /**
@@ -5686,6 +5703,10 @@ struct workqueue_struct *alloc_workqueue(const char *fmt,
 
 	/* init wq */
 	wq->flags = flags;
+	if (current->flags & PF_MEMALLOC_NOIO)
+		wq->flags |= __WQ_NOIO;
+	if (current->flags & PF_MEMALLOC_NOFS)
+		wq->flags |= __WQ_NOFS;
 	wq->max_active = max_active;
 	wq->min_active = min(max_active, WQ_DFL_MIN_ACTIVE);
 	wq->saved_max_active = wq->max_active;
