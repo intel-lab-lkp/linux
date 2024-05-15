@@ -29,10 +29,12 @@
 #include "cros_ec_lpc_mec.h"
 
 #define DRV_NAME "cros_ec_lpcs"
-#define ACPI_DRV_NAME "GOOG0004"
 
-/* True if ACPI device is present */
-static bool cros_ec_lpc_acpi_device_found;
+/*
+ * Index into cros_ec_lpc_acpi_device_ids of ACPI device,
+ * negative for ACPI device not found.
+ */
+static int cros_ec_lpc_acpi_device_found;
 
 /*
  * Indicates that lpc_driver_data.quirk_mmio_memory_base should
@@ -598,7 +600,8 @@ static void cros_ec_lpc_remove(struct platform_device *pdev)
 }
 
 static const struct acpi_device_id cros_ec_lpc_acpi_device_ids[] = {
-	{ ACPI_DRV_NAME, 0 },
+	{ "PNP0C09", 0 },    /* Standard ACPI EC name. Must be first in list */
+	{ "GOOG0004", 0 },
 	{ }
 };
 MODULE_DEVICE_TABLE(acpi, cros_ec_lpc_acpi_device_ids);
@@ -737,30 +740,33 @@ static struct platform_device cros_ec_lpc_device = {
 	.name = DRV_NAME
 };
 
-static acpi_status cros_ec_lpc_parse_device(acpi_handle handle, u32 level,
-					    void *context, void **retval)
+static int cros_ec_lpc_find_acpi_dev(const struct acpi_device_id *acpi_ids)
 {
-	*(bool *)context = true;
-	return AE_CTRL_TERMINATE;
+	int i;
+
+	for (i = 0; acpi_ids[i].id[0]; ++i) {
+		if (acpi_dev_present(acpi_ids[i].id, NULL, -1))
+			return i;
+	}
+
+	return -1;
 }
 
 static int __init cros_ec_lpc_init(void)
 {
 	int ret;
-	acpi_status status;
 	const struct dmi_system_id *dmi_match;
 
-	status = acpi_get_devices(ACPI_DRV_NAME, cros_ec_lpc_parse_device,
-				  &cros_ec_lpc_acpi_device_found, NULL);
-	if (ACPI_FAILURE(status))
-		pr_warn(DRV_NAME ": Looking for %s failed\n", ACPI_DRV_NAME);
+	cros_ec_lpc_acpi_device_found = cros_ec_lpc_find_acpi_dev(
+		cros_ec_lpc_driver.driver.acpi_match_table);
 
 	dmi_match = dmi_first_match(cros_ec_lpc_dmi_table);
 
 	if (dmi_match) {
 		/* Pass the DMI match's driver data down to the platform device */
 		cros_ec_lpc_driver_data = dmi_match->driver_data;
-	} else if (!cros_ec_lpc_acpi_device_found) {
+	} else if (cros_ec_lpc_acpi_device_found <= 0) {
+		/* Standard EC "PNP0C09" not supported without DMI data */
 		pr_err(DRV_NAME ": unsupported system.\n");
 		return -ENODEV;
 	}
@@ -772,7 +778,7 @@ static int __init cros_ec_lpc_init(void)
 		return ret;
 	}
 
-	if (!cros_ec_lpc_acpi_device_found) {
+	if (cros_ec_lpc_acpi_device_found < 0) {
 		/* Register the device, and it'll get hooked up automatically */
 		ret = platform_device_register(&cros_ec_lpc_device);
 		if (ret) {
@@ -786,7 +792,7 @@ static int __init cros_ec_lpc_init(void)
 
 static void __exit cros_ec_lpc_exit(void)
 {
-	if (!cros_ec_lpc_acpi_device_found)
+	if (cros_ec_lpc_acpi_device_found < 0)
 		platform_device_unregister(&cros_ec_lpc_device);
 	platform_driver_unregister(&cros_ec_lpc_driver);
 }
