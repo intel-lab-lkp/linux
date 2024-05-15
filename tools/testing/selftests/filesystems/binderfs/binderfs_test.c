@@ -433,6 +433,7 @@ TEST(binderfs_stress)
 		int i, j, k, nthreads;
 		pthread_attr_t attr;
 		pthread_t threads[DEFAULT_THREADS];
+
 		change_userns(_metadata, syncfds);
 		change_mountns(_metadata);
 
@@ -536,11 +537,11 @@ TEST(binderfs_test_privileged)
 {
 	if (geteuid() != 0)
 		SKIP(return,
-			   "Tests are not run as root. Skipping privileged tests");
+		     "Tests are not run as root. Skipping privileged tests");
 
 	if (__do_binderfs_test(_metadata))
 		SKIP(return,
-			   "The Android binderfs filesystem is not available");
+		     "The Android binderfs filesystem is not available");
 }
 
 TEST(binderfs_test_unprivileged)
@@ -576,7 +577,7 @@ TEST(binderfs_test_unprivileged)
 	if (ret) {
 		if (ret == 2)
 			SKIP(return,
-				   "The Android binderfs filesystem is not available");
+			     "The Android binderfs filesystem is not available");
 		ASSERT_EQ(ret, 0)
 		{
 			TH_LOG("wait_for_pid() failed");
