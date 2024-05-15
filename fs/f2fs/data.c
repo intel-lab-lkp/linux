@@ -3925,10 +3925,12 @@ static int check_swap_activate(struct swap_info_struct *sis,
 	block_t pblock;
 	block_t lowest_pblock = -1;
 	block_t highest_pblock = 0;
+	block_t blk_start;
 	int nr_extents = 0;
 	unsigned int nr_pblocks;
 	unsigned int blks_per_sec = BLKS_PER_SEC(sbi);
 	unsigned int not_aligned = 0;
+	unsigned int cur_sec;
 	int ret = 0;
 
 	/*
@@ -3965,22 +3967,38 @@ retry:
 		pblock = map.m_pblk;
 		nr_pblocks = map.m_len;
 
-		if ((pblock - SM_I(sbi)->main_blkaddr) % blks_per_sec ||
+		blk_start = pblock - SM_I(sbi)->main_blkaddr;
+
+		if (blk_start % blks_per_sec ||
 				nr_pblocks % blks_per_sec ||
 				!f2fs_valid_pinned_area(sbi, pblock)) {
 			bool last_extent = false;
 
 			not_aligned++;
 
+			cur_sec = (blk_start + nr_pblocks) / BLKS_PER_SEC(sbi);
 			nr_pblocks = roundup(nr_pblocks, blks_per_sec);
-			if (cur_lblock + nr_pblocks > sis->max)
+			if (cur_lblock + nr_pblocks > sis->max) {
 				nr_pblocks -= blks_per_sec;
+
+				/* the start address is aligned to section */
+				if (!(blk_start % blks_per_sec))
+					last_extent = true;
+			}
 
 			/* this extent is last one */
 			if (!nr_pblocks) {
 				nr_pblocks = last_lblock - cur_lblock;
 				last_extent = true;
 			}
+
+			/*
+			 * the last extent which located on conventional UFS doesn't
+			 * need migrate
+			 */
+			if (last_extent && f2fs_sb_has_blkzoned(sbi) &&
+				cur_sec < GET_SEC_FROM_SEG(sbi, first_zoned_segno(sbi)))
+				goto next;
 
 			ret = f2fs_migrate_blocks(inode, cur_lblock,
 							nr_pblocks);
@@ -3994,6 +4012,7 @@ retry:
 				goto retry;
 		}
 
+next:
 		if (cur_lblock + nr_pblocks >= sis->max)
 			nr_pblocks = sis->max - cur_lblock;
 
