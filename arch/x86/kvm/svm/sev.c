@@ -4009,20 +4009,13 @@ static int snp_complete_ext_guest_req(struct kvm_vcpu *vcpu)
 	sev_ret_code fw_err = 0;
 	int vmm_ret;
 
-	vmm_ret = vcpu->run->vmgexit.req_certs.ret;
+	vmm_ret = vcpu->run->snp_req_certs.ret;
 	if (vmm_ret) {
 		if (vmm_ret == SNP_GUEST_VMM_ERR_INVALID_LEN)
 			vcpu->arch.regs[VCPU_REGS_RBX] =
-				vcpu->run->vmgexit.req_certs.data_npages;
+				vcpu->run->snp_req_certs.data_npages;
 		goto out;
 	}
-
-	/*
-	 * The request was completed on the previous completion callback and
-	 * this completion is only for the STATUS_DONE userspace notification.
-	 */
-	if (vcpu->run->vmgexit.req_certs.status == KVM_USER_VMGEXIT_REQ_CERTS_STATUS_DONE)
-		goto out_resume;
 
 	control = &svm->vmcb->control;
 
@@ -4032,14 +4025,6 @@ static int snp_complete_ext_guest_req(struct kvm_vcpu *vcpu)
 
 out:
 	ghcb_set_sw_exit_info_2(svm->sev_es.ghcb, SNP_GUEST_ERR(vmm_ret, fw_err));
-
-	if (vcpu->run->vmgexit.req_certs.flags & KVM_USER_VMGEXIT_REQ_CERTS_FLAGS_NOTIFY_DONE) {
-		vcpu->run->vmgexit.req_certs.status = KVM_USER_VMGEXIT_REQ_CERTS_STATUS_DONE;
-		vcpu->run->vmgexit.req_certs.flags = 0;
-		return 0; /* notify userspace of completion */
-	}
-
-out_resume:
 	return 1; /* resume guest */
 }
 
@@ -4064,12 +4049,9 @@ static int snp_begin_ext_guest_req(struct kvm_vcpu *vcpu)
 	 * Grab the certificates from userspace so that can be bundled with
 	 * attestation/guest requests.
 	 */
-	vcpu->run->exit_reason = KVM_EXIT_VMGEXIT;
-	vcpu->run->vmgexit.type = KVM_USER_VMGEXIT_REQ_CERTS;
-	vcpu->run->vmgexit.req_certs.data_gpa = data_gpa;
-	vcpu->run->vmgexit.req_certs.data_npages = data_npages;
-	vcpu->run->vmgexit.req_certs.flags = 0;
-	vcpu->run->vmgexit.req_certs.status = KVM_USER_VMGEXIT_REQ_CERTS_STATUS_PENDING;
+	vcpu->run->exit_reason = KVM_EXIT_SNP_REQ_CERTS;
+	vcpu->run->snp_req_certs.data_gpa = data_gpa;
+	vcpu->run->snp_req_certs.data_npages = data_npages;
 	vcpu->arch.complete_userspace_io = snp_complete_ext_guest_req;
 
 	return 0; /* forward request to userspace */
