@@ -378,7 +378,7 @@ struct cxl_event_record_raw hardware_replace = {
 
 struct cxl_test_gen_media {
 	uuid_t id;
-	struct cxl_event_gen_media rec;
+	struct cxl_event_media rec;
 } __packed;
 
 struct cxl_test_gen_media gen_media = {
@@ -402,7 +402,7 @@ struct cxl_test_gen_media gen_media = {
 
 struct cxl_test_dram {
 	uuid_t id;
-	struct cxl_event_dram rec;
+	struct cxl_event_media rec;
 } __packed;
 
 struct cxl_test_dram dram = {
