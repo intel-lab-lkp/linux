@@ -48,6 +48,7 @@
 #include <linux/mlx5/vport.h>
 #include <linux/version.h>
 #include <net/devlink.h>
+#include <linux/sched/mm.h>
 #include "mlx5_core.h"
 #include "lib/eq.h"
 #include "fs_core.h"
@@ -86,6 +87,10 @@ MODULE_PARM_DESC(debug_mask, "debug mask: 1 = dump cmd data, 2 = dump cmd exec t
 static unsigned int prof_sel = MLX5_DEFAULT_PROF;
 module_param_named(prof_sel, prof_sel, uint, 0444);
 MODULE_PARM_DESC(prof_sel, "profile selector. Valid range 0 - 2");
+
+static bool mlx5_core_force_noio;
+module_param_named(force_noio, mlx5_core_force_noio, bool, 0444);
+MODULE_PARM_DESC(force_noio, "Force the use of GFP_NOIO (Y/N)");
 
 static u32 sw_owner_id[4];
 #define MAX_SW_VHCA_ID (BIT(__mlx5_bit_sz(cmd_hca_cap_2, sw_vhca_id)) - 1)
@@ -2306,7 +2311,11 @@ static void mlx5_core_verify_params(void)
 
 static int __init mlx5_init(void)
 {
+	unsigned int noio_flags;
 	int err;
+
+	if (mlx5_core_force_noio)
+		noio_flags = memalloc_noio_save();
 
 	WARN_ONCE(strcmp(MLX5_ADEV_NAME, KBUILD_MODNAME),
 		  "mlx5_core name not in sync with kernel module name");
@@ -2328,7 +2337,7 @@ static int __init mlx5_init(void)
 	if (err)
 		goto err_pci;
 
-	return 0;
+	goto out;
 
 err_pci:
 	mlx5_sf_driver_unregister();
@@ -2336,6 +2345,9 @@ err_sf:
 	mlx5e_cleanup();
 err_debug:
 	mlx5_unregister_debugfs();
+out:
+	if (mlx5_core_force_noio)
+		memalloc_noio_restore(noio_flags);
 	return err;
 }
 
