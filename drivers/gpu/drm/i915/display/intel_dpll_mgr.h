@@ -242,14 +242,12 @@ struct intel_mpllb_state {
 };
 
 struct intel_c10pll_state {
-	u32 clock; /* in KHz */
 	u8 tx;
 	u8 cmn;
 	u8 pll[20];
 };
 
 struct intel_c20pll_state {
-	u32 clock; /* in kHz */
 	u16 tx[3];
 	u16 cmn[4];
 	union {
