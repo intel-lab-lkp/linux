@@ -1006,14 +1006,14 @@ unsigned bch2_sb_dev_has_data(struct bch_sb *sb, unsigned dev)
 
 		for_each_replicas_entry(replicas, r)
 			for (i = 0; i < r->nr_devs; i++)
-				if (r->devs[i] == dev)
+				if (r->devs[i] == dev && r->data_type < BCH_DATA_NR)
 					data_has |= 1 << r->data_type;
 	} else if (replicas_v0) {
 		struct bch_replicas_entry_v0 *r;
 
 		for_each_replicas_entry_v0(replicas_v0, r)
 			for (i = 0; i < r->nr_devs; i++)
-				if (r->devs[i] == dev)
+				if (r->devs[i] == dev && r->data_type < BCH_DATA_NR)
 					data_has |= 1 << r->data_type;
 	}
 
