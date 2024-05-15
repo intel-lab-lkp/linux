@@ -28,13 +28,15 @@
 #define PTR_TO_INT(p) ((int)((intptr_t)(p)))
 #define INT_TO_PTR(u) ((void *)((intptr_t)(u)))
 
-#define close_prot_errno_disarm(fd) \
-	if (fd >= 0) {              \
-		int _e_ = errno;    \
-		close(fd);          \
-		errno = _e_;        \
-		fd = -EBADF;        \
-	}
+#define close_prot_errno_disarm(fd)      \
+	do {				 \
+		if (fd >= 0) {		 \
+			int _e_ = errno; \
+			close(fd);	 \
+			errno = _e_;	 \
+			fd = -EBADF;	 \
+		}			 \
+	} while (false)
 
 static void change_mountns(struct __test_metadata *_metadata)
 {
