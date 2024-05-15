@@ -76,6 +76,16 @@
 					      (1ULL << __bf_shf(_mask))); \
 	})
 
+#define __BF_FIELD_CHECK_CONST(_mask, _val)				\
+	(								\
+		/* mask must be non-zero */				\
+		BUILD_BUG_ON_ZERO((_mask) == 0) +			\
+		/* check if value fits */				\
+		BUILD_BUG_ON_ZERO(~((_mask) >> __bf_shf(_mask)) & (_val)) + \
+		/* check if mask is contiguous */			\
+		__BF_CHECK_POW2((_mask) + (1ULL << __bf_shf(_mask)))	\
+	)
+
 /**
  * FIELD_MAX() - produce the maximum value representable by a field
  * @_mask: shifted mask defining the field's length and position
@@ -88,6 +98,22 @@
 		__BF_FIELD_CHECK(_mask, 0ULL, 0ULL, "FIELD_MAX: ");	\
 		(typeof(_mask))((_mask) >> __bf_shf(_mask));		\
 	})
+
+/**
+ * FIELD_MAX_CONST() - produce the maximum value representable by a field
+ * @_mask: shifted mask defining the field's length and position
+ *
+ * FIELD_MAX_CONST() returns the maximum value that can be held in
+ * the field specified by @_mask.
+ *
+ * Unlike FIELD_MAX(), it can be used where statement expressions can't.
+ * Error checking is less comfortable for this version.
+ */
+#define FIELD_MAX_CONST(_mask)						\
+	(								\
+		__BF_FIELD_CHECK_CONST(_mask, 0ULL) +			\
+		(typeof(_mask))((_mask) >> __bf_shf(_mask))		\
+	)
 
 /**
  * FIELD_FIT() - check if value fits in the field
@@ -132,13 +158,7 @@
  */
 #define FIELD_PREP_CONST(_mask, _val)					\
 	(								\
-		/* mask must be non-zero */				\
-		BUILD_BUG_ON_ZERO((_mask) == 0) +			\
-		/* check if value fits */				\
-		BUILD_BUG_ON_ZERO(~((_mask) >> __bf_shf(_mask)) & (_val)) + \
-		/* check if mask is contiguous */			\
-		__BF_CHECK_POW2((_mask) + (1ULL << __bf_shf(_mask))) +	\
-		/* and create the value */				\
+		__BF_FIELD_CHECK_CONST(_mask, _val) +			\
 		(((typeof(_mask))(_val) << __bf_shf(_mask)) & (_mask))	\
 	)
 
