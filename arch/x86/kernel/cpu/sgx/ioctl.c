@@ -365,6 +365,20 @@ static int sgx_validate_offset_length(struct sgx_encl *encl,
 	return 0;
 }
 
+/*
+ * Check signals and invoke scheduler. Return true for a pending signal.
+ */
+static bool sgx_check_signal_and_resched(void)
+{
+	if (signal_pending(current))
+		return true;
+
+	if (need_resched())
+		cond_resched();
+
+	return false;
+}
+
 /**
  * sgx_ioc_enclave_add_pages() - The handler for %SGX_IOC_ENCLAVE_ADD_PAGES
  * @encl:       an enclave pointer
@@ -409,7 +423,7 @@ static long sgx_ioc_enclave_add_pages(struct sgx_encl *encl, void __user *arg)
 	struct sgx_enclave_add_pages add_arg;
 	struct sgx_secinfo secinfo;
 	unsigned long c;
-	int ret;
+	int ret = -ERESTARTSYS;
 
 	if (!test_bit(SGX_ENCL_CREATED, &encl->flags) ||
 	    test_bit(SGX_ENCL_INITIALIZED, &encl->flags))
@@ -432,15 +446,8 @@ static long sgx_ioc_enclave_add_pages(struct sgx_encl *encl, void __user *arg)
 		return -EINVAL;
 
 	for (c = 0 ; c < add_arg.length; c += PAGE_SIZE) {
-		if (signal_pending(current)) {
-			if (!c)
-				ret = -ERESTARTSYS;
-
+		if (sgx_check_signal_and_resched())
 			break;
-		}
-
-		if (need_resched())
-			cond_resched();
 
 		ret = sgx_encl_add_page(encl, add_arg.src + c, add_arg.offset + c,
 					&secinfo, add_arg.flags);
@@ -740,12 +747,15 @@ sgx_enclave_restrict_permissions(struct sgx_encl *encl,
 	unsigned long addr;
 	unsigned long c;
 	void *epc_virt;
-	int ret;
+	int ret = -ERESTARTSYS;
 
 	memset(&secinfo, 0, sizeof(secinfo));
 	secinfo.flags = modp->permissions & SGX_SECINFO_PERMISSION_MASK;
 
 	for (c = 0 ; c < modp->length; c += PAGE_SIZE) {
+		if (sgx_check_signal_and_resched())
+			goto out;
+
 		addr = encl->base + modp->offset + c;
 
 		sgx_reclaim_direct();
@@ -898,7 +908,7 @@ static long sgx_enclave_modify_types(struct sgx_encl *encl,
 	unsigned long addr;
 	unsigned long c;
 	void *epc_virt;
-	int ret;
+	int ret = -ERESTARTSYS;
 
 	page_type = modt->page_type & SGX_PAGE_TYPE_MASK;
 
@@ -913,6 +923,9 @@ static long sgx_enclave_modify_types(struct sgx_encl *encl,
 	secinfo.flags = page_type << 8;
 
 	for (c = 0 ; c < modt->length; c += PAGE_SIZE) {
+		if (sgx_check_signal_and_resched())
+			goto out;
+
 		addr = encl->base + modt->offset + c;
 
 		sgx_reclaim_direct();
@@ -1095,12 +1108,15 @@ static long sgx_encl_remove_pages(struct sgx_encl *encl,
 	unsigned long addr;
 	unsigned long c;
 	void *epc_virt;
-	int ret;
+	int ret = -ERESTARTSYS;
 
 	memset(&secinfo, 0, sizeof(secinfo));
 	secinfo.flags = SGX_SECINFO_R | SGX_SECINFO_W | SGX_SECINFO_X;
 
 	for (c = 0 ; c < params->length; c += PAGE_SIZE) {
+		if (sgx_check_signal_and_resched())
+			goto out;
+
 		addr = encl->base + params->offset + c;
 
 		sgx_reclaim_direct();
