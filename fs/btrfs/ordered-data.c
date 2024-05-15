@@ -388,6 +388,33 @@ bool btrfs_finish_ordered_extent(struct btrfs_ordered_extent *ordered,
 	ret = can_finish_ordered_extent(ordered, page, file_offset, len, uptodate);
 	spin_unlock_irqrestore(&inode->ordered_tree_lock, flags);
 
+	/*
+	 * If this is a COW write it means we created new extent maps for the
+	 * range and they point to an unwritten location if we got an error
+	 * either before submitting a bio or during IO.
+	 *
+	 * We have marked the ordered extent with BTRFS_ORDERED_IOERR, and we
+	 * are queuing its completion below. During completion, at
+	 * btrfs_finish_one_ordered(), we will drop the extent maps for the
+	 * unwritten extents.
+	 *
+	 * However because completion runs in a work queue we can end up
+	 * unlocking the inode before the ordered extent is completed.
+	 *
+	 * That means that a fast fsync can happen before the work queue
+	 * executes the completion of the ordered extent, and in that case
+	 * the fsync will use the extent maps that point to unwritten extents,
+	 * resulting in logging file extent items that point to unwritten
+	 * locations. Unlike read paths, a fast fsync doesn't wait for ordered
+	 * extent completion before proceeding (intentional to reduce latency).
+	 *
+	 * To be safe drop the new extent maps in the range (if are doing COW)
+	 * right here before we unlock the inode and allow a fsync to run.
+	 */
+	if (!uptodate && !test_bit(BTRFS_ORDERED_NOCOW, &ordered->flags))
+		btrfs_drop_extent_map_range(inode, file_offset,
+					    file_offset + len - 1, false);
+
 	if (ret)
 		btrfs_queue_ordered_fn(ordered);
 	return ret;
