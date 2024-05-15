@@ -56,6 +56,10 @@ MODULE_AUTHOR("Eli Cohen <eli@mellanox.com>");
 MODULE_DESCRIPTION("Mellanox 5th generation network adapters (ConnectX series) IB driver");
 MODULE_LICENSE("Dual BSD/GPL");
 
+static bool mlx5_ib_force_noio;
+module_param_named(force_noio, mlx5_ib_force_noio, bool, 0444);
+MODULE_PARM_DESC(force_noio, "Force the use of GFP_NOIO (Y/N)");
+
 struct mlx5_ib_event_work {
 	struct work_struct	work;
 	union {
@@ -4489,16 +4493,23 @@ static struct auxiliary_driver mlx5r_driver = {
 
 static int __init mlx5_ib_init(void)
 {
+	unsigned int noio_flags;
 	int ret;
 
+	if (mlx5_ib_force_noio)
+		noio_flags = memalloc_noio_save();
+
 	xlt_emergency_page = (void *)__get_free_page(GFP_KERNEL);
-	if (!xlt_emergency_page)
-		return -ENOMEM;
+	if (!xlt_emergency_page) {
+		ret = -ENOMEM;
+		goto out;
+	}
 
 	mlx5_ib_event_wq = alloc_ordered_workqueue("mlx5_ib_event_wq", 0);
 	if (!mlx5_ib_event_wq) {
 		free_page((unsigned long)xlt_emergency_page);
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto out;
 	}
 
 	ret = mlx5_ib_qp_event_init();
@@ -4515,7 +4526,7 @@ static int __init mlx5_ib_init(void)
 	ret = auxiliary_driver_register(&mlx5r_driver);
 	if (ret)
 		goto drv_err;
-	return 0;
+	goto out;
 
 drv_err:
 	auxiliary_driver_unregister(&mlx5r_mp_driver);
@@ -4526,6 +4537,9 @@ rep_err:
 qp_event_err:
 	destroy_workqueue(mlx5_ib_event_wq);
 	free_page((unsigned long)xlt_emergency_page);
+out:
+	if (mlx5_ib_force_noio)
+		memalloc_noio_restore(noio_flags);
 	return ret;
 }
 
