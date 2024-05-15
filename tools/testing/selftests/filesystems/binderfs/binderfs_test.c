@@ -30,11 +30,11 @@
 
 #define close_prot_errno_disarm(fd)      \
 	do {				 \
-		if (fd >= 0) {		 \
+		if ((fd) >= 0) {	 \
 			int _e_ = errno; \
-			close(fd);	 \
+			close((fd));	 \
 			errno = _e_;	 \
-			fd = -EBADF;	 \
+			(fd) = -EBADF;	 \
 		}			 \
 	} while (false)
 
