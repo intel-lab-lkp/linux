@@ -1836,10 +1836,48 @@ static struct folio *shmem_alloc_folio(gfp_t gfp, struct shmem_inode_info *info,
 	struct page *page;
 
 	mpol = shmem_get_pgoff_policy(info, index, order, &ilx);
-	page = alloc_pages_mpol(gfp, order, mpol, ilx, numa_node_id());
+	page = alloc_pages_mpol(gfp | __GFP_COMP, order, mpol, ilx,
+				numa_node_id());
 	mpol_cond_put(mpol);
 
 	return page_rmappable_folio(page);
+}
+
+/**
+ * shmem_mapping_size_order - Get maximum folio order for the given file size.
+ * @mapping: Target address_space.
+ * @index: The page index.
+ * @size: The suggested size of the folio to create.
+ *
+ * This returns a high order for folios (when supported) based on the file size
+ * which the mapping currently allows at the given index. The index is relevant
+ * due to alignment considerations the mapping might have. The returned order
+ * may be less than the size passed.
+ *
+ * Like __filemap_get_folio order calculation.
+ *
+ * Return: The order.
+ */
+static inline unsigned int
+shmem_mapping_size_order(struct address_space *mapping, pgoff_t index,
+			 size_t size, struct shmem_sb_info *sbinfo)
+{
+	unsigned int order = ilog2(size);
+
+	if ((order <= PAGE_SHIFT) ||
+	    (!mapping_large_folio_support(mapping) || !sbinfo->noswap))
+		return 0;
+
+	order -= PAGE_SHIFT;
+
+	/* If we're not aligned, allocate a smaller folio */
+	if (index & ((1UL << order) - 1))
+		order = __ffs(index);
+
+	order = min_t(size_t, order, MAX_PAGECACHE_ORDER);
+
+	/* Order-1 not supported due to THP dependency */
+	return (order == 1) ? 0 : order;
 }
 
 static struct folio *shmem_alloc_and_add_folio(gfp_t gfp,
@@ -1848,11 +1886,13 @@ static struct folio *shmem_alloc_and_add_folio(gfp_t gfp,
 {
 	struct address_space *mapping = inode->i_mapping;
 	struct shmem_inode_info *info = SHMEM_I(inode);
-	unsigned int order = 0;
+	unsigned int order = shmem_mapping_size_order(mapping, index, len,
+						      SHMEM_SB(inode->i_sb));
 	struct folio *folio;
 	long pages;
 	int error;
 
+neworder:
 	if (!IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE))
 		huge = false;
 
@@ -1937,6 +1977,11 @@ static struct folio *shmem_alloc_and_add_folio(gfp_t gfp,
 unlock:
 	folio_unlock(folio);
 	folio_put(folio);
+	if ((error != -ENOSPC) && (order > 0)) {
+		if (--order == 1)
+			order = 0;
+		goto neworder;
+	}
 	return ERR_PTR(error);
 }
 
