@@ -4,8 +4,8 @@
 #include <linux/device.h>
 #include <linux/slab.h>
 #include <linux/pci.h>
-#include <cxlmem.h>
-#include <cxlpci.h>
+#include <linux/cxlmem.h>
+#include <linux/cxlpci.h>
 #include <pmu.h>
 
 #include "core.h"

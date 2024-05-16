@@ -8,8 +8,8 @@
 #include <linux/async.h>
 #include <linux/slab.h>
 #include <linux/nd.h>
-#include "cxlmem.h"
-#include "cxl.h"
+#include <linux/cxlmem.h>
+#include <linux/cxl.h>
 
 extern const struct nvdimm_security_ops *cxl_security_ops;
 

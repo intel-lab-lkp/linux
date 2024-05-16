@@ -4,8 +4,8 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 
-#include "cxlmem.h"
-#include "cxlpci.h"
+#include <linux/cxlmem.h>
+#include <linux/cxlpci.h>
 
 /**
  * DOC: cxl port

@@ -2,7 +2,7 @@
 
 #include <linux/list.h>
 #include <linux/acpi.h>
-#include <cxl.h>
+#include <linux/cxl.h>
 
 struct cxl_mock_ops {
 	struct list_head list;

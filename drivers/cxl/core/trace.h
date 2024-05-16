@@ -10,8 +10,8 @@
 #include <linux/pci.h>
 #include <asm-generic/unaligned.h>
 
-#include <cxl.h>
-#include <cxlmem.h>
+#include <linux/cxl.h>
+#include <linux/cxlmem.h>
 #include "core.h"
 
 #define CXL_RAS_UC_CACHE_DATA_PARITY	BIT(0)

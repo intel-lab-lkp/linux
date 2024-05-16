@@ -8,8 +8,8 @@
 #include <linux/pci.h>
 #include <linux/node.h>
 #include <asm/div64.h>
-#include "cxlpci.h"
-#include "cxl.h"
+#include <linux/cxlpci.h>
+#include <linux/cxl.h>
 
 #define CXL_RCRB_SIZE	SZ_8K
 

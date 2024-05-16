@@ -20,8 +20,8 @@
 #include <linux/bug.h>
 #include <linux/pci.h>
 
-#include "../cxl/cxlpci.h"
-#include "../cxl/cxl.h"
+#include <linux/cxlpci.h>
+#include <linux/cxl.h>
 #include "../cxl/pmu.h"
 
 #define CXL_PMU_CAP_REG			0x0

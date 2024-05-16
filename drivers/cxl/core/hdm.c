@@ -4,7 +4,7 @@
 #include <linux/device.h>
 #include <linux/delay.h>
 
-#include "cxlmem.h"
+#include <linux/cxlmem.h>
 #include "core.h"
 
 /**

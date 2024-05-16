@@ -3,7 +3,7 @@
 #include <linux/module.h>
 #include <linux/dax.h>
 
-#include "../cxl/cxl.h"
+#include <linux/cxl.h>
 #include "bus.h"
 
 static int cxl_dax_region_probe(struct device *dev)

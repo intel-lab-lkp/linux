@@ -7,8 +7,8 @@
 #include <linux/export.h>
 #include <linux/acpi.h>
 #include <linux/pci.h>
-#include <cxlmem.h>
-#include <cxlpci.h>
+#include <linux/cxlmem.h>
+#include <linux/cxlpci.h>
 #include "mock.h"
 
 static LIST_HEAD(mock);

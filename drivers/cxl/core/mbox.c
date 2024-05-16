@@ -5,9 +5,9 @@
 #include <linux/ktime.h>
 #include <linux/mutex.h>
 #include <asm/unaligned.h>
-#include <cxlpci.h>
-#include <cxlmem.h>
-#include <cxl.h>
+#include <linux/cxlpci.h>
+#include <linux/cxlmem.h>
+#include <linux/cxl.h>
 
 #include "core.h"
 #include "trace.h"

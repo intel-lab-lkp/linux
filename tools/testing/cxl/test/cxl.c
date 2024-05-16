@@ -8,7 +8,7 @@
 #include <linux/acpi.h>
 #include <linux/pci.h>
 #include <linux/mm.h>
-#include <cxlmem.h>
+#include <linux/cxlmem.h>
 
 #include "../watermark.h"
 #include "mock.h"

@@ -4,9 +4,9 @@
 #include <linux/device.h>
 #include <linux/slab.h>
 #include <linux/idr.h>
-#include <cxlmem.h>
+#include <linux/cxlmem.h>
 #include <pmu.h>
-#include <cxl.h>
+#include <linux/cxl.h>
 #include "core.h"
 
 static void cxl_pmu_release(struct device *dev)

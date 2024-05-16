@@ -9,7 +9,7 @@
 #include <linux/bits.h>
 #include <asm/unaligned.h>
 #include <crypto/sha2.h>
-#include <cxlmem.h>
+#include <linux/cxlmem.h>
 
 #include "trace.h"
 

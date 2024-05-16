@@ -9,8 +9,8 @@
 #include <linux/uuid.h>
 #include <linux/sort.h>
 #include <linux/idr.h>
-#include <cxlmem.h>
-#include <cxl.h>
+#include <linux/cxlmem.h>
+#include <linux/cxl.h>
 #include "core.h"
 
 /**

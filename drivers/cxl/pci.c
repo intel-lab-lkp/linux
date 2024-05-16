@@ -11,9 +11,9 @@
 #include <linux/pci.h>
 #include <linux/aer.h>
 #include <linux/io.h>
-#include "cxlmem.h"
-#include "cxlpci.h"
-#include "cxl.h"
+#include <linux/cxlmem.h>
+#include <linux/cxlpci.h>
+#include <linux/cxl.h>
 #include "pmu.h"
 
 /**

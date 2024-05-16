@@ -5,8 +5,8 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 
-#include "cxlmem.h"
-#include "cxlpci.h"
+#include <linux/cxlmem.h>
+#include <linux/cxlpci.h>
 
 /**
  * DOC: cxl mem

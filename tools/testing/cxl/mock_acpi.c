@@ -4,7 +4,7 @@
 #include <linux/platform_device.h>
 #include <linux/device.h>
 #include <linux/acpi.h>
-#include <cxl.h>
+#include <linux/cxl.h>
 #include "test/mock.h"
 
 struct acpi_device *to_cxl_host_bridge(struct device *host, struct device *dev)

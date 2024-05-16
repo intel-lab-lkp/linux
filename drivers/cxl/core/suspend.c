@@ -2,7 +2,7 @@
 /* Copyright(c) 2022 Intel Corporation. All rights reserved. */
 #include <linux/atomic.h>
 #include <linux/export.h>
-#include "cxlmem.h"
+#include <linux/cxlmem.h>
 
 static atomic_t mem_active;
 

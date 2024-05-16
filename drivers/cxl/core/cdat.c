@@ -5,10 +5,10 @@
 #include <linux/fw_table.h>
 #include <linux/node.h>
 #include <linux/overflow.h>
-#include "cxlpci.h"
-#include "cxlmem.h"
+#include <linux/cxlpci.h>
+#include <linux/cxlmem.h>
 #include "core.h"
-#include "cxl.h"
+#include <linux/cxl.h>
 #include "core.h"
 
 struct dsmas_entry {

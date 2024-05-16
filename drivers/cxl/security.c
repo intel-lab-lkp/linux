@@ -6,8 +6,8 @@
 #include <linux/async.h>
 #include <linux/slab.h>
 #include <linux/memregion.h>
-#include "cxlmem.h"
-#include "cxl.h"
+#include <linux/cxlmem.h>
+#include <linux/cxl.h>
 
 static unsigned long cxl_pmem_get_security_flags(struct nvdimm *nvdimm,
 						 enum nvdimm_passphrase_type ptype)

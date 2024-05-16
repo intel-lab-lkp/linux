@@ -11,9 +11,9 @@
 #include <linux/slab.h>
 #include <linux/idr.h>
 #include <linux/node.h>
-#include <cxlmem.h>
-#include <cxlpci.h>
-#include <cxl.h>
+#include <linux/cxlmem.h>
+#include <linux/cxlpci.h>
+#include <linux/cxl.h>
 #include "core.h"
 
 /**

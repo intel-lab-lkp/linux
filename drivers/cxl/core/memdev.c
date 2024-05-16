@@ -7,7 +7,7 @@
 #include <linux/slab.h>
 #include <linux/idr.h>
 #include <linux/pci.h>
-#include <cxlmem.h>
+#include <linux/cxlmem.h>
 #include "trace.h"
 #include "core.h"
 
