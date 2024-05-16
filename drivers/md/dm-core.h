@@ -208,6 +208,9 @@ struct dm_table {
 	bool singleton:1;
 	unsigned integrity_added:1;
 
+	/* set if all the targets in the table have "flush_pass_around" set */
+	bool flush_pass_around:1;
+
 	/*
 	 * Indicates the rw permissions for the new logical device.  This
 	 * should be a combination of BLK_OPEN_READ and BLK_OPEN_WRITE.
