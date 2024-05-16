@@ -1202,6 +1202,15 @@ static inline bool blk_req_can_dispatch_to_zone(struct request *rq)
 		return true;
 	return !blk_req_zone_is_write_locked(rq);
 }
+
+static inline bool blk_req_zone_in_one(struct request *rq_a,
+		struct request *rq_b)
+{
+	unsigned int zone_sectors = rq_a->q->limits.chunk_sectors;
+
+	return round_down(blk_rq_pos(rq_a), zone_sectors) ==
+		round_down(blk_rq_pos(rq_b), zone_sectors);
+}
 #else /* CONFIG_BLK_DEV_ZONED */
 static inline bool blk_rq_is_seq_zoned_write(struct request *rq)
 {
@@ -1228,6 +1237,12 @@ static inline bool blk_req_zone_is_write_locked(struct request *rq)
 static inline bool blk_req_can_dispatch_to_zone(struct request *rq)
 {
 	return true;
+}
+
+static inline bool blk_req_zone_in_one(struct request *rq_a,
+		struct request *rq_b)
+{
+	return false;
 }
 #endif /* CONFIG_BLK_DEV_ZONED */
 

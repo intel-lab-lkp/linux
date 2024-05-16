@@ -539,6 +539,37 @@ dispatch_request:
 	if (started_after(dd, rq, latest_start))
 		return NULL;
 
+	if (!blk_rq_is_seq_zoned_write(rq))
+		goto skip_check;
+	/*
+	 * To ensure sequential writing, check the lower priority class to see
+	 * if there is a request on the same zone and need to be dispatched
+	 * first
+	 */
+	ioprio_class = dd_rq_ioclass(rq);
+	prio = ioprio_class_to_prio[ioprio_class];
+	prio++;
+	for (; prio <= DD_PRIO_MAX; prio++) {
+		struct request *temp_rq;
+		unsigned long flags;
+		bool can_dispatch;
+
+		if (!dd_queued(dd, prio))
+			continue;
+
+		temp_rq = deadline_from_pos(&dd->per_prio[prio], data_dir, blk_rq_pos(rq));
+		if (temp_rq && blk_req_zone_in_one(temp_rq, rq) &&
+				blk_rq_pos(temp_rq) < blk_rq_pos(rq)) {
+			spin_lock_irqsave(&dd->zone_lock, flags);
+			can_dispatch = blk_req_can_dispatch_to_zone(temp_rq);
+			spin_unlock_irqrestore(&dd->zone_lock, flags);
+			if (!can_dispatch)
+				return NULL;
+			rq = temp_rq;
+			per_prio = &dd->per_prio[prio];
+		}
+	}
+skip_check:
 	/*
 	 * rq is the selected appropriate request.
 	 */
