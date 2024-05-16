@@ -479,7 +479,8 @@ static int adv7511_irq_process(struct adv7511 *adv7511, bool process_hpd)
 		return ret;
 
 	/* If there is no IRQ to handle, exit indicating no IRQ data */
-	if (!(irq0 & (ADV7511_INT0_HPD | ADV7511_INT0_EDID_READY)) &&
+	if (adv7511->i2c_main->irq &&
+	    !(irq0 & (ADV7511_INT0_HPD | ADV7511_INT0_EDID_READY)) &&
 	    !(irq1 & ADV7511_INT1_DDC_ERROR))
 		return -ENODATA;
 
