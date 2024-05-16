@@ -1753,7 +1753,8 @@ void intel_psr_compute_config(struct intel_dp *intel_dp,
 		return;
 	}
 
-	if (CAN_PANEL_REPLAY(intel_dp))
+	if (CAN_PANEL_REPLAY(intel_dp) &&
+	    !(intel_dp->psr.debug & I915_PSR_DEBUG_PANEL_REPLAY_DISABLE))
 		crtc_state->has_panel_replay = true;
 
 	crtc_state->has_psr = crtc_state->has_panel_replay ? true :
@@ -3064,7 +3065,8 @@ int intel_psr_debug_set(struct intel_dp *intel_dp, u64 val)
 	u32 old_mode;
 	int ret;
 
-	if (val & ~(I915_PSR_DEBUG_IRQ | I915_PSR_DEBUG_MODE_MASK) ||
+	if (val & ~(I915_PSR_DEBUG_IRQ | I915_PSR_DEBUG_PANEL_REPLAY_DISABLE |
+		    I915_PSR_DEBUG_MODE_MASK) ||
 	    mode > I915_PSR_DEBUG_ENABLE_SEL_FETCH) {
 		drm_dbg_kms(&dev_priv->drm, "Invalid debug mask %llx\n", val);
 		return -EINVAL;
