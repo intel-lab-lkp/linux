@@ -6,6 +6,7 @@
 
 struct cxl_dev_state *cxlds;
 struct cxl_memdev *cxlmd;
+struct cxl_port *endpoint;
 
 #define CXL_TYPE2_MEM_SIZE   (1024*1024*256)
 
@@ -71,6 +72,14 @@ static int type2_pci_probe(struct pci_dev *pci_dev,
 	cxlmd = devm_cxl_add_memdev(&pci_dev->dev, cxlds);
 	if (IS_ERR(cxlmd))
 		return PTR_ERR(cxlmd);
+
+	endpoint = cxl_acquire_endpoint(cxlmd);
+	if (IS_ERR(endpoint)) {
+		dev_dbg(&pci_dev->dev, "cxl_acquire_endpoint failed\n");
+		return PTR_ERR(endpoint);
+	}
+
+	cxl_release_endpoint(cxlmd, endpoint);
 
 	return 0;
 }
