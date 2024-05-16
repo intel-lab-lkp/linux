@@ -700,14 +700,14 @@ static struct _pcie_device *
 mpt3sas_get_pdev_from_target(struct MPT3SAS_ADAPTER *ioc,
 	struct MPT3SAS_TARGET *tgt_priv)
 {
-	struct _pcie_device *ret;
+	struct _pcie_device *pcie_device;
 	unsigned long flags;
 
 	spin_lock_irqsave(&ioc->pcie_device_lock, flags);
-	ret = __mpt3sas_get_pdev_from_target(ioc, tgt_priv);
+	pcie_device = __mpt3sas_get_pdev_from_target(ioc, tgt_priv);
 	spin_unlock_irqrestore(&ioc->pcie_device_lock, flags);
 
-	return ret;
+	return pcie_device;
 }
 
 
