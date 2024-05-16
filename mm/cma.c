@@ -361,6 +361,7 @@ int __init cma_declare_contiguous_nid(phys_addr_t base,
 		kmemleak_ignore_phys(addr);
 		base = addr;
 	}
+	nid = early_pfn_to_nid(PHYS_PFN(base));
 
 	ret = cma_init_reserved_mem(base, size, order_per_bit, name, res_cma);
 	if (ret)
