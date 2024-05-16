@@ -4,6 +4,7 @@
 #include <linux/cxlpci.h>
 #include <linux/cxlmem.h>
 
+void __iomem *ctpio_cxl = NULL, *ctpio_target = NULL;
 struct cxl_region_params *region_params;
 struct cxl_endpoint_decoder *cxled;
 struct cxl_root_decoder *cxlrd;
@@ -20,6 +21,8 @@ static int type2_pci_probe(struct pci_dev *pci_dev,
 {
 	struct cxl_register_map map;
 	resource_size_t max = 0;
+	u32 data_read;
+	u32 offset;
 	u16 dvsec;
 	int rc;
 
@@ -122,6 +125,28 @@ static int type2_pci_probe(struct pci_dev *pci_dev,
 	pci_info(pci_dev, "CXL region: start=%llx, end=%llx\n", region_params->res->start,
 			  region_params->res->end);
 
+	ctpio_cxl = ioremap(region_params->res->start, region_params->res->end -
+			    region_params->res->start);
+	if (!ctpio_cxl) {
+		printk("%s: ioremap failed\n", __func__);
+	} else {
+		printk("%s: ioremap OK. ctpio_cxl=%p\n", __func__, ctpio_cxl);
+	}
+
+	get_random_bytes(&offset, sizeof(offset));
+
+	offset &= (CXL_TYPE2_MEM_SIZE - 1);
+	offset &= ~0xf;
+	ctpio_target = ctpio_cxl + offset;
+	printk("%s: ctpio_target=%p\n", __func__, ctpio_target);
+
+	*(uint32_t *)ctpio_target = 0xdeadbeef;
+
+	data_read = 0;
+	data_read = *(uint32_t *)ctpio_target;
+
+	printk("%s: ctpio_target=%p read back, %08x\n", __func__, ctpio_target, data_read);
+
 	cxl_release_endpoint(cxlmd, endpoint);
 	return 0;
 
@@ -135,6 +160,7 @@ out:
 
 static void type2_pci_remove(struct pci_dev *pci_dev)
 {
+	iounmap(ctpio_cxl);
 	cxl_dpa_free(cxled);
 }
 
