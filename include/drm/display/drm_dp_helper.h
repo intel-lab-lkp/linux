@@ -112,7 +112,7 @@ struct drm_dp_vsc_sdp {
  * @target_rr: Target Refresh
  * @duration_incr_ms: Successive frame duration increase
  * @duration_decr_ms: Successive frame duration decrease
- * @operation_mode: Adaptive Sync Operation Mode
+ * @mode: Adaptive Sync Operation Mode
  */
 struct drm_dp_as_sdp {
 	unsigned char sdp_type;
@@ -230,7 +230,8 @@ drm_dp_dsc_sink_max_slice_width(const u8 dsc_dpcd[DP_DSC_RECEIVER_CAP_SIZE])
  * @dsc_dpcd : DSC-capability DPCDs of the sink
  * @output_format: output_format which is to be checked
  *
- * Returns true if the sink supports DSC with the given output_format, false otherwise.
+ * Returns: %true if the sink supports DSC with the given output_format,
+ * %false otherwise.
  */
 static inline bool
 drm_dp_dsc_sink_supports_format(const u8 dsc_dpcd[DP_DSC_RECEIVER_CAP_SIZE], u8 output_format)
@@ -280,8 +281,8 @@ drm_dp_sink_can_do_video_without_timing_msa(const u8 dpcd[DP_RECEIVER_CAP_SIZE])
  * backlight features but which require the brightness be set through PWM, and don't support setting
  * the brightness level via the DPCD.
  *
- * Returns: %True if @edp_dpcd indicates that VESA backlight controls are supported, %false
- * otherwise
+ * Returns: %true if @edp_dpcd indicates that VESA backlight controls are
+ * supported, %false otherwise
  */
 static inline bool
 drm_edp_backlight_supported(const u8 edp_dpcd[EDP_DISPLAY_CTL_CAP_SIZE])
@@ -295,7 +296,7 @@ drm_edp_backlight_supported(const u8 edp_dpcd[EDP_DISPLAY_CTL_CAP_SIZE])
  *
  * Determine if the provided link rate is an UHBR rate.
  *
- * Returns: %True if @link_rate is an UHBR rate.
+ * Returns: %true if @link_rate is an UHBR rate.
  */
 static inline bool drm_dp_is_uhbr_rate(int link_rate)
 {
@@ -531,7 +532,7 @@ ssize_t drm_dp_dpcd_write(struct drm_dp_aux *aux, unsigned int offset,
  * @offset: address of the register to read
  * @valuep: location where the value of the register will be stored
  *
- * Returns the number of bytes transferred (1) on success, or a negative
+ * Returns: the number of bytes transferred (1) on success, or a negative
  * error code on failure.
  */
 static inline ssize_t drm_dp_dpcd_readb(struct drm_dp_aux *aux,
@@ -546,7 +547,7 @@ static inline ssize_t drm_dp_dpcd_readb(struct drm_dp_aux *aux,
  * @offset: address of the register to write
  * @value: value to write to the register
  *
- * Returns the number of bytes transferred (1) on success, or a negative
+ * Returns: the number of bytes transferred (1) on success, or a negative
  * error code on failure.
  */
 static inline ssize_t drm_dp_dpcd_writeb(struct drm_dp_aux *aux,
@@ -714,7 +715,7 @@ enum drm_dp_quirk {
  * @desc: Device descriptor filled by drm_dp_read_desc()
  * @quirk: Quirk to query for
  *
- * Return true if DP device identified by @desc has @quirk.
+ * Returns: %true if DP device identified by @desc has @quirk.
  */
 static inline bool
 drm_dp_has_quirk(const struct drm_dp_desc *desc, enum drm_dp_quirk quirk)
