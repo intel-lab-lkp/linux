@@ -228,7 +228,7 @@ static __always_inline int
 __irq_startup_managed(struct irq_desc *desc, const struct cpumask *aff,
 		      bool force)
 {
-	return IRQ_STARTUP_NORMAL;
+	return IRQ_STARTUP_MANAGED;
 }
 #endif
 
