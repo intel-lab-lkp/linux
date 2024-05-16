@@ -17,8 +17,18 @@
  */
 #define TOPA_PMI_MARGIN 512
 
+/*
+ * Shift for 4K-aligned values
+ */
 #define TOPA_SHIFT 12
 
+/**
+ * sizes() - compute output buffer size in bytes from ToPA entry encoded size
+ *
+ * @tsz:	encoded ToPA entry size
+ *
+ * Return:	size in bytes
+ */
 static inline unsigned int sizes(unsigned int tsz)
 {
 	return 1 << (tsz + TOPA_SHIFT);
@@ -61,7 +71,6 @@ struct pt_pmu {
  * @cur_idx:	current output region's index within @cur table
  * @output_off:	offset within the current output region
  * @data_size:	running total of the amount of data in this buffer
- * @lost:	if data was lost/truncated
  * @head:	logical write offset inside the buffer
  * @snapshot:	if this is for a snapshot/overwrite counter
  * @single:	use Single Range Output instead of ToPA
@@ -70,7 +79,6 @@ struct pt_pmu {
  * @stop_te:	STOP topa entry pointer
  * @intr_te:	INT topa entry pointer
  * @data_pages:	array of pages from perf
- * @topa_index:	table of topa entries indexed by page offset
  */
 struct pt_buffer {
 	struct list_head	tables;
@@ -87,7 +95,7 @@ struct pt_buffer {
 	void			**data_pages;
 };
 
-#define PT_FILTERS_NUM	4
+#define PT_FILTERS_MAX_NUM	4
 
 /**
  * struct pt_filter - IP range filter configuration
@@ -107,7 +115,7 @@ struct pt_filter {
  * @nr_filters:	number of defined filters in the @filter array
  */
 struct pt_filters {
-	struct pt_filter	filter[PT_FILTERS_NUM];
+	struct pt_filter	filter[PT_FILTERS_MAX_NUM];
 	unsigned int		nr_filters;
 };
 
