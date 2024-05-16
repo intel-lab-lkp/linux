@@ -865,4 +865,9 @@ struct dentry *cxl_debugfs_create_dir(const char *dir);
 void cxl_dpa_debug(struct seq_file *file, struct cxl_dev_state *cxlds);
 
 struct cxl_dev_state *cxl_accel_state_create(struct device *dev);
+struct cxl_root_decoder *cxl_get_hpa_freespace(struct cxl_port *endpoint,
+					   struct device *const *host_bridges,
+					   int interleave_ways,
+					   unsigned long flags,
+					   resource_size_t *max);
 #endif /* __CXL_MEM_H__ */

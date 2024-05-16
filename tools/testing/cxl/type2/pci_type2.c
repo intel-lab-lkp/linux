@@ -4,6 +4,7 @@
 #include <linux/cxlpci.h>
 #include <linux/cxlmem.h>
 
+struct cxl_root_decoder *cxlrd;
 struct cxl_dev_state *cxlds;
 struct cxl_memdev *cxlmd;
 struct cxl_port *endpoint;
@@ -15,6 +16,7 @@ static int type2_pci_probe(struct pci_dev *pci_dev,
 
 {
 	struct cxl_register_map map;
+	resource_size_t max = 0;
 	u16 dvsec;
 	int rc;
 
@@ -79,9 +81,28 @@ static int type2_pci_probe(struct pci_dev *pci_dev,
 		return PTR_ERR(endpoint);
 	}
 
+	pci_info(pci_dev, "cxl hpa_freespace...");
+	cxlrd = cxl_get_hpa_freespace(endpoint, &endpoint->host_bridge, 1,
+				      CXL_DECODER_F_RAM | CXL_DECODER_F_TYPE2,
+				      &max);
+
+	if (IS_ERR(cxlrd)) {
+		dev_dbg(&pci_dev->dev, "cxl_get_hpa_freespace failed\n");
+		rc = PTR_ERR(cxlrd);
+		goto out;
+	}
+
+	if (max < CXL_TYPE2_MEM_SIZE) {
+		dev_dbg(&pci_dev->dev, "%s: no enough free HPA space %llu < %u\n",
+				       __func__, max, CXL_TYPE2_MEM_SIZE);
+		rc = -ENOMEM;
+		goto out;
+	}
+
+out:
 	cxl_release_endpoint(cxlmd, endpoint);
 
-	return 0;
+	return rc;
 }
 
 static void type2_pci_remove(struct pci_dev *pci_dev)
