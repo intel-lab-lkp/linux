@@ -558,6 +558,9 @@ void cxl_region_perf_data_calculate(struct cxl_region *cxlr,
 	};
 	struct cxl_dpa_perf *perf;
 
+	if (!mds)
+		return;
+
 	switch (cxlr->mode) {
 	case CXL_DECODER_RAM:
 		perf = &mds->ram_perf;

@@ -5,6 +5,7 @@
 #include <linux/cxlmem.h>
 
 struct cxl_dev_state *cxlds;
+struct cxl_memdev *cxlmd;
 
 #define CXL_TYPE2_MEM_SIZE   (1024*1024*256)
 
@@ -65,6 +66,11 @@ static int type2_pci_probe(struct pci_dev *pci_dev,
 		cxlds->media_ready = true;
 	else
 		dev_warn(&pci_dev->dev, "Media not active (%d)\n", rc);
+
+	pci_info(pci_dev, "cxl adding memdev...");
+	cxlmd = devm_cxl_add_memdev(&pci_dev->dev, cxlds);
+	if (IS_ERR(cxlmd))
+		return PTR_ERR(cxlmd);
 
 	return 0;
 }
