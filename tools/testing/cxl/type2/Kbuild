@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: GPL-2.0
+
+obj-m += pci_type2.o
+
+cxl_pci_type2-y := cxl_pci_type2.o
+
+KBUILD_CFLAGS := $(filter-out -Wmissing-prototypes -Wmissing-declarations, $(KBUILD_CFLAGS))

@@ -859,4 +859,6 @@ struct cxl_hdm {
 struct seq_file;
 struct dentry *cxl_debugfs_create_dir(const char *dir);
 void cxl_dpa_debug(struct seq_file *file, struct cxl_dev_state *cxlds);
+
+struct cxl_dev_state *cxl_accel_state_create(struct device *dev);
 #endif /* __CXL_MEM_H__ */
