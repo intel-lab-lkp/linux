@@ -6,6 +6,8 @@ obj-m += test_klp_atomic_replace.o \
 	test_klp_callbacks_demo.o \
 	test_klp_callbacks_demo2.o \
 	test_klp_callbacks_mod.o \
+	test_klp_extern.o \
+	test_klp_extern_hello.o \
 	test_klp_livepatch.o \
 	test_klp_state.o \
 	test_klp_state2.o \
