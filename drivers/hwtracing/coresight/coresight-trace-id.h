@@ -123,6 +123,17 @@ int coresight_trace_id_read_cpu_id(int cpu);
 int coresight_trace_id_get_system_id(void);
 
 /**
+ * Reserve trace id for a system component.
+ *
+ * Reserve the trace id if system component needs a static id for the trace.
+ *
+ * @id: value of trace ID.
+ *
+ * return: 0 if reserve successfully or -EINVAL if fail.
+ */
+int coresight_trace_id_reserve_system_id(int id);
+
+/**
  * Release an allocated system trace ID.
  *
  * Unconditionally release a trace ID allocated to a system component.

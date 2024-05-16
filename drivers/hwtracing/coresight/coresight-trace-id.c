@@ -110,6 +110,24 @@ trace_id_allocated:
 	return id;
 }
 
+static int coresight_trace_id_set(int id, struct coresight_trace_id_map *id_map)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&id_map_lock, flags);
+
+	if (WARN(!IS_VALID_CS_TRACE_ID(id), "Invalid Trace ID %d\n", id))
+		return -EINVAL;
+	if (WARN(test_bit(id, id_map->used_ids), "ID is already used: %d\n", id))
+		return -EINVAL;
+	set_bit(id, id_map->used_ids);
+
+	DUMP_ID_MAP(id_map);
+
+	spin_unlock_irqrestore(&id_map_lock, flags);
+	return 0;
+}
+
 static void coresight_trace_id_free(int id, struct coresight_trace_id_map *id_map)
 {
 	if (WARN(!IS_VALID_CS_TRACE_ID(id), "Invalid Trace ID %d\n", id))
@@ -274,6 +292,12 @@ int coresight_trace_id_get_system_id(void)
 	return coresight_trace_id_map_get_system_id(&id_map_default);
 }
 EXPORT_SYMBOL_GPL(coresight_trace_id_get_system_id);
+
+int coresight_trace_id_reserve_system_id(int id)
+{
+	return coresight_trace_id_set(id, &id_map_default);
+}
+EXPORT_SYMBOL_GPL(coresight_trace_id_reserve_system_id);
 
 void coresight_trace_id_put_system_id(int id)
 {
