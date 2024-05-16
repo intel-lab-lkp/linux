@@ -292,11 +292,23 @@ static int supported_arch(void)
 #elif defined(__x86_64__)
 	return 1;
 #elif defined(__aarch64__)
-	return getpagesize() == PAGE_SIZE;
+	return 1;
 #else
 	return 0;
 #endif
 }
+
+#if defined(__aarch64__)
+void failure_message(void)
+{
+	printf("TEST MAY FAIL: Are you running on a pagesize other than 64K?\n");
+	printf("If yes, please change macros manually. Ensure to change the\n");
+	printf("address macros too if running defconfig on 16K pagesize,\n");
+	printf("since userspace VA = 47 bits post FEAT_LPA2.\n");
+}
+#else
+void failure_message(void) {}
+#endif
 
 int main(int argc, char **argv)
 {
@@ -308,5 +320,8 @@ int main(int argc, char **argv)
 	ret = run_test(testcases, ARRAY_SIZE(testcases));
 	if (argc == 2 && !strcmp(argv[1], "--run-hugetlb"))
 		ret = run_test(hugetlb_testcases, ARRAY_SIZE(hugetlb_testcases));
+
+	if (ret)
+		failure_message();
 	return ret;
 }
