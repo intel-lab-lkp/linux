@@ -300,3 +300,70 @@ symbol table, and relocation section indices, ELF information is preserved for
 livepatch modules and is made accessible by the module loader through
 module->klp_info, which is a :c:type:`klp_modinfo` struct. When a livepatch module
 loads, this struct is filled in by the module loader.
+
+6. klp-convert tool
+===================
+The livepatch relocation sections might be created using
+scripts/livepatch/klp-convert. It is called automatically during
+the build as part of a module post processing.
+
+The tool is not able to find the symbols and all the metadata
+automatically. Instead, all needed information must already be
+part of rela entry for the given symbol. Such a rela can
+be created easily by using KLP_RELOC_SYMBOL() macro after
+the symbol declaration.
+
+KLP_RELOC_SYMBOL causes that the relocation entries for
+the given symbol will be created in the following format::
+
+  .klp.sym.rela.lp_object.sym_object.sym_name,sympos
+  ^           ^ ^       ^ ^        ^ ^      ^   ^
+  |___________| |_______| |________| |______|   |
+       [A]         [B]        [C]       [D]    [E]
+
+[A]
+  The symbol name is prefixed with the string ".klp.sym.rela."
+
+[B]
+  The name of the object (i.e. "vmlinux" or name of module) which
+  is livepatched.
+
+[C]
+  The name of the object (i.e. "vmlinux" or name of module) to
+  which the symbol belongs follows immediately after the prefix.
+
+[D]
+  The actual name of the symbol.
+
+[E]
+  The position of the symbol in the object (as according to kallsyms)
+  This is used to differentiate duplicate symbols within the same
+  object. The symbol position is expressed numerically (0, 1, 2...).
+  The symbol position of a unique symbol is 0.
+
+Example:
+--------
+**Livepatch source code:**
+
+::
+
+  extern char *saved_command_line \
+                 KLP_RELOC_SYMBOL(vmlinux, vmlinux, saved_command_line, 0);
+
+**`readelf -r -W` output of compiled module:**
+
+::
+
+  Relocation section '.rela.text' at offset 0x32e60 contains 10 entries:
+      Offset             Info             Type               Symbol's Value  Symbol's Name + Addend
+  ...
+  0000000000000068  0000003c00000002 R_X86_64_PC32          0000000000000000 .klp.sym.rela.vmlinux.vmlinux.saved_command_line,0 - 4
+  ...
+
+**`readelf -r -W` output of transformed module by klp-convert:**
+
+::
+
+  Relocation section '.klp.rela.vmlinux.text' at offset 0x5cb60 contains 1 entry:
+      Offset             Info             Type               Symbol's Value  Symbol's Name + Addend
+      0000000000000068  0000003c00000002 R_X86_64_PC32          0000000000000000 .klp.sym.vmlinux.saved_command_line,0 - 4
