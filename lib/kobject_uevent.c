@@ -24,6 +24,7 @@
 #include <linux/netlink.h>
 #include <linux/uidgid.h>
 #include <linux/uuid.h>
+#include <linux/sysfs.h>
 #include <linux/ctype.h>
 #include <net/sock.h>
 #include <net/netlink.h>
@@ -592,6 +593,9 @@ int kobject_uevent_env(struct kobject *kobj, enum kobject_action action,
 
 	retval = kobject_uevent_net_broadcast(kobj, env, action_string,
 					      devpath);
+
+	if (action == KOBJ_CHANGE)
+		sysfs_notify(kobj, NULL, "uevent");
 
 #ifdef CONFIG_UEVENT_HELPER
 	/* call uevent_helper, usually only enabled during early boot */
