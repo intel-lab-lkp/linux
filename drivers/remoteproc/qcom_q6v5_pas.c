@@ -10,6 +10,7 @@
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/firmware.h>
+#include <linux/hwspinlock.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -52,6 +53,7 @@ struct adsp_data {
 	const char *ssr_name;
 	const char *sysmon_name;
 	int ssctl_id;
+	int hwlock_id;
 
 	int region_assign_idx;
 	int region_assign_count;
@@ -83,6 +85,9 @@ struct qcom_adsp {
 	int crash_reason_smem;
 	bool decrypt_shutdown;
 	const char *info_name;
+
+	struct hwspinlock *hwlock;
+	int hwlock_id;
 
 	const struct firmware *firmware;
 	const struct firmware *dtb_firmware;
@@ -399,6 +404,12 @@ static int adsp_stop(struct rproc *rproc)
 	if (handover)
 		qcom_pas_handover(&adsp->q6v5);
 
+	if (adsp->hwlock) {
+		ret = hwspin_lock_bust(adsp->hwlock, adsp->hwlock_id);
+		if (ret)
+			dev_info(adsp->dev, "failed to bust hwspinlock\n");
+	}
+
 	return ret;
 }
 
@@ -684,6 +695,7 @@ static int adsp_probe(struct platform_device *pdev)
 	struct rproc *rproc;
 	const char *fw_name, *dtb_fw_name = NULL;
 	const struct rproc_ops *ops = &adsp_ops;
+	int hwlock_idx;
 	int ret;
 
 	desc = of_device_get_match_data(&pdev->dev);
@@ -736,6 +748,17 @@ static int adsp_probe(struct platform_device *pdev)
 		adsp->dtb_firmware_name = dtb_fw_name;
 		adsp->dtb_pas_id = desc->dtb_pas_id;
 	}
+
+	if (desc->hwlock_id) {
+		adsp->hwlock_id = desc->hwlock_id;
+		hwlock_idx = of_hwspin_lock_get_id(pdev->dev.of_node, 0);
+		if (hwlock_idx >= 0) {
+			adsp->hwlock = hwspin_lock_request_specific(hwlock_idx);
+			if (!adsp->hwlock)
+				dev_err(&pdev->dev, "failed to request hwspinlock\n");
+		}
+	}
+
 	platform_set_drvdata(pdev, adsp);
 
 	ret = device_init_wakeup(adsp->dev, true);
@@ -1196,6 +1219,7 @@ static const struct adsp_data sm8550_adsp_resource = {
 	.ssr_name = "lpass",
 	.sysmon_name = "adsp",
 	.ssctl_id = 0x14,
+	.hwlock_id = 3,
 };
 
 static const struct adsp_data sm8550_cdsp_resource = {
@@ -1216,6 +1240,7 @@ static const struct adsp_data sm8550_cdsp_resource = {
 	.ssr_name = "cdsp",
 	.sysmon_name = "cdsp",
 	.ssctl_id = 0x17,
+	.hwlock_id = 6,
 };
 
 static const struct adsp_data sm8550_mpss_resource = {
@@ -1236,6 +1261,7 @@ static const struct adsp_data sm8550_mpss_resource = {
 	.ssr_name = "mpss",
 	.sysmon_name = "modem",
 	.ssctl_id = 0x12,
+	.hwlock_id = 2,
 	.region_assign_idx = 2,
 	.region_assign_count = 1,
 	.region_assign_vmid = QCOM_SCM_VMID_MSS_MSA,
@@ -1275,6 +1301,7 @@ static const struct adsp_data sm8650_cdsp_resource = {
 	.ssr_name = "cdsp",
 	.sysmon_name = "cdsp",
 	.ssctl_id = 0x17,
+	.hwlock_id = 6,
 	.region_assign_idx = 2,
 	.region_assign_count = 1,
 	.region_assign_shared = true,
@@ -1299,6 +1326,7 @@ static const struct adsp_data sm8650_mpss_resource = {
 	.ssr_name = "mpss",
 	.sysmon_name = "modem",
 	.ssctl_id = 0x12,
+	.hwlock_id = 2,
 	.region_assign_idx = 2,
 	.region_assign_count = 3,
 	.region_assign_vmid = QCOM_SCM_VMID_MSS_MSA,
