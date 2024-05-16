@@ -554,6 +554,7 @@ static void qcom_scm_set_download_mode(bool enable)
 int qcom_scm_pas_init_image(u32 peripheral, const void *metadata, size_t size,
 			    struct qcom_scm_pas_metadata *ctx)
 {
+	size_t page_aligned_size;
 	dma_addr_t mdata_phys;
 	void *mdata_buf;
 	int ret;
@@ -571,7 +572,8 @@ int qcom_scm_pas_init_image(u32 peripheral, const void *metadata, size_t size,
 	 * data blob, so make sure it's physically contiguous, 4K aligned and
 	 * non-cachable to avoid XPU violations.
 	 */
-	mdata_buf = dma_alloc_coherent(__scm->dev, size, &mdata_phys,
+	page_aligned_size = PAGE_ALIGN(size + PAGE_SIZE);
+	mdata_buf = dma_alloc_coherent(__scm->dev, page_aligned_size, &mdata_phys,
 				       GFP_KERNEL);
 	if (!mdata_buf)
 		return -ENOMEM;
@@ -596,11 +598,11 @@ disable_clk:
 
 out:
 	if (ret < 0 || !ctx) {
-		dma_free_coherent(__scm->dev, size, mdata_buf, mdata_phys);
+		dma_free_coherent(__scm->dev, page_aligned_size, mdata_buf, mdata_phys);
 	} else if (ctx) {
 		ctx->ptr = mdata_buf;
 		ctx->phys = mdata_phys;
-		ctx->size = size;
+		ctx->size = page_aligned_size;
 	}
 
 	return ret ? : res.result[0];
