@@ -2131,6 +2131,13 @@ void dm_table_postsuspend_targets(struct dm_table *t)
 	suspend_targets(t, POSTSUSPEND);
 }
 
+static int dm_link_dev_to_target(struct dm_target *ti, struct dm_dev *dev,
+		sector_t start, sector_t len, void *data)
+{
+	dev->ti = ti;
+	return 0;
+}
+
 int dm_table_resume_targets(struct dm_table *t)
 {
 	unsigned int i;
@@ -2157,6 +2164,15 @@ int dm_table_resume_targets(struct dm_table *t)
 
 		if (ti->type->resume)
 			ti->type->resume(ti);
+	}
+
+	if (t->flush_pass_around) {
+		for (i = 0; i < t->num_targets; i++) {
+			struct dm_target *ti = dm_table_get_target(t, i);
+
+			if (ti->type->iterate_devices)
+				ti->type->iterate_devices(ti, dm_link_dev_to_target, NULL);
+		}
 	}
 
 	return 0;

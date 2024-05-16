@@ -169,6 +169,7 @@ struct dm_dev {
 	struct dax_device *dax_dev;
 	blk_mode_t mode;
 	char name[16];
+	struct dm_target *ti
 };
 
 /*
