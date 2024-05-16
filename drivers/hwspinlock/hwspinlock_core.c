@@ -428,6 +428,7 @@ static int hwspin_lock_register_single(struct hwspinlock *hwlock, int id)
 	int ret;
 
 	mutex_lock(&hwspinlock_tree_lock);
+	hwlock->refcnt = 0;
 
 	ret = radix_tree_insert(&hwspinlock_tree, id, hwlock);
 	if (ret) {
@@ -671,6 +672,8 @@ static int __hwspin_lock_request(struct hwspinlock *hwlock)
 
 	ret = 0;
 
+	hwlock->refcnt++;
+
 	/* mark hwspinlock as used, should not fail */
 	tmp = radix_tree_tag_clear(&hwspinlock_tree, hwlock_to_id(hwlock),
 							HWSPINLOCK_UNUSED);
@@ -829,12 +832,13 @@ int hwspin_lock_free(struct hwspinlock *hwlock)
 	/* notify the underlying device that power is not needed */
 	pm_runtime_put(dev);
 
-	/* mark this hwspinlock as available */
-	tmp = radix_tree_tag_set(&hwspinlock_tree, hwlock_to_id(hwlock),
-							HWSPINLOCK_UNUSED);
+	if (--hwlock->refcnt == 0) {
+		/* mark this hwspinlock as available */
+		tmp = radix_tree_tag_set(&hwspinlock_tree, hwlock_to_id(hwlock), HWSPINLOCK_UNUSED);
 
-	/* sanity check (this shouldn't happen) */
-	WARN_ON(tmp != hwlock);
+		/* sanity check (this shouldn't happen) */
+		WARN_ON(tmp != hwlock);
+	}
 
 	module_put(dev->driver->owner);
 
