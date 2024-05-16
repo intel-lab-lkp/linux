@@ -76,6 +76,8 @@
 
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
+#define KLP_SYM_RELA ".klp.sym.rela."
+
 void *do_nofail(void *ptr, const char *expr);
 
 struct buffer {
@@ -97,6 +99,7 @@ struct module {
 	bool is_gpl_compatible;
 	bool from_dump;		/* true if module was loaded from *.symvers */
 	bool is_vmlinux;
+	bool is_livepatch;
 	bool seen;
 	bool has_init;
 	bool has_cleanup;
