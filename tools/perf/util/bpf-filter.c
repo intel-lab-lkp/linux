@@ -80,6 +80,10 @@ static int check_sample_flags(struct evsel *evsel, struct perf_bpf_filter_expr *
 		CHECK_TERM(DATA_PAGE_SIZE);
 		CHECK_TERM(WEIGHT_STRUCT);
 		CHECK_TERM(DATA_SRC);
+	case PBF_TERM_UID:
+	case PBF_TERM_GID:
+		/* Not dependent on the sample_type as computed from a BPF helper. */
+		return 0;
 	case PBF_TERM_NONE:
 	default:
 		break;

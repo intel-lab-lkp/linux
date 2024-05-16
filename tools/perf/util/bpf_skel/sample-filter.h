@@ -34,6 +34,9 @@ enum perf_bpf_filter_term {
 	PBF_TERM_DATA_PAGE_SIZE,
 	PBF_TERM_WEIGHT_STRUCT,
 	PBF_TERM_DATA_SRC,
+	/* Terms computed from BPF helpers. */
+	PBF_TERM_UID,
+	PBF_TERM_GID,
 };
 
 /* BPF map entry for filtering */
