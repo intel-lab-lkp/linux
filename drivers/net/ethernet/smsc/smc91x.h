@@ -142,14 +142,14 @@ static inline void _SMC_outw_align4(u16 val, void __iomem *ioaddr, int reg,
 #define SMC_CAN_USE_32BIT	0
 #define SMC_NOWAIT		1
 
-static inline void mcf_insw(void *a, unsigned char *p, int l)
+static inline void mcf_insw(void __iomem *a, unsigned char *p, int l)
 {
 	u16 *wp = (u16 *) p;
 	while (l-- > 0)
 		*wp++ = readw(a);
 }
 
-static inline void mcf_outsw(void *a, unsigned char *p, int l)
+static inline void mcf_outsw(void __iomem *a, unsigned char *p, int l)
 {
 	u16 *wp = (u16 *) p;
 	while (l-- > 0)
@@ -1026,15 +1026,15 @@ static const char * chip_ids[ 16 ] =  {
 		}							\
 	} while (0)
 
-#define SMC_PUSH_DATA(lp, p, l)					\
+#define SMC_PUSH_DATA(lp, p, l)						\
 	do {								\
-		if (SMC_32BIT(lp)) {				\
+		void __iomem *__ioaddr = ioaddr;			\
+		if (SMC_32BIT(lp)) {					\
 			void *__ptr = (p);				\
 			int __len = (l);				\
-			void __iomem *__ioaddr = ioaddr;		\
 			if (__len >= 2 && (unsigned long)__ptr & 2) {	\
 				__len -= 2;				\
-				SMC_outsw(ioaddr, DATA_REG(lp), __ptr, 1); \
+				SMC_outsw(__ioaddr, DATA_REG(lp), __ptr, 1); \
 				__ptr += 2;				\
 			}						\
 			if (SMC_CAN_USE_DATACS && lp->datacs)		\
@@ -1042,20 +1042,20 @@ static const char * chip_ids[ 16 ] =  {
 			SMC_outsl(__ioaddr, DATA_REG(lp), __ptr, __len>>2); \
 			if (__len & 2) {				\
 				__ptr += (__len & ~3);			\
-				SMC_outsw(ioaddr, DATA_REG(lp), __ptr, 1); \
+				SMC_outsw(__ioaddr, DATA_REG(lp), __ptr, 1); \
 			}						\
 		} else if (SMC_16BIT(lp))				\
-			SMC_outsw(ioaddr, DATA_REG(lp), p, (l) >> 1);	\
-		else if (SMC_8BIT(lp))				\
-			SMC_outsb(ioaddr, DATA_REG(lp), p, l);	\
+			SMC_outsw(__ioaddr, DATA_REG(lp), p, (l) >> 1);	\
+		else if (SMC_8BIT(lp))					\
+			SMC_outsb(__ioaddr, DATA_REG(lp), p, l);	\
 	} while (0)
 
-#define SMC_PULL_DATA(lp, p, l)					\
+#define SMC_PULL_DATA(lp, p, l)						\
 	do {								\
-		if (SMC_32BIT(lp)) {				\
+		void __iomem *__ioaddr = ioaddr;			\
+		if (SMC_32BIT(lp)) {					\
 			void *__ptr = (p);				\
 			int __len = (l);				\
-			void __iomem *__ioaddr = ioaddr;		\
 			if ((unsigned long)__ptr & 2) {			\
 				/*					\
 				 * We want 32bit alignment here.	\
@@ -1072,7 +1072,7 @@ static const char * chip_ids[ 16 ] =  {
 				 */					\
 				__ptr -= 2;				\
 				__len += 2;				\
-				SMC_SET_PTR(lp,			\
+				SMC_SET_PTR(lp,				\
 					2|PTR_READ|PTR_RCV|PTR_AUTOINC); \
 			}						\
 			if (SMC_CAN_USE_DATACS && lp->datacs)		\
@@ -1080,9 +1080,9 @@ static const char * chip_ids[ 16 ] =  {
 			__len += 2;					\
 			SMC_insl(__ioaddr, DATA_REG(lp), __ptr, __len>>2); \
 		} else if (SMC_16BIT(lp))				\
-			SMC_insw(ioaddr, DATA_REG(lp), p, (l) >> 1);	\
-		else if (SMC_8BIT(lp))				\
-			SMC_insb(ioaddr, DATA_REG(lp), p, l);		\
+			SMC_insw(__ioaddr, DATA_REG(lp), p, (l) >> 1);	\
+		else if (SMC_8BIT(lp))					\
+			SMC_insb(__ioaddr, DATA_REG(lp), p, l);		\
 	} while (0)
 
 #endif  /* _SMC91X_H_ */
