@@ -321,6 +321,15 @@ static void early_init_intel(struct cpuinfo_x86 *c)
 #ifdef CONFIG_X86_64
 	set_cpu_cap(c, X86_FEATURE_SYSENTER32);
 #else
+	/*
+	 * The Quark doesn't have bit 19 set in 0x01 CPUID leaf, which means
+	 * it doesn't provide any clflush instructions and hence the cache
+	 * alignment is set to 0. The actual cache line size is 16 bytes,
+	 * hence set the alignment accordingly. At the same time the physical
+	 * and virtual address bits are retrieved via 0x80000008 CPUID leaf.
+	 */
+	if (c->x86 == 5 && c->x86_model == 9)
+		c->x86_cache_alignment = 16;
 	/* Netburst reports 64 bytes clflush size, but does IO in 128 bytes */
 	if (c->x86 == 15 && c->x86_cache_alignment == 64)
 		c->x86_cache_alignment = 128;
