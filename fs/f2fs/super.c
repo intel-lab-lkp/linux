@@ -1631,7 +1631,6 @@ static void f2fs_put_super(struct super_block *sb)
 	f2fs_release_ino_entry(sbi, true);
 
 	f2fs_leave_shrinker(sbi);
-	mutex_unlock(&sbi->umount_mutex);
 
 	/* our cp_error case, we can wait for any writeback page */
 	f2fs_flush_merged_writes(sbi);
@@ -1660,6 +1659,8 @@ static void f2fs_put_super(struct super_block *sb)
 
 	iput(sbi->meta_inode);
 	sbi->meta_inode = NULL;
+
+	mutex_unlock(&sbi->umount_mutex);
 
 	/*
 	 * iput() can update stat information, if f2fs_write_checkpoint()
