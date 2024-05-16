@@ -8312,7 +8312,10 @@ static int ufs_get_device_desc(struct ufs_hba *hba)
 	if (hba->ext_iid_sup)
 		ufshcd_ext_iid_probe(hba, desc_buf);
 
-	ufshcd_rtt_set(hba, desc_buf);
+	if (hba->vops && hba->vops->rtt_set)
+		hba->vops->rtt_set(hba, desc_buf);
+	else
+		ufshcd_rtt_set(hba, desc_buf);
 
 	/*
 	 * ufshcd_read_string_desc returns size of the string
