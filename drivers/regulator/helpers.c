@@ -211,8 +211,14 @@ int regulator_set_voltage_sel_pickable_regmap(struct regulator_dev *rdev,
 		if (ret)
 			return ret;
 
-		ret = regmap_update_bits(rdev->regmap, rdev->desc->vsel_reg,
-				  rdev->desc->vsel_mask, sel);
+		/*
+		 * Some PMICs treat the vsel_reg same as apply-bit. Force it
+		 * to be written even if the old selector were same as the new
+		 * (but range changed) by using regmap_write_bits() and not the
+		 * regmap_update_bits().
+		 */
+		ret = regmap_write_bits(rdev->regmap, rdev->desc->vsel_reg,
+					rdev->desc->vsel_mask, sel);
 	}
 
 	if (ret)
