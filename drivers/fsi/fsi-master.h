@@ -12,6 +12,7 @@
 #include <linux/device.h>
 #include <linux/irq.h>
 #include <linux/mutex.h>
+#include <linux/sysfs.h>
 
 /*
  * Master registers
@@ -27,12 +28,16 @@
 #define FSI_MENP0		0x10		/* R/W: enable */
 #define FSI_MLEVP0		0x18		/* R: plug detect */
 #define FSI_MSENP0		0x18		/* S: Set enable */
+#define FSI_MREFP0		0x20		/* R: Plug reference */
 #define FSI_MCENP0		0x20		/* C: Clear enable */
+#define FSI_MHPMP0		0x28		/* R: Plug monitor */
 #define FSI_MSIEP0		0x30		/* R/W: interrupt enable */
+#define FSI_MAESP0		0x50		/* R: Any error port */
 #define FSI_MSSIEP0		0x50		/* S: Set interrupt enable */
 #define FSI_MCSIEP0		0x70		/* C: Clear interrupt enable */
 #define FSI_MAEB		0x70		/* R: Error address */
 #define FSI_MVER		0x74		/* R: master version/type */
+#define FSI_MBSYP0		0x78		/* R: Port busy */
 #define FSI_MSTAP0		0xd0		/* R: Port status */
 #define FSI_MRESP0		0xd0		/* W: Port reset */
 #define FSI_MESRB0		0x1d0		/* R: Master error status */
@@ -151,6 +156,7 @@ struct fsi_master {
 	int		(*link_config)(struct fsi_master *, int link,
 				       u8 t_send_delay, u8 t_echo_delay);
 	u8		remote_interrupt_status;
+	bool		groups;
 };
 
 #define to_fsi_master(d) container_of(d, struct fsi_master, dev)
