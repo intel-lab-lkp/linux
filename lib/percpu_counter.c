@@ -73,11 +73,14 @@ void percpu_counter_set(struct percpu_counter *fbc, s64 amount)
 EXPORT_SYMBOL(percpu_counter_set);
 
 /*
- * local_irq_save() is needed to make the function irq safe:
- * - The slow path would be ok as protected by an irq-safe spinlock.
- * - this_cpu_add would be ok as it is irq-safe by definition.
- * But:
- * The decision slow path/fast path and the actual update must be atomic, too.
+ * Add to a counter while respecting batch size.
+ *
+ * Safety against interrupts is achieved in 2 ways:
+ * 1. the fast path uses local cmpxchg (note: no lock prefix)
+ * 2. the slow path operates with interrupts disabled
+ *
+ * This deals with the following:
+ * The decision slow path/fast path and the actual update must be atomic.
  * Otherwise a call in process context could check the current values and
  * decide that the fast path can be used. If now an interrupt occurs before
  * the this_cpu_add(), and the interrupt updates this_cpu(*fbc->counters),
@@ -86,20 +89,33 @@ EXPORT_SYMBOL(percpu_counter_set);
  */
 void percpu_counter_add_batch(struct percpu_counter *fbc, s64 amount, s32 batch)
 {
-	s64 count;
+	s64 count, ocount;
 	unsigned long flags;
 
-	local_irq_save(flags);
-	count = __this_cpu_read(*fbc->counters) + amount;
-	if (abs(count) >= batch) {
-		raw_spin_lock(&fbc->lock);
-		fbc->count += count;
-		__this_cpu_sub(*fbc->counters, count - amount);
-		raw_spin_unlock(&fbc->lock);
-	} else {
-		this_cpu_add(*fbc->counters, amount);
+	preempt_disable();
+	ocount = __this_cpu_read(*fbc->counters);
+retry:
+	if (unlikely(abs(ocount + amount) >= batch)) {
+		raw_spin_lock_irqsave(&fbc->lock, flags);
+		/*
+		 * Note: the counter might have changed before we got the lock,
+		 * but is guaranteed to be stable now.
+		 */
+		ocount = __this_cpu_read(*fbc->counters);
+		fbc->count += ocount + amount;
+		__this_cpu_sub(*fbc->counters, ocount);
+		raw_spin_unlock_irqrestore(&fbc->lock, flags);
+		preempt_enable();
+		return;
 	}
-	local_irq_restore(flags);
+
+	count = __this_cpu_cmpxchg(*fbc->counters, ocount, ocount + amount);
+	if (unlikely(count != ocount)) {
+		ocount = count;
+		goto retry;
+	}
+
+	preempt_enable();
 }
 EXPORT_SYMBOL(percpu_counter_add_batch);
 
