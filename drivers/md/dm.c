@@ -1549,6 +1549,20 @@ static unsigned int __send_duplicate_bios(struct clone_info *ci, struct dm_targe
 	return ret;
 }
 
+static void __send_empty_flush_bios(struct dm_table *t, struct dm_target *ti,
+		struct clone_info *ci)
+{
+	unsigned int bios;
+
+	if (unlikely(ti->num_flush_bios == 0))
+		return;
+
+	atomic_add(ti->num_flush_bios, &ci->io->io_count);
+	bios = __send_duplicate_bios(ci, ti, ti->num_flush_bios,
+			NULL, GFP_NOWAIT);
+	atomic_sub(ti->num_flush_bios - bios, &ci->io->io_count);
+}
+
 static void __send_empty_flush(struct clone_info *ci)
 {
 	struct dm_table *t = ci->map;
@@ -1567,16 +1581,9 @@ static void __send_empty_flush(struct clone_info *ci)
 	ci->io->tio.clone.bi_iter.bi_size = 0;
 
 	for (unsigned int i = 0; i < t->num_targets; i++) {
-		unsigned int bios;
 		struct dm_target *ti = dm_table_get_target(t, i);
 
-		if (unlikely(ti->num_flush_bios == 0))
-			continue;
-
-		atomic_add(ti->num_flush_bios, &ci->io->io_count);
-		bios = __send_duplicate_bios(ci, ti, ti->num_flush_bios,
-					     NULL, GFP_NOWAIT);
-		atomic_sub(ti->num_flush_bios - bios, &ci->io->io_count);
+		__send_empty_flush_bios(t, ti, ci);
 	}
 
 	/*
