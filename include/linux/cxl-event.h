@@ -32,41 +32,38 @@ struct cxl_event_generic {
  * CXL rev 3.0 Section 8.2.9.2.1.1; Table 8-43
  */
 #define CXL_EVENT_GEN_MED_COMP_ID_SIZE	0x10
-struct cxl_event_gen_media {
-	struct cxl_event_record_hdr hdr;
-	__le64 phys_addr;
-	u8 descriptor;
-	u8 type;
-	u8 transaction_type;
-	u8 validity_flags[2];
-	u8 channel;
-	u8 rank;
-	u8 device[3];
-	u8 component_id[CXL_EVENT_GEN_MED_COMP_ID_SIZE];
-	u8 reserved[46];
-} __packed;
-
 /*
  * DRAM Event Record - DER
  * CXL rev 3.0 section 8.2.9.2.1.2; Table 3-44
  */
 #define CXL_EVENT_DER_CORRECTION_MASK_SIZE	0x20
-struct cxl_event_dram {
+struct cxl_event_media {
 	struct cxl_event_record_hdr hdr;
-	__le64 phys_addr;
-	u8 descriptor;
-	u8 type;
-	u8 transaction_type;
-	u8 validity_flags[2];
-	u8 channel;
-	u8 rank;
-	u8 nibble_mask[3];
-	u8 bank_group;
-	u8 bank;
-	u8 row[3];
-	u8 column[2];
-	u8 correction_mask[CXL_EVENT_DER_CORRECTION_MASK_SIZE];
-	u8 reserved[0x17];
+	struct_group_tagged(cxl_event_media_hdr, media_hdr,
+		__le64 phys_addr;
+		u8 descriptor;
+		u8 type;
+		u8 transaction_type;
+		u8 validity_flags[2];
+		u8 channel;
+		u8 rank;
+	);
+	union {
+		struct_group(general,
+			u8 device[3];
+			u8 component_id[CXL_EVENT_GEN_MED_COMP_ID_SIZE];
+			u8 gen_reserved[46];
+		);
+		struct_group(dram,
+			u8 nibble_mask[3];
+			u8 bank_group;
+			u8 bank;
+			u8 row[3];
+			u8 column[2];
+			u8 correction_mask[CXL_EVENT_DER_CORRECTION_MASK_SIZE];
+			u8 dram_reserved[0x17];
+		);
+	};
 } __packed;
 
 /*
@@ -95,21 +92,12 @@ struct cxl_event_mem_module {
 	u8 reserved[0x3d];
 } __packed;
 
-/*
- * General Media or DRAM Event Common Fields
- * - provides common access to phys_addr
- */
-struct cxl_event_common {
-	struct cxl_event_record_hdr hdr;
-	__le64 phys_addr;
-} __packed;
-
 union cxl_event {
 	struct cxl_event_generic generic;
-	struct cxl_event_gen_media gen_media;
-	struct cxl_event_dram dram;
+	struct cxl_event_media media_general;
+	struct cxl_event_media media_dram;
 	struct cxl_event_mem_module mem_module;
-	struct cxl_event_common common;
+	struct cxl_event_media media_common;
 } __packed;
 
 /*
