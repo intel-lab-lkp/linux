@@ -4,8 +4,10 @@
 #include <linux/cxlpci.h>
 #include <linux/cxlmem.h>
 
+struct cxl_region_params *region_params;
 struct cxl_endpoint_decoder *cxled;
 struct cxl_root_decoder *cxlrd;
+struct cxl_region *efx_region;
 struct cxl_dev_state *cxlds;
 struct cxl_memdev *cxlmd;
 struct cxl_port *endpoint;
@@ -109,6 +111,22 @@ static int type2_pci_probe(struct pci_dev *pci_dev,
 		goto out;
 	}
 
+	pci_info(pci_dev, "cxl create_region...");
+	efx_region = cxl_create_region(cxlrd, &cxled, 1);
+	if (!efx_region) {
+		rc = PTR_ERR(cxled);
+		goto out_dpa;
+	}
+
+	region_params = &efx_region->params;
+	pci_info(pci_dev, "CXL region: start=%llx, end=%llx\n", region_params->res->start,
+			  region_params->res->end);
+
+	cxl_release_endpoint(cxlmd, endpoint);
+	return 0;
+
+out_dpa:
+	cxl_dpa_free(cxled);
 out:
 	cxl_release_endpoint(cxlmd, endpoint);
 
