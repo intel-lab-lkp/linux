@@ -438,17 +438,47 @@ static const struct dmi_system_id disable_broken_read_transmit_power[] = {
 	{ }
 };
 
+struct bcm_chip_version_table {
+	u8	chip_id;
+	u16 baseline;
+};
+#define BCM_ROMFW_BASELINE_NUM	0xFFFF
+static const struct bcm_chip_version_table disable_broken_read_transmit_power_by_chip_ver[] = {
+	{0x87, BCM_ROMFW_BASELINE_NUM}		/* CYW4373/4373E */
+};
+static bool btbcm_is_disable_broken_read_tx_power_by_chip_ver(u8 chip_id, u16 baseline)
+{
+	int i;
+	int table_size = sizeof(disable_broken_read_transmit_power_by_chip_ver)/sizeof(disable_broken_read_transmit_power_by_chip_ver[0]);
+	struct bcm_chip_version_table *entry = &disable_broken_read_transmit_power_by_chip_ver[0];
+
+	for( i=0 ; i<table_size ; i++, entry++)
+	{
+		if( (chip_id == entry->chip_id) && (baseline == entry->baseline) )
+			return true;
+	}
+
+	return false;
+}
+
 static int btbcm_read_info(struct hci_dev *hdev)
 {
 	struct sk_buff *skb;
+	u8 chip_id;
+	u16 baseline;
 
 	/* Read Verbose Config Version Info */
 	skb = btbcm_read_verbose_config(hdev);
 	if (IS_ERR(skb))
 		return PTR_ERR(skb);
-
+	chip_id = skb->data[1];
+	baseline = skb->data[3] | (skb->data[4] << 8);
 	bt_dev_info(hdev, "BCM: chip id %u", skb->data[1]);
 	kfree_skb(skb);
+
+	/* Check Chip ID and disable broken Read LE Min/Max Tx Power */
+	if (btbcm_is_disable_broken_read_tx_power_by_chip_ver(chip_id, baseline))
+		set_bit(HCI_QUIRK_BROKEN_READ_TRANSMIT_POWER, &hdev->quirks);
 
 	return 0;
 }
