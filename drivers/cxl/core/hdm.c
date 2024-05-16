@@ -432,12 +432,12 @@ int cxl_dpa_set_mode(struct cxl_endpoint_decoder *cxled,
 	 * Only allow modes that are supported by the current partition
 	 * configuration
 	 */
-	if (mode == CXL_DECODER_PMEM && !resource_size(&cxlds->pmem_res)) {
+	if (mode == CXL_DECODER_PMEM && !cxlds->pmem_res.end) {
 		dev_dbg(dev, "no available pmem capacity\n");
 		rc = -ENXIO;
 		goto out;
 	}
-	if (mode == CXL_DECODER_RAM && !resource_size(&cxlds->ram_res)) {
+	if (mode == CXL_DECODER_RAM && !cxlds->ram_res.end) {
 		dev_dbg(dev, "no available ram capacity\n");
 		rc = -ENXIO;
 		goto out;

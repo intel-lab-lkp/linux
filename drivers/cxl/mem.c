@@ -174,7 +174,7 @@ unlock:
 	if (rc)
 		return rc;
 
-	if (resource_size(&cxlds->pmem_res) && IS_ENABLED(CONFIG_CXL_PMEM)) {
+	if (cxlds->pmem_res.end && IS_ENABLED(CONFIG_CXL_PMEM)) {
 		rc = devm_cxl_add_nvdimm(cxlmd);
 		if (rc == -ENODEV)
 			dev_info(dev, "PMEM disabled by platform\n");

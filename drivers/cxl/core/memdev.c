@@ -197,14 +197,14 @@ static int cxl_get_poison_by_memdev(struct cxl_memdev *cxlmd)
 	int rc = 0;
 
 	/* CXL 3.0 Spec 8.2.9.8.4.1 Separate pmem and ram poison requests */
-	if (resource_size(&cxlds->pmem_res)) {
+	if (cxlds->pmem_res.end) {
 		offset = cxlds->pmem_res.start;
 		length = resource_size(&cxlds->pmem_res);
 		rc = cxl_mem_get_poison(cxlmd, offset, length, NULL);
 		if (rc)
 			return rc;
 	}
-	if (resource_size(&cxlds->ram_res)) {
+	if (cxlds->ram_res.end) {
 		offset = cxlds->ram_res.start;
 		length = resource_size(&cxlds->ram_res);
 		rc = cxl_mem_get_poison(cxlmd, offset, length, NULL);
@@ -266,7 +266,7 @@ static int __cxl_dpa_to_region(struct device *dev, void *arg)
 		return 0;
 
 	cxled = to_cxl_endpoint_decoder(dev);
-	if (!cxled->dpa_res || !resource_size(cxled->dpa_res))
+	if (!cxled->dpa_res || !cxled->dpa_res->end)
 		return 0;
 
 	if (dpa > cxled->dpa_res->end || dpa < cxled->dpa_res->start)
@@ -302,7 +302,7 @@ static int cxl_validate_poison_dpa(struct cxl_memdev *cxlmd, u64 dpa)
 	if (!IS_ENABLED(CONFIG_DEBUG_FS))
 		return 0;
 
-	if (!resource_size(&cxlds->dpa_res)) {
+	if (!cxlds->dpa_res.end) {
 		dev_dbg(cxlds->dev, "device has no dpa resource\n");
 		return -EINVAL;
 	}
