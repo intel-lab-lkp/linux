@@ -283,13 +283,18 @@ int line6_init_midi(struct usb_line6 *line6)
 
 	err = line6_midibuf_init(&line6midi->midibuf_in, MIDI_BUFFER_SIZE, 0);
 	if (err < 0)
-		return err;
+		goto error;
 
 	err = line6_midibuf_init(&line6midi->midibuf_out, MIDI_BUFFER_SIZE, 1);
 	if (err < 0)
-		return err;
+		goto error;
 
 	line6->line6midi = line6midi;
 	return 0;
+
+error:
+	kfree(line6midi);
+	return err;
+
 }
 EXPORT_SYMBOL_GPL(line6_init_midi);
