@@ -318,17 +318,27 @@ static int prueth_emac_buffer_setup(struct prueth_emac *emac)
 
 static void icssg_init_emac_mode(struct prueth *prueth)
 {
+	u32 addr = prueth->shram.pa + VLAN_STATIC_REG_TABLE_OFFSET;
 	/* When the device is configured as a bridge and it is being brought
 	 * back to the emac mode, the host mac address has to be set as 0.
 	 */
 	u8 mac[ETH_ALEN] = { 0 };
+	int i;
 
 	if (prueth->emacs_initialized)
 		return;
 
-	regmap_update_bits(prueth->miig_rt, FDB_GEN_CFG1,
-			   SMEM_VLAN_OFFSET_MASK, 0);
-	regmap_write(prueth->miig_rt, FDB_GEN_CFG2, 0);
+	/* Set VLAN TABLE address base */
+	regmap_update_bits(prueth->miig_rt, FDB_GEN_CFG1, SMEM_VLAN_OFFSET_MASK,
+			   addr <<  SMEM_VLAN_OFFSET);
+	/* Configure CFG2 register */
+	regmap_write(prueth->miig_rt, FDB_GEN_CFG2, (FDB_PRU0_EN | FDB_PRU1_EN | FDB_HOST_EN));
+
+	prueth->vlan_tbl = prueth->shram.va + VLAN_STATIC_REG_TABLE_OFFSET;
+	for (i = 0; i < SZ_4K - 1; i++) {
+		prueth->vlan_tbl[i].fid = i;
+		prueth->vlan_tbl[i].fid_c1 = 0;
+	}
 	/* Clear host MAC address */
 	icssg_class_set_host_mac_addr(prueth->miig_rt, mac);
 }
