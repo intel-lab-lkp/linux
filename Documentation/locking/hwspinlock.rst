@@ -53,10 +53,10 @@ Should be called from a process context (might sleep).
 
   struct hwspinlock *hwspin_lock_request_specific(unsigned int id);
 
-Assign a specific hwspinlock id and return its address, or NULL
-if that hwspinlock is already in use. Usually board code will
-be calling this function in order to reserve specific hwspinlock
-ids for predefined purposes.
+Assign a specific hwspinlock id or increment the reference count if the
+hwspinlock is already in use. Return NULL if unable to request the
+hwspinlock. Usually board code will be calling this function in order
+to reserve specific hwspinlock ids for predefined purposes.
 
 Should be called from a process context (might sleep).
 
