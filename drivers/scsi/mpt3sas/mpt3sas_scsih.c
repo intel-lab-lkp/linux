@@ -499,7 +499,7 @@ _scsih_is_boot_device(u64 sas_address, u64 device_name,
 
 /**
  * _scsih_get_sas_address - set the sas_address for given device handle
- * @ioc: ?
+ * @ioc: per adapter object
  * @handle: device handle
  * @sas_address: sas address
  *
