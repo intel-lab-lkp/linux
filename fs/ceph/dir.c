@@ -2146,11 +2146,15 @@ static ssize_t ceph_read_dir(struct file *file, char __user *buf, size_t size,
 	struct ceph_dir_file_info *dfi = file->private_data;
 	struct inode *inode = file_inode(file);
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	int left;
+	int left, err;
 	const int bufsize = 1024;
 
 	if (!ceph_test_mount_opt(ceph_sb_to_fs_client(inode->i_sb), DIRSTAT))
 		return -EISDIR;
+
+	err = ceph_do_getattr(inode, CEPH_STAT_CAP_XATTR, true);
+	if (err)
+		return err;
 
 	if (!dfi->dir_info) {
 		dfi->dir_info = kmalloc(bufsize, GFP_KERNEL);
