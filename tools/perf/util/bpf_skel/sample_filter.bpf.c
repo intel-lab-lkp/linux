@@ -48,31 +48,50 @@ static inline __u64 perf_get_sample(struct bpf_perf_event_data_kern *kctx,
 {
 	struct perf_sample_data___new *data = (void *)kctx->data;
 
-	if (!bpf_core_field_exists(data->sample_flags) ||
-	    (data->sample_flags & entry->flags) == 0)
+	if (!bpf_core_field_exists(data->sample_flags))
 		return 0;
 
-	switch (entry->flags) {
-	case PERF_SAMPLE_IP:
+	switch (entry->term) {
+	case PBF_TERM_NONE:
+		return 0;
+	case PBF_TERM_IP:
+		if ((data->sample_flags & PERF_SAMPLE_IP) == 0)
+			return 0;
 		return kctx->data->ip;
-	case PERF_SAMPLE_ID:
+	case PBF_TERM_ID:
+		if ((data->sample_flags & PERF_SAMPLE_ID) == 0)
+			return 0;
 		return kctx->data->id;
-	case PERF_SAMPLE_TID:
+	case PBF_TERM_TID:
+		if ((data->sample_flags & PERF_SAMPLE_TID) == 0)
+			return 0;
 		if (entry->part)
 			return kctx->data->tid_entry.pid;
 		else
 			return kctx->data->tid_entry.tid;
-	case PERF_SAMPLE_CPU:
+	case PBF_TERM_CPU:
+		if ((data->sample_flags & PERF_SAMPLE_CPU) == 0)
+			return 0;
 		return kctx->data->cpu_entry.cpu;
-	case PERF_SAMPLE_TIME:
+	case PBF_TERM_TIME:
+		if ((data->sample_flags & PERF_SAMPLE_TIME) == 0)
+			return 0;
 		return kctx->data->time;
-	case PERF_SAMPLE_ADDR:
+	case PBF_TERM_ADDR:
+		if ((data->sample_flags & PERF_SAMPLE_ADDR) == 0)
+			return 0;
 		return kctx->data->addr;
-	case PERF_SAMPLE_PERIOD:
+	case PBF_TERM_PERIOD:
+		if ((data->sample_flags & PERF_SAMPLE_PERIOD) == 0)
+			return 0;
 		return kctx->data->period;
-	case PERF_SAMPLE_TRANSACTION:
+	case PBF_TERM_TRANSACTION:
+		if ((data->sample_flags & PERF_SAMPLE_TRANSACTION) == 0)
+			return 0;
 		return kctx->data->txn;
-	case PERF_SAMPLE_WEIGHT_STRUCT:
+	case PBF_TERM_WEIGHT_STRUCT:
+		if ((data->sample_flags & PERF_SAMPLE_WEIGHT_STRUCT) == 0)
+			return 0;
 		if (entry->part == 1)
 			return kctx->data->weight.var1_dw;
 		if (entry->part == 2)
@@ -80,15 +99,25 @@ static inline __u64 perf_get_sample(struct bpf_perf_event_data_kern *kctx,
 		if (entry->part == 3)
 			return kctx->data->weight.var3_w;
 		/* fall through */
-	case PERF_SAMPLE_WEIGHT:
+	case PBF_TERM_WEIGHT:
+		if ((data->sample_flags & PERF_SAMPLE_WEIGHT) == 0)
+			return 0;
 		return kctx->data->weight.full;
-	case PERF_SAMPLE_PHYS_ADDR:
+	case PBF_TERM_PHYS_ADDR:
+		if ((data->sample_flags & PERF_SAMPLE_PHYS_ADDR) == 0)
+			return 0;
 		return kctx->data->phys_addr;
-	case PERF_SAMPLE_CODE_PAGE_SIZE:
+	case PBF_TERM_CODE_PAGE_SIZE:
+		if ((data->sample_flags & PERF_SAMPLE_CODE_PAGE_SIZE) == 0)
+			return 0;
 		return kctx->data->code_page_size;
-	case PERF_SAMPLE_DATA_PAGE_SIZE:
+	case PBF_TERM_DATA_PAGE_SIZE:
+		if ((data->sample_flags & PERF_SAMPLE_DATA_PAGE_SIZE) == 0)
+			return 0;
 		return kctx->data->data_page_size;
-	case PERF_SAMPLE_DATA_SRC:
+	case PBF_TERM_DATA_SRC:
+		if ((data->sample_flags & PERF_SAMPLE_DATA_SRC) == 0)
+			return 0;
 		if (entry->part == 1)
 			return kctx->data->data_src.mem_op;
 		if (entry->part == 2)
