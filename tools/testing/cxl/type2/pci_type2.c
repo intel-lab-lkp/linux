@@ -4,6 +4,7 @@
 #include <linux/cxlpci.h>
 #include <linux/cxlmem.h>
 
+struct cxl_endpoint_decoder *cxled;
 struct cxl_root_decoder *cxlrd;
 struct cxl_dev_state *cxlds;
 struct cxl_memdev *cxlmd;
@@ -99,6 +100,15 @@ static int type2_pci_probe(struct pci_dev *pci_dev,
 		goto out;
 	}
 
+	pci_info(pci_dev, "cxl request_dpa...");
+	cxled = cxl_request_dpa(endpoint, CXL_DECODER_RAM, CXL_TYPE2_MEM_SIZE,
+				CXL_TYPE2_MEM_SIZE);
+	if (IS_ERR(cxled)) {
+		dev_dbg(&pci_dev->dev, "cxl_request_dpa error\n");
+		rc = PTR_ERR(cxled);
+		goto out;
+	}
+
 out:
 	cxl_release_endpoint(cxlmd, endpoint);
 
@@ -107,7 +117,7 @@ out:
 
 static void type2_pci_remove(struct pci_dev *pci_dev)
 {
-
+	cxl_dpa_free(cxled);
 }
 
 /* PCI device ID table */

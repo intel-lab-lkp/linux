@@ -870,4 +870,9 @@ struct cxl_root_decoder *cxl_get_hpa_freespace(struct cxl_port *endpoint,
 					   int interleave_ways,
 					   unsigned long flags,
 					   resource_size_t *max);
+struct cxl_endpoint_decoder *cxl_request_dpa(struct cxl_port *endpoint,
+					     enum cxl_decoder_mode mode,
+					     resource_size_t min,
+					     resource_size_t max);
+int cxl_dpa_free(struct cxl_endpoint_decoder *cxled);
 #endif /* __CXL_MEM_H__ */
