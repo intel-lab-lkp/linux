@@ -37,6 +37,7 @@
 #include <scsi/scsi_device.h>
 #include <scsi/scsi_host.h>
 #include <scsi/scsi_tcq.h>
+#include <linux/kmsg_dump.h>
 #include <uapi/scsi/scsi_bsg_mpi3mr.h>
 #include <scsi/scsi_transport_sas.h>
 
@@ -195,6 +196,13 @@ extern atomic64_t event_counter;
 
 #define MPI3MR_HDB_TRIGGER_TYPE_GLOBAL          3
 
+/* Driver Host Diag Buffer (drv_db) */
+#define MPI3MR_MIN_DIAG_HOST_BUFFER_SZ		((32 * 1024) + \
+	sizeof(struct mpi3_driver_buffer_header))
+#define MPI3MR_DEFAULT_DIAG_HOST_BUFFER_SZ	((512 * 1024) + \
+	sizeof(struct mpi3_driver_buffer_header))
+#define MPI3MR_UEFI_DIAG_HOST_BUFFER_OFFSET	(16 * 1024)
+
 /* SGE Flag definition */
 #define MPI3MR_SGEFLAGS_SYSTEM_SIMPLE_END_OF_LIST \
 	(MPI3_SGE_FLAGS_ELEMENT_TYPE_SIMPLE | MPI3_SGE_FLAGS_DLAS_SYSTEM | \
@@ -218,6 +226,12 @@ extern atomic64_t event_counter;
 #define MPI3MR_WRITE_SAME_MAX_LEN_256_BLKS 256
 #define MPI3MR_WRITE_SAME_MAX_LEN_2048_BLKS 2048
 
+/* Driver diag buffer levels */
+enum mpi3mr_drv_db_level {
+	MRIOC_DRV_DB_DISABLED = 0,
+	MRIOC_DRV_DB_MINI = 1,
+	MRIOC_DRV_DB_FULL = 2,
+};
 
 /**
  * struct mpi3mr_nvme_pt_sge -  Structure to store SGEs for NVMe
@@ -1113,6 +1127,10 @@ struct scmd_priv {
  * @ioctl_chain_sge: DMA buffer descriptor for IOCTL chain
  * @ioctl_resp_sge: DMA buffer descriptor for Mgmt cmd response
  * @ioctl_sges_allocated: Flag for IOCTL SGEs allocated or not
+ * @drv_diag_buffer: Diagnostic host buffer virtual address
+ * @drv_diag_buffer_dma: Diagnostic host buffer DMA address
+ * @drv_diag_buffer_sz: Diagnostic host buffer size
+ *
  */
 struct mpi3mr_ioc {
 	struct list_head list;
@@ -1310,6 +1328,9 @@ struct mpi3mr_ioc {
 	struct diag_buffer_desc diag_buffers[MPI3MR_MAX_NUM_HDB];
 	struct mpi3_driver_page2 *driver_pg2;
 	spinlock_t trigger_lock;
+	void *drv_diag_buffer;
+	dma_addr_t drv_diag_buffer_dma;
+	u32 drv_diag_buffer_sz;
 };
 
 /**
