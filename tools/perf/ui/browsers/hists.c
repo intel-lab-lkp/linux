@@ -2305,8 +2305,8 @@ static int hists_browser__scnprintf_title(struct hist_browser *browser, char *bf
 				     " drop: %" PRIu64 "/%" PRIu64,
 				     top->drop, top->drop_total);
 
-		if (top->zero)
-			printed += scnprintf(bf + printed, size - printed, " [z]");
+		if (top->decay_samples)
+			printed += scnprintf(bf + printed, size - printed, " [decay]");
 
 		perf_top__reset_sample_counters(top);
 	}
@@ -3209,9 +3209,10 @@ do_hotkey:		 // key came straight from options ui__popup_menu()
 			continue;
 		case 'z':
 			if (!is_report_browser(hbt)) {
+				/* Toggle between zeroing and decaying samples. */
 				struct perf_top *top = hbt->arg;
 
-				top->zero = !top->zero;
+				top->decay_samples = !top->decay_samples;
 			}
 			continue;
 		case 'L':

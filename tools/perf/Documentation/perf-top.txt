@@ -120,9 +120,9 @@ Default is to monitor all CPUS.
 --verbose::
 	Be more verbose (show counter open errors, etc).
 
--z::
---zero::
-	Zero history across display updates.
+-Z::
+--decay::
+	Decay rather than zero history across display updates.
 
 -s::
 --sort::
