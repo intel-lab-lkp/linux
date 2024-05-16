@@ -3,6 +3,7 @@
 #include <linux/init.h>
 #include <linux/swiotlb.h>
 #include <boot_param.h>
+#include <asm/bootinfo.h>
 
 dma_addr_t phys_to_dma(struct device *dev, phys_addr_t paddr)
 {
