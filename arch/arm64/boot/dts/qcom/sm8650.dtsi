@@ -2878,6 +2878,7 @@
 
 			qcom,smem-states = <&smp2p_modem_out 0>;
 			qcom,smem-state-names = "stop";
+			hwlocks = <&tcsr_mutex 3>;
 
 			status = "disabled";
 
@@ -5024,6 +5025,7 @@
 
 			qcom,smem-states = <&smp2p_adsp_out 0>;
 			qcom,smem-state-names = "stop";
+			hwlocks = <&tcsr_mutex 3>;
 
 			status = "disabled";
 
@@ -5183,6 +5185,7 @@
 
 			qcom,smem-states = <&smp2p_cdsp_out 0>;
 			qcom,smem-state-names = "stop";
+			hwlocks = <&tcsr_mutex 3>;
 
 			status = "disabled";
 
