@@ -12,7 +12,9 @@ static int type2_pci_probe(struct pci_dev *pci_dev,
 			   const struct pci_device_id *entry)
 
 {
+	struct cxl_register_map map;
 	u16 dvsec;
+	int rc;
 
 	dvsec = pci_find_dvsec_capability(pci_dev, PCI_DVSEC_VENDOR_ID_CXL, CXL_DVSEC_PCIE_DEVICE);
 
@@ -34,6 +36,35 @@ static int type2_pci_probe(struct pci_dev *pci_dev,
 	/* Should not this be based on DVSEC range size registers */
 	cxlds->dpa_res = DEFINE_RES_MEM(0, CXL_TYPE2_MEM_SIZE);
 	cxlds->ram_res = DEFINE_RES_MEM_NAMED(0, CXL_TYPE2_MEM_SIZE, "ram");
+
+	rc = cxl_pci_setup_regs(pci_dev, CXL_REGLOC_RBI_MEMDEV, &map);
+	if (rc)
+		return rc;
+
+	rc = cxl_map_device_regs(&map, &cxlds->regs.device_regs);
+	if (rc)
+		return rc;
+
+	rc = cxl_pci_setup_regs(pci_dev, CXL_REGLOC_RBI_COMPONENT,
+				&cxlds->reg_map);
+	if (rc)
+		dev_warn(&pci_dev->dev, "No component registers (%d)\n", rc);
+
+	rc = cxl_map_component_regs(&cxlds->reg_map, &cxlds->regs.component,
+				    BIT(CXL_CM_CAP_CAP_ID_RAS));
+	if (rc)
+		dev_dbg(&pci_dev->dev, "Failed to map RAS capability.\n");
+
+	pci_info(pci_dev, "requesting resource...");
+	rc = request_resource(&cxlds->dpa_res, &cxlds->ram_res);
+	if (rc)
+		return rc;
+
+	rc = cxl_await_media_ready(cxlds);
+	if (rc == 0)
+		cxlds->media_ready = true;
+	else
+		dev_warn(&pci_dev->dev, "Media not active (%d)\n", rc);
 
 	return 0;
 }
