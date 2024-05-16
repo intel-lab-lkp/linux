@@ -859,9 +859,12 @@ struct drm_color_lut {
 
 /**
  * struct drm_plane_size_hint - Plane size hints
+ * @width: recommended plane width (no scaling)
+ * @height: recommended plane height (no scaling)
  *
  * The plane SIZE_HINTS property blob contains an
- * array of struct drm_plane_size_hint.
+ * array of struct drm_plane_size_hint as described in
+ * "DOC: standard plane properties".
  */
 struct drm_plane_size_hint {
 	__u16 width;
@@ -954,7 +957,7 @@ struct hdr_output_metadata {
 	};
 };
 
-/**
+/*
  * DRM_MODE_PAGE_FLIP_EVENT
  *
  * Request that the kernel sends back a vblank event (see
@@ -962,7 +965,7 @@ struct hdr_output_metadata {
  * page-flip is done.
  */
 #define DRM_MODE_PAGE_FLIP_EVENT 0x01
-/**
+/*
  * DRM_MODE_PAGE_FLIP_ASYNC
  *
  * Request that the page-flip is performed as soon as possible, ie. with no
@@ -983,7 +986,7 @@ struct hdr_output_metadata {
 #define DRM_MODE_PAGE_FLIP_TARGET_RELATIVE 0x8
 #define DRM_MODE_PAGE_FLIP_TARGET (DRM_MODE_PAGE_FLIP_TARGET_ABSOLUTE | \
 				   DRM_MODE_PAGE_FLIP_TARGET_RELATIVE)
-/**
+/*
  * DRM_MODE_PAGE_FLIP_FLAGS
  *
  * Bitmask of flags suitable for &drm_mode_crtc_page_flip_target.flags.
@@ -1093,7 +1096,7 @@ struct drm_mode_destroy_dumb {
 	__u32 handle;
 };
 
-/**
+/*
  * DRM_MODE_ATOMIC_TEST_ONLY
  *
  * Do not apply the atomic commit, instead check whether the hardware supports
@@ -1103,7 +1106,7 @@ struct drm_mode_destroy_dumb {
  * commits.
  */
 #define DRM_MODE_ATOMIC_TEST_ONLY 0x0100
-/**
+/*
  * DRM_MODE_ATOMIC_NONBLOCK
  *
  * Do not block while applying the atomic commit. The &DRM_IOCTL_MODE_ATOMIC
@@ -1112,7 +1115,7 @@ struct drm_mode_destroy_dumb {
  * applied before retuning.
  */
 #define DRM_MODE_ATOMIC_NONBLOCK  0x0200
-/**
+/*
  * DRM_MODE_ATOMIC_ALLOW_MODESET
  *
  * Allow the update to result in temporary or transient visible artifacts while
@@ -1134,7 +1137,7 @@ struct drm_mode_destroy_dumb {
  */
 #define DRM_MODE_ATOMIC_ALLOW_MODESET 0x0400
 
-/**
+/*
  * DRM_MODE_ATOMIC_FLAGS
  *
  * Bitfield of flags accepted by the &DRM_IOCTL_MODE_ATOMIC IOCTL in
@@ -1344,7 +1347,7 @@ struct drm_mode_rect {
 };
 
 /**
- * struct drm_mode_closefb
+ * struct drm_mode_closefb - ioctl struct to close a framebuffer
  * @fb_id: Framebuffer ID.
  * @pad: Must be zero.
  */
