@@ -14,6 +14,7 @@
  * FSI slave engine control register offsets
  */
 #define FSI_SMODE		0x0	/* R/W: Mode register */
+#define FSI_SDMA		0x4	/* R/W: DMA control */
 #define FSI_SISC		0x8	/* R  : Interrupt condition */
 #define FSI_SCISC		0x8	/* C  : Clear interrupt condition */
 #define FSI_SISM		0xc	/* R/W: Interrupt mask */
@@ -21,11 +22,30 @@
 #define FSI_SSISM		0x10	/* S  : Set interrupt mask */
 #define FSI_SCISM		0x14	/* C  : Clear interrupt mask */
 #define FSI_SSTAT		0x14	/* R  : Slave status */
+#define FSI_SI1M		0x18	/* R/W: Interrupt 1 mask */
 #define FSI_SI1S		0x1c	/* R  : Slave interrupt 1 status */
 #define FSI_SSI1M		0x1c	/* S  : Set slave interrupt 1 mask */
+#define FSI_SIC			0x20	/* R  : Interrupt 1 condition */
 #define FSI_SCI1M		0x20	/* C  : Clear slave interrupt 1 mask */
+#define FSI_SI2M		0x24	/* R/W: Interrupt 2 mask */
+#define FSI_SI2S		0x28	/* R  : Interrupt 2 status */
+#define FSI_SCMDT		0x2c	/* R  : Last command trace */
+#define FSI_SDATA		0x30	/* R  : Last data trace */
 #define FSI_SLBUS		0x30	/* W  : LBUS Ownership */
+#define FSI_SLASTD		0x34	/* R  : Last data sent */
 #define FSI_SRES		0x34	/* W  : Reset */
+#define FSI_SMBL		0x38
+#define FSI_SOML		0x3c
+#define FSI_SNML		0x40
+#define FSI_SMBR		0x44
+#define FSI_SOMR		0x48
+#define FSI_SNMR		0x4c
+#define FSI_ScRSIC0		0x50
+#define FSI_ScRSIC4		0x54
+#define FSI_ScRSIM0		0x58
+#define FSI_ScRSIM4		0x5c
+#define FSI_ScRSIS0		0x60
+#define FSI_ScRSIS4		0x64
 #define FSI_SRSIC0		0x68	/* C  : Clear remote interrupt condition */
 #define FSI_SRSIC4		0x6c	/* C  : Clear remote interrupt condition */
 #define FSI_SRSIM0		0x70	/* R/W: Remote interrupt mask */
@@ -33,6 +53,7 @@
 #define FSI_SRSIS0		0x78	/* R  : Remote interrupt status */
 #define FSI_SRSIS4		0x7c	/* R  : Remote interrupt status */
 #define FSI_LLMODE		0x100	/* R/W: Link layer mode register */
+#define FSI_LLSTAT		0x104
 
 /*
  * SMODE fields
