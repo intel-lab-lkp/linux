@@ -257,6 +257,13 @@ config COMMON_CLK_LAN966X
 	  LAN966X SoC. GCK generates and supplies clock to various peripherals
 	  within the SoC.
 
+config COMMON_CLK_AD24XX
+	bool "Clock driver for Analog Devices Inc. AD24xx"
+	depends on A2B_AD24XX_NODE
+	help
+	  This driver supports the clock output functionality of AD24xx series
+	  A2B transceiver chips.
+
 config COMMON_CLK_ASPEED
 	bool "Clock driver for Aspeed BMC SoCs"
 	depends on ARCH_ASPEED || COMPILE_TEST
