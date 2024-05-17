@@ -23,6 +23,12 @@ properties:
     minItems: 6
     maxItems: 6
 
+  ignore-local-mac-address:
+    $ref: /schemas/types.yaml#/definitions/flag
+    description:
+      Indicates that 'local-mac-address' is to be ignored. This can
+      be useful when the boot program stores a bogus address.
+
   mac-address:
     description:
       Specifies the MAC address that was last used by the boot
