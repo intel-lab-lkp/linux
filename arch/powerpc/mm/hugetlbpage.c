@@ -195,10 +195,33 @@ pte_t *huge_pte_alloc(struct mm_struct *mm, struct vm_area_struct *vma,
 pte_t *huge_pte_alloc(struct mm_struct *mm, struct vm_area_struct *vma,
 		      unsigned long addr, unsigned long sz)
 {
-	pmd_t *pmd = pmd_off(mm, addr);
+	pgd_t *pgd;
+	p4d_t *p4d;
+	pud_t *pud;
+	pmd_t *pmd;
+
+	addr &= ~(sz - 1);
+	pgd = pgd_offset(mm, addr);
+
+	p4d = p4d_offset(pgd, addr);
+	if (sz >= PGDIR_SIZE)
+		return (pte_t *)p4d;
+
+	pud = pud_alloc(mm, p4d, addr);
+	if (!pud)
+		return NULL;
+	if (sz >= PUD_SIZE)
+		return (pte_t *)pud;
+
+	pmd = pmd_alloc(mm, pud, addr);
+	if (!pmd)
+		return NULL;
 
 	if (sz < PMD_SIZE)
 		return pte_alloc_huge(mm, pmd, addr, sz);
+
+	if (!IS_ENABLED(CONFIG_PPC_8xx))
+		return (pte_t *)pmd;
 
 	if (sz != SZ_8M)
 		return NULL;
