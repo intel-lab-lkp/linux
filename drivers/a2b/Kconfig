@@ -44,4 +44,17 @@ config A2B_AD24XX_NODE
 
 	 If unsure, say N.
 
+config A2B_BEO_SHAPE_NODE
+       tristate "Bang & Olufsen Beosound Shape node support"
+       depends on A2B_AD24XX_NODE
+       help
+         The Beosound Shape is an A2B-connected amplifier speaker. As a piece of
+         hardware it is functionally similar to any board with an AD2425, but
+         this driver handles firmware update of the on-board microcontroller in
+         a way that is agreeable to the A2B driver model.
+
+	 Beosound Shapes are always subordinate A2B nodes.
+
+	 If unsure, say N.
+
 endif # A2B

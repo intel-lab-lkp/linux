@@ -10,3 +10,4 @@ obj-$(CONFIG_A2B_AD24XX_I2C)		+= ad24xx-i2c.o
 
 # Node drivers
 obj-$(CONFIG_A2B_AD24XX_NODE)		+= ad24xx-node.o
+obj-$(CONFIG_A2B_BEO_SHAPE_NODE)	+= beo-shape-node.o
