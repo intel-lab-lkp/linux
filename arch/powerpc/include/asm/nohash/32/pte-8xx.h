@@ -129,32 +129,34 @@ static inline void ptep_set_wrprotect(struct mm_struct *mm, unsigned long addr, 
 }
 #define ptep_set_wrprotect ptep_set_wrprotect
 
+static pmd_t *pmd_off(struct mm_struct *mm, unsigned long addr);
+static inline pte_t *pte_offset_kernel(pmd_t *pmd, unsigned long address);
+
 static inline void __ptep_set_access_flags(struct vm_area_struct *vma, pte_t *ptep,
 					   pte_t entry, unsigned long address, int psize)
 {
 	unsigned long set = pte_val(entry) & (_PAGE_DIRTY | _PAGE_ACCESSED | _PAGE_EXEC);
 	unsigned long clr = ~pte_val(entry) & _PAGE_RO;
 	int huge = psize > mmu_virtual_psize ? 1 : 0;
+	pmd_t *pmdp = (pmd_t *)ptep;
 
-	pte_update(vma->vm_mm, address, ptep, clr, set, huge);
+	if (pmdp == pmd_off(vma->vm_mm, ALIGN_DOWN(address, SZ_8M))) {
+		pte_update(vma->vm_mm, address, pte_offset_kernel(pmdp, 0), clr, set, huge);
+		pte_update(vma->vm_mm, address, pte_offset_kernel(pmdp + 1, 0), clr, set, huge);
+	} else {
+		pte_update(vma->vm_mm, address, ptep, clr, set, huge);
+	}
 
 	flush_tlb_page(vma, address);
 }
 #define __ptep_set_access_flags __ptep_set_access_flags
 
-static inline unsigned long pgd_leaf_size(pgd_t pgd)
-{
-	if (pgd_val(pgd) & _PMD_PAGE_8M)
-		return SZ_8M;
-	return SZ_4M;
-}
-
-#define pgd_leaf_size pgd_leaf_size
-
 static inline unsigned long pte_leaf_size(pmd_t pmd, pte_t pte)
 {
 	pte_basic_t val = pte_val(pte);
 
+	if (pmd_val(pmd) & _PMD_PAGE_8M)
+		return SZ_8M;
 	if (val & _PAGE_HUGE)
 		return SZ_512K;
 	if (val & _PAGE_SPS)
@@ -168,17 +170,16 @@ static inline unsigned long pte_leaf_size(pmd_t pmd, pte_t pte)
  * On the 8xx, the page tables are a bit special. For 16k pages, we have
  * 4 identical entries. For 512k pages, we have 128 entries as if it was
  * 4k pages, but they are flagged as 512k pages for the hardware.
- * For other page sizes, we have a single entry in the table.
+ * For 8M pages, we have 1024 entries as if it was
+ * 4M pages, but they are flagged as 8M pages for the hardware.
+ * For 4k pages, we have a single entry in the table.
  */
-static pmd_t *pmd_off(struct mm_struct *mm, unsigned long addr);
-static int hugepd_ok(hugepd_t hpd);
-
 static inline int number_of_cells_per_pte(pmd_t *pmd, pte_basic_t val, int huge)
 {
 	if (!huge)
 		return PAGE_SIZE / SZ_4K;
-	else if (hugepd_ok(*((hugepd_t *)pmd)))
-		return 1;
+	else if ((pmd_val(*pmd) & _PMD_PAGE_MASK) == _PMD_PAGE_8M)
+		return SZ_4M / SZ_4K;
 	else if (IS_ENABLED(CONFIG_PPC_4K_PAGES) && !(val & _PAGE_HUGE))
 		return SZ_16K / SZ_4K;
 	else
@@ -198,7 +199,7 @@ static inline pte_basic_t pte_update(struct mm_struct *mm, unsigned long addr, p
 
 	for (i = 0; i < num; i += PAGE_SIZE / SZ_4K, new += PAGE_SIZE) {
 		*entry++ = new;
-		if (IS_ENABLED(CONFIG_PPC_16K_PAGES) && num != 1) {
+		if (IS_ENABLED(CONFIG_PPC_16K_PAGES)) {
 			*entry++ = new;
 			*entry++ = new;
 			*entry++ = new;
@@ -220,6 +221,28 @@ static inline pte_t ptep_get(pte_t *ptep)
 	return pte;
 }
 #endif /* CONFIG_PPC_16K_PAGES */
+
+static inline void pmd_populate_kernel_size(struct mm_struct *mm, pmd_t *pmdp,
+					    pte_t *pte, unsigned long sz)
+{
+	if (sz == SZ_8M)
+		*pmdp = __pmd(__pa(pte) | _PMD_PRESENT | _PMD_PAGE_8M);
+	else
+		*pmdp = __pmd(__pa(pte) | _PMD_PRESENT);
+}
+
+static inline void pmd_populate_size(struct mm_struct *mm, pmd_t *pmdp,
+				     pgtable_t pte_page, unsigned long sz)
+{
+	if (sz == SZ_8M)
+		*pmdp = __pmd(__pa(pte_page) | _PMD_USER | _PMD_PRESENT | _PMD_PAGE_8M);
+	else
+		*pmdp = __pmd(__pa(pte_page) | _PMD_USER | _PMD_PRESENT);
+}
+#define pmd_populate_size pmd_populate_size
+
+#define pmd_populate(mm, pmdp, pte) pmd_populate_size(mm, pmdp, pte, PAGE_SIZE)
+#define pmd_populate_kernel(mm, pmdp, pte) pmd_populate_kernel_size(mm, pmdp, pte, PAGE_SIZE)
 
 #endif
 

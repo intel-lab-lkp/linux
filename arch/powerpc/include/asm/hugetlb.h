@@ -41,7 +41,16 @@ void hugetlb_free_pgd_range(struct mmu_gather *tlb, unsigned long addr,
 static inline pte_t huge_ptep_get_and_clear(struct mm_struct *mm,
 					    unsigned long addr, pte_t *ptep)
 {
-	return __pte(pte_update(mm, addr, ptep, ~0UL, 0, 1));
+	pmd_t *pmdp = (pmd_t *)ptep;
+	pte_t pte;
+
+	if (IS_ENABLED(CONFIG_PPC_8xx) && pmdp == pmd_off(mm, ALIGN_DOWN(addr, SZ_8M))) {
+		pte = __pte(pte_update(mm, addr, pte_offset_kernel(pmdp, 0), ~0UL, 0, 1));
+		pte_update(mm, addr, pte_offset_kernel(pmdp + 1, 0), ~0UL, 0, 1);
+	} else {
+		pte = __pte(pte_update(mm, addr, ptep, ~0UL, 0, 1));
+	}
+	return pte;
 }
 
 #define __HAVE_ARCH_HUGE_PTEP_CLEAR_FLUSH
