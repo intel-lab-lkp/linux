@@ -8,7 +8,8 @@ menuconfig A2B
        select OF
        help
 	 A2B (Automotive Audio Bus) is a digital audio and control bus from
-	 Analog Devices Inc.
+	 Analog Devices Inc. that enables synchronous capture and playback of
+	 PCM audio over distance.
 
 	 If unsure, say N.
 
@@ -33,6 +34,7 @@ config A2B_AD24XX_NODE
        tristate "Analog Devices Inc. AD24xx node support"
        select REGMAP_A2B
        imply GPIO_AD24XX
+       imply SND_SOC_AD24XX
        help
          Say Y here to enable support for AD24xx A2B transceiver nodes. This
          applies to both main nodes and subordinate nodes. Supported models

@@ -21,6 +21,7 @@ config SND_SOC_ALL_CODECS
 	imply SND_SOC_AD193X_SPI
 	imply SND_SOC_AD193X_I2C
 	imply SND_SOC_AD1980
+	imply SND_SOC_AD24XX
 	imply SND_SOC_AD73311
 	imply SND_SOC_ADAU1372_I2C
 	imply SND_SOC_ADAU1372_SPI
@@ -430,6 +431,10 @@ config SND_SOC_AD1980
 	tristate
 	depends on SND_SOC_AC97_BUS
 	select REGMAP_AC97
+
+config SND_SOC_AD24XX
+	tristate "Analog Devices Inc. AD24xx codec"
+	depends on A2B_AD24XX_NODE
 
 config SND_SOC_AD73311
 	tristate
