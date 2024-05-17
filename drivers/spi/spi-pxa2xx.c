@@ -1391,28 +1391,16 @@ static size_t pxa2xx_spi_max_dma_transfer_size(struct spi_device *spi)
 	return MAX_DMA_LEN;
 }
 
-static int pxa2xx_spi_probe(struct platform_device *pdev)
+static int pxa2xx_spi_probe(struct device *dev, struct ssp_device *ssp)
 {
-	struct device *dev = &pdev->dev;
 	struct pxa2xx_spi_controller *platform_info;
 	struct spi_controller *controller;
 	struct driver_data *drv_data;
-	struct ssp_device *ssp;
 	const struct lpss_config *config;
 	int status;
 	u32 tmp;
 
 	platform_info = dev_get_platdata(dev);
-	if (!platform_info) {
-		platform_info = pxa2xx_spi_init_pdata(pdev);
-		if (IS_ERR(platform_info))
-			return dev_err_probe(dev, PTR_ERR(platform_info), "missing platform data\n");
-	}
-
-	ssp = pxa_ssp_request(pdev->id, pdev->name);
-	if (!ssp)
-		ssp = &platform_info->ssp;
-
 	if (platform_info->is_target)
 		controller = devm_spi_alloc_target(dev, sizeof(*drv_data));
 	else
@@ -1610,9 +1598,8 @@ out_error_controller_alloc:
 	return status;
 }
 
-static void pxa2xx_spi_remove(struct platform_device *pdev)
+static void pxa2xx_spi_remove(struct device *dev)
 {
-	struct device *dev = &pdev->dev;
 	struct driver_data *drv_data = dev_get_drvdata(dev);
 	struct ssp_device *ssp = drv_data->ssp;
 
@@ -1633,9 +1620,6 @@ static void pxa2xx_spi_remove(struct platform_device *pdev)
 
 	/* Release IRQ */
 	free_irq(ssp->irq, drv_data);
-
-	/* Release SSP */
-	pxa_ssp_free(ssp);
 }
 
 static int pxa2xx_spi_suspend(struct device *dev)
@@ -1693,6 +1677,45 @@ static const struct dev_pm_ops pxa2xx_spi_pm_ops = {
 	RUNTIME_PM_OPS(pxa2xx_spi_runtime_suspend, pxa2xx_spi_runtime_resume, NULL)
 };
 
+static int pxa2xx_spi_platform_probe(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct pxa2xx_spi_controller *platform_info;
+	struct ssp_device *ssp;
+	int status;
+
+	platform_info = dev_get_platdata(dev);
+	if (!platform_info) {
+		platform_info = pxa2xx_spi_init_pdata(pdev);
+		if (IS_ERR(platform_info))
+			return dev_err_probe(dev, PTR_ERR(platform_info), "missing platform data\n");
+
+		dev->platform_data = platform_info;
+
+	}
+
+	ssp = pxa_ssp_request(pdev->id, pdev->name);
+	if (!ssp)
+		ssp = &platform_info->ssp;
+
+	status = pxa2xx_spi_probe(dev, ssp);
+	if (status)
+		pxa_ssp_free(ssp);
+
+	return status;
+}
+
+static void pxa2xx_spi_platform_remove(struct platform_device *pdev)
+{
+	struct driver_data *drv_data = platform_get_drvdata(pdev);
+	struct ssp_device *ssp = drv_data->ssp;
+
+	pxa2xx_spi_remove(&pdev->dev);
+
+	/* Release SSP */
+	pxa_ssp_free(ssp);
+}
+
 static const struct acpi_device_id pxa2xx_spi_acpi_match[] = {
 	{ "80860F0E" },
 	{ "8086228E" },
@@ -1717,8 +1740,8 @@ static struct platform_driver driver = {
 		.acpi_match_table = pxa2xx_spi_acpi_match,
 		.of_match_table = pxa2xx_spi_of_match,
 	},
-	.probe = pxa2xx_spi_probe,
-	.remove_new = pxa2xx_spi_remove,
+	.probe = pxa2xx_spi_platform_probe,
+	.remove_new = pxa2xx_spi_platform_remove,
 };
 
 static int __init pxa2xx_spi_init(void)
