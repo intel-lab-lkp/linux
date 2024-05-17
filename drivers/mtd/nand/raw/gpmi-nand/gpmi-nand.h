@@ -78,6 +78,7 @@ enum gpmi_type {
 	IS_MX6Q,
 	IS_MX6SX,
 	IS_MX7D,
+	IS_MX8QXP,
 };
 
 struct gpmi_devdata {
@@ -172,8 +173,11 @@ struct gpmi_nand_data {
 #define GPMI_IS_MX6Q(x)		((x)->devdata->type == IS_MX6Q)
 #define GPMI_IS_MX6SX(x)	((x)->devdata->type == IS_MX6SX)
 #define GPMI_IS_MX7D(x)		((x)->devdata->type == IS_MX7D)
+#define GPMI_IS_MX8QXP(x)	((x)->devdata->type == IS_MX8QXP)
 
 #define GPMI_IS_MX6(x)		(GPMI_IS_MX6Q(x) || GPMI_IS_MX6SX(x) || \
 				 GPMI_IS_MX7D(x))
+
+#define GPMI_IS_MX8(x)		(GPMI_IS_MX8QXP(x))
 #define GPMI_IS_MXS(x)		(GPMI_IS_MX23(x) || GPMI_IS_MX28(x))
 #endif

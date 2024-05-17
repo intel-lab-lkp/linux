@@ -983,7 +983,8 @@ static int gpmi_setup_interface(struct nand_chip *chip, int chipnr,
 		return PTR_ERR(sdr);
 
 	/* Only MX28/MX6 GPMI controller can reach EDO timings */
-	if (sdr->tRC_min <= 25000 && !GPMI_IS_MX28(this) && !GPMI_IS_MX6(this))
+	if (sdr->tRC_min <= 25000 && !GPMI_IS_MX28(this) &&
+	    !(GPMI_IS_MX6(this) || GPMI_IS_MX8(this)))
 		return -ENOTSUPP;
 
 	/* Stop here if this call was just a check */
@@ -1176,6 +1177,18 @@ static const struct gpmi_devdata gpmi_devdata_imx7d = {
 	.max_chain_delay = 12000,
 	.clks = gpmi_clks_for_mx7d,
 	.clks_count = ARRAY_SIZE(gpmi_clks_for_mx7d),
+};
+
+static const char *gpmi_clks_for_mx8qxp[GPMI_CLK_MAX] = {
+	"gpmi_io", "gpmi_apb", "gpmi_bch", "gpmi_bch_apb",
+};
+
+static const struct gpmi_devdata gpmi_devdata_imx8qxp = {
+	.type = IS_MX8QXP,
+	.bch_max_ecc_strength = 62,
+	.max_chain_delay = 12000,
+	.clks = gpmi_clks_for_mx8qxp,
+	.clks_count = ARRAY_SIZE(gpmi_clks_for_mx8qxp),
 };
 
 static int acquire_register_block(struct gpmi_nand_data *this,
@@ -2281,7 +2294,7 @@ static int gpmi_init_last(struct gpmi_nand_data *this)
 	 *  (1) the chip is imx6, and
 	 *  (2) the size of the ECC parity is byte aligned.
 	 */
-	if (GPMI_IS_MX6(this) &&
+	if ((GPMI_IS_MX6(this) || GPMI_IS_MX8(this))  &&
 		((bch_geo->gf_len * bch_geo->ecc_strength) % 8) == 0) {
 		ecc->read_subpage = gpmi_ecc_read_subpage;
 		chip->options |= NAND_SUBPAGE_READ;
@@ -2692,7 +2705,7 @@ static int gpmi_nand_init(struct gpmi_nand_data *this)
 	this->base.ops = &gpmi_nand_controller_ops;
 	chip->controller = &this->base;
 
-	ret = nand_scan(chip, GPMI_IS_MX6(this) ? 2 : 1);
+	ret = nand_scan(chip, (GPMI_IS_MX6(this) || GPMI_IS_MX8(this)) ? 2 : 1);
 	if (ret)
 		goto err_out;
 
@@ -2721,6 +2734,7 @@ static const struct of_device_id gpmi_nand_id_table[] = {
 	{ .compatible = "fsl,imx6q-gpmi-nand", .data = &gpmi_devdata_imx6q, },
 	{ .compatible = "fsl,imx6sx-gpmi-nand", .data = &gpmi_devdata_imx6sx, },
 	{ .compatible = "fsl,imx7d-gpmi-nand", .data = &gpmi_devdata_imx7d,},
+	{ .compatible = "fsl,imx8qxp-gpmi-nand", .data = &gpmi_devdata_imx8qxp, },
 	{}
 };
 MODULE_DEVICE_TABLE(of, gpmi_nand_id_table);
