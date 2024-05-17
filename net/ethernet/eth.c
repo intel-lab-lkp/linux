@@ -582,9 +582,10 @@ static int fwnode_get_mac_addr(struct fwnode_handle *fwnode,
  *
  * Search the firmware node for the best MAC address to use.  'mac-address' is
  * checked first, because that is supposed to contain to "most recent" MAC
- * address. If that isn't set, then 'local-mac-address' is checked next,
- * because that is the default address.  If that isn't set, then the obsolete
- * 'address' is checked, just in case we're using an old device tree.
+ * address. If there is no valid 'mac-address' and `ignore-local-mac-address'
+ * isn't set, then 'local-mac-address' is checked next, because that is the
+ * default address. If that isn't set, then the obsolete 'address' is checked,
+ * just in case we're using an old device tree.
  *
  * Note that the 'address' property is supposed to contain a virtual address of
  * the register set, but some DTS files have redefined that property to be the
@@ -600,7 +601,8 @@ static int fwnode_get_mac_addr(struct fwnode_handle *fwnode,
 int fwnode_get_mac_address(struct fwnode_handle *fwnode, char *addr)
 {
 	if (!fwnode_get_mac_addr(fwnode, "mac-address", addr) ||
-	    !fwnode_get_mac_addr(fwnode, "local-mac-address", addr) ||
+	    (!fwnode_property_present(fwnode, "ignore-local-mac-address") &&
+	      !fwnode_get_mac_addr(fwnode, "local-mac-address", addr)) ||
 	    !fwnode_get_mac_addr(fwnode, "address", addr))
 		return 0;
 

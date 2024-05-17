@@ -104,11 +104,11 @@ EXPORT_SYMBOL(of_get_mac_address_nvmem);
  *
  * Search the device tree for the best MAC address to use.  'mac-address' is
  * checked first, because that is supposed to contain to "most recent" MAC
- * address. If that isn't set, then 'local-mac-address' is checked next,
- * because that is the default address. If that isn't set, then the obsolete
- * 'address' is checked, just in case we're using an old device tree. If any
- * of the above isn't set, then try to get MAC address from nvmem cell named
- * 'mac-address'.
+ * address. If there is no valid 'mac-address' and `ignore-local-mac-address'
+ * isn't set, then 'local-mac-address' is checked next, because that is the
+ * default address. If that isn't set, then the obsolete * 'address' is
+ * checked, just in case we're using an old device tree. If any of the above
+ * isn't set, then try to get MAC address from nvmem cell named 'mac-address'.
  *
  * Note that the 'address' property is supposed to contain a virtual address of
  * the register set, but some DTS files have redefined that property to be the
@@ -134,9 +134,11 @@ int of_get_mac_address(struct device_node *np, u8 *addr)
 	if (!ret)
 		return 0;
 
-	ret = of_get_mac_addr(np, "local-mac-address", addr);
-	if (!ret)
-		return 0;
+	if (!of_find_property(np, "ignore-local-mac-address", NULL)) {
+		ret = of_get_mac_addr(np, "local-mac-address", addr);
+		if (!ret)
+			return 0;
+	}
 
 	ret = of_get_mac_addr(np, "address", addr);
 	if (!ret)
