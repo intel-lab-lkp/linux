@@ -39,7 +39,7 @@ virtio_transport_get_ops(struct vsock_sock *vsk)
 
 static bool virtio_transport_can_zcopy(const struct virtio_transport *t_ops,
 				       struct virtio_vsock_pkt_info *info,
-				       size_t pkt_len)
+				       size_t pkt_len, unsigned int cid)
 {
 	struct iov_iter *iov_iter;
 
@@ -62,7 +62,7 @@ static bool virtio_transport_can_zcopy(const struct virtio_transport *t_ops,
 		int pages_to_send = iov_iter_npages(iov_iter, MAX_SKB_FRAGS);
 
 		/* +1 is for packet header. */
-		return t_ops->can_msgzerocopy(pages_to_send + 1);
+		return t_ops->can_msgzerocopy(cid, pages_to_send + 1);
 	}
 
 	return true;
@@ -375,7 +375,7 @@ static int virtio_transport_send_pkt_info(struct vsock_sock *vsk,
 			info->msg->msg_flags &= ~MSG_ZEROCOPY;
 
 		if (info->msg->msg_flags & MSG_ZEROCOPY)
-			can_zcopy = virtio_transport_can_zcopy(t_ops, info, pkt_len);
+			can_zcopy = virtio_transport_can_zcopy(t_ops, info, pkt_len, src_cid);
 
 		if (can_zcopy)
 			max_skb_len = min_t(u32, VIRTIO_VSOCK_MAX_PKT_BUF_SIZE,

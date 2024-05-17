@@ -168,7 +168,7 @@ struct virtio_transport {
 	 * extra checks and can perform zerocopy transmission by
 	 * default.
 	 */
-	bool (*can_msgzerocopy)(int bufs_num);
+	bool (*can_msgzerocopy)(u32 cid, int bufs_num);
 };
 
 ssize_t

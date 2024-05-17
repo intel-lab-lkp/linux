@@ -521,14 +521,13 @@ static void virtio_vsock_rx_done(struct virtqueue *vq)
 	queue_work(virtio_vsock_workqueue, &vsock->rx_work);
 }
 
-static bool virtio_transport_can_msgzerocopy(int bufs_num)
+static bool virtio_transport_can_msgzerocopy(u32 cid, int bufs_num)
 {
 	struct virtio_vsock *vsock;
 	bool res = false;
 
 	rcu_read_lock();
-
-	vsock = rcu_dereference(the_virtio_vsock);
+	vsock = virtio_transport_get_virtio_vsock(cid);
 	if (vsock) {
 		struct virtqueue *vq = vsock->vqs[VSOCK_VQ_TX];
 
