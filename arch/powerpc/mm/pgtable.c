@@ -390,8 +390,12 @@ pte_t *__find_linux_pte(pgd_t *pgdir, unsigned long ea,
 			bool *is_thp, unsigned *hpage_shift)
 {
 	pgd_t *pgdp;
-	p4d_t p4d, *p4dp;
-	pud_t pud, *pudp;
+	p4d_t *p4dp;
+	pud_t *pudp;
+#ifdef CONFIG_PPC64
+	p4d_t p4d;
+	pud_t pud;
+#endif
 	pmd_t pmd, *pmdp;
 	pte_t *ret_pte;
 	hugepd_t *hpdp = NULL;
@@ -412,6 +416,7 @@ pte_t *__find_linux_pte(pgd_t *pgdir, unsigned long ea,
 	 */
 	pgdp = pgdir + pgd_index(ea);
 	p4dp = p4d_offset(pgdp, ea);
+#ifdef CONFIG_PPC64
 	p4d  = READ_ONCE(*p4dp);
 	pdshift = P4D_SHIFT;
 
@@ -452,6 +457,11 @@ pte_t *__find_linux_pte(pgd_t *pgdir, unsigned long ea,
 
 	pdshift = PMD_SHIFT;
 	pmdp = pmd_offset(&pud, ea);
+#else
+	p4dp = p4d_offset(pgdp, ea);
+	pudp = pud_offset(p4dp, ea);
+	pmdp = pmd_offset(pudp, ea);
+#endif
 	pmd  = READ_ONCE(*pmdp);
 
 	/*
