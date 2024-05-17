@@ -36,6 +36,7 @@ config A2B_AD24XX_NODE
        imply GPIO_AD24XX
        imply SND_SOC_AD24XX
        imply COMMON_CLK_AD24XX
+       imply I2C_AD24XX
        help
          Say Y here to enable support for AD24xx A2B transceiver nodes. This
          applies to both main nodes and subordinate nodes. Supported models

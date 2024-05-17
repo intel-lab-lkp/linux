@@ -258,7 +258,7 @@ config COMMON_CLK_LAN966X
 	  within the SoC.
 
 config COMMON_CLK_AD24XX
-	bool "Clock driver for Analog Devices Inc. AD24xx"
+	tristate "Clock driver for Analog Devices Inc. AD24xx"
 	depends on A2B_AD24XX_NODE
 	help
 	  This driver supports the clock output functionality of AD24xx series

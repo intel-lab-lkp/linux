@@ -1387,6 +1387,13 @@ config I2C_ACORN
 
 	  If you don't know, say Y.
 
+config I2C_AD24XX
+	tristate "Analog Devices Inc. AD24xx I2C controller support"
+	depends on A2B_AD24XX_NODE
+	help
+	  Say yes if you want to support the I2C controller function of AD24xx
+	  A2B transceiver chips.
+
 config I2C_ELEKTOR
 	tristate "Elektor ISA card"
 	depends on ISA && HAS_IOPORT_MAP && BROKEN_ON_SMP
