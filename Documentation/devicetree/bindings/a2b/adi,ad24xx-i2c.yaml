@@ -1,0 +1,55 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/a2b/adi,ad24xx-i2c.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Analog Devices Inc. AD24xx I2C controller functional block
+
+maintainers:
+  - Alvin Šipraga <alsi@bang-olufsen.dk>
+
+allOf:
+  - $ref: /schemas/i2c/i2c-controller.yaml
+
+properties:
+  compatible:
+    enum:
+      - adi,ad2401-i2c
+      - adi,ad2402-i2c
+      - adi,ad2403-i2c
+      - adi,ad2410-i2c
+      - adi,ad2420-i2c
+      - adi,ad2421-i2c
+      - adi,ad2422-i2c
+      - adi,ad2425-i2c
+      - adi,ad2426-i2c
+      - adi,ad2427-i2c
+      - adi,ad2428-i2c
+
+required:
+  - compatible
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    a2b {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      node@1 {
+        compatible = "adi,ad2425-node";
+        reg = <1>;
+        interrupts = <1>;
+        adi,tdm-mode = <16>;
+        adi,tdm-slot-size = <32>;
+
+        i2c {
+          compatible = "adi,ad2425-i2c";
+          #address-cells = <1>;
+          #size-cells = <0>;
+          clock-frequency = <400000>;
+        };
+      };
+    };

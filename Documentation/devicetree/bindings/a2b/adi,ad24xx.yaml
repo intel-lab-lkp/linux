@@ -1,0 +1,253 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/a2b/adi,ad24xx.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Analog Devices Inc. AD24xx Automotive Audio Bus A2B Transceiver
+
+description: |
+  AD24xx chips provide A2B bus functionality together with several peripheral
+  functions, including GPIO, I2S/TDM, an I2C controller interface, and
+  programmable clock outputs.
+
+maintainers:
+  - Alvin Šipraga <alsi@bang-olufsen.dk>
+
+properties:
+  compatible:
+    enum:
+      - adi,ad2403
+      - adi,ad2410
+      - adi,ad2425
+      - adi,ad2428
+      - adi,ad2429
+
+  reg-names:
+    items:
+      - const: base
+      - const: bus
+
+  reg:
+    items:
+      - description: Normal I2C address of the chip
+      - description: Auxiliary BUS_ADDR I2C address of the chip
+
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 0
+
+  clock-names:
+    items:
+      - const: sync
+
+  clocks:
+    items:
+      - description: SYNC input pin clock source
+
+  vin-supply:
+    description: Optional regulator for supply voltage to VIN pin
+
+  bus-supply:
+    description: Optional regulator for out-of-band supply voltage to
+      subodrinate nodes' VIN pins
+
+  interrupts: true
+
+  interrupt-controller: true
+
+  '#interrupt-cells':
+    const: 1
+
+patternProperties:
+  '^node@[0-9]+$':
+    type: object
+    unevaluatedProperties: false
+
+    properties:
+      compatible:
+        enum:
+          - adi,ad2401-node
+          - adi,ad2402-node
+          - adi,ad2403-node
+          - adi,ad2410-node
+          - adi,ad2420-node
+          - adi,ad2421-node
+          - adi,ad2422-node
+          - adi,ad2425-node
+          - adi,ad2426-node
+          - adi,ad2427-node
+          - adi,ad2428-node
+          - adi,ad2429-node
+
+      reg:
+        maxItems: 1
+
+      interrupts:
+        maxItems: 1
+
+      interrupt-controller: true
+
+      '#interrupt-cells':
+        const: 1
+
+      gpio:
+        $ref: adi,ad24xx-gpio.yaml#
+
+      codec:
+        $ref: adi,ad24xx-codec.yaml#
+
+      i2c:
+        $ref: adi,ad24xx-i2c.yaml#
+
+      clock:
+        $ref: adi,ad24xx-clk.yaml#
+
+      adi,tdm-mode:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        description: TDM mode
+        enum: [2, 4, 8, 12, 16, 20, 24, 32]
+
+      adi,tdm-slot-size:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        description: TDM slot size
+        enum: [16, 32]
+
+      adi,invert-sync:
+        description: Falling edge of SYNC pin indicates the start of an audio
+          frame, as opposed to rising edge.
+        type: boolean
+
+      adi,early-sync:
+        description: The SYNC pin changes one cycle before the MSB of the first
+          data slot.
+        type: boolean
+
+      adi,alternating-sync:
+        description: Drive SYNC pin during first half of I2S/TDM data
+          transmission rather than just pulsing it for once cycle.
+        type: boolean
+
+      adi,rx-on-dtx1:
+        description: Use the DTX1 pin for I2S/TDM RX in place of the DRX1 pin.
+        type: boolean
+
+      adi,a2b-external-switch-mode-1:
+        description: Use external switch mode 1 instead of 0 on the assumption
+          that the downstream node is not using A2B bus power.
+        type: boolean
+
+      adi,drive-strength:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        description: Configures drive strength low (0) or high (1, default).
+        enum: [0, 1]
+        default: 1
+
+      adi,invert-interrupt:
+        description: Invert polarity of IRQ pin, making it active low.
+        type: boolean
+
+      adi,tristate-interrupt:
+        description: Rather than always actively driving the IRQ pin, only drive
+          when the interrupt is active and otherwise set to tristate (high-Z).
+        type: boolean
+
+    required:
+      - compatible
+      - reg
+      - adi,tdm-mode
+      - adi,tdm-slot-size
+
+    dependencies:
+      interrupt-controller: [ '#interrupt-cells' ]
+      '#interrupt-cells': [ interrupt-controller ]
+
+required:
+  - compatible
+  - reg-names
+  - reg
+  - clock-names
+  - clocks
+  - '#address-cells'
+  - '#size-cells'
+  - interrupts
+  - interrupt-controller
+  - '#interrupt-cells'
+  - node@0
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    sync_clk: sync-clock {
+          compatible = "fixed-clock";
+          #clock-cells = <0>;
+          clock-frequency = <48000>;
+    };
+
+    i2c {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      a2b@68 {
+        compatible = "adi,ad2428";
+        reg-names = "base", "bus";
+        reg = <0x68>, <0x69>;
+        clock-names = "sync";
+        clocks = <&sync_clk>;
+        #address-cells = <1>;
+        #size-cells = <0>;
+        interrupts = <42>;
+        interrupt-controller;
+        #interrupt-cells = <1>;
+
+        node@0 {
+          compatible = "adi,ad2428-node";
+          reg = <0>;
+          interrupts = <0>;
+          adi,tdm-mode = <16>;
+          adi,tdm-slot-size = <32>;
+
+          codec {
+            compatible = "adi,ad2428-codec";
+            #sound-dai-cells = <0>;
+            sound-name-prefix = "A2B Main";
+          };
+        };
+
+        node@1 {
+          compatible = "adi,ad2425-node";
+          reg = <1>;
+          interrupts = <1>;
+          adi,tdm-mode = <8>;
+          adi,tdm-slot-size = <32>;
+
+          gpio {
+            compatible = "adi,ad2425-gpio";
+            interrupt-controller;
+            #interrupt-cells = <2>;
+            gpio-controller;
+            #gpio-cells = <2>;
+          };
+
+          codec {
+            compatible = "adi,ad2425-codec";
+            #sound-dai-cells = <0>;
+            sound-name-prefix = "A2B Sub1";
+          };
+
+          i2c {
+            compatible = "adi,ad2425-i2c";
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            eeprom@50 {
+              compatible = "atmel,24c64";
+              reg = <0x50>;
+            };
+          };
+        };
+      };
+    };

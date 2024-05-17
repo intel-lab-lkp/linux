@@ -1,0 +1,76 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/a2b/adi,ad24xx-gpio.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Analog Devices Inc. AD24xx GPIO functional block
+
+maintainers:
+  - Alvin Šipraga <alsi@bang-olufsen.dk>
+
+properties:
+  compatible:
+    enum:
+      - adi,ad2401-gpio
+      - adi,ad2402-gpio
+      - adi,ad2403-gpio
+      - adi,ad2410-gpio
+      - adi,ad2420-gpio
+      - adi,ad2421-gpio
+      - adi,ad2422-gpio
+      - adi,ad2425-gpio
+      - adi,ad2426-gpio
+      - adi,ad2427-gpio
+      - adi,ad2428-gpio
+      - adi,ad2429-gpio
+
+  gpio-controller: true
+
+  '#gpio-cells':
+    const: 2
+
+  interrupt-controller: true
+
+  '#interrupt-cells':
+    const: 2
+
+  gpio-line-names: true
+  gpio-reserved-ranges: true
+
+required:
+  - compatible
+  - gpio-controller
+  - '#gpio-cells'
+
+dependencies:
+  interrupt-controller: [ '#interrupt-cells' ]
+  '#interrupt-cells': [ interrupt-controller ]
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    a2b {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      node@0 {
+        compatible = "adi,ad2428-node";
+        reg = <0>;
+        interrupts = <0>;
+        interrupt-controller;
+        #interrupt-cells = <1>;
+        adi,tdm-mode = <16>;
+        adi,tdm-slot-size = <32>;
+
+        gpio {
+          compatible = "adi,ad2428-gpio";
+          interrupt-controller;
+          #interrupt-cells = <2>;
+          gpio-controller;
+          #gpio-cells = <2>;
+          gpio-reserved-ranges = <0 1>;
+        };
+      };
+    };
