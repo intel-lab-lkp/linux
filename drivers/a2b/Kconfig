@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# A2B driver configuration
+#
+
+menuconfig A2B
+       tristate "A2B support"
+       select OF
+       help
+	 A2B (Automotive Audio Bus) is a digital audio and control bus from
+	 Analog Devices Inc.
+
+	 If unsure, say N.

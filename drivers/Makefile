@@ -191,5 +191,6 @@ obj-$(CONFIG_HTE)		+= hte/
 obj-$(CONFIG_DRM_ACCEL)		+= accel/
 obj-$(CONFIG_CDX_BUS)		+= cdx/
 obj-$(CONFIG_DPLL)		+= dpll/
+obj-$(CONFIG_A2B)		+= a2b/
 
 obj-$(CONFIG_S390)		+= s390/
