@@ -1459,14 +1459,16 @@ bool intel_dp_supports_fec(struct intel_dp *intel_dp,
 		drm_dp_sink_supports_fec(connector->dp.fec_capability);
 }
 
-static bool intel_dp_supports_dsc(const struct intel_connector *connector,
+static bool intel_dp_supports_dsc(struct intel_connector *connector,
 				  const struct intel_crtc_state *crtc_state)
 {
+	if (!intel_dp_has_dsc(connector))
+		return false;
+
 	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_DP) && !crtc_state->fec_enable)
 		return false;
 
-	return intel_dsc_source_support(crtc_state) &&
-		drm_dp_sink_supports_dsc(connector->dp.dsc_dpcd);
+	return intel_dsc_source_support(crtc_state);
 }
 
 static int intel_dp_hdmi_compute_bpc(struct intel_dp *intel_dp,
@@ -2213,7 +2215,7 @@ int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
 {
 	struct intel_digital_port *dig_port = dp_to_dig_port(intel_dp);
 	struct drm_i915_private *dev_priv = to_i915(dig_port->base.base.dev);
-	const struct intel_connector *connector =
+	struct intel_connector *connector =
 		to_intel_connector(conn_state->connector);
 	const struct drm_display_mode *adjusted_mode =
 		&pipe_config->hw.adjusted_mode;
