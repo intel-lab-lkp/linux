@@ -44,6 +44,10 @@
  */
 .macro TDX_MODULE_CALL host:req ret=0 saved=0
 	FRAME_BEGIN
+#ifndef CONFIG_FRAME_POINTER
+	/* Buggy firmware sometimes clobbers %rbp, so save it. */
+	pushq	%rbp
+#endif
 
 	/* Move Leaf ID to RAX */
 	mov %rdi, %rax
@@ -187,6 +191,9 @@
 	popq	%rbx
 .endif	/* \saved */
 
+#ifndef CONFIG_FRAME_POINTER
+	popq	%rbp
+#endif
 	FRAME_END
 	RET
 
