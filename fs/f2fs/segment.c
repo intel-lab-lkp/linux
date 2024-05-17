@@ -5190,7 +5190,9 @@ static int fix_curseg_write_pointer(struct f2fs_sb_info *sbi, int type)
 	if (cs->next_blkoff) {
 		unsigned int old_segno = cs->segno, old_blkoff = cs->next_blkoff;
 
-		f2fs_allocate_new_section(sbi, type, true);
+		err = f2fs_allocate_new_section(sbi, type, true);
+		if (err)
+			return err;
 		f2fs_notice(sbi, "Assign new section to curseg[%d]: "
 				"[0x%x,0x%x] -> [0x%x,0x%x]",
 				type, old_segno, old_blkoff,
