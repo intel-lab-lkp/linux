@@ -37,6 +37,8 @@ struct regmap_range_cfg;
 struct regmap_field;
 struct snd_ac97;
 struct sdw_slave;
+struct a2b_node;
+struct a2b_func;
 
 /*
  * regmap_mdio address encoding. IEEE 802.3ae clause 45 addresses consist of a
@@ -655,6 +657,14 @@ struct regmap *__regmap_init_fsi(struct fsi_device *fsi_dev,
 				 const struct regmap_config *config,
 				 struct lock_class_key *lock_key,
 				 const char *lock_name);
+struct regmap *__devm_regmap_init_a2b_node(struct a2b_node *node,
+					   const struct regmap_config *config,
+					   struct lock_class_key *lock_key,
+					   const char *lock_name);
+struct regmap *__devm_regmap_init_a2b_func(struct a2b_func *func,
+					   const struct regmap_config *config,
+					   struct lock_class_key *lock_key,
+					   const char *lock_name);
 
 struct regmap *__devm_regmap_init(struct device *dev,
 				  const struct regmap_bus *bus,
@@ -1206,6 +1216,34 @@ bool regmap_ac97_default_volatile(struct device *dev, unsigned int reg);
 #define devm_regmap_init_fsi(fsi_dev, config)				\
 	__regmap_lockdep_wrapper(__devm_regmap_init_fsi, #config,	\
 				 fsi_dev, config)
+
+/**
+ * devm_regmap_init_a2b_node() - Initialise managed register map for A2B node
+ *
+ * @node: Device that will be interacted with
+ * @config: Configuration for register map
+ *
+ * The return value will be an ERR_PTR() on error or a valid pointer
+ * to a struct regmap.  The regmap will be automatically freed by the
+ * device management code.
+ */
+#define devm_regmap_init_a2b_node(node, config)                              \
+	__regmap_lockdep_wrapper(__devm_regmap_init_a2b_node, #config, node, \
+				 config)
+
+/**
+ * devm_regmap_init_a2b_func() - Initialise managed register map for A2B func
+ *
+ * @func: Device that will be interacted with
+ * @config: Configuration for register map
+ *
+ * The return value will be an ERR_PTR() on error or a valid pointer
+ * to a struct regmap.  The regmap will be automatically freed by the
+ * device management code.
+ */
+#define devm_regmap_init_a2b_func(func, config)                              \
+	__regmap_lockdep_wrapper(__devm_regmap_init_a2b_func, #config, func, \
+				 config)
 
 int regmap_mmio_attach_clk(struct regmap *map, struct clk *clk);
 void regmap_mmio_detach_clk(struct regmap *map);
