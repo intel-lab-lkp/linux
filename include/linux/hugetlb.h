@@ -193,9 +193,9 @@ static inline pte_t *pte_offset_huge(pmd_t *pmd, unsigned long address)
 	return pte_offset_kernel(pmd, address);
 }
 static inline pte_t *pte_alloc_huge(struct mm_struct *mm, pmd_t *pmd,
-				    unsigned long address)
+				    unsigned long address, unsigned long sz)
 {
-	return pte_alloc(mm, pmd) ? NULL : pte_offset_huge(pmd, address);
+	return pte_alloc_size(mm, pmd, sz) ? NULL : pte_offset_huge(pmd, address);
 }
 #endif
 

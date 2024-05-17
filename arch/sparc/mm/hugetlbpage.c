@@ -298,7 +298,7 @@ pte_t *huge_pte_alloc(struct mm_struct *mm, struct vm_area_struct *vma,
 		return NULL;
 	if (sz >= PMD_SIZE)
 		return (pte_t *)pmd;
-	return pte_alloc_huge(mm, pmd, addr);
+	return pte_alloc_huge(mm, pmd, addr, sz);
 }
 
 pte_t *huge_pte_offset(struct mm_struct *mm,
