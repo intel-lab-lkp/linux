@@ -1241,6 +1241,12 @@ config GPIO_ALTERA_A10SR
 	  includes reads of pushbuttons and DIP switches as well
 	  as writes to LEDs.
 
+config GPIO_AD24XX
+	tristate "Analog Devies Inc. AD24xx GPIO support"
+	depends on A2B_AD24XX_NODE
+	help
+	  Say Y here to enable GPIO support for AD24xx A2B transceivers.
+
 config GPIO_ARIZONA
 	tristate "Wolfson Microelectronics Arizona class devices"
 	depends on MFD_ARIZONA

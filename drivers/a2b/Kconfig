@@ -32,6 +32,7 @@ config A2B_AD24XX_I2C
 config A2B_AD24XX_NODE
        tristate "Analog Devices Inc. AD24xx node support"
        select REGMAP_A2B
+       imply GPIO_AD24XX
        help
          Say Y here to enable support for AD24xx A2B transceiver nodes. This
          applies to both main nodes and subordinate nodes. Supported models
