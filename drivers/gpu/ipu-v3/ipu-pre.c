@@ -96,9 +96,12 @@ struct ipu_pre {
 
 	dma_addr_t		buffer_paddr;
 	void			*buffer_virt;
-	bool			in_use;
-	unsigned int		safe_window_end;
-	unsigned int		last_bufaddr;
+
+	struct {
+		bool		in_use;
+		unsigned int	safe_window_end;
+		unsigned int	bufaddr;
+	} cur;
 };
 
 static DEFINE_MUTEX(ipu_pre_list_mutex);
@@ -138,7 +141,7 @@ int ipu_pre_get(struct ipu_pre *pre)
 {
 	u32 val;
 
-	if (pre->in_use)
+	if (pre->cur.in_use)
 		return -EBUSY;
 
 	/* first get the engine out of reset and remove clock gating */
@@ -151,7 +154,7 @@ int ipu_pre_get(struct ipu_pre *pre)
 	      IPU_PRE_CTRL_SDW_UPDATE;
 	writel(val, pre->regs + IPU_PRE_CTRL);
 
-	pre->in_use = true;
+	pre->cur.in_use = true;
 	return 0;
 }
 
@@ -159,7 +162,7 @@ void ipu_pre_put(struct ipu_pre *pre)
 {
 	writel(IPU_PRE_CTRL_SFTRST, pre->regs + IPU_PRE_CTRL);
 
-	pre->in_use = false;
+	pre->cur.in_use = false;
 }
 
 void ipu_pre_configure(struct ipu_pre *pre, unsigned int width,
@@ -172,13 +175,13 @@ void ipu_pre_configure(struct ipu_pre *pre, unsigned int width,
 
 	/* calculate safe window for ctrl register updates */
 	if (modifier == DRM_FORMAT_MOD_LINEAR)
-		pre->safe_window_end = height - 2;
+		pre->cur.safe_window_end = height - 2;
 	else
-		pre->safe_window_end = DIV_ROUND_UP(height, 4) - 1;
+		pre->cur.safe_window_end = DIV_ROUND_UP(height, 4) - 1;
 
 	writel(bufaddr, pre->regs + IPU_PRE_CUR_BUF);
 	writel(bufaddr, pre->regs + IPU_PRE_NEXT_BUF);
-	pre->last_bufaddr = bufaddr;
+	pre->cur.bufaddr = bufaddr;
 
 	val = IPU_PRE_PREF_ENG_CTRL_INPUT_PIXEL_FORMAT(0) |
 	      IPU_PRE_PREF_ENG_CTRL_INPUT_ACTIVE_BPP(active_bpp) |
@@ -236,11 +239,11 @@ void ipu_pre_update(struct ipu_pre *pre, unsigned int bufaddr)
 	unsigned short current_yblock;
 	u32 val;
 
-	if (bufaddr == pre->last_bufaddr)
+	if (bufaddr == pre->cur.bufaddr)
 		return;
 
 	writel(bufaddr, pre->regs + IPU_PRE_NEXT_BUF);
-	pre->last_bufaddr = bufaddr;
+	pre->cur.bufaddr = bufaddr;
 
 	do {
 		if (time_after(jiffies, timeout)) {
@@ -252,7 +255,7 @@ void ipu_pre_update(struct ipu_pre *pre, unsigned int bufaddr)
 		current_yblock =
 			(val >> IPU_PRE_STORE_ENG_STATUS_STORE_BLOCK_Y_SHIFT) &
 			IPU_PRE_STORE_ENG_STATUS_STORE_BLOCK_Y_MASK;
-	} while (current_yblock == 0 || current_yblock >= pre->safe_window_end);
+	} while (current_yblock == 0 || current_yblock >= pre->cur.safe_window_end);
 
 	writel(IPU_PRE_CTRL_SDW_UPDATE, pre->regs + IPU_PRE_CTRL_SET);
 }
