@@ -58,6 +58,15 @@ xfs_get_extsz_hint(
 	 */
 	if (xfs_is_always_cow_inode(ip))
 		return 0;
+
+	/*
+	 * let xfs_buffered_write_iomap_begin() do delayed allocation
+	 * in unshare path so that the new blocks have more chance to
+	 * be contigurous
+	 */
+	if (xfs_iflags_test(ip, XFS_IUNSHARE))
+		return 0;
+
 	if ((ip->i_diflags & XFS_DIFLAG_EXTSIZE) && ip->i_extsize)
 		return ip->i_extsize;
 	if (XFS_IS_REALTIME_INODE(ip))
@@ -76,6 +85,14 @@ xfs_get_cowextsz_hint(
 	struct xfs_inode	*ip)
 {
 	xfs_extlen_t		a, b;
+
+	/*
+	 * in unshare path, allocate exactly the number of the blocks to be
+	 * unshared so that no new blocks caused the unshare operation remain
+	 * in Cow fork after the unshare is done
+	 */
+	if (xfs_iflags_test(ip, XFS_IUNSHARE))
+		return 1;
 
 	a = 0;
 	if (ip->i_diflags2 & XFS_DIFLAG2_COWEXTSIZE)

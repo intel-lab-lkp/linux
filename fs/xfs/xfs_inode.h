@@ -207,13 +207,13 @@ xfs_new_eof(struct xfs_inode *ip, xfs_fsize_t new_size)
  * i_flags helper functions
  */
 static inline void
-__xfs_iflags_set(xfs_inode_t *ip, unsigned short flags)
+__xfs_iflags_set(xfs_inode_t *ip, unsigned long flags)
 {
 	ip->i_flags |= flags;
 }
 
 static inline void
-xfs_iflags_set(xfs_inode_t *ip, unsigned short flags)
+xfs_iflags_set(xfs_inode_t *ip, unsigned long flags)
 {
 	spin_lock(&ip->i_flags_lock);
 	__xfs_iflags_set(ip, flags);
@@ -221,7 +221,7 @@ xfs_iflags_set(xfs_inode_t *ip, unsigned short flags)
 }
 
 static inline void
-xfs_iflags_clear(xfs_inode_t *ip, unsigned short flags)
+xfs_iflags_clear(xfs_inode_t *ip, unsigned long flags)
 {
 	spin_lock(&ip->i_flags_lock);
 	ip->i_flags &= ~flags;
@@ -229,13 +229,13 @@ xfs_iflags_clear(xfs_inode_t *ip, unsigned short flags)
 }
 
 static inline int
-__xfs_iflags_test(xfs_inode_t *ip, unsigned short flags)
+__xfs_iflags_test(xfs_inode_t *ip, unsigned long flags)
 {
 	return (ip->i_flags & flags);
 }
 
 static inline int
-xfs_iflags_test(xfs_inode_t *ip, unsigned short flags)
+xfs_iflags_test(xfs_inode_t *ip, unsigned long flags)
 {
 	int ret;
 	spin_lock(&ip->i_flags_lock);
@@ -245,7 +245,7 @@ xfs_iflags_test(xfs_inode_t *ip, unsigned short flags)
 }
 
 static inline int
-xfs_iflags_test_and_clear(xfs_inode_t *ip, unsigned short flags)
+xfs_iflags_test_and_clear(xfs_inode_t *ip, unsigned long flags)
 {
 	int ret;
 
@@ -258,7 +258,7 @@ xfs_iflags_test_and_clear(xfs_inode_t *ip, unsigned short flags)
 }
 
 static inline int
-xfs_iflags_test_and_set(xfs_inode_t *ip, unsigned short flags)
+xfs_iflags_test_and_set(xfs_inode_t *ip, unsigned long flags)
 {
 	int ret;
 
@@ -321,25 +321,25 @@ static inline bool xfs_inode_has_large_extent_counts(struct xfs_inode *ip)
 /*
  * In-core inode flags.
  */
-#define XFS_IRECLAIM		(1 << 0) /* started reclaiming this inode */
-#define XFS_ISTALE		(1 << 1) /* inode has been staled */
-#define XFS_IRECLAIMABLE	(1 << 2) /* inode can be reclaimed */
-#define XFS_INEW		(1 << 3) /* inode has just been allocated */
-#define XFS_IPRESERVE_DM_FIELDS	(1 << 4) /* has legacy DMAPI fields set */
-#define XFS_ITRUNCATED		(1 << 5) /* truncated down so flush-on-close */
-#define XFS_IDIRTY_RELEASE	(1 << 6) /* dirty release already seen */
-#define XFS_IFLUSHING		(1 << 7) /* inode is being flushed */
+#define XFS_IRECLAIM		(1UL << 0) /* started reclaiming this inode */
+#define XFS_ISTALE		(1UL << 1) /* inode has been staled */
+#define XFS_IRECLAIMABLE	(1UL<< 2) /* inode can be reclaimed */
+#define XFS_INEW		(1UL<< 3) /* inode has just been allocated */
+#define XFS_IPRESERVE_DM_FIELDS	(1UL << 4) /* has legacy DMAPI fields set */
+#define XFS_ITRUNCATED		(1UL << 5) /* truncated down so flush-on-close */
+#define XFS_IDIRTY_RELEASE	(1UL << 6) /* dirty release already seen */
+#define XFS_IFLUSHING		(1UL << 7) /* inode is being flushed */
 #define __XFS_IPINNED_BIT	8	 /* wakeup key for zero pin count */
-#define XFS_IPINNED		(1 << __XFS_IPINNED_BIT)
-#define XFS_IEOFBLOCKS		(1 << 9) /* has the preallocblocks tag set */
-#define XFS_NEED_INACTIVE	(1 << 10) /* see XFS_INACTIVATING below */
+#define XFS_IPINNED		(1UL << __XFS_IPINNED_BIT)UL
+#define XFS_IEOFBLOCKS		(1UL << 9) /* has the preallocblocks tag set */
+#define XFS_NEED_INACTIVE	(1UL << 10) /* see XFS_INACTIVATING below */
 /*
  * If this unlinked inode is in the middle of recovery, don't let drop_inode
  * truncate and free the inode.  This can happen if we iget the inode during
  * log recovery to replay a bmap operation on the inode.
  */
-#define XFS_IRECOVERY		(1 << 11)
-#define XFS_ICOWBLOCKS		(1 << 12)/* has the cowblocks tag set */
+#define XFS_IRECOVERY		(1UL << 11)
+#define XFS_ICOWBLOCKS		(1UL << 12)/* has the cowblocks tag set */
 
 /*
  * If we need to update on-disk metadata before this IRECLAIMABLE inode can be
@@ -348,10 +348,10 @@ static inline bool xfs_inode_has_large_extent_counts(struct xfs_inode *ip)
  * inactivation completes, both flags will be cleared and the inode is a
  * plain old IRECLAIMABLE inode.
  */
-#define XFS_INACTIVATING	(1 << 13)
+#define XFS_INACTIVATING	(1UL << 13)
 
 /* Quotacheck is running but inode has not been added to quota counts. */
-#define XFS_IQUOTAUNCHECKED	(1 << 14)
+#define XFS_IQUOTAUNCHECKED	(1UL << 14)
 
 /*
  * Remap in progress. Callers that wish to update file data while
@@ -359,7 +359,9 @@ static inline bool xfs_inode_has_large_extent_counts(struct xfs_inode *ip)
  * the lock in exclusive mode. Relocking the file will block until
  * IREMAPPING is cleared.
  */
-#define XFS_IREMAPPING		(1U << 15)
+#define XFS_IREMAPPING		(1UL << 15)
+
+#define XFS_IUNSHARE		(1UL << 16) /* file under unsharing */
 
 /* All inode state flags related to inode reclaim. */
 #define XFS_ALL_IRECLAIM_FLAGS	(XFS_IRECLAIMABLE | \
