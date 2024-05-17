@@ -925,6 +925,9 @@ retry:
 		if (bytes > length)
 			bytes = length;
 
+		if (!mapping_large_folio_support(iter->inode->i_mapping))
+			bytes = min_t(size_t, bytes, PAGE_SIZE - offset_in_page(pos));
+
 		/*
 		 * Bring in the user page that we'll copy from _first_.
 		 * Otherwise there's a nasty deadlock on copying from the
