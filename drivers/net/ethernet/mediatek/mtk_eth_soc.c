@@ -4957,7 +4957,7 @@ static int mtk_probe(struct platform_device *pdev)
 
 			eth->ppe[i] = mtk_ppe_init(eth, eth->base + ppe_addr, i);
 
-			if (!eth->ppe[i]) {
+			if (IS_ERR_OR_NULL(eth->ppe[i])) {
 				err = -ENOMEM;
 				goto err_deinit_ppe;
 			}

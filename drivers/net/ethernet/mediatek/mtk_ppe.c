@@ -884,12 +884,15 @@ struct mtk_ppe *mtk_ppe_init(struct mtk_eth *eth, void __iomem *base, int index)
 	struct mtk_ppe *ppe;
 	u32 foe_flow_size;
 	void *foe;
+	int ret;
 
 	ppe = devm_kzalloc(dev, sizeof(*ppe), GFP_KERNEL);
 	if (!ppe)
 		return NULL;
 
-	rhashtable_init(&ppe->l2_flows, &mtk_flow_l2_ht_params);
+	ret = rhashtable_init(&ppe->l2_flows, &mtk_flow_l2_ht_params);
+	if (ret)
+		return ERR_PTR(ret);
 
 	/* need to allocate a separate device, since it PPE DMA access is
 	 * not coherent.
