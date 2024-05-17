@@ -1,1 +1,7 @@
+# Board Name: hp-11A-G6-EE-grunt
+# Bug Report: TBD
+# IGT Version: 1.28-g0df7b9b97
+# Linux Version: 6.9.0-rc7
 kms_async_flips@async-flip-with-page-flip-events
+kms_async_flips@crc
+kms_plane@pixel-format-source-clamping

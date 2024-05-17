@@ -1,0 +1,6 @@
+# Board Name: hp-x360-12b-ca0010nr-n4020-octopus
+# Bug Report: TBD
+# IGT Version: 1.28-g0df7b9b97
+# Linux Version: 6.9.0-rc7
+core_hotunplug@unplug-rescan
+kms_fb_coherency@memset-crc

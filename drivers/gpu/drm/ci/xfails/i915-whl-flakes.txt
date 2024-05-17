@@ -1,0 +1,5 @@
+# Board Name: dell-latitude-5400-8665U-sarien
+# Bug Report: TBD
+# IGT Version: 1.28-g0df7b9b97
+# Linux Version: 6.9.0-rc7
+kms_pm_rpm@modeset-lpsp-stress

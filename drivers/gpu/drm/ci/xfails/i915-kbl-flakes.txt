@@ -1,1 +1,5 @@
-kms_async_flips@crc
+# Board Name: hp-x360-14-G1-sona
+# Bug Report: TBD
+# IGT Version: 1.28-g0df7b9b97
+# Linux Version: 6.9.0-rc7
+prime_busy@hang

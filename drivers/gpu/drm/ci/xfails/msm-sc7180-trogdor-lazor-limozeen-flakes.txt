@@ -1,5 +1,5 @@
-# Board Name: rk3399-gru-kevin
+# Board Name: sc7180-trogdor-lazor-limozeen-nots-r5
 # Bug Report: TBD
 # IGT Version: 1.28-g0df7b9b97
 # Linux Version: 6.9.0-rc7
-panfrost_submit@pan-unhandled-pagefault
+msm_mapping@shadow

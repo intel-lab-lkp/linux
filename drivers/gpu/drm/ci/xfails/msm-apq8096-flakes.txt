@@ -1,5 +1,5 @@
-# Board Name: rk3399-gru-kevin
+# Board Name: apq8096-db820c
 # Bug Report: TBD
 # IGT Version: 1.28-g0df7b9b97
 # Linux Version: 6.9.0-rc7
-panfrost_submit@pan-unhandled-pagefault
+dumb_buffer@create-clear

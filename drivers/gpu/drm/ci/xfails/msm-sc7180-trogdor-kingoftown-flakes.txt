@@ -1,0 +1,7 @@
+# Board Name: sc7180-trogdor-kingoftown
+# Bug Report: TBD
+# IGT Version: 1.28-g0df7b9b97
+# Linux Version: 6.9.0-rc7
+msm_mapping@shadow
+msm_shrink@copy-gpu-oom-32
+msm_shrink@copy-gpu-oom-8

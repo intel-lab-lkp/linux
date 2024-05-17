@@ -1,0 +1,10 @@
+# Board Name: mt8173-elm-hana
+# Bug Report: TBD
+# IGT Version: 1.28-g0df7b9b97
+# Linux Version: 6.9.0-rc7
+core_setmaster_vs_auth
+dumb_buffer@create-clear
+fbdev@unaligned-write
+fbdev@write
+kms_cursor_legacy@cursor-vs-flip-atomic-transitions
+kms_prop_blob@invalid-set-prop
