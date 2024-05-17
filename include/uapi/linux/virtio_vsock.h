@@ -43,6 +43,7 @@
 
 struct virtio_vsock_config {
 	__le64 guest_cid;
+	__le64 order;
 } __attribute__((packed));
 
 enum virtio_vsock_event_id {
