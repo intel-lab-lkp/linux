@@ -1310,19 +1310,20 @@ pxa2xx_spi_init_pdata(struct platform_device *pdev)
 	struct pxa2xx_spi_controller *pdata;
 	struct device *dev = &pdev->dev;
 	struct device *parent = dev->parent;
+	const void *match = device_get_match_data(dev);
 	enum pxa_ssp_type type = SSP_UNDEFINED;
 	struct ssp_device *ssp = NULL;
-	const void *match;
 	bool is_lpss_priv;
 	u32 num_cs = 1;
 	int status;
 
-	is_lpss_priv = platform_get_resource_byname(pdev, IORESOURCE_MEM, "lpss_priv");
-
-	match = device_get_match_data(dev);
-	if (match)
-		type = (uintptr_t)match;
-	else if (is_lpss_priv) {
+	ssp = pxa_ssp_request(pdev->id, pdev->name);
+	if (ssp) {
+		type = ssp->type;
+		pxa_ssp_free(ssp);
+	} else if (match) {
+		type = (enum pxa_ssp_type)(uintptr_t)match;
+	} else {
 		u32 value;
 
 		status = device_property_read_u32(dev, "intel,spi-pxa2xx-type", &value);
@@ -1330,12 +1331,6 @@ pxa2xx_spi_init_pdata(struct platform_device *pdev)
 			return ERR_PTR(status);
 
 		type = (enum pxa_ssp_type)value;
-	} else {
-		ssp = pxa_ssp_request(pdev->id, pdev->name);
-		if (ssp) {
-			type = ssp->type;
-			pxa_ssp_free(ssp);
-		}
 	}
 
 	/* Validate the SSP type correctness */
@@ -1347,6 +1342,7 @@ pxa2xx_spi_init_pdata(struct platform_device *pdev)
 		return ERR_PTR(-ENOMEM);
 
 	/* Platforms with iDMA 64-bit */
+	is_lpss_priv = platform_get_resource_byname(pdev, IORESOURCE_MEM, "lpss_priv");
 	if (is_lpss_priv) {
 		pdata->tx_param = parent;
 		pdata->rx_param = parent;
