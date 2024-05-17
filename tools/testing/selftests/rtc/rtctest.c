@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/rtc.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/ioctl.h>
@@ -24,12 +25,17 @@
 #define READ_LOOP_SLEEP_MS 11
 
 static char *rtc_file = "/dev/rtc0";
+static char *rtc_procfs = "/proc/driver/rtc";
 
 FIXTURE(rtc) {
 	int fd;
 };
 
 FIXTURE_SETUP(rtc) {
+	if (access(rtc_file, R_OK) != 0)
+		SKIP(return, "Skipping test since cannot access %s, perhaps miss sudo",
+			 rtc_file);
+
 	self->fd = open(rtc_file, O_RDONLY);
 }
 
@@ -80,6 +86,36 @@ static void nanosleep_with_retries(long ns)
 		req.tv_sec = rem.tv_sec;
 		req.tv_nsec = rem.tv_nsec;
 	}
+}
+
+static bool is_rtc_alarm_supported(int fd)
+{
+	struct rtc_param param = { 0 };
+	int rc;
+	char buf[1024] = { 0 };
+
+	/* Validate kernel reflects unsupported RTC alarm state */
+	param.param = RTC_PARAM_FEATURES;
+	param.index = 0;
+	rc = ioctl(fd, RTC_PARAM_GET, &param);
+	if (rc < 0) {
+		/* Fallback to read rtc procfs */
+		fd = open(rtc_procfs, O_RDONLY);
+		if (fd != -1) {
+			rc = read(fd, buf, sizeof(buf));
+			close(fd);
+
+			/* Check for the presence of "alarm" in the buf */
+			if (strstr(buf, "alarm") == NULL)
+				return false;
+		} else
+			return false;
+	} else {
+		if ((param.uvalue & _BITUL(RTC_FEATURE_ALARM)) == 0)
+			return false;
+	}
+
+	return true;
 }
 
 TEST_F_TIMEOUT(rtc, date_read_loop, READ_LOOP_DURATION_SEC + 2) {
@@ -202,6 +238,9 @@ TEST_F(rtc, alarm_alm_set) {
 		SKIP(return, "Skipping test since %s does not exist", rtc_file);
 	ASSERT_NE(-1, self->fd);
 
+	if (!is_rtc_alarm_supported(self->fd))
+		SKIP(return, "Skipping test since alarms are not supported.");
+
 	rc = ioctl(self->fd, RTC_RD_TIME, &tm);
 	ASSERT_NE(-1, rc);
 
@@ -209,11 +248,7 @@ TEST_F(rtc, alarm_alm_set) {
 	gmtime_r(&secs, (struct tm *)&tm);
 
 	rc = ioctl(self->fd, RTC_ALM_SET, &tm);
-	if (rc == -1) {
-		ASSERT_EQ(EINVAL, errno);
-		TH_LOG("skip alarms are not supported.");
-		return;
-	}
+	ASSERT_NE(-1, rc);
 
 	rc = ioctl(self->fd, RTC_ALM_READ, &tm);
 	ASSERT_NE(-1, rc);
@@ -260,6 +295,9 @@ TEST_F(rtc, alarm_wkalm_set) {
 		SKIP(return, "Skipping test since %s does not exist", rtc_file);
 	ASSERT_NE(-1, self->fd);
 
+	if (!is_rtc_alarm_supported(self->fd))
+		SKIP(return, "Skipping test since alarms are not supported.");
+
 	rc = ioctl(self->fd, RTC_RD_TIME, &alarm.time);
 	ASSERT_NE(-1, rc);
 
@@ -269,11 +307,7 @@ TEST_F(rtc, alarm_wkalm_set) {
 	alarm.enabled = 1;
 
 	rc = ioctl(self->fd, RTC_WKALM_SET, &alarm);
-	if (rc == -1) {
-		ASSERT_EQ(EINVAL, errno);
-		TH_LOG("skip alarms are not supported.");
-		return;
-	}
+	ASSERT_NE(-1, rc);
 
 	rc = ioctl(self->fd, RTC_WKALM_RD, &alarm);
 	ASSERT_NE(-1, rc);
@@ -312,6 +346,9 @@ TEST_F_TIMEOUT(rtc, alarm_alm_set_minute, 65) {
 		SKIP(return, "Skipping test since %s does not exist", rtc_file);
 	ASSERT_NE(-1, self->fd);
 
+	if (!is_rtc_alarm_supported(self->fd))
+		SKIP(return, "Skipping test since alarms are not supported.");
+
 	rc = ioctl(self->fd, RTC_RD_TIME, &tm);
 	ASSERT_NE(-1, rc);
 
@@ -319,11 +356,7 @@ TEST_F_TIMEOUT(rtc, alarm_alm_set_minute, 65) {
 	gmtime_r(&secs, (struct tm *)&tm);
 
 	rc = ioctl(self->fd, RTC_ALM_SET, &tm);
-	if (rc == -1) {
-		ASSERT_EQ(EINVAL, errno);
-		TH_LOG("skip alarms are not supported.");
-		return;
-	}
+	ASSERT_NE(-1, rc);
 
 	rc = ioctl(self->fd, RTC_ALM_READ, &tm);
 	ASSERT_NE(-1, rc);
@@ -370,6 +403,9 @@ TEST_F_TIMEOUT(rtc, alarm_wkalm_set_minute, 65) {
 		SKIP(return, "Skipping test since %s does not exist", rtc_file);
 	ASSERT_NE(-1, self->fd);
 
+	if (!is_rtc_alarm_supported(self->fd))
+		SKIP(return, "Skipping test since alarms are not supported.");
+
 	rc = ioctl(self->fd, RTC_RD_TIME, &alarm.time);
 	ASSERT_NE(-1, rc);
 
@@ -379,11 +415,7 @@ TEST_F_TIMEOUT(rtc, alarm_wkalm_set_minute, 65) {
 	alarm.enabled = 1;
 
 	rc = ioctl(self->fd, RTC_WKALM_SET, &alarm);
-	if (rc == -1) {
-		ASSERT_EQ(EINVAL, errno);
-		TH_LOG("skip alarms are not supported.");
-		return;
-	}
+	ASSERT_NE(-1, rc);
 
 	rc = ioctl(self->fd, RTC_WKALM_RD, &alarm);
 	ASSERT_NE(-1, rc);
