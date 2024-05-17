@@ -81,6 +81,7 @@ patternProperties:
           - adi,ad2427-node
           - adi,ad2428-node
           - adi,ad2429-node
+          - beo,shape-node
 
       reg:
         maxItems: 1
