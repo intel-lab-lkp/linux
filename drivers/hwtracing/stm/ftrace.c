@@ -31,6 +31,7 @@ static struct stm_ftrace {
 
 /**
  * stm_ftrace_write() - write data to STM via 'stm_ftrace' source
+ * @export:	Pointer to trace export descriptor
  * @buf:	buffer containing the data packet
  * @len:	length of the data packet
  */
