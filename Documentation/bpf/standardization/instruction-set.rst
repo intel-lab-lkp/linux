@@ -378,12 +378,21 @@ etc. This specification requires that signed modulo use truncated division
 
    a % n = a - n * trunc(a / n)
 
-The ``MOVSX`` instruction does a move operation with sign extension.
+The ``MOV`` instruction does a move operation without sign extension, whereas
+the ``MOVSX`` instruction does a move operation with sign extension.
 ``{MOVSX, X, ALU}`` :term:`sign extends<Sign Extend>` 8-bit and 16-bit operands into
 32-bit operands, and zeroes the remaining upper 32 bits.
 ``{MOVSX, X, ALU64}`` :term:`sign extends<Sign Extend>` 8-bit, 16-bit, and 32-bit
 operands into 64-bit operands.  Unlike other arithmetic instructions,
 ``MOVSX`` is only defined for register source operands (``X``).
+
+``{MOV, K, ALU}`` means::
+
+  dst = (u32) imm
+
+``{MOVSX, X, ALU}`` with 'offset' 32 means::
+
+  dst = (s32) src
 
 The ``NEG`` instruction is only defined when the source bit is clear
 (``K``).
@@ -485,6 +494,10 @@ Example:
   if (s32)dst s>= (s32)src goto +offset
 
 where 's>=' indicates a signed '>=' comparison.
+
+``{JLE, K, JMP}`` means::
+
+  if dst <= (u64)(s64)imm goto +offset
 
 ``{JA, K, JMP32}`` means::
 
