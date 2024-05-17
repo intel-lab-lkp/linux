@@ -14,6 +14,9 @@
 
 #include <linux/iio/iio.h>
 
+#define MCP9600_CHAN_HOT_JUNCTION	0
+#define MCP9600_CHAN_COLD_JUNCTION	1
+
 /* MCP9600 registers */
 #define MCP9600_HOT_JUNCTION 0x0
 #define MCP9600_COLD_JUNCTION 0x2
@@ -25,17 +28,19 @@
 static const struct iio_chan_spec mcp9600_channels[] = {
 	{
 		.type = IIO_TEMP,
+		.channel = MCP9600_CHAN_HOT_JUNCTION,
 		.address = MCP9600_HOT_JUNCTION,
 		.info_mask_separate =
 			BIT(IIO_CHAN_INFO_RAW) | BIT(IIO_CHAN_INFO_SCALE),
+		.indexed = 1,
 	},
 	{
 		.type = IIO_TEMP,
+		.channel = MCP9600_CHAN_COLD_JUNCTION,
 		.address = MCP9600_COLD_JUNCTION,
-		.channel2 = IIO_MOD_TEMP_AMBIENT,
-		.modified = 1,
 		.info_mask_separate =
 			BIT(IIO_CHAN_INFO_RAW) | BIT(IIO_CHAN_INFO_SCALE),
+		.indexed = 1,
 	},
 };
 
