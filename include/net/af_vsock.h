@@ -264,4 +264,11 @@ static inline bool vsock_msgzerocopy_allow(const struct vsock_transport *t)
 {
 	return t->msgzerocopy_allow && t->msgzerocopy_allow();
 }
+
+/**** IOCTL ****/
+/* Type of return value of IOCTL_VM_SOCKETS_GET_LOCAL_CIDS. */
+struct vsock_local_cids {
+	int nr;
+	unsigned int data[MAX_VSOCK_NUM];
+};
 #endif /* __AF_VSOCK_H__ */

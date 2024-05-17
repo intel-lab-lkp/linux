@@ -2454,6 +2454,7 @@ static long vsock_dev_do_ioctl(struct file *filp,
 	u32 __user *p = ptr;
 	u32 cid = VMADDR_CID_ANY;
 	int retval = 0;
+	struct vsock_local_cids local_cids;
 
 	switch (cmd) {
 	case IOCTL_VM_SOCKETS_GET_LOCAL_CID:
@@ -2467,6 +2468,24 @@ static long vsock_dev_do_ioctl(struct file *filp,
 
 		if (put_user(cid, p) != 0)
 			retval = -EFAULT;
+		break;
+
+	case IOCTL_VM_SOCKETS_GET_LOCAL_CIDS:
+		if (!transport_g2h || !transport_g2h->get_local_cids)
+			goto fault;
+
+		rcu_read_lock();
+		local_cids.nr = transport_g2h->get_local_cids(local_cids.data);
+		rcu_read_unlock();
+
+		if (local_cids.nr < 0 ||
+		    copy_to_user(p, &local_cids, sizeof(local_cids)))
+			goto fault;
+
+		break;
+
+fault:
+		retval = -EFAULT;
 		break;
 
 	default:

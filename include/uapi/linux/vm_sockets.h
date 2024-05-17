@@ -195,7 +195,15 @@ struct sockaddr_vm {
 
 #define MAX_VSOCK_NUM 16
 
+/* Return actual context id if the transport not support vsock
+ * multi-devices. Otherwise, return `-1U`.
+ */
+
 #define IOCTL_VM_SOCKETS_GET_LOCAL_CID		_IO(7, 0xb9)
+
+/* Only available in transports that support multiple devices. */
+
+#define IOCTL_VM_SOCKETS_GET_LOCAL_CIDS     _IOR(7, 0xba, struct vsock_local_cids)
 
 /* MSG_ZEROCOPY notifications are encoded in the standard error format,
  * sock_extended_err. See Documentation/networking/msg_zerocopy.rst in
