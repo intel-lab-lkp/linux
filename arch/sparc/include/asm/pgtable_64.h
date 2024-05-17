@@ -1175,7 +1175,7 @@ extern unsigned long pud_leaf_size(pud_t pud);
 extern unsigned long pmd_leaf_size(pmd_t pmd);
 
 #define pte_leaf_size pte_leaf_size
-extern unsigned long pte_leaf_size(pte_t pte);
+extern unsigned long pte_leaf_size(pmd_t pmd, pte_t pte);
 
 #endif /* CONFIG_HUGETLB_PAGE */
 

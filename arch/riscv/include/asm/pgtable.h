@@ -434,7 +434,7 @@ static inline pte_t pte_mkhuge(pte_t pte)
 }
 
 #ifdef CONFIG_RISCV_ISA_SVNAPOT
-#define pte_leaf_size(pte)	(pte_napot(pte) ?				\
+#define pte_leaf_size(pmd, pte)	(pte_napot(pte) ?				\
 					napot_cont_size(napot_cont_order(pte)) :\
 					PAGE_SIZE)
 #endif

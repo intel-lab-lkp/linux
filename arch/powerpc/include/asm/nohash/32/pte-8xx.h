@@ -151,7 +151,7 @@ static inline unsigned long pgd_leaf_size(pgd_t pgd)
 
 #define pgd_leaf_size pgd_leaf_size
 
-static inline unsigned long pte_leaf_size(pte_t pte)
+static inline unsigned long pte_leaf_size(pmd_t pmd, pte_t pte)
 {
 	pte_basic_t val = pte_val(pte);
 
