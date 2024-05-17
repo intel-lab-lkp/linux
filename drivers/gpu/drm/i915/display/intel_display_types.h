@@ -329,6 +329,7 @@ struct intel_vbt_panel_data {
 		u8 drrs_msa_timing_delay;
 		bool low_vswing;
 		bool hobl;
+		bool dsc_disable;
 	} edp;
 
 	struct {
