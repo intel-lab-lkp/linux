@@ -23,6 +23,7 @@ properties:
       - fsl,imx8qm-mqs
       - fsl,imx8qxp-mqs
       - fsl,imx93-mqs
+      - fsl,imx95-mqs
 
   clocks:
     minItems: 1
@@ -44,6 +45,22 @@ properties:
 
   resets:
     maxItems: 1
+
+  fsl,mqs-ctrl:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 6
+    maxItems: 6
+    description: |
+      Contains the control register information, defined as,
+      Cell #1: register type
+               0 - the register in owned register map
+               1 - the register in general purpose register map
+               2 - the register in control of system manager
+      Cell #2: offset of the control register from the syscon
+      Cell #3: shift bits for module enable bit
+      Cell #4: shift bits for reset bit
+      Cell #5: shift bits for oversampling ratio bit
+      Cell #6: shift bits for divider ratio control bit
 
 required:
   - compatible
