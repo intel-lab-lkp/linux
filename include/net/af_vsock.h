@@ -174,6 +174,22 @@ struct vsock_transport {
 
 	/* Addressing. */
 	u32 (*get_local_cid)(void);
+	/* Held rcu read lock by the caller. */
+	struct virtio_vsock *(*get_virtio_vsock)(unsigned int cid);
+	unsigned int (*get_default_cid)(void);
+	/* Get an list containing all the CIDs of registered vsock.   Return
+	 * the length of the list.
+	 *
+	 * Held rcu read lock by the caller.
+	 */
+	int (*get_local_cids)(unsigned int *local_cids);
+	/* Compare the order of two devices.  Given the guest CIDs of two
+	 * different devices, returns -1 while the left is behind the right.
+	 * Otherwise, return 1.
+	 *
+	 * Held rcu read lock by the caller.
+	 */
+	int (*compare_order)(unsigned int left, unsigned int right);
 
 	/* Read a single skb */
 	int (*read_skb)(struct vsock_sock *, skb_read_actor_t);

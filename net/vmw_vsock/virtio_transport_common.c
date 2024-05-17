@@ -340,7 +340,15 @@ static int virtio_transport_send_pkt_info(struct vsock_sock *vsk,
 	if (unlikely(!t_ops))
 		return -EFAULT;
 
-	src_cid = t_ops->transport.get_local_cid();
+	if (vsk->local_addr.svm_cid == VMADDR_CID_ANY) {
+		if (t_ops->transport.get_default_cid)
+			src_cid = t_ops->transport.get_default_cid();
+		else
+			src_cid = t_ops->transport.get_local_cid();
+	} else {
+		src_cid = vsk->local_addr.svm_cid;
+	}
+
 	src_port = vsk->local_addr.svm_port;
 	if (!info->remote_cid) {
 		dst_cid	= vsk->remote_addr.svm_cid;

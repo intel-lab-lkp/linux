@@ -189,6 +189,12 @@ struct sockaddr_vm {
 			       sizeof(__u8)];
 };
 
+/* The maximum number of vsock devices.  Each vsock device has an exclusive
+ * context id.
+ */
+
+#define MAX_VSOCK_NUM 16
+
 #define IOCTL_VM_SOCKETS_GET_LOCAL_CID		_IO(7, 0xb9)
 
 /* MSG_ZEROCOPY notifications are encoded in the standard error format,
