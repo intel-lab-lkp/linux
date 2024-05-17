@@ -90,6 +90,7 @@ struct power_pmu {
 #define PPMU_ARCH_31		0x00000200 /* Has MMCR3, SIER2 and SIER3 */
 #define PPMU_P10_DD1		0x00000400 /* Is power10 DD1 processor version */
 #define PPMU_HAS_ATTR_CONFIG1	0x00000800 /* Using config1 attribute */
+#define PPMU_P10			0x00001000 /* For power10 pmu */
 
 /*
  * Values for flags to get_alternatives()
