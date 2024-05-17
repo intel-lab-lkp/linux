@@ -18,10 +18,24 @@ config A2B_AD24XX_I2C
        tristate "Analog Devices Inc. AD24xx I2C interface support"
        depends on I2C
        select REGMAP_I2C
+       select A2B_AD24XX_NODE
        help
          Say Y here to enable I2C interface support for AD24xx A2B transceiver
          chips from Analog Devices Inc. Supported models include AD240x, AD241x,
          and AD242x.
+
+	 Selecting this option will also force AD24xx node support, which is
+	 required to operate the chip as a main node.
+
+	 If unsure, say N.
+
+config A2B_AD24XX_NODE
+       tristate "Analog Devices Inc. AD24xx node support"
+       select REGMAP_A2B
+       help
+         Say Y here to enable support for AD24xx A2B transceiver nodes. This
+         applies to both main nodes and subordinate nodes. Supported models
+         include AD240x, AD241x, and AD242x.
 
 	 If unsure, say N.
 

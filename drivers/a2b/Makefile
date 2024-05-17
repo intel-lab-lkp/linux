@@ -7,3 +7,6 @@ obj-$(CONFIG_A2B)			+= a2b.o
 
 # Interface drivers
 obj-$(CONFIG_A2B_AD24XX_I2C)		+= ad24xx-i2c.o
+
+# Node drivers
+obj-$(CONFIG_A2B_AD24XX_NODE)		+= ad24xx-node.o
