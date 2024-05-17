@@ -11,3 +11,18 @@ menuconfig A2B
 	 Analog Devices Inc.
 
 	 If unsure, say N.
+
+if A2B
+
+config A2B_AD24XX_I2C
+       tristate "Analog Devices Inc. AD24xx I2C interface support"
+       depends on I2C
+       select REGMAP_I2C
+       help
+         Say Y here to enable I2C interface support for AD24xx A2B transceiver
+         chips from Analog Devices Inc. Supported models include AD240x, AD241x,
+         and AD242x.
+
+	 If unsure, say N.
+
+endif # A2B
