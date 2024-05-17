@@ -1437,12 +1437,39 @@ xfs_truncate_page(
 	loff_t			pos,
 	bool			*did_zero)
 {
+	struct xfs_mount	*mp = ip->i_mount;
 	struct inode		*inode = VFS_I(ip);
 	unsigned int		blocksize = i_blocksize(inode);
+	int			error;
+
+	if (XFS_IS_REALTIME_INODE(ip))
+		blocksize = XFS_FSB_TO_B(mp, mp->m_sb.sb_rextsize);
+
+	/*
+	 * iomap won't detect a dirty page over an unwritten block (or a
+	 * cow block over a hole) and subsequently skips zeroing the
+	 * newly post-EOF portion of the page. Flush the new EOF to
+	 * convert the block before the pagecache truncate.
+	 */
+	error = filemap_write_and_wait_range(inode->i_mapping, pos,
+					     roundup_64(pos, blocksize));
+	if (error)
+		return error;
 
 	if (IS_DAX(inode))
-		return dax_truncate_page(inode, pos, blocksize, did_zero,
-					&xfs_dax_write_iomap_ops);
-	return iomap_truncate_page(inode, pos, blocksize, did_zero,
-				   &xfs_buffered_write_iomap_ops);
+		error = dax_truncate_page(inode, pos, blocksize, did_zero,
+					  &xfs_dax_write_iomap_ops);
+	else
+		error = iomap_truncate_page(inode, pos, blocksize, did_zero,
+					    &xfs_buffered_write_iomap_ops);
+	if (error)
+		return error;
+
+	/*
+	 * Write back path won't write dirty blocks post EOF folio,
+	 * flush the entire zeroed range before updating the inode
+	 * size.
+	 */
+	return filemap_write_and_wait_range(inode->i_mapping, pos,
+					    roundup_64(pos, blocksize));
 }
