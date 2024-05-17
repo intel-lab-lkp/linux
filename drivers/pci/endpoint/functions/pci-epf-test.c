@@ -167,7 +167,7 @@ static int pci_epf_test_data_transfer(struct pci_epf_test *epf_test,
 
 	ret = dma_submit_error(epf_test->transfer_cookie);
 	if (ret) {
-		dev_err(dev, "Failed to do DMA tx_submit %d\n", ret);
+		dev_err(dev, "Failed to do DMA tx_submit: %pe\n", ERR_PTR(ret));
 		goto terminate;
 	}
 
@@ -949,7 +949,7 @@ static int __init pci_epf_test_init(void)
 	ret = pci_epf_register_driver(&test_driver);
 	if (ret) {
 		destroy_workqueue(kpcitest_workqueue);
-		pr_err("Failed to register pci epf test driver --> %d\n", ret);
+		pr_err("Failed to register pci epf test driver: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 

@@ -427,8 +427,8 @@ static int dpc_probe(struct pcie_device *dev)
 					   dpc_handler, IRQF_SHARED,
 					   "pcie-dpc", pdev);
 	if (status) {
-		pci_warn(pdev, "request IRQ%d failed: %d\n", dev->irq,
-			 status);
+		pci_warn(pdev, "request IRQ%d failed: %pe\n", dev->irq,
+			 ERR_PTR(status));
 		return status;
 	}
 

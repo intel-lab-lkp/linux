@@ -343,8 +343,8 @@ void pci_hp_create_module_link(struct pci_slot *pci_slot)
 		return;
 	ret = sysfs_create_link(&pci_slot->kobj, kobj, "module");
 	if (ret)
-		dev_err(&pci_slot->bus->dev, "Error creating sysfs link (%d)\n",
-			ret);
+		dev_err(&pci_slot->bus->dev, "Error creating sysfs link: %pe\n",
+			ERR_PTR(ret));
 	kobject_put(kobj);
 }
 EXPORT_SYMBOL_GPL(pci_hp_create_module_link);

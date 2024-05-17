@@ -512,8 +512,8 @@ static struct pci_doe_mb *pci_doe_create_mb(struct pci_dev *pdev,
 	 */
 	rc = pci_doe_cache_protocols(doe_mb);
 	if (rc) {
-		pci_err(pdev, "[%x] failed to cache protocols : %d\n",
-			doe_mb->cap_offset, rc);
+		pci_err(pdev, "[%x] failed to cache protocols : %pe\n",
+			doe_mb->cap_offset, ERR_PTR(rc));
 		goto err_cancel;
 	}
 

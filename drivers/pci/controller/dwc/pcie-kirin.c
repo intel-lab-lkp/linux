@@ -421,7 +421,7 @@ static int kirin_pcie_parse_port(struct kirin_pcie *pcie,
 
 			ret = of_pci_get_devfn(child);
 			if (ret < 0) {
-				dev_err(dev, "failed to parse devfn: %d\n", ret);
+				dev_err(dev, "failed to parse devfn: %pe\n", ERR_PTR(ret));
 				goto put_node;
 			}
 
@@ -555,8 +555,8 @@ static int kirin_pcie_add_bus(struct pci_bus *bus)
 	for (i = 0; i < kirin_pcie->num_slots; i++) {
 		ret = gpio_direction_output(kirin_pcie->gpio_id_reset[i], 1);
 		if (ret) {
-			dev_err(pci->dev, "PERST# %s error: %d\n",
-				kirin_pcie->reset_names[i], ret);
+			dev_err(pci->dev, "PERST# %s error: %pe\n",
+				kirin_pcie->reset_names[i], ERR_PTR(ret));
 		}
 	}
 	usleep_range(PERST_2_ACCESS_MIN, PERST_2_ACCESS_MAX);

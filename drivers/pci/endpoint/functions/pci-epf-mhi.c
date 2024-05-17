@@ -738,14 +738,14 @@ static int pci_epf_mhi_core_init(struct pci_epf *epf)
 	ret = pci_epc_set_msi(epc, epf->func_no, epf->vfunc_no,
 			      order_base_2(info->msi_count));
 	if (ret) {
-		dev_err(dev, "Failed to set MSI configuration: %d\n", ret);
+		dev_err(dev, "Failed to set MSI configuration: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 
 	ret = pci_epc_write_header(epc, epf->func_no, epf->vfunc_no,
 				   epf->header);
 	if (ret) {
-		dev_err(dev, "Failed to set Configuration header: %d\n", ret);
+		dev_err(dev, "Failed to set Configuration header: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 
@@ -768,7 +768,7 @@ static int pci_epf_mhi_link_up(struct pci_epf *epf)
 	if (info->flags & MHI_EPF_USE_DMA) {
 		ret = pci_epf_mhi_dma_init(epf_mhi);
 		if (ret) {
-			dev_err(dev, "Failed to initialize DMA: %d\n", ret);
+			dev_err(dev, "Failed to initialize DMA: %pe\n", ERR_PTR(ret));
 			return ret;
 		}
 	}
@@ -794,7 +794,7 @@ static int pci_epf_mhi_link_up(struct pci_epf *epf)
 	/* Register the MHI EP controller */
 	ret = mhi_ep_register_controller(mhi_cntrl, info->config);
 	if (ret) {
-		dev_err(dev, "Failed to register MHI EP controller: %d\n", ret);
+		dev_err(dev, "Failed to register MHI EP controller: %pe\n", ERR_PTR(ret));
 		if (info->flags & MHI_EPF_USE_DMA)
 			pci_epf_mhi_dma_deinit(epf_mhi);
 		return ret;

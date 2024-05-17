@@ -2129,7 +2129,7 @@ static int __init epf_ntb_init(void)
 	ret = pci_epf_register_driver(&epf_ntb_driver);
 	if (ret) {
 		destroy_workqueue(kpcintb_workqueue);
-		pr_err("Failed to register pci epf ntb driver --> %d\n", ret);
+		pr_err("Failed to register pci epf ntb driver: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 

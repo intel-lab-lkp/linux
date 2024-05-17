@@ -518,7 +518,7 @@ err:
 		pr_warn_once("%s: possibly some PCI slots don't have level triggered interrupts capability\n",
 			__func__);
 	} else {
-		dev_err(&pdev->dev, "%s: failed with rc=%d\n", __func__, rc);
+		dev_err(&pdev->dev, "%s: failed with rc=%pe\n", __func__, ERR_PTR(rc));
 	}
 	return rc;
 }
@@ -573,8 +573,8 @@ static int pci_parse_request_of_pci_ranges(struct device *dev,
 		case IORESOURCE_IO:
 			err = devm_pci_remap_iospace(dev, res, iobase);
 			if (err) {
-				dev_warn(dev, "error %d: failed to map resource %pR\n",
-					 err, res);
+				dev_warn(dev, "failed to map resource %pR with error: %pe\n",
+					 res, ERR_PTR(err));
 				resource_list_destroy_entry(win);
 			}
 			break;

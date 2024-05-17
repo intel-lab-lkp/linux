@@ -81,7 +81,7 @@ static int init_slot(struct controller *ctrl)
 	retval = pci_hp_initialize(&ctrl->hotplug_slot,
 				   ctrl->pcie->port->subordinate, 0, name);
 	if (retval) {
-		ctrl_err(ctrl, "pci_hp_initialize failed: error %d\n", retval);
+		ctrl_err(ctrl, "pci_hp_initialize failed with error: %pe\n", ERR_PTR(retval));
 		kfree(ops);
 	}
 	return retval;
@@ -210,21 +210,21 @@ static int pciehp_probe(struct pcie_device *dev)
 		if (rc == -EBUSY)
 			ctrl_warn(ctrl, "Slot already registered by another hotplug driver\n");
 		else
-			ctrl_err(ctrl, "Slot initialization failed (%d)\n", rc);
+			ctrl_err(ctrl, "Slot initialization failed: %pe\n", ERR_PTR(rc));
 		goto err_out_release_ctlr;
 	}
 
 	/* Enable events after we have setup the data structures */
 	rc = pcie_init_notification(ctrl);
 	if (rc) {
-		ctrl_err(ctrl, "Notification initialization failed (%d)\n", rc);
+		ctrl_err(ctrl, "Notification initialization failed: %d\n", rc);
 		goto err_out_free_ctrl_slot;
 	}
 
 	/* Publish to user space */
 	rc = pci_hp_add(&ctrl->hotplug_slot);
 	if (rc) {
-		ctrl_err(ctrl, "Publication to user space failed (%d)\n", rc);
+		ctrl_err(ctrl, "Publication to user space failed: %pe\n", ERR_PTR(rc));
 		goto err_out_shutdown_notification;
 	}
 

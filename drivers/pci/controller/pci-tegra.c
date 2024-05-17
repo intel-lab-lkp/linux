@@ -946,7 +946,7 @@ static int tegra_pcie_phy_enable(struct tegra_pcie *pcie)
 	/* wait for the PLL to lock */
 	err = tegra_pcie_pll_wait(pcie, 500);
 	if (err < 0) {
-		dev_err(dev, "PLL failed to lock: %d\n", err);
+		dev_err(dev, "PLL failed to lock: %pe\n", ERR_PTR(err));
 		return err;
 	}
 
@@ -997,7 +997,7 @@ static int tegra_pcie_port_phy_power_on(struct tegra_pcie_port *port)
 	for (i = 0; i < port->lanes; i++) {
 		err = phy_power_on(port->phys[i]);
 		if (err < 0) {
-			dev_err(dev, "failed to power on PHY#%u: %d\n", i, err);
+			dev_err(dev, "failed to power on PHY#%u: %pe\n", i, ERR_PTR(err));
 			return err;
 		}
 	}
@@ -1014,8 +1014,8 @@ static int tegra_pcie_port_phy_power_off(struct tegra_pcie_port *port)
 	for (i = 0; i < port->lanes; i++) {
 		err = phy_power_off(port->phys[i]);
 		if (err < 0) {
-			dev_err(dev, "failed to power off PHY#%u: %d\n", i,
-				err);
+			dev_err(dev, "failed to power off PHY#%u: %pe\n", i,
+				ERR_PTR(err));
 			return err;
 		}
 	}
@@ -1036,7 +1036,7 @@ static int tegra_pcie_phy_power_on(struct tegra_pcie *pcie)
 			err = tegra_pcie_phy_enable(pcie);
 
 		if (err < 0)
-			dev_err(dev, "failed to power on PHY: %d\n", err);
+			dev_err(dev, "failed to power on PHY: %pe\n", ERR_PTR(err));
 
 		return err;
 	}
@@ -1045,8 +1045,8 @@ static int tegra_pcie_phy_power_on(struct tegra_pcie *pcie)
 		err = tegra_pcie_port_phy_power_on(port);
 		if (err < 0) {
 			dev_err(dev,
-				"failed to power on PCIe port %u PHY: %d\n",
-				port->index, err);
+				"failed to power on PCIe port %u PHY: %pe\n",
+				port->index, ERR_PTR(err));
 			return err;
 		}
 	}
@@ -1067,7 +1067,7 @@ static int tegra_pcie_phy_power_off(struct tegra_pcie *pcie)
 			err = tegra_pcie_phy_disable(pcie);
 
 		if (err < 0)
-			dev_err(dev, "failed to power off PHY: %d\n", err);
+			dev_err(dev, "failed to power off PHY: %pe\n", ERR_PTR(err));
 
 		return err;
 	}
@@ -1076,8 +1076,8 @@ static int tegra_pcie_phy_power_off(struct tegra_pcie *pcie)
 		err = tegra_pcie_port_phy_power_off(port);
 		if (err < 0) {
 			dev_err(dev,
-				"failed to power off PCIe port %u PHY: %d\n",
-				port->index, err);
+				"failed to power off PCIe port %u PHY: %pe\n",
+				port->index, ERR_PTR(err));
 			return err;
 		}
 	}
@@ -1167,7 +1167,7 @@ static void tegra_pcie_power_off(struct tegra_pcie *pcie)
 
 	err = regulator_bulk_disable(pcie->num_supplies, pcie->supplies);
 	if (err < 0)
-		dev_warn(dev, "failed to disable regulators: %d\n", err);
+		dev_warn(dev, "failed to disable regulators: %pe\n", ERR_PTR(err));
 }
 
 static int tegra_pcie_power_on(struct tegra_pcie *pcie)
@@ -1186,38 +1186,38 @@ static int tegra_pcie_power_on(struct tegra_pcie *pcie)
 	/* enable regulators */
 	err = regulator_bulk_enable(pcie->num_supplies, pcie->supplies);
 	if (err < 0)
-		dev_err(dev, "failed to enable regulators: %d\n", err);
+		dev_err(dev, "failed to enable regulators: %pe\n", ERR_PTR(err));
 
 	if (!dev->pm_domain) {
 		err = tegra_powergate_power_on(TEGRA_POWERGATE_PCIE);
 		if (err) {
-			dev_err(dev, "failed to power ungate: %d\n", err);
+			dev_err(dev, "failed to power ungate: %pe\n", ERR_PTR(err));
 			goto regulator_disable;
 		}
 		err = tegra_powergate_remove_clamping(TEGRA_POWERGATE_PCIE);
 		if (err) {
-			dev_err(dev, "failed to remove clamp: %d\n", err);
+			dev_err(dev, "failed to remove clamp: %pe\n", ERR_PTR(err));
 			goto powergate;
 		}
 	}
 
 	err = clk_prepare_enable(pcie->afi_clk);
 	if (err < 0) {
-		dev_err(dev, "failed to enable AFI clock: %d\n", err);
+		dev_err(dev, "failed to enable AFI clock: %pe\n", ERR_PTR(err));
 		goto powergate;
 	}
 
 	if (soc->has_cml_clk) {
 		err = clk_prepare_enable(pcie->cml_clk);
 		if (err < 0) {
-			dev_err(dev, "failed to enable CML clock: %d\n", err);
+			dev_err(dev, "failed to enable CML clock: %pe\n", ERR_PTR(err));
 			goto disable_afi_clk;
 		}
 	}
 
 	err = clk_prepare_enable(pcie->pll_e);
 	if (err < 0) {
-		dev_err(dev, "failed to enable PLLE clock: %d\n", err);
+		dev_err(dev, "failed to enable PLLE clock: %pe\n", ERR_PTR(err));
 		goto disable_cml_clk;
 	}
 
@@ -1303,13 +1303,13 @@ static int tegra_pcie_phys_get_legacy(struct tegra_pcie *pcie)
 	pcie->phy = devm_phy_optional_get(dev, "pcie");
 	if (IS_ERR(pcie->phy)) {
 		err = PTR_ERR(pcie->phy);
-		dev_err(dev, "failed to get PHY: %d\n", err);
+		dev_err(dev, "failed to get PHY: %pe\n", ERR_PTR(err));
 		return err;
 	}
 
 	err = phy_init(pcie->phy);
 	if (err < 0) {
-		dev_err(dev, "failed to initialize PHY: %d\n", err);
+		dev_err(dev, "failed to initialize PHY: %pe\n", ERR_PTR(err));
 		return err;
 	}
 
@@ -1350,15 +1350,15 @@ static int tegra_pcie_port_get_phys(struct tegra_pcie_port *port)
 	for (i = 0; i < port->lanes; i++) {
 		phy = devm_of_phy_optional_get_index(dev, port->np, "pcie", i);
 		if (IS_ERR(phy)) {
-			dev_err(dev, "failed to get PHY#%u: %ld\n", i,
-				PTR_ERR(phy));
+			dev_err(dev, "failed to get PHY#%u: %pe\n", i,
+				phy);
 			return PTR_ERR(phy);
 		}
 
 		err = phy_init(phy);
 		if (err < 0) {
-			dev_err(dev, "failed to initialize PHY#%u: %d\n", i,
-				err);
+			dev_err(dev, "failed to initialize PHY#%u: %pe\n", i,
+				ERR_PTR(err));
 			return err;
 		}
 
@@ -1396,7 +1396,7 @@ static void tegra_pcie_phys_put(struct tegra_pcie *pcie)
 	if (pcie->legacy_phy) {
 		err = phy_exit(pcie->phy);
 		if (err < 0)
-			dev_err(dev, "failed to teardown PHY: %d\n", err);
+			dev_err(dev, "failed to teardown PHY: %pe\n", ERR_PTR(err));
 		return;
 	}
 
@@ -1404,8 +1404,8 @@ static void tegra_pcie_phys_put(struct tegra_pcie *pcie)
 		for (i = 0; i < port->lanes; i++) {
 			err = phy_exit(port->phys[i]);
 			if (err < 0)
-				dev_err(dev, "failed to teardown PHY#%u: %d\n",
-					i, err);
+				dev_err(dev, "failed to teardown PHY#%u: %pe\n",
+					i, ERR_PTR(err));
 		}
 	}
 }
@@ -1420,20 +1420,20 @@ static int tegra_pcie_get_resources(struct tegra_pcie *pcie)
 
 	err = tegra_pcie_clocks_get(pcie);
 	if (err) {
-		dev_err(dev, "failed to get clocks: %d\n", err);
+		dev_err(dev, "failed to get clocks: %pe\n", ERR_PTR(err));
 		return err;
 	}
 
 	err = tegra_pcie_resets_get(pcie);
 	if (err) {
-		dev_err(dev, "failed to get resets: %d\n", err);
+		dev_err(dev, "failed to get resets: %pe\n", ERR_PTR(err));
 		return err;
 	}
 
 	if (soc->program_uphy) {
 		err = tegra_pcie_phys_get(pcie);
 		if (err < 0) {
-			dev_err(dev, "failed to get PHYs: %d\n", err);
+			dev_err(dev, "failed to get PHYs: %pe\n", ERR_PTR(err));
 			return err;
 		}
 	}
@@ -1477,7 +1477,7 @@ static int tegra_pcie_get_resources(struct tegra_pcie *pcie)
 
 	err = request_irq(pcie->irq, tegra_pcie_isr, IRQF_SHARED, "PCIE", pcie);
 	if (err) {
-		dev_err(dev, "failed to register IRQ: %d\n", err);
+		dev_err(dev, "failed to register IRQ: %pe\n", ERR_PTR(err));
 		goto phys_put;
 	}
 
@@ -2127,7 +2127,7 @@ static int tegra_pcie_parse_dt(struct tegra_pcie *pcie)
 
 		err = of_pci_get_devfn(port);
 		if (err < 0) {
-			dev_err(dev, "failed to parse address: %d\n", err);
+			dev_err(dev, "failed to parse address: %pe\n", ERR_PTR(err));
 			goto err_node_put;
 		}
 
@@ -2143,8 +2143,8 @@ static int tegra_pcie_parse_dt(struct tegra_pcie *pcie)
 
 		err = of_property_read_u32(port, "nvidia,num-lanes", &value);
 		if (err < 0) {
-			dev_err(dev, "failed to parse # of lanes: %d\n",
-				err);
+			dev_err(dev, "failed to parse # of lanes: %pe\n",
+				ERR_PTR(err));
 			goto err_node_put;
 		}
 
@@ -2172,7 +2172,7 @@ static int tegra_pcie_parse_dt(struct tegra_pcie *pcie)
 
 		err = of_address_to_resource(port, 0, &rp->regs);
 		if (err < 0) {
-			dev_err(dev, "failed to parse address: %d\n", err);
+			dev_err(dev, "failed to parse address: %pe\n", ERR_PTR(err));
 			goto err_node_put;
 		}
 
@@ -2640,20 +2640,20 @@ static int tegra_pcie_probe(struct platform_device *pdev)
 
 	err = tegra_pcie_get_resources(pcie);
 	if (err < 0) {
-		dev_err(dev, "failed to request resources: %d\n", err);
+		dev_err(dev, "failed to request resources: %pe\n", ERR_PTR(err));
 		return err;
 	}
 
 	err = tegra_pcie_msi_setup(pcie);
 	if (err < 0) {
-		dev_err(dev, "failed to enable MSI support: %d\n", err);
+		dev_err(dev, "failed to enable MSI support: %pe\n", ERR_PTR(err));
 		goto put_resources;
 	}
 
 	pm_runtime_enable(pcie->dev);
 	err = pm_runtime_get_sync(pcie->dev);
 	if (err < 0) {
-		dev_err(dev, "fail to enable pcie controller: %d\n", err);
+		dev_err(dev, "fail to enable pcie controller: %pe\n", ERR_PTR(err));
 		goto pm_runtime_put;
 	}
 
@@ -2662,7 +2662,7 @@ static int tegra_pcie_probe(struct platform_device *pdev)
 
 	err = pci_host_probe(host);
 	if (err < 0) {
-		dev_err(dev, "failed to register host: %d\n", err);
+		dev_err(dev, "failed to register host: %pe\n", ERR_PTR(err));
 		goto pm_runtime_put;
 	}
 
@@ -2723,7 +2723,7 @@ static int tegra_pcie_pm_suspend(struct device *dev)
 	if (pcie->soc->program_uphy) {
 		err = tegra_pcie_phy_power_off(pcie);
 		if (err < 0)
-			dev_err(dev, "failed to power off PHY(s): %d\n", err);
+			dev_err(dev, "failed to power off PHY(s): %pe\n", ERR_PTR(err));
 	}
 
 	reset_control_assert(pcie->pex_rst);
@@ -2745,13 +2745,13 @@ static int tegra_pcie_pm_resume(struct device *dev)
 
 	err = tegra_pcie_power_on(pcie);
 	if (err) {
-		dev_err(dev, "tegra pcie power on fail: %d\n", err);
+		dev_err(dev, "tegra pcie power on fail: %pe\n", ERR_PTR(err));
 		return err;
 	}
 
 	err = pinctrl_pm_select_default_state(dev);
 	if (err < 0) {
-		dev_err(dev, "failed to disable PCIe IO DPD: %d\n", err);
+		dev_err(dev, "failed to disable PCIe IO DPD: %pe\n", ERR_PTR(err));
 		goto poweroff;
 	}
 
@@ -2763,7 +2763,7 @@ static int tegra_pcie_pm_resume(struct device *dev)
 
 	err = clk_prepare_enable(pcie->pex_clk);
 	if (err) {
-		dev_err(dev, "failed to enable PEX clock: %d\n", err);
+		dev_err(dev, "failed to enable PEX clock: %pe\n", ERR_PTR(err));
 		goto pex_dpd_enable;
 	}
 
@@ -2772,7 +2772,7 @@ static int tegra_pcie_pm_resume(struct device *dev)
 	if (pcie->soc->program_uphy) {
 		err = tegra_pcie_phy_power_on(pcie);
 		if (err < 0) {
-			dev_err(dev, "failed to power on PHY(s): %d\n", err);
+			dev_err(dev, "failed to power on PHY(s): %pe\n", ERR_PTR(err));
 			goto disable_pex_clk;
 		}
 	}

@@ -183,7 +183,7 @@ static inline struct clk *meson_pcie_probe_clock(struct device *dev,
 	if (rate) {
 		ret = clk_set_rate(clk, rate);
 		if (ret) {
-			dev_err(dev, "set clk rate failed, ret = %d\n", ret);
+			dev_err(dev, "set clk rate failed: %pe\n", ERR_PTR(ret));
 			return ERR_PTR(ret);
 		}
 	}
@@ -416,7 +416,7 @@ static int meson_pcie_probe(struct platform_device *pdev)
 
 	mp->phy = devm_phy_get(dev, "pcie");
 	if (IS_ERR(mp->phy)) {
-		dev_err(dev, "get phy failed, %ld\n", PTR_ERR(mp->phy));
+		dev_err(dev, "get phy failed: %pe\n", mp->phy);
 		return PTR_ERR(mp->phy);
 	}
 
@@ -428,31 +428,31 @@ static int meson_pcie_probe(struct platform_device *pdev)
 
 	ret = meson_pcie_get_resets(mp);
 	if (ret) {
-		dev_err(dev, "get reset resource failed, %d\n", ret);
+		dev_err(dev, "get reset resource failed: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 
 	ret = meson_pcie_get_mems(pdev, mp);
 	if (ret) {
-		dev_err(dev, "get memory resource failed, %d\n", ret);
+		dev_err(dev, "get memory resource failed: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 
 	ret = meson_pcie_power_on(mp);
 	if (ret) {
-		dev_err(dev, "phy power on failed, %d\n", ret);
+		dev_err(dev, "phy power on failed: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 
 	ret = meson_pcie_reset(mp);
 	if (ret) {
-		dev_err(dev, "reset failed, %d\n", ret);
+		dev_err(dev, "reset failed: %pe\n", ERR_PTR(ret));
 		goto err_phy;
 	}
 
 	ret = meson_pcie_probe_clocks(mp);
 	if (ret) {
-		dev_err(dev, "init clock resources failed, %d\n", ret);
+		dev_err(dev, "init clock resources failed: %pe\n", ERR_PTR(ret));
 		goto err_phy;
 	}
 
@@ -460,7 +460,7 @@ static int meson_pcie_probe(struct platform_device *pdev)
 
 	ret = dw_pcie_host_init(&pci->pp);
 	if (ret < 0) {
-		dev_err(dev, "Add PCIe port failed, %d\n", ret);
+		dev_err(dev, "Add PCIe port failed: %pe\n", ERR_PTR(ret));
 		goto err_phy;
 	}
 

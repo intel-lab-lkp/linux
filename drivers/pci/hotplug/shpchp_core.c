@@ -104,8 +104,8 @@ static int init_slots(struct controller *ctrl)
 		retval = pci_hp_register(hotplug_slot,
 				ctrl->pci_dev->subordinate, slot->device, name);
 		if (retval) {
-			ctrl_err(ctrl, "pci_hp_register failed with error %d\n",
-				 retval);
+			ctrl_err(ctrl, "pci_hp_register failed with error: %pe\n",
+				 ERR_PTR(retval));
 			goto error_slotwq;
 		}
 

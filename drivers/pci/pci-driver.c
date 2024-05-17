@@ -1313,8 +1313,8 @@ static int pci_pm_runtime_suspend(struct device *dev)
 				pm->runtime_suspend, error);
 			return error;
 		} else if (error) {
-			pci_err(pci_dev, "can't suspend (%ps returned %d)\n",
-				pm->runtime_suspend, error);
+			pci_err(pci_dev, "can't suspend: %ps returned %pe)\n",
+				pm->runtime_suspend, ERR_PTR(error));
 			return error;
 		}
 	}

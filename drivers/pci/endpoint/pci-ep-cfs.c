@@ -727,8 +727,8 @@ static int __init pci_ep_cfs_init(void)
 
 	ret = configfs_register_subsystem(&pci_ep_cfs_subsys);
 	if (ret) {
-		pr_err("Error %d while registering subsystem %s\n",
-		       ret, root->cg_item.ci_namebuf);
+		pr_err("Error while registering subsystem %s: %pe\n",
+		       root->cg_item.ci_namebuf, ERR_PTR(ret));
 		goto err;
 	}
 
@@ -736,8 +736,8 @@ static int __init pci_ep_cfs_init(void)
 							  &pci_functions_type);
 	if (IS_ERR(functions_group)) {
 		ret = PTR_ERR(functions_group);
-		pr_err("Error %d while registering functions group\n",
-		       ret);
+		pr_err("Error while registering functions group: %pe\n",
+		       ERR_PTR(ret));
 		goto err_functions_group;
 	}
 
@@ -746,8 +746,8 @@ static int __init pci_ep_cfs_init(void)
 						&pci_controllers_type);
 	if (IS_ERR(controllers_group)) {
 		ret = PTR_ERR(controllers_group);
-		pr_err("Error %d while registering controllers group\n",
-		       ret);
+		pr_err("Error while registering controllers group: %pe\n",
+		       ERR_PTR(ret));
 		goto err_controllers_group;
 	}
 

@@ -377,7 +377,7 @@ static int keembay_pcie_add_pcie_port(struct keembay_pcie *pcie,
 	ret = dw_pcie_host_init(pp);
 	if (ret) {
 		keembay_ep_reset_assert(pcie);
-		dev_err(dev, "Failed to initialize host: %d\n", ret);
+		dev_err(dev, "Failed to initialize host: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 
