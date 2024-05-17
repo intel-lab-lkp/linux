@@ -208,6 +208,8 @@ patternProperties:
     description: Compass Electronics Group, LLC
   "^beagle,.*":
     description: BeagleBoard.org Foundation
+  "^beo,.*":
+    description: Bang & Olufsen a/s
   "^belling,.*":
     description: Shanghai Belling Co., Ltd.
   "^bhf,.*":
