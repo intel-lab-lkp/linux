@@ -34,21 +34,16 @@ static int adis_validate_irq_flag(struct adis *adis)
 	if (adis->data->unmasked_drdy)
 		adis->irq_flag |= IRQF_NO_AUTOEN;
 	/*
-	 * Typically this devices have data ready either on the rising edge or
-	 * on the falling edge of the data ready pin. This checks enforces that
-	 * one of those is set in the drivers... It defaults to
-	 * IRQF_TRIGGER_RISING for backward compatibility with devices that
-	 * don't support changing the pin polarity.
+	 * Typically adis devices without fifo have data ready either on the
+	 * rising edge or on the falling edge of the data ready pin.
+	 * IMU devices with fifo support have the watermark pin level driven
+	 * either high or low when the fifo is filled with the desired number
+	 * of samples.
+	 * It defaults to IRQF_TRIGGER_RISING for backward compatibility with
+	 * devices that don't support changing the pin polarity.
 	 */
-	if (direction == IRQF_TRIGGER_NONE) {
+	if (direction == IRQF_TRIGGER_NONE)
 		adis->irq_flag |= IRQF_TRIGGER_RISING;
-		return 0;
-	} else if (direction != IRQF_TRIGGER_RISING &&
-		   direction != IRQF_TRIGGER_FALLING) {
-		dev_err(&adis->spi->dev, "Invalid IRQ mask: %08lx\n",
-			adis->irq_flag);
-		return -EINVAL;
-	}
 
 	return 0;
 }
@@ -77,11 +72,19 @@ int devm_adis_probe_trigger(struct adis *adis, struct iio_dev *indio_dev)
 	if (ret)
 		return ret;
 
-	ret = devm_request_irq(&adis->spi->dev, adis->spi->irq,
-			       &iio_trigger_generic_data_rdy_poll,
-			       adis->irq_flag,
-			       indio_dev->name,
-			       adis->trig);
+	if (adis->irq_flag & (IRQF_TRIGGER_HIGH | IRQF_TRIGGER_LOW))
+		ret = devm_request_threaded_irq(&adis->spi->dev, adis->spi->irq,
+						NULL,
+						&iio_trigger_generic_data_rdy_poll,
+						adis->irq_flag | IRQF_ONESHOT,
+						indio_dev->name,
+						adis->trig);
+	else
+		ret = devm_request_irq(&adis->spi->dev, adis->spi->irq,
+				       &iio_trigger_generic_data_rdy_poll,
+				       adis->irq_flag,
+				       indio_dev->name,
+				       adis->trig);
 	if (ret)
 		return ret;
 
