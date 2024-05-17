@@ -242,14 +242,27 @@ struct paravirt_patch_template {
 extern struct pv_info pv_info;
 extern struct paravirt_patch_template pv_ops;
 
-#define paravirt_ptr(op)	[paravirt_opptr] "m" (pv_ops.op)
 
 int paravirt_disable_iospace(void);
 
 /* This generates an indirect call based on the operation type number. */
+#ifdef CONFIG_X86_64
+
+#define paravirt_ptr(op)       [paravirt_opptr] "i" (&pv_ops.op)
+
+#define PARAVIRT_CALL					\
+	ANNOTATE_RETPOLINE_SAFE				\
+	"call *%c[paravirt_opptr](%%rip);"
+
+#else /* CONFIG_X86_32 */
+
+#define paravirt_ptr(op)       [paravirt_opptr] "m" (pv_ops.op)
+
 #define PARAVIRT_CALL					\
 	ANNOTATE_RETPOLINE_SAFE				\
 	"call *%[paravirt_opptr];"
+
+#endif /* CONFIG_X86_64 */
 
 /*
  * These macros are intended to wrap calls through one of the paravirt
