@@ -200,6 +200,28 @@ struct msm_gem_address_space *msm_kms_init_aspace(struct drm_device *dev)
 	return aspace;
 }
 
+static int msm_kms_fault_handler(void *arg, unsigned long iova, int flags, void *data)
+{
+	struct msm_kms *kms = arg;
+	struct msm_disp_state *state;
+	int ret;
+
+	ret = mutex_lock_interruptible(&kms->dump_mutex);
+	if (ret)
+		return ret;
+
+	state = msm_disp_snapshot_state_sync(kms);
+
+	mutex_unlock(&kms->dump_mutex);
+
+	if (IS_ERR(state)) {
+		DRM_DEV_ERROR(kms->dev->dev, "failed to capture snapshot\n");
+		return PTR_ERR(state);
+	}
+
+	return 0;
+}
+
 void msm_drm_kms_uninit(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
@@ -260,6 +282,9 @@ int msm_drm_kms_init(struct device *dev, const struct drm_driver *drv)
 		DRM_DEV_ERROR(dev, "kms hw init failed: %d\n", ret);
 		goto err_msm_uninit;
 	}
+
+	if (kms->aspace)
+		msm_mmu_set_fault_handler(kms->aspace->mmu, kms, msm_kms_fault_handler);
 
 	drm_helper_move_panel_connectors_to_head(ddev);
 
