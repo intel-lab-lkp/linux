@@ -161,10 +161,11 @@ static unsigned int __drm_buddy_free(struct drm_buddy *mm,
 	return order;
 }
 
-static int __force_merge(struct drm_buddy *mm,
-			 u64 start,
-			 u64 end,
-			 unsigned int min_order)
+static int __merge_blocks(struct drm_buddy *mm,
+			  u64 start,
+			  u64 end,
+			  unsigned int min_order,
+			  bool force_merge)
 {
 	unsigned int order;
 	int i;
@@ -195,8 +196,9 @@ static int __force_merge(struct drm_buddy *mm,
 			if (!drm_buddy_block_is_free(buddy))
 				continue;
 
-			WARN_ON(drm_buddy_block_is_clear(block) ==
-				drm_buddy_block_is_clear(buddy));
+			if (force_merge)
+				WARN_ON(drm_buddy_block_is_clear(block) ==
+					drm_buddy_block_is_clear(buddy));
 
 			/*
 			 * If the prev block is same as buddy, don't access the
@@ -210,7 +212,7 @@ static int __force_merge(struct drm_buddy *mm,
 			if (drm_buddy_block_is_clear(block))
 				mm->clear_avail -= drm_buddy_block_size(mm, block);
 
-			order = __drm_buddy_free(mm, block, true);
+			order = __drm_buddy_free(mm, block, force_merge);
 			if (order >= min_order)
 				return 0;
 		}
@@ -332,7 +334,7 @@ void drm_buddy_fini(struct drm_buddy *mm)
 
 	for (i = 0; i < mm->n_roots; ++i) {
 		order = ilog2(size) - ilog2(mm->chunk_size);
-		__force_merge(mm, 0, size, order);
+		__merge_blocks(mm, 0, size, order, true);
 
 		WARN_ON(!drm_buddy_block_is_free(mm->roots[i]));
 		drm_block_free(mm, mm->roots[i]);
@@ -479,7 +481,7 @@ __alloc_range_bias(struct drm_buddy *mm,
 		   unsigned long flags,
 		   bool fallback)
 {
-	u64 req_size = mm->chunk_size << order;
+	u64 size, root_size, req_size = mm->chunk_size << order;
 	struct drm_buddy_block *block;
 	struct drm_buddy_block *buddy;
 	LIST_HEAD(dfs);
@@ -487,6 +489,7 @@ __alloc_range_bias(struct drm_buddy *mm,
 	int i;
 
 	end = end - 1;
+	size = mm->size;
 
 	for (i = 0; i < mm->n_roots; ++i)
 		list_add_tail(&mm->roots[i]->tmp_link, &dfs);
@@ -547,6 +550,15 @@ __alloc_range_bias(struct drm_buddy *mm,
 		list_add(&block->right->tmp_link, &dfs);
 		list_add(&block->left->tmp_link, &dfs);
 	} while (1);
+
+	/* Merge back the split blocks */
+	for (i = 0; i < mm->n_roots; ++i) {
+		order = ilog2(size) - ilog2(mm->chunk_size);
+		__merge_blocks(mm, start, end, order, false);
+
+		root_size = mm->chunk_size << order;
+		size -= root_size;
+	}
 
 	return ERR_PTR(-ENOSPC);
 
@@ -1026,7 +1038,7 @@ int drm_buddy_alloc_blocks(struct drm_buddy *mm,
 			if (order-- == min_order) {
 				/* Try allocation through force merge method */
 				if (mm->clear_avail &&
-				    !__force_merge(mm, start, end, min_order)) {
+				    !__merge_blocks(mm, start, end, min_order, true)) {
 					block = __drm_buddy_alloc_blocks(mm, start,
 									 end,
 									 min_order,
