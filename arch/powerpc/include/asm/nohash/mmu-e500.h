@@ -303,7 +303,6 @@ extern unsigned long linear_map_top;
 extern int book3e_htw_mode;
 
 #define PPC_HTW_NONE	0
-#define PPC_HTW_IBM	1
 #define PPC_HTW_E6500	2
 
 /*
