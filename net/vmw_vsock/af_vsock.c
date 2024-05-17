@@ -470,9 +470,11 @@ int vsock_assign_transport(struct vsock_sock *vsk, struct vsock_sock *psk)
 {
 	const struct vsock_transport *new_transport;
 	struct sock *sk = sk_vsock(vsk);
-	unsigned int remote_cid = vsk->remote_addr.svm_cid;
+	unsigned int src_cid, remote_cid;
 	__u8 remote_flags;
 	int ret;
+
+	remote_cid = vsk->remote_addr.svm_cid;
 
 	/* If the packet is coming with the source and destination CIDs higher
 	 * than VMADDR_CID_HOST, then a vsock channel where all the packets are
@@ -527,8 +529,17 @@ int vsock_assign_transport(struct vsock_sock *vsk, struct vsock_sock *psk)
 		return -ENODEV;
 
 	if (sk->sk_type == SOCK_SEQPACKET) {
+		if (vsk->local_addr.svm_cid == VMADDR_CID_ANY) {
+			if (new_transport->get_default_cid)
+				src_cid = new_transport->get_default_cid();
+			else
+				src_cid = new_transport->get_local_cid();
+		} else {
+			src_cid = vsk->local_addr.svm_cid;
+		}
+
 		if (!new_transport->seqpacket_allow ||
-		    !new_transport->seqpacket_allow(remote_cid)) {
+		    !new_transport->seqpacket_allow(src_cid, remote_cid)) {
 			module_put(new_transport->module);
 			return -ESOCKTNOSUPPORT;
 		}
