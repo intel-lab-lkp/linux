@@ -1441,6 +1441,12 @@ icmp_ratelimit - INTEGER
 
 	Default: 1000
 
+icmp_timestamp_ignore_all - BOOLEAN
+	If set non-zero, then the kernel will ignore all ICMP TIMESTAMP
+	requests sent to it.
+
+	Default: 0
+
 icmp_msgs_per_sec - INTEGER
 	Limit maximal number of ICMP packets sent per second from this host.
 	Only messages whose type matches icmp_ratemask (see below) are

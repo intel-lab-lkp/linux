@@ -1152,6 +1152,11 @@ EXPORT_SYMBOL_GPL(icmp_build_probe);
 static enum skb_drop_reason icmp_timestamp(struct sk_buff *skb)
 {
 	struct icmp_bxm icmp_param;
+	struct net *net;
+
+	if (READ_ONCE(net->ipv4.sysctl_icmp_timestamp_ignore_all))
+		return SKB_NOT_DROPPED_YET;
+
 	/*
 	 *	Too short.
 	 */
@@ -1468,6 +1473,9 @@ static int __net_init icmp_sk_init(struct net *net)
 	net->ipv4.sysctl_icmp_echo_ignore_all = 0;
 	net->ipv4.sysctl_icmp_echo_enable_probe = 0;
 	net->ipv4.sysctl_icmp_echo_ignore_broadcasts = 1;
+
+	/* Control parameters for TIMESTAMP replies. */
+	net->ipv4.sysctl_icmp_timestamp_ignore_all = 0;
 
 	/* Control parameter - ignore bogus broadcast responses? */
 	net->ipv4.sysctl_icmp_ignore_bogus_error_responses = 1;
