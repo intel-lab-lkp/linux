@@ -366,6 +366,9 @@ static inline struct drm_printer drm_err_printer(struct drm_device *drm,
 __printf(3, 4)
 void drm_dev_printk(const struct device *dev, const char *level,
 		    const char *format, ...);
+void __drm_dev_vprintk(const struct device *dev, const char *level,
+		       const void *origin, const char *prefix,
+		       struct va_format *vaf);
 struct _ddebug;
 __printf(4, 5)
 void __drm_dev_dbg(struct _ddebug *desc, const struct device *dev,
