@@ -1,0 +1,30 @@
+drm drm-fixes a38297e3fb012ddfa7ce0321a7e5a8daeb1872b6
+	Linux 6.9
+drm-misc drm-misc-fixes aed9a1a4f7106ff99a882ad06318cebfa71016a2
+	drm/nouveau: use tile_mode and pte_kind for VM_BIND bo allocations
+drm-intel drm-intel-fixes 43b26bdd2ee5cfca80939be910d5b23a50cd7f9d
+	drm/i915/bios: Fix parsing backlight BDB data
+drm-xe drm-xe-fixes c002bfe644a29ba600c571f2abba13a155a12dcd
+	drm/xe: Use ordered WQ for G2H handler
+drm drm-next 431c590c3ab0469dfedad3a832fe73556396ee52
+	drm/tests: Add a unit test for range bias allocation
+drm-misc drm-misc-next-fixes 959314c438caf1b62d787f02d54a193efda38880
+	drm/nouveau: use tile_mode and pte_kind for VM_BIND bo allocations
+drm-intel drm-intel-next-fixes 84b5ece64477df4394d362d494a2496bf0878985
+	drm/i915: Drop -Wstringop-overflow
+drm-xe drm-xe-next-fixes d69c3d4b53829097b8948d6791ea32c07de3faab
+	drm/xe/ads: Use flexible-array
+drm-misc drm-misc-next 3179338750d83877bbc491493032bdf192266ad9
+	drm/panel: himax-hx83102: Support for IVO t109nw41 MIPI-DSI panel
+drm-intel drm-intel-next 11abdbc22b1ad8fd0d41ca0742c79a153b2ade97
+	drm/i915: pass dev_priv explicitly to CURSURFLIVE
+drm-intel drm-intel-gt-next 364e039827ef628c650c21c1afe1c54d9c3296d9
+	drm/i915/guc: avoid FIELD_PREP warning
+drm-xe drm-xe-next 63d8cb8fe3ddf74627003f99ad085887baf91e60
+	drm/xe/vf: Expose SR-IOV VF attributes to GT debugfs
+drm-intel topic/core-for-CI 44909e5ed2f8e95a9a8576f44d570c68c76c44d6
+	ASoC: SOF: Core: Add remove_late() to  sof_init_environment failure path
+drm-xe topic/xe-for-CI 684685f297175fb825771a33adfbb6a293d7b614
+	Revert "drm/xe/gsc: define GSC FW for LNL"
+drm-intel topic/thunderbolt-next b8a730836c6b1788ca2fbd6bcc2ac99e97ef7de9
+	thunderbolt: Constify the struct device_type usage
