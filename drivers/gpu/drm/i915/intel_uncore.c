@@ -2637,7 +2637,7 @@ static void driver_initiated_flr(struct intel_uncore *uncore)
 	 */
 	ret = intel_wait_for_register_fw(uncore, GU_CNTL, DRIVERFLR, 0, flr_timeout_ms);
 	if (ret) {
-		drm_err(&i915->drm,
+		drm_dbg(&i915->drm,
 			"Failed to wait for Driver-FLR bit to clear! %d\n",
 			ret);
 		return;
@@ -2652,7 +2652,7 @@ static void driver_initiated_flr(struct intel_uncore *uncore)
 					 DRIVERFLR, 0,
 					 flr_timeout_ms);
 	if (ret) {
-		drm_err(&i915->drm, "Driver-FLR-teardown wait completion failed! %d\n", ret);
+		drm_dbg(&i915->drm, "Driver-FLR-teardown wait completion failed! %d\n", ret);
 		return;
 	}
 
@@ -2661,7 +2661,7 @@ static void driver_initiated_flr(struct intel_uncore *uncore)
 					 DRIVERFLR_STATUS, DRIVERFLR_STATUS,
 					 flr_timeout_ms);
 	if (ret) {
-		drm_err(&i915->drm, "Driver-FLR-reinit wait completion failed! %d\n", ret);
+		drm_dbg(&i915->drm, "Driver-FLR-reinit wait completion failed! %d\n", ret);
 		return;
 	}
 
