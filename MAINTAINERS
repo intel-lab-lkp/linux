@@ -3501,6 +3501,18 @@ F:	kernel/audit*
 F:	lib/*audit.c
 K:	\baudit_[a-z_0-9]\+\b
 
+AUTOMOTIVE AUDIO BUS (A2B) DRIVERS
+M:	Alvin Šipraga <alsi@bang-olufsen.dk>
+S:	Supported
+F:	Documentation/devicetree/bindings/a2b/
+F:	drivers/a2b/
+F:	drivers/base/regmap/regmap-a2b.c
+F:	drivers/clk/clk-ad24xx.c
+F:	drivers/gpio/gpio-ad24xx.c
+F:	drivers/i2c/busses/i2c-ad24xx.c
+F:	include/linux/a2b/
+F:	sound/soc/codecs/ad24xx-codec.c
+
 AUXILIARY BUS DRIVER
 M:	Greg Kroah-Hartman <gregkh@linuxfoundation.org>
 R:	Dave Ertman <david.m.ertman@intel.com>
