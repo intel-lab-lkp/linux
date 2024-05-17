@@ -39,7 +39,7 @@ const struct x86_cpu_id *x86_match_cpu(const struct x86_cpu_id *match)
 	struct cpuinfo_x86 *c = &boot_cpu_data;
 
 	for (m = match;
-	     m->vendor | m->family | m->model | m->steppings | m->feature;
+	     m->vendor | m->family | m->model | m->steppings | m->feature | m->flags;
 	     m++) {
 		if (m->vendor != X86_VENDOR_ANY && c->x86_vendor != m->vendor)
 			continue;

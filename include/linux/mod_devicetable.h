@@ -690,6 +690,7 @@ struct x86_cpu_id {
 	__u16 model;
 	__u16 steppings;
 	__u16 feature;	/* bit index */
+	__u16 flags;
 	kernel_ulong_t driver_data;
 };
 
@@ -699,6 +700,9 @@ struct x86_cpu_id {
 #define X86_MODEL_ANY  0
 #define X86_STEPPING_ANY 0
 #define X86_FEATURE_ANY 0	/* Same as FPU, you can't test for that */
+
+/* x86_cpu_id::flags */
+#define X86_CPU_ID_FLAG_VENDOR_VALID	BIT(0)
 
 /*
  * Generic table type for matching CPU features.

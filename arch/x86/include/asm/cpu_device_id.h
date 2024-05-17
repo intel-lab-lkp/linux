@@ -79,6 +79,7 @@
 	.model		= _model,					\
 	.steppings	= _steppings,					\
 	.feature	= _feature,					\
+	.flags		= X86_CPU_ID_FLAG_VENDOR_VALID,			\
 	.driver_data	= (unsigned long) _data				\
 }
 
@@ -89,6 +90,7 @@
 	.model		= _model,					\
 	.steppings	= _steppings,					\
 	.feature	= _feature,					\
+	.flags		= X86_CPU_ID_FLAG_VENDOR_VALID,			\
 	.driver_data	= (unsigned long) _data				\
 }
 
