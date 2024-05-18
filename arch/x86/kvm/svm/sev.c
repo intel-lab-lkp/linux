@@ -3938,11 +3938,16 @@ static int snp_setup_guest_buf(struct kvm *kvm, struct sev_data_snp_guest_reques
 		return -EINVAL;
 
 	resp_pfn = gfn_to_pfn(kvm, gpa_to_gfn(resp_gpa));
-	if (is_error_noslot_pfn(resp_pfn))
+	if (is_error_noslot_pfn(resp_pfn)) {
+		kvm_release_pfn_clean(req_pfn);
 		return -EINVAL;
+	}
 
-	if (rmp_make_private(resp_pfn, 0, PG_LEVEL_4K, 0, true))
+	if (rmp_make_private(resp_pfn, 0, PG_LEVEL_4K, 0, true)) {
+		kvm_release_pfn_clean(req_pfn);
+		kvm_release_pfn_clean(resp_pfn);
 		return -EINVAL;
+	}
 
 	data->gctx_paddr = __psp_pa(sev->snp_context);
 	data->req_paddr = __sme_set(req_pfn << PAGE_SHIFT);
@@ -3953,10 +3958,15 @@ static int snp_setup_guest_buf(struct kvm *kvm, struct sev_data_snp_guest_reques
 
 static int snp_cleanup_guest_buf(struct sev_data_snp_guest_request *data)
 {
-	u64 pfn = __sme_clr(data->res_paddr) >> PAGE_SHIFT;
+	u64 req_pfn = __sme_clr(data->req_paddr) >> PAGE_SHIFT;
+	u64 resp_pfn = __sme_clr(data->res_paddr) >> PAGE_SHIFT;
 
-	if (snp_page_reclaim(pfn) || rmp_make_shared(pfn, PG_LEVEL_4K))
+	kvm_release_pfn_clean(req_pfn);
+
+	if (snp_page_reclaim(resp_pfn) || rmp_make_shared(resp_pfn, PG_LEVEL_4K))
 		return -EINVAL;
+
+	kvm_release_pfn_dirty(resp_pfn);
 
 	return 0;
 }
@@ -3978,14 +3988,11 @@ static int __snp_handle_guest_req(struct kvm *kvm, gpa_t req_gpa, gpa_t resp_gpa
 		return ret;
 
 	ret = sev_issue_cmd(kvm, SEV_CMD_SNP_GUEST_REQUEST, &data, fw_err);
-	if (ret)
-		return ret;
 
-	ret = snp_cleanup_guest_buf(&data);
-	if (ret)
-		return ret;
+	if (snp_cleanup_guest_buf(&data))
+		return -EINVAL;
 
-	return 0;
+	return ret;
 }
 
 static void snp_handle_guest_req(struct vcpu_svm *svm, gpa_t req_gpa, gpa_t resp_gpa)
