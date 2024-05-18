@@ -1718,6 +1718,7 @@ int ieee80211_ibss_join(struct ieee80211_sub_if_data *sdata,
 	struct ieee80211_supported_band *sband;
 	enum ieee80211_chanctx_mode chanmode;
 	struct ieee80211_local *local = sdata->local;
+	struct ieee80211_link_data *link;
 	int radar_detect_width = 0;
 	int i;
 	int ret;
@@ -1744,7 +1745,11 @@ int ieee80211_ibss_join(struct ieee80211_sub_if_data *sdata,
 	chanmode = (params->channel_fixed && !ret) ?
 		IEEE80211_CHANCTX_SHARED : IEEE80211_CHANCTX_EXCLUSIVE;
 
-	ret = ieee80211_check_combinations(sdata, &params->chandef, chanmode,
+	link = ieee80211_link_or_deflink(sdata, -1, false);
+	if (IS_ERR(link))
+		return PTR_ERR(link);
+
+	ret = ieee80211_check_combinations(link, &params->chandef, chanmode,
 					   radar_detect_width);
 	if (ret < 0)
 		return ret;

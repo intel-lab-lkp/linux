@@ -2368,11 +2368,58 @@ int cfg80211_iter_combinations(struct wiphy *wiphy,
 {
 	const struct ieee80211_regdomain *regdom;
 	enum nl80211_dfs_regions region = 0;
-	int i, j, iftype;
-	int num_interfaces = 0;
+	int i, j, k, iftype;
 	u32 used_iftypes = 0;
-	u32 beacon_int_gcd;
+	u32 beacon_int_gcd, link_beacon_int_gcd = 0;
+	u32 *freqs, num_different_channels = 0;
 	bool beacon_int_different;
+	u8 radar_detect = 0, link_id;
+
+	if (!params->num_iface)
+		goto skip;
+
+	freqs = kcalloc(params->num_iface * sizeof(params->ifaces->links),
+			sizeof(*freqs), GFP_KERNEL);
+	if (!freqs)
+		return -ENOMEM;
+
+	for (i = 0; i < params->num_iface; i++) {
+		const struct iface_combination_interface *iface;
+		u32 link_bi;
+
+		iface = &params->ifaces[i];
+		iftype = iface->iftype;
+		if (!cfg80211_iftype_allowed(wiphy, iftype, 0, 1))
+			used_iftypes |= BIT(iftype);
+
+		for (link_id = 0; link_id < IEEE80211_MLD_MAX_NUM_LINKS;
+		     link_id++) {
+			if (!(iface->valid_links & BIT(link_id)))
+				continue;
+
+			link_bi = iface->links[link_id].new_beacon_int;
+			if (link_bi && link_beacon_int_gcd != link_bi) {
+				link_beacon_int_gcd = gcd(link_beacon_int_gcd,
+							  link_bi);
+				beacon_int_different = true;
+			}
+
+			radar_detect |= iface->links[link_id].radar_detect;
+
+			/* check this freq is already match or not */
+			for (j = 0; j < num_different_channels; j++)
+				if (freqs[j] == iface->links[link_id].freq)
+					break;
+
+			/* if not match then its a different channel freq */
+			if (j == num_different_channels) {
+				freqs[j] = iface->links[link_id].freq;
+				num_different_channels++;
+			}
+		}
+	}
+
+	kfree(freqs);
 
 	/*
 	 * This is a bit strange, since the iteration used to rely only on
@@ -2384,10 +2431,10 @@ int cfg80211_iter_combinations(struct wiphy *wiphy,
 	 * cfg80211 already - the only thing not would appear to be any new
 	 * interfaces (while being brought up) and channel/radar data.
 	 */
-	cfg80211_calculate_bi_data(wiphy, params->new_beacon_int,
+	cfg80211_calculate_bi_data(wiphy, link_beacon_int_gcd,
 				   &beacon_int_gcd, &beacon_int_different);
 
-	if (params->radar_detect) {
+	if (radar_detect) {
 		rcu_read_lock();
 		regdom = rcu_dereference(cfg80211_regdomain);
 		if (regdom)
@@ -2395,13 +2442,7 @@ int cfg80211_iter_combinations(struct wiphy *wiphy,
 		rcu_read_unlock();
 	}
 
-	for (iftype = 0; iftype < NUM_NL80211_IFTYPES; iftype++) {
-		num_interfaces += params->iftype_num[iftype];
-		if (params->iftype_num[iftype] > 0 &&
-		    !cfg80211_iftype_allowed(wiphy, iftype, 0, 1))
-			used_iftypes |= BIT(iftype);
-	}
-
+skip:
 	for (i = 0; i < wiphy->n_iface_combinations; i++) {
 		const struct ieee80211_iface_combination *c;
 		struct ieee80211_iface_limit *limits;
@@ -2409,9 +2450,10 @@ int cfg80211_iter_combinations(struct wiphy *wiphy,
 
 		c = &wiphy->iface_combinations[i];
 
-		if (num_interfaces > c->max_interfaces)
+		if (params->num_iface > c->max_interfaces)
 			continue;
-		if (params->num_different_channels > c->num_different_channels)
+
+		if (num_different_channels > c->num_different_channels)
 			continue;
 
 		limits = kmemdup(c->limits, sizeof(limits[0]) * c->n_limits,
@@ -2419,24 +2461,26 @@ int cfg80211_iter_combinations(struct wiphy *wiphy,
 		if (!limits)
 			return -ENOMEM;
 
-		for (iftype = 0; iftype < NUM_NL80211_IFTYPES; iftype++) {
+		for (j = 0; j < params->num_iface; j++) {
+			iftype = params->ifaces[j].iftype;
+
 			if (cfg80211_iftype_allowed(wiphy, iftype, 0, 1))
 				continue;
-			for (j = 0; j < c->n_limits; j++) {
-				all_iftypes |= limits[j].types;
-				if (!(limits[j].types & BIT(iftype)))
+
+			for (k = 0; k < c->n_limits; k++) {
+				all_iftypes |= limits[k].types;
+				if (!(limits[k].types & BIT(iftype)))
 					continue;
-				if (limits[j].max < params->iftype_num[iftype])
+				if (!limits[k].max)
 					goto cont;
-				limits[j].max -= params->iftype_num[iftype];
+				limits[k].max--;
 			}
 		}
 
-		if (params->radar_detect !=
-			(c->radar_detect_widths & params->radar_detect))
+		if (radar_detect != (c->radar_detect_widths & radar_detect))
 			goto cont;
 
-		if (params->radar_detect && c->radar_detect_regions &&
+		if (radar_detect && c->radar_detect_regions &&
 		    !(c->radar_detect_regions & BIT(region)))
 			goto cont;
 

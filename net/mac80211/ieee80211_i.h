@@ -1659,6 +1659,20 @@ ieee80211_get_link_sband(struct ieee80211_link_data *link)
 	return local->hw.wiphy->bands[band];
 }
 
+static inline struct ieee80211_chanctx *
+ieee80211_link_get_chanctx(struct ieee80211_link_data *link)
+{
+	struct ieee80211_local *local __maybe_unused = link->sdata->local;
+	struct ieee80211_chanctx_conf *conf;
+
+	conf = rcu_dereference_protected(link->conf->chanctx_conf,
+					 lockdep_is_held(&local->hw.wiphy->mtx));
+	if (!conf)
+		return NULL;
+
+	return container_of(conf, struct ieee80211_chanctx, conf);
+}
+
 /* this struct holds the value parsing from channel switch IE  */
 struct ieee80211_csa_ie {
 	struct ieee80211_chan_req chanreq;
@@ -2041,6 +2055,10 @@ static inline void ieee80211_vif_clear_links(struct ieee80211_sub_if_data *sdata
 {
 	ieee80211_vif_set_links(sdata, 0, 0);
 }
+
+struct ieee80211_link_data *
+ieee80211_link_or_deflink(struct ieee80211_sub_if_data *sdata, int link_id,
+			  bool require_valid);
 
 /* tx handling */
 void ieee80211_clear_tx_pending(struct ieee80211_local *local);
@@ -2605,7 +2623,7 @@ int ieee80211_send_action_csa(struct ieee80211_sub_if_data *sdata,
 
 void ieee80211_recalc_dtim(struct ieee80211_local *local,
 			   struct ieee80211_sub_if_data *sdata);
-int ieee80211_check_combinations(struct ieee80211_sub_if_data *sdata,
+int ieee80211_check_combinations(struct ieee80211_link_data *link,
 				 const struct cfg80211_chan_def *chandef,
 				 enum ieee80211_chanctx_mode chanmode,
 				 u8 radar_detect);

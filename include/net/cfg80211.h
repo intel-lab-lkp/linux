@@ -1591,27 +1591,50 @@ struct cfg80211_color_change_settings {
 };
 
 /**
+ * struct iface_combination_iface_link - Interface combination link parameter
+ *
+ * Used to pass link specific interface combination parameters
+ *
+ * @freq: center frequency used for verification against the different channels
+ * @new_beacon_int: set this to the beacon interval of a new interface
+ *	that's not operating yet, if such is to be checked as part of
+ *	the verification
+ * @radar_detect: a bitmap where each bit corresponds to a channel
+ *	width where radar detection is needed, as in the definition of
+ *	&struct ieee80211_iface_combination.@radar_detect_widths
+ */
+struct iface_combination_iface_link {
+	u32 freq;
+	u32 new_beacon_int;
+	u8 radar_detect;
+};
+
+/**
+ * struct iface_combination_interface - Interface parameter for iface combination
+ *
+ * Used to pass interface specific parameter for iface combination
+ *
+ * @iftype: interface type as specified in &enum nl80211_iftype.
+ * @links: array with the number of link parameter used for verification
+ * @valid_links: bitmap of valid links, or 0 for non-MLO.
+ */
+struct iface_combination_interface {
+	enum nl80211_iftype iftype;
+	struct iface_combination_iface_link links[IEEE80211_MLD_MAX_NUM_LINKS];
+	u16 valid_links;
+};
+
+/**
  * struct iface_combination_params - input parameters for interface combinations
  *
  * Used to pass interface combination parameters
  *
- * @num_different_channels: the number of different channels we want
- *	to use for verification
- * @radar_detect: a bitmap where each bit corresponds to a channel
- *	width where radar detection is needed, as in the definition of
- *	&struct ieee80211_iface_combination.@radar_detect_widths
- * @iftype_num: array with the number of interfaces of each interface
- *	type.  The index is the interface type as specified in &enum
- *	nl80211_iftype.
- * @new_beacon_int: set this to the beacon interval of a new interface
- *	that's not operating yet, if such is to be checked as part of
- *	the verification
+ * @ifaces: array with the number of interface parameter use for verification
+ * @num_iface: the length of the @ifaces interface parameter
  */
 struct iface_combination_params {
-	int num_different_channels;
-	u8 radar_detect;
-	int iftype_num[NUM_NL80211_IFTYPES];
-	u32 new_beacon_int;
+	const struct iface_combination_interface *ifaces;
+	u16 num_iface;
 };
 
 /**

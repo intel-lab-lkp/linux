@@ -79,26 +79,38 @@ qtnf_validate_iface_combinations(struct wiphy *wiphy,
 	struct qtnf_vif *vif;
 	int i;
 	int ret = 0;
-	struct iface_combination_params params = {
-		.num_different_channels = 1,
-	};
+	struct iface_combination_params params = { };
+	struct iface_combination_interface ifaces[QTNF_MAX_INTF] = { };
+	bool change_vif_need = false;
 
 	mac = wiphy_priv(wiphy);
 	if (!mac)
 		return -EFAULT;
 
+	if (change_vif)
+		change_vif_need = true;
+
 	for (i = 0; i < QTNF_MAX_INTF; i++) {
 		vif = &mac->iflist[i];
-		if (vif->wdev.iftype != NL80211_IFTYPE_UNSPECIFIED)
-			params.iftype_num[vif->wdev.iftype]++;
+		if (vif->wdev.iftype != NL80211_IFTYPE_UNSPECIFIED) {
+			if (change_vif_need &&
+			    change_vif->wdev.iftype == vif->wdev.iftype) {
+				change_vif_need = false;
+				continue;
+			}
+
+			ifaces[params.num_iface].iftype = vif->wdev.iftype;
+			ifaces[params.num_iface].valid_links = BIT(0);
+			params.num_iface++;
+		}
 	}
 
-	if (change_vif) {
-		params.iftype_num[new_type]++;
-		params.iftype_num[change_vif->wdev.iftype]--;
-	} else {
-		params.iftype_num[new_type]++;
+	if (params.num_iface < QTNF_MAX_INTF) {
+		ifaces[params.num_iface].iftype = new_type;
+		ifaces[params.num_iface].valid_links = BIT(0);
+		params.num_iface++;
 	}
+	params.ifaces = ifaces;
 
 	ret = cfg80211_check_combinations(wiphy, &params);
 

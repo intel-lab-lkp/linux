@@ -51,6 +51,29 @@ const struct ieee80211_conn_settings ieee80211_conn_settings_unlimited = {
 	.bw_limit = IEEE80211_CONN_BW_LIMIT_320,
 };
 
+struct ieee80211_link_data *
+ieee80211_link_or_deflink(struct ieee80211_sub_if_data *sdata, int link_id,
+			  bool require_valid)
+{
+	struct ieee80211_link_data *link;
+
+	if (link_id < 0) {
+		/* For keys, if sdata is not an MLD, we might not use
+		 * the return value at all (if it's not a pairwise key),
+		 * so in that case (require_valid==false) don't error.
+		 */
+		if (require_valid && ieee80211_vif_is_mld(&sdata->vif))
+			return ERR_PTR(-EINVAL);
+
+		return &sdata->deflink;
+	}
+
+	link = sdata_dereference(sdata->link[link_id], sdata);
+	if (!link)
+		return ERR_PTR(-ENOLINK);
+	return link;
+}
+
 u8 *ieee80211_get_bssid(struct ieee80211_hdr *hdr, size_t len,
 			enum nl80211_iftype type)
 {
@@ -3900,52 +3923,100 @@ void ieee80211_recalc_dtim(struct ieee80211_local *local,
 	ps->dtim_count = dtim_count;
 }
 
-static u8 ieee80211_chanctx_radar_detect(struct ieee80211_local *local,
-					 struct ieee80211_chanctx *ctx)
+static int ieee80211_link_get_new_chanctx(struct ieee80211_link_data *link,
+					  struct ieee80211_chanctx **chanctx,
+					  bool *radar_required)
 {
-	struct ieee80211_link_data *link;
-	u8 radar_detect = 0;
+	struct ieee80211_chanctx *ctx;
 
-	lockdep_assert_wiphy(local->hw.wiphy);
+	if (!radar_required || !chanctx)
+		return -EINVAL;
 
-	if (WARN_ON(ctx->replace_state == IEEE80211_CHANCTX_WILL_BE_REPLACED))
-		return 0;
+	ctx = ieee80211_link_get_chanctx(link);
+	if (!ctx)
+		return -ENOENT;
 
-	list_for_each_entry(link, &ctx->reserved_links, reserved_chanctx_list)
-		if (link->reserved_radar_required)
-			radar_detect |= BIT(link->reserved.oper.width);
+	if (ctx->replace_state == IEEE80211_CHANCTX_WILL_BE_REPLACED) {
+		if (!link->reserved_chanctx)
+			return -ENOENT;
 
-	/*
-	 * An in-place reservation context should not have any assigned vifs
-	 * until it replaces the other context.
-	 */
-	WARN_ON(ctx->replace_state == IEEE80211_CHANCTX_REPLACES_OTHER &&
-		!list_empty(&ctx->assigned_links));
-
-	list_for_each_entry(link, &ctx->assigned_links, assigned_chanctx_list) {
-		if (!link->radar_required)
-			continue;
-
-		radar_detect |=
-			BIT(link->conf->chanreq.oper.width);
+		*chanctx = link->reserved_chanctx;
+		*radar_required = link->reserved_radar_required;
+	} else {
+		*chanctx = ctx;
+		*radar_required = link->radar_required;
 	}
 
-	return radar_detect;
+	return 0;
 }
 
-int ieee80211_check_combinations(struct ieee80211_sub_if_data *sdata,
+static
+u8 ieee80211_fill_combination_link(struct ieee80211_sub_if_data *sdata,
+				   const struct cfg80211_chan_def *chandef,
+				   enum ieee80211_chanctx_mode chanmode,
+				   struct iface_combination_interface *iface)
+{
+	struct iface_combination_iface_link *link_comb;
+	struct ieee80211_link_data *link;
+	unsigned int link_id;
+	u8 links_radar_detect = 0;
+
+	lockdep_assert_wiphy(sdata->local->hw.wiphy);
+
+	rcu_read_lock();
+
+	for (link_id = 0; link_id < ARRAY_SIZE(sdata->link); link_id++) {
+		struct ieee80211_chanctx *ctx;
+		const struct cfg80211_chan_def *chandef_iter;
+		bool radar_required = false;
+
+		link = sdata_dereference(sdata->link[link_id], sdata);
+		if (!link)
+			continue;
+
+		if (ieee80211_link_get_new_chanctx(link, &ctx, &radar_required))
+			continue;
+
+		if (ctx->replace_state == IEEE80211_CHANCTX_WILL_BE_REPLACED)
+			continue;
+
+		chandef_iter = &ctx->conf.def;
+		link_comb = &iface->links[link_id];
+
+		if (chandef && chanmode == IEEE80211_CHANCTX_SHARED &&
+		    ctx->mode == IEEE80211_CHANCTX_SHARED &&
+		    cfg80211_chandef_compatible(chandef, &ctx->conf.def))
+			chandef_iter = chandef;
+
+		link_comb->freq = chandef_iter->chan->center_freq;
+
+		if (radar_required) {
+			link_comb->radar_detect = BIT(chandef_iter->width);
+			links_radar_detect |= BIT(chandef_iter->width);
+		}
+
+		iface->valid_links |= BIT(link_id);
+	}
+
+	rcu_read_unlock();
+
+	return links_radar_detect;
+}
+
+int ieee80211_check_combinations(struct ieee80211_link_data *link,
 				 const struct cfg80211_chan_def *chandef,
 				 enum ieee80211_chanctx_mode chanmode,
 				 u8 radar_detect)
 {
+	struct ieee80211_sub_if_data *sdata = link->sdata;
 	struct ieee80211_local *local = sdata->local;
 	struct ieee80211_sub_if_data *sdata_iter;
 	enum nl80211_iftype iftype = sdata->wdev.iftype;
-	struct ieee80211_chanctx *ctx;
-	int total = 1;
-	struct iface_combination_params params = {
-		.radar_detect = radar_detect,
-	};
+	struct iface_combination_interface *ifaces = NULL;
+	int total = 1, ret = 0;
+	struct iface_combination_params params = { };
+	u16 total_iface = 0;
+	u8 links_radar_detect = 0;
 
 	lockdep_assert_wiphy(local->hw.wiphy);
 
@@ -3959,16 +4030,6 @@ int ieee80211_check_combinations(struct ieee80211_sub_if_data *sdata,
 	if (WARN_ON(iftype >= NUM_NL80211_IFTYPES))
 		return -EINVAL;
 
-	if (sdata->vif.type == NL80211_IFTYPE_AP ||
-	    sdata->vif.type == NL80211_IFTYPE_MESH_POINT) {
-		/*
-		 * always passing this is harmless, since it'll be the
-		 * same value that cfg80211 finds if it finds the same
-		 * interface ... and that's always allowed
-		 */
-		params.new_beacon_int = sdata->vif.bss_conf.beacon_int;
-	}
-
 	/* Always allow software iftypes */
 	if (cfg80211_iftype_allowed(local->hw.wiphy, iftype, 0, 1)) {
 		if (radar_detect)
@@ -3976,30 +4037,87 @@ int ieee80211_check_combinations(struct ieee80211_sub_if_data *sdata,
 		return 0;
 	}
 
-	if (chandef)
-		params.num_different_channels = 1;
-
 	if (iftype != NL80211_IFTYPE_UNSPECIFIED)
-		params.iftype_num[iftype] = 1;
+		total_iface = 1;
 
-	list_for_each_entry(ctx, &local->chanctx_list, list) {
-		if (ctx->replace_state == IEEE80211_CHANCTX_WILL_BE_REPLACED)
+	list_for_each_entry_rcu(sdata_iter, &local->interfaces, list) {
+		if (sdata_iter == sdata)
 			continue;
-		params.radar_detect |=
-			ieee80211_chanctx_radar_detect(local, ctx);
-		if (ctx->mode == IEEE80211_CHANCTX_EXCLUSIVE) {
-			params.num_different_channels++;
-			continue;
+
+		total_iface++;
+	}
+
+	if (!total_iface)
+		goto skip;
+
+	ifaces = kcalloc(total_iface, sizeof(*ifaces), GFP_KERNEL);
+	if (!ifaces)
+		return -ENOMEM;
+
+	if (iftype != NL80211_IFTYPE_UNSPECIFIED) {
+		struct iface_combination_interface *iface;
+		unsigned int link_id;
+		bool ap_or_mesh = false;
+
+		iface = &ifaces[params.num_iface];
+		iface->iftype = iftype;
+
+		if (sdata->vif.type == NL80211_IFTYPE_AP ||
+		    sdata->vif.type == NL80211_IFTYPE_MESH_POINT)
+			ap_or_mesh = true;
+
+		rcu_read_lock();
+		for (link_id = 0; link_id < ARRAY_SIZE(sdata->link); link_id++) {
+			struct ieee80211_link_data *link_iter;
+			struct iface_combination_iface_link *iface_link;
+			struct ieee80211_chanctx *ctx;
+			bool radar_required = false;
+
+			link_iter = sdata_dereference(sdata->link[link_id], sdata);
+			if (!link_iter)
+				continue;
+
+			iface_link = &iface->links[link_id];
+
+			if (link_iter->link_id == link->link_id &&
+			    chandef) {
+				iface_link->freq = chandef->chan->center_freq;
+				iface_link->radar_detect = radar_detect;
+			} else {
+				if (ieee80211_link_get_new_chanctx(link_iter,
+								   &ctx,
+								   &radar_required))
+					continue;
+
+				if (ctx->replace_state == IEEE80211_CHANCTX_WILL_BE_REPLACED)
+					continue;
+
+				iface_link->freq = ctx->conf.def.chan->center_freq;
+
+				if (radar_required)
+					iface_link->radar_detect = BIT(ctx->conf.def.width);
+			}
+
+			links_radar_detect |= iface_link->radar_detect;
+
+			if (ap_or_mesh) {
+				/* always passing this is harmless, since it'll be the
+				 * same value that cfg80211 finds if it finds the same
+				 * interface ... and that's always allowed
+				 */
+				iface_link->new_beacon_int = link_iter->conf->beacon_int;
+			}
+
+			iface->valid_links = BIT(link_id);
 		}
-		if (chandef && chanmode == IEEE80211_CHANCTX_SHARED &&
-		    cfg80211_chandef_compatible(chandef,
-						&ctx->conf.def))
-			continue;
-		params.num_different_channels++;
+		rcu_read_unlock();
+
+		params.num_iface++;
 	}
 
 	list_for_each_entry_rcu(sdata_iter, &local->interfaces, list) {
 		struct wireless_dev *wdev_iter;
+		struct iface_combination_interface *iface;
 
 		wdev_iter = &sdata_iter->wdev;
 
@@ -4009,14 +4127,29 @@ int ieee80211_check_combinations(struct ieee80211_sub_if_data *sdata,
 					    wdev_iter->iftype, 0, 1))
 			continue;
 
-		params.iftype_num[wdev_iter->iftype]++;
+		if (WARN_ON(params.num_iface >= total_iface))
+			continue;
+
+		iface = &ifaces[params.num_iface];
+		iface->iftype = wdev_iter->iftype;
+
+		links_radar_detect |= ieee80211_fill_combination_link(sdata_iter,
+								      chandef,
+								      chanmode,
+								      iface);
+		params.num_iface++;
 		total++;
 	}
 
-	if (total == 1 && !params.radar_detect)
-		return 0;
+	params.ifaces = ifaces;
+skip:
+	if (total == 1 && !links_radar_detect)
+		goto out;
 
-	return cfg80211_check_combinations(local->hw.wiphy, &params);
+	ret = cfg80211_check_combinations(local->hw.wiphy, &params);
+out:
+	kfree(ifaces);
+	return ret;
 }
 
 static void
@@ -4032,29 +4165,44 @@ ieee80211_iter_max_chans(const struct ieee80211_iface_combination *c,
 int ieee80211_max_num_channels(struct ieee80211_local *local)
 {
 	struct ieee80211_sub_if_data *sdata;
-	struct ieee80211_chanctx *ctx;
+	struct iface_combination_params params = {0};
+	struct iface_combination_interface *ifaces = NULL;
 	u32 max_num_different_channels = 1;
 	int err;
-	struct iface_combination_params params = {0};
+	u16 total_iface = 0;
 
 	lockdep_assert_wiphy(local->hw.wiphy);
 
-	list_for_each_entry(ctx, &local->chanctx_list, list) {
-		if (ctx->replace_state == IEEE80211_CHANCTX_WILL_BE_REPLACED)
+	list_for_each_entry_rcu(sdata, &local->interfaces, list)
+		total_iface++;
+
+	if (!total_iface)
+		goto skip;
+
+	ifaces = kcalloc(total_iface, sizeof(*ifaces), GFP_KERNEL);
+	if (!ifaces)
+		return -ENOMEM;
+
+	list_for_each_entry_rcu(sdata, &local->interfaces, list) {
+		struct iface_combination_interface *iface;
+
+		if (WARN_ON(params.num_iface >= total_iface))
 			continue;
 
-		params.num_different_channels++;
+		iface = &ifaces[params.num_iface];
+		iface->iftype = sdata->wdev.iftype;
 
-		params.radar_detect |=
-			ieee80211_chanctx_radar_detect(local, ctx);
+		ieee80211_fill_combination_link(sdata, NULL, 0, iface);
+
+		params.num_iface++;
 	}
 
-	list_for_each_entry_rcu(sdata, &local->interfaces, list)
-		params.iftype_num[sdata->wdev.iftype]++;
-
+	params.ifaces = ifaces;
+skip:
 	err = cfg80211_iter_combinations(local->hw.wiphy, &params,
 					 ieee80211_iter_max_chans,
 					 &max_num_different_channels);
+	kfree(ifaces);
 	if (err < 0)
 		return err;
 

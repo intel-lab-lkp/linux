@@ -496,22 +496,38 @@ static int brcmf_vif_change_validate(struct brcmf_cfg80211_info *cfg,
 	struct brcmf_cfg80211_vif *pos;
 	bool check_combos = false;
 	int ret = 0;
-	struct iface_combination_params params = {
-		.num_different_channels = 1,
-	};
+	struct iface_combination_params params = { };
+	struct iface_combination_interface *ifaces;
+	u16 total_iface = 0;
 
 	list_for_each_entry(pos, &cfg->vif_list, list)
+		total_iface++;
+
+	ifaces = kcalloc(total_iface, sizeof(*ifaces), GFP_KERNEL);
+	if (!ifaces)
+		return -ENOMEM;
+
+	list_for_each_entry(pos, &cfg->vif_list, list) {
+		if (WARN_ON(params.num_iface >= total_iface))
+			continue;
+
 		if (pos == vif) {
-			params.iftype_num[new_type]++;
+			ifaces[params.num_iface].iftype = new_type;
 		} else {
 			/* concurrent interfaces so need check combinations */
 			check_combos = true;
-			params.iftype_num[pos->wdev.iftype]++;
+			ifaces[params.num_iface].iftype = pos->wdev.iftype;
 		}
+
+		ifaces[params.num_iface].valid_links = BIT(0);
+		params.num_iface++;
+	}
+	params.ifaces = ifaces;
 
 	if (check_combos)
 		ret = cfg80211_check_combinations(cfg->wiphy, &params);
 
+	kfree(ifaces);
 	return ret;
 }
 
@@ -519,15 +535,37 @@ static int brcmf_vif_add_validate(struct brcmf_cfg80211_info *cfg,
 				  enum nl80211_iftype new_type)
 {
 	struct brcmf_cfg80211_vif *pos;
-	struct iface_combination_params params = {
-		.num_different_channels = 1,
-	};
+	struct iface_combination_params params = { };
+	struct iface_combination_interface *ifaces;
+	u16 total_iface = 0;
+	int ret;
 
 	list_for_each_entry(pos, &cfg->vif_list, list)
-		params.iftype_num[pos->wdev.iftype]++;
+		total_iface++;
 
-	params.iftype_num[new_type]++;
-	return cfg80211_check_combinations(cfg->wiphy, &params);
+	ifaces = kcalloc(total_iface, sizeof(*ifaces), GFP_KERNEL);
+	if (!ifaces)
+		return -ENOMEM;
+
+	list_for_each_entry(pos, &cfg->vif_list, list) {
+		if (params.num_iface >= total_iface)
+			continue;
+
+		ifaces[params.num_iface].iftype = pos->wdev.iftype;
+		ifaces[params.num_iface].valid_links = BIT(0);
+		params.num_iface++;
+	}
+
+	if (params.num_iface < total_iface) {
+		ifaces[params.num_iface].iftype = new_type;
+		ifaces[params.num_iface].valid_links = BIT(0);
+		params.num_iface++;
+	}
+
+	ret = cfg80211_check_combinations(cfg->wiphy, &params);
+
+	kfree(ifaces);
+	return ret;
 }
 
 static void convert_key_from_CPU(struct brcmf_wsec_key *key,
