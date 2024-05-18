@@ -5217,8 +5217,10 @@ static int handle_exception_nmi(struct kvm_vcpu *vcpu)
 	if (is_invalid_opcode(intr_info))
 		return handle_ud(vcpu);
 
-	if (KVM_BUG_ON(is_ve_fault(intr_info), vcpu->kvm))
+	if (KVM_BUG_ON(is_ve_fault(intr_info), vcpu->kvm)) {
+		dump_vmcs(vcpu);
 		return -EIO;
+	}
 
 	error_code = 0;
 	if (intr_info & INTR_INFO_DELIVER_CODE_MASK)
