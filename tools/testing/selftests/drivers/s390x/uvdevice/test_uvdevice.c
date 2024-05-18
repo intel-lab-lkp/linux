@@ -18,6 +18,16 @@
 
 #define UV_PATH  "/dev/uv"
 #define BUFFER_SIZE 0x200
+
+#define open_uv() \
+do { \
+	self->uv_fd = open(UV_PATH, O_ACCMODE);	\
+	if (self->uv_fd < 0) \
+		SKIP(return, "No uv-device or cannot access " UV_PATH  "\n" \
+			     "Enable CONFIG_S390_UV_UAPI and check the access rights on " \
+			     UV_PATH ".\n"); \
+} while (0)
+
 FIXTURE(uvio_fixture) {
 	int uv_fd;
 	struct uvio_ioctl_cb uvio_ioctl;
@@ -37,7 +47,7 @@ FIXTURE_VARIANT_ADD(uvio_fixture, att) {
 
 FIXTURE_SETUP(uvio_fixture)
 {
-	self->uv_fd = open(UV_PATH, O_ACCMODE);
+	open_uv();
 
 	self->uvio_ioctl.argument_addr = (__u64)self->buffer;
 	self->uvio_ioctl.argument_len = variant->arg_size;
@@ -159,7 +169,7 @@ FIXTURE(attest_fixture) {
 
 FIXTURE_SETUP(attest_fixture)
 {
-	self->uv_fd = open(UV_PATH, O_ACCMODE);
+	open_uv();
 
 	self->uvio_ioctl.argument_addr = (__u64)&self->uvio_attest;
 	self->uvio_ioctl.argument_len = sizeof(self->uvio_attest);
@@ -257,20 +267,4 @@ TEST_F(attest_fixture, att_inval_addr)
 	att_inval_addr_test(&self->uvio_attest.meas_addr, _metadata, self);
 }
 
-static void __attribute__((constructor)) __constructor_order_last(void)
-{
-	if (!__constructor_order)
-		__constructor_order = _CONSTRUCTOR_ORDER_BACKWARD;
-}
-
-int main(int argc, char **argv)
-{
-	int fd = open(UV_PATH, O_ACCMODE);
-
-	if (fd < 0)
-		ksft_exit_skip("No uv-device or cannot access " UV_PATH  "\n"
-			       "Enable CONFIG_S390_UV_UAPI and check the access rights on "
-			       UV_PATH ".\n");
-	close(fd);
-	return test_harness_run(argc, argv);
-}
+TEST_HARNESS_MAIN
