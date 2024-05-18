@@ -327,8 +327,7 @@ static void __unix_set_addr_hash(struct net *net, struct sock *sk,
 {
 	__unix_remove_socket(sk);
 	smp_store_release(&unix_sk(sk)->addr, addr);
-
-	sk->sk_hash = hash;
+	WRITE_ONCE(sk->sk_hash, hash);
 	__unix_insert_socket(net, sk);
 }
 
@@ -1131,7 +1130,7 @@ static struct sock *unix_find_other(struct net *net,
 
 static int unix_autobind(struct sock *sk)
 {
-	unsigned int new_hash, old_hash = sk->sk_hash;
+	unsigned int new_hash, old_hash = READ_ONCE(sk->sk_hash);
 	struct unix_sock *u = unix_sk(sk);
 	struct net *net = sock_net(sk);
 	struct unix_address *addr;
@@ -1195,7 +1194,7 @@ static int unix_bind_bsd(struct sock *sk, struct sockaddr_un *sunaddr,
 {
 	umode_t mode = S_IFSOCK |
 	       (SOCK_INODE(sk->sk_socket)->i_mode & ~current_umask());
-	unsigned int new_hash, old_hash = sk->sk_hash;
+	unsigned int new_hash, old_hash = READ_ONCE(sk->sk_hash);
 	struct unix_sock *u = unix_sk(sk);
 	struct net *net = sock_net(sk);
 	struct mnt_idmap *idmap;
@@ -1261,7 +1260,7 @@ out:
 static int unix_bind_abstract(struct sock *sk, struct sockaddr_un *sunaddr,
 			      int addr_len)
 {
-	unsigned int new_hash, old_hash = sk->sk_hash;
+	unsigned int new_hash, old_hash = READ_ONCE(sk->sk_hash);
 	struct unix_sock *u = unix_sk(sk);
 	struct net *net = sock_net(sk);
 	struct unix_address *addr;
