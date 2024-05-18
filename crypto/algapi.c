@@ -7,6 +7,7 @@
 
 #include <crypto/algapi.h>
 #include <crypto/internal/simd.h>
+#include <linux/device/driver.h>
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/fips.h>
@@ -1056,8 +1057,11 @@ EXPORT_SYMBOL_GPL(crypto_type_has_alg);
 
 static void __init crypto_start_tests(void)
 {
-	if (IS_ENABLED(CONFIG_CRYPTO_MANAGER_DISABLE_TESTS))
+	if (!IS_BUILTIN(CONFIG_CRYPTO_ALGAPI))
 		return;
+
+	if (IS_ENABLED(CONFIG_CRYPTO_MANAGER_DISABLE_TESTS))
+		goto test_done;
 
 	for (;;) {
 		struct crypto_larval *larval = NULL;
@@ -1092,6 +1096,8 @@ static void __init crypto_start_tests(void)
 		crypto_wait_for_test(larval);
 	}
 
+test_done:
+	wait_for_device_probe();
 	set_crypto_boot_test_finished();
 }
 

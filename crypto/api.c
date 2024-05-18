@@ -31,9 +31,8 @@ EXPORT_SYMBOL_GPL(crypto_alg_sem);
 BLOCKING_NOTIFIER_HEAD(crypto_chain);
 EXPORT_SYMBOL_GPL(crypto_chain);
 
-#ifndef CONFIG_CRYPTO_MANAGER_DISABLE_TESTS
+#if IS_BUILTIN(CONFIG_CRYPTO_ALGAPI)
 DEFINE_STATIC_KEY_FALSE(__crypto_boot_test_finished);
-EXPORT_SYMBOL_GPL(__crypto_boot_test_finished);
 #endif
 
 static struct crypto_alg *crypto_larval_wait(struct crypto_alg *alg);
@@ -280,7 +279,7 @@ static struct crypto_alg *crypto_larval_lookup(const char *name, u32 type,
 	mask &= ~(CRYPTO_ALG_LARVAL | CRYPTO_ALG_DEAD);
 
 	alg = crypto_alg_lookup(name, type, mask);
-	if (!alg && !(mask & CRYPTO_NOLOAD)) {
+	if (crypto_boot_test_finished() && !alg && !(mask & CRYPTO_NOLOAD)) {
 		request_module("crypto-%s", name);
 
 		if (!((type ^ CRYPTO_ALG_NEED_FALLBACK) & mask &
