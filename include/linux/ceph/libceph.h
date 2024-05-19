@@ -164,7 +164,7 @@ struct ceph_snap_context {
 	refcount_t nref;
 	u64 seq;
 	u32 num_snaps;
-	u64 snaps[];
+	u64 snaps[] __counted_by(num_snaps);
 };
 
 extern struct ceph_snap_context *ceph_create_snap_context(u32 snap_count,
