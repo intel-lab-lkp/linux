@@ -651,6 +651,7 @@ static void i2cdev_dev_release(struct device *dev)
 
 static int i2cdev_attach_adapter(struct device *dev)
 {
+	const char *name;
 	struct i2c_adapter *adap;
 	struct i2c_dev *i2c_dev;
 	int res;
@@ -672,7 +673,16 @@ static int i2cdev_attach_adapter(struct device *dev)
 	i2c_dev->dev.parent = &adap->dev;
 	i2c_dev->dev.release = i2cdev_dev_release;
 
-	res = dev_set_name(&i2c_dev->dev, "i2c-%d", adap->nr);
+	/*
+	 * If "linux,i2c-dev-name" is specified in device tree, use /dev/i2c-<name>
+	 * in Linux userspace, otherwise use /dev/i2c-<nr>.
+	 */
+	res = device_property_read_string(&adap->dev, "linux,i2c-dev-name", &name);
+	if (res < 0)
+		res = dev_set_name(&i2c_dev->dev, "i2c-%d", adap->nr);
+	else
+		res = dev_set_name(&i2c_dev->dev, "i2c-%s", name);
+
 	if (res)
 		goto err_put_i2c_dev;
 
