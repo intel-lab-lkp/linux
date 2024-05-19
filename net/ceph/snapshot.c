@@ -28,11 +28,8 @@ struct ceph_snap_context *ceph_create_snap_context(u32 snap_count,
 						gfp_t gfp_flags)
 {
 	struct ceph_snap_context *snapc;
-	size_t size;
 
-	size = sizeof (struct ceph_snap_context);
-	size += snap_count * sizeof (snapc->snaps[0]);
-	snapc = kzalloc(size, gfp_flags);
+	snapc = kzalloc(sruct_size(snapc, snaps, snap_count), gfp_flags);
 	if (!snapc)
 		return NULL;
 
