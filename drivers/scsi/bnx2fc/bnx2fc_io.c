@@ -213,7 +213,6 @@ struct bnx2fc_cmd_mgr *bnx2fc_cmd_mgr_alloc(struct bnx2fc_hba *hba)
 	struct bnx2fc_cmd_mgr *cmgr;
 	struct io_bdt *bdt_info;
 	struct bnx2fc_cmd *io_req;
-	size_t len;
 	u32 mem_size;
 	u16 xid;
 	int i;
@@ -231,10 +230,8 @@ struct bnx2fc_cmd_mgr *bnx2fc_cmd_mgr_alloc(struct bnx2fc_hba *hba)
 	BNX2FC_MISC_DBG("min xid 0x%x, max xid 0x%x\n", min_xid, max_xid);
 
 	num_ios = max_xid - min_xid + 1;
-	len = (num_ios * (sizeof(struct bnx2fc_cmd *)));
-	len += sizeof(struct bnx2fc_cmd_mgr);
 
-	cmgr = kzalloc(len, GFP_KERNEL);
+	cmgr = kzalloc(struct_size(cmgr, cmds, num_ios), GFP_KERNEL);
 	if (!cmgr) {
 		printk(KERN_ERR PFX "failed to alloc cmgr\n");
 		return NULL;
@@ -256,8 +253,6 @@ struct bnx2fc_cmd_mgr *bnx2fc_cmd_mgr_alloc(struct bnx2fc_hba *hba)
 		cmgr->free_list = NULL;
 		goto mem_err;
 	}
-
-	cmgr->cmds = (struct bnx2fc_cmd **)(cmgr + 1);
 
 	for (i = 0; i < arr_sz; i++)  {
 		INIT_LIST_HEAD(&cmgr->free_list[i]);
