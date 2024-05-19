@@ -767,6 +767,8 @@ MODULE_DEVICE_TABLE(acpi, spidev_acpi_ids);
 
 static int spidev_probe(struct spi_device *spi)
 {
+	int ret;
+	const char *name;
 	int (*match)(struct device *dev);
 	struct spidev_data	*spidev;
 	int			status;
@@ -800,9 +802,20 @@ static int spidev_probe(struct spi_device *spi)
 		struct device *dev;
 
 		spidev->devt = MKDEV(SPIDEV_MAJOR, minor);
-		dev = device_create(&spidev_class, &spi->dev, spidev->devt,
-				    spidev, "spidev%d.%d",
-				    spi->controller->bus_num, spi_get_chipselect(spi, 0));
+
+		/*
+		 * If "linux,spidev-name" is specified in device tree, use /dev/spidev-<name>
+		 * in Linux userspace, otherwise use /dev/spidev<bus_num>.<cs_num>.
+		 */
+		ret = device_property_read_string(&spi->dev, "linux,spidev-name", &name);
+		if (ret < 0)
+			dev = device_create(&spidev_class, &spi->dev, spidev->devt,
+					    spidev, "spidev%d.%d",
+					    spi->controller->bus_num, spi_get_chipselect(spi, 0));
+		else
+			dev = device_create(&spidev_class, &spi->dev, spidev->devt,
+					    spidev, "spidev-%s", name);
+
 		status = PTR_ERR_OR_ZERO(dev);
 	} else {
 		dev_dbg(&spi->dev, "no minor number available!\n");
