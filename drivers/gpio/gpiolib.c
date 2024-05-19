@@ -862,6 +862,7 @@ int gpiochip_add_data_with_key(struct gpio_chip *gc, void *data,
 			       struct lock_class_key *lock_key,
 			       struct lock_class_key *request_key)
 {
+	const char *name;
 	struct gpio_device *gdev;
 	unsigned int desc_index;
 	int base = 0;
@@ -898,7 +899,16 @@ int gpiochip_add_data_with_key(struct gpio_chip *gc, void *data,
 		goto err_free_gdev;
 	}
 
-	ret = dev_set_name(&gdev->dev, GPIOCHIP_NAME "%d", gdev->id);
+	/*
+	 * If "linux,gpiochip-name" is specified in device tree, use /dev/gpiochip-<name>
+	 * in Linux userspace, otherwise use /dev/gpiochip<id>.
+	 */
+	ret = device_property_read_string(gc->parent, "linux,gpiochip-name", &name);
+	if (ret < 0)
+		ret = dev_set_name(&gdev->dev, GPIOCHIP_NAME "%d", gdev->id);
+	else
+		ret = dev_set_name(&gdev->dev, GPIOCHIP_NAME "-%s", name);
+
 	if (ret)
 		goto err_free_ida;
 
