@@ -176,6 +176,14 @@ static void transmit_chars(struct uart_pxa_port *up)
 {
 	u8 ch;
 
+	/* If there is nothing left to transmit, disable the TX interrupt.
+	 * Otherwise we can get stuck waiting for another IRQ that never happens.
+	 */
+	if (uart_circ_empty(&up->port.state->xmit)) {
+		serial_pxa_stop_tx(&up->port);
+		return;
+	}
+
 	uart_port_tx_limited(&up->port, ch, up->port.fifosize / 2,
 		true,
 		serial_out(up, UART_TX, ch),
