@@ -106,6 +106,7 @@ struct amd_gpio {
 	struct platform_device  *pdev;
 	u32			*saved_regs;
 	int			irq;
+	const struct cpumask	*base_affinity;
 };
 
 /*  KERNCZ configuration*/

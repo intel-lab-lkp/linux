@@ -561,6 +561,21 @@ static int amd_gpio_irq_set_type(struct irq_data *d, unsigned int type)
 	return ret;
 }
 
+static int amd_gpio_set_affinity(struct irq_data *data, const struct cpumask *dest,
+				 bool force)
+{
+	struct gpio_chip *gc = irq_data_get_irq_chip_data(data);
+	struct amd_gpio *gpio_dev = gpiochip_get_data(gc);
+
+	/*
+	 * The affinity is explicitly set to the GPIO controller as amd_irq_ack()
+	 * doesn't do anything and pinning to a different CPU is a needless wakeup.
+	 */
+	irq_data_update_effective_affinity(data, gpio_dev->base_affinity);
+
+	return 0;
+}
+
 static void amd_irq_ack(struct irq_data *d)
 {
 	/*
@@ -580,6 +595,7 @@ static const struct irq_chip amd_gpio_irqchip = {
 	.irq_set_wake = amd_gpio_irq_set_wake,
 	.irq_eoi      = amd_gpio_irq_eoi,
 	.irq_set_type = amd_gpio_irq_set_type,
+	.irq_set_affinity = amd_gpio_set_affinity,
 	/*
 	 * We need to set IRQCHIP_ENABLE_WAKEUP_ON_SUSPEND so that a wake event
 	 * also generates an IRQ. We need the IRQ so the irq_handler can clear
@@ -1162,6 +1178,8 @@ static int amd_gpio_probe(struct platform_device *pdev)
 			       IRQF_SHARED | IRQF_ONESHOT, KBUILD_MODNAME, gpio_dev);
 	if (ret)
 		goto out2;
+
+	gpio_dev->base_affinity = irq_get_affinity_mask(gpio_dev->irq);
 
 	platform_set_drvdata(pdev, gpio_dev);
 	acpi_register_wakeup_handler(gpio_dev->irq, amd_gpio_check_wake, gpio_dev);
