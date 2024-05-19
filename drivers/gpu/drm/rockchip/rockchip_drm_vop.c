@@ -1578,6 +1578,9 @@ static void vop_crtc_atomic_flush(struct drm_crtc *crtc,
 
 	spin_lock(&vop->reg_lock);
 
+	/* If the chip has a DMA stop bit (RK3066), it must be cleared. */
+	VOP_REG_SET(vop, common, dma_stop, 0);
+
 	/* Enable AFBC if there is some AFBC window, disable otherwise. */
 	s = to_rockchip_crtc_state(crtc->state);
 	VOP_AFBC_SET(vop, enable, s->enable_afbc);
