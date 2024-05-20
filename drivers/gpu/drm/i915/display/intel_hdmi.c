@@ -2044,7 +2044,7 @@ intel_hdmi_mode_valid(struct drm_connector *connector,
 			return status;
 	}
 
-	return intel_mode_valid_max_plane_size(dev_priv, mode, false);
+	return intel_mode_valid_max_plane_size(dev_priv, mode, false, false);
 }
 
 bool intel_hdmi_bpc_possible(const struct intel_crtc_state *crtc_state,
@@ -2336,6 +2336,18 @@ int intel_hdmi_compute_config(struct intel_encoder *encoder,
 			    pipe_config->hw.adjusted_mode.crtc_clock);
 		return ret;
 	}
+
+	if (adjusted_mode->crtc_clock > dev_priv->display.cdclk.max_dotclk_freq ||
+	    pipe_config->joiner_pipes) {
+		if (pipe_config->dsc.slice_count < 2) {
+			drm_dbg_kms(&dev_priv->drm,
+				    "Cannot split stream to use 2 VDSC instances\n");
+			return -EINVAL;
+		}
+
+		pipe_config->dsc.dsc_split = true;
+	}
+
 
 	if (intel_hdmi_is_ycbcr420(pipe_config)) {
 		ret = intel_panel_fitting(pipe_config, conn_state);
