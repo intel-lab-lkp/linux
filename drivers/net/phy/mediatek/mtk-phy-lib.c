@@ -106,6 +106,65 @@ int mtk_phy_write_page(struct phy_device *phydev, int page)
 }
 EXPORT_SYMBOL_GPL(mtk_phy_write_page);
 
+static void extend_an_new_lp_cnt_limit(struct phy_device *phydev)
+{
+	int mmd_read_ret;
+	int ret;
+	u32 reg_val;
+
+	ret = read_poll_timeout(mmd_read_ret = phy_read_mmd, reg_val,
+				(mmd_read_ret < 0) || reg_val & MTK_PHY_FINAL_SPEED_1000,
+				10000, 1000000, false, phydev,
+				MDIO_MMD_VEND1, MTK_PHY_LINK_STATUS_MISC);
+	if (mmd_read_ret < 0)
+		ret = mmd_read_ret;
+	/* If final_speed_1000 is raised, try to extend timeout period
+	 * of auto downshift.
+	 */
+	if (!ret) {
+		tr_modify(phydev, 0x0, 0xf, 0x3c, AN_NEW_LP_CNT_LIMIT_MASK,
+			  FIELD_PREP(AN_NEW_LP_CNT_LIMIT_MASK, 0xf));
+		mdelay(1500);
+
+		ret = read_poll_timeout(mmd_read_ret = tr_read, reg_val,
+					(mmd_read_ret < 0) ||
+					(reg_val & AN_STATE_MASK) !=
+					(AN_STATE_TX_DISABLE << AN_STATE_SHIFT),
+					10000, 1000000, false, phydev,
+					0x0, 0xf, 0x2);
+
+		if (mmd_read_ret < 0)
+			ret = mmd_read_ret;
+
+		if (!ret) {
+			mdelay(625);
+			tr_modify(phydev, 0x0, 0xf, 0x3c, AN_NEW_LP_CNT_LIMIT_MASK,
+				  FIELD_PREP(AN_NEW_LP_CNT_LIMIT_MASK, 0x8));
+			mdelay(500);
+			tr_modify(phydev, 0x0, 0xf, 0x3c, AN_NEW_LP_CNT_LIMIT_MASK,
+				  FIELD_PREP(AN_NEW_LP_CNT_LIMIT_MASK, 0xf));
+		}
+	}
+}
+
+int mtk_gphy_cl22_read_status(struct phy_device *phydev)
+{
+	int ret;
+
+	ret = genphy_read_status(phydev);
+	if (ret)
+		return ret;
+
+	if (phydev->autoneg == AUTONEG_ENABLE && !phydev->autoneg_complete) {
+		ret = phy_read(phydev, MII_CTRL1000);
+		if ((ret & ADVERTISE_1000FULL) || (ret & ADVERTISE_1000HALF))
+			extend_an_new_lp_cnt_limit(phydev);
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(mtk_gphy_cl22_read_status);
+
 int mtk_phy_led_hw_is_supported(struct phy_device *phydev, u8 index, unsigned long rules,
 				unsigned long supported_triggers)
 {
