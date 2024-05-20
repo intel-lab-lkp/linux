@@ -27,6 +27,15 @@
 
 static DEFINE_IDA(eventfd_ida);
 
+#ifdef CONFIG_EVENTFD_RATELIMITED_WAKEUP
+struct eventfd_bucket {
+	struct eventfd_qos qos;
+	struct hrtimer timer;
+	u64 timestamp;
+	u64 tokens;
+};
+#endif
+
 struct eventfd_ctx {
 	struct kref kref;
 	wait_queue_head_t wqh;
@@ -41,7 +50,96 @@ struct eventfd_ctx {
 	__u64 count;
 	unsigned int flags;
 	int id;
+#ifdef CONFIG_EVENTFD_RATELIMITED_WAKEUP
+	struct eventfd_bucket bucket;
+#endif
 };
+
+#ifdef CONFIG_EVENTFD_RATELIMITED_WAKEUP
+
+static void eventfd_refill_tokens(struct eventfd_bucket *bucket)
+{
+	unsigned int rate = bucket->qos.token_rate;
+	u64 now = ktime_get_ns();
+	u64 tokens;
+
+	tokens = ktime_sub(now, bucket->timestamp) * rate;
+	do_div(tokens, NSEC_PER_SEC);
+	if (tokens > 0) {
+		tokens += bucket->tokens;
+		bucket->tokens = (tokens > bucket->qos.token_capacity) ?
+				 tokens : bucket->qos.token_capacity;
+	}
+	bucket->timestamp = now;
+}
+
+static int eventfd_consume_tokens(struct eventfd_bucket *bucket)
+{
+	if (bucket->tokens > 0) {
+		bucket->tokens--;
+		return 1;
+	} else
+		return 0;
+}
+
+static bool eventfd_detect_storm(struct eventfd_ctx *ctx)
+{
+	u32 rate = ctx->bucket.qos.token_rate;
+
+	if (rate == 0)
+		return false;
+
+	eventfd_refill_tokens(&ctx->bucket);
+	return !eventfd_consume_tokens(&ctx->bucket);
+}
+
+static enum hrtimer_restart eventfd_timer_handler(struct hrtimer *timer)
+{
+	struct eventfd_ctx *ctx;
+	unsigned long flags;
+
+	ctx = container_of(timer, struct eventfd_ctx, bucket.timer);
+	spin_lock_irqsave(&ctx->wqh.lock, flags);
+
+	/*
+	 * Checking for locked entry and wake_up_locked_poll() happens
+	 * under the ctx->wqh.lock lock spinlock
+	 */
+	if (waitqueue_active(&ctx->wqh))
+		wake_up_locked_poll(&ctx->wqh, EPOLLIN);
+
+	spin_unlock_irqrestore(&ctx->wqh.lock, flags);
+	eventfd_ctx_put(ctx);
+
+	return HRTIMER_NORESTART;
+}
+
+static void eventfd_ratelimited_wake_up(struct eventfd_ctx *ctx)
+{
+	u32 rate = ctx->bucket.qos.token_rate;
+	u64 now = ktime_get_ns();
+	u64 slack_ns;
+	u64 expires;
+
+	if (likely(rate)) {
+		slack_ns = NSEC_PER_SEC/rate;
+	} else {
+		WARN_ON_ONCE("fallback to the default NSEC_PER_SEC.");
+		slack_ns = NSEC_PER_MSEC;
+	}
+
+	/* if already queued, don't bother */
+	if (hrtimer_is_queued(&ctx->bucket.timer))
+		return;
+
+	/* determine next wakeup, add a timer margin */
+	expires = now + slack_ns;
+
+	kref_get(&ctx->kref);
+	hrtimer_start(&ctx->bucket.timer, expires, HRTIMER_MODE_ABS);
+}
+
+#endif
 
 /**
  * eventfd_signal_mask - Increment the event counter
@@ -270,8 +368,23 @@ static ssize_t eventfd_write(struct file *file, const char __user *buf, size_t c
 	if (likely(res > 0)) {
 		ctx->count += ucnt;
 		current->in_eventfd = 1;
-		if (waitqueue_active(&ctx->wqh))
+
+		/*
+		 * Checking for locked entry and wake_up_locked_poll() happens
+		 * under the ctx->wqh.lock spinlock
+		 */
+		if (waitqueue_active(&ctx->wqh)) {
+#ifdef CONFIG_EVENTFD_RATELIMITED_WAKEUP
+			if ((ctx->flags & EFD_SEMAPHORE) || !eventfd_detect_storm(ctx))
+				wake_up_locked_poll(&ctx->wqh, EPOLLIN);
+			else
+				eventfd_ratelimited_wake_up(ctx);
+
+#else
 			wake_up_locked_poll(&ctx->wqh, EPOLLIN);
+#endif
+		}
+
 		current->in_eventfd = 0;
 	}
 	spin_unlock_irq(&ctx->wqh.lock);
@@ -299,6 +412,66 @@ static void eventfd_show_fdinfo(struct seq_file *m, struct file *f)
 }
 #endif
 
+#ifdef CONFIG_EVENTFD_RATELIMITED_WAKEUP
+static long eventfd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+	struct eventfd_ctx *ctx = file->private_data;
+	void __user *uaddr = (void __user *)arg;
+	struct eventfd_qos qos;
+
+	if (ctx->flags & EFD_SEMAPHORE)
+		return -EINVAL;
+	if (!uaddr)
+		return -EINVAL;
+
+	switch (cmd) {
+	case EFD_IOC_SET_QOS:
+		if (copy_from_user(&qos, uaddr, sizeof(qos)))
+			return -EFAULT;
+		if (qos.token_rate > NSEC_PER_SEC)
+			return -EINVAL;
+
+		for (;;) {
+			spin_lock_irq(&ctx->wqh.lock);
+			if (hrtimer_try_to_cancel(&ctx->bucket.timer) >= 0) {
+				spin_unlock_irq(&ctx->wqh.lock);
+				break;
+			}
+			spin_unlock_irq(&ctx->wqh.lock);
+			hrtimer_cancel_wait_running(&ctx->bucket.timer);
+		}
+
+		spin_lock_irq(&ctx->wqh.lock);
+		ctx->bucket.timestamp = ktime_get_ns();
+		ctx->bucket.qos = qos;
+		ctx->bucket.tokens = qos.token_capacity;
+
+		current->in_eventfd = 1;
+		/*
+		 * Checking for locked entry and wake_up_locked_poll() happens
+		 * under the ctx->wqh.lock lock spinlock
+		 */
+		if ((!ctx->count) && (waitqueue_active(&ctx->wqh)))
+			wake_up_locked_poll(&ctx->wqh, EPOLLIN);
+		current->in_eventfd = 0;
+
+		spin_unlock_irq(&ctx->wqh.lock);
+		return 0;
+
+	case EFD_IOC_GET_QOS:
+		qos = READ_ONCE(ctx->bucket.qos);
+		if (copy_to_user(uaddr, &qos, sizeof(qos)))
+			return -EFAULT;
+		return 0;
+
+	default:
+		return -ENOENT;
+	}
+
+	return -EINVAL;
+}
+#endif
+
 static const struct file_operations eventfd_fops = {
 #ifdef CONFIG_PROC_FS
 	.show_fdinfo	= eventfd_show_fdinfo,
@@ -308,6 +481,10 @@ static const struct file_operations eventfd_fops = {
 	.read_iter	= eventfd_read,
 	.write		= eventfd_write,
 	.llseek		= noop_llseek,
+#ifdef CONFIG_EVENTFD_RATELIMITED_WAKEUP
+	.unlocked_ioctl	= eventfd_ioctl,
+	.compat_ioctl	= eventfd_ioctl,
+#endif
 };
 
 /**
@@ -402,6 +579,15 @@ static int do_eventfd(unsigned int count, int flags)
 	ctx->count = count;
 	ctx->flags = flags;
 	ctx->id = ida_alloc(&eventfd_ida, GFP_KERNEL);
+
+#ifdef CONFIG_EVENTFD_RATELIMITED_WAKEUP
+	ctx->bucket.qos.token_rate = 0;
+	ctx->bucket.qos.token_capacity = 0;
+	ctx->bucket.tokens = 0;
+	ctx->bucket.timestamp = ktime_get_ns();
+	hrtimer_init(&ctx->bucket.timer, CLOCK_MONOTONIC, HRTIMER_MODE_ABS);
+	ctx->bucket.timer.function = eventfd_timer_handler;
+#endif
 
 	flags &= EFD_SHARED_FCNTL_FLAGS;
 	flags |= O_RDWR;
