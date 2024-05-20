@@ -157,6 +157,13 @@ static void __init zone_sizes_init(void)
 	free_area_init(max_zone_pfns);
 }
 
+#ifdef CONFIG_DEFERRED_STRUCT_PAGE_INIT
+int __init deferred_page_init_max_threads(const struct cpumask *node_cpumask)
+{
+	return max_t(int, cpumask_weight(node_cpumask), 1);
+}
+#endif
+
 int pfn_is_map_memory(unsigned long pfn)
 {
 	phys_addr_t addr = PFN_PHYS(pfn);
