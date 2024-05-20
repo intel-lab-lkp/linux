@@ -11,6 +11,7 @@
 struct dst_cache {
 	struct dst_cache_pcpu __percpu *cache;
 	unsigned long reset_ts;
+	u32 id;
 };
 
 /**
