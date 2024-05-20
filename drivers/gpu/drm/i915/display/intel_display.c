@@ -244,33 +244,65 @@ is_trans_port_sync_mode(const struct intel_crtc_state *crtc_state)
 		is_trans_port_sync_slave(crtc_state);
 }
 
-static enum pipe joiner_master_pipe(const struct intel_crtc_state *crtc_state)
+static u8 joiner_master_pipes(const struct intel_crtc_state *crtc_state)
 {
-	return ffs(crtc_state->joiner_pipes) - 1;
+	return BIT(PIPE_A) | BIT(PIPE_C);
+}
+
+static u8 joiner_primary_master_pipes(const struct intel_crtc_state *crtc_state)
+{
+	return BIT(PIPE_A);
 }
 
 u8 intel_crtc_joiner_slave_pipes(const struct intel_crtc_state *crtc_state)
 {
-	if (crtc_state->joiner_pipes)
-		return crtc_state->joiner_pipes & ~BIT(joiner_master_pipe(crtc_state));
+	if (intel_is_ultrajoiner(crtc_state))
+		return crtc_state->joiner_pipes & ~joiner_primary_master_pipes(crtc_state);
+	else if (intel_is_bigjoiner(crtc_state))
+		return crtc_state->joiner_pipes & ~joiner_master_pipes(crtc_state);
 	else
 		return 0;
+}
+
+bool intel_crtc_is_bigjoiner_slave(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+
+	return crtc_state->joiner_pipes &&
+		!(BIT(crtc->pipe) & joiner_master_pipes(crtc_state));
+}
+
+bool intel_crtc_is_bigjoiner_master(const struct intel_crtc_state *crtc_state)
+{
+	return !intel_crtc_is_bigjoiner_slave(crtc_state);
 }
 
 bool intel_crtc_is_joiner_slave(const struct intel_crtc_state *crtc_state)
 {
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 
-	return crtc_state->joiner_pipes &&
-		crtc->pipe != joiner_master_pipe(crtc_state);
+	if (intel_is_ultrajoiner(crtc_state))
+		return crtc_state->joiner_pipes &&
+			!(BIT(crtc->pipe) & joiner_primary_master_pipes(crtc_state));
+	return intel_crtc_is_bigjoiner_slave(crtc_state);
 }
 
 bool intel_crtc_is_joiner_master(const struct intel_crtc_state *crtc_state)
 {
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 
+	if (intel_is_ultrajoiner(crtc_state))
+		return crtc_state->joiner_pipes &&
+			(BIT(crtc->pipe) & joiner_primary_master_pipes(crtc_state));
+	return intel_crtc_is_bigjoiner_master(crtc_state);
+}
+
+bool intel_crtc_is_joiner_primary_master(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+
 	return crtc_state->joiner_pipes &&
-		crtc->pipe == joiner_master_pipe(crtc_state);
+		(BIT(crtc->pipe) & joiner_primary_master_pipes(crtc_state));
 }
 
 static int intel_joiner_num_pipes(const struct intel_crtc_state *crtc_state)
@@ -285,12 +317,26 @@ u8 intel_crtc_joined_pipe_mask(const struct intel_crtc_state *crtc_state)
 	return BIT(crtc->pipe) | crtc_state->joiner_pipes;
 }
 
+enum pipe intel_crtc_master_pipe(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+
+	if (intel_is_ultrajoiner(crtc_state)) {
+		return ffs(joiner_primary_master_pipes(crtc_state)) - 1;
+	} else if (intel_is_bigjoiner(crtc_state)) {
+		return intel_crtc_is_joiner_slave(crtc_state) ?
+			crtc->pipe - 1 : crtc->pipe;
+	} else {
+		return crtc->pipe;
+	}
+}
+
 struct intel_crtc *intel_master_crtc(const struct intel_crtc_state *crtc_state)
 {
 	struct drm_i915_private *i915 = to_i915(crtc_state->uapi.crtc->dev);
 
 	if (intel_crtc_is_joiner_slave(crtc_state))
-		return intel_crtc_for_pipe(i915, joiner_master_pipe(crtc_state));
+		return intel_crtc_for_pipe(i915, intel_crtc_master_pipe(crtc_state));
 	else
 		return to_intel_crtc(crtc_state->uapi.crtc);
 }
@@ -2859,7 +2905,7 @@ static void intel_joiner_adjust_pipe_src(struct intel_crtc_state *crtc_state)
 	if (num_pipes < 2)
 		return;
 
-	master_pipe = joiner_master_pipe(crtc_state);
+	master_pipe = intel_crtc_master_pipe(crtc_state);
 	width = drm_rect_width(&crtc_state->pipe_src);
 
 	drm_rect_translate_to(&crtc_state->pipe_src,
@@ -5900,7 +5946,7 @@ static int intel_atomic_check_joiner(struct intel_atomic_state *state,
 
 	/* sanity check */
 	if (drm_WARN_ON(&i915->drm,
-			master_crtc->pipe != joiner_master_pipe(master_crtc_state)))
+			master_crtc->pipe != intel_crtc_master_pipe(master_crtc_state)))
 		return -EINVAL;
 
 	if (master_crtc_state->joiner_pipes & ~joiner_pipes(i915)) {
