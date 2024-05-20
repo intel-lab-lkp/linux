@@ -1256,6 +1256,7 @@ static int kcore_mapfn(u64 start, u64 len, u64 pgoff, void *data)
 {
 	struct kcore_mapfn_data *md = data;
 	struct map_list_node *list_node = map_list_node__new();
+	struct map_list_node *node;
 
 	if (!list_node)
 		return -ENOMEM;
@@ -1269,8 +1270,55 @@ static int kcore_mapfn(u64 start, u64 len, u64 pgoff, void *data)
 	map__set_end(list_node->map, map__start(list_node->map) + len);
 	map__set_pgoff(list_node->map, pgoff);
 
-	list_add(&list_node->node, &md->maps);
+	list_for_each_entry(node, &md->maps, node) {
+		/*
+		 * When the new map (list_node)'s end address is less than
+		 * current node, it can be divided into three cases.
+		 *
+		 * Case 1: the new map does not overlap with the current node,
+		 * as the new map's end address is less than the current node's
+		 * start address.
+		 *                      [*******node********]
+		 *    [***list_node***] `start              `end
+		 *    `start          `end
+		 *
+		 * Case 2: the new map overlaps with the current node.
+		 *
+		 *        ,start              ,end
+		 *        [*******node********]
+		 *    [***list_node***]
+		 *    `start          `end
+		 *
+		 * Case 3: the new map is subset of the current node.
+		 *
+		 *        ,start              ,end
+		 *        [*******node********]
+		 *         [***list_node***]
+		 *         `start          `end
+		 *
+		 * For above three cases, insert the new map node before the
+		 * current node.
+		 */
+		if (map__end(node->map) > map__end(list_node->map))
+			break;
 
+		/*
+		 * When the new map is subset of the current node and both nodes
+		 * have the same end address, insert the new map node before the
+		 * current node.
+		 *
+		 *        ,start              ,end
+		 *        [*******node********]
+		 *            [***list_node***]
+		 *            `start          `end
+		 */
+		if ((map__end(node->map) == map__end(list_node->map)) &&
+		    (map__start(node->map) <= map__start(list_node->map)))
+			break;
+	}
+
+	/* Insert the new node (list_node) ahead */
+	list_add_tail(&list_node->node, &node->node);
 	return 0;
 }
 
