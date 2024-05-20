@@ -47,3 +47,19 @@ Description:
 		Value of register. This is used to read or reset the registers
 		where various performance statistics are counted for each block.
 
+What:		/sys/bus/platform/devices/<HID>/hwmon/hwmonX/<block>/count_clock
+Date:		May 2024
+KernelVersion:	6.10
+Contact:	"Shravan Kumar Ramani <shravankr@nvidia.com>"
+Description:
+		Use counter for counting cycles. This is used to program any of
+		the counters in the block to count cycles.
+
+What:		/sys/bus/platform/devices/<HID>/hwmon/hwmonX/<block>/use_odd_counter
+Date:		May 2024
+KernelVersion:	6.10
+Contact:	"Shravan Kumar Ramani <shravankr@nvidia.com>"
+Description:
+		Form 64-bit counter using 2 32-bit counters. This is used to combine
+		2 adjacent counters to form a single 64-bit counter.
+
