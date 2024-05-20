@@ -1269,6 +1269,8 @@ int inet_csk_listen_start(struct sock *sk)
 
 	reqsk_queue_alloc(&icsk->icsk_accept_queue);
 
+	/* closed sockets can have non zero sk_shutdown */
+	WRITE_ONCE(sk->sk_shutdown, 0);
 	sk->sk_ack_backlog = 0;
 	inet_csk_delack_init(sk);
 
