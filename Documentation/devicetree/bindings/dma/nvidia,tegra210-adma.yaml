@@ -29,7 +29,17 @@ properties:
           - const: nvidia,tegra186-adma
 
   reg:
+    description: |
+      For hypervisor mode, the address range should include a
+      ADMA channel page address range, for non-hypervisor mode
+      it starts with ADMA base address covering Global and Channel
+      page address range.
     maxItems: 1
+
+  reg-names:
+    description: only required for Hypervisor mode.
+    items:
+      - const: vm
 
   interrupts:
     description: |
