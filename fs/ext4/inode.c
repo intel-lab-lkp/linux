@@ -546,7 +546,8 @@ int ext4_map_blocks(handle_t *handle, struct inode *inode,
 	 * Try to see if we can get the block without requesting a new
 	 * file system block.
 	 */
-	down_read(&EXT4_I(inode)->i_data_sem);
+	if (!(flags & EXT4_GET_BLOCKS_NOLOCK))
+		down_read(&EXT4_I(inode)->i_data_sem);
 	if (ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS)) {
 		retval = ext4_ext_map_blocks(handle, inode, map, 0);
 	} else {
@@ -573,7 +574,15 @@ int ext4_map_blocks(handle_t *handle, struct inode *inode,
 		ext4_es_insert_extent(inode, map->m_lblk, map->m_len,
 				      map->m_pblk, status);
 	}
-	up_read((&EXT4_I(inode)->i_data_sem));
+	/*
+	 * We should never call ext4_map_blocks() in nolock mode outside
+	 * of fast commit path.
+	 */
+	WARN_ON((flags & EXT4_GET_BLOCKS_NOLOCK) &&
+		!ext4_test_inode_state(inode,
+				       EXT4_STATE_FC_COMMITTING));
+	if (!(flags & EXT4_GET_BLOCKS_NOLOCK))
+		up_read((&EXT4_I(inode)->i_data_sem));
 
 found:
 	if (retval > 0 && map->m_flags & EXT4_MAP_MAPPED) {
@@ -614,6 +623,7 @@ found:
 	 * the write lock of i_data_sem, and call get_block()
 	 * with create == 1 flag.
 	 */
+	WARN_ON((flags & EXT4_GET_BLOCKS_NOLOCK) != 0);
 	down_write(&EXT4_I(inode)->i_data_sem);
 
 	/*
