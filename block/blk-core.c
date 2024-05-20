@@ -298,8 +298,6 @@ void blk_queue_start_drain(struct request_queue *q)
 	 * prevent I/O from crossing blk_queue_enter().
 	 */
 	blk_freeze_queue_start(q);
-	if (queue_is_mq(q))
-		blk_mq_wake_waiters(q);
 	/* Make blk_queue_enter() reexamine the DYING flag. */
 	wake_up_all(&q->mq_freeze_wq);
 }
