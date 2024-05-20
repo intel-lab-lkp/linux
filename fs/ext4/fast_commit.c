@@ -638,11 +638,24 @@ void ext4_fc_track_range(handle_t *handle, struct inode *inode, ext4_lblk_t star
 static void ext4_fc_submit_bh(struct super_block *sb, bool is_tail)
 {
 	blk_opf_t write_flags = REQ_SYNC;
-	struct buffer_head *bh = EXT4_SB(sb)->s_fc_bh;
+	struct ext4_sb_info *sbi = EXT4_SB(sb);
+	struct buffer_head *bh = sbi->s_fc_bh;
+	int old = 1, new = 0;
 
-	/* Add REQ_FUA | REQ_PREFLUSH only its tail */
-	if (test_opt(sb, BARRIER) && is_tail)
-		write_flags |= REQ_FUA | REQ_PREFLUSH;
+	if (!is_tail) {
+		/*
+		 * This commit has at least 1 non-tail block,
+		 * thus FLUSH is required.
+		 */
+		ext4_fc_mark_needs_flush(sb);
+	} else {
+		/* Use cmpxchg to ensure that no flush requrest is lost. */
+		if (cmpxchg(&sbi->fc_flush_required, old, new))
+			/* Old value was 1, so request a flush. */
+			write_flags |= REQ_PREFLUSH;
+		write_flags |= REQ_FUA;
+	}
+
 	lock_buffer(bh);
 	set_buffer_dirty(bh);
 	set_buffer_uptodate(bh);
@@ -1090,7 +1103,7 @@ static int ext4_fc_perform_commit(journal_t *journal)
 	 * If file system device is different from journal device, issue a cache
 	 * flush before we start writing fast commit blocks.
 	 */
-	if (journal->j_fs_dev != journal->j_dev)
+	if (sbi->fc_flush_required && journal->j_fs_dev != journal->j_dev)
 		blkdev_issue_flush(journal->j_fs_dev);
 
 	blk_start_plug(&plug);
