@@ -865,25 +865,15 @@ void jbd2_journal_wait_updates(journal_t *journal)
 	}
 }
 
-/**
- * jbd2_journal_lock_updates () - establish a transaction barrier.
- * @journal:  Journal to establish a barrier on.
- *
- * This locks out any further updates from being started, and blocks
- * until all existing updates have completed, returning only once the
- * journal is in a quiescent state with no updates running.
- *
- * The journal lock should not be held on entry.
- */
-void jbd2_journal_lock_updates(journal_t *journal)
+static void __jbd2_journal_lock_updates(journal_t *journal, bool wait_on_rsv)
 {
 	jbd2_might_wait_for_commit(journal);
 
 	write_lock(&journal->j_state_lock);
 	++journal->j_barrier_count;
 
-	/* Wait until there are no reserved handles */
-	if (atomic_read(&journal->j_reserved_credits)) {
+	if (wait_on_rsv && atomic_read(&journal->j_reserved_credits)) {
+		/* Wait until there are no reserved handles */
 		write_unlock(&journal->j_state_lock);
 		wait_event(journal->j_wait_reserved,
 			   atomic_read(&journal->j_reserved_credits) == 0);
@@ -902,6 +892,31 @@ void jbd2_journal_lock_updates(journal_t *journal)
 	 * too.
 	 */
 	mutex_lock(&journal->j_barrier);
+}
+
+/**
+ * jbd2_journal_lock_updates () - establish a transaction barrier.
+ * @journal:  Journal to establish a barrier on.
+ *
+ * This locks out any further updates from being started, and blocks
+ * until all existing updates have completed, returning only once the
+ * journal is in a quiescent state with no updates running.
+ *
+ * The journal lock should not be held on entry.
+ */
+void jbd2_journal_lock_updates(journal_t *journal)
+{
+	__jbd2_journal_lock_updates(journal, true);
+}
+
+/**
+ * jbd2_journal_lock_updates_no_rsv - same as above, but doesn't
+ * wait for reserved handles to finish.
+ * @journal: Journal to establish barrier on.
+ */
+void jbd2_journal_lock_updates_no_rsv(journal_t *journal)
+{
+	__jbd2_journal_lock_updates(journal, false);
 }
 
 /**
