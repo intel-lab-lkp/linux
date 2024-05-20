@@ -2519,8 +2519,6 @@ static void btintel_set_dsm_reset_method(struct hci_dev *hdev,
 		RESET_TYPE_VSEC
 	};
 
-	handle = ACPI_HANDLE(GET_HCIDEV_DEV(hdev));
-
 	if (!handle) {
 		bt_dev_dbg(hdev, "No support for bluetooth device in ACPI firmware");
 		return;
