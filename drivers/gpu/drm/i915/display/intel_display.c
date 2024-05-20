@@ -3539,12 +3539,14 @@ static bool transcoder_ddi_func_is_enabled(struct drm_i915_private *dev_priv,
 }
 
 static void enabled_joiner_pipes(struct drm_i915_private *dev_priv,
-				    u8 *master_pipes, u8 *slave_pipes)
+				    u8 *master_pipes, u8 *slave_pipes,
+				    bool *ultrajoiner_used)
 {
 	struct intel_crtc *crtc;
 
 	*master_pipes = 0;
 	*slave_pipes = 0;
+	*ultrajoiner_used = false;
 
 	for_each_intel_crtc_in_pipe_mask(&dev_priv->drm, crtc,
 					 joiner_pipes(dev_priv)) {
@@ -3558,6 +3560,20 @@ static void enabled_joiner_pipes(struct drm_i915_private *dev_priv,
 
 			if (!(tmp & BIG_JOINER_ENABLE))
 				continue;
+
+			if (tmp & ULTRA_JOINER_ENABLE)
+				*ultrajoiner_used = true;
+
+			/*
+			 * As of now we always assume primary master to be PIPE A.
+			 * Otherwise we need a new field in crtc_state to track
+			 * primary master as well.
+			 */
+			drm_WARN(&dev_priv->drm,
+				 (tmp & MASTER_ULTRA_JOINER_ENABLE) && crtc->pipe != PIPE_A,
+				 "Ultrajoiner primary master isn't PIPE A(pipe %c)",
+				 pipe_name(crtc->pipe));
+
 
 			if (tmp & MASTER_BIG_JOINER_ENABLE)
 				*master_pipes |= BIT(pipe);
@@ -3585,7 +3601,8 @@ static void enabled_joiner_pipes(struct drm_i915_private *dev_priv,
 		 *master_pipes, *slave_pipes);
 }
 
-static enum pipe get_joiner_master_pipe(enum pipe pipe, u8 master_pipes, u8 slave_pipes)
+static enum pipe get_joiner_master_pipe(enum pipe pipe, u8 master_pipes,
+					u8 slave_pipes, bool ultrajoiner_used)
 {
 	if ((slave_pipes & BIT(pipe)) == 0)
 		return pipe;
@@ -3593,15 +3610,22 @@ static enum pipe get_joiner_master_pipe(enum pipe pipe, u8 master_pipes, u8 slav
 	/* ignore everything above our pipe */
 	master_pipes &= ~GENMASK(7, pipe);
 
-	/* highest remaining bit should be our master pipe */
-	return fls(master_pipes) - 1;
+	if (!ultrajoiner_used) {
+		/* highest remaining bit should be our master pipe */
+		return fls(master_pipes) - 1;
+	} else {
+		/* lowest remaining bit should be our primary master pipe */
+		return ffs(master_pipes) - 1;
+	}
 }
 
-static u8 get_joiner_slave_pipes(enum pipe pipe, u8 master_pipes, u8 slave_pipes)
+static u8 get_joiner_slave_pipes(enum pipe pipe, u8 master_pipes,
+				 u8 slave_pipes, bool ultrajoiner_used)
 {
 	enum pipe master_pipe, next_master_pipe;
 
-	master_pipe = get_joiner_master_pipe(pipe, master_pipes, slave_pipes);
+	master_pipe = get_joiner_master_pipe(pipe, master_pipes,
+					     slave_pipes, ultrajoiner_used);
 
 	if ((master_pipes & BIT(master_pipe)) == 0)
 		return 0;
@@ -3613,7 +3637,10 @@ static u8 get_joiner_slave_pipes(enum pipe pipe, u8 master_pipes, u8 slave_pipes
 	/* lowest remaining bit should be the next master pipe */
 	next_master_pipe = ffs(master_pipes) - 1;
 
-	return slave_pipes & GENMASK(next_master_pipe - 1, master_pipe);
+	if (!ultrajoiner_used)
+		return slave_pipes & GENMASK(next_master_pipe - 1, master_pipe);
+	else
+		return (slave_pipes | master_pipes) & ~BIT(master_pipe);
 }
 
 static u8 hsw_panel_transcoders(struct drm_i915_private *i915)
@@ -3634,6 +3661,7 @@ static u8 hsw_enabled_transcoders(struct intel_crtc *crtc)
 	enum transcoder cpu_transcoder;
 	u8 master_pipes, slave_pipes;
 	u8 enabled_transcoders = 0;
+	bool ultrajoiner_used;
 
 	/*
 	 * XXX: Do intel_display_power_get_if_enabled before reading this (for
@@ -3684,10 +3712,11 @@ static u8 hsw_enabled_transcoders(struct intel_crtc *crtc)
 		enabled_transcoders |= BIT(cpu_transcoder);
 
 	/* joiner slave -> consider the master pipe's transcoder as well */
-	enabled_joiner_pipes(dev_priv, &master_pipes, &slave_pipes);
+	enabled_joiner_pipes(dev_priv, &master_pipes, &slave_pipes, &ultrajoiner_used);
 	if (slave_pipes & BIT(crtc->pipe)) {
 		cpu_transcoder = (enum transcoder)
-			get_joiner_master_pipe(crtc->pipe, master_pipes, slave_pipes);
+			get_joiner_master_pipe(crtc->pipe, master_pipes,
+					       slave_pipes, ultrajoiner_used);
 		if (transcoder_ddi_func_is_enabled(dev_priv, cpu_transcoder))
 			enabled_transcoders |= BIT(cpu_transcoder);
 	}
@@ -3818,15 +3847,18 @@ static void intel_joiner_get_config(struct intel_crtc_state *crtc_state)
 	struct drm_i915_private *i915 = to_i915(crtc->base.dev);
 	u8 master_pipes, slave_pipes;
 	enum pipe pipe = crtc->pipe;
+	bool ultrajoiner_used;
 
-	enabled_joiner_pipes(i915, &master_pipes, &slave_pipes);
+	enabled_joiner_pipes(i915, &master_pipes, &slave_pipes, &ultrajoiner_used);
 
 	if (((master_pipes | slave_pipes) & BIT(pipe)) == 0)
 		return;
 
 	crtc_state->joiner_pipes =
-		BIT(get_joiner_master_pipe(pipe, master_pipes, slave_pipes)) |
-		get_joiner_slave_pipes(pipe, master_pipes, slave_pipes);
+		BIT(get_joiner_master_pipe(pipe, master_pipes,
+					   slave_pipes, ultrajoiner_used)) |
+			get_joiner_slave_pipes(pipe, master_pipes,
+					       slave_pipes, ultrajoiner_used);
 }
 
 static bool hsw_get_pipe_config(struct intel_crtc *crtc,
