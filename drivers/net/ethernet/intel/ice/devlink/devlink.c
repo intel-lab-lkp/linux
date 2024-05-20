@@ -1477,8 +1477,14 @@ int ice_devlink_register_params(struct ice_pf *pf)
 
 void ice_devlink_unregister_params(struct ice_pf *pf)
 {
+	size_t params_size = ARRAY_SIZE(ice_devlink_params);
+	struct ice_hw *hw = &pf->hw;
+
+	if (!hw->func_caps.common_cap.tx_sched_topo_comp_mode_en)
+		params_size--;
+
 	devl_params_unregister(priv_to_devlink(pf), ice_devlink_params,
-			       ARRAY_SIZE(ice_devlink_params));
+			       params_size);
 }
 
 #define ICE_DEVLINK_READ_BLK_SIZE (1024 * 1024)
