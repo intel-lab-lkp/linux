@@ -32,6 +32,8 @@ mod build_assert;
 pub mod device;
 pub mod devres;
 pub mod driver;
+#[cfg(CONFIG_DRM = "y")]
+pub mod drm;
 pub mod error;
 pub mod init;
 pub mod ioctl;
