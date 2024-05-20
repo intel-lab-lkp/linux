@@ -291,7 +291,7 @@ static void teo_update(struct cpuidle_driver *drv, struct cpuidle_device *dev)
 		cpu_data->next_recent_idx = 0;
 
 	if (cpu_data->recent_idx[i] >= 0)
-		cpu_data->state_bins[cpu_data->recent_idx[i]].recent--;
+		cpu_data->state_bins[cpu_data->recent_idx[i]].recent = 0;
 
 	/*
 	 * If the deepest state's target residency is below the tick length,
