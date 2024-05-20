@@ -35,6 +35,7 @@ pub mod driver;
 #[cfg(CONFIG_DRM = "y")]
 pub mod drm;
 pub mod error;
+pub mod firmware;
 pub mod init;
 pub mod ioctl;
 #[cfg(CONFIG_KUNIT)]
