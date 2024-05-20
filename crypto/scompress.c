@@ -42,15 +42,10 @@ static inline struct crypto_scomp *__crypto_scomp_cast(struct crypto_tfm *tfm)
 	return container_of(tfm, struct crypto_scomp, base);
 }
 
-static int scomp_no_setparam(struct crypto_scomp *tfm, const u8 *param,
-			     unsigned int len)
+int scomp_no_setparam(struct crypto_scomp *tfm, const u8 *param,
+		      unsigned int len)
 {
 	return -ENOSYS;
-}
-
-static bool crypto_scomp_alg_has_setparam(struct scomp_alg *alg)
-{
-	return alg->setparam != scomp_no_setparam;
 }
 
 static bool crypto_scomp_alg_needs_param(struct scomp_alg *alg)

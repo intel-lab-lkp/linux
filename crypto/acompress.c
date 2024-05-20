@@ -33,6 +33,55 @@ static inline struct acomp_alg *crypto_acomp_alg(struct crypto_acomp *tfm)
 	return __crypto_acomp_alg(crypto_acomp_tfm(tfm)->__crt_alg);
 }
 
+static int acomp_no_setparam(struct crypto_acomp *tfm, const u8 *param,
+			    unsigned int len)
+{
+	return -ENOSYS;
+}
+
+static int acomp_set_need_param(struct crypto_acomp *tfm,
+				 struct acomp_alg *alg)
+{
+	if (alg->calg.base.cra_type != &crypto_acomp_type) {
+		struct crypto_scomp **ctx = acomp_tfm_ctx(tfm);
+		struct crypto_scomp *scomp = *ctx;
+
+		if (!crypto_scomp_alg_has_setparam(crypto_scomp_alg(scomp)))
+			return 0;
+	} else if (alg->setparam == acomp_no_setparam)
+		return 0;
+
+	if ((alg->base.cra_flags & CRYPTO_ALG_OPTIONAL_KEY))
+		crypto_acomp_set_flags(tfm, CRYPTO_TFM_NEED_KEY);
+
+	return 0;
+}
+
+int crypto_acomp_setparam(struct crypto_acomp *tfm, const u8 *param,
+			  unsigned int len)
+{
+	struct acomp_alg *alg = crypto_acomp_alg(tfm);
+	int err;
+
+	if (alg->calg.base.cra_type == &crypto_acomp_type)
+		err = alg->setparam(tfm, param, len);
+	else {
+		struct crypto_scomp **ctx = acomp_tfm_ctx(tfm);
+		struct crypto_scomp *scomp = *ctx;
+
+		err = crypto_scomp_setparam(scomp, param, len);
+	}
+
+	if (unlikely(err)) {
+		acomp_set_need_param(tfm, alg);
+		return err;
+	}
+
+	crypto_acomp_clear_flags(tfm, CRYPTO_TFM_NEED_KEY);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(crypto_acomp_setparam);
+
 static int __maybe_unused crypto_acomp_report(
 	struct sk_buff *skb, struct crypto_alg *alg)
 {
@@ -66,8 +115,9 @@ static int crypto_acomp_init_tfm(struct crypto_tfm *tfm)
 	struct crypto_acomp *acomp = __crypto_acomp_tfm(tfm);
 	struct acomp_alg *alg = crypto_acomp_alg(acomp);
 
-	if (tfm->__crt_alg->cra_type != &crypto_acomp_type)
-		return crypto_init_scomp_ops_async(tfm);
+	if (alg->calg.base.cra_type != &crypto_acomp_type)
+		return crypto_init_scomp_ops_async(tfm) ?:
+		       acomp_set_need_param(acomp, alg);
 
 	acomp->compress = alg->compress;
 	acomp->decompress = alg->decompress;
@@ -77,10 +127,8 @@ static int crypto_acomp_init_tfm(struct crypto_tfm *tfm)
 	if (alg->exit)
 		acomp->base.exit = crypto_acomp_exit_tfm;
 
-	if (alg->init)
-		return alg->init(acomp);
-
-	return 0;
+	return (alg->init ? alg->init(acomp) : 0) ?:
+	       acomp_set_need_param(acomp, alg);
 }
 
 static unsigned int crypto_acomp_extsize(struct crypto_alg *alg)
@@ -160,11 +208,19 @@ void comp_prepare_alg(struct comp_alg_common *alg)
 	base->cra_flags &= ~CRYPTO_ALG_TYPE_MASK;
 }
 
+static void acomp_prepare_alg(struct acomp_alg *alg)
+{
+	comp_prepare_alg(&alg->calg);
+
+	if (!alg->setparam)
+		alg->setparam = acomp_no_setparam;
+}
+
 int crypto_register_acomp(struct acomp_alg *alg)
 {
 	struct crypto_alg *base = &alg->calg.base;
 
-	comp_prepare_alg(&alg->calg);
+	acomp_prepare_alg(alg);
 
 	base->cra_type = &crypto_acomp_type;
 	base->cra_flags |= CRYPTO_ALG_TYPE_ACOMPRESS;

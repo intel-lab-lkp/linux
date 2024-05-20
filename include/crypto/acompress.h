@@ -125,6 +125,21 @@ static inline struct comp_alg_common *crypto_comp_alg_common(
 	return __crypto_comp_alg_common(crypto_acomp_tfm(tfm)->__crt_alg);
 }
 
+static inline u32 crypto_acomp_get_flags(struct crypto_acomp *tfm)
+{
+	return crypto_tfm_get_flags(crypto_acomp_tfm(tfm));
+}
+
+static inline void crypto_acomp_set_flags(struct crypto_acomp *tfm, u32 flags)
+{
+	crypto_tfm_set_flags(crypto_acomp_tfm(tfm), flags);
+}
+
+static inline void crypto_acomp_clear_flags(struct crypto_acomp *tfm, u32 flags)
+{
+	crypto_tfm_clear_flags(crypto_acomp_tfm(tfm), flags);
+}
+
 static inline unsigned int crypto_acomp_reqsize(struct crypto_acomp *tfm)
 {
 	return tfm->reqsize;
@@ -248,7 +263,12 @@ static inline void acomp_request_set_params(struct acomp_req *req,
  */
 static inline int crypto_acomp_compress(struct acomp_req *req)
 {
-	return crypto_acomp_reqtfm(req)->compress(req);
+	struct crypto_acomp *tfm = crypto_acomp_reqtfm(req);
+
+	if (crypto_acomp_get_flags(tfm) & CRYPTO_TFM_NEED_KEY)
+		return -ENOKEY;
+
+	return tfm->compress(req);
 }
 
 /**
@@ -262,7 +282,15 @@ static inline int crypto_acomp_compress(struct acomp_req *req)
  */
 static inline int crypto_acomp_decompress(struct acomp_req *req)
 {
-	return crypto_acomp_reqtfm(req)->decompress(req);
+	struct crypto_acomp *tfm = crypto_acomp_reqtfm(req);
+
+	if (crypto_acomp_get_flags(tfm) & CRYPTO_TFM_NEED_KEY)
+		return -ENOKEY;
+
+	return tfm->decompress(req);
 }
+
+int crypto_acomp_setparam(struct crypto_acomp *tfm,
+			  const u8 *param, unsigned int len);
 
 #endif
