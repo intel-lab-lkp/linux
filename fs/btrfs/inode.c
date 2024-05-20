@@ -890,6 +890,32 @@ static inline void inode_should_defrag(struct btrfs_inode *inode,
 		btrfs_add_inode_defrag(NULL, inode, small_write);
 }
 
+static int extent_range_clear_dirty_for_io(struct inode *inode, u64 start, u64 end)
+{
+	struct btrfs_fs_info *fs_info = inode_to_fs_info(inode);
+	const u64 len = end + 1 - start;
+	unsigned long end_index = end >> PAGE_SHIFT;
+	bool missing_folio = false;
+
+	/* We should not have such large range. */
+	ASSERT(len < U32_MAX);
+	for (unsigned long index = start >> PAGE_SHIFT;
+	     index <= end_index; index++) {
+		struct folio *folio;
+
+		folio = filemap_get_folio(inode->i_mapping, index);
+		if (IS_ERR(folio)) {
+			missing_folio = true;
+			continue;
+		}
+		btrfs_folio_clamp_clear_dirty(fs_info, folio, start, len);
+		folio_put(folio);
+	}
+	if (missing_folio)
+		return -ENOENT;
+	return 0;
+}
+
 /*
  * Work queue call back to started compression on a file and pages.
  *
@@ -931,7 +957,10 @@ static void compress_file_range(struct btrfs_work *work)
 	 * Otherwise applications with the file mmap'd can wander in and change
 	 * the page contents while we are compressing them.
 	 */
-	extent_range_clear_dirty_for_io(&inode->vfs_inode, start, end);
+	ret = extent_range_clear_dirty_for_io(&inode->vfs_inode, start, end);
+
+	/* We have locked all the involved pagse, shouldn't hit a missing page. */
+	ASSERT(ret == 0);
 
 	/*
 	 * We need to save i_size before now because it could change in between
