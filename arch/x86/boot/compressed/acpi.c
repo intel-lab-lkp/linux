@@ -17,9 +17,9 @@
 
 /*
  * Immovable memory regions representation. Max amount of memory regions is
- * MAX_NUMNODES*2.
+ * MAX_NUMNODES*4.
  */
-struct mem_vector immovable_mem[MAX_NUMNODES*2];
+struct mem_vector immovable_mem[MAX_NUMNODES*4];
 
 static acpi_physical_address
 __efi_get_rsdp_addr(unsigned long cfg_tbl_pa, unsigned int cfg_tbl_len)
@@ -305,7 +305,7 @@ int count_immovable_mem_regions(void)
 				num++;
 			}
 
-			if (num >= MAX_NUMNODES*2) {
+			if (num >= ARRAY_SIZE(immovable_mem)) {
 				debug_putstr("Too many immovable memory regions, aborting.\n");
 				return 0;
 			}
