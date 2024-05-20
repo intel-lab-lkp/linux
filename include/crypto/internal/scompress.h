@@ -27,6 +27,7 @@ struct crypto_scomp {
  * @free_ctx:	Function frees context allocated with alloc_ctx
  * @compress:	Function performs a compress operation
  * @decompress:	Function performs a de-compress operation
+ * @setparam:	Set parameters of the algorithm (e.g., compression level)
  * @base:	Common crypto API algorithm data structure
  * @calg:	Cmonn algorithm data structure shared with acomp
  */
@@ -39,6 +40,8 @@ struct scomp_alg {
 	int (*decompress)(struct crypto_scomp *tfm, const u8 *src,
 			  unsigned int slen, u8 *dst, unsigned int *dlen,
 			  void *ctx);
+	int (*setparam)(struct crypto_scomp *tfm, const u8 *param,
+			unsigned int len);
 
 	union {
 		struct COMP_ALG_COMMON;
@@ -71,6 +74,21 @@ static inline struct scomp_alg *crypto_scomp_alg(struct crypto_scomp *tfm)
 	return __crypto_scomp_alg(crypto_scomp_tfm(tfm)->__crt_alg);
 }
 
+static inline u32 crypto_scomp_get_flags(struct crypto_scomp *tfm)
+{
+	return crypto_tfm_get_flags(crypto_scomp_tfm(tfm));
+}
+
+static inline void crypto_scomp_set_flags(struct crypto_scomp *tfm, u32 flags)
+{
+	crypto_tfm_set_flags(crypto_scomp_tfm(tfm), flags);
+}
+
+static inline void crypto_scomp_clear_flags(struct crypto_scomp *tfm, u32 flags)
+{
+	crypto_tfm_clear_flags(crypto_scomp_tfm(tfm), flags);
+}
+
 static inline void *crypto_scomp_alloc_ctx(struct crypto_scomp *tfm)
 {
 	return crypto_scomp_alg(tfm)->alloc_ctx(tfm);
@@ -82,10 +100,16 @@ static inline void crypto_scomp_free_ctx(struct crypto_scomp *tfm,
 	return crypto_scomp_alg(tfm)->free_ctx(tfm, ctx);
 }
 
+int crypto_scomp_setparam(struct crypto_scomp *tfm, const u8 *param,
+			  unsigned int len);
+
 static inline int crypto_scomp_compress(struct crypto_scomp *tfm,
 					const u8 *src, unsigned int slen,
 					u8 *dst, unsigned int *dlen, void *ctx)
 {
+	if (crypto_scomp_get_flags(tfm) & CRYPTO_TFM_NEED_KEY)
+		return -ENOKEY;
+
 	return crypto_scomp_alg(tfm)->compress(tfm, src, slen, dst, dlen, ctx);
 }
 
@@ -94,6 +118,9 @@ static inline int crypto_scomp_decompress(struct crypto_scomp *tfm,
 					  u8 *dst, unsigned int *dlen,
 					  void *ctx)
 {
+	if (crypto_scomp_get_flags(tfm) & CRYPTO_TFM_NEED_KEY)
+		return -ENOKEY;
+
 	return crypto_scomp_alg(tfm)->decompress(tfm, src, slen, dst, dlen,
 						 ctx);
 }

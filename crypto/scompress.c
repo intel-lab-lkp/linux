@@ -37,6 +37,51 @@ static const struct crypto_type crypto_scomp_type;
 static int scomp_scratch_users;
 static DEFINE_MUTEX(scomp_lock);
 
+static inline struct crypto_scomp *__crypto_scomp_cast(struct crypto_tfm *tfm)
+{
+	return container_of(tfm, struct crypto_scomp, base);
+}
+
+static int scomp_no_setparam(struct crypto_scomp *tfm, const u8 *param,
+			     unsigned int len)
+{
+	return -ENOSYS;
+}
+
+static bool crypto_scomp_alg_has_setparam(struct scomp_alg *alg)
+{
+	return alg->setparam != scomp_no_setparam;
+}
+
+static bool crypto_scomp_alg_needs_param(struct scomp_alg *alg)
+{
+	return crypto_scomp_alg_has_setparam(alg) &&
+	       !(alg->base.cra_flags & CRYPTO_ALG_OPTIONAL_KEY);
+}
+
+static void scomp_set_need_param(struct crypto_scomp *tfm,
+				 struct scomp_alg *alg)
+{
+	if (crypto_scomp_alg_needs_param(alg))
+		crypto_scomp_set_flags(tfm, CRYPTO_TFM_NEED_KEY);
+}
+
+int crypto_scomp_setparam(struct crypto_scomp *tfm, const u8 *param,
+			  unsigned int len)
+{
+	struct scomp_alg *scomp = crypto_scomp_alg(tfm);
+	int err;
+
+	err = scomp->setparam(tfm, param, len);
+	if (unlikely(err)) {
+		scomp_set_need_param(tfm, scomp);
+		return err;
+	}
+
+	crypto_scomp_clear_flags(tfm, CRYPTO_TFM_NEED_KEY);
+	return 0;
+}
+
 static int __maybe_unused crypto_scomp_report(
 	struct sk_buff *skb, struct crypto_alg *alg)
 {
@@ -100,7 +145,11 @@ error:
 
 static int crypto_scomp_init_tfm(struct crypto_tfm *tfm)
 {
+	struct crypto_scomp *comp = __crypto_scomp_cast(tfm);
+	struct scomp_alg *alg = crypto_scomp_alg(comp);
 	int ret = 0;
+
+	scomp_set_need_param(comp, alg);
 
 	mutex_lock(&scomp_lock);
 	if (!scomp_scratch_users++)
@@ -277,11 +326,19 @@ static const struct crypto_type crypto_scomp_type = {
 	.tfmsize = offsetof(struct crypto_scomp, base),
 };
 
+static void scomp_prepare_alg(struct scomp_alg *alg)
+{
+	comp_prepare_alg(&alg->calg);
+
+	if (!alg->setparam)
+		alg->setparam = scomp_no_setparam;
+}
+
 int crypto_register_scomp(struct scomp_alg *alg)
 {
 	struct crypto_alg *base = &alg->calg.base;
 
-	comp_prepare_alg(&alg->calg);
+	scomp_prepare_alg(alg);
 
 	base->cra_type = &crypto_scomp_type;
 	base->cra_flags |= CRYPTO_ALG_TYPE_SCOMPRESS;
