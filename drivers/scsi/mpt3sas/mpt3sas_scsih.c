@@ -2206,13 +2206,6 @@ _scsih_display_sata_capabilities(struct MPT3SAS_ADAPTER *ioc,
 	    (flags & MPI2_SAS_DEVICE0_FLAGS_SATA_SW_PRESERVE) ? "y" : "n");
 }
 
-/*
- * raid transport support -
- * Enabled for SLES11 and newer, in older kernels the driver will panic when
- * unloading the driver followed by a load - I believe that the subroutine
- * raid_class_release() is not cleaning up properly.
- */
-
 /**
  * scsih_is_raid - return boolean indicating device is raid volume
  * @dev: the device struct object
