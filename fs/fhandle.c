@@ -16,7 +16,8 @@
 
 static long do_sys_name_to_handle(const struct path *path,
 				  struct file_handle __user *ufh,
-				  int __user *mnt_id, int fh_flags)
+				  void __user *mnt_id, bool unique_mntid,
+				  int fh_flags)
 {
 	long retval;
 	struct file_handle f_handle;
@@ -69,10 +70,16 @@ static long do_sys_name_to_handle(const struct path *path,
 	} else
 		retval = 0;
 	/* copy the mount id */
-	if (put_user(real_mount(path->mnt)->mnt_id, mnt_id) ||
-	    copy_to_user(ufh, handle,
-			 struct_size(handle, f_handle, handle_bytes)))
-		retval = -EFAULT;
+	if (unique_mntid)
+		retval = put_user(real_mount(path->mnt)->mnt_id_unique,
+				  (u64 __user *) mnt_id);
+	else
+		retval = put_user(real_mount(path->mnt)->mnt_id,
+				  (int __user *) mnt_id);
+	/* copy the handle */
+	if (!retval)
+		retval = copy_to_user(ufh, handle,
+				struct_size(handle, f_handle, handle_bytes));
 	kfree(handle);
 	return retval;
 }
@@ -83,6 +90,7 @@ static long do_sys_name_to_handle(const struct path *path,
  * @name: name that should be converted to handle.
  * @handle: resulting file handle
  * @mnt_id: mount id of the file system containing the file
+ *          (u64 if AT_HANDLE_UNIQUE_MNT_ID, otherwise int)
  * @flag: flag value to indicate whether to follow symlink or not
  *        and whether a decodable file handle is required.
  *
@@ -92,7 +100,7 @@ static long do_sys_name_to_handle(const struct path *path,
  * value required.
  */
 SYSCALL_DEFINE5(name_to_handle_at, int, dfd, const char __user *, name,
-		struct file_handle __user *, handle, int __user *, mnt_id,
+		struct file_handle __user *, handle, void __user *, mnt_id,
 		int, flag)
 {
 	struct path path;
@@ -100,7 +108,8 @@ SYSCALL_DEFINE5(name_to_handle_at, int, dfd, const char __user *, name,
 	int fh_flags;
 	int err;
 
-	if (flag & ~(AT_SYMLINK_FOLLOW | AT_EMPTY_PATH | AT_HANDLE_FID))
+	if (flag & ~(AT_SYMLINK_FOLLOW | AT_EMPTY_PATH | AT_HANDLE_FID |
+		     AT_HANDLE_UNIQUE_MNT_ID))
 		return -EINVAL;
 
 	lookup_flags = (flag & AT_SYMLINK_FOLLOW) ? LOOKUP_FOLLOW : 0;
@@ -109,7 +118,9 @@ SYSCALL_DEFINE5(name_to_handle_at, int, dfd, const char __user *, name,
 		lookup_flags |= LOOKUP_EMPTY;
 	err = user_path_at(dfd, name, lookup_flags, &path);
 	if (!err) {
-		err = do_sys_name_to_handle(&path, handle, mnt_id, fh_flags);
+		err = do_sys_name_to_handle(&path, handle, mnt_id,
+					    flag & AT_HANDLE_UNIQUE_MNT_ID,
+					    fh_flags);
 		path_put(&path);
 	}
 	return err;
