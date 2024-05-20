@@ -673,6 +673,22 @@ out:
 		return count;
 	}
 
+	if (!strcmp(a->attr.name, "atgc_age_threshold")) {
+		if (t < 0)
+			return -EINVAL;
+		sbi->am.age_threshold = t;
+		if (sbi->am.atgc_enabled)
+			return count;
+
+		if (test_opt(sbi, ATGC) &&
+			le64_to_cpu(sbi->ckpt->elapsed_time) >= t) {
+			if (f2fs_init_atgc_curseg(sbi))
+				return -EINVAL;
+			sbi->am.atgc_enabled = true;
+		}
+		return count;
+	}
+
 	if (!strcmp(a->attr.name, "gc_segment_mode")) {
 		if (t < MAX_GC_MODE)
 			sbi->gc_segment_mode = t;
