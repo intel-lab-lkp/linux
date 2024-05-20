@@ -47,9 +47,6 @@
  * TODO
  * ====
  *
- * - To speed up resends, keep a bitmap of "resend" set bits in the
- *   ICS
- *
  * - Speed up server# -> ICP lookup (array ? hash table ?)
  *
  * - Make ICS lockless as well, or at least a per-interrupt lock or hashed
@@ -125,15 +122,17 @@ static int ics_deliver_irq(struct kvmppc_xics *xics, u32 irq, u32 level)
 static void ics_check_resend(struct kvmppc_xics *xics, struct kvmppc_ics *ics,
 			     struct kvmppc_icp *icp)
 {
-	int i;
+	u32 irq;
+	struct ics_irq_state *state;
 
-	for (i = 0; i < KVMPPC_XICS_IRQ_PER_ICS; i++) {
-		struct ics_irq_state *state = &ics->irq_state[i];
-		if (state->resend) {
-			XICS_DBG("resend %#x prio %#x\n", state->number,
-				      state->priority);
-			icp_deliver_irq(xics, icp, state->number, true);
-		}
+	for_each_set_bit(irq, ics->resend_map, KVMPPC_XICS_IRQ_PER_ICS) {
+		state = &ics->irq_state[irq];
+
+		if (!test_and_clear_bit(irq, ics->resend_map))
+			continue;
+		if (!state)
+			continue;
+		icp_deliver_irq(xics, icp, state->number, true);
 	}
 }
 
@@ -489,6 +488,7 @@ static void icp_deliver_irq(struct kvmppc_xics *xics, struct kvmppc_icp *icp,
 		 */
 		smp_wmb();
 		set_bit(ics->icsid, icp->resend_map);
+		set_bit(src, ics->resend_map);
 
 		/*
 		 * If the need_resend flag got cleared in the ICP some time
