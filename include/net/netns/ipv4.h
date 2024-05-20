@@ -113,6 +113,7 @@ struct netns_ipv4 {
 	u8 sysctl_icmp_echo_ignore_broadcasts;
 	u8 sysctl_icmp_ignore_bogus_error_responses;
 	u8 sysctl_icmp_errors_use_inbound_ifaddr;
+	u8 sysctl_icmp_timestamp_ignore_all;
 	int sysctl_icmp_ratelimit;
 	int sysctl_icmp_ratemask;
 
