@@ -113,7 +113,7 @@ pub struct AllocOps {
 }
 
 /// Trait for memory manager implementations. Implemented internally.
-pub trait AllocImpl: Sealed {
+pub trait AllocImpl: Sealed + drm::gem::IntoGEMObject {
     /// The C callback operations for this memory manager.
     const ALLOC_OPS: AllocOps;
 }
@@ -243,7 +243,7 @@ impl<T: Driver> Registration<T> {
             drm: drm::device::Device::new(parent, &vtable)?,
             registered: false,
             vtable,
-            fops: Default::default(), // TODO: GEM abstraction
+            fops: drm::gem::create_fops(),
             _pin: PhantomPinned,
             _p: PhantomData,
         })
