@@ -322,7 +322,7 @@ static u16 vdpasim_get_vq_size(struct vdpa_device *vdpa, u16 idx)
 		return VDPASIM_QUEUE_MAX;
 }
 
-static void vdpasim_kick_vq(struct vdpa_device *vdpa, u16 idx)
+static void vdpasim_do_kick_vq(struct vdpa_device *vdpa, u16 idx)
 {
 	struct vdpasim *vdpasim = vdpa_to_sim(vdpa);
 	struct vdpasim_virtqueue *vq = &vdpasim->vqs[idx];
@@ -335,6 +335,15 @@ static void vdpasim_kick_vq(struct vdpa_device *vdpa, u16 idx)
 
 	if (vq->ready)
 		vdpasim_schedule_work(vdpasim);
+}
+
+static void vdpasim_kick_vq(struct vdpa_device *vdpa, u16 idx)
+{
+	struct vdpasim *vdpasim = vdpa_to_sim(vdpa);
+
+	spin_lock(&vdpasim->kick_lock);
+	vdpasim_do_kick_vq(vdpa, idx);
+	spin_unlock(&vdpasim->kick_lock);
 }
 
 static void vdpasim_set_vq_cb(struct vdpa_device *vdpa, u16 idx,
@@ -520,8 +529,11 @@ static int vdpasim_suspend(struct vdpa_device *vdpa)
 	struct vdpasim *vdpasim = vdpa_to_sim(vdpa);
 
 	mutex_lock(&vdpasim->mutex);
+	spin_lock(&vdpasim->kick_lock);
 	vdpasim->running = false;
+	spin_unlock(&vdpasim->kick_lock);
 	mutex_unlock(&vdpasim->mutex);
+	kthread_flush_work(&vdpasim->work);
 
 	return 0;
 }
@@ -537,7 +549,7 @@ static int vdpasim_resume(struct vdpa_device *vdpa)
 	if (vdpasim->pending_kick) {
 		/* Process pending descriptors */
 		for (i = 0; i < vdpasim->dev_attr.nvqs; ++i)
-			vdpasim_kick_vq(vdpa, i);
+			vdpasim_do_kick_vq(vdpa, i);
 
 		vdpasim->pending_kick = false;
 	}

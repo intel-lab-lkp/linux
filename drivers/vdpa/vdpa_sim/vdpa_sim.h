@@ -75,6 +75,7 @@ struct vdpasim {
 	bool pending_kick;
 	/* spinlock to synchronize iommu table */
 	spinlock_t iommu_lock;
+	spinlock_t kick_lock;
 };
 
 struct vdpasim *vdpasim_create(struct vdpasim_dev_attr *attr,
