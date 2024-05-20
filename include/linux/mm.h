@@ -1312,6 +1312,7 @@ static inline struct folio *virt_to_folio(const void *x)
 }
 
 void __folio_put(struct folio *folio);
+void __folio_put_ugen(struct folio *folio, unsigned short int ugen);
 
 void put_pages_list(struct list_head *pages);
 
@@ -1507,6 +1508,27 @@ static inline void folio_put(struct folio *folio)
 {
 	if (folio_put_testzero(folio))
 		__folio_put(folio);
+}
+
+/**
+ * folio_put_ugen - Decrement the last reference count on a folio.
+ * @folio: The folio.
+ * @ugen: The unmap generation # of TLB flush that the folio requires.
+ *
+ * The folio's reference count should be one since the only user, folio
+ * migration code, calls folio_put_ugen() only when the folio has no
+ * reference else.  The memory will be released back to the page
+ * allocator and may be used by another allocation immediately.  Do not
+ * access the memory or the struct folio after calling folio_put_ugen().
+ *
+ * Context: May be called in process or interrupt context, but not in NMI
+ * context.  May be called while holding a spinlock.
+ */
+static inline void folio_put_ugen(struct folio *folio, unsigned short int ugen)
+{
+	if (WARN_ON(!folio_put_testzero(folio)))
+		return;
+	__folio_put_ugen(folio, ugen);
 }
 
 /**

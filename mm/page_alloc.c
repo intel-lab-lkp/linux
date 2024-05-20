@@ -696,6 +696,7 @@ static inline void __del_page_from_free_list(struct page *page, struct zone *zon
 	if (page_reported(page))
 		__ClearPageReported(page);
 
+	update_task_ugen(page_buddy_ugen(page));
 	list_del(&page->buddy_list);
 	__ClearPageBuddy(page);
 	set_page_private(page, 0);
@@ -768,7 +769,7 @@ buddy_merge_likely(unsigned long pfn, unsigned long buddy_pfn,
 static inline void __free_one_page(struct page *page,
 		unsigned long pfn,
 		struct zone *zone, unsigned int order,
-		int migratetype, fpi_t fpi_flags)
+		int migratetype, fpi_t fpi_flags, unsigned short int ugen)
 {
 	struct capture_control *capc = task_capc(zone);
 	unsigned long buddy_pfn = 0;
@@ -783,12 +784,22 @@ static inline void __free_one_page(struct page *page,
 	VM_BUG_ON_PAGE(pfn & ((1 << order) - 1), page);
 	VM_BUG_ON_PAGE(bad_range(zone, page), page);
 
+	/*
+	 * Ensure private is zero before using it inside buddy.
+	 */
+	set_page_private(page, 0);
+
 	account_freepages(zone, 1 << order, migratetype);
 
 	while (order < MAX_PAGE_ORDER) {
 		int buddy_mt = migratetype;
 
 		if (compaction_capture(capc, page, order, migratetype)) {
+			/*
+			 * Capturer will check_flush_task_ugen() through
+			 * prep_new_page().
+			 */
+			update_task_ugen(ugen);
 			account_freepages(zone, -(1 << order), migratetype);
 			return;
 		}
@@ -819,6 +830,11 @@ static inline void __free_one_page(struct page *page,
 		if (page_is_guard(buddy))
 			clear_page_guard(zone, buddy, order);
 		else
+			/*
+			 * __del_page_from_free_list() updates current's
+			 * ugen that pairs with hand_over_task_ugen() below
+			 * in this funtion.
+			 */
 			__del_page_from_free_list(buddy, zone, order, buddy_mt);
 
 		if (unlikely(buddy_mt != migratetype)) {
@@ -837,7 +853,8 @@ static inline void __free_one_page(struct page *page,
 	}
 
 done_merging:
-	set_buddy_order_ugen(page, order, 0);
+	ugen = ugen_latest(ugen, hand_over_task_ugen());
+	set_buddy_order_ugen(page, order, ugen);
 
 	if (fpi_flags & FPI_TO_TAIL)
 		to_tail = true;
@@ -1048,6 +1065,11 @@ __always_inline bool free_pages_prepare(struct page *page,
 
 	VM_BUG_ON_PAGE(PageTail(page), page);
 
+	/*
+	 * Ensure private is zero before using it inside pcp.
+	 */
+	set_page_private(page, 0);
+
 	trace_mm_page_free(page, order);
 	kmsan_free_page(page, order);
 
@@ -1179,17 +1201,23 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 		do {
 			unsigned long pfn;
 			int mt;
+			unsigned short int ugen;
 
 			page = list_last_entry(list, struct page, pcp_list);
 			pfn = page_to_pfn(page);
 			mt = get_pfnblock_migratetype(page, pfn);
+
+			/*
+			 * pcp uses private to store ugen.
+			 */
+			ugen = page_private(page);
 
 			/* must delete to avoid corrupting pcp list */
 			list_del(&page->pcp_list);
 			count -= nr_pages;
 			pcp->count -= nr_pages;
 
-			__free_one_page(page, pfn, zone, order, mt, FPI_NONE);
+			__free_one_page(page, pfn, zone, order, mt, FPI_NONE, ugen);
 			trace_mm_page_pcpu_drain(page, order, mt);
 		} while (count > 0 && !list_empty(list));
 	}
@@ -1199,14 +1227,14 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 
 static void free_one_page(struct zone *zone, struct page *page,
 			  unsigned long pfn, unsigned int order,
-			  fpi_t fpi_flags)
+			  fpi_t fpi_flags, unsigned short int ugen)
 {
 	unsigned long flags;
 	int migratetype;
 
 	spin_lock_irqsave(&zone->lock, flags);
 	migratetype = get_pfnblock_migratetype(page, pfn);
-	__free_one_page(page, pfn, zone, order, migratetype, fpi_flags);
+	__free_one_page(page, pfn, zone, order, migratetype, fpi_flags, ugen);
 	spin_unlock_irqrestore(&zone->lock, flags);
 }
 
@@ -1219,7 +1247,7 @@ static void __free_pages_ok(struct page *page, unsigned int order,
 	if (!free_pages_prepare(page, order))
 		return;
 
-	free_one_page(zone, page, pfn, order, fpi_flags);
+	free_one_page(zone, page, pfn, order, fpi_flags, 0);
 
 	__count_vm_events(PGFREE, 1 << order);
 }
@@ -1484,6 +1512,10 @@ inline void post_alloc_hook(struct page *page, unsigned int order,
 static void prep_new_page(struct page *page, unsigned int order, gfp_t gfp_flags,
 							unsigned int alloc_flags)
 {
+	/*
+	 * Check and flush before using the pages.
+	 */
+	check_flush_task_ugen();
 	post_alloc_hook(page, order, gfp_flags);
 
 	if (order && (gfp_flags & __GFP_COMP))
@@ -1519,6 +1551,10 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 		page = get_page_from_free_area(area, migratetype);
 		if (!page)
 			continue;
+		/*
+		 * del_page_from_free_list() updates current's ugen that
+		 * pairs with check_flush_task_ugen() in prep_new_page().
+		 */
 		del_page_from_free_list(page, zone, current_order, migratetype);
 		expand(zone, page, order, current_order, migratetype);
 		trace_mm_page_alloc_zone_locked(page, order, migratetype,
@@ -1681,7 +1717,8 @@ static unsigned long find_large_buddy(unsigned long start_pfn)
 
 /* Split a multi-block free page into its individual pageblocks */
 static void split_large_buddy(struct zone *zone, struct page *page,
-			      unsigned long pfn, int order)
+			      unsigned long pfn, int order,
+			      unsigned short int ugen)
 {
 	unsigned long end_pfn = pfn + (1 << order);
 
@@ -1694,7 +1731,7 @@ static void split_large_buddy(struct zone *zone, struct page *page,
 	while (pfn != end_pfn) {
 		int mt = get_pfnblock_migratetype(page, pfn);
 
-		__free_one_page(page, pfn, zone, pageblock_order, mt, FPI_NONE);
+		__free_one_page(page, pfn, zone, pageblock_order, mt, FPI_NONE, ugen);
 		pfn += pageblock_nr_pages;
 		page = pfn_to_page(pfn);
 	}
@@ -1736,22 +1773,34 @@ bool move_freepages_block_isolate(struct zone *zone, struct page *page,
 	if (pfn != start_pfn) {
 		struct page *buddy = pfn_to_page(pfn);
 		int order = buddy_order(buddy);
+		unsigned short int ugen;
 
+		/*
+		 * del_page_from_free_list() updates current's ugen that
+		 * pairs with the following hand_over_task_ugen().
+		 */
 		del_page_from_free_list(buddy, zone, order,
 					get_pfnblock_migratetype(buddy, pfn));
+		ugen = hand_over_task_ugen();
 		set_pageblock_migratetype(page, migratetype);
-		split_large_buddy(zone, buddy, pfn, order);
+		split_large_buddy(zone, buddy, pfn, order, ugen);
 		return true;
 	}
 
 	/* We're the starting block of a larger buddy */
 	if (PageBuddy(page) && buddy_order(page) > pageblock_order) {
 		int order = buddy_order(page);
+		unsigned short int ugen;
 
+		/*
+		 * del_page_from_free_list() updates current's ugen that
+		 * pairs with the following hand_over_task_ugen().
+		 */
 		del_page_from_free_list(page, zone, order,
 					get_pfnblock_migratetype(page, pfn));
+		ugen = hand_over_task_ugen();
 		set_pageblock_migratetype(page, migratetype);
-		split_large_buddy(zone, page, pfn, order);
+		split_large_buddy(zone, page, pfn, order, ugen);
 		return true;
 	}
 move:
@@ -1871,6 +1920,10 @@ steal_suitable_fallback(struct zone *zone, struct page *page,
 
 	/* Take ownership for orders >= pageblock_order */
 	if (current_order >= pageblock_order) {
+		/*
+		 * del_page_from_free_list() updates current's ugen that
+		 * pairs with check_flush_task_ugen() in prep_new_page().
+		 */
 		del_page_from_free_list(page, zone, current_order, block_type);
 		change_pageblock_range(page, current_order, start_type);
 		expand(zone, page, order, current_order, start_type);
@@ -1926,6 +1979,10 @@ steal_suitable_fallback(struct zone *zone, struct page *page,
 	}
 
 single_page:
+	/*
+	 * del_page_from_free_list() updates current's ugen that pairs
+	 * with check_flush_task_ugen() in prep_new_page().
+	 */
 	del_page_from_free_list(page, zone, current_order, block_type);
 	expand(zone, page, order, current_order, block_type);
 	return page;
@@ -2547,7 +2604,7 @@ static int nr_pcp_high(struct per_cpu_pages *pcp, struct zone *zone,
 
 static void free_unref_page_commit(struct zone *zone, struct per_cpu_pages *pcp,
 				   struct page *page, int migratetype,
-				   unsigned int order)
+				   unsigned int order, unsigned short int ugen)
 {
 	int high, batch;
 	int pindex;
@@ -2561,6 +2618,11 @@ static void free_unref_page_commit(struct zone *zone, struct per_cpu_pages *pcp,
 	pcp->alloc_factor >>= 1;
 	__count_vm_events(PGFREE, 1 << order);
 	pindex = order_to_pindex(migratetype, order);
+
+	/*
+	 * pcp uses private to store ugen.
+	 */
+	set_page_private(page, ugen);
 	list_add(&page->pcp_list, &pcp->lists[pindex]);
 	pcp->count += 1 << order;
 
@@ -2596,7 +2658,8 @@ static void free_unref_page_commit(struct zone *zone, struct per_cpu_pages *pcp,
 /*
  * Free a pcp page
  */
-void free_unref_page(struct page *page, unsigned int order)
+void free_unref_page(struct page *page, unsigned int order,
+		     unsigned short int ugen)
 {
 	unsigned long __maybe_unused UP_flags;
 	struct per_cpu_pages *pcp;
@@ -2622,7 +2685,7 @@ void free_unref_page(struct page *page, unsigned int order)
 	migratetype = get_pfnblock_migratetype(page, pfn);
 	if (unlikely(migratetype >= MIGRATE_PCPTYPES)) {
 		if (unlikely(is_migrate_isolate(migratetype))) {
-			free_one_page(page_zone(page), page, pfn, order, FPI_NONE);
+			free_one_page(page_zone(page), page, pfn, order, FPI_NONE, ugen);
 			return;
 		}
 		migratetype = MIGRATE_MOVABLE;
@@ -2632,10 +2695,10 @@ void free_unref_page(struct page *page, unsigned int order)
 	pcp_trylock_prepare(UP_flags);
 	pcp = pcp_spin_trylock(zone->per_cpu_pageset);
 	if (pcp) {
-		free_unref_page_commit(zone, pcp, page, migratetype, order);
+		free_unref_page_commit(zone, pcp, page, migratetype, order, ugen);
 		pcp_spin_unlock(pcp);
 	} else {
-		free_one_page(zone, page, pfn, order, FPI_NONE);
+		free_one_page(zone, page, pfn, order, FPI_NONE, ugen);
 	}
 	pcp_trylock_finish(UP_flags);
 }
@@ -2666,7 +2729,7 @@ void free_unref_folios(struct folio_batch *folios)
 		 */
 		if (!pcp_allowed_order(order)) {
 			free_one_page(folio_zone(folio), &folio->page,
-				      pfn, order, FPI_NONE);
+				      pfn, order, FPI_NONE, 0);
 			continue;
 		}
 		folio->private = (void *)(unsigned long)order;
@@ -2702,7 +2765,7 @@ void free_unref_folios(struct folio_batch *folios)
 			 */
 			if (is_migrate_isolate(migratetype)) {
 				free_one_page(zone, &folio->page, pfn,
-					      order, FPI_NONE);
+					      order, FPI_NONE, 0);
 				continue;
 			}
 
@@ -2715,7 +2778,7 @@ void free_unref_folios(struct folio_batch *folios)
 			if (unlikely(!pcp)) {
 				pcp_trylock_finish(UP_flags);
 				free_one_page(zone, &folio->page, pfn,
-					      order, FPI_NONE);
+					      order, FPI_NONE, 0);
 				continue;
 			}
 			locked_zone = zone;
@@ -2730,7 +2793,7 @@ void free_unref_folios(struct folio_batch *folios)
 
 		trace_mm_page_free_batched(&folio->page);
 		free_unref_page_commit(zone, pcp, &folio->page, migratetype,
-				order);
+				order, 0);
 	}
 
 	if (pcp) {
@@ -2781,6 +2844,11 @@ int __isolate_free_page(struct page *page, unsigned int order)
 			return 0;
 	}
 
+	/*
+	 * del_page_from_free_list() updates current's ugen. The user of
+	 * the isolated page should check_flush_task_ugen() before using
+	 * it.
+	 */
 	del_page_from_free_list(page, zone, order, mt);
 
 	/*
@@ -2822,7 +2890,7 @@ void __putback_isolated_page(struct page *page, unsigned int order, int mt)
 
 	/* Return isolated page to tail of freelist. */
 	__free_one_page(page, page_to_pfn(page), zone, order, mt,
-			FPI_SKIP_REPORT_NOTIFY | FPI_TO_TAIL);
+			FPI_SKIP_REPORT_NOTIFY | FPI_TO_TAIL, 0);
 }
 
 /*
@@ -2965,6 +3033,11 @@ struct page *__rmqueue_pcplist(struct zone *zone, unsigned int order,
 		}
 
 		page = list_first_entry(list, struct page, pcp_list);
+
+		/*
+		 * Pairs with check_flush_task_ugen() in prep_new_page().
+		 */
+		update_task_ugen(page_private(page));
 		list_del(&page->pcp_list);
 		pcp->count -= 1 << order;
 	} while (check_new_pages(page, order));
@@ -4791,11 +4864,11 @@ void __free_pages(struct page *page, unsigned int order)
 	struct alloc_tag *tag = pgalloc_tag_get(page);
 
 	if (put_page_testzero(page))
-		free_unref_page(page, order);
+		free_unref_page(page, order, 0);
 	else if (!head) {
 		pgalloc_tag_sub_pages(tag, (1 << order) - 1);
 		while (order-- > 0)
-			free_unref_page(page + (1 << order), order);
+			free_unref_page(page + (1 << order), order, 0);
 	}
 }
 EXPORT_SYMBOL(__free_pages);
@@ -4857,7 +4930,7 @@ void __page_frag_cache_drain(struct page *page, unsigned int count)
 	VM_BUG_ON_PAGE(page_ref_count(page) == 0, page);
 
 	if (page_ref_sub_and_test(page, count))
-		free_unref_page(page, compound_order(page));
+		free_unref_page(page, compound_order(page), 0);
 }
 EXPORT_SYMBOL(__page_frag_cache_drain);
 
@@ -4898,7 +4971,7 @@ refill:
 			goto refill;
 
 		if (unlikely(nc->pfmemalloc)) {
-			free_unref_page(page, compound_order(page));
+			free_unref_page(page, compound_order(page), 0);
 			goto refill;
 		}
 
@@ -4942,7 +5015,7 @@ void page_frag_free(void *addr)
 	struct page *page = virt_to_head_page(addr);
 
 	if (unlikely(put_page_testzero(page)))
-		free_unref_page(page, compound_order(page));
+		free_unref_page(page, compound_order(page), 0);
 }
 EXPORT_SYMBOL(page_frag_free);
 
@@ -6751,10 +6824,19 @@ void __offline_isolated_pages(unsigned long start_pfn, unsigned long end_pfn)
 		BUG_ON(!PageBuddy(page));
 		VM_WARN_ON(get_pageblock_migratetype(page) != MIGRATE_ISOLATE);
 		order = buddy_order(page);
+		/*
+		 * del_page_from_free_list() updates current's ugen that
+		 * pairs with check_flush_task_ugen() below in this function.
+		 */
 		del_page_from_free_list(page, zone, order, MIGRATE_ISOLATE);
 		pfn += (1 << order);
 	}
 	spin_unlock_irqrestore(&zone->lock, flags);
+
+	/*
+	 * Check and flush before using it.
+	 */
+	check_flush_task_ugen();
 }
 #endif
 
@@ -6830,6 +6912,11 @@ bool take_page_off_buddy(struct page *page)
 			int migratetype = get_pfnblock_migratetype(page_head,
 								   pfn_head);
 
+			/*
+			 * del_page_from_free_list() updates current's
+			 * ugen that pairs with check_flush_task_ugen() below
+			 * in this function.
+			 */
 			del_page_from_free_list(page_head, zone, page_order,
 						migratetype);
 			break_down_buddy_pages(zone, page_head, page, 0,
@@ -6842,6 +6929,11 @@ bool take_page_off_buddy(struct page *page)
 			break;
 	}
 	spin_unlock_irqrestore(&zone->lock, flags);
+
+	/*
+	 * Check and flush before using it.
+	 */
+	check_flush_task_ugen();
 	return ret;
 }
 
@@ -6860,7 +6952,7 @@ bool put_page_back_buddy(struct page *page)
 		int migratetype = get_pfnblock_migratetype(page, pfn);
 
 		ClearPageHWPoisonTakenOff(page);
-		__free_one_page(page, pfn, zone, 0, migratetype, FPI_NONE);
+		__free_one_page(page, pfn, zone, 0, migratetype, FPI_NONE, 0);
 		if (TestClearPageHWPoison(page)) {
 			ret = true;
 		}

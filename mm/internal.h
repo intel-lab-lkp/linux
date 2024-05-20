@@ -638,7 +638,7 @@ extern bool free_pages_prepare(struct page *page, unsigned int order);
 
 extern int user_min_free_kbytes;
 
-void free_unref_page(struct page *page, unsigned int order);
+void free_unref_page(struct page *page, unsigned int order, unsigned short int ugen);
 void free_unref_folios(struct folio_batch *fbatch);
 
 extern void zone_pcp_reset(struct zone *zone);
@@ -1512,4 +1512,72 @@ static inline void shrinker_debugfs_remove(struct dentry *debugfs_entry,
 void workingset_update_node(struct xa_node *node);
 extern struct list_lru shadow_nodes;
 
+#if defined(CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH)
+static inline unsigned short int ugen_latest(unsigned short int a, unsigned short int b)
+{
+	if (!a || !b)
+		return a + b;
+
+	/*
+	 * The ugen is wrapped around so let's use this trick.
+	 */
+	if ((short int)(a - b) < 0)
+		return b;
+	else
+		return a;
+}
+
+static inline void update_task_ugen(unsigned short int ugen)
+{
+	current->ugen = ugen_latest(current->ugen, ugen);
+}
+
+static inline unsigned short int hand_over_task_ugen(void)
+{
+	unsigned short int ret = current->ugen;
+
+	current->ugen = 0;
+	return ret;
+}
+
+static inline void check_flush_task_ugen(void)
+{
+	/*
+	 * XXX: luf mechanism will handle this. For now, do nothing but
+	 * reset current's ugen to finalize this turn.
+	 */
+	current->ugen = 0;
+}
+
+/*
+ * Check the constratints of what luf currently supports.
+ */
+static inline bool can_luf_folio(struct folio *f)
+{
+	bool can_luf = true;
+
+	/*
+	 * XXX: Remove the constraint once luf handles zone device folio.
+	 */
+	can_luf = can_luf && likely(!folio_is_zone_device(f));
+
+	/*
+	 * XXX: Remove the constraint once luf handles hugetlb folio.
+	 */
+	can_luf = can_luf && likely(!folio_test_hugetlb(f));
+
+	/*
+	 * XXX: Remove the constraint once luf handles large folio.
+	 */
+	can_luf = can_luf && likely(!folio_test_large(f));
+
+	return can_luf;
+}
+#else /* CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH */
+static inline unsigned short int ugen_latest(unsigned short int a, unsigned short int b) { return 0; }
+static inline void update_task_ugen(unsigned short int ugen) {}
+static inline unsigned short int hand_over_task_ugen(void) { return 0; }
+static inline void check_flush_task_ugen(void) {}
+static inline bool can_luf_folio(struct folio *f) { return false; }
+#endif
 #endif	/* __MM_INTERNAL_H */

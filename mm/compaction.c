@@ -702,6 +702,11 @@ isolate_fail:
 		spin_unlock_irqrestore(&cc->zone->lock, flags);
 
 	/*
+	 * Check and flush before using the isolated pages.
+	 */
+	check_flush_task_ugen();
+
+	/*
 	 * Be careful to not go outside of the pageblock.
 	 */
 	if (unlikely(blockpfn > end_pfn))
@@ -1672,6 +1677,11 @@ static void fast_isolate_freepages(struct compact_control *cc)
 		}
 
 		spin_unlock_irqrestore(&cc->zone->lock, flags);
+
+		/*
+		 * Check and flush before using the isolated pages.
+		 */
+		check_flush_task_ugen();
 
 		/* Skip fast search if enough freepages isolated */
 		if (cc->nr_freepages >= cc->nr_migratepages)
