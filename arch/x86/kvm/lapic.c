@@ -2848,7 +2848,7 @@ int kvm_create_lapic(struct kvm_vcpu *vcpu, int timer_advance_ns)
 	if (timer_advance_ns == -1) {
 		apic->lapic_timer.timer_advance_ns = LAPIC_TIMER_ADVANCE_NS_INIT;
 		lapic_timer_advance_dynamic = true;
-	} else {
+	} else if (timer_advance_ns >= 0) {
 		apic->lapic_timer.timer_advance_ns = timer_advance_ns;
 		lapic_timer_advance_dynamic = false;
 	}
