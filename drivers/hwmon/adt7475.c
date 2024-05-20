@@ -21,6 +21,8 @@
 #include <linux/of.h>
 #include <linux/util_macros.h>
 
+#include <dt-bindings/pwm/pwm.h>
+
 /* Indexes for the sysfs hooks */
 
 #define INPUT		0
@@ -1662,6 +1664,63 @@ static int adt7475_set_pwm_polarity(struct i2c_client *client)
 	return 0;
 }
 
+static int adt7475_fan_pwm_config(struct i2c_client *client)
+{
+	struct adt7475_data *data = i2c_get_clientdata(client);
+	struct fwnode_handle *child;
+	struct of_phandle_args args = {};
+	int ret, pwm, duty, freq, flags;
+	u8 val;
+
+	device_for_each_child_node(&client->dev, child) {
+		if (!is_of_node(child))
+			continue;
+
+		ret = of_parse_phandle_with_args(to_of_node(child), "pwms", "#pwm-cells", 0, &args);
+		if (ret)
+			return ret;
+
+		if (args.args_count != 4)
+			return -EINVAL;
+
+		pwm = args.args[0];
+		freq = find_closest(args.args[1], pwmfreq_table, ARRAY_SIZE(pwmfreq_table));
+		flags = args.args[2];
+		duty = clamp_val(args.args[3], 0, 0xFF);
+
+		if (pwm >= ADT7475_PWM_COUNT)
+			return -EINVAL;
+
+		ret = adt7475_read(PWM_CONFIG_REG(pwm));
+		if (ret < 0)
+			return ret;
+		val = ret;
+		if (flags & PWM_POLARITY_INVERTED)
+			val |= BIT(4);
+		else
+			val &= ~BIT(4);
+
+		ret = i2c_smbus_write_byte_data(client, PWM_CONFIG_REG(pwm), val);
+		if (ret)
+			return ret;
+
+		data->pwm[pwm][0] = duty;
+		ret = i2c_smbus_write_byte_data(client, PWM_REG(pwm), data->pwm[pwm][0]);
+		if (ret)
+			return ret;
+
+		data->range[pwm] = adt7475_read(TEMP_TRANGE_REG(pwm));
+		data->range[pwm] &= ~0xf;
+		data->range[pwm] |= freq;
+
+		ret = i2c_smbus_write_byte_data(client, TEMP_TRANGE_REG(pwm), data->range[pwm]);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
 static int adt7475_probe(struct i2c_client *client)
 {
 	enum chips chip;
@@ -1777,6 +1836,10 @@ static int adt7475_probe(struct i2c_client *client)
 	ret = adt7475_set_pwm_polarity(client);
 	if (ret && ret != -EINVAL)
 		dev_warn(&client->dev, "Error configuring pwm polarity\n");
+
+	ret = adt7475_fan_pwm_config(client);
+	if (ret)
+		dev_warn(&client->dev, "Error %d configuring fan/pwm\n", ret);
 
 	/* Start monitoring */
 	switch (chip) {
