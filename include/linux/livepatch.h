@@ -37,6 +37,7 @@
  * @nop:        temporary patch to use the original code again; dyn. allocated
  * @patched:	the func has been added to the klp_ops list
  * @transition:	the func is currently being applied or reverted
+ * @called:		the func is called
  *
  * The patched and transition variables define the func's patching state.  When
  * patching, a func is always in one of the following states:
@@ -75,6 +76,7 @@ struct klp_func {
 	bool nop;
 	bool patched;
 	bool transition;
+	bool called;
 };
 
 struct klp_object;
