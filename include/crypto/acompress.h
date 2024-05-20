@@ -12,9 +12,18 @@
 #include <linux/atomic.h>
 #include <linux/container_of.h>
 #include <linux/crypto.h>
+#include <linux/limits.h>
 
 #define CRYPTO_ACOMP_ALLOC_OUTPUT	0x00000001
 #define CRYPTO_ACOMP_DST_MAX		131072
+
+#define CRYPTO_COMP_NO_LEVEL		INT_MIN
+
+enum {
+	CRYPTO_COMP_PARAM_UNSPEC,
+	CRYPTO_COMP_PARAM_LEVEL,
+	CRYPTO_COMP_PARAM_LAST,
+};
 
 /**
  * struct acomp_req - asynchronous (de)compression request

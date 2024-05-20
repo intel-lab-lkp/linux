@@ -49,6 +49,12 @@ struct scomp_alg {
 	};
 };
 
+struct crypto_comp_params {
+	int level;
+	unsigned dict_sz;
+	void *dict;
+};
+
 static inline struct scomp_alg *__crypto_scomp_alg(struct crypto_alg *alg)
 {
 	return container_of(alg, struct scomp_alg, base);
@@ -149,5 +155,9 @@ void crypto_unregister_scomp(struct scomp_alg *alg);
 
 int crypto_register_scomps(struct scomp_alg *algs, int count);
 void crypto_unregister_scomps(struct scomp_alg *algs, int count);
+
+int crypto_comp_getparams(struct crypto_comp_params *params, const u8 *raw,
+			  unsigned int len);
+void crypto_comp_putparams(struct crypto_comp_params *params);
 
 #endif
