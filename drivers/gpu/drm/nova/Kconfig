@@ -1,0 +1,11 @@
+config DRM_NOVA_STUB
+	tristate "Nova GPU driver stub"
+	depends on DRM
+	depends on PCI
+	depends on RUST
+	default n
+	help
+	  Choose this if you want to build the Nova stub driver for Nvidia
+	  GSP-based GPUs.
+
+	  If M is selected, the module will be called nova.
