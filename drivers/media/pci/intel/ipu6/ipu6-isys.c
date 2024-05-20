@@ -1062,6 +1062,7 @@ static int isys_probe(struct auxiliary_device *auxdev,
 	const struct ipu6_isys_internal_csi2_pdata *csi2_pdata;
 	struct ipu6_bus_device *adev = auxdev_to_adev(auxdev);
 	struct ipu6_device *isp = adev->isp;
+	struct isys_fw_msgs *fwmsg, *safe;
 	const struct firmware *fw;
 	struct ipu6_isys *isys;
 	unsigned int i;
@@ -1140,11 +1141,16 @@ static int isys_probe(struct auxiliary_device *auxdev,
 
 	ret = isys_register_devices(isys);
 	if (ret)
-		goto out_remove_pkg_dir_shared_buffer;
+		goto free_fw_msg_bufs;
 
 	ipu6_mmu_hw_cleanup(adev->mmu);
 
 	return 0;
+
+free_fw_msg_bufs:
+	list_for_each_entry_safe(fwmsg, safe, &isys->framebuflist, head)
+		dma_free_attrs(&auxdev->dev, sizeof(struct isys_fw_msgs),
+			       fwmsg, fwmsg->dma_addr, 0);
 
 out_remove_pkg_dir_shared_buffer:
 	if (!isp->secure_mode)
