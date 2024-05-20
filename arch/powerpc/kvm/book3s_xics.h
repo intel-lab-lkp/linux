@@ -111,19 +111,13 @@ struct kvmppc_xics {
 	u32 err_noics;
 	u32 err_noicp;
 	struct kvmppc_ics *ics[KVMPPC_XICS_MAX_ICS_ID + 1];
+	DECLARE_FLEX_ARRAY(struct kvmppc_icp *, icps);
 };
 
 static inline struct kvmppc_icp *kvmppc_xics_find_server(struct kvm *kvm,
 							 u32 nr)
 {
-	struct kvm_vcpu *vcpu = NULL;
-	unsigned long i;
-
-	kvm_for_each_vcpu(i, vcpu, kvm) {
-		if (vcpu->arch.icp && nr == vcpu->arch.icp->server_num)
-			return vcpu->arch.icp;
-	}
-	return NULL;
+	return kvm->arch.xics->icps[nr];
 }
 
 static inline struct kvmppc_ics *kvmppc_xics_find_ics(struct kvmppc_xics *xics,

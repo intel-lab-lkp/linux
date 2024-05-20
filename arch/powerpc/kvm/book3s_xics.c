@@ -47,8 +47,6 @@
  * TODO
  * ====
  *
- * - Speed up server# -> ICP lookup (array ? hash table ?)
- *
  * - Make ICS lockless as well, or at least a per-interrupt lock or hashed
  *   locks array to improve scalability
  */
@@ -1062,6 +1060,7 @@ static struct kvmppc_ics *kvmppc_xics_create_ics(struct kvm *kvm,
 static int kvmppc_xics_create_icp(struct kvm_vcpu *vcpu, unsigned long server_num)
 {
 	struct kvmppc_icp *icp;
+	struct kvm *kvm = vcpu->kvm;
 
 	if (!vcpu->kvm->arch.xics)
 		return -ENODEV;
@@ -1078,6 +1077,7 @@ static int kvmppc_xics_create_icp(struct kvm_vcpu *vcpu, unsigned long server_nu
 	icp->state.mfrr = MASKED;
 	icp->state.pending_pri = MASKED;
 	vcpu->arch.icp = icp;
+	kvm->arch.xics->icps[server_num] = icp;
 
 	XICS_DBG("created server for vcpu %d\n", vcpu->vcpu_id);
 
