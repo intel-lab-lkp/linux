@@ -8,6 +8,7 @@
 #include "uprobe_multi_usdt.skel.h"
 #include "bpf/libbpf_internal.h"
 #include "testing_helpers.h"
+#include "../sdt.h"
 
 static char test_data[] = "test_data";
 
@@ -24,6 +25,11 @@ noinline void uprobe_multi_func_2(void)
 noinline void uprobe_multi_func_3(void)
 {
 	asm volatile ("");
+}
+
+noinline void usdt_trigger(void)
+{
+	STAP_PROBE(test, pid_filter_usdt);
 }
 
 struct child {
@@ -269,8 +275,24 @@ __test_attach_api(const char *binary, const char *pattern, struct bpf_uprobe_mul
 	if (!ASSERT_OK_PTR(skel->links.uprobe_extra, "bpf_program__attach_uprobe_multi"))
 		goto cleanup;
 
+	/* Attach (uprobe-backed) USDTs */
+	skel->links.usdt_pid = bpf_program__attach_usdt(skel->progs.usdt_pid, pid, binary,
+							"test", "pid_filter_usdt", NULL);
+	if (!ASSERT_OK_PTR(skel->links.usdt_pid, "attach_usdt_pid"))
+		goto cleanup;
+
+	skel->links.usdt_extra = bpf_program__attach_usdt(skel->progs.usdt_extra, -1, binary,
+							  "test", "pid_filter_usdt", NULL);
+	if (!ASSERT_OK_PTR(skel->links.usdt_extra, "attach_usdt_extra"))
+		goto cleanup;
+
 	uprobe_multi_test_run(skel, child);
 
+	ASSERT_FALSE(skel->bss->bad_pid_seen_usdt, "bad_pid_seen_usdt");
+	if (child) {
+		ASSERT_EQ(skel->bss->child_pid_usdt, child->pid, "usdt_multi_child_pid");
+		ASSERT_EQ(skel->bss->child_tid_usdt, child->tid, "usdt_multi_child_tid");
+	}
 cleanup:
 	uprobe_multi__destroy(skel);
 }
