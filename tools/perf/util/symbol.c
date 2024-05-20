@@ -1322,15 +1322,13 @@ static int kcore_mapfn(u64 start, u64 len, u64 pgoff, void *data)
 	return 0;
 }
 
-static bool remove_old_maps(struct map *map, void *data)
+static bool remove_old_maps(struct map *map)
 {
-	const struct map *map_to_save = data;
-
 	/*
 	 * We need to preserve eBPF maps even if they are covered by kcore,
 	 * because we need to access eBPF dso for source data.
 	 */
-	return !RC_CHK_EQUAL(map, map_to_save) && !__map__is_bpf_prog(map);
+	return !__map__is_bpf_prog(map);
 }
 
 static int dso__load_kcore(struct dso *dso, struct map *map,
@@ -1385,7 +1383,7 @@ static int dso__load_kcore(struct dso *dso, struct map *map,
 	}
 
 	/* Remove old maps */
-	maps__remove_maps(kmaps, remove_old_maps, map);
+	maps__remove_maps(kmaps, remove_old_maps);
 	machine->trampolines_mapped = false;
 
 	/* Find the kernel map using the '_stext' symbol */
@@ -1422,7 +1420,6 @@ static int dso__load_kcore(struct dso *dso, struct map *map,
 	 * remaining maps so vmlinux gets split if necessary.
 	 */
 	map_ref = map__get(map);
-	maps__remove(kmaps, map_ref);
 
 	map__set_start(map_ref, map__start(replacement_map));
 	map__set_end(map_ref, map__end(replacement_map));

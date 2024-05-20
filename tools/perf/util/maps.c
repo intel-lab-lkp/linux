@@ -589,7 +589,7 @@ int maps__for_each_map(struct maps *maps, int (*cb)(struct map *map, void *data)
 	return ret;
 }
 
-void maps__remove_maps(struct maps *maps, bool (*cb)(struct map *map, void *data), void *data)
+void maps__remove_maps(struct maps *maps, bool (*cb)(struct map *map))
 {
 	struct map **maps_by_address;
 
@@ -597,7 +597,7 @@ void maps__remove_maps(struct maps *maps, bool (*cb)(struct map *map, void *data
 
 	maps_by_address = maps__maps_by_address(maps);
 	for (unsigned int i = 0; i < maps__nr_maps(maps);) {
-		if (cb(maps_by_address[i], data))
+		if (cb(maps_by_address[i]))
 			__maps__remove(maps, maps_by_address[i]);
 		else
 			i++;

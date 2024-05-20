@@ -40,7 +40,7 @@ bool maps__equal(struct maps *a, struct maps *b);
 /* Iterate over map calling cb for each entry. */
 int maps__for_each_map(struct maps *maps, int (*cb)(struct map *map, void *data), void *data);
 /* Iterate over map removing an entry if cb returns true. */
-void maps__remove_maps(struct maps *maps, bool (*cb)(struct map *map, void *data), void *data);
+void maps__remove_maps(struct maps *maps, bool (*cb)(struct map *map));
 
 struct machine *maps__machine(const struct maps *maps);
 unsigned int maps__nr_maps(const struct maps *maps); /* Test only. */
