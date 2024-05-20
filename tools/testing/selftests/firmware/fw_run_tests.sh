@@ -6,6 +6,9 @@
 
 set -e
 
+DIR="$(dirname $(readlink -f "$0"))"
+source "${DIR}"/../kselftest/ktap_helpers.sh
+
 TEST_DIR=$(dirname $0)
 source $TEST_DIR/fw_lib.sh
 
@@ -26,54 +29,68 @@ run_tests()
 	proc_set_force_sysfs_fallback $1
 	proc_set_ignore_sysfs_fallback $2
 	$TEST_DIR/fw_upload.sh
+
+	ktap_test_pass "Completed"
 }
 
 run_test_config_0001()
 {
-	echo "-----------------------------------------------------"
-	echo "Running kernel configuration test 1 -- rare"
-	echo "Emulates:"
-	echo "CONFIG_FW_LOADER=y"
-	echo "CONFIG_FW_LOADER_USER_HELPER=n"
-	echo "CONFIG_FW_LOADER_USER_HELPER_FALLBACK=n"
+	ktap_print_msg "-----------------------------------------------------"
+	ktap_print_msg "Running kernel configuration test 1 -- rare"
+	ktap_print_msg "Emulates:"
+	ktap_print_msg "CONFIG_FW_LOADER=y"
+	ktap_print_msg "CONFIG_FW_LOADER_USER_HELPER=n"
+	ktap_print_msg "CONFIG_FW_LOADER_USER_HELPER_FALLBACK=n"
 	run_tests 0 1
 }
 
 run_test_config_0002()
 {
-	echo "-----------------------------------------------------"
-	echo "Running kernel configuration test 2 -- distro"
-	echo "Emulates:"
-	echo "CONFIG_FW_LOADER=y"
-	echo "CONFIG_FW_LOADER_USER_HELPER=y"
-	echo "CONFIG_FW_LOADER_USER_HELPER_FALLBACK=n"
+	ktap_print_msg "-----------------------------------------------------"
+	ktap_print_msg "Running kernel configuration test 2 -- distro"
+	ktap_print_msg "Emulates:"
+	ktap_print_msg "CONFIG_FW_LOADER=y"
+	ktap_print_msg "CONFIG_FW_LOADER_USER_HELPER=y"
+	ktap_print_msg "CONFIG_FW_LOADER_USER_HELPER_FALLBACK=n"
 	proc_set_ignore_sysfs_fallback 0
 	run_tests 0 0
 }
 
 run_test_config_0003()
 {
-	echo "-----------------------------------------------------"
-	echo "Running kernel configuration test 3 -- android"
-	echo "Emulates:"
-	echo "CONFIG_FW_LOADER=y"
-	echo "CONFIG_FW_LOADER_USER_HELPER=y"
-	echo "CONFIG_FW_LOADER_USER_HELPER_FALLBACK=y"
+	ktap_print_msg "-----------------------------------------------------"
+	ktap_print_msg "Running kernel configuration test 3 -- android"
+	ktap_print_msg "Emulates:"
+	ktap_print_msg "CONFIG_FW_LOADER=y"
+	ktap_print_msg "CONFIG_FW_LOADER_USER_HELPER=y"
+	ktap_print_msg "CONFIG_FW_LOADER_USER_HELPER_FALLBACK=y"
 	run_tests 1 0
 }
+
+ktap_print_header
 
 check_mods
 check_setup
 
-echo "Running namespace test: "
-$TEST_DIR/fw_namespace $DIR/trigger_request
-echo "OK"
-
 if [ -f $FW_FORCE_SYSFS_FALLBACK ]; then
+	ktap_set_plan "4"
+
 	run_test_config_0001
 	run_test_config_0002
 	run_test_config_0003
 else
-	echo "Running basic kernel configuration, working with your config"
+	ktap_set_plan "2"
+
+	ktap_print_msg "Running basic kernel configuration, working with your config"
 	run_tests
 fi
+
+ktap_print_msg "Running namespace test: "
+$TEST_DIR/fw_namespace $DIR/trigger_request
+if [ $? -eq 0 ]; then
+    ktap_test_pass "fw_namespace completed successfully"
+else
+    ktap_test_fail "fw_namespace failed"
+fi
+
+ktap_finished
