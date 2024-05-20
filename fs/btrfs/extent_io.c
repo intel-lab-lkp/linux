@@ -2164,8 +2164,7 @@ retry:
 				folio_wait_writeback(folio);
 			}
 
-			if (folio_test_writeback(folio) ||
-			    !folio_clear_dirty_for_io(folio)) {
+			if (folio_test_writeback(folio)) {
 				folio_unlock(folio);
 				continue;
 			}
