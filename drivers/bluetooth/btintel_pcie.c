@@ -1280,17 +1280,17 @@ static int btintel_pcie_probe(struct pci_dev *pdev,
 
 	err = btintel_pcie_config_pcie(pdev, data);
 	if (err)
-		goto exit_error;
+		goto exit_destroy_worqueue;
 
 	pci_set_drvdata(pdev, data);
 
 	err = btintel_pcie_alloc(data);
 	if (err)
-		goto exit_error;
+		goto exit_free_irq_vectors;
 
 	err = btintel_pcie_enable_bt(data);
 	if (err)
-		goto exit_error;
+		goto exit_free_pcie;
 
 	/* CNV information (CNVi and CNVr) is in CSR */
 	data->cnvi = btintel_pcie_rd_reg32(data, BTINTEL_PCIE_CSR_HW_REV_REG);
@@ -1299,17 +1299,25 @@ static int btintel_pcie_probe(struct pci_dev *pdev,
 
 	err = btintel_pcie_start_rx(data);
 	if (err)
-		goto exit_error;
+		goto exit_free_pcie;
 
 	err = btintel_pcie_setup_hdev(data);
 	if (err)
-		goto exit_error;
+		goto exit_free_pcie;
 
 	bt_dev_dbg(data->hdev, "cnvi: 0x%8.8x cnvr: 0x%8.8x", data->cnvi,
 		   data->cnvr);
 	return 0;
 
-exit_error:
+exit_free_pcie:
+	btintel_pcie_free(data);
+
+exit_free_irq_vectors:
+	pci_free_irq_vectors(pdev);
+
+exit_destroy_worqueue:
+	destroy_workqueue(data->workqueue);
+
 	/* reset device before exit */
 	btintel_pcie_reset_bt(data);
 
