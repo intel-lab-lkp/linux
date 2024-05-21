@@ -1152,12 +1152,12 @@ static int reserve_bo_and_vm(struct kgd_mem *mem,
 	drm_exec_init(&ctx->exec, DRM_EXEC_INTERRUPTIBLE_WAIT, 0);
 	drm_exec_until_all_locked(&ctx->exec) {
 		ret = amdgpu_vm_lock_pd(vm, &ctx->exec, 2);
-		drm_exec_retry_on_contention(&ctx->exec);
+		ret = drm_exec_retry_on_contention(&ctx->exec, ret);
 		if (unlikely(ret))
 			goto error;
 
 		ret = drm_exec_prepare_obj(&ctx->exec, &bo->tbo.base, 1);
-		drm_exec_retry_on_contention(&ctx->exec);
+		ret = drm_exec_retry_on_contention(&ctx->exec, ret);
 		if (unlikely(ret))
 			goto error;
 	}
@@ -1199,14 +1199,14 @@ static int reserve_bo_and_cond_vms(struct kgd_mem *mem,
 
 			ret = amdgpu_vm_lock_pd(entry->bo_va->base.vm,
 						&ctx->exec, 2);
-			drm_exec_retry_on_contention(&ctx->exec);
+			ret = drm_exec_retry_on_contention(&ctx->exec, ret);
 			if (unlikely(ret))
 				goto error;
 			++ctx->n_vms;
 		}
 
 		ret = drm_exec_prepare_obj(&ctx->exec, &bo->tbo.base, 1);
-		drm_exec_retry_on_contention(&ctx->exec);
+		ret = drm_exec_retry_on_contention(&ctx->exec, ret);
 		if (unlikely(ret))
 			goto error;
 	}
@@ -2619,7 +2619,7 @@ static int validate_invalid_user_pages(struct amdkfd_process_info *process_info)
 		list_for_each_entry(peer_vm, &process_info->vm_list_head,
 				    vm_list_node) {
 			ret = amdgpu_vm_lock_pd(peer_vm, &exec, 2);
-			drm_exec_retry_on_contention(&exec);
+			ret = drm_exec_retry_on_contention(&exec, ret);
 			if (unlikely(ret))
 				goto unreserve_out;
 		}
@@ -2631,7 +2631,7 @@ static int validate_invalid_user_pages(struct amdkfd_process_info *process_info)
 
 			gobj = &mem->bo->tbo.base;
 			ret = drm_exec_prepare_obj(&exec, gobj, 1);
-			drm_exec_retry_on_contention(&exec);
+			ret = drm_exec_retry_on_contention(&exec, ret);
 			if (unlikely(ret))
 				goto unreserve_out;
 		}
@@ -2875,7 +2875,7 @@ int amdgpu_amdkfd_gpuvm_restore_process_bos(void *info, struct dma_fence __rcu *
 		list_for_each_entry(peer_vm, &process_info->vm_list_head,
 				    vm_list_node) {
 			ret = amdgpu_vm_lock_pd(peer_vm, &exec, 2);
-			drm_exec_retry_on_contention(&exec);
+			ret = drm_exec_retry_on_contention(&exec, ret);
 			if (unlikely(ret)) {
 				pr_err("Locking VM PD failed, ret: %d\n", ret);
 				goto ttm_reserve_fail;
@@ -2891,7 +2891,7 @@ int amdgpu_amdkfd_gpuvm_restore_process_bos(void *info, struct dma_fence __rcu *
 
 			gobj = &mem->bo->tbo.base;
 			ret = drm_exec_prepare_obj(&exec, gobj, 1);
-			drm_exec_retry_on_contention(&exec);
+			ret = drm_exec_retry_on_contention(&exec, ret);
 			if (unlikely(ret)) {
 				pr_err("drm_exec_prepare_obj failed, ret: %d\n", ret);
 				goto ttm_reserve_fail;

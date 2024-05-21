@@ -897,7 +897,7 @@ static int amdgpu_cs_parser_bos(struct amdgpu_cs_parser *p,
 
 	drm_exec_until_all_locked(&p->exec) {
 		r = amdgpu_vm_lock_pd(&fpriv->vm, &p->exec, 1 + p->gang_size);
-		drm_exec_retry_on_contention(&p->exec);
+		r = drm_exec_retry_on_contention(&p->exec, r);
 		if (unlikely(r))
 			goto out_free_user_pages;
 
@@ -905,7 +905,7 @@ static int amdgpu_cs_parser_bos(struct amdgpu_cs_parser *p,
 			/* One fence for TTM and one for each CS job */
 			r = drm_exec_prepare_obj(&p->exec, &e->bo->tbo.base,
 						 1 + p->gang_size);
-			drm_exec_retry_on_contention(&p->exec);
+			r = drm_exec_retry_on_contention(&p->exec, r);
 			if (unlikely(r))
 				goto out_free_user_pages;
 
@@ -915,7 +915,7 @@ static int amdgpu_cs_parser_bos(struct amdgpu_cs_parser *p,
 		if (p->uf_bo) {
 			r = drm_exec_prepare_obj(&p->exec, &p->uf_bo->tbo.base,
 						 1 + p->gang_size);
-			drm_exec_retry_on_contention(&p->exec);
+			r = drm_exec_retry_on_contention(&p->exec, r);
 			if (unlikely(r))
 				goto out_free_user_pages;
 		}

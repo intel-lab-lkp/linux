@@ -28,12 +28,12 @@
  *	drm_exec_init(&exec, DRM_EXEC_INTERRUPTIBLE_WAIT);
  *	drm_exec_until_all_locked(&exec) {
  *		ret = drm_exec_prepare_obj(&exec, boA, 1);
- *		drm_exec_retry_on_contention(&exec);
+ *		ret = drm_exec_retry_on_contention(&exec, ret);
  *		if (ret)
  *			goto error;
  *
  *		ret = drm_exec_prepare_obj(&exec, boB, 1);
- *		drm_exec_retry_on_contention(&exec);
+ *		ret = drm_exec_retry_on_contention(&exec, ret);
  *		if (ret)
  *			goto error;
  *	}
@@ -48,7 +48,8 @@
  */
 
 /* Dummy value used to initially enter the retry loop */
-#define DRM_EXEC_DUMMY ((void *)~0)
+#define DRM_EXEC_DUMMY ERR_PTR(-ESTALE)
+#define DRM_EXEC_CONTENDED ERR_PTR(-EDEADLK)
 
 /* Unlock all objects and drop references */
 static void drm_exec_unlock_all(struct drm_exec *exec)
@@ -131,8 +132,7 @@ bool drm_exec_cleanup(struct drm_exec *exec)
 		return true;
 	}
 
-	drm_exec_unlock_all(exec);
-	exec->num_objects = 0;
+	exec->contended = NULL;
 	return true;
 }
 EXPORT_SYMBOL(drm_exec_cleanup);
@@ -195,6 +195,27 @@ error_dropref:
 }
 
 /**
+ * drm_exec_handle_contended() - Perform cleanup before a ww transaction restart
+ * @exec: Pointer to the drm_exec object.
+ *
+ * Unlocks all held resvs and re-locks the contended object.
+ *
+ * Return: 0 on success, negative error code on failure.
+ */
+int drm_exec_handle_contended(struct drm_exec *exec)
+{
+	int ret;
+
+	drm_exec_unlock_all(exec);
+	exec->num_objects = 0;
+	ret = drm_exec_lock_contended(exec);
+	exec->contended = DRM_EXEC_CONTENDED;
+
+	return ret;
+}
+EXPORT_SYMBOL(drm_exec_handle_contended);
+
+/**
  * drm_exec_lock_obj - lock a GEM object for use
  * @exec: the drm_exec object with the state
  * @obj: the GEM object to lock
@@ -208,10 +229,6 @@ error_dropref:
 int drm_exec_lock_obj(struct drm_exec *exec, struct drm_gem_object *obj)
 {
 	int ret;
-
-	ret = drm_exec_lock_contended(exec);
-	if (unlikely(ret))
-		return ret;
 
 	if (exec->prelocked == obj) {
 		drm_gem_object_put(exec->prelocked);

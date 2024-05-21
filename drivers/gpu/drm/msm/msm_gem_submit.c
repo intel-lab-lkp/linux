@@ -259,7 +259,7 @@ static int submit_lock_objects(struct msm_gem_submit *submit)
 		for (unsigned i = 0; i < submit->nr_bos; i++) {
 			struct drm_gem_object *obj = submit->bos[i].obj;
 			ret = drm_exec_prepare_obj(&submit->exec, obj, 1);
-			drm_exec_retry_on_contention(&submit->exec);
+			ret = drm_exec_retry_on_contention(&submit->exec, ret);
 			if (ret)
 				goto error;
 		}

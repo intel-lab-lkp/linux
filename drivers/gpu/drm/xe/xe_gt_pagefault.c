@@ -200,7 +200,7 @@ retry_userptr:
 	drm_exec_init(&exec, 0, 0);
 	drm_exec_until_all_locked(&exec) {
 		ret = xe_pf_begin(&exec, vma, atomic, tile->id);
-		drm_exec_retry_on_contention(&exec);
+		ret = drm_exec_retry_on_contention(&exec, ret);
 		if (ret)
 			goto unlock_dma_resv;
 
@@ -543,7 +543,7 @@ static int handle_acc(struct xe_gt *gt, struct acc *acc)
 	drm_exec_init(&exec, 0, 0);
 	drm_exec_until_all_locked(&exec) {
 		ret = xe_pf_begin(&exec, vma, true, tile->id);
-		drm_exec_retry_on_contention(&exec);
+		ret = drm_exec_retry_on_contention(&exec, ret);
 		if (ret)
 			break;
 	}

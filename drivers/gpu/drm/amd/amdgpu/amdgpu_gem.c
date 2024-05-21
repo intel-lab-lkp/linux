@@ -239,12 +239,12 @@ static void amdgpu_gem_object_close(struct drm_gem_object *obj,
 	drm_exec_init(&exec, DRM_EXEC_IGNORE_DUPLICATES, 0);
 	drm_exec_until_all_locked(&exec) {
 		r = drm_exec_prepare_obj(&exec, &bo->tbo.base, 1);
-		drm_exec_retry_on_contention(&exec);
+		r = drm_exec_retry_on_contention(&exec, r);
 		if (unlikely(r))
 			goto out_unlock;
 
 		r = amdgpu_vm_lock_pd(vm, &exec, 0);
-		drm_exec_retry_on_contention(&exec);
+		r = drm_exec_retry_on_contention(&exec, r);
 		if (unlikely(r))
 			goto out_unlock;
 	}
@@ -776,13 +776,13 @@ int amdgpu_gem_va_ioctl(struct drm_device *dev, void *data,
 	drm_exec_until_all_locked(&exec) {
 		if (gobj) {
 			r = drm_exec_lock_obj(&exec, gobj);
-			drm_exec_retry_on_contention(&exec);
+			r = drm_exec_retry_on_contention(&exec, r);
 			if (unlikely(r))
 				goto error;
 		}
 
 		r = amdgpu_vm_lock_pd(&fpriv->vm, &exec, 2);
-		drm_exec_retry_on_contention(&exec);
+		r = drm_exec_retry_on_contention(&exec, r);
 		if (unlikely(r))
 			goto error;
 	}

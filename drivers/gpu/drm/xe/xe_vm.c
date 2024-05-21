@@ -501,7 +501,7 @@ retry:
 		bool done = false;
 
 		err = xe_preempt_work_begin(&exec, vm, &done);
-		drm_exec_retry_on_contention(&exec);
+		err = drm_exec_retry_on_contention(&exec, err);
 		if (err || done) {
 			drm_exec_fini(&exec);
 			if (err && xe_vm_validate_should_retry(&exec, err, &end))
@@ -1052,7 +1052,7 @@ static void xe_vma_destroy_unlocked(struct xe_vma *vma)
 	drm_exec_init(&exec, 0, 0);
 	drm_exec_until_all_locked(&exec) {
 		err = xe_vm_lock_vma(&exec, vma);
-		drm_exec_retry_on_contention(&exec);
+		err = drm_exec_retry_on_contention(&exec, err);
 		if (XE_WARN_ON(err))
 			break;
 	}
@@ -2148,11 +2148,11 @@ static struct xe_vma *new_vma(struct xe_vm *vm, struct drm_gpuva_op_map *op,
 			err = 0;
 			if (!bo->vm) {
 				err = drm_exec_lock_obj(&exec, xe_vm_obj(vm));
-				drm_exec_retry_on_contention(&exec);
+				err = drm_exec_retry_on_contention(&exec, err);
 			}
 			if (!err) {
 				err = drm_exec_lock_obj(&exec, &bo->ttm.base);
-				drm_exec_retry_on_contention(&exec);
+				err = drm_exec_retry_on_contention(&exec, err);
 			}
 			if (err) {
 				drm_exec_fini(&exec);
@@ -2884,7 +2884,7 @@ static int vm_bind_ioctl_ops_execute(struct xe_vm *vm,
 		      DRM_EXEC_IGNORE_DUPLICATES, 0);
 	drm_exec_until_all_locked(&exec) {
 		err = vm_bind_ioctl_ops_lock_and_prep(&exec, vm, vops);
-		drm_exec_retry_on_contention(&exec);
+		err = drm_exec_retry_on_contention(&exec, err);
 		if (err)
 			goto unlock;
 

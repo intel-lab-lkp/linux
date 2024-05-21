@@ -1499,7 +1499,7 @@ static int svm_range_reserve_bos(struct svm_validate_context *ctx, bool intr)
 			vm = drm_priv_to_vm(pdd->drm_priv);
 
 			r = amdgpu_vm_lock_pd(vm, &ctx->exec, 2);
-			drm_exec_retry_on_contention(&ctx->exec);
+			r = drm_exec_retry_on_contention(&ctx->exec, r);
 			if (unlikely(r)) {
 				pr_debug("failed %d to reserve bo\n", r);
 				goto unreserve_out;

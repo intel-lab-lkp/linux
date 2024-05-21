@@ -1221,12 +1221,12 @@ int amdgpu_mes_ctx_map_meta_data(struct amdgpu_device *adev,
 	drm_exec_until_all_locked(&exec) {
 		r = drm_exec_lock_obj(&exec,
 				      &ctx_data->meta_data_obj->tbo.base);
-		drm_exec_retry_on_contention(&exec);
+		r = drm_exec_retry_on_contention(&exec, r);
 		if (unlikely(r))
 			goto error_fini_exec;
 
 		r = amdgpu_vm_lock_pd(vm, &exec, 0);
-		drm_exec_retry_on_contention(&exec);
+		r = drm_exec_retry_on_contention(&exec, r);
 		if (unlikely(r))
 			goto error_fini_exec;
 	}
@@ -1292,12 +1292,12 @@ int amdgpu_mes_ctx_unmap_meta_data(struct amdgpu_device *adev,
 	drm_exec_until_all_locked(&exec) {
 		r = drm_exec_lock_obj(&exec,
 				      &ctx_data->meta_data_obj->tbo.base);
-		drm_exec_retry_on_contention(&exec);
+		r = drm_exec_retry_on_contention(&exec, r);
 		if (unlikely(r))
 			goto out_unlock;
 
 		r = amdgpu_vm_lock_pd(vm, &exec, 0);
-		drm_exec_retry_on_contention(&exec);
+		r = drm_exec_retry_on_contention(&exec, r);
 		if (unlikely(r))
 			goto out_unlock;
 	}

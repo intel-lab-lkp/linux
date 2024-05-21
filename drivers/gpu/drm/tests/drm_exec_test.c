@@ -63,7 +63,7 @@ static void test_lock(struct kunit *test)
 	drm_exec_init(&exec, DRM_EXEC_INTERRUPTIBLE_WAIT, 0);
 	drm_exec_until_all_locked(&exec) {
 		ret = drm_exec_lock_obj(&exec, &gobj);
-		drm_exec_retry_on_contention(&exec);
+		ret = drm_exec_retry_on_contention(&exec, ret);
 		KUNIT_EXPECT_EQ(test, ret, 0);
 		if (ret)
 			break;
@@ -83,14 +83,14 @@ static void test_lock_unlock(struct kunit *test)
 	drm_exec_init(&exec, DRM_EXEC_INTERRUPTIBLE_WAIT, 0);
 	drm_exec_until_all_locked(&exec) {
 		ret = drm_exec_lock_obj(&exec, &gobj);
-		drm_exec_retry_on_contention(&exec);
+		ret = drm_exec_retry_on_contention(&exec, ret);
 		KUNIT_EXPECT_EQ(test, ret, 0);
 		if (ret)
 			break;
 
 		drm_exec_unlock_obj(&exec, &gobj);
 		ret = drm_exec_lock_obj(&exec, &gobj);
-		drm_exec_retry_on_contention(&exec);
+		ret = drm_exec_retry_on_contention(&exec, ret);
 		KUNIT_EXPECT_EQ(test, ret, 0);
 		if (ret)
 			break;
@@ -110,13 +110,13 @@ static void test_duplicates(struct kunit *test)
 	drm_exec_init(&exec, DRM_EXEC_IGNORE_DUPLICATES, 0);
 	drm_exec_until_all_locked(&exec) {
 		ret = drm_exec_lock_obj(&exec, &gobj);
-		drm_exec_retry_on_contention(&exec);
+		ret = drm_exec_retry_on_contention(&exec, ret);
 		KUNIT_EXPECT_EQ(test, ret, 0);
 		if (ret)
 			break;
 
 		ret = drm_exec_lock_obj(&exec, &gobj);
-		drm_exec_retry_on_contention(&exec);
+		ret = drm_exec_retry_on_contention(&exec, ret);
 		KUNIT_EXPECT_EQ(test, ret, 0);
 		if (ret)
 			break;
@@ -137,7 +137,7 @@ static void test_prepare(struct kunit *test)
 	drm_exec_init(&exec, DRM_EXEC_INTERRUPTIBLE_WAIT, 0);
 	drm_exec_until_all_locked(&exec) {
 		ret = drm_exec_prepare_obj(&exec, &gobj, 1);
-		drm_exec_retry_on_contention(&exec);
+		ret = drm_exec_retry_on_contention(&exec, ret);
 		KUNIT_EXPECT_EQ(test, ret, 0);
 		if (ret)
 			break;

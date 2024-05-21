@@ -1350,7 +1350,7 @@ nouveau_uvmm_bind_job_submit(struct nouveau_job *job,
 	drm_exec_init(exec, vme->flags, 0);
 	drm_exec_until_all_locked(exec) {
 		ret = bind_lock_validate(job, exec, vme->num_fences);
-		drm_exec_retry_on_contention(exec);
+		ret = drm_exec_retry_on_contention(exec, ret);
 		if (ret) {
 			op = list_last_op(&bind_job->ops);
 			goto unwind;

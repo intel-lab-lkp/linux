@@ -574,7 +574,7 @@ prepare_job_resvs_for_each(struct drm_exec *exec, struct pvr_job_data *job_data,
 	drm_exec_until_all_locked(exec) {
 		int err = jobs_lock_all_objs(exec, job_data, job_count);
 
-		drm_exec_retry_on_contention(exec);
+		err = drm_exec_retry_on_contention(exec, err);
 		if (err)
 			return err;
 	}

@@ -51,6 +51,8 @@ struct drm_exec {
 	struct drm_gem_object *prelocked;
 };
 
+int drm_exec_handle_contended(struct drm_exec *exec);
+
 /**
  * drm_exec_obj() - Return the object for a give drm_exec index
  * @exec: Pointer to the drm_exec context
@@ -113,15 +115,26 @@ __PASTE(__drm_exec_, __LINE__):						\
 /**
  * drm_exec_retry_on_contention - restart the loop to grap all locks
  * @exec: drm_exec object
+ * @_ret: The current error status
  *
  * Control flow helper to continue when a contention was detected and we need to
  * clean up and re-start the loop to prepare all GEM objects.
+ *
+ * Return: If no loop restart occurred: The error status.
  */
-#define drm_exec_retry_on_contention(exec)			\
-	do {							\
-		if (unlikely(drm_exec_is_contended(exec)))	\
-			goto *__drm_exec_retry_ptr;		\
-	} while (0)
+#define drm_exec_retry_on_contention(exec, _ret)			\
+	({								\
+		struct drm_exec *__exec = (exec);			\
+		int __ret = (_ret);					\
+									\
+		if (unlikely(drm_exec_is_contended(__exec))) {		\
+			WARN_ON(__ret != -EDEADLK);			\
+			__ret = drm_exec_handle_contended(__exec);	\
+			if (!__ret)					\
+				goto *__drm_exec_retry_ptr;		\
+		}							\
+		__ret;							\
+	})
 
 /**
  * drm_exec_is_contended - check for contention
