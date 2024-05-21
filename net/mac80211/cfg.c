@@ -23,30 +23,6 @@
 #include "mesh.h"
 #include "wme.h"
 
-static struct ieee80211_link_data *
-ieee80211_link_or_deflink(struct ieee80211_sub_if_data *sdata, int link_id,
-			  bool require_valid)
-{
-	struct ieee80211_link_data *link;
-
-	if (link_id < 0) {
-		/*
-		 * For keys, if sdata is not an MLD, we might not use
-		 * the return value at all (if it's not a pairwise key),
-		 * so in that case (require_valid==false) don't error.
-		 */
-		if (require_valid && ieee80211_vif_is_mld(&sdata->vif))
-			return ERR_PTR(-EINVAL);
-
-		return &sdata->deflink;
-	}
-
-	link = sdata_dereference(sdata->link[link_id], sdata);
-	if (!link)
-		return ERR_PTR(-ENOLINK);
-	return link;
-}
-
 static void ieee80211_set_mu_mimo_follow(struct ieee80211_sub_if_data *sdata,
 					 struct vif_params *params)
 {
@@ -259,11 +235,16 @@ static int ieee80211_start_p2p_device(struct wiphy *wiphy,
 				      struct wireless_dev *wdev)
 {
 	struct ieee80211_sub_if_data *sdata = IEEE80211_WDEV_TO_SUB_IF(wdev);
+	struct ieee80211_link_data *link;
 	int ret;
 
 	lockdep_assert_wiphy(sdata->local->hw.wiphy);
 
-	ret = ieee80211_check_combinations(sdata, NULL, 0, 0);
+	link = ieee80211_link_or_deflink(sdata, -1, false);
+	if (IS_ERR(link))
+		return PTR_ERR(link);
+
+	ret = ieee80211_check_combinations(link, NULL, 0, 0);
 	if (ret < 0)
 		return ret;
 
@@ -281,11 +262,16 @@ static int ieee80211_start_nan(struct wiphy *wiphy,
 			       struct cfg80211_nan_conf *conf)
 {
 	struct ieee80211_sub_if_data *sdata = IEEE80211_WDEV_TO_SUB_IF(wdev);
+	struct ieee80211_link_data *link;
 	int ret;
 
 	lockdep_assert_wiphy(sdata->local->hw.wiphy);
 
-	ret = ieee80211_check_combinations(sdata, NULL, 0, 0);
+	link = ieee80211_link_or_deflink(sdata, -1, false);
+	if (IS_ERR(link))
+		return PTR_ERR(link);
+
+	ret = ieee80211_check_combinations(link, NULL, 0, 0);
 	if (ret < 0)
 		return ret;
 
@@ -4000,7 +3986,7 @@ __ieee80211_channel_switch(struct wiphy *wiphy, struct net_device *dev,
 		goto out;
 
 	/* if reservation is invalid then this will fail */
-	err = ieee80211_check_combinations(sdata, NULL, chanctx->mode, 0);
+	err = ieee80211_check_combinations(link_data, NULL, chanctx->mode, 0);
 	if (err) {
 		ieee80211_link_unreserve_chanctx(link_data);
 		goto out;

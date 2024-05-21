@@ -67,20 +67,6 @@ static bool ieee80211_can_create_new_chanctx(struct ieee80211_local *local)
 	return ieee80211_num_chanctx(local) < ieee80211_max_num_channels(local);
 }
 
-static struct ieee80211_chanctx *
-ieee80211_link_get_chanctx(struct ieee80211_link_data *link)
-{
-	struct ieee80211_local *local __maybe_unused = link->sdata->local;
-	struct ieee80211_chanctx_conf *conf;
-
-	conf = rcu_dereference_protected(link->conf->chanctx_conf,
-					 lockdep_is_held(&local->hw.wiphy->mtx));
-	if (!conf)
-		return NULL;
-
-	return container_of(conf, struct ieee80211_chanctx, conf);
-}
-
 bool ieee80211_chanreq_identical(const struct ieee80211_chan_req *a,
 				 const struct ieee80211_chan_req *b)
 {
@@ -1764,7 +1750,7 @@ int _ieee80211_link_use_channel(struct ieee80211_link_data *link,
 
 	link->radar_required = ret;
 
-	ret = ieee80211_check_combinations(sdata, &chanreq->oper, mode,
+	ret = ieee80211_check_combinations(link, &chanreq->oper, mode,
 					   radar_detect_width);
 	if (ret < 0)
 		goto out;

@@ -625,17 +625,25 @@ static int wil_cfg80211_validate_add_iface(struct wil6210_priv *wil,
 {
 	int i;
 	struct wireless_dev *wdev;
-	struct iface_combination_params params = {
-		.num_different_channels = 1,
-	};
+	struct iface_combination_params params = { };
+	struct iface_combination_interface ifaces[WIL_MAX_VIFS] = { };
 
 	for (i = 0; i < GET_MAX_VIFS(wil); i++) {
 		if (wil->vifs[i]) {
 			wdev = vif_to_wdev(wil->vifs[i]);
-			params.iftype_num[wdev->iftype]++;
+			ifaces[params.num_iface].iftype = wdev->iftype;
+			ifaces[params.num_iface].valid_links = BIT(0);
+			params.num_iface++;
 		}
 	}
-	params.iftype_num[new_type]++;
+
+	if (params.num_iface < WIL_MAX_VIFS) {
+		ifaces[params.num_iface].iftype = new_type;
+		ifaces[params.num_iface].valid_links = BIT(0);
+		params.num_iface++;
+	}
+	params.ifaces = ifaces;
+
 	return cfg80211_check_combinations(wil->wiphy, &params);
 }
 
@@ -643,11 +651,10 @@ static int wil_cfg80211_validate_change_iface(struct wil6210_priv *wil,
 					      struct wil6210_vif *vif,
 					      enum nl80211_iftype new_type)
 {
-	int i, ret = 0;
+	int i;
 	struct wireless_dev *wdev;
-	struct iface_combination_params params = {
-		.num_different_channels = 1,
-	};
+	struct iface_combination_params params = { };
+	struct iface_combination_interface ifaces[WIL_MAX_VIFS] = { };
 	bool check_combos = false;
 
 	for (i = 0; i < GET_MAX_VIFS(wil); i++) {
@@ -655,16 +662,25 @@ static int wil_cfg80211_validate_change_iface(struct wil6210_priv *wil,
 
 		if (vif_pos && vif != vif_pos) {
 			wdev = vif_to_wdev(vif_pos);
-			params.iftype_num[wdev->iftype]++;
+			ifaces[params.num_iface].iftype = wdev->iftype;
+			ifaces[params.num_iface].valid_links = BIT(0);
+			params.num_iface++;
+
 			check_combos = true;
 		}
 	}
 
-	if (check_combos) {
-		params.iftype_num[new_type]++;
-		ret = cfg80211_check_combinations(wil->wiphy, &params);
+	if (!check_combos)
+		return 0;
+
+	if (params.num_iface < WIL_MAX_VIFS) {
+		ifaces[params.num_iface].iftype = new_type;
+		ifaces[params.num_iface].valid_links = BIT(0);
+		params.num_iface++;
 	}
-	return ret;
+	params.ifaces = ifaces;
+
+	return cfg80211_check_combinations(wil->wiphy, &params);
 }
 
 static struct wireless_dev *
