@@ -2066,6 +2066,7 @@ static unsigned long memsize_code __initdata_memblock;
 static unsigned long memsize_data __initdata_memblock;
 static unsigned long memsize_ro __initdata_memblock;
 static unsigned long memsize_bss __initdata_memblock;
+static long memsize_reusable_size __initdata_memblock;
 static bool memblock_memsize_tracking __initdata_memblock = true;
 
 void __init memblock_memsize_enable_tracking(void)
@@ -2115,6 +2116,11 @@ static void __init_memblock memsize_get_valid_name(char *valid_name, const char 
 		val_size = NAME_SIZE - 1;
 	strscpy(valid_name, head, val_size);
 	valid_name[val_size] = '\0';
+}
+
+void memblock_memsize_mod_reusable_size(long size)
+{
+	memsize_reusable_size += size;
 }
 
 static inline struct memsize_rgn_struct * __init_memblock memsize_get_new_rgn(void)
@@ -2716,6 +2722,7 @@ static int memblock_memsize_show(struct seq_file *m, void *private)
 	etc -= memsize_code + memsize_data + memsize_ro + memsize_bss +
 		memsize_memap;
 
+	system += memsize_reusable_size;
 	sort(memsize_rgn, memsize_rgn_count,
 	     sizeof(memsize_rgn[0]), memsize_rgn_cmp, NULL);
 	for (i = 0; i < memsize_rgn_count; i++) {
