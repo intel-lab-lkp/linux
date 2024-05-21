@@ -1108,6 +1108,51 @@ unlock:
 }
 DEFINE_SHOW_ATTRIBUTE(amdgpu_current_colorspace);
 
+/*
+ * Returns the current pixelencoding for the crtc.
+ * Example usage: cat /sys/kernel/debug/dri/0/crtc-0/amdgpu_current_pixelencoding
+ */
+static int amdgpu_current_pixelencoding_show(struct seq_file *m, void *data)
+{
+	struct drm_crtc *crtc = m->private;
+	struct drm_device *dev = crtc->dev;
+	struct dm_crtc_state *dm_crtc_state;
+	int res = -ENODEV;
+
+	mutex_lock(&dev->mode_config.mutex);
+	drm_modeset_lock(&crtc->mutex, NULL);
+	if (crtc->state == NULL)
+		goto unlock;
+
+	dm_crtc_state = to_dm_crtc_state(crtc->state);
+	if (dm_crtc_state->stream == NULL)
+		goto unlock;
+
+	switch (dm_crtc_state->stream->timing.pixel_encoding) {
+	case PIXEL_ENCODING_RGB:
+		seq_puts(m, "RGB");
+		break;
+	case PIXEL_ENCODING_YCBCR422:
+		seq_puts(m, "YCBCR422");
+		break;
+	case PIXEL_ENCODING_YCBCR444:
+		seq_puts(m, "YCBCR444");
+		break;
+	case PIXEL_ENCODING_YCBCR420:
+		seq_puts(m, "YCBCR420");
+		break;
+	default:
+		goto unlock;
+	}
+	res = 0;
+
+unlock:
+	drm_modeset_unlock(&crtc->mutex);
+	mutex_unlock(&dev->mode_config.mutex);
+
+	return res;
+}
+DEFINE_SHOW_ATTRIBUTE(amdgpu_current_pixelencoding);
 
 /*
  * Example usage:
@@ -3546,6 +3591,8 @@ void crtc_debugfs_init(struct drm_crtc *crtc)
 			    crtc, &amdgpu_current_bpc_fops);
 	debugfs_create_file("amdgpu_current_colorspace", 0644, crtc->debugfs_entry,
 			    crtc, &amdgpu_current_colorspace_fops);
+	debugfs_create_file("amdgpu_current_pixelencoding", 0644, crtc->debugfs_entry,
+			    crtc, &amdgpu_current_pixelencoding_fops);
 }
 
 /*
