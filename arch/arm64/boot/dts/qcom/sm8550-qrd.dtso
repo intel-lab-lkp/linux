@@ -4,10 +4,14 @@
  */
 
 /dts-v1/;
+/plugin/;
 
+#include <dt-bindings/arm/qcom,ids.h>
+#include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/leds/common.h>
+#include <dt-bindings/phy/phy-qcom-qmp.h>
 #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
-#include "sm8550.dtsi"
+#include <dt-bindings/sound/qcom,q6dsp-lpass-ports.h>
 #include "pm8010.dtsi"
 #include "pm8550.dtsi"
 #include "pm8550b.dtsi"
@@ -19,13 +23,25 @@
 #include "pmr735d_b.dtsi"
 
 / {
+	board-id {
+		qcom,soc = <QCOM_ID_SM8550>;
+		qcom,platform = <QCOM_BOARD_ID_QRD>;
+	};
+};
+
+&{/} {
 	model = "Qualcomm Technologies, Inc. SM8550 QRD";
 	compatible = "qcom,sm8550-qrd", "qcom,sm8550";
 	chassis-type = "handset";
 
+	board-id {
+		qcom,soc = <QCOM_ID_SM8550>;
+		qcom,platform = <QCOM_BOARD_ID_QRD>;
+	};
+
 	aliases {
-		serial0 = &uart7;
-		serial1 = &uart14;
+		// serial0 = &uart7;
+		// serial1 = &uart14;
 	};
 
 	wcd938x: audio-codec {

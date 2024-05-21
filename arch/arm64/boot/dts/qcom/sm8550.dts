@@ -3,6 +3,9 @@
  * Copyright (c) 2022, Linaro Limited
  */
 
+/dts-v1/;
+
+#include <dt-bindings/arm/qcom,ids.h>
 #include <dt-bindings/clock/qcom,rpmh.h>
 #include <dt-bindings/clock/qcom,sm8450-videocc.h>
 #include <dt-bindings/clock/qcom,sm8550-camcc.h>
@@ -31,6 +34,11 @@
 	#size-cells = <2>;
 
 	chosen { };
+
+	board_id: board-id {
+		qcom,soc-version = <QCOM_ID_SM8550 QCOM_SOC_REVISION(1)>,
+				   <QCOM_ID_SM8550 QCOM_SOC_REVISION(2)>;
+	};
 
 	clocks {
 		xo_board: xo-board {
