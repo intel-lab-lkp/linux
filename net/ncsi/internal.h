@@ -343,6 +343,7 @@ struct ncsi_dev_priv {
 	bool                multi_package;   /* Enable multiple packages   */
 	bool                mlx_multi_host;  /* Enable multi host Mellanox */
 	u32                 package_whitelist; /* Packages to configure    */
+	unsigned char       max_channel;     /* Num of channels to probe   */
 };
 
 struct ncsi_cmd_arg {
