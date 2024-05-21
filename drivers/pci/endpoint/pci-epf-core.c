@@ -77,8 +77,8 @@ int pci_epf_bind(struct pci_epf *epf)
 		vfunc_no = epf_vf->vfunc_no;
 
 		if (vfunc_no < 1) {
-			dev_err(dev, "Invalid virtual function number\n");
 			ret = -EINVAL;
+			dev_err(dev, "Invalid virtual function number: %pe\n", ERR_PTR(ret));
 			goto ret;
 		}
 
@@ -86,15 +86,15 @@ int pci_epf_bind(struct pci_epf *epf)
 		func_no = epf->func_no;
 		if (!IS_ERR_OR_NULL(epc)) {
 			if (!epc->max_vfs) {
-				dev_err(dev, "No support for virt function\n");
 				ret = -EINVAL;
+				dev_err(dev, "No support for virt function: %pe\n", ERR_PTR(ret));
 				goto ret;
 			}
 
 			if (vfunc_no > epc->max_vfs[func_no]) {
-				dev_err(dev, "PF%d: Exceeds max vfunc number\n",
-					func_no);
 				ret = -EINVAL;
+				dev_err(dev, "PF%d: Exceeds max vfunc number: %pe\n",
+					func_no, ERR_PTR(ret));
 				goto ret;
 			}
 		}
@@ -103,15 +103,15 @@ int pci_epf_bind(struct pci_epf *epf)
 		func_no = epf->sec_epc_func_no;
 		if (!IS_ERR_OR_NULL(epc)) {
 			if (!epc->max_vfs) {
-				dev_err(dev, "No support for virt function\n");
 				ret = -EINVAL;
+				dev_err(dev, "No support for virt function: %pe\n", ERR_PTR(ret));
 				goto ret;
 			}
 
 			if (vfunc_no > epc->max_vfs[func_no]) {
-				dev_err(dev, "PF%d: Exceeds max vfunc number\n",
-					func_no);
 				ret = -EINVAL;
+				dev_err(dev, "PF%d: Exceeds max vfunc number: %pe\n",
+					func_no, ERR_PTR(ret));
 				goto ret;
 			}
 		}
@@ -535,7 +535,7 @@ static int __init pci_epf_init(void)
 
 	ret = bus_register(&pci_epf_bus_type);
 	if (ret) {
-		pr_err("failed to register pci epf bus --> %d\n", ret);
+		pr_err("failed to register pci epf bus: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 

@@ -1743,14 +1743,14 @@ static int advk_pcie_setup_phy(struct advk_pcie *pcie)
 
 	/* Old bindings miss the PHY handle */
 	if (IS_ERR(pcie->phy)) {
-		dev_warn(dev, "PHY unavailable (%ld)\n", PTR_ERR(pcie->phy));
+		dev_warn(dev, "PHY unavailable: %pe\n", pcie->phy);
 		pcie->phy = NULL;
 		return 0;
 	}
 
 	ret = advk_pcie_enable_phy(pcie);
 	if (ret)
-		dev_err(dev, "Failed to initialize PHY (%d)\n", ret);
+		dev_err(dev, "Failed to initialize PHY: %pe\n", ERR_PTR(ret));
 
 	return ret;
 }
@@ -1863,7 +1863,7 @@ static int advk_pcie_probe(struct platform_device *pdev)
 	ret = PTR_ERR_OR_ZERO(pcie->reset_gpio);
 	if (ret) {
 		if (ret != -EPROBE_DEFER)
-			dev_err(dev, "Failed to get reset-gpio: %i\n", ret);
+			dev_err(dev, "Failed to get reset-gpio: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 

@@ -1542,7 +1542,7 @@ static int __init vga_arb_device_init(void)
 
 	rc = misc_register(&vga_arb_device);
 	if (rc < 0)
-		pr_err("error %d registering device\n", rc);
+		pr_err("error registering device: %pe\n", ERR_PTR(rc));
 
 	bus_register_notifier(&pci_bus_type, &pci_notifier);
 

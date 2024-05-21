@@ -943,7 +943,7 @@ static int vmd_enable_domain(struct vmd_dev *vmd, unsigned long features)
 					       struct pci_dev, bus_list);
 			ret = pci_reset_bus(dev);
 			if (ret)
-				pci_warn(dev, "can't reset device: %d\n", ret);
+				pci_warn(dev, "can't reset device: %pe\n", ERR_PTR(ret));
 
 			break;
 		}

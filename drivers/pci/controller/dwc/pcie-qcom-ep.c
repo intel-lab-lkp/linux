@@ -296,8 +296,8 @@ static void qcom_pcie_ep_icc_update(struct qcom_pcie_ep *pcie_ep)
 
 	ret = icc_set_bw(pcie_ep->icc_mem, 0, width * QCOM_PCIE_LINK_SPEED_TO_BW(speed));
 	if (ret)
-		dev_err(pci->dev, "failed to set interconnect bandwidth: %d\n",
-			ret);
+		dev_err(pci->dev, "failed to set interconnect bandwidth: %pe\n",
+			ERR_PTR(ret));
 }
 
 static int qcom_pcie_enable_resources(struct qcom_pcie_ep *pcie_ep)
@@ -334,8 +334,8 @@ static int qcom_pcie_enable_resources(struct qcom_pcie_ep *pcie_ep)
 	 */
 	ret = icc_set_bw(pcie_ep->icc_mem, 0, QCOM_PCIE_LINK_SPEED_TO_BW(1));
 	if (ret) {
-		dev_err(pci->dev, "failed to set interconnect bandwidth: %d\n",
-			ret);
+		dev_err(pci->dev, "failed to set interconnect bandwidth: %pe\n",
+			ERR_PTR(ret));
 		goto err_phy_off;
 	}
 
@@ -368,7 +368,7 @@ static int qcom_pcie_perst_deassert(struct dw_pcie *pci)
 
 	ret = qcom_pcie_enable_resources(pcie_ep);
 	if (ret) {
-		dev_err(dev, "Failed to enable resources: %d\n", ret);
+		dev_err(dev, "Failed to enable resources: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 
@@ -465,7 +465,7 @@ static int qcom_pcie_perst_deassert(struct dw_pcie *pci)
 
 	ret = dw_pcie_ep_init_registers(&pcie_ep->pci.ep);
 	if (ret) {
-		dev_err(dev, "Failed to complete initialization: %d\n", ret);
+		dev_err(dev, "Failed to complete initialization: %pe\n", ERR_PTR(ret));
 		goto err_disable_resources;
 	}
 
@@ -591,7 +591,7 @@ static int qcom_pcie_ep_get_resources(struct platform_device *pdev,
 
 	ret = qcom_pcie_ep_get_io_resources(pdev, pcie_ep);
 	if (ret) {
-		dev_err(dev, "Failed to get io resources %d\n", ret);
+		dev_err(dev, "Failed to get io resources: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 
@@ -824,13 +824,13 @@ static int qcom_pcie_ep_probe(struct platform_device *pdev)
 
 	ret = qcom_pcie_enable_resources(pcie_ep);
 	if (ret) {
-		dev_err(dev, "Failed to enable resources: %d\n", ret);
+		dev_err(dev, "Failed to enable resources: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 
 	ret = dw_pcie_ep_init(&pcie_ep->pci.ep);
 	if (ret) {
-		dev_err(dev, "Failed to initialize endpoint: %d\n", ret);
+		dev_err(dev, "Failed to initialize endpoint: %pe\n", ERR_PTR(ret));
 		goto err_disable_resources;
 	}
 

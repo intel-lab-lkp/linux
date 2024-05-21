@@ -931,7 +931,7 @@ static int qcom_pcie_init_2_7_0(struct qcom_pcie *pcie)
 
 	ret = reset_control_assert(res->rst);
 	if (ret) {
-		dev_err(dev, "reset assert failed (%d)\n", ret);
+		dev_err(dev, "reset assert failed: %pe\n", ERR_PTR(ret));
 		goto err_disable_clocks;
 	}
 
@@ -939,7 +939,7 @@ static int qcom_pcie_init_2_7_0(struct qcom_pcie *pcie)
 
 	ret = reset_control_deassert(res->rst);
 	if (ret) {
-		dev_err(dev, "reset deassert failed (%d)\n", ret);
+		dev_err(dev, "reset deassert failed: %pe\n", ERR_PTR(ret));
 		goto err_disable_clocks;
 	}
 
@@ -1135,7 +1135,7 @@ static int qcom_pcie_init_2_9_0(struct qcom_pcie *pcie)
 
 	ret = reset_control_assert(res->rst);
 	if (ret) {
-		dev_err(dev, "reset assert failed (%d)\n", ret);
+		dev_err(dev, "reset assert failed: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 
@@ -1147,7 +1147,7 @@ static int qcom_pcie_init_2_9_0(struct qcom_pcie *pcie)
 
 	ret = reset_control_deassert(res->rst);
 	if (ret) {
-		dev_err(dev, "reset deassert failed (%d)\n", ret);
+		dev_err(dev, "reset deassert failed: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 
@@ -1418,8 +1418,8 @@ static int qcom_pcie_icc_init(struct qcom_pcie *pcie)
 	 */
 	ret = icc_set_bw(pcie->icc_mem, 0, QCOM_PCIE_LINK_SPEED_TO_BW(1));
 	if (ret) {
-		dev_err(pci->dev, "failed to set interconnect bandwidth: %d\n",
-			ret);
+		dev_err(pci->dev, "failed to set interconnect bandwidth: %pe\n",
+			ERR_PTR(ret));
 		return ret;
 	}
 
@@ -1448,8 +1448,8 @@ static void qcom_pcie_icc_update(struct qcom_pcie *pcie)
 
 	ret = icc_set_bw(pcie->icc_mem, 0, width * QCOM_PCIE_LINK_SPEED_TO_BW(speed));
 	if (ret) {
-		dev_err(pci->dev, "failed to set interconnect bandwidth: %d\n",
-			ret);
+		dev_err(pci->dev, "failed to set interconnect bandwidth: %pe\n",
+			ERR_PTR(ret));
 	}
 }
 
@@ -1610,7 +1610,7 @@ static int qcom_pcie_suspend_noirq(struct device *dev)
 	 */
 	ret = icc_set_bw(pcie->icc_mem, 0, kBps_to_icc(1));
 	if (ret) {
-		dev_err(dev, "Failed to set interconnect bandwidth: %d\n", ret);
+		dev_err(dev, "Failed to set interconnect bandwidth: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 

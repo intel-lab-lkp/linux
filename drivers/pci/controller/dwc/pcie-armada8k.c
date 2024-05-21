@@ -134,7 +134,7 @@ static int armada8k_pcie_setup_phys(struct armada8k_pcie *pcie)
 
 	ret = armada8k_pcie_enable_phys(pcie);
 	if (ret)
-		dev_err(dev, "Failed to initialize PHY(s) (%d)\n", ret);
+		dev_err(dev, "Failed to initialize PHY(s): %pe\n", ERR_PTR(ret));
 
 	return ret;
 }
@@ -251,7 +251,7 @@ static int armada8k_add_pcie_port(struct armada8k_pcie *pcie,
 
 	ret = dw_pcie_host_init(pp);
 	if (ret) {
-		dev_err(dev, "failed to initialize host: %d\n", ret);
+		dev_err(dev, "failed to initialize host: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 

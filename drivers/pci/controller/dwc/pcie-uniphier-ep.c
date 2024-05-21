@@ -388,7 +388,7 @@ static int uniphier_pcie_ep_probe(struct platform_device *pdev)
 	priv->phy = devm_phy_optional_get(dev, "pcie-phy");
 	if (IS_ERR(priv->phy)) {
 		ret = PTR_ERR(priv->phy);
-		dev_err(dev, "Failed to get phy (%d)\n", ret);
+		dev_err(dev, "Failed to get phy: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 

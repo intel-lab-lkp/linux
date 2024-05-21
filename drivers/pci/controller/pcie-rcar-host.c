@@ -78,7 +78,7 @@ static int rcar_pcie_wakeup(struct device *pcie_dev, void __iomem *pcie_base)
 		writel(L1IATN, pcie_base + PMCTLR);
 		ret = readl_poll_timeout_atomic(pcie_base + PMSR, val,
 						val & L1FAEG, 10, 1000);
-		WARN(ret, "Timeout waiting for L1 link state, ret=%d\n", ret);
+		WARN(ret, "Timeout waiting for L1 link state, ret=%pe\n", ERR_PTR(ret));
 		writel(L1FAEG | PMEL1RX, pcie_base + PMSR);
 	}
 
@@ -782,7 +782,7 @@ static int rcar_pcie_enable_msi(struct rcar_pcie_host *host)
 			       IRQF_SHARED | IRQF_NO_THREAD,
 			       rcar_msi_bottom_chip.name, host);
 	if (err < 0) {
-		dev_err(dev, "failed to request IRQ: %d\n", err);
+		dev_err(dev, "failed to request IRQ: %pe\n", ERR_PTR(err));
 		goto err;
 	}
 
@@ -790,7 +790,7 @@ static int rcar_pcie_enable_msi(struct rcar_pcie_host *host)
 			       IRQF_SHARED | IRQF_NO_THREAD,
 			       rcar_msi_bottom_chip.name, host);
 	if (err < 0) {
-		dev_err(dev, "failed to request IRQ: %d\n", err);
+		dev_err(dev, "failed to request IRQ: %pe\n", ERR_PTR(err));
 		goto err;
 	}
 
@@ -996,13 +996,13 @@ static int rcar_pcie_probe(struct platform_device *pdev)
 
 	err = rcar_pcie_get_resources(host);
 	if (err < 0) {
-		dev_err(dev, "failed to request resources: %d\n", err);
+		dev_err(dev, "failed to request resources: %pe\n", ERR_PTR(err));
 		goto err_pm_put;
 	}
 
 	err = clk_prepare_enable(host->bus_clk);
 	if (err) {
-		dev_err(dev, "failed to enable bus clock: %d\n", err);
+		dev_err(dev, "failed to enable bus clock: %pe\n", ERR_PTR(err));
 		goto err_unmap_msi_irqs;
 	}
 
@@ -1031,8 +1031,8 @@ static int rcar_pcie_probe(struct platform_device *pdev)
 		err = rcar_pcie_enable_msi(host);
 		if (err < 0) {
 			dev_err(dev,
-				"failed to enable MSI support: %d\n",
-				err);
+				"failed to enable MSI support: %pe\n",
+				ERR_PTR(err));
 			goto err_phy_shutdown;
 		}
 	}

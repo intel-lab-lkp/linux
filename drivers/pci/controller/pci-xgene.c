@@ -206,8 +206,8 @@ static int xgene_get_csr_resource(struct acpi_device *adev,
 				     acpi_dev_filter_resource_type_cb,
 				     (void *) flags);
 	if (ret < 0) {
-		dev_err(dev, "failed to parse _CRS method, error code %d\n",
-			ret);
+		dev_err(dev, "failed to parse _CRS method, error code %pe\n",
+			ERR_PTR(ret));
 		return ret;
 	}
 

@@ -1175,7 +1175,7 @@ static int mc_host_probe(struct platform_device *pdev)
 
 	ret = mc_pcie_init_clks(dev);
 	if (ret) {
-		dev_err(dev, "failed to get clock resources, error %d\n", ret);
+		dev_err(dev, "failed to get clock resources, error: %pe\n", ERR_PTR(ret));
 		return -ENODEV;
 	}
 

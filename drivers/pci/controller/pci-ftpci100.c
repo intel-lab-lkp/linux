@@ -502,7 +502,7 @@ static int faraday_pci_probe(struct platform_device *pdev)
 
 	ret = pci_scan_root_bus_bridge(host);
 	if (ret) {
-		dev_err(dev, "failed to scan host: %d\n", ret);
+		dev_err(dev, "failed to scan host: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 	p->bus = host->bus;

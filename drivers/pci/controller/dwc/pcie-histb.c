@@ -230,7 +230,7 @@ static int histb_pcie_host_enable(struct dw_pcie_rp *pp)
 	if (hipcie->vpcie) {
 		ret = regulator_enable(hipcie->vpcie);
 		if (ret) {
-			dev_err(dev, "failed to enable regulator: %d\n", ret);
+			dev_err(dev, "failed to enable regulator: %pe\n", ERR_PTR(ret));
 			return ret;
 		}
 	}
@@ -337,14 +337,14 @@ static int histb_pcie_probe(struct platform_device *pdev)
 						     GPIOD_OUT_HIGH);
 	ret = PTR_ERR_OR_ZERO(hipcie->reset_gpio);
 	if (ret) {
-		dev_err(dev, "unable to request reset gpio: %d\n", ret);
+		dev_err(dev, "unable to request reset gpio: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 
 	ret = gpiod_set_consumer_name(hipcie->reset_gpio,
 				      "PCIe device power control");
 	if (ret) {
-		dev_err(dev, "unable to set reset gpio name: %d\n", ret);
+		dev_err(dev, "unable to set reset gpio name: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 

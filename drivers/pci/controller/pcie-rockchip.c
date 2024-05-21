@@ -169,51 +169,51 @@ int rockchip_pcie_init_port(struct rockchip_pcie *rockchip)
 
 	err = reset_control_assert(rockchip->aclk_rst);
 	if (err) {
-		dev_err(dev, "assert aclk_rst err %d\n", err);
+		dev_err(dev, "assert aclk_rst err: %pe\n", ERR_PTR(err));
 		return err;
 	}
 
 	err = reset_control_assert(rockchip->pclk_rst);
 	if (err) {
-		dev_err(dev, "assert pclk_rst err %d\n", err);
+		dev_err(dev, "assert pclk_rst err: %pe\n", ERR_PTR(err));
 		return err;
 	}
 
 	err = reset_control_assert(rockchip->pm_rst);
 	if (err) {
-		dev_err(dev, "assert pm_rst err %d\n", err);
+		dev_err(dev, "assert pm_rst err: %pe\n", ERR_PTR(err));
 		return err;
 	}
 
 	for (i = 0; i < MAX_LANE_NUM; i++) {
 		err = phy_init(rockchip->phys[i]);
 		if (err) {
-			dev_err(dev, "init phy%d err %d\n", i, err);
+			dev_err(dev, "init phy%d err: %pe\n", i, ERR_PTR(err));
 			goto err_exit_phy;
 		}
 	}
 
 	err = reset_control_assert(rockchip->core_rst);
 	if (err) {
-		dev_err(dev, "assert core_rst err %d\n", err);
+		dev_err(dev, "assert core_rst err: %pe\n", ERR_PTR(err));
 		goto err_exit_phy;
 	}
 
 	err = reset_control_assert(rockchip->mgmt_rst);
 	if (err) {
-		dev_err(dev, "assert mgmt_rst err %d\n", err);
+		dev_err(dev, "assert mgmt_rst err: %pe\n", ERR_PTR(err));
 		goto err_exit_phy;
 	}
 
 	err = reset_control_assert(rockchip->mgmt_sticky_rst);
 	if (err) {
-		dev_err(dev, "assert mgmt_sticky_rst err %d\n", err);
+		dev_err(dev, "assert mgmt_sticky_rst err: %pe\n", ERR_PTR(err));
 		goto err_exit_phy;
 	}
 
 	err = reset_control_assert(rockchip->pipe_rst);
 	if (err) {
-		dev_err(dev, "assert pipe_rst err %d\n", err);
+		dev_err(dev, "assert pipe_rst err: %pe\n", ERR_PTR(err));
 		goto err_exit_phy;
 	}
 
@@ -221,19 +221,19 @@ int rockchip_pcie_init_port(struct rockchip_pcie *rockchip)
 
 	err = reset_control_deassert(rockchip->pm_rst);
 	if (err) {
-		dev_err(dev, "deassert pm_rst err %d\n", err);
+		dev_err(dev, "deassert pm_rst err: %pe\n", ERR_PTR(err));
 		goto err_exit_phy;
 	}
 
 	err = reset_control_deassert(rockchip->aclk_rst);
 	if (err) {
-		dev_err(dev, "deassert aclk_rst err %d\n", err);
+		dev_err(dev, "deassert aclk_rst err: %pe\n", ERR_PTR(err));
 		goto err_exit_phy;
 	}
 
 	err = reset_control_deassert(rockchip->pclk_rst);
 	if (err) {
-		dev_err(dev, "deassert pclk_rst err %d\n", err);
+		dev_err(dev, "deassert pclk_rst err: %pe\n", ERR_PTR(err));
 		goto err_exit_phy;
 	}
 
@@ -257,7 +257,7 @@ int rockchip_pcie_init_port(struct rockchip_pcie *rockchip)
 	for (i = 0; i < MAX_LANE_NUM; i++) {
 		err = phy_power_on(rockchip->phys[i]);
 		if (err) {
-			dev_err(dev, "power on phy%d err %d\n", i, err);
+			dev_err(dev, "power on phy%d err: %pe\n", i, ERR_PTR(err));
 			goto err_power_off_phy;
 		}
 	}
@@ -268,7 +268,7 @@ int rockchip_pcie_init_port(struct rockchip_pcie *rockchip)
 				 RK_PHY_PLL_LOCK_SLEEP_US,
 				 RK_PHY_PLL_LOCK_TIMEOUT_US);
 	if (err) {
-		dev_err(dev, "PHY PLLs could not lock, %d\n", err);
+		dev_err(dev, "PHY PLLs could not lock: %pe\n", ERR_PTR(err));
 		goto err_power_off_phy;
 	}
 
@@ -278,25 +278,25 @@ int rockchip_pcie_init_port(struct rockchip_pcie *rockchip)
 	 */
 	err = reset_control_deassert(rockchip->mgmt_sticky_rst);
 	if (err) {
-		dev_err(dev, "deassert mgmt_sticky_rst err %d\n", err);
+		dev_err(dev, "deassert mgmt_sticky_rst err: %pe\n", ERR_PTR(err));
 		goto err_power_off_phy;
 	}
 
 	err = reset_control_deassert(rockchip->core_rst);
 	if (err) {
-		dev_err(dev, "deassert core_rst err %d\n", err);
+		dev_err(dev, "deassert core_rst err: %pe\n", ERR_PTR(err));
 		goto err_power_off_phy;
 	}
 
 	err = reset_control_deassert(rockchip->mgmt_rst);
 	if (err) {
-		dev_err(dev, "deassert mgmt_rst err %d\n", err);
+		dev_err(dev, "deassert mgmt_rst err: %pe\n", ERR_PTR(err));
 		goto err_power_off_phy;
 	}
 
 	err = reset_control_deassert(rockchip->pipe_rst);
 	if (err) {
-		dev_err(dev, "deassert pipe_rst err %d\n", err);
+		dev_err(dev, "deassert pipe_rst err: %pe\n", ERR_PTR(err));
 		goto err_power_off_phy;
 	}
 

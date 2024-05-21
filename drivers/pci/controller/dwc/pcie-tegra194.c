@@ -1114,38 +1114,38 @@ static int tegra_pcie_dw_parse_dt(struct tegra_pcie_dw *pcie)
 
 	ret = of_property_read_u32(np, "nvidia,aspm-cmrt-us", &pcie->aspm_cmrt);
 	if (ret < 0) {
-		dev_info(pcie->dev, "Failed to read ASPM T_cmrt: %d\n", ret);
+		dev_info(pcie->dev, "Failed to read ASPM T_cmrt: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 
 	ret = of_property_read_u32(np, "nvidia,aspm-pwr-on-t-us",
 				   &pcie->aspm_pwr_on_t);
 	if (ret < 0)
-		dev_info(pcie->dev, "Failed to read ASPM Power On time: %d\n",
-			 ret);
+		dev_info(pcie->dev, "Failed to read ASPM Power On time: %pe\n",
+			 ERR_PTR(ret));
 
 	ret = of_property_read_u32(np, "nvidia,aspm-l0s-entrance-latency-us",
 				   &pcie->aspm_l0s_enter_lat);
 	if (ret < 0)
 		dev_info(pcie->dev,
-			 "Failed to read ASPM L0s Entrance latency: %d\n", ret);
+			 "Failed to read ASPM L0s Entrance latency: %pe\n", ERR_PTR(ret));
 
 	ret = of_property_read_u32(np, "num-lanes", &pcie->num_lanes);
 	if (ret < 0) {
-		dev_err(pcie->dev, "Failed to read num-lanes: %d\n", ret);
+		dev_err(pcie->dev, "Failed to read num-lanes: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 
 	ret = of_property_read_u32_index(np, "nvidia,bpmp", 1, &pcie->cid);
 	if (ret) {
-		dev_err(pcie->dev, "Failed to read Controller-ID: %d\n", ret);
+		dev_err(pcie->dev, "Failed to read Controller-ID: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 
 	ret = of_property_count_strings(np, "phy-names");
 	if (ret < 0) {
-		dev_err(pcie->dev, "Failed to find PHY entries: %d\n",
-			ret);
+		dev_err(pcie->dev, "Failed to find PHY entries: %pe\n",
+			ERR_PTR(ret));
 		return ret;
 	}
 	pcie->phy_count = ret;
@@ -1186,8 +1186,8 @@ static int tegra_pcie_dw_parse_dt(struct tegra_pcie_dw *pcie)
 			level = KERN_DEBUG;
 
 		dev_printk(level, pcie->dev,
-			   dev_fmt("Failed to get PERST GPIO: %d\n"),
-			   err);
+			   dev_fmt("Failed to get PERST GPIO: %pe\n"),
+			   ERR_PTR(err));
 		return err;
 	}
 
@@ -1202,8 +1202,8 @@ static int tegra_pcie_dw_parse_dt(struct tegra_pcie_dw *pcie)
 			level = KERN_DEBUG;
 
 		dev_printk(level, pcie->dev,
-			   dev_fmt("Failed to get REFCLK select GPIOs: %d\n"),
-			   err);
+			   dev_fmt("Failed to get REFCLK select GPIOs: %pe\n"),
+			   ERR_PTR(err));
 		pcie->pex_refclk_sel_gpiod = NULL;
 	}
 
@@ -1336,7 +1336,7 @@ static int tegra_pcie_enable_slot_regulators(struct tegra_pcie_dw *pcie)
 		ret = regulator_enable(pcie->slot_ctl_3v3);
 		if (ret < 0) {
 			dev_err(pcie->dev,
-				"Failed to enable 3.3V slot supply: %d\n", ret);
+				"Failed to enable 3.3V slot supply: %pe\n", ERR_PTR(ret));
 			return ret;
 		}
 	}
@@ -1345,7 +1345,7 @@ static int tegra_pcie_enable_slot_regulators(struct tegra_pcie_dw *pcie)
 		ret = regulator_enable(pcie->slot_ctl_12v);
 		if (ret < 0) {
 			dev_err(pcie->dev,
-				"Failed to enable 12V slot supply: %d\n", ret);
+				"Failed to enable 12V slot supply: %pe\n", ERR_PTR(ret));
 			goto fail_12v_enable;
 		}
 	}
@@ -1383,14 +1383,14 @@ static int tegra_pcie_config_controller(struct tegra_pcie_dw *pcie,
 	ret = tegra_pcie_bpmp_set_ctrl_state(pcie, true);
 	if (ret) {
 		dev_err(pcie->dev,
-			"Failed to enable controller %u: %d\n", pcie->cid, ret);
+			"Failed to enable controller %u: %pe\n", pcie->cid, ERR_PTR(ret));
 		return ret;
 	}
 
 	if (pcie->enable_ext_refclk) {
 		ret = tegra_pcie_bpmp_set_pll_state(pcie, true);
 		if (ret) {
-			dev_err(pcie->dev, "Failed to init UPHY: %d\n", ret);
+			dev_err(pcie->dev, "Failed to init UPHY: %pe\n", ERR_PTR(ret));
 			goto fail_pll_init;
 		}
 	}
@@ -1401,20 +1401,20 @@ static int tegra_pcie_config_controller(struct tegra_pcie_dw *pcie,
 
 	ret = regulator_enable(pcie->pex_ctl_supply);
 	if (ret < 0) {
-		dev_err(pcie->dev, "Failed to enable regulator: %d\n", ret);
+		dev_err(pcie->dev, "Failed to enable regulator: %pe\n", ERR_PTR(ret));
 		goto fail_reg_en;
 	}
 
 	ret = clk_prepare_enable(pcie->core_clk);
 	if (ret) {
-		dev_err(pcie->dev, "Failed to enable core clock: %d\n", ret);
+		dev_err(pcie->dev, "Failed to enable core clock: %pe\n", ERR_PTR(ret));
 		goto fail_core_clk;
 	}
 
 	ret = reset_control_deassert(pcie->core_apb_rst);
 	if (ret) {
-		dev_err(pcie->dev, "Failed to deassert core APB reset: %d\n",
-			ret);
+		dev_err(pcie->dev, "Failed to deassert core APB reset: %pe\n",
+			ERR_PTR(ret));
 		goto fail_core_apb_rst;
 	}
 
@@ -1431,7 +1431,7 @@ static int tegra_pcie_config_controller(struct tegra_pcie_dw *pcie,
 
 	ret = tegra_pcie_enable_phy(pcie);
 	if (ret) {
-		dev_err(pcie->dev, "Failed to enable PHY: %d\n", ret);
+		dev_err(pcie->dev, "Failed to enable PHY: %pe\n", ERR_PTR(ret));
 		goto fail_phy;
 	}
 
@@ -1503,32 +1503,32 @@ static void tegra_pcie_unconfig_controller(struct tegra_pcie_dw *pcie)
 
 	ret = reset_control_assert(pcie->core_rst);
 	if (ret)
-		dev_err(pcie->dev, "Failed to assert \"core\" reset: %d\n", ret);
+		dev_err(pcie->dev, "Failed to assert \"core\" reset: %pe\n", ERR_PTR(ret));
 
 	tegra_pcie_disable_phy(pcie);
 
 	ret = reset_control_assert(pcie->core_apb_rst);
 	if (ret)
-		dev_err(pcie->dev, "Failed to assert APB reset: %d\n", ret);
+		dev_err(pcie->dev, "Failed to assert APB reset: %pe\n", ERR_PTR(ret));
 
 	clk_disable_unprepare(pcie->core_clk);
 
 	ret = regulator_disable(pcie->pex_ctl_supply);
 	if (ret)
-		dev_err(pcie->dev, "Failed to disable regulator: %d\n", ret);
+		dev_err(pcie->dev, "Failed to disable regulator: %pe\n", ERR_PTR(ret));
 
 	tegra_pcie_disable_slot_regulators(pcie);
 
 	if (pcie->enable_ext_refclk) {
 		ret = tegra_pcie_bpmp_set_pll_state(pcie, false);
 		if (ret)
-			dev_err(pcie->dev, "Failed to deinit UPHY: %d\n", ret);
+			dev_err(pcie->dev, "Failed to deinit UPHY: %pe\n", ERR_PTR(ret));
 	}
 
 	ret = tegra_pcie_bpmp_set_ctrl_state(pcie, false);
 	if (ret)
-		dev_err(pcie->dev, "Failed to disable controller %d: %d\n",
-			pcie->cid, ret);
+		dev_err(pcie->dev, "Failed to disable controller %d: %pe\n",
+			pcie->cid, ERR_PTR(ret));
 }
 
 static int tegra_pcie_init_controller(struct tegra_pcie_dw *pcie)
@@ -1545,7 +1545,7 @@ static int tegra_pcie_init_controller(struct tegra_pcie_dw *pcie)
 
 	ret = dw_pcie_host_init(pp);
 	if (ret < 0) {
-		dev_err(pcie->dev, "Failed to add PCIe port: %d\n", ret);
+		dev_err(pcie->dev, "Failed to add PCIe port: %pe\n", ERR_PTR(ret));
 		goto fail_host_init;
 	}
 
@@ -1652,20 +1652,20 @@ static int tegra_pcie_config_rp(struct tegra_pcie_dw *pcie)
 
 	ret = pm_runtime_get_sync(dev);
 	if (ret < 0) {
-		dev_err(dev, "Failed to get runtime sync for PCIe dev: %d\n",
-			ret);
+		dev_err(dev, "Failed to get runtime sync for PCIe dev: %pe\n",
+			ERR_PTR(ret));
 		goto fail_pm_get_sync;
 	}
 
 	ret = pinctrl_pm_select_default_state(dev);
 	if (ret < 0) {
-		dev_err(dev, "Failed to configure sideband pins: %d\n", ret);
+		dev_err(dev, "Failed to configure sideband pins: %pe\n", ERR_PTR(ret));
 		goto fail_pm_get_sync;
 	}
 
 	ret = tegra_pcie_init_controller(pcie);
 	if (ret < 0) {
-		dev_err(dev, "Failed to initialize controller: %d\n", ret);
+		dev_err(dev, "Failed to initialize controller: %pe\n", ERR_PTR(ret));
 		goto fail_pm_get_sync;
 	}
 
@@ -1713,7 +1713,7 @@ static void pex_ep_event_pex_rst_assert(struct tegra_pcie_dw *pcie)
 				 LTSSM_STATE_PRE_DETECT,
 				 1, LTSSM_TIMEOUT);
 	if (ret)
-		dev_err(pcie->dev, "Failed to go Detect state: %d\n", ret);
+		dev_err(pcie->dev, "Failed to go Detect state: %pe\n", ERR_PTR(ret));
 
 	dw_pcie_ep_cleanup(&pcie->pci.ep);
 
@@ -1730,13 +1730,13 @@ static void pex_ep_event_pex_rst_assert(struct tegra_pcie_dw *pcie)
 	if (pcie->enable_ext_refclk) {
 		ret = tegra_pcie_bpmp_set_pll_state(pcie, false);
 		if (ret)
-			dev_err(pcie->dev, "Failed to turn off UPHY: %d\n",
-				ret);
+			dev_err(pcie->dev, "Failed to turn off UPHY: %pe\n",
+				ERR_PTR(ret));
 	}
 
 	ret = tegra_pcie_bpmp_set_pll_state(pcie, false);
 	if (ret)
-		dev_err(pcie->dev, "Failed to turn off UPHY: %d\n", ret);
+		dev_err(pcie->dev, "Failed to turn off UPHY: %pe\n", ERR_PTR(ret));
 
 	pcie->ep_state = EP_STATE_DISABLED;
 	dev_dbg(pcie->dev, "Uninitialization of endpoint is completed\n");
@@ -1756,42 +1756,42 @@ static void pex_ep_event_pex_rst_deassert(struct tegra_pcie_dw *pcie)
 
 	ret = pm_runtime_resume_and_get(dev);
 	if (ret < 0) {
-		dev_err(dev, "Failed to get runtime sync for PCIe dev: %d\n",
-			ret);
+		dev_err(dev, "Failed to get runtime sync for PCIe dev: %pe\n",
+			ERR_PTR(ret));
 		return;
 	}
 
 	ret = tegra_pcie_bpmp_set_ctrl_state(pcie, true);
 	if (ret) {
-		dev_err(pcie->dev, "Failed to enable controller %u: %d\n",
-			pcie->cid, ret);
+		dev_err(pcie->dev, "Failed to enable controller %u: %pe\n",
+			pcie->cid, ERR_PTR(ret));
 		goto fail_set_ctrl_state;
 	}
 
 	if (pcie->enable_ext_refclk) {
 		ret = tegra_pcie_bpmp_set_pll_state(pcie, true);
 		if (ret) {
-			dev_err(dev, "Failed to init UPHY for PCIe EP: %d\n",
-				ret);
+			dev_err(dev, "Failed to init UPHY for PCIe EP: %pe\n",
+				ERR_PTR(ret));
 			goto fail_pll_init;
 		}
 	}
 
 	ret = clk_prepare_enable(pcie->core_clk);
 	if (ret) {
-		dev_err(dev, "Failed to enable core clock: %d\n", ret);
+		dev_err(dev, "Failed to enable core clock: %pe\n", ERR_PTR(ret));
 		goto fail_core_clk_enable;
 	}
 
 	ret = reset_control_deassert(pcie->core_apb_rst);
 	if (ret) {
-		dev_err(dev, "Failed to deassert core APB reset: %d\n", ret);
+		dev_err(dev, "Failed to deassert core APB reset: %pe\n", ERR_PTR(ret));
 		goto fail_core_apb_rst;
 	}
 
 	ret = tegra_pcie_enable_phy(pcie);
 	if (ret) {
-		dev_err(dev, "Failed to enable PHY: %d\n", ret);
+		dev_err(dev, "Failed to enable PHY: %pe\n", ERR_PTR(ret));
 		goto fail_phy;
 	}
 
@@ -1899,7 +1899,7 @@ static void pex_ep_event_pex_rst_deassert(struct tegra_pcie_dw *pcie)
 
 	ret = dw_pcie_ep_init_registers(ep);
 	if (ret) {
-		dev_err(dev, "Failed to complete initialization: %d\n", ret);
+		dev_err(dev, "Failed to complete initialization: %pe\n", ERR_PTR(ret));
 		goto fail_init_complete;
 	}
 
@@ -2044,14 +2044,14 @@ static int tegra_pcie_config_ep(struct tegra_pcie_dw *pcie,
 
 	ret = gpiod_set_debounce(pcie->pex_rst_gpiod, PERST_DEBOUNCE_TIME);
 	if (ret < 0) {
-		dev_err(dev, "Failed to set PERST GPIO debounce time: %d\n",
-			ret);
+		dev_err(dev, "Failed to set PERST GPIO debounce time: %pe\n",
+			ERR_PTR(ret));
 		return ret;
 	}
 
 	ret = gpiod_to_irq(pcie->pex_rst_gpiod);
 	if (ret < 0) {
-		dev_err(dev, "Failed to get IRQ for PERST GPIO: %d\n", ret);
+		dev_err(dev, "Failed to get IRQ for PERST GPIO: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 	pcie->pex_rst_irq = (unsigned int)ret;
@@ -2073,7 +2073,7 @@ static int tegra_pcie_config_ep(struct tegra_pcie_dw *pcie,
 					IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 					name, (void *)pcie);
 	if (ret < 0) {
-		dev_err(dev, "Failed to request IRQ for PERST: %d\n", ret);
+		dev_err(dev, "Failed to request IRQ for PERST: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 
@@ -2081,8 +2081,8 @@ static int tegra_pcie_config_ep(struct tegra_pcie_dw *pcie,
 
 	ret = dw_pcie_ep_init(ep);
 	if (ret) {
-		dev_err(dev, "Failed to initialize DWC Endpoint subsystem: %d\n",
-			ret);
+		dev_err(dev, "Failed to initialize DWC Endpoint subsystem: %pe\n",
+			ERR_PTR(ret));
 		pm_runtime_disable(dev);
 		return ret;
 	}
@@ -2152,15 +2152,15 @@ static int tegra_pcie_dw_probe(struct platform_device *pdev)
 	if (IS_ERR(pcie->pex_ctl_supply)) {
 		ret = PTR_ERR(pcie->pex_ctl_supply);
 		if (ret != -EPROBE_DEFER)
-			dev_err(dev, "Failed to get regulator: %ld\n",
-				PTR_ERR(pcie->pex_ctl_supply));
+			dev_err(dev, "Failed to get regulator: %pe\n",
+				pcie->pex_ctl_supply);
 		return ret;
 	}
 
 	pcie->core_clk = devm_clk_get(dev, "core");
 	if (IS_ERR(pcie->core_clk)) {
-		dev_err(dev, "Failed to get core clock: %ld\n",
-			PTR_ERR(pcie->core_clk));
+		dev_err(dev, "Failed to get core clock: %pe\n",
+			pcie->core_clk);
 		return PTR_ERR(pcie->core_clk);
 	}
 
@@ -2177,8 +2177,8 @@ static int tegra_pcie_dw_probe(struct platform_device *pdev)
 
 	pcie->core_apb_rst = devm_reset_control_get(dev, "apb");
 	if (IS_ERR(pcie->core_apb_rst)) {
-		dev_err(dev, "Failed to get APB reset: %ld\n",
-			PTR_ERR(pcie->core_apb_rst));
+		dev_err(dev, "Failed to get APB reset: %pe\n",
+			pcie->core_apb_rst);
 		return PTR_ERR(pcie->core_apb_rst);
 	}
 
@@ -2197,7 +2197,7 @@ static int tegra_pcie_dw_probe(struct platform_device *pdev)
 		if (IS_ERR(phys[i])) {
 			ret = PTR_ERR(phys[i]);
 			if (ret != -EPROBE_DEFER)
-				dev_err(dev, "Failed to get PHY: %d\n", ret);
+				dev_err(dev, "Failed to get PHY: %pe\n", ERR_PTR(ret));
 			return ret;
 		}
 	}
@@ -2219,8 +2219,8 @@ static int tegra_pcie_dw_probe(struct platform_device *pdev)
 
 	pcie->core_rst = devm_reset_control_get(dev, "core");
 	if (IS_ERR(pcie->core_rst)) {
-		dev_err(dev, "Failed to get core reset: %ld\n",
-			PTR_ERR(pcie->core_rst));
+		dev_err(dev, "Failed to get core reset: %pe\n",
+			pcie->core_rst);
 		return PTR_ERR(pcie->core_rst);
 	}
 
@@ -2247,8 +2247,8 @@ static int tegra_pcie_dw_probe(struct platform_device *pdev)
 		ret = devm_request_irq(dev, pp->irq, tegra_pcie_rp_irq_handler,
 				       IRQF_SHARED, "tegra-pcie-intr", pcie);
 		if (ret) {
-			dev_err(dev, "Failed to request IRQ %d: %d\n", pp->irq,
-				ret);
+			dev_err(dev, "Failed to request IRQ %d: %pe\n", pp->irq,
+				ERR_PTR(ret));
 			goto fail;
 		}
 
@@ -2266,8 +2266,8 @@ static int tegra_pcie_dw_probe(struct platform_device *pdev)
 						IRQF_SHARED | IRQF_ONESHOT,
 						"tegra-pcie-ep-intr", pcie);
 		if (ret) {
-			dev_err(dev, "Failed to request IRQ %d: %d\n", pp->irq,
-				ret);
+			dev_err(dev, "Failed to request IRQ %d: %pe\n", pp->irq,
+				ERR_PTR(ret));
 			goto fail;
 		}
 
@@ -2364,7 +2364,7 @@ static int tegra_pcie_dw_resume_noirq(struct device *dev)
 
 	ret = tegra_pcie_dw_host_init(&pcie->pci.pp);
 	if (ret < 0) {
-		dev_err(dev, "Failed to init host: %d\n", ret);
+		dev_err(dev, "Failed to init host: %pe\n", ERR_PTR(ret));
 		goto fail_host_init;
 	}
 

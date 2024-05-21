@@ -277,7 +277,7 @@ int acpiphp_register_hotplug_slot(struct acpiphp_slot *acpiphp_slot,
 	if (retval == -EBUSY)
 		goto error_slot;
 	if (retval) {
-		pr_err("pci_hp_register failed with error %d\n", retval);
+		pr_err("pci_hp_register failed with error: %pe\n", ERR_PTR(retval));
 		goto error_slot;
 	}
 

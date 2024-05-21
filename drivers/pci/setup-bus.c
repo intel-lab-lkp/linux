@@ -2221,7 +2221,7 @@ again:
 enable_all:
 	retval = pci_reenable_device(bridge);
 	if (retval)
-		pci_err(bridge, "Error reenabling bridge (%d)\n", retval);
+		pci_err(bridge, "Error reenabling bridge: %pe\n", ERR_PTR(retval));
 	pci_set_master(bridge);
 }
 EXPORT_SYMBOL_GPL(pci_assign_unassigned_bridge_resources);

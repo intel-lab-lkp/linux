@@ -155,7 +155,7 @@ static int intel_pcie_ep_rst_init(struct intel_pcie *pcie)
 	if (IS_ERR(pcie->reset_gpio)) {
 		ret = PTR_ERR(pcie->reset_gpio);
 		if (ret != -EPROBE_DEFER)
-			dev_err(dev, "Failed to request PCIe GPIO: %d\n", ret);
+			dev_err(dev, "Failed to request PCIe GPIO: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 
@@ -214,7 +214,7 @@ static int intel_pcie_get_resources(struct platform_device *pdev)
 	if (IS_ERR(pcie->core_clk)) {
 		ret = PTR_ERR(pcie->core_clk);
 		if (ret != -EPROBE_DEFER)
-			dev_err(dev, "Failed to get clks: %d\n", ret);
+			dev_err(dev, "Failed to get clks: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 
@@ -222,7 +222,7 @@ static int intel_pcie_get_resources(struct platform_device *pdev)
 	if (IS_ERR(pcie->core_rst)) {
 		ret = PTR_ERR(pcie->core_rst);
 		if (ret != -EPROBE_DEFER)
-			dev_err(dev, "Failed to get resets: %d\n", ret);
+			dev_err(dev, "Failed to get resets: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 
@@ -239,7 +239,7 @@ static int intel_pcie_get_resources(struct platform_device *pdev)
 	if (IS_ERR(pcie->phy)) {
 		ret = PTR_ERR(pcie->phy);
 		if (ret != -EPROBE_DEFER)
-			dev_err(dev, "Couldn't get pcie-phy: %d\n", ret);
+			dev_err(dev, "Couldn't get pcie-phy: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 
@@ -295,7 +295,7 @@ static int intel_pcie_host_setup(struct intel_pcie *pcie)
 
 	ret = clk_prepare_enable(pcie->core_clk);
 	if (ret) {
-		dev_err(pcie->pci.dev, "Core clock enable failed: %d\n", ret);
+		dev_err(pcie->pci.dev, "Core clock enable failed: %pe\n", ERR_PTR(ret));
 		goto clk_err;
 	}
 
