@@ -4647,17 +4647,13 @@ static inline int l2cap_conn_param_update_req(struct l2cap_conn *conn,
 
 	memset(&rsp, 0, sizeof(rsp));
 
-	if (max > hcon->le_conn_max_interval) {
-		BT_DBG("requested connection interval exceeds current bounds.");
-		err = -EINVAL;
-	} else {
-		err = hci_check_conn_params(min, max, latency, to_multiplier);
-	}
-
-	if (err)
+	err = hci_check_conn_params(min, max, latency, to_multiplier);
+	if (err) {
+		BT_WARN("hci_check_conn_params failed err: %d", err);
 		rsp.result = cpu_to_le16(L2CAP_CONN_PARAM_REJECTED);
-	else
+	} else {
 		rsp.result = cpu_to_le16(L2CAP_CONN_PARAM_ACCEPTED);
+	}
 
 	l2cap_send_cmd(conn, cmd->ident, L2CAP_CONN_PARAM_UPDATE_RSP,
 		       sizeof(rsp), &rsp);
