@@ -812,7 +812,7 @@ static void adsp_remove(struct platform_device *pdev)
 
 static const struct adsp_data adsp_resource_init = {
 	.crash_reason_smem = 423,
-	.firmware_name = "adsp.mdt",
+	.firmware_name = "adsp.mbn",
 	.pas_id = 1,
 	.auto_boot = true,
 	.ssr_name = "lpass",
@@ -822,7 +822,7 @@ static const struct adsp_data adsp_resource_init = {
 
 static const struct adsp_data sdm845_adsp_resource_init = {
 	.crash_reason_smem = 423,
-	.firmware_name = "adsp.mdt",
+	.firmware_name = "adsp.mbn",
 	.pas_id = 1,
 	.auto_boot = true,
 	.load_state = "adsp",
@@ -833,7 +833,7 @@ static const struct adsp_data sdm845_adsp_resource_init = {
 
 static const struct adsp_data sm6350_adsp_resource = {
 	.crash_reason_smem = 423,
-	.firmware_name = "adsp.mdt",
+	.firmware_name = "adsp.mbn",
 	.pas_id = 1,
 	.auto_boot = true,
 	.proxy_pd_names = (char*[]){
@@ -849,7 +849,7 @@ static const struct adsp_data sm6350_adsp_resource = {
 
 static const struct adsp_data sm6375_mpss_resource = {
 	.crash_reason_smem = 421,
-	.firmware_name = "modem.mdt",
+	.firmware_name = "modem.mbn",
 	.pas_id = 4,
 	.minidump_id = 3,
 	.auto_boot = false,
@@ -864,7 +864,7 @@ static const struct adsp_data sm6375_mpss_resource = {
 
 static const struct adsp_data sm8150_adsp_resource = {
 	.crash_reason_smem = 423,
-	.firmware_name = "adsp.mdt",
+	.firmware_name = "adsp.mbn",
 	.pas_id = 1,
 	.auto_boot = true,
 	.proxy_pd_names = (char*[]){
@@ -879,7 +879,7 @@ static const struct adsp_data sm8150_adsp_resource = {
 
 static const struct adsp_data sm8250_adsp_resource = {
 	.crash_reason_smem = 423,
-	.firmware_name = "adsp.mdt",
+	.firmware_name = "adsp.mbn",
 	.pas_id = 1,
 	.auto_boot = true,
 	.proxy_pd_names = (char*[]){
@@ -895,7 +895,7 @@ static const struct adsp_data sm8250_adsp_resource = {
 
 static const struct adsp_data sm8350_adsp_resource = {
 	.crash_reason_smem = 423,
-	.firmware_name = "adsp.mdt",
+	.firmware_name = "adsp.mbn",
 	.pas_id = 1,
 	.auto_boot = true,
 	.proxy_pd_names = (char*[]){
@@ -911,7 +911,7 @@ static const struct adsp_data sm8350_adsp_resource = {
 
 static const struct adsp_data msm8996_adsp_resource = {
 	.crash_reason_smem = 423,
-	.firmware_name = "adsp.mdt",
+	.firmware_name = "adsp.mbn",
 	.pas_id = 1,
 	.auto_boot = true,
 	.proxy_pd_names = (char*[]){
@@ -925,7 +925,7 @@ static const struct adsp_data msm8996_adsp_resource = {
 
 static const struct adsp_data cdsp_resource_init = {
 	.crash_reason_smem = 601,
-	.firmware_name = "cdsp.mdt",
+	.firmware_name = "cdsp.mbn",
 	.pas_id = 18,
 	.auto_boot = true,
 	.ssr_name = "cdsp",
@@ -935,7 +935,7 @@ static const struct adsp_data cdsp_resource_init = {
 
 static const struct adsp_data sdm845_cdsp_resource_init = {
 	.crash_reason_smem = 601,
-	.firmware_name = "cdsp.mdt",
+	.firmware_name = "cdsp.mbn",
 	.pas_id = 18,
 	.auto_boot = true,
 	.load_state = "cdsp",
@@ -946,7 +946,7 @@ static const struct adsp_data sdm845_cdsp_resource_init = {
 
 static const struct adsp_data sm6350_cdsp_resource = {
 	.crash_reason_smem = 601,
-	.firmware_name = "cdsp.mdt",
+	.firmware_name = "cdsp.mbn",
 	.pas_id = 18,
 	.auto_boot = true,
 	.proxy_pd_names = (char*[]){
@@ -962,7 +962,7 @@ static const struct adsp_data sm6350_cdsp_resource = {
 
 static const struct adsp_data sm8150_cdsp_resource = {
 	.crash_reason_smem = 601,
-	.firmware_name = "cdsp.mdt",
+	.firmware_name = "cdsp.mbn",
 	.pas_id = 18,
 	.auto_boot = true,
 	.proxy_pd_names = (char*[]){
@@ -977,7 +977,7 @@ static const struct adsp_data sm8150_cdsp_resource = {
 
 static const struct adsp_data sm8250_cdsp_resource = {
 	.crash_reason_smem = 601,
-	.firmware_name = "cdsp.mdt",
+	.firmware_name = "cdsp.mbn",
 	.pas_id = 18,
 	.auto_boot = true,
 	.proxy_pd_names = (char*[]){
@@ -992,7 +992,7 @@ static const struct adsp_data sm8250_cdsp_resource = {
 
 static const struct adsp_data sc8280xp_nsp0_resource = {
 	.crash_reason_smem = 601,
-	.firmware_name = "cdsp.mdt",
+	.firmware_name = "cdsp.mbn",
 	.pas_id = 18,
 	.auto_boot = true,
 	.proxy_pd_names = (char*[]){
@@ -1006,7 +1006,7 @@ static const struct adsp_data sc8280xp_nsp0_resource = {
 
 static const struct adsp_data sc8280xp_nsp1_resource = {
 	.crash_reason_smem = 633,
-	.firmware_name = "cdsp.mdt",
+	.firmware_name = "cdsp.mbn",
 	.pas_id = 30,
 	.auto_boot = true,
 	.proxy_pd_names = (char*[]){
@@ -1020,8 +1020,8 @@ static const struct adsp_data sc8280xp_nsp1_resource = {
 
 static const struct adsp_data x1e80100_adsp_resource = {
 	.crash_reason_smem = 423,
-	.firmware_name = "adsp.mdt",
-	.dtb_firmware_name = "adsp_dtb.mdt",
+	.firmware_name = "adsp.mbn",
+	.dtb_firmware_name = "adsp_dtb.mbn",
 	.pas_id = 1,
 	.dtb_pas_id = 0x24,
 	.lite_pas_id = 0x1f,
@@ -1040,8 +1040,8 @@ static const struct adsp_data x1e80100_adsp_resource = {
 
 static const struct adsp_data x1e80100_cdsp_resource = {
 	.crash_reason_smem = 601,
-	.firmware_name = "cdsp.mdt",
-	.dtb_firmware_name = "cdsp_dtb.mdt",
+	.firmware_name = "cdsp.mbn",
+	.dtb_firmware_name = "cdsp_dtb.mbn",
 	.pas_id = 18,
 	.dtb_pas_id = 0x25,
 	.minidump_id = 7,
@@ -1060,7 +1060,7 @@ static const struct adsp_data x1e80100_cdsp_resource = {
 
 static const struct adsp_data sm8350_cdsp_resource = {
 	.crash_reason_smem = 601,
-	.firmware_name = "cdsp.mdt",
+	.firmware_name = "cdsp.mbn",
 	.pas_id = 18,
 	.auto_boot = true,
 	.proxy_pd_names = (char*[]){
@@ -1076,7 +1076,7 @@ static const struct adsp_data sm8350_cdsp_resource = {
 
 static const struct adsp_data mpss_resource_init = {
 	.crash_reason_smem = 421,
-	.firmware_name = "modem.mdt",
+	.firmware_name = "modem.mbn",
 	.pas_id = 4,
 	.minidump_id = 3,
 	.auto_boot = false,
@@ -1093,7 +1093,7 @@ static const struct adsp_data mpss_resource_init = {
 
 static const struct adsp_data sc8180x_mpss_resource = {
 	.crash_reason_smem = 421,
-	.firmware_name = "modem.mdt",
+	.firmware_name = "modem.mbn",
 	.pas_id = 4,
 	.auto_boot = false,
 	.proxy_pd_names = (char*[]){
@@ -1108,7 +1108,7 @@ static const struct adsp_data sc8180x_mpss_resource = {
 
 static const struct adsp_data msm8996_slpi_resource_init = {
 	.crash_reason_smem = 424,
-	.firmware_name = "slpi.mdt",
+	.firmware_name = "slpi.mbn",
 	.pas_id = 12,
 	.auto_boot = true,
 	.proxy_pd_names = (char*[]){
@@ -1122,7 +1122,7 @@ static const struct adsp_data msm8996_slpi_resource_init = {
 
 static const struct adsp_data sdm845_slpi_resource_init = {
 	.crash_reason_smem = 424,
-	.firmware_name = "slpi.mdt",
+	.firmware_name = "slpi.mbn",
 	.pas_id = 12,
 	.auto_boot = true,
 	.proxy_pd_names = (char*[]){
@@ -1138,7 +1138,7 @@ static const struct adsp_data sdm845_slpi_resource_init = {
 
 static const struct adsp_data wcss_resource_init = {
 	.crash_reason_smem = 421,
-	.firmware_name = "wcnss.mdt",
+	.firmware_name = "wcnss.mbn",
 	.pas_id = 6,
 	.auto_boot = true,
 	.ssr_name = "mpss",
@@ -1148,7 +1148,7 @@ static const struct adsp_data wcss_resource_init = {
 
 static const struct adsp_data sdx55_mpss_resource = {
 	.crash_reason_smem = 421,
-	.firmware_name = "modem.mdt",
+	.firmware_name = "modem.mbn",
 	.pas_id = 4,
 	.auto_boot = true,
 	.proxy_pd_names = (char*[]){
@@ -1163,7 +1163,7 @@ static const struct adsp_data sdx55_mpss_resource = {
 
 static const struct adsp_data sm8450_mpss_resource = {
 	.crash_reason_smem = 421,
-	.firmware_name = "modem.mdt",
+	.firmware_name = "modem.mbn",
 	.pas_id = 4,
 	.minidump_id = 3,
 	.auto_boot = false,
@@ -1181,8 +1181,8 @@ static const struct adsp_data sm8450_mpss_resource = {
 
 static const struct adsp_data sm8550_adsp_resource = {
 	.crash_reason_smem = 423,
-	.firmware_name = "adsp.mdt",
-	.dtb_firmware_name = "adsp_dtb.mdt",
+	.firmware_name = "adsp.mbn",
+	.dtb_firmware_name = "adsp_dtb.mbn",
 	.pas_id = 1,
 	.dtb_pas_id = 0x24,
 	.minidump_id = 5,
@@ -1200,8 +1200,8 @@ static const struct adsp_data sm8550_adsp_resource = {
 
 static const struct adsp_data sm8550_cdsp_resource = {
 	.crash_reason_smem = 601,
-	.firmware_name = "cdsp.mdt",
-	.dtb_firmware_name = "cdsp_dtb.mdt",
+	.firmware_name = "cdsp.mbn",
+	.dtb_firmware_name = "cdsp_dtb.mbn",
 	.pas_id = 18,
 	.dtb_pas_id = 0x25,
 	.minidump_id = 7,
@@ -1220,8 +1220,8 @@ static const struct adsp_data sm8550_cdsp_resource = {
 
 static const struct adsp_data sm8550_mpss_resource = {
 	.crash_reason_smem = 421,
-	.firmware_name = "modem.mdt",
-	.dtb_firmware_name = "modem_dtb.mdt",
+	.firmware_name = "modem.mbn",
+	.dtb_firmware_name = "modem_dtb.mbn",
 	.pas_id = 4,
 	.dtb_pas_id = 0x26,
 	.minidump_id = 3,
@@ -1243,7 +1243,7 @@ static const struct adsp_data sm8550_mpss_resource = {
 
 static const struct adsp_data sc7280_wpss_resource = {
 	.crash_reason_smem = 626,
-	.firmware_name = "wpss.mdt",
+	.firmware_name = "wpss.mbn",
 	.pas_id = 6,
 	.auto_boot = true,
 	.proxy_pd_names = (char*[]){
@@ -1259,8 +1259,8 @@ static const struct adsp_data sc7280_wpss_resource = {
 
 static const struct adsp_data sm8650_cdsp_resource = {
 	.crash_reason_smem = 601,
-	.firmware_name = "cdsp.mdt",
-	.dtb_firmware_name = "cdsp_dtb.mdt",
+	.firmware_name = "cdsp.mbn",
+	.dtb_firmware_name = "cdsp_dtb.mbn",
 	.pas_id = 18,
 	.dtb_pas_id = 0x25,
 	.minidump_id = 7,
@@ -1283,8 +1283,8 @@ static const struct adsp_data sm8650_cdsp_resource = {
 
 static const struct adsp_data sm8650_mpss_resource = {
 	.crash_reason_smem = 421,
-	.firmware_name = "modem.mdt",
-	.dtb_firmware_name = "modem_dtb.mdt",
+	.firmware_name = "modem.mbn",
+	.dtb_firmware_name = "modem_dtb.mbn",
 	.pas_id = 4,
 	.dtb_pas_id = 0x26,
 	.minidump_id = 3,
