@@ -5,6 +5,7 @@
 
 /dts-v1/;
 
+#include <dt-bindings/arm/qcom,ids.h>
 #include <dt-bindings/leds/common.h>
 #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
 #include "sm8650.dtsi"
@@ -24,6 +25,11 @@
 	aliases {
 		serial0 = &uart15;
 		serial1 = &uart14;
+	};
+
+	board-id {
+		qcom,soc = <QCOM_ID_SM8650>;
+		qcom,platform = <QCOM_BOARD_ID_QRD>;
 	};
 
 	chosen {
