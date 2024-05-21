@@ -583,6 +583,17 @@ config CPU_HAS_PREFETCH
 	bool
 	default y
 
+config PARAVIRT_TIME_ACCOUNTING
+	bool "Paravirtual steal time accounting"
+	select PARAVIRT
+	help
+	  Select this option to enable fine granularity task steal time
+	  accounting. Time spent executing other tasks in parallel with
+	  the current vCPU is discounted from the vCPU power. To account for
+	  that, there can be a small performance impact.
+
+	  If in doubt, say N here.
+
 config ARCH_SUPPORTS_KEXEC
 	def_bool y
 
