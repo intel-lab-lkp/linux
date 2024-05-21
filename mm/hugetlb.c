@@ -6005,6 +6005,15 @@ retry_avoidcopy:
 	 * be acquired again before returning to the caller, as expected.
 	 */
 	spin_unlock(vmf->ptl);
+
+	/*
+	 * When the original hugepage is shared one, it does not have
+	 * anon_vma prepared.
+	 */
+	ret = vmf_anon_prepare(vmf);
+	if (unlikely(ret))
+		goto out_release_old;
+
 	new_folio = alloc_hugetlb_folio(vma, vmf->address, outside_reserve);
 
 	if (IS_ERR(new_folio)) {
@@ -6057,14 +6066,6 @@ retry_avoidcopy:
 		ret = vmf_error(PTR_ERR(new_folio));
 		goto out_release_old;
 	}
-
-	/*
-	 * When the original hugepage is shared one, it does not have
-	 * anon_vma prepared.
-	 */
-	ret = vmf_anon_prepare(vmf);
-	if (unlikely(ret))
-		goto out_release_all;
 
 	if (copy_user_large_folio(new_folio, old_folio, vmf->real_address, vma)) {
 		ret = VM_FAULT_HWPOISON_LARGE | VM_FAULT_SET_HINDEX(hstate_index(h));
