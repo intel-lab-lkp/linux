@@ -10,6 +10,7 @@
 static struct kunit_case xe_bo_tests[] = {
 	KUNIT_CASE(xe_ccs_migrate_kunit),
 	KUNIT_CASE(xe_bo_evict_kunit),
+	KUNIT_CASE_SLOW(xe_bo_shrink_kunit),
 	{}
 };
 
