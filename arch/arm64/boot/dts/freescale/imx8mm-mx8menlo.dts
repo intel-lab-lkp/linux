@@ -14,6 +14,13 @@
 		     "toradex,verdin-imx8mm",
 		     "fsl,imx8mm";
 
+	/* Carrier board Xtal for SPI CAN controller and CPLD */
+	clk20mcb: clk-20m-cb {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <20000000>;
+	};
+
 	/delete-node/ gpio-keys;
 
 	leds {
@@ -60,7 +67,7 @@
 	/* CAN controller on the baseboard */
 	canfd: can@0 {
 		compatible = "microchip,mcp2518fd";
-		clocks = <&clk_xtal20>;
+		clocks = <&clk20mcb>;
 		interrupt-parent = <&gpio1>;
 		interrupts = <8 IRQ_TYPE_EDGE_FALLING>;
 		reg = <0>;
