@@ -139,14 +139,17 @@ EXPORT_SYMBOL(drm_exec_cleanup);
 
 /* Track the locked object in the array */
 static int drm_exec_obj_locked(struct drm_exec *exec,
-			       struct drm_gem_object *obj)
+			       struct drm_gem_object *obj,
+			       gfp_t gfp)
 {
+	might_alloc(gfp);
+
 	if (unlikely(exec->num_objects == exec->max_objects)) {
 		size_t size = exec->max_objects * sizeof(void *);
 		void *tmp;
 
 		tmp = kvrealloc(exec->objects, size, size + PAGE_SIZE,
-				GFP_KERNEL);
+				gfp);
 		if (!tmp)
 			return -ENOMEM;
 
@@ -179,7 +182,7 @@ static int drm_exec_lock_contended(struct drm_exec *exec)
 		dma_resv_lock_slow(obj->resv, &exec->ticket);
 	}
 
-	ret = drm_exec_obj_locked(exec, obj);
+	ret = drm_exec_obj_locked(exec, obj, GFP_KERNEL);
 	if (unlikely(ret))
 		goto error_unlock;
 
@@ -214,6 +217,45 @@ int drm_exec_handle_contended(struct drm_exec *exec)
 	return ret;
 }
 EXPORT_SYMBOL(drm_exec_handle_contended);
+
+/**
+ * drm_exec_trylock_obj - trylock a GEM object for use
+ * @exec: the drm_exec object with the state.
+ * @obj: the GEM object to lock.
+ *
+ * Trylock a GEM object for use and grab a reference to it.
+ *
+ * Returns: -EALREADY when object is already locked (can be suppressed by
+ * setting the DRM_EXEC_IGNORE_DUPLICATES flag), -ENOMEM when memory
+ * allocation failed, and zero for success. If the object was already
+ * locked, -EBUSY will be returned.
+ */
+int drm_exec_trylock_obj(struct drm_exec *exec, struct drm_gem_object *obj)
+{
+	int ret;
+
+	might_alloc(GFP_ATOMIC);
+
+	if (exec->prelocked == obj) {
+		drm_gem_object_put(exec->prelocked);
+		exec->prelocked = NULL;
+		return 0;
+	}
+
+	if (!dma_resv_trylock_ctx(obj->resv, &exec->ticket)) {
+		if (dma_resv_locking_ctx(obj->resv) == &exec->ticket)
+			return (exec->flags & DRM_EXEC_IGNORE_DUPLICATES) ? 0 : -EALREADY;
+		else
+			return -EBUSY;
+	}
+
+	ret = drm_exec_obj_locked(exec, obj, GFP_ATOMIC | __GFP_NOWARN);
+	if (ret)
+		dma_resv_unlock(obj->resv);
+
+	return ret;
+}
+EXPORT_SYMBOL(drm_exec_trylock_obj);
 
 /**
  * drm_exec_lock_obj - lock a GEM object for use
@@ -254,7 +296,7 @@ int drm_exec_lock_obj(struct drm_exec *exec, struct drm_gem_object *obj)
 	if (unlikely(ret))
 		return ret;
 
-	ret = drm_exec_obj_locked(exec, obj);
+	ret = drm_exec_obj_locked(exec, obj, GFP_KERNEL);
 	if (ret)
 		goto error_unlock;
 
