@@ -399,6 +399,10 @@ void tcp_twsk_purge(struct list_head *net_exit_list)
 			/* Even if tw_refcount == 1, we must clean up kernel reqsk */
 			inet_twsk_purge(net->ipv4.tcp_death_row.hashinfo);
 		} else if (!purged_once) {
+			/* The last refcount is decremented in tcp_sk_exit_batch() */
+			if (refcount_read(&net->ipv4.tcp_death_row.tw_refcount) == 1)
+				continue;
+
 			inet_twsk_purge(&tcp_hashinfo);
 			purged_once = true;
 		}
