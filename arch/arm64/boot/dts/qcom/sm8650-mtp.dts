@@ -5,6 +5,7 @@
 
 /dts-v1/;
 
+#include <dt-bindings/arm/qcom,ids.h>
 #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
 #include "sm8650.dtsi"
 #include "pm8010.dtsi"
@@ -26,6 +27,11 @@
 
 	chosen {
 		stdout-path = "serial0:115200n8";
+	};
+
+	board-id {
+		qcom,soc = <QCOM_ID_SM8650>;
+		qcom,platform = <QCOM_BOARD_ID_MTP>;
 	};
 
 	pmic-glink {
