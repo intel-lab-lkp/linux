@@ -22,6 +22,7 @@
 #include <linux/firmware/qcom/qcom_scm.h>
 #include <linux/regulator/consumer.h>
 #include <linux/remoteproc.h>
+#include <linux/soc/qcom/fw_helper.h>
 #include <linux/soc/qcom/mdt_loader.h>
 #include <linux/soc/qcom/smem.h>
 #include <linux/soc/qcom/smem_state.h>
@@ -705,10 +706,18 @@ static int adsp_probe(struct platform_device *pdev)
 						    &dtb_fw_name);
 		if (ret < 0 && ret != -EINVAL)
 			return ret;
+
+		dtb_fw_name = devm_qcom_get_board_fw(&pdev->dev, dtb_fw_name);
+		if (!dtb_fw_name)
+			return -ENOMEM;
 	}
 
 	if (desc->minidump_id)
 		ops = &adsp_minidump_ops;
+
+	fw_name = qcom_get_board_fw(fw_name);
+	if (!fw_name)
+		return -ENOMEM;
 
 	rproc = devm_rproc_alloc(&pdev->dev, pdev->name, ops, fw_name, sizeof(*adsp));
 
