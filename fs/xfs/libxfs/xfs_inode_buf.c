@@ -375,12 +375,23 @@ xfs_dinode_verify_fork(
 	 * For fork types that can contain local data, check that the fork
 	 * format matches the size of local data contained within the fork.
 	 *
+	 * A symlink with a small target can have a data fork can be in extents
+	 * format if xattrs were added (thus converting the data fork from
+	 * shortform to remote format) and then removed.
+	 *
 	 * For all types, check that when the size says the should be in extent
 	 * or btree format, the inode isn't claiming it is in local format.
 	 */
 	if (whichfork == XFS_DATA_FORK) {
-		if (S_ISDIR(mode) || S_ISLNK(mode)) {
+		if (S_ISDIR(mode)) {
 			if (be64_to_cpu(dip->di_size) <= fork_size &&
+			    fork_format != XFS_DINODE_FMT_LOCAL)
+				return __this_address;
+		}
+
+		if (S_ISLNK(mode)) {
+			if (be64_to_cpu(dip->di_size) <= fork_size &&
+			    fork_format != XFS_DINODE_FMT_EXTENTS &&
 			    fork_format != XFS_DINODE_FMT_LOCAL)
 				return __this_address;
 		}
