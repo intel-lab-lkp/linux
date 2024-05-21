@@ -210,7 +210,7 @@
 
 	pinctrl_beeper: beepergrp {
 		fsl,pins = <
-			MX8MM_IOMUXC_SPDIF_TX_GPIO5_IO3			0x1c4
+			MX8MM_IOMUXC_SPDIF_TX_GPIO5_IO3			0x4
 		>;
 	};
 
@@ -225,8 +225,8 @@
 
 	pinctrl_led: ledgrp {
 		fsl,pins = <
-			MX8MM_IOMUXC_SAI1_TXD6_GPIO4_IO18		0x1c4
-			MX8MM_IOMUXC_SAI1_TXFS_GPIO4_IO10		0x1c4
+			MX8MM_IOMUXC_SAI1_TXD6_GPIO4_IO18		0x184
+			MX8MM_IOMUXC_SAI1_TXFS_GPIO4_IO10		0x184
 		>;
 	};
 
