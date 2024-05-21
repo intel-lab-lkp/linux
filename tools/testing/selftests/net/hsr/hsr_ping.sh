@@ -166,6 +166,14 @@ setup_hsr_interfaces()
 	ip -net "$ns3" link set hsr3 up
 }
 
+delete_hsr_interfaces()
+{
+	echo "INFO: delete interfaces."
+	ip -net "$ns1" link del ns1eth1
+	ip -net "$ns1" link del ns1eth2
+	ip -net "$ns3" link del ns3eth2
+}
+
 check_prerequisites
 setup_ns ns1 ns2 ns3
 
@@ -173,6 +181,8 @@ trap cleanup_all_ns EXIT
 
 setup_hsr_interfaces 0
 do_complete_ping_test
+
+delete_hsr_interfaces
 
 setup_hsr_interfaces 1
 do_complete_ping_test
