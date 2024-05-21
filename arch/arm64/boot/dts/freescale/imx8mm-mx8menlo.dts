@@ -197,6 +197,7 @@
 &i2c4 {
 	/* None of this is present on the SoM. */
 	/delete-node/ bridge@2c;
+	/delete-node/ hwmon@40;
 	/delete-node/ hdmi@48;
 	/delete-node/ touch@4a;
 	/delete-node/ sensor@4f;
