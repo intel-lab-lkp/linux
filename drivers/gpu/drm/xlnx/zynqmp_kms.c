@@ -120,9 +120,8 @@ static void zynqmp_dpsub_plane_atomic_update(struct drm_plane *plane,
 		zynqmp_disp_blend_set_global_alpha(dpsub->disp, true,
 						   plane->state->alpha >> 8);
 
-	/* Enable or re-enable the plane if the format has changed. */
-	if (format_changed)
-		zynqmp_disp_layer_enable(layer);
+	/* Enable or re-enable the plane. */
+	zynqmp_disp_layer_enable(layer);
 }
 
 static const struct drm_plane_helper_funcs zynqmp_dpsub_plane_helper_funcs = {
