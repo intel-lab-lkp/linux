@@ -1,0 +1,144 @@
+# SPDX-License-Identifier: BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/board/qcom,board-id.yaml
+$schema: http://devicetree.org/meta-schemas/core.yaml
+
+title: Board identifiers for devices from Qualcomm Technologies, Inc.
+description: Board identifiers for devices from Qualcomm Technologies, Inc.
+
+maintainers:
+  - Elliot Berman <quic_eberman@quicinc.com>
+
+properties:
+  $nodename:
+    const: 'board-id'
+
+  qcom,soc:
+    description:
+      List of Qualcomm SoCs this devicetree is applicable to.
+
+  qcom,soc-version:
+    items:
+      items:
+        - description: Qualcomm SoC identifier
+        - description: SoC version
+
+  qcom,platform:
+    description:
+      List of Qualcomm platforms this devicetree is applicable to.
+
+  qcom,platform-type:
+    items:
+      items:
+        - description: Qualcomm platform type identifier
+        - description: Qualcomm platform subtype
+
+  qcom,platform-version:
+    items:
+      items:
+        - description: Qualcomm platform type identifier
+        - description: Qualcomm platform subtype
+        - description: Qualcomm platform major and minor version.
+
+  qcom,boot-device:
+    description:
+      Boot device type
+
+  qcom,pmic:
+    description:
+      List of Qualcomm PMIC attaches
+
+  qcom,pmic-id:
+    items:
+      items:
+        - description: Qualcomm PMIC identifier
+        - description: Qualcomm PMIC revision
+
+allOf:
+  # either describe soc or soc-version; it's confusing to have both
+  - if:
+      properties:
+        qcom,soc: true
+    then:
+      properties:
+        qcom,soc-version: false
+  - if:
+      properties:
+        qcom,soc-version: true
+    then:
+      properties:
+        qcom,soc: false
+
+  # describe one of platform, platform-type, or platform-version; it's confusing to have multiple
+  - if:
+    properties:
+      qcom,platform: true
+    then:
+      properties:
+        qcom,platform-type: false
+        qcom,platform-version: false
+  - if:
+    properties:
+      qcom,platform-type: true
+    then:
+      properties:
+        qcom,platform: false
+        qcom,platform-version: false
+  - if:
+    properties:
+      qcom,platform: true
+    then:
+      properties:
+        qcom,platform: false
+        qcom,platform-type: false
+
+  # either describe pmic or pmic-id; it's confusing to have both
+  - if:
+    properties:
+      qcom,pmic: true
+    then:
+      properties:
+        qcom,pmic-id: false
+  - if:
+    properties:
+      qcom,pmic-id: true
+    then:
+      properties:
+        qcom,pmic: false
+
+additionalProperties: true
+
+examples:
+  - |
+    #include <dt-bindings/arm/qcom,ids.h>
+    / {
+      compatible = "qcom,sm8650";
+      board-id {
+        qcom,soc = <QCOM_ID_SM8650>;
+        qcom,platform = <QCOM_BOARD_ID_MTP>;
+      };
+    };
+
+  - |
+    #include <dt-bindings/arm/qcom,ids.h>
+    / {
+      compatible = "qcom,sm8650";
+      board-id {
+        qcom,soc-version = <QCOM_ID_SM8650 QCOM_SOC_REVISION(1)>,
+                           <QCOM_ID_SM8650 QCOM_SOC_REVISION(2)>;
+        qcom,platform-type = <QCOM_BOARD_ID_MTP 0>, <QCOM_BOARD_ID_MTP 1>;
+      };
+    };
+
+  - |
+    #include <dt-bindings/arm/qcom,ids.h>
+    / {
+      compatible = "qcom,sm8650";
+      board-id {
+        qcom,soc = <QCOM_ID_SM8650>;
+        qcom,platform-version = <QCOM_BOARD_ID(MTP, 0, 1, 0)>,
+                                <QCOM_BOARD_ID(MTP, 0, 1, 1)>;
+        qcom,boot-device = <QCOM_BOARD_BOOT_UFS>;
+      };
+    };
