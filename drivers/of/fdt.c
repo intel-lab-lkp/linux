@@ -1194,6 +1194,8 @@ void __init early_init_dt_scan_nodes(void)
 
 	/* Handle linux,usable-memory-range property */
 	early_init_dt_check_for_usable_mem_range();
+
+	memblock_memsize_detect_hole();
 }
 
 bool __init early_init_dt_scan(void *params)
