@@ -1475,9 +1475,22 @@ retry:
 			goto free_card;
 	}
 
-	err = mmc_sd_setup_card(host, card, oldcard != NULL);
-	if (err)
-		goto free_card;
+        u32 card_status;
+
+        err = mmc_send_status(card, &card_status);
+        if (err){
+                pr_err("%s: unable to get card status\n",
+                        mmc_hostname(host));
+                goto free_card;
+        }
+
+        if (card_status & R1_CARD_IS_LOCKED){
+                pr_warn("%s: card is locked\n", mmc_hostname(host));
+        } else {
+                err = mmc_sd_setup_card(host, card, oldcard != NULL);
+                if (err)
+                        goto free_card;
+        }
 
 	/*
 	 * If the card has not been power cycled, it may still be using 1.8V
