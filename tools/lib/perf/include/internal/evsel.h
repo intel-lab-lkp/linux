@@ -36,6 +36,13 @@ struct perf_sample_id {
 
 	/* Holds total ID period value for PERF_SAMPLE_READ processing. */
 	u64			 period;
+
+	/*
+	 * When inherit is combined with PERF_SAMPLE_READ, the period value is
+	 * per (id, thread) tuple, rather than per id, so use the stream_id to
+	 * uniquely identify the period, rather than the id.
+	 */
+	bool			 period_per_thread;
 };
 
 struct perf_evsel {
@@ -87,5 +94,7 @@ int perf_evsel__apply_filter(struct perf_evsel *evsel, const char *filter);
 
 int perf_evsel__alloc_id(struct perf_evsel *evsel, int ncpus, int nthreads);
 void perf_evsel__free_id(struct perf_evsel *evsel);
+
+bool perf_evsel__attr_has_per_thread_sample_period(struct perf_evsel *evsel);
 
 #endif /* __LIBPERF_INTERNAL_EVSEL_H */
