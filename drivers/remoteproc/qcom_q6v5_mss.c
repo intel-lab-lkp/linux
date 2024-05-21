@@ -26,6 +26,7 @@
 #include <linux/remoteproc.h>
 #include <linux/reset.h>
 #include <linux/soc/qcom/mdt_loader.h>
+#include <linux/soc/qcom/fw_helper.h>
 #include <linux/iopoll.h>
 #include <linux/slab.h>
 
@@ -1990,8 +1991,13 @@ static int q6v5_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	mba_image = qcom_get_board_fw(mba_image);
+	if (!mba_image)
+		return -ENOMEM;
+
 	rproc = devm_rproc_alloc(&pdev->dev, pdev->name, &q6v5_ops,
 				 mba_image, sizeof(*qproc));
+	kfree(mba_image);
 	if (!rproc) {
 		dev_err(&pdev->dev, "failed to allocate rproc\n");
 		return -ENOMEM;
@@ -2010,6 +2016,10 @@ static int q6v5_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "unable to read mpss firmware-name\n");
 		return ret;
 	}
+
+	qproc->hexagon_mdt_image = devm_qcom_get_board_fw(&pdev->dev, qproc->hexagon_mdt_image);
+	if (!qproc->hexagon_mdt_image)
+		return -ENOMEM;
 
 	platform_set_drvdata(pdev, qproc);
 
