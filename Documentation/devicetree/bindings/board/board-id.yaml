@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/board/board-id.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: board identifiers
+description: Common property for board-id subnode
+
+maintainers:
+  - Elliot Berman <quic_eberman@quicinc.com>
+
+properties:
+  $nodename:
+    const: '/'
+  board-id:
+    type: object
+    patternProperties:
+      "^.*(?!_str)$":
+        $ref: /schemas/types.yaml#/definitions/uint32-matrix
+      "^.*_str$":
+        $ref: /schemas/types.yaml#/definitions/string-array
+
+additionalProperties: true
