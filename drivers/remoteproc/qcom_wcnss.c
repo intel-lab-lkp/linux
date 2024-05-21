@@ -32,7 +32,7 @@
 #include "qcom_wcnss.h"
 
 #define WCNSS_CRASH_REASON_SMEM		422
-#define WCNSS_FIRMWARE_NAME		"wcnss.mdt"
+#define WCNSS_FIRMWARE_NAME		"wcnss.mbn"
 #define WCNSS_PAS_ID			6
 #define WCNSS_SSCTL_ID			0x13
 
