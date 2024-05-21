@@ -4,9 +4,12 @@
  */
 
 /dts-v1/;
+/plugin/;
 
+#include <dt-bindings/arm/qcom,ids.h>
+#include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
-#include "sm8550.dtsi"
+#include <dt-bindings/sound/qcom,q6dsp-lpass-ports.h>
 #include "pm8010.dtsi"
 #include "pm8550.dtsi"
 #include "pm8550b.dtsi"
@@ -17,13 +20,30 @@
 #include "pmr735d_a.dtsi"
 #include "pmr735d_b.dtsi"
 
+#define BOARD_ID	qcom,soc = <QCOM_ID_SM8550>; \
+			qcom,platform-type = <QCOM_BOARD_ID_MTP 0>
+
 / {
+	board-id {
+		BOARD_ID;
+	};
+};
+
+&{/} {
 	model = "Qualcomm Technologies, Inc. SM8550 MTP";
 	compatible = "qcom,sm8550-mtp", "qcom,sm8550";
 	chassis-type = "handset";
 
+	/**
+	 * Redefine the overlay in the DTBO so the sm8550-mtp.dtb that Kbuild
+	 * generates has accurate board-id.
+	 */
+	board-id {
+		BOARD_ID;
+	};
+
 	aliases {
-		serial0 = &uart7;
+		// serial0 = &uart7;
 	};
 
 	wcd938x: audio-codec {
