@@ -6,26 +6,24 @@
 #include <dt-bindings/interrupt-controller/irq.h>
 #include <dt-bindings/spmi/spmi.h>
 
-/ {
-	thermal-zones {
-		pm8550-thermal {
-			polling-delay-passive = <100>;
-			polling-delay = <0>;
+&thermal_zones {
+	pm8550-thermal {
+		polling-delay-passive = <100>;
+		polling-delay = <0>;
 
-			thermal-sensors = <&pm8550_temp_alarm>;
+		thermal-sensors = <&pm8550_temp_alarm>;
 
-			trips {
-				trip0 {
-					temperature = <95000>;
-					hysteresis = <0>;
-					type = "passive";
-				};
+		trips {
+			trip0 {
+				temperature = <95000>;
+				hysteresis = <0>;
+				type = "passive";
+			};
 
-				trip1 {
-					temperature = <115000>;
-					hysteresis = <0>;
-					type = "hot";
-				};
+			trip1 {
+				temperature = <115000>;
+				hysteresis = <0>;
+				type = "hot";
 			};
 		};
 	};
