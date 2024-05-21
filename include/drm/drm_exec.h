@@ -5,6 +5,7 @@
 
 #include <linux/compiler.h>
 #include <linux/ww_mutex.h>
+#include <linux/xarray.h>
 
 #define DRM_EXEC_INTERRUPTIBLE_WAIT	BIT(0)
 #define DRM_EXEC_IGNORE_DUPLICATES	BIT(1)
@@ -53,6 +54,17 @@ struct drm_exec {
 	 * @snap: Pointer to the last snapshot taken or NULL if none.
 	 */
 	struct drm_exec_snapshot *snap;
+
+	/**
+	 * @resv_set: Set of pointers to locked objects in evict mode.
+	 */
+	struct xarray resv_set;
+
+	/**
+	 * @drop_contended: Drop the contended object after WW transaction
+	 * relaxation.
+	 */
+	bool drop_contended;
 };
 
 /**
@@ -67,6 +79,9 @@ struct drm_exec_snapshot {
 
 	/** @num_locked: Number of locked objects at snapshot time. */
 	unsigned long num_locked;
+
+	/** @flags: The drm_exec flags at snapshot time. */
+	u32 flags;
 };
 
 int drm_exec_handle_contended(struct drm_exec *exec);
