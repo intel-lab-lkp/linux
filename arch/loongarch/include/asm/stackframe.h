@@ -42,8 +42,10 @@
 	.macro JUMP_VIRT_ADDR temp1 temp2
 	li.d	\temp1, CACHE_BASE
 	pcaddi	\temp2, 0
+	PTR_SLL \temp2, \temp2, (BITS_PER_LONG - DMW_PABITS)
+	PTR_SRL \temp2, \temp2, (BITS_PER_LONG - DMW_PABITS)
 	or	\temp1, \temp1, \temp2
-	jirl	zero, \temp1, 0xc
+	jirl	zero, \temp1, 0x14
 	.endm
 
 	.macro BACKUP_T0T1
