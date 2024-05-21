@@ -19,7 +19,6 @@ struct drm_exec {
 	 * @flags: Flags to control locking behavior
 	 */
 	u32                     flags;
-
 	/**
 	 * @ticket: WW ticket used for acquiring locks
 	 */
@@ -49,6 +48,25 @@ struct drm_exec {
 	 * @prelocked: already locked GEM object due to contention
 	 */
 	struct drm_gem_object *prelocked;
+
+	/**
+	 * @snap: Pointer to the last snapshot taken or NULL if none.
+	 */
+	struct drm_exec_snapshot *snap;
+};
+
+/**
+ * struct drm_exec_snapshot - drm_exec snapshot information
+ */
+struct drm_exec_snapshot {
+	/** @saved_snap: Pointer to the previous snapshot or NULL. */
+	struct drm_exec_snapshot *saved_snap;
+
+	/** @prelocked: Refcounted pointer to the prelocked object at snapshot time. */
+	struct drm_gem_object *prelocked;
+
+	/** @num_locked: Number of locked objects at snapshot time. */
+	unsigned long num_locked;
 };
 
 int drm_exec_handle_contended(struct drm_exec *exec);
@@ -160,5 +178,8 @@ int drm_exec_prepare_array(struct drm_exec *exec,
 			   struct drm_gem_object **objects,
 			   unsigned int num_objects,
 			   unsigned int num_fences);
+void drm_exec_snapshot(struct drm_exec *exec, struct drm_exec_snapshot *snap);
+void drm_exec_restore(struct drm_exec *exec, struct drm_exec_snapshot *snap);
+
 
 #endif
