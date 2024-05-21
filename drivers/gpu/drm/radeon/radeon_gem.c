@@ -54,7 +54,7 @@ static vm_fault_t radeon_gem_fault(struct vm_fault *vmf)
 
 	down_read(&rdev->pm.mclk_lock);
 
-	ret = ttm_bo_vm_reserve(bo, vmf);
+	ret = ttm_bo_vm_reserve(bo, vmf, NULL);
 	if (ret)
 		goto unlock_mclk;
 
@@ -63,7 +63,7 @@ static vm_fault_t radeon_gem_fault(struct vm_fault *vmf)
 		goto unlock_resv;
 
 	ret = ttm_bo_vm_fault_reserved(vmf, vmf->vma->vm_page_prot,
-				       TTM_BO_VM_NUM_PREFAULT);
+				       TTM_BO_VM_NUM_PREFAULT, NULL);
 	if (ret == VM_FAULT_RETRY && !(vmf->flags & FAULT_FLAG_RETRY_NOWAIT))
 		goto unlock_mclk;
 

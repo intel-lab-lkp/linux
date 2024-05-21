@@ -31,6 +31,8 @@
 
 #define pr_fmt(fmt) "[TTM] " fmt
 
+#include <drm/drm_exec.h>
+
 #include <drm/ttm/ttm_bo.h>
 #include <drm/ttm/ttm_placement.h>
 #include <drm/ttm/ttm_tt.h>
@@ -39,7 +41,8 @@
 #include <drm/drm_managed.h>
 
 static vm_fault_t ttm_bo_vm_fault_idle(struct ttm_buffer_object *bo,
-				struct vm_fault *vmf)
+				       struct vm_fault *vmf,
+				       struct drm_exec *exec)
 {
 	long err = 0;
 
@@ -63,7 +66,10 @@ static vm_fault_t ttm_bo_vm_fault_idle(struct ttm_buffer_object *bo,
 		(void)dma_resv_wait_timeout(bo->base.resv,
 					    DMA_RESV_USAGE_KERNEL, true,
 					    MAX_SCHEDULE_TIMEOUT);
-		dma_resv_unlock(bo->base.resv);
+		if (exec)
+			drm_exec_unlock_obj(exec, &bo->base);
+		else
+			dma_resv_unlock(bo->base.resv);
 		ttm_bo_put(bo);
 		return VM_FAULT_RETRY;
 	}
@@ -96,6 +102,7 @@ static unsigned long ttm_bo_io_mem_pfn(struct ttm_buffer_object *bo,
  * ttm_bo_vm_reserve - Reserve a buffer object in a retryable vm callback
  * @bo: The buffer object
  * @vmf: The fault structure handed to the callback
+ * @exec: The drm_exec locking transaction context. May be NULL.
  *
  * vm callbacks like fault() and *_mkwrite() allow for the mmap_lock to be dropped
  * during long waits, and after the wait the callback will be restarted. This
@@ -114,15 +121,16 @@ static unsigned long ttm_bo_io_mem_pfn(struct ttm_buffer_object *bo,
  *    VM_FAULT_NOPAGE if blocking wait and retrying was not allowed.
  */
 vm_fault_t ttm_bo_vm_reserve(struct ttm_buffer_object *bo,
-			     struct vm_fault *vmf)
+			     struct vm_fault *vmf, struct drm_exec *exec)
 {
-	/*
-	 * Work around locking order reversal in fault / nopfn
-	 * between mmap_lock and bo_reserve: Perform a trylock operation
-	 * for reserve, and if it fails, retry the fault after waiting
-	 * for the buffer to become unreserved.
-	 */
-	if (unlikely(!dma_resv_trylock(bo->base.resv))) {
+	int ret;
+
+	if (exec)
+		ret = drm_exec_trylock_obj(exec, &bo->base);
+	else
+		ret = dma_resv_trylock(bo->base.resv) ? 0 : -EBUSY;
+
+	if (unlikely(ret == -EBUSY)) {
 		/*
 		 * If the fault allows retry and this is the first
 		 * fault attempt, we try to release the mmap_lock
@@ -132,16 +140,26 @@ vm_fault_t ttm_bo_vm_reserve(struct ttm_buffer_object *bo,
 			if (!(vmf->flags & FAULT_FLAG_RETRY_NOWAIT)) {
 				ttm_bo_get(bo);
 				mmap_read_unlock(vmf->vma->vm_mm);
-				if (!dma_resv_lock_interruptible(bo->base.resv,
-								 NULL))
-					dma_resv_unlock(bo->base.resv);
+				if (exec) {
+					ret = drm_exec_lock_obj(exec, &bo->base);
+					if (!ret)
+						drm_exec_unlock_obj(exec, &bo->base);
+				} else  {
+					if (!dma_resv_lock_interruptible(bo->base.resv,
+									 NULL))
+						dma_resv_unlock(bo->base.resv);
+				}
 				ttm_bo_put(bo);
 			}
 
 			return VM_FAULT_RETRY;
 		}
 
-		if (dma_resv_lock_interruptible(bo->base.resv, NULL))
+		if (exec)
+			ret = drm_exec_lock_obj(exec, &bo->base);
+		else
+			ret = dma_resv_lock_interruptible(bo->base.resv, NULL);
+		if (ret)
 			return VM_FAULT_NOPAGE;
 	}
 
@@ -151,7 +169,10 @@ vm_fault_t ttm_bo_vm_reserve(struct ttm_buffer_object *bo,
 	 */
 	if (bo->ttm && (bo->ttm->page_flags & TTM_TT_FLAG_EXTERNAL)) {
 		if (!(bo->ttm->page_flags & TTM_TT_FLAG_EXTERNAL_MAPPABLE)) {
-			dma_resv_unlock(bo->base.resv);
+			if (exec)
+				drm_exec_unlock_obj(exec, &bo->base);
+			else
+				dma_resv_unlock(bo->base.resv);
 			return VM_FAULT_SIGBUS;
 		}
 	}
@@ -167,6 +188,7 @@ EXPORT_SYMBOL(ttm_bo_vm_reserve);
  * @num_prefault: Maximum number of prefault pages. The caller may want to
  * specify this based on madvice settings and the size of the GPU object
  * backed by the memory.
+ * @exec: The struct drm_exec locking transaction context. May be NULL.
  *
  * This function inserts one or more page table entries pointing to the
  * memory backing the buffer object, and then returns a return code
@@ -180,7 +202,8 @@ EXPORT_SYMBOL(ttm_bo_vm_reserve);
  */
 vm_fault_t ttm_bo_vm_fault_reserved(struct vm_fault *vmf,
 				    pgprot_t prot,
-				    pgoff_t num_prefault)
+				    pgoff_t num_prefault,
+				    struct drm_exec *exec)
 {
 	struct vm_area_struct *vma = vmf->vma;
 	struct ttm_buffer_object *bo = vma->vm_private_data;
@@ -199,7 +222,7 @@ vm_fault_t ttm_bo_vm_fault_reserved(struct vm_fault *vmf,
 	 * Wait for buffer data in transit, due to a pipelined
 	 * move.
 	 */
-	ret = ttm_bo_vm_fault_idle(bo, vmf);
+	ret = ttm_bo_vm_fault_idle(bo, vmf, exec);
 	if (unlikely(ret != 0))
 		return ret;
 
@@ -220,7 +243,8 @@ vm_fault_t ttm_bo_vm_fault_reserved(struct vm_fault *vmf,
 		struct ttm_operation_ctx ctx = {
 			.interruptible = true,
 			.no_wait_gpu = false,
-			.force_alloc = true
+			.force_alloc = true,
+			.exec = exec,
 		};
 
 		ttm = bo->ttm;
@@ -324,25 +348,34 @@ vm_fault_t ttm_bo_vm_fault(struct vm_fault *vmf)
 	pgprot_t prot;
 	struct ttm_buffer_object *bo = vma->vm_private_data;
 	struct drm_device *ddev = bo->base.dev;
+	struct drm_exec exec;
 	vm_fault_t ret;
-	int idx;
+	int idx, err;
 
-	ret = ttm_bo_vm_reserve(bo, vmf);
-	if (ret)
-		return ret;
+	drm_exec_init(&exec, DRM_EXEC_INTERRUPTIBLE_WAIT, 16);
+	drm_exec_until_all_locked(&exec) {
+		ret = ttm_bo_vm_reserve(bo, vmf, &exec);
+		err = drm_exec_retry_on_contention(&exec, 0);
+		if (err)
+			ret = VM_FAULT_NOPAGE;
+		if (ret)
+			goto out;
 
-	prot = vma->vm_page_prot;
-	if (drm_dev_enter(ddev, &idx)) {
-		ret = ttm_bo_vm_fault_reserved(vmf, prot, TTM_BO_VM_NUM_PREFAULT);
-		drm_dev_exit(idx);
-	} else {
-		ret = ttm_bo_vm_dummy_page(vmf, prot);
+		prot = vma->vm_page_prot;
+		if (drm_dev_enter(ddev, &idx)) {
+			ret = ttm_bo_vm_fault_reserved(vmf, prot, TTM_BO_VM_NUM_PREFAULT,
+						       &exec);
+			drm_dev_exit(idx);
+			err = drm_exec_retry_on_contention(&exec, 0);
+			if (err)
+				ret = VM_FAULT_NOPAGE;
+		} else {
+			ret = ttm_bo_vm_dummy_page(vmf, prot);
+		}
 	}
-	if (ret == VM_FAULT_RETRY && !(vmf->flags & FAULT_FLAG_RETRY_NOWAIT))
-		return ret;
 
-	dma_resv_unlock(bo->base.resv);
-
+out:
+	drm_exec_fini(&exec);
 	return ret;
 }
 EXPORT_SYMBOL(ttm_bo_vm_fault);

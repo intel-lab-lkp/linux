@@ -1046,7 +1046,7 @@ static vm_fault_t vm_fault_ttm(struct vm_fault *vmf)
 		     area->vm_flags & VM_WRITE))
 		return VM_FAULT_SIGBUS;
 
-	ret = ttm_bo_vm_reserve(bo, vmf);
+	ret = ttm_bo_vm_reserve(bo, vmf, NULL);
 	if (ret)
 		return ret;
 
@@ -1108,7 +1108,7 @@ static vm_fault_t vm_fault_ttm(struct vm_fault *vmf)
 
 	if (drm_dev_enter(dev, &idx)) {
 		ret = ttm_bo_vm_fault_reserved(vmf, vmf->vma->vm_page_prot,
-					       TTM_BO_VM_NUM_PREFAULT);
+					       TTM_BO_VM_NUM_PREFAULT, NULL);
 		drm_dev_exit(idx);
 	} else {
 		ret = ttm_bo_vm_dummy_page(vmf, vmf->vma->vm_page_prot);

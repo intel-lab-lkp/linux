@@ -52,7 +52,7 @@ static vm_fault_t amdgpu_gem_fault(struct vm_fault *vmf)
 	vm_fault_t ret;
 	int idx;
 
-	ret = ttm_bo_vm_reserve(bo, vmf);
+	ret = ttm_bo_vm_reserve(bo, vmf, NULL);
 	if (ret)
 		return ret;
 
@@ -64,7 +64,7 @@ static vm_fault_t amdgpu_gem_fault(struct vm_fault *vmf)
 		}
 
 		ret = ttm_bo_vm_fault_reserved(vmf, vmf->vma->vm_page_prot,
-					       TTM_BO_VM_NUM_PREFAULT);
+					       TTM_BO_VM_NUM_PREFAULT, NULL);
 
 		drm_dev_exit(idx);
 	} else {

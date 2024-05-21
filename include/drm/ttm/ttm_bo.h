@@ -427,10 +427,12 @@ int ttm_bo_evict_first(struct ttm_device *bdev,
 		       struct ttm_resource_manager *man,
 		       struct ttm_operation_ctx *ctx);
 vm_fault_t ttm_bo_vm_reserve(struct ttm_buffer_object *bo,
-			     struct vm_fault *vmf);
+			     struct vm_fault *vmf,
+			     struct drm_exec *exec);
 vm_fault_t ttm_bo_vm_fault_reserved(struct vm_fault *vmf,
 				    pgprot_t prot,
-				    pgoff_t num_prefault);
+				    pgoff_t num_prefault,
+				    struct drm_exec *exec);
 vm_fault_t ttm_bo_vm_fault(struct vm_fault *vmf);
 void ttm_bo_vm_open(struct vm_area_struct *vma);
 void ttm_bo_vm_close(struct vm_area_struct *vma);

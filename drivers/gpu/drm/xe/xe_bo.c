@@ -1223,7 +1223,7 @@ static vm_fault_t xe_gem_fault(struct vm_fault *vmf)
 	if (needs_rpm)
 		xe_pm_runtime_get(xe);
 
-	ret = ttm_bo_vm_reserve(tbo, vmf);
+	ret = ttm_bo_vm_reserve(tbo, vmf, NULL);
 	if (ret)
 		goto out;
 
@@ -1231,7 +1231,8 @@ static vm_fault_t xe_gem_fault(struct vm_fault *vmf)
 		trace_xe_bo_cpu_fault(bo);
 
 		ret = ttm_bo_vm_fault_reserved(vmf, vmf->vma->vm_page_prot,
-					       TTM_BO_VM_NUM_PREFAULT);
+					       TTM_BO_VM_NUM_PREFAULT,
+					       NULL);
 		drm_dev_exit(idx);
 	} else {
 		ret = ttm_bo_vm_dummy_page(vmf, vmf->vma->vm_page_prot);

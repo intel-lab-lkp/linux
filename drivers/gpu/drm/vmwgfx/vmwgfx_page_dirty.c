@@ -388,7 +388,7 @@ vm_fault_t vmw_bo_vm_mkwrite(struct vm_fault *vmf)
 	 */
 	save_flags = vmf->flags;
 	vmf->flags &= ~FAULT_FLAG_ALLOW_RETRY;
-	ret = ttm_bo_vm_reserve(bo, vmf);
+	ret = ttm_bo_vm_reserve(bo, vmf, NULL);
 	vmf->flags = save_flags;
 	if (ret)
 		return ret;
@@ -423,7 +423,7 @@ vm_fault_t vmw_bo_vm_fault(struct vm_fault *vmf)
 	pgprot_t prot;
 	vm_fault_t ret;
 
-	ret = ttm_bo_vm_reserve(bo, vmf);
+	ret = ttm_bo_vm_reserve(bo, vmf, NULL);
 	if (ret)
 		return ret;
 
@@ -457,7 +457,7 @@ vm_fault_t vmw_bo_vm_fault(struct vm_fault *vmf)
 	else
 		prot = vm_get_page_prot(vma->vm_flags);
 
-	ret = ttm_bo_vm_fault_reserved(vmf, prot, num_prefault);
+	ret = ttm_bo_vm_fault_reserved(vmf, prot, num_prefault, NULL);
 	if (ret == VM_FAULT_RETRY && !(vmf->flags & FAULT_FLAG_RETRY_NOWAIT))
 		return ret;
 
