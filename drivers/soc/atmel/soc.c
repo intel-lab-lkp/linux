@@ -250,7 +250,7 @@ static const struct at91_soc socs[] __initconst = {
 
 static int __init at91_get_cidr_exid_from_dbgu(u32 *cidr, u32 *exid)
 {
-	struct device_node *np;
+	struct device_node *np __free(device_node);
 	void __iomem *regs;
 
 	np = of_find_compatible_node(NULL, NULL, "atmel,at91rm9200-dbgu");
@@ -261,7 +261,6 @@ static int __init at91_get_cidr_exid_from_dbgu(u32 *cidr, u32 *exid)
 		return -ENODEV;
 
 	regs = of_iomap(np, 0);
-	of_node_put(np);
 
 	if (!regs) {
 		pr_warn("Could not map DBGU iomem range");
