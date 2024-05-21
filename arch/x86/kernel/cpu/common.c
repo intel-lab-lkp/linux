@@ -1734,12 +1734,11 @@ static void generic_identify(struct cpuinfo_x86 *c)
 {
 	c->extended_cpuid_level = 0;
 
-	if (!have_cpuid_p())
+	if (!have_cpuid_p()) {
 		identify_cpu_without_cpuid(c);
-
-	/* cyrix could have cpuid enabled via c_identify()*/
-	if (!have_cpuid_p())
+		/* cyrix could have cpuid enabled via c_identify()*/
 		return;
+	}
 
 	cpu_detect(c);
 
