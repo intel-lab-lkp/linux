@@ -620,6 +620,9 @@ extern void memblock_memsize_record(const char *name, phys_addr_t base,
 extern void memblock_memsize_detect_hole(void);
 extern void memblock_memsize_set_name(const char *name);
 extern void memblock_memsize_unset_name(void);
+extern void memblock_memsize_enable_tracking(void);
+extern void memblock_memsize_disable_tracking(void);
+extern void memblock_memsize_mod_kernel_size(long size);
 #else
 static inline void memblock_memsize_record(const char *name, phys_addr_t base,
 				    phys_addr_t size, bool nomap,
@@ -627,6 +630,9 @@ static inline void memblock_memsize_record(const char *name, phys_addr_t base,
 static inline void memblock_memsize_detect_hole(void) { }
 static inline void memblock_memsize_set_name(const char *name) { }
 static inline void memblock_memsize_unset_name(void) { }
+static inline void memblock_memsize_enable_tracking(void){ }
+static inline void memblock_memsize_disable_tracking(void){ }
+static inline void memblock_memsize_mod_kernel_size(long size) { }
 #endif
 
 #endif /* _LINUX_MEMBLOCK_H */

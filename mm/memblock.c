@@ -2060,6 +2060,23 @@ struct memsize_rgn_struct {
 static struct memsize_rgn_struct memsize_rgn[CONFIG_MAX_MEMBLOCK_MEMSIZE] __initdata_memblock;
 static int memsize_rgn_count __initdata_memblock;
 static const char *memblock_memsize_name __initdata_memblock;
+static long memsize_kinit __initdata_memblock;
+static bool memblock_memsize_tracking __initdata_memblock = true;
+
+void __init memblock_memsize_enable_tracking(void)
+{
+	memblock_memsize_tracking = true;
+}
+
+void __init memblock_memsize_disable_tracking(void)
+{
+	memblock_memsize_tracking = false;
+}
+
+void memblock_memsize_mod_kernel_size(long size)
+{
+	memsize_kinit += size;
+}
 
 static void __init_memblock memsize_get_valid_name(char *valid_name, const char *name)
 {
@@ -2313,6 +2330,12 @@ static void __init_memblock memblock_memsize_record_add(struct memblock_type *ty
 						base, size, false, false);
 		else if (type == &memblock.memory)
 			memblock_memsize_free(base, size);
+	} else if (memblock_memsize_tracking) {
+		if (type == &memblock.reserved) {
+			memblock_dbg("%s: kernel %lu %+ld\n", __func__,
+				     memsize_kinit, (unsigned long)size);
+			memsize_kinit += size;
+		}
 	}
 }
 
@@ -2325,6 +2348,12 @@ static void __init_memblock memblock_memsize_record_remove(struct memblock_type 
 		else if (type == &memblock.memory)
 			memblock_memsize_record(memblock_memsize_name,
 						base, size, true, false);
+	} else if (memblock_memsize_tracking) {
+		if (type == &memblock.reserved) {
+			memblock_dbg("%s: kernel %lu %+ld\n", __func__,
+				     memsize_kinit, (unsigned long)size);
+			memsize_kinit -= size;
+		}
 	}
 }
 #endif /* MEMBLOCK_MEMSIZE */
@@ -2442,6 +2471,19 @@ static unsigned long __init __free_memory_core(phys_addr_t start,
 	unsigned long end_pfn = min_t(unsigned long,
 				      PFN_DOWN(end), max_low_pfn);
 
+#ifdef CONFIG_MEMBLOCK_MEMSIZE
+	unsigned long start_align_up = PFN_ALIGN(start);
+	unsigned long end_align_down = PFN_PHYS(end_pfn);
+
+	if (start_pfn >= end_pfn) {
+		memblock_memsize_mod_kernel_size(end - start);
+	} else {
+		if (start_align_up > start)
+			memblock_memsize_mod_kernel_size(start_align_up - start);
+		if (end_pfn != max_low_pfn && end_align_down < end)
+			memblock_memsize_mod_kernel_size(end - end_align_down);
+	}
+#endif
 	if (start_pfn >= end_pfn)
 		return 0;
 
@@ -2546,6 +2588,8 @@ void __init memblock_free_all(void)
 
 	pages = free_low_memory_core_early();
 	totalram_pages_add(pages);
+
+	memblock_memsize_disable_tracking();
 }
 
 #if defined(CONFIG_DEBUG_FS) && defined(CONFIG_ARCH_KEEP_MEMBLOCK)
@@ -2672,6 +2716,8 @@ static int memblock_memsize_show(struct seq_file *m, void *private)
 	}
 
 	seq_puts(m, "\n");
+	seq_printf(m, " .kernel    : %7lu KB\n",
+		   DIV_ROUND_UP(memsize_kinit, SZ_1K));
 	seq_printf(m, " .unusable  : %7lu KB\n",
 		   DIV_ROUND_UP(reserved, SZ_1K));
 	seq_printf(m, " .reusable  : %7lu KB\n",

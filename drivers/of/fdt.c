@@ -524,6 +524,8 @@ void __init early_init_fdt_scan_reserved_mem(void)
 	if (!initial_boot_params)
 		return;
 
+	memblock_memsize_disable_tracking();
+
 	fdt_scan_reserved_mem();
 	fdt_reserve_elfcorehdr();
 
@@ -537,6 +539,7 @@ void __init early_init_fdt_scan_reserved_mem(void)
 	}
 
 	fdt_init_reserved_mem();
+	memblock_memsize_enable_tracking();
 }
 
 /**
@@ -1189,12 +1192,15 @@ void __init early_init_dt_scan_nodes(void)
 	if (rc)
 		pr_warn("No chosen node found, continuing without\n");
 
+	memblock_memsize_disable_tracking();
+
 	/* Setup memory, calling early_init_dt_add_memory_arch */
 	early_init_dt_scan_memory();
 
 	/* Handle linux,usable-memory-range property */
 	early_init_dt_check_for_usable_mem_range();
 
+	memblock_memsize_enable_tracking();
 	memblock_memsize_detect_hole();
 }
 
