@@ -613,5 +613,14 @@ static inline void early_memtest(phys_addr_t start, phys_addr_t end) { }
 static inline void memtest_report_meminfo(struct seq_file *m) { }
 #endif
 
+#ifdef CONFIG_MEMBLOCK_MEMSIZE
+extern void memblock_memsize_record(const char *name, phys_addr_t base,
+				    phys_addr_t size, bool nomap,
+				    bool reusable);
+#else
+static inline void memblock_memsize_record(const char *name, phys_addr_t base,
+				    phys_addr_t size, bool nomap,
+				    bool reusable) { }
+#endif
 
 #endif /* _LINUX_MEMBLOCK_H */
