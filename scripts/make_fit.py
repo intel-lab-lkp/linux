@@ -22,6 +22,10 @@ the entire FIT.
 Use -c to compress the data, using bzip2, gzip, lz4, lzma, lzo and
 zstd algorithms.
 
+Use -C to disable compression for DTBs regardless of the setting of '-c'.
+This is intended for old bootloaders that support compression of the
+kernel image but not the devicetree blobs.
+
 The resulting FIT can be booted by bootloaders which support FIT, such
 as U-Boot, Linuxboot, Tianocore, etc.
 
@@ -64,6 +68,8 @@ def parse_args():
           help='Specifies the architecture')
     parser.add_argument('-c', '--compress', type=str, default='none',
           help='Specifies the compression')
+    parser.add_argument('-C', '--no-dtb-compression', action='store_true',
+                        help='Disables compression for included DTBs')
     parser.add_argument('-E', '--external', action='store_true',
           help='Convert the FIT to use external data')
     parser.add_argument('-n', '--name', type=str, required=True,
@@ -247,7 +253,10 @@ def build_fit(args):
         if os.path.splitext(fname)[1] == '.dtb':
             seq += 1
             size += os.path.getsize(fname)
-            model, compat = output_dtb(fsw, seq, fname, args.arch, args.compress)
+            compress = args.compress
+            if args.no_dtb_compression:
+                compress = 'none'
+            model, compat = output_dtb(fsw, seq, fname, args.arch, compress)
             entries.append([model, compat])
 
     finish_fit(fsw, entries)
