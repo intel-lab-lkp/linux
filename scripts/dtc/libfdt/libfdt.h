@@ -1230,6 +1230,60 @@ int fdt_address_cells(const void *fdt, int nodeoffset);
  */
 int fdt_size_cells(const void *fdt, int nodeoffset);
 
+/**********************************************************************/
+/* Read-only functions (board-id related)                             */
+/**********************************************************************/
+
+/**
+ * fdt_get_board_id_t - callback to retrieve the board id for the platform
+ * @ctx: Context data passed from fdt_board_id_prop_matches()
+ * @name: board id name
+ * @data: Callback sets pointer to the board id data
+ * @datalen: Callback sets length of the board id data
+ *
+ * returns:
+ *	Pointer to the board id data, NULL if the data doesn't exist
+ */
+typedef const void *(*fdt_get_board_id_t)(void *ctx, const char *name,
+					   int *datalen);
+
+/**
+ * fdt_board_id_prop_matches - check if the property matches the platform's board id
+ * @fdt: pointer to the device tree blob
+ * @prop_offset: Offset of the property to match
+ * @get_board_id_cb: Function pointer to retrieve the platform's board id
+ *
+ * returns:
+ *	1: the property matches
+ *	0: the property doesn't match
+ *	-FDT_ERR_BADMAGIC,
+ *	-FDT_ERR_BADVERSION,
+ *	-FDT_ERR_BADSTATE,
+ *	-FDT_ERR_BADSTRUCTURE,
+ *	-FDT_ERR_TRUNCATED, standard meanings
+ */
+int fdt_board_id_prop_matches(const void *fdt,
+			      const struct fdt_property *prop,
+			      fdt_get_board_id_t get_board_id_cb,
+			      void *ctx);
+
+/**
+ * fdt_board_id_score - calculate score of the fdt's board_id
+ * @fdt: pointer to the device tree blob
+ * @get_board_id_cb: Function pointer to retrieve the platform's board id
+ *
+ * returns:
+ *	>0 for the number of board-id properties that were matched
+ *	0 if there was a mismatch in any of the board-id properties
+ *	-FDT_ERR_BADMAGIC,
+ *	-FDT_ERR_BADVERSION,
+ *	-FDT_ERR_BADSTATE,
+ *	-FDT_ERR_BADSTRUCTURE,
+ *	-FDT_ERR_TRUNCATED, standard meanings
+ */
+int fdt_board_id_score(const void *fdt, fdt_get_board_id_t get_board_id_cb,
+		       void *ctx);
+
 
 /**********************************************************************/
 /* Write-in-place functions                                           */

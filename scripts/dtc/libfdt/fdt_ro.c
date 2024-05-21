@@ -857,3 +857,79 @@ int fdt_node_offset_by_compatible(const void *fdt, int startoffset,
 
 	return offset; /* error from fdt_next_node() */
 }
+
+int fdt_board_id_prop_matches(const void *fdt,
+			      const struct fdt_property *prop,
+			      fdt_get_board_id_t get_board_id_cb,
+			      void *ctx)
+{
+	int data_len;
+	const void *data;
+	const char *name;
+	int name_len;
+	int string = 0;
+
+	name = fdt_get_string(fdt, fdt32_to_cpu(prop->nameoff), &name_len);
+	if (!name)
+		return -FDT_ERR_BADOFFSET;
+
+	if (name_len > 4 && !strcmp(name + name_len - 4, "_str"))
+		string = 1;
+
+	data = get_board_id_cb(ctx, name, &data_len);
+	if (!data)
+		return -FDT_ERR_NOTFOUND;
+
+	if (string) {
+		return fdt_stringlist_contains(prop->data,
+					       fdt32_to_cpu(prop->len),
+					       data);
+	} else {
+		// exact data comparison. data_len is the size of each entry
+		if (fdt32_to_cpu(prop->len) % data_len || data_len % 4)
+			return -FDT_ERR_BADVALUE;
+
+		for (int i = 0; i < fdt32_to_cpu(prop->len); i += data_len) {
+			if (!memcmp(&prop->data[i], data, data_len))
+				return 1;
+		}
+
+		return 0;
+	}
+
+	return 0;
+}
+
+int fdt_board_id_score(const void *fdt, fdt_get_board_id_t get_board_id_cb,
+		       void *ctx)
+{
+	const struct fdt_property *prop;
+	int node, property, ret, score = 0;
+	const char *name;
+
+	node = fdt_path_offset(fdt, "/board-id");
+	if (node < 0)
+		return node;
+
+	fdt_for_each_property_offset(property, fdt, node) {
+		prop = fdt_get_property_by_offset(fdt, property, NULL);
+		if (!prop)
+			return -FDT_ERR_BADOFFSET;
+
+		name = fdt_get_string(fdt, fdt32_to_cpu(prop->nameoff), NULL);
+		if (!name)
+			return -FDT_ERR_BADOFFSET;
+
+		if (!strcmp(name, "phandle") || !strcmp(name, "linux,phandle"))
+			continue;
+
+		ret = fdt_board_id_prop_matches(fdt, prop, get_board_id_cb,
+						ctx);
+		if (ret == 1)
+			score++;
+		else
+			return ret;
+	}
+
+	return score;
+}
