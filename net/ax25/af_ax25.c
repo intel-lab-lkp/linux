@@ -1381,6 +1381,8 @@ static int ax25_accept(struct socket *sock, struct socket *newsock, int flags,
 	DEFINE_WAIT(wait);
 	struct sock *sk;
 	int err = 0;
+	ax25_cb *ax25;
+	ax25_dev *ax25_dev;
 
 	if (sock->state != SS_UNCONNECTED)
 		return -EINVAL;
@@ -1434,6 +1436,10 @@ static int ax25_accept(struct socket *sock, struct socket *newsock, int flags,
 	kfree_skb(skb);
 	sk_acceptq_removed(sk);
 	newsock->state = SS_CONNECTED;
+	ax25 = sk_to_ax25(newsk);
+	ax25_dev = ax25->ax25_dev;
+	netdev_hold(ax25_dev->dev, &ax25->dev_tracker, GFP_ATOMIC);
+	ax25_dev_hold(ax25_dev);
 
 out:
 	release_sock(sk);
