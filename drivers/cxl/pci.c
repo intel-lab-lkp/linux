@@ -1011,12 +1011,42 @@ static void cxl_handle_cper_event(enum cxl_event_type ev_type,
 			       &uuid_null, &rec->event);
 }
 
+static void cxl_handle_prot_err(struct cxl_cper_prot_err *p_err)
+{
+	struct pci_dev *pdev __free(pci_dev_put) = NULL;
+	struct cxl_dev_state *cxlds;
+	unsigned int devfn;
+
+	devfn = PCI_DEVFN(p_err->device, p_err->function);
+	pdev = pci_get_domain_bus_and_slot(p_err->segment,
+					   p_err->bus, devfn);
+	if (!pdev)
+		return;
+
+	guard(device)(&pdev->dev);
+	if (pdev->driver != &cxl_pci_driver)
+		return;
+
+	cxlds = pci_get_drvdata(pdev);
+	if (!cxlds)
+		return;
+
+	if (((u64)p_err->upper_dw << 32 | p_err->lower_dw) != cxlds->serial)
+		pr_warn("CPER-reported device serial number does not match expected value\n");
+
+	cxl_trace_prot_err(cxlds, p_err);
+}
+
 static void cxl_cper_work_fn(struct work_struct *work)
 {
 	struct cxl_cper_work_data wd;
 
-	while (cxl_cper_kfifo_get(&wd))
-		cxl_handle_cper_event(wd.event_type, &wd.rec);
+	while (cxl_cper_kfifo_get(&wd)) {
+		if (wd.event_type == CXL_CPER_EVENT_PROT_ERR)
+			cxl_handle_prot_err(&wd.p_err);
+		else
+			cxl_handle_cper_event(wd.event_type, &wd.rec);
+	}
 }
 static DECLARE_WORK(cxl_cper_work, cxl_cper_work_fn);
 

@@ -723,6 +723,20 @@ static void cxl_cper_handle_prot_err(struct acpi_hest_generic_data *gdata)
 
 	if (cxl_cper_handle_prot_err_info(gdata, &wd.p_err))
 		return;
+
+	guard(spinlock_irqsave)(&cxl_cper_work_lock);
+
+	if (!cxl_cper_work)
+		return;
+
+	wd.event_type = CXL_CPER_EVENT_PROT_ERR;
+
+	if (!kfifo_put(&cxl_cper_fifo, wd)) {
+		pr_err_ratelimited("CXL CPER kfifo overflow\n");
+		return;
+	}
+
+	schedule_work(cxl_cper_work);
 }
 
 int cxl_cper_register_work(struct work_struct *work)
