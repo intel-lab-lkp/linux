@@ -76,7 +76,7 @@ static bool set_up_conn(const struct sockaddr *addr, socklen_t len, int type,
 	if (CHECK_FAIL(getsockname(*server, sa, &slen)))
 		goto close_server;
 
-	*conn = connect_to_addr(type, (struct sockaddr_storage *)sa, slen, NULL);
+	*conn = connect_to_addr((struct sockaddr_storage *)sa, slen, &opts);
 	if (*conn < 0)
 		goto close_server;
 

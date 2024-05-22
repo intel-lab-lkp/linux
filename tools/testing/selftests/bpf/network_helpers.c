@@ -268,7 +268,7 @@ static int connect_fd_to_addr(int fd,
 	return 0;
 }
 
-int connect_to_addr(int type, const struct sockaddr_storage *addr, socklen_t addrlen,
+int connect_to_addr(const struct sockaddr_storage *addr, socklen_t addrlen,
 		    const struct network_helper_opts *opts)
 {
 	int fd;
@@ -276,7 +276,7 @@ int connect_to_addr(int type, const struct sockaddr_storage *addr, socklen_t add
 	if (!opts)
 		opts = &default_opts;
 
-	fd = socket(addr->ss_family, type, opts->proto);
+	fd = socket(addr->ss_family, opts->type ? : SOCK_STREAM, opts->proto);
 	if (fd < 0) {
 		log_err("Failed to create client socket");
 		return -1;

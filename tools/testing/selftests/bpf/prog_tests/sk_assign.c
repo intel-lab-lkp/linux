@@ -109,12 +109,15 @@ rcv_msg(int srv_client, int type)
 static int
 run_test(int server_fd, const struct sockaddr *addr, socklen_t len, int type)
 {
+	struct network_helper_opts opts = {
+		.type = type,
+	};
 	int client = -1, srv_client = -1;
 	char buf[] = "testing";
 	in_port_t port;
 	int ret = 1;
 
-	client = connect_to_addr(type, (struct sockaddr_storage *)addr, len, NULL);
+	client = connect_to_addr((struct sockaddr_storage *)addr, len, &opts);
 	if (client == -1) {
 		perror("Cannot connect to server");
 		goto out;

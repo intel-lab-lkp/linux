@@ -224,12 +224,12 @@ static int kernel_getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen)
 	return sock_addr_op("kernel_getpeername", addr, addrlen, true);
 }
 
-int kernel_connect_to_addr(int type, const struct sockaddr_storage *addr, socklen_t addrlen,
+int kernel_connect_to_addr(const struct sockaddr_storage *addr, socklen_t addrlen,
 			   const struct network_helper_opts *opts)
 {
 	int err;
 
-	if (!ASSERT_OK(kernel_init_sock(addr->ss_family, type, 0),
+	if (!ASSERT_OK(kernel_init_sock(addr->ss_family, opts->type, 0),
 		       "kernel_init_sock"))
 		goto err;
 
@@ -278,7 +278,7 @@ out:
 }
 
 struct sock_ops {
-	int (*connect_to_addr)(int type, const struct sockaddr_storage *addr,
+	int (*connect_to_addr)(const struct sockaddr_storage *addr,
 			       socklen_t addrlen,
 			       const struct network_helper_opts *opts);
 	int (*start_server)(int family, int type, const char *addr_str,
@@ -2284,6 +2284,9 @@ static int test_bind(struct sock_addr_test *test)
 {
 	struct sockaddr_storage expected_addr;
 	socklen_t expected_addr_len = sizeof(struct sockaddr_storage);
+	struct network_helper_opts opts = {
+		.type = test->socket_type,
+	};
 	int serv = -1, client = -1, err;
 
 	serv = test->ops->start_server(test->socket_family, test->socket_type,
@@ -2306,7 +2309,7 @@ static int test_bind(struct sock_addr_test *test)
 		goto cleanup;
 
 	/* Try to connect to server just in case */
-	client = connect_to_addr(test->socket_type, &expected_addr, expected_addr_len, NULL);
+	client = connect_to_addr(&expected_addr, expected_addr_len, &opts);
 	if (!ASSERT_GE(client, 0, "connect_to_addr"))
 		goto cleanup;
 
@@ -2327,6 +2330,9 @@ static int test_connect(struct sock_addr_test *test)
 	socklen_t addr_len = sizeof(struct sockaddr_storage),
 		  expected_addr_len = sizeof(struct sockaddr_storage),
 		  expected_src_addr_len = sizeof(struct sockaddr_storage);
+	struct network_helper_opts opts = {
+		.type = test->socket_type,
+	};
 	int serv = -1, client = -1, err;
 
 	serv = start_server(test->socket_family, test->socket_type,
@@ -2339,8 +2345,7 @@ static int test_connect(struct sock_addr_test *test)
 	if (!ASSERT_EQ(err, 0, "make_sockaddr"))
 		goto cleanup;
 
-	client = test->ops->connect_to_addr(test->socket_type, &addr, addr_len,
-					    NULL);
+	client = test->ops->connect_to_addr(&addr, addr_len, &opts);
 	if (client < 0) {
 		err = errno;
 		goto err;
@@ -2519,6 +2524,9 @@ static int test_getpeername(struct sock_addr_test *test)
 	struct sockaddr_storage addr, expected_addr;
 	socklen_t addr_len = sizeof(struct sockaddr_storage),
 		  expected_addr_len = sizeof(struct sockaddr_storage);
+	struct network_helper_opts opts = {
+		.type = test->socket_type,
+	};
 	int serv = -1, client = -1, err;
 
 	serv = start_server(test->socket_family, test->socket_type,
@@ -2531,8 +2539,7 @@ static int test_getpeername(struct sock_addr_test *test)
 	if (!ASSERT_EQ(err, 0, "make_sockaddr"))
 		goto cleanup;
 
-	client = test->ops->connect_to_addr(test->socket_type, &addr, addr_len,
-					    NULL);
+	client = test->ops->connect_to_addr(&addr, addr_len, &opts);
 	if (!ASSERT_GE(client, 0, "connect_to_addr"))
 		goto cleanup;
 
