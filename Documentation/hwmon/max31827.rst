@@ -142,3 +142,28 @@ usage (+33% for both write and reads) in normal conditions.
 Since this operation implies there will be an extra delay to each
 transaction, PEC can be disabled or enabled through sysfs.
 Just write 1  to the "pec" file for enabling PEC and 0 for disabling it.
+
+DebugFs entries
+---------------
+
+The chip also has a configuration register where each bit stands for a specific
+functionality to be configured. Hence as one would like to have access to these
+features, we give access to them in debugfs.
+
+.. warning:: The debugfs interface is subject to change without notice
+             and is only available when the kernel is compiled with
+             ``CONFIG_DEBUG_FS`` defined.
+
+``/sys/kernel/debug/max31827/``
+contains the following attributes:
+
+==============  ===============================================================
+alarm_polarity  Write 1 for ALARM pin active state is low, 0 otherwise
+comp_int        Set to 1 if OT and UT status bits are in interrupt mode
+fault_queue     Number of consecutive temperature faults until OT and UT faults
+                are indicated in status bits
+pec_error       Set to 1 if PEC Enable bit is set, 0 otherwise
+resolution      2-bit value that select the conversion resolution, please see
+                datasheet for corresponding values
+timeout         Write 1 do disable bus timeout, 0 otherwise
+==============  ===============================================================
