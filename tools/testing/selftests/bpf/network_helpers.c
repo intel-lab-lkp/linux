@@ -119,6 +119,21 @@ error_close:
 	return -1;
 }
 
+int start_server_str(int family, const char *addr_str, __u16 port,
+		     const struct network_helper_opts *opts)
+{
+	struct sockaddr_storage addr;
+	socklen_t addrlen;
+
+	if (!opts)
+		opts = &default_opts;
+
+	if (make_sockaddr(family, addr_str, port, &addr, &addrlen))
+		return -1;
+
+	return __start_server((struct sockaddr *)&addr, addrlen, opts);
+}
+
 int start_server(int family, int type, const char *addr_str, __u16 port,
 		 int timeout_ms)
 {
@@ -126,13 +141,8 @@ int start_server(int family, int type, const char *addr_str, __u16 port,
 		.type		= type,
 		.timeout_ms	= timeout_ms,
 	};
-	struct sockaddr_storage addr;
-	socklen_t addrlen;
 
-	if (make_sockaddr(family, addr_str, port, &addr, &addrlen))
-		return -1;
-
-	return __start_server((struct sockaddr *)&addr, addrlen, &opts);
+	return start_server_str(family, addr_str, port, &opts);
 }
 
 static int reuseport_cb(int fd, void *opts)
