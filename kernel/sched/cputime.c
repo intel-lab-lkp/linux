@@ -254,13 +254,21 @@ static __always_inline u64 steal_account_process_time(u64 maxtime)
 {
 #ifdef CONFIG_PARAVIRT
 	if (static_key_false(&paravirt_steal_enabled)) {
-		u64 steal;
+		u64 steal, abs_steal;
 
-		steal = paravirt_steal_clock(smp_processor_id());
-		steal -= this_rq()->prev_steal_time;
-		steal = min(steal, maxtime);
+		abs_steal = paravirt_steal_clock(smp_processor_id());
+		steal = abs_steal - this_rq()->prev_steal_time;
+		if (unlikely(steal > maxtime)) {
+			/*
+			 * If the delta isn't egregious, it can be counted
+			 * in the next time period. Only advance by maxtime.
+			 */
+			if (steal < maxtime * 2)
+				abs_steal = this_rq()->prev_steal_time + maxtime;
+			steal = maxtime;
+		}
 		account_steal_time(steal);
-		this_rq()->prev_steal_time += steal;
+		this_rq()->prev_steal_time = abs_steal;
 
 		return steal;
 	}
