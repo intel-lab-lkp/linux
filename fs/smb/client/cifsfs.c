@@ -435,6 +435,7 @@ cifs_evict_inode(struct inode *inode)
 	if (inode->i_state & I_PINNING_NETFS_WB)
 		cifs_fscache_unuse_inode_cookie(inode, true);
 	cifs_fscache_release_inode_cookie(inode);
+	netfs_wait_for_outstanding_io(inode);
 	clear_inode(inode);
 }
 
