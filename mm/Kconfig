@@ -190,6 +190,7 @@ config ZSMALLOC
 	tristate
 	prompt "N:1 compression allocator (zsmalloc)" if ZSWAP
 	depends on MMU
+	depends on PAGE_SIZE_LESS_THAN_256KB # we want <= 64KB
 	help
 	  zsmalloc is a slab-based memory allocator designed to store
 	  pages of various compression levels efficiently. It achieves

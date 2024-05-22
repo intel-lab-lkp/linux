@@ -20,7 +20,8 @@
  *	page->index: links together all component pages of a zspage
  *		For the huge page, this is always 0, so we use this field
  *		to store handle.
- *	page->page_type: first object offset in a subpage of zspage
+ *	page->page_type: PG_zsmalloc, lower 16 bit locate the first object
+ *		offset in a subpage of a zspage
  *
  * Usage of struct page flags:
  *	PG_private: identifies the first component page
@@ -450,14 +451,22 @@ static inline struct page *get_first_page(struct zspage *zspage)
 	return first_page;
 }
 
+static inline void reset_first_obj_offset(struct page *page)
+{
+	page->page_type |= 0xffff;
+}
+
 static inline unsigned int get_first_obj_offset(struct page *page)
 {
-	return page->page_type;
+	return page->page_type & 0xffff;
 }
 
 static inline void set_first_obj_offset(struct page *page, unsigned int offset)
 {
-	page->page_type = offset;
+	BUILD_BUG_ON(PAGE_SIZE & ~0xffff);
+	VM_WARN_ON_ONCE(offset & ~0xffff);
+	page->page_type &= ~0xffff;
+	page->page_type |= offset & 0xffff;
 }
 
 static inline unsigned int get_freeobj(struct zspage *zspage)
@@ -791,8 +800,9 @@ static void reset_page(struct page *page)
 	__ClearPageMovable(page);
 	ClearPagePrivate(page);
 	set_page_private(page, 0);
-	page_mapcount_reset(page);
 	page->index = 0;
+	reset_first_obj_offset(page);
+	__ClearPageZsmalloc(page);
 }
 
 static int trylock_zspage(struct zspage *zspage)
@@ -965,11 +975,13 @@ static struct zspage *alloc_zspage(struct zs_pool *pool,
 		if (!page) {
 			while (--i >= 0) {
 				dec_zone_page_state(pages[i], NR_ZSPAGES);
+				__ClearPageZsmalloc(pages[i]);
 				__free_page(pages[i]);
 			}
 			cache_free_zspage(pool, zspage);
 			return NULL;
 		}
+		__SetPageZsmalloc(page);
 
 		inc_zone_page_state(page, NR_ZSPAGES);
 		pages[i] = page;
@@ -1761,6 +1773,9 @@ static int zs_page_migrate(struct page *newpage, struct page *page,
 		return -EINVAL;
 
 	VM_BUG_ON_PAGE(!PageIsolated(page), page);
+
+	/* We're committed, tell the world that this is a Zsmalloc page. */
+	__SetPageZsmalloc(newpage);
 
 	/* The page is locked, so this pointer must remain valid */
 	zspage = get_zspage(page);
