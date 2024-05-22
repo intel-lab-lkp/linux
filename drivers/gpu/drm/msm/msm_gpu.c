@@ -254,6 +254,18 @@ out:
 	state->nr_bos++;
 }
 
+static int pgtable_walk_cb(void *cb_data, void *pte, int level)
+{
+	struct msm_gpu_fault_info *info = cb_data;
+
+	if (level > ARRAY_SIZE(info->ptes))
+		return -EINVAL;
+
+	info->ptes[level] = *(u64 *)pte;
+
+	return 0;
+}
+
 static void msm_gpu_crashstate_capture(struct msm_gpu *gpu,
 		struct msm_gem_submit *submit, char *comm, char *cmd)
 {
@@ -278,6 +290,16 @@ static void msm_gpu_crashstate_capture(struct msm_gpu *gpu,
 
 	if (submit) {
 		int i;
+
+		if (state->fault_info.ttbr0) {
+			struct msm_gpu_fault_info *info = &state->fault_info;
+			struct msm_mmu *mmu = submit->aspace->mmu;
+
+			msm_iommu_pagetable_params(mmu, &info->pgtbl_ttbr0,
+						   &info->asid);
+			msm_iommu_pagetable_walk(mmu, info->iova,
+						 pgtable_walk_cb, info);
+		}
 
 		state->bos = kcalloc(submit->nr_bos,
 			sizeof(struct msm_gpu_state_bo), GFP_KERNEL);
