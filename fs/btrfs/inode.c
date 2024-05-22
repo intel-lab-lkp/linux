@@ -892,15 +892,20 @@ static inline void inode_should_defrag(struct btrfs_inode *inode,
 
 static void extent_range_clear_dirty_for_io(struct inode *inode, u64 start, u64 end)
 {
+	struct btrfs_fs_info *fs_info = inode_to_fs_info(inode);
+	const u64 len = end + 1 - start;
 	unsigned long index = start >> PAGE_SHIFT;
 	unsigned long end_index = end >> PAGE_SHIFT;
-	struct page *page;
 
+	/* We should not have such large range. */
+	ASSERT(len < U32_MAX);
 	while (index <= end_index) {
-		page = find_get_page(inode->i_mapping, index);
-		BUG_ON(!page); /* Pages should be in the extent_io_tree */
-		clear_page_dirty_for_io(page);
-		put_page(page);
+		struct folio *folio;
+
+		folio = filemap_get_folio(inode->i_mapping, index);
+		BUG_ON(IS_ERR(folio)); /* Pages should have been locked. */
+		btrfs_folio_clamp_clear_dirty(fs_info, folio, start, len);
+		folio_put(folio);
 		index++;
 	}
 }
