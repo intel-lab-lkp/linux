@@ -442,7 +442,6 @@ static int lo_rw_aio(struct loop_device *lo, struct loop_cmd *cmd,
 	cmd->iocb.ki_filp = file;
 	cmd->iocb.ki_complete = lo_rw_aio_complete;
 	cmd->iocb.ki_flags = IOCB_DIRECT;
-	cmd->iocb.ki_ioprio = IOPRIO_PRIO_VALUE(IOPRIO_CLASS_NONE, 0);
 
 	if (rw == ITER_SOURCE)
 		ret = call_write_iter(file, &cmd->iocb, &iter);
@@ -1856,6 +1855,9 @@ static blk_status_t loop_queue_rq(struct blk_mq_hw_ctx *hctx,
 		break;
 	}
 
+	/* get request's ioprio */
+	cmd->iocb.ki_ioprio = rq->ioprio;
+
 	/* always use the first bio's css */
 	cmd->blkcg_css = NULL;
 	cmd->memcg_css = NULL;
@@ -1886,11 +1888,17 @@ static void loop_handle_cmd(struct loop_cmd *cmd)
 	int ret = 0;
 	struct mem_cgroup *old_memcg = NULL;
 	const bool use_aio = cmd->use_aio;
+	int ori_ioprio = 0;
+	int cmd_ioprio = cmd->iocb.ki_ioprio;
 
 	if (write && (lo->lo_flags & LO_FLAGS_READ_ONLY)) {
 		ret = -EIO;
 		goto failed;
 	}
+
+	ori_ioprio = get_current_ioprio();
+	if (ori_ioprio != cmd_ioprio)
+		set_task_ioprio(current, cmd_ioprio);
 
 	if (cmd_blkcg_css)
 		kthread_associate_blkcg(cmd_blkcg_css);
@@ -1913,6 +1921,10 @@ static void loop_handle_cmd(struct loop_cmd *cmd)
 		set_active_memcg(old_memcg);
 		css_put(cmd_memcg_css);
 	}
+
+	if (ori_ioprio != cmd_ioprio)
+		set_task_ioprio(current, ori_ioprio);
+
  failed:
 	/* complete non-aio request */
 	if (!use_aio || ret) {
