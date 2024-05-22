@@ -2392,6 +2392,78 @@ fail:
 	return -ENOBUFS;
 }
 
+static int nl80211_put_radio(struct wiphy *wiphy, struct sk_buff *msg, int idx)
+{
+	const struct wiphy_radio *r = &wiphy->radio[idx];
+	struct nlattr *radio, *freqs, *freq;
+	int i;
+
+	radio = nla_nest_start(msg, idx);
+	if (!radio)
+		return -ENOBUFS;
+
+	if (nla_put_u32(msg, NL80211_WIPHY_RADIO_ATTR_BAND_MASK, r->band_mask))
+		goto fail;
+
+	if (!r->n_freq_range)
+		goto out;
+
+	freqs = nla_nest_start(msg, NL80211_WIPHY_RADIO_ATTR_FREQ_RANGES);
+	if (!freqs)
+		goto fail;
+
+	for (i = 0; i < r->n_freq_range; i++) {
+		const struct wiphy_radio_freq_range *range = &r->freq_range[i];
+		int ret;
+
+		freq = nla_nest_start(msg, i);
+		ret = nla_put_u32(msg, NL80211_WIPHY_RADIO_FREQ_ATTR_START,
+				  range->start_freq) ||
+		      nla_put_u32(msg, NL80211_WIPHY_RADIO_FREQ_ATTR_END,
+				  range->end_freq);
+		nla_nest_end(msg, freq);
+
+		if (ret)
+			goto fail_freq;
+	}
+
+	nla_nest_end(msg, freqs);
+
+out:
+	nla_nest_end(msg, radio);
+	return 0;
+
+fail_freq:
+	nla_nest_cancel(msg, freqs);
+fail:
+	nla_nest_cancel(msg, radio);
+	return -ENOBUFS;
+}
+
+static int nl80211_put_radios(struct wiphy *wiphy, struct sk_buff *msg)
+{
+	struct nlattr *radios;
+	int i;
+
+	if (!wiphy->n_radio)
+		return 0;
+
+	radios = nla_nest_start(msg, NL80211_ATTR_RADIOS);
+	if (!radios)
+		return -ENOBUFS;
+
+	for (i = 0; i < wiphy->n_radio; i++)
+		if (nl80211_put_radio(wiphy, msg, i))
+			goto fail;
+
+	nla_nest_end(msg, radios);
+	return 0;
+
+fail:
+	nla_nest_cancel(msg, radios);
+	return -ENOBUFS;
+}
+
 struct nl80211_dump_wiphy_state {
 	s64 filter_wiphy;
 	long start;
@@ -2999,6 +3071,9 @@ static int nl80211_send_wiphy(struct cfg80211_registered_device *rdev,
 		if (rdev->wiphy.hw_timestamp_max_peers &&
 		    nla_put_u16(msg, NL80211_ATTR_MAX_HW_TIMESTAMP_PEERS,
 				rdev->wiphy.hw_timestamp_max_peers))
+			goto nla_put_failure;
+
+		if (nl80211_put_radios(&rdev->wiphy, msg))
 			goto nla_put_failure;
 
 		/* done */
