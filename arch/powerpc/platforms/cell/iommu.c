@@ -780,14 +780,13 @@ static int __init cell_iommu_init_disabled(void)
 static u64 cell_iommu_get_fixed_address(struct device *dev)
 {
 	u64 cpu_addr, size, best_size, dev_addr = OF_BAD_ADDR;
-	struct device_node *np;
+	struct device_node *np = dev->of_node;
 	const u32 *ranges = NULL;
 	int i, len, best, naddr, nsize, pna, range_size;
 
 	/* We can be called for platform devices that have no of_node */
-	np = of_node_get(dev->of_node);
 	if (!np)
-		goto out;
+		return dev_addr;
 
 	while (1) {
 		naddr = of_n_addr_cells(np);
@@ -805,7 +804,7 @@ static u64 cell_iommu_get_fixed_address(struct device *dev)
 
 	if (!ranges) {
 		dev_dbg(dev, "iommu: no dma-ranges found\n");
-		goto out;
+		return dev_addr;
 	}
 
 	len /= sizeof(u32);
@@ -833,8 +832,6 @@ static u64 cell_iommu_get_fixed_address(struct device *dev)
 	} else
 		dev_dbg(dev, "iommu: no suitable range found!\n");
 
-out:
-	of_node_put(np);
 
 	return dev_addr;
 }
