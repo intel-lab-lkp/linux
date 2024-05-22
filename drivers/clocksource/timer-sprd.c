@@ -30,6 +30,7 @@
 #define TIMER_VALUE_SHDW_HI	0x1c
 
 #define TIMER_VALUE_LO_MASK	GENMASK(31, 0)
+#define TIMER_VALUE_HI_MASK	GENMASK(31, 0)
 
 static void sprd_timer_enable(void __iomem *base, u32 flag)
 {
@@ -57,10 +58,11 @@ static void sprd_timer_disable(void __iomem *base)
 	writel_relaxed(val, base + TIMER_CTL);
 }
 
-static void sprd_timer_update_counter(void __iomem *base, unsigned long cycles)
+static void sprd_timer_update_counter(void __iomem *base, unsigned long cycles_lo,
+					unsigned long cycles_hi)
 {
-	writel_relaxed(cycles & TIMER_VALUE_LO_MASK, base + TIMER_LOAD_LO);
-	writel_relaxed(0, base + TIMER_LOAD_HI);
+	writel_relaxed(cycles_lo & TIMER_VALUE_LO_MASK, base + TIMER_LOAD_LO);
+	writel_relaxed(cycles_hi, base + TIMER_LOAD_HI);
 }
 
 static void sprd_timer_enable_interrupt(void __iomem *base)
@@ -82,7 +84,8 @@ static int sprd_timer_set_next_event(unsigned long cycles,
 	struct timer_of *to = to_timer_of(ce);
 
 	sprd_timer_disable(timer_of_base(to));
-	sprd_timer_update_counter(timer_of_base(to), cycles);
+	sprd_timer_update_counter(timer_of_base(to), cycles,
+				(u64)cycles >> 32);
 	sprd_timer_enable(timer_of_base(to), 0);
 
 	return 0;
@@ -93,7 +96,8 @@ static int sprd_timer_set_periodic(struct clock_event_device *ce)
 	struct timer_of *to = to_timer_of(ce);
 
 	sprd_timer_disable(timer_of_base(to));
-	sprd_timer_update_counter(timer_of_base(to), timer_of_period(to));
+	sprd_timer_update_counter(timer_of_base(to), timer_of_period(to),
+				(u64)timer_of_period(to) >> 32);
 	sprd_timer_enable(timer_of_base(to), TIMER_CTL_PERIOD_MODE);
 
 	return 0;
@@ -162,14 +166,21 @@ static struct timer_of suspend_to = {
 
 static u64 sprd_suspend_timer_read(struct clocksource *cs)
 {
-	return ~(u64)readl_relaxed(timer_of_base(&suspend_to) +
-				   TIMER_VALUE_SHDW_LO) & cs->mask;
+	u32 hi, lo;
+
+	lo = readl_relaxed(timer_of_base(&suspend_to) +
+				   TIMER_VALUE_SHDW_LO);
+	hi = readl_relaxed(timer_of_base(&suspend_to) +
+				   TIMER_VALUE_SHDW_HI);
+
+	return ~((u64)hi << 32 | lo);
 }
 
 static int sprd_suspend_timer_enable(struct clocksource *cs)
 {
 	sprd_timer_update_counter(timer_of_base(&suspend_to),
-				  TIMER_VALUE_LO_MASK);
+				  TIMER_VALUE_LO_MASK,
+				  TIMER_VALUE_HI_MASK);
 	sprd_timer_enable(timer_of_base(&suspend_to), TIMER_CTL_PERIOD_MODE);
 
 	return 0;
@@ -186,7 +197,7 @@ static struct clocksource suspend_clocksource = {
 	.read	= sprd_suspend_timer_read,
 	.enable = sprd_suspend_timer_enable,
 	.disable = sprd_suspend_timer_disable,
-	.mask	= CLOCKSOURCE_MASK(32),
+	.mask	= CLOCKSOURCE_MASK(64),
 	.flags	= CLOCK_SOURCE_IS_CONTINUOUS | CLOCK_SOURCE_SUSPEND_NONSTOP,
 };
 
