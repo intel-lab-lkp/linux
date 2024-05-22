@@ -862,6 +862,8 @@ struct btusb_data {
 	int (*recv_acl)(struct hci_dev *hdev, struct sk_buff *skb);
 	int (*recv_bulk)(struct btusb_data *data, void *buffer, int count);
 
+	int (*is_iso_data_pkt)(struct sk_buff *skb);
+
 	int (*setup_on_usb)(struct hci_dev *hdev);
 
 	int oob_wake_irq;   /* irq for out-of-band wake-on-bt */
@@ -1202,6 +1204,8 @@ static int btusb_recv_bulk(struct btusb_data *data, void *buffer, int count)
 
 		if (!hci_skb_expect(skb)) {
 			/* Complete frame */
+			if (data->is_iso_data_pkt && data->is_iso_data_pkt(skb))
+				hci_skb_pkt_type(skb) = HCI_ISODATA_PKT;
 			btusb_recv_acl(data, skb);
 			skb = NULL;
 		}
@@ -2510,6 +2514,13 @@ static int btusb_recv_bulk_intel(struct btusb_data *data, void *buffer,
 		return btusb_recv_intr(data, buffer, count);
 
 	return btusb_recv_bulk(data, buffer, count);
+}
+
+static int btusb_is_iso_data_pkt_intel(struct sk_buff *skb)
+{
+	__u16 handle = (__le16_to_cpu(hci_acl_hdr(skb)->handle) & 0xfff);
+
+	return (handle >= 0x900);
 }
 
 static int btusb_send_frame_intel(struct hci_dev *hdev, struct sk_buff *skb)
@@ -4312,6 +4323,9 @@ static int btusb_probe(struct usb_interface *intf,
 		/* Override the rx handlers */
 		data->recv_event = btintel_recv_event;
 		data->recv_bulk = btusb_recv_bulk_intel;
+
+		/* Override for ISO data packet*/
+		data->is_iso_data_pkt = btusb_is_iso_data_pkt_intel;
 	} else if (id->driver_info & BTUSB_REALTEK) {
 		/* Allocate extra space for Realtek device */
 		priv_size += sizeof(struct btrealtek_data);
