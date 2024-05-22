@@ -216,52 +216,113 @@ Returns:
 Specifies the guest's TSC offset relative to the host's TSC. The guest's
 TSC is then derived by the following equation:
 
-  guest_tsc = host_tsc + KVM_VCPU_TSC_OFFSET
+  guest_tsc = (( host_tsc * tsc_scale_ratio ) >> tsc_scale_bits ) + KVM_VCPU_TSC_OFFSET
+
+The values of tsc_scale_ratio and tsc_scale_bits can be obtained using
+the KVM_VCPU_TSC_SCALE attribute.
 
 This attribute is useful to adjust the guest's TSC on live migration,
 so that the TSC counts the time during which the VM was paused. The
-following describes a possible algorithm to use for this purpose.
+following describes a possible algorithm to use for this purpose,
 
 From the source VMM process:
 
-1. Invoke the KVM_GET_CLOCK ioctl to record the host TSC (tsc_src),
+1. Invoke the KVM_GET_CLOCK ioctl to record the host TSC (host_tsc_src),
    kvmclock nanoseconds (guest_src), and host CLOCK_REALTIME nanoseconds
-   (host_src).
+   (time_src) at a given moment (Tsrc).
 
-2. Read the KVM_VCPU_TSC_OFFSET attribute for every vCPU to record the
-   guest TSC offset (ofs_src[i]).
+2. For each vCPU[i]:
 
-3. Invoke the KVM_GET_TSC_KHZ ioctl to record the frequency of the
-   guest's TSC (freq).
+   a. Read the KVM_VCPU_TSC_OFFSET attribute to record the guest TSC offset
+      (ofs_src[i]).
+
+   b. Read the KVM_VCPU_TSC_SCALE attribute to record the guest TSC scaling
+      ratio (ratio_src[i], frac_bits_src[i]).
+
+   c. Use host_tsc_src and the scaling/offset factors to calculate this
+      vCPU's TSC at time Tsrc:
+      tsc_src[i] = (( host_tsc_src * ratio_src[i] ) >> frac_bits_src[i] ) + ofs_src[i]
+
+3. Invoke the KVM_GET_CLOCK_GUEST ioctl on the boot vCPU to return the KVM
+   clock as a function of the guest TSC (pvti_src).  (This ioctl not succeed
+   if the host and guest TSCs are not consistent and well-behaved.)
 
 From the destination VMM process:
 
-4. Invoke the KVM_SET_CLOCK ioctl, providing the source nanoseconds from
-   kvmclock (guest_src) and CLOCK_REALTIME (host_src) in their respective
+4. Before creating the vCPUs, invoke the KVM_SET_TSC_KHZ ioctl on the VM, to
+   set the scaled frequency of the guest's TSC (freq).
+
+5. Invoke the KVM_SET_CLOCK ioctl, providing the source nanoseconds from
+   kvmclock (guest_src) and CLOCK_REALTIME (time_src) in their respective
    fields.  Ensure that the KVM_CLOCK_REALTIME flag is set in the provided
    structure.
 
-   KVM will advance the VM's kvmclock to account for elapsed time since
-   recording the clock values.  Note that this will cause problems in
+   KVM will restore the VM's kvmclock, accounting for elapsed time since
+   the clock values were recorded.  Note that this will cause problems in
    the guest (e.g., timeouts) unless CLOCK_REALTIME is synchronized
    between the source and destination, and a reasonably short time passes
-   between the source pausing the VMs and the destination executing
-   steps 4-7.
+   between the source pausing the VMs and the destination resuming them.
+   Due to the KVM_[SG]ET_CLOCK API using CLOCK_REALTIME instead of
+   CLOCK_TAI, leap seconds during the migration may also introduce errors.
 
-5. Invoke the KVM_GET_CLOCK ioctl to record the host TSC (tsc_dest) and
-   kvmclock nanoseconds (guest_dest).
+6. Invoke the KVM_GET_CLOCK ioctl to record the host TSC (host_tsc_dst) and
+   host CLOCK_REALTIME nanoseconds (time_dst) at a given moment (Tdst).
 
-6. Adjust the guest TSC offsets for every vCPU to account for (1) time
-   elapsed since recording state and (2) difference in TSCs between the
-   source and destination machine:
+7. Calculate the number of nanoseconds elapsed between Tsrc and Tdst:
+   ΔT = time_dst - time_src
 
-   ofs_dst[i] = ofs_src[i] -
-     (guest_src - guest_dest) * freq +
-     (tsc_src - tsc_dest)
+8. As each vCPU[i] is created:
 
-   ("ofs[i] + tsc - guest * freq" is the guest TSC value corresponding to
-   a time of 0 in kvmclock.  The above formula ensures that it is the
-   same on the destination as it was on the source).
+   a. Read the KVM_VCPU_TSC_SCALE attribute to record the guest TSC scaling
+      ratio (ratio_dst[i], frac_bits_dst[i]).
 
-7. Write the KVM_VCPU_TSC_OFFSET attribute for every vCPU with the
-   respective value derived in the previous step.
+   b. Calculate the intended guest TSC value at time Tdst:
+      tsc_dst[i] = tsc_tsc[i] + (ΔT * freq[i])
+
+   c. Use host_tsc_dst and the scaling/offset factors to calculate this vCPU's
+      TSC at time Tsrc without taking offsetting into account:
+      raw_dst[i] = (( host_tsc_dst * ratio_dst[i] ) >> frac_bits_dst[i] )
+
+   d. Calculate ofs_src[i] = tsc_dst[i] + raw_dst[i] and set the resulting
+      offset using the KVM_VCPU_TSC_OFFSET attrribute.
+
+9. If pvti_src was provided, invoke the KVM_SET_CLOCK_GUEST ioctl on the boot
+   vCPU to restore the KVM clock as a precise function of the guest TSC. If
+   pvti_src was not provided by the source, or the ioctl fails on the
+   destination, the KVM clock is operating in its less precise mode where it
+   is defined in terms of the host CLOCK_MONOTONIC_RAW, so the value
+   previously set in step 5 is as accurate as it can be.
+
+4.2 ATTRIBUTE: KVM_VCPU_TSC_SCALE
+
+:Parameters: 64-bit fixed point TSC scale factor
+
+Returns:
+
+	 ======= ======================================
+	 -EFAULT Error reading the provided parameter
+		 address.
+	 -ENXIO  Attribute not supported
+	 -EINVAL Invalid request to write the attribute
+	 ======= ======================================
+
+This read-only attribute reports the guest's TSC scaling factor, in the form
+of a fixed-point number represented by the following structure:
+
+    struct kvm_vcpu_tsc_scale {
+	    __u64	tsc_ratio;
+	    __u64	tsc_frac_bits;
+    };
+
+
+The tsc_frac_bits field indicate the location of the fixed point, such that
+host TSC values are converted to guest TSC using the formula:
+
+    guest_tsc = ( ( host_tsc * tsc_ratio ) >> tsc_frac_bits) + offset
+
+Userspace can use this to precisely calculate the guest TSC from the host
+TSC at any given moment. This is needed for accurate migration of guests,
+as described in the documentation for the KVM_VCPU_TSC_OFFSET attribute.
+In conjunction with the KVM_GET_CLOCK_GUEST ioctl, it also provides a way
+for userspace to quickly calculate the KVM clock for a guest, to use as a
+time reference for hypercalls or emulation of other timer devices.
