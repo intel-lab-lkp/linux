@@ -717,6 +717,14 @@ static void cxl_cper_post_event(enum cxl_event_type event_type,
 	schedule_work(cxl_cper_work);
 }
 
+static void cxl_cper_handle_prot_err(struct acpi_hest_generic_data *gdata)
+{
+	struct cxl_cper_work_data wd;
+
+	if (cxl_cper_handle_prot_err_info(gdata, &wd.p_err))
+		return;
+}
+
 int cxl_cper_register_work(struct work_struct *work)
 {
 	if (cxl_cper_work)
@@ -791,6 +799,8 @@ static bool ghes_do_proc(struct ghes *ghes,
 			struct cxl_cper_event_rec *rec = acpi_hest_get_payload(gdata);
 
 			cxl_cper_post_event(CXL_CPER_EVENT_MEM_MODULE, rec);
+		} else if (guid_equal(sec_type, &CPER_SEC_CXL_PROT_ERR)) {
+			cxl_cper_handle_prot_err(gdata);
 		} else {
 			void *err = acpi_hest_get_payload(gdata);
 

@@ -165,10 +165,36 @@ struct cxl_ras_capability_regs {
 	u32 header_log[16];
 };
 
+enum cxl_aer_err_type {
+	CXL_AER_UNCORRECTABLE,
+	CXL_AER_CORRECTABLE,
+};
+
+struct cxl_cper_prot_err {
+	struct cxl_ras_capability_regs cxl_ras;
+
+	/* Device ID */
+	u8 function;
+	u8 device;
+	u8 bus;
+	u16 segment;
+
+	/* Device Serial Number */
+	u32 lower_dw;
+	u32 upper_dw;
+
+	int severity;
+};
+
 struct cxl_cper_work_data {
 	enum cxl_event_type event_type;
 	struct cxl_cper_event_rec rec;
+	struct cxl_cper_prot_err p_err;
 };
+
+struct acpi_hest_generic_data;
+int cxl_cper_handle_prot_err_info(struct acpi_hest_generic_data *gdata,
+				  struct cxl_cper_prot_err *p_err);
 
 #ifdef CONFIG_ACPI_APEI_GHES
 int cxl_cper_register_work(struct work_struct *work);
