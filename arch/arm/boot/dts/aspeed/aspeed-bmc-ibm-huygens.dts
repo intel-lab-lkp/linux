@@ -1,0 +1,23 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright 2024 IBM Corp.
+/dts-v1/;
+
+#include "aspeed-bmc-ibm-rainier.dts"
+
+/ {
+	model = "Huygens";
+};
+
+&fsim0 {
+	/delete-node/ cfam@0,0;
+	/delete-property/ cfam-reset-gpios;
+
+	bus-frequency = <100000000>;
+};
+
+&fsim1 {
+	#address-cells = <2>;
+	#size-cells = <0>;
+	status = "okay";
+	bus-frequency = <100000000>;
+};
