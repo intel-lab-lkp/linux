@@ -42,6 +42,11 @@
 
 #define SUN6I_LOSC_CLK_PRESCAL			0x0008
 
+#define SUN6I_LOSC_CLK_AUTO_CAL			0x000c
+#define SUN6I_LOSC_CLK_AUTO_CAL_16MS		BIT(2)
+#define SUN6I_LOSC_CLK_AUTO_CAL_ENABLE		BIT(1)
+#define SUN6I_LOSC_CLK_AUTO_CAL_SEL_CAL		BIT(0)
+
 /* RTC */
 #define SUN6I_RTC_YMD				0x0010
 #define SUN6I_RTC_HMS				0x0014
@@ -126,7 +131,6 @@
  *     registers (R40, H6)
  *   - SYS power domain controls (R40)
  *   - DCXO controls (H6)
- *   - RC oscillator calibration (H6)
  *
  * These functions are not covered by this driver.
  */
@@ -137,6 +141,7 @@ struct sun6i_rtc_clk_data {
 	unsigned int has_out_clk : 1;
 	unsigned int has_losc_en : 1;
 	unsigned int has_auto_swt : 1;
+	unsigned int has_auto_cal : 1;
 };
 
 #define RTC_LINEAR_DAY	BIT(0)
@@ -267,6 +272,14 @@ static void __init sun6i_rtc_clk_init(struct device_node *node,
 	}
 	writel(reg, rtc->base + SUN6I_LOSC_CTRL);
 
+	if (rtc->data->has_auto_cal) {
+		/* Enable internal OSC clock auto calibration */
+		reg = SUN6I_LOSC_CLK_AUTO_CAL_16MS |
+			SUN6I_LOSC_CLK_AUTO_CAL_ENABLE |
+			SUN6I_LOSC_CLK_AUTO_CAL_SEL_CAL;
+		writel(reg, rtc->base + SUN6I_LOSC_CLK_AUTO_CAL);
+	}
+
 	/* Yes, I know, this is ugly. */
 	sun6i_rtc = rtc;
 
@@ -374,6 +387,7 @@ static const struct sun6i_rtc_clk_data sun50i_h6_rtc_data = {
 	.has_out_clk = 1,
 	.has_losc_en = 1,
 	.has_auto_swt = 1,
+	.has_auto_cal = 1,
 };
 
 static void __init sun50i_h6_rtc_clk_init(struct device_node *node)
