@@ -89,12 +89,14 @@ enum {
 	Opt_uid,
 	Opt_gid,
 	Opt_mode,
+	Opt_ignore,
 };
 
 static const struct fs_parameter_spec debugfs_param_specs[] = {
 	fsparam_u32	("gid",		Opt_gid),
 	fsparam_u32oct	("mode",	Opt_mode),
 	fsparam_u32	("uid",		Opt_uid),
+	fsparam_flag_no	("auto",	Opt_ignore),
 	{}
 };
 
