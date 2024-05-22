@@ -110,6 +110,7 @@ static void cifs_issue_write(struct netfs_io_subrequest *subreq)
 		goto fail;
 
 	wdata->server->ops->async_writev(wdata);
+	wdata->credits.value = 0;
 out:
 	return;
 
@@ -205,10 +206,12 @@ static void cifs_req_issue_read(struct netfs_io_subrequest *subreq)
 
 	rc = adjust_credits(rdata->server, &rdata->credits, rdata->subreq.len);
 	if (!rc) {
-		if (rdata->req->cfile->invalidHandle)
+		if (rdata->req->cfile->invalidHandle) {
 			rc = -EAGAIN;
-		else
+		} else {
 			rc = rdata->server->ops->async_readv(rdata);
+			rdata->credits.value = 0;
+		}
 	}
 
 out:
