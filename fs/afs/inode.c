@@ -652,6 +652,7 @@ void afs_evict_inode(struct inode *inode)
 
 	afs_set_cache_aux(vnode, &aux);
 	netfs_clear_inode_writeback(inode, &aux);
+	netfs_wait_for_outstanding_io(inode);
 	clear_inode(inode);
 
 	while (!list_empty(&vnode->wb_keys)) {
