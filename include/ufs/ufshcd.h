@@ -916,6 +916,7 @@ enum ufshcd_mcq_opr {
  * @ufs_rtc_update_work: A work for UFS RTC periodic update
  * @pm_qos_req: PM QoS request handle
  * @pm_qos_enabled: flag to check if pm qos is enabled
+ * @uic_cmd_timeout: timeout in ms for UIC commands
  */
 struct ufs_hba {
 	void __iomem *mmio_base;
@@ -1084,6 +1085,7 @@ struct ufs_hba {
 	struct delayed_work ufs_rtc_update_work;
 	struct pm_qos_request pm_qos_req;
 	bool pm_qos_enabled;
+	u32 uic_cmd_timeout;
 };
 
 /**
