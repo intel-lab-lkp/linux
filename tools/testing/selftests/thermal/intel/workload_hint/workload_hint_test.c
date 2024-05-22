@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
+#include "../../../kselftest.h"
 
 #define WORKLOAD_NOTIFICATION_DELAY_ATTRIBUTE "/sys/bus/pci/devices/0000:00:04.0/workload_hint/notification_delay_ms"
 #define WORKLOAD_ENABLE_ATTRIBUTE "/sys/bus/pci/devices/0000:00:04.0/workload_hint/workload_hint_enable"
@@ -31,17 +32,13 @@ void workload_hint_exit(int signum)
 	/* Disable feature via sysfs knob */
 
 	fd = open(WORKLOAD_ENABLE_ATTRIBUTE, O_RDWR);
-	if (fd < 0) {
-		perror("Unable to open workload type feature enable file\n");
-		exit(1);
-	}
+	if (fd < 0)
+		ksft_exit_fail_perror("Unable to open workload type feature enable file");
 
-	if (write(fd, "0\n", 2) < 0) {
-		perror("Can' disable workload hints\n");
-		exit(1);
-	}
+	if (write(fd, "0\n", 2) < 0)
+		ksft_exit_fail_perror("Can' disable workload hints");
 
-	printf("Disabled workload type prediction\n");
+	ksft_print_msg("Disabled workload type prediction\n");
 
 	close(fd);
 }
@@ -54,32 +51,27 @@ int main(int argc, char **argv)
 	char delay_str[64];
 	int delay = 0;
 
-	printf("Usage: workload_hint_test [notification delay in milli seconds]\n");
+	ksft_print_header();
+	ksft_set_plan(1);
+
+	ksft_print_msg("Usage: workload_hint_test [notification delay in milli seconds]\n");
 
 	if (argc > 1) {
 		ret = sscanf(argv[1], "%d", &delay);
-		if (ret < 0) {
-			printf("Invalid delay\n");
-			exit(1);
-		}
+		if (ret < 0)
+			ksft_exit_fail_perror("Invalid delay");
 
-		printf("Setting notification delay to %d ms\n", delay);
+		ksft_print_msg("Setting notification delay to %d ms\n", delay);
 		if (delay < 0)
-			exit(1);
-
-		sprintf(delay_str, "%s\n", argv[1]);
+			ksft_exit_fail_msg("delay can never be negative\n");
 
 		sprintf(delay_str, "%s\n", argv[1]);
 		fd = open(WORKLOAD_NOTIFICATION_DELAY_ATTRIBUTE, O_RDWR);
-		if (fd < 0) {
-			perror("Unable to open workload notification delay\n");
-			exit(1);
-		}
+		if (fd < 0)
+			ksft_exit_fail_perror("Unable to open workload notification delay");
 
-		if (write(fd, delay_str, strlen(delay_str)) < 0) {
-			perror("Can't set delay\n");
-			exit(1);
-		}
+		if (write(fd, delay_str, strlen(delay_str)) < 0)
+			ksft_exit_fail_perror("Can't set delay");
 
 		close(fd);
 	}
@@ -93,63 +85,51 @@ int main(int argc, char **argv)
 
 	/* Enable feature via sysfs knob */
 	fd = open(WORKLOAD_ENABLE_ATTRIBUTE, O_RDWR);
-	if (fd < 0) {
-		perror("Unable to open workload type feature enable file\n");
-		exit(1);
-	}
+	if (fd < 0)
+		ksft_exit_fail_perror("Unable to open workload type feature enable file");
 
-	if (write(fd, "1\n", 2) < 0) {
-		perror("Can' enable workload hints\n");
-		exit(1);
-	}
+	if (write(fd, "1\n", 2) < 0)
+		ksft_exit_fail_perror("Can' enable workload hints");
 
 	close(fd);
 
-	printf("Enabled workload type prediction\n");
+	ksft_print_msg("Enabled workload type prediction\n");
 
 	while (1) {
 		fd = open(WORKLOAD_TYPE_INDEX_ATTRIBUTE, O_RDONLY);
-		if (fd < 0) {
-			perror("Unable to open workload type file\n");
-			exit(1);
-		}
+		if (fd < 0)
+			ksft_exit_fail_perror("Unable to open workload type file");
 
-		if ((lseek(fd, 0L, SEEK_SET)) < 0) {
-			fprintf(stderr, "Failed to set pointer to beginning\n");
-			exit(1);
-		}
+		if ((lseek(fd, 0L, SEEK_SET)) < 0)
+			ksft_exit_fail_perror("Failed to set pointer to beginning");
 
-		if (read(fd, index_str, sizeof(index_str)) < 0) {
-			fprintf(stderr, "Failed to read from:%s\n",
-			WORKLOAD_TYPE_INDEX_ATTRIBUTE);
-			exit(1);
-		}
+		if (read(fd, index_str, sizeof(index_str)) < 0)
+			ksft_exit_fail_perror("Failed to read from: workload_type_index");
 
 		ufd.fd = fd;
 		ufd.events = POLLPRI;
 
 		ret = poll(&ufd, 1, -1);
 		if (ret < 0) {
-			perror("poll error");
-			exit(1);
+			ksft_exit_fail_perror("poll error");
 		} else if (ret == 0) {
-			printf("Poll Timeout\n");
+			ksft_print_msg("Poll Timeout\n");
 		} else {
-			if ((lseek(fd, 0L, SEEK_SET)) < 0) {
-				fprintf(stderr, "Failed to set pointer to beginning\n");
-				exit(1);
-			}
+			if ((lseek(fd, 0L, SEEK_SET)) < 0)
+				ksft_exit_fail_perror("Failed to set pointer to beginning");
 
-			if (read(fd, index_str, sizeof(index_str)) < 0)
-				exit(0);
+			if (read(fd, index_str, sizeof(index_str)) < 0) {
+				ksft_test_result_pass("Successfully read\n");
+				ksft_finished();
+			}
 
 			ret = sscanf(index_str, "%d", &index);
 			if (ret < 0)
 				break;
 			if (index > WORKLOAD_TYPE_MAX_INDEX)
-				printf("Invalid workload type index\n");
+				ksft_print_msg("Invalid workload type index\n");
 			else
-				printf("workload type:%s\n", workload_types[index]);
+				ksft_print_msg("workload type:%s\n", workload_types[index]);
 		}
 
 		close(fd);
