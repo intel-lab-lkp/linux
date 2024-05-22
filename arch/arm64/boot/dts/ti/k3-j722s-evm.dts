@@ -369,6 +369,7 @@
 &sdhci0 {
 	disable-wp;
 	bootph-all;
+	non-removable;
 	ti,driver-strength-ohm = <50>;
 	status = "okay";
 };
