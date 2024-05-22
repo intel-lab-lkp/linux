@@ -2712,11 +2712,9 @@ static void __kvm_synchronize_tsc(struct kvm_vcpu *vcpu, u64 offset, u64 tsc,
 	lockdep_assert_held(&kvm->arch.tsc_write_lock);
 
 	/*
-	 * We also track th most recent recorded KHZ, write and time to
-	 * allow the matching interval to be extended at each write.
+	 * Track the last recorded kHz (and associated scaling ratio for
+	 * calculating the guest TSC), and offset.
 	 */
-	kvm->arch.last_tsc_nsec = ns;
-	kvm->arch.last_tsc_write = tsc;
 	kvm->arch.last_tsc_khz = vcpu->arch.virtual_tsc_khz;
 	kvm->arch.last_tsc_scaling_ratio = vcpu->arch.l1_tsc_scaling_ratio;
 	kvm->arch.last_tsc_offset = offset;
@@ -2735,10 +2733,9 @@ static void __kvm_synchronize_tsc(struct kvm_vcpu *vcpu, u64 offset, u64 tsc,
 		 *
 		 * These values are tracked in kvm->arch.cur_xxx variables.
 		 */
+		kvm->arch.last_tsc_nsec = ns;
+		kvm->arch.last_tsc_write = tsc;
 		kvm->arch.cur_tsc_generation++;
-		kvm->arch.cur_tsc_nsec = ns;
-		kvm->arch.cur_tsc_write = tsc;
-		kvm->arch.cur_tsc_offset = offset;
 		kvm->arch.nr_vcpus_matched_tsc = 0;
 	} else if (vcpu->arch.this_tsc_generation != kvm->arch.cur_tsc_generation) {
 		kvm->arch.nr_vcpus_matched_tsc++;
@@ -2746,8 +2743,8 @@ static void __kvm_synchronize_tsc(struct kvm_vcpu *vcpu, u64 offset, u64 tsc,
 
 	/* Keep track of which generation this VCPU has synchronized to */
 	vcpu->arch.this_tsc_generation = kvm->arch.cur_tsc_generation;
-	vcpu->arch.this_tsc_nsec = kvm->arch.cur_tsc_nsec;
-	vcpu->arch.this_tsc_write = kvm->arch.cur_tsc_write;
+	vcpu->arch.this_tsc_nsec = kvm->arch.last_tsc_nsec;
+	vcpu->arch.this_tsc_write = kvm->arch.last_tsc_write;
 
 	kvm_track_tsc_matching(vcpu);
 }
@@ -2824,8 +2821,8 @@ static void kvm_synchronize_tsc(struct kvm_vcpu *vcpu, u64 *user_value)
 		data = kvm->arch.last_tsc_write;
 
 		if (!kvm_check_tsc_unstable()) {
-			offset = kvm->arch.cur_tsc_offset;
-			ns = kvm->arch.cur_tsc_nsec;
+			offset = kvm->arch.last_tsc_offset;
+			ns = kvm->arch.last_tsc_nsec;
 		} else {
 			/*
 			 * ... unless the TSC is unstable and has to be
