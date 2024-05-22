@@ -2153,20 +2153,39 @@ static int tasdevice_load_data(struct tasdevice_priv *tas_priv,
 
 static void tasdev_load_calibrated_data(struct tasdevice_priv *priv, int i)
 {
+	struct tasdevice_fw *cal_fmw = priv->tasdevice[i].cali_data_fmw;
+	struct calidata *cali_data = &priv->cali_data;
+	unsigned char *data = cali_data->data;
 	struct tasdevice_calibration *cal;
-	struct tasdevice_fw *cal_fmw;
+	int k = i * (CAL_DAT_SZ + 1);
+	int j, rc;
 
-	cal_fmw = priv->tasdevice[i].cali_data_fmw;
+	if (!priv->is_user_space_calidata &&
+		cal_fmw) {
+		cal = cal_fmw->calibrations;
 
-	/* No calibrated data for current devices, playback will go ahead. */
-	if (!cal_fmw)
+		if (cal)
+			load_calib_data(priv, &cal->dev_data);
 		return;
-
-	cal = cal_fmw->calibrations;
-	if (cal)
+	}
+	if (!priv->is_user_space_calidata)
 		return;
-
-	load_calib_data(priv, &cal->dev_data);
+	/* load calibrated data from user space */
+	if (data[k] != i) {
+		dev_err(priv->dev, "%s: no cal-data for dev %d from usr-spc\n",
+			__func__, i);
+		return;
+	}
+	for (j = 0; j < cali_data->reg_array_sz; j++) {
+		if (data[k] != j)
+			rc = tasdevice_dev_bulk_write(priv, i,
+				cali_data->reg_array[j],
+				&(data[k + 4 * j]), 4);
+		if (rc < 0)
+			dev_err(priv->dev,
+				"chn %d calib %d bulk_wr err = %d\n",
+				i, j, rc);
+	}
 }
 
 int tasdevice_select_tuningprm_cfg(void *context, int prm_no,
@@ -2261,9 +2280,10 @@ int tasdevice_select_tuningprm_cfg(void *context, int prm_no,
 				tas_priv->tasdevice[i].cur_conf = cfg_no;
 			}
 		}
-	} else
+	} else {
 		dev_dbg(tas_priv->dev, "%s: Unneeded loading dsp conf %d\n",
 			__func__, cfg_no);
+	}
 
 	status |= cfg_info[rca_conf_no]->active_dev;
 
@@ -2324,13 +2344,15 @@ void tasdevice_tuning_switch(void *context, int state)
 	struct tasdevice_fw *tas_fmw = tas_priv->fmw;
 	int profile_cfg_id = tas_priv->rcabin.profile_cfg_id;
 
-	if (tas_priv->fw_state == TASDEVICE_DSP_FW_FAIL) {
-		dev_err(tas_priv->dev, "DSP bin file not loaded\n");
+	/* Only RCA file loaded still can work without speaker protection */
+	if (!(tas_priv->fw_state == TASDEVICE_RCA_FW_OK ||
+		tas_priv->fw_state == TASDEVICE_DSP_FW_ALL_OK)) {
+		dev_err(tas_priv->dev, "No firmware loaded\n");
 		return;
 	}
 
 	if (state == 0) {
-		if (tas_priv->cur_prog < tas_fmw->nr_programs) {
+		if (tas_fmw && tas_priv->cur_prog < tas_fmw->nr_programs) {
 			/*dsp mode or tuning mode*/
 			profile_cfg_id = tas_priv->rcabin.profile_cfg_id;
 			tasdevice_select_tuningprm_cfg(tas_priv,
@@ -2340,9 +2362,10 @@ void tasdevice_tuning_switch(void *context, int state)
 
 		tasdevice_select_cfg_blk(tas_priv, profile_cfg_id,
 			TASDEVICE_BIN_BLK_PRE_POWER_UP);
-	} else
+	} else {
 		tasdevice_select_cfg_blk(tas_priv, profile_cfg_id,
 			TASDEVICE_BIN_BLK_PRE_SHUTDOWN);
+	}
 }
 EXPORT_SYMBOL_NS_GPL(tasdevice_tuning_switch,
 	SND_SOC_TAS2781_FMWLIB);

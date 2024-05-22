@@ -2,7 +2,7 @@
 //
 // ALSA SoC Texas Instruments TAS2563/TAS2781 Audio Smart Amplifier
 //
-// Copyright (C) 2022 - 2023 Texas Instruments Incorporated
+// Copyright (C) 2022 - 2024 Texas Instruments Incorporated
 // https://www.ti.com
 //
 // The TAS2563/TAS2781 driver implements a flexible and configurable
@@ -23,6 +23,8 @@
 #define SMARTAMP_MODULE_NAME		"tas2781"
 #define TAS2781_GLOBAL_ADDR	0x40
 #define TAS2563_GLOBAL_ADDR	0x48
+#define CAL_DAT_SZ		20
+
 #define TASDEVICE_RATES			(SNDRV_PCM_RATE_44100 |\
 	SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_96000 |\
 	SNDRV_PCM_RATE_88200)
@@ -30,6 +32,11 @@
 #define TASDEVICE_FORMATS		(SNDRV_PCM_FMTBIT_S16_LE | \
 	SNDRV_PCM_FMTBIT_S24_LE | \
 	SNDRV_PCM_FMTBIT_S32_LE)
+
+#define TASDEVICE_CMD_SING_W		0x1
+#define TASDEVICE_CMD_BURST		0x2
+#define TASDEVICE_CMD_DELAY		0x3
+#define TASDEVICE_CMD_FIELD_W		0x4
 
 /*PAGE Control Register (available in page0 of each book) */
 #define TASDEVICE_PAGE_SELECT		0x00
@@ -43,21 +50,73 @@
 					(page * 128)) + reg)
 
 /*Software Reset */
-#define TAS2781_REG_SWRESET		TASDEVICE_REG(0x0, 0X0, 0x01)
-#define TAS2781_REG_SWRESET_RESET	BIT(0)
+#define TASDEVICE_REG_SWRESET		TASDEVICE_REG(0x00, 0X00, 0x01)
+#define TASDEVICE_REG_SWRESET_RESET	BIT(0)
 
 /*I2C Checksum */
-#define TASDEVICE_I2CChecksum		TASDEVICE_REG(0x0, 0x0, 0x7E)
+#define TASDEVICE_I2CChecksum		TASDEVICE_REG(0x00, 0x00, 0x7E)
+
+/* XM_340 */
+#define	TASDEVICE_XM_A1_REG	TASDEVICE_REG(0x64, 0x02, 0x4c)
+/* XM_341 */
+#define	TASDEVICE_XM_A2_REG	TASDEVICE_REG(0x64, 0x02, 0x64)
 
 /* Volume control */
-#define TAS2781_DVC_LVL			TASDEVICE_REG(0x0, 0x0, 0x1A)
-#define TAS2781_AMP_LEVEL		TASDEVICE_REG(0x0, 0x0, 0x03)
+#define TAS2563_DVC_LVL			TASDEVICE_REG(0x00, 0x02, 0x0C)
+#define TAS2781_DVC_LVL			TASDEVICE_REG(0x00, 0x00, 0x1A)
+#define TAS2781_AMP_LEVEL		TASDEVICE_REG(0x00, 0x00, 0x03)
 #define TAS2781_AMP_LEVEL_MASK		GENMASK(5, 1)
 
-#define TASDEVICE_CMD_SING_W		0x1
-#define TASDEVICE_CMD_BURST		0x2
-#define TASDEVICE_CMD_DELAY		0x3
-#define TASDEVICE_CMD_FIELD_W		0x4
+#define TAS2563_PRM_R0_REG		TASDEVICE_REG(0x00, 0x0f, 0x34)
+#define TAS2563_PRM_R0_LOW_REG		TASDEVICE_REG(0x00, 0x0f, 0x48)
+#define TAS2563_PRM_INVR0_REG		TASDEVICE_REG(0x00, 0x0f, 0x40)
+#define TAS2563_PRM_POW_REG		TASDEVICE_REG(0x00, 0x0d, 0x3c)
+#define TAS2563_PRM_TLIMIT_REG		TASDEVICE_REG(0x00, 0x10, 0x14)
+
+#define TAS2563_RUNTIME_RE_REG_TF	TASDEVICE_REG(0x64, 0x02, 0x70)
+#define TAS2563_RUNTIME_RE_REG		TASDEVICE_REG(0x64, 0x02, 0x48)
+
+#define TAS2563_PRM_ENFF_REG		TASDEVICE_REG(0x00, 0x0d, 0x54)
+#define TAS2563_PRM_DISTCK_REG		TASDEVICE_REG(0x00, 0x0d, 0x58)
+#define TAS2563_PRM_TE_SCTHR_REG	TASDEVICE_REG(0x00, 0x0f, 0x60)
+#define TAS2563_PRM_PLT_FLAG_REG	TASDEVICE_REG(0x00, 0x0d, 0x74)
+#define TAS2563_PRM_SINEGAIN_REG	TASDEVICE_REG(0x00, 0x0d, 0x7c)
+/* prm_Int_B0 */
+#define TAS2563_TE_TA1_REG		TASDEVICE_REG(0x00, 0x10, 0x0c)
+/* prm_Int_A1 */
+#define TAS2563_TE_TA1_AT_REG		TASDEVICE_REG(0x00, 0x10, 0x10)
+/* prm_TE_Beta */
+#define TAS2563_TE_TA2_REG		TASDEVICE_REG(0x00, 0x0f, 0x64)
+/* prm_TE_Beta1 */
+#define TAS2563_TE_AT_REG		TASDEVICE_REG(0x00, 0x0f, 0x68)
+/* prm_TE_1_Beta1 */
+#define TAS2563_TE_DT_REG		TASDEVICE_REG(0x00, 0x0f, 0x70)
+
+#define TAS2781_PRM_R0_REG		TASDEVICE_REG(0x00, 0x17, 0x74)
+#define TAS2781_PRM_R0_LOW_REG		TASDEVICE_REG(0x00, 0x18, 0x0c)
+#define TAS2781_PRM_INVR0_REG		TASDEVICE_REG(0x00, 0x18, 0x14)
+#define TAS2781_PRM_POW_REG		TASDEVICE_REG(0x00, 0x13, 0x70)
+#define TAS2781_PRM_TLIMIT_REG		TASDEVICE_REG(0x00, 0x18, 0x7c)
+
+#define TAS2781_PRM_INT_MASK_REG	TASDEVICE_REG(0x00, 0x00, 0x3b)
+#define TAS2781_PRM_CLK_CFG_REG		TASDEVICE_REG(0x00, 0x00, 0x5c)
+#define TAS2781_PRM_RSVD_REG		TASDEVICE_REG(0x00, 0x01, 0x19)
+#define TAS2781_PRM_TEST_57_REG		TASDEVICE_REG(0x00, 0xfd, 0x39)
+#define TAS2781_PRM_TEST_62_REG		TASDEVICE_REG(0x00, 0xfd, 0x3e)
+#define TAS2781_PRM_PVDD_UVLO_REG	TASDEVICE_REG(0x00, 0x00, 0x71)
+#define TAS2781_PRM_CHNL_0_REG		TASDEVICE_REG(0x00, 0x00, 0x03)
+#define TAS2781_PRM_NG_CFG0_REG		TASDEVICE_REG(0x00, 0x00, 0x35)
+#define TAS2781_PRM_IDLE_CH_DET_REG	TASDEVICE_REG(0x00, 0x00, 0x66)
+#define TAS2781_PRM_PLT_FLAG_REG	TASDEVICE_REG(0x00, 0x14, 0x38)
+#define TAS2781_PRM_SINEGAIN_REG	TASDEVICE_REG(0x00, 0x14, 0x40)
+#define TAS2781_PRM_SINEGAIN2_REG	TASDEVICE_REG(0x00, 0x14, 0x44)
+
+#define TAS2781_TEST_UNLOCK_REG		TASDEVICE_REG(0x00, 0xFD, 0x0D)
+#define TAS2781_TEST_PAGE_UNLOCK	0x0D
+
+#define TAS2781_RUNTIME_LATCH_RE_REG	TASDEVICE_REG(0x00, 0x00, 0x49)
+#define TAS2781_RUNTIME_RE_REG_TF	TASDEVICE_REG(0x64, 0x62, 0x48)
+#define TAS2781_RUNTIME_RE_REG		TASDEVICE_REG(0x64, 0x63, 0x44)
 
 enum audio_device {
 	TAS2563,
@@ -69,7 +128,15 @@ enum device_catlog_id {
 	OTHERS
 };
 
+struct bulk_reg_val {
+	int reg;
+	unsigned char val[4];
+	unsigned char val_len;
+	bool is_locked;
+};
+
 struct tasdevice {
+	struct bulk_reg_val *cali_data_restore;
 	struct tasdevice_fw *cali_data_fmw;
 	unsigned int dev_addr;
 	unsigned int err_code;
@@ -88,6 +155,8 @@ struct tasdevice_irqinfo {
 struct calidata {
 	unsigned char *data;
 	unsigned long total_sz;
+	unsigned int *reg_array;
+	unsigned int reg_array_sz;
 };
 
 struct tasdevice_priv {
@@ -122,6 +191,7 @@ struct tasdevice_priv {
 	bool force_fwload_status;
 	bool playback_started;
 	bool isacpi;
+	bool is_user_space_calidata;
 	unsigned int global_addr;
 
 	int (*fw_parse_variable_header)(struct tasdevice_priv *tas_priv,
@@ -148,6 +218,8 @@ int tasdevice_init(struct tasdevice_priv *tas_priv);
 void tasdevice_remove(struct tasdevice_priv *tas_priv);
 int tasdevice_save_calibration(struct tasdevice_priv *tas_priv);
 void tasdevice_apply_calibration(struct tasdevice_priv *tas_priv);
+int tasdevice_chn_switch(struct tasdevice_priv *tas_priv,
+	unsigned short chn);
 int tasdevice_dev_read(struct tasdevice_priv *tas_priv,
 	unsigned short chn, unsigned int reg, unsigned int *value);
 int tasdevice_dev_write(struct tasdevice_priv *tas_priv,
