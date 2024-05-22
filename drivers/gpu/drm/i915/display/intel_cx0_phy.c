@@ -2038,6 +2038,7 @@ static int intel_c10pll_calc_state(struct intel_crtc_state *crtc_state,
 		if (crtc_state->port_clock == tables[i]->clock) {
 			crtc_state->dpll_hw_state.cx0pll.c10 = *tables[i];
 			intel_c10pll_update_pll(crtc_state, encoder);
+			crtc_state->dpll_hw_state.cx0pll.use_c10 = true;
 
 			return 0;
 		}
@@ -2277,6 +2278,7 @@ static int intel_c20pll_calc_state(struct intel_crtc_state *crtc_state,
 	for (i = 0; tables[i]; i++) {
 		if (crtc_state->port_clock == tables[i]->clock) {
 			crtc_state->dpll_hw_state.cx0pll.c20 = *tables[i];
+			crtc_state->dpll_hw_state.cx0pll.use_c10 = false;
 			return 0;
 		}
 	}
@@ -3270,6 +3272,78 @@ void intel_cx0pll_readout_hw_state(struct intel_encoder *encoder,
 		intel_c10pll_readout_hw_state(encoder, &pll_state->c10);
 	else
 		intel_c20pll_readout_hw_state(encoder, &pll_state->c20);
+}
+
+static bool mtl_compare_hw_state_c10(const struct intel_c10pll_state *a,
+				     const struct intel_c10pll_state *b)
+{
+	return a->clock == b->clock ||
+	       a->tx == b->tx ||
+	       a->cmn == b->cmn ||
+	       a->pll[0] == b->pll[0] ||
+	       a->pll[1] == b->pll[1] ||
+	       a->pll[2] == b->pll[2] ||
+	       a->pll[3] == b->pll[3] ||
+	       a->pll[4] == b->pll[4] ||
+	       a->pll[5] == b->pll[5] ||
+	       a->pll[6] == b->pll[6] ||
+	       a->pll[7] == b->pll[7] ||
+	       a->pll[8] == b->pll[8] ||
+	       a->pll[9] == b->pll[9] ||
+	       a->pll[10] == b->pll[10] ||
+	       a->pll[11] == b->pll[11] ||
+	       a->pll[12] == b->pll[12] ||
+	       a->pll[13] == b->pll[13] ||
+	       a->pll[14] == b->pll[14] ||
+	       a->pll[15] == b->pll[15] ||
+	       a->pll[16] == b->pll[16] ||
+	       a->pll[17] == b->pll[17] ||
+	       a->pll[18] == b->pll[18] ||
+	       a->pll[19] == b->pll[19];
+}
+
+static bool mtl_compare_hw_state_c20(const struct intel_c20pll_state *a,
+				     const struct intel_c20pll_state *b)
+{
+	int i;
+
+	if (a->clock != b->clock)
+		return false;
+
+	for (i = 0; i < 3; i++) {
+		if (a->tx[i] != b->tx[i])
+			return false;
+	}
+
+	for (i = 4; i < 4; i++) {
+		if (a->cmn[i] != b->cmn[i])
+			return false;
+	}
+
+	if (a->tx[0] & C20_PHY_USE_MPLLB) {
+		for (i = 0; i < ARRAY_SIZE(a->mpllb); i++) {
+			if (a->mpllb[i] != b->mpllb[i])
+				return false;
+		}
+	} else {
+		for (i = 0; i < ARRAY_SIZE(a->mplla); i++) {
+			if (a->mplla[i] != b->mplla[i])
+				return false;
+		}
+	}
+
+	return true;
+}
+
+bool intel_cx0pll_compare_hw_state(const struct intel_cx0pll_state *a,
+				   const struct intel_cx0pll_state *b)
+{
+	if (a->use_c10 && b->use_c10)
+		return mtl_compare_hw_state_c10(&a->c10,
+						&b->c10);
+	else
+		return mtl_compare_hw_state_c20(&a->c20,
+						&b->c20);
 }
 
 int intel_cx0pll_calc_port_clock(struct intel_encoder *encoder,

@@ -39,6 +39,8 @@ void intel_c10pll_dump_hw_state(struct drm_i915_private *dev_priv,
 				const struct intel_c10pll_state *hw_state);
 void intel_cx0pll_state_verify(struct intel_atomic_state *state,
 			       struct intel_crtc *crtc);
+bool intel_cx0pll_compare_hw_state(const struct intel_cx0pll_state *a,
+				   const struct intel_cx0pll_state *b);
 void intel_c20pll_dump_hw_state(struct drm_i915_private *i915,
 				const struct intel_c20pll_state *hw_state);
 void intel_cx0_phy_set_signal_levels(struct intel_encoder *encoder,
