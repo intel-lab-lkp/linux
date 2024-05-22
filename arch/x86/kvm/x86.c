@@ -5867,6 +5867,154 @@ static int kvm_vcpu_ioctl_enable_cap(struct kvm_vcpu *vcpu,
 	}
 }
 
+#ifdef CONFIG_X86_64
+static int kvm_vcpu_ioctl_get_clock_guest(struct kvm_vcpu *v, void __user *argp)
+{
+	struct pvclock_vcpu_time_info *hv_clock = &v->arch.hv_clock;
+
+	/*
+	 * If KVM_REQ_CLOCK_UPDATE is already pending, or if the hv_clock has
+	 * never been generated at all, call kvm_guest_time_update() to do so.
+	 * Might as well use the PVCLOCK_TSC_STABLE_BIT as the check for ever
+	 * having been written.
+	 */
+	if (kvm_check_request(KVM_REQ_CLOCK_UPDATE, v) ||
+	    !(hv_clock->flags & PVCLOCK_TSC_STABLE_BIT)) {
+		if (kvm_guest_time_update(v))
+			return -EINVAL;
+	}
+
+	/*
+	 * PVCLOCK_TSC_STABLE_BIT is set in use_master_clock mode where the
+	 * KVM clock is defined in terms of the guest TSC. Otherwise, it is
+	 * is defined by the host CLOCK_MONOTONIC_RAW, and userspace should
+	 * use the legacy KVM_[GS]ET_CLOCK to migrate it.
+	 */
+	if (!(hv_clock->flags & PVCLOCK_TSC_STABLE_BIT))
+		return -EINVAL;
+
+	if (copy_to_user(argp, hv_clock, sizeof(*hv_clock)))
+		return -EFAULT;
+
+	return 0;
+}
+
+/*
+ * Reverse the calculation in the hv_clock definition.
+ *
+ * time_ns = ( (cycles << shift) * mul ) >> 32;
+ * (although shift can be negative, so that's bad C)
+ *
+ * So for a single second,
+ *  NSEC_PER_SEC = ( ( FREQ_HZ << shift) * mul ) >> 32
+ *  NSEC_PER_SEC << 32 = ( FREQ_HZ << shift ) * mul
+ *  ( NSEC_PER_SEC << 32 ) / mul = FREQ_HZ << shift
+ *  ( NSEC_PER_SEC << 32 ) / mul ) >> shift = FREQ_HZ
+ */
+static uint64_t hvclock_to_hz(uint32_t mul, int8_t shift)
+{
+	uint64_t tm = NSEC_PER_SEC << 32;
+
+	/* Maximise precision. Shift right until the top bit is set */
+	tm <<= 2;
+	shift += 2;
+
+	/* While 'mul' is even, increase the shift *after* the division */
+	while (!(mul & 1)) {
+		shift++;
+		mul >>= 1;
+	}
+
+	tm /= mul;
+
+	if (shift > 0)
+		return tm >> shift;
+	else
+		return tm << -shift;
+}
+
+static int kvm_vcpu_ioctl_set_clock_guest(struct kvm_vcpu *v, void __user *argp)
+{
+	struct pvclock_vcpu_time_info user_hv_clock;
+	struct kvm *kvm = v->kvm;
+	struct kvm_arch *ka = &kvm->arch;
+	uint64_t curr_tsc_hz, user_tsc_hz;
+	uint64_t user_clk_ns;
+	uint64_t guest_tsc;
+	int rc = 0;
+
+	if (copy_from_user(&user_hv_clock, argp, sizeof(user_hv_clock)))
+		return -EFAULT;
+
+	if (!user_hv_clock.tsc_to_system_mul)
+		return -EINVAL;
+
+	user_tsc_hz = hvclock_to_hz(user_hv_clock.tsc_to_system_mul,
+				    user_hv_clock.tsc_shift);
+
+
+	kvm_hv_request_tsc_page_update(kvm);
+	kvm_start_pvclock_update(kvm);
+	pvclock_update_vm_gtod_copy(kvm);
+
+	/*
+	 * If not in use_master_clock mode, do not allow userspace to set
+	 * the clock in terms of the guest TSC. Userspace should either
+	 * fail the migration (to a host with suboptimal TSCs), or should
+	 * knowingly restore the KVM clock using KVM_SET_CLOCK instead.
+	 */
+	if (!ka->use_master_clock) {
+		rc = -EINVAL;
+		goto out;
+	}
+
+	curr_tsc_hz = get_cpu_tsc_khz() * 1000LL;
+	if (unlikely(curr_tsc_hz == 0)) {
+		rc = -EINVAL;
+		goto out;
+	}
+
+	if (kvm_caps.has_tsc_control)
+		curr_tsc_hz = kvm_scale_tsc(curr_tsc_hz,
+					    v->arch.l1_tsc_scaling_ratio);
+
+	/*
+	 * The scaling factors in the hv_clock do not depend solely on the
+	 * TSC frequency *requested* by userspace. They actually use the
+	 * host TSC frequency that was measured/detected by the host kernel,
+	 * scaled by kvm_scale_tsc() with the vCPU's l1_tsc_scaling_ratio.
+	 *
+	 * So a sanity check that they *precisely* match would have false
+	 * negatives. Allow for a discrepancy of 1 kHz either way.
+	 */
+	if (user_tsc_hz < curr_tsc_hz - 1000 ||
+	    user_tsc_hz > curr_tsc_hz + 1000) {
+		rc = -ERANGE;
+		goto out;
+	}
+
+	/*
+	 * The call to pvclock_update_vm_gtod_copy() has created a new time
+	 * reference point in ka->master_cycle_now and ka->master_kernel_ns.
+	 *
+	 * Calculate the guest TSC at that moment, and the corresponding KVM
+	 * clock value according to user_hv_clock. The value according to the
+	 * current hv_clock will of course be ka->master_kernel_ns since no
+	 * TSC cycles have elapsed.
+	 *
+	 * Adjust ka->kvmclock_offset to the delta, so that both definitions
+	 * of the clock give precisely the same reading at the reference time.
+	 */
+	guest_tsc = kvm_read_l1_tsc(v, ka->master_cycle_now);
+	user_clk_ns = __pvclock_read_cycles(&user_hv_clock, guest_tsc);
+	ka->kvmclock_offset = user_clk_ns - ka->master_kernel_ns;
+
+out:
+	kvm_end_pvclock_update(kvm);
+	return rc;
+}
+#endif
+
 long kvm_arch_vcpu_ioctl(struct file *filp,
 			 unsigned int ioctl, unsigned long arg)
 {
@@ -6255,6 +6403,14 @@ long kvm_arch_vcpu_ioctl(struct file *filp,
 		srcu_read_unlock(&vcpu->kvm->srcu, idx);
 		break;
 	}
+#ifdef CONFIG_X86_64
+	case KVM_SET_CLOCK_GUEST:
+		r = kvm_vcpu_ioctl_set_clock_guest(vcpu, argp);
+		break;
+	case KVM_GET_CLOCK_GUEST:
+		r = kvm_vcpu_ioctl_get_clock_guest(vcpu, argp);
+		break;
+#endif
 #ifdef CONFIG_KVM_HYPERV
 	case KVM_GET_SUPPORTED_HV_CPUID:
 		r = kvm_ioctl_get_supported_hv_cpuid(vcpu, argp);
