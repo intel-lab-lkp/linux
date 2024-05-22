@@ -3692,7 +3692,10 @@ int device_add(struct device *dev)
 		if (error)
 			goto SysEntryError;
 
-		devtmpfs_create_node(dev);
+		error = devtmpfs_create_node(dev);
+		if (error)
+			pr_info("devtmpfs create node for %s failed: %d\n",
+				dev_name(dev), error);
 	}
 
 	/* Notify clients of device addition.  This call must come
