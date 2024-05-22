@@ -169,7 +169,7 @@ struct page {
 		 * See page-flags.h for a list of page types which are currently
 		 * stored here.
 		 *
-		 * Owners of typed folios may reuse the lower 16bit of the
+		 * Owners of typed folios may reuse the lower 16 bit of the
 		 * head page page_type field after setting the page type,
 		 * but must reset these 16 bit to -1 before clearing the
 		 * page type.
