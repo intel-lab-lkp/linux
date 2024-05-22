@@ -2273,7 +2273,7 @@ void kvm_xen_update_tsc_info(struct kvm_vcpu *vcpu)
 
 	entry = kvm_find_cpuid_entry_index(vcpu, function, 2);
 	if (entry)
-		entry->eax = vcpu->arch.hw_tsc_khz;
+		entry->eax = vcpu->arch.hw_tsc_hz / 1000;
 }
 
 void kvm_xen_init_vm(struct kvm *kvm)
