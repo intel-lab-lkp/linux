@@ -583,6 +583,7 @@ Flags bitfields such as page flags, page_type, gfp_flags
 
 	%pGp	0x17ffffc0002036(referenced|uptodate|lru|active|private|node=0|zone=2|lastcpupid=0x1fffff)
 	%pGt	0xffffff7f(buddy)
+	%pGs	0x10310(HWCACHE_ALIGN|PANIC|TYPESAFE_BY_RCU|CMPXCHG_DOUBLE)
 	%pGg	GFP_USER|GFP_DMA32|GFP_NOWARN
 	%pGv	read|exec|mayread|maywrite|mayexec|denywrite
 
@@ -592,6 +593,7 @@ character. Currently supported are:
 
         - p - [p]age flags, expects value of type (``unsigned long *``)
         - t - page [t]ype, expects value of type (``unsigned int *``)
+        - s - [s]lab flags, expects value of type (``slab_flags_t *``)
         - v - [v]ma_flags, expects value of type (``unsigned long *``)
         - g - [g]fp_flags, expects value of type (``gfp_t *``)
 

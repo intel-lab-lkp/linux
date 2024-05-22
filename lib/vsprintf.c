@@ -2055,6 +2055,25 @@ char *format_page_flags(char *buf, char *end, unsigned long flags)
 }
 
 static
+char *format_slab_flags(char *buf, char *end, unsigned int flags)
+{
+	buf = number(buf, end, flags, default_flag_spec);
+	if (buf < end)
+		*buf = '(';
+	buf++;
+
+	flags &= SLAB_FLAG_MASK;
+	if (flags)
+		buf = format_flags(buf, end, (__force unsigned long)flags, slabflag_names);
+
+	if (buf < end)
+		*buf = ')';
+	buf++;
+
+	return buf;
+}
+
+static
 char *format_page_type(char *buf, char *end, unsigned int page_type)
 {
 	buf = number(buf, end, page_type, default_flag_spec);
@@ -2088,6 +2107,9 @@ char *flags_string(char *buf, char *end, void *flags_ptr,
 		return format_page_flags(buf, end, *(unsigned long *)flags_ptr);
 	case 't':
 		return format_page_type(buf, end, *(unsigned int *)flags_ptr);
+	case 's':
+		flags = (__force unsigned int)(*(slab_flags_t *)flags_ptr);
+		return format_slab_flags(buf, end, flags);
 	case 'v':
 		flags = *(unsigned long *)flags_ptr;
 		names = vmaflag_names;

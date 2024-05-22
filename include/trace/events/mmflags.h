@@ -141,6 +141,73 @@ IF_HAVE_PG_ARCH_X(arch_3)
 	DEF_PAGETYPE_NAME(table),					\
 	DEF_PAGETYPE_NAME(buddy)
 
+#ifdef CONFIG_DEBUG_OBJECTS
+#define IF_HAVE_SLAB_DEBUG_OBJECTS(_name) {1UL << _SLAB_##_name, __stringify(_name)},
+#else
+#define IF_HAVE_SLAB_DEBUG_OBJECTS(_name)
+#endif
+
+#ifdef CONFIG_FAILSLAB
+#define IF_HAVE_SLAB_FAILSLAB(_name) {1U << _SLAB_##_name, __stringify(_name)},
+#else
+#define IF_HAVE_SLAB_FAILSLAB(_name)
+#endif
+
+#ifdef CONFIG_MEMCG_KMEM
+#define IF_HAVE_SLAB_MEMCG_KMEM(_name) {1U << _SLAB_##_name, __stringify(_name)},
+#else
+#define IF_HAVE_SLAB_MEMCG_KMEM(_name)
+#endif
+
+#ifdef CONFIG_KASAN_GENERIC
+#define IF_HAVE_SLAB_KASAN_GENERIC(_name) {1UL << _SLAB_##_name, __stringify(_name)},
+#else
+#define IF_HAVE_SLAB_KASAN_GENERIC(_name)
+#endif
+
+#ifdef CONFIG_KFENCE
+#define IF_HAVE_SLAB_KFENCE(_name) {1UL << _SLAB_##_name, __stringify(_name)},
+#else
+#define IF_HAVE_SLAB_KFENCE(_name)
+#endif
+
+#ifdef CONFIG_SLUB_TINY
+#define IF_HAVE_SLAB_SLUB_TINY(_name) {1UL << _SLAB_##_name, __stringify(_name)}
+#else
+#define IF_HAVE_SLAB_SLUB_TINY(_name)
+#endif
+
+#define DEF_SLABFLAG_NAME(_name) { 1UL <<  _SLAB_##_name, __stringify(_name) }
+
+#define __def_slabflag_names						\
+	DEF_SLABFLAG_NAME(CONSISTENCY_CHECKS),				\
+	DEF_SLABFLAG_NAME(RED_ZONE),					\
+	DEF_SLABFLAG_NAME(POISON),					\
+	DEF_SLABFLAG_NAME(KMALLOC),					\
+	DEF_SLABFLAG_NAME(HWCACHE_ALIGN),				\
+	DEF_SLABFLAG_NAME(CACHE_DMA),					\
+	DEF_SLABFLAG_NAME(CACHE_DMA32),					\
+	DEF_SLABFLAG_NAME(STORE_USER),					\
+	DEF_SLABFLAG_NAME(PANIC),					\
+	DEF_SLABFLAG_NAME(TYPESAFE_BY_RCU),				\
+	DEF_SLABFLAG_NAME(TRACE),					\
+IF_HAVE_SLAB_DEBUG_OBJECTS(DEBUG_OBJECTS)				\
+	DEF_SLABFLAG_NAME(NOLEAKTRACE),					\
+	DEF_SLABFLAG_NAME(NO_MERGE),					\
+IF_HAVE_SLAB_FAILSLAB(FAILSLAB)						\
+IF_HAVE_SLAB_MEMCG_KMEM(MEMCG_KMEM)					\
+IF_HAVE_SLAB_KASAN_GENERIC(KASAN_GENERIC)				\
+	DEF_SLABFLAG_NAME(NO_USER_FLAGS),				\
+IF_HAVE_SLAB_KFENCE(KFENCE)						\
+IF_HAVE_SLAB_SLUB_TINY(SLUB_TINY)					\
+	DEF_SLABFLAG_NAME(OBJECT_POISON),				\
+	DEF_SLABFLAG_NAME(CMPXCHG_DOUBLE)
+
+#define show_slab_flags(flags)						\
+	(flags) ? __print_flags(flags, "|",				\
+	__def_slabflag_names						\
+	) : "none"
+
 #if defined(CONFIG_X86)
 #define __VM_ARCH_SPECIFIC_1 {VM_PAT,     "pat"           }
 #elif defined(CONFIG_PPC)

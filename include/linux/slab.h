@@ -21,6 +21,10 @@
 #include <linux/cleanup.h>
 #include <linux/hash.h>
 
+/*
+ * In case of any changes, please don't forget to update the flags
+ * in include/linux/events/mmflags.h
+ */
 enum _slab_flag_bits {
 	_SLAB_CONSISTENCY_CHECKS,
 	_SLAB_RED_ZONE,
@@ -64,6 +68,7 @@ enum _slab_flag_bits {
 
 #define __SLAB_FLAG_BIT(nr)	((slab_flags_t __force)(1U << (nr)))
 #define __SLAB_FLAG_UNUSED	((slab_flags_t __force)(0U))
+#define SLAB_FLAG_MASK		((slab_flags_t __force)(1U << _SLAB_FLAGS_LAST_BIT) - 1)
 
 /*
  * Flags to pass to kmem_cache_create().

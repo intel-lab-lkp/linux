@@ -681,6 +681,19 @@ flags(void)
 	flags = VM_READ | VM_EXEC | VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
 	test("read|exec|mayread|maywrite|mayexec", "%pGv", &flags);
 
+	flags = 0;
+	scnprintf(cmp_buffer, BUF_SIZE, "%#x(%s)", (unsigned int) flags, "");
+	test(cmp_buffer, "%pGs", &flags);
+
+	flags = 1U << _SLAB_FLAGS_LAST_BIT;
+	scnprintf(cmp_buffer, BUF_SIZE, "%#x(%s)", (unsigned int) flags, "");
+	test(cmp_buffer, "%pGs", &flags);
+
+	flags = SLAB_HWCACHE_ALIGN | SLAB_PANIC | SLAB_NO_USER_FLAGS;
+	scnprintf(cmp_buffer, BUF_SIZE, "%#x(%s)", (unsigned int) flags,
+		  "HWCACHE_ALIGN|PANIC|NO_USER_FLAGS");
+	test(cmp_buffer, "%pGs", &flags);
+
 	gfp = GFP_TRANSHUGE;
 	test("GFP_TRANSHUGE", "%pGg", &gfp);
 
