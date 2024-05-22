@@ -508,11 +508,12 @@ skip:
 int main(int argc, char **argv)
 {
 	ksft_print_header();
-	ksft_set_plan(NUM_TESTS);
 
 	/* NOTE: We should be checking for CAP_SYS_ADMIN here... */
-	if (geteuid() != 0)
+	if (geteuid())
 		ksft_exit_skip("all tests require euid == 0\n");
+
+	ksft_set_plan(NUM_TESTS);
 
 	test_openat2_opath_tests();
 
