@@ -4116,6 +4116,11 @@ static int kvmhv_vcpu_entry_nestedv2(struct kvm_vcpu *vcpu, u64 time_limit,
 	int trap;
 	long rc;
 
+	if (vcpu->arch.doorbell_request) {
+		vcpu->arch.doorbell_request = 0;
+		kvmppc_set_dpdes(vcpu, 1);
+	}
+
 	io = &vcpu->arch.nestedv2_io;
 
 	msr = mfmsr();
@@ -4278,8 +4283,15 @@ static int kvmhv_p9_guest_entry(struct kvm_vcpu *vcpu, u64 time_limit,
 	if (kvmhv_on_pseries()) {
 		if (kvmhv_is_nestedv1())
 			trap = kvmhv_vcpu_entry_p9_nested(vcpu, time_limit, lpcr, tb);
-		else
+		else {
 			trap = kvmhv_vcpu_entry_nestedv2(vcpu, time_limit, lpcr, tb);
+
+			/* Remember doorbell if it is pending  */
+			if (kvmppc_get_dpdes(vcpu)) {
+				vcpu->arch.doorbell_request = 1;
+				kvmppc_set_dpdes(vcpu, 0);
+			}
+		}
 
 		/* H_CEDE has to be handled now, not later */
 		if (trap == BOOK3S_INTERRUPT_SYSCALL && !nested &&
