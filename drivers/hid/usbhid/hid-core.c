@@ -1189,6 +1189,15 @@ static int usbhid_start(struct hid_device *hid)
 		device_set_wakeup_enable(&dev->dev, 1);
 	}
 
+	/* enable remote wakeup by default for all mouse
+	 * devices supporting the boot protocol.
+	 */
+	if (interface->desc.bInterfaceSubClass == USB_INTERFACE_SUBCLASS_BOOT &&
+			interface->desc.bInterfaceProtocol ==
+				USB_INTERFACE_PROTOCOL_MOUSE) {
+		device_set_wakeup_enable(&dev->dev, 1);
+	}
+
 	mutex_unlock(&usbhid->mutex);
 	return 0;
 
