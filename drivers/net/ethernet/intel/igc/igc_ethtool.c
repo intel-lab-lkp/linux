@@ -1980,6 +1980,37 @@ static void igc_ethtool_diag_test(struct net_device *netdev,
 	msleep_interruptible(4 * 1000);
 }
 
+static int igc_ethtool_set_phys_id(struct net_device *netdev,
+				   enum ethtool_phys_id_state state)
+{
+	struct igc_adapter *adapter = netdev_priv(netdev);
+	struct igc_hw *hw = &adapter->hw;
+	u32 ledctl;
+
+	switch (state) {
+	case ETHTOOL_ID_ACTIVE:
+		ledctl = rd32(IGC_LEDCTL);
+
+		/* initiate LED1 blinking */
+		ledctl &= ~(IGC_LEDCTL_GLOBAL_BLINK_MODE |
+			   IGC_LEDCTL_LED1_MODE_MASK |
+			   IGC_LEDCTL_LED2_MODE_MASK);
+		ledctl |= IGC_LEDCTL_LED1_BLINK;
+		wr32(IGC_LEDCTL, ledctl);
+		break;
+
+	case ETHTOOL_ID_INACTIVE:
+		/* restore LEDCTL default value */
+		wr32(IGC_LEDCTL, hw->mac.ledctl_default);
+		break;
+
+	default:
+		break;
+	}
+
+	return 0;
+}
+
 static const struct ethtool_ops igc_ethtool_ops = {
 	.supported_coalesce_params = ETHTOOL_COALESCE_USECS,
 	.get_drvinfo		= igc_ethtool_get_drvinfo,
@@ -2018,6 +2049,7 @@ static const struct ethtool_ops igc_ethtool_ops = {
 	.get_link_ksettings	= igc_ethtool_get_link_ksettings,
 	.set_link_ksettings	= igc_ethtool_set_link_ksettings,
 	.self_test		= igc_ethtool_diag_test,
+	.set_phys_id		= igc_ethtool_set_phys_id,
 };
 
 void igc_ethtool_set_ops(struct net_device *netdev)

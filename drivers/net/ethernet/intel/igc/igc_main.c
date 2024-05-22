@@ -7074,6 +7074,8 @@ static int igc_probe(struct pci_dev *pdev,
 			goto err_register;
 	}
 
+	hw->mac.ledctl_default = rd32(IGC_LEDCTL);
+
 	return 0;
 
 err_register:
