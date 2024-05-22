@@ -23,6 +23,10 @@
 static const unsigned int total_bytes = 10 * 1024 * 1024;
 static int expected_stg = 0xeB9F;
 
+struct cb_opts {
+	const char *cc;
+};
+
 static int settcpca(int fd, const char *tcp_ca)
 {
 	int err;
@@ -79,6 +83,14 @@ static void do_test(const char *tcp_ca, const struct bpf_map *sk_stg_map)
 done:
 	close(lfd);
 	close(fd);
+}
+
+static int cc_cb(int fd, void *opts)
+{
+	struct cb_opts *cb_opts = (struct cb_opts *)opts;
+
+	return setsockopt(fd, SOL_TCP, TCP_CONGESTION, cb_opts->cc,
+			  strlen(cb_opts->cc) + 1);
 }
 
 static void test_cubic(void)
@@ -171,8 +183,12 @@ static void test_invalid_license(void)
 static void test_dctcp_fallback(void)
 {
 	int err, lfd = -1, cli_fd = -1, srv_fd = -1;
-	struct network_helper_opts opts = {
+	struct cb_opts cb_opts = {
 		.cc = "cubic",
+	};
+	struct network_helper_opts opts = {
+		.post_socket_cb	= cc_cb,
+		.cb_opts	= &cb_opts,
 	};
 	struct bpf_dctcp *dctcp_skel;
 	struct bpf_link *link = NULL;
