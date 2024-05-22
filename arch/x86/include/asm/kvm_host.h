@@ -1357,6 +1357,7 @@ struct kvm_arch {
 	u64 last_tsc_write;
 	u32 last_tsc_khz;
 	u64 last_tsc_offset;
+	u64 last_tsc_scaling_ratio;
 	u64 cur_tsc_nsec;
 	u64 cur_tsc_write;
 	u64 cur_tsc_offset;
@@ -1368,6 +1369,9 @@ struct kvm_arch {
 
 	seqcount_raw_spinlock_t pvclock_sc;
 	bool use_master_clock;
+	s8 master_tsc_shift;
+	u32 master_tsc_mul;
+	u64 master_tsc_scaling_ratio;
 	u64 master_kernel_ns;
 	u64 master_cycle_now;
 	struct delayed_work kvmclock_update_work;

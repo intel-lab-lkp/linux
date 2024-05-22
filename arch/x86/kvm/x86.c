@@ -2673,6 +2673,7 @@ static void __kvm_synchronize_tsc(struct kvm_vcpu *vcpu, u64 offset, u64 tsc,
 	kvm->arch.last_tsc_nsec = ns;
 	kvm->arch.last_tsc_write = tsc;
 	kvm->arch.last_tsc_khz = vcpu->arch.virtual_tsc_khz;
+	kvm->arch.last_tsc_scaling_ratio = vcpu->arch.l1_tsc_scaling_ratio;
 	kvm->arch.last_tsc_offset = offset;
 
 	vcpu->arch.last_guest_tsc = tsc;
@@ -3008,6 +3009,7 @@ static void pvclock_update_vm_gtod_copy(struct kvm *kvm)
 {
 #ifdef CONFIG_X86_64
 	struct kvm_arch *ka = &kvm->arch;
+	uint64_t last_tsc_hz;
 	int vclock_mode;
 	bool host_tsc_clocksource, vcpus_matched;
 
@@ -3026,6 +3028,35 @@ static void pvclock_update_vm_gtod_copy(struct kvm *kvm)
 	ka->use_master_clock = host_tsc_clocksource && vcpus_matched
 				&& !ka->backwards_tsc_observed
 				&& !ka->boot_vcpu_runs_old_kvmclock;
+
+	/*
+	 * When TSC scaling is in use (which can thankfully only happen
+	 * with X86_FEATURE_CONSTANT_TSC), the host must calculate the
+	 * KVM clock precisely as the guest would, by scaling through
+	 * the guest TSC frequency. Otherwise, differences in arithmetic
+	 * precision lead to systemic drift between the guest's and the
+	 * host's idea of the time.
+	 */
+	if (kvm_caps.has_tsc_control) {
+		/*
+		 * Copy from the field protected solely by ka->tsc_write_lock,
+		 * to the field protected by the ka->pvclock_sc seqlock.
+		 */
+		ka->master_tsc_scaling_ratio = ka->last_tsc_scaling_ratio ? :
+			kvm_caps.default_tsc_scaling_ratio;
+
+		/*
+		 * Calculate the scaling factors precisely the same way
+		 * that kvm_guest_time_update() does.
+		 */
+		last_tsc_hz = kvm_scale_tsc(tsc_khz * 1000LL,
+					    ka->master_tsc_scaling_ratio);
+		kvm_get_time_scale(NSEC_PER_SEC, last_tsc_hz,
+				   &ka->master_tsc_shift, &ka->master_tsc_mul);
+	} else if (boot_cpu_has(X86_FEATURE_CONSTANT_TSC)) {
+		kvm_get_time_scale(NSEC_PER_SEC, tsc_khz * 1000LL,
+				   &ka->master_tsc_shift, &ka->master_tsc_mul);
+	}
 
 	if (ka->use_master_clock)
 		atomic_set(&kvm_guest_has_master_clock, 1);
@@ -3099,36 +3130,49 @@ static unsigned long get_cpu_tsc_khz(void)
 static void __get_kvmclock(struct kvm *kvm, struct kvm_clock_data *data)
 {
 	struct kvm_arch *ka = &kvm->arch;
-	struct pvclock_vcpu_time_info hv_clock;
+
+#ifdef CONFIG_X86_64
+	uint64_t cur_tsc_khz = 0;
+	struct timespec64 ts;
 
 	/* both __this_cpu_read() and rdtsc() should be on the same cpu */
 	get_cpu();
 
-	data->flags = 0;
 	if (ka->use_master_clock &&
-	    (static_cpu_has(X86_FEATURE_CONSTANT_TSC) || __this_cpu_read(cpu_tsc_khz))) {
-#ifdef CONFIG_X86_64
-		struct timespec64 ts;
-
-		if (kvm_get_walltime_and_clockread(&ts, &data->host_tsc)) {
-			data->realtime = ts.tv_nsec + NSEC_PER_SEC * ts.tv_sec;
-			data->flags |= KVM_CLOCK_REALTIME | KVM_CLOCK_HOST_TSC;
-		} else
-#endif
-		data->host_tsc = rdtsc();
-
-		data->flags |= KVM_CLOCK_TSC_STABLE;
-		hv_clock.tsc_timestamp = ka->master_cycle_now;
-		hv_clock.system_time = ka->master_kernel_ns + ka->kvmclock_offset;
-		kvm_get_time_scale(NSEC_PER_SEC, get_cpu_tsc_khz() * 1000LL,
-				   &hv_clock.tsc_shift,
-				   &hv_clock.tsc_to_system_mul);
-		data->clock = __pvclock_read_cycles(&hv_clock, data->host_tsc);
-	} else {
-		data->clock = get_kvmclock_base_ns() + ka->kvmclock_offset;
-	}
+	    (cur_tsc_khz = get_cpu_tsc_khz()) &&
+	    !kvm_get_walltime_and_clockread(&ts, &data->host_tsc))
+		cur_tsc_khz = 0;
 
 	put_cpu();
+
+	if (cur_tsc_khz) {
+		uint64_t tsc_cycles;
+		uint32_t mul;
+		int8_t shift;
+
+		tsc_cycles = data->host_tsc - ka->master_cycle_now;
+
+		if (kvm_caps.has_tsc_control)
+			tsc_cycles = kvm_scale_tsc(tsc_cycles,
+						   ka->master_tsc_scaling_ratio);
+
+		if (static_cpu_has(X86_FEATURE_CONSTANT_TSC)) {
+			mul = ka->master_tsc_mul;
+			shift = ka->master_tsc_shift;
+		} else {
+			kvm_get_time_scale(NSEC_PER_SEC, cur_tsc_khz * 1000LL,
+					   &shift, &mul);
+		}
+		data->clock = ka->master_kernel_ns + ka->kvmclock_offset +
+			pvclock_scale_delta(tsc_cycles, mul, shift);
+		data->realtime = ts.tv_nsec + NSEC_PER_SEC * ts.tv_sec;
+		data->flags = KVM_CLOCK_REALTIME | KVM_CLOCK_HOST_TSC | KVM_CLOCK_TSC_STABLE;
+		return;
+	}
+#endif
+
+	data->clock = get_kvmclock_base_ns() + ka->kvmclock_offset;
+	data->flags = 0;
 }
 
 static void get_kvmclock(struct kvm *kvm, struct kvm_clock_data *data)
@@ -3329,68 +3373,23 @@ static int kvm_guest_time_update(struct kvm_vcpu *v)
  * that and kvmclock, but even that would be subject to change over
  * time.
  *
- * Attempt to calculate the epoch at a given moment using the *same*
- * TSC reading via kvm_get_walltime_and_clockread() to obtain both
- * wallclock and kvmclock times, and subtracting one from the other.
+ * Use get_kvmclock() to obtain a simultaneous reading of wallclock
+ * and kvmclock times from the *same* TSC reading, and subtract one
+ * from the other.
  *
  * Fall back to using their values at slightly different moments by
  * calling ktime_get_real_ns() and get_kvmclock_ns() separately.
  */
 uint64_t kvm_get_wall_clock_epoch(struct kvm *kvm)
 {
-#ifdef CONFIG_X86_64
-	struct pvclock_vcpu_time_info hv_clock;
-	struct kvm_arch *ka = &kvm->arch;
-	unsigned long seq, local_tsc_khz;
-	struct timespec64 ts;
-	uint64_t host_tsc;
+	struct kvm_clock_data data;
 
-	do {
-		seq = read_seqcount_begin(&ka->pvclock_sc);
+	get_kvmclock(kvm, &data);
 
-		local_tsc_khz = 0;
-		if (!ka->use_master_clock)
-			break;
-
-		/*
-		 * The TSC read and the call to get_cpu_tsc_khz() must happen
-		 * on the same CPU.
-		 */
-		get_cpu();
-
-		local_tsc_khz = get_cpu_tsc_khz();
-
-		if (local_tsc_khz &&
-		    !kvm_get_walltime_and_clockread(&ts, &host_tsc))
-			local_tsc_khz = 0; /* Fall back to old method */
-
-		put_cpu();
-
-		/*
-		 * These values must be snapshotted within the seqcount loop.
-		 * After that, it's just mathematics which can happen on any
-		 * CPU at any time.
-		 */
-		hv_clock.tsc_timestamp = ka->master_cycle_now;
-		hv_clock.system_time = ka->master_kernel_ns + ka->kvmclock_offset;
-
-	} while (read_seqcount_retry(&ka->pvclock_sc, seq));
-
-	/*
-	 * If the conditions were right, and obtaining the wallclock+TSC was
-	 * successful, calculate the KVM clock at the corresponding time and
-	 * subtract one from the other to get the guest's epoch in nanoseconds
-	 * since 1970-01-01.
-	 */
-	if (local_tsc_khz) {
-		kvm_get_time_scale(NSEC_PER_SEC, local_tsc_khz * NSEC_PER_USEC,
-				   &hv_clock.tsc_shift,
-				   &hv_clock.tsc_to_system_mul);
-		return ts.tv_nsec + NSEC_PER_SEC * ts.tv_sec -
-			__pvclock_read_cycles(&hv_clock, host_tsc);
-	}
-#endif
-	return ktime_get_real_ns() - get_kvmclock_ns(kvm);
+	if (data.flags & KVM_CLOCK_REALTIME)
+		return data.realtime - data.clock;
+	else
+		return ktime_get_real_ns() - data.clock;
 }
 
 /*
