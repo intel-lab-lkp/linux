@@ -95,6 +95,8 @@ struct igc_mac_info {
 	bool autoneg;
 	bool autoneg_failed;
 	bool get_link_status;
+
+	u32 ledctl_default;
 };
 
 struct igc_nvm_operations {
