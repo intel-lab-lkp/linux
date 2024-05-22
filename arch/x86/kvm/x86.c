@@ -2374,32 +2374,66 @@ static uint32_t div_frac(uint32_t dividend, uint32_t divisor)
 	return dividend;
 }
 
+/*
+ * Calculate scaling factors to be applied with pvclock_scale_delta().
+ *
+ * The output of this function is a fixed-point factor which is used to
+ * scale a tick count at base_hz, to a tick count at scaled_hz, within
+ * the limitations of the Xen/KVM pvclock ABI.
+ *
+ * Mathematically, the factor is (*pmultiplier) >> (32 - *pshift).
+ *
+ * Working backwards, the div_frac() function divides (dividend << 32) by
+ * the given divisor, in other words giving dividend/divisor in the form
+ * of a 32-bit fixed-point fraction in the range 0 to 0x0.FFFFFFFF, which
+ * is (*pmultiplier >> 32).
+ *
+ * The rest of the function is shifting the scaled_hz and base_hz left or
+ * right as appropriate to ensure maximal precision within the constraints.
+ *
+ * The first constraint is that the result of the division *must* be less
+ * than 1, which means the dividend (derived from scaled_hz) must be greater
+ * than the divisor (derived from base_hz).
+ *
+ * The second constraint is that for optimal precision, the dividend (scaled)
+ * shouldn't be more than twice the divisor (base) — i.e. the top bit ought
+ * to be set in the resulting *pmultiplier.
+ */
 static void kvm_get_time_scale(uint64_t scaled_hz, uint64_t base_hz,
 			       s8 *pshift, u32 *pmultiplier)
 {
-	uint64_t scaled64;
 	int32_t  shift = 0;
-	uint64_t tps64;
-	uint32_t tps32;
+	uint32_t base32;
 
-	tps64 = base_hz;
-	scaled64 = scaled_hz;
-	while (tps64 > scaled64*2 || tps64 & 0xffffffff00000000ULL) {
-		tps64 >>= 1;
+	/*
+	 * Start by shifting the base_hz right until it fits in 32 bits, and
+	 * is lower than double the target rate. This introduces a negative
+	 * shift value which would result in pvclock_scale_delta() shifting
+	 * the actual tick count right before performing the multiplication.
+	 */
+	while (base_hz > scaled_hz*2 || base_hz & 0xffffffff00000000ULL) {
+		base_hz >>= 1;
 		shift--;
 	}
 
-	tps32 = (uint32_t)tps64;
-	while (tps32 <= scaled64 || scaled64 & 0xffffffff00000000ULL) {
-		if (scaled64 & 0xffffffff00000000ULL || tps32 & 0x80000000)
-			scaled64 >>= 1;
+	/* Now the shifted base_hz fits in 32 bits, copy it to base32 */
+	base32 = (uint32_t)base_hz;
+
+	/*
+	 * Next, shift the scaled_hz right until it fits in 32 bits, and ensure
+	 * that the shifted base_hz is not larger (so that the result of the
+	 * final division also fits in 32 bits).
+	 */
+	while (base32 <= scaled_hz || scaled_hz & 0xffffffff00000000ULL) {
+		if (scaled_hz & 0xffffffff00000000ULL || base32 & 0x80000000)
+			scaled_hz >>= 1;
 		else
-			tps32 <<= 1;
+			base32 <<= 1;
 		shift++;
 	}
 
 	*pshift = shift;
-	*pmultiplier = div_frac(scaled64, tps32);
+	*pmultiplier = div_frac(scaled_hz, base32);
 }
 
 #ifdef CONFIG_X86_64
