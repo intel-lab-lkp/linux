@@ -1421,16 +1421,23 @@ err_alloc:
 	return ERR_PTR(err);
 }
 
+#define RESCHED_MSEC 2
 static void mlx5_free_cmd_msg(struct mlx5_core_dev *dev,
 			      struct mlx5_cmd_msg *msg)
 {
 	struct mlx5_cmd_mailbox *head = msg->next;
 	struct mlx5_cmd_mailbox *next;
+	unsigned long start_time = jiffies;
 
 	while (head) {
 		next = head->next;
 		free_cmd_box(dev, head);
 		head = next;
+		if (time_after(jiffies, start_time + msecs_to_jiffies(RESCHED_MSEC))) {
+			mlx5_core_warn_rl(dev, "Spent more than %d msecs, yielding CPU\n", RESCHED_MSEC);
+			cond_resched();
+			start_time = jiffies;
+		}
 	}
 	kfree(msg);
 }
