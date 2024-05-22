@@ -49,6 +49,7 @@ enum {
 
 #define QCOM_UFS_MAX_GEAR 4
 #define QCOM_UFS_MAX_LANE 2
+#define QCOM_UIC_CMD_TIMEOUT_MS 2000
 
 enum {
 	MODE_MIN,
@@ -1116,6 +1117,8 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 		/* Failure is non-fatal */
 		dev_warn(dev, "%s: failed to configure the testbus %d\n",
 				__func__, err);
+
+	hba->uic_cmd_timeout = QCOM_UIC_CMD_TIMEOUT_MS;
 
 	return 0;
 
