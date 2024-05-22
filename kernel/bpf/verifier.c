@@ -14882,7 +14882,7 @@ static int reg_set_min_max(struct bpf_verifier_env *env,
 			   struct bpf_reg_state *true_reg2,
 			   struct bpf_reg_state *false_reg1,
 			   struct bpf_reg_state *false_reg2,
-			   u8 opcode, bool is_jmp32)
+			   u8 opcode, bool is_jmp32, bool ignore_bad_range)
 {
 	int err;
 
@@ -14903,6 +14903,8 @@ static int reg_set_min_max(struct bpf_verifier_env *env,
 	reg_bounds_sync(true_reg1);
 	reg_bounds_sync(true_reg2);
 
+	if (ignore_bad_range)
+		return 0;
 	err = reg_bounds_sanity_check(env, true_reg1, "true_reg1");
 	err = err ?: reg_bounds_sanity_check(env, true_reg2, "true_reg2");
 	err = err ?: reg_bounds_sanity_check(env, false_reg1, "false_reg1");
@@ -15177,7 +15179,11 @@ static int check_cond_jmp_op(struct bpf_verifier_env *env,
 	}
 
 	is_jmp32 = BPF_CLASS(insn->code) == BPF_JMP32;
-	pred = is_branch_taken(dst_reg, src_reg, opcode, is_jmp32);
+	if (!get_loop_entry(this_branch) || src_reg->precise || dst_reg->precise ||
+	    (BPF_SRC(insn->code) == BPF_K && insn->imm == 0))
+		pred = is_branch_taken(dst_reg, src_reg, opcode, is_jmp32);
+	else
+		pred = -2;
 	if (pred >= 0) {
 		/* If we get here with a dst_reg pointer type it is because
 		 * above is_branch_taken() special cased the 0 comparison.
@@ -15229,13 +15235,13 @@ static int check_cond_jmp_op(struct bpf_verifier_env *env,
 		err = reg_set_min_max(env,
 				      &other_branch_regs[insn->dst_reg],
 				      &other_branch_regs[insn->src_reg],
-				      dst_reg, src_reg, opcode, is_jmp32);
+				      dst_reg, src_reg, opcode, is_jmp32, pred == -2);
 	} else /* BPF_SRC(insn->code) == BPF_K */ {
 		err = reg_set_min_max(env,
 				      &other_branch_regs[insn->dst_reg],
 				      src_reg /* fake one */,
 				      dst_reg, src_reg /* same fake one */,
-				      opcode, is_jmp32);
+				      opcode, is_jmp32, pred == -2);
 	}
 	if (err)
 		return err;
@@ -17217,6 +17223,81 @@ static int propagate_precision(struct bpf_verifier_env *env,
 	return 0;
 }
 
+static void __copy_precision(struct bpf_verifier_env *env,
+			     struct bpf_verifier_state *cur,
+			     const struct bpf_verifier_state *old)
+{
+	struct bpf_reg_state *state_reg;
+	struct bpf_func_state *state, *cur_fr;
+	int i, fr;
+	bool first;
+
+	for (fr = min(cur->curframe, old->curframe); fr >= 0; fr--) {
+		state = old->frame[fr];
+		cur_fr = cur->frame[fr];
+		state_reg = state->regs;
+		first = true;
+		verbose(env, "XX old state:");
+		print_verifier_state(env, state, true);
+		for (i = 0; i < BPF_REG_FP; i++, state_reg++) {
+			if (state_reg->type != SCALAR_VALUE ||
+			    !state_reg->precise ||
+			    !(state_reg->live & REG_LIVE_READ))
+				continue;
+			if (env->log.level & BPF_LOG_LEVEL2) {
+				if (first)
+					verbose(env, "XX frame %d: propagating r%d", fr, i);
+				else
+					verbose(env, ",r%d", i);
+			}
+			cur_fr->regs[i].precise = true;
+			first = false;
+		}
+
+		for (i = 0; i < min(cur_fr->allocated_stack, state->allocated_stack) / BPF_REG_SIZE; i++) {
+			if (!is_spilled_reg(&state->stack[i]))
+				continue;
+			state_reg = &state->stack[i].spilled_ptr;
+			if (state_reg->type != SCALAR_VALUE ||
+			    !state_reg->precise ||
+			    !(state_reg->live & REG_LIVE_READ))
+				continue;
+			if (env->log.level & BPF_LOG_LEVEL2) {
+				if (first)
+					verbose(env, "XX frame %d: propagating fp%d",
+						fr, (-i - 1) * BPF_REG_SIZE);
+				else
+					verbose(env, ",fp%d", (-i - 1) * BPF_REG_SIZE);
+			}
+			cur_fr->stack[i].spilled_ptr.precise = true;
+			first = false;
+		}
+		if (!first)
+			verbose(env, "\n");
+	}
+}
+
+static void copy_precision(struct bpf_verifier_env *env,
+			   struct bpf_verifier_state *cur,
+			   const struct bpf_verifier_state *old)
+{
+	if (!old)
+		return;
+	/*
+	 * parent state unlikely to have precise registers
+	 * due to mark_all_scalars_imprecise(), but let's try anyway.
+	 */
+	__copy_precision(env, cur, old);
+	old = old->parent;
+	if (!old)
+		return;
+	/*
+	 * This one might have precise scalars, since precision propagation
+	 * from array access will mark them in the parent.
+	 */
+	__copy_precision(env, cur, old);
+}
+
 static bool states_maybe_looping(struct bpf_verifier_state *old,
 				 struct bpf_verifier_state *cur)
 {
@@ -17409,6 +17490,7 @@ static int is_state_visited(struct bpf_verifier_env *env, int insn_idx)
 			 * => unsafe memory access at 11 would not be caught.
 			 */
 			if (is_iter_next_insn(env, insn_idx)) {
+				update_loop_entry(cur, &sl->state);
 				if (states_equal(env, &sl->state, cur, RANGE_WITHIN)) {
 					struct bpf_func_state *cur_frame;
 					struct bpf_reg_state *iter_state, *iter_reg;
@@ -17426,15 +17508,14 @@ static int is_state_visited(struct bpf_verifier_env *env, int insn_idx)
 					spi = __get_spi(iter_reg->off + iter_reg->var_off.value);
 					iter_state = &func(env, iter_reg)->stack[spi].spilled_ptr;
 					if (iter_state->iter.state == BPF_ITER_STATE_ACTIVE) {
-						update_loop_entry(cur, &sl->state);
 						goto hit;
 					}
 				}
 				goto skip_inf_loop_check;
 			}
 			if (is_may_goto_insn_at(env, insn_idx)) {
+				update_loop_entry(cur, &sl->state);
 				if (states_equal(env, &sl->state, cur, RANGE_WITHIN)) {
-					update_loop_entry(cur, &sl->state);
 					goto hit;
 				}
 				goto skip_inf_loop_check;
@@ -18066,6 +18147,7 @@ process_bpf_exit:
 						return err;
 					break;
 				} else {
+					copy_precision(env, env->cur_state, env->cur_state->parent);
 					do_print_state = true;
 					continue;
 				}
