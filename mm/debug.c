@@ -16,6 +16,7 @@
 #include <linux/ctype.h>
 
 #include "internal.h"
+#include "slab.h"
 #include <trace/events/migrate.h>
 
 /*
@@ -80,7 +81,9 @@ static void __dump_folio(struct folio *folio, struct page *page,
 	if (folio->memcg_data)
 		pr_warn("memcg:%lx\n", folio->memcg_data);
 #endif
-	if (folio_test_ksm(folio))
+	if (folio_test_slab(folio))
+		type = "slab ";
+	else if (folio_test_ksm(folio))
 		type = "ksm ";
 	else if (folio_test_anon(folio))
 		type = "anon ";
@@ -98,6 +101,8 @@ static void __dump_folio(struct folio *folio, struct page *page,
 		is_migrate_cma_folio(folio, pfn) ? " CMA" : "");
 	if (page_has_type(&folio->page))
 		pr_warn("page_type: %pGt\n", &folio->page.page_type);
+	else if (folio_test_slab(folio))
+		pr_warn("cache flags: %pGs\n", &((struct slab *)&folio->page)->slab_cache->flags);
 
 	print_hex_dump(KERN_WARNING, "raw: ", DUMP_PREFIX_NONE, 32,
 			sizeof(unsigned long), page,
