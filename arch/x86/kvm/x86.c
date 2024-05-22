@@ -2492,40 +2492,6 @@ static int set_tsc_khz(struct kvm_vcpu *vcpu, u32 user_tsc_khz, bool scale)
 	return 0;
 }
 
-static int kvm_set_tsc_khz(struct kvm_vcpu *vcpu, u32 user_tsc_khz)
-{
-	u32 thresh_lo, thresh_hi;
-	int use_scaling = 0;
-
-	/* tsc_khz can be zero if TSC calibration fails */
-	if (user_tsc_khz == 0) {
-		/* set tsc_scaling_ratio to a safe value */
-		kvm_vcpu_write_tsc_multiplier(vcpu, kvm_caps.default_tsc_scaling_ratio);
-		return -1;
-	}
-
-	/* Compute a scale to convert nanoseconds in TSC cycles */
-	kvm_get_time_scale(user_tsc_khz * 1000LL, NSEC_PER_SEC,
-			   &vcpu->arch.virtual_tsc_shift,
-			   &vcpu->arch.virtual_tsc_mult);
-	vcpu->arch.virtual_tsc_khz = user_tsc_khz;
-
-	/*
-	 * Compute the variation in TSC rate which is acceptable
-	 * within the range of tolerance and decide if the
-	 * rate being applied is within that bounds of the hardware
-	 * rate.  If so, no scaling or compensation need be done.
-	 */
-	thresh_lo = adjust_tsc_khz(tsc_khz, -tsc_tolerance_ppm);
-	thresh_hi = adjust_tsc_khz(tsc_khz, tsc_tolerance_ppm);
-	if (user_tsc_khz < thresh_lo || user_tsc_khz > thresh_hi) {
-		pr_debug("requested TSC rate %u falls outside tolerance [%u,%u]\n",
-			 user_tsc_khz, thresh_lo, thresh_hi);
-		use_scaling = 1;
-	}
-	return set_tsc_khz(vcpu, user_tsc_khz, use_scaling);
-}
-
 static u64 compute_guest_tsc(struct kvm_vcpu *vcpu, s64 kernel_ns)
 {
 	s64 delta = kernel_ns - vcpu->arch.this_tsc_nsec;
@@ -2556,14 +2522,34 @@ static void kvm_track_tsc_matching(struct kvm_vcpu *vcpu)
 #ifdef CONFIG_X86_64
 	struct kvm_arch *ka = &vcpu->kvm->arch;
 	struct pvclock_gtod_data *gtod = &pvclock_gtod_data;
+	struct kvm_vcpu *v;
+	unsigned long i;
+	bool matched = true;
+
+	lockdep_assert_held(&vcpu->kvm->arch.tsc_write_lock);
+
+	/*
+	 * When called via kvm_arch_vcpu_create() for a new vCPU, the count
+	 * in kvm->online_vcpus will not yet have been incremented and the
+	 * kvm_for_each_vcpu() loop will not iterate over 'vcpu'.
+	 *
+	 * The right thing still happens in that case, because a match will
+	 * be found only if the new vCPU's TSC is at the same rate as *all*
+	 * the existing vCPUs' TSCs.
+	 */
+	kvm_for_each_vcpu(i, v, vcpu->kvm) {
+		if (v->arch.virtual_tsc_khz != vcpu->arch.virtual_tsc_khz) {
+			matched = false;
+			break;
+		}
+	}
+	ka->all_vcpus_matched_tsc = matched;
 
 	/*
 	 * To use the masterclock, the host clocksource must be based on TSC
-	 * and all vCPUs must have matching TSCs.  Note, the count for matching
-	 * vCPUs doesn't include the reference vCPU, hence "+1".
+	 * and all vCPUs must have matching TSC frequencies.
 	 */
-	bool use_master_clock = (ka->nr_vcpus_matched_tsc + 1 ==
-				 atomic_read(&vcpu->kvm->online_vcpus)) &&
+	bool use_master_clock = ka->all_vcpus_matched_tsc &&
 				gtod_is_based_on_tsc(gtod->clock.vclock_mode);
 
 	/*
@@ -2573,11 +2559,50 @@ static void kvm_track_tsc_matching(struct kvm_vcpu *vcpu)
 	if ((ka->use_master_clock != use_master_clock))
 		kvm_make_request(KVM_REQ_MASTERCLOCK_UPDATE, vcpu);
 
-	trace_kvm_track_tsc(vcpu->vcpu_id, ka->nr_vcpus_matched_tsc,
+	trace_kvm_track_tsc(vcpu->vcpu_id, ka->all_vcpus_matched_tsc,
 			    atomic_read(&vcpu->kvm->online_vcpus),
 		            ka->use_master_clock, gtod->clock.vclock_mode);
 #endif
 }
+
+static int kvm_set_tsc_khz(struct kvm_vcpu *vcpu, u32 user_tsc_khz)
+{
+	u32 thresh_lo, thresh_hi;
+	int use_scaling = 0;
+
+	/* tsc_khz can be zero if TSC calibration fails */
+	if (user_tsc_khz == 0) {
+		/* set tsc_scaling_ratio to a safe value */
+		kvm_vcpu_write_tsc_multiplier(vcpu, kvm_caps.default_tsc_scaling_ratio);
+		return -1;
+	}
+
+	/* Compute a scale to convert nanoseconds in TSC cycles */
+	kvm_get_time_scale(user_tsc_khz * 1000LL, NSEC_PER_SEC,
+			   &vcpu->arch.virtual_tsc_shift,
+			   &vcpu->arch.virtual_tsc_mult);
+
+	raw_spin_lock_irq(&vcpu->kvm->arch.tsc_write_lock);
+	vcpu->arch.virtual_tsc_khz = user_tsc_khz;
+	kvm_track_tsc_matching(vcpu);
+	raw_spin_unlock_irq(&vcpu->kvm->arch.tsc_write_lock);
+
+	/*
+	 * Compute the variation in TSC rate which is acceptable
+	 * within the range of tolerance and decide if the
+	 * rate being applied is within that bounds of the hardware
+	 * rate.  If so, no scaling or compensation need be done.
+	 */
+	thresh_lo = adjust_tsc_khz(tsc_khz, -tsc_tolerance_ppm);
+	thresh_hi = adjust_tsc_khz(tsc_khz, tsc_tolerance_ppm);
+	if (user_tsc_khz < thresh_lo || user_tsc_khz > thresh_hi) {
+		pr_debug("requested TSC rate %u falls outside tolerance [%u,%u]\n",
+			 user_tsc_khz, thresh_lo, thresh_hi);
+		use_scaling = 1;
+	}
+	return set_tsc_khz(vcpu, user_tsc_khz, use_scaling);
+}
+
 
 /*
  * Multiply tsc by a fixed point number represented by ratio.
@@ -2724,29 +2749,13 @@ static void __kvm_synchronize_tsc(struct kvm_vcpu *vcpu, u64 offset, u64 tsc,
 	kvm_vcpu_write_tsc_offset(vcpu, offset);
 
 	if (!matched) {
-		/*
-		 * We split periods of matched TSC writes into generations.
-		 * For each generation, we track the original measured
-		 * nanosecond time, offset, and write, so if TSCs are in
-		 * sync, we can match exact offset, and if not, we can match
-		 * exact software computation in compute_guest_tsc()
-		 *
-		 * These values are tracked in kvm->arch.cur_xxx variables.
-		 */
 		kvm->arch.last_tsc_nsec = ns;
 		kvm->arch.last_tsc_write = tsc;
-		kvm->arch.cur_tsc_generation++;
-		kvm->arch.nr_vcpus_matched_tsc = 0;
-	} else if (vcpu->arch.this_tsc_generation != kvm->arch.cur_tsc_generation) {
-		kvm->arch.nr_vcpus_matched_tsc++;
 	}
 
-	/* Keep track of which generation this VCPU has synchronized to */
-	vcpu->arch.this_tsc_generation = kvm->arch.cur_tsc_generation;
+	/* Keep track of the point this VCPU has synchronized to */
 	vcpu->arch.this_tsc_nsec = kvm->arch.last_tsc_nsec;
 	vcpu->arch.this_tsc_write = kvm->arch.last_tsc_write;
-
-	kvm_track_tsc_matching(vcpu);
 }
 
 static void kvm_synchronize_tsc(struct kvm_vcpu *vcpu, u64 *user_value)
@@ -3073,11 +3082,9 @@ static void pvclock_update_vm_gtod_copy(struct kvm *kvm)
 	struct kvm_arch *ka = &kvm->arch;
 	uint64_t last_tsc_hz;
 	int vclock_mode;
-	bool host_tsc_clocksource, vcpus_matched;
+	bool host_tsc_clocksource;
 
 	lockdep_assert_held(&kvm->arch.tsc_write_lock);
-	vcpus_matched = (ka->nr_vcpus_matched_tsc + 1 ==
-			atomic_read(&kvm->online_vcpus));
 
 	/*
 	 * If the host uses TSC clock, then passthrough TSC as stable
@@ -3087,7 +3094,8 @@ static void pvclock_update_vm_gtod_copy(struct kvm *kvm)
 					&ka->master_kernel_ns,
 					&ka->master_cycle_now);
 
-	ka->use_master_clock = host_tsc_clocksource && vcpus_matched
+	ka->use_master_clock = host_tsc_clocksource
+				&& ka->all_vcpus_matched_tsc
 				&& !ka->backwards_tsc_observed
 				&& !ka->boot_vcpu_runs_old_kvmclock;
 
@@ -3125,7 +3133,7 @@ static void pvclock_update_vm_gtod_copy(struct kvm *kvm)
 
 	vclock_mode = pvclock_gtod_data.clock.vclock_mode;
 	trace_kvm_update_master_clock(ka->use_master_clock, vclock_mode,
-					vcpus_matched);
+					ka->all_vcpus_matched_tsc);
 #endif
 }
 

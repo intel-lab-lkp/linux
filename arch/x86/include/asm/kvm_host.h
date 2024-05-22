@@ -911,7 +911,6 @@ struct kvm_vcpu_arch {
 	u64 tsc_offset_adjustment;
 	u64 this_tsc_nsec;
 	u64 this_tsc_write;
-	u64 this_tsc_generation;
 	bool tsc_catchup;
 	bool tsc_always_catchup;
 	s8 virtual_tsc_shift;
@@ -1358,11 +1357,10 @@ struct kvm_arch {
 	u32 last_tsc_khz;
 	u64 last_tsc_offset;
 	u64 last_tsc_scaling_ratio;
-	u64 cur_tsc_generation;
-	int nr_vcpus_matched_tsc;
+	bool all_vcpus_matched_tsc;
 
-	u32 default_tsc_khz;
 	bool user_set_tsc;
+	u32 default_tsc_khz;
 
 	seqcount_raw_spinlock_t pvclock_sc;
 	bool use_master_clock;
