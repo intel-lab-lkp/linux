@@ -62,11 +62,14 @@ static bool fill_addr_port(const struct sockaddr *sa, struct addr_port *ap)
 static bool set_up_conn(const struct sockaddr *addr, socklen_t len, int type,
 			int *server, int *conn, struct tuple *tuple)
 {
+	struct network_helper_opts opts = {
+		.type = type,
+	};
 	struct sockaddr_storage ss;
 	socklen_t slen = sizeof(ss);
 	struct sockaddr *sa = (struct sockaddr *)&ss;
 
-	*server = start_server_addr(type, (struct sockaddr_storage *)addr, len, NULL);
+	*server = start_server_addr((struct sockaddr_storage *)addr, len, &opts);
 	if (*server < 0)
 		return false;
 

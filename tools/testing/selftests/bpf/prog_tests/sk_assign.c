@@ -255,6 +255,9 @@ void test_sk_assign(void)
 
 	for (i = 0; i < ARRAY_SIZE(tests) && !READ_ONCE(stop); i++) {
 		struct test_sk_cfg *test = &tests[i];
+		struct network_helper_opts opts = {
+			.type = test->type,
+		};
 		const struct sockaddr *addr;
 		const int zero = 0;
 		int err;
@@ -263,9 +266,8 @@ void test_sk_assign(void)
 			continue;
 		prepare_addr(test->addr, test->family, BIND_PORT, false);
 		addr = (const struct sockaddr *)test->addr;
-		server = start_server_addr(test->type,
-					   (const struct sockaddr_storage *)addr,
-					   test->len, NULL);
+		server = start_server_addr((const struct sockaddr_storage *)addr,
+					   test->len, &opts);
 		if (server == -1)
 			goto close;
 

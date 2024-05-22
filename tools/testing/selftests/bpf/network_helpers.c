@@ -80,9 +80,10 @@ int settimeo(int fd, int timeout_ms)
 
 #define save_errno_close(fd) ({ int __save = errno; close(fd); errno = __save; })
 
-static int __start_server(int type, const struct sockaddr *addr, socklen_t addrlen,
+static int __start_server(const struct sockaddr *addr, socklen_t addrlen,
 			  const struct network_helper_opts *opts)
 {
+	int type = opts->type ? : SOCK_STREAM;
 	int fd;
 
 	fd = socket(addr->sa_family, type, opts->proto);
@@ -122,6 +123,7 @@ int start_server(int family, int type, const char *addr_str, __u16 port,
 		 int timeout_ms)
 {
 	struct network_helper_opts opts = {
+		.type		= type,
 		.timeout_ms	= timeout_ms,
 	};
 	struct sockaddr_storage addr;
@@ -130,7 +132,7 @@ int start_server(int family, int type, const char *addr_str, __u16 port,
 	if (make_sockaddr(family, addr_str, port, &addr, &addrlen))
 		return -1;
 
-	return __start_server(type, (struct sockaddr *)&addr, addrlen, &opts);
+	return __start_server((struct sockaddr *)&addr, addrlen, &opts);
 }
 
 static int reuseport_cb(int fd, void *opts)
@@ -144,6 +146,7 @@ int *start_reuseport_server(int family, int type, const char *addr_str,
 			    __u16 port, int timeout_ms, unsigned int nr_listens)
 {
 	struct network_helper_opts opts = {
+		.type = type,
 		.timeout_ms = timeout_ms,
 		.post_socket_cb = reuseport_cb,
 	};
@@ -162,7 +165,7 @@ int *start_reuseport_server(int family, int type, const char *addr_str,
 	if (!fds)
 		return NULL;
 
-	fds[0] = __start_server(type, (struct sockaddr *)&addr, addrlen, &opts);
+	fds[0] = __start_server((struct sockaddr *)&addr, addrlen, &opts);
 	if (fds[0] == -1)
 		goto close_fds;
 	nr_fds = 1;
@@ -171,7 +174,7 @@ int *start_reuseport_server(int family, int type, const char *addr_str,
 		goto close_fds;
 
 	for (; nr_fds < nr_listens; nr_fds++) {
-		fds[nr_fds] = __start_server(type, (struct sockaddr *)&addr, addrlen, &opts);
+		fds[nr_fds] = __start_server((struct sockaddr *)&addr, addrlen, &opts);
 		if (fds[nr_fds] == -1)
 			goto close_fds;
 	}
@@ -183,13 +186,13 @@ close_fds:
 	return NULL;
 }
 
-int start_server_addr(int type, const struct sockaddr_storage *addr, socklen_t len,
+int start_server_addr(const struct sockaddr_storage *addr, socklen_t len,
 		      const struct network_helper_opts *opts)
 {
 	if (!opts)
 		opts = &default_opts;
 
-	return __start_server(type, (struct sockaddr *)addr, len, opts);
+	return __start_server((struct sockaddr *)addr, len, opts);
 }
 
 void free_fds(int *fds, unsigned int nr_close_fds)

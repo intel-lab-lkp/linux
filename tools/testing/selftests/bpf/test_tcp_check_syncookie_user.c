@@ -197,19 +197,19 @@ int main(int argc, char **argv)
 	addr6dual.sin6_addr = in6addr_any;
 	addr6dual.sin6_port = 0;
 
-	server = start_server_addr(SOCK_STREAM, (struct sockaddr_storage *)&addr4,
+	server = start_server_addr((struct sockaddr_storage *)&addr4,
 				   sizeof(addr4), NULL);
 	if (server == -1)
 		goto err;
 
 	opts.post_socket_cb = v6only_true;
-	server_v6 = start_server_addr(SOCK_STREAM, (struct sockaddr_storage *)&addr6,
+	server_v6 = start_server_addr((struct sockaddr_storage *)&addr6,
 				      sizeof(addr6), &opts);
 	if (server_v6 == -1)
 		goto err;
 
 	opts.post_socket_cb = v6only_false;
-	server_dual = start_server_addr(SOCK_STREAM, (struct sockaddr_storage *)&addr6dual,
+	server_dual = start_server_addr((struct sockaddr_storage *)&addr6dual,
 					sizeof(addr6dual), &opts);
 	if (server_dual == -1)
 		goto err;

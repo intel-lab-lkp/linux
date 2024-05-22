@@ -121,7 +121,7 @@ static void run_test(int cgroup_fd)
 	if (!ASSERT_OK_PTR(link_setsockopt, "cg-attach-setsockopt"))
 		goto close_bpf_object;
 
-	server_fd = start_server_addr(SOCK_STREAM, (struct sockaddr_storage *)&addr,
+	server_fd = start_server_addr((struct sockaddr_storage *)&addr,
 				      sizeof(addr), &opts);
 	if (!ASSERT_GE(server_fd, 0, "start_server"))
 		goto close_bpf_object;

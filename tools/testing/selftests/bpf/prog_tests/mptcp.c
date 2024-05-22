@@ -95,7 +95,7 @@ static int start_mptcp_server(int family, const char *addr_str, __u16 port,
 	if (make_sockaddr(family, addr_str, port, &addr, &addrlen))
 		return -1;
 
-	return start_server_addr(SOCK_STREAM, &addr, addrlen, &opts);
+	return start_server_addr(&addr, addrlen, &opts);
 }
 
 static int verify_tsk(int map_fd, int client_fd)
