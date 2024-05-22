@@ -255,14 +255,15 @@ static int ili251x_read_reg(struct i2c_client *client,
 static int ili251x_read_touch_data(struct i2c_client *client, u8 *data)
 {
 	int error;
+	int ret;
 
 	error = ili251x_read_reg_common(client, REG_TOUCHDATA,
 					data, ILI251X_DATA_SIZE1, 0);
 	if (!error && data[0] == 2) {
-		error = i2c_master_recv(client, data + ILI251X_DATA_SIZE1,
-					ILI251X_DATA_SIZE2);
-		if (error >= 0 && error != ILI251X_DATA_SIZE2)
-			error = -EIO;
+		ret = i2c_master_recv(client, data + ILI251X_DATA_SIZE1,
+				      ILI251X_DATA_SIZE2);
+		if (ret != ILI251X_DATA_SIZE2)
+			error = ret < 0 ? ret : -EIO;
 	}
 
 	return error;
