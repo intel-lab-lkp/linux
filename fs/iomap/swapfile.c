@@ -49,6 +49,16 @@ static int iomap_swapfile_add_extent(struct iomap_swapfile_info *isi)
 	next_ppage = ALIGN_DOWN(iomap->addr + iomap->length, PAGE_SIZE) >>
 			PAGE_SHIFT;
 
+#ifdef CONFIG_HIBERNATION
+	/*
+	 * Print a warning if the starting physical block is not aligned
+	 * to PAGE_SIZE (for filesystems using smaller block sizes).
+	 * This will fail the hibernation suspend as we need to read
+	 * the swap header later using the starting block offset.
+	 */
+	if (!iomap->offset && iomap->addr & PAGE_MASK)
+		pr_warn("swapon: starting physical offset not page-aligned\n");
+#endif
 	/* Skip too-short physical extents. */
 	if (first_ppage >= next_ppage)
 		return 0;
