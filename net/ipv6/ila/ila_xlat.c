@@ -483,6 +483,8 @@ int ila_xlat_nl_cmd_get_mapping(struct sk_buff *skb, struct genl_info *info)
 				    info->snd_portid,
 				    info->snd_seq, 0, msg,
 				    info->genlhdr->cmd);
+	} else {
+		ret = -EINVAL;
 	}
 
 	rcu_read_unlock();
