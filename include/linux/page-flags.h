@@ -942,17 +942,23 @@ PAGEFLAG_FALSE(HasHWPoisoned, has_hwpoisoned)
  * __ClearPageFoo *sets* the bit used for PageFoo.  We reserve a few high and
  * low bits so that an underflow or overflow of _mapcount won't be
  * mistaken for a page type value.
+ *
+ * The highest bit must always be 1, to make page_has_type() work as expected.
  */
 
 #define PAGE_TYPE_BASE	0xf0000000
-/* Reserve		0x0000007f to catch underflows of _mapcount */
-#define PAGE_MAPCOUNT_RESERVE	-128
-#define PG_buddy	0x00000080
-#define PG_offline	0x00000100
-#define PG_table	0x00000200
-#define PG_guard	0x00000400
-#define PG_hugetlb	0x00000800
-#define PG_slab		0x00001000
+/*
+ * Reserve		0x0000ffff to catch underflows of _mapcount and
+ * allow owners that set a type to reuse the lower 16 bit for their own
+ * purposes.
+ */
+#define PAGE_MAPCOUNT_RESERVE	-65536
+#define PG_buddy	0x00010080
+#define PG_offline	0x00020000
+#define PG_table	0x00040000
+#define PG_guard	0x00080000
+#define PG_hugetlb	0x00100800
+#define PG_slab		0x00200000
 
 #define PageType(page, flag)						\
 	((page->page_type & (PAGE_TYPE_BASE | flag)) == PAGE_TYPE_BASE)
