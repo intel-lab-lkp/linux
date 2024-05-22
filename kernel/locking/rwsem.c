@@ -758,6 +758,8 @@ rwsem_spin_on_owner(struct rw_semaphore *sem)
 		return state;
 
 	for (;;) {
+		cpu_relax();
+
 		/*
 		 * When a waiting writer set the handoff flag, it may spin
 		 * on the owner as well. Once that writer acquires the lock,
@@ -784,8 +786,6 @@ rwsem_spin_on_owner(struct rw_semaphore *sem)
 			state = OWNER_NONSPINNABLE;
 			break;
 		}
-
-		cpu_relax();
 	}
 
 	return state;
