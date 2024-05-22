@@ -60,11 +60,24 @@ static int ieee80211_num_chanctx(struct ieee80211_local *local)
 	return num;
 }
 
-static bool ieee80211_can_create_new_chanctx(struct ieee80211_local *local)
+static bool ieee80211_can_create_new_chanctx(struct ieee80211_local *local,
+					     int radio_idx)
 {
+	struct ieee80211_chanctx *ctx;
+
 	lockdep_assert_wiphy(local->hw.wiphy);
 
-	return ieee80211_num_chanctx(local) < ieee80211_max_num_channels(local);
+	if (ieee80211_num_chanctx(local) >= ieee80211_max_num_channels(local))
+		return false;
+
+	if (radio_idx < 0)
+		return true;
+
+	list_for_each_entry(ctx, &local->chanctx_list, list)
+		if (ctx->conf.radio_idx == radio_idx)
+			return false;
+
+	return true;
 }
 
 static struct ieee80211_chanctx *
@@ -638,7 +651,8 @@ ieee80211_chanctx_radar_required(struct ieee80211_local *local,
 static struct ieee80211_chanctx *
 ieee80211_alloc_chanctx(struct ieee80211_local *local,
 			const struct ieee80211_chan_req *chanreq,
-			enum ieee80211_chanctx_mode mode)
+			enum ieee80211_chanctx_mode mode,
+			int radio_idx)
 {
 	struct ieee80211_chanctx *ctx;
 
@@ -656,6 +670,7 @@ ieee80211_alloc_chanctx(struct ieee80211_local *local,
 	ctx->conf.rx_chains_dynamic = 1;
 	ctx->mode = mode;
 	ctx->conf.radar_enabled = false;
+	ctx->conf.radio_idx = radio_idx;
 	_ieee80211_recalc_chanctx_min_def(local, ctx, NULL);
 
 	return ctx;
@@ -689,14 +704,14 @@ static struct ieee80211_chanctx *
 ieee80211_new_chanctx(struct ieee80211_local *local,
 		      const struct ieee80211_chan_req *chanreq,
 		      enum ieee80211_chanctx_mode mode,
-		      bool assign_on_failure)
+		      bool assign_on_failure, int radio_idx)
 {
 	struct ieee80211_chanctx *ctx;
 	int err;
 
 	lockdep_assert_wiphy(local->hw.wiphy);
 
-	ctx = ieee80211_alloc_chanctx(local, chanreq, mode);
+	ctx = ieee80211_alloc_chanctx(local, chanreq, mode, radio_idx);
 	if (!ctx)
 		return ERR_PTR(-ENOMEM);
 
@@ -1053,6 +1068,51 @@ int ieee80211_link_unreserve_chanctx(struct ieee80211_link_data *link)
 	return 0;
 }
 
+static bool
+ieee80211_get_radio_freq_match(const struct wiphy_radio *radio,
+			       const struct ieee80211_chan_req *chanreq)
+{
+	const struct wiphy_radio_freq_range *r;
+	u32 freq;
+	int i;
+
+	if (!radio->n_freq_range)
+		return true;
+
+	freq = ieee80211_channel_to_khz(chanreq->oper.chan);
+	for (i = 0; i < radio->n_freq_range; i++) {
+		r = &radio->freq_range[i];
+		if (freq >= r->start_freq && freq <= r->end_freq)
+			return true;
+	}
+
+	return false;
+}
+
+static int
+ieee80211_get_chanreq_radio(struct ieee80211_local *local,
+			    const struct ieee80211_chan_req *chanreq)
+{
+	struct wiphy *wiphy = local->hw.wiphy;
+	const struct wiphy_radio *radio;
+	u32 band_mask;
+	int i;
+
+	band_mask = BIT(chanreq->oper.chan->band);
+	for (i = 0; i < wiphy->n_radio; i++) {
+		radio = &wiphy->radio[i];
+		if (!(radio->band_mask & band_mask))
+			continue;
+
+		if (!ieee80211_get_radio_freq_match(radio, chanreq))
+			continue;
+
+		return i;
+	}
+
+	return -1;
+}
+
 int ieee80211_link_reserve_chanctx(struct ieee80211_link_data *link,
 				   const struct ieee80211_chan_req *chanreq,
 				   enum ieee80211_chanctx_mode mode,
@@ -1061,6 +1121,7 @@ int ieee80211_link_reserve_chanctx(struct ieee80211_link_data *link,
 	struct ieee80211_sub_if_data *sdata = link->sdata;
 	struct ieee80211_local *local = sdata->local;
 	struct ieee80211_chanctx *new_ctx, *curr_ctx, *ctx;
+	int radio_idx;
 
 	lockdep_assert_wiphy(local->hw.wiphy);
 
@@ -1070,9 +1131,10 @@ int ieee80211_link_reserve_chanctx(struct ieee80211_link_data *link,
 
 	new_ctx = ieee80211_find_reservation_chanctx(local, chanreq, mode);
 	if (!new_ctx) {
-		if (ieee80211_can_create_new_chanctx(local)) {
+		radio_idx = ieee80211_get_chanreq_radio(local, chanreq);
+		if (ieee80211_can_create_new_chanctx(local, radio_idx)) {
 			new_ctx = ieee80211_new_chanctx(local, chanreq, mode,
-							false);
+							false, radio_idx);
 			if (IS_ERR(new_ctx))
 				return PTR_ERR(new_ctx);
 		} else {
@@ -1111,6 +1173,9 @@ int ieee80211_link_reserve_chanctx(struct ieee80211_link_data *link,
 					if (!list_empty(&ctx->reserved_links))
 						continue;
 
+					if (ctx->conf.radio_idx != radio_idx)
+						continue;
+
 					curr_ctx = ctx;
 					break;
 				}
@@ -1126,7 +1191,8 @@ int ieee80211_link_reserve_chanctx(struct ieee80211_link_data *link,
 			    !list_empty(&curr_ctx->reserved_links))
 				return -EBUSY;
 
-			new_ctx = ieee80211_alloc_chanctx(local, chanreq, mode);
+			new_ctx = ieee80211_alloc_chanctx(local, chanreq, mode,
+							  radio_idx);
 			if (!new_ctx)
 				return -ENOMEM;
 
@@ -1745,6 +1811,7 @@ int _ieee80211_link_use_channel(struct ieee80211_link_data *link,
 	struct ieee80211_chanctx *ctx;
 	u8 radar_detect_width = 0;
 	bool reserved = false;
+	int radio_idx;
 	int ret;
 
 	lockdep_assert_wiphy(local->hw.wiphy);
@@ -1773,11 +1840,18 @@ int _ieee80211_link_use_channel(struct ieee80211_link_data *link,
 
 	ctx = ieee80211_find_chanctx(local, link, chanreq, mode);
 	/* Note: context is now reserved */
-	if (ctx)
+	if (ctx) {
 		reserved = true;
-	else
+	} else {
+		radio_idx = ieee80211_get_chanreq_radio(local, chanreq);
+		if (ieee80211_can_create_new_chanctx(local, radio_idx)) {
+			ret = -EBUSY;
+			goto out;
+		}
+
 		ctx = ieee80211_new_chanctx(local, chanreq, mode,
-					    assign_on_failure);
+					    assign_on_failure, radio_idx);
+	}
 	if (IS_ERR(ctx)) {
 		ret = PTR_ERR(ctx);
 		goto out;
