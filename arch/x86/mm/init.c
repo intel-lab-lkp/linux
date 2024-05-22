@@ -279,7 +279,7 @@ static const struct x86_cpu_id invlpg_miss_ids[] = {
 
 static void setup_pcid(void)
 {
-	const struct x86_cpu_id *invlpg_miss_match;
+	const struct x86_cpu_id *invlpg_miss_match = NULL;
 
 	if (!IS_ENABLED(CONFIG_X86_64))
 		return;
@@ -287,7 +287,9 @@ static void setup_pcid(void)
 	if (!boot_cpu_has(X86_FEATURE_PCID))
 		return;
 
-	invlpg_miss_match = x86_match_cpu(invlpg_miss_ids);
+	/* Only bare-metal is affected.  PCIDs in guests are OK.  */
+	if (!boot_cpu_has(X86_FEATURE_HYPERVISOR))
+		invlpg_miss_match = x86_match_cpu(invlpg_miss_ids);
 
 	if (invlpg_miss_match &&
 	    boot_cpu_data.microcode < invlpg_miss_match->driver_data) {
