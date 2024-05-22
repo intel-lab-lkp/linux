@@ -114,6 +114,7 @@
 
 /* LED General Purpose IO Configuration Register */
 #define LED_GPIO_CFG		(0x24)
+#define LED_GPIO_CFG_LED_SEL	BIT(31)		/* Separate Link/Act LEDs */
 #define LED_GPIO_CFG_SPD_LED	(0x01000000)	/* GPIOz as Speed LED */
 #define LED_GPIO_CFG_LNK_LED	(0x00100000)	/* GPIOy as Link LED */
 #define LED_GPIO_CFG_FDX_LED	(0x00010000)	/* GPIOx as Full Duplex LED */

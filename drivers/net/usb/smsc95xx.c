@@ -1006,6 +1006,18 @@ static int smsc95xx_reset(struct usbnet *dev)
 	/* Configure GPIO pins as LED outputs */
 	write_buf = LED_GPIO_CFG_SPD_LED | LED_GPIO_CFG_LNK_LED |
 		LED_GPIO_CFG_FDX_LED;
+
+	/* Set LED Select (LED_SEL) bit for the external LED pins functionality
+	 * in the Microchip's EVB-LAN8670-USB 10BASE-T1S Ethernet device which
+	 * uses the below LED function.
+	 * nSPD_LED -> Speed Indicator
+	 * nLNKA_LED -> Link Indicator
+	 * nFDX_LED -> Activity Indicator
+	 */
+	if (dev->udev->descriptor.idVendor == 0x184F &&
+	    dev->udev->descriptor.idProduct == 0x0051)
+		write_buf |= LED_GPIO_CFG_LED_SEL;
+
 	ret = smsc95xx_write_reg(dev, LED_GPIO_CFG, write_buf);
 	if (ret < 0)
 		return ret;
