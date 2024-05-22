@@ -2490,10 +2490,19 @@ static int kvm_set_tsc_khz(struct kvm_vcpu *vcpu, u32 user_tsc_khz)
 
 static u64 compute_guest_tsc(struct kvm_vcpu *vcpu, s64 kernel_ns)
 {
-	u64 tsc = pvclock_scale_delta(kernel_ns-vcpu->arch.this_tsc_nsec,
-				      vcpu->arch.virtual_tsc_mult,
-				      vcpu->arch.virtual_tsc_shift);
-	tsc += vcpu->arch.this_tsc_write;
+	s64 delta = kernel_ns - vcpu->arch.this_tsc_nsec;
+	u64 tsc = vcpu->arch.this_tsc_write;
+
+	/* pvclock_scale_delta cannot cope with negative deltas */
+	if (delta >= 0)
+		tsc += pvclock_scale_delta(delta,
+					   vcpu->arch.virtual_tsc_mult,
+					   vcpu->arch.virtual_tsc_shift);
+	else
+		tsc -= pvclock_scale_delta(-delta,
+					   vcpu->arch.virtual_tsc_mult,
+					   vcpu->arch.virtual_tsc_shift);
+
 	return tsc;
 }
 
@@ -2504,7 +2513,7 @@ static inline bool gtod_is_based_on_tsc(int mode)
 }
 #endif
 
-static void kvm_track_tsc_matching(struct kvm_vcpu *vcpu, bool new_generation)
+static void kvm_track_tsc_matching(struct kvm_vcpu *vcpu)
 {
 #ifdef CONFIG_X86_64
 	struct kvm_arch *ka = &vcpu->kvm->arch;
@@ -2521,12 +2530,9 @@ static void kvm_track_tsc_matching(struct kvm_vcpu *vcpu, bool new_generation)
 
 	/*
 	 * Request a masterclock update if the masterclock needs to be toggled
-	 * on/off, or when starting a new generation and the masterclock is
-	 * enabled (compute_guest_tsc() requires the masterclock snapshot to be
-	 * taken _after_ the new generation is created).
+	 * on/off.
 	 */
-	if ((ka->use_master_clock && new_generation) ||
-	    (ka->use_master_clock != use_master_clock))
+	if ((ka->use_master_clock != use_master_clock))
 		kvm_make_request(KVM_REQ_MASTERCLOCK_UPDATE, vcpu);
 
 	trace_kvm_track_tsc(vcpu->vcpu_id, ka->nr_vcpus_matched_tsc,
@@ -2704,7 +2710,7 @@ static void __kvm_synchronize_tsc(struct kvm_vcpu *vcpu, u64 offset, u64 tsc,
 	vcpu->arch.this_tsc_nsec = kvm->arch.cur_tsc_nsec;
 	vcpu->arch.this_tsc_write = kvm->arch.cur_tsc_write;
 
-	kvm_track_tsc_matching(vcpu, !matched);
+	kvm_track_tsc_matching(vcpu);
 }
 
 static void kvm_synchronize_tsc(struct kvm_vcpu *vcpu, u64 *user_value)
@@ -3299,8 +3305,6 @@ static int kvm_guest_time_update(struct kvm_vcpu *v)
 		kernel_ns = get_kvmclock_base_ns();
 	}
 
-	tsc_timestamp = kvm_read_l1_tsc(v, host_tsc);
-
 	/*
 	 * We may have to catch up the TSC to match elapsed wall clock
 	 * time for two reasons, even if kvmclock is used.
@@ -3312,11 +3316,46 @@ static int kvm_guest_time_update(struct kvm_vcpu *v)
 	 *	very slowly.
 	 */
 	if (vcpu->tsc_catchup) {
-		u64 tsc = compute_guest_tsc(v, kernel_ns);
-		if (tsc > tsc_timestamp) {
-			adjust_tsc_offset_guest(v, tsc - tsc_timestamp);
-			tsc_timestamp = tsc;
+		uint64_t now_host_tsc, now_guest_tsc;
+		int64_t adjustment;
+
+		/*
+		 * First, calculate what the guest TSC should be at the
+		 * time (kernel_ns) which will be placed in the hvclock.
+		 * This may be the *current* time, or it may be the time
+		 * of the master clock reference. This is 'tsc_timestamp'.
+		 */
+		tsc_timestamp = compute_guest_tsc(v, kernel_ns);
+
+		now_guest_tsc = tsc_timestamp;
+		now_host_tsc = host_tsc;
+
+#ifdef CONFIG_X86_64
+		/*
+		 * If the master clock was used, calculate what the guest
+		 * TSC should be *now* in order to advance to that.
+		 */
+		if (use_master_clock) {
+			int64_t now_kernel_ns;
+
+			if (!kvm_get_time_and_clockread(&now_kernel_ns,
+							&now_host_tsc)) {
+				now_kernel_ns = get_kvmclock_base_ns();
+				now_host_tsc = rdtsc();
+			}
+			now_guest_tsc = compute_guest_tsc(v, now_kernel_ns);
 		}
+#endif
+		/*
+		 * Calculate the delta between what the guest TSC *should* be,
+		 * and what it actually is according to kvm_read_l1_tsc().
+		 */
+		adjustment = now_guest_tsc - kvm_read_l1_tsc(v, now_host_tsc);
+
+		if (adjustment > 0)
+			adjust_tsc_offset_guest(v, adjustment);
+	} else {
+		tsc_timestamp = kvm_read_l1_tsc(v, host_tsc);
 	}
 
 	local_irq_restore(flags);
