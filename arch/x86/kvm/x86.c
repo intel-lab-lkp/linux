@@ -160,6 +160,8 @@ module_param(min_timer_period_us, uint, 0644);
 static bool __read_mostly kvmclock_periodic_sync = true;
 module_param(kvmclock_periodic_sync, bool, 0444);
 
+#define KVMCLOCK_SYNC_PERIOD (300 * HZ)
+
 /* tsc tolerance in parts per million - default to 1/2 of the NTP threshold */
 static u32 __read_mostly tsc_tolerance_ppm = 250;
 module_param(tsc_tolerance_ppm, uint, 0644);
@@ -3186,6 +3188,10 @@ static void kvm_end_pvclock_update(struct kvm *kvm)
 	kvm_for_each_vcpu(i, vcpu, kvm)
 		kvm_make_request(KVM_REQ_CLOCK_UPDATE, vcpu);
 
+	if (kvmclock_periodic_sync && !kvm->arch.use_master_clock)
+		schedule_delayed_work(&kvm->arch.kvmclock_sync_work,
+				      KVMCLOCK_SYNC_PERIOD);
+
 	/* guest entries allowed */
 	kvm_for_each_vcpu(i, vcpu, kvm)
 		kvm_clear_request(KVM_REQ_MCLOCK_INPROGRESS, vcpu);
@@ -3554,14 +3560,15 @@ static void kvm_gen_kvmclock_update(struct kvm_vcpu *v)
 					KVMCLOCK_UPDATE_DELAY);
 }
 
-#define KVMCLOCK_SYNC_PERIOD (300 * HZ)
-
 static void kvmclock_sync_fn(struct work_struct *work)
 {
 	struct delayed_work *dwork = to_delayed_work(work);
 	struct kvm_arch *ka = container_of(dwork, struct kvm_arch,
 					   kvmclock_sync_work);
 	struct kvm *kvm = container_of(ka, struct kvm, arch);
+
+	if (!kvm->arch.use_master_clock)
+		return;
 
 	schedule_delayed_work(&kvm->arch.kvmclock_update_work, 0);
 	schedule_delayed_work(&kvm->arch.kvmclock_sync_work,
@@ -12560,7 +12567,8 @@ void kvm_arch_vcpu_postcreate(struct kvm_vcpu *vcpu)
 
 	mutex_unlock(&vcpu->mutex);
 
-	if (kvmclock_periodic_sync && vcpu->vcpu_idx == 0)
+	if (kvmclock_periodic_sync && !kvm->arch.use_master_clock &&
+	    vcpu->vcpu_idx == 0)
 		schedule_delayed_work(&kvm->arch.kvmclock_sync_work,
 						KVMCLOCK_SYNC_PERIOD);
 }
