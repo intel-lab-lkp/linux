@@ -4975,6 +4975,7 @@ static void lru_gen_shrink_node(struct pglist_data *pgdat, struct scan_control *
 done:
 	/* kswapd should never fail */
 	pgdat->kswapd_failures = 0;
+	pgdat->nr_may_reclaimable = 0;
 }
 
 /******************************************************************************
@@ -6044,9 +6045,10 @@ again:
 	 * sleep. On reclaim progress, reset the failure counter. A
 	 * successful direct reclaim run will revive a dormant kswapd.
 	 */
-	if (reclaimable)
+	if (reclaimable) {
 		pgdat->kswapd_failures = 0;
-	else if (sc->cache_trim_mode)
+		pgdat->nr_may_reclaimable = 0;
+	} else if (sc->cache_trim_mode)
 		sc->cache_trim_mode_failed = 1;
 }
 
@@ -6705,6 +6707,11 @@ static void clear_pgdat_congested(pg_data_t *pgdat)
 	clear_bit(PGDAT_WRITEBACK, &pgdat->flags);
 }
 
+static bool may_recaimable(pg_data_t *pgdat, int order)
+{
+	return pgdat->nr_may_reclaimable >= 1 << order;
+}
+
 /*
  * Prepare kswapd for sleeping. This verifies that there are no processes
  * waiting in throttle_direct_reclaim() and that watermarks have been met.
@@ -6731,7 +6738,8 @@ static bool prepare_kswapd_sleep(pg_data_t *pgdat, int order,
 		wake_up_all(&pgdat->pfmemalloc_wait);
 
 	/* Hopeless node, leave it to direct reclaim */
-	if (pgdat->kswapd_failures >= MAX_RECLAIM_RETRIES)
+	if (pgdat->kswapd_failures >= MAX_RECLAIM_RETRIES &&
+	    !may_recaimable(pgdat, order))
 		return true;
 
 	if (pgdat_balanced(pgdat, order, highest_zoneidx)) {
@@ -7009,8 +7017,10 @@ restart:
 		goto restart;
 	}
 
-	if (!sc.nr_reclaimed)
+	if (!sc.nr_reclaimed) {
 		pgdat->kswapd_failures++;
+		pgdat->nr_may_reclaimable = 0;
+	}
 
 out:
 	clear_reclaim_active(pgdat, highest_zoneidx);
@@ -7273,7 +7283,8 @@ void wakeup_kswapd(struct zone *zone, gfp_t gfp_flags, int order,
 		return;
 
 	/* Hopeless node, leave it to direct reclaim if possible */
-	if (pgdat->kswapd_failures >= MAX_RECLAIM_RETRIES ||
+	if ((pgdat->kswapd_failures >= MAX_RECLAIM_RETRIES &&
+	     !may_recaimable(pgdat, order)) ||
 	    (pgdat_balanced(pgdat, order, highest_zoneidx) &&
 	     !pgdat_watermark_boosted(pgdat, highest_zoneidx))) {
 		/*
