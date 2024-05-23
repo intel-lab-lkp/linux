@@ -49,13 +49,18 @@ nouveau_get_backlight_name(char backlight_name[BL_NAME_SIZE],
 			   struct nouveau_backlight *bl)
 {
 	const int nb = ida_alloc_max(&bl_ida, 99, GFP_KERNEL);
+	int ret;
 
 	if (nb < 0)
 		return false;
 	if (nb > 0)
-		snprintf(backlight_name, BL_NAME_SIZE, "nv_backlight%d", nb);
+		ret = snprintf(backlight_name, BL_NAME_SIZE, "nv_backlight%d", nb);
 	else
-		snprintf(backlight_name, BL_NAME_SIZE, "nv_backlight");
+		ret = snprintf(backlight_name, BL_NAME_SIZE, "nv_backlight");
+
+	if (ret >= BL_NAME_SIZE)
+		return false;
+
 	bl->id = nb;
 	return true;
 }
