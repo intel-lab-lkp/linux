@@ -9,6 +9,112 @@
 #include "11ac.h"
 #include "11n.h"
 
+struct wpa_suite_ucast {
+        /* count */
+        u16 count;
+        /** wpa_suite list */
+	__be32 suite[1];
+} __packed;
+
+struct IEEEtypes_Rsn_t {
+        /** Rsn : version */
+        u16 version;
+        /** Rsn : group cipher */
+        __be32 group_cipher;
+        /** Rsn : pairwise cipher */
+        struct wpa_suite_ucast pairwise_cipher;
+} __packed;
+
+static void woal_check_rsn_ie(const struct IEEEtypes_Rsn_t *rsn_ie, int len,
+			      struct mwifiex_uap_bss_param *bss_config, u8 *pairwise_cipher)
+{
+	int left, count, i;
+	struct wpa_suite_ucast *key_mgmt;
+
+	left = len;
+	if (left < (int)sizeof(struct IEEEtypes_Rsn_t))
+		return;
+
+	bss_config->wpa_cfg.group_cipher = 0;
+	*pairwise_cipher = 0;
+	bss_config->key_mgmt = 0;
+
+	/* check the group cipher */
+	switch (be32_to_cpu(rsn_ie->group_cipher)) {
+	case WLAN_CIPHER_SUITE_TKIP:
+		bss_config->wpa_cfg.group_cipher = CIPHER_TKIP;
+		break;
+	case WLAN_CIPHER_SUITE_CCMP:
+		bss_config->wpa_cfg.group_cipher = CIPHER_AES_CCMP;
+		break;
+	default:
+		break;
+	}
+
+	count = le16_to_cpu(rsn_ie->pairwise_cipher.count);
+	for (i = 0; i < count; i++) {
+		switch (be32_to_cpu(rsn_ie->pairwise_cipher.suite[i])) {
+		case WLAN_CIPHER_SUITE_TKIP:
+			*pairwise_cipher |= CIPHER_TKIP;
+			break;
+		case WLAN_CIPHER_SUITE_CCMP:
+			*pairwise_cipher |= CIPHER_AES_CCMP;
+			break;
+		default:
+			break;
+		}
+	}
+	left -= sizeof(struct IEEEtypes_Rsn_t) + (count - 1) * sizeof(__be32);
+	if (left < (int)sizeof(struct wpa_suite_ucast))
+		return;
+
+	key_mgmt = ((void *)rsn_ie + sizeof(struct IEEEtypes_Rsn_t) + (count - 1) * sizeof(__be32));
+	count = le16_to_cpu(key_mgmt->count);
+	if (left < (int)(sizeof(struct wpa_suite_ucast) +
+			 (count - 1) * sizeof(__be32)))
+		return;
+
+	for (i = 0; i < count; i++) {
+		switch (be32_to_cpu(key_mgmt->suite[i])) {
+		case WLAN_AKM_SUITE_8021X:
+			bss_config->key_mgmt |= KEY_MGMT_EAP;
+			break;
+		case WLAN_AKM_SUITE_PSK:
+			bss_config->key_mgmt |= KEY_MGMT_PSK;
+			break;
+		case WLAN_AKM_SUITE_PSK_SHA256:
+			bss_config->key_mgmt |= KEY_MGMT_PSK_SHA256;
+			break;
+		case WLAN_AKM_SUITE_SAE:
+			bss_config->key_mgmt |= KEY_MGMT_SAE;
+			break;
+		case WLAN_AKM_SUITE_OWE:
+			bss_config->key_mgmt |= KEY_MGMT_OWE;
+			break;
+		}
+	}
+}
+
+static void woal_find_wpa_ies(const void *ie, int len, struct mwifiex_uap_bss_param *bss_config)
+{
+	const struct element *e;
+
+	e = cfg80211_find_elem(WLAN_EID_RSN, ie, len);
+	if (e) {
+		woal_check_rsn_ie((void *)e->data, e->datalen, bss_config,
+				  &bss_config->wpa_cfg.pairwise_cipher_wpa2);
+
+		bss_config->protocol |= PROTOCOL_WPA2;
+	}
+
+	e = cfg80211_find_vendor_elem(WLAN_EID_VENDOR_SPECIFIC, 0x1, ie, len);
+	if (e) {
+		woal_check_rsn_ie((void *)e->data, e->datalen, bss_config,
+				  &bss_config->wpa_cfg.pairwise_cipher_wpa);
+		bss_config->protocol |= PROTOCOL_WPA;
+	}
+}
+
 /* This function parses security related parameters from cfg80211_ap_settings
  * and sets into FW understandable bss_config structure.
  */
@@ -17,6 +123,11 @@ int mwifiex_set_secure_params(struct mwifiex_private *priv,
 			      struct cfg80211_ap_settings *params) {
 	int i;
 	struct mwifiex_wep_key wep_key;
+	const u8 *ie = NULL;
+	int ie_len;
+
+	ie = params->beacon.tail;
+	ie_len = params->beacon.tail_len;
 
 	if (!params->privacy) {
 		bss_config->protocol = PROTOCOL_NO_SECURITY;
@@ -46,36 +157,34 @@ int mwifiex_set_secure_params(struct mwifiex_private *priv,
 
 	bss_config->key_mgmt_operation |= KEY_MGMT_ON_HOST;
 
+	if (params->crypto.wpa_versions & NL80211_WPA_VERSION_1)
+		bss_config->protocol |= PROTOCOL_WPA;
+	if (params->crypto.wpa_versions & NL80211_WPA_VERSION_2)
+		bss_config->protocol |= PROTOCOL_WPA2;
+
+	woal_find_wpa_ies(ie, ie_len, bss_config);
+
 	for (i = 0; i < params->crypto.n_akm_suites; i++) {
+		mwifiex_dbg(priv->adapter, MSG, "suite%d: 0x%08x\n", i, params->crypto.akm_suites[i]);
+
 		switch (params->crypto.akm_suites[i]) {
 		case WLAN_AKM_SUITE_8021X:
-			if (params->crypto.wpa_versions &
-			    NL80211_WPA_VERSION_1) {
-				bss_config->protocol = PROTOCOL_WPA;
-				bss_config->key_mgmt = KEY_MGMT_EAP;
-			}
-			if (params->crypto.wpa_versions &
-			    NL80211_WPA_VERSION_2) {
-				bss_config->protocol |= PROTOCOL_WPA2;
-				bss_config->key_mgmt = KEY_MGMT_EAP;
-			}
+			bss_config->key_mgmt |= KEY_MGMT_EAP;
 			break;
 		case WLAN_AKM_SUITE_PSK:
-			if (params->crypto.wpa_versions &
-			    NL80211_WPA_VERSION_1) {
-				bss_config->protocol = PROTOCOL_WPA;
-				bss_config->key_mgmt = KEY_MGMT_PSK;
-			}
-			if (params->crypto.wpa_versions &
-			    NL80211_WPA_VERSION_2) {
-				bss_config->protocol |= PROTOCOL_WPA2;
-				bss_config->key_mgmt = KEY_MGMT_PSK;
-			}
+			bss_config->key_mgmt |= KEY_MGMT_PSK;
+			break;
+		case WLAN_AKM_SUITE_PSK_SHA256:
+			bss_config->key_mgmt |= KEY_MGMT_PSK_SHA256;
 			break;
 		default:
 			break;
 		}
 	}
+
+	mwifiex_dbg(priv->adapter, MSG, "protocol: 0x%08x key_mgmt: 0x%08x\n",
+		    bss_config->protocol, bss_config->key_mgmt);
+
 	for (i = 0; i < params->crypto.n_ciphers_pairwise; i++) {
 		switch (params->crypto.ciphers_pairwise[i]) {
 		case WLAN_CIPHER_SUITE_WEP40:
