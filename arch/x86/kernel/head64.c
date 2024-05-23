@@ -260,8 +260,7 @@ unsigned long __head __startup_64(unsigned long physaddr,
 
 	/* fixup pages that are part of the kernel image */
 	for (; i <= pmd_index((unsigned long)_end); i++)
-		if (pmd[i] & _PAGE_PRESENT)
-			pmd[i] += load_delta;
+		pmd[i] += load_delta;
 
 	/* invalidate pages after the kernel image */
 	for (; i < PTRS_PER_PMD; i++)
