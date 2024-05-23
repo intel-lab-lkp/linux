@@ -283,8 +283,8 @@ handle_line() {
 
 	if [[ ${words[$last]} =~ \[([^]]+)\] ]]; then
 		module=${words[$last]}
-		module=${module#\[}
-		module=${module%\]}
+		module=${module#*\[}
+		module=${module%\]*}
 		modbuildid=${module#* }
 		module=${module% *}
 		if [[ $modbuildid == $module ]]; then
