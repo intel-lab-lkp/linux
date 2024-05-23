@@ -11,7 +11,9 @@ maintainers:
 
 properties:
   compatible:
-    const: ti,am3352-eqep
+    enum:
+      - ti,am3352-eqep
+      - ti,am62-eqep
 
   reg:
     maxItems: 1
@@ -21,19 +23,43 @@ properties:
     maxItems: 1
 
   clocks:
-    description: The clock that determines the SYSCLKOUT rate for the eQEP
-      peripheral.
+    description: The functional and interface clock that determines the clock
+      rate for the eQEP peripheral.
     maxItems: 1
 
   clock-names:
-    const: sysclkout
+    enum:
+      - sysclkout
+      - fck
+
+  power-domains:
+    maxItems: 1
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - ti,am3352-eqep
+    then:
+      required:
+        - clock-names
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - ti,am62-eqep
+    then:
+      required:
+        - power-domains
 
 required:
   - compatible
   - reg
   - interrupts
   - clocks
-  - clock-names
 
 additionalProperties: false
 
@@ -47,4 +73,21 @@ examples:
         interrupts = <79>;
     };
 
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/soc/ti,sci_pm_domain.h>
+
+    bus {
+        #address-cells = <2>;
+        #size-cells = <2>;
+        eqep1: counter@23210000 {
+          compatible = "ti,am62-eqep";
+          reg = <0x00 0x23210000 0x00 0x100>;
+          power-domains = <&k3_pds 60 TI_SCI_PD_EXCLUSIVE>;
+          clocks = <&k3_clks 60 0>;
+          interrupts = <GIC_SPI 117 IRQ_TYPE_EDGE_RISING>;
+          status = "disabled";
+        };
+    };
 ...
