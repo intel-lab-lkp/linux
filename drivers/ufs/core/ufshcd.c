@@ -8542,7 +8542,10 @@ static int ufshcd_device_params_init(struct ufs_hba *hba)
 		goto out;
 	}
 
-	ufshcd_set_rtt(hba);
+	if (hba->vops && hba->vops->set_rtt)
+		hba->vops->set_rtt(hba);
+	else
+		ufshcd_set_rtt(hba);
 
 	ufshcd_get_ref_clk_gating_wait(hba);
 
