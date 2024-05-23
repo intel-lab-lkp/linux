@@ -615,9 +615,21 @@ int ieee80211_start_tx_ba_session(struct ieee80211_sta *pubsta, u16 tid,
 		 "Requested to start BA session on reserved tid=%d", tid))
 		return -EINVAL;
 
-	if (!pubsta->deflink.ht_cap.ht_supported &&
-	    sta->sdata->vif.bss_conf.chanreq.oper.chan->band != NL80211_BAND_6GHZ)
-		return -EINVAL;
+	if (!pubsta->deflink.ht_cap.ht_supported) {
+		struct ieee80211_vif *vif = &sta->sdata->vif;
+		struct ieee80211_bss_conf *bss_conf;
+
+		rcu_read_lock();
+
+		bss_conf = rcu_dereference(vif->link_conf[pubsta->deflink.link_id]);
+		if (unlikely(!bss_conf) ||
+		    bss_conf->chanreq.oper.chan->band != NL80211_BAND_6GHZ) {
+			rcu_read_unlock();
+			return -EINVAL;
+		}
+
+		rcu_read_unlock();
+	}
 
 	if (WARN_ON_ONCE(!local->ops->ampdu_action))
 		return -EINVAL;
