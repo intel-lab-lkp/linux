@@ -30,11 +30,16 @@
 #include <nvhw/class/cl507e.h>
 #include <nvhw/class/clc37e.h>
 
+#include <linux/iosys-map.h>
+
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_blend.h>
-#include <drm/drm_gem_atomic_helper.h>
 #include <drm/drm_fourcc.h>
+#include <drm/drm_framebuffer.h>
+#include <drm/drm_gem_atomic_helper.h>
+#include <drm/drm_panic.h>
+#include <drm/ttm/ttm_bo.h>
 
 #include "nouveau_bo.h"
 #include "nouveau_gem.h"
@@ -577,11 +582,126 @@ nv50_wndw_prepare_fb(struct drm_plane *plane, struct drm_plane_state *state)
 	return 0;
 }
 
+/* Values found on GTX1650 */
+/* blocks level 0, 4x4 pixels */
+#define BL0_W 4
+/* blocks level 1, 8x8 pixels */
+#define BL1_W 8
+/* blocks level 2, Group of Bytes? 16x128 pixels */
+#define BL2_W 16
+
+/* get the offset in bytes inside the framebuffer, after taking tiling into account */
+static unsigned int nv50_get_tiled_offset(struct drm_scanout_buffer *sb, unsigned int gobs,
+					  unsigned int x, unsigned int y, unsigned int px_width)
+{
+	u32 blk2_x, blk2_y, bl2sz;
+	u32 blk1_x, blk1_y, bl1sz;
+	u32 blk0_x, blk0_y, bl0sz;
+	u32 nblk2w, bl2_h, off;
+
+	/* fixme - block2 height depends of the "Group of Bytes" value */
+	bl2_h = BL1_W * gobs;
+
+	bl0sz = BL0_W * BL0_W * px_width;
+	bl1sz = BL1_W * BL1_W * px_width;
+	bl2sz = BL2_W * bl2_h * px_width;
+
+	/* block level 2 coordinate */
+	blk2_x = x / BL2_W;
+	blk2_y = y / bl2_h;
+
+	x = x % BL2_W;
+	y = y % bl2_h;
+
+	/* block level 1 coordinate */
+	blk1_x = x / BL1_W;
+	blk1_y = y / BL1_W;
+
+	x = x % BL1_W;
+	y = y % BL1_W;
+
+	/* block level 0 coordinate */
+	blk0_x = x / BL0_W;
+	blk0_y = y / BL0_W;
+
+	x = x % BL0_W;
+	y = y % BL0_W;
+
+	nblk2w = DIV_ROUND_UP(sb->width, BL2_W);
+
+	off = ((blk2_y * nblk2w) + blk2_x) * bl2sz;
+	off += ((blk1_y * 2) + blk1_x) * bl1sz;
+	off += (blk0_y * 2 + blk0_x) * bl0sz;
+	off += (x + y * BL0_W) * px_width;
+
+	return off;
+}
+
+static void nv50_set_pixel(struct drm_scanout_buffer *sb, unsigned int x, unsigned int y, u32 color)
+{
+	struct drm_framebuffer *fb = sb->private;
+	unsigned int off;
+	/* According to DRM_FORMAT_MOD_NVIDIA_BLOCK_LINEAR_2D documentation,
+	 * the last 4 bits of modifier is log2(height) of each block, in GOBs
+	 */
+	unsigned int gobs = 1 << (fb->modifier & 0xf);
+
+	off = nv50_get_tiled_offset(sb, gobs, x, y, sb->format->cpp[0]);
+	iosys_map_wr(&sb->map[0], off, u32, color);
+}
+
+static int
+nv50_wndw_get_scanout_buffer(struct drm_plane *plane, struct drm_scanout_buffer *sb)
+{
+	struct drm_framebuffer *fb;
+	struct nouveau_bo *nvbo;
+
+	if (!plane->state || !plane->state->fb)
+		return -EINVAL;
+
+	fb = plane->state->fb;
+	nvbo = nouveau_gem_object(fb->obj[0]);
+
+	/* Don't support compressed format, or multiplane yet */
+	if (nvbo->comp || fb->format->num_planes != 1)
+		return -EOPNOTSUPP;
+
+	if (nouveau_bo_map(nvbo)) {
+		pr_warn("nouveau bo map failed, panic won't be displayed\n");
+		return -ENOMEM;
+	}
+
+	if (nvbo->kmap.bo_kmap_type & TTM_BO_MAP_IOMEM_MASK)
+		iosys_map_set_vaddr_iomem(&sb->map[0], nvbo->kmap.virtual);
+	else
+		iosys_map_set_vaddr(&sb->map[0], nvbo->kmap.virtual);
+
+	sb->height = fb->height;
+	sb->width = fb->width;
+	sb->pitch[0] = fb->pitches[0];
+	sb->format = fb->format;
+
+	/* If tiling is enabled, use the set_pixel() to display correctly */
+	if (fb->modifier & 0xf) {
+		sb->private = (void *) fb;
+		sb->set_pixel = nv50_set_pixel;
+	}
+	return 0;
+}
+
 static const struct drm_plane_helper_funcs
 nv50_wndw_helper = {
 	.prepare_fb = nv50_wndw_prepare_fb,
 	.cleanup_fb = nv50_wndw_cleanup_fb,
 	.atomic_check = nv50_wndw_atomic_check,
+};
+
+static const struct drm_plane_helper_funcs
+nv50_wndw_primary_helper = {
+	.prepare_fb = nv50_wndw_prepare_fb,
+	.cleanup_fb = nv50_wndw_cleanup_fb,
+	.atomic_check = nv50_wndw_atomic_check,
+	.get_scanout_buffer = nv50_wndw_get_scanout_buffer,
 };
 
 static void
@@ -732,7 +852,10 @@ nv50_wndw_new_(const struct nv50_wndw_func *func, struct drm_device *dev,
 		return ret;
 	}
 
-	drm_plane_helper_add(&wndw->plane, &nv50_wndw_helper);
+	if (type == DRM_PLANE_TYPE_PRIMARY)
+		drm_plane_helper_add(&wndw->plane, &nv50_wndw_primary_helper);
+	else
+		drm_plane_helper_add(&wndw->plane, &nv50_wndw_helper);
 
 	if (wndw->func->ilut) {
 		ret = nv50_lut_init(disp, mmu, &wndw->ilut);
