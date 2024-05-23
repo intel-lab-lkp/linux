@@ -683,8 +683,6 @@ void machine_check_poll(enum mcp_flags flags, mce_banks_t *b)
 	struct mce m;
 	int i;
 
-	this_cpu_inc(mce_poll_count);
-
 	mce_gather_info(&m, NULL);
 
 	if (flags & MCP_TIMESTAMP)
@@ -1667,8 +1665,10 @@ static void mce_timer_fn(struct timer_list *t)
 
 	iv = __this_cpu_read(mce_next_interval);
 
-	if (mce_available(this_cpu_ptr(&cpu_info)))
+	if (mce_available(this_cpu_ptr(&cpu_info))) {
+		this_cpu_inc(mce_poll_count);
 		mc_poll_banks();
+	}
 
 	/*
 	 * Alert userspace if needed. If we logged an MCE, reduce the polling
