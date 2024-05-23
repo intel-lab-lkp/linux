@@ -783,6 +783,9 @@ static void dw_pcie_link_set_max_link_width(struct dw_pcie *pci, u32 num_lanes)
 void dw_pcie_iatu_detect(struct dw_pcie *pci)
 {
 	int max_region, ob, ib;
+	struct dw_pcie_rp *pp = &pci->pp;
+	struct resource_entry *entry;
+	u64 max_mem_sz = 0;
 	u32 val, min, dir;
 	u64 max;
 
@@ -832,10 +835,25 @@ void dw_pcie_iatu_detect(struct dw_pcie *pci)
 		max = 0;
 	}
 
+	resource_list_for_each_entry(entry, &pp->bridge->windows) {
+		if (resource_type(entry->res) != IORESOURCE_MEM)
+			continue;
+		max_mem_sz = (max_mem_sz < resource_size(entry->res)) ?
+						resource_size(entry->res) : max_mem_sz;
+	}
+
+	if (max_mem_sz <= SZ_4G)
+		pci->region_limit = (max << 32) | (SZ_4G - 1);
+	else if ((max_mem_sz > SZ_4G) && (max_mem_sz <= SZ_8G))
+		pci->region_limit = (max << 32) | (SZ_8G - 1);
+	else if ((max_mem_sz > SZ_8G) && (max_mem_sz <= SZ_16G))
+		pci->region_limit = (max << 32) | (SZ_16G - 1);
+	else
+		pci->region_limit = (max << 32) | (SZ_32G - 1);
+
 	pci->num_ob_windows = ob;
 	pci->num_ib_windows = ib;
 	pci->region_align = 1 << fls(min);
-	pci->region_limit = (max << 32) | (SZ_4G - 1);
 
 	dev_info(pci->dev, "iATU: unroll %s, %u ob, %u ib, align %uK, limit %lluG\n",
 		 dw_pcie_cap_is(pci, IATU_UNROLL) ? "T" : "F",
