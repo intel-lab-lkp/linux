@@ -3453,6 +3453,12 @@ int iscsi_conn_bind(struct iscsi_cls_session *cls_session,
 	struct iscsi_conn *conn = cls_conn->dd_data;
 
 	spin_lock_bh(&session->frwd_lock);
+	if (test_bit(ISCSI_CONN_FLAG_BOUND, &conn->flags)) {
+		spin_unlock_bh(&session->frwd_lock);
+		return -EBUSY;
+	}
+
+
 	if (is_leading)
 		session->leadconn = conn;
 

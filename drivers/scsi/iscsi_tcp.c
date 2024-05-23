@@ -696,7 +696,7 @@ static void iscsi_sw_tcp_conn_stop(struct iscsi_cls_conn *cls_conn, int flag)
 	wake_up_interruptible(sk_sleep(sock->sk));
 
 	/* stop xmit side */
-	iscsi_suspend_tx(conn);
+	iscsi_conn_unbind(cls_conn, true);
 
 	/* stop recv side and release socket */
 	iscsi_sw_tcp_release_conn(conn);
