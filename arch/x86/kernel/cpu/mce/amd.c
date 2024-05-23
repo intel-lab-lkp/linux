@@ -302,6 +302,11 @@ static void smca_configure(unsigned int bank, unsigned int cpu)
 			high |= BIT(5);
 		}
 
+		if ((low & BIT(10)) && this_cpu_read(smca_thr_intr_enabled)) {
+			__set_bit(bank, this_cpu_ptr(mce_thr_intr_banks));
+			high |= BIT(8);
+		}
+
 		this_cpu_ptr(mce_banks_array)[bank].lsb_in_status = !!(low & BIT(8));
 
 		wrmsr(smca_config, low, high);
