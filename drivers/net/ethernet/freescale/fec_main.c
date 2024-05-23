@@ -4524,6 +4524,7 @@ failed_register:
 	fec_enet_mii_remove(fep);
 failed_mii_init:
 failed_irq:
+	fec_enet_free_queue(ndev);
 failed_init:
 	fec_ptp_stop(pdev);
 failed_reset:
@@ -4587,6 +4588,7 @@ fec_drv_remove(struct platform_device *pdev)
 	pm_runtime_put_noidle(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
 
+	fec_enet_free_queue(ndev);
 	free_netdev(ndev);
 }
 
