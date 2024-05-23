@@ -4,8 +4,13 @@
  * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
-#include <net/mac80211.h>
+#include <linux/bitfield.h>
 #include <linux/etherdevice.h>
+#include <linux/inetdevice.h>
+#include <net/if_inet6.h>
+#include <net/ipv6.h>
+#include <net/mac80211.h>
+
 #include "mac.h"
 #include "core.h"
 #include "debug.h"
@@ -3043,6 +3048,22 @@ static void ath12k_mac_vif_setup_ps(struct ath12k_vif *arvif)
 			    psmode, arvif->vdev_id, ret);
 }
 
+static struct ath12k_arp_ns_offload *
+ath12k_mac_arvif_get_arp_ns_offload(struct ath12k_vif *arvif)
+{
+	if (!arvif->arp_ns_offload)
+		arvif->arp_ns_offload = kzalloc(sizeof(*arvif->arp_ns_offload),
+						GFP_ATOMIC);
+
+	return arvif->arp_ns_offload;
+}
+
+static void ath12k_mac_arvif_put_arp_ns_offload(struct ath12k_vif *arvif)
+{
+	kfree(arvif->arp_ns_offload);
+	arvif->arp_ns_offload = NULL;
+}
+
 static void ath12k_mac_bss_info_changed(struct ath12k *ar,
 					struct ath12k_vif *arvif,
 					struct ieee80211_bss_conf *info,
@@ -3050,11 +3071,13 @@ static void ath12k_mac_bss_info_changed(struct ath12k *ar,
 {
 	struct ieee80211_vif *vif = arvif->vif;
 	struct ieee80211_vif_cfg *vif_cfg = &vif->cfg;
+	struct ath12k_arp_ns_offload *offload;
 	struct cfg80211_chan_def def;
 	u32 param_id, param_value;
 	enum nl80211_band band;
 	u32 vdev_param;
 	int mcast_rate;
+	u32 ipv4_cnt;
 	u32 preamble;
 	u16 hw_value;
 	u16 bitrate;
@@ -3324,6 +3347,25 @@ static void ath12k_mac_bss_info_changed(struct ath12k *ar,
 	    ar->ab->hw_params->supports_sta_ps) {
 		arvif->ps = vif_cfg->ps;
 		ath12k_mac_vif_setup_ps(arvif);
+	}
+
+	if (changed & BSS_CHANGED_ARP_FILTER) {
+		offload = ath12k_mac_arvif_get_arp_ns_offload(arvif);
+		if (offload) {
+			ipv4_cnt = min(vif_cfg->arp_addr_cnt, ATH12K_IPV4_MAX_COUNT);
+			memcpy(offload->ipv4_addr, vif_cfg->arp_addr_list,
+			       ipv4_cnt * sizeof(u32));
+			memcpy(offload->mac_addr, vif->addr, ETH_ALEN);
+			offload->ipv4_count = ipv4_cnt;
+
+			ath12k_dbg(ar->ab, ATH12K_DBG_MAC,
+				   "mac arp_addr_cnt %d vif->addr %pM, offload_addr %pI4\n",
+				   vif_cfg->arp_addr_cnt,
+				   vif->addr, offload->ipv4_addr);
+		} else {
+			ath12k_warn(ar->ab, "failed to get arp ns offload for vdev %u\n",
+				    arvif->vdev_id);
+		}
 	}
 }
 
@@ -6819,6 +6861,8 @@ static void ath12k_mac_op_remove_interface(struct ieee80211_hw *hw,
 	struct ath12k *ar;
 	int ret;
 
+	ath12k_mac_arvif_put_arp_ns_offload(arvif);
+
 	if (!arvif->is_created) {
 		/* if we cached some config but never received assign chanctx,
 		 * free the allocated cache.
@@ -8505,6 +8549,113 @@ exit:
 	return ret;
 }
 
+static void ath12k_mac_generate_ns_mc_addr(struct ath12k *ar,
+					   struct ath12k_arp_ns_offload *offload)
+{
+	int i;
+
+	for (i = 0; i < offload->ipv6_count; i++) {
+		offload->self_ipv6_addr[i][0] = 0xff;
+		offload->self_ipv6_addr[i][1] = 0x02;
+		offload->self_ipv6_addr[i][11] = 0x01;
+		offload->self_ipv6_addr[i][12] = 0xff;
+		offload->self_ipv6_addr[i][13] =
+					offload->ipv6_addr[i][13];
+		offload->self_ipv6_addr[i][14] =
+					offload->ipv6_addr[i][14];
+		offload->self_ipv6_addr[i][15] =
+					offload->ipv6_addr[i][15];
+		ath12k_dbg(ar->ab, ATH12K_DBG_MAC, "NS solicited addr %pI6\n",
+			   offload->self_ipv6_addr[i]);
+	}
+}
+
+static __maybe_unused void ath12k_mac_op_ipv6_changed(struct ieee80211_hw *hw,
+						      struct ieee80211_vif *vif,
+						      struct inet6_dev *idev)
+{
+	struct ath12k_vif *arvif = ath12k_vif_to_arvif(vif);
+	struct ath12k_hw *ah = ath12k_hw_to_ah(hw);
+	struct ath12k *ar = ath12k_ah_to_ar(ah, 0);
+	struct ath12k_arp_ns_offload *offload;
+	struct inet6_ifaddr *ifa6;
+	struct ifacaddr6 *ifaca6;
+	struct list_head *p;
+	u32 count, scope;
+
+	ath12k_dbg(ar->ab, ATH12K_DBG_MAC, "mac op ipv6 changed\n");
+
+	offload = ath12k_mac_arvif_get_arp_ns_offload(arvif);
+	if (!offload) {
+		ath12k_warn(ar->ab, "failed to get arp ns offload for vdev %u\n",
+			    arvif->vdev_id);
+		return;
+	}
+
+	count = 0;
+
+	memset(offload->ipv6_addr, 0, sizeof(offload->ipv6_addr));
+	memset(offload->self_ipv6_addr, 0, sizeof(offload->self_ipv6_addr));
+	memcpy(offload->mac_addr, vif->addr, ETH_ALEN);
+
+	read_lock_bh(&idev->lock);
+
+	/* get unicast address */
+	list_for_each(p, &idev->addr_list) {
+		if (count >= ATH12K_IPV6_MAX_COUNT)
+			goto unlock;
+
+		ifa6 = list_entry(p, struct inet6_ifaddr, if_list);
+		if (ifa6->flags & IFA_F_DADFAILED)
+			continue;
+
+		scope = ipv6_addr_src_scope(&ifa6->addr);
+		if (scope != IPV6_ADDR_SCOPE_LINKLOCAL &&
+		    scope != IPV6_ADDR_SCOPE_GLOBAL) {
+			ath12k_dbg(ar->ab, ATH12K_DBG_MAC,
+				   "Unsupported ipv6 scope: %d\n", scope);
+			continue;
+		}
+
+		memcpy(offload->ipv6_addr[count], &ifa6->addr.s6_addr,
+		       sizeof(ifa6->addr.s6_addr));
+		offload->ipv6_type[count] = ATH12K_IPV6_UC_TYPE;
+		ath12k_dbg(ar->ab, ATH12K_DBG_MAC, "mac count %d ipv6 uc %pI6 scope %d\n",
+			   count, offload->ipv6_addr[count],
+			   scope);
+		count++;
+	}
+
+	/* get anycast address */
+	for (ifaca6 = rcu_dereference(idev->ac_list); ifaca6;
+	     ifaca6 = rcu_dereference(ifaca6->aca_next)) {
+		if (count >= ATH12K_IPV6_MAX_COUNT)
+			goto unlock;
+
+		scope = ipv6_addr_src_scope(&ifaca6->aca_addr);
+		if (scope != IPV6_ADDR_SCOPE_LINKLOCAL &&
+		    scope != IPV6_ADDR_SCOPE_GLOBAL) {
+			ath12k_dbg(ar->ab, ATH12K_DBG_MAC,
+				   "Unsupported ipv scope: %d\n", scope);
+			continue;
+		}
+
+		memcpy(offload->ipv6_addr[count], &ifaca6->aca_addr,
+		       sizeof(ifaca6->aca_addr));
+		offload->ipv6_type[count] = ATH12K_IPV6_AC_TYPE;
+		ath12k_dbg(ar->ab, ATH12K_DBG_MAC, "mac count %d ipv6 ac %pI6 scope %d\n",
+			   count, offload->ipv6_addr[count],
+			   scope);
+		count++;
+	}
+
+unlock:
+	read_unlock_bh(&idev->lock);
+
+	offload->ipv6_count = count;
+	ath12k_mac_generate_ns_mc_addr(ar, offload);
+}
+
 static const struct ieee80211_ops ath12k_ops = {
 	.tx				= ath12k_mac_op_tx,
 	.wake_tx_queue			= ieee80211_handle_wake_tx_queue,
@@ -8546,6 +8697,10 @@ static const struct ieee80211_ops ath12k_ops = {
 	.suspend			= ath12k_wow_op_suspend,
 	.resume				= ath12k_wow_op_resume,
 	.set_wakeup			= ath12k_wow_op_set_wakeup,
+#endif
+
+#if IS_ENABLED(CONFIG_IPV6)
+	.ipv6_addr_change		= ath12k_mac_op_ipv6_changed,
 #endif
 };
 
