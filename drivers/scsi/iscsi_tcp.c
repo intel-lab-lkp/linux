@@ -725,7 +725,7 @@ iscsi_sw_tcp_conn_bind(struct iscsi_cls_session *cls_session,
 	}
 
 	err = -EINVAL;
-	if (!sk_is_tcp(sock->sk))
+	if (!sk_is_tcp(sock->sk) || sock->sk->sk_user_data)
 		goto free_socket;
 
 	err = iscsi_conn_bind(cls_session, cls_conn, is_leading);
