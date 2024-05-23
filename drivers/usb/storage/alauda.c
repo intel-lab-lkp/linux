@@ -947,6 +947,8 @@ static int alauda_read_data(struct us_data *us, unsigned long address,
 	sg = NULL;
 
 	while (sectors > 0) {
+		if (!uzonesize)
+			return USB_STOR_TRANSPORT_ERROR;
 		unsigned int zone = lba / uzonesize; /* integer division */
 		unsigned int lba_offset = lba - (zone * uzonesize);
 		unsigned int pages;
