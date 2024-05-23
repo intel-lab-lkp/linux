@@ -322,7 +322,7 @@ void *fake_cont_thread(void *arg)
 
 void *cont_thread(void *arg)
 {
-	char buff[MSG_SIZE];
+	char buff[MSG_SIZE] = { };
 	int i, priority;
 
 	for (i = 0; i < num_cpus_to_pin; i++)
