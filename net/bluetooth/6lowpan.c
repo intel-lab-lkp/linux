@@ -295,8 +295,8 @@ static int recv_pkt(struct sk_buff *skb, struct net_device *dev,
 			goto drop;
 		}
 
-		dev->stats.rx_bytes += skb->len;
-		dev->stats.rx_packets++;
+		DEV_STATS_ADD(dev, rx_bytes, skb->len);
+		DEV_STATS_INC(dev, rx_packets);
 
 		consume_skb(local_skb);
 		consume_skb(skb);
@@ -323,8 +323,8 @@ static int recv_pkt(struct sk_buff *skb, struct net_device *dev,
 			goto drop;
 		}
 
-		dev->stats.rx_bytes += skb->len;
-		dev->stats.rx_packets++;
+		DEV_STATS_ADD(dev, rx_bytes, skb->len);
+		DEV_STATS_INC(dev, rx_packets);
 
 		consume_skb(local_skb);
 		consume_skb(skb);
@@ -336,7 +336,8 @@ static int recv_pkt(struct sk_buff *skb, struct net_device *dev,
 	return NET_RX_SUCCESS;
 
 drop:
-	dev->stats.rx_dropped++;
+
+	DEV_STATS_INC(dev, rx_dropped);
 	return NET_RX_DROP;
 }
 
@@ -445,13 +446,13 @@ static int send_pkt(struct l2cap_chan *chan, struct sk_buff *skb,
 
 	err = l2cap_chan_send(chan, &msg, skb->len);
 	if (err > 0) {
-		netdev->stats.tx_bytes += err;
-		netdev->stats.tx_packets++;
+		DEV_STATS_ADD(netdev, tx_bytes, err);
+		DEV_STATS_INC(netdev, tx_packets);
 		return 0;
 	}
 
 	if (err < 0)
-		netdev->stats.tx_errors++;
+		DEV_STATS_INC(netdev, tx_errors);
 
 	return err;
 }
