@@ -372,6 +372,73 @@ void futex_wait_queue(struct futex_hash_bucket *hb, struct futex_q *q,
 	__set_current_state(TASK_RUNNING);
 }
 
+static inline bool task_on_cpu(struct task_struct *p)
+{
+#ifdef CONFIG_SMP
+	return !!(p->on_cpu);
+#else
+	return false;
+#endif
+}
+
+static int futex_spin(struct futex_hash_bucket *hb, struct futex_q *q,
+		       struct hrtimer_sleeper *timeout, u32 uval)
+{
+	struct task_struct *p;
+	pid_t pid = uval & FUTEX_TID_MASK;
+
+	p = find_get_task_by_vpid(pid);
+
+	/* no task found, maybe it already exited */
+	if (!p) {
+		futex_q_unlock(hb);
+		return -EAGAIN;
+	}
+
+	/* can't spin in a kernel task */
+	if (unlikely(p->flags & PF_KTHREAD)) {
+		put_task_struct(p);
+		futex_q_unlock(hb);
+		return -EPERM;
+	}
+
+	futex_queue(q, hb);
+
+	if (timeout)
+		hrtimer_sleeper_start_expires(timeout, HRTIMER_MODE_ABS);
+
+	while (1) {
+		if (likely(!plist_node_empty(&q->list))) {
+			if (timeout && !timeout->task)
+				goto exit;
+
+			if (task_on_cpu(p)) {
+				/* spin */
+				continue;
+			} else {
+				/* task is not running, sleep */
+				break;
+			}
+		} else {
+			goto exit;
+		}
+	}
+
+	/* spinning didn't work, go to the normal path */
+	set_current_state(TASK_INTERRUPTIBLE|TASK_FREEZABLE);
+
+	if (likely(!plist_node_empty(&q->list))) {
+		if (!timeout || timeout->task)
+			schedule();
+	}
+
+	__set_current_state(TASK_RUNNING);
+
+exit:
+	put_task_struct(p);
+	return 0;
+}
+
 /**
  * futex_unqueue_multiple - Remove various futexes from their hash bucket
  * @v:	   The list of futexes to unqueue
@@ -665,8 +732,15 @@ retry:
 	if (ret)
 		return ret;
 
-	/* futex_queue and wait for wakeup, timeout, or a signal. */
-	futex_wait_queue(hb, &q, to);
+	if (flags & FLAGS_SPIN) {
+		ret = futex_spin(hb, &q, to, val);
+
+		if (ret)
+			return ret;
+	} else {
+		/* futex_queue and wait for wakeup, timeout, or a signal. */
+		futex_wait_queue(hb, &q, to);
+	}
 
 	/* If we were woken (and unqueued), we succeeded, whatever. */
 	if (!futex_unqueue(&q))
