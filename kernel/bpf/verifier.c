@@ -15107,7 +15107,7 @@ static int check_cond_jmp_op(struct bpf_verifier_env *env,
 	struct bpf_reg_state *eq_branch_regs;
 	struct bpf_reg_state fake_reg = {};
 	u8 opcode = BPF_OP(insn->code);
-	bool is_jmp32;
+	bool is_jmp32, ignore_pred;
 	int pred = -1;
 	int err;
 
@@ -15177,8 +15177,12 @@ static int check_cond_jmp_op(struct bpf_verifier_env *env,
 	}
 
 	is_jmp32 = BPF_CLASS(insn->code) == BPF_JMP32;
+	ignore_pred = !(!get_loop_entry(this_branch) || src_reg->precise ||
+			dst_reg->precise ||
+			(BPF_SRC(insn->code) == BPF_K && insn->imm == 0));
+
 	pred = is_branch_taken(dst_reg, src_reg, opcode, is_jmp32);
-	if (pred >= 0) {
+	if (pred >= 0 && !ignore_pred) {
 		/* If we get here with a dst_reg pointer type it is because
 		 * above is_branch_taken() special cased the 0 comparison.
 		 */
@@ -15189,6 +15193,14 @@ static int check_cond_jmp_op(struct bpf_verifier_env *env,
 			err = mark_chain_precision(env, insn->src_reg);
 		if (err)
 			return err;
+	}
+
+	if (pred < 0 || ignore_pred) {
+		other_branch = push_stack(env, *insn_idx + insn->off + 1, *insn_idx,
+					  false);
+		if (!other_branch)
+			return -EFAULT;
+		other_branch_regs = other_branch->frame[other_branch->curframe]->regs;
 	}
 
 	if (pred == 1) {
@@ -15202,8 +15214,13 @@ static int check_cond_jmp_op(struct bpf_verifier_env *env,
 			return -EFAULT;
 		if (env->log.level & BPF_LOG_LEVEL)
 			print_insn_state(env, this_branch->frame[this_branch->curframe]);
-		*insn_idx += insn->off;
-		return 0;
+		if (ignore_pred) {
+			__mark_reg_unknown(env, dst_reg);
+			__mark_reg_unknown(env, src_reg);
+		} else {
+			*insn_idx += insn->off;
+			return 0;
+		}
 	} else if (pred == 0) {
 		/* Only follow the fall-through branch, since that's where the
 		 * program will go. If needed, push the goto branch for
@@ -15216,14 +15233,14 @@ static int check_cond_jmp_op(struct bpf_verifier_env *env,
 			return -EFAULT;
 		if (env->log.level & BPF_LOG_LEVEL)
 			print_insn_state(env, this_branch->frame[this_branch->curframe]);
-		return 0;
+		if (ignore_pred) {
+			__mark_reg_unknown(env, &other_branch_regs[insn->dst_reg]);
+			if (BPF_SRC(insn->code) == BPF_X)
+				__mark_reg_unknown(env, &other_branch_regs[insn->src_reg]);
+		} else {
+			return 0;
+		}
 	}
-
-	other_branch = push_stack(env, *insn_idx + insn->off + 1, *insn_idx,
-				  false);
-	if (!other_branch)
-		return -EFAULT;
-	other_branch_regs = other_branch->frame[other_branch->curframe]->regs;
 
 	if (BPF_SRC(insn->code) == BPF_X) {
 		err = reg_set_min_max(env,
@@ -17217,6 +17234,38 @@ static int propagate_precision(struct bpf_verifier_env *env,
 	return 0;
 }
 
+static void find_precise_reg(struct bpf_reg_state *cur_reg)
+{
+	struct bpf_reg_state *reg;
+
+	reg = cur_reg->parent;
+	while (reg && reg->type == SCALAR_VALUE) {
+		/*
+		 * propagate_liveness() might not have happened for this states yet.
+		 * Intermediate reg missing LIVE_READ mark is not an issue.
+		 */
+		if (reg->precise && (reg->live & REG_LIVE_READ)) {
+			cur_reg->precise = true;
+			break;
+		}
+		reg = reg->parent;
+	}
+}
+
+static void find_precision(struct bpf_verifier_state *cur_state)
+{
+	struct bpf_func_state *state;
+	struct bpf_reg_state *reg;
+
+	if (!get_loop_entry(cur_state))
+		return;
+	bpf_for_each_reg_in_vstate(cur_state, state, reg, ({
+		if (reg->type != SCALAR_VALUE || reg->precise)
+			continue;
+		find_precise_reg(reg);
+	}));
+}
+
 static bool states_maybe_looping(struct bpf_verifier_state *old,
 				 struct bpf_verifier_state *cur)
 {
@@ -17409,6 +17458,7 @@ static int is_state_visited(struct bpf_verifier_env *env, int insn_idx)
 			 * => unsafe memory access at 11 would not be caught.
 			 */
 			if (is_iter_next_insn(env, insn_idx)) {
+				update_loop_entry(cur, &sl->state);
 				if (states_equal(env, &sl->state, cur, RANGE_WITHIN)) {
 					struct bpf_func_state *cur_frame;
 					struct bpf_reg_state *iter_state, *iter_reg;
@@ -17426,15 +17476,14 @@ static int is_state_visited(struct bpf_verifier_env *env, int insn_idx)
 					spi = __get_spi(iter_reg->off + iter_reg->var_off.value);
 					iter_state = &func(env, iter_reg)->stack[spi].spilled_ptr;
 					if (iter_state->iter.state == BPF_ITER_STATE_ACTIVE) {
-						update_loop_entry(cur, &sl->state);
 						goto hit;
 					}
 				}
 				goto skip_inf_loop_check;
 			}
 			if (is_may_goto_insn_at(env, insn_idx)) {
+				update_loop_entry(cur, &sl->state);
 				if (states_equal(env, &sl->state, cur, RANGE_WITHIN)) {
-					update_loop_entry(cur, &sl->state);
 					goto hit;
 				}
 				goto skip_inf_loop_check;
@@ -18066,6 +18115,7 @@ process_bpf_exit:
 						return err;
 					break;
 				} else {
+					find_precision(env->cur_state);
 					do_print_state = true;
 					continue;
 				}
