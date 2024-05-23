@@ -15,6 +15,7 @@
 
 #include <asm/archrandom.h>
 #include <asm/coco.h>
+#include <asm/tdx.h>
 #include <asm/processor.h>
 
 enum cc_vendor cc_vendor __ro_after_init = CC_VENDOR_NONE;
@@ -25,8 +26,22 @@ static struct cc_attr_flags {
 	      __resv		: 63;
 } cc_flags;
 
+static bool noinstr intel_cc_platform_td_l2(enum cc_attr attr)
+{
+	switch (attr) {
+	case CC_ATTR_GUEST_MEM_ENCRYPT:
+	case CC_ATTR_MEM_ENCRYPT:
+		return true;
+	default:
+		return false;
+	}
+}
+
 static bool noinstr intel_cc_platform_has(enum cc_attr attr)
 {
+	if (tdx_partitioned_td_l2)
+		return intel_cc_platform_td_l2(attr);
+
 	switch (attr) {
 	case CC_ATTR_GUEST_UNROLL_STRING_IO:
 	case CC_ATTR_HOTPLUG_DISABLED:

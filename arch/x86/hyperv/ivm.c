@@ -626,7 +626,7 @@ static bool hv_is_private_mmio(u64 addr)
 	return false;
 }
 
-void __init hv_vtom_init(void)
+void __init hv_vtom_init(void) /* TODO: rename the function for TDX */
 {
 	enum hv_isolation_type type = hv_get_isolation_type();
 
@@ -650,6 +650,7 @@ void __init hv_vtom_init(void)
 
 	case HV_ISOLATION_TYPE_TDX:
 		cc_vendor = CC_VENDOR_INTEL;
+		tdx_partitioned_td_l2 = true;
 		break;
 
 	default:

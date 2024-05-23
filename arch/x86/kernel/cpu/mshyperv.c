@@ -18,6 +18,7 @@
 #include <linux/kexec.h>
 #include <linux/i8253.h>
 #include <linux/random.h>
+#include <linux/set_memory.h>
 #include <asm/processor.h>
 #include <asm/hypervisor.h>
 #include <asm/hyperv-tlfs.h>
@@ -449,8 +450,11 @@ static void __init ms_hyperv_init_platform(void)
 			ms_hyperv.hints &= ~HV_X64_APIC_ACCESS_RECOMMENDED;
 
 			if (!ms_hyperv.paravisor_present) {
-				/* To be supported: more work is required.  */
-				ms_hyperv.features &= ~HV_MSR_REFERENCE_TSC_AVAILABLE;
+				unsigned long vaddr = (unsigned long)__start_bss_decrypted;
+				unsigned long vaddr_end = (unsigned long)__end_bss_decrypted;
+
+				for (; vaddr < vaddr_end; vaddr += PMD_SIZE)
+					set_memory_decrypted(vaddr, PMD_SIZE >> PAGE_SHIFT);
 
 				/* HV_MSR_CRASH_CTL is unsupported. */
 				ms_hyperv.misc_features &= ~HV_FEATURE_GUEST_CRASH_MSR_AVAILABLE;

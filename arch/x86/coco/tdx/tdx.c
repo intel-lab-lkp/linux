@@ -38,6 +38,8 @@
 
 #define TDREPORT_SUBTYPE_0	0
 
+bool tdx_partitioned_td_l2 __ro_after_init;
+
 /* Called from __tdx_hypercall() for unrecoverable failure */
 noinstr void __noreturn __tdx_hypercall_failed(void)
 {

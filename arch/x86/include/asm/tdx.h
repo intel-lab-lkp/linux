@@ -66,6 +66,7 @@ int tdx_mcall_get_report0(u8 *reportdata, u8 *tdreport);
 
 u64 tdx_hcall_get_quote(u8 *buf, size_t size);
 
+extern bool tdx_partitioned_td_l2;
 #else
 
 static inline void tdx_early_init(void) { };

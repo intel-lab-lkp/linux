@@ -25,6 +25,7 @@
 #include <asm/fixmap.h>
 #include <asm/setup.h>
 #include <asm/mem_encrypt.h>
+#include <asm/tdx.h>
 #include <asm/bootparam.h>
 #include <asm/set_memory.h>
 #include <asm/cacheflush.h>
@@ -529,7 +530,7 @@ void __init mem_encrypt_free_decrypted_mem(void)
 	 * CC_ATTR_MEM_ENCRYPT, aren't necessarily equivalent in a Hyper-V VM
 	 * using vTOM, where sme_me_mask is always zero.
 	 */
-	if (sme_me_mask) {
+	if (sme_me_mask || (cc_vendor == CC_VENDOR_INTEL && !tdx_partitioned_td_l2)) {
 		r = set_memory_encrypted(vaddr, npages);
 		if (r) {
 			pr_warn("failed to free unused decrypted pages\n");
