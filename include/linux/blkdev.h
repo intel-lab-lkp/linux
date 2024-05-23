@@ -316,7 +316,8 @@ struct queue_limits {
 	unsigned char		misaligned;
 	unsigned char		discard_misaligned;
 	unsigned char		raid_partial_stripes_expensive;
-	bool			zoned;
+	bool			zoned:1;
+	bool			stacking:1;
 	unsigned int		max_open_zones;
 	unsigned int		max_active_zones;
 

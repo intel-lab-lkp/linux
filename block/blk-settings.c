@@ -35,6 +35,7 @@ EXPORT_SYMBOL_GPL(blk_queue_rq_timeout);
 void blk_set_stacking_limits(struct queue_limits *lim)
 {
 	memset(lim, 0, sizeof(*lim));
+	lim->stacking = true;
 	lim->logical_block_size = SECTOR_SIZE;
 	lim->physical_block_size = SECTOR_SIZE;
 	lim->io_min = SECTOR_SIZE;
@@ -103,7 +104,7 @@ static int blk_validate_zoned_limits(struct queue_limits *lim)
  */
 static int blk_validate_limits(struct queue_limits *lim)
 {
-	unsigned int max_hw_sectors;
+	unsigned int max_hw_sectors, stacked_max_hw_sectors = 0;
 
 	/*
 	 * Unless otherwise specified, default to 512 byte logical blocks and a
@@ -120,6 +121,23 @@ static int blk_validate_limits(struct queue_limits *lim)
 	 */
 	if (lim->io_min < lim->physical_block_size)
 		lim->io_min = lim->physical_block_size;
+
+
+	/*
+	 * For stacked block devices, don't throw-away stacked max_sectors.
+	 */
+	if (lim->stacking && lim->max_hw_sectors) {
+		/*
+		 * lim->max_sectors and lim->max_hw_sectors were already
+		 * validated, relative underlying device(s) in this stacked
+		 * block device.
+		 */
+		stacked_max_hw_sectors = lim->max_hw_sectors;
+		/*
+		 * Impose stacked max_sectors as upper-bound for code below.
+		 */
+		lim->max_hw_sectors = lim->max_sectors;
+	}
 
 	/*
 	 * max_hw_sectors has a somewhat weird default for historical reason,
@@ -154,6 +172,11 @@ static int blk_validate_limits(struct queue_limits *lim)
 	}
 	lim->max_sectors = round_down(lim->max_sectors,
 			lim->logical_block_size >> SECTOR_SHIFT);
+
+	if (stacked_max_hw_sectors) {
+		/* Restore previously validated stacked max_hw_sectors */
+		lim->max_hw_sectors = max_hw_sectors;
+	}
 
 	/*
 	 * Random default for the maximum number of segments.  Driver should not
@@ -740,11 +763,14 @@ int blk_stack_limits(struct queue_limits *t, struct queue_limits *b,
 						   b->max_secure_erase_sectors);
 	t->zone_write_granularity = max(t->zone_write_granularity,
 					b->zone_write_granularity);
-	t->zoned = max(t->zoned, b->zoned);
+	t->zoned |= b->zoned;
 	if (!t->zoned) {
 		t->zone_write_granularity = 0;
 		t->max_zone_append_sectors = 0;
 	}
+
+	t->stacking |= b->stacking;
+
 	return ret;
 }
 EXPORT_SYMBOL(blk_stack_limits);
