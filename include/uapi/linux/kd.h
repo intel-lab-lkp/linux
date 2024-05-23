@@ -3,6 +3,7 @@
 #define _UAPI_LINUX_KD_H
 #include <linux/types.h>
 #include <linux/compiler.h>
+#include <linux/ioctl.h>
 
 /* 0x4B is 'K', to avoid collision with termios and vt */
 #define KD_IOCTL_BASE	'K'
