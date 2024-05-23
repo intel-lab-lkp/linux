@@ -7172,7 +7172,10 @@ static void intel_atomic_cleanup_work(struct work_struct *work)
 	struct drm_i915_private *i915 = to_i915(state->base.dev);
 	struct intel_crtc_state *old_crtc_state;
 	struct intel_crtc *crtc;
+	intel_wakeref_t wakeref;
 	int i;
+
+	wakeref = intel_runtime_pm_get(&i915->runtime_pm);
 
 	for_each_old_intel_crtc_in_state(state, crtc, old_crtc_state, i)
 		intel_color_cleanup_commit(old_crtc_state);
@@ -7180,6 +7183,8 @@ static void intel_atomic_cleanup_work(struct work_struct *work)
 	drm_atomic_helper_cleanup_planes(&i915->drm, &state->base);
 	drm_atomic_helper_commit_cleanup_done(&state->base);
 	drm_atomic_state_put(&state->base);
+
+	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
 }
 
 static void intel_atomic_prepare_plane_clear_colors(struct intel_atomic_state *state)
@@ -7453,8 +7458,12 @@ static void intel_atomic_commit_work(struct work_struct *work)
 {
 	struct intel_atomic_state *state =
 		container_of(work, struct intel_atomic_state, base.commit_work);
+	struct drm_i915_private *i915 = to_i915(state->base.dev);
+	intel_wakeref_t wakeref;
 
+	wakeref = intel_runtime_pm_get(&i915->runtime_pm);
 	intel_atomic_commit_tail(state);
+	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
 }
 
 static void intel_atomic_track_fbs(struct intel_atomic_state *state)
