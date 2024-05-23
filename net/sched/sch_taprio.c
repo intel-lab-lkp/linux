@@ -256,7 +256,8 @@ static int length_to_duration(struct taprio_sched *q, int len)
 
 static int duration_to_length(struct taprio_sched *q, u64 duration)
 {
-	return div_u64(duration * PSEC_PER_NSEC, atomic64_read(&q->picos_per_byte));
+	return div64_u64(duration * PSEC_PER_NSEC,
+			 atomic64_read(&q->picos_per_byte));
 }
 
 /* Sets sched->max_sdu[] and sched->max_frm_len[] to the minimum between the
