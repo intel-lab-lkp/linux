@@ -813,6 +813,8 @@ static int alauda_write_lba(struct us_data *us, u16 lba,
 	unsigned char ecc[3];
 	int i, result;
 	unsigned int uzonesize = MEDIA_INFO(us).uzonesize;
+	if (!uzonesize)
+		return USB_STOR_TRANSPORT_ERROR;
 	unsigned int zonesize = MEDIA_INFO(us).zonesize;
 	unsigned int pagesize = MEDIA_INFO(us).pagesize;
 	unsigned int blocksize = MEDIA_INFO(us).blocksize;
@@ -921,6 +923,8 @@ static int alauda_read_data(struct us_data *us, unsigned long address,
 	unsigned int blocksize = MEDIA_INFO(us).blocksize;
 	unsigned int pagesize = MEDIA_INFO(us).pagesize;
 	unsigned int uzonesize = MEDIA_INFO(us).uzonesize;
+	if (!uzonesize)
+		return USB_STOR_TRANSPORT_ERROR;
 	struct scatterlist *sg;
 	int result;
 
