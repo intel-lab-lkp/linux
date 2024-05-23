@@ -637,7 +637,8 @@ static noinstr void mce_read_aux(struct mce *m, int i)
 	if (m->status & MCI_STATUS_MISCV)
 		m->misc = mce_rdmsrl(mca_msr_reg(i, MCA_MISC));
 
-	if (m->status & MCI_STATUS_ADDRV) {
+	/* Don't overwrite an address value that was saved earlier. */
+	if (m->status & MCI_STATUS_ADDRV && !m->addr) {
 		m->addr = mce_rdmsrl(mca_msr_reg(i, MCA_ADDR));
 
 		/*
@@ -668,6 +669,35 @@ static void reset_thr_limit(unsigned int bank)
 
 DEFINE_PER_CPU(unsigned, mce_poll_count);
 
+static bool smca_log_poll_error(struct mce *m, u32 *status_reg)
+{
+	/*
+	 * If this is a deferred error found in MCA_STATUS, then clear
+	 * the redundant data from the MCA_DESTAT register.
+	 */
+	if (m->status & MCI_STATUS_VAL) {
+		if (m->status & MCI_STATUS_DEFERRED)
+			mce_wrmsrl(MSR_AMD64_SMCA_MCx_DESTAT(m->bank), 0);
+
+		return true;
+	}
+
+	/*
+	 * If the MCA_DESTAT register has valid data, then use
+	 * it as the status register.
+	 */
+	*status_reg = MSR_AMD64_SMCA_MCx_DESTAT(m->bank);
+	m->status = mce_rdmsrl(*status_reg);
+
+	if (!(m->status & MCI_STATUS_VAL))
+		return false;
+
+	if (m->status & MCI_STATUS_ADDRV)
+		m->addr = mce_rdmsrl(MSR_AMD64_SMCA_MCx_DEADDR(m->bank));
+
+	return true;
+}
+
 static bool ser_log_poll_error(struct mce *m)
 {
 	/* Log "not enabled" (speculative) errors */
@@ -684,8 +714,11 @@ static bool ser_log_poll_error(struct mce *m)
 	return false;
 }
 
-static bool log_poll_error(enum mcp_flags flags, struct mce *m)
+static bool log_poll_error(enum mcp_flags flags, struct mce *m, u32 *status_reg)
 {
+	if (mce_flags.smca)
+		return smca_log_poll_error(m, status_reg);
+
 	/* If this entry is not valid, ignore it. */
 	if (!(m->status & MCI_STATUS_VAL))
 		return false;
@@ -724,6 +757,7 @@ static bool log_poll_error(enum mcp_flags flags, struct mce *m)
 void machine_check_poll(enum mcp_flags flags, mce_banks_t *b)
 {
 	struct mce_bank *mce_banks = this_cpu_ptr(mce_banks_array);
+	u32 status_reg;
 	struct mce m;
 	int i;
 
@@ -736,12 +770,14 @@ void machine_check_poll(enum mcp_flags flags, mce_banks_t *b)
 		if (!mce_banks[i].ctl || !test_bit(i, *b))
 			continue;
 
+		status_reg = mca_msr_reg(i, MCA_STATUS);
+
 		m.misc = 0;
 		m.addr = 0;
 		m.bank = i;
 
 		barrier();
-		m.status = mce_rdmsrl(mca_msr_reg(i, MCA_STATUS));
+		m.status = mce_rdmsrl(status_reg);
 
 		/*
 		 * Update storm tracking here, before checking for the
@@ -753,7 +789,7 @@ void machine_check_poll(enum mcp_flags flags, mce_banks_t *b)
 		if (!mca_cfg.cmci_disabled)
 			mce_track_storm(&m);
 
-		if (!log_poll_error(flags, &m))
+		if (!log_poll_error(flags, &m, &status_reg))
 			continue;
 
 		if (flags & MCP_DONTLOG)
@@ -780,7 +816,7 @@ clear_it:
 		/*
 		 * Clear state for this bank.
 		 */
-		mce_wrmsrl(mca_msr_reg(i, MCA_STATUS), 0);
+		mce_wrmsrl(status_reg, 0);
 	}
 
 	/*
