@@ -411,6 +411,8 @@ static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 	unsigned long iova;
 	struct arm_smmu_domain *smmu_domain = dev;
 	struct arm_smmu_device *smmu = smmu_domain->smmu;
+	static DEFINE_RATELIMIT_STATE(rs, DEFAULT_RATELIMIT_INTERVAL,
+				      DEFAULT_RATELIMIT_BURST);
 	int idx = smmu_domain->cfg.cbndx;
 	int ret;
 
@@ -425,10 +427,53 @@ static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 	ret = report_iommu_fault(&smmu_domain->domain, NULL, iova,
 		fsynr & ARM_SMMU_FSYNR0_WNR ? IOMMU_FAULT_WRITE : IOMMU_FAULT_READ);
 
-	if (ret == -ENOSYS)
-		dev_err_ratelimited(smmu->dev,
-		"Unhandled context fault: fsr=0x%x, iova=0x%08lx, fsynr=0x%x, cbfrsynra=0x%x, cb=%d\n",
-			    fsr, iova, fsynr, cbfrsynra, idx);
+	if (ret == -ENOSYS && __ratelimit(&rs)) {
+		static const struct {
+			u32 mask; const char *name;
+		} fsr_bits[] = {
+			{ ARM_SMMU_FSR_MULTI,  "MULTI" },
+			{ ARM_SMMU_FSR_SS,     "SS"    },
+			{ ARM_SMMU_FSR_UUT,    "UUT"   },
+			{ ARM_SMMU_FSR_ASF,    "ASF"   },
+			{ ARM_SMMU_FSR_TLBLKF, "TLBLKF" },
+			{ ARM_SMMU_FSR_TLBMCF, "TLBMCF" },
+			{ ARM_SMMU_FSR_EF,     "EF"     },
+			{ ARM_SMMU_FSR_PF,     "PF"     },
+			{ ARM_SMMU_FSR_AFF,    "AFF"    },
+			{ ARM_SMMU_FSR_TF,     "TF"     },
+		}, fsynr0_bits[] = {
+			{ ARM_SMMU_FSYNR0_WNR,    "WNR"    },
+			{ ARM_SMMU_FSYNR0_PNU,    "PNU"    },
+			{ ARM_SMMU_FSYNR0_IND,    "IND"    },
+			{ ARM_SMMU_FSYNR0_NSATTR, "NSATTR" },
+			{ ARM_SMMU_FSYNR0_PTWF,   "PTWF"   },
+			{ ARM_SMMU_FSYNR0_AFR,    "AFR"    },
+		};
+
+		pr_err("%s %s: Unhandled context fault: fsr=0x%x (",
+		       dev_driver_string(smmu->dev), dev_name(smmu->dev), fsr);
+
+		for (int i = 0, n = 0; i < ARRAY_SIZE(fsr_bits); i++) {
+			if (fsr & fsr_bits[i].mask) {
+				pr_cont("%s%s", (n > 0) ? "|" : "", fsr_bits[i].name);
+				n++;
+			}
+		}
+
+		pr_cont("), iova=0x%08lx, fsynr=0x%x (S1CBNDX=%u", iova, fsynr,
+			(fsynr >> 16) & 0xff);
+
+		for (int i = 0; i < ARRAY_SIZE(fsynr0_bits); i++) {
+			if (fsynr & fsynr0_bits[i].mask) {
+				pr_cont("|%s", fsynr0_bits[i].name);
+			}
+		}
+
+		pr_cont("|PLVL=%u), cbfrsynra=0x%x, cb=%d\n",
+			fsynr & 0x3,   /* FSYNR0.PLV */
+			cbfrsynra, idx);
+
+	}
 
 	arm_smmu_cb_write(smmu, idx, ARM_SMMU_CB_FSR, fsr);
 	return IRQ_HANDLED;

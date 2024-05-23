@@ -224,6 +224,11 @@ enum arm_smmu_cbar_type {
 
 #define ARM_SMMU_CB_FSYNR0		0x68
 #define ARM_SMMU_FSYNR0_WNR		BIT(4)
+#define ARM_SMMU_FSYNR0_PNU		BIT(5)
+#define ARM_SMMU_FSYNR0_IND		BIT(6)
+#define ARM_SMMU_FSYNR0_NSATTR		BIT(8)
+#define ARM_SMMU_FSYNR0_PTWF		BIT(10)
+#define ARM_SMMU_FSYNR0_AFR		BIT(11)
 
 #define ARM_SMMU_CB_FSYNR1		0x6c
 
