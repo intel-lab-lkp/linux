@@ -52,6 +52,12 @@ struct drm_scanout_buffer {
 	unsigned int pitch[DRM_FORMAT_MAX_PLANES];
 
 	/**
+	 * @private: Optional pointer to some private data you want to pass to
+	 * the set_pixel() function.
+	 */
+	void *private;
+
+	/**
 	 * @set_pixel: Optional function, to set a pixel color on the
 	 * framebuffer. It allows to handle special tiling format inside the
 	 * driver.
