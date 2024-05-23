@@ -265,8 +265,8 @@ static bool qcom_geni_serial_secondary_active(struct uart_port *uport)
 	return readl(uport->membase + SE_GENI_STATUS) & S_GENI_CMD_ACTIVE;
 }
 
-static bool qcom_geni_serial_poll_bit(struct uart_port *uport,
-				int offset, int field, bool set)
+static bool qcom_geni_serial_poll_bitfield(struct uart_port *uport,
+					   int offset, int field, u32 val)
 {
 	u32 reg;
 	struct qcom_geni_serial_port *port;
@@ -295,12 +295,18 @@ static bool qcom_geni_serial_poll_bit(struct uart_port *uport,
 	timeout_us = DIV_ROUND_UP(timeout_us, 10) * 10;
 	while (timeout_us) {
 		reg = readl(uport->membase + offset);
-		if ((bool)(reg & field) == set)
+		if ((reg & field) == val)
 			return true;
 		udelay(10);
 		timeout_us -= 10;
 	}
 	return false;
+}
+
+static bool qcom_geni_serial_poll_bit(struct uart_port *uport,
+				      int offset, int field, bool set)
+{
+	return qcom_geni_serial_poll_bitfield(uport, offset, field, set ? field : 0);
 }
 
 static void qcom_geni_serial_setup_tx(struct uart_port *uport, u32 xmit_size)
@@ -675,6 +681,31 @@ static void qcom_geni_serial_stop_tx_fifo(struct uart_port *uport)
 	if (!qcom_geni_serial_main_active(uport))
 		return;
 
+	/*
+	 * Wait until the FIFO has been drained. We've already taken bytes out
+	 * of the higher level queue in qcom_geni_serial_send_chunk_fifo() so
+	 * if we don't drain the FIFO but send the "cancel" below they seem to
+	 * get lost.
+	 */
+	qcom_geni_serial_poll_bitfield(uport, SE_GENI_TX_FIFO_STATUS, TX_FIFO_WC, 0);
+
+	/*
+	 * If we send the cancel immediately after the FIFO reports that it's
+	 * empty then bytes still seem to get lost. From trial and error, it
+	 * appears that a small delay here keeps bytes from being lost and
+	 * there is (apparently) no bit that we can poll instead of this.
+	 * Specifically it can be noted that the sequencer is still "active"
+	 * if it's waiting for us to send it more bytes from the current
+	 * transfer.
+	 */
+	mdelay(1);
+
+	/*
+	 * Cancel the current command. After this the main sequencer will
+	 * stop reporting that it's active and we'll have to start a new
+	 * transfer command. If the cancel doesn't take, we'll also send an
+	 * abort.
+	 */
 	geni_se_cancel_m_cmd(&port->se);
 	if (!qcom_geni_serial_poll_bit(uport, SE_GENI_M_IRQ_STATUS,
 						M_CMD_CANCEL_EN, true)) {
@@ -684,6 +715,14 @@ static void qcom_geni_serial_stop_tx_fifo(struct uart_port *uport)
 		writel(M_CMD_ABORT_EN, uport->membase + SE_GENI_M_IRQ_CLEAR);
 	}
 	writel(M_CMD_CANCEL_EN, uport->membase + SE_GENI_M_IRQ_CLEAR);
+
+	/*
+	 * We've cancelled the current command. "tx_remaining" stores how
+	 * many bytes are left to finish in the current command so we know
+	 * when to start a new command. Since the command was cancelled we
+	 * need to zero "tx_remaining".
+	 */
+	port->tx_remaining = 0;
 }
 
 static void qcom_geni_serial_handle_rx_fifo(struct uart_port *uport, bool drop)
