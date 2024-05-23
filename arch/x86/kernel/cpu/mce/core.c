@@ -660,6 +660,12 @@ static noinstr void mce_read_aux(struct mce *m, int i)
 	}
 }
 
+static void reset_thr_limit(unsigned int bank)
+{
+	if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
+		return amd_reset_thr_limit(bank);
+}
+
 DEFINE_PER_CPU(unsigned, mce_poll_count);
 
 static bool ser_log_poll_error(struct mce *m)
@@ -769,6 +775,8 @@ void machine_check_poll(enum mcp_flags flags, mce_banks_t *b)
 			mce_log(&m);
 
 clear_it:
+		reset_thr_limit(i);
+
 		/*
 		 * Clear state for this bank.
 		 */
