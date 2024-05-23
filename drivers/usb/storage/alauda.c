@@ -816,8 +816,10 @@ static int alauda_write_lba(struct us_data *us, u16 lba,
 	unsigned int zonesize = MEDIA_INFO(us).zonesize;
 	unsigned int pagesize = MEDIA_INFO(us).pagesize;
 	unsigned int blocksize = MEDIA_INFO(us).blocksize;
-	unsigned int lba_offset = lba % uzonesize;
 	unsigned int new_pba_offset;
+	if (!uzonesize)
+		return USB_STOR_TRANSPORT_ERROR;
+	unsigned int lba_offset = lba % uzonesize;
 	unsigned int zone = lba / uzonesize;
 
 	alauda_ensure_map_for_zone(us, zone);
@@ -923,6 +925,8 @@ static int alauda_read_data(struct us_data *us, unsigned long address,
 	unsigned int uzonesize = MEDIA_INFO(us).uzonesize;
 	struct scatterlist *sg;
 	int result;
+	if (!uzonesize)
+		return USB_STOR_TRANSPORT_ERROR;
 
 	/*
 	 * Since we only read in one block at a time, we have to create
