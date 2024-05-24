@@ -22,7 +22,7 @@ void *kmalloc(size_t size, gfp_t gfp)
 	uatomic_inc(&kmalloc_nr_allocated);
 	if (kmalloc_verbose)
 		printf("Allocating %p from malloc\n", ret);
-	if (gfp & __GFP_ZERO)
+	if (gfp & __GFP_ZERO && ret)
 		memset(ret, 0, size);
 	return ret;
 }
