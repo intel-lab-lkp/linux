@@ -95,14 +95,6 @@ static void xe_ggtt_clear(struct xe_ggtt *ggtt, u64 start, u64 size)
 	}
 }
 
-static void ggtt_fini_early(struct drm_device *drm, void *arg)
-{
-	struct xe_ggtt *ggtt = arg;
-
-	mutex_destroy(&ggtt->lock);
-	drm_mm_takedown(&ggtt->mm);
-}
-
 static void ggtt_fini(struct drm_device *drm, void *arg)
 {
 	struct xe_ggtt *ggtt = arg;
@@ -140,6 +132,7 @@ int xe_ggtt_init_early(struct xe_ggtt *ggtt)
 	struct xe_device *xe = tile_to_xe(ggtt->tile);
 	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
 	unsigned int gsm_size;
+	int err;
 
 	if (IS_SRIOV_VF(xe))
 		gsm_size = SZ_8M; /* GGTT is expected to be 4GiB */
@@ -188,12 +181,18 @@ int xe_ggtt_init_early(struct xe_ggtt *ggtt)
 	else
 		ggtt->pt_ops = &xelp_pt_ops;
 
-	drm_mm_init(&ggtt->mm, xe_wopcm_size(xe),
-		    ggtt->size - xe_wopcm_size(xe));
-	mutex_init(&ggtt->lock);
+	err = drmm_mm_init(&xe->drm, &ggtt->mm, xe_wopcm_size(xe),
+			   ggtt->size - xe_wopcm_size(xe));
+	if (err)
+		return err;
+
+	err = drmm_mutex_init(&xe->drm, &ggtt->lock);
+	if (err)
+		return err;
+
 	primelockdep(ggtt);
 
-	return drmm_add_action_or_reset(&xe->drm, ggtt_fini_early, ggtt);
+	return 0;
 }
 
 static void xe_ggtt_invalidate(struct xe_ggtt *ggtt);
