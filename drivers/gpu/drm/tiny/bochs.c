@@ -547,13 +547,15 @@ static int bochs_kms_init(struct bochs_device *bochs)
 	bochs->dev->mode_config.funcs = &bochs_mode_funcs;
 
 	bochs_connector_init(bochs->dev);
-	drm_simple_display_pipe_init(bochs->dev,
+	ret = drm_simple_display_pipe_init(bochs->dev,
 				     &bochs->pipe,
 				     &bochs_pipe_funcs,
 				     bochs_formats,
 				     ARRAY_SIZE(bochs_formats),
 				     NULL,
 				     &bochs->connector);
+	if (ret)
+		return ret;
 
 	drm_mode_config_reset(bochs->dev);
 
