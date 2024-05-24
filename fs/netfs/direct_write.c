@@ -69,7 +69,7 @@ static ssize_t netfs_unbuffered_write_iter_locked(struct kiocb *iocb, struct iov
 		 */
 		if (async || user_backed_iter(iter)) {
 			n = netfs_extract_user_iter(iter, len, &wreq->iter, 0);
-			if (n < 0) {
+			if (n <= 0) {
 				ret = n;
 				goto out;
 			}
