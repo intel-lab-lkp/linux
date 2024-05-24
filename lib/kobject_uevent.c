@@ -434,7 +434,7 @@ static void zap_modalias_env(struct kobj_uevent_env *env)
 
 		if (i != env->envp_idx - 1) {
 			memmove(env->envp[i], env->envp[i + 1],
-				env->buflen - len);
+				env->buf + env->buflen - env->envp[i + 1]);
 
 			for (j = i; j < env->envp_idx - 1; j++)
 				env->envp[j] = env->envp[j + 1] - len;
