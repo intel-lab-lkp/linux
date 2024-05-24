@@ -339,11 +339,13 @@ bool sch_direct_xmit(struct sk_buff *skb, struct Qdisc *q,
 
 	if (likely(skb)) {
 		HARD_TX_LOCK(dev, txq, smp_processor_id());
-		if (!netif_xmit_frozen_or_stopped(txq))
+		if (!netif_xmit_frozen_or_stopped(txq)) {
+			dev_xmit_recursion_inc();
 			skb = dev_hard_start_xmit(skb, dev, txq, &ret);
-		else
+			dev_xmit_recursion_dec();
+		} else {
 			qdisc_maybe_clear_missed(q, txq);
-
+		}
 		HARD_TX_UNLOCK(dev, txq);
 	} else {
 		if (root_lock)
