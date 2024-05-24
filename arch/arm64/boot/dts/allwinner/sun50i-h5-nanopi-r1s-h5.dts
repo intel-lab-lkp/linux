@@ -146,11 +146,15 @@
 		reg = <0x51>;
 		pagesize = <16>;
 		read-only;
-		#address-cells = <1>;
-		#size-cells = <1>;
 
-		eth_mac1: mac-address@fa {
-			reg = <0xfa 0x06>;
+		nvmem-layout {
+			compatible = "fixed-layout";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			eth_mac1: mac-address@fa {
+				reg = <0xfa 0x06>;
+			};
 		};
 	};
 };
