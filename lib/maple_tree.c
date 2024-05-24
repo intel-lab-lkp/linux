@@ -3515,7 +3515,7 @@ static inline void mas_store_root(struct ma_state *mas, void *entry)
 {
 	if (likely((mas->last != 0) || (mas->index != 0)))
 		mas_root_expand(mas, entry);
-	else if (((unsigned long) (entry) & 3) == 2)
+        else if (xa_is_internal(entry))
 		mas_root_expand(mas, entry);
 	else {
 		rcu_assign_pointer(mas->tree->ma_root, entry);
