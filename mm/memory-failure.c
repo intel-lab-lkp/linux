@@ -294,14 +294,8 @@ int hwpoison_filter(struct page *p)
 
 	return 0;
 }
-#else
-int hwpoison_filter(struct page *p)
-{
-	return 0;
-}
-#endif
-
 EXPORT_SYMBOL_GPL(hwpoison_filter);
+#endif
 
 /*
  * Kill all processes that have a poisoned page mapped and then isolate
