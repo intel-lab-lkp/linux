@@ -13,6 +13,7 @@
 #include <linux/spinlock.h>
 
 #include <drm/drm_device.h>
+#include <drm/drm_mm.h>
 #include <drm/drm_print.h>
 
 #include "drm_internal.h"
@@ -310,3 +311,29 @@ void __drmm_mutex_release(struct drm_device *dev, void *res)
 	mutex_destroy(lock);
 }
 EXPORT_SYMBOL(__drmm_mutex_release);
+
+static void __drmm_mm_takedown(struct drm_device *dev, void *res)
+{
+	struct drm_mm *mm = res;
+
+	drm_mm_takedown(mm);
+}
+
+/**
+ * drmm_mm_init - &drm_device managed drm_mm_init()
+ * @dev: DRM device
+ * @mm: the drm_mm structure to initialize
+ * @start: start of the range managed by @mm
+ * @size: end of the range managed by @mm
+ *
+ * This is a &drm_device managed version of drm_mm_init().
+ * The initialized allocator will be cleaned up on the final drm_dev_put().
+ *
+ * Return: 0 on success, or a negative errno code otherwise.
+ */
+int drmm_mm_init(struct drm_device *dev, struct drm_mm *mm, u64 start, u64 size)
+{
+	drm_mm_init(mm, start, size);
+	return drmm_add_action_or_reset(dev, __drmm_mm_takedown, mm);
+}
+EXPORT_SYMBOL(drmm_mm_init);

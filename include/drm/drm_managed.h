@@ -8,6 +8,7 @@
 #include <linux/types.h>
 
 struct drm_device;
+struct drm_mm;
 struct mutex;
 
 typedef void (*drmres_release_t)(struct drm_device *dev, void *res);
@@ -126,5 +127,7 @@ void __drmm_mutex_release(struct drm_device *dev, void *res);
 	mutex_init(lock);						     \
 	drmm_add_action_or_reset(dev, __drmm_mutex_release, lock);	     \
 })									     \
+
+int drmm_mm_init(struct drm_device *dev, struct drm_mm *mm, u64 start, u64 size);
 
 #endif
