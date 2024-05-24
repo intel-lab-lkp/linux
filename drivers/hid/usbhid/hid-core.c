@@ -1020,6 +1020,9 @@ static int usbhid_parse(struct hid_device *hid)
 	num_descriptors = min_t(int, hdesc->bNumDescriptors,
 	       (hdesc->bLength - offset) / sizeof(struct hid_class_descriptor));
 
+	if (num_descriptors > ARRAY_SIZE(hdesc->desc))
+		num_descriptors = ARRAY_SIZE(hdesc->desc);
+
 	for (n = 0; n < num_descriptors; n++)
 		if (hdesc->desc[n].bDescriptorType == HID_DT_REPORT)
 			rsize = le16_to_cpu(hdesc->desc[n].wDescriptorLength);
