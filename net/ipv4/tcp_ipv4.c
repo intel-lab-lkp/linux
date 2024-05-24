@@ -613,10 +613,7 @@ int tcp_v4_err(struct sk_buff *skb, u32 info)
 
 		if (!sock_owned_by_user(sk)) {
 			WRITE_ONCE(sk->sk_err, err);
-
-			sk_error_report(sk);
-
-			tcp_done(sk);
+			tcp_done_with_error(sk);
 		} else {
 			WRITE_ONCE(sk->sk_err_soft, err);
 		}
