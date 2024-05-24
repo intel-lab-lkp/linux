@@ -66,6 +66,7 @@ static void _init_caps(struct __test_metadata *const _metadata, bool drop_all)
 		CAP_NET_BIND_SERVICE,
 		CAP_SYS_ADMIN,
 		CAP_SYS_CHROOT,
+		CAP_NET_RAW,
 		/* clang-format on */
 	};
 	const unsigned int noroot = SECBIT_NOROOT | SECBIT_NOROOT_LOCKED;

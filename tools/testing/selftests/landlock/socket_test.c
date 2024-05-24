@@ -9,6 +9,7 @@
 #define _GNU_SOURCE
 
 #include <errno.h>
+#include <linux/net.h>
 #include <linux/landlock.h>
 #include <sched.h>
 #include <string.h>
@@ -437,6 +438,98 @@ TEST_F(mini, ruleset_with_unknown_access)
 						      sizeof(ruleset_attr), 0));
 		EXPECT_EQ(EINVAL, errno);
 	}
+}
+
+TEST_F(mini, socket_overflow)
+{
+	const struct landlock_ruleset_attr ruleset_attr = {
+		.handled_access_socket = LANDLOCK_ACCESS_SOCKET_CREATE,
+	};
+	/*
+	 * Assuming that AF_MCTP == AF_MAX - 1 uses MCTP as protocol
+	 * with maximum family value. Appropriate сheck for this is given below.
+	 */
+	const struct landlock_socket_attr create_socket_max_family = {
+		.allowed_access = LANDLOCK_ACCESS_SOCKET_CREATE,
+		.family = AF_MCTP,
+		.type = SOCK_DGRAM,
+	};
+	/*
+	 * Assuming that SOCK_PACKET == SOCK_MAX - 1 uses PACKET socket as
+	 * socket with maximum type value. Since SOCK_MAX cannot be accessed
+	 * from selftests, this assumption is not verified.
+	 */
+	const struct landlock_socket_attr create_socket_max_type = {
+		.allowed_access = LANDLOCK_ACCESS_SOCKET_CREATE,
+		.family = AF_PACKET,
+		.type = SOCK_PACKET,
+	};
+	struct landlock_socket_attr create_socket_overflow = {
+		.allowed_access = LANDLOCK_ACCESS_SOCKET_CREATE,
+	};
+	const struct protocol_variant protocol_max_family = {
+		.family = create_socket_max_family.family,
+		.type = create_socket_max_family.type,
+	};
+	const struct protocol_variant protocol_max_type = {
+		.family = create_socket_max_type.family,
+		.type = create_socket_max_type.type,
+	};
+	const struct protocol_variant ipv4_tcp = {
+		.family = AF_INET,
+		.type = SOCK_STREAM,
+	};
+	struct service_fixture srv_max_allowed_family, srv_max_allowed_type,
+		srv_denied;
+	int ruleset_fd;
+
+	/* Checks protocol_max_family correctness. */
+	ASSERT_EQ(AF_MCTP + 1, AF_MAX);
+
+	srv_max_allowed_family.protocol = protocol_max_family;
+	srv_max_allowed_type.protocol = protocol_max_type;
+	srv_denied.protocol = ipv4_tcp;
+
+	ruleset_fd =
+		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
+	ASSERT_LE(0, ruleset_fd);
+
+	ASSERT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
+				       &create_socket_max_family, 0));
+	ASSERT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
+				       &create_socket_max_type, 0));
+
+	/* Checks the overflow variants for family, type values. */
+#define CHECK_RULE_OVERFLOW(family_val, type_val)                             \
+	do {                                                                  \
+		create_socket_overflow.family = family_val;                   \
+		create_socket_overflow.type = type_val;                       \
+		EXPECT_EQ(-1,                                                 \
+			  landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET, \
+					    &create_socket_overflow, 0));     \
+		EXPECT_EQ(EINVAL, errno);                                     \
+	} while (0)
+
+	CHECK_RULE_OVERFLOW(AF_MAX, SOCK_STREAM);
+	CHECK_RULE_OVERFLOW(AF_INET, (SOCK_PACKET + 1));
+	CHECK_RULE_OVERFLOW(AF_MAX, (SOCK_PACKET + 1));
+	CHECK_RULE_OVERFLOW(-1, SOCK_STREAM);
+	CHECK_RULE_OVERFLOW(AF_INET, -1);
+	CHECK_RULE_OVERFLOW(-1, -1);
+	CHECK_RULE_OVERFLOW(INT16_MAX + 1, INT16_MAX + 1);
+
+#undef CHECK_RULE_OVERFLOW
+
+	enforce_ruleset(_metadata, ruleset_fd);
+
+	EXPECT_EQ(0, test_socket(&srv_max_allowed_family));
+
+	/* PACKET sockets can be used only with CAP_NET_RAW. */
+	set_cap(_metadata, CAP_NET_RAW);
+	EXPECT_EQ(0, test_socket(&srv_max_allowed_type));
+	clear_cap(_metadata, CAP_NET_RAW);
+
+	EXPECT_EQ(EACCES, test_socket(&srv_denied));
 }
 
 TEST_HARNESS_MAIN
