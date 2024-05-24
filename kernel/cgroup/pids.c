@@ -186,7 +186,7 @@ revert:
 	return -EAGAIN;
 }
 
-static int pids_can_attach(struct cgroup_taskset *tset)
+static void pids_attach(struct cgroup_taskset *tset)
 {
 	struct task_struct *task;
 	struct cgroup_subsys_state *dst_css;
@@ -206,26 +206,6 @@ static int pids_can_attach(struct cgroup_taskset *tset)
 
 		pids_charge(pids, 1);
 		pids_uncharge(old_pids, 1);
-	}
-
-	return 0;
-}
-
-static void pids_cancel_attach(struct cgroup_taskset *tset)
-{
-	struct task_struct *task;
-	struct cgroup_subsys_state *dst_css;
-
-	cgroup_taskset_for_each(task, dst_css, tset) {
-		struct pids_cgroup *pids = css_pids(dst_css);
-		struct cgroup_subsys_state *old_css;
-		struct pids_cgroup *old_pids;
-
-		old_css = task_css(task, pids_cgrp_id);
-		old_pids = css_pids(old_css);
-
-		pids_charge(old_pids, 1);
-		pids_uncharge(pids, 1);
 	}
 }
 
@@ -374,8 +354,7 @@ static struct cftype pids_files[] = {
 struct cgroup_subsys pids_cgrp_subsys = {
 	.css_alloc	= pids_css_alloc,
 	.css_free	= pids_css_free,
-	.can_attach 	= pids_can_attach,
-	.cancel_attach 	= pids_cancel_attach,
+	.attach		= pids_attach,
 	.can_fork	= pids_can_fork,
 	.cancel_fork	= pids_cancel_fork,
 	.release	= pids_release,
