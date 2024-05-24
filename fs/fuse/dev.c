@@ -2377,10 +2377,22 @@ static long fuse_dev_ioctl_backing_close(struct file *file, __u32 __user *argp)
 	return fuse_backing_close(fud->fc, backing_id);
 }
 
+static inline bool fuse_device_attach_permissible(struct fuse_conn *fc)
+{
+	const struct cred *cred = current_cred();
+
+	return (uid_eq(cred->euid, fc->rescue_uid) &&
+		uid_eq(cred->suid, fc->rescue_uid) &&
+		uid_eq(cred->uid,  fc->rescue_uid));
+}
+
 static inline bool fuse_device_attach_match(struct fuse_conn *fc,
 					    const char *tag)
 {
 	if (!fc->recovery)
+		return false;
+
+	if (!fuse_device_attach_permissible(fc))
 		return false;
 
 	return !strncmp(fc->tag, tag, FUSE_TAG_NAME_MAX);

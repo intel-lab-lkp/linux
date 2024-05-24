@@ -734,6 +734,7 @@ enum {
 	OPT_MAX_READ,
 	OPT_BLKSIZE,
 	OPT_TAG,
+	OPT_RESCUE_UID,
 	OPT_ERR
 };
 
@@ -749,6 +750,7 @@ static const struct fs_parameter_spec fuse_fs_parameters[] = {
 	fsparam_u32	("blksize",		OPT_BLKSIZE),
 	fsparam_string	("subtype",		OPT_SUBTYPE),
 	fsparam_string	("tag",			OPT_TAG),
+	fsparam_u32	("rescue_uid",		OPT_RESCUE_UID),
 	{}
 };
 
@@ -840,6 +842,13 @@ static int fuse_parse_param(struct fs_context *fsc, struct fs_parameter *param)
 		ctx->tag = param->string;
 		param->string = NULL;
 		return 0;
+
+	case OPT_RESCUE_UID:
+		ctx->rescue_uid = make_kuid(fsc->user_ns, result.uint_32);
+		if (!uid_valid(ctx->rescue_uid))
+			return invalfc(fsc, "Invalid rescue_uid");
+		ctx->rescue_uid_present = true;
+		break;
 
 	default:
 		return -EINVAL;
@@ -1344,7 +1353,7 @@ static void process_init_reply(struct fuse_mount *fm, struct fuse_args *args,
 			}
 			if (flags & FUSE_NO_EXPORT_SUPPORT)
 				fm->sb->s_export_op = &fuse_export_fid_operations;
-			if (flags & FUSE_HAS_RECOVERY)
+			if (flags & FUSE_HAS_RECOVERY && fc->rescue_uid_present)
 				fc->recovery = 1;
 		} else {
 			ra_pages = fc->max_read / PAGE_SIZE;
@@ -1753,6 +1762,8 @@ int fuse_fill_super_common(struct super_block *sb, struct fuse_fs_context *ctx)
 	fc->destroy = ctx->destroy;
 	fc->no_control = ctx->no_control;
 	fc->no_force_umount = ctx->no_force_umount;
+	fc->rescue_uid = ctx->rescue_uid;
+	fc->rescue_uid_present = ctx->rescue_uid_present;
 	fc->tag = ctx->tag;
 	ctx->tag = NULL;
 
