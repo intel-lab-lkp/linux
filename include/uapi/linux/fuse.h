@@ -463,6 +463,7 @@ struct fuse_file_lock {
 #define FUSE_PASSTHROUGH	(1ULL << 37)
 #define FUSE_NO_EXPORT_SUPPORT	(1ULL << 38)
 #define FUSE_HAS_RESEND		(1ULL << 39)
+#define FUSE_HAS_RECOVERY	(1ULL << 40)
 
 /* Obsolete alias for FUSE_DIRECT_IO_ALLOW_MMAP */
 #define FUSE_DIRECT_IO_RELAX	FUSE_DIRECT_IO_ALLOW_MMAP
@@ -1079,12 +1080,18 @@ struct fuse_backing_map {
 	uint64_t	padding;
 };
 
+struct fuse_ioctl_attach {
+#define FUSE_TAG_NAME_MAX		128
+	char	tag[FUSE_TAG_NAME_MAX];
+};
+
 /* Device ioctls: */
 #define FUSE_DEV_IOC_MAGIC		229
 #define FUSE_DEV_IOC_CLONE		_IOR(FUSE_DEV_IOC_MAGIC, 0, uint32_t)
 #define FUSE_DEV_IOC_BACKING_OPEN	_IOW(FUSE_DEV_IOC_MAGIC, 1, \
 					     struct fuse_backing_map)
 #define FUSE_DEV_IOC_BACKING_CLOSE	_IOW(FUSE_DEV_IOC_MAGIC, 2, uint32_t)
+#define FUSE_DEV_IOC_ATTACH		_IOW(FUSE_DEV_IOC_MAGIC, 3, struct fuse_ioctl_attach)
 
 struct fuse_lseek_in {
 	uint64_t	fh;

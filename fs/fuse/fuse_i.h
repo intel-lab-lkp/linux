@@ -575,6 +575,7 @@ struct fuse_fs_context {
 	unsigned int max_read;
 	unsigned int blksize;
 	const char *subtype;
+	const char *tag;
 
 	/* DAX device, may be NULL */
 	struct dax_device *dax_dev;
@@ -860,6 +861,9 @@ struct fuse_conn {
 	/** Passthrough support for read/write IO */
 	unsigned int passthrough:1;
 
+	/** Support for fuse server recovery */
+	unsigned int recovery:1;
+
 	/** Maximum stack depth for passthrough backing files */
 	int max_stack_depth;
 
@@ -917,6 +921,9 @@ struct fuse_conn {
 	/** IDR for backing files ids */
 	struct idr backing_files_map;
 #endif
+
+	/* Tag of the connection used by fuse server recovery */
+	const char *tag;
 };
 
 /*

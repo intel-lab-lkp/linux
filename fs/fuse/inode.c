@@ -733,6 +733,7 @@ enum {
 	OPT_ALLOW_OTHER,
 	OPT_MAX_READ,
 	OPT_BLKSIZE,
+	OPT_TAG,
 	OPT_ERR
 };
 
@@ -747,6 +748,7 @@ static const struct fs_parameter_spec fuse_fs_parameters[] = {
 	fsparam_u32	("max_read",		OPT_MAX_READ),
 	fsparam_u32	("blksize",		OPT_BLKSIZE),
 	fsparam_string	("subtype",		OPT_SUBTYPE),
+	fsparam_string	("tag",			OPT_TAG),
 	{}
 };
 
@@ -830,6 +832,15 @@ static int fuse_parse_param(struct fs_context *fsc, struct fs_parameter *param)
 		ctx->blksize = result.uint_32;
 		break;
 
+	case OPT_TAG:
+		if (ctx->tag)
+			return invalfc(fsc, "Multiple tags specified");
+		if (strlen(param->string) > FUSE_TAG_NAME_MAX)
+			return invalfc(fsc, "Tag name too long");
+		ctx->tag = param->string;
+		param->string = NULL;
+		return 0;
+
 	default:
 		return -EINVAL;
 	}
@@ -843,6 +854,7 @@ static void fuse_free_fsc(struct fs_context *fsc)
 
 	if (ctx) {
 		kfree(ctx->subtype);
+		kfree(ctx->tag);
 		kfree(ctx);
 	}
 }
@@ -969,6 +981,7 @@ void fuse_conn_put(struct fuse_conn *fc)
 		}
 		if (IS_ENABLED(CONFIG_FUSE_PASSTHROUGH))
 			fuse_backing_files_free(fc);
+		kfree(fc->tag);
 		call_rcu(&fc->rcu, delayed_release);
 	}
 }
@@ -1331,6 +1344,8 @@ static void process_init_reply(struct fuse_mount *fm, struct fuse_args *args,
 			}
 			if (flags & FUSE_NO_EXPORT_SUPPORT)
 				fm->sb->s_export_op = &fuse_export_fid_operations;
+			if (flags & FUSE_HAS_RECOVERY)
+				fc->recovery = 1;
 		} else {
 			ra_pages = fc->max_read / PAGE_SIZE;
 			fc->no_lock = 1;
@@ -1378,7 +1393,7 @@ void fuse_send_init(struct fuse_mount *fm)
 		FUSE_HANDLE_KILLPRIV_V2 | FUSE_SETXATTR_EXT | FUSE_INIT_EXT |
 		FUSE_SECURITY_CTX | FUSE_CREATE_SUPP_GROUP |
 		FUSE_HAS_EXPIRE_ONLY | FUSE_DIRECT_IO_ALLOW_MMAP |
-		FUSE_NO_EXPORT_SUPPORT | FUSE_HAS_RESEND;
+		FUSE_NO_EXPORT_SUPPORT | FUSE_HAS_RESEND | FUSE_HAS_RECOVERY;
 #ifdef CONFIG_FUSE_DAX
 	if (fm->fc->dax)
 		flags |= FUSE_MAP_ALIGNMENT;
@@ -1519,6 +1534,17 @@ void fuse_dev_free(struct fuse_dev *fud)
 	kfree(fud);
 }
 EXPORT_SYMBOL_GPL(fuse_dev_free);
+
+static bool fuse_find_conn_tag(const char *tag)
+{
+	struct fuse_conn *fc;
+
+	list_for_each_entry(fc, &fuse_conn_list, entry) {
+		if (!strcmp(fc->tag, tag))
+			return true;
+	}
+	return false;
+}
 
 static void fuse_fill_attr_from_inode(struct fuse_attr *attr,
 				      const struct fuse_inode *fi)
@@ -1727,6 +1753,8 @@ int fuse_fill_super_common(struct super_block *sb, struct fuse_fs_context *ctx)
 	fc->destroy = ctx->destroy;
 	fc->no_control = ctx->no_control;
 	fc->no_force_umount = ctx->no_force_umount;
+	fc->tag = ctx->tag;
+	ctx->tag = NULL;
 
 	err = -ENOMEM;
 	root = fuse_get_root_inode(sb, ctx->rootmode);
@@ -1741,6 +1769,11 @@ int fuse_fill_super_common(struct super_block *sb, struct fuse_fs_context *ctx)
 	err = -EINVAL;
 	if (ctx->fudptr && *ctx->fudptr)
 		goto err_unlock;
+
+	if (fc->tag && fuse_find_conn_tag(fc->tag)) {
+		pr_err("tag %s already exist\n", fc->tag);
+		goto err_unlock;
+	}
 
 	err = fuse_ctl_add_conn(fc);
 	if (err)
