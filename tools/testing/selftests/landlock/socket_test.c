@@ -232,4 +232,37 @@ TEST_F(protocol, rule_with_unknown_access)
 	EXPECT_EQ(0, close(ruleset_fd));
 }
 
+TEST_F(protocol, rule_with_unhandled_access)
+{
+	struct landlock_ruleset_attr ruleset_attr = {
+		.handled_access_socket = LANDLOCK_ACCESS_SOCKET_CREATE,
+	};
+	struct landlock_socket_attr protocol = {
+		.family = self->srv0.protocol.family,
+		.type = self->srv0.protocol.type,
+	};
+	int ruleset_fd;
+	__u64 access;
+
+	ruleset_fd =
+		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
+	ASSERT_LE(0, ruleset_fd);
+
+	for (access = 1; access > 0; access <<= 1) {
+		int err;
+
+		protocol.allowed_access = access;
+		err = landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
+					&protocol, 0);
+		if (access == ruleset_attr.handled_access_socket) {
+			EXPECT_EQ(0, err);
+		} else {
+			EXPECT_EQ(-1, err);
+			EXPECT_EQ(EINVAL, errno);
+		}
+	}
+
+	EXPECT_EQ(0, close(ruleset_fd));
+}
+
 TEST_HARNESS_MAIN
