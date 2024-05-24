@@ -8,6 +8,63 @@
 
 #include "core.h"
 
+/*
+ * There is a whole sequence of chips from Macronix that uses the same device
+ * id. These are recommended as EoL replacement parts by Macronix, although they
+ * are only partly software compatible.
+ *
+ * Recommended replacement for MX25L3205D was MX25L3206E.
+ * Recommended replacement for MX25L3206E was MX25L3233F.
+ *
+ * MX25L3205D does not support RDSFDP. The other two does.
+ *
+ * MX25L3205D supports 1-2-2 (2READ) command.
+ * MX25L3206E supports 1-1-2 (DREAD) command.
+ * MX25L3233F supports 1-1-2 (DREAD), 1-2-2 (2READ), 1-1-4 (QREAD), and 1-4-4
+ * (4READ) commands.
+ *
+ * In order to trigger reading optional SFDP configuration, the
+ * SPI_NOR_DUAL_READ|SPI_NOR_QUAD_READ flags are set, seemingly enabling 1-1-2
+ * and 1-1-4 for MX25L3205D. The other chips supporting RDSFDP will have the
+ * correct read commands configured based on SFDP information.
+ *
+ * As none of the other will enable 1-1-4 and NOT 1-4-4, so we identify
+ * MX25L3205D when we see that.
+ */
+static int
+mx25l3205d_late_init(struct spi_nor *nor)
+{
+	struct spi_nor_flash_parameter *params = nor->params;
+
+	/*                          DREAD  2READ  QREAD  4READ
+	 *                          1-1-2  1-2-2  1-1-4  1-4-4
+	 * Before SFDP parse          1      0      1      0
+	 * 3206e after SFDP parse     1      0      0      0
+	 * 3233f after SFDP parse     1      1      1      1
+	 * 3205d after this func      0      1      0      0
+	 */
+	if ((params->hwcaps.mask & SNOR_HWCAPS_READ_1_1_4) &&
+	    !(params->hwcaps.mask & SNOR_HWCAPS_READ_1_4_4)) {
+		/* Should be MX25L3205D */
+		params->hwcaps.mask &= ~SNOR_HWCAPS_READ_1_1_2;
+		spi_nor_set_read_settings(&params->reads[SNOR_CMD_READ_1_1_2],
+					  0, 0, 0, 0);
+		params->hwcaps.mask &= ~SNOR_HWCAPS_READ_1_1_4;
+		spi_nor_set_read_settings(&params->reads[SNOR_CMD_READ_1_1_4],
+					  0, 0, 0, 0);
+		params->hwcaps.mask |= SNOR_HWCAPS_READ_1_2_2;
+		spi_nor_set_read_settings(&params->reads[SNOR_CMD_READ_1_2_2],
+					  0, 4, SPINOR_OP_READ_1_2_2,
+					  SNOR_PROTO_1_2_2);
+	}
+
+	return 0;
+}
+
+static const struct spi_nor_fixups mx25l3205d_fixups = {
+	.late_init = mx25l3205d_late_init,
+};
+
 static int
 mx25l25635_post_bfpt_fixups(struct spi_nor *nor,
 			    const struct sfdp_parameter_header *bfpt_header,
@@ -61,7 +118,8 @@ static const struct flash_info macronix_nor_parts[] = {
 		.id = SNOR_ID(0xc2, 0x20, 0x16),
 		.name = "mx25l3205d",
 		.size = SZ_4M,
-		.no_sfdp_flags = SECT_4K,
+		.no_sfdp_flags = SECT_4K | SPI_NOR_DUAL_READ | SPI_NOR_QUAD_READ,
+		.fixups = &mx25l3205d_fixups
 	}, {
 		.id = SNOR_ID(0xc2, 0x20, 0x17),
 		.name = "mx25l6405d",
