@@ -67,6 +67,8 @@ int rockchip_drm_dma_attach_device(struct drm_device *drm_dev,
 		}
 	}
 
+	dma_set_max_seg_size(drm_dev->dev, UINT_MAX);
+
 	ret = iommu_attach_device(private->domain, dev);
 	if (ret) {
 		DRM_DEV_ERROR(dev, "Failed to attach iommu device\n");
