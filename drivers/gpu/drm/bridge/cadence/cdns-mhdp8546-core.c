@@ -1617,12 +1617,10 @@ bool cdns_mhdp_bandwidth_ok(struct cdns_mhdp_device *mhdp,
 	return true;
 }
 
-static
-enum drm_mode_status cdns_mhdp_mode_valid(struct drm_connector *conn,
-					  struct drm_display_mode *mode)
+static enum
+drm_mode_status cdns_mhdp_mode_valid(struct cdns_mhdp_device *mhdp,
+				     const struct drm_display_mode *mode)
 {
-	struct cdns_mhdp_device *mhdp = connector_to_mhdp(conn);
-
 	mutex_lock(&mhdp->link_mutex);
 
 	if (!cdns_mhdp_bandwidth_ok(mhdp, mode, mhdp->link.num_lanes,
@@ -1633,6 +1631,16 @@ enum drm_mode_status cdns_mhdp_mode_valid(struct drm_connector *conn,
 
 	mutex_unlock(&mhdp->link_mutex);
 	return MODE_OK;
+}
+
+static enum drm_mode_status
+cdns_mhdp_connector_mode_valid(struct drm_connector *conn,
+			       struct drm_display_mode *mode)
+{
+	struct cdns_mhdp_device *mhdp = connector_to_mhdp(conn);
+	const struct drm_display_mode *mod = mode;
+
+	return cdns_mhdp_mode_valid(mhdp, mod);
 }
 
 static int cdns_mhdp_connector_atomic_check(struct drm_connector *conn,
@@ -1678,7 +1686,7 @@ mode_changed:
 static const struct drm_connector_helper_funcs cdns_mhdp_conn_helper_funcs = {
 	.detect_ctx = cdns_mhdp_connector_detect,
 	.get_modes = cdns_mhdp_get_modes,
-	.mode_valid = cdns_mhdp_mode_valid,
+	.mode_valid = cdns_mhdp_connector_mode_valid,
 	.atomic_check = cdns_mhdp_connector_atomic_check,
 };
 
@@ -2233,6 +2241,16 @@ static const struct drm_edid *cdns_mhdp_bridge_edid_read(struct drm_bridge *brid
 	return cdns_mhdp_edid_read(mhdp, connector);
 }
 
+static enum drm_mode_status
+cdns_mhdp_bridge_mode_valid(struct drm_bridge *bridge,
+			    const struct drm_display_info *info,
+			    const struct drm_display_mode *mode)
+{
+	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
+
+	return cdns_mhdp_mode_valid(mhdp, mode);
+}
+
 static const struct drm_bridge_funcs cdns_mhdp_bridge_funcs = {
 	.atomic_enable = cdns_mhdp_atomic_enable,
 	.atomic_disable = cdns_mhdp_atomic_disable,
@@ -2247,6 +2265,7 @@ static const struct drm_bridge_funcs cdns_mhdp_bridge_funcs = {
 	.edid_read = cdns_mhdp_bridge_edid_read,
 	.hpd_enable = cdns_mhdp_bridge_hpd_enable,
 	.hpd_disable = cdns_mhdp_bridge_hpd_disable,
+	.mode_valid = cdns_mhdp_bridge_mode_valid,
 };
 
 static bool cdns_mhdp_detect_hpd(struct cdns_mhdp_device *mhdp, bool *hpd_pulse)
