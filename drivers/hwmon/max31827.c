@@ -24,6 +24,7 @@
 
 #define MAX31827_CONFIGURATION_1SHOT_MASK	BIT(0)
 #define MAX31827_CONFIGURATION_CNV_RATE_MASK	GENMASK(3, 1)
+#define MAX31827_CONFIGURATION_PEC_EN_MASK	BIT(4)
 #define MAX31827_CONFIGURATION_TIMEOUT_MASK	BIT(5)
 #define MAX31827_CONFIGURATION_RESOLUTION_MASK	GENMASK(7, 6)
 #define MAX31827_CONFIGURATION_ALRM_POL_MASK	BIT(8)
@@ -475,6 +476,53 @@ static ssize_t temp1_resolution_store(struct device *dev,
 
 static DEVICE_ATTR_RW(temp1_resolution);
 
+static ssize_t pec_show(struct device *dev, struct device_attribute *devattr,
+			char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", !!(client->flags & I2C_CLIENT_PEC));
+}
+
+static ssize_t pec_store(struct device *dev, struct device_attribute *devattr,
+			 const char *buf, size_t count)
+{
+	struct max31827_state *st = dev_get_drvdata(dev);
+	struct i2c_client *client = to_i2c_client(dev);
+	unsigned int val;
+	int err;
+
+	err = kstrtouint(buf, 10, &val);
+	if (err < 0)
+		return err;
+
+	switch (val) {
+	case 0:
+		err = regmap_update_bits(st->regmap, MAX31827_CONFIGURATION_REG,
+					 MAX31827_CONFIGURATION_PEC_EN_MASK,
+					 0);
+		if (err)
+			return err;
+
+		client->flags &= ~I2C_CLIENT_PEC;
+		break;
+	case 1:
+		err = regmap_set_bits(st->regmap, MAX31827_CONFIGURATION_REG,
+				      MAX31827_CONFIGURATION_PEC_EN_MASK);
+		if (err)
+			return err;
+
+		client->flags |= I2C_CLIENT_PEC;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(pec);
+
 static struct attribute *max31827_attrs[] = {
 	&dev_attr_temp1_resolution.attr,
 	NULL
@@ -578,6 +626,11 @@ static int max31827_init_client(struct max31827_state *st,
 	return regmap_write(st->regmap, MAX31827_CONFIGURATION_REG, res);
 }
 
+static void max31827_remove_pec(void *dev)
+{
+	device_remove_file(dev, &dev_attr_pec);
+}
+
 static const struct hwmon_channel_info *max31827_info[] = {
 	HWMON_CHANNEL_INFO(temp, HWMON_T_ENABLE | HWMON_T_INPUT | HWMON_T_MIN |
 					 HWMON_T_MIN_HYST | HWMON_T_MIN_ALARM |
@@ -626,6 +679,16 @@ static int max31827_probe(struct i2c_client *client)
 	err = max31827_init_client(st, dev);
 	if (err)
 		return err;
+
+	if (i2c_check_functionality(client->adapter, I2C_FUNC_SMBUS_PEC)) {
+		err = device_create_file(dev, &dev_attr_pec);
+		if (err)
+			return err;
+
+		err = devm_add_action_or_reset(dev, max31827_remove_pec, dev);
+		if (err)
+			return err;
+	}
 
 	hwmon_dev = devm_hwmon_device_register_with_info(dev, client->name, st,
 							 &max31827_chip_info,
