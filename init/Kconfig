@@ -1235,6 +1235,7 @@ config IPC_NS
 
 config USER_NS
 	bool "User namespace"
+	default y if MEMCG
 	default n
 	help
 	  This allows containers, i.e. vservers, to use user namespaces
