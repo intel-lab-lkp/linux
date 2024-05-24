@@ -1317,7 +1317,6 @@ static inline bool is_core_idle(int cpu)
 }
 
 #ifdef CONFIG_NUMA
-#define NUMA_IMBALANCE_MIN 2
 
 static inline long
 adjust_numa_imbalance(int imbalance, int dst_running, int imb_numa_nr)
@@ -1336,7 +1335,7 @@ adjust_numa_imbalance(int imbalance, int dst_running, int imb_numa_nr)
 	 * Allow a small imbalance based on a simple pair of communicating
 	 * tasks that remain local when the destination is lightly loaded.
 	 */
-	if (imbalance <= NUMA_IMBALANCE_MIN)
+	if (imbalance <= imb_numa_nr)
 		return 0;
 
 	return imbalance;
@@ -10775,14 +10774,15 @@ static inline void calculate_imbalance(struct lb_env *env, struct sd_lb_stats *s
 			 */
 			env->migration_type = migrate_task;
 			env->imbalance = max_t(long, 0,
-					       (local->idle_cpus - busiest->idle_cpus));
+					(busiest->group_weight - busiest->idle_cpus) -
+					 (local->group_weight - local->idle_cpus));
 		}
 
 #ifdef CONFIG_NUMA
 		/* Consider allowing a small imbalance between NUMA groups */
 		if (env->sd->flags & SD_NUMA) {
 			env->imbalance = adjust_numa_imbalance(env->imbalance,
-							       local->sum_nr_running + 1,
+							       busiest->sum_nr_running,
 							       env->sd->imb_numa_nr);
 		}
 #endif
