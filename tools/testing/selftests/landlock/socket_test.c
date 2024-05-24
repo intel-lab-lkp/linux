@@ -265,4 +265,38 @@ TEST_F(protocol, rule_with_unhandled_access)
 	EXPECT_EQ(0, close(ruleset_fd));
 }
 
+TEST_F(protocol, inval)
+{
+	const struct landlock_ruleset_attr ruleset_attr = {
+		.handled_access_socket = LANDLOCK_ACCESS_SOCKET_CREATE
+	};
+
+	struct landlock_socket_attr protocol = {
+		.allowed_access = LANDLOCK_ACCESS_SOCKET_CREATE,
+		.family = self->srv0.protocol.family,
+		.type = self->srv0.protocol.type,
+	};
+
+	struct landlock_socket_attr protocol_denied = {
+		.allowed_access = 0,
+		.family = self->srv0.protocol.family,
+		.type = self->srv0.protocol.type,
+	};
+
+	int ruleset_fd;
+
+	ruleset_fd =
+		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
+	ASSERT_LE(0, ruleset_fd);
+
+	/* Checks zero access value. */
+	EXPECT_EQ(-1, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
+					&protocol_denied, 0));
+	EXPECT_EQ(ENOMSG, errno);
+
+	/* Adds with legitimate values. */
+	ASSERT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
+				       &protocol, 0));
+}
+
 TEST_HARNESS_MAIN
