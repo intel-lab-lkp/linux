@@ -920,6 +920,17 @@ static bool verify_root_map(const struct file *file,
 	return true;
 }
 
+static inline bool map_write_allowed(struct file *file, struct user_namespace *map_ns, int cap_setid)
+{
+	// if the cap is -1, then anyone is allowed to write
+	if (!cap_valid(cap_setid))
+		return true;
+
+	// Otherwise, require either cap_setid or CAP_SYS_ADMIN
+	return (file_ns_capable(file, map_ns, cap_setid) ||
+		file_ns_capable(file, map_ns, CAP_SYS_ADMIN));
+}
+
 static ssize_t map_write(struct file *file, const char __user *buf,
 			 size_t count, loff_t *ppos,
 			 int cap_setid,
@@ -974,7 +985,7 @@ static ssize_t map_write(struct file *file, const char __user *buf,
 	/*
 	 * Adjusting namespace settings requires capabilities on the target.
 	 */
-	if (cap_valid(cap_setid) && !file_ns_capable(file, map_ns, CAP_SYS_ADMIN))
+	if (!map_write_allowed(file, map_ns, cap_setid))
 		goto out;
 
 	/* Parse the user data */
