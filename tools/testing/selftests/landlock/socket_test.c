@@ -532,4 +532,50 @@ TEST_F(mini, socket_overflow)
 	EXPECT_EQ(EACCES, test_socket(&srv_denied));
 }
 
+TEST_F(mini, socket_invalid_type)
+{
+	const struct landlock_ruleset_attr ruleset_attr = {
+		.handled_access_socket = LANDLOCK_ACCESS_SOCKET_CREATE,
+	};
+	/*
+	 * SOCK_PACKET is invalid type for UNIX socket
+	 * (see net/unix/af_unix.c:unix_create()).
+	 */
+	const struct landlock_socket_attr create_unix_invalid = {
+		.allowed_access = LANDLOCK_ACCESS_SOCKET_CREATE,
+		.family = AF_UNIX,
+		.type = SOCK_PACKET,
+	};
+	const struct protocol_variant protocol_invalid = {
+		.family = create_unix_invalid.family,
+		.type = create_unix_invalid.type,
+	};
+	struct service_fixture srv_unix_invalid;
+	int ruleset_fd;
+
+	srv_unix_invalid.protocol = protocol_invalid;
+
+	/* Allowed created */
+	ruleset_fd =
+		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
+	ASSERT_LE(0, ruleset_fd);
+
+	ASSERT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
+				       &create_unix_invalid, 0));
+	enforce_ruleset(_metadata, ruleset_fd);
+	EXPECT_EQ(0, close(ruleset_fd));
+
+	EXPECT_EQ(ESOCKTNOSUPPORT, test_socket(&srv_unix_invalid));
+
+	/* Denied create */
+	ruleset_fd =
+		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
+	ASSERT_LE(0, ruleset_fd);
+
+	enforce_ruleset(_metadata, ruleset_fd);
+	EXPECT_EQ(0, close(ruleset_fd));
+
+	EXPECT_EQ(ESOCKTNOSUPPORT, test_socket(&srv_unix_invalid));
+}
+
 TEST_HARNESS_MAIN
