@@ -174,7 +174,7 @@ void __printf(1, 0) acpi_os_vprintf(const char *fmt, va_list args)
 #endif
 }
 
-#ifdef CONFIG_KEXEC
+#ifdef CONFIG_KEXEC_CORE
 static unsigned long acpi_rsdp;
 static int __init setup_acpi_rsdp(char *arg)
 {
@@ -187,7 +187,7 @@ acpi_physical_address __init acpi_os_get_root_pointer(void)
 {
 	acpi_physical_address pa;
 
-#ifdef CONFIG_KEXEC
+#ifdef CONFIG_KEXEC_CORE
 	/*
 	 * We may have been provided with an RSDP on the command line,
 	 * but if a malicious user has done so they may be pointing us
