@@ -5530,6 +5530,9 @@ entity_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr, int queued)
 			hrtimer_active(&rq_of(cfs_rq)->hrtick_timer))
 		return;
 #endif
+
+	if (!entity_eligible(cfs_rq, curr))
+		resched_curr(rq_of(cfs_rq));
 }
 
 
@@ -8387,6 +8390,9 @@ static void check_preempt_wakeup_fair(struct rq *rq, struct task_struct *p, int 
 	 */
 	if (unlikely(p->policy != SCHED_NORMAL) || !sched_feat(WAKEUP_PREEMPTION))
 		return;
+
+	if (!entity_eligible(cfs_rq, se))
+		goto preempt;
 
 	find_matching_se(&se, &pse);
 	WARN_ON_ONCE(!pse);
