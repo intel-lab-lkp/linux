@@ -146,4 +146,6 @@ struct rzv2h_cpg_info {
 	int (*pll_get_clk2_offset)(int clk);
 };
 
+extern const struct rzv2h_cpg_info r9a09g057_cpg_info;
+
 #endif	/* __RENESAS_RZV2H_CPG_H__ */
