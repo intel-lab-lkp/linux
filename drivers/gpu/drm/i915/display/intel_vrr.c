@@ -226,6 +226,7 @@ intel_vrr_compute_config(struct intel_crtc_state *crtc_state,
 		crtc_state->mode_flags |= I915_MODE_FLAG_VRR;
 	} else if (is_cmrr_frac_required(crtc_state, is_edp)) {
 		crtc_state->vrr.enable = true;
+		crtc_state->cmrr.enable = true;
 		crtc_state->vrr.vmax = cmrr_get_vtotal(crtc_state);
 		crtc_state->vrr.vmin = crtc_state->vrr.vmax;
 		crtc_state->vrr.flipline = crtc_state->vrr.vmin;
