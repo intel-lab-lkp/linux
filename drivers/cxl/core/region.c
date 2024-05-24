@@ -1054,6 +1054,7 @@ static int cxl_port_attach_region(struct cxl_port *port,
 	struct cxl_decoder *cxld;
 	unsigned long index;
 	int rc = -EBUSY;
+	struct cxl_switch_decoder *cxlsd;
 
 	lockdep_assert_held_write(&cxl_region_rwsem);
 
@@ -1100,6 +1101,23 @@ static int cxl_port_attach_region(struct cxl_port *port,
 			goto out_erase;
 	}
 	cxld = cxl_rr->decoder;
+
+	/*
+	 * the number of targets should not exceed the target_count
+	 * of the decoder
+	 */
+	if (is_switch_decoder(&cxld->dev)) {
+		cxlsd = to_cxl_switch_decoder(&cxld->dev);
+		if (cxl_rr->nr_targets > cxlsd->nr_targets) {
+			dev_dbg(&cxlr->dev,
+				"%s:%s %s add: %s:%s @ %d overflows targets: %d\n",
+				dev_name(port->uport_dev), dev_name(&port->dev),
+				dev_name(&cxld->dev), dev_name(&cxlmd->dev),
+				dev_name(&cxled->cxld.dev), pos,
+				cxlsd->nr_targets);
+			goto out_erase;
+		}
+	}
 
 	rc = cxl_rr_ep_add(cxl_rr, cxled);
 	if (rc) {
@@ -1206,6 +1224,53 @@ static int check_last_peer(struct cxl_endpoint_decoder *cxled,
 			dev_name(&cxled_peer->cxld.dev));
 		return -ENXIO;
 	}
+
+	return 0;
+}
+
+static int check_interleave_cap(struct cxl_decoder *cxld, int iw, int ig)
+{
+	struct cxl_port *port = to_cxl_port(cxld->dev.parent);
+	struct cxl_hdm *cxlhdm = dev_get_drvdata(&port->dev);
+	unsigned int interleave_mask;
+	u8 eiw;
+	u16 eig;
+	int rc, high_pos, low_pos;
+
+	rc = ways_to_eiw(iw, &eiw);
+	if (rc)
+		return rc;
+
+	if (!test_bit(iw, &cxlhdm->iw_cap_mask))
+		return -ENXIO;
+
+	rc = granularity_to_eig(ig, &eig);
+	if (rc)
+		return rc;
+
+	/*
+	 * Per CXL specification (8.2.3.20.13 Decoder Protection in r3.1)
+	 * if eiw < 8, the interleave bits start at bit position eig + 8, and
+	 * end at eig + eiw + 8 - 1.
+	 * if eiw >= 8, the interleave bits start at bit position eig + 8, and
+	 * end at eig + eiw - 1.
+	 */
+	if (eiw >= 8)
+		high_pos = eiw + eig - 1;
+	else
+		high_pos = eiw + eig + 7;
+	low_pos = eig + 8;
+	/*
+	 * when the eiw is 0 or 8 (interlave way is 1 or 3), the num of
+	 * interleave bits is 0, there is no interleaving, the following
+	 * check is ignored.
+	 */
+	if (low_pos > high_pos)
+		return 0;
+
+	interleave_mask = GENMASK(high_pos, low_pos);
+	if (interleave_mask & ~cxlhdm->interleave_mask)
+		return -ENXIO;
 
 	return 0;
 }
@@ -1360,6 +1425,15 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 			return -ENXIO;
 		}
 	} else {
+		rc = check_interleave_cap(cxld, iw, ig);
+		if (rc) {
+			dev_dbg(&cxlr->dev,
+				"%s:%s iw: %d ig: %d is not supported\n",
+				dev_name(port->uport_dev),
+				dev_name(&port->dev), iw, ig);
+			return rc;
+		}
+
 		cxld->interleave_ways = iw;
 		cxld->interleave_granularity = ig;
 		cxld->hpa_range = (struct range) {
@@ -1795,6 +1869,15 @@ static int cxl_region_attach(struct cxl_region *cxlr,
 	struct cxl_port *ep_port, *root_port;
 	struct cxl_dport *dport;
 	int rc = -ENXIO;
+
+	rc = check_interleave_cap(&cxled->cxld, p->interleave_ways,
+				  p->interleave_granularity);
+	if (rc) {
+		dev_dbg(&cxlr->dev, "%s iw: %d ig: %d is not supported\n",
+			dev_name(&cxled->cxld.dev), p->interleave_ways,
+			p->interleave_granularity);
+		return rc;
+	}
 
 	if (cxled->mode != cxlr->mode) {
 		dev_dbg(&cxlr->dev, "%s region mode: %d mismatch: %d\n",
