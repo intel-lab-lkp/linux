@@ -245,6 +245,7 @@ int btintel_bootloader_setup_tlv(struct hci_dev *hdev,
 int btintel_shutdown_combined(struct hci_dev *hdev);
 void btintel_hw_error(struct hci_dev *hdev, u8 code);
 void btintel_print_fseq_info(struct hci_dev *hdev);
+u8 btintel_classify_pkt_type(struct hci_dev *hdev, struct sk_buff *skb);
 #else
 
 static inline int btintel_check_bdaddr(struct hci_dev *hdev)
@@ -377,5 +378,10 @@ static inline void btintel_hw_error(struct hci_dev *hdev, u8 code)
 
 static inline void btintel_print_fseq_info(struct hci_dev *hdev)
 {
+}
+
+static inline u8 btintel_classify_pkt_type(struct hci_dev *hdev, struct sk_buff *skb)
+{
+	return hci_skb_pkt_type(skb);
 }
 #endif
