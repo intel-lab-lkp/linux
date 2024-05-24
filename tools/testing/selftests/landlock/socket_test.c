@@ -408,4 +408,35 @@ TEST_F(tcp_layers, ruleset_overlap)
 	}
 }
 
+/* clang-format off */
+FIXTURE(mini) {};
+/* clang-format on */
+
+FIXTURE_SETUP(mini)
+{
+	disable_caps(_metadata);
+
+	setup_namespace(_metadata);
+};
+
+FIXTURE_TEARDOWN(mini)
+{
+}
+
+TEST_F(mini, ruleset_with_unknown_access)
+{
+	__u64 access_mask;
+
+	for (access_mask = 1ULL << 63; access_mask != ACCESS_LAST;
+	     access_mask >>= 1) {
+		const struct landlock_ruleset_attr ruleset_attr = {
+			.handled_access_socket = access_mask,
+		};
+
+		EXPECT_EQ(-1, landlock_create_ruleset(&ruleset_attr,
+						      sizeof(ruleset_attr), 0));
+		EXPECT_EQ(EINVAL, errno);
+	}
+}
+
 TEST_HARNESS_MAIN
