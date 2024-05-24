@@ -305,6 +305,7 @@ static inline int exportfs_encode_fid(struct inode *inode, struct fid *fid,
 extern struct dentry *exportfs_decode_fh_raw(struct vfsmount *mnt,
 					     struct fid *fid, int fh_len,
 					     int fileid_type,
+					     bool directory,
 					     int (*acceptable)(void *, struct dentry *),
 					     void *context);
 extern struct dentry *exportfs_decode_fh(struct vfsmount *mnt, struct fid *fid,
