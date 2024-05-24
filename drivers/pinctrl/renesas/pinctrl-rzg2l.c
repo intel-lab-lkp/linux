@@ -256,6 +256,8 @@ struct rzg2l_pinctrl_data {
 	const struct rzg2l_hwcfg *hwcfg;
 	const struct rzg2l_variable_pin_cfg *variable_pin_cfg;
 	unsigned int n_variable_pin_cfg;
+	int (*pin_to_oen_bit)(const struct rzg2l_hwcfg *hwcfg,
+			      u32 caps, u32 offset, u8 pin);
 };
 
 /**
@@ -1012,22 +1014,14 @@ static bool rzg2l_ds_is_supported(struct rzg2l_pinctrl *pctrl, u32 caps,
 	return false;
 }
 
-static bool rzg2l_oen_is_supported(u32 caps, u8 pin, u8 max_pin)
-{
-	if (!(caps & PIN_CFG_OEN))
-		return false;
-
-	if (pin > max_pin)
-		return false;
-
-	return true;
-}
-
-static u8 rzg2l_pin_to_oen_bit(u32 port, u8 pin, u8 max_port)
+static int rzg3s_pin_to_oen_bit(const struct rzg2l_hwcfg *hwcfg, u32 caps, u32 port, u8 pin)
 {
 	u8 bit = pin * 2;
 
-	if (port == max_port)
+	if (!(caps & PIN_CFG_OEN) || pin > hwcfg->oen_max_pin)
+		return -EINVAL;
+
+	if (port == hwcfg->oen_max_port)
 		bit += 1;
 
 	return bit;
@@ -1035,29 +1029,30 @@ static u8 rzg2l_pin_to_oen_bit(u32 port, u8 pin, u8 max_port)
 
 static u32 rzg2l_read_oen(struct rzg2l_pinctrl *pctrl, u32 caps, u32 port, u8 pin)
 {
-	u8 max_port = pctrl->data->hwcfg->oen_max_port;
-	u8 max_pin = pctrl->data->hwcfg->oen_max_pin;
-	u8 bit;
+	int bit;
 
-	if (!rzg2l_oen_is_supported(caps, pin, max_pin))
+	if (!pctrl->data->pin_to_oen_bit)
 		return 0;
 
-	bit = rzg2l_pin_to_oen_bit(port, pin, max_port);
+	bit = pctrl->data->pin_to_oen_bit(pctrl->data->hwcfg, caps, port, pin);
+	if (bit < 0)
+		return 0;
 
 	return !(readb(pctrl->base + ETH_MODE) & BIT(bit));
 }
 
 static int rzg2l_write_oen(struct rzg2l_pinctrl *pctrl, u32 caps, u32 port, u8 pin, u8 oen)
 {
-	u8 max_port = pctrl->data->hwcfg->oen_max_port;
-	u8 max_pin = pctrl->data->hwcfg->oen_max_pin;
 	unsigned long flags;
-	u8 val, bit;
+	int bit;
+	u8 val;
 
-	if (!rzg2l_oen_is_supported(caps, pin, max_pin))
-		return -EINVAL;
+	if (!pctrl->data->pin_to_oen_bit)
+		return -EOPNOTSUPP;
 
-	bit = rzg2l_pin_to_oen_bit(port, pin, max_port);
+	bit = pctrl->data->pin_to_oen_bit(pctrl->data->hwcfg, caps, port, pin);
+	if (bit < 0)
+		return bit;
 
 	spin_lock_irqsave(&pctrl->lock, flags);
 	val = readb(pctrl->base + ETH_MODE);
@@ -2691,6 +2686,7 @@ static struct rzg2l_pinctrl_data r9a08g045_data = {
 	.n_port_pins = ARRAY_SIZE(r9a08g045_gpio_configs) * RZG2L_PINS_PER_PORT,
 	.n_dedicated_pins = ARRAY_SIZE(rzg3s_dedicated_pins),
 	.hwcfg = &rzg3s_hwcfg,
+	.pin_to_oen_bit = rzg3s_pin_to_oen_bit,
 };
 
 static const struct of_device_id rzg2l_pinctrl_of_table[] = {
