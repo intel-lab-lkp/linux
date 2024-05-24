@@ -10,6 +10,8 @@
 
 #include "ruleset.h"
 
+__init void landlock_add_socket_hooks(void);
+
 int landlock_append_socket_rule(struct landlock_ruleset *const ruleset,
 				const int family, const int type,
 				access_mask_t access_rights);

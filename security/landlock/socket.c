@@ -8,7 +8,9 @@
 #include <linux/net.h>
 #include <linux/socket.h>
 #include <linux/stddef.h>
+#include <net/ipv6.h>
 
+#include "cred.h"
 #include "limits.h"
 #include "ruleset.h"
 #include "socket.h"
@@ -57,4 +59,72 @@ int landlock_append_socket_rule(struct landlock_ruleset *const ruleset,
 	mutex_unlock(&ruleset->lock);
 
 	return err;
+}
+
+static access_mask_t
+get_raw_handled_socket_accesses(const struct landlock_ruleset *const domain)
+{
+	access_mask_t access_dom = 0;
+	size_t layer_level;
+
+	for (layer_level = 0; layer_level < domain->num_layers; layer_level++)
+		access_dom |=
+			landlock_get_socket_access_mask(domain, layer_level);
+	return access_dom;
+}
+
+static const struct landlock_ruleset *get_current_socket_domain(void)
+{
+	const struct landlock_ruleset *const dom =
+		landlock_get_current_domain();
+
+	if (!dom || !get_raw_handled_socket_accesses(dom))
+		return NULL;
+
+	return dom;
+}
+
+static int current_check_access_socket(struct socket *const sock, int family,
+				       int type,
+				       const access_mask_t access_request)
+{
+	layer_mask_t layer_masks[LANDLOCK_NUM_ACCESS_SOCKET] = {};
+	const struct landlock_rule *rule;
+	access_mask_t handled_access;
+	struct landlock_id id = {
+		.type = LANDLOCK_KEY_SOCKET,
+	};
+	const struct landlock_ruleset *const dom = get_current_socket_domain();
+
+	if (!dom)
+		return 0;
+	if (WARN_ON_ONCE(dom->num_layers < 1))
+		return -EACCES;
+
+	id.key.data = pack_socket_key(family, type);
+
+	rule = landlock_find_rule(dom, id);
+	handled_access = landlock_init_layer_masks(
+		dom, access_request, &layer_masks, LANDLOCK_KEY_SOCKET);
+	if (landlock_unmask_layers(rule, handled_access, &layer_masks,
+				   ARRAY_SIZE(layer_masks)))
+		return 0;
+	return -EACCES;
+}
+
+static int hook_socket_create(struct socket *const sock, int family, int type,
+			      int protocol, int kern)
+{
+	return current_check_access_socket(sock, family, type,
+					   LANDLOCK_ACCESS_SOCKET_CREATE);
+}
+
+static struct security_hook_list landlock_hooks[] __ro_after_init = {
+	LSM_HOOK_INIT(socket_post_create, hook_socket_create),
+};
+
+__init void landlock_add_socket_hooks(void)
+{
+	security_add_hooks(landlock_hooks, ARRAY_SIZE(landlock_hooks),
+			   &landlock_lsmid);
 }
