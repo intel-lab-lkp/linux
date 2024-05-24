@@ -299,4 +299,113 @@ TEST_F(protocol, inval)
 				       &protocol, 0));
 }
 
+FIXTURE(tcp_layers)
+{
+	struct service_fixture srv0;
+};
+
+FIXTURE_VARIANT(tcp_layers)
+{
+	const size_t num_layers;
+};
+
+FIXTURE_SETUP(tcp_layers)
+{
+	const struct protocol_variant prot = {
+		.family = AF_INET,
+		.type = SOCK_STREAM,
+	};
+
+	disable_caps(_metadata);
+	self->srv0.protocol = prot;
+	setup_namespace(_metadata);
+};
+
+FIXTURE_TEARDOWN(tcp_layers)
+{
+}
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(tcp_layers, no_sandbox_with_ipv4) {
+	/* clang-format on */
+	.num_layers = 0,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(tcp_layers, one_sandbox_with_ipv4) {
+	/* clang-format on */
+	.num_layers = 1,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(tcp_layers, two_sandboxes_with_ipv4) {
+	/* clang-format on */
+	.num_layers = 2,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(tcp_layers, three_sandboxes_with_ipv4) {
+	/* clang-format on */
+	.num_layers = 3,
+};
+
+TEST_F(tcp_layers, ruleset_overlap)
+{
+	const struct landlock_ruleset_attr ruleset_attr = {
+		.handled_access_socket = LANDLOCK_ACCESS_SOCKET_CREATE,
+	};
+	const struct landlock_socket_attr tcp_create = {
+		.allowed_access = LANDLOCK_ACCESS_SOCKET_CREATE,
+		.family = self->srv0.protocol.family,
+		.type = self->srv0.protocol.type,
+	};
+
+	if (variant->num_layers >= 1) {
+		int ruleset_fd;
+
+		ruleset_fd = landlock_create_ruleset(&ruleset_attr,
+						     sizeof(ruleset_attr), 0);
+		ASSERT_LE(0, ruleset_fd);
+
+		/* Allows create. */
+		ASSERT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
+					       &tcp_create, 0));
+		enforce_ruleset(_metadata, ruleset_fd);
+		EXPECT_EQ(0, close(ruleset_fd));
+	}
+
+	if (variant->num_layers >= 2) {
+		int ruleset_fd;
+
+		/* Creates another ruleset layer with denied create. */
+		ruleset_fd = landlock_create_ruleset(&ruleset_attr,
+						     sizeof(ruleset_attr), 0);
+		ASSERT_LE(0, ruleset_fd);
+
+		enforce_ruleset(_metadata, ruleset_fd);
+		EXPECT_EQ(0, close(ruleset_fd));
+	}
+
+	if (variant->num_layers >= 3) {
+		int ruleset_fd;
+
+		/* Creates another ruleset layer. */
+		ruleset_fd = landlock_create_ruleset(&ruleset_attr,
+						     sizeof(ruleset_attr), 0);
+		ASSERT_LE(0, ruleset_fd);
+
+		/* Try to allow create second time. */
+		ASSERT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
+					       &tcp_create, 0));
+		enforce_ruleset(_metadata, ruleset_fd);
+		EXPECT_EQ(0, close(ruleset_fd));
+	}
+
+	if (variant->num_layers < 2) {
+		ASSERT_EQ(0, test_socket(&self->srv0));
+	} else {
+		ASSERT_EQ(EACCES, test_socket(&self->srv0));
+	}
+}
+
 TEST_HARNESS_MAIN
