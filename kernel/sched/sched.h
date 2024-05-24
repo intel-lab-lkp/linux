@@ -181,6 +181,11 @@ extern struct list_head asym_cap_list;
  */
 #define RUNTIME_INF		((u64)~0ULL)
 
+/*
+ * Single value that denotes runtime is disabled, and it should not be used.
+ */
+#define RUNTIME_DISABLED	(-2ULL)
+
 static inline int idle_policy(int policy)
 {
 	return policy == SCHED_IDLE;
