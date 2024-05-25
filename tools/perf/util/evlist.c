@@ -32,6 +32,7 @@
 #include "util/sample.h"
 #include "util/bpf-filter.h"
 #include "util/stat.h"
+#include "util/strbuf.h"
 #include "util/util.h"
 #include <signal.h>
 #include <unistd.h>
@@ -93,14 +94,12 @@ struct evlist *evlist__new(void)
 struct evlist *evlist__new_default(void)
 {
 	struct evlist *evlist = evlist__new();
-	bool can_profile_kernel;
 	int err;
 
 	if (!evlist)
 		return NULL;
 
-	can_profile_kernel = perf_event_paranoid_check(1);
-	err = parse_event(evlist, can_profile_kernel ? "cycles:P" : "cycles:Pu");
+	err = evlist__add_default_events(evlist);
 	if (err) {
 		evlist__delete(evlist);
 		return NULL;
@@ -185,6 +184,44 @@ void evlist__delete(struct evlist *evlist)
 	evlist__purge(evlist);
 	evlist__exit(evlist);
 	free(evlist);
+}
+
+int evlist__add_default_events(struct evlist *evlist)
+{
+	struct perf_pmu *pmu = NULL;
+	bool can_profile_kernel = perf_event_paranoid_check(1);
+	struct strbuf events;
+	bool first = true;
+	int err;
+
+	err = strbuf_init(&events, /*hint=*/32);
+	if (err)
+		return err;
+
+	while ((pmu = perf_pmus__scan_core(pmu)) != NULL) {
+		if (!first) {
+			err = strbuf_addch(&events, ',');
+			if (err)
+				goto err_out;
+		}
+		err = strbuf_addstr(&events, pmu->name);
+		if (err < 0)
+			goto err_out;
+
+		if (can_profile_kernel)
+			err = strbuf_addstr(&events, "/cycles/P");
+		else
+			err = strbuf_addstr(&events, "/cycles/Pu");
+
+		if (err < 0)
+			goto err_out;
+
+		first = false;
+	}
+	err = parse_event(evlist, events.buf);
+err_out:
+	strbuf_release(&events);
+	return err;
 }
 
 void evlist__add(struct evlist *evlist, struct evsel *entry)
