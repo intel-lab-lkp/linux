@@ -375,11 +375,10 @@ static int tpm2_load_cmd(struct tpm_chip *chip,
 		/* old form */
 		blob = payload->blob;
 		payload->old_format = 1;
+	} else {
+		if (!options->keyhandle)
+			return -EINVAL;
 	}
-
-	/* new format carries keyhandle but old format doesn't */
-	if (!options->keyhandle)
-		return -EINVAL;
 
 	/* must be big enough for at least the two be16 size counts */
 	if (payload->blob_len < 4)
