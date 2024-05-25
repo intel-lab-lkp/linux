@@ -107,9 +107,12 @@ livepatch: '$MOD_LIVEPATCH': unpatching complete
 
 # - load a livepatch that modifies the output from /proc/cmdline and
 #   verify correct behavior
-# - load an atomic replace livepatch and verify that only the second is active
-# - remove the first livepatch and verify that the atomic replace livepatch
-#   is still active
+# - load two addtional livepatches and check the number of livepatch modules
+#   applied
+# - load an atomic replace livepatch and check that the other three modules were
+#   disabled
+# - remove all livepatches besides the atomic replace one and verify that the
+#   atomic replace livepatch is still active
 # - remove the atomic replace livepatch and verify that none are active
 
 start_test "atomic replace livepatch"
@@ -119,12 +122,31 @@ load_lp $MOD_LIVEPATCH
 grep 'live patched' /proc/cmdline > /dev/kmsg
 grep 'live patched' /proc/meminfo > /dev/kmsg
 
+for mod in test_klp_syscall test_klp_callbacks_demo; do
+	load_lp $mod
+done
+
+mods=(/sys/kernel/livepatch/*)
+nmods=${#mods[@]}
+if [ "$nmods" -ne 3 ]; then
+	die "Expecting three modules listed, found $nmods"
+fi
+
 load_lp $MOD_REPLACE replace=1
 
 grep 'live patched' /proc/cmdline > /dev/kmsg
 grep 'live patched' /proc/meminfo > /dev/kmsg
 
-unload_lp $MOD_LIVEPATCH
+mods=(/sys/kernel/livepatch/*)
+nmods=${#mods[@]}
+if [ "$nmods" -ne 1 ]; then
+	die "Expecting only one moduled listed, found $nmods"
+fi
+
+# These modules were disabled by the atomic replace
+for mod in test_klp_callbacks_demo test_klp_syscall $MOD_LIVEPATCH; do
+	unload_lp "$mod"
+done
 
 grep 'live patched' /proc/cmdline > /dev/kmsg
 grep 'live patched' /proc/meminfo > /dev/kmsg
@@ -142,6 +164,20 @@ livepatch: '$MOD_LIVEPATCH': starting patching transition
 livepatch: '$MOD_LIVEPATCH': completing patching transition
 livepatch: '$MOD_LIVEPATCH': patching complete
 $MOD_LIVEPATCH: this has been live patched
+% insmod test_modules/test_klp_syscall.ko
+livepatch: enabling patch 'test_klp_syscall'
+livepatch: 'test_klp_syscall': initializing patching transition
+livepatch: 'test_klp_syscall': starting patching transition
+livepatch: 'test_klp_syscall': completing patching transition
+livepatch: 'test_klp_syscall': patching complete
+% insmod test_modules/test_klp_callbacks_demo.ko
+livepatch: enabling patch 'test_klp_callbacks_demo'
+livepatch: 'test_klp_callbacks_demo': initializing patching transition
+test_klp_callbacks_demo: pre_patch_callback: vmlinux
+livepatch: 'test_klp_callbacks_demo': starting patching transition
+livepatch: 'test_klp_callbacks_demo': completing patching transition
+test_klp_callbacks_demo: post_patch_callback: vmlinux
+livepatch: 'test_klp_callbacks_demo': patching complete
 % insmod test_modules/$MOD_REPLACE.ko replace=1
 livepatch: enabling patch '$MOD_REPLACE'
 livepatch: '$MOD_REPLACE': initializing patching transition
@@ -149,6 +185,8 @@ livepatch: '$MOD_REPLACE': starting patching transition
 livepatch: '$MOD_REPLACE': completing patching transition
 livepatch: '$MOD_REPLACE': patching complete
 $MOD_REPLACE: this has been live patched
+% rmmod test_klp_callbacks_demo
+% rmmod test_klp_syscall
 % rmmod $MOD_LIVEPATCH
 $MOD_REPLACE: this has been live patched
 % echo 0 > /sys/kernel/livepatch/$MOD_REPLACE/enabled
