@@ -69,6 +69,7 @@ enum g762_regs {
 #define G762_REG_FAN_CMD1_PWM_POLARITY  0x02 /* PWM polarity */
 #define G762_REG_FAN_CMD1_PULSE_PER_REV 0x01 /* pulse per fan revolution */
 
+#define G761_REG_FAN_CMD2_FAN_CLOCK     0x20 /* choose internal clock*/
 #define G762_REG_FAN_CMD2_GEAR_MODE_1   0x08 /* fan gear mode */
 #define G762_REG_FAN_CMD2_GEAR_MODE_0   0x04
 #define G762_REG_FAN_CMD2_FAN_STARTV_1  0x02 /* fan startup voltage */
@@ -115,6 +116,7 @@ enum g762_regs {
 
 struct g762_data {
 	struct i2c_client *client;
+	bool internal_clock;
 	struct clk *clk;
 
 	/* update mutex */
@@ -566,6 +568,7 @@ static int do_set_fan_startv(struct device *dev, unsigned long val)
 
 #ifdef CONFIG_OF
 static const struct of_device_id g762_dt_match[] = {
+	{ .compatible = "gmt,g761" },
 	{ .compatible = "gmt,g762" },
 	{ .compatible = "gmt,g763" },
 	{ },
@@ -597,6 +600,16 @@ static int g762_of_clock_enable(struct i2c_client *client)
 	if (!client->dev.of_node)
 		return 0;
 
+	data = i2c_get_clientdata(client);
+
+	/* Skip CLK detection and handling if we use internal clock */
+	data->internal_clock = of_property_read_bool(client->dev.of_node,
+						     "gmt,internal-clock");
+	if (data->internal_clock) {
+		do_set_clk_freq(&client->dev, 32768);
+		return 0;
+	}
+
 	clk = of_clk_get(client->dev.of_node, 0);
 	if (IS_ERR(clk)) {
 		dev_err(&client->dev, "failed to get clock\n");
@@ -616,7 +629,6 @@ static int g762_of_clock_enable(struct i2c_client *client)
 		goto clk_unprep;
 	}
 
-	data = i2c_get_clientdata(client);
 	data->clk = clk;
 
 	ret = devm_add_action(&client->dev, g762_of_clock_disable, data);
@@ -1029,12 +1041,17 @@ static inline int g762_fan_init(struct device *dev)
 	if (IS_ERR(data))
 		return PTR_ERR(data);
 
+	if (data->internal_clock)
+		data->fan_cmd2 |= G761_REG_FAN_CMD2_FAN_CLOCK;
+
 	data->fan_cmd1 |= G762_REG_FAN_CMD1_DET_FAN_FAIL;
 	data->fan_cmd1 |= G762_REG_FAN_CMD1_DET_FAN_OOC;
 	data->valid = false;
 
-	return i2c_smbus_write_byte_data(data->client, G762_REG_FAN_CMD1,
-					 data->fan_cmd1);
+	return (i2c_smbus_write_byte_data(data->client, G762_REG_FAN_CMD1,
+					  data->fan_cmd1) |
+		i2c_smbus_write_byte_data(data->client, G762_REG_FAN_CMD2,
+					  data->fan_cmd2));
 }
 
 static int g762_probe(struct i2c_client *client)
