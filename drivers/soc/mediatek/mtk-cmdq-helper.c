@@ -562,4 +562,159 @@ int cmdq_pkt_finalize(struct cmdq_pkt *pkt)
 }
 EXPORT_SYMBOL(cmdq_pkt_finalize);
 
+int cmdq_sec_insert_backup_cookie(struct cmdq_pkt *pkt)
+{
+	struct cmdq_client *cl = (struct cmdq_client *)pkt->cl;
+	struct cmdq_operand left, right;
+	dma_addr_t addr;
+
+	addr = cmdq_sec_get_exec_cnt_addr(cl->chan);
+	cmdq_pkt_assign(pkt, CMDQ_THR_SPR_IDX1, CMDQ_ADDR_HIGH(addr));
+	cmdq_pkt_read_s(pkt, CMDQ_THR_SPR_IDX1, CMDQ_ADDR_LOW(addr), CMDQ_THR_SPR_IDX1);
+
+	left.reg = true;
+	left.idx = CMDQ_THR_SPR_IDX1;
+	right.reg = false;
+	right.value = 1;
+	cmdq_pkt_logic_command(pkt, CMDQ_THR_SPR_IDX1, &left, CMDQ_LOGIC_ADD, &right);
+
+	addr = cmdq_sec_get_cookie_addr(cl->chan);
+	cmdq_pkt_assign(pkt, CMDQ_THR_SPR_IDX2, CMDQ_ADDR_HIGH(addr));
+	cmdq_pkt_write_s(pkt, CMDQ_THR_SPR_IDX2, CMDQ_ADDR_LOW(addr), CMDQ_THR_SPR_IDX1);
+	cmdq_pkt_set_event(pkt, cmdq_sec_get_eof_event_id(cl->chan));
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(cmdq_sec_insert_backup_cookie);
+
+static int cmdq_sec_realloc_addr_list(struct cmdq_pkt *pkt, const u32 count)
+{
+	struct cmdq_sec_data *sec_data = (struct cmdq_sec_data *)pkt->sec_data;
+	void *prev = (void *)(unsigned long)sec_data->addr_metadatas, *curr;
+
+	if (count <= sec_data->addr_metadata_max_cnt)
+		return 0;
+
+	curr = kcalloc(count, sizeof(*sec_data), GFP_KERNEL);
+	if (!curr)
+		return -ENOMEM;
+
+	if (count && sec_data->addr_metadatas)
+		memcpy(curr, prev, sizeof(*sec_data) * sec_data->addr_metadata_max_cnt);
+
+	kfree(prev);
+
+	sec_data->addr_metadatas = (uintptr_t)curr;
+	sec_data->addr_metadata_max_cnt = count;
+	return 0;
+}
+
+void cmdq_sec_pkt_free_sec_data(struct cmdq_pkt *pkt)
+{
+	kfree(pkt->sec_data);
+}
+EXPORT_SYMBOL_GPL(cmdq_sec_pkt_free_sec_data);
+
+int cmdq_sec_pkt_alloc_sec_data(struct cmdq_pkt *pkt)
+{
+	struct cmdq_sec_data *sec_data;
+
+	if (pkt->sec_data)
+		return 0;
+
+	sec_data = kzalloc(sizeof(*sec_data), GFP_KERNEL);
+	if (!sec_data)
+		return -ENOMEM;
+
+	pkt->sec_data = (void *)sec_data;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(cmdq_sec_pkt_alloc_sec_data);
+
+static int cmdq_sec_append_metadata(struct cmdq_pkt *pkt,
+				    const enum cmdq_iwc_addr_metadata_type type,
+				    const u32 base, const u32 offset)
+{
+	struct cmdq_sec_data *sec_data;
+	struct iwc_cmdq_addr_metadata_t *meta;
+	int idx, max, ret;
+
+	pr_debug("[%s %d] pkt:%p type:%u base:%#x offset:%#x",
+		 __func__, __LINE__, pkt, type, base, offset);
+
+	ret = cmdq_sec_pkt_alloc_sec_data(pkt);
+	if (ret < 0)
+		return ret;
+
+	sec_data = (struct cmdq_sec_data *)pkt->sec_data;
+	idx = sec_data->addr_metadata_cnt;
+	if (idx >= CMDQ_IWC_MAX_ADDR_LIST_LENGTH) {
+		pr_err("idx:%u reach over:%u", idx, CMDQ_IWC_MAX_ADDR_LIST_LENGTH);
+		return -EFAULT;
+	}
+
+	if (!sec_data->addr_metadata_max_cnt)
+		max = ADDR_METADATA_MAX_COUNT_ORIGIN;
+	else if (idx >= sec_data->addr_metadata_max_cnt)
+		max = sec_data->addr_metadata_max_cnt * 2;
+	else
+		max = sec_data->addr_metadata_max_cnt;
+
+	ret = cmdq_sec_realloc_addr_list(pkt, max);
+	if (ret)
+		return ret;
+
+	if (!sec_data->addr_metadatas) {
+		pr_info("addr_metadatas is missing");
+
+		meta = kzalloc(sizeof(*meta), GFP_KERNEL);
+		if (!meta)
+			return -ENOMEM;
+
+		sec_data->addr_metadatas = (uintptr_t)(void *)meta;
+	}
+	meta = (struct iwc_cmdq_addr_metadata_t *)(uintptr_t)sec_data->addr_metadatas;
+
+	meta[idx].type = type;
+	meta[idx].base_handle = base;
+	meta[idx].offset = offset;
+	sec_data->addr_metadata_cnt += 1;
+	return 0;
+}
+
+int cmdq_sec_pkt_set_data(struct cmdq_pkt *pkt, enum cmdq_sec_scenario scenario)
+{
+	struct cmdq_sec_data *sec_data;
+	int ret;
+
+	if (!pkt) {
+		pr_err("invalid pkt:%p", pkt);
+		return -EINVAL;
+	}
+
+	ret = cmdq_sec_pkt_alloc_sec_data(pkt);
+	if (ret < 0)
+		return ret;
+
+	pr_debug("[%s %d] pkt:%p sec_data:%p scen:%u",
+		 __func__, __LINE__, pkt, pkt->sec_data, scenario);
+
+	sec_data = (struct cmdq_sec_data *)pkt->sec_data;
+	sec_data->scenario = scenario;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(cmdq_sec_pkt_set_data);
+
+int cmdq_sec_pkt_write(struct cmdq_pkt *pkt, u8 subsys, u16 offset,
+		       enum cmdq_iwc_addr_metadata_type type,
+		       u32 base, u32 base_offset)
+{
+	cmdq_pkt_write(pkt, subsys, offset, base);
+
+	return cmdq_sec_append_metadata(pkt, type, base, base_offset);
+}
+EXPORT_SYMBOL_GPL(cmdq_sec_pkt_write);
+
 MODULE_LICENSE("GPL v2");

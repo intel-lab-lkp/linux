@@ -9,6 +9,7 @@
 
 #include <linux/mailbox_client.h>
 #include <linux/mailbox/mtk-cmdq-mailbox.h>
+#include <linux/mailbox/mtk-cmdq-sec-mailbox.h>
 #include <linux/timer.h>
 
 #define CMDQ_ADDR_HIGH(addr)	((u32)(((addr) >> 16) & GENMASK(31, 0)))
@@ -399,6 +400,52 @@ int cmdq_pkt_eoc(struct cmdq_pkt *pkt);
  */
 int cmdq_pkt_finalize(struct cmdq_pkt *pkt);
 
+/**
+ * cmdq_sec_pkt_free_sec_data() - free sec_data for CMDQ packet.
+ * @pkt:	the CMDQ packet.
+ */
+void cmdq_sec_pkt_free_sec_data(struct cmdq_pkt *pkt);
+
+/**
+ * cmdq_sec_pkt_alloc_sec_data() - allocate sec_data for CMDQ packet.
+ * @pkt:	the CMDQ packet.
+ *
+ * Return: 0 for success; else the error code is returned
+ */
+int cmdq_sec_pkt_alloc_sec_data(struct cmdq_pkt *pkt);
+
+/**
+ * cmdq_sec_insert_backup_cookie() - append backup cookie related instructions.
+ * @pkt:	the CMDQ packet.
+ *
+ * Return: 0 for success; else the error code is returned
+ */
+int cmdq_sec_insert_backup_cookie(struct cmdq_pkt *pkt);
+
+/**
+ * cmdq_sec_pkt_set_data() - set secure configuration to sec_data in CDMQ packet.
+ * @pkt:	the CMDQ packet.
+ * @scenario:		the scenario to CMDQ TA.
+ *
+ * Return: 0 for success; else the error code is returned
+ */
+int cmdq_sec_pkt_set_data(struct cmdq_pkt *pkt, enum cmdq_sec_scenario scenario);
+
+/**
+ * cmdq_sec_pkt_write() - append write secure buffer related instructions.
+ * @pkt:	  the CMDQ packet.
+ * @subsys:	the CMDQ sub system code.
+ * @offset:	register offset from CMDQ sub system.
+ * @type:	the address metadata conversion type.
+ * @base:	the secure handle of secure buffer.
+ * @base_offset:the address offset of secure buffer.
+ *
+ * Return: 0 for success; else the error code is returned
+ */
+int cmdq_sec_pkt_write(struct cmdq_pkt *pkt, u8 subsys, u16 offset,
+		       enum cmdq_iwc_addr_metadata_type type,
+		       u32 base, u32 base_offset);
+
 #else /* IS_ENABLED(CONFIG_MTK_CMDQ) */
 
 static inline int cmdq_dev_get_client_reg(struct device *dev,
@@ -520,6 +567,30 @@ static inline int cmdq_pkt_eoc(struct cmdq_pkt *pkt)
 }
 
 static inline int cmdq_pkt_finalize(struct cmdq_pkt *pkt)
+{
+	return -EINVAL;
+}
+
+static inline void cmdq_sec_pkt_free_sec_data(struct cmdq_pkt *pkt) {}
+
+static inline int cmdq_sec_pkt_alloc_sec_data(struct cmdq_pkt *pkt)
+{
+	return -EINVAL;
+}
+
+static inline int cmdq_sec_insert_backup_cookie(struct cmdq_pkt *pkt)
+{
+	return -EINVAL;
+}
+
+static inline int cmdq_sec_pkt_set_data(struct cmdq_pkt *pkt, enum cmdq_sec_scenario scenario)
+{
+	return -EINVAL;
+}
+
+static inline int cmdq_sec_pkt_write(struct cmdq_pkt *pkt, u8 subsys, u16 offset,
+				     enum cmdq_iwc_addr_metadata_type type,
+				     u32 base, u32 base_offset)
 {
 	return -EINVAL;
 }
