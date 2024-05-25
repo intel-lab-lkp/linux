@@ -84,6 +84,7 @@ struct cmdq_pkt {
 	size_t			buf_size; /* real buffer size */
 	void			*cl;
 	bool			loop;
+	void			*sec_data;
 };
 
 struct cmdq_thread {
