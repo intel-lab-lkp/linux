@@ -20,10 +20,7 @@ struct lsdc_i2c {
 	u8 scl;
 };
 
-struct lsdc_display_pipe;
-
 int lsdc_create_i2c_chan(struct drm_device *ddev,
-			 struct lsdc_display_pipe *dispipe,
 			 unsigned int index);
 
 #endif

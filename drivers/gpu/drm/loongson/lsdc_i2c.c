@@ -115,7 +115,6 @@ static void lsdc_destroy_i2c(struct drm_device *ddev, void *data)
  * @index: output channel index, 0 for PIPE0, 1 for PIPE1
  */
 int lsdc_create_i2c_chan(struct drm_device *ddev,
-			 struct lsdc_display_pipe *dispipe,
 			 unsigned int index)
 {
 	struct lsdc_device *ldev = to_lsdc(ddev);
@@ -126,8 +125,6 @@ int lsdc_create_i2c_chan(struct drm_device *ddev,
 	li2c = kzalloc(sizeof(*li2c), GFP_KERNEL);
 	if (!li2c)
 		return -ENOMEM;
-
-	dispipe->li2c = li2c;
 
 	if (index == 0) {
 		li2c->sda = 0x01;  /* pin 0 */
@@ -170,6 +167,8 @@ int lsdc_create_i2c_chan(struct drm_device *ddev,
 	ret = drmm_add_action_or_reset(ddev, lsdc_destroy_i2c, li2c);
 	if (ret)
 		return ret;
+
+	ldev->i2c[index] = adapter;
 
 	drm_info(ddev, "%s(sda pin mask=%u, scl pin mask=%u) created\n",
 		 adapter->name, li2c->sda, li2c->scl);
