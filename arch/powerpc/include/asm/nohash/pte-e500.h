@@ -67,6 +67,7 @@
 #define _PAGE_RWX	(_PAGE_READ | _PAGE_WRITE | _PAGE_BAP_UX)
 
 #define _PAGE_SPECIAL	_PAGE_SW0
+#define _PAGE_PTE	_PAGE_PSIZE_4K
 
 #define	PTE_RPN_SHIFT	(24)
 
@@ -105,6 +106,33 @@ static inline pte_t pte_mkexec(pte_t pte)
 	return __pte((pte_val(pte) & ~_PAGE_BAP_SX) | _PAGE_BAP_UX);
 }
 #define pte_mkexec pte_mkexec
+
+static inline int pmd_leaf(pmd_t pmd)
+{
+	return pmd_val(pmd) & _PAGE_PTE;
+}
+#define pmd_leaf pmd_leaf
+
+static inline unsigned long pmd_leaf_size(pmd_t pmd)
+{
+	return 1UL << (((pmd_val(pmd) & _PAGE_HSIZE_MSK) >> _PAGE_HSIZE_SHIFT) + 20);
+}
+#define pmd_leaf_size pmd_leaf_size
+
+#ifdef CONFIG_PPC64
+static inline int pud_leaf(pud_t pud)
+{
+	return pud_val(pud) & _PAGE_PTE;
+}
+#define pud_leaf pud_leaf
+
+static inline unsigned long pud_leaf_size(pud_t pud)
+{
+	return 1UL << (((pud_val(pud) & _PAGE_HSIZE_MSK) >> _PAGE_HSIZE_SHIFT) + 20);
+}
+#define pud_leaf_size pud_leaf_size
+
+#endif
 
 #endif /* __ASSEMBLY__ */
 

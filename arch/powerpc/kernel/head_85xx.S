@@ -310,16 +310,17 @@ set_ivor:
 	rlwinm	r12, r10, 14, 18, 28;	/* Compute pgdir/pmd offset */	\
 	add	r12, r11, r12;						\
 	lwz	r11, 4(r12);		/* Get pgd/pmd entry */		\
-	rlwinm.	r12, r11, 0, 0, 20;	/* Extract pt base address */	\
-	blt	1000f;			/* Normal non-huge page */	\
-	beq	2f;			/* Bail if no table */		\
-	oris	r11, r11, PD_HUGE@h;	/* Put back address bit */	\
-	andi.	r10, r11, HUGEPD_SHIFT_MASK@l; /* extract size field */	\
-	xor	r12, r10, r11;		/* drop size bits from pointer */ \
+	rotlwi.	r11, r11, 22;		/* Leaf entry (_PAGE_PTE set) */\
+	bge	1000f;			/* Normal non-huge page */	\
+	rlwinm	r10, r11, 64 - _PAGE_HSIZE_SHIFT - 22, 0xf;		\
+	rotrwi	r11, r11, 22;		/* Restore entry */		\
 	b	1001f;							\
-1000:	rlwimi	r12, r10, 23, 20, 28;	/* Compute pte address */	\
+1000:	rlwinm.	r12, r11, 32 - 22, 0, 20; /* Extract pt base address */	\
+	beq	2f;			/* Bail if no table */		\
+	rlwimi	r12, r10, 23, 20, 28;	/* Compute pte address */	\
 	li	r10, 0;			/* clear r10 */			\
-1001:	lwz	r11, 4(r12);		/* Get pte entry */
+	lwz	r11, 4(r12);		/* Get pte entry */		\
+1001:
 #else
 #define FIND_PTE	\
 	rlwinm	r12, r10, 14, 18, 28;	/* Compute pgdir/pmd offset */	\
@@ -749,16 +750,16 @@ finish_tlb_load:
 100:	stw	r15, 0(r17)
 
 	/*
-	 * Calc MAS1_TSIZE from r10 (which has pshift encoded)
+	 * Calc MAS1_TSIZE from r10 (which has pshift - 20 encoded)
 	 * tlb_enc = (pshift - 10).
 	 */
-	subi	r15, r10, 10
+	addi	r15, r10, 10
 	mfspr	r16, SPRN_MAS1
 	rlwimi	r16, r15, 7, 20, 24
 	mtspr	SPRN_MAS1, r16
 
 	/* copy the pshift for use later */
-	mr	r14, r10
+	addi	r14, r10, 20
 
 	/* fall through */
 

@@ -152,20 +152,26 @@ tlb_miss_common_bolted:
 
 	rldicl	r15,r16,64-PUD_SHIFT+3,64-PUD_INDEX_SIZE-3
 	clrrdi	r15,r15,3
-	cmpdi	cr0,r14,0
-	bge	tlb_miss_fault_bolted	/* Bad pgd entry or hugepage; bail */
+	cmpdi	cr3,r14,0
+	andi.	r10,r14,_PAGE_PTE
+	beq-	cr3,tlb_miss_fault_bolted /* No entry, bail */
+	bne	tlb_miss_fault_bolted	/* Hugepage; bail */
 	ldx	r14,r14,r15		/* grab pud entry */
 
 	rldicl	r15,r16,64-PMD_SHIFT+3,64-PMD_INDEX_SIZE-3
 	clrrdi	r15,r15,3
-	cmpdi	cr0,r14,0
-	bge	tlb_miss_fault_bolted
+	cmpdi	cr3,r14,0
+	andi.	r10,r14,_PAGE_PTE
+	beq-	cr3,tlb_miss_fault_bolted /* No entry, bail */
+	bne	tlb_miss_fault_bolted	/* Hugepage; bail */
 	ldx	r14,r14,r15		/* Grab pmd entry */
 
 	rldicl	r15,r16,64-PAGE_SHIFT+3,64-PTE_INDEX_SIZE-3
 	clrrdi	r15,r15,3
-	cmpdi	cr0,r14,0
-	bge	tlb_miss_fault_bolted
+	cmpdi	cr3,r14,0
+	andi.	r10,r14,_PAGE_PTE
+	beq-	cr3,tlb_miss_fault_bolted /* No entry, bail */
+	bne	tlb_miss_fault_bolted	/* Hugepage; bail */
 	ldx	r14,r14,r15		/* Grab PTE, normal (!huge) page */
 
 	/* Check if required permissions are met */
@@ -390,19 +396,25 @@ ALT_FTR_SECTION_END_IFSET(CPU_FTR_SMT)
 
 	rldicl	r15,r16,64-PUD_SHIFT+3,64-PUD_INDEX_SIZE-3
 	clrrdi	r15,r15,3
-	cmpdi	cr0,r14,0
-	bge	tlb_miss_huge_e6500	/* Bad pgd entry or hugepage; bail */
+	cmpdi	cr3,r14,0
+	andi.	r10,r14,_PAGE_PTE
+	beq-	cr3,tlb_miss_fault_e6500 /* No entry, bail */
+	bne	tlb_miss_huge_e6500	/* Hugepage; bail */
 	ldx	r14,r14,r15		/* grab pud entry */
 
 	rldicl	r15,r16,64-PMD_SHIFT+3,64-PMD_INDEX_SIZE-3
 	clrrdi	r15,r15,3
-	cmpdi	cr0,r14,0
-	bge	tlb_miss_huge_e6500
+	cmpdi	cr3,r14,0
+	andi.	r10,r14,_PAGE_PTE
+	beq-	cr3,tlb_miss_fault_e6500 /* No entry, bail */
+	bne	tlb_miss_huge_e6500	/* Hugepage; bail */
 	ldx	r14,r14,r15		/* Grab pmd entry */
 
 	mfspr	r10,SPRN_MAS0
-	cmpdi	cr0,r14,0
-	bge	tlb_miss_huge_e6500
+	cmpdi	cr3,r14,0
+	andi.	r15,r14,_PAGE_PTE
+	beq-	cr3,tlb_miss_fault_e6500 /* No entry, bail */
+	bne	tlb_miss_huge_e6500	/* Hugepage; bail */
 
 	/* Now we build the MAS for a 2M indirect page:
 	 *
@@ -449,12 +461,7 @@ END_FTR_SECTION_IFSET(CPU_FTR_SMT)
 	rfi
 
 tlb_miss_huge_e6500:
-	beq	tlb_miss_fault_e6500
-	li	r10,1
-	andi.	r15,r14,HUGEPD_SHIFT_MASK@l /* r15 = psize */
-	rldimi	r14,r10,63,0		/* Set PD_HUGE */
-	xor	r14,r14,r15		/* Clear size bits */
-	ldx	r14,0,r14
+	rlwinm	r15,r14,32-_PAGE_HSIZE_SHIFT,0xf
 
 	/*
 	 * Now we build the MAS for a huge page.
@@ -465,7 +472,7 @@ tlb_miss_huge_e6500:
 	 * MAS 2,3+7:	Needs to be redone similar to non-tablewalk handler
 	 */
 
-	subi	r15,r15,10		/* Convert psize to tsize */
+	addi	r15,r15,10		/* Convert hsize to tsize */
 	mfspr	r10,SPRN_MAS1
 	rlwinm	r10,r10,0,~MAS1_IND
 	rlwimi	r10,r15,MAS1_TSIZE_SHIFT,MAS1_TSIZE_MASK
@@ -579,22 +586,28 @@ virt_page_table_tlb_miss:
 	rldicl	r11,r16,64-VPTE_PGD_SHIFT,64-PGD_INDEX_SIZE-3
 	clrrdi	r10,r11,3
 	ldx	r15,r10,r15
-	cmpdi	cr0,r15,0
-	bge	virt_page_table_tlb_miss_fault
+	cmpdi	cr3,r15,0
+	andi.	r10,r15,_PAGE_PTE
+	beq-	cr3,virt_page_table_tlb_miss_fault /* No entry, bail */
+	bne	virt_page_table_tlb_miss_fault	/* Hugepage; bail */
 
 	/* Get to PUD entry */
 	rldicl	r11,r16,64-VPTE_PUD_SHIFT,64-PUD_INDEX_SIZE-3
 	clrrdi	r10,r11,3
 	ldx	r15,r10,r15
-	cmpdi	cr0,r15,0
-	bge	virt_page_table_tlb_miss_fault
+	cmpdi	cr3,r15,0
+	andi.	r10,r15,_PAGE_PTE
+	beq-	cr3,virt_page_table_tlb_miss_fault /* No entry, bail */
+	bne	virt_page_table_tlb_miss_fault	/* Hugepage; bail */
 
 	/* Get to PMD entry */
 	rldicl	r11,r16,64-VPTE_PMD_SHIFT,64-PMD_INDEX_SIZE-3
 	clrrdi	r10,r11,3
 	ldx	r15,r10,r15
-	cmpdi	cr0,r15,0
-	bge	virt_page_table_tlb_miss_fault
+	cmpdi	cr3,r15,0
+	andi.	r10,r15,_PAGE_PTE
+	beq-	cr3,virt_page_table_tlb_miss_fault /* No entry, bail */
+	bne	virt_page_table_tlb_miss_fault	/* Hugepage; bail */
 
 	/* Ok, we're all right, we can now create a kernel translation for
 	 * a 4K or 64K page from r16 -> r15.
