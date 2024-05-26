@@ -29,8 +29,15 @@ static int __init loongson_module_init(void)
 	if (ret)
 		return ret;
 
+	ret = pci_register_driver(&loong_gpu_pci_driver);
+	if (ret) {
+		platform_driver_unregister(&lsdc_output_port_platform_driver);
+		return ret;
+	}
+
 	ret = pci_register_driver(&lsdc_pci_driver);
 	if (ret) {
+		pci_unregister_driver(&loong_gpu_pci_driver);
 		platform_driver_unregister(&lsdc_output_port_platform_driver);
 		return ret;
 	}
@@ -42,6 +49,8 @@ module_init(loongson_module_init);
 static void __exit loongson_module_exit(void)
 {
 	pci_unregister_driver(&lsdc_pci_driver);
+
+	pci_unregister_driver(&loong_gpu_pci_driver);
 
 	platform_driver_unregister(&lsdc_output_port_platform_driver);
 }

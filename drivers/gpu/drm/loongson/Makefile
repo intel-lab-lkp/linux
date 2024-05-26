@@ -17,6 +17,9 @@ loongson-y := \
 	lsdc_probe.o \
 	lsdc_ttm.o
 
+loongson-y += \
+	loong_gpu_pci_drv.o
+
 loongson-y += loongson_device.o \
 	      loongson_module.o
 

@@ -154,9 +154,10 @@ static int lsdc_get_dedicated_vram(struct lsdc_device *ldev,
 	base = pci_resource_start(pdev_gpu, 2);
 	size = pci_resource_len(pdev_gpu, 2);
 
+	pci_dev_put(pdev_gpu);
+
 	ldev->vram_base = base;
 	ldev->vram_size = size;
-	ldev->gpu = pdev_gpu;
 
 	drm_info(ddev, "Dedicated vram start: 0x%llx, size: %uMiB\n",
 		 (u64)base, (u32)(size >> 20));
@@ -281,6 +282,7 @@ static const struct component_master_ops loongson_drm_master_ops = {
 
 static int lsdc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
+	struct pci_dev *gpu = NULL;
 	struct component_match *matches = NULL;
 	const struct lsdc_desc *descp;
 	struct lsdc_device *ldev;
@@ -337,6 +339,14 @@ static int lsdc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		component_match_add(&pdev->dev, &matches,
 				    component_compare_dev,
 				    &ldev->child[i]->dev);
+	}
+
+	gpu = pci_get_device(PCI_VENDOR_ID_LOONGSON, 0x7a25, NULL);
+	if (gpu) {
+		component_match_add(&pdev->dev, &matches,
+				    component_compare_dev,
+				    &gpu->dev);
+		pci_dev_put(gpu);
 	}
 
 	ret = component_master_add_with_match(&pdev->dev,
