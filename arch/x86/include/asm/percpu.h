@@ -160,7 +160,10 @@ do {									\
 	*(qual __my_cpu_type(pcp) *)__my_cpu_ptr(&(pcp)) = (val);	\
 } while (0)
 
-#define __raw_cpu_read_const(pcp)	__raw_cpu_read(, , pcp)
+#define __raw_cpu_read_const(pcp)					\
+({									\
+	*(typeof(pcp) *)(__force uintptr_t)(&(pcp));			\
+})
 
 #else /* !CONFIG_USE_X86_SEG_SUPPORT: */
 
