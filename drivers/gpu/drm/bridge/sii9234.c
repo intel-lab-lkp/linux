@@ -817,10 +817,11 @@ static int sii9234_init_resources(struct sii9234 *ctx,
 				  struct i2c_client *client)
 {
 	struct i2c_adapter *adapter = client->adapter;
+	struct fwnode_handle *fwnode = dev_fwnode(ctx->dev);
 	int ret;
 
-	if (!ctx->dev->of_node) {
-		dev_err(ctx->dev, "not DT device\n");
+	if (!fwnode) {
+		dev_err(ctx->dev, "firmware data is missing\n");
 		return -ENODEV;
 	}
 
