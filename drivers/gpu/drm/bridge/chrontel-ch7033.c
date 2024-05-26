@@ -531,6 +531,7 @@ static const struct regmap_config ch7033_regmap_config = {
 static int ch7033_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
+	struct fwnode_handle *fwnode = dev_fwnode(dev);
 	struct ch7033_priv *priv;
 	unsigned int val;
 	int ret;
@@ -541,10 +542,15 @@ static int ch7033_probe(struct i2c_client *client)
 
 	dev_set_drvdata(dev, priv);
 
-	ret = drm_of_find_panel_or_bridge(dev->of_node, 1, -1, NULL,
-					  &priv->next_bridge);
-	if (ret)
+	priv->next_bridge = drm_bridge_find_next_bridge_by_fwnode(fwnode, 1);
+	if (IS_ERR(priv->next_bridge)) {
+		ret = PTR_ERR(priv->next_bridge);
+		dev_err(dev, "Error in founding the next bridge: %d\n", ret);
 		return ret;
+	} else if (!priv->next_bridge) {
+		dev_dbg(dev, "Next bridge not found, deferring probe\n");
+		return -EPROBE_DEFER;
+	}
 
 	priv->regmap = devm_regmap_init_i2c(client, &ch7033_regmap_config);
 	if (IS_ERR(priv->regmap)) {
