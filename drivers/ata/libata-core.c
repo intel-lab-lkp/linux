@@ -1793,7 +1793,7 @@ retry:
 
 	if (err_mask) {
 		if (err_mask & AC_ERR_NODEV_HINT) {
-			ata_dev_dbg(dev, "NODEV after polling detection\n");
+			ata_dev_err(dev, "NODEV after polling detection\n");
 			return -ENOENT;
 		}
 
@@ -1825,8 +1825,8 @@ retry:
 			 * both flavors of IDENTIFYs which happens
 			 * sometimes with phantom devices.
 			 */
-			ata_dev_dbg(dev,
-				    "both IDENTIFYs aborted, assuming NODEV\n");
+			ata_dev_info(dev,
+				     "both IDENTIFYs aborted, assuming NODEV\n");
 			return -ENOENT;
 		}
 
@@ -1857,9 +1857,9 @@ retry:
 	if (class == ATA_DEV_ATA || class == ATA_DEV_ZAC) {
 		if (!ata_id_is_ata(id) && !ata_id_is_cfa(id))
 			goto err_out;
-		if (ap->host->flags & ATA_HOST_IGNORE_ATA &&
-							ata_id_is_ata(id)) {
-			ata_dev_dbg(dev,
+		if ((ap->host->flags & ATA_HOST_IGNORE_ATA) &&
+		    ata_id_is_ata(id)) {
+			ata_dev_info(dev,
 				"host indicates ignore ATA devices, ignored\n");
 			return -ENOENT;
 		}
@@ -2247,7 +2247,8 @@ static void ata_dev_config_ncq_send_recv(struct ata_device *dev)
 		memcpy(cmds, ap->sector_buf, ATA_LOG_NCQ_SEND_RECV_SIZE);
 
 		if (dev->horkage & ATA_HORKAGE_NO_NCQ_TRIM) {
-			ata_dev_dbg(dev, "disabling queued TRIM support\n");
+			ata_dev_info(dev, "disabling queued TRIM - "
+					  "known buggy device\n");
 			cmds[ATA_LOG_NCQ_SEND_RECV_DSM_OFFSET] &=
 				~ATA_LOG_NCQ_SEND_RECV_DSM_TRIM;
 		}
@@ -2335,13 +2336,13 @@ static int ata_dev_config_ncq(struct ata_device *dev,
 	if (!IS_ENABLED(CONFIG_SATA_HOST))
 		return 0;
 	if (dev->horkage & ATA_HORKAGE_NONCQ) {
-		snprintf(desc, desc_sz, "NCQ (not used)");
+		snprintf(desc, desc_sz, "NCQ (not used - known buggy device)");
 		return 0;
 	}
 
 	if (dev->horkage & ATA_HORKAGE_NO_NCQ_ON_ATI &&
 	    ata_dev_check_adapter(dev, PCI_VENDOR_ID_ATI)) {
-		snprintf(desc, desc_sz, "NCQ (not used)");
+		snprintf(desc, desc_sz, "NCQ (not used - known buggy device/host adapter)");
 		return 0;
 	}
 
@@ -2397,7 +2398,7 @@ static void ata_dev_config_sense_reporting(struct ata_device *dev)
 
 	err_mask = ata_dev_set_feature(dev, SETFEATURE_SENSE_DATA, 0x1);
 	if (err_mask) {
-		ata_dev_dbg(dev,
+		ata_dev_err(dev,
 			    "failed to enable Sense Data Reporting, Emask 0x%x\n",
 			    err_mask);
 	}
@@ -2479,7 +2480,7 @@ static void ata_dev_config_trusted(struct ata_device *dev)
 
 	trusted_cap = get_unaligned_le64(&ap->sector_buf[40]);
 	if (!(trusted_cap & (1ULL << 63))) {
-		ata_dev_dbg(dev,
+		ata_dev_err(dev,
 			    "Trusted Computing capability qword not valid!\n");
 		return;
 	}
@@ -2688,9 +2689,15 @@ static void ata_dev_config_fua(struct ata_device *dev)
 	if (!(dev->flags & ATA_DFLAG_LBA48) || !ata_id_has_fua(dev->id))
 		goto nofua;
 
-	/* Ignore known bad devices and devices that lack NCQ support */
-	if (!ata_ncq_supported(dev) || (dev->horkage & ATA_HORKAGE_NO_FUA))
+	/* Ignore devices that lack NCQ support */
+	if (!ata_ncq_supported(dev))
 		goto nofua;
+
+	/* Finally, ignore buggy devices */
+	if (dev->horkage & ATA_HORKAGE_NO_FUA) {
+		ata_dev_info(dev, "disabling FUA - known buggy device");
+		goto nofua;
+	}
 
 	dev->flags |= ATA_DFLAG_FUA;
 
@@ -3060,24 +3067,22 @@ int ata_dev_configure(struct ata_device *dev)
 	if (ap->ops->dev_config)
 		ap->ops->dev_config(dev);
 
-	if (dev->horkage & ATA_HORKAGE_DIAGNOSTIC) {
+	if ((dev->horkage & ATA_HORKAGE_DIAGNOSTIC) && print_info) {
 		/* Let the user know. We don't want to disallow opens for
 		   rescue purposes, or in case the vendor is just a blithering
 		   idiot. Do this after the dev_config call as some controllers
 		   with buggy firmware may want to avoid reporting false device
 		   bugs */
 
-		if (print_info) {
-			ata_dev_warn(dev,
-"Drive reports diagnostics failure. This may indicate a drive\n");
-			ata_dev_warn(dev,
-"fault or invalid emulation. Contact drive vendor for information.\n");
-		}
+		ata_dev_warn(dev, "Drive reports diagnostics failure."
+				  " This may indicate a drive fault or invalid emulation."
+				  " Contact drive vendor for information.\n");
 	}
 
 	if ((dev->horkage & ATA_HORKAGE_FIRMWARE_WARN) && print_info) {
-		ata_dev_warn(dev, "WARNING: device requires firmware update to be fully functional\n");
-		ata_dev_warn(dev, "         contact the vendor or visit http://ata.wiki.kernel.org\n");
+		ata_dev_warn(dev, "WARNING: device requires firmware update to be"
+				  " fully functional contact the vendor or visit"
+				  " http://ata.wiki.kernel.org/index.php/Known_issues\n");
 	}
 
 	return 0;
