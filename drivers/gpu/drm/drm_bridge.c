@@ -1351,35 +1351,6 @@ void drm_bridge_hpd_notify(struct drm_bridge *bridge,
 }
 EXPORT_SYMBOL_GPL(drm_bridge_hpd_notify);
 
-#ifdef CONFIG_OF
-/**
- * of_drm_find_bridge - find the bridge corresponding to the device node in
- *			the global bridge list
- *
- * @np: device node
- *
- * RETURNS:
- * drm_bridge control struct on success, NULL on failure
- */
-struct drm_bridge *of_drm_find_bridge(struct device_node *np)
-{
-	struct drm_bridge *bridge;
-
-	mutex_lock(&bridge_lock);
-
-	list_for_each_entry(bridge, &bridge_list, list) {
-		if (bridge->of_node == np) {
-			mutex_unlock(&bridge_lock);
-			return bridge;
-		}
-	}
-
-	mutex_unlock(&bridge_lock);
-	return NULL;
-}
-EXPORT_SYMBOL(of_drm_find_bridge);
-#endif
-
 /**
  * drm_bridge_find_by_fwnode - Find the bridge corresponding to the fwnode
  *

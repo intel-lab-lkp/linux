@@ -791,20 +791,16 @@ int drm_bridge_attach(struct drm_encoder *encoder, struct drm_bridge *bridge,
 		      struct drm_bridge *previous,
 		      enum drm_bridge_attach_flags flags);
 
-#ifdef CONFIG_OF
-struct drm_bridge *of_drm_find_bridge(struct device_node *np);
-#else
-static inline struct drm_bridge *of_drm_find_bridge(struct device_node *np)
-{
-	return NULL;
-}
-#endif
-
 struct drm_bridge *
 drm_bridge_find_by_fwnode(struct fwnode_handle *fwnode);
 
 struct drm_bridge *
 drm_bridge_find_next_bridge_by_fwnode(struct fwnode_handle *fwnode, u32 port);
+
+static inline struct drm_bridge *of_drm_find_bridge(struct device_node *np)
+{
+	return drm_bridge_find_by_fwnode(of_fwnode_handle(np));
+}
 
 /**
  * drm_bridge_get_next_bridge() - Get the next bridge in the chain
