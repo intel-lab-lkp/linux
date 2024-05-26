@@ -29,12 +29,6 @@ extern struct file *alloc_file_pseudo_noaccount(struct inode *, struct vfsmount 
 extern struct file *alloc_file_clone(struct file *, int flags,
 	const struct file_operations *);
 
-static inline void fput_light(struct file *file, int fput_needed)
-{
-	if (fput_needed)
-		fput(file);
-}
-
 struct fd {
 	struct file *file;
 	unsigned int flags;
@@ -74,6 +68,12 @@ static inline struct fd fdget_raw(unsigned int fd)
 static inline struct fd fdget_pos(int fd)
 {
 	return __to_fd(__fdget_pos(fd));
+}
+
+static inline bool fd_empty(struct fd f)
+{
+	// better code with gcc that way
+	return unlikely(!(f.flags | (unsigned long)f.file));
 }
 
 static inline void fdput_pos(struct fd f)
