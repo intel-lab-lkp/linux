@@ -32,6 +32,30 @@ static inline bool ufshcd_is_wb_buf_flush_allowed(struct ufs_hba *hba)
 		!(hba->quirks & UFSHCI_QUIRK_SKIP_MANUAL_WB_FLUSH_CTRL);
 }
 
+static inline void ufshcd_freez_hw_queues(struct ufs_hba *hba)
+{
+	struct scsi_device *sdev;
+
+	shost_for_each_device(sdev, hba->host) {
+		if (sdev == hba->ufs_device_wlun)
+			continue;
+		blk_mq_freeze_queue(sdev->request_queue);
+		blk_mq_quiesce_queue(sdev->request_queue);
+	}
+}
+
+static inline void ufshcd_unfreez_hw_queues(struct ufs_hba *hba)
+{
+	struct scsi_device *sdev;
+
+	shost_for_each_device(sdev, hba->host) {
+		if (sdev == hba->ufs_device_wlun)
+			continue;
+		blk_mq_unquiesce_queue(sdev->request_queue);
+		blk_mq_unfreeze_queue(sdev->request_queue);
+	}
+}
+
 #ifdef CONFIG_SCSI_UFS_HWMON
 void ufs_hwmon_probe(struct ufs_hba *hba, u8 mask);
 void ufs_hwmon_remove(struct ufs_hba *hba);
