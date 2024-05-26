@@ -4968,7 +4968,7 @@ bool wlc_phy_attach_lcnphy(struct brcms_phy *pi)
 {
 	struct brcms_phy_lcnphy *pi_lcn;
 
-	pi->u.pi_lcnphy = kzalloc(sizeof(struct brcms_phy_lcnphy), GFP_ATOMIC);
+	pi->u.pi_lcnphy = kzalloc(sizeof(*pi->u.pi_lcnphy), GFP_ATOMIC);
 	if (pi->u.pi_lcnphy == NULL)
 		return false;
 
