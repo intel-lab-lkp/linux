@@ -340,7 +340,7 @@ static inline void __set_pte_at(struct mm_struct *mm, unsigned long addr,
 
 #define pgprot_writecombine pgprot_noncached_wc
 
-#ifdef CONFIG_HUGETLB_PAGE
+#ifdef CONFIG_ARCH_HAS_HUGEPD
 static inline int hugepd_ok(hugepd_t hpd)
 {
 #ifdef CONFIG_PPC_8xx
@@ -351,6 +351,10 @@ static inline int hugepd_ok(hugepd_t hpd)
 #endif
 }
 
+#define is_hugepd(hpd)		(hugepd_ok(hpd))
+#endif
+
+#ifdef CONFIG_HUGETLB_PAGE
 static inline int pmd_huge(pmd_t pmd)
 {
 	return 0;
@@ -360,8 +364,6 @@ static inline int pud_huge(pud_t pud)
 {
 	return 0;
 }
-
-#define is_hugepd(hpd)		(hugepd_ok(hpd))
 #endif
 
 int map_kernel_page(unsigned long va, phys_addr_t pa, pgprot_t prot);
