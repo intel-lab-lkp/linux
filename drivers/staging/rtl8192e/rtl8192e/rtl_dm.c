@@ -1370,9 +1370,6 @@ static void _rtl92e_dm_rx_path_sel_byrssi(struct net_device *dev)
 					tmp_sec_rssi = cur_rf_rssi;
 					sec_rssi_index = i;
 				}
-			} else if ((cur_rf_rssi < tmp_sec_rssi) &&
-					(cur_rf_rssi > tmp_min_rssi)) {
-				;
 			} else if (cur_rf_rssi == tmp_min_rssi) {
 				if (tmp_sec_rssi == tmp_min_rssi) {
 					tmp_min_rssi = cur_rf_rssi;
@@ -1426,9 +1423,6 @@ static void _rtl92e_dm_rx_path_sel_byrssi(struct net_device *dev)
 						tmp_cck_sec_pwdb = cur_cck_pwdb;
 						cck_rx_ver2_sec_index = i;
 					}
-				} else if ((cur_cck_pwdb < tmp_cck_sec_pwdb) &&
-						(cur_cck_pwdb > tmp_cck_min_pwdb)) {
-					;
 				} else if (cur_cck_pwdb == tmp_cck_min_pwdb) {
 					if (tmp_cck_sec_pwdb == tmp_cck_min_pwdb)
 						tmp_cck_min_pwdb = cur_cck_pwdb;
