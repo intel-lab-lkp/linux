@@ -1441,5 +1441,23 @@ static inline bool pud_leaf(pud_t pud)
 	return !!(pud_raw(pud) & cpu_to_be64(_PAGE_PTE));
 }
 
+#define pmd_leaf_size pmd_leaf_size
+static inline unsigned long pmd_leaf_size(pmd_t pmd)
+{
+	if (IS_ENABLED(CONFIG_PPC_4K_PAGES) && !radix_enabled())
+		return SZ_16M;
+	else
+		return PMD_SIZE;
+}
+
+#define pud_leaf_size pud_leaf_size
+static inline unsigned long pud_leaf_size(pud_t pud)
+{
+	if (IS_ENABLED(CONFIG_PPC_4K_PAGES) && !radix_enabled())
+		return SZ_16G;
+	else
+		return PUD_SIZE;
+}
+
 #endif /* __ASSEMBLY__ */
 #endif /* _ASM_POWERPC_BOOK3S_64_PGTABLE_H_ */
