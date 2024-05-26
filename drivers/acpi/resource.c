@@ -541,6 +541,12 @@ static const struct dmi_system_id irq1_level_low_skip_override[] = {
  */
 static const struct dmi_system_id irq1_edge_low_force_override[] = {
 	{
+		/* MECHREVO Yilong15 Series GM5HG0A */
+		.matches = {
+			DMI_MATCH(DMI_BOARD_NAME, "GM5HG0A"),
+		},
+	},
+	{
 		/* XMG APEX 17 (M23) */
 		.matches = {
 			DMI_MATCH(DMI_BOARD_NAME, "GMxBGxx"),
