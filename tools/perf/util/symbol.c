@@ -22,6 +22,7 @@
 #include "util.h" // lsdir()
 #include "debug.h"
 #include "event.h"
+#include "llvm-c-helpers.h"
 #include "machine.h"
 #include "map.h"
 #include "symbol.h"
@@ -1566,6 +1567,50 @@ out_failure:
 	return -1;
 }
 
+#ifdef HAVE_LIBLLVM_SUPPORT
+int dso__load_llvm_symbols(struct dso *dso, const char *debugfile)
+{
+	struct llvm_symbol_list symbols;
+	struct symbol *symbol;
+	int err = llvm_load_symbols(debugfile, &symbols);
+	int ret = -1;
+
+	if (err == -1)
+		return -1;
+	else if (err == 0)
+		return 0;
+
+	for (size_t i = 0; i < symbols.num_symbols; ++i) {
+		const struct llvm_symbol *sym = &symbols.symbols[i];
+		int elf_binding;
+
+		if (sym->weak)
+			elf_binding = STB_WEAK;
+		else if (sym->global)
+			elf_binding = STB_GLOBAL;
+		else
+			elf_binding = STB_LOCAL;
+		symbol = symbol__new(sym->start, sym->len, elf_binding, STT_FUNC,
+				     sym->name);
+		if (!symbol)
+			goto out_free;
+
+		symbols__insert(dso__symbols(dso), symbol);
+	}
+
+	symbols__fixup_end(dso__symbols(dso), false);
+	symbols__fixup_duplicate(dso__symbols(dso));
+	dso__set_adjust_symbols(dso, true);
+	ret = 0;
+
+out_free:
+	for (size_t i = 0; i < symbols.num_symbols; ++i)
+		zfree(&symbols.symbols[i].name);
+	zfree(&symbols.symbols);
+	return ret;
+}
+#endif
+
 #ifdef HAVE_LIBBFD_SUPPORT
 #define PACKAGE 'perf'
 #include <bfd.h>
@@ -1871,6 +1916,7 @@ int dso__load(struct dso *dso, struct map *map)
 		bool next_slot = false;
 		bool is_reg;
 		bool nsexit;
+		int llvmrc = -1;
 		int bfdrc = -1;
 		int sirc = -1;
 
@@ -1899,11 +1945,15 @@ int dso__load(struct dso *dso, struct map *map)
 			}
 		}
 
-#ifdef HAVE_LIBBFD_SUPPORT
+#ifdef HAVE_LIBLLVM_SUPPORT
 		if (is_reg)
+			llvmrc = dso__load_llvm_symbols(dso, name);
+#endif
+#ifdef HAVE_LIBBFD_SUPPORT
+		if (is_reg && llvmrc < 0)
 			bfdrc = dso__load_bfd_symbols(dso, name);
 #endif
-		if (is_reg && bfdrc < 0)
+		if (is_reg && llvmrc < 0 && bfdrc < 0)
 			sirc = symsrc__init(ss, dso, name, symtab_type);
 
 		if (nsexit)

@@ -174,6 +174,9 @@ int symbol__config_symfs(const struct option *opt __maybe_unused,
 
 struct symsrc;
 
+#ifdef HAVE_LIBLLVM_SUPPORT
+int dso__load_llvm_symbols(struct dso *dso, const char *debugfile);
+#endif
 #ifdef HAVE_LIBBFD_SUPPORT
 int dso__load_bfd_symbols(struct dso *dso, const char *debugfile);
 #endif

@@ -9,6 +9,7 @@
 #pragma GCC diagnostic ignored "-Wunused-parameter"  /* Needed for LLVM <= 15 */
 #include <llvm/DebugInfo/Symbolize/Symbolize.h>
 #include <llvm/Support/TargetSelect.h>
+#include <llvm/Object/Binary.h>
 #pragma GCC diagnostic pop
 
 #include <stdio.h>
@@ -17,6 +18,8 @@
 extern "C" {
 #include <linux/zalloc.h>
 }
+#include <vector>
+#include <algorithm>
 #include "symbol_conf.h"
 #include "llvm-c-helpers.h"
 
@@ -24,6 +27,7 @@ extern "C"
 char *dso__demangle_sym(struct dso *dso, int kmodule, const char *elf_name);
 
 using namespace llvm;
+using namespace llvm::object;
 using llvm::symbolize::LLVMSymbolizer;
 
 /*
@@ -193,4 +197,124 @@ char *llvm_name_for_data(struct dso *dso, const char *dso_name, u64 addr)
 	return make_symbol_relative_string(
 		dso, res_or_err->Name.c_str(),
 		addr, res_or_err->Start);
+}
+
+int llvm_load_symbols(const char *debugfile, struct llvm_symbol_list *symbols)
+{
+	/* NOTE: This nominally does an mmap, despite the scary name. */
+	ErrorOr<std::unique_ptr<MemoryBuffer>> mem_buf_or_err =
+		MemoryBuffer::getFile(debugfile);
+	if (mem_buf_or_err.getError())
+		return -1;
+
+	Expected<std::unique_ptr<Binary>> binary_or_err(
+		createBinary(mem_buf_or_err.get()->getMemBufferRef(), nullptr));
+	if (!binary_or_err)
+		return -1;
+
+	/* Find the .text section. */
+	SectionRef text_section;
+	uint64_t text_filepos, image_base;
+	for (SectionRef section :
+	     cast<ObjectFile>(*binary_or_err.get()).sections()) {
+		Expected<StringRef> name = section.getName();
+		if (name && *name == ".text") {
+			text_section = section;
+
+			/*
+			 * If we don't find an image base below, we infer the
+			 * image base * from the address and file offset of the
+			 * .text section.
+			 */
+			text_filepos = reinterpret_cast<const char *>(
+				text_section.getContents()->bytes_begin()) -
+				mem_buf_or_err.get()->getBufferStart();
+			image_base = text_section.getAddress() - text_filepos;
+			break;
+		}
+	}
+	if (text_section == SectionRef())
+		/* No .text section, so no symbols (but also not a failure). */
+		return 0;
+
+	/*
+	 * See if we can find an explicit image base pseudosymbol. If so, get
+	 * the image base directly from it, then infer the file position of
+	 * .text from that (i.e., the opposite inference of the fallback above).
+	 */
+	for (SymbolRef symbol :
+	     cast<ObjectFile>(*binary_or_err.get()).symbols())
+		if (symbol.getName() &&
+		    symbol.getAddress() &&
+		    (*symbol.getName() == "__ImageBase" ||
+		     *symbol.getName() == "__image_base__")) {
+			image_base = *symbol.getAddress();
+			if (image_base < 0x100000000ULL)
+				/*
+				 * PE symbols can only have 4 bytes, so use
+				 * .text high bits (if any).
+				 */
+				image_base |= text_section.getAddress() &
+					~0xFFFFFFFFULL;
+			text_filepos = text_section.getAddress() - image_base;
+			break;
+		}
+
+	symbols->image_base = image_base;
+	symbols->text_end = text_filepos + text_section.getSize();
+
+	/* Collect all valid symbols. */
+	std::vector<SymbolRef> all_symbols;
+	for (SymbolRef symbol :
+	     cast<ObjectFile>(*binary_or_err.get()).symbols())
+		if (symbol.getName() && symbol.getFlags() &&
+		    symbol.getAddress() && symbol.getSection())
+			all_symbols.push_back(symbol);
+	symbols->num_symbols = all_symbols.size();
+	symbols->symbols = (struct llvm_symbol *)calloc(
+		all_symbols.size(), sizeof(struct llvm_symbol));
+	if (symbols->symbols == nullptr)
+		return -1;
+
+	/*
+	 * Symbols don't normally come with lengths, so we'll infer them
+	 * from what comes after the symbol address-wise. There is some
+	 * extra logic around zero-length symbols and deduplication,
+	 * which the caller will do for us (it's shared with other backends).
+	 */
+	std::sort(all_symbols.begin(), all_symbols.end(),
+		  [](const SymbolRef &a, const SymbolRef &b) {
+			  if (*a.getAddress() != *b.getAddress())
+				  return *a.getAddress() < *b.getAddress();
+			  return *a.getName() < *b.getName();
+		  });
+	for (size_t i = 0; i < all_symbols.size(); ++i) {
+		const SymbolRef &sym = all_symbols[i];
+		llvm_symbol &out_sym = symbols->symbols[i];
+		out_sym.start = *sym.getAddress() - image_base;
+		out_sym.name = (char *)calloc(1, sym.getName()->size() + 1);
+		if (out_sym.name == nullptr) {
+			for (size_t i = 0; i < all_symbols.size(); ++i) {
+				zfree(&symbols->symbols[i].name);
+			}
+			zfree(&symbols->symbols);
+			return -1;
+		}
+		memcpy(out_sym.name, sym.getName()->bytes_begin(),
+		       sym.getName()->size());
+		out_sym.global = *sym.getFlags() & SymbolRef::SF_Global;
+		out_sym.weak = *sym.getFlags() & SymbolRef::SF_Weak;
+
+		SectionRef section = **sym.getSection();
+		uint64_t next_addr;
+		if (i + 1 < all_symbols.size() &&
+		    section == **all_symbols[i + 1].getSection())
+			next_addr = *all_symbols[i + 1].getAddress();
+		else
+			next_addr = section.getAddress() + section.getSize();
+
+		out_sym.len = next_addr - *sym.getAddress();
+	}
+
+	return 1;
 }
