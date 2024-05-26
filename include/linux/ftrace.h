@@ -666,6 +666,7 @@ unsigned long ftrace_location(unsigned long ip);
 unsigned long ftrace_location_range(unsigned long start, unsigned long end);
 unsigned long ftrace_get_addr_new(struct dyn_ftrace *rec);
 unsigned long ftrace_get_addr_curr(struct dyn_ftrace *rec);
+bool ftrace_pids_enabled(struct ftrace_ops *ops);
 
 extern ftrace_func_t ftrace_trace_function;
 
