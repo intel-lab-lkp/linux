@@ -78,7 +78,6 @@ pte_t *huge_pte_alloc(struct mm_struct *mm, struct vm_area_struct *vma,
 
 	return pte_alloc_huge(mm, pmd, addr);
 }
-#endif
 
 #ifdef CONFIG_PPC_BOOK3S_64
 /*
