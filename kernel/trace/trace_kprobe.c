@@ -2023,18 +2023,18 @@ static __init int kprobe_trace_self_tests_init(void)
 	pr_info("Testing kprobe tracing: ");
 
 	ret = create_or_delete_trace_kprobe("p:testprobe kprobe_trace_selftest_target $stack $stack0 +0($stack)");
-	if (WARN_ON_ONCE(ret)) {
+	if (ret) {
 		pr_warn("error on probing function entry.\n");
 		warn++;
 	} else {
 		/* Enable trace point */
 		tk = find_trace_kprobe("testprobe", KPROBE_EVENT_SYSTEM);
-		if (WARN_ON_ONCE(tk == NULL)) {
+		if (tk == NULL) {
 			pr_warn("error on getting new probe.\n");
 			warn++;
 		} else {
 			file = find_trace_probe_file(tk, top_trace_array());
-			if (WARN_ON_ONCE(file == NULL)) {
+			if (file == NULL) {
 				pr_warn("error on getting probe file.\n");
 				warn++;
 			} else
@@ -2044,18 +2044,18 @@ static __init int kprobe_trace_self_tests_init(void)
 	}
 
 	ret = create_or_delete_trace_kprobe("r:testprobe2 kprobe_trace_selftest_target $retval");
-	if (WARN_ON_ONCE(ret)) {
+	if (ret) {
 		pr_warn("error on probing function return.\n");
 		warn++;
 	} else {
 		/* Enable trace point */
 		tk = find_trace_kprobe("testprobe2", KPROBE_EVENT_SYSTEM);
-		if (WARN_ON_ONCE(tk == NULL)) {
+		if (tk == NULL) {
 			pr_warn("error on getting 2nd new probe.\n");
 			warn++;
 		} else {
 			file = find_trace_probe_file(tk, top_trace_array());
-			if (WARN_ON_ONCE(file == NULL)) {
+			if (file == NULL) {
 				pr_warn("error on getting probe file.\n");
 				warn++;
 			} else
@@ -2079,7 +2079,7 @@ static __init int kprobe_trace_self_tests_init(void)
 
 	/* Disable trace points before removing it */
 	tk = find_trace_kprobe("testprobe", KPROBE_EVENT_SYSTEM);
-	if (WARN_ON_ONCE(tk == NULL)) {
+	if (tk == NULL) {
 		pr_warn("error on getting test probe.\n");
 		warn++;
 	} else {
@@ -2089,7 +2089,7 @@ static __init int kprobe_trace_self_tests_init(void)
 		}
 
 		file = find_trace_probe_file(tk, top_trace_array());
-		if (WARN_ON_ONCE(file == NULL)) {
+		if (file == NULL) {
 			pr_warn("error on getting probe file.\n");
 			warn++;
 		} else
@@ -2098,7 +2098,7 @@ static __init int kprobe_trace_self_tests_init(void)
 	}
 
 	tk = find_trace_kprobe("testprobe2", KPROBE_EVENT_SYSTEM);
-	if (WARN_ON_ONCE(tk == NULL)) {
+	if (tk == NULL) {
 		pr_warn("error on getting 2nd test probe.\n");
 		warn++;
 	} else {
@@ -2108,7 +2108,7 @@ static __init int kprobe_trace_self_tests_init(void)
 		}
 
 		file = find_trace_probe_file(tk, top_trace_array());
-		if (WARN_ON_ONCE(file == NULL)) {
+		if (file == NULL) {
 			pr_warn("error on getting probe file.\n");
 			warn++;
 		} else
@@ -2117,20 +2117,20 @@ static __init int kprobe_trace_self_tests_init(void)
 	}
 
 	ret = create_or_delete_trace_kprobe("-:testprobe");
-	if (WARN_ON_ONCE(ret)) {
+	if (ret) {
 		pr_warn("error on deleting a probe.\n");
 		warn++;
 	}
 
 	ret = create_or_delete_trace_kprobe("-:testprobe2");
-	if (WARN_ON_ONCE(ret)) {
+	if (ret) {
 		pr_warn("error on deleting a probe.\n");
 		warn++;
 	}
 
 end:
 	ret = dyn_events_release_all(&trace_kprobe_ops);
-	if (WARN_ON_ONCE(ret)) {
+	if (ret) {
 		pr_warn("error on cleaning up probes.\n");
 		warn++;
 	}
