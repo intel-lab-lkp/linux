@@ -47,6 +47,12 @@ enum loongson_chip_id {
 const struct lsdc_desc *
 lsdc_device_probe(struct pci_dev *pdev, enum loongson_chip_id chip);
 
+int loongson_create_platform_device(struct device *parent,
+				    const char *name, int id,
+				    struct resource *pres,
+				    void *data,
+				    struct platform_device **ppdev);
+
 struct lsdc_kms_funcs;
 
 /* DC specific */
