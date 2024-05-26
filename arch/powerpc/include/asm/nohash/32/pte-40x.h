@@ -49,9 +49,6 @@
 #define _PAGE_EXEC	0x200	/* hardware: EX permission */
 #define _PAGE_ACCESSED	0x400	/* software: R: page referenced */
 
-/* No page size encoding in the linux PTE */
-#define _PAGE_PSIZE		0
-
 /* cache related flags non existing on 40x */
 #define _PAGE_COHERENT	0
 
