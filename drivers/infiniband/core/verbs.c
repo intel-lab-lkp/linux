@@ -2962,6 +2962,17 @@ void ib_drain_qp(struct ib_qp *qp)
 	ib_drain_sq(qp);
 	if (!qp->srq)
 		ib_drain_rq(qp);
+	else {
+		/*
+		 * We cannot drain a srq, however the qp is in error state,
+		 * and will not generate new recv completions, hence it should
+		 * be enough to reap the recv cq to cleanup any recv completions
+		 * that may have placed before we drained. Without this nothing
+		 * guarantees that the ulp will free resources and only then
+		 * consume the recv completion.
+		 */
+		ib_process_cq_direct(qp->recv_cq, -1);
+	}
 }
 EXPORT_SYMBOL(ib_drain_qp);
 
