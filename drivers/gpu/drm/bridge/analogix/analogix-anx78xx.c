@@ -1232,8 +1232,6 @@ static int anx78xx_i2c_probe(struct i2c_client *client)
 
 	mutex_init(&anx78xx->lock);
 
-	anx78xx->bridge.of_node = client->dev.of_node;
-
 	anx78xx->client = client;
 	i2c_set_clientdata(client, anx78xx);
 
@@ -1339,7 +1337,7 @@ static int anx78xx_i2c_probe(struct i2c_client *client)
 
 	anx78xx->bridge.funcs = &anx78xx_bridge_funcs;
 
-	drm_bridge_add(&anx78xx->bridge);
+	drm_bridge_add(&anx78xx->bridge, &client->dev);
 
 	/* If cable is pulled out, just poweroff and wait for HPD event */
 	if (!gpiod_get_value(anx78xx->pdata.gpiod_hpd))

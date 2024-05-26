@@ -703,8 +703,6 @@ static int anx6345_i2c_probe(struct i2c_client *client)
 
 	mutex_init(&anx6345->lock);
 
-	anx6345->bridge.of_node = client->dev.of_node;
-
 	anx6345->client = client;
 	i2c_set_clientdata(client, anx6345);
 
@@ -772,7 +770,7 @@ static int anx6345_i2c_probe(struct i2c_client *client)
 	anx6345_poweron(anx6345);
 	if (anx6345_get_chip_id(anx6345)) {
 		anx6345->bridge.funcs = &anx6345_bridge_funcs;
-		drm_bridge_add(&anx6345->bridge);
+		drm_bridge_add(&anx6345->bridge, dev);
 
 		return 0;
 	} else {

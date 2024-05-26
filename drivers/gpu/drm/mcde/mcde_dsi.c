@@ -1138,8 +1138,7 @@ static int mcde_dsi_bind(struct device *dev, struct device *master,
 
 	/* Create a bridge for this DSI channel */
 	d->bridge.funcs = &mcde_dsi_bridge_funcs;
-	d->bridge.of_node = dev->of_node;
-	drm_bridge_add(&d->bridge);
+	drm_bridge_add(&d->bridge, dev);
 
 	/* TODO: first come first serve, use a list */
 	mcde->bridge = &d->bridge;

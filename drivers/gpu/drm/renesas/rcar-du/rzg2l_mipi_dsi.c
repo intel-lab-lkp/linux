@@ -636,7 +636,7 @@ static int rzg2l_mipi_dsi_host_attach(struct mipi_dsi_host *host,
 		return ret;
 	}
 
-	drm_bridge_add(&dsi->bridge);
+	drm_bridge_add(&dsi->bridge, dsi->dev);
 
 	return 0;
 }
@@ -762,7 +762,6 @@ static int rzg2l_mipi_dsi_probe(struct platform_device *pdev)
 
 	/* Initialize the DRM bridge. */
 	dsi->bridge.funcs = &rzg2l_mipi_dsi_bridge_ops;
-	dsi->bridge.of_node = dsi->dev->of_node;
 
 	/* Init host device */
 	dsi->host.dev = dsi->dev;

@@ -393,11 +393,10 @@ int meson_encoder_hdmi_probe(struct meson_drm *priv)
 
 	/* HDMI Encoder Bridge */
 	meson_encoder_hdmi->bridge.funcs = &meson_encoder_hdmi_bridge_funcs;
-	meson_encoder_hdmi->bridge.of_node = priv->dev->of_node;
 	meson_encoder_hdmi->bridge.type = DRM_MODE_CONNECTOR_HDMIA;
 	meson_encoder_hdmi->bridge.interlace_allowed = true;
 
-	drm_bridge_add(&meson_encoder_hdmi->bridge);
+	drm_bridge_add(&meson_encoder_hdmi->bridge, priv->dev);
 
 	meson_encoder_hdmi->priv = priv;
 

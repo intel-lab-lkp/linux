@@ -708,9 +708,8 @@ static int sn65dsi83_probe(struct i2c_client *client)
 	i2c_set_clientdata(client, ctx);
 
 	ctx->bridge.funcs = &sn65dsi83_funcs;
-	ctx->bridge.of_node = dev->of_node;
 	ctx->bridge.pre_enable_prev_first = true;
-	drm_bridge_add(&ctx->bridge);
+	drm_bridge_add(&ctx->bridge, dev);
 
 	ret = sn65dsi83_host_attach(ctx);
 	if (ret) {

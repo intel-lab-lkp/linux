@@ -201,9 +201,8 @@ static int lvds_codec_probe(struct platform_device *pdev)
 	 * but we need a bridge attached to our of_node for our user
 	 * to look up.
 	 */
-	lvds_codec->bridge.of_node = dev->of_node;
 	lvds_codec->bridge.timings = &lvds_codec->timings;
-	drm_bridge_add(&lvds_codec->bridge);
+	drm_bridge_add(&lvds_codec->bridge, dev);
 
 	platform_set_drvdata(pdev, lvds_codec);
 

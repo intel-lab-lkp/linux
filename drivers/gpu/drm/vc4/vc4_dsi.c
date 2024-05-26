@@ -1379,7 +1379,7 @@ static int vc4_dsi_host_attach(struct mipi_dsi_host *host,
 		return 0;
 	}
 
-	drm_bridge_add(&dsi->bridge);
+	drm_bridge_add(&dsi->bridge, &dsi->pdev->dev);
 
 	ret = component_add(&dsi->pdev->dev, &vc4_dsi_ops);
 	if (ret) {
@@ -1815,9 +1815,6 @@ static int vc4_dsi_dev_probe(struct platform_device *pdev)
 
 	dsi->pdev = pdev;
 	dsi->bridge.funcs = &vc4_dsi_bridge_funcs;
-#ifdef CONFIG_OF
-	dsi->bridge.of_node = dev->of_node;
-#endif
 	dsi->bridge.type = DRM_MODE_CONNECTOR_DSI;
 	dsi->dsi_host.ops = &vc4_dsi_host_ops;
 	dsi->dsi_host.dev = dev;

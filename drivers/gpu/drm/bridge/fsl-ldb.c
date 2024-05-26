@@ -308,7 +308,6 @@ static int fsl_ldb_probe(struct platform_device *pdev)
 
 	fsl_ldb->dev = &pdev->dev;
 	fsl_ldb->bridge.funcs = &funcs;
-	fsl_ldb->bridge.of_node = dev->of_node;
 
 	fsl_ldb->clk = devm_clk_get(dev, "ldb");
 	if (IS_ERR(fsl_ldb->clk))
@@ -368,7 +367,7 @@ static int fsl_ldb_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, fsl_ldb);
 
-	drm_bridge_add(&fsl_ldb->bridge);
+	drm_bridge_add(&fsl_ldb->bridge, dev);
 
 	return 0;
 }

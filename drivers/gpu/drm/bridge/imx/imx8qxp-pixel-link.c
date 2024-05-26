@@ -391,9 +391,8 @@ static int imx8qxp_pixel_link_bridge_probe(struct platform_device *pdev)
 
 	pl->bridge.driver_private = pl;
 	pl->bridge.funcs = &imx8qxp_pixel_link_bridge_funcs;
-	pl->bridge.of_node = np;
 
-	drm_bridge_add(&pl->bridge);
+	drm_bridge_add(&pl->bridge, dev);
 
 	return ret;
 }

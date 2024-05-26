@@ -1578,7 +1578,6 @@ static int it66121_probe(struct i2c_client *client)
 	}
 
 	ctx->bridge.funcs = &it66121_bridge_funcs;
-	ctx->bridge.of_node = dev->of_node;
 	ctx->bridge.type = DRM_MODE_CONNECTOR_HDMIA;
 	ctx->bridge.ops = DRM_BRIDGE_OP_DETECT | DRM_BRIDGE_OP_EDID;
 	if (client->irq > 0) {
@@ -1596,7 +1595,7 @@ static int it66121_probe(struct i2c_client *client)
 
 	it66121_audio_codec_init(ctx, dev);
 
-	drm_bridge_add(&ctx->bridge);
+	drm_bridge_add(&ctx->bridge, dev);
 
 	dev_info(ctx->dev, "IT66121 revision %d probed\n", revision_id);
 

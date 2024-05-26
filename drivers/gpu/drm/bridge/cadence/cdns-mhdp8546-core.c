@@ -2557,7 +2557,6 @@ static int cdns_mhdp_probe(struct platform_device *pdev)
 	mhdp->display_fmt.color_format = DRM_COLOR_FORMAT_RGB444;
 	mhdp->display_fmt.bpc = 8;
 
-	mhdp->bridge.of_node = pdev->dev.of_node;
 	mhdp->bridge.funcs = &cdns_mhdp_bridge_funcs;
 	mhdp->bridge.ops = DRM_BRIDGE_OP_DETECT | DRM_BRIDGE_OP_EDID |
 			   DRM_BRIDGE_OP_HPD;
@@ -2583,7 +2582,7 @@ static int cdns_mhdp_probe(struct platform_device *pdev)
 	if (mhdp->hdcp_supported)
 		cdns_mhdp_hdcp_init(mhdp);
 
-	drm_bridge_add(&mhdp->bridge);
+	drm_bridge_add(&mhdp->bridge, dev);
 
 	return 0;
 

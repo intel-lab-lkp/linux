@@ -165,10 +165,9 @@ static int imx8mp_hdmi_pvi_probe(struct platform_device *pdev)
 
 	/* Register the bridge. */
 	pvi->bridge.funcs = &imx_hdmi_pvi_bridge_funcs;
-	pvi->bridge.of_node = pdev->dev.of_node;
 	pvi->bridge.timings = pvi->next_bridge->timings;
 
-	drm_bridge_add(&pvi->bridge);
+	drm_bridge_add(&pvi->bridge, &pdev->dev);
 
 	return 0;
 }

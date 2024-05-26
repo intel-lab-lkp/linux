@@ -939,13 +939,12 @@ retry:
 	i2c_set_clientdata(client, lt9611uxc);
 
 	lt9611uxc->bridge.funcs = &lt9611uxc_bridge_funcs;
-	lt9611uxc->bridge.of_node = client->dev.of_node;
 	lt9611uxc->bridge.ops = DRM_BRIDGE_OP_DETECT | DRM_BRIDGE_OP_EDID;
 	if (lt9611uxc->hpd_supported)
 		lt9611uxc->bridge.ops |= DRM_BRIDGE_OP_HPD;
 	lt9611uxc->bridge.type = DRM_MODE_CONNECTOR_HDMIA;
 
-	drm_bridge_add(&lt9611uxc->bridge);
+	drm_bridge_add(&lt9611uxc->bridge, dev);
 
 	/* Attach primary DSI */
 	lt9611uxc->dsi0 = lt9611uxc_attach_dsi(lt9611uxc, lt9611uxc->dsi0_node);

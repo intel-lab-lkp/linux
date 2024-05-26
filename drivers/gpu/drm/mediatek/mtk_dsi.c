@@ -908,7 +908,7 @@ static int mtk_dsi_host_attach(struct mipi_dsi_host *host,
 	if (IS_ERR(dsi->next_bridge))
 		return PTR_ERR(dsi->next_bridge);
 
-	drm_bridge_add(&dsi->bridge);
+	drm_bridge_add(&dsi->bridge, dev);
 
 	ret = component_add(host->dev, &mtk_dsi_component_ops);
 	if (ret) {
@@ -1155,7 +1155,6 @@ static int mtk_dsi_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, dsi);
 
 	dsi->bridge.funcs = &mtk_dsi_bridge_funcs;
-	dsi->bridge.of_node = dev->of_node;
 	dsi->bridge.type = DRM_MODE_CONNECTOR_DSI;
 
 	return 0;

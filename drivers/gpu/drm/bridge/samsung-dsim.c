@@ -1739,7 +1739,7 @@ of_find_panel_or_bridge:
 		     mipi_dsi_pixel_format_to_bpp(device->format),
 		     device->mode_flags);
 
-	drm_bridge_add(&dsi->bridge);
+	drm_bridge_add(&dsi->bridge, dev);
 
 	/*
 	 * This is a temporary solution and should be made by more generic way.
@@ -1987,7 +1987,6 @@ int samsung_dsim_probe(struct platform_device *pdev)
 	pm_runtime_enable(dev);
 
 	dsi->bridge.funcs = &samsung_dsim_bridge_funcs;
-	dsi->bridge.of_node = dev->of_node;
 	dsi->bridge.type = DRM_MODE_CONNECTOR_DSI;
 
 	/* DE_LOW: i.MX8M Mini/Nano LCDIF-DSIM glue logic inverts HS/VS/DE */

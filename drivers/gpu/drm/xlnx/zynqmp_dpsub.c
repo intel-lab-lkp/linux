@@ -256,7 +256,7 @@ static int zynqmp_dpsub_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_dp;
 
-	drm_bridge_add(dpsub->bridge);
+	drm_bridge_add(dpsub->bridge, &pdev->dev);
 
 	if (dpsub->dma_enabled) {
 		ret = zynqmp_dpsub_drm_init(dpsub);

@@ -481,11 +481,10 @@ static const struct drm_bridge_funcs hdmi5_bridge_funcs = {
 static void hdmi5_bridge_init(struct omap_hdmi *hdmi)
 {
 	hdmi->bridge.funcs = &hdmi5_bridge_funcs;
-	hdmi->bridge.of_node = hdmi->pdev->dev.of_node;
 	hdmi->bridge.ops = DRM_BRIDGE_OP_EDID;
 	hdmi->bridge.type = DRM_MODE_CONNECTOR_HDMIA;
 
-	drm_bridge_add(&hdmi->bridge);
+	drm_bridge_add(&hdmi->bridge, &hdmi->pdev->dev.);
 }
 
 static void hdmi5_bridge_cleanup(struct omap_hdmi *hdmi)

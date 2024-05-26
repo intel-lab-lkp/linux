@@ -308,8 +308,7 @@ static int ptn3460_probe(struct i2c_client *client)
 	ptn_bridge->bridge.funcs = &ptn3460_bridge_funcs;
 	ptn_bridge->bridge.ops = DRM_BRIDGE_OP_EDID;
 	ptn_bridge->bridge.type = DRM_MODE_CONNECTOR_LVDS;
-	ptn_bridge->bridge.of_node = dev->of_node;
-	drm_bridge_add(&ptn_bridge->bridge);
+	drm_bridge_add(&ptn_bridge->bridge, dev);
 
 	i2c_set_clientdata(client, ptn_bridge);
 

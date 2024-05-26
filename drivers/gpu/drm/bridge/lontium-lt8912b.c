@@ -777,11 +777,10 @@ static int lt8912_probe(struct i2c_client *client)
 	i2c_set_clientdata(client, lt);
 
 	lt->bridge.funcs = &lt8912_bridge_funcs;
-	lt->bridge.of_node = dev->of_node;
 	lt->bridge.ops = (DRM_BRIDGE_OP_EDID |
 			  DRM_BRIDGE_OP_DETECT);
 
-	drm_bridge_add(&lt->bridge);
+	drm_bridge_add(&lt->bridge, dev);
 
 	ret = lt8912_attach_dsi(lt);
 	if (ret)

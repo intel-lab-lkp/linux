@@ -246,12 +246,11 @@ int meson_encoder_cvbs_probe(struct meson_drm *priv)
 
 	/* CVBS Encoder Bridge */
 	meson_encoder_cvbs->bridge.funcs = &meson_encoder_cvbs_bridge_funcs;
-	meson_encoder_cvbs->bridge.of_node = priv->dev->of_node;
 	meson_encoder_cvbs->bridge.type = DRM_MODE_CONNECTOR_Composite;
 	meson_encoder_cvbs->bridge.ops = DRM_BRIDGE_OP_MODES;
 	meson_encoder_cvbs->bridge.interlace_allowed = true;
 
-	drm_bridge_add(&meson_encoder_cvbs->bridge);
+	drm_bridge_add(&meson_encoder_cvbs->bridge, priv->dev);
 
 	meson_encoder_cvbs->priv = priv;
 

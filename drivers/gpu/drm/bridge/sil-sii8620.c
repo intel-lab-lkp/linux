@@ -2336,8 +2336,7 @@ static int sii8620_probe(struct i2c_client *client)
 	i2c_set_clientdata(client, ctx);
 
 	ctx->bridge.funcs = &sii8620_bridge_funcs;
-	ctx->bridge.of_node = dev->of_node;
-	drm_bridge_add(&ctx->bridge);
+	drm_bridge_add(&ctx->bridge, dev);
 
 	if (!ctx->extcon)
 		sii8620_cable_in(ctx);

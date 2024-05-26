@@ -368,10 +368,9 @@ static int tc358764_probe(struct mipi_dsi_device *dsi)
 		return ret;
 
 	ctx->bridge.funcs = &tc358764_bridge_funcs;
-	ctx->bridge.of_node = dev->of_node;
 	ctx->bridge.pre_enable_prev_first = true;
 
-	drm_bridge_add(&ctx->bridge);
+	drm_bridge_add(&ctx->bridge, dev);
 
 	ret = mipi_dsi_attach(dsi);
 	if (ret < 0) {

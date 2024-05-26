@@ -448,9 +448,8 @@ static int imx8qxp_pxl2dpi_bridge_probe(struct platform_device *pdev)
 
 	p2d->bridge.driver_private = p2d;
 	p2d->bridge.funcs = &imx8qxp_pxl2dpi_bridge_funcs;
-	p2d->bridge.of_node = np;
 
-	drm_bridge_add(&p2d->bridge);
+	drm_bridge_add(&p2d->bridge, dev);
 
 	return ret;
 }

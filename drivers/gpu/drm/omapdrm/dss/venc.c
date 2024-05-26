@@ -664,12 +664,11 @@ static const struct drm_bridge_funcs venc_bridge_funcs = {
 static void venc_bridge_init(struct venc_device *venc)
 {
 	venc->bridge.funcs = &venc_bridge_funcs;
-	venc->bridge.of_node = venc->pdev->dev.of_node;
 	venc->bridge.ops = DRM_BRIDGE_OP_MODES;
 	venc->bridge.type = DRM_MODE_CONNECTOR_SVIDEO;
 	venc->bridge.interlace_allowed = true;
 
-	drm_bridge_add(&venc->bridge);
+	drm_bridge_add(&venc->bridge, &venc->pdev->dev);
 }
 
 static void venc_bridge_cleanup(struct venc_device *venc)

@@ -1323,10 +1323,9 @@ static int adv7511_probe(struct i2c_client *i2c)
 	if (adv7511->i2c_main->irq)
 		adv7511->bridge.ops |= DRM_BRIDGE_OP_HPD;
 
-	adv7511->bridge.of_node = dev->of_node;
 	adv7511->bridge.type = DRM_MODE_CONNECTOR_HDMIA;
 
-	drm_bridge_add(&adv7511->bridge);
+	drm_bridge_add(&adv7511->bridge, dev);
 
 	adv7511_audio_init(dev, adv7511);
 

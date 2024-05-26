@@ -340,9 +340,10 @@ static int imx8qxp_pc_bridge_probe(struct platform_device *pdev)
 		ch->bridge.driver_private = ch;
 		ch->bridge.funcs = &imx8qxp_pc_bridge_funcs;
 		ch->bridge.of_node = child;
+		ch->bridge.fwnode = of_fwnode_handle(child);
 		ch->is_available = true;
 
-		drm_bridge_add(&ch->bridge);
+		drm_bridge_add(&ch->bridge, NULL);
 	}
 
 	return 0;

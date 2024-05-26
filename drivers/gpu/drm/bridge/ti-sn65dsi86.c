@@ -1312,14 +1312,13 @@ static int ti_sn_bridge_probe(struct auxiliary_device *adev,
 		return ret;
 
 	pdata->bridge.funcs = &ti_sn_bridge_funcs;
-	pdata->bridge.of_node = np;
 	pdata->bridge.type = pdata->next_bridge->type == DRM_MODE_CONNECTOR_DisplayPort
 			   ? DRM_MODE_CONNECTOR_DisplayPort : DRM_MODE_CONNECTOR_eDP;
 
 	if (pdata->bridge.type == DRM_MODE_CONNECTOR_DisplayPort)
 		pdata->bridge.ops = DRM_BRIDGE_OP_EDID | DRM_BRIDGE_OP_DETECT;
 
-	drm_bridge_add(&pdata->bridge);
+	drm_bridge_add(&pdata->bridge, pdata->dev);
 
 	ret = ti_sn_attach_host(adev, pdata);
 	if (ret) {

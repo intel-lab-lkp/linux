@@ -124,10 +124,9 @@ int meson_encoder_dsi_probe(struct meson_drm *priv)
 
 	/* DSI Encoder Bridge */
 	meson_encoder_dsi->bridge.funcs = &meson_encoder_dsi_bridge_funcs;
-	meson_encoder_dsi->bridge.of_node = priv->dev->of_node;
 	meson_encoder_dsi->bridge.type = DRM_MODE_CONNECTOR_DSI;
 
-	drm_bridge_add(&meson_encoder_dsi->bridge);
+	drm_bridge_add(&meson_encoder_dsi->bridge, priv->dev);
 
 	meson_encoder_dsi->priv = priv;
 

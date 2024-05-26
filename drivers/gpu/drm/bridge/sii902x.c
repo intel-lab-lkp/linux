@@ -1097,14 +1097,13 @@ static int sii902x_init(struct sii902x *sii902x)
 		goto err_unreg_audio;
 
 	sii902x->bridge.funcs = &sii902x_bridge_funcs;
-	sii902x->bridge.of_node = dev->of_node;
 	sii902x->bridge.timings = &default_sii902x_timings;
 	sii902x->bridge.ops = DRM_BRIDGE_OP_DETECT | DRM_BRIDGE_OP_EDID;
 
 	if (sii902x->i2c->irq > 0)
 		sii902x->bridge.ops |= DRM_BRIDGE_OP_HPD;
 
-	drm_bridge_add(&sii902x->bridge);
+	drm_bridge_add(&sii902x->bridge, dev);
 
 	return 0;
 

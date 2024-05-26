@@ -575,8 +575,7 @@ static int ch7033_probe(struct i2c_client *client)
 
 	INIT_LIST_HEAD(&priv->bridge.list);
 	priv->bridge.funcs = &ch7033_bridge_funcs;
-	priv->bridge.of_node = dev->of_node;
-	drm_bridge_add(&priv->bridge);
+	drm_bridge_add(&priv->bridge, dev);
 
 	dev_info(dev, "Chrontel CH7033 Video Encoder\n");
 	return 0;

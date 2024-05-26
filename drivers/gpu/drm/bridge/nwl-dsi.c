@@ -1182,7 +1182,6 @@ static int nwl_dsi_probe(struct platform_device *pdev)
 
 	dsi->bridge.driver_private = dsi;
 	dsi->bridge.funcs = &nwl_dsi_bridge_funcs;
-	dsi->bridge.of_node = dev->of_node;
 	dsi->bridge.timings = &nwl_dsi_timings;
 
 	dev_set_drvdata(dev, dsi);
@@ -1195,7 +1194,7 @@ static int nwl_dsi_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	drm_bridge_add(&dsi->bridge);
+	drm_bridge_add(&dsi->bridge, dev);
 	return 0;
 }
 

@@ -202,10 +202,22 @@ static LIST_HEAD(bridge_list);
  * drm_bridge_add - add the given bridge to the global bridge list
  *
  * @bridge: bridge control structure
+ * @dev: pointer to the kernel device that backing this bridge
  */
-void drm_bridge_add(struct drm_bridge *bridge)
+void drm_bridge_add(struct drm_bridge *bridge, struct device *dev)
 {
 	mutex_init(&bridge->hpd_mutex);
+
+	if (dev) {
+		if (dev->of_node) {
+			bridge->of_node = dev->of_node;
+			bridge->fwnode = of_fwnode_handle(dev->of_node);
+		} else {
+			bridge->fwnode = dev->fwnode;
+		}
+
+		bridge->kdev = dev;
+	}
 
 	mutex_lock(&bridge_lock);
 	list_add_tail(&bridge->list, &bridge_list);
@@ -231,7 +243,7 @@ static void drm_bridge_remove_void(void *bridge)
  */
 int devm_drm_bridge_add(struct device *dev, struct drm_bridge *bridge)
 {
-	drm_bridge_add(bridge);
+	drm_bridge_add(bridge, dev);
 	return devm_add_action_or_reset(dev, drm_bridge_remove_void, bridge);
 }
 EXPORT_SYMBOL(devm_drm_bridge_add);

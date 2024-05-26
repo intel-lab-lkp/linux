@@ -3379,7 +3379,6 @@ static int it6505_i2c_probe(struct i2c_client *client)
 	mutex_init(&it6505->mode_lock);
 	mutex_init(&it6505->aux_lock);
 
-	it6505->bridge.of_node = client->dev.of_node;
 	it6505->connector_status = connector_status_disconnected;
 	it6505->dev = &client->dev;
 	i2c_set_clientdata(client, it6505);
@@ -3451,7 +3450,7 @@ static int it6505_i2c_probe(struct i2c_client *client)
 	it6505->bridge.type = DRM_MODE_CONNECTOR_DisplayPort;
 	it6505->bridge.ops = DRM_BRIDGE_OP_DETECT | DRM_BRIDGE_OP_EDID |
 			     DRM_BRIDGE_OP_HPD;
-	drm_bridge_add(&it6505->bridge);
+	drm_bridge_add(&it6505->bridge, dev);
 
 	return 0;
 }

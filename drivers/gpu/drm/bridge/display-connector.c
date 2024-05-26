@@ -358,7 +358,6 @@ static int display_connector_probe(struct platform_device *pdev)
 	}
 
 	conn->bridge.funcs = &display_connector_bridge_funcs;
-	conn->bridge.of_node = pdev->dev.of_node;
 
 	if (conn->bridge.ddc)
 		conn->bridge.ops |= DRM_BRIDGE_OP_EDID
@@ -376,7 +375,7 @@ static int display_connector_probe(struct platform_device *pdev)
 		conn->hpd_gpio ? "with" : "without",
 		conn->bridge.ops);
 
-	drm_bridge_add(&conn->bridge);
+	drm_bridge_add(&conn->bridge, &pdev->dev);
 
 	return 0;
 }

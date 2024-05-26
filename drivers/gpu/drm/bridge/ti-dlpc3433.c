@@ -366,8 +366,7 @@ static int dlpc3433_probe(struct i2c_client *client)
 	i2c_set_clientdata(client, dlpc);
 
 	dlpc->bridge.funcs = &dlpc_bridge_funcs;
-	dlpc->bridge.of_node = dev->of_node;
-	drm_bridge_add(&dlpc->bridge);
+	drm_bridge_add(&dlpc->bridge, dev);
 
 	ret = dlpc_host_attach(dlpc);
 	if (ret)

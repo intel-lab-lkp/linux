@@ -2609,7 +2609,6 @@ static int anx7625_link_bridge(struct drm_dp_aux *aux)
 	}
 
 	platform->bridge.funcs = &anx7625_bridge_funcs;
-	platform->bridge.of_node = dev->of_node;
 	if (!anx7625_of_panel_on_aux_bus(dev))
 		platform->bridge.ops |= DRM_BRIDGE_OP_EDID;
 	if (!platform->pdata.panel_bridge)
@@ -2619,7 +2618,7 @@ static int anx7625_link_bridge(struct drm_dp_aux *aux)
 				    DRM_MODE_CONNECTOR_eDP :
 				    DRM_MODE_CONNECTOR_DisplayPort;
 
-	drm_bridge_add(&platform->bridge);
+	drm_bridge_add(&platform->bridge, dev);
 
 	if (!platform->pdata.is_dpi) {
 		ret = anx7625_attach_dsi(platform);

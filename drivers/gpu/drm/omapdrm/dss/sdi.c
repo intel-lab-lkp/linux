@@ -283,10 +283,9 @@ static const struct drm_bridge_funcs sdi_bridge_funcs = {
 static void sdi_bridge_init(struct sdi_device *sdi)
 {
 	sdi->bridge.funcs = &sdi_bridge_funcs;
-	sdi->bridge.of_node = sdi->pdev->dev.of_node;
 	sdi->bridge.type = DRM_MODE_CONNECTOR_LVDS;
 
-	drm_bridge_add(&sdi->bridge);
+	drm_bridge_add(&sdi->bridge, &sdi->pdev->dev);
 }
 
 static void sdi_bridge_cleanup(struct sdi_device *sdi)

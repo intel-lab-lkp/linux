@@ -1988,11 +1988,8 @@ static int tda998x_create(struct device *dev)
 	}
 
 	priv->bridge.funcs = &tda998x_bridge_funcs;
-#ifdef CONFIG_OF
-	priv->bridge.of_node = dev->of_node;
-#endif
 
-	drm_bridge_add(&priv->bridge);
+	drm_bridge_add(&priv->bridge, dev);
 
 	return 0;
 

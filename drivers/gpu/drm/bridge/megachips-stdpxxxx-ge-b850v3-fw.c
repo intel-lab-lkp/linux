@@ -279,8 +279,7 @@ static int ge_b850v3_register(void)
 	ge_b850v3_lvds_ptr->bridge.ops = DRM_BRIDGE_OP_DETECT |
 					 DRM_BRIDGE_OP_EDID;
 	ge_b850v3_lvds_ptr->bridge.type = DRM_MODE_CONNECTOR_DisplayPort;
-	ge_b850v3_lvds_ptr->bridge.of_node = dev->of_node;
-	drm_bridge_add(&ge_b850v3_lvds_ptr->bridge);
+	drm_bridge_add(&ge_b850v3_lvds_ptr->bridge, dev);
 
 	/* Clear pending interrupts since power up. */
 	i2c_smbus_write_word_data(stdp4028_i2c,

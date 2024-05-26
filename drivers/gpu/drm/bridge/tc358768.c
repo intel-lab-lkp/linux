@@ -451,7 +451,7 @@ static int tc358768_dsi_host_attach(struct mipi_dsi_host *host,
 	if (ret)
 		priv->pd_lines = priv->dsi_bpp;
 
-	drm_bridge_add(&priv->bridge);
+	drm_bridge_add(&priv->bridge, priv->dev);
 
 	return 0;
 }
@@ -1299,7 +1299,6 @@ static int tc358768_i2c_probe(struct i2c_client *client)
 
 	priv->bridge.funcs = &tc358768_bridge_funcs;
 	priv->bridge.timings = &default_tc358768_timings;
-	priv->bridge.of_node = np;
 
 	i2c_set_clientdata(client, priv);
 

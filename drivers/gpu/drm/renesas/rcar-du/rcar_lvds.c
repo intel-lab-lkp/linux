@@ -896,7 +896,6 @@ static int rcar_lvds_probe(struct platform_device *pdev)
 		return ret;
 
 	lvds->bridge.funcs = &rcar_lvds_bridge_ops;
-	lvds->bridge.of_node = pdev->dev.of_node;
 
 	lvds->mmio = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(lvds->mmio))
@@ -913,7 +912,7 @@ static int rcar_lvds_probe(struct platform_device *pdev)
 
 	pm_runtime_enable(&pdev->dev);
 
-	drm_bridge_add(&lvds->bridge);
+	drm_bridge_add(&lvds->bridge, &pdev->dev);
 
 	return 0;
 }

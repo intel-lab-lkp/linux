@@ -918,8 +918,7 @@ static int rcar_mipi_dsi_host_attach(struct mipi_dsi_host *host,
 
 	/* Initialize the DRM bridge. */
 	dsi->bridge.funcs = &rcar_mipi_dsi_bridge_ops;
-	dsi->bridge.of_node = dsi->dev->of_node;
-	drm_bridge_add(&dsi->bridge);
+	drm_bridge_add(&dsi->bridge, dsi->dev);
 
 	return 0;
 }

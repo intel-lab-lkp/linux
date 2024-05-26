@@ -702,7 +702,6 @@ static int chipone_common_probe(struct device *dev, struct chipone **icnr)
 
 	icn->bridge.funcs = &chipone_bridge_funcs;
 	icn->bridge.type = DRM_MODE_CONNECTOR_DPI;
-	icn->bridge.of_node = dev->of_node;
 
 	*icnr = icn;
 
@@ -729,7 +728,7 @@ static int chipone_dsi_probe(struct mipi_dsi_device *dsi)
 
 	mipi_dsi_set_drvdata(dsi, icn);
 
-	drm_bridge_add(&icn->bridge);
+	drm_bridge_add(&icn->bridge, dev);
 
 	ret = chipone_dsi_attach(icn);
 	if (ret)
@@ -757,7 +756,7 @@ static int chipone_i2c_probe(struct i2c_client *client)
 	dev_set_drvdata(dev, icn);
 	i2c_set_clientdata(client, icn);
 
-	drm_bridge_add(&icn->bridge);
+	drm_bridge_add(&icn->bridge, dev);
 
 	return chipone_dsi_host_attach(icn);
 }

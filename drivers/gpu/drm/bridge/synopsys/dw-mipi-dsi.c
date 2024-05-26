@@ -339,7 +339,7 @@ static int dw_mipi_dsi_host_attach(struct mipi_dsi_host *host,
 	bridge->pre_enable_prev_first = true;
 	dsi->panel_bridge = bridge;
 
-	drm_bridge_add(&dsi->bridge);
+	drm_bridge_add(&dsi->bridge, dsi->dev);
 
 	if (pdata->host_ops && pdata->host_ops->attach) {
 		ret = pdata->host_ops->attach(pdata->priv_data, device);
@@ -1265,7 +1265,6 @@ __dw_mipi_dsi_probe(struct platform_device *pdev,
 
 	dsi->bridge.driver_private = dsi;
 	dsi->bridge.funcs = &dw_mipi_dsi_bridge_funcs;
-	dsi->bridge.of_node = pdev->dev.of_node;
 
 	return dsi;
 }

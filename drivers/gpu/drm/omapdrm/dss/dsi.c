@@ -4701,10 +4701,9 @@ static const struct drm_bridge_funcs dsi_bridge_funcs = {
 static void dsi_bridge_init(struct dsi_data *dsi)
 {
 	dsi->bridge.funcs = &dsi_bridge_funcs;
-	dsi->bridge.of_node = dsi->host.dev->of_node;
 	dsi->bridge.type = DRM_MODE_CONNECTOR_DSI;
 
-	drm_bridge_add(&dsi->bridge);
+	drm_bridge_add(&dsi->bridge, dsi->host.dev);
 }
 
 static void dsi_bridge_cleanup(struct dsi_data *dsi)

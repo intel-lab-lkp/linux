@@ -122,7 +122,6 @@ static int tpd12s015_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, tpd);
 
 	tpd->bridge.funcs = &tpd12s015_bridge_funcs;
-	tpd->bridge.of_node = pdev->dev.of_node;
 	tpd->bridge.type = DRM_MODE_CONNECTOR_HDMIA;
 	tpd->bridge.ops = DRM_BRIDGE_OP_DETECT;
 
@@ -174,7 +173,7 @@ static int tpd12s015_probe(struct platform_device *pdev)
 	}
 
 	/* Register the DRM bridge. */
-	drm_bridge_add(&tpd->bridge);
+	drm_bridge_add(&tpd->bridge, &pdev->dev);
 
 	return 0;
 }

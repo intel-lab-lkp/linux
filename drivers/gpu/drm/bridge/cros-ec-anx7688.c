@@ -143,8 +143,6 @@ static int cros_ec_anx7688_bridge_probe(struct i2c_client *client)
 	fw_version = (u16)buffer[0] << 8 | buffer[1];
 	dev_info(dev, "ANX7688 firmware version 0x%04x\n", fw_version);
 
-	anx7688->bridge.of_node = dev->of_node;
-
 	/* FW version >= 0.85 supports bandwidth/lane count registers */
 	if (fw_version >= ANX7688_MINIMUM_FW_VERSION)
 		anx7688->filter = true;
@@ -154,7 +152,7 @@ static int cros_ec_anx7688_bridge_probe(struct i2c_client *client)
 			 fw_version);
 
 	anx7688->bridge.funcs = &cros_ec_anx7688_bridge_funcs;
-	drm_bridge_add(&anx7688->bridge);
+	drm_bridge_add(&anx7688->bridge, dev);
 
 	return 0;
 }

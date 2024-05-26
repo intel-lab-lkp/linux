@@ -353,7 +353,6 @@ static int tfp410_init(struct device *dev, bool i2c)
 	dev_set_drvdata(dev, dvi);
 
 	dvi->bridge.funcs = &tfp410_bridge_funcs;
-	dvi->bridge.of_node = dev->of_node;
 	dvi->bridge.timings = &dvi->timings;
 	dvi->bridge.type = DRM_MODE_CONNECTOR_DVID;
 
@@ -381,7 +380,7 @@ static int tfp410_init(struct device *dev, bool i2c)
 	}
 
 	/*  Register the DRM bridge. */
-	drm_bridge_add(&dvi->bridge);
+	drm_bridge_add(&dvi->bridge, dev);
 
 	return 0;
 }

@@ -211,8 +211,9 @@ void ldb_add_bridge_helper(struct ldb *ldb,
 		ldb_ch->bridge.driver_private = ldb_ch;
 		ldb_ch->bridge.funcs = bridge_funcs;
 		ldb_ch->bridge.of_node = ldb_ch->np;
+		ldb_ch->bridge.fwnode = of_fwnode_handle(ldb_ch->np);
 
-		drm_bridge_add(&ldb_ch->bridge);
+		drm_bridge_add(&ldb_ch->bridge, NULL);
 	}
 }
 EXPORT_SYMBOL_GPL(ldb_add_bridge_helper);

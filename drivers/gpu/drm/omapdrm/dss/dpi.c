@@ -561,10 +561,9 @@ static const struct drm_bridge_funcs dpi_bridge_funcs = {
 static void dpi_bridge_init(struct dpi_data *dpi)
 {
 	dpi->bridge.funcs = &dpi_bridge_funcs;
-	dpi->bridge.of_node = dpi->pdev->dev.of_node;
 	dpi->bridge.type = DRM_MODE_CONNECTOR_DPI;
 
-	drm_bridge_add(&dpi->bridge);
+	drm_bridge_add(&dpi->bridge, &dpi->pdev->dev);
 }
 
 static void dpi_bridge_cleanup(struct dpi_data *dpi)

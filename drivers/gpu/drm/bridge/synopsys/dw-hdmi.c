@@ -3525,7 +3525,6 @@ struct dw_hdmi *dw_hdmi_probe(struct platform_device *pdev,
 			 | DRM_BRIDGE_OP_HPD;
 	hdmi->bridge.interlace_allowed = true;
 	hdmi->bridge.ddc = hdmi->ddc;
-	hdmi->bridge.of_node = pdev->dev.of_node;
 	hdmi->bridge.type = DRM_MODE_CONNECTOR_HDMIA;
 
 	memset(&pdevinfo, 0, sizeof(pdevinfo));
@@ -3599,7 +3598,7 @@ struct dw_hdmi *dw_hdmi_probe(struct platform_device *pdev,
 		hdmi->cec = platform_device_register_full(&pdevinfo);
 	}
 
-	drm_bridge_add(&hdmi->bridge);
+	drm_bridge_add(&hdmi->bridge, dev);
 
 	return hdmi;
 

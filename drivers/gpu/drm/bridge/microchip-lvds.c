@@ -190,7 +190,6 @@ static int mchp_lvds_probe(struct platform_device *pdev)
 	if (IS_ERR(lvds->panel_bridge))
 		return PTR_ERR(lvds->panel_bridge);
 
-	lvds->bridge.of_node = dev->of_node;
 	lvds->bridge.type = DRM_MODE_CONNECTOR_LVDS;
 	lvds->bridge.funcs = &mchp_lvds_bridge_funcs;
 
@@ -201,7 +200,7 @@ static int mchp_lvds_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	drm_bridge_add(&lvds->bridge);
+	drm_bridge_add(&lvds->bridge, dev);
 
 	return 0;
 }

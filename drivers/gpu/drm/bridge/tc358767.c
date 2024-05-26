@@ -2445,8 +2445,7 @@ static int tc_probe(struct i2c_client *client)
 			return ret;
 	}
 
-	tc->bridge.of_node = dev->of_node;
-	drm_bridge_add(&tc->bridge);
+	drm_bridge_add(&tc->bridge, dev);
 
 	i2c_set_clientdata(client, tc);
 

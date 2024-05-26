@@ -511,8 +511,7 @@ static int ps8622_probe(struct i2c_client *client)
 
 	ps8622->bridge.funcs = &ps8622_bridge_funcs;
 	ps8622->bridge.type = DRM_MODE_CONNECTOR_LVDS;
-	ps8622->bridge.of_node = dev->of_node;
-	drm_bridge_add(&ps8622->bridge);
+	drm_bridge_add(&ps8622->bridge, dev);
 
 	i2c_set_clientdata(client, ps8622);
 
