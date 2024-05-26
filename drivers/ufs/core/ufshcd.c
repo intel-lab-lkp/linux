@@ -8144,7 +8144,11 @@ static void ufshcd_set_rtt(struct ufs_hba *hba)
 	if (dev_rtt != DEFAULT_MAX_NUM_RTT)
 		return;
 
-	rtt = min_t(int, dev_info->rtt_cap, hba->nortt);
+	if (hba->vops && hba->vops->max_num_rtt)
+		rtt = hba->vops->max_num_rtt;
+	else
+		rtt = min_t(int, dev_info->rtt_cap, hba->nortt);
+
 	if (rtt == dev_rtt)
 		return;
 
