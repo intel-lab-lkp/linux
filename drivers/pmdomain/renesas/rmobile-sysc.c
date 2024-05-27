@@ -10,7 +10,6 @@
  *  Copyright (C) 2011 Magnus Damm
  */
 #include <linux/clk/renesas.h>
-#include <linux/console.h>
 #include <linux/delay.h>
 #include <linux/io.h>
 #include <linux/iopoll.h>
@@ -31,8 +30,6 @@
 
 struct rmobile_pm_domain {
 	struct generic_pm_domain genpd;
-	struct dev_power_governor *gov;
-	int (*suspend)(void);
 	void __iomem *base;
 	unsigned int bit_shift;
 };
@@ -48,13 +45,6 @@ static int rmobile_pd_power_down(struct generic_pm_domain *genpd)
 	struct rmobile_pm_domain *rmobile_pd = to_rmobile_pd(genpd);
 	unsigned int mask = BIT(rmobile_pd->bit_shift);
 	u32 val;
-
-	if (rmobile_pd->suspend) {
-		int ret = rmobile_pd->suspend();
-
-		if (ret)
-			return ret;
-	}
 
 	if (readl(rmobile_pd->base + PSTR) & mask) {
 		writel(mask, rmobile_pd->base + SPDCR);
@@ -98,7 +88,6 @@ static int rmobile_pd_power_up(struct generic_pm_domain *genpd)
 static void rmobile_init_pm_domain(struct rmobile_pm_domain *rmobile_pd)
 {
 	struct generic_pm_domain *genpd = &rmobile_pd->genpd;
-	struct dev_power_governor *gov = rmobile_pd->gov;
 
 	genpd->flags |= GENPD_FLAG_PM_CLK | GENPD_FLAG_ACTIVE_WAKEUP;
 	genpd->attach_dev = cpg_mstp_attach_dev;
@@ -110,22 +99,12 @@ static void rmobile_init_pm_domain(struct rmobile_pm_domain *rmobile_pd)
 		__rmobile_pd_power_up(rmobile_pd);
 	}
 
-	pm_genpd_init(genpd, gov ? : &simple_qos_governor, false);
-}
-
-static int rmobile_pd_suspend_console(void)
-{
-	/*
-	 * Serial consoles make use of SCIF hardware located in this domain,
-	 * hence keep the power domain on if "no_console_suspend" is set.
-	 */
-	return console_suspend_enabled ? 0 : -EBUSY;
+	pm_genpd_init(genpd, &simple_qos_governor, false);
 }
 
 enum pd_types {
 	PD_NORMAL,
 	PD_CPU,
-	PD_CONSOLE,
 	PD_DEBUG,
 	PD_MEMCTL,
 };
@@ -184,10 +163,6 @@ static void __init get_special_pds(void)
 	for_each_of_cpu_node(np)
 		add_special_pd(np, PD_CPU);
 
-	/* PM domain containing console */
-	if (of_stdout)
-		add_special_pd(of_stdout, PD_CONSOLE);
-
 	/* PM domains containing other special devices */
 	for_each_matching_node_and_match(np, special_ids, &id)
 		add_special_pd(np, (uintptr_t)id->data);
@@ -225,12 +200,6 @@ static void __init rmobile_setup_pm_domain(struct device_node *np,
 		 */
 		pr_debug("PM domain %s contains CPU\n", name);
 		pd->genpd.flags |= GENPD_FLAG_ALWAYS_ON;
-		break;
-
-	case PD_CONSOLE:
-		pr_debug("PM domain %s contains serial console\n", name);
-		pd->gov = &pm_domain_always_on_gov;
-		pd->suspend = rmobile_pd_suspend_console;
 		break;
 
 	case PD_DEBUG:
