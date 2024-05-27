@@ -22,6 +22,7 @@
 #include <linux/export.h>
 #include <linux/cpu.h>
 #include <linux/debugfs.h>
+#include <linux/serial_core.h>
 
 #define GENPD_RETRY_MAX_MS	250		/* Approximate */
 
@@ -129,6 +130,7 @@ static const struct genpd_lock_ops genpd_spin_ops = {
 #define genpd_is_cpu_domain(genpd)	(genpd->flags & GENPD_FLAG_CPU_DOMAIN)
 #define genpd_is_rpm_always_on(genpd)	(genpd->flags & GENPD_FLAG_RPM_ALWAYS_ON)
 #define genpd_is_opp_table_fw(genpd)	(genpd->flags & GENPD_FLAG_OPP_TABLE_FW)
+#define genpd_is_early_on(genpd)	(genpd->flags & GENPD_FLAG_EARLY_ON)
 
 static inline bool irq_safe_dev_in_sleep_domain(struct device *dev,
 		const struct generic_pm_domain *genpd)
@@ -735,8 +737,9 @@ static int genpd_power_off(struct generic_pm_domain *genpd, bool one_dev_on,
 	 * (2) When the domain has a subdomain being powered on.
 	 */
 	if (genpd_is_always_on(genpd) ||
-			genpd_is_rpm_always_on(genpd) ||
-			atomic_read(&genpd->sd_count) > 0)
+	    (genpd_is_early_on(genpd) && system_state < SYSTEM_RUNNING) ||
+	    genpd_is_rpm_always_on(genpd) ||
+	    atomic_read(&genpd->sd_count) > 0)
 		return -EBUSY;
 
 	/*
@@ -2377,6 +2380,10 @@ int of_genpd_add_provider_simple(struct device_node *np,
 
 	genpd->dev.of_node = np;
 
+	if (earlycon_power_domains &&
+	    np->phandle == be32_to_cpup(earlycon_power_domains))
+		genpd->flags |= GENPD_FLAG_EARLY_ON;
+
 	/* Parse genpd OPP table */
 	if (!genpd_is_opp_table_fw(genpd) && genpd->set_performance_state) {
 		ret = dev_pm_opp_of_add_table(&genpd->dev);
@@ -2455,6 +2462,19 @@ int of_genpd_add_provider_onecell(struct device_node *np,
 
 		genpd->provider = &np->fwnode;
 		genpd->has_provider = true;
+	}
+
+	if (earlycon_power_domains && earlycon_power_domains_ncells == 2 &&
+	    np->phandle == be32_to_cpup(earlycon_power_domains)) {
+		struct of_phandle_args genpdspec = {
+			.np = np,
+			.args_count = 1,
+			.args[0] = be32_to_cpup(earlycon_power_domains + 1),
+		};
+
+		genpd = data->xlate(&genpdspec, data);
+		if (!IS_ERR(genpd))
+			genpd->flags |= GENPD_FLAG_EARLY_ON;
 	}
 
 	ret = genpd_add_provider(np, data->xlate, data);
