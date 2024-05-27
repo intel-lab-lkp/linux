@@ -1291,20 +1291,22 @@ static struct option stat_options[] = {
  */
 static int cpu__get_cache_id_from_map(struct perf_cpu cpu, char *map)
 {
-	int id;
+	int id = cpu.cpu;
 	struct perf_cpu_map *cpu_map = perf_cpu_map__new(map);
 
-	/*
-	 * If the map contains no CPU, consider the current CPU to
-	 * be the first online CPU in the cache domain else use the
-	 * first online CPU of the cache domain as the ID.
-	 */
-	id = perf_cpu_map__min(cpu_map).cpu;
-	if (id == -1)
-		id = cpu.cpu;
+	if (cpu_map) {
+		/*
+		 * If the map contains no CPU, consider the current CPU to
+		 * be the first online CPU in the cache domain else use the
+		 * first online CPU of the cache domain as the ID.
+		 */
+		id = perf_cpu_map__min(cpu_map).cpu;
+		if (id == -1)
+			id = cpu.cpu;
 
-	/* Free the perf_cpu_map used to find the cache ID */
-	perf_cpu_map__put(cpu_map);
+		/* Free the perf_cpu_map used to find the cache ID */
+		perf_cpu_map__put(cpu_map);
+	}
 
 	return id;
 }
