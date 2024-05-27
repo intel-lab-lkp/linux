@@ -250,11 +250,14 @@ early_param("earlycon", param_setup_earlycon);
 
 #ifdef CONFIG_OF_EARLY_FLATTREE
 
+const __be32 *earlycon_clocks, *earlycon_power_domains;
+int earlycon_clocks_ncells, earlycon_power_domains_ncells;
+
 int __init of_setup_earlycon(const struct earlycon_id *match,
 			     unsigned long node,
 			     const char *options)
 {
-	int err;
+	int err, size;
 	struct uart_port *port = &early_console_dev.port;
 	const __be32 *val;
 	bool big_endian;
@@ -308,6 +311,15 @@ int __init of_setup_earlycon(const struct earlycon_id *match,
 	val = of_get_flat_dt_prop(node, "clock-frequency", NULL);
 	if (val)
 		port->uartclk = be32_to_cpu(*val);
+
+	earlycon_clocks = of_get_flat_dt_prop(node, "clocks", &size);
+	if (earlycon_clocks)
+		earlycon_clocks_ncells = size / sizeof(u32);
+
+	earlycon_power_domains = of_get_flat_dt_prop(node, "power-domains",
+						     &size);
+	if (earlycon_power_domains)
+		earlycon_power_domains_ncells = size / sizeof(u32);
 
 	if (options) {
 		early_console_dev.baud = simple_strtoul(options, NULL, 0);

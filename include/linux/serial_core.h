@@ -954,6 +954,16 @@ static const bool earlycon_acpi_spcr_enable EARLYCON_USED_OR_UNUSED;
 static inline int setup_earlycon(char *buf) { return 0; }
 #endif
 
+#ifdef CONFIG_OF_EARLY_FLATTREE
+extern const __be32 *earlycon_clocks, *earlycon_power_domains;
+extern int earlycon_clocks_ncells, earlycon_power_domains_ncells;
+#else
+#define earlycon_clocks			NULL
+#define earlycon_clocks_ncells		0
+#define earlycon_power_domains		NULL
+#define earlycon_power_domains_ncells	0
+#endif
+
 /* Variant of uart_console_registered() when the console_list_lock is held. */
 static inline bool uart_console_registered_locked(struct uart_port *port)
 {
