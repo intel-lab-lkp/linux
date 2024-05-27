@@ -11,6 +11,7 @@
 #include <dt-bindings/gpio/gpio.h>
 
 #include "r8a779h0.dtsi"
+#include "gray-hawk-csi-dsi.dtsi"
 
 / {
 	model = "Renesas Gray Hawk Single board based on r8a779h0";
@@ -117,13 +118,6 @@
 		compatible = "rohm,br24g01", "atmel,24c01";
 		label = "breakout-board";
 		reg = <0x51>;
-		pagesize = <8>;
-	};
-
-	eeprom@52 {
-		compatible = "rohm,br24g01", "atmel,24c01";
-		label = "csi-dsi-sub-board-id";
-		reg = <0x52>;
 		pagesize = <8>;
 	};
 
