@@ -367,6 +367,24 @@ EXPORT_SYMBOL(fs_param_is_blockdev);
 int fs_param_is_path(struct p_log *log, const struct fs_parameter_spec *p,
 		     struct fs_parameter *param, struct fs_parse_result *result)
 {
+	int ret;
+	struct filename *f;
+	struct path path;
+
+	if (param->type != fs_value_is_filename)
+		return fs_param_bad_value(log, param);
+	if (!*param->string && (p->flags & fs_param_can_be_empty))
+		return 0;
+
+	f = param->name;
+	ret = filename_lookup(param->dirfd, f, LOOKUP_FOLLOW, &path, NULL);
+	if (ret < 0) {
+		error_plog(log, "%s: Lookup failure for '%s'", param->key, f->name);
+		return fs_param_bad_value(log, param);
+	}
+	result->ptr = d_backing_inode(path.dentry);
+	path_put(&path);
+
 	return 0;
 }
 EXPORT_SYMBOL(fs_param_is_path);
