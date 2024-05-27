@@ -26,7 +26,7 @@ static int rtw_ips_pwr_up(struct rtw_dev *rtwdev)
 
 int rtw_enter_ips(struct rtw_dev *rtwdev)
 {
-	if (!test_bit(RTW_FLAG_POWERON, rtwdev->flags))
+	if (!test_bit(RTW_FLAG_RUNNING, rtwdev->flags))
 		return 0;
 
 	rtw_coex_ips_notify(rtwdev, COEX_IPS_ENTER);
@@ -50,7 +50,7 @@ int rtw_leave_ips(struct rtw_dev *rtwdev)
 {
 	int ret;
 
-	if (test_bit(RTW_FLAG_POWERON, rtwdev->flags))
+	if (test_bit(RTW_FLAG_RUNNING, rtwdev->flags))
 		return 0;
 
 	rtw_hci_link_ps(rtwdev, false);
