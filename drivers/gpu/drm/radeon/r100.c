@@ -1055,6 +1055,11 @@ static int r100_cp_init_microcode(struct radeon_device *rdev)
 		   (rdev->family == CHIP_RV570)) {
 		DRM_INFO("Loading R500 Microcode\n");
 		fw_name = FIRMWARE_R520;
+	} else {
+		pr_err("radeon_cp: Failed to load firmware \"%d\"\n",
+			rdev->family);
+		err = -EINVAL;
+		goto out;
 	}
 
 	err = request_firmware(&rdev->me_fw, fw_name, rdev->dev);
@@ -1067,6 +1072,8 @@ static int r100_cp_init_microcode(struct radeon_device *rdev)
 		release_firmware(rdev->me_fw);
 		rdev->me_fw = NULL;
 	}
+
+out:
 	return err;
 }
 
