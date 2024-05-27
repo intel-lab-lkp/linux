@@ -253,7 +253,7 @@ manage the filesystem context.  They are as follows:
      will have been weeded out and fc->sb_flags updated in the context.
      Security options will also have been weeded out and fc->security updated.
 
-     The parameter can be parsed with fs_parse() and fs_lookup_param().  Note
+     The parameter can be parsed with fs_parse().  Note
      that the source(s) are presented as parameters named "source".
 
      If successful, 0 should be returned or a negative error code otherwise.
@@ -796,18 +796,3 @@ process the parameters it is given.
      If the parameter isn't matched, -ENOPARAM will be returned; if the
      parameter is matched, but the value is erroneous, -EINVAL will be
      returned; otherwise the parameter's option number will be returned.
-
-   * ::
-
-       int fs_lookup_param(struct fs_context *fc,
-			   struct fs_parameter *value,
-			   bool want_bdev,
-			   unsigned int flags,
-			   struct path *_path);
-
-     This takes a parameter that carries a string or filename type and attempts
-     to do a path lookup on it.  If the parameter expects a blockdev, a check
-     is made that the inode actually represents one.
-
-     Returns 0 if successful and ``*_path`` will be set; returns a negative
-     error code if not.
