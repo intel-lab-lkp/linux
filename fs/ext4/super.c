@@ -2310,6 +2310,7 @@ static int ext4_parse_param(struct fs_context *fc, struct fs_parameter *param)
 		ctx->spec |= EXT4_SPEC_s_resgid;
 		return 0;
 	case Opt_journal_dev:
+	case Opt_journal_path:
 		if (is_remount) {
 			ext4_msg(NULL, KERN_ERR,
 				 "Cannot specify journal on remount");
@@ -2318,31 +2319,6 @@ static int ext4_parse_param(struct fs_context *fc, struct fs_parameter *param)
 		ctx->journal_devnum = result.uint_32;
 		ctx->spec |= EXT4_SPEC_JOURNAL_DEV;
 		return 0;
-	case Opt_journal_path:
-	{
-		struct inode *journal_inode;
-		struct path path;
-		int error;
-
-		if (is_remount) {
-			ext4_msg(NULL, KERN_ERR,
-				 "Cannot specify journal on remount");
-			return -EINVAL;
-		}
-
-		error = fs_lookup_param(fc, param, 1, LOOKUP_FOLLOW, &path);
-		if (error) {
-			ext4_msg(NULL, KERN_ERR, "error: could not find "
-				 "journal device path");
-			return -EINVAL;
-		}
-
-		journal_inode = d_inode(path.dentry);
-		ctx->journal_devnum = new_encode_dev(journal_inode->i_rdev);
-		ctx->spec |= EXT4_SPEC_JOURNAL_DEV;
-		path_put(&path);
-		return 0;
-	}
 	case Opt_journal_ioprio:
 		if (result.uint_32 > 7) {
 			ext4_msg(NULL, KERN_ERR, "Invalid journal IO priority"
