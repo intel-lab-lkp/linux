@@ -1482,11 +1482,11 @@ void rtw_core_scan_complete(struct rtw_dev *rtwdev, struct ieee80211_vif *vif,
 
 int rtw_core_start(struct rtw_dev *rtwdev)
 {
-	int ret;
-
-	ret = rtw_power_on(rtwdev);
-	if (ret)
-		return ret;
+	if (!test_bit(RTW_FLAG_POWERON, rtwdev->flags)) {
+		int ret = rtw_power_on(rtwdev);
+		if (ret)
+			return ret;
+	}
 
 	rtw_sec_enable_sec_engine(rtwdev);
 
@@ -1534,7 +1534,9 @@ void rtw_core_stop(struct rtw_dev *rtwdev)
 
 	mutex_lock(&rtwdev->mutex);
 
-	rtw_power_off(rtwdev);
+	/* FIXME: 8821C doesn't wake up from this state from time to time */
+	if (rtwdev->chip->id != RTW_CHIP_TYPE_8821C)
+		rtw_power_off(rtwdev);
 }
 
 static void rtw_init_ht_cap(struct rtw_dev *rtwdev,
