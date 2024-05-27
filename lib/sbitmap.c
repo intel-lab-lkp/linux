@@ -62,10 +62,19 @@ static inline void update_alloc_hint_after_get(struct sbitmap *sb,
  */
 static inline bool sbitmap_deferred_clear(struct sbitmap_word *map)
 {
-	unsigned long mask;
+	unsigned long mask, flags;
+	int zero = 0;
 
-	if (!READ_ONCE(map->cleared))
+	if (!READ_ONCE(map->cleared)) {
+		if (atomic_read(&map->swap_inprogress))
+			goto out_wait;
 		return false;
+	}
+
+	if (!atomic_try_cmpxchg(&map->swap_inprogress, &zero, 1))
+		goto out_wait;
+
+	local_irq_save(flags);
 
 	/*
 	 * First get a stable cleared mask, setting the old mask to 0.
@@ -77,6 +86,15 @@ static inline bool sbitmap_deferred_clear(struct sbitmap_word *map)
 	 */
 	atomic_long_andnot(mask, (atomic_long_t *)&map->word);
 	BUILD_BUG_ON(sizeof(atomic_long_t) != sizeof(map->word));
+
+	atomic_set(&map->swap_inprogress, 0);
+	smp_mb__after_atomic();
+	local_irq_restore(flags);
+	return true;
+
+out_wait:
+	while (atomic_read(&map->swap_inprogress))
+		;
 	return true;
 }
 

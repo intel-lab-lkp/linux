@@ -36,6 +36,11 @@ struct sbitmap_word {
 	 * @cleared: word holding cleared bits
 	 */
 	unsigned long cleared ____cacheline_aligned_in_smp;
+
+	/**
+	 * @swap_inprogress: set to 1 when swapping word <-> cleared
+	 */
+	atomic_t swap_inprogress;
 } ____cacheline_aligned_in_smp;
 
 /**
