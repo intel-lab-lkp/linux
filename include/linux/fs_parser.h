@@ -74,12 +74,6 @@ static inline int fs_parse(struct fs_context *fc,
 	return __fs_parse(&fc->log, desc, param, result);
 }
 
-extern int fs_lookup_param(struct fs_context *fc,
-			   struct fs_parameter *param,
-			   bool want_bdev,
-			   unsigned int flags,
-			   struct path *_path);
-
 extern int lookup_constant(const struct constant_table tbl[], const char *name, int not_found);
 
 #ifdef CONFIG_VALIDATE_FS_PARSER

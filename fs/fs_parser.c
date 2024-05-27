@@ -133,62 +133,6 @@ int __fs_parse(struct p_log *log,
 }
 EXPORT_SYMBOL(__fs_parse);
 
-/**
- * fs_lookup_param - Look up a path referred to by a parameter
- * @fc: The filesystem context to log errors through.
- * @param: The parameter.
- * @want_bdev: T if want a blockdev
- * @flags: Pathwalk flags passed to filename_lookup()
- * @_path: The result of the lookup
- */
-int fs_lookup_param(struct fs_context *fc,
-		    struct fs_parameter *param,
-		    bool want_bdev,
-		    unsigned int flags,
-		    struct path *_path)
-{
-	struct filename *f;
-	bool put_f;
-	int ret;
-
-	switch (param->type) {
-	case fs_value_is_string:
-		f = getname_kernel(param->string);
-		if (IS_ERR(f))
-			return PTR_ERR(f);
-		put_f = true;
-		break;
-	case fs_value_is_filename:
-		f = param->name;
-		put_f = false;
-		break;
-	default:
-		return invalf(fc, "%s: not usable as path", param->key);
-	}
-
-	ret = filename_lookup(param->dirfd, f, flags, _path, NULL);
-	if (ret < 0) {
-		errorf(fc, "%s: Lookup failure for '%s'", param->key, f->name);
-		goto out;
-	}
-
-	if (want_bdev &&
-	    !S_ISBLK(d_backing_inode(_path->dentry)->i_mode)) {
-		path_put(_path);
-		_path->dentry = NULL;
-		_path->mnt = NULL;
-		errorf(fc, "%s: Non-blockdev passed as '%s'",
-		       param->key, f->name);
-		ret = -ENOTBLK;
-	}
-
-out:
-	if (put_f)
-		putname(f);
-	return ret;
-}
-EXPORT_SYMBOL(fs_lookup_param);
-
 static int fs_param_bad_value(struct p_log *log, struct fs_parameter *param)
 {
 	return inval_plog(log, "Bad value for '%s'", param->key);
