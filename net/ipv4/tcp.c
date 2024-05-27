@@ -2659,6 +2659,8 @@ void tcp_set_state(struct sock *sk, int state)
 	default:
 		if (oldstate == TCP_ESTABLISHED)
 			TCP_DEC_STATS(sock_net(sk), TCP_MIB_CURRESTAB);
+		if (state == TCP_CLOSE_WAIT)
+			NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPCLOSEWAIT);
 	}
 
 	/* Change state AFTER socket is unhashed to avoid closed
