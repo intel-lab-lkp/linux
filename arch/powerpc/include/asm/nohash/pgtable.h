@@ -52,11 +52,36 @@ static inline pte_basic_t pte_update(struct mm_struct *mm, unsigned long addr, p
 {
 	pte_basic_t old = pte_val(*p);
 	pte_basic_t new = (old & ~(pte_basic_t)clr) | set;
+	unsigned long sz;
+	unsigned long pdsize;
+	int i;
 
 	if (new == old)
 		return old;
 
-	*p = __pte(new);
+#ifdef CONFIG_PPC_E500
+	if (huge)
+		sz = 1UL << (((old & _PAGE_HSIZE_MSK) >> _PAGE_HSIZE_SHIFT) + 20);
+	else
+#endif
+		sz = PAGE_SIZE;
+
+	if (!huge || sz < PMD_SIZE)
+		pdsize = PAGE_SIZE;
+	else if (sz < PUD_SIZE)
+		pdsize = PMD_SIZE;
+	else if (sz < P4D_SIZE)
+		pdsize = PUD_SIZE;
+	else if (sz < PGDIR_SIZE)
+		pdsize = P4D_SIZE;
+	else
+		pdsize = PGDIR_SIZE;
+
+	for (i = 0; i < sz / pdsize; i++, p++) {
+		*p = __pte(new);
+		if (new)
+			new += (unsigned long long)(pdsize / PAGE_SIZE) << PTE_RPN_SHIFT;
+	}
 
 	if (IS_ENABLED(CONFIG_44x) && !is_kernel_addr(addr) && (old & _PAGE_EXEC))
 		icache_44x_need_flush = 1;
@@ -339,16 +364,6 @@ static inline void __set_pte_at(struct mm_struct *mm, unsigned long addr,
 		(__pgprot(pgprot_val(prot) & ~_PAGE_CACHE_CTL))
 
 #define pgprot_writecombine pgprot_noncached_wc
-
-#ifdef CONFIG_ARCH_HAS_HUGEPD
-static inline int hugepd_ok(hugepd_t hpd)
-{
-	/* We clear the top bit to indicate hugepd */
-	return (hpd_val(hpd) && (hpd_val(hpd) & PD_HUGE) == 0);
-}
-
-#define is_hugepd(hpd)		(hugepd_ok(hpd))
-#endif
 
 int map_kernel_page(unsigned long va, phys_addr_t pa, pgprot_t prot);
 void unmap_kernel_page(unsigned long va);
