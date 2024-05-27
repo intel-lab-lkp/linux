@@ -118,8 +118,8 @@ bool qcom_scm_lmh_dcvsh_available(void);
 #ifdef CONFIG_QCOM_QSEECOM
 
 int qcom_scm_qseecom_app_get_id(const char *app_name, u32 *app_id);
-int qcom_scm_qseecom_app_send(u32 app_id, dma_addr_t req, size_t req_size,
-			      dma_addr_t rsp, size_t rsp_size);
+int qcom_scm_qseecom_app_send(u32 app_id, void *req, size_t req_size,
+			      void *rsp, size_t rsp_size);
 
 #else /* CONFIG_QCOM_QSEECOM */
 
@@ -129,8 +129,8 @@ static inline int qcom_scm_qseecom_app_get_id(const char *app_name, u32 *app_id)
 }
 
 static inline int qcom_scm_qseecom_app_send(u32 app_id,
-					    dma_addr_t req, size_t req_size,
-					    dma_addr_t rsp, size_t rsp_size)
+					    void *req, size_t req_size,
+					    void *rsp, size_t rsp_size)
 {
 	return -EINVAL;
 }
