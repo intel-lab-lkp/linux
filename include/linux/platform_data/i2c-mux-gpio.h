@@ -19,6 +19,7 @@
  *	position
  * @n_values: Number of multiplexer positions (busses to instantiate)
  * @idle: Bitmask to write to MUX when idle or GPIO_I2CMUX_NO_IDLE if not used
+ * @transition_delay: Delay to wait when a new bus is selected
  */
 struct i2c_mux_gpio_platform_data {
 	int parent;
@@ -26,6 +27,7 @@ struct i2c_mux_gpio_platform_data {
 	const unsigned *values;
 	int n_values;
 	unsigned idle;
+	int transition_delay;
 };
 
 #endif /* _LINUX_I2C_MUX_GPIO_H */
