@@ -1292,6 +1292,15 @@ static const struct rvin_info rcar_info_r8a779g0 = {
 	.max_height = 4096,
 };
 
+static const struct rvin_info rcar_info_r8a779h0 = {
+	.model = RCAR_GEN3,
+	.use_mc = true,
+	.use_isp = true,
+	.nv12 = true,
+	.max_width = 4096,
+	.max_height = 4096,
+};
+
 static const struct of_device_id rvin_of_id_table[] = {
 	{
 		.compatible = "renesas,vin-r8a774a1",
@@ -1360,6 +1369,10 @@ static const struct of_device_id rvin_of_id_table[] = {
 	{
 		.compatible = "renesas,vin-r8a779g0",
 		.data = &rcar_info_r8a779g0,
+	},
+	{
+		.compatible = "renesas,vin-r8a779h0",
+		.data = &rcar_info_r8a779h0,
 	},
 	{ /* Sentinel */ },
 };
