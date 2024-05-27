@@ -30,6 +30,7 @@
 #include "root-tree.h"
 #include "tree-checker.h"
 
+struct kmem_cache *btrfs_qgroup_extent_record_cachep;
 enum btrfs_qgroup_mode btrfs_qgroup_mode(struct btrfs_fs_info *fs_info)
 {
 	if (!test_bit(BTRFS_FS_QUOTA_ENABLED, &fs_info->flags))
@@ -2024,7 +2025,7 @@ int btrfs_qgroup_trace_extent(struct btrfs_trans_handle *trans, u64 bytenr,
 
 	if (!btrfs_qgroup_full_accounting(fs_info) || bytenr == 0 || num_bytes == 0)
 		return 0;
-	record = kzalloc(sizeof(*record), GFP_NOFS);
+	record = kmem_cache_zalloc(btrfs_qgroup_extent_record_cachep, GFP_NOFS);
 	if (!record)
 		return -ENOMEM;
 
@@ -2985,7 +2986,7 @@ cleanup:
 		ulist_free(new_roots);
 		new_roots = NULL;
 		rb_erase(node, &delayed_refs->dirty_extent_root);
-		kfree(record);
+		kmem_cache_free(btrfs_qgroup_extent_record_cachep, record);
 
 	}
 	trace_qgroup_num_dirty_extents(fs_info, trans->transid,
@@ -4783,7 +4784,7 @@ void btrfs_qgroup_destroy_extent_records(struct btrfs_transaction *trans)
 	root = &trans->delayed_refs.dirty_extent_root;
 	rbtree_postorder_for_each_entry_safe(entry, next, root, node) {
 		ulist_free(entry->old_roots);
-		kfree(entry);
+		kmem_cache_free(btrfs_qgroup_extent_record_cachep, entry);
 	}
 	*root = RB_ROOT;
 }
@@ -4844,4 +4845,18 @@ int btrfs_record_squota_delta(struct btrfs_fs_info *fs_info,
 out:
 	spin_unlock(&fs_info->qgroup_lock);
 	return ret;
+}
+
+void __cold btrfs_qgroup_exit(void)
+{
+	kmem_cache_destroy(btrfs_qgroup_extent_record_cachep);
+}
+
+int __init btrfs_qgroup_init(void)
+{
+	btrfs_qgroup_extent_record_cachep = KMEM_CACHE(btrfs_qgroup_extent_record, 0);
+	if (!btrfs_qgroup_extent_record_cachep)
+		return -ENOMEM;
+
+	return 0;
 }

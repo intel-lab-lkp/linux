@@ -2507,6 +2507,9 @@ static const struct init_sequence mod_init_seq[] = {
 		.init_func = btrfs_delayed_ref_init,
 		.exit_func = btrfs_delayed_ref_exit,
 	}, {
+		.init_func = btrfs_qgroup_init,
+		.exit_func = btrfs_qgroup_exit,
+	}, {
 		.init_func = btrfs_prelim_ref_init,
 		.exit_func = btrfs_prelim_ref_exit,
 	}, {

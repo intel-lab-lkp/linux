@@ -123,7 +123,6 @@ struct btrfs_inode;
 
 /*
  * Record a dirty extent, and info qgroup to update quota on it
- * TODO: Use kmem cache to alloc it.
  */
 struct btrfs_qgroup_extent_record {
 	struct rb_node node;
@@ -311,6 +310,11 @@ enum btrfs_qgroup_mode {
 	BTRFS_QGROUP_MODE_FULL,
 	BTRFS_QGROUP_MODE_SIMPLE
 };
+
+extern struct kmem_cache *btrfs_qgroup_extent_record_cachep;
+
+void __cold btrfs_qgroup_exit(void);
+int __init btrfs_qgroup_init(void);
 
 enum btrfs_qgroup_mode btrfs_qgroup_mode(struct btrfs_fs_info *fs_info);
 bool btrfs_qgroup_enabled(struct btrfs_fs_info *fs_info);
