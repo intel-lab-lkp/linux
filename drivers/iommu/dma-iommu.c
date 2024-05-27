@@ -1108,6 +1108,9 @@ static void iommu_dma_sync_sg_for_cpu(struct device *dev,
 	struct scatterlist *sg;
 	int i;
 
+	if (nelems < 1)
+		return;
+
 	if (sg_dma_is_swiotlb(sgl))
 		for_each_sg(sgl, sg, nelems, i)
 			iommu_dma_sync_single_for_cpu(dev, sg_dma_address(sg),
@@ -1123,6 +1126,9 @@ static void iommu_dma_sync_sg_for_device(struct device *dev,
 {
 	struct scatterlist *sg;
 	int i;
+
+	if (nelems < 1)
+		return;
 
 	if (sg_dma_is_swiotlb(sgl))
 		for_each_sg(sgl, sg, nelems, i)
@@ -1320,6 +1326,9 @@ static int iommu_dma_map_sg_swiotlb(struct device *dev, struct scatterlist *sg,
 {
 	struct scatterlist *s;
 	int i;
+
+	if (nents < 1)
+		return nents;
 
 	sg_dma_mark_swiotlb(sg);
 
