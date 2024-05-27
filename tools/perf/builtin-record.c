@@ -40,6 +40,7 @@
 #include "util/trigger.h"
 #include "util/perf-hooks.h"
 #include "util/cpu-set-sched.h"
+#include "util/metricgroup.h"
 #include "util/synthetic-events.h"
 #include "util/time-utils.h"
 #include "util/units.h"
@@ -188,6 +189,7 @@ static volatile int done;
 static volatile int auxtrace_record__snapshot_started;
 static DEFINE_TRIGGER(auxtrace_snapshot_trigger);
 static DEFINE_TRIGGER(switch_output_trigger);
+static char *metrics;
 
 static const char *affinity_tags[PERF_AFFINITY_MAX] = {
 	"SYS", "NODE", "CPU"
@@ -199,6 +201,25 @@ static inline pid_t gettid(void)
 	return (pid_t)syscall(__NR_gettid);
 }
 #endif
+
+static int append_metric_groups(const struct option *opt __maybe_unused,
+			       const char *str,
+			       int unset __maybe_unused)
+{
+	if (metrics) {
+		char *tmp;
+
+		if (asprintf(&tmp, "%s,%s", metrics, str) < 0)
+			return -ENOMEM;
+		free(metrics);
+		metrics = tmp;
+	} else {
+		metrics = strdup(str);
+		if (!metrics)
+			return -ENOMEM;
+	}
+	return 0;
+}
 
 static int record__threads_enabled(struct record *rec)
 {
@@ -3382,6 +3403,9 @@ static struct option __record_options[] = {
 		     parse_events_option),
 	OPT_CALLBACK(0, "filter", &record.evlist, "filter",
 		     "event filter", parse_filter),
+	OPT_CALLBACK('M', "metrics", &record.evlist, "metric/metric group list",
+		     "monitor specified metrics or metric groups (separated by ,)",
+		     append_metric_groups),
 	OPT_CALLBACK_NOOPT(0, "exclude-perf", &record.evlist,
 			   NULL, "don't record events from perf itself",
 			   exclude_perf),
@@ -3984,6 +4008,7 @@ int cmd_record(int argc, const char **argv)
 	int err;
 	struct record *rec = &record;
 	char errbuf[BUFSIZ];
+	struct rblist mevents;
 
 	setlocale(LC_ALL, "");
 
@@ -4153,6 +4178,23 @@ int cmd_record(int argc, const char **argv)
 	if (record.opts.overwrite)
 		record.opts.tail_synthesize = true;
 
+	if (metrics) {
+		const char *pmu = parse_events_option_args.pmu_filter ?: "all";
+		int ret = metricgroup__parse_groups(rec->evlist, pmu, metrics,
+						false, /* metric_no_group */
+						false, /* metric_no_merge */
+						false, /* metric_no_threshold */
+						rec->opts.target.cpu_list,
+						rec->opts.target.system_wide,
+						false, /* hardware_aware_grouping */
+						&mevents);
+		if (ret) {
+			err = ret;
+			goto out;
+		}
+		zfree(&metrics);
+	}
+
 	if (rec->evlist->core.nr_entries == 0) {
 		bool can_profile_kernel = perf_event_paranoid_check(1);
 
@@ -4264,6 +4306,7 @@ out:
 out_opts:
 	record__free_thread_masks(rec, rec->nr_threads);
 	rec->nr_threads = 0;
+	metricgroup__rblist_exit(&mevents);
 	evlist__close_control(rec->opts.ctl_fd, rec->opts.ctl_fd_ack, &rec->opts.ctl_fd_close);
 	return err;
 }

@@ -18,7 +18,6 @@ from it, into perf.data - without displaying anything.
 
 This file can then be inspected later on, using 'perf report'.
 
-
 OPTIONS
 -------
 <command>...::
@@ -215,6 +214,12 @@ OPTIONS
 	  na, l1_hit, l1_miss, l2_hit, l2_miss, any_hit, any_miss, walk, fault (for mem_dtlb)
 	  na, by_data, by_addr (for mem_blk)
 	  hops0, hops1, hops2, hops3 (for mem_hops)
+
+-M::
+--metrics::
+Record metrics or metricgroups specified in a comma separated list.
+For a group all metrics from the group are added.
+See perf list output for the possible metrics and metricgroups.
 
 --exclude-perf::
 	Don't record events issued by perf itself. This option should follow
