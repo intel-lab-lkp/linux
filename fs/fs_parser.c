@@ -311,7 +311,56 @@ EXPORT_SYMBOL(fs_param_is_fd);
 int fs_param_is_blockdev(struct p_log *log, const struct fs_parameter_spec *p,
 		  struct fs_parameter *param, struct fs_parse_result *result)
 {
-	return 0;
+	int ret;
+	int dfd;
+	struct filename *f;
+	struct inode *dev_inode;
+	struct path path;
+	bool put_f;
+
+	switch (param->type) {
+	case fs_value_is_string:
+		if (!*param->string) {
+			if (p->flags & fs_param_can_be_empty)
+				return 0;
+			break;
+		}
+		f = getname_kernel(param->string);
+		if (IS_ERR(f))
+			return fs_param_bad_value(log, param);
+		dfd = AT_FDCWD;
+		put_f = true;
+		break;
+	case fs_value_is_filename:
+		f = param->name;
+		dfd = param->dirfd;
+		put_f = false;
+		break;
+	default:
+		return fs_param_bad_value(log, param);
+	}
+
+	ret = filename_lookup(dfd, f, LOOKUP_FOLLOW, &path, NULL);
+	if (ret < 0) {
+		error_plog(log, "%s: Lookup failure for '%s'", param->key, f->name);
+		goto out_putname;
+	}
+
+	dev_inode = d_backing_inode(path.dentry);
+	if (!S_ISBLK(dev_inode->i_mode)) {
+		error_plog(log, "%s: Non-blockdev passed as '%s'", param->key, f->name);
+		ret = -1;
+		goto out_putpath;
+	}
+	result->uint_32 = new_encode_dev(dev_inode->i_rdev);
+
+out_putpath:
+	path_put(&path);
+out_putname:
+	if (put_f)
+		putname(f);
+
+	return (ret < 0) ? fs_param_bad_value(log, param) : 0;
 }
 EXPORT_SYMBOL(fs_param_is_blockdev);
 
