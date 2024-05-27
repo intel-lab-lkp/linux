@@ -2697,7 +2697,7 @@ static bool drm_dp_validate_guid(struct drm_dp_mst_topology_mgr *mgr,
 {
 	u64 salt;
 
-	if (memchr_inv(guid, 0, 16))
+	if (!mem_is_zero(guid, 16))
 		return true;
 
 	salt = get_jiffies_64();

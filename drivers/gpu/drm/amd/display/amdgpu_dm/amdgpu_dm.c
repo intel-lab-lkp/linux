@@ -2432,7 +2432,7 @@ static void resume_mst_branch_status(struct drm_dp_mst_topology_mgr *mgr)
 		goto out_fail;
 	}
 
-	if (memchr_inv(guid, 0, 16) == NULL) {
+	if (mem_is_zero(guid, 16)) {
 		tmp64 = get_jiffies_64();
 		memcpy(&guid[0], &tmp64, sizeof(u64));
 		memcpy(&guid[8], &tmp64, sizeof(u64));
