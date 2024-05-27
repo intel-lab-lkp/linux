@@ -23,7 +23,7 @@ int devkmsg_sysctl_set_loglvl(struct ctl_table *table, int write,
 #ifdef CONFIG_PRINTK
 
 #ifdef CONFIG_PRINTK_CALLER
-#define PRINTK_PREFIX_MAX	48
+#define PRINTK_PREFIX_MAX	64
 #else
 #define PRINTK_PREFIX_MAX	32
 #endif

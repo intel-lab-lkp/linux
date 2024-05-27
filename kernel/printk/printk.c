@@ -1331,7 +1331,7 @@ static size_t print_time(u64 ts, char *buf)
 #ifdef CONFIG_PRINTK_CALLER
 static size_t print_caller(u32 id, char *buf)
 {
-	char caller[12];
+	char caller[32];
 
 	snprintf(caller, sizeof(caller), "%c%u",
 		 id & 0x80000000 ? 'C' : 'T', id & ~0x80000000);
