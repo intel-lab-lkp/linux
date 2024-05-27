@@ -65,21 +65,8 @@ struct list_head *zlib_alloc_workspace(unsigned int level)
 			zlib_inflate_workspacesize());
 	workspace->strm.workspace = kvzalloc(workspacesize, GFP_KERNEL | __GFP_NOWARN);
 	workspace->level = level;
-	workspace->buf = NULL;
-	/*
-	 * In case of s390 zlib hardware support, allocate lager workspace
-	 * buffer. If allocator fails, fall back to a single page buffer.
-	 */
-	if (zlib_deflate_dfltcc_enabled()) {
-		workspace->buf = kmalloc(ZLIB_DFLTCC_BUF_SIZE,
-					 __GFP_NOMEMALLOC | __GFP_NORETRY |
-					 __GFP_NOWARN | GFP_NOIO);
-		workspace->buf_size = ZLIB_DFLTCC_BUF_SIZE;
-	}
-	if (!workspace->buf) {
-		workspace->buf = kmalloc(PAGE_SIZE, GFP_KERNEL);
-		workspace->buf_size = PAGE_SIZE;
-	}
+	workspace->buf = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	workspace->buf_size = PAGE_SIZE;
 	if (!workspace->strm.workspace || !workspace->buf)
 		goto fail;
 
@@ -103,7 +90,6 @@ int zlib_compress_folios(struct list_head *ws, struct address_space *mapping,
 	struct folio *in_folio = NULL;
 	struct folio *out_folio = NULL;
 	unsigned long bytes_left;
-	unsigned int in_buf_folios;
 	unsigned long len = *total_out;
 	unsigned long nr_dest_folios = *out_folios;
 	const unsigned long max_out = nr_dest_folios * PAGE_SIZE;
@@ -130,7 +116,6 @@ int zlib_compress_folios(struct list_head *ws, struct address_space *mapping,
 	folios[0] = out_folio;
 	nr_folios = 1;
 
-	workspace->strm.next_in = workspace->buf;
 	workspace->strm.avail_in = 0;
 	workspace->strm.next_out = cfolio_out;
 	workspace->strm.avail_out = PAGE_SIZE;
@@ -142,43 +127,19 @@ int zlib_compress_folios(struct list_head *ws, struct address_space *mapping,
 		 */
 		if (workspace->strm.avail_in == 0) {
 			bytes_left = len - workspace->strm.total_in;
-			in_buf_folios = min(DIV_ROUND_UP(bytes_left, PAGE_SIZE),
-					    workspace->buf_size / PAGE_SIZE);
-			if (in_buf_folios > 1) {
-				int i;
-
-				for (i = 0; i < in_buf_folios; i++) {
-					if (data_in) {
-						kunmap_local(data_in);
-						folio_put(in_folio);
-						data_in = NULL;
-					}
-					ret = btrfs_compress_filemap_get_folio(mapping,
-							start, &in_folio);
-					if (ret < 0)
-						goto out;
-					data_in = kmap_local_folio(in_folio, 0);
-					copy_page(workspace->buf + i * PAGE_SIZE,
-						  data_in);
-					start += PAGE_SIZE;
-				}
-				workspace->strm.next_in = workspace->buf;
-			} else {
-				if (data_in) {
-					kunmap_local(data_in);
-					folio_put(in_folio);
-					data_in = NULL;
-				}
-				ret = btrfs_compress_filemap_get_folio(mapping,
-						start, &in_folio);
-				if (ret < 0)
-					goto out;
-				data_in = kmap_local_folio(in_folio, 0);
-				start += PAGE_SIZE;
-				workspace->strm.next_in = data_in;
+			if (data_in) {
+				kunmap_local(data_in);
+				folio_put(in_folio);
+				data_in = NULL;
 			}
-			workspace->strm.avail_in = min(bytes_left,
-						       (unsigned long) workspace->buf_size);
+			ret = btrfs_compress_filemap_get_folio(mapping,
+					start, &in_folio);
+			if (ret < 0)
+				goto out;
+			data_in = kmap_local_folio(in_folio, 0);
+			start += PAGE_SIZE;
+			workspace->strm.next_in = data_in;
+			workspace->strm.avail_in = min(bytes_left, PAGE_SIZE);
 		}
 
 		ret = zlib_deflate(&workspace->strm, Z_SYNC_FLUSH);
