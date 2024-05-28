@@ -1731,7 +1731,8 @@ static int scan_movable_pages(unsigned long start, unsigned long end,
 	unsigned long pfn;
 
 	for (pfn = start; pfn < end; pfn++) {
-		struct page *page, *head;
+		struct page *page;
+		struct folio *folio;
 		unsigned long skip;
 
 		if (!pfn_valid(pfn))
@@ -1753,7 +1754,7 @@ static int scan_movable_pages(unsigned long start, unsigned long end,
 
 		if (!PageHuge(page))
 			continue;
-		head = compound_head(page);
+		folio = page_folio(page);
 		/*
 		 * This test is racy as we hold no reference or lock.  The
 		 * hugetlb page could have been free'ed and head is no longer
@@ -1761,9 +1762,9 @@ static int scan_movable_pages(unsigned long start, unsigned long end,
 		 * cases false positives and negatives are possible.  Calling
 		 * code must deal with these scenarios.
 		 */
-		if (HPageMigratable(head))
+		if (folio_test_hugetlb_migratable(folio))
 			goto found;
-		skip = compound_nr(head) - (pfn - page_to_pfn(head));
+		skip = folio_nr_pages(folio) - folio_page_idx(folio, page);
 		pfn += skip - 1;
 	}
 	return -ENOENT;
