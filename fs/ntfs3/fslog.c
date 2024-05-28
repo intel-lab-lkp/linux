@@ -3741,6 +3741,7 @@ int log_replay(struct ntfs_inode *ni, bool *initialized)
 	u32 i, bytes_per_attr_entry;
 	u32 vbo, tail, off, dlen;
 	u32 saved_len, rec_len, transact_id;
+	u32 attr_names_len, oatbl_len;
 	bool use_second_page;
 	struct RESTART_AREA *ra2, *ra = NULL;
 	struct CLIENT_REC *ca, *cr;
@@ -4247,6 +4248,7 @@ check_attribute_names:
 		err = -ENOMEM;
 		goto out;
 	}
+	attr_names_len = rec_len;
 
 	lcb_put(lcb);
 	lcb = NULL;
@@ -4286,6 +4288,7 @@ check_attr_table:
 		err = -ENOMEM;
 		goto out;
 	}
+	oatbl_len = t32;
 
 	log->open_attr_tbl = oatbl;
 
@@ -4316,15 +4319,30 @@ check_attr_table:
 check_attribute_names2:
 	if (rst->attr_names_len && oatbl) {
 		struct ATTR_NAME_ENTRY *ane = attr_names;
+		struct ATTR_NAME_ENTRY *attr_names_end =
+			(struct ATTR_NAME_ENTRY *)Add2Ptr(attr_names, attr_name_len);
+		struct OPEN_ATTR_ENTRY *oatbl_end =
+			(struct OPEN_ATTR_ENTRY *)Add2Ptr(oatbl, oatbl_len);
 		while (ane->off) {
 			/* TODO: Clear table on exit! */
 			oe = Add2Ptr(oatbl, le16_to_cpu(ane->off));
+			if (oe + 1 > oatbl_end) {
+				err = -EINVAL;
+				goto out;
+			}
+
 			t16 = le16_to_cpu(ane->name_bytes);
 			oe->name_len = t16 / sizeof(short);
 			oe->ptr = ane->name;
 			oe->is_attr_name = 2;
+
 			ane = Add2Ptr(ane,
 				      sizeof(struct ATTR_NAME_ENTRY) + t16);
+			if (ane > attr_names_end ||
+			    ane + 1 > attr_names_end) {
+				err = -EINVAL;
+				goto out;
+			}
 		}
 	}
 
