@@ -5,7 +5,7 @@
 
 #include <linux/kernel.h>
 #include <linux/bitops.h>
-#include <linux/cpumask.h>
+#include <linux/cpumask_types.h>
 #include <linux/irqreturn.h>
 #include <linux/irqnr.h>
 #include <linux/hardirq.h>
