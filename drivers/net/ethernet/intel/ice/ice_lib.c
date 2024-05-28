@@ -2426,7 +2426,10 @@ void ice_vsi_decfg(struct ice_vsi *vsi)
 		dev_err(ice_pf_to_dev(pf), "Failed to remove RDMA scheduler config for VSI %u, err %d\n",
 			vsi->vsi_num, err);
 
-	if (ice_is_xdp_ena_vsi(vsi))
+	/* xdp_rings can be absent, if program was attached amid reset,
+	 * VSI rebuild is supposed to create them later
+	 */
+	if (ice_is_xdp_ena_vsi(vsi) && vsi->xdp_rings)
 		/* return value check can be skipped here, it always returns
 		 * 0 if reset is in progress
 		 */
@@ -2737,12 +2740,24 @@ ice_queue_set_napi(struct ice_vsi *vsi, unsigned int queue_index,
 	if (current_work() == &pf->serv_task ||
 	    test_bit(ICE_PREPARED_FOR_RESET, pf->state) ||
 	    test_bit(ICE_DOWN, pf->state) ||
-	    test_bit(ICE_SUSPENDED, pf->state))
-		__ice_queue_set_napi(vsi->netdev, queue_index, type, napi,
-				     false);
-	else
+	    test_bit(ICE_SUSPENDED, pf->state)) {
+		bool rtnl_held_here = true;
+
+		while (!rtnl_trylock()) {
+			if (test_bit(ICE_RTNL_WAITS_FOR_RESET, pf->state)) {
+				rtnl_held_here = false;
+				break;
+			}
+			usleep_range(1000, 2000);
+		}
 		__ice_queue_set_napi(vsi->netdev, queue_index, type, napi,
 				     true);
+		if (rtnl_held_here)
+			rtnl_unlock();
+	} else {
+		__ice_queue_set_napi(vsi->netdev, queue_index, type, napi,
+				     true);
+	}
 }
 
 /**

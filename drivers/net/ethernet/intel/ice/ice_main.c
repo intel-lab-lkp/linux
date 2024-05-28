@@ -2987,6 +2987,20 @@ static int ice_max_xdp_frame_size(struct ice_vsi *vsi)
 }
 
 /**
+ * ice_rebuild_pending - ice_vsi_rebuild will be performed, when locks are released
+ * @vsi: VSI to setup XDP for
+ *
+ * ice_vsi_close() in the reset path is called under rtnl_lock(),
+ * so it happened strictly before or after .ndo_bpf().
+ * In case it has happened before, we do not have anything attached to rings
+ */
+bool ice_rebuild_pending(struct ice_vsi *vsi)
+{
+	return ice_is_reset_in_progress(vsi->back->state) &&
+	       !vsi->rx_rings[0]->desc;
+}
+
+/**
  * ice_xdp_setup_prog - Add or remove XDP eBPF program
  * @vsi: VSI to setup XDP for
  * @prog: XDP program
@@ -3009,7 +3023,7 @@ ice_xdp_setup_prog(struct ice_vsi *vsi, struct bpf_prog *prog,
 	}
 
 	/* hot swap progs and avoid toggling link */
-	if (ice_is_xdp_ena_vsi(vsi) == !!prog) {
+	if (ice_is_xdp_ena_vsi(vsi) == !!prog || ice_rebuild_pending(vsi)) {
 		ice_vsi_assign_bpf_prog(vsi, prog);
 		return 0;
 	}
@@ -3081,21 +3095,33 @@ static int ice_xdp(struct net_device *dev, struct netdev_bpf *xdp)
 {
 	struct ice_netdev_priv *np = netdev_priv(dev);
 	struct ice_vsi *vsi = np->vsi;
+	struct ice_pf *pf = vsi->back;
+	int ret;
 
 	if (vsi->type != ICE_VSI_PF) {
 		NL_SET_ERR_MSG_MOD(xdp->extack, "XDP can be loaded only on PF VSI");
 		return -EINVAL;
 	}
 
+	while (test_and_set_bit(ICE_CFG_BUSY, pf->state)) {
+		set_bit(ICE_RTNL_WAITS_FOR_RESET, pf->state);
+		usleep_range(1000, 2000);
+	}
+	clear_bit(ICE_RTNL_WAITS_FOR_RESET, pf->state);
+
 	switch (xdp->command) {
 	case XDP_SETUP_PROG:
-		return ice_xdp_setup_prog(vsi, xdp->prog, xdp->extack);
+		ret = ice_xdp_setup_prog(vsi, xdp->prog, xdp->extack);
+		break;
 	case XDP_SETUP_XSK_POOL:
-		return ice_xsk_pool_setup(vsi, xdp->xsk.pool,
-					  xdp->xsk.queue_id);
+		ret = ice_xsk_pool_setup(vsi, xdp->xsk.pool, xdp->xsk.queue_id);
+		break;
 	default:
-		return -EINVAL;
+		ret = -EINVAL;
 	}
+
+	clear_bit(ICE_CFG_BUSY, pf->state);
+	return ret;
 }
 
 /**
@@ -7672,7 +7698,10 @@ static void ice_rebuild(struct ice_pf *pf, enum ice_reset_req reset_type)
 		ice_gnss_init(pf);
 
 	/* rebuild PF VSI */
+	while (test_and_set_bit(ICE_CFG_BUSY, pf->state))
+		usleep_range(1000, 2000);
 	err = ice_vsi_rebuild_by_type(pf, ICE_VSI_PF);
+	clear_bit(ICE_CFG_BUSY, pf->state);
 	if (err) {
 		dev_err(dev, "PF VSI rebuild failed: %d\n", err);
 		goto err_vsi_rebuild;
