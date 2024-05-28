@@ -855,6 +855,112 @@ static DEVICE_ATTR_RW(cores_enabled);
 WMI_SIMPLE_SHOW(cores_max, "0x%x\n", ASUS_WMI_DEVID_CORES_MAX);
 static DEVICE_ATTR_RO(cores_max);
 
+/* Device memory available to APU */
+
+static ssize_t apu_mem_show(struct device *dev,
+				 struct device_attribute *attr, char *buf)
+{
+	struct asus_wmi *asus = dev_get_drvdata(dev);
+	int err;
+	u32 mem;
+
+	err = asus_wmi_get_devstate(asus, ASUS_WMI_DEVID_APU_MEM, &mem);
+	if (err < 0)
+		return err;
+
+	switch (mem) {
+	case 256:
+		mem = 0;
+		break;
+	case 258:
+		mem = 1;
+		break;
+	case 259:
+		mem = 2;
+		break;
+	case 260:
+		mem = 3;
+		break;
+	case 261:
+		mem = 4;
+		break;
+	case 262:
+		mem = 8;
+		break;
+	case 263:
+		mem = 5;
+		break;
+	case 264:
+		mem = 6;
+		break;
+	case 265:
+		mem = 7;
+		break;
+	default:
+		mem = 4;
+		break;
+	}
+
+	return sysfs_emit(buf, "%d\n", mem);
+}
+
+static ssize_t apu_mem_store(struct device *dev,
+				    struct device_attribute *attr,
+				    const char *buf, size_t count)
+{
+	struct asus_wmi *asus = dev_get_drvdata(dev);
+	int result, err;
+	u32 mem;
+
+	result = kstrtou32(buf, 10, &mem);
+	if (result)
+		return result;
+
+	switch (mem) {
+	case 0:
+		mem = 0;
+		break;
+	case 1:
+		mem = 258;
+		break;
+	case 2:
+		mem = 259;
+		break;
+	case 3:
+		mem = 260;
+		break;
+	case 4:
+		mem = 261;
+		break;
+	case 5:
+		mem = 263;
+		break;
+	case 6:
+		mem = 264;
+		break;
+	case 7:
+		mem = 265;
+		break;
+	case 8:
+		mem = 262;
+		break;
+	default:
+		return -EIO;
+	}
+
+	err = asus_wmi_set_devstate(ASUS_WMI_DEVID_APU_MEM, mem, &result);
+	if (err) {
+		pr_warn("Failed to set apu_mem: %d\n", err);
+		return err;
+	}
+
+	pr_info("APU memory changed, reboot required\n");
+	sysfs_notify(&asus->platform_device->dev.kobj, NULL, "apu_mem");
+
+	return count;
+}
+static DEVICE_ATTR_RW(apu_mem);
+
 /* Tablet mode ****************************************************************/
 
 static void asus_wmi_tablet_mode_get_state(struct asus_wmi *asus)
@@ -4099,6 +4205,7 @@ static struct attribute *platform_attributes[] = {
 	&dev_attr_panel_fhd.attr,
 	&dev_attr_cores_enabled.attr,
 	&dev_attr_cores_max.attr,
+	&dev_attr_apu_mem.attr,
 	&dev_attr_mini_led_mode.attr,
 	&dev_attr_available_mini_led_mode.attr,
 	NULL
@@ -4175,6 +4282,8 @@ static umode_t asus_sysfs_is_visible(struct kobject *kobj,
 	else if (attr == &dev_attr_cores_enabled.attr
 		|| attr == &dev_attr_cores_max.attr)
 		ok = asus_wmi_dev_is_present(asus, ASUS_WMI_DEVID_CORES_SET);
+	else if (attr == &dev_attr_apu_mem.attr)
+		ok = asus_wmi_dev_is_present(asus, ASUS_WMI_DEVID_APU_MEM);
 	else if (attr == &dev_attr_mini_led_mode.attr)
 		ok = asus->mini_led_dev_id != 0;
 	else if (attr == &dev_attr_available_mini_led_mode.attr)

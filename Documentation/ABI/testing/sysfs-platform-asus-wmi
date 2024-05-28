@@ -245,3 +245,11 @@ Description:
 		Show the maximum performance and efficiency core countin format
 		0x[E][P] where [E] is the efficiency core count, and [P] is
 		the perfromance core count.
+
+What:		/sys/devices/platform/<platform>/apu_mem
+Date:		Jun 2024
+KernelVersion:	6.11
+Contact:	"Luke Jones" <luke@ljones.dev>
+Description:
+		Set the maximum available system memory for the APU.
+		  * Min=0, Max=8

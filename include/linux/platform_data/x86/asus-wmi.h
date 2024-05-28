@@ -121,6 +121,9 @@
  /* Maximum Intel E-core and P-core availability */
 #define ASUS_WMI_DEVID_CORES_MAX	0x001200D3
 
+/* Set the memory available to the APU */
+#define ASUS_WMI_DEVID_APU_MEM		0x000600C1
+
 /* MCU powersave mode */
 #define ASUS_WMI_DEVID_MCU_POWERSAVE   0x001200E2
 
