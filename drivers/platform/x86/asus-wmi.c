@@ -813,19 +813,6 @@ static void asus_wmi_tablet_mode_get_state(struct asus_wmi *asus)
 }
 
 /* dGPU ********************************************************************/
-static ssize_t dgpu_disable_show(struct device *dev,
-				   struct device_attribute *attr, char *buf)
-{
-	struct asus_wmi *asus = dev_get_drvdata(dev);
-	int result;
-
-	result = asus_wmi_get_devstate_simple(asus, ASUS_WMI_DEVID_DGPU);
-	if (result < 0)
-		return result;
-
-	return sysfs_emit(buf, "%d\n", result);
-}
-
 /*
  * A user may be required to store the value twice, typcial store first, then
  * rescan PCI bus to activate power, then store a second time to save correctly.
@@ -875,22 +862,11 @@ static ssize_t dgpu_disable_store(struct device *dev,
 
 	return count;
 }
+
+WMI_SIMPLE_SHOW(dgpu_disable, "%d\n", ASUS_WMI_DEVID_DGPU);
 static DEVICE_ATTR_RW(dgpu_disable);
 
 /* eGPU ********************************************************************/
-static ssize_t egpu_enable_show(struct device *dev,
-				   struct device_attribute *attr, char *buf)
-{
-	struct asus_wmi *asus = dev_get_drvdata(dev);
-	int result;
-
-	result = asus_wmi_get_devstate_simple(asus, ASUS_WMI_DEVID_EGPU);
-	if (result < 0)
-		return result;
-
-	return sysfs_emit(buf, "%d\n", result);
-}
-
 /* The ACPI call to enable the eGPU also disables the internal dGPU */
 static ssize_t egpu_enable_store(struct device *dev,
 				    struct device_attribute *attr,
@@ -943,6 +919,8 @@ static ssize_t egpu_enable_store(struct device *dev,
 
 	return count;
 }
+
+WMI_SIMPLE_SHOW(egpu_enable, "%d\n", ASUS_WMI_DEVID_EGPU);
 static DEVICE_ATTR_RW(egpu_enable);
 
 /* gpu mux switch *************************************************************/
