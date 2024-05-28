@@ -413,6 +413,29 @@ path after ->swap_activate() returned success.
 
 ->swap_rw will be called for swap IO if SWP_FS_OPS was set by ->swap_activate().
 
+buffered_write_operations
+=========================
+
+	struct folio *(*write_begin)(struct file *, struct address_space *,
+			loff_t pos, size_t len, void **fsdata);
+	size_t (*write_end)(struct file *, struct address_space *,
+			loff_t pos, size_t len, size_t copied,
+			struct folio *folio, void **fsdata);
+
+For write_begin, 'len' is typically the remaining length of the write,
+and is not capped to PAGE_SIZE.  For write_end, len will be limited so
+that pos + len <= folio_pos(folio) + folio_size(folio).  copied will
+not exceed len.  pos + len will not exceed MAX_LFS_FILESIZE.
+
+write_begin may return an ERR_PTR.  write_end may return a number less
+than copied if it needs the caller to retry from an earlier position in
+the file.  It cannot signal an error; that must be done by write_begin().
+
+write_begin should lock the folio and increase its refcount.  write_end
+should unlock it and drop the refcount, possibly after setting it
+uptodate (it can only use folio_end_read() for this if it knows the folio
+was not previously uptodate; probably best not to use it).
+
 file_lock_operations
 ====================
 

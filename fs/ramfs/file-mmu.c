@@ -24,8 +24,7 @@
  * caches is sufficient.
  */
 
-#include <linux/fs.h>
-#include <linux/mm.h>
+#include <linux/pagemap.h>
 #include <linux/ramfs.h>
 #include <linux/sched.h>
 

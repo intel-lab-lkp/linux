@@ -18,6 +18,27 @@
 
 struct folio_batch;
 
+struct buffered_write_operations {
+	struct folio *(*write_begin)(struct file *, struct address_space *,
+			loff_t pos, size_t len, void **fsdata);
+	size_t (*write_end)(struct file *, struct address_space *,
+			loff_t pos, size_t len, size_t copied,
+			struct folio *folio, void **fsdata);
+};
+
+ssize_t filemap_write_iter(struct kiocb *, struct iov_iter *,
+		const struct buffered_write_operations *, void *fsdata);
+ssize_t __filemap_write_iter(struct kiocb *, struct iov_iter *,
+		const struct buffered_write_operations *, void *fsdata);
+ssize_t filemap_perform_write(struct kiocb *, struct iov_iter *,
+		const struct buffered_write_operations *, void *fsdata);
+
+ssize_t generic_file_write_iter(struct kiocb *, struct iov_iter *);
+#define generic_perform_write(kiocb, iter)		\
+	filemap_perform_write(kiocb, iter, NULL, NULL)
+#define __generic_file_write_iter(kiocb, iter)		\
+	__filemap_write_iter(kiocb, iter, NULL, NULL)
+
 unsigned long invalidate_mapping_pages(struct address_space *mapping,
 					pgoff_t start, pgoff_t end);
 
