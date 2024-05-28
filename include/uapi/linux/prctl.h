@@ -33,12 +33,12 @@
 /* Get/set floating-point exception mode (if meaningful) */
 #define PR_GET_FPEXC	11
 #define PR_SET_FPEXC	12
-# define PR_FP_EXC_SW_ENABLE	0x80	/* Use FPEXC for FP exception enables */
-# define PR_FP_EXC_DIV		0x010000	/* floating point divide by zero */
-# define PR_FP_EXC_OVF		0x020000	/* floating point overflow */
-# define PR_FP_EXC_UND		0x040000	/* floating point underflow */
-# define PR_FP_EXC_RES		0x080000	/* floating point inexact result */
-# define PR_FP_EXC_INV		0x100000	/* floating point invalid operation */
+# define PR_FP_EXC_SW_ENABLE	0x80UL	/* Use FPEXC for FP exception enables */
+# define PR_FP_EXC_DIV		0x010000UL	/* floating point divide by zero */
+# define PR_FP_EXC_OVF		0x020000UL	/* floating point overflow */
+# define PR_FP_EXC_UND		0x040000UL	/* floating point underflow */
+# define PR_FP_EXC_RES		0x080000UL	/* floating point inexact result */
+# define PR_FP_EXC_INV		0x100000UL	/* floating point invalid operation */
 # define PR_FP_EXC_DISABLED	0L	/* FP exceptions disabled */
 # define PR_FP_EXC_NONRECOV	1L	/* async non-recoverable exc. mode */
 # define PR_FP_EXC_ASYNC	2L	/* async recoverable exception mode */
@@ -188,8 +188,8 @@ struct prctl_mm_map {
 
 #define PR_SET_FP_MODE		45
 #define PR_GET_FP_MODE		46
-# define PR_FP_MODE_FR		(1 << 0)	/* 64b FP registers */
-# define PR_FP_MODE_FRE		(1 << 1)	/* 32b compatibility */
+# define PR_FP_MODE_FR		(1UL << 0)	/* 64b FP registers */
+# define PR_FP_MODE_FRE		(1UL << 1)	/* 32b compatibility */
 
 /* Control the ambient capability set */
 #define PR_CAP_AMBIENT			47
@@ -201,11 +201,11 @@ struct prctl_mm_map {
 /* arm64 Scalable Vector Extension controls */
 /* Flag values must be kept in sync with ptrace NT_ARM_SVE interface */
 #define PR_SVE_SET_VL			50	/* set task vector length */
-# define PR_SVE_SET_VL_ONEXEC		(1 << 18) /* defer effect until exec */
+# define PR_SVE_SET_VL_ONEXEC		(1UL << 18) /* defer effect until exec */
 #define PR_SVE_GET_VL			51	/* get task vector length */
 /* Bits common to PR_SVE_SET_VL and PR_SVE_GET_VL */
-# define PR_SVE_VL_LEN_MASK		0xffff
-# define PR_SVE_VL_INHERIT		(1 << 17) /* inherit across exec */
+# define PR_SVE_VL_LEN_MASK		0xffffUL
+# define PR_SVE_VL_INHERIT		(1UL << 17) /* inherit across exec */
 
 /* Per task speculation control */
 #define PR_GET_SPECULATION_CTRL		52
@@ -215,7 +215,7 @@ struct prctl_mm_map {
 # define PR_SPEC_INDIRECT_BRANCH	1L
 # define PR_SPEC_L1D_FLUSH		2L
 /* Return and control values for PR_SET/GET_SPECULATION_CTRL */
-# define PR_SPEC_NOT_AFFECTED		0
+# define PR_SPEC_NOT_AFFECTED		0UL
 # define PR_SPEC_PRCTL			(1UL << 0)
 # define PR_SPEC_ENABLE			(1UL << 1)
 # define PR_SPEC_DISABLE		(1UL << 2)
@@ -240,10 +240,10 @@ struct prctl_mm_map {
 # define PR_MTE_TCF_ASYNC		(1UL << 2)
 # define PR_MTE_TCF_MASK		(PR_MTE_TCF_SYNC | PR_MTE_TCF_ASYNC)
 /* MTE tag inclusion mask */
-# define PR_MTE_TAG_SHIFT		3
+# define PR_MTE_TAG_SHIFT		3UL
 # define PR_MTE_TAG_MASK		(0xffffUL << PR_MTE_TAG_SHIFT)
 /* Unused; kept only for source compatibility */
-# define PR_MTE_TCF_SHIFT		1
+# define PR_MTE_TCF_SHIFT		1UL
 
 /* Control reclaim behavior when allocating memory */
 #define PR_SET_IO_FLUSHER		57
@@ -275,11 +275,11 @@ struct prctl_mm_map {
 /* arm64 Scalable Matrix Extension controls */
 /* Flag values must be in sync with SVE versions */
 #define PR_SME_SET_VL			63	/* set task vector length */
-# define PR_SME_SET_VL_ONEXEC		(1 << 18) /* defer effect until exec */
+# define PR_SME_SET_VL_ONEXEC		(1UL << 18) /* defer effect until exec */
 #define PR_SME_GET_VL			64	/* get task vector length */
 /* Bits common to PR_SME_SET_VL and PR_SME_GET_VL */
-# define PR_SME_VL_LEN_MASK		0xffff
-# define PR_SME_VL_INHERIT		(1 << 17) /* inherit across exec */
+# define PR_SME_VL_LEN_MASK		0xffffUL
+# define PR_SME_VL_INHERIT		(1UL << 17) /* inherit across exec */
 
 /* Memory deny write / execute */
 #define PR_SET_MDWE			65
@@ -298,13 +298,13 @@ struct prctl_mm_map {
 
 #define PR_RISCV_V_SET_CONTROL		69
 #define PR_RISCV_V_GET_CONTROL		70
-# define PR_RISCV_V_VSTATE_CTRL_DEFAULT		0
-# define PR_RISCV_V_VSTATE_CTRL_OFF		1
-# define PR_RISCV_V_VSTATE_CTRL_ON		2
-# define PR_RISCV_V_VSTATE_CTRL_INHERIT		(1 << 4)
-# define PR_RISCV_V_VSTATE_CTRL_CUR_MASK	0x3
-# define PR_RISCV_V_VSTATE_CTRL_NEXT_MASK	0xc
-# define PR_RISCV_V_VSTATE_CTRL_MASK		0x1f
+# define PR_RISCV_V_VSTATE_CTRL_DEFAULT		0UL
+# define PR_RISCV_V_VSTATE_CTRL_OFF		1UL
+# define PR_RISCV_V_VSTATE_CTRL_ON		2UL
+# define PR_RISCV_V_VSTATE_CTRL_INHERIT		(1UL << 4)
+# define PR_RISCV_V_VSTATE_CTRL_CUR_MASK	0x3UL
+# define PR_RISCV_V_VSTATE_CTRL_NEXT_MASK	0xcUL
+# define PR_RISCV_V_VSTATE_CTRL_MASK		0x1fUL
 
 #define PR_RISCV_SET_ICACHE_FLUSH_CTX	71
 # define PR_RISCV_CTX_SW_FENCEI_ON	0L
@@ -321,11 +321,11 @@ struct prctl_mm_map {
 # define PR_PPC_DEXCR_SRAPD		2L /* Subroutine return address prediction disable */
 # define PR_PPC_DEXCR_NPHIE		3L /* Non-privileged hash instruction enable */
 /* Action to apply / return */
-# define PR_PPC_DEXCR_CTRL_EDITABLE	 0x1 /* Aspect can be modified with PR_PPC_SET_DEXCR */
-# define PR_PPC_DEXCR_CTRL_SET		 0x2 /* Set the aspect for this process */
-# define PR_PPC_DEXCR_CTRL_CLEAR	 0x4 /* Clear the aspect for this process */
-# define PR_PPC_DEXCR_CTRL_SET_ONEXEC	 0x8 /* Set the aspect on exec */
-# define PR_PPC_DEXCR_CTRL_CLEAR_ONEXEC	0x10 /* Clear the aspect on exec */
-# define PR_PPC_DEXCR_CTRL_MASK		0x1f
+# define PR_PPC_DEXCR_CTRL_EDITABLE	 0x1UL /* Aspect can be modified with PR_PPC_SET_DEXCR */
+# define PR_PPC_DEXCR_CTRL_SET		 0x2UL /* Set the aspect for this process */
+# define PR_PPC_DEXCR_CTRL_CLEAR	 0x4UL /* Clear the aspect for this process */
+# define PR_PPC_DEXCR_CTRL_SET_ONEXEC	 0x8UL /* Set the aspect on exec */
+# define PR_PPC_DEXCR_CTRL_CLEAR_ONEXEC	0x10UL /* Clear the aspect on exec */
+# define PR_PPC_DEXCR_CTRL_MASK		0x1fUL
 
 #endif /* _LINUX_PRCTL_H */
