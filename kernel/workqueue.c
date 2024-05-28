@@ -5470,7 +5470,7 @@ out_unlock:
 static int alloc_and_link_pwqs(struct workqueue_struct *wq)
 {
 	bool highpri = wq->flags & WQ_HIGHPRI;
-	int cpu, ret;
+	int cpu, ret = -ENOMEM;
 
 	wq->cpu_pwq = alloc_percpu(struct pool_workqueue *);
 	if (!wq->cpu_pwq)
@@ -5518,14 +5518,10 @@ static int alloc_and_link_pwqs(struct workqueue_struct *wq)
 		ret = apply_workqueue_attrs(wq, unbound_std_wq_attrs[highpri]);
 	}
 	cpus_read_unlock();
-
-	/* for unbound pwq, flush the pwq_release_worker ensures that the
-	 * pwq_release_workfn() completes before calling kfree(wq).
-	 */
 	if (ret)
-		kthread_flush_worker(pwq_release_worker);
+		goto enomem;
 
-	return ret;
+	return 0;
 
 enomem:
 	if (wq->cpu_pwq) {
@@ -5538,7 +5534,7 @@ enomem:
 		free_percpu(wq->cpu_pwq);
 		wq->cpu_pwq = NULL;
 	}
-	return -ENOMEM;
+	return ret;
 }
 
 static int wq_clamp_max_active(int max_active, unsigned int flags,
@@ -5733,7 +5729,7 @@ struct workqueue_struct *alloc_workqueue(const char *fmt,
 			goto err_unreg_lockdep;
 	}
 
-	if (alloc_and_link_pwqs(wq) < 0)
+	if (alloc_and_link_pwqs(wq))
 		goto err_free_node_nr_active;
 
 	if (wq_online && init_rescuer(wq) < 0)
