@@ -74,6 +74,7 @@
 #define ITOA_MAX_LEN 12
 
 MODULE_AUTHOR("Qumranet");
+MODULE_DESCRIPTION("Kernel-based Virtual Machine driver for Linux");
 MODULE_LICENSE("GPL");
 
 /* Architectures should define their poll value according to the halt latency */
