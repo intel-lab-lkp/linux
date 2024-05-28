@@ -356,8 +356,7 @@ int ksz9477_reset_switch(struct ksz_device *dev)
 
 	/* default configuration */
 	ksz_read8(dev, REG_SW_LUE_CTRL_1, &data8);
-	data8 = SW_AGING_ENABLE | SW_LINK_AUTO_AGING |
-	      SW_SRC_ADDR_FILTER | SW_FLUSH_STP_TABLE | SW_FLUSH_MSTP_TABLE;
+	data8 |= SW_AGING_ENABLE | SW_LINK_AUTO_AGING | SW_SRC_ADDR_FILTER;
 	ksz_write8(dev, REG_SW_LUE_CTRL_1, data8);
 
 	/* disable interrupts */
