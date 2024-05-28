@@ -1322,12 +1322,15 @@ static void cgroup_destroy_root(struct cgroup_root *root)
 {
 	struct cgroup *cgrp = &root->cgrp;
 	struct cgrp_cset_link *link, *tmp_link;
+	struct cgroup_subsys *ss;
+	int ssid;
 
 	trace_cgroup_destroy_root(root);
 
 	cgroup_lock_and_drain_offline(&cgrp_dfl_root.cgrp);
 
-	BUG_ON(atomic_read(&root->nr_cgrps));
+	for_each_subsys(ss, ssid)
+		BUG_ON(atomic_read(&root->nr_css[ssid]));
 	BUG_ON(!list_empty(&cgrp->self.children));
 
 	/* Rebind all subsystems back to the default hierarchy */
@@ -1874,6 +1877,7 @@ int rebind_subsystems(struct cgroup_root *dst_root, u16 ss_mask)
 		} else {
 			dcgrp->subtree_control |= 1 << ssid;
 			static_branch_disable(cgroup_subsys_on_dfl_key[ssid]);
+			atomic_set(&ss->root->nr_css[ssid], 1);
 		}
 
 		ret = cgroup_apply_control(dcgrp);
@@ -2046,7 +2050,6 @@ void init_cgroup_root(struct cgroup_fs_context *ctx)
 	struct cgroup *cgrp = &root->cgrp;
 
 	INIT_LIST_HEAD_RCU(&root->root_list);
-	atomic_set(&root->nr_cgrps, 1);
 	cgrp->root = root;
 	init_cgroup_housekeeping(cgrp);
 
@@ -2065,6 +2068,7 @@ int cgroup_setup_root(struct cgroup_root *root, u16 ss_mask)
 	LIST_HEAD(tmp_links);
 	struct cgroup *root_cgrp = &root->cgrp;
 	struct kernfs_syscall_ops *kf_sops;
+	struct cgroup_subsys *ss;
 	struct css_set *cset;
 	int i, ret;
 
@@ -2144,7 +2148,9 @@ int cgroup_setup_root(struct cgroup_root *root, u16 ss_mask)
 	spin_unlock_irq(&css_set_lock);
 
 	BUG_ON(!list_empty(&root_cgrp->self.children));
-	BUG_ON(atomic_read(&root->nr_cgrps) != 1);
+	do_each_subsys_mask(ss, i, ss_mask) {
+		BUG_ON(atomic_read(&root->nr_css[i]) != 1);
+	} while_each_subsys_mask();
 
 	ret = 0;
 	goto out;
@@ -5368,7 +5374,6 @@ static void css_free_rwork_fn(struct work_struct *work)
 			css_put(parent);
 	} else {
 		/* cgroup free path */
-		atomic_dec(&cgrp->root->nr_cgrps);
 		if (!cgroup_on_dfl(cgrp))
 			cgroup1_pidlist_destroy_all(cgrp);
 		cancel_work_sync(&cgrp->release_agent_work);
@@ -5387,12 +5392,27 @@ static void css_free_rwork_fn(struct work_struct *work)
 			cgroup_rstat_exit(cgrp);
 			kfree(cgrp);
 		} else {
+			struct cgroup_root *root = cgrp->root;
 			/*
 			 * This is root cgroup's refcnt reaching zero,
 			 * which indicates that the root should be
 			 * released.
 			 */
-			cgroup_destroy_root(cgrp->root);
+
+			/*
+			 * v1 root css are first onlined as v2, then rebound
+			 * to v1 (without re-onlining) where their count is
+			 * initialized to 1. Drop the root counters to 0
+			 * before destroying v1 roots.
+			 */
+			if (root != &cgrp_dfl_root) {
+				int ssid;
+
+				do_each_subsys_mask(ss, ssid, root->subsys_mask) {
+					atomic_dec(&root->nr_css[ssid]);
+				} while_each_subsys_mask();
+			}
+			cgroup_destroy_root(root);
 		}
 	}
 }
@@ -5678,7 +5698,6 @@ static struct cgroup *cgroup_create(struct cgroup *parent, const char *name,
 
 	/* allocation complete, commit to creation */
 	list_add_tail_rcu(&cgrp->self.sibling, &cgroup_parent(cgrp)->self.children);
-	atomic_inc(&root->nr_cgrps);
 	cgroup_get_live(parent);
 
 	/*

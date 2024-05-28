@@ -576,9 +576,6 @@ struct cgroup_root {
 	/* must follow cgrp for cgrp->ancestors[0], see above */
 	struct cgroup *cgrp_ancestor_storage;
 
-	/* Number of cgroups in the hierarchy, used only for /proc/cgroups */
-	atomic_t nr_cgrps;
-
 	/*
 	 * Number of cgroups using each controller. Includes online and zombies.
 	 * Used only for /proc/cgroups.
