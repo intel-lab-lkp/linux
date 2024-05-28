@@ -6269,7 +6269,7 @@ static void sched_core_cpu_starting(unsigned int cpu)
 static void sched_core_cpu_deactivate(unsigned int cpu)
 {
 	const struct cpumask *smt_mask = cpu_smt_mask(cpu);
-	struct rq *rq = cpu_rq(cpu), *core_rq = NULL;
+	struct rq *rq = cpu_rq(cpu), *core_rq;
 	int t;
 
 	guard(core_lock)(&cpu);
