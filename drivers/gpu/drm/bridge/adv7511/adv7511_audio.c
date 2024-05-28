@@ -101,11 +101,14 @@ static int adv7511_hdmi_hw_params(struct device *dev, void *data,
 	case 20:
 		len = ADV7511_I2S_SAMPLE_LEN_20;
 		break;
-	case 32:
-		if (fmt->bit_fmt != SNDRV_PCM_FORMAT_IEC958_SUBFRAME_LE)
-			return -EINVAL;
-		fallthrough;
 	case 24:
+	case 32:
+		/*
+		 * 32 bits are handled like 24 bits, except that the lowest
+		 * 8 bits are discarded. In fact, the accepted I2S slot widths
+		 * are 16 and 32 bits, so the chip is fully compatible with
+		 * 32 bit data.
+		 */
 		len = ADV7511_I2S_SAMPLE_LEN_24;
 		break;
 	default:
