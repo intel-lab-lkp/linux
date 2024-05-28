@@ -122,6 +122,7 @@
 enum fastrpc_userpd_type {
 	SIGNED_PD			= 1,
 	UNSIGNED_PD			= 2,
+	SYSTEM_UNSIGNED_PD	= 3,
 };
 
 static const char *domains[FASTRPC_DEV_MAX] = { "adsp", "mdsp",
@@ -1552,10 +1553,18 @@ static int fastrpc_init_create_process(struct fastrpc_user *fl,
 	if (init.attrs & FASTRPC_MODE_UNSIGNED_MODULE)
 		fl->userpd_type = UNSIGNED_PD;
 
+	/* Disregard any system unsigned PD attribute from userspace */
+	init.attrs &= (~FASTRPC_MODE_SYSTEM_UNSIGNED_PD);
 
 	if (is_session_rejected(fl, !(fl->userpd_type == SIGNED_PD))) {
 		err = -EACCES;
 		goto err;
+	}
+
+	/* Trusted apps will be launched as system unsigned PDs */
+	if (!fl->untrusted_process && (fl->userpd_type != SIGNED_PD)) {
+		fl->userpd_type = SYSTEM_UNSIGNED_PD;
+		init.attrs |= FASTRPC_MODE_SYSTEM_UNSIGNED_PD;
 	}
 
 	if (init.filelen > INIT_FILELEN_MAX) {
