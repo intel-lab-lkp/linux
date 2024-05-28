@@ -532,14 +532,17 @@ int migrate_huge_page_move_mapping(struct address_space *mapping,
 				   struct folio *dst, struct folio *src)
 {
 	XA_STATE(xas, &mapping->i_pages, folio_index(src));
-	int expected_count;
+	int expected_count = folio_expected_refs(mapping, src);
+
+	if (!folio_ref_freeze(src, expected_count))
+		return -EAGAIN;
+
+	if (unlikely(folio_mc_copy(dst, src))) {
+		folio_ref_unfreeze(src, expected_count);
+		return -EFAULT;
+	}
 
 	xas_lock_irq(&xas);
-	expected_count = folio_expected_refs(mapping, src);
-	if (!folio_ref_freeze(src, expected_count)) {
-		xas_unlock_irq(&xas);
-		return -EAGAIN;
-	}
 
 	dst->index = src->index;
 	dst->mapping = src->mapping;
