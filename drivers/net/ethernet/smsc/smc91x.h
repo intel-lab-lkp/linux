@@ -839,190 +839,190 @@ static const char * chip_ids[ 16 ] =  {
 #define SMC_MUST_ALIGN_WRITE(lp)	SMC_32BIT(lp)
 
 #define SMC_GET_PN(lp)						\
-	(SMC_8BIT(lp)	? (SMC_inb(ioaddr, PN_REG(lp)))	\
-				: (SMC_inw(ioaddr, PN_REG(lp)) & 0xFF))
+	(SMC_8BIT(lp)	? (SMC_inb(lp->base, PN_REG(lp)))	\
+				: (SMC_inw(lp->base, PN_REG(lp)) & 0xFF))
 
 #define SMC_SET_PN(lp, x)						\
 	do {								\
 		if (SMC_MUST_ALIGN_WRITE(lp))				\
-			SMC_outl((x)<<16, ioaddr, SMC_REG(lp, 0, 2));	\
+			SMC_outl((x)<<16, lp->base, SMC_REG(lp, 0, 2));	\
 		else if (SMC_8BIT(lp))				\
-			SMC_outb(x, ioaddr, PN_REG(lp));		\
+			SMC_outb(x, lp->base, PN_REG(lp));		\
 		else							\
-			SMC_outw(lp, x, ioaddr, PN_REG(lp));		\
+			SMC_outw(lp, x, lp->base, PN_REG(lp));		\
 	} while (0)
 
 #define SMC_GET_AR(lp)						\
-	(SMC_8BIT(lp)	? (SMC_inb(ioaddr, AR_REG(lp)))	\
-				: (SMC_inw(ioaddr, PN_REG(lp)) >> 8))
+	(SMC_8BIT(lp)	? (SMC_inb(lp->base, AR_REG(lp)))	\
+				: (SMC_inw(lp->base, PN_REG(lp)) >> 8))
 
 #define SMC_GET_TXFIFO(lp)						\
-	(SMC_8BIT(lp)	? (SMC_inb(ioaddr, TXFIFO_REG(lp)))	\
-				: (SMC_inw(ioaddr, TXFIFO_REG(lp)) & 0xFF))
+	(SMC_8BIT(lp)	? (SMC_inb(lp->base, TXFIFO_REG(lp)))	\
+				: (SMC_inw(lp->base, TXFIFO_REG(lp)) & 0xFF))
 
 #define SMC_GET_RXFIFO(lp)						\
-	(SMC_8BIT(lp)	? (SMC_inb(ioaddr, RXFIFO_REG(lp)))	\
-				: (SMC_inw(ioaddr, TXFIFO_REG(lp)) >> 8))
+	(SMC_8BIT(lp)	? (SMC_inb(lp->base, RXFIFO_REG(lp)))	\
+				: (SMC_inw(lp->base, TXFIFO_REG(lp)) >> 8))
 
 #define SMC_GET_INT(lp)						\
-	(SMC_8BIT(lp)	? (SMC_inb(ioaddr, INT_REG(lp)))	\
-				: (SMC_inw(ioaddr, INT_REG(lp)) & 0xFF))
+	(SMC_8BIT(lp)	? (SMC_inb(lp->base, INT_REG(lp)))	\
+				: (SMC_inw(lp->base, INT_REG(lp)) & 0xFF))
 
 #define SMC_ACK_INT(lp, x)						\
 	do {								\
 		if (SMC_8BIT(lp))					\
-			SMC_outb(x, ioaddr, INT_REG(lp));		\
+			SMC_outb(x, lp->base, INT_REG(lp));		\
 		else {							\
 			unsigned long __flags;				\
 			int __mask;					\
 			local_irq_save(__flags);			\
-			__mask = SMC_inw(ioaddr, INT_REG(lp)) & ~0xff; \
-			SMC_outw(lp, __mask | (x), ioaddr, INT_REG(lp)); \
+			__mask = SMC_inw(lp->base, INT_REG(lp)) & ~0xff; \
+			SMC_outw(lp, __mask | (x), lp->base, INT_REG(lp)); \
 			local_irq_restore(__flags);			\
 		}							\
 	} while (0)
 
 #define SMC_GET_INT_MASK(lp)						\
-	(SMC_8BIT(lp)	? (SMC_inb(ioaddr, IM_REG(lp)))	\
-				: (SMC_inw(ioaddr, INT_REG(lp)) >> 8))
+	(SMC_8BIT(lp)	? (SMC_inb(lp->base, IM_REG(lp)))	\
+				: (SMC_inw(lp->base, INT_REG(lp)) >> 8))
 
 #define SMC_SET_INT_MASK(lp, x)					\
 	do {								\
 		if (SMC_8BIT(lp))					\
-			SMC_outb(x, ioaddr, IM_REG(lp));		\
+			SMC_outb(x, lp->base, IM_REG(lp));		\
 		else							\
-			SMC_outw(lp, (x) << 8, ioaddr, INT_REG(lp));	\
+			SMC_outw(lp, (x) << 8, lp->base, INT_REG(lp));	\
 	} while (0)
 
-#define SMC_CURRENT_BANK(lp)	SMC_inw(ioaddr, BANK_SELECT)
+#define SMC_CURRENT_BANK(lp)	SMC_inw(lp->base, BANK_SELECT)
 
 #define SMC_SELECT_BANK(lp, x)					\
 	do {								\
 		if (SMC_MUST_ALIGN_WRITE(lp))				\
-			SMC_outl((x)<<16, ioaddr, 12<<SMC_IO_SHIFT);	\
+			SMC_outl((x)<<16, lp->base, 12<<SMC_IO_SHIFT);	\
 		else							\
-			SMC_outw(lp, x, ioaddr, BANK_SELECT);		\
+			SMC_outw(lp, x, lp->base, BANK_SELECT);		\
 	} while (0)
 
-#define SMC_GET_BASE(lp)		SMC_inw(ioaddr, BASE_REG(lp))
+#define SMC_GET_BASE(lp)		SMC_inw(lp->base, BASE_REG(lp))
 
-#define SMC_SET_BASE(lp, x)	SMC_outw(lp, x, ioaddr, BASE_REG(lp))
+#define SMC_SET_BASE(lp, x)	SMC_outw(lp, x, lp->base, BASE_REG(lp))
 
-#define SMC_GET_CONFIG(lp)	SMC_inw(ioaddr, CONFIG_REG(lp))
+#define SMC_GET_CONFIG(lp)	SMC_inw(lp->base, CONFIG_REG(lp))
 
-#define SMC_SET_CONFIG(lp, x)	SMC_outw(lp, x, ioaddr, CONFIG_REG(lp))
+#define SMC_SET_CONFIG(lp, x)	SMC_outw(lp, x, lp->base, CONFIG_REG(lp))
 
-#define SMC_GET_COUNTER(lp)	SMC_inw(ioaddr, COUNTER_REG(lp))
+#define SMC_GET_COUNTER(lp)	SMC_inw(lp->base, COUNTER_REG(lp))
 
-#define SMC_GET_CTL(lp)		SMC_inw(ioaddr, CTL_REG(lp))
+#define SMC_GET_CTL(lp)		SMC_inw(lp->base, CTL_REG(lp))
 
-#define SMC_SET_CTL(lp, x)	SMC_outw(lp, x, ioaddr, CTL_REG(lp))
+#define SMC_SET_CTL(lp, x)	SMC_outw(lp, x, lp->base, CTL_REG(lp))
 
-#define SMC_GET_MII(lp)		SMC_inw(ioaddr, MII_REG(lp))
+#define SMC_GET_MII(lp)		SMC_inw(lp->base, MII_REG(lp))
 
-#define SMC_GET_GP(lp)		SMC_inw(ioaddr, GP_REG(lp))
+#define SMC_GET_GP(lp)		SMC_inw(lp->base, GP_REG(lp))
 
 #define SMC_SET_GP(lp, x)						\
 	do {								\
 		if (SMC_MUST_ALIGN_WRITE(lp))				\
-			SMC_outl((x)<<16, ioaddr, SMC_REG(lp, 8, 1));	\
+			SMC_outl((x)<<16, lp->base, SMC_REG(lp, 8, 1));	\
 		else							\
-			SMC_outw(lp, x, ioaddr, GP_REG(lp));		\
+			SMC_outw(lp, x, lp->base, GP_REG(lp));		\
 	} while (0)
 
-#define SMC_SET_MII(lp, x)	SMC_outw(lp, x, ioaddr, MII_REG(lp))
+#define SMC_SET_MII(lp, x)	SMC_outw(lp, x, lp->base, MII_REG(lp))
 
-#define SMC_GET_MIR(lp)		SMC_inw(ioaddr, MIR_REG(lp))
+#define SMC_GET_MIR(lp)		SMC_inw(lp->base, MIR_REG(lp))
 
-#define SMC_SET_MIR(lp, x)	SMC_outw(lp, x, ioaddr, MIR_REG(lp))
+#define SMC_SET_MIR(lp, x)	SMC_outw(lp, x, lp->base, MIR_REG(lp))
 
-#define SMC_GET_MMU_CMD(lp)	SMC_inw(ioaddr, MMU_CMD_REG(lp))
+#define SMC_GET_MMU_CMD(lp)	SMC_inw(lp->base, MMU_CMD_REG(lp))
 
-#define SMC_SET_MMU_CMD(lp, x)	SMC_outw(lp, x, ioaddr, MMU_CMD_REG(lp))
+#define SMC_SET_MMU_CMD(lp, x)	SMC_outw(lp, x, lp->base, MMU_CMD_REG(lp))
 
-#define SMC_GET_FIFO(lp)	SMC_inw(ioaddr, FIFO_REG(lp))
+#define SMC_GET_FIFO(lp)	SMC_inw(lp->base, FIFO_REG(lp))
 
-#define SMC_GET_PTR(lp)		SMC_inw(ioaddr, PTR_REG(lp))
+#define SMC_GET_PTR(lp)		SMC_inw(lp->base, PTR_REG(lp))
 
 #define SMC_SET_PTR(lp, x)						\
 	do {								\
 		if (SMC_MUST_ALIGN_WRITE(lp))				\
-			SMC_outl((x)<<16, ioaddr, SMC_REG(lp, 4, 2));	\
+			SMC_outl((x)<<16, lp->base, SMC_REG(lp, 4, 2));	\
 		else							\
-			SMC_outw(lp, x, ioaddr, PTR_REG(lp));		\
+			SMC_outw(lp, x, lp->base, PTR_REG(lp));		\
 	} while (0)
 
-#define SMC_GET_EPH_STATUS(lp)	SMC_inw(ioaddr, EPH_STATUS_REG(lp))
+#define SMC_GET_EPH_STATUS(lp)	SMC_inw(lp->base, EPH_STATUS_REG(lp))
 
-#define SMC_GET_RCR(lp)		SMC_inw(ioaddr, RCR_REG(lp))
+#define SMC_GET_RCR(lp)		SMC_inw(lp->base, RCR_REG(lp))
 
-#define SMC_SET_RCR(lp, x)		SMC_outw(lp, x, ioaddr, RCR_REG(lp))
+#define SMC_SET_RCR(lp, x)		SMC_outw(lp, x, lp->base, RCR_REG(lp))
 
-#define SMC_GET_REV(lp)		SMC_inw(ioaddr, REV_REG(lp))
+#define SMC_GET_REV(lp)		SMC_inw(lp->base, REV_REG(lp))
 
-#define SMC_GET_RPC(lp)		SMC_inw(ioaddr, RPC_REG(lp))
+#define SMC_GET_RPC(lp)		SMC_inw(lp->base, RPC_REG(lp))
 
 #define SMC_SET_RPC(lp, x)						\
 	do {								\
 		if (SMC_MUST_ALIGN_WRITE(lp))				\
-			SMC_outl((x)<<16, ioaddr, SMC_REG(lp, 8, 0));	\
+			SMC_outl((x)<<16, lp->base, SMC_REG(lp, 8, 0));	\
 		else							\
-			SMC_outw(lp, x, ioaddr, RPC_REG(lp));		\
+			SMC_outw(lp, x, lp->base, RPC_REG(lp));		\
 	} while (0)
 
-#define SMC_GET_TCR(lp)		SMC_inw(ioaddr, TCR_REG(lp))
+#define SMC_GET_TCR(lp)		SMC_inw(lp->base, TCR_REG(lp))
 
-#define SMC_SET_TCR(lp, x)	SMC_outw(lp, x, ioaddr, TCR_REG(lp))
+#define SMC_SET_TCR(lp, x)	SMC_outw(lp, x, lp->base, TCR_REG(lp))
 
 #ifndef SMC_GET_MAC_ADDR
 #define SMC_GET_MAC_ADDR(lp, addr)					\
 	do {								\
 		unsigned int __v;					\
-		__v = SMC_inw(ioaddr, ADDR0_REG(lp));			\
+		__v = SMC_inw(lp->base, ADDR0_REG(lp));			\
 		addr[0] = __v; addr[1] = __v >> 8;			\
-		__v = SMC_inw(ioaddr, ADDR1_REG(lp));			\
+		__v = SMC_inw(lp->base, ADDR1_REG(lp));			\
 		addr[2] = __v; addr[3] = __v >> 8;			\
-		__v = SMC_inw(ioaddr, ADDR2_REG(lp));			\
+		__v = SMC_inw(lp->base, ADDR2_REG(lp));			\
 		addr[4] = __v; addr[5] = __v >> 8;			\
 	} while (0)
 #endif
 
 #define SMC_SET_MAC_ADDR(lp, addr)					\
 	do {								\
-		SMC_outw(lp, addr[0] | (addr[1] << 8), ioaddr, ADDR0_REG(lp)); \
-		SMC_outw(lp, addr[2] | (addr[3] << 8), ioaddr, ADDR1_REG(lp)); \
-		SMC_outw(lp, addr[4] | (addr[5] << 8), ioaddr, ADDR2_REG(lp)); \
+		SMC_outw(lp, addr[0] | (addr[1] << 8), lp->base, ADDR0_REG(lp)); \
+		SMC_outw(lp, addr[2] | (addr[3] << 8), lp->base, ADDR1_REG(lp)); \
+		SMC_outw(lp, addr[4] | (addr[5] << 8), lp->base, ADDR2_REG(lp)); \
 	} while (0)
 
 #define SMC_SET_MCAST(lp, x)						\
 	do {								\
 		const unsigned char *mt = (x);				\
-		SMC_outw(lp, mt[0] | (mt[1] << 8), ioaddr, MCAST_REG1(lp)); \
-		SMC_outw(lp, mt[2] | (mt[3] << 8), ioaddr, MCAST_REG2(lp)); \
-		SMC_outw(lp, mt[4] | (mt[5] << 8), ioaddr, MCAST_REG3(lp)); \
-		SMC_outw(lp, mt[6] | (mt[7] << 8), ioaddr, MCAST_REG4(lp)); \
+		SMC_outw(lp, mt[0] | (mt[1] << 8), lp->base, MCAST_REG1(lp)); \
+		SMC_outw(lp, mt[2] | (mt[3] << 8), lp->base, MCAST_REG2(lp)); \
+		SMC_outw(lp, mt[4] | (mt[5] << 8), lp->base, MCAST_REG3(lp)); \
+		SMC_outw(lp, mt[6] | (mt[7] << 8), lp->base, MCAST_REG4(lp)); \
 	} while (0)
 
 #define SMC_PUT_PKT_HDR(lp, status, length)				\
 	do {								\
 		if (SMC_32BIT(lp))					\
-			SMC_outl((status) | (length)<<16, ioaddr,	\
+			SMC_outl((status) | (length)<<16, lp->base,	\
 				 DATA_REG(lp));			\
 		else {							\
-			SMC_outw(lp, status, ioaddr, DATA_REG(lp));	\
-			SMC_outw(lp, length, ioaddr, DATA_REG(lp));	\
+			SMC_outw(lp, status, lp->base, DATA_REG(lp));	\
+			SMC_outw(lp, length, lp->base, DATA_REG(lp));	\
 		}							\
 	} while (0)
 
 #define SMC_GET_PKT_HDR(lp, status, length)				\
 	do {								\
 		if (SMC_32BIT(lp)) {				\
-			unsigned int __val = SMC_inl(ioaddr, DATA_REG(lp)); \
+			unsigned int __val = SMC_inl(lp->base, DATA_REG(lp)); \
 			(status) = __val & 0xffff;			\
 			(length) = __val >> 16;				\
 		} else {						\
-			(status) = SMC_inw(ioaddr, DATA_REG(lp));	\
-			(length) = SMC_inw(ioaddr, DATA_REG(lp));	\
+			(status) = SMC_inw(lp->base, DATA_REG(lp));	\
+			(length) = SMC_inw(lp->base, DATA_REG(lp));	\
 		}							\
 	} while (0)
 
@@ -1031,10 +1031,10 @@ static const char * chip_ids[ 16 ] =  {
 		if (SMC_32BIT(lp)) {				\
 			void *__ptr = (p);				\
 			int __len = (l);				\
-			void __iomem *__ioaddr = ioaddr;		\
+			void __iomem *__ioaddr = lp->base;		\
 			if (__len >= 2 && (unsigned long)__ptr & 2) {	\
 				__len -= 2;				\
-				SMC_outsw(ioaddr, DATA_REG(lp), __ptr, 1); \
+				SMC_outsw(lp->base, DATA_REG(lp), __ptr, 1); \
 				__ptr += 2;				\
 			}						\
 			if (SMC_CAN_USE_DATACS && lp->datacs)		\
@@ -1042,12 +1042,12 @@ static const char * chip_ids[ 16 ] =  {
 			SMC_outsl(__ioaddr, DATA_REG(lp), __ptr, __len>>2); \
 			if (__len & 2) {				\
 				__ptr += (__len & ~3);			\
-				SMC_outsw(ioaddr, DATA_REG(lp), __ptr, 1); \
+				SMC_outsw(lp->base, DATA_REG(lp), __ptr, 1); \
 			}						\
 		} else if (SMC_16BIT(lp))				\
-			SMC_outsw(ioaddr, DATA_REG(lp), p, (l) >> 1);	\
+			SMC_outsw(lp->base, DATA_REG(lp), p, (l) >> 1);	\
 		else if (SMC_8BIT(lp))				\
-			SMC_outsb(ioaddr, DATA_REG(lp), p, l);	\
+			SMC_outsb(lp->base, DATA_REG(lp), p, l);	\
 	} while (0)
 
 #define SMC_PULL_DATA(lp, p, l)					\
@@ -1055,7 +1055,7 @@ static const char * chip_ids[ 16 ] =  {
 		if (SMC_32BIT(lp)) {				\
 			void *__ptr = (p);				\
 			int __len = (l);				\
-			void __iomem *__ioaddr = ioaddr;		\
+			void __iomem *__ioaddr = lp->base;		\
 			if ((unsigned long)__ptr & 2) {			\
 				/*					\
 				 * We want 32bit alignment here.	\
@@ -1080,9 +1080,9 @@ static const char * chip_ids[ 16 ] =  {
 			__len += 2;					\
 			SMC_insl(__ioaddr, DATA_REG(lp), __ptr, __len>>2); \
 		} else if (SMC_16BIT(lp))				\
-			SMC_insw(ioaddr, DATA_REG(lp), p, (l) >> 1);	\
+			SMC_insw(lp->base, DATA_REG(lp), p, (l) >> 1);	\
 		else if (SMC_8BIT(lp))				\
-			SMC_insb(ioaddr, DATA_REG(lp), p, l);		\
+			SMC_insb(lp->base, DATA_REG(lp), p, l);		\
 	} while (0)
 
 #endif  /* _SMC91X_H_ */

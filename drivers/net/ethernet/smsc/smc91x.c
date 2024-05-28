@@ -239,7 +239,6 @@ static inline void PRINT_PKT(u_char *buf, int length) { }
 static void smc_reset(struct net_device *dev)
 {
 	struct smc_local *lp = netdev_priv(dev);
-	void __iomem *ioaddr = lp->base;
 	unsigned int ctl, cfg;
 	struct sk_buff *pending_skb;
 
@@ -333,7 +332,6 @@ static void smc_reset(struct net_device *dev)
 static void smc_enable(struct net_device *dev)
 {
 	struct smc_local *lp = netdev_priv(dev);
-	void __iomem *ioaddr = lp->base;
 	int mask;
 
 	DBG(2, dev, "%s\n", __func__);
@@ -367,7 +365,6 @@ static void smc_enable(struct net_device *dev)
 static void smc_shutdown(struct net_device *dev)
 {
 	struct smc_local *lp = netdev_priv(dev);
-	void __iomem *ioaddr = lp->base;
 	struct sk_buff *pending_skb;
 
 	DBG(2, dev, "%s: %s\n", CARDNAME, __func__);
@@ -399,7 +396,6 @@ static void smc_shutdown(struct net_device *dev)
 static inline void  smc_rcv(struct net_device *dev)
 {
 	struct smc_local *lp = netdev_priv(dev);
-	void __iomem *ioaddr = lp->base;
 	unsigned int packet_number, status, packet_len;
 
 	DBG(3, dev, "%s\n", __func__);
@@ -540,7 +536,6 @@ static void smc_hardware_send_pkt(struct tasklet_struct *t)
 {
 	struct smc_local *lp = from_tasklet(lp, t, tx_task);
 	struct net_device *dev = lp->dev;
-	void __iomem *ioaddr = lp->base;
 	struct sk_buff *skb;
 	unsigned int packet_no, len;
 	unsigned char *buf;
@@ -590,7 +585,7 @@ static void smc_hardware_send_pkt(struct tasklet_struct *t)
 	SMC_PUSH_DATA(lp, buf, len & ~1);
 
 	/* Send final ctl word with the last byte if there is one */
-	SMC_outw(lp, ((len & 1) ? (0x2000 | buf[len - 1]) : 0), ioaddr,
+	SMC_outw(lp, ((len & 1) ? (0x2000 | buf[len - 1]) : 0), lp->base,
 		 DATA_REG(lp));
 
 	/*
@@ -630,7 +625,6 @@ static netdev_tx_t
 smc_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct smc_local *lp = netdev_priv(dev);
-	void __iomem *ioaddr = lp->base;
 	unsigned int numPages, poll_count, status;
 	unsigned long flags;
 
@@ -703,7 +697,6 @@ smc_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
 static void smc_tx(struct net_device *dev)
 {
 	struct smc_local *lp = netdev_priv(dev);
-	void __iomem *ioaddr = lp->base;
 	unsigned int saved_packet, packet_no, tx_status;
 	unsigned int pkt_len __always_unused;
 
@@ -762,7 +755,6 @@ static void smc_tx(struct net_device *dev)
 static void smc_mii_out(struct net_device *dev, unsigned int val, int bits)
 {
 	struct smc_local *lp = netdev_priv(dev);
-	void __iomem *ioaddr = lp->base;
 	unsigned int mii_reg, mask;
 
 	mii_reg = SMC_GET_MII(lp) & ~(MII_MCLK | MII_MDOE | MII_MDO);
@@ -784,7 +776,6 @@ static void smc_mii_out(struct net_device *dev, unsigned int val, int bits)
 static unsigned int smc_mii_in(struct net_device *dev, int bits)
 {
 	struct smc_local *lp = netdev_priv(dev);
-	void __iomem *ioaddr = lp->base;
 	unsigned int mii_reg, mask, val;
 
 	mii_reg = SMC_GET_MII(lp) & ~(MII_MCLK | MII_MDOE | MII_MDO);
@@ -809,7 +800,6 @@ static unsigned int smc_mii_in(struct net_device *dev, int bits)
 static int smc_phy_read(struct net_device *dev, int phyaddr, int phyreg)
 {
 	struct smc_local *lp = netdev_priv(dev);
-	void __iomem *ioaddr = lp->base;
 	unsigned int phydata;
 
 	SMC_SELECT_BANK(lp, 3);
@@ -840,7 +830,6 @@ static void smc_phy_write(struct net_device *dev, int phyaddr, int phyreg,
 			  int phydata)
 {
 	struct smc_local *lp = netdev_priv(dev);
-	void __iomem *ioaddr = lp->base;
 
 	SMC_SELECT_BANK(lp, 3);
 
@@ -902,7 +891,6 @@ static void smc_phy_detect(struct net_device *dev)
 static int smc_phy_fixed(struct net_device *dev)
 {
 	struct smc_local *lp = netdev_priv(dev);
-	void __iomem *ioaddr = lp->base;
 	int phyaddr = lp->mii.phy_id;
 	int bmcr, cfg1;
 
@@ -1005,7 +993,6 @@ static void smc_phy_powerdown(struct net_device *dev)
 static void smc_phy_check_media(struct net_device *dev, int init)
 {
 	struct smc_local *lp = netdev_priv(dev);
-	void __iomem *ioaddr = lp->base;
 
 	if (mii_check_media(&lp->mii, netif_msg_link(lp), init)) {
 		/* duplex state has changed */
@@ -1034,7 +1021,6 @@ static void smc_phy_configure(struct work_struct *work)
 	struct smc_local *lp =
 		container_of(work, struct smc_local, phy_configure);
 	struct net_device *dev = lp->dev;
-	void __iomem *ioaddr = lp->base;
 	int phyaddr = lp->mii.phy_id;
 	int my_phy_caps; /* My PHY capabilities */
 	int my_ad_caps; /* My Advertised capabilities */
@@ -1158,7 +1144,6 @@ static void smc_phy_interrupt(struct net_device *dev)
 static void smc_10bt_check_media(struct net_device *dev, int init)
 {
 	struct smc_local *lp = netdev_priv(dev);
-	void __iomem *ioaddr = lp->base;
 	unsigned int old_carrier, new_carrier;
 
 	old_carrier = netif_carrier_ok(dev) ? 1 : 0;
@@ -1182,7 +1167,6 @@ static void smc_10bt_check_media(struct net_device *dev, int init)
 static void smc_eph_interrupt(struct net_device *dev)
 {
 	struct smc_local *lp = netdev_priv(dev);
-	void __iomem *ioaddr = lp->base;
 	unsigned int ctl;
 
 	smc_10bt_check_media(dev, 0);
@@ -1202,7 +1186,6 @@ static irqreturn_t smc_interrupt(int irq, void *dev_id)
 {
 	struct net_device *dev = dev_id;
 	struct smc_local *lp = netdev_priv(dev);
-	void __iomem *ioaddr = lp->base;
 	int status, mask, timeout, card_stats;
 	int saved_pointer;
 
@@ -1325,7 +1308,6 @@ static void smc_poll_controller(struct net_device *dev)
 static void smc_timeout(struct net_device *dev, unsigned int txqueue)
 {
 	struct smc_local *lp = netdev_priv(dev);
-	void __iomem *ioaddr = lp->base;
 	int status, mask, eph_st, meminfo, fifo;
 
 	DBG(2, dev, "%s\n", __func__);
@@ -1367,7 +1349,6 @@ static void smc_timeout(struct net_device *dev, unsigned int txqueue)
 static void smc_set_multicast_list(struct net_device *dev)
 {
 	struct smc_local *lp = netdev_priv(dev);
-	void __iomem *ioaddr = lp->base;
 	unsigned char multicast_table[8];
 	int update_multicast = 0;
 
@@ -1625,7 +1606,6 @@ static int smc_write_eeprom_word(struct net_device *dev, u16 addr, u16 word)
 {
 	u16 ctl;
 	struct smc_local *lp = netdev_priv(dev);
-	void __iomem *ioaddr = lp->base;
 
 	spin_lock_irq(&lp->lock);
 	/* load word into GP register */
@@ -1653,7 +1633,6 @@ static int smc_read_eeprom_word(struct net_device *dev, u16 addr, u16 *word)
 {
 	u16 ctl;
 	struct smc_local *lp = netdev_priv(dev);
-	void __iomem *ioaddr = lp->base;
 
 	spin_lock_irq(&lp->lock);
 	/* set the EEPROM address to get the data from */
@@ -1773,7 +1752,6 @@ static const struct net_device_ops smc_netdev_ops = {
  */
 static int smc_findirq(struct smc_local *lp)
 {
-	void __iomem *ioaddr = lp->base;
 	int timeout = 20;
 	unsigned long cookie;
 
