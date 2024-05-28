@@ -1050,8 +1050,8 @@ struct ravb_hw_info {
 	netdev_features_t net_features;
 	int stats_len;
 	u32 tccr_mask;
+	u32 rx_buffer_size;
 	u32 rx_max_frame_size;
-	u32 rx_max_desc_use;
 	u32 rx_desc_size;
 	unsigned aligned_tx: 1;
 	unsigned coalesce_irqs:1;	/* Needs software IRQ coalescing */
@@ -1069,6 +1069,11 @@ struct ravb_hw_info {
 	unsigned nc_queues:1;		/* AVB-DMAC has RX and TX NC queues */
 	unsigned magic_pkt:1;		/* E-MAC supports magic packet detection */
 	unsigned half_duplex:1;		/* E-MAC supports half duplex mode */
+};
+
+struct ravb_rx_buffer {
+	struct page *page;
+	unsigned int offset;
 };
 
 struct ravb_private {
@@ -1094,7 +1099,8 @@ struct ravb_private {
 	struct ravb_tx_desc *tx_ring[NUM_TX_QUEUE];
 	void *tx_align[NUM_TX_QUEUE];
 	struct sk_buff *rx_1st_skb;
-	struct sk_buff **rx_skb[NUM_RX_QUEUE];
+	struct page_pool *rx_pool[NUM_RX_QUEUE];
+	struct ravb_rx_buffer *rx_buffers[NUM_RX_QUEUE];
 	struct sk_buff **tx_skb[NUM_TX_QUEUE];
 	u32 rx_over_errors;
 	u32 rx_fifo_errors;
