@@ -73,6 +73,22 @@ TRACE_EVENT(mctp_key_release,
 	)
 );
 
+TRACE_EVENT(mctp_reply,
+	TP_PROTO(const u8 *rx_buffer, const size_t recvlen),
+	TP_ARGS(rx_buffer, recvlen),
+	TP_STRUCT__entry(
+		__field(__u16, len)
+		__dynamic_array(__u8, buf, recvlen)),
+	TP_fast_assign(
+		__entry->len = (__u16) recvlen;
+		memcpy(__get_dynamic_array(buf), rx_buffer, recvlen);
+	),
+	TP_printk("l=%u [%*phD]",
+		__entry->len,
+		__entry->len, __get_dynamic_array(buf)
+	)
+);
+
 #endif
 
 #include <trace/define_trace.h>

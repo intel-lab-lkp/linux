@@ -24,6 +24,7 @@
 #include <linux/if_arp.h>
 #include <net/mctp.h>
 #include <net/mctpdevice.h>
+#include <trace/events/mctp.h>
 
 /* byte_count is limited to u8 */
 #define MCTP_I2C_MAXBLOCK 255
@@ -311,6 +312,8 @@ static int mctp_i2c_recv(struct mctp_i2c_dev *midev)
 		ndev->stats.rx_dropped++;
 		return -ENOMEM;
 	}
+
+	trace_mctp_reply(midev->rx_buffer, recvlen);
 
 	skb->protocol = htons(ETH_P_MCTP);
 	skb_put_data(skb, midev->rx_buffer, recvlen);
