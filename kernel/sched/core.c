@@ -9049,7 +9049,7 @@ static int __cfs_schedulable(struct task_group *tg, u64 period, u64 runtime);
 static int tg_set_cfs_bandwidth(struct task_group *tg, u64 period, u64 quota,
 				u64 burst)
 {
-	int i, ret = 0, runtime_enabled, runtime_was_enabled;
+	int i, ret, runtime_enabled, runtime_was_enabled;
 	struct cfs_bandwidth *cfs_b = &tg->cfs_bandwidth;
 
 	if (tg == &root_task_group)
