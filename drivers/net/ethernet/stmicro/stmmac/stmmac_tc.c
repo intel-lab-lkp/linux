@@ -378,6 +378,7 @@ static int tc_setup_cbs(struct stmmac_priv *priv,
 		speed_div = 100000;
 		break;
 	default:
+		dev_err(priv->device, "Link speed is not known");
 		return -EOPNOTSUPP;
 	}
 
