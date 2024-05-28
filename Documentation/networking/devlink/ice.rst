@@ -11,6 +11,7 @@ Parameters
 ==========
 
 .. list-table:: Generic parameters implemented
+   :widths: 5 5 90
 
    * - Name
      - Mode
@@ -68,6 +69,28 @@ Parameters
 
        To verify that value has been set:
        $ devlink dev param show pci/0000:16:00.0 name tx_scheduling_layers
+.. list-table:: Driver specific parameters implemented
+    :widths: 5 5 90
+
+    * - Name
+      - Mode
+      - Description
+    * - ``loopback``
+      - runtime
+      - Controls loopback behavior by tuning scheduler bandwidth.
+        Supported values are:
+
+        ``enabled`` - loopback traffic is not allowed on port
+
+        ``disabled`` - loopback traffic is allowed on this port
+
+        ``prioritized`` - loopback traffic is prioritized on this port
+
+        Default value of ``loopback`` parameter is ``enabled``.
+        ``prioritized`` provides ability to adjust loopback rate to increase
+        one port capacity at cost of the another. User needs to disable
+        loopback on one of the ports in order have increased capacity
+        on the ``prioritized`` port.
 
 Info versions
 =============
