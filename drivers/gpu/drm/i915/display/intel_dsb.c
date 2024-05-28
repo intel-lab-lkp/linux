@@ -326,14 +326,16 @@ static int intel_dsb_dewake_scanline(const struct intel_crtc_state *crtc_state)
 	struct drm_i915_private *i915 = to_i915(crtc_state->uapi.crtc->dev);
 	const struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
 	unsigned int latency = skl_watermark_max_latency(i915, 0);
-	int vblank_start;
+	int vblank_start, dewake_scanline;
 
 	if (crtc_state->vrr.enable)
 		vblank_start = intel_vrr_vmin_vblank_start(crtc_state);
 	else
 		vblank_start = intel_mode_vblank_start(adjusted_mode);
 
-	return max(0, vblank_start - intel_usecs_to_scanlines(adjusted_mode, latency));
+	dewake_scanline = max(0, vblank_start - intel_usecs_to_scanlines(adjusted_mode, latency));
+
+	return intel_crtc_scanline_to_hw(crtc_state, dewake_scanline);
 }
 
 static u32 dsb_chicken(struct intel_crtc *crtc)
@@ -376,19 +378,19 @@ static void _intel_dsb_commit(struct intel_dsb *dsb, u32 ctrl,
 			  intel_dsb_buffer_ggtt_offset(&dsb->dsb_buf));
 
 	if (dewake_scanline >= 0) {
-		int diff, hw_dewake_scanline;
-
-		hw_dewake_scanline = intel_crtc_scanline_to_hw(crtc, dewake_scanline);
+		int diff, position;
 
 		intel_de_write_fw(dev_priv, DSB_PMCTRL(pipe, dsb->id),
 				  DSB_ENABLE_DEWAKE |
-				  DSB_SCANLINE_FOR_DEWAKE(hw_dewake_scanline));
+				  DSB_SCANLINE_FOR_DEWAKE(dewake_scanline));
 
 		/*
 		 * Force DEwake immediately if we're already past
 		 * or close to racing past the target scanline.
 		 */
-		diff = dewake_scanline - intel_get_crtc_scanline(crtc);
+		position = intel_de_read_fw(dev_priv, PIPEDSL(pipe)) & PIPEDSL_LINE_MASK;
+		diff = dewake_scanline - position;
+
 		intel_de_write_fw(dev_priv, DSB_PMCTRL_2(pipe, dsb->id),
 				  (diff >= 0 && diff < 5 ? DSB_FORCE_DEWAKE : 0) |
 				  DSB_BLOCK_DEWAKE_EXTENSION);
