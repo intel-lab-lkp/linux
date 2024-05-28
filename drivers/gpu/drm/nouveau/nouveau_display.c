@@ -450,6 +450,9 @@ nouveau_display_hpd_resume(struct drm_device *dev)
 {
 	struct nouveau_drm *drm = nouveau_drm(dev);
 
+	if (drm->headless)
+		return;
+
 	spin_lock_irq(&drm->hpd_lock);
 	drm->hpd_pending = ~0;
 	spin_unlock_irq(&drm->hpd_lock);
@@ -467,6 +470,11 @@ nouveau_display_hpd_work(struct work_struct *work)
 	u32 pending;
 	int changed = 0;
 	struct drm_connector *first_changed_connector = NULL;
+
+	WARN_ON_ONCE(drm->headless);
+
+	if (drm->headless)
+		return;
 
 	pm_runtime_get_sync(dev->dev);
 
@@ -635,7 +643,7 @@ nouveau_display_fini(struct drm_device *dev, bool suspend, bool runtime)
 	}
 	drm_connector_list_iter_end(&conn_iter);
 
-	if (!runtime)
+	if (!runtime && !drm->headless)
 		cancel_work_sync(&drm->hpd_work);
 
 	drm_kms_helper_poll_disable(dev);
@@ -729,6 +737,7 @@ nouveau_display_create(struct drm_device *dev)
 		/* no display hw */
 		if (ret == -ENODEV) {
 			ret = 0;
+			drm->headless = true;
 			goto disp_create_err;
 		}
 

@@ -1190,6 +1190,9 @@ nouveau_connector_hpd(struct nouveau_connector *nv_connector, u64 bits)
 	u32 mask = drm_connector_mask(&nv_connector->base);
 	unsigned long flags;
 
+	if (drm->headless)
+		return;
+
 	spin_lock_irqsave(&drm->hpd_lock, flags);
 	if (!(drm->hpd_pending & mask)) {
 		nv_connector->hpd_pending |= bits;
