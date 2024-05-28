@@ -1099,26 +1099,70 @@ void ksz9477_get_caps(struct ksz_device *dev, int port,
 int ksz9477_set_ageing_time(struct ksz_device *dev, unsigned int msecs)
 {
 	u32 secs = msecs / 1000;
+	u8 first, last, mult, i;
+	int min, ret;
+	int diff[8];
 	u8 value;
 	u8 data;
-	int ret;
 
-	value = FIELD_GET(SW_AGE_PERIOD_7_0_M, secs);
-
-	ret = ksz_write8(dev, REG_SW_LUE_CTRL_3, value);
-	if (ret < 0)
-		return ret;
-
-	data = FIELD_GET(SW_AGE_PERIOD_10_8_M, secs);
+	/* The aging timer comprises a 3-bit multiplier and an 8-bit second
+	 * value.  Either of them cannot be zero.  The maximum timer is then
+	 * 7 * 255 = 1785.
+	 */
+	if (!secs)
+		secs = 1;
 
 	ret = ksz_read8(dev, REG_SW_LUE_CTRL_0, &value);
 	if (ret < 0)
 		return ret;
 
-	value &= ~SW_AGE_CNT_M;
-	value |= FIELD_PREP(SW_AGE_CNT_M, data);
+	/* Check whether there is need to update the multiplier. */
+	mult = FIELD_GET(SW_AGE_CNT_M, value);
+	if (mult > 0) {
+		/* Try to use the same multiplier already in the register. */
+		min = secs / mult;
+		if (min <= 0xff && min * mult == secs)
+			return ksz_write8(dev, REG_SW_LUE_CTRL_3, min);
+	}
 
-	return ksz_write8(dev, REG_SW_LUE_CTRL_0, value);
+	/* Return error if too large. */
+	if (secs > 7 * 0xff)
+		return -EINVAL;
+
+	/* Find out which combination of multiplier * value results in a timer
+	 * value close to the specified timer value.
+	 */
+	first = (secs + 0xfe) / 0xff;
+	for (i = first; i <= 7; i++) {
+		min = secs / i;
+		diff[i] = secs - i * min;
+		if (!diff[i]) {
+			i++;
+			break;
+		}
+	}
+
+	last = i;
+	min = 0xff;
+	for (i = last - 1; i >= first; i--) {
+		if (diff[i] < min) {
+			data = i;
+			min = diff[i];
+		}
+		if (!min)
+			break;
+	}
+
+	if (mult != data) {
+		value &= ~SW_AGE_CNT_M;
+		value |= FIELD_PREP(SW_AGE_CNT_M, data);
+		ret = ksz_write8(dev, REG_SW_LUE_CTRL_0, value);
+		if (ret)
+			return ret;
+	}
+
+	value = secs / data;
+	return ksz_write8(dev, REG_SW_LUE_CTRL_3, value);
 }
 
 void ksz9477_port_queue_split(struct ksz_device *dev, int port)
