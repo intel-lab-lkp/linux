@@ -252,7 +252,7 @@ static ssize_t ext2_dio_write_iter(struct kiocb *iocb, struct iov_iter *from)
 
 		iocb->ki_flags &= ~IOCB_DIRECT;
 		pos = iocb->ki_pos;
-		status = generic_perform_write(iocb, from);
+		status = filemap_perform_write(iocb, from, &ext2_bw_ops, NULL);
 		if (unlikely(status < 0)) {
 			ret = status;
 			goto out_unlock;
@@ -299,7 +299,7 @@ static ssize_t ext2_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	if (iocb->ki_flags & IOCB_DIRECT)
 		return ext2_dio_write_iter(iocb, from);
 
-	return generic_file_write_iter(iocb, from);
+	return filemap_write_iter(iocb, from, &ext2_bw_ops, NULL);
 }
 
 static int ext2_file_open(struct inode *inode, struct file *filp)

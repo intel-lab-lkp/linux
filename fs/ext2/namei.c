@@ -179,7 +179,7 @@ static int ext2_symlink (struct mnt_idmap * idmap, struct inode * dir,
 		inode->i_op = &ext2_symlink_inode_operations;
 		inode_nohighmem(inode);
 		inode->i_mapping->a_ops = &ext2_aops;
-		err = page_symlink(inode, symname, l);
+		err = filemap_symlink(inode, symname, l, &ext2_bw_ops, NULL);
 		if (err)
 			goto out_fail;
 	} else {

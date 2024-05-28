@@ -914,30 +914,6 @@ static void ext2_readahead(struct readahead_control *rac)
 	mpage_readahead(rac, ext2_get_block);
 }
 
-static int
-ext2_write_begin(struct file *file, struct address_space *mapping,
-		loff_t pos, unsigned len, struct page **pagep, void **fsdata)
-{
-	int ret;
-
-	ret = block_write_begin(mapping, pos, len, pagep, ext2_get_block);
-	if (ret < 0)
-		ext2_write_failed(mapping, pos + len);
-	return ret;
-}
-
-static int ext2_write_end(struct file *file, struct address_space *mapping,
-			loff_t pos, unsigned len, unsigned copied,
-			struct page *page, void *fsdata)
-{
-	int ret;
-
-	ret = generic_write_end(file, mapping, pos, len, copied, page, fsdata);
-	if (ret < len)
-		ext2_write_failed(mapping, pos + len);
-	return ret;
-}
-
 static sector_t ext2_bmap(struct address_space *mapping, sector_t block)
 {
 	return generic_block_bmap(mapping,block,ext2_get_block);
@@ -962,8 +938,6 @@ const struct address_space_operations ext2_aops = {
 	.invalidate_folio	= block_invalidate_folio,
 	.read_folio		= ext2_read_folio,
 	.readahead		= ext2_readahead,
-	.write_begin		= ext2_write_begin,
-	.write_end		= ext2_write_end,
 	.bmap			= ext2_bmap,
 	.writepages		= ext2_writepages,
 	.migrate_folio		= buffer_migrate_folio,
@@ -974,6 +948,35 @@ const struct address_space_operations ext2_aops = {
 static const struct address_space_operations ext2_dax_aops = {
 	.writepages		= ext2_dax_writepages,
 	.dirty_folio		= noop_dirty_folio,
+};
+
+static struct folio *ext2_write_begin(struct file *file,
+		struct address_space *mapping, loff_t pos, size_t len,
+		void **fsdata)
+{
+	struct folio *folio;
+
+	folio = buffer_write_begin(mapping, pos, len, ext2_get_block);
+
+	if (IS_ERR(folio))
+		ext2_write_failed(mapping, pos + len);
+	return folio;
+}
+
+static size_t ext2_write_end(struct file *file, struct address_space *mapping,
+		loff_t pos, size_t len, size_t copied, struct folio *folio,
+		void **fsdata)
+{
+	size_t ret = buffer_write_end(file, mapping, pos, len, copied, folio);
+
+	if (ret < len)
+		ext2_write_failed(mapping, pos + len);
+	return ret;
+}
+
+const struct buffered_write_operations ext2_bw_ops = {
+	.write_begin		= ext2_write_begin,
+	.write_end		= ext2_write_end,
 };
 
 /*

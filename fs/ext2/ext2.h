@@ -784,6 +784,7 @@ extern const struct file_operations ext2_file_operations;
 extern void ext2_set_file_ops(struct inode *inode);
 extern const struct address_space_operations ext2_aops;
 extern const struct iomap_ops ext2_iomap_ops;
+extern const struct buffered_write_operations ext2_bw_ops;
 
 /* namei.c */
 extern const struct inode_operations ext2_dir_inode_operations;
