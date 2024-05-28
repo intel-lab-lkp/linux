@@ -2971,8 +2971,6 @@ int ext4_walk_page_buffers(handle_t *handle,
 				     struct buffer_head *bh));
 int do_journal_get_write_access(handle_t *handle, struct inode *inode,
 				struct buffer_head *bh);
-#define FALL_BACK_TO_NONDELALLOC 1
-#define CONVERT_INLINE_DATA	 2
 
 typedef enum {
 	EXT4_IGET_NORMAL =	0,
@@ -3011,6 +3009,7 @@ extern int ext4_break_layouts(struct inode *);
 extern int ext4_punch_hole(struct file *file, loff_t offset, loff_t length);
 extern void ext4_set_inode_flags(struct inode *, bool init);
 extern int ext4_alloc_da_blocks(struct inode *inode);
+int ext4_nonda_switch(struct super_block *sb);
 extern void ext4_set_aops(struct inode *inode);
 extern int ext4_writepage_trans_blocks(struct inode *);
 extern int ext4_normal_submit_inode_data_buffers(struct jbd2_inode *jinode);
@@ -3025,6 +3024,10 @@ extern void ext4_da_update_reserve_space(struct inode *inode,
 					int used, int quota_claim);
 extern int ext4_issue_zeroout(struct inode *inode, ext4_lblk_t lblk,
 			      ext4_fsblk_t pblk, ext4_lblk_t len);
+
+extern const struct buffered_write_operations ext4_bw_ops;
+extern const struct buffered_write_operations ext4_journalled_bw_ops;
+extern const struct buffered_write_operations ext4_da_bw_ops;
 
 /* indirect.c */
 extern int ext4_ind_map_blocks(handle_t *handle, struct inode *inode,
@@ -3551,17 +3554,12 @@ extern int ext4_find_inline_data_nolock(struct inode *inode);
 extern int ext4_destroy_inline_data(handle_t *handle, struct inode *inode);
 
 int ext4_readpage_inline(struct inode *inode, struct folio *folio);
-extern int ext4_try_to_write_inline_data(struct address_space *mapping,
-					 struct inode *inode,
-					 loff_t pos, unsigned len,
-					 struct page **pagep);
-int ext4_write_inline_data_end(struct inode *inode, loff_t pos, unsigned len,
-			       unsigned copied, struct folio *folio);
-extern int ext4_da_write_inline_data_begin(struct address_space *mapping,
-					   struct inode *inode,
-					   loff_t pos, unsigned len,
-					   struct page **pagep,
-					   void **fsdata);
+struct folio *ext4_try_to_write_inline_data(struct address_space *mapping,
+		struct inode *inode, loff_t pos, size_t len);
+size_t ext4_write_inline_data_end(struct inode *inode, loff_t pos, size_t len,
+			       size_t copied, struct folio *folio);
+struct folio *ext4_da_write_inline_data_begin(struct address_space *mapping,
+		struct inode *inode, loff_t pos, size_t len);
 extern int ext4_try_add_inline_entry(handle_t *handle,
 				     struct ext4_filename *fname,
 				     struct inode *dir, struct inode *inode);

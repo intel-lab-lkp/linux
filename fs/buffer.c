@@ -2299,7 +2299,7 @@ int block_write_end(struct file *file, struct address_space *mapping,
 			loff_t pos, unsigned len, unsigned copied,
 			struct page *page, void *fsdata)
 {
-	return buffer_write_end(file, mapping, pos, len, copied,
+	return __buffer_write_end(file, mapping, pos, len, copied,
 			page_folio(page));
 }
 EXPORT_SYMBOL(block_write_end);
