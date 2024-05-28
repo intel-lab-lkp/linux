@@ -219,15 +219,6 @@ static const struct regulator_ops rtq2208_regulator_buck_ops = {
 	.set_suspend_mode = rtq2208_set_suspend_mode,
 };
 
-static const struct regulator_ops rtq2208_regulator_ldo_ops = {
-	.enable = regulator_enable_regmap,
-	.disable = regulator_disable_regmap,
-	.is_enabled = regulator_is_enabled_regmap,
-	.set_active_discharge = regulator_set_active_discharge_regmap,
-	.set_suspend_enable = rtq2208_set_suspend_enable,
-	.set_suspend_disable = rtq2208_set_suspend_disable,
-};
-
 static unsigned int rtq2208_of_map_mode(unsigned int mode)
 {
 	switch (mode) {
