@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: GPL-2.0-only
 config QAT_VFIO_PCI
 	tristate "VFIO support for QAT VF PCI devices"
-	select VFIO_PCI_CORE
 	depends on CRYPTO_DEV_QAT_4XXX
+	depends on PCI_IOV
+	select VFIO_PCI_CORE
 	help
 	  This provides migration support for Intel(R) QAT Virtual Function
 	  using the VFIO framework.
