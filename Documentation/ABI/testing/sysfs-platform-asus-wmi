@@ -226,3 +226,22 @@ Description:
 		Set panel to UHD or FHD mode
 			* 0 - UHD,
 			* 1 - FHD
+
+What:		/sys/devices/platform/<platform>/cores_enabled
+Date:		Jun 2024
+KernelVersion:	6.11
+Contact:	"Luke Jones" <luke@ljones.dev>
+Description:
+		Enable/disable efficiency and performance cores. The format is
+		0x[E][P] where [E] is the efficiency core count, and [P] is
+		the perfromance core count. If the core count is a single digit
+		it is preceded by a 0 such as 0x0406; E=4, P=6, 0x1006; E=10, P=6
+
+What:		/sys/devices/platform/<platform>/cores_max
+Date:		Jun 2024
+KernelVersion:	6.11
+Contact:	"Luke Jones" <luke@ljones.dev>
+Description:
+		Show the maximum performance and efficiency core countin format
+		0x[E][P] where [E] is the efficiency core count, and [P] is
+		the perfromance core count.

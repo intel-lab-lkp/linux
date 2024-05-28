@@ -815,6 +815,46 @@ static ssize_t panel_fhd_store(struct device *dev,
 WMI_SIMPLE_SHOW(panel_fhd, "%d\n", ASUS_WMI_DEVID_PANEL_FHD);
 static DEVICE_ATTR_RW(panel_fhd);
 
+/* Efficiency and Performance core control **********************************/
+static ssize_t cores_enabled_store(struct device *dev,
+				    struct device_attribute *attr,
+				    const char *buf, size_t count)
+{
+	struct asus_wmi *asus = dev_get_drvdata(dev);
+	int result, err;
+	u32 cores, max;
+
+	result = kstrtou32(buf, 16, &cores);
+	if (result)
+		return result;
+
+	err = asus_wmi_get_devstate(asus, ASUS_WMI_DEVID_CORES_MAX, &max);
+	if (err < 0)
+		return err;
+
+	if (cores > max) {
+		pr_warn("Core count 0x%x exceeds max: 0x%x\n", cores, max);
+		return -EIO;
+	}
+
+	err = asus_wmi_set_devstate(ASUS_WMI_DEVID_CORES_SET, cores, &result);
+	if (err) {
+		pr_warn("Failed to set cores_enabled: %d\n", err);
+		return err;
+	}
+
+	pr_info("Enabled core count changed, reboot required\n");
+	sysfs_notify(&asus->platform_device->dev.kobj, NULL, "cores_enabled");
+
+	return count;
+}
+
+WMI_SIMPLE_SHOW(cores_enabled, "0x%x\n", ASUS_WMI_DEVID_CORES_SET);
+static DEVICE_ATTR_RW(cores_enabled);
+
+WMI_SIMPLE_SHOW(cores_max, "0x%x\n", ASUS_WMI_DEVID_CORES_MAX);
+static DEVICE_ATTR_RO(cores_max);
+
 /* Tablet mode ****************************************************************/
 
 static void asus_wmi_tablet_mode_get_state(struct asus_wmi *asus)
@@ -4057,6 +4097,8 @@ static struct attribute *platform_attributes[] = {
 	&dev_attr_boot_sound.attr,
 	&dev_attr_panel_od.attr,
 	&dev_attr_panel_fhd.attr,
+	&dev_attr_cores_enabled.attr,
+	&dev_attr_cores_max.attr,
 	&dev_attr_mini_led_mode.attr,
 	&dev_attr_available_mini_led_mode.attr,
 	NULL
@@ -4130,6 +4172,9 @@ static umode_t asus_sysfs_is_visible(struct kobject *kobj,
 		devid = ASUS_WMI_DEVID_PANEL_OD;
 	else if (attr == &dev_attr_panel_fhd.attr)
 		devid = ASUS_WMI_DEVID_PANEL_FHD;
+	else if (attr == &dev_attr_cores_enabled.attr
+		|| attr == &dev_attr_cores_max.attr)
+		ok = asus_wmi_dev_is_present(asus, ASUS_WMI_DEVID_CORES_SET);
 	else if (attr == &dev_attr_mini_led_mode.attr)
 		ok = asus->mini_led_dev_id != 0;
 	else if (attr == &dev_attr_available_mini_led_mode.attr)
