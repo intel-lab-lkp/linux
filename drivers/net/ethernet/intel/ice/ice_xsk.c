@@ -370,6 +370,7 @@ int ice_xsk_pool_setup(struct ice_vsi *vsi, struct xsk_buff_pool *pool, u16 qid)
 {
 	bool if_running, pool_present = !!pool;
 	int ret = 0, pool_failure = 0;
+	struct ice_pf *pf = vsi->back;
 
 	if (qid >= vsi->num_rxq || qid >= vsi->num_txq) {
 		netdev_err(vsi->netdev, "Please use queue id in scope of combined queues count\n");
@@ -383,7 +384,7 @@ int ice_xsk_pool_setup(struct ice_vsi *vsi, struct xsk_buff_pool *pool, u16 qid)
 		struct ice_rx_ring *rx_ring = vsi->rx_rings[qid];
 		int timeout = 50;
 
-		while (test_and_set_bit(ICE_CFG_BUSY, vsi->state)) {
+		while (test_and_set_bit(ICE_CFG_BUSY, pf->state)) {
 			timeout--;
 			if (!timeout)
 				return -EBUSY;
@@ -411,7 +412,7 @@ xsk_pool_if_up:
 			napi_schedule(&vsi->rx_rings[qid]->xdp_ring->q_vector->napi);
 		else if (ret)
 			netdev_err(vsi->netdev, "ice_qp_ena error = %d\n", ret);
-		clear_bit(ICE_CFG_BUSY, vsi->state);
+		clear_bit(ICE_CFG_BUSY, pf->state);
 	}
 
 failure:
