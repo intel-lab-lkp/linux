@@ -2971,7 +2971,7 @@ int hid_check_keys_pressed(struct hid_device *hid)
 EXPORT_SYMBOL_GPL(hid_check_keys_pressed);
 
 #ifdef CONFIG_HID_BPF
-static struct hid_bpf_ops hid_ops = {
+static struct hid_ops __hid_ops = {
 	.hid_get_report = hid_get_report,
 	.hid_hw_raw_request = hid_hw_raw_request,
 	.hid_hw_output_report = hid_hw_output_report,
@@ -2992,7 +2992,7 @@ static int __init hid_init(void)
 	}
 
 #ifdef CONFIG_HID_BPF
-	hid_bpf_ops = &hid_ops;
+	hid_ops = &__hid_ops;
 #endif
 
 	ret = hidraw_init();
@@ -3011,7 +3011,7 @@ err:
 static void __exit hid_exit(void)
 {
 #ifdef CONFIG_HID_BPF
-	hid_bpf_ops = NULL;
+	hid_ops = NULL;
 #endif
 	hid_debug_exit();
 	hidraw_exit();
