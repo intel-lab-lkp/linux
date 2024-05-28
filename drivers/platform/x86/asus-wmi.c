@@ -798,6 +798,23 @@ WMI_ATTR_SIMPLE_RW(panel_od, 0, 1, ASUS_WMI_DEVID_PANEL_OD);
 WMI_ATTR_SIMPLE_RW(boot_sound, 0, 1, ASUS_WMI_DEVID_BOOT_SOUND);
 WMI_ATTR_SIMPLE_RO(charge_mode, ASUS_WMI_DEVID_CHARGE_MODE);
 
+static ssize_t panel_fhd_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct asus_wmi *asus = dev_get_drvdata(dev);
+	int err;
+
+	err = rog_tunable_store(asus, &attr->attr, buf, count,
+				0, 1, -1, NULL, ASUS_WMI_DEVID_PANEL_FHD);
+	if (err < 0)
+		return err;
+
+	pr_info("Panel UHD/FHD display mode changed, reboot required\n");
+	return count;
+}
+WMI_SIMPLE_SHOW(panel_fhd, "%d\n", ASUS_WMI_DEVID_PANEL_FHD);
+static DEVICE_ATTR_RW(panel_fhd);
+
 /* Tablet mode ****************************************************************/
 
 static void asus_wmi_tablet_mode_get_state(struct asus_wmi *asus)
@@ -4039,6 +4056,7 @@ static struct attribute *platform_attributes[] = {
 	&dev_attr_mcu_powersave.attr,
 	&dev_attr_boot_sound.attr,
 	&dev_attr_panel_od.attr,
+	&dev_attr_panel_fhd.attr,
 	&dev_attr_mini_led_mode.attr,
 	&dev_attr_available_mini_led_mode.attr,
 	NULL
@@ -4110,6 +4128,8 @@ static umode_t asus_sysfs_is_visible(struct kobject *kobj,
 		devid = ASUS_WMI_DEVID_BOOT_SOUND;
 	else if (attr == &dev_attr_panel_od.attr)
 		devid = ASUS_WMI_DEVID_PANEL_OD;
+	else if (attr == &dev_attr_panel_fhd.attr)
+		devid = ASUS_WMI_DEVID_PANEL_FHD;
 	else if (attr == &dev_attr_mini_led_mode.attr)
 		ok = asus->mini_led_dev_id != 0;
 	else if (attr == &dev_attr_available_mini_led_mode.attr)

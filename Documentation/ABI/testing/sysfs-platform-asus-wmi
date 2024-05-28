@@ -217,3 +217,12 @@ Description:
 		Set if the MCU can go in to low-power mode on system sleep
 			* 0 - False,
 			* 1 - True
+
+What:		/sys/devices/platform/<platform>/panel_fhd
+Date:		Apr 2024
+KernelVersion:	6.11
+Contact:	"Luke Jones" <luke@ljones.dev>
+Description:
+		Set panel to UHD or FHD mode
+			* 0 - UHD,
+			* 1 - FHD
