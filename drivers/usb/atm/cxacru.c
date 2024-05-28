@@ -1131,7 +1131,8 @@ static int cxacru_bind(struct usbatm_data *usbatm_instance,
 	struct cxacru_data *instance;
 	struct usb_device *usb_dev = interface_to_usbdev(intf);
 	struct usb_host_endpoint *cmd_ep = usb_dev->ep_in[CXACRU_EP_CMD];
-	int ret;
+	struct usb_endpoint_descriptor *in, *out;
+	int ret = -1;
 
 	/* instance init */
 	instance = kzalloc(sizeof(*instance), GFP_KERNEL);
@@ -1173,6 +1174,19 @@ static int cxacru_bind(struct usbatm_data *usbatm_instance,
 
 	if (!cmd_ep) {
 		usb_dbg(usbatm_instance, "cxacru_bind: no command endpoint\n");
+		ret = -ENODEV;
+		goto fail;
+	}
+
+	if (usb_endpoint_xfer_int(&cmd_ep->desc))
+		ret = usb_find_common_endpoints(intf->cur_altsetting,
+						NULL, NULL, &in, &out);
+	else
+		ret = usb_find_common_endpoints(intf->cur_altsetting,
+						&in, &out, NULL, NULL);
+
+	if (ret) {
+		usb_dbg(usbatm_instance, "cxacru_bind: interface has incorrect endpoints\n");
 		ret = -ENODEV;
 		goto fail;
 	}
