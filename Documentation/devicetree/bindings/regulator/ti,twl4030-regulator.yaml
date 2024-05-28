@@ -1,0 +1,402 @@
+# SPDX-License-Identifier: (GPL-2.0)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/regulator/ti,twl4030-regulator.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Regulators in the TWL4030 PMIC
+
+maintainers:
+  - Andreas Kemnade <andreas@kemnade.info>
+
+properties:
+  regulator-vaux1:
+    type: object
+    $ref: regulator.yaml#
+    unevaluatedProperties: false
+    properties:
+      compatible:
+        const: "ti,twl4030-vaux1"
+
+      regulator-initial-mode:
+        items:
+          - items:
+              enum:
+                - 0x08 # Sleep mode, the nominal output voltage is maintained
+                       # with low power consumption with low load current capability
+                - 0x0e # Active mode, the regulator can deliver its nominal output
+                       # voltage with full-load current capability
+
+    required:
+      - compatible
+
+  regulator-vaux2:
+    type: object
+    $ref: regulator.yaml#
+    unevaluatedProperties: false
+    properties:
+      compatible:
+        const: "ti,twl4030-vaux2"
+
+      regulator-initial-mode:
+        items:
+          - items:
+              enum:
+                - 0x08 # Sleep mode, the nominal output voltage is maintained
+                       # with low power consumption with low load current capability
+                - 0x0e # Active mode, the regulator can deliver its nominal output
+                       # voltage with full-load current capability
+
+    required:
+      - compatible
+
+  regulator-vaux3:
+    type: object
+    $ref: regulator.yaml#
+    unevaluatedProperties: false
+    properties:
+      compatible:
+        const: "ti,twl4030-vaux3"
+
+      regulator-initial-mode:
+        items:
+          - items:
+              enum:
+                - 0x08 # Sleep mode, the nominal output voltage is maintained
+                       # with low power consumption with low load current capability
+                - 0x0e # Active mode, the regulator can deliver its nominal output
+                       # voltage with full-load current capability
+
+    required:
+      - compatible
+
+  regulator-vaux4:
+    type: object
+    $ref: regulator.yaml#
+    unevaluatedProperties: false
+    properties:
+      compatible:
+        const: "ti,twl4030-vaux4"
+
+      regulator-initial-mode:
+        items:
+          - items:
+              enum:
+                - 0x08 # Sleep mode, the nominal output voltage is maintained
+                       # with low power consumption with low load current capability
+                - 0x0e # Active mode, the regulator can deliver its nominal output
+                       # voltage with full-load current capability
+
+    required:
+      - compatible
+
+  regulator-vmmc1:
+    type: object
+    $ref: regulator.yaml#
+    unevaluatedProperties: false
+    properties:
+      compatible:
+        const: "ti,twl4030-vmmc1"
+
+      regulator-initial-mode:
+        items:
+          - items:
+              enum:
+                - 0x08 # Sleep mode, the nominal output voltage is maintained
+                       # with low power consumption with low load current capability
+                - 0x0e # Active mode, the regulator can deliver its nominal output
+                       # voltage with full-load current capability
+
+    required:
+      - compatible
+
+  regulator-vmmc2:
+    type: object
+    $ref: regulator.yaml#
+    unevaluatedProperties: false
+    properties:
+      compatible:
+        const: "ti,twl4030-vmmc2"
+
+      regulator-initial-mode:
+        items:
+          - items:
+              enum:
+                - 0x08 # Sleep mode, the nominal output voltage is maintained
+                       # with low power consumption with low load current capability
+                - 0x0e # Active mode, the regulator can deliver its nominal output
+                       # voltage with full-load current capability
+
+    required:
+      - compatible
+
+  regulator-vpll1:
+    type: object
+    $ref: regulator.yaml#
+    unevaluatedProperties: false
+    properties:
+      compatible:
+        const: "ti,twl4030-vpll1"
+
+      regulator-initial-mode:
+        items:
+          - items:
+              enum:
+                - 0x08 # Sleep mode, the nominal output voltage is maintained
+                       # with low power consumption with low load current capability
+                - 0x0e # Active mode, the regulator can deliver its nominal output
+                       # voltage with full-load current capability
+
+    required:
+      - compatible
+
+  regulator-vpll2:
+    type: object
+    $ref: regulator.yaml#
+    unevaluatedProperties: false
+    properties:
+      compatible:
+        const: "ti,twl4030-vpll2"
+
+      regulator-initial-mode:
+        items:
+          - items:
+              enum:
+                - 0x08 # Sleep mode, the nominal output voltage is maintained
+                       # with low power consumption with low load current capability
+                - 0x0e # Active mode, the regulator can deliver its nominal output
+                       # voltage with full-load current capability
+
+    required:
+      - compatible
+
+  regulator-vsim:
+    type: object
+    $ref: regulator.yaml#
+    unevaluatedProperties: false
+    properties:
+      compatible:
+        const: "ti,twl4030-vsim"
+
+      regulator-initial-mode:
+        items:
+          - items:
+              enum:
+                - 0x08 # Sleep mode, the nominal output voltage is maintained
+                       # with low power consumption with low load current capability
+                - 0x0e # Active mode, the regulator can deliver its nominal output
+                       # voltage with full-load current capability
+
+    required:
+      - compatible
+
+  regulator-vdac:
+    type: object
+    $ref: regulator.yaml#
+    unevaluatedProperties: false
+    properties:
+      compatible:
+        const: "ti,twl4030-vdac"
+
+      regulator-initial-mode:
+        items:
+          - items:
+              enum:
+                - 0x08 # Sleep mode, the nominal output voltage is maintained
+                       # with low power consumption with low load current capability
+                - 0x0e # Active mode, the regulator can deliver its nominal output
+                       # voltage with full-load current capability
+
+    required:
+      - compatible
+
+  regulator-vintana2:
+    type: object
+    $ref: regulator.yaml#
+    unevaluatedProperties: false
+    properties:
+      compatible:
+        const: "ti,twl4030-vintana2"
+
+      regulator-initial-mode:
+        items:
+          - items:
+              enum:
+                - 0x08 # Sleep mode, the nominal output voltage is maintained
+                       # with low power consumption with low load current capability
+                - 0x0e # Active mode, the regulator can deliver its nominal output
+                       # voltage with full-load current capability
+
+    required:
+      - compatible
+
+  regulator-vio:
+    type: object
+    $ref: regulator.yaml#
+    unevaluatedProperties: false
+    properties:
+      compatible:
+        const: "ti,twl4030-vio"
+
+      regulator-initial-mode:
+        items:
+          - items:
+              enum:
+                - 0x08 # Sleep mode, the nominal output voltage is maintained
+                       # with low power consumption with low load current capability
+                - 0x0e # Active mode, the regulator can deliver its nominal output
+                       # voltage with full-load current capability
+
+    required:
+      - compatible
+
+  regulator-vdd1:
+    type: object
+    $ref: regulator.yaml#
+    unevaluatedProperties: false
+    properties:
+      compatible:
+        const: "ti,twl4030-vdd1"
+
+      regulator-initial-mode:
+        items:
+          - items:
+              enum:
+                - 0x08 # Sleep mode, the nominal output voltage is maintained
+                       # with low power consumption with low load current capability
+                - 0x0e # Active mode, the regulator can deliver its nominal output
+                       # voltage with full-load current capability
+
+    required:
+      - compatible
+
+  regulator-vdd2:
+    type: object
+    $ref: regulator.yaml#
+    unevaluatedProperties: false
+    properties:
+      compatible:
+        const: "ti,twl4030-vdd2"
+
+      regulator-initial-mode:
+        items:
+          - items:
+              enum:
+                - 0x08 # Sleep mode, the nominal output voltage is maintained
+                       # with low power consumption with low load current capability
+                - 0x0e # Active mode, the regulator can deliver its nominal output
+                       # voltage with full-load current capability
+
+    required:
+      - compatible
+
+  regulator-vintana1:
+    type: object
+    $ref: regulator.yaml#
+    unevaluatedProperties: false
+    properties:
+      compatible:
+        const: "ti,twl4030-vintana1"
+
+      regulator-initial-mode:
+        items:
+          - items:
+              enum:
+                - 0x08 # Sleep mode, the nominal output voltage is maintained
+                       # with low power consumption with low load current capability
+                - 0x0e # Active mode, the regulator can deliver its nominal output
+                       # voltage with full-load current capability
+
+    required:
+      - compatible
+
+  regulator-vintdig:
+    type: object
+    $ref: regulator.yaml#
+    unevaluatedProperties: false
+    properties:
+      compatible:
+        const: "ti,twl4030-vintdig"
+
+      regulator-initial-mode:
+        items:
+          - items:
+              enum:
+                - 0x08 # Sleep mode, the nominal output voltage is maintained
+                       # with low power consumption with low load current capability
+                - 0x0e # Active mode, the regulator can deliver its nominal output
+                       # voltage with full-load current capability
+
+    required:
+      - compatible
+
+  regulator-vusb1v5:
+    type: object
+    $ref: regulator.yaml#
+    unevaluatedProperties: false
+    properties:
+      compatible:
+        const: "ti,twl4030-vusb1v5"
+
+      regulator-initial-mode:
+        items:
+          - items:
+              enum:
+                - 0x08 # Sleep mode, the nominal output voltage is maintained
+                       # with low power consumption with low load current capability
+                - 0x0e # Active mode, the regulator can deliver its nominal output
+                       # voltage with full-load current capability
+
+    required:
+      - compatible
+
+  regulator-vusb1v8:
+    type: object
+    $ref: regulator.yaml#
+    unevaluatedProperties: false
+    properties:
+      compatible:
+        const: "ti,twl4030-vusb1v8"
+
+      regulator-initial-mode:
+        items:
+          - items:
+              enum:
+                - 0x08 # Sleep mode, the nominal output voltage is maintained
+                       # with low power consumption with low load current capability
+                - 0x0e # Active mode, the regulator can deliver its nominal output
+                       # voltage with full-load current capability
+
+    required:
+      - compatible
+
+  regulator-vusb3v1:
+    type: object
+    $ref: regulator.yaml#
+    unevaluatedProperties: false
+    properties:
+      compatible:
+        const: "ti,twl4030-vusb3v1"
+
+      regulator-initial-mode:
+        items:
+          - items:
+              enum:
+                - 0x08 # Sleep mode, the nominal output voltage is maintained
+                       # with low power consumption with low load current capability
+                - 0x0e # Active mode, the regulator can deliver its nominal output
+                       # voltage with full-load current capability
+
+    required:
+      - compatible
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    regulator-vaux1 {
+        compatible = "ti,twl4030-vaux1";
+        regulator-min-microvolt  = <1000000>;
+        regulator-max-microvolt  = <3000000>;
+    };
+...
