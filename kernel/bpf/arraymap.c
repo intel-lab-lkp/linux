@@ -1194,10 +1194,15 @@ static struct bpf_event_entry *bpf_event_entry_gen(struct file *perf_file,
 						   struct file *map_file)
 {
 	struct bpf_event_entry *ee;
+	struct perf_event *event = perf_file->private_data;
+	int node = -1;
 
-	ee = kzalloc(sizeof(*ee), GFP_KERNEL);
+	if (event->cpu >= 0)
+		node = cpu_to_node(cpu);
+
+	ee = kzalloc_node(sizeof(*ee), GFP_KERNEL, node);
 	if (ee) {
-		ee->event = perf_file->private_data;
+		ee->event = event;
 		ee->perf_file = perf_file;
 		ee->map_file = map_file;
 	}
