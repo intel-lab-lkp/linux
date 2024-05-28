@@ -675,11 +675,15 @@ int proc_cgroupstats_show(struct seq_file *m, void *v)
 	 * cgroup_mutex contention.
 	 */
 
-	for_each_subsys(ss, i)
+	for_each_subsys(ss, i) {
+		int count = cgroup_on_dfl(&ss->root->cgrp) ?
+			atomic_read(&ss->root->nr_css[i]) : atomic_read(&ss->root->nr_cgrps);
+
 		seq_printf(m, "%s\t%d\t%d\t%d\n",
 			   ss->legacy_name, ss->root->hierarchy_id,
-			   atomic_read(&ss->root->nr_cgrps),
+			   count,
 			   cgroup_ssid_enabled(i));
+	}
 
 	return 0;
 }

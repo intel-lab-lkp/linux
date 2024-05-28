@@ -579,6 +579,12 @@ struct cgroup_root {
 	/* Number of cgroups in the hierarchy, used only for /proc/cgroups */
 	atomic_t nr_cgrps;
 
+	/*
+	 * Number of cgroups using each controller. Includes online and zombies.
+	 * Used only for /proc/cgroups.
+	 */
+	atomic_t nr_css[CGROUP_SUBSYS_COUNT];
+
 	/* Hierarchy-specific flags */
 	unsigned int flags;
 

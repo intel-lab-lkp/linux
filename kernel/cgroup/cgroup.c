@@ -5362,6 +5362,7 @@ static void css_free_rwork_fn(struct work_struct *work)
 		ss->css_free(css);
 		cgroup_idr_remove(&ss->css_idr, id);
 		cgroup_put(cgrp);
+		atomic_dec(&ss->root->nr_css[ss->id]);
 
 		if (parent)
 			css_put(parent);
@@ -5504,6 +5505,7 @@ static int online_css(struct cgroup_subsys_state *css)
 		atomic_inc(&css->online_cnt);
 		if (css->parent)
 			atomic_inc(&css->parent->online_cnt);
+		atomic_inc(&ss->root->nr_css[ss->id]);
 	}
 	return ret;
 }
