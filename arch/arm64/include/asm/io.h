@@ -199,7 +199,8 @@ void __iowrite32_copy_full(void __iomem *to, const void *from, size_t count);
 static inline void __const_iowrite32_copy(void __iomem *to, const void *from,
 					  size_t count)
 {
-	if (count == 8 || count == 4 || count == 2 || count == 1) {
+	if (__builtin_constant_p(count) &&
+	    (count == 8 || count == 4 || count == 2 || count == 1)) {
 		__const_memcpy_toio_aligned32(to, from, count);
 		dgh();
 	} else {
