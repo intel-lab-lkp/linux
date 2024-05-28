@@ -39,6 +39,7 @@ config NET_DSA_REALTEK_RTL8365MB
 config NET_DSA_REALTEK_RTL8366RB
 	tristate "Realtek RTL8366RB switch driver"
 	depends on NET_DSA_REALTEK_SMI || NET_DSA_REALTEK_MDIO
+	depends on LEDS_CLASS
 	select NET_DSA_TAG_RTL4_A
 	help
 	  Select to enable support for Realtek RTL8366RB.
