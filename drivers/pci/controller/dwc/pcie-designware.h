@@ -672,6 +672,7 @@ int dw_pcie_ep_init(struct dw_pcie_ep *ep);
 int dw_pcie_ep_init_registers(struct dw_pcie_ep *ep);
 void dw_pcie_ep_init_notify(struct dw_pcie_ep *ep);
 void dw_pcie_ep_deinit(struct dw_pcie_ep *ep);
+void dw_pcie_ep_deinit_notify(struct dw_pcie_ep *ep);
 void dw_pcie_ep_cleanup(struct dw_pcie_ep *ep);
 int dw_pcie_ep_raise_intx_irq(struct dw_pcie_ep *ep, u8 func_no);
 int dw_pcie_ep_raise_msi_irq(struct dw_pcie_ep *ep, u8 func_no,
@@ -703,6 +704,10 @@ static inline void dw_pcie_ep_init_notify(struct dw_pcie_ep *ep)
 }
 
 static inline void dw_pcie_ep_deinit(struct dw_pcie_ep *ep)
+{
+}
+
+static inline void dw_pcie_ep_deinit_notify(struct dw_pcie_ep *ep)
 {
 }
 
