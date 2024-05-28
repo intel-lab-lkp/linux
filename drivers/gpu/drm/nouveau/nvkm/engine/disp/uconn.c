@@ -211,8 +211,6 @@ nvkm_uconn_new(const struct nvkm_oclass *oclass, void *argv, u32 argc, struct nv
 		case DCB_CONNECTOR_HDMI_1   :
 		case DCB_CONNECTOR_HDMI_C   : args->v0.type = NVIF_CONN_V0_HDMI; break;
 		default:
-			WARN_ON(1);
-			ret = -EINVAL;
 			break;
 		}
 
