@@ -5255,6 +5255,31 @@ fail:
 }
 EXPORT_SYMBOL(page_symlink);
 
+int filemap_symlink(struct inode *inode, const char *symname, int len,
+		const struct buffered_write_operations *ops, void **fsdata)
+{
+	struct address_space *mapping = inode->i_mapping;
+	struct folio *folio;
+	int err;
+
+retry:
+	folio = ops->write_begin(NULL, mapping, 0, len-1, fsdata);
+	if (IS_ERR(folio))
+		return PTR_ERR(folio);
+
+	memcpy(folio_address(folio), symname, len-1);
+
+	err = ops->write_end(NULL, mapping, 0, len-1, len-1, folio, fsdata);
+	if (err < 0)
+		return err;
+	if (err < len-1)
+		goto retry;
+
+	mark_inode_dirty(inode);
+	return 0;
+}
+EXPORT_SYMBOL(filemap_symlink);
+
 const struct inode_operations page_symlink_inode_operations = {
 	.get_link	= page_get_link,
 };

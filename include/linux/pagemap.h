@@ -39,6 +39,8 @@ ssize_t generic_file_write_iter(struct kiocb *, struct iov_iter *);
 #define __generic_file_write_iter(kiocb, iter)		\
 	__filemap_write_iter(kiocb, iter, NULL, NULL)
 
+int filemap_symlink(struct inode *inode, const char *symname, int len,
+		const struct buffered_write_operations *bw, void **fsdata);
 unsigned long invalidate_mapping_pages(struct address_space *mapping,
 					pgoff_t start, pgoff_t end);
 
