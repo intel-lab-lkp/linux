@@ -37,4 +37,9 @@
 			enable-method = "psci";
 		};
 	};
+
+	pwrc: power-controller {
+		compatible = "amlogic,a4-pwrc";
+		#power-domain-cells = <1>;
+	};
 };
