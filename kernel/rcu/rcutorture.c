@@ -3495,8 +3495,9 @@ static void rcu_test_debug_objects(void)
 		return;
 	}
 
-	if (WARN_ON_ONCE(cur_ops->debug_objects &&
-			(!cur_ops->call || !cur_ops->cb_barrier)))
+	if (!cur_ops->debug_objects ||
+			WARN_ON_ONCE(cur_ops->debug_objects &&
+				(!cur_ops->call || !cur_ops->cb_barrier)))
 		return;
 
 	struct rcu_head *rhp = kmalloc(sizeof(*rhp), GFP_KERNEL);
