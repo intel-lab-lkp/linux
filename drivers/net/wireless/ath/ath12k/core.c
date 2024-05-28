@@ -830,11 +830,6 @@ static void ath12k_core_device_cleanup(struct ath12k_base *ab)
 	if (test_bit(ATH12K_FLAG_PDEV_CREATED, &ab->dev_flags))
 		ath12k_core_pdev_destroy(ab);
 
-	if (test_bit(ATH12K_FLAG_REGISTERED, &ab->dev_flags)) {
-		ath12k_mac_unregister(ab);
-		ath12k_mac_destroy(ab);
-	}
-
 	mutex_unlock(&ab->core_lock);
 }
 
@@ -851,6 +846,8 @@ static void ath12k_core_hw_group_stop(struct ath12k_hw_group *ag)
 			continue;
 		ath12k_core_device_cleanup(ab);
 	}
+	ath12k_mac_unregister(ag);
+	ath12k_mac_destroy(ag);
 }
 
 static int ath12k_core_hw_group_start(struct ath12k_hw_group *ag)
@@ -861,6 +858,23 @@ static int ath12k_core_hw_group_start(struct ath12k_hw_group *ag)
 
 	lockdep_assert_held(&ag->mutex_lock);
 
+	/* Check if already registered or not, since same flow
+	 * execute for HW restart case.
+	 */
+	is_registered = test_bit(ATH12K_GROUP_FLAG_REGISTERED, &ag->flags);
+
+	if (is_registered)
+		goto core_pdev_create;
+
+	ret = ath12k_mac_allocate(ag);
+	if (WARN_ON(ret))
+		return ret;
+
+	ret = ath12k_mac_register(ag);
+	if (WARN_ON(ret))
+		goto err_mac_alloc;
+
+core_pdev_create:
 	for (i = 0; i < ag->num_devices; i++) {
 		ab = ag->ab[i];
 		if (!ab)
@@ -868,31 +882,6 @@ static int ath12k_core_hw_group_start(struct ath12k_hw_group *ag)
 
 		mutex_lock(&ab->core_lock);
 
-		/* Check if already registered or not, since same flow
-		 * execute for HW restart case.
-		 */
-		is_registered = test_bit(ATH12K_FLAG_REGISTERED, &ab->dev_flags);
-
-		if (is_registered)
-			goto core_pdev_create;
-
-		ret = ath12k_mac_allocate(ab);
-		if (ret) {
-			ath12k_err(ab, "failed to create new hw device with mac80211 :%d\n",
-				   ret);
-			mutex_unlock(&ab->core_lock);
-			return ret;
-		}
-
-		ret = ath12k_mac_register(ab);
-		if (ret) {
-			ath12k_err(ab, "failed to register radio with mac80211: %d\n",
-				   ret);
-			mutex_unlock(&ab->core_lock);
-			goto err;
-		}
-
-core_pdev_create:
 		ret = ath12k_core_pdev_create(ab);
 		if (ret) {
 			ath12k_err(ab, "failed to create pdev core %d\n", ret);
@@ -919,7 +908,10 @@ core_pdev_create:
 
 err:
 	ath12k_core_hw_group_stop(ag);
+	return ret;
 
+err_mac_alloc:
+	ath12k_mac_destroy(ag);
 	return ret;
 }
 
