@@ -663,16 +663,28 @@ static int __migrate_folio(struct address_space *mapping, struct folio *dst,
 			   struct folio *src, void *src_private,
 			   enum migrate_mode mode)
 {
-	int rc;
+	int expected_cnt = folio_expected_refs(mapping, src);
 
-	rc = folio_migrate_mapping(mapping, dst, src, 0);
-	if (rc != MIGRATEPAGE_SUCCESS)
-		return rc;
+	if (!mapping) {
+		if (folio_ref_count(src) != expected_cnt)
+			return -EAGAIN;
+	} else {
+		if (!folio_ref_freeze(src, expected_cnt))
+			return -EAGAIN;
+	}
+
+	if (unlikely(folio_mc_copy(dst, src))) {
+		if (mapping)
+			folio_ref_unfreeze(src, expected_cnt);
+		return -EFAULT;
+	}
+
+	__folio_migrate_mapping(mapping, dst, src, expected_cnt);
 
 	if (src_private)
 		folio_attach_private(dst, folio_detach_private(src));
 
-	folio_migrate_copy(dst, src);
+	folio_migrate_flags(dst, src);
 	return MIGRATEPAGE_SUCCESS;
 }
 
