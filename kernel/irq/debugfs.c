@@ -9,23 +9,6 @@
 
 static struct dentry *irq_dir;
 
-struct irq_bit_descr {
-	unsigned int	mask;
-	char		*name;
-};
-#define BIT_MASK_DESCR(m)	{ .mask = m, .name = #m }
-
-static void irq_debug_show_bits(struct seq_file *m, int ind, unsigned int state,
-				const struct irq_bit_descr *sd, int size)
-{
-	int i;
-
-	for (i = 0; i < size; i++, sd++) {
-		if (state & sd->mask)
-			seq_printf(m, "%*s%s\n", ind + 12, "", sd->name);
-	}
-}
-
 #ifdef CONFIG_SMP
 static void irq_debug_show_masks(struct seq_file *m, struct irq_desc *desc)
 {
