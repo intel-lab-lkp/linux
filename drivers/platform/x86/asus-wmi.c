@@ -123,6 +123,7 @@ module_param(fnlock_default, bool, 0444);
 #define NVIDIA_BOOST_MAX	25
 #define NVIDIA_TEMP_MIN		75
 #define NVIDIA_TEMP_MAX		87
+#define NVIDIA_GPU_POWER_MAX	70
 
 #define ASUS_SCREENPAD_BRIGHT_MIN 20
 #define ASUS_SCREENPAD_BRIGHT_MAX 255
@@ -797,6 +798,8 @@ WMI_ATTR_SIMPLE_RO(egpu_connected, ASUS_WMI_DEVID_EGPU_CONNECTED);
 WMI_ATTR_SIMPLE_RW(panel_od, 0, 1, ASUS_WMI_DEVID_PANEL_OD);
 WMI_ATTR_SIMPLE_RW(boot_sound, 0, 1, ASUS_WMI_DEVID_BOOT_SOUND);
 WMI_ATTR_SIMPLE_RO(charge_mode, ASUS_WMI_DEVID_CHARGE_MODE);
+WMI_ATTR_SIMPLE_RO(dgpu_base_tgp, ASUS_WMI_DEVID_DGPU_BASE_TGP);
+WMI_ATTR_SIMPLE_RW(dgpu_tgp, 0, NVIDIA_GPU_POWER_MAX, ASUS_WMI_DEVID_DGPU_SET_TGP);
 
 static ssize_t panel_fhd_store(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t count)
@@ -4203,6 +4206,8 @@ static struct attribute *platform_attributes[] = {
 	&dev_attr_boot_sound.attr,
 	&dev_attr_panel_od.attr,
 	&dev_attr_panel_fhd.attr,
+	&dev_attr_dgpu_base_tgp.attr,
+	&dev_attr_dgpu_tgp.attr,
 	&dev_attr_cores_enabled.attr,
 	&dev_attr_cores_max.attr,
 	&dev_attr_apu_mem.attr,
@@ -4279,6 +4284,10 @@ static umode_t asus_sysfs_is_visible(struct kobject *kobj,
 		devid = ASUS_WMI_DEVID_PANEL_OD;
 	else if (attr == &dev_attr_panel_fhd.attr)
 		devid = ASUS_WMI_DEVID_PANEL_FHD;
+	else if (attr == &dev_attr_dgpu_base_tgp.attr)
+		devid = ASUS_WMI_DEVID_DGPU_BASE_TGP;
+	else if (attr == &dev_attr_dgpu_tgp.attr)
+		ok = asus_wmi_dev_is_present(asus, ASUS_WMI_DEVID_DGPU_SET_TGP);
 	else if (attr == &dev_attr_cores_enabled.attr
 		|| attr == &dev_attr_cores_max.attr)
 		ok = asus_wmi_dev_is_present(asus, ASUS_WMI_DEVID_CORES_SET);

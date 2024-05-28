@@ -253,3 +253,22 @@ Contact:	"Luke Jones" <luke@ljones.dev>
 Description:
 		Set the maximum available system memory for the APU.
 		  * Min=0, Max=8
+
+What:		/sys/devices/platform/<platform>/dgpu_tgp
+Date:		Jun 2024
+KernelVersion:	6.11
+Contact:	"Luke Jones" <luke@ljones.dev>
+Description:
+		Read and set the extra TGP applied to the dGPU. This is applied on
+		top of the dgpu_base_tgp.
+
+		If the dGPU maximum power including boost is 175 then we can calculate:
+		175 - 25 (dynamic boost) - 70 (initial dgpu_tgp) = 80 (dgpu_base_tgp).
+		For NVIDIA dGPU the max power can be found with nvidia-smi.
+
+What:		/sys/devices/platform/<platform>/dgpu_base_tgp
+Date:		Jun 2024
+KernelVersion:	6.11
+Contact:	"Luke Jones" <luke@ljones.dev>
+Description:
+		Read the absolute base TGP of the dGPU.
