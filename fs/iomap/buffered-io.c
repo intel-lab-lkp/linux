@@ -764,27 +764,27 @@ static int iomap_write_begin_inline(const struct iomap_iter *iter,
 	return iomap_read_inline_data(iter, folio);
 }
 
-static int iomap_write_begin(struct iomap_iter *iter, loff_t pos,
-		size_t len, struct folio **foliop)
+static struct folio *iomap_write_begin(struct iomap_iter *iter, loff_t pos,
+		size_t len)
 {
 	const struct iomap_folio_ops *folio_ops = iter->iomap.folio_ops;
 	const struct iomap *srcmap = iomap_iter_srcmap(iter);
 	struct folio *folio;
-	int status = 0;
+	int status;
 
 	BUG_ON(pos + len > iter->iomap.offset + iter->iomap.length);
 	if (srcmap != &iter->iomap)
 		BUG_ON(pos + len > srcmap->offset + srcmap->length);
 
 	if (fatal_signal_pending(current))
-		return -EINTR;
+		return ERR_PTR(-EINTR);
 
 	if (!mapping_large_folio_support(iter->inode->i_mapping))
 		len = min_t(size_t, len, PAGE_SIZE - offset_in_page(pos));
 
 	folio = __iomap_get_folio(iter, pos, len);
 	if (IS_ERR(folio))
-		return PTR_ERR(folio);
+		return folio;
 
 	/*
 	 * Now we have a locked folio, before we do anything with it we need to
@@ -801,7 +801,6 @@ static int iomap_write_begin(struct iomap_iter *iter, loff_t pos,
 							 &iter->iomap);
 		if (!iomap_valid) {
 			iter->iomap.flags |= IOMAP_F_STALE;
-			status = 0;
 			goto out_unlock;
 		}
 	}
@@ -819,13 +818,12 @@ static int iomap_write_begin(struct iomap_iter *iter, loff_t pos,
 	if (unlikely(status))
 		goto out_unlock;
 
-	*foliop = folio;
-	return 0;
+	return folio;
 
 out_unlock:
 	__iomap_put_folio(iter, pos, 0, folio);
 
-	return status;
+	return ERR_PTR(status);
 }
 
 static bool __iomap_write_end(struct inode *inode, loff_t pos, size_t len,
@@ -940,9 +938,10 @@ retry:
 			break;
 		}
 
-		status = iomap_write_begin(iter, pos, bytes, &folio);
-		if (unlikely(status)) {
+		folio = iomap_write_begin(iter, pos, bytes);
+		if (IS_ERR(folio)) {
 			iomap_write_failed(iter->inode, pos, bytes);
+			status = PTR_ERR(folio);
 			break;
 		}
 		if (iter->iomap.flags & IOMAP_F_STALE)
@@ -1330,14 +1329,13 @@ static loff_t iomap_unshare_iter(struct iomap_iter *iter)
 
 	do {
 		struct folio *folio;
-		int status;
 		size_t offset;
 		size_t bytes = min_t(u64, SIZE_MAX, length);
 		bool ret;
 
-		status = iomap_write_begin(iter, pos, bytes, &folio);
-		if (unlikely(status))
-			return status;
+		folio = iomap_write_begin(iter, pos, bytes);
+		if (IS_ERR(folio))
+			return PTR_ERR(folio);
 		if (iomap->flags & IOMAP_F_STALE)
 			break;
 
@@ -1393,14 +1391,13 @@ static loff_t iomap_zero_iter(struct iomap_iter *iter, bool *did_zero)
 
 	do {
 		struct folio *folio;
-		int status;
 		size_t offset;
 		size_t bytes = min_t(u64, SIZE_MAX, length);
 		bool ret;
 
-		status = iomap_write_begin(iter, pos, bytes, &folio);
-		if (status)
-			return status;
+		folio = iomap_write_begin(iter, pos, bytes);
+		if (IS_ERR(folio))
+			return PTR_ERR(folio);
 		if (iter->iomap.flags & IOMAP_F_STALE)
 			break;
 
