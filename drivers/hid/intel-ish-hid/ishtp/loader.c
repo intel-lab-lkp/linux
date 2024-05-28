@@ -33,7 +33,6 @@
 
 #define dev_fmt(fmt) "ISH loader: " fmt
 
-#include <linux/cacheflush.h>
 #include <linux/container_of.h>
 #include <linux/dev_printk.h>
 #include <linux/dma-mapping.h>
@@ -175,10 +174,11 @@ static int prepare_dma_bufs(struct ishtp_device *dev,
 			return -ENOMEM;
 
 		fragment->fragment_tbl[i].ddr_adrs = cpu_to_le64(dma_addr);
+
+		memcpy(dma_bufs[i], ish_fw->data + offset, fragment->fragment_tbl[i].length);
+		dma_wmb();
 		fragment->fragment_tbl[i].length = clamp(ish_fw->size - offset, 0, fragment_size);
 		fragment->fragment_tbl[i].fw_off = offset;
-		memcpy(dma_bufs[i], ish_fw->data + offset, fragment->fragment_tbl[i].length);
-		clflush_cache_range(dma_bufs[i], fragment_size);
 
 		offset += fragment->fragment_tbl[i].length;
 	}
