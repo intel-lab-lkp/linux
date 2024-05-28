@@ -9280,7 +9280,7 @@ static int tg_cfs_schedulable_down(struct task_group *tg, void *data)
 {
 	struct cfs_schedulable_data *d = data;
 	struct cfs_bandwidth *cfs_b = &tg->cfs_bandwidth;
-	s64 quota = 0, parent_quota = -1;
+	s64 quota, parent_quota;
 
 	if (!tg->parent) {
 		quota = RUNTIME_INF;
