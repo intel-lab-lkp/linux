@@ -40,7 +40,7 @@
 #define FASTRPC_INIT_HANDLE	1
 #define FASTRPC_DSP_UTILITIES_HANDLE	2
 #define FASTRPC_CTXID_MASK (0xFF0)
-#define INIT_FILELEN_MAX (2 * 1024 * 1024)
+#define INIT_FILELEN_MAX (5 * 1024 * 1024)
 #define INIT_FILE_NAMELEN_MAX (128)
 #define FASTRPC_DEVICE_NAME	"fastrpc"
 
@@ -118,6 +118,11 @@
 #define SENSORS_PDR_SLPI_SERVICE_LOCATION_CLIENT_NAME "sensors_pdr_slpi"
 #define SENSORS_PDR_SLPI_SERVICE_NAME            SENSORS_PDR_ADSP_SERVICE_NAME
 #define SLPI_SENSORPD_NAME                       "msm/slpi/sensor_pd"
+
+enum fastrpc_userpd_type {
+	SIGNED_PD			= 1,
+	UNSIGNED_PD			= 2,
+};
 
 static const char *domains[FASTRPC_DEV_MAX] = { "adsp", "mdsp",
 						"sdsp", "cdsp"};
@@ -326,6 +331,7 @@ struct fastrpc_user {
 	int tgid;
 	int pd;
 	bool is_secure_dev;
+	enum fastrpc_userpd_type userpd_type;
 	char *servloc_name;
 	/* Lock for lists */
 	spinlock_t lock;
@@ -1515,7 +1521,6 @@ static int fastrpc_init_create_process(struct fastrpc_user *fl,
 		u32 siglen;
 	} inbuf;
 	u32 sc;
-	bool unsigned_module = false;
 
 	args = kcalloc(FASTRPC_CREATE_PROCESS_NARGS, sizeof(*args), GFP_KERNEL);
 	if (!args)
@@ -1527,9 +1532,10 @@ static int fastrpc_init_create_process(struct fastrpc_user *fl,
 	}
 
 	if (init.attrs & FASTRPC_MODE_UNSIGNED_MODULE)
-		unsigned_module = true;
+		fl->userpd_type = UNSIGNED_PD;
 
-	if (is_session_rejected(fl, unsigned_module)) {
+
+	if (is_session_rejected(fl, !(fl->userpd_type == SIGNED_PD))) {
 		err = -ECONNREFUSED;
 		goto err;
 	}
@@ -1742,6 +1748,7 @@ static int fastrpc_device_open(struct inode *inode, struct file *filp)
 	fl->tgid = current->tgid;
 	fl->cctx = cctx;
 	fl->is_secure_dev = fdevice->secure;
+	fl->userpd_type = SIGNED_PD;
 
 	fl->sctx = fastrpc_session_alloc(cctx);
 	if (!fl->sctx) {
@@ -2029,6 +2036,7 @@ static int fastrpc_req_munmap(struct fastrpc_user *fl, char __user *argp)
 {
 	struct fastrpc_buf *buf = NULL, *iter, *b;
 	struct fastrpc_req_munmap req;
+	struct fastrpc_map *map = NULL, *iterm, *m;
 	struct device *dev = fl->sctx->dev;
 	int err = 0;
 
@@ -2075,76 +2083,49 @@ static int fastrpc_req_munmap(struct fastrpc_user *fl, char __user *argp)
 		}
 		return err;
 	}
-	dev_err(dev, "buffer not found addr 0x%09lx, len 0x%08llx\n",
+	spin_lock(&fl->lock);
+	list_for_each_entry_safe(iterm, m, &fl->maps, node) {
+		if (iterm->raddr == req.vaddrout) {
+			map = iterm;
+			break;
+		}
+	}
+	spin_unlock(&fl->lock);
+	if (!map) {
+		dev_err(dev, "buffer not found addr 0x%09llx, len 0x%08llx\n",
 			req.vaddrout, req.size);
-	return -EINVAL;
+		return -EINVAL;
+	}
+
+	err = fastrpc_req_munmap_dsp(fl, map->raddr, map->size);
+	if (err)
+		dev_err(dev, "unmmap\tpt fd = %d, 0x%09llx error\n",  map->fd, map->raddr);
+	else
+		fastrpc_map_put(map);
+
+	return err;
 }
 
-
-static int fastrpc_req_mmap(struct fastrpc_user *fl, char __user *argp)
+static int fastrpc_req_map_dsp(struct fastrpc_user *fl, u64 phys,
+			u64 size, u32 flag, uintptr_t vaddrin, u64 *raddr)
 {
 	struct fastrpc_invoke_args args[3] = { [0 ... 2] = { 0 } };
-	struct fastrpc_buf *buf = NULL;
 	struct fastrpc_mmap_req_msg req_msg;
 	struct fastrpc_mmap_rsp_msg rsp_msg;
 	struct fastrpc_phy_page pages;
-	struct fastrpc_req_mmap req;
-	struct device *dev = fl->sctx->dev;
 	int err;
 	u32 sc;
 
-	if (copy_from_user(&req, argp, sizeof(req)))
-		return -EFAULT;
-
-	if (req.flags != ADSP_MMAP_ADD_PAGES && req.flags != ADSP_MMAP_REMOTE_HEAP_ADDR) {
-		dev_err(dev, "flag not supported 0x%x\n", req.flags);
-
-		return -EINVAL;
-	}
-
-	if (req.vaddrin) {
-		dev_err(dev, "adding user allocated pages is not supported\n");
-		return -EINVAL;
-	}
-
-	if (req.flags == ADSP_MMAP_REMOTE_HEAP_ADDR) {
-		if (!fl->spd || !fl->spd->ispdup) {
-			dev_err(dev, "remote heap request supported only for active static PD\n");
-			return -EINVAL;
-		}
-		err = fastrpc_remote_heap_alloc(fl, dev, req.size, &buf);
-	} else {
-		err = fastrpc_buf_alloc(fl, dev, req.size, &buf);
-	}
-
-	if (err) {
-		dev_err(dev, "failed to allocate buffer\n");
-		return err;
-	}
-	buf->flag = req.flags;
-
-	/* Add memory to static PD pool, protection through hypervisor */
-	if ((req.flags == ADSP_MMAP_REMOTE_HEAP_ADDR) && fl->cctx->vmcount) {
-		u64 src_perms = BIT(QCOM_SCM_VMID_HLOS);
-
-		err = qcom_scm_assign_mem(buf->phys, (u64)buf->size,
-			&src_perms, fl->cctx->vmperms, fl->cctx->vmcount);
-		if (err) {
-			dev_err(fl->sctx->dev, "Failed to assign memory phys 0x%llx size 0x%llx err %d\n",
-					buf->phys, buf->size, err);
-			goto err_invoke;
-		}
-	}
 	req_msg.pgid = fl->tgid;
-	req_msg.flags = req.flags;
-	req_msg.vaddr = req.vaddrin;
+	req_msg.flags = flag;
+	req_msg.vaddr = vaddrin;
 	req_msg.num = sizeof(pages);
 
 	args[0].ptr = (u64) (uintptr_t) &req_msg;
 	args[0].length = sizeof(req_msg);
 
-	pages.addr = buf->phys;
-	pages.size = buf->size;
+	pages.addr = phys;
+	pages.size = size;
 
 	args[1].ptr = (u64) (uintptr_t) &pages;
 	args[1].length = sizeof(pages);
@@ -2154,48 +2135,134 @@ static int fastrpc_req_mmap(struct fastrpc_user *fl, char __user *argp)
 
 	sc = FASTRPC_SCALARS(FASTRPC_RMID_INIT_MMAP, 2, 1);
 	err = fastrpc_internal_invoke(fl, true, FASTRPC_INIT_HANDLE, sc,
-				      &args[0]);
+					  &args[0]);
+
 	if (err) {
-		dev_err(dev, "mmap error (len 0x%08llx)\n", buf->size);
-		goto err_invoke;
+		dev_err(fl->sctx->dev, "mmap error (len 0x%08llx)\n", size);
+		return err;
 	}
+	*raddr = rsp_msg.vaddr;
 
-	/* update the buffer to be able to deallocate the memory on the DSP */
-	buf->raddr = (uintptr_t) rsp_msg.vaddr;
+	return err;
+}
 
-	/* let the client know the address to use */
-	req.vaddrout = rsp_msg.vaddr;
+static int fastrpc_req_mmap(struct fastrpc_user *fl, char __user *argp)
+{
+	struct fastrpc_buf *buf = NULL;
+	struct fastrpc_req_mmap req;
+	struct fastrpc_map *map = NULL;
+	struct device *dev = fl->sctx->dev;
+	u64 raddr = 0;
+	int err;
 
+	if (copy_from_user(&req, argp, sizeof(req)))
+		return -EFAULT;
 
-	spin_lock(&fl->lock);
-	if (req.flags == ADSP_MMAP_REMOTE_HEAP_ADDR)
-		list_add_tail(&buf->node, &fl->spd->rmaps);
-	else
-		list_add_tail(&buf->node, &fl->mmaps);
-	spin_unlock(&fl->lock);
+	if ((req.flags == ADSP_MMAP_ADD_PAGES ||
+			req.flags == ADSP_MMAP_REMOTE_HEAP_ADDR) && (fl->userpd_type == SIGNED_PD)) {
+		if (req.vaddrin) {
+			dev_err(dev, "adding user allocated pages is not supported for signed PD\n");
+			return -EINVAL;
+		}
 
+		if (req.flags == ADSP_MMAP_REMOTE_HEAP_ADDR) {
+			if (!fl->spd || !fl->spd->ispdup) {
+				dev_err(dev, "remote heap request supported only for active static PD\n");
+				return -EINVAL;
+			}
+			err = fastrpc_remote_heap_alloc(fl, dev, req.size, &buf);
+		} else {
+			err = fastrpc_buf_alloc(fl, dev, req.size, &buf);
+		}
+
+		if (err) {
+			dev_err(dev, "failed to allocate buffer\n");
+			return err;
+		}
+		buf->flag = req.flags;
+
+		/* Add memory to static PD pool, protection through hypervisor */
+		if ((req.flags == ADSP_MMAP_REMOTE_HEAP_ADDR) && fl->cctx->vmcount) {
+			u64 src_perms = BIT(QCOM_SCM_VMID_HLOS);
+
+			err = qcom_scm_assign_mem(buf->phys, (u64)buf->size,
+				&src_perms, fl->cctx->vmperms, fl->cctx->vmcount);
+			if (err) {
+				dev_err(fl->sctx->dev, "Failed to assign memory phys 0x%llx size 0x%llx err %d\n",
+						buf->phys, buf->size, err);
+				goto err_invoke;
+			}
+		}
+
+		err = fastrpc_req_map_dsp(fl, buf->phys, buf->size, buf->flag,
+					req.vaddrin, &raddr);
+		if (err)
+			goto err_invoke;
+
+		/* update the buffer to be able to deallocate the memory on the DSP */
+		buf->raddr = (uintptr_t) raddr;
+
+		/* let the client know the address to use */
+		req.vaddrout = raddr;
+
+		spin_lock(&fl->lock);
+		if (req.flags == ADSP_MMAP_REMOTE_HEAP_ADDR)
+			list_add_tail(&buf->node, &fl->spd->rmaps);
+		else
+			list_add_tail(&buf->node, &fl->mmaps);
+		spin_unlock(&fl->lock);
+		dev_dbg(dev, "mmap\t\tpt 0x%09lx OK [len 0x%08llx]\n",
+			buf->raddr, buf->size);
+	} else {
+		if ((req.flags == ADSP_MMAP_REMOTE_HEAP_ADDR) && (fl->userpd_type != SIGNED_PD)) {
+			dev_err(dev, "secure memory allocation is not supported in unsigned PD\n");
+			return -EINVAL;
+		}
+		err = fastrpc_map_create(fl, req.fd, req.size, 0, &map);
+		if (err) {
+			dev_err(dev, "failed to map buffer, fd = %d\n", req.fd);
+			return err;
+		}
+
+		err = fastrpc_req_map_dsp(fl, map->phys, map->size, req.flags,
+					req.vaddrin, &raddr);
+		if (err)
+			goto err_invoke;
+
+		/* update the buffer to be able to deallocate the memory on the DSP */
+		map->raddr = (uintptr_t) raddr;
+
+		/* let the client know the address to use */
+		req.vaddrout = raddr;
+		dev_dbg(dev, "mmap\t\tpt 0x%09llx OK [len 0x%08llx]\n",
+			map->raddr, map->size);
+	}
 	if (copy_to_user((void __user *)argp, &req, sizeof(req))) {
 		err = -EFAULT;
 		goto err_copy;
 	}
 
-	dev_dbg(dev, "mmap\t\tpt 0x%09lx OK [len 0x%08llx]\n",
-		buf->raddr, buf->size);
-
 	return 0;
 
 err_copy:
-	spin_lock(&fl->lock);
-	list_del(&buf->node);
-	spin_unlock(&fl->lock);
-	fastrpc_req_munmap_impl(fl, buf);
-	buf = NULL;
+	if ((req.flags != ADSP_MMAP_ADD_PAGES &&
+		req.flags != ADSP_MMAP_REMOTE_HEAP_ADDR) || fl->userpd_type != SIGNED_PD) {
+		fastrpc_req_munmap_dsp(fl, map->raddr, map->size);
+	} else {
+		spin_lock(&fl->lock);
+		list_del(&buf->node);
+		spin_unlock(&fl->lock);
+		fastrpc_req_munmap_impl(fl, buf);
+		buf = NULL;
+	}
 err_invoke:
-	fastrpc_buf_free(buf);
+	if (map)
+		fastrpc_map_put(map);
+	if (buf)
+		fastrpc_buf_free(buf);
 
 	return err;
 }
-
 
 static int fastrpc_req_mem_unmap_impl(struct fastrpc_user *fl, struct fastrpc_mem_unmap *req)
 {
