@@ -2217,39 +2217,55 @@ static void __block_commit_write(struct folio *folio, size_t from, size_t to)
 }
 
 /*
- * block_write_begin takes care of the basic task of block allocation and
+ * buffer_write_begin - Helper for filesystem write_begin implementations
+ * @mapping: Address space being written to.
+ * @pos: Position in bytes within the file.
+ * @len: Number of bytes being written.
+ * @get_block: How to get buffer_heads for this filesystem.
+ *
+ * Take care of the basic task of block allocation and
  * bringing partial write blocks uptodate first.
  *
  * The filesystem needs to handle block truncation upon failure.
+ *
+ * Return: The folio to write to, or an ERR_PTR on failure.
  */
+struct folio *buffer_write_begin(struct address_space *mapping, loff_t pos,
+		size_t len, get_block_t *get_block)
+{
+	struct folio *folio = __filemap_get_folio(mapping, pos / PAGE_SIZE,
+			FGP_WRITEBEGIN, mapping_gfp_mask(mapping));
+	int status;
+
+	if (IS_ERR(folio))
+		return folio;
+
+	status = __block_write_begin_int(folio, pos, len, get_block, NULL);
+	if (unlikely(status)) {
+		folio_unlock(folio);
+		folio_put(folio);
+		folio = ERR_PTR(status);
+	}
+
+	return folio;
+}
+EXPORT_SYMBOL(buffer_write_begin);
+
 int block_write_begin(struct address_space *mapping, loff_t pos, unsigned len,
 		struct page **pagep, get_block_t *get_block)
 {
-	pgoff_t index = pos >> PAGE_SHIFT;
-	struct page *page;
-	int status;
+	struct folio *folio = buffer_write_begin(mapping, pos, len, get_block);
 
-	page = grab_cache_page_write_begin(mapping, index);
-	if (!page)
-		return -ENOMEM;
-
-	status = __block_write_begin(page, pos, len, get_block);
-	if (unlikely(status)) {
-		unlock_page(page);
-		put_page(page);
-		page = NULL;
-	}
-
-	*pagep = page;
-	return status;
+	if (IS_ERR(folio))
+		return PTR_ERR(folio);
+	*pagep = &folio->page;
+	return 0;
 }
 EXPORT_SYMBOL(block_write_begin);
 
-int block_write_end(struct file *file, struct address_space *mapping,
-			loff_t pos, unsigned len, unsigned copied,
-			struct page *page, void *fsdata)
+size_t __buffer_write_end(struct file *file, struct address_space *mapping,
+		loff_t pos, size_t len, size_t copied, struct folio *folio)
 {
-	struct folio *folio = page_folio(page);
 	size_t start = pos - folio_pos(folio);
 
 	if (unlikely(copied < len)) {
@@ -2277,17 +2293,26 @@ int block_write_end(struct file *file, struct address_space *mapping,
 
 	return copied;
 }
-EXPORT_SYMBOL(block_write_end);
+EXPORT_SYMBOL(__buffer_write_end);
 
-int generic_write_end(struct file *file, struct address_space *mapping,
+int block_write_end(struct file *file, struct address_space *mapping,
 			loff_t pos, unsigned len, unsigned copied,
 			struct page *page, void *fsdata)
+{
+	return buffer_write_end(file, mapping, pos, len, copied,
+			page_folio(page));
+}
+EXPORT_SYMBOL(block_write_end);
+
+size_t buffer_write_end(struct file *file, struct address_space *mapping,
+			loff_t pos, size_t len, size_t copied,
+			struct folio *folio)
 {
 	struct inode *inode = mapping->host;
 	loff_t old_size = inode->i_size;
 	bool i_size_changed = false;
 
-	copied = block_write_end(file, mapping, pos, len, copied, page, fsdata);
+	copied = __buffer_write_end(file, mapping, pos, len, copied, folio);
 
 	/*
 	 * No need to use i_size_read() here, the i_size cannot change under us
@@ -2301,8 +2326,8 @@ int generic_write_end(struct file *file, struct address_space *mapping,
 		i_size_changed = true;
 	}
 
-	unlock_page(page);
-	put_page(page);
+	folio_unlock(folio);
+	folio_put(folio);
 
 	if (old_size < pos)
 		pagecache_isize_extended(inode, old_size, pos);
@@ -2315,6 +2340,15 @@ int generic_write_end(struct file *file, struct address_space *mapping,
 	if (i_size_changed)
 		mark_inode_dirty(inode);
 	return copied;
+}
+EXPORT_SYMBOL(buffer_write_end);
+
+int generic_write_end(struct file *file, struct address_space *mapping,
+			loff_t pos, unsigned len, unsigned copied,
+			struct page *page, void *fsdata)
+{
+	return buffer_write_end(file, mapping, pos, len, copied,
+			page_folio(page));
 }
 EXPORT_SYMBOL(generic_write_end);
 

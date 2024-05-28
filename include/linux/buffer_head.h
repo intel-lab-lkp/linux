@@ -267,6 +267,12 @@ int block_write_end(struct file *, struct address_space *,
 int generic_write_end(struct file *, struct address_space *,
 				loff_t, unsigned, unsigned,
 				struct page *, void *);
+struct folio *buffer_write_begin(struct address_space *mapping, loff_t pos,
+		size_t len, get_block_t *get_block);
+size_t buffer_write_end(struct file *, struct address_space *, loff_t pos,
+		size_t len, size_t copied, struct folio *);
+size_t __buffer_write_end(struct file *, struct address_space *, loff_t pos,
+		size_t len, size_t copied, struct folio *);
 void folio_zero_new_buffers(struct folio *folio, size_t from, size_t to);
 int cont_write_begin(struct file *, struct address_space *, loff_t pos,
 		unsigned len, struct page **, void **fsdata, get_block_t *,
