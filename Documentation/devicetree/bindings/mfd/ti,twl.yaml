@@ -22,6 +22,42 @@ allOf:
           contains:
             const: ti,twl4030
     then:
+      patternProperties:
+        "^regulator-":
+          type: object
+          $ref: /schemas/regulator/regulator.yaml
+          unevaluatedProperties: false
+          properties:
+            compatible:
+              enum:
+                - ti,twl4030-vaux1
+                - ti,twl4030-vaux2
+                - ti,twl4030-vaux3
+                - ti,twl4030-vaux4
+                - ti,twl4030-vmmc1
+                - ti,twl4030-vmmc2
+                - ti,twl4030-vpll1
+                - ti,twl4030-vpll2
+                - ti,twl4030-vsim
+                - ti,twl4030-vdac
+                - ti,twl4030-vintana2
+                - ti,twl4030-vio
+                - ti,twl4030-vdd1
+                - ti,twl4030-vdd2
+                - ti,twl4030-vintana1
+                - ti,twl4030-vintdig
+                - ti,twl4030-vusb1v5
+                - ti,twl4030-vusb1v8
+                - ti,twl4030-vusb3v1
+            regulator-initial-mode:
+              items:
+                - items:
+                    enum:
+                      - 0x08 # Sleep mode, the nominal output voltage is maintained
+                             # with low power consumption with low load current capability
+                      - 0x0e # Active mode, the regulator can deliver its nominal output
+                             # voltage with full-load current capability
+
       properties:
         madc:
           type: object
@@ -50,13 +86,43 @@ allOf:
           properties:
             compatible:
               const: ti,twl4030-wdt
-
   - if:
       properties:
         compatible:
           contains:
             const: ti,twl6030
     then:
+      patternProperties:
+        "^regulator-":
+          type: object
+          $ref: /schemas/regulator/regulator.yaml
+          unevaluatedProperties: false
+          properties:
+            compatible:
+              enum:
+                - ti,twl6030-vaux1
+                - ti,twl6030-vaux2
+                - ti,twl6030-vaux3
+                - ti,twl6030-vmmc
+                - ti,twl6030-vpp
+                - ti,twl6030-vusim
+                - ti,twl6030-vana
+                - ti,twl6030-vcxio
+                - ti,twl6030-vdac
+                - ti,twl6030-vusb
+                - ti,twl6030-v1v8
+                - ti,twl6030-v2v1
+                - ti,twl6030-vdd1
+                - ti,twl6030-vdd2
+                - ti,twl6030-vdd3
+            ti,retain-on-reset:
+              description:
+                Does not turn off the supplies during warm
+                reset. Could be needed for VMMC, as TWL6030
+                reset sequence for this signal does not comply
+                with the SD specification.
+              type: boolean
+
       properties:
         gpadc:
           type: object
@@ -69,6 +135,34 @@ allOf:
           contains:
             const: ti,twl6032
     then:
+      patternProperties:
+        "^regulator-":
+          type: object
+          $ref: /schemas/regulator/regulator.yaml
+          unevaluatedProperties: false
+          properties:
+            compatible:
+              enum:
+                - ti,twl6032-ldo1
+                - ti,twl6032-ldo2
+                - ti,twl6032-ldo3
+                - ti,twl6032-ldo4
+                - ti,twl6032-ldo5
+                - ti,twl6032-ldo6
+                - ti,twl6032-ldo7
+                - ti,twl6032-ldoln
+                - ti,twl6032-ldousb
+                - ti,twl6032-smps3
+                - ti,twl6032-smps4
+                - ti,twl6032-vio
+            ti,retain-on-reset:
+              description:
+                Does not turn off the supplies during warm
+                reset. Could be needed for VMMC, as TWL6030
+                reset sequence for this signal does not comply
+                with the SD specification.
+              type: boolean
+
       properties:
         gpadc:
           type: object
@@ -134,6 +228,20 @@ examples:
         interrupt-controller;
         #interrupt-cells = <1>;
         interrupt-parent = <&gic>;
+
+        gpadc {
+          compatible = "ti,twl6030-gpadc";
+          interrupts = <6>;
+        };
+
+        rtc {
+          compatible = "ti,twl4030-rtc";
+          interrupts = <8>;
+        };
+
+        regulator-vaux1 {
+          compatible = "ti,twl6030-vaux1";
+        };
       };
     };
 
