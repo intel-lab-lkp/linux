@@ -1324,9 +1324,10 @@ static int check_object(struct kmem_cache *s, struct slab *slab,
 		}
 	} else {
 		if ((s->flags & SLAB_POISON) && s->object_size < s->inuse) {
-			check_bytes_and_report(s, slab, p, "Alignment padding",
+			if (!check_bytes_and_report(s, slab, p, "Alignment padding",
 				endobject, POISON_INUSE,
-				s->inuse - s->object_size);
+				s->inuse - s->object_size))
+				return 0;
 		}
 	}
 
