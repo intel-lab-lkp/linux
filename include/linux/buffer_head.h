@@ -268,15 +268,29 @@ int generic_write_end(struct file *, struct address_space *,
 				loff_t, unsigned, unsigned,
 				struct page *, void *);
 void folio_zero_new_buffers(struct folio *folio, size_t from, size_t to);
-int cont_write_begin(struct file *, struct address_space *, loff_t,
-			unsigned, struct page **, void **,
-			get_block_t *, loff_t *);
-int generic_cont_expand_simple(struct inode *inode, loff_t size);
+int cont_write_begin(struct file *, struct address_space *, loff_t pos,
+		unsigned len, struct page **, void **fsdata, get_block_t *,
+		loff_t *bytes, const struct buffered_write_operations *);
+int generic_cont_expand_simple(struct inode *inode, loff_t size,
+		const struct buffered_write_operations *ops, void *fsdata);
 void block_commit_write(struct page *page, unsigned int from, unsigned int to);
 int block_page_mkwrite(struct vm_area_struct *vma, struct vm_fault *vmf,
 				get_block_t get_block);
 sector_t generic_block_bmap(struct address_space *, sector_t, get_block_t *);
 int block_truncate_page(struct address_space *, loff_t, get_block_t *);
+
+#define _cont_write_begin(file, mapping, pos, len, pagep, fsdata,	\
+		getblk, bytes, ops, extra...)				\
+	cont_write_begin(file, mapping, pos, len, pagep, fsdata,	\
+		getblk, bytes, ops)
+#define cont_write_begin(file, mapping, pos, len, pagep, fsdata,	\
+		getblk, bytes, ops...)					\
+	_cont_write_begin(file, mapping, pos, len, pagep, fsdata,	\
+		getblk, bytes, ## ops, NULL)
+#define _generic_cont_expand_simple(inode, size, ops, fsdata, extra...)	\
+	generic_cont_expand_simple(inode, size, ops, fsdata)
+#define generic_cont_expand_simple(inode, size, ops_data...)		\
+	_generic_cont_expand_simple(inode, size, ## ops_data, NULL, NULL)
 
 #ifdef CONFIG_MIGRATION
 extern int buffer_migrate_folio(struct address_space *,
