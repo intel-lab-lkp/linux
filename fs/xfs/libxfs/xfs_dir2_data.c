@@ -179,6 +179,9 @@ __xfs_dir3_data_check(
 		struct xfs_dir2_data_unused	*dup = bp->b_addr + offset;
 		struct xfs_dir2_data_entry	*dep = bp->b_addr + offset;
 
+		if (offset + sizeof(*dup) > end)
+			return __this_address;
+
 		/*
 		 * If it's unused, look for the space in the bestfree table.
 		 * If we find it, account for that, else make sure it
@@ -211,6 +214,10 @@ __xfs_dir3_data_check(
 			lastfree = 1;
 			continue;
 		}
+
+		if (offset + sizeof(*dep) > end)
+			return __this_address;
+
 		/*
 		 * It's a real entry.  Validate the fields.
 		 * If this is a block directory then make sure it's
