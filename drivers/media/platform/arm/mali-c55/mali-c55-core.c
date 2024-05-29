@@ -420,15 +420,9 @@ static u32 mali_c55_check_hwcfg(struct mali_c55 *mali_c55)
 	return version;
 }
 
-static void mali_c55_swap_next_config(struct mali_c55 *mali_c55)
+static void mali_c55_swap_next_config(struct mali_c55 *mali_c55, u32 next_config)
 {
 	struct mali_c55_ctx *ctx = mali_c55_get_active_context(mali_c55);
-	u32 curr_config, next_config;
-
-	curr_config = mali_c55_read(mali_c55, MALI_C55_REG_PING_PONG_READ, false);
-	curr_config = (curr_config & MALI_C55_REG_PING_PONG_READ_MASK)
-		      >> (ffs(MALI_C55_REG_PING_PONG_READ_MASK) - 1);
-	next_config = curr_config ^ 1;
 
 	mali_c55_update_bits(mali_c55, MALI_C55_REG_MCU_CONFIG,
 			     MALI_C55_REG_MCU_CONFIG_WRITE_MASK, next_config);
@@ -440,6 +434,7 @@ static irqreturn_t mali_c55_isr(int irq, void *context)
 {
 	struct device *dev = context;
 	struct mali_c55 *mali_c55 = dev_get_drvdata(dev);
+	u32 curr_config, next_config;
 	u32 interrupt_status;
 	unsigned int i, j;
 
@@ -465,7 +460,31 @@ static irqreturn_t mali_c55_isr(int irq, void *context)
 			for (j = i; j < MALI_C55_NUM_CAP_DEVS; j++)
 				mali_c55_set_next_buffer(&mali_c55->cap_devs[j]);
 
-			mali_c55_swap_next_config(mali_c55);
+			/*
+			 * When the ISP starts a frame we have some work to do:
+			 *
+			 * 1. Copy over the config for the **next** frame
+			 * 2. Read out the metering stats for the **last** frame
+			 */
+
+			curr_config = mali_c55_read(mali_c55,
+						    MALI_C55_REG_PING_PONG_READ,
+						    false);
+			curr_config &= MALI_C55_REG_PING_PONG_READ_MASK;
+			curr_config >>= ffs(MALI_C55_REG_PING_PONG_READ_MASK) - 1;
+			next_config = curr_config ^ 1;
+
+			/*
+			 * The ordering of these two is currently important as
+			 * mali_c55_stats_fill_buffer() is asynchronous whereas
+			 * mali_c55_swap_next_config() is not.
+			 *
+			 * TODO: Should mali_c55_swap_next_config() be async?
+			 */
+			mali_c55_stats_fill_buffer(mali_c55,
+				next_config ? MALI_C55_CONFIG_PING :
+				MALI_C55_CONFIG_PONG);
+			mali_c55_swap_next_config(mali_c55, next_config);
 
 			break;
 		case MALI_C55_IRQ_ISP_DONE:
