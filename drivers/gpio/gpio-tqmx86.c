@@ -44,7 +44,7 @@ struct tqmx86_gpio_data {
 	int			irq;
 	raw_spinlock_t		spinlock;
 	DECLARE_BITMAP(output, TQMX86_NGPIO);
-	u8			irq_type[TQMX86_NGPI];
+	u8			irq_type[TQMX86_NGPIO];
 };
 
 static u8 tqmx86_gpio_read(struct tqmx86_gpio_data *gd, unsigned int reg)
@@ -146,7 +146,7 @@ static void tqmx86_gpio_irq_unmask(struct irq_data *data)
 	gpiochip_enable_irq(&gpio->chip, irqd_to_hwirq(data));
 
 	mask = TQMX86_GPII_MASK(offset);
-	val = TQMX86_GPII_CONFIG(offset, gpio->irq_type[offset]);
+	val = TQMX86_GPII_CONFIG(offset, gpio->irq_type[data->hwirq]);
 	raw_spin_lock_irqsave(&gpio->spinlock, flags);
 	_tqmx86_gpio_update_bits(gpio, TQMX86_GPIIC, mask, val);
 	raw_spin_unlock_irqrestore(&gpio->spinlock, flags);
@@ -175,7 +175,7 @@ static int tqmx86_gpio_irq_set_type(struct irq_data *data, unsigned int type)
 		return -EINVAL; /* not supported */
 	}
 
-	gpio->irq_type[offset] = new_type;
+	gpio->irq_type[data->hwirq] = new_type;
 
 	mask = TQMX86_GPII_MASK(offset);
 	val = TQMX86_GPII_CONFIG(offset, new_type);
