@@ -59,6 +59,7 @@ extern int local_apic_timer_c2_ok;
 
 extern bool apic_is_disabled;
 extern unsigned int lapic_timer_period;
+extern u32 apic_perfmon_ctr;
 
 extern enum apic_intr_mode_id apic_intr_mode;
 enum apic_intr_mode_id {

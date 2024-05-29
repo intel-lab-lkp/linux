@@ -46,6 +46,7 @@
 
 struct x86_pmu x86_pmu __read_mostly;
 static struct pmu pmu;
+u32 apic_perfmon_ctr = APIC_DM_NMI;
 
 DEFINE_PER_CPU(struct cpu_hw_events, cpu_hw_events) = {
 	.enabled = 1,
@@ -1680,7 +1681,7 @@ int x86_pmu_handle_irq(struct pt_regs *regs)
 	 * This generic handler doesn't seem to have any issues where the
 	 * unmasking occurs so it was left at the top.
 	 */
-	apic_write(APIC_LVTPC, APIC_DM_NMI);
+	apic_write(APIC_LVTPC, apic_perfmon_ctr);
 
 	for (idx = 0; idx < x86_pmu.num_counters; idx++) {
 		if (!test_bit(idx, cpuc->active_mask))
@@ -1723,7 +1724,10 @@ void perf_events_lapic_init(void)
 	/*
 	 * Always use NMI for PMU
 	 */
-	apic_write(APIC_LVTPC, APIC_DM_NMI);
+	if (cpu_feature_enabled(X86_FEATURE_NMI_SOURCE))
+		apic_perfmon_ctr |= NMI_SOURCE_VEC_PMI;
+
+	apic_write(APIC_LVTPC, apic_perfmon_ctr);
 }
 
 static int
