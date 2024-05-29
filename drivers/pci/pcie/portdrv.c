@@ -162,9 +162,6 @@ static int pcie_port_enable_irq_vec(struct pci_dev *dev, int *irqs, int mask)
 		irqs[PCIE_PORT_SERVICE_BWNOTIF_SHIFT] = pcie_irq;
 	}
 
-	if (mask & PCIE_PORT_SERVICE_AER)
-		irqs[PCIE_PORT_SERVICE_AER_SHIFT] = pci_irq_vector(dev, aer);
-
 	if (mask & PCIE_PORT_SERVICE_DPC)
 		irqs[PCIE_PORT_SERVICE_DPC_SHIFT] = pci_irq_vector(dev, dpc);
 
@@ -210,6 +207,15 @@ intx_irq:
 	return 0;
 }
 
+DEFINE_IDA(pcie_portdrv_aer_ida);
+
+static void pcie_port_aer_adev_release(struct device *dev)
+{
+	struct auxiliary_device *adev = to_auxiliary_dev(dev);
+
+	ida_free(&pcie_portdrv_aer_ida, adev->id);
+}
+
 /**
  * get_port_device_capability - discover capabilities of a PCI Express port
  * @dev: PCI Express port to examine
@@ -245,8 +251,28 @@ static int get_port_device_capability(struct pci_dev *dev,
 	if ((pci_pcie_type(dev) == PCI_EXP_TYPE_ROOT_PORT ||
              pci_pcie_type(dev) == PCI_EXP_TYPE_RC_EC) &&
 	    dev->aer_cap && pci_aer_available() &&
-	    (pcie_ports_native || host->native_aer))
+	    (pcie_ports_native || host->native_aer)) {
+		struct pcie_port_aux_dev *pcie_adev;
+		int id, ret;
+
+		pcie_adev = devm_kzalloc(&dev->dev, sizeof(*pcie_adev), GFP_KERNEL);
+		if (!pcie_adev)
+			return -ENOMEM;
+
+		id = ida_alloc(&pcie_portdrv_aer_ida, GFP_KERNEL);
+		if (id < 0)
+			return id;
+		pcie_adev->adev.name = "aer";
+		pcie_adev->adev.id = id;
+		pcie_adev->adev.dev.parent = &dev->dev;
+		pcie_adev->adev.dev.release = pcie_port_aer_adev_release;
+
+		ret = devm_pcie_port_aux_dev_init(&dev->dev, pcie_adev);
+		if (ret)
+			return ret;
+		list_add(&pcie_adev->node, aux_dev_list);
 		services |= PCIE_PORT_SERVICE_AER;
+	}
 #endif
 
 	/* Root Ports and Root Complex Event Collectors may generate PMEs */

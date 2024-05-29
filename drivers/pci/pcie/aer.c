@@ -15,6 +15,7 @@
 #define pr_fmt(fmt) "AER: " fmt
 #define dev_fmt pr_fmt
 
+#include <linux/auxiliary_bus.h>
 #include <linux/bitops.h>
 #include <linux/cper.h>
 #include <linux/pci.h>
@@ -1327,8 +1328,9 @@ static void aer_isr_one_error(struct aer_rpc *rpc,
  */
 static irqreturn_t aer_isr(int irq, void *context)
 {
-	struct pcie_device *dev = (struct pcie_device *)context;
-	struct aer_rpc *rpc = dev_get_drvdata(&dev->device);
+	struct pcie_port_aux_dev *pcie_adev = context;
+	struct device *dev = &pcie_adev->adev.dev;
+	struct aer_rpc *rpc = dev_get_drvdata(dev);
 	struct aer_err_source e_src;
 
 	if (kfifo_is_empty(&rpc->aer_fifo))
@@ -1348,8 +1350,9 @@ static irqreturn_t aer_isr(int irq, void *context)
  */
 static irqreturn_t aer_irq(int irq, void *context)
 {
-	struct pcie_device *pdev = (struct pcie_device *)context;
-	struct aer_rpc *rpc = dev_get_drvdata(&pdev->device);
+	struct pcie_port_aux_dev *pcie_adev = context;
+	struct device *dev = &pcie_adev->adev.dev;
+	struct aer_rpc *rpc = dev_get_drvdata(dev);
 	struct pci_dev *rp = rpc->rpd;
 	int aer = rp->aer_cap;
 	struct aer_err_source e_src = {};
@@ -1442,58 +1445,74 @@ static void aer_disable_rootport(struct aer_rpc *rpc)
 
 /**
  * aer_remove - clean up resources
- * @dev: pointer to the pcie_dev data structure
+ * @adev: pointer to the auxiliary device within the pcie_port_aux_dev
  *
  * Invoked when PCI Express bus unloads or AER probe fails.
  */
-static void aer_remove(struct pcie_device *dev)
+static void aer_remove(struct auxiliary_device *adev)
 {
-	struct aer_rpc *rpc = dev_get_drvdata(&dev->device);
-
+	struct aer_rpc *rpc = dev_get_drvdata(&adev->dev);
 	aer_disable_rootport(rpc);
 }
 
 /**
  * aer_probe - initialize resources
- * @dev: pointer to the pcie_dev data structure
+ * @adev: pointer to the auxiliary device within the pcie_port_aux_dev
+ * @id: id table entry that matched.
  *
  * Invoked when PCI Express bus loads AER service driver.
  */
-static int aer_probe(struct pcie_device *dev)
+static int aer_probe(struct auxiliary_device *adev,
+		     const struct auxiliary_device_id *id)
 {
+	struct pcie_port_aux_dev *pcie_adev = to_pcie_port_aux_dev(adev);
 	int status;
 	struct aer_rpc *rpc;
-	struct device *device = &dev->device;
-	struct pci_dev *port = dev->port;
+	struct device *dev = &adev->dev;
+	struct pci_dev *port = to_pci_dev(dev->parent);
+	u32 pos, reg32;
+	int irq_num, irq;
 
 	BUILD_BUG_ON(ARRAY_SIZE(aer_correctable_error_string) <
 		     AER_MAX_TYPEOF_COR_ERRS);
 	BUILD_BUG_ON(ARRAY_SIZE(aer_uncorrectable_error_string) <
 		     AER_MAX_TYPEOF_UNCOR_ERRS);
 
+	pos = port->aer_cap;
+	if (pos) {
+		pci_read_config_dword(port, pos + PCI_ERR_ROOT_STATUS,
+				&reg32);
+		irq_num = FIELD_GET(PCI_ERR_ROOT_AER_IRQ, reg32);
+		/* To check - is this sufficient to detect legacy case? */
+		if (pci_dev_msi_enabled(port))
+			irq = pci_irq_vector(port, irq_num);
+		else
+			irq = pci_irq_vector(port, 0);
+	}
+
 	/* Limit to Root Ports or Root Complex Event Collectors */
 	if ((pci_pcie_type(port) != PCI_EXP_TYPE_RC_EC) &&
 	    (pci_pcie_type(port) != PCI_EXP_TYPE_ROOT_PORT))
 		return -ENODEV;
 
-	rpc = devm_kzalloc(device, sizeof(struct aer_rpc), GFP_KERNEL);
+	rpc = devm_kzalloc(dev, sizeof(struct aer_rpc), GFP_KERNEL);
 	if (!rpc)
 		return -ENOMEM;
 
 	rpc->rpd = port;
 	INIT_KFIFO(rpc->aer_fifo);
-	dev_set_drvdata(&dev->device, rpc);
+	dev_set_drvdata(&adev->dev, rpc);
 
-	status = devm_request_threaded_irq(device, dev->irq, aer_irq, aer_isr,
-					   IRQF_SHARED, "aerdrv", dev);
+	status = devm_request_threaded_irq(dev, irq, aer_irq, aer_isr,
+					   IRQF_SHARED, "aerdrv", pcie_adev);
 	if (status) {
-		pci_err(port, "request AER IRQ %d failed\n", dev->irq);
+		pci_err(port, "request AER IRQ %d failed\n", irq);
 		return status;
 	}
 
 	cxl_rch_enable_rcec(port);
 	aer_enable_rootport(rpc);
-	pci_info(port, "enabled with IRQ %d\n", dev->irq);
+	pci_info(port, "enabled with IRQ %d\n", irq);
 	return 0;
 }
 
@@ -1555,12 +1574,16 @@ static pci_ers_result_t aer_root_reset(struct pci_dev *dev)
 	return rc ? PCI_ERS_RESULT_DISCONNECT : PCI_ERS_RESULT_RECOVERED;
 }
 
-static struct pcie_port_service_driver aerdriver = {
-	.name		= "aer",
-	.service	= PCIE_PORT_SERVICE_AER,
+static const struct auxiliary_device_id aer_ids[] = {
+	{ .name = "pcieportdrv.aer" },
+	{ }
+};
 
+static struct auxiliary_driver aerdriver = {
+	.name		= "aer",
 	.probe		= aer_probe,
 	.remove		= aer_remove,
+	.id_table	= aer_ids,
 };
 
 /**
@@ -1572,5 +1595,5 @@ int __init pcie_aer_init(void)
 {
 	if (!pci_aer_available())
 		return -ENXIO;
-	return pcie_port_service_register(&aerdriver);
+	return auxiliary_driver_register(&aerdriver);
 }
