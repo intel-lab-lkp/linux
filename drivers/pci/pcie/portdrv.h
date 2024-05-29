@@ -51,9 +51,6 @@ int pcie_dpc_init(void);
 static inline int pcie_dpc_init(void) { return 0; }
 #endif
 
-/* Port Type */
-#define PCIE_ANY_PORT			(~0)
-
 struct pcie_device {
 	int		irq;	    /* Service IRQ/MSI/MSI-X Vector */
 	struct pci_dev *port;	    /* Root/Upstream/Downstream Port */
@@ -74,7 +71,6 @@ struct pcie_port_service_driver {
 
 	int (*slot_reset)(struct pcie_device *dev);
 
-	int port_type;  /* Type of the port this driver can handle */
 	u32 service;    /* Port service this device represents */
 
 	struct device_driver driver;

@@ -462,7 +462,6 @@ static void dpc_remove(struct pcie_device *dev)
 
 static struct pcie_port_service_driver dpcdriver = {
 	.name		= "dpc",
-	.port_type	= PCIE_ANY_PORT,
 	.service	= PCIE_PORT_SERVICE_DPC,
 	.probe		= dpc_probe,
 	.remove		= dpc_remove,

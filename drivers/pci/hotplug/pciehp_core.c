@@ -337,7 +337,6 @@ static int pciehp_runtime_resume(struct pcie_device *dev)
 
 static struct pcie_port_service_driver hpdriver_portdrv = {
 	.name		= "pciehp",
-	.port_type	= PCIE_ANY_PORT,
 	.service	= PCIE_PORT_SERVICE_HP,
 
 	.probe		= pciehp_probe,
