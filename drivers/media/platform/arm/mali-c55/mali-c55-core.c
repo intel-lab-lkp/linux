@@ -347,6 +347,17 @@ static int mali_c55_create_links(struct mali_c55 *mali_c55)
 		goto err_remove_links;
 	}
 
+	ret = media_create_pad_link(&mali_c55->params.vdev.entity, 0,
+				    &mali_c55->isp.sd.entity,
+				    MALI_C55_ISP_PAD_SINK_PARAMS,
+				    MEDIA_LNK_FL_ENABLED |
+				    MEDIA_LNK_FL_IMMUTABLE);
+	if (ret) {
+		dev_err(mali_c55->dev,
+			"failed to link ISP and parameters video node\n");
+		goto err_remove_links;
+	}
+
 	return 0;
 
 err_remove_links:
@@ -360,6 +371,7 @@ static void mali_c55_unregister_entities(struct mali_c55 *mali_c55)
 	mali_c55_unregister_isp(mali_c55);
 	mali_c55_unregister_resizers(mali_c55);
 	mali_c55_unregister_capture_devs(mali_c55);
+	mali_c55_unregister_params(mali_c55);
 	mali_c55_unregister_stats(mali_c55);
 }
 
@@ -380,6 +392,10 @@ static int mali_c55_register_entities(struct mali_c55 *mali_c55)
 		goto err_unregister_entities;
 
 	ret = mali_c55_register_capture_devs(mali_c55);
+	if (ret)
+		goto err_unregister_entities;
+
+	ret = mali_c55_register_params(mali_c55);
 	if (ret)
 		goto err_unregister_entities;
 
@@ -473,6 +489,14 @@ static irqreturn_t mali_c55_isr(int irq, void *context)
 			curr_config &= MALI_C55_REG_PING_PONG_READ_MASK;
 			curr_config >>= ffs(MALI_C55_REG_PING_PONG_READ_MASK) - 1;
 			next_config = curr_config ^ 1;
+
+			/*
+			 * Write the configuration parameters received from
+			 * userspace into the configuration buffer, which will
+			 * be transferred to the 'next' active config space at
+			 * by mali_c55_swap_next_config().
+			 */
+			mali_c55_params_write_config(mali_c55);
 
 			/*
 			 * The ordering of these two is currently important as
