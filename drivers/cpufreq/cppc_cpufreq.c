@@ -296,7 +296,8 @@ static int cppc_cpufreq_set_target(struct cpufreq_policy *policy,
 
 	desired_perf = cppc_khz_to_perf(&cpu_data->perf_caps, target_freq);
 	/* Return if it is exactly the same perf */
-	if (desired_perf == cpu_data->perf_ctrls.desired_perf)
+	if (desired_perf == cpu_data->perf_ctrls.desired_perf &&
+	    desired_perf == policy->cur)
 		return ret;
 
 	cpu_data->perf_ctrls.desired_perf = desired_perf;
