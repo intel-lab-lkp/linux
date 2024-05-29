@@ -54,6 +54,17 @@ static void tqmx86_gpio_write(struct tqmx86_gpio_data *gd, unsigned int reg,
 	iowrite8(val, gd->io_base + reg);
 }
 
+static void _tqmx86_gpio_update_bits(struct tqmx86_gpio_data *gd,
+				     unsigned int reg, u8 mask, u8 val)
+{
+	u8 tmp = tqmx86_gpio_read(gd, reg);
+
+	tmp &= ~mask;
+	tmp |= val & mask;
+
+	tqmx86_gpio_write(gd, reg, tmp);
+}
+
 static int tqmx86_gpio_get(struct gpio_chip *chip, unsigned int offset)
 {
 	struct tqmx86_gpio_data *gpio = gpiochip_get_data(chip);
@@ -110,15 +121,13 @@ static void tqmx86_gpio_irq_mask(struct irq_data *data)
 	struct tqmx86_gpio_data *gpio = gpiochip_get_data(
 		irq_data_get_irq_chip_data(data));
 	unsigned long flags;
-	u8 gpiic, mask;
+	u8 mask;
 
 	mask = TQMX86_GPII_MASK << (offset * TQMX86_GPII_BITS);
-
 	raw_spin_lock_irqsave(&gpio->spinlock, flags);
-	gpiic = tqmx86_gpio_read(gpio, TQMX86_GPIIC);
-	gpiic &= ~mask;
-	tqmx86_gpio_write(gpio, TQMX86_GPIIC, gpiic);
+	_tqmx86_gpio_update_bits(gpio, TQMX86_GPIIC, mask, 0);
 	raw_spin_unlock_irqrestore(&gpio->spinlock, flags);
+
 	gpiochip_disable_irq(&gpio->chip, irqd_to_hwirq(data));
 }
 
@@ -128,16 +137,14 @@ static void tqmx86_gpio_irq_unmask(struct irq_data *data)
 	struct tqmx86_gpio_data *gpio = gpiochip_get_data(
 		irq_data_get_irq_chip_data(data));
 	unsigned long flags;
-	u8 gpiic, mask;
-
-	mask = TQMX86_GPII_MASK << (offset * TQMX86_GPII_BITS);
+	u8 mask, val;
 
 	gpiochip_enable_irq(&gpio->chip, irqd_to_hwirq(data));
+
+	mask = TQMX86_GPII_MASK << (offset * TQMX86_GPII_BITS);
+	val = gpio->irq_type[offset] << (offset * TQMX86_GPII_BITS);
 	raw_spin_lock_irqsave(&gpio->spinlock, flags);
-	gpiic = tqmx86_gpio_read(gpio, TQMX86_GPIIC);
-	gpiic &= ~mask;
-	gpiic |= gpio->irq_type[offset] << (offset * TQMX86_GPII_BITS);
-	tqmx86_gpio_write(gpio, TQMX86_GPIIC, gpiic);
+	_tqmx86_gpio_update_bits(gpio, TQMX86_GPIIC, mask, val);
 	raw_spin_unlock_irqrestore(&gpio->spinlock, flags);
 }
 
@@ -148,7 +155,7 @@ static int tqmx86_gpio_irq_set_type(struct irq_data *data, unsigned int type)
 	unsigned int offset = (data->hwirq - TQMX86_NGPO);
 	unsigned int edge_type = type & IRQF_TRIGGER_MASK;
 	unsigned long flags;
-	u8 new_type, gpiic;
+	u8 new_type, mask, val;
 
 	switch (edge_type) {
 	case IRQ_TYPE_EDGE_RISING:
@@ -166,11 +173,10 @@ static int tqmx86_gpio_irq_set_type(struct irq_data *data, unsigned int type)
 
 	gpio->irq_type[offset] = new_type;
 
+	mask = TQMX86_GPII_MASK << (offset * TQMX86_GPII_BITS);
+	val = new_type << (offset * TQMX86_GPII_BITS);
 	raw_spin_lock_irqsave(&gpio->spinlock, flags);
-	gpiic = tqmx86_gpio_read(gpio, TQMX86_GPIIC);
-	gpiic &= ~((TQMX86_GPII_MASK) << (offset * TQMX86_GPII_BITS));
-	gpiic |= new_type << (offset * TQMX86_GPII_BITS);
-	tqmx86_gpio_write(gpio, TQMX86_GPIIC, gpiic);
+	_tqmx86_gpio_update_bits(gpio, TQMX86_GPIIC, mask, val);
 	raw_spin_unlock_irqrestore(&gpio->spinlock, flags);
 
 	return 0;
