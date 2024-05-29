@@ -126,6 +126,16 @@
 #define NMI_SOURCE_VEC_IPI_TEST		7	/* For remote and local IPIs*/
 #define NR_NMI_SOURCE_VECTORS		8
 
+/*
+ * When programming the local APIC, IDT NMI vector and NMI source vector
+ * are encoded in a single 32 bit variable. The top 16 bits contain
+ * the NMI source vector and the bottom 16 bits contain NMI_VECTOR (2)
+ * The top 16 bits are always zero when NMI source feature is not enabled
+ * or the caller does not use NMI source.
+ */
+#define NMI_VECTOR_WITH_SOURCE(src)	(NMI_VECTOR | (src << 16))
+#define NMI_SOURCE_VEC_MASK		GENMASK(15, 0)
+
 #ifdef CONFIG_X86_LOCAL_APIC
 #define FIRST_SYSTEM_VECTOR		POSTED_MSI_NOTIFICATION_VECTOR
 #else
