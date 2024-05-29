@@ -2032,6 +2032,48 @@ struct iommu_domain *iommu_domain_alloc(const struct bus_type *bus)
 }
 EXPORT_SYMBOL_GPL(iommu_domain_alloc);
 
+/**
+ * iommu_user_domain_alloc() - Allocate a user domain
+ * @dev: device for which the domain is allocated
+ * @flags: iommufd_hwpt_alloc_flags defined in uapi/linux/iommufd.h
+ *
+ * Allocate a user domain which will be managed by a userspace driver. Return
+ * allocated domain if successful, or a ERR pointer for failure.
+ */
+struct iommu_domain *iommu_user_domain_alloc(struct device *dev, u32 flags)
+{
+	struct iommu_domain *domain;
+	const struct iommu_ops *ops;
+
+	if (!dev_has_iommu(dev))
+		return ERR_PTR(-ENODEV);
+
+	ops = dev_iommu_ops(dev);
+	if (ops->domain_alloc_user) {
+		domain = ops->domain_alloc_user(dev, flags, NULL, NULL);
+		if (IS_ERR(domain))
+			return domain;
+
+		domain->type = IOMMU_DOMAIN_UNMANAGED;
+		domain->owner = ops;
+		domain->pgsize_bitmap = ops->pgsize_bitmap;
+		domain->ops = ops->default_domain_ops;
+
+		return domain;
+	}
+
+	/*
+	 * The iommu driver doesn't support domain_alloc_user callback.
+	 * Rollback to a UNMANAGED paging domain which doesn't support
+	 * the allocation flags.
+	 */
+	if (flags)
+		return ERR_PTR(-EOPNOTSUPP);
+
+	return __iommu_domain_alloc(ops, dev, IOMMU_DOMAIN_UNMANAGED);
+}
+EXPORT_SYMBOL_GPL(iommu_user_domain_alloc);
+
 void iommu_domain_free(struct iommu_domain *domain)
 {
 	if (domain->type == IOMMU_DOMAIN_SVA)
