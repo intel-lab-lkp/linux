@@ -49,6 +49,7 @@ struct loop_func_table;
 
 struct loop_device {
 	int		lo_number;
+	atomic_t        lo_refcnt;
 	loff_t		lo_offset;
 	loff_t		lo_sizelimit;
 	int		lo_flags;
@@ -1242,7 +1243,7 @@ static int loop_clr_fd(struct loop_device *lo)
 	 * <dev>/do something like mkfs/losetup -d <dev> causing the losetup -d
 	 * command to fail with EBUSY.
 	 */
-	if (disk_openers(lo->lo_disk) > 1) {
+	if (atomic_read(&lo->lo_refcnt) > 1) {
 		lo->lo_flags |= LO_FLAGS_AUTOCLEAR;
 		loop_global_unlock(lo, true);
 		return 0;
@@ -1717,14 +1718,31 @@ static int lo_compat_ioctl(struct block_device *bdev, blk_mode_t mode,
 }
 #endif
 
+static int lo_open(struct gendisk *disk, blk_mode_t mode)
+{
+	struct loop_device *lo = disk->private_data;
+	int err;
+
+	err = mutex_lock_killable(&lo->lo_mutex);
+	if (err)
+		return err;
+
+	if (lo->lo_state == Lo_deleting || lo->lo_state == Lo_rundown)
+		err = -ENXIO;
+	else
+		atomic_inc(&lo->lo_refcnt);
+	mutex_unlock(&lo->lo_mutex);
+	return err;
+}
+
 static void lo_release(struct gendisk *disk)
 {
 	struct loop_device *lo = disk->private_data;
 
-	if (disk_openers(disk) > 0)
-		return;
-
 	mutex_lock(&lo->lo_mutex);
+	if (atomic_dec_return(&lo->lo_refcnt))
+		goto out_unlock;
+
 	if (lo->lo_state == Lo_bound && (lo->lo_flags & LO_FLAGS_AUTOCLEAR)) {
 		lo->lo_state = Lo_rundown;
 		mutex_unlock(&lo->lo_mutex);
@@ -1735,6 +1753,7 @@ static void lo_release(struct gendisk *disk)
 		__loop_clr_fd(lo, true);
 		return;
 	}
+out_unlock:
 	mutex_unlock(&lo->lo_mutex);
 }
 
@@ -1752,6 +1771,7 @@ static void lo_free_disk(struct gendisk *disk)
 
 static const struct block_device_operations lo_fops = {
 	.owner =	THIS_MODULE,
+	.open =         lo_open,
 	.release =	lo_release,
 	.ioctl =	lo_ioctl,
 #ifdef CONFIG_COMPAT
@@ -2064,6 +2084,7 @@ static int loop_add(int i)
 	 */
 	if (!part_shift)
 		set_bit(GD_SUPPRESS_PART_SCAN, &disk->state);
+	atomic_set(&lo->lo_refcnt, 0);
 	mutex_init(&lo->lo_mutex);
 	lo->lo_number		= i;
 	spin_lock_init(&lo->lo_lock);
@@ -2158,7 +2179,7 @@ static int loop_control_remove(int idx)
 	ret = mutex_lock_killable(&lo->lo_mutex);
 	if (ret)
 		goto mark_visible;
-	if (lo->lo_state != Lo_unbound || disk_openers(lo->lo_disk) > 0) {
+	if (lo->lo_state != Lo_unbound || atomic_read(&lo->lo_refcnt) > 0) {
 		mutex_unlock(&lo->lo_mutex);
 		ret = -EBUSY;
 		goto mark_visible;
