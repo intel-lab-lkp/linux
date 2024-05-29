@@ -1,5 +1,17 @@
 # This mimics the top-level Makefile. We do it explicitly here so that this
 # Makefile can operate with or without the kbuild infrastructure.
+
+# The kselftests may be built in a couple different ways:
+#     make LLVM=1
+#     make CC=clang
+#
+# In order to handle both cases, set LLVM=1 if CC=clang. That way,the rest of
+# lib.mk, and any Makefiles that include lib.mk, can base decisions solely on
+# whether or not LLVM is set.
+ifeq ($(CC),clang)
+    LLVM := 1
+endif
+
 ifneq ($(LLVM),)
 ifneq ($(filter %/,$(LLVM)),)
 LLVM_PREFIX := $(LLVM)
