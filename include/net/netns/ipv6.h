@@ -20,7 +20,6 @@ struct netns_sysctl_ipv6 {
 	struct ctl_table_header *frags_hdr;
 	struct ctl_table_header *xfrm6_hdr;
 #endif
-	int flush_delay;
 	int ip6_rt_max_size;
 	int ip6_rt_gc_min_interval;
 	int ip6_rt_gc_timeout;

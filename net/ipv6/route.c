@@ -6335,15 +6335,17 @@ static int rt6_stats_seq_show(struct seq_file *seq, void *v)
 static int ipv6_sysctl_rtcache_flush(struct ctl_table *ctl, int write,
 			      void *buffer, size_t *lenp, loff_t *ppos)
 {
-	struct net *net;
+	struct net *net = ctl->extra1;
+	struct ctl_table lctl;
 	int delay;
 	int ret;
+
 	if (!write)
 		return -EINVAL;
 
-	net = (struct net *)ctl->extra1;
-	delay = net->ipv6.sysctl.flush_delay;
-	ret = proc_dointvec(ctl, write, buffer, lenp, ppos);
+	lctl = *ctl;
+	lctl.data = &delay;
+	ret = proc_dointvec(&lctl, write, buffer, lenp, ppos);
 	if (ret)
 		return ret;
 
@@ -6368,7 +6370,6 @@ static struct ctl_table ipv6_route_table_template[] = {
 	},
 	{
 		.procname	=	"flush",
-		.data		=	&init_net.ipv6.sysctl.flush_delay,
 		.maxlen		=	sizeof(int),
 		.mode		=	0200,
 		.proc_handler	=	ipv6_sysctl_rtcache_flush
@@ -6444,7 +6445,6 @@ struct ctl_table * __net_init ipv6_route_sysctl_init(struct net *net)
 	if (table) {
 		table[0].data = &net->ipv6.sysctl.ip6_rt_max_size;
 		table[1].data = &net->ipv6.ip6_dst_ops.gc_thresh;
-		table[2].data = &net->ipv6.sysctl.flush_delay;
 		table[2].extra1 = net;
 		table[3].data = &net->ipv6.sysctl.ip6_rt_gc_min_interval;
 		table[4].data = &net->ipv6.sysctl.ip6_rt_gc_timeout;
@@ -6521,7 +6521,6 @@ static int __net_init ip6_route_net_init(struct net *net)
 #endif
 #endif
 
-	net->ipv6.sysctl.flush_delay = 0;
 	net->ipv6.sysctl.ip6_rt_max_size = INT_MAX;
 	net->ipv6.sysctl.ip6_rt_gc_min_interval = HZ / 2;
 	net->ipv6.sysctl.ip6_rt_gc_timeout = 60*HZ;
