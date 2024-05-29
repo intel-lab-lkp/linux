@@ -3708,35 +3708,8 @@ static struct dmar_domain *paging_domain_alloc(struct device *dev, bool first_st
 
 static struct iommu_domain *intel_iommu_domain_alloc(unsigned type)
 {
-	struct dmar_domain *dmar_domain;
-	struct iommu_domain *domain;
-
-	switch (type) {
-	case IOMMU_DOMAIN_DMA:
-	case IOMMU_DOMAIN_UNMANAGED:
-		dmar_domain = alloc_domain(type);
-		if (!dmar_domain) {
-			pr_err("Can't allocate dmar_domain\n");
-			return NULL;
-		}
-		if (md_domain_init(dmar_domain, DEFAULT_DOMAIN_ADDRESS_WIDTH)) {
-			pr_err("Domain initialization failed\n");
-			domain_exit(dmar_domain);
-			return NULL;
-		}
-
-		domain = &dmar_domain->domain;
-		domain->geometry.aperture_start = 0;
-		domain->geometry.aperture_end   =
-				__DOMAIN_MAX_ADDR(dmar_domain->gaw);
-		domain->geometry.force_aperture = true;
-
-		return domain;
-	case IOMMU_DOMAIN_IDENTITY:
+	if (type == IOMMU_DOMAIN_IDENTITY)
 		return &si_domain->domain;
-	default:
-		return NULL;
-	}
 
 	return NULL;
 }
@@ -3789,6 +3762,26 @@ intel_iommu_domain_alloc_user(struct device *dev, u32 flags,
 	}
 
 	return domain;
+}
+
+static struct iommu_domain *intel_iommu_domain_alloc_paging(struct device *dev)
+{
+	struct dmar_domain *dmar_domain;
+	struct device_domain_info *info;
+	struct intel_iommu *iommu;
+
+	/* Do not support the legacy iommu_domain_alloc() interface. */
+	if (!dev)
+		return ERR_PTR(-ENODEV);
+
+	info = dev_iommu_priv_get(dev);
+	iommu = info->iommu;
+	dmar_domain = paging_domain_alloc(dev,
+			sm_supported(iommu) && ecap_flts(iommu->ecap));
+	if (IS_ERR(dmar_domain))
+		return ERR_CAST(dmar_domain);
+
+	return &dmar_domain->domain;
 }
 
 static void intel_iommu_domain_free(struct iommu_domain *domain)
@@ -4650,6 +4643,7 @@ const struct iommu_ops intel_iommu_ops = {
 	.domain_alloc		= intel_iommu_domain_alloc,
 	.domain_alloc_user	= intel_iommu_domain_alloc_user,
 	.domain_alloc_sva	= intel_svm_domain_alloc,
+	.domain_alloc_paging	= intel_iommu_domain_alloc_paging,
 	.probe_device		= intel_iommu_probe_device,
 	.release_device		= intel_iommu_release_device,
 	.get_resv_regions	= intel_iommu_get_resv_regions,
