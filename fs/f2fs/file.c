@@ -2717,6 +2717,7 @@ static int f2fs_defragment_range(struct f2fs_sb_info *sbi,
 		goto out;
 	}
 
+	set_inode_flag(inode, FI_DEFRAG_IN_PROGRESS);
 	map.m_lblk = pg_start;
 	map.m_len = pg_end - pg_start;
 	total = 0;
@@ -2772,6 +2773,7 @@ check:
 clear_out:
 	clear_inode_flag(inode, FI_SKIP_WRITES);
 out:
+	clear_inode_flag(inode, FI_DEFRAG_IN_PROGRESS);
 	clear_inode_flag(inode, FI_OPU_WRITE);
 unlock_out:
 	inode_unlock(inode);
