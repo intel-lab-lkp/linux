@@ -2190,6 +2190,16 @@ static bool device_rmrr_is_relaxable(struct device *dev)
  */
 static int device_def_domain_type(struct device *dev)
 {
+	struct device_domain_info *info = dev_iommu_priv_get(dev);
+	struct intel_iommu *iommu = info->iommu;
+
+	/*
+	 * Hardware does not support the passthrough translation mode.
+	 * Always use a dynamaic mapping domain.
+	 */
+	if (!ecap_pass_through(iommu->ecap))
+		return IOMMU_DOMAIN_DMA;
+
 	if (dev_is_pci(dev)) {
 		struct pci_dev *pdev = to_pci_dev(dev);
 
@@ -3801,6 +3811,14 @@ int prepare_domain_attach_device(struct iommu_domain *domain,
 	struct dmar_domain *dmar_domain = to_dmar_domain(domain);
 	struct intel_iommu *iommu = info->iommu;
 	int addr_width;
+
+	/*
+	 * This is a temporary solution as the identity domain attachment
+	 * goes through this path as well. It should be removed once the
+	 * identity domain has its own attach path.
+	 */
+	if (domain->type == IOMMU_DOMAIN_IDENTITY)
+		return ecap_pass_through(iommu->ecap) ? 0 : -EOPNOTSUPP;
 
 	if (dmar_domain->force_snooping && !ecap_sc_support(iommu->ecap))
 		return -EINVAL;
