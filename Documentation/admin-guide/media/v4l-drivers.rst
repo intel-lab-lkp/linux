@@ -18,6 +18,7 @@ Video4Linux (V4L) driver-specific documentation
 	ipu3
 	ipu6-isys
 	ivtv
+	mali-c55
 	mgb4
 	omap3isp
 	omap4_camera
