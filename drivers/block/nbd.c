@@ -588,11 +588,17 @@ static inline int was_interrupted(int result)
 	return result == -ERESTARTSYS || result == -EINTR;
 }
 
+struct send_res {
+	int result;
+	blk_status_t status;
+};
+
 /*
  * Returns BLK_STS_RESOURCE if the caller should retry after a delay. Returns
  * -EAGAIN if the caller should requeue @cmd. Returns -EIO if sending failed.
  */
-static int nbd_send_cmd(struct nbd_device *nbd, struct nbd_cmd *cmd, int index)
+static struct send_res nbd_send_cmd(struct nbd_device *nbd, struct nbd_cmd *cmd,
+				    int index)
 {
 	struct request *req = blk_mq_rq_from_pdu(cmd);
 	struct nbd_config *config = nbd->config;
@@ -614,13 +620,13 @@ static int nbd_send_cmd(struct nbd_device *nbd, struct nbd_cmd *cmd, int index)
 
 	type = req_to_nbd_cmd_type(req);
 	if (type == U32_MAX)
-		return -EIO;
+		return (struct send_res){ .result = -EIO };
 
 	if (rq_data_dir(req) == WRITE &&
 	    (config->flags & NBD_FLAG_READ_ONLY)) {
 		dev_err_ratelimited(disk_to_dev(nbd->disk),
 				    "Write on read-only\n");
-		return -EIO;
+		return (struct send_res){ .result = -EIO };
 	}
 
 	if (req->cmd_flags & REQ_FUA)
@@ -674,11 +680,11 @@ static int nbd_send_cmd(struct nbd_device *nbd, struct nbd_cmd *cmd, int index)
 				nsock->sent = sent;
 			}
 			set_bit(NBD_CMD_REQUEUED, &cmd->flags);
-			return (__force int)BLK_STS_RESOURCE;
+			return (struct send_res){ .status = BLK_STS_RESOURCE };
 		}
 		dev_err_ratelimited(disk_to_dev(nbd->disk),
 			"Send control failed (result %d)\n", result);
-		return -EAGAIN;
+		return (struct send_res){ .result = -EAGAIN };
 	}
 send_pages:
 	if (type != NBD_CMD_WRITE)
@@ -715,12 +721,14 @@ send_pages:
 					nsock->pending = req;
 					nsock->sent = sent;
 					set_bit(NBD_CMD_REQUEUED, &cmd->flags);
-					return (__force int)BLK_STS_RESOURCE;
+					return (struct send_res){
+						.status = BLK_STS_RESOURCE
+					};
 				}
 				dev_err(disk_to_dev(nbd->disk),
 					"Send data failed (result %d)\n",
 					result);
-				return -EAGAIN;
+				return (struct send_res){ .result = -EAGAIN };
 			}
 			/*
 			 * The completion might already have come in,
@@ -737,7 +745,7 @@ out:
 	trace_nbd_payload_sent(req, handle);
 	nsock->pending = NULL;
 	nsock->sent = 0;
-	return 0;
+	return (struct send_res){};
 }
 
 static int nbd_read_reply(struct nbd_device *nbd, struct socket *sock,
@@ -1018,7 +1026,8 @@ static blk_status_t nbd_handle_cmd(struct nbd_cmd *cmd, int index)
 	struct nbd_device *nbd = cmd->nbd;
 	struct nbd_config *config;
 	struct nbd_sock *nsock;
-	int ret;
+	struct send_res send_res;
+	blk_status_t ret;
 
 	lockdep_assert_held(&cmd->lock);
 
@@ -1076,14 +1085,15 @@ again:
 	 * Some failures are related to the link going down, so anything that
 	 * returns EAGAIN can be retried on a different socket.
 	 */
-	ret = nbd_send_cmd(nbd, cmd, index);
-	/*
-	 * Access to this flag is protected by cmd->lock, thus it's safe to set
-	 * the flag after nbd_send_cmd() succeed to send request to server.
-	 */
-	if (!ret)
+	send_res = nbd_send_cmd(nbd, cmd, index);
+	ret = send_res.result < 0 ? BLK_STS_IOERR : send_res.status;
+	if (ret == BLK_STS_OK) {
+		/*
+		 * cmd->lock is held. Hence, it's safe to set this flag after
+		 * nbd_send_cmd() succeeded sending the request to the server.
+		 */
 		__set_bit(NBD_CMD_INFLIGHT, &cmd->flags);
-	else if (ret == -EAGAIN) {
+	} else if (send_res.result == -EAGAIN) {
 		dev_err_ratelimited(disk_to_dev(nbd->disk),
 				    "Request send failed, requeueing\n");
 		nbd_mark_nsock_dead(nbd, nsock, 1);
@@ -1093,7 +1103,7 @@ again:
 out:
 	mutex_unlock(&nsock->tx_lock);
 	nbd_config_put(nbd);
-	return ret < 0 ? BLK_STS_IOERR : (__force blk_status_t)ret;
+	return ret;
 }
 
 static blk_status_t nbd_queue_rq(struct blk_mq_hw_ctx *hctx,
