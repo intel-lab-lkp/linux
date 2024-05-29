@@ -74,14 +74,13 @@ static int starfive_rsa_montgomery_form(struct starfive_cryp_ctx *ctx,
 {
 	struct starfive_cryp_dev *cryp = ctx->cryp;
 	struct starfive_cryp_request_ctx *rctx = ctx->rctx;
-	int count = rctx->total / sizeof(u32) - 1;
+	int count = (ALIGN(rctx->total, sizeof(u32)) >> 2) - 1;
 	int loop;
 	u32 temp;
 	u8 opsize;
 
 	opsize = (bit_len - 1) >> 5;
 	rctx->csr.pka.v = 0;
-
 	writel(rctx->csr.pka.v, cryp->base + STARFIVE_PKA_CACR_OFFSET);
 
 	for (loop = 0; loop <= opsize; loop++)
@@ -117,7 +116,6 @@ static int starfive_rsa_montgomery_form(struct starfive_cryp_ctx *ctx,
 		rctx->csr.pka.cmd = CRYPTO_CMD_AERN;
 		rctx->csr.pka.start = 1;
 		rctx->csr.pka.ie = 1;
-
 		writel(rctx->csr.pka.v, cryp->base + STARFIVE_PKA_CACR_OFFSET);
 
 		if (starfive_pka_wait_done(ctx))
@@ -251,12 +249,17 @@ static int starfive_rsa_enc_core(struct starfive_cryp_ctx *ctx, int enc)
 	struct starfive_cryp_dev *cryp = ctx->cryp;
 	struct starfive_cryp_request_ctx *rctx = ctx->rctx;
 	struct starfive_rsa_key *key = &ctx->rsa_key;
-	int ret = 0;
+	int ret = 0, shift = 0;
 
 	writel(STARFIVE_RSA_RESET, cryp->base + STARFIVE_PKA_CACR_OFFSET);
 
-	rctx->total = sg_copy_to_buffer(rctx->in_sg, rctx->nents,
-					rctx->rsa_data, rctx->total);
+	rctx->rsa_data = kzalloc(key->key_sz, GFP_KERNEL);
+
+	if (!IS_ALIGNED(rctx->total, sizeof(u32)))
+		shift = sizeof(u32) - (rctx->total & 0x3);
+
+	rctx->total = sg_copy_to_buffer(rctx->in_sg, sg_nents(rctx->in_sg),
+					rctx->rsa_data + shift, rctx->total);
 
 	if (enc) {
 		key->bitlen = key->e_bitlen;
@@ -275,6 +278,7 @@ static int starfive_rsa_enc_core(struct starfive_cryp_ctx *ctx, int enc)
 		       rctx->rsa_data, key->key_sz, 0, 0);
 
 err_rsa_crypt:
+	kfree(rctx->rsa_data);
 	writel(STARFIVE_RSA_RESET, cryp->base + STARFIVE_PKA_CACR_OFFSET);
 	return ret;
 }
@@ -305,7 +309,6 @@ static int starfive_rsa_enc(struct akcipher_request *req)
 	rctx->in_sg = req->src;
 	rctx->out_sg = req->dst;
 	rctx->total = req->src_len;
-	rctx->nents = sg_nents(rctx->in_sg);
 	ctx->rctx = rctx;
 
 	return starfive_rsa_enc_core(ctx, 1);
