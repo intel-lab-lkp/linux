@@ -696,11 +696,13 @@ static void bnxt_stamp_tx_skb(struct bnxt *bp, struct sk_buff *skb)
 		spin_unlock_bh(&ptp->ptp_lock);
 		timestamp.hwtstamp = ns_to_ktime(ns);
 		skb_tstamp_tx(ptp->tx_skb, &timestamp);
+		ptp->stats->ts_pkts++;
 	} else {
 		if (!time_after_eq(jiffies, ptp->abs_txts_tmo)) {
 			ptp->txts_pending = true;
 			return;
 		}
+		ptp->stats->ts_lost++;
 		netdev_warn_once(bp->dev,
 				 "TS query for TX timer failed rc = %x\n", rc);
 	}
@@ -979,6 +981,18 @@ int bnxt_ptp_init(struct bnxt *bp, bool phc_cfg)
 		rc = err;
 		goto out;
 	}
+	if (!ptp->stats) {
+		ptp->stats = kzalloc(sizeof(*ptp->stats), GFP_KERNEL);
+		if (!ptp->stats) {
+			rc = -ENOMEM;
+			goto out;
+		}
+		atomic64_set(&ptp->stats->ts_err, 0);
+	} else {
+		ptp->stats->ts_pkts = 0;
+		ptp->stats->ts_lost = 0;
+		atomic64_set(&ptp->stats->ts_err, 0);
+	}
 	if (BNXT_CHIP_P5(bp)) {
 		spin_lock_bh(&ptp->ptp_lock);
 		bnxt_refclk_read(bp, NULL, &ptp->current_time);
@@ -1013,5 +1027,9 @@ void bnxt_ptp_clear(struct bnxt *bp)
 		dev_kfree_skb_any(ptp->tx_skb);
 		ptp->tx_skb = NULL;
 	}
+
+	kfree(ptp->stats);
+	ptp->stats = NULL;
+
 	bnxt_unmap_ptp_regs(bp);
 }
