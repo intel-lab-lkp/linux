@@ -599,9 +599,6 @@ extern char			ignore_fpu_irq;
 #ifdef CONFIG_X86_32
 # define BASE_PREFETCH		""
 # define ARCH_HAS_PREFETCH
-#else
-# define BASE_PREFETCH		"prefetcht0 %1"
-#endif
 
 /*
  * Prefetch instructions for Pentium III (+) and AMD Athlon (+)
@@ -615,6 +612,10 @@ static inline void prefetch(const void *x)
 			  X86_FEATURE_XMM,
 			  "m" (*(const char *)x));
 }
+
+#else
+# define BASE_PREFETCH		"prefetcht0 %1"
+#endif
 
 /*
  * 3dnow prefetch to get an exclusive cache line.
