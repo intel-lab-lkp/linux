@@ -744,6 +744,17 @@ int entity_eligible(struct cfs_rq *cfs_rq, struct sched_entity *se)
 	return vruntime_eligible(cfs_rq, se->vruntime);
 }
 
+static bool check_entity_need_preempt(struct cfs_rq *cfs_rq, struct sched_entity *se)
+{
+	if (sched_feat(RUN_TO_PARITY) && se->vlag != se->deadline)
+		return true;
+
+	if (!sched_feat(RUN_TO_PARITY) && !entity_eligible(cfs_rq, se))
+		return true;
+
+	return false;
+}
+
 static u64 __update_min_vruntime(struct cfs_rq *cfs_rq, u64 vruntime)
 {
 	u64 min_vruntime = cfs_rq->min_vruntime;
@@ -5536,6 +5547,9 @@ entity_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr, int queued)
 			hrtimer_active(&rq_of(cfs_rq)->hrtick_timer))
 		return;
 #endif
+
+	if (check_entity_need_preempt(cfs_rq, curr))
+		resched_curr(rq_of(cfs_rq));
 }
 
 
@@ -8411,6 +8425,9 @@ static void check_preempt_wakeup_fair(struct rq *rq, struct task_struct *p, int 
 
 	cfs_rq = cfs_rq_of(se);
 	update_curr(cfs_rq);
+
+	if (check_entity_need_preempt(cfs_rq, se))
+		goto preempt;
 
 	/*
 	 * XXX pick_eevdf(cfs_rq) != se ?
