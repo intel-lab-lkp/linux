@@ -511,11 +511,20 @@ config X86_CPU_RESCTRL
 config X86_FRED
 	bool "Flexible Return and Event Delivery"
 	depends on X86_64
+	select X86_NMI_SOURCE
 	help
 	  When enabled, try to use Flexible Return and Event Delivery
 	  instead of the legacy SYSCALL/SYSENTER/IDT architecture for
 	  ring transitions and exception/interrupt handling if the
 	  system supports it.
+
+config X86_NMI_SOURCE
+	def_bool n
+	help
+	  Once enabled, information on NMI originator/source can be provided
+	  via FRED event data. This makes NMI processing more efficient in that
+	  NMI handler does not need to check for every possible source at
+	  runtime when NMI is delivered.
 
 config X86_BIGSMP
 	bool "Support for big SMP systems with more than 8 CPUs"

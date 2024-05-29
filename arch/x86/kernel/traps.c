@@ -1427,8 +1427,10 @@ early_param("fred", fred_setup);
 
 void __init trap_init(void)
 {
-	if (cpu_feature_enabled(X86_FEATURE_FRED) && !enable_fred)
+	if (cpu_feature_enabled(X86_FEATURE_FRED) && !enable_fred) {
 		setup_clear_cpu_cap(X86_FEATURE_FRED);
+		setup_clear_cpu_cap(X86_FEATURE_NMI_SOURCE);
+	}
 
 	/* Init cpu_entry_area before IST entries are set up */
 	setup_cpu_entry_areas();
