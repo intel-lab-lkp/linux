@@ -4,4 +4,8 @@
  *
  */
 
-#include "rk3588.dtsi"
+#include "rk3588-fullfat.dtsi"
+
+/*
+ * RK3588J OPPs to be added here
+ */
