@@ -317,6 +317,27 @@ static int pcie_device_init(struct pci_dev *pdev, int service, int irq)
 	return 0;
 }
 
+static int remove_iter(struct device *dev, void *data)
+{
+	if (dev->bus == &pcie_port_bus_type)
+		device_unregister(dev);
+	return 0;
+}
+
+/**
+ * pcie_port_device_remove - unregister PCI Express port service devices
+ * @d: PCI Express port the service devices to unregister are associated with
+ *
+ * Remove PCI Express port service devices associated with given port and
+ * disable MSI-X or MSI for the port.
+ */
+static void pcie_port_device_remove(void *d)
+{
+	struct pci_dev *dev = d;
+
+	device_for_each_child(&dev->dev, NULL, remove_iter);
+}
+
 /**
  * pcie_port_device_register - register PCI Express port
  * @dev: PCI Express port to register
@@ -330,7 +351,7 @@ static int pcie_port_device_register(struct pci_dev *dev)
 	int irqs[PCIE_PORT_DEVICE_MAXSERVICES];
 
 	/* Enable PCI Express port device */
-	status = pci_enable_device(dev);
+	status = pcim_enable_device(dev);
 	if (status)
 		return status;
 
@@ -351,7 +372,7 @@ static int pcie_port_device_register(struct pci_dev *dev)
 	if (status) {
 		capabilities &= PCIE_PORT_SERVICE_HP;
 		if (!capabilities)
-			goto error_disable;
+			return status;
 	}
 
 	/* Allocate child services if any */
@@ -365,15 +386,9 @@ static int pcie_port_device_register(struct pci_dev *dev)
 			nr_service++;
 	}
 	if (!nr_service)
-		goto error_cleanup_irqs;
+		return -ENODEV; /* Why carry on if nothing supported? */
 
 	return 0;
-
-error_cleanup_irqs:
-	pci_free_irq_vectors(dev);
-error_disable:
-	pci_disable_device(dev);
-	return status;
 }
 
 typedef int (*pcie_callback_t)(struct pcie_device *);
@@ -441,13 +456,6 @@ static int pcie_port_device_runtime_resume(struct device *dev)
 }
 #endif /* PM */
 
-static int remove_iter(struct device *dev, void *data)
-{
-	if (dev->bus == &pcie_port_bus_type)
-		device_unregister(dev);
-	return 0;
-}
-
 static int find_service_iter(struct device *device, void *data)
 {
 	struct pcie_port_service_driver *service_driver;
@@ -490,19 +498,6 @@ struct device *pcie_port_find_device(struct pci_dev *dev,
 	return device;
 }
 EXPORT_SYMBOL_GPL(pcie_port_find_device);
-
-/**
- * pcie_port_device_remove - unregister PCI Express port service devices
- * @dev: PCI Express port the service devices to unregister are associated with
- *
- * Remove PCI Express port service devices associated with given port and
- * disable MSI-X or MSI for the port.
- */
-static void pcie_port_device_remove(struct pci_dev *dev)
-{
-	device_for_each_child(&dev->dev, NULL, remove_iter);
-	pci_free_irq_vectors(dev);
-}
 
 /**
  * pcie_port_probe_service - probe driver for given PCI Express port service
@@ -669,6 +664,17 @@ static const struct dev_pm_ops pcie_portdrv_pm_ops = {
 #define PCIE_PORTDRV_PM_OPS	NULL
 #endif /* !PM */
 
+static void pcie_portdrv_runtime_pm_disable(void *d)
+{
+	struct pci_dev *dev = d;
+
+	if (pci_bridge_d3_possible(dev)) {
+		pm_runtime_forbid(&dev->dev);
+		pm_runtime_get_noresume(&dev->dev);
+		pm_runtime_dont_use_autosuspend(&dev->dev);
+	}
+}
+
 /*
  * pcie_portdrv_probe - Probe PCI-Express port devices
  * @dev: PCI-Express port device being probed
@@ -697,6 +703,11 @@ static int pcie_portdrv_probe(struct pci_dev *dev,
 	if (status)
 		return status;
 
+	status = devm_add_action_or_reset(&dev->dev, pcie_port_device_remove,
+					  dev);
+	if (status)
+		return status;
+
 	pci_save_state(dev);
 
 	dev_pm_set_driver_flags(&dev->dev, DPM_FLAG_NO_DIRECT_COMPLETE |
@@ -718,28 +729,11 @@ static int pcie_portdrv_probe(struct pci_dev *dev,
 	return 0;
 }
 
-static void pcie_portdrv_remove(struct pci_dev *dev)
-{
-	if (pci_bridge_d3_possible(dev)) {
-		pm_runtime_forbid(&dev->dev);
-		pm_runtime_get_noresume(&dev->dev);
-		pm_runtime_dont_use_autosuspend(&dev->dev);
-	}
-
-	pcie_port_device_remove(dev);
-
-	pci_disable_device(dev);
-}
-
 static void pcie_portdrv_shutdown(struct pci_dev *dev)
 {
-	if (pci_bridge_d3_possible(dev)) {
-		pm_runtime_forbid(&dev->dev);
-		pm_runtime_get_noresume(&dev->dev);
-		pm_runtime_dont_use_autosuspend(&dev->dev);
-	}
-
+	pcie_portdrv_runtime_pm_disable(dev);
 	pcie_port_device_remove(dev);
+	pci_free_irq_vectors(dev);
 }
 
 static pci_ers_result_t pcie_portdrv_error_detected(struct pci_dev *dev,
@@ -789,7 +783,6 @@ static struct pci_driver pcie_portdriver = {
 	.id_table	= &port_pci_ids[0],
 
 	.probe		= pcie_portdrv_probe,
-	.remove		= pcie_portdrv_remove,
 	.shutdown	= pcie_portdrv_shutdown,
 
 	.err_handler	= &pcie_portdrv_err_handler,
