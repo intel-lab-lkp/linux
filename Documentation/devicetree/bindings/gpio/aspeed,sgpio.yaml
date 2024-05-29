@@ -51,12 +51,12 @@ properties:
 required:
   - compatible
   - reg
-  - gpio-controller
-  - '#gpio-cells'
+  - clocks
   - interrupts
   - interrupt-controller
+  - gpio-controller
+  - '#gpio-cells'
   - ngpios
-  - clocks
   - bus-frequency
 
 additionalProperties: false
@@ -65,13 +65,13 @@ examples:
   - |
     #include <dt-bindings/clock/aspeed-clock.h>
     sgpio: sgpio@1e780200 {
-        #gpio-cells = <2>;
         compatible = "aspeed,ast2500-sgpio";
-        gpio-controller;
-        interrupts = <40>;
         reg = <0x1e780200 0x0100>;
         clocks = <&syscon ASPEED_CLK_APB>;
+        interrupts = <40>;
         interrupt-controller;
+        gpio-controller;
+        #gpio-cells = <2>;
         ngpios = <80>;
         bus-frequency = <12000000>;
     };
