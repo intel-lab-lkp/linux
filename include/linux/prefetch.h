@@ -36,6 +36,7 @@ struct page;
 */
 
 #ifndef ARCH_HAS_PREFETCH
+#define ARCH_HAS_PREFETCH
 #define prefetch(x) __builtin_prefetch(x)
 #endif
 
