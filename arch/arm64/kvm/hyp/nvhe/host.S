@@ -214,7 +214,7 @@ SYM_FUNC_END(__host_hvc)
 .endm
 
 .macro host_el2_sync_vect
-	__host_el2_vect __hyp_panic
+	__host_el2_vect __hyp_save_context_and_panic
 .endm
 
 .macro invalid_host_el1_vect
