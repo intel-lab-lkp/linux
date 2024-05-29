@@ -24,10 +24,13 @@ int main(int argc, char **argv)
 {
 	const char *version = versions[VDSO_VERSION];
 	const char **name = (const char **)&names[VDSO_NAMES];
-
 	unsigned long sysinfo_ehdr = getauxval(AT_SYSINFO_EHDR);
+
+	ksft_print_header();
+	ksft_set_plan(1);
+
 	if (!sysinfo_ehdr) {
-		printf("AT_SYSINFO_EHDR is not present!\n");
+		ksft_print_msg("AT_SYSINFO_EHDR is not present!\n");
 		return KSFT_SKIP;
 	}
 
@@ -38,20 +41,18 @@ int main(int argc, char **argv)
 	gtod_t gtod = (gtod_t)vdso_sym(version, name[0]);
 
 	if (!gtod) {
-		printf("Could not find %s\n", name[0]);
+		ksft_print_msg("Could not find %s\n", name[0]);
 		return KSFT_SKIP;
 	}
 
 	struct timeval tv;
 	long ret = gtod(&tv, 0);
 
-	if (ret == 0) {
-		printf("The time is %lld.%06lld\n",
-		       (long long)tv.tv_sec, (long long)tv.tv_usec);
-	} else {
-		printf("%s failed\n", name[0]);
-		return KSFT_FAIL;
-	}
+	if (ret == 0)
+		ksft_test_result_pass("The time is %lld.%06lld\n",
+				      (long long)tv.tv_sec, (long long)tv.tv_usec);
+	else
+		ksft_test_result_fail("%s failed\n", name[0]);
 
-	return 0;
+	ksft_finished();
 }
