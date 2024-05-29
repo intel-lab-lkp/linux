@@ -105,6 +105,27 @@
 
 #define NR_VECTORS			 256
 
+/*
+ * The NMI senders specify the NMI source vector as an 8bit integer in their
+ * vector field with NMI delivery mode. A local APIC receiving an NMI will
+ * set the corresponding bit in a 16bit bitmask, which is accumulated until
+ * the NMI is delivered.
+ * When a sender didn't specify an NMI source vector the source vector will
+ * be 0, which will result in bit 0 of the bitmask being set. For out of
+ * bounds vectors >= 16 bit 0 will also be set.
+ * When bit 0 is set, system software must invoke all registered NMI handlers
+ * as if NMI source feature is not enabled.
+ */
+#define NMI_SOURCE_VEC_UNKNOWN		0
+#define NMI_SOURCE_VEC_PMI		1	/* PerfMon counters */
+#define NMI_SOURCE_VEC_IPI_BT		2	/* CPU backtrace */
+#define NMI_SOURCE_VEC_IPI_MCE		3	/* MCE injection */
+#define NMI_SOURCE_VEC_IPI_KGDB		4
+#define NMI_SOURCE_VEC_IPI_REBOOT	5	/* Crash reboot */
+#define NMI_SOURCE_VEC_IPI_SMP_STOP	6	/* Panic stop CPU */
+#define NMI_SOURCE_VEC_IPI_TEST		7	/* For remote and local IPIs*/
+#define NR_NMI_SOURCE_VECTORS		8
+
 #ifdef CONFIG_X86_LOCAL_APIC
 #define FIRST_SYSTEM_VECTOR		POSTED_MSI_NOTIFICATION_VECTOR
 #else

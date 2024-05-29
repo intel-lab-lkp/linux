@@ -603,12 +603,12 @@ int kgdb_arch_init(void)
 		goto out;
 
 	retval = register_nmi_handler(NMI_LOCAL, kgdb_nmi_handler,
-					0, "kgdb");
+					0, "kgdb", NMI_SOURCE_VEC_IPI_KGDB);
 	if (retval)
 		goto out1;
 
 	retval = register_nmi_handler(NMI_UNKNOWN, kgdb_nmi_handler,
-					0, "kgdb");
+					0, "kgdb", 0);
 
 	if (retval)
 		goto out2;
