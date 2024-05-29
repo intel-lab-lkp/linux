@@ -59,9 +59,11 @@ __u8 uclogic_rdesc_wp4030u_fixed_arr[] = {
 	0xC0,               /*      End Collection,                 */
 	0xC0                /*  End Collection                      */
 };
+EXPORT_SYMBOL_GPL(uclogic_rdesc_wp4030u_fixed_arr);
 
 const size_t uclogic_rdesc_wp4030u_fixed_size =
 			sizeof(uclogic_rdesc_wp4030u_fixed_arr);
+EXPORT_SYMBOL_GPL(uclogic_rdesc_wp4030u_fixed_size);
 
 /* Fixed WP5540U report descriptor */
 __u8 uclogic_rdesc_wp5540u_fixed_arr[] = {
@@ -136,9 +138,11 @@ __u8 uclogic_rdesc_wp5540u_fixed_arr[] = {
 	0xC0,               /*      End Collection,                 */
 	0xC0                /*  End Collection                      */
 };
+EXPORT_SYMBOL_GPL(uclogic_rdesc_wp5540u_fixed_arr);
 
 const size_t uclogic_rdesc_wp5540u_fixed_size =
 			sizeof(uclogic_rdesc_wp5540u_fixed_arr);
+EXPORT_SYMBOL_GPL(uclogic_rdesc_wp5540u_fixed_size);
 
 /* Fixed WP8060U report descriptor */
 __u8 uclogic_rdesc_wp8060u_fixed_arr[] = {
@@ -213,9 +217,11 @@ __u8 uclogic_rdesc_wp8060u_fixed_arr[] = {
 	0xC0,               /*      End Collection,                 */
 	0xC0                /*  End Collection                      */
 };
+EXPORT_SYMBOL_GPL(uclogic_rdesc_wp8060u_fixed_arr);
 
 const size_t uclogic_rdesc_wp8060u_fixed_size =
 			sizeof(uclogic_rdesc_wp8060u_fixed_arr);
+EXPORT_SYMBOL_GPL(uclogic_rdesc_wp8060u_fixed_size);
 
 /* Fixed WP1062 report descriptor */
 __u8 uclogic_rdesc_wp1062_fixed_arr[] = {
@@ -261,9 +267,11 @@ __u8 uclogic_rdesc_wp1062_fixed_arr[] = {
 	0xC0,               /*      End Collection,                 */
 	0xC0                /*  End Collection                      */
 };
+EXPORT_SYMBOL_GPL(uclogic_rdesc_wp1062_fixed_arr);
 
 const size_t uclogic_rdesc_wp1062_fixed_size =
 			sizeof(uclogic_rdesc_wp1062_fixed_arr);
+EXPORT_SYMBOL_GPL(uclogic_rdesc_wp1062_fixed_size);
 
 /* Fixed PF1209 report descriptor */
 __u8 uclogic_rdesc_pf1209_fixed_arr[] = {
@@ -338,9 +346,11 @@ __u8 uclogic_rdesc_pf1209_fixed_arr[] = {
 	0xC0,               /*      End Collection,                 */
 	0xC0                /*  End Collection                      */
 };
+EXPORT_SYMBOL_GPL(uclogic_rdesc_pf1209_fixed_arr);
 
 const size_t uclogic_rdesc_pf1209_fixed_size =
 			sizeof(uclogic_rdesc_pf1209_fixed_arr);
+EXPORT_SYMBOL_GPL(uclogic_rdesc_pf1209_fixed_size);
 
 /* Fixed PID 0522 tablet report descriptor, interface 0 (stylus) */
 __u8 uclogic_rdesc_twhl850_fixed0_arr[] = {
@@ -384,9 +394,11 @@ __u8 uclogic_rdesc_twhl850_fixed0_arr[] = {
 	0xC0,               /*      End Collection,                 */
 	0xC0                /*  End Collection                      */
 };
+EXPORT_SYMBOL_GPL(uclogic_rdesc_twhl850_fixed0_arr);
 
 const size_t uclogic_rdesc_twhl850_fixed0_size =
 			sizeof(uclogic_rdesc_twhl850_fixed0_arr);
+EXPORT_SYMBOL_GPL(uclogic_rdesc_twhl850_fixed0_size);
 
 /* Fixed PID 0522 tablet report descriptor, interface 1 (mouse) */
 __u8 uclogic_rdesc_twhl850_fixed1_arr[] = {
@@ -424,9 +436,11 @@ __u8 uclogic_rdesc_twhl850_fixed1_arr[] = {
 	0xC0,               /*      End Collection,                 */
 	0xC0                /*  End Collection                      */
 };
+EXPORT_SYMBOL_GPL(uclogic_rdesc_twhl850_fixed1_arr);
 
 const size_t uclogic_rdesc_twhl850_fixed1_size =
 			sizeof(uclogic_rdesc_twhl850_fixed1_arr);
+EXPORT_SYMBOL_GPL(uclogic_rdesc_twhl850_fixed1_size);
 
 /* Fixed PID 0522 tablet report descriptor, interface 2 (frame buttons) */
 __u8 uclogic_rdesc_twhl850_fixed2_arr[] = {
@@ -450,9 +464,11 @@ __u8 uclogic_rdesc_twhl850_fixed2_arr[] = {
 	0x80,               /*      Input,                          */
 	0xC0                /*  End Collection                      */
 };
+EXPORT_SYMBOL_GPL(uclogic_rdesc_twhl850_fixed2_arr);
 
 const size_t uclogic_rdesc_twhl850_fixed2_size =
 			sizeof(uclogic_rdesc_twhl850_fixed2_arr);
+EXPORT_SYMBOL_GPL(uclogic_rdesc_twhl850_fixed2_size);
 
 /* Fixed TWHA60 report descriptor, interface 0 (stylus) */
 __u8 uclogic_rdesc_twha60_fixed0_arr[] = {
@@ -499,9 +515,11 @@ __u8 uclogic_rdesc_twha60_fixed0_arr[] = {
 	0xC0,               /*      End Collection,                 */
 	0xC0                /*  End Collection                      */
 };
+EXPORT_SYMBOL_GPL(uclogic_rdesc_twha60_fixed0_arr);
 
 const size_t uclogic_rdesc_twha60_fixed0_size =
 			sizeof(uclogic_rdesc_twha60_fixed0_arr);
+EXPORT_SYMBOL_GPL(uclogic_rdesc_twha60_fixed0_size);
 
 /* Fixed TWHA60 report descriptor, interface 1 (frame buttons) */
 __u8 uclogic_rdesc_twha60_fixed1_arr[] = {
@@ -527,9 +545,11 @@ __u8 uclogic_rdesc_twha60_fixed1_arr[] = {
 	0x81, 0x01, /*      Input (Constant),       */
 	0xC0        /*  End Collection              */
 };
+EXPORT_SYMBOL_GPL(uclogic_rdesc_twha60_fixed1_arr);
 
 const size_t uclogic_rdesc_twha60_fixed1_size =
 			sizeof(uclogic_rdesc_twha60_fixed1_arr);
+EXPORT_SYMBOL_GPL(uclogic_rdesc_twha60_fixed1_size);
 
 /* Fixed report descriptor template for (tweaked) v1 pen reports */
 const __u8 uclogic_rdesc_v1_pen_template_arr[] = {
@@ -581,9 +601,11 @@ const __u8 uclogic_rdesc_v1_pen_template_arr[] = {
 	0xC0,                   /*      End Collection,                     */
 	0xC0                    /*  End Collection                          */
 };
+EXPORT_SYMBOL_GPL(uclogic_rdesc_v1_pen_template_arr);
 
 const size_t uclogic_rdesc_v1_pen_template_size =
 			sizeof(uclogic_rdesc_v1_pen_template_arr);
+EXPORT_SYMBOL_GPL(uclogic_rdesc_v1_pen_template_size);
 
 /* Fixed report descriptor template for (tweaked) v2 pen reports */
 const __u8 uclogic_rdesc_v2_pen_template_arr[] = {
@@ -647,9 +669,11 @@ const __u8 uclogic_rdesc_v2_pen_template_arr[] = {
 	0xC0,                   /*      End Collection,                     */
 	0xC0                    /*  End Collection                          */
 };
+EXPORT_SYMBOL_GPL(uclogic_rdesc_v2_pen_template_arr);
 
 const size_t uclogic_rdesc_v2_pen_template_size =
 			sizeof(uclogic_rdesc_v2_pen_template_arr);
+EXPORT_SYMBOL_GPL(uclogic_rdesc_v2_pen_template_size);
 
 /*
  * Expand to the contents of a generic frame buttons report descriptor.
@@ -702,16 +726,22 @@ const size_t uclogic_rdesc_v2_pen_template_size =
 const __u8 uclogic_rdesc_v1_frame_arr[] = {
 	UCLOGIC_RDESC_FRAME_BUTTONS_BYTES(UCLOGIC_RDESC_V1_FRAME_ID, 8)
 };
+EXPORT_SYMBOL_GPL(uclogic_rdesc_v1_frame_arr);
+
 const size_t uclogic_rdesc_v1_frame_size =
 			sizeof(uclogic_rdesc_v1_frame_arr);
+EXPORT_SYMBOL_GPL(uclogic_rdesc_v1_frame_size);
 
 /* Fixed report descriptor for (tweaked) v2 frame button reports */
 const __u8 uclogic_rdesc_v2_frame_buttons_arr[] = {
 	UCLOGIC_RDESC_FRAME_BUTTONS_BYTES(UCLOGIC_RDESC_V2_FRAME_BUTTONS_ID,
 					  12)
 };
+EXPORT_SYMBOL_GPL(uclogic_rdesc_v2_frame_buttons_arr);
+
 const size_t uclogic_rdesc_v2_frame_buttons_size =
 			sizeof(uclogic_rdesc_v2_frame_buttons_arr);
+EXPORT_SYMBOL_GPL(uclogic_rdesc_v2_frame_buttons_size);
 
 /* Fixed report descriptor for (tweaked) v2 frame touch ring reports */
 const __u8 uclogic_rdesc_v2_frame_touch_ring_arr[] = {
@@ -758,8 +788,11 @@ const __u8 uclogic_rdesc_v2_frame_touch_ring_arr[] = {
 	0xC0,               /*      End Collection,                 */
 	0xC0                /*  End Collection                      */
 };
+EXPORT_SYMBOL_GPL(uclogic_rdesc_v2_frame_touch_ring_arr);
+
 const size_t uclogic_rdesc_v2_frame_touch_ring_size =
 			sizeof(uclogic_rdesc_v2_frame_touch_ring_arr);
+EXPORT_SYMBOL_GPL(uclogic_rdesc_v2_frame_touch_ring_size);
 
 /* Fixed report descriptor for (tweaked) v2 frame touch strip reports */
 const __u8 uclogic_rdesc_v2_frame_touch_strip_arr[] = {
@@ -806,8 +839,11 @@ const __u8 uclogic_rdesc_v2_frame_touch_strip_arr[] = {
 	0xC0,               /*      End Collection,                 */
 	0xC0                /*  End Collection                      */
 };
+EXPORT_SYMBOL_GPL(uclogic_rdesc_v2_frame_touch_strip_arr);
+
 const size_t uclogic_rdesc_v2_frame_touch_strip_size =
 			sizeof(uclogic_rdesc_v2_frame_touch_strip_arr);
+EXPORT_SYMBOL_GPL(uclogic_rdesc_v2_frame_touch_strip_size);
 
 /* Fixed report descriptor for (tweaked) v2 frame dial reports */
 const __u8 uclogic_rdesc_v2_frame_dial_arr[] = {
@@ -856,14 +892,22 @@ const __u8 uclogic_rdesc_v2_frame_dial_arr[] = {
 	0xC0,               /*      End Collection,                 */
 	0xC0                /*  End Collection                      */
 };
+EXPORT_SYMBOL_GPL(uclogic_rdesc_v2_frame_dial_arr);
+
 const size_t uclogic_rdesc_v2_frame_dial_size =
 			sizeof(uclogic_rdesc_v2_frame_dial_arr);
+EXPORT_SYMBOL_GPL(uclogic_rdesc_v2_frame_dial_size);
 
 const __u8 uclogic_ugee_v2_probe_arr[] = {
 	0x02, 0xb0, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
+EXPORT_SYMBOL_GPL(uclogic_ugee_v2_probe_arr);
+
 const size_t uclogic_ugee_v2_probe_size = sizeof(uclogic_ugee_v2_probe_arr);
+EXPORT_SYMBOL_GPL(uclogic_ugee_v2_probe_size);
+
 const int uclogic_ugee_v2_probe_endpoint = 0x03;
+EXPORT_SYMBOL_GPL(uclogic_ugee_v2_probe_endpoint);
 
 /* Fixed report descriptor template for UGEE v2 pen reports */
 const __u8 uclogic_rdesc_ugee_v2_pen_template_arr[] = {
@@ -935,8 +979,11 @@ const __u8 uclogic_rdesc_ugee_v2_pen_template_arr[] = {
 	0xc0,               /*      End Collection,                     */
 	0xc0,               /*  End Collection                          */
 };
+EXPORT_SYMBOL_GPL(uclogic_rdesc_ugee_v2_pen_template_arr);
+
 const size_t uclogic_rdesc_ugee_v2_pen_template_size =
 			sizeof(uclogic_rdesc_ugee_v2_pen_template_arr);
+EXPORT_SYMBOL_GPL(uclogic_rdesc_ugee_v2_pen_template_size);
 
 /* Fixed report descriptor template for UGEE v2 frame reports (buttons only) */
 const __u8 uclogic_rdesc_ugee_v2_frame_btn_template_arr[] = {
@@ -964,8 +1011,11 @@ const __u8 uclogic_rdesc_ugee_v2_frame_btn_template_arr[] = {
 	0xC0,               /*      End Collection,                     */
 	0xC0                /*  End Collection                          */
 };
+EXPORT_SYMBOL_GPL(uclogic_rdesc_ugee_v2_frame_btn_template_arr);
+
 const size_t uclogic_rdesc_ugee_v2_frame_btn_template_size =
 			sizeof(uclogic_rdesc_ugee_v2_frame_btn_template_arr);
+EXPORT_SYMBOL_GPL(uclogic_rdesc_ugee_v2_frame_btn_template_size);
 
 /* Fixed report descriptor template for UGEE v2 frame reports (dial) */
 const __u8 uclogic_rdesc_ugee_v2_frame_dial_template_arr[] = {
@@ -1004,8 +1054,11 @@ const __u8 uclogic_rdesc_ugee_v2_frame_dial_template_arr[] = {
 	0xC0,               /*      End Collection,                     */
 	0xC0                /*  End Collection                          */
 };
+EXPORT_SYMBOL_GPL(uclogic_rdesc_ugee_v2_frame_dial_template_arr);
+
 const size_t uclogic_rdesc_ugee_v2_frame_dial_template_size =
 			sizeof(uclogic_rdesc_ugee_v2_frame_dial_template_arr);
+EXPORT_SYMBOL_GPL(uclogic_rdesc_ugee_v2_frame_dial_template_size);
 
 /* Fixed report descriptor template for UGEE v2 frame reports (mouse) */
 const __u8 uclogic_rdesc_ugee_v2_frame_mouse_template_arr[] = {
@@ -1038,8 +1091,11 @@ const __u8 uclogic_rdesc_ugee_v2_frame_mouse_template_arr[] = {
 	0xC0,               /*      End Collection,                     */
 	0xC0                /*  End Collection                          */
 };
+EXPORT_SYMBOL_GPL(uclogic_rdesc_ugee_v2_frame_mouse_template_arr);
+
 const size_t uclogic_rdesc_ugee_v2_frame_mouse_template_size =
 			sizeof(uclogic_rdesc_ugee_v2_frame_mouse_template_arr);
+EXPORT_SYMBOL_GPL(uclogic_rdesc_ugee_v2_frame_mouse_template_size);
 
 /* Fixed report descriptor template for UGEE v2 battery reports */
 const __u8 uclogic_rdesc_ugee_v2_battery_template_arr[] = {
@@ -1072,8 +1128,11 @@ const __u8 uclogic_rdesc_ugee_v2_battery_template_arr[] = {
 	0x81, 0x01,         /*      Input (Constant),                   */
 	0xC0                /*  End Collection                          */
 };
+EXPORT_SYMBOL_GPL(uclogic_rdesc_ugee_v2_battery_template_arr);
+
 const size_t uclogic_rdesc_ugee_v2_battery_template_size =
 			sizeof(uclogic_rdesc_ugee_v2_battery_template_arr);
+EXPORT_SYMBOL_GPL(uclogic_rdesc_ugee_v2_battery_template_size);
 
 /* Fixed report descriptor for Ugee EX07 frame */
 const __u8 uclogic_rdesc_ugee_ex07_frame_arr[] = {
@@ -1099,8 +1158,11 @@ const __u8 uclogic_rdesc_ugee_ex07_frame_arr[] = {
 	0xC0,                   /*      End Collection,                     */
 	0xC0                    /*  End Collection                          */
 };
+EXPORT_SYMBOL_GPL(uclogic_rdesc_ugee_ex07_frame_arr);
+
 const size_t uclogic_rdesc_ugee_ex07_frame_size =
 			sizeof(uclogic_rdesc_ugee_ex07_frame_arr);
+EXPORT_SYMBOL_GPL(uclogic_rdesc_ugee_ex07_frame_size);
 
 /* Fixed report descriptor for Ugee G5 frame controls */
 const __u8 uclogic_rdesc_ugee_g5_frame_arr[] = {
@@ -1153,8 +1215,10 @@ const __u8 uclogic_rdesc_ugee_g5_frame_arr[] = {
 	0xC0,               /*      End Collection,                 */
 	0xC0                /*  End Collection                      */
 };
+EXPORT_SYMBOL_GPL(uclogic_rdesc_ugee_g5_frame_arr);
 const size_t uclogic_rdesc_ugee_g5_frame_size =
 			sizeof(uclogic_rdesc_ugee_g5_frame_arr);
+EXPORT_SYMBOL_GPL(uclogic_rdesc_ugee_g5_frame_size);
 
 /* Fixed report descriptor for XP-Pen Deco 01 frame controls */
 const __u8 uclogic_rdesc_xppen_deco01_frame_arr[] = {
@@ -1187,9 +1251,11 @@ const __u8 uclogic_rdesc_xppen_deco01_frame_arr[] = {
 	0xC0,       /*      End Collection,                 */
 	0xC0        /*  End Collection                      */
 };
+EXPORT_SYMBOL_GPL(uclogic_rdesc_xppen_deco01_frame_arr);
 
 const size_t uclogic_rdesc_xppen_deco01_frame_size =
 			sizeof(uclogic_rdesc_xppen_deco01_frame_arr);
+EXPORT_SYMBOL_GPL(uclogic_rdesc_xppen_deco01_frame_size);
 
 /**
  * uclogic_rdesc_template_apply() - apply report descriptor parameters to a
@@ -1242,3 +1308,9 @@ __u8 *uclogic_rdesc_template_apply(const __u8 *template_ptr,
 
 	return rdesc_ptr;
 }
+EXPORT_SYMBOL_GPL(uclogic_rdesc_template_apply);
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Martin Rusko");
+MODULE_AUTHOR("Nikolai Kondrashov");
+MODULE_DESCRIPTION("HID driver for UC-Logic devices original and fixed report descriptors");

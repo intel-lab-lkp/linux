@@ -133,6 +133,7 @@ void uclogic_params_hid_dbg(const struct hid_device *hdev,
 	}
 	hid_dbg(hdev, "}\n");
 }
+EXPORT_SYMBOL_GPL(uclogic_params_hid_dbg);
 
 /**
  * uclogic_params_get_str_desc - retrieve a string descriptor from a HID
@@ -660,6 +661,7 @@ void uclogic_params_cleanup(struct uclogic_params *params)
 		memset(params, 0, sizeof(*params));
 	}
 }
+EXPORT_SYMBOL_GPL(uclogic_params_cleanup);
 
 /**
  * uclogic_params_get_desc() - Get a replacement report descriptor for a
@@ -732,6 +734,7 @@ cleanup:
 	kfree(desc);
 	return rc;
 }
+EXPORT_SYMBOL_GPL(uclogic_params_get_desc);
 
 /**
  * uclogic_params_init_invalid() - initialize tablet interface parameters,
@@ -1859,7 +1862,12 @@ cleanup:
 	uclogic_params_cleanup(&p);
 	return rc;
 }
+EXPORT_SYMBOL_GPL(uclogic_params_init);
 
 #ifdef CONFIG_HID_KUNIT_TEST
 #include "hid-uclogic-params-test.c"
 #endif
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Nikolai Kondrashov");
+MODULE_DESCRIPTION("HID driver for UC-Logic devices tablet initialization and parameter retrieval");
