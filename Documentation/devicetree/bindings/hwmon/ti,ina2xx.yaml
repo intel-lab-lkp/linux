@@ -66,6 +66,14 @@ properties:
     description: phandle to the regulator that provides the VS supply typically
       in range from 2.7 V to 5.5 V.
 
+  alert-polarity:
+    description: |
+      Alert polarity bit value of Mask/Enable register. Alert pin is asserted
+      based on the value of Alert polarity Bit. Default value is active low.
+      0 selects active low, 1 selects active high.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [0, 1]
+
 required:
   - compatible
   - reg
@@ -88,5 +96,6 @@ examples:
             label = "vdd_3v0";
             shunt-resistor = <1000>;
             vs-supply = <&vdd_3v0>;
+            alert-polarity = <1>;
         };
     };
