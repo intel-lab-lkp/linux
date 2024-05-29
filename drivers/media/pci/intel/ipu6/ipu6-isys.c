@@ -676,7 +676,15 @@ static int isys_notifier_bound(struct v4l2_async_notifier *notifier,
 		container_of(notifier, struct ipu6_isys, notifier);
 	struct sensor_async_sd *s_asd =
 		container_of(asc, struct sensor_async_sd, asc);
+	u32 nports;
 	int ret;
+
+	nports = isys->pdata->ipdata->csi2.nports;
+	if (nports <= s_asd->csi2.port) {
+		dev_err(&isys->adev->auxdev.dev, "invalid csi2 port %u\n",
+			s_asd->csi2.port);
+		return -EINVAL;
+	}
 
 	ret = ipu_bridge_instantiate_vcm(sd->dev);
 	if (ret) {
