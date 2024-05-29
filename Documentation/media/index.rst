@@ -7,6 +7,7 @@ Media Subsystem Documentation
 .. toctree::
    :maxdepth: 2
 
+   guides/index
    ../userspace-api/media/index
    ../driver-api/media/index.rst
    ../admin-guide/media/index
