@@ -62,6 +62,7 @@ required:
   - clocks
   - interrupts
   - interrupt-controller
+  - '#interrupt-cells'
   - gpio-controller
   - '#gpio-cells'
   - ngpios
