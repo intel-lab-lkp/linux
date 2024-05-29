@@ -12,6 +12,7 @@
  */
 
 #include <linux/io-64-nonatomic-lo-hi.h>
+#include <linux/auxiliary_bus.h>
 #include <linux/perf_event.h>
 #include <linux/bitops.h>
 #include <linux/device.h>
@@ -20,6 +21,7 @@
 #include <linux/bug.h>
 #include <linux/pci.h>
 
+#include "../pci/pcie/portdrv.h"
 #include "../cxl/cxlpci.h"
 #include "../cxl/cxl.h"
 #include "../cxl/pmu.h"
@@ -753,13 +755,12 @@ static void cxl_pmu_cpuhp_remove(void *_info)
 	cpuhp_state_remove_instance_nocalls(cxl_pmu_cpuhp_state_num, &info->node);
 }
 
-static int cxl_pmu_probe(struct device *dev)
+static int __cxl_pmu_probe(struct device *dev, const char *dev_name,
+			   void __iomem *base)
 {
-	struct cxl_pmu *pmu = to_cxl_pmu(dev);
 	struct pci_dev *pdev = to_pci_dev(dev->parent);
 	struct cxl_pmu_info *info;
 	char *irq_name;
-	char *dev_name;
 	int rc, irq;
 
 	info = devm_kzalloc(dev, sizeof(*info), GFP_KERNEL);
@@ -767,10 +768,10 @@ static int cxl_pmu_probe(struct device *dev)
 		return -ENOMEM;
 
 	dev_set_drvdata(dev, info);
+
 	INIT_LIST_HEAD(&info->event_caps_fixed);
 	INIT_LIST_HEAD(&info->event_caps_configurable);
-
-	info->base = pmu->base;
+	info->base = base;
 
 	info->on_cpu = -1;
 	rc = cxl_pmu_parse_caps(dev, info);
@@ -780,15 +781,6 @@ static int cxl_pmu_probe(struct device *dev)
 	info->hw_events = devm_kcalloc(dev, sizeof(*info->hw_events),
 				       info->num_counters, GFP_KERNEL);
 	if (!info->hw_events)
-		return -ENOMEM;
-
-	switch (pmu->type) {
-	case CXL_PMU_MEMDEV:
-		dev_name = devm_kasprintf(dev, GFP_KERNEL, "cxl_pmu_mem%d.%d",
-					  pmu->assoc_id, pmu->index);
-		break;
-	}
-	if (!dev_name)
 		return -ENOMEM;
 
 	info->pmu = (struct pmu) {
@@ -843,12 +835,77 @@ static int cxl_pmu_probe(struct device *dev)
 		return rc;
 
 	return 0;
+
+}
+
+static int cxl_pmu_port_probe(struct auxiliary_device *adev,
+			      const struct auxiliary_device_id *id)
+{
+
+	struct pcie_port_aux_dev *pcie_adev = to_pcie_port_aux_dev(adev);
+	struct device *parent = adev->dev.parent;
+	struct pci_dev *pdev = to_pci_dev(parent);
+	struct device *dev = &adev->dev;
+	char *dev_name;
+	void __iomem *base;
+	struct resource *res;
+
+	/*
+	 * Map only the CPMU region because other parts are in control
+	 * of the CXL port driver.
+	 */
+	res = devm_request_mem_region(&adev->dev, pcie_adev->addr,
+				      CXL_PMU_REGMAP_SIZE, NULL);
+	if (!res) {
+		pci_err(pdev, "CPMU: could not map\n");
+		return -ENOMEM;
+	}
+
+	base = devm_ioremap(&adev->dev, pcie_adev->addr, CXL_PMU_REGMAP_SIZE);
+	if (!base) {
+		pci_err(pdev, "CPU: ioremap fail\n");
+		return -ENOMEM;
+	}
+	dev_name = devm_kasprintf(dev, GFP_KERNEL, "cxl_pmu_port%d",
+				  adev->id);
+	if (!dev_name)
+		return -ENOMEM;
+
+	return __cxl_pmu_probe(dev, dev_name, base);
+}
+
+static int cxl_pmu_probe(struct device *dev)
+{
+	struct cxl_pmu *pmu = to_cxl_pmu(dev);
+	char *dev_name;
+
+	switch (pmu->type) {
+	case CXL_PMU_MEMDEV:
+		dev_name = devm_kasprintf(dev, GFP_KERNEL, "cxl_pmu_mem%d.%d",
+					  pmu->assoc_id, pmu->index);
+		break;
+	}
+	if (!dev_name)
+		return -ENOMEM;
+
+	return __cxl_pmu_probe(dev, dev_name, pmu->base);
 }
 
 static struct cxl_driver cxl_pmu_driver = {
 	.name = "cxl_pmu",
 	.probe = cxl_pmu_probe,
 	.id = CXL_DEVICE_PMU,
+};
+
+static const struct auxiliary_device_id cxl_port_pmu_ids[] = {
+	{ .name = "pcieportdrv.cpmu" },
+	{ }
+};
+
+static struct auxiliary_driver cxl_port_pmu_driver = {
+	.name = "cxl_port_pmu",
+	.probe = cxl_pmu_port_probe,
+	.id_table = cxl_port_pmu_ids,
 };
 
 static int cxl_pmu_online_cpu(unsigned int cpu, struct hlist_node *node)
@@ -907,13 +964,25 @@ static __init int cxl_pmu_init(void)
 
 	rc = cxl_driver_register(&cxl_pmu_driver);
 	if (rc)
-		cpuhp_remove_multi_state(cxl_pmu_cpuhp_state_num);
+		goto cleanup_hp;
+
+	rc = auxiliary_driver_register(&cxl_port_pmu_driver);
+	if (rc)
+		goto unregister_cxl_driver;
+
+	return 0;
+
+unregister_cxl_driver:
+	cxl_driver_unregister(&cxl_pmu_driver);
+cleanup_hp:
+	cpuhp_remove_multi_state(cxl_pmu_cpuhp_state_num);
 
 	return rc;
 }
 
 static __exit void cxl_pmu_exit(void)
 {
+	auxiliary_driver_unregister(&cxl_port_pmu_driver);
 	cxl_driver_unregister(&cxl_pmu_driver);
 	cpuhp_remove_multi_state(cxl_pmu_cpuhp_state_num);
 }

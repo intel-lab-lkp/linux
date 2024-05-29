@@ -255,6 +255,7 @@ source "drivers/perf/amlogic/Kconfig"
 config CXL_PMU
 	tristate "CXL Performance Monitoring Unit"
 	depends on CXL_BUS
+	depends on AUXILIARY_BUS
 	help
 	  Support performance monitoring as defined in CXL rev 3.0
 	  section 13.2: Performance Monitoring. CXL components may have
