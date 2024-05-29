@@ -33,6 +33,7 @@ Human interfaces
    input/index
    hid/index
    sound/index
+   media/index
    gpu/index
    fb/index
    leds/index
