@@ -1744,6 +1744,13 @@ struct ext4_sb_info {
 					 */
 	struct list_head s_fc_dentry_q[2];	/* directory entry updates */
 	unsigned int s_fc_bytes;
+
+	/*
+	 * This flag indicates whether a full flush is needed on
+	 * next fast commit.
+	 */
+	int fc_flush_required;
+
 	/*
 	 * Main fast commit lock. This lock protects accesses to the
 	 * following fields:
@@ -2905,6 +2912,11 @@ void ext4_fc_del(struct inode *inode);
 bool ext4_fc_replay_check_excluded(struct super_block *sb, ext4_fsblk_t block);
 void ext4_fc_replay_cleanup(struct super_block *sb);
 int ext4_fc_commit(journal_t *journal, tid_t commit_tid);
+static inline void ext4_fc_mark_needs_flush(struct super_block *sb)
+{
+	EXT4_SB(sb)->fc_flush_required = 1;
+}
+
 int __init ext4_fc_init_dentry_cache(void);
 void ext4_fc_destroy_dentry_cache(void);
 int ext4_fc_record_regions(struct super_block *sb, int ino,
