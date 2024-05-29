@@ -4,6 +4,7 @@
 #
 config PCIEPORTBUS
 	bool "PCI Express Port Bus support"
+	select AUXILIARY_BUS
 	default y if USB4
 	help
 	  This enables PCI Express Port Bus support. Users can then enable

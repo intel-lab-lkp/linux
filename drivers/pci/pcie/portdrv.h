@@ -9,6 +9,7 @@
 #ifndef _PORTDRV_H_
 #define _PORTDRV_H_
 
+#include <linux/auxiliary_bus.h>
 #include <linux/compiler.h>
 
 /* Service Type */
@@ -50,6 +51,18 @@ int pcie_dpc_init(void);
 #else
 static inline int pcie_dpc_init(void) { return 0; }
 #endif
+
+struct pcie_port_aux_dev {
+	struct auxiliary_device adev;
+	u64 addr;
+	struct list_head node;
+	bool optional; /* Drivers may not yet be available */
+};
+#define to_pcie_port_aux_dev(adev)\
+	container_of(adev, struct pcie_port_aux_dev, adev)
+
+int devm_pcie_port_aux_dev_init(struct device *dev,
+				struct pcie_port_aux_dev *pcie_adev);
 
 struct pcie_device {
 	int		irq;	    /* Service IRQ/MSI/MSI-X Vector */

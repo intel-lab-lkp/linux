@@ -6,12 +6,14 @@
  * Copyright (C) Tom Long Nguyen (tom.l.nguyen@intel.com)
  */
 
+#include <linux/auxiliary_bus.h>
 #include <linux/bitfield.h>
 #include <linux/dmi.h>
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/kernel.h>
+#include <linux/list.h>
 #include <linux/errno.h>
 #include <linux/pm.h>
 #include <linux/pm_runtime.h>
@@ -208,6 +210,7 @@ intx_irq:
 /**
  * get_port_device_capability - discover capabilities of a PCI Express port
  * @dev: PCI Express port to examine
+ * @aux_dev_list: Auxiliary devices to create after interrupt vectors resoved.
  *
  * The capabilities are read from the port's PCI Express configuration registers
  * as described in PCI Express Base Specification 1.0a sections 7.8.2, 7.8.9 and
@@ -215,7 +218,8 @@ intx_irq:
  *
  * Return value: Bitmask of discovered port capabilities
  */
-static int get_port_device_capability(struct pci_dev *dev)
+static int get_port_device_capability(struct pci_dev *dev,
+				      struct list_head *aux_dev_list)
 {
 	struct pci_host_bridge *host = pci_find_host_bridge(dev->bus);
 	int services = 0;
@@ -317,10 +321,33 @@ static int pcie_device_init(struct pci_dev *pdev, int service, int irq)
 	return 0;
 }
 
+static void pcie_port_auxdev_delete(void *p_ad)
+{
+	struct pcie_port_aux_dev *pcie_adev = p_ad;
+
+	auxiliary_device_delete(&pcie_adev->adev);
+}
+
+static void pcie_port_auxdev_uninit(void *p_ad)
+{
+	struct pcie_port_aux_dev *pcie_adev = p_ad;
+
+	auxiliary_device_uninit(&pcie_adev->adev);
+}
+
 static int remove_iter(struct device *dev, void *data)
 {
 	if (dev->bus == &pcie_port_bus_type)
 		device_unregister(dev);
+	return 0;
+}
+
+static int aux_remove_iter(struct device *dev, void *data)
+{
+	if (dev->bus == &auxiliary_bus_type) {
+		auxiliary_device_delete(to_auxiliary_dev(dev));
+		auxiliary_device_uninit(to_auxiliary_dev(dev));
+	}
 	return 0;
 }
 
@@ -338,6 +365,20 @@ static void pcie_port_device_remove(void *d)
 	device_for_each_child(&dev->dev, NULL, remove_iter);
 }
 
+/* Should be called when device created to ensure resource cleanup */
+int devm_pcie_port_aux_dev_init(struct device *dev,
+				struct pcie_port_aux_dev *pcie_adev)
+{
+	int status;
+
+	status = auxiliary_device_init(&pcie_adev->adev);
+	if (status)
+		return status;
+
+	return devm_add_action_or_reset(dev, pcie_port_auxdev_uninit,
+					pcie_adev);
+}
+
 /**
  * pcie_port_device_register - register PCI Express port
  * @dev: PCI Express port to register
@@ -349,6 +390,8 @@ static int pcie_port_device_register(struct pci_dev *dev)
 {
 	int status, capabilities, i, nr_service;
 	int irqs[PCIE_PORT_DEVICE_MAXSERVICES];
+	struct pcie_port_aux_dev *pcie_adev;
+	LIST_HEAD(aux_dev_list);
 
 	/* Enable PCI Express port device */
 	status = pcim_enable_device(dev);
@@ -356,8 +399,8 @@ static int pcie_port_device_register(struct pci_dev *dev)
 		return status;
 
 	/* Get and check PCI Express port services */
-	capabilities = get_port_device_capability(dev);
-	if (!capabilities)
+	capabilities = get_port_device_capability(dev, &aux_dev_list);
+	if (!capabilities && list_empty(&aux_dev_list))
 		return 0;
 
 	pci_set_master(dev);
@@ -385,6 +428,33 @@ static int pcie_port_device_register(struct pci_dev *dev)
 		if (!pcie_device_init(dev, service, irqs[i]))
 			nr_service++;
 	}
+
+	/*
+	 * Register auxiliary bus device found earlier.
+	 * This is done after PCI irq vectors have been requested
+	 * so the indidividual drivers may use their IRQs immediately.
+	 */
+	list_for_each_entry(pcie_adev, &aux_dev_list, node) {
+		status = auxiliary_device_add(&pcie_adev->adev);
+		if (status)
+			return status;
+
+		status = devm_add_action_or_reset(&dev->dev,
+						pcie_port_auxdev_delete,
+						pcie_adev);
+		if (status)
+			return status;
+
+		if (pcie_adev->optional) {
+			nr_service++; /* Need to register even if no one is ready yet */
+		} else {
+			device_lock(&pcie_adev->adev.dev);
+			if (pcie_adev->adev.dev.driver)
+				nr_service++;
+			device_unlock(&pcie_adev->adev.dev);
+		}
+	}
+
 	if (!nr_service)
 		return -ENODEV; /* Why carry on if nothing supported? */
 
@@ -408,6 +478,31 @@ static int pcie_port_device_iter(struct device *dev, void *data)
 	return 0;
 }
 
+static int pcie_port_adev_resume_iter(struct device *dev, void *data)
+{
+	if ((dev->bus == &auxiliary_bus_type) && dev->driver) {
+		struct auxiliary_driver *adrv = to_auxiliary_drv(dev->driver);
+		struct auxiliary_device *adev = to_auxiliary_dev(dev);
+
+		if (adrv->resume)
+			adrv->resume(adev);
+	}
+	return 0;
+}
+
+static int pcie_port_adev_suspend_iter(struct device *dev, void *data)
+{
+	if ((dev->bus == &auxiliary_bus_type) && dev->driver) {
+		struct auxiliary_driver *adrv = to_auxiliary_drv(dev->driver);
+		struct auxiliary_device *adev = to_auxiliary_dev(dev);
+		pm_message_t pm = {};
+
+		if (adrv->suspend)
+			adrv->suspend(adev, pm);
+	}
+	return 0;
+}
+
 #ifdef CONFIG_PM
 /**
  * pcie_port_device_suspend - suspend port services associated with a PCIe port
@@ -415,8 +510,13 @@ static int pcie_port_device_iter(struct device *dev, void *data)
  */
 static int pcie_port_device_suspend(struct device *dev)
 {
+	int ret;
 	size_t off = offsetof(struct pcie_port_service_driver, suspend);
-	return device_for_each_child(dev, &off, pcie_port_device_iter);
+	ret = device_for_each_child(dev, &off, pcie_port_device_iter);
+	if (ret)
+		return ret;
+
+	return device_for_each_child(dev, NULL, pcie_port_adev_suspend_iter);
 }
 
 static int pcie_port_device_resume_noirq(struct device *dev)
@@ -431,7 +531,14 @@ static int pcie_port_device_resume_noirq(struct device *dev)
  */
 static int pcie_port_device_resume(struct device *dev)
 {
-	size_t off = offsetof(struct pcie_port_service_driver, resume);
+	int ret;
+	size_t off;
+
+	ret = device_for_each_child(dev, NULL, pcie_port_adev_resume_iter);
+	if (ret)
+		return ret;
+
+	off = offsetof(struct pcie_port_service_driver, resume);
 	return device_for_each_child(dev, &off, pcie_port_device_iter);
 }
 
@@ -732,6 +839,7 @@ static int pcie_portdrv_probe(struct pci_dev *dev,
 static void pcie_portdrv_shutdown(struct pci_dev *dev)
 {
 	pcie_portdrv_runtime_pm_disable(dev);
+	device_for_each_child(&dev->dev, NULL, aux_remove_iter);
 	pcie_port_device_remove(dev);
 	pci_free_irq_vectors(dev);
 }
