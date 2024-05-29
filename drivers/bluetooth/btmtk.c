@@ -4,6 +4,7 @@
  */
 #include <linux/module.h>
 #include <linux/firmware.h>
+#include <linux/usb.h>
 
 #include <net/bluetooth/bluetooth.h>
 #include <net/bluetooth/hci_core.h>
@@ -18,6 +19,9 @@
 #define MTK_FW_ROM_PATCH_SEC_MAP_SIZE	64
 #define MTK_SEC_MAP_COMMON_SIZE	12
 #define MTK_SEC_MAP_NEED_SEND_SIZE	52
+
+/* It is for mt79xx iso data transmission setting */
+#define MTK_ISO_THRESHOLD	264
 
 struct btmtk_patch_header {
 	u8 datetime[16];
@@ -430,6 +434,37 @@ int btmtk_process_coredump(struct hci_dev *hdev, struct sk_buff *skb)
 	return err;
 }
 EXPORT_SYMBOL_GPL(btmtk_process_coredump);
+
+int btmtk_isointf_setup(struct hci_dev *hdev)
+{
+	u8 iso_param[2] = { 0x08, 0x01 };
+	struct sk_buff *skb;
+
+	skb = __hci_cmd_sync(hdev, 0xfd98, sizeof(iso_param), iso_param,
+			     HCI_INIT_TIMEOUT);
+	if (IS_ERR(skb)) {
+		bt_dev_err(hdev, "Failed to apply iso setting (%ld)", PTR_ERR(skb));
+		return PTR_ERR(skb);
+	}
+	kfree_skb(skb);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(btmtk_isointf_setup);
+
+int btmtk_isopkt_pad(struct hci_dev *hdev, struct sk_buff *skb)
+{
+	if (skb->len > MTK_ISO_THRESHOLD)
+		return -EINVAL;
+
+	if (skb_pad(skb, MTK_ISO_THRESHOLD - skb->len))
+		return -ENOMEM;
+
+	__skb_put(skb, MTK_ISO_THRESHOLD - skb->len);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(btmtk_isopkt_pad);
 
 MODULE_AUTHOR("Sean Wang <sean.wang@mediatek.com>");
 MODULE_AUTHOR("Mark Chen <mark-yw.chen@mediatek.com>");

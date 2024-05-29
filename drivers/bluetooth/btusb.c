@@ -831,6 +831,7 @@ struct qca_dump_info {
 #define BTUSB_USE_ALT3_FOR_WBS	15
 #define BTUSB_ALT6_CONTINUOUS_TX	16
 #define BTUSB_HW_SSR_ACTIVE	17
+#define BTUSB_ISOPKT_RUNNING	18
 
 struct btusb_data {
 	struct hci_dev       *hdev;
@@ -860,11 +861,13 @@ struct btusb_data {
 	struct usb_anchor isoc_anchor;
 	struct usb_anchor diag_anchor;
 	struct usb_anchor ctrl_anchor;
+	struct usb_anchor isopkt_anchor;
 	spinlock_t rxlock;
 
 	struct sk_buff *evt_skb;
 	struct sk_buff *acl_skb;
 	struct sk_buff *sco_skb;
+	struct sk_buff *isopkt_skb;
 
 	struct usb_endpoint_descriptor *intr_ep;
 	struct usb_endpoint_descriptor *bulk_tx_ep;
@@ -1099,6 +1102,9 @@ static inline void btusb_free_frags(struct btusb_data *data)
 	dev_kfree_skb_irq(data->sco_skb);
 	data->sco_skb = NULL;
 
+	dev_kfree_skb_irq(data->isopkt_skb);
+	data->isopkt_skb = NULL;
+
 	spin_unlock_irqrestore(&data->rxlock, flags);
 }
 
@@ -1322,6 +1328,64 @@ static int btusb_recv_isoc(struct btusb_data *data, void *buffer, int count)
 	}
 
 	data->sco_skb = skb;
+	spin_unlock_irqrestore(&data->rxlock, flags);
+
+	return err;
+}
+
+static int btusb_recv_isopkt(struct btusb_data *data, void *buffer, int count)
+{
+	struct sk_buff *skb;
+	unsigned long flags;
+	int err = 0;
+
+	spin_lock_irqsave(&data->rxlock, flags);
+	skb = data->isopkt_skb;
+
+	while (count) {
+		int len;
+
+		if (!skb) {
+			skb = bt_skb_alloc(HCI_MAX_ISO_SIZE, GFP_ATOMIC);
+			if (!skb) {
+				err = -ENOMEM;
+				break;
+			}
+
+			hci_skb_pkt_type(skb) = HCI_ISODATA_PKT;
+			hci_skb_expect(skb) = HCI_ISO_HDR_SIZE;
+		}
+
+		len = min_t(uint, hci_skb_expect(skb), count);
+		skb_put_data(skb, buffer, len);
+
+		count -= len;
+		buffer += len;
+		hci_skb_expect(skb) -= len;
+
+		if (skb->len == HCI_ISO_HDR_SIZE) {
+			__le16 dlen = hci_iso_hdr(skb)->dlen;
+
+			/* Complete ISO header */
+			hci_skb_expect(skb) = __le16_to_cpu(dlen);
+
+			if (skb_tailroom(skb) < hci_skb_expect(skb)) {
+				kfree_skb(skb);
+				skb = NULL;
+
+				err = -EILSEQ;
+				break;
+			}
+		}
+
+		if (!hci_skb_expect(skb)) {
+			/* Complete frame */
+			hci_recv_frame(data->hdev, skb);
+			skb = NULL;
+		}
+	}
+
+	data->isopkt_skb = skb;
 	spin_unlock_irqrestore(&data->rxlock, flags);
 
 	return err;
@@ -1784,6 +1848,101 @@ static int btusb_submit_diag_urb(struct hci_dev *hdev, gfp_t mem_flags)
 	return err;
 }
 
+static void btusb_mtk_intr_complete(struct urb *urb)
+{
+	struct hci_dev *hdev = urb->context;
+	struct btusb_data *data = hci_get_drvdata(hdev);
+	int err;
+
+	BT_DBG("%s urb %p status %d count %d", hdev->name, urb, urb->status,
+	       urb->actual_length);
+
+	if (!test_bit(HCI_RUNNING, &hdev->flags))
+		return;
+
+	if (urb->status == 0) {
+		hdev->stat.byte_rx += urb->actual_length;
+
+		if (btusb_recv_isopkt(data, urb->transfer_buffer,
+				      urb->actual_length) < 0) {
+			bt_dev_err(hdev, "corrupted iso packet");
+			hdev->stat.err_rx++;
+		}
+	} else if (urb->status == -ENOENT) {
+		/* Avoid suspend failed when usb_kill_urb */
+		return;
+	}
+
+	if (!test_bit(BTUSB_ISOPKT_RUNNING, &data->flags))
+		return;
+
+	usb_mark_last_busy(data->udev);
+	usb_anchor_urb(urb, &data->isopkt_anchor);
+
+	err = usb_submit_urb(urb, GFP_ATOMIC);
+	if (err < 0) {
+		/* -EPERM: urb is being killed;
+		 * -ENODEV: device got disconnected
+		 */
+		if (err != -EPERM && err != -ENODEV)
+			bt_dev_err(hdev, "urb %p failed to resubmit (%d)",
+				   urb, -err);
+		if (err != -EPERM)
+			hci_cmd_sync_cancel(hdev, -err);
+		usb_unanchor_urb(urb);
+	}
+}
+
+static int btusb_mtk_submit_intr_urb(struct hci_dev *hdev, gfp_t mem_flags)
+{
+	struct btmediatek_data *btmtk_data = hci_get_priv(hdev);
+	struct btusb_data *data = hci_get_drvdata(hdev);
+	unsigned char *buf;
+	unsigned int pipe;
+	struct urb *urb;
+	int err, size;
+
+	BT_DBG("%s", hdev->name);
+
+	if (!btmtk_data->isopkt_info.isopkt_rx_ep)
+		return -ENODEV;
+
+	urb = usb_alloc_urb(0, mem_flags);
+	if (!urb)
+		return -ENOMEM;
+	size = le16_to_cpu(btmtk_data->isopkt_info.isopkt_rx_ep->wMaxPacketSize);
+
+	buf = kmalloc(size, mem_flags);
+	if (!buf) {
+		usb_free_urb(urb);
+		return -ENOMEM;
+	}
+
+	pipe = usb_rcvintpipe(data->udev,
+			      btmtk_data->isopkt_info.isopkt_rx_ep->bEndpointAddress);
+
+	usb_fill_int_urb(urb, data->udev, pipe, buf, size,
+			 btusb_mtk_intr_complete, hdev,
+			 btmtk_data->isopkt_info.isopkt_rx_ep->bInterval);
+
+	urb->transfer_flags |= URB_FREE_BUFFER;
+
+	usb_mark_last_busy(data->udev);
+	usb_anchor_urb(urb, &data->isopkt_anchor);
+
+	err = usb_submit_urb(urb, mem_flags);
+	if (err < 0) {
+		if (err != -EPERM && err != -ENODEV)
+			bt_dev_err(hdev, "urb %p submission failed (%d)",
+				   urb, -err);
+		usb_unanchor_urb(urb);
+	}
+
+	usb_free_urb(urb);
+
+	return err;
+}
+
 static void btusb_tx_complete(struct urb *urb)
 {
 	struct sk_buff *skb = urb->context;
@@ -1898,6 +2057,7 @@ static void btusb_stop_traffic(struct btusb_data *data)
 	usb_kill_anchored_urbs(&data->isoc_anchor);
 	usb_kill_anchored_urbs(&data->diag_anchor);
 	usb_kill_anchored_urbs(&data->ctrl_anchor);
+	usb_kill_anchored_urbs(&data->isopkt_anchor);
 }
 
 static int btusb_close(struct hci_dev *hdev)
@@ -1917,6 +2077,7 @@ static int btusb_close(struct hci_dev *hdev)
 	clear_bit(BTUSB_BULK_RUNNING, &data->flags);
 	clear_bit(BTUSB_INTR_RUNNING, &data->flags);
 	clear_bit(BTUSB_DIAG_RUNNING, &data->flags);
+	clear_bit(BTUSB_ISOPKT_RUNNING, &data->flags);
 
 	btusb_stop_traffic(data);
 	btusb_free_frags(data);
@@ -2043,6 +2204,81 @@ static struct urb *alloc_isoc_urb(struct hci_dev *hdev, struct sk_buff *skb)
 	return urb;
 }
 
+static inline int __set_mtk_intr_interface(struct hci_dev *hdev, unsigned int ifnum)
+{
+	struct btusb_data *data = hci_get_drvdata(hdev);
+	struct btmediatek_data *btmtk_data = hci_get_priv(hdev);
+	struct usb_interface *intf = btmtk_data->isopkt_info.isopkt_intf;
+	int i, err;
+
+	if (!btmtk_data->isopkt_info.isopkt_intf)
+		return -ENODEV;
+
+	err = usb_set_interface(data->udev, ifnum, 1);
+	if (err < 0) {
+		bt_dev_err(hdev, "setting interface failed (%d)", -err);
+		return err;
+	}
+
+	btmtk_data->isopkt_info.isopkt_tx_ep = NULL;
+	btmtk_data->isopkt_info.isopkt_rx_ep = NULL;
+
+	for (i = 0; i < intf->cur_altsetting->desc.bNumEndpoints; i++) {
+		struct usb_endpoint_descriptor *ep_desc;
+
+		ep_desc = &intf->cur_altsetting->endpoint[i].desc;
+
+		if (!btmtk_data->isopkt_info.isopkt_tx_ep &&
+		    usb_endpoint_is_int_out(ep_desc)) {
+			btmtk_data->isopkt_info.isopkt_tx_ep = ep_desc;
+			continue;
+		}
+
+		if (!btmtk_data->isopkt_info.isopkt_rx_ep &&
+		    usb_endpoint_is_int_in(ep_desc)) {
+			btmtk_data->isopkt_info.isopkt_rx_ep = ep_desc;
+			continue;
+		}
+	}
+
+	if (!btmtk_data->isopkt_info.isopkt_tx_ep ||
+	    !btmtk_data->isopkt_info.isopkt_rx_ep) {
+		bt_dev_err(hdev, "invalid interrupt descriptors");
+		return -ENODEV;
+	}
+
+	return 0;
+}
+
+static struct urb *alloc_mtk_intr_urb(struct hci_dev *hdev, struct sk_buff *skb)
+{
+	struct btusb_data *data = hci_get_drvdata(hdev);
+	struct btmediatek_data *btmtk_data = hci_get_priv(hdev);
+	struct urb *urb;
+	unsigned int pipe;
+
+	if (!btmtk_data->isopkt_info.isopkt_tx_ep)
+		return ERR_PTR(-ENODEV);
+
+	urb = usb_alloc_urb(0, GFP_KERNEL);
+	if (!urb)
+		return ERR_PTR(-ENOMEM);
+
+	if (btmtk_isopkt_pad(hdev, skb))
+		return ERR_PTR(-EINVAL);
+
+	pipe = usb_sndintpipe(data->udev,
+			      btmtk_data->isopkt_info.isopkt_tx_ep->bEndpointAddress);
+
+	usb_fill_int_urb(urb, data->udev, pipe,
+			 skb->data, skb->len, btusb_tx_complete,
+			 skb, btmtk_data->isopkt_info.isopkt_tx_ep->bInterval);
+
+	skb->dev = (void *)hdev;
+
+	return urb;
+}
+
 static int submit_tx_urb(struct hci_dev *hdev, struct urb *urb)
 {
 	struct btusb_data *data = hci_get_drvdata(hdev);
@@ -2122,7 +2358,10 @@ static int btusb_send_frame(struct hci_dev *hdev, struct sk_buff *skb)
 		return submit_tx_urb(hdev, urb);
 
 	case HCI_ISODATA_PKT:
-		urb = alloc_bulk_urb(hdev, skb);
+		if (btmtk_test_flag(hdev, BTMTK_ISOPKT_OVER_INTR))
+			urb = alloc_mtk_intr_urb(hdev, skb);
+		else
+			urb = alloc_bulk_urb(hdev, skb);
 		if (IS_ERR(urb))
 			return PTR_ERR(urb);
 
@@ -2650,6 +2889,8 @@ static int btusb_recv_event_realtek(struct hci_dev *hdev, struct sk_buff *skb)
 #define MTK_BT_RESET_REG_CONNV3	0x70028610
 #define MTK_BT_READ_DEV_ID	0x70010200
 
+/* MediaTek ISO interface number */
+#define MTK_ISO_IFNUM		2
 
 static void btusb_mtk_wmt_recv(struct urb *urb)
 {
@@ -3126,6 +3367,28 @@ static int btusb_mtk_reset(struct hci_dev *hdev, void *rst_data)
 	return err;
 }
 
+static int btusb_mtk_claim_iso_intf(struct btusb_data *data, struct usb_interface *intf)
+{
+	int err;
+
+	err = usb_driver_claim_interface(&btusb_driver, intf, data);
+	if (err < 0)
+		return err;
+
+	__set_mtk_intr_interface(data->hdev, MTK_ISO_IFNUM);
+
+	err = btusb_mtk_submit_intr_urb(data->hdev, GFP_KERNEL);
+	if (err < 0) {
+		usb_kill_anchored_urbs(&data->isopkt_anchor);
+		bt_dev_err(data->hdev, "ISO intf not support (%d)", err);
+		return err;
+	}
+
+	btmtk_set_flag(data->hdev, BTMTK_ISOPKT_OVER_INTR);
+
+	return 0;
+}
+
 static int btusb_mtk_setup(struct hci_dev *hdev)
 {
 	struct btusb_data *data = hci_get_drvdata(hdev);
@@ -3210,6 +3473,12 @@ static int btusb_mtk_setup(struct hci_dev *hdev)
 		/* It's Device EndPoint Reset Option Register */
 		btusb_mtk_uhw_reg_write(data, MTK_EP_RST_OPT, MTK_EP_RST_IN_OUT_OPT);
 
+		/* Claim USB interface and EndPoint for ISO data */
+		mediatek->isopkt_info.isopkt_intf = usb_ifnum_to_if(data->udev, MTK_ISO_IFNUM);
+		err = btusb_mtk_claim_iso_intf(data, mediatek->isopkt_info.isopkt_intf);
+		if (err < 0)
+			mediatek->isopkt_info.isopkt_intf = NULL;
+
 		/* Enable Bluetooth protocol */
 		param = 1;
 		wmt_params.op = BTMTK_WMT_FUNC_CTRL;
@@ -3226,6 +3495,13 @@ static int btusb_mtk_setup(struct hci_dev *hdev)
 
 		hci_set_msft_opcode(hdev, 0xFD30);
 		hci_set_aosp_capable(hdev);
+
+		/* Setup ISO interface after protocol enabled */
+		if (btmtk_test_flag(hdev, BTMTK_ISOPKT_OVER_INTR)) {
+			btmtk_isointf_setup(hdev);
+			set_bit(BTUSB_ISOPKT_RUNNING, &data->flags);
+		}
+
 		goto done;
 	default:
 		bt_dev_err(hdev, "Unsupported hardware variant (%08x)",
@@ -4347,6 +4623,7 @@ static int btusb_probe(struct usb_interface *intf,
 	init_usb_anchor(&data->isoc_anchor);
 	init_usb_anchor(&data->diag_anchor);
 	init_usb_anchor(&data->ctrl_anchor);
+	init_usb_anchor(&data->isopkt_anchor);
 	spin_lock_init(&data->rxlock);
 
 	priv_size = 0;
@@ -4663,6 +4940,17 @@ static void btusb_disconnect(struct usb_interface *intf)
 	if (data->diag)
 		usb_set_intfdata(data->diag, NULL);
 
+	if (btmtk_test_flag(hdev, BTMTK_ISOPKT_OVER_INTR)) {
+		struct btmediatek_data *btmtk_data = hci_get_priv(hdev);
+
+		if (btmtk_data->isopkt_info.isopkt_intf) {
+			usb_set_intfdata(btmtk_data->isopkt_info.isopkt_intf, NULL);
+			usb_driver_release_interface(&btusb_driver,
+						     btmtk_data->isopkt_info.isopkt_intf);
+		}
+		btmtk_clear_flag(hdev, BTMTK_ISOPKT_OVER_INTR);
+	}
+
 	hci_unregister_dev(hdev);
 
 	if (intf == data->intf) {
@@ -4816,6 +5104,11 @@ static int btusb_resume(struct usb_interface *intf)
 			clear_bit(BTUSB_ISOC_RUNNING, &data->flags);
 		else
 			btusb_submit_isoc_urb(hdev, GFP_NOIO);
+	}
+
+	if (test_bit(BTUSB_ISOPKT_RUNNING, &data->flags)) {
+		if (btusb_mtk_submit_intr_urb(hdev, GFP_NOIO) < 0)
+			clear_bit(BTUSB_ISOPKT_RUNNING, &data->flags);
 	}
 
 	spin_lock_irq(&data->txlock);

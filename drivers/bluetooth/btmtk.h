@@ -129,6 +129,8 @@ struct btmtk_hci_wmt_params {
 typedef int (*btmtk_reset_sync_func_t)(struct hci_dev *, void *);
 
 enum {
+	BTMTK_ISOPKT_OVER_INTR,
+
 	__BTMTK_NUM_FLAGS,
 };
 
@@ -139,12 +141,19 @@ struct btmtk_coredump_info {
 	int state;
 };
 
+struct btmtk_isopkt_info {
+	struct usb_interface *isopkt_intf;
+	struct usb_endpoint_descriptor *isopkt_tx_ep;
+	struct usb_endpoint_descriptor *isopkt_rx_ep;
+};
+
 struct btmediatek_data {
 	DECLARE_BITMAP(flags, __BTMTK_NUM_FLAGS);
 
 	u32 dev_id;
 	btmtk_reset_sync_func_t reset_sync;
 	struct btmtk_coredump_info cd_info;
+	struct btmtk_isopkt_info isopkt_info;
 };
 
 #define btmtk_set_flag(hdev, nr)						\
@@ -186,6 +195,10 @@ int btmtk_process_coredump(struct hci_dev *hdev, struct sk_buff *skb);
 
 void btmtk_fw_get_filename(char *buf, size_t size, u32 dev_id, u32 fw_ver,
 			   u32 fw_flavor);
+
+int btmtk_isointf_setup(struct hci_dev *hdev);
+
+int btmtk_isopkt_pad(struct hci_dev *hdev, struct sk_buff *skb);
 #else
 
 static inline int btmtk_set_bdaddr(struct hci_dev *hdev,
@@ -224,5 +237,15 @@ static int btmtk_process_coredump(struct hci_dev *hdev, struct sk_buff *skb)
 static void btmtk_fw_get_filename(char *buf, size_t size, u32 dev_id,
 				  u32 fw_ver, u32 fw_flavor)
 {
+}
+
+static int btmtk_isointf_setup(struct hci_dev *hdev)
+{
+	return -EOPNOTSUPP;
+}
+
+static int btmtk_isopkt_pad(struct hci_dev *hdev, struct sk_buff *skb)
+{
+	return -EOPNOTSUPP;
 }
 #endif
