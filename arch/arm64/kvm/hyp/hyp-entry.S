@@ -122,7 +122,7 @@ el2_error:
 	eret
 	sb
 
-.macro invalid_vector	label, target = __guest_exit_panic
+.macro invalid_vector	label, target = __hyp_panic
 	.align	2
 SYM_CODE_START_LOCAL(\label)
 	b \target
