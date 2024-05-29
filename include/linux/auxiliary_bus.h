@@ -248,4 +248,5 @@ struct auxiliary_device *auxiliary_find_device(struct device *start,
 					       const void *data,
 					       int (*match)(struct device *dev, const void *data));
 
+extern const struct bus_type auxiliary_bus_type;
 #endif /* _AUXILIARY_BUS_H_ */
