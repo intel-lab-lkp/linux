@@ -337,6 +337,16 @@ static int mali_c55_create_links(struct mali_c55 *mali_c55)
 		}
 	}
 
+	ret = media_create_pad_link(&mali_c55->isp.sd.entity,
+			MALI_C55_ISP_PAD_SOURCE_3A,
+			&mali_c55->stats.vdev.entity, 0,
+			MEDIA_LNK_FL_ENABLED | MEDIA_LNK_FL_IMMUTABLE);
+	if (ret) {
+		dev_err(mali_c55->dev,
+			"failed to link ISP and 3a stats node\n");
+		goto err_remove_links;
+	}
+
 	return 0;
 
 err_remove_links:
@@ -350,6 +360,7 @@ static void mali_c55_unregister_entities(struct mali_c55 *mali_c55)
 	mali_c55_unregister_isp(mali_c55);
 	mali_c55_unregister_resizers(mali_c55);
 	mali_c55_unregister_capture_devs(mali_c55);
+	mali_c55_unregister_stats(mali_c55);
 }
 
 static int mali_c55_register_entities(struct mali_c55 *mali_c55)
@@ -369,6 +380,10 @@ static int mali_c55_register_entities(struct mali_c55 *mali_c55)
 		goto err_unregister_entities;
 
 	ret = mali_c55_register_capture_devs(mali_c55);
+	if (ret)
+		goto err_unregister_entities;
+
+	ret = mali_c55_register_stats(mali_c55);
 	if (ret)
 		goto err_unregister_entities;
 
