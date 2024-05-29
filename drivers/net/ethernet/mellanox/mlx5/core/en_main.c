@@ -2312,6 +2312,22 @@ static int mlx5e_txq_get_qos_node_hw_id(struct mlx5e_params *params, int txq_ix,
 	return 0;
 }
 
+static inline int tc_to_txq_ix(struct mlx5e_channel *c,
+			       struct mlx5e_params *params,
+			       int tc)
+{
+	return c->ix + tc * params->num_channels;
+}
+
+static inline void txq_ix_to_chtc_ix(struct mlx5e_params *params, int txq_ix,
+				     int *ch_ix, int *tc_ix)
+{
+	if (params->num_channels) {
+		*ch_ix = txq_ix % params->num_channels;
+		*tc_ix = txq_ix / params->num_channels;
+	}
+}
+
 static int mlx5e_open_sqs(struct mlx5e_channel *c,
 			  struct mlx5e_params *params,
 			  struct mlx5e_channel_param *cparam)
@@ -2319,7 +2335,7 @@ static int mlx5e_open_sqs(struct mlx5e_channel *c,
 	int err, tc;
 
 	for (tc = 0; tc < mlx5e_get_dcb_num_tc(params); tc++) {
-		int txq_ix = c->ix + tc * params->num_channels;
+		int txq_ix = tc_to_txq_ix(c, params, tc);
 		u32 qos_queue_group_id;
 		u32 tisn;
 
