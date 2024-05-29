@@ -559,13 +559,6 @@ void ext4_fc_track_inode(handle_t *handle, struct inode *inode)
 		!list_empty(&ei->i_fc_list))
 		return;
 
-	/*
-	 * If we come here, we may sleep while waiting for the inode to
-	 * commit. We shouldn't be holding i_data_sem in write mode when we go
-	 * to sleep since the commit path needs to grab the lock while
-	 * committing the inode.
-	 */
-	WARN_ON(lockdep_is_held_type(&ei->i_data_sem, 1));
 
 	while (ext4_test_inode_state(inode, EXT4_STATE_FC_COMMITTING)) {
 #if (BITS_PER_LONG < 64)
@@ -898,7 +891,14 @@ static int ext4_fc_write_inode_data(struct inode *inode, u32 *crc)
 	while (cur_lblk_off <= new_blk_size) {
 		map.m_lblk = cur_lblk_off;
 		map.m_len = new_blk_size - cur_lblk_off + 1;
-		ret = ext4_map_blocks(NULL, inode, &map, 0);
+		/*
+		 * Given that this inode is being committed,
+		 * EXT4_STATE_FC_COMMITTING is already set on this inode.
+		 * Which means all the mutations on the inode are paused
+		 * until the commit operation is complete. Thus it is safe
+		 * call ext4_map_blocks() in no lock mode.
+		 */
+		ret = ext4_map_blocks(NULL, inode, &map, EXT4_GET_BLOCKS_NOLOCK);
 		if (ret < 0)
 			return -ECANCELED;
 
