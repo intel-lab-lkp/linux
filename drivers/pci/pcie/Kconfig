@@ -156,3 +156,12 @@ config PCIE_EDR
 	  the PCI Firmware Specification r3.2.  Enable this if you want to
 	  support hybrid DPC model which uses both firmware and OS to
 	  implement DPC.
+
+config PCIE_CXL_PMU
+	bool "CXL performance monitoring units on RP and Switch Ports"
+	depends on AUXILIARY_BUS
+	help
+	  CXL root ports, switch upstream and switch downstream ports may
+	  have one or more CXL PMU devices. Enable this option to look
+	  for these and register a device to which the cxl_pmu driver
+	  may bind

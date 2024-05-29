@@ -59,7 +59,7 @@ static void release_pcie_device(struct device *dev)
 static int pcie_message_numbers(struct pci_dev *dev, int mask,
 				u32 *pme, u32 *aer, u32 *dpc)
 {
-	u32 nvec = 0, pos;
+	u32 nvec = 0, pos, max_cpmu = 0;
 	u16 reg16;
 
 	/*
@@ -99,6 +99,9 @@ static int pcie_message_numbers(struct pci_dev *dev, int mask,
 			nvec = max(nvec, *dpc + 1);
 		}
 	}
+
+	if (!pcie_cxl_pmu_get_irqs(dev, &max_cpmu, NULL))
+		nvec = max(nvec, max_cpmu + 1);
 
 	return nvec;
 }
@@ -276,6 +279,12 @@ static int get_port_device_capability(struct pci_dev *dev,
 		pcie_capability_read_dword(dev, PCI_EXP_LNKCAP, &linkcap);
 		if (linkcap & PCI_EXP_LNKCAP_LBNC)
 			services |= PCIE_PORT_SERVICE_BWNOTIF;
+	}
+
+	if (pci_pcie_type(dev) == PCI_EXP_TYPE_UPSTREAM ||
+	    pci_pcie_type(dev) == PCI_EXP_TYPE_DOWNSTREAM ||
+	    pci_pcie_type(dev) == PCI_EXP_TYPE_ROOT_PORT) {
+		pcie_cxl_pmu_get_irqs(dev, NULL, aux_dev_list);
 	}
 
 	return services;

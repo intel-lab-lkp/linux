@@ -52,6 +52,17 @@ int pcie_dpc_init(void);
 static inline int pcie_dpc_init(void) { return 0; }
 #endif
 
+struct list_head;
+#ifdef CONFIG_PCIE_CXL_PMU
+int pcie_cxl_pmu_get_irqs(struct pci_dev *dev, u32 *max_irq, struct list_head *aux_dev_list);
+#else
+static inline int pcie_cxl_pmu_get_irqs(struct pci_dev *dev, u32 *max_irq,
+					struct list_head *aux_dev_list)
+{
+	return 0;
+}
+#endif
+
 struct pcie_port_aux_dev {
 	struct auxiliary_device adev;
 	u64 addr;
