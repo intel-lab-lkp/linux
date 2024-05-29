@@ -126,8 +126,14 @@ static void _tqmx86_gpio_irq_config(struct tqmx86_gpio_data *gpio, int hwirq)
 	unsigned int offset = hwirq - TQMX86_NGPO;
 	u8 type = TQMX86_INT_TRIG_NONE, mask, val;
 
-	if (gpio->irq_type[hwirq] & TQMX86_INT_UNMASKED)
+	if (gpio->irq_type[hwirq] & TQMX86_INT_UNMASKED) {
 		type = gpio->irq_type[hwirq] & TQMX86_INT_TRIG_MASK;
+
+		if (type == TQMX86_INT_TRIG_BOTH)
+			type = tqmx86_gpio_get(&gpio->chip, hwirq)
+				? TQMX86_INT_TRIG_FALLING
+				: TQMX86_INT_TRIG_RISING;
+	}
 
 	mask = TQMX86_GPII_MASK(offset);
 	val = TQMX86_GPII_CONFIG(offset, type);
@@ -200,8 +206,8 @@ static void tqmx86_gpio_irq_handler(struct irq_desc *desc)
 	struct gpio_chip *chip = irq_desc_get_handler_data(desc);
 	struct tqmx86_gpio_data *gpio = gpiochip_get_data(chip);
 	struct irq_chip *irq_chip = irq_desc_get_chip(desc);
-	unsigned long irq_bits;
-	int i = 0;
+	unsigned long irq_bits, flags;
+	int i, hwirq;
 	u8 irq_status;
 
 	chained_irq_enter(irq_chip, desc);
@@ -210,6 +216,36 @@ static void tqmx86_gpio_irq_handler(struct irq_desc *desc)
 	tqmx86_gpio_write(gpio, TQMX86_GPIIS, irq_status);
 
 	irq_bits = irq_status;
+
+	raw_spin_lock_irqsave(&gpio->spinlock, flags);
+	for_each_set_bit(i, &irq_bits, TQMX86_NGPI) {
+		hwirq = i + TQMX86_NGPO;
+
+		/*
+		 * Edge-both triggers are implemented by flipping the edge
+		 * trigger after each interrupt, as the controller only supports
+		 * either rising or falling edge triggers, but not both.
+		 *
+		 * Internally, the TQMx86 GPIO controller has separate status
+		 * registers for rising and falling edge interrupts. GPIIC
+		 * configures which bits from which register are visible in the
+		 * interrupt status register GPIIS and defines what triggers the
+		 * parent IRQ line. Writing to GPIIS always clears both rising
+		 * and falling interrupt flags internally, regardless of the
+		 * currently configured trigger.
+		 *
+		 * In consequence, we can cleanly implement the edge-both
+		 * trigger in software by first clearing the interrupt and then
+		 * setting the new trigger based on the current GPIO input in
+		 * _tqmx86_gpio_irq_config() - even if an edge arrives between
+		 * reading the input and setting the trigger, we will have a new
+		 * interrupt pending.
+		 */
+		if ((gpio->irq_type[hwirq] & TQMX86_INT_TRIG_MASK) == TQMX86_INT_TRIG_BOTH)
+			_tqmx86_gpio_irq_config(gpio, hwirq);
+	}
+	raw_spin_unlock_irqrestore(&gpio->spinlock, flags);
+
 	for_each_set_bit(i, &irq_bits, TQMX86_NGPI)
 		generic_handle_domain_irq(gpio->chip.irq.domain,
 					  i + TQMX86_NGPO);
