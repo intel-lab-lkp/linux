@@ -73,6 +73,9 @@
 #define INA226_READ_AVG(reg)		(((reg) & INA226_AVG_RD_MASK) >> 9)
 #define INA226_SHIFT_AVG(val)		((val) << 9)
 
+#define INA226_ALERT_POLARITY_MASK		0x0002
+#define INA226_SHIFT_ALERT_POLARITY(val)	((val) << 1)
+
 /* bit number of alert functions in Mask/Enable Register */
 #define INA226_SHUNT_OVER_VOLTAGE_BIT	15
 #define INA226_SHUNT_UNDER_VOLTAGE_BIT	14
@@ -176,6 +179,23 @@ static u16 ina226_interval_to_reg(int interval)
 				ARRAY_SIZE(ina226_avg_tab));
 
 	return INA226_SHIFT_AVG(avg_bits);
+}
+
+static int ina2xx_set_alert_polarity(struct ina2xx_data *data,
+				     unsigned long val)
+{
+	int ret;
+
+	if (val > INT_MAX || !(val == 0 || val == 1))
+		return -EINVAL;
+
+	mutex_lock(&data->config_lock);
+	ret = regmap_update_bits(data->regmap, INA226_MASK_ENABLE,
+				 INA226_ALERT_POLARITY_MASK,
+				 INA226_SHIFT_ALERT_POLARITY(val));
+
+	mutex_unlock(&data->config_lock);
+	return ret;
 }
 
 /*
@@ -658,6 +678,14 @@ static int ina2xx_probe(struct i2c_client *client)
 	ret = devm_regulator_get_enable(dev, "vs");
 	if (ret)
 		return dev_err_probe(dev, ret, "failed to enable vs regulator\n");
+
+	if (!of_property_read_u32(dev->of_node, "alert-polarity", &val)) {
+		ret = ina2xx_set_alert_polarity(data, val);
+		if (ret < 0)
+			return dev_err_probe(
+				dev, ret,
+				"failed to set APOL bit of Enable/Mask register\n");
+	}
 
 	ret = ina2xx_init(data);
 	if (ret < 0) {
