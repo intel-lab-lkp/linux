@@ -50,6 +50,12 @@ else
 CLANG_FLAGS     += --target=$(notdir $(CROSS_COMPILE:%-=%))
 endif # CROSS_COMPILE
 
+# gcc defaults to silence (off) for the following warnings, but clang defaults
+# to the opposite. These warnings are not useful for kselftests, so silence them
+# for the clang builds as well.
+CFLAGS += -Wno-address-of-packed-member
+CFLAGS += -Wno-gnu-variable-sized-type-not-at-end
+
 CC := $(CLANG) $(CLANG_FLAGS) -fintegrated-as
 else
 CC := $(CROSS_COMPILE)gcc
