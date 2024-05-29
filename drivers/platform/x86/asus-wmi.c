@@ -144,6 +144,15 @@ module_param(fnlock_default, bool, 0444);
 
 static const char * const ashs_ids[] = { "ATK4001", "ATK4002", NULL };
 
+static const char * const use_hid_led_matches[] = {
+	"ROG Zephyrus",
+	"ROG Strix",
+	"ROG Flow",
+	"GA403",
+	"GU605",
+	"RC71L",
+};
+
 static int throttle_thermal_policy_write(struct asus_wmi *);
 
 static bool ashs_present(void)
@@ -1652,6 +1661,29 @@ static int micmute_led_set(struct led_classdev *led_cdev,
 	return err < 0 ? err : 0;
 }
 
+bool asus_use_hid_led(void)
+{
+	const char *product, *board;
+	int i;
+
+	product = dmi_get_system_info(DMI_PRODUCT_FAMILY);
+	if (!product)
+		return false;
+
+	board = dmi_get_system_info(DMI_BOARD_NAME);
+	if (!board)
+		return false;
+
+	for (i = 0; i < ARRAY_SIZE(use_hid_led_matches); i++) {
+		if (strstr(product, use_hid_led_matches[i]))
+			return true;
+		if (strstr(board, use_hid_led_matches[i]))
+			return true;
+	}
+	return false;
+}
+EXPORT_SYMBOL_GPL(asus_use_hid_led);
+
 static void asus_wmi_led_exit(struct asus_wmi *asus)
 {
 	led_classdev_unregister(&asus->kbd_led);
@@ -1691,7 +1723,8 @@ static int asus_wmi_led_init(struct asus_wmi *asus)
 			goto error;
 	}
 
-	if (!kbd_led_read(asus, &led_val, NULL)) {
+	if (!kbd_led_read(asus, &led_val, NULL) && !asus_use_hid_led()) {
+		pr_info("using asus-wmi for asus::kbd_backlight\n");
 		asus->kbd_led_wk = led_val;
 		asus->kbd_led.name = "asus::kbd_backlight";
 		asus->kbd_led.flags = LED_BRIGHT_HW_CHANGED;
