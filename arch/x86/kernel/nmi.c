@@ -149,11 +149,59 @@ static inline int do_handle_nmi(struct nmiaction *a, struct pt_regs *regs, unsig
 	return thishandled;
 }
 
+static inline int nmi_handle_src(unsigned int type, struct pt_regs *regs)
+{
+	unsigned long source_bitmask;
+	struct nmiaction *a;
+	int handled = 0;
+	int vec = 1;
+
+	if (!cpu_feature_enabled(X86_FEATURE_NMI_SOURCE) || type != NMI_LOCAL)
+		return 0;
+
+	source_bitmask = fred_event_data(regs);
+	if (!source_bitmask) {
+		pr_warn_ratelimited("NMI received without source information!\n");
+		return 0;
+	}
+
+	/*
+	 * Per NMI source specification, there is no guarantee that a valid
+	 * NMI vector is always delivered, even when the source specified
+	 * one. It is software's responsibility to check all available NMI
+	 * sources when bit 0 is set in the NMI source bitmap. i.e. we have
+	 * to call every handler as if we have no NMI source.
+	 * On the other hand, if we do get non-zero vectors, we know exactly
+	 * what the sources are. So we only call the handlers with the bit set.
+	 */
+	if (source_bitmask & BIT(NMI_SOURCE_VEC_UNKNOWN)) {
+		pr_warn_ratelimited("NMI received with unknown source\n");
+		return 0;
+	}
+
+	rcu_read_lock();
+	/* Bit 0 is for unknown NMI sources, skip it. */
+	for_each_set_bit_from(vec, &source_bitmask, NR_NMI_SOURCE_VECTORS) {
+		a = rcu_dereference(nmiaction_src_table[vec]);
+		if (!a) {
+			pr_warn_ratelimited("NMI received %d no handler", vec);
+			continue;
+		}
+		handled += do_handle_nmi(a, regs, type);
+	}
+	rcu_read_unlock();
+	return handled;
+}
+
 static int nmi_handle(unsigned int type, struct pt_regs *regs)
 {
 	struct nmi_desc *desc = nmi_to_desc(type);
 	struct nmiaction *a;
 	int handled=0;
+
+	handled = nmi_handle_src(type, regs);
+	if (handled)
+		return handled;
 
 	rcu_read_lock();
 
