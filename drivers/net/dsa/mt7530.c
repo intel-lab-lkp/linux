@@ -3,6 +3,7 @@
  * Mediatek MT7530 DSA Switch driver
  * Copyright (C) 2017 Sean Wang <sean.wang@mediatek.com>
  */
+#include <linux/debugfs.h>
 #include <linux/etherdevice.h>
 #include <linux/if_bridge.h>
 #include <linux/iopoll.h>
@@ -270,6 +271,28 @@ mt7530_clear(struct mt7530_priv *priv, u32 reg, u32 val)
 {
 	mt7530_rmw(priv, reg, val, 0);
 }
+
+static int
+mt7530_reg_set(void *data, u64 val)
+{
+	struct mt7530_priv *priv = data;
+
+	mt7530_write(priv, priv->debugfs_reg, val);
+
+	return 0;
+}
+
+static int
+mt7530_reg_get(void *data, u64 *val)
+{
+	struct mt7530_priv *priv = data;
+
+	*val = mt7530_read(priv, priv->debugfs_reg);
+
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(fops, mt7530_reg_get, mt7530_reg_set, "0x%08llx\n");
 
 static int
 mt7530_fdb_cmd(struct mt7530_priv *priv, enum mt7530_fdb_cmd cmd, u32 *rsp)
@@ -3219,6 +3242,22 @@ const struct mt753x_info mt753x_table[] = {
 EXPORT_SYMBOL_GPL(mt753x_table);
 
 int
+mt7530_register_debugfs(struct mt7530_priv *priv)
+{
+	priv->debugfs_dir = debugfs_create_dir(KBUILD_MODNAME, NULL);
+	if (IS_ERR(priv->debugfs_dir))
+		return PTR_ERR(priv->debugfs_dir);
+
+	debugfs_create_u32("regidx", 0600, priv->debugfs_dir,
+			   &priv->debugfs_reg);
+	debugfs_create_file_unsafe("regval", 0600, priv->debugfs_dir, priv,
+				   &fops);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(mt7530_register_debugfs);
+
+int
 mt7530_probe_common(struct mt7530_priv *priv)
 {
 	struct device *dev = priv->dev;
@@ -3252,6 +3291,8 @@ EXPORT_SYMBOL_GPL(mt7530_probe_common);
 void
 mt7530_remove_common(struct mt7530_priv *priv)
 {
+	debugfs_remove(priv->debugfs_dir);
+
 	if (priv->irq)
 		mt7530_free_irq(priv);
 

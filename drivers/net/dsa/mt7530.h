@@ -798,6 +798,8 @@ struct mt753x_info {
  * @create_sgmii:	Pointer to function creating SGMII PCS instance(s)
  * @active_cpu_ports:	Holding the active CPU ports
  * @mdiodev:		The pointer to the MDIO device structure
+ * @debugfs_dir:	Debugfs entry point
+ * @debugfs_reg:	Selected register to read or write through debugfs
  */
 struct mt7530_priv {
 	struct device		*dev;
@@ -825,6 +827,8 @@ struct mt7530_priv {
 	int (*create_sgmii)(struct mt7530_priv *priv);
 	u8 active_cpu_ports;
 	struct mdio_device *mdiodev;
+	struct dentry *debugfs_dir;
+	u32 debugfs_reg;
 };
 
 struct mt7530_hw_vlan_entry {
@@ -861,6 +865,7 @@ static inline void INIT_MT7530_DUMMY_POLL(struct mt7530_dummy_poll *p,
 	p->reg = reg;
 }
 
+int mt7530_register_debugfs(struct mt7530_priv *priv);
 int mt7530_probe_common(struct mt7530_priv *priv);
 void mt7530_remove_common(struct mt7530_priv *priv);
 
