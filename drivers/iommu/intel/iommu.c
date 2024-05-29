@@ -3826,27 +3826,26 @@ int prepare_domain_attach_device(struct iommu_domain *domain,
 	if (domain->dirty_ops && !ssads_supported(iommu))
 		return -EINVAL;
 
-	/* check if this iommu agaw is sufficient for max mapped address */
-	addr_width = agaw_to_width(iommu->agaw);
-	if (addr_width > cap_mgaw(iommu->cap))
-		addr_width = cap_mgaw(iommu->cap);
-
-	if (dmar_domain->max_addr > (1LL << addr_width))
+	if (dmar_domain->iommu_coherency !=
+			iommu_paging_structure_coherency(iommu))
 		return -EINVAL;
-	dmar_domain->gaw = addr_width;
 
-	/*
-	 * Knock out extra levels of page tables if necessary
-	 */
-	while (iommu->agaw < dmar_domain->agaw) {
-		struct dma_pte *pte;
+	if (domain->type & __IOMMU_DOMAIN_PAGING) {
+		if (dmar_domain->iommu_superpage !=
+				iommu_superpage_capability(iommu, dmar_domain->use_first_level))
+			return -EINVAL;
 
-		pte = dmar_domain->pgd;
-		if (dma_pte_present(pte)) {
-			dmar_domain->pgd = phys_to_virt(dma_pte_addr(pte));
-			iommu_free_page(pte);
-		}
-		dmar_domain->agaw--;
+		if (dmar_domain->use_first_level &&
+				(!sm_supported(iommu) || !ecap_flts(iommu->ecap)))
+			return -EINVAL;
+
+		/* check if this iommu agaw is sufficient for max mapped address */
+		addr_width = agaw_to_width(iommu->agaw);
+		if (addr_width > cap_mgaw(iommu->cap))
+			addr_width = cap_mgaw(iommu->cap);
+
+		if (dmar_domain->gaw > addr_width || dmar_domain->agaw > iommu->agaw)
+			return -EINVAL;
 	}
 
 	if (sm_supported(iommu) && !dev_is_real_dma_subdevice(dev) &&
