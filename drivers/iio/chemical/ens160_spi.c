@@ -49,6 +49,7 @@ static struct spi_driver ens160_spi_driver = {
 	.driver = {
 		.name	= "ens160_spi",
 		.of_match_table = ens160_spi_of_match,
+		.pm = pm_sleep_ptr(&ens160_pm_ops),
 	},
 	.probe		= ens160_spi_probe,
 	.id_table	= ens160_spi_id,
