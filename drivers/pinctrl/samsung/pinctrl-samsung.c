@@ -997,6 +997,56 @@ static int samsung_pinctrl_unregister(struct platform_device *pdev,
 	return 0;
 }
 
+/*
+ * samsung_gpio_set_pud will enable or disable the pull-down and
+ * pull-up for the gpio pins in the PUD register.
+ */
+static void samsung_gpio_set_pud(struct gpio_chip *gc, unsigned int offset,
+				 unsigned int value)
+{
+	struct samsung_pin_bank *bank = gpiochip_get_data(gc);
+	const struct samsung_pin_bank_type *type = bank->type;
+	void __iomem *reg;
+	unsigned int data;
+
+	reg = bank->pctl_base + bank->pctl_offset;
+	data = readl(reg + type->reg_offset[PINCFG_TYPE_PUD]);
+	data &= ~(0xf << (offset * 4));
+	data |= value << (offset * 4);
+	writel(data, reg + type->reg_offset[PINCFG_TYPE_PUD]);
+}
+
+/*
+ * samsung_gpio_set_config will identify the type of PUD config based
+ * on the gpiolib request to enable or disable the PUD configuration.
+ */
+static int samsung_gpio_set_config(struct gpio_chip *gc, unsigned int offset,
+				   unsigned long config)
+{
+	struct samsung_pin_bank *bank = gpiochip_get_data(gc);
+	unsigned long flags;
+	unsigned int value = 0;
+
+	switch (pinconf_to_config_param(config)) {
+	case PIN_CONFIG_BIAS_DISABLE:
+		value = DISABLE_PIN_PULL_UP_DOWN;
+		break;
+	case PIN_CONFIG_BIAS_PULL_DOWN:
+		value = ENABLE_PIN_PULL_DOWN;
+		break;
+	case PIN_CONFIG_BIAS_PULL_UP:
+		value = ENABLE_PIN_PULL_UP;
+		break;
+	default:
+		return -ENOTSUPP;
+	}
+
+	raw_spin_lock_irqsave(&bank->slock, flags);
+	samsung_gpio_set_pud(gc, offset, value);
+	raw_spin_unlock_irqrestore(&bank->slock, flags);
+	return 0;
+}
+
 static const struct gpio_chip samsung_gpiolib_chip = {
 	.request = gpiochip_generic_request,
 	.free = gpiochip_generic_free,
@@ -1006,6 +1056,7 @@ static const struct gpio_chip samsung_gpiolib_chip = {
 	.direction_output = samsung_gpio_direction_output,
 	.to_irq = samsung_gpio_to_irq,
 	.add_pin_ranges = samsung_add_pin_ranges,
+	.set_config = samsung_gpio_set_config,
 	.owner = THIS_MODULE,
 };
 

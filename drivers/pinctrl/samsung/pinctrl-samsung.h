@@ -61,6 +61,13 @@ enum pincfg_type {
 #define PIN_CON_FUNC_INPUT		0x0
 #define PIN_CON_FUNC_OUTPUT		0x1
 
+/*
+ * Values for the pin PUD register.
+ */
+#define DISABLE_PIN_PULL_UP_DOWN	0x0
+#define ENABLE_PIN_PULL_DOWN		0x1
+#define ENABLE_PIN_PULL_UP		0x3
+
 /**
  * enum eint_type - possible external interrupt types.
  * @EINT_TYPE_NONE: bank does not support external interrupts
