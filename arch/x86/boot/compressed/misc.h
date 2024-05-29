@@ -68,6 +68,7 @@ void __putdec(unsigned long value);
 #define error_putstr(__x)  __putstr(__x)
 #define error_puthex(__x)  __puthex(__x)
 #define error_putdec(__x)  __putdec(__x)
+void __fortify_panic(const u8 reason, size_t avail, size_t size);
 
 #ifdef CONFIG_X86_VERBOSE_BOOTUP
 
