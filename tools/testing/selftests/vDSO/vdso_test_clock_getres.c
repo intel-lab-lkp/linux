@@ -25,7 +25,7 @@
 #include <unistd.h>
 #include <sys/syscall.h>
 
-#include "../kselftest.h"
+#include "../kselftest_harness.h"
 
 static long syscall_clock_getres(clockid_t _clkid, struct timespec *_ts)
 {
@@ -54,18 +54,8 @@ const char *vdso_clock_name[12] = {
 /*
  * This function calls clock_getres in vdso and by system call
  * with different values for clock_id.
- *
- * Example of output:
- *
- * clock_id: CLOCK_REALTIME [PASS]
- * clock_id: CLOCK_BOOTTIME [PASS]
- * clock_id: CLOCK_TAI [PASS]
- * clock_id: CLOCK_REALTIME_COARSE [PASS]
- * clock_id: CLOCK_MONOTONIC [PASS]
- * clock_id: CLOCK_MONOTONIC_RAW [PASS]
- * clock_id: CLOCK_MONOTONIC_COARSE [PASS]
  */
-static inline int vdso_test_clock(unsigned int clock_id)
+static inline void vdso_test_clock(struct __test_metadata *_metadata, unsigned int clock_id)
 {
 	struct timespec x, y;
 
@@ -73,52 +63,60 @@ static inline int vdso_test_clock(unsigned int clock_id)
 	clock_getres(clock_id, &x);
 	syscall_clock_getres(clock_id, &y);
 
-	if ((x.tv_sec != y.tv_sec) || (x.tv_nsec != y.tv_nsec)) {
-		printf(" [FAIL]\n");
-		return KSFT_FAIL;
-	}
-
-	printf(" [PASS]\n");
-	return KSFT_PASS;
+	ASSERT_EQ(0, ((x.tv_sec != y.tv_sec) || (x.tv_nsec != y.tv_nsec)));
 }
-
-int main(int argc, char **argv)
-{
-	int ret = 0;
 
 #if _POSIX_TIMERS > 0
 
 #ifdef CLOCK_REALTIME
-	ret += vdso_test_clock(CLOCK_REALTIME);
+TEST(clock_realtime)
+{
+	vdso_test_clock(_metadata, CLOCK_REALTIME);
+}
 #endif
 
 #ifdef CLOCK_BOOTTIME
-	ret += vdso_test_clock(CLOCK_BOOTTIME);
+TEST(clock_boottime)
+{
+	vdso_test_clock(_metadata, CLOCK_BOOTTIME);
+}
 #endif
 
 #ifdef CLOCK_TAI
-	ret += vdso_test_clock(CLOCK_TAI);
+TEST(clock_tai)
+{
+	vdso_test_clock(_metadata, CLOCK_TAI);
+}
 #endif
 
 #ifdef CLOCK_REALTIME_COARSE
-	ret += vdso_test_clock(CLOCK_REALTIME_COARSE);
+TEST(clock_realtime_coarse)
+{
+	vdso_test_clock(_metadata, CLOCK_REALTIME_COARSE);
+}
 #endif
 
 #ifdef CLOCK_MONOTONIC
-	ret += vdso_test_clock(CLOCK_MONOTONIC);
+TEST(clock_monotonic)
+{
+	vdso_test_clock(_metadata, CLOCK_MONOTONIC);
+}
 #endif
 
 #ifdef CLOCK_MONOTONIC_RAW
-	ret += vdso_test_clock(CLOCK_MONOTONIC_RAW);
+TEST(clock_monotonic_raw)
+{
+	vdso_test_clock(_metadata, CLOCK_MONOTONIC_RAW);
+}
 #endif
 
 #ifdef CLOCK_MONOTONIC_COARSE
-	ret += vdso_test_clock(CLOCK_MONOTONIC_COARSE);
-#endif
-
-#endif
-	if (ret > 0)
-		return KSFT_FAIL;
-
-	return KSFT_PASS;
+TEST(clock_monotonic_coarse)
+{
+	vdso_test_clock(_metadata, CLOCK_MONOTONIC_COARSE);
 }
+#endif
+
+#endif /* _POSIX_TIMERS > 0 */
+
+TEST_HARNESS_MAIN
