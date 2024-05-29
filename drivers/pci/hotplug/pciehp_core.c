@@ -202,7 +202,7 @@ static int pciehp_probe(struct pcie_device *dev)
 		pci_err(dev->port, "Controller initialization failed\n");
 		return -ENODEV;
 	}
-	set_service_data(dev, ctrl);
+	dev_set_drvdata(&dev->device, ctrl);
 
 	/* Setup the slot information structures */
 	rc = init_slot(ctrl);
@@ -243,7 +243,7 @@ err_out_release_ctlr:
 
 static void pciehp_remove(struct pcie_device *dev)
 {
-	struct controller *ctrl = get_service_data(dev);
+	struct controller *ctrl = dev_get_drvdata(&dev->device);
 
 	pci_hp_del(&ctrl->hotplug_slot);
 	pcie_shutdown_notification(ctrl);
@@ -267,7 +267,7 @@ static void pciehp_disable_interrupt(struct pcie_device *dev)
 	 * immediately when the downstream link goes down.
 	 */
 	if (pme_is_native(dev))
-		pcie_disable_interrupt(get_service_data(dev));
+		pcie_disable_interrupt(dev_get_drvdata(&dev->device));
 }
 
 #ifdef CONFIG_PM_SLEEP
@@ -286,7 +286,7 @@ static int pciehp_suspend(struct pcie_device *dev)
 
 static int pciehp_resume_noirq(struct pcie_device *dev)
 {
-	struct controller *ctrl = get_service_data(dev);
+	struct controller *ctrl = dev_get_drvdata(&dev->device);
 
 	/* pci_restore_state() just wrote to the Slot Control register */
 	ctrl->cmd_started = jiffies;
@@ -302,7 +302,7 @@ static int pciehp_resume_noirq(struct pcie_device *dev)
 
 static int pciehp_resume(struct pcie_device *dev)
 {
-	struct controller *ctrl = get_service_data(dev);
+	struct controller *ctrl = dev_get_drvdata(&dev->device);
 
 	if (pme_is_native(dev))
 		pcie_enable_interrupt(ctrl);
@@ -320,7 +320,7 @@ static int pciehp_runtime_suspend(struct pcie_device *dev)
 
 static int pciehp_runtime_resume(struct pcie_device *dev)
 {
-	struct controller *ctrl = get_service_data(dev);
+	struct controller *ctrl = dev_get_drvdata(&dev->device);
 
 	/* pci_restore_state() just wrote to the Slot Control register */
 	ctrl->cmd_started = jiffies;

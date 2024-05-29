@@ -1328,7 +1328,7 @@ static void aer_isr_one_error(struct aer_rpc *rpc,
 static irqreturn_t aer_isr(int irq, void *context)
 {
 	struct pcie_device *dev = (struct pcie_device *)context;
-	struct aer_rpc *rpc = get_service_data(dev);
+	struct aer_rpc *rpc = dev_get_drvdata(&dev->device);
 	struct aer_err_source e_src;
 
 	if (kfifo_is_empty(&rpc->aer_fifo))
@@ -1349,7 +1349,7 @@ static irqreturn_t aer_isr(int irq, void *context)
 static irqreturn_t aer_irq(int irq, void *context)
 {
 	struct pcie_device *pdev = (struct pcie_device *)context;
-	struct aer_rpc *rpc = get_service_data(pdev);
+	struct aer_rpc *rpc = dev_get_drvdata(&pdev->device);
 	struct pci_dev *rp = rpc->rpd;
 	int aer = rp->aer_cap;
 	struct aer_err_source e_src = {};
@@ -1448,7 +1448,7 @@ static void aer_disable_rootport(struct aer_rpc *rpc)
  */
 static void aer_remove(struct pcie_device *dev)
 {
-	struct aer_rpc *rpc = get_service_data(dev);
+	struct aer_rpc *rpc = dev_get_drvdata(&dev->device);
 
 	aer_disable_rootport(rpc);
 }
@@ -1482,7 +1482,7 @@ static int aer_probe(struct pcie_device *dev)
 
 	rpc->rpd = port;
 	INIT_KFIFO(rpc->aer_fifo);
-	set_service_data(dev, rpc);
+	dev_set_drvdata(&dev->device, rpc);
 
 	status = devm_request_threaded_irq(device, dev->irq, aer_irq, aer_isr,
 					   IRQF_SHARED, "aerdrv", dev);

@@ -58,20 +58,9 @@ struct pcie_device {
 	int		irq;	    /* Service IRQ/MSI/MSI-X Vector */
 	struct pci_dev *port;	    /* Root/Upstream/Downstream Port */
 	u32		service;    /* Port service this device represents */
-	void		*priv_data; /* Service Private Data */
 	struct device	device;     /* Generic Device Interface */
 };
 #define to_pcie_device(d) container_of(d, struct pcie_device, device)
-
-static inline void set_service_data(struct pcie_device *dev, void *data)
-{
-	dev->priv_data = data;
-}
-
-static inline void *get_service_data(struct pcie_device *dev)
-{
-	return dev->priv_data;
-}
 
 struct pcie_port_service_driver {
 	const char *name;

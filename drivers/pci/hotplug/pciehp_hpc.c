@@ -871,7 +871,7 @@ void pcie_disable_interrupt(struct controller *ctrl)
  */
 int pciehp_slot_reset(struct pcie_device *dev)
 {
-	struct controller *ctrl = get_service_data(dev);
+	struct controller *ctrl = dev_get_drvdata(&dev->device);
 
 	if (ctrl->state != ON_STATE)
 		return 0;

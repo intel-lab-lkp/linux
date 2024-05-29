@@ -265,13 +265,14 @@ static void pcie_pme_work_fn(struct work_struct *work)
  */
 static irqreturn_t pcie_pme_irq(int irq, void *context)
 {
+	struct pcie_device *srv = context;
 	struct pci_dev *port;
 	struct pcie_pme_service_data *data;
 	u32 rtsta;
 	unsigned long flags;
 
-	port = ((struct pcie_device *)context)->port;
-	data = get_service_data((struct pcie_device *)context);
+	port = srv->port;
+	data = dev_get_drvdata(&srv->device);
 
 	spin_lock_irqsave(&data->lock, flags);
 	pcie_capability_read_dword(port, PCI_EXP_RTSTA, &rtsta);
@@ -342,7 +343,7 @@ static int pcie_pme_probe(struct pcie_device *srv)
 	spin_lock_init(&data->lock);
 	INIT_WORK(&data->work, pcie_pme_work_fn);
 	data->srv = srv;
-	set_service_data(srv, data);
+	dev_set_drvdata(&srv->device, data);
 
 	pcie_pme_interrupt_enable(port, false);
 	pcie_clear_root_pme_status(port);
@@ -391,7 +392,7 @@ static void pcie_pme_disable_interrupt(struct pci_dev *port,
  */
 static int pcie_pme_suspend(struct pcie_device *srv)
 {
-	struct pcie_pme_service_data *data = get_service_data(srv);
+	struct pcie_pme_service_data *data = dev_get_drvdata(&srv->device);
 	struct pci_dev *port = srv->port;
 	bool wakeup;
 	int ret;
@@ -422,7 +423,7 @@ static int pcie_pme_suspend(struct pcie_device *srv)
  */
 static int pcie_pme_resume(struct pcie_device *srv)
 {
-	struct pcie_pme_service_data *data = get_service_data(srv);
+	struct pcie_pme_service_data *data = dev_get_drvdata(&srv->device);
 
 	spin_lock_irq(&data->lock);
 	if (data->noirq) {
@@ -445,7 +446,7 @@ static int pcie_pme_resume(struct pcie_device *srv)
  */
 static void pcie_pme_remove(struct pcie_device *srv)
 {
-	struct pcie_pme_service_data *data = get_service_data(srv);
+	struct pcie_pme_service_data *data = dev_get_drvdata(&srv->device);
 
 	pcie_pme_disable_interrupt(srv->port, data);
 	free_irq(srv->irq, srv);
