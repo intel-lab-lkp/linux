@@ -135,6 +135,20 @@ static void nmi_check_duration(struct nmiaction *action, u64 duration)
 		action->handler, duration, decimal_msecs);
 }
 
+static inline int do_handle_nmi(struct nmiaction *a, struct pt_regs *regs, unsigned int type)
+{
+	int thishandled;
+	u64 delta;
+
+	delta = sched_clock();
+	thishandled = a->handler(type, regs);
+	delta = sched_clock() - delta;
+	trace_nmi_handler(a->handler, (int)delta, thishandled);
+	nmi_check_duration(a, delta);
+
+	return thishandled;
+}
+
 static int nmi_handle(unsigned int type, struct pt_regs *regs)
 {
 	struct nmi_desc *desc = nmi_to_desc(type);
@@ -149,18 +163,8 @@ static int nmi_handle(unsigned int type, struct pt_regs *regs)
 	 * can be latched at any given time.  Walk the whole list
 	 * to handle those situations.
 	 */
-	list_for_each_entry_rcu(a, &desc->head, list) {
-		int thishandled;
-		u64 delta;
-
-		delta = sched_clock();
-		thishandled = a->handler(type, regs);
-		handled += thishandled;
-		delta = sched_clock() - delta;
-		trace_nmi_handler(a->handler, (int)delta, thishandled);
-
-		nmi_check_duration(a, delta);
-	}
+	list_for_each_entry_rcu(a, &desc->head, list)
+		handled += do_handle_nmi(a, regs, type);
 
 	rcu_read_unlock();
 
