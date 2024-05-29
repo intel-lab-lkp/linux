@@ -1568,6 +1568,8 @@ out_reset:
 
 out_rq:
 	i915_request_put(rq);
+	if (flags & EXEC_OBJECT_NEEDS_FENCE)
+		i915_active_wait(&arg.vma->fence->active);
 out_obj:
 	i915_gem_object_put(obj);
 fini:
