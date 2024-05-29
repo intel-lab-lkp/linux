@@ -5,6 +5,7 @@
  */
 
 #include <hyp/adjust_pc.h>
+#include <hyp/cfi.h>
 
 #include <asm/pgtable-types.h>
 #include <asm/kvm_asm.h>
@@ -12,6 +13,8 @@
 #include <asm/kvm_host.h>
 #include <asm/kvm_hyp.h>
 #include <asm/kvm_mmu.h>
+
+#include <linux/compiler.h>
 
 #include <nvhe/ffa.h>
 #include <nvhe/mem_protect.h>
@@ -301,6 +304,19 @@ static void handle___pkvm_teardown_vm(struct kvm_cpu_context *host_ctxt)
 	cpu_reg(host_ctxt, 1) = __pkvm_teardown_vm(handle);
 }
 
+#ifndef CONFIG_HYP_SUPPORTS_CFI_TEST
+__always_unused
+#endif
+static void handle___kvm_register_cfi_test_cb(struct kvm_cpu_context *host_ctxt)
+{
+	DECLARE_REG(phys_addr_t, cb_phys, host_ctxt, 1);
+	DECLARE_REG(bool, in_host_ctxt, host_ctxt, 2);
+
+	void (*cb)(void) = cb_phys ? __hyp_va(cb_phys) : NULL;
+
+	cpu_reg(host_ctxt, 1) = __kvm_register_cfi_test_cb(cb, in_host_ctxt);
+}
+
 typedef void (*hcall_t)(struct kvm_cpu_context *);
 
 #define HANDLE_FUNC(x)	[__KVM_HOST_SMCCC_FUNC_##x] = (hcall_t)handle_##x
@@ -333,6 +349,9 @@ static const hcall_t host_hcall[] = {
 	HANDLE_FUNC(__pkvm_init_vm),
 	HANDLE_FUNC(__pkvm_init_vcpu),
 	HANDLE_FUNC(__pkvm_teardown_vm),
+#ifdef CONFIG_HYP_SUPPORTS_CFI_TEST
+	HANDLE_FUNC(__kvm_register_cfi_test_cb),
+#endif
 };
 
 static void handle_host_hcall(struct kvm_cpu_context *host_ctxt)

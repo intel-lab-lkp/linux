@@ -79,6 +79,9 @@ enum __kvm_host_smccc_func {
 	__KVM_HOST_SMCCC_FUNC___pkvm_init_vm,
 	__KVM_HOST_SMCCC_FUNC___pkvm_init_vcpu,
 	__KVM_HOST_SMCCC_FUNC___pkvm_teardown_vm,
+#ifdef CONFIG_HYP_SUPPORTS_CFI_TEST
+	__KVM_HOST_SMCCC_FUNC___kvm_register_cfi_test_cb,
+#endif
 };
 
 #define DECLARE_KVM_VHE_SYM(sym)	extern char sym[]
