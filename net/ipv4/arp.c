@@ -330,6 +330,15 @@ void arp_send(int type, int ptype, __be32 dest_ip,
 }
 EXPORT_SYMBOL(arp_send);
 
+static __be32 __ip_srcaddr(const struct sk_buff *skb)
+{
+	/* Handle cases like MPLS where IP is the inner header */
+	if (skb->protocol != cpu_to_be16(ETH_P_IP) &&
+	    skb->inner_protocol == cpu_to_be16(ETH_P_IP))
+		return inner_ip_hdr(skb)->saddr;
+	return ip_hdr(skb)->saddr;
+}
+
 static void arp_solicit(struct neighbour *neigh, struct sk_buff *skb)
 {
 	__be32 saddr = 0;
@@ -350,13 +359,13 @@ static void arp_solicit(struct neighbour *neigh, struct sk_buff *skb)
 	default:
 	case 0:		/* By default announce any local IP */
 		if (skb && inet_addr_type_dev_table(dev_net(dev), dev,
-					  ip_hdr(skb)->saddr) == RTN_LOCAL)
-			saddr = ip_hdr(skb)->saddr;
+					  __ip_srcaddr(skb)) == RTN_LOCAL)
+			saddr = __ip_srcaddr(skb);
 		break;
 	case 1:		/* Restrict announcements of saddr in same subnet */
 		if (!skb)
 			break;
-		saddr = ip_hdr(skb)->saddr;
+		saddr = __ip_srcaddr(skb);
 		if (inet_addr_type_dev_table(dev_net(dev), dev,
 					     saddr) == RTN_LOCAL) {
 			/* saddr should be known to target */

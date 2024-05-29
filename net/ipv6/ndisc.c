@@ -730,6 +730,15 @@ static void ndisc_error_report(struct neighbour *neigh, struct sk_buff *skb)
 	kfree_skb(skb);
 }
 
+static struct in6_addr *__ip6_srcaddr(const struct sk_buff *skb)
+{
+	/* Handle cases like MPLS where IPv6 is the inner header */
+	if (skb->protocol != cpu_to_be16(ETH_P_IPV6) &&
+	    skb->inner_protocol == cpu_to_be16(ETH_P_IPV6))
+		return &inner_ipv6_hdr(skb)->saddr;
+	return &ipv6_hdr(skb)->saddr;
+}
+
 /* Called with locked neigh: either read or both */
 
 static void ndisc_solicit(struct neighbour *neigh, struct sk_buff *skb)
@@ -740,10 +749,10 @@ static void ndisc_solicit(struct neighbour *neigh, struct sk_buff *skb)
 	struct in6_addr *target = (struct in6_addr *)&neigh->primary_key;
 	int probes = atomic_read(&neigh->probes);
 
-	if (skb && ipv6_chk_addr_and_flags(dev_net(dev), &ipv6_hdr(skb)->saddr,
+	if (skb && ipv6_chk_addr_and_flags(dev_net(dev), __ip6_srcaddr(skb),
 					   dev, false, 1,
 					   IFA_F_TENTATIVE|IFA_F_OPTIMISTIC))
-		saddr = &ipv6_hdr(skb)->saddr;
+		saddr = __ip6_srcaddr(skb);
 	probes -= NEIGH_VAR(neigh->parms, UCAST_PROBES);
 	if (probes < 0) {
 		if (!(READ_ONCE(neigh->nud_state) & NUD_VALID)) {
