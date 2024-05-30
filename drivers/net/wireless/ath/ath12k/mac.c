@@ -6,6 +6,7 @@
 
 #include <net/mac80211.h>
 #include <linux/etherdevice.h>
+
 #include "mac.h"
 #include "core.h"
 #include "debug.h"
@@ -8505,6 +8506,16 @@ exit:
 	return ret;
 }
 
+static __maybe_unused void ath12k_mac_op_ipv6_changed(struct ieee80211_hw *hw,
+						      struct ieee80211_vif *vif,
+						      struct inet6_dev *idev)
+{
+	struct ath12k_vif *arvif = ath12k_vif_to_arvif(vif);
+
+	/* just cache here, would revisit it during WoW offload */
+	arvif->idev = idev;
+}
+
 static const struct ieee80211_ops ath12k_ops = {
 	.tx				= ath12k_mac_op_tx,
 	.wake_tx_queue			= ieee80211_handle_wake_tx_queue,
@@ -8546,6 +8557,10 @@ static const struct ieee80211_ops ath12k_ops = {
 	.suspend			= ath12k_wow_op_suspend,
 	.resume				= ath12k_wow_op_resume,
 	.set_wakeup			= ath12k_wow_op_set_wakeup,
+#endif
+
+#if IS_ENABLED(CONFIG_IPV6)
+	.ipv6_addr_change		= ath12k_mac_op_ipv6_changed,
 #endif
 };
 

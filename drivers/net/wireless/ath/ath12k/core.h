@@ -285,6 +285,7 @@ struct ath12k_vif {
 	u32 punct_bitmap;
 	bool ps;
 	struct ath12k_vif_cache *cache;
+	struct inet6_dev *idev;
 };
 
 struct ath12k_vif_iter {
