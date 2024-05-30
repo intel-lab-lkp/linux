@@ -1091,7 +1091,7 @@ static int __init drm_core_init(void)
 
 	drm_debugfs_root = debugfs_create_dir("dri", NULL);
 
-	ret = register_chrdev(DRM_MAJOR, "drm", &drm_stub_fops);
+	ret = __register_chrdev(DRM_MAJOR, 0, 1024, "drm", &drm_stub_fops);
 	if (ret < 0)
 		goto error;
 
