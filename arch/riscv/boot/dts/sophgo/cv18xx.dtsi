@@ -310,5 +310,41 @@
 			reg = <0x74000000 0x10000>;
 			interrupts-extended = <&cpu0_intc 3>, <&cpu0_intc 7>;
 		};
+
+		soc_temp: thermal-sensor@30e0000 {
+			compatible = "sophgo,cv180x-thermal";
+			reg = <0x30e0000 0x100>;
+			clocks = <&clk CLK_TEMPSEN>;
+			clock-names = "clk_tempsen";
+			#thermal-sensor-cells = <0>;
+		};
+	};
+
+	thermal-zones {
+		soc-thermal-0 {
+			polling-delay-passive	= <1000>;
+			polling-delay		= <1000>;
+			thermal-sensors		= <&soc_temp>;
+
+			trips {
+				soc_passive: soc-passive {
+					temperature	= <75000>;
+					hysteresis	= <5000>;
+					type		= "passive";
+				};
+
+				soc_hot: soc-hot {
+					temperature	= <85000>;
+					hysteresis	= <5000>;
+					type		= "hot";
+				};
+
+				soc_critical: soc-critical {
+					temperature	= <100000>;
+					hysteresis	= <0>;
+					type		= "critical";
+				};
+			};
+		};
 	};
 };
