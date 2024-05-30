@@ -1023,21 +1023,11 @@ int ipu6_isys_video_set_streaming(struct ipu6_isys_video *av, int state,
 	if (!state) {
 		stop_streaming_firmware(av);
 
-		/* stop external sub-device now. */
-		dev_dbg(dev, "disable streams 0x%llx of %s\n", stream_mask,
-			ssd->name);
-		ret = v4l2_subdev_disable_streams(ssd, s_pad->index,
-						  stream_mask);
-		if (ret) {
-			dev_err(dev, "disable streams of %s failed with %d\n",
-				ssd->name, ret);
-			return ret;
-		}
-
 		/* stop sub-device which connects with video */
-		dev_dbg(dev, "stream off entity %s pad:%d\n", sd->name,
-			r_pad->index);
-		ret = v4l2_subdev_call(sd, video, s_stream, state);
+		dev_dbg(dev, "stream off entity %s pad:%d mask:0x%llx\n",
+			sd->name, r_pad->index, stream_mask);
+		ret = v4l2_subdev_disable_streams(sd, r_pad->index,
+						  stream_mask);
 		if (ret) {
 			dev_err(dev, "stream off %s failed with %d\n", sd->name,
 				ret);
@@ -1052,33 +1042,19 @@ int ipu6_isys_video_set_streaming(struct ipu6_isys_video *av, int state,
 		}
 
 		/* start sub-device which connects with video */
-		dev_dbg(dev, "stream on %s pad %d\n", sd->name, r_pad->index);
-		ret = v4l2_subdev_call(sd, video, s_stream, state);
+		dev_dbg(dev, "stream on %s pad %d mask 0x%llx\n", sd->name,
+			r_pad->index, stream_mask);
+		ret = v4l2_subdev_enable_streams(sd, r_pad->index, stream_mask);
 		if (ret) {
 			dev_err(dev, "stream on %s failed with %d\n", sd->name,
 				ret);
 			goto out_media_entity_stop_streaming_firmware;
-		}
-
-		/* start external sub-device now. */
-		dev_dbg(dev, "enable streams 0x%llx of %s\n", stream_mask,
-			ssd->name);
-		ret = v4l2_subdev_enable_streams(ssd, s_pad->index,
-						 stream_mask);
-		if (ret) {
-			dev_err(dev,
-				"enable streams 0x%llx of %s failed with %d\n",
-				stream_mask, stream->source_entity->name, ret);
-			goto out_media_entity_stop_streaming;
 		}
 	}
 
 	av->streaming = state;
 
 	return 0;
-
-out_media_entity_stop_streaming:
-	v4l2_subdev_disable_streams(sd, r_pad->index, BIT(r_stream));
 
 out_media_entity_stop_streaming_firmware:
 	stop_streaming_firmware(av);
