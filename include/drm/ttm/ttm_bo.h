@@ -39,7 +39,11 @@
 #include "ttm_device.h"
 
 /* Default number of pre-faulted pages in the TTM fault handler */
-#define TTM_BO_VM_NUM_PREFAULT 16
+#ifdef CONFIG_PGTABLE_HAS_HUGE_LEAVES
+#define TTM_BO_VM_NUM_PREFAULT (1 << (PMD_SHIFT - PAGE_SHIFT))
+#else
+ #define TTM_BO_VM_NUM_PREFAULT 16
+#endif
 
 struct iosys_map;
 
