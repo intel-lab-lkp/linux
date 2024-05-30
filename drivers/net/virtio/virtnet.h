@@ -236,4 +236,7 @@ struct virtnet_info {
 
 	u64 device_stats_cap;
 };
+
+void virtnet_rx_pause(struct virtnet_info *vi, struct virtnet_rq *rq);
+void virtnet_rx_resume(struct virtnet_info *vi, struct virtnet_rq *rq);
 #endif
