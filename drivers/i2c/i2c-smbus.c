@@ -308,7 +308,7 @@ EXPORT_SYMBOL_GPL(i2c_free_slave_host_notify_device);
  * target systems are the same.
  * Restrictions to automatic SPD instantiation:
  *  - Only works if all filled slots have the same memory type
- *  - Only works for DDR, DDR2, DDR3 and DDR4 for now
+ *  - Only works for DDR, DDR2, DDR3, DDR4 and DDR5 for now
  *  - Only works on systems with 1 to 8 memory slots
  */
 #if IS_ENABLED(CONFIG_DMI)
@@ -382,6 +382,12 @@ void i2c_register_spd(struct i2c_adapter *adap)
 	case 0x1E:	/* LPDDR4 */
 		name = "ee1004";
 		break;
+	case 0x22:	/* DDR5 */
+	case 0x23:	/* LPDDR5 */
+		dev_info(&adap->dev,
+			 "(LP)DDR5 SPD (memory type 0x%02x) not supported. JEDEC JESD300-5 compatible driver does not exist yet, not instantiating SPD\n",
+			 common_mem_type);
+		return;
 	default:
 		dev_info(&adap->dev,
 			 "Memory type 0x%02x not supported yet, not instantiating SPD\n",
