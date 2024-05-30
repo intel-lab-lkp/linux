@@ -1258,8 +1258,8 @@ static int k3_r5_cluster_rproc_init(struct platform_device *pdev)
 			goto out;
 		}
 
-		rproc = rproc_alloc(cdev, dev_name(cdev), &k3_r5_rproc_ops,
-				    fw_name, sizeof(*kproc));
+		rproc = devm_rproc_alloc(cdev, dev_name(cdev), &k3_r5_rproc_ops,
+					 fw_name, sizeof(*kproc));
 		if (!rproc) {
 			ret = -ENOMEM;
 			goto out;
@@ -1351,7 +1351,6 @@ err_split:
 err_add:
 	k3_r5_reserved_mem_exit(kproc);
 err_config:
-	rproc_free(rproc);
 	core->rproc = NULL;
 out:
 	/* undo core0 upon any failures on core1 in split-mode */
@@ -1398,7 +1397,6 @@ static void k3_r5_cluster_rproc_exit(void *data)
 
 		k3_r5_reserved_mem_exit(kproc);
 
-		rproc_free(rproc);
 		core->rproc = NULL;
 	}
 }
