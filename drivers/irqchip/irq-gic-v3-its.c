@@ -1964,9 +1964,13 @@ out:
 static int its_vlpi_prop_update(struct irq_data *d, struct its_cmd_info *info)
 {
 	struct its_device *its_dev = irq_data_get_irq_chip_data(d);
+	int ret = 0;
 
-	if (!its_dev->event_map.vm || !irqd_is_forwarded_to_vcpu(d))
-		return -EINVAL;
+	raw_spin_lock(&its_dev->event_map.vlpi_lock);
+	if (!its_dev->event_map.vm || !irqd_is_forwarded_to_vcpu(d)) {
+		ret = -EINVAL;
+		goto out;
+	}
 
 	if (info->cmd_type == PROP_UPDATE_AND_INV_VLPI)
 		lpi_update_config(d, 0xff, info->config);
@@ -1974,7 +1978,9 @@ static int its_vlpi_prop_update(struct irq_data *d, struct its_cmd_info *info)
 		lpi_write_config(d, 0xff, info->config);
 	its_vlpi_set_doorbell(d, !!(info->config & LPI_PROP_ENABLED));
 
-	return 0;
+out:
+	raw_spin_unlock(&its_dev->event_map.vlpi_lock);
+	return ret;
 }
 
 static int its_irq_set_vcpu_affinity(struct irq_data *d, void *vcpu_info)
