@@ -138,6 +138,7 @@ static void stmmac_tx_timer_arm(struct stmmac_priv *priv, u32 queue);
 static void stmmac_flush_tx_descriptors(struct stmmac_priv *priv, int queue);
 static void stmmac_set_dma_operation_mode(struct stmmac_priv *priv, u32 txmode,
 					  u32 rxmode, u32 chan);
+static void stmmac_configure_cbs(struct stmmac_priv *priv);
 
 #ifdef CONFIG_DEBUG_FS
 static const struct net_device_ops stmmac_netdev_ops;
@@ -1075,7 +1076,11 @@ static void stmmac_mac_link_up(struct phylink_config *config,
 		}
 	}
 
-	priv->speed = speed;
+	/* Update speed and CBS parameters when speed changes */
+	if (speed != priv->speed) {
+		priv->speed = speed;
+		stmmac_configure_cbs(priv);
+	}
 
 	if (priv->plat->fix_mac_speed)
 		priv->plat->fix_mac_speed(priv->plat->bsp_priv, speed, mode);
@@ -1115,6 +1120,7 @@ static void stmmac_mac_link_up(struct phylink_config *config,
 
 	if (priv->plat->flags & STMMAC_FLAG_HWTSTAMP_CORRECT_LATENCY)
 		stmmac_hwtstamp_correct_latency(priv, priv);
+
 }
 
 static const struct phylink_mac_ops stmmac_phylink_mac_ops = {
@@ -3182,19 +3188,54 @@ static void stmmac_set_tx_queue_weight(struct stmmac_priv *priv)
 /**
  *  stmmac_configure_cbs - Configure CBS in TX queue
  *  @priv: driver private structure
- *  Description: It is used for configuring CBS in AVB TX queues
+ *  Description: It is used for configuring CBS in AVB TX queues,
+ *  and when the speed changes, update CBS parameters to reconfigure
  */
 static void stmmac_configure_cbs(struct stmmac_priv *priv)
 {
 	u32 tx_queues_count = priv->plat->tx_queues_to_use;
 	u32 mode_to_use;
 	u32 queue;
+	u32 ptr, speed_div;
+	u64 value;
+
+	/* Port Transmit Rate and Speed Divider */
+	switch (priv->speed) {
+	case SPEED_10000:
+		ptr = 32;
+		speed_div = 10000000;
+		break;
+	case SPEED_5000:
+		ptr = 32;
+		speed_div = 5000000;
+		break;
+	case SPEED_2500:
+		ptr = 8;
+		speed_div = 2500000;
+		break;
+	case SPEED_1000:
+		ptr = 8;
+		speed_div = 1000000;
+		break;
+	case SPEED_100:
+		ptr = 4;
+		speed_div = 100000;
+		break;
+	default:
+		netdev_dbg(priv->dev, "link speed is not known\n");
+	}
 
 	/* queue 0 is reserved for legacy traffic */
 	for (queue = 1; queue < tx_queues_count; queue++) {
 		mode_to_use = priv->plat->tx_queues_cfg[queue].mode_to_use;
 		if (mode_to_use == MTL_QUEUE_DCB)
 			continue;
+
+		value = div_s64(priv->old_idleslope[queue] * 1024ll * ptr, speed_div);
+		priv->plat->tx_queues_cfg[queue].idle_slope = value & GENMASK(31, 0);
+
+		value = div_s64(-priv->old_sendslope[queue] * 1024ll * ptr, speed_div);
+		priv->plat->tx_queues_cfg[queue].send_slope = value & GENMASK(31, 0);
 
 		stmmac_config_cbs(priv, priv->hw,
 				priv->plat->tx_queues_cfg[queue].send_slope,

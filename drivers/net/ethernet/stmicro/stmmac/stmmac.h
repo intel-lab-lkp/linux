@@ -356,6 +356,10 @@ struct stmmac_priv {
 	unsigned int rfs_entries_total;
 	struct stmmac_rfs_entry *rfs_entries;
 
+	/* Save CBS configuration to adjust parameters when port link up speed changes */
+	s32 old_idleslope[MTL_MAX_TX_QUEUES];
+	s32 old_sendslope[MTL_MAX_TX_QUEUES];
+
 	/* Pulse Per Second output */
 	struct stmmac_pps_cfg pps[STMMAC_PPS_MAX];
 

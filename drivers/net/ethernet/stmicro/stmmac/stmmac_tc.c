@@ -355,6 +355,9 @@ static int tc_setup_cbs(struct stmmac_priv *priv,
 	if (!priv->dma_cap.av)
 		return -EOPNOTSUPP;
 
+	if (!netif_carrier_ok(priv->dev))
+		return -ENETDOWN;
+
 	/* Port Transmit Rate and Speed Divider */
 	switch (priv->speed) {
 	case SPEED_10000:
@@ -396,6 +399,9 @@ static int tc_setup_cbs(struct stmmac_priv *priv,
 
 		priv->plat->tx_queues_cfg[queue].mode_to_use = MTL_QUEUE_DCB;
 	}
+
+	priv->old_idleslope[queue] = qopt->idleslope;
+	priv->old_sendslope[queue] = qopt->sendslope;
 
 	/* Final adjustments for HW */
 	value = div_s64(qopt->idleslope * 1024ll * ptr, speed_div);
