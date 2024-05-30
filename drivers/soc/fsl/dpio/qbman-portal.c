@@ -7,6 +7,7 @@
 
 #include <asm/cacheflush.h>
 #include <linux/io.h>
+#include <linux/prefetch.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <soc/fsl/dpaa2-global.h>

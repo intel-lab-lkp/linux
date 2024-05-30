@@ -9,6 +9,7 @@
 #include <soc/fsl/dpaa2-io.h>
 #include <linux/init.h>
 #include <linux/module.h>
+#include <linux/prefetch.h>
 #include <linux/platform_device.h>
 #include <linux/interrupt.h>
 #include <linux/dma-mapping.h>
