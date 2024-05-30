@@ -1473,7 +1473,7 @@ static bool rt_cache_route(struct fib_nh_common *nhc, struct rtable *rt)
 	prev = cmpxchg(p, orig, rt);
 	if (prev == orig) {
 		if (orig) {
-			rt_add_uncached_list(orig);
+			dst_dev_put(&orig->dst);
 			dst_release(&orig->dst);
 		}
 	} else {
