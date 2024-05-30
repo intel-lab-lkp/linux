@@ -395,4 +395,5 @@ static void __exit cleanup_trusted(void)
 late_initcall(init_trusted);
 module_exit(cleanup_trusted);
 
+MODULE_DESCRIPTION("Trusted Key support");
 MODULE_LICENSE("GPL");
