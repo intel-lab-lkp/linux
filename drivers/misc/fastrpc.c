@@ -119,6 +119,12 @@
 #define SENSORS_PDR_SLPI_SERVICE_NAME            SENSORS_PDR_ADSP_SERVICE_NAME
 #define SLPI_SENSORPD_NAME                       "msm/slpi/sensor_pd"
 
+enum fastrpc_userpd_type {
+	SIGNED_PD			= 1,
+	UNSIGNED_PD			= 2,
+	SYSTEM_UNSIGNED_PD		= 3,
+};
+
 static const char *domains[FASTRPC_DEV_MAX] = { "adsp", "mdsp",
 						"sdsp", "cdsp"};
 struct fastrpc_phy_page {
@@ -327,7 +333,7 @@ struct fastrpc_user {
 	int tgid;
 	int pd;
 	bool is_secure_dev;
-	bool is_unsigned_pd;
+	enum fastrpc_userpd_type userpd_type;
 	bool untrusted_process;
 	char *servloc_name;
 	/* Lock for lists */
@@ -1518,12 +1524,20 @@ static int fastrpc_init_create_process(struct fastrpc_user *fl,
 		fl->untrusted_process = true;
 
 	if (init.attrs & FASTRPC_MODE_UNSIGNED_MODULE)
-		fl->is_unsigned_pd = true;
+		fl->userpd_type = UNSIGNED_PD;
 
+	/* Disregard any system unsigned PD attribute from userspace */
+	init.attrs &= (~FASTRPC_MODE_SYSTEM_UNSIGNED_PD);
 
-	if (is_session_rejected(fl, fl->is_unsigned_pd)) {
+	if (is_session_rejected(fl, fl->userpd_type != SIGNED_PD)) {
 		err = -EACCES;
 		goto err;
+	}
+
+	/* Trusted apps will be launched as system unsigned PDs */
+	if (!fl->untrusted_process && (fl->userpd_type != SIGNED_PD)) {
+		fl->userpd_type = SYSTEM_UNSIGNED_PD;
+		init.attrs |= FASTRPC_MODE_SYSTEM_UNSIGNED_PD;
 	}
 
 	if (init.filelen > INIT_FILELEN_MAX) {
@@ -1718,6 +1732,7 @@ static int fastrpc_device_open(struct inode *inode, struct file *filp)
 	fl->tgid = current->tgid;
 	fl->cctx = cctx;
 	fl->is_secure_dev = fdevice->secure;
+	fl->userpd_type = SIGNED_PD;
 
 	fl->sctx = fastrpc_session_alloc(cctx);
 	if (!fl->sctx) {
@@ -2133,7 +2148,7 @@ static int fastrpc_req_mmap(struct fastrpc_user *fl, char __user *argp)
 		return -EFAULT;
 
 	if ((req.flags == ADSP_MMAP_ADD_PAGES ||
-		req.flags == ADSP_MMAP_REMOTE_HEAP_ADDR) && !fl->is_unsigned_pd) {
+			req.flags == ADSP_MMAP_REMOTE_HEAP_ADDR) && (fl->userpd_type == SIGNED_PD)) {
 		if (req.vaddrin) {
 			dev_err(dev, "adding user allocated pages is not supported for signed PD\n");
 			return -EINVAL;
@@ -2188,7 +2203,7 @@ static int fastrpc_req_mmap(struct fastrpc_user *fl, char __user *argp)
 		dev_dbg(dev, "mmap\t\tpt 0x%09lx OK [len 0x%08llx]\n",
 			buf->raddr, buf->size);
 	} else {
-		if ((req.flags == ADSP_MMAP_REMOTE_HEAP_ADDR) && fl->is_unsigned_pd) {
+		if ((req.flags == ADSP_MMAP_REMOTE_HEAP_ADDR) && (fl->userpd_type != SIGNED_PD)) {
 			dev_err(dev, "secure memory allocation is not supported in unsigned PD\n");
 			return -EINVAL;
 		}
@@ -2220,7 +2235,7 @@ static int fastrpc_req_mmap(struct fastrpc_user *fl, char __user *argp)
 
 err_copy:
 	if ((req.flags != ADSP_MMAP_ADD_PAGES &&
-		req.flags != ADSP_MMAP_REMOTE_HEAP_ADDR) || fl->is_unsigned_pd) {
+		req.flags != ADSP_MMAP_REMOTE_HEAP_ADDR) || fl->userpd_type != SIGNED_PD) {
 		fastrpc_req_munmap_dsp(fl, map->raddr, map->size);
 	} else {
 		spin_lock(&fl->lock);
