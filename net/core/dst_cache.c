@@ -11,6 +11,7 @@
 #include <net/route.h>
 #if IS_ENABLED(CONFIG_IPV6)
 #include <net/ip6_fib.h>
+#include <net/ip6_route.h>
 #endif
 #include <uapi/linux/in.h>
 
@@ -28,6 +29,7 @@ static void dst_cache_per_cpu_dst_set(struct dst_cache_pcpu *dst_cache,
 				      struct dst_entry *dst, u32 cookie)
 {
 	dst_release(dst_cache->dst);
+
 	if (dst)
 		dst_hold(dst);
 
@@ -98,6 +100,9 @@ void dst_cache_set_ip4(struct dst_cache *dst_cache, struct dst_entry *dst,
 
 	idst = this_cpu_ptr(dst_cache->cache);
 	dst_cache_per_cpu_dst_set(idst, dst, 0);
+	if (dst && list_empty(&dst->rt_uncached))
+		rt_add_uncached_list(dst_rtable(dst));
+
 	idst->in_saddr.s_addr = saddr;
 }
 EXPORT_SYMBOL_GPL(dst_cache_set_ip4);
@@ -114,6 +119,9 @@ void dst_cache_set_ip6(struct dst_cache *dst_cache, struct dst_entry *dst,
 	idst = this_cpu_ptr(dst_cache->cache);
 	dst_cache_per_cpu_dst_set(idst, dst,
 				  rt6_get_cookie(dst_rt6_info(dst)));
+	if (dst && list_empty(&dst->rt_uncached))
+		rt6_uncached_list_add(dst_rt6_info(dst));
+
 	idst->in6_saddr = *saddr;
 }
 EXPORT_SYMBOL_GPL(dst_cache_set_ip6);
