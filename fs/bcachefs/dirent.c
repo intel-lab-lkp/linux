@@ -534,6 +534,7 @@ int bch2_empty_dir_trans(struct btree_trans *trans, subvol_inum dir)
 static int bch2_dir_emit(struct dir_context *ctx, struct bkey_s_c_dirent d, subvol_inum target)
 {
 	struct qstr name = bch2_dirent_get_name(d);
+	ctx->pos = d.k->p.offset;
 	bool ret = dir_emit(ctx, name.name,
 		      name.len,
 		      target.inum,
