@@ -40,3 +40,19 @@ The ``octeontx2 AF`` driver implements the following driver-specific parameters.
      - runtime
      - Use to set the quantum which hardware uses for scheduling among transmit queues.
        Hardware uses weighted DWRR algorithm to schedule among all transmit queues.
+
+The ``octeontx2 PF`` driver implements the following driver-specific parameters.
+
+.. list-table:: Driver-specific parameters implemented
+   :widths: 5 5 5 85
+
+   * - Name
+     - Type
+     - Mode
+     - Description
+   * - ``unicast_filter_count``
+     - u8
+     - runtime
+     - Used to Set/modify unicast filter count, which helps in better utilization of
+       resources against possible wastage(un-used) with current scheme of hardcoded
+       unicast count.
