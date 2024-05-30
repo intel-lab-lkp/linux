@@ -3135,9 +3135,31 @@ static struct attribute_group serial8250_dev_attr_group = {
 static void register_dev_spec_attr_grp(struct uart_8250_port *up)
 {
 	const struct serial8250_config *conf_type = &uart_config[up->port.type];
+	struct attribute **upp_attrs = NULL;
+	int upp_attrs_num = 0, i;
 
-	if (conf_type->rxtrig_bytes[0])
-		up->port.attr_group = &serial8250_dev_attr_group;
+	up->port.attr_group_allocated = false;
+
+	if (up->port.attr_group) {
+		upp_attrs = up->port.attr_group->attrs;
+
+		while (upp_attrs[upp_attrs_num])
+			upp_attrs_num++;
+
+		up->port.attr_group = kcalloc(1, sizeof(struct attribute_group), GFP_KERNEL);
+		up->port.attr_group->attrs = kcalloc(upp_attrs_num + 2, sizeof(struct attribute *), GFP_KERNEL);
+
+		for (i = 0; i < upp_attrs_num; ++i)
+			up->port.attr_group->attrs[i] = upp_attrs[i];
+
+		if (conf_type->rxtrig_bytes[0])
+			up->port.attr_group->attrs[upp_attrs_num] = &dev_attr_rx_trig_bytes.attr;
+
+		up->port.attr_group_allocated = true;
+	} else {
+		if (conf_type->rxtrig_bytes[0])
+			up->port.attr_group = &serial8250_dev_attr_group;
+	}
 }
 
 static void serial8250_config_port(struct uart_port *port, int flags)

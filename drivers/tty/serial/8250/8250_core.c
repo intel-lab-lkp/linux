@@ -1126,6 +1126,8 @@ int serial8250_register_8250_port(const struct uart_8250_port *up)
 			uart->port.pm = up->port.pm;
 		if (up->port.handle_break)
 			uart->port.handle_break = up->port.handle_break;
+		if (up->port.attr_group)
+			uart->port.attr_group = up->port.attr_group;
 		if (up->dl_read)
 			uart->dl_read = up->dl_read;
 		if (up->dl_write)
@@ -1206,6 +1208,13 @@ void serial8250_unregister_port(int line)
 		uart->port.type = PORT_UNKNOWN;
 		uart->port.dev = &serial8250_isa_devs->dev;
 		uart->port.port_id = line;
+
+		if (uart->port.attr_group_allocated) {
+			kfree(uart->port.attr_group->attrs);
+			kfree(uart->port.attr_group);
+			uart->port.attr_group_allocated = false;
+		}
+		uart->port.attr_group = NULL;
 		uart->capabilities = 0;
 		serial8250_init_port(uart);
 		serial8250_apply_quirks(uart);
