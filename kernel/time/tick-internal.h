@@ -111,7 +111,8 @@ extern void tick_resume_oneshot(void);
 static inline bool tick_oneshot_possible(void) { return true; }
 extern int tick_oneshot_mode_active(void);
 extern void tick_clock_notify(void);
-extern int tick_check_oneshot_change(int allow_nohz);
+extern int tick_check_oneshot_change(void);
+extern void tick_nohz_switch_to_nohz(void);
 extern int tick_init_highres(void);
 #else /* !CONFIG_TICK_ONESHOT: */
 static inline
@@ -124,7 +125,8 @@ static inline void tick_oneshot_notify(void) { }
 static inline bool tick_oneshot_possible(void) { return false; }
 static inline int tick_oneshot_mode_active(void) { return 0; }
 static inline void tick_clock_notify(void) { }
-static inline int tick_check_oneshot_change(int allow_nohz) { return 0; }
+static inline int tick_check_oneshot_change(void) { return 0; }
+static inline void tick_nohz_switch_to_nohz(void) { }
 #endif /* !CONFIG_TICK_ONESHOT */
 
 /* Functions related to oneshot broadcasting */

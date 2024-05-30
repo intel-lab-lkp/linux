@@ -1891,8 +1891,11 @@ void hrtimer_run_queues(void)
 	 * there only sets the check bit in the tick_oneshot code,
 	 * otherwise we might deadlock vs. xtime_lock.
 	 */
-	if (tick_check_oneshot_change(!hrtimer_is_hres_enabled())) {
-		hrtimer_switch_to_hres();
+	if (tick_check_oneshot_change()) {
+		if (hrtimer_is_hres_enabled())
+			hrtimer_switch_to_hres();
+		else
+			tick_nohz_switch_to_nohz();
 		return;
 	}
 
