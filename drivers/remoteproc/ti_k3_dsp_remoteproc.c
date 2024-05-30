@@ -222,6 +222,7 @@ static int k3_dsp_rproc_request_mbox(struct rproc *rproc)
 	struct mbox_client *client = &kproc->client;
 	struct device *dev = kproc->dev;
 	int ret;
+	long err;
 
 	client->dev = dev;
 	client->tx_done = NULL;
@@ -231,10 +232,9 @@ static int k3_dsp_rproc_request_mbox(struct rproc *rproc)
 
 	kproc->mbox = mbox_request_channel(client, 0);
 	if (IS_ERR(kproc->mbox)) {
-		ret = -EBUSY;
-		dev_err(dev, "mbox_request_channel failed: %ld\n",
-			PTR_ERR(kproc->mbox));
-		return ret;
+		err = PTR_ERR(kproc->mbox);
+		dev_err(dev, "mbox_request_channel failed: %ld\n", err);
+		return (err == -EPROBE_DEFER) ? -EPROBE_DEFER : -EBUSY;
 	}
 
 	/*
@@ -315,31 +315,25 @@ static int k3_dsp_rproc_start(struct rproc *rproc)
 	u32 boot_addr;
 	int ret;
 
-	ret = k3_dsp_rproc_request_mbox(rproc);
-	if (ret)
-		return ret;
-
 	boot_addr = rproc->bootaddr;
 	if (boot_addr & (kproc->data->boot_align_addr - 1)) {
 		dev_err(dev, "invalid boot address 0x%x, must be aligned on a 0x%x boundary\n",
 			boot_addr, kproc->data->boot_align_addr);
 		ret = -EINVAL;
-		goto put_mbox;
+		goto out;
 	}
 
 	dev_err(dev, "booting DSP core using boot addr = 0x%x\n", boot_addr);
 	ret = ti_sci_proc_set_config(kproc->tsp, boot_addr, 0, 0);
 	if (ret)
-		goto put_mbox;
+		goto out;
 
 	ret = k3_dsp_rproc_release(kproc);
 	if (ret)
-		goto put_mbox;
+		goto out;
 
 	return 0;
-
-put_mbox:
-	mbox_free_channel(kproc->mbox);
+out:
 	return ret;
 }
 
@@ -353,8 +347,6 @@ static int k3_dsp_rproc_stop(struct rproc *rproc)
 {
 	struct k3_dsp_rproc *kproc = rproc->priv;
 
-	mbox_free_channel(kproc->mbox);
-
 	k3_dsp_rproc_reset(kproc);
 
 	return 0;
@@ -363,42 +355,21 @@ static int k3_dsp_rproc_stop(struct rproc *rproc)
 /*
  * Attach to a running DSP remote processor (IPC-only mode)
  *
- * This rproc attach callback only needs to request the mailbox, the remote
- * processor is already booted, so there is no need to issue any TI-SCI
- * commands to boot the DSP core. This callback is invoked only in IPC-only
- * mode.
+ * This rproc attach callback is a NOP. The remote processor is already booted,
+ * and all required resources have been acquired during probe routine, so there
+ * is no need to issue any TI-SCI commands to boot the DSP core. This callback
+ * is invoked only in IPC-only mode and exists for sanity sake.
  */
-static int k3_dsp_rproc_attach(struct rproc *rproc)
-{
-	struct k3_dsp_rproc *kproc = rproc->priv;
-	struct device *dev = kproc->dev;
-	int ret;
-
-	ret = k3_dsp_rproc_request_mbox(rproc);
-	if (ret)
-		return ret;
-
-	dev_info(dev, "DSP initialized in IPC-only mode\n");
-	return 0;
-}
+static int k3_dsp_rproc_attach(struct rproc *rproc) { return 0; }
 
 /*
  * Detach from a running DSP remote processor (IPC-only mode)
  *
- * This rproc detach callback performs the opposite operation to attach callback
- * and only needs to release the mailbox, the DSP core is not stopped and will
- * be left to continue to run its booted firmware. This callback is invoked only
- * in IPC-only mode.
+ * This rproc detach callback is a NOP. The DSP core is not stopped and will be
+ * left to continue to run its booted firmware. This callback is invoked only in
+ * IPC-only mode and exists for sanity sake.
  */
-static int k3_dsp_rproc_detach(struct rproc *rproc)
-{
-	struct k3_dsp_rproc *kproc = rproc->priv;
-	struct device *dev = kproc->dev;
-
-	mbox_free_channel(kproc->mbox);
-	dev_info(dev, "DSP deinitialized in IPC-only mode\n");
-	return 0;
-}
+static int k3_dsp_rproc_detach(struct rproc *rproc) { return 0; }
 
 /*
  * This function implements the .get_loaded_rsc_table() callback and is used
@@ -696,6 +667,10 @@ static int k3_dsp_rproc_probe(struct platform_device *pdev)
 	kproc->rproc = rproc;
 	kproc->dev = dev;
 	kproc->data = data;
+
+	ret = k3_dsp_rproc_request_mbox(rproc);
+	if (ret)
+		return ret;
 
 	kproc->ti_sci = devm_ti_sci_get_by_phandle(dev, "ti,sci");
 	if (IS_ERR(kproc->ti_sci))
