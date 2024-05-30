@@ -2761,5 +2761,7 @@ void megasas_setup_debugfs(struct megasas_instance *instance);
 void megasas_destroy_debugfs(struct megasas_instance *instance);
 int megasas_blk_mq_poll(struct Scsi_Host *shost, unsigned int queue_num);
 int dcmd_timeout_ocr_possible(struct megasas_instance *instance);
+void megasas_dcmd_timeout(struct megasas_instance *instance,
+			struct megasas_cmd *cmd);
 
 #endif				/*LSI_MEGARAID_SAS_H */

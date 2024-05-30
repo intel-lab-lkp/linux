@@ -1371,22 +1371,7 @@ megasas_sync_pd_seq_num(struct megasas_instance *instance, bool pend) {
 		instance->pd_seq_map_id++;
 		break;
 	case DCMD_TIMEOUT:
-		switch (dcmd_timeout_ocr_possible(instance)) {
-		case INITIATE_OCR:
-			cmd->flags |= DRV_DCMD_SKIP_REFIRE;
-			mutex_unlock(&instance->reset_mutex);
-			megasas_reset_fusion(instance->host,
-					     MFI_IO_TIMEOUT_OCR);
-			mutex_lock(&instance->reset_mutex);
-			break;
-		case KILL_ADAPTER:
-			megaraid_sas_kill_hba(instance);
-			break;
-		case IGNORE_TIMEOUT:
-			dev_info(&instance->pdev->dev, "Ignore DCMD timeout: %s %d\n",
-				 __func__, __LINE__);
-			break;
-		}
+		megasas_dcmd_timeout(instance, cmd);
 		break;
 	case DCMD_FAILED:
 		dev_err(&instance->pdev->dev,
@@ -1476,22 +1461,7 @@ megasas_get_ld_map_info(struct megasas_instance *instance)
 
 	switch (ret) {
 	case DCMD_TIMEOUT:
-		switch (dcmd_timeout_ocr_possible(instance)) {
-		case INITIATE_OCR:
-			cmd->flags |= DRV_DCMD_SKIP_REFIRE;
-			mutex_unlock(&instance->reset_mutex);
-			megasas_reset_fusion(instance->host,
-					     MFI_IO_TIMEOUT_OCR);
-			mutex_lock(&instance->reset_mutex);
-			break;
-		case KILL_ADAPTER:
-			megaraid_sas_kill_hba(instance);
-			break;
-		case IGNORE_TIMEOUT:
-			dev_info(&instance->pdev->dev, "Ignore DCMD timeout: %s %d\n",
-				 __func__, __LINE__);
-			break;
-		}
+		megasas_dcmd_timeout(instance, cmd);
 		break;
 	case DCMD_FAILED:
 		dev_err(&instance->pdev->dev,
