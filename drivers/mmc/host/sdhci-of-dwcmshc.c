@@ -1254,10 +1254,14 @@ static int dwcmshc_probe(struct platform_device *pdev)
 
 	/* Setup Command Queue Engine if enabled */
 	if (device_property_read_bool(&pdev->dev, "supports-cqe")) {
-		priv->vendor_specific_area2 =
-			sdhci_readw(host, DWCMSHC_P_VENDOR_AREA2);
+		if (pltfm_data && pltfm_data->ops && pltfm_data->ops->irq) {
+			priv->vendor_specific_area2 =
+				sdhci_readw(host, DWCMSHC_P_VENDOR_AREA2);
 
-		dwcmshc_cqhci_init(host, pdev);
+			dwcmshc_cqhci_init(host, pdev);
+		} else {
+			dev_warn(&pdev->dev, "can't enable cqe support without irq handler\n");
+		}
 	}
 
 	if (rk_priv)
