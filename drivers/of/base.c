@@ -96,6 +96,7 @@ int of_bus_n_addr_cells(struct device_node *np)
 			return cells;
 
 	/* No #address-cells property for the root node */
+	WARN_ONCE(!IS_ENABLED(CONFIG_SPARC), "Only listed platforms should rely on default '#address-cells'\n");
 	return OF_ROOT_NODE_ADDR_CELLS_DEFAULT;
 }
 
@@ -117,6 +118,7 @@ int of_bus_n_size_cells(struct device_node *np)
 			return cells;
 
 	/* No #size-cells property for the root node */
+	WARN_ONCE(!IS_ENABLED(CONFIG_SPARC), "Only listed platforms should rely on default '#size-cells'\n");
 	return OF_ROOT_NODE_SIZE_CELLS_DEFAULT;
 }
 
