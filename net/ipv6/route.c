@@ -2251,6 +2251,7 @@ struct rt6_info *ip6_pol_route(struct net *net, struct fib6_table *table,
 			 * this refcnt is always returned to the caller even
 			 * if caller sets RT6_LOOKUP_F_DST_NOREF flag.
 			 */
+			rt->rt6i_count_held = true;
 			rt6_uncached_list_add(rt);
 			rcu_read_unlock();
 
@@ -2648,8 +2649,7 @@ struct dst_entry *ip6_route_output_flags(struct net *net,
 	rcu_read_lock();
 	dst = ip6_route_output_flags_noref(net, sk, fl6, flags);
 	rt6 = dst_rt6_info(dst);
-	/* For dst cached in uncached_list, refcnt is already taken. */
-	if (list_empty(&rt6->dst.rt_uncached) && !dst_hold_safe(dst)) {
+	if (!rt6->rt6i_count_held && !dst_hold_safe(dst)) {
 		dst = &net->ipv6.ip6_null_entry->dst;
 		dst_hold(dst);
 	}

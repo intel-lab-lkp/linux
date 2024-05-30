@@ -216,6 +216,9 @@ struct rt6_info {
 
 	/* more non-fragment space at head required */
 	unsigned short			rt6i_nfheader_len;
+
+	/* route lookup always acquires a reference */
+	bool				rt6i_count_held;
 };
 
 struct fib6_result {
