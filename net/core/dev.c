@@ -3135,15 +3135,6 @@ void __netif_schedule(struct Qdisc *q)
 }
 EXPORT_SYMBOL(__netif_schedule);
 
-struct dev_kfree_skb_cb {
-	enum skb_drop_reason reason;
-};
-
-static struct dev_kfree_skb_cb *get_kfree_skb_cb(const struct sk_buff *skb)
-{
-	return (struct dev_kfree_skb_cb *)skb->cb;
-}
-
 void netif_schedule_queue(struct netdev_queue *txq)
 {
 	rcu_read_lock();
@@ -3182,7 +3173,11 @@ void dev_kfree_skb_irq_reason(struct sk_buff *skb, enum skb_drop_reason reason)
 	} else if (likely(!refcount_dec_and_test(&skb->users))) {
 		return;
 	}
-	get_kfree_skb_cb(skb)->reason = reason;
+
+	/* There is no need to save the old cb since we are the only user. */
+	KFREE_SKB_CB(skb)->reason = reason;
+	KFREE_SKB_CB(skb)->rx_sk = NULL;
+
 	local_irq_save(flags);
 	skb->next = __this_cpu_read(softnet_data.completion_queue);
 	__this_cpu_write(softnet_data.completion_queue, skb);
@@ -5229,17 +5224,17 @@ static __latent_entropy void net_tx_action(struct softirq_action *h)
 			clist = clist->next;
 
 			WARN_ON(refcount_read(&skb->users));
-			if (likely(get_kfree_skb_cb(skb)->reason == SKB_CONSUMED))
+			if (likely(KFREE_SKB_CB(skb)->reason == SKB_CONSUMED))
 				trace_consume_skb(skb, net_tx_action);
 			else
 				trace_kfree_skb(skb, net_tx_action,
-						get_kfree_skb_cb(skb)->reason);
+						KFREE_SKB_CB(skb)->reason);
 
 			if (skb->fclone != SKB_FCLONE_UNAVAILABLE)
 				__kfree_skb(skb);
 			else
 				__napi_kfree_skb(skb,
-						 get_kfree_skb_cb(skb)->reason);
+						 KFREE_SKB_CB(skb)->reason);
 		}
 	}
 

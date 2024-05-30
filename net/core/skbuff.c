@@ -1190,7 +1190,8 @@ void __kfree_skb(struct sk_buff *skb)
 EXPORT_SYMBOL(__kfree_skb);
 
 static __always_inline
-bool __kfree_skb_reason(struct sk_buff *skb, enum skb_drop_reason reason)
+bool __kfree_skb_reason(struct sk_buff *skb, struct sock *rx_sk,
+			enum skb_drop_reason reason)
 {
 	if (unlikely(!skb_unref(skb)))
 		return false;
@@ -1201,28 +1202,30 @@ bool __kfree_skb_reason(struct sk_buff *skb, enum skb_drop_reason reason)
 				SKB_DROP_REASON_SUBSYS_NUM);
 
 	if (reason == SKB_CONSUMED)
-		trace_consume_skb(skb, __builtin_return_address(0));
+		call_trace_consume_skb(skb, rx_sk, __builtin_return_address(0));
 	else
-		trace_kfree_skb(skb, __builtin_return_address(0), reason);
+		call_trace_kfree_skb(skb, rx_sk, __builtin_return_address(0), reason);
+
 	return true;
 }
 
 /**
- *	kfree_skb_reason - free an sk_buff with special reason
+ *	kfree_skb_for_sk - free an sk_buff with special reason and receiving socket
  *	@skb: buffer to free
+ *	@rx_sk: the socket to receive the buffer, or NULL if not applicable
  *	@reason: reason why this skb is dropped
  *
  *	Drop a reference to the buffer and free it if the usage count has
- *	hit zero. Meanwhile, pass the drop reason to 'kfree_skb'
+ *	hit zero. Meanwhile, pass the drop reason and rx socket to 'kfree_skb'
  *	tracepoint.
  */
-void __fix_address
-kfree_skb_reason(struct sk_buff *skb, enum skb_drop_reason reason)
+void __fix_address kfree_skb_for_sk(struct sk_buff *skb, struct sock *rx_sk,
+				    enum skb_drop_reason reason)
 {
-	if (__kfree_skb_reason(skb, reason))
+	if (__kfree_skb_reason(skb, rx_sk, reason))
 		__kfree_skb(skb);
 }
-EXPORT_SYMBOL(kfree_skb_reason);
+EXPORT_SYMBOL(kfree_skb_for_sk);
 
 #define KFREE_SKB_BULK_SIZE	16
 
@@ -1261,7 +1264,7 @@ kfree_skb_list_reason(struct sk_buff *segs, enum skb_drop_reason reason)
 	while (segs) {
 		struct sk_buff *next = segs->next;
 
-		if (__kfree_skb_reason(segs, reason)) {
+		if (__kfree_skb_reason(segs, NULL, reason)) {
 			skb_poison_list(segs);
 			kfree_skb_add_bulk(segs, &sa, reason);
 		}
@@ -1405,7 +1408,7 @@ void consume_skb(struct sk_buff *skb)
 	if (!skb_unref(skb))
 		return;
 
-	trace_consume_skb(skb, __builtin_return_address(0));
+	call_trace_consume_skb(skb, NULL, __builtin_return_address(0));
 	__kfree_skb(skb);
 }
 EXPORT_SYMBOL(consume_skb);
@@ -1420,7 +1423,7 @@ EXPORT_SYMBOL(consume_skb);
  */
 void __consume_stateless_skb(struct sk_buff *skb)
 {
-	trace_consume_skb(skb, __builtin_return_address(0));
+	call_trace_consume_skb(skb, NULL, __builtin_return_address(0));
 	skb_release_data(skb, SKB_CONSUMED);
 	kfree_skbmem(skb);
 }
@@ -1478,7 +1481,7 @@ void napi_consume_skb(struct sk_buff *skb, int budget)
 		return;
 
 	/* if reaching here SKB is ready to free */
-	trace_consume_skb(skb, __builtin_return_address(0));
+	call_trace_consume_skb(skb, NULL, __builtin_return_address(0));
 
 	/* if SKB is a clone, don't handle this case */
 	if (skb->fclone != SKB_FCLONE_UNAVAILABLE) {

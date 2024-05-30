@@ -1251,8 +1251,52 @@ static inline bool skb_data_unref(const struct sk_buff *skb,
 	return true;
 }
 
-void __fix_address
-kfree_skb_reason(struct sk_buff *skb, enum skb_drop_reason reason);
+/*
+ * Some protocol will clear or reuse skb->dev field for other purposes.  For
+ * example, TCP stack would reuse the pointer for out of order packet handling.
+ * This caused some problem for drop monitoring on kfree_skb tracepoint, since
+ * no other fields of an skb provides netns information.  In addition, it is
+ * also complicated to recover receive socket information for dropped packets,
+ * because the socket lookup can be an sk-lookup BPF program.
+ *
+ * This can be addressed by just passing the rx socket to the tracepoint,
+ * because it also has valid netns binding.
+ */
+struct kfree_skb_cb {
+	enum skb_drop_reason reason; /* used only by dev_kfree_skb_irq */
+	struct sock *rx_sk;
+};
+
+#define KFREE_SKB_CB(skb) ((struct kfree_skb_cb *)(skb)->cb)
+
+/* Save cb->rx_sk before calling kfree_skb/consume_skb tracepoint, and restore
+ * after the tracepoint. This is necessary because some skb destructor might
+ * rely on values in skb->cb, e.g. unix_destruct_scm.
+ */
+#define _call_trace_kfree_skb(action, skb, sk, ...)	do {	\
+	if (trace_##action##_skb_enabled()) {			\
+		struct kfree_skb_cb saved;			\
+		saved.rx_sk = KFREE_SKB_CB(skb)->rx_sk;		\
+		KFREE_SKB_CB(skb)->rx_sk = sk;			\
+		trace_##action##_skb((skb), ## __VA_ARGS__);	\
+		KFREE_SKB_CB(skb)->rx_sk = saved.rx_sk;		\
+	}							\
+} while (0)
+
+#define call_trace_kfree_skb(skb, sk, ...) \
+	_call_trace_kfree_skb(kfree, skb, sk, ## __VA_ARGS__)
+
+#define call_trace_consume_skb(skb, sk, ...) \
+	_call_trace_kfree_skb(consume, skb, sk, ## __VA_ARGS__)
+
+void __fix_address kfree_skb_for_sk(struct sk_buff *skb, struct sock *rx_sk,
+				    enum skb_drop_reason reason);
+
+static inline void
+kfree_skb_reason(struct sk_buff *skb, enum skb_drop_reason reason)
+{
+	kfree_skb_for_sk(skb, NULL, reason);
+}
 
 /**
  *	kfree_skb - free an sk_buff with 'NOT_SPECIFIED' reason
