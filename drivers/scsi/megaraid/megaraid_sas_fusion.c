@@ -1363,17 +1363,42 @@ megasas_sync_pd_seq_num(struct megasas_instance *instance, bool pend) {
 			"driver supports max %d JBOD, but FW reports %d\n",
 			MAX_PHYSICAL_DEVICES, le32_to_cpu(pd_sync->count));
 		ret = -EINVAL;
+		goto out;
 	}
 
-	if (ret == DCMD_TIMEOUT)
-		dev_warn(&instance->pdev->dev,
-			 "%s DCMD timed out, continue without JBOD sequence map\n",
-			 __func__);
-
-	if (ret == DCMD_SUCCESS)
+	switch (ret) {
+	case DCMD_SUCCESS:
 		instance->pd_seq_map_id++;
+		break;
+	case DCMD_TIMEOUT:
+		switch (dcmd_timeout_ocr_possible(instance)) {
+		case INITIATE_OCR:
+			cmd->flags |= DRV_DCMD_SKIP_REFIRE;
+			mutex_unlock(&instance->reset_mutex);
+			megasas_reset_fusion(instance->host,
+					     MFI_IO_TIMEOUT_OCR);
+			mutex_lock(&instance->reset_mutex);
+			break;
+		case KILL_ADAPTER:
+			megaraid_sas_kill_hba(instance);
+			break;
+		case IGNORE_TIMEOUT:
+			dev_info(&instance->pdev->dev, "Ignore DCMD timeout: %s %d\n",
+				 __func__, __LINE__);
+			break;
+		}
+		break;
+	case DCMD_FAILED:
+		dev_err(&instance->pdev->dev,
+			"%s: MR_DCMD_SYSTEM_PD_MAP_GET_INFO failed\n",
+			__func__);
+		break;
+	}
 
-	megasas_return_cmd(instance, cmd);
+out:
+	if (ret != DCMD_TIMEOUT)
+		megasas_return_cmd(instance, cmd);
+
 	return ret;
 }
 
@@ -1449,12 +1474,34 @@ megasas_get_ld_map_info(struct megasas_instance *instance)
 	else
 		ret = megasas_issue_polled(instance, cmd);
 
-	if (ret == DCMD_TIMEOUT)
-		dev_warn(&instance->pdev->dev,
-			 "%s DCMD timed out, RAID map is disabled\n",
-			 __func__);
+	switch (ret) {
+	case DCMD_TIMEOUT:
+		switch (dcmd_timeout_ocr_possible(instance)) {
+		case INITIATE_OCR:
+			cmd->flags |= DRV_DCMD_SKIP_REFIRE;
+			mutex_unlock(&instance->reset_mutex);
+			megasas_reset_fusion(instance->host,
+					     MFI_IO_TIMEOUT_OCR);
+			mutex_lock(&instance->reset_mutex);
+			break;
+		case KILL_ADAPTER:
+			megaraid_sas_kill_hba(instance);
+			break;
+		case IGNORE_TIMEOUT:
+			dev_info(&instance->pdev->dev, "Ignore DCMD timeout: %s %d\n",
+				 __func__, __LINE__);
+			break;
+		}
+		break;
+	case DCMD_FAILED:
+		dev_err(&instance->pdev->dev,
+			"%s: MR_DCMD_LD_MAP_GET_INFO failed\n",
+			__func__);
+		break;
+	}
 
-	megasas_return_cmd(instance, cmd);
+	if (ret != DCMD_TIMEOUT)
+		megasas_return_cmd(instance, cmd);
 
 	return ret;
 }
