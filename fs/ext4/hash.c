@@ -265,6 +265,10 @@ static int __ext4fs_dirhash(const struct inode *dir, const char *name, int len,
 		__u64	combined_hash;
 
 		if (fscrypt_has_encryption_key(dir)) {
+			if (!IS_CASEFOLDED(dir)) {
+				ext4_warning_inode(dir, "Siphash requires Casefolded file");
+				return -2;
+			}
 			combined_hash = fscrypt_fname_siphash(dir, &qname);
 		} else {
 			ext4_warning_inode(dir, "Siphash requires key");
