@@ -244,7 +244,8 @@ will exist, of the form::
 
 Inside each of these directories, the set of files contained in ``/proc``
 will exist.  In addition, two additional interfaces for demoting huge
-pages may exist::
+pages, and one additional interface for handling corrected memory errors,
+may exist::
 
         demote
         demote_size
@@ -254,6 +255,7 @@ pages may exist::
 	free_hugepages
 	resv_hugepages
 	surplus_hugepages
+	softoffline_corrected_errors
 
 The demote interfaces provide the ability to split a huge page into
 smaller huge pages.  For example, the x86 architecture supports both
@@ -275,6 +277,17 @@ demote
         requested number of huge pages.  To determine how many pages were
         actually demoted, compare the value of nr_hugepages before and after
         writing to the demote interface.  demote is a write only interface.
+
+The interface for handling corrected memory errors is
+
+softoffline_corrected_errors
+	allow userspace to control how to deal with hugepages that have
+	corrected memory errors.  When setting to 1, kernel attempts to soft
+	offline the hugepage whenever it thinks needed.  If soft offlinging a
+	huge page succeeds, for in-use hugepage, page content is migrated to a
+	new hugepage; however, regardless of in-use or free, capacity of the
+	hugepages will reduce by 1.  When setting to 0, kernel won't attempt to
+	soft offline the hugepage of the specific size. Its default value is 1.
 
 The interfaces which are the same as in ``/proc`` (all except demote and
 demote_size) function as described above for the default huge page-sized case.
