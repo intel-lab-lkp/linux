@@ -108,7 +108,7 @@ static inline u64 xfeatures_mask_independent(void)
  *
  * We use XSAVE as a fallback.
  *
- * The 661 label is defined in the ALTERNATIVE* macros as the address of the
+ * The 771 label is defined in the ALTERNATIVE* macros as the address of the
  * original instruction which gets replaced. We need to use it here as the
  * address of the instruction where we might get an exception at.
  */
@@ -120,7 +120,7 @@ static inline u64 xfeatures_mask_independent(void)
 		     "\n"						\
 		     "xor %[err], %[err]\n"				\
 		     "3:\n"						\
-		     _ASM_EXTABLE_TYPE_REG(661b, 3b, EX_TYPE_EFAULT_REG, %[err]) \
+		     _ASM_EXTABLE_TYPE_REG(771b, 3b, EX_TYPE_EFAULT_REG, %[err]) \
 		     : [err] "=r" (err)					\
 		     : "D" (st), "m" (*st), "a" (lmask), "d" (hmask)	\
 		     : "memory")
