@@ -426,3 +426,34 @@ void __init set_platform_trusted_keys(struct key *keyring)
 	platform_trusted_keys = keyring;
 }
 #endif
+
+/**
+ * system_key_link - Link to a system key
+ * @keyring: The keyring to link into
+ * @id: The asymmetric key id to look for in the system keyring
+ */
+int system_key_link(struct key *keyring, struct asymmetric_key_id *id)
+{
+	struct key *system_keyring;
+	struct key *key;
+
+#ifdef CONFIG_SECONDARY_TRUSTED_KEYRING
+	system_keyring = secondary_trusted_keys;
+#else
+	system_keyring = builtin_trusted_keys;
+#endif
+
+	key = find_asymmetric_key(system_keyring, id, NULL, NULL, false);
+	if (!IS_ERR(key))
+		goto found;
+
+	key = find_asymmetric_key(platform_trusted_keys, id, NULL, NULL, false);
+	if (!IS_ERR(key))
+		goto found;
+
+	return -ENOKEY;
+
+found:
+	key_link(keyring, key);
+	return 0;
+}
