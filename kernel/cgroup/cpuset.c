@@ -891,6 +891,44 @@ static inline int nr_cpusets(void)
 	return static_key_count(&cpusets_enabled_key.key) + 1;
 }
 
+/*define a union find node struct*/
+struct uf_node {
+	int parent;
+	int rank;
+};
+
+static int find_root(struct uf_node *nodes, int x)
+{
+	int root = x;
+	int parent;
+
+	/*Find the root node and perform path compression at the same time*/
+	while (nodes[root].parent != root) {
+		parent = nodes[root].parent;
+		nodes[root].parent = nodes[parent].parent;
+		root = parent;
+	}
+	return root;
+}
+
+/*Function to merge two sets, using union by rank*/
+static void union_sets(struct uf_node *nodes, int a, int b)
+{
+	int root_a = find_root(nodes, a);
+	int root_b = find_root(nodes, b);
+
+	if (root_a != root_b) {
+		if (nodes[root_a].rank < nodes[root_b].rank) {
+			nodes[root_a].parent = root_b;
+		} else if (nodes[root_a].rank > nodes[root_b].rank) {
+			nodes[root_b].parent = root_a;
+		} else {
+			nodes[root_b].parent = root_a;
+			nodes[root_a].rank++;
+		}
+	}
+}
+
 /*
  * generate_sched_domains()
  *
@@ -950,13 +988,14 @@ static int generate_sched_domains(cpumask_var_t **domains,
 	struct cpuset *cp;	/* top-down scan of cpusets */
 	struct cpuset **csa;	/* array of all cpuset ptrs */
 	int csn;		/* how many cpuset ptrs in csa so far */
-	int i, j, k;		/* indices for partition finding loops */
+	int i, j;		/* indices for partition finding loops */
 	cpumask_var_t *doms;	/* resulting partition; i.e. sched domains */
 	struct sched_domain_attr *dattr;  /* attributes for custom domains */
 	int ndoms = 0;		/* number of sched domains in result */
 	int nslot;		/* next empty doms[] struct cpumask slot */
 	struct cgroup_subsys_state *pos_css;
 	bool root_load_balance = is_sched_load_balance(&top_cpuset);
+	struct uf_node *nodes;
 
 	doms = NULL;
 	dattr = NULL;
@@ -1022,31 +1061,29 @@ static int generate_sched_domains(cpumask_var_t **domains,
 	}
 	rcu_read_unlock();
 
-	for (i = 0; i < csn; i++)
-		csa[i]->pn = i;
-	ndoms = csn;
+	nodes = kmalloc_array(csn, sizeof(struct uf_node), GFP_KERNEL);
+	if (!nodes)
+		goto done;
 
-restart:
-	/* Find the best partition (set of sched domains) */
+
+	/* Each node is initially its own parent */
 	for (i = 0; i < csn; i++) {
-		struct cpuset *a = csa[i];
-		int apn = a->pn;
+		nodes[i].parent = i;
+		nodes[i].rank = 0;
+	}
 
-		for (j = 0; j < csn; j++) {
-			struct cpuset *b = csa[j];
-			int bpn = b->pn;
-
-			if (apn != bpn && cpusets_overlap(a, b)) {
-				for (k = 0; k < csn; k++) {
-					struct cpuset *c = csa[k];
-
-					if (c->pn == bpn)
-						c->pn = apn;
-				}
-				ndoms--;	/* one less element */
-				goto restart;
-			}
+	/* Merge overlapping cpusets */
+	for (i = 0; i < csn; i++) {
+		for (j = i + 1; j < csn; j++) {
+			if (cpusets_overlap(csa[i], csa[j]))
+				union_sets(nodes, i, j);
 		}
+	}
+
+	/* Calculate the number of domains after merging */
+	for (i = 0; i < csn; i++) {
+		if (nodes[i].parent == i)
+			ndoms++;
 	}
 
 	/*
@@ -1065,47 +1102,25 @@ restart:
 			      GFP_KERNEL);
 
 	for (nslot = 0, i = 0; i < csn; i++) {
-		struct cpuset *a = csa[i];
-		struct cpumask *dp;
-		int apn = a->pn;
-
-		if (apn < 0) {
-			/* Skip completed partitions */
-			continue;
-		}
-
-		dp = doms[nslot];
-
-		if (nslot == ndoms) {
-			static int warnings = 10;
-			if (warnings) {
-				pr_warn("rebuild_sched_domains confused: nslot %d, ndoms %d, csn %d, i %d, apn %d\n",
-					nslot, ndoms, csn, i, apn);
-				warnings--;
-			}
-			continue;
-		}
+		struct cpumask *dp = doms[nslot];
 
 		cpumask_clear(dp);
 		if (dattr)
 			*(dattr + nslot) = SD_ATTR_INIT;
 		for (j = i; j < csn; j++) {
-			struct cpuset *b = csa[j];
+			if (find_root(nodes, j) == i) {
+				if (i == j)
+					nslot++;
 
-			if (apn == b->pn) {
-				cpumask_or(dp, dp, b->effective_cpus);
+				cpumask_or(dp, dp, csa[j]->effective_cpus);
 				cpumask_and(dp, dp, housekeeping_cpumask(HK_TYPE_DOMAIN));
 				if (dattr)
-					update_domain_attr_tree(dattr + nslot, b);
-
-				/* Done with this partition */
-				b->pn = -1;
+					update_domain_attr_tree(dattr + nslot, csa[j]);
 			}
 		}
-		nslot++;
 	}
 	BUG_ON(nslot != ndoms);
-
+	kfree(nodes);
 done:
 	kfree(csa);
 
