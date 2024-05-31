@@ -4325,9 +4325,10 @@ check_folio:
 	 */
 	if (!folio_test_ksm(folio) &&
 	    (exclusive || folio_ref_count(folio) == 1)) {
-		if (vmf->flags & FAULT_FLAG_WRITE) {
-			pte = maybe_mkwrite(pte_mkdirty(pte), vma);
-			vmf->flags &= ~FAULT_FLAG_WRITE;
+		if (vma->vm_flags & VM_WRITE) {
+			pte = pte_mkwrite(pte_mkdirty(pte), vma);
+			if (vmf->flags & FAULT_FLAG_WRITE)
+				vmf->flags &= ~FAULT_FLAG_WRITE;
 		}
 		rmap_flags |= RMAP_EXCLUSIVE;
 	}
