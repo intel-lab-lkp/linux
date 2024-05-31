@@ -137,6 +137,27 @@ config DRM_PANIC_DEBUG
 	  This is unsafe and should not be enabled on a production build.
 	  If in doubt, say "N".
 
+choice
+	prompt "Panic screen formater"
+	default DRM_PANIC_SCREEN_USERFRIENDLY
+	depends on DRM_PANIC
+	help
+	  This option enable to choose what will be displayed when a kernel
+	  panic occurs.
+
+	config DRM_PANIC_SCREEN_USERFRIENDLY
+		bool "Default user friendly message"
+		help
+		  Only a short message telling the user to reboot the system.
+
+	config DRM_PANIC_SCREEN_KMSG
+		bool "Display the last lines of kmsg"
+		help
+		  Display kmsg last lines on panic.
+		  Enable if you are a kernel developer, and want to debug a
+		  kernel panic.
+endchoice
+
 config DRM_DEBUG_DP_MST_TOPOLOGY_REFS
         bool "Enable refcount backtrace history in the DP MST helpers"
 	depends on STACKTRACE_SUPPORT
