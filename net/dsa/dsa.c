@@ -1505,12 +1505,9 @@ static int dsa_switch_probe(struct dsa_switch *ds)
 	if (!ds->num_ports)
 		return -EINVAL;
 
-	if (ds->phylink_mac_ops) {
-		if (ds->ops->phylink_mac_select_pcs ||
-		    ds->ops->phylink_mac_config ||
-		    ds->ops->phylink_mac_link_down ||
-		    ds->ops->phylink_mac_link_up)
-			return -EINVAL;
+	if (!ds->phylink_mac_ops) {
+		dev_err(ds->dev, "DSA switch driver does not provide phylink MAC operations");
+		return -EINVAL;
 	}
 
 	if (np) {
