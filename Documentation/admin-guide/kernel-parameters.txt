@@ -629,6 +629,8 @@
 			keyrings (builtin, secondary, or platform) to be used as
 			the Clavis root of trust.
 			Format: { <keyid> }
+			See Documentation/admin-guide/LSM/clavis.rst for
+			details.
 
 	clearcpuid=X[,X...] [X86]
 			Disable CPUID feature X for the kernel. See
