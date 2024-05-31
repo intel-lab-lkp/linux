@@ -1382,6 +1382,9 @@ static int pci_scan_bridge_extend(struct pci_bus *bus, struct pci_dev *dev,
 		else
 			next_busnr = max + 1;
 
+		if (next_busnr == 256)
+			goto out;
+
 		/*
 		 * Prevent assigning a bus number that already exists.
 		 * This can happen when a bridge is hot-plugged, so in this
