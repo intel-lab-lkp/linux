@@ -917,7 +917,7 @@ int bio_poll(struct bio *bio, struct io_comp_batch *iob, unsigned int flags)
 	q = bdev_get_queue(bdev);
 	if (cookie == BLK_QC_T_NONE ||
 	    !test_bit(QUEUE_FLAG_POLL, &q->queue_flags))
-		return 0;
+		return -EOPNOTSUPP;
 
 	blk_flush_plug(current->plug, false);
 
