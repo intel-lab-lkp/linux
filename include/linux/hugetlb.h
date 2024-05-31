@@ -673,6 +673,7 @@ struct hstate {
 	int next_nid_to_free;
 	unsigned int order;
 	unsigned int demote_order;
+	unsigned int softoffline_corrected_errors;
 	unsigned long mask;
 	unsigned long max_huge_pages;
 	unsigned long nr_huge_pages;
@@ -1017,6 +1018,16 @@ void hugetlb_unregister_node(struct node *node);
  */
 bool is_raw_hwpoison_page_in_hugepage(struct page *page);
 
+/*
+ * For certain hugepage size, when a hugepage has corrected memory error(s):
+ * - Return 0 if userspace wants to disable soft offlining the hugepage.
+ * - Return > 0 if userspace allows soft offlining the hugepage.
+ */
+static inline int hugetlb_softoffline_corrected_errors(struct folio *folio)
+{
+	return folio_hstate(folio)->softoffline_corrected_errors;
+}
+
 #else	/* CONFIG_HUGETLB_PAGE */
 struct hstate {};
 
@@ -1214,6 +1225,12 @@ static inline bool hugetlbfs_pagecache_present(
 {
 	return false;
 }
+
+static inline int hugetlb_softoffline_corrected_errors(struct folio *folio)
+{
+	return 1;
+}
+
 #endif	/* CONFIG_HUGETLB_PAGE */
 
 static inline spinlock_t *huge_pte_lock(struct hstate *h,

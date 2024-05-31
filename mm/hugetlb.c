@@ -4323,6 +4323,38 @@ static ssize_t demote_size_store(struct kobject *kobj,
 }
 HSTATE_ATTR(demote_size);
 
+static ssize_t softoffline_corrected_errors_show(struct kobject *kobj,
+						 struct kobj_attribute *attr,
+						 char *buf)
+{
+	struct hstate *h = kobj_to_hstate(kobj, NULL);
+
+	return sysfs_emit(buf, "%d\n", h->softoffline_corrected_errors);
+}
+
+static ssize_t softoffline_corrected_errors_store(struct kobject *kobj,
+						  struct kobj_attribute *attr,
+						  const char *buf,
+						  size_t count)
+{
+	int err;
+	unsigned long input;
+	struct hstate *h = kobj_to_hstate(kobj, NULL);
+
+	err = kstrtoul(buf, 10, &input);
+	if (err)
+		return err;
+
+	/* softoffline_corrected_errors is either 0 or 1. */
+	if (input > 1)
+		return -EINVAL;
+
+	h->softoffline_corrected_errors = input;
+
+	return count;
+}
+HSTATE_ATTR(softoffline_corrected_errors);
+
 static struct attribute *hstate_attrs[] = {
 	&nr_hugepages_attr.attr,
 	&nr_overcommit_hugepages_attr.attr,
@@ -4332,6 +4364,7 @@ static struct attribute *hstate_attrs[] = {
 #ifdef CONFIG_NUMA
 	&nr_hugepages_mempolicy_attr.attr,
 #endif
+	&softoffline_corrected_errors_attr.attr,
 	NULL,
 };
 
@@ -4653,6 +4686,7 @@ void __init hugetlb_add_hstate(unsigned int order)
 	h = &hstates[hugetlb_max_hstate++];
 	mutex_init(&h->resize_lock);
 	h->order = order;
+	h->softoffline_corrected_errors = 1;
 	h->mask = ~(huge_page_size(h) - 1);
 	for (i = 0; i < MAX_NUMNODES; ++i)
 		INIT_LIST_HEAD(&h->hugepage_freelists[i]);

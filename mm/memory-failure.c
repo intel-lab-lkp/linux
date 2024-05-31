@@ -2833,6 +2833,13 @@ int soft_offline_page(unsigned long pfn, int flags)
 		return -EIO;
 	}
 
+	if (PageHuge(page) &&
+	    !hugetlb_softoffline_corrected_errors(page_folio(page))) {
+		pr_info("soft offline: %#lx: hugetlb page is ignored\n", pfn);
+		put_ref_page(pfn, flags);
+		return -EINVAL;
+	}
+
 	mutex_lock(&mf_mutex);
 
 	if (PageHWPoison(page)) {
