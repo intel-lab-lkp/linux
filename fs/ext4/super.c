@@ -5282,6 +5282,9 @@ static int __ext4_fill_super(struct fs_context *fc, struct super_block *sb)
 		goto failed_mount;
 
 	ext4_hash_info_init(sb);
+	if (es->s_def_hash_version == DX_HASH_SIPHASH && 
+	    !ext4_has_feature_casefold(sb))
+		goto failed_mount;
 
 	err = ext4_handle_clustersize(sb);
 	if (err)
