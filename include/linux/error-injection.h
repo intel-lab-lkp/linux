@@ -6,10 +6,12 @@
 #include <linux/errno.h>
 #include <asm-generic/error-injection.h>
 
+struct static_key;
+
 #ifdef CONFIG_FUNCTION_ERROR_INJECTION
 
-extern bool within_error_injection_list(unsigned long addr);
-extern int get_injectable_error_type(unsigned long addr);
+bool within_error_injection_list(unsigned long addr);
+int get_injectable_error_type(unsigned long addr, struct static_key **key_addr);
 
 #else /* !CONFIG_FUNCTION_ERROR_INJECTION */
 
@@ -18,7 +20,8 @@ static inline bool within_error_injection_list(unsigned long addr)
 	return false;
 }
 
-static inline int get_injectable_error_type(unsigned long addr)
+static inline int get_injectable_error_type(unsigned long addr,
+					    struct static_key **key_addr)
 {
 	return -EOPNOTSUPP;
 }

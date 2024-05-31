@@ -17,6 +17,7 @@ struct ei_entry {
 	struct list_head list;
 	unsigned long start_addr;
 	unsigned long end_addr;
+	struct static_key *key;
 	int etype;
 	void *priv;
 };
@@ -37,7 +38,7 @@ bool within_error_injection_list(unsigned long addr)
 	return ret;
 }
 
-int get_injectable_error_type(unsigned long addr)
+int get_injectable_error_type(unsigned long addr, struct static_key **key_addr)
 {
 	struct ei_entry *ent;
 	int ei_type = -EINVAL;
@@ -46,6 +47,8 @@ int get_injectable_error_type(unsigned long addr)
 	list_for_each_entry(ent, &error_injection_list, list) {
 		if (addr >= ent->start_addr && addr < ent->end_addr) {
 			ei_type = ent->etype;
+			if (key_addr)
+				*key_addr = ent->key;
 			break;
 		}
 	}
@@ -86,6 +89,7 @@ static void populate_error_injection_list(struct error_injection_entry *start,
 		ent->start_addr = entry;
 		ent->end_addr = entry + size;
 		ent->etype = iter->etype;
+		ent->key = (struct static_key *) iter->static_key_addr;
 		ent->priv = priv;
 		INIT_LIST_HEAD(&ent->list);
 		list_add_tail(&ent->list, &error_injection_list);
