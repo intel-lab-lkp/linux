@@ -11,8 +11,11 @@
 
 #ifdef CONFIG_PCIE_TPH
 int pcie_tph_disable(struct pci_dev *dev);
+int tph_set_dev_nostmode(struct pci_dev *dev);
 #else
 static inline int pcie_tph_disable(struct pci_dev *dev)
+{ return -EOPNOTSUPP; }
+static inline int tph_set_dev_nostmode(struct pci_dev *dev)
 { return -EOPNOTSUPP; }
 #endif
 

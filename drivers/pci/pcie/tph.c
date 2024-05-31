@@ -43,6 +43,27 @@ static int tph_set_reg_field_u32(struct pci_dev *dev, u8 offset, u32 mask,
 	return ret;
 }
 
+int tph_set_dev_nostmode(struct pci_dev *dev)
+{
+	int ret;
+
+	/* set ST Mode Select to "No ST Mode" */
+	ret = tph_set_reg_field_u32(dev, PCI_TPH_CTRL,
+				    PCI_TPH_CTRL_MODE_SEL_MASK,
+				    PCI_TPH_CTRL_MODE_SEL_SHIFT,
+				    PCI_TPH_NO_ST_MODE);
+	if (ret)
+		return ret;
+
+	/* set "TPH Requester Enable" to "TPH only" */
+	ret = tph_set_reg_field_u32(dev, PCI_TPH_CTRL,
+				    PCI_TPH_CTRL_REQ_EN_MASK,
+				    PCI_TPH_CTRL_REQ_EN_SHIFT,
+				    PCI_TPH_REQ_TPH_ONLY);
+
+	return ret;
+}
+
 int pcie_tph_disable(struct pci_dev *dev)
 {
 	return  tph_set_reg_field_u32(dev, PCI_TPH_CTRL,
