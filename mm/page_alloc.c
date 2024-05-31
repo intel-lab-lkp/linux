@@ -2698,7 +2698,7 @@ void free_unref_page(struct page *page, unsigned int order,
 /*
  * Free a batch of folios
  */
-void free_unref_folios(struct folio_batch *folios)
+void free_unref_folios(struct folio_batch *folios, unsigned short int ugen)
 {
 	unsigned long __maybe_unused UP_flags;
 	struct per_cpu_pages *pcp = NULL;
@@ -2720,7 +2720,7 @@ void free_unref_folios(struct folio_batch *folios)
 		 */
 		if (!pcp_allowed_order(order)) {
 			free_one_page(folio_zone(folio), &folio->page,
-				      pfn, order, FPI_NONE, 0);
+				      pfn, order, FPI_NONE, ugen);
 			continue;
 		}
 		folio->private = (void *)(unsigned long)order;
@@ -2756,7 +2756,7 @@ void free_unref_folios(struct folio_batch *folios)
 			 */
 			if (is_migrate_isolate(migratetype)) {
 				free_one_page(zone, &folio->page, pfn,
-					      order, FPI_NONE, 0);
+					      order, FPI_NONE, ugen);
 				continue;
 			}
 
@@ -2769,7 +2769,7 @@ void free_unref_folios(struct folio_batch *folios)
 			if (unlikely(!pcp)) {
 				pcp_trylock_finish(UP_flags);
 				free_one_page(zone, &folio->page, pfn,
-					      order, FPI_NONE, 0);
+					      order, FPI_NONE, ugen);
 				continue;
 			}
 			locked_zone = zone;
@@ -2784,7 +2784,7 @@ void free_unref_folios(struct folio_batch *folios)
 
 		trace_mm_page_free_batched(&folio->page);
 		free_unref_page_commit(zone, pcp, &folio->page, migratetype,
-				order, 0);
+				order, ugen);
 	}
 
 	if (pcp) {
