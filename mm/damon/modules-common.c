@@ -53,7 +53,6 @@ int damon_modules_new_paddr_kdamond(struct kdamond **kdamondp)
 		damon_destroy_kdamond(kdamond);
 		return err;
 	}
-	kdamond->nr_ctxs = 1;
 
 	*kdamondp = kdamond;
 	return 0;

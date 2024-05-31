@@ -50,12 +50,13 @@ TRACE_EVENT_CONDITION(damos_before_apply,
 
 TRACE_EVENT(damon_aggregated,
 
-	TP_PROTO(unsigned int target_id, struct damon_region *r,
-		unsigned int nr_regions),
+	TP_PROTO(unsigned int context_id, unsigned int target_id,
+		struct damon_region *r, unsigned int nr_regions),
 
-	TP_ARGS(target_id, r, nr_regions),
+	TP_ARGS(context_id, target_id, r, nr_regions),
 
 	TP_STRUCT__entry(
+		__field(unsigned long, context_id)
 		__field(unsigned long, target_id)
 		__field(unsigned int, nr_regions)
 		__field(unsigned long, start)
@@ -65,6 +66,7 @@ TRACE_EVENT(damon_aggregated,
 	),
 
 	TP_fast_assign(
+		__entry->context_id = context_id;
 		__entry->target_id = target_id;
 		__entry->nr_regions = nr_regions;
 		__entry->start = r->ar.start;
@@ -73,9 +75,9 @@ TRACE_EVENT(damon_aggregated,
 		__entry->age = r->age;
 	),
 
-	TP_printk("target_id=%lu nr_regions=%u %lu-%lu: %u %u",
-			__entry->target_id, __entry->nr_regions,
-			__entry->start, __entry->end,
+	TP_printk("context_id=%lu target_id=%lu nr_regions=%u %lu-%lu: %u %u",
+			__entry->context_id, __entry->target_id,
+			__entry->nr_regions, __entry->start, __entry->end,
 			__entry->nr_accesses, __entry->age)
 );
 

@@ -500,6 +500,8 @@ struct damon_ctx *damon_new_ctx(void)
 	ctx->attrs.min_nr_regions = 10;
 	ctx->attrs.max_nr_regions = 1000;
 
+	ctx->valid = true;
+
 	INIT_LIST_HEAD(&ctx->adaptive_targets);
 	INIT_LIST_HEAD(&ctx->schemes);
 	INIT_LIST_HEAD(&ctx->list);
@@ -513,7 +515,7 @@ struct damon_ctx *damon_new_ctx(void)
 void damon_add_ctx(struct kdamond *kdamond, struct damon_ctx *ctx)
 {
 	list_add_tail(&ctx->list, &kdamond->contexts);
-	++kdamond->nr_ctxs;
+	ctx->kdamond = kdamond;
 }
 
 struct kdamond *damon_new_kdamond(void)
@@ -567,10 +569,8 @@ void damon_destroy_ctxs(struct kdamond *kdamond)
 {
 	struct damon_ctx *c, *next;
 
-	damon_for_each_context_safe(c, next, kdamond) {
+	damon_for_each_context_safe(c, next, kdamond)
 		damon_destroy_ctx(c);
-		--kdamond->nr_ctxs;
-	}
 }
 
 void damon_destroy_kdamond(struct kdamond *kdamond)
@@ -735,6 +735,20 @@ bool damon_kdamond_running(struct kdamond *kdamond)
 	return running;
 }
 
+/**
+ * kdamond_nr_ctxs() - Return number of contexts for this kdamond.
+ */
+static int kdamond_nr_ctxs(struct kdamond *kdamond)
+{
+	struct list_head *pos;
+	int nr_ctxs = 0;
+
+	list_for_each(pos, &kdamond->contexts)
+		++nr_ctxs;
+
+	return nr_ctxs;
+}
+
 /* Returns the size upper limit for each monitoring region */
 static unsigned long damon_region_sz_limit(struct damon_ctx *ctx)
 {
@@ -793,11 +807,11 @@ static int __damon_start(struct kdamond *kdamond)
  * @exclusive:	exclusiveness of this contexts group
  *
  * This function starts a group of monitoring threads for a group of monitoring
- * contexts.  One thread per each context is created and run in parallel.  The
- * caller should handle synchronization between the threads by itself.  If
- * @exclusive is true and a group of threads that created by other
+ * contexts. If @exclusive is true and a group of contexts that created by other
  * 'damon_start()' call is currently running, this function does nothing but
- * returns -EBUSY.
+ * returns -EBUSY, if @exclusive is true and a given kdamond wants to run
+ * several contexts, then this function returns -EINVAL. kdamond can run
+ * exclusively only one context.
  *
  * Return: 0 on success, negative error code otherwise.
  */
@@ -806,16 +820,17 @@ int damon_start(struct kdamond *kdamond, bool exclusive)
 	int err = 0;
 
 	BUG_ON(!kdamond);
-	BUG_ON(!kdamond->nr_ctxs);
-
-	if (kdamond->nr_ctxs != 1)
-		return -EINVAL;
 
 	mutex_lock(&damon_lock);
 	if ((exclusive && nr_running_kdamonds) ||
 			(!exclusive && running_exclusive_ctxs)) {
 		mutex_unlock(&damon_lock);
 		return -EBUSY;
+	}
+
+	if (exclusive && kdamond_nr_ctxs(kdamond) > 1) {
+		mutex_unlock(&damon_lock);
+		return -EINVAL;
 	}
 
 	err = __damon_start(kdamond);
@@ -857,7 +872,7 @@ int damon_stop(struct kdamond *kdamond)
 /*
  * Reset the aggregated monitoring results ('nr_accesses' of each region).
  */
-static void kdamond_reset_aggregated(struct damon_ctx *c)
+static void kdamond_reset_aggregated(struct damon_ctx *c, unsigned int ci)
 {
 	struct damon_target *t;
 	unsigned int ti = 0;	/* target's index */
@@ -866,7 +881,7 @@ static void kdamond_reset_aggregated(struct damon_ctx *c)
 		struct damon_region *r;
 
 		damon_for_each_region(r, t) {
-			trace_damon_aggregated(ti, r, damon_nr_regions(t));
+			trace_damon_aggregated(ci, ti, r, damon_nr_regions(t));
 			r->last_nr_accesses = r->nr_accesses;
 			r->nr_accesses = 0;
 		}
@@ -1033,21 +1048,15 @@ static bool damos_filter_out(struct damon_ctx *ctx, struct damon_target *t,
 	return false;
 }
 
-static void damos_apply_scheme(struct damon_ctx *c, struct damon_target *t,
-		struct damon_region *r, struct damos *s)
+static void damos_apply_scheme(unsigned int cidx, struct damon_ctx *c,
+			       struct damon_target *t, struct damon_region *r,
+			       struct damos *s)
 {
 	struct damos_quota *quota = &s->quota;
 	unsigned long sz = damon_sz_region(r);
 	struct timespec64 begin, end;
 	unsigned long sz_applied = 0;
 	int err = 0;
-	/*
-	 * We plan to support multiple context per kdamond, as DAMON sysfs
-	 * implies with 'nr_contexts' file.  Nevertheless, only single context
-	 * per kdamond is supported for now.  So, we can simply use '0' context
-	 * index here.
-	 */
-	unsigned int cidx = 0;
 	struct damos *siter;		/* schemes iterator */
 	unsigned int sidx = 0;
 	struct damon_target *titer;	/* targets iterator */
@@ -1103,7 +1112,8 @@ update_stat:
 	damos_update_stat(s, sz, sz_applied);
 }
 
-static void damon_do_apply_schemes(struct damon_ctx *c,
+static void damon_do_apply_schemes(unsigned int ctx_id,
+				   struct damon_ctx *c,
 				   struct damon_target *t,
 				   struct damon_region *r)
 {
@@ -1128,7 +1138,7 @@ static void damon_do_apply_schemes(struct damon_ctx *c,
 		if (!damos_valid_target(c, t, r, s))
 			continue;
 
-		damos_apply_scheme(c, t, r, s);
+		damos_apply_scheme(ctx_id, c, t, r, s);
 	}
 }
 
@@ -1309,7 +1319,7 @@ static void damos_adjust_quota(struct damon_ctx *c, struct damos *s)
 	quota->min_score = score;
 }
 
-static void kdamond_apply_schemes(struct damon_ctx *c)
+static void kdamond_apply_schemes(struct damon_ctx *c, unsigned int ctx_id)
 {
 	struct damon_target *t;
 	struct damon_region *r, *next_r;
@@ -1335,7 +1345,7 @@ static void kdamond_apply_schemes(struct damon_ctx *c)
 
 	damon_for_each_target(t, c) {
 		damon_for_each_region_safe(r, next_r, t)
-			damon_do_apply_schemes(c, t, r);
+			damon_do_apply_schemes(ctx_id, c, t, r);
 	}
 
 	damon_for_each_scheme(s, c) {
@@ -1505,22 +1515,35 @@ static void kdamond_split_regions(struct damon_ctx *ctx)
  *
  * Returns true if need to stop current monitoring.
  */
-static bool kdamond_need_stop(struct damon_ctx *ctx)
+static bool kdamond_need_stop(void)
+{
+	if (kthread_should_stop())
+		return true;
+	return false;
+}
+
+static bool kdamond_valid_ctx(struct damon_ctx *ctx)
 {
 	struct damon_target *t;
 
-	if (kthread_should_stop())
-		return true;
-
 	if (!ctx->ops.target_valid)
-		return false;
+		return true;
 
 	damon_for_each_target(t, ctx) {
 		if (ctx->ops.target_valid(t))
-			return false;
+			return true;
 	}
 
-	return true;
+	return false;
+}
+
+static void kdamond_usleep(unsigned long usecs)
+{
+	/* See Documentation/timers/timers-howto.rst for the thresholds */
+	if (usecs > 20 * USEC_PER_MSEC)
+		schedule_timeout_idle(usecs_to_jiffies(usecs));
+	else
+		usleep_idle_range(usecs, usecs + 1);
 }
 
 static unsigned long damos_wmark_metric_value(enum damos_wmark_metric metric)
@@ -1569,41 +1592,25 @@ static unsigned long damos_wmark_wait_us(struct damos *scheme)
 	return 0;
 }
 
-static void kdamond_usleep(unsigned long usecs)
-{
-	/* See Documentation/timers/timers-howto.rst for the thresholds */
-	if (usecs > 20 * USEC_PER_MSEC)
-		schedule_timeout_idle(usecs_to_jiffies(usecs));
-	else
-		usleep_idle_range(usecs, usecs + 1);
-}
-
-/* Returns negative error code if it's not activated but should return */
-static int kdamond_wait_activation(struct damon_ctx *ctx)
+/**
+ * Returns minimum wait time for monitoring context if it hits watermarks,
+ * otherwise returns 0.
+ */
+static unsigned long kdamond_wmark_wait_time(struct damon_ctx *ctx)
 {
 	struct damos *s;
 	unsigned long wait_time;
 	unsigned long min_wait_time = 0;
 	bool init_wait_time = false;
 
-	while (!kdamond_need_stop(ctx)) {
-		damon_for_each_scheme(s, ctx) {
-			wait_time = damos_wmark_wait_us(s);
-			if (!init_wait_time || wait_time < min_wait_time) {
-				init_wait_time = true;
-				min_wait_time = wait_time;
-			}
+	damon_for_each_scheme(s, ctx) {
+		wait_time = damos_wmark_wait_us(s);
+		if (!init_wait_time || wait_time < min_wait_time) {
+			init_wait_time = true;
+			min_wait_time = wait_time;
 		}
-		if (!min_wait_time)
-			return 0;
-
-		kdamond_usleep(min_wait_time);
-
-		if (ctx->callback.after_wmarks_check &&
-				ctx->callback.after_wmarks_check(ctx))
-			break;
 	}
-	return -EBUSY;
+	return min_wait_time;
 }
 
 static void kdamond_init_intervals_sis(struct damon_ctx *ctx)
@@ -1672,14 +1679,41 @@ static void kdamond_finish_ctxs(struct kdamond *kdamond)
 		kdamond_finish_ctx(c);
 }
 
+static bool kdamond_prepare_access_checks_ctx(struct damon_ctx *ctx,
+					      unsigned long *sample_interval,
+					      unsigned long *min_wait_time)
+{
+	unsigned long wait_time = 0;
+
+	if (!ctx->valid || !kdamond_valid_ctx(ctx))
+		goto invalidate_ctx;
+
+	wait_time = kdamond_wmark_wait_time(ctx);
+	if (wait_time) {
+		if (!*min_wait_time || wait_time < *min_wait_time)
+			*min_wait_time = wait_time;
+		return false;
+	}
+
+	if (ctx->ops.prepare_access_checks)
+		ctx->ops.prepare_access_checks(ctx);
+	if (ctx->callback.after_sampling &&
+			ctx->callback.after_sampling(ctx))
+		goto invalidate_ctx;
+	*sample_interval = ctx->attrs.sample_interval;
+	return true;
+invalidate_ctx:
+	ctx->valid = false;
+	return false;
+}
+
 /*
  * The monitoring daemon that runs as a kernel thread
  */
 static int kdamond_fn(void *data)
 {
+	struct damon_ctx *ctx;
 	struct kdamond *kdamond = data;
-	struct damon_ctx *ctx = damon_first_ctx(kdamond);
-	unsigned int max_nr_accesses = 0;
 
 	pr_debug("kdamond (%d) starts\n", current->pid);
 
@@ -1687,69 +1721,85 @@ static int kdamond_fn(void *data)
 	if (!kdamond_init_ctxs(kdamond))
 		goto done;
 
-	while (!kdamond_need_stop(ctx)) {
-		/*
-		 * ctx->attrs and ctx->next_{aggregation,ops_update}_sis could
-		 * be changed from after_wmarks_check() or after_aggregation()
-		 * callbacks.  Read the values here, and use those for this
-		 * iteration.  That is, damon_set_attrs() updated new values
-		 * are respected from next iteration.
-		 */
-		unsigned long next_aggregation_sis = ctx->next_aggregation_sis;
-		unsigned long next_ops_update_sis = ctx->next_ops_update_sis;
-		unsigned long sample_interval = ctx->attrs.sample_interval;
-		unsigned long sz_limit = ctx->sz_limit;
+	while (!kdamond_need_stop()) {
+		unsigned int ctx_id = 0;
+		unsigned long nr_valid_ctxs = 0;
+		unsigned long min_wait_time = 0;
+		unsigned long sample_interval = 0;
 
-		if (kdamond_wait_activation(ctx))
-			break;
+		damon_for_each_context(ctx, kdamond) {
+			if (kdamond_prepare_access_checks_ctx(ctx, &sample_interval,
+							      &min_wait_time))
+				nr_valid_ctxs++;
+		}
 
-		if (ctx->ops.prepare_access_checks)
-			ctx->ops.prepare_access_checks(ctx);
-		if (ctx->callback.after_sampling &&
-				ctx->callback.after_sampling(ctx))
-			break;
-
-		kdamond_usleep(sample_interval);
-		ctx->passed_sample_intervals++;
-
-		if (ctx->ops.check_accesses)
-			max_nr_accesses = ctx->ops.check_accesses(ctx);
-
-		if (ctx->passed_sample_intervals == next_aggregation_sis) {
-			kdamond_merge_regions(ctx,
-					max_nr_accesses / 10,
-					sz_limit);
-			if (ctx->callback.after_aggregation &&
-					ctx->callback.after_aggregation(ctx))
+		if (!nr_valid_ctxs) {
+			if (!min_wait_time)
 				break;
+			kdamond_usleep(min_wait_time);
+			continue;
 		}
+		kdamond_usleep(sample_interval);
 
-		/*
-		 * do kdamond_apply_schemes() after kdamond_merge_regions() if
-		 * possible, to reduce overhead
-		 */
-		if (!list_empty(&ctx->schemes))
-			kdamond_apply_schemes(ctx);
+		damon_for_each_context(ctx, kdamond) {
+			/*
+			 * ctx->attrs and ctx->next_{aggregation,ops_update}_sis could
+			 * be changed from after_wmarks_check() or after_aggregation()
+			 * callbacks.  Read the values here, and use those for this
+			 * iteration.  That is, damon_set_attrs() updated new values
+			 * are respected from next iteration.
+			 */
+			unsigned int max_nr_accesses = 0;
+			unsigned long next_aggregation_sis = ctx->next_aggregation_sis;
+			unsigned long next_ops_update_sis = ctx->next_ops_update_sis;
+			unsigned long sz_limit = ctx->sz_limit;
+			unsigned long sample_interval = ctx->attrs.sample_interval ?
+							ctx->attrs.sample_interval : 1;
 
-		sample_interval = ctx->attrs.sample_interval ?
-			ctx->attrs.sample_interval : 1;
-		if (ctx->passed_sample_intervals == next_aggregation_sis) {
-			ctx->next_aggregation_sis = next_aggregation_sis +
-				ctx->attrs.aggr_interval / sample_interval;
+			if (!ctx->valid)
+				goto next_ctx;
 
-			kdamond_reset_aggregated(ctx);
-			kdamond_split_regions(ctx);
-			if (ctx->ops.reset_aggregated)
-				ctx->ops.reset_aggregated(ctx);
-		}
+			ctx->passed_sample_intervals++;
 
-		if (ctx->passed_sample_intervals == next_ops_update_sis) {
-			ctx->next_ops_update_sis = next_ops_update_sis +
-				ctx->attrs.ops_update_interval /
-				sample_interval;
-			if (ctx->ops.update)
-				ctx->ops.update(ctx);
-			ctx->sz_limit = damon_region_sz_limit(ctx);
+			if (ctx->ops.check_accesses)
+				max_nr_accesses = ctx->ops.check_accesses(ctx);
+
+			if (ctx->passed_sample_intervals == next_aggregation_sis) {
+				kdamond_merge_regions(ctx,
+						max_nr_accesses / 10,
+						sz_limit);
+				if (ctx->callback.after_aggregation &&
+						ctx->callback.after_aggregation(ctx))
+					goto next_ctx;
+			}
+
+			/*
+			 * do kdamond_apply_schemes() after kdamond_merge_regions() if
+			 * possible, to reduce overhead
+			 */
+			if (!list_empty(&ctx->schemes))
+				kdamond_apply_schemes(ctx, ctx_id);
+
+			if (ctx->passed_sample_intervals == next_aggregation_sis) {
+				ctx->next_aggregation_sis = next_aggregation_sis +
+					ctx->attrs.aggr_interval / sample_interval;
+
+				kdamond_reset_aggregated(ctx, ctx_id);
+				kdamond_split_regions(ctx);
+				if (ctx->ops.reset_aggregated)
+					ctx->ops.reset_aggregated(ctx);
+			}
+
+			if (ctx->passed_sample_intervals == next_ops_update_sis) {
+				ctx->next_ops_update_sis = next_ops_update_sis +
+					ctx->attrs.ops_update_interval /
+					sample_interval;
+				if (ctx->ops.update)
+					ctx->ops.update(ctx);
+				ctx->sz_limit = damon_region_sz_limit(ctx);
+			}
+next_ctx:
+			++ctx_id;
 		}
 	}
 done:

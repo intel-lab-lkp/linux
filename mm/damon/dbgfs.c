@@ -20,14 +20,77 @@
 	"to DAMON_SYSFS. If you cannot, please report your usecase to "	\
 	"damon@lists.linux.dev and linux-mm@kvack.org.\n"
 
-static struct damon_ctx **dbgfs_ctxs;
-static int dbgfs_nr_ctxs;
-static struct dentry **dbgfs_dirs;
+struct damon_dbgfs_ctx {
+	struct kdamond *kdamond;
+	struct dentry *dbgfs_dir;
+	struct list_head list;
+};
+
+static LIST_HEAD(damon_dbgfs_ctxs);
 static DEFINE_MUTEX(damon_dbgfs_lock);
 
 static void damon_dbgfs_warn_deprecation(void)
 {
 	pr_warn_once(DAMON_DBGFS_DEPRECATION_NOTICE);
+}
+
+static struct damon_dbgfs_ctx *dbgfs_root_dbgfs_ctx(void)
+{
+	return list_first_entry(&damon_dbgfs_ctxs,
+				struct damon_dbgfs_ctx, list);
+}
+
+static void dbgfs_add_dbgfs_ctx(struct damon_dbgfs_ctx *dbgfs_ctx)
+{
+	list_add_tail(&dbgfs_ctx->list, &damon_dbgfs_ctxs);
+}
+
+static struct damon_dbgfs_ctx *
+dbgfs_lookup_dbgfs_ctx(struct dentry *dbgfs_dir)
+{
+	struct damon_dbgfs_ctx *dbgfs_ctx;
+
+	list_for_each_entry(dbgfs_ctx, &damon_dbgfs_ctxs, list)
+		if (dbgfs_ctx->dbgfs_dir == dbgfs_dir)
+			return dbgfs_ctx;
+	return NULL;
+}
+
+static void dbgfs_stop_kdamonds(void)
+{
+	struct damon_dbgfs_ctx *dbgfs_ctx;
+	int ret = 0;
+
+	list_for_each_entry(dbgfs_ctx, &damon_dbgfs_ctxs, list)
+		if (damon_kdamond_running(dbgfs_ctx->kdamond))
+			ret |= damon_stop(dbgfs_ctx->kdamond);
+	if (ret)
+		pr_err("%s: some running kdamond(s) failed to stop!\n", __func__);
+}
+
+
+static int dbgfs_start_kdamonds(void)
+{
+	int ret;
+	struct damon_dbgfs_ctx *dbgfs_ctx;
+
+	list_for_each_entry(dbgfs_ctx, &damon_dbgfs_ctxs, list) {
+		ret = damon_start(dbgfs_ctx->kdamond, false);
+		if (ret)
+			goto err_stop_kdamonds;
+	}
+	return 0;
+
+err_stop_kdamonds:
+	dbgfs_stop_kdamonds();
+	return ret;
+}
+
+static bool dbgfs_targets_empty(struct damon_dbgfs_ctx *dbgfs_ctx)
+{
+	struct damon_ctx *ctx = damon_first_ctx(dbgfs_ctx->kdamond);
+
+	return damon_targets_empty(ctx);
 }
 
 /*
@@ -60,15 +123,16 @@ static ssize_t dbgfs_attrs_read(struct file *file,
 		char __user *buf, size_t count, loff_t *ppos)
 {
 	struct damon_ctx *ctx = file->private_data;
+	struct kdamond *kdamond = ctx->kdamond;
 	char kbuf[128];
 	int ret;
 
-	mutex_lock(&ctx->kdamond_lock);
+	mutex_lock(&kdamond->lock);
 	ret = scnprintf(kbuf, ARRAY_SIZE(kbuf), "%lu %lu %lu %lu %lu\n",
 			ctx->attrs.sample_interval, ctx->attrs.aggr_interval,
 			ctx->attrs.ops_update_interval,
 			ctx->attrs.min_nr_regions, ctx->attrs.max_nr_regions);
-	mutex_unlock(&ctx->kdamond_lock);
+	mutex_unlock(&kdamond->lock);
 
 	return simple_read_from_buffer(buf, count, ppos, kbuf, ret);
 }
@@ -77,6 +141,7 @@ static ssize_t dbgfs_attrs_write(struct file *file,
 		const char __user *buf, size_t count, loff_t *ppos)
 {
 	struct damon_ctx *ctx = file->private_data;
+	struct kdamond *kdamond = ctx->kdamond;
 	struct damon_attrs attrs;
 	char *kbuf;
 	ssize_t ret;
@@ -94,8 +159,8 @@ static ssize_t dbgfs_attrs_write(struct file *file,
 		goto out;
 	}
 
-	mutex_lock(&ctx->kdamond_lock);
-	if (ctx->kdamond) {
+	mutex_lock(&kdamond->lock);
+	if (kdamond->self) {
 		ret = -EBUSY;
 		goto unlock_out;
 	}
@@ -104,7 +169,7 @@ static ssize_t dbgfs_attrs_write(struct file *file,
 	if (!ret)
 		ret = count;
 unlock_out:
-	mutex_unlock(&ctx->kdamond_lock);
+	mutex_unlock(&kdamond->lock);
 out:
 	kfree(kbuf);
 	return ret;
@@ -173,6 +238,7 @@ static ssize_t dbgfs_schemes_read(struct file *file, char __user *buf,
 		size_t count, loff_t *ppos)
 {
 	struct damon_ctx *ctx = file->private_data;
+	struct kdamond *kdamond = ctx->kdamond;
 	char *kbuf;
 	ssize_t len;
 
@@ -180,9 +246,9 @@ static ssize_t dbgfs_schemes_read(struct file *file, char __user *buf,
 	if (!kbuf)
 		return -ENOMEM;
 
-	mutex_lock(&ctx->kdamond_lock);
+	mutex_lock(&kdamond->lock);
 	len = sprint_schemes(ctx, kbuf, count);
-	mutex_unlock(&ctx->kdamond_lock);
+	mutex_unlock(&kdamond->lock);
 	if (len < 0)
 		goto out;
 	len = simple_read_from_buffer(buf, count, ppos, kbuf, len);
@@ -298,6 +364,7 @@ static ssize_t dbgfs_schemes_write(struct file *file, const char __user *buf,
 		size_t count, loff_t *ppos)
 {
 	struct damon_ctx *ctx = file->private_data;
+	struct kdamond *kdamond = ctx->kdamond;
 	char *kbuf;
 	struct damos **schemes;
 	ssize_t nr_schemes = 0, ret;
@@ -312,8 +379,8 @@ static ssize_t dbgfs_schemes_write(struct file *file, const char __user *buf,
 		goto out;
 	}
 
-	mutex_lock(&ctx->kdamond_lock);
-	if (ctx->kdamond) {
+	mutex_lock(&kdamond->lock);
+	if (kdamond->self) {
 		ret = -EBUSY;
 		goto unlock_out;
 	}
@@ -323,12 +390,15 @@ static ssize_t dbgfs_schemes_write(struct file *file, const char __user *buf,
 	nr_schemes = 0;
 
 unlock_out:
-	mutex_unlock(&ctx->kdamond_lock);
+	mutex_unlock(&kdamond->lock);
 	free_schemes_arr(schemes, nr_schemes);
 out:
 	kfree(kbuf);
 	return ret;
 }
+
+#pragma GCC push_options
+#pragma GCC optimize("O0")
 
 static ssize_t sprint_target_ids(struct damon_ctx *ctx, char *buf, ssize_t len)
 {
@@ -360,17 +430,20 @@ static ssize_t dbgfs_target_ids_read(struct file *file,
 		char __user *buf, size_t count, loff_t *ppos)
 {
 	struct damon_ctx *ctx = file->private_data;
+	struct kdamond *kdamond = ctx->kdamond;
 	ssize_t len;
 	char ids_buf[320];
 
-	mutex_lock(&ctx->kdamond_lock);
+	mutex_lock(&kdamond->lock);
 	len = sprint_target_ids(ctx, ids_buf, 320);
-	mutex_unlock(&ctx->kdamond_lock);
+	mutex_unlock(&kdamond->lock);
 	if (len < 0)
 		return len;
 
 	return simple_read_from_buffer(buf, count, ppos, ids_buf, len);
 }
+
+#pragma GCC pop_options
 
 /*
  * Converts a string into an integers array
@@ -491,6 +564,7 @@ static ssize_t dbgfs_target_ids_write(struct file *file,
 		const char __user *buf, size_t count, loff_t *ppos)
 {
 	struct damon_ctx *ctx = file->private_data;
+	struct kdamond *kdamond = ctx->kdamond;
 	bool id_is_pid = true;
 	char *kbuf;
 	struct pid **target_pids = NULL;
@@ -514,8 +588,8 @@ static ssize_t dbgfs_target_ids_write(struct file *file,
 		}
 	}
 
-	mutex_lock(&ctx->kdamond_lock);
-	if (ctx->kdamond) {
+	mutex_lock(&kdamond->lock);
+	if (kdamond->self) {
 		if (id_is_pid)
 			dbgfs_put_pids(target_pids, nr_targets);
 		ret = -EBUSY;
@@ -542,7 +616,7 @@ static ssize_t dbgfs_target_ids_write(struct file *file,
 		ret = count;
 
 unlock_out:
-	mutex_unlock(&ctx->kdamond_lock);
+	mutex_unlock(&kdamond->lock);
 	kfree(target_pids);
 out:
 	kfree(kbuf);
@@ -575,6 +649,7 @@ static ssize_t dbgfs_init_regions_read(struct file *file, char __user *buf,
 		size_t count, loff_t *ppos)
 {
 	struct damon_ctx *ctx = file->private_data;
+	struct kdamond *kdamond = ctx->kdamond;
 	char *kbuf;
 	ssize_t len;
 
@@ -582,15 +657,15 @@ static ssize_t dbgfs_init_regions_read(struct file *file, char __user *buf,
 	if (!kbuf)
 		return -ENOMEM;
 
-	mutex_lock(&ctx->kdamond_lock);
+	mutex_lock(&kdamond->lock);
 	if (ctx->kdamond) {
-		mutex_unlock(&ctx->kdamond_lock);
+		mutex_unlock(&kdamond->lock);
 		len = -EBUSY;
 		goto out;
 	}
 
 	len = sprint_init_regions(ctx, kbuf, count);
-	mutex_unlock(&ctx->kdamond_lock);
+	mutex_unlock(&kdamond->lock);
 	if (len < 0)
 		goto out;
 	len = simple_read_from_buffer(buf, count, ppos, kbuf, len);
@@ -670,6 +745,7 @@ static ssize_t dbgfs_init_regions_write(struct file *file,
 					  loff_t *ppos)
 {
 	struct damon_ctx *ctx = file->private_data;
+	struct kdamond *kdamond = ctx->kdamond;
 	char *kbuf;
 	ssize_t ret = count;
 	int err;
@@ -678,8 +754,8 @@ static ssize_t dbgfs_init_regions_write(struct file *file,
 	if (IS_ERR(kbuf))
 		return PTR_ERR(kbuf);
 
-	mutex_lock(&ctx->kdamond_lock);
-	if (ctx->kdamond) {
+	mutex_lock(&kdamond->lock);
+	if (kdamond->self) {
 		ret = -EBUSY;
 		goto unlock_out;
 	}
@@ -689,7 +765,7 @@ static ssize_t dbgfs_init_regions_write(struct file *file,
 		ret = err;
 
 unlock_out:
-	mutex_unlock(&ctx->kdamond_lock);
+	mutex_unlock(&kdamond->lock);
 	kfree(kbuf);
 	return ret;
 }
@@ -698,6 +774,7 @@ static ssize_t dbgfs_kdamond_pid_read(struct file *file,
 		char __user *buf, size_t count, loff_t *ppos)
 {
 	struct damon_ctx *ctx = file->private_data;
+	struct kdamond *kdamond = ctx->kdamond;
 	char *kbuf;
 	ssize_t len;
 
@@ -705,12 +782,12 @@ static ssize_t dbgfs_kdamond_pid_read(struct file *file,
 	if (!kbuf)
 		return -ENOMEM;
 
-	mutex_lock(&ctx->kdamond_lock);
-	if (ctx->kdamond)
-		len = scnprintf(kbuf, count, "%d\n", ctx->kdamond->pid);
+	mutex_lock(&kdamond->lock);
+	if (kdamond->self)
+		len = scnprintf(kbuf, count, "%d\n", ctx->kdamond->self->pid);
 	else
 		len = scnprintf(kbuf, count, "none\n");
-	mutex_unlock(&ctx->kdamond_lock);
+	mutex_unlock(&kdamond->lock);
 	if (!len)
 		goto out;
 	len = simple_read_from_buffer(buf, count, ppos, kbuf, len);
@@ -773,19 +850,30 @@ static void dbgfs_fill_ctx_dir(struct dentry *dir, struct damon_ctx *ctx)
 static void dbgfs_before_terminate(struct damon_ctx *ctx)
 {
 	struct damon_target *t, *next;
+	struct kdamond *kdamond = ctx->kdamond;
 
 	if (!damon_target_has_pid(ctx))
 		return;
 
-	mutex_lock(&ctx->kdamond_lock);
+	mutex_lock(&kdamond->lock);
 	damon_for_each_target_safe(t, next, ctx) {
 		put_pid(t->pid);
 		damon_destroy_target(t);
 	}
-	mutex_unlock(&ctx->kdamond_lock);
+	mutex_unlock(&kdamond->lock);
 }
 
-static struct damon_ctx *dbgfs_new_ctx(void)
+static struct kdamond *dbgfs_new_kdamond(void)
+{
+	struct kdamond *kdamond;
+
+	kdamond = damon_new_kdamond();
+	if (!kdamond)
+		return NULL;
+	return kdamond;
+}
+
+static struct damon_ctx *dbgfs_new_damon_ctx(void)
 {
 	struct damon_ctx *ctx;
 
@@ -802,9 +890,17 @@ static struct damon_ctx *dbgfs_new_ctx(void)
 	return ctx;
 }
 
-static void dbgfs_destroy_ctx(struct damon_ctx *ctx)
+static void dbgfs_destroy_damon_ctx(struct damon_ctx *ctx)
 {
 	damon_destroy_ctx(ctx);
+}
+
+static void dbgfs_destroy_dbgfs_ctx(struct damon_dbgfs_ctx *dbgfs_ctx)
+{
+	debugfs_remove(dbgfs_ctx->dbgfs_dir);
+	damon_destroy_kdamond(dbgfs_ctx->kdamond);
+	list_del(&dbgfs_ctx->list);
+	kfree(dbgfs_ctx);
 }
 
 static ssize_t damon_dbgfs_deprecated_read(struct file *file,
@@ -824,47 +920,56 @@ static ssize_t damon_dbgfs_deprecated_read(struct file *file,
  */
 static int dbgfs_mk_context(char *name)
 {
-	struct dentry *root, **new_dirs, *new_dir;
-	struct damon_ctx **new_ctxs, *new_ctx;
+	int rc;
+	struct damon_dbgfs_ctx *dbgfs_root_ctx, *new_dbgfs_ctx;
+	struct dentry *root, *new_dir;
+	struct damon_ctx *new_ctx;
+	struct kdamond *new_kdamond;
 
 	if (damon_nr_running_ctxs())
 		return -EBUSY;
 
-	new_ctxs = krealloc(dbgfs_ctxs, sizeof(*dbgfs_ctxs) *
-			(dbgfs_nr_ctxs + 1), GFP_KERNEL);
-	if (!new_ctxs)
+	new_dbgfs_ctx = kmalloc(sizeof(*new_dbgfs_ctx), GFP_KERNEL);
+	if (!new_dbgfs_ctx)
 		return -ENOMEM;
-	dbgfs_ctxs = new_ctxs;
 
-	new_dirs = krealloc(dbgfs_dirs, sizeof(*dbgfs_dirs) *
-			(dbgfs_nr_ctxs + 1), GFP_KERNEL);
-	if (!new_dirs)
-		return -ENOMEM;
-	dbgfs_dirs = new_dirs;
-
-	root = dbgfs_dirs[0];
-	if (!root)
-		return -ENOENT;
+	rc = -ENOENT;
+	dbgfs_root_ctx = dbgfs_root_dbgfs_ctx();
+	if (!dbgfs_root_ctx || !dbgfs_root_ctx->dbgfs_dir)
+		goto destroy_new_dbgfs_ctx;
+	root = dbgfs_root_ctx->dbgfs_dir;
 
 	new_dir = debugfs_create_dir(name, root);
 	/* Below check is required for a potential duplicated name case */
-	if (IS_ERR(new_dir))
-		return PTR_ERR(new_dir);
-	dbgfs_dirs[dbgfs_nr_ctxs] = new_dir;
-
-	new_ctx = dbgfs_new_ctx();
-	if (!new_ctx) {
-		debugfs_remove(new_dir);
-		dbgfs_dirs[dbgfs_nr_ctxs] = NULL;
-		return -ENOMEM;
+	if (IS_ERR(new_dir)) {
+		rc = PTR_ERR(new_dir);
+		goto destroy_new_dbgfs_ctx;
 	}
+	new_dbgfs_ctx->dbgfs_dir = new_dir;
 
-	dbgfs_ctxs[dbgfs_nr_ctxs] = new_ctx;
-	dbgfs_fill_ctx_dir(dbgfs_dirs[dbgfs_nr_ctxs],
-			dbgfs_ctxs[dbgfs_nr_ctxs]);
-	dbgfs_nr_ctxs++;
+	rc = -ENOMEM;
+	new_kdamond = damon_new_kdamond();
+	if (!new_kdamond)
+		goto destroy_new_dir;
+
+	new_ctx = dbgfs_new_damon_ctx();
+	if (!new_ctx)
+		goto destroy_new_kdamond;
+	damon_add_ctx(new_kdamond, new_ctx);
+	new_dbgfs_ctx->kdamond = new_kdamond;
+
+	dbgfs_fill_ctx_dir(new_dir, new_ctx);
+	dbgfs_add_dbgfs_ctx(new_dbgfs_ctx);
 
 	return 0;
+
+destroy_new_kdamond:
+	damon_destroy_kdamond(new_kdamond);
+destroy_new_dir:
+	debugfs_remove(new_dir);
+destroy_new_dbgfs_ctx:
+	kfree(new_dbgfs_ctx);
+	return rc;
 }
 
 static ssize_t dbgfs_mk_context_write(struct file *file,
@@ -910,21 +1015,26 @@ out:
  */
 static int dbgfs_rm_context(char *name)
 {
-	struct dentry *root, *dir, **new_dirs;
+	struct dentry *root, *dir;
 	struct inode *inode;
-	struct damon_ctx **new_ctxs;
-	int i, j;
+	struct damon_dbgfs_ctx *dbgfs_root_ctx;
+	struct damon_dbgfs_ctx *dbgfs_ctx;
 	int ret = 0;
 
 	if (damon_nr_running_ctxs())
 		return -EBUSY;
 
-	root = dbgfs_dirs[0];
-	if (!root)
+	dbgfs_root_ctx = dbgfs_root_dbgfs_ctx();
+	if (!dbgfs_root_ctx || !dbgfs_root_ctx->dbgfs_dir)
 		return -ENOENT;
+	root = dbgfs_root_ctx->dbgfs_dir;
 
 	dir = debugfs_lookup(name, root);
 	if (!dir)
+		return -ENOENT;
+
+	dbgfs_ctx = dbgfs_lookup_dbgfs_ctx(dir);
+	if (!dbgfs_ctx)
 		return -ENOENT;
 
 	inode = d_inode(dir);
@@ -932,42 +1042,8 @@ static int dbgfs_rm_context(char *name)
 		ret = -EINVAL;
 		goto out_dput;
 	}
+	dbgfs_destroy_dbgfs_ctx(dbgfs_ctx);
 
-	new_dirs = kmalloc_array(dbgfs_nr_ctxs - 1, sizeof(*dbgfs_dirs),
-			GFP_KERNEL);
-	if (!new_dirs) {
-		ret = -ENOMEM;
-		goto out_dput;
-	}
-
-	new_ctxs = kmalloc_array(dbgfs_nr_ctxs - 1, sizeof(*dbgfs_ctxs),
-			GFP_KERNEL);
-	if (!new_ctxs) {
-		ret = -ENOMEM;
-		goto out_new_dirs;
-	}
-
-	for (i = 0, j = 0; i < dbgfs_nr_ctxs; i++) {
-		if (dbgfs_dirs[i] == dir) {
-			debugfs_remove(dbgfs_dirs[i]);
-			dbgfs_destroy_ctx(dbgfs_ctxs[i]);
-			continue;
-		}
-		new_dirs[j] = dbgfs_dirs[i];
-		new_ctxs[j++] = dbgfs_ctxs[i];
-	}
-
-	kfree(dbgfs_dirs);
-	kfree(dbgfs_ctxs);
-
-	dbgfs_dirs = new_dirs;
-	dbgfs_ctxs = new_ctxs;
-	dbgfs_nr_ctxs--;
-
-	goto out_dput;
-
-out_new_dirs:
-	kfree(new_dirs);
 out_dput:
 	dput(dir);
 	return ret;
@@ -1024,6 +1100,7 @@ static ssize_t dbgfs_monitor_on_write(struct file *file,
 {
 	ssize_t ret;
 	char *kbuf;
+	struct damon_dbgfs_ctx *dbgfs_ctx;
 
 	kbuf = user_input_str(buf, count, ppos);
 	if (IS_ERR(kbuf))
@@ -1037,18 +1114,16 @@ static ssize_t dbgfs_monitor_on_write(struct file *file,
 
 	mutex_lock(&damon_dbgfs_lock);
 	if (!strncmp(kbuf, "on", count)) {
-		int i;
-
-		for (i = 0; i < dbgfs_nr_ctxs; i++) {
-			if (damon_targets_empty(dbgfs_ctxs[i])) {
+		list_for_each_entry(dbgfs_ctx, &damon_dbgfs_ctxs, list) {
+			if (dbgfs_targets_empty(dbgfs_ctx)) {
 				kfree(kbuf);
 				mutex_unlock(&damon_dbgfs_lock);
 				return -EINVAL;
 			}
 		}
-		ret = damon_start(dbgfs_ctxs, dbgfs_nr_ctxs, true);
+		ret = dbgfs_start_kdamonds();
 	} else if (!strncmp(kbuf, "off", count)) {
-		ret = damon_stop(dbgfs_ctxs, dbgfs_nr_ctxs);
+		dbgfs_stop_kdamonds();
 	} else {
 		ret = -EINVAL;
 	}
@@ -1088,27 +1163,20 @@ static const struct file_operations monitor_on_fops = {
 
 static int __init __damon_dbgfs_init(void)
 {
-	struct dentry *dbgfs_root;
+	struct dentry *dbgfs_root_dir;
+	struct damon_dbgfs_ctx *dbgfs_root_ctx = dbgfs_root_dbgfs_ctx();
+	struct damon_ctx *damon_ctx = damon_first_ctx(dbgfs_root_ctx->kdamond);
 	const char * const file_names[] = {"mk_contexts", "rm_contexts",
 		"monitor_on_DEPRECATED", "DEPRECATED"};
 	const struct file_operations *fops[] = {&mk_contexts_fops,
 		&rm_contexts_fops, &monitor_on_fops, &deprecated_fops};
-	int i;
 
-	dbgfs_root = debugfs_create_dir("damon", NULL);
-
-	for (i = 0; i < ARRAY_SIZE(file_names); i++)
-		debugfs_create_file(file_names[i], 0600, dbgfs_root, NULL,
+	dbgfs_root_dir = debugfs_create_dir("damon", NULL);
+	for (int i = 0; i < ARRAY_SIZE(file_names); i++)
+		debugfs_create_file(file_names[i], 0600, dbgfs_root_dir, NULL,
 				fops[i]);
-	dbgfs_fill_ctx_dir(dbgfs_root, dbgfs_ctxs[0]);
-
-	dbgfs_dirs = kmalloc(sizeof(dbgfs_root), GFP_KERNEL);
-	if (!dbgfs_dirs) {
-		debugfs_remove(dbgfs_root);
-		return -ENOMEM;
-	}
-	dbgfs_dirs[0] = dbgfs_root;
-
+	dbgfs_fill_ctx_dir(dbgfs_root_dir, damon_ctx);
+	dbgfs_root_ctx->dbgfs_dir = dbgfs_root_dir;
 	return 0;
 }
 
@@ -1118,26 +1186,38 @@ static int __init __damon_dbgfs_init(void)
 
 static int __init damon_dbgfs_init(void)
 {
+	struct damon_dbgfs_ctx *dbgfs_ctx;
+	struct damon_ctx *damon_ctx;
 	int rc = -ENOMEM;
 
 	mutex_lock(&damon_dbgfs_lock);
-	dbgfs_ctxs = kmalloc(sizeof(*dbgfs_ctxs), GFP_KERNEL);
-	if (!dbgfs_ctxs)
+	dbgfs_ctx = kmalloc(sizeof(*dbgfs_ctx), GFP_KERNEL);
+	if (!dbgfs_ctx)
 		goto out;
-	dbgfs_ctxs[0] = dbgfs_new_ctx();
-	if (!dbgfs_ctxs[0]) {
-		kfree(dbgfs_ctxs);
-		goto out;
-	}
-	dbgfs_nr_ctxs = 1;
+
+	dbgfs_ctx->kdamond = dbgfs_new_kdamond();
+	if (!dbgfs_ctx->kdamond)
+		goto bad_kdamond;
+
+	damon_ctx = dbgfs_new_damon_ctx();
+	if (!damon_ctx)
+		goto destroy_kdamond;
+	damon_add_ctx(dbgfs_ctx->kdamond, damon_ctx);
+
+	dbgfs_add_dbgfs_ctx(dbgfs_ctx);
 
 	rc = __damon_dbgfs_init();
 	if (rc) {
-		kfree(dbgfs_ctxs[0]);
-		kfree(dbgfs_ctxs);
 		pr_err("%s: dbgfs init failed\n", __func__);
+		goto destroy_kdamond;
 	}
+	mutex_unlock(&damon_dbgfs_lock);
+	return 0;
 
+destroy_kdamond:
+	damon_destroy_kdamond(dbgfs_ctx->kdamond);
+bad_kdamond:
+	kfree(dbgfs_ctx);
 out:
 	mutex_unlock(&damon_dbgfs_lock);
 	return rc;

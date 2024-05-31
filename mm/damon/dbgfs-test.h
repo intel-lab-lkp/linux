@@ -70,7 +70,7 @@ static void damon_dbgfs_test_str_to_ints(struct kunit *test)
 
 static void damon_dbgfs_test_set_targets(struct kunit *test)
 {
-	struct damon_ctx *ctx = dbgfs_new_ctx();
+	struct damon_ctx *ctx = dbgfs_new_damon_ctx();
 	char buf[64];
 
 	/* Make DAMON consider target has no pid */
@@ -88,7 +88,7 @@ static void damon_dbgfs_test_set_targets(struct kunit *test)
 	sprint_target_ids(ctx, buf, 64);
 	KUNIT_EXPECT_STREQ(test, (char *)buf, "\n");
 
-	dbgfs_destroy_ctx(ctx);
+	dbgfs_destroy_damon_ctx(ctx);
 }
 
 static void damon_dbgfs_test_set_init_regions(struct kunit *test)

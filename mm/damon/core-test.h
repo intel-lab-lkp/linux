@@ -99,7 +99,7 @@ static void damon_test_aggregate(struct kunit *test)
 		}
 		it++;
 	}
-	kdamond_reset_aggregated(ctx);
+	kdamond_reset_aggregated(ctx, 0);
 	it = 0;
 	damon_for_each_target(t, ctx) {
 		ir = 0;
