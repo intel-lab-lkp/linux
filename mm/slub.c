@@ -3874,13 +3874,15 @@ static __always_inline void maybe_wipe_obj_freeptr(struct kmem_cache *s,
 			0, sizeof(void *));
 }
 
+DEFINE_STATIC_KEY_FALSE(should_failslab_active);
+
 noinline int should_failslab(struct kmem_cache *s, gfp_t gfpflags)
 {
 	if (__should_failslab(s, gfpflags))
 		return -ENOMEM;
 	return 0;
 }
-ALLOW_ERROR_INJECTION(should_failslab, ERRNO);
+ALLOW_ERROR_INJECTION_KEY(should_failslab, ERRNO, &should_failslab_active);
 
 static __fastpath_inline
 struct kmem_cache *slab_pre_alloc_hook(struct kmem_cache *s, gfp_t flags)
@@ -3889,8 +3891,10 @@ struct kmem_cache *slab_pre_alloc_hook(struct kmem_cache *s, gfp_t flags)
 
 	might_alloc(flags);
 
-	if (unlikely(should_failslab(s, flags)))
-		return NULL;
+	if (static_branch_unlikely(&should_failslab_active)) {
+		if (should_failslab(s, flags))
+			return NULL;
+	}
 
 	return s;
 }
