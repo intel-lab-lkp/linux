@@ -13,6 +13,7 @@
 #include <linux/err.h>
 #include <linux/slab.h>
 #include <linux/keyctl.h>
+#include <linux/security.h>
 #include <crypto/public_key.h>
 #include <keys/user-type.h>
 #include "asymmetric_keys.h"
@@ -152,6 +153,9 @@ int verify_signature(const struct key *key,
 		return -ENOTSUPP;
 
 	ret = subtype->verify_signature(key, sig);
+
+	if (!ret)
+		ret = security_key_verify_signature(key, sig);
 
 	pr_devel("<==%s() = %d\n", __func__, ret);
 	return ret;

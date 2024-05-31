@@ -51,7 +51,8 @@
 	(IS_ENABLED(CONFIG_BPF_LSM) ? 1 : 0) + \
 	(IS_ENABLED(CONFIG_SECURITY_LANDLOCK) ? 1 : 0) + \
 	(IS_ENABLED(CONFIG_IMA) ? 1 : 0) + \
-	(IS_ENABLED(CONFIG_EVM) ? 1 : 0))
+	(IS_ENABLED(CONFIG_EVM) ? 1 : 0) + \
+	(IS_ENABLED(CONFIG_SECURITY_CLAVIS) ? 1 : 0))
 
 /*
  * These are descriptions of the reasons that can be passed to the
@@ -5322,6 +5323,19 @@ void security_key_post_create_or_update(struct key *keyring, struct key *key,
 {
 	call_void_hook(key_post_create_or_update, keyring, key, payload,
 		       payload_len, flags, create);
+}
+
+/**
+ * security_key_verify_signature - verify signature
+ * @key: key
+ * @sig: signature
+ *
+ * See whether signature verification is allowed based on the ACL for
+ * key usage.
+ */
+int security_key_verify_signature(const struct key *key, const struct public_key_signature *sig)
+{
+	return call_int_hook(key_verify_signature, key, sig);
 }
 #endif	/* CONFIG_KEYS */
 
