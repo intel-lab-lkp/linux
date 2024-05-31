@@ -330,6 +330,41 @@
 //SDMA0_ATOMIC_PREOP_HI
 #define SDMA0_ATOMIC_PREOP_HI__DATA__SHIFT                                                                    0x0
 #define SDMA0_ATOMIC_PREOP_HI__DATA_MASK                                                                      0xFFFFFFFFL
+//SDMA0_DCC_CNTL
+#define SDMA0_DCC_CNTL__DCC_FORCE_BYPASS__SHIFT                                                               0x0
+#define SDMA0_DCC_CNTL__DCC_RD_NOPTE_OVERRIDE_0__SHIFT                                                        0x1
+#define SDMA0_DCC_CNTL__DCC_RD_NOPTE_COMP_EN_0__SHIFT                                                         0x2
+#define SDMA0_DCC_CNTL__DCC_WR_NOPTE_OVERRIDE_0__SHIFT                                                        0x3
+#define SDMA0_DCC_CNTL__DCC_WR_NOPTE_COMP_EN_0__SHIFT                                                         0x4
+#define SDMA0_DCC_CNTL__DCC_RD_NOPTE_OVERRIDE_1__SHIFT                                                        0x5
+#define SDMA0_DCC_CNTL__DCC_RD_NOPTE_COMP_EN_1__SHIFT                                                         0x6
+#define SDMA0_DCC_CNTL__DCC_WR_NOPTE_OVERRIDE_1__SHIFT                                                        0x7
+#define SDMA0_DCC_CNTL__DCC_WR_NOPTE_COMP_EN_1__SHIFT                                                         0x8
+#define SDMA0_DCC_CNTL__DCC_RD_NOPTE_OVERRIDE_2__SHIFT                                                        0x9
+#define SDMA0_DCC_CNTL__DCC_RD_NOPTE_COMP_EN_2__SHIFT                                                         0xa
+#define SDMA0_DCC_CNTL__DCC_WR_NOPTE_OVERRIDE_2__SHIFT                                                        0xb
+#define SDMA0_DCC_CNTL__DCC_WR_NOPTE_COMP_EN_2__SHIFT                                                         0xc
+#define SDMA0_DCC_CNTL__DCC_RD_NOPTE_OVERRIDE_3__SHIFT                                                        0xd
+#define SDMA0_DCC_CNTL__DCC_RD_NOPTE_COMP_EN_3__SHIFT                                                         0xe
+#define SDMA0_DCC_CNTL__DCC_WR_NOPTE_OVERRIDE_3__SHIFT                                                        0xf
+#define SDMA0_DCC_CNTL__DCC_WR_NOPTE_COMP_EN_3__SHIFT                                                         0x10
+#define SDMA0_DCC_CNTL__DCC_FORCE_BYPASS_MASK                                                                 0x00000001L
+#define SDMA0_DCC_CNTL__DCC_RD_NOPTE_OVERRIDE_0_MASK                                                          0x00000002L
+#define SDMA0_DCC_CNTL__DCC_RD_NOPTE_COMP_EN_0_MASK                                                           0x00000004L
+#define SDMA0_DCC_CNTL__DCC_WR_NOPTE_OVERRIDE_0_MASK                                                          0x00000008L
+#define SDMA0_DCC_CNTL__DCC_WR_NOPTE_COMP_EN_0_MASK                                                           0x00000010L
+#define SDMA0_DCC_CNTL__DCC_RD_NOPTE_OVERRIDE_1_MASK                                                          0x00000020L
+#define SDMA0_DCC_CNTL__DCC_RD_NOPTE_COMP_EN_1_MASK                                                           0x00000040L
+#define SDMA0_DCC_CNTL__DCC_WR_NOPTE_OVERRIDE_1_MASK                                                          0x00000080L
+#define SDMA0_DCC_CNTL__DCC_WR_NOPTE_COMP_EN_1_MASK                                                           0x00000100L
+#define SDMA0_DCC_CNTL__DCC_RD_NOPTE_OVERRIDE_2_MASK                                                          0x00000200L
+#define SDMA0_DCC_CNTL__DCC_RD_NOPTE_COMP_EN_2_MASK                                                           0x00000400L
+#define SDMA0_DCC_CNTL__DCC_WR_NOPTE_OVERRIDE_2_MASK                                                          0x00000800L
+#define SDMA0_DCC_CNTL__DCC_WR_NOPTE_COMP_EN_2_MASK                                                           0x00001000L
+#define SDMA0_DCC_CNTL__DCC_RD_NOPTE_OVERRIDE_3_MASK                                                          0x00002000L
+#define SDMA0_DCC_CNTL__DCC_RD_NOPTE_COMP_EN_3_MASK                                                           0x00004000L
+#define SDMA0_DCC_CNTL__DCC_WR_NOPTE_OVERRIDE_3_MASK                                                          0x00008000L
+#define SDMA0_DCC_CNTL__DCC_WR_NOPTE_COMP_EN_3_MASK                                                           0x00010000L
 //SDMA0_UTCL1_CNTL
 #define SDMA0_UTCL1_CNTL__REDO_DELAY__SHIFT                                                                   0x0
 #define SDMA0_UTCL1_CNTL__PAGE_WAIT_DELAY__SHIFT                                                              0x5
@@ -3204,6 +3239,41 @@
 //SDMA1_ATOMIC_PREOP_HI
 #define SDMA1_ATOMIC_PREOP_HI__DATA__SHIFT                                                                    0x0
 #define SDMA1_ATOMIC_PREOP_HI__DATA_MASK                                                                      0xFFFFFFFFL
+//SDMA1_DCC_CNTL
+#define SDMA1_DCC_CNTL__DCC_FORCE_BYPASS__SHIFT                                                               0x0
+#define SDMA1_DCC_CNTL__DCC_RD_NOPTE_OVERRIDE_0__SHIFT                                                        0x1
+#define SDMA1_DCC_CNTL__DCC_RD_NOPTE_COMP_EN_0__SHIFT                                                         0x2
+#define SDMA1_DCC_CNTL__DCC_WR_NOPTE_OVERRIDE_0__SHIFT                                                        0x3
+#define SDMA1_DCC_CNTL__DCC_WR_NOPTE_COMP_EN_0__SHIFT                                                         0x4
+#define SDMA1_DCC_CNTL__DCC_RD_NOPTE_OVERRIDE_1__SHIFT                                                        0x5
+#define SDMA1_DCC_CNTL__DCC_RD_NOPTE_COMP_EN_1__SHIFT                                                         0x6
+#define SDMA1_DCC_CNTL__DCC_WR_NOPTE_OVERRIDE_1__SHIFT                                                        0x7
+#define SDMA1_DCC_CNTL__DCC_WR_NOPTE_COMP_EN_1__SHIFT                                                         0x8
+#define SDMA1_DCC_CNTL__DCC_RD_NOPTE_OVERRIDE_2__SHIFT                                                        0x9
+#define SDMA1_DCC_CNTL__DCC_RD_NOPTE_COMP_EN_2__SHIFT                                                         0xa
+#define SDMA1_DCC_CNTL__DCC_WR_NOPTE_OVERRIDE_2__SHIFT                                                        0xb
+#define SDMA1_DCC_CNTL__DCC_WR_NOPTE_COMP_EN_2__SHIFT                                                         0xc
+#define SDMA1_DCC_CNTL__DCC_RD_NOPTE_OVERRIDE_3__SHIFT                                                        0xd
+#define SDMA1_DCC_CNTL__DCC_RD_NOPTE_COMP_EN_3__SHIFT                                                         0xe
+#define SDMA1_DCC_CNTL__DCC_WR_NOPTE_OVERRIDE_3__SHIFT                                                        0xf
+#define SDMA1_DCC_CNTL__DCC_WR_NOPTE_COMP_EN_3__SHIFT                                                         0x10
+#define SDMA1_DCC_CNTL__DCC_FORCE_BYPASS_MASK                                                                 0x00000001L
+#define SDMA1_DCC_CNTL__DCC_RD_NOPTE_OVERRIDE_0_MASK                                                          0x00000002L
+#define SDMA1_DCC_CNTL__DCC_RD_NOPTE_COMP_EN_0_MASK                                                           0x00000004L
+#define SDMA1_DCC_CNTL__DCC_WR_NOPTE_OVERRIDE_0_MASK                                                          0x00000008L
+#define SDMA1_DCC_CNTL__DCC_WR_NOPTE_COMP_EN_0_MASK                                                           0x00000010L
+#define SDMA1_DCC_CNTL__DCC_RD_NOPTE_OVERRIDE_1_MASK                                                          0x00000020L
+#define SDMA1_DCC_CNTL__DCC_RD_NOPTE_COMP_EN_1_MASK                                                           0x00000040L
+#define SDMA1_DCC_CNTL__DCC_WR_NOPTE_OVERRIDE_1_MASK                                                          0x00000080L
+#define SDMA1_DCC_CNTL__DCC_WR_NOPTE_COMP_EN_1_MASK                                                           0x00000100L
+#define SDMA1_DCC_CNTL__DCC_RD_NOPTE_OVERRIDE_2_MASK                                                          0x00000200L
+#define SDMA1_DCC_CNTL__DCC_RD_NOPTE_COMP_EN_2_MASK                                                           0x00000400L
+#define SDMA1_DCC_CNTL__DCC_WR_NOPTE_OVERRIDE_2_MASK                                                          0x00000800L
+#define SDMA1_DCC_CNTL__DCC_WR_NOPTE_COMP_EN_2_MASK                                                           0x00001000L
+#define SDMA1_DCC_CNTL__DCC_RD_NOPTE_OVERRIDE_3_MASK                                                          0x00002000L
+#define SDMA1_DCC_CNTL__DCC_RD_NOPTE_COMP_EN_3_MASK                                                           0x00004000L
+#define SDMA1_DCC_CNTL__DCC_WR_NOPTE_OVERRIDE_3_MASK                                                          0x00008000L
+#define SDMA1_DCC_CNTL__DCC_WR_NOPTE_COMP_EN_3_MASK                                                           0x00010000L
 //SDMA1_UTCL1_CNTL
 #define SDMA1_UTCL1_CNTL__REDO_DELAY__SHIFT                                                                   0x0
 #define SDMA1_UTCL1_CNTL__PAGE_WAIT_DELAY__SHIFT                                                              0x5
@@ -17286,6 +17356,34 @@
 #define CHC_STATUS__REQUEST_TRACKER_BUFFER_STALL_MASK                                                         0x00400000L
 #define CHC_STATUS__REQUEST_TRACKER_BUSY_MASK                                                                 0x00800000L
 #define CHC_STATUS__BUFFER_FULL_MASK                                                                          0x01000000L
+//CHC_CTRL2
+#define CHC_CTRL2__DCC_COMP_TO_CONSTANT_EN__SHIFT                                                             0x0
+#define CHC_CTRL2__DCC_COMP_TO_SINGLE_EN__SHIFT                                                               0x1
+#define CHC_CTRL2__DCC_CLEAR_ERRORS__SHIFT                                                                    0x6
+#define CHC_CTRL2__DCC_COMP_TRANSFER_SIZE_ENABLE__SHIFT                                                       0x7
+#define CHC_CTRL2__DCC_COMP_SKIP_LOW_COMP_RATIOS__SHIFT                                                       0xa
+#define CHC_CTRL2__DCC_COMPRESSION_DISABLE__SHIFT                                                             0xb
+#define CHC_CTRL2__DF_COMPRESSION_MODE_OVERRIDE__SHIFT                                                        0xc
+#define CHC_CTRL2__OC_OVERRIDE_UNCOMP_LOGICAL_SIZE_DISABLE__SHIFT                                             0xe
+#define CHC_CTRL2__EA_NACK_DISABLE__SHIFT                                                                     0xf
+#define CHC_CTRL2__DCC_FORCE_BYPASS__SHIFT                                                                    0x10
+#define CHC_CTRL2__DCC_CLEAR_128B_CONSTANT_ENCODE_EN__SHIFT                                                   0x11
+#define CHC_CTRL2__OC_UNCOMP_128B_COMPRESS_EN_DISABLE__SHIFT                                                  0x12
+#define CHC_CTRL2__DCC_COMP_TO_CONSTANT_EN_MASK                                                               0x00000001L
+#define CHC_CTRL2__DCC_COMP_TO_SINGLE_EN_MASK                                                                 0x00000002L
+#define CHC_CTRL2__DCC_CLEAR_ERRORS_MASK                                                                      0x00000040L
+#define CHC_CTRL2__DCC_COMP_TRANSFER_SIZE_ENABLE_MASK                                                         0x00000380L
+#define CHC_CTRL2__DCC_COMP_SKIP_LOW_COMP_RATIOS_MASK                                                         0x00000400L
+#define CHC_CTRL2__DCC_COMPRESSION_DISABLE_MASK                                                               0x00000800L
+#define CHC_CTRL2__DF_COMPRESSION_MODE_OVERRIDE_MASK                                                          0x00003000L
+#define CHC_CTRL2__OC_OVERRIDE_UNCOMP_LOGICAL_SIZE_DISABLE_MASK                                               0x00004000L
+#define CHC_CTRL2__EA_NACK_DISABLE_MASK                                                                       0x00008000L
+#define CHC_CTRL2__DCC_FORCE_BYPASS_MASK                                                                      0x00010000L
+#define CHC_CTRL2__DCC_CLEAR_128B_CONSTANT_ENCODE_EN_MASK                                                     0x00020000L
+#define CHC_CTRL2__OC_UNCOMP_128B_COMPRESS_EN_DISABLE_MASK                                                    0x00040000L
+//CHC_STATUS2
+#define CHC_STATUS2__DCC_OUT_ERROR_CODE__SHIFT                                                                0x0
+#define CHC_STATUS2__DCC_OUT_ERROR_CODE_MASK                                                                  0x00000FFFL
 
 
 // addressBlock: gc_gfx_cpwd_cpwd_gl2dec
