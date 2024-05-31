@@ -114,9 +114,12 @@ static int pps_gpio_setup(struct device *dev)
 		device_property_read_bool(dev, "assert-falling-edge");
 
 	data->echo_pin = devm_gpiod_get_optional(dev, "echo", GPIOD_OUT_LOW);
-	if (IS_ERR(data->echo_pin))
-		return dev_err_probe(dev, PTR_ERR(data->echo_pin),
-				     "failed to request ECHO GPIO\n");
+	if (IS_ERR(data->echo_pin)) {
+		dev_warn(dev, "failed to request ECHO GPIO: %ld\n",
+			 PTR_ERR(data->echo_pin));
+		data->echo_pin = NULL;
+		return 0;
+	}
 
 	if (!data->echo_pin)
 		return 0;
