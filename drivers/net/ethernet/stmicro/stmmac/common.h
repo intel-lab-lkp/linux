@@ -14,7 +14,7 @@
 #include <linux/etherdevice.h>
 #include <linux/netdevice.h>
 #include <linux/stmmac.h>
-#include <linux/phy.h>
+#include <linux/phylink.h>
 #include <linux/pcs/pcs-xpcs.h>
 #include <linux/module.h>
 #if IS_ENABLED(CONFIG_VLAN_8021Q)
@@ -591,6 +591,7 @@ struct mac_device_info {
 	const struct stmmac_tc_ops *tc;
 	const struct stmmac_mmc_ops *mmc;
 	const struct stmmac_est_ops *est;
+	struct phylink_pcs mac_pcs;	/* The MAC's RGMII/SGMII "PCS" */
 	struct dw_xpcs *xpcs;
 	struct phylink_pcs *phylink_pcs;
 	struct mii_regs mii;	/* MII register Addresses */
@@ -610,6 +611,12 @@ struct mac_device_info {
 	u8 vlan_fail_q;
 	bool hw_vlan_en;
 };
+
+static inline struct mac_device_info *
+phylink_pcs_to_mac_dev_info(struct phylink_pcs *pcs)
+{
+	return container_of(pcs, struct mac_device_info, mac_pcs);
+}
 
 struct stmmac_rx_routing {
 	u32 reg_mask;
