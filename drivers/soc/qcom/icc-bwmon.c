@@ -17,6 +17,8 @@
 #include <linux/pm_opp.h>
 #include <linux/regmap.h>
 #include <linux/sizes.h>
+#define CREATE_TRACE_POINTS
+#include "trace_icc-bwmon.h"
 
 /*
  * The BWMON samples data throughput within 'sample_ms' time. With three
@@ -681,7 +683,7 @@ static irqreturn_t bwmon_intr_thread(int irq, void *dev_id)
 
 	if (bwmon->target_kbps == bwmon->current_kbps)
 		goto out;
-
+	trace_qcom_bwmon_update(dev_name(bwmon->dev), bw_kbps, up_kbps, down_kbps);
 	dev_pm_opp_set_opp(bwmon->dev, target_opp);
 	bwmon->current_kbps = bwmon->target_kbps;
 
