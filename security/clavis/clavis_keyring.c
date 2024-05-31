@@ -4,6 +4,7 @@
 #include <linux/integrity.h>
 #include <keys/asymmetric-type.h>
 #include <keys/system_keyring.h>
+#include "clavis.h"
 
 static struct key *clavis_keyring;
 static struct asymmetric_key_id *setup_keyid;
@@ -82,9 +83,21 @@ static int __init clavis_keyring_init(void)
 
 void __init late_init_clavis_setup(void)
 {
-	if (!setup_keyid)
+	int error;
+	struct {
+		struct asymmetric_key_id id;
+		unsigned char data[MAX_BIN_KID];
+	} efi_keyid;
+	struct asymmetric_key_id *keyid = &efi_keyid.id;
+
+	error = clavis_efi_param(keyid, sizeof(efi_keyid.data));
+
+	if (error && !setup_keyid)
 		return;
 
+	if (error)
+		keyid = setup_keyid;
+
 	clavis_keyring_init();
-	system_key_link(clavis_keyring, setup_keyid);
+	system_key_link(clavis_keyring, keyid);
 }
