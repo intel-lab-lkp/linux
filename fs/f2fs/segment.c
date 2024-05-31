@@ -394,6 +394,9 @@ int f2fs_commit_atomic_write(struct inode *inode)
 	return err;
 }
 
+static int new_curseg(struct f2fs_sb_info *sbi, int type, bool new_sec);
+static void locate_dirty_segment(struct f2fs_sb_info *sbi, unsigned int segno);
+
 /*
  * This function balances dirty node and dentry pages.
  * In addition, it controls garbage collection.
@@ -420,6 +423,58 @@ void f2fs_balance_fs(struct f2fs_sb_info *sbi, bool need)
 	if (has_enough_free_secs(sbi, 0, 0))
 		return;
 
+	if (test_opt(sbi, SINGLE_NODE_SEC) && !sbi->single_node_sec) {
+		int type, segno, left_blocks = 0;
+
+		for (type = CURSEG_HOT_NODE; type <= CURSEG_COLD_NODE; type++) {
+			segno = CURSEG_I(sbi, type)->segno;
+			left_blocks += CAP_BLKS_PER_SEC(sbi) -
+					get_ckpt_valid_blocks(sbi, segno, true);
+		}
+
+		/* enable single node section mode if we get 2 free sections */
+		if (left_blocks < CAP_BLKS_PER_SEC(sbi) * 2)
+			goto do_gc;
+
+		f2fs_down_read(&SM_I(sbi)->curseg_lock);
+		down_write(&SIT_I(sbi)->sentry_lock);
+
+		/* it can be enabled by others */
+		if (sbi->single_node_sec)
+			goto unlock;
+
+		/* leave current zone by allocating new section */
+		for (type = CURSEG_WARM_NODE; type <= CURSEG_COLD_NODE; type++) {
+			struct curseg_info *curseg = CURSEG_I(sbi, type);
+
+			mutex_lock(&curseg->curseg_mutex);
+			segno = curseg->segno;
+			if (new_curseg(sbi, type, true)) {
+				mutex_unlock(&curseg->curseg_mutex);
+				goto unlock;
+			}
+			locate_dirty_segment(sbi, segno);
+			mutex_unlock(&curseg->curseg_mutex);
+		}
+
+		/* clear warm node, cold node information */
+		for (type = CURSEG_WARM_NODE; type <= CURSEG_COLD_NODE; type++) {
+			struct curseg_info *curseg = CURSEG_I(sbi, type);
+
+			mutex_lock(&curseg->curseg_mutex);
+			segno = curseg->segno;
+			curseg->segno = NULL_SEGNO;
+			curseg->inited = false;
+			__set_test_and_free(sbi, segno, false);
+			mutex_unlock(&curseg->curseg_mutex);
+		}
+		f2fs_notice(sbi, "single node section mode enabled");
+		sbi->single_node_sec = true;
+unlock:
+		up_write(&SIT_I(sbi)->sentry_lock);
+		f2fs_up_read(&SM_I(sbi)->curseg_lock);
+	}
+do_gc:
 	if (test_opt(sbi, GC_MERGE) && sbi->gc_thread &&
 				sbi->gc_thread->f2fs_gc_task) {
 		DEFINE_WAIT(wait);
@@ -3503,6 +3558,9 @@ static int __get_segment_type_6(struct f2fs_io_info *fio)
 		return f2fs_rw_hint_to_seg_type(F2FS_I_SB(inode),
 						inode->i_write_hint);
 	} else {
+		if (fio->sbi->single_node_sec)
+			return CURSEG_HOT_NODE;
+
 		if (IS_DNODE(fio->page))
 			return is_cold_node(fio->page) ? CURSEG_WARM_NODE :
 						CURSEG_HOT_NODE;
@@ -4117,6 +4175,15 @@ static int read_normal_summaries(struct f2fs_sb_info *sbi, int type)
 							CURSEG_HOT_NODE]);
 		blk_off = le16_to_cpu(ckpt->cur_node_blkoff[type -
 							CURSEG_HOT_NODE]);
+		if (segno == NULL_SEGNO && type != CURSEG_HOT_NODE) {
+			if (!test_opt(sbi, SINGLE_NODE_SEC)) {
+				f2fs_err(sbi, "single_node_sec option required");
+				return -EFAULT;
+			}
+			sbi->single_node_sec = true;
+			return 0;
+		}
+
 		if (__exist_node_summaries(sbi))
 			blk_addr = sum_blk_addr(sbi, NR_CURSEG_NODE_TYPE,
 							type - CURSEG_HOT_NODE);
@@ -4885,6 +4952,8 @@ static void init_free_segmap(struct f2fs_sb_info *sbi)
 		struct curseg_info *curseg_t = CURSEG_I(sbi, type);
 
 		__set_test_and_inuse(sbi, curseg_t->segno);
+		if (sbi->single_node_sec && type == CURSEG_HOT_NODE)
+			break;
 	}
 }
 
@@ -5028,6 +5097,10 @@ out:
 			f2fs_handle_error(sbi, ERROR_INVALID_CURSEG);
 			return -EFSCORRUPTED;
 		}
+
+		/* in single node section mode, WARM/COLD NODE are invalid */
+		if (sbi->single_node_sec && i == CURSEG_HOT_NODE)
+			break;
 	}
 	return 0;
 }
@@ -5152,6 +5225,10 @@ static int fix_curseg_write_pointer(struct f2fs_sb_info *sbi, int type)
 
 	zbd = get_target_zoned_dev(sbi, cs_zone_block);
 	if (!zbd)
+		return 0;
+
+	/* in single node section mode, WARM/COLD node are not valid */
+	if (sbi->single_node_sec && type > CURSEG_HOT_NODE)
 		return 0;
 
 	/* report zone for the sector the curseg points to */

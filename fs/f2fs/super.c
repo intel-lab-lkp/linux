@@ -129,6 +129,7 @@ enum {
 	Opt_acl,
 	Opt_noacl,
 	Opt_active_logs,
+	Opt_single_node_sec,
 	Opt_disable_ext_identify,
 	Opt_inline_xattr,
 	Opt_noinline_xattr,
@@ -207,6 +208,7 @@ static match_table_t f2fs_tokens = {
 	{Opt_acl, "acl"},
 	{Opt_noacl, "noacl"},
 	{Opt_active_logs, "active_logs=%u"},
+	{Opt_single_node_sec, "single_node_sec"},
 	{Opt_disable_ext_identify, "disable_ext_identify"},
 	{Opt_inline_xattr, "inline_xattr"},
 	{Opt_noinline_xattr, "noinline_xattr"},
@@ -802,6 +804,9 @@ static int parse_options(struct super_block *sb, char *options, bool is_remount)
 				arg != NR_CURSEG_PERSIST_TYPE)
 				return -EINVAL;
 			F2FS_OPTION(sbi).active_logs = arg;
+			break;
+		case Opt_single_node_sec:
+			set_opt(sbi, SINGLE_NODE_SEC);
 			break;
 		case Opt_disable_ext_identify:
 			set_opt(sbi, DISABLE_EXT_IDENTIFY);
@@ -2039,6 +2044,8 @@ static int f2fs_show_options(struct seq_file *seq, struct dentry *root)
 					F2FS_OPTION(sbi).s_resuid),
 				from_kgid_munged(&init_user_ns,
 					F2FS_OPTION(sbi).s_resgid));
+	if (test_opt(sbi, SINGLE_NODE_SEC))
+		seq_puts(seq, ",single_node_sec");
 #ifdef CONFIG_F2FS_FAULT_INJECTION
 	if (test_opt(sbi, FAULT_INJECTION)) {
 		seq_printf(seq, ",fault_injection=%u",
@@ -3675,6 +3682,9 @@ int f2fs_sanity_check_ckpt(struct f2fs_sb_info *sbi)
 	blocks_per_seg = BLKS_PER_SEG(sbi);
 
 	for (i = 0; i < NR_CURSEG_NODE_TYPE; i++) {
+		/* bypass single node section mode */
+		if (le32_to_cpu(ckpt->cur_node_segno[i] == NULL_SEGNO))
+			goto check_data;
 		if (le32_to_cpu(ckpt->cur_node_segno[i]) >= main_segs ||
 			le16_to_cpu(ckpt->cur_node_blkoff[i]) >= blocks_per_seg)
 			return 1;
@@ -3822,6 +3832,8 @@ static void init_sb_info(struct f2fs_sb_info *sbi)
 	mutex_init(&sbi->umount_mutex);
 	init_f2fs_rwsem(&sbi->io_order_lock);
 	spin_lock_init(&sbi->cp_lock);
+
+	sbi->single_node_sec = false;
 
 	sbi->dirty_device = 0;
 	spin_lock_init(&sbi->dev_lock);

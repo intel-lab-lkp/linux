@@ -414,6 +414,9 @@ static int find_fsync_dnodes(struct f2fs_sb_info *sbi, struct list_head *head,
 
 	/* get node pages in the current segment */
 	curseg = CURSEG_I(sbi, CURSEG_WARM_NODE);
+	/* check hot node if single node section mode is enabled */
+	if (sbi->single_node_sec && curseg->segno == NULL_SEGNO)
+		curseg = CURSEG_I(sbi, CURSEG_HOT_NODE);
 	blkaddr = NEXT_FREE_BLKADDR(sbi, curseg);
 	blkaddr_fast = blkaddr;
 

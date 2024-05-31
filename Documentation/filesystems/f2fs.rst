@@ -134,6 +134,8 @@ noacl			 Disable POSIX Access Control List. Note: acl is enabled
 active_logs=%u		 Support configuring the number of active logs. In the
 			 current design, f2fs supports only 2, 4, and 6 logs.
 			 Default number is 6.
+single_node_sec	 Support single node section mode, it enables single active
+			 log for hot/warm/cold nodes. This is disabled by default.
 disable_ext_identify	 Disable the extension list configured by mkfs, so f2fs
 			 is not aware of cold files such as media files.
 inline_xattr		 Enable the inline xattrs feature.

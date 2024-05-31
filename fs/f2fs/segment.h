@@ -570,6 +570,8 @@ static inline bool has_curseg_enough_space(struct f2fs_sb_info *sbi,
 				get_ckpt_valid_blocks(sbi, segno, true);
 		if (node_blocks > left_blocks)
 			return false;
+		if (sbi->single_node_sec) /* check only hot node */
+			break;
 	}
 
 	/* check current data section for dentry blocks. */
