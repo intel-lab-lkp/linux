@@ -75,5 +75,4 @@ static inline bool kvm_auth_eretax(struct kvm_vcpu *vcpu, u64 *elr)
 	return false;
 }
 #endif
-
 #endif /* __ARM64_KVM_NESTED_H */
