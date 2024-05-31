@@ -56,12 +56,7 @@ static void dwmac1000_core_init(struct mac_device_info *hw,
 	writel(value, ioaddr + GMAC_CONTROL);
 
 	/* Mask GMAC interrupts */
-	value = GMAC_INT_DEFAULT_MASK;
-
-	if (hw->pcs)
-		value &= ~GMAC_INT_DISABLE_PCS;
-
-	writel(value, ioaddr + GMAC_INT_MASK);
+	writel(GMAC_INT_DEFAULT_MASK, ioaddr + GMAC_INT_MASK);
 
 #ifdef STMMAC_VLAN_TAG_USED
 	/* Tag detection without filtering */
@@ -387,6 +382,30 @@ static int dwmac1000_mii_pcs_validate(struct phylink_pcs *pcs,
 	return 0;
 }
 
+static int dwmac1000_mii_pcs_enable(struct phylink_pcs *pcs)
+{
+	struct mac_device_info *hw = phylink_pcs_to_mac_dev_info(pcs);
+	void __iomem *ioaddr = hw->pcsr;
+	u32 intr_mask;
+
+	intr_mask = readl(ioaddr + GMAC_INT_MASK);
+	intr_mask &= ~GMAC_INT_DISABLE_PCS;
+	writel(intr_mask, ioaddr + GMAC_INT_MASK);
+
+	return 0;
+}
+
+static void dwmac1000_mii_pcs_disable(struct phylink_pcs *pcs)
+{
+	struct mac_device_info *hw = phylink_pcs_to_mac_dev_info(pcs);
+	void __iomem *ioaddr = hw->pcsr;
+	u32 intr_mask;
+
+	intr_mask = readl(ioaddr + GMAC_INT_MASK);
+	intr_mask |= GMAC_INT_DISABLE_PCS;
+	writel(intr_mask, ioaddr + GMAC_INT_MASK);
+}
+
 static int dwmac1000_mii_pcs_config(struct phylink_pcs *pcs,
 				    unsigned int neg_mode,
 				    phy_interface_t interface,
@@ -428,6 +447,8 @@ static void dwmac1000_mii_pcs_get_state(struct phylink_pcs *pcs,
 
 static const struct phylink_pcs_ops dwmac1000_mii_pcs_ops = {
 	.pcs_validate = dwmac1000_mii_pcs_validate,
+	.pcs_enable = dwmac1000_mii_pcs_enable,
+	.pcs_disable = dwmac1000_mii_pcs_disable,
 	.pcs_config = dwmac1000_mii_pcs_config,
 	.pcs_get_state = dwmac1000_mii_pcs_get_state,
 };
