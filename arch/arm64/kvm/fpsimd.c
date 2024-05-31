@@ -173,7 +173,16 @@ void kvm_arch_vcpu_put_fp(struct kvm_vcpu *vcpu)
 
 	if (guest_owns_fp_regs()) {
 		if (vcpu_has_sve(vcpu)) {
-			__vcpu_sys_reg(vcpu, ZCR_EL1) = read_sysreg_el1(SYS_ZCR);
+			u64 zcr = read_sysreg_el1(SYS_ZCR);
+
+			/*
+			 * If the vCPU is in the hyp context then ZCR_EL1 is
+			 * loaded with its vEL2 counterpart.
+			 */
+			if (is_hyp_ctxt(vcpu))
+				__vcpu_sys_reg(vcpu, ZCR_EL2) = zcr;
+			else
+				__vcpu_sys_reg(vcpu, ZCR_EL1) = zcr;
 
 			/*
 			 * Restore the VL that was saved when bound to the CPU,
