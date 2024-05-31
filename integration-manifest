@@ -1,0 +1,28 @@
+drm drm-fixes a2ce3f7752bfbb47e659574fc2e1e6942bca3c29
+	Merge tag 'drm-misc-fixes-2024-05-30' of https://gitlab.freedesktop.org/drm/misc/kernel into drm-fixes
+drm-misc drm-misc-fixes bb195358806847217efba98de62b7decec3b371f
+	drm/msm: remove python 3.9 dependency for compiling msm
+drm-intel drm-intel-fixes 75800e2e4203ea83bbc9d4f63ad97ea582244a08
+	drm/i915: Fix audio component initialization
+drm-xe drm-xe-fixes 6c5cd0807c79eb4c0cda70b48f6be668a241d584
+	drm/xe: Properly handle alloc_guc_id() failure
+drm drm-next 1613e604df0cd359cf2a7fbd9be7a0bcfacfabd0
+	Linux 6.10-rc1
+drm-misc drm-misc-next-fixes 539d33b5783804f22a62bd62ff463dfd1cef4265
+	drm/komeda: remove unused struct 'gamma_curve_segment'
+drm-intel drm-intel-next-fixes 1613e604df0cd359cf2a7fbd9be7a0bcfacfabd0
+	Linux 6.10-rc1
+drm-xe drm-xe-next-fixes d69c3d4b53829097b8948d6791ea32c07de3faab
+	drm/xe/ads: Use flexible-array
+drm-misc drm-misc-next c9402efe492bb46ccbf94fedc4783eb8f8747567
+	dma-buf: add a warning when drv try to reserve 0 fence slots
+drm-intel drm-intel-next cef26c248110f034650a83b2c92700cec70a5f4d
+	MAINTAINERS: update i915 and xe entries for include/drm/intel
+drm-intel drm-intel-gt-next a09d2327a9ba8e3f5be238bc1b7ca2809255b464
+	drm/i915/gt: Fix CCS id's calculation for CCS mode setting
+drm-xe drm-xe-next c063cce7df3a765539e2a2d75ab943f334446cce
+	drm/xe/pf: Update the LMTT when freeing VF GT config
+drm-intel topic/core-for-CI 3e5fdd7886b71d1050015b2762a7984dfc97cafa
+	Revert "igc: fix a log entry using uninitialized netdev"
+drm-xe topic/xe-for-CI 428c3ef38ef5565140b2104f0d3dafdae9056ca9
+	Revert "drm/xe/gsc: define GSC FW for LNL"
