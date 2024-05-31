@@ -137,4 +137,14 @@ static inline void dwmac_get_adv_lp(void __iomem *ioaddr, u32 reg,
 
 	adv_lp->lp_pause = (value & GMAC_ANE_PSE) >> GMAC_ANE_PSE_SHIFT;
 }
+
+int dwmac_pcs_config(struct mac_device_info *hw, unsigned int neg_mode,
+		     phy_interface_t interface,
+		     const unsigned long *advertising,
+		     unsigned int reg_base);
+
+void dwmac_pcs_get_state(struct mac_device_info *hw,
+			 struct phylink_link_state *state,
+			 unsigned int reg_base);
+
 #endif /* __STMMAC_PCS_H__ */
