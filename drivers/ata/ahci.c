@@ -1736,6 +1736,12 @@ static void ahci_update_initial_lpm_policy(struct ata_port *ap)
 	if (ap->pflags & ATA_PFLAG_EXTERNAL)
 		return;
 
+	/* If no LPM states are supported by the HBA, do not bother with LPM */
+	if ((ap->host->flags & ATA_HOST_NO_PART) &&
+	    (ap->host->flags & ATA_HOST_NO_SSC) &&
+	    (ap->host->flags & ATA_HOST_NO_DEVSLP))
+		return;
+
 	/* user modified policy via module param */
 	if (mobile_lpm_policy != -1) {
 		policy = mobile_lpm_policy;
