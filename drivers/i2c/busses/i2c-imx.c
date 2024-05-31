@@ -503,10 +503,18 @@ static int i2c_imx_bus_busy(struct imx_i2c_struct *i2c_imx, int for_busy, bool a
 				"<%s> I2C bus is busy\n", __func__);
 			return -ETIMEDOUT;
 		}
-		if (atomic)
+		if (atomic) {
 			udelay(100);
-		else
-			schedule();
+		} else {
+			/*
+			 * Avoid rescheduling in the first 10 ms to avoid
+			 * timeouts for SMBus like devices
+			 */
+			if (time_before(jiffies, orig_jiffies + msecs_to_jiffies(10)))
+				udelay(10);
+			else
+				schedule();
+		}
 	}
 
 	return 0;
