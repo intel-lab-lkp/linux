@@ -1340,6 +1340,7 @@ struct task_struct {
 #endif
 
 	struct tlbflush_unmap_batch	tlb_ubc;
+	struct tlbflush_unmap_batch	tlb_ubc_ro;
 	unsigned short int		ugen;
 
 	/* Cache last used pipe for splice(): */
