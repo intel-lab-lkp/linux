@@ -1657,6 +1657,7 @@ int io_connect_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 {
 	struct io_connect *conn = io_kiocb_to_cmd(req, struct io_connect);
 	struct io_async_msghdr *io;
+	int ret;
 
 	if (sqe->len || sqe->buf_index || sqe->rw_flags || sqe->splice_fd_in)
 		return -EINVAL;
@@ -1669,7 +1670,10 @@ int io_connect_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 	if (unlikely(!io))
 		return -ENOMEM;
 
-	return move_addr_to_kernel(conn->addr, conn->addr_len, &io->addr);
+	ret = move_addr_to_kernel(conn->addr, conn->addr_len, &io->addr);
+	if (ret)
+		io_netmsg_recycle(req, 0);
+	return ret;
 }
 
 int io_connect(struct io_kiocb *req, unsigned int issue_flags)
