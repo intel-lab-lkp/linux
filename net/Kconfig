@@ -290,12 +290,12 @@ config MAX_SKB_FRAGS
 	  If unsure, say 17.
 
 config RPS
-	bool
+	bool "Enable receive packet steering"
 	depends on SMP && SYSFS
 	default y
 
 config RFS_ACCEL
-	bool
+	bool "Enable hardware acceleration of RFS"
 	depends on RPS
 	select CPU_RMAP
 	default y
@@ -351,7 +351,7 @@ config BPF_STREAM_PARSER
 	  BPF_MAP_TYPE_SOCKMAP.
 
 config NET_FLOW_LIMIT
-	bool
+	bool "Enable net flow limit"
 	depends on RPS
 	default y
 	help
