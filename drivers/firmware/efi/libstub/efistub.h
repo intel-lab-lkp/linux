@@ -1142,6 +1142,14 @@ static inline void
 efi_enable_reset_attack_mitigation(void) { }
 #endif
 
+#ifdef CONFIG_EARLY_CLAVIS
+void efi_parse_clavis(char *option);
+void efi_setup_clavis(void);
+#else
+static inline void efi_parse_clavis(char *option) { }
+static inline void efi_setup_clavis(void) { }
+#endif
+
 void efi_retrieve_eventlog(void);
 
 struct screen_info *alloc_screen_info(void);
