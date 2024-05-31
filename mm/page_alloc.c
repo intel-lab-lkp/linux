@@ -274,6 +274,8 @@ int user_min_free_kbytes = -1;
 static int watermark_boost_factor __read_mostly = 15000;
 static int watermark_scale_factor = 10;
 
+DEFINE_STATIC_KEY_FALSE(should_fail_alloc_page_active);
+
 /* movable_zone is the "real" zone pages in ZONE_MOVABLE are taken from */
 int movable_zone;
 EXPORT_SYMBOL(movable_zone);
@@ -3012,7 +3014,7 @@ noinline bool should_fail_alloc_page(gfp_t gfp_mask, unsigned int order)
 {
 	return __should_fail_alloc_page(gfp_mask, order);
 }
-ALLOW_ERROR_INJECTION(should_fail_alloc_page, TRUE);
+ALLOW_ERROR_INJECTION_KEY(should_fail_alloc_page, TRUE, &should_fail_alloc_page_active);
 
 static inline long __zone_watermark_unusable_free(struct zone *z,
 				unsigned int order, unsigned int alloc_flags)
@@ -4430,8 +4432,11 @@ static inline bool prepare_alloc_pages(gfp_t gfp_mask, unsigned int order,
 
 	might_alloc(gfp_mask);
 
-	if (should_fail_alloc_page(gfp_mask, order))
-		return false;
+	if (static_branch_unlikely(&should_fail_alloc_page_active)) {
+		if (should_fail_alloc_page(gfp_mask, order)) {
+			return false;
+		}
+	}
 
 	*alloc_flags = gfp_to_alloc_flags_cma(gfp_mask, *alloc_flags);
 
