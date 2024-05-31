@@ -2025,18 +2025,21 @@ static unsigned long  __init deferred_init_pages(struct zone *zone,
  * return false indicating there are no valid ranges left.
  */
 static bool __init
-deferred_init_mem_pfn_range_in_zone(u64 *i, struct zone *zone,
+deferred_init_mem_pfn_range_in_zone_from(u64 *i, struct zone *zone,
 				    unsigned long *spfn, unsigned long *epfn,
 				    unsigned long first_init_pfn)
 {
-	u64 j;
+	u64 j = *i;
+
+	if (j == 0)
+		__next_mem_pfn_range_in_zone(&j, zone, spfn, epfn);
 
 	/*
 	 * Start out by walking through the ranges in this zone that have
 	 * already been initialized. We don't need to do anything with them
 	 * so we just need to flush them out of the system.
 	 */
-	for_each_free_mem_pfn_range_in_zone(j, zone, spfn, epfn) {
+	for_each_free_mem_pfn_range_in_zone_from(j, zone, spfn, epfn) {
 		if (*epfn <= first_init_pfn)
 			continue;
 		if (*spfn < first_init_pfn)
@@ -2108,9 +2111,9 @@ deferred_init_memmap_chunk(unsigned long start_pfn, unsigned long end_pfn,
 {
 	unsigned long spfn, epfn;
 	struct zone *zone = arg;
-	u64 i;
+	u64 i = 0;
 
-	deferred_init_mem_pfn_range_in_zone(&i, zone, &spfn, &epfn, start_pfn);
+	deferred_init_mem_pfn_range_in_zone_from(&i, zone, &spfn, &epfn, start_pfn);
 
 	/*
 	 * Initialize and free pages in MAX_PAGE_ORDER sized increments so that
@@ -2139,7 +2142,7 @@ static int __init deferred_init_memmap(void *data)
 	unsigned long start = jiffies;
 	struct zone *zone;
 	int max_threads;
-	u64 i;
+	u64 i = 0;
 
 	/* Bind memory initialisation thread to a local node if possible */
 	if (!cpumask_empty(cpumask))
@@ -2170,7 +2173,7 @@ static int __init deferred_init_memmap(void *data)
 
 	max_threads = deferred_page_init_max_threads(cpumask);
 
-	while (deferred_init_mem_pfn_range_in_zone(&i, zone, &spfn, &epfn, first_init_pfn)) {
+	while (deferred_init_mem_pfn_range_in_zone_from(&i, zone, &spfn, &epfn, first_init_pfn)) {
 		first_init_pfn = ALIGN(epfn, PAGES_PER_SECTION);
 		struct padata_mt_job job = {
 			.thread_fn   = deferred_init_memmap_chunk,
@@ -2214,7 +2217,7 @@ bool __init deferred_grow_zone(struct zone *zone, unsigned int order)
 	unsigned long first_deferred_pfn = pgdat->first_deferred_pfn;
 	unsigned long spfn, epfn, flags;
 	unsigned long nr_pages = 0;
-	u64 i;
+	u64 i = 0;
 
 	/* Only the last zone may have deferred pages */
 	if (zone_end_pfn(zone) != pgdat_end_pfn(pgdat))
@@ -2232,7 +2235,7 @@ bool __init deferred_grow_zone(struct zone *zone, unsigned int order)
 	}
 
 	/* If the zone is empty somebody else may have cleared out the zone */
-	if (!deferred_init_mem_pfn_range_in_zone(&i, zone, &spfn, &epfn,
+	if (!deferred_init_mem_pfn_range_in_zone_from(&i, zone, &spfn, &epfn,
 						 first_deferred_pfn)) {
 		pgdat->first_deferred_pfn = ULONG_MAX;
 		pgdat_resize_unlock(pgdat, &flags);
