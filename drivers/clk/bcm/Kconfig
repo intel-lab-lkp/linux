@@ -106,6 +106,7 @@ config CLK_BCM_SR
 config CLK_RASPBERRYPI
 	tristate "Raspberry Pi firmware based clock support"
 	depends on RASPBERRYPI_FIRMWARE || (COMPILE_TEST && !RASPBERRYPI_FIRMWARE)
+	default y
 	help
 	  Enable common clock framework support for Raspberry Pi's firmware
 	  dependent clocks
