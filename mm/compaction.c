@@ -1925,7 +1925,7 @@ static void compaction_free(struct folio *dst, unsigned long data)
 	struct page *page = &dst->page;
 
 	if (folio_put_testzero(dst)) {
-		free_pages_prepare(page, order);
+		free_pages_prepare(page, order, NULL);
 		list_add(&dst->lru, &cc->freepages[order]);
 		cc->nr_freepages += 1 << order;
 	}

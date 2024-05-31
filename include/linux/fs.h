@@ -2872,6 +2872,12 @@ static inline void file_end_write(struct file *file)
 	if (!S_ISREG(file_inode(file)->i_mode))
 		return;
 	sb_end_write(file_inode(file)->i_sb);
+
+	/*
+	 * XXX: If needed, can be optimized by avoiding luf_flush() if
+	 * the address space of the file has never been involved by luf.
+	 */
+	luf_flush();
 }
 
 /**

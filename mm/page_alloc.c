@@ -1048,7 +1048,7 @@ void kernel_init_pages(struct page *page, int numpages)
 }
 
 __always_inline bool free_pages_prepare(struct page *page,
-			unsigned int order)
+			unsigned int order, unsigned short int *ugen)
 {
 	int bad = 0;
 	bool skip_kasan_poison = should_skip_kasan_poison(page);
@@ -1061,6 +1061,15 @@ __always_inline bool free_pages_prepare(struct page *page,
 	 * Ensure private is zero before using it inside pcp.
 	 */
 	set_page_private(page, 0);
+
+	/*
+	 * The contents of the pages will be updated for some reasons.
+	 * So we should give up luf.
+	 */
+	if ((!skip_kasan_poison || init) && ugen && *ugen) {
+		check_luf_flush(*ugen);
+		*ugen = 0;
+	}
 
 	trace_mm_page_free(page, order);
 	kmsan_free_page(page, order);
@@ -1236,7 +1245,7 @@ static void __free_pages_ok(struct page *page, unsigned int order,
 	unsigned long pfn = page_to_pfn(page);
 	struct zone *zone = page_zone(page);
 
-	if (!free_pages_prepare(page, order))
+	if (!free_pages_prepare(page, order, NULL))
 		return;
 
 	free_one_page(zone, page, pfn, order, fpi_flags, 0);
@@ -2664,7 +2673,7 @@ void free_unref_page(struct page *page, unsigned int order,
 		return;
 	}
 
-	if (!free_pages_prepare(page, order))
+	if (!free_pages_prepare(page, order, &ugen))
 		return;
 
 	/*
@@ -2712,7 +2721,7 @@ void free_unref_folios(struct folio_batch *folios, unsigned short int ugen)
 		unsigned int order = folio_order(folio);
 
 		folio_undo_large_rmappable(folio);
-		if (!free_pages_prepare(&folio->page, order))
+		if (!free_pages_prepare(&folio->page, order, &ugen))
 			continue;
 		/*
 		 * Free orders not handled on the PCP directly to the

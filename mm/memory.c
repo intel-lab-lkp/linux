@@ -3011,6 +3011,15 @@ static inline int pte_unmap_same(struct vm_fault *vmf)
 	return same;
 }
 
+static bool need_luf_flush(struct vm_fault *vmf)
+{
+	if ((vmf->flags & FAULT_FLAG_ORIG_PTE_VALID) &&
+	    pte_write(vmf->orig_pte))
+		return false;
+
+	return pte_write(ptep_get(vmf->pte));
+}
+
 /*
  * Return:
  *	0:		copied succeeded
@@ -3026,6 +3035,7 @@ static inline int __wp_page_copy_user(struct page *dst, struct page *src,
 	struct vm_area_struct *vma = vmf->vma;
 	struct mm_struct *mm = vma->vm_mm;
 	unsigned long addr = vmf->address;
+	bool luf = false;
 
 	if (likely(src)) {
 		if (copy_mc_user_highpage(dst, src, addr, vma)) {
@@ -3059,8 +3069,10 @@ static inline int __wp_page_copy_user(struct page *dst, struct page *src,
 			 * Other thread has already handled the fault
 			 * and update local tlb only
 			 */
-			if (vmf->pte)
+			if (vmf->pte) {
 				update_mmu_tlb(vma, addr, vmf->pte);
+				luf = need_luf_flush(vmf);
+			}
 			ret = -EAGAIN;
 			goto pte_unlock;
 		}
@@ -3084,8 +3096,10 @@ static inline int __wp_page_copy_user(struct page *dst, struct page *src,
 		vmf->pte = pte_offset_map_lock(mm, vmf->pmd, addr, &vmf->ptl);
 		if (unlikely(!vmf->pte || !pte_same(ptep_get(vmf->pte), vmf->orig_pte))) {
 			/* The PTE changed under us, update local tlb */
-			if (vmf->pte)
+			if (vmf->pte) {
 				update_mmu_tlb(vma, addr, vmf->pte);
+				luf = need_luf_flush(vmf);
+			}
 			ret = -EAGAIN;
 			goto pte_unlock;
 		}
@@ -3112,6 +3126,8 @@ pte_unlock:
 		pte_unmap_unlock(vmf->pte, vmf->ptl);
 	pagefault_enable();
 	kunmap_local(kaddr);
+	if (luf)
+		luf_flush();
 	flush_dcache_page(dst);
 
 	return ret;
@@ -3446,6 +3462,8 @@ static vm_fault_t wp_page_copy(struct vm_fault *vmf)
 	} else if (vmf->pte) {
 		update_mmu_tlb(vma, vmf->address, vmf->pte);
 		pte_unmap_unlock(vmf->pte, vmf->ptl);
+		if (need_luf_flush(vmf))
+			luf_flush();
 	}
 
 	mmu_notifier_invalidate_range_end(&range);
@@ -3501,6 +3519,8 @@ static vm_fault_t finish_mkwrite_fault(struct vm_fault *vmf, struct folio *folio
 	if (!pte_same(ptep_get(vmf->pte), vmf->orig_pte)) {
 		update_mmu_tlb(vmf->vma, vmf->address, vmf->pte);
 		pte_unmap_unlock(vmf->pte, vmf->ptl);
+		if (need_luf_flush(vmf))
+			luf_flush();
 		return VM_FAULT_NOPAGE;
 	}
 	wp_page_reuse(vmf, folio);
@@ -4469,6 +4489,7 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 	vm_fault_t ret = 0;
 	int nr_pages = 1;
 	pte_t entry;
+	bool luf = false;
 
 	/* File mapping without ->vm_ops ? */
 	if (vma->vm_flags & VM_SHARED)
@@ -4492,6 +4513,7 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 			goto unlock;
 		if (vmf_pte_changed(vmf)) {
 			update_mmu_tlb(vma, vmf->address, vmf->pte);
+			luf = need_luf_flush(vmf);
 			goto unlock;
 		}
 		ret = check_stable_address_space(vma->vm_mm);
@@ -4536,9 +4558,11 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 		goto release;
 	if (nr_pages == 1 && vmf_pte_changed(vmf)) {
 		update_mmu_tlb(vma, addr, vmf->pte);
+		luf = need_luf_flush(vmf);
 		goto release;
 	} else if (nr_pages > 1 && !pte_range_none(vmf->pte, nr_pages)) {
 		update_mmu_tlb_range(vma, addr, vmf->pte, nr_pages);
+		luf = need_luf_flush(vmf);
 		goto release;
 	}
 
@@ -4570,6 +4594,8 @@ setpte:
 unlock:
 	if (vmf->pte)
 		pte_unmap_unlock(vmf->pte, vmf->ptl);
+	if (luf)
+		luf_flush();
 	return ret;
 release:
 	folio_put(folio);
@@ -4796,6 +4822,7 @@ vm_fault_t finish_fault(struct vm_fault *vmf)
 	vm_fault_t ret;
 	bool is_cow = (vmf->flags & FAULT_FLAG_WRITE) &&
 		      !(vma->vm_flags & VM_SHARED);
+	bool luf = false;
 
 	/* Did we COW the page? */
 	if (is_cow)
@@ -4841,10 +4868,14 @@ vm_fault_t finish_fault(struct vm_fault *vmf)
 		ret = 0;
 	} else {
 		update_mmu_tlb(vma, vmf->address, vmf->pte);
+		luf = need_luf_flush(vmf);
 		ret = VM_FAULT_NOPAGE;
 	}
 
 	pte_unmap_unlock(vmf->pte, vmf->ptl);
+
+	if (luf)
+		luf_flush();
 	return ret;
 }
 
@@ -5397,6 +5428,7 @@ split:
 static vm_fault_t handle_pte_fault(struct vm_fault *vmf)
 {
 	pte_t entry;
+	bool luf = false;
 
 	if (unlikely(pmd_none(*vmf->pmd))) {
 		/*
@@ -5440,6 +5472,7 @@ static vm_fault_t handle_pte_fault(struct vm_fault *vmf)
 	entry = vmf->orig_pte;
 	if (unlikely(!pte_same(ptep_get(vmf->pte), entry))) {
 		update_mmu_tlb(vmf->vma, vmf->address, vmf->pte);
+		luf = need_luf_flush(vmf);
 		goto unlock;
 	}
 	if (vmf->flags & (FAULT_FLAG_WRITE|FAULT_FLAG_UNSHARE)) {
@@ -5469,6 +5502,8 @@ static vm_fault_t handle_pte_fault(struct vm_fault *vmf)
 	}
 unlock:
 	pte_unmap_unlock(vmf->pte, vmf->ptl);
+	if (luf)
+		luf_flush();
 	return 0;
 }
 

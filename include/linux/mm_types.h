@@ -1223,6 +1223,14 @@ static inline unsigned int mm_cid_size(void)
 }
 #endif /* CONFIG_SCHED_MM_CID */
 
+#if defined(CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH)
+void check_luf_flush(unsigned short int ugen);
+void luf_flush(void);
+#else
+static inline void check_luf_flush(unsigned short int ugen) {}
+static inline void luf_flush(void) {}
+#endif
+
 struct mmu_gather;
 extern void tlb_gather_mmu(struct mmu_gather *tlb, struct mm_struct *mm);
 extern void tlb_gather_mmu_fullmm(struct mmu_gather *tlb, struct mm_struct *mm);
