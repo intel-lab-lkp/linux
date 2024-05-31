@@ -465,8 +465,8 @@ sub give_redhat_hints()
 sub give_opensuse_hints()
 {
 	my %map = (
-		"python-sphinx"		=> "python3-sphinx",
-		"yaml"			=> "python3-pyyaml",
+		"python-sphinx"		=> "python3-Sphinx",
+		"yaml"			=> "python3-pyaml",
 		"virtualenv"		=> "python3-virtualenv",
 		"dot"			=> "graphviz",
 		"convert"		=> "ImageMagick",
