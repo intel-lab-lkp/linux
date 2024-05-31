@@ -47,7 +47,11 @@ struct icve_common {
 	enum icve_state	state;
 	struct mutex state_lock; /* Lock to be used while changing the interface state */
 	struct delayed_work state_work;
+	struct work_struct rx_mode_work;
+	struct workqueue_struct *cmd_wq;
+	struct netdev_hw_addr_list mc_list;
 	struct completion sync_msg;
+	u8 mcast_addr[ETH_ALEN];
 };
 
 struct icve_ndev_priv {

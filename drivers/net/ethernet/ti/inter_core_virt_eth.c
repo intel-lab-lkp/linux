@@ -46,6 +46,11 @@ static int create_request(struct icve_common *common,
 		ether_addr_copy(msg->req_msg.mac_addr.addr,
 				common->port->ndev->dev_addr);
 		break;
+	case ICVE_REQ_ADD_MC_ADDR:
+	case ICVE_REQ_DEL_MC_ADDR:
+		ether_addr_copy(msg->req_msg.mac_addr.addr,
+				common->mcast_addr);
+		break;
 	case ICVE_NOTIFY_PORT_UP:
 	case ICVE_NOTIFY_PORT_DOWN:
 		msg->msg_hdr.msg_type = ICVE_NOTIFY_MSG;
@@ -84,6 +89,26 @@ static int icve_create_send_request(struct icve_common *common,
 			return ret;
 		}
 	}
+	return ret;
+}
+
+static int icve_add_mc_addr(struct net_device *ndev, const u8 *addr)
+{
+	struct icve_common *common = icve_ndev_to_common(ndev);
+	int ret = 0;
+
+	ether_addr_copy(common->mcast_addr, addr);
+	icve_create_send_request(common, ICVE_REQ_ADD_MC_ADDR, true);
+	return ret;
+}
+
+static int icve_del_mc_addr(struct net_device *ndev, const u8 *addr)
+{
+	struct icve_common *common = icve_ndev_to_common(ndev);
+	int ret = 0;
+
+	ether_addr_copy(common->mcast_addr, addr);
+	icve_create_send_request(common, ICVE_REQ_DEL_MC_ADDR, true);
 	return ret;
 }
 
@@ -210,6 +235,10 @@ static int icve_rpmsg_cb(struct rpmsg_device *rpdev, void *data, int len,
 
 			break;
 		case ICVE_RESP_SET_MAC_ADDR:
+			break;
+		case ICVE_RESP_ADD_MC_ADDR:
+		case ICVE_RESP_DEL_MC_ADDR:
+			complete(&common->sync_msg);
 			break;
 		}
 
@@ -395,10 +424,35 @@ static int icve_set_mac_address(struct net_device *ndev, void *addr)
 	return ret;
 }
 
+static void icve_ndo_set_rx_mode_work(struct work_struct *work)
+{
+	struct icve_common *common;
+	struct net_device *ndev;
+
+	common = container_of(work, struct icve_common, rx_mode_work);
+	ndev = common->port->ndev;
+
+	/* make a mc list copy */
+	netif_addr_lock_bh(ndev);
+	__hw_addr_sync(&common->mc_list, &ndev->mc, ndev->addr_len);
+	netif_addr_unlock_bh(ndev);
+
+	__hw_addr_sync_dev(&common->mc_list, ndev, icve_add_mc_addr,
+			   icve_del_mc_addr);
+}
+
+static void icve_set_rx_mode(struct net_device *ndev)
+{
+	struct icve_common *common = icve_ndev_to_common(ndev);
+
+	queue_work(common->cmd_wq, &common->rx_mode_work);
+}
+
 static const struct net_device_ops icve_netdev_ops = {
 	.ndo_open = icve_ndo_open,
 	.ndo_stop = icve_ndo_stop,
 	.ndo_start_xmit = icve_start_xmit,
+	.ndo_set_rx_mode = icve_set_rx_mode,
 	.ndo_set_mac_address = icve_set_mac_address,
 };
 
@@ -491,7 +545,13 @@ static int icve_rpmsg_probe(struct rpmsg_device *rpdev)
 	mutex_init(&common->state_lock);
 	INIT_DELAYED_WORK(&common->state_work, icve_state_machine);
 	init_completion(&common->sync_msg);
-
+	__hw_addr_init(&common->mc_list);
+	INIT_WORK(&common->rx_mode_work, icve_ndo_set_rx_mode_work);
+	common->cmd_wq = create_singlethread_workqueue("icve_rx_work");
+	if (!common->cmd_wq) {
+		dev_err(dev, "Failure requesting workqueue\n");
+		return -ENOMEM;
+	}
 	/* Register the network device */
 	ret = icve_init_ndev(common);
 	if (ret)
@@ -506,6 +566,7 @@ static void icve_rpmsg_remove(struct rpmsg_device *rpdev)
 
 	netif_napi_del(&port->rx_napi);
 	del_timer_sync(&port->rx_timer);
+	destroy_workqueue(common->cmd_wq);
 	dev_info(&rpdev->dev, "icve rpmsg client driver is removed\n");
 }
 
