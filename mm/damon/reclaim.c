@@ -150,8 +150,18 @@ static struct damos_stat damon_reclaim_stat;
 DEFINE_DAMON_MODULES_DAMOS_STATS_PARAMS(damon_reclaim_stat,
 		reclaim_tried_regions, reclaimed_regions, quota_exceeds);
 
-static struct damon_ctx *ctx;
-static struct damon_target *target;
+static struct kdamond *kdamond;
+
+static inline struct damon_ctx *damon_reclaim_ctx(void)
+{
+	return damon_first_ctx(kdamond);
+}
+
+static inline struct damon_target *damon_reclaim_target(void)
+{
+	return damon_first_target(
+			damon_reclaim_ctx());
+}
 
 static struct damos *damon_reclaim_new_scheme(void)
 {
@@ -197,6 +207,7 @@ static int damon_reclaim_apply_parameters(void)
 	struct damos *scheme, *old_scheme;
 	struct damos_quota_goal *goal;
 	struct damos_filter *filter;
+	struct damon_ctx *ctx = damon_reclaim_ctx();
 	int err = 0;
 
 	err = damon_set_attrs(ctx, &damon_reclaim_mon_attrs);
@@ -244,7 +255,8 @@ static int damon_reclaim_apply_parameters(void)
 	}
 	damon_set_schemes(ctx, &scheme, 1);
 
-	return damon_set_region_biggest_system_ram_default(target,
+	return damon_set_region_biggest_system_ram_default(
+					damon_reclaim_target(),
 					&monitor_region_start,
 					&monitor_region_end);
 }
@@ -254,7 +266,7 @@ static int damon_reclaim_turn(bool on)
 	int err;
 
 	if (!on) {
-		err = damon_stop(&ctx, 1);
+		err = damon_stop(kdamond);
 		if (!err)
 			kdamond_pid = -1;
 		return err;
@@ -264,10 +276,10 @@ static int damon_reclaim_turn(bool on)
 	if (err)
 		return err;
 
-	err = damon_start(&ctx, 1, true);
+	err = damon_start(kdamond, true);
 	if (err)
 		return err;
-	kdamond_pid = ctx->kdamond->pid;
+	kdamond_pid = kdamond->self->pid;
 	return 0;
 }
 
@@ -286,7 +298,7 @@ static int damon_reclaim_enabled_store(const char *val,
 		return 0;
 
 	/* Called before init function.  The function will handle this. */
-	if (!ctx)
+	if (!kdamond)
 		goto set_param_out;
 
 	err = damon_reclaim_turn(enable);
@@ -337,11 +349,13 @@ static int damon_reclaim_after_wmarks_check(struct damon_ctx *c)
 
 static int __init damon_reclaim_init(void)
 {
-	int err = damon_modules_new_paddr_ctx_target(&ctx, &target);
+	struct damon_ctx *ctx;
+	int err = damon_modules_new_paddr_kdamond(&kdamond);
 
 	if (err)
 		return err;
 
+	ctx = damon_reclaim_ctx();
 	ctx->callback.after_wmarks_check = damon_reclaim_after_wmarks_check;
 	ctx->callback.after_aggregation = damon_reclaim_after_aggregation;
 

@@ -569,28 +569,48 @@ struct damon_attrs {
 };
 
 /**
+ * struct kdamond - Represents a background daemon that is responsible
+ * for executing each context.
+ *
+ * @lock:	Kdamond's global lock, serializes accesses to any field.
+ * @self:	Kernel thread which is actually being executed.
+ * @contexts:	Head of contexts (&damon_ctx) list.
+ * @nr_ctxs:	Number of contexts being monitored.
+ *
+ * Each DAMON's background daemon has this structure. Once
+ * configured, daemon can be started by calling damon_start().
+ *
+ * Monitoring can be explicitly stopped by calling damon_stop(). Once
+ * daemon is terminated @self is set to NULL, so users can know if
+ * monitoring is stopped by reading @self pointer. Access to @self
+ * must also be protected by @lock.
+ */
+struct kdamond {
+	struct mutex lock;
+	struct task_struct *self;
+	struct list_head contexts;
+	size_t nr_ctxs;
+
+/* private: */
+	/* for waiting until the execution of the kdamond_fn is started */
+	struct completion kdamond_started;
+};
+
+/**
  * struct damon_ctx - Represents a context for each monitoring.  This is the
  * main interface that allows users to set the attributes and get the results
  * of the monitoring.
  *
  * @attrs:		Monitoring attributes for accuracy/overhead control.
- * @kdamond:		Kernel thread who does the monitoring.
- * @kdamond_lock:	Mutex for the synchronizations with @kdamond.
+ * @kdamond:		Back reference to daemon who is the owner of this context.
+ * @list:		List head of siblings.
  *
  * For each monitoring context, one kernel thread for the monitoring is
  * created.  The pointer to the thread is stored in @kdamond.
  *
  * Once started, the monitoring thread runs until explicitly required to be
  * terminated or every monitoring target is invalid.  The validity of the
- * targets is checked via the &damon_operations.target_valid of @ops.  The
- * termination can also be explicitly requested by calling damon_stop().
- * The thread sets @kdamond to NULL when it terminates. Therefore, users can
- * know whether the monitoring is ongoing or terminated by reading @kdamond.
- * Reads and writes to @kdamond from outside of the monitoring thread must
- * be protected by @kdamond_lock.
- *
- * Note that the monitoring thread protects only @kdamond via @kdamond_lock.
- * Accesses to other fields must be protected by themselves.
+ * targets is checked via the &damon_operations.target_valid of @ops.
  *
  * @ops:	Set of monitoring operations for given use cases.
  * @callback:	Set of callbacks for monitoring events notifications.
@@ -614,12 +634,11 @@ struct damon_ctx {
 	 * update
 	 */
 	unsigned long next_ops_update_sis;
-	/* for waiting until the execution of the kdamond_fn is started */
-	struct completion kdamond_started;
+	unsigned long sz_limit;
 
 /* public: */
-	struct task_struct *kdamond;
-	struct mutex kdamond_lock;
+	struct kdamond *kdamond;
+	struct list_head list;
 
 	struct damon_operations ops;
 	struct damon_callback callback;
@@ -653,6 +672,15 @@ static inline unsigned long damon_sz_region(struct damon_region *r)
 	return r->ar.end - r->ar.start;
 }
 
+static inline struct damon_target *damon_first_target(struct damon_ctx *ctx)
+{
+	return list_first_entry(&ctx->adaptive_targets, struct damon_target, list);
+}
+
+static inline struct damon_ctx *damon_first_ctx(struct kdamond *kdamond)
+{
+	return list_first_entry(&kdamond->contexts, struct damon_ctx, list);
+}
 
 #define damon_for_each_region(r, t) \
 	list_for_each_entry(r, &t->regions_list, list)
@@ -674,6 +702,12 @@ static inline unsigned long damon_sz_region(struct damon_region *r)
 
 #define damon_for_each_scheme_safe(s, next, ctx) \
 	list_for_each_entry_safe(s, next, &(ctx)->schemes, list)
+
+#define damon_for_each_context(c, kdamond) \
+	list_for_each_entry(c, &(kdamond)->contexts, list)
+
+#define damon_for_each_context_safe(c, next, kdamond) \
+	list_for_each_entry_safe(c, next, &(kdamond)->contexts, list)
 
 #define damos_for_each_quota_goal(goal, quota) \
 	list_for_each_entry(goal, &quota->goals, list)
@@ -736,7 +770,12 @@ void damon_destroy_target(struct damon_target *t);
 unsigned int damon_nr_regions(struct damon_target *t);
 
 struct damon_ctx *damon_new_ctx(void);
+void damon_add_ctx(struct kdamond *kdamond, struct damon_ctx *ctx);
+struct kdamond *damon_new_kdamond(void);
 void damon_destroy_ctx(struct damon_ctx *ctx);
+void damon_destroy_ctxs(struct kdamond *kdamond);
+void damon_destroy_kdamond(struct kdamond *kdamond);
+bool damon_kdamond_running(struct kdamond *kdamond);
 int damon_set_attrs(struct damon_ctx *ctx, struct damon_attrs *attrs);
 void damon_set_schemes(struct damon_ctx *ctx,
 			struct damos **schemes, ssize_t nr_schemes);
@@ -758,8 +797,8 @@ static inline unsigned int damon_max_nr_accesses(const struct damon_attrs *attrs
 }
 
 
-int damon_start(struct damon_ctx **ctxs, int nr_ctxs, bool exclusive);
-int damon_stop(struct damon_ctx **ctxs, int nr_ctxs);
+int damon_start(struct kdamond *kdamond, bool exclusive);
+int damon_stop(struct kdamond *kdamond);
 
 int damon_set_region_biggest_system_ram_default(struct damon_target *t,
 				unsigned long *start, unsigned long *end);
