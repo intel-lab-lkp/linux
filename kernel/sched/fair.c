@@ -5304,6 +5304,12 @@ enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	 */
 	update_load_avg(cfs_rq, se, UPDATE_TG | DO_ATTACH);
 	se_update_runnable(se);
+
+	/*
+	 * we should update the weight of cfs_rq before update_cfs_group.
+	 * Ensure we can get accurate shares of the cfs_rq when its weights changes.
+	 */
+	account_entity_enqueue(cfs_rq, se);
 	/*
 	 * XXX update_load_avg() above will have attached us to the pelt sum;
 	 * but update_cfs_group() here will re-adjust the weight and have to
@@ -5317,8 +5323,6 @@ enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	 */
 	if (!curr)
 		place_entity(cfs_rq, se, flags);
-
-	account_entity_enqueue(cfs_rq, se);
 
 	/* Entity has migrated, no longer consider this task hot */
 	if (flags & ENQUEUE_MIGRATED)
