@@ -90,7 +90,7 @@ static int chnl_recv_cb(struct cflayer *layr, struct cfpkt *pkt)
 		break;
 	default:
 		kfree_skb(skb);
-		priv->netdev->stats.rx_errors++;
+		DEV_STATS_INC(priv->netdev, rx_errors);
 		return -EINVAL;
 	}
 
@@ -103,8 +103,8 @@ static int chnl_recv_cb(struct cflayer *layr, struct cfpkt *pkt)
 	netif_rx(skb);
 
 	/* Update statistics. */
-	priv->netdev->stats.rx_packets++;
-	priv->netdev->stats.rx_bytes += pktlen;
+	DEV_STATS_INC(priv->netdev, rx_packets);
+	DEV_STATS_ADD(priv->netdev, rx_bytes, pktlen);
 
 	return 0;
 }
@@ -206,14 +206,14 @@ static netdev_tx_t chnl_net_start_xmit(struct sk_buff *skb,
 	if (skb->len > priv->netdev->mtu) {
 		pr_warn("Size of skb exceeded MTU\n");
 		kfree_skb(skb);
-		dev->stats.tx_errors++;
+		DEV_STATS_INC(dev, tx_errors);
 		return NETDEV_TX_OK;
 	}
 
 	if (!priv->flowenabled) {
 		pr_debug("dropping packets flow off\n");
 		kfree_skb(skb);
-		dev->stats.tx_dropped++;
+		DEV_STATS_INC(dev, tx_dropped);
 		return NETDEV_TX_OK;
 	}
 
@@ -228,13 +228,13 @@ static netdev_tx_t chnl_net_start_xmit(struct sk_buff *skb,
 	/* Send the packet down the stack. */
 	result = priv->chnl.dn->transmit(priv->chnl.dn, pkt);
 	if (result) {
-		dev->stats.tx_dropped++;
+		DEV_STATS_INC(dev, tx_dropped);
 		return NETDEV_TX_OK;
 	}
 
 	/* Update statistics. */
-	dev->stats.tx_packets++;
-	dev->stats.tx_bytes += len;
+	DEV_STATS_INC(dev, tx_packets);
+	DEV_STATS_ADD(dev, tx_bytes, len);
 
 	return NETDEV_TX_OK;
 }
