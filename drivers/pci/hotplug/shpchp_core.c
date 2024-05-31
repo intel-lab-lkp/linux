@@ -262,6 +262,12 @@ static int shpc_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (acpi_get_hp_hw_control_from_firmware(pdev))
 		return -ENODEV;
 
+	if (!pdev->subordinate) {
+		/* Can happen if we run out of bus numbers during probe */
+		pci_err(pdev, "Hotplug bridge without secondary bus, ignoring\n");
+		return -ENODEV;
+	}
+
 	ctrl = kzalloc(sizeof(*ctrl), GFP_KERNEL);
 	if (!ctrl)
 		goto err_out_none;
