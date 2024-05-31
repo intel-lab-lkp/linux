@@ -32,6 +32,9 @@ extern int pkcs7_get_content_data(const struct pkcs7_message *pkcs7,
 extern int pkcs7_validate_trust(struct pkcs7_message *pkcs7,
 				struct key *trust_keyring);
 
+extern void pkcs7_set_usage_flag(struct pkcs7_message *pkcs7, unsigned long usage);
+extern void pkcs7_clear_usage_flag(struct pkcs7_message *pkcs7, unsigned long usage);
+
 /*
  * pkcs7_verify.c
  */

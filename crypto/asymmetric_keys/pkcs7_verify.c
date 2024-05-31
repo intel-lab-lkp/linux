@@ -455,6 +455,10 @@ int pkcs7_verify(struct pkcs7_message *pkcs7,
 			return ret;
 		}
 		actual_ret = 0;
+		if (sinfo->sig) {
+			sinfo->sig->usage = usage;
+			set_bit(PKS_USAGE_SET, &sinfo->sig->usage_flags);
+		}
 	}
 
 	kleave(" = %d", actual_ret);

@@ -49,6 +49,10 @@ struct public_key_signature {
 	const char *pkey_algo;
 	const char *hash_algo;
 	const char *encoding;
+	u32 usage;		/* Intended usage */
+	unsigned long usage_flags;
+#define PKS_USAGE_SET		0
+#define PKS_REVOCATION_PASS	1
 };
 
 extern void public_key_signature_free(struct public_key_signature *sig);
