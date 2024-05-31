@@ -103,7 +103,7 @@ static void add_version(const char *verstring);
 static int  is_download_const(expression_t *immed);
 static int  is_location_address(symbol_t *symbol);
 void yyerror(const char *string);
-
+int yylex(void);
 #define SRAM_SYMNAME "SRAM_BASE"
 #define SCB_SYMNAME "SCB_BASE"
 %}

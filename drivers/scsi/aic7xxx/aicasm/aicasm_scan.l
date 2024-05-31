@@ -56,6 +56,7 @@
 #include "aicasm.h"
 #include "aicasm_symbol.h"
 #include "aicasm_gram.h"
+#include "aicasm_macro_gram.h"
 
 /* This is used for macro body capture too, so err on the large size. */
 #define MAX_STR_CONST 4096
@@ -414,11 +415,11 @@ nop			{ return T_NOP; }
 					    yy_create_buffer(stdin,
 							     YY_BUF_SIZE);
 					yy_switch_to_buffer(temp_state);
-					mm_switch_to_buffer(old_state);
-					mmparse();
-					mm_switch_to_buffer(temp_state);
 					yy_switch_to_buffer(old_state);
-					mm_delete_buffer(temp_state);
+					mmparse();
+					yy_switch_to_buffer(temp_state);
+					yy_switch_to_buffer(old_state);
+					yy_delete_buffer(temp_state);
 					expand_macro(yylval.sym);
 				} else {
 					if (yylval.sym->type == UNINITIALIZED) {
