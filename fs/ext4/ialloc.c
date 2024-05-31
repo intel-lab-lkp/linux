@@ -983,7 +983,8 @@ struct inode *__ext4_new_inode(struct mnt_idmap *idmap,
 		ei->i_projid = make_kprojid(&init_user_ns, EXT4_DEF_PROJID);
 
 	if (!(i_flags & EXT4_EA_INODE_FL)) {
-		err = fscrypt_prepare_new_inode(dir, inode, &encrypt);
+		if (ext4_has_feature_casefold(inode->i_sb))
+			err = fscrypt_prepare_new_inode(dir, inode, &encrypt);
 		if (err)
 			goto out;
 	}
