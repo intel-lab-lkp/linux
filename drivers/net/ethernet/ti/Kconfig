@@ -145,6 +145,15 @@ config TI_AM65_CPSW_QOS
 	  The EST scheduler runs on CPTS and the TAS/EST schedule is
 	  updated in the Fetch RAM memory of the CPSW.
 
+config TI_K3_INTERCORE_VIRT_ETH
+	tristate "TI K3 Intercore Virtual Ethernet driver"
+	help
+	  This driver provides intercore virtual ethernet driver
+	  capability.Intercore Virtual Ethernet driver is modelled as
+	  a RPMsg based shared memory ethernet driver for network traffic
+	  tunnelling between heterogeneous processors Cortex A and Cortex R
+	  used in TI's K3 SoCs.
+
 config TI_KEYSTONE_NETCP
 	tristate "TI Keystone NETCP Core Support"
 	select TI_DAVINCI_MDIO

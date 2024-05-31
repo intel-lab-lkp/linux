@@ -50,3 +50,4 @@ icssg-prueth-sr1-y := icssg/icssg_prueth_sr1.o \
 		      icssg/icssg_stats.o \
 		      icssg/icssg_ethtool.o
 obj-$(CONFIG_TI_ICSS_IEP) += icssg/icss_iep.o
+obj-$(CONFIG_TI_K3_INTERCORE_VIRT_ETH) += inter_core_virt_eth.o
