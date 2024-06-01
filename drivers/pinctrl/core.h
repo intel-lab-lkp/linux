@@ -72,6 +72,7 @@ struct pinctrl_dev {
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *device_root;
 #endif
+	bool devm_allocated;
 };
 
 /**

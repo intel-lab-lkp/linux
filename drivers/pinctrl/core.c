@@ -2135,6 +2135,13 @@ int pinctrl_enable(struct pinctrl_dev *pctldev)
 	error = pinctrl_claim_hogs(pctldev);
 	if (error) {
 		dev_err(pctldev->dev, "could not claim hogs: %i\n", error);
+		if (!pctldev->devm_allocated) {
+			pinctrl_free_pindescs(pctldev, pctldev->desc->pins,
+					      pctldev->desc->npins);
+			mutex_destroy(&pctldev->mutex);
+			kfree(pctldev);
+		}
+
 		return error;
 	}
 
@@ -2293,6 +2300,7 @@ struct pinctrl_dev *devm_pinctrl_register(struct device *dev,
 		return pctldev;
 	}
 
+	pctldev->devm_allocated = true;
 	*ptr = pctldev;
 	devres_add(dev, ptr);
 
@@ -2329,6 +2337,7 @@ int devm_pinctrl_register_and_init(struct device *dev,
 		return error;
 	}
 
+	(*pctldev)->devm_allocated = true;
 	*ptr = *pctldev;
 	devres_add(dev, ptr);
 
