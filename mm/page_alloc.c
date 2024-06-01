@@ -1235,6 +1235,7 @@ void __free_pages_core(struct page *page, unsigned int order)
 	set_page_count(p, 0);
 
 	atomic_long_add(nr_pages, &page_zone(page)->managed_pages);
+	totalram_pages_add(nr_pages);
 
 	if (page_contains_unaccepted(page, order)) {
 		if (order == MAX_PAGE_ORDER && __free_unaccepted(page))
