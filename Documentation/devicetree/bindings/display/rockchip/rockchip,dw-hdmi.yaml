@@ -10,12 +10,10 @@ maintainers:
   - Mark Yao <markyao0591@gmail.com>
 
 description: |
-  The HDMI transmitter is a Synopsys DesignWare HDMI 1.4 TX controller IP
-  with a companion PHY IP.
-
-allOf:
-  - $ref: ../bridge/synopsys,dw-hdmi.yaml#
-  - $ref: /schemas/sound/dai-common.yaml#
+  For SoCs up to RK3568, the HDMI transmitter is a Synopsys DesignWare
+  HDMI 1.4 TX controller IP with a companion PHY IP.
+  The RK3588 SoC integrates the Synopsys DesignWare HDMI 2.1 Quad-Pixel (QP)
+  TX controller IP and a HDMI/eDP TX Combo PHY based on a Samsung IP block.
 
 properties:
   compatible:
@@ -25,6 +23,7 @@ properties:
       - rockchip,rk3328-dw-hdmi
       - rockchip,rk3399-dw-hdmi
       - rockchip,rk3568-dw-hdmi
+      - rockchip,rk3588-dw-hdmi
 
   reg-io-width:
     const: 4
@@ -39,36 +38,6 @@ properties:
     description:
       A 1.8V supply that powers up the SoC internal circuitry. The pin name on the
       SoC usually is HDMI_TX_AVDD_1V8.
-
-  clocks:
-    minItems: 2
-    items:
-      - {}
-      - {}
-      # The next three clocks are all optional, but shall be specified in this
-      # order when present.
-      - description: The HDMI CEC controller main clock
-      - description: Power for GRF IO
-      - description: External clock for some HDMI PHY (old clock name, deprecated)
-      - description: External clock for some HDMI PHY (new name)
-
-  clock-names:
-    minItems: 2
-    items:
-      - {}
-      - {}
-      - enum:
-          - cec
-          - grf
-          - vpll
-          - ref
-      - enum:
-          - grf
-          - vpll
-          - ref
-      - enum:
-          - vpll
-          - ref
 
   ddc-i2c-bus:
     $ref: /schemas/types.yaml#/definitions/phandle
@@ -131,12 +100,96 @@ properties:
 required:
   - compatible
   - reg
-  - reg-io-width
   - clocks
   - clock-names
   - interrupts
   - ports
   - rockchip,grf
+
+allOf:
+  - $ref: /schemas/sound/dai-common.yaml#
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - rockchip,rk3588-dw-hdmi
+    then:
+      properties:
+        reg:
+          maxItems: 1
+
+        clocks:
+          minItems: 1
+          items:
+            - description: APB system interface clock
+            # The next clocks are optional, but shall be specified in this
+            # order when present.
+            - description: TMDS/FRL link clock
+            - description: EARC RX biphase clock
+            - description: Reference clock
+            - description: Audio interface clock
+            - description: Video datapath clock
+
+        clock-names:
+          minItems: 1
+          items:
+            - const: pclk
+            - enum: [hdp, earc, ref, aud, hclk_vo1]
+            - enum: [earc, ref, aud, hclk_vo1]
+            - enum: [ref, aud, hclk_vo1]
+            - enum: [aud, hclk_vo1]
+            - const: hclk_vo1
+
+        resets:
+          minItems: 2
+          maxItems: 2
+
+        reset-names:
+          items:
+            - const: ref
+            - const: hdp
+
+        interrupts:
+          minItems: 1
+          maxItems: 5
+
+        rockchip,vo1_grf:
+          $ref: /schemas/types.yaml#/definitions/phandle
+          description: Some QP related data is accessed through VO1 GRF regs
+
+      required:
+        - resets
+        - reset-names
+        - rockchip,vo1_grf
+
+    else:
+      $ref: ../bridge/synopsys,dw-hdmi.yaml#
+
+      properties:
+        clocks:
+          minItems: 2
+          items:
+            - {}
+            - {}
+            # The next three clocks are all optional, but shall be specified in this
+            # order when present.
+            - description: The HDMI CEC controller main clock
+            - description: Power for GRF IO
+            - description: External clock for some HDMI PHY (old clock name, deprecated)
+            - description: External clock for some HDMI PHY (new name)
+
+        clock-names:
+          minItems: 2
+          items:
+            - {}
+            - {}
+            - enum: [cec, grf, vpll, ref]
+            - enum: [grf, vpll, ref]
+            - enum: [vpll, ref]
+
+      required:
+        - reg-io-width
 
 unevaluatedProperties: false
 
