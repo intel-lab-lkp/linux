@@ -131,6 +131,7 @@ struct dw_hdmi_plat_data {
 	unsigned long input_bus_encoding;
 	bool use_drm_infoframe;
 	bool ycbcr_420_allowed;
+	bool is_hdmi_qp;
 
 	/*
 	 * Private data passed to all the .mode_valid() and .configure_phy()
@@ -162,6 +163,7 @@ struct dw_hdmi_plat_data {
 			     unsigned long mpixelclock);
 
 	unsigned int disable_cec : 1;
+
 };
 
 struct dw_hdmi *dw_hdmi_probe(struct platform_device *pdev,
@@ -205,6 +207,12 @@ enum drm_connector_status dw_hdmi_phy_read_hpd(struct dw_hdmi *hdmi,
 void dw_hdmi_phy_update_hpd(struct dw_hdmi *hdmi, void *data,
 			    bool force, bool disabled, bool rxsense);
 void dw_hdmi_phy_setup_hpd(struct dw_hdmi *hdmi, void *data);
+
+void dw_hdmi_qp_unbind(struct dw_hdmi *hdmi);
+struct dw_hdmi *dw_hdmi_qp_bind(struct platform_device *pdev,
+				struct drm_encoder *encoder,
+				struct dw_hdmi_plat_data *plat_data);
+void dw_hdmi_qp_resume(struct device *dev, struct dw_hdmi *hdmi);
 
 bool dw_hdmi_bus_fmt_is_420(struct dw_hdmi *hdmi);
 
