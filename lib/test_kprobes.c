@@ -400,4 +400,5 @@ static struct kunit_suite kprobes_test_suite = {
 
 kunit_test_suites(&kprobes_test_suite);
 
+MODULE_DESCRIPTION("simple sanity test for *probes");
 MODULE_LICENSE("GPL");

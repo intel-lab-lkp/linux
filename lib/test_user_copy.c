@@ -328,4 +328,5 @@ static void __exit test_user_copy_exit(void)
 module_exit(test_user_copy_exit);
 
 MODULE_AUTHOR("Kees Cook <keescook@chromium.org>");
+MODULE_DESCRIPTION("Kernel module for testing copy_to/from_user infrastructure");
 MODULE_LICENSE("GPL");

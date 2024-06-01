@@ -45,4 +45,5 @@ static struct kunit_suite sort_test_suite = {
 
 kunit_test_suites(&sort_test_suite);
 
+MODULE_DESCRIPTION("sort() KUnit test suite");
 MODULE_LICENSE("GPL");
