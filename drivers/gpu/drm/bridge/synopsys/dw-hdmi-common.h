@@ -154,6 +154,8 @@ void dw_hdmi_prep_avi_infoframe(struct hdmi_avi_infoframe *frame,
 				struct dw_hdmi *hdmi,
 				const struct drm_connector *connector,
 				const struct drm_display_mode *mode);
+struct hdmi_vmode *dw_hdmi_prep_vmode(struct dw_hdmi *hdmi,
+				      const struct drm_display_mode *mode);
 
 enum drm_connector_status
 dw_hdmi_connector_detect(struct drm_connector *connector, bool force);

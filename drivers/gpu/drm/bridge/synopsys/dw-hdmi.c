@@ -1864,15 +1864,10 @@ static void hdmi_config_drm_infoframe(struct dw_hdmi *hdmi,
 		  HDMI_FC_PACKET_TX_EN_DRM_MASK, HDMI_FC_PACKET_TX_EN);
 }
 
-static void hdmi_av_composer(struct dw_hdmi *hdmi,
-			     const struct drm_display_info *display,
-			     const struct drm_display_mode *mode)
+struct hdmi_vmode *dw_hdmi_prep_vmode(struct dw_hdmi *hdmi,
+				      const struct drm_display_mode *mode)
 {
-	u8 inv_val, bytes;
-	const struct drm_hdmi_info *hdmi_info = &display->hdmi;
 	struct hdmi_vmode *vmode = &hdmi->hdmi_data.video_mode;
-	int hblank, vblank, h_de_hs, v_de_vs, hsync_len, vsync_len;
-	unsigned int vdisplay, hdisplay;
 
 	vmode->mpixelclock = mode->clock * 1000;
 
@@ -1899,6 +1894,20 @@ static void hdmi_av_composer(struct dw_hdmi *hdmi,
 		vmode->mtmdsclock /= 2;
 
 	dev_dbg(hdmi->dev, "final tmdsclock = %d\n", vmode->mtmdsclock);
+
+	return vmode;
+}
+EXPORT_SYMBOL_GPL(dw_hdmi_prep_vmode);
+
+static void hdmi_av_composer(struct dw_hdmi *hdmi,
+			     const struct drm_display_info *display,
+			     const struct drm_display_mode *mode)
+{
+	u8 inv_val, bytes;
+	const struct drm_hdmi_info *hdmi_info = &display->hdmi;
+	struct hdmi_vmode *vmode = dw_hdmi_prep_vmode(hdmi, mode);
+	int hblank, vblank, h_de_hs, v_de_vs, hsync_len, vsync_len;
+	unsigned int vdisplay, hdisplay;
 
 	/* Set up HDMI_FC_INVIDCONF */
 	inv_val = (hdmi->hdmi_data.hdcp_enable ||
