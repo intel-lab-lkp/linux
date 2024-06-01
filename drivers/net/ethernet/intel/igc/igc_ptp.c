@@ -1169,9 +1169,9 @@ void igc_ptp_init(struct igc_adapter *adapter)
 						&adapter->pdev->dev);
 	if (IS_ERR(adapter->ptp_clock)) {
 		adapter->ptp_clock = NULL;
-		netdev_err(netdev, "ptp_clock_register failed\n");
+		dev_err(&adapter->pdev->dev, "ptp_clock_register failed\n");
 	} else if (adapter->ptp_clock) {
-		netdev_info(netdev, "PHC added\n");
+		dev_info(&adapter->pdev->dev, "PHC added\n");
 		adapter->ptp_flags |= IGC_PTP_ENABLED;
 	}
 }
