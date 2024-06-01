@@ -822,9 +822,7 @@ struct perf_buffer *rb_alloc(int nr_pages, long watermark, int cpu, int flags)
 	unsigned long size;
 	int i, node;
 
-	size = sizeof(struct perf_buffer);
-	size += nr_pages * sizeof(void *);
-
+	size = struct_size(rb, data_pages, nr_pages);
 	if (order_base_2(size) > PAGE_SHIFT+MAX_PAGE_ORDER)
 		goto fail;
 
@@ -833,6 +831,7 @@ struct perf_buffer *rb_alloc(int nr_pages, long watermark, int cpu, int flags)
 	if (!rb)
 		goto fail;
 
+	rb->nr_pages = nr_pages;
 	rb->user_page = perf_mmap_alloc_page(cpu);
 	if (!rb->user_page)
 		goto fail_user_page;
@@ -842,8 +841,6 @@ struct perf_buffer *rb_alloc(int nr_pages, long watermark, int cpu, int flags)
 		if (!rb->data_pages[i])
 			goto fail_data_pages;
 	}
-
-	rb->nr_pages = nr_pages;
 
 	ring_buffer_init(rb, watermark, flags);
 
@@ -916,15 +913,11 @@ void rb_free(struct perf_buffer *rb)
 struct perf_buffer *rb_alloc(int nr_pages, long watermark, int cpu, int flags)
 {
 	struct perf_buffer *rb;
-	unsigned long size;
 	void *all_buf;
 	int node;
 
-	size = sizeof(struct perf_buffer);
-	size += sizeof(void *);
-
 	node = (cpu == -1) ? cpu : cpu_to_node(cpu);
-	rb = kzalloc_node(size, GFP_KERNEL, node);
+	rb = kzalloc_node(struct_size(rb, data_pages, 1), GFP_KERNEL, node);
 	if (!rb)
 		goto fail;
 
@@ -935,9 +928,9 @@ struct perf_buffer *rb_alloc(int nr_pages, long watermark, int cpu, int flags)
 		goto fail_all_buf;
 
 	rb->user_page = all_buf;
-	rb->data_pages[0] = all_buf + PAGE_SIZE;
 	if (nr_pages) {
 		rb->nr_pages = 1;
+		rb->data_pages[0] = all_buf + PAGE_SIZE;
 		rb->page_order = ilog2(nr_pages);
 	}
 
