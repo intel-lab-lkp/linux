@@ -2469,7 +2469,8 @@ static const struct drm_connector_helper_funcs dw_hdmi_connector_helper_funcs = 
 	.atomic_check = dw_hdmi_connector_atomic_check,
 };
 
-static int dw_hdmi_connector_create(struct dw_hdmi *hdmi)
+int dw_hdmi_connector_create(struct dw_hdmi *hdmi,
+			     const struct drm_connector_funcs *funcs)
 {
 	struct drm_connector *connector = &hdmi->connector;
 	struct cec_connector_info conn_info;
@@ -2487,7 +2488,7 @@ static int dw_hdmi_connector_create(struct dw_hdmi *hdmi)
 	drm_connector_helper_add(connector, &dw_hdmi_connector_helper_funcs);
 
 	drm_connector_init_with_ddc(hdmi->bridge.dev, connector,
-				    &dw_hdmi_connector_funcs,
+				    funcs ? funcs : &dw_hdmi_connector_funcs,
 				    DRM_MODE_CONNECTOR_HDMIA,
 				    hdmi->ddc);
 
@@ -2516,6 +2517,7 @@ static int dw_hdmi_connector_create(struct dw_hdmi *hdmi)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(dw_hdmi_connector_create);
 
 /* -----------------------------------------------------------------------------
  * DRM Bridge Operations
@@ -2804,7 +2806,7 @@ static int dw_hdmi_bridge_attach(struct drm_bridge *bridge,
 		return drm_bridge_attach(bridge->encoder, hdmi->next_bridge,
 					 bridge, flags);
 
-	return dw_hdmi_connector_create(hdmi);
+	return dw_hdmi_connector_create(hdmi, NULL);
 }
 
 void dw_hdmi_bridge_detach(struct drm_bridge *bridge)

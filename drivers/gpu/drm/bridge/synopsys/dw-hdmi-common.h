@@ -161,6 +161,8 @@ void dw_hdmi_prep_data(struct dw_hdmi *hdmi,
 
 enum drm_connector_status
 dw_hdmi_connector_detect(struct drm_connector *connector, bool force);
+int dw_hdmi_connector_create(struct dw_hdmi *hdmi,
+			     const struct drm_connector_funcs *funcs);
 
 int dw_hdmi_bridge_atomic_check(struct drm_bridge *bridge,
 				struct drm_bridge_state *bridge_state,
