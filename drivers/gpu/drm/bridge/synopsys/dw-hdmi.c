@@ -2133,14 +2133,9 @@ static void hdmi_disable_overflow_interrupts(struct dw_hdmi *hdmi)
 		    HDMI_IH_MUTE_FC_STAT2);
 }
 
-static int dw_hdmi_setup(struct dw_hdmi *hdmi,
-			 const struct drm_connector *connector,
-			 const struct drm_display_mode *mode)
+void dw_hdmi_prep_data(struct dw_hdmi *hdmi,
+		       const struct drm_display_mode *mode)
 {
-	int ret;
-
-	hdmi_disable_overflow_interrupts(hdmi);
-
 	hdmi->vic = drm_match_cea_mode(mode);
 
 	if (!hdmi->vic) {
@@ -2180,6 +2175,18 @@ static int dw_hdmi_setup(struct dw_hdmi *hdmi,
 	hdmi->hdmi_data.pix_repet_factor = 0;
 	hdmi->hdmi_data.hdcp_enable = 0;
 	hdmi->hdmi_data.video_mode.mdataenablepolarity = true;
+}
+EXPORT_SYMBOL_GPL(dw_hdmi_prep_data);
+
+static int dw_hdmi_setup(struct dw_hdmi *hdmi,
+			 const struct drm_connector *connector,
+			 const struct drm_display_mode *mode)
+{
+	int ret;
+
+	hdmi_disable_overflow_interrupts(hdmi);
+
+	dw_hdmi_prep_data(hdmi, mode);
 
 	/* HDMI Initialization Step B.1 */
 	hdmi_av_composer(hdmi, &connector->display_info, mode);
