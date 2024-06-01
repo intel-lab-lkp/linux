@@ -2547,6 +2547,14 @@ addr_to_vb_xa(unsigned long addr)
 	return &per_cpu(vmap_block_queue, index).vmap_blocks;
 }
 
+static struct vmap_block_queue *
+addr_to_vbq(unsigned long addr)
+{
+	int index = (addr / VMAP_BLOCK_SIZE) % num_possible_cpus();
+
+	return &per_cpu(vmap_block_queue, index);
+}
+
 /*
  * We should probably have a fallback mechanism to allocate virtual memory
  * out of partially filled vmap blocks. However vmap block sizing should be
@@ -2626,7 +2634,7 @@ static void *new_vmap_block(unsigned int order, gfp_t gfp_mask)
 		return ERR_PTR(err);
 	}
 
-	vbq = raw_cpu_ptr(&vmap_block_queue);
+	vbq = addr_to_vbq(va->va_start);
 	spin_lock(&vbq->lock);
 	list_add_tail_rcu(&vb->free_list, &vbq->free);
 	spin_unlock(&vbq->lock);
