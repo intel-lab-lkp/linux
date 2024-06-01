@@ -4176,8 +4176,13 @@ static inline void mas_wr_modify(struct ma_wr_state *wr_mas)
 	 * path.
 	 */
 	new_end = mas_wr_new_end(wr_mas);
-	if (new_end >= mt_slots[wr_mas->type])
+	if (new_end >= mt_slots[wr_mas->type]) }
+                mas->depth = mas_mt_height(mas);
+                mas_node_count(mas, 1 + mas->depth * 2);
+                if (mas_is_err(mas))
+                        return;
 		goto slow_path;
+        }
 
 	/* Attempt to append */
 	if (mas_wr_append(wr_mas, new_end))
