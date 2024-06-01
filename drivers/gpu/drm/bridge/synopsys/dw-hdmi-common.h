@@ -146,6 +146,8 @@ struct dw_hdmi {
 };
 
 void dw_handle_plugged_change(struct dw_hdmi *hdmi, bool plugged);
+struct i2c_adapter *dw_hdmi_i2c_adapter(struct dw_hdmi *hdmi,
+					const struct i2c_algorithm *algo);
 bool dw_hdmi_support_scdc(struct dw_hdmi *hdmi,
 			  const struct drm_display_info *display);
 

@@ -376,7 +376,8 @@ static const struct i2c_algorithm dw_hdmi_algorithm = {
 	.functionality	= dw_hdmi_i2c_func,
 };
 
-static struct i2c_adapter *dw_hdmi_i2c_adapter(struct dw_hdmi *hdmi)
+struct i2c_adapter *dw_hdmi_i2c_adapter(struct dw_hdmi *hdmi,
+					const struct i2c_algorithm *algo)
 {
 	struct i2c_adapter *adap;
 	struct dw_hdmi_i2c *i2c;
@@ -392,7 +393,7 @@ static struct i2c_adapter *dw_hdmi_i2c_adapter(struct dw_hdmi *hdmi)
 	adap = &i2c->adap;
 	adap->owner = THIS_MODULE;
 	adap->dev.parent = hdmi->dev;
-	adap->algo = &dw_hdmi_algorithm;
+	adap->algo = algo ? algo : &dw_hdmi_algorithm;
 	strscpy(adap->name, "DesignWare HDMI", sizeof(adap->name));
 	i2c_set_adapdata(adap, hdmi);
 
@@ -409,6 +410,7 @@ static struct i2c_adapter *dw_hdmi_i2c_adapter(struct dw_hdmi *hdmi)
 
 	return adap;
 }
+EXPORT_SYMBOL_GPL(dw_hdmi_i2c_adapter);
 
 static void hdmi_set_cts_n(struct dw_hdmi *hdmi, unsigned int cts,
 			   unsigned int n)
@@ -3373,7 +3375,7 @@ struct dw_hdmi *dw_hdmi_probe(struct platform_device *pdev,
 			}
 		}
 
-		hdmi->ddc = dw_hdmi_i2c_adapter(hdmi);
+		hdmi->ddc = dw_hdmi_i2c_adapter(hdmi, NULL);
 		if (IS_ERR(hdmi->ddc))
 			hdmi->ddc = NULL;
 	}
