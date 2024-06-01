@@ -1638,6 +1638,67 @@ static void hdmi_tx_hdcp_config(struct dw_hdmi *hdmi)
 		  HDMI_A_HDCPCFG1_ENCRYPTIONDISABLE_MASK, HDMI_A_HDCPCFG1);
 }
 
+void dw_hdmi_prep_avi_infoframe(struct hdmi_avi_infoframe *frame,
+				struct dw_hdmi *hdmi,
+				const struct drm_connector *connector,
+				const struct drm_display_mode *mode)
+{
+	/* Initialise info frame from DRM mode */
+	drm_hdmi_avi_infoframe_from_display_mode(frame, connector, mode);
+
+	if (hdmi_bus_fmt_is_rgb(hdmi->hdmi_data.enc_out_bus_format)) {
+		drm_hdmi_avi_infoframe_quant_range(frame, connector, mode,
+						   hdmi->hdmi_data.rgb_limited_range ?
+						   HDMI_QUANTIZATION_RANGE_LIMITED :
+						   HDMI_QUANTIZATION_RANGE_FULL);
+	} else {
+		frame->quantization_range = HDMI_QUANTIZATION_RANGE_DEFAULT;
+		frame->ycc_quantization_range =
+			HDMI_YCC_QUANTIZATION_RANGE_LIMITED;
+	}
+
+	if (hdmi_bus_fmt_is_yuv444(hdmi->hdmi_data.enc_out_bus_format))
+		frame->colorspace = HDMI_COLORSPACE_YUV444;
+	else if (hdmi_bus_fmt_is_yuv422(hdmi->hdmi_data.enc_out_bus_format))
+		frame->colorspace = HDMI_COLORSPACE_YUV422;
+	else if (hdmi_bus_fmt_is_yuv420(hdmi->hdmi_data.enc_out_bus_format))
+		frame->colorspace = HDMI_COLORSPACE_YUV420;
+	else
+		frame->colorspace = HDMI_COLORSPACE_RGB;
+
+	/* Set up colorimetry */
+	if (!hdmi_bus_fmt_is_rgb(hdmi->hdmi_data.enc_out_bus_format)) {
+		switch (hdmi->hdmi_data.enc_out_encoding) {
+		case V4L2_YCBCR_ENC_601:
+			if (hdmi->hdmi_data.enc_in_encoding == V4L2_YCBCR_ENC_XV601)
+				frame->colorimetry = HDMI_COLORIMETRY_EXTENDED;
+			else
+				frame->colorimetry = HDMI_COLORIMETRY_ITU_601;
+			frame->extended_colorimetry =
+					HDMI_EXTENDED_COLORIMETRY_XV_YCC_601;
+			break;
+		case V4L2_YCBCR_ENC_709:
+			if (hdmi->hdmi_data.enc_in_encoding == V4L2_YCBCR_ENC_XV709)
+				frame->colorimetry = HDMI_COLORIMETRY_EXTENDED;
+			else
+				frame->colorimetry = HDMI_COLORIMETRY_ITU_709;
+			frame->extended_colorimetry =
+					HDMI_EXTENDED_COLORIMETRY_XV_YCC_709;
+			break;
+		default: /* Carries no data */
+			frame->colorimetry = HDMI_COLORIMETRY_ITU_601;
+			frame->extended_colorimetry =
+					HDMI_EXTENDED_COLORIMETRY_XV_YCC_601;
+			break;
+		}
+	} else {
+		frame->colorimetry = HDMI_COLORIMETRY_NONE;
+		frame->extended_colorimetry =
+			HDMI_EXTENDED_COLORIMETRY_XV_YCC_601;
+	}
+}
+EXPORT_SYMBOL_GPL(dw_hdmi_prep_avi_infoframe);
+
 static void hdmi_config_AVI(struct dw_hdmi *hdmi,
 			    const struct drm_connector *connector,
 			    const struct drm_display_mode *mode)
@@ -1645,59 +1706,7 @@ static void hdmi_config_AVI(struct dw_hdmi *hdmi,
 	struct hdmi_avi_infoframe frame;
 	u8 val;
 
-	/* Initialise info frame from DRM mode */
-	drm_hdmi_avi_infoframe_from_display_mode(&frame, connector, mode);
-
-	if (hdmi_bus_fmt_is_rgb(hdmi->hdmi_data.enc_out_bus_format)) {
-		drm_hdmi_avi_infoframe_quant_range(&frame, connector, mode,
-						   hdmi->hdmi_data.rgb_limited_range ?
-						   HDMI_QUANTIZATION_RANGE_LIMITED :
-						   HDMI_QUANTIZATION_RANGE_FULL);
-	} else {
-		frame.quantization_range = HDMI_QUANTIZATION_RANGE_DEFAULT;
-		frame.ycc_quantization_range =
-			HDMI_YCC_QUANTIZATION_RANGE_LIMITED;
-	}
-
-	if (hdmi_bus_fmt_is_yuv444(hdmi->hdmi_data.enc_out_bus_format))
-		frame.colorspace = HDMI_COLORSPACE_YUV444;
-	else if (hdmi_bus_fmt_is_yuv422(hdmi->hdmi_data.enc_out_bus_format))
-		frame.colorspace = HDMI_COLORSPACE_YUV422;
-	else if (hdmi_bus_fmt_is_yuv420(hdmi->hdmi_data.enc_out_bus_format))
-		frame.colorspace = HDMI_COLORSPACE_YUV420;
-	else
-		frame.colorspace = HDMI_COLORSPACE_RGB;
-
-	/* Set up colorimetry */
-	if (!hdmi_bus_fmt_is_rgb(hdmi->hdmi_data.enc_out_bus_format)) {
-		switch (hdmi->hdmi_data.enc_out_encoding) {
-		case V4L2_YCBCR_ENC_601:
-			if (hdmi->hdmi_data.enc_in_encoding == V4L2_YCBCR_ENC_XV601)
-				frame.colorimetry = HDMI_COLORIMETRY_EXTENDED;
-			else
-				frame.colorimetry = HDMI_COLORIMETRY_ITU_601;
-			frame.extended_colorimetry =
-					HDMI_EXTENDED_COLORIMETRY_XV_YCC_601;
-			break;
-		case V4L2_YCBCR_ENC_709:
-			if (hdmi->hdmi_data.enc_in_encoding == V4L2_YCBCR_ENC_XV709)
-				frame.colorimetry = HDMI_COLORIMETRY_EXTENDED;
-			else
-				frame.colorimetry = HDMI_COLORIMETRY_ITU_709;
-			frame.extended_colorimetry =
-					HDMI_EXTENDED_COLORIMETRY_XV_YCC_709;
-			break;
-		default: /* Carries no data */
-			frame.colorimetry = HDMI_COLORIMETRY_ITU_601;
-			frame.extended_colorimetry =
-					HDMI_EXTENDED_COLORIMETRY_XV_YCC_601;
-			break;
-		}
-	} else {
-		frame.colorimetry = HDMI_COLORIMETRY_NONE;
-		frame.extended_colorimetry =
-			HDMI_EXTENDED_COLORIMETRY_XV_YCC_601;
-	}
+	dw_hdmi_prep_avi_infoframe(&frame, hdmi, connector, mode);
 
 	/*
 	 * The Designware IP uses a different byte format from standard

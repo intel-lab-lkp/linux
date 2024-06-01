@@ -150,6 +150,10 @@ struct i2c_adapter *dw_hdmi_i2c_adapter(struct dw_hdmi *hdmi,
 					const struct i2c_algorithm *algo);
 bool dw_hdmi_support_scdc(struct dw_hdmi *hdmi,
 			  const struct drm_display_info *display);
+void dw_hdmi_prep_avi_infoframe(struct hdmi_avi_infoframe *frame,
+				struct dw_hdmi *hdmi,
+				const struct drm_connector *connector,
+				const struct drm_display_mode *mode);
 
 enum drm_connector_status
 dw_hdmi_connector_detect(struct drm_connector *connector, bool force);
