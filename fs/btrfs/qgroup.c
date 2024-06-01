@@ -1885,16 +1885,14 @@ out:
  *
  * Return 0 for success insert
  * Return >0 for existing record, caller can free @record safely.
- * Error is not possible
  */
 int btrfs_qgroup_trace_extent_nolock(struct btrfs_fs_info *fs_info,
 				struct btrfs_delayed_ref_root *delayed_refs,
 				struct btrfs_qgroup_extent_record *record)
 {
-	struct rb_node **p = &delayed_refs->dirty_extent_root.rb_node;
-	struct rb_node *parent_node = NULL;
-	struct btrfs_qgroup_extent_record *entry;
-	u64 bytenr = record->bytenr;
+	struct btrfs_qgroup_extent_record *existing;
+	const u64 bytenr = record->bytenr;
+	int ret;
 
 	if (!btrfs_qgroup_full_accounting(fs_info))
 		return 1;
@@ -1902,27 +1900,26 @@ int btrfs_qgroup_trace_extent_nolock(struct btrfs_fs_info *fs_info,
 	lockdep_assert_held(&delayed_refs->lock);
 	trace_btrfs_qgroup_trace_extent(fs_info, record);
 
-	while (*p) {
-		parent_node = *p;
-		entry = rb_entry(parent_node, struct btrfs_qgroup_extent_record,
-				 node);
-		if (bytenr < entry->bytenr) {
-			p = &(*p)->rb_left;
-		} else if (bytenr > entry->bytenr) {
-			p = &(*p)->rb_right;
-		} else {
-			if (record->data_rsv && !entry->data_rsv) {
-				entry->data_rsv = record->data_rsv;
-				entry->data_rsv_refroot =
-					record->data_rsv_refroot;
-			}
-			return 1;
+	existing = xa_store(&delayed_refs->dirty_extents, bytenr, record, GFP_ATOMIC);
+	if (xa_is_err(existing))
+		goto out;
+	else if (existing) {
+		if (record->data_rsv && !existing->data_rsv) {
+			existing->data_rsv = record->data_rsv;
+			existing->data_rsv_refroot = record->data_rsv_refroot;
 		}
+		existing = xa_store(&delayed_refs->dirty_extents, bytenr, existing, GFP_ATOMIC);
+		if (xa_is_err(existing))
+			goto out;
+		return 1;
 	}
 
-	rb_link_node(&record->node, parent_node, p);
-	rb_insert_color(&record->node, &delayed_refs->dirty_extent_root);
 	return 0;
+
+out:
+	ret = xa_err(existing);
+	ASSERT(ret != -ENOMEM);
+	return ret;
 }
 
 /*
@@ -2022,13 +2019,19 @@ int btrfs_qgroup_trace_extent(struct btrfs_trans_handle *trans, u64 bytenr,
 	struct btrfs_delayed_ref_root *delayed_refs;
 	int ret;
 
+	delayed_refs = &trans->transaction->delayed_refs;
 	if (!btrfs_qgroup_full_accounting(fs_info) || bytenr == 0 || num_bytes == 0)
 		return 0;
 	record = kzalloc(sizeof(*record), GFP_NOFS);
 	if (!record)
 		return -ENOMEM;
 
-	delayed_refs = &trans->transaction->delayed_refs;
+	ret = xa_reserve(&delayed_refs->dirty_extents, bytenr, GFP_NOFS);
+	if (ret) {
+		kfree(record);
+		return ret;
+	}
+
 	record->bytenr = bytenr;
 	record->num_bytes = num_bytes;
 	record->old_roots = NULL;
@@ -2039,7 +2042,11 @@ int btrfs_qgroup_trace_extent(struct btrfs_trans_handle *trans, u64 bytenr,
 	if (ret > 0) {
 		kfree(record);
 		return 0;
+	} else if (ret < 0) {
+		kfree(record);
+		return ret;
 	}
+
 	return btrfs_qgroup_trace_extent_post(trans, record);
 }
 
@@ -2905,7 +2912,7 @@ int btrfs_qgroup_account_extents(struct btrfs_trans_handle *trans)
 	struct btrfs_qgroup_extent_record *record;
 	struct btrfs_delayed_ref_root *delayed_refs;
 	struct ulist *new_roots = NULL;
-	struct rb_node *node;
+	unsigned long index;
 	u64 num_dirty_extents = 0;
 	u64 qgroup_to_skip;
 	int ret = 0;
@@ -2915,10 +2922,7 @@ int btrfs_qgroup_account_extents(struct btrfs_trans_handle *trans)
 
 	delayed_refs = &trans->transaction->delayed_refs;
 	qgroup_to_skip = delayed_refs->qgroup_to_skip;
-	while ((node = rb_first(&delayed_refs->dirty_extent_root))) {
-		record = rb_entry(node, struct btrfs_qgroup_extent_record,
-				  node);
-
+	xa_for_each(&delayed_refs->dirty_extents, index, record) {
 		num_dirty_extents++;
 		trace_btrfs_qgroup_account_extents(fs_info, record);
 
@@ -2984,7 +2988,7 @@ cleanup:
 		ulist_free(record->old_roots);
 		ulist_free(new_roots);
 		new_roots = NULL;
-		rb_erase(node, &delayed_refs->dirty_extent_root);
+		xa_erase(&delayed_refs->dirty_extents, record->bytenr);
 		kfree(record);
 
 	}
@@ -4777,15 +4781,14 @@ out:
 void btrfs_qgroup_destroy_extent_records(struct btrfs_transaction *trans)
 {
 	struct btrfs_qgroup_extent_record *entry;
-	struct btrfs_qgroup_extent_record *next;
-	struct rb_root *root;
+	unsigned long index;
 
-	root = &trans->delayed_refs.dirty_extent_root;
-	rbtree_postorder_for_each_entry_safe(entry, next, root, node) {
+	xa_for_each(&trans->delayed_refs.dirty_extents, index, entry) {
 		ulist_free(entry->old_roots);
 		kfree(entry);
 	}
-	*root = RB_ROOT;
+	xa_destroy(&trans->delayed_refs.dirty_extents);
+	xa_init(&trans->delayed_refs.dirty_extents);
 }
 
 void btrfs_free_squota_rsv(struct btrfs_fs_info *fs_info, u64 root, u64 rsv_bytes)
