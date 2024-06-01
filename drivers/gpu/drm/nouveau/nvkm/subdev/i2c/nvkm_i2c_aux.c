@@ -24,7 +24,7 @@
 
 #include <linux/string_helpers.h>
 
-#include "aux.h"
+#include "nvkm_i2c_aux.h"
 #include "pad.h"
 
 static int
