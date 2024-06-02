@@ -4771,6 +4771,19 @@ static bool __maybe_unused its_enable_rk3588001(void *data)
 	return true;
 }
 
+static bool __maybe_unused its_enable_sunxi001(void *data)
+{
+	struct its_node *its = data;
+
+	if (!of_machine_is_compatible("arm,sun55iw3p1"))
+		return false;
+
+	its->flags |= ITS_FLAGS_FORCE_NON_SHAREABLE;
+	gic_rdists->flags |= RDIST_FLAGS_FORCE_NON_SHAREABLE;
+
+	return true;
+}
+
 static bool its_set_non_coherent(void *data)
 {
 	struct its_node *its = data;
@@ -4831,6 +4844,14 @@ static const struct gic_quirk its_quirks[] = {
 		.iidr   = 0x0201743b,
 		.mask   = 0xffffffff,
 		.init   = its_enable_rk3588001,
+	},
+#endif
+#ifdef CONFIG_ALLWINNER_ERRATUM_SUNXI001
+	{
+		.desc   = "ITS: Allwinner erratum sunxi001",
+		.iidr   = 0x0201643b,
+		.mask   = 0xffffffff,
+		.init   = its_enable_sunxi001,
 	},
 #endif
 	{
