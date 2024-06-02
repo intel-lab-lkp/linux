@@ -498,7 +498,7 @@ static int usbhs_omap_get_dt_pdata(struct device *dev,
 			continue;
 
 		/* get 'enum usbhs_omap_port_mode' from port mode string */
-		ret = match_string(port_modes, ARRAY_SIZE(port_modes), mode);
+		ret = match_string(port_modes, mode);
 		if (ret < 0) {
 			dev_warn(dev, "Invalid port%d-mode \"%s\" in device tree\n",
 					i, mode);

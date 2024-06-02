@@ -4,7 +4,7 @@
  */
 
 #include <linux/sort.h>
-#include <linux/string.h>
+#include <linux/string_helpers.h>
 
 #include "t4_regs.h"
 #include "cxgb4.h"
@@ -1191,9 +1191,9 @@ static int cudbg_get_mem_region(struct adapter *padap,
 	if (rc)
 		return rc;
 
-	i = match_string(cudbg_region, ARRAY_SIZE(cudbg_region), region_name);
+	i = match_string(cudbg_region, region_name);
 	if (i < 0)
-		return -EINVAL;
+		return i;
 
 	idx = i;
 	for (i = 0; i < meminfo->mem_c; i++) {

@@ -1820,9 +1820,9 @@ static int param_set_audit(const char *val, const struct kernel_param *kp)
 	if (apparmor_initialized && !aa_current_policy_admin_capable(NULL))
 		return -EPERM;
 
-	i = match_string(audit_mode_names, AUDIT_MAX_INDEX, val);
+	i = __match_string(audit_mode_names, AUDIT_MAX_INDEX, val);
 	if (i < 0)
-		return -EINVAL;
+		return i;
 
 	aa_g_audit = i;
 	return 0;
@@ -1849,10 +1849,9 @@ static int param_set_mode(const char *val, const struct kernel_param *kp)
 	if (apparmor_initialized && !aa_current_policy_admin_capable(NULL))
 		return -EPERM;
 
-	i = match_string(aa_profile_mode_names, APPARMOR_MODE_NAMES_MAX_INDEX,
-			 val);
+	i = __match_string(aa_profile_mode_names, APPARMOR_MODE_NAMES_MAX_INDEX, val);
 	if (i < 0)
-		return -EINVAL;
+		return i;
 
 	aa_g_profile_mode = i;
 	return 0;

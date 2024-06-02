@@ -123,7 +123,7 @@ int tegra_xusb_lane_parse_dt(struct tegra_xusb_lane *lane,
 	if (err < 0)
 		return err;
 
-	err = match_string(lane->soc->funcs, lane->soc->num_funcs, function);
+	err = __match_string(lane->soc->funcs, lane->soc->num_funcs, function);
 	if (err < 0) {
 		dev_err(dev, "invalid function \"%s\" for lane \"%pOFn\"\n",
 			function, np);
@@ -748,7 +748,7 @@ static int tegra_xusb_usb2_port_parse_dt(struct tegra_xusb_usb2_port *usb2)
 	usb2->internal = of_property_read_bool(np, "nvidia,internal");
 
 	if (!of_property_read_string(np, "mode", &mode)) {
-		int err = match_string(modes, ARRAY_SIZE(modes), mode);
+		int err = match_string(modes, mode);
 		if (err < 0) {
 			dev_err(&port->dev, "invalid value %s for \"mode\"\n",
 				mode);

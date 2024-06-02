@@ -3478,8 +3478,7 @@ skipbl(void)
 	return c;
 }
 
-#define N_PTREGS	44
-static const char *regnames[N_PTREGS] = {
+static const char *regnames[] = {
 	"r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
 	"r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
 	"r16", "r17", "r18", "r19", "r20", "r21", "r22", "r23",
@@ -3514,7 +3513,7 @@ scanhex(unsigned long *vp)
 			regname[i] = c;
 		}
 		regname[i] = 0;
-		i = match_string(regnames, N_PTREGS, regname);
+		i = match_string(regnames, regname);
 		if (i < 0) {
 			printf("invalid register name '%%%s'\n", regname);
 			return 0;

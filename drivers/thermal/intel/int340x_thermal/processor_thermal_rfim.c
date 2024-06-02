@@ -111,7 +111,7 @@ static ssize_t suffix##_show(struct device *dev,\
 		match_strs = (const char **)fivr_strings;\
 		mmio_regs = tgl_fivr_mmio_regs;\
 	} \
-	ret = match_string(match_strs, -1, attr->attr.name);\
+	ret = __match_string(match_strs, -1, attr->attr.name);\
 	if (ret < 0)\
 		return ret;\
 	reg_val = readl((void __iomem *) (proc_priv->mmio_base + mmio_regs[ret].offset));\
@@ -145,7 +145,7 @@ static ssize_t suffix##_store(struct device *dev,\
 		mmio_regs = tgl_fivr_mmio_regs;\
 	} \
 	\
-	ret = match_string(match_strs, -1, attr->attr.name);\
+	ret = __match_string(match_strs, -1, attr->attr.name);\
 	if (ret < 0)\
 		return ret;\
 	if (mmio_regs[ret].read_only)\

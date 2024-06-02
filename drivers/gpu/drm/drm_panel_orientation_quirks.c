@@ -481,7 +481,7 @@ int drm_get_panel_orientation_quirk(int width, int height)
 		if (!bios_date)
 			continue;
 
-		i = match_string(data->bios_dates, -1, bios_date);
+		i = __match_string(data->bios_dates, -1, bios_date);
 		if (i >= 0)
 			return data->orientation;
 	}

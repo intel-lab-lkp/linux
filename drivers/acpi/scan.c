@@ -798,7 +798,7 @@ static bool acpi_info_matches_ids(struct acpi_device_info *info,
 	if (!(info->valid & ACPI_VALID_HID))
 		return false;
 
-	index = match_string(ids, -1, info->hardware_id.string);
+	index = __match_string(ids, -1, info->hardware_id.string);
 	if (index >= 0)
 		return true;
 
@@ -809,7 +809,7 @@ static bool acpi_info_matches_ids(struct acpi_device_info *info,
 		return false;
 
 	for (i = 0; i < cid_list->count; i++) {
-		index = match_string(ids, -1, cid_list->ids[i].string);
+		index = __match_string(ids, -1, cid_list->ids[i].string);
 		if (index >= 0)
 			return true;
 	}

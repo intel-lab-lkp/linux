@@ -24,7 +24,6 @@
 #include <linux/list.h>
 #include <linux/sysctl.h>
 #include <linux/ctype.h>
-#include <linux/string.h>
 #include <linux/parser.h>
 #include <linux/string_helpers.h>
 #include <linux/uaccess.h>
@@ -154,7 +153,7 @@ static struct ddebug_class_map *ddebug_find_valid_class(struct ddebug_table cons
 	int idx;
 
 	list_for_each_entry(map, &dt->maps, link) {
-		idx = match_string(map->class_names, map->length, class_string);
+		idx = __match_string(map->class_names, map->length, class_string);
 		if (idx >= 0) {
 			*class_id = idx + map->base;
 			return map;
@@ -665,7 +664,7 @@ static int param_set_dyndbg_classnames(const char *instr, const struct kernel_pa
 			if (*cl_str == '+')
 				cl_str++;
 		}
-		cls_id = match_string(map->class_names, map->length, cl_str);
+		cls_id = __match_string(map->class_names, map->length, cl_str);
 		if (cls_id < 0) {
 			pr_err("%s unknown to %s\n", cl_str, KP_NAME(kp));
 			continue;

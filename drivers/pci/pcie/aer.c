@@ -210,7 +210,7 @@ void pcie_ecrc_get_policy(char *str)
 {
 	int i;
 
-	i = match_string(ecrc_policy_str, ARRAY_SIZE(ecrc_policy_str), str);
+	i = match_string(ecrc_policy_str, str);
 	if (i < 0)
 		return;
 

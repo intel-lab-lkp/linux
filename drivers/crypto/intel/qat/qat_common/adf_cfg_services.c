@@ -3,7 +3,7 @@
 
 #include <linux/export.h>
 #include <linux/pci.h>
-#include <linux/string.h>
+#include <linux/string_helpers.h>
 #include "adf_cfg.h"
 #include "adf_cfg_services.h"
 #include "adf_cfg_strings.h"
@@ -35,8 +35,7 @@ int adf_get_service_enabled(struct adf_accel_dev *accel_dev)
 		return ret;
 	}
 
-	ret = match_string(adf_cfg_services, ARRAY_SIZE(adf_cfg_services),
-			   services);
+	ret = match_string(adf_cfg_services, services);
 	if (ret < 0)
 		dev_err(&GET_DEV(accel_dev),
 			"Invalid value of " ADF_SERVICES_ENABLED " param: %s\n",

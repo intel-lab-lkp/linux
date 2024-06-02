@@ -135,15 +135,14 @@ struct xenon_emmc_phy_regs {
 	u32 logic_timing_val;
 };
 
-static const char * const phy_types[] = {
-	"emmc 5.0 phy",
-	"emmc 5.1 phy"
-};
-
 enum xenon_phy_type_enum {
 	EMMC_5_0_PHY,
 	EMMC_5_1_PHY,
-	NR_PHY_TYPES
+};
+
+static const char * const phy_types[] = {
+	[EMMC_5_0_PHY] = "emmc 5.0 phy",
+	[EMMC_5_1_PHY] = "emmc 5.1 phy",
 };
 
 enum soc_pad_ctrl_type {
@@ -852,7 +851,7 @@ static int xenon_add_phy(struct device *dev, struct sdhci_host *host,
 	struct xenon_priv *priv = sdhci_pltfm_priv(pltfm_host);
 	int ret;
 
-	priv->phy_type = match_string(phy_types, NR_PHY_TYPES, phy_name);
+	priv->phy_type = match_string(phy_types, phy_name);
 	if (priv->phy_type < 0) {
 		dev_err(mmc_dev(host->mmc),
 			"Unable to determine PHY name %s. Use default eMMC 5.1 PHY\n",

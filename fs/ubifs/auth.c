@@ -264,13 +264,13 @@ int ubifs_init_authentication(struct ubifs_info *c)
 		return -EINVAL;
 	}
 
-	c->auth_hash_algo = match_string(hash_algo_name, HASH_ALGO__LAST,
-					 c->auth_hash_name);
-	if ((int)c->auth_hash_algo < 0) {
+	err = __match_string(hash_algo_name, HASH_ALGO__LAST, c->auth_hash_name);
+	if (err < 0) {
 		ubifs_err(c, "Unknown hash algo %s specified",
 			  c->auth_hash_name);
-		return -EINVAL;
+		return err;
 	}
+	c->auth_hash_algo = err;
 
 	snprintf(hmac_name, CRYPTO_MAX_ALG_NAME, "hmac(%s)",
 		 c->auth_hash_name);

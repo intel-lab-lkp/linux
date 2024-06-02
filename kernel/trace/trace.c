@@ -32,7 +32,6 @@
 #include <linux/percpu.h>
 #include <linux/splice.h>
 #include <linux/kdebug.h>
-#include <linux/string.h>
 #include <linux/mount.h>
 #include <linux/rwsem.h>
 #include <linux/slab.h>
@@ -45,6 +44,7 @@
 #include <linux/trace.h>
 #include <linux/sched/clock.h>
 #include <linux/sched/rt.h>
+#include <linux/string_helpers.h>
 #include <linux/fsnotify.h>
 #include <linux/irq_work.h>
 #include <linux/workqueue.h>
@@ -5309,7 +5309,7 @@ int trace_set_options(struct trace_array *tr, char *option)
 	mutex_lock(&event_mutex);
 	mutex_lock(&trace_types_lock);
 
-	ret = match_string(trace_options, -1, cmp);
+	ret = __match_string(trace_options, -1, cmp);
 	/* If no option could be set, test the specific tracer options */
 	if (ret < 0)
 		ret = set_tracer_option(tr, cmp, neg);

@@ -898,7 +898,7 @@ bool sysfs_streq(const char *s1, const char *s2)
 EXPORT_SYMBOL(sysfs_streq);
 
 /**
- * match_string - matches given string in an array
+ * __match_string - matches given string in an array
  * @array:	array of strings
  * @n:		number of strings in the array or -1 for NULL terminated arrays
  * @string:	string to match with
@@ -914,7 +914,7 @@ EXPORT_SYMBOL(sysfs_streq);
  * Return:
  * index of a @string in the @array if matches, or %-EINVAL otherwise.
  */
-int match_string(const char * const *array, size_t n, const char *string)
+int __match_string(const char * const *array, size_t n, const char *string)
 {
 	int index;
 	const char *item;
@@ -929,7 +929,7 @@ int match_string(const char * const *array, size_t n, const char *string)
 
 	return -EINVAL;
 }
-EXPORT_SYMBOL(match_string);
+EXPORT_SYMBOL(__match_string);
 
 /**
  * __sysfs_match_string - matches given string in an array

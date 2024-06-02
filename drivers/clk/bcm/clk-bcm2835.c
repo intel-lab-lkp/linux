@@ -1447,9 +1447,7 @@ static struct clk_hw *bcm2835_register_clock(struct bcm2835_cprman *cprman,
 	for (i = 0; i < clock_data->num_mux_parents; i++) {
 		parents[i] = clock_data->parents[i];
 
-		ret = match_string(cprman_parent_names,
-				   ARRAY_SIZE(cprman_parent_names),
-				   parents[i]);
+		ret = match_string(cprman_parent_names, parents[i]);
 		if (ret >= 0)
 			parents[i] = cprman->real_parent_names[ret];
 	}

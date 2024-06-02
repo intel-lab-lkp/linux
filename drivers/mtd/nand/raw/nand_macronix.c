@@ -178,8 +178,7 @@ static void macronix_nand_fix_broken_get_timings(struct nand_chip *chip)
 	if (!chip->parameters.supports_set_get_features)
 		return;
 
-	i = match_string(broken_get_timings, ARRAY_SIZE(broken_get_timings),
-			 chip->parameters.model);
+	i = match_string(broken_get_timings, chip->parameters.model);
 	if (i < 0)
 		return;
 
@@ -317,8 +316,7 @@ static void macronix_nand_deep_power_down_support(struct nand_chip *chip)
 		"MX30UF4G28AD",
 	};
 
-	i = match_string(deep_power_down_dev, ARRAY_SIZE(deep_power_down_dev),
-			 chip->parameters.model);
+	i = match_string(deep_power_down_dev, chip->parameters.model);
 	if (i < 0)
 		return;
 
@@ -461,9 +459,7 @@ static void macronix_nand_setup_otp(struct nand_chip *chip)
 	};
 	struct mtd_info *mtd;
 
-	if (match_string(supported_otp_models,
-			 ARRAY_SIZE(supported_otp_models),
-			 chip->parameters.model) < 0)
+	if (match_string(supported_otp_models, chip->parameters.model) < 0)
 		return;
 
 	if (!chip->parameters.supports_set_get_features)

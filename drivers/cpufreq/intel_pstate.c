@@ -832,7 +832,7 @@ static ssize_t store_energy_performance_preference(
 	if (ret != 1)
 		return -EINVAL;
 
-	ret = match_string(energy_perf_strings, -1, str_preference);
+	ret = __match_string(energy_perf_strings, -1, str_preference);
 	if (ret < 0) {
 		if (!boot_cpu_has(X86_FEATURE_HWP_EPP))
 			return ret;

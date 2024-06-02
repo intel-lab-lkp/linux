@@ -352,7 +352,7 @@ static int armada_37xx_pmx_set_by_name(struct pinctrl_dev *pctldev,
 
 	dev_dbg(dev, "enable function %s group %s\n", name, grp->name);
 
-	func = match_string(grp->funcs, NB_FUNCS, name);
+	func = match_string(grp->funcs, name);
 	if (func < 0)
 		return -ENOTSUPP;
 
@@ -885,7 +885,7 @@ static int armada_37xx_fill_group(struct armada_37xx_pinctrl *info)
 		for (j = 0; j < grp->extra_npins; j++)
 			grp->pins[i+j] = grp->extra_pin + j;
 
-		for (f = 0; (f < NB_FUNCS) && grp->funcs[f]; f++) {
+		for (f = 0; (f < ARRAY_SIZE(grp->funcs)) && grp->funcs[f]; f++) {
 			int ret;
 			/* check for unique functions and count groups */
 			ret = armada_37xx_add_function(info->funcs, &funcsize,
@@ -937,7 +937,7 @@ static int armada_37xx_fill_func(struct armada_37xx_pinctrl *info)
 			struct armada_37xx_pin_group *gp = &info->groups[g];
 			int f;
 
-			f = match_string(gp->funcs, NB_FUNCS, name);
+			f = match_string(gp->funcs, name);
 			if (f < 0)
 				continue;
 

@@ -769,14 +769,13 @@ static int dapm_connect_mux(struct snd_soc_dapm_context *dapm,
 		item = 0;
 	}
 
-	i = match_string(e->texts, e->items, control_name);
+	i = __match_string(e->texts, e->items, control_name);
 	if (i < 0)
-		return -ENODEV;
+		return i;
 
 	path->name = e->texts[i];
 	path->connect = (i == item);
 	return 0;
-
 }
 
 /* set up initial codec paths */

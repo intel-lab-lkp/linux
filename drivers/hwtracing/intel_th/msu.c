@@ -1901,7 +1901,7 @@ mode_store(struct device *dev, struct device_attribute *attr, const char *buf,
 	if (!mode)
 		return -ENOMEM;
 
-	i = match_string(msc_mode, ARRAY_SIZE(msc_mode), mode);
+	i = match_string(msc_mode, mode);
 	if (i >= 0) {
 		kfree(mode);
 		goto found;

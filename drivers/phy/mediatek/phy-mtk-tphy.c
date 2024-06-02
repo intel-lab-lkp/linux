@@ -389,7 +389,7 @@ static int u2_phy_params_show(struct seq_file *sf, void *unused)
 	u32 val = 0;
 	int ret;
 
-	ret = match_string(u2_phy_files, ARRAY_SIZE(u2_phy_files), fname);
+	ret = match_string(u2_phy_files, fname);
 	if (ret < 0)
 		return ret;
 
@@ -464,7 +464,7 @@ static ssize_t u2_phy_params_write(struct file *file, const char __user *ubuf,
 	if (rc)
 		return rc;
 
-	ret = match_string(u2_phy_files, ARRAY_SIZE(u2_phy_files), fname);
+	ret = match_string(u2_phy_files, fname);
 	if (ret < 0)
 		return (ssize_t)ret;
 
@@ -530,7 +530,7 @@ static int u3_phy_params_show(struct seq_file *sf, void *unused)
 	u32 tmp;
 	int ret;
 
-	ret = match_string(u3_phy_files, ARRAY_SIZE(u3_phy_files), fname);
+	ret = match_string(u3_phy_files, fname);
 	if (ret < 0)
 		return ret;
 
@@ -590,7 +590,7 @@ static ssize_t u3_phy_params_write(struct file *file, const char __user *ubuf,
 	if (rc)
 		return rc;
 
-	ret = match_string(u3_phy_files, ARRAY_SIZE(u3_phy_files), fname);
+	ret = match_string(u3_phy_files, fname);
 	if (ret < 0)
 		return (ssize_t)ret;
 

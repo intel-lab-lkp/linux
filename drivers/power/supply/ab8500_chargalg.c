@@ -857,7 +857,7 @@ static int ab8500_chargalg_get_ext_psy_data(struct device *dev, void *data)
 	psy = (struct power_supply *)data;
 	di = power_supply_get_drvdata(psy);
 	/* For all psy where the driver name appears in any supplied_to */
-	j = match_string(supplicants, ext->num_supplicants, psy->desc->name);
+	j = __match_string(supplicants, ext->num_supplicants, psy->desc->name);
 	if (j < 0)
 		return 0;
 

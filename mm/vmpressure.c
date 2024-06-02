@@ -388,7 +388,7 @@ int vmpressure_register_event(struct mem_cgroup *memcg,
 
 	/* Find required level */
 	token = strsep(&spec, ",");
-	ret = match_string(vmpressure_str_levels, VMPRESSURE_NUM_LEVELS, token);
+	ret = match_string(vmpressure_str_levels, token);
 	if (ret < 0)
 		goto out;
 	level = ret;
@@ -396,7 +396,7 @@ int vmpressure_register_event(struct mem_cgroup *memcg,
 	/* Find optional mode */
 	token = strsep(&spec, ",");
 	if (token) {
-		ret = match_string(vmpressure_str_modes, VMPRESSURE_NUM_MODES, token);
+		ret = match_string(vmpressure_str_modes, token);
 		if (ret < 0)
 			goto out;
 		mode = ret;

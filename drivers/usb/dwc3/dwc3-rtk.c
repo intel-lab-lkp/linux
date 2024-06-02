@@ -185,7 +185,7 @@ static enum usb_device_speed __get_dwc3_maximum_speed(struct device_node *np)
 	if (ret < 0)
 		goto out;
 
-	ret = match_string(speed_names, ARRAY_SIZE(speed_names), maximum_speed);
+	ret = match_string(speed_names, maximum_speed);
 
 out:
 	of_node_put(dwc3_np);

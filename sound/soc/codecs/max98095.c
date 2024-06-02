@@ -1627,7 +1627,7 @@ static int max98095_get_bq_channel(struct snd_soc_component *component,
 {
 	int ret;
 
-	ret = match_string(bq_mode_name, ARRAY_SIZE(bq_mode_name), name);
+	ret = match_string(bq_mode_name, name);
 	if (ret < 0)
 		dev_err(component->dev, "Bad biquad channel name '%s'\n", name);
 	return ret;

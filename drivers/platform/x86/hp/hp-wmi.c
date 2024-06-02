@@ -25,7 +25,7 @@
 #include <linux/hwmon.h>
 #include <linux/acpi.h>
 #include <linux/rfkill.h>
-#include <linux/string.h>
+#include <linux/string_helpers.h>
 #include <linux/dmi.h>
 
 MODULE_AUTHOR("Matthew Garrett <mjg59@srcf.ucam.org>");
@@ -443,18 +443,15 @@ static int hp_wmi_get_tablet_mode(void)
 {
 	char system_device_mode[4] = { 0 };
 	const char *chassis_type;
-	bool tablet_found;
 	int ret;
 
 	chassis_type = dmi_get_system_info(DMI_CHASSIS_TYPE);
 	if (!chassis_type)
 		return -ENODEV;
 
-	tablet_found = match_string(tablet_chassis_types,
-				    ARRAY_SIZE(tablet_chassis_types),
-				    chassis_type) >= 0;
-	if (!tablet_found)
-		return -ENODEV;
+	ret = match_string(tablet_chassis_types, chassis_type);
+	if (ret < 0)
+		return ret;
 
 	ret = hp_wmi_perform_query(HPWMI_SYSTEM_DEVICE_MODE, HPWMI_READ,
 				   system_device_mode, zero_if_sup(system_device_mode),
@@ -490,9 +487,7 @@ static bool is_omen_thermal_profile(void)
 	if (!board_name)
 		return false;
 
-	return match_string(omen_thermal_profile_boards,
-			    ARRAY_SIZE(omen_thermal_profile_boards),
-			    board_name) >= 0;
+	return match_string(omen_thermal_profile_boards, board_name) >= 0;
 }
 
 static int omen_get_thermal_policy_version(void)
@@ -503,9 +498,9 @@ static int omen_get_thermal_policy_version(void)
 	const char *board_name = dmi_get_system_info(DMI_BOARD_NAME);
 
 	if (board_name) {
-		int matches = match_string(omen_thermal_profile_force_v0_boards,
-			ARRAY_SIZE(omen_thermal_profile_force_v0_boards),
-			board_name);
+		int matches;
+
+		matches = match_string(omen_thermal_profile_force_v0_boards, board_name);
 		if (matches >= 0)
 			return 0;
 	}
@@ -1230,9 +1225,7 @@ static bool has_omen_thermal_profile_ec_timer(void)
 	if (!board_name)
 		return false;
 
-	return match_string(omen_timed_thermal_profile_boards,
-			    ARRAY_SIZE(omen_timed_thermal_profile_boards),
-			    board_name) >= 0;
+	return match_string(omen_timed_thermal_profile_boards, board_name) >= 0;
 }
 
 inline int omen_thermal_profile_ec_flags_set(enum hp_thermal_profile_omen_flags flags)
@@ -1376,9 +1369,7 @@ static bool is_victus_thermal_profile(void)
 	if (!board_name)
 		return false;
 
-	return match_string(victus_thermal_profile_boards,
-			    ARRAY_SIZE(victus_thermal_profile_boards),
-			    board_name) >= 0;
+	return match_string(victus_thermal_profile_boards, board_name) >= 0;
 }
 
 static int platform_profile_victus_get(struct platform_profile_handler *pprof,

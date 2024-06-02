@@ -4,8 +4,8 @@
 #include <linux/uaccess.h>
 #include <linux/proc_fs.h>
 #include <linux/ctype.h>
-#include <linux/string.h>
 #include <linux/slab.h>
+#include <linux/string_helpers.h>
 #include <linux/init.h>
 
 #define LINE_SIZE 80
@@ -139,7 +139,7 @@ mtrr_write(struct file *file, const char __user *buf, size_t len, loff_t * ppos)
 		return -EINVAL;
 	ptr = skip_spaces(ptr + 5);
 
-	i = match_string(mtrr_strings, MTRR_NUM_TYPES, ptr);
+	i = match_string(mtrr_strings, ptr);
 	if (i < 0)
 		return i;
 

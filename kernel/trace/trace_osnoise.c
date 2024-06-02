@@ -2230,9 +2230,9 @@ static ssize_t osnoise_options_write(struct file *filp, const char __user *ubuf,
 		enable = false;
 	}
 
-	option = match_string(osnoise_options_str, OSN_MAX, option_str);
+	option = match_string(osnoise_options_str, option_str);
 	if (option < 0)
-		return -EINVAL;
+		return option;
 
 	/*
 	 * trace_types_lock is taken to avoid concurrency on start/stop.

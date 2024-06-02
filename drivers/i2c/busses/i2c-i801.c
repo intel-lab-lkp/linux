@@ -111,7 +111,7 @@
 #include <linux/io.h>
 #include <linux/dmi.h>
 #include <linux/slab.h>
-#include <linux/string.h>
+#include <linux/string_helpers.h>
 #include <linux/completion.h>
 #include <linux/err.h>
 #include <linux/platform_device.h>
@@ -1186,7 +1186,7 @@ static acpi_status check_acpi_smo88xx_device(acpi_handle obj_handle,
 	if (!hid)
 		goto smo88xx_not_found;
 
-	i = match_string(acpi_smo8800_ids, ARRAY_SIZE(acpi_smo8800_ids), hid);
+	i = match_string(acpi_smo8800_ids, hid);
 	if (i < 0)
 		goto smo88xx_not_found;
 
