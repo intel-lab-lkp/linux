@@ -144,4 +144,5 @@ static struct kunit_suite clk_fd_approximation_suite = {
 kunit_test_suites(
 	&clk_fd_approximation_suite
 );
+MODULE_DESCRIPTION("Kunit test for clock fractional divider");
 MODULE_LICENSE("GPL");

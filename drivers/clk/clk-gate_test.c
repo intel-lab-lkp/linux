@@ -461,4 +461,5 @@ kunit_test_suites(
 	&clk_gate_test_hiword_suite,
 	&clk_gate_test_enabled_suite
 );
+MODULE_DESCRIPTION("Kunit test for clk gate basic type");
 MODULE_LICENSE("GPL v2");

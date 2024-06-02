@@ -2674,4 +2674,5 @@ kunit_test_suites(
 	&clk_single_parent_mux_test_suite,
 	&clk_uncached_test_suite
 );
+MODULE_DESCRIPTION("Kunit test for clk rate management");
 MODULE_LICENSE("GPL v2");
