@@ -104,7 +104,7 @@ static inline int sc_retry_prerr(sc_func_t func, sc_err_func_t err_func,
  */
 static int try_init_module_global(void)
 {
-	struct tdx_module_args args = {};
+	struct tdx_module_args args;
 	static DEFINE_RAW_SPINLOCK(sysinit_lock);
 	static bool sysinit_done;
 	static int sysinit_ret;
@@ -115,6 +115,8 @@ static int try_init_module_global(void)
 
 	if (sysinit_done)
 		goto out;
+
+	tdx_arg_init(&args);
 
 	/* RCX is module attributes and all bits are reserved */
 	args.rcx = 0;
@@ -147,7 +149,7 @@ out:
  */
 int tdx_cpu_enable(void)
 {
-	struct tdx_module_args args = {};
+	struct tdx_module_args args;
 	int ret;
 
 	if (!boot_cpu_has(X86_FEATURE_TDX_HOST_PLATFORM))
@@ -167,6 +169,7 @@ int tdx_cpu_enable(void)
 	if (ret)
 		return ret;
 
+	tdx_arg_init(&args);
 	ret = seamcall_prerr(TDH_SYS_LP_INIT, &args);
 	if (ret)
 		return ret;
@@ -253,7 +256,7 @@ err:
 
 static int read_sys_metadata_field(u64 field_id, u64 *data)
 {
-	struct tdx_module_args args = {};
+	struct tdx_module_args args;
 	int ret;
 
 	/*
@@ -261,6 +264,7 @@ static int read_sys_metadata_field(u64 field_id, u64 *data)
 	 *  - RDX (in): the field to read
 	 *  - R8 (out): the field data
 	 */
+	tdx_arg_init(&args);
 	args.rdx = field_id;
 	ret = seamcall_prerr_ret(TDH_SYS_RD, &args);
 	if (ret)
@@ -956,7 +960,7 @@ static int construct_tdmrs(struct list_head *tmb_list,
 
 static int config_tdx_module(struct tdmr_info_list *tdmr_list, u64 global_keyid)
 {
-	struct tdx_module_args args = {};
+	struct tdx_module_args args;
 	u64 *tdmr_pa_array;
 	size_t array_sz;
 	int i, ret;
@@ -978,6 +982,7 @@ static int config_tdx_module(struct tdmr_info_list *tdmr_list, u64 global_keyid)
 	for (i = 0; i < tdmr_list->nr_consumed_tdmrs; i++)
 		tdmr_pa_array[i] = __pa(tdmr_entry(tdmr_list, i));
 
+	tdx_arg_init(&args);
 	args.rcx = __pa(tdmr_pa_array);
 	args.rdx = tdmr_list->nr_consumed_tdmrs;
 	args.r8 = global_keyid;
@@ -991,8 +996,9 @@ static int config_tdx_module(struct tdmr_info_list *tdmr_list, u64 global_keyid)
 
 static int do_global_key_config(void *unused)
 {
-	struct tdx_module_args args = {};
+	struct tdx_module_args args;
 
+	tdx_arg_init(&args);
 	return seamcall_prerr(TDH_SYS_KEY_CONFIG, &args);
 }
 
@@ -1057,11 +1063,11 @@ static int init_tdmr(struct tdmr_info *tdmr)
 	 * TDMR in each call.
 	 */
 	do {
-		struct tdx_module_args args = {
-			.rcx = tdmr->base,
-		};
+		struct tdx_module_args args;
 		int ret;
 
+		tdx_arg_init(&args);
+		args.rcx = tdmr->base;
 		ret = seamcall_prerr_ret(TDH_SYS_TDMR_INIT, &args);
 		if (ret)
 			return ret;
@@ -1285,15 +1291,15 @@ static bool is_pamt_page(unsigned long phys)
  */
 static bool paddr_is_tdx_private(unsigned long phys)
 {
-	struct tdx_module_args args = {
-		.rcx = phys & PAGE_MASK,
-	};
+	struct tdx_module_args args;
 	u64 sret;
 
 	if (!boot_cpu_has(X86_FEATURE_TDX_HOST_PLATFORM))
 		return false;
 
 	/* Get page type from the TDX module */
+	tdx_arg_init(&args);
+	args.rcx = phys & PAGE_MASK;
 	sret = __seamcall_ret(TDH_PHYMEM_PAGE_RDMD, &args);
 
 	/*

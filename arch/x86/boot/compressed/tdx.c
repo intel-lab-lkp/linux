@@ -18,13 +18,14 @@ void __tdx_hypercall_failed(void)
 
 static inline unsigned int tdx_io_in(int size, u16 port)
 {
-	struct tdx_module_args args = {
-		.r10 = TDX_HYPERCALL_STANDARD,
-		.r11 = hcall_func(EXIT_REASON_IO_INSTRUCTION),
-		.r12 = size,
-		.r13 = 0,
-		.r14 = port,
-	};
+	struct tdx_module_args args;
+
+	tdx_arg_init(&args);
+	args.r10 = TDX_HYPERCALL_STANDARD;
+	args.r11 = hcall_func(EXIT_REASON_IO_INSTRUCTION);
+	args.r12 = size;
+	args.r13 = 0;
+	args.r14 = port;
 
 	if (__tdx_hypercall(&args))
 		return UINT_MAX;
@@ -34,14 +35,15 @@ static inline unsigned int tdx_io_in(int size, u16 port)
 
 static inline void tdx_io_out(int size, u16 port, u32 value)
 {
-	struct tdx_module_args args = {
-		.r10 = TDX_HYPERCALL_STANDARD,
-		.r11 = hcall_func(EXIT_REASON_IO_INSTRUCTION),
-		.r12 = size,
-		.r13 = 1,
-		.r14 = port,
-		.r15 = value,
-	};
+	struct tdx_module_args args;
+
+	tdx_arg_init(&args);
+	args.r10 = TDX_HYPERCALL_STANDARD;
+	args.r11 = hcall_func(EXIT_REASON_IO_INSTRUCTION);
+	args.r12 = size;
+	args.r13 = 1;
+	args.r14 = port;
+	args.r15 = value;
 
 	__tdx_hypercall(&args);
 }

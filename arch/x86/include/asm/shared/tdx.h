@@ -89,6 +89,14 @@ struct tdx_module_args {
 	u64 rsi;
 };
 
+static __always_inline void tdx_arg_init(struct tdx_module_args *args)
+{
+	asm ("rep stosb"
+	     : "+D" (args)
+	     : "c" (sizeof(*args)), "a" (0)
+	     : "memory");
+}
+
 /* Used to communicate with the TDX module */
 u64 __tdcall(u64 fn, struct tdx_module_args *args);
 u64 __tdcall_ret(u64 fn, struct tdx_module_args *args);
@@ -103,14 +111,15 @@ u64 __tdx_hypercall(struct tdx_module_args *args);
  */
 static inline u64 _tdx_hypercall(u64 fn, u64 r12, u64 r13, u64 r14, u64 r15)
 {
-	struct tdx_module_args args = {
-		.r10 = TDX_HYPERCALL_STANDARD,
-		.r11 = fn,
-		.r12 = r12,
-		.r13 = r13,
-		.r14 = r14,
-		.r15 = r15,
-	};
+	struct tdx_module_args args;
+
+	tdx_arg_init(&args);
+	args.r10 = TDX_HYPERCALL_STANDARD;
+	args.r11 = fn;
+	args.r12 = r12;
+	args.r13 = r13;
+	args.r14 = r14;
+	args.r15 = r15;
 
 	return __tdx_hypercall(&args);
 }

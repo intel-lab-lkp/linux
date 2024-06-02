@@ -49,13 +49,14 @@ noinstr void __noreturn __tdx_hypercall_failed(void)
 long tdx_kvm_hypercall(unsigned int nr, unsigned long p1, unsigned long p2,
 		       unsigned long p3, unsigned long p4)
 {
-	struct tdx_module_args args = {
-		.r10 = nr,
-		.r11 = p1,
-		.r12 = p2,
-		.r13 = p3,
-		.r14 = p4,
-	};
+	struct tdx_module_args args;
+
+	tdx_arg_init(&args);
+	args.r10 = nr;
+	args.r11 = p1;
+	args.r12 = p2;
+	args.r13 = p3;
+	args.r14 = p4;
 
 	return __tdx_hypercall(&args);
 }
@@ -89,12 +90,13 @@ static inline void tdcall(u64 fn, struct tdx_module_args *args)
  */
 int tdx_mcall_get_report0(u8 *reportdata, u8 *tdreport)
 {
-	struct tdx_module_args args = {
-		.rcx = virt_to_phys(tdreport),
-		.rdx = virt_to_phys(reportdata),
-		.r8 = TDREPORT_SUBTYPE_0,
-	};
+	struct tdx_module_args args;
 	u64 ret;
+
+	tdx_arg_init(&args);
+	args.rcx = virt_to_phys(tdreport);
+	args.rdx = virt_to_phys(reportdata);
+	args.r8 = TDREPORT_SUBTYPE_0;
 
 	ret = __tdcall(TDG_MR_REPORT, &args);
 	if (ret) {
@@ -130,11 +132,7 @@ EXPORT_SYMBOL_GPL(tdx_hcall_get_quote);
 
 static void __noreturn tdx_panic(const char *msg)
 {
-	struct tdx_module_args args = {
-		.r10 = TDX_HYPERCALL_STANDARD,
-		.r11 = TDVMCALL_REPORT_FATAL_ERROR,
-		.r12 = 0, /* Error code: 0 is Panic */
-	};
+	struct tdx_module_args args;
 	union {
 		/* Define register order according to the GHCI */
 		struct { u64 r14, r15, rbx, rdi, rsi, r8, r9, rdx; };
@@ -144,6 +142,11 @@ static void __noreturn tdx_panic(const char *msg)
 
 	/* VMM assumes '\0' in byte 65, if the message took all 64 bytes */
 	strtomem_pad(message.str, msg, '\0');
+
+	tdx_arg_init(&args);
+	args.r10 = TDX_HYPERCALL_STANDARD;
+	args.r11 = TDVMCALL_REPORT_FATAL_ERROR;
+	args.r12 = 0; /* Error code: 0 is Panic */
 
 	args.r8  = message.r8;
 	args.r9  = message.r9;
@@ -165,9 +168,11 @@ static void __noreturn tdx_panic(const char *msg)
 
 static void tdx_parse_tdinfo(u64 *cc_mask)
 {
-	struct tdx_module_args args = {};
+	struct tdx_module_args args;
 	unsigned int gpa_width;
 	u64 td_attr;
+
+	tdx_arg_init(&args);
 
 	/*
 	 * TDINFO TDX module call is used to get the TD execution environment
@@ -252,11 +257,12 @@ static int ve_instr_len(struct ve_info *ve)
 
 static u64 __cpuidle __halt(const bool irq_disabled)
 {
-	struct tdx_module_args args = {
-		.r10 = TDX_HYPERCALL_STANDARD,
-		.r11 = hcall_func(EXIT_REASON_HLT),
-		.r12 = irq_disabled,
-	};
+	struct tdx_module_args args;
+
+	tdx_arg_init(&args);
+	args.r10 = TDX_HYPERCALL_STANDARD;
+	args.r11 = hcall_func(EXIT_REASON_HLT);
+	args.r12 = irq_disabled;
 
 	/*
 	 * Emulate HLT operation via hypercall. More info about ABI
@@ -296,11 +302,12 @@ void __cpuidle tdx_safe_halt(void)
 
 static int read_msr(struct pt_regs *regs, struct ve_info *ve)
 {
-	struct tdx_module_args args = {
-		.r10 = TDX_HYPERCALL_STANDARD,
-		.r11 = hcall_func(EXIT_REASON_MSR_READ),
-		.r12 = regs->cx,
-	};
+	struct tdx_module_args args;
+
+	tdx_arg_init(&args);
+	args.r10 = TDX_HYPERCALL_STANDARD;
+	args.r11 = hcall_func(EXIT_REASON_MSR_READ);
+	args.r12 = regs->cx;
 
 	/*
 	 * Emulate the MSR read via hypercall. More info about ABI
@@ -317,12 +324,13 @@ static int read_msr(struct pt_regs *regs, struct ve_info *ve)
 
 static int write_msr(struct pt_regs *regs, struct ve_info *ve)
 {
-	struct tdx_module_args args = {
-		.r10 = TDX_HYPERCALL_STANDARD,
-		.r11 = hcall_func(EXIT_REASON_MSR_WRITE),
-		.r12 = regs->cx,
-		.r13 = (u64)regs->dx << 32 | regs->ax,
-	};
+	struct tdx_module_args args;
+
+	tdx_arg_init(&args);
+	args.r10 = TDX_HYPERCALL_STANDARD;
+	args.r11 = hcall_func(EXIT_REASON_MSR_WRITE);
+	args.r12 = regs->cx;
+	args.r13 = (u64)regs->dx << 32 | regs->ax;
 
 	/*
 	 * Emulate the MSR write via hypercall. More info about ABI
@@ -337,12 +345,13 @@ static int write_msr(struct pt_regs *regs, struct ve_info *ve)
 
 static int handle_cpuid(struct pt_regs *regs, struct ve_info *ve)
 {
-	struct tdx_module_args args = {
-		.r10 = TDX_HYPERCALL_STANDARD,
-		.r11 = hcall_func(EXIT_REASON_CPUID),
-		.r12 = regs->ax,
-		.r13 = regs->cx,
-	};
+	struct tdx_module_args args;
+
+	tdx_arg_init(&args);
+	args.r10 = TDX_HYPERCALL_STANDARD;
+	args.r11 = hcall_func(EXIT_REASON_CPUID);
+	args.r12 = regs->ax;
+	args.r13 = regs->cx;
 
 	/*
 	 * Only allow VMM to control range reserved for hypervisor
@@ -379,14 +388,15 @@ static int handle_cpuid(struct pt_regs *regs, struct ve_info *ve)
 
 static bool mmio_read(int size, unsigned long addr, unsigned long *val)
 {
-	struct tdx_module_args args = {
-		.r10 = TDX_HYPERCALL_STANDARD,
-		.r11 = hcall_func(EXIT_REASON_EPT_VIOLATION),
-		.r12 = size,
-		.r13 = EPT_READ,
-		.r14 = addr,
-		.r15 = *val,
-	};
+	struct tdx_module_args args;
+
+	tdx_arg_init(&args);
+	args.r10 = TDX_HYPERCALL_STANDARD;
+	args.r11 = hcall_func(EXIT_REASON_EPT_VIOLATION);
+	args.r12 = size;
+	args.r13 = EPT_READ;
+	args.r14 = addr;
+	args.r15 = *val;
 
 	if (__tdx_hypercall(&args))
 		return false;
@@ -508,15 +518,16 @@ static int handle_mmio(struct pt_regs *regs, struct ve_info *ve)
 
 static bool handle_in(struct pt_regs *regs, int size, int port)
 {
-	struct tdx_module_args args = {
-		.r10 = TDX_HYPERCALL_STANDARD,
-		.r11 = hcall_func(EXIT_REASON_IO_INSTRUCTION),
-		.r12 = size,
-		.r13 = PORT_READ,
-		.r14 = port,
-	};
+	struct tdx_module_args args;
 	u64 mask = GENMASK(BITS_PER_BYTE * size, 0);
 	bool success;
+
+	tdx_arg_init(&args);
+	args.r10 = TDX_HYPERCALL_STANDARD;
+	args.r11 = hcall_func(EXIT_REASON_IO_INSTRUCTION);
+	args.r12 = size;
+	args.r13 = PORT_READ;
+	args.r14 = port;
 
 	/*
 	 * Emulate the I/O read via hypercall. More info about ABI can be found
@@ -602,7 +613,9 @@ __init bool tdx_early_handle_ve(struct pt_regs *regs)
 
 void tdx_get_ve_info(struct ve_info *ve)
 {
-	struct tdx_module_args args = {};
+	struct tdx_module_args args;
+
+	tdx_arg_init(&args);
 
 	/*
 	 * Called during #VE handling to retrieve the #VE info from the
@@ -745,14 +758,16 @@ static bool tdx_map_gpa(phys_addr_t start, phys_addr_t end, bool enc)
 	}
 
 	while (retry_count < max_retries_per_page) {
-		struct tdx_module_args args = {
-			.r10 = TDX_HYPERCALL_STANDARD,
-			.r11 = TDVMCALL_MAP_GPA,
-			.r12 = start,
-			.r13 = end - start };
-
+		struct tdx_module_args args;
 		u64 map_fail_paddr;
-		u64 ret = __tdx_hypercall(&args);
+		u64 ret;
+
+		tdx_arg_init(&args);
+		args.r10 = TDX_HYPERCALL_STANDARD;
+		args.r11 = TDVMCALL_MAP_GPA;
+		args.r12 = start;
+		args.r13 = end - start;
+		ret = __tdx_hypercall(&args);
 
 		if (ret != TDVMCALL_STATUS_RETRY)
 			return !ret;
@@ -824,10 +839,8 @@ static bool tdx_enc_status_change_finish(unsigned long vaddr, int numpages,
 
 void __init tdx_early_init(void)
 {
-	struct tdx_module_args args = {
-		.rdx = TDCS_NOTIFY_ENABLES,
-		.r9 = -1ULL,
-	};
+	struct tdx_module_args args;
+
 	u64 cc_mask;
 	u32 eax, sig[3];
 
@@ -846,6 +859,9 @@ void __init tdx_early_init(void)
 	cc_set_mask(cc_mask);
 
 	/* Kernel does not use NOTIFY_ENABLES and does not need random #VEs */
+	tdx_arg_init(&args);
+	args.rdx = TDCS_NOTIFY_ENABLES;
+	args.r9 = -1ULL;
 	tdcall(TDG_VM_WR, &args);
 
 	/*
