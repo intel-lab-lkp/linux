@@ -256,7 +256,7 @@ static int sun50i_a100_ledc_parse_format(struct device *dev,
 
 	device_property_read_string(dev, "allwinner,pixel-format", &format);
 
-	i = match_string(sun50i_a100_ledc_formats, ARRAY_SIZE(sun50i_a100_ledc_formats), format);
+	i = match_string(sun50i_a100_ledc_formats, format);
 	if (i < 0)
 		return dev_err_probe(dev, i, "Bad pixel format '%s'\n", format);
 

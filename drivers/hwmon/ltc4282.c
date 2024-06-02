@@ -21,7 +21,7 @@
 #include <linux/mutex.h>
 #include <linux/regmap.h>
 #include <linux/property.h>
-#include <linux/string.h>
+#include <linux/string_helpers.h>
 #include <linux/units.h>
 #include <linux/util_macros.h>
 
@@ -1282,8 +1282,7 @@ static int ltc4282_gpio_setup(struct ltc4282_state *st, struct device *dev)
 
 	ret = device_property_read_string(dev, "adi,gpio1-mode", &func);
 	if (!ret) {
-		ret = match_string(ltc4282_gpio1_modes,
-				   ARRAY_SIZE(ltc4282_gpio1_modes), func);
+		ret = match_string(ltc4282_gpio1_modes, func);
 		if (ret < 0)
 			return dev_err_probe(dev, ret,
 					     "Invalid func(%s) for gpio1\n",
@@ -1298,8 +1297,7 @@ static int ltc4282_gpio_setup(struct ltc4282_state *st, struct device *dev)
 
 	ret = device_property_read_string(dev, "adi,gpio2-mode", &func);
 	if (!ret) {
-		ret = match_string(ltc4282_gpio2_modes,
-				   ARRAY_SIZE(ltc4282_gpio2_modes), func);
+		ret = match_string(ltc4282_gpio2_modes, func);
 		if (ret < 0)
 			return dev_err_probe(dev, ret,
 					     "Invalid func(%s) for gpio2\n",
@@ -1463,8 +1461,7 @@ static int ltc4282_setup(struct ltc4282_state *st, struct device *dev)
 	ret = device_property_read_string(dev, "adi,overvoltage-dividers",
 					  &divider);
 	if (!ret) {
-		int div = match_string(ltc4282_dividers,
-				       ARRAY_SIZE(ltc4282_dividers), divider);
+		int div = match_string(ltc4282_dividers, divider);
 		if (div < 0)
 			return dev_err_probe(dev, -EINVAL,
 					     "Invalid val(%s) for adi,overvoltage-divider\n",
@@ -1478,8 +1475,7 @@ static int ltc4282_setup(struct ltc4282_state *st, struct device *dev)
 	ret = device_property_read_string(dev, "adi,undervoltage-dividers",
 					  &divider);
 	if (!ret) {
-		int div = match_string(ltc4282_dividers,
-				       ARRAY_SIZE(ltc4282_dividers), divider);
+		int div = match_string(ltc4282_dividers, divider);
 		if (div < 0)
 			return dev_err_probe(dev, -EINVAL,
 					     "Invalid val(%s) for adi,undervoltage-divider\n",

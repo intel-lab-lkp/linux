@@ -38,7 +38,7 @@ static int nv50_crc_parse_source(const char *buf, enum nv50_crc_source *s)
 		return 0;
 	}
 
-	i = match_string(nv50_crc_sources, ARRAY_SIZE(nv50_crc_sources), buf);
+	i = match_string(nv50_crc_sources, buf);
 	if (i < 0)
 		return i;
 

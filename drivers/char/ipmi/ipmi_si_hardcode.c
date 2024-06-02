@@ -70,7 +70,7 @@ static void __init ipmi_hardcode_init_one(const char *si_type_str,
 	if (!si_type_str || !*si_type_str) {
 		p.type = SI_KCS;
 	} else {
-		t = match_string(si_to_str, -1, si_type_str);
+		t = __match_string(si_to_str, -1, si_type_str);
 		if (t < 0) {
 			pr_warn("Interface type specified for interface %d, was invalid: %s\n",
 				i, si_type_str);

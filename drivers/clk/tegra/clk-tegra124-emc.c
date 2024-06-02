@@ -20,7 +20,7 @@
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/sort.h>
-#include <linux/string.h>
+#include <linux/string_helpers.h>
 
 #include <soc/tegra/fuse.h>
 
@@ -413,13 +413,12 @@ static int load_one_timing_from_dt(struct tegra_clk_emc *tegra,
 	}
 
 	timing->parent_index = 0xff;
-	i = match_string(emc_parent_clk_names, ARRAY_SIZE(emc_parent_clk_names),
-			 __clk_get_name(timing->parent));
+	i = match_string(emc_parent_clk_names, __clk_get_name(timing->parent));
 	if (i < 0) {
 		pr_err("timing %pOF: %s is not a valid parent\n",
 		       node, __clk_get_name(timing->parent));
 		clk_put(timing->parent);
-		return -EINVAL;
+		return i;
 	}
 
 	timing->parent_index = i;

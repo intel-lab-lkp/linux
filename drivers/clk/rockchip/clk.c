@@ -266,8 +266,8 @@ static struct clk *rockchip_clk_register_frac_branch(
 		struct clk *mux_clk;
 		int ret;
 
-		frac->mux_frac_idx = match_string(child->parent_names,
-						  child->num_parents, name);
+		frac->mux_frac_idx = __match_string(child->parent_names,
+						    child->num_parents, name);
 		frac->mux_ops = &clk_mux_ops;
 		frac->clk_nb.notifier_call = rockchip_clk_frac_notifier_cb;
 

@@ -141,8 +141,8 @@ int pkcs7_get_digest(struct pkcs7_message *pkcs7, const u8 **buf, u32 *len,
 	*buf = sinfo->sig->digest;
 	*len = sinfo->sig->digest_size;
 
-	i = match_string(hash_algo_name, HASH_ALGO__LAST,
-			 sinfo->sig->hash_algo);
+	i = __match_string(hash_algo_name, HASH_ALGO__LAST,
+			   sinfo->sig->hash_algo);
 	if (i >= 0)
 		*hash_algo = i;
 

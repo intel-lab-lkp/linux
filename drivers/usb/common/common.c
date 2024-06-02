@@ -114,11 +114,11 @@ enum usb_device_speed usb_get_maximum_speed(struct device *dev)
 	if (ret < 0)
 		return USB_SPEED_UNKNOWN;
 
-	ret = match_string(ssp_rate, ARRAY_SIZE(ssp_rate), maximum_speed);
+	ret = match_string(ssp_rate, maximum_speed);
 	if (ret > 0)
 		return USB_SPEED_SUPER_PLUS;
 
-	ret = match_string(speed_names, ARRAY_SIZE(speed_names), maximum_speed);
+	ret = match_string(speed_names, maximum_speed);
 	return (ret < 0) ? USB_SPEED_UNKNOWN : ret;
 }
 EXPORT_SYMBOL_GPL(usb_get_maximum_speed);
@@ -141,7 +141,7 @@ enum usb_ssp_rate usb_get_maximum_ssp_rate(struct device *dev)
 	if (ret < 0)
 		return USB_SSP_GEN_UNKNOWN;
 
-	ret = match_string(ssp_rate, ARRAY_SIZE(ssp_rate), maximum_speed);
+	ret = match_string(ssp_rate, maximum_speed);
 	return (ret < 0) ? USB_SSP_GEN_UNKNOWN : ret;
 }
 EXPORT_SYMBOL_GPL(usb_get_maximum_ssp_rate);
@@ -184,7 +184,7 @@ static enum usb_dr_mode usb_get_dr_mode_from_string(const char *str)
 {
 	int ret;
 
-	ret = match_string(usb_dr_modes, ARRAY_SIZE(usb_dr_modes), str);
+	ret = match_string(usb_dr_modes, str);
 	return (ret < 0) ? USB_DR_MODE_UNKNOWN : ret;
 }
 

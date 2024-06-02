@@ -1414,7 +1414,7 @@ static int max98088_get_channel(struct snd_soc_component *component, const char 
 {
 	int ret;
 
-	ret = match_string(eq_mode_name, ARRAY_SIZE(eq_mode_name), name);
+	ret = match_string(eq_mode_name, name);
 	if (ret < 0)
 		dev_err(component->dev, "Bad EQ channel name '%s'\n", name);
 	return ret;

@@ -53,10 +53,9 @@ static int gdm_tty_install(struct tty_driver *driver, struct tty_struct *tty)
 	struct gdm *gdm = NULL;
 	int ret;
 
-	ret = match_string(DRIVER_STRING, TTY_MAX_COUNT,
-			   tty->driver->driver_name);
+	ret = match_string(DRIVER_STRING, tty->driver->driver_name);
 	if (ret < 0)
-		return -ENODEV;
+		return ret;
 
 	mutex_lock(&gdm_table_lock);
 	gdm = gdm_table[ret][tty->index];

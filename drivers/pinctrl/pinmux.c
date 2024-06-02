@@ -23,7 +23,7 @@
 #include <linux/radix-tree.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
-#include <linux/string.h>
+#include <linux/string_helpers.h>
 
 #include <linux/pinctrl/machine.h>
 #include <linux/pinctrl/pinctrl.h>
@@ -376,7 +376,7 @@ int pinmux_map_to_setting(const struct pinctrl_map *map,
 	}
 	if (map->data.mux.group) {
 		group = map->data.mux.group;
-		ret = match_string(groups, num_groups, group);
+		ret = __match_string(groups, num_groups, group);
 		if (ret < 0) {
 			dev_err(pctldev->dev,
 				"invalid group \"%s\" for function \"%s\"\n",
@@ -730,7 +730,7 @@ static ssize_t pinmux_select_write(struct file *file, const char __user *user_bu
 		goto exit_free_buf;
 	}
 
-	ret = match_string(groups, num_groups, gname);
+	ret = __match_string(groups, num_groups, gname);
 	if (ret < 0) {
 		dev_err(pctldev->dev, "invalid group %s", gname);
 		goto exit_free_buf;

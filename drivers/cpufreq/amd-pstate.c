@@ -1117,9 +1117,9 @@ static ssize_t store_energy_performance_preference(
 	if (ret != 1)
 		return -EINVAL;
 
-	ret = match_string(energy_perf_strings, -1, str_preference);
+	ret = __match_string(energy_perf_strings, -1, str_preference);
 	if (ret < 0)
-		return -EINVAL;
+		return ret;
 
 	mutex_lock(&amd_pstate_limits_lock);
 	ret = amd_pstate_set_energy_pref_index(cpudata, ret);

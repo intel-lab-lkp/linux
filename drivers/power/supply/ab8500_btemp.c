@@ -556,7 +556,7 @@ static int ab8500_btemp_get_ext_psy_data(struct device *dev, void *data)
 	 * For all psy where the name of your driver
 	 * appears in any supplied_to
 	 */
-	j = match_string(supplicants, ext->num_supplicants, psy->desc->name);
+	j = __match_string(supplicants, ext->num_supplicants, psy->desc->name);
 	if (j < 0)
 		return 0;
 

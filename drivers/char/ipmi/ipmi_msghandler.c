@@ -78,7 +78,7 @@ static int panic_op_write_handler(const char *val,
 	int e;
 
 	strscpy(valcp, val, sizeof(valcp));
-	e = match_string(ipmi_panic_event_str, -1, strstrip(valcp));
+	e = __match_string(ipmi_panic_event_str, -1, strstrip(valcp));
 	if (e < 0)
 		return e;
 

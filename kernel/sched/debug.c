@@ -105,7 +105,7 @@ static int sched_feat_set(char *cmp)
 		cmp += 3;
 	}
 
-	i = match_string(sched_feat_names, __SCHED_FEAT_NR, cmp);
+	i = __match_string(sched_feat_names, __SCHED_FEAT_NR, cmp);
 	if (i < 0)
 		return i;
 

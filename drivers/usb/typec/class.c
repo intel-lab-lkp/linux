@@ -1986,8 +1986,7 @@ EXPORT_SYMBOL_GPL(typec_set_pwr_opmode);
  */
 int typec_find_pwr_opmode(const char *name)
 {
-	return match_string(typec_pwr_opmodes,
-			    ARRAY_SIZE(typec_pwr_opmodes), name);
+	return match_string(typec_pwr_opmodes, name);
 }
 EXPORT_SYMBOL_GPL(typec_find_pwr_opmode);
 
@@ -2001,8 +2000,7 @@ EXPORT_SYMBOL_GPL(typec_find_pwr_opmode);
  */
 int typec_find_orientation(const char *name)
 {
-	return match_string(typec_orientations, ARRAY_SIZE(typec_orientations),
-			    name);
+	return match_string(typec_orientations, name);
 }
 EXPORT_SYMBOL_GPL(typec_find_orientation);
 
@@ -2016,8 +2014,7 @@ EXPORT_SYMBOL_GPL(typec_find_orientation);
  */
 int typec_find_port_power_role(const char *name)
 {
-	return match_string(typec_port_power_roles,
-			    ARRAY_SIZE(typec_port_power_roles), name);
+	return match_string(typec_port_power_roles, name);
 }
 EXPORT_SYMBOL_GPL(typec_find_port_power_role);
 
@@ -2031,7 +2028,7 @@ EXPORT_SYMBOL_GPL(typec_find_port_power_role);
  */
 int typec_find_power_role(const char *name)
 {
-	return match_string(typec_roles, ARRAY_SIZE(typec_roles), name);
+	return match_string(typec_roles, name);
 }
 EXPORT_SYMBOL_GPL(typec_find_power_role);
 
@@ -2045,8 +2042,7 @@ EXPORT_SYMBOL_GPL(typec_find_power_role);
  */
 int typec_find_port_data_role(const char *name)
 {
-	return match_string(typec_port_data_roles,
-			    ARRAY_SIZE(typec_port_data_roles), name);
+	return match_string(typec_port_data_roles, name);
 }
 EXPORT_SYMBOL_GPL(typec_find_port_data_role);
 

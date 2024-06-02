@@ -37,9 +37,9 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
-#include <linux/string.h>
 #include <linux/interrupt.h>
 #include <linux/slab.h>
+#include <linux/string_helpers.h>
 #include <linux/mm.h>
 #include <linux/fb.h>
 #include <linux/delay.h>
@@ -2107,7 +2107,7 @@ static int of_get_pxafb_display(struct device *dev, struct device_node *disp,
 	if (ret)
 		s = "color-tft";
 
-	i = match_string(lcd_types, -1, s);
+	i = __match_string(lcd_types, -1, s);
 	if (i < 0) {
 		dev_err(dev, "lcd-type %s is unknown\n", s);
 		return i;

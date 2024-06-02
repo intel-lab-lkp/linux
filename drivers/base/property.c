@@ -15,7 +15,7 @@
 #include <linux/property.h>
 #include <linux/phy.h>
 #include <linux/slab.h>
-#include <linux/string.h>
+#include <linux/string_helpers.h>
 #include <linux/types.h>
 
 struct fwnode_handle *__dev_fwnode(struct device *dev)
@@ -489,7 +489,7 @@ int fwnode_property_match_string(const struct fwnode_handle *fwnode,
 	if (ret < 0)
 		goto out_free;
 
-	ret = match_string(values, nval, string);
+	ret = __match_string(values, nval, string);
 	if (ret < 0)
 		ret = -ENODATA;
 
@@ -526,7 +526,7 @@ int fwnode_property_match_property_string(const struct fwnode_handle *fwnode,
 	if (ret)
 		return ret;
 
-	ret = match_string(array, n, string);
+	ret = __match_string(array, n, string);
 	if (ret < 0)
 		ret = -ENOENT;
 

@@ -1380,7 +1380,7 @@ static unsigned int ima_parse_appraise_algos(char *arg)
 	char *token;
 
 	while ((token = strsep(&arg, ",")) != NULL) {
-		idx = match_string(hash_algo_name, HASH_ALGO__LAST, token);
+		idx = __match_string(hash_algo_name, HASH_ALGO__LAST, token);
 
 		if (idx < 0) {
 			pr_err("unknown hash algorithm \"%s\"",

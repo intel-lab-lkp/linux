@@ -64,7 +64,7 @@ static int __init hash_setup(char *str)
 		goto out;
 	}
 
-	i = match_string(hash_algo_name, HASH_ALGO__LAST, str);
+	i = __match_string(hash_algo_name, HASH_ALGO__LAST, str);
 	if (i < 0) {
 		pr_err("invalid hash algorithm \"%s\"", str);
 		return 1;

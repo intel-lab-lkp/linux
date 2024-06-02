@@ -426,7 +426,7 @@ display_crc_ctl_parse_source(const char *buf, enum intel_pipe_crc_source *s)
 		return 0;
 	}
 
-	i = match_string(pipe_crc_sources, ARRAY_SIZE(pipe_crc_sources), buf);
+	i = match_string(pipe_crc_sources, buf);
 	if (i < 0)
 		return i;
 

@@ -50,7 +50,7 @@ static ssize_t workload_type_store(struct device *dev,
 	if (ret != 1)
 		return -EINVAL;
 
-	ret = match_string(workload_types, -1, str_preference);
+	ret = __match_string(workload_types, -1, str_preference);
 	if (ret < 0)
 		return ret;
 

@@ -722,8 +722,7 @@ static int tps6598x_check_mode(struct tps6598x *tps)
 	if (ret)
 		return ret;
 
-	ret = match_string(modes, ARRAY_SIZE(modes), mode);
-
+	ret = match_string(modes, mode);
 	switch (ret) {
 	case TPS_MODE_APP:
 	case TPS_MODE_PTCH:

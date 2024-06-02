@@ -19,7 +19,7 @@
 #include <linux/preempt.h>
 #include <linux/random.h>
 #include <linux/seq_file.h>
-#include <linux/string.h>
+#include <linux/string_helpers.h>
 #include <linux/types.h>
 #include <linux/sched/clock.h>
 
@@ -215,7 +215,7 @@ u64 bch2_read_flag_list(char *opt, const char * const list[])
 	s = strim(d);
 
 	while ((p = strsep(&s, ","))) {
-		int flag = match_string(list, -1, p);
+		int flag = __match_string(list, -1, p);
 
 		if (flag < 0) {
 			ret = -1;

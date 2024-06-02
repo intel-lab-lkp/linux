@@ -89,7 +89,6 @@
 #include <linux/nodemask.h>
 #include <linux/cpuset.h>
 #include <linux/slab.h>
-#include <linux/string.h>
 #include <linux/export.h>
 #include <linux/nsproxy.h>
 #include <linux/interrupt.h>
@@ -103,6 +102,7 @@
 #include <linux/ksm.h>
 #include <linux/rmap.h>
 #include <linux/security.h>
+#include <linux/string_helpers.h>
 #include <linux/syscalls.h>
 #include <linux/ctype.h>
 #include <linux/mm_inline.h>
@@ -3183,7 +3183,7 @@ int mpol_parse_str(char *str, struct mempolicy **mpol)
 	} else
 		nodes_clear(nodes);
 
-	mode = match_string(policy_modes, MPOL_MAX, str);
+	mode = match_string(policy_modes, str);
 	if (mode < 0)
 		goto out;
 

@@ -122,7 +122,7 @@ static int bch2_opt_fix_errors_parse(struct bch_fs *c, const char *val, u64 *res
 	if (!val) {
 		*res = FSCK_FIX_yes;
 	} else {
-		int ret = match_string(bch2_fsck_fix_opts, -1, val);
+		int ret = __match_string(bch2_fsck_fix_opts, -1, val);
 
 		if (ret < 0 && err)
 			prt_str(err, "fix_errors: invalid selection");
@@ -366,7 +366,7 @@ int bch2_opt_parse(struct bch_fs *c,
 			return -EINVAL;
 		}
 
-		ret = match_string(opt->choices, -1, val);
+		ret = __match_string(opt->choices, -1, val);
 		if (ret < 0) {
 			if (err)
 				prt_printf(err, "%s: invalid selection",

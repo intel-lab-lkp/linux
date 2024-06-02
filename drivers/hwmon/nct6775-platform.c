@@ -1514,13 +1514,11 @@ static int __init sensors_nct6775_platform_init(void)
 
 	if (board_name && board_vendor &&
 	    !strcmp(board_vendor, "ASUSTeK COMPUTER INC.")) {
-		err = match_string(asus_wmi_boards, ARRAY_SIZE(asus_wmi_boards),
-				   board_name);
+		err = match_string(asus_wmi_boards, board_name);
 		if (err >= 0)
 			access = nct6775_determine_access(ASUSWMI_DEVICE_UID);
 
-		err = match_string(asus_msi_boards, ARRAY_SIZE(asus_msi_boards),
-				   board_name);
+		err = match_string(asus_msi_boards, board_name);
 		if (err >= 0)
 			access = nct6775_determine_access(ASUSMSI_DEVICE_UID);
 	}

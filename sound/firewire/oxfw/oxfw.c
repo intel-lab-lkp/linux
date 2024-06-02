@@ -59,7 +59,7 @@ static bool detect_loud_models(struct fw_unit *unit)
 	if (err < 0)
 		return false;
 
-	return match_string(models, ARRAY_SIZE(models), model) >= 0;
+	return match_string(models, model) >= 0;
 }
 
 static int name_card(struct snd_oxfw *oxfw, const struct ieee1394_device_id *entry)
