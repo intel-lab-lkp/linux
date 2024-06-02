@@ -1506,7 +1506,7 @@ static inline void tick_nohz_activate(struct tick_sched *ts)
 /**
  * tick_nohz_switch_to_nohz - switch to NOHZ mode
  */
-static void tick_nohz_switch_to_nohz(void)
+void tick_nohz_switch_to_nohz(void)
 {
 	if (!tick_nohz_enabled)
 		return;
@@ -1544,7 +1544,6 @@ static inline void tick_nohz_irq_enter(void)
 
 #else
 
-static inline void tick_nohz_switch_to_nohz(void) { }
 static inline void tick_nohz_irq_enter(void) { }
 static inline void tick_nohz_activate(struct tick_sched *ts) { }
 
@@ -1662,11 +1661,9 @@ void tick_oneshot_notify(void)
  * Check if a change happened, which makes oneshot possible.
  *
  * Called cyclically from the hrtimer softirq (driven by the timer
- * softirq). 'allow_nohz' signals that we can switch into low-res NOHZ
- * mode, because high resolution timers are disabled (either compile
- * or runtime). Called with interrupts disabled.
+ * softirq). Called with interrupts disabled.
  */
-int tick_check_oneshot_change(int allow_nohz)
+int tick_check_oneshot_change(void)
 {
 	struct tick_sched *ts = this_cpu_ptr(&tick_cpu_sched);
 
@@ -1679,9 +1676,5 @@ int tick_check_oneshot_change(int allow_nohz)
 	if (!timekeeping_valid_for_hres() || !tick_is_oneshot_available())
 		return 0;
 
-	if (!allow_nohz)
-		return 1;
-
-	tick_nohz_switch_to_nohz();
-	return 0;
+	return 1;
 }

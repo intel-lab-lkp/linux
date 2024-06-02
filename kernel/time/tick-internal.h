@@ -111,7 +111,7 @@ extern void tick_resume_oneshot(void);
 static inline bool tick_oneshot_possible(void) { return true; }
 extern int tick_oneshot_mode_active(void);
 extern void tick_clock_notify(void);
-extern int tick_check_oneshot_change(int allow_nohz);
+extern int tick_check_oneshot_change(void);
 extern int tick_init_highres(void);
 #else /* !CONFIG_TICK_ONESHOT: */
 static inline
@@ -124,7 +124,7 @@ static inline void tick_oneshot_notify(void) { }
 static inline bool tick_oneshot_possible(void) { return false; }
 static inline int tick_oneshot_mode_active(void) { return 0; }
 static inline void tick_clock_notify(void) { }
-static inline int tick_check_oneshot_change(int allow_nohz) { return 0; }
+static inline int tick_check_oneshot_change(void) { return 0; }
 #endif /* !CONFIG_TICK_ONESHOT */
 
 /* Functions related to oneshot broadcasting */
@@ -157,6 +157,7 @@ static inline void tick_nohz_init(void) { }
 #endif
 
 #ifdef CONFIG_NO_HZ_COMMON
+extern void tick_nohz_switch_to_nohz(void);
 extern unsigned long tick_nohz_active;
 extern void timers_update_nohz(void);
 extern u64 get_jiffies_update(unsigned long *basej);
@@ -171,6 +172,7 @@ extern bool timer_base_is_idle(void);
 extern void timer_expire_remote(unsigned int cpu);
 # endif
 #else /* CONFIG_NO_HZ_COMMON */
+static inline void tick_nohz_switch_to_nohz(void) { }
 static inline void timers_update_nohz(void) { }
 #define tick_nohz_active (0)
 #endif
