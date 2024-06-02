@@ -456,10 +456,10 @@ static bool construct_phy(struct dc_link *link,
 	struct dc_context *dc_ctx = init_params->ctx;
 	struct encoder_init_data enc_init_data = { 0 };
 	struct panel_cntl_init_data panel_cntl_init_data = { 0 };
-	struct integrated_info info = { 0 };
 	struct dc_bios *bios = init_params->dc->ctx->dc_bios;
 	const struct dc_vbios_funcs *bp_funcs = bios->funcs;
 	struct bp_disp_connector_caps_info disp_connect_caps_info = { 0 };
+	struct integrated_info *info;
 
 	DC_LOGGER_INIT(dc_ctx->logger);
 
@@ -672,12 +672,16 @@ static bool construct_phy(struct dc_link *link,
 	}
 
 	if (bios->integrated_info)
-		info = *bios->integrated_info;
+		info = kmemdup(bios->integrated_info, sizeof(*info), GFP_KERNEL);
+	else
+		info = kzalloc(sizeof(*info), GFP_KERNEL);
+	if (!info)
+		goto device_tag_fail;
 
 	/* Look for channel mapping corresponding to connector and device tag */
 	for (i = 0; i < MAX_NUMBER_OF_EXT_DISPLAY_PATH; i++) {
 		struct external_display_path *path =
-			&info.ext_disp_conn_info.path[i];
+			&info->ext_disp_conn_info.path[i];
 
 		if (path->device_connector_id.enum_id == link->link_id.enum_id &&
 		    path->device_connector_id.id == link->link_id.id &&
@@ -698,14 +702,15 @@ static bool construct_phy(struct dc_link *link,
 
 			if (link->chip_caps & EXT_DISPLAY_PATH_CAPS__DP_FIXED_VS_EN) {
 				link->bios_forced_drive_settings.VOLTAGE_SWING =
-						(info.ext_disp_conn_info.fixdpvoltageswing & 0x3);
+						info->ext_disp_conn_info.fixdpvoltageswing & 0x3;
 				link->bios_forced_drive_settings.PRE_EMPHASIS =
-						((info.ext_disp_conn_info.fixdpvoltageswing >> 2) & 0x3);
+						(info->ext_disp_conn_info.fixdpvoltageswing >> 2) & 0x3;
 			}
 
 			break;
 		}
 	}
+	kfree(info);
 
 	if (bios->funcs->get_atom_dc_golden_table)
 		bios->funcs->get_atom_dc_golden_table(bios);
