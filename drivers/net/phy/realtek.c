@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/clk.h>
+#include <linux/etherdevice.h>
 
 #define RTL821x_PHYSR				0x11
 #define RTL821x_PHYSR_DUPLEX			BIT(13)
@@ -86,6 +87,11 @@
 #define RTL_8221B_VB_CG				0x001cc849
 #define RTL_8221B_VN_CG				0x001cc84a
 #define RTL_8251B				0x001cc862
+
+#define RTL8211F_MAC_ADDR_32_47_OFFSET		16
+#define RTL8211F_MAC_ADDR_16_31_OFFSET		17
+#define RTL8211F_MAC_ADDR_0_15_OFFSET		18
+#define RTL8211F_MAGIC_EN			BIT(12)
 
 MODULE_DESCRIPTION("Realtek PHY driver");
 MODULE_AUTHOR("Johnson Leung");
@@ -1109,6 +1115,71 @@ static irqreturn_t rtl9000a_handle_interrupt(struct phy_device *phydev)
 	return IRQ_HANDLED;
 }
 
+static int rtl821x_set_wol(struct phy_device *phydev,
+			   struct ethtool_wolinfo *wol)
+{
+	int err = 0;
+	int val = 0;
+
+	err = phy_read_paged(phydev, 0xd8a, 0x10);
+	if (err < 0)
+		return err;
+
+	if (wol->wolopts & WAKE_MAGIC) {
+		struct net_device *ndev = phydev->attached_dev;
+		const u8 *mac;
+		unsigned int i;
+		static const unsigned int offsets[] = {
+			RTL8211F_MAC_ADDR_32_47_OFFSET,
+			RTL8211F_MAC_ADDR_16_31_OFFSET,
+			RTL8211F_MAC_ADDR_0_15_OFFSET,
+		};
+
+		if (!ndev)
+			return -ENODEV;
+
+		mac = (const u8 *)ndev->dev_addr;
+
+		if (!is_valid_ether_addr(mac))
+			return -EINVAL;
+
+		for (i = 0; i < 3; i++)
+			phy_write_paged(phydev, 0xd8c, offsets[i],
+				      mac[(i * 2)] | (mac[(i * 2) + 1] << 8));
+
+		val = err | RTL8211F_MAGIC_EN;
+
+		phy_write_paged(phydev, 0xd8a, 0x11, 0x9fff);
+		err = phy_write_paged(phydev, 0xd8a, 0x10, val);
+		if (err < 0)
+			return err;
+
+	} else {
+		val = err & ~RTL8211F_MAGIC_EN;
+		err = phy_write_paged(phydev, 0xd8a, 0x10, val);
+		if (err < 0)
+			return err;
+	}
+
+	return 0;
+}
+
+static void rtl821x_get_wol(struct phy_device *phydev,
+			   struct ethtool_wolinfo *wol)
+{
+	int value;
+
+	wol->supported = WAKE_MAGIC;
+	wol->wolopts = 0;
+
+	value = phy_read_paged(phydev, 0xd8a, 0x10);
+	if (value < 0)
+		return;
+
+	if (value & RTL8211F_MAGIC_EN)
+		wol->wolopts |= WAKE_MAGIC;
+}
+
 static struct phy_driver realtek_drvs[] = {
 	{
 		PHY_ID_MATCH_EXACT(0x00008201),
@@ -1179,6 +1250,8 @@ static struct phy_driver realtek_drvs[] = {
 		.resume		= genphy_resume,
 		.read_page	= rtl821x_read_page,
 		.write_page	= rtl821x_write_page,
+		.get_wol	= rtl821x_get_wol,
+		.set_wol	= rtl821x_set_wol,
 	}, {
 		PHY_ID_MATCH_EXACT(0x001cc916),
 		.name		= "RTL8211F Gigabit Ethernet",
