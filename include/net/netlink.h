@@ -1198,6 +1198,46 @@ nl_dump_check_consistent(struct netlink_callback *cb,
 	cb->prev_seq = cb->seq;
 }
 
+/**
+ * nl_dump_legacy_retval - get legacy return code for netlink dumps
+ * @err: error encountered during dump, negative errno or zero
+ * @skb: skb with the dump results
+ *
+ * Netlink dump callbacks get called multiple times per dump, because
+ * all the objects may not fit into a single skb. Whether another iteration
+ * is necessary gets decided based on the return value of the callback
+ * (with 0 meaning "end reached").
+ *
+ * The semantics used to be more complicated, with positive return values
+ * meaning "continue" and negative meaning "end with an error". A lot of
+ * handlers simplified this to return skb->len ? : -errno. Meaning that zero
+ * would only be returned when skb was empty, requiring another recvmsg()
+ * syscall just to get the NLM_DONE message.
+ *
+ * The current semantics allow handlers to also return -EMSGSIZE to continue.
+ *
+ * Unfortunately, some user space has started to depend on the NLM_DONE
+ * message being returned individually, in a separate recvmsg(). Select
+ * netlink dumps must preserve those semantics.
+ *
+ * This helper wraps the "legacy logic" and serves as an annotation for
+ * dumps which are known to require legacy handling.
+ *
+ * When used in combination with for_each_netdev_dump() - make sure to
+ * invalidate the ifindex when iteration is done. for_each_netdev_dump()
+ * does not move the iterator index "after" the last valid entry.
+ *
+ * NOTE: Do not use this helper in new code or dumps without legacy users!
+ *
+ * Return: return code to use for a dump handler
+ */
+static inline int nl_dump_legacy_retval(int err, const struct sk_buff *skb)
+{
+	if (err < 0 && err != -EMSGSIZE)
+		return err;
+	return skb->len;
+}
+
 /**************************************************************************
  * Netlink Attributes
  **************************************************************************/

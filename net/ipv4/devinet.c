@@ -1912,7 +1912,10 @@ static int inet_dump_ifaddr(struct sk_buff *skb, struct netlink_callback *cb)
 		if (err < 0)
 			goto done;
 	}
+	ctx->ifindex = INT_MAX;
 done:
+	err = nl_dump_legacy_retval(err, skb);
+
 	if (fillargs.netnsid >= 0)
 		put_net(tgt_net);
 	rcu_read_unlock();

@@ -2284,8 +2284,11 @@ walk_entries:
 				       ext_filter_mask, 0, NULL, 0,
 				       netnsid, GFP_KERNEL);
 		if (err < 0)
-			break;
+			goto done;
 	}
+	ctx->ifindex = INT_MAX;
+done:
+	err = nl_dump_legacy_retval(err, skb);
 	cb->seq = tgt_net->dev_base_seq;
 	nl_dump_check_consistent(cb, nlmsg_hdr(skb));
 	if (netnsid >= 0)
