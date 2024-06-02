@@ -829,7 +829,7 @@ void blk_queue_write_cache(struct request_queue *q, bool wc, bool fua)
 EXPORT_SYMBOL_GPL(blk_queue_write_cache);
 
 /**
- * disk_set_zoned - inidicate a zoned device
+ * disk_set_zoned - indicate a zoned device
  * @disk:	gendisk to configure
  */
 void disk_set_zoned(struct gendisk *disk)

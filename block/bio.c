@@ -520,7 +520,7 @@ struct bio *bio_alloc_bioset(struct block_device *bdev, unsigned short nr_vecs,
 				return bio;
 			/*
 			 * No cached bio available, bio returned below marked with
-			 * REQ_ALLOC_CACHE to particpate in per-cpu alloc cache.
+			 * REQ_ALLOC_CACHE to participate in per-cpu alloc cache.
 			 */
 		} else {
 			opf &= ~REQ_ALLOC_CACHE;

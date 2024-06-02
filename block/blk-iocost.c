@@ -853,7 +853,7 @@ static int ioc_autop_idx(struct ioc *ioc, struct gendisk *disk)
 }
 
 /*
- * Take the followings as input
+ * Take the following as input
  *
  *  @bps	maximum sequential throughput
  *  @seqiops	maximum sequential 4k iops
@@ -1267,7 +1267,7 @@ static bool iocg_activate(struct ioc_gq *iocg, struct ioc_now *now)
 
 	/*
 	 * If seem to be already active, just update the stamp to tell the
-	 * timer that we're still active.  We don't mind occassional races.
+	 * timer that we're still active.  We don't mind occasional races.
 	 */
 	if (!list_empty(&iocg->active_list)) {
 		ioc_now(ioc, now);
@@ -2154,7 +2154,7 @@ static void ioc_forgive_debts(struct ioc *ioc, u64 usage_us_sum, int nr_debtors,
 }
 
 /*
- * Check the active iocgs' state to avoid oversleeping and deactive
+ * Check the active iocgs' state to avoid oversleeping and deactivate
  * idle iocgs.
  *
  * Since waiters determine the sleep durations based on the vrate
@@ -2356,7 +2356,7 @@ static void ioc_timer_fn(struct timer_list *timer)
 				 *
 				 * Don't reset debtors as their inuse's are
 				 * owned by debt handling. This shouldn't affect
-				 * donation calculuation in any meaningful way
+				 * donation calculation in any meaningful way
 				 * as @iocg doesn't have a meaningful amount of
 				 * share anyway.
 				 */

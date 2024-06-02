@@ -3,7 +3,7 @@
 #include "blk-cgroup.h"
 
 /**
- * blkcg_set_fc_appid - set the fc_app_id field associted to blkcg
+ * blkcg_set_fc_appid - set the fc_app_id field associated to blkcg
  * @app_id: application identifier
  * @cgrp_id: cgroup id
  * @app_id_len: size of application identifier

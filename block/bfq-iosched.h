@@ -843,7 +843,7 @@ struct bfq_data {
 	 * We set the threshold, empirically, to the minimum possible
 	 * value for which an actuator is fully utilized, or close to
 	 * be fully utilized. By doing so, injected I/O 'steals' as
-	 * few drive-queue slots as possibile to the in-service
+	 * few drive-queue slots as possible to the in-service
 	 * queue. This reduces as much as possible the probability
 	 * that the service of I/O from the in-service bfq_queue gets
 	 * delayed because of slot exhaustion, i.e., because all the

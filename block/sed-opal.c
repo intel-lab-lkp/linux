@@ -2095,7 +2095,7 @@ static int set_lr_boolean_ace(struct opal_dev *dev,
 		/*
 		 * Add boolean operator in postfix only with
 		 * two or more authorities being added in ACE
-		 * expresion.
+		 * expression.
 		 * */
 		if (u > 0)
 			add_boolean_object_ref(&err, dev, OPAL_BOOLEAN_OR);

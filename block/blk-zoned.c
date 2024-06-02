@@ -1546,7 +1546,7 @@ void disk_free_zone_resources(struct gendisk *disk)
 
 	/*
 	 * Wait for the zone write plugs to be RCU-freed before
-	 * destorying the mempool.
+	 * destroying the mempool.
 	 */
 	rcu_barrier();
 

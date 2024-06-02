@@ -8,7 +8,7 @@
  * - This policy is cgroup based so it has all the advantages of cgroups.
  * - While ioprio_set() does not affect page cache writeback I/O, this rq-qos
  *   controller affects page cache writeback I/O for filesystems that support
- *   assiociating a cgroup with writeback I/O. See also
+ *   associating a cgroup with writeback I/O. See also
  *   Documentation/admin-guide/cgroup-v2.rst.
  */
 

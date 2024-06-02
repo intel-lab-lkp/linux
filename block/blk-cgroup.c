@@ -1542,7 +1542,7 @@ EXPORT_SYMBOL_GPL(io_cgrp_subsys);
  * always enough for dereferencing policy data.
  *
  * The caller is responsible for synchronizing [de]activations and policy
- * [un]registerations.  Returns 0 on success, -errno on failure.
+ * [un]registrations.  Returns 0 on success, -errno on failure.
  */
 int blkcg_activate_policy(struct gendisk *disk, const struct blkcg_policy *pol)
 {

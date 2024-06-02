@@ -580,7 +580,7 @@ static void bd_clear_claiming(struct block_device *whole, void *holder)
  * @holder: holder that has claimed @bdev
  * @hops: block device holder operations
  *
- * Finish exclusive open of a block device. Mark the device as exlusively
+ * Finish exclusive open of a block device. Mark the device as exclusively
  * open by the holder and wake up all waiters for exclusive open to finish.
  */
 static void bd_finish_claiming(struct block_device *bdev, void *holder,
@@ -1183,7 +1183,7 @@ EXPORT_SYMBOL(lookup_bdev);
  * to %true the device or media is already gone, if not we are preparing for an
  * orderly removal.
  *
- * This calls into the file system, which then typicall syncs out all dirty data
+ * This calls into the file system, which then typical syncs out all dirty data
  * and writes back inodes and then invalidates any cached data in the inodes on
  * the file system.  In addition we also invalidate the block device mapping.
  */

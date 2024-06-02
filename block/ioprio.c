@@ -5,7 +5,7 @@
  * Copyright (C) 2004 Jens Axboe <axboe@kernel.dk>
  *
  * Helper functions for setting/querying io priorities of processes. The
- * system calls closely mimmick getpriority/setpriority, see the man page for
+ * system calls closely mimic getpriority/setpriority, see the man page for
  * those. The prio argument is a composite of prio class and prio data, where
  * the data argument has meaning within that class. The standard scheduling
  * classes have 8 distinct prio levels, with 0 being the highest prio and 7
@@ -157,7 +157,7 @@ out:
  * Return raw IO priority value as set by userspace. We use this for
  * ioprio_get(pid, IOPRIO_WHO_PROCESS) so that we keep historical behavior and
  * also so that userspace can distinguish unset IO priority (which just gets
- * overriden based on task's nice value) from IO priority set to some value.
+ * overridden based on task's nice value) from IO priority set to some value.
  */
 static int get_task_raw_ioprio(struct task_struct *p)
 {

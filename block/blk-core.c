@@ -728,7 +728,7 @@ void submit_bio_noacct_nocheck(struct bio *bio)
 	/*
 	 * We only want one ->submit_bio to be active at a time, else stack
 	 * usage with stacked devices could be a problem.  Use current->bio_list
-	 * to collect a list of requests submited by a ->submit_bio method while
+	 * to collect a list of requests submitted by a ->submit_bio method while
 	 * it is active, and then process them after it returned.
 	 */
 	if (current->bio_list)
@@ -801,7 +801,7 @@ void submit_bio_noacct(struct bio *bio)
 	case REQ_OP_FLUSH:
 		/*
 		 * REQ_OP_FLUSH can't be submitted through bios, it is only
-		 * synthetized in struct request by the flush state machine.
+		 * synthesized in struct request by the flush state machine.
 		 */
 		goto not_supported;
 	case REQ_OP_DISCARD:
@@ -960,7 +960,7 @@ int iocb_bio_iopoll(struct kiocb *kiocb, struct io_comp_batch *iob,
 	 * point to a freshly allocated bio at this point.  If that happens
 	 * we have a few cases to consider:
 	 *
-	 *  1) the bio is beeing initialized and bi_bdev is NULL.  We can just
+	 *  1) the bio is being initialized and bi_bdev is NULL.  We can just
 	 *     simply nothing in this case
 	 *  2) the bio points to a not poll enabled device.  bio_poll will catch
 	 *     this and return 0

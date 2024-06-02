@@ -818,7 +818,7 @@ int blk_register_queue(struct gendisk *disk)
 	/*
 	 * SCSI probing may synchronously create and destroy a lot of
 	 * request_queues for non-existent devices.  Shutting down a fully
-	 * functional queue takes measureable wallclock time as RCU grace
+	 * functional queue takes measurable wallclock time as RCU grace
 	 * periods are involved.  To avoid excessive latency in these
 	 * cases, a request_queue starts out in a degraded mode which is
 	 * faster to shut down and is made fully functional here as

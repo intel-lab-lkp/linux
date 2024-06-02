@@ -352,7 +352,7 @@ int disk_scan_partitions(struct gendisk *disk, blk_mode_t mode)
 
 	/*
 	 * If the device is opened exclusively by current thread already, it's
-	 * safe to scan partitons, otherwise, use bd_prepare_to_claim() to
+	 * safe to scan partitions, otherwise, use bd_prepare_to_claim() to
 	 * synchronize with other exclusive openers and other partition
 	 * scanners.
 	 */
