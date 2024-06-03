@@ -978,11 +978,22 @@ static void dwc3_core_setup_global_control(struct dwc3 *dwc)
 		 *
 		 * STAR#9000588375: Clock Gating, SOF Issues when ref_clk-Based
 		 * SOF/ITP Mode Used
+		 *
+		 * WORKAROUND: DWC31 version 2.00a have an issue that would
+		 * cause a CSR read timeout When CSR read coincides with RAM
+		 * Clock Gating Entry.
+		 *
+		 * This workaround solution disable Clock Gating, sacrificing
+		 * power consumption for normal operation.
 		 */
 		if ((dwc->dr_mode == USB_DR_MODE_HOST ||
 				dwc->dr_mode == USB_DR_MODE_OTG) &&
 				DWC3_VER_IS_WITHIN(DWC3, 210A, 250A))
 			reg |= DWC3_GCTL_DSBLCLKGTNG | DWC3_GCTL_SOFITPSYNC;
+		else if ((dwc->dr_mode == USB_DR_MODE_HOST ||
+				dwc->dr_mode == USB_DR_MODE_OTG) &&
+				DWC3_VER_IS(DWC31, 200A))
+			reg |= DWC3_GCTL_DSBLCLKGTNG;
 		else
 			reg &= ~DWC3_GCTL_DSBLCLKGTNG;
 		break;
@@ -992,6 +1003,18 @@ static void dwc3_core_setup_global_control(struct dwc3 *dwc)
 		 * will work. Device-mode hibernation is not yet implemented.
 		 */
 		reg |= DWC3_GCTL_GBLHIBERNATIONEN;
+
+		/*
+		 * WORKAROUND: DWC31 version 2.00a have an issue that would
+		 * cause a CSR read timeout When CSR read coincides with RAM
+		 * Clock Gating Entry.
+		 *
+		 * This workaround solution disable Clock Gating, sacrificing
+		 * power consumption for normal operation.
+		 */
+		if ((dwc->dr_mode == USB_DR_MODE_HOST ||
+		     dwc->dr_mode == USB_DR_MODE_OTG) && DWC3_VER_IS(DWC31, 200A))
+			reg |= DWC3_GCTL_DSBLCLKGTNG;
 		break;
 	default:
 		/* nothing */
