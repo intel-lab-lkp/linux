@@ -637,7 +637,7 @@ struct intel_connector {
 
 	struct intel_dp *mst_port;
 
-	bool force_bigjoiner_enable;
+	bool force_joiner_enable;
 
 	struct {
 		struct drm_dp_aux *dsc_decompression_aux;
@@ -1339,7 +1339,7 @@ struct intel_crtc_state {
 	bool wgc_enable;
 
 	/* big joiner pipe bitmask */
-	u8 bigjoiner_pipes;
+	u8 joiner_pipes;
 
 	/* Display Stream compression state */
 	struct {

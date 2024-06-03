@@ -2723,7 +2723,7 @@ static int intel_vdsc_min_cdclk(const struct intel_crtc_state *crtc_state)
 	min_cdclk = max_t(int, min_cdclk,
 			  DIV_ROUND_UP(crtc_state->pixel_rate, num_vdsc_instances));
 
-	if (crtc_state->bigjoiner_pipes) {
+	if (crtc_state->joiner_pipes) {
 		int pixel_clock = intel_dp_mode_to_fec_clock(crtc_state->hw.adjusted_mode.clock);
 
 		/*
@@ -2735,13 +2735,13 @@ static int intel_vdsc_min_cdclk(const struct intel_crtc_state *crtc_state)
 		 *
 		 * => CDCLK >= compressed_bpp * Pixel clock / (PPC * Bigjoiner Interface bits)
 		 *
-		 * Since PPC = 2 with bigjoiner
+		 * Since PPC = 2 with joiner
 		 * => CDCLK >= compressed_bpp * Pixel clock  / 2 * Bigjoiner Interface bits
 		 */
-		int bigjoiner_interface_bits = DISPLAY_VER(i915) >= 14 ? 36 : 24;
+		int joiner_interface_bits = DISPLAY_VER(i915) >= 14 ? 36 : 24;
 		int min_cdclk_bj =
 			(to_bpp_int_roundup(crtc_state->dsc.compressed_bpp_x16) *
-			 pixel_clock) / (2 * bigjoiner_interface_bits);
+			 pixel_clock) / (2 * joiner_interface_bits);
 
 		min_cdclk = max(min_cdclk, min_cdclk_bj);
 	}
