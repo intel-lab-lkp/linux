@@ -727,6 +727,12 @@ attribute-sets:
         name: dec-ttl
         type: nest
         nested-attributes: dec-ttl-attrs
+      -
+        name: emit-sample
+        type: nest
+        nested-attributes: emit-sample-attrs
+        doc: |
+          Sends a packet sample to psample for external observation.
   -
     name: tunnel-key-attrs
     enum-name: ovs-tunnel-key-attr
@@ -938,6 +944,17 @@ attribute-sets:
       -
         name: gbp
         type: u32
+  -
+    name: emit-sample-attrs
+    enum-name: ovs-emit-sample-attr
+    name-prefix: ovs-emit-sample-attr-
+    attributes:
+      -
+        name: group
+        type: u32
+      -
+        name: cookie
+        type: binary
 
 operations:
   name-prefix: ovs-flow-cmd-
