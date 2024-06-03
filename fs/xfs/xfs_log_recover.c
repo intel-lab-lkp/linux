@@ -2394,6 +2394,11 @@ xlog_recover_process_ophdr(
 	unsigned int		len;
 	int			error;
 
+	if (dp > end) {
+		xfs_warn(log->l_mp, "%s: op header overrun", __func__);
+		return -EFSCORRUPTED;
+	}
+
 	/* Do we understand who wrote this op? */
 	if (ohead->oh_clientid != XFS_TRANSACTION &&
 	    ohead->oh_clientid != XFS_LOG) {
@@ -2489,7 +2494,6 @@ xlog_recover_process_data(
 
 		ohead = (struct xlog_op_header *)dp;
 		dp += sizeof(*ohead);
-		ASSERT(dp <= end);
 
 		/* errors will abort recovery */
 		error = xlog_recover_process_ophdr(log, rhash, rhead, ohead,
