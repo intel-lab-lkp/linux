@@ -46,64 +46,61 @@ static int __hpp__fmt_print(struct perf_hpp *hpp, struct hists *hists, u64 val,
 	return hpp__call_print_fn(hpp, print_fn, fmt, len, val);
 }
 
+struct hpp_fmt_data {
+	struct hists *hists;
+	u64 val;
+	int samples;
+};
+
 static int __hpp__fmt(struct perf_hpp *hpp, struct hist_entry *he,
 		      hpp_field_fn get_field, const char *fmt, int len,
 		      hpp_snprint_fn print_fn, enum perf_hpp_fmt_type fmtype)
 {
-	int ret;
+	int ret = 0;
 	struct hists *hists = he->hists;
 	struct evsel *evsel = hists_to_evsel(hists);
+	struct evsel *pos;
 	char *buf = hpp->buf;
 	size_t size = hpp->size;
+	int i, nr_members = 1;
+	struct hpp_fmt_data *data;
 
-	ret = __hpp__fmt_print(hpp, hists, get_field(he), he->stat.nr_events,
-			       fmt, len, print_fn, fmtype);
+	if (evsel__is_group_event(evsel))
+		nr_members = evsel->core.nr_members;
+
+	data = calloc(nr_members, sizeof(*data));
+	if (data == NULL)
+		return 0;
+
+	i = 0;
+	for_each_group_evsel(pos, evsel)
+		data[i++].hists = evsel__hists(pos);
+
+	data[0].val = get_field(he);
+	data[0].samples = he->stat.nr_events;
 
 	if (evsel__is_group_event(evsel)) {
-		int prev_idx, idx_delta;
 		struct hist_entry *pair;
-		int nr_members = evsel->core.nr_members;
-
-		prev_idx = evsel__group_idx(evsel);
 
 		list_for_each_entry(pair, &he->pairs.head, pairs.node) {
-			u64 period = get_field(pair);
-			u64 total = hists__total_period(pair->hists);
-			int nr_samples = pair->stat.nr_events;
+			for (i = 0; i < nr_members; i++) {
+				if (data[i].hists != pair->hists)
+					continue;
 
-			if (!total)
-				continue;
-
-			evsel = hists_to_evsel(pair->hists);
-			idx_delta = evsel__group_idx(evsel) - prev_idx - 1;
-
-			while (idx_delta--) {
-				/*
-				 * zero-fill group members in the middle which have
-				 * no samples, pair->hists is not correct but it's
-				 * fine since the value is 0.
-				 */
-				ret += __hpp__fmt_print(hpp, pair->hists, 0, 0,
-							fmt, len, print_fn, fmtype);
+				data[i].val = get_field(pair);
+				data[i].samples = pair->stat.nr_events;
+				break;
 			}
-
-			ret += __hpp__fmt_print(hpp, pair->hists, period, nr_samples,
-						fmt, len, print_fn, fmtype);
-
-			prev_idx = evsel__group_idx(evsel);
-		}
-
-		idx_delta = nr_members - prev_idx - 1;
-
-		while (idx_delta--) {
-			/*
-			 * zero-fill group members at last which have no sample.
-			 * the hists is not correct but it's fine like above.
-			 */
-			ret += __hpp__fmt_print(hpp, evsel__hists(evsel), 0, 0,
-						fmt, len, print_fn, fmtype);
 		}
 	}
+
+	for (i = 0; i < nr_members; i++) {
+		ret += __hpp__fmt_print(hpp, data[i].hists, data[i].val,
+					data[i].samples, fmt, len,
+					print_fn, fmtype);
+	}
+
+	free(data);
 
 	/*
 	 * Restore original buf and size as it's where caller expects
