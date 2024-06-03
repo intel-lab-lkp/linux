@@ -205,7 +205,7 @@ int cachefiles_ondemand_restore(struct cachefiles_cache *cache, char *args)
 	return 0;
 }
 
-static int cachefiles_ondemand_get_fd(struct cachefiles_req *req)
+static struct file *cachefiles_ondemand_get_fd(struct cachefiles_req *req)
 {
 	struct cachefiles_object *object;
 	struct cachefiles_cache *cache;
@@ -238,7 +238,6 @@ static int cachefiles_ondemand_get_fd(struct cachefiles_req *req)
 	}
 
 	file->f_mode |= FMODE_PWRITE | FMODE_LSEEK;
-	fd_install(fd, file);
 
 	load = (void *)req->msg.data;
 	load->fd = fd;
@@ -246,7 +245,7 @@ static int cachefiles_ondemand_get_fd(struct cachefiles_req *req)
 
 	cachefiles_get_unbind_pincount(cache);
 	trace_cachefiles_ondemand_open(object, &req->msg, load);
-	return 0;
+	return file;
 
 err_put_fd:
 	put_unused_fd(fd);
@@ -254,7 +253,7 @@ err_free_id:
 	xa_erase(&cache->ondemand_ids, object_id);
 err:
 	cachefiles_put_object(object, cachefiles_obj_put_ondemand_fd);
-	return ret;
+	return ERR_PTR(ret);
 }
 
 static void ondemand_object_worker(struct work_struct *work)
@@ -299,9 +298,9 @@ ssize_t cachefiles_ondemand_daemon_read(struct cachefiles_cache *cache,
 {
 	struct cachefiles_req *req;
 	struct cachefiles_msg *msg;
+	struct file *file = NULL;
 	unsigned long id = 0;
 	size_t n;
-	int ret = 0;
 	XA_STATE(xas, &cache->reqs, cache->req_id_next);
 
 	xa_lock(&cache->reqs);
@@ -335,8 +334,8 @@ ssize_t cachefiles_ondemand_daemon_read(struct cachefiles_cache *cache,
 	id = xas.xa_index;
 
 	if (msg->opcode == CACHEFILES_OP_OPEN) {
-		ret = cachefiles_ondemand_get_fd(req);
-		if (ret) {
+		file = cachefiles_ondemand_get_fd(req);
+		if (IS_ERR(file)) {
 			cachefiles_ondemand_set_object_close(req->object);
 			goto error;
 		}
@@ -346,9 +345,14 @@ ssize_t cachefiles_ondemand_daemon_read(struct cachefiles_cache *cache,
 	msg->object_id = req->object->ondemand->ondemand_id;
 
 	if (copy_to_user(_buffer, msg, n) != 0) {
-		ret = -EFAULT;
-		goto err_put_fd;
+		if (file)
+			fput(file);
+		file = ERR_PTR(-EFAULT);
+		goto error;
 	}
+
+	if (file)
+		fd_install(((struct cachefiles_open *)msg->data)->fd, file);
 
 	/* CLOSE request has no reply */
 	if (msg->opcode == CACHEFILES_OP_CLOSE) {
@@ -358,14 +362,11 @@ ssize_t cachefiles_ondemand_daemon_read(struct cachefiles_cache *cache,
 
 	return n;
 
-err_put_fd:
-	if (msg->opcode == CACHEFILES_OP_OPEN)
-		close_fd(((struct cachefiles_open *)msg->data)->fd);
 error:
 	xa_erase(&cache->reqs, id);
-	req->error = ret;
+	req->error = PTR_ERR(file);
 	complete(&req->done);
-	return ret;
+	return PTR_ERR(file);
 }
 
 typedef int (*init_req_fn)(struct cachefiles_req *req, void *private);
