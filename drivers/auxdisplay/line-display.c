@@ -388,4 +388,5 @@ void linedisp_unregister(struct linedisp *linedisp)
 }
 EXPORT_SYMBOL_NS_GPL(linedisp_unregister, LINEDISP);
 
+MODULE_DESCRIPTION("Character line display core support");
 MODULE_LICENSE("GPL");
