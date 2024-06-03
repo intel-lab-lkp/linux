@@ -118,9 +118,12 @@ int coresight_trace_id_read_cpu_id(int cpu);
  *
  * Used to allocate IDs for system trace sources such as STM.
  *
+ * @id: Preferred id value. If id is 0, get a free id from id map. If id is greater
+ *      than 0, get a preferred id.
+ *
  * return: Trace ID or -EINVAL if allocation is impossible.
  */
-int coresight_trace_id_get_system_id(void);
+int coresight_trace_id_get_system_id(int id);
 
 /**
  * Release an allocated system trace ID.
