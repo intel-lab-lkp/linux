@@ -4342,6 +4342,7 @@ static void dwc3_gadget_suspend_interrupt(struct dwc3 *dwc,
 	if (!dwc->suspended && next == DWC3_LINK_STATE_U3) {
 		dwc->suspended = true;
 		dwc3_suspend_gadget(dwc);
+		usb_gadget_set_state(dwc->gadget, USB_STATE_SUSPENDED);
 	}
 
 	dwc->link_state = next;
