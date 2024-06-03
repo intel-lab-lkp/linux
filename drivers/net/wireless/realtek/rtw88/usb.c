@@ -570,6 +570,11 @@ static void rtw_usb_rx_handler(struct work_struct *work)
 			continue;
 		}
 
+		if (!test_bit(RTW_FLAG_RUNNING, rtwdev->flags)) {
+			dev_kfree_skb_any(skb);
+			continue;
+		}
+
 		skb_put(skb, pkt_stat.pkt_len);
 		skb_reserve(skb, pkt_offset);
 		memcpy(skb->cb, &rx_status, sizeof(rx_status));
