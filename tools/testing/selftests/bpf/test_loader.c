@@ -2,6 +2,7 @@
 /* Copyright (c) 2022 Meta Platforms, Inc. and affiliates. */
 #include <linux/capability.h>
 #include <stdlib.h>
+#include <regex.h>
 #include <test_progs.h>
 #include <bpf/btf.h>
 
@@ -17,9 +18,11 @@
 #define TEST_TAG_EXPECT_FAILURE "comment:test_expect_failure"
 #define TEST_TAG_EXPECT_SUCCESS "comment:test_expect_success"
 #define TEST_TAG_EXPECT_MSG_PFX "comment:test_expect_msg="
+#define TEST_TAG_EXPECT_REGEX_PFX "comment:test_expect_regex="
 #define TEST_TAG_EXPECT_FAILURE_UNPRIV "comment:test_expect_failure_unpriv"
 #define TEST_TAG_EXPECT_SUCCESS_UNPRIV "comment:test_expect_success_unpriv"
 #define TEST_TAG_EXPECT_MSG_PFX_UNPRIV "comment:test_expect_msg_unpriv="
+#define TEST_TAG_EXPECT_REGEX_PFX_UNPRIV "comment:test_expect_regex_unpriv="
 #define TEST_TAG_LOG_LEVEL_PFX "comment:test_log_level="
 #define TEST_TAG_PROG_FLAGS_PFX "comment:test_prog_flags="
 #define TEST_TAG_DESCRIPTION_PFX "comment:test_description="
@@ -46,10 +49,15 @@ enum mode {
 	UNPRIV = 2
 };
 
+struct expect_msg {
+	const char *msg;
+	regex_t *regex;
+};
+
 struct test_subspec {
 	char *name;
 	bool expect_failure;
-	const char **expect_msgs;
+	struct expect_msg *expect;
 	size_t expect_msg_cnt;
 	int retval;
 	bool execute;
@@ -91,27 +99,57 @@ static void free_test_spec(struct test_spec *spec)
 {
 	free(spec->priv.name);
 	free(spec->unpriv.name);
-	free(spec->priv.expect_msgs);
-	free(spec->unpriv.expect_msgs);
+	free(spec->priv.expect);
+	free(spec->unpriv.expect);
 
 	spec->priv.name = NULL;
 	spec->unpriv.name = NULL;
-	spec->priv.expect_msgs = NULL;
-	spec->unpriv.expect_msgs = NULL;
+	spec->priv.expect = NULL;
+	spec->unpriv.expect = NULL;
 }
 
 static int push_msg(const char *msg, struct test_subspec *subspec)
 {
 	void *tmp;
 
-	tmp = realloc(subspec->expect_msgs, (1 + subspec->expect_msg_cnt) * sizeof(void *));
+	tmp = realloc(subspec->expect,
+		      (1 + subspec->expect_msg_cnt) * sizeof(struct expect_msg));
 	if (!tmp) {
 		ASSERT_FAIL("failed to realloc memory for messages\n");
 		return -ENOMEM;
 	}
-	subspec->expect_msgs = tmp;
-	subspec->expect_msgs[subspec->expect_msg_cnt++] = msg;
 
+	subspec->expect = tmp;
+	subspec->expect[subspec->expect_msg_cnt].msg = msg;
+	subspec->expect[subspec->expect_msg_cnt].regex = NULL;
+	subspec->expect_msg_cnt += 1;
+	return 0;
+}
+
+static int push_regex(const char *regex_str, struct test_subspec *subspec)
+{
+	void *tmp;
+	int regcomp_res;
+
+	tmp = realloc(subspec->expect,
+		      (1 + subspec->expect_msg_cnt) * sizeof(struct expect_msg));
+	if (!tmp) {
+		ASSERT_FAIL("failed to realloc memory for messages\n");
+		return -ENOMEM;
+	}
+	subspec->expect = tmp;
+
+	subspec->expect[subspec->expect_msg_cnt].regex = (regex_t *) malloc(sizeof(regex_t));
+	regcomp_res = regcomp (subspec->expect[subspec->expect_msg_cnt].regex,
+			       regex_str, REG_EXTENDED|REG_NEWLINE);
+	if (regcomp_res != 0) {
+		fprintf(stderr, "Regexp: '%s'\n", regex_str);
+		ASSERT_FAIL("failed to compile regex\n");
+		return -EINVAL;
+	}
+
+	subspec->expect[subspec->expect_msg_cnt].msg = regex_str;
+	subspec->expect_msg_cnt += 1;
 	return 0;
 }
 
@@ -243,6 +281,18 @@ static int parse_test_spec(struct test_loader *tester,
 			if (err)
 				goto cleanup;
 			spec->mode_mask |= UNPRIV;
+		} else if (str_has_pfx(s, TEST_TAG_EXPECT_REGEX_PFX)) {
+			msg = s + sizeof(TEST_TAG_EXPECT_REGEX_PFX) - 1;
+			err = push_regex(msg, &spec->priv);
+			if (err)
+				goto cleanup;
+			spec->mode_mask |= PRIV;
+		} else if (str_has_pfx(s, TEST_TAG_EXPECT_REGEX_PFX_UNPRIV)) {
+			msg = s + sizeof(TEST_TAG_EXPECT_REGEX_PFX_UNPRIV) - 1;
+			err = push_regex(msg, &spec->unpriv);
+			if (err)
+				goto cleanup;
+			spec->mode_mask |= UNPRIV;
 		} else if (str_has_pfx(s, TEST_TAG_RETVAL_PFX)) {
 			val = s + sizeof(TEST_TAG_RETVAL_PFX) - 1;
 			err = parse_retval(val, &spec->priv.retval, "__retval");
@@ -336,16 +386,16 @@ static int parse_test_spec(struct test_loader *tester,
 			spec->unpriv.execute = spec->priv.execute;
 		}
 
-		if (!spec->unpriv.expect_msgs) {
-			size_t sz = spec->priv.expect_msg_cnt * sizeof(void *);
+		if (!spec->unpriv.expect) {
+			size_t sz = spec->priv.expect_msg_cnt * sizeof(struct expect_msg);
 
-			spec->unpriv.expect_msgs = malloc(sz);
-			if (!spec->unpriv.expect_msgs) {
-				PRINT_FAIL("failed to allocate memory for unpriv.expect_msgs\n");
+			spec->unpriv.expect = malloc(sz);
+			if (!spec->unpriv.expect) {
+				PRINT_FAIL("failed to allocate memory for unpriv.expect\n");
 				err = -ENOMEM;
 				goto cleanup;
 			}
-			memcpy(spec->unpriv.expect_msgs, spec->priv.expect_msgs, sz);
+			memcpy(spec->unpriv.expect, spec->priv.expect, sz);
 			spec->unpriv.expect_msg_cnt = spec->priv.expect_msg_cnt;
 		}
 	}
@@ -403,26 +453,44 @@ static void validate_case(struct test_loader *tester,
 			  int load_err)
 {
 	int i, j;
+	const char *match;
 
 	for (i = 0; i < subspec->expect_msg_cnt; i++) {
-		char *match;
 		const char *expect_msg;
+		regex_t *regex;
+		regmatch_t reg_match[1];
 
-		expect_msg = subspec->expect_msgs[i];
+		expect_msg = subspec->expect[i].msg;
+		regex = subspec->expect[i].regex;
 
-		match = strstr(tester->log_buf + tester->next_match_pos, expect_msg);
-		if (!ASSERT_OK_PTR(match, "expect_msg")) {
-			/* if we are in verbose mode, we've already emitted log */
-			if (env.verbosity == VERBOSE_NONE)
-				emit_verifier_log(tester->log_buf, true /*force*/);
-			for (j = 0; j < i; j++)
-				fprintf(stderr,
-					"MATCHED  MSG: '%s'\n", subspec->expect_msgs[j]);
-			fprintf(stderr, "EXPECTED MSG: '%s'\n", expect_msg);
-			return;
+		if (regex == NULL) {
+			match = strstr(tester->log_buf + tester->next_match_pos, expect_msg);
+			if (!ASSERT_OK_PTR (match, "expect_msg")) {
+				/* if we are in verbose mode, we've already emitted log */
+				if (env.verbosity == VERBOSE_NONE)
+					emit_verifier_log(tester->log_buf, true /*force*/);
+				for (j = 0; j < i; j++)
+					fprintf(stderr,
+						"MATCHED  MSG: '%s'\n", subspec->expect[j].msg);
+				fprintf(stderr, "EXPECTED MSG: '%s'\n", expect_msg);
+				return;
+			}
+			tester->next_match_pos = match - tester->log_buf + strlen(expect_msg);
+		} else {
+			int match_size = regexec (regex, tester->log_buf + tester->next_match_pos, 1, reg_match, 0);
+			if (match_size != 1) {
+				/* if we are in verbose mode, we've already emitted log */
+				if (env.verbosity == VERBOSE_NONE)
+					emit_verifier_log(tester->log_buf, true /*force*/);
+				for (j = 0; j < i; j++)
+					fprintf(stderr,
+						"MATCHED  REGEX: '%s'\n", subspec->expect[j].msg);
+				fprintf(stderr, "EXPECTED REGEX: '%s'\n", expect_msg);
+				return;
+			}
+
+			tester->next_match_pos += reg_match[0].rm_eo;
 		}
-
-		tester->next_match_pos = match - tester->log_buf + strlen(expect_msg);
 	}
 }
 
