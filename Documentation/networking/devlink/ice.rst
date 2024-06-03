@@ -11,6 +11,7 @@ Parameters
 ==========
 
 .. list-table:: Generic parameters implemented
+   :widths: 5 5 90
 
    * - Name
      - Mode
@@ -68,6 +69,28 @@ Parameters
 
        To verify that value has been set:
        $ devlink dev param show pci/0000:16:00.0 name tx_scheduling_layers
+.. list-table:: Driver specific parameters implemented
+    :widths: 5 5 90
+
+    * - Name
+      - Mode
+      - Description
+    * - ``local_forwarding``
+      - runtime
+      - Controls loopback behavior by tuning scheduler bandwidth.
+        Supported values are:
+
+        ``enabled`` - VF to VF traffic is allowed on port
+
+        ``disabled`` - VF to VF traffic is not allowed on this port
+
+        ``prioritized`` - VF to VF traffic is prioritized on this port
+
+        Default value of ``local_forwarding`` parameter is ``enabled``.
+        ``prioritized`` provides ability to adjust VF to VF traffic rate to increase
+        one port capacity at cost of the another. User needs to disable
+        local forwarding on one of the ports in order have increased capacity
+        on the ``prioritized`` port.
 
 Info versions
 =============
