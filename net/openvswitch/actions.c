@@ -82,6 +82,15 @@ static struct action_fifo __percpu *action_fifos;
 static struct action_flow_keys __percpu *flow_keys;
 static DEFINE_PER_CPU(int, exec_actions_level);
 
+static inline void ovs_drop_skb_last_action(struct sk_buff *skb)
+{
+	/* Do not emit packet drops inside sample(). */
+	if (OVS_CB(skb)->probability)
+		consume_skb(skb);
+	else
+		ovs_kfree_skb_reason(skb, OVS_DROP_LAST_ACTION);
+}
+
 /* Make a clone of the 'key', using the pre-allocated percpu 'flow_keys'
  * space. Return NULL if out of key spaces.
  */
@@ -1061,7 +1070,7 @@ static int sample(struct datapath *dp, struct sk_buff *skb,
 	if ((arg->probability != U32_MAX) &&
 	    (!arg->probability || get_random_u32() > arg->probability)) {
 		if (last)
-			ovs_kfree_skb_reason(skb, OVS_DROP_LAST_ACTION);
+			ovs_drop_skb_last_action(skb);
 		return 0;
 	}
 
@@ -1579,7 +1588,7 @@ static int do_execute_actions(struct datapath *dp, struct sk_buff *skb,
 		}
 	}
 
-	ovs_kfree_skb_reason(skb, OVS_DROP_LAST_ACTION);
+	ovs_drop_skb_last_action(skb);
 	return 0;
 }
 
