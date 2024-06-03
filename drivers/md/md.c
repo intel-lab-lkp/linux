@@ -752,7 +752,6 @@ int mddev_init(struct mddev *mddev)
 
 	mutex_init(&mddev->open_mutex);
 	mutex_init(&mddev->reconfig_mutex);
-	mutex_init(&mddev->sync_mutex);
 	mutex_init(&mddev->suspend_mutex);
 	mutex_init(&mddev->bitmap_info.mutex);
 	INIT_LIST_HEAD(&mddev->disks);
@@ -5020,34 +5019,6 @@ void md_unfrozen_sync_thread(struct mddev *mddev)
 }
 EXPORT_SYMBOL_GPL(md_unfrozen_sync_thread);
 
-static void idle_sync_thread(struct mddev *mddev)
-{
-	mutex_lock(&mddev->sync_mutex);
-	clear_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
-
-	if (mddev_lock(mddev)) {
-		mutex_unlock(&mddev->sync_mutex);
-		return;
-	}
-
-	stop_sync_thread(mddev, false);
-	mutex_unlock(&mddev->sync_mutex);
-}
-
-static void frozen_sync_thread(struct mddev *mddev)
-{
-	mutex_lock(&mddev->sync_mutex);
-	set_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
-
-	if (mddev_lock(mddev)) {
-		mutex_unlock(&mddev->sync_mutex);
-		return;
-	}
-
-	stop_sync_thread(mddev, false);
-	mutex_unlock(&mddev->sync_mutex);
-}
-
 static int mddev_start_reshape(struct mddev *mddev)
 {
 	int ret;
@@ -5055,24 +5026,13 @@ static int mddev_start_reshape(struct mddev *mddev)
 	if (mddev->pers->start_reshape == NULL)
 		return -EINVAL;
 
-	ret = mddev_lock(mddev);
-	if (ret)
-		return ret;
-
-	if (test_bit(MD_RECOVERY_RUNNING, &mddev->recovery)) {
-		mddev_unlock(mddev);
-		return -EBUSY;
-	}
-
 	if (mddev->reshape_position == MaxSector ||
 	    mddev->pers->check_reshape == NULL ||
 	    mddev->pers->check_reshape(mddev)) {
 		clear_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
 		ret = mddev->pers->start_reshape(mddev);
-		if (ret) {
-			mddev_unlock(mddev);
+		if (ret)
 			return ret;
-		}
 	} else {
 		/*
 		 * If reshape is still in progress, and md_check_recovery() can
@@ -5082,7 +5042,6 @@ static int mddev_start_reshape(struct mddev *mddev)
 		clear_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
 	}
 
-	mddev_unlock(mddev);
 	sysfs_notify_dirent_safe(mddev->sysfs_degraded);
 	return 0;
 }
@@ -5096,36 +5055,53 @@ action_store(struct mddev *mddev, const char *page, size_t len)
 	if (!mddev->pers || !mddev->pers->sync_request)
 		return -EINVAL;
 
+retry:
+	if (work_busy(&mddev->sync_work))
+		flush_work(&mddev->sync_work);
+
+	ret = mddev_lock(mddev);
+	if (ret)
+		return ret;
+
+	if (work_busy(&mddev->sync_work)) {
+		mddev_unlock(mddev);
+		goto retry;
+	}
+
 	action = md_sync_action_by_name(page);
 
 	/* TODO: mdadm rely on "idle" to start sync_thread. */
 	if (test_bit(MD_RECOVERY_RUNNING, &mddev->recovery)) {
 		switch (action) {
 		case ACTION_FROZEN:
-			frozen_sync_thread(mddev);
-			return len;
+			md_frozen_sync_thread(mddev);
+			ret = len;
+			goto out;
 		case ACTION_IDLE:
-			idle_sync_thread(mddev);
+			md_idle_sync_thread(mddev);
 			break;
 		case ACTION_RESHAPE:
 		case ACTION_RECOVER:
 		case ACTION_CHECK:
 		case ACTION_REPAIR:
 		case ACTION_RESYNC:
-			return -EBUSY;
+			ret = -EBUSY;
+			goto out;
 		default:
-			return -EINVAL;
+			ret = -EINVAL;
+			goto out;
 		}
 	} else {
 		switch (action) {
 		case ACTION_FROZEN:
 			set_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
-			return len;
+			ret = len;
+			goto out;
 		case ACTION_RESHAPE:
 			clear_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
 			ret = mddev_start_reshape(mddev);
 			if (ret)
-				return ret;
+				goto out;
 			break;
 		case ACTION_RECOVER:
 			clear_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
@@ -5143,7 +5119,8 @@ action_store(struct mddev *mddev, const char *page, size_t len)
 			clear_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
 			break;
 		default:
-			return -EINVAL;
+			ret = -EINVAL;
+			goto out;
 		}
 	}
 
@@ -5151,14 +5128,18 @@ action_store(struct mddev *mddev, const char *page, size_t len)
 		/* A write to sync_action is enough to justify
 		 * canceling read-auto mode
 		 */
-		flush_work(&mddev->sync_work);
 		mddev->ro = MD_RDWR;
 		md_wakeup_thread(mddev->sync_thread);
 	}
+
 	set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
 	md_wakeup_thread(mddev->thread);
 	sysfs_notify_dirent_safe(mddev->sysfs_action);
-	return len;
+	ret = len;
+
+out:
+	mddev_unlock(mddev);
+	return ret;
 }
 
 static struct md_sysfs_entry md_scan_mode =
