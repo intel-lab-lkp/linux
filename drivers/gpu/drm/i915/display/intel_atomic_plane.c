@@ -688,27 +688,27 @@ int intel_plane_atomic_check(struct intel_atomic_state *state,
 		intel_atomic_get_new_plane_state(state, plane);
 	const struct intel_plane_state *old_plane_state =
 		intel_atomic_get_old_plane_state(state, plane);
-	const struct intel_plane_state *new_master_plane_state;
+	const struct intel_plane_state *new_primary_plane_state;
 	struct intel_crtc *crtc = intel_crtc_for_pipe(i915, plane->pipe);
 	const struct intel_crtc_state *old_crtc_state =
 		intel_atomic_get_old_crtc_state(state, crtc);
 	struct intel_crtc_state *new_crtc_state =
 		intel_atomic_get_new_crtc_state(state, crtc);
 
-	if (new_crtc_state && intel_crtc_is_joiner_slave(new_crtc_state)) {
-		struct intel_crtc *master_crtc =
-			intel_master_crtc(new_crtc_state);
-		struct intel_plane *master_plane =
-			intel_crtc_get_plane(master_crtc, plane->id);
+	if (new_crtc_state && intel_crtc_is_joiner_secondary(new_crtc_state)) {
+		struct intel_crtc *primary_crtc =
+			intel_primary_crtc(new_crtc_state);
+		struct intel_plane *primary_plane =
+			intel_crtc_get_plane(primary_crtc, plane->id);
 
-		new_master_plane_state =
-			intel_atomic_get_new_plane_state(state, master_plane);
+		new_primary_plane_state =
+			intel_atomic_get_new_plane_state(state, primary_plane);
 	} else {
-		new_master_plane_state = new_plane_state;
+		new_primary_plane_state = new_plane_state;
 	}
 
 	intel_plane_copy_uapi_to_hw_state(new_plane_state,
-					  new_master_plane_state,
+					  new_primary_plane_state,
 					  crtc);
 
 	new_plane_state->uapi.visible = false;
