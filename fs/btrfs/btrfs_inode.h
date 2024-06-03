@@ -172,14 +172,6 @@ struct btrfs_inode {
 	/* held while logging the inode in tree-log.c */
 	struct mutex log_mutex;
 
-	/*
-	 * Counters to keep track of the number of extent item's we may use due
-	 * to delalloc and such.  outstanding_extents is the number of extent
-	 * items we think we'll end up using, and reserved_extents is the number
-	 * of extent items we've reserved metadata for. Protected by 'lock'.
-	 */
-	unsigned outstanding_extents;
-
 	/* used to order data wrt metadata */
 	spinlock_t ordered_tree_lock;
 	struct rb_root ordered_tree;
@@ -331,6 +323,14 @@ struct btrfs_inode {
 	/* File creation time. */
 	u64 i_otime_sec;
 	u32 i_otime_nsec;
+
+	/*
+	 * Counters to keep track of the number of extent item's we may use due
+	 * to delalloc and such.  outstanding_extents is the number of extent
+	 * items we think we'll end up using, and reserved_extents is the number
+	 * of extent items we've reserved metadata for. Protected by 'lock'.
+	 */
+	unsigned outstanding_extents;
 
 	/* Hook into fs_info->delayed_iputs */
 	struct list_head delayed_iput;
