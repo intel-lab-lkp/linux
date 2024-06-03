@@ -915,8 +915,11 @@ add_delayed_ref_head(struct btrfs_trans_handle *trans,
 	/* Record qgroup extent info if provided */
 	if (qrecord) {
 		if (btrfs_qgroup_trace_extent_nolock(trans->fs_info,
-					delayed_refs, qrecord))
+					delayed_refs, qrecord)) {
+			/* If insertion failed, free preallocated memory */
+			xa_release(&delayed_refs->dirty_extents, qrecord->bytenr);
 			kfree(qrecord);
+		}
 		else
 			qrecord_inserted = true;
 	}
@@ -1075,6 +1078,7 @@ int btrfs_add_delayed_tree_ref(struct btrfs_trans_handle *trans,
 	u8 ref_type;
 
 	is_system = (generic_ref->tree_ref.ref_root == BTRFS_CHUNK_TREE_OBJECTID);
+	delayed_refs = &trans->transaction->delayed_refs;
 
 	ASSERT(generic_ref->type == BTRFS_REF_METADATA && generic_ref->action);
 	ref = kmem_cache_alloc(btrfs_delayed_tree_ref_cachep, GFP_NOFS);
@@ -1082,18 +1086,15 @@ int btrfs_add_delayed_tree_ref(struct btrfs_trans_handle *trans,
 		return -ENOMEM;
 
 	head_ref = kmem_cache_alloc(btrfs_delayed_ref_head_cachep, GFP_NOFS);
-	if (!head_ref) {
-		kmem_cache_free(btrfs_delayed_tree_ref_cachep, ref);
-		return -ENOMEM;
-	}
+	if (!head_ref)
+		goto free_ref;
 
 	if (btrfs_qgroup_full_accounting(fs_info) && !generic_ref->skip_qgroup) {
 		record = kzalloc(sizeof(*record), GFP_NOFS);
-		if (!record) {
-			kmem_cache_free(btrfs_delayed_tree_ref_cachep, ref);
-			kmem_cache_free(btrfs_delayed_ref_head_cachep, head_ref);
-			return -ENOMEM;
-		}
+		if (!record)
+			goto free_head_ref;
+		if (xa_reserve(&delayed_refs->dirty_extents, bytenr, GFP_NOFS))
+			goto free_record;
 	}
 
 	if (parent)
@@ -1113,7 +1114,6 @@ int btrfs_add_delayed_tree_ref(struct btrfs_trans_handle *trans,
 			      false, is_system, generic_ref->owning_root);
 	head_ref->extent_op = extent_op;
 
-	delayed_refs = &trans->transaction->delayed_refs;
 	spin_lock(&delayed_refs->lock);
 
 	/*
@@ -1142,6 +1142,14 @@ int btrfs_add_delayed_tree_ref(struct btrfs_trans_handle *trans,
 		btrfs_qgroup_trace_extent_post(trans, record);
 
 	return 0;
+
+free_record:
+	kfree(record);
+free_head_ref:
+	kmem_cache_free(btrfs_delayed_ref_head_cachep, head_ref);
+free_ref:
+	kmem_cache_free(btrfs_delayed_tree_ref_cachep, ref);
+	return -ENOMEM;
 }
 
 /*
@@ -1183,28 +1191,23 @@ int btrfs_add_delayed_data_ref(struct btrfs_trans_handle *trans,
 	ref->objectid = owner;
 	ref->offset = offset;
 
-
+	delayed_refs = &trans->transaction->delayed_refs;
 	head_ref = kmem_cache_alloc(btrfs_delayed_ref_head_cachep, GFP_NOFS);
-	if (!head_ref) {
-		kmem_cache_free(btrfs_delayed_data_ref_cachep, ref);
-		return -ENOMEM;
-	}
+	if (!head_ref)
+		goto free_ref;
 
 	if (btrfs_qgroup_full_accounting(fs_info) && !generic_ref->skip_qgroup) {
 		record = kzalloc(sizeof(*record), GFP_NOFS);
-		if (!record) {
-			kmem_cache_free(btrfs_delayed_data_ref_cachep, ref);
-			kmem_cache_free(btrfs_delayed_ref_head_cachep,
-					head_ref);
-			return -ENOMEM;
-		}
+		if (!record)
+			goto free_head_ref;
+		if (xa_reserve(&delayed_refs->dirty_extents, bytenr, GFP_NOFS))
+			goto free_record;
 	}
 
 	init_delayed_ref_head(head_ref, record, bytenr, num_bytes, ref_root,
 			      reserved, action, true, false, generic_ref->owning_root);
 	head_ref->extent_op = NULL;
 
-	delayed_refs = &trans->transaction->delayed_refs;
 	spin_lock(&delayed_refs->lock);
 
 	/*
@@ -1233,6 +1236,14 @@ int btrfs_add_delayed_data_ref(struct btrfs_trans_handle *trans,
 	if (qrecord_inserted)
 		return btrfs_qgroup_trace_extent_post(trans, record);
 	return 0;
+
+free_record:
+	kfree(record);
+free_head_ref:
+	kmem_cache_free(btrfs_delayed_ref_head_cachep, head_ref);
+free_ref:
+	kmem_cache_free(btrfs_delayed_data_ref_cachep, ref);
+	return -ENOMEM;
 }
 
 int btrfs_add_delayed_extent_op(struct btrfs_trans_handle *trans,
