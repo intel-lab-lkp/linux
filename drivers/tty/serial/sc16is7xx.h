@@ -33,6 +33,8 @@ const char *sc16is7xx_regmap_name(u8 port_id);
 
 unsigned int sc16is7xx_regmap_port_mask(unsigned int port_id);
 
+void sc16is7xx_setup_reset_pin(struct device *dev);
+
 int sc16is7xx_probe(struct device *dev, const struct sc16is7xx_devtype *devtype,
 		    struct regmap *regmaps[], int irq);
 

@@ -21,6 +21,8 @@ static int sc16is7xx_i2c_probe(struct i2c_client *i2c)
 	if (!devtype)
 		return dev_err_probe(&i2c->dev, -ENODEV, "Failed to match device\n");
 
+	sc16is7xx_setup_reset_pin(&i2c->dev);
+
 	memcpy(&regcfg, &sc16is7xx_regcfg, sizeof(struct regmap_config));
 
 	for (i = 0; i < devtype->nr_uart; i++) {

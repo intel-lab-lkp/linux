@@ -19,6 +19,7 @@
 #include <linux/kthread.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
+#include <linux/of_gpio.h>
 #include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/sched.h>
@@ -1466,6 +1467,27 @@ static const struct serial_rs485 sc16is7xx_rs485_supported = {
 	.delay_rts_before_send = 1,
 	.delay_rts_after_send = 1,	/* Not supported but keep returning -EINVAL */
 };
+
+void sc16is7xx_setup_reset_pin(struct device *dev)
+{
+	struct device_node *np = dev->of_node;
+	int reset_gpio, err;
+
+	reset_gpio = of_get_named_gpio(np, "reset-gpios", 0);
+	if (!gpio_is_valid(reset_gpio))
+		return;
+
+	err = devm_gpio_request_one(dev, reset_gpio, GPIOF_OUT_INIT_LOW,
+				    "sc16is7xx-reset");
+	if (err) {
+		dev_err(dev, "failed to request sc16is7xx-reset-gpios: %d\n", err);
+		return;
+	}
+
+	/* Deassert the reset pin */
+	gpio_set_value_cansleep(reset_gpio, 1);
+}
+EXPORT_SYMBOL_GPL(sc16is7xx_setup_reset_pin);
 
 int sc16is7xx_probe(struct device *dev, const struct sc16is7xx_devtype *devtype,
 		    struct regmap *regmaps[], int irq)

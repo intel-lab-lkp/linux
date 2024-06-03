@@ -38,6 +38,8 @@ static int sc16is7xx_spi_probe(struct spi_device *spi)
 	if (!devtype)
 		return dev_err_probe(&spi->dev, -ENODEV, "Failed to match device\n");
 
+	sc16is7xx_setup_reset_pin(&spi->dev);
+
 	memcpy(&regcfg, &sc16is7xx_regcfg, sizeof(struct regmap_config));
 
 	for (i = 0; i < devtype->nr_uart; i++) {
