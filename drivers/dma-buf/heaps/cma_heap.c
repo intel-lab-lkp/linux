@@ -288,6 +288,9 @@ static struct dma_buf *cma_heap_allocate(struct dma_heap *heap,
 	int ret = -ENOMEM;
 	pgoff_t pg;
 
+	if (heap_flags & ~DMA_HEAP_VALID_HEAP_FLAGS)
+		return ERR_PTR(-EINVAL);
+
 	buffer = kzalloc(sizeof(*buffer), GFP_KERNEL);
 	if (!buffer)
 		return ERR_PTR(-ENOMEM);
