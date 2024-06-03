@@ -653,7 +653,8 @@ static __always_inline kvm_mn_ret_t __kvm_handle_hva_range(struct kvm *kvm,
 				if (IS_KVM_NULL_FN(range->handler))
 					break;
 			}
-			r.ret |= range->handler(kvm, &gfn_range);
+			if (!IS_KVM_NULL_FN(range->handler))
+				r.ret |= range->handler(kvm, &gfn_range);
 		}
 	}
 
