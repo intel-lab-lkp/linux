@@ -3187,21 +3187,21 @@ static void trans_port_sync_stop_link_train(struct intel_atomic_state *state,
 	for_each_new_connector_in_state(&state->base, conn, conn_state, i) {
 		struct intel_encoder *slave_encoder =
 			to_intel_encoder(conn_state->best_encoder);
-		struct intel_crtc *slave_crtc = to_intel_crtc(conn_state->crtc);
-		const struct intel_crtc_state *slave_crtc_state;
+		struct intel_crtc *secondary_crtc = to_intel_crtc(conn_state->crtc);
+		const struct intel_crtc_state *secondary_crtc_state;
 
-		if (!slave_crtc)
+		if (!secondary_crtc)
 			continue;
 
-		slave_crtc_state =
-			intel_atomic_get_new_crtc_state(state, slave_crtc);
+		secondary_crtc_state =
+			intel_atomic_get_new_crtc_state(state, secondary_crtc);
 
-		if (slave_crtc_state->master_transcoder !=
+		if (secondary_crtc_state->master_transcoder !=
 		    crtc_state->cpu_transcoder)
 			continue;
 
 		intel_dp_stop_link_train(enc_to_intel_dp(slave_encoder),
-					 slave_crtc_state);
+					 secondary_crtc_state);
 	}
 
 	usleep_range(200, 400);
@@ -3506,11 +3506,11 @@ intel_ddi_pre_pll_enable(struct intel_atomic_state *state,
 	bool is_tc_port = intel_encoder_is_tc(encoder);
 
 	if (is_tc_port) {
-		struct intel_crtc *master_crtc =
+		struct intel_crtc *primary_crtc =
 			to_intel_crtc(crtc_state->uapi.crtc);
 
 		intel_tc_port_get_link(dig_port, crtc_state->lane_count);
-		intel_ddi_update_active_dpll(state, encoder, master_crtc);
+		intel_ddi_update_active_dpll(state, encoder, primary_crtc);
 	}
 
 	main_link_aux_power_domain_get(dig_port, crtc_state);
