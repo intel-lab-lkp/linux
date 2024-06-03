@@ -621,6 +621,8 @@ static void amd_pstate_adjust_perf(unsigned int cpu,
 	unsigned long max_perf, min_perf, des_perf,
 		      cap_perf, lowest_nonlinear_perf, max_freq;
 	struct cpufreq_policy *policy = cpufreq_cpu_get(cpu);
+	if (!policy)
+		return;
 	struct amd_cpudata *cpudata = policy->driver_data;
 	unsigned int target_freq;
 
@@ -777,6 +779,8 @@ static void amd_pstate_init_prefcore(struct amd_cpudata *cpudata)
 static void amd_pstate_update_limits(unsigned int cpu)
 {
 	struct cpufreq_policy *policy = cpufreq_cpu_get(cpu);
+	if (!policy)
+		return;
 	struct amd_cpudata *cpudata = policy->driver_data;
 	u32 prev_high = 0, cur_high = 0;
 	int ret;
