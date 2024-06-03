@@ -112,9 +112,9 @@ static int sdw_drv_probe(struct device *dev)
 		if (!name)
 			name = drv->driver.name;
 
-		dev_err(dev, "Probe of %s failed: %d\n", name, ret);
 		dev_pm_domain_detach(dev, false);
-		return ret;
+
+		return dev_err_probe(dev, ret, "Probe of %s failed\n", name);
 	}
 
 	mutex_lock(&slave->sdw_dev_lock);
