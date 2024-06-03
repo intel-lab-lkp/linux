@@ -195,10 +195,16 @@ int led_trigger_set(struct led_classdev *led_cdev, struct led_trigger *trig)
 		led_cdev->trigger = trig;
 
 		ret = 0;
-		if (trig->activate)
+		if (trig->activate) {
+			/*
+			 * If "set brightness to 0" is pending in workqueue,
+			 * we don't want that to be reordered after ->activate()
+			 */
+			flush_work(&led_cdev->set_brightness_work);
 			ret = trig->activate(led_cdev);
-		else
+		} else {
 			led_set_brightness(led_cdev, trig->brightness);
+		}
 		if (ret)
 			goto err_activate;
 
