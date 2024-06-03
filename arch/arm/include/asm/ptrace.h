@@ -52,6 +52,28 @@ struct svc_pt_regs {
 #define fast_interrupts_enabled(regs) \
 	(!((regs)->ARM_cpsr & PSR_F_BIT))
 
+/**
+ * regs_get_kernel_argument() - get Nth function argument in kernel
+ * @regs:	pt_regs of that context
+ * @n:		function argument number (start from 0)
+ *
+ * regs_get_argument() returns @n th argument of the function call.
+ *
+ * Note that this chooses the most likely register mapping. In very rare
+ * cases this may not return correct data, for example, if one of the
+ * function parameters is 16 bytes or bigger. In such cases, we cannot
+ * get access the parameter correctly and the register assignment of
+ * subsequent parameters will be shifted.
+ */
+static inline unsigned long regs_get_kernel_argument(struct pt_regs *regs,
+						     unsigned int n)
+{
+#define NR_REG_ARGUMENTS 4
+	if (n < NR_REG_ARGUMENTS)
+		return regs->uregs[n];
+	return 0;
+}
+
 /* Are the current registers suitable for user mode?
  * (used to maintain security in signal handlers)
  */
