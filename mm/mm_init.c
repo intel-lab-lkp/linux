@@ -901,7 +901,7 @@ void __meminit memmap_init_range(unsigned long size, int nid, unsigned long zone
 		 * over the place during system boot.
 		 */
 		if (pageblock_aligned(pfn)) {
-			set_pageblock_migratetype(page, migratetype);
+			set_pageblock_migratetype(page, pfn, migratetype);
 			cond_resched();
 		}
 		pfn++;
@@ -1005,7 +1005,7 @@ static void __ref __init_zone_device_page(struct page *page, unsigned long pfn,
 	 * because this is done early in section_activate()
 	 */
 	if (pageblock_aligned(pfn)) {
-		set_pageblock_migratetype(page, MIGRATE_MOVABLE);
+		set_pageblock_migratetype(page, pfn, MIGRATE_MOVABLE);
 		cond_resched();
 	}
 
@@ -1927,7 +1927,7 @@ static void __init deferred_free_range(unsigned long pfn,
 	/* Free a large naturally-aligned chunk if possible */
 	if (nr_pages == MAX_ORDER_NR_PAGES && IS_MAX_ORDER_ALIGNED(pfn)) {
 		for (i = 0; i < nr_pages; i += pageblock_nr_pages)
-			set_pageblock_migratetype(page + i, MIGRATE_MOVABLE);
+			set_pageblock_migratetype(page + i, pfn + i, MIGRATE_MOVABLE);
 		__free_pages_core(page, MAX_PAGE_ORDER);
 		return;
 	}
@@ -1937,7 +1937,7 @@ static void __init deferred_free_range(unsigned long pfn,
 
 	for (i = 0; i < nr_pages; i++, page++, pfn++) {
 		if (pageblock_aligned(pfn))
-			set_pageblock_migratetype(page, MIGRATE_MOVABLE);
+			set_pageblock_migratetype(page, pfn, MIGRATE_MOVABLE);
 		__free_pages_core(page, 0);
 	}
 }
@@ -2282,7 +2282,7 @@ void __init init_cma_reserved_pageblock(struct page *page)
 		set_page_count(p, 0);
 	} while (++p, --i);
 
-	set_pageblock_migratetype(page, MIGRATE_CMA);
+	set_pageblock_migratetype(page, page_to_pfn(page), MIGRATE_CMA);
 	set_page_refcounted(page);
 	__free_pages(page, pageblock_order);
 

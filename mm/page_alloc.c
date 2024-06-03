@@ -412,14 +412,14 @@ void set_pfnblock_flags_mask(struct page *page, unsigned long flags,
 	} while (!try_cmpxchg(&bitmap[word_bitidx], &word, (word & ~mask) | flags));
 }
 
-void set_pageblock_migratetype(struct page *page, int migratetype)
+void set_pageblock_migratetype(struct page *page, unsigned long pfn, int migratetype)
 {
 	if (unlikely(page_group_by_mobility_disabled &&
 		     migratetype < MIGRATE_PCPTYPES))
 		migratetype = MIGRATE_UNMOVABLE;
 
 	set_pfnblock_flags_mask(page, (unsigned long)migratetype,
-				page_to_pfn(page), MIGRATETYPE_MASK);
+				pfn, MIGRATETYPE_MASK);
 }
 
 #ifdef CONFIG_DEBUG_VM
@@ -817,7 +817,7 @@ static inline void __free_one_page(struct page *page,
 			 * expand() down the line puts the sub-blocks
 			 * on the right freelists.
 			 */
-			set_pageblock_migratetype(buddy, migratetype);
+			set_pageblock_migratetype(buddy, buddy_pfn, migratetype);
 		}
 
 		combined_pfn = buddy_pfn & pfn;
@@ -1579,7 +1579,7 @@ static int __move_freepages_block(struct zone *zone, unsigned long start_pfn,
 		pages_moved += 1 << order;
 	}
 
-	set_pageblock_migratetype(pfn_to_page(start_pfn), new_mt);
+	set_pageblock_migratetype(pfn_to_page(start_pfn), start_pfn, new_mt);
 
 	return pages_moved;
 }
@@ -1730,7 +1730,7 @@ bool move_freepages_block_isolate(struct zone *zone, struct page *page,
 
 		del_page_from_free_list(buddy, zone, order,
 					get_pfnblock_migratetype(buddy, pfn));
-		set_pageblock_migratetype(page, migratetype);
+		set_pageblock_migratetype(page, page_to_pfn(page), migratetype);
 		split_large_buddy(zone, buddy, pfn, order);
 		return true;
 	}
@@ -1741,7 +1741,7 @@ bool move_freepages_block_isolate(struct zone *zone, struct page *page,
 
 		del_page_from_free_list(page, zone, order,
 					get_pfnblock_migratetype(page, pfn));
-		set_pageblock_migratetype(page, migratetype);
+		set_pageblock_migratetype(page, pfn, migratetype);
 		split_large_buddy(zone, page, pfn, order);
 		return true;
 	}
@@ -1753,14 +1753,14 @@ move:
 }
 #endif /* CONFIG_MEMORY_ISOLATION */
 
-static void change_pageblock_range(struct page *pageblock_page,
+static void change_pageblock_range(struct page *page,
 					int start_order, int migratetype)
 {
 	int nr_pageblocks = 1 << (start_order - pageblock_order);
 
 	while (nr_pageblocks--) {
-		set_pageblock_migratetype(pageblock_page, migratetype);
-		pageblock_page += pageblock_nr_pages;
+		set_pageblock_migratetype(page, page_to_pfn(page), migratetype);
+		page += pageblock_nr_pages;
 	}
 }
 
