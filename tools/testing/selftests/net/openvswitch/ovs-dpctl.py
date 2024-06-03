@@ -437,40 +437,46 @@ class ovsactions(nla):
     def dpstr(self, more=False):
         print_str = ""
 
-        for field in self.nla_map:
-            if field[1] == "none" or self.get_attr(field[0]) is None:
+        for attr_name, value in self["attrs"]:
+            attr_desc = next(filter(lambda x: x[0] == attr_name, self.nla_map),
+                             None)
+            if not attr_desc:
+                raise ValueError("Unknown attribute: %s" % attr)
+
+            attr_type = attr_desc[1]
+
+            if attr_type == "none":
                 continue
             if print_str != "":
                 print_str += ","
 
-            if field[1] == "uint32":
-                if field[0] == "OVS_ACTION_ATTR_OUTPUT":
-                    print_str += "%d" % int(self.get_attr(field[0]))
-                elif field[0] == "OVS_ACTION_ATTR_RECIRC":
-                    print_str += "recirc(0x%x)" % int(self.get_attr(field[0]))
-                elif field[0] == "OVS_ACTION_ATTR_TRUNC":
-                    print_str += "trunc(%d)" % int(self.get_attr(field[0]))
-                elif field[0] == "OVS_ACTION_ATTR_DROP":
-                    print_str += "drop(%d)" % int(self.get_attr(field[0]))
-            elif field[1] == "flag":
-                if field[0] == "OVS_ACTION_ATTR_CT_CLEAR":
+            if attr_type == "uint32":
+                if attr_name == "OVS_ACTION_ATTR_OUTPUT":
+                    print_str += "%d" % int(value)
+                elif attr_name == "OVS_ACTION_ATTR_RECIRC":
+                    print_str += "recirc(0x%x)" % int(value)
+                elif attr_name == "OVS_ACTION_ATTR_TRUNC":
+                    print_str += "trunc(%d)" % int(value)
+                elif attr_name == "OVS_ACTION_ATTR_DROP":
+                    print_str += "drop(%d)" % int(value)
+            elif attr_type == "flag":
+                if attr_name == "OVS_ACTION_ATTR_CT_CLEAR":
                     print_str += "ct_clear"
-                elif field[0] == "OVS_ACTION_ATTR_POP_VLAN":
+                elif attr_name == "OVS_ACTION_ATTR_POP_VLAN":
                     print_str += "pop_vlan"
-                elif field[0] == "OVS_ACTION_ATTR_POP_ETH":
+                elif attr_name == "OVS_ACTION_ATTR_POP_ETH":
                     print_str += "pop_eth"
-                elif field[0] == "OVS_ACTION_ATTR_POP_NSH":
+                elif attr_name == "OVS_ACTION_ATTR_POP_NSH":
                     print_str += "pop_nsh"
-                elif field[0] == "OVS_ACTION_ATTR_POP_MPLS":
+                elif attr_name == "OVS_ACTION_ATTR_POP_MPLS":
                     print_str += "pop_mpls"
             else:
-                datum = self.get_attr(field[0])
-                if field[0] == "OVS_ACTION_ATTR_CLONE":
+                if attr_name == "OVS_ACTION_ATTR_CLONE":
                     print_str += "clone("
-                    print_str += datum.dpstr(more)
+                    print_str += value.dpstr(more)
                     print_str += ")"
                 else:
-                    print_str += datum.dpstr(more)
+                    print_str += value.dpstr(more)
 
         return print_str
 
