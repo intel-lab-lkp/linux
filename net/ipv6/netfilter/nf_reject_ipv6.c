@@ -334,6 +334,7 @@ void nf_send_reset6(struct net *net, struct sock *sk, struct sk_buff *oldskb,
 		return;
 	}
 
+	nskb->dev = dst->dev;
 	skb_dst_set(nskb, dst);
 
 	nskb->mark = fl6.flowi6_mark;

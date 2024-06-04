@@ -278,6 +278,7 @@ void nf_send_reset(struct net *net, struct sock *sk, struct sk_buff *oldskb,
 	if (nskb->len > dst_mtu(skb_dst(nskb)))
 		goto free_nskb;
 
+	nskb->dev = skb_dst(nskb)->dev;
 	nf_ct_attach(nskb, oldskb);
 	nf_ct_set_closing(skb_nfct(oldskb));
 
