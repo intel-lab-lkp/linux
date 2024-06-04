@@ -686,6 +686,8 @@ static void handle_sc_creation(struct vmbus_channel *new_sc)
 	new_sc->max_pkt_size = STORVSC_MAX_PKT_SIZE;
 
 	new_sc->next_request_id_callback = storvsc_next_request_id;
+	snprintf(new_sc->irq_name, VMBUS_CHAN_IRQ_NAME_MAX, "sub@storvsc%d",
+			stor_device->host->host_no);
 
 	ret = vmbus_open(new_sc,
 			 aligned_ringbuffer_size,
@@ -1322,12 +1324,19 @@ static int storvsc_connect_to_vsp(struct hv_device *device, u32 ring_size,
 				  bool is_fc)
 {
 	struct vmstorage_channel_properties props;
+	struct storvsc_device *stor_device;
 	int ret;
 
 	memset(&props, 0, sizeof(struct vmstorage_channel_properties));
 
 	device->channel->max_pkt_size = STORVSC_MAX_PKT_SIZE;
 	device->channel->next_request_id_callback = storvsc_next_request_id;
+
+	stor_device = get_out_stor_device(device);
+	if (!stor_device)
+		return -EINVAL;
+	snprintf(device->channel->irq_name, VMBUS_CHAN_IRQ_NAME_MAX, "pri@storvsc%d",
+			stor_device->host->host_no);
 
 	ret = vmbus_open(device->channel,
 			 ring_size,
