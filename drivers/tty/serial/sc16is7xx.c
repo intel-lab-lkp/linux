@@ -14,6 +14,7 @@
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/export.h>
+#include <linux/gpio/consumer.h>
 #include <linux/gpio/driver.h>
 #include <linux/idr.h>
 #include <linux/kthread.h>
@@ -1467,6 +1468,25 @@ static const struct serial_rs485 sc16is7xx_rs485_supported = {
 	.delay_rts_after_send = 1,	/* Not supported but keep returning -EINVAL */
 };
 
+static int sc16is7xx_reset(struct device *dev, struct regmap *regmaps[])
+{
+	struct gpio_desc *reset_gpiod;
+
+	reset_gpiod = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_LOW);
+	if (!reset_gpiod)
+		/* soft reset device, purging any pending irq / data */
+		regmap_write(regmaps[0], SC16IS7XX_IOCONTROL_REG,
+			     SC16IS7XX_IOCONTROL_SRESET_BIT);
+	else if (!IS_ERR(reset_gpiod)) {
+		/* delay 5 us (at least 3 us) and deassert the gpio to exit the hard reset */
+		udelay(5);
+		gpiod_set_value_cansleep(reset_gpiod, 0);
+	} else
+		return PTR_ERR(reset_gpiod);
+
+	return 0;
+}
+
 int sc16is7xx_probe(struct device *dev, const struct sc16is7xx_devtype *devtype,
 		    struct regmap *regmaps[], int irq)
 {
@@ -1527,6 +1547,10 @@ int sc16is7xx_probe(struct device *dev, const struct sc16is7xx_devtype *devtype,
 	s->devtype = devtype;
 	dev_set_drvdata(dev, s);
 
+	ret = sc16is7xx_reset(dev, regmaps);
+	if (ret)
+		goto out_clk;
+
 	kthread_init_worker(&s->kworker);
 	s->kworker_task = kthread_run(kthread_worker_fn, &s->kworker,
 				      "sc16is7xx");
@@ -1535,10 +1559,6 @@ int sc16is7xx_probe(struct device *dev, const struct sc16is7xx_devtype *devtype,
 		goto out_clk;
 	}
 	sched_set_fifo(s->kworker_task);
-
-	/* reset device, purging any pending irq / data */
-	regmap_write(regmaps[0], SC16IS7XX_IOCONTROL_REG,
-		     SC16IS7XX_IOCONTROL_SRESET_BIT);
 
 	/* Mark each port line and status as uninitialised. */
 	for (i = 0; i < devtype->nr_uart; ++i) {
