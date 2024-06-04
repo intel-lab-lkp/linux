@@ -1334,6 +1334,10 @@ typedef struct pglist_data {
 	enum zone_type kswapd_highest_zoneidx;
 
 	int kswapd_failures;		/* Number of 'reclaimed == 0' runs */
+	int nr_may_reclaimable;		/* Number of pages that have been
+					   allocated since considered the
+					   node is hopeless due to too many
+					   kswapd_failures. */
 
 #ifdef CONFIG_COMPACTION
 	int kcompactd_max_order;

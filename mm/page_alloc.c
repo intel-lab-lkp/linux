@@ -1475,7 +1475,19 @@ inline void post_alloc_hook(struct page *page, unsigned int order,
 static void prep_new_page(struct page *page, unsigned int order, gfp_t gfp_flags,
 							unsigned int alloc_flags)
 {
+	pg_data_t *pgdat = page_pgdat(page);
+
 	post_alloc_hook(page, order, gfp_flags);
+
+	/*
+	 * New pages might or might not be reclaimable depending on how
+	 * these pages are going to be used.  However, since these are
+	 * potentially reclaimable, it's worth hopefully trying reclaim
+	 * by allowing kswapd to work again even if there have been too
+	 * many ->kswapd_failures, if ->nr_may_reclaimable is big enough.
+	 */
+	if (pgdat->kswapd_failures >= MAX_RECLAIM_RETRIES)
+		pgdat->nr_may_reclaimable += 1 << order;
 
 	if (order && (gfp_flags & __GFP_COMP))
 		prep_compound_page(page, order);
