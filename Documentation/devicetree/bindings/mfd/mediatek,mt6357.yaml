@@ -37,6 +37,11 @@ properties:
   "#interrupt-cells":
     const: 2
 
+  adc:
+    type: object
+    $ref: /schemas/iio/adc/mediatek,mt6359-auxadc.yaml
+    unevaluatedProperties: false
+
   regulators:
     type: object
     $ref: /schemas/regulator/mediatek,mt6357-regulator.yaml
@@ -82,6 +87,11 @@ examples:
             interrupts = <145 IRQ_TYPE_LEVEL_HIGH>;
             interrupt-controller;
             #interrupt-cells = <2>;
+
+            pmic_adc: adc {
+                    compatible = "mediatek,mt6357-auxadc";
+                    #io-channel-cells = <1>;
+            };
 
             regulators {
                 mt6357_vproc_reg: buck-vproc {
