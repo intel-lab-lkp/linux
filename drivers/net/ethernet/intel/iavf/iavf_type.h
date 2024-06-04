@@ -206,6 +206,45 @@ union iavf_16byte_rx_desc {
 	} wb;  /* writeback */
 };
 
+/* Rx Flex Descriptor NIC Profile
+ * RxDID Profile ID 2
+ * Flex-field 0: RSS hash lower 16-bits
+ * Flex-field 1: RSS hash upper 16-bits
+ * Flex-field 2: Flow ID lower 16-bits
+ * Flex-field 3: Flow ID higher 16-bits
+ * Flex-field 4: reserved, VLAN ID taken from L2Tag
+ */
+struct iavf_32byte_rx_flex_wb {
+	/* Qword 0 */
+	u8 rxdid;
+	u8 mir_id_umb_cast;
+	__le16 ptype_flexi_flags0;
+	__le16 pkt_len;
+	__le16 hdr_len_sph_flex_flags1;
+
+	/* Qword 1 */
+	__le16 status_error0;
+	__le16 l2tag1;
+	__le32 rss_hash;
+
+	/* Qword 2 */
+	__le16 status_error1;
+	u8 flexi_flags2;
+	u8 ts_low;
+	__le16 l2tag2_1st;
+	__le16 l2tag2_2nd;
+
+	/* Qword 3 */
+	__le32 flow_id;
+	union {
+		struct {
+			__le16 rsvd;
+			__le16 flow_id_ipv6;
+		} flex;
+		__le32 ts_high;
+	} flex_ts;
+};
+
 union iavf_32byte_rx_desc {
 	struct {
 		__le64  pkt_addr; /* Packet buffer address */
@@ -253,35 +292,34 @@ union iavf_32byte_rx_desc {
 			} hi_dword;
 		} qword3;
 	} wb;  /* writeback */
+	struct iavf_32byte_rx_flex_wb flex_wb;
 };
 
-enum iavf_rx_desc_status_bits {
-	/* Note: These are predefined bit offsets */
-	IAVF_RX_DESC_STATUS_DD_SHIFT		= 0,
-	IAVF_RX_DESC_STATUS_EOF_SHIFT		= 1,
-	IAVF_RX_DESC_STATUS_L2TAG1P_SHIFT	= 2,
-	IAVF_RX_DESC_STATUS_L3L4P_SHIFT		= 3,
-	IAVF_RX_DESC_STATUS_CRCP_SHIFT		= 4,
-	IAVF_RX_DESC_STATUS_TSYNINDX_SHIFT	= 5, /* 2 BITS */
-	IAVF_RX_DESC_STATUS_TSYNVALID_SHIFT	= 7,
-	/* Note: Bit 8 is reserved in X710 and XL710 */
-	IAVF_RX_DESC_STATUS_EXT_UDP_0_SHIFT	= 8,
-	IAVF_RX_DESC_STATUS_UMBCAST_SHIFT	= 9, /* 2 BITS */
-	IAVF_RX_DESC_STATUS_FLM_SHIFT		= 11,
-	IAVF_RX_DESC_STATUS_FLTSTAT_SHIFT	= 12, /* 2 BITS */
-	IAVF_RX_DESC_STATUS_LPBK_SHIFT		= 14,
-	IAVF_RX_DESC_STATUS_IPV6EXADD_SHIFT	= 15,
-	IAVF_RX_DESC_STATUS_RESERVED_SHIFT	= 16, /* 2 BITS */
-	/* Note: For non-tunnel packets INT_UDP_0 is the right status for
-	 * UDP header
-	 */
-	IAVF_RX_DESC_STATUS_INT_UDP_0_SHIFT	= 18,
-	IAVF_RX_DESC_STATUS_LAST /* this entry must be last!!! */
-};
+/* Note: These are predefined bit offsets */
+#define IAVF_RX_DESC_STATUS_DD_MASK		BIT(0)
+#define IAVF_RX_DESC_STATUS_EOF_MASK		BIT(1)
+#define IAVF_RX_DESC_STATUS_L2TAG1P_MASK	BIT(2)
+#define IAVF_RX_DESC_STATUS_L3L4P_MASK		BIT(3)
+#define IAVF_RX_DESC_STATUS_CRCP_MASK		BIT(4)
+#define IAVF_RX_DESC_STATUS_TSYNINDX_MASK	GENMASK_ULL(6, 5)
+#define IAVF_RX_DESC_STATUS_TSYNVALID_MASK	BIT(7)
+/* Note: Bit 8 is reserved in X710 and XL710 */
+#define IAVF_RX_DESC_STATUS_EXT_UDP_0_MASK	BIT(8)
+#define IAVF_RX_DESC_STATUS_UMBCAST_MASK	GENMASK_ULL(10, 9)
+#define IAVF_RX_DESC_STATUS_FLM_MASK		BIT(11)
+#define IAVF_RX_DESC_STATUS_FLTSTAT_MASK	GENMASK_ULL(13, 12)
+#define IAVF_RX_DESC_STATUS_LPBK_MASK		BIT(14)
+#define IAVF_RX_DESC_STATUS_IPV6EXADD_MASK	BIT(15)
+#define IAVF_RX_DESC_STATUS_RESERVED_MASK	GENMASK_ULL(17, 16)
+/* Note: For non-tunnel packets INT_UDP_0 is the right status for
+ * UDP header
+ */
+#define IAVF_RX_DESC_STATUS_INT_UDP_0_MASK	BIT(18)
 
-#define IAVF_RXD_QW1_STATUS_SHIFT	0
-#define IAVF_RXD_QW1_STATUS_MASK	((BIT(IAVF_RX_DESC_STATUS_LAST) - 1) \
-					 << IAVF_RXD_QW1_STATUS_SHIFT)
+#define IAVF_RX_FLEX_DESC_STATUS_ERR0_EOP_BIT	BIT(1)
+#define IAVF_RX_FLEX_DESC_STATUS_ERR0_RXE_BIT	BIT(10)
+
+#define IAVF_RXD_QW1_STATUS_MASK		(BIT(19) - 1)
 
 #define IAVF_RXD_QW1_STATUS_TSYNINDX_SHIFT IAVF_RX_DESC_STATUS_TSYNINDX_SHIFT
 #define IAVF_RXD_QW1_STATUS_TSYNINDX_MASK  (0x3UL << \
@@ -301,18 +339,16 @@ enum iavf_rx_desc_fltstat_values {
 #define IAVF_RXD_QW1_ERROR_SHIFT	19
 #define IAVF_RXD_QW1_ERROR_MASK		(0xFFUL << IAVF_RXD_QW1_ERROR_SHIFT)
 
-enum iavf_rx_desc_error_bits {
-	/* Note: These are predefined bit offsets */
-	IAVF_RX_DESC_ERROR_RXE_SHIFT		= 0,
-	IAVF_RX_DESC_ERROR_RECIPE_SHIFT		= 1,
-	IAVF_RX_DESC_ERROR_HBO_SHIFT		= 2,
-	IAVF_RX_DESC_ERROR_L3L4E_SHIFT		= 3, /* 3 BITS */
-	IAVF_RX_DESC_ERROR_IPE_SHIFT		= 3,
-	IAVF_RX_DESC_ERROR_L4E_SHIFT		= 4,
-	IAVF_RX_DESC_ERROR_EIPE_SHIFT		= 5,
-	IAVF_RX_DESC_ERROR_OVERSIZE_SHIFT	= 6,
-	IAVF_RX_DESC_ERROR_PPRS_SHIFT		= 7
-};
+/* Note: These are predefined bit offsets */
+#define IAVF_RX_DESC_ERROR_RXE_MASK		BIT(0)
+#define IAVF_RX_DESC_ERROR_RECIPE_MASK		BIT(1)
+#define IAVF_RX_DESC_ERROR_HBO_MASK		BIT(2)
+#define IAVF_RX_DESC_ERROR_L3L4E_MASK		GENMASK_ULL(5, 3)
+#define IAVF_RX_DESC_ERROR_IPE_MASK		BIT(3)
+#define IAVF_RX_DESC_ERROR_L4E_MASK		BIT(4)
+#define IAVF_RX_DESC_ERROR_EIPE_MASK		BIT(5)
+#define IAVF_RX_DESC_ERROR_OVERSIZE_MASK	BIT(6)
+#define IAVF_RX_DESC_ERROR_PPRS_MASK		BIT(7)
 
 enum iavf_rx_desc_error_l3l4e_fcoe_masks {
 	IAVF_RX_DESC_ERROR_L3L4E_NONE		= 0,
@@ -324,6 +360,41 @@ enum iavf_rx_desc_error_l3l4e_fcoe_masks {
 
 #define IAVF_RXD_QW1_PTYPE_SHIFT	30
 #define IAVF_RXD_QW1_PTYPE_MASK		(0xFFULL << IAVF_RXD_QW1_PTYPE_SHIFT)
+
+/* for iavf_32byte_rx_flex_wb.ptype_flexi_flags0 member */
+#define IAVF_RX_FLEX_DESC_PTYPE_M      (0x3FF) /* 10-bits */
+
+/* for iavf_32byte_rx_flex_wb.pkt_length member */
+#define IAVF_RX_FLEX_DESC_PKT_LEN_M    (0x3FFF) /* 14-bits */
+
+/* Note: These are predefined bit offsets */
+#define IAVF_RX_FLEX_DESC_STATUS0_DD_M			BIT(0)
+#define IAVF_RX_FLEX_DESC_STATUS0_EOF_M			BIT(1)
+#define IAVF_RX_FLEX_DESC_STATUS0_HBO_M			BIT(2)
+#define IAVF_RX_FLEX_DESC_STATUS0_L3L4P_M		BIT(3)
+#define IAVF_RX_FLEX_DESC_STATUS0_XSUM_IPE_M		BIT(4)
+#define IAVF_RX_FLEX_DESC_STATUS0_XSUM_L4E_M		BIT(5)
+#define IAVF_RX_FLEX_DESC_STATUS0_XSUM_EIPE_M		BIT(6)
+#define IAVF_RX_FLEX_DESC_STATUS0_XSUM_EUDPE_M		BIT(7)
+#define IAVF_RX_FLEX_DESC_STATUS0_LPBK_M		BIT(8)
+#define IAVF_RX_FLEX_DESC_STATUS0_IPV6EXADD_M		BIT(9)
+#define IAVF_RX_FLEX_DESC_STATUS0_RXE_M			BIT(10)
+#define IAVF_RX_FLEX_DESC_STATUS0_CRCP_			BIT(11)
+#define IAVF_RX_FLEX_DESC_STATUS0_RSS_VALID_M		BIT(12)
+#define IAVF_RX_FLEX_DESC_STATUS0_L2TAG1P_M		BIT(13)
+#define IAVF_RX_FLEX_DESC_STATUS0_XTRMD0_VALID_M	BIT(14)
+#define IAVF_RX_FLEX_DESC_STATUS0_XTRMD1_VALID_M	BIT(15)
+
+/* Note: These are predefined bit offsets */
+#define IAVF_RX_FLEX_DESC_STATUS1_CPM_M			(0xFULL) /* 4 bits */
+#define IAVF_RX_FLEX_DESC_STATUS1_NAT_M			BIT(4)
+#define IAVF_RX_FLEX_DESC_STATUS1_CRYPTO_M		BIT(5)
+/* [10:6] reserved */
+#define IAVF_RX_FLEX_DESC_STATUS1_L2TAG2P_M		BIT(11)
+#define IAVF_RX_FLEX_DESC_STATUS1_XTRMD2_VALID_M	BIT(12)
+#define IAVF_RX_FLEX_DESC_STATUS1_XTRMD3_VALID_M	BIT(13)
+#define IAVF_RX_FLEX_DESC_STATUS1_XTRMD4_VALID_M	BIT(14)
+#define IAVF_RX_FLEX_DESC_STATUS1_XTRMD5_VALID_M	BIT(15)
 
 #define IAVF_RXD_QW1_LENGTH_PBUF_SHIFT	38
 #define IAVF_RXD_QW1_LENGTH_PBUF_MASK	(0x3FFFULL << \
