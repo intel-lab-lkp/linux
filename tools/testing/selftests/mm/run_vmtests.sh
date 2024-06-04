@@ -75,6 +75,8 @@ separated by spaces:
 	read-only VMAs
 - mdwe
 	test prctl(PR_SET_MDWE, ...)
+- workingset_report
+	test workingset reporting
 
 example: ./run_vmtests.sh -t "hmm mmap ksm"
 EOF
@@ -445,6 +447,9 @@ CATEGORY="migration" run_test ./migration
 CATEGORY="mkdirty" run_test ./mkdirty
 
 CATEGORY="mdwe" run_test ./mdwe_test
+
+CATEGORY="workingset_report" run_test ./workingset_report_test \
+  "${WORKINGSET_REPORT_TEST_FILE_PATH}"
 
 echo "SUMMARY: PASS=${count_pass} SKIP=${count_skip} FAIL=${count_fail}" | tap_prefix
 echo "1..${count_total}" | tap_output
