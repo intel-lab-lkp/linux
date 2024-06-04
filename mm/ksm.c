@@ -2195,15 +2195,14 @@ again:
  */
 static
 struct ksm_rmap_item *unstable_tree_search_insert(struct ksm_rmap_item *rmap_item,
-					      struct page *page,
-					      struct page **tree_pagep)
+						  struct folio *folio, struct folio **tree_foliop)
 {
 	struct rb_node **new;
 	struct rb_root *root;
 	struct rb_node *parent = NULL;
 	int nid;
 
-	nid = get_kpfn_nid(page_to_pfn(page));
+	nid = get_kpfn_nid(folio_pfn(folio));
 	root = root_unstable_tree + nid;
 	new = &root->rb_node;
 
@@ -2221,12 +2220,12 @@ struct ksm_rmap_item *unstable_tree_search_insert(struct ksm_rmap_item *rmap_ite
 		/*
 		 * Don't substitute a ksm page for a forked page.
 		 */
-		if (page == tree_page) {
+		if (folio == page_folio(tree_page)) {
 			put_page(tree_page);
 			return NULL;
 		}
 
-		ret = memcmp_pages(page, tree_page);
+		ret = memcmp_pages(folio_page(folio, 0), tree_page);
 
 		parent = *new;
 		if (ret < 0) {
@@ -2245,7 +2244,7 @@ struct ksm_rmap_item *unstable_tree_search_insert(struct ksm_rmap_item *rmap_ite
 			put_page(tree_page);
 			return NULL;
 		} else {
-			*tree_pagep = tree_page;
+			*tree_foliop = page_folio(tree_page);
 			return tree_rmap_item;
 		}
 	}
@@ -2313,6 +2312,7 @@ static void cmp_and_merge_page(struct page *page, struct ksm_rmap_item *rmap_ite
 	struct mm_struct *mm = rmap_item->mm;
 	struct ksm_rmap_item *tree_rmap_item;
 	struct page *tree_page = NULL;
+	struct folio *tree_folio = NULL;
 	struct ksm_stable_node *stable_node;
 	struct page *kpage;
 	unsigned int checksum;
@@ -2412,7 +2412,7 @@ static void cmp_and_merge_page(struct page *page, struct ksm_rmap_item *rmap_ite
 			return;
 	}
 	tree_rmap_item =
-		unstable_tree_search_insert(rmap_item, page, &tree_page);
+		unstable_tree_search_insert(rmap_item, folio, &tree_folio);
 	if (tree_rmap_item) {
 		bool split;
 
