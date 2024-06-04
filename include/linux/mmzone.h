@@ -24,6 +24,7 @@
 #include <linux/local_lock.h>
 #include <linux/zswap.h>
 #include <asm/page.h>
+#include <linux/workingset_report.h>
 
 /* Free memory management - zoned buddy allocator.  */
 #ifndef CONFIG_ARCH_FORCE_MAX_ORDER
@@ -631,6 +632,9 @@ struct lruvec {
 	struct lru_gen_mm_state		mm_state;
 #endif
 #endif /* CONFIG_LRU_GEN */
+#ifdef CONFIG_WORKINGSET_REPORT
+	struct wsr_state	wsr;
+#endif /* CONFIG_WORKINGSET_REPORT */
 #ifdef CONFIG_MEMCG
 	struct pglist_data *pgdat;
 #endif
@@ -1402,6 +1406,11 @@ typedef struct pglist_data {
 	struct lru_gen_mm_walk mm_walk;
 	/* lru_gen_folio list */
 	struct lru_gen_memcg memcg_lru;
+#endif
+
+#ifdef CONFIG_WORKINGSET_REPORT
+	struct mutex wsr_update_mutex;
+	struct wsr_report_bins __rcu *wsr_page_age_bins;
 #endif
 
 	CACHELINE_PADDING(_pad2_);

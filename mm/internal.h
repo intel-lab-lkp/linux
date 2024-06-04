@@ -389,11 +389,15 @@ extern unsigned long highest_memmap_pfn;
 /*
  * in mm/vmscan.c:
  */
+struct scan_control;
 bool isolate_lru_page(struct page *page);
 bool folio_isolate_lru(struct folio *folio);
 void putback_lru_page(struct page *page);
 void folio_putback_lru(struct folio *folio);
 extern void reclaim_throttle(pg_data_t *pgdat, enum vmscan_throttle_state reason);
+bool try_to_inc_max_seq(struct lruvec *lruvec, unsigned long seq, bool can_swap,
+			bool force_scan);
+void set_task_reclaim_state(struct task_struct *task, struct reclaim_state *rs);
 
 /*
  * in mm/rmap.c:

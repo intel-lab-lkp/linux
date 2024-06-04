@@ -90,6 +90,8 @@ void lruvec_init(struct lruvec *lruvec)
 	 */
 	list_del(&lruvec->lists[LRU_UNEVICTABLE]);
 
+	wsr_init_lruvec(lruvec);
+
 	lru_gen_init_lruvec(lruvec);
 }
 

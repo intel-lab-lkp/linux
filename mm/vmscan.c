@@ -56,6 +56,7 @@
 #include <linux/khugepaged.h>
 #include <linux/rculist_nulls.h>
 #include <linux/random.h>
+#include <linux/workingset_report.h>
 
 #include <asm/tlbflush.h>
 #include <asm/div64.h>
@@ -250,8 +251,7 @@ static bool writeback_throttling_sane(struct scan_control *sc)
 }
 #endif
 
-static void set_task_reclaim_state(struct task_struct *task,
-				   struct reclaim_state *rs)
+void set_task_reclaim_state(struct task_struct *task, struct reclaim_state *rs)
 {
 	/* Check for an overwrite */
 	WARN_ON_ONCE(rs && task->reclaim_state);
@@ -3842,8 +3842,8 @@ unlock:
 	return success;
 }
 
-static bool try_to_inc_max_seq(struct lruvec *lruvec, unsigned long seq,
-			       bool can_swap, bool force_scan)
+bool try_to_inc_max_seq(struct lruvec *lruvec, unsigned long seq, bool can_swap,
+			bool force_scan)
 {
 	bool success;
 	struct lru_gen_mm_walk *walk;
@@ -5627,6 +5627,8 @@ static int __init init_lru_gen(void)
 
 	if (sysfs_create_group(mm_kobj, &lru_gen_attr_group))
 		pr_err("lru_gen: failed to create sysfs group\n");
+
+	wsr_init_sysfs(NULL);
 
 	debugfs_create_file("lru_gen", 0644, NULL, NULL, &lru_gen_rw_fops);
 	debugfs_create_file("lru_gen_full", 0444, NULL, NULL, &lru_gen_ro_fops);

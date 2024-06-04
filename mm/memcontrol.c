@@ -66,6 +66,7 @@
 #include <linux/seq_buf.h>
 #include <linux/sched/isolation.h>
 #include <linux/kmemleak.h>
+#include <linux/workingset_report.h>
 #include "internal.h"
 #include <net/sock.h>
 #include <net/ip.h>
@@ -5671,6 +5672,7 @@ static void free_mem_cgroup_per_node_info(struct mem_cgroup *memcg, int node)
 	if (!pn)
 		return;
 
+	wsr_destroy_lruvec(&pn->lruvec);
 	free_percpu(pn->lruvec_stats_percpu);
 	kfree(pn->lruvec_stats);
 	kfree(pn);
