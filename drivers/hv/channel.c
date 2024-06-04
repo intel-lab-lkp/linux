@@ -638,6 +638,7 @@ static int __vmbus_open(struct vmbus_channel *newchannel,
 	struct vmbus_channel_open_channel *open_msg;
 	struct vmbus_channel_msginfo *open_info = NULL;
 	struct page *page = newchannel->ringbuffer_page;
+	u32 relid = newchannel->offermsg.child_relid;
 	u32 send_pages, recv_pages;
 	unsigned long flags;
 	int err;
@@ -685,13 +686,31 @@ static int __vmbus_open(struct vmbus_channel *newchannel,
 	if (err)
 		goto error_free_gpadl;
 
+	/* Request the IRQ and assign to target_cpu */
+	err = request_irq(newchannel->irq, vmbus_chan_handler, 0,
+			  newchannel->irq_name, newchannel);
+	if (err) {
+		pr_err("request_irq failed with %d for relid %d irq %d\n",
+				err, relid, newchannel->irq);
+		goto error_free_gpadl;
+	}
+	err = irq_set_affinity_and_hint(newchannel->irq,
+				  cpumask_of(newchannel->target_cpu));
+	if (err) {
+		pr_err("irq_set_affinity_and_hint failed with %d for relid %d irq %d\n",
+				err, relid, newchannel->irq);
+		free_irq(newchannel->irq, newchannel);
+		goto error_free_gpadl;
+	}
+	newchannel->irq_requested = true;
+
 	/* Create and init the channel open message */
 	open_info = kzalloc(sizeof(*open_info) +
 			   sizeof(struct vmbus_channel_open_channel),
 			   GFP_KERNEL);
 	if (!open_info) {
 		err = -ENOMEM;
-		goto error_free_gpadl;
+		goto error_free_irq;
 	}
 
 	init_completion(&open_info->waitevent);
@@ -759,6 +778,10 @@ error_clean_msglist:
 	spin_unlock_irqrestore(&vmbus_connection.channelmsg_lock, flags);
 error_free_info:
 	kfree(open_info);
+error_free_irq:
+	irq_update_affinity_hint(newchannel->irq, NULL);
+	free_irq(newchannel->irq, newchannel);
+	newchannel->irq_requested = false;
 error_free_gpadl:
 	vmbus_teardown_gpadl(newchannel, &newchannel->ringbuffer_gpadlhandle);
 error_clean_ring:

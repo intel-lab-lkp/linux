@@ -178,7 +178,7 @@ static inline void vmbus_signal_eom(struct hv_message *msg, u32 old_msg_type)
 
 int hv_get_hypervisor_version(union hv_hypervisor_version_info *info);
 
-void hv_setup_vmbus_handler(void (*handler)(void));
+void hv_setup_vmbus_handler(bool (*handler)(void));
 void hv_remove_vmbus_handler(void);
 void hv_setup_stimer0_handler(void (*handler)(void));
 void hv_remove_stimer0_handler(void);
@@ -188,6 +188,7 @@ void hv_remove_kexec_handler(void);
 void hv_setup_crash_handler(void (*handler)(struct pt_regs *regs));
 void hv_remove_crash_handler(void);
 
+extern irqreturn_t vmbus_chan_handler(int irq, void *dev_id);
 extern void vmbus_irq_mask(struct irq_data *data);
 extern void vmbus_irq_unmask(struct irq_data *data);
 extern int vmbus_irq_set_affinity(struct irq_data *data,

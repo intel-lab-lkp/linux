@@ -1193,6 +1193,45 @@ static void vmbus_force_channel_rescinded(struct vmbus_channel *channel)
 }
 #endif /* CONFIG_PM_SLEEP */
 
+irqreturn_t vmbus_chan_handler(int irq, void *dev_id)
+{
+	void (*callback_fn)(void *context);
+	struct vmbus_channel *channel = dev_id;
+
+	/*
+	 * Make sure that the ring buffer data structure doesn't get
+	 * freed while we dereference the ring buffer pointer.  Test
+	 * for the channel's onchannel_callback being NULL within a
+	 * sched_lock critical section.  See also the inline comments
+	 * in vmbus_reset_channel_cb().
+	 */
+	spin_lock(&channel->sched_lock);
+
+	callback_fn = channel->onchannel_callback;
+	if (unlikely(callback_fn == NULL))
+		goto spin_unlock;
+
+	trace_vmbus_chan_sched(channel);
+
+	++channel->interrupts;
+
+	switch (channel->callback_mode) {
+	case HV_CALL_ISR:
+		(*callback_fn)(channel->channel_callback_context);
+		break;
+
+	case HV_CALL_BATCHED:
+		hv_begin_read(&channel->inbound);
+		fallthrough;
+	case HV_CALL_DIRECT:
+		tasklet_schedule(&channel->callback_event);
+	}
+
+spin_unlock:
+	spin_unlock(&channel->sched_lock);
+	return IRQ_HANDLED;
+}
+
 /*
  * Schedule all channels with events pending
  */
@@ -1217,7 +1256,6 @@ static void vmbus_chan_sched(struct hv_per_cpu_context *hv_cpu)
 		return;
 
 	for_each_set_bit(relid, recv_int_page, maxbits) {
-		void (*callback_fn)(void *context);
 		struct vmbus_channel *channel;
 		struct irq_desc *desc;
 
@@ -1244,43 +1282,14 @@ static void vmbus_chan_sched(struct hv_per_cpu_context *hv_cpu)
 		if (channel->rescind)
 			goto sched_unlock_rcu;
 
-		/*
-		 * Make sure that the ring buffer data structure doesn't get
-		 * freed while we dereference the ring buffer pointer.  Test
-		 * for the channel's onchannel_callback being NULL within a
-		 * sched_lock critical section.  See also the inline comments
-		 * in vmbus_reset_channel_cb().
-		 */
-		spin_lock(&channel->sched_lock);
+		generic_handle_irq_desc(desc);
 
-		callback_fn = channel->onchannel_callback;
-		if (unlikely(callback_fn == NULL))
-			goto sched_unlock;
-
-		trace_vmbus_chan_sched(channel);
-
-		++channel->interrupts;
-
-		switch (channel->callback_mode) {
-		case HV_CALL_ISR:
-			(*callback_fn)(channel->channel_callback_context);
-			break;
-
-		case HV_CALL_BATCHED:
-			hv_begin_read(&channel->inbound);
-			fallthrough;
-		case HV_CALL_DIRECT:
-			tasklet_schedule(&channel->callback_event);
-		}
-
-sched_unlock:
-		spin_unlock(&channel->sched_lock);
 sched_unlock_rcu:
 		rcu_read_unlock();
 	}
 }
 
-static void vmbus_isr(void)
+static bool vmbus_isr(void)
 {
 	struct hv_per_cpu_context *hv_cpu
 		= this_cpu_ptr(hv_context.cpu_context);
@@ -1299,15 +1308,18 @@ static void vmbus_isr(void)
 			vmbus_signal_eom(msg, HVMSG_TIMER_EXPIRED);
 		} else
 			tasklet_schedule(&hv_cpu->msg_dpc);
-	}
 
-	add_interrupt_randomness(vmbus_interrupt);
+		add_interrupt_randomness(vmbus_interrupt);
+		return true;
+	}
+	return false;
 }
 
 static irqreturn_t vmbus_percpu_isr(int irq, void *dev_id)
 {
-	vmbus_isr();
-	return IRQ_HANDLED;
+	if (vmbus_isr())
+		return IRQ_HANDLED;
+	return IRQ_NONE;
 }
 
 int vmbus_irq_set_affinity(struct irq_data *data,

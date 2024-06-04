@@ -610,7 +610,7 @@ bool __weak hv_isolation_type_tdx(void)
 }
 EXPORT_SYMBOL_GPL(hv_isolation_type_tdx);
 
-void __weak hv_setup_vmbus_handler(void (*handler)(void))
+void __weak hv_setup_vmbus_handler(bool (*handler)(void))
 {
 }
 EXPORT_SYMBOL_GPL(hv_setup_vmbus_handler);
