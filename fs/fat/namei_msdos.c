@@ -524,7 +524,7 @@ static int do_msdos_rename(struct inode *old_dir, unsigned char *old_name,
 
 	if (update_dotdot) {
 		fat_set_start(dotdot_de, MSDOS_I(new_dir)->i_logstart);
-		mark_buffer_dirty_inode(dotdot_bh, old_inode);
+		mark_buffer_dirty_fsync(dotdot_bh, old_inode->i_mapping);
 		if (IS_DIRSYNC(new_dir)) {
 			err = sync_dirty_buffer(dotdot_bh);
 			if (err)
@@ -564,7 +564,7 @@ error_dotdot:
 
 	if (update_dotdot) {
 		fat_set_start(dotdot_de, MSDOS_I(old_dir)->i_logstart);
-		mark_buffer_dirty_inode(dotdot_bh, old_inode);
+		mark_buffer_dirty_fsync(dotdot_bh, old_inode->i_mapping);
 		corrupt |= sync_dirty_buffer(dotdot_bh);
 	}
 error_inode:

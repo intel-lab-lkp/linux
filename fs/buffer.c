@@ -118,7 +118,7 @@ void buffer_check_dirty_writeback(struct folio *folio,
  * from becoming locked again - you have to lock it yourself
  * if you want to preserve its state.
  */
-void __wait_on_buffer(struct buffer_head * bh)
+void __wait_on_buffer(struct buffer_head *bh)
 {
 	wait_on_bit_io(&bh->b_state, BH_Lock, TASK_UNINTERRUPTIBLE);
 }
@@ -471,7 +471,7 @@ EXPORT_SYMBOL(mark_buffer_async_write);
  * try_to_free_buffers() will be operating against the *blockdev* mapping
  * at the time, not against the S_ISREG file which depends on those buffers.
  * So the locking for i_private_list is via the i_private_lock in the address_space
- * which backs the buffers.  Which is different from the address_space 
+ * which backs the buffers.  Which is different from the address_space
  * against which the buffers are listed.  So for a particular address_space,
  * mapping->i_private_lock does *not* protect mapping->i_private_list!  In fact,
  * mapping->i_private_list will always be protected by the backing blockdev's
@@ -664,26 +664,27 @@ void write_boundary_block(struct block_device *bdev,
 	}
 }
 
-void mark_buffer_dirty_inode(struct buffer_head *bh, struct inode *inode)
+void mark_buffer_dirty_fsync(struct buffer_head *bh, struct address_space *mapping)
 {
-	struct address_space *mapping = inode->i_mapping;
 	struct address_space *buffer_mapping = bh->b_folio->mapping;
 
 	mark_buffer_dirty(bh);
+
+	if (bh->b_assoc_map)
+        return;
+
 	if (!mapping->i_private_data) {
-		mapping->i_private_data = buffer_mapping;
-	} else {
-		BUG_ON(mapping->i_private_data != buffer_mapping);
-	}
-	if (!bh->b_assoc_map) {
-		spin_lock(&buffer_mapping->i_private_lock);
-		list_move_tail(&bh->b_assoc_buffers,
-				&mapping->i_private_list);
-		bh->b_assoc_map = mapping;
-		spin_unlock(&buffer_mapping->i_private_lock);
-	}
+    	mapping->i_private_data = buffer_mapping;
+    } else {
+        BUG_ON(mapping->i_private_data != buffer_mapping);
+    }
+
+    spin_lock(&buffer_mapping->i_private_lock);
+    list_move_tail(&bh->b_assoc_buffers, &mapping->i_private_list);
+    bh->b_assoc_map = mapping;
+    spin_unlock(&buffer_mapping->i_private_lock);
 }
-EXPORT_SYMBOL(mark_buffer_dirty_inode);
+EXPORT_SYMBOL(mark_buffer_dirty_fsync);
 
 /**
  * block_dirty_folio - Mark a folio as dirty.
@@ -841,7 +842,6 @@ static int fsync_buffers_list(spinlock_t *lock, struct list_head *list)
 		brelse(bh);
 		spin_lock(lock);
 	}
-	
 	spin_unlock(lock);
 	err2 = osync_buffers_list(lock, list);
 	if (err)
@@ -2152,7 +2152,7 @@ int __block_write_begin_int(struct folio *folio, loff_t pos, unsigned len,
 		    !buffer_unwritten(bh) &&
 		     (block_start < from || block_end > to)) {
 			bh_read_nowait(bh, 0);
-			*wait_bh++=bh;
+			*wait_bh++ = bh;
 		}
 	}
 	/*

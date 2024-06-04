@@ -16,7 +16,7 @@ enum {DIRECT = 10, DEPTH = 4};	/* Have triple indirect */
 
 static inline void dirty_indirect(struct buffer_head *bh, struct inode *inode)
 {
-	mark_buffer_dirty_inode(bh, inode);
+	mark_buffer_dirty_fsync(bh, inode->i_mapping);
 	if (IS_SYNC(inode))
 		sync_dirty_buffer(bh);
 }

@@ -165,6 +165,8 @@ bad_inode:
 int
 affs_write_inode(struct inode *inode, struct writeback_control *wbc)
 {
+	
+	struct address_space *mapping = inode->i_mapping;
 	struct super_block	*sb = inode->i_sb;
 	struct buffer_head	*bh;
 	struct affs_tail	*tail;
@@ -206,7 +208,7 @@ affs_write_inode(struct inode *inode, struct writeback_control *wbc)
 		}
 	}
 	affs_fix_checksum(sb, bh);
-	mark_buffer_dirty_inode(bh, inode);
+	mark_buffer_dirty_fsync(bh, mapping);
 	affs_brelse(bh);
 	affs_free_prealloc(inode);
 	return 0;
@@ -289,7 +291,8 @@ affs_evict_inode(struct inode *inode)
 
 struct inode *
 affs_new_inode(struct inode *dir)
-{
+{	
+	struct address_space *mapping = dir->i_mapping;
 	struct super_block	*sb = dir->i_sb;
 	struct inode		*inode;
 	u32			 block;
@@ -304,7 +307,7 @@ affs_new_inode(struct inode *dir)
 	bh = affs_getzeroblk(sb, block);
 	if (!bh)
 		goto err_bh;
-	mark_buffer_dirty_inode(bh, inode);
+	mark_buffer_dirty_fsync(bh, mapping);
 	affs_brelse(bh);
 
 	inode->i_uid     = current_fsuid();
@@ -347,6 +350,7 @@ err_inode:
 int
 affs_add_entry(struct inode *dir, struct inode *inode, struct dentry *dentry, s32 type)
 {
+	struct address_space *mapping = inode->i_mapping;
 	struct super_block *sb = dir->i_sb;
 	struct buffer_head *inode_bh = NULL;
 	struct buffer_head *bh;
@@ -392,17 +396,17 @@ affs_add_entry(struct inode *dir, struct inode *inode, struct dentry *dentry, s3
 		AFFS_TAIL(sb, bh)->link_chain = chain;
 		AFFS_TAIL(sb, inode_bh)->link_chain = cpu_to_be32(block);
 		affs_adjust_checksum(inode_bh, block - be32_to_cpu(chain));
-		mark_buffer_dirty_inode(inode_bh, inode);
+		mark_buffer_dirty_fsync(inode_bh, mapping);
 		set_nlink(inode, 2);
 		ihold(inode);
 	}
 	affs_fix_checksum(sb, bh);
-	mark_buffer_dirty_inode(bh, inode);
+	mark_buffer_dirty_fsync(bh, mapping);
 	dentry->d_fsdata = (void *)(long)bh->b_blocknr;
 
 	affs_lock_dir(dir);
 	retval = affs_insert_hash(dir, bh);
-	mark_buffer_dirty_inode(bh, inode);
+	mark_buffer_dirty_fsync(bh, mapping);
 	affs_unlock_dir(dir);
 	affs_unlock_link(inode);
 
