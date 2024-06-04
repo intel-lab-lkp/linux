@@ -158,6 +158,12 @@ config CROS_KBD_LED_BACKLIGHT
 	  To compile this driver as a module, choose M here: the
 	  module will be called cros_kbd_led_backlight.
 
+config CROS_KBD_V30
+	bool "ChromeOS built-in keyboard version 3.0"
+	default n
+	help
+	  If you say Y here, you get support for built-in keyboard ver 3.0.
+
 config CROS_EC_CHARDEV
 	tristate "ChromeOS EC miscdevice"
 	depends on MFD_CROS_EC_DEV
