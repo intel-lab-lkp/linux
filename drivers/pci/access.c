@@ -319,6 +319,8 @@ bool pci_cfg_access_trylock(struct pci_dev *dev)
 		dev->block_cfg_access = 1;
 	raw_spin_unlock_irqrestore(&pci_lock, flags);
 
+	if (locked)
+		lock_map_acquire(&dev->cfg_access_lock);
 	return locked;
 }
 EXPORT_SYMBOL_GPL(pci_cfg_access_trylock);
