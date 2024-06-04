@@ -753,6 +753,11 @@
 &i2c5 {
 	status = "okay";
 
+	power-monitor@3a {
+		compatible = "maxim,max5970";
+		reg = <0x3a>;
+	};
+
 	regulator@42 {
 		compatible = "infineon,ir38263";
 		reg = <0x42>;
@@ -1138,7 +1143,7 @@
 			reg = <6>;
 
 			temperature-sensor@4c {
-				compatible = "ti,tmp423";
+				compatible = "ti,tmp432";
 				reg = <0x4c>;
 			};
 		};
@@ -1599,7 +1604,7 @@
 			reg = <6>;
 
 			temperature-sensor@4c {
-				compatible = "ti,tmp423";
+				compatible = "ti,tmp432";
 				reg = <0x4c>;
 			};
 		};
@@ -1615,7 +1620,7 @@
 			};
 
 			temperature-sensor@4c {
-				compatible = "ti,tmp423";
+				compatible = "ti,tmp432";
 				reg = <0x4c>;
 			};
 		};
