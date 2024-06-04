@@ -1242,15 +1242,15 @@ int amdgpu_vm_bo_update(struct amdgpu_device *adev, struct amdgpu_bo_va *bo_va,
 			return r;
 	}
 
-	/* If the BO is not in its preferred location add it back to
-	 * the evicted list so that it gets validated again on the
-	 * next command submission.
-	 */
 	if (bo && bo->tbo.base.resv == vm->root.bo->tbo.base.resv) {
-		uint32_t mem_type = bo->tbo.resource->mem_type;
-
-		if (!(bo->preferred_domains &
-		      amdgpu_mem_type_to_domain(mem_type)))
+		/*
+		 * If the preferred location is VRAM but we placed it into GTT
+		 * add it back to the evicted list so that it gets validated
+		 * again on the next command submission.
+		 */
+		if (!(adev->flags & AMD_IS_APU) &&
+		    bo->preferred_domains & AMDGPU_GEM_DOMAIN_VRAM &&
+		    bo->tbo.resource->mem_type != TTM_PL_VRAM)
 			amdgpu_vm_bo_evicted(&bo_va->base);
 		else
 			amdgpu_vm_bo_idle(&bo_va->base);
