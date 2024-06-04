@@ -2297,7 +2297,7 @@
 
 /* Pipe B */
 #define _PIPEBDSL(dev_priv)		(DISPLAY_MMIO_BASE(dev_priv) + 0x71000)
-#define _TRANSBCONF		(DISPLAY_MMIO_BASE(dev_priv) + 0x71008)
+#define _TRANSBCONF(dev_priv)		(DISPLAY_MMIO_BASE(dev_priv) + 0x71008)
 #define _PIPEBSTAT		(DISPLAY_MMIO_BASE(dev_priv) + 0x71024)
 #define _PIPEBFRAMEHIGH		0x71040
 #define _PIPEBFRAMEPIXEL	0x71044
