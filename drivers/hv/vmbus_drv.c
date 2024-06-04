@@ -1219,6 +1219,7 @@ static void vmbus_chan_sched(struct hv_per_cpu_context *hv_cpu)
 	for_each_set_bit(relid, recv_int_page, maxbits) {
 		void (*callback_fn)(void *context);
 		struct vmbus_channel *channel;
+		struct irq_desc *desc;
 
 		if (!sync_test_and_clear_bit(relid, recv_int_page))
 			continue;
@@ -1236,7 +1237,7 @@ static void vmbus_chan_sched(struct hv_per_cpu_context *hv_cpu)
 		rcu_read_lock();
 
 		/* Find channel based on relid */
-		channel = relid2channel(relid);
+		channel = relid2channel(relid, &desc);
 		if (channel == NULL)
 			goto sched_unlock_rcu;
 
@@ -2466,10 +2467,10 @@ static int vmbus_bus_suspend(struct device *dev)
 
 	list_for_each_entry(channel, &vmbus_connection.chn_list, listentry) {
 		/*
-		 * Remove the channel from the array of channels and invalidate
+		 * Remove the channel from the IRQ map and invalidate
 		 * the channel's relid.  Upon resume, vmbus_onoffer() will fix
 		 * up the relid (and other fields, if necessary) and add the
-		 * channel back to the array.
+		 * channel back to the IRQ map.
 		 */
 		vmbus_channel_unmap_relid(channel);
 		channel->offermsg.child_relid = INVALID_RELID;
@@ -2748,7 +2749,6 @@ static void __exit vmbus_exit(void)
 	vmbus_free_channels();
 	irq_domain_remove(vmbus_connection.vmbus_irq_domain);
 	irq_domain_free_fwnode(vmbus_connection.vmbus_fwnode);
-	kfree(vmbus_connection.channels);
 
 	/*
 	 * The vmbus panic notifier is always registered, hence we should

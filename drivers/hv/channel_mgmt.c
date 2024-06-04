@@ -10,6 +10,9 @@
 
 #include <linux/kernel.h>
 #include <linux/interrupt.h>
+#include <linux/irq.h>
+#include <linux/irqdesc.h>
+#include <linux/irqdomain.h>
 #include <linux/sched.h>
 #include <linux/wait.h>
 #include <linux/mm.h>
@@ -410,7 +413,10 @@ static void free_channel(struct vmbus_channel *channel)
 
 void vmbus_channel_map_relid(struct vmbus_channel *channel)
 {
-	if (WARN_ON(channel->offermsg.child_relid >= MAX_CHANNEL_RELIDS))
+	int res;
+	u32 relid = channel->offermsg.child_relid;
+
+	if (WARN_ON(relid >= MAX_CHANNEL_RELIDS))
 		return;
 	/*
 	 * The mapping of the channel's relid is visible from the CPUs that
@@ -437,18 +443,33 @@ void vmbus_channel_map_relid(struct vmbus_channel *channel)
 	 *      of the VMBus driver and vmbus_chan_sched() can not run before
 	 *      vmbus_bus_resume() has completed execution (cf. resume_noirq).
 	 */
-	virt_store_mb(
-		vmbus_connection.channels[channel->offermsg.child_relid],
-		channel);
+
+	channel->irq = irq_create_mapping(vmbus_connection.vmbus_irq_domain, relid);
+	if (!channel->irq) {
+		pr_err("irq_create_mapping failed for relid %d\n", relid);
+		return;
+	}
+
+	res = irq_set_handler_data(channel->irq, channel);
+	if (res) {
+		irq_dispose_mapping(channel->irq);
+		channel->irq = 0;
+		pr_err("irq_set_handler_data failed with %d for relid %d\n",
+				res, relid);
+		return;
+	}
+
+	irq_set_status_flags(channel->irq, IRQ_MOVE_PCNTXT);
 }
 
 void vmbus_channel_unmap_relid(struct vmbus_channel *channel)
 {
-	if (WARN_ON(channel->offermsg.child_relid >= MAX_CHANNEL_RELIDS))
-		return;
-	WRITE_ONCE(
-		vmbus_connection.channels[channel->offermsg.child_relid],
-		NULL);
+	if (channel->irq_requested) {
+		irq_update_affinity_hint(channel->irq, NULL);
+		free_irq(channel->irq, channel);
+	}
+	channel->irq_requested = false;
+	irq_dispose_mapping(channel->irq);
 }
 
 static void vmbus_release_relid(u32 relid)
@@ -478,10 +499,10 @@ void hv_process_channel_removal(struct vmbus_channel *channel)
 		!is_hvsock_channel(channel));
 
 	/*
-	 * Upon suspend, an in-use hv_sock channel is removed from the array of
-	 * channels and the relid is invalidated.  After hibernation, when the
+	 * Upon suspend, an in-use hv_sock channel is removed from the IRQ
+	 * map and the relid is invalidated. After hibernation, when the
 	 * user-space application destroys the channel, it's unnecessary and
-	 * unsafe to remove the channel from the array of channels.  See also
+	 * unsafe to remove the channel from the IRQ map. See also
 	 * the inline comments before the call of vmbus_release_relid() below.
 	 */
 	if (channel->offermsg.child_relid != INVALID_RELID)
@@ -532,6 +553,9 @@ static void vmbus_add_channel_work(struct work_struct *work)
 		container_of(work, struct vmbus_channel, add_channel_work);
 	struct vmbus_channel *primary_channel = newchannel->primary_channel;
 	int ret;
+
+	if (!newchannel->irq)
+		goto err_deq_chan;
 
 	/*
 	 * This state is used to indicate a successful open
@@ -1144,7 +1168,7 @@ static void vmbus_onoffer(struct vmbus_channel_message_header *hdr)
 			vmbus_setup_channel_state(oldchannel, offer);
 		}
 
-		/* Add the channel back to the array of channels. */
+		/* Re-establish the channel's IRQ mapping using the new relid */
 		vmbus_channel_map_relid(oldchannel);
 		check_ready_for_resume_event();
 
@@ -1225,7 +1249,7 @@ static void vmbus_onoffer_rescind(struct vmbus_channel_message_header *hdr)
 	}
 
 	mutex_lock(&vmbus_connection.channel_mutex);
-	channel = relid2channel(rescind->child_relid);
+	channel = relid2channel(rescind->child_relid, NULL);
 	if (channel != NULL) {
 		/*
 		 * Guarantee that no other instance of vmbus_onoffer_rescind()

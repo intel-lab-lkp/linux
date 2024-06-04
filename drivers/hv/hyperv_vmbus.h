@@ -259,9 +259,6 @@ struct vmbus_connection {
 	struct list_head chn_list;
 	struct mutex channel_mutex;
 
-	/* Array of channels */
-	struct vmbus_channel **channels;
-
 	/* IRQ domain data */
 	struct fwnode_handle *vmbus_fwnode;
 	struct irq_domain *vmbus_irq_domain;
@@ -364,7 +361,7 @@ void vmbus_remove_channel_attr_group(struct vmbus_channel *channel);
 void vmbus_channel_map_relid(struct vmbus_channel *channel);
 void vmbus_channel_unmap_relid(struct vmbus_channel *channel);
 
-struct vmbus_channel *relid2channel(u32 relid);
+struct vmbus_channel *relid2channel(u32 relid, struct irq_desc **desc);
 
 void vmbus_free_channels(void);
 

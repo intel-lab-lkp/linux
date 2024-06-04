@@ -1072,6 +1072,9 @@ struct vmbus_channel {
 	/* The max size of a packet on this channel */
 	u32 max_pkt_size;
 
+	/* The Linux IRQ for the channel in the "hv-vmbus" IRQ domain */
+	u32 irq;
+	bool irq_requested;
 	char irq_name[VMBUS_CHAN_IRQ_NAME_MAX];
 };
 

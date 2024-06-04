@@ -308,14 +308,6 @@ int vmbus_connect(void)
 	pr_info("Vmbus version:%d.%d\n",
 		version >> 16, version & 0xFFFF);
 
-	vmbus_connection.channels = kcalloc(MAX_CHANNEL_RELIDS,
-					    sizeof(struct vmbus_channel *),
-					    GFP_KERNEL);
-	if (vmbus_connection.channels == NULL) {
-		ret = -ENOMEM;
-		goto cleanup;
-	}
-
 	kfree(msginfo);
 	return 0;
 
@@ -373,15 +365,16 @@ void vmbus_disconnect(void)
  * relid2channel - Get the channel object given its
  * child relative id (ie channel id)
  */
-struct vmbus_channel *relid2channel(u32 relid)
+struct vmbus_channel *relid2channel(u32 relid, struct irq_desc **desc_ptr)
 {
-	if (vmbus_connection.channels == NULL) {
-		pr_warn_once("relid2channel: relid=%d: No channels mapped!\n", relid);
+	struct irq_desc *desc;
+
+	desc = irq_resolve_mapping(vmbus_connection.vmbus_irq_domain, relid);
+	if (!desc)
 		return NULL;
-	}
-	if (WARN_ON(relid >= MAX_CHANNEL_RELIDS))
-		return NULL;
-	return READ_ONCE(vmbus_connection.channels[relid]);
+	if (desc_ptr)
+		*desc_ptr = desc;
+	return irq_desc_get_handler_data(desc);
 }
 
 /*
