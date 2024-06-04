@@ -18,6 +18,7 @@
 #include <linux/syscalls.h>
 #include <linux/suspend.h>
 #include <linux/debugfs.h>
+#include <linux/property.h>
 #include <linux/extcon.h>
 #include <linux/extcon-provider.h>
 #include <linux/sys_soc.h>
@@ -1237,7 +1238,6 @@ static int extcon_rtk_type_c_init(struct type_c_data *type_c)
 
 	if (!type_c->port) {
 		struct typec_capability typec_cap = { };
-		struct fwnode_handle *fwnode;
 		const char *buf;
 		int ret;
 
@@ -1246,7 +1246,8 @@ static int extcon_rtk_type_c_init(struct type_c_data *type_c)
 		typec_cap.driver_data = type_c;
 		typec_cap.ops = &type_c_port_ops;
 
-		fwnode = device_get_named_child_node(dev, "connector");
+		struct fwnode_handle *fwnode __free(fwnode_handle)
+					     = device_get_named_child_node(dev, "connector");
 		if (!fwnode)
 			return -EINVAL;
 
