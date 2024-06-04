@@ -911,6 +911,35 @@ void handle_percpu_irq(struct irq_desc *desc)
 }
 
 /**
+ *	handle_percpu_demux_irq - Per CPU local irq handler for IRQs
+ *	that may demultiplex to other IRQs
+ *	@desc:	the interrupt description structure for this irq
+ *
+ *	For per CPU interrupts on SMP machines without locking requirements.
+ *	Used for IRQs that may demultiplex to other IRQs that will do the
+ *     stats tracking and randomness. If the handler result indicates no
+ *	demultiplexing is done, account for the interrupt on this IRQ.
+ */
+void handle_percpu_demux_irq(struct irq_desc *desc)
+{
+	struct irq_chip *chip = irq_desc_get_chip(desc);
+
+	if (chip->irq_ack)
+		chip->irq_ack(&desc->irq_data);
+
+	if (__handle_irq_event_percpu(desc))
+		/*
+		 * PER CPU interrupts are not serialized.  Do not touch
+		 * desc->tot_count.
+		 */
+		__kstat_incr_irqs_this_cpu(desc);
+
+	if (chip->irq_eoi)
+		chip->irq_eoi(&desc->irq_data);
+}
+EXPORT_SYMBOL_GPL(handle_percpu_demux_irq);
+
+/**
  * handle_percpu_devid_irq - Per CPU local irq handler with per cpu dev ids
  * @desc:	the interrupt description structure for this irq
  *
