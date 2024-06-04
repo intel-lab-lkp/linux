@@ -1842,6 +1842,7 @@ int vmbus_add_channel_kobj(struct hv_device *dev, struct vmbus_channel *channel)
 		dev_err(device, "Unable to set up channel sysfs files\n");
 		return ret;
 	}
+	channel->channel_attr_set = true;
 
 	kobject_uevent(kobj, KOBJ_ADD);
 
@@ -1853,7 +1854,9 @@ int vmbus_add_channel_kobj(struct hv_device *dev, struct vmbus_channel *channel)
  */
 void vmbus_remove_channel_attr_group(struct vmbus_channel *channel)
 {
-	sysfs_remove_group(&channel->kobj, &vmbus_chan_group);
+	if (channel->channel_attr_set)
+		sysfs_remove_group(&channel->kobj, &vmbus_chan_group);
+	channel->channel_attr_set = false;
 }
 
 /*

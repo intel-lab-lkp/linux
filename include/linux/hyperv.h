@@ -980,6 +980,7 @@ struct vmbus_channel {
 	 * For sysfs per-channel properties.
 	 */
 	struct kobject			kobj;
+	bool channel_attr_set;
 
 	/*
 	 * For performance critical channels (storage, networking
