@@ -3705,6 +3705,9 @@ static int hv_pci_probe(struct hv_device *hdev,
 	hdev->channel->request_addr_callback = vmbus_request_addr;
 	hdev->channel->rqstor_size = HV_PCI_RQSTOR_SIZE;
 
+	snprintf(hdev->channel->irq_name, VMBUS_CHAN_IRQ_NAME_MAX,
+				"vpci:%04x", dom);
+
 	ret = vmbus_open(hdev->channel, pci_ring_size, pci_ring_size, NULL, 0,
 			 hv_pci_onchannelcallback, hbus);
 	if (ret)
@@ -4018,6 +4021,8 @@ static int hv_pci_resume(struct hv_device *hdev)
 	hdev->channel->next_request_id_callback = vmbus_next_request_id;
 	hdev->channel->request_addr_callback = vmbus_request_addr;
 	hdev->channel->rqstor_size = HV_PCI_RQSTOR_SIZE;
+	snprintf(hdev->channel->irq_name, VMBUS_CHAN_IRQ_NAME_MAX,
+				"vpci:%04x", hbus->bridge->domain_nr);
 
 	ret = vmbus_open(hdev->channel, pci_ring_size, pci_ring_size, NULL, 0,
 			 hv_pci_onchannelcallback, hbus);
