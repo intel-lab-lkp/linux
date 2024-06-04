@@ -10,7 +10,7 @@
 #include <kunit/test.h>
 #include <linux/list.h>
 #include <linux/slab.h>
-
+#include <kunit/visibility.h>
 #include "string-stream.h"
 
 
@@ -86,6 +86,7 @@ int string_stream_vadd(struct string_stream *stream,
 
 	return 0;
 }
+EXPORT_SYMBOL_IF_KUNIT(string_stream_vadd);
 
 int string_stream_add(struct string_stream *stream, const char *fmt, ...)
 {
@@ -98,6 +99,7 @@ int string_stream_add(struct string_stream *stream, const char *fmt, ...)
 
 	return result;
 }
+EXPORT_SYMBOL_IF_KUNIT(string_stream_add);
 
 void string_stream_clear(struct string_stream *stream)
 {
@@ -113,6 +115,7 @@ void string_stream_clear(struct string_stream *stream)
 	stream->length = 0;
 	spin_unlock(&stream->lock);
 }
+EXPORT_SYMBOL_IF_KUNIT(string_stream_clear);
 
 char *string_stream_get_string(struct string_stream *stream)
 {
@@ -131,6 +134,7 @@ char *string_stream_get_string(struct string_stream *stream)
 
 	return buf;
 }
+EXPORT_SYMBOL_IF_KUNIT(string_stream_get_string);
 
 int string_stream_append(struct string_stream *stream,
 			 struct string_stream *other)
@@ -148,11 +152,13 @@ int string_stream_append(struct string_stream *stream,
 
 	return ret;
 }
+EXPORT_SYMBOL_IF_KUNIT(string_stream_append);
 
 bool string_stream_is_empty(struct string_stream *stream)
 {
 	return list_empty(&stream->fragments);
 }
+EXPORT_SYMBOL_IF_KUNIT(string_stream_is_empty);
 
 struct string_stream *alloc_string_stream(gfp_t gfp)
 {
@@ -168,6 +174,7 @@ struct string_stream *alloc_string_stream(gfp_t gfp)
 
 	return stream;
 }
+EXPORT_SYMBOL_IF_KUNIT(alloc_string_stream);
 
 void string_stream_destroy(struct string_stream *stream)
 {
@@ -179,6 +186,7 @@ void string_stream_destroy(struct string_stream *stream)
 	string_stream_clear(stream);
 	kfree(stream);
 }
+EXPORT_SYMBOL_IF_KUNIT(string_stream_destroy);
 
 static void resource_free_string_stream(void *p)
 {
@@ -200,8 +208,10 @@ struct string_stream *kunit_alloc_string_stream(struct kunit *test, gfp_t gfp)
 
 	return stream;
 }
+EXPORT_SYMBOL_IF_KUNIT(kunit_alloc_string_stream);
 
 void kunit_free_string_stream(struct kunit *test, struct string_stream *stream)
 {
 	kunit_release_action(test, resource_free_string_stream, (void *)stream);
 }
+EXPORT_SYMBOL_IF_KUNIT(kunit_free_string_stream);
