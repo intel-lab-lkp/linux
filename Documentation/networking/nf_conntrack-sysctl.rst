@@ -34,13 +34,15 @@ nf_conntrack_count - INTEGER (read-only)
 
 nf_conntrack_events - BOOLEAN
 	- 0 - disabled
-	- 1 - enabled
-	- 2 - auto (default)
+	- 1 - enabled (default)
+	- 2 - auto
 
 	If this option is enabled, the connection tracking code will
 	provide userspace with connection tracking events via ctnetlink.
-	The default allocates the extension if a userspace program is
-	listening to ctnetlink events.
+	The 'auto' allocates the extension if a userspace program is
+	listening to ctnetlink events. Note that conntracks created
+	before the first listener has started won't trigger any netlink
+	event.
 
 nf_conntrack_expect_max - INTEGER
 	Maximum size of expectation table.  Default value is
