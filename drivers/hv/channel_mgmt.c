@@ -20,6 +20,7 @@
 #include <linux/delay.h>
 #include <linux/cpu.h>
 #include <linux/hyperv.h>
+#include <linux/string.h>
 #include <asm/mshyperv.h>
 #include <linux/sched/isolation.h>
 
@@ -33,6 +34,7 @@ const struct vmbus_device vmbus_devs[] = {
 	  HV_IDE_GUID,
 	  .perf_device = true,
 	  .allowed_in_isolated = false,
+	  .irq_name = "storvsc",
 	},
 
 	/* SCSI */
@@ -40,6 +42,7 @@ const struct vmbus_device vmbus_devs[] = {
 	  HV_SCSI_GUID,
 	  .perf_device = true,
 	  .allowed_in_isolated = true,
+	  .irq_name = "storvsc",
 	},
 
 	/* Fibre Channel */
@@ -47,6 +50,7 @@ const struct vmbus_device vmbus_devs[] = {
 	  HV_SYNTHFC_GUID,
 	  .perf_device = true,
 	  .allowed_in_isolated = false,
+	  .irq_name = "storvsc",
 	},
 
 	/* Synthetic NIC */
@@ -54,6 +58,7 @@ const struct vmbus_device vmbus_devs[] = {
 	  HV_NIC_GUID,
 	  .perf_device = true,
 	  .allowed_in_isolated = true,
+	  .irq_name = "netvsc",
 	},
 
 	/* Network Direct */
@@ -61,6 +66,7 @@ const struct vmbus_device vmbus_devs[] = {
 	  HV_ND_GUID,
 	  .perf_device = true,
 	  .allowed_in_isolated = false,
+	  .irq_name = "netdirect",
 	},
 
 	/* PCIE */
@@ -68,6 +74,7 @@ const struct vmbus_device vmbus_devs[] = {
 	  HV_PCIE_GUID,
 	  .perf_device = false,
 	  .allowed_in_isolated = true,
+	  .irq_name = "vpci",
 	},
 
 	/* Synthetic Frame Buffer */
@@ -75,6 +82,7 @@ const struct vmbus_device vmbus_devs[] = {
 	  HV_SYNTHVID_GUID,
 	  .perf_device = false,
 	  .allowed_in_isolated = false,
+	  .irq_name = "framebuffer",
 	},
 
 	/* Synthetic Keyboard */
@@ -82,6 +90,7 @@ const struct vmbus_device vmbus_devs[] = {
 	  HV_KBD_GUID,
 	  .perf_device = false,
 	  .allowed_in_isolated = false,
+	  .irq_name = "keyboard",
 	},
 
 	/* Synthetic MOUSE */
@@ -89,6 +98,7 @@ const struct vmbus_device vmbus_devs[] = {
 	  HV_MOUSE_GUID,
 	  .perf_device = false,
 	  .allowed_in_isolated = false,
+	  .irq_name = "mouse",
 	},
 
 	/* KVP */
@@ -96,6 +106,7 @@ const struct vmbus_device vmbus_devs[] = {
 	  HV_KVP_GUID,
 	  .perf_device = false,
 	  .allowed_in_isolated = false,
+	  .irq_name = "kvp",
 	},
 
 	/* Time Synch */
@@ -103,6 +114,7 @@ const struct vmbus_device vmbus_devs[] = {
 	  HV_TS_GUID,
 	  .perf_device = false,
 	  .allowed_in_isolated = true,
+	  .irq_name = "timesync",
 	},
 
 	/* Heartbeat */
@@ -110,6 +122,7 @@ const struct vmbus_device vmbus_devs[] = {
 	  HV_HEART_BEAT_GUID,
 	  .perf_device = false,
 	  .allowed_in_isolated = true,
+	  .irq_name = "heartbeat",
 	},
 
 	/* Shutdown */
@@ -117,6 +130,7 @@ const struct vmbus_device vmbus_devs[] = {
 	  HV_SHUTDOWN_GUID,
 	  .perf_device = false,
 	  .allowed_in_isolated = true,
+	  .irq_name = "shutdown",
 	},
 
 	/* File copy */
@@ -126,6 +140,7 @@ const struct vmbus_device vmbus_devs[] = {
 	  HV_FCOPY_GUID,
 	  .perf_device = false,
 	  .allowed_in_isolated = false,
+	  .irq_name = "fcopy",
 	},
 
 	/* Backup */
@@ -133,6 +148,7 @@ const struct vmbus_device vmbus_devs[] = {
 	  HV_VSS_GUID,
 	  .perf_device = false,
 	  .allowed_in_isolated = false,
+	  .irq_name = "vss",
 	},
 
 	/* Dynamic Memory */
@@ -140,6 +156,7 @@ const struct vmbus_device vmbus_devs[] = {
 	  HV_DM_GUID,
 	  .perf_device = false,
 	  .allowed_in_isolated = false,
+	  .irq_name = "balloon",
 	},
 
 	/*
@@ -198,20 +215,30 @@ static bool is_unsupported_vmbus_devs(const guid_t *guid)
 	return false;
 }
 
-static u16 hv_get_dev_type(const struct vmbus_channel *channel)
+static void hv_set_dev_type_and_irq_name(struct vmbus_channel *channel)
 {
 	const guid_t *guid = &channel->offermsg.offer.if_type;
+	char *name = NULL;
 	u16 i;
 
-	if (is_hvsock_channel(channel))
-		return HV_UNKNOWN;
-
-	for (i = HV_IDE; i < HV_UNKNOWN; i++) {
-		if (guid_equal(guid, &vmbus_devs[i].guid))
-			return i;
+	if (is_hvsock_channel(channel)) {
+		i = HV_UNKNOWN;
+		name = "hv_sock";
+		goto found;
 	}
+
+	for (i = HV_IDE; i < HV_UNKNOWN; i++)
+		if (guid_equal(guid, &vmbus_devs[i].guid)) {
+			name = vmbus_devs[i].irq_name;
+			goto found;
+		}
+
 	pr_info("Unknown GUID: %pUl\n", guid);
-	return i;
+
+found:
+	channel->device_id =  i;
+	if (name)
+		strscpy(channel->irq_name, name, VMBUS_CHAN_IRQ_NAME_MAX);
 }
 
 /**
@@ -970,7 +997,7 @@ static void vmbus_setup_channel_state(struct vmbus_channel *channel,
 	       sizeof(struct vmbus_channel_offer_channel));
 	channel->monitor_grp = (u8)offer->monitorid / 32;
 	channel->monitor_bit = (u8)offer->monitorid % 32;
-	channel->device_id = hv_get_dev_type(channel);
+	hv_set_dev_type_and_irq_name(channel);
 }
 
 /*

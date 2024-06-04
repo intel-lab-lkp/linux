@@ -826,6 +826,7 @@ struct vmbus_device {
 	guid_t guid;
 	bool perf_device;
 	bool allowed_in_isolated;
+	char *irq_name;
 };
 
 #define VMBUS_DEFAULT_MAX_PKT_SIZE 4096
@@ -836,6 +837,8 @@ struct vmbus_gpadl {
 	void *buffer;
 	bool decrypted;
 };
+
+#define VMBUS_CHAN_IRQ_NAME_MAX 32
 
 struct vmbus_channel {
 	struct list_head listentry;
@@ -1068,6 +1071,8 @@ struct vmbus_channel {
 
 	/* The max size of a packet on this channel */
 	u32 max_pkt_size;
+
+	char irq_name[VMBUS_CHAN_IRQ_NAME_MAX];
 };
 
 #define lock_requestor(channel, flags)					\
