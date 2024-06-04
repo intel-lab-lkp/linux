@@ -6,6 +6,7 @@
 #include <kunit/test.h>
 #include <linux/ioport.h>
 #include <linux/kernel.h>
+#include <linux/sizes.h>
 #include <linux/string.h>
 
 #define R0_START	0x0000
@@ -137,9 +138,104 @@ static void resource_test_intersection(struct kunit *test)
 	} while (++i < ARRAY_SIZE(results_for_intersection));
 }
 
+static int resource_walk_count(struct resource *res, void *data)
+{
+	int *count = data;
+	(*count)++;
+	return 0;
+}
+
+static void resource_test_walk_iomem_res_desc(struct kunit *test)
+{
+	struct resource root = {
+		.name = "Resource Walk Test",
+	};
+	struct resource res[8];
+	resource_size_t offset;
+	int count;
+
+	KUNIT_ASSERT_EQ(test, 0,
+			allocate_resource(&iomem_resource, &root, SZ_1M,
+				0, ~0, SZ_1M, NULL, NULL));
+
+	/* build the resource tree */
+	offset = root.start;
+	res[0] = (struct resource){
+		.start = offset,
+		.end = offset + SZ_1K - 1,
+		.name = "SYSRAM 1",
+		.flags = IORESOURCE_SYSTEM_RAM,
+	};
+	offset += SZ_1K;
+
+	res[1] = (struct resource){
+		.start = offset,
+		.end = offset + SZ_1K - 1,
+		.name = "OTHER",
+	};
+	offset += SZ_1K;
+
+	/* hole */
+	offset += SZ_1K;
+
+	res[2] = (struct resource){
+		.start = offset,
+		.end = offset + SZ_1K - 1,
+		.name = "NESTED",
+	};
+	res[3] = (struct resource){
+		.start = offset + SZ_512,
+		.end = offset + SZ_1K - 1,
+		.name = "SYSRAM 2",
+		.flags = IORESOURCE_SYSTEM_RAM,
+	};
+	offset += SZ_1K;
+
+	res[4] = (struct resource){
+		.start = offset,
+		.end = offset + SZ_1K - 1,
+		.name = "SYSRAM 3",
+		.flags = IORESOURCE_SYSTEM_RAM,
+	};
+	offset += SZ_1K;
+
+	KUNIT_EXPECT_EQ(test, 0, request_resource(&root, &res[0]));
+	KUNIT_EXPECT_EQ(test, 0, request_resource(&root, &res[1]));
+	KUNIT_EXPECT_EQ(test, 0, request_resource(&root, &res[2]));
+	KUNIT_EXPECT_EQ(test, 0, request_resource(&res[2], &res[3]));
+	KUNIT_EXPECT_EQ(test, 0, request_resource(&root, &res[4]));
+
+	/* walk the entire region */
+	count = 0;
+	walk_iomem_res_desc(IORES_DESC_NONE, IORESOURCE_SYSTEM_RAM,
+			root.start, root.end, &count, resource_walk_count);
+	KUNIT_EXPECT_EQ(test, count, 3);
+
+	/* walk the region requested by res[1] */
+	count = 0;
+	walk_iomem_res_desc(IORES_DESC_NONE, IORESOURCE_SYSTEM_RAM,
+			res[1].start, res[1].end, &count, resource_walk_count);
+	KUNIT_EXPECT_EQ(test, count, 0);
+
+	/* walk the region requested by res[2] */
+	count = 0;
+	walk_iomem_res_desc(IORES_DESC_NONE, IORESOURCE_SYSTEM_RAM,
+			res[2].start, res[2].end, &count, resource_walk_count);
+	KUNIT_EXPECT_EQ(test, count, 1);
+
+	/* walk the region requested by res[4] */
+	count = 0;
+	walk_iomem_res_desc(IORES_DESC_NONE, IORESOURCE_SYSTEM_RAM,
+			res[4].start, res[4].end, &count, resource_walk_count);
+	KUNIT_EXPECT_EQ(test, count, 1);
+
+	release_resource(&root);
+}
+
 static struct kunit_case resource_test_cases[] = {
 	KUNIT_CASE(resource_test_union),
 	KUNIT_CASE(resource_test_intersection),
+	KUNIT_CASE(resource_test_walk_iomem_res_desc),
 	{}
 };
 
