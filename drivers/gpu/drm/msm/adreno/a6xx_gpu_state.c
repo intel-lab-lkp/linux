@@ -1926,6 +1926,8 @@ void a6xx_show(struct msm_gpu *gpu, struct msm_gpu_state *state,
 
 	adreno_show(gpu, state, p);
 
+	drm_printf(p, "sqe-version: 0x%08x\n", a6xx_get_sqe_version(gpu));
+
 	drm_puts(p, "gmu-log:\n");
 	if (a6xx_state->gmu_log) {
 		struct msm_gpu_state_bo *gmu_log = a6xx_state->gmu_log;

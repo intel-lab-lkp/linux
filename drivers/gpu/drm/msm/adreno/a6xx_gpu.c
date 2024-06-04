@@ -1527,6 +1527,32 @@ static int a7xx_cp_init(struct msm_gpu *gpu)
 	return a6xx_idle(gpu, ring) ? 0 : -EINVAL;
 }
 
+static uint32_t get_ucode_version(const uint32_t *data)
+{
+	uint32_t version;
+
+	/* NOTE: compared to kgsl, we've already stripped off the first dword: */
+	version = data[0];
+
+	if ((version & 0xf) != 0xa)
+		return version;
+
+	version &= ~0xfff;
+	return  version | ((data[2] & 0xfff000) >> 12);
+}
+
+uint32_t a6xx_get_sqe_version(struct msm_gpu *gpu)
+{
+	struct adreno_gpu *adreno_gpu = to_adreno_gpu(gpu);
+	struct a6xx_gpu *a6xx_gpu = to_a6xx_gpu(adreno_gpu);
+	uint32_t *buf = msm_gem_get_vaddr(a6xx_gpu->sqe_bo);
+	uint32_t version = get_ucode_version(buf);
+
+	msm_gem_put_vaddr(a6xx_gpu->sqe_bo);
+
+	return version;
+}
+
 /*
  * Check that the microcode version is new enough to include several key
  * security fixes. Return true if the ucode is safe.
@@ -1542,6 +1568,8 @@ static bool a6xx_ucode_check_version(struct a6xx_gpu *a6xx_gpu,
 
 	if (IS_ERR(buf))
 		return false;
+
+	DRM_DEV_INFO(&gpu->pdev->dev, "Have SQE version %03x\n", get_ucode_version(buf));
 
 	/* A7xx is safe! */
 	if (adreno_is_a7xx(adreno_gpu) || adreno_is_a702(adreno_gpu))
@@ -1576,7 +1604,7 @@ static bool a6xx_ucode_check_version(struct a6xx_gpu *a6xx_gpu,
 		}
 
 		DRM_DEV_ERROR(&gpu->pdev->dev,
-			"a630 SQE ucode is too old. Have version %x need at least %x\n",
+			"a630 SQE ucode is too old. Have version %03x need at least %03x\n",
 			buf[0] & 0xfff, 0x190);
 	} else if (!strcmp(sqe_name, "a650_sqe.fw")) {
 		if ((buf[0] & 0xfff) >= 0x095) {
@@ -1585,7 +1613,7 @@ static bool a6xx_ucode_check_version(struct a6xx_gpu *a6xx_gpu,
 		}
 
 		DRM_DEV_ERROR(&gpu->pdev->dev,
-			"a650 SQE ucode is too old. Have version %x need at least %x\n",
+			"a650 SQE ucode is too old. Have version %03x need at least %03x\n",
 			buf[0] & 0xfff, 0x095);
 	} else if (!strcmp(sqe_name, "a660_sqe.fw")) {
 		ret = true;
