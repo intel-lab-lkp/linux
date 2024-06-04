@@ -152,8 +152,6 @@ static int sdw_drv_probe(struct device *dev)
 
 	mutex_unlock(&slave->sdw_dev_lock);
 
-	dev_dbg(dev, "probe complete\n");
-
 	return 0;
 }
 
