@@ -2305,7 +2305,7 @@ static void stable_tree_append(struct ksm_rmap_item *rmap_item,
  * @page: the page that we are searching identical page to.
  * @rmap_item: the reverse mapping into the virtual address of this page
  */
-static void cmp_and_merge_page(struct page *page, struct ksm_rmap_item *rmap_item)
+static void cmp_and_merge_page(struct folio *folio, struct ksm_rmap_item *rmap_item)
 {
 	struct mm_struct *mm = rmap_item->mm;
 	struct ksm_rmap_item *tree_rmap_item;
@@ -2315,9 +2315,7 @@ static void cmp_and_merge_page(struct page *page, struct ksm_rmap_item *rmap_ite
 	unsigned int checksum;
 	int err;
 	bool max_page_sharing_bypass = false;
-	struct folio *folio;
 
-	folio = page_folio(page);
 	stable_node = folio_stable_node(folio);
 	if (stable_node) {
 		if (stable_node->head != &migrate_nodes &&
@@ -2519,12 +2517,12 @@ static unsigned int skip_age(rmap_age_t age)
 }
 
 /*
- * Determines if a page should be skipped for the current scan.
+ * Determines if a folio should be skipped for the current scan.
  *
- * @page: page to check
- * @rmap_item: associated rmap_item of page
+ * @folio: folio to check
+ * @rmap_item: associated rmap_item of folio
  */
-static bool should_skip_rmap_item(struct page *page,
+static bool should_skip_rmap_item(struct folio *folio,
 				  struct ksm_rmap_item *rmap_item)
 {
 	rmap_age_t age;
@@ -2537,7 +2535,7 @@ static bool should_skip_rmap_item(struct page *page,
 	 * will essentially ignore them, but we still have to process them
 	 * properly.
 	 */
-	if (PageKsm(page))
+	if (folio_test_ksm(folio))
 		return false;
 
 	age = rmap_item->age;
@@ -2567,7 +2565,7 @@ static bool should_skip_rmap_item(struct page *page,
 	return true;
 }
 
-static struct ksm_rmap_item *scan_get_next_rmap_item(struct page **page)
+static struct ksm_rmap_item *scan_get_next_rmap_item(struct folio **folio)
 {
 	struct mm_struct *mm;
 	struct ksm_mm_slot *mm_slot;
@@ -2656,36 +2654,41 @@ next_mm:
 			ksm_scan.address = vma->vm_end;
 
 		while (ksm_scan.address < vma->vm_end) {
+			struct page *page;
+
 			if (ksm_test_exit(mm))
 				break;
-			*page = follow_page(vma, ksm_scan.address, FOLL_GET);
-			if (IS_ERR_OR_NULL(*page)) {
+			page = follow_page(vma, ksm_scan.address, FOLL_GET);
+			if (IS_ERR_OR_NULL(page)) {
 				ksm_scan.address += PAGE_SIZE;
 				cond_resched();
 				continue;
 			}
 
-			VM_WARN_ON(PageTail(*page));
-			nr = compound_nr(*page);
-			if (is_zone_device_page(*page))
+			*folio = page_folio(page);
+			VM_WARN_ON(PageTail(page));
+			nr = folio_nr_pages(*folio);
+
+			if (folio_is_zone_device(*folio))
 				goto next_page;
-			if (PageAnon(*page)) {
+
+			if (folio_test_anon(*folio)) {
 				rmap_item = get_next_rmap_item(mm_slot,
 					ksm_scan.rmap_list, ksm_scan.address);
 				if (rmap_item) {
 					ksm_scan.rmap_list = &rmap_item->rmap_list;
 
-					if (should_skip_rmap_item(*page, rmap_item))
+					if (should_skip_rmap_item(*folio, rmap_item))
 						goto next_page;
 
 					ksm_scan.address += nr * PAGE_SIZE;
 				} else
-					put_page(*page);
+					folio_put(*folio);
 				mmap_read_unlock(mm);
 				return rmap_item;
 			}
 next_page:
-			put_page(*page);
+			folio_put(*folio);
 			ksm_scan.address += nr * PAGE_SIZE;
 			cond_resched();
 		}
@@ -2756,16 +2759,16 @@ no_vmas:
 static void ksm_do_scan(unsigned int scan_npages)
 {
 	struct ksm_rmap_item *rmap_item;
-	struct page *page;
+	struct folio *folio;
 	unsigned int npages = scan_npages;
 
 	while (npages-- && likely(!freezing(current))) {
 		cond_resched();
-		rmap_item = scan_get_next_rmap_item(&page);
+		rmap_item = scan_get_next_rmap_item(&folio);
 		if (!rmap_item)
 			return;
-		cmp_and_merge_page(page, rmap_item);
-		put_page(page);
+		cmp_and_merge_page(folio, rmap_item);
+		folio_put(folio);
 	}
 
 	ksm_pages_scanned += scan_npages - npages;
