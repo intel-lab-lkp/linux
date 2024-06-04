@@ -293,6 +293,37 @@ bool ttm_resource_intersects(struct ttm_device *bdev,
 }
 
 /**
+ * ttm_place_applicable - check if place is applicable
+ *
+ * @place: place to check
+ * @ctx: the operation context
+ * @evicting: true if TTM is evicting resources
+ *
+ * Return true if the place is currently applicable.
+ */
+bool ttm_place_applicable(const struct ttm_place *place,
+			  struct ttm_operation_ctx *ctx,
+			  bool evicting)
+{
+
+	/* When no flag is given we always consider the place applicable */
+	if (!(place->flags & TTM_PL_FLAG_CTX_MASK))
+		return true;
+
+	if (place->flags & TTM_PL_FLAG_FALLBACK && evicting)
+		return true;
+
+	if (place->flags & TTM_PL_FLAG_DESIRED && !evicting)
+		return true;
+
+	if (place->flags & TTM_PL_FLAG_MOVE_THRESHOLD &&
+	    ctx->bytes_moved < ctx->move_threshold)
+		return true;
+
+	return false;
+}
+
+/**
  * ttm_resource_compatible - check if resource is compatible with placement
  *
  * @res: the resource to check
@@ -303,6 +334,7 @@ bool ttm_resource_intersects(struct ttm_device *bdev,
  */
 bool ttm_resource_compatible(struct ttm_resource *res,
 			     struct ttm_placement *placement,
+			     struct ttm_operation_ctx *ctx,
 			     bool evicting)
 {
 	struct ttm_buffer_object *bo = res->bo;
@@ -319,8 +351,7 @@ bool ttm_resource_compatible(struct ttm_resource *res,
 		if (res->mem_type != place->mem_type)
 			continue;
 
-		if (place->flags & (evicting ? TTM_PL_FLAG_DESIRED :
-				    TTM_PL_FLAG_FALLBACK))
+		if (!ttm_place_applicable(place, ctx, evicting))
 			continue;
 
 		if (place->flags & TTM_PL_FLAG_CONTIGUOUS &&

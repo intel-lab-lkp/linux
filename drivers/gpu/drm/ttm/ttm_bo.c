@@ -764,8 +764,7 @@ static int ttm_bo_alloc_resource(struct ttm_buffer_object *bo,
 		if (!man || !ttm_resource_manager_used(man))
 			continue;
 
-		if (place->flags & (force_space ? TTM_PL_FLAG_DESIRED :
-				    TTM_PL_FLAG_FALLBACK))
+		if (!ttm_place_applicable(place, ctx, force_space))
 			continue;
 
 		do {
@@ -864,7 +863,7 @@ int ttm_bo_validate(struct ttm_buffer_object *bo,
 	do {
 		/* Check whether we need to move buffer. */
 		if (bo->resource &&
-		    ttm_resource_compatible(bo->resource, placement,
+		    ttm_resource_compatible(bo->resource, placement, ctx,
 					    force_space))
 			return 0;
 

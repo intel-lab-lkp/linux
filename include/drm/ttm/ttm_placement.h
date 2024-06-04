@@ -48,6 +48,8 @@
  * placement that can handle such scenarios is a good idea.
  */
 
+struct ttm_operation_ctx;
+
 #define TTM_PL_SYSTEM           0
 #define TTM_PL_TT               1
 #define TTM_PL_VRAM             2
@@ -69,6 +71,15 @@
 
 /* Placement is only used during eviction */
 #define TTM_PL_FLAG_FALLBACK	(1 << 4)
+
+/* Placement can only be used if threshold of moved bytes is reached */
+#define TTM_PL_FLAG_MOVE_THRESHOLD	(1 << 5)
+
+/* Placement flags which depend on TTMs operation ctx. Fulfilling any flag is
+ * enough to consider the placement applicable.
+ */
+#define TTM_PL_FLAG_CTX_MASK	(TTM_PL_FLAG_DESIRED | TTM_PL_FLAG_FALLBACK | \
+				 TTM_PL_FLAG_MOVE_THRESHOLD)
 
 /**
  * struct ttm_place
@@ -99,5 +110,9 @@ struct ttm_placement {
 	unsigned		num_placement;
 	const struct ttm_place	*placement;
 };
+
+bool ttm_place_applicable(const struct ttm_place *place,
+			  struct ttm_operation_ctx *ctx,
+			  bool evicting);
 
 #endif

@@ -176,6 +176,8 @@ struct ttm_bo_kmap_obj {
  * faults. Should only be used by TTM internally.
  * @resv: Reservation object to allow reserved evictions with.
  * @bytes_moved: Statistics on how many bytes have been moved.
+ * @move_threshold: When @bytes_moved >= @move_threshold placements with
+ * @TTM_PL_FLAG_MOVE_TRESHOLD are used as well.
  *
  * Context for TTM operations like changing buffer placement or general memory
  * allocation.
@@ -188,6 +190,7 @@ struct ttm_operation_ctx {
 	bool force_alloc;
 	struct dma_resv *resv;
 	uint64_t bytes_moved;
+	uint64_t move_threshold;
 };
 
 /**
