@@ -155,6 +155,9 @@ struct prueth_emac {
 	unsigned int tx_ts_enabled : 1;
 	unsigned int half_duplex : 1;
 
+	/* List for storing multicast addresses */
+	struct netdev_hw_addr_list mcast_list;
+
 	/* DMA related */
 	struct prueth_tx_chn tx_chns[PRUETH_MAX_TX_QUEUES];
 	struct completion tdown_complete;
