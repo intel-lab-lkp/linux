@@ -1994,7 +1994,9 @@ static struct device **scan_labels(struct nd_region *nd_region)
 		/* Publish a zero-sized namespace for userspace to configure. */
 		nd_mapping_free_labels(nd_mapping);
 
-		devs = kcalloc(2, sizeof(dev), GFP_KERNEL);
+		/* devs probably has been allocated */
+		if (!devs)
+			devs = kcalloc(2, sizeof(dev), GFP_KERNEL);
 		if (!devs)
 			goto err;
 
