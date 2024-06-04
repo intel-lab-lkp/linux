@@ -118,7 +118,7 @@ extern void cifs_pages_write_redirty(struct inode *inode, loff_t start, unsigned
 extern const struct dentry_operations cifs_dentry_ops;
 extern const struct dentry_operations cifs_ci_dentry_ops;
 
-extern struct vfsmount *cifs_d_automount(struct path *path);
+extern struct vfsmount *cifs_d_automount(struct path *path, unsigned int sb_flags);
 
 /* Functions related to symlinks */
 extern const char *cifs_get_link(struct dentry *, struct inode *,

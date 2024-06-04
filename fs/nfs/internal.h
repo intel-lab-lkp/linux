@@ -484,7 +484,7 @@ static inline bool nfs_file_io_is_buffered(struct nfs_inode *nfsi)
 #define NFS_PATH_CANONICAL 1
 extern char *nfs_path(char **p, struct dentry *dentry,
 		      char *buffer, ssize_t buflen, unsigned flags);
-extern struct vfsmount *nfs_d_automount(struct path *path);
+extern struct vfsmount *nfs_d_automount(struct path *path, unsigned int);
 int nfs_submount(struct fs_context *, struct nfs_server *);
 int nfs_do_submount(struct fs_context *);
 

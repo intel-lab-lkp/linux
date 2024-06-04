@@ -352,12 +352,13 @@ EXPORT_SYMBOL(fs_context_for_reconfigure);
  * the fc->security object is inherited from @reference (if needed).
  */
 struct fs_context *fs_context_for_submount(struct file_system_type *type,
-					   struct dentry *reference)
+					   struct dentry *reference,
+					   unsigned int sb_flags)
 {
 	struct fs_context *fc;
 	int ret;
 
-	fc = alloc_fs_context(type, reference, 0, 0, FS_CONTEXT_FOR_SUBMOUNT);
+	fc = alloc_fs_context(type, reference, sb_flags, 0, FS_CONTEXT_FOR_SUBMOUNT);
 	if (IS_ERR(fc))
 		return fc;
 

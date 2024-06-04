@@ -305,13 +305,13 @@ static int fuse_dentry_delete(const struct dentry *dentry)
  * as the root), and return that mount so it can be auto-mounted on
  * @path.
  */
-static struct vfsmount *fuse_dentry_automount(struct path *path)
+static struct vfsmount *fuse_dentry_automount(struct path *path, unsigned int sb_flags)
 {
 	struct fs_context *fsc;
 	struct vfsmount *mnt;
 	struct fuse_inode *mp_fi = get_fuse_inode(d_inode(path->dentry));
 
-	fsc = fs_context_for_submount(path->mnt->mnt_sb->s_type, path->dentry);
+	fsc = fs_context_for_submount(path->mnt->mnt_sb->s_type, path->dentry, 0);
 	if (IS_ERR(fsc))
 		return ERR_CAST(fsc);
 

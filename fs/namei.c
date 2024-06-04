@@ -1345,6 +1345,7 @@ static bool choose_mountpoint(struct mount *m, const struct path *root,
 static int follow_automount(struct path *path, int *count, unsigned lookup_flags)
 {
 	struct dentry *dentry = path->dentry;
+	struct nameidata *nd = container_of(count, struct nameidata, total_link_count);
 
 	/* We don't want to mount if someone's just doing a stat -
 	 * unless they're stat'ing a directory and appended a '/' to
@@ -1365,7 +1366,7 @@ static int follow_automount(struct path *path, int *count, unsigned lookup_flags
 	if (count && (*count)++ >= MAXSYMLINKS)
 		return -ELOOP;
 
-	return finish_automount(dentry->d_op->d_automount(path), path);
+	return finish_automount(dentry->d_op->d_automount(path, nd->root.mnt->mnt_sb->s_flags), path);
 }
 
 /*

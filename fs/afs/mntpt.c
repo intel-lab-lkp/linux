@@ -156,7 +156,7 @@ static struct vfsmount *afs_mntpt_do_automount(struct dentry *mntpt)
 
 	BUG_ON(!d_inode(mntpt));
 
-	fc = fs_context_for_submount(&afs_fs_type, mntpt);
+	fc = fs_context_for_submount(&afs_fs_type, mntpt, 0);
 	if (IS_ERR(fc))
 		return ERR_CAST(fc);
 
@@ -173,7 +173,7 @@ static struct vfsmount *afs_mntpt_do_automount(struct dentry *mntpt)
 /*
  * handle an automount point
  */
-struct vfsmount *afs_d_automount(struct path *path)
+struct vfsmount *afs_d_automount(struct path *path, unsigned int sb_flags)
 {
 	struct vfsmount *newmnt;
 

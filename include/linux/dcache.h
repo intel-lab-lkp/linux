@@ -142,7 +142,7 @@ struct dentry_operations {
 	void (*d_prune)(struct dentry *);
 	void (*d_iput)(struct dentry *, struct inode *);
 	char *(*d_dname)(struct dentry *, char *, int);
-	struct vfsmount *(*d_automount)(struct path *);
+	struct vfsmount *(*d_automount)(struct path *, unsigned int sb_flags);
 	int (*d_manage)(const struct path *, bool);
 	struct dentry *(*d_real)(struct dentry *, enum d_real_type type);
 } ____cacheline_aligned;

@@ -250,7 +250,7 @@ static void debugfs_release_dentry(struct dentry *dentry)
 	kfree(fsd);
 }
 
-static struct vfsmount *debugfs_automount(struct path *path)
+static struct vfsmount *debugfs_automount(struct path *path, unsigned int sb_flags)
 {
 	struct debugfs_fsdata *fsd = path->dentry->d_fsdata;
 

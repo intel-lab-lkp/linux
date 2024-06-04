@@ -254,7 +254,7 @@ out:
 /*
  * Attempt to automount the referral
  */
-struct vfsmount *cifs_d_automount(struct path *path)
+struct vfsmount *cifs_d_automount(struct path *path, unsigned int sb_flags)
 {
 	struct vfsmount *newmnt;
 

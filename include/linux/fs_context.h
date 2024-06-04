@@ -130,7 +130,8 @@ extern struct fs_context *fs_context_for_reconfigure(struct dentry *dentry,
 						unsigned int sb_flags,
 						unsigned int sb_flags_mask);
 extern struct fs_context *fs_context_for_submount(struct file_system_type *fs_type,
-						struct dentry *reference);
+						struct dentry *reference,
+						unsigned int sb_flags);
 
 extern struct fs_context *vfs_dup_fs_context(struct fs_context *fc);
 extern int vfs_parse_fs_param(struct fs_context *fc, struct fs_parameter *param);

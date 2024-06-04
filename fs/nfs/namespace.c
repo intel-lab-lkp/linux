@@ -142,7 +142,7 @@ EXPORT_SYMBOL_GPL(nfs_path);
  * situation, and that different filesystems may want to use
  * different security flavours.
  */
-struct vfsmount *nfs_d_automount(struct path *path)
+struct vfsmount *nfs_d_automount(struct path *path, unsigned int sb_flags)
 {
 	struct nfs_fs_context *ctx;
 	struct fs_context *fc;
@@ -158,7 +158,7 @@ struct vfsmount *nfs_d_automount(struct path *path)
 	/* Open a new filesystem context, transferring parameters from the
 	 * parent superblock, including the network namespace.
 	 */
-	fc = fs_context_for_submount(path->mnt->mnt_sb->s_type, path->dentry);
+	fc = fs_context_for_submount(path->mnt->mnt_sb->s_type, path->dentry, 0);
 	if (IS_ERR(fc))
 		return ERR_CAST(fc);
 
