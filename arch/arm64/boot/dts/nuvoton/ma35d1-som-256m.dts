@@ -54,3 +54,7 @@
 			   "integer",
 			   "integer";
 };
+
+&rtc {
+	status = "okay";
+};
