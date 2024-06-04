@@ -274,7 +274,7 @@ nocopy:
 }
 
 bool wsr_refresh_report(struct wsr_state *wsr, struct mem_cgroup *root,
-			struct pglist_data *pgdat)
+			struct pglist_data *pgdat, unsigned long *refresh_time)
 {
 	struct wsr_page_age_histo *page_age;
 	unsigned long refresh_interval = READ_ONCE(wsr->refresh_interval);
@@ -291,10 +291,14 @@ bool wsr_refresh_report(struct wsr_state *wsr, struct mem_cgroup *root,
 		goto unlock;
 	if (page_age->timestamp &&
 	    time_is_after_jiffies(page_age->timestamp + refresh_interval))
-		goto unlock;
+		goto time;
 	refresh_scan(wsr, root, pgdat, refresh_interval);
 	copy_node_bins(pgdat, page_age);
 	refresh_aggregate(page_age, root, pgdat);
+
+time:
+	if (refresh_time)
+		*refresh_time = page_age->timestamp + refresh_interval;
 unlock:
 	mutex_unlock(&wsr->page_age_lock);
 	return !!page_age;
@@ -357,6 +361,7 @@ static ssize_t refresh_interval_store(struct kobject *kobj,
 	unsigned int interval;
 	int err;
 	struct wsr_state *wsr = kobj_to_wsr(kobj);
+	unsigned long old_interval = 0;
 
 	err = kstrtouint(buf, 0, &interval);
 	if (err)
@@ -378,9 +383,13 @@ static ssize_t refresh_interval_store(struct kobject *kobj,
 		wsr->page_age = NULL;
 	}
 
+	old_interval = READ_ONCE(wsr->refresh_interval);
 	WRITE_ONCE(wsr->refresh_interval, msecs_to_jiffies(interval));
 unlock:
 	mutex_unlock(&wsr->page_age_lock);
+	if (!err && interval &&
+	    (!old_interval || jiffies_to_msecs(old_interval) > interval))
+		wsr_wakeup_aging_thread();
 	return err ?: len;
 }
 
@@ -470,7 +479,7 @@ static ssize_t page_age_show(struct kobject *kobj, struct kobj_attribute *attr,
 	int ret = 0;
 	struct wsr_state *wsr = kobj_to_wsr(kobj);
 
-	wsr_refresh_report(wsr, NULL, kobj_to_pgdat(kobj));
+	wsr_refresh_report(wsr, NULL, kobj_to_pgdat(kobj), NULL);
 
 	mutex_lock(&wsr->page_age_lock);
 	if (!wsr->page_age)

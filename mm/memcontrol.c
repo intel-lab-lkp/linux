@@ -7281,12 +7281,12 @@ static ssize_t memory_ws_refresh_interval_write(struct kernfs_open_file *of,
 {
 	unsigned int nid, msecs;
 	struct wsr_state *wsr;
+	unsigned long old_interval;
 	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
 	ssize_t ret = memory_wsr_threshold_parse(buf, nbytes, &nid, &msecs);
 
 	if (ret < 0)
 		return ret;
-
 	wsr = &mem_cgroup_lruvec(memcg, NODE_DATA(nid))->wsr;
 
 	mutex_lock(&wsr->page_age_lock);
@@ -7305,9 +7305,13 @@ static ssize_t memory_ws_refresh_interval_write(struct kernfs_open_file *of,
 		wsr->page_age = NULL;
 	}
 
+	old_interval = READ_ONCE(wsr->refresh_interval);
 	WRITE_ONCE(wsr->refresh_interval, msecs_to_jiffies(msecs));
 unlock:
 	mutex_unlock(&wsr->page_age_lock);
+	if (ret > 0 && msecs &&
+	    (!old_interval || jiffies_to_msecs(old_interval) > msecs))
+		wsr_wakeup_aging_thread();
 	return ret;
 }
 
@@ -7358,7 +7362,7 @@ static int memory_ws_page_age_show(struct seq_file *m, void *v)
 		if (!READ_ONCE(wsr->page_age))
 			continue;
 
-		wsr_refresh_report(wsr, memcg, NODE_DATA(nid));
+		wsr_refresh_report(wsr, memcg, NODE_DATA(nid), NULL);
 		mutex_lock(&wsr->page_age_lock);
 		if (!wsr->page_age)
 			goto unlock;
