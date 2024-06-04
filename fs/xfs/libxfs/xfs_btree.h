@@ -281,6 +281,7 @@ struct xfs_btree_cur
 			struct xfs_perag	*pag;
 			struct xfs_buf		*agbp;
 			struct xbtree_afakeroot	*afake;	/* for staging cursor */
+			xfs_extlen_t		bc_free_longest; /* potential longest free space */
 		} bc_ag;
 		struct {
 			struct xfbtree		*xfbtree;
