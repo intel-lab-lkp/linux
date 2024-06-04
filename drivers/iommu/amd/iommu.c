@@ -3506,7 +3506,7 @@ static int irq_remapping_alloc(struct irq_domain *domain, unsigned int virq,
 		}
 
 		data->iommu = iommu;
-		irq_data->hwirq = (devid << 16) + i;
+		irq_data->hwirq = ((irq_hw_number_t)devid << 16) + i;
 		irq_data->chip_data = data;
 		irq_data->chip = &amd_ir_chip;
 		irq_remapping_prepare_irte(data, cfg, info, devid, index, i);
