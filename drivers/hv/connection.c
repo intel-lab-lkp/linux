@@ -21,21 +21,29 @@
 #include <linux/export.h>
 #include <linux/io.h>
 #include <linux/set_memory.h>
+#include <linux/irq.h>
+#include <linux/irqdesc.h>
+#include <linux/irqdomain.h>
 #include <asm/mshyperv.h>
 
 #include "hyperv_vmbus.h"
 
 
 struct vmbus_connection vmbus_connection = {
-	.conn_state		= DISCONNECTED,
-	.unload_event		= COMPLETION_INITIALIZER(
-				  vmbus_connection.unload_event),
-	.next_gpadl_handle	= ATOMIC_INIT(0xE1E10),
+	.conn_state			= DISCONNECTED,
+	.unload_event			= COMPLETION_INITIALIZER(
+						vmbus_connection.unload_event),
+	.next_gpadl_handle		= ATOMIC_INIT(0xE1E10),
 
-	.ready_for_suspend_event = COMPLETION_INITIALIZER(
-				  vmbus_connection.ready_for_suspend_event),
+	.vmbus_irq_chip.name		= "VMBus",
+	.vmbus_irq_chip.irq_set_affinity = vmbus_irq_set_affinity,
+	.vmbus_irq_chip.irq_mask	= vmbus_irq_mask,
+	.vmbus_irq_chip.irq_unmask	= vmbus_irq_unmask,
+
+	.ready_for_suspend_event	= COMPLETION_INITIALIZER(
+					vmbus_connection.ready_for_suspend_event),
 	.ready_for_resume_event	= COMPLETION_INITIALIZER(
-				  vmbus_connection.ready_for_resume_event),
+					vmbus_connection.ready_for_resume_event),
 };
 EXPORT_SYMBOL_GPL(vmbus_connection);
 

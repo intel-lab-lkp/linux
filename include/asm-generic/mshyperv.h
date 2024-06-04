@@ -24,6 +24,7 @@
 #include <acpi/acpi_numa.h>
 #include <linux/cpumask.h>
 #include <linux/nmi.h>
+#include <linux/irq.h>
 #include <asm/ptrace.h>
 #include <asm/hyperv-tlfs.h>
 
@@ -186,6 +187,11 @@ void hv_setup_kexec_handler(void (*handler)(void));
 void hv_remove_kexec_handler(void);
 void hv_setup_crash_handler(void (*handler)(struct pt_regs *regs));
 void hv_remove_crash_handler(void);
+
+extern void vmbus_irq_mask(struct irq_data *data);
+extern void vmbus_irq_unmask(struct irq_data *data);
+extern int vmbus_irq_set_affinity(struct irq_data *data,
+				const struct cpumask *dest, bool force);
 
 extern int vmbus_interrupt;
 extern int vmbus_irq;

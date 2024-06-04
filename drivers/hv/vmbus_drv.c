@@ -36,6 +36,9 @@
 #include <linux/syscore_ops.h>
 #include <linux/dma-map-ops.h>
 #include <linux/pci.h>
+#include <linux/irq.h>
+#include <linux/irqdomain.h>
+#include <linux/hardirq.h>
 #include <clocksource/hyperv_timer.h>
 #include <asm/mshyperv.h>
 #include "hyperv_vmbus.h"
@@ -1306,6 +1309,40 @@ static irqreturn_t vmbus_percpu_isr(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+int vmbus_irq_set_affinity(struct irq_data *data,
+				  const struct cpumask *dest, bool force)
+{
+	return 0;
+}
+
+/*
+ * VMBus channel interrupts do not need to be masked or unmasked, and the
+ * Hyper-V synic doesn't provide any masking functionality anyway. But in the
+ * absence of these irqchip functions, the IRQ subsystem keeps the IRQ marked
+ * as "masked". To prevent any problems associated with staying the "masked"
+ * state, and so that IRQ status shown in debugfs doesn't indicate "masked",
+ * provide null implementations.
+ */
+void vmbus_irq_unmask(struct irq_data *data)
+{
+}
+
+void vmbus_irq_mask(struct irq_data *data)
+{
+}
+
+static int vmbus_irq_map(struct irq_domain *d, unsigned int irq,
+			 irq_hw_number_t hw)
+{
+	irq_set_chip_and_handler(irq,
+			&vmbus_connection.vmbus_irq_chip, handle_simple_irq);
+	return 0;
+}
+
+static const struct irq_domain_ops vmbus_domain_ops = {
+	.map = vmbus_irq_map,
+};
+
 /*
  * vmbus_bus_init -Main vmbus driver initialization routine.
  *
@@ -1340,6 +1377,7 @@ static int vmbus_bus_init(void)
 	if (vmbus_irq == -1) {
 		hv_setup_vmbus_handler(vmbus_isr);
 	} else {
+		irq_set_handler(vmbus_irq, handle_percpu_demux_irq);
 		vmbus_evt = alloc_percpu(long);
 		ret = request_percpu_irq(vmbus_irq, vmbus_percpu_isr,
 				"Hyper-V VMbus", vmbus_evt);
@@ -1355,6 +1393,20 @@ static int vmbus_bus_init(void)
 	if (ret)
 		goto err_alloc;
 
+	/* Create IRQ domain for VMBus devices */
+	vmbus_connection.vmbus_fwnode = irq_domain_alloc_named_fwnode("hv-vmbus");
+	if (!vmbus_connection.vmbus_fwnode) {
+		ret = -ENOMEM;
+		goto err_alloc;
+	}
+	vmbus_connection.vmbus_irq_domain = irq_domain_create_linear(
+			vmbus_connection.vmbus_fwnode, MAX_CHANNEL_RELIDS,
+			&vmbus_domain_ops, NULL);
+	if (!vmbus_connection.vmbus_irq_domain) {
+		ret = -ENOMEM;
+		goto err_fwnode;
+	}
+
 	/*
 	 * Initialize the per-cpu interrupt state and stimer state.
 	 * Then connect to the host.
@@ -1362,7 +1414,7 @@ static int vmbus_bus_init(void)
 	ret = cpuhp_setup_state(CPUHP_AP_ONLINE_DYN, "hyperv/vmbus:online",
 				hv_synic_init, hv_synic_cleanup);
 	if (ret < 0)
-		goto err_alloc;
+		goto err_domain;
 	hyperv_cpuhp_online = ret;
 
 	ret = vmbus_connect();
@@ -1382,6 +1434,10 @@ static int vmbus_bus_init(void)
 
 err_connect:
 	cpuhp_remove_state(hyperv_cpuhp_online);
+err_domain:
+	irq_domain_remove(vmbus_connection.vmbus_irq_domain);
+err_fwnode:
+	irq_domain_free_fwnode(vmbus_connection.vmbus_fwnode);
 err_alloc:
 	hv_synic_free();
 	if (vmbus_irq == -1) {
@@ -2690,6 +2746,8 @@ static void __exit vmbus_exit(void)
 	hv_debug_rm_all_dir();
 
 	vmbus_free_channels();
+	irq_domain_remove(vmbus_connection.vmbus_irq_domain);
+	irq_domain_free_fwnode(vmbus_connection.vmbus_fwnode);
 	kfree(vmbus_connection.channels);
 
 	/*

@@ -18,7 +18,11 @@
 #include <asm/hyperv-tlfs.h>
 #include <linux/atomic.h>
 #include <linux/hyperv.h>
+#include <linux/fwnode.h>
 #include <linux/interrupt.h>
+#include <linux/irq.h>
+#include <linux/irqdesc.h>
+#include <linux/irqdomain.h>
 
 #include "hv_trace.h"
 
@@ -257,6 +261,11 @@ struct vmbus_connection {
 
 	/* Array of channels */
 	struct vmbus_channel **channels;
+
+	/* IRQ domain data */
+	struct fwnode_handle *vmbus_fwnode;
+	struct irq_domain *vmbus_irq_domain;
+	struct irq_chip	vmbus_irq_chip;
 
 	/*
 	 * An offer message is handled first on the work_queue, and then
