@@ -2302,7 +2302,7 @@
 #define _PIPEBFRAMEHIGH		0x71040
 #define _PIPEBFRAMEPIXEL	0x71044
 #define _PIPEB_FRMCOUNT_G4X(dev_priv)	(DISPLAY_MMIO_BASE(dev_priv) + 0x71040)
-#define _PIPEB_FLIPCOUNT_G4X	(DISPLAY_MMIO_BASE(dev_priv) + 0x71044)
+#define _PIPEB_FLIPCOUNT_G4X(dev_priv)	(DISPLAY_MMIO_BASE(dev_priv) + 0x71044)
 
 
 /* Display B control */
