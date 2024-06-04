@@ -63,9 +63,13 @@ static inline void update_alloc_hint_after_get(struct sbitmap *sb,
 static inline bool sbitmap_deferred_clear(struct sbitmap_word *map)
 {
 	unsigned long mask;
+	bool ret = false;
+	unsigned long flags;
 
-	if (!READ_ONCE(map->cleared))
-		return false;
+	spin_lock_irqsave(&map->swap_lock, flags);
+
+	if (!map->cleared)
+		goto out_unlock;
 
 	/*
 	 * First get a stable cleared mask, setting the old mask to 0.
@@ -77,7 +81,10 @@ static inline bool sbitmap_deferred_clear(struct sbitmap_word *map)
 	 */
 	atomic_long_andnot(mask, (atomic_long_t *)&map->word);
 	BUILD_BUG_ON(sizeof(atomic_long_t) != sizeof(map->word));
-	return true;
+	ret = true;
+out_unlock:
+	spin_unlock_irqrestore(&map->swap_lock, flags);
+	return ret;
 }
 
 int sbitmap_init_node(struct sbitmap *sb, unsigned int depth, int shift,
@@ -85,6 +92,7 @@ int sbitmap_init_node(struct sbitmap *sb, unsigned int depth, int shift,
 		      bool alloc_hint)
 {
 	unsigned int bits_per_word;
+	int i;
 
 	if (shift < 0)
 		shift = sbitmap_calculate_shift(depth);
@@ -115,6 +123,9 @@ int sbitmap_init_node(struct sbitmap *sb, unsigned int depth, int shift,
 		free_percpu(sb->alloc_hint);
 		return -ENOMEM;
 	}
+
+	for (i = 0; i < sb->map_nr; i++)
+		spin_lock_init(&sb->map[i].swap_lock);
 
 	return 0;
 }
