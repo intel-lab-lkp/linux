@@ -62,6 +62,7 @@ extern int __cpu_logical_map[NR_CPUS];
 #define SMP_BOOT_CPU		0x1
 #define SMP_RESCHEDULE		0x2
 #define SMP_CALL_FUNCTION	0x4
+#define SMP_CLEAR_VECT		0x8
 
 struct secondary_data {
 	unsigned long stack;
