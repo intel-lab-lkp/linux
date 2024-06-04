@@ -3042,10 +3042,20 @@ struct page *rmqueue(struct zone *preferred_zone,
 	WARN_ON_ONCE((gfp_flags & __GFP_NOFAIL) && (order > 1));
 
 	if (likely(pcp_allowed_order(order))) {
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+		if (!IS_ENABLED(CONFIG_CMA) || alloc_flags & ALLOC_CMA ||
+						order != HPAGE_PMD_ORDER) {
+			page = rmqueue_pcplist(preferred_zone, zone, order,
+						migratetype, alloc_flags);
+			if (likely(page))
+				goto out;
+		}
+#else
 		page = rmqueue_pcplist(preferred_zone, zone, order,
 				       migratetype, alloc_flags);
 		if (likely(page))
 			goto out;
+#endif
 	}
 
 	page = rmqueue_buddy(preferred_zone, zone, order, alloc_flags,
