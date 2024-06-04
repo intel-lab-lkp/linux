@@ -315,23 +315,24 @@ void dma_direct_free(struct device *dev, size_t size,
 		void *cpu_addr, dma_addr_t dma_addr, unsigned long attrs)
 {
 	unsigned int page_order = get_order(size);
+	bool swiotlb_for_alloc = is_swiotlb_for_alloc(dev);
+	bool is_dma_coherent = dev_is_dma_coherent(dev);
 
 	if ((attrs & DMA_ATTR_NO_KERNEL_MAPPING) &&
-	    !force_dma_unencrypted(dev) && !is_swiotlb_for_alloc(dev)) {
+	    !force_dma_unencrypted(dev) && !swiotlb_for_alloc) {
 		/* cpu_addr is a struct page cookie, not a kernel address */
 		dma_free_contiguous(dev, cpu_addr, size);
 		return;
 	}
 
 	if (IS_ENABLED(CONFIG_ARCH_HAS_DMA_ALLOC) &&
-	    !dev_is_dma_coherent(dev) &&
-	    !is_swiotlb_for_alloc(dev)) {
+	    !is_dma_coherent && !swiotlb_for_alloc) {
 		arch_dma_free(dev, size, cpu_addr, dma_addr, attrs);
 		return;
 	}
 
 	if (IS_ENABLED(CONFIG_DMA_GLOBAL_POOL) &&
-	    !dev_is_dma_coherent(dev)) {
+	    !is_dma_coherent) {
 		if (!dma_release_from_global_coherent(page_order, cpu_addr))
 			WARN_ON_ONCE(1);
 		return;
