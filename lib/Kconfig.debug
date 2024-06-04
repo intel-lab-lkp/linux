@@ -2171,6 +2171,15 @@ config KCOV_IRQ_AREA_SIZE
 	  soft interrupts. This specifies the size of those areas in the
 	  number of unsigned long words.
 
+config KCOV_TEST
+	bool "Test CONFIG_KCOV feature"
+	depends on KCOV
+	help
+	  Sanity check for KCOV coverage collection.
+	  Runs built-in self test on boot to detect some common issues.
+
+	  If unsure, say N.
+
 menuconfig RUNTIME_TESTING_MENU
 	bool "Runtime Testing"
 	default y
