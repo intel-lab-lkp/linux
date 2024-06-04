@@ -1031,11 +1031,11 @@ ssize_t bcm_vk_read(struct file *p_file,
 				    (iter->to_h_blks * VK_MSGQ_BLK_SIZE)) {
 					list_del(&iter->node);
 					atomic_dec(&ctx->pend_cnt);
-					entry = iter;
 				} else {
 					/* buffer not big enough */
 					rc = -EMSGSIZE;
 				}
+				entry = iter;
 				goto read_loop_exit;
 			}
 		}
@@ -1044,25 +1044,27 @@ read_loop_exit:
 	spin_unlock(&chan->pendq_lock);
 
 	if (entry) {
-		/* retrieve the passed down msg_id */
-		set_msg_id(&entry->to_h_msg[0], entry->usr_msg_id);
-		rsp_length = entry->to_h_blks * VK_MSGQ_BLK_SIZE;
-		if (copy_to_user(buf, entry->to_h_msg, rsp_length) == 0)
-			rc = rsp_length;
+		if (rc != -EMSGSIZE) {
+			/* retrieve the passed down msg_id */
+			set_msg_id(&entry->to_h_msg[0], entry->usr_msg_id);
+			rsp_length = entry->to_h_blks * VK_MSGQ_BLK_SIZE;
+			if (copy_to_user(buf, entry->to_h_msg, rsp_length) == 0)
+				rc = rsp_length;
 
-		bcm_vk_free_wkent(dev, entry);
-	} else if (rc == -EMSGSIZE) {
-		struct vk_msg_blk tmp_msg = entry->to_h_msg[0];
+			bcm_vk_free_wkent(dev, entry);
+		} else {
+			struct vk_msg_blk tmp_msg = entry->to_h_msg[0];
 
-		/*
-		 * in this case, return just the first block, so
-		 * that app knows what size it is looking for.
-		 */
-		set_msg_id(&tmp_msg, entry->usr_msg_id);
-		tmp_msg.size = entry->to_h_blks - 1;
-		if (copy_to_user(buf, &tmp_msg, VK_MSGQ_BLK_SIZE) != 0) {
-			dev_err(dev, "Error return 1st block in -EMSGSIZE\n");
-			rc = -EFAULT;
+			/*
+			 * in this case, return just the first block, so
+			 * that app knows what size it is looking for.
+			 */
+			set_msg_id(&tmp_msg, entry->usr_msg_id);
+			tmp_msg.size = entry->to_h_blks - 1;
+			if (copy_to_user(buf, &tmp_msg, VK_MSGQ_BLK_SIZE) != 0) {
+				dev_err(dev, "Error return 1st block in -EMSGSIZE\n");
+				rc = -EFAULT;
+			}
 		}
 	}
 	return rc;
