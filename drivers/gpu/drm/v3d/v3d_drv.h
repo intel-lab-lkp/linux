@@ -352,7 +352,9 @@ struct v3d_timestamp_query {
 };
 
 /* Maximum number of performance counters supported by any version of V3D */
-#define V3D_MAX_COUNTERS ARRAY_SIZE(v3d_v71_performance_counters)
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define V3D_MAX_COUNTERS MAX(ARRAY_SIZE(v3d_v71_performance_counters), \
+			     ARRAY_SIZE(v3d_v42_performance_counters))
 
 /* Number of perfmons required to handle all supported performance counters */
 #define V3D_MAX_PERFMONS DIV_ROUND_UP(V3D_MAX_COUNTERS, \
