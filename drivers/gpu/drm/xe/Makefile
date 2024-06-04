@@ -89,7 +89,7 @@ xe-y += xe_bb.o \
 	xe_gt_mcr.o \
 	xe_gt_pagefault.o \
 	xe_gt_sysfs.o \
-	xe_gt_throttle_sysfs.o \
+	xe_gt_throttle.o \
 	xe_gt_tlb_invalidation.o \
 	xe_gt_topology.o \
 	xe_guc.o \
@@ -143,6 +143,7 @@ xe-y += xe_bb.o \
 	xe_uc_debugfs.o \
 	xe_uc_fw.o \
 	xe_vm.o \
+	xe_vram.o \
 	xe_vram_freq.o \
 	xe_wait_user_fence.o \
 	xe_wa.o \
@@ -155,6 +156,8 @@ xe-$(CONFIG_HWMON) += xe_hwmon.o
 
 # graphics virtualization (SR-IOV) support
 xe-y += \
+	xe_gt_sriov_vf.o \
+	xe_gt_sriov_vf_debugfs.o \
 	xe_guc_relay.o \
 	xe_memirq.o \
 	xe_sriov.o
@@ -163,10 +166,14 @@ xe-$(CONFIG_PCI_IOV) += \
 	xe_gt_sriov_pf.o \
 	xe_gt_sriov_pf_config.o \
 	xe_gt_sriov_pf_control.o \
+	xe_gt_sriov_pf_debugfs.o \
+	xe_gt_sriov_pf_monitor.o \
 	xe_gt_sriov_pf_policy.o \
+	xe_gt_sriov_pf_service.o \
 	xe_lmtt.o \
 	xe_lmtt_2l.o \
 	xe_lmtt_ml.o \
+	xe_pci_sriov.o \
 	xe_sriov_pf.o
 
 # include helpers for tests even when XE is built-in
