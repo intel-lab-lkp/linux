@@ -519,6 +519,35 @@ static bool is_write_abort(unsigned long esr)
 	return (esr & ESR_ELx_WNR) && !(esr & ESR_ELx_CM);
 }
 
+static bool is_el0_atomic_instr(struct pt_regs *regs)
+{
+	u32 insn;
+	__le32 insn_le;
+	unsigned long pc = instruction_pointer(regs);
+
+	if (!user_mode(regs) || compat_user_mode(regs))
+		return false;
+
+	pagefault_disable();
+	if (get_user(insn_le, (__le32 __user *)pc)) {
+		pagefault_enable();
+		return false;
+	}
+	pagefault_enable();
+
+	insn = le32_to_cpu(insn_le);
+
+	if (aarch64_insn_is_class_atomic(insn)) {
+		if (aarch64_atomic_insn_has_wr_perm(insn))
+			return true;
+	}
+
+	if (aarch64_insn_is_class_cas(insn))
+		return true;
+
+	return false;
+}
+
 static int __kprobes do_page_fault(unsigned long far, unsigned long esr,
 				   struct pt_regs *regs)
 {
@@ -529,6 +558,7 @@ static int __kprobes do_page_fault(unsigned long far, unsigned long esr,
 	unsigned int mm_flags = FAULT_FLAG_DEFAULT;
 	unsigned long addr = untagged_addr(far);
 	struct vm_area_struct *vma;
+	bool force_write = false;
 
 	if (kprobe_page_fault(regs, esr))
 		return 0;
@@ -557,6 +587,11 @@ static int __kprobes do_page_fault(unsigned long far, unsigned long esr,
 		/* It was write fault */
 		vm_flags = VM_WRITE;
 		mm_flags |= FAULT_FLAG_WRITE;
+	} else if (is_el0_atomic_instr(regs)) {
+		/* Force write fault */
+		vm_flags = VM_WRITE;
+		mm_flags |= FAULT_FLAG_WRITE;
+		force_write = true;
 	} else {
 		/* It was read fault */
 		vm_flags = VM_READ;
@@ -585,6 +620,14 @@ static int __kprobes do_page_fault(unsigned long far, unsigned long esr,
 	vma = lock_vma_under_rcu(mm, addr);
 	if (!vma)
 		goto lock_mmap;
+
+	/* vma flags don't allow write, undo force write */
+	if (force_write && !(vma->vm_flags & VM_WRITE)) {
+		vm_flags |= VM_READ;
+		if (!alternative_has_cap_unlikely(ARM64_HAS_EPAN))
+			vm_flags |= VM_EXEC;
+		mm_flags &= ~FAULT_FLAG_WRITE;
+	}
 
 	if (!(vma->vm_flags & vm_flags)) {
 		vma_end_read(vma);
