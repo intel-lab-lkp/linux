@@ -1,0 +1,28 @@
+drm drm-fixes c3f38fa61af77b49866b006939479069cd451173
+	Linux 6.10-rc2
+drm-misc drm-misc-fixes 629f2b4e05225e53125aaf7ff0b87d5d53897128
+	drm/panel: sitronix-st7789v: Add check for of_drm_get_panel_orientation
+drm-intel drm-intel-fixes c3f38fa61af77b49866b006939479069cd451173
+	Linux 6.10-rc2
+drm-xe drm-xe-fixes 0698ff57bf327d9a5735a898f78161b8dada160b
+	drm/xe/pf: Update the LMTT when freeing VF GT config
+drm drm-next c3f38fa61af77b49866b006939479069cd451173
+	Linux 6.10-rc2
+drm-misc drm-misc-next-fixes 539d33b5783804f22a62bd62ff463dfd1cef4265
+	drm/komeda: remove unused struct 'gamma_curve_segment'
+drm-intel drm-intel-next-fixes 1613e604df0cd359cf2a7fbd9be7a0bcfacfabd0
+	Linux 6.10-rc1
+drm-xe drm-xe-next-fixes d69c3d4b53829097b8948d6791ea32c07de3faab
+	drm/xe/ads: Use flexible-array
+drm-misc drm-misc-next 35e7a72a67190a3846cfe2f87add4ed1229b2248
+	drm/bridge: analogix_dp: don't adjust further when clock recovery succeeded
+drm-intel drm-intel-next 30ca6365bb4200f55e59bf1ab2a24e65406e9eac
+	drm/i915: Fix assert on pending async-put power domain work when it requeues itself
+drm-intel drm-intel-gt-next a09d2327a9ba8e3f5be238bc1b7ca2809255b464
+	drm/i915/gt: Fix CCS id's calculation for CCS mode setting
+drm-xe drm-xe-next 877517f2dcba58867b64e3e0c616f26c62d4a8db
+	drm/xe: Add kernel-doc to some xe_lrc interfaces
+drm-intel topic/core-for-CI a51e92845f99879e971677482b0f5fd96ef10d3c
+	thunderbolt: Add Kconfig option to disable PCIe tunneling
+drm-xe topic/xe-for-CI 428c3ef38ef5565140b2104f0d3dafdae9056ca9
+	Revert "drm/xe/gsc: define GSC FW for LNL"
