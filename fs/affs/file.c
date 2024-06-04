@@ -119,6 +119,7 @@ err:
 static struct buffer_head *
 affs_alloc_extblock(struct inode *inode, struct buffer_head *bh, u32 ext)
 {
+	struct address_space *mapping = inode->i_mapping;
 	struct super_block *sb = inode->i_sb;
 	struct buffer_head *new_bh;
 	u32 blocknr, tmp;
@@ -139,14 +140,14 @@ affs_alloc_extblock(struct inode *inode, struct buffer_head *bh, u32 ext)
 	AFFS_TAIL(sb, new_bh)->parent = cpu_to_be32(inode->i_ino);
 	affs_fix_checksum(sb, new_bh);
 
-	mark_buffer_dirty_inode(new_bh, inode);
+	mark_buffer_dirty_fsync(new_bh, mapping);
 
 	tmp = be32_to_cpu(AFFS_TAIL(sb, bh)->extension);
 	if (tmp)
 		affs_warning(sb, "alloc_ext", "previous extension set (%x)", tmp);
 	AFFS_TAIL(sb, bh)->extension = cpu_to_be32(blocknr);
 	affs_adjust_checksum(bh, blocknr - tmp);
-	mark_buffer_dirty_inode(bh, inode);
+	mark_buffer_dirty_fsync(bh, mapping);
 
 	AFFS_I(inode)->i_extcnt++;
 	mark_inode_dirty(inode);
@@ -558,6 +559,7 @@ static int affs_do_read_folio_ofs(struct folio *folio, size_t to, int create)
 static int
 affs_extent_file_ofs(struct inode *inode, u32 newsize)
 {
+	struct address_space *mapping = inode->i_mapping;
 	struct super_block *sb = inode->i_sb;
 	struct buffer_head *bh, *prev_bh;
 	u32 bidx, boff;
@@ -579,7 +581,7 @@ affs_extent_file_ofs(struct inode *inode, u32 newsize)
 		memset(AFFS_DATA(bh) + boff, 0, tmp);
 		be32_add_cpu(&AFFS_DATA_HEAD(bh)->size, tmp);
 		affs_fix_checksum(sb, bh);
-		mark_buffer_dirty_inode(bh, inode);
+		mark_buffer_dirty_fsync(bh, mapping);
 		size += tmp;
 		bidx++;
 	} else if (bidx) {
@@ -601,7 +603,7 @@ affs_extent_file_ofs(struct inode *inode, u32 newsize)
 		AFFS_DATA_HEAD(bh)->size = cpu_to_be32(tmp);
 		affs_fix_checksum(sb, bh);
 		bh->b_state &= ~(1UL << BH_New);
-		mark_buffer_dirty_inode(bh, inode);
+		mark_buffer_dirty_fsync(bh, mapping);
 		if (prev_bh) {
 			u32 tmp_next = be32_to_cpu(AFFS_DATA_HEAD(prev_bh)->next);
 
@@ -611,7 +613,7 @@ affs_extent_file_ofs(struct inode *inode, u32 newsize)
 					     bidx, tmp_next);
 			AFFS_DATA_HEAD(prev_bh)->next = cpu_to_be32(bh->b_blocknr);
 			affs_adjust_checksum(prev_bh, bh->b_blocknr - tmp_next);
-			mark_buffer_dirty_inode(prev_bh, inode);
+			mark_buffer_dirty_fsync(prev_bh, mapping);
 			affs_brelse(prev_bh);
 		}
 		size += bsize;
@@ -728,7 +730,7 @@ static int affs_write_end_ofs(struct file *file, struct address_space *mapping,
 		memcpy(AFFS_DATA(bh) + boff, data + from, tmp);
 		be32_add_cpu(&AFFS_DATA_HEAD(bh)->size, tmp);
 		affs_fix_checksum(sb, bh);
-		mark_buffer_dirty_inode(bh, inode);
+		mark_buffer_dirty_fsync(bh, mapping);
 		written += tmp;
 		from += tmp;
 		bidx++;
@@ -761,12 +763,12 @@ static int affs_write_end_ofs(struct file *file, struct address_space *mapping,
 						     bidx, tmp_next);
 				AFFS_DATA_HEAD(prev_bh)->next = cpu_to_be32(bh->b_blocknr);
 				affs_adjust_checksum(prev_bh, bh->b_blocknr - tmp_next);
-				mark_buffer_dirty_inode(prev_bh, inode);
+				mark_buffer_dirty_fsync(prev_bh, mapping);
 			}
 		}
 		affs_brelse(prev_bh);
 		affs_fix_checksum(sb, bh);
-		mark_buffer_dirty_inode(bh, inode);
+		mark_buffer_dirty_fsync(bh, mapping);
 		written += bsize;
 		from += bsize;
 		bidx++;
@@ -795,13 +797,13 @@ static int affs_write_end_ofs(struct file *file, struct address_space *mapping,
 						     bidx, tmp_next);
 				AFFS_DATA_HEAD(prev_bh)->next = cpu_to_be32(bh->b_blocknr);
 				affs_adjust_checksum(prev_bh, bh->b_blocknr - tmp_next);
-				mark_buffer_dirty_inode(prev_bh, inode);
+				mark_buffer_dirty_fsync(prev_bh, mapping);
 			}
 		} else if (be32_to_cpu(AFFS_DATA_HEAD(bh)->size) < tmp)
 			AFFS_DATA_HEAD(bh)->size = cpu_to_be32(tmp);
 		affs_brelse(prev_bh);
 		affs_fix_checksum(sb, bh);
-		mark_buffer_dirty_inode(bh, inode);
+		mark_buffer_dirty_fsync(bh, mapping);
 		written += tmp;
 		from += tmp;
 		bidx++;
@@ -863,6 +865,7 @@ affs_free_prealloc(struct inode *inode)
 void
 affs_truncate(struct inode *inode)
 {
+	struct address_space *mapping = inode->i_mapping;
 	struct super_block *sb = inode->i_sb;
 	u32 ext, ext_key;
 	u32 last_blk, blkcnt, blk;
@@ -881,7 +884,6 @@ affs_truncate(struct inode *inode)
 	}
 
 	if (inode->i_size > AFFS_I(inode)->mmu_private) {
-		struct address_space *mapping = inode->i_mapping;
 		struct page *page;
 		void *fsdata = NULL;
 		loff_t isize = inode->i_size;
@@ -938,7 +940,7 @@ affs_truncate(struct inode *inode)
 	}
 	AFFS_TAIL(sb, ext_bh)->extension = 0;
 	affs_fix_checksum(sb, ext_bh);
-	mark_buffer_dirty_inode(ext_bh, inode);
+	mark_buffer_dirty_fsync(ext_bh, mapping);
 	affs_brelse(ext_bh);
 
 	if (inode->i_size) {

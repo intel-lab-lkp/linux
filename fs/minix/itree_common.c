@@ -98,7 +98,7 @@ static int alloc_branch(struct inode *inode,
 		*branch[n].p = branch[n].key;
 		set_buffer_uptodate(bh);
 		unlock_buffer(bh);
-		mark_buffer_dirty_inode(bh, inode);
+		mark_buffer_dirty_fsync(bh, inode->i_mapping);
 		parent = nr;
 	}
 	if (n == num)
@@ -135,7 +135,7 @@ static inline int splice_branch(struct inode *inode,
 
 	/* had we spliced it onto indirect block? */
 	if (where->bh)
-		mark_buffer_dirty_inode(where->bh, inode);
+		mark_buffer_dirty_fsync(where->bh, inode->i_mapping);
 
 	mark_inode_dirty(inode);
 	return 0;
@@ -328,14 +328,14 @@ static inline void truncate (struct inode * inode)
 		if (partial == chain)
 			mark_inode_dirty(inode);
 		else
-			mark_buffer_dirty_inode(partial->bh, inode);
+			mark_buffer_dirty_fsync(partial->bh, inode->i_mapping);
 		free_branches(inode, &nr, &nr+1, (chain+n-1) - partial);
 	}
 	/* Clear the ends of indirect blocks on the shared branch */
 	while (partial > chain) {
 		free_branches(inode, partial->p + 1, block_end(partial->bh),
 				(chain+n-1) - partial);
-		mark_buffer_dirty_inode(partial->bh, inode);
+		mark_buffer_dirty_fsync(partial->bh, inode->i_mapping);
 		brelse (partial->bh);
 		partial--;
 	}

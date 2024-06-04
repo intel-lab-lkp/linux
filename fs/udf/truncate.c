@@ -169,7 +169,7 @@ static void udf_update_alloc_ext_desc(struct inode *inode,
 		len += lenalloc;
 
 	udf_update_tag(epos->bh->b_data, len);
-	mark_buffer_dirty_inode(epos->bh, inode);
+	mark_buffer_dirty_fsync(epos->bh, inode->i_mapping);
 }
 
 /*

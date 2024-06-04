@@ -373,7 +373,8 @@ affs_symlink(struct mnt_idmap *idmap, struct inode *dir,
 	}
 	*p = 0;
 	inode->i_size = i + 1;
-	mark_buffer_dirty_inode(bh, inode);
+	struct address_space *mapping = inode->i_mapping
+	mark_buffer_dirty_fsync(bh, mapping);
 	affs_brelse(bh);
 	mark_inode_dirty(inode);
 
@@ -443,7 +444,7 @@ affs_rename(struct inode *old_dir, struct dentry *old_dentry,
 	/* TODO: move it back to old_dir, if error? */
 
 done:
-	mark_buffer_dirty_inode(bh, retval ? old_dir : new_dir);
+	mark_buffer_dirty_fsync(bh, retval ? old_dir->i_mapping : new_dir->i_mapping);
 	affs_brelse(bh);
 	return retval;
 }
@@ -496,8 +497,8 @@ affs_xrename(struct inode *old_dir, struct dentry *old_dentry,
 	retval = affs_insert_hash(old_dir, bh_new);
 	affs_unlock_dir(old_dir);
 done:
-	mark_buffer_dirty_inode(bh_old, new_dir);
-	mark_buffer_dirty_inode(bh_new, old_dir);
+	mark_buffer_dirty_fsync(bh_old, new_dir->i_mapping);
+	mark_buffer_dirty_fsync(bh_new, old_dir->i_mapping);
 	affs_brelse(bh_old);
 	affs_brelse(bh_new);
 	return retval;

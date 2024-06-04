@@ -1226,7 +1226,7 @@ struct buffer_head *udf_bread(struct inode *inode, udf_pblk_t block,
 		memset(bh->b_data, 0x00, inode->i_sb->s_blocksize);
 		set_buffer_uptodate(bh);
 		unlock_buffer(bh);
-		mark_buffer_dirty_inode(bh, inode);
+		mark_buffer_dirty_fsync(bh, inode->i_mapping);
 		return bh;
 	}
 
@@ -1978,7 +1978,7 @@ int udf_setup_indirect_aext(struct inode *inode, udf_pblk_t block,
 	memset(bh->b_data, 0x00, sb->s_blocksize);
 	set_buffer_uptodate(bh);
 	unlock_buffer(bh);
-	mark_buffer_dirty_inode(bh, inode);
+	mark_buffer_dirty_fsync(bh, inode->i_mapping);
 
 	aed = (struct allocExtDesc *)(bh->b_data);
 	if (!UDF_QUERY_FLAG(sb, UDF_FLAG_STRICT)) {
@@ -2068,7 +2068,7 @@ int __udf_add_aext(struct inode *inode, struct extent_position *epos,
 		else
 			udf_update_tag(epos->bh->b_data,
 					sizeof(struct allocExtDesc));
-		mark_buffer_dirty_inode(epos->bh, inode);
+		mark_buffer_dirty_fsync(epos->bh, inode->i_mapping);
 	}
 
 	return 0;
@@ -2152,7 +2152,7 @@ void udf_write_aext(struct inode *inode, struct extent_position *epos,
 				       le32_to_cpu(aed->lengthAllocDescs) +
 				       sizeof(struct allocExtDesc));
 		}
-		mark_buffer_dirty_inode(epos->bh, inode);
+		mark_buffer_dirty_fsync(epos->bh, inode->i_mapping);
 	} else {
 		mark_inode_dirty(inode);
 	}
@@ -2331,7 +2331,7 @@ int8_t udf_delete_aext(struct inode *inode, struct extent_position epos)
 			else
 				udf_update_tag(oepos.bh->b_data,
 						sizeof(struct allocExtDesc));
-			mark_buffer_dirty_inode(oepos.bh, inode);
+			mark_buffer_dirty_fsync(oepos.bh, inode->i_mapping);
 		}
 	} else {
 		udf_write_aext(inode, &oepos, &eloc, elen, 1);
@@ -2348,7 +2348,7 @@ int8_t udf_delete_aext(struct inode *inode, struct extent_position epos)
 			else
 				udf_update_tag(oepos.bh->b_data,
 						sizeof(struct allocExtDesc));
-			mark_buffer_dirty_inode(oepos.bh, inode);
+			mark_buffer_dirty_fsync(oepos.bh, inode->i_mapping);
 		}
 	}
 

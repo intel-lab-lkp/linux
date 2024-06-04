@@ -27,6 +27,7 @@ affs_insert_hash(struct inode *dir, struct buffer_head *bh)
 {
 	struct super_block *sb = dir->i_sb;
 	struct buffer_head *dir_bh;
+	struct address_space *mapping = dir->i_mapping;
 	u32 ino, hash_ino;
 	int offset;
 
@@ -57,7 +58,7 @@ affs_insert_hash(struct inode *dir, struct buffer_head *bh)
 		AFFS_TAIL(sb, dir_bh)->hash_chain = cpu_to_be32(ino);
 
 	affs_adjust_checksum(dir_bh, ino);
-	mark_buffer_dirty_inode(dir_bh, dir);
+	mark_buffer_dirty_fsync(dir_bh, mapping);
 	affs_brelse(dir_bh);
 
 	inode_set_mtime_to_ts(dir, inode_set_ctime_current(dir));
@@ -74,6 +75,7 @@ affs_insert_hash(struct inode *dir, struct buffer_head *bh)
 int
 affs_remove_hash(struct inode *dir, struct buffer_head *rem_bh)
 {
+	struct address_space *mapping = dir->i_mapping;
 	struct super_block *sb;
 	struct buffer_head *bh;
 	u32 rem_ino, hash_ino;
@@ -100,7 +102,7 @@ affs_remove_hash(struct inode *dir, struct buffer_head *rem_bh)
 			else
 				AFFS_TAIL(sb, bh)->hash_chain = ino;
 			affs_adjust_checksum(bh, be32_to_cpu(ino) - hash_ino);
-			mark_buffer_dirty_inode(bh, dir);
+			mark_buffer_dirty_fsync(bh, mapping);
 			AFFS_TAIL(sb, rem_bh)->parent = 0;
 			retval = 0;
 			break;
@@ -142,6 +144,7 @@ static int
 affs_remove_link(struct dentry *dentry)
 {
 	struct inode *dir, *inode = d_inode(dentry);
+	struct address_space *mapping = inode->i_mapping;
 	struct super_block *sb = inode->i_sb;
 	struct buffer_head *bh, *link_bh = NULL;
 	u32 link_ino, ino;
@@ -180,7 +183,7 @@ affs_remove_link(struct dentry *dentry)
 			affs_unlock_dir(dir);
 			goto done;
 		}
-		mark_buffer_dirty_inode(link_bh, inode);
+		mark_buffer_dirty_fsync(link_bh, mapping);
 
 		memcpy(AFFS_TAIL(sb, bh)->name, AFFS_TAIL(sb, link_bh)->name, 32);
 		retval = affs_insert_hash(dir, bh);
@@ -188,7 +191,7 @@ affs_remove_link(struct dentry *dentry)
 			affs_unlock_dir(dir);
 			goto done;
 		}
-		mark_buffer_dirty_inode(bh, inode);
+		mark_buffer_dirty_fsync(bh, mapping);
 
 		affs_unlock_dir(dir);
 		iput(dir);
@@ -203,7 +206,7 @@ affs_remove_link(struct dentry *dentry)
 			__be32 ino2 = AFFS_TAIL(sb, link_bh)->link_chain;
 			AFFS_TAIL(sb, bh)->link_chain = ino2;
 			affs_adjust_checksum(bh, be32_to_cpu(ino2) - link_ino);
-			mark_buffer_dirty_inode(bh, inode);
+			mark_buffer_dirty_fsync(bh, mapping);
 			retval = 0;
 			/* Fix the link count, if bh is a normal header block without links */
 			switch (be32_to_cpu(AFFS_TAIL(sb, bh)->stype)) {
@@ -276,6 +279,8 @@ affs_remove_header(struct dentry *dentry)
 
 	retval = -ENOENT;
 	inode = d_inode(dentry);
+	struct address_space *mapping = inode->i_mapping;
+
 	if (!inode)
 		goto done;
 
@@ -306,7 +311,7 @@ affs_remove_header(struct dentry *dentry)
 	retval = affs_remove_hash(dir, bh);
 	if (retval)
 		goto done_unlock;
-	mark_buffer_dirty_inode(bh, inode);
+	mark_buffer_dirty_fsync(bh, mapping);
 
 	affs_unlock_dir(dir);
 
