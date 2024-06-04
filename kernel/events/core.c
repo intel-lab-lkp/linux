@@ -4283,7 +4283,7 @@ out:
 static bool perf_rotate_context(struct perf_cpu_pmu_context *cpc)
 {
 	struct perf_cpu_context *cpuctx = this_cpu_ptr(&perf_cpu_context);
-	struct perf_event_pmu_context *cpu_epc, *task_epc = NULL;
+	struct perf_event_pmu_context *cpu_epc, *task_epc;
 	struct perf_event *cpu_event = NULL, *task_event = NULL;
 	int cpu_rotate, task_rotate;
 	struct pmu *pmu;
