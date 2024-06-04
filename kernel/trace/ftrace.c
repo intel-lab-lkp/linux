@@ -1892,16 +1892,24 @@ static bool __ftrace_hash_rec_update(struct ftrace_ops *ops,
 	return update;
 }
 
-static bool ftrace_hash_rec_disable(struct ftrace_ops *ops,
-				    int filter_hash)
+/*
+ * This is called when an ops is removed from tracing. It will decrement
+ * the counters of the dyn_ftrace records for all the functions that
+ * the @ops attached to.
+ */
+static bool ftrace_hash_rec_disable(struct ftrace_ops *ops)
 {
-	return __ftrace_hash_rec_update(ops, filter_hash, 0);
+	return __ftrace_hash_rec_update(ops, true, 0);
 }
 
-static bool ftrace_hash_rec_enable(struct ftrace_ops *ops,
-				   int filter_hash)
+/*
+ * This is called when an ops is added to tracing. It will increment
+ * the counters of the dyn_ftrace records for all the functions that
+ * the @ops attached to.
+ */
+static bool ftrace_hash_rec_enable(struct ftrace_ops *ops)
 {
-	return __ftrace_hash_rec_update(ops, filter_hash, 1);
+	return __ftrace_hash_rec_update(ops, true, 1);
 }
 
 static void ftrace_hash_rec_update_modify(struct ftrace_ops *ops,
@@ -3059,7 +3067,7 @@ int ftrace_startup(struct ftrace_ops *ops, int command)
 		return ret;
 	}
 
-	if (ftrace_hash_rec_enable(ops, 1))
+	if (ftrace_hash_rec_enable(ops))
 		command |= FTRACE_UPDATE_CALLS;
 
 	ftrace_startup_enable(command);
@@ -3101,7 +3109,7 @@ int ftrace_shutdown(struct ftrace_ops *ops, int command)
 	/* Disabling ipmodify never fails */
 	ftrace_hash_ipmodify_disable(ops);
 
-	if (ftrace_hash_rec_disable(ops, 1))
+	if (ftrace_hash_rec_disable(ops))
 		command |= FTRACE_UPDATE_CALLS;
 
 	ops->flags &= ~FTRACE_OPS_FL_ENABLED;
