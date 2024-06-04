@@ -7,6 +7,14 @@ This document contains useful information to know when working with
 the Rust support in the kernel.
 
 
+``no_std``
+----------
+
+The Rust support in the kernel links to the `core-crate <https://doc.rust-
+lang.org/core/>`_ instead of the std-crate. This is done by using
+the ``#![no_std]`` attribute.
+
+
 Code documentation
 ------------------
 
