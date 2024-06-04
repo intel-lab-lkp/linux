@@ -99,6 +99,14 @@ static inline bool iavf_test_staterr(union iavf_rx_desc *rx_desc,
 		  cpu_to_le64(stat_err_bits));
 }
 
+struct iavf_rx_extracted {
+	unsigned int size;
+	u16 vlan_tag;
+	u16 rx_ptype;
+	u8 end_of_packet:1;
+	u8 rxe:1;
+};
+
 /* How many Rx Buffers do we bundle into one write to the hardware ? */
 #define IAVF_RX_INCREMENT(r, i) \
 	do {					\
