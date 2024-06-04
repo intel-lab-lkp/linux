@@ -213,6 +213,7 @@ int vmbus_connect(void)
 
 	INIT_LIST_HEAD(&vmbus_connection.chn_list);
 	mutex_init(&vmbus_connection.channel_mutex);
+	spin_lock_init(&vmbus_connection.set_affinity_lock);
 
 	/*
 	 * Setup the vmbus event connection for channel interrupt

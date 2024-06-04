@@ -1351,6 +1351,14 @@ int vmbus_irq_set_affinity(struct irq_data *data,
 		return -EINVAL;
 	}
 
+	/*
+	 * The spin lock must be held so that checking synic_online, sending
+	 * the MODIFYCHANNEL message, and setting channel->target_cpu are
+	 * atomic with respect to hv_synic_cleanup() clearing the CPU in
+	 * synic_online and doing the search.
+	 */
+	spin_lock(&vmbus_connection.set_affinity_lock);
+
 	/* Don't consider CPUs that are isolated */
 	if (housekeeping_enabled(HK_TYPE_MANAGED_IRQ))
 		cpumask_and(&tempmask, dest,
@@ -1367,30 +1375,39 @@ int vmbus_irq_set_affinity(struct irq_data *data,
 	origin_cpu = channel->target_cpu;
 	if (cpumask_test_cpu(origin_cpu, &tempmask)) {
 		target_cpu = origin_cpu;
+		spin_unlock(&vmbus_connection.set_affinity_lock);
 		goto update_effective;
 	}
 
 	/*
 	 * Pick a CPU from the new affinity mask. As a simple heuristic to
 	 * spread out the selection when the mask contains multiple CPUs,
-	 * start with whatever CPU was last selected.
+	 * start with whatever CPU was last selected. Also filter out any
+	 * CPUs where synic_online isn't set -- these CPUs are in the process
+	 * of going offline and must not have channel interrupts assigned
+	 * to them.
 	 */
+	cpumask_and(&tempmask, &tempmask, &vmbus_connection.synic_online);
 	target_cpu = cpumask_next_wrap(next_cpu, &tempmask, nr_cpu_ids, false);
-	if (target_cpu >= nr_cpu_ids)
-		return -EINVAL;
+	if (target_cpu >= nr_cpu_ids) {
+		ret = -EINVAL;
+		goto unlock;
+	}
 	next_cpu = target_cpu;
 
 	/*
 	 * Hyper-V will ignore MODIFYCHANNEL messages for "non-open" channels;
 	 * avoid sending the message and fail here for such channels.
 	 */
-	if (channel->state != CHANNEL_OPENED_STATE)
-		return -EIO;
+	if (channel->state != CHANNEL_OPENED_STATE) {
+		ret = -EIO;
+		goto unlock;
+	}
 
 	ret = vmbus_send_modifychannel(channel,
 				     hv_cpu_number_to_vp_number(target_cpu));
 	if (ret)
-		return ret;
+		goto unlock;
 
 	/*
 	 * Warning.  At this point, there is *no* guarantee that the host will
@@ -1408,6 +1425,7 @@ int vmbus_irq_set_affinity(struct irq_data *data,
 	 */
 
 	channel->target_cpu = target_cpu;
+	spin_unlock(&vmbus_connection.set_affinity_lock);
 
 	/* See init_vp_index(). */
 	if (hv_is_perf_channel(channel))
@@ -1422,6 +1440,10 @@ int vmbus_irq_set_affinity(struct irq_data *data,
 update_effective:
 	irq_data_update_effective_affinity(data, cpumask_of(target_cpu));
 	return IRQ_SET_MASK_OK;
+
+unlock:
+	spin_unlock(&vmbus_connection.set_affinity_lock);
+	return ret;
 }
 
 /*

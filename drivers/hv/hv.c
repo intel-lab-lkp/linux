@@ -338,6 +338,8 @@ int hv_synic_init(unsigned int cpu)
 {
 	hv_synic_enable_regs(cpu);
 
+	cpumask_set_cpu(cpu, &vmbus_connection.synic_online);
+
 	hv_stimer_legacy_init(cpu, VMBUS_MESSAGE_SINT);
 
 	return 0;
@@ -513,6 +515,17 @@ int hv_synic_cleanup(unsigned int cpu)
 	 * TODO: Re-bind the channels to different CPUs.
 	 */
 	mutex_lock(&vmbus_connection.channel_mutex);
+	spin_lock(&vmbus_connection.set_affinity_lock);
+
+	/*
+	 * Once the check for channels assigned to this CPU is complete, we
+	 * must not allow a channel to be assigned to this CPU. So mark
+	 * the synic as no longer online. This cpumask is checked in
+	 * vmbus_irq_set_affinity() to prevent setting the affinity of
+	 * an IRQ to such a CPU.
+	 */
+	cpumask_clear_cpu(cpu, &vmbus_connection.synic_online);
+
 	list_for_each_entry(channel, &vmbus_connection.chn_list, listentry) {
 		if (channel->target_cpu == cpu) {
 			channel_found = true;
@@ -527,10 +540,11 @@ int hv_synic_cleanup(unsigned int cpu)
 		if (channel_found)
 			break;
 	}
+	spin_unlock(&vmbus_connection.set_affinity_lock);
 	mutex_unlock(&vmbus_connection.channel_mutex);
 
 	if (channel_found)
-		return -EBUSY;
+		goto set_online;
 
 	/*
 	 * channel_found == false means that any channels that were previously
@@ -547,7 +561,7 @@ int hv_synic_cleanup(unsigned int cpu)
 		if (hv_synic_event_pending()) {
 			pr_err("Events pending when trying to offline CPU %d\n",
 					cpu);
-			return -EBUSY;
+			goto set_online;
 		}
 	}
 
@@ -557,4 +571,8 @@ always_cleanup:
 	hv_synic_disable_regs(cpu);
 
 	return 0;
+
+set_online:
+	cpumask_set_cpu(cpu, &vmbus_connection.synic_online);
+	return -EBUSY;
 }

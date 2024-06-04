@@ -263,6 +263,8 @@ struct vmbus_connection {
 	struct fwnode_handle *vmbus_fwnode;
 	struct irq_domain *vmbus_irq_domain;
 	struct irq_chip	vmbus_irq_chip;
+	cpumask_t synic_online;
+	spinlock_t set_affinity_lock;
 
 	/*
 	 * VM-wide counts of MODIFYCHANNEL messages sent and completed.
