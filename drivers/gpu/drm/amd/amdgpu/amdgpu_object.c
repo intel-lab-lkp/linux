@@ -168,13 +168,23 @@ void amdgpu_bo_placement_from_domain(struct amdgpu_bo *abo, u32 domain)
 			abo->flags & AMDGPU_GEM_CREATE_PREEMPTIBLE ?
 			AMDGPU_PL_PREEMPT : TTM_PL_TT;
 		places[c].flags = 0;
-		/*
-		 * When GTT is just an alternative to VRAM make sure that we
-		 * only use it as fallback and still try to fill up VRAM first.
-		 */
+
 		if (domain & abo->preferred_domains & AMDGPU_GEM_DOMAIN_VRAM &&
-		    !(adev->flags & AMD_IS_APU))
-			places[c].flags |= TTM_PL_FLAG_FALLBACK;
+		    !(adev->flags & AMD_IS_APU)) {
+			/*
+			 * When GTT is just an alternative to VRAM make sure that we
+			 * only use it as fallback and still try to fill up VRAM first.
+			*/
+			if (abo->preferred_domains & AMDGPU_GEM_DOMAIN_GTT)
+				places[c].flags |= TTM_PL_FLAG_FALLBACK;
+
+			/*
+			 * Enable GTT when the threshold of moved bytes is
+			 * reached. This prevents any non essential buffer move
+			 * when the links are already saturated.
+			 */
+			places[c].flags |= TTM_PL_FLAG_MOVE_THRESHOLD;
+		}
 		c++;
 	}
 

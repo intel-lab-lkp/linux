@@ -784,7 +784,6 @@ static int amdgpu_cs_bo_validate(void *param, struct amdgpu_bo *bo)
 		.no_wait_gpu = false,
 		.resv = bo->tbo.base.resv
 	};
-	uint32_t domain;
 	int r;
 
 	if (bo->tbo.pin_count)
@@ -796,37 +795,28 @@ static int amdgpu_cs_bo_validate(void *param, struct amdgpu_bo *bo)
 	if (p->bytes_moved < p->bytes_moved_threshold &&
 	    (!bo->tbo.base.dma_buf ||
 	    list_empty(&bo->tbo.base.dma_buf->attachments))) {
+
+		/* And don't move a CPU_ACCESS_REQUIRED BO to limited
+		 * visible VRAM if we've depleted our allowance to do
+		 * that.
+		 */
 		if (!amdgpu_gmc_vram_full_visible(&adev->gmc) &&
-		    (bo->flags & AMDGPU_GEM_CREATE_CPU_ACCESS_REQUIRED)) {
-			/* And don't move a CPU_ACCESS_REQUIRED BO to limited
-			 * visible VRAM if we've depleted our allowance to do
-			 * that.
-			 */
-			if (p->bytes_moved_vis < p->bytes_moved_vis_threshold)
-				domain = bo->preferred_domains;
-			else
-				domain = bo->allowed_domains;
-		} else {
-			domain = bo->preferred_domains;
-		}
-	} else {
-		domain = bo->allowed_domains;
+		    (bo->flags & AMDGPU_GEM_CREATE_CPU_ACCESS_REQUIRED) &&
+		    p->bytes_moved_vis < p->bytes_moved_vis_threshold)
+			ctx.move_threshold = p->bytes_moved_vis_threshold -
+				p->bytes_moved_vis;
+		else
+			ctx.move_threshold = p->bytes_moved_vis_threshold -
+				p->bytes_moved;
 	}
 
-retry:
-	amdgpu_bo_placement_from_domain(bo, domain);
+	amdgpu_bo_placement_from_domain(bo, bo->allowed_domains);
 	r = ttm_bo_validate(&bo->tbo, &bo->placement, &ctx);
 
 	p->bytes_moved += ctx.bytes_moved;
 	if (!amdgpu_gmc_vram_full_visible(&adev->gmc) &&
 	    amdgpu_res_cpu_visible(adev, bo->tbo.resource))
 		p->bytes_moved_vis += ctx.bytes_moved;
-
-	if (unlikely(r == -ENOMEM) && domain != bo->allowed_domains) {
-		domain = bo->allowed_domains;
-		goto retry;
-	}
-
 	return r;
 }
 
