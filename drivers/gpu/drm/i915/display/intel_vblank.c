@@ -89,9 +89,7 @@ u32 i915_get_vblank_counter(struct drm_crtc *crtc)
 
 	htotal = mode->crtc_htotal;
 	hsync_start = mode->crtc_hsync_start;
-	vbl_start = mode->crtc_vblank_start;
-	if (mode->flags & DRM_MODE_FLAG_INTERLACE)
-		vbl_start = DIV_ROUND_UP(vbl_start, 2);
+	vbl_start = intel_mode_vblank_start(mode);
 
 	/* Convert to pixel count */
 	vbl_start *= htotal;
@@ -132,8 +130,7 @@ u32 g4x_get_vblank_counter(struct drm_crtc *crtc)
 static u32 intel_crtc_scanlines_since_frame_timestamp(struct intel_crtc *crtc)
 {
 	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
-	struct drm_vblank_crtc *vblank =
-		&crtc->base.dev->vblank[drm_crtc_index(&crtc->base)];
+	struct drm_vblank_crtc *vblank = drm_crtc_vblank_crtc(&crtc->base);
 	const struct drm_display_mode *mode = &vblank->hwmode;
 	u32 htotal = mode->crtc_htotal;
 	u32 clock = mode->crtc_clock;
@@ -178,8 +175,7 @@ static u32 intel_crtc_scanlines_since_frame_timestamp(struct intel_crtc *crtc)
  */
 static u32 __intel_get_crtc_scanline_from_timestamp(struct intel_crtc *crtc)
 {
-	struct drm_vblank_crtc *vblank =
-		&crtc->base.dev->vblank[drm_crtc_index(&crtc->base)];
+	struct drm_vblank_crtc *vblank = drm_crtc_vblank_crtc(&crtc->base);
 	const struct drm_display_mode *mode = &vblank->hwmode;
 	u32 vblank_start = mode->crtc_vblank_start;
 	u32 vtotal = mode->crtc_vtotal;
@@ -192,6 +188,44 @@ static u32 __intel_get_crtc_scanline_from_timestamp(struct intel_crtc *crtc)
 	return scanline;
 }
 
+static int intel_crtc_scanline_offset(const struct intel_crtc_state *crtc_state)
+{
+	struct drm_i915_private *i915 = to_i915(crtc_state->uapi.crtc->dev);
+
+	/*
+	 * The scanline counter increments at the leading edge of hsync.
+	 *
+	 * On most platforms it starts counting from vtotal-1 on the
+	 * first active line. That means the scanline counter value is
+	 * always one less than what we would expect. Ie. just after
+	 * start of vblank, which also occurs at start of hsync (on the
+	 * last active line), the scanline counter will read vblank_start-1.
+	 *
+	 * On gen2 the scanline counter starts counting from 1 instead
+	 * of vtotal-1, so we have to subtract one.
+	 *
+	 * On HSW+ the behaviour of the scanline counter depends on the output
+	 * type. For DP ports it behaves like most other platforms, but on HDMI
+	 * there's an extra 1 line difference. So we need to add two instead of
+	 * one to the value.
+	 *
+	 * On VLV/CHV DSI the scanline counter would appear to increment
+	 * approx. 1/3 of a scanline before start of vblank. Unfortunately
+	 * that means we can't tell whether we're in vblank or not while
+	 * we're on that particular line. We must still set scanline_offset
+	 * to 1 so that the vblank timestamps come out correct when we query
+	 * the scanline counter from within the vblank interrupt handler.
+	 * However if queried just before the start of vblank we'll get an
+	 * answer that's slightly in the future.
+	 */
+	if (DISPLAY_VER(i915) == 2)
+		return -1;
+	else if (HAS_DDI(i915) && intel_crtc_has_type(crtc_state, INTEL_OUTPUT_HDMI))
+		return 2;
+	else
+		return 1;
+}
+
 /*
  * intel_de_read_fw(), only for fast reads of display block, no need for
  * forcewake etc.
@@ -200,23 +234,18 @@ static int __intel_get_crtc_scanline(struct intel_crtc *crtc)
 {
 	struct drm_device *dev = crtc->base.dev;
 	struct drm_i915_private *dev_priv = to_i915(dev);
-	const struct drm_display_mode *mode;
-	struct drm_vblank_crtc *vblank;
+	struct drm_vblank_crtc *vblank = drm_crtc_vblank_crtc(&crtc->base);
+	const struct drm_display_mode *mode = &vblank->hwmode;
 	enum pipe pipe = crtc->pipe;
 	int position, vtotal;
 
 	if (!crtc->active)
 		return 0;
 
-	vblank = &crtc->base.dev->vblank[drm_crtc_index(&crtc->base)];
-	mode = &vblank->hwmode;
-
 	if (crtc->mode_flags & I915_MODE_FLAG_GET_SCANLINE_FROM_TIMESTAMP)
 		return __intel_get_crtc_scanline_from_timestamp(crtc);
 
-	vtotal = mode->crtc_vtotal;
-	if (mode->flags & DRM_MODE_FLAG_INTERLACE)
-		vtotal /= 2;
+	vtotal = intel_mode_vtotal(mode);
 
 	position = intel_de_read_fw(dev_priv, PIPEDSL(pipe)) & PIPEDSL_LINE_MASK;
 
@@ -249,19 +278,14 @@ static int __intel_get_crtc_scanline(struct intel_crtc *crtc)
 	 * See update_scanline_offset() for the details on the
 	 * scanline_offset adjustment.
 	 */
-	return (position + crtc->scanline_offset) % vtotal;
+	return (position + vtotal + crtc->scanline_offset) % vtotal;
 }
 
 int intel_crtc_scanline_to_hw(struct intel_crtc *crtc, int scanline)
 {
-	const struct drm_vblank_crtc *vblank =
-		&crtc->base.dev->vblank[drm_crtc_index(&crtc->base)];
+	const struct drm_vblank_crtc *vblank = drm_crtc_vblank_crtc(&crtc->base);
 	const struct drm_display_mode *mode = &vblank->hwmode;
-	int vtotal;
-
-	vtotal = mode->crtc_vtotal;
-	if (mode->flags & DRM_MODE_FLAG_INTERLACE)
-		vtotal /= 2;
+	int vtotal = intel_mode_vtotal(mode);
 
 	return (scanline + vtotal - crtc->scanline_offset) % vtotal;
 }
@@ -318,15 +342,9 @@ static bool i915_get_crtc_scanoutpos(struct drm_crtc *_crtc,
 
 	htotal = mode->crtc_htotal;
 	hsync_start = mode->crtc_hsync_start;
-	vtotal = mode->crtc_vtotal;
-	vbl_start = mode->crtc_vblank_start;
-	vbl_end = mode->crtc_vblank_end;
-
-	if (mode->flags & DRM_MODE_FLAG_INTERLACE) {
-		vbl_start = DIV_ROUND_UP(vbl_start, 2);
-		vbl_end /= 2;
-		vtotal /= 2;
-	}
+	vtotal = intel_mode_vtotal(mode);
+	vbl_start = intel_mode_vblank_start(mode);
+	vbl_end = intel_mode_vblank_end(mode);
 
 	/*
 	 * Enter vblank critical section, as we will do multiple
@@ -487,53 +505,6 @@ void intel_wait_for_pipe_scanline_moving(struct intel_crtc *crtc)
 	wait_for_pipe_scanline_moving(crtc, true);
 }
 
-static int intel_crtc_scanline_offset(const struct intel_crtc_state *crtc_state)
-{
-	struct drm_i915_private *i915 = to_i915(crtc_state->uapi.crtc->dev);
-	const struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
-
-	/*
-	 * The scanline counter increments at the leading edge of hsync.
-	 *
-	 * On most platforms it starts counting from vtotal-1 on the
-	 * first active line. That means the scanline counter value is
-	 * always one less than what we would expect. Ie. just after
-	 * start of vblank, which also occurs at start of hsync (on the
-	 * last active line), the scanline counter will read vblank_start-1.
-	 *
-	 * On gen2 the scanline counter starts counting from 1 instead
-	 * of vtotal-1, so we have to subtract one (or rather add vtotal-1
-	 * to keep the value positive), instead of adding one.
-	 *
-	 * On HSW+ the behaviour of the scanline counter depends on the output
-	 * type. For DP ports it behaves like most other platforms, but on HDMI
-	 * there's an extra 1 line difference. So we need to add two instead of
-	 * one to the value.
-	 *
-	 * On VLV/CHV DSI the scanline counter would appear to increment
-	 * approx. 1/3 of a scanline before start of vblank. Unfortunately
-	 * that means we can't tell whether we're in vblank or not while
-	 * we're on that particular line. We must still set scanline_offset
-	 * to 1 so that the vblank timestamps come out correct when we query
-	 * the scanline counter from within the vblank interrupt handler.
-	 * However if queried just before the start of vblank we'll get an
-	 * answer that's slightly in the future.
-	 */
-	if (DISPLAY_VER(i915) == 2) {
-		int vtotal;
-
-		vtotal = adjusted_mode->crtc_vtotal;
-		if (adjusted_mode->flags & DRM_MODE_FLAG_INTERLACE)
-			vtotal /= 2;
-
-		return vtotal - 1;
-	} else if (HAS_DDI(i915) && intel_crtc_has_type(crtc_state, INTEL_OUTPUT_HDMI)) {
-		return 2;
-	} else {
-		return 1;
-	}
-}
-
 void intel_crtc_update_active_timings(const struct intel_crtc_state *crtc_state,
 				      bool vrr_enable)
 {
@@ -583,7 +554,7 @@ void intel_crtc_update_active_timings(const struct intel_crtc_state *crtc_state,
 	spin_unlock_irqrestore(&i915->drm.vblank_time_lock, irqflags);
 }
 
-static int intel_mode_vblank_start(const struct drm_display_mode *mode)
+int intel_mode_vblank_start(const struct drm_display_mode *mode)
 {
 	int vblank_start = mode->crtc_vblank_start;
 
@@ -591,6 +562,26 @@ static int intel_mode_vblank_start(const struct drm_display_mode *mode)
 		vblank_start = DIV_ROUND_UP(vblank_start, 2);
 
 	return vblank_start;
+}
+
+int intel_mode_vblank_end(const struct drm_display_mode *mode)
+{
+	int vblank_end = mode->crtc_vblank_end;
+
+	if (mode->flags & DRM_MODE_FLAG_INTERLACE)
+		vblank_end /= 2;
+
+	return vblank_end;
+}
+
+int intel_mode_vtotal(const struct drm_display_mode *mode)
+{
+	int vtotal = mode->crtc_vtotal;
+
+	if (mode->flags & DRM_MODE_FLAG_INTERLACE)
+		vtotal /= 2;
+
+	return vtotal;
 }
 
 void intel_vblank_evade_init(const struct intel_crtc_state *old_crtc_state,
