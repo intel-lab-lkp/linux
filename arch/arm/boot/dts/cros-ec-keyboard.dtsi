@@ -8,16 +8,26 @@
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/input/cros-ec-keyboard.h>
 
+#ifdef CONFIG_CROS_KBD_V30
+#define CROS_EC_KEYBOARD_COLUMN_SIZE 18
+#define CROS_TOP_ROW_KEYMAP CROS_TOP_ROW_KEYMAP_V30
+#define CROS_MAIN_KEYMAP CROS_MAIN_KEYMAP_V30
+#else
+#define CROS_EC_KEYBOARD_COLUMN_SIZE 13
+#define CROS_TOP_ROW_KEYMAP CROS_STD_TOP_ROW_KEYMAP
+#define CROS_MAIN_KEYMAP CROS_STD_MAIN_KEYMAP
+#endif
+
 &cros_ec {
 	keyboard_controller: keyboard-controller {
 		compatible = "google,cros-ec-keyb";
 		keypad,num-rows = <8>;
-		keypad,num-columns = <13>;
+		keypad,num-columns = <CROS_EC_KEYBOARD_COLUMN_SIZE>;
 		google,needs-ghost-filter;
 
 		linux,keymap = <
-			CROS_STD_TOP_ROW_KEYMAP
-			CROS_STD_MAIN_KEYMAP
+			CROS_TOP_ROW_KEYMAP
+			CROS_MAIN_KEYMAP
 		>;
 	};
 };
