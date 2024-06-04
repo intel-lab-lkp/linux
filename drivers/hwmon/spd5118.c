@@ -18,6 +18,7 @@
 #include <linux/bits.h>
 #include <linux/err.h>
 #include <linux/i2c.h>
+#include <linux/i3c/device.h>
 #include <linux/hwmon.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
@@ -705,6 +706,8 @@ static int spd5118_i2c_init(struct i2c_client *client)
  * which does reset the addressing mode. To prevent this from happening,
  * detect if 16-bit addressing is enabled and always use the currently
  * configured addressing mode.
+ *
+ * I3C always uses 16-bit addressing.
  */
 
 static int spd5118_i2c_probe(struct i2c_client *client)
@@ -770,7 +773,53 @@ static struct i2c_driver spd5118_i2c_driver = {
 	.address_list	= IS_ENABLED(CONFIG_SENSORS_SPD5118_DETECT) ? normal_i2c : NULL,
 };
 
-module_i2c_driver(spd5118_i2c_driver);
+/* I3C */
+
+static int spd5118_i3c_probe(struct i3c_device *i3cdev)
+{
+	struct device *dev = i3cdev_to_dev(i3cdev);
+	struct regmap *regmap;
+
+	regmap = devm_regmap_init_i3c(i3cdev, &spd5118_regmap16_config);
+	if (IS_ERR(regmap))
+		return dev_err_probe(dev, PTR_ERR(regmap), "regmap init failed\n");
+
+	return spd5118_common_probe(dev, regmap, true);
+}
+
+/*
+ * SPD5118 compliant devices do not have to support the GETPID command.
+ * It is unknown if those chips can be auto-detected on I3C busses. It may be
+ * necessary to instantiate SPD5118 devices on I3C through devicetree or by
+ * other explicit means. See Documentation/devicetree/bindings/i3c/i3c.yaml
+ * for details on how to instantiate I3C devices from devicetree.
+ * Device IDs are provided to enable association of devicetree entries with the
+ * driver. The Renesas entry was found in a driver from Nuvoton. A reference to
+ * the IDT ID was found in a devicetree file. The entries for Rambus and Montage
+ * Technology were guessed based on assigned MIPI IDs (https://mid.mipi.org).
+ * There is also a SPD5118 compliant EEPROM/Hub/Temperature sensor (S-34HTS08AB)
+ * from Ablic. The MIPI ID for this chip might be 0x0173 (Mitsumi) for Ablic's
+ * parent company, but that is unconfirmed.
+ */
+static const struct i3c_device_id spd5118_i3c_ids[] = {
+	I3C_DEVICE(0x01e0, 0x5118, NULL),	/* IDT */
+	I3C_DEVICE(0x0266, 0x5118, NULL),	/* Renesas */
+	I3C_DEVICE(0x03fa, 0x5118, NULL),	/* Rambus (unconfirmed) */
+	I3C_DEVICE(0x0433, 0x5118, NULL),	/* Montage Technology (unconfirmed) */
+	{ }
+};
+MODULE_DEVICE_TABLE(i3c, spd5118_i3c_ids);
+
+static struct i3c_driver spd5118_i3c_driver = {
+	.driver = {
+		.name = "spd5118_i3c",
+		.pm = pm_sleep_ptr(&spd5118_pm_ops),
+	},
+	.probe = spd5118_i3c_probe,
+	.id_table = spd5118_i3c_ids,
+};
+
+module_i3c_i2c_driver(spd5118_i3c_driver, &spd5118_i2c_driver);
 
 MODULE_AUTHOR("René Rebe <rene@exactcode.de>");
 MODULE_AUTHOR("Guenter Roeck <linux@roeck-us.net>");
