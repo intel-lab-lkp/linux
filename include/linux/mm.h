@@ -4164,6 +4164,23 @@ static inline void setup_nr_node_ids(void) {}
 
 extern int memcmp_pages(struct page *page1, struct page *page2);
 
+static inline int identical_folio(struct folio *folio1, struct folio *folio2)
+{
+	int i, nr1, nr2, ret = 0;
+
+	nr1 = folio_nr_pages(folio1);
+	nr2 = folio_nr_pages(folio2);
+	if (nr1 != nr2)
+		return 0;
+
+	for (i = 0; i < nr1; i++) {
+		ret = memcmp_pages(folio_page(folio1, i), folio_page(folio2, i));
+		if (ret)
+			break;
+	}
+
+	return !ret;
+}
 static inline int pages_identical(struct page *page1, struct page *page2)
 {
 	return !memcmp_pages(page1, page2);

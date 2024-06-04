@@ -1527,7 +1527,7 @@ static int try_to_merge_one_page(struct vm_area_struct *vma, struct folio *folio
 			if (!folio_test_dirty(folio))
 				folio_set_dirty(folio);
 			err = 0;
-		} else if (pages_identical(page, kpage))
+		} else if (identical_folio(folio, kfolio))
 			err = replace_page(vma, page, kpage, orig_pte);
 	}
 
