@@ -38,42 +38,6 @@ static const struct scsi_host_template pata_gayle_sht = {
 	ATA_PIO_SHT(DRV_NAME),
 };
 
-/* FIXME: is this needed? */
-static unsigned int pata_gayle_data_xfer(struct ata_queued_cmd *qc,
-					 unsigned char *buf,
-					 unsigned int buflen, int rw)
-{
-	struct ata_device *dev = qc->dev;
-	struct ata_port *ap = dev->link->ap;
-	void __iomem *data_addr = ap->ioaddr.data_addr;
-	unsigned int words = buflen >> 1;
-
-	/* Transfer multiple of 2 bytes */
-	if (rw == READ)
-		raw_insw((u16 *)data_addr, (u16 *)buf, words);
-	else
-		raw_outsw((u16 *)data_addr, (u16 *)buf, words);
-
-	/* Transfer trailing byte, if any. */
-	if (unlikely(buflen & 0x01)) {
-		unsigned char pad[2] = { };
-
-		/* Point buf to the tail of buffer */
-		buf += buflen - 1;
-
-		if (rw == READ) {
-			raw_insw((u16 *)data_addr, (u16 *)pad, 1);
-			*buf = pad[0];
-		} else {
-			pad[0] = *buf;
-			raw_outsw((u16 *)data_addr, (u16 *)pad, 1);
-		}
-		words++;
-	}
-
-	return words << 1;
-}
-
 /*
  * Provide our own set_mode() as we don't want to change anything that has
  * already been configured..
@@ -110,7 +74,7 @@ static void pata_gayle_irq_clear(struct ata_port *ap)
 
 static struct ata_port_operations pata_gayle_a1200_ops = {
 	.inherits	= &ata_sff_port_ops,
-	.sff_data_xfer	= pata_gayle_data_xfer,
+	.sff_data_xfer	= ata_sff_data_xfer,
 	.sff_irq_check	= pata_gayle_irq_check,
 	.sff_irq_clear	= pata_gayle_irq_clear,
 	.cable_detect	= ata_cable_unknown,
@@ -119,7 +83,7 @@ static struct ata_port_operations pata_gayle_a1200_ops = {
 
 static struct ata_port_operations pata_gayle_a4000_ops = {
 	.inherits	= &ata_sff_port_ops,
-	.sff_data_xfer	= pata_gayle_data_xfer,
+	.sff_data_xfer	= ata_sff_data_xfer,
 	.cable_detect	= ata_cable_unknown,
 	.set_mode	= pata_gayle_set_mode,
 };
