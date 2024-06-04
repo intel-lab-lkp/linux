@@ -1698,8 +1698,20 @@ static bool skip_record(struct dyn_ftrace *rec)
 		!(rec->flags & FTRACE_FL_ENABLED);
 }
 
+/*
+ * This is the main engine to the ftrace updates.
+ *
+ * It will iterate through all the available ftrace functions
+ * (the ones that ftrace can have callbacks to) and set the flags
+ * to the associated dyn_ftrace records.
+ *
+ * @filter_hash: True if for the filter hash is udpated, false for the
+ *               notrace hash
+ * @inc: True to add this hash, false to remove it (increment the
+ *       recorder counters or decrement them).
+ */
 static bool __ftrace_hash_rec_update(struct ftrace_ops *ops,
-				     int filter_hash,
+				     bool filter_hash,
 				     bool inc)
 {
 	struct ftrace_hash *hash;
