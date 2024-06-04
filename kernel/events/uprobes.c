@@ -26,6 +26,7 @@
 #include <linux/task_work.h>
 #include <linux/shmem_fs.h>
 #include <linux/khugepaged.h>
+#include <linux/pagewalk.h>
 
 #include <linux/uprobes.h>
 
@@ -135,80 +136,6 @@ static unsigned long offset_to_vaddr(struct vm_area_struct *vma, loff_t offset)
 static loff_t vaddr_to_offset(struct vm_area_struct *vma, unsigned long vaddr)
 {
 	return ((loff_t)vma->vm_pgoff << PAGE_SHIFT) + (vaddr - vma->vm_start);
-}
-
-/**
- * __replace_page - replace page in vma by new page.
- * based on replace_page in mm/ksm.c
- *
- * @vma:      vma that holds the pte pointing to page
- * @addr:     address the old @page is mapped at
- * @old_page: the page we are replacing by new_page
- * @new_page: the modified page we replace page by
- *
- * If @new_page is NULL, only unmap @old_page.
- *
- * Returns 0 on success, negative error code otherwise.
- */
-static int __replace_page(struct vm_area_struct *vma, unsigned long addr,
-				struct page *old_page, struct page *new_page)
-{
-	struct folio *old_folio = page_folio(old_page);
-	struct folio *new_folio;
-	struct mm_struct *mm = vma->vm_mm;
-	DEFINE_FOLIO_VMA_WALK(pvmw, old_folio, vma, addr, 0);
-	int err;
-	struct mmu_notifier_range range;
-
-	mmu_notifier_range_init(&range, MMU_NOTIFY_CLEAR, 0, mm, addr,
-				addr + PAGE_SIZE);
-
-	if (new_page) {
-		new_folio = page_folio(new_page);
-		err = mem_cgroup_charge(new_folio, vma->vm_mm, GFP_KERNEL);
-		if (err)
-			return err;
-	}
-
-	/* For folio_free_swap() below */
-	folio_lock(old_folio);
-
-	mmu_notifier_invalidate_range_start(&range);
-	err = -EAGAIN;
-	if (!page_vma_mapped_walk(&pvmw))
-		goto unlock;
-	VM_BUG_ON_PAGE(addr != pvmw.address, old_page);
-
-	if (new_page) {
-		folio_get(new_folio);
-		folio_add_new_anon_rmap(new_folio, vma, addr);
-		folio_add_lru_vma(new_folio, vma);
-	} else
-		/* no new page, just dec_mm_counter for old_page */
-		dec_mm_counter(mm, MM_ANONPAGES);
-
-	if (!folio_test_anon(old_folio)) {
-		dec_mm_counter(mm, mm_counter_file(old_folio));
-		inc_mm_counter(mm, MM_ANONPAGES);
-	}
-
-	flush_cache_page(vma, addr, pte_pfn(ptep_get(pvmw.pte)));
-	ptep_clear_flush(vma, addr, pvmw.pte);
-	if (new_page)
-		set_pte_at(mm, addr, pvmw.pte,
-			   mk_pte(new_page, vma->vm_page_prot));
-
-	folio_remove_rmap_pte(old_folio, old_page, vma);
-	if (!folio_mapped(old_folio))
-		folio_free_swap(old_folio);
-	page_vma_mapped_walk_done(&pvmw);
-	folio_put(old_folio);
-
-	err = 0;
- unlock:
-	mmu_notifier_invalidate_range_end(&range);
-	folio_unlock(old_folio);
-	return err;
 }
 
 /**
@@ -438,6 +365,120 @@ static int update_ref_ctr(struct uprobe *uprobe, struct mm_struct *mm,
 	return ret;
 }
 
+static bool orig_page_is_identical(struct vm_area_struct *vma,
+		unsigned long vaddr, struct page *page, bool *large)
+{
+	const pgoff_t index = vaddr_to_offset(vma, vaddr) >> PAGE_SHIFT;
+	struct page *orig_page = find_get_page(vma->vm_file->f_inode->i_mapping,
+					       index);
+	struct folio *orig_folio;
+	bool identical;
+
+	if (!orig_page)
+		return false;
+	orig_folio = page_folio(orig_page);
+
+	*large = folio_test_large(orig_folio);
+	identical = folio_test_uptodate(orig_folio) &&
+		    pages_identical(page, orig_page);
+	folio_put(orig_folio);
+	return identical;
+}
+
+#define UWO_NO_PGTABLE		0
+#define UWO_RETRY		1
+#define UWO_RETRY_WRITE_FAULT	2
+#define UWO_DONE		3
+#define UWO_DONE_COLLAPSE	4
+
+struct uwo_data {
+	unsigned long opcode_vaddr;
+	uprobe_opcode_t opcode;
+};
+
+static int __write_opcode_pte(pte_t *ptep, unsigned long vaddr,
+		unsigned long next, struct mm_walk *walk)
+{
+	struct uwo_data *data = walk->private;
+	const bool is_register = !!is_swbp_insn(&data->opcode);
+	pte_t pte = ptep_get(ptep);
+	struct folio *folio = NULL;
+	struct page *page;
+	bool large;
+
+	if (!pte_present(pte))
+		return UWO_RETRY;
+	page = vm_normal_page(walk->vma, vaddr, pte);
+	if (page)
+		folio = page_folio(page);
+
+	/*
+	 * If we don't find an anonymous folio when unregistering, we're done.
+	 */
+	if (!folio || !folio_test_anon(folio))
+		return is_register ? UWO_RETRY_WRITE_FAULT : UWO_DONE;
+
+	/*
+	 * See can_follow_write_pte(): we'd actually prefer a writable PTE here,
+	 * but when unregistering we might no longer have VM_WRITE ...
+	 */
+	if (!pte_write(pte)) {
+		if (!PageAnonExclusive(page))
+			return UWO_RETRY_WRITE_FAULT;
+		if (unlikely(userfaultfd_pte_wp(walk->vma, pte)))
+			return UWO_RETRY_WRITE_FAULT;
+		/* SOFTDIRTY is handled via pte_mkdirty() below. */
+	}
+
+	/* Unmap + flush the TLB, such that we can write atomically .*/
+	flush_cache_page(walk->vma, vaddr, pte_pfn(pte));
+	pte = ptep_clear_flush(walk->vma, vaddr, ptep);
+	copy_to_page(page, data->opcode_vaddr, &data->opcode,
+		     UPROBE_SWBP_INSN_SIZE);
+
+	/*
+	 * When unregistering, we may only zap a PTE if uffd is disabled and
+	 * there are no unexpected folio references ...
+	 */
+	if (is_register || userfaultfd_missing(walk->vma) ||
+	    (folio_ref_count(folio) != folio_mapcount(folio) +
+	     folio_test_swapcache(folio) * folio_nr_pages(folio)))
+		goto remap;
+
+	/*
+	 * ... and the mapped page is identical to the original page that
+	 * would get faulted in on next access.
+	 */
+	if (!orig_page_is_identical(walk->vma, vaddr, page, &large))
+		goto remap;
+
+	/* Zap it and try to reclaim swap space. */
+	dec_mm_counter(walk->mm, MM_ANONPAGES);
+	folio_remove_rmap_pte(folio, page, walk->vma);
+	if (!folio_mapped(folio) && folio_test_swapcache(folio) &&
+	     folio_trylock(folio)) {
+		folio_free_swap(folio);
+		folio_unlock(folio);
+	}
+	folio_put(folio);
+
+	return large ? UWO_DONE_COLLAPSE : UWO_DONE;
+remap:
+	/*
+	 * Make sure that our copy_to_page() changes become visible before the
+	 * set_pte_at() write.
+	 */
+	smp_wmb();
+	/* We modified the page. Make sure to mark the PTE dirty. */
+	set_pte_at(walk->mm, vaddr, ptep, pte_mkdirty(pte));
+	return UWO_DONE;
+}
+
+static const struct mm_walk_ops write_opcode_ops = {
+	.pte_entry		= __write_opcode_pte,
+	.walk_lock		= PGWALK_WRLOCK,
+};
+
 /*
  * NOTE:
  * Expect the breakpoint instruction to be the smallest size instruction for
@@ -450,111 +491,116 @@ static int update_ref_ctr(struct uprobe *uprobe, struct mm_struct *mm,
  * uprobe_write_opcode - write the opcode at a given virtual address.
  * @auprobe: arch specific probepoint information.
  * @vma: the probed virtual memory area.
- * @vaddr: the virtual address to store the opcode.
- * @opcode: opcode to be written at @vaddr.
+ * @opcode_vaddr: the virtual address to store the opcode.
+ * @opcode: opcode to be written at @opcode_vaddr.
  *
  * Called with mm->mmap_lock held for write.
  * Return 0 (success) or a negative errno.
  */
 int uprobe_write_opcode(struct arch_uprobe *auprobe, struct vm_area_struct *vma,
-		unsigned long vaddr, uprobe_opcode_t opcode)
+		const unsigned long opcode_vaddr, uprobe_opcode_t opcode)
 {
-	struct mm_struct *mm = vma->vm_mm;
-	struct uprobe *uprobe;
-	struct page *old_page, *new_page;
-	int ret, is_register, ref_ctr_updated = 0;
-	bool orig_page_huge = false;
+	struct uprobe *uprobe = container_of(auprobe, struct uprobe, arch);
+	const unsigned long vaddr = opcode_vaddr & PAGE_MASK;
+	const bool is_register = !!is_swbp_insn(&opcode);
+	struct uwo_data data = {
+		.opcode = opcode,
+		.opcode_vaddr = opcode_vaddr,
+	};
 	unsigned int gup_flags = FOLL_FORCE;
+	struct mm_struct *mm = vma->vm_mm;
+	struct mmu_notifier_range range;
+	int ret, ref_ctr_updated = 0;
+	struct page *page;
 
-	is_register = is_swbp_insn(&opcode);
-	uprobe = container_of(auprobe, struct uprobe, arch);
+	if (WARN_ON_ONCE(!is_cow_mapping(vma->vm_flags)))
+		return -EINVAL;
+
+	/*
+	 * When registering, we have to break COW to get an exclusive anonymous
+	 * page that we can safely modify. Use FOLL_WRITE to trigger a write
+	 * fault if required. When unregistering, we might be lucky and the
+	 * anon page is already gone. So defer write faults until really
+	 * required.
+	 */
+	if (is_register)
+		gup_flags |= FOLL_WRITE;
 
 retry:
-	if (is_register)
-		gup_flags |= FOLL_SPLIT_PMD;
-	/* Read the page with vaddr into memory */
-	ret = get_user_pages_remote(mm, vaddr, 1, gup_flags, &old_page, NULL);
+	ret = get_user_pages_remote(mm, vaddr, 1, gup_flags, &page, NULL);
 	if (ret != 1)
-		return ret;
+		goto out;
 
-	ret = verify_opcode(old_page, vaddr, &opcode);
+	ret = verify_opcode(page, opcode_vaddr, &opcode);
+	put_page(page);
 	if (ret <= 0)
-		goto put_old;
-
-	if (WARN(!is_register && PageCompound(old_page),
-		 "uprobe unregister should never work on compound page\n")) {
-		ret = -EINVAL;
-		goto put_old;
-	}
+		goto out;
 
 	/* We are going to replace instruction, update ref_ctr. */
 	if (!ref_ctr_updated && uprobe->ref_ctr_offset) {
 		ret = update_ref_ctr(uprobe, mm, is_register ? 1 : -1);
 		if (ret)
-			goto put_old;
-
+			goto out;
 		ref_ctr_updated = 1;
 	}
 
-	ret = 0;
-	if (!is_register && !PageAnon(old_page))
-		goto put_old;
-
-	ret = anon_vma_prepare(vma);
-	if (ret)
-		goto put_old;
-
-	ret = -ENOMEM;
-	new_page = alloc_page_vma(GFP_HIGHUSER_MOVABLE, vma, vaddr);
-	if (!new_page)
-		goto put_old;
-
-	__SetPageUptodate(new_page);
-	copy_highpage(new_page, old_page);
-	copy_to_page(new_page, vaddr, &opcode, UPROBE_SWBP_INSN_SIZE);
-
 	if (!is_register) {
-		struct page *orig_page;
-		pgoff_t index;
-
-		VM_BUG_ON_PAGE(!PageAnon(old_page), old_page);
-
-		index = vaddr_to_offset(vma, vaddr & PAGE_MASK) >> PAGE_SHIFT;
-		orig_page = find_get_page(vma->vm_file->f_inode->i_mapping,
-					  index);
-
-		if (orig_page) {
-			if (PageUptodate(orig_page) &&
-			    pages_identical(new_page, orig_page)) {
-				/* let go new_page */
-				put_page(new_page);
-				new_page = NULL;
-
-				if (PageCompound(orig_page))
-					orig_page_huge = true;
-			}
-			put_page(orig_page);
-		}
+		/*
+		 * In the common case, we'll be able to zap the page when
+		 * unregistering. So trigger MMU notifiers now, as we won't
+		 * be able to do it under PTL.
+		 */
+		mmu_notifier_range_init(&range, MMU_NOTIFY_CLEAR, 0, mm,
+					vaddr, vaddr + PAGE_SIZE);
+		mmu_notifier_invalidate_range_start(&range);
 	}
 
-	ret = __replace_page(vma, vaddr & PAGE_MASK, old_page, new_page);
-	if (new_page)
-		put_page(new_page);
-put_old:
-	put_page(old_page);
+	/*
+	 * Perform another page table walk and perform the actual page
+	 * modification.
+	 */
+	ret = walk_page_range_vma(vma, vaddr, vaddr + PAGE_SIZE,
+				  &write_opcode_ops, &data);
 
-	if (unlikely(ret == -EAGAIN))
+	if (!is_register)
+		mmu_notifier_invalidate_range_end(&range);
+
+	switch (ret) {
+	case UWO_NO_PGTABLE: /* walk_page_range_vma() returned 0. */
+		/*
+		 * walk_page_range_vma() did not find anything. If there
+		 * would have been a PMD-mapped file THP, it could have
+		 * simply been zapped; in that (unlikely) case, there is
+		 * nothing to when unregistering.
+		 *
+		 * If we had a PMD-mapped anonymous folio,
+		 * walk_page_range_vma() would have PTE-mapped it for us
+		 * and walked it.
+		 */
+		if (is_register)
+			goto retry;
+		break;
+	case UWO_RETRY_WRITE_FAULT:
+		gup_flags |= FOLL_WRITE;
+		fallthrough;
+	case UWO_RETRY:
 		goto retry;
-
+	case UWO_DONE_COLLAPSE:
+	case UWO_DONE:
+		break;
+	default:
+		VM_WARN_ON_ONCE(1);
+	}
+out:
 	/* Revert back reference counter if instruction update failed. */
-	if (ret && is_register && ref_ctr_updated)
+	if (ret < 0 && is_register && ref_ctr_updated)
 		update_ref_ctr(uprobe, mm, -1);
 
 	/* try collapse pmd for compound page */
-	if (!ret && orig_page_huge)
+	if (ret == UWO_DONE_COLLAPSE)
 		collapse_pte_mapped_thp(mm, vaddr, false);
 
-	return ret;
+	return ret < 0 ? ret : 0;
 }
 
 /**
