@@ -2645,6 +2645,8 @@ next_mm:
 		goto no_vmas;
 
 	for_each_vma(vmi, vma) {
+		int nr = 1;
+
 		if (!(vma->vm_flags & VM_MERGEABLE))
 			continue;
 		if (ksm_scan.address < vma->vm_start)
@@ -2661,6 +2663,9 @@ next_mm:
 				cond_resched();
 				continue;
 			}
+
+			VM_WARN_ON(PageTail(*page));
+			nr = compound_nr(*page);
 			if (is_zone_device_page(*page))
 				goto next_page;
 			if (PageAnon(*page)) {
@@ -2673,7 +2678,7 @@ next_mm:
 					if (should_skip_rmap_item(*page, rmap_item))
 						goto next_page;
 
-					ksm_scan.address += PAGE_SIZE;
+					ksm_scan.address += nr * PAGE_SIZE;
 				} else
 					put_page(*page);
 				mmap_read_unlock(mm);
@@ -2681,7 +2686,7 @@ next_mm:
 			}
 next_page:
 			put_page(*page);
-			ksm_scan.address += PAGE_SIZE;
+			ksm_scan.address += nr * PAGE_SIZE;
 			cond_resched();
 		}
 	}
