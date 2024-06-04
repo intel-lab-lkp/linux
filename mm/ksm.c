@@ -1258,11 +1258,13 @@ error:
 }
 #endif /* CONFIG_SYSFS */
 
-static u32 calc_checksum(struct page *page)
+static u32 calc_checksum(struct folio *folio)
 {
 	u32 checksum;
-	void *addr = kmap_local_page(page);
-	checksum = xxhash(addr, PAGE_SIZE, 0);
+	int nr = folio_nr_pages(folio);
+	void *addr = kmap_local_page(folio_page(folio, 0));
+
+	checksum = xxhash(addr, nr * PAGE_SIZE, 0);
 	kunmap_local(addr);
 	return checksum;
 }
@@ -2370,7 +2372,7 @@ static void cmp_and_merge_page(struct page *page, struct ksm_rmap_item *rmap_ite
 	 * don't want to insert it in the unstable tree, and we don't want
 	 * to waste our time searching for something identical to it there.
 	 */
-	checksum = calc_checksum(page);
+	checksum = calc_checksum(folio);
 	if (rmap_item->oldchecksum != checksum) {
 		rmap_item->oldchecksum = checksum;
 		return;
@@ -2386,7 +2388,7 @@ static void cmp_and_merge_page(struct page *page, struct ksm_rmap_item *rmap_ite
 		mmap_read_lock(mm);
 		vma = find_mergeable_vma(mm, rmap_item->address);
 		if (vma) {
-			err = try_to_merge_one_page(vma, page_folio(page), rmap_item,
+			err = try_to_merge_one_page(vma, folio, rmap_item,
 						    page_folio(ZERO_PAGE(rmap_item->address)));
 			trace_ksm_merge_one_page(
 				page_to_pfn(ZERO_PAGE(rmap_item->address)),
@@ -3917,7 +3919,7 @@ static int __init ksm_init(void)
 	int err;
 
 	/* The correct value depends on page size and endianness */
-	zero_checksum = calc_checksum(ZERO_PAGE(0));
+	zero_checksum = calc_checksum(page_folio(ZERO_PAGE(0)));
 	/* Default to false for backwards compatibility */
 	ksm_use_zero_pages = false;
 
