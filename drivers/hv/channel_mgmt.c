@@ -203,7 +203,7 @@ static u16 hv_get_dev_type(const struct vmbus_channel *channel)
 	const guid_t *guid = &channel->offermsg.offer.if_type;
 	u16 i;
 
-	if (is_hvsock_channel(channel) || is_unsupported_vmbus_devs(guid))
+	if (is_hvsock_channel(channel))
 		return HV_UNKNOWN;
 
 	for (i = HV_IDE; i < HV_UNKNOWN; i++) {
@@ -1035,6 +1035,16 @@ static void vmbus_onoffer(struct vmbus_channel_message_header *hdr)
 	offer = (struct vmbus_channel_offer_channel *)hdr;
 
 	trace_vmbus_onoffer(offer);
+
+	/*
+	 * Hyper-V may offer pseudo-devices with functionality intended for
+	 * Windows guests. Silently ignore them. There's no value in
+	 * cluttering dmesg with error messages.
+	 */
+	if (is_unsupported_vmbus_devs(&offer->offer.if_type)) {
+		atomic_dec(&vmbus_connection.offer_in_progress);
+		return;
+	}
 
 	if (!vmbus_is_valid_offer(offer)) {
 		pr_err_ratelimited("Invalid offer %d from the host supporting isolation\n",
