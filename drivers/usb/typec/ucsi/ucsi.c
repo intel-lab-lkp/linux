@@ -632,8 +632,12 @@ static int ucsi_read_pdos(struct ucsi_connector *con,
 	command |= is_source(role) ? UCSI_GET_PDOS_SRC_PDOS : 0;
 	ret = ucsi_send_command(ucsi, command, pdos + offset,
 				num_pdos * sizeof(u32));
-	if (ret < 0 && ret != -ETIMEDOUT)
-		dev_err(ucsi->dev, "UCSI_GET_PDOS failed (%d)\n", ret);
+	if (ret < 0 && ret != -ETIMEDOUT) {
+		if (ret == -EOPNOTSUPP)
+			dev_info(ucsi->dev, "UCSI_GET_PDOS not supported on this hardware\n");
+		else
+			dev_err(ucsi->dev, "UCSI_GET_PDOS failed (%d)\n", ret);
+	}
 
 	return ret;
 }
