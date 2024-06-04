@@ -783,10 +783,7 @@ static struct page *get_mergeable_page(struct ksm_rmap_item *rmap_item)
 		goto out;
 	if (is_zone_device_page(page))
 		goto out_putpage;
-	if (PageAnon(page)) {
-		flush_anon_page(vma, page, addr);
-		flush_dcache_page(page);
-	} else {
+	if (!PageAnon(page)) {
 out_putpage:
 		put_page(page);
 out:
@@ -1473,8 +1470,8 @@ out:
  *
  * This function returns 0 if the pages were merged, -EFAULT otherwise.
  */
-static int try_to_merge_one_page(struct vm_area_struct *vma,
-				 struct page *page, struct page *kpage)
+static int try_to_merge_one_page(struct vm_area_struct *vma, struct page *page,
+				 struct ksm_rmap_item *rmap_item, struct page *kpage)
 {
 	pte_t orig_pte = __pte(0);
 	int err = -EFAULT;
@@ -1499,6 +1496,9 @@ static int try_to_merge_one_page(struct vm_area_struct *vma,
 		if (split_huge_page(page))
 			goto out_unlock;
 	}
+
+	flush_anon_page(vma, page, rmap_item->address);
+	flush_dcache_page(page);
 
 	/*
 	 * If this anonymous page is mapped only here, its pte may need
@@ -1550,7 +1550,7 @@ static int try_to_merge_with_ksm_page(struct ksm_rmap_item *rmap_item,
 	if (!vma)
 		goto out;
 
-	err = try_to_merge_one_page(vma, page, kpage);
+	err = try_to_merge_one_page(vma, page, rmap_item, kpage);
 	if (err)
 		goto out;
 
@@ -2386,7 +2386,7 @@ static void cmp_and_merge_page(struct page *page, struct ksm_rmap_item *rmap_ite
 		mmap_read_lock(mm);
 		vma = find_mergeable_vma(mm, rmap_item->address);
 		if (vma) {
-			err = try_to_merge_one_page(vma, page,
+			err = try_to_merge_one_page(vma, page, rmap_item,
 					ZERO_PAGE(rmap_item->address));
 			trace_ksm_merge_one_page(
 				page_to_pfn(ZERO_PAGE(rmap_item->address)),
@@ -2664,8 +2664,6 @@ next_mm:
 			if (is_zone_device_page(*page))
 				goto next_page;
 			if (PageAnon(*page)) {
-				flush_anon_page(vma, *page, ksm_scan.address);
-				flush_dcache_page(*page);
 				rmap_item = get_next_rmap_item(mm_slot,
 					ksm_scan.rmap_list, ksm_scan.address);
 				if (rmap_item) {
