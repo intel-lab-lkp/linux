@@ -1086,11 +1086,6 @@ static inline struct ksm_stable_node *folio_stable_node(struct folio *folio)
 	return folio_test_ksm(folio) ? folio_raw_mapping(folio) : NULL;
 }
 
-static inline struct ksm_stable_node *page_stable_node(struct page *page)
-{
-	return folio_stable_node(page_folio(page));
-}
-
 static inline void folio_set_stable_node(struct folio *folio,
 					 struct ksm_stable_node *stable_node)
 {
@@ -2325,7 +2320,8 @@ static void cmp_and_merge_page(struct page *page, struct ksm_rmap_item *rmap_ite
 	bool max_page_sharing_bypass = false;
 	struct folio *folio, *kfolio;
 
-	stable_node = page_stable_node(page);
+	folio = page_folio(page);
+	stable_node = folio_stable_node(folio);
 	if (stable_node) {
 		if (stable_node->head != &migrate_nodes &&
 		    get_kpfn_nid(READ_ONCE(stable_node->kpfn)) !=
@@ -2346,7 +2342,6 @@ static void cmp_and_merge_page(struct page *page, struct ksm_rmap_item *rmap_ite
 	}
 
 	/* We first start with searching the page inside the stable tree */
-	folio = page_folio(page);
 	kfolio = stable_tree_search(folio);
 	if (kfolio == folio && rmap_item->head == stable_node) {
 		folio_put(kfolio);
