@@ -1465,40 +1465,20 @@ static void vmbus_ongpadl_created(struct vmbus_channel_message_header *hdr)
  * vmbus_onmodifychannel_response - Modify Channel response handler.
  *
  * This is invoked when we received a response to our channel modify request.
- * Find the matching request, copy the response and signal the requesting thread.
+ * Increment the count of responses received. No locking is needed because
+ * responses are always received on the VMBUS_CONNECT_CPU.
  */
 static void vmbus_onmodifychannel_response(struct vmbus_channel_message_header *hdr)
 {
 	struct vmbus_channel_modifychannel_response *response;
-	struct vmbus_channel_msginfo *msginfo;
-	unsigned long flags;
 
 	response = (struct vmbus_channel_modifychannel_response *)hdr;
+	if (response->status)
+		pr_err("Error status %x in MODIFYCHANNEL response for relid %d\n",
+			response->status, response->child_relid);
+	vmbus_connection.modchan_completed++;
 
 	trace_vmbus_onmodifychannel_response(response);
-
-	/*
-	 * Find the modify msg, copy the response and signal/unblock the wait event.
-	 */
-	spin_lock_irqsave(&vmbus_connection.channelmsg_lock, flags);
-
-	list_for_each_entry(msginfo, &vmbus_connection.chn_msg_list, msglistentry) {
-		struct vmbus_channel_message_header *responseheader =
-				(struct vmbus_channel_message_header *)msginfo->msg;
-
-		if (responseheader->msgtype == CHANNELMSG_MODIFYCHANNEL) {
-			struct vmbus_channel_modifychannel *modifymsg;
-
-			modifymsg = (struct vmbus_channel_modifychannel *)msginfo->msg;
-			if (modifymsg->child_relid == response->child_relid) {
-				memcpy(&msginfo->response.modify_response, response,
-				       sizeof(*response));
-				complete(&msginfo->waitevent);
-				break;
-			}
-		}
-	}
-	spin_unlock_irqrestore(&vmbus_connection.channelmsg_lock, flags);
 }
 
 /*

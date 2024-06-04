@@ -401,6 +401,56 @@ void hv_synic_disable_regs(unsigned int cpu)
 		disable_percpu_irq(vmbus_irq);
 }
 
+static void hv_synic_wait_for_modifychannel(int cpu)
+{
+	int i = 5;
+	u64 base;
+
+	/*
+	 * If we're on a VMBus version where MODIFYCHANNEL doesn't send acks,
+	 * just sleep for 20 milliseconds and hope that gives Hyper-V enough
+	 * time to process them. Empirical data on recent server-class CPUs
+	 * (both x86 and arm64) shows that the Hyper-V response is typically
+	 * received and processed in the guest within a few hundred
+	 * microseconds. The 20 millisecond wait is somewhat arbitrary and
+	 * intended to give plenty to time in case there are multiple
+	 * MODIFYCHANNEL requests in progress and the host is busy. It's
+	 * the best we can do.
+	 */
+	if (vmbus_proto_version < VERSION_WIN10_V5_3) {
+		usleep_range(20000, 25000);
+		return;
+	}
+
+	/*
+	 * Otherwise compare the current value of modchan_completed against
+	 * modchan_sent. If some MODIFYCHANNEL requests have been sent that
+	 * haven't completed, sleep 5 milliseconds and check again. If the
+	 * requests still haven't completed after 5 attempts, output a
+	 * message and proceed anyway.
+	 *
+	 * Hyper-V guarantees to process MODIFYCHANNEL requests in the order
+	 * they are received from the guest, so simply comparing the counts
+	 * is sufficient.
+	 *
+	 * Note that this check may encompass MODIFYCHANNEL requests that are
+	 * unrelated to the CPU that is going offline. But the only effect is
+	 * to potentially wait a little bit longer than necessary. CPUs going
+	 * offline and affinity changes that result in MODIFYCHANNEL are
+	 * relatively rare and it's not worth the complexity to track them more
+	 * precisely.
+	 */
+	base = READ_ONCE(vmbus_connection.modchan_sent);
+	while (READ_ONCE(vmbus_connection.modchan_completed) < base && i) {
+		usleep_range(5000, 10000);
+		i--;
+	}
+
+	if (i == 0)
+		pr_err("Timed out waiting for MODIFYCHANNEL. CPU %d sent %lld completed %lld\n",
+			cpu, base, vmbus_connection.modchan_completed);
+}
+
 #define HV_MAX_TRIES 3
 /*
  * Scan the event flags page of 'this' CPU looking for any bit that is set.  If we find one
@@ -485,13 +535,21 @@ int hv_synic_cleanup(unsigned int cpu)
 	/*
 	 * channel_found == false means that any channels that were previously
 	 * assigned to the CPU have been reassigned elsewhere with a call of
-	 * vmbus_send_modifychannel().  Scan the event flags page looking for
-	 * bits that are set and waiting with a timeout for vmbus_chan_sched()
-	 * to process such bits.  If bits are still set after this operation
-	 * and VMBus is connected, fail the CPU offlining operation.
+	 * vmbus_send_modifychannel(). First wait until any MODIFYCHANNEL
+	 * requests have been completed by Hyper-V, after which we know that
+	 * no new bits in the event flags will be set. Then scan the event flags
+	 * page looking for bits that are set and waiting with a timeout for
+	 * vmbus_chan_sched() to process such bits.  If bits are still set
+	 * after this operation, fail the CPU offlining operation.
 	 */
-	if (vmbus_proto_version >= VERSION_WIN10_V4_1 && hv_synic_event_pending())
-		return -EBUSY;
+	if (vmbus_proto_version >= VERSION_WIN10_V4_1) {
+		hv_synic_wait_for_modifychannel(cpu);
+		if (hv_synic_event_pending()) {
+			pr_err("Events pending when trying to offline CPU %d\n",
+					cpu);
+			return -EBUSY;
+		}
+	}
 
 always_cleanup:
 	hv_stimer_legacy_cleanup(cpu);

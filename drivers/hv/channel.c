@@ -246,6 +246,9 @@ int vmbus_send_modifychannel(struct vmbus_channel *channel, u32 target_vp)
 	ret = vmbus_post_msg(&msg, sizeof(msg), false);
 	trace_vmbus_send_modifychannel(&msg, ret);
 
+	if (!ret)
+		vmbus_connection.modchan_sent++;
+
 	return ret;
 }
 EXPORT_SYMBOL_GPL(vmbus_send_modifychannel);

@@ -265,6 +265,14 @@ struct vmbus_connection {
 	struct irq_chip	vmbus_irq_chip;
 
 	/*
+	 * VM-wide counts of MODIFYCHANNEL messages sent and completed.
+	 * Used when taking a CPU offline to make sure the relevant
+	 * MODIFYCHANNEL messages have been completed.
+	 */
+	u64 modchan_sent;
+	u64 modchan_completed;
+
+	/*
 	 * An offer message is handled first on the work_queue, and then
 	 * is further handled on handle_primary_chan_wq or
 	 * handle_sub_chan_wq.
