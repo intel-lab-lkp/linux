@@ -1540,22 +1540,18 @@ out:
  * This function returns 0 if the pages were merged, -EFAULT otherwise.
  */
 static int try_to_merge_with_ksm_page(struct ksm_rmap_item *rmap_item,
-				      struct page *page, struct page *kpage)
+				      struct folio *folio, struct folio *kfolio)
 {
 	struct mm_struct *mm = rmap_item->mm;
 	struct vm_area_struct *vma;
 	int err = -EFAULT;
-	struct folio *kfolio;
 
 	mmap_read_lock(mm);
 	vma = find_mergeable_vma(mm, rmap_item->address);
 	if (!vma)
 		goto out;
 
-	if (kpage)
-		kfolio = page_folio(kpage);
-
-	err = try_to_merge_one_page(vma, page_folio(page), rmap_item, kfolio);
+	err = try_to_merge_one_page(vma, folio, rmap_item, kfolio);
 	if (err)
 		goto out;
 
@@ -1567,8 +1563,8 @@ static int try_to_merge_with_ksm_page(struct ksm_rmap_item *rmap_item,
 	get_anon_vma(vma->anon_vma);
 out:
 	mmap_read_unlock(mm);
-	trace_ksm_merge_with_ksm_page(kpage, page_to_pfn(kpage ? kpage : page),
-				rmap_item, mm, err);
+	trace_ksm_merge_with_ksm_page(kfolio, folio_pfn(kfolio ? kfolio : folio),
+				      rmap_item, mm, err);
 	return err;
 }
 
@@ -1582,17 +1578,17 @@ out:
  * Note that this function upgrades page to ksm page: if one of the pages
  * is already a ksm page, try_to_merge_with_ksm_page should be used.
  */
-static struct page *try_to_merge_two_pages(struct ksm_rmap_item *rmap_item,
-					   struct page *page,
+static struct folio *try_to_merge_two_pages(struct ksm_rmap_item *rmap_item,
+					   struct folio *folio,
 					   struct ksm_rmap_item *tree_rmap_item,
-					   struct page *tree_page)
+					   struct folio *tree_folio)
 {
 	int err;
 
-	err = try_to_merge_with_ksm_page(rmap_item, page, NULL);
+	err = try_to_merge_with_ksm_page(rmap_item, folio, NULL);
 	if (!err) {
 		err = try_to_merge_with_ksm_page(tree_rmap_item,
-							tree_page, page);
+							tree_folio, folio);
 		/*
 		 * If that fails, we have a ksm page with only one pte
 		 * pointing to it: so break it.
@@ -1600,7 +1596,7 @@ static struct page *try_to_merge_two_pages(struct ksm_rmap_item *rmap_item,
 		if (err)
 			break_cow(rmap_item);
 	}
-	return err ? NULL : page;
+	return err ? NULL : folio;
 }
 
 static __always_inline
@@ -2311,14 +2307,13 @@ static void cmp_and_merge_page(struct page *page, struct ksm_rmap_item *rmap_ite
 {
 	struct mm_struct *mm = rmap_item->mm;
 	struct ksm_rmap_item *tree_rmap_item;
-	struct page *tree_page = NULL;
 	struct folio *tree_folio = NULL;
 	struct ksm_stable_node *stable_node;
-	struct page *kpage;
+	struct folio *kfolio;
 	unsigned int checksum;
 	int err;
 	bool max_page_sharing_bypass = false;
-	struct folio *folio, *kfolio;
+	struct folio *folio;
 
 	folio = page_folio(page);
 	stable_node = folio_stable_node(folio);
@@ -2354,7 +2349,7 @@ static void cmp_and_merge_page(struct page *page, struct ksm_rmap_item *rmap_ite
 		if (kfolio == ERR_PTR(-EBUSY))
 			return;
 
-		err = try_to_merge_with_ksm_page(rmap_item, page, folio_page(kfolio, 0));
+		err = try_to_merge_with_ksm_page(rmap_item, folio, kfolio);
 		if (!err) {
 			/*
 			 * The page was successfully merged:
@@ -2416,8 +2411,8 @@ static void cmp_and_merge_page(struct page *page, struct ksm_rmap_item *rmap_ite
 	if (tree_rmap_item) {
 		bool split;
 
-		kpage = try_to_merge_two_pages(rmap_item, page,
-						tree_rmap_item, tree_page);
+		kfolio = try_to_merge_two_pages(rmap_item, folio,
+						tree_rmap_item, tree_folio);
 		/*
 		 * If both pages we tried to merge belong to the same compound
 		 * page, then we actually ended up increasing the reference
@@ -2428,23 +2423,22 @@ static void cmp_and_merge_page(struct page *page, struct ksm_rmap_item *rmap_ite
 		 * afterwards, the reference count will be correct and
 		 * split_huge_page should succeed.
 		 */
-		split = PageTransCompound(page)
-			&& compound_head(page) == compound_head(tree_page);
-		put_page(tree_page);
-		if (kpage) {
+		split = folio_test_large(folio) && folio == kfolio;
+		folio_put(tree_folio);
+		if (kfolio) {
 			/*
 			 * The pages were successfully merged: insert new
 			 * node in the stable tree and add both rmap_items.
 			 */
-			lock_page(kpage);
-			stable_node = stable_tree_insert(page_folio(kpage));
+			folio_lock(kfolio);
+			stable_node = stable_tree_insert(kfolio);
 			if (stable_node) {
 				stable_tree_append(tree_rmap_item, stable_node,
 						   false);
 				stable_tree_append(rmap_item, stable_node,
 						   false);
 			}
-			unlock_page(kpage);
+			folio_unlock(kfolio);
 
 			/*
 			 * If we fail to insert the page into the stable tree,
@@ -2466,10 +2460,10 @@ static void cmp_and_merge_page(struct page *page, struct ksm_rmap_item *rmap_ite
 			 * the page is locked, it is better to skip it and
 			 * perhaps try again later.
 			 */
-			if (!trylock_page(page))
+			if (!folio_trylock(folio))
 				return;
-			split_huge_page(page);
-			unlock_page(page);
+			split_folio(folio);
+			folio_unlock(folio);
 		}
 	}
 }
