@@ -8,7 +8,7 @@
     -----------------------
     |       alpha: | TODO |
     |         arc: |  ok  |
-    |         arm: | TODO |
+    |         arm: |  ok  |
     |       arm64: |  ok  |
     |        csky: | TODO |
     |     hexagon: | TODO |
