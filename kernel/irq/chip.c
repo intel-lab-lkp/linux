@@ -64,9 +64,9 @@ EXPORT_SYMBOL(irq_set_chip);
  */
 int irq_set_irq_type(unsigned int irq, unsigned int type)
 {
+	int ret;
 	unsigned long flags;
 	struct irq_desc *desc = irq_get_desc_buslock(irq, &flags, IRQ_GET_DESC_CHECK_GLOBAL);
-	int ret = 0;
 
 	if (!desc)
 		return -EINVAL;
