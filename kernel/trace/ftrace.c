@@ -1912,8 +1912,31 @@ static bool ftrace_hash_rec_enable(struct ftrace_ops *ops)
 	return __ftrace_hash_rec_update(ops, true, 1);
 }
 
+/*
+ * This function will update what functions @ops traces when its filter
+ * changes. @filter_hash is set to true when modifying the filter_hash
+ * and set to false when modifying the notrace_hash.
+ *
+ * For example, if the user does: echo schedule > set_ftrace_filter
+ * that would call: ftrace_hash_rec_update_modify(ops, true, true);
+ *
+ * For: echo schedule >> set_ftrace_notrace
+ * That would call: ftrace_hash_rec_enable(ops, false, true);
+ *
+ * The @inc states if the @ops callbacks are going to be added or removed.
+ * The dyn_ftrace records are update via:
+ *
+ * ftrace_hash_rec_disable_modify(ops, filter_hash);
+ * ops->hash = new_hash
+ * ftrace_hash_rec_enable_modify(ops, filter_hash);
+ *
+ * Where the @ops is removed from all the records it is tracing using
+ * its old hash. The @ops hash is updated to the new hash, and then
+ * the @ops is added back to the records so that it is tracing all
+ * the new functions.
+ */
 static void ftrace_hash_rec_update_modify(struct ftrace_ops *ops,
-					  int filter_hash, int inc)
+					  bool filter_hash, bool inc)
 {
 	struct ftrace_ops *op;
 
@@ -1936,15 +1959,15 @@ static void ftrace_hash_rec_update_modify(struct ftrace_ops *ops,
 }
 
 static void ftrace_hash_rec_disable_modify(struct ftrace_ops *ops,
-					   int filter_hash)
+					   bool filter_hash)
 {
-	ftrace_hash_rec_update_modify(ops, filter_hash, 0);
+	ftrace_hash_rec_update_modify(ops, filter_hash, false);
 }
 
 static void ftrace_hash_rec_enable_modify(struct ftrace_ops *ops,
-					  int filter_hash)
+					  bool filter_hash)
 {
-	ftrace_hash_rec_update_modify(ops, filter_hash, 1);
+	ftrace_hash_rec_update_modify(ops, filter_hash, true);
 }
 
 /*
