@@ -22,7 +22,6 @@
 #include <linux/kernel_stat.h>
 #include <linux/of_address.h>
 #include <linux/clockchips.h>
-#include <linux/cpu.h>
 #include <linux/sched/isolation.h>
 #include <linux/sched/task_stack.h>
 
@@ -1322,10 +1321,107 @@ static irqreturn_t vmbus_percpu_isr(int irq, void *dev_id)
 	return IRQ_NONE;
 }
 
+/*
+ * This function is invoked by user space affinity changes initiated
+ * from /proc/irq/<nn> or from the legacy VMBus-specific interface at
+ * /sys/bus/vmbus/devices/<guid>/channels/<nn>/cpu.
+ *
+ * In the former case, the /proc implementation ensures that unmapping
+ * (i.e., deleting) the IRQ will pend while this function is in progress.
+ * Since deleting the channel unmaps the IRQ first, the channel can't go
+ * away either.
+ *
+ * In the latter case, the VMBus connection channel_mutex is held, which
+ * prevents channel deltion, and therefore IRQ unampping as well.
+ *
+ * So in both cases, accessing the channel and IRQ data structures is safe.
+ */
 int vmbus_irq_set_affinity(struct irq_data *data,
 				  const struct cpumask *dest, bool force)
 {
-	return 0;
+	static int next_cpu;
+	static cpumask_t tempmask;
+	int origin_cpu, target_cpu;
+	struct vmbus_channel *channel = irq_data_get_irq_handler_data(data);
+	int ret;
+
+	if (!channel) {
+		pr_err("Bad channel in vmbus_irq_set_affinity for relid %ld\n",
+				data->hwirq);
+		return -EINVAL;
+	}
+
+	/* Don't consider CPUs that are isolated */
+	if (housekeeping_enabled(HK_TYPE_MANAGED_IRQ))
+		cpumask_and(&tempmask, dest,
+				housekeeping_cpumask(HK_TYPE_MANAGED_IRQ));
+	else
+		cpumask_copy(&tempmask, dest);
+
+	/*
+	 * If Hyper-V is already targeting a CPU in the new affinity mask,
+	 * keep that targeting and Hyper-V doesn't need to be updated. But
+	 * still set effective affinity as it may be unset when the IRQ is
+	 * first created.
+	 */
+	origin_cpu = channel->target_cpu;
+	if (cpumask_test_cpu(origin_cpu, &tempmask)) {
+		target_cpu = origin_cpu;
+		goto update_effective;
+	}
+
+	/*
+	 * Pick a CPU from the new affinity mask. As a simple heuristic to
+	 * spread out the selection when the mask contains multiple CPUs,
+	 * start with whatever CPU was last selected.
+	 */
+	target_cpu = cpumask_next_wrap(next_cpu, &tempmask, nr_cpu_ids, false);
+	if (target_cpu >= nr_cpu_ids)
+		return -EINVAL;
+	next_cpu = target_cpu;
+
+	/*
+	 * Hyper-V will ignore MODIFYCHANNEL messages for "non-open" channels;
+	 * avoid sending the message and fail here for such channels.
+	 */
+	if (channel->state != CHANNEL_OPENED_STATE)
+		return -EIO;
+
+	ret = vmbus_send_modifychannel(channel,
+				     hv_cpu_number_to_vp_number(target_cpu));
+	if (ret)
+		return ret;
+
+	/*
+	 * Warning.  At this point, there is *no* guarantee that the host will
+	 * have successfully processed the vmbus_send_modifychannel() request.
+	 * See the header comment of vmbus_send_modifychannel() for more info.
+	 *
+	 * Lags in the processing of the above vmbus_send_modifychannel() can
+	 * result in missed interrupts if the "old" target CPU is taken offline
+	 * before Hyper-V starts sending interrupts to the "new" target CPU.
+	 * hv_synic_cleanup() will ensure no interrupts are missed.
+	 *
+	 * But apart from this offlining scenario, the code tolerates such
+	 * lags.  It will function correctly even if a channel interrupt comes
+	 * in on a CPU that is different from the channel target_cpu value.
+	 */
+
+	channel->target_cpu = target_cpu;
+
+	/* See init_vp_index(). */
+	if (hv_is_perf_channel(channel))
+		hv_update_allocated_cpus(origin_cpu, target_cpu);
+
+	/* Currently set only for storvsc channels. */
+	if (channel->change_target_cpu_callback) {
+		(*channel->change_target_cpu_callback)(channel,
+				origin_cpu, target_cpu);
+	}
+
+update_effective:
+	irq_data_update_effective_affinity(data, cpumask_of(target_cpu));
+	return IRQ_SET_MASK_OK;
 }
 
 /*
@@ -1655,7 +1751,7 @@ static ssize_t target_cpu_show(struct vmbus_channel *channel, char *buf)
 static ssize_t target_cpu_store(struct vmbus_channel *channel,
 				const char *buf, size_t count)
 {
-	u32 target_cpu, origin_cpu;
+	u32 target_cpu;
 	ssize_t ret = count;
 
 	if (vmbus_proto_version < VERSION_WIN10_V4_1)
@@ -1667,17 +1763,6 @@ static ssize_t target_cpu_store(struct vmbus_channel *channel,
 	/* Validate target_cpu for the cpumask_test_cpu() operation below. */
 	if (target_cpu >= nr_cpumask_bits)
 		return -EINVAL;
-
-	if (!cpumask_test_cpu(target_cpu, housekeeping_cpumask(HK_TYPE_MANAGED_IRQ)))
-		return -EINVAL;
-
-	/* No CPUs should come up or down during this. */
-	cpus_read_lock();
-
-	if (!cpu_online(target_cpu)) {
-		cpus_read_unlock();
-		return -EINVAL;
-	}
 
 	/*
 	 * Synchronizes target_cpu_store() and channel closure:
@@ -1703,55 +1788,9 @@ static ssize_t target_cpu_store(struct vmbus_channel *channel,
 	 */
 	mutex_lock(&vmbus_connection.channel_mutex);
 
-	/*
-	 * Hyper-V will ignore MODIFYCHANNEL messages for "non-open" channels;
-	 * avoid sending the message and fail here for such channels.
-	 */
-	if (channel->state != CHANNEL_OPENED_STATE) {
-		ret = -EIO;
-		goto cpu_store_unlock;
-	}
+	ret = irq_set_affinity(channel->irq, cpumask_of(target_cpu));
 
-	origin_cpu = channel->target_cpu;
-	if (target_cpu == origin_cpu)
-		goto cpu_store_unlock;
-
-	if (vmbus_send_modifychannel(channel,
-				     hv_cpu_number_to_vp_number(target_cpu))) {
-		ret = -EIO;
-		goto cpu_store_unlock;
-	}
-
-	/*
-	 * For version before VERSION_WIN10_V5_3, the following warning holds:
-	 *
-	 * Warning.  At this point, there is *no* guarantee that the host will
-	 * have successfully processed the vmbus_send_modifychannel() request.
-	 * See the header comment of vmbus_send_modifychannel() for more info.
-	 *
-	 * Lags in the processing of the above vmbus_send_modifychannel() can
-	 * result in missed interrupts if the "old" target CPU is taken offline
-	 * before Hyper-V starts sending interrupts to the "new" target CPU.
-	 * But apart from this offlining scenario, the code tolerates such
-	 * lags.  It will function correctly even if a channel interrupt comes
-	 * in on a CPU that is different from the channel target_cpu value.
-	 */
-
-	channel->target_cpu = target_cpu;
-
-	/* See init_vp_index(). */
-	if (hv_is_perf_channel(channel))
-		hv_update_allocated_cpus(origin_cpu, target_cpu);
-
-	/* Currently set only for storvsc channels. */
-	if (channel->change_target_cpu_callback) {
-		(*channel->change_target_cpu_callback)(channel,
-				origin_cpu, target_cpu);
-	}
-
-cpu_store_unlock:
 	mutex_unlock(&vmbus_connection.channel_mutex);
-	cpus_read_unlock();
 	return ret;
 }
 static VMBUS_CHAN_ATTR(cpu, 0644, target_cpu_show, target_cpu_store);

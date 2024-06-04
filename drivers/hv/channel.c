@@ -212,79 +212,6 @@ int vmbus_send_tl_connect_request(const guid_t *shv_guest_servie_id,
 }
 EXPORT_SYMBOL_GPL(vmbus_send_tl_connect_request);
 
-static int send_modifychannel_without_ack(struct vmbus_channel *channel, u32 target_vp)
-{
-	struct vmbus_channel_modifychannel msg;
-	int ret;
-
-	memset(&msg, 0, sizeof(msg));
-	msg.header.msgtype = CHANNELMSG_MODIFYCHANNEL;
-	msg.child_relid = channel->offermsg.child_relid;
-	msg.target_vp = target_vp;
-
-	ret = vmbus_post_msg(&msg, sizeof(msg), true);
-	trace_vmbus_send_modifychannel(&msg, ret);
-
-	return ret;
-}
-
-static int send_modifychannel_with_ack(struct vmbus_channel *channel, u32 target_vp)
-{
-	struct vmbus_channel_modifychannel *msg;
-	struct vmbus_channel_msginfo *info;
-	unsigned long flags;
-	int ret;
-
-	info = kzalloc(sizeof(struct vmbus_channel_msginfo) +
-				sizeof(struct vmbus_channel_modifychannel),
-		       GFP_KERNEL);
-	if (!info)
-		return -ENOMEM;
-
-	init_completion(&info->waitevent);
-	info->waiting_channel = channel;
-
-	msg = (struct vmbus_channel_modifychannel *)info->msg;
-	msg->header.msgtype = CHANNELMSG_MODIFYCHANNEL;
-	msg->child_relid = channel->offermsg.child_relid;
-	msg->target_vp = target_vp;
-
-	spin_lock_irqsave(&vmbus_connection.channelmsg_lock, flags);
-	list_add_tail(&info->msglistentry, &vmbus_connection.chn_msg_list);
-	spin_unlock_irqrestore(&vmbus_connection.channelmsg_lock, flags);
-
-	ret = vmbus_post_msg(msg, sizeof(*msg), true);
-	trace_vmbus_send_modifychannel(msg, ret);
-	if (ret != 0) {
-		spin_lock_irqsave(&vmbus_connection.channelmsg_lock, flags);
-		list_del(&info->msglistentry);
-		spin_unlock_irqrestore(&vmbus_connection.channelmsg_lock, flags);
-		goto free_info;
-	}
-
-	/*
-	 * Release channel_mutex; otherwise, vmbus_onoffer_rescind() could block on
-	 * the mutex and be unable to signal the completion.
-	 *
-	 * See the caller target_cpu_store() for information about the usage of the
-	 * mutex.
-	 */
-	mutex_unlock(&vmbus_connection.channel_mutex);
-	wait_for_completion(&info->waitevent);
-	mutex_lock(&vmbus_connection.channel_mutex);
-
-	spin_lock_irqsave(&vmbus_connection.channelmsg_lock, flags);
-	list_del(&info->msglistentry);
-	spin_unlock_irqrestore(&vmbus_connection.channelmsg_lock, flags);
-
-	if (info->response.modify_response.status)
-		ret = -EAGAIN;
-
-free_info:
-	kfree(info);
-	return ret;
-}
-
 /*
  * Set/change the vCPU (@target_vp) the channel (@child_relid) will interrupt.
  *
@@ -294,14 +221,32 @@ free_info:
  * out an ACK, we can not know when the host will stop interrupting the "old"
  * vCPU and start interrupting the "new" vCPU for the given channel.
  *
+ * But even if Hyper-V provides the ACK, we don't wait for it because the
+ * caller, vmbus_irq_set_affinity(), is running with a spin lock held. The
+ * unknown delay in when the host will start interrupting the new vCPU is not
+ * a problem unless the old vCPU is taken offline, and that situation is dealt
+ * with separately in the CPU offlining path.
+ *
  * The CHANNELMSG_MODIFYCHANNEL message type is supported since VMBus version
  * VERSION_WIN10_V4_1.
  */
 int vmbus_send_modifychannel(struct vmbus_channel *channel, u32 target_vp)
 {
-	if (vmbus_proto_version >= VERSION_WIN10_V5_3)
-		return send_modifychannel_with_ack(channel, target_vp);
-	return send_modifychannel_without_ack(channel, target_vp);
+	struct vmbus_channel_modifychannel msg;
+	int ret;
+
+	if (vmbus_proto_version < VERSION_WIN10_V4_1)
+		return -EINVAL;
+
+	memset(&msg, 0, sizeof(msg));
+	msg.header.msgtype = CHANNELMSG_MODIFYCHANNEL;
+	msg.child_relid = channel->offermsg.child_relid;
+	msg.target_vp = target_vp;
+
+	ret = vmbus_post_msg(&msg, sizeof(msg), false);
+	trace_vmbus_send_modifychannel(&msg, ret);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(vmbus_send_modifychannel);
 
