@@ -313,7 +313,7 @@ static bool spd5118_vendor_valid(u8 bank, u8 id)
 }
 
 /* Return 0 if detection is successful, -ENODEV otherwise */
-static int spd5118_detect(struct i2c_client *client, struct i2c_board_info *info)
+static int __maybe_unused spd5118_detect(struct i2c_client *client, struct i2c_board_info *info)
 {
 	struct i2c_adapter *adapter = client->adapter;
 	int regval;
@@ -647,7 +647,9 @@ static struct i2c_driver spd5118_driver = {
 	},
 	.probe		= spd5118_probe,
 	.id_table	= spd5118_id,
+#ifdef CONFIG_SENSORS_SPD5118_DETECT
 	.detect		= spd5118_detect,
+#endif
 	.address_list	= normal_i2c,
 };
 
