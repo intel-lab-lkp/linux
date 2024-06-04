@@ -577,12 +577,6 @@ static struct kunit_suite kunit_resource_test_suite = {
 	.test_cases = kunit_resource_test_cases,
 };
 
-/*
- * Log tests call string_stream functions, which aren't exported. So only
- * build this code if this test is built-in.
- */
-#if IS_BUILTIN(CONFIG_KUNIT_TEST)
-
 /* This avoids a cast warning if kfree() is passed direct to kunit_add_action(). */
 KUNIT_DEFINE_ACTION_WRAPPER(kfree_wrapper, kfree, const void *);
 
@@ -637,17 +631,6 @@ static void kunit_log_newline_test(struct kunit *test)
 		kunit_skip(test, "only useful when debugfs is enabled");
 	}
 }
-#else
-static void kunit_log_test(struct kunit *test)
-{
-	kunit_skip(test, "Log tests only run when built-in");
-}
-
-static void kunit_log_newline_test(struct kunit *test)
-{
-	kunit_skip(test, "Log tests only run when built-in");
-}
-#endif /* IS_BUILTIN(CONFIG_KUNIT_TEST) */
 
 static struct kunit_case kunit_log_test_cases[] = {
 	KUNIT_CASE(kunit_log_test),
@@ -871,4 +854,5 @@ kunit_test_suites(&kunit_try_catch_test_suite, &kunit_resource_test_suite,
 		  &kunit_current_test_suite, &kunit_device_test_suite,
 		  &kunit_fault_test_suite);
 
+MODULE_IMPORT_NS(EXPORTED_FOR_KUNIT_TESTING);
 MODULE_LICENSE("GPL v2");
