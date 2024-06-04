@@ -382,6 +382,10 @@ void i2c_register_spd(struct i2c_adapter *adap)
 	case 0x1E:	/* LPDDR4 */
 		name = "ee1004";
 		break;
+	case 0x22:	/* DDR5 */
+	case 0x23:	/* LPDDR5 */
+		name = "spd5118";
+		break;
 	default:
 		dev_info(&adap->dev,
 			 "Memory type 0x%02x not supported yet, not instantiating SPD\n",
