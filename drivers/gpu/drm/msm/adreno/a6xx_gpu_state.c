@@ -8,18 +8,9 @@
 #include "a6xx_gpu_state.h"
 #include "a6xx_gmu.xml.h"
 
-/* Ignore diagnostics about register tables that we aren't using yet. We don't
- * want to modify these headers too much from their original source.
- */
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-variable"
-#pragma GCC diagnostic ignored "-Wunused-const-variable"
-
 #include "adreno_gen7_0_0_snapshot.h"
 #include "adreno_gen7_2_0_snapshot.h"
 #include "adreno_gen7_9_0_snapshot.h"
-
-#pragma GCC diagnostic pop
 
 struct a6xx_gpu_state_obj {
 	const void *handle;
@@ -1350,6 +1341,10 @@ static void a7xx_get_registers(struct msm_gpu *gpu,
 	int index = 0;
 	const u32 *pre_crashdumper_regs;
 	const struct gen7_reg_list *reglist;
+	__always_unused const u32 **external_core_regs7_0_0 = gen7_0_0_external_core_regs;
+	__always_unused const u32 **external_core_regs_7_2_0 = gen7_2_0_external_core_regs;
+	__always_unused const u32 **external_core_regs_7_9_0 = gen7_9_0_external_core_regs;
+	__always_unused struct gen7_sptp_cluster_registers *sptp_gen7 = gen7_9_0_sptp_clusters;
 
 	if (adreno_is_a730(adreno_gpu)) {
 		reglist = gen7_0_0_reg_list;
