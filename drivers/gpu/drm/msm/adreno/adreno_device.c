@@ -609,8 +609,11 @@ MODULE_FIRMWARE("qcom/a650_gmu.bin");
 MODULE_FIRMWARE("qcom/a650_sqe.fw");
 MODULE_FIRMWARE("qcom/a660_gmu.bin");
 MODULE_FIRMWARE("qcom/a660_sqe.fw");
+MODULE_FIRMWARE("qcom/a660_zap.mbn");
+MODULE_FIRMWARE("qcom/a702_sqe.fw");
 MODULE_FIRMWARE("qcom/leia_pfp_470.fw");
 MODULE_FIRMWARE("qcom/leia_pm4_470.fw");
+MODULE_FIRMWARE("qcom/sc8280xp/LENOVO/21BX/qcdxkmsuc8280.mbn");
 MODULE_FIRMWARE("qcom/yamato_pfp.fw");
 MODULE_FIRMWARE("qcom/yamato_pm4.fw");
 
