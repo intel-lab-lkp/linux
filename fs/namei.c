@@ -260,11 +260,13 @@ void putname(struct filename *name)
 	if (IS_ERR(name))
 		return;
 
-	if (WARN_ON_ONCE(!atomic_read(&name->refcnt)))
-		return;
+	if (unlikely(atomic_read(&name->refcnt) != 1)) {
+		if (WARN_ON_ONCE(!atomic_read(&name->refcnt)))
+			return;
 
-	if (!atomic_dec_and_test(&name->refcnt))
-		return;
+		if (!atomic_dec_and_test(&name->refcnt))
+			return;
+	}
 
 	if (name->name != name->iname) {
 		__putname(name->name);
