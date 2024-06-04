@@ -45,6 +45,14 @@ config KUNIT_TEST
 	  purposes by developers interested in testing that KUnit works as
 	  expected.
 
+config KUNIT_STRING_STREAM_TEST
+	tristate "KUnit test for string-stream" if !KUNIT_ALL_TESTS
+	default KUNIT_ALL_TESTS
+	help
+	  Enables the KUnit test for the string-stream (C++ stream style string
+	  builder used in KUnit for building messages). For the string-stream
+	  implementation, see lib/kunit/string-stream.c.
+
 config KUNIT_EXAMPLE_TEST
 	tristate "Example test for KUnit" if !KUNIT_ALL_TESTS
 	default KUNIT_ALL_TESTS
