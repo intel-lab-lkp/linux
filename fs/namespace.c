@@ -1969,7 +1969,7 @@ static bool mnt_ns_loop(struct dentry *dentry)
 struct mount *copy_tree(struct mount *mnt, struct dentry *dentry,
 					int flag)
 {
-	struct mount *res, *p, *q, *r, *parent;
+	struct mount *res, *o_parent, *o_child, *o_mnt, *n_parent, *n_mnt;
 
 	if (!(flag & CL_COPY_UNBINDABLE) && IS_MNT_UNBINDABLE(mnt))
 		return ERR_PTR(-EINVAL);
@@ -1977,47 +1977,46 @@ struct mount *copy_tree(struct mount *mnt, struct dentry *dentry,
 	if (!(flag & CL_COPY_MNT_NS_FILE) && is_mnt_ns_file(dentry))
 		return ERR_PTR(-EINVAL);
 
-	res = q = clone_mnt(mnt, dentry, flag);
-	if (IS_ERR(q))
-		return q;
+	res = n_mnt = clone_mnt(mnt, dentry, flag);
+	if (IS_ERR(n_mnt))
+		return n_mnt;
 
-	q->mnt_mountpoint = mnt->mnt_mountpoint;
+	n_mnt->mnt_mountpoint = mnt->mnt_mountpoint;
 
-	p = mnt;
-	list_for_each_entry(r, &mnt->mnt_mounts, mnt_child) {
-		struct mount *s;
-		if (!is_subdir(r->mnt_mountpoint, dentry))
+	o_parent = mnt;
+	list_for_each_entry(o_mnt, &mnt->mnt_mounts, mnt_child) {
+		if (!is_subdir(o_mnt->mnt_mountpoint, dentry))
 			continue;
 
-		for (s = r; s; s = next_mnt(s, r)) {
+		for (o_child = o_mnt; o_child; o_child = next_mnt(o_child, o_mnt)) {
 			if (!(flag & CL_COPY_UNBINDABLE) &&
-			    IS_MNT_UNBINDABLE(s)) {
-				if (s->mnt.mnt_flags & MNT_LOCKED) {
+			    IS_MNT_UNBINDABLE(o_child)) {
+				if (o_child->mnt.mnt_flags & MNT_LOCKED) {
 					/* Both unbindable and locked. */
-					q = ERR_PTR(-EPERM);
+					n_mnt = ERR_PTR(-EPERM);
 					goto out;
 				} else {
-					s = skip_mnt_tree(s);
+					o_child = skip_mnt_tree(o_child);
 					continue;
 				}
 			}
 			if (!(flag & CL_COPY_MNT_NS_FILE) &&
-			    is_mnt_ns_file(s->mnt.mnt_root)) {
-				s = skip_mnt_tree(s);
+			    is_mnt_ns_file(o_child->mnt.mnt_root)) {
+				o_child = skip_mnt_tree(o_child);
 				continue;
 			}
-			while (p != s->mnt_parent) {
-				p = p->mnt_parent;
-				q = q->mnt_parent;
+			while (o_parent != o_child->mnt_parent) {
+				o_parent = o_parent->mnt_parent;
+				n_mnt = n_mnt->mnt_parent;
 			}
-			p = s;
-			parent = q;
-			q = clone_mnt(p, p->mnt.mnt_root, flag);
-			if (IS_ERR(q))
+			o_parent = o_child;
+			n_parent = n_mnt;
+			n_mnt = clone_mnt(o_parent, o_parent->mnt.mnt_root, flag);
+			if (IS_ERR(n_mnt))
 				goto out;
 			lock_mount_hash();
-			list_add_tail(&q->mnt_list, &res->mnt_list);
-			attach_mnt(q, parent, p->mnt_mp, false);
+			list_add_tail(&n_mnt->mnt_list, &res->mnt_list);
+			attach_mnt(n_mnt, n_parent, o_parent->mnt_mp, false);
 			unlock_mount_hash();
 		}
 	}
@@ -2028,7 +2027,7 @@ out:
 		umount_tree(res, UMOUNT_SYNC);
 		unlock_mount_hash();
 	}
-	return q;
+	return n_mnt;
 }
 
 /* Caller should check returned pointer for errors */
