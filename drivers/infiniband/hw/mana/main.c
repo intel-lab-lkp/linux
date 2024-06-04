@@ -654,6 +654,39 @@ int mana_ib_gd_query_adapter_caps(struct mana_ib_dev *dev)
 	return 0;
 }
 
+static void
+mana_ib_event_handler(void *ctx, struct gdma_queue *q, struct gdma_event *event)
+{
+	struct mana_ib_dev *mdev = (struct mana_ib_dev *)ctx;
+	struct mana_ib_qp *qp;
+	struct ib_event ev;
+	unsigned long flag;
+	u32 qpn;
+
+	switch (event->type) {
+	case GDMA_EQE_RNIC_QP_FATAL:
+		qpn = event->details[0];
+		xa_lock_irqsave(&mdev->qp_table_rq, flag);
+		qp = xa_load(&mdev->qp_table_rq, qpn);
+		if (qp)
+			refcount_inc(&qp->refcount);
+		xa_unlock_irqrestore(&mdev->qp_table_rq, flag);
+		if (!qp)
+			break;
+		if (qp->ibqp.event_handler) {
+			ev.device = qp->ibqp.device;
+			ev.element.qp = &qp->ibqp;
+			ev.event = IB_EVENT_QP_FATAL;
+			qp->ibqp.event_handler(&ev, qp->ibqp.qp_context);
+		}
+		if (refcount_dec_and_test(&qp->refcount))
+			complete(&qp->free);
+		break;
+	default:
+		break;
+	}
+}
+
 int mana_ib_create_eqs(struct mana_ib_dev *mdev)
 {
 	struct gdma_context *gc = mdev_to_gc(mdev);
@@ -663,7 +696,7 @@ int mana_ib_create_eqs(struct mana_ib_dev *mdev)
 	spec.type = GDMA_EQ;
 	spec.monitor_avl_buf = false;
 	spec.queue_size = EQ_SIZE;
-	spec.eq.callback = NULL;
+	spec.eq.callback = mana_ib_event_handler;
 	spec.eq.context = mdev;
 	spec.eq.log2_throttle_limit = LOG2_EQ_THROTTLE;
 	spec.eq.msix_index = 0;
@@ -678,7 +711,7 @@ int mana_ib_create_eqs(struct mana_ib_dev *mdev)
 		err = -ENOMEM;
 		goto destroy_fatal_eq;
 	}
-
+	spec.eq.callback = NULL;
 	for (i = 0; i < mdev->ib_dev.num_comp_vectors; i++) {
 		spec.eq.msix_index = (i + 1) % gc->num_msix_usable;
 		err = mana_gd_create_mana_eq(mdev->gdma_dev, &spec, &mdev->eqs[i]);

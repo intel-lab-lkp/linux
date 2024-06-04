@@ -57,6 +57,7 @@ struct mana_ib_dev {
 	mana_handle_t adapter_handle;
 	struct gdma_queue *fatal_err_eq;
 	struct gdma_queue **eqs;
+	struct xarray qp_table_rq;
 	struct mana_ib_adapter_caps adapter_caps;
 };
 
@@ -119,6 +120,9 @@ struct mana_ib_qp {
 
 	/* The port on the IB device, starting with 1 */
 	u32 port;
+
+	refcount_t		refcount;
+	struct completion	free;
 };
 
 struct mana_ib_ucontext {

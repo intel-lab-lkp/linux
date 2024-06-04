@@ -460,6 +460,12 @@ static int mana_ib_create_rc_qp(struct ib_qp *ibqp, struct ib_pd *ibpd,
 		}
 	}
 
+	refcount_set(&qp->refcount, 1);
+	init_completion(&qp->free);
+	err = xa_insert_irq(&mdev->qp_table_rq, qp->ibqp.qp_num, qp, GFP_KERNEL);
+	if (err)
+		goto destroy_qp;
+
 	return 0;
 
 destroy_qp:
@@ -619,6 +625,11 @@ static int mana_ib_destroy_rc_qp(struct mana_ib_qp *qp, struct ib_udata *udata)
 	struct mana_ib_dev *mdev =
 		container_of(qp->ibqp.device, struct mana_ib_dev, ib_dev);
 	int i;
+
+	xa_erase_irq(&mdev->qp_table_rq, qp->ibqp.qp_num);
+	if (refcount_dec_and_test(&qp->refcount))
+		complete(&qp->free);
+	wait_for_completion(&qp->free);
 
 	/* Ignore return code as there is not much we can do about it.
 	 * The error message is printed inside.
