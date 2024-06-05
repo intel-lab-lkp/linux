@@ -3765,10 +3765,13 @@ static int regulator_set_voltage_unlocked(struct regulator *regulator,
 
 	/* If we're setting the same range as last time the change
 	 * should be a noop (some cpufreq implementations use the same
-	 * voltage for multiple frequencies, for example).
+	 * voltage for multiple frequencies, for example). Also make sure
+	 * state is the same in HW.
 	 */
-	if (voltage->min_uV == min_uV && voltage->max_uV == max_uV)
-		goto out;
+	if (voltage->min_uV == min_uV && voltage->max_uV == max_uV) {
+		if (regulator_get_voltage_rdev(rdev) == min_uV)
+			goto out;
+	}
 
 	/* If we're trying to set a range that overlaps the current voltage,
 	 * return successfully even though the regulator does not support
