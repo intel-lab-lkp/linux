@@ -161,6 +161,14 @@ test_add_proc()
 #  T    = put a task into cgroup
 #  O<c>=<v> = Write <v> to CPU online file of <c>
 #
+# ECPUs    - effective CPUs of cpusets
+# Pstate   - partition root state
+# ISOLCPUS - isolated CPUs (<icpus>[,<icpus2>])
+#
+# Note that if there are 2 fields in ISOLCPUS, the first one is for
+# sched-debug matching which includes offline CPUs and single-CPU partitions
+# while the second one is for matching cpuset.cpus.isolated.
+#
 SETUP_A123_PARTITIONS="C1-3:P1:S+ C2-3:P1:S+ C3:P1"
 TEST_MATRIX=(
 	#  old-A1 old-A2 old-A3 old-B1 new-A1 new-A2 new-A3 new-B1 fail ECPUs Pstate ISOLCPUS
@@ -233,10 +241,14 @@ TEST_MATRIX=(
 								       A1:P0,A2:P1,A3:P2,B1:P1 2-3"
 	" C0-3:S+ C1-3:S+ C2-3    C4    X2-3  X2-3:P1   P2     P1    0 A1:0-1,A2:,A3:2-3,B1:4 \
 								       A1:P0,A2:P1,A3:P2,B1:P1 2-4,2-3"
+	" C0-3:S+ C1-3:S+ C2-3    C4    X2-3  X2-3:P1    .     P1    0 A1:0-1,A2:2-3,A3:2-3,B1:4 \
+								       A1:P0,A2:P1,A3:P0,B1:P1"
 	" C0-3:S+ C1-3:S+  C3     C4    X2-3  X2-3:P1   P2     P1    0 A1:0-1,A2:2,A3:3,B1:4 \
 								       A1:P0,A2:P1,A3:P2,B1:P1 2-4,3"
 	" C0-4:S+ C1-4:S+ C2-4     .    X2-4  X2-4:P2  X4:P1    .    0 A1:0-1,A2:2-3,A3:4 \
 								       A1:P0,A2:P2,A3:P1 2-4,2-3"
+	" C0-4:S+ C1-4:S+ C2-4     .    X2-4  X2-4:P2 X3-4:P1   .    0 A1:0-1,A2:2,A3:3-4 \
+								       A1:P0,A2:P2,A3:P1 2"
 	" C0-4:X2-4:S+ C1-4:X2-4:S+:P2 C2-4:X4:P1 \
 				   .      .      X5      .      .    0 A1:0-4,A2:1-4,A3:2-4 \
 								       A1:P0,A2:P-2,A3:P-1"
@@ -556,14 +568,15 @@ check_cgroup_states()
 	do
 		set -- $(echo $CHK | sed -e "s/:/ /g")
 		CGRP=$1
+		CGRP_DIR=$CGRP
 		STATE=$2
 		FILE=
 		EVAL=$(expr substr $STATE 2 2)
-		[[ $CGRP = A2 ]] && CGRP=A1/A2
-		[[ $CGRP = A3 ]] && CGRP=A1/A2/A3
+		[[ $CGRP = A2 ]] && CGRP_DIR=A1/A2
+		[[ $CGRP = A3 ]] && CGRP_DIR=A1/A2/A3
 
 		case $STATE in
-			P*) FILE=$CGRP/cpuset.cpus.partition
+			P*) FILE=$CGRP_DIR/cpuset.cpus.partition
 			    ;;
 			*)  echo "Unknown state: $STATE!"
 			    exit 1
@@ -587,6 +600,16 @@ check_cgroup_states()
 				;;
 		esac
 		[[ $EVAL != $VAL ]] && return 1
+
+		#
+		# For root partition, dump sched-domains info to console if
+		# verbose mode set for manual comparison with sched debug info.
+		#
+		[[ $VAL -eq 1 && $VERBOSE -gt 0 ]] && {
+			DOMS=$(cat $CGRP_DIR/cpuset.cpus.effective)
+			[[ -n "$DOMS" ]] &&
+				echo " [$CGRP] sched-domain: $DOMS" > /dev/console
+		}
 	done
 	return 0
 }
