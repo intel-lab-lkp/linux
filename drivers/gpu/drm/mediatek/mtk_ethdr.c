@@ -341,7 +341,7 @@ static int mtk_ethdr_probe(struct platform_device *pdev)
 
 	ret = component_add(dev, &mtk_ethdr_component_ops);
 	if (ret)
-		dev_notice(dev, "Failed to add component: %d\n", ret);
+		dev_err_probe(dev, ret, "Failed to add component\n");
 
 	return ret;
 }

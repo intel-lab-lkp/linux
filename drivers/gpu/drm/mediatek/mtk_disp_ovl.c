@@ -555,7 +555,7 @@ static int mtk_disp_ovl_probe(struct platform_device *pdev)
 	ret = component_add(dev, &mtk_disp_ovl_component_ops);
 	if (ret) {
 		pm_runtime_disable(dev);
-		dev_err(dev, "Failed to add component: %d\n", ret);
+		dev_err_probe(dev, ret, "Failed to add component\n");
 	}
 
 	return ret;
