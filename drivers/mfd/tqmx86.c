@@ -259,13 +259,14 @@ static int tqmx86_probe(struct platform_device *pdev)
 		err = tqmx86_setup_irq(dev, "GPIO", gpio_irq, io_base,
 				       TQMX86_REG_IO_EXT_INT_GPIO_SHIFT);
 		if (err)
-			return err;
+			gpio_irq = 0;
+	}
 
+	if (gpio_irq)
 		/* Assumes the IRQ resource is first. */
 		tqmx_gpio_resources[0].start = gpio_irq;
-	} else {
+	else
 		tqmx_gpio_resources[0].flags = 0;
-	}
 
 	ocores_platform_data.clock_khz = tqmx86_board_id_to_clk_rate(dev, board_id);
 
