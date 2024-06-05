@@ -73,7 +73,6 @@
 #define FSI_SISS_MFSI_PORT_ERROR	BIT(2)
 #define FSI_SISS_MFSI_HP		BIT(1)
 #define FSI_SISS_MFSI_CR_PARITY_ERROR	BIT(0)
-#define FSI_SISS_ALL			0xfe007f00
 
 /*
  * SI1S fields
