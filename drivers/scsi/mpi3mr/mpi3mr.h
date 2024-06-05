@@ -194,7 +194,12 @@ extern atomic64_t event_counter;
 #define MPI3MR_DEFAULT_HDB_MIN_SZ       (2 * 1024 * 1024)
 #define MPI3MR_MAX_NUM_HDB      2
 
+#define MPI3MR_HDB_TRIGGER_TYPE_UNKNOWN		0
+#define MPI3MR_HDB_TRIGGER_TYPE_FAULT		1
+#define MPI3MR_HDB_TRIGGER_TYPE_ELEMENT		2
 #define MPI3MR_HDB_TRIGGER_TYPE_GLOBAL          3
+#define MPI3MR_HDB_TRIGGER_TYPE_SOFT_RESET      4
+#define MPI3MR_HDB_TRIGGER_TYPE_FW_RELEASED     5
 
 /* Driver Host Diag Buffer (drv_db) */
 #define MPI3MR_MIN_DIAG_HOST_BUFFER_SZ		((32 * 1024) + \
@@ -225,6 +230,8 @@ extern atomic64_t event_counter;
 
 #define MPI3MR_WRITE_SAME_MAX_LEN_256_BLKS 256
 #define MPI3MR_WRITE_SAME_MAX_LEN_2048_BLKS 2048
+
+#define MPI3MR_DRIVER_EVENT_PROCESS_TRIGGER    (0xFFFD)
 
 /* Driver diag buffer levels */
 enum mpi3mr_drv_db_level {
@@ -317,6 +324,7 @@ enum mpi3mr_reset_reason {
 	MPI3MR_RESET_FROM_FIRMWARE = 27,
 	MPI3MR_RESET_FROM_CFG_REQ_TIMEOUT = 29,
 	MPI3MR_RESET_FROM_SAS_TRANSPORT_TIMEOUT = 30,
+	MPI3MR_RESET_FROM_TRIGGER = 31,
 };
 
 #define MPI3MR_RESET_REASON_OSTYPE_LINUX	1
@@ -893,6 +901,24 @@ union mpi3mr_trigger_data {
 };
 
 /**
+ * struct trigger_event_data - store trigger related
+ * information.
+ *
+ * @trace_hdb: Trace diag buffer descriptor reference
+ * @fw_hdb: FW diag buffer descriptor reference
+ * @trigger_type: Trigger type
+ * @trigger_specific_data: Trigger specific data
+ * @snapdump: Snapdump enable or disable flag
+ */
+struct trigger_event_data {
+	struct diag_buffer_desc *trace_hdb;
+	struct diag_buffer_desc *fw_hdb;
+	u8 trigger_type;
+	union mpi3mr_trigger_data trigger_specific_data;
+	bool snapdump;
+};
+
+/**
  * struct diag_buffer_desc - memory descriptor structure to
  * store virtual, dma addresses, size, buffer status for host
  * diagnostic buffers.
@@ -1130,6 +1156,9 @@ struct scmd_priv {
  * @drv_diag_buffer: Diagnostic host buffer virtual address
  * @drv_diag_buffer_dma: Diagnostic host buffer DMA address
  * @drv_diag_buffer_sz: Diagnostic host buffer size
+ * @trace_release_trigger_active: Trace trigger active flag
+ * @fw_release_trigger_active: Fw release trigger active flag
+ * @snapdump_trigger_active: Snapdump trigger active flag
  *
  */
 struct mpi3mr_ioc {
@@ -1331,6 +1360,9 @@ struct mpi3mr_ioc {
 	void *drv_diag_buffer;
 	dma_addr_t drv_diag_buffer_dma;
 	u32 drv_diag_buffer_sz;
+	bool snapdump_trigger_active;
+	bool trace_release_trigger_active;
+	bool fw_release_trigger_active;
 };
 
 /**
@@ -1534,4 +1566,16 @@ struct diag_buffer_desc *mpi3mr_diag_buffer_for_type(struct mpi3mr_ioc *mrioc,
 	u8 buf_type);
 int mpi3mr_issue_diag_buf_post(struct mpi3mr_ioc *mrioc,
 	struct diag_buffer_desc *diag_buffer);
+void mpi3mr_set_trigger_data_in_all_hdb(struct mpi3mr_ioc *mrioc,
+	u8 type, union mpi3mr_trigger_data *trigger_data, bool force);
+void mpi3mr_reply_trigger(struct mpi3mr_ioc *mrioc, u16 iocstatus,
+	u32 iocloginfo);
+void mpi3mr_hdb_trigger_data_event(struct mpi3mr_ioc *mrioc,
+	struct trigger_event_data *event_data);
+void mpi3mr_scsisense_trigger(struct mpi3mr_ioc *mrioc, u8 senseky, u8 asc,
+	u8 ascq);
+void mpi3mr_event_trigger(struct mpi3mr_ioc *mrioc, u8 event);
+void mpi3mr_global_trigger(struct mpi3mr_ioc *mrioc, u64 trigger_data);
+void mpi3mr_hdbstatuschg_evt_th(struct mpi3mr_ioc *mrioc,
+	struct mpi3_event_notification_reply *event_reply);
 #endif /*MPI3MR_H_INCLUDED*/
