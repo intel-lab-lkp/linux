@@ -285,7 +285,7 @@ err:
 	}
 }
 
-/**
+/*
  * bch_data_insert - stick some data in the cache
  * @cl: closure pointer.
  *
