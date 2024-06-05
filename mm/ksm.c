@@ -2315,6 +2315,7 @@ static void cmp_and_merge_page(struct page *page, struct ksm_rmap_item *rmap_ite
 	unsigned int checksum;
 	int err;
 	bool max_page_sharing_bypass = false;
+	struct vm_area_struct *vma;
 
 	stable_node = page_stable_node(page);
 	if (stable_node) {
@@ -2370,9 +2371,17 @@ static void cmp_and_merge_page(struct page *page, struct ksm_rmap_item *rmap_ite
 	 * don't want to insert it in the unstable tree, and we don't want
 	 * to waste our time searching for something identical to it there.
 	 */
+	mmap_read_lock(mm);
+	vma = find_mergeable_vma(mm, rmap_item->address);
+	if (!vma) {
+		/* If the vma is out of date, we do not need to  continue.*/
+		mmap_read_unlock(mm);
+		return;
+	}
 	checksum = calc_checksum(page);
 	if (rmap_item->oldchecksum != checksum) {
 		rmap_item->oldchecksum = checksum;
+		mmap_read_unlock(mm);
 		return;
 	}
 
@@ -2381,31 +2390,20 @@ static void cmp_and_merge_page(struct page *page, struct ksm_rmap_item *rmap_ite
 	 * appropriate zero page if the user enabled this via sysfs.
 	 */
 	if (ksm_use_zero_pages && (checksum == zero_checksum)) {
-		struct vm_area_struct *vma;
-
-		mmap_read_lock(mm);
-		vma = find_mergeable_vma(mm, rmap_item->address);
-		if (vma) {
-			err = try_to_merge_one_page(vma, page,
-					ZERO_PAGE(rmap_item->address));
-			trace_ksm_merge_one_page(
-				page_to_pfn(ZERO_PAGE(rmap_item->address)),
-				rmap_item, mm, err);
-		} else {
-			/*
-			 * If the vma is out of date, we do not need to
-			 * continue.
-			 */
-			err = 0;
-		}
-		mmap_read_unlock(mm);
+		err = try_to_merge_one_page(vma, page, ZERO_PAGE(rmap_item->address));
+		trace_ksm_merge_one_page(page_to_pfn(ZERO_PAGE(rmap_item->address)),
+					 rmap_item, mm, err);
 		/*
 		 * In case of failure, the page was not really empty, so we
 		 * need to continue. Otherwise we're done.
 		 */
-		if (!err)
+		if (!err) {
+			mmap_read_unlock(mm);
 			return;
+		}
 	}
+	mmap_read_unlock(mm);
+
 	tree_rmap_item =
 		unstable_tree_search_insert(rmap_item, page, &tree_page);
 	if (tree_rmap_item) {
