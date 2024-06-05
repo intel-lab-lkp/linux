@@ -840,15 +840,6 @@ struct deferred_split *get_deferred_split_queue(struct folio *folio)
 }
 #endif
 
-static inline bool is_transparent_hugepage(const struct folio *folio)
-{
-	if (!folio_test_large(folio))
-		return false;
-
-	return is_huge_zero_folio(folio) ||
-		folio_test_large_rmappable(folio);
-}
-
 static unsigned long __thp_get_unmapped_area(struct file *filp,
 		unsigned long addr, unsigned long len,
 		loff_t off, unsigned long flags, unsigned long size,
@@ -3511,7 +3502,7 @@ static int split_huge_pages_pid(int pid, unsigned long vaddr_start,
 			continue;
 
 		folio = page_folio(page);
-		if (!is_transparent_hugepage(folio))
+		if (!folio_test_large(folio))
 			goto next;
 
 		if (new_order >= folio_order(folio))
