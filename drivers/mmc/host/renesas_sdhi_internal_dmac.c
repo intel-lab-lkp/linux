@@ -215,6 +215,45 @@ static const struct renesas_sdhi_quirks sdhi_quirks_rzg2l = {
 	.hs400_disabled = true,
 };
 
+static const unsigned int r9a09g057_vqmmc_voltages[] = {
+	3300000, 1800000,
+};
+
+static const struct regulator_ops r9a09g057_regulator_voltage_ops = {
+	.list_voltage = regulator_list_voltage_table,
+	.map_voltage = regulator_map_voltage_descend,
+	.get_voltage_sel = regulator_get_voltage_sel_regmap,
+	.set_voltage_sel = regulator_set_voltage_sel_regmap,
+};
+
+static struct regulator_desc r9a09g057_vqmmc_regulator = {
+	.of_match	= of_match_ptr("vqmmc-r9a09g057-regulator"),
+	.owner		= THIS_MODULE,
+	.type		= REGULATOR_VOLTAGE,
+	.ops		= &r9a09g057_regulator_voltage_ops,
+	.volt_table	= r9a09g057_vqmmc_voltages,
+	.n_voltages	= ARRAY_SIZE(r9a09g057_vqmmc_voltages),
+	.vsel_mask	= 0x10000,
+	.vsel_reg	= 0,
+};
+
+static const struct regmap_config r9a09g057_vqmmc_regmap_config = {
+	.reg_bits	= 32,
+	.val_bits	= 32,
+	.reg_stride	= 4,
+	.max_register	= 1,
+};
+
+static const struct renesas_sdhi_quirks sdhi_quirks_r9a09g057 = {
+	.fixed_addr_mode = true,
+	.hs400_disabled = true,
+	.sd_iovs = true,
+	.sd_pwen = true,
+	.rdesc = &r9a09g057_vqmmc_regulator,
+	.rdesc_regmap_config = &r9a09g057_vqmmc_regmap_config,
+	.rdesc_offset = 0x3C8,
+};
+
 /*
  * Note for r8a7796 / r8a774a1: we can't distinguish ES1.1 and 1.2 as of now.
  * So, we want to treat them equally and only have a match for ES1.2 to enforce
@@ -260,6 +299,11 @@ static const struct renesas_sdhi_of_data_with_quirks of_rzg2l_compatible = {
 	.quirks = &sdhi_quirks_rzg2l,
 };
 
+static const struct renesas_sdhi_of_data_with_quirks of_r9a09g057_compatible = {
+	.of_data = &of_data_rcar_gen3,
+	.quirks = &sdhi_quirks_r9a09g057,
+};
+
 static const struct renesas_sdhi_of_data_with_quirks of_rcar_gen3_compatible = {
 	.of_data = &of_data_rcar_gen3,
 };
@@ -284,6 +328,7 @@ static const struct of_device_id renesas_sdhi_internal_dmac_of_match[] = {
 	{ .compatible = "renesas,sdhi-r8a77990", .data = &of_r8a77990_compatible, },
 	{ .compatible = "renesas,sdhi-r8a77995", .data = &of_rcar_gen3_nohs400_compatible, },
 	{ .compatible = "renesas,sdhi-r9a09g011", .data = &of_rzg2l_compatible, },
+	{ .compatible = "renesas,sdhi-r9a09g057", .data = &of_r9a09g057_compatible, },
 	{ .compatible = "renesas,rzg2l-sdhi", .data = &of_rzg2l_compatible, },
 	{ .compatible = "renesas,rcar-gen3-sdhi", .data = &of_rcar_gen3_compatible, },
 	{ .compatible = "renesas,rcar-gen4-sdhi", .data = &of_rcar_gen3_compatible, },

@@ -248,6 +248,19 @@ static int renesas_sdhi_card_busy(struct mmc_host *mmc)
 		 TMIO_STAT_DAT0);
 }
 
+static void renesas_sdhi_sd_status_pwen(struct tmio_mmc_host *host, bool on)
+{
+	u32 sd_status;
+
+	sd_ctrl_read32_rep(host, CTL_SD_STATUS, &sd_status, 1);
+	if (on)
+		sd_status |=  SD_STATUS_PWEN;
+	else
+		sd_status &=  ~SD_STATUS_PWEN;
+
+	sd_ctrl_write32(host, CTL_SD_STATUS, sd_status);
+}
+
 static int renesas_sdhi_start_signal_voltage_switch(struct mmc_host *mmc,
 						    struct mmc_ios *ios)
 {
@@ -587,6 +600,9 @@ static void renesas_sdhi_reset(struct tmio_mmc_host *host, bool preserve)
 					  false, priv->rstc);
 			/* At least SDHI_VER_GEN2_SDR50 needs manual release of reset */
 			sd_ctrl_write16(host, CTL_RESET_SD, 0x0001);
+			if (sdhi_has_quirk(priv, sd_pwen))
+				renesas_sdhi_sd_status_pwen(host, true);
+
 			priv->needs_adjust_hs400 = false;
 			renesas_sdhi_set_clock(host, host->clk_cache);
 
@@ -904,6 +920,34 @@ static void renesas_sdhi_enable_dma(struct tmio_mmc_host *host, bool enable)
 	renesas_sdhi_sdbuf_width(host, enable ? width : 16);
 }
 
+static int renesas_sdhi_internal_dmac_register_regulator(struct platform_device *pdev,
+							 const struct renesas_sdhi_quirks *quirks)
+{
+	struct tmio_mmc_host *host = platform_get_drvdata(pdev);
+	struct renesas_sdhi *priv = host_to_priv(host);
+	struct regulator_config rcfg = {
+		.dev = &pdev->dev,
+		.driver_data = priv,
+	};
+	struct regulator_dev *rdev;
+	const char *devname;
+
+	devname = devm_kasprintf(&pdev->dev, GFP_KERNEL, "%s-vqmmc-regulator",
+				 dev_name(&pdev->dev));
+	if (!devname)
+		return -ENOMEM;
+
+	quirks->rdesc->name = devname;
+	rcfg.regmap = devm_regmap_init_mmio(&pdev->dev, host->ctl + quirks->rdesc_offset,
+					    quirks->rdesc_regmap_config);
+	if (IS_ERR(rcfg.regmap))
+		return PTR_ERR(rcfg.regmap);
+
+	rdev = devm_regulator_register(&pdev->dev, quirks->rdesc, &rcfg);
+
+	return PTR_ERR_OR_ZERO(rdev);
+}
+
 int renesas_sdhi_probe(struct platform_device *pdev,
 		       const struct tmio_mmc_dma_ops *dma_ops,
 		       const struct renesas_sdhi_of_data *of_data,
@@ -1051,6 +1095,15 @@ int renesas_sdhi_probe(struct platform_device *pdev,
 	if (ret)
 		goto efree;
 
+	if (sdhi_has_quirk(priv, sd_iovs)) {
+		ret = renesas_sdhi_internal_dmac_register_regulator(pdev, quirks);
+		if (ret)
+			goto efree;
+	}
+
+	if (sdhi_has_quirk(priv, sd_pwen))
+		renesas_sdhi_sd_status_pwen(host, true);
+
 	ver = sd_ctrl_read16(host, CTL_VERSION);
 	/* GEN2_SDR104 is first known SDHI to use 32bit block count */
 	if (ver < SDHI_VER_GEN2_SDR104 && mmc_data->max_blk_count > U16_MAX)
@@ -1110,26 +1163,26 @@ int renesas_sdhi_probe(struct platform_device *pdev,
 	num_irqs = platform_irq_count(pdev);
 	if (num_irqs < 0) {
 		ret = num_irqs;
-		goto eirq;
+		goto epwen;
 	}
 
 	/* There must be at least one IRQ source */
 	if (!num_irqs) {
 		ret = -ENXIO;
-		goto eirq;
+		goto epwen;
 	}
 
 	for (i = 0; i < num_irqs; i++) {
 		irq = platform_get_irq(pdev, i);
 		if (irq < 0) {
 			ret = irq;
-			goto eirq;
+			goto epwen;
 		}
 
 		ret = devm_request_irq(&pdev->dev, irq, tmio_mmc_irq, 0,
 				       dev_name(&pdev->dev), host);
 		if (ret)
-			goto eirq;
+			goto epwen;
 	}
 
 	ret = tmio_mmc_host_probe(host);
@@ -1141,7 +1194,9 @@ int renesas_sdhi_probe(struct platform_device *pdev,
 
 	return ret;
 
-eirq:
+epwen:
+	if (sdhi_has_quirk(priv, sd_pwen))
+		renesas_sdhi_sd_status_pwen(host, false);
 	tmio_mmc_host_remove(host);
 edisclk:
 	renesas_sdhi_clk_disable(host);
@@ -1157,6 +1212,8 @@ void renesas_sdhi_remove(struct platform_device *pdev)
 	struct tmio_mmc_host *host = platform_get_drvdata(pdev);
 
 	tmio_mmc_host_remove(host);
+	if (sdhi_has_quirk(host_to_priv(host), sd_pwen))
+		renesas_sdhi_sd_status_pwen(host, false);
 	renesas_sdhi_clk_disable(host);
 	tmio_mmc_host_free(host);
 }

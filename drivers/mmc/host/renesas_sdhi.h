@@ -11,6 +11,8 @@
 
 #include <linux/dmaengine.h>
 #include <linux/platform_device.h>
+#include <linux/regmap.h>
+#include <linux/regulator/driver.h>
 #include "tmio_mmc.h"
 
 struct renesas_sdhi_scc {
@@ -49,6 +51,11 @@ struct renesas_sdhi_quirks {
 	bool manual_tap_correction;
 	bool old_info1_layout;
 	u32 hs400_bad_taps;
+	bool sd_iovs;
+	bool sd_pwen;
+	struct regulator_desc *rdesc;
+	const struct regmap_config *rdesc_regmap_config;
+	unsigned int rdesc_offset;
 	const u8 (*hs400_calib_table)[SDHI_CALIB_TABLE_MAX];
 };
 
