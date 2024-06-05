@@ -42,6 +42,8 @@
 #include <drm/drm_edid.h>
 #include <drm/drm_panel.h>
 
+#include "panel-drm-shutdown-check.h"
+
 /**
  * struct panel_delay - Describes delays for a simple panel.
  */
@@ -948,22 +950,7 @@ static void panel_edp_shutdown(struct device *dev)
 {
 	struct panel_edp *panel = dev_get_drvdata(dev);
 
-	/*
-	 * NOTE: the following two calls don't really belong here. It is the
-	 * responsibility of a correctly written DRM modeset driver to call
-	 * drm_atomic_helper_shutdown() at shutdown time and that should
-	 * cause the panel to be disabled / unprepared if needed. For now,
-	 * however, we'll keep these calls due to the sheer number of
-	 * different DRM modeset drivers used with panel-edp. The fact that
-	 * we're calling these and _also_ the drm_atomic_helper_shutdown()
-	 * will try to disable/unprepare means that we can get a warning about
-	 * trying to disable/unprepare an already disabled/unprepared panel,
-	 * but that's something we'll have to live with until we've confirmed
-	 * that all DRM modeset drivers are properly calling
-	 * drm_atomic_helper_shutdown().
-	 */
-	drm_panel_disable(&panel->base);
-	drm_panel_unprepare(&panel->base);
+	panel_shutdown_if_drm_driver_needs_fixing(&panel->base);
 }
 
 static void panel_edp_remove(struct device *dev)

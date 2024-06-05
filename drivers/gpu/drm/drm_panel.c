@@ -161,6 +161,12 @@ int drm_panel_unprepare(struct drm_panel *panel)
 	if (!panel)
 		return -EINVAL;
 
+	/*
+	 * If you're seeing this warning, you either need to add your driver
+	 * to "drm_drivers_that_shutdown" (if you're seeing it with panel-edp
+	 * or panel-simple) or you need to remove the manual call to
+	 * drm_panel_unprepare() in your panel driver.
+	 */
 	if (!panel->prepared) {
 		dev_warn(panel->dev, "Skipping unprepare of already unprepared panel\n");
 		return 0;
@@ -245,6 +251,12 @@ int drm_panel_disable(struct drm_panel *panel)
 	if (!panel)
 		return -EINVAL;
 
+	/*
+	 * If you're seeing this warning, you either need to add your driver
+	 * to "drm_drivers_that_shutdown" (if you're seeing it with panel-edp
+	 * or panel-simple) or you need to remove the manual call to
+	 * drm_panel_disable() in your panel driver.
+	 */
 	if (!panel->enabled) {
 		dev_warn(panel->dev, "Skipping disable of already disabled panel\n");
 		return 0;
