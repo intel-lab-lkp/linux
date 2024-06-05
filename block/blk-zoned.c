@@ -1650,6 +1650,20 @@ static int disk_update_zone_resources(struct gendisk *disk,
 	if (!disk->zone_wplugs_pool)
 		return 0;
 
+	lim = queue_limits_start_update(q);
+
+	/*
+	 * Some devices can advertize max open and max active zone limits that
+	 * are larger than the number of sequential zones of the zoned block
+	 * device, e.g. a small ZNS namespace. For such case, assume that the
+	 * zoned device has no limits.
+	 */
+	nr_seq_zones = disk->nr_zones - nr_conv_zones;
+	if (lim.max_active_zones > nr_seq_zones)
+		lim.max_active_zones = 0;
+	if (lim.max_open_zones > nr_seq_zones)
+		lim.max_open_zones = 0;
+
 	/*
 	 * If the device has no limit on the maximum number of open and active
 	 * zones, set its max open zone limit to the mempool size to indicate
@@ -1657,9 +1671,6 @@ static int disk_update_zone_resources(struct gendisk *disk,
 	 * dynamic zone write plug allocation when simultaneously writing to
 	 * more zones than the size of the mempool.
 	 */
-	lim = queue_limits_start_update(q);
-
-	nr_seq_zones = disk->nr_zones - nr_conv_zones;
 	pool_size = max(lim.max_open_zones, lim.max_active_zones);
 	if (!pool_size)
 		pool_size = min(BLK_ZONE_WPLUG_DEFAULT_POOL_SIZE, nr_seq_zones);
