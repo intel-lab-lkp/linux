@@ -37,10 +37,8 @@ struct mtk_scp *scp_get(struct platform_device *pdev)
 	struct platform_device *scp_pdev;
 
 	scp_node = of_parse_phandle(dev->of_node, "mediatek,scp", 0);
-	if (!scp_node) {
-		dev_err(dev, "can't get SCP node\n");
+	if (!scp_node)
 		return NULL;
-	}
 
 	scp_pdev = of_find_device_by_node(scp_node);
 	of_node_put(scp_node);
