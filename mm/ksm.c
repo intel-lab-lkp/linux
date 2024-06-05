@@ -784,10 +784,7 @@ static struct page *get_mergeable_page(struct ksm_rmap_item *rmap_item)
 		goto out;
 	if (is_zone_device_page(page))
 		goto out_putpage;
-	if (PageAnon(page)) {
-		flush_anon_page(vma, page, addr);
-		flush_dcache_page(page);
-	} else {
+	if (!PageAnon(page)) {
 out_putpage:
 		put_page(page);
 out:
@@ -2378,7 +2375,12 @@ static void cmp_and_merge_page(struct page *page, struct ksm_rmap_item *rmap_ite
 		mmap_read_unlock(mm);
 		return;
 	}
+
+	/* flush page contents before calculate checksum */
+	flush_anon_page(vma, page, rmap_item->address);
+	flush_dcache_page(page);
 	checksum = calc_checksum(page);
+
 	if (rmap_item->oldchecksum != checksum) {
 		rmap_item->oldchecksum = checksum;
 		mmap_read_unlock(mm);
@@ -2662,8 +2664,6 @@ next_mm:
 			if (is_zone_device_page(*page))
 				goto next_page;
 			if (PageAnon(*page)) {
-				flush_anon_page(vma, *page, ksm_scan.address);
-				flush_dcache_page(*page);
 				rmap_item = get_next_rmap_item(mm_slot,
 					ksm_scan.rmap_list, ksm_scan.address);
 				if (rmap_item) {
