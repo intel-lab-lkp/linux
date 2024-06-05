@@ -735,6 +735,8 @@ int regulator_map_voltage_iterate(struct regulator_dev *rdev,
 				  int min_uV, int max_uV);
 int regulator_map_voltage_ascend(struct regulator_dev *rdev,
 				  int min_uV, int max_uV);
+int regulator_map_voltage_descend(struct regulator_dev *rdev,
+				  int min_uV, int max_uV);
 int regulator_get_voltage_sel_pickable_regmap(struct regulator_dev *rdev);
 int regulator_set_voltage_sel_pickable_regmap(struct regulator_dev *rdev,
 						unsigned int sel);
