@@ -412,7 +412,8 @@ extern void __starget_for_each_device(struct scsi_target *, void *,
 
 /* only exposed to implement shost_for_each_device */
 extern struct scsi_device *__scsi_iterate_devices(struct Scsi_Host *,
-						  struct scsi_device *);
+						  struct scsi_device *,
+						  bool);
 
 /**
  * shost_for_each_device - iterate over all devices of a host
@@ -422,11 +423,29 @@ extern struct scsi_device *__scsi_iterate_devices(struct Scsi_Host *,
  * Iterator that returns each device attached to @shost.  This loop
  * takes a reference on each device and releases it at the end.  If
  * you break out of the loop, you must call scsi_device_put(sdev).
+ *
+ * Note: this macro would skip sdev which is in progress of removing
  */
 #define shost_for_each_device(sdev, shost) \
-	for ((sdev) = __scsi_iterate_devices((shost), NULL); \
+	for ((sdev) = __scsi_iterate_devices((shost), NULL, 1); \
 	     (sdev); \
-	     (sdev) = __scsi_iterate_devices((shost), (sdev)))
+	     (sdev) = __scsi_iterate_devices((shost), (sdev), 1))
+
+/*
+ * shost_for_each_device_include_deleted- iterate over all devices of a host
+ * @sdev: the &struct scsi_device to use as a cursor
+ * @shost: the &struct scsi_host to iterate over
+ *
+ * Iterator that returns each device attached to @shost.  This loop
+ * takes a reference on each device and releases it at the end.  If
+ * you break out of the loop, you must call scsi_device_put(sdev).
+ *
+ * Note: this macro would include sdev which is in progress of removing
+ */
+#define shost_for_each_device_include_deleted(sdev, shost) \
+	for ((sdev) = __scsi_iterate_devices((shost), NULL, 0); \
+	     (sdev); \
+	     (sdev) = __scsi_iterate_devices((shost), (sdev), 0))
 
 /**
  * __shost_for_each_device - iterate over all devices of a host (UNLOCKED)

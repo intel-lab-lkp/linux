@@ -742,6 +742,31 @@ int scsi_cdl_enable(struct scsi_device *sdev, bool enable)
 	return 0;
 }
 
+/*
+ * __scsi_device_get  -  get an additional reference to a scsi_device
+ * @sdev:	device to get a reference to
+ * @skip_deleted: when true, would return failed if device is deleted
+ */
+static int __scsi_device_get(struct scsi_device *sdev, bool skip_deleted)
+{
+	/*
+	 * if skip_deleted is true and device is in removing, return failed
+	 */
+	if (skip_deleted &&
+	    (sdev->sdev_state == SDEV_DEL || sdev->sdev_state == SDEV_CANCEL))
+		goto fail;
+	if (!try_module_get(sdev->host->hostt->module))
+		goto fail;
+	if (!get_device(&sdev->sdev_gendev))
+		goto fail_put_module;
+	return 0;
+
+fail_put_module:
+	module_put(sdev->host->hostt->module);
+fail:
+	return -ENXIO;
+}
+
 /**
  * scsi_device_get  -  get an additional reference to a scsi_device
  * @sdev:	device to get a reference to
@@ -755,18 +780,7 @@ int scsi_cdl_enable(struct scsi_device *sdev, bool enable)
  */
 int scsi_device_get(struct scsi_device *sdev)
 {
-	if (sdev->sdev_state == SDEV_DEL || sdev->sdev_state == SDEV_CANCEL)
-		goto fail;
-	if (!try_module_get(sdev->host->hostt->module))
-		goto fail;
-	if (!get_device(&sdev->sdev_gendev))
-		goto fail_put_module;
-	return 0;
-
-fail_put_module:
-	module_put(sdev->host->hostt->module);
-fail:
-	return -ENXIO;
+	return __scsi_device_get(sdev, 0);
 }
 EXPORT_SYMBOL(scsi_device_get);
 
@@ -787,9 +801,13 @@ void scsi_device_put(struct scsi_device *sdev)
 }
 EXPORT_SYMBOL(scsi_device_put);
 
-/* helper for shost_for_each_device, see that for documentation */
+/**
+ * helper for shost_for_each_device, see that for documentation
+ * @skip_deleted: if true, sdev in progress of removing would be skipped
+ */
 struct scsi_device *__scsi_iterate_devices(struct Scsi_Host *shost,
-					   struct scsi_device *prev)
+					   struct scsi_device *prev,
+					   bool skip_deleted)
 {
 	struct list_head *list = (prev ? &prev->siblings : &shost->__devices);
 	struct scsi_device *next = NULL;
@@ -799,7 +817,7 @@ struct scsi_device *__scsi_iterate_devices(struct Scsi_Host *shost,
 	while (list->next != &shost->__devices) {
 		next = list_entry(list->next, struct scsi_device, siblings);
 		/* skip devices that we can't get a reference to */
-		if (!scsi_device_get(next))
+		if (!__scsi_device_get(next, skip_deleted))
 			break;
 		next = NULL;
 		list = list->next;
