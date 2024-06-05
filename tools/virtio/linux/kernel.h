@@ -66,10 +66,7 @@ static inline void *kmalloc_array(unsigned n, size_t s, gfp_t gfp)
 
 static inline void *kzalloc(size_t s, gfp_t gfp)
 {
-	void *p = kmalloc(s, gfp);
-
-	memset(p, 0, s);
-	return p;
+	return kmalloc(s, gfp | __GFP_ZERO);
 }
 
 static inline void *alloc_pages_exact(size_t s, gfp_t gfp)
