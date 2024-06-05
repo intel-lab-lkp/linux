@@ -311,6 +311,13 @@ struct kernfs_ops {
 	 * ->prealloc.  Provide ->read and ->write with ->prealloc.
 	 */
 	bool prealloc;
+	/*
+	 * Use the file as an allocator from userspace. This disables
+	 * page_mkwrite() to prevent the file time from being updated on write
+	 * which enables using GUP with FOLL_LONGTERM with memory that's been
+	 * mmaped.
+	 */
+	bool mmap_allocates;
 	ssize_t (*write)(struct kernfs_open_file *of, char *buf, size_t bytes,
 			 loff_t off);
 
