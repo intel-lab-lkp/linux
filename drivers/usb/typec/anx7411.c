@@ -16,6 +16,7 @@
 #include <linux/of_graph.h>
 #include <linux/of_platform.h>
 #include <linux/pm_runtime.h>
+#include <linux/property.h>
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
 #include <linux/types.h>
@@ -1142,11 +1143,11 @@ static int anx7411_typec_port_probe(struct anx7411_data *ctx,
 {
 	struct typec_capability *cap = &ctx->typec.caps;
 	struct typec_params *typecp = &ctx->typec;
-	struct fwnode_handle *fwnode;
 	const char *buf;
 	int ret, i;
 
-	fwnode = device_get_named_child_node(dev, "connector");
+	struct fwnode_handle *fwnode __free(fwnode_handle)
+				     = device_get_named_child_node(dev, "connector");
 	if (!fwnode)
 		return -EINVAL;
 
@@ -1237,7 +1238,7 @@ static int anx7411_typec_port_probe(struct anx7411_data *ctx,
 		typecp->caps_flags |= HAS_SINK_WATT;
 	}
 
-	cap->fwnode = fwnode;
+	cap->fwnode = no_free_ptr(fwnode);
 
 	ctx->typec.role_sw = usb_role_switch_get(dev);
 	if (IS_ERR(ctx->typec.role_sw)) {
