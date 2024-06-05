@@ -1223,7 +1223,19 @@ static int fsi_master_break(struct fsi_master *master, int link)
 
 static int fsi_master_scan(struct fsi_master *master)
 {
+	bool set_mmode = false;
 	int link, rc;
+
+	/* relative addressing is not allowed during slave ID initialization */
+	if (master->map && (master->flags & FSI_MASTER_FLAG_RELA)) {
+		u32 mmode = master->mmode & ~FSI_MMODE_RELA;
+
+		rc = regmap_write(master->map, FSI_MMODE, mmode);
+		if (rc)
+			return rc;
+
+		set_mmode = true;
+	}
 
 	trace_fsi_master_scan(master, true);
 	for (link = 0; link < master->n_links; link++) {
@@ -1244,6 +1256,12 @@ static int fsi_master_scan(struct fsi_master *master)
 		rc = fsi_slave_init(master, link, 0);
 		if (rc)
 			fsi_master_link_disable(master, link);
+	}
+
+	if (set_mmode) {
+		rc = regmap_write(master->map, FSI_MMODE, master->mmode);
+		if (rc)
+			return rc;
 	}
 
 	return 0;
