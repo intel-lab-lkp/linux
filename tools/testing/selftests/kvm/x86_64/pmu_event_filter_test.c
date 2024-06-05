@@ -353,38 +353,16 @@ static bool use_intel_pmu(void)
 	       kvm_pmu_has(X86_PMU_FEATURE_BRANCH_INSNS_RETIRED);
 }
 
-static bool is_zen1(uint32_t family, uint32_t model)
-{
-	return family == 0x17 && model <= 0x0f;
-}
-
-static bool is_zen2(uint32_t family, uint32_t model)
-{
-	return family == 0x17 && model >= 0x30 && model <= 0x3f;
-}
-
-static bool is_zen3(uint32_t family, uint32_t model)
-{
-	return family == 0x19 && model <= 0x0f;
-}
-
 /*
- * Determining AMD support for a PMU event requires consulting the AMD
- * PPR for the CPU or reference material derived therefrom. The AMD
- * test code herein has been verified to work on Zen1, Zen2, and Zen3.
- *
- * Feel free to add more AMD CPUs that are documented to support event
- * select 0xc2 umask 0 as "retired branch instructions."
+ * Family 17h+ is where Zen and its successors start and that event
+ * 0xc2,0 is supported on all currently released F17h+ processors as
+ * branch instruction retired and it is true going forward to maintain
+ * the backward compatibility for the branch instruction retired.
  */
 static bool use_amd_pmu(void)
 {
 	uint32_t family = kvm_cpu_family();
-	uint32_t model = kvm_cpu_model();
-
-	return host_cpu_is_amd &&
-		(is_zen1(family, model) ||
-		 is_zen2(family, model) ||
-		 is_zen3(family, model));
+	return family >= 0x17;
 }
 
 /*
