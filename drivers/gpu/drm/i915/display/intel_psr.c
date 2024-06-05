@@ -1497,8 +1497,13 @@ static bool _psr_compute_config(struct intel_dp *intel_dp,
 
 static bool
 _panel_replay_compute_config(struct intel_dp *intel_dp,
-			     const struct intel_crtc_state *crtc_state)
+			     const struct intel_crtc_state *crtc_state,
+			     const struct drm_connector_state *conn_state)
 {
+	struct intel_connector *connector =
+		to_intel_connector(conn_state->connector);
+	struct intel_hdcp *hdcp = &connector->hdcp;
+
 	if (!CAN_PANEL_REPLAY(intel_dp))
 		return false;
 
@@ -1509,6 +1514,14 @@ _panel_replay_compute_config(struct intel_dp *intel_dp,
 
 	/* 128b/132b Panel Replay is not supported on eDP */
 	if (intel_dp_is_uhbr(crtc_state))
+		return false;
+
+	/* HW will not allow Panel Replay on eDP when HDCP enabled */
+	if (conn_state->content_protection ==
+	    DRM_MODE_CONTENT_PROTECTION_DESIRED ||
+	    (conn_state->content_protection ==
+	     DRM_MODE_CONTENT_PROTECTION_ENABLED && hdcp->value ==
+	     DRM_MODE_CONTENT_PROTECTION_UNDESIRED))
 		return false;
 
 	return true;
@@ -1550,7 +1563,8 @@ void intel_psr_compute_config(struct intel_dp *intel_dp,
 	}
 
 	crtc_state->has_panel_replay = _panel_replay_compute_config(intel_dp,
-								    crtc_state);
+								    crtc_state,
+								    conn_state);
 
 	crtc_state->has_psr = crtc_state->has_panel_replay ? true :
 		_psr_compute_config(intel_dp, crtc_state);
