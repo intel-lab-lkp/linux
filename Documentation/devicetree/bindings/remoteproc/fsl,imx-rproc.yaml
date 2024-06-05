@@ -59,6 +59,7 @@ properties:
     maxItems: 32
 
   power-domains:
+    minItems: 1
     maxItems: 8
 
   fsl,auto-boot:
@@ -98,6 +99,21 @@ allOf:
     then:
       properties:
         fsl,iomuxc-gpr: false
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - fsl,imx8qxp-cm4
+    then:
+      properties:
+        power-domains:
+          minItems: 2
+    else:
+      properties:
+        power-domains:
+          minItems: 8
 
 additionalProperties: false
 
