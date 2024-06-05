@@ -35,10 +35,19 @@ int main(int argc, char *argv[])
 	TEST_ASSERT(ret < 0,
 		    "Setting KVM_CAP_MAX_VCPU_ID multiple times should fail");
 
-	/* Create vCPU with id beyond KVM_CAP_MAX_VCPU_ID cap*/
+	/* Create vCPU with id beyond KVM_CAP_MAX_VCPU_ID cap */
 	ret = __vm_ioctl(vm, KVM_CREATE_VCPU, (void *)MAX_VCPU_ID);
 	TEST_ASSERT(ret < 0, "Creating vCPU with ID > MAX_VCPU_ID should fail");
 
+	/* Create vCPU with id beyond UINT_MAX */
+	ret = __vm_ioctl(vm, KVM_CREATE_VCPU, (void *)(1L << 32));
+	TEST_ASSERT(ret < 0, "Creating vCPU with ID > UINT_MAX should fail");
+
+	/* Create vCPU with id within bounds */
+	ret = __vm_ioctl(vm, KVM_CREATE_VCPU, (void *)0);
+	TEST_ASSERT(ret >= 0, "Creating vCPU with ID 0 should succeed");
+
+	close(ret);
 	kvm_vm_free(vm);
 	return 0;
 }
