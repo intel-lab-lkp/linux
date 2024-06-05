@@ -2700,9 +2700,13 @@ static int __cxl_dpa_to_region(struct device *dev, void *arg)
 	if (dpa > cxled->dpa_res->end || dpa < cxled->dpa_res->start)
 		return 0;
 
-	dev_dbg(dev, "dpa:0x%llx mapped in region:%s\n", dpa,
-		dev_name(&cxled->cxld.region->dev));
-
+	/*
+	 * Stop the region search (return 1) when an endpoint mapping is
+	 * found. The region may not be fully constructed so offering
+	 * the cxlr in the context structure is not guaranteed.
+	 */
+	dev_dbg(dev, "dpa:0x%llx mapped in endpoint:%s\n", dpa,
+		dev_name(dev));
 	ctx->cxlr = cxled->cxld.region;
 
 	return 1;
