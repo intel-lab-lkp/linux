@@ -500,6 +500,34 @@ static bool is_write_abort(unsigned long esr)
 	return (esr & ESR_ELx_WNR) && !(esr & ESR_ELx_CM);
 }
 
+static bool is_el0_atomic_instr(struct pt_regs *regs)
+{
+	u32 insn;
+	__le32 insn_le;
+	unsigned long pc = instruction_pointer(regs);
+
+	if (compat_user_mode(regs))
+		return false;
+
+	pagefault_disable();
+	if (get_user(insn_le, (__le32 __user *)pc)) {
+		pagefault_enable();
+		return false;
+	}
+	pagefault_enable();
+
+	insn = le32_to_cpu(insn_le);
+
+	if (aarch64_insn_is_class_atomic(insn) &&
+	    aarch64_atomic_insn_has_wr_perm(insn))
+		return true;
+
+	if (aarch64_insn_is_class_cas(insn))
+		return true;
+
+	return false;
+}
+
 static int __kprobes do_page_fault(unsigned long far, unsigned long esr,
 				   struct pt_regs *regs)
 {
@@ -511,6 +539,7 @@ static int __kprobes do_page_fault(unsigned long far, unsigned long esr,
 	unsigned long addr = untagged_addr(far);
 	struct vm_area_struct *vma;
 	int si_code;
+	bool may_force_write = false;
 
 	if (kprobe_page_fault(regs, esr))
 		return 0;
@@ -547,6 +576,7 @@ static int __kprobes do_page_fault(unsigned long far, unsigned long esr,
 		/* If EPAN is absent then exec implies read */
 		if (!alternative_has_cap_unlikely(ARM64_HAS_EPAN))
 			vm_flags |= VM_EXEC;
+		may_force_write = true;
 	}
 
 	if (is_ttbr0_addr(addr) && is_el1_permission_fault(addr, esr, regs)) {
@@ -567,6 +597,12 @@ static int __kprobes do_page_fault(unsigned long far, unsigned long esr,
 	vma = lock_vma_under_rcu(mm, addr);
 	if (!vma)
 		goto lock_mmap;
+
+	if (may_force_write && (vma->vm_flags & VM_WRITE) &&
+	    is_el0_atomic_instr(regs)) {
+		vm_flags = VM_WRITE;
+		mm_flags |= FAULT_FLAG_WRITE;
+	}
 
 	if (!(vma->vm_flags & vm_flags)) {
 		vma_end_read(vma);
