@@ -4690,6 +4690,9 @@ void netdev_stats_to_stats64(struct rtnl_link_stats64 *stats64,
 void dev_fetch_sw_netstats(struct rtnl_link_stats64 *s,
 			   const struct pcpu_sw_netstats __percpu *netstats);
 void dev_get_tstats64(struct net_device *dev, struct rtnl_link_stats64 *s);
+void dev_fetch_dstats(struct rtnl_link_stats64 *s,
+		      const struct pcpu_dstats __percpu *dstats);
+void dev_get_dstats64(struct net_device *dev, struct rtnl_link_stats64 *s);
 
 enum {
 	NESTED_SYNC_IMM_BIT,

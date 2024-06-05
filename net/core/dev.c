@@ -10849,6 +10849,62 @@ void dev_get_tstats64(struct net_device *dev, struct rtnl_link_stats64 *s)
 }
 EXPORT_SYMBOL_GPL(dev_get_tstats64);
 
+/**
+ *	dev_fetch_dstats - collate per-cpu network dstats statistics
+ *	@s: place to store stats
+ *	@dstats: per-cpu network stats to read from
+ *
+ *	Read per-cpu network statistics from dev->dstats and populate the
+ *	related fields in @s.
+ */
+void dev_fetch_dstats(struct rtnl_link_stats64 *s,
+		      const struct pcpu_dstats __percpu *dstats)
+{
+	int cpu;
+
+	for_each_possible_cpu(cpu) {
+		u64 rx_packets, rx_bytes, rx_drops;
+		u64 tx_packets, tx_bytes, tx_drops;
+		const struct pcpu_dstats *dstats;
+		unsigned int start;
+
+		dstats = per_cpu_ptr(dstats, cpu);
+		do {
+			start = u64_stats_fetch_begin(&dstats->syncp);
+			rx_packets = u64_stats_read(&dstats->rx_packets);
+			rx_bytes   = u64_stats_read(&dstats->rx_bytes);
+			rx_drops   = u64_stats_read(&dstats->rx_drops);
+			tx_packets = u64_stats_read(&dstats->tx_packets);
+			tx_bytes   = u64_stats_read(&dstats->tx_bytes);
+			tx_drops   = u64_stats_read(&dstats->tx_drops);
+		} while (u64_stats_fetch_retry(&dstats->syncp, start));
+
+		s->rx_packets += rx_packets;
+		s->rx_bytes   += rx_bytes;
+		s->rx_dropped += rx_drops;
+		s->tx_packets += tx_packets;
+		s->tx_bytes   += tx_bytes;
+		s->tx_dropped += tx_drops;
+	}
+}
+EXPORT_SYMBOL_GPL(dev_fetch_dstats);
+
+/**
+ *	dev_get_dstats64 - ndo_get_stats64 implementation for dtstats-based
+ *	account.
+ *	@dev: device to get statistics from
+ *	@s: place to store stats
+ *
+ *	Populate @s from dev->stats and dev->dstats. Can be used as
+ *	ndo_get_stats64() callback.
+ */
+void dev_get_dstats64(struct net_device *dev, struct rtnl_link_stats64 *s)
+{
+	netdev_stats_to_stats64(s, &dev->stats);
+	dev_fetch_dstats(s, dev->dstats);
+}
+EXPORT_SYMBOL_GPL(dev_get_dstats64);
+
 struct netdev_queue *dev_ingress_queue_create(struct net_device *dev)
 {
 	struct netdev_queue *queue = dev_ingress_queue(dev);
