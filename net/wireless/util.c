@@ -2309,9 +2309,6 @@ static void cfg80211_calculate_bi_data(struct wiphy *wiphy, u32 new_beacon_int,
 {
 	struct wireless_dev *wdev;
 
-	*beacon_int_gcd = 0;
-	*beacon_int_different = false;
-
 	list_for_each_entry(wdev, &wiphy->wdev_list, list) {
 		int wdev_bi;
 
@@ -2366,13 +2363,15 @@ int cfg80211_iter_combinations(struct wiphy *wiphy,
 					    void *data),
 			       void *data)
 {
+	const struct wiphy_radio *radio = params->radio;
+	const struct ieee80211_iface_combination *c;
 	const struct ieee80211_regdomain *regdom;
 	enum nl80211_dfs_regions region = 0;
-	int i, j, iftype;
+	int i, j, n, iftype;
 	int num_interfaces = 0;
 	u32 used_iftypes = 0;
-	u32 beacon_int_gcd;
-	bool beacon_int_different;
+	u32 beacon_int_gcd = 0;
+	bool beacon_int_different = false;
 
 	/*
 	 * This is a bit strange, since the iteration used to rely only on
@@ -2384,8 +2383,10 @@ int cfg80211_iter_combinations(struct wiphy *wiphy,
 	 * cfg80211 already - the only thing not would appear to be any new
 	 * interfaces (while being brought up) and channel/radar data.
 	 */
-	cfg80211_calculate_bi_data(wiphy, params->new_beacon_int,
-				   &beacon_int_gcd, &beacon_int_different);
+	if (!radio)
+			cfg80211_calculate_bi_data(wiphy, params->new_beacon_int,
+						   &beacon_int_gcd,
+						   &beacon_int_different);
 
 	if (params->radar_detect) {
 		rcu_read_lock();
@@ -2402,12 +2403,16 @@ int cfg80211_iter_combinations(struct wiphy *wiphy,
 			used_iftypes |= BIT(iftype);
 	}
 
-	for (i = 0; i < wiphy->n_iface_combinations; i++) {
-		const struct ieee80211_iface_combination *c;
+	if (radio) {
+		c = radio->iface_combinations;
+		n = radio->n_iface_combinations;
+	} else {
+		c = wiphy->iface_combinations;
+		n = wiphy->n_iface_combinations;
+	}
+	for (i = 0; i < n; i++, c++) {
 		struct ieee80211_iface_limit *limits;
 		u32 all_iftypes = 0;
-
-		c = &wiphy->iface_combinations[i];
 
 		if (num_interfaces > c->max_interfaces)
 			continue;
