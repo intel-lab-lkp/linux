@@ -1204,7 +1204,7 @@ void bio_iov_bvec_set(struct bio *bio, struct iov_iter *iter)
 	bio_set_flag(bio, BIO_CLONED);
 }
 
-static int bio_iov_add_page(struct bio *bio, struct page *page,
+static int bio_iov_add_folio(struct bio *bio, struct folio *folio,
 		unsigned int len, unsigned int offset)
 {
 	bool same_page = false;
@@ -1214,27 +1214,27 @@ static int bio_iov_add_page(struct bio *bio, struct page *page,
 
 	if (bio->bi_vcnt > 0 &&
 	    bvec_try_merge_page(&bio->bi_io_vec[bio->bi_vcnt - 1],
-				page, len, offset, &same_page)) {
+				&folio->page, len, offset, &same_page)) {
 		bio->bi_iter.bi_size += len;
 		if (same_page)
-			bio_release_page(bio, page);
+			bio_release_page(bio, &folio->page);
 		return 0;
 	}
-	__bio_add_page(bio, page, len, offset);
+	bio_add_folio_nofail(bio, folio, len, offset);
 	return 0;
 }
 
-static int bio_iov_add_zone_append_page(struct bio *bio, struct page *page,
+static int bio_iov_add_zone_append_folio(struct bio *bio, struct folio *folio,
 		unsigned int len, unsigned int offset)
 {
 	struct request_queue *q = bdev_get_queue(bio->bi_bdev);
 	bool same_page = false;
 
-	if (bio_add_hw_page(q, bio, page, len, offset,
+	if (bio_add_hw_page(q, bio, &folio->page, len, offset,
 			queue_max_zone_append_sectors(q), &same_page) != len)
 		return -EINVAL;
 	if (same_page)
-		bio_release_page(bio, page);
+		bio_release_page(bio, &folio->page);
 	return 0;
 }
 
@@ -1258,9 +1258,9 @@ static int __bio_iov_iter_get_pages(struct bio *bio, struct iov_iter *iter)
 	struct bio_vec *bv = bio->bi_io_vec + bio->bi_vcnt;
 	struct page **pages = (struct page **)bv;
 	ssize_t size, left;
-	unsigned len, i = 0;
-	size_t offset;
-	int ret = 0;
+	unsigned int len, i = 0, j;
+	size_t offset, folio_offset;
+	int ret = 0, num_pages;
 
 	/*
 	 * Move page array up in the allocated memory for the bio vecs as far as
@@ -1301,15 +1301,49 @@ static int __bio_iov_iter_get_pages(struct bio *bio, struct iov_iter *iter)
 
 	for (left = size, i = 0; left > 0; left -= len, i++) {
 		struct page *page = pages[i];
+		struct folio *folio = page_folio(page);
 
-		len = min_t(size_t, PAGE_SIZE - offset, left);
+		/* Calculate the offset of page in folio */
+		folio_offset = (folio_page_idx(folio, page) << PAGE_SHIFT) +
+				offset;
+
+		len = min_t(size_t, (folio_size(folio) - folio_offset), left);
+
+		num_pages = DIV_ROUND_UP(offset + len, PAGE_SIZE);
+
+		if (num_pages > 1) {
+			ssize_t bytes = left;
+			size_t contig_sz = min_t(size_t,  PAGE_SIZE - offset,
+						 bytes);
+
+			/*
+			 * Check if pages are contiguous and belong to the
+			 * same folio.
+			 */
+			for (j = i + 1; j < i + num_pages; j++) {
+				size_t next = min_t(size_t, PAGE_SIZE, bytes);
+
+				if (page_folio(pages[j]) != folio ||
+				    pages[j] != pages[j - 1] + 1) {
+					break;
+				}
+				contig_sz += next;
+				bytes -= next;
+			}
+			num_pages = j - i;
+			len = contig_sz;
+		}
+
 		if (bio_op(bio) == REQ_OP_ZONE_APPEND) {
-			ret = bio_iov_add_zone_append_page(bio, page, len,
-					offset);
+			ret = bio_iov_add_zone_append_folio(bio, folio, len,
+					folio_offset);
 			if (ret)
 				break;
 		} else
-			bio_iov_add_page(bio, page, len, offset);
+			bio_iov_add_folio(bio, folio, len, folio_offset);
+
+		/* Skip the pages which got added */
+		i = i + (num_pages - 1);
 
 		offset = 0;
 	}
