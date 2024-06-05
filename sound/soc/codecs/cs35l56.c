@@ -1345,13 +1345,13 @@ static void cs35l56_acpi_dev_release_driver_gpios(void *adev)
 
 static int cs35l56_try_get_broken_sdca_spkid_gpio(struct cs35l56_private *cs35l56)
 {
-	struct fwnode_handle *af01_fwnode;
 	const union acpi_object *obj;
 	struct gpio_desc *desc;
 	int ret;
 
 	/* Find the SDCA node containing the GpioIo */
-	af01_fwnode = device_get_named_child_node(cs35l56->base.dev, "AF01");
+	struct fwnode_handle *af01_fwnode __free(fwnode_handle)
+					  = device_get_named_child_node(cs35l56->base.dev, "AF01");
 	if (!af01_fwnode) {
 		dev_dbg(cs35l56->base.dev, "No AF01 node\n");
 		return -ENOENT;
@@ -1361,7 +1361,6 @@ static int cs35l56_try_get_broken_sdca_spkid_gpio(struct cs35l56_private *cs35l5
 				    "spk-id-gpios", ACPI_TYPE_PACKAGE, &obj);
 	if (ret) {
 		dev_dbg(cs35l56->base.dev, "Could not get spk-id-gpios package: %d\n", ret);
-		fwnode_handle_put(af01_fwnode);
 		return -ENOENT;
 	}
 
@@ -1369,7 +1368,6 @@ static int cs35l56_try_get_broken_sdca_spkid_gpio(struct cs35l56_private *cs35l5
 	if (obj->package.count != 4) {
 		dev_warn(cs35l56->base.dev, "Unexpected spk-id element count %d\n",
 			 obj->package.count);
-		fwnode_handle_put(af01_fwnode);
 		return -ENOENT;
 	}
 
@@ -1383,26 +1381,21 @@ static int cs35l56_try_get_broken_sdca_spkid_gpio(struct cs35l56_private *cs35l5
 		 * ACPI_COMPANION().
 		 */
 		ret = acpi_dev_add_driver_gpios(adev, cs35l56_af01_spkid_gpios_mapping);
-		if (ret) {
-			fwnode_handle_put(af01_fwnode);
+		if (ret)
 			return dev_err_probe(cs35l56->base.dev, ret,
 					     "Failed to add gpio mapping to AF01\n");
-		}
 
 		ret = devm_add_action_or_reset(cs35l56->base.dev,
 					       cs35l56_acpi_dev_release_driver_gpios,
 					       adev);
-		if (ret) {
-			fwnode_handle_put(af01_fwnode);
+		if (ret)
 			return ret;
-		}
 
 		dev_dbg(cs35l56->base.dev, "Added spk-id-gpios mapping to AF01\n");
 	}
 
 	desc = fwnode_gpiod_get_index(af01_fwnode, "spk-id", 0, GPIOD_IN, NULL);
 	if (IS_ERR(desc)) {
-		fwnode_handle_put(af01_fwnode);
 		ret = PTR_ERR(desc);
 		return dev_err_probe(cs35l56->base.dev, ret, "Get GPIO from AF01 failed\n");
 	}
@@ -1411,12 +1404,9 @@ static int cs35l56_try_get_broken_sdca_spkid_gpio(struct cs35l56_private *cs35l5
 	gpiod_put(desc);
 
 	if (ret < 0) {
-		fwnode_handle_put(af01_fwnode);
 		dev_err_probe(cs35l56->base.dev, ret, "Error reading spk-id GPIO\n");
 		return ret;
 	}
-
-	fwnode_handle_put(af01_fwnode);
 
 	dev_info(cs35l56->base.dev, "Got spk-id from AF01\n");
 
