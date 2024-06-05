@@ -1368,11 +1368,12 @@ static int pistachio_gpio_register(struct pistachio_pinctrl *pctl)
 
 	for (i = 0; i < pctl->nbanks; i++) {
 		char child_name[sizeof("gpioXX")];
-		struct fwnode_handle *child;
 		struct gpio_irq_chip *girq;
 
 		snprintf(child_name, sizeof(child_name), "gpio%d", i);
-		child = device_get_named_child_node(pctl->dev, child_name);
+
+		struct fwnode_handle *child __free(fwnode_handle)
+					    = device_get_named_child_node(pctl->dev, child_name);
 		if (!child) {
 			dev_err(pctl->dev, "No node for bank %u\n", i);
 			ret = -ENODEV;
@@ -1380,7 +1381,6 @@ static int pistachio_gpio_register(struct pistachio_pinctrl *pctl)
 		}
 
 		if (!fwnode_property_present(child, "gpio-controller")) {
-			fwnode_handle_put(child);
 			dev_err(pctl->dev,
 				"No gpio-controller property for bank %u\n", i);
 			ret = -ENODEV;
@@ -1389,12 +1389,10 @@ static int pistachio_gpio_register(struct pistachio_pinctrl *pctl)
 
 		ret = fwnode_irq_get(child, 0);
 		if (ret < 0) {
-			fwnode_handle_put(child);
 			dev_err(pctl->dev, "Failed to retrieve IRQ for bank %u\n", i);
 			goto err;
 		}
 		if (!ret) {
-			fwnode_handle_put(child);
 			dev_err(pctl->dev, "No IRQ for bank %u\n", i);
 			ret = -EINVAL;
 			goto err;
@@ -1406,7 +1404,7 @@ static int pistachio_gpio_register(struct pistachio_pinctrl *pctl)
 		bank->base = pctl->base + GPIO_BANK_BASE(i);
 
 		bank->gpio_chip.parent = pctl->dev;
-		bank->gpio_chip.fwnode = child;
+		bank->gpio_chip.fwnode = no_free_ptr(child);
 
 		girq = &bank->gpio_chip.irq;
 		gpio_irq_chip_set_chip(girq, &pistachio_gpio_irq_chip);
