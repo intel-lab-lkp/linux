@@ -128,6 +128,19 @@ struct klp_find_arg {
 static int klp_match_callback(void *data, unsigned long addr)
 {
 	struct klp_find_arg *args = data;
+#ifdef CONFIG_LTO_CLANG
+	char full_name[KSYM_NAME_LEN];
+
+	/*
+	 * With CONFIG_LTO_CLANG, we need to compare the full name of the
+	 * symbol (with .llvm.<hash> postfix).
+	 */
+	if (kallsyms_lookup_symbol_full_name(addr, full_name))
+		return 0;
+
+	if (strcmp(args->name, full_name))
+		return 0;
+#endif
 
 	args->addr = addr;
 	args->count++;
@@ -145,10 +158,12 @@ static int klp_match_callback(void *data, unsigned long addr)
 
 static int klp_find_callback(void *data, const char *name, unsigned long addr)
 {
+#ifndef CONFIG_LTO_CLANG
 	struct klp_find_arg *args = data;
 
 	if (strcmp(args->name, name))
 		return 0;
+#endif
 
 	return klp_match_callback(data, addr);
 }
@@ -162,11 +177,26 @@ static int klp_find_object_symbol(const char *objname, const char *name,
 		.count = 0,
 		.pos = sympos,
 	};
+	const char *lookup_name = name;
+#ifdef CONFIG_LTO_CLANG
+	char short_name[KSYM_NAME_LEN];
+
+	/*
+	 * With CONFIG_LTO_CLANG, the symbol name make have .llvm.<hash>
+	 * postfix, e.g. show_cpuinfo.llvm.12345.
+	 * Call kallsyms_on_each_match_symbol with short_name, e.g.
+	 * show_cpuinfo, args->name is still the full name, which is used
+	 * checked in klp_match_callback.
+	 */
+	strscpy(short_name, name, sizeof(short_name));
+	kallsyms_cleanup_symbol_name(short_name);
+	lookup_name = short_name;
+#endif
 
 	if (objname)
 		module_kallsyms_on_each_symbol(objname, klp_find_callback, &args);
 	else
-		kallsyms_on_each_match_symbol(klp_match_callback, name, &args);
+		kallsyms_on_each_match_symbol(klp_match_callback, lookup_name, &args);
 
 	/*
 	 * Ensure an address was found. If sympos is 0, ensure symbol is unique;

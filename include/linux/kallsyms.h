@@ -97,6 +97,10 @@ extern int sprint_backtrace_build_id(char *buffer, unsigned long address);
 
 int lookup_symbol_name(unsigned long addr, char *symname);
 
+int kallsyms_lookup_symbol_full_name(unsigned long addr, char *symname);
+
+void kallsyms_cleanup_symbol_name(char *s);
+
 #else /* !CONFIG_KALLSYMS */
 
 static inline unsigned long kallsyms_lookup_name(const char *name)
@@ -164,6 +168,15 @@ static inline int kallsyms_on_each_match_symbol(int (*fn)(void *, unsigned long)
 						const char *name, void *data)
 {
 	return -EOPNOTSUPP;
+}
+
+static inline int kallsyms_lookup_symbol_full_name(unsigned long addr, char *symname)
+{
+	return -ERANGE;
+}
+
+static inline void kallsyms_cleanup_symbol_name(char *s)
+{
 }
 #endif /*CONFIG_KALLSYMS*/
 

@@ -163,7 +163,7 @@ unsigned long kallsyms_sym_address(int idx)
 	return kallsyms_relative_base - 1 - kallsyms_offsets[idx];
 }
 
-static void cleanup_symbol_name(char *s)
+void kallsyms_cleanup_symbol_name(char *s)
 {
 	char *res;
 
@@ -191,7 +191,7 @@ static int compare_symbol_name(const char *name, char *namebuf)
 	 * To ensure correct bisection in kallsyms_lookup_names(), do
 	 * cleanup_symbol_name(namebuf) before comparing name and namebuf.
 	 */
-	cleanup_symbol_name(namebuf);
+	kallsyms_cleanup_symbol_name(namebuf);
 	return strcmp(name, namebuf);
 }
 
@@ -426,7 +426,7 @@ static const char *kallsyms_lookup_buildid(unsigned long addr,
 						offset, modname, namebuf);
 
 found:
-	cleanup_symbol_name(namebuf);
+	kallsyms_cleanup_symbol_name(namebuf);
 	return ret;
 }
 
@@ -446,7 +446,7 @@ const char *kallsyms_lookup(unsigned long addr,
 				       NULL, namebuf);
 }
 
-int lookup_symbol_name(unsigned long addr, char *symname)
+static int __lookup_symbol_name(unsigned long addr, char *symname, bool cleanup)
 {
 	int res;
 
@@ -468,8 +468,19 @@ int lookup_symbol_name(unsigned long addr, char *symname)
 		return res;
 
 found:
-	cleanup_symbol_name(symname);
+	if (cleanup)
+		kallsyms_cleanup_symbol_name(symname);
 	return 0;
+}
+
+int lookup_symbol_name(unsigned long addr, char *symname)
+{
+	return __lookup_symbol_name(addr, symname, true);
+}
+
+int kallsyms_lookup_symbol_full_name(unsigned long addr, char *symname)
+{
+	return __lookup_symbol_name(addr, symname, false);
 }
 
 /* Look up a kernel symbol and return it in a text buffer. */
