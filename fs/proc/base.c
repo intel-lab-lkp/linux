@@ -152,6 +152,30 @@ struct pid_entry {
 		NULL, &proc_pid_attr_operations,	\
 		{ .lsmid = LSMID })
 
+#define DEFINE_EARLY_PROC_MEM_RESTRICT(CFG, name)				\
+DEFINE_STATIC_KEY_MAYBE_RO(CONFIG_PROC_MEM_RESTRICT_##CFG##_DEFAULT,		\
+			   proc_mem_restrict_##name##_all);			\
+DEFINE_STATIC_KEY_MAYBE_RO(CONFIG_PROC_MEM_RESTRICT_##CFG##_PTRACE_DEFAULT,	\
+			   proc_mem_restrict_##name##_ptracer);			\
+										\
+static int __init early_proc_mem_restrict_##name(char *buf)			\
+{										\
+	if (!buf)								\
+		return -EINVAL;							\
+										\
+	if (strcmp(buf, "all") == 0)						\
+		static_key_slow_inc(&proc_mem_restrict_##name##_all.key);	\
+	else if (strcmp(buf, "ptracer") == 0)					\
+		static_key_slow_inc(&proc_mem_restrict_##name##_ptracer.key);	\
+	return 0;								\
+}										\
+early_param("proc_mem.restrict_" #name, early_proc_mem_restrict_##name)
+
+DEFINE_EARLY_PROC_MEM_RESTRICT(OPEN_READ, open_read);
+DEFINE_EARLY_PROC_MEM_RESTRICT(OPEN_WRITE, open_write);
+DEFINE_EARLY_PROC_MEM_RESTRICT(WRITE, write);
+DEFINE_EARLY_PROC_MEM_RESTRICT(FOLL_FORCE, foll_force);
+
 /*
  * Count the number of hardlinks for the pid_entry table, excluding the .
  * and .. links.
@@ -794,12 +818,56 @@ static const struct file_operations proc_single_file_operations = {
 };
 
 
+static int __mem_open_access_permitted(struct file *file, struct task_struct *task)
+{
+	bool is_ptracer;
+
+	rcu_read_lock();
+	is_ptracer = current == ptrace_parent(task);
+	rcu_read_unlock();
+
+	if (file->f_mode & FMODE_WRITE) {
+		/* Deny if writes are unconditionally disabled via param */
+		if (static_branch_maybe(CONFIG_PROC_MEM_RESTRICT_OPEN_WRITE_DEFAULT,
+					&proc_mem_restrict_open_write_all))
+			return -EACCES;
+
+		/* Deny if writes are allowed only for ptracers via param */
+		if (static_branch_maybe(CONFIG_PROC_MEM_RESTRICT_OPEN_WRITE_PTRACE_DEFAULT,
+					&proc_mem_restrict_open_write_ptracer) &&
+		    !is_ptracer)
+			return -EACCES;
+	}
+
+	if (file->f_mode & FMODE_READ) {
+		/* Deny if reads are unconditionally disabled via param */
+		if (static_branch_maybe(CONFIG_PROC_MEM_RESTRICT_OPEN_READ_DEFAULT,
+					&proc_mem_restrict_open_read_all))
+			return -EACCES;
+
+		/* Deny if reads are allowed only for ptracers via param */
+		if (static_branch_maybe(CONFIG_PROC_MEM_RESTRICT_OPEN_READ_PTRACE_DEFAULT,
+					&proc_mem_restrict_open_read_ptracer) &&
+		    !is_ptracer)
+			return -EACCES;
+	}
+
+	return 0; /* R/W are not restricted */
+}
+
 struct mm_struct *proc_mem_open(struct file  *file, unsigned int mode)
 {
 	struct task_struct *task = get_proc_task(file->f_inode);
 	struct mm_struct *mm = ERR_PTR(-ESRCH);
+	int ret;
 
 	if (task) {
+		ret = __mem_open_access_permitted(file, task);
+		if (ret) {
+			put_task_struct(task);
+			return ERR_PTR(ret);
+		}
+
 		mm = mm_access(task, mode | PTRACE_MODE_FSCREDS);
 		put_task_struct(task);
 
@@ -835,6 +903,62 @@ static int mem_open(struct inode *inode, struct file *file)
 	return ret;
 }
 
+static bool __mem_rw_current_is_ptracer(struct file *file)
+{
+	struct inode *inode = file_inode(file);
+	struct task_struct *task = get_proc_task(inode);
+	struct mm_struct *mm = NULL;
+	int is_ptracer = false, has_mm_access = false;
+
+	if (task) {
+		rcu_read_lock();
+		is_ptracer = current == ptrace_parent(task);
+		rcu_read_unlock();
+
+		mm = mm_access(task, PTRACE_MODE_READ_FSCREDS);
+		if (mm && file->private_data == mm) {
+			has_mm_access = true;
+			mmput(mm);
+		}
+
+		put_task_struct(task);
+	}
+
+	return is_ptracer && has_mm_access;
+}
+
+static unsigned int __mem_rw_get_foll_force_flag(struct file *file)
+{
+	/* Deny if FOLL_FORCE is disabled via param */
+	if (static_branch_maybe(CONFIG_PROC_MEM_RESTRICT_FOLL_FORCE_DEFAULT,
+				&proc_mem_restrict_foll_force_all))
+		return 0;
+
+	/* Deny if FOLL_FORCE is allowed only for ptracers via param */
+	if (static_branch_maybe(CONFIG_PROC_MEM_RESTRICT_FOLL_FORCE_PTRACE_DEFAULT,
+				&proc_mem_restrict_foll_force_ptracer) &&
+	    !__mem_rw_current_is_ptracer(file))
+		return 0;
+
+	return FOLL_FORCE;
+}
+
+static bool __mem_rw_block_writes(struct file *file)
+{
+	/* Block if writes are disabled via param proc_mem.restrict_write=all */
+	if (static_branch_maybe(CONFIG_PROC_MEM_RESTRICT_WRITE_DEFAULT,
+				&proc_mem_restrict_write_all))
+		return true;
+
+	/* Block with an exception only for ptracers */
+	if (static_branch_maybe(CONFIG_PROC_MEM_RESTRICT_WRITE_PTRACE_DEFAULT,
+				&proc_mem_restrict_write_ptracer) &&
+	    !__mem_rw_current_is_ptracer(file))
+		return true;
+
+	return false;
+}
+
 static ssize_t mem_rw(struct file *file, char __user *buf,
 			size_t count, loff_t *ppos, int write)
 {
@@ -847,6 +971,9 @@ static ssize_t mem_rw(struct file *file, char __user *buf,
 	if (!mm)
 		return 0;
 
+	if (write && __mem_rw_block_writes(file))
+		return -EACCES;
+
 	page = (char *)__get_free_page(GFP_KERNEL);
 	if (!page)
 		return -ENOMEM;
@@ -855,7 +982,8 @@ static ssize_t mem_rw(struct file *file, char __user *buf,
 	if (!mmget_not_zero(mm))
 		goto free;
 
-	flags = FOLL_FORCE | (write ? FOLL_WRITE : 0);
+	flags = (write ? FOLL_WRITE : 0);
+	flags |= __mem_rw_get_foll_force_flag(file);
 
 	while (count > 0) {
 		size_t this_len = min_t(size_t, count, PAGE_SIZE);

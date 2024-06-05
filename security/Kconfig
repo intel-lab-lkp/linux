@@ -183,6 +183,74 @@ config STATIC_USERMODEHELPER_PATH
 	  If you wish for all usermode helper programs to be disabled,
 	  specify an empty string here (i.e. "").
 
+menu "Procfs mem restriction options"
+
+config PROC_MEM_RESTRICT_FOLL_FORCE_DEFAULT
+	bool "Restrict all FOLL_FORCE flag usage"
+	default n
+	help
+	  Restrict all FOLL_FORCE usage during /proc/*/mem RW.
+	  Debuggers like GDB require using FOLL_FORCE for basic
+	  functionality.
+
+config PROC_MEM_RESTRICT_FOLL_FORCE_PTRACE_DEFAULT
+	bool "Restrict FOLL_FORCE usage except for ptracers"
+	default n
+	help
+	  Restrict FOLL_FORCE usage during /proc/*/mem RW, except
+	  for ptracer processes. Debuggers like GDB require using
+	  FOLL_FORCE for basic functionality.
+
+config PROC_MEM_RESTRICT_OPEN_READ_DEFAULT
+	bool "Restrict all open() read access"
+	default n
+	help
+	  Restrict all open() read access to /proc/*/mem files.
+	  Use with caution: this can break init systems, debuggers,
+	  container supervisors and other tasks using /proc/*/mem.
+
+config PROC_MEM_RESTRICT_OPEN_READ_PTRACE_DEFAULT
+	bool "Restrict open() for reads except for ptracers"
+	default n
+	help
+	  Restrict open() read access except for ptracer processes.
+	  Use with caution: this can break init systems, debuggers,
+	  container supervisors and other non-ptrace capable tasks
+	  using /proc/*/mem.
+
+config PROC_MEM_RESTRICT_OPEN_WRITE_DEFAULT
+	bool "Restrict all open() write access"
+	default n
+	help
+	  Restrict all open() write access to /proc/*/mem files.
+	  Debuggers like GDB and some container supervisors tasks
+	  require opening as RW and may break.
+
+config PROC_MEM_RESTRICT_OPEN_WRITE_PTRACE_DEFAULT
+	bool "Restrict open() for writes except for ptracers"
+	default n
+	help
+	  Restrict open() write access except for ptracer processes,
+	  usually debuggers.
+
+config PROC_MEM_RESTRICT_WRITE_DEFAULT
+	bool "Restrict all write() calls"
+	default n
+	help
+	  Restrict all /proc/*/mem direct write calls.
+	  Open calls with RW modes are still allowed, this blocks
+	  just the write() calls.
+
+config PROC_MEM_RESTRICT_WRITE_PTRACE_DEFAULT
+	bool "Restrict write() calls except for ptracers"
+	default n
+	help
+	  Restrict /proc/*/mem direct write calls except for ptracer processes.
+	  Open calls with RW modes are still allowed, this blocks just
+	  the write() calls.
+
+endmenu
+
 source "security/selinux/Kconfig"
 source "security/smack/Kconfig"
 source "security/tomoyo/Kconfig"
