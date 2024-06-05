@@ -80,6 +80,10 @@ static int blk_validate_zoned_limits(struct queue_limits *lim)
 	if (WARN_ON_ONCE(!IS_ENABLED(CONFIG_BLK_DEV_ZONED)))
 		return -EINVAL;
 
+	if (lim->max_active_zones &&
+	    WARN_ON_ONCE(lim->max_open_zones > lim->max_active_zones))
+		lim->max_open_zones = lim->max_active_zones;
+
 	if (lim->zone_write_granularity < lim->logical_block_size)
 		lim->zone_write_granularity = lim->logical_block_size;
 

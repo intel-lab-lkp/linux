@@ -1660,6 +1660,11 @@ static int disk_update_zone_resources(struct gendisk *disk,
 	lim = queue_limits_start_update(q);
 
 	nr_seq_zones = disk->nr_zones - nr_conv_zones;
+	if (WARN_ON_ONCE(lim.max_active_zones > nr_seq_zones))
+		lim.max_active_zones = 0;
+	if (WARN_ON_ONCE(lim.max_open_zones > nr_seq_zones))
+		lim.max_open_zones = 0;
+
 	pool_size = max(lim.max_open_zones, lim.max_active_zones);
 	if (!pool_size)
 		pool_size = min(BLK_ZONE_WPLUG_DEFAULT_POOL_SIZE, nr_seq_zones);
