@@ -22,6 +22,17 @@ static int poll_queues;
 module_param(poll_queues, int, 0444);
 MODULE_PARM_DESC(poll_queues, "Number of queues for io_uring poll mode. (Range 1 - 126)");
 
+int drv_db_level = 1;
+module_param(drv_db_level, int, 0444);
+MODULE_PARM_DESC(drv_db_level, "Driver diagnostic buffer level(Default=1).\n\t\t"
+		"options:\n\t\t"
+		"0 = disabled:  Driver diagnostic buffer not captured\n\t\t"
+		"1 = minidump:  Driver diagnostic buffer captures prints\n\t\t"
+		"related to specific mrioc instance\n\t\t"
+		"2 = fulldump:  Driver diagnostic buffer captures prints\n\t\t"
+		"related to specific mrioc instance and complete dmesg logs"
+		);
+
 #if defined(writeq) && defined(CONFIG_64BIT)
 static inline void mpi3mr_writeq(__u64 b, volatile void __iomem *addr)
 {
@@ -873,6 +884,31 @@ out_failed:
 }
 
 static const struct {
+	enum mpi3mr_drv_db_level value;
+	char *name;
+} mpi3mr_drv_db[] = {
+	{ MRIOC_DRV_DB_DISABLED, "disabled (uefi dump is enabled)" },
+	{ MRIOC_DRV_DB_MINI, "minidump" },
+	{ MRIOC_DRV_DB_FULL, "fulldump" },
+};
+static const char *mpi3mr_drv_db_name(enum mpi3mr_drv_db_level drv_db_level)
+{
+	int i;
+	char *name = NULL;
+
+	/* Start with Disabled */
+	name = mpi3mr_drv_db[0].name;
+
+	for (i = 0; i < ARRAY_SIZE(mpi3mr_drv_db); i++) {
+		if (mpi3mr_drv_db[i].value == drv_db_level) {
+			name = mpi3mr_drv_db[i].name;
+			break;
+		}
+	}
+	return name;
+}
+
+static const struct {
 	enum mpi3mr_iocstate value;
 	char *name;
 } mrioc_states[] = {
@@ -1235,6 +1271,102 @@ static int mpi3mr_issue_and_process_mur(struct mpi3mr_ioc *mrioc,
 
 	ioc_info(mrioc, "Base IOC Sts/Config after %s MUR is (0x%x)/(0x%x)\n",
 	    (!retval) ? "successful" : "failed", ioc_status, ioc_config);
+	return retval;
+}
+
+/**
+ * mpi3mr_alloc_issue_host_diag_buf - Allocate and send host diag buffer
+ * @mrioc: Adapter instance reference
+ *
+ * Issue diagnostic buffer post (unconditional) MPI request through admin queue
+ * and wait for the completion of it or time out.
+ *
+ * Return: 0 on success non-zero on failure
+ */
+static int mpi3mr_alloc_issue_host_diag_buf(struct mpi3mr_ioc *mrioc)
+{
+	struct mpi3_diag_buffer_post_request diag_buf_post_req;
+	dma_addr_t buf_dma_addr;
+	u32 buf_sz;
+	int retval = -1;
+
+	ioc_info(mrioc, "driver diag buffer level = %s.\n",
+			mpi3mr_drv_db_name(drv_db_level));
+
+	if (!mrioc->drv_diag_buffer) {
+		mrioc->drv_diag_buffer_sz =
+			    MPI3MR_DEFAULT_DIAG_HOST_BUFFER_SZ;
+		mrioc->drv_diag_buffer =
+			dma_alloc_coherent(&mrioc->pdev->dev,
+			    mrioc->drv_diag_buffer_sz,
+			    &mrioc->drv_diag_buffer_dma, GFP_KERNEL);
+		if (!mrioc->drv_diag_buffer) {
+			mrioc->drv_diag_buffer_sz =
+			    MPI3MR_MIN_DIAG_HOST_BUFFER_SZ;
+			mrioc->drv_diag_buffer =
+				dma_alloc_coherent(&mrioc->pdev->dev,
+				mrioc->drv_diag_buffer_sz,
+				&mrioc->drv_diag_buffer_dma, GFP_KERNEL);
+		}
+		if (!mrioc->drv_diag_buffer) {
+			ioc_warn(mrioc, "%s:%d:failed to allocate buffer\n",
+			    __func__, __LINE__);
+			mrioc->drv_diag_buffer_sz = 0;
+			return retval;
+		}
+		/* TBD - memset to Zero once feature is stable */
+		memset(mrioc->drv_diag_buffer, 0x55, mrioc->drv_diag_buffer_sz);
+	}
+
+	buf_dma_addr = mrioc->drv_diag_buffer_dma;
+	buf_sz = mrioc->drv_diag_buffer_sz;
+
+	memset(&diag_buf_post_req, 0, sizeof(diag_buf_post_req));
+	mutex_lock(&mrioc->init_cmds.mutex);
+	if (mrioc->init_cmds.state & MPI3MR_CMD_PENDING) {
+		ioc_err(mrioc, "sending driver diag buffer post is failed due to command in use\n");
+		mutex_unlock(&mrioc->init_cmds.mutex);
+		return retval;
+	}
+	mrioc->init_cmds.state = MPI3MR_CMD_PENDING;
+	mrioc->init_cmds.is_waiting = 1;
+	mrioc->init_cmds.callback = NULL;
+	diag_buf_post_req.host_tag = cpu_to_le16(MPI3MR_HOSTTAG_INITCMDS);
+	diag_buf_post_req.function = MPI3_FUNCTION_DIAG_BUFFER_POST;
+	diag_buf_post_req.type = MPI3_DIAG_BUFFER_TYPE_DRIVER;
+	diag_buf_post_req.address = le64_to_cpu(buf_dma_addr);
+	diag_buf_post_req.length = le32_to_cpu(buf_sz);
+
+	init_completion(&mrioc->init_cmds.done);
+	retval = mpi3mr_admin_request_post(mrioc, &diag_buf_post_req,
+	    sizeof(diag_buf_post_req), 1);
+	if (retval) {
+		ioc_err(mrioc, "posting driver diag buffer failed\n");
+		goto out_unlock;
+	}
+	wait_for_completion_timeout(&mrioc->init_cmds.done,
+	    (MPI3MR_INTADMCMD_TIMEOUT * HZ));
+	if (!(mrioc->init_cmds.state & MPI3MR_CMD_COMPLETE)) {
+		ioc_err(mrioc, "posting driver diag buffer timed out\n");
+		mpi3mr_check_rh_fault_ioc(mrioc,
+		    MPI3MR_RESET_FROM_DIAG_BUFFER_POST_TIMEOUT);
+		retval = -1;
+		goto out_unlock;
+	}
+	retval = 0;
+	if ((mrioc->init_cmds.ioc_status & MPI3_IOCSTATUS_STATUS_MASK)
+	    != MPI3_IOCSTATUS_SUCCESS)
+		ioc_warn(mrioc,
+		    "driver diag buffer post returned with ioc_status(0x%04x) log_info(0x%08x)\n",
+		    (mrioc->init_cmds.ioc_status & MPI3_IOCSTATUS_STATUS_MASK),
+		    mrioc->init_cmds.ioc_loginfo);
+	else
+		ioc_info(mrioc, "driver diag buffer of size %dKB posted successfully\n",
+		    mrioc->drv_diag_buffer_sz / 1024);
+
+out_unlock:
+	mrioc->init_cmds.state = MPI3MR_CMD_NOTUSED;
+	mutex_unlock(&mrioc->init_cmds.mutex);
 	return retval;
 }
 
@@ -4168,6 +4300,13 @@ retry_init:
 		goto out_failed;
 	}
 
+	dprint_reset(mrioc, "posting driver diag buffer\n");
+	retval = mpi3mr_alloc_issue_host_diag_buf(mrioc);
+	if (retval) {
+		ioc_err(mrioc, "failed to post driver diag buffer\n");
+		goto out_failed;
+	}
+
 	ioc_info(mrioc, "controller initialization completed successfully\n");
 	return retval;
 out_failed:
@@ -4357,6 +4496,13 @@ retry_init:
 		    mrioc->scan_failed);
 	} else
 		ioc_info(mrioc, "port enable completed successfully\n");
+
+	dprint_reset(mrioc, "posting driver diag buffer\n");
+	retval = mpi3mr_alloc_issue_host_diag_buf(mrioc);
+	if (retval) {
+		ioc_err(mrioc, "failed to post driver diag buffer\n");
+		goto out_failed;
+	}
 
 	ioc_info(mrioc, "controller %s completed successfully\n",
 	    (is_resume)?"resume":"re-initialization");
@@ -4667,6 +4813,14 @@ void mpi3mr_free_mem(struct mpi3mr_ioc *mrioc)
 			diag_buffer->type = 0;
 			diag_buffer->status = 0;
 		}
+	}
+
+	if (mrioc->drv_diag_buffer) {
+		dma_free_coherent(&mrioc->pdev->dev,
+		    mrioc->drv_diag_buffer_sz, mrioc->drv_diag_buffer,
+		    mrioc->drv_diag_buffer_dma);
+		mrioc->drv_diag_buffer = NULL;
+		mrioc->drv_diag_buffer_sz = 0;
 	}
 
 	kfree(mrioc->throttle_groups);
