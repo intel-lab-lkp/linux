@@ -31,6 +31,7 @@ int reset_control_reset(struct reset_control *rstc);
 int reset_control_rearm(struct reset_control *rstc);
 int reset_control_assert(struct reset_control *rstc);
 int reset_control_deassert(struct reset_control *rstc);
+int devm_reset_control_deassert(struct device *dev, struct reset_control *rstc);
 int reset_control_status(struct reset_control *rstc);
 int reset_control_acquire(struct reset_control *rstc);
 void reset_control_release(struct reset_control *rstc);
@@ -87,6 +88,11 @@ static inline int reset_control_assert(struct reset_control *rstc)
 }
 
 static inline int reset_control_deassert(struct reset_control *rstc)
+{
+	return 0;
+}
+
+static inline int devm_reset_control_deassert(struct device *dev, struct reset_control *rstc)
 {
 	return 0;
 }

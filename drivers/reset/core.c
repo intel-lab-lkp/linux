@@ -592,6 +592,28 @@ int reset_control_deassert(struct reset_control *rstc)
 }
 EXPORT_SYMBOL_GPL(reset_control_deassert);
 
+static void reset_control_assert_action(void *rstc)
+{
+	reset_control_assert(rstc);
+}
+
+/**
+ * devm_reset_control_deassert - devres-enabled version of reset_control_deassert()
+ * @dev: device that requests the reset control
+ * @rstc: reset controller
+ */
+int devm_reset_control_deassert(struct device *dev, struct reset_control *rstc)
+{
+	int ret;
+
+	ret = reset_control_deassert(rstc);
+	if (ret)
+		return ret;
+
+	return devm_add_action_or_reset(dev, reset_control_assert_action, rstc);
+}
+EXPORT_SYMBOL_GPL(devm_reset_control_deassert);
+
 /**
  * reset_control_bulk_deassert - deasserts the reset lines in reverse order
  * @num_rstcs: number of entries in rstcs array
