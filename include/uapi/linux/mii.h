@@ -93,22 +93,22 @@
 				  ADVERTISE_100HALF | ADVERTISE_100FULL)
 
 /* Link partner ability register. */
-#define LPA_SLCT		0x001f	/* Same as advertise selector  */
-#define LPA_10HALF		0x0020	/* Can do 10mbps half-duplex   */
-#define LPA_1000XFULL		0x0020	/* Can do 1000BASE-X full-duplex */
-#define LPA_10FULL		0x0040	/* Can do 10mbps full-duplex   */
-#define LPA_1000XHALF		0x0040	/* Can do 1000BASE-X half-duplex */
-#define LPA_100HALF		0x0080	/* Can do 100mbps half-duplex  */
-#define LPA_1000XPAUSE		0x0080	/* Can do 1000BASE-X pause     */
-#define LPA_100FULL		0x0100	/* Can do 100mbps full-duplex  */
-#define LPA_1000XPAUSE_ASYM	0x0100	/* Can do 1000BASE-X pause asym*/
-#define LPA_100BASE4		0x0200	/* Can do 100mbps 4k packets   */
-#define LPA_PAUSE_CAP		0x0400	/* Can pause                   */
-#define LPA_PAUSE_ASYM		0x0800	/* Can pause asymetrically     */
-#define LPA_RESV		0x1000	/* Unused...                   */
-#define LPA_RFAULT		0x2000	/* Link partner faulted        */
-#define LPA_LPACK		0x4000	/* Link partner acked us       */
-#define LPA_NPAGE		0x8000	/* Next page bit               */
+#define LPA_SLCT		ADVERTISE_SLCT   /* Same as advertise selector */
+#define LPA_10HALF		ADVERTISE_10HALF
+#define LPA_1000XFULL		ADVERTISE_1000XFULL
+#define LPA_10FULL		ADVERTISE_10FULL
+#define LPA_1000XHALF		ADVERTISE_1000XHALF
+#define LPA_100HALF		ADVERTISE_100HALF
+#define LPA_1000XPAUSE		ADVERTISE_1000XPAUSE
+#define LPA_100FULL		ADVERTISE_100FULL
+#define LPA_1000XPAUSE_ASYM	ADVERTISE_1000XPSE_ASYM
+#define LPA_100BASE4		ADVERTISE_100BASE4
+#define LPA_PAUSE_CAP		ADVERTISE_PAUSE_CAP
+#define LPA_PAUSE_ASYM		ADVERTISE_PAUSE_ASYM
+#define LPA_RESV		ADVERTISE_RESV
+#define LPA_RFAULT		ADVERTISE_RFAULT /* Link partner faulted       */
+#define LPA_LPACK		ADVERTISE_LPACK  /* Link partner acked us      */
+#define LPA_NPAGE		ADVERTISE_NPAGE
 
 #define LPA_DUPLEX		(LPA_10FULL | LPA_100FULL)
 #define LPA_100			(LPA_100FULL | LPA_100HALF | LPA_100BASE4)
