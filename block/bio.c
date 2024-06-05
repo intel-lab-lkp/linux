@@ -1166,20 +1166,12 @@ void __bio_release_pages(struct bio *bio, bool mark_dirty)
 	struct folio_iter fi;
 
 	bio_for_each_folio_all(fi, bio) {
-		struct page *page;
-		size_t nr_pages;
-
 		if (mark_dirty) {
 			folio_lock(fi.folio);
 			folio_mark_dirty(fi.folio);
 			folio_unlock(fi.folio);
 		}
-		page = folio_page(fi.folio, fi.offset / PAGE_SIZE);
-		nr_pages = (fi.offset + fi.length - 1) / PAGE_SIZE -
-			   fi.offset / PAGE_SIZE + 1;
-		do {
-			bio_release_page(bio, page++);
-		} while (--nr_pages != 0);
+		bio_release_page(bio, &fi.folio->page);
 	}
 }
 EXPORT_SYMBOL_GPL(__bio_release_pages);
@@ -1341,6 +1333,9 @@ static int __bio_iov_iter_get_pages(struct bio *bio, struct iov_iter *iter)
 				break;
 		} else
 			bio_iov_add_folio(bio, folio, len, folio_offset);
+
+		if (bio_flagged(bio, BIO_PAGE_PINNED) && num_pages > 1)
+			unpin_user_pages(pages + i, num_pages - 1);
 
 		/* Skip the pages which got added */
 		i = i + (num_pages - 1);
