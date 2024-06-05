@@ -228,8 +228,10 @@ int adf_sriov_configure(struct pci_dev *pdev, int numvfs)
 		return ret;
 
 	val = 1;
-	adf_cfg_add_key_value_param(accel_dev, ADF_GENERAL_SEC, ADF_SRIOV_ENABLED,
+	ret = adf_cfg_add_key_value_param(accel_dev, ADF_GENERAL_SEC, ADF_SRIOV_ENABLED,
 				    &val, ADF_DEC);
+	if (ret)
+		return ret;
 
 	return numvfs;
 }
