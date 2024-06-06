@@ -867,7 +867,7 @@ int lockup_detector_offline_cpu(unsigned int cpu)
 
 static void __lockup_detector_reconfigure(void)
 {
-	cpus_read_lock();
+	cpu_hotplug_disable();
 	watchdog_hardlockup_stop();
 
 	softlockup_stop_all();
@@ -877,7 +877,7 @@ static void __lockup_detector_reconfigure(void)
 		softlockup_start_all();
 
 	watchdog_hardlockup_start();
-	cpus_read_unlock();
+	cpu_hotplug_enable();
 	/*
 	 * Must be called outside the cpus locked section to prevent
 	 * recursive locking in the perf code.
@@ -916,11 +916,11 @@ static __init void lockup_detector_setup(void)
 #else /* CONFIG_SOFTLOCKUP_DETECTOR */
 static void __lockup_detector_reconfigure(void)
 {
-	cpus_read_lock();
+	cpu_hotplug_disable();
 	watchdog_hardlockup_stop();
 	lockup_detector_update_enable();
 	watchdog_hardlockup_start();
-	cpus_read_unlock();
+	cpu_hotplug_enable();
 }
 void lockup_detector_reconfigure(void)
 {
