@@ -428,6 +428,9 @@ static int snmp_seq_show_tcp_udp(struct seq_file *seq, void *v)
 		/* MaxConn field is signed, RFC 2012 */
 		if (snmp4_tcp_list[i].entry == TCP_MIB_MAXCONN)
 			seq_printf(seq, " %ld", buff[i]);
+		else if (snmp4_tcp_list[i].entry == TCP_MIB_RTOMIN)
+			seq_printf(seq, " %lu",
+				   tcp_rtax_rtomin ? tcp_rtax_rtomin : buff[i]);
 		else
 			seq_printf(seq, " %lu", buff[i]);
 	}

@@ -7,6 +7,8 @@
 #include <net/net_namespace.h>
 #include <net/tcp.h>
 
+unsigned int tcp_rtax_rtomin __read_mostly;
+
 static int ip_metrics_convert(struct nlattr *fc_mx,
 			      int fc_mx_len, u32 *metrics,
 			      struct netlink_ext_ack *extack)
@@ -59,6 +61,8 @@ static int ip_metrics_convert(struct nlattr *fc_mx,
 
 	if (ecn_ca)
 		metrics[RTAX_FEATURES - 1] |= DST_FEATURE_ECN_CA;
+
+	tcp_rtax_rtomin = metrics[RTAX_RTO_MIN - 1];
 
 	return 0;
 }
