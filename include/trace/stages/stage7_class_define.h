@@ -25,6 +25,9 @@
 #undef __print_hex_dump
 #undef __get_buf
 
+#undef __print_sym
+#define __print_sym(value, symbol_id)	__print_sym(value:symbol_id)
+
 /*
  * The below is not executed in the kernel. It is only what is
  * displayed in the print format for userspace to parse.
