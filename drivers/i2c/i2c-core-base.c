@@ -2207,10 +2207,8 @@ int __i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 	unsigned long orig_jiffies;
 	int ret, try;
 
-	if (!adap->algo->master_xfer) {
-		dev_dbg(&adap->dev, "I2C level transfers not supported\n");
+	if (WARN_ON_ONCE(!adap->algo->master_xfer))
 		return -EOPNOTSUPP;
-	}
 
 	if (WARN_ON(!msgs || num < 1))
 		return -EINVAL;
