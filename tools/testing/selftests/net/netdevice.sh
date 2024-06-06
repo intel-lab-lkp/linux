@@ -117,14 +117,31 @@ kci_netdev_ethtool()
 		return 1
 	fi
 
-	ethtool -k "$netdev" > "$TMP_ETHTOOL_FEATURES"
+	ethtool -k "$netdev" | tail -n +2 > "$TMP_ETHTOOL_FEATURES"
 	if [ $? -ne 0 ];then
 		echo "FAIL: $netdev: ethtool list features"
 		rm "$TMP_ETHTOOL_FEATURES"
 		return 1
 	fi
 	echo "PASS: $netdev: ethtool list features"
-	#TODO for each non fixed features, try to turn them on/off
+
+	for feature in $(grep -v fixed "$TMP_ETHTOOL_FEATURES" | \
+		awk '{print $1}' | sed 's/://'); do
+		ethtool --offload "$netdev" "$feature" off
+		if [ $? -eq 0 ]; then
+			echo "PASS: $netdev: Turned off feature: $feature"
+		else
+			echo "FAIL: $netdev: Failed to turn off feature: $feature"
+		fi
+
+		ethtool --offload "$netdev" "$feature" on
+		if [ $? -eq 0 ]; then
+			echo "PASS: $netdev: Turned on feature: $feature"
+		else
+			echo "FAIL: $netdev: Failed to turn on feature: $feature"
+		fi
+	done
+
 	rm "$TMP_ETHTOOL_FEATURES"
 
 	kci_netdev_ethtool_test 74 'dump' "ethtool -d $netdev"
