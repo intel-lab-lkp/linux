@@ -647,7 +647,9 @@ __after_prom_start:
  * Note: This process overwrites the OF exception vectors.
  */
 	LOAD_REG_IMMEDIATE(r3, PAGE_OFFSET)
-	mr.	r4,r26			/* In some cases the loader may  */
+	tophys(r4,r26)
+	cmplwi	cr0,r4,0	/* runtime base addr is zero */
+	mr	r4,r26			/* In some cases the loader may */
 	beq	9f			/* have already put us at zero */
 	li	r6,0x100		/* Start offset, the first 0x100 */
 					/* bytes were copied earlier.	 */
