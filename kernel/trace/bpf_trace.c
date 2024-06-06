@@ -2391,7 +2391,23 @@ void __bpf_trace_run(struct bpf_raw_tp_link *link, u64 *args)
 	struct bpf_trace_run_ctx run_ctx;
 
 	cant_sleep();
-	if (unlikely(this_cpu_inc_return(*(prog->active)) != 1)) {
+
+	// return if instrumentation disabled, see: bpf_disable_instrumentation
+	int instrumentation = unlikely(__this_cpu_read(bpf_prog_active));
+	if (instrumentation) {
+		printk("SKIP FOR INSTRUMENTATION: %s > %s > %p /%i ==============\n",
+				prog->aux->name,
+				link->btp->tp->name, prog, instrumentation);
+		bpf_prog_inc_misses_counter(prog);
+		return;
+	}
+
+	int active = this_cpu_inc_return(*(prog->active));
+	// printk("%s > %s > %p /%i\n", prog->aux->name, link->btp->tp->name, prog, active);
+	if (active != 1) {
+		printk("SKIP FOR ACTIVE: %s > %s > %p /%i =======================\n",
+				prog->aux->name,
+				link->btp->tp->name, prog, active);
 		bpf_prog_inc_misses_counter(prog);
 		goto out;
 	}

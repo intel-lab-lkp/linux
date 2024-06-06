@@ -168,12 +168,21 @@ static inline void release_probes(struct tracepoint_func *old)
 static void debug_print_probes(struct tracepoint_func *funcs)
 {
 	int i;
+	struct bpf_raw_tp_link *link;
 
 	if (!tracepoint_debug || !funcs)
 		return;
 
-	for (i = 0; funcs[i].func; i++)
-		printk(KERN_DEBUG "Probe %d : %p\n", i, funcs[i].func);
+	for (i = 0; funcs[i].func; i++) {
+		link = funcs[i].data;
+		int active = this_cpu_read(*(link->link.prog->active));
+		printk("Probe %d : %p / %p: %s/%d / %i\n", i,
+				funcs[i].func,
+				link,
+				link->link.prog->aux->name,
+				active,
+				funcs[i].prio);
+	}
 }
 
 static struct tracepoint_func *
@@ -297,6 +306,8 @@ static void *func_remove(struct tracepoint_func **funcs,
 static enum tp_func_state nr_func_state(const struct tracepoint_func *tp_funcs)
 {
 	if (!tp_funcs)
+		return TP_FUNC_0;
+	if (!tp_funcs[0].func)
 		return TP_FUNC_0;
 	if (!tp_funcs[1].func)
 		return TP_FUNC_1;
