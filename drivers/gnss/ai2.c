@@ -6,6 +6,7 @@
  * Copyright (C) 2024 Andreas Kemnade <andreas@kemnade.info>
  */
 #include <asm/byteorder.h>
+#include <linux/completion.h>
 #include <linux/errno.h>
 #include <linux/gnss.h>
 #include <linux/init.h>
@@ -68,6 +69,16 @@ struct ai2_device {
 	struct device *dev;
 	struct sk_buff *recv_skb;
 	bool recv_esc;
+	/*
+	 * completion for the lower level around
+	 * GPS_CH9_OP_COMPLETED_EVT
+	 * probably more important if we send large
+	 * fragmented packets
+	 */
+	struct completion ch9_complete;
+
+	/* completion for AI2 ack packets */
+	struct completion ai2_ack_complete;
 };
 
 static struct sk_buff *ai2_skb_alloc(unsigned int len, gfp_t how)
@@ -87,6 +98,7 @@ static int ai2_send_frame(struct ai2_device *ai2dev,
 	int len;
 	struct gps_event_hdr *gnssdrv_hdr;
 	struct hci_dev *hdev;
+	int ret;
 
 	if (skb->len >= U16_MAX)
 		return -EINVAL;
@@ -96,13 +108,25 @@ static int ai2_send_frame(struct ai2_device *ai2dev,
 	 * not needed for simple config commands
 	 */
 	len = skb->len;
+	print_hex_dump_bytes("ai2 send frame: ", DUMP_PREFIX_OFFSET, skb->data, skb->len);
+
 	gnssdrv_hdr = skb_push(skb, sizeof(struct gps_event_hdr));
 	gnssdrv_hdr->opcode = GPS_CH9_OP_WRITE;
 	gnssdrv_hdr->plen = __cpu_to_le16(len);
-
 	hci_skb_pkt_type(skb) = GPS_CH9_PKT_NUMBER;
 	hdev = st_get_hci(ai2dev->dev->parent);
-	return hdev->send(hdev, skb);
+	reinit_completion(&ai2dev->ch9_complete);
+
+	ret = hdev->send(hdev, skb);
+	if (ret)
+		return ret;
+
+	if (!wait_for_completion_timeout(&ai2dev->ch9_complete,
+					 msecs_to_jiffies(2000)))
+		return -ETIMEDOUT;
+	dev_dbg(ai2dev->dev, "send finished\n");
+
+	return 0;
 }
 
 static void ai2_put_escaped(struct sk_buff *skb, u8 d)
@@ -151,30 +175,50 @@ static struct sk_buff *ai2_compose_frame(bool request_ack,
 	return skb;
 }
 
-static int ai2_set_receiver_state(struct ai2_device *ai2dev,
-					      uint8_t state)
+static int ai2_compose_send_frame(struct ai2_device *ai2dev,
+				  bool request_ack,
+				  u8 cmd,
+				  const u8 *data,
+				  int len)
 {
-	struct sk_buff *skb = ai2_compose_frame(true, AI2_CMD_RECEIVER_STATE,
-						&state, 1);
+	struct sk_buff *skb = ai2_compose_frame(request_ack, cmd, data, len);
 	if (!skb)
 		return -ENOMEM;
 
+	if (request_ack) {
+		int ret;
+
+		reinit_completion(&ai2dev->ai2_ack_complete);
+
+		ret = ai2_send_frame(ai2dev, skb);
+		if (ret)
+			return ret;
+
+		if (!wait_for_completion_timeout(&ai2dev->ai2_ack_complete,
+						 msecs_to_jiffies(2000)))
+			return -ETIMEDOUT;
+
+		return 0;
+	}
+
 	return ai2_send_frame(ai2dev, skb);
+}
+
+static int ai2_set_receiver_state(struct ai2_device *ai2dev,
+				  uint8_t state)
+{
+	return ai2_compose_send_frame(ai2dev, true, AI2_CMD_RECEIVER_STATE,
+				      &state, 1);
 }
 
 static int ai2_config_nmea_reports(struct ai2_device *ai2dev,
 				   uint8_t mask)
 {
 	u8 buf[4] = {0};
-	struct sk_buff *skb;
 
 	buf[0] = mask;
-	skb = ai2_compose_frame(true, AI2_CMD_CONFIG_NMEA,
-				buf, sizeof(buf));
-	if (!skb)
-		return -ENOMEM;
-
-	return ai2_send_frame(ai2dev, skb);
+	return ai2_compose_send_frame(ai2dev, true, AI2_CMD_CONFIG_NMEA,
+				      buf, sizeof(buf));
 }
 
 /*
@@ -187,22 +231,12 @@ static int gnss_ai2_init(struct ai2_device *ai2dev)
 {
 	int ret;
 	u8 d = 0x01;
-	struct sk_buff *skb = ai2_compose_frame(true, 0xf5, &d, 1);
-
-	if (!skb)
-		return -ENOMEM;
-
-	ret = ai2_send_frame(ai2dev, skb);
+	ret = ai2_compose_send_frame(ai2dev, true, 0xf5, &d, 1);
 	if (ret)
 		return ret;
 
-	msleep(200); /* seen some 60ms response time here, so wait a bit */
 	d = 5;
-	skb = ai2_compose_frame(true, 0xf1, &d, 1);
-	if (!skb)
-		return -ENOMEM;
-
-	return ai2_send_frame(ai2dev, skb);
+	return ai2_compose_send_frame(ai2dev, true, 0xf1, &d, 1);
 }
 
 static int gnss_ai2_open(struct gnss_device *gdev)
@@ -220,18 +254,14 @@ static int gnss_ai2_open(struct gnss_device *gdev)
 	if (ret)
 		goto err;
 
-	/* TODO: find out on what kind of ack we should wait */
-	msleep(50);
 	ret = ai2_set_receiver_state(ai2dev, RECEIVER_STATE_IDLE);
 	if (ret)
 		goto err;
 
-	msleep(100);
 	ret = ai2_config_nmea_reports(ai2dev, NMEA_MASK_ALL);
 	if (ret)
 		goto err;
 
-	msleep(50);
 	ret = ai2_set_receiver_state(ai2dev, RECEIVER_STATE_ON);
 	if (ret)
 		goto err;
@@ -254,13 +284,9 @@ static void gnss_ai2_close(struct gnss_device *gdev)
 {
 	struct ai2_device *ai2dev = gnss_get_drvdata(gdev);
 
-	/* TODO: find out on what kind of ack we should wait */
 	if (!ai2raw) {
-		msleep(50);
 		ai2_set_receiver_state(ai2dev, RECEIVER_STATE_IDLE);
-		msleep(50);
 		ai2_set_receiver_state(ai2dev, RECEIVER_STATE_OFF);
-		msleep(200); /* seen some longer response time here, so wait */
 	}
 
 	mutex_lock(&ai2dev->gdev_mutex);
@@ -345,8 +371,10 @@ static void process_ai2_frame(struct ai2_device *ai2dev)
 	}
 
 	/* reached if byte 1 in the command packet is set to 1 */
-	if (data[1] == AI2_ACK)
+	if (data[1] == AI2_ACK) {
+		complete(&ai2dev->ai2_ack_complete);
 		return;
+	}
 
 	head = skb_pull(ai2dev->recv_skb, 2); /* drop frame start marker */
 	while (head && (ai2dev->recv_skb->len >= 3)) {
@@ -434,11 +462,9 @@ static void gnss_recv_frame(struct device *dev, struct sk_buff *skb)
 	gnss_hdr = (struct gps_event_hdr *)skb->data;
 
 	data = skb_pull(skb, sizeof(*gnss_hdr));
-	/*
-	 * REVISIT: maybe do something with the completed
-	 * event
-	 */
-	if (gnss_hdr->opcode ==	GPS_CH9_OP_READ) {
+
+	switch (gnss_hdr->opcode) {
+	case GPS_CH9_OP_READ:
 		mutex_lock(&ai2dev->gdev_mutex);
 		if (ai2dev->gdev_open) {
 			if (ai2raw)
@@ -450,6 +476,10 @@ static void gnss_recv_frame(struct device *dev, struct sk_buff *skb)
 				"receiving data while chip should be off\n");
 		}
 		mutex_unlock(&ai2dev->gdev_mutex);
+		break;
+	case GPS_CH9_OP_COMPLETED_EVT:
+		complete(&ai2dev->ch9_complete);
+		break;
 	}
 	kfree_skb(skb);
 }
@@ -475,6 +505,8 @@ static int gnss_ai2_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, ai2dev);
 	st_set_gnss_recv_func(pdev->dev.parent, gnss_recv_frame);
 	mutex_init(&ai2dev->gdev_mutex);
+	init_completion(&ai2dev->ch9_complete);
+	init_completion(&ai2dev->ai2_ack_complete);
 
 	ret = gnss_register_device(gdev);
 	if (ret)
