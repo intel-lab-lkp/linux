@@ -811,12 +811,81 @@ static u8 psr_compute_idle_frames(struct intel_dp *intel_dp)
 	return idle_frames;
 }
 
+static bool intel_psr_check_delayed_vblank_limit(struct drm_i915_private *i915,
+						 enum transcoder cpu_transcoder)
+{
+	return intel_de_read(i915, TRANS_SET_CONTEXT_LATENCY(cpu_transcoder)) >= 6;
+}
+
+static bool intel_psr_is_dpkgc_configured(struct drm_i915_private *i915)
+{
+	return intel_de_read(i915, LNL_PKG_C_LATENCY) == U32_MAX;
+}
+
+static bool intel_psr_is_dc5_entry_possible(struct drm_i915_private *i915)
+{
+	struct intel_crtc *intel_crtc;
+	bool ret = true;
+
+	for_each_intel_crtc(&i915->drm, intel_crtc) {
+		struct intel_encoder *encoder;
+		struct drm_crtc *crtc = &intel_crtc->base;
+		enum pipe pipe = intel_crtc->pipe;
+
+		if (!crtc->active)
+			continue;
+
+		if (!(i915->display.irq.de_irq_mask[pipe] & GEN8_PIPE_VBLANK))
+			ret = false;
+
+		for_each_encoder_on_crtc(&i915->drm, crtc, encoder) {
+			struct intel_dp *intel_dp = enc_to_intel_dp(_encoder);
+			struct intel_psr *psr = &intel_dp->psr;
+
+			if (!psr->enabled)
+				ret = false;
+		}
+	}
+
+	return ret;
+}
+
+static bool wa_16023497226_check(struct intel_dp *intel_dp, bool psr1)
+{
+	struct drm_i915_private *i915 = dp_to_i915(intel_dp);
+	enum transcoder cpu_transcoder = intel_dp->psr.transcoder;
+
+	if (DISPLAY_VER(i915) != 20)
+		return true;
+
+	if (is_dpkg_c_configured(i915)) {
+		if (psr1 &&
+		    (intel_psr_check_delayed_vblank_limit(i915, cpu_transcoder) ||
+		     intel_psr_is_dc5_entry_possible(i915)))
+			return true;
+		else if (!psr1 && is_dc5_entry_possible(i915))
+			return true;
+		else
+			return false;
+	}
+
+	return true;
+}
+
 static bool hsw_activate_psr1(struct intel_dp *intel_dp)
 {
 	struct drm_i915_private *dev_priv = dp_to_i915(intel_dp);
 	enum transcoder cpu_transcoder = intel_dp->psr.transcoder;
 	u32 max_sleep_time = 0x1f;
-	u32 val = EDP_PSR_ENABLE;
+	u32 val = 0;
+
+	/* WA: 16023497226*/
+	if (wa_16023497226_check(intel_dp, true)) {
+		val = EDP_PSR_ENABLE;
+	} else {
+		drm_dbg_kms(&dev_priv->drm, "PSR1 was not activated\n");
+		return false;
+	}
 
 	val |= EDP_PSR_IDLE_FRAMES(psr_compute_idle_frames(intel_dp));
 
@@ -910,7 +979,9 @@ static void hsw_activate_psr2(struct intel_dp *intel_dp)
 	u32 val = EDP_PSR2_ENABLE;
 	u32 psr_val = 0;
 
-	val |= EDP_PSR2_IDLE_FRAMES(psr_compute_idle_frames(intel_dp));
+	/* WA: 16023497226*/
+	if (wa_16023497226_check(intel_dp, false))
+		val |= EDP_PSR2_IDLE_FRAMES(psr_compute_idle_frames(intel_dp));
 
 	if (DISPLAY_VER(dev_priv) < 14 && !IS_ALDERLAKE_P(dev_priv))
 		val |= EDP_SU_TRACK_ENABLE;
