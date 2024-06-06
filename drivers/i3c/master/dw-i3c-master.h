@@ -39,7 +39,7 @@ struct dw_i3c_master {
 	char version[5];
 	char type[5];
 	bool ibi_capable;
-
+	u8 sir_en_cnt;
 	/*
 	 * Per-device hardware data, used to manage the device address table
 	 * (DAT)

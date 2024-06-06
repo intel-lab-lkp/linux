@@ -1177,13 +1177,13 @@ static void dw_i3c_master_set_sir_enabled(struct dw_i3c_master *master,
 
 	reg = readl(master->regs + IBI_SIR_REQ_REJECT);
 	if (enable) {
-		global = reg == 0xffffffff;
+		global = !master->sir_en_cnt++;
 		reg &= ~BIT(idx);
 	} else {
 		bool hj_rejected = !!(readl(master->regs + DEVICE_CTRL) & DEV_CTRL_HOT_JOIN_NACK);
 
 		reg |= BIT(idx);
-		global = (reg == 0xffffffff) && hj_rejected;
+		global = (!--master->sir_en_cnt) && hj_rejected;
 	}
 	writel(reg, master->regs + IBI_SIR_REQ_REJECT);
 
