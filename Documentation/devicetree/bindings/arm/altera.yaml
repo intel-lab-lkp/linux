@@ -47,6 +47,7 @@ properties:
               - novtech,chameleon96
               - samtec,vining
               - terasic,de0-atlas
+              - terasic,de1-soc
               - terasic,socfpga-cyclone5-sockit
           - const: altr,socfpga-cyclone5
           - const: altr,socfpga
