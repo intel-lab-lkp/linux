@@ -7843,8 +7843,7 @@ static int ice_change_mtu(struct net_device *netdev, int new_mtu)
  */
 static int ice_eth_ioctl(struct net_device *netdev, struct ifreq *ifr, int cmd)
 {
-	struct ice_netdev_priv *np = netdev_priv(netdev);
-	struct ice_pf *pf = np->vsi->back;
+	struct ice_pf *pf = ice_netdev_to_pf(netdev);
 
 	switch (cmd) {
 	case SIOCGHWTSTAMP:
@@ -8072,9 +8071,7 @@ static int
 ice_bridge_getlink(struct sk_buff *skb, u32 pid, u32 seq,
 		   struct net_device *dev, u32 filter_mask, int nlflags)
 {
-	struct ice_netdev_priv *np = netdev_priv(dev);
-	struct ice_vsi *vsi = np->vsi;
-	struct ice_pf *pf = vsi->back;
+	struct ice_pf *pf = ice_netdev_to_pf(dev);
 	u16 bmode;
 
 	bmode = pf->first_sw->bridge_mode;
