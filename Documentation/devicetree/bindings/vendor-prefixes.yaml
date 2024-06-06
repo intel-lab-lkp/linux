@@ -1154,6 +1154,8 @@ patternProperties:
     description: Poslab Technology Co., Ltd.
   "^pov,.*":
     description: Point of View International B.V.
+  "^primeview,.*":
+    description: Prime View International (PVI)
   "^powertip,.*":
     description: Powertip Tech. Corp.
   "^powervr,.*":
