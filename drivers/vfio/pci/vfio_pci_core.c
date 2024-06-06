@@ -1192,6 +1192,7 @@ static int vfio_pci_ioctl_set_irqs(struct vfio_pci_core_device *vdev,
 {
 	unsigned long minsz = offsetofend(struct vfio_irq_set, count);
 	struct vfio_irq_set hdr;
+	cpumask_var_t mask;
 	u8 *data = NULL;
 	int max, ret = 0;
 	size_t data_size = 0;
@@ -1207,9 +1208,21 @@ static int vfio_pci_ioctl_set_irqs(struct vfio_pci_core_device *vdev,
 		return ret;
 
 	if (data_size) {
-		data = memdup_user(&arg->data, data_size);
-		if (IS_ERR(data))
-			return PTR_ERR(data);
+		if (hdr.flags & VFIO_IRQ_SET_DATA_AFFINITY) {
+			if (!zalloc_cpumask_var(&mask, GFP_KERNEL))
+				return -ENOMEM;
+
+			ret = copy_from_user(mask, &arg->data, data_size);
+			if (ret)
+				goto out;
+
+			data = (u8 *)mask;
+
+		} else {
+			data = memdup_user(&arg->data, data_size);
+			if (IS_ERR(data))
+				return PTR_ERR(data);
+		}
 	}
 
 	mutex_lock(&vdev->igate);
@@ -1218,7 +1231,12 @@ static int vfio_pci_ioctl_set_irqs(struct vfio_pci_core_device *vdev,
 				      hdr.count, data);
 
 	mutex_unlock(&vdev->igate);
-	kfree(data);
+
+out:
+	if (hdr.flags & VFIO_IRQ_SET_DATA_AFFINITY)
+		free_cpumask_var(mask);
+	else
+		kfree(data);
 
 	return ret;
 }
