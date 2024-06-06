@@ -478,21 +478,11 @@ void lockdep_set_selftest_task(struct task_struct *task)
  */
 
 #define VERBOSE			0
-#define VERY_VERBOSE		0
 
-#if VERBOSE
-# define HARDIRQ_VERBOSE	1
-# define SOFTIRQ_VERBOSE	1
-#else
-# define HARDIRQ_VERBOSE	0
-# define SOFTIRQ_VERBOSE	0
-#endif
-
-#if VERBOSE || HARDIRQ_VERBOSE || SOFTIRQ_VERBOSE
 /*
  * Quick filtering for interesting events:
  */
-static int class_filter(struct lock_class *class)
+static inline int class_filter(struct lock_class *class)
 {
 #if 0
 	/* Example */
@@ -506,14 +496,10 @@ static int class_filter(struct lock_class *class)
 	/* Filter everything else. 1 would be to allow everything else */
 	return 0;
 }
-#endif
 
 static int verbose(struct lock_class *class)
 {
-#if VERBOSE
 	return class_filter(class);
-#endif
-	return 0;
 }
 
 static void print_lockdep_off(const char *bug_msg)
@@ -809,10 +795,7 @@ static void print_kernel_ident(void)
 
 static int very_verbose(struct lock_class *class)
 {
-#if VERY_VERBOSE
 	return class_filter(class);
-#endif
-	return 0;
 }
 
 /*
@@ -4171,18 +4154,12 @@ void print_irqtrace_events(struct task_struct *curr)
 
 static int HARDIRQ_verbose(struct lock_class *class)
 {
-#if HARDIRQ_VERBOSE
 	return class_filter(class);
-#endif
-	return 0;
 }
 
 static int SOFTIRQ_verbose(struct lock_class *class)
 {
-#if SOFTIRQ_VERBOSE
 	return class_filter(class);
-#endif
-	return 0;
 }
 
 static int (*state_verbose_f[])(struct lock_class *class) = {
