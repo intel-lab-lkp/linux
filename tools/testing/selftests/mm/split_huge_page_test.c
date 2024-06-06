@@ -23,6 +23,11 @@
 uint64_t pagesize;
 unsigned int pageshift;
 uint64_t pmd_pagesize;
+/*
+ * Used by create_pagecache_thp_and_fd() to do mmap read.
+ * Made it as global to avoid compiler optimizing out the variable.
+ */
+int dummy;
 
 #define SPLIT_DEBUGFS "/sys/kernel/debug/split_huge_pages"
 #define SMAP_PATH "/proc/self/smaps"
@@ -300,7 +305,6 @@ int create_pagecache_thp_and_fd(const char *testfile, size_t fd_size, int *fd,
 		char **addr)
 {
 	size_t i;
-	int __attribute__((unused)) dummy = 0;
 
 	srand(time(NULL));
 
