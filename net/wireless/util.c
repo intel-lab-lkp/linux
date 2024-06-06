@@ -2305,19 +2305,34 @@ static int cfg80211_wdev_bi(struct wireless_dev *wdev)
 
 static void cfg80211_calculate_bi_data(struct wiphy *wiphy, u32 new_beacon_int,
 				       u32 *beacon_int_gcd,
-				       bool *beacon_int_different)
+				       bool *beacon_int_different,
+				       const struct wiphy_radio *radio)
 {
+	struct cfg80211_registered_device *rdev;
 	struct wireless_dev *wdev;
+	int radio_idx = -1;
 
 	*beacon_int_gcd = 0;
 	*beacon_int_different = false;
+	if (radio)
+		radio_idx = radio - wiphy->radio;
 
+	rdev = wiphy_to_rdev(wiphy);
 	list_for_each_entry(wdev, &wiphy->wdev_list, list) {
 		int wdev_bi;
+		u32 mask;
 
 		/* this feature isn't supported with MLO */
 		if (wdev->valid_links)
 			continue;
+
+		if (radio_idx >= 0) {
+			if (rdev_get_radio_mask(rdev, wdev->netdev, &mask))
+				continue;
+
+			if (!(mask & BIT(radio_idx)))
+				continue;
+		}
 
 		wdev_bi = cfg80211_wdev_bi(wdev);
 
@@ -2366,9 +2381,11 @@ int cfg80211_iter_combinations(struct wiphy *wiphy,
 					    void *data),
 			       void *data)
 {
+	const struct wiphy_radio *radio = params->radio;
+	const struct ieee80211_iface_combination *c;
 	const struct ieee80211_regdomain *regdom;
 	enum nl80211_dfs_regions region = 0;
-	int i, j, iftype;
+	int i, j, n, iftype;
 	int num_interfaces = 0;
 	u32 used_iftypes = 0;
 	u32 beacon_int_gcd;
@@ -2385,7 +2402,8 @@ int cfg80211_iter_combinations(struct wiphy *wiphy,
 	 * interfaces (while being brought up) and channel/radar data.
 	 */
 	cfg80211_calculate_bi_data(wiphy, params->new_beacon_int,
-				   &beacon_int_gcd, &beacon_int_different);
+				   &beacon_int_gcd, &beacon_int_different,
+				   radio);
 
 	if (params->radar_detect) {
 		rcu_read_lock();
@@ -2402,12 +2420,16 @@ int cfg80211_iter_combinations(struct wiphy *wiphy,
 			used_iftypes |= BIT(iftype);
 	}
 
-	for (i = 0; i < wiphy->n_iface_combinations; i++) {
-		const struct ieee80211_iface_combination *c;
+	if (radio) {
+		c = radio->iface_combinations;
+		n = radio->n_iface_combinations;
+	} else {
+		c = wiphy->iface_combinations;
+		n = wiphy->n_iface_combinations;
+	}
+	for (i = 0; i < n; i++, c++) {
 		struct ieee80211_iface_limit *limits;
 		u32 all_iftypes = 0;
-
-		c = &wiphy->iface_combinations[i];
 
 		if (num_interfaces > c->max_interfaces)
 			continue;
