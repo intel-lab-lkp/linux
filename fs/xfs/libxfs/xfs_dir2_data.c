@@ -179,6 +179,12 @@ __xfs_dir3_data_check(
 		struct xfs_dir2_data_unused	*dup = bp->b_addr + offset;
 		struct xfs_dir2_data_entry	*dep = bp->b_addr + offset;
 
+		if (offset > end - xfs_dir2_data_entsize(mp, 1)) {
+			if (end - offset != XFS_DIR2_DATA_ALIGN ||
+			    be16_to_cpu(dup->freetag) != XFS_DIR2_DATA_FREE_TAG)
+				return __this_address;
+		}
+
 		/*
 		 * If it's unused, look for the space in the bestfree table.
 		 * If we find it, account for that, else make sure it
@@ -188,6 +194,8 @@ __xfs_dir3_data_check(
 			xfs_failaddr_t	fa;
 
 			if (lastfree != 0)
+				return __this_address;
+			if (be16_to_cpu(dup->length) % XFS_DIR2_DATA_ALIGN != 0)
 				return __this_address;
 			if (offset + be16_to_cpu(dup->length) > end)
 				return __this_address;
