@@ -409,6 +409,19 @@ static int snmp_seq_show_ipstats(struct seq_file *seq, void *v)
 	return 0;
 }
 
+static void snmp_seq_show_tcp_rtomin(struct seq_file *seq, struct net *net,
+				     unsigned long val)
+{
+	int sysctl_rtomin = READ_ONCE(net->ipv4.sysctl_tcp_rto_min_us);
+
+	if (tcp_rtax_rtomin)
+		seq_printf(seq, " %u", tcp_rtax_rtomin);
+	else if (sysctl_rtomin != jiffies_to_usecs(TCP_RTO_MIN))
+		seq_printf(seq, " %lu", usecs_to_jiffies(sysctl_rtomin));
+	else
+		seq_printf(seq, " %lu", val);
+}
+
 static int snmp_seq_show_tcp_udp(struct seq_file *seq, void *v)
 {
 	unsigned long buff[TCPUDP_MIB_MAX];
@@ -429,8 +442,7 @@ static int snmp_seq_show_tcp_udp(struct seq_file *seq, void *v)
 		if (snmp4_tcp_list[i].entry == TCP_MIB_MAXCONN)
 			seq_printf(seq, " %ld", buff[i]);
 		else if (snmp4_tcp_list[i].entry == TCP_MIB_RTOMIN)
-			seq_printf(seq, " %lu",
-				   tcp_rtax_rtomin ? tcp_rtax_rtomin : buff[i]);
+			snmp_seq_show_tcp_rtomin(seq, net, buff[i]);
 		else
 			seq_printf(seq, " %lu", buff[i]);
 	}
