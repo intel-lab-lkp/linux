@@ -664,6 +664,16 @@ static inline int dev_pm_opp_set_config_regulators(struct device *dev,
 	return dev_pm_opp_set_config(dev, &config);
 }
 
+static inline int devm_pm_opp_set_config_regulators(struct device *dev,
+						   config_regulators_t helper)
+{
+	struct dev_pm_opp_config config = {
+		.config_regulators = helper,
+	};
+
+	return devm_pm_opp_set_config(dev, &config);
+}
+
 static inline void dev_pm_opp_put_config_regulators(int token)
 {
 	dev_pm_opp_clear_config(token);
