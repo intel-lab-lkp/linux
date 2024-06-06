@@ -677,6 +677,12 @@ static const struct xe_rtp_entry_sr lrc_was[] = {
 		       ENGINE_CLASS(RENDER)),
 	  XE_RTP_ACTIONS(SET(CHICKEN_RASTER_2, TBIMR_FAST_CLIP))
 	},
+	/* This WA is also needed on primary GT when the media version is 2000.
+	 * In the current situation, Media 2000 is along with xe2_lpg, thus WA
+	 * is already covered below. In the future, Media version 2000 can be
+	 * used with some other graphics version where WA still needs to be
+	 * implemented.
+	 */
 	{ XE_RTP_NAME("14020756599"),
 	  XE_RTP_RULES(GRAPHICS_VERSION(2004), ENGINE_CLASS(RENDER)),
 	  XE_RTP_ACTIONS(SET(WM_CHICKEN3, HIZ_PLANE_COMPRESSION_DIS))
@@ -703,13 +709,6 @@ static const struct xe_rtp_entry_sr lrc_was[] = {
 			 SET(VFLSKPD,
 			     DIS_PARTIAL_AUTOSTRIP |
 			     DIS_AUTOSTRIP))
-	},
-
-	/* Xe2_LPM */
-
-	{ XE_RTP_NAME("14020756599"),
-	  XE_RTP_RULES(ENGINE_CLASS(RENDER), FUNC(xe_rtp_match_when_media2000)),
-	  XE_RTP_ACTIONS(SET(WM_CHICKEN3, HIZ_PLANE_COMPRESSION_DIS))
 	},
 
 	{}
