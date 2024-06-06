@@ -6,6 +6,8 @@
 #ifndef _USB_MISC_ONBOARD_USB_DEV_H
 #define _USB_MISC_ONBOARD_USB_DEV_H
 
+#include <linux/i2c.h>
+
 #define MAX_SUPPLIES 2
 
 struct onboard_dev_pdata {
@@ -13,6 +15,7 @@ struct onboard_dev_pdata {
 	unsigned int num_supplies;	/* number of supplies */
 	const char * const supply_names[MAX_SUPPLIES];
 	bool is_hub;
+	int (*onboard_dev_i2c_init)(struct i2c_client *client);
 };
 
 static const struct onboard_dev_pdata microchip_usb424_data = {
@@ -22,11 +25,14 @@ static const struct onboard_dev_pdata microchip_usb424_data = {
 	.is_hub = true,
 };
 
+int onboard_dev_5744_i2c_init(struct i2c_client *client);
+
 static const struct onboard_dev_pdata microchip_usb5744_data = {
-	.reset_us = 0,
+	.reset_us = 10000,
 	.num_supplies = 2,
 	.supply_names = { "vdd", "vdd2" },
 	.is_hub = true,
+	.onboard_dev_i2c_init = onboard_dev_5744_i2c_init,
 };
 
 static const struct onboard_dev_pdata realtek_rts5411_data = {
