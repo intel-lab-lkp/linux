@@ -21,6 +21,7 @@
 
 #include "komeda_dev.h"
 
+#ifdef CONFIG_DEBUG_FS
 static int komeda_register_show(struct seq_file *sf, void *x)
 {
 	struct komeda_dev *mdev = sf->private;
@@ -43,7 +44,6 @@ static int komeda_register_show(struct seq_file *sf, void *x)
 
 DEFINE_SHOW_ATTRIBUTE(komeda_register);
 
-#ifdef CONFIG_DEBUG_FS
 static void komeda_debugfs_init(struct komeda_dev *mdev)
 {
 	if (!debugfs_initialized())
