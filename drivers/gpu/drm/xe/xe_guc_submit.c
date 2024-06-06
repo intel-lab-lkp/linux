@@ -1208,7 +1208,7 @@ static int guc_exec_queue_init(struct xe_exec_queue *q)
 			    get_submit_wq(guc),
 			    q->lrc[0].ring.size / MAX_JOB_SIZE_BYTES, 64,
 			    timeout, guc_to_gt(guc)->ordered_wq, NULL,
-			    q->name, gt_to_xe(q->gt)->drm.dev);
+			    q->name, &gt_to_xe(q->gt)->drm);
 	if (err)
 		goto err_free;
 

@@ -740,7 +740,7 @@ v3d_sched_init(struct v3d_dev *v3d)
 			     DRM_SCHED_PRIORITY_COUNT,
 			     hw_jobs_limit, job_hang_limit,
 			     msecs_to_jiffies(hang_limit_ms), NULL,
-			     NULL, "v3d_bin", v3d->drm.dev);
+			     NULL, "v3d_bin", &v3d->drm);
 	if (ret)
 		return ret;
 
@@ -749,7 +749,7 @@ v3d_sched_init(struct v3d_dev *v3d)
 			     DRM_SCHED_PRIORITY_COUNT,
 			     hw_jobs_limit, job_hang_limit,
 			     msecs_to_jiffies(hang_limit_ms), NULL,
-			     NULL, "v3d_render", v3d->drm.dev);
+			     NULL, "v3d_render", &v3d->drm);
 	if (ret)
 		goto fail;
 
@@ -758,7 +758,7 @@ v3d_sched_init(struct v3d_dev *v3d)
 			     DRM_SCHED_PRIORITY_COUNT,
 			     hw_jobs_limit, job_hang_limit,
 			     msecs_to_jiffies(hang_limit_ms), NULL,
-			     NULL, "v3d_tfu", v3d->drm.dev);
+			     NULL, "v3d_tfu", &v3d->drm);
 	if (ret)
 		goto fail;
 
@@ -768,7 +768,7 @@ v3d_sched_init(struct v3d_dev *v3d)
 				     DRM_SCHED_PRIORITY_COUNT,
 				     hw_jobs_limit, job_hang_limit,
 				     msecs_to_jiffies(hang_limit_ms), NULL,
-				     NULL, "v3d_csd", v3d->drm.dev);
+				     NULL, "v3d_csd", &v3d->drm);
 		if (ret)
 			goto fail;
 
@@ -777,7 +777,7 @@ v3d_sched_init(struct v3d_dev *v3d)
 				     DRM_SCHED_PRIORITY_COUNT,
 				     hw_jobs_limit, job_hang_limit,
 				     msecs_to_jiffies(hang_limit_ms), NULL,
-				     NULL, "v3d_cache_clean", v3d->drm.dev);
+				     NULL, "v3d_cache_clean", &v3d->drm);
 		if (ret)
 			goto fail;
 	}
@@ -787,7 +787,7 @@ v3d_sched_init(struct v3d_dev *v3d)
 			     DRM_SCHED_PRIORITY_COUNT,
 			     1, job_hang_limit,
 			     msecs_to_jiffies(hang_limit_ms), NULL,
-			     NULL, "v3d_cpu", v3d->drm.dev);
+			     NULL, "v3d_cpu", &v3d->drm);
 	if (ret)
 		goto fail;
 

@@ -526,7 +526,7 @@ int lima_sched_pipe_init(struct lima_sched_pipe *pipe, const char *name)
 			      1,
 			      lima_job_hang_limit,
 			      msecs_to_jiffies(timeout), NULL,
-			      NULL, name, pipe->ldev->dev);
+			      NULL, name, pipe->ldev->ddev);
 }
 
 void lima_sched_pipe_fini(struct lima_sched_pipe *pipe)

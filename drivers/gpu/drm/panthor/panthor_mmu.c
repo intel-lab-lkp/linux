@@ -2293,7 +2293,7 @@ panthor_vm_create(struct panthor_device *ptdev, bool for_mcu,
 	ret = drm_sched_init(&vm->sched, &panthor_vm_bind_ops, ptdev->mmu->vm.wq,
 			     1, 1, 0,
 			     MAX_SCHEDULE_TIMEOUT, NULL, NULL,
-			     "panthor-vm-bind", ptdev->base.dev);
+			     "panthor-vm-bind", &ptdev->base);
 	if (ret)
 		goto err_free_io_pgtable;
 

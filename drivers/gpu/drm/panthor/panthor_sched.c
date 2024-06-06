@@ -3043,7 +3043,7 @@ group_create_queue(struct panthor_group *group,
 			     args->ringbuf_size / (NUM_INSTRS_PER_SLOT * sizeof(u64)),
 			     0, msecs_to_jiffies(JOB_TIMEOUT_MS),
 			     group->ptdev->reset.wq,
-			     NULL, "panthor-queue", group->ptdev->base.dev);
+			     NULL, "panthor-queue", &group->ptdev->base);
 	if (ret)
 		goto err_free_queue;
 

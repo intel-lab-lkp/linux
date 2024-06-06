@@ -103,9 +103,9 @@ static u32 drm_sched_available_credits(struct drm_gpu_scheduler *sched)
 {
 	u32 credits;
 
-	drm_WARN_ON(sched, check_sub_overflow(sched->credit_limit,
-					      atomic_read(&sched->credit_count),
-					      &credits));
+	drm_WARN_ON(sched->dev, check_sub_overflow(sched->credit_limit,
+						  atomic_read(&sched->credit_count),
+						  &credits));
 
 	return credits;
 }
@@ -130,14 +130,14 @@ static bool drm_sched_can_queue(struct drm_gpu_scheduler *sched,
 	if (sched->ops->update_job_credits) {
 		s_job->credits = sched->ops->update_job_credits(s_job);
 
-		drm_WARN(sched, !s_job->credits,
+		drm_WARN(sched->dev, !s_job->credits,
 			 "Jobs with zero credits bypass job-flow control.\n");
 	}
 
 	/* If a job exceeds the credit limit, truncate it to the credit limit
 	 * itself to guarantee forward progress.
 	 */
-	if (drm_WARN(sched, s_job->credits > sched->credit_limit,
+	if (drm_WARN(sched->dev, s_job->credits > sched->credit_limit,
 		     "Jobs may not exceed the credit limit, truncate.\n"))
 		s_job->credits = sched->credit_limit;
 
@@ -701,7 +701,7 @@ void drm_sched_start(struct drm_gpu_scheduler *sched, bool full_recovery)
 			if (r == -ENOENT)
 				drm_sched_job_done(s_job, fence->error);
 			else if (r)
-				DRM_DEV_ERROR(sched->dev, "fence add callback failed (%d)\n",
+				DRM_DEV_ERROR(sched->dev->dev, "fence add callback failed (%d)\n",
 					  r);
 		} else
 			drm_sched_job_done(s_job, -ECANCELED);
@@ -797,7 +797,7 @@ int drm_sched_job_init(struct drm_sched_job *job,
 		 * or worse--a blank screen--leave a trail in the
 		 * logs, so this can be debugged easier.
 		 */
-		drm_err(job->sched, "%s: entity has no rq!\n", __func__);
+		drm_err(job->sched->dev, "%s: entity has no rq!\n", __func__);
 		return -ENOENT;
 	}
 
@@ -1215,7 +1215,7 @@ static void drm_sched_run_job_work(struct work_struct *w)
 		if (r == -ENOENT)
 			drm_sched_job_done(sched_job, fence->error);
 		else if (r)
-			DRM_DEV_ERROR(sched->dev, "fence add callback failed (%d)\n", r);
+			DRM_DEV_ERROR(sched->dev->dev, "fence add callback failed (%d)\n", r);
 	} else {
 		drm_sched_job_done(sched_job, IS_ERR(fence) ?
 				   PTR_ERR(fence) : 0);
@@ -1240,7 +1240,7 @@ static void drm_sched_run_job_work(struct work_struct *w)
  *		used
  * @score: optional score atomic shared with other schedulers
  * @name: name used for debugging
- * @dev: target &struct device
+ * @dev: target &struct drm_device
  *
  * Return 0 on success, otherwise error code.
  */
@@ -1249,7 +1249,7 @@ int drm_sched_init(struct drm_gpu_scheduler *sched,
 		   struct workqueue_struct *submit_wq,
 		   u32 num_rqs, u32 credit_limit, unsigned int hang_limit,
 		   long timeout, struct workqueue_struct *timeout_wq,
-		   atomic_t *score, const char *name, struct device *dev)
+		   atomic_t *score, const char *name, struct drm_device *dev)
 {
 	int i;
 
@@ -1265,7 +1265,7 @@ int drm_sched_init(struct drm_gpu_scheduler *sched,
 	if (num_rqs > DRM_SCHED_PRIORITY_COUNT) {
 		/* This is a gross violation--tell drivers what the  problem is.
 		 */
-		drm_err(sched, "%s: num_rqs cannot be greater than DRM_SCHED_PRIORITY_COUNT\n",
+		drm_err(dev, "%s: num_rqs cannot be greater than DRM_SCHED_PRIORITY_COUNT\n",
 			__func__);
 		return -EINVAL;
 	} else if (sched->sched_rq) {
@@ -1273,7 +1273,7 @@ int drm_sched_init(struct drm_gpu_scheduler *sched,
 		 * fine-tune their DRM calling order, and return all
 		 * is good.
 		 */
-		drm_warn(sched, "%s: scheduler already initialized!\n", __func__);
+		drm_warn(dev, "%s: scheduler already initialized!\n", __func__);
 		return 0;
 	}
 
@@ -1322,7 +1322,7 @@ Out_unroll:
 Out_check_own:
 	if (sched->own_submit_wq)
 		destroy_workqueue(sched->submit_wq);
-	drm_err(sched, "%s: Failed to setup GPU scheduler--out of memory\n", __func__);
+	drm_err(dev, "%s: Failed to setup GPU scheduler--out of memory\n", __func__);
 	return -ENOMEM;
 }
 EXPORT_SYMBOL(drm_sched_init);

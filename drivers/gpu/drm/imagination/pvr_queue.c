@@ -1287,7 +1287,7 @@ struct pvr_queue *pvr_queue_create(struct pvr_context *ctx,
 			     pvr_dev->sched_wq, 1, 64 * 1024, 1,
 			     msecs_to_jiffies(500),
 			     pvr_dev->sched_wq, NULL, "pvr-queue",
-			     pvr_dev->base.dev);
+			     &pvr_dev->base);
 	if (err)
 		goto err_release_ufo;
 

@@ -61,7 +61,7 @@ int xe_sched_init(struct xe_gpu_scheduler *sched,
 		  uint32_t hw_submission, unsigned hang_limit,
 		  long timeout, struct workqueue_struct *timeout_wq,
 		  atomic_t *score, const char *name,
-		  struct device *dev)
+		  struct drm_device *dev)
 {
 	sched->ops = xe_ops;
 	INIT_LIST_HEAD(&sched->msgs);

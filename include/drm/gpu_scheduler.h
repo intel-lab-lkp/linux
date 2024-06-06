@@ -539,7 +539,7 @@ struct drm_gpu_scheduler {
 	bool				free_guilty;
 	bool				pause_submit;
 	bool				own_submit_wq;
-	struct device			*dev;
+	struct drm_device		*dev;
 };
 
 int drm_sched_init(struct drm_gpu_scheduler *sched,
@@ -547,7 +547,7 @@ int drm_sched_init(struct drm_gpu_scheduler *sched,
 		   struct workqueue_struct *submit_wq,
 		   u32 num_rqs, u32 credit_limit, unsigned int hang_limit,
 		   long timeout, struct workqueue_struct *timeout_wq,
-		   atomic_t *score, const char *name, struct device *dev);
+		   atomic_t *score, const char *name, struct drm_device *dev);
 
 void drm_sched_fini(struct drm_gpu_scheduler *sched);
 int drm_sched_job_init(struct drm_sched_job *job,
