@@ -37,6 +37,12 @@ struct landlock_ruleset_attr {
 	 * rule explicitly allow them.
 	 */
 	__u64 handled_access_net;
+	/**
+	 * scoped: Bitmask of actions (cf. `Scope access flags`_)
+	 * that is handled by this ruleset and should be permitted
+	 * by default if no rule explicitly deny them.
+	 */
+	__u64 scoped;
 };
 
 /*
@@ -266,4 +272,26 @@ struct landlock_net_port_attr {
 #define LANDLOCK_ACCESS_NET_BIND_TCP			(1ULL << 0)
 #define LANDLOCK_ACCESS_NET_CONNECT_TCP			(1ULL << 1)
 /* clang-format on */
+
+/**
+ * DOC: scoped
+ *
+ * Scoped handles a set of restrictions on kernel IPCs.
+ *
+ * Scope access flags
+ * ~~~~~~~~~~~~~~~~~~~~
+ * 
+ * These flags enable to restrict a sandboxed process from a set of
+ * inter-process communications actions. Setting a flag in a landlock
+ * domain will isolate the Landlock domain to forbid connections
+ * to resources outside the domain.
+ *
+ * IPCs with scoped actions:
+ * - %LANDLOCK_SCOPED_ABSTRACT_UNIX_SOCKET: Restrict a sandbox process to
+ *   connect to a process outside of the sandbox domain through abstract
+ *   unix sockets. 
+ */
+/* clang-format off */
+#define LANDLOCK_SCOPED_ABSTRACT_UNIX_SOCKET		(1ULL << 0)
+/* clang-format on*/
 #endif /* _UAPI_LINUX_LANDLOCK_H */
