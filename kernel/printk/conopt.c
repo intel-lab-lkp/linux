@@ -140,7 +140,7 @@ int add_preferred_console_match(const char *match, const char *name,
 	if (con->has_brl_opt)
 		brl_opt = con->brl_opt;
 
-	console_opt_add_preferred_console(name, idx, con->opt, brl_opt);
+	console_opt_add_preferred_console(match, name, idx, con->opt, brl_opt);
 
 	return 0;
 }

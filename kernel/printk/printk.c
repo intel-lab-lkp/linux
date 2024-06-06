@@ -2426,6 +2426,24 @@ static void set_user_specified(struct console_cmdline *c, bool user_specified)
 	console_set_on_cmdline = 1;
 }
 
+/* Checks if a console is the last user specified preferred console */
+static bool is_last_user_prefcon(int position)
+{
+	struct console_cmdline *c = console_cmdline;
+	int last_user_specified = -1;
+	int i;
+
+	for (i = 0; i < MAX_CMDLINECONSOLES; i++, c++) {
+		if (!c->name[0] && !c->devname[0])
+			break;
+
+		if (c->user_specified || c->devname[0])
+			last_user_specified = i;
+	}
+
+	return position == last_user_specified;
+}
+
 static int __add_preferred_console(const char *name, const short idx, char *options,
 				   char *brl_options, bool user_specified)
 {
@@ -2445,10 +2463,10 @@ static int __add_preferred_console(const char *name, const short idx, char *opti
 	 *	if we have a slot free.
 	 */
 	for (i = 0, c = console_cmdline;
-	     i < MAX_CMDLINECONSOLES && c->name[0];
+	     i < MAX_CMDLINECONSOLES && (c->name[0] || c->devname[0]);
 	     i++, c++) {
 		if (strcmp(c->name, name) == 0 && c->index == idx) {
-			if (!brl_options)
+			if (!brl_options && (!user_specified || is_last_user_prefcon(i)))
 				preferred_console = i;
 			set_user_specified(c, user_specified);
 			return 0;
@@ -2465,6 +2483,25 @@ static int __add_preferred_console(const char *name, const short idx, char *opti
 
 	c->index = idx;
 	return 0;
+}
+
+/* Reserves a console_cmdline position for a deferred devname console */
+static void reserve_deferred_console(const char *str)
+{
+	struct console_cmdline *c = console_cmdline;
+	size_t namelen;
+	int i;
+
+	namelen = strcspn(str, ",");
+	if (namelen == 0 || namelen >= sizeof(c->devname))
+		return;
+
+	for (i = 0; i < MAX_CMDLINECONSOLES; i++, c++) {
+		if (c->name[0] || c->devname[0])
+			continue;
+		strscpy(c->devname, str, namelen + 1);
+		return;
+	}
 }
 
 static int __init console_msg_format_setup(char *str)
@@ -2508,8 +2545,10 @@ static int __init console_setup(char *str)
 	console_set_on_cmdline = 1;
 
 	/* Don't attempt to parse a DEVNAME:0.0 style console */
-	if (strchr(str, ':'))
+	if (strchr(str, ':')) {
+		reserve_deferred_console(str);
 		return 1;
+	}
 
 	/*
 	 * Decode str into name, index, options.
@@ -2542,9 +2581,26 @@ static int __init console_setup(char *str)
 __setup("console=", console_setup);
 
 /* Only called from add_preferred_console_match() */
-int console_opt_add_preferred_console(const char *name, const short idx,
-				      char *options, char *brl_options)
+int console_opt_add_preferred_console(const char *devname, const char *name,
+				      const short idx, char *options,
+				      char *brl_options)
 {
+	struct console_cmdline *c = console_cmdline;
+	int i;
+
+	/* Populate a reserved console based on devname */
+	for (i = 0; i < MAX_CMDLINECONSOLES; i++, c++) {
+		if (!c->name[0] && !strcmp(c->devname, devname)) {
+			strscpy(c->name, name);
+			c->index = idx;
+			c->options = options;
+#ifdef CONFIG_A11Y_BRAILLE_CONSOLE
+			c->brl_options = brl_options;
+#endif
+			break;
+		}
+	}
+
 	return __add_preferred_console(name, idx, options, brl_options, true);
 }
 
@@ -3333,7 +3389,7 @@ static int try_enable_preferred_console(struct console *newcon,
 	int i, err;
 
 	for (i = 0, c = console_cmdline;
-	     i < MAX_CMDLINECONSOLES && c->name[0];
+	     i < MAX_CMDLINECONSOLES && (c->name[0] || c->devname[0]);
 	     i++, c++) {
 		if (c->user_specified != user_specified)
 			continue;
