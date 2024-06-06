@@ -1,0 +1,109 @@
+// SPDX-License-Identifier: GPL-2.0+
+/*
+ * Copyright (C) 2024 Florian Vaussard <florian.vaussard@gmail.com>
+ */
+
+#include "socfpga_cyclone5.dtsi"
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+#include <dt-bindings/leds/common.h>
+
+/ {
+	model = "Terasic DE1-SOC";
+	compatible = "terasic,de1-soc", "altr,socfpga-cyclone5", "altr,socfpga";
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	memory@0 {
+		device_type = "memory";
+		reg = <0x0 0x40000000>; /* 1GB */
+	};
+
+	aliases {
+		/*
+		 * this allows the ethaddr uboot environmnet variable content
+		 * to be added to the gmac1 device tree blob.
+		 */
+		ethernet0 = &gmac1;
+	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		hps-led {
+			gpios = <&portb 24 GPIO_ACTIVE_HIGH>;	/* HPS_GPIO53 */
+			function = LED_FUNCTION_HEARTBEAT;
+			color = <LED_COLOR_ID_GREEN>;
+			linux,default-trigger = "heartbeat";
+		};
+	};
+
+	gpio-keys {
+		compatible = "gpio-keys";
+
+		hps-key {
+			label = "hps_key";
+			gpios = <&portb 25 GPIO_ACTIVE_LOW>;	/* HPS_GPIO54 */
+			linux,code = <BTN_0>;
+		};
+	};
+
+	reg_3v3_sd: regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "VCC3P3";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+	};
+};
+
+&gmac1 {
+	status = "okay";
+	phy-mode = "rgmii";
+
+	rxd0-skew-ps = <0>;
+	rxd1-skew-ps = <0>;
+	rxd2-skew-ps = <0>;
+	rxd3-skew-ps = <0>;
+	txen-skew-ps = <0>;
+	txc-skew-ps = <2600>;
+	rxdv-skew-ps = <0>;
+	rxc-skew-ps = <2000>;
+};
+
+&gpio0 {	/* GPIO 0..29 */
+	status = "okay";
+};
+
+&gpio1 {	/* GPIO 30..57 */
+	status = "okay";
+};
+
+&gpio2 {	/* GPIO 58..66 (HLGPI 0..13 at offset 13) */
+	status = "okay";
+};
+
+&i2c0 {
+	status = "okay";
+
+	accel1: accelerometer@53 {
+		compatible = "adi,adxl345";
+		reg = <0x53>;
+
+		interrupt-parent = <&portc>;
+		interrupts = <3 IRQ_TYPE_EDGE_FALLING>;
+	};
+};
+
+&mmc0 {
+	vmmc-supply = <&reg_3v3_sd>;
+	vqmmc-supply = <&reg_3v3_sd>;
+	status = "okay";
+};
+
+&usb1 {
+	status = "okay";
+};
