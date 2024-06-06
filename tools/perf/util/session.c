@@ -1478,14 +1478,19 @@ static int deliver_sample_value(struct evlist *evlist,
 {
 	struct perf_sample_id *sid = evlist__id2sid(evlist, v->id);
 	struct evsel *evsel;
+	u64 *storage = NULL;
 
 	if (sid) {
-		sample->id     = v->id;
-		sample->period = v->value - sid->period;
-		sid->period    = v->value;
+		storage  = perf_sample_id__get_period_storage(sid, sample->tid);
 	}
 
-	if (!sid || sid->evsel == NULL) {
+	if (storage) {
+		sample->id     = v->id;
+		sample->period = v->value - *storage;
+		*storage       = v->value;
+	}
+
+	if (!storage || sid->evsel == NULL) {
 		++evlist->stats.nr_unknown_id;
 		return 0;
 	}
