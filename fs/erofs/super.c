@@ -10,6 +10,9 @@
 #include <linux/fs_context.h>
 #include <linux/fs_parser.h>
 #include <linux/exportfs.h>
+#ifdef CONFIG_EROFS_FS_ZIP_CRYPTO
+#include <linux/crypto.h>
+#endif
 #include "xattr.h"
 
 #define CREATE_TRACE_POINTS
@@ -793,7 +796,10 @@ static void erofs_kill_sb(struct super_block *sb)
 		kill_anon_super(sb);
 	else
 		kill_block_super(sb);
-
+#ifdef CONFIG_EROFS_FS_ZIP_CRYPTO
+	if (sbi->crypto)
+		crypto_free_comp(sbi->crypto);
+#endif
 	erofs_free_dev_context(sbi->devs);
 	fs_put_dax(sbi->dax_dev, NULL);
 	erofs_fscache_unregister_fs(sb);

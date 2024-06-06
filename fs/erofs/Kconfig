@@ -127,6 +127,25 @@ config EROFS_FS_ZIP_ZSTD
 
 	  If unsure, say N.
 
+config EROFS_FS_ZIP_CRYPTO
+	bool "EROFS external crypto decompress support"
+	depends on EROFS_FS_ZIP
+	help
+	  Saying Y here to support external crypto for decompressing EROFS
+	  file systems. Some SoCs have hardware decompressor with private
+	  algorithm, which can be used for accelarating decompression of
+	  EROFS. This config enables external cryptos.
+
+	  If unsure, say N.
+
+config EROFS_CRYPTO_MAX_DISTANCE_PAGES
+	int "EROFS max distance pages for crypto usage"
+	default 32
+	help
+	  This config defines max distance pages for external crypto. Crypto
+	  layer will use this value to grow up PCP buffers.
+	  The default value is 128KB(32 pages).
+
 config EROFS_FS_ONDEMAND
 	bool "EROFS fscache-based on-demand read support"
 	depends on EROFS_FS

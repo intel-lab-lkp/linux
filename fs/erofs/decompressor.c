@@ -406,6 +406,13 @@ const struct z_erofs_decompressor erofs_decompressors[] = {
 		.name = "zstd"
 	},
 #endif
+#ifdef CONFIG_EROFS_FS_ZIP_CRYPTO
+	[Z_EROFS_COMPRESSION_CRYPTO] = {
+		.config = z_erofs_load_crypto_config,
+		.decompress = z_erofs_crypto_decompress,
+		.name = "crypto"
+	},
+#endif
 };
 
 int z_erofs_parse_cfgs(struct super_block *sb, struct erofs_super_block *dsb)

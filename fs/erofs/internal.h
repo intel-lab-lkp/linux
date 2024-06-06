@@ -129,6 +129,10 @@ struct erofs_sb_info {
 	struct inode *managed_cache;
 
 	struct erofs_sb_lz4_info lz4;
+#ifdef CONFIG_EROFS_FS_ZIP_CRYPTO
+	/* decompress crypto for other algorithms except lz4/lzma */
+	struct crypto_comp *crypto;
+#endif
 #endif	/* CONFIG_EROFS_FS_ZIP */
 	struct inode *packed_inode;
 	struct erofs_dev_context *devs;

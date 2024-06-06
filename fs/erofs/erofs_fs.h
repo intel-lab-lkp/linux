@@ -297,6 +297,10 @@ enum {
 	Z_EROFS_COMPRESSION_LZMA	= 1,
 	Z_EROFS_COMPRESSION_DEFLATE	= 2,
 	Z_EROFS_COMPRESSION_ZSTD	= 3,
+#ifdef CONFIG_EROFS_FS_ZIP_CRYPTO
+	/* for generic crypto framework */
+	Z_EROFS_COMPRESSION_CRYPTO	= 4,
+#endif
 	Z_EROFS_COMPRESSION_MAX
 };
 #define Z_EROFS_ALL_COMPR_ALGS		((1 << Z_EROFS_COMPRESSION_MAX) - 1)
@@ -329,6 +333,16 @@ struct z_erofs_zstd_cfgs {
 	u8 windowlog;           /* windowLog - ZSTD_WINDOWLOG_ABSOLUTEMIN(10) */
 	u8 reserved[4];
 } __packed;
+
+#ifdef CONFIG_EROFS_FS_ZIP_CRYPTO
+/* 16 bytes */
+struct z_erofs_crypto_cfgs {
+	char   crypto_name[8];
+	__le16 max_distance;
+	__le16 max_pclusterblks;
+	u8     reserved[4];
+} __packed;
+#endif
 
 #define Z_EROFS_ZSTD_MAX_DICT_SIZE      Z_EROFS_PCLUSTER_MAX_SIZE
 

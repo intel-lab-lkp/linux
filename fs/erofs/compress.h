@@ -98,4 +98,32 @@ int z_erofs_deflate_decompress(struct z_erofs_decompress_req *rq,
 			       struct page **pagepool);
 int z_erofs_zstd_decompress(struct z_erofs_decompress_req *rq,
 			    struct page **pgpl);
+
+#ifdef CONFIG_EROFS_FS_ZIP_CRYPTO
+/* for external cryto decompress */
+int z_erofs_crypto_decompress(struct z_erofs_decompress_req *rq,
+			      struct page **pagepool);
+int z_erofs_load_crypto_config(struct super_block *sb,
+			       struct erofs_super_block *dsb,
+			       void *data, int size);
+#else
+static inline int z_erofs_crypto_decompress(struct z_erofs_decompress_req *rq,
+					    struct page **pagepool)
+{
+	return -EINVAL;
+}
+
+static inline int z_erofs_load_crypto_config(struct super_block *sb,
+					     struct erofs_super_block *dsb,
+					     void *data,
+					     int size);
+{
+	if (crypto) {
+		erofs_err(sb, "crypto algorithm isn't enabled");
+		return -EINVAL;
+	}
+	return 0;
+}
+#endif
+
 #endif
