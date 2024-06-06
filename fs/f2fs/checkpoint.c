@@ -1828,8 +1828,11 @@ repeat:
 	if (kthread_should_stop())
 		return 0;
 
-	if (!llist_empty(&cprc->issue_list))
+	if (!llist_empty(&cprc->issue_list)) {
+		sb_start_intwrite(sbi->sb);
 		__checkpoint_and_complete_reqs(sbi);
+		sb_end_intwrite(sbi->sb);
+	}
 
 	wait_event_interruptible(*q,
 		kthread_should_stop() || !llist_empty(&cprc->issue_list));
