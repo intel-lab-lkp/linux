@@ -274,6 +274,7 @@ struct fastrpc_session_ctx {
 };
 
 struct fastrpc_static_pd {
+	struct list_head rmaps;
 	char *servloc_name;
 	char *spdname;
 	void *pdrhandle;
@@ -299,7 +300,6 @@ struct fastrpc_channel_ctx {
 	u32 dsp_attributes[FASTRPC_MAX_DSP_ATTRIBUTES];
 	struct fastrpc_device *secure_fdevice;
 	struct fastrpc_device *fdevice;
-	struct fastrpc_buf *remote_heap;
 	struct list_head invoke_interrupted_mmaps;
 	bool secure;
 	bool unsigned_support;
@@ -1256,6 +1256,53 @@ static bool is_session_rejected(struct fastrpc_user *fl, bool unsigned_pd_reques
 	return false;
 }
 
+static void fastrpc_mmap_remove_pdr(struct fastrpc_static_pd *spd)
+{
+	struct fastrpc_buf *buf, *b;
+	struct fastrpc_channel_ctx *cctx;
+	int err;
+
+	if (!spd || !spd->fl)
+		return;
+
+	cctx = spd->cctx;
+
+	spin_lock(&spd->fl->lock);
+	list_for_each_entry_safe(buf, b, &spd->rmaps, node) {
+		list_del(&buf->node);
+		spin_unlock(&spd->fl->lock);
+		if (cctx->vmcount) {
+			u64 src_perms = 0;
+			struct qcom_scm_vmperm dst_perms;
+			u32 i;
+
+			for (i = 0; i < cctx->vmcount; i++)
+				src_perms |= BIT(cctx->vmperms[i].vmid);
+
+			dst_perms.vmid = QCOM_SCM_VMID_HLOS;
+			dst_perms.perm = QCOM_SCM_PERM_RWX;
+			err = qcom_scm_assign_mem(buf->phys, (u64)buf->size,
+				&src_perms, &dst_perms, 1);
+			if (err) {
+				pr_err("%s: Failed to assign memory phys 0x%llx size 0x%llx err %d\n",
+					__func__, buf->phys, buf->size, err);
+				return;
+			}
+		}
+		fastrpc_buf_free(buf);
+		spin_lock(&spd->fl->lock);
+	}
+	spin_unlock(&spd->fl->lock);
+}
+
+static void fastrpc_mmap_remove_ssr(struct fastrpc_channel_ctx *cctx)
+{
+	int i;
+
+	for (i = 0; i < FASTRPC_MAX_SPD; i++)
+		fastrpc_mmap_remove_pdr(&cctx->spd[i]);
+}
+
 static struct fastrpc_static_pd *fastrpc_get_spd_session(
 				struct fastrpc_user *fl)
 {
@@ -1282,7 +1329,9 @@ static int fastrpc_init_create_static_process(struct fastrpc_user *fl,
 	struct fastrpc_init_create_static init;
 	struct fastrpc_invoke_args *args;
 	struct fastrpc_phy_page pages[1];
+	struct fastrpc_buf *buf = NULL;
 	struct fastrpc_static_pd *spd = NULL;
+	u64 phys = 0, size = 0;
 	char *name;
 	int err;
 	struct {
@@ -1330,23 +1379,23 @@ static int fastrpc_init_create_static_process(struct fastrpc_user *fl,
 		goto err_name;
 	}
 	fl->spd = spd;
-	if (!fl->cctx->remote_heap) {
-		err = fastrpc_remote_heap_alloc(fl, fl->sctx->dev, init.memlen,
-						&fl->cctx->remote_heap);
+	if (list_empty(&spd->rmaps)) {
+		err = fastrpc_remote_heap_alloc(fl, fl->sctx->dev, init.memlen, &buf);
 		if (err)
 			goto err_name;
 
+		phys = buf->phys;
+		size = buf->size;
 		/* Map if we have any heap VMIDs associated with this ADSP Static Process. */
 		if (fl->cctx->vmcount) {
 			u64 src_perms = BIT(QCOM_SCM_VMID_HLOS);
 
-			err = qcom_scm_assign_mem(fl->cctx->remote_heap->phys,
-							(u64)fl->cctx->remote_heap->size,
-							&src_perms,
-							fl->cctx->vmperms, fl->cctx->vmcount);
+			err = qcom_scm_assign_mem(phys, (u64)size,
+						&src_perms,
+						fl->cctx->vmperms, fl->cctx->vmcount);
 			if (err) {
 				dev_err(fl->sctx->dev, "Failed to assign memory with phys 0x%llx size 0x%llx err %d\n",
-					fl->cctx->remote_heap->phys, fl->cctx->remote_heap->size, err);
+					phys, size, err);
 				goto err_map;
 			}
 		}
@@ -1365,8 +1414,8 @@ static int fastrpc_init_create_static_process(struct fastrpc_user *fl,
 	args[1].length = inbuf.namelen;
 	args[1].fd = -1;
 
-	pages[0].addr = fl->cctx->remote_heap->phys;
-	pages[0].size = fl->cctx->remote_heap->size;
+	pages[0].addr = phys;
+	pages[0].size = size;
 
 	args[2].ptr = (u64)(uintptr_t) pages;
 	args[2].length = sizeof(*pages);
@@ -1382,6 +1431,12 @@ static int fastrpc_init_create_static_process(struct fastrpc_user *fl,
 	kfree(args);
 	kfree(name);
 
+	if (buf) {
+		spin_lock(&fl->lock);
+		list_add_tail(&buf->node, &spd->rmaps);
+		spin_unlock(&fl->lock);
+	}
+
 	return 0;
 err_invoke:
 	if (fl->cctx->vmcount) {
@@ -1394,15 +1449,15 @@ err_invoke:
 
 		dst_perms.vmid = QCOM_SCM_VMID_HLOS;
 		dst_perms.perm = QCOM_SCM_PERM_RWX;
-		err = qcom_scm_assign_mem(fl->cctx->remote_heap->phys,
-						(u64)fl->cctx->remote_heap->size,
-						&src_perms, &dst_perms, 1);
+		err = qcom_scm_assign_mem(phys, (u64)size,
+					&src_perms, &dst_perms, 1);
 		if (err)
 			dev_err(fl->sctx->dev, "Failed to assign memory phys 0x%llx size 0x%llx err %d\n",
-				fl->cctx->remote_heap->phys, fl->cctx->remote_heap->size, err);
+				phys, size, err);
 	}
 err_map:
-	fastrpc_buf_free(fl->cctx->remote_heap);
+	if (buf)
+		fastrpc_buf_free(buf);
 err_name:
 	kfree(name);
 err:
@@ -2250,6 +2305,7 @@ static void fastrpc_pdr_cb(int state, char *service_path, void *priv)
 			spd->servloc_name,
 			domains[cctx->domain_id]);
 		spd->ispdup = false;
+		fastrpc_mmap_remove_pdr(spd);
 		fastrpc_notify_pdr_drivers(cctx, spd->servloc_name);
 		break;
 	case SERVREG_SERVICE_STATE_UP:
@@ -2401,6 +2457,7 @@ static int fastrpc_setup_service_locator(struct fastrpc_channel_ctx *cctx, char 
 	cctx->spd[spd_session].servloc_name = client_name;
 	cctx->spd[spd_session].spdname = service_path;
 	cctx->spd[spd_session].cctx = cctx;
+	INIT_LIST_HEAD(&cctx->spd[spd_session].rmaps);
 	service = pdr_add_lookup(handle, service_name, service_path);
 	if (IS_ERR(service)) {
 		err = PTR_ERR(service);
@@ -2567,15 +2624,14 @@ static void fastrpc_rpmsg_remove(struct rpmsg_device *rpdev)
 	list_for_each_entry_safe(buf, b, &cctx->invoke_interrupted_mmaps, node)
 		list_del(&buf->node);
 
-	if (cctx->remote_heap)
-		fastrpc_buf_free(cctx->remote_heap);
-
 	for (i = 0; i < FASTRPC_MAX_SPD; i++) {
 		if (cctx->spd[i].pdrhandle)
 			pdr_handle_release(cctx->spd[i].pdrhandle);
 	}
 
 	of_platform_depopulate(&rpdev->dev);
+
+	fastrpc_mmap_remove_ssr(cctx);
 
 	fastrpc_channel_ctx_put(cctx);
 }
