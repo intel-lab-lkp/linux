@@ -269,7 +269,8 @@ hpet_read(struct file *file, char __user *buf, size_t count, loff_t * ppos)
 	if (!devp->hd_ireqfreq)
 		return -EIO;
 
-	if (count < sizeof(unsigned long))
+	if ((sizeof(int) != sizeof(long) && count < sizeof(compat_ulong_t)) ||
+	    (sizeof(int) == sizeof(long) && count < sizeof(unsigned long)))
 		return -EINVAL;
 
 	add_wait_queue(&devp->hd_waitqueue, &wait);
@@ -294,9 +295,15 @@ hpet_read(struct file *file, char __user *buf, size_t count, loff_t * ppos)
 		schedule();
 	}
 
-	retval = put_user(data, (unsigned long __user *)buf);
-	if (!retval)
-		retval = sizeof(unsigned long);
+	if (sizeof(int) != sizeof(long) && count == sizeof(compat_ulong_t)) {
+		retval = put_user(data, (compat_ulong_t __user *)buf);
+		if (!retval)
+			retval = sizeof(compat_ulong_t);
+	} else {
+		retval = put_user(data, (unsigned long __user *)buf);
+		if (!retval)
+			retval = sizeof(unsigned long);
+	}
 out:
 	__set_current_state(TASK_RUNNING);
 	remove_wait_queue(&devp->hd_waitqueue, &wait);
@@ -651,14 +658,23 @@ struct compat_hpet_info {
 	unsigned short hi_timer;
 };
 
+#define COMPAT_HPET_INFO       _IOR('h', 0x03, struct compat_hpet_info)
+#define COMPAT_HPET_IRQFREQ    _IOW('h', 0x6, compat_ulong_t)
+
 static long
 hpet_compat_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct hpet_info info;
 	int err;
 
+	if (cmd == COMPAT_HPET_INFO)
+		cmd = HPET_INFO;
+
+	if (cmd == COMPAT_HPET_IRQFREQ)
+		cmd = HPET_IRQFREQ;
+
 	mutex_lock(&hpet_mutex);
-	err = hpet_ioctl_common(file->private_data, cmd, arg, &info);
+	err = hpet_ioctl_common(file->private_data, cmd, (unsigned long)compat_ptr(arg), &info);
 	mutex_unlock(&hpet_mutex);
 
 	if ((cmd == HPET_INFO) && !err) {
