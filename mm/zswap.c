@@ -1577,6 +1577,9 @@ bool zswap_load(struct folio *folio)
 	if (!entry)
 		return false;
 
+	/* Zswap loads do not handle large folio swapins correctly yet */
+	VM_BUG_ON(folio_test_large(folio));
+
 	if (entry->length)
 		zswap_decompress(entry, folio);
 	else
