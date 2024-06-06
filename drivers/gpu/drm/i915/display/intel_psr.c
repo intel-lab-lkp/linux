@@ -811,7 +811,7 @@ static u8 psr_compute_idle_frames(struct intel_dp *intel_dp)
 	return idle_frames;
 }
 
-static void hsw_activate_psr1(struct intel_dp *intel_dp)
+static bool hsw_activate_psr1(struct intel_dp *intel_dp)
 {
 	struct drm_i915_private *dev_priv = dp_to_i915(intel_dp);
 	enum transcoder cpu_transcoder = intel_dp->psr.transcoder;
@@ -839,6 +839,8 @@ static void hsw_activate_psr1(struct intel_dp *intel_dp)
 
 	intel_de_rmw(dev_priv, psr_ctl_reg(dev_priv, cpu_transcoder),
 		     ~EDP_PSR_RESTORE_PSR_ACTIVE_CTX_MASK, val);
+
+	return true;
 }
 
 static u32 intel_psr2_get_tp_time(struct intel_dp *intel_dp)
@@ -1540,6 +1542,7 @@ static void intel_psr_activate(struct intel_dp *intel_dp)
 {
 	struct drm_i915_private *dev_priv = dp_to_i915(intel_dp);
 	enum transcoder cpu_transcoder = intel_dp->psr.transcoder;
+	bool ret = true;
 
 	drm_WARN_ON(&dev_priv->drm,
 		    transcoder_has_psr2(dev_priv, cpu_transcoder) &&
@@ -1558,9 +1561,9 @@ static void intel_psr_activate(struct intel_dp *intel_dp)
 	else if (intel_dp->psr.sel_update_enabled)
 		hsw_activate_psr2(intel_dp);
 	else
-		hsw_activate_psr1(intel_dp);
+		ret = hsw_activate_psr1(intel_dp);
 
-	intel_dp->psr.active = true;
+	intel_dp->psr.active = ret;
 }
 
 static u32 wa_16013835468_bit_get(struct intel_dp *intel_dp)
