@@ -525,25 +525,23 @@ static void dcn32_auto_dpm_test_log(
 
 	mall_ss_size_bytes = context->bw_ctx.bw.dcn.mall_ss_size_bytes;
 
-    dispclk_khz_reg    = REG_READ(CLK1_CLK0_CURRENT_CNT); // DISPCLK
-    dppclk_khz_reg     = REG_READ(CLK1_CLK1_CURRENT_CNT); // DPPCLK
-    dprefclk_khz_reg   = REG_READ(CLK1_CLK2_CURRENT_CNT); // DPREFCLK
-    dcfclk_khz_reg     = REG_READ(CLK1_CLK3_CURRENT_CNT); // DCFCLK
-    dtbclk_khz_reg     = REG_READ(CLK1_CLK4_CURRENT_CNT); // DTBCLK
-    fclk_khz_reg       = REG_READ(CLK4_CLK0_CURRENT_CNT); // FCLK
+	dispclk_khz_reg    = REG_READ(CLK1_CLK0_CURRENT_CNT); // DISPCLK
+	dppclk_khz_reg     = REG_READ(CLK1_CLK1_CURRENT_CNT); // DPPCLK
+	dprefclk_khz_reg   = REG_READ(CLK1_CLK2_CURRENT_CNT); // DPREFCLK
+	dcfclk_khz_reg     = REG_READ(CLK1_CLK3_CURRENT_CNT); // DCFCLK
+	dtbclk_khz_reg     = REG_READ(CLK1_CLK4_CURRENT_CNT); // DTBCLK
+	fclk_khz_reg       = REG_READ(CLK4_CLK0_CURRENT_CNT); // FCLK
 
-    // Overrides for these clocks in case there is no p_state change support
-    dramclk_khz_override = new_clocks->dramclk_khz;
-    fclk_khz_override = new_clocks->fclk_khz;
+	// Overrides for these clocks in case there is no p_state change support
+	dramclk_khz_override = new_clocks->dramclk_khz;
+	fclk_khz_override = new_clocks->fclk_khz;
 
-    num_fclk_levels = clk_mgr->base.bw_params->clk_table.num_entries_per_clk.num_fclk_levels - 1;
+	num_fclk_levels = clk_mgr->base.bw_params->clk_table.num_entries_per_clk.num_fclk_levels - 1;
 
-    if (!new_clocks->p_state_change_support) {
-	    dramclk_khz_override = clk_mgr->base.bw_params->max_memclk_mhz * 1000;
-    }
-    if (!new_clocks->fclk_p_state_change_support) {
-	    fclk_khz_override = clk_mgr->base.bw_params->clk_table.entries[num_fclk_levels].fclk_mhz * 1000;
-    }
+	if (!new_clocks->p_state_change_support)
+		dramclk_khz_override = clk_mgr->base.bw_params->max_memclk_mhz * 1000;
+	if (!new_clocks->fclk_p_state_change_support)
+		fclk_khz_override = clk_mgr->base.bw_params->clk_table.entries[num_fclk_levels].fclk_mhz * 1000;
 
 	////////////////////////////////////////////////////////////////////////////
 	//	IMPORTANT: 	When adding more clocks to these logs, do NOT put a newline
