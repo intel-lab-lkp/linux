@@ -99,6 +99,7 @@ static int hibmc_kms_init(struct hibmc_drm_private *priv)
 	ret = drmm_mode_config_init(dev);
 	if (ret)
 		return ret;
+	priv->mode_config_initialized = true;
 
 	dev->mode_config.min_width = 0;
 	dev->mode_config.min_height = 0;
@@ -240,9 +241,12 @@ static int hibmc_hw_init(struct hibmc_drm_private *priv)
 static int hibmc_unload(struct drm_device *dev)
 {
 	struct pci_dev *pdev = to_pci_dev(dev->dev);
+	struct hibmc_drm_private *priv = to_hibmc_drm_private(dev);
 
-	drm_atomic_helper_shutdown(dev);
-
+	if(priv->mode_config_initialized){
+		drm_atomic_helper_shutdown(dev);
+		priv->mode_config_initialized = false;
+	}
 	free_irq(pdev->irq, dev);
 
 	pci_disable_msi(to_pci_dev(dev->dev));
