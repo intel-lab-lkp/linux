@@ -191,7 +191,7 @@ static int _aead_recvmsg(struct socket *sock, struct msghdr *msg,
 		if (tsgl_src)
 			break;
 	}
-	if (processed && !tsgl_src) {
+	if (processed || !tsgl_src) {
 		err = -EFAULT;
 		goto free;
 	}
