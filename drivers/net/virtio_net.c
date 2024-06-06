@@ -2680,7 +2680,9 @@ static int virtnet_tx_resize(struct virtnet_info *vi,
  * supported by the hypervisor, as indicated by feature bits, should
  * never fail unless improperly formatted.
  */
-static bool virtnet_send_command_reply(struct virtnet_info *vi, u8 class, u8 cmd,
+static bool virtnet_send_command_reply(struct virtnet_info *vi,
+				       u8 class, u8 cmd,
+				       struct control_buf *ctrl,
 				       struct scatterlist *out,
 				       struct scatterlist *in)
 {
@@ -2692,18 +2694,18 @@ static bool virtnet_send_command_reply(struct virtnet_info *vi, u8 class, u8 cmd
 	BUG_ON(!virtio_has_feature(vi->vdev, VIRTIO_NET_F_CTRL_VQ));
 
 	mutex_lock(&vi->cvq_lock);
-	vi->ctrl->status = ~0;
-	vi->ctrl->hdr.class = class;
-	vi->ctrl->hdr.cmd = cmd;
+	ctrl->status = ~0;
+	ctrl->hdr.class = class;
+	ctrl->hdr.cmd = cmd;
 	/* Add header */
-	sg_init_one(&hdr, &vi->ctrl->hdr, sizeof(vi->ctrl->hdr));
+	sg_init_one(&hdr, &ctrl->hdr, sizeof(ctrl->hdr));
 	sgs[out_num++] = &hdr;
 
 	if (out)
 		sgs[out_num++] = out;
 
 	/* Add return status. */
-	sg_init_one(&stat, &vi->ctrl->status, sizeof(vi->ctrl->status));
+	sg_init_one(&stat, &ctrl->status, sizeof(ctrl->status));
 	sgs[out_num + in_num++] = &stat;
 
 	if (in)
@@ -2732,13 +2734,13 @@ static bool virtnet_send_command_reply(struct virtnet_info *vi, u8 class, u8 cmd
 
 unlock:
 	mutex_unlock(&vi->cvq_lock);
-	return vi->ctrl->status == VIRTIO_NET_OK;
+	return ctrl->status == VIRTIO_NET_OK;
 }
 
 static bool virtnet_send_command(struct virtnet_info *vi, u8 class, u8 cmd,
 				 struct scatterlist *out)
 {
-	return virtnet_send_command_reply(vi, class, cmd, out, NULL);
+	return virtnet_send_command_reply(vi, class, cmd, vi->ctrl, out, NULL);
 }
 
 static int virtnet_set_mac_address(struct net_device *dev, void *p)
@@ -4018,7 +4020,7 @@ static int __virtnet_get_hw_stats(struct virtnet_info *vi,
 
 	ok = virtnet_send_command_reply(vi, VIRTIO_NET_CTRL_STATS,
 					VIRTIO_NET_CTRL_STATS_GET,
-					&sgs_out, &sgs_in);
+					vi->ctrl, &sgs_out, &sgs_in);
 
 	if (!ok)
 		return ok;
@@ -5882,7 +5884,7 @@ static int virtnet_probe(struct virtio_device *vdev)
 
 		if (!virtnet_send_command_reply(vi, VIRTIO_NET_CTRL_STATS,
 						VIRTIO_NET_CTRL_STATS_QUERY,
-						NULL, &sg)) {
+						vi->ctrl, NULL, &sg)) {
 			pr_debug("virtio_net: fail to get stats capability\n");
 			rtnl_unlock();
 			err = -EINVAL;
