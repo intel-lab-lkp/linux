@@ -58,9 +58,9 @@ DECLARE_EVENT_CLASS(drm_sched_job,
 				   &sched_job->sched->credit_count);
 			   __entry->dev_index = sched_job->sched->dev->primary->index;
 			   ),
-	    TP_printk("entity=%p, id=%llu, fence=%p, ring=%s, job count:%u, hw job count:%d",
-		      __entry->entity, __entry->id,
-		      __entry->fence, __get_str(name),
+	    TP_printk("id=%llu, fence=(context:%llu, seqno:%lld), ring=%s, job count:%u, hw job count:%d",
+		      __entry->id,
+		      __entry->fence->context, __entry->fence->seqno, __get_str(name),
 		      __entry->job_count, __entry->hw_job_count)
 );
 
@@ -72,9 +72,9 @@ DEFINE_EVENT(drm_sched_job, drm_sched_job,
 DEFINE_EVENT_PRINT(drm_sched_job, drm_run_job,
 	    TP_PROTO(struct drm_sched_job *sched_job, struct drm_sched_entity *entity),
 	    TP_ARGS(sched_job, entity),
-	    TP_printk("dev_index=%d entity=%p id=%llu, fence=%p, ring=%s, job count:%u, hw job count:%d",
-		      __entry->dev_index, __entry->entity, __entry->id,
-		      __entry->fence, __get_str(name),
+	    TP_printk("dev_index=%d id=%llu, fence=(context:%llu, seqno:%lld), ring=%s, job count:%u, hw job count:%d",
+		      __entry->dev_index, __entry->id,
+		      __entry->fence->context, __entry->fence->seqno, __get_str(name),
 		      __entry->job_count, __entry->hw_job_count)
 );
 
@@ -88,7 +88,8 @@ TRACE_EVENT(drm_sched_process_job,
 	    TP_fast_assign(
 		    __entry->fence = &fence->finished;
 		    ),
-	    TP_printk("fence=%p signaled", __entry->fence)
+	    TP_printk("fence=(context:%llu, seqno:%lld) signaled",
+		      __entry->fence->context, __entry->fence->seqno)
 );
 
 TRACE_EVENT(drm_sched_job_wait_dep,
@@ -96,23 +97,25 @@ TRACE_EVENT(drm_sched_job_wait_dep,
 	    TP_ARGS(sched_job, fence),
 	    TP_STRUCT__entry(
 			     __string(name, sched_job->sched->name)
+			     __field(uint64_t, fence_context)
 			     __field(uint64_t, id)
 			     __field(struct dma_fence *, fence)
 			     __field(uint64_t, ctx)
-			     __field(unsigned, seqno)
+			     __field(uint64_t, seqno)
 			     ),
 
 	    TP_fast_assign(
 			   __assign_str(name);
+			   /* Store the hw exec fence context. */
+			   __entry->fence_context = sched_job->entity->fence_context + 1;
 			   __entry->id = sched_job->id;
 			   __entry->fence = fence;
 			   __entry->ctx = fence->context;
 			   __entry->seqno = fence->seqno;
 			   ),
-	    TP_printk("job ring=%s, id=%llu, depends fence=%p, context=%llu, seq=%u",
-		      __get_str(name), __entry->id,
-		      __entry->fence, __entry->ctx,
-		      __entry->seqno)
+	    TP_printk("job ring=%s, fence_context=%llu, id=%llu, depends fence=(context:%llu, seqno:%lld)",
+		      __get_str(name), __entry->fence_context, __entry->id,
+		      __entry->ctx, __entry->seqno)
 );
 
 #endif
