@@ -431,7 +431,7 @@ bool bio_integrity_prep(struct bio *bio)
 	void *buf;
 	unsigned long start, end;
 	unsigned int len, nr_pages;
-	unsigned int bytes, offset, i;
+	unsigned int bytes, offset, i, intervals;
 
 	if (!bi)
 		return true;
@@ -457,7 +457,13 @@ bool bio_integrity_prep(struct bio *bio)
 	}
 
 	/* Allocate kernel buffer for protection data */
-	len = bio_integrity_bytes(bi, bio_sectors(bio));
+	intervals = bio_integrity_intervals(bi, bio_sectors(bio));
+	if (unlikely((bio->bi_vcnt && intervals < bio->bi_vcnt) ||
+		     (!bio->bi_vcnt && intervals < bio_segments(bio)))) {
+		printk(KERN_ERR"BIO segments are not aligned according to integrity interval\n");
+		goto err_end_io;
+	}
+	len = intervals * bi->tuple_size;
 	buf = kmalloc(len, GFP_NOIO);
 	if (unlikely(buf == NULL)) {
 		printk(KERN_ERR "could not allocate integrity buffer\n");
