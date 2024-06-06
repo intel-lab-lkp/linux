@@ -76,7 +76,7 @@ static int gc_thread_func(void *data)
 			f2fs_stop_checkpoint(sbi, false,
 					STOP_CP_REASON_FAULT_INJECT);
 
-		if (!sb_start_write_trylock(sbi->sb)) {
+		if (!sb_start_intwrite_trylock(sbi->sb)) {
 			stat_other_skip_bggc_count(sbi);
 			continue;
 		}
@@ -163,7 +163,7 @@ next:
 			}
 			spin_unlock(&sbi->gc_remaining_trials_lock);
 		}
-		sb_end_write(sbi->sb);
+		sb_end_intwrite(sbi->sb);
 
 	} while (!kthread_should_stop());
 	return 0;
