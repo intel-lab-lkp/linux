@@ -280,8 +280,10 @@ config QCOM_FASTRPC
 	tristate "Qualcomm FastRPC"
 	depends on ARCH_QCOM || COMPILE_TEST
 	depends on RPMSG
+	depends on NET
 	select DMA_SHARED_BUFFER
 	select QCOM_SCM
+	select QCOM_PDR_HELPERS
 	help
 	  Provides a communication mechanism that allows for clients to
 	  make remote method invocations across processor boundary to
