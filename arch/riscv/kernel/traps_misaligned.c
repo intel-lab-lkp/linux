@@ -16,6 +16,7 @@
 #include <asm/entry-common.h>
 #include <asm/hwprobe.h>
 #include <asm/cpufeature.h>
+#include <asm/vector.h>
 
 #define INSN_MATCH_LB			0x3
 #define INSN_MASK_LB			0x707f
@@ -413,10 +414,6 @@ int handle_misaligned_load(struct pt_regs *regs)
 
 	perf_sw_event(PERF_COUNT_SW_ALIGNMENT_FAULTS, 1, regs, addr);
 
-#ifdef CONFIG_RISCV_PROBE_UNALIGNED_ACCESS
-	*this_cpu_ptr(&misaligned_access_speed) = RISCV_HWPROBE_MISALIGNED_EMULATED;
-#endif
-
 	if (!unaligned_enabled)
 		return -1;
 
@@ -425,6 +422,17 @@ int handle_misaligned_load(struct pt_regs *regs)
 
 	if (get_insn(regs, epc, &insn))
 		return -1;
+
+#ifdef CONFIG_RISCV_PROBE_UNALIGNED_ACCESS
+	if (insn_is_vector(insn) &&
+	    *this_cpu_ptr(&vector_misaligned_access) == RISCV_HWPROBE_VEC_MISALIGNED_SUPPORTED) {
+		*this_cpu_ptr(&vector_misaligned_access) = RISCV_HWPROBE_VEC_MISALIGNED_UNSUPPORTED;
+		regs->epc = epc + INSN_LEN(insn);
+		return 0;
+	}
+
+	*this_cpu_ptr(&misaligned_access_speed) = RISCV_HWPROBE_MISALIGNED_EMULATED;
+#endif
 
 	regs->epc = 0;
 
@@ -624,6 +632,74 @@ static bool check_unaligned_access_emulated(int cpu)
 
 	return misaligned_emu_detected;
 }
+
+#ifdef CONFIG_RISCV_ISA_V
+static void check_vector_unaligned_access(struct work_struct *unused)
+{
+	int cpu = smp_processor_id();
+	long *mas_ptr = this_cpu_ptr(&vector_misaligned_access);
+	unsigned long tmp_var;
+
+	if (!riscv_isa_extension_available(hart_isa[cpu].isa, v))
+		return;
+
+	*mas_ptr = RISCV_HWPROBE_VEC_MISALIGNED_SUPPORTED;
+
+	local_irq_enable();
+	kernel_vector_begin();
+	__asm__ __volatile__ (
+		".balign 4\n\t"
+		".option push\n\t"
+		".option arch, +v\n\t"
+		"       vsetivli zero, 1, e16, m1, ta, ma\n\t"	// Vectors of 16b
+		"	vle16.v v0, (%[ptr])\n\t"		// Load bytes
+		".option pop\n\t"
+		: : [ptr] "r" ((u8 *)&tmp_var + 1) : "v0", "memory");
+	kernel_vector_end();
+
+	if (*mas_ptr == RISCV_HWPROBE_VEC_MISALIGNED_UNKNOWN)
+		*mas_ptr = RISCV_HWPROBE_VEC_MISALIGNED_SUPPORTED;
+}
+
+bool check_vector_unaligned_access_all_cpus(void)
+{
+	int cpu;
+	bool ret = true;
+
+	for_each_online_cpu(cpu)
+		if (riscv_isa_extension_available(hart_isa[cpu].isa, ZICCLSM))
+			per_cpu(vector_misaligned_access, cpu) = RISCV_HWPROBE_VEC_MISALIGNED_SUPPORTED;
+		else
+			ret = false;
+
+
+	if (ret)
+		return true;
+	ret = true;
+
+	schedule_on_each_cpu(check_vector_unaligned_access);
+
+	for_each_online_cpu(cpu)
+		if (per_cpu(vector_misaligned_access, cpu)
+		    != RISCV_HWPROBE_VEC_MISALIGNED_SUPPORTED)
+			return false;
+
+	return ret;
+}
+#else
+bool check_vector_unaligned_access_all_cpus(void)
+{
+	int cpu;
+
+	for_each_online_cpu(cpu)
+		if (riscv_isa_extension_available(hart_isa[cpu].isa, ZICCLSM))
+			per_cpu(vector_misaligned_access, cpu) = RISCV_HWPROBE_VEC_MISALIGNED_SUPPORTED;
+		else
+			per_cpu(vector_misaligned_access, cpu) = RISCV_HWPROBE_VEC_MISALIGNED_UNSUPPORTED;
+
+	return false;
+}
+#endif
 
 bool check_unaligned_access_emulated_all_cpus(void)
 {
