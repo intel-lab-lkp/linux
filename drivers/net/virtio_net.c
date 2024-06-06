@@ -372,6 +372,8 @@ struct virtio_net_ctrl_rss {
 struct control_buf {
 	struct virtio_net_ctrl_hdr hdr;
 	virtio_net_ctrl_ack status;
+	/* Wait for the device to complete the cvq request. */
+	struct completion completion;
 };
 
 struct virtnet_info {
@@ -662,6 +664,13 @@ static bool virtqueue_napi_complete(struct napi_struct *napi,
 	}
 
 	return false;
+}
+
+static void virtnet_cvq_done(struct virtqueue *cvq)
+{
+	struct virtnet_info *vi = cvq->vdev->priv;
+
+	complete(&vi->ctrl->completion);
 }
 
 static void skb_xmit_done(struct virtqueue *vq)
@@ -2723,14 +2732,8 @@ static bool virtnet_send_command_reply(struct virtnet_info *vi,
 	if (unlikely(!virtqueue_kick(vi->cvq)))
 		goto unlock;
 
-	/* Spin for a response, the kick causes an ioport write, trapping
-	 * into the hypervisor, so the request should be handled immediately.
-	 */
-	while (!virtqueue_get_buf(vi->cvq, &tmp) &&
-	       !virtqueue_is_broken(vi->cvq)) {
-		cond_resched();
-		cpu_relax();
-	}
+	wait_for_completion(&vi->ctrl->completion);
+	virtqueue_get_buf(vi->cvq, &tmp);
 
 unlock:
 	mutex_unlock(&vi->cvq_lock);
@@ -5314,7 +5317,7 @@ static int virtnet_find_vqs(struct virtnet_info *vi)
 
 	/* Parameters for control virtqueue, if any */
 	if (vi->has_cvq) {
-		callbacks[total_vqs - 1] = NULL;
+		callbacks[total_vqs - 1] = virtnet_cvq_done;
 		names[total_vqs - 1] = "control";
 	}
 
@@ -5834,6 +5837,7 @@ static int virtnet_probe(struct virtio_device *vdev)
 	if (vi->has_rss || vi->has_rss_hash_report)
 		virtnet_init_default_rss(vi);
 
+	init_completion(&vi->ctrl->completion);
 	enable_rx_mode_work(vi);
 
 	/* serialize netdev register + virtio_device_ready() with ndo_open() */
