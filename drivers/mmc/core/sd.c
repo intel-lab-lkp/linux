@@ -928,8 +928,19 @@ int mmc_sd_setup_card(struct mmc_host *host, struct mmc_card *card,
 	bool reinit)
 {
 	int err;
+	u32 card_status;
 
-	if (!reinit) {
+	err = mmc_send_status(card, &card_status);
+	if (err){
+		pr_err("%s: unable to get card status\n", mmc_hostname(host));
+		return err;
+	}
+
+	if (card_status & R1_CARD_IS_LOCKED){
+		pr_warn("%s: card is locked\n", mmc_hostname(host));
+	}
+
+	if (!reinit && !(card_status & R1_CARD_IS_LOCKED)) {
 		/*
 		 * Fetch SCR from card.
 		 */
