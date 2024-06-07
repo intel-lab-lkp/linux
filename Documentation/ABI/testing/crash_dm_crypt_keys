@@ -29,4 +29,7 @@ Description:	read/write
         the kdump kernel has been loaded with the dm crypt keys stored to kdump
         reserved memory
 
+    After the kdump kernel gets booted, user space can write anything to this API
+    so the dm crypt keys can be restored to the keyring.
+
 User:		Kdump service
