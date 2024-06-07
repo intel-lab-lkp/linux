@@ -11,6 +11,8 @@
 #include <asm/cpufeature.h>
 #include <asm/sysreg.h>
 
+#define ARMV8_PMU_CYCLE_IDX		31
+
 #define RETURN_READ_PMEVCNTRN(n) \
 	return read_sysreg(pmevcntr##n##_el0)
 static inline unsigned long read_pmevcntrn(int n)
