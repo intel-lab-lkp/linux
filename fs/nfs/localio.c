@@ -13,6 +13,7 @@
 #include <linux/sunrpc/addr.h>
 #include <linux/inetdevice.h>
 #include <net/addrconf.h>
+#include <linux/nfslocalio.h>
 #include <linux/module.h>
 #include <linux/bvec.h>
 
@@ -227,16 +228,65 @@ nfs_local_disable(struct nfs_client *clp)
 	}
 }
 
-/*
- * nfs_local_probe - probe local i/o support for an nfs_client
- */
-void
-nfs_local_probe(struct nfs_client *clp)
+static bool nfs_local_server_getuuid(struct nfs_client *clp, uuid_t *nfsd_uuid)
 {
-	bool enable = false;
+	u8 uuid[UUID_SIZE];
+	struct nfs_getuuidres res = {
+		uuid,
+	};
+	struct rpc_message msg = {
+		.rpc_resp = &res,
+	};
+	int status;
 
-	if (enable)
-		nfs_local_enable(clp);
+	clp->rpc_ops->init_localioclient(clp);
+	if (IS_ERR(clp->cl_rpcclient_localio))
+		return false;
+
+	dprintk("%s: NFS issuing getuuid\n", __func__);
+	msg.rpc_proc = &clp->cl_rpcclient_localio->cl_procinfo[LOCALIOPROC_GETUUID];
+	status = rpc_call_sync(clp->cl_rpcclient_localio, &msg, 0);
+	dprintk("%s: NFS reply getuuid: status=%d uuid=%pU uuid_len=%u\n",
+		__func__, status, res.uuid, res.len);
+	if (status || res.len != UUID_SIZE)
+		return false;
+
+	import_uuid(nfsd_uuid, res.uuid);
+
+	return true;
+}
+
+/*
+ * nfs_local_probe - probe local i/o support for an nfs_server and nfs_client
+ * - called after alloc_client and init_client (so cl_rpcclient exists)
+ */
+void nfs_local_probe(struct nfs_client *clp)
+{
+	uuid_t uuid;
+
+	if (!localio_enabled)
+		return;
+
+	switch (clp->cl_rpcclient->cl_vers) {
+	case 3:
+		/*
+		 * Retrieve server's uuid via LOCALIO protocol and verify the
+		 * server with that uuid it is known to be local. This ensures
+		 * client and server 1: support localio 2: are local to each other.
+		 */
+		if (!nfs_local_server_getuuid(clp, &uuid))
+			return;
+		/* Verify client's nfsd, with specififed uuid, is local */
+		if (!nfsd_uuid_is_local(&uuid))
+			return;
+		break;
+	case 4:
+	default:
+		return; /* localio not supported */
+	}
+
+	dprintk("%s: detected local server.\n", __func__);
+	nfs_local_enable(clp);
 }
 EXPORT_SYMBOL_GPL(nfs_local_probe);
 

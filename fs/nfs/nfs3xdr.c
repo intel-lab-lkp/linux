@@ -2579,3 +2579,61 @@ const struct rpc_version nfsacl_version3 = {
 	.counts			= nfs3_acl_counts,
 };
 #endif  /* CONFIG_NFS_V3_ACL */
+
+#if defined(CONFIG_NFS_V3_LOCALIO)
+
+#define LOCALIO3_getuuidres_sz	(1+NFS3_filename_sz)
+
+static void nfs3_xdr_enc_getuuidargs(struct rpc_rqst *req,
+				struct xdr_stream *xdr,
+				const void *data)
+{
+	/* void function */
+}
+
+static inline int nfs3_decode_getuuidresok(struct xdr_stream *xdr,
+					struct nfs_getuuidres *result)
+{
+	return decode_inline_filename3(xdr, &result->uuid, &result->len);
+}
+
+static int nfs3_xdr_dec_getuuidres(struct rpc_rqst *req,
+				struct xdr_stream *xdr,
+				void *result)
+{
+	enum nfs_stat status;
+	int error;
+
+	error = decode_nfsstat3(xdr, &status);
+	if (unlikely(error))
+		goto out;
+	if (status != NFS3_OK)
+		goto out_default;
+	error = nfs3_decode_getuuidresok(xdr, result);
+out:
+	return error;
+out_default:
+	return nfs3_stat_to_errno(status);
+}
+
+static const struct rpc_procinfo nfs3_localio_procedures[] = {
+	[LOCALIOPROC_GETUUID] = {
+		.p_proc = LOCALIOPROC_GETUUID,
+		.p_encode = nfs3_xdr_enc_getuuidargs,
+		.p_decode = nfs3_xdr_dec_getuuidres,
+		.p_arglen = 1,
+		.p_replen = LOCALIO3_getuuidres_sz,
+		.p_timer = 0,
+		.p_name = "GETUUID",
+	},
+};
+
+static unsigned int nfs3_localio_counts[ARRAY_SIZE(nfs3_localio_procedures)];
+const struct rpc_version nfslocalio_version3 = {
+	.number			= 3,
+	.nrprocs		= ARRAY_SIZE(nfs3_localio_procedures),
+	.procs			= nfs3_localio_procedures,
+	.counts			= nfs3_localio_counts,
+};
+
+#endif  /* CONFIG_NFS_V3_LOCALIO */

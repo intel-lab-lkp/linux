@@ -7,6 +7,8 @@
 #include "netns.h"
 #include "sysfs.h"
 
+#define NFSDBG_FACILITY		NFSDBG_CLIENT
+
 #ifdef CONFIG_NFS_V3_ACL
 static struct rpc_stat		nfsacl_rpcstat = { &nfsacl_program };
 static const struct rpc_version *nfsacl_version[] = {
@@ -130,3 +132,43 @@ struct nfs_client *nfs3_set_ds_client(struct nfs_server *mds_srv,
 	return clp;
 }
 EXPORT_SYMBOL_GPL(nfs3_set_ds_client);
+
+#if defined(CONFIG_NFS_V3_LOCALIO)
+static struct rpc_stat		nfslocalio_rpcstat = { &nfslocalio_program3 };
+static const struct rpc_version *nfslocalio_version[] = {
+	[3]			= &nfslocalio_version3,
+};
+
+const struct rpc_program nfslocalio_program3 = {
+	.name			= "nfslocalio",
+	.number			= NFS_LOCALIO_PROGRAM,
+	.nrvers			= ARRAY_SIZE(nfslocalio_version),
+	.version		= nfslocalio_version,
+	.stats			= &nfslocalio_rpcstat,
+};
+
+/*
+ * Initialise an NFSv3 localio client connection
+ */
+void nfs3_init_localioclient(struct nfs_client *clp)
+{
+	if (unlikely(!IS_ERR(clp->cl_rpcclient_localio)))
+		goto out;
+
+	clp->cl_rpcclient_localio = rpc_bind_new_program(clp->cl_rpcclient,
+							&nfslocalio_program3, 3);
+	if (IS_ERR(clp->cl_rpcclient_localio)) {
+		dprintk_rcu("%s: server (%s) does not support NFS v3 LOCALIO\n", __func__,
+			rpc_peeraddr2str(clp->cl_rpcclient, RPC_DISPLAY_ADDR));
+		return;
+	}
+out:
+	/* No errors! Assume that localio is supported */
+	dprintk_rcu("%s: server (%s) supports NFS v3 LOCALIO\n", __func__,
+		rpc_peeraddr2str(clp->cl_rpcclient_localio, RPC_DISPLAY_ADDR));
+}
+#else
+void nfs3_init_localioclient(struct nfs_client *clp)
+{
+}
+#endif /* CONFIG_NFS_V3_LOCALIO */

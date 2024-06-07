@@ -1002,6 +1002,11 @@ struct nfs3_getaclres {
 	struct posix_acl *	acl_default;
 };
 
+struct nfs_getuuidres {
+	const char *		uuid;
+	unsigned int		len;
+};
+
 #if IS_ENABLED(CONFIG_NFS_V4)
 
 typedef u64 clientid4;
@@ -1819,6 +1824,7 @@ struct nfs_rpc_ops {
 	int	(*discover_trunking)(struct nfs_server *, struct nfs_fh *);
 	void	(*enable_swap)(struct inode *inode);
 	void	(*disable_swap)(struct inode *inode);
+	void	(*init_localioclient)(struct nfs_client *);
 };
 
 /*
@@ -1833,5 +1839,8 @@ extern const struct rpc_version nfs_version4;
 
 extern const struct rpc_version nfsacl_version3;
 extern const struct rpc_program nfsacl_program;
+
+extern const struct rpc_version nfslocalio_version3;
+extern const struct rpc_program nfslocalio_program3;
 
 #endif

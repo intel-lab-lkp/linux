@@ -130,6 +130,7 @@ struct nfs_client {
 	/* localio */
 	struct timespec64	cl_nfssvc_boot;
 	seqlock_t		cl_boot_lock;
+	struct rpc_clnt *	cl_rpcclient_localio;	/* localio RPC client handle */
 };
 
 /*

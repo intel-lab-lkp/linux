@@ -170,7 +170,7 @@ struct nfs_client *nfs_alloc_client(const struct nfs_client_initdata *cl_init)
 	}
 
 	INIT_LIST_HEAD(&clp->cl_superblocks);
-	clp->cl_rpcclient = ERR_PTR(-EINVAL);
+	clp->cl_rpcclient = clp->cl_rpcclient_localio = ERR_PTR(-EINVAL);
 
 	clp->cl_flags = cl_init->init_flags;
 	clp->cl_proto = cl_init->proto;
@@ -241,6 +241,8 @@ void nfs_free_client(struct nfs_client *clp)
 	/* -EIO all pending I/O */
 	if (!IS_ERR(clp->cl_rpcclient))
 		rpc_shutdown_client(clp->cl_rpcclient);
+	if (!IS_ERR(clp->cl_rpcclient_localio))
+		rpc_shutdown_client(clp->cl_rpcclient_localio);
 
 	put_net(clp->cl_net);
 	put_nfs_version(clp->cl_nfs_mod);
@@ -429,8 +431,10 @@ struct nfs_client *nfs_get_client(const struct nfs_client_initdata *cl_init)
 			list_add_tail(&new->cl_share_link,
 					&nn->nfs_client_list);
 			spin_unlock(&nn->nfs_client_lock);
-			nfs_local_probe(new);
-			return rpc_ops->init_client(new, cl_init);
+			new = rpc_ops->init_client(new, cl_init);
+			if (!IS_ERR(new))
+				 nfs_local_probe(new);
+			return new;
 		}
 
 		spin_unlock(&nn->nfs_client_lock);

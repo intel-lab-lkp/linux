@@ -1067,4 +1067,7 @@ const struct nfs_rpc_ops nfs_v3_clientops = {
 	.free_client	= nfs_free_client,
 	.create_server	= nfs3_create_server,
 	.clone_server	= nfs3_clone_server,
+#if defined(CONFIG_NFS_V3_LOCALIO)
+	.init_localioclient = nfs3_init_localioclient,
+#endif
 };

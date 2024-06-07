@@ -30,6 +30,7 @@ static inline int nfs3_proc_setacls(struct inode *inode, struct posix_acl *acl,
 struct nfs_server *nfs3_create_server(struct fs_context *);
 struct nfs_server *nfs3_clone_server(struct nfs_server *, struct nfs_fh *,
 				     struct nfs_fattr *, rpc_authflavor_t);
+void nfs3_init_localioclient(struct nfs_client *);
 
 /* nfs3super.c */
 extern struct nfs_subversion nfs_v3;
