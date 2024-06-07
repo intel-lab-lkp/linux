@@ -543,13 +543,15 @@ bool rfkill_set_hw_state_reason(struct rfkill *rfkill,
 {
 	unsigned long flags;
 	bool ret, prev;
+	const unsigned long reason_mask = RFKILL_HARD_BLOCK_SIGNAL |
+		RFKILL_HARD_BLOCK_NOT_OWNER;
 
 	BUG_ON(!rfkill);
 
-	if (WARN(reason &
-	    ~(RFKILL_HARD_BLOCK_SIGNAL | RFKILL_HARD_BLOCK_NOT_OWNER),
-	    "hw_state reason not supported: 0x%lx", reason))
-		return blocked;
+	if (reason & ~reason_mask) {
+		pr_err("hw_state reason not supported: 0x%lx\n", reason);
+		return rfkill_blocked(rfkill);
+	}
 
 	spin_lock_irqsave(&rfkill->lock, flags);
 	prev = !!(rfkill->hard_block_reasons & reason);
