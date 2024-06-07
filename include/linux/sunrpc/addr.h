@@ -68,9 +68,6 @@ static inline bool __rpc_copy_addr4(struct sockaddr *dst,
 }
 
 #if IS_ENABLED(CONFIG_IPV6)
-extern size_t rpc_ntop6_addr_noscopeid(const struct in6_addr *addr,
-				       char *buf, const int buflen);
-
 static inline bool rpc_cmp_addr6(const struct sockaddr *sap1,
 				 const struct sockaddr *sap2)
 {
@@ -97,12 +94,6 @@ static inline bool __rpc_copy_addr6(struct sockaddr *dst,
 	return true;
 }
 #else	/* !(IS_ENABLED(CONFIG_IPV6) */
-static size_t rpc_ntop6_addr_noscopeid(const struct in6_addr *addr,
-				       char *buf, const int buflen)
-{
-	return 0;
-}
-
 static inline bool rpc_cmp_addr6(const struct sockaddr *sap1,
 				   const struct sockaddr *sap2)
 {

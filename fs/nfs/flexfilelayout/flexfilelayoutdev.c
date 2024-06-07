@@ -348,22 +348,6 @@ outerr:
 	return false;
 }
 
-static bool ff_layout_ds_is_local(struct nfs4_pnfs_ds *ds)
-{
-	struct nfs_local_addr *addr;
-	struct sockaddr *sap;
-	struct nfs4_pnfs_ds_addr *da;
-
-	list_for_each_entry(da, &ds->ds_addrs, da_node) {
-		sap = (struct sockaddr *)&da->da_addr;
-		list_for_each_entry(addr, &ds->ds_clp->cl_local_addrs, cl_addrs)
-			if (rpc_cmp_addr((struct sockaddr *)&addr->address, sap))
-				return true;
-	}
-
-	return false;
-}
-
 /**
  * nfs4_ff_layout_prepare_ds - prepare a DS connection for an RPC call
  * @lseg: the layout segment we're operating on
@@ -416,10 +400,7 @@ nfs4_ff_layout_prepare_ds(struct pnfs_layout_segment *lseg,
 		 * keep ds_clp even if DS is local, so that if local IO cannot
 		 * proceed somehow, we can fall back to NFS whenever we want.
 		 */
-		if (ff_layout_ds_is_local(ds)) {
-			dprintk("%s: found local DS\n", __func__);
-			nfs_local_enable(ds->ds_clp);
-		}
+		nfs_local_probe(ds->ds_clp);
 		max_payload =
 			nfs_block_size(rpc_max_payload(ds->ds_clp->cl_rpcclient),
 				       NULL);

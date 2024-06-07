@@ -170,7 +170,6 @@ struct nfs_client *nfs_alloc_client(const struct nfs_client_initdata *cl_init)
 	}
 
 	INIT_LIST_HEAD(&clp->cl_superblocks);
-	INIT_LIST_HEAD(&clp->cl_local_addrs);
 	clp->cl_rpcclient = ERR_PTR(-EINVAL);
 
 	clp->cl_flags = cl_init->init_flags;
@@ -184,7 +183,6 @@ struct nfs_client *nfs_alloc_client(const struct nfs_client_initdata *cl_init)
 
 	clp->cl_principal = "*";
 	clp->cl_xprtsec = cl_init->xprtsec;
-	nfs_probe_local_addr(clp);
 	return clp;
 
 error_cleanup:
@@ -238,18 +236,11 @@ static void pnfs_init_server(struct nfs_server *server)
  */
 void nfs_free_client(struct nfs_client *clp)
 {
-	struct nfs_local_addr *addr, *tmp;
-
 	nfs_local_disable(clp);
 
 	/* -EIO all pending I/O */
 	if (!IS_ERR(clp->cl_rpcclient))
 		rpc_shutdown_client(clp->cl_rpcclient);
-
-	list_for_each_entry_safe(addr, tmp, &clp->cl_local_addrs, cl_addrs) {
-		list_del(&addr->cl_addrs);
-		kfree(addr);
-	}
 
 	put_net(clp->cl_net);
 	put_nfs_version(clp->cl_nfs_mod);

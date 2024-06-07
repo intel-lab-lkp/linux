@@ -20,8 +20,6 @@
 #include <linux/nfs_fs.h>
 #include <linux/nfs_xdr.h>
 
-#include <uapi/linux/if_arp.h>
-
 #include "internal.h"
 #include "pnfs.h"
 #include "nfstrace.h"
@@ -216,7 +214,6 @@ nfs_local_enable(struct nfs_client *clp)
 		trace_nfs_local_enable(clp);
 	}
 }
-EXPORT_SYMBOL_GPL(nfs_local_enable);
 
 /*
  * nfs_local_disable - disable local i/o for an nfs_client
@@ -236,50 +233,12 @@ nfs_local_disable(struct nfs_client *clp)
 void
 nfs_local_probe(struct nfs_client *clp)
 {
-	struct sockaddr_in *sin;
-	struct sockaddr_in6 *sin6;
-	struct nfs_local_addr *addr;
-	struct sockaddr *sap;
 	bool enable = false;
 
-	switch (clp->cl_addr.ss_family) {
-	case AF_INET:
-		sin = (struct sockaddr_in *)&clp->cl_addr;
-		if (ipv4_is_loopback(sin->sin_addr.s_addr)) {
-			dprintk("%s: detected IPv4 loopback address\n",
-				__func__);
-			enable = true;
-		}
-		break;
-	case AF_INET6:
-		sin6 = (struct sockaddr_in6 *)&clp->cl_addr;
-		if (memcmp(&sin6->sin6_addr, &in6addr_loopback,
-		    sizeof(struct in6_addr)) == 0) {
-			dprintk("%s: detected IPv6 loopback address\n",
-				__func__);
-			enable = true;
-		}
-		break;
-	default:
-		break;
-	}
-
-	if (enable)
-		goto out;
-
-	list_for_each_entry(addr, &clp->cl_local_addrs, cl_addrs) {
-		sap = (struct sockaddr *)&addr->address;
-		if (rpc_cmp_addr((struct sockaddr *)&clp->cl_addr, sap)) {
-			dprintk("%s: detected local server.\n", __func__);
-			enable = true;
-			break;
-		}
-	}
-
-out:
 	if (enable)
 		nfs_local_enable(clp);
 }
+EXPORT_SYMBOL_GPL(nfs_local_probe);
 
 /*
  * nfs_local_open_fh - open a local filehandle
@@ -879,106 +838,4 @@ nfs_local_commit(struct nfs_client *clp, struct file *filp,
 		queue_work(nfsiod_workqueue, &ctx->work);
 	nfs_local_fsync_ctx_put(ctx);
 	return 0;
-}
-
-static int
-nfs_client_add_addr(struct nfs_client *clnt, char *buf, gfp_t flags)
-{
-	struct nfs_local_addr *addr;
-	struct sockaddr *sap;
-
-	dprintk("%s: adding new local IP %s\n", __func__, buf);
-	addr = kmalloc(sizeof(*addr), flags);
-	if (!addr) {
-		printk(KERN_WARNING "NFS: cannot alloc new addr\n");
-		return -ENOMEM;
-	}
-	sap = (struct sockaddr *)&addr->address;
-	addr->addrlen = rpc_pton(clnt->cl_net, buf, strlen(buf),
-				sap, sizeof(addr->address));
-	if (!addr->addrlen) {
-		printk(KERN_WARNING "NFS: cannot parse new addr %s\n",
-				buf);
-		kfree(addr);
-		return -EINVAL;
-	}
-	list_add(&addr->cl_addrs, &clnt->cl_local_addrs);
-
-	return 0;
-}
-
-static int
-nfs_client_add_v4_addr(struct nfs_client *clnt, struct in_device *indev,
-		       char *buf, size_t buflen)
-{
-	struct in_ifaddr *ifa;
-	int ret;
-
-	in_dev_for_each_ifa_rtnl(ifa, indev) {
-		snprintf(buf, buflen, "%pI4", &ifa->ifa_local);
-		ret = nfs_client_add_addr(clnt, buf, GFP_KERNEL);
-		if (ret < 0)
-			return ret;
-	}
-
-	return 0;
-}
-
-#if IS_ENABLED(CONFIG_IPV6)
-static int
-nfs_client_add_v6_addr(struct nfs_client *clnt, struct inet6_dev *in6dev,
-		       char *buf, size_t buflen)
-{
-	struct inet6_ifaddr *ifp;
-	int ret = 0;
-
-	read_lock_bh(&in6dev->lock);
-	list_for_each_entry(ifp, &in6dev->addr_list, if_list) {
-		rpc_ntop6_addr_noscopeid(&ifp->addr, buf, buflen);
-		ret = nfs_client_add_addr(clnt, buf, GFP_ATOMIC);
-		if (ret < 0)
-			goto out;
-	}
-out:
-	read_unlock_bh(&in6dev->lock);
-	return ret;
-}
-#else /* CONFIG_IPV6 */
-static int
-nfs_client_add_v6_addr(struct nfs_client *clnt, struct inet6_dev *in6dev,
-		       char *buf, size_t buflen)
-{
-	return 0;
-}
-#endif
-
-/* Find out all local IP addresses. Ignore errors
- * because local IO can be optional.
- */
-void
-nfs_probe_local_addr(struct nfs_client *clnt)
-{
-	struct net_device *dev;
-	struct in_device *indev;
-	struct inet6_dev *in6dev;
-	char buf[INET6_ADDRSTRLEN + IPV6_SCOPE_ID_LEN];
-	size_t buflen = sizeof(buf);
-
-	rtnl_lock();
-
-	for_each_netdev(clnt->cl_net, dev) {
-		if (dev->type == ARPHRD_LOOPBACK ||
-		    !(dev->flags & IFF_UP))
-			continue;
-		indev = __in_dev_get_rtnl(dev);
-		if (indev &&
-		    nfs_client_add_v4_addr(clnt, indev, buf, buflen) < 0)
-			break;
-		in6dev = __in6_dev_get(dev);
-		if (in6dev &&
-		    nfs_client_add_v6_addr(clnt, in6dev, buf, buflen) < 0)
-			break;
-	}
-
-	rtnl_unlock();
 }

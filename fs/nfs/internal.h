@@ -204,12 +204,6 @@ struct nfs_mount_request {
 	struct net		*net;
 };
 
-struct nfs_local_addr {
-	struct list_head	cl_addrs;
-	struct sockaddr_storage	address;
-	size_t			addrlen;
-};
-
 extern int nfs_mount(struct nfs_mount_request *info, int timeo, int retrans);
 extern void nfs_umount(const struct nfs_mount_request *info);
 
@@ -475,7 +469,6 @@ extern int nfs_local_doio(struct nfs_client *, struct file *,
 extern int nfs_local_commit(struct nfs_client *, struct file *,
 			    struct nfs_commit_data *,
 			    const struct rpc_call_ops *, int);
-extern void nfs_probe_local_addr(struct nfs_client *clnt);
 extern bool nfs_server_is_local(const struct nfs_client *clp);
 
 /* super.c */
