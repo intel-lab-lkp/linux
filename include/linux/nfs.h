@@ -111,10 +111,6 @@ static inline int nfs_stat_to_errno(enum nfs_stat status)
 	return nfs_common_errtbl[i].errno;
 }
 
-typedef int (*nfs_to_nfsd_open_t)(struct rpc_clnt *, const struct cred *,
-				  const struct nfs_fh *, const fmode_t,
-				  struct file **);
-
 #ifdef CONFIG_CRC32
 /**
  * nfs_fhandle_hash - calculate the crc32 hash for the filehandle

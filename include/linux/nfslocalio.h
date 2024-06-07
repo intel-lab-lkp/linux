@@ -7,6 +7,7 @@
 
 #include <linux/list.h>
 #include <linux/uuid.h>
+#include <linux/nfs.h>
 
 /*
  * Global list of nfsd_uuid_t instances, add/remove
@@ -25,5 +26,12 @@ typedef struct {
 } nfsd_uuid_t;
 
 bool nfsd_uuid_is_local(const uuid_t *uuid);
+
+typedef int (*nfs_to_nfsd_open_t)(struct rpc_clnt *, const struct cred *,
+				  const struct nfs_fh *, const fmode_t,
+				  struct file **);
+
+nfs_to_nfsd_open_t get_nfsd_open_local_fh(void);
+void put_nfsd_open_local_fh(void);
 
 #endif  /* __LINUX_NFSLOCALIO_H */

@@ -27,26 +27,6 @@
 
 #define NFSDBG_FACILITY		NFSDBG_VFS
 
-extern int nfsd_open_local_fh(struct rpc_clnt *rpc_clnt,
-			      const struct cred *cred,
-			      const struct nfs_fh *nfs_fh, const fmode_t fmode,
-			      struct file **pfilp);
-/*
- * The localio code needs to call into nfsd to do the filehandle -> struct path
- * mapping, but cannot be statically linked, because that will make the nfs
- * module depend on the nfsd module.
- *
- * Instead, do dynamic linking to the nfsd module. This way the nfs module
- * will only hold a reference on nfsd when it's actually in use. This also
- * allows some sanity checking, like giving up on localio if nfsd isn't loaded.
- */
-
-struct nfs_local_open_ctx {
-	spinlock_t lock;
-	nfs_to_nfsd_open_t open_f;
-	atomic_t refcount;
-};
-
 struct nfs_local_kiocb {
 	struct kiocb		kiocb;
 	struct bio_vec		*bvec;
@@ -139,8 +119,6 @@ nfs4errno(int errno)
 	return NFS4ERR_SERVERFAULT;
 }
 
-static struct nfs_local_open_ctx __local_open_ctx __read_mostly;
-
 static bool localio_enabled __read_mostly = true;
 module_param(localio_enabled, bool, 0644);
 
@@ -151,66 +129,12 @@ bool nfs_server_is_local(const struct nfs_client *clp)
 }
 EXPORT_SYMBOL_GPL(nfs_server_is_local);
 
-void
-nfs_local_init(void)
-{
-	struct nfs_local_open_ctx *ctx = &__local_open_ctx;
-
-	ctx->open_f = NULL;
-	spin_lock_init(&ctx->lock);
-	atomic_set(&ctx->refcount, 0);
-}
-
-static bool
-nfs_local_get_lookup_ctx(void)
-{
-	struct nfs_local_open_ctx *ctx = &__local_open_ctx;
-	nfs_to_nfsd_open_t fn = NULL;
-
-	spin_lock(&ctx->lock);
-	if (ctx->open_f == NULL) {
-		spin_unlock(&ctx->lock);
-
-		fn = symbol_request(nfsd_open_local_fh);
-		if (!fn)
-			return false;
-
-		spin_lock(&ctx->lock);
-		/* catch race */
-		if (ctx->open_f == NULL) {
-			ctx->open_f = fn;
-			fn = NULL;
-		}
-	}
-	atomic_inc(&ctx->refcount);
-	spin_unlock(&ctx->lock);
-	if (fn)
-		symbol_put(nfsd_open_local_fh);
-	return true;
-}
-
-static void
-nfs_local_put_lookup_ctx(void)
-{
-	struct nfs_local_open_ctx *ctx = &__local_open_ctx;
-	nfs_to_nfsd_open_t fn;
-
-	if (atomic_dec_and_lock(&ctx->refcount, &ctx->lock)) {
-		fn = ctx->open_f;
-		ctx->open_f = NULL;
-		spin_unlock(&ctx->lock);
-		if (fn)
-			symbol_put(nfsd_open_local_fh);
-	}
-}
-
 /*
  * nfs_local_enable - attempt to enable local i/o for an nfs_client
  */
-void
-nfs_local_enable(struct nfs_client *clp)
+void nfs_local_enable(struct nfs_client *clp)
 {
-	if (nfs_local_get_lookup_ctx()) {
+	if (READ_ONCE(clp->nfsd_open_local_fh)) {
 		set_bit(NFS_CS_LOCAL_IO, &clp->cl_flags);
 		trace_nfs_local_enable(clp);
 	}
@@ -219,12 +143,12 @@ nfs_local_enable(struct nfs_client *clp)
 /*
  * nfs_local_disable - disable local i/o for an nfs_client
  */
-void
-nfs_local_disable(struct nfs_client *clp)
+void nfs_local_disable(struct nfs_client *clp)
 {
 	if (test_and_clear_bit(NFS_CS_LOCAL_IO, &clp->cl_flags)) {
 		trace_nfs_local_disable(clp);
-		nfs_local_put_lookup_ctx();
+		put_nfsd_open_local_fh();
+		clp->nfsd_open_local_fh = NULL;
 	}
 }
 
@@ -299,14 +223,13 @@ struct file *
 nfs_local_open_fh(struct nfs_client *clp, const struct cred *cred,
 		  struct nfs_fh *fh, const fmode_t mode)
 {
-	struct nfs_local_open_ctx *ctx = &__local_open_ctx;
 	struct file *filp;
 	int status;
 
 	if (mode & ~(FMODE_READ | FMODE_WRITE))
 		return ERR_PTR(-EINVAL);
 
-	status = ctx->open_f(clp->cl_rpcclient, cred, fh, mode, &filp);
+	status = clp->nfsd_open_local_fh(clp->cl_rpcclient, cred, fh, mode, &filp);
 	if (status < 0) {
 		dprintk("%s: open local file failed error=%d\n",
 				__func__, status);

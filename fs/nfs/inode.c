@@ -2513,7 +2513,6 @@ static int __init init_nfs_fs(void)
 	if (err)
 		goto out1;
 
-	nfs_local_init();
 	err = register_nfs_fs();
 	if (err)
 		goto out0;

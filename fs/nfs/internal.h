@@ -470,11 +470,18 @@ nfs_init_localioclient(struct nfs_client *clp,
 	if (IS_ERR(clp->cl_rpcclient_localio))
 		goto out;
 	/* No errors! Assume that localio is supported */
+	clp->nfsd_open_local_fh = get_nfsd_open_local_fh();
+	if (!clp->nfsd_open_local_fh) {
+		rpc_shutdown_client(clp->cl_rpcclient_localio);
+		clp->cl_rpcclient_localio = ERR_PTR(-EINVAL);
+		goto out;
+	}
 	supported = true;
 out:
-	dfprintk_rcu(CLIENT, "%s: server (%s) %s NFS v%u LOCALIO\n", __func__,
-		rpc_peeraddr2str(clp->cl_rpcclient_localio, RPC_DISPLAY_ADDR),
-		(supported ? "supports" : "does not support"), vers);
+	dfprintk_rcu(CLIENT, "%s: server (%s) %s NFS v%u LOCALIO, nfsd_open_local_fh is %s.\n",
+		__func__, rpc_peeraddr2str(clp->cl_rpcclient_localio, RPC_DISPLAY_ADDR),
+		(supported ? "supports" : "does not support"), vers,
+		(clp->nfsd_open_local_fh ? "set" : "not set"));
 }
 
 /* localio.c */
