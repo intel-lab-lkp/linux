@@ -190,6 +190,7 @@ properties:
               - hardkernel,odroid-c4
               - hardkernel,odroid-hc4
               - haochuangyi,h96-max
+              - jethome,jethub-j200
               - khadas,vim3l
               - libretech,aml-s905d3-cc
               - seirobotics,sei610
