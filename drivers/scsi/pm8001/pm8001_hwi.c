@@ -1672,7 +1672,18 @@ void pm8001_work_fn(struct work_struct *work)
 	break;
 	case IO_XFER_ERROR_ABORTED_NCQ_MODE:
 	{
+		struct pm8001_hba_info *pm8001_ha = pw->pm8001_ha;
 		dev = pm8001_dev->sas_device;
+		/*
+		 * pm8001_abort_task() issues a hard reset to a drive
+		 * before libata EH has a chance to read the NCQ log page.
+		 *
+		 * Initiate abort all from the driver to prevent libsas EH
+		 * from calling lldd_abort_task() / pm8001_abort_task().
+		 */
+		if (pm8001_ha->chip_id == chip_8006)
+			sas_execute_internal_abort_dev(dev, 0, NULL);
+
 		sas_ata_device_link_abort(dev, false);
 	}
 	break;
