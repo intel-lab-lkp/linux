@@ -5223,15 +5223,21 @@ static void numa_rebuild_single_mapping(struct vm_fault *vmf, struct vm_area_str
 	update_mmu_cache_range(vmf, vma, fault_addr, fault_pte, 1);
 }
 
-static void numa_rebuild_large_mapping(struct vm_fault *vmf, struct vm_area_struct *vma,
-				       struct folio *folio, pte_t fault_pte,
-				       bool ignore_writable, bool pte_write_upgrade)
+static void numa_rebuild_large_mapping(struct vm_fault *vmf,
+		struct vm_area_struct *vma, struct folio *folio, int nr_pages,
+		pte_t fault_pte, bool ignore_writable, bool pte_write_upgrade)
 {
 	int nr = pte_pfn(fault_pte) - folio_pfn(folio);
-	unsigned long start = max(vmf->address - nr * PAGE_SIZE, vma->vm_start);
-	unsigned long end = min(vmf->address + (folio_nr_pages(folio) - nr) * PAGE_SIZE, vma->vm_end);
-	pte_t *start_ptep = vmf->pte - (vmf->address - start) / PAGE_SIZE;
-	unsigned long addr;
+	unsigned long folio_size = nr_pages * PAGE_SIZE;
+	unsigned long addr = vmf->address;
+	unsigned long start, end, align_addr;
+	pte_t *start_ptep;
+
+	align_addr = ALIGN_DOWN(addr, folio_size);
+	start = max3(addr - nr * PAGE_SIZE, align_addr, vma->vm_start);
+	end = min3(addr + (nr_pages - nr) * PAGE_SIZE, align_addr + folio_size,
+		   vma->vm_end);
+	start_ptep = vmf->pte - (addr - start) / PAGE_SIZE;
 
 	/* Restore all PTEs' mapping of the large folio */
 	for (addr = start; addr != end; start_ptep++, addr += PAGE_SIZE) {
@@ -5361,8 +5367,8 @@ out_map:
 	 * non-accessible ptes, some can allow access by kernel mode.
 	 */
 	if (folio && folio_test_large(folio))
-		numa_rebuild_large_mapping(vmf, vma, folio, pte, ignore_writable,
-					   pte_write_upgrade);
+		numa_rebuild_large_mapping(vmf, vma, folio, nr_pages, pte,
+					   ignore_writable, pte_write_upgrade);
 	else
 		numa_rebuild_single_mapping(vmf, vma, vmf->address, vmf->pte,
 					    writable);
