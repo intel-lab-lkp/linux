@@ -52,3 +52,26 @@ Description:
 		Writing 0 to the sysfs will clear the counter, writing any other
 		value is not allowed.
 
+What:		/sys/bus/platform/devices/<HID>/hwmon/hwmonX/<block>/count_clock
+Date:		May 2024
+KernelVersion:	6.10
+Contact:	"Shravan Kumar Ramani <shravankr@nvidia.com>"
+Description:
+		Use a counter for counting cycles. This is used to repurpose/dedicate
+		any of the counters in the block to counting cycles. Each counter is
+		represented by a bit (bit 0 for counter0, bit1 for counter1 and so on)
+		and setting the corresponding bit will reserve that specific counter
+		for counting cycles and override the event<N> setting.
+
+What:		/sys/bus/platform/devices/<HID>/hwmon/hwmonX/<block>/use_odd_counter
+Date:		May 2024
+KernelVersion:	6.10
+Contact:	"Shravan Kumar Ramani <shravankr@nvidia.com>"
+Description:
+		Form 64-bit counter using 2 32-bit counters. This is used to combine
+		2 adjacent counters to form a single 64-bit counter. Each even counter
+		is represented by a bit and setting the bit will join the corresponding
+		even counter with the next (odd) counter. The full 64-bit value can be
+		accessed using the same 2 counter<N> and counter<N+1> sysfs, with each
+		of them holding the lower and upper 32 bits respectively.
+
