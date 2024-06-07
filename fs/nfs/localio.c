@@ -511,7 +511,7 @@ static int nfs_do_local_read(struct nfs_pgio_header *hdr, struct file *filp,
 	args.done = &done;
 	INIT_WORK_ONSTACK(&args.work, nfs_local_call_read);
 
-	queue_work(nfsiod_workqueue, &args.work);
+	queue_work(nfssync_workqueue, &args.work);
 	wait_for_completion(&done);
 	destroy_work_on_stack(&args.work);
 	return 0;
@@ -682,7 +682,7 @@ static int nfs_do_local_write(struct nfs_pgio_header *hdr, struct file *filp,
 	args.done = &done;
 	INIT_WORK_ONSTACK(&args.work, nfs_local_call_write);
 
-	queue_work(nfsiod_workqueue, &args.work);
+	queue_work(nfssync_workqueue, &args.work);
 	wait_for_completion(&done);
 	destroy_work_on_stack(&args.work);
 	return 0;

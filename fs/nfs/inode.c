@@ -2394,6 +2394,7 @@ static void nfs_destroy_inodecache(void)
 	kmem_cache_destroy(nfs_inode_cachep);
 }
 
+struct workqueue_struct *nfssync_workqueue;
 struct workqueue_struct *nfsiod_workqueue;
 EXPORT_SYMBOL_GPL(nfsiod_workqueue);
 
@@ -2404,9 +2405,17 @@ static int nfsiod_start(void)
 {
 	struct workqueue_struct *wq;
 	dprintk("RPC:       creating workqueue nfsiod\n");
-	wq = alloc_workqueue("nfsiod", WQ_MEM_RECLAIM | WQ_UNBOUND, 0);
+	wq = alloc_workqueue("nfs-sync", WQ_UNBOUND, 0);
 	if (wq == NULL)
 		return -ENOMEM;
+	nfssync_workqueue = wq;
+	wq = alloc_workqueue("nfsiod", WQ_MEM_RECLAIM | WQ_UNBOUND, 0);
+	if (wq == NULL) {
+		wq = nfssync_workqueue;
+		nfsiod_workqueue = NULL;
+		destroy_workqueue(wq);
+		return -ENOMEM;
+	}
 	nfsiod_workqueue = wq;
 	return 0;
 }
@@ -2419,10 +2428,15 @@ static void nfsiod_stop(void)
 	struct workqueue_struct *wq;
 
 	wq = nfsiod_workqueue;
-	if (wq == NULL)
-		return;
-	nfsiod_workqueue = NULL;
-	destroy_workqueue(wq);
+	if (wq != NULL) {
+		nfsiod_workqueue = NULL;
+		destroy_workqueue(wq);
+	}
+	wq = nfssync_workqueue;
+	if (wq != NULL) {
+		nfssync_workqueue = NULL;
+		destroy_workqueue(wq);
+	}
 }
 
 unsigned int nfs_net_id;
