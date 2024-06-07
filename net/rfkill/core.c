@@ -554,7 +554,7 @@ bool rfkill_set_hw_state_reason(struct rfkill *rfkill,
 	}
 
 	spin_lock_irqsave(&rfkill->lock, flags);
-	prev = !!(rfkill->hard_block_reasons & reason);
+	prev = !!(rfkill->hard_block_reasons & reason_mask);
 	if (blocked) {
 		rfkill->state |= RFKILL_BLOCK_HW;
 		rfkill->hard_block_reasons |= reason;
