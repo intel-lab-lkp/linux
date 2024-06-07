@@ -2010,6 +2010,25 @@ enum {
 	MOXA_SUPP_RS485 = BIT(2),
 };
 
+static bool pci_moxa_is_pcie(unsigned short device)
+{
+	if (device == PCI_DEVICE_ID_MOXA_CP102E     ||
+	    device == PCI_DEVICE_ID_MOXA_CP102EL    ||
+	    device == PCI_DEVICE_ID_MOXA_CP104EL_A  ||
+	    device == PCI_DEVICE_ID_MOXA_CP114EL    ||
+	    device == PCI_DEVICE_ID_MOXA_CP116E_A_A ||
+	    device == PCI_DEVICE_ID_MOXA_CP116E_A_B ||
+	    device == PCI_DEVICE_ID_MOXA_CP118EL_A  ||
+	    device == PCI_DEVICE_ID_MOXA_CP118E_A_I ||
+	    device == PCI_DEVICE_ID_MOXA_CP132EL    ||
+	    device == PCI_DEVICE_ID_MOXA_CP134EL_A  ||
+	    device == PCI_DEVICE_ID_MOXA_CP138E_A   ||
+	    device == PCI_DEVICE_ID_MOXA_CP168EL_A)
+		return true;
+
+	return false;
+}
+
 static bool pci_moxa_is_mini_pcie(unsigned short device)
 {
 	if (device == PCI_DEVICE_ID_MOXA_CP102N	||
@@ -2070,11 +2089,13 @@ static int pci_moxa_init(struct pci_dev *dev)
 	    device == PCI_DEVICE_ID_MOXA_CP116E_A_B)
 		num_ports = 8;
 
-	if (!(pci_moxa_supported_rs(dev) & MOXA_SUPP_RS232)) {
-		init_mode = MOXA_RS422;
+	if (pci_moxa_is_pcie(device) || pci_moxa_is_mini_pcie(device)) {
+		if (!(pci_moxa_supported_rs(dev) & MOXA_SUPP_RS232))
+			init_mode = MOXA_RS422;
+
+		for (i = 0; i < num_ports; ++i)
+			pci_moxa_set_interface(dev, i, init_mode);
 	}
-	for (i = 0; i < num_ports; ++i)
-		pci_moxa_set_interface(dev, i, init_mode);
 
 	/*
 	 * Enable hardware buffer to prevent break signal output when system boots up.
