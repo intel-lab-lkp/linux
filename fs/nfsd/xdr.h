@@ -5,6 +5,7 @@
 #define LINUX_NFSD_H
 
 #include <linux/vfs.h>
+#include <linux/uuid.h>
 #include "nfsd.h"
 #include "nfsfh.h"
 
@@ -121,6 +122,11 @@ struct nfsd_readdirres {
 struct nfsd_statfsres {
 	__be32			status;
 	struct kstatfs		stats;
+};
+
+struct nfsd_getuuidres {
+	__be32			status;
+	uuid_t			uuid;
 };
 
 /*

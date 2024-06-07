@@ -14,6 +14,8 @@
 #include "vfs.h"
 #include "netns.h"
 #include "filecache.h"
+#include "cache.h"
+#include "xdr3.h"
 
 #define NFSDDBG_FACILITY		NFSDDBG_FH
 
@@ -177,3 +179,91 @@ EXPORT_SYMBOL_GPL(nfsd_open_local_fh);
 
 /* Compile time type checking, not used by anything */
 static nfs_to_nfsd_open_t __maybe_unused nfsd_open_local_fh_typecheck = nfsd_open_local_fh;
+
+/*
+ * GETUUID XDR encode functions
+ */
+
+static __be32 nfsd_proc_null(struct svc_rqst *rqstp)
+{
+	return rpc_success;
+}
+
+static __be32 nfsd_proc_getuuid(struct svc_rqst *rqstp)
+{
+	struct nfsd_net *nn = net_generic(SVC_NET(rqstp), nfsd_net_id);
+	struct nfsd_getuuidres *resp = rqstp->rq_resp;
+
+	uuid_copy(&resp->uuid, &nn->nfsd_uuid.uuid);
+	resp->status = nfs_ok;
+
+	return rpc_success;
+}
+
+#if defined(CONFIG_NFSD_V3_LOCALIO)
+
+static void encode_uuid(struct xdr_stream *xdr,
+			const char *name, u32 length)
+{
+	__be32 *p;
+
+	p = xdr_reserve_space(xdr, 4 + length);
+	xdr_encode_opaque(p, name, length);
+}
+
+static bool nfs3svc_encode_getuuidres(struct svc_rqst *rqstp,
+				      struct xdr_stream *xdr)
+{
+	struct nfsd_getuuidres *resp = rqstp->rq_resp;
+
+	if (!svcxdr_encode_nfsstat3(xdr, resp->status))
+		return false;
+	if (resp->status == nfs_ok) {
+		u8 uuid[UUID_SIZE];
+
+		export_uuid(uuid, &resp->uuid);
+		encode_uuid(xdr, uuid, UUID_SIZE);
+		dprintk("%s: nfs_ok uuid=%pU uuid_len=%lu\n",
+			__func__, uuid, sizeof(uuid));
+	}
+
+	return true;
+}
+
+#define ST 1		/* status */
+#define NFS3_filename_sz	(1+(NFS3_MAXNAMLEN>>2))
+
+static const struct svc_procedure nfsd_localio_procedures3[2] = {
+	[LOCALIOPROC_NULL] = {
+		.pc_func = nfsd_proc_null,
+		.pc_decode = nfssvc_decode_voidarg,
+		.pc_encode = nfssvc_encode_voidres,
+		.pc_argsize = sizeof(struct nfsd_voidargs),
+		.pc_ressize = sizeof(struct nfsd_voidres),
+		.pc_cachetype = RC_NOCACHE,
+		.pc_xdrressize = ST,
+		.pc_name = "NULL",
+	},
+	[LOCALIOPROC_GETUUID] = {
+		.pc_func = nfsd_proc_getuuid,
+		.pc_decode = nfssvc_decode_voidarg,
+		.pc_encode = nfs3svc_encode_getuuidres,
+		.pc_argsize = sizeof(struct nfsd_voidargs),
+		.pc_ressize = sizeof(struct nfsd_getuuidres),
+		.pc_cachetype = RC_NOCACHE,
+		.pc_xdrressize = ST+NFS3_filename_sz,
+		.pc_name = "GETUUID",
+	},
+};
+
+static DEFINE_PER_CPU_ALIGNED(unsigned long,
+			      nfsd_localio_count3[ARRAY_SIZE(nfsd_localio_procedures3)]);
+const struct svc_version nfsd_localio_version3 = {
+	.vs_vers	= 3,
+	.vs_nproc	= 2,
+	.vs_proc	= nfsd_localio_procedures3,
+	.vs_dispatch	= nfsd_dispatch,
+	.vs_count	= nfsd_localio_count3,
+	.vs_xdrsize	= NFS3_SVC_XDRSIZE,
+};
+#endif /* CONFIG_NFSD_V3_LOCALIO */

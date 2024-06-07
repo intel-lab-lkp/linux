@@ -142,6 +142,12 @@ extern const struct svc_version nfsd_acl_version3;
 #endif
 #endif
 
+#if defined(CONFIG_NFSD_V3_LOCALIO)
+extern const struct svc_version nfsd_localio_version3;
+#else
+#define nfsd_localio_version3 NULL
+#endif
+
 struct nfsd_net;
 
 enum vers_op {NFSD_SET, NFSD_CLEAR, NFSD_TEST, NFSD_AVAIL };
