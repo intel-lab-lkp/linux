@@ -70,18 +70,16 @@ struct xe_exec_queue {
 	 */
 	struct dma_fence *last_fence;
 
-/* queue no longer allowed to submit */
-#define EXEC_QUEUE_FLAG_BANNED			BIT(0)
 /* queue used for kernel submission only */
-#define EXEC_QUEUE_FLAG_KERNEL			BIT(1)
+#define EXEC_QUEUE_FLAG_KERNEL			BIT(0)
 /* kernel engine only destroyed at driver unload */
-#define EXEC_QUEUE_FLAG_PERMANENT		BIT(2)
+#define EXEC_QUEUE_FLAG_PERMANENT		BIT(1)
 /* for VM jobs. Caller needs to hold rpm ref when creating queue with this flag */
-#define EXEC_QUEUE_FLAG_VM			BIT(3)
+#define EXEC_QUEUE_FLAG_VM			BIT(2)
 /* child of VM queue for multi-tile VM jobs */
-#define EXEC_QUEUE_FLAG_BIND_ENGINE_CHILD	BIT(4)
+#define EXEC_QUEUE_FLAG_BIND_ENGINE_CHILD	BIT(3)
 /* kernel exec_queue only, set priority to highest level */
-#define EXEC_QUEUE_FLAG_HIGH_PRIORITY		BIT(5)
+#define EXEC_QUEUE_FLAG_HIGH_PRIORITY		BIT(4)
 
 	/**
 	 * @flags: flags for this exec queue, should statically setup aside from ban
@@ -102,16 +100,6 @@ struct xe_exec_queue {
 		/** @guc: GuC backend specific state for exec queue */
 		struct xe_guc_exec_queue *guc;
 	};
-
-	/**
-	 * @parallel: parallel submission state
-	 */
-	struct {
-		/** @parallel.composite_fence_ctx: context composite fence */
-		u64 composite_fence_ctx;
-		/** @parallel.composite_fence_seqno: seqno for composite fence */
-		u32 composite_fence_seqno;
-	} parallel;
 
 	/** @sched_props: scheduling properties */
 	struct {
@@ -151,8 +139,12 @@ struct xe_exec_queue {
 	 * Protected by @vm's resv. Unused if @vm == NULL.
 	 */
 	u64 tlb_flush_seqno;
+	/** @old_run_ticks: prior hw engine class run time in ticks for this exec queue */
+	u64 old_run_ticks;
+	/** @run_ticks: hw engine class run time in ticks for this exec queue */
+	u64 run_ticks;
 	/** @lrc: logical ring context for this exec queue */
-	struct xe_lrc lrc[];
+	struct xe_lrc *lrc[];
 };
 
 /**
