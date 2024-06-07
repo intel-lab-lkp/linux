@@ -620,6 +620,7 @@ static void lpg_sdam_apply_lut_control(struct lpg_channel *chan)
 	u8 val = 0, conf = 0, lut_offset = 0;
 	unsigned int hi_pause, lo_pause;
 	struct lpg *lpg = chan->lpg;
+	u16 addr;
 
 	if (!chan->ramp_enabled || chan->pattern_lo_idx == chan->pattern_hi_idx)
 		return;
@@ -640,17 +641,23 @@ static void lpg_sdam_apply_lut_control(struct lpg_channel *chan)
 		lo_idx += lut_offset;
 	}
 
-	nvmem_device_write(lpg_chan_sdam, SDAM_PBS_SCRATCH_LUT_COUNTER_OFFSET + chan->sdam_offset, 1, &val);
-	nvmem_device_write(lpg_chan_sdam, SDAM_PATTERN_CONFIG_OFFSET + chan->sdam_offset, 1, &conf);
-	nvmem_device_write(lpg_chan_sdam, SDAM_END_INDEX_OFFSET + chan->sdam_offset, 1, &hi_idx);
-	nvmem_device_write(lpg_chan_sdam, SDAM_START_INDEX_OFFSET + chan->sdam_offset, 1, &lo_idx);
+	addr = SDAM_PBS_SCRATCH_LUT_COUNTER_OFFSET + chan->sdam_offset;
+	nvmem_device_write(lpg_chan_sdam, addr, 1, &val);
+	addr = SDAM_PATTERN_CONFIG_OFFSET + chan->sdam_offset;
+	nvmem_device_write(lpg_chan_sdam, addr, 1, &conf);
+	addr = SDAM_END_INDEX_OFFSET + chan->sdam_offset;
+	nvmem_device_write(lpg_chan_sdam, addr, 1, &hi_idx);
+	addr = SDAM_START_INDEX_OFFSET + chan->sdam_offset;
+	nvmem_device_write(lpg_chan_sdam, addr, 1, &lo_idx);
 
 	val = RAMP_STEP_DURATION(chan->ramp_tick_ms);
 	nvmem_device_write(lpg_chan_sdam, SDAM_REG_RAMP_STEP_DURATION, 1, &val);
 
 	if (lpg->lut_sdam) {
-		nvmem_device_write(lpg_chan_sdam, SDAM_PAUSE_HI_MULTIPLIER_OFFSET + chan->sdam_offset, 1, &hi_pause);
-		nvmem_device_write(lpg_chan_sdam, SDAM_PAUSE_LO_MULTIPLIER_OFFSET + chan->sdam_offset, 1, &lo_pause);
+		addr = SDAM_PAUSE_HI_MULTIPLIER_OFFSET + chan->sdam_offset;
+		nvmem_device_write(lpg_chan_sdam, addr, 1, &hi_pause);
+		addr = SDAM_PAUSE_LO_MULTIPLIER_OFFSET + chan->sdam_offset;
+		nvmem_device_write(lpg_chan_sdam, addr, 1, &lo_pause);
 	}
 
 }
