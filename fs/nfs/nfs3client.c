@@ -152,23 +152,6 @@ const struct rpc_program nfslocalio_program3 = {
  */
 void nfs3_init_localioclient(struct nfs_client *clp)
 {
-	if (unlikely(!IS_ERR(clp->cl_rpcclient_localio)))
-		goto out;
-
-	clp->cl_rpcclient_localio = rpc_bind_new_program(clp->cl_rpcclient,
-							&nfslocalio_program3, 3);
-	if (IS_ERR(clp->cl_rpcclient_localio)) {
-		dprintk_rcu("%s: server (%s) does not support NFS v3 LOCALIO\n", __func__,
-			rpc_peeraddr2str(clp->cl_rpcclient, RPC_DISPLAY_ADDR));
-		return;
-	}
-out:
-	/* No errors! Assume that localio is supported */
-	dprintk_rcu("%s: server (%s) supports NFS v3 LOCALIO\n", __func__,
-		rpc_peeraddr2str(clp->cl_rpcclient_localio, RPC_DISPLAY_ADDR));
-}
-#else
-void nfs3_init_localioclient(struct nfs_client *clp)
-{
+	nfs_init_localioclient(clp, &nfslocalio_program3, 3);
 }
 #endif /* CONFIG_NFS_V3_LOCALIO */

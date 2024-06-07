@@ -10745,6 +10745,9 @@ const struct nfs_rpc_ops nfs_v4_clientops = {
 	.discover_trunking = nfs4_discover_trunking,
 	.enable_swap	= nfs4_enable_swap,
 	.disable_swap	= nfs4_disable_swap,
+#if defined(CONFIG_NFS_V4_LOCALIO)
+	.init_localioclient = nfs4_init_localioclient,
+#endif
 };
 
 static const struct xattr_handler nfs4_xattr_nfs4_acl_handler = {

@@ -1384,3 +1384,26 @@ int nfs4_update_server(struct nfs_server *server, const char *hostname,
 
 	return nfs_probe_server(server, NFS_FH(d_inode(server->super->s_root)));
 }
+
+#if defined(CONFIG_NFS_V4_LOCALIO)
+static struct rpc_stat		nfslocalio_rpcstat = { &nfslocalio_program4 };
+static const struct rpc_version *nfslocalio_version[] = {
+	[4]			= &nfslocalio_version4,
+};
+
+const struct rpc_program nfslocalio_program4 = {
+	.name			= "nfslocalio",
+	.number			= NFS_LOCALIO_PROGRAM,
+	.nrvers			= ARRAY_SIZE(nfslocalio_version),
+	.version		= nfslocalio_version,
+	.stats			= &nfslocalio_rpcstat,
+};
+
+/*
+ * Initialise an NFSv4 localio client connection
+ */
+void nfs4_init_localioclient(struct nfs_client *clp)
+{
+	nfs_init_localioclient(clp, &nfslocalio_program4, 4);
+}
+#endif /* CONFIG_NFS_V4_LOCALIO */

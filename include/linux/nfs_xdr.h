@@ -1842,5 +1842,7 @@ extern const struct rpc_program nfsacl_program;
 
 extern const struct rpc_version nfslocalio_version3;
 extern const struct rpc_program nfslocalio_program3;
+extern const struct rpc_version nfslocalio_version4;
+extern const struct rpc_program nfslocalio_program4;
 
 #endif

@@ -452,7 +452,31 @@ extern void nfs_set_cache_invalid(struct inode *inode, unsigned long flags);
 extern bool nfs_check_cache_invalid(struct inode *, unsigned long);
 extern int nfs_wait_bit_killable(struct wait_bit_key *key, int mode);
 
-#if defined(CONFIG_NFS_V3_LOCALIO)
+#if defined(CONFIG_NFS_V3_LOCALIO) || defined(CONFIG_NFS_V4_LOCALIO)
+/*
+ * Initialise an NFS localio client connection.
+ * Inlined here to allow nfs[34]client.c to share this code.
+ */
+static __always_inline void
+nfs_init_localioclient(struct nfs_client *clp,
+		       const struct rpc_program *program, u32 vers)
+{
+	bool supported = false;
+
+	if (unlikely(!IS_ERR(clp->cl_rpcclient_localio)))
+		goto out;
+	clp->cl_rpcclient_localio = rpc_bind_new_program(clp->cl_rpcclient,
+							program, vers);
+	if (IS_ERR(clp->cl_rpcclient_localio))
+		goto out;
+	/* No errors! Assume that localio is supported */
+	supported = true;
+out:
+	dfprintk_rcu(CLIENT, "%s: server (%s) %s NFS v%u LOCALIO\n", __func__,
+		rpc_peeraddr2str(clp->cl_rpcclient_localio, RPC_DISPLAY_ADDR),
+		(supported ? "supports" : "does not support"), vers);
+}
+
 /* localio.c */
 extern void nfs_local_init(void);
 extern void nfs_local_enable(struct nfs_client *);
@@ -507,7 +531,7 @@ static inline bool nfs_server_is_local(const struct nfs_client *clp)
 {
 	return false;
 }
-#endif /* CONFIG_NFS_V3_LOCALIO */
+#endif /* CONFIG_NFS_V3_LOCALIO || CONFIG_NFS_V4_LOCALIO */
 
 /* super.c */
 extern const struct super_operations nfs_sops;

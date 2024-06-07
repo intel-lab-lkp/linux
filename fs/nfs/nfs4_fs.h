@@ -538,6 +538,8 @@ extern int nfs4_proc_commit(struct file *dst, __u64 offset, __u32 count, struct 
 extern const nfs4_stateid zero_stateid;
 extern const nfs4_stateid invalid_stateid;
 
+extern void nfs4_init_localioclient(struct nfs_client *);
+
 /* nfs4super.c */
 struct nfs_mount_info;
 extern struct nfs_subversion nfs_v4;

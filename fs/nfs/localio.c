@@ -269,6 +269,7 @@ void nfs_local_probe(struct nfs_client *clp)
 
 	switch (clp->cl_rpcclient->cl_vers) {
 	case 3:
+	case 4:
 		/*
 		 * Retrieve server's uuid via LOCALIO protocol and verify the
 		 * server with that uuid it is known to be local. This ensures
@@ -280,7 +281,6 @@ void nfs_local_probe(struct nfs_client *clp)
 		if (!nfsd_uuid_is_local(&uuid))
 			return;
 		break;
-	case 4:
 	default:
 		return; /* localio not supported */
 	}

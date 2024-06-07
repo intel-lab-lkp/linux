@@ -7728,3 +7728,56 @@ const struct rpc_version nfs_version4 = {
 	.procs			= nfs4_procedures,
 	.counts			= nfs_version4_counts,
 };
+
+#if defined(CONFIG_NFS_V4_LOCALIO)
+
+#define NFS4_filename_sz	(1+(NFS4_MAXNAMLEN>>2))
+#define LOCALIO4_getuuidres_sz	(1+NFS4_filename_sz)
+
+static void nfs4_xdr_enc_getuuidargs(struct rpc_rqst *req,
+				struct xdr_stream *xdr,
+				const void *data)
+{
+	/* void function */
+}
+
+static inline int nfs4_decode_getuuidresok(struct xdr_stream *xdr,
+					struct nfs_getuuidres *result)
+{
+	return decode_opaque_inline(xdr, &result->len, (char **)&result->uuid);
+}
+
+static int nfs4_xdr_dec_getuuidres(struct rpc_rqst *req,
+				struct xdr_stream *xdr,
+				void *result)
+{
+	// FIXME: need proper handling that isn't abusing nfs_opnum4
+	int error = decode_op_hdr(xdr, LOCALIOPROC_GETUUID);
+	if (unlikely(error))
+		goto out;
+	error = nfs4_decode_getuuidresok(xdr, result);
+out:
+	return error;
+}
+
+static const struct rpc_procinfo nfs4_localio_procedures[] = {
+	[LOCALIOPROC_GETUUID] = {
+		.p_proc = LOCALIOPROC_GETUUID,
+		.p_encode = nfs4_xdr_enc_getuuidargs,
+		.p_decode = nfs4_xdr_dec_getuuidres,
+		.p_arglen = 1,
+		.p_replen = LOCALIO4_getuuidres_sz,
+		.p_statidx = LOCALIOPROC_GETUUID,
+		.p_name = "GETUUID",
+	},
+};
+
+static unsigned int nfs4_localio_counts[ARRAY_SIZE(nfs4_localio_procedures)];
+const struct rpc_version nfslocalio_version4 = {
+	.number			= 4,
+	.nrprocs		= ARRAY_SIZE(nfs4_localio_procedures),
+	.procs			= nfs4_localio_procedures,
+	.counts			= nfs4_localio_counts,
+};
+
+#endif  /* CONFIG_NFS_V4_LOCALIO */
