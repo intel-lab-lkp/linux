@@ -2159,6 +2159,9 @@ pci_moxa_setup(struct serial_private *priv,
 	unsigned int bar = FL_GET_BASE(board->flags);
 	int offset;
 
+	port->port.flags |= UPF_FIXED_TYPE;
+	port->port.type = PORT_MUEX50;
+
 	if (pci_moxa_is_pcie(dev->device) || pci_moxa_is_mini_pcie(dev->device)) {
 		if (pci_moxa_supported_rs(dev) & MOXA_SUPP_RS485) {
 			port->port.rs485_config = pci_moxa_rs485_config;
