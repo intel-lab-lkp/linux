@@ -954,6 +954,9 @@ unsigned long module_kallsyms_lookup_name(const char *name);
 
 unsigned long find_kallsyms_symbol_value(struct module *mod, const char *name);
 
+int find_kallsyms_symbol(struct module *mod, unsigned long addr,
+			 unsigned long *size, unsigned long *offset);
+
 #else	/* CONFIG_MODULES && CONFIG_KALLSYMS */
 
 static inline int module_kallsyms_on_each_symbol(const char *modname,
@@ -997,6 +1000,11 @@ static inline unsigned long find_kallsyms_symbol_value(struct module *mod,
 	return 0;
 }
 
+static inline int find_kallsyms_symbol(struct module *mod, unsigned long addr,
+				       unsigned long *size, unsigned long *offset)
+{
+	return 0;
+}
 #endif  /* CONFIG_MODULES && CONFIG_KALLSYMS */
 
 #endif /* _LINUX_MODULE_H */

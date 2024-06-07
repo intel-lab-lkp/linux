@@ -6493,6 +6493,7 @@ static int ftrace_process_locs(struct module *mod,
 	unsigned long addr;
 	unsigned long flags = 0; /* Shut up gcc */
 	int ret = -ENOMEM;
+	unsigned long last_func = 0;
 
 	count = end - start;
 
@@ -6543,6 +6544,8 @@ static int ftrace_process_locs(struct module *mod,
 	pg = start_pg;
 	while (p < end) {
 		unsigned long end_offset;
+		unsigned long cur_func, off;
+
 		addr = ftrace_call_adjust(*p++);
 		/*
 		 * Some architecture linkers will pad between
@@ -6554,6 +6557,16 @@ static int ftrace_process_locs(struct module *mod,
 			skipped++;
 			continue;
 		}
+		if (mod)
+			WARN_ON_ONCE(!find_kallsyms_symbol(mod, addr, NULL, &off));
+		else
+			WARN_ON_ONCE(!kallsyms_lookup_size_offset(addr, NULL, &off));
+		cur_func = addr - off;
+		if (cur_func == last_func) {
+			skipped++;
+			continue;
+		}
+		last_func = cur_func;
 
 		end_offset = (pg->index+1) * sizeof(pg->records[0]);
 		if (end_offset > PAGE_SIZE << pg->order) {
@@ -6859,13 +6872,6 @@ void ftrace_module_enable(struct module *mod)
 		 */
 		if (!within_module(rec->ip, mod))
 			break;
-
-		/* Weak functions should still be ignored */
-		if (!test_for_valid_rec(rec)) {
-			/* Clear all other flags. Should not be enabled anyway */
-			rec->flags = FTRACE_FL_DISABLED;
-			continue;
-		}
 
 		cnt = 0;
 
