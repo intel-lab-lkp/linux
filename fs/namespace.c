@@ -5083,10 +5083,11 @@ static ssize_t do_listmount(struct mount *first, struct path *orig,
 SYSCALL_DEFINE4(listmount, const struct mnt_id_req __user *, req, u64 __user *,
 		mnt_ids, size_t, nr_mnt_ids, unsigned int, flags)
 {
+	struct path root __free(path_put) = {};
 	struct mnt_namespace *ns = current->nsproxy->mnt_ns;
 	struct mnt_id_req kreq;
 	struct mount *first;
-	struct path root, orig;
+	struct path orig;
 	u64 mnt_parent_id, last_mnt_id;
 	const size_t maxcount = (size_t)-1 >> 3;
 	ssize_t ret;
@@ -5112,10 +5113,9 @@ SYSCALL_DEFINE4(listmount, const struct mnt_id_req __user *, req, u64 __user *,
 	if (mnt_parent_id == LSMT_ROOT) {
 		orig = root;
 	} else {
-		ret = -ENOENT;
 		orig.mnt = lookup_mnt_in_ns(mnt_parent_id, ns);
 		if (!orig.mnt)
-			goto err;
+			return -ENOENT;
 		orig.dentry = orig.mnt->mnt_root;
 	}
 	if (!last_mnt_id)
@@ -5123,10 +5123,7 @@ SYSCALL_DEFINE4(listmount, const struct mnt_id_req __user *, req, u64 __user *,
 	else
 		first = mnt_find_id_at(ns, last_mnt_id + 1);
 
-	ret = do_listmount(first, &orig, mnt_parent_id, mnt_ids, nr_mnt_ids, &root);
-err:
-	path_put(&root);
-	return ret;
+	return do_listmount(first, &orig, mnt_parent_id, mnt_ids, nr_mnt_ids, &root);
 }
 
 
