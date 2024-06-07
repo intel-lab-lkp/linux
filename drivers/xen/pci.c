@@ -177,6 +177,31 @@ static int xen_remove_device(struct device *dev)
 	return r;
 }
 
+enum pci_device_state_reset_type {
+	DEVICE_RESET_FLR,
+	DEVICE_RESET_COLD,
+	DEVICE_RESET_WARM,
+	DEVICE_RESET_HOT,
+};
+
+struct pci_device_state_reset {
+	struct physdev_pci_device dev;
+	enum pci_device_state_reset_type reset_type;
+};
+
+int xen_reset_device_function_state(const struct pci_dev *dev)
+{
+	struct pci_device_state_reset device = {
+		.dev.seg = pci_domain_nr(dev->bus),
+		.dev.bus = dev->bus->number,
+		.dev.devfn = dev->devfn,
+		.reset_type = DEVICE_RESET_FLR,
+	};
+
+	return HYPERVISOR_physdev_op(PHYSDEVOP_pci_device_state_reset, &device);
+}
+EXPORT_SYMBOL_GPL(xen_reset_device_function_state);
+
 static int xen_pci_notifier(struct notifier_block *nb,
 			    unsigned long action, void *data)
 {
