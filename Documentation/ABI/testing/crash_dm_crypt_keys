@@ -15,6 +15,8 @@ Description:	read/write
         Record a key description. For security reason, the key must be a logon
         key whose payload can't be read by user space. For details, please refer
         to security/keys/core.rst.
+      - "reuse"
+        Reuse the dm crypt keys stored in kdump reserved memory.
 
     And you can also read this API to know the command eructation status,
       - fresh
