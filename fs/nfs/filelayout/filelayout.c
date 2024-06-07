@@ -1009,7 +1009,8 @@ static int filelayout_initiate_commit(struct nfs_commit_data *data, int how)
 	fh = select_ds_fh_from_commit(lseg, data->ds_commit_index);
 	if (fh)
 		data->args.fh = fh;
-	return nfs_initiate_commit(ds_clnt, data, NFS_PROTO(data->inode),
+	return nfs_initiate_commit(ds->ds_clp, ds_clnt, data,
+				   NFS_PROTO(data->inode),
 				   &filelayout_commit_call_ops, how,
 				   RPC_TASK_SOFTCONN);
 out_err:

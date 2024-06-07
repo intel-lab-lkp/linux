@@ -534,7 +534,8 @@ pnfs_generic_commit_pagelist(struct inode *inode, struct list_head *mds_pages,
 		list_del(&data->list);
 		if (data->ds_commit_index < 0) {
 			nfs_init_commit(data, NULL, NULL, cinfo);
-			nfs_initiate_commit(NFS_CLIENT(inode), data,
+			nfs_initiate_commit(NFS_SERVER(inode)->nfs_client,
+					    NFS_CLIENT(inode), data,
 					    NFS_PROTO(data->inode),
 					    data->mds_ops, how,
 					    RPC_TASK_CRED_NOREF);

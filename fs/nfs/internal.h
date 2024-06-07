@@ -525,7 +525,8 @@ extern void nfs_pageio_init_write(struct nfs_pageio_descriptor *pgio,
 extern void nfs_pageio_reset_write_mds(struct nfs_pageio_descriptor *pgio);
 extern void nfs_commit_free(struct nfs_commit_data *p);
 extern void nfs_commit_prepare(struct rpc_task *task, void *calldata);
-extern int nfs_initiate_commit(struct rpc_clnt *clnt,
+extern int nfs_initiate_commit(struct nfs_client *clp,
+			       struct rpc_clnt *clnt,
 			       struct nfs_commit_data *data,
 			       const struct nfs_rpc_ops *nfs_ops,
 			       const struct rpc_call_ops *call_ops,
