@@ -5106,7 +5106,8 @@ SYSCALL_DEFINE4(listmount, const struct mnt_id_req __user *, req, u64 __user *,
 	mnt_parent_id = kreq.mnt_id;
 	last_mnt_id = kreq.param;
 
-	down_read(&namespace_sem);
+	guard(rwsem_read)(&namespace_sem);
+
 	get_fs_root(current->fs, &root);
 	if (mnt_parent_id == LSMT_ROOT) {
 		orig = root;
@@ -5125,7 +5126,6 @@ SYSCALL_DEFINE4(listmount, const struct mnt_id_req __user *, req, u64 __user *,
 	ret = do_listmount(first, &orig, mnt_parent_id, mnt_ids, nr_mnt_ids, &root);
 err:
 	path_put(&root);
-	up_read(&namespace_sem);
 	return ret;
 }
 
