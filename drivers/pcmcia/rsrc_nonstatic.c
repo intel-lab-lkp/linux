@@ -31,6 +31,7 @@
 
 /* moved to rsrc_mgr.c
 MODULE_AUTHOR("David A. Hinds, Dominik Brodowski");
+MODULE_DESCRIPTION("Resource management routines for !SS_CAP_STATIC_MAP sockets");
 MODULE_LICENSE("GPL");
 */
 

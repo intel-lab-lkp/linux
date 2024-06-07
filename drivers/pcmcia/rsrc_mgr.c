@@ -66,5 +66,6 @@ EXPORT_SYMBOL(pccard_static_ops);
 
 
 MODULE_AUTHOR("David A. Hinds, Dominik Brodowski");
+MODULE_DESCRIPTION("Resource management routines");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("rsrc_nonstatic");
