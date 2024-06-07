@@ -872,6 +872,12 @@ ftrace_graph_get_ret_stack(struct task_struct *task, int idx)
 /**
  * ftrace_graph_ret_addr - convert a potentially modified stack return address
  *			   to its original value
+ * @task: pointer to the task_struct of the task being examined
+ * @idx: pointer to a state variable, should be initialized to zero
+ *	 before the first call
+ * @ret: the current return address found on the stack
+ * @retp: pointer to the return address on the stack, ignored if
+ *	  HAVE_FUNCTION_GRAPH_RET_ADDR_PTR is not defined
  *
  * This function can be called by stack unwinding code to convert a found stack
  * return address ('ret') to its original value, in case the function graph
