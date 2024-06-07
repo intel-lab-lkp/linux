@@ -18,6 +18,7 @@
 #include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
 #include <linux/string.h>
 #include <linux/usb/of.h>
@@ -111,6 +112,7 @@ struct rcar_gen3_chan {
 	struct extcon_dev *extcon;
 	struct rcar_gen3_phy rphys[NUM_OF_PHYS];
 	struct regulator *vbus;
+	struct regmap *regmap;
 	struct work_struct work;
 	struct mutex lock;	/* protects rphys[...].powered */
 	enum usb_dr_mode dr_mode;
@@ -188,6 +190,10 @@ static void rcar_gen3_enable_vbus_ctrl(struct rcar_gen3_chan *ch, int vbus)
 
 	dev_vdbg(ch->dev, "%s: %08x, %d\n", __func__, val, vbus);
 	if (ch->soc_no_adp_ctrl) {
+		if (vbus)
+			regmap_write(ch->regmap, 0, 0);
+		else
+			regmap_write(ch->regmap, 0, 1);
 		vbus_ctrl_reg = USB2_VBCTRL;
 		vbus_ctrl_val = USB2_VBCTRL_VBOUT;
 	}
@@ -718,13 +724,22 @@ static int rcar_gen3_phy_usb2_probe(struct platform_device *pdev)
 		phy_set_drvdata(channel->rphys[i].phy, &channel->rphys[i]);
 	}
 
-	channel->vbus = devm_regulator_get_optional(dev, "vbus");
+	channel->vbus = devm_regulator_get(dev, channel->soc_no_adp_ctrl ?
+					   "usb_vbus" : "vbus");
 	if (IS_ERR(channel->vbus)) {
 		if (PTR_ERR(channel->vbus) == -EPROBE_DEFER) {
 			ret = PTR_ERR(channel->vbus);
 			goto error;
 		}
 		channel->vbus = NULL;
+	}
+
+	if (channel->soc_no_adp_ctrl && channel->vbus) {
+		channel->regmap = regulator_get_regmap(channel->vbus);
+		if (IS_ERR(channel->regmap)) {
+			ret = PTR_ERR(channel->vbus);
+			goto error;
+		}
 	}
 
 	platform_set_drvdata(pdev, channel);
