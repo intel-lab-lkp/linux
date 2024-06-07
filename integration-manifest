@@ -1,0 +1,28 @@
+drm drm-fixes eb55943aab89be99a26e34fc2175ebb3583a2778
+	Merge tag 'drm-misc-next-fixes-2024-06-07' of https://gitlab.freedesktop.org/drm/misc/kernel into drm-fixes
+drm-misc drm-misc-fixes 0c76053e3fec801e86aca73f80072b3da4e72849
+	drm: have config DRM_WERROR depend on !WERROR
+drm-intel drm-intel-fixes c3f38fa61af77b49866b006939479069cd451173
+	Linux 6.10-rc2
+drm-xe drm-xe-fixes a9f9b30e1748252d158f78a0c0affdc949671dd1
+	MAINTAINERS: Update Xe driver maintainers
+drm drm-next c3f38fa61af77b49866b006939479069cd451173
+	Linux 6.10-rc2
+drm-misc drm-misc-next-fixes 539d33b5783804f22a62bd62ff463dfd1cef4265
+	drm/komeda: remove unused struct 'gamma_curve_segment'
+drm-intel drm-intel-next-fixes 1613e604df0cd359cf2a7fbd9be7a0bcfacfabd0
+	Linux 6.10-rc1
+drm-xe drm-xe-next-fixes d69c3d4b53829097b8948d6791ea32c07de3faab
+	drm/xe/ads: Use flexible-array
+drm-misc drm-misc-next aa61186951cc1fd302e7d2d180061a8d568dff90
+	drm/tiny: panel-mipi-dbi: Support the pixel format property
+drm-intel drm-intel-next 76dbc41608167d531f9c45d60054fd1f76498785
+	drm/i915/display/bmg: Add platform descriptor
+drm-intel drm-intel-gt-next 6ef078383a50dded4bb9e71250ea6f7b533a6109
+	drm/i915/guc: Enable w/a 16021333562 for DG2, MTL and ARL
+drm-xe drm-xe-next 4468d0488ecb91639f12659f8a025139120a431b
+	drm/xe: Drop EXEC_QUEUE_FLAG_BANNED
+drm-intel topic/core-for-CI a51e92845f99879e971677482b0f5fd96ef10d3c
+	thunderbolt: Add Kconfig option to disable PCIe tunneling
+drm-xe topic/xe-for-CI 428c3ef38ef5565140b2104f0d3dafdae9056ca9
+	Revert "drm/xe/gsc: define GSC FW for LNL"
