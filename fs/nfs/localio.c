@@ -195,7 +195,6 @@ nfs_local_put_lookup_ctx(void)
 		spin_unlock(&ctx->lock);
 		if (fn)
 			symbol_put(nfsd_open_local_fh);
-		dprintk("destroy lookup context\n");
 	}
 }
 
@@ -206,8 +205,8 @@ void
 nfs_local_enable(struct nfs_client *clp)
 {
 	if (nfs_local_get_lookup_ctx()) {
-		dprintk("enabled local i/o\n");
 		set_bit(NFS_CS_LOCAL_IO, &clp->cl_flags);
+		trace_nfs_local_enable(clp);
 	}
 }
 EXPORT_SYMBOL_GPL(nfs_local_enable);
@@ -219,7 +218,7 @@ void
 nfs_local_disable(struct nfs_client *clp)
 {
 	if (test_and_clear_bit(NFS_CS_LOCAL_IO, &clp->cl_flags)) {
-		dprintk("disabled local i/o\n");
+		trace_nfs_local_disable(clp);
 		nfs_local_put_lookup_ctx();
 	}
 }
