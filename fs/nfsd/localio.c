@@ -8,6 +8,8 @@
 #include <linux/sunrpc/svcauth_gss.h>
 #include <linux/sunrpc/clnt.h>
 #include <linux/nfs.h>
+#include <linux/nfs_fs.h>
+#include <linux/nfs_xdr.h>
 #include <linux/string.h>
 
 #include "nfsd.h"
@@ -202,11 +204,6 @@ static __be32 nfsd_proc_getuuid(struct svc_rqst *rqstp)
 }
 
 #define NFS_getuuid_sz XDR_QUADLEN(UUID_SIZE)
-
-static inline void encode_opaque_fixed(struct xdr_stream *xdr, const void *buf, size_t len)
-{
-	WARN_ON_ONCE(xdr_stream_encode_opaque_fixed(xdr, buf, len) < 0);
-}
 
 static void encode_uuid(struct xdr_stream *xdr, uuid_t *src_uuid)
 {
