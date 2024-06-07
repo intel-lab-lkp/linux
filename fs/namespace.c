@@ -1448,6 +1448,30 @@ static struct mount *mnt_find_id_at(struct mnt_namespace *ns, u64 mnt_id)
 	return ret;
 }
 
+/*
+ * Returns the mount which either has the specified mnt_id, or has the next
+ * greater id before the specified one.
+ */
+static struct mount *mnt_find_id_at_reverse(struct mnt_namespace *ns, u64 mnt_id)
+{
+	struct rb_node *node = ns->mounts.rb_node;
+	struct mount *ret = NULL;
+
+	while (node) {
+		struct mount *m = node_to_mount(node);
+
+		if (mnt_id >= m->mnt_id_unique) {
+			ret = node_to_mount(node);
+			if (mnt_id == m->mnt_id_unique)
+				break;
+			node = node->rb_right;
+		} else {
+			node = node->rb_left;
+		}
+	}
+	return ret;
+}
+
 #ifdef CONFIG_PROC_FS
 
 /* iterator; we want it to have access to namespace_sem, thus here... */
@@ -5042,14 +5066,22 @@ retry:
 	return ret;
 }
 
-static struct mount *listmnt_next(struct mount *curr)
+static struct mount *listmnt_next(struct mount *curr, bool reverse)
 {
-	return node_to_mount(rb_next(&curr->mnt_node));
+	struct rb_node *node;
+
+	if (reverse)
+		node = rb_prev(&curr->mnt_node);
+	else
+		node = rb_next(&curr->mnt_node);
+
+	return node_to_mount(node);
 }
 
 static ssize_t do_listmount(struct mount *first, struct path *orig,
 			    u64 mnt_parent_id, u64 __user *mnt_ids,
-			    size_t nr_mnt_ids, const struct path *root)
+			    size_t nr_mnt_ids, const struct path *root,
+			    bool reverse)
 {
 	struct mount *r;
 	ssize_t ret;
@@ -5066,7 +5098,7 @@ static ssize_t do_listmount(struct mount *first, struct path *orig,
 	if (ret)
 		return ret;
 
-	for (ret = 0, r = first; r && nr_mnt_ids; r = listmnt_next(r)) {
+	for (ret = 0, r = first; r && nr_mnt_ids; r = listmnt_next(r, reverse)) {
 		if (r->mnt_id_unique == mnt_parent_id)
 			continue;
 		if (!is_path_reachable(r, r->mnt.mnt_root, orig))
@@ -5090,9 +5122,10 @@ SYSCALL_DEFINE4(listmount, const struct mnt_id_req __user *, req, u64 __user *,
 	struct path orig;
 	u64 mnt_parent_id, last_mnt_id;
 	const size_t maxcount = (size_t)-1 >> 3;
+	bool reverse_order;
 	ssize_t ret;
 
-	if (flags)
+	if (flags & ~LISTMOUNT_REVERSE)
 		return -EINVAL;
 
 	if (unlikely(nr_mnt_ids > maxcount))
@@ -5118,12 +5151,21 @@ SYSCALL_DEFINE4(listmount, const struct mnt_id_req __user *, req, u64 __user *,
 			return -ENOENT;
 		orig.dentry = orig.mnt->mnt_root;
 	}
-	if (!last_mnt_id)
-		first = node_to_mount(rb_first(&ns->mounts));
-	else
-		first = mnt_find_id_at(ns, last_mnt_id + 1);
+	reverse_order = flags & LISTMOUNT_REVERSE;
+	if (!last_mnt_id) {
+		if (reverse_order)
+			first = node_to_mount(rb_last(&ns->mounts));
+		else
+			first = node_to_mount(rb_first(&ns->mounts));
+	} else {
+		if (reverse_order)
+			first = mnt_find_id_at_reverse(ns, last_mnt_id - 1);
+		else
+			first = mnt_find_id_at(ns, last_mnt_id + 1);
+	}
 
-	return do_listmount(first, &orig, mnt_parent_id, mnt_ids, nr_mnt_ids, &root);
+	return do_listmount(first, &orig, mnt_parent_id, mnt_ids, nr_mnt_ids,
+			    &root, reverse_order);
 }
 
 
