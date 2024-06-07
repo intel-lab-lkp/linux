@@ -25,12 +25,9 @@
 
 #if IS_ENABLED(CONFIG_IPV6)
 
-static size_t rpc_ntop6_noscopeid(const struct sockaddr *sap,
-				  char *buf, const int buflen)
+size_t rpc_ntop6_addr_noscopeid(const struct in6_addr *addr,
+				char *buf, const int buflen)
 {
-	const struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)sap;
-	const struct in6_addr *addr = &sin6->sin6_addr;
-
 	/*
 	 * RFC 4291, Section 2.2.2
 	 *
@@ -55,12 +52,22 @@ static size_t rpc_ntop6_noscopeid(const struct sockaddr *sap,
 	 */
 	if (ipv6_addr_v4mapped(addr))
 		return snprintf(buf, buflen, "::ffff:%pI4",
-					&addr->s6_addr32[3]);
+				&addr->s6_addr32[3]);
 
 	/*
 	 * RFC 4291, Section 2.2.1
 	 */
 	return snprintf(buf, buflen, "%pI6c", addr);
+}
+EXPORT_SYMBOL_GPL(rpc_ntop6_addr_noscopeid);
+
+static size_t rpc_ntop6_noscopeid(const struct sockaddr *sap,
+				  char *buf, const int buflen)
+{
+	const struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)sap;
+	const struct in6_addr *addr = &sin6->sin6_addr;
+
+	return rpc_ntop6_addr_noscopeid(addr, buf, buflen);
 }
 
 static size_t rpc_ntop6(const struct sockaddr *sap,
