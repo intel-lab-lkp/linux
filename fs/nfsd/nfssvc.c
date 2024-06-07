@@ -38,7 +38,7 @@
 atomic_t			nfsd_th_cnt = ATOMIC_INIT(0);
 extern struct svc_program	nfsd_program;
 static int			nfsd(void *vrqstp);
-#if defined(CONFIG_NFSD_V3_LOCALIO)
+#if defined(CONFIG_NFSD_V3_LOCALIO) || defined(CONFIG_NFSD_V4_LOCALIO)
 static int			nfsd_localio_rpcbind_set(struct net *,
 						     const struct svc_program *,
 						     u32, int,
@@ -47,7 +47,7 @@ static int			nfsd_localio_rpcbind_set(struct net *,
 static __be32			nfsd_localio_init_request(struct svc_rqst *,
 						const struct svc_program *,
 						struct svc_process_info *);
-#endif /* CONFIG_NFSD_V3_LOCALIO */
+#endif /* CONFIG_NFSD_V3_LOCALIO || CONFIG_NFSD_V4_LOCALIO */
 #if defined(CONFIG_NFSD_V2_ACL) || defined(CONFIG_NFSD_V3_ACL)
 static int			nfsd_acl_rpcbind_set(struct net *,
 						     const struct svc_program *,
@@ -91,9 +91,14 @@ DEFINE_SPINLOCK(nfsd_drc_lock);
 unsigned long	nfsd_drc_max_mem;
 unsigned long	nfsd_drc_mem_used;
 
-#if defined(CONFIG_NFSD_V3_LOCALIO)
+#if defined(CONFIG_NFSD_V3_LOCALIO) || defined(CONFIG_NFSD_V4_LOCALIO)
 static const struct svc_version *nfsd_localio_version[] = {
+#if defined(CONFIG_NFSD_V3_LOCALIO)
 	[3] = &nfsd_localio_version3,
+#endif
+#if defined(CONFIG_NFSD_V4_LOCALIO)
+	[4] = &nfsd_localio_version4,
+#endif
 };
 
 #define NFSD_LOCALIO_MINVERS            3
@@ -109,7 +114,7 @@ static struct svc_program	nfsd_localio_program = {
 	.pg_init_request	= nfsd_localio_init_request,
 	.pg_rpcbind_set		= nfsd_localio_rpcbind_set,
 };
-#endif /* CONFIG_NFSD_V3_LOCALIO */
+#endif /* CONFIG_NFSD_V3_LOCALIO || CONFIG_NFSD_V4_LOCALIO */
 
 #if defined(CONFIG_NFSD_V2_ACL) || defined(CONFIG_NFSD_V3_ACL)
 static const struct svc_version *nfsd_acl_version[] = {
@@ -125,9 +130,9 @@ static const struct svc_version *nfsd_acl_version[] = {
 #define NFSD_ACL_NRVERS		ARRAY_SIZE(nfsd_acl_version)
 
 static struct svc_program	nfsd_acl_program = {
-#if defined(CONFIG_NFSD_V3_LOCALIO)
+#if defined(CONFIG_NFSD_V3_LOCALIO) || defined(CONFIG_NFSD_V4_LOCALIO)
 	.pg_next		= &nfsd_localio_program,
-#endif /* CONFIG_NFSD_V3_LOCALIO */
+#endif /* CONFIG_NFSD_V3_LOCALIO || CONFIG_NFSD_V4_LOCALIO */
 	.pg_prog		= NFS_ACL_PROGRAM,
 	.pg_nvers		= NFSD_ACL_NRVERS,
 	.pg_vers		= nfsd_acl_version,
@@ -157,9 +162,9 @@ struct svc_program		nfsd_program = {
 #if defined(CONFIG_NFSD_V2_ACL) || defined(CONFIG_NFSD_V3_ACL)
 	.pg_next		= &nfsd_acl_program,
 #else
-#if defined(CONFIG_NFSD_V3_LOCALIO)
+#if defined(CONFIG_NFSD_V3_LOCALIO) || defined(CONFIG_NFSD_V4_LOCALIO)
 	.pg_next		= &nfsd_localio_program,
-#endif /* CONFIG_NFSD_V3_LOCALIO */
+#endif /* CONFIG_NFSD_V3_LOCALIO || CONFIG_NFSD_V4_LOCALIO */
 #endif
 	.pg_prog		= NFS_PROGRAM,		/* program number */
 	.pg_nvers		= NFSD_NRVERS,		/* nr of entries in nfsd_version */
@@ -855,7 +860,7 @@ out:
 	return error;
 }
 
-#if defined(CONFIG_NFSD_V3_LOCALIO)
+#if defined(CONFIG_NFSD_V3_LOCALIO) || defined(CONFIG_NFSD_V4_LOCALIO)
 static bool
 nfsd_support_localio_version(int vers)
 {
@@ -889,7 +894,7 @@ nfsd_localio_init_request(struct svc_rqst *rqstp,
 
 	return rpc_prog_unavail;
 }
-#endif /* CONFIG_NFSD_V3_LOCALIO */
+#endif /* CONFIG_NFSD_V3_LOCALIO || CONFIG_NFSD_V4_LOCALIO */
 
 #if defined(CONFIG_NFSD_V2_ACL) || defined(CONFIG_NFSD_V3_ACL)
 static bool

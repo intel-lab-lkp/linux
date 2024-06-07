@@ -16,6 +16,7 @@
 #include "filecache.h"
 #include "cache.h"
 #include "xdr3.h"
+#include "xdr4.h"
 
 #define NFSDDBG_FACILITY		NFSDDBG_FH
 
@@ -267,3 +268,72 @@ const struct svc_version nfsd_localio_version3 = {
 	.vs_xdrsize	= NFS3_SVC_XDRSIZE,
 };
 #endif /* CONFIG_NFSD_V3_LOCALIO */
+
+#if defined(CONFIG_NFSD_V4_LOCALIO)
+static bool nfs4svc_encode_getuuidres(struct svc_rqst *rqstp,
+				      struct xdr_stream *xdr)
+{
+	struct nfsd_getuuidres *resp = rqstp->rq_resp;
+	__be32 *p;
+
+	p = xdr_reserve_space(xdr, 8);
+	if (!p)
+		return 0;
+	*p++ = cpu_to_be32(LOCALIOPROC_GETUUID);
+	*p++ = resp->status;
+
+	if (resp->status == nfs_ok) {
+		u8 uuid[UUID_SIZE];
+
+		export_uuid(uuid, &resp->uuid);
+		p = xdr_reserve_space(xdr, 4 + UUID_SIZE);
+		if (!p)
+			return 0;
+		xdr_encode_opaque(p, uuid, UUID_SIZE);
+		dprintk("%s: nfs_ok uuid=%pU uuid_len=%lu\n",
+			__func__, uuid, sizeof(uuid));
+	}
+
+	return 1;
+}
+
+#define ST 1		/* status */
+#define NFS4_filename_sz	(1+(NFS4_MAXNAMLEN>>2))
+
+static const struct svc_procedure nfsd_localio_procedures4[2] = {
+	[LOCALIOPROC_NULL] = {
+		.pc_func = nfsd_proc_null,
+		.pc_decode = nfssvc_decode_voidarg,
+		.pc_encode = nfssvc_encode_voidres,
+		.pc_argsize = sizeof(struct nfsd_voidargs),
+		.pc_ressize = sizeof(struct nfsd_voidres),
+		.pc_cachetype = RC_NOCACHE,
+		.pc_xdrressize = ST,
+		.pc_name = "NULL",
+	},
+	[LOCALIOPROC_GETUUID] = {
+		.pc_func = nfsd_proc_getuuid,
+		.pc_decode = nfssvc_decode_voidarg,
+		.pc_encode = nfs4svc_encode_getuuidres,
+		.pc_argsize = sizeof(struct nfsd_voidargs),
+		.pc_ressize = sizeof(struct nfsd_getuuidres),
+		.pc_cachetype = RC_NOCACHE,
+		.pc_xdrressize = ST+NFS4_filename_sz,
+		.pc_name = "GETUUID",
+	},
+};
+
+static DEFINE_PER_CPU_ALIGNED(unsigned long,
+			      nfsd_localio_count4[ARRAY_SIZE(nfsd_localio_procedures4)]);
+const struct svc_version nfsd_localio_version4 = {
+	.vs_vers	        = 4,
+	.vs_nproc	        = 2,
+	.vs_proc	        = nfsd_localio_procedures4,
+	.vs_dispatch	        = nfsd_dispatch,
+	.vs_count	        = nfsd_localio_count4,
+	.vs_xdrsize	        = NFS4_SVC_XDRSIZE,
+	.vs_rpcb_optnl		= true,
+	.vs_need_cong_ctrl	= true,
+
+};
+#endif /* CONFIG_NFSD_V4_LOCALIO */

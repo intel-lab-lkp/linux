@@ -147,6 +147,11 @@ extern const struct svc_version nfsd_localio_version3;
 #else
 #define nfsd_localio_version3 NULL
 #endif
+#if defined(CONFIG_NFSD_V4_LOCALIO)
+extern const struct svc_version nfsd_localio_version4;
+#else
+#define nfsd_localio_version4 NULL
+#endif
 
 struct nfsd_net;
 
