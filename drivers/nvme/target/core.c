@@ -827,7 +827,7 @@ void nvmet_sq_destroy(struct nvmet_sq *sq)
 	 */
 	ctrl = sq->ctrl;
 
-	if (ctrl) {
+	if (ctrl && ctrl->sqs) {
 		/*
 		 * The teardown flow may take some time, and the host may not
 		 * send us keep-alive during this period, hence reset the
