@@ -227,7 +227,8 @@ bl_end_par_io_read(void *data)
 }
 
 static enum pnfs_try_status
-bl_read_pagelist(struct nfs_pgio_header *header)
+bl_read_pagelist(struct nfs_pageio_descriptor *desc,
+		 struct nfs_pgio_header *header)
 {
 	struct pnfs_block_layout *bl = BLK_LSEG2EXT(header->lseg);
 	struct pnfs_block_dev_map map = { .start = NFS4_MAX_UINT64 };
@@ -372,7 +373,8 @@ static void bl_end_par_io_write(void *data)
 }
 
 static enum pnfs_try_status
-bl_write_pagelist(struct nfs_pgio_header *header, int sync)
+bl_write_pagelist(struct nfs_pageio_descriptor *desc,
+		  struct nfs_pgio_header *header, int sync)
 {
 	struct pnfs_block_layout *bl = BLK_LSEG2EXT(header->lseg);
 	struct pnfs_block_dev_map map = { .start = NFS4_MAX_UINT64 };

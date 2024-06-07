@@ -157,8 +157,10 @@ struct pnfs_layoutdriver_type {
 	 * Return PNFS_ATTEMPTED to indicate the layout code has attempted
 	 * I/O, else return PNFS_NOT_ATTEMPTED to fall back to normal NFS
 	 */
-	enum pnfs_try_status (*read_pagelist)(struct nfs_pgio_header *);
-	enum pnfs_try_status (*write_pagelist)(struct nfs_pgio_header *, int);
+	enum pnfs_try_status (*read_pagelist)(struct nfs_pageio_descriptor *,
+					      struct nfs_pgio_header *);
+	enum pnfs_try_status (*write_pagelist)(struct nfs_pageio_descriptor *,
+					       struct nfs_pgio_header *, int);
 
 	void (*free_deviceid_node) (struct nfs4_deviceid_node *);
 	struct nfs4_deviceid_node * (*alloc_deviceid_node)
