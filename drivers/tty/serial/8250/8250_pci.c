@@ -3043,6 +3043,7 @@ enum pci_board_num_t {
 	pbn_b2_16_460800,
 
 	pbn_b2_1_921600,
+	pbn_b2_2_921600,
 	pbn_b2_4_921600,
 	pbn_b2_8_921600,
 
@@ -3459,6 +3460,12 @@ static struct pciserial_board pci_boards[] = {
 	[pbn_b2_1_921600] = {
 		.flags		= FL_BASE2,
 		.num_ports	= 1,
+		.base_baud	= 921600,
+		.uart_offset	= 8,
+	},
+	[pbn_b2_2_921600] = {
+		.flags		= FL_BASE2,
+		.num_ports	= 2,
 		.base_baud	= 921600,
 		.uart_offset	= 8,
 	},
