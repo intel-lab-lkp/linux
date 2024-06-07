@@ -5,6 +5,7 @@ config NFS_FS
 	select LOCKD
 	select SUNRPC
 	select NFS_ACL_SUPPORT if NFS_V3_ACL
+	select NFS_LOCALIO_SUPPORT if NFS_V3_LOCALIO
 	help
 	  Choose Y here if you want to access files residing on other
 	  computers using Sun's Network File System protocol.  To compile
@@ -69,6 +70,18 @@ config NFS_V3_ACL
 	  extension.  You can choose N here or specify the "noacl" mount
 	  option to prevent your NFS client from trying to use the NFSv3
 	  ACL protocol.
+
+	  If unsure, say N.
+
+config NFS_V3_LOCALIO
+	bool "NFS client support for the NFSv3 LOCALIO protocol extension"
+	depends on NFS_V3
+	help
+	  Some NFS servers support an auxiliary NFSv3 LOCALIO protocol
+	  that is not an official part of the NFS version 3 protocol.
+
+	  This option enables support for version 3 of the LOCALIO
+	  protocol in the kernel's NFS client.
 
 	  If unsure, say N.
 

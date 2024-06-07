@@ -9,6 +9,7 @@ config NFSD
 	select EXPORTFS
 	select NFS_ACL_SUPPORT if NFSD_V2_ACL
 	select NFS_ACL_SUPPORT if NFSD_V3_ACL
+	select NFS_LOCALIO_SUPPORT if NFSD_V3_LOCALIO
 	depends on MULTIUSER
 	help
 	  Choose Y here if you want to allow other computers to access
@@ -66,6 +67,18 @@ config NFSD_V3_ACL
 
 	  To store ACLs on your NFS server, you also need to enable ACL-
 	  related CONFIG options for your local file systems of choice.
+
+	  If unsure, say N.
+
+config NFSD_V3_LOCALIO
+	bool "NFS server support for the NFSv3 LOCALIO protocol extension"
+	depends on NFSD
+	help
+	  Some NFS servers support an auxiliary NFSv3 LOCALIO protocol
+	  that is not an official part of the NFS version 3 protocol.
+
+	  This option enables support for version 3 of the LOCALIO
+	  protocol in the kernel's NFS server.
 
 	  If unsure, say N.
 
