@@ -550,4 +550,5 @@ static struct platform_driver mac_scsi_driver __refdata = {
 module_platform_driver_probe(mac_scsi_driver, mac_scsi_probe);
 
 MODULE_ALIAS("platform:" DRV_MODULE_NAME);
+MODULE_DESCRIPTION("Generic Macintosh NCR5380 driver");
 MODULE_LICENSE("GPL");

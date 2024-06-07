@@ -68,6 +68,7 @@
 
 
 MODULE_DESCRIPTION("SCSI cdrom (sr) driver");
+MODULE_DESCRIPTION("TBD");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS_BLOCKDEV_MAJOR(SCSI_CDROM_MAJOR);
 MODULE_ALIAS_SCSI_DEVICE(TYPE_ROM);
@@ -1007,4 +1008,5 @@ static void __exit exit_sr(void)
 
 module_init(init_sr);
 module_exit(exit_sr);
+MODULE_DESCRIPTION("SCSI CDROM driver");
 MODULE_LICENSE("GPL");

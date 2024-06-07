@@ -2939,6 +2939,7 @@ static void initio_remove_one(struct pci_dev *pdev)
 	pci_disable_device(pdev);
 }
 
+MODULE_DESCRIPTION("Initio 9100U(W) driver");
 MODULE_LICENSE("GPL");
 
 static struct pci_device_id initio_pci_tbl[] = {
@@ -2961,4 +2962,5 @@ module_pci_driver(initio_pci_driver);
 
 MODULE_DESCRIPTION("Initio INI-9X00U/UW SCSI device driver");
 MODULE_AUTHOR("Initio Corporation");
+MODULE_DESCRIPTION("TBD");
 MODULE_LICENSE("GPL");
