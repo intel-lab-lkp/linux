@@ -1704,7 +1704,7 @@ int nfs_initiate_commit(struct nfs_client *clp,
 	dprintk("NFS: initiated commit call\n");
 
 	if (localio) {
-		nfs_local_commit(clp, localio, data, call_ops, how);
+		status = nfs_local_commit(clp, localio, data, call_ops, how);
 		goto out;
 	}
 
