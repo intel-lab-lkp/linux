@@ -161,6 +161,45 @@ DEFINE_NFS_INODE_EVENT(nfs_readdir_force_readdirplus);
 DEFINE_NFS_INODE_EVENT_DONE(nfs_readdir_cache_fill_done);
 DEFINE_NFS_INODE_EVENT_DONE(nfs_readdir_uncached_done);
 
+DECLARE_EVENT_CLASS(nfs3_acl_template,
+		TP_PROTO(
+			const struct inode *inode,
+			int error
+		),
+
+		TP_ARGS(inode, error),
+
+		TP_STRUCT__entry(
+			__field(dev_t, dev)
+			__field(u32, fhandle)
+			__field(u64, fileid)
+			__field(unsigned long, error)
+		),
+
+		TP_fast_assign(
+			__entry->dev = inode->i_sb->s_dev;
+			__entry->fileid = NFS_FILEID(inode);
+			__entry->fhandle = nfs_fhandle_hash(NFS_FH(inode));
+			__entry->error = error < 0 ? -error : 0;
+		),
+
+		TP_printk(
+			"error=%ld (%s) fileid=%02x:%02x:%llu fhandle=0x%08x",
+			-__entry->error,
+			show_nfs4_status(__entry->error),
+			MAJOR(__entry->dev), MINOR(__entry->dev),
+			(unsigned long long)__entry->fileid,
+			__entry->fhandle
+		)
+);
+
+DEFINE_EVENT(nfs3_acl_template, nfs3_get_acl,
+		TP_PROTO(const struct inode *inode, int error),
+		TP_ARGS(inode, error));
+DEFINE_EVENT(nfs3_acl_template, nfs3_set_acl,
+		TP_PROTO(const struct inode *inode, int error),
+		TP_ARGS(inode, error));
+
 TRACE_EVENT(nfs_access_exit,
 		TP_PROTO(
 			const struct inode *inode,

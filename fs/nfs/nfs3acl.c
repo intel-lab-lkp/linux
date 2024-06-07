@@ -9,6 +9,7 @@
 
 #include "internal.h"
 #include "nfs3_fs.h"
+#include "nfstrace.h"
 
 #define NFSDBG_FACILITY	NFSDBG_PROC
 
@@ -96,6 +97,7 @@ struct posix_acl *nfs3_get_acl(struct inode *inode, int type, bool rcu)
 		nfs3_prepare_get_acl(&inode->i_default_acl);
 
 	status = rpc_call_sync(server->client_acl, &msg, 0);
+	trace_nfs3_get_acl(inode, status);
 	dprintk("NFS reply getacl: %d\n", status);
 
 	/* pages may have been allocated at the xdr layer. */
@@ -287,6 +289,7 @@ int nfs3_set_acl(struct mnt_idmap *idmap, struct dentry *dentry,
 		acl = alloc;
 	}
 	status = __nfs3_proc_setacls(inode, acl, dfacl);
+	trace_nfs3_set_acl(inode, status);
 out:
 	if (acl != orig)
 		posix_acl_release(acl);
