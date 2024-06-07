@@ -7,7 +7,7 @@
 #include <asm/page.h>
 #include <asm-generic/vmlinux.lds.h>
 
-#ifdef __LITTLE_ENDIAN__
+#ifdef CONFIG_CPU_LITTLE_ENDIAN
 OUTPUT_FORMAT("elf64-powerpcle", "elf64-powerpcle", "elf64-powerpcle")
 #else
 OUTPUT_FORMAT("elf64-powerpc", "elf64-powerpc", "elf64-powerpc")
