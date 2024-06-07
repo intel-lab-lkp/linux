@@ -60,6 +60,7 @@ struct nfs_local_fsync_ctx {
 	struct nfs_commit_data	*data;
 	struct work_struct	work;
 	struct kref		kref;
+	struct completion	*done;
 };
 static void nfs_local_fsync_work(struct work_struct *work);
 
@@ -813,6 +814,7 @@ nfs_local_fsync_ctx_alloc(struct nfs_commit_data *data, struct file *filp,
 		ctx->data = data;
 		INIT_WORK(&ctx->work, nfs_local_fsync_work);
 		kref_init(&ctx->kref);
+		ctx->done = NULL;
 	}
 	return ctx;
 }
@@ -847,6 +849,8 @@ nfs_local_fsync_work(struct work_struct *work)
 
 	status = nfs_local_run_commit(ctx->filp, ctx->data);
 	nfs_local_commit_done(ctx->data, status);
+	if (ctx->done != NULL)
+		complete(ctx->done);
 	nfs_local_fsync_ctx_free(ctx);
 }
 
@@ -866,9 +870,13 @@ nfs_local_commit(struct nfs_client *clp, struct file *filp,
 
 	nfs_local_init_commit(data, call_ops);
 	kref_get(&ctx->kref);
-	queue_work(nfsiod_workqueue, &ctx->work);
-	if (how & FLUSH_SYNC)
-		flush_work(&ctx->work);
+	if (how & FLUSH_SYNC) {
+		DECLARE_COMPLETION_ONSTACK(done);
+		ctx->done = &done;
+		queue_work(nfsiod_workqueue, &ctx->work);
+		wait_for_completion(&done);
+	} else
+		queue_work(nfsiod_workqueue, &ctx->work);
 	nfs_local_fsync_ctx_put(ctx);
 	return 0;
 }
