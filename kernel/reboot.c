@@ -274,14 +274,17 @@ static void do_kernel_restart_prepare(void)
  */
 void kernel_restart(char *cmd)
 {
+	char comm[sizeof(current->comm)];
+
+	get_task_comm(comm, current);
 	kernel_restart_prepare(cmd);
 	do_kernel_restart_prepare();
 	migrate_to_reboot_cpu();
 	syscore_shutdown();
 	if (!cmd)
-		pr_emerg("Restarting system\n");
+		pr_emerg("PID: %d Comm: %s Restarting system\n", current->pid, comm);
 	else
-		pr_emerg("Restarting system with command '%s'\n", cmd);
+		pr_emerg("PID: %d Comm: %s Restarting system with command '%s'\n", current->pid, comm, cmd);
 	kmsg_dump(KMSG_DUMP_SHUTDOWN);
 	machine_restart(cmd);
 }
