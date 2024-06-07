@@ -83,4 +83,13 @@ int xen_acpi_get_gsi_info(struct pci_dev *dev,
 						  int *gsi_out,
 						  int *trigger_out,
 						  int *polarity_out);
+
+#ifdef CONFIG_XEN_PCI_STUB
+int pcistub_get_gsi_from_sbdf(unsigned int sbdf);
+#else
+static inline int pcistub_get_gsi_from_sbdf(unsigned int sbdf)
+{
+	return -1;
+}
+#endif
 #endif	/* _XEN_ACPI_H */
