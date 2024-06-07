@@ -77,6 +77,9 @@ struct perf_record_lost_samples {
 	__u64			 lost;
 };
 
+#define MAX_ID_HDR_ENTRIES  6
+#define PERF_RECORD_MAX_LOST_SAMPLE_AND_ID_SIZE \
+	(sizeof(struct perf_record_lost_samples) + MAX_ID_HDR_ENTRIES * sizeof(__u64))
 /*
  * PERF_FORMAT_ENABLED | PERF_FORMAT_RUNNING | PERF_FORMAT_ID | PERF_FORMAT_LOST
  */
