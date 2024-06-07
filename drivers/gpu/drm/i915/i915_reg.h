@@ -3385,12 +3385,6 @@
 #define ADL_TVIDEO_DIP_AS_SDP_DATA(dev_priv, trans, i)	_MMIO_TRANS2(dev_priv, trans,\
 							     _ADL_VIDEO_DIP_AS_DATA_A + (i) * 4)
 
-#define _HSW_STEREO_3D_CTL_A		0x70020
-#define   S3D_ENABLE			(1 << 31)
-#define _HSW_STEREO_3D_CTL_B		0x71020
-
-#define HSW_STEREO_3D_CTL(trans)	_MMIO_PIPE2(dev_priv, trans, _HSW_STEREO_3D_CTL_A)
-
 #define _PCH_TRANS_HTOTAL_B          0xe1000
 #define _PCH_TRANS_HBLANK_B          0xe1004
 #define _PCH_TRANS_HSYNC_B           0xe1008
