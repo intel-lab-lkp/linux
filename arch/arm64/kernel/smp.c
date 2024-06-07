@@ -1039,7 +1039,8 @@ void __init set_smp_ipi_range(int ipi_base, int n)
 		}
 
 		ipi_desc[i] = irq_to_desc(ipi_base + i);
-		irq_set_status_flags(ipi_base + i, IRQ_HIDDEN);
+		if (i < NR_IPI)
+			irq_set_status_flags(ipi_base + i, IRQ_HIDDEN);
 	}
 
 	ipi_irq_base = ipi_base;
