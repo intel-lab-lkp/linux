@@ -1,0 +1,30 @@
+What:		/sys/kernel/crash_dm_crypt_keys
+Date:		Jun 2024
+KernelVersion:	6.11
+Contact:	kexec@lists.infradead.org
+Description:	read/write
+    Make dm crypt keys persistent for the kdump kernel.
+
+    Assume the key size won't exceed 256 bytes and the maximum number of keys is 128.
+
+    You can write the following commands before kexec'ing the kdump kernel,
+      - "init KEY_NUM"
+        Let the kernel know the number of dm crypt keys so it will initialize
+        needed structures. KEY_NUM=128 dm crypt keys at maximum.
+        - "record KEY_DESC"
+        Record a key description. For security reason, the key must be a logon
+        key whose payload can't be read by user space. For details, please refer
+        to security/keys/core.rst.
+
+    And you can also read this API to know the command eructation status,
+      - fresh
+        Waiting for a command
+      - initialized
+        The "init KEY_NUM" command has been executed successfully
+      - recorded
+        Specified number of keys have been recorded
+      - loaded
+        the kdump kernel has been loaded with the dm crypt keys stored to kdump
+        reserved memory
+
+User:		Kdump service
