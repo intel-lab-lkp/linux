@@ -2041,6 +2041,10 @@ static int pci_moxa_init(struct pci_dev *dev)
 	unsigned int num_ports = (device & 0x00F0) >> 4, i;
 	u8 val, init_mode = MOXA_RS232;
 
+	if (device == PCI_DEVICE_ID_MOXA_CP116E_A_A ||
+	    device == PCI_DEVICE_ID_MOXA_CP116E_A_B)
+		num_ports = 8;
+
 	if (!(pci_moxa_supported_rs(dev) & MOXA_SUPP_RS232)) {
 		init_mode = MOXA_RS422;
 	}
