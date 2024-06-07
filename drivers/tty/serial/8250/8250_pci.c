@@ -2010,6 +2010,10 @@ enum {
 	MOXA_SUPP_RS485 = BIT(2),
 };
 
+static const struct serial_rs485 pci_moxa_rs485_supported = {
+	.flags = SER_RS485_ENABLED | SER_RS485_RTS_ON_SEND | SER_RS485_RX_DURING_TX | SER_RS485_MODE_RS422,
+};
+
 static bool pci_moxa_is_pcie(unsigned short device)
 {
 	if (device == PCI_DEVICE_ID_MOXA_CP102E     ||
@@ -2078,6 +2082,37 @@ static int pci_moxa_set_interface(const struct pci_dev *dev,
 	return 0;
 }
 
+/*
+ * Moxa PCIe boards support switching the serial interface using the ioctl()
+ * command "TIOCSRS485".
+ *
+ *      RS232                   = (no flags are set)
+ *      RS422                   = SER_RS485_ENABLED | SER_RS485_MODE_RS422
+ *      RS485_2W (half-duplex)  = SER_RS485_ENABLED
+ *      RS485_4W (full-duplex)  = SER_RS485_ENABLED | SER_RS485_RX_DURING_TX
+ */
+static int pci_moxa_rs485_config(struct uart_port *port,
+				 struct ktermios *termios,
+				 struct serial_rs485 *rs485)
+{
+	struct pci_dev *dev = to_pci_dev(port->dev);
+	u8 mode = MOXA_RS232;
+
+	if (rs485->flags & SER_RS485_ENABLED) {
+		if (rs485->flags & SER_RS485_MODE_RS422)
+			mode = MOXA_RS422;
+		else if (rs485->flags & SER_RS485_RX_DURING_TX)
+			mode = MOXA_RS485_4W;
+		else
+			mode = MOXA_RS485_2W;
+	} else {
+		if (!(pci_moxa_supported_rs(dev) & MOXA_SUPP_RS232))
+			return -ENODEV;
+	}
+
+	return pci_moxa_set_interface(dev, port->port_id, mode);
+}
+
 static int pci_moxa_init(struct pci_dev *dev)
 {
 	unsigned short device = dev->device;
@@ -2120,8 +2155,19 @@ pci_moxa_setup(struct serial_private *priv,
 		const struct pciserial_board *board,
 		struct uart_8250_port *port, int idx)
 {
+	struct pci_dev *dev = priv->dev;
 	unsigned int bar = FL_GET_BASE(board->flags);
 	int offset;
+
+	if (pci_moxa_is_pcie(dev->device) || pci_moxa_is_mini_pcie(dev->device)) {
+		if (pci_moxa_supported_rs(dev) & MOXA_SUPP_RS485) {
+			port->port.rs485_config = pci_moxa_rs485_config;
+			port->port.rs485_supported = pci_moxa_rs485_supported;
+
+			if (!(pci_moxa_supported_rs(dev) & MOXA_SUPP_RS232))
+				port->port.rs485.flags = SER_RS485_ENABLED | SER_RS485_MODE_RS422;
+		}
+	}
 
 	if (board->num_ports == 4 && idx == 3)
 		offset = 7 * board->uart_offset;
