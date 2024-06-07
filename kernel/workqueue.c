@@ -2292,6 +2292,18 @@ retry:
 	}
 
 	pwq = rcu_dereference(*per_cpu_ptr(wq->cpu_pwq, cpu));
+
+	/*
+	 * Discard work queued to a destroyed wq.
+	 * This must be checked while the rcu_read_lock() is
+	 * held, so destroy_workqueue() cannot nullify wq->cpu_pwq while it's
+	 * being accessed here.
+	 */
+	if (WARN_ON_ONCE(!pwq || !pwq->pool)) {
+		pr_warn("workqueue %s: discarding work for destroyed wq\n", wq->name);
+		goto out_rcu_read_unlock;
+	}
+
 	pool = pwq->pool;
 
 	/*
@@ -2366,6 +2378,7 @@ retry:
 
 out:
 	raw_spin_unlock(&pool->lock);
+out_rcu_read_unlock:
 	rcu_read_unlock();
 }
 
