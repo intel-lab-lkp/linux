@@ -5,7 +5,7 @@ config NFS_FS
 	select LOCKD
 	select SUNRPC
 	select NFS_ACL_SUPPORT if NFS_V3_ACL
-	select NFS_LOCALIO_SUPPORT if NFS_V3_LOCALIO
+	select NFS_LOCALIO_SUPPORT if NFS_V3_LOCALIO || NFS_V4_LOCALIO
 	help
 	  Choose Y here if you want to access files residing on other
 	  computers using Sun's Network File System protocol.  To compile
@@ -98,6 +98,18 @@ config NFS_V4
 	  available from http://linux-nfs.org/.
 
 	  If unsure, say Y.
+
+config NFS_V4_LOCALIO
+	bool "NFS client support for the NFSv4 LOCALIO protocol extension"
+	depends on NFS_V4
+	help
+	  Some NFS servers support an auxiliary NFSv4 LOCALIO protocol
+	  that is not an official part of the NFS version 4 protocol.
+
+	  This option enables support for version 4 of the LOCALIO
+	  protocol in the kernel's NFS client.
+
+	  If unsure, say N.
 
 config NFS_SWAP
 	bool "Provide swap over NFS support"

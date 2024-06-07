@@ -214,7 +214,7 @@ struct nfsd_net {
 	/* last time an admin-revoke happened for NFSv4.0 */
 	time64_t		nfs40_last_revoke;
 
-#if defined(CONFIG_NFSD_V3_LOCALIO)
+#if defined(CONFIG_NFSD_V3_LOCALIO) || defined(CONFIG_NFSD_V4_LOCALIO)
 	nfsd_uuid_t		nfsd_uuid;
 #endif
 };
