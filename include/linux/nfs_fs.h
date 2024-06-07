@@ -96,6 +96,8 @@ struct nfs_open_context {
 	struct list_head list;
 	struct nfs4_threshold	*mdsthreshold;
 	struct rcu_head	rcu_head;
+
+	struct file *local_filp;
 };
 
 struct nfs_open_dir_context {

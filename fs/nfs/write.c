@@ -1672,7 +1672,8 @@ int nfs_initiate_commit(struct nfs_client *clp,
 			struct nfs_commit_data *data,
 			const struct nfs_rpc_ops *nfs_ops,
 			const struct rpc_call_ops *call_ops,
-			int how, int flags)
+			int how, int flags,
+			struct file *localio)
 {
 	struct rpc_task *task;
 	int priority = flush_task_priority(how);
@@ -1691,6 +1692,7 @@ int nfs_initiate_commit(struct nfs_client *clp,
 		.flags = RPC_TASK_ASYNC | flags,
 		.priority = priority,
 	};
+	int status = 0;
 
 	if (nfs_server_capable(data->inode, NFS_CAP_MOVEABLE))
 		task_setup_data.flags |= RPC_TASK_MOVEABLE;
@@ -1701,13 +1703,19 @@ int nfs_initiate_commit(struct nfs_client *clp,
 
 	dprintk("NFS: initiated commit call\n");
 
+	if (localio) {
+		nfs_local_commit(clp, localio, data, call_ops, how);
+		goto out;
+	}
+
 	task = rpc_run_task(&task_setup_data);
 	if (IS_ERR(task))
 		return PTR_ERR(task);
 	if (how & FLUSH_SYNC)
 		rpc_wait_for_completion_task(task);
 	rpc_put_task(task);
-	return 0;
+out:
+	return status;
 }
 EXPORT_SYMBOL_GPL(nfs_initiate_commit);
 
@@ -1819,7 +1827,7 @@ nfs_commit_list(struct inode *inode, struct list_head *head, int how,
 	return nfs_initiate_commit(NFS_SERVER(inode)->nfs_client,
 				   NFS_CLIENT(inode), data, NFS_PROTO(inode),
 				   data->mds_ops, how,
-				   RPC_TASK_CRED_NOREF | task_flags);
+				   RPC_TASK_CRED_NOREF | task_flags, NULL);
 }
 
 /*

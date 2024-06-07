@@ -204,6 +204,12 @@ struct nfs_mount_request {
 	struct net		*net;
 };
 
+struct nfs_local_addr {
+	struct list_head	cl_addrs;
+	struct sockaddr_storage	address;
+	size_t			addrlen;
+};
+
 extern int nfs_mount(struct nfs_mount_request *info, int timeo, int retrans);
 extern void nfs_umount(const struct nfs_mount_request *info);
 
@@ -309,7 +315,8 @@ int nfs_generic_pgio(struct nfs_pageio_descriptor *, struct nfs_pgio_header *);
 int nfs_initiate_pgio(struct nfs_pageio_descriptor *, struct nfs_client *clp,
 		      struct rpc_clnt *rpc_clnt, struct nfs_pgio_header *hdr,
 		      const struct cred *cred, const struct nfs_rpc_ops *rpc_ops,
-		      const struct rpc_call_ops *call_ops, int how, int flags);
+		      const struct rpc_call_ops *call_ops, int how, int flags,
+		      struct file *localio);
 void nfs_free_request(struct nfs_page *req);
 struct nfs_pgio_mirror *
 nfs_pgio_current_mirror(struct nfs_pageio_descriptor *desc);
@@ -450,6 +457,26 @@ extern void nfs_set_cache_invalid(struct inode *inode, unsigned long flags);
 extern bool nfs_check_cache_invalid(struct inode *, unsigned long);
 extern int nfs_wait_bit_killable(struct wait_bit_key *key, int mode);
 
+/* localio.c */
+extern void nfs_local_init(void);
+extern void nfs_local_enable(struct nfs_client *);
+extern void nfs_local_disable(struct nfs_client *);
+extern void nfs_local_probe(struct nfs_client *);
+extern struct file *nfs_local_open_fh(struct nfs_client *, const struct cred *,
+				      struct nfs_fh *, const fmode_t);
+extern struct file *nfs_local_file_open(struct nfs_client *clp,
+					const struct cred *cred,
+					struct nfs_fh *fh,
+					struct nfs_open_context *ctx);
+extern int nfs_local_doio(struct nfs_client *, struct file *,
+			  struct nfs_pgio_header *,
+			  const struct rpc_call_ops *);
+extern int nfs_local_commit(struct nfs_client *, struct file *,
+			    struct nfs_commit_data *,
+			    const struct rpc_call_ops *, int);
+extern void nfs_probe_local_addr(struct nfs_client *clnt);
+extern bool nfs_server_is_local(const struct nfs_client *clp);
+
 /* super.c */
 extern const struct super_operations nfs_sops;
 bool nfs_auth_info_match(const struct nfs_auth_info *, rpc_authflavor_t);
@@ -530,7 +557,8 @@ extern int nfs_initiate_commit(struct nfs_client *clp,
 			       struct nfs_commit_data *data,
 			       const struct nfs_rpc_ops *nfs_ops,
 			       const struct rpc_call_ops *call_ops,
-			       int how, int flags);
+			       int how, int flags,
+			       struct file *localio);
 extern void nfs_init_commit(struct nfs_commit_data *data,
 			    struct list_head *head,
 			    struct pnfs_layout_segment *lseg,

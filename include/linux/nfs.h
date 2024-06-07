@@ -8,6 +8,8 @@
 #ifndef _LINUX_NFS_H
 #define _LINUX_NFS_H
 
+#include <linux/cred.h>
+#include <linux/sunrpc/auth.h>
 #include <linux/sunrpc/msg_prot.h>
 #include <linux/string.h>
 #include <linux/errno.h>
@@ -108,6 +110,10 @@ static inline int nfs_stat_to_errno(enum nfs_stat status)
 	}
 	return nfs_common_errtbl[i].errno;
 }
+
+typedef int (*nfs_to_nfsd_open_t)(struct rpc_clnt *, const struct cred *,
+				  const struct nfs_fh *, const fmode_t,
+				  struct file **);
 
 #ifdef CONFIG_CRC32
 /**
