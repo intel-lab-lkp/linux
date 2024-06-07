@@ -29,7 +29,6 @@ module_param(svc_rpc_per_connection_limit, uint, 0644);
 
 static struct svc_deferred_req *svc_deferred_dequeue(struct svc_xprt *xprt);
 static int svc_deferred_recv(struct svc_rqst *rqstp);
-static struct cache_deferred_req *svc_defer(struct cache_req *req);
 static void svc_age_temp_xprts(struct timer_list *t);
 static void svc_delete_xprt(struct svc_xprt *xprt);
 
@@ -1185,7 +1184,7 @@ static void svc_revisit(struct cache_deferred_req *dreq, int too_many)
  * This code can only handle requests that consist of an xprt-header
  * and rpc-header.
  */
-static struct cache_deferred_req *svc_defer(struct cache_req *req)
+struct cache_deferred_req *svc_defer(struct cache_req *req)
 {
 	struct svc_rqst *rqstp = container_of(req, struct svc_rqst, rq_chandle);
 	struct svc_deferred_req *dr;
@@ -1226,6 +1225,7 @@ static struct cache_deferred_req *svc_defer(struct cache_req *req)
 	dr->handle.revisit = svc_revisit;
 	return &dr->handle;
 }
+EXPORT_SYMBOL_GPL(svc_defer);
 
 /*
  * recv data from a deferred request into an active one
