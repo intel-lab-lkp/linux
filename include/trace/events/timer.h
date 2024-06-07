@@ -402,26 +402,18 @@ TRACE_EVENT(itimer_expire,
 #undef tick_dep_mask_name
 #undef tick_dep_name_end
 
-/* The MASK will convert to their bits and they need to be processed too */
-#define tick_dep_name(sdep) TRACE_DEFINE_ENUM(TICK_DEP_BIT_##sdep); \
-	TRACE_DEFINE_ENUM(TICK_DEP_MASK_##sdep);
-#define tick_dep_name_end(sdep)  TRACE_DEFINE_ENUM(TICK_DEP_BIT_##sdep); \
-	TRACE_DEFINE_ENUM(TICK_DEP_MASK_##sdep);
-/* NONE only has a mask defined for it */
-#define tick_dep_mask_name(sdep) TRACE_DEFINE_ENUM(TICK_DEP_MASK_##sdep);
+#define tick_dep_name(sdep) { TICK_DEP_MASK_##sdep, #sdep },
+#define tick_dep_mask_name(sdep) { TICK_DEP_MASK_##sdep, #sdep },
+#define tick_dep_name_end(sdep) { TICK_DEP_MASK_##sdep, #sdep }
 
-TICK_DEP_NAMES
+TRACE_DEFINE_SYM_LIST(tick_dep_names, TICK_DEP_NAMES);
 
 #undef tick_dep_name
 #undef tick_dep_mask_name
 #undef tick_dep_name_end
 
-#define tick_dep_name(sdep) { TICK_DEP_MASK_##sdep, #sdep },
-#define tick_dep_mask_name(sdep) { TICK_DEP_MASK_##sdep, #sdep },
-#define tick_dep_name_end(sdep) { TICK_DEP_MASK_##sdep, #sdep }
-
 #define show_tick_dep_name(val)				\
-	__print_symbolic(val, TICK_DEP_NAMES)
+	__print_sym(val, tick_dep_names)
 
 TRACE_EVENT(tick_stop,
 
