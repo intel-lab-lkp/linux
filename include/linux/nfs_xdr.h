@@ -1003,8 +1003,7 @@ struct nfs3_getaclres {
 };
 
 struct nfs_getuuidres {
-	const char *		uuid;
-	unsigned int		len;
+	__u8 *			uuid;
 };
 
 #if IS_ENABLED(CONFIG_NFS_V4)

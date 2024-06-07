@@ -201,17 +201,23 @@ static __be32 nfsd_proc_getuuid(struct svc_rqst *rqstp)
 	return rpc_success;
 }
 
-#if defined(CONFIG_NFSD_V3_LOCALIO)
+#define NFS_getuuid_sz XDR_QUADLEN(UUID_SIZE)
 
-static void encode_uuid(struct xdr_stream *xdr,
-			const char *name, u32 length)
+static inline void encode_opaque_fixed(struct xdr_stream *xdr, const void *buf, size_t len)
 {
-	__be32 *p;
-
-	p = xdr_reserve_space(xdr, 4 + length);
-	xdr_encode_opaque(p, name, length);
+	WARN_ON_ONCE(xdr_stream_encode_opaque_fixed(xdr, buf, len) < 0);
 }
 
+static void encode_uuid(struct xdr_stream *xdr, uuid_t *src_uuid)
+{
+	u8 uuid[UUID_SIZE];
+
+	export_uuid(uuid, src_uuid);
+	encode_opaque_fixed(xdr, uuid, UUID_SIZE);
+	dprintk("%s: uuid=%pU\n", __func__, uuid);
+}
+
+#if defined(CONFIG_NFSD_V3_LOCALIO)
 static bool nfs3svc_encode_getuuidres(struct svc_rqst *rqstp,
 				      struct xdr_stream *xdr)
 {
@@ -219,14 +225,8 @@ static bool nfs3svc_encode_getuuidres(struct svc_rqst *rqstp,
 
 	if (!svcxdr_encode_nfsstat3(xdr, resp->status))
 		return false;
-	if (resp->status == nfs_ok) {
-		u8 uuid[UUID_SIZE];
-
-		export_uuid(uuid, &resp->uuid);
-		encode_uuid(xdr, uuid, UUID_SIZE);
-		dprintk("%s: nfs_ok uuid=%pU uuid_len=%lu\n",
-			__func__, uuid, sizeof(uuid));
-	}
+	if (resp->status == nfs_ok)
+		encode_uuid(xdr, &resp->uuid);
 
 	return true;
 }
@@ -242,7 +242,7 @@ static const struct svc_procedure nfsd_localio_procedures3[2] = {
 		.pc_argsize = sizeof(struct nfsd_voidargs),
 		.pc_ressize = sizeof(struct nfsd_voidres),
 		.pc_cachetype = RC_NOCACHE,
-		.pc_xdrressize = ST,
+		.pc_xdrressize = 1,
 		.pc_name = "NULL",
 	},
 	[LOCALIOPROC_GETUUID] = {
@@ -252,7 +252,7 @@ static const struct svc_procedure nfsd_localio_procedures3[2] = {
 		.pc_argsize = sizeof(struct nfsd_voidargs),
 		.pc_ressize = sizeof(struct nfsd_getuuidres),
 		.pc_cachetype = RC_NOCACHE,
-		.pc_xdrressize = ST+NFS3_filename_sz,
+		.pc_xdrressize = 1+NFS_getuuid_sz,
 		.pc_name = "GETUUID",
 	},
 };
@@ -282,23 +282,11 @@ static bool nfs4svc_encode_getuuidres(struct svc_rqst *rqstp,
 	*p++ = cpu_to_be32(LOCALIOPROC_GETUUID);
 	*p++ = resp->status;
 
-	if (resp->status == nfs_ok) {
-		u8 uuid[UUID_SIZE];
-
-		export_uuid(uuid, &resp->uuid);
-		p = xdr_reserve_space(xdr, 4 + UUID_SIZE);
-		if (!p)
-			return 0;
-		xdr_encode_opaque(p, uuid, UUID_SIZE);
-		dprintk("%s: nfs_ok uuid=%pU uuid_len=%lu\n",
-			__func__, uuid, sizeof(uuid));
-	}
+	if (resp->status == nfs_ok)
+		encode_uuid(xdr, &resp->uuid);
 
 	return 1;
 }
-
-#define ST 1		/* status */
-#define NFS4_filename_sz	(1+(NFS4_MAXNAMLEN>>2))
 
 static const struct svc_procedure nfsd_localio_procedures4[2] = {
 	[LOCALIOPROC_NULL] = {
@@ -308,7 +296,7 @@ static const struct svc_procedure nfsd_localio_procedures4[2] = {
 		.pc_argsize = sizeof(struct nfsd_voidargs),
 		.pc_ressize = sizeof(struct nfsd_voidres),
 		.pc_cachetype = RC_NOCACHE,
-		.pc_xdrressize = ST,
+		.pc_xdrressize = 1,
 		.pc_name = "NULL",
 	},
 	[LOCALIOPROC_GETUUID] = {
@@ -318,7 +306,7 @@ static const struct svc_procedure nfsd_localio_procedures4[2] = {
 		.pc_argsize = sizeof(struct nfsd_voidargs),
 		.pc_ressize = sizeof(struct nfsd_getuuidres),
 		.pc_cachetype = RC_NOCACHE,
-		.pc_xdrressize = ST+NFS4_filename_sz,
+		.pc_xdrressize = 2+NFS_getuuid_sz,
 		.pc_name = "GETUUID",
 	},
 };

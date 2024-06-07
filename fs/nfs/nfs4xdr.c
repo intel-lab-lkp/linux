@@ -7731,8 +7731,7 @@ const struct rpc_version nfs_version4 = {
 
 #if defined(CONFIG_NFS_V4_LOCALIO)
 
-#define NFS4_filename_sz	(1+(NFS4_MAXNAMLEN>>2))
-#define LOCALIO4_getuuidres_sz	(1+NFS4_filename_sz)
+#define LOCALIO4_getuuidres_sz	(op_decode_hdr_maxsz+XDR_QUADLEN(UUID_SIZE))
 
 static void nfs4_xdr_enc_getuuidargs(struct rpc_rqst *req,
 				struct xdr_stream *xdr,
@@ -7744,7 +7743,7 @@ static void nfs4_xdr_enc_getuuidargs(struct rpc_rqst *req,
 static inline int nfs4_decode_getuuidresok(struct xdr_stream *xdr,
 					struct nfs_getuuidres *result)
 {
-	return decode_opaque_inline(xdr, &result->len, (char **)&result->uuid);
+	return decode_opaque_fixed(xdr, result->uuid, UUID_SIZE);
 }
 
 static int nfs4_xdr_dec_getuuidres(struct rpc_rqst *req,

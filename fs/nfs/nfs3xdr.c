@@ -2582,7 +2582,7 @@ const struct rpc_version nfsacl_version3 = {
 
 #if defined(CONFIG_NFS_V3_LOCALIO)
 
-#define LOCALIO3_getuuidres_sz	(1+NFS3_filename_sz)
+#define LOCALIO3_getuuidres_sz	(1+XDR_QUADLEN(UUID_SIZE))
 
 static void nfs3_xdr_enc_getuuidargs(struct rpc_rqst *req,
 				struct xdr_stream *xdr,
@@ -2591,10 +2591,19 @@ static void nfs3_xdr_enc_getuuidargs(struct rpc_rqst *req,
 	/* void function */
 }
 
+// FIXME: factor out from fs/nfs/nfs4xdr.c
+static int decode_opaque_fixed(struct xdr_stream *xdr, void *buf, size_t len)
+{
+	ssize_t ret = xdr_stream_decode_opaque_fixed(xdr, buf, len);
+	if (unlikely(ret < 0))
+		return -EIO;
+	return 0;
+}
+
 static inline int nfs3_decode_getuuidresok(struct xdr_stream *xdr,
 					struct nfs_getuuidres *result)
 {
-	return decode_inline_filename3(xdr, &result->uuid, &result->len);
+	return decode_opaque_fixed(xdr, result->uuid, UUID_SIZE);
 }
 
 static int nfs3_xdr_dec_getuuidres(struct rpc_rqst *req,

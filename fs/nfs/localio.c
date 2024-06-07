@@ -246,9 +246,9 @@ static bool nfs_local_server_getuuid(struct nfs_client *clp, uuid_t *nfsd_uuid)
 	dprintk("%s: NFS issuing getuuid\n", __func__);
 	msg.rpc_proc = &clp->cl_rpcclient_localio->cl_procinfo[LOCALIOPROC_GETUUID];
 	status = rpc_call_sync(clp->cl_rpcclient_localio, &msg, 0);
-	dprintk("%s: NFS reply getuuid: status=%d uuid=%pU uuid_len=%u\n",
-		__func__, status, res.uuid, res.len);
-	if (status || res.len != UUID_SIZE)
+	dprintk("%s: NFS reply getuuid: status=%d uuid=%pU\n",
+		__func__, status, res.uuid);
+	if (status)
 		return false;
 
 	import_uuid(nfsd_uuid, res.uuid);
