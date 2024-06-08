@@ -1304,7 +1304,7 @@ static struct shrinker *zswap_alloc_shrinker(void)
 
 static int shrink_memcg(struct mem_cgroup *memcg)
 {
-	int nid, shrunk = 0;
+	int nid, shrunk = 0, stored = 0;
 
 	if (!mem_cgroup_zswap_writeback_enabled(memcg))
 		return -EINVAL;
@@ -1319,9 +1319,16 @@ static int shrink_memcg(struct mem_cgroup *memcg)
 	for_each_node_state(nid, N_NORMAL_MEMORY) {
 		unsigned long nr_to_walk = 1;
 
+		if (!list_lru_count_one(&zswap_list_lru, nid, memcg))
+			continue;
+		++stored;
 		shrunk += list_lru_walk_one(&zswap_list_lru, nid, memcg,
 					    &shrink_memcg_cb, NULL, &nr_to_walk);
 	}
+
+	if (!stored)
+		return -ENOENT;
+
 	return shrunk ? 0 : -EAGAIN;
 }
 
@@ -1329,11 +1336,17 @@ static void shrink_worker(struct work_struct *w)
 {
 	struct mem_cgroup *memcg = NULL;
 	struct mem_cgroup *next_memcg;
-	int ret, failures = 0;
+	int ret, failures = 0, progress;
 	unsigned long thr;
 
 	/* Reclaim down to the accept threshold */
 	thr = zswap_accept_thr_pages();
+
+	/*
+	 * We might start from the last memcg.
+	 * That is not a failure.
+	 */
+	progress = 1;
 
 	/* global reclaim will select cgroup in a round-robin fashion.
 	 *
@@ -1372,9 +1385,12 @@ iternext:
 		 */
 		if (!memcg) {
 			spin_unlock(&zswap_shrink_lock);
-			if (++failures == MAX_RECLAIM_RETRIES)
+
+			/* tree walk completed but no progress */
+			if (!progress && ++failures == MAX_RECLAIM_RETRIES)
 				break;
 
+			progress = 0;
 			goto resched;
 		}
 
@@ -1404,10 +1420,15 @@ iternext:
 		/* drop the extra reference */
 		mem_cgroup_put(memcg);
 
-		if (ret == -EINVAL)
-			break;
+		/* not a writeback candidate memcg */
+		if (ret == -EINVAL || ret == -ENOENT)
+			continue;
+
 		if (ret && ++failures == MAX_RECLAIM_RETRIES)
 			break;
+
+		++progress;
+		/* reschedule as we performed some IO */
 resched:
 		cond_resched();
 	} while (zswap_total_pages() > thr);
