@@ -405,4 +405,154 @@ int cond_break5(const void *ctx)
 	return cnt1 > 1 && cnt2 > 1 ? 1 : 0;
 }
 
+#define ARR2_SZ 1000
+SEC(".data.arr2")
+char arr2[ARR2_SZ];
+
+SEC("socket")
+__success __flag(BPF_F_TEST_STATE_FREQ)
+int loop_inside_iter(const void *ctx)
+{
+	struct bpf_iter_num it;
+	int *v, sum = 0;
+	__u64 i = 0;
+
+	bpf_iter_num_new(&it, 0, ARR2_SZ);
+	while ((v = bpf_iter_num_next(&it))) {
+		if (i < ARR2_SZ)
+			sum += arr2[i++];
+	}
+	bpf_iter_num_destroy(&it);
+	return sum;
+}
+
+SEC("socket")
+__success __flag(BPF_F_TEST_STATE_FREQ)
+int loop_inside_iter_signed(const void *ctx)
+{
+	struct bpf_iter_num it;
+	int *v, sum = 0;
+	long i = 0;
+
+	bpf_iter_num_new(&it, 0, ARR2_SZ);
+	while ((v = bpf_iter_num_next(&it))) {
+		if (i < ARR2_SZ && i >= 0)
+			sum += arr2[i++];
+	}
+	bpf_iter_num_destroy(&it);
+	return sum;
+}
+
+volatile const int limit = ARR2_SZ;
+
+SEC("socket")
+__success __flag(BPF_F_TEST_STATE_FREQ)
+int loop_inside_iter_volatile_limit(const void *ctx)
+{
+	struct bpf_iter_num it;
+	int *v, sum = 0;
+	__u64 i = 0;
+
+	bpf_iter_num_new(&it, 0, ARR2_SZ);
+	while ((v = bpf_iter_num_next(&it))) {
+		if (i < limit)
+			sum += arr2[i++];
+	}
+	bpf_iter_num_destroy(&it);
+	return sum;
+}
+
+#define ARR_LONG_SZ 1000
+
+SEC(".data.arr_long")
+long arr_long[ARR_LONG_SZ];
+
+SEC("socket")
+__success
+int test1(const void *ctx)
+{
+	long i;
+
+	for (i = 0; i < ARR_LONG_SZ && can_loop; i++)
+		arr_long[i] = i;
+	return 0;
+}
+
+SEC("socket")
+__success
+int test2(const void *ctx)
+{
+	__u64 i;
+
+	for (i = zero; i < ARR_LONG_SZ && can_loop; i++) {
+		barrier_var(i);
+		arr_long[i] = i;
+	}
+	return 0;
+}
+
+SEC(".data.arr_foo")
+struct {
+	int a;
+	int b;
+} arr_foo[ARR_LONG_SZ];
+
+SEC("socket")
+__success
+int test3(const void *ctx)
+{
+	__u64 i;
+
+	for (i = zero; i < ARR_LONG_SZ && can_loop; i++) {
+		barrier_var(i);
+		arr_foo[i].a = i;
+		arr_foo[i].b = i;
+	}
+	return 0;
+}
+
+SEC("socket")
+__success
+int test4(const void *ctx)
+{
+	long i;
+
+	for (i = zero + ARR_LONG_SZ - 1; i < ARR_LONG_SZ && i >= 0 && can_loop; i--) {
+		barrier_var(i);
+		arr_foo[i].a = i;
+		arr_foo[i].b = i;
+	}
+	return 0;
+}
+
+char buf[10] SEC(".data.buf");
+
+SEC("socket")
+__description("check add const")
+__success
+__naked void check_add_const(void)
+{
+	/* typical LLVM generated loop with may_goto */
+	asm volatile ("			\
+	call %[bpf_ktime_get_ns];	\
+	if r0 >= 10 goto l1_%=;		\
+l0_%=:	r1 = %[buf];			\
+	r1 += r0;			\
+	r3 = *(u8 *)(r1 +0);		\
+	.byte 0xe5; /* may_goto */	\
+	.byte 0; /* regs */		\
+	.short 4; /* off of l1_%=: */	\
+	.long 0; /* imm */		\
+	r2 = r0;			\
+	r2 += 1;			\
+	if r2 <= 10 goto l0_%=;		\
+	exit;				\
+l1_%=:	r0 = 0;				\
+	exit;				\
+"	:
+	: __imm(bpf_ktime_get_ns),
+	  __imm_ptr(buf)
+	: __clobber_common);
+}
+
 char _license[] SEC("license") = "GPL";
