@@ -33,6 +33,7 @@
 
 #include "mtk_dp.h"
 #include "mtk_dp_reg.h"
+#include "mtk_dp_hdcp1x.h"
 #include "mtk_dp_hdcp2.h"
 
 #define MTK_DP_SIP_CONTROL_AARCH32	MTK_SIP_SMC_CMD(0x523)
@@ -1841,6 +1842,7 @@ static int mtk_dp_hpd_sink_event(struct mtk_dp *mtk_dp)
 static void mtk_dp_hdcp_get_info(struct mtk_dp *mtk_dp)
 {
 	dp_tx_hdcp2x_get_info(&mtk_dp->hdcp_info);
+	dp_tx_hdcp1x_get_info(&mtk_dp->hdcp_info);
 }
 
 static void mtk_dp_hdcp_disable(struct mtk_dp *mtk_dp)
@@ -1852,6 +1854,8 @@ static void mtk_dp_hdcp_disable(struct mtk_dp *mtk_dp)
 
 	if (mtk_dp->hdcp_info.auth_version == HDCP_VERSION_2X)
 		dp_tx_hdcp2x_disabel(&mtk_dp->hdcp_info);
+	else if (mtk_dp->hdcp_info.auth_version == HDCP_VERSION_1X)
+		dp_tx_hdcp1x_disabel(&mtk_dp->hdcp_info);
 
 end:
 	cancel_delayed_work_sync(&mtk_dp->check_work);
@@ -1868,6 +1872,9 @@ static void mtk_dp_hdcp_check_work(struct work_struct *work)
 	if (mtk_dp->hdcp_info.auth_version == HDCP_VERSION_2X &&
 	    (!dp_tx_hdcp2x_check_link(&mtk_dp->hdcp_info))) {
 		schedule_delayed_work(&mtk_dp->check_work, DRM_HDCP2_CHECK_PERIOD_MS);
+	} else if (mtk_dp->hdcp_info.auth_version == HDCP_VERSION_1X &&
+		(!dp_tx_hdcp1x_check_link(&mtk_dp->hdcp_info))) {
+		schedule_delayed_work(&mtk_dp->check_work, DRM_HDCP_CHECK_PERIOD_MS);
 	}
 }
 
@@ -1889,6 +1896,10 @@ static void mtk_dp_hdcp_handle(struct work_struct *data)
 		if (!ret)
 			check_link_interval = DRM_HDCP2_CHECK_PERIOD_MS;
 	}
+
+	if (ret && mtk_dp->hdcp_info.hdcp1x_info.capable &&
+	    mtk_dp->hdcp_info.hdcp_content_type != DRM_MODE_HDCP_CONTENT_TYPE1)
+		ret = dp_tx_hdcp1x_enable(&mtk_dp->hdcp_info);
 
 	if (!ret) {
 		schedule_delayed_work(&mtk_dp->check_work, check_link_interval);

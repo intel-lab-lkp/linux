@@ -28,6 +28,7 @@ mediatek-drm-hdmi-objs := mtk_cec.o \
 obj-$(CONFIG_DRM_MEDIATEK_HDMI) += mediatek-drm-hdmi.o
 
 mtk-dp-objs := tlc_dp_hdcp.o \
+		  mtk_dp_hdcp1x.o \
 		  mtk_dp_hdcp2.o \
 		  mtk_dp.o
 
