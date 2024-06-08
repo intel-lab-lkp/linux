@@ -111,18 +111,17 @@ checked if it is a same-value filled page before compressing it. If true, the
 compressed length of the page is set to zero and the pattern or same-filled
 value is stored.
 
-To prevent zswap from shrinking pool when zswap is full and there's a high
-pressure on swap (this will result in flipping pages in and out zswap pool
-without any real benefit but with a performance drop for the system), a
-special parameter has been introduced to implement a sort of hysteresis to
-refuse taking pages into zswap pool until it has sufficient space if the limit
-has been hit. To set the threshold at which zswap would start accepting pages
-again after it became full, use the sysfs ``accept_threshold_percent``
-attribute, e. g.::
+To prevent zswap from rejecting new pages and incurring latency when zswap is
+full, zswap initiates a worker called global shrinker that proactively evicts
+some pages from the pool to swap devices while the pool is reaching the limit.
+The global shrinker continues to evict pages until there is sufficient space to
+accept new pages. To control how many pages should remain in the pool, use the
+sysfs ``accept_threshold_percent`` attribute as a percentage of the max pool
+size, e. g.::
 
 	echo 80 > /sys/module/zswap/parameters/accept_threshold_percent
 
-Setting this parameter to 100 will disable the hysteresis.
+Setting this parameter to 100 will disable the proactive shrinking.
 
 Some users cannot tolerate the swapping that comes with zswap store failures
 and zswap writebacks. Swapping can be disabled entirely (without disabling
