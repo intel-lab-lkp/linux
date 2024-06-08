@@ -690,6 +690,8 @@ void handle_fasteoi_irq(struct irq_desc *desc)
 
 	raw_spin_lock(&desc->lock);
 
+	desc->istate &= ~(IRQS_REPLAY | IRQS_WAITING);
+
 	/*
 	 * When an affinity change races with IRQ handling, the next interrupt
 	 * can arrive on the new CPU before the original CPU has completed
@@ -700,8 +702,6 @@ void handle_fasteoi_irq(struct irq_desc *desc)
 			desc->istate |= IRQS_PENDING;
 		goto out;
 	}
-
-	desc->istate &= ~(IRQS_REPLAY | IRQS_WAITING);
 
 	/*
 	 * If its disabled or no action available
