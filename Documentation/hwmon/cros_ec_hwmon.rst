@@ -23,4 +23,8 @@ ChromeOS embedded controller used in Chromebooks and other devices.
 
 The channel labels exposed via hwmon are retrieved from the EC itself.
 
-Fan and temperature readings are supported.
+Supported features:
+
+  - Current fan speed
+  - Target fan speed (for fan 1 only)
+  - Current temperature
