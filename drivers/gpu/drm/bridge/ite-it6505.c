@@ -2605,7 +2605,8 @@ static int it6505_poweron(struct it6505 *it6505)
 		usleep_range(1000, 2000);
 		err = regulator_enable(pdata->ovdd);
 		if (err) {
-			regulator_disable(pdata->pwr18);
+			if (pdata->pwr18)
+				regulator_disable(pdata->pwr18);
 			return err;
 		}
 	}
