@@ -97,12 +97,14 @@ EXPORT_SYMBOL(dotdot_name);
  */
 
 static unsigned int d_hash_shift __ro_after_init;
-
 static struct hlist_bl_head *dentry_hashtable __ro_after_init;
 
-static inline struct hlist_bl_head *d_hash(unsigned int hash)
+#include <asm/runtime-const.h>
+
+static inline struct hlist_bl_head *d_hash(unsigned long hashlen)
 {
-	return dentry_hashtable + (hash >> d_hash_shift);
+	return runtime_const_ptr(dentry_hashtable) +
+		runtime_const_shift_right_32(hashlen, d_hash_shift);
 }
 
 #define IN_LOOKUP_SHIFT 10
@@ -495,7 +497,7 @@ static void ___d_drop(struct dentry *dentry)
 	if (unlikely(IS_ROOT(dentry)))
 		b = &dentry->d_sb->s_roots;
 	else
-		b = d_hash(dentry->d_name.hash);
+		b = d_hash(dentry->d_name.hash_len);
 
 	hlist_bl_lock(b);
 	__hlist_bl_del(&dentry->d_hash);
@@ -2104,7 +2106,7 @@ static noinline struct dentry *__d_lookup_rcu_op_compare(
 	unsigned *seqp)
 {
 	u64 hashlen = name->hash_len;
-	struct hlist_bl_head *b = d_hash(hashlen_hash(hashlen));
+	struct hlist_bl_head *b = d_hash(hashlen);
 	struct hlist_bl_node *node;
 	struct dentry *dentry;
 
@@ -2171,7 +2173,7 @@ struct dentry *__d_lookup_rcu(const struct dentry *parent,
 {
 	u64 hashlen = name->hash_len;
 	const unsigned char *str = name->name;
-	struct hlist_bl_head *b = d_hash(hashlen_hash(hashlen));
+	struct hlist_bl_head *b = d_hash(hashlen);
 	struct hlist_bl_node *node;
 	struct dentry *dentry;
 
@@ -2277,7 +2279,7 @@ EXPORT_SYMBOL(d_lookup);
 struct dentry *__d_lookup(const struct dentry *parent, const struct qstr *name)
 {
 	unsigned int hash = name->hash;
-	struct hlist_bl_head *b = d_hash(hash);
+	struct hlist_bl_head *b = d_hash(name->hash_len);
 	struct hlist_bl_node *node;
 	struct dentry *found = NULL;
 	struct dentry *dentry;
@@ -2397,7 +2399,7 @@ EXPORT_SYMBOL(d_delete);
 
 static void __d_rehash(struct dentry *entry)
 {
-	struct hlist_bl_head *b = d_hash(entry->d_name.hash);
+	struct hlist_bl_head *b = d_hash(entry->d_name.hash_len);
 
 	hlist_bl_lock(b);
 	hlist_bl_add_head_rcu(&entry->d_hash, b);
@@ -3129,6 +3131,9 @@ static void __init dcache_init_early(void)
 					0,
 					0);
 	d_hash_shift = 32 - d_hash_shift;
+
+	runtime_const_init(shift, d_hash_shift, d_hash_shift);
+	runtime_const_init(ptr, dentry_hashtable, dentry_hashtable);
 }
 
 static void __init dcache_init(void)
@@ -3157,6 +3162,9 @@ static void __init dcache_init(void)
 					0,
 					0);
 	d_hash_shift = 32 - d_hash_shift;
+
+	runtime_const_init(shift, d_hash_shift, d_hash_shift);
+	runtime_const_init(ptr, dentry_hashtable, dentry_hashtable);
 }
 
 /* SLAB cache for __getname() consumers */
