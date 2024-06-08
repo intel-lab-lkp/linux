@@ -22,6 +22,9 @@
 
 #include <sys/types.h>
 
+#include "spdm.h"
+#include "intel_sdsi.h"
+
 #ifndef __packed
 #define __packed __attribute__((packed))
 #endif
@@ -179,6 +182,7 @@ struct sdsi_dev {
 	struct state_certificate sc;
 	char *dev_name;
 	char *dev_path;
+	int dev_no;
 	uint32_t guid;
 };
 
@@ -189,6 +193,12 @@ enum command {
 	CMD_STATE_CERT,
 	CMD_PROV_AKC,
 	CMD_PROV_CAP,
+	CMD_ATTESTATION,
+};
+
+enum spdm_message {
+	GET_DIGESTS,
+	GET_CERTIFICATE,
 };
 
 static void sdsi_list_devices(void)
@@ -647,6 +657,41 @@ static int sdsi_provision_cap(struct sdsi_dev *s, char *bin_file)
 	return sdsi_provision(s, bin_file, CMD_PROV_CAP);
 }
 
+static int sdsi_attestation(struct sdsi_dev *s, enum spdm_message message)
+{
+	struct cert_chain c;
+	uint8_t digest[TPM_ALG_SHA_384_SIZE];
+	size_t size;
+	int ret, i;
+
+	switch (message) {
+	case GET_CERTIFICATE:
+		ret = spdm_get_certificate(s->dev_no, &c);
+		if (ret)
+			return ret;
+
+		size = fwrite(c.chain, sizeof(uint8_t), c.len, stdout);
+		if (size != c.len) {
+			fprintf(stderr, "Unable to write complete certificate chain\n");
+			ret = -1;
+		}
+
+		free(c.chain);
+		break;
+	case GET_DIGESTS:
+		ret = spdm_get_digests(s->dev_no, digest);
+		if (ret)
+			return ret;
+
+		for (i = 0; i < TPM_ALG_SHA_384_SIZE; i++)
+			printf("%02x", digest[i]);
+		printf("\n");
+		break;
+	}
+
+	return ret;
+}
+
 static int read_sysfs_data(const char *file, int *value)
 {
 	char buff[16];
@@ -728,6 +773,7 @@ static struct sdsi_dev *sdsi_create_dev(char *dev_no)
 	}
 
 	s->guid = guid;
+	s->dev_no = atoi(dev_no);
 
 	return s;
 }
@@ -742,6 +788,7 @@ static void sdsi_free_dev(struct sdsi_dev *s)
 static void usage(char *prog)
 {
 	printf("Usage: %s [-l] [-d DEVNO [-i] [-s] [-m | -C] [-a FILE] [-c FILE]\n", prog);
+	printf("       [-attest MESSAGE]\n");
 }
 
 static void show_help(void)
@@ -754,12 +801,17 @@ static void show_help(void)
 	printf("  %-18s\t%s\n", "-m, --meter",          "show meter certificate data");
 	printf("  %-18s\t%s\n", "-C, --meter_current",  "show live unattested meter data");
 	printf("  %-18s\t%s\n", "-a, --akc FILE",       "provision socket with AKC FILE");
-	printf("  %-18s\t%s\n", "-c, --cap FILE>",      "provision socket with CAP FILE");
+	printf("  %-18s\t%s\n", "-c, --cap FILE",       "provision socket with CAP FILE");
+	printf("  %-18s\t%s\n", "--attest MESSAGE",     "send attestion MESSAGE. Valid");
+	printf("  %-18s\t%s\n", "",                     "messages are:");
+	printf("  %-18s\t%s\n", "",                     "    get_digests");
+	printf("  %-18s\t%s\n", "",                     "    get_certificate");
 }
 
 int main(int argc, char *argv[])
 {
 	char bin_file[PATH_MAX], *dev_no = NULL;
+	enum spdm_message message = GET_DIGESTS;
 	bool device_selected = false;
 	char *progname;
 	enum command command = -1;
@@ -769,6 +821,7 @@ int main(int argc, char *argv[])
 
 	static struct option long_options[] = {
 		{"akc",			required_argument,	0, 'a'},
+		{"attest",		required_argument,	0, 0},
 		{"cap",			required_argument,	0, 'c'},
 		{"devno",		required_argument,	0, 'd'},
 		{"help",		no_argument,		0, 'h'},
@@ -820,6 +873,20 @@ int main(int argc, char *argv[])
 
 			command = (opt == 'a') ? CMD_PROV_AKC : CMD_PROV_CAP;
 			break;
+		case 0:
+			if (strcmp(long_options[option_index].name, "attest") == 0) {
+				command = CMD_ATTESTATION;
+
+				if (strcmp(optarg, "get_digests") == 0)
+					message = GET_DIGESTS;
+				else if (strcmp(optarg, "get_certificate") == 0)
+					message = GET_CERTIFICATE;
+				else {
+					fprintf(stderr, "Unrecognized attestation command\n");
+					return -1;
+				}
+			}
+			break;
 		case 'h':
 			usage(progname);
 			show_help();
@@ -853,6 +920,9 @@ int main(int argc, char *argv[])
 			break;
 		case CMD_PROV_CAP:
 			ret = sdsi_provision_cap(s, bin_file);
+			break;
+		case CMD_ATTESTATION:
+			ret = sdsi_attestation(s, message);
 			break;
 		default:
 			fprintf(stderr, "No command specified\n");
