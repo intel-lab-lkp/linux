@@ -2,6 +2,11 @@
 #ifndef __PERF_SYSCALLTBL_H
 #define __PERF_SYSCALLTBL_H
 
+struct __syscall {
+	int id;
+	const char *name;
+};
+
 struct syscalltbl {
 	int audit_machine;
 	struct {

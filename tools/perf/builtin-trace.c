@@ -3354,7 +3354,8 @@ static int trace__bpf_prog_sys_exit_fd(struct trace *trace, int id)
 static struct bpf_program *trace__find_usable_bpf_prog_entry(struct trace *trace, struct syscall *sc)
 {
 	struct tep_format_field *field, *candidate_field;
-	int id;
+	struct __syscall *scs = trace->sctbl->syscalls.entries;
+	int id, _id;
 
 	/*
 	 * We're only interested in syscalls that have a pointer:
@@ -3368,9 +3369,12 @@ static struct bpf_program *trace__find_usable_bpf_prog_entry(struct trace *trace
 
 try_to_find_pair:
 	for (id = 0; id < trace->sctbl->syscalls.nr_entries; ++id) {
-		struct syscall *pair = trace__syscall_info(trace, NULL, id);
+		struct syscall *pair;
 		struct bpf_program *pair_prog;
 		bool is_candidate = false;
+
+		_id = scs[id].id;
+		pair = trace__syscall_info(trace, NULL, _id);
 
 		if (pair == NULL || pair == sc ||
 		    pair->bpf_prog.sys_enter == trace->skel->progs.syscall_unaugmented)
@@ -3456,23 +3460,26 @@ static int trace__init_syscalls_bpf_prog_array_maps(struct trace *trace)
 {
 	int map_enter_fd = bpf_map__fd(trace->skel->maps.syscalls_sys_enter);
 	int map_exit_fd  = bpf_map__fd(trace->skel->maps.syscalls_sys_exit);
-	int err = 0, key;
+	int err = 0, key, id;
+	struct __syscall *scs = trace->sctbl->syscalls.entries;
 
 	for (key = 0; key < trace->sctbl->syscalls.nr_entries; ++key) {
 		int prog_fd;
 
-		if (!trace__syscall_enabled(trace, key))
+		id = scs[key].id;
+
+		if (!trace__syscall_enabled(trace, id))
 			continue;
 
-		trace__init_syscall_bpf_progs(trace, key);
+		trace__init_syscall_bpf_progs(trace, id);
 
 		// It'll get at least the "!raw_syscalls:unaugmented"
-		prog_fd = trace__bpf_prog_sys_enter_fd(trace, key);
-		err = bpf_map_update_elem(map_enter_fd, &key, &prog_fd, BPF_ANY);
+		prog_fd = trace__bpf_prog_sys_enter_fd(trace, id);
+		err = bpf_map_update_elem(map_enter_fd, &id, &prog_fd, BPF_ANY);
 		if (err)
 			break;
-		prog_fd = trace__bpf_prog_sys_exit_fd(trace, key);
-		err = bpf_map_update_elem(map_exit_fd, &key, &prog_fd, BPF_ANY);
+		prog_fd = trace__bpf_prog_sys_exit_fd(trace, id);
+		err = bpf_map_update_elem(map_exit_fd, &id, &prog_fd, BPF_ANY);
 		if (err)
 			break;
 	}
@@ -3506,9 +3513,12 @@ static int trace__init_syscalls_bpf_prog_array_maps(struct trace *trace)
 	 * array tail call, then that one will be used.
 	 */
 	for (key = 0; key < trace->sctbl->syscalls.nr_entries; ++key) {
-		struct syscall *sc = trace__syscall_info(trace, NULL, key);
+		struct syscall *sc;
 		struct bpf_program *pair_prog;
 		int prog_fd;
+
+		id = scs[key].id;
+		sc = trace__syscall_info(trace, NULL, id);
 
 		if (sc == NULL || sc->bpf_prog.sys_enter == NULL)
 			continue;
@@ -3535,7 +3545,7 @@ static int trace__init_syscalls_bpf_prog_array_maps(struct trace *trace)
 		 * with the fd for the program we're reusing:
 		 */
 		prog_fd = bpf_program__fd(sc->bpf_prog.sys_enter);
-		err = bpf_map_update_elem(map_enter_fd, &key, &prog_fd, BPF_ANY);
+		err = bpf_map_update_elem(map_enter_fd, &id, &prog_fd, BPF_ANY);
 		if (err)
 			break;
 	}
