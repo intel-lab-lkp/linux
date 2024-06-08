@@ -614,11 +614,10 @@ static int sis900_mii_probe(struct net_device *net_dev)
 
 	/* search for total of 32 possible mii phy addresses */
 	for (phy_addr = 0; phy_addr < 32; phy_addr++) {
-		struct mii_phy * mii_phy = NULL;
+		struct mii_phy *mii_phy;
 		u16 mii_status;
 		int i;
 
-		mii_phy = NULL;
 		for(i = 0; i < 2; i++)
 			mii_status = mdio_read(net_dev, phy_addr, MII_STATUS);
 
@@ -630,7 +629,8 @@ static int sis900_mii_probe(struct net_device *net_dev)
 			continue;
 		}
 
-		if ((mii_phy = kmalloc(sizeof(struct mii_phy), GFP_KERNEL)) == NULL) {
+		mii_phy = kmalloc(sizeof(*mii_phy), GFP_KERNEL);
+		if (!mii_phy) {
 			mii_phy = sis_priv->first_mii;
 			while (mii_phy) {
 				struct mii_phy *phy;
