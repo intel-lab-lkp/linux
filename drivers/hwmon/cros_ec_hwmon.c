@@ -29,6 +29,7 @@ struct cros_ec_hwmon_priv {
 	const char *temp_sensor_names[EC_TEMP_SENSOR_ENTRIES + EC_TEMP_SENSOR_B_ENTRIES];
 	u8 usable_fans;
 	bool has_fan_pwm;
+	bool has_temp_threshold;
 	u8 fan_pwm[EC_FAN_SPEED_ENTRIES];
 	enum cros_ec_hwmon_fan_mode fan_mode[EC_FAN_SPEED_ENTRIES];
 };
@@ -97,6 +98,42 @@ static int cros_ec_hwmon_read_temp(struct cros_ec_device *cros_ec, u8 index, u8 
 	return 0;
 }
 
+static int cros_ec_hwmon_read_temp_threshold(struct cros_ec_device *cros_ec, u8 index,
+					     enum ec_temp_thresholds threshold, u32 *temp)
+{
+	struct ec_params_thermal_get_threshold_v1 req = {};
+	struct ec_thermal_config resp;
+	int ret;
+
+	req.sensor_num = index;
+	ret = cros_ec_cmd(cros_ec, 1, EC_CMD_THERMAL_GET_THRESHOLD,
+			  &req, sizeof(req), &resp, sizeof(resp));
+	if (ret < 0)
+		return ret;
+
+	*temp = resp.temp_host[threshold];
+	return 0;
+}
+
+static int cros_ec_hwmon_write_temp_threshold(struct cros_ec_device *cros_ec, u8 index,
+					      enum ec_temp_thresholds threshold, u32 temp)
+{
+	struct ec_params_thermal_get_threshold_v1 get_req = {};
+	struct ec_params_thermal_set_threshold_v1 set_req = {};
+	int ret;
+
+	get_req.sensor_num = index;
+	ret = cros_ec_cmd(cros_ec, 1, EC_CMD_THERMAL_GET_THRESHOLD,
+			  &get_req, sizeof(get_req), &set_req.cfg, sizeof(set_req.cfg));
+	if (ret < 0)
+		return ret;
+
+	set_req.sensor_num = index;
+	set_req.cfg.temp_host[threshold] = temp;
+	return cros_ec_cmd(cros_ec, 1, EC_CMD_THERMAL_SET_THRESHOLD,
+			   &set_req, sizeof(set_req), NULL, 0);
+}
+
 static bool cros_ec_hwmon_is_error_fan(u16 speed)
 {
 	return speed == EC_FAN_SPEED_NOT_PRESENT || speed == EC_FAN_SPEED_STALLED;
@@ -115,11 +152,24 @@ static long cros_ec_hwmon_temp_to_millicelsius(u8 temp)
 	return kelvin_to_millicelsius((((long)temp) + EC_TEMP_SENSOR_OFFSET));
 }
 
+static enum ec_temp_thresholds cros_ec_hwmon_attr_to_thres(u32 attr)
+{
+	if (attr == hwmon_temp_max)
+		return EC_TEMP_THRESH_WARN;
+	else if (attr == hwmon_temp_crit)
+		return EC_TEMP_THRESH_HIGH;
+	else if (attr == hwmon_temp_emergency)
+		return EC_TEMP_THRESH_HALT;
+	else
+		return 0;
+}
+
 static int cros_ec_hwmon_read(struct device *dev, enum hwmon_sensor_types type,
 			      u32 attr, int channel, long *val)
 {
 	struct cros_ec_hwmon_priv *priv = dev_get_drvdata(dev);
 	int ret = -EOPNOTSUPP;
+	u32 threshold;
 	u16 speed;
 	u8 temp;
 
@@ -166,6 +216,14 @@ static int cros_ec_hwmon_read(struct device *dev, enum hwmon_sensor_types type,
 			ret = cros_ec_hwmon_read_temp(priv->cros_ec, channel, &temp);
 			if (ret == 0)
 				*val = cros_ec_hwmon_is_error_temp(temp);
+
+		} else if (attr == hwmon_temp_max || attr == hwmon_temp_crit ||
+			   attr == hwmon_temp_emergency) {
+			ret = cros_ec_hwmon_read_temp_threshold(priv->cros_ec, channel,
+								cros_ec_hwmon_attr_to_thres(attr),
+								&threshold);
+			if (ret == 0)
+				*val = kelvin_to_millicelsius(threshold);
 		}
 	}
 
@@ -235,6 +293,10 @@ static int cros_ec_hwmon_write(struct device *dev, enum hwmon_sensor_types type,
 
 		else if (attr == hwmon_pwm_enable)
 			ret = cros_ec_hwmon_write_pwm_enable(priv, channel, val);
+	} else if (type == hwmon_temp) {
+		ret = cros_ec_hwmon_write_temp_threshold(priv->cros_ec, channel,
+							 cros_ec_hwmon_attr_to_thres(attr),
+							 millicelsius_to_kelvin(val));
 	}
 
 	return ret;
@@ -259,8 +321,16 @@ static umode_t cros_ec_hwmon_is_visible(const void *data, enum hwmon_sensor_type
 			return 0644;
 
 	} else if (type == hwmon_temp) {
-		if (priv->temp_sensor_names[channel])
-			return 0444;
+		if (priv->temp_sensor_names[channel]) {
+			if (attr == hwmon_temp_max ||
+			    attr == hwmon_temp_crit ||
+			    attr == hwmon_temp_emergency) {
+				if (priv->has_temp_threshold)
+					return 0644;
+			} else {
+				return 0444;
+			}
+		}
 	}
 
 	return 0;
@@ -278,7 +348,8 @@ static const struct hwmon_channel_info * const cros_ec_hwmon_info[] = {
 			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE,
 			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE),
 
-#define CROS_EC_HWMON_TEMP_PARAMS (HWMON_T_INPUT | HWMON_T_FAULT | HWMON_T_LABEL)
+#define CROS_EC_HWMON_TEMP_PARAMS (HWMON_T_INPUT | HWMON_T_FAULT | HWMON_T_LABEL | \
+				   HWMON_T_MAX | HWMON_T_CRIT | HWMON_T_EMERGENCY)
 	HWMON_CHANNEL_INFO(temp,
 			   CROS_EC_HWMON_TEMP_PARAMS,
 			   CROS_EC_HWMON_TEMP_PARAMS,
@@ -325,8 +396,13 @@ static void cros_ec_hwmon_probe_temp_sensors(struct device *dev, struct cros_ec_
 	struct ec_params_temp_sensor_get_info req = {};
 	struct ec_response_temp_sensor_get_info resp;
 	size_t candidates, i, sensor_name_size;
+	u32 threshold;
 	int ret;
 	u8 temp;
+
+	ret = cros_ec_hwmon_read_temp_threshold(priv->cros_ec, 0, EC_TEMP_THRESH_HIGH, &threshold);
+	if (ret == 0)
+		priv->has_temp_threshold = 1;
 
 	if (thermal_version < 2)
 		candidates = EC_TEMP_SENSOR_ENTRIES;

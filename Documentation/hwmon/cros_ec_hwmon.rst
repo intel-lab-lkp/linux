@@ -29,3 +29,4 @@ Supported features:
   - Target fan speed (for fan 1 only)
   - PWM-based fan control
   - Current temperature
+  - Temperature thresholds
