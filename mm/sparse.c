@@ -333,7 +333,7 @@ sparse_early_usemaps_alloc_pgdat_section(struct pglist_data *pgdat,
 					 unsigned long size)
 {
 	struct mem_section_usage *usage;
-	unsigned long goal, limit;
+	unsigned long goal, limit_or_flag;
 	int nid;
 	/*
 	 * A page may contain usemaps for other sections preventing the
@@ -346,12 +346,13 @@ sparse_early_usemaps_alloc_pgdat_section(struct pglist_data *pgdat,
 	 * this problem.
 	 */
 	goal = pgdat_to_phys(pgdat) & (PAGE_SECTION_MASK << PAGE_SHIFT);
-	limit = goal + (1UL << PA_SECTION_SHIFT);
+	limit_or_flag = goal + (1UL << PA_SECTION_SHIFT);
 	nid = early_pfn_to_nid(goal >> PAGE_SHIFT);
 again:
-	usage = memblock_alloc_try_nid(size, SMP_CACHE_BYTES, goal, limit, nid);
-	if (!usage && limit) {
-		limit = 0;
+	usage = memblock_alloc_try_nid(size, SMP_CACHE_BYTES, goal,
+				limit_or_flag, nid);
+	if (!usage && (limit_or_flag != MEMBLOCK_ALLOC_ACCESSIBLE)) {
+		limit_or_flag = MEMBLOCK_ALLOC_ACCESSIBLE;
 		goto again;
 	}
 	return usage;
