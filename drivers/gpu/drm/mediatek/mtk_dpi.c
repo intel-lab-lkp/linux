@@ -25,6 +25,7 @@
 #include <drm/drm_edid.h>
 #include <drm/drm_of.h>
 #include <drm/drm_simple_kms_helper.h>
+#include <drm/display/drm_hdcp_helper.h>
 
 #include "mtk_ddp_comp.h"
 #include "mtk_disp_drv.h"
@@ -819,6 +820,8 @@ static int mtk_dpi_bind(struct device *dev, struct device *master, void *data)
 		goto err_cleanup;
 	}
 	drm_connector_attach_encoder(dpi->connector, &dpi->encoder);
+
+	drm_connector_attach_content_protection_property(dpi->connector, true);
 
 	return 0;
 

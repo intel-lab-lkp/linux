@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2019-2022 MediaTek Inc.
+ * Copyright (c) 2019-2024 MediaTek Inc.
  * Copyright (c) 2022 BayLibre
  */
 
@@ -8,13 +8,13 @@
 #include <drm/display/drm_dp.h>
 #include <drm/display/drm_dp_helper.h>
 #include <drm/drm_atomic_helper.h>
-#include <drm/drm_bridge.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_edid.h>
 #include <drm/drm_of.h>
 #include <drm/drm_panel.h>
 #include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
+#include <drm/display/drm_hdcp_helper.h>
 #include <linux/arm-smccc.h>
 #include <linux/clk.h>
 #include <linux/delay.h>
@@ -30,10 +30,10 @@
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/soc/mediatek/mtk_sip_svc.h>
-#include <sound/hdmi-codec.h>
-#include <video/videomode.h>
 
+#include "mtk_dp.h"
 #include "mtk_dp_reg.h"
+#include "mtk_dp_hdcp2.h"
 
 #define MTK_DP_SIP_CONTROL_AARCH32	MTK_SIP_SMC_CMD(0x523)
 #define MTK_DP_SIP_ATF_EDP_VIDEO_UNMUTE	(BIT(0) | BIT(5))
@@ -52,43 +52,6 @@
 #define MTK_DP_VERSION 0x11
 #define MTK_DP_SDP_AUI 0x4
 
-enum {
-	MTK_DP_CAL_GLB_BIAS_TRIM = 0,
-	MTK_DP_CAL_CLKTX_IMPSE,
-	MTK_DP_CAL_LN_TX_IMPSEL_PMOS_0,
-	MTK_DP_CAL_LN_TX_IMPSEL_PMOS_1,
-	MTK_DP_CAL_LN_TX_IMPSEL_PMOS_2,
-	MTK_DP_CAL_LN_TX_IMPSEL_PMOS_3,
-	MTK_DP_CAL_LN_TX_IMPSEL_NMOS_0,
-	MTK_DP_CAL_LN_TX_IMPSEL_NMOS_1,
-	MTK_DP_CAL_LN_TX_IMPSEL_NMOS_2,
-	MTK_DP_CAL_LN_TX_IMPSEL_NMOS_3,
-	MTK_DP_CAL_MAX,
-};
-
-struct mtk_dp_train_info {
-	bool sink_ssc;
-	bool cable_plugged_in;
-	/* link_rate is in multiple of 0.27Gbps */
-	int link_rate;
-	int lane_count;
-	unsigned int channel_eq_pattern;
-};
-
-struct mtk_dp_audio_cfg {
-	bool detect_monitor;
-	int sad_count;
-	int sample_rate;
-	int word_length_bits;
-	int channels;
-};
-
-struct mtk_dp_info {
-	enum dp_pixelformat format;
-	struct videomode vm;
-	struct mtk_dp_audio_cfg audio_cur_cfg;
-};
-
 struct mtk_dp_efuse_fmt {
 	unsigned short idx;
 	unsigned short shift;
@@ -96,44 +59,6 @@ struct mtk_dp_efuse_fmt {
 	unsigned short min_val;
 	unsigned short max_val;
 	unsigned short default_val;
-};
-
-struct mtk_dp {
-	bool enabled;
-	bool need_debounce;
-	int irq;
-	u8 max_lanes;
-	u8 max_linkrate;
-	u8 rx_cap[DP_RECEIVER_CAP_SIZE];
-	u32 cal_data[MTK_DP_CAL_MAX];
-	u32 irq_thread_handle;
-	/* irq_thread_lock is used to protect irq_thread_handle */
-	spinlock_t irq_thread_lock;
-
-	struct device *dev;
-	struct drm_bridge bridge;
-	struct drm_bridge *next_bridge;
-	struct drm_connector *conn;
-	struct drm_device *drm_dev;
-	struct drm_dp_aux aux;
-
-	const struct mtk_dp_data *data;
-	struct mtk_dp_info info;
-	struct mtk_dp_train_info train_info;
-
-	struct platform_device *phy_dev;
-	struct phy *phy;
-	struct regmap *regs;
-	struct timer_list debounce_timer;
-
-	/* For audio */
-	bool audio_enable;
-	hdmi_codec_plugged_cb plugged_cb;
-	struct platform_device *audio_pdev;
-
-	struct device *codec_dev;
-	/* protect the plugged_cb as it's used in both bridge ops and audio */
-	struct mutex update_plugged_status_lock;
 };
 
 struct mtk_dp_data {
@@ -319,12 +244,24 @@ static struct regmap_config mtk_dp_regmap_config = {
 	.name = "mtk-dp-registers",
 };
 
+u64 mtk_dp_get_system_time(void)
+{
+	return ktime_get_mono_fast_ns();
+}
+
+u64 mtk_dp_get_time_diff(u64 pre_time)
+{
+	u64 post_time = mtk_dp_get_system_time();
+
+	return (post_time - pre_time);
+}
+
 static struct mtk_dp *mtk_dp_from_bridge(struct drm_bridge *b)
 {
 	return container_of(b, struct mtk_dp, bridge);
 }
 
-static u32 mtk_dp_read(struct mtk_dp *mtk_dp, u32 offset)
+u32 mtk_dp_read(struct mtk_dp *mtk_dp, u32 offset)
 {
 	u32 read_val;
 	int ret;
@@ -350,8 +287,8 @@ static int mtk_dp_write(struct mtk_dp *mtk_dp, u32 offset, u32 val)
 	return ret;
 }
 
-static int mtk_dp_update_bits(struct mtk_dp *mtk_dp, u32 offset,
-			      u32 val, u32 mask)
+int mtk_dp_update_bits(struct mtk_dp *mtk_dp, u32 offset,
+		       u32 val, u32 mask)
 {
 	int ret = regmap_update_bits(mtk_dp->regs, offset, mask, val);
 
@@ -1865,11 +1802,200 @@ static void mtk_dp_init_port(struct mtk_dp *mtk_dp)
 	mtk_dp_digital_sw_reset(mtk_dp);
 }
 
+static void mtk_dp_check_sink_esi(struct mtk_dp *mtk_dp)
+{
+	u8 clear_cp_irq = BIT(2);
+
+	/* hdcp 1.x do not need irq */
+	if (mtk_dp->hdcp_info.hdcp2_info.capable) {
+		dp_tx_hdcp2x_irq(&mtk_dp->hdcp_info);
+		drm_dp_dpcd_write(&mtk_dp->aux,
+				  DP_DEVICE_SERVICE_IRQ_VECTOR, &clear_cp_irq, 0x1);
+	}
+}
+
+static int mtk_dp_hpd_sink_event(struct mtk_dp *mtk_dp)
+{
+	ssize_t ret;
+	u8 sink_count;
+	u8 sink_count_200;
+
+	ret = drm_dp_dpcd_readb(&mtk_dp->aux, DP_SINK_COUNT_ESI, &sink_count);
+	if (ret < 0) {
+		drm_info(mtk_dp->drm_dev, "Read sink count failed: %zd\n", ret);
+		return ret;
+	}
+
+	ret = drm_dp_dpcd_readb(&mtk_dp->aux, DP_SINK_COUNT, &sink_count_200);
+	if (ret < 0) {
+		drm_info(mtk_dp->drm_dev,
+			 "Read DP_SINK_COUNT_ESI failed: %zd\n", ret);
+		return ret;
+	}
+
+	mtk_dp_check_sink_esi(mtk_dp);
+
+	return 0;
+}
+
+static void mtk_dp_hdcp_get_info(struct mtk_dp *mtk_dp)
+{
+	dp_tx_hdcp2x_get_info(&mtk_dp->hdcp_info);
+}
+
+static void mtk_dp_hdcp_disable(struct mtk_dp *mtk_dp)
+{
+	mutex_lock(&mtk_dp->hdcp_mutex);
+
+	if (mtk_dp->hdcp_info.auth_status == AUTH_ZERO)
+		goto end;
+
+	if (mtk_dp->hdcp_info.auth_version == HDCP_VERSION_2X)
+		dp_tx_hdcp2x_disabel(&mtk_dp->hdcp_info);
+
+end:
+	cancel_delayed_work_sync(&mtk_dp->check_work);
+	mtk_dp_hdcp_update_value(mtk_dp, DRM_MODE_CONTENT_PROTECTION_DESIRED);
+
+	mutex_unlock(&mtk_dp->hdcp_mutex);
+}
+
+static void mtk_dp_hdcp_check_work(struct work_struct *work)
+{
+	struct mtk_dp *mtk_dp = container_of(to_delayed_work(work),
+		struct mtk_dp, check_work);
+
+	if (mtk_dp->hdcp_info.auth_version == HDCP_VERSION_2X &&
+	    (!dp_tx_hdcp2x_check_link(&mtk_dp->hdcp_info))) {
+		schedule_delayed_work(&mtk_dp->check_work, DRM_HDCP2_CHECK_PERIOD_MS);
+	}
+}
+
+static void mtk_dp_hdcp_handle(struct work_struct *data)
+{
+	struct mtk_dp *mtk_dp = container_of(data, struct mtk_dp, hdcp_work);
+	unsigned long check_link_interval = DRM_HDCP_CHECK_PERIOD_MS;
+	int ret = -EINVAL;
+
+	mutex_lock(&mtk_dp->hdcp_mutex);
+
+	if (mtk_dp->hdcp_info.auth_status == AUTH_PASS)
+		goto end;
+
+	mtk_dp_hdcp_get_info(mtk_dp);
+
+	if (mtk_dp->hdcp_info.hdcp2_info.capable) {
+		ret = dp_tx_hdcp2x_enable(&mtk_dp->hdcp_info);
+		if (!ret)
+			check_link_interval = DRM_HDCP2_CHECK_PERIOD_MS;
+	}
+
+	if (!ret) {
+		schedule_delayed_work(&mtk_dp->check_work, check_link_interval);
+		mtk_dp_hdcp_update_value(mtk_dp, DRM_MODE_CONTENT_PROTECTION_ENABLED);
+	}
+
+end:
+	mutex_unlock(&mtk_dp->hdcp_mutex);
+}
+
+static void mtk_dp_hdcp_enable(struct mtk_dp *mtk_dp)
+{
+	if (!mtk_dp->train_info.cable_plugged_in || !mtk_dp->enabled)
+		return;
+
+	dev_info(mtk_dp->dev, "[HDCP] dp start HDCP work\n");
+	queue_work(mtk_dp->hdcp_workqueue, &mtk_dp->hdcp_work);
+}
+
+static void mtk_dp_hdcp_prop_work(struct work_struct *work)
+{
+	struct mtk_dp *mtk_dp;
+	struct drm_device *drm_dev;
+
+	mtk_dp = container_of(work, struct mtk_dp, prop_work);
+
+	if (!mtk_dp->conn) {
+		dev_err(mtk_dp->dev, "[HDCP] Connector is null\n");
+		return;
+	}
+
+	drm_dev = mtk_dp->conn->dev;
+
+	drm_modeset_lock(&drm_dev->mode_config.connection_mutex, NULL);
+
+	if (mtk_dp->hdcp_info.content_protection != DRM_MODE_CONTENT_PROTECTION_UNDESIRED) {
+		dev_info(mtk_dp->dev, "[HDCP] Update CP, content protection: %d, auth status:%d\n",
+			 mtk_dp->hdcp_info.content_protection, mtk_dp->hdcp_info.auth_status);
+
+		/* only update between ENABLED/DESIRED */
+		drm_hdcp_update_content_protection(mtk_dp->conn,
+						   mtk_dp->hdcp_info.content_protection);
+	}
+
+	drm_modeset_unlock(&drm_dev->mode_config.connection_mutex);
+}
+
+void mtk_dp_hdcp_update_value(struct mtk_dp *mtk_dp, u32 value)
+{
+	if (mtk_dp->hdcp_info.content_protection == value)
+		return;
+
+	mtk_dp->hdcp_info.content_protection = value;
+	if (mtk_dp->hdcp_info.content_protection == DRM_MODE_CONTENT_PROTECTION_UNDESIRED)
+		return;
+
+	schedule_work(&mtk_dp->prop_work);
+}
+
+static void mtk_dp_hdcp_atomic_check(struct mtk_dp *mtk_dp, struct drm_connector_state *state)
+{
+	unsigned int current_protection = mtk_dp->hdcp_info.content_protection;
+	unsigned int new_protection = state->content_protection;
+	bool type_changed = state->hdcp_content_type != mtk_dp->hdcp_info.hdcp_content_type;
+	bool protection_changed = current_protection != new_protection;
+	bool disable = false;
+	bool enable = false;
+
+	dev_dbg(mtk_dp->dev, "[HDCP] atomic check, old[%d, %d], new[%d, %d]\n",
+		mtk_dp->hdcp_info.content_protection, mtk_dp->hdcp_info.hdcp_content_type,
+		state->content_protection, state->hdcp_content_type);
+
+	if (type_changed) {
+		/*
+		 * With the current protection as ENABLED/DESIRED,
+		 * re-authenticate with new content type if the content type changed.
+		 */
+		mtk_dp->hdcp_info.hdcp_content_type = state->hdcp_content_type;
+		mtk_dp->hdcp_info.hdcp2_info.stream_id_type = state->hdcp_content_type;
+
+		if (current_protection != DRM_MODE_CONTENT_PROTECTION_UNDESIRED)
+			disable = true;
+
+		if (new_protection != DRM_MODE_CONTENT_PROTECTION_UNDESIRED)
+			enable = true;
+	} else if (protection_changed) {
+		if (new_protection == DRM_MODE_CONTENT_PROTECTION_UNDESIRED)
+			disable = true;
+		else
+			enable = true;
+	}
+
+	if (disable)
+		mtk_dp_hdcp_disable(mtk_dp);
+
+	if (enable) {
+		mtk_dp->hdcp_info.content_protection = DRM_MODE_CONTENT_PROTECTION_DESIRED;
+		mtk_dp_hdcp_enable(mtk_dp);
+	}
+}
+
 static irqreturn_t mtk_dp_hpd_event_thread(int hpd, void *dev)
 {
 	struct mtk_dp *mtk_dp = dev;
 	unsigned long flags;
 	u32 status;
+	int ret;
 
 	if (mtk_dp->need_debounce && mtk_dp->train_info.cable_plugged_in)
 		msleep(100);
@@ -1894,8 +2020,13 @@ static irqreturn_t mtk_dp_hpd_event_thread(int hpd, void *dev)
 		}
 	}
 
-	if (status & MTK_DP_THREAD_HPD_EVENT)
+	if (status & MTK_DP_THREAD_HPD_EVENT) {
 		dev_dbg(mtk_dp->dev, "Receive IRQ from sink devices\n");
+		/* check if need clear hpd irq */
+		ret = mtk_dp_hpd_sink_event(mtk_dp);
+		if (ret)
+			dev_err(mtk_dp->dev, "Fail to process hpd sink event\n");
+	}
 
 	return IRQ_HANDLED;
 }
@@ -2242,6 +2373,7 @@ static void mtk_dp_bridge_atomic_enable(struct drm_bridge *bridge,
 					struct drm_bridge_state *old_state)
 {
 	struct mtk_dp *mtk_dp = mtk_dp_from_bridge(bridge);
+	struct drm_connector_state *connector_state;
 	int ret;
 
 	mtk_dp->conn = drm_atomic_get_new_connector_for_encoder(old_state->base.state,
@@ -2251,6 +2383,8 @@ static void mtk_dp_bridge_atomic_enable(struct drm_bridge *bridge,
 			"Can't enable bridge as connector is missing\n");
 		return;
 	}
+
+	connector_state = drm_atomic_get_connector_state(old_state->base.state, mtk_dp->conn);
 
 	mtk_dp_aux_panel_poweron(mtk_dp, true);
 
@@ -2280,6 +2414,14 @@ static void mtk_dp_bridge_atomic_enable(struct drm_bridge *bridge,
 
 	mtk_dp->enabled = true;
 	mtk_dp_update_plugged_status(mtk_dp);
+
+	/* Enable hdcp if it's desired */
+	dev_dbg(mtk_dp->dev, "hdcp_content_type:%d, content protection: %d",
+		connector_state->hdcp_content_type, connector_state->content_protection);
+	if (connector_state->content_protection == DRM_MODE_CONTENT_PROTECTION_DESIRED) {
+		mtk_dp->hdcp_info.hdcp_content_type = connector_state->hdcp_content_type;
+		mtk_dp_hdcp_enable(mtk_dp);
+	}
 
 	return;
 power_off_aux:
@@ -2426,6 +2568,8 @@ static int mtk_dp_bridge_atomic_check(struct drm_bridge *bridge,
 	}
 
 	drm_display_mode_to_videomode(&crtc_state->adjusted_mode, &mtk_dp->info.vm);
+
+	mtk_dp_hdcp_atomic_check(mtk_dp, conn_state);
 
 	return 0;
 }
@@ -2665,6 +2809,17 @@ static int mtk_dp_probe(struct platform_device *pdev)
 	ret = mtk_dp_register_phy(mtk_dp);
 	if (ret)
 		return ret;
+
+	mutex_init(&mtk_dp->hdcp_mutex);
+	init_waitqueue_head(&mtk_dp->hdcp_info.hdcp2_info.cp_irq_queue);
+	INIT_WORK(&mtk_dp->hdcp_work, mtk_dp_hdcp_handle);
+	INIT_WORK(&mtk_dp->prop_work, mtk_dp_hdcp_prop_work);
+	INIT_DELAYED_WORK(&mtk_dp->check_work, mtk_dp_hdcp_check_work);
+	mtk_dp->hdcp_workqueue = create_workqueue("mtk_dp_hdcp_work");
+	if (!mtk_dp->hdcp_workqueue) {
+		dev_err(mtk_dp->dev, "failed to create hdcp work queue");
+		return -ENOMEM;
+	}
 
 	mtk_dp->bridge.funcs = &mtk_dp_bridge_funcs;
 	mtk_dp->bridge.of_node = dev->of_node;
