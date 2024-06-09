@@ -800,10 +800,11 @@ static void synchronize_group_exit(struct task_struct *tsk, long code)
 	struct sighand_struct *sighand = tsk->sighand;
 	struct signal_struct *signal = tsk->signal;
 
+	if (READ_ONCE(signal->flags) & SIGNAL_GROUP_EXIT)
+		return;
+
 	spin_lock_irq(&sighand->siglock);
-	signal->quick_threads--;
-	if ((signal->quick_threads == 0) &&
-	    !(signal->flags & SIGNAL_GROUP_EXIT)) {
+	if (!(signal->flags & SIGNAL_GROUP_EXIT)) {
 		signal->flags = SIGNAL_GROUP_EXIT;
 		signal->group_exit_code = code;
 		signal->group_stop_count = 0;
@@ -818,7 +819,9 @@ void __noreturn do_exit(long code)
 
 	WARN_ON(irqs_disabled());
 
-	synchronize_group_exit(tsk, code);
+	group_dead = atomic_dec_and_test(&tsk->signal->live);
+	if (group_dead)
+		synchronize_group_exit(tsk, code);
 
 	WARN_ON(tsk->plug);
 
@@ -833,7 +836,6 @@ void __noreturn do_exit(long code)
 	exit_signals(tsk);  /* sets PF_EXITING */
 
 	acct_update_integrals(tsk);
-	group_dead = atomic_dec_and_test(&tsk->signal->live);
 	if (group_dead) {
 		/*
 		 * If the last thread of global init has exited, panic
