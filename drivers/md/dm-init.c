@@ -87,11 +87,21 @@ static void __init dm_setup_cleanup(struct list_head *devices)
  */
 static char __init *str_field_delimit(char **str, char separator)
 {
-	char *s;
+	char *s, *escaped;
 
-	/* TODO: add support for escaped characters */
 	*str = skip_spaces(*str);
 	s = strchr(*str, separator);
+
+	/* Check for escaped character */
+	escaped = strchr(*str, '\\');
+	if (escaped && (s == NULL || escaped < s)) {
+		/*
+		 * If escaped character comes before the separator, move
+		 * the separator ahead & continue searching for next one.
+		 */
+		s = strchr(escaped + 1, separator);
+	}
+
 	/* Delimit the field and remove trailing spaces */
 	if (s)
 		*s = '\0';
