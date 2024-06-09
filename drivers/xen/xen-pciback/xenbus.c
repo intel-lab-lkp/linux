@@ -258,14 +258,37 @@ static int xen_pcibk_export_device(struct xen_pcibk_device *pdev,
 		xen_register_device_domain_owner(dev, pdev->xdev->otherend_id);
 	}
 
-	/* TODO: It'd be nice to export a bridge and have all of its children
-	 * get exported with it. This may be best done in xend (which will
-	 * have to calculate resource usage anyway) but we probably want to
-	 * put something in here to ensure that if a bridge gets given to a
-	 * driver domain, that all devices under that bridge are not given
-	 * to other driver domains (as he who controls the bridge can disable
-	 * it and stop the other devices from working).
-	 */
+	/* Check if the device is a bridge and export all its children */
+	if ((dev->hdr_type && PCI_HEADER_TYPE_MASK) == PCI_HEADER_TYPE_BRIDGE) {
+		struct pci_dev *child = NULL;
+
+		/* Iterate over all the devices in this bridge */
+		list_for_each_entry(child, &dev->subordinate->devices,
+				bus_list) {
+			dev_dbg(&pdev->xdev->dev,
+				"exporting child device %04x:%02x:%02x.%d\n",
+				child->domain, child->bus->number,
+				PCI_SLOT(child->devfn),
+				PCI_FUNC(child->devfn));
+
+			err = xen_pcibk_export_device(pdev,
+						      child->domain,
+						      child->bus->number,
+						      PCI_SLOT(child->devfn),
+						      PCI_FUNC(child->devfn),
+						      devid);
+			if (err) {
+				dev_err(&pdev->xdev->dev,
+					"failed to export child device : "
+					"%04x:%02x:%02x.%d\n",
+					child->domain,
+					child->bus->number,
+					PCI_SLOT(child->devfn),
+					PCI_FUNC(child->devfn));
+				goto out;
+			}
+		}
+	}
 out:
 	return err;
 }
