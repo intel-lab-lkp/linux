@@ -403,11 +403,10 @@ static int kirin_pcie_parse_port(struct kirin_pcie *pcie,
 				 struct device_node *node)
 {
 	struct device *dev = &pdev->dev;
-	struct device_node *parent, *child;
 	int ret, slot, i;
 
-	for_each_available_child_of_node(node, parent) {
-		for_each_available_child_of_node(parent, child) {
+	for_each_available_child_of_node_scoped(node, parent) {
+		for_each_available_child_of_node_scoped(parent, child) {
 			i = pcie->num_slots;
 
 			pcie->id_reset_gpio[i] = devm_fwnode_gpiod_get_index(dev,
@@ -424,14 +423,13 @@ static int kirin_pcie_parse_port(struct kirin_pcie *pcie,
 			pcie->num_slots++;
 			if (pcie->num_slots > MAX_PCI_SLOTS) {
 				dev_err(dev, "Too many PCI slots!\n");
-				ret = -EINVAL;
-				goto put_node;
+				return -EINVAL;
 			}
 
 			ret = of_pci_get_devfn(child);
 			if (ret < 0) {
 				dev_err(dev, "failed to parse devfn: %d\n", ret);
-				goto put_node;
+				return ret;
 			}
 
 			slot = PCI_SLOT(ret);
@@ -439,10 +437,8 @@ static int kirin_pcie_parse_port(struct kirin_pcie *pcie,
 			pcie->reset_names[i] = devm_kasprintf(dev, GFP_KERNEL,
 							      "pcie_perst_%d",
 							      slot);
-			if (!pcie->reset_names[i]) {
-				ret = -ENOMEM;
-				goto put_node;
-			}
+			if (!pcie->reset_names[i])
+				return -ENOMEM;
 
 			gpiod_set_consumer_name(pcie->id_reset_gpio[i],
 						pcie->reset_names[i]);
@@ -450,11 +446,6 @@ static int kirin_pcie_parse_port(struct kirin_pcie *pcie,
 	}
 
 	return 0;
-
-put_node:
-	of_node_put(child);
-	of_node_put(parent);
-	return ret;
 }
 
 static long kirin_pcie_get_resource(struct kirin_pcie *kirin_pcie,
