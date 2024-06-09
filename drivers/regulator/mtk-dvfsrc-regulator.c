@@ -211,4 +211,5 @@ static void __exit mtk_dvfsrc_regulator_exit(void)
 module_exit(mtk_dvfsrc_regulator_exit);
 
 MODULE_AUTHOR("Arvin wang <arvin.wang@mediatek.com>");
+MODULE_DESCRIPTION("MediaTek DVFSRC regulator driver");
 MODULE_LICENSE("GPL v2");
