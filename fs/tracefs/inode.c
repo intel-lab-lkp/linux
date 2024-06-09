@@ -53,14 +53,6 @@ static struct inode *tracefs_alloc_inode(struct super_block *sb)
 	return &ti->vfs_inode;
 }
 
-static void tracefs_free_inode_rcu(struct rcu_head *rcu)
-{
-	struct tracefs_inode *ti;
-
-	ti = container_of(rcu, struct tracefs_inode, rcu);
-	kmem_cache_free(tracefs_inode_cachep, ti);
-}
-
 static void tracefs_free_inode(struct inode *inode)
 {
 	struct tracefs_inode *ti = get_tracefs(inode);
@@ -70,7 +62,7 @@ static void tracefs_free_inode(struct inode *inode)
 	list_del_rcu(&ti->list);
 	spin_unlock_irqrestore(&tracefs_inode_lock, flags);
 
-	call_rcu(&ti->rcu, tracefs_free_inode_rcu);
+	kfree_rcu(ti, rcu);
 }
 
 static ssize_t default_read_file(struct file *file, char __user *buf,
