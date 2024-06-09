@@ -993,114 +993,292 @@ static void ixgbe_get_regs(struct net_device *netdev,
 
 static int ixgbe_get_eeprom_len(struct net_device *netdev)
 {
-	struct ixgbe_adapter *adapter = netdev_priv(netdev);
-	return adapter->hw.eeprom.word_size * 2;
+        struct ixgbe_adapter *adapter = netdev_priv(netdev);
+
+        return pci_resource_len(adapter->pdev, 0);
+}
+
+static u8 ixgbe_nvmupd_get_module(u32 val)
+{
+        return (u8)(val & IXGBE_NVMUPD_MOD_PNT_MASK);
+}
+
+static int ixgbe_nvmupd_validate_offset(struct ixgbe_adapter *adapter,
+                                        u32 offset)
+{
+        struct net_device *netdev = adapter->netdev;
+
+        switch (offset) {
+        case IXGBE_STATUS:
+        case IXGBE_ESDP:
+        case IXGBE_MSCA:
+        case IXGBE_MSRWD:
+        case IXGBE_EEC_8259X:
+        case IXGBE_FLA_8259X:
+        case IXGBE_FLOP:
+        case IXGBE_SWSM_8259X:
+        case IXGBE_FWSM_8259X:
+        case IXGBE_FACTPS_8259X:
+        case IXGBE_GSSR:
+        case IXGBE_HICR:
+        case IXGBE_FWSTS:
+                return 0;
+        default:
+                if ((offset >= IXGBE_MAVTV(0) && offset <= IXGBE_MAVTV(7)) ||
+                    (offset >= IXGBE_RAL(0) && offset <= IXGBE_RAH(15)))
+                        return 0;
+        }
+
+        switch (adapter->hw.mac.type) {
+        case ixgbe_mac_82599EB:
+                switch (offset) {
+                case IXGBE_AUTOC:
+                case IXGBE_EERD:
+                case IXGBE_BARCTRL:
+                        return 0;
+                default:
+                        if (offset >= 0x00020000 &&
+                            offset <= ixgbe_get_eeprom_len(netdev))
+                                return 0;
+                }
+                break;
+        case ixgbe_mac_X540:
+                switch (offset) {
+                case IXGBE_EERD:
+                case IXGBE_EEWR:
+                case IXGBE_SRAMREL:
+                case IXGBE_BARCTRL:
+                        return 0;
+                default:
+                        if ((offset >= 0x00020000 &&
+                             offset <= ixgbe_get_eeprom_len(netdev)))
+                                return 0;
+                }
+                break;
+        case ixgbe_mac_X550:
+                switch (offset) {
+                case IXGBE_EEWR:
+                case IXGBE_SRAMREL:
+                case IXGBE_PHYCTL_82599:
+                case IXGBE_FWRESETCNT:
+                        return 0;
+                default:
+                        if (offset >= IXGBE_FLEX_MNG_PTR(0) &&
+                            offset <= IXGBE_FLEX_MNG_PTR(447))
+                                return 0;
+                }
+                break;
+        case ixgbe_mac_X550EM_x:
+                switch (offset) {
+                case IXGBE_PHYCTL_82599:
+                case IXGBE_NW_MNG_IF_SEL:
+                case IXGBE_FWRESETCNT:
+                case IXGBE_I2CCTL_X550:
+                        return 0;
+                default:
+                        if ((offset >= IXGBE_FLEX_MNG_PTR(0) &&
+                             offset <= IXGBE_FLEX_MNG_PTR(447)) ||
+                            (offset >= IXGBE_FUSES0_GROUP(0) &&
+                             offset <= IXGBE_FUSES0_GROUP(7)))
+                                return 0;
+                }
+                break;
+        case ixgbe_mac_x550em_a:
+                switch (offset) {
+                case IXGBE_PHYCTL_82599:
+                case IXGBE_NW_MNG_IF_SEL:
+                case IXGBE_FWRESETCNT:
+                case IXGBE_I2CCTL_X550:
+                case IXGBE_FLA_X550EM_a:
+                case IXGBE_SWSM_X550EM_a:
+                case IXGBE_FWSM_X550EM_a:
+                case IXGBE_SWFW_SYNC_X550EM_a:
+                case IXGBE_FACTPS_X550EM_a:
+                case IXGBE_EEC_X550EM_a:
+                        return 0;
+                default:
+                        if (offset >= IXGBE_FLEX_MNG_PTR(0) &&
+                            offset <= IXGBE_FLEX_MNG_PTR(447))
+                                return 0;
+                }
+        default:
+                break;
+        }
+
+        return -ENOTTY;
+}
+
+static int ixgbe_nvmupd_command(struct ixgbe_hw *hw,
+                                struct ixgbe_nvm_access *nvm,
+                                u8 *bytes)
+{
+        u32 command;
+        int ret_val = 0;
+        u8 module;
+
+        command = nvm->command;
+        module = ixgbe_nvmupd_get_module(nvm->config);
+
+        switch (command) {
+        case IXGBE_NVMUPD_CMD_REG_READ:
+                switch (module) {
+                case IXGBE_NVMUPD_EXEC_FEATURES:
+                        if (nvm->data_size == hw->nvmupd_features.size)
+                                memcpy(bytes, &hw->nvmupd_features,
+                                       hw->nvmupd_features.size);
+                        else
+                                ret_val = -ENOMEM;
+                break;
+                default:
+                        if (ixgbe_nvmupd_validate_offset(hw->back, nvm->offset))
+                                return -ENOTTY;
+
+                        if (nvm->data_size == 1)
+                                *((u8 *)bytes) = IXGBE_R8_Q(hw, nvm->offset);
+                        else
+                                *((u32 *)bytes) = IXGBE_R32_Q(hw, nvm->offset);
+                break;
+                }
+        break;
+        case IXGBE_NVMUPD_CMD_REG_WRITE:
+                if (ixgbe_nvmupd_validate_offset(hw->back, nvm->offset))
+                        return -ENOTTY;
+
+                IXGBE_WRITE_REG(hw, nvm->offset, *((u32 *)bytes));
+        break;
+        }
+
+        return ret_val;
 }
 
 static int ixgbe_get_eeprom(struct net_device *netdev,
-			    struct ethtool_eeprom *eeprom, u8 *bytes)
+                            struct ethtool_eeprom *eeprom, u8 *bytes)
 {
-	struct ixgbe_adapter *adapter = netdev_priv(netdev);
-	struct ixgbe_hw *hw = &adapter->hw;
-	u16 *eeprom_buff;
-	int first_word, last_word, eeprom_len;
-	int ret_val = 0;
-	u16 i;
+        struct ixgbe_adapter *adapter = netdev_priv(netdev);
+        struct ixgbe_hw *hw = &adapter->hw;
+        u16 *eeprom_buff;
+        int first_word, last_word, eeprom_len;
+        struct ixgbe_nvm_access *nvm;
+        u32 magic;
+        int ret_val = 0;
+        u16 i;
 
-	if (eeprom->len == 0)
-		return -EINVAL;
+        //WARN("ixgbe_get_eeprom() invoked, bytes=%u\n", bytes);
 
-	eeprom->magic = hw->vendor_id | (hw->device_id << 16);
+        if (eeprom->len == 0)
+                return -EINVAL;
 
-	first_word = eeprom->offset >> 1;
-	last_word = (eeprom->offset + eeprom->len - 1) >> 1;
-	eeprom_len = last_word - first_word + 1;
+        magic = hw->vendor_id | (hw->device_id << 16);
+        if (eeprom->magic && eeprom->magic != magic) {
+                nvm = (struct ixgbe_nvm_access *)eeprom;
+                ret_val = ixgbe_nvmupd_command(hw, nvm, bytes);
+                return ret_val;
+        }
 
-	eeprom_buff = kmalloc_array(eeprom_len, sizeof(u16), GFP_KERNEL);
-	if (!eeprom_buff)
-		return -ENOMEM;
+        /* normal ethtool get_eeprom support */
+        eeprom->magic = hw->vendor_id | (hw->device_id << 16);
 
-	ret_val = hw->eeprom.ops.read_buffer(hw, first_word, eeprom_len,
-					     eeprom_buff);
+        first_word = eeprom->offset >> 1;
+        last_word = (eeprom->offset + eeprom->len - 1) >> 1;
+        eeprom_len = last_word - first_word + 1;
 
-	/* Device's eeprom is always little-endian, word addressable */
-	for (i = 0; i < eeprom_len; i++)
-		le16_to_cpus(&eeprom_buff[i]);
+        eeprom_buff = kmalloc(sizeof(u16) * eeprom_len, GFP_KERNEL);
+        if (!eeprom_buff)
+                return -ENOMEM;
 
-	memcpy(bytes, (u8 *)eeprom_buff + (eeprom->offset & 1), eeprom->len);
-	kfree(eeprom_buff);
+        ret_val = hw->eeprom.ops.read_buffer(hw, first_word, eeprom_len,
+                                           eeprom_buff);
 
-	return ret_val;
+        /* Device's eeprom is always little-endian, word addressable */
+        for (i = 0; i < eeprom_len; i++)
+                le16_to_cpus(&eeprom_buff[i]);
+
+        memcpy(bytes, (u8 *)eeprom_buff + (eeprom->offset & 1), eeprom->len);
+        kfree(eeprom_buff);
+
+        return ret_val;
 }
 
 static int ixgbe_set_eeprom(struct net_device *netdev,
-			    struct ethtool_eeprom *eeprom, u8 *bytes)
+                            struct ethtool_eeprom *eeprom, u8 *bytes)
 {
-	struct ixgbe_adapter *adapter = netdev_priv(netdev);
-	struct ixgbe_hw *hw = &adapter->hw;
-	u16 *eeprom_buff;
-	void *ptr;
-	int max_len, first_word, last_word, ret_val = 0;
-	u16 i;
+        struct ixgbe_adapter *adapter = netdev_priv(netdev);
+        struct ixgbe_hw *hw = &adapter->hw;
+        int max_len, first_word, last_word, ret_val = 0;
+        struct ixgbe_nvm_access *nvm;
+        u32 magic;
+        u16 *eeprom_buff, i;
+        void *ptr;
 
-	if (eeprom->len == 0)
-		return -EINVAL;
+        //WARN("ixgbe_set_eeprom() invoked, bytes=%u\n", bytes);
 
-	if (eeprom->magic != (hw->vendor_id | (hw->device_id << 16)))
-		return -EINVAL;
+        if (eeprom->len == 0) 
+                return -EINVAL;
 
-	max_len = hw->eeprom.word_size * 2;
+        magic = hw->vendor_id | (hw->device_id << 16);
+        if (eeprom->magic && eeprom->magic != magic) {
+                nvm = (struct ixgbe_nvm_access *)eeprom;
+                ret_val = ixgbe_nvmupd_command(hw, nvm, bytes);
+                return ret_val;
+        }
 
-	first_word = eeprom->offset >> 1;
-	last_word = (eeprom->offset + eeprom->len - 1) >> 1;
-	eeprom_buff = kmalloc(max_len, GFP_KERNEL);
-	if (!eeprom_buff)
-		return -ENOMEM;
+        /* normal ethtool set_eeprom support */
 
-	ptr = eeprom_buff;
+        if (eeprom->magic != (hw->vendor_id | (hw->device_id << 16)))
+                return -EINVAL;
 
-	if (eeprom->offset & 1) {
-		/*
-		 * need read/modify/write of first changed EEPROM word
-		 * only the second byte of the word is being modified
-		 */
-		ret_val = hw->eeprom.ops.read(hw, first_word, &eeprom_buff[0]);
-		if (ret_val)
-			goto err;
+        max_len = hw->eeprom.word_size * 2;
 
-		ptr++;
-	}
-	if ((eeprom->offset + eeprom->len) & 1) {
-		/*
-		 * need read/modify/write of last changed EEPROM word
-		 * only the first byte of the word is being modified
-		 */
-		ret_val = hw->eeprom.ops.read(hw, last_word,
-					  &eeprom_buff[last_word - first_word]);
-		if (ret_val)
-			goto err;
-	}
+        first_word = eeprom->offset >> 1;
+        last_word = (eeprom->offset + eeprom->len - 1) >> 1;
+        eeprom_buff = kmalloc(max_len, GFP_KERNEL);
+        if (!eeprom_buff)
+                return -ENOMEM;
 
-	/* Device's eeprom is always little-endian, word addressable */
-	for (i = 0; i < last_word - first_word + 1; i++)
-		le16_to_cpus(&eeprom_buff[i]);
+        ptr = eeprom_buff;
 
-	memcpy(ptr, bytes, eeprom->len);
+        if (eeprom->offset & 1) {
+                /*
+                 * need read/modify/write of first changed EEPROM word
+                 * only the second byte of the word is being modified
+                 */
+                ret_val = hw->eeprom.ops.read(hw, first_word, &eeprom_buff[0]);
+                if (ret_val)
+                        goto err;
 
-	for (i = 0; i < last_word - first_word + 1; i++)
-		cpu_to_le16s(&eeprom_buff[i]);
+                ptr++;
+        }
+        if (((eeprom->offset + eeprom->len) & 1) && (ret_val == 0)) {
+                /*
+                 * need read/modify/write of last changed EEPROM word
+                 * only the first byte of the word is being modified
+                 */
+                ret_val = hw->eeprom.ops.read(hw, last_word,
+                                          &eeprom_buff[last_word - first_word]);
+                if (ret_val)
+                        goto err;
+        }
 
-	ret_val = hw->eeprom.ops.write_buffer(hw, first_word,
-					      last_word - first_word + 1,
-					      eeprom_buff);
+        /* Device's eeprom is always little-endian, word addressable */
+        for (i = 0; i < last_word - first_word + 1; i++)
+                le16_to_cpus(&eeprom_buff[i]);
 
-	/* Update the checksum */
-	if (ret_val == 0)
-		hw->eeprom.ops.update_checksum(hw);
+        memcpy(ptr, bytes, eeprom->len);
+
+        for (i = 0; i < last_word - first_word + 1; i++)
+                cpu_to_le16s(&eeprom_buff[i]);
+
+        ret_val = hw->eeprom.ops.write_buffer(hw, first_word,
+                                            last_word - first_word + 1,
+                                            eeprom_buff);
+
+        /* Update the checksum */
+        if (ret_val == 0)
+                hw->eeprom.ops.update_checksum(hw);
 
 err:
-	kfree(eeprom_buff);
-	return ret_val;
+        kfree(eeprom_buff);
+        return ret_val;
 }
 
 static void ixgbe_get_drvinfo(struct net_device *netdev,

@@ -6519,6 +6519,17 @@ static int ixgbe_sw_init(struct ixgbe_adapter *adapter,
 	if (nr_cpu_ids > IXGBE_MAX_XDP_QS)
 		static_branch_enable(&ixgbe_xdp_locking_key);
 
+        /* NVM Update features structure initialization */
+        hw->nvmupd_features.major = IXGBE_NVMUPD_FEATURES_API_VER_MAJOR;
+        hw->nvmupd_features.minor = IXGBE_NVMUPD_FEATURES_API_VER_MINOR;
+        hw->nvmupd_features.size = sizeof(hw->nvmupd_features);
+        memset(hw->nvmupd_features.features, 0x0,
+               IXGBE_NVMUPD_FEATURES_API_FEATURES_ARRAY_LEN *
+               sizeof(*hw->nvmupd_features.features));
+
+        hw->nvmupd_features.features[0] =
+                IXGBE_NVMUPD_FEATURE_REGISTER_ACCESS_SUPPORT;
+
 	return 0;
 }
 

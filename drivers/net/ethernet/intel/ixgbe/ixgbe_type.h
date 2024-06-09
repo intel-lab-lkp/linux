@@ -129,6 +129,8 @@
 #define IXGBE_GRC_X550EM_x	IXGBE_GRC_8259X
 #define IXGBE_GRC_X550EM_a	0x15F64
 #define IXGBE_GRC(_hw)		IXGBE_BY_MAC((_hw), GRC)
+#define IXGBE_SRAMREL           0x10210
+#define IXGBE_FWRESETCNT        0x15F40
 
 /* General Receive Control */
 #define IXGBE_GRC_MNG  0x00000001 /* Manageability Enable */
@@ -936,6 +938,7 @@ struct ixgbe_nvm_version {
 #define IXGBE_SWSR      0x15F10
 #define IXGBE_HFDR      0x15FE8
 #define IXGBE_FLEX_MNG  0x15800 /* 0x15800 - 0x15EFC */
+#define IXGBE_FLEX_MNG_PTR(_i)  (IXGBE_FLEX_MNG + ((_i) * 4))
 
 #define IXGBE_HICR_EN              0x01  /* Enable bit - RO */
 /* Driver sets this bit when done to put command in RAM */
@@ -3390,6 +3393,38 @@ struct ixgbe_hw_stats {
 	u64 o2bspc;
 };
 
+/* NVM Update commands */
+#define IXGBE_NVMUPD_CMD_REG_READ	0x0000000B
+#define IXGBE_NVMUPD_CMD_REG_WRITE	0x0000000C 
+
+#define IXGBE_R32_Q(h, r) ixgbe_read_reg(h, r)
+#define IXGBE_R8_Q(h, r) readb(READ_ONCE(h->hw_addr) + r)
+
+/* NVM Update features API */
+#define IXGBE_NVMUPD_FEATURES_API_VER_MAJOR             0
+#define IXGBE_NVMUPD_FEATURES_API_VER_MINOR             0
+#define IXGBE_NVMUPD_FEATURES_API_FEATURES_ARRAY_LEN    12
+#define IXGBE_NVMUPD_EXEC_FEATURES                      0xe
+#define IXGBE_NVMUPD_FEATURE_FLAT_NVM_SUPPORT           BIT(0)
+#define IXGBE_NVMUPD_FEATURE_REGISTER_ACCESS_SUPPORT    BIT(1)
+
+#define IXGBE_NVMUPD_MOD_PNT_MASK                       0xFF
+
+struct ixgbe_nvm_access {
+        u32 command;
+        u32 config; 
+        u32 offset;     /* in bytes */
+        u32 data_size;  /* in bytes */
+        u8 data[1];
+};
+
+struct ixgbe_nvm_features {
+        u8 major;
+        u8 minor;
+        u16 size;
+        u8 features[IXGBE_NVMUPD_FEATURES_API_FEATURES_ARRAY_LEN];
+}; 
+
 /* forward declaration */
 struct ixgbe_hw;
 
@@ -3654,6 +3689,8 @@ struct ixgbe_hw {
 	bool				allow_unsupported_sfp;
 	bool				wol_enabled;
 	bool				need_crosstalk_fix;
+       /* NVM Update features */
+        struct ixgbe_nvm_features nvmupd_features;
 };
 
 struct ixgbe_info {
