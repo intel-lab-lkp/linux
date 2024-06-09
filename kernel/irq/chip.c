@@ -478,7 +478,6 @@ void handle_nested_irq(unsigned int irq)
 	}
 
 	kstat_incr_irqs_this_cpu(desc);
-	atomic_inc(&desc->threads_active);
 	raw_spin_unlock_irq(&desc->lock);
 
 	action_ret = IRQ_NONE;
@@ -487,8 +486,6 @@ void handle_nested_irq(unsigned int irq)
 
 	if (!irq_settings_no_debug(desc))
 		note_interrupt(desc, action_ret);
-
-	wake_threads_waitq(desc);
 }
 EXPORT_SYMBOL_GPL(handle_nested_irq);
 
