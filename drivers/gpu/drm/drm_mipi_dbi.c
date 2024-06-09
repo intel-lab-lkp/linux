@@ -1475,4 +1475,5 @@ EXPORT_SYMBOL(mipi_dbi_debugfs_init);
 
 #endif
 
+MODULE_DESCRIPTION("MIPI Display Bus Interface (DBI) LCD controller support");
 MODULE_LICENSE("GPL");
