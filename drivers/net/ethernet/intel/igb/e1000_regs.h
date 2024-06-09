@@ -9,8 +9,10 @@
 #define E1000_EECD     0x00010  /* EEPROM/Flash Control - RW */
 #define E1000_EERD     0x00014  /* EEPROM Read - RW */
 #define E1000_CTRL_EXT 0x00018  /* Extended Device Control - RW */
+#define E1000_FLA      0x0001C  /* Flash Access - RW */
 #define E1000_MDIC     0x00020  /* MDI Control - RW */
 #define E1000_MDICNFG  0x00E04  /* MDI Config - RW */
+#define E1000_REGISTER_SET_SIZE         0x20000 /* CSR Size */
 #define E1000_SCTL     0x00024  /* SerDes Control - RW */
 #define E1000_FCAL     0x00028  /* Flow Control Address Low - RW */
 #define E1000_FCAH     0x0002C  /* Flow Control Address High -RW */
@@ -49,6 +51,7 @@
 #define E1000_EEMNGCTL_I210 0x12030  /* MNG EEprom Control */
 #define E1000_EEARBC_I210 0x12024  /* EEPROM Auto Read Bus Control */
 #define E1000_EEWR     0x0102C  /* EEPROM Write Register - RW */
+#define E1000_FLOP      0x0103C  /* FLASH Opcode Register */
 #define E1000_I2CCMD   0x01028  /* SFPI2C Command Register - RW */
 #define E1000_FRTIMER  0x01048  /* Free Running Timer - RW */
 #define E1000_TCPTIMER 0x0104C  /* TCP Timer - RW */
@@ -66,6 +69,7 @@
 #define E1000_MPHY_ADDR_CTRL	0x0024 /* GbE MPHY Address Control */
 #define E1000_MPHY_DATA		0x0E10 /* GBE MPHY Data */
 #define E1000_MPHY_STAT		0x0E0C /* GBE MPHY Statistics */
+#define E1000_I350_BARCTRL              0x5BFC /* BAR ctrl reg */
 
 /* IEEE 1588 TIMESYNCH */
 #define E1000_TSYNCRXCTL 0x0B620 /* Rx Time Sync Control register - RW */
@@ -116,6 +120,7 @@
 #define E1000_DMCRTRH	0x05DD0 /* Receive Packet Rate Threshold */
 #define E1000_DMCCNT	0x05DD4 /* Current Rx Count */
 #define E1000_FCRTC	0x02170 /* Flow Control Rx high watermark */
+#define E1000_PCIEMISC	0x05BB8 /* PCIE misc config register */
 
 /* TX Rate Limit Registers */
 #define E1000_RTTDQSEL	0x3604 /* Tx Desc Plane Queue Select - WO */
@@ -390,6 +395,7 @@ do { \
 #define E1000_O2BSPC	0x0415C /* OS2BMC packets transmitted by host */
 
 #define E1000_SRWR		0x12018  /* Shadow Ram Write Register - RW */
+#define E1000_EEC_REG           0x12010
 #define E1000_I210_FLMNGCTL	0x12038
 #define E1000_I210_FLMNGDATA	0x1203C
 #define E1000_I210_FLMNGCNT	0x12040
@@ -399,6 +405,9 @@ do { \
 #define E1000_I210_FLSWCNT	0x12050
 
 #define E1000_I210_FLA		0x1201C
+
+#define E1000_SHADOWINF         0x12068
+#define E1000_FLFWUPDATE        0x12108
 
 #define E1000_I210_DTXMXPKTSZ	0x355C
 

@@ -33,4 +33,8 @@ struct e1000_fw_version {
 };
 void igb_get_fw_version(struct e1000_hw *hw, struct e1000_fw_version *fw_vers);
 
+s32 e1000_read_nvm(struct e1000_hw *hw, u16 offset, u16 words, u16 *data);
+s32 e1000_write_nvm(struct e1000_hw *hw, u16 offset, u16 words, u16 *data);
+s32 e1000_update_nvm_checksum(struct e1000_hw *hw);
+
 #endif

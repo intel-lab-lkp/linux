@@ -1955,6 +1955,28 @@ static void igb_setup_tx_mode(struct igb_adapter *adapter)
 		   "enabled" : "disabled");
 }
 
+u32 e1000_read_reg(struct e1000_hw *hw, u32 reg)
+{
+        struct igb_adapter *igb = container_of(hw, struct igb_adapter, hw);
+        u8 __iomem *hw_addr = READ_ONCE(hw->hw_addr);
+        u32 value = 0;
+
+        if (E1000_REMOVED(hw_addr))
+                return ~value;
+
+        value = readl(&hw_addr[reg]);
+
+        /* reads should not return all F's */
+        if (!(~value) && (!reg || !(~readl(hw_addr)))) {
+                struct net_device *netdev = igb->netdev;
+
+                hw->hw_addr = NULL;
+                netdev_err(netdev, "PCIe link lost\n");
+        }
+
+        return value;
+}
+
 /**
  *  igb_configure - configure the hardware for RX and TX
  *  @adapter: private board structure
@@ -4091,6 +4113,18 @@ static int igb_sw_init(struct igb_adapter *adapter)
 		adapter->flags &= ~IGB_FLAG_DMAC;
 
 	set_bit(__IGB_DOWN, &adapter->state);
+
+        /* NVM Update features structure initialization */
+        hw->nvmupd_features.major = E1000_NVMUPD_FEATURES_API_VER_MAJOR;
+        hw->nvmupd_features.minor = E1000_NVMUPD_FEATURES_API_VER_MINOR;
+        hw->nvmupd_features.size = sizeof(hw->nvmupd_features);
+        memset(hw->nvmupd_features.features, 0x0,
+               E1000_NVMUPD_FEATURES_API_FEATURES_ARRAY_LEN *
+               sizeof(*hw->nvmupd_features.features));
+
+        hw->nvmupd_features.features[0] =
+                E1000_NVMUPD_FEATURE_REGISTER_ACCESS_SUPPORT;
+
 	return 0;
 }
 

@@ -778,3 +778,54 @@ etrack_id:
 			| eeprom_verl;
 	}
 }
+
+/**
+ *  e1000_read_nvm - Reads NVM (EEPROM)
+ *  @hw: pointer to the HW structure
+ *  @offset: the word offset to read
+ *  @words: number of 16-bit words to read
+ *  @data: pointer to the properly sized buffer for the data.
+ *
+ *  Reads 16-bit chunks of data from the NVM (EEPROM). This is a function
+ *  pointer entry point called by drivers.
+ **/
+s32 e1000_read_nvm(struct e1000_hw *hw, u16 offset, u16 words, u16 *data)
+{
+        if (hw->nvm.ops.read)
+                return hw->nvm.ops.read(hw, offset, words, data);
+
+        return -E1000_ERR_CONFIG;
+}
+
+/**
+ *  e1000_write_nvm - Writes to NVM (EEPROM)
+ *  @hw: pointer to the HW structure
+ *  @offset: the word offset to read
+ *  @words: number of 16-bit words to write
+ *  @data: pointer to the properly sized buffer for the data.
+ *
+ *  Writes 16-bit chunks of data to the NVM (EEPROM). This is a function
+ *  pointer entry point called by drivers.
+ **/
+s32 e1000_write_nvm(struct e1000_hw *hw, u16 offset, u16 words, u16 *data)
+{
+        if (hw->nvm.ops.write)
+                return hw->nvm.ops.write(hw, offset, words, data);
+
+        return E1000_SUCCESS;
+}
+
+/**
+ *  e1000_update_nvm_checksum - Updates NVM (EEPROM) checksum
+ *  @hw: pointer to the HW structure
+ *
+ *  Updates the NVM checksum. Currently no func pointer exists and all
+ *  implementations are handled in the generic version of this function.
+ **/
+s32 e1000_update_nvm_checksum(struct e1000_hw *hw)
+{
+        if (hw->nvm.ops.update)
+                return hw->nvm.ops.update(hw);
+
+        return -E1000_ERR_CONFIG;
+}

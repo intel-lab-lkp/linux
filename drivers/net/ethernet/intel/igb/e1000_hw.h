@@ -292,6 +292,35 @@ struct e1000_host_mng_command_info {
 #include "e1000_nvm.h"
 #include "e1000_mbx.h"
 
+/* NVM Update commands */
+#define E1000_NVMUPD_CMD_REG_READ       0x0000000B
+#define E1000_NVMUPD_CMD_REG_WRITE      0x0000000C
+
+/* NVM Update features API */
+#define E1000_NVMUPD_FEATURES_API_VER_MAJOR             0
+#define E1000_NVMUPD_FEATURES_API_VER_MINOR             0
+#define E1000_NVMUPD_FEATURES_API_FEATURES_ARRAY_LEN    12
+#define E1000_NVMUPD_EXEC_FEATURES                      0xE
+#define E1000_NVMUPD_FEATURE_FLAT_NVM_SUPPORT           (1 << 0)
+#define E1000_NVMUPD_FEATURE_REGISTER_ACCESS_SUPPORT    (1 << 1)
+
+#define E1000_NVMUPD_MOD_PNT_MASK                       0xFF
+
+struct e1000_nvm_access {
+        u32 command;
+        u32 config;
+        u32 offset;     /* in bytes */
+        u32 data_size;  /* in bytes */
+        u8 data[1];
+};
+
+struct e1000_nvm_features {
+        u8 major;
+        u8 minor;
+        u16 size;
+        u8 features[E1000_NVMUPD_FEATURES_API_FEATURES_ARRAY_LEN];
+};
+
 struct e1000_mac_operations {
 	s32 (*check_for_link)(struct e1000_hw *);
 	s32 (*reset_hw)(struct e1000_hw *);
@@ -539,6 +568,8 @@ struct e1000_hw {
 	u16 vendor_id;
 
 	u8  revision_id;
+        /* NVM Update features */
+        struct e1000_nvm_features nvmupd_features;
 };
 
 struct net_device *igb_get_hw_dev(struct e1000_hw *hw);
@@ -551,4 +582,32 @@ s32 igb_write_pcie_cap_reg(struct e1000_hw *hw, u32 reg, u16 *value);
 
 void igb_read_pci_cfg(struct e1000_hw *hw, u32 reg, u16 *value);
 void igb_write_pci_cfg(struct e1000_hw *hw, u32 reg, u16 *value);
+
+
+u32 e1000_read_reg(struct e1000_hw *hw, u32 reg);
+
+#define E1000_WRITE_REG(hw, reg, val) \
+do { \
+        u8 __iomem *hw_addr = READ_ONCE((hw)->hw_addr); \
+        if (!E1000_REMOVED(hw_addr)) \
+                writel((val), &hw_addr[(reg)]); \
+} while (0)
+
+#define E1000_READ_REG(x, y) e1000_read_reg(x, y)
+#define E1000_READ_REG8(h, r) readb(READ_ONCE(h->hw_addr) + r)
+
+#define E1000_WRITE_FLASH_REG(a, reg, value) ( \
+        writel((value), ((a)->flash_address + reg)))
+
+//#define E1000_READ_FLASH_REG(a, reg) (readl((a)->flash_address + reg))
+
+//#define E1000_READ_FLASH_REG16(a, reg) (readw((a)->flash_address + reg))
+
+
+#define E1000_READ_FLASH_REG(a, reg) (readl((a)->flash_address + reg))
+
+#define E1000_READ_FLASH_REG8(a, reg) ( \
+        readb(READ_ONCE((a)->flash_address) + reg))
+
+
 #endif /* _E1000_IGB_HW_H_ */

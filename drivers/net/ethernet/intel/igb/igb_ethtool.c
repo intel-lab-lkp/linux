@@ -724,128 +724,282 @@ static void igb_get_regs(struct net_device *netdev,
 		regs_buff[739] = rd32(E1000_I210_RR2DCDELAY);
 }
 
+static u8 igb_nvmupd_get_module(u32 val)
+{
+        return (u8)(val & E1000_NVMUPD_MOD_PNT_MASK);
+}
+
+static int igb_nvmupd_validate_offset(struct igb_adapter *adapter, u32 offset)
+{
+        if (offset >= E1000_REGISTER_SET_SIZE)
+                return 0;
+
+        switch (offset) {
+        case E1000_CTRL:
+        case E1000_STATUS:
+        case E1000_EECD:
+        case E1000_EERD:
+        case E1000_CTRL_EXT:
+        case E1000_FLA:
+        case E1000_FLOP:
+        case E1000_SWSM:
+        case E1000_FWSM:
+        case E1000_SW_FW_SYNC:
+        case E1000_IOVTCL:
+        case E1000_I350_BARCTRL:
+        case E1000_THSTAT:
+        case E1000_EEC_REG:
+        case E1000_SRWR:
+        case E1000_I210_FLA:
+        case E1000_I210_FLSWCTL:
+        case E1000_I210_FLSWDATA:
+        case E1000_I210_FLSWCNT:
+        case E1000_SHADOWINF:
+        case E1000_FLFWUPDATE:
+        case E1000_RAL(0):
+        case E1000_RAL(1):
+        case E1000_RAL(2):
+        case E1000_RAL(3):
+        case E1000_RAL(4):
+        case E1000_RAL(5):
+        case E1000_RAL(6):
+        case E1000_RAL(7):
+        case E1000_RAL(8):
+        case E1000_RAL(9):
+        case E1000_RAL(10):
+        case E1000_RAL(11):
+        case E1000_RAL(12):
+        case E1000_RAL(13):
+        case E1000_RAL(14):
+        case E1000_RAL(15):
+        case E1000_RAH(0):
+        case E1000_RAH(1):
+        case E1000_RAH(2):
+        case E1000_RAH(3):
+        case E1000_RAH(4):
+        case E1000_RAH(5):
+        case E1000_RAH(6):
+        case E1000_RAH(7):
+        case E1000_RAH(8):
+        case E1000_RAH(9):
+        case E1000_RAH(10):
+        case E1000_RAH(11):
+        case E1000_RAH(12):
+        case E1000_RAH(13):
+        case E1000_RAH(14):
+        case E1000_RAH(15):
+                return 0;
+        default:
+                dev_warn(&adapter->pdev->dev, "Bad offset: %x\n", offset);
+                return -ENOTTY;
+        }
+}
+
+static int igb_nvmupd_command(struct e1000_hw *hw,
+                              struct e1000_nvm_access *nvm,
+                              u8 *bytes)
+{
+        struct igb_adapter *adapter = hw->back;
+        resource_size_t bar0_len;
+        int ret_val = 0;
+        u32 command;
+        u8 module;
+
+        bar0_len = pci_resource_len(adapter->pdev, 0);
+        command = nvm->command;
+        module = igb_nvmupd_get_module(nvm->config);
+
+        switch (command) {
+        case E1000_NVMUPD_CMD_REG_READ:
+                switch (module) {
+                case E1000_NVMUPD_EXEC_FEATURES:
+                        if (nvm->data_size == hw->nvmupd_features.size)
+                                memcpy(bytes, &hw->nvmupd_features,
+                                hw->nvmupd_features.size);
+                        else
+                                ret_val = -ENOMEM;
+                break;
+                default:
+                        if (igb_nvmupd_validate_offset(adapter, nvm->offset))
+                                return -ENOTTY;
+                        if (nvm->offset >= bar0_len) {
+                                if (hw->mac.type == e1000_82576 &&
+                                    hw->flash_address) {
+                                        if (nvm->data_size == 1)
+                                                *bytes = E1000_READ_FLASH_REG8(
+                                                        hw,
+                                                        nvm->offset - bar0_len);
+                                        else
+                                                *((u32 *)bytes) =
+                                                        E1000_READ_FLASH_REG(hw,
+                                                        nvm->offset - bar0_len);
+                                } else
+                                        ret_val = -EFAULT;
+                        } else if (nvm->data_size == 1)
+                                *bytes = E1000_READ_REG8(hw, nvm->offset);
+                        else
+                                *((u32 *)bytes) = E1000_READ_REG(hw,
+                                                                 nvm->offset);
+                break;
+                }
+        break;
+        case E1000_NVMUPD_CMD_REG_WRITE:
+                if (igb_nvmupd_validate_offset(adapter, nvm->offset))
+                        return -ENOTTY;
+                if (nvm->offset >= bar0_len) {
+                        if (hw->mac.type == e1000_82576 && hw->flash_address)
+                                E1000_WRITE_FLASH_REG(hw,
+                                                      nvm->offset - bar0_len,
+                                                      *((u32 *)bytes));
+                        else
+                                ret_val = -EFAULT;
+                } else
+                        E1000_WRITE_REG(hw, nvm->offset, *((u32 *)bytes));
+        break;
+        }
+
+        return ret_val;
+}
+
 static int igb_get_eeprom_len(struct net_device *netdev)
 {
-	struct igb_adapter *adapter = netdev_priv(netdev);
-	return adapter->hw.nvm.word_size * 2;
+        struct igb_adapter *adapter = netdev_priv(netdev);
+        struct pci_dev *pdev = adapter->pdev;
+
+        if (adapter->hw.mac.type == e1000_82576)
+                return pci_resource_len(pdev, 0) + pci_resource_len(pdev, 1);
+
+        return pci_resource_len(pdev, 0);
 }
 
 static int igb_get_eeprom(struct net_device *netdev,
-			  struct ethtool_eeprom *eeprom, u8 *bytes)
+                          struct ethtool_eeprom *eeprom, u8 *bytes)
 {
-	struct igb_adapter *adapter = netdev_priv(netdev);
-	struct e1000_hw *hw = &adapter->hw;
-	u16 *eeprom_buff;
-	int first_word, last_word;
-	int ret_val = 0;
-	u16 i;
+        struct igb_adapter *adapter = netdev_priv(netdev);
+        struct e1000_hw *hw = &adapter->hw;
+        u16 *eeprom_buff;
+        int first_word, last_word;
+        int ret_val = 0;
+        struct e1000_nvm_access *nvm;
+        u32 magic;
+        u16 i;
 
-	if (eeprom->len == 0)
-		return -EINVAL;
+        if (eeprom->len == 0)
+                return -EINVAL;
 
-	eeprom->magic = hw->vendor_id | (hw->device_id << 16);
+        magic = hw->vendor_id | (hw->device_id << 16);
+        if (eeprom->magic && eeprom->magic != magic) {
+                nvm = (struct e1000_nvm_access *)eeprom;
+                ret_val = igb_nvmupd_command(hw, nvm, bytes);
+                return ret_val;
+        }
+          
+        /* normal ethtool get_eeprom support */
+        eeprom->magic = hw->vendor_id | (hw->device_id << 16);
 
-	first_word = eeprom->offset >> 1;
-	last_word = (eeprom->offset + eeprom->len - 1) >> 1;
+        first_word = eeprom->offset >> 1;
+        last_word = (eeprom->offset + eeprom->len - 1) >> 1;
 
-	eeprom_buff = kmalloc_array(last_word - first_word + 1, sizeof(u16),
-				    GFP_KERNEL);
-	if (!eeprom_buff)
-		return -ENOMEM;
+        eeprom_buff = kmalloc(sizeof(u16) *
+                        (last_word - first_word + 1), GFP_KERNEL);
+        if (!eeprom_buff)
+                return -ENOMEM;
 
-	if (hw->nvm.type == e1000_nvm_eeprom_spi)
-		ret_val = hw->nvm.ops.read(hw, first_word,
-					   last_word - first_word + 1,
-					   eeprom_buff);
-	else {
-		for (i = 0; i < last_word - first_word + 1; i++) {
-			ret_val = hw->nvm.ops.read(hw, first_word + i, 1,
-						   &eeprom_buff[i]);
-			if (ret_val)
-				break;
-		}
-	}
+        if (hw->nvm.type == e1000_nvm_eeprom_spi)
+                ret_val = e1000_read_nvm(hw, first_word,
+                                         last_word - first_word + 1,
+                                         eeprom_buff);
+        else {
+                for (i = 0; i < last_word - first_word + 1; i++) {
+                        ret_val = e1000_read_nvm(hw, first_word + i, 1,
+                                                 &eeprom_buff[i]);
+                        if (ret_val)
+                                break;
+                }
+        }
 
-	/* Device's eeprom is always little-endian, word addressable */
-	for (i = 0; i < last_word - first_word + 1; i++)
-		le16_to_cpus(&eeprom_buff[i]);
+        /* Device's eeprom is always little-endian, word addressable */
+        for (i = 0; i < last_word - first_word + 1; i++)
+                eeprom_buff[i] = le16_to_cpu(eeprom_buff[i]);
 
-	memcpy(bytes, (u8 *)eeprom_buff + (eeprom->offset & 1),
-			eeprom->len);
-	kfree(eeprom_buff);
+        memcpy(bytes, (u8 *)eeprom_buff + (eeprom->offset & 1),
+                        eeprom->len);
+        kfree(eeprom_buff);
 
-	return ret_val;
+        return ret_val;
 }
 
 static int igb_set_eeprom(struct net_device *netdev,
-			  struct ethtool_eeprom *eeprom, u8 *bytes)
+                          struct ethtool_eeprom *eeprom, u8 *bytes)
 {
-	struct igb_adapter *adapter = netdev_priv(netdev);
-	struct e1000_hw *hw = &adapter->hw;
-	u16 *eeprom_buff;
-	void *ptr;
-	int max_len, first_word, last_word, ret_val = 0;
-	u16 i;
+        struct igb_adapter *adapter = netdev_priv(netdev);
+        struct e1000_hw *hw = &adapter->hw;
+        u16 *eeprom_buff;
+        void *ptr;
+        int max_len, first_word, last_word, ret_val = 0;
+        struct e1000_nvm_access *nvm;
+        u32 magic;
+        u16 i;
 
-	if (eeprom->len == 0)
-		return -EOPNOTSUPP;
+        if (eeprom->len == 0)
+                return -EOPNOTSUPP;
 
-	if ((hw->mac.type >= e1000_i210) &&
-	    !igb_get_flash_presence_i210(hw)) {
-		return -EOPNOTSUPP;
-	}
+        magic = hw->vendor_id | (hw->device_id << 16);
+        if (eeprom->magic && eeprom->magic != magic) {
+                nvm = (struct e1000_nvm_access *)eeprom;
+                ret_val = igb_nvmupd_command(hw, nvm, bytes);
+                return ret_val;
+        }
 
-	if (eeprom->magic != (hw->vendor_id | (hw->device_id << 16)))
-		return -EFAULT;
+        /* normal ethtool get_eeprom support */
+        if (eeprom->magic != (hw->vendor_id | (hw->device_id << 16)))
+                return -EFAULT;
 
-	max_len = hw->nvm.word_size * 2;
+        max_len = hw->nvm.word_size * 2;
 
-	first_word = eeprom->offset >> 1;
-	last_word = (eeprom->offset + eeprom->len - 1) >> 1;
-	eeprom_buff = kmalloc(max_len, GFP_KERNEL);
-	if (!eeprom_buff)
-		return -ENOMEM;
+        first_word = eeprom->offset >> 1;
+        last_word = (eeprom->offset + eeprom->len - 1) >> 1;
+        eeprom_buff = kmalloc(max_len, GFP_KERNEL);
+        if (!eeprom_buff)
+                return -ENOMEM;
 
-	ptr = (void *)eeprom_buff;
+        ptr = (void *)eeprom_buff;
 
-	if (eeprom->offset & 1) {
-		/* need read/modify/write of first changed EEPROM word
-		 * only the second byte of the word is being modified
-		 */
-		ret_val = hw->nvm.ops.read(hw, first_word, 1,
-					    &eeprom_buff[0]);
-		ptr++;
-	}
-	if (((eeprom->offset + eeprom->len) & 1) && (ret_val == 0)) {
-		/* need read/modify/write of last changed EEPROM word
-		 * only the first byte of the word is being modified
-		 */
-		ret_val = hw->nvm.ops.read(hw, last_word, 1,
-				   &eeprom_buff[last_word - first_word]);
-		if (ret_val)
-			goto out;
-	}
+        if (eeprom->offset & 1) {
+                /* need read/modify/write of first changed EEPROM word */
+                /* only the second byte of the word is being modified */
+                ret_val = e1000_read_nvm(hw, first_word, 1,
+                                            &eeprom_buff[0]);
+                ptr++;
+        }
+        if (((eeprom->offset + eeprom->len) & 1) && (ret_val == 0)) {
+                /* need read/modify/write of last changed EEPROM word */
+                /* only the first byte of the word is being modified */
+                ret_val = e1000_read_nvm(hw, last_word, 1,
+                          &eeprom_buff[last_word - first_word]);
+                if (ret_val)
+                        goto out;
+        }
 
-	/* Device's eeprom is always little-endian, word addressable */
-	for (i = 0; i < last_word - first_word + 1; i++)
-		le16_to_cpus(&eeprom_buff[i]);
+        /* Device's eeprom is always little-endian, word addressable */
+        for (i = 0; i < last_word - first_word + 1; i++)
+                le16_to_cpus(&eeprom_buff[i]);
 
-	memcpy(ptr, bytes, eeprom->len);
+        memcpy(ptr, bytes, eeprom->len);
 
-	for (i = 0; i < last_word - first_word + 1; i++)
-		cpu_to_le16s(&eeprom_buff[i]);
+        for (i = 0; i < last_word - first_word + 1; i++)
+                cpu_to_le16s(&eeprom_buff[i]);
 
-	ret_val = hw->nvm.ops.write(hw, first_word,
-				    last_word - first_word + 1, eeprom_buff);
+        ret_val = e1000_write_nvm(hw, first_word,
+                                  last_word - first_word + 1, eeprom_buff);
 
-	/* Update the checksum if nvm write succeeded */
-	if (ret_val == 0)
-		hw->nvm.ops.update(hw);
-
-	igb_set_fw_version(adapter);
+        /* Update the checksum if write succeeded.
+         * and flush shadow RAM for 82573 controllers */
+        if (ret_val == 0)
+                e1000_update_nvm_checksum(hw);
 out:
-	kfree(eeprom_buff);
-	return ret_val;
+        kfree(eeprom_buff);
+        return ret_val;
 }
 
 static void igb_get_drvinfo(struct net_device *netdev,
