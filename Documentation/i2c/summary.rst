@@ -49,11 +49,16 @@ whole class of I2C adapters. Each specific adapter driver either depends on
 an algorithm driver in the ``drivers/i2c/algos/`` subdirectory, or includes
 its own implementation.
 
-A **target** chip is a node that responds to communications when addressed
-by the controller. In Linux it is called a **client**. Client drivers are kept
-in a directory specific to the feature they provide, for example
-``drivers/media/gpio/`` for GPIO expanders and ``drivers/media/i2c/`` for
-video-related chips.
+A **target** chip is a node that responds to communications when addressed by a
+controller. In the Linux kernel implementation it is called a **client**. While
+targets are usually separate external chips, Linux can also act as a target
+(needs hardware support) and respond to another controller on the bus. This is
+then called a **local target**. In contrast, an external chip is called a
+**remote target**.
+
+Client drivers are kept in a directory specific to the feature they
+provide, for example ``drivers/media/gpio/`` for GPIO expanders and
+``drivers/media/i2c/`` for video-related chips.
 
 For the example configuration in figure, you will need a driver for your
 I2C adapter, and drivers for your I2C devices (usually one driver for each
