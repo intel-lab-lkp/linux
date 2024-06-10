@@ -137,19 +137,26 @@ static int __must_check cec_devnode_register(struct cec_devnode *devnode,
 
 	/* Part 2: Initialize and register the character device */
 	cdev_init(&devnode->cdev, &cec_devnode_fops);
+	devnode->cdev.kobj.parent = &devnode->dev.kobj;
 	devnode->cdev.owner = owner;
 	kobject_set_name(&devnode->cdev.kobj, "cec%d", devnode->minor);
 
 	devnode->registered = true;
-	ret = cdev_device_add(&devnode->cdev, &devnode->dev);
-	if (ret) {
+	ret = cdev_add(&devnode->cdev, devnode->dev.devt, 1);
+	if (ret < 0) {
+		pr_err("%s: cdev_add failed\n", __func__);
 		devnode->registered = false;
-		pr_err("%s: cdev_device_add failed\n", __func__);
 		goto clr_bit;
 	}
 
+	ret = device_add(&devnode->dev);
+	if (ret)
+		goto cdev_del;
+
 	return 0;
 
+cdev_del:
+	cdev_del(&devnode->cdev);
 clr_bit:
 	mutex_lock(&cec_devnode_lock);
 	clear_bit(devnode->minor, cec_devnode_nums);
@@ -195,7 +202,8 @@ static void cec_devnode_unregister(struct cec_adapter *adap)
 	cec_adap_enable(adap);
 	mutex_unlock(&adap->lock);
 
-	cdev_device_del(&devnode->cdev, &devnode->dev);
+	device_del(&devnode->dev);
+	cdev_del(&devnode->cdev);
 	put_device(&devnode->dev);
 }
 
