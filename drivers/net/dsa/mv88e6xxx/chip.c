@@ -1951,14 +1951,17 @@ int mv88e6xxx_fid_map(struct mv88e6xxx_chip *chip, unsigned long *fid_bitmap)
 
 static int mv88e6xxx_atu_new(struct mv88e6xxx_chip *chip, u16 *fid)
 {
-	DECLARE_BITMAP(fid_bitmap, MV88E6XXX_N_FID);
 	int err;
 
-	err = mv88e6xxx_fid_map(chip, fid_bitmap);
-	if (err)
-		return err;
+	if (!chip->fid_populated) {
+		err = mv88e6xxx_fid_map(chip, chip->fid_bitmap);
+		if (err)
+			return err;
 
-	*fid = find_first_zero_bit(fid_bitmap, MV88E6XXX_N_FID);
+		chip->fid_populated = true;
+	}
+
+	*fid = find_first_zero_bit(chip->fid_bitmap, MV88E6XXX_N_FID);
 	if (unlikely(*fid >= mv88e6xxx_num_databases(chip)))
 		return -ENOSPC;
 
@@ -2665,6 +2668,9 @@ static int mv88e6xxx_port_vlan_join(struct mv88e6xxx_chip *chip, int port,
 			 port, vid);
 	}
 
+	/* Record FID used in SW FID map */
+	bitmap_set(chip->fid_bitmap, vlan.fid, 1);
+
 	return 0;
 }
 
@@ -2772,7 +2778,14 @@ static int mv88e6xxx_port_vlan_leave(struct mv88e6xxx_chip *chip,
 			return err;
 	}
 
-	return mv88e6xxx_g1_atu_remove(chip, vlan.fid, port, false);
+	err = mv88e6xxx_g1_atu_remove(chip, vlan.fid, port, false);
+	if (err)
+		return err;
+
+	/* Record FID freed in SW FID map */
+	bitmap_clear(chip->fid_bitmap, vlan.fid, 1);
+
+	return err;
 }
 
 static int mv88e6xxx_port_vlan_del(struct dsa_switch *ds, int port,

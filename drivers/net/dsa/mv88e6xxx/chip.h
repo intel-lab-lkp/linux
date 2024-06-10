@@ -432,6 +432,10 @@ struct mv88e6xxx_chip {
 
 	/* Bridge MST to SID mappings */
 	struct list_head msts;
+
+	/* FID map */
+	DECLARE_BITMAP(fid_bitmap, MV88E6XXX_N_FID);
+	bool fid_populated;
 };
 
 struct mv88e6xxx_bus_ops {
