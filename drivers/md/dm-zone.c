@@ -13,8 +13,6 @@
 
 #define DM_MSG_PREFIX "zone"
 
-#define DM_ZONE_INVALID_WP_OFST		UINT_MAX
-
 /*
  * For internal zone reports bypassing the top BIO submission path.
  */
@@ -285,8 +283,6 @@ static int device_get_zone_resource_limits(struct dm_target *ti,
 		return ret;
 	}
 
-	zlim->mapped_nr_seq_zones += zc.target_nr_seq_zones;
-
 	/*
 	 * If the target does not map any sequential zones, then we do not need
 	 * any zone resource limits.
@@ -316,6 +312,13 @@ static int device_get_zone_resource_limits(struct dm_target *ti,
 		max_open_zones = 0;
 	zlim->lim->max_open_zones =
 		min_not_zero(max_open_zones, zlim->lim->max_open_zones);
+
+	/*
+	 * Also count the total number of sequential zones for the mapped
+	 * device so that when we are done inspecting all its targets, we are
+	 * able to check if the mapped device actually has any sequential zones.
+	 */
+	zlim->mapped_nr_seq_zones += zc.target_nr_seq_zones;
 
 	return 0;
 }
