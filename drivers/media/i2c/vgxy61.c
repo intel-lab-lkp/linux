@@ -1898,3 +1898,4 @@ MODULE_AUTHOR("Mickael Guene <mickael.guene@st.com>");
 MODULE_AUTHOR("Sylvain Petinot <sylvain.petinot@foss.st.com>");
 MODULE_DESCRIPTION("VGXY61 camera subdev driver");
 MODULE_LICENSE("GPL");
+MODULE_ALIAS("platform:st-vgxy61");
