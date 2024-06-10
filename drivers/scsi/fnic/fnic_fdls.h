@@ -321,17 +321,20 @@ void fnic_fdls_recv_frame(struct fnic_iport_s *iport, void *rx_frame, int len,
 void fnic_fdls_link_down(struct fnic_iport_s *iport);
 void fdls_init_tgt_oxid_pool(struct fnic_iport_s *iport);
 void fdls_tgt_logout(struct fnic_iport_s *iport, struct fnic_tport_s *tport);
+void fdls_send_fabric_logo(struct fnic_iport_s *iport);
+int fnic_fdls_validate_and_get_frame_type(struct fnic_iport_s *iport,
+								  void *rx_frame, int len,
+								  int fchdr_offset);
 
 /* fnic_fcs.c */
 void fnic_fdls_init(struct fnic *fnic, int usefip);
 int fnic_send_fcoe_frame(struct fnic_iport_s *iport, void *payload,
 	int payload_sz);
-
+void fnic_fcoe_send_vlan_req(struct fnic *fnic);
 int fnic_send_fip_frame(struct fnic_iport_s *iport,
 	void *payload, int payload_sz);
 void fnic_fdls_learn_fcoe_macs(struct fnic_iport_s *iport, void *rx_frame,
 	uint8_t *fcid);
-
 void fnic_fdls_add_tport(struct fnic_iport_s *iport,
 		struct fnic_tport_s *tport, unsigned long flags);
 void fnic_fdls_remove_tport(struct fnic_iport_s *iport,
