@@ -565,7 +565,7 @@ static void mtk_vcodec_dec_remove(struct platform_device *pdev)
 
 	destroy_workqueue(dev->decode_workqueue);
 
-	if (media_devnode_is_registered(dev->mdev_dec.devnode)) {
+	if (media_devnode_is_registered(&dev->mdev_dec.devnode)) {
 		media_device_unregister(&dev->mdev_dec);
 		v4l2_m2m_unregister_media_controller(dev->m2m_dev_dec);
 		media_device_cleanup(&dev->mdev_dec);

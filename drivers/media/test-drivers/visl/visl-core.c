@@ -513,7 +513,7 @@ static void visl_remove(struct platform_device *pdev)
 	v4l2_info(&dev->v4l2_dev, "Removing " VISL_NAME);
 
 #ifdef CONFIG_MEDIA_CONTROLLER
-	if (media_devnode_is_registered(dev->mdev.devnode)) {
+	if (media_devnode_is_registered(&dev->mdev.devnode)) {
 		media_device_unregister(&dev->mdev);
 		v4l2_m2m_unregister_media_controller(dev->m2m_dev);
 	}
