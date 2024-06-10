@@ -54,6 +54,8 @@ static int media_device_open(struct media_devnode *devnode, struct file *filp)
 	if (!fh)
 		return -ENOMEM;
 
+	fh->fh.ref = devnode->ref;
+
 	filp->private_data = &fh->fh;
 
 	spin_lock_irq(&mdev->fh_list_lock);
@@ -65,13 +67,16 @@ static int media_device_open(struct media_devnode *devnode, struct file *filp)
 
 static int media_device_close(struct file *filp)
 {
-	struct media_devnode *devnode = media_devnode_data(filp);
-	struct media_device *mdev = to_media_device(devnode);
 	struct media_device_fh *fh = media_device_fh(filp);
 
-	spin_lock_irq(&mdev->fh_list_lock);
-	list_del(&fh->mdev_list);
-	spin_unlock_irq(&mdev->fh_list_lock);
+	if (!fh->fh.ref || atomic_read(&fh->fh.ref->registered)) {
+		struct media_devnode *devnode = media_devnode_data(filp);
+		struct media_device *mdev = to_media_device(devnode);
+
+		spin_lock_irq(&mdev->fh_list_lock);
+		list_del(&fh->mdev_list);
+		spin_unlock_irq(&mdev->fh_list_lock);
+	}
 
 	kfree(fh);
 
@@ -810,28 +815,45 @@ EXPORT_SYMBOL_GPL(media_device_cleanup);
 int __must_check __media_device_register(struct media_device *mdev,
 					 struct module *owner)
 {
+	struct media_devnode_compat_ref *ref = NULL;
 	int ret;
+
+	if (!mdev->ops || !mdev->ops->release) {
+		ref = kzalloc(sizeof(*mdev->devnode.ref), GFP_KERNEL);
+		if (!ref)
+			return -ENOMEM;
+	}
 
 	/* Register the device node. */
 	mdev->devnode.fops = &media_device_fops;
 	mdev->devnode.parent = mdev->dev;
+	mdev->devnode.ref = ref;
 
 	/* Set version 0 to indicate user-space that the graph is static */
 	mdev->topology_version = 0;
 
 	ret = media_devnode_register(&mdev->devnode, owner);
 	if (ret < 0)
-		return ret;
+		goto out_put_ref;
 
-	ret = device_create_file(&mdev->devnode.dev, &dev_attr_model);
-	if (ret < 0) {
-		media_devnode_unregister(&mdev->devnode);
-		return ret;
-	}
+	ret = device_create_file(media_devnode_dev(&mdev->devnode),
+				 &dev_attr_model);
+	if (ret < 0)
+		goto out_devnode_unregister;
+
 
 	dev_dbg(mdev->dev, "Media device registered\n");
 
 	return 0;
+
+out_devnode_unregister:
+	media_devnode_unregister(&mdev->devnode);
+
+out_put_ref:
+	if (ref)
+		put_device(&ref->dev);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(__media_device_register);
 
@@ -847,9 +869,12 @@ void media_device_unregister(struct media_device *mdev)
 	list_del_init(&mdev->fh_list);
 	spin_unlock_irq(&mdev->fh_list_lock);
 
-	device_remove_file(&mdev->devnode.dev, &dev_attr_model);
+	device_remove_file(media_devnode_dev(&mdev->devnode), &dev_attr_model);
 	dev_dbg(mdev->dev, "Media device unregistering\n");
 	media_devnode_unregister(&mdev->devnode);
+
+	if (mdev->devnode.ref)
+		put_device(&mdev->devnode.ref->dev);
 }
 EXPORT_SYMBOL_GPL(media_device_unregister);
 

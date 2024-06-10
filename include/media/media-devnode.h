@@ -41,8 +41,7 @@ struct media_devnode;
  * @compat_ioctl: pointer to the function that will handle 32 bits userspace
  *	calls to the ioctl() syscall on a Kernel compiled with 64 bits.
  * @open: pointer to the function that implements open() syscall
- * @release: pointer to the function that will release the resources allocated
- *	by the @open function.
+ * @release: pointer to the function that implements release() syscall
  */
 struct media_file_operations {
 	struct module *owner;
@@ -56,8 +55,53 @@ struct media_file_operations {
 };
 
 /**
+ * struct media_devnode_cdev - Workaround for drivers not managing media device
+ *			       lifetime - character device
+ *
+ * Store the characeter device and whether this is a compatibility reference or
+ * not. struct media_devnode_cdev is embedded in either struct
+ * media_devnode_compat_ref or struct media_devnode.
+ *
+ * @cdev: the chracter device
+ * @is_compat_ref: Is this a compatibility reference or not?
+ */
+struct media_devnode_cdev {
+	struct cdev cdev;
+	bool is_compat_ref;
+};
+
+/**
+ * struct media_devnode_compat_ref - Workaround for drivers not managing media
+ *				     device lifetime - reference
+ *
+ * The purpose if this struct is to support drivers that do not manage the
+ * lifetime of their respective media devices to avoid the worst effects of
+ * this, namely an IOCTL call on an open file handle to a device that has been
+ * unbound causing a kernel oops systematically. This is not a fix. The proper,
+ * reliable way to handle this is to manage the resources used by the
+ * driver. This struct and its use can be removed once all drivers have been
+ * converted.
+ *
+ * @dev: struct device that remains in place as long as any reference remains
+ * @mcdev: the related character device
+ * @devnode: a pointer back to the devnode
+ * @release:	pointer to the function that will release the resources
+ *		allocated by the @open function.
+ * @registered: is this device registered?
+ */
+struct media_devnode_compat_ref {
+	struct device dev;
+	struct media_devnode_cdev mcdev;
+	struct media_devnode *devnode;
+	int (*release)(struct file *);
+	atomic_t registered;
+};
+
+/**
  * struct media_devnode_fh - Media device node file handle
  * @devnode:	pointer to the media device node
+ * @ref:	media device compat ref, if the driver does not manage media
+ *		device lifetime
  *
  * This structure serves as a base for per-file-handle data storage. Media
  * device node users embed media_devnode_fh in their custom file handle data
@@ -67,18 +111,21 @@ struct media_file_operations {
  */
 struct media_devnode_fh {
 	struct media_devnode *devnode;
+	struct media_devnode_compat_ref *ref;
 };
 
 /**
  * struct media_devnode - Media device node
  * @fops:	pointer to struct &media_file_operations with media device ops
  * @dev:	pointer to struct &device containing the media controller device
- * @cdev:	struct cdev pointer character device
+ * @mcdev:	related to the character device
  * @parent:	parent device
  * @minor:	device node minor number
  * @flags:	flags, combination of the ``MEDIA_FLAG_*`` constants
  * @release:	release callback called at the end of ``media_devnode_release()``
  *		routine at media-device.c.
+ * @ref:	reference for providing best effort memory safety in device
+ *		removal
  *
  * This structure represents a media-related device node.
  *
@@ -91,7 +138,7 @@ struct media_devnode {
 
 	/* sysfs */
 	struct device dev;		/* media device */
-	struct cdev cdev;		/* character device */
+	struct media_devnode_cdev mcdev; /* character device + compat status */
 	struct device *parent;		/* device parent */
 
 	/* device info */
@@ -100,10 +147,18 @@ struct media_devnode {
 
 	/* callbacks */
 	void (*release)(struct media_devnode *devnode);
+
+	/* compat reference */
+	struct media_devnode_compat_ref *ref;
 };
 
+static inline struct device *media_devnode_dev(struct media_devnode *devnode)
+{
+	return devnode->ref ? &devnode->ref->dev : &devnode->dev;
+}
+
 /* dev to media_devnode */
-#define to_media_devnode(cd) container_of(cd, struct media_devnode, dev)
+struct media_devnode *to_media_devnode(struct device *dev);
 
 /**
  * media_devnode_init - initialise a media devnode

@@ -179,7 +179,7 @@ static void v4l2_device_release(struct device *cd)
 	bool v4l2_dev_call_release = v4l2_dev->release;
 #ifdef CONFIG_MEDIA_CONTROLLER
 	struct media_device *mdev = v4l2_dev->mdev;
-	bool mdev_has_release = mdev && mdev->ops && mdev->ops->release;
+	bool mdev_has_ref = mdev && mdev->devnode.ref;
 #endif
 
 	mutex_lock(&videodev_lock);
@@ -212,12 +212,24 @@ static void v4l2_device_release(struct device *cd)
 	}
 #endif
 
-	/* Release video_device and perform other
-	   cleanups as needed. */
+	/*
+	 * Put struct media_devnode_compat_ref here as indicated by
+	 * mdev_has_ref. mdev may be released by vdev->release() below.
+	 */
+#ifdef CONFIG_MEDIA_CONTROLLER
+	if (mdev && mdev_has_ref)
+		media_device_put(mdev);
+#endif
+
+	/* Release video_device and perform other cleanups as needed. */
 	vdev->release(vdev);
 
 #ifdef CONFIG_MEDIA_CONTROLLER
-	if (mdev)
+	/*
+	 * Put a reference to struct media_device acquired in
+	 * video_register_media_controller().
+	 */
+	if (mdev && !mdev_has_ref)
 		media_device_put(mdev);
 
 	/*
@@ -225,13 +237,15 @@ static void v4l2_device_release(struct device *cd)
 	 * embedded in the same driver's context struct so having a release
 	 * callback in both is a bug.
 	 */
-	if (WARN_ON(v4l2_dev_call_release && mdev_has_release))
+	if (WARN_ON(v4l2_dev_call_release && !mdev_has_ref))
 		v4l2_dev_call_release = false;
 #endif
 
 	/*
 	 * Decrease v4l2_device refcount, but only if the media device doesn't
-	 * have a release callback.
+	 * have a release callback. Otherwise one could expect accessing
+	 * released memory --- driver's context struct refcounted already via
+	 * struct media_device.
 	 */
 	if (v4l2_dev_call_release)
 		v4l2_device_put(v4l2_dev);

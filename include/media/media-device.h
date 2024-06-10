@@ -259,10 +259,10 @@ static inline void media_device_put(struct media_device *mdev)
  *
  * @mdev:	pointer to struct &media_device
  *
- * This function that will destroy the graph_mutex that is initialized in
- * media_device_init(). Note that *only* drivers that do not manage releasing
- * the memory of th media device itself call this function. This function is
- * thus effectively DEPRECATED.
+ * This function will destroy the graph_mutex that is initialized in
+ * media_device_init(). Note that only drivers that do not have a proper release
+ * callback of the struct media_device call this function. This function is thus
+ * effectively DEPRECATED.
  */
 void media_device_cleanup(struct media_device *mdev);
 

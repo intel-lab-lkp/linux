@@ -49,24 +49,52 @@ static void media_devnode_release(struct device *cd)
 {
 	struct media_devnode *devnode = to_media_devnode(cd);
 
+	/* If the devnode has a ref, it is simply released by the user. */
+	if (devnode->ref)
+		return;
+
 	/* Release media_devnode and perform other cleanups as needed. */
 	if (devnode->release)
 		devnode->release(devnode);
+}
+
+static void media_devnode_ref_release(struct device *cd)
+{
+	struct media_devnode_compat_ref *ref =
+		container_of_const(cd, struct media_devnode_compat_ref, dev);
+
+	kfree(ref);
+}
+
+struct media_devnode *to_media_devnode(struct device *dev)
+{
+	if (dev->release == media_devnode_release)
+		return container_of(dev, struct media_devnode, dev);
+
+	return container_of(dev, struct media_devnode_compat_ref, dev)->devnode;
 }
 
 static const struct bus_type media_bus_type = {
 	.name = MEDIA_NAME,
 };
 
+static bool media_devnode_is_registered_compat(struct media_devnode_fh *fh)
+{
+	if (fh->ref)
+		return atomic_read(&fh->ref->registered);
+
+	return media_devnode_is_registered(fh->devnode);
+}
+
 static ssize_t media_read(struct file *filp, char __user *buf,
 		size_t sz, loff_t *off)
 {
 	struct media_devnode *devnode = media_devnode_data(filp);
 
+	if (!media_devnode_is_registered_compat(filp->private_data))
+		return -EIO;
 	if (!devnode->fops->read)
 		return -EINVAL;
-	if (!media_devnode_is_registered(devnode))
-		return -EIO;
 	return devnode->fops->read(filp, buf, sz, off);
 }
 
@@ -75,10 +103,10 @@ static ssize_t media_write(struct file *filp, const char __user *buf,
 {
 	struct media_devnode *devnode = media_devnode_data(filp);
 
+	if (!media_devnode_is_registered_compat(filp->private_data))
+		return -EIO;
 	if (!devnode->fops->write)
 		return -EINVAL;
-	if (!media_devnode_is_registered(devnode))
-		return -EIO;
 	return devnode->fops->write(filp, buf, sz, off);
 }
 
@@ -87,7 +115,7 @@ static __poll_t media_poll(struct file *filp,
 {
 	struct media_devnode *devnode = media_devnode_data(filp);
 
-	if (!media_devnode_is_registered(devnode))
+	if (!media_devnode_is_registered_compat(filp->private_data))
 		return EPOLLERR | EPOLLHUP;
 	if (!devnode->fops->poll)
 		return DEFAULT_POLLMASK;
@@ -99,13 +127,8 @@ __media_ioctl(struct file *filp, unsigned int cmd, unsigned long arg,
 	      long (*ioctl_func)(struct file *filp, unsigned int cmd,
 				 unsigned long arg))
 {
-	struct media_devnode *devnode = media_devnode_data(filp);
-
 	if (!ioctl_func)
 		return -ENOTTY;
-
-	if (!media_devnode_is_registered(devnode))
-		return -EIO;
 
 	return ioctl_func(filp, cmd, arg);
 }
@@ -113,6 +136,9 @@ __media_ioctl(struct file *filp, unsigned int cmd, unsigned long arg,
 static long media_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	struct media_devnode *devnode = media_devnode_data(filp);
+
+	if (!media_devnode_is_registered_compat(filp->private_data))
+		return -EIO;
 
 	return __media_ioctl(filp, cmd, arg, devnode->fops->ioctl);
 }
@@ -124,6 +150,9 @@ static long media_compat_ioctl(struct file *filp, unsigned int cmd,
 {
 	struct media_devnode *devnode = media_devnode_data(filp);
 
+	if (!media_devnode_is_registered_compat(filp->private_data))
+		return -EIO;
+
 	return __media_ioctl(filp, cmd, arg, devnode->fops->compat_ioctl);
 }
 
@@ -132,6 +161,7 @@ static long media_compat_ioctl(struct file *filp, unsigned int cmd,
 /* Override for the open function */
 static int media_open(struct inode *inode, struct file *filp)
 {
+	struct media_devnode_cdev *mcdev;
 	struct media_devnode *devnode;
 	struct media_devnode_fh *fh;
 	int ret;
@@ -143,7 +173,12 @@ static int media_open(struct inode *inode, struct file *filp)
 	 * a crash.
 	 */
 	mutex_lock(&media_devnode_lock);
-	devnode = container_of(inode->i_cdev, struct media_devnode, cdev);
+	mcdev = container_of(inode->i_cdev, struct media_devnode_cdev, cdev);
+	if (mcdev->is_compat_ref)
+		devnode = container_of(mcdev, struct media_devnode_compat_ref,
+				       mcdev)->devnode;
+	else
+		devnode = container_of(mcdev, struct media_devnode, mcdev);
 	/* return ENXIO if the media device has been removed
 	   already or if it is not registered anymore. */
 	if (!media_devnode_is_registered(devnode)) {
@@ -151,12 +186,12 @@ static int media_open(struct inode *inode, struct file *filp)
 		return -ENXIO;
 	}
 	/* and increase the device refcount */
-	get_device(&devnode->dev);
+	get_device(media_devnode_dev(devnode));
 	mutex_unlock(&media_devnode_lock);
 
 	ret = devnode->fops->open(devnode, filp);
 	if (ret) {
-		put_device(&devnode->dev);
+		put_device(media_devnode_dev(devnode));
 		return ret;
 	}
 
@@ -169,15 +204,21 @@ static int media_open(struct inode *inode, struct file *filp)
 /* Override for the release function */
 static int media_release(struct inode *inode, struct file *filp)
 {
-	struct media_devnode *devnode = media_devnode_data(filp);
+	struct media_devnode_fh *fh = filp->private_data;
+	struct device *dev;
 
-	devnode->fops->release(filp);
+	if (!fh->ref) {
+		dev = &fh->devnode->dev;
+		fh->devnode->fops->release(filp);
+	} else {
+		dev = &fh->ref->dev;
+		fh->ref->release(filp);
+	}
 
 	filp->private_data = NULL;
 
-	/* decrease the refcount unconditionally since the release()
-	   return value is ignored. */
-	put_device(&devnode->dev);
+	put_device(dev);
+
 	return 0;
 }
 
@@ -204,6 +245,9 @@ void media_devnode_init(struct media_devnode *devnode)
 int __must_check media_devnode_register(struct media_devnode *devnode,
 					struct module *owner)
 {
+	struct media_devnode_compat_ref *ref = devnode->ref;
+	struct cdev *cdev;
+	struct device *dev;
 	int minor;
 	int ret;
 
@@ -222,19 +266,31 @@ int __must_check media_devnode_register(struct media_devnode *devnode,
 	devnode->minor = minor;
 
 	/* Part 2: Initialize the media and character devices */
-	cdev_init(&devnode->cdev, &media_devnode_fops);
-	devnode->cdev.owner = owner;
-	kobject_set_name(&devnode->cdev.kobj, "media%d", devnode->minor);
+	cdev = ref ? &ref->mcdev.cdev : &devnode->mcdev.cdev;
+	cdev_init(cdev, &media_devnode_fops);
+	cdev->owner = owner;
+	kobject_set_name(&cdev->kobj, "media%d", devnode->minor);
 
-	devnode->dev.bus = &media_bus_type;
-	devnode->dev.devt = MKDEV(MAJOR(media_dev_t), devnode->minor);
+	if (!ref) {
+		dev = &devnode->dev;
+	} else {
+		ref->mcdev.is_compat_ref = true;
+		device_initialize(&ref->dev);
+		atomic_set(&ref->registered, 1);
+		ref->devnode = devnode;
+		ref->release = devnode->fops->release;
+		dev = &ref->dev;
+		dev->release = media_devnode_ref_release;
+	}
+	dev->bus = &media_bus_type;
+	dev->devt = MKDEV(MAJOR(media_dev_t), devnode->minor);
 	if (devnode->parent)
-		devnode->dev.parent = devnode->parent;
-	dev_set_name(&devnode->dev, "media%d", devnode->minor);
+		dev->parent = devnode->parent;
+	dev_set_name(dev, "media%d", devnode->minor);
 
 	/* Part 3: Add the media and character devices */
 	set_bit(MEDIA_FLAG_REGISTERED, &devnode->flags);
-	ret = cdev_device_add(&devnode->cdev, &devnode->dev);
+	ret = cdev_device_add(cdev, dev);
 	if (ret < 0) {
 		pr_err("%s: cdev_device_add failed\n", __func__);
 		goto cdev_add_error;
@@ -256,11 +312,15 @@ void media_devnode_unregister(struct media_devnode *devnode)
 	if (!media_devnode_is_registered(devnode))
 		return;
 
+	if (devnode->ref)
+		atomic_set(&devnode->ref->registered, 0);
+
 	mutex_lock(&media_devnode_lock);
 	clear_bit(MEDIA_FLAG_REGISTERED, &devnode->flags);
 	mutex_unlock(&media_devnode_lock);
 
-	cdev_device_del(&devnode->cdev, &devnode->dev);
+	cdev_device_del(devnode->ref ? &devnode->ref->mcdev.cdev :
+			&devnode->mcdev.cdev, media_devnode_dev(devnode));
 
 	mutex_lock(&media_devnode_lock);
 	clear_bit(devnode->minor, media_devnode_nums);
