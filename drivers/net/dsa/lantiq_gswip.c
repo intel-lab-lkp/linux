@@ -658,11 +658,6 @@ static int gswip_add_single_port_br(struct gswip_priv *priv, int port, bool add)
 	unsigned int max_ports = priv->hw_info->max_ports;
 	int err;
 
-	if (port >= max_ports) {
-		dev_err(priv->dev, "single port for %i supported\n", port);
-		return -EIO;
-	}
-
 	vlan_active.index = port + 1;
 	vlan_active.table = GSWIP_TABLE_ACTIVE_VLAN;
 	vlan_active.key[0] = 0; /* vid */
