@@ -872,10 +872,18 @@ static int ionic_set_tunable(struct net_device *dev,
 			     const void *data)
 {
 	struct ionic_lif *lif = netdev_priv(dev);
+	u32 rx_copybreak, max_rx_copybreak;
 
 	switch (tuna->id) {
 	case ETHTOOL_RX_COPYBREAK:
-		lif->rx_copybreak = *(u32 *)data;
+		rx_copybreak = *(u32 *)data;
+		max_rx_copybreak = min_t(u32, U16_MAX, IONIC_MAX_BUF_LEN);
+		if (rx_copybreak > max_rx_copybreak) {
+			netdev_err(dev, "Max supported rx_copybreak size: %u\n",
+				   max_rx_copybreak);
+			return -EINVAL;
+		}
+		lif->rx_copybreak = (u16)rx_copybreak;
 		break;
 	default:
 		return -EOPNOTSUPP;

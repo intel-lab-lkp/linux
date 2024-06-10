@@ -206,7 +206,7 @@ struct ionic_lif {
 	unsigned int nxqs;
 	unsigned int ntxq_descs;
 	unsigned int nrxq_descs;
-	u32 rx_copybreak;
+	u16 rx_copybreak;
 	u64 rxq_features;
 	u16 rx_mode;
 	u64 hw_features;
