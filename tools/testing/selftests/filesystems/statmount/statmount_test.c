@@ -125,8 +125,17 @@ static uint32_t old_root_id, old_parent_id;
 
 static void cleanup_namespace(void)
 {
-	fchdir(orig_root);
-	chroot(".");
+	int ret;
+
+	ret = fchdir(orig_root);
+	if (ret == -1)
+		ksft_exit_fail_msg("changing current directory: %s\n",
+				strerror(errno));
+
+	ret = chroot(".");
+	if (ret == -1)
+		ksft_exit_fail_msg("chroot: %s\n", strerror(errno));
+
 	umount2(root_mntpoint, MNT_DETACH);
 	rmdir(root_mntpoint);
 }
