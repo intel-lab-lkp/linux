@@ -2591,24 +2591,21 @@ static int it6505_poweron(struct it6505 *it6505)
 		return 0;
 	}
 
-	if (pdata->pwr18) {
-		err = regulator_enable(pdata->pwr18);
-		if (err) {
-			DRM_DEV_DEBUG_DRIVER(dev, "Failed to enable VDD18: %d",
-					     err);
-			return err;
-		}
+	err = regulator_enable(pdata->pwr18);
+	if (err) {
+		DRM_DEV_DEBUG_DRIVER(dev, "Failed to enable VDD18: %d",
+				     err);
+		return err;
 	}
 
-	if (pdata->ovdd) {
-		/* time interval between IVDD and OVDD at least be 1ms */
-		usleep_range(1000, 2000);
-		err = regulator_enable(pdata->ovdd);
-		if (err) {
-			regulator_disable(pdata->pwr18);
-			return err;
-		}
+	/* time interval between IVDD and OVDD at least be 1ms */
+	usleep_range(1000, 2000);
+	err = regulator_enable(pdata->ovdd);
+	if (err) {
+		regulator_disable(pdata->pwr18);
+		return err;
 	}
+
 	/* time interval between OVDD and SYSRSTN at least be 10ms */
 	if (pdata->gpiod_reset) {
 		usleep_range(10000, 20000);
@@ -2643,17 +2640,13 @@ static int it6505_poweroff(struct it6505 *it6505)
 	if (pdata->gpiod_reset)
 		gpiod_set_value_cansleep(pdata->gpiod_reset, 0);
 
-	if (pdata->pwr18) {
-		err = regulator_disable(pdata->pwr18);
-		if (err)
-			return err;
-	}
+	err = regulator_disable(pdata->pwr18);
+	if (err)
+		return err;
 
-	if (pdata->ovdd) {
-		err = regulator_disable(pdata->ovdd);
-		if (err)
-			return err;
-	}
+	err = regulator_disable(pdata->ovdd);
+	if (err)
+		return err;
 
 	it6505->powered = false;
 	it6505->sink_count = 0;
