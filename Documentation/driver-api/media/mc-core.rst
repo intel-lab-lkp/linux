@@ -46,12 +46,26 @@ Drivers initialise media device instances by calling
 :c:func:`media_device_init()`. After initialising a media device instance, it is
 registered by calling :c:func:`__media_device_register()` via the macro
 ``media_device_register()`` and unregistered by calling
-:c:func:`media_device_unregister()`. An initialised media device must be
-eventually cleaned up by calling :c:func:`media_device_cleanup()`.
+:c:func:`media_device_unregister()`. The resources of a newly unregistered media
+device will be released by the ``release()`` callback of :c:type:`media_device`
+ops, which will be called when the last user of the media device has released it
+calling :c:func:`media_device_put()`.
+
+The ``release()`` callback is the way all the resources of the media device are
+released once :c:func:`media_device_init()` has been called. This is also
+relevant during device driver's probe function as the ``release()`` callback
+will also have to be able to safely release the resources related to a partially
+initialised media device.
 
 Note that it is not allowed to unregister a media device instance that was not
 previously registered, or clean up a media device instance that was not
 previously initialised.
+
+Media device and driver's per-device context
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Drivers should use the struct media_device_ops ``release()`` callback to release
+their own resources and not e.g. that of the struct v4l2_device.
 
 Entities
 ^^^^^^^^
