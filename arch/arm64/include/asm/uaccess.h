@@ -30,23 +30,20 @@ static inline int __access_ok(const void __user *ptr, unsigned long size);
 
 /*
  * Test whether a block of memory is a valid user space address.
- * Returns 1 if the range is valid, 0 otherwise.
  *
- * This is equivalent to the following test:
- * (u65)addr + (u65)size <= (u65)TASK_SIZE_MAX
+ * We only care that the address cannot reach the kernel mapping, and
+ * that an invalid address will fault.
  */
-static inline int access_ok(const void __user *addr, unsigned long size)
+static inline int access_ok(const void __user *p, unsigned long size)
 {
-	/*
-	 * Asynchronous I/O running in a kernel thread does not have the
-	 * TIF_TAGGED_ADDR flag of the process owning the mm, so always untag
-	 * the user address before checking.
-	 */
-	if (IS_ENABLED(CONFIG_ARM64_TAGGED_ADDR_ABI) &&
-	    (current->flags & PF_KTHREAD || test_thread_flag(TIF_TAGGED_ADDR)))
-		addr = untagged_addr(addr);
+	unsigned long addr = (unsigned long)p;
 
-	return likely(__access_ok(addr, size));
+	/* Only bit 55 of the address matters */
+	addr |= addr+size;
+	addr = (addr >> 55) & 1;
+	size >>= 55;
+
+	return !(addr | size);
 }
 #define access_ok access_ok
 
