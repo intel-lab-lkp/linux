@@ -224,7 +224,12 @@ struct gdma_dev {
 	struct auxiliary_device *adev;
 };
 
-#define MINIMUM_SUPPORTED_PAGE_SIZE PAGE_SIZE
+/* These are defined by HW */
+#define MANA_MIN_QSHIFT 12
+#define MANA_MIN_QSIZE (1 << MANA_MIN_QSHIFT)
+#define MANA_MIN_QALIGN(x) ALIGN((x), MANA_MIN_QSIZE)
+#define MANA_MIN_QALIGNED(addr) IS_ALIGNED((unsigned long)(addr), MANA_MIN_QSIZE)
+#define MANA_PFN(a) (PHYS_PFN(a) << (PAGE_SHIFT - MANA_MIN_QSHIFT))
 
 #define GDMA_CQE_SIZE 64
 #define GDMA_EQE_SIZE 16
