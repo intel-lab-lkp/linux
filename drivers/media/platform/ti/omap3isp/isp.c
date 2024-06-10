@@ -649,8 +649,11 @@ static irqreturn_t isp_isr(int irq, void *_isp)
 	return IRQ_HANDLED;
 }
 
+static void isp_release(struct media_device *mdev);
+
 static const struct media_device_ops isp_media_ops = {
 	.link_notify = v4l2_pipeline_link_notify,
+	.release = isp_release,
 };
 
 /* -----------------------------------------------------------------------------
@@ -1607,7 +1610,6 @@ static void isp_unregister_entities(struct isp_device *isp)
 	omap3isp_stat_unregister_entities(&isp->isp_hist);
 
 	v4l2_device_unregister(&isp->v4l2_dev);
-	media_device_cleanup(&isp->media_dev);
 }
 
 static int isp_link_entity(
@@ -1955,6 +1957,19 @@ static void isp_detach_iommu(struct isp_device *isp)
 #endif
 }
 
+static void isp_release(struct media_device *mdev)
+{
+	struct isp_device *isp =
+		container_of(mdev, struct isp_device, media_dev);
+
+	isp_cleanup_modules(isp);
+
+	media_entity_enum_cleanup(&isp->crashed);
+	v4l2_async_nf_cleanup(&isp->notifier);
+
+	kfree(isp);
+}
+
 static int isp_attach_iommu(struct isp_device *isp)
 {
 #ifdef CONFIG_ARM_DMA_USE_IOMMU
@@ -2002,18 +2017,16 @@ static void isp_remove(struct platform_device *pdev)
 	struct isp_device *isp = platform_get_drvdata(pdev);
 
 	v4l2_async_nf_unregister(&isp->notifier);
-	v4l2_async_nf_cleanup(&isp->notifier);
 	isp_unregister_entities(isp);
-	isp_cleanup_modules(isp);
+
 	isp_xclk_cleanup(isp);
 
 	__omap3isp_get(isp, false);
 	isp_detach_iommu(isp);
 	__omap3isp_put(isp, false);
 
-	media_entity_enum_cleanup(&isp->crashed);
-
-	kfree(isp);
+	/* May release isp immediately */
+	media_device_put(&isp->media_dev);
 }
 
 enum isp_of_phy {
