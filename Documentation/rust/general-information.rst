@@ -7,6 +7,15 @@ This document contains useful information to know when working with
 the Rust support in the kernel.
 
 
+``no_std``
+----------
+
+The Rust support in the kernel can link only `core <https://doc.rust-
+lang.org/core/>`_, not `std <https://doc.rust-lang.org/std/>`_. Crates for
+use in the kernel must opt into this behavior using the ``#![no_std]``
+attribute.
+
+
 Code documentation
 ------------------
 
