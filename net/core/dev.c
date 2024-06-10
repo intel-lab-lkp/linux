@@ -3502,7 +3502,14 @@ static netdev_features_t gso_features_check(const struct sk_buff *skb,
 	if (gso_segs > READ_ONCE(dev->gso_max_segs))
 		return features & ~NETIF_F_GSO_MASK;
 
-	if (unlikely(skb->len >= READ_ONCE(dev->gso_max_size)))
+	/* Both GSO max sizes need to be checked e.g. for the case
+	 * when BIG TCP is enabled for IPv4 but not for IPv6. This
+	 * is checking the limits supported by the NIC (tso_max_size).
+	 * However, the latter is not hot in net_device_read_tx.
+	 */
+	if (unlikely(skb->len >=
+		     max(READ_ONCE(dev->gso_max_size),
+			 READ_ONCE(dev->gso_ipv4_max_size))))
 		return features & ~NETIF_F_GSO_MASK;
 
 	if (!skb_shinfo(skb)->gso_type) {
