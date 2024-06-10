@@ -252,9 +252,9 @@ int __must_check media_devnode_register(struct media_devnode *devnode,
 
 cdev_add_error:
 	mutex_lock(&media_devnode_lock);
-	cdev_device_del(&devnode->cdev, &devnode->dev);
 	clear_bit(devnode->minor, media_devnode_nums);
 	mutex_unlock(&media_devnode_lock);
+	put_device(&devnode->dev);
 
 	return ret;
 }
