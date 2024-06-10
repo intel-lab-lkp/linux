@@ -261,6 +261,7 @@ broadcase||broadcast
 broadcat||broadcast
 bufer||buffer
 bufferred||buffered
+bufferur||buffer
 bufufer||buffer
 cacluated||calculated
 caculate||calculate
@@ -368,6 +369,7 @@ completly||completely
 complient||compliant
 componnents||components
 compoment||component
+componend||component
 comppatible||compatible
 compres||compress
 compresion||compression
@@ -394,6 +396,7 @@ configuretion||configuration
 configutation||configuration
 conider||consider
 conjuction||conjunction
+connction||connection
 connecetd||connected
 connectinos||connections
 connetor||connector
@@ -431,6 +434,7 @@ correponding||corresponding
 correponds||corresponds
 correspoding||corresponding
 cotrol||control
+couldnt||couldn't
 cound||could
 couter||counter
 coutner||counter
@@ -438,6 +442,7 @@ creationg||creating
 cryptocraphic||cryptographic
 cummulative||cumulative
 cunter||counter
+curent||current
 curently||currently
 cylic||cyclic
 dafault||default
@@ -467,6 +472,7 @@ deintializing||deinitializing
 deintialize||deinitialize
 deintialized||deinitialized
 deivce||device
+deley||delay
 delared||declared
 delare||declare
 delares||declares
@@ -591,6 +597,7 @@ eigth||eight
 elementry||elementary
 eletronic||electronic
 embeded||embedded
+enale||enable
 enabledi||enabled
 enbale||enable
 enble||enable
@@ -619,6 +626,7 @@ equiped||equipped
 equivelant||equivalent
 equivilant||equivalent
 eror||error
+erro||error
 errorr||error
 errror||error
 estbalishment||establishment
@@ -704,10 +712,12 @@ followign||following
 followings||following
 follwing||following
 fonud||found
+forcebly||forcibly
 forseeable||foreseeable
 forse||force
 fortan||fortran
 forwardig||forwarding
+forwared||forwarded
 frambuffer||framebuffer
 framming||framing
 framwork||framework
@@ -748,9 +758,11 @@ grahpical||graphical
 granularty||granularity
 grapic||graphic
 grranted||granted
+grups||groups
 guage||gauge
 guarenteed||guaranteed
 guarentee||guarantee
+gueue||queue
 halfs||halves
 hander||handler
 handfull||handful
@@ -761,6 +773,7 @@ hardare||hardware
 harware||hardware
 hardward||hardware
 havind||having
+heigth||height
 heirarchically||hierarchically
 heirarchy||hierarchy
 heirachy||hierarchy
@@ -769,6 +782,7 @@ hearbeat||heartbeat
 heterogenous||heterogeneous
 hexdecimal||hexadecimal
 hybernate||hibernate
+hiearchy||hierarchy
 hierachy||hierarchy
 hierarchie||hierarchy
 homogenous||homogeneous
@@ -823,6 +837,7 @@ independed||independent
 indiate||indicate
 indicat||indicate
 inexpect||inexpected
+infalte||inflate
 inferface||interface
 infinit||infinite
 infomation||information
@@ -838,6 +853,7 @@ initalise||initialize
 initalize||initialize
 initation||initiation
 initators||initiators
+initialiased||initialized
 initialiazation||initialization
 initializationg||initialization
 initializiation||initialization
@@ -1052,6 +1068,7 @@ nerver||never
 nescessary||necessary
 nessessary||necessary
 none existent||non-existent
+notfify||notify
 noticable||noticeable
 notication||notification
 notications||notifications
@@ -1163,6 +1180,7 @@ phoneticly||phonetically
 plaform||platform
 plalform||platform
 platfoem||platform
+platfomr||platform
 platfrom||platform
 plattform||platform
 pleaes||please
@@ -1185,6 +1203,7 @@ preceeding||preceding
 preceed||precede
 precendence||precedence
 precission||precision
+predicition||prediction
 preemptable||preemptible
 prefered||preferred
 prefferably||preferably
@@ -1263,6 +1282,7 @@ querrying||querying
 queus||queues
 randomally||randomly
 raoming||roaming
+readyness||readiness
 reasearcher||researcher
 reasearchers||researchers
 reasearch||research
@@ -1409,6 +1429,7 @@ sequencial||sequential
 serivce||service
 serveral||several
 servive||service
+sesion||session
 setts||sets
 settting||setting
 shapshot||snapshot
@@ -1502,6 +1523,7 @@ superseeded||superseded
 suplied||supplied
 suported||supported
 suport||support
+supporte||supported
 supportet||supported
 suppored||supported
 supporing||supporting
@@ -1597,6 +1619,7 @@ transormed||transformed
 trasfer||transfer
 trasmission||transmission
 treshold||threshold
+trigged||triggered
 triggerd||triggered
 trigerred||triggered
 trigerring||triggering
