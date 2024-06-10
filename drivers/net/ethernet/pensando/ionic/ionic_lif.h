@@ -207,6 +207,7 @@ struct ionic_lif {
 	unsigned int ntxq_descs;
 	unsigned int nrxq_descs;
 	u16 rx_copybreak;
+	u8 doorbell_wa:1;
 	u64 rxq_features;
 	u16 rx_mode;
 	u64 hw_features;
