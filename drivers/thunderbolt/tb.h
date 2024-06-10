@@ -329,6 +329,7 @@ struct usb4_port {
  * @nvm: Pointer to the NVM if the retimer has one (%NULL otherwise)
  * @no_nvm_upgrade: Prevent NVM upgrade of this retimer
  * @auth_status: Status of last NVM authentication
+ * @debugfs_dir: Pointer to the debugfs structure
  */
 struct tb_retimer {
 	struct device dev;
@@ -340,6 +341,7 @@ struct tb_retimer {
 	struct tb_nvm *nvm;
 	bool no_nvm_upgrade;
 	u32 auth_status;
+	struct dentry *debugfs_dir;
 };
 
 /**
@@ -1458,6 +1460,8 @@ void tb_xdomain_debugfs_init(struct tb_xdomain *xd);
 void tb_xdomain_debugfs_remove(struct tb_xdomain *xd);
 void tb_service_debugfs_init(struct tb_service *svc);
 void tb_service_debugfs_remove(struct tb_service *svc);
+void tb_retimer_debugfs_init(struct tb_retimer *rt);
+void tb_retimer_debugfs_remove(struct tb_retimer *rt);
 #else
 static inline void tb_debugfs_init(void) { }
 static inline void tb_debugfs_exit(void) { }
@@ -1467,6 +1471,8 @@ static inline void tb_xdomain_debugfs_init(struct tb_xdomain *xd) { }
 static inline void tb_xdomain_debugfs_remove(struct tb_xdomain *xd) { }
 static inline void tb_service_debugfs_init(struct tb_service *svc) { }
 static inline void tb_service_debugfs_remove(struct tb_service *svc) { }
+static inline void tb_retimer_debugfs_init(struct tb_retimer *rt) { }
+static inline void tb_retimer_debugfs_remove(struct tb_retimer *rt) { }
 #endif
 
 #endif
