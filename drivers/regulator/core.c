@@ -1251,6 +1251,10 @@ static int machine_constraints_voltage(struct regulator_dev *rdev,
 		int current_uV = regulator_get_voltage_rdev(rdev);
 
 		if (current_uV == -ENOTRECOVERABLE) {
+			if (rdev->constraints->always_on || rdev->constraints->boot_on)
+				rdev_warn(rdev,
+					  "boot-on / always-on regulator is in not-recoverable state\n");
+
 			/* This regulator can't be read and must be initialized */
 			rdev_info(rdev, "Setting %d-%duV\n",
 				  rdev->constraints->min_uV,
