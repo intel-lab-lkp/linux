@@ -304,7 +304,7 @@ static int ionic_qcq_enable(struct ionic_qcq *qcq)
 	if (ret)
 		return ret;
 
-	if (qcq->napi.poll)
+	if (test_bit(NAPI_STATE_LISTED, &qcq->napi.state))
 		napi_enable(&qcq->napi);
 
 	if (qcq->flags & IONIC_QCQ_F_INTR) {
