@@ -232,37 +232,32 @@ int __must_check media_devnode_register(struct media_device *mdev,
 	devnode->minor = minor;
 	devnode->media_dev = mdev;
 
-	/* Part 2: Initialize and register the character device */
+	/* Part 2: Initialize the media and character devices */
 	cdev_init(&devnode->cdev, &media_devnode_fops);
 	devnode->cdev.owner = owner;
 	kobject_set_name(&devnode->cdev.kobj, "media%d", devnode->minor);
 
-	set_bit(MEDIA_FLAG_REGISTERED, &devnode->flags);
-	ret = cdev_add(&devnode->cdev, MKDEV(MAJOR(media_dev_t),
-					     devnode->minor), 1);
-	if (ret < 0) {
-		pr_err("%s: cdev_add failed\n", __func__);
-		goto error;
-	}
-
-	/* Part 3: Register the media device */
 	devnode->dev.bus = &media_bus_type;
 	devnode->dev.devt = MKDEV(MAJOR(media_dev_t), devnode->minor);
 	devnode->dev.release = media_devnode_release;
 	if (devnode->parent)
 		devnode->dev.parent = devnode->parent;
 	dev_set_name(&devnode->dev, "media%d", devnode->minor);
-	ret = device_register(&devnode->dev);
+	device_initialize(&devnode->dev);
+
+	/* Part 3: Add the media and character devices */
+	set_bit(MEDIA_FLAG_REGISTERED, &devnode->flags);
+	ret = cdev_device_add(&devnode->cdev, &devnode->dev);
 	if (ret < 0) {
-		pr_err("%s: device_register failed\n", __func__);
-		goto error;
+		pr_err("%s: cdev_device_add failed\n", __func__);
+		goto cdev_add_error;
 	}
 
 	return 0;
 
-error:
+cdev_add_error:
 	mutex_lock(&media_devnode_lock);
-	cdev_del(&devnode->cdev);
+	cdev_device_del(&devnode->cdev, &devnode->dev);
 	clear_bit(devnode->minor, media_devnode_nums);
 	mutex_unlock(&media_devnode_lock);
 
