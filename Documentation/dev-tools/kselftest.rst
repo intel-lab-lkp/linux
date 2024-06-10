@@ -228,6 +228,14 @@ In general, the rules for selftests are
  * Don't cause the top-level "make run_tests" to fail if your feature is
    unconfigured.
 
+ * The output of tests must conform to the TAP standard to ensure high
+   testing quality and to capture failures/errors with specific details.
+   The kselftest.h and kselftest_harness.h headers provide wrappers for
+   outputting test results such as pass, fail, or skip etc. These wrappers
+   should be used instead of reinventing the wheel or using raw printf and
+   exit statements. CI systems can easily parse TAP output messages to
+   detect test failures.
+
 Contributing new tests (details)
 ================================
 
