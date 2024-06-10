@@ -151,6 +151,13 @@ static void udf_bitmap_free_blocks(struct super_block *sb,
 	block = bloc->logicalBlockNum + offset +
 		(sizeof(struct spaceBitmapDesc) << 3);
 
+	if (block < offset + (sizeof(struct spaceBitmapDesc) << 3)) {
+		udf_debug("integer overflow: %u + %u + %zu",
+			  bloc->logicalBlockNum, offset,
+			  sizeof(struct spaceBitmapDesc) << 3);
+		goto error_return;
+	}
+
 	do {
 		overflow = 0;
 		block_group = block >> (sb->s_blocksize_bits + 3);
