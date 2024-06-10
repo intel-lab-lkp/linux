@@ -176,6 +176,11 @@ static void v4l2_device_release(struct device *cd)
 {
 	struct video_device *vdev = to_video_device(cd);
 	struct v4l2_device *v4l2_dev = vdev->v4l2_dev;
+	bool v4l2_dev_call_release = v4l2_dev->release;
+#ifdef CONFIG_MEDIA_CONTROLLER
+	struct media_device *mdev = v4l2_dev->mdev;
+	bool mdev_has_release = mdev && mdev->ops && mdev->ops->release;
+#endif
 
 	mutex_lock(&videodev_lock);
 	if (WARN_ON(video_devices[vdev->minor] != vdev)) {
@@ -198,8 +203,8 @@ static void v4l2_device_release(struct device *cd)
 
 	mutex_unlock(&videodev_lock);
 
-#if defined(CONFIG_MEDIA_CONTROLLER)
-	if (v4l2_dev->mdev && vdev->vfl_dir != VFL_DIR_M2M) {
+#ifdef CONFIG_MEDIA_CONTROLLER
+	if (mdev && vdev->vfl_dir != VFL_DIR_M2M) {
 		/* Remove interfaces and interface links */
 		media_devnode_remove(vdev->intf_devnode);
 		if (vdev->entity.function != MEDIA_ENT_F_UNKNOWN)
@@ -207,23 +212,28 @@ static void v4l2_device_release(struct device *cd)
 	}
 #endif
 
-	/* Do not call v4l2_device_put if there is no release callback set.
-	 * Drivers that have no v4l2_device release callback might free the
-	 * v4l2_dev instance in the video_device release callback below, so we
-	 * must perform this check here.
-	 *
-	 * TODO: In the long run all drivers that use v4l2_device should use the
-	 * v4l2_device release callback. This check will then be unnecessary.
-	 */
-	if (v4l2_dev->release == NULL)
-		v4l2_dev = NULL;
-
 	/* Release video_device and perform other
 	   cleanups as needed. */
 	vdev->release(vdev);
 
-	/* Decrease v4l2_device refcount */
-	if (v4l2_dev)
+#ifdef CONFIG_MEDIA_CONTROLLER
+	if (mdev)
+		media_device_put(mdev);
+
+	/*
+	 * Generally both struct media_device and struct v4l2_device are
+	 * embedded in the same driver's context struct so having a release
+	 * callback in both is a bug.
+	 */
+	if (WARN_ON(v4l2_dev_call_release && mdev_has_release))
+		v4l2_dev_call_release = false;
+#endif
+
+	/*
+	 * Decrease v4l2_device refcount, but only if the media device doesn't
+	 * have a release callback.
+	 */
+	if (v4l2_dev_call_release)
 		v4l2_device_put(v4l2_dev);
 }
 
@@ -795,11 +805,17 @@ static int video_register_media_controller(struct video_device *vdev)
 	u32 intf_type;
 	int ret;
 
-	/* Memory-to-memory devices are more complex and use
-	 * their own function to register its mc entities.
-	 */
-	if (!vdev->v4l2_dev->mdev || vdev->vfl_dir == VFL_DIR_M2M)
+	if (!vdev->v4l2_dev->mdev)
 		return 0;
+
+	/*
+	 * Memory-to-memory devices are more complex and use their own function
+	 * to register its mc entities.
+	 */
+	if (vdev->vfl_dir == VFL_DIR_M2M) {
+		media_device_get(vdev->v4l2_dev->mdev);
+		return 0;
+	}
 
 	vdev->entity.obj_type = MEDIA_ENTITY_TYPE_VIDEO_DEVICE;
 	vdev->entity.function = MEDIA_ENT_F_UNKNOWN;
@@ -878,6 +894,7 @@ static int video_register_media_controller(struct video_device *vdev)
 
 	/* FIXME: how to create the other interface links? */
 
+	media_device_get(vdev->v4l2_dev->mdev);
 #endif
 	return 0;
 }
