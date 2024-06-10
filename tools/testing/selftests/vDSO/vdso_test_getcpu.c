@@ -28,9 +28,12 @@ int main(int argc, char **argv)
 	getcpu_t get_cpu;
 	long ret;
 
+	ksft_print_header();
+	ksft_set_plan(1);
+
 	sysinfo_ehdr = getauxval(AT_SYSINFO_EHDR);
 	if (!sysinfo_ehdr) {
-		printf("AT_SYSINFO_EHDR is not present!\n");
+		ksft_print_msg("AT_SYSINFO_EHDR is not present!\n");
 		return KSFT_SKIP;
 	}
 
@@ -38,17 +41,12 @@ int main(int argc, char **argv)
 
 	get_cpu = (getcpu_t)vdso_sym(version, name[4]);
 	if (!get_cpu) {
-		printf("Could not find %s\n", name[4]);
+		ksft_print_msg("Could not find %s\n", name[4]);
 		return KSFT_SKIP;
 	}
 
 	ret = get_cpu(&cpu, &node, 0);
-	if (ret == 0) {
-		printf("Running on CPU %u node %u\n", cpu, node);
-	} else {
-		printf("%s failed\n", name[4]);
-		return KSFT_FAIL;
-	}
+	ksft_test_result(ret == 0, "Running on CPU %u node %u\n", cpu, node);
 
-	return 0;
+	ksft_finished();
 }
