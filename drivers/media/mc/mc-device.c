@@ -822,6 +822,9 @@ int __must_check __media_device_register(struct media_device *mdev,
 		ref = kzalloc(sizeof(*mdev->devnode.ref), GFP_KERNEL);
 		if (!ref)
 			return -ENOMEM;
+
+		dev_warn(mdev->dev,
+			 "Set mdev release op to safely release resources!\n");
 	}
 
 	/* Register the device node. */
