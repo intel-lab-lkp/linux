@@ -30,6 +30,7 @@ pub mod alloc;
 mod build_assert;
 pub mod device;
 pub mod error;
+pub mod firmware;
 pub mod init;
 pub mod ioctl;
 #[cfg(CONFIG_KUNIT)]
