@@ -97,6 +97,11 @@ int __init efi_memmap_install(struct efi_memory_map_data *data)
 	if (efi_enabled(EFI_PARAVIRT))
 		return 0;
 
+	if (efi.memmap.flags & (EFI_MEMMAP_MEMBLOCK | EFI_MEMMAP_SLAB))
+		__efi_memmap_free(efi.memmap.phys_map,
+				  efi.memmap.desc_size * efi.memmap.nr_map,
+				  efi.memmap.flags);
+
 	return __efi_memmap_init(data);
 }
 
