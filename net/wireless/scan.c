@@ -3046,7 +3046,7 @@ cfg80211_parse_ml_elem_sta_data(struct wiphy *wiphy,
 
 		bss = cfg80211_inform_single_bss_data(wiphy, &data, gfp);
 		if (!bss)
-			break;
+			continue;
 		cfg80211_put_bss(wiphy, bss);
 	}
 
