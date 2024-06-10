@@ -325,6 +325,10 @@ void fdls_send_fabric_logo(struct fnic_iport_s *iport);
 int fnic_fdls_validate_and_get_frame_type(struct fnic_iport_s *iport,
 								  void *rx_frame, int len,
 								  int fchdr_offset);
+void fdls_send_tport_abts(struct fnic_iport_s *iport,
+						  struct fnic_tport_s *tport);
+void fdls_delete_tport(struct fnic_iport_s *iport,
+					   struct fnic_tport_s *tport);
 
 /* fnic_fcs.c */
 void fnic_fdls_init(struct fnic *fnic, int usefip);
