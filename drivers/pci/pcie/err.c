@@ -192,7 +192,7 @@ pci_ers_result_t pcie_do_recovery(struct pci_dev *dev,
 		pci_channel_state_t state,
 		pci_ers_result_t (*reset_subordinates)(struct pci_dev *pdev))
 {
-	int type = pci_pcie_type(dev);
+	int type = pci_pcie_type(dev), ret;
 	struct pci_dev *bridge;
 	pci_ers_result_t status = PCI_ERS_RESULT_CAN_RECOVER;
 	struct pci_host_bridge *host = pci_find_host_bridge(dev->bus);
@@ -214,6 +214,10 @@ pci_ers_result_t pcie_do_recovery(struct pci_dev *dev,
 	else
 		bridge = pci_upstream_bridge(dev);
 
+
+	ret = pci_trylock_rescan_remove(bridge);
+	if (!ret)
+		return PCI_ERS_RESULT_DISCONNECT;
 	pci_walk_bridge(bridge, pci_pm_runtime_get_sync, NULL);
 
 	pci_dbg(bridge, "broadcast error_detected message\n");
@@ -262,12 +266,14 @@ pci_ers_result_t pcie_do_recovery(struct pci_dev *dev,
 	}
 
 	pci_walk_bridge(bridge, pci_pm_runtime_put, NULL);
+	pci_unlock_rescan_remove();
 
 	pci_info(bridge, "device recovery successful\n");
 	return status;
 
 failed:
 	pci_walk_bridge(bridge, pci_pm_runtime_put, NULL);
+	pci_unlock_rescan_remove();
 
 	pci_uevent_ers(bridge, PCI_ERS_RESULT_DISCONNECT);
 
