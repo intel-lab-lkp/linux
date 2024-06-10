@@ -1033,12 +1033,17 @@ static void scrub_read_endio(struct btrfs_bio *bbio)
 {
 	struct scrub_stripe *stripe = bbio->private;
 	struct bio_vec *bvec;
-	int sector_nr = calc_sector_number(stripe, bio_first_bvec_all(&bbio->bio));
+	int sector_nr = 0;
 	int num_sectors;
 	u32 bio_size = 0;
 	int i;
 
-	ASSERT(sector_nr < stripe->nr_sectors);
+	if (bbio->bio.bi_status == BLK_STS_OK) {
+		sector_nr = calc_sector_number(stripe,
+					       bio_first_bvec_all(&bbio->bio));
+		ASSERT(sector_nr < stripe->nr_sectors);
+	}
+
 	bio_for_each_bvec_all(bvec, &bbio->bio, i)
 		bio_size += bvec->bv_len;
 	num_sectors = bio_size >> stripe->bg->fs_info->sectorsize_bits;
