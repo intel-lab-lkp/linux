@@ -4094,8 +4094,12 @@ static int rdtgroup_setup_root(struct rdt_fs_context *ctx)
 
 static void rdtgroup_destroy_root(void)
 {
-	kernfs_destroy_root(rdt_root);
-	rdtgroup_default.kn = NULL;
+	lockdep_assert_held(&rdtgroup_mutex);
+
+	if (rdtgroup_default.kn) {
+		kernfs_destroy_root(rdt_root);
+		rdtgroup_default.kn = NULL;
+	}
 }
 
 static void __init rdtgroup_setup_default(void)
@@ -4387,11 +4391,26 @@ cleanup_mountpoint:
 	return ret;
 }
 
+/**
+ * resctrl_exit() - Remove the resctrl filesystem and free resources.
+ *
+ * Called by the architecture code in response to a fatal error.
+ * Resctrl files and structures are removed from kernfs to prevent further
+ * configuration.
+ */
 void __exit resctrl_exit(void)
 {
+	mutex_lock(&rdtgroup_mutex);
+	rdtgroup_destroy_root();
+	mutex_unlock(&rdtgroup_mutex);
+
 	debugfs_remove_recursive(debugfs_resctrl);
 	unregister_filesystem(&rdt_fs_type);
-	sysfs_remove_mount_point(fs_kobj, "resctrl");
+
+	/*
+	 * The sysfs mount point added by resctrl_init() is not removed so that
+	 * it can be used to umount resctrl.
+	 */
 
 	resctrl_mon_resource_exit();
 }
