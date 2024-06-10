@@ -264,13 +264,12 @@ static int vimc_add_subdevs(struct vimc_device *vimc)
 	return 0;
 }
 
-static void vimc_v4l2_dev_release(struct v4l2_device *v4l2_dev)
+static void vimc_mdev_release(struct media_device *mdev)
 {
 	struct vimc_device *vimc =
-		container_of(v4l2_dev, struct vimc_device, v4l2_dev);
+		container_of_const(mdev, struct vimc_device, mdev);
 
 	vimc_release_subdevs(vimc);
-	media_device_cleanup(&vimc->mdev);
 	kfree(vimc->ent_devs);
 	kfree(vimc);
 }
@@ -336,6 +335,10 @@ err_v4l2_unregister:
 	return ret;
 }
 
+static const struct media_device_ops vimc_mdev_ops = {
+	.release = vimc_mdev_release,
+};
+
 static int vimc_probe(struct platform_device *pdev)
 {
 	const struct font_desc *font = find_font("VGA8x16");
@@ -369,12 +372,12 @@ static int vimc_probe(struct platform_device *pdev)
 	snprintf(vimc->mdev.bus_info, sizeof(vimc->mdev.bus_info),
 		 "platform:%s", VIMC_PDEV_NAME);
 	vimc->mdev.dev = &pdev->dev;
+	vimc->mdev.ops = &vimc_mdev_ops;
 	media_device_init(&vimc->mdev);
 
 	ret = vimc_register_devices(vimc);
 	if (ret) {
-		media_device_cleanup(&vimc->mdev);
-		kfree(vimc);
+		media_device_put(&vimc->mdev);
 		return ret;
 	}
 	/*
@@ -382,7 +385,6 @@ static int vimc_probe(struct platform_device *pdev)
 	 * if the registration fails, we release directly from probe
 	 */
 
-	vimc->v4l2_dev.release = vimc_v4l2_dev_release;
 	platform_set_drvdata(pdev, vimc);
 	return 0;
 }
@@ -397,6 +399,7 @@ static void vimc_remove(struct platform_device *pdev)
 	media_device_unregister(&vimc->mdev);
 	v4l2_device_unregister(&vimc->v4l2_dev);
 	v4l2_device_put(&vimc->v4l2_dev);
+	media_device_put(&vimc->mdev);
 }
 
 static void vimc_dev_release(struct device *dev)
