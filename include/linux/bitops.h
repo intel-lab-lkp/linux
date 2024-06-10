@@ -29,6 +29,9 @@ extern unsigned long __sw_hweight64(__u64 w);
 #include <asm-generic/bitops/generic-non-atomic.h>
 
 /*
+ * These double underscore __set_bit(), __clear_bit() macros are non-atomic
+ * versions of set_bit(), clear_bit() and so on.
+ *
  * Many architecture-specific non-atomic bitops contain inline asm code and due
  * to that the compiler can't optimize them to compile-time expressions or
  * constants. In contrary, generic_*() helpers are defined in pure C and
