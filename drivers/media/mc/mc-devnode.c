@@ -49,13 +49,6 @@ static void media_devnode_release(struct device *cd)
 {
 	struct media_devnode *devnode = to_media_devnode(cd);
 
-	mutex_lock(&media_devnode_lock);
-
-	/* Mark device node number as free */
-	clear_bit(devnode->minor, media_devnode_nums);
-
-	mutex_unlock(&media_devnode_lock);
-
 	/* Release media_devnode and perform other cleanups as needed. */
 	if (devnode->release)
 		devnode->release(devnode);
@@ -268,6 +261,10 @@ void media_devnode_unregister(struct media_devnode *devnode)
 
 	cdev_del(&devnode->cdev);
 	device_unregister(&devnode->dev);
+
+	mutex_lock(&media_devnode_lock);
+	clear_bit(devnode->minor, media_devnode_nums);
+	mutex_unlock(&media_devnode_lock);
 }
 
 /*
