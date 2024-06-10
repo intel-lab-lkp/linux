@@ -243,6 +243,32 @@ void media_devnode_init(struct media_devnode *devnode)
 	devnode->minor = -1;
 }
 
+/*
+ * Best effort media device lifetime management for old drivers
+ *
+ * Drivers that do not manage the lifetime of the media device are provided with
+ * a best effort lifetime management support. This means that as the driver does
+ * not release the media device once all users are gone but when the device is
+ * unbound, there are bound to be (brief) moments when released memory may get
+ * accessed. All drivers should be converted to release their memory at a safe
+ * time, i.e. provide a release callback in struct media_file_operations to do
+ * so. This is especially important for drivers for devices that are
+ * unpluggable, e.g. USB devices.
+ *
+ * A second struct device is used to manage the lifetime of a helper object,
+ * struct media_devnode_compat_ref. For a media device, one is initialised in
+ * media_devnode_register and put in media_devnode_unregister. This object is
+ * also used as the device of the media character device so file handles to the
+ * media device have a reference to this object. When the media device is
+ * released, any file handle retains a reference to this helper that also
+ * contains the media device's registration status. If a media device is
+ * released and a user space process attempts to access the file handle, an
+ * error is returned.
+ *
+ * The struct device in struct media_devnode is put at media_device_cleanup and
+ * uses an empty release callback, reflecting the expectation the driver will
+ * release the memory of the media device at unbind time.
+ */
 int __must_check media_devnode_register(struct media_devnode *devnode,
 					struct module *owner)
 {
