@@ -493,6 +493,7 @@ static void fdls_send_fabric_flogi(struct fnic_iport_s *iport)
 
 	fnic_send_fcoe_frame(iport, &flogi, sizeof(struct fc_els_s));
 	/* Even if fnic_send_fcoe_frame() fails we want to retry after timeout */
+	atomic64_inc(&iport->iport_stats.fabric_flogi_sent);
 	fdls_start_fabric_timer(iport, 2 * iport->e_d_tov);
 }
 
@@ -516,6 +517,7 @@ static void fdls_send_fabric_plogi(struct fnic_iport_s *iport)
 	FNIC_SET_NODE_NAME(plogi, iport->wwnn);
 	FNIC_SET_RDF_SIZE(plogi.u.csp_plogi, iport->max_payload_size);
 
+	atomic64_inc(&iport->iport_stats.fabric_plogi_sent);
 	fnic_send_fcoe_frame(iport, &plogi, sizeof(struct fc_els_s));
 	/* Even if fnic_send_fcoe_frame() fails we want to retry after timeout */
 	fdls_start_fabric_timer(iport, 2 * iport->e_d_tov);
@@ -587,6 +589,7 @@ static void fdls_send_scr(struct fnic_iport_s *iport)
 	hton24(fcid, iport->fcid);
 	FNIC_SET_S_ID((&scr_req.fchdr), fcid);
 
+	atomic64_inc(&iport->iport_stats.fabric_scr_sent);
 	fnic_send_fcoe_frame(iport, &scr_req, sizeof(struct fc_scr_s));
 	/* Even if fnic_send_fcoe_frame() fails we want to retry after timeout */
 	fdls_start_fabric_timer(iport, 2 * iport->e_d_tov);
@@ -651,6 +654,7 @@ fdls_send_tgt_adisc(struct fnic_iport_s *iport, struct fnic_tport_s *tport)
 	FNIC_FCS_DBG(KERN_INFO, fnic->lport->host, fnic->fnic_num,
 				 "sending ADISC to tgt fcid: 0x%x", tport->fcid);
 
+	atomic64_inc(&iport->iport_stats.tport_adisc_sent);
 	fnic_send_fcoe_frame(iport, &adisc, sizeof(struct fc_els_adisc_s));
 	/* Even if fnic_send_fcoe_frame() fails we want to retry after timeout */
 	fdls_start_tport_timer(iport, tport, 2 * iport->e_d_tov);
@@ -752,6 +756,7 @@ fdls_send_tgt_plogi(struct fnic_iport_s *iport, struct fnic_tport_s *tport)
 
 	timeout = max(2 * iport->e_d_tov, iport->plogi_timeout);
 
+	atomic64_inc(&iport->iport_stats.tport_plogi_sent);
 	fnic_send_fcoe_frame(iport, &plogi, sizeof(struct fc_els_s));
 	/* Even if fnic_send_fcoe_frame() fails we want to retry after timeout */
 	fdls_start_tport_timer(iport, tport, timeout);
@@ -859,6 +864,7 @@ fdls_send_tgt_prli(struct fnic_iport_s *iport, struct fnic_tport_s *tport)
 
 	timeout = max(2 * iport->e_d_tov, iport->plogi_timeout);
 
+	atomic64_inc(&iport->iport_stats.tport_prli_sent);
 	fnic_send_fcoe_frame(iport, &prli, sizeof(struct fc_els_prli_s));
 	/* Even if fnic_send_fcoe_frame() fails we want to retry after timeout */
 	fdls_start_tport_timer(iport, tport, timeout);
@@ -951,6 +957,7 @@ void fdls_tgt_logout(struct fnic_iport_s *iport,
 	memcpy(&logo.fcid, s_id, 3);
 	logo.wwpn = htonll(iport->wwpn);
 
+	atomic64_inc(&iport->iport_stats.tport_logo_sent);
 	fnic_send_fcoe_frame(iport, &logo, sizeof(struct fc_logo_req_s));
 }
 
@@ -1618,6 +1625,7 @@ fdls_process_tgt_adisc_rsp(struct fnic_iport_s *iport,
 
 	switch (adisc_rsp->command) {
 	case FC_LS_ACC:
+		atomic64_inc(&iport->iport_stats.tport_adisc_ls_accepts);
 		if (tport->timer_pending) {
 			FNIC_FCS_DBG(KERN_INFO, fnic->lport->host, fnic->fnic_num,
 						 "tport 0x%p Canceling fabric disc timer\n",
@@ -1642,6 +1650,7 @@ fdls_process_tgt_adisc_rsp(struct fnic_iport_s *iport,
 		break;
 
 	case FC_LS_REJ:
+		atomic64_inc(&iport->iport_stats.tport_adisc_ls_rejects);
 		if (((els_rjt->reason_code == FC_ELS_RJT_LOGICAL_BUSY)
 			 || (els_rjt->reason_code == FC_ELS_RJT_BUSY))
 			&& (tport->retry_counter < FDLS_RETRY_COUNT)) {
@@ -1716,6 +1725,7 @@ fdls_process_tgt_plogi_rsp(struct fnic_iport_s *iport,
 
 	switch (plogi_rsp->command) {
 	case FC_LS_ACC:
+		atomic64_inc(&iport->iport_stats.tport_plogi_ls_accepts);
 		FNIC_FCS_DBG(KERN_INFO, fnic->lport->host, fnic->fnic_num,
 					 "PLOGI accepted by target: 0x%x", tgt_fcid);
 		oxid = ntohs(FNIC_GET_OX_ID(fchdr));
@@ -1723,6 +1733,7 @@ fdls_process_tgt_plogi_rsp(struct fnic_iport_s *iport,
 		break;
 
 	case FC_LS_REJ:
+		atomic64_inc(&iport->iport_stats.tport_plogi_ls_rejects);
 		if (((els_rjt->reason_code == FC_ELS_RJT_LOGICAL_BUSY)
 			 || (els_rjt->reason_code == FC_ELS_RJT_BUSY))
 			&& (tport->retry_counter < iport->max_plogi_retries)) {
@@ -1742,6 +1753,7 @@ fdls_process_tgt_plogi_rsp(struct fnic_iport_s *iport,
 		return;
 
 	default:
+		atomic64_inc(&iport->iport_stats.tport_plogi_misc_rejects);
 		FNIC_FCS_DBG(KERN_INFO, fnic->lport->host, fnic->fnic_num,
 					 "PLOGI not accepted from target fcid: 0x%x",
 					 tgt_fcid);
@@ -1845,6 +1857,7 @@ fdls_process_tgt_prli_rsp(struct fnic_iport_s *iport,
 
 	switch (prli_rsp->command) {
 	case FC_LS_ACC:
+		atomic64_inc(&iport->iport_stats.tport_prli_ls_accepts);
 		FNIC_FCS_DBG(KERN_INFO, fnic->lport->host, fnic->fnic_num,
 					 "PRLI accepted from target: 0x%x", tgt_fcid);
 		oxid = ntohs(FNIC_GET_OX_ID(fchdr));
@@ -1864,6 +1877,7 @@ fdls_process_tgt_prli_rsp(struct fnic_iport_s *iport,
 		break;
 
 	case FC_LS_REJ:
+		atomic64_inc(&iport->iport_stats.tport_prli_ls_rejects);
 		if (((els_rjt->reason_code == FC_ELS_RJT_LOGICAL_BUSY)
 			 || (els_rjt->reason_code == FC_ELS_RJT_BUSY))
 			&& (tport->retry_counter < FDLS_RETRY_COUNT)) {
@@ -1889,6 +1903,7 @@ fdls_process_tgt_prli_rsp(struct fnic_iport_s *iport,
 		break;
 
 	default:
+		atomic64_inc(&iport->iport_stats.tport_prli_misc_rejects);
 		FNIC_FCS_DBG(KERN_INFO, fnic->lport->host, fnic->fnic_num,
 					 "PRLI not accepted from target: 0x%x", tgt_fcid);
 		return;
@@ -2153,6 +2168,7 @@ fdls_process_scr_rsp(struct fnic_iport_s *iport, struct fc_hdr_s *fchdr)
 
 	switch (scr_rsp->command) {
 	case FC_LS_ACC:
+		atomic64_inc(&iport->iport_stats.fabric_scr_ls_accepts);
 		if (iport->fabric.timer_pending) {
 			FNIC_FCS_DBG(KERN_INFO, fnic->lport->host, fnic->fnic_num,
 						 "Canceling fabric disc timer %p\n", iport);
@@ -2164,6 +2180,7 @@ fdls_process_scr_rsp(struct fnic_iport_s *iport, struct fc_hdr_s *fchdr)
 		break;
 
 	case FC_LS_REJ:
+		atomic64_inc(&iport->iport_stats.fabric_scr_ls_rejects);
 		if (((els_rjt->reason_code == FC_ELS_RJT_LOGICAL_BUSY)
 			 || (els_rjt->reason_code == FC_ELS_RJT_BUSY))
 			&& (fdls->retry_counter < FDLS_RETRY_COUNT)) {
@@ -2187,6 +2204,7 @@ fdls_process_scr_rsp(struct fnic_iport_s *iport, struct fc_hdr_s *fchdr)
 		break;
 
 	default:
+		atomic64_inc(&iport->iport_stats.fabric_scr_misc_rejects);
 		break;
 	}
 }
@@ -2494,6 +2512,7 @@ fdls_process_flogi_rsp(struct fnic_iport_s *iport, struct fc_hdr_s *fchdr,
 
 	switch (flogi_rsp->command) {
 	case FC_LS_ACC:
+		atomic64_inc(&iport->iport_stats.fabric_flogi_ls_accepts);
 		if (iport->fabric.timer_pending) {
 			FNIC_FCS_DBG(KERN_INFO, fnic->lport->host, fnic->fnic_num,
 						 "iport fcid: 0x%x Canceling fabric disc timer\n",
@@ -2567,6 +2586,7 @@ fdls_process_flogi_rsp(struct fnic_iport_s *iport, struct fc_hdr_s *fchdr,
 		break;
 
 	case FC_LS_REJ:
+		atomic64_inc(&iport->iport_stats.fabric_flogi_ls_rejects);
 		els_rjt = (struct fc_els_reject_s *) fchdr;
 		if (fabric->retry_counter < iport->max_flogi_retries) {
 			FNIC_FCS_DBG(KERN_INFO, fnic->lport->host, fnic->fnic_num,
@@ -2594,6 +2614,7 @@ fdls_process_flogi_rsp(struct fnic_iport_s *iport, struct fc_hdr_s *fchdr,
 		FNIC_FCS_DBG(KERN_INFO, fnic->lport->host, fnic->fnic_num,
 					 "FLOGI response not accepted: 0x%x",
 					 flogi_rsp->command);
+		atomic64_inc(&iport->iport_stats.fabric_flogi_misc_rejects);
 		break;
 	}
 }
@@ -2615,6 +2636,7 @@ fdls_process_fabric_plogi_rsp(struct fnic_iport_s *iport,
 
 	switch (plogi_rsp->command) {
 	case FC_LS_ACC:
+		atomic64_inc(&iport->iport_stats.fabric_plogi_ls_accepts);
 		if (iport->fabric.timer_pending) {
 			FNIC_FCS_DBG(KERN_INFO, fnic->lport->host, fnic->fnic_num,
 				 "iport fcid: 0x%x fabric PLOGI response: Accepted\n",
@@ -2627,6 +2649,7 @@ fdls_process_fabric_plogi_rsp(struct fnic_iport_s *iport,
 		fdls_send_rpn_id(iport);
 		break;
 	case FC_LS_REJ:
+		atomic64_inc(&iport->iport_stats.fabric_plogi_ls_rejects);
 		if (((els_rjt->reason_code == FC_ELS_RJT_LOGICAL_BUSY)
 			 || (els_rjt->reason_code == FC_ELS_RJT_BUSY))
 			&& (iport->fabric.retry_counter < iport->max_plogi_retries)) {
@@ -2652,6 +2675,7 @@ fdls_process_fabric_plogi_rsp(struct fnic_iport_s *iport,
 		FNIC_FCS_DBG(KERN_INFO, fnic->lport->host, fnic->fnic_num,
 					 "PLOGI response not accepted: 0x%x",
 					 plogi_rsp->command);
+		atomic64_inc(&iport->iport_stats.fabric_plogi_misc_rejects);
 		break;
 	}
 }
@@ -2932,6 +2956,7 @@ fdls_process_unsupported_els_req(struct fnic_iport_s *iport,
 		FNIC_FCS_DBG(KERN_INFO, fnic->lport->host, fnic->fnic_num,
 			 "Dropping unsupported ELS with illegal frame bits 0x%x\n",
 			 d_id);
+		atomic64_inc(&iport->iport_stats.unsupported_frames_dropped);
 		return;
 	}
 
@@ -2940,6 +2965,7 @@ fdls_process_unsupported_els_req(struct fnic_iport_s *iport,
 		FNIC_FCS_DBG(KERN_INFO, fnic->lport->host, fnic->fnic_num,
 			 "Dropping unsupported ELS request in iport state: %d",
 			 iport->state);
+		atomic64_inc(&iport->iport_stats.unsupported_frames_dropped);
 		return;
 	}
 
@@ -3332,6 +3358,8 @@ fdls_process_rscn(struct fnic_iport_s *iport, struct fc_hdr_s *fchdr)
 	int newports = 0;
 	struct fnic_fdls_fabric_s *fdls = &iport->fabric;
 	struct fnic *fnic = iport->fnic;
+
+	atomic64_inc(&iport->iport_stats.num_rscns);
 
 	FNIC_FCS_DBG(KERN_INFO, fnic->lport->host, fnic->fnic_num,
 				 "FDLS process RSCN %p", iport);
