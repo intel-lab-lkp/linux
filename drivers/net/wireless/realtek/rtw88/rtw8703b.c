@@ -2013,6 +2013,7 @@ const struct rtw_chip_info rtw8703b_hw_spec = {
 	.tx_stbc = false,
 	.max_power_index = 0x3f,
 	.ampdu_density = IEEE80211_HT_MPDU_DENSITY_16,
+	.usb_tx_agg_desc_num = 1, /* Not sure if this chip has USB interface */
 
 	.path_div_supported = false,
 	.ht_supported = true,
@@ -2065,25 +2066,26 @@ const struct rtw_chip_info rtw8703b_hw_spec = {
 	.bt_rssi_type = COEX_BTRSSI_RATIO,
 	.ant_isolation = 15,
 	.rssi_tolerance = 2,
-	.bt_rssi_step = bt_rssi_step_8703b,
-	.wl_rssi_step = wl_rssi_step_8703b,
 	/* sant -> shared antenna, nsant -> non-shared antenna
 	 * Not sure if 8703b versions with non-shard antenna even exist.
 	 */
 	.table_sant_num = ARRAY_SIZE(table_sant_8703b),
-	.table_sant = table_sant_8703b,
 	.table_nsant_num = 0,
-	.table_nsant = NULL,
 	.tdma_sant_num = ARRAY_SIZE(tdma_sant_8703b),
-	.tdma_sant = tdma_sant_8703b,
 	.tdma_nsant_num = 0,
-	.tdma_nsant = NULL,
-	.wl_rf_para_num = ARRAY_SIZE(rf_para_tx_8703b),
-	.wl_rf_para_tx = rf_para_tx_8703b,
-	.wl_rf_para_rx = rf_para_rx_8703b,
 	.bt_afh_span_bw20 = 0x20,
 	.bt_afh_span_bw40 = 0x30,
 	.afh_5g_num = ARRAY_SIZE(afh_5g_8703b),
+	.wl_rf_para_num = ARRAY_SIZE(rf_para_tx_8703b),
+	.coex_info_hw_regs_num = 0,
+	.bt_rssi_step = bt_rssi_step_8703b,
+	.wl_rssi_step = wl_rssi_step_8703b,
+	.table_nsant = NULL,
+	.table_sant = table_sant_8703b,
+	.tdma_sant = tdma_sant_8703b,
+	.tdma_nsant = NULL,
+	.wl_rf_para_tx = rf_para_tx_8703b,
+	.wl_rf_para_rx = rf_para_rx_8703b,
 	.afh_5g = afh_5g_8703b,
 	/* REG_BTG_SEL doesn't seem to have a counterpart in the
 	 * vendor driver. Mathematically it's REG_PAD_CTRL1 + 3.
@@ -2096,7 +2098,6 @@ const struct rtw_chip_info rtw8703b_hw_spec = {
 	/* These registers are used to read (and print) from if
 	 * CONFIG_RTW88_DEBUGFS is enabled.
 	 */
-	.coex_info_hw_regs_num = 0,
 	.coex_info_hw_regs = NULL,
 };
 EXPORT_SYMBOL(rtw8703b_hw_spec);
