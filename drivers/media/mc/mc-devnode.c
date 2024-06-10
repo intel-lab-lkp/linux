@@ -240,6 +240,7 @@ void media_devnode_init(struct media_devnode *devnode)
 {
 	device_initialize(&devnode->dev);
 	devnode->dev.release = media_devnode_release;
+	devnode->minor = -1;
 }
 
 int __must_check media_devnode_register(struct media_devnode *devnode,
@@ -250,6 +251,9 @@ int __must_check media_devnode_register(struct media_devnode *devnode,
 	struct device *dev;
 	int minor;
 	int ret;
+
+	if (devnode->minor != -1)
+		return -EINVAL;
 
 	/* Part 1: Find a free minor number */
 	mutex_lock(&media_devnode_lock);
