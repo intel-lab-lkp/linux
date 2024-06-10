@@ -60,9 +60,9 @@ Client drivers are kept in a directory specific to the feature they
 provide, for example ``drivers/media/gpio/`` for GPIO expanders and
 ``drivers/media/i2c/`` for video-related chips.
 
-For the example configuration in figure, you will need a driver for your
-I2C adapter, and drivers for your I2C devices (usually one driver for each
-device).
+For the example configuration in the figure above, you will need one adapter
+driver for the I2C controller, and client drivers for your I2C targets. Usually
+one driver for each client.
 
 Outdated terminology
 --------------------
