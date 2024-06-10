@@ -25,6 +25,7 @@
 #include <linux/pci.h>
 #include <linux/acpi.h>
 #include <linux/backlight.h>
+#include <linux/dmi.h>
 #include <linux/slab.h>
 #include <linux/xarray.h>
 #include <linux/power_supply.h>
@@ -129,6 +130,35 @@ static struct amdgpu_acpi_priv {
 	struct amdgpu_atif atif;
 	struct amdgpu_atcs atcs;
 } amdgpu_acpi_priv;
+
+struct amdgpu_acpi_quirks {
+	bool ignore_min_input_signal;
+};
+
+static const struct dmi_system_id amdgpu_acpi_quirk_table[] = {
+	{
+		/* the Framework Laptop 13 (AMD Ryzen) and 16 (AMD Ryzen) */
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Framework"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "AMD Ryzen"),
+			DMI_MATCH(DMI_PRODUCT_FAMILY, "Laptop"),
+		},
+		.driver_data = &(struct amdgpu_acpi_quirks) {
+			.ignore_min_input_signal = true,
+		},
+	},
+	{}
+};
+
+static const struct amdgpu_acpi_quirks *amdgpu_acpi_get_quirks(void)
+{
+	const struct dmi_system_id *dmi_id;
+
+	dmi_id = dmi_first_match(amdgpu_acpi_quirk_table);
+	if (!dmi_id)
+		return NULL;
+	return dmi_id->driver_data;
+}
 
 /* Call the ATIF method
  */
@@ -1388,6 +1418,7 @@ bool amdgpu_acpi_should_gpu_reset(struct amdgpu_device *adev)
  */
 void amdgpu_acpi_detect(void)
 {
+	const struct amdgpu_acpi_quirks *quirks = amdgpu_acpi_get_quirks();
 	struct amdgpu_atif *atif = &amdgpu_acpi_priv.atif;
 	struct amdgpu_atcs *atcs = &amdgpu_acpi_priv.atcs;
 	struct pci_dev *pdev = NULL;
@@ -1428,6 +1459,10 @@ void amdgpu_acpi_detect(void)
 			DRM_DEBUG_DRIVER("Call to QUERY_BACKLIGHT_TRANSFER_CHARACTERISTICS failed: %d\n",
 					ret);
 			atif->backlight_caps.caps_valid = false;
+		}
+		if (quirks && quirks->ignore_min_input_signal) {
+			DRM_INFO("amdgpu_acpi quirk: min_input_signal=0\n");
+			atif->backlight_caps.min_input_signal = 0;
 		}
 	} else {
 		atif->backlight_caps.caps_valid = false;
