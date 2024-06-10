@@ -1867,6 +1867,11 @@ static void vgxy61_remove(struct i2c_client *client)
 }
 
 static const struct of_device_id vgxy61_dt_ids[] = {
+	{ .compatible = "st,vgxy61" },
+	/*
+	 * Previously the driver was named 'st-vgxy61' instead of simply
+	 * 'vgxy61', keep it for retrocompatibility purposes.
+	 */
 	{ .compatible = "st,st-vgxy61" },
 	{ /* sentinel */ }
 };
