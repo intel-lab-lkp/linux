@@ -329,6 +329,7 @@ void fdls_send_tport_abts(struct fnic_iport_s *iport,
 						  struct fnic_tport_s *tport);
 void fdls_delete_tport(struct fnic_iport_s *iport,
 					   struct fnic_tport_s *tport);
+void fdls_fdmi_timer_callback(struct timer_list *t);
 
 /* fnic_fcs.c */
 void fnic_fdls_init(struct fnic *fnic, int usefip);
@@ -366,4 +367,3 @@ struct fnic_tport_s *fnic_find_tport_by_wwpn(struct fnic_iport_s *iport,
 		uint64_t  wwpn);
 
 #endif /* _FNIC_FDLS_H_ */
-
