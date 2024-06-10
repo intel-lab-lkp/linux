@@ -7,9 +7,12 @@
  * Charles University, Faculty of Mathematics and Physics
  */
 
+#include <linux/array_size.h>
 #include <linux/buffer_head.h>
 #include <linux/fs.h>
 #include "swab.h"
+
+#define FT_SHIFT 12
 
 /*
  * functions used for retyping
@@ -146,40 +149,29 @@ ufs_set_de_namlen(struct super_block *sb, struct ufs_dir_entry *de, u16 value)
 		de->d_u.d_44.d_namlen = value; /* XXX this seems wrong */
 }
 
+static const unsigned char ufs_mode_to_dt[] = {
+	[S_IFSOCK >> FT_SHIFT] = DT_SOCK,
+	[S_IFLNK >> FT_SHIFT] = DT_LNK,
+	[S_IFREG >> FT_SHIFT] = DT_REG,
+	[S_IFBLK >> FT_SHIFT] = DT_BLK,
+	[S_IFDIR >> FT_SHIFT] = DT_DIR,
+	[S_IFCHR >> FT_SHIFT] = DT_CHR,
+	[S_IFIFO >> FT_SHIFT] = DT_FIFO,
+	[0] = DT_UNKNOWN
+};
+
 static inline void
 ufs_set_de_type(struct super_block *sb, struct ufs_dir_entry *de, int mode)
 {
 	if ((UFS_SB(sb)->s_flags & UFS_DE_MASK) != UFS_DE_44BSD)
 		return;
 
-	/*
-	 * TODO turn this into a table lookup
-	 */
-	switch (mode & S_IFMT) {
-	case S_IFSOCK:
-		de->d_u.d_44.d_type = DT_SOCK;
-		break;
-	case S_IFLNK:
-		de->d_u.d_44.d_type = DT_LNK;
-		break;
-	case S_IFREG:
-		de->d_u.d_44.d_type = DT_REG;
-		break;
-	case S_IFBLK:
-		de->d_u.d_44.d_type = DT_BLK;
-		break;
-	case S_IFDIR:
-		de->d_u.d_44.d_type = DT_DIR;
-		break;
-	case S_IFCHR:
-		de->d_u.d_44.d_type = DT_CHR;
-		break;
-	case S_IFIFO:
-		de->d_u.d_44.d_type = DT_FIFO;
-		break;
-	default:
+	unsigned int mode_index = (mode & S_IFMT) >> FT_SHIFT;
+
+	if (mode_index < ARRAY_SIZE(ufs_mode_to_dt))
+		de->d_u.d_44.d_type = ufs_mode_to_dt[mode_index];
+	else
 		de->d_u.d_44.d_type = DT_UNKNOWN;
-	}
 }
 
 static inline u32
