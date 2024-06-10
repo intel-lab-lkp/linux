@@ -652,6 +652,33 @@ static struct pci_ops dw_pcie_ops = {
 	.write = pci_generic_config_write,
 };
 
+static int dw_pcie_num_atu_regions(struct resource_entry *entry)
+{
+	return DIV_ROUND_UP(resource_size(entry->res), SZ_4G);
+}
+
+static int dw_pcie_prog_outbound_atu_multi(struct dw_pcie *pci, int type,
+						struct resource_entry *entry)
+{
+	int idx, ret, num_regions;
+
+	num_regions = dw_pcie_num_atu_regions(entry);
+
+	for (idx = 0; idx < num_regions; idx++) {
+		dw_pcie_writel_dbi(pci, PCIE_ATU_VIEWPORT, idx);
+		ret = dw_pcie_prog_outbound_atu(pci, idx, PCIE_ATU_TYPE_MEM,
+						entry->res->start,
+						entry->res->start - entry->offset,
+						resource_size(entry->res)/4);
+
+		if (ret)
+			goto err;
+	}
+
+err:
+	return ret;
+}
+
 static int dw_pcie_iatu_setup(struct dw_pcie_rp *pp)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
@@ -682,10 +709,13 @@ static int dw_pcie_iatu_setup(struct dw_pcie_rp *pp)
 		if (pci->num_ob_windows <= ++i)
 			break;
 
-		ret = dw_pcie_prog_outbound_atu(pci, i, PCIE_ATU_TYPE_MEM,
-						entry->res->start,
-						entry->res->start - entry->offset,
-						resource_size(entry->res));
+		if (resource_size(entry->res) > SZ_4G)
+			ret = dw_pcie_prog_outbound_atu_multi(pci, PCIE_ATU_TYPE_MEM, entry);
+		else
+			ret = dw_pcie_prog_outbound_atu(pci, i, PCIE_ATU_TYPE_MEM,
+							entry->res->start,
+							entry->res->start - entry->offset,
+							resource_size(entry->res));
 		if (ret) {
 			dev_err(pci->dev, "Failed to set MEM range %pr\n",
 				entry->res);
