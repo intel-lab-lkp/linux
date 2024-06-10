@@ -62,6 +62,7 @@ struct media_entity_notify {
  *	       request (and thus the buffer) must be available to the driver.
  *	       And once a buffer is queued, then the driver can complete
  *	       or delete objects from the request before req_queue exits.
+ * @release: Release the resources of the media device.
  */
 struct media_device_ops {
 	int (*link_notify)(struct media_link *link, u32 flags,
@@ -70,6 +71,7 @@ struct media_device_ops {
 	void (*req_free)(struct media_request *req);
 	int (*req_validate)(struct media_request *req);
 	void (*req_queue)(struct media_request *req);
+	void (*release)(struct media_device *mdev);
 };
 
 /**
@@ -218,6 +220,32 @@ struct usb_device;
  * if the field begins with '\0'.
  */
 void media_device_init(struct media_device *mdev);
+
+/**
+ * media_device_get() - atomically increment the reference count for the media
+ * device
+ *
+ * Returns: the media device
+ *
+ * @mdev: media device
+ */
+static inline struct media_device *media_device_get(struct media_device *mdev)
+{
+	get_device(&mdev->devnode.dev);
+
+	return mdev;
+}
+
+/**
+ * media_device_put() - atomically decrement the reference count for the media
+ * device
+ *
+ * @mdev: media device
+ */
+static inline void media_device_put(struct media_device *mdev)
+{
+	put_device(&mdev->devnode.dev);
+}
 
 /**
  * media_device_cleanup() - Cleanups a media device element
@@ -433,6 +461,13 @@ void __media_device_usb_init(struct media_device *mdev,
 
 #else
 static inline void media_device_init(struct media_device *mdev)
+{
+}
+static inline struct media_device *media_device_get(struct media_device *mdev)
+{
+	return NULL;
+}
+static inline void media_device_put(struct media_device *mdev)
 {
 }
 static inline int media_device_register(struct media_device *mdev)

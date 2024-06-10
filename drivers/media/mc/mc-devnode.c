@@ -200,6 +200,7 @@ static const struct file_operations media_devnode_fops = {
 void media_devnode_init(struct media_devnode *devnode)
 {
 	device_initialize(&devnode->dev);
+	devnode->dev.release = media_devnode_release;
 }
 
 int __must_check media_devnode_register(struct media_devnode *devnode,
@@ -229,7 +230,6 @@ int __must_check media_devnode_register(struct media_devnode *devnode,
 
 	devnode->dev.bus = &media_bus_type;
 	devnode->dev.devt = MKDEV(MAJOR(media_dev_t), devnode->minor);
-	devnode->dev.release = media_devnode_release;
 	if (devnode->parent)
 		devnode->dev.parent = devnode->parent;
 	dev_set_name(&devnode->dev, "media%d", devnode->minor);

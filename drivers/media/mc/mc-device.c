@@ -700,6 +700,31 @@ void media_device_unregister_entity_notify(struct media_device *mdev,
 }
 EXPORT_SYMBOL_GPL(media_device_unregister_entity_notify);
 
+static void __media_device_release(struct media_device *mdev)
+{
+	dev_dbg(mdev->dev, "Media device released\n");
+
+	ida_destroy(&mdev->entity_internal_idx);
+	mdev->entity_internal_idx_max = 0;
+	media_graph_walk_cleanup(&mdev->pm_count_walk);
+	mutex_destroy(&mdev->graph_mutex);
+	mutex_destroy(&mdev->req_queue_mutex);
+}
+
+static void media_device_release(struct media_devnode *devnode)
+{
+	struct media_device *mdev = to_media_device(devnode);
+
+	if (mdev->ops && mdev->ops->release) {
+		/*
+		 * If release op isn't set, __media_device_release() is called
+		 * via media_device_cleanup().
+		 */
+		__media_device_release(mdev);
+		mdev->ops->release(mdev);
+	}
+}
+
 void media_device_init(struct media_device *mdev)
 {
 	INIT_LIST_HEAD(&mdev->entities);
@@ -713,6 +738,7 @@ void media_device_init(struct media_device *mdev)
 	ida_init(&mdev->entity_internal_idx);
 	atomic_set(&mdev->request_id, 0);
 
+	mdev->devnode.release = media_device_release;
 	media_devnode_init(&mdev->devnode);
 
 	if (!*mdev->bus_info)
@@ -725,12 +751,9 @@ EXPORT_SYMBOL_GPL(media_device_init);
 
 void media_device_cleanup(struct media_device *mdev)
 {
-	ida_destroy(&mdev->entity_internal_idx);
-	mdev->entity_internal_idx_max = 0;
-	media_graph_walk_cleanup(&mdev->pm_count_walk);
-	mutex_destroy(&mdev->graph_mutex);
-	mutex_destroy(&mdev->req_queue_mutex);
-	put_device(&mdev->devnode.dev);
+	WARN_ON(mdev->ops && mdev->ops->release);
+	__media_device_release(mdev);
+	media_device_put(mdev);
 }
 EXPORT_SYMBOL_GPL(media_device_cleanup);
 
