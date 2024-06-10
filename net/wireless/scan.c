@@ -1891,6 +1891,10 @@ __cfg80211_bss_update(struct cfg80211_registered_device *rdev,
 	found = rb_find_bss(rdev, tmp, BSS_CMP_REGULAR);
 
 	if (found) {
+		if (tmp->bss_source == BSS_SOURCE_STA_PROFILE &&
+		    found->bss_source != BSS_SOURCE_STA_PROFILE)
+			goto free_ies;
+
 		if (!cfg80211_update_known_bss(rdev, found, tmp, signal_valid))
 			return NULL;
 	} else {
