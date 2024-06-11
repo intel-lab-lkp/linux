@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/reset/brcm,bcm63138-pmb.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Broadcom BCM63138 Processor Monitor Bus
+
+description: This document describes the BCM63138 processor monitor bus.
+
+maintainers:
+  - Philipp Zabel <p.zabel@pengutronix.de>
+  - Kanak Shilledar <kanakshilledar111@protonmail.com>
+
+properties:
+  compatible:
+    const: brcm,bcm63138-pmb
+
+  reg:
+    description: base register address and size for this bus controller
+    maxItems: 1
+
+  "#reset-cells":
+    description: |
+      must be 2 first cell is the address within the bus instance
+      designated by the phandle, and the second is the number of zones
+      for this peripheral.
+    const: 2
+
+required:
+  - compatible
+  - reg
+  - "#reset-cells"
+
+additionalProperties: false
+
+examples:
+  - |
+    pmb0: reset-controller@4800c0 {
+        compatible = "brcm,bcm63138-pmb";
+        reg = <0x4800c0 0x10>;
+        #reset-cells = <2>;
+    };
