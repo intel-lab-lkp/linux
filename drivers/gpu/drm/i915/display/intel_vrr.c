@@ -122,10 +122,11 @@ is_cmrr_frac_required(struct intel_crtc_state *crtc_state)
 
 	actual_refresh_k =
 		drm_mode_vrefresh(adjusted_mode) * FIXED_POINT_PRECISION;
-	pixel_clock_per_line =
-		adjusted_mode->crtc_clock * 1000 / adjusted_mode->crtc_htotal;
+	pixel_clock_per_line = DIV_ROUND_UP(adjusted_mode->crtc_clock * 1000,
+					    adjusted_mode->crtc_htotal);
 	calculated_refresh_k =
-		pixel_clock_per_line * FIXED_POINT_PRECISION / adjusted_mode->crtc_vtotal;
+		DIV_ROUND_UP(pixel_clock_per_line * FIXED_POINT_PRECISION,
+			     adjusted_mode->crtc_vtotal);
 
 	if ((actual_refresh_k - calculated_refresh_k) < CMRR_PRECISION_TOLERANCE)
 		return false;
@@ -149,7 +150,8 @@ cmrr_get_vtotal(struct intel_crtc_state *crtc_state, bool video_mode_required)
 
 	crtc_state->cmrr.cmrr_n =
 		desired_refresh_rate * adjusted_mode->crtc_htotal * multiplier_n;
-	vtotal = (adjusted_mode->crtc_clock * 1000 * multiplier_n) / crtc_state->cmrr.cmrr_n;
+	vtotal = DIV_ROUND_UP(adjusted_mode->crtc_clock * 1000 * multiplier_n,
+			      crtc_state->cmrr.cmrr_n);
 	adjusted_pixel_rate = adjusted_mode->crtc_clock * 1000 * multiplier_m;
 	crtc_state->cmrr.cmrr_m = do_div(adjusted_pixel_rate, crtc_state->cmrr.cmrr_n);
 
