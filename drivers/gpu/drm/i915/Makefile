@@ -15,6 +15,11 @@ subdir-ccflags-y += -DI915
 
 subdir-ccflags-y += -I$(src)
 
+# Shared ABI definitions
+subdir-ccflags-y += \
+	-I$(srctree)/drivers/gpu/drm/intel/guc/ \
+	-I$(srctree)/drivers/gpu/drm/intel/guc/abi
+
 # Please keep these build lists sorted!
 
 # core driver code
