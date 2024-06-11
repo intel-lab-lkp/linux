@@ -127,6 +127,7 @@ static bool __read_mostly allow_mismatched_32bit_el0;
  * seen at least one CPU capable of 32-bit EL0.
  */
 DEFINE_STATIC_KEY_FALSE(arm64_mismatched_32bit_el0);
+EXPORT_SYMBOL_GPL(arm64_mismatched_32bit_el0);
 
 /*
  * Mask of CPUs supporting 32-bit EL0.
@@ -1614,6 +1615,7 @@ const struct cpumask *system_32bit_el0_cpumask(void)
 
 	return cpu_possible_mask;
 }
+EXPORT_SYMBOL_GPL(system_32bit_el0_cpumask);
 
 static int __init parse_32bit_el0_param(char *str)
 {
