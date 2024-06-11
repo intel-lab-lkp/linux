@@ -437,5 +437,6 @@ static struct platform_driver exynos_pcie_driver = {
 	},
 };
 module_platform_driver(exynos_pcie_driver);
+MODULE_DESCRIPTION("PCIe host controller driver for Samsung Exynos SoCs");
 MODULE_LICENSE("GPL v2");
 MODULE_DEVICE_TABLE(of, exynos_pcie_of_match);

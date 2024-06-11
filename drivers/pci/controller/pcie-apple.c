@@ -839,4 +839,5 @@ static struct platform_driver apple_pcie_driver = {
 };
 module_platform_driver(apple_pcie_driver);
 
+MODULE_DESCRIPTION("PCIe host bridge driver for Apple system-on-chips");
 MODULE_LICENSE("GPL v2");

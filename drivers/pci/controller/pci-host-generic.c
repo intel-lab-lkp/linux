@@ -86,4 +86,5 @@ static struct platform_driver gen_pci_driver = {
 };
 module_platform_driver(gen_pci_driver);
 
+MODULE_DESCRIPTION("Simple, generic PCI host controller driver");
 MODULE_LICENSE("GPL v2");
