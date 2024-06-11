@@ -49,7 +49,7 @@ static int kvm_gmem_prepare_folio(struct inode *inode, pgoff_t index, struct fol
 	return 0;
 }
 
-static struct folio *kvm_gmem_get_folio(struct inode *inode, pgoff_t index, bool prepare)
+static struct folio *__kvm_gmem_get_folio(struct inode *inode, pgoff_t index)
 {
 	struct folio *folio;
 
@@ -57,6 +57,19 @@ static struct folio *kvm_gmem_get_folio(struct inode *inode, pgoff_t index, bool
 	folio = filemap_grab_folio(inode->i_mapping, index);
 	if (IS_ERR(folio))
 		return folio;
+
+	if (folio_test_hwpoison(folio)) {
+		folio_unlock(folio);
+		folio_put(folio);
+		folio = ERR_PTR(-EHWPOISON);
+	}
+
+	return folio;
+}
+
+static struct folio *kvm_gmem_get_folio(struct inode *inode, pgoff_t index, bool prepare)
+{
+	struct folio *folio = __kvm_gmem_get_folio(inode, index);
 
 	/*
 	 * Use the up-to-date flag to track whether or not the memory has been
@@ -549,7 +562,6 @@ static int __kvm_gmem_get_pfn(struct file *file, struct kvm_memory_slot *slot,
 	struct kvm_gmem *gmem = file->private_data;
 	struct folio *folio;
 	struct page *page;
-	int r;
 
 	if (file != slot->gmem.file) {
 		WARN_ON_ONCE(slot->gmem.file);
@@ -566,23 +578,14 @@ static int __kvm_gmem_get_pfn(struct file *file, struct kvm_memory_slot *slot,
 	if (IS_ERR(folio))
 		return PTR_ERR(folio);
 
-	if (folio_test_hwpoison(folio)) {
-		r = -EHWPOISON;
-		goto out_unlock;
-	}
-
 	page = folio_file_page(folio, index);
 
 	*pfn = page_to_pfn(page);
 	if (max_order)
 		*max_order = 0;
 
-	r = 0;
-
-out_unlock:
 	folio_unlock(folio);
-
-	return r;
+	return 0;
 }
 
 int kvm_gmem_get_pfn(struct kvm *kvm, struct kvm_memory_slot *slot,
