@@ -36,6 +36,7 @@ Currently, these files are in /proc/sys/vm:
 - dirtytime_expire_seconds
 - dirty_writeback_centisecs
 - drop_caches
+- enable_soft_offline
 - extfrag_threshold
 - highmem_is_dirtyable
 - hugetlb_shm_group
@@ -267,6 +268,20 @@ used::
 These are informational only.  They do not mean that anything is wrong
 with your system.  To disable them, echo 4 (bit 2) into drop_caches.
 
+enable_soft_offline
+===================
+Control whether to soft offline memory pages that have (excessive) correctable
+memory errors.  It is your call to choose between reliability (stay away from
+fragile physical memory) vs performance (brought by HugeTLB or transparent
+hugepages).
+
+When setting to 1, kernel attempts to soft offline the page when it thinks
+needed.  For in-use page, page content will be migrated to a new page.  If
+the oringinal hugepage is a HugeTLB hugepage, regardless of in-use or free,
+it will be dissolved into raw pages, and the capacity of the HugeTLB pool
+will reduce by 1.  If the original hugepage is a transparent hugepage, it
+will be split into raw pages.  When setting to 0, kernel won't attempt to
+soft offline the page.  Its default value is 1.
 
 extfrag_threshold
 =================
