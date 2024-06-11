@@ -582,21 +582,14 @@ static int kvm_map_page_fast(struct kvm_vcpu *vcpu, unsigned long gpa, bool writ
 	if (changed) {
 		kvm_set_pte(ptep, new);
 		pfn = kvm_pte_pfn(new);
-	}
-	spin_unlock(&kvm->mmu_lock);
+		if (kvm_pte_young(changed))
+			kvm_set_pfn_accessed(pfn);
 
-	/*
-	 * Fixme: pfn may be freed after mmu_lock
-	 * kvm_try_get_pfn(pfn)/kvm_release_pfn pair to prevent this?
-	 */
-	if (kvm_pte_young(changed))
-		kvm_set_pfn_accessed(pfn);
-
-	if (kvm_pte_dirty(changed)) {
-		mark_page_dirty(kvm, gfn);
-		kvm_set_pfn_dirty(pfn);
+		if (kvm_pte_dirty(changed)) {
+			mark_page_dirty(kvm, gfn);
+			kvm_set_pfn_dirty(pfn);
+		}
 	}
-	return ret;
 out:
 	spin_unlock(&kvm->mmu_lock);
 	return ret;
