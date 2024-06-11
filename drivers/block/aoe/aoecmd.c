@@ -897,8 +897,7 @@ aoecmd_sleepwork(struct work_struct *work)
 		set_capacity_and_notify(d->gd, d->ssize);
 
 		spin_lock_irq(&d->lock);
-		d->flags |= DEVFL_UP;
-		d->flags &= ~DEVFL_NEWSIZE;
+		d->flags = (d->flags | DEVFL_UP) & ~DEVFL_NEWSIZE;
 		spin_unlock_irq(&d->lock);
 	}
 }
