@@ -27,10 +27,15 @@
 #include <linux/of_irq.h>
 #include <linux/of_device.h>
 #include <linux/regmap.h>
+#include <linux/pps_kernel.h>
 #include <linux/watchdog.h>
 
 /* Control register 1 */
 #define PCF2127_REG_CTRL1		0x00
+/* Change interrupt. 1=seconds change, 2=minutes */
+#define PCF2127_CTRL1_MSI_MASK			GENMASK(1, 0)
+#define PCF2127_BIT_CTRL1_SI			BIT(0)
+#define PCF2127_BIT_CTRL1_MI			BIT(1)
 #define PCF2127_BIT_CTRL1_POR_OVRD		BIT(3)
 #define PCF2127_BIT_CTRL1_TSF1			BIT(4)
 #define PCF2127_BIT_CTRL1_STOP			BIT(5)
@@ -41,6 +46,7 @@
 #define PCF2127_BIT_CTRL2_AF			BIT(4)
 #define PCF2127_BIT_CTRL2_TSF2			BIT(5)
 #define PCF2127_BIT_CTRL2_WDTF			BIT(6)
+#define PCF2127_BIT_CTRL2_MSF			BIT(7)
 /* Control register 3 */
 #define PCF2127_REG_CTRL3		0x02
 #define PCF2127_BIT_CTRL3_BLIE			BIT(0)
@@ -92,6 +98,7 @@
 /* Mask for currently enabled interrupts */
 #define PCF2127_CTRL1_IRQ_MASK (PCF2127_BIT_CTRL1_TSF1)
 #define PCF2127_CTRL2_IRQ_MASK ( \
+		PCF2127_CTRL1_MSI_MASK | \
 		PCF2127_BIT_CTRL2_AF | \
 		PCF2127_BIT_CTRL2_WDTF | \
 		PCF2127_BIT_CTRL2_TSF2)
@@ -143,6 +150,7 @@
 #define PCF2131_BIT_INT_SI		BIT(4)
 #define PCF2131_BIT_INT_MI		BIT(5)
 #define PCF2131_CTRL2_IRQ_MASK ( \
+		PCF2127_CTRL1_MSI_MASK | \
 		PCF2127_BIT_CTRL2_AF | \
 		PCF2127_BIT_CTRL2_WDTF)
 #define PCF2131_CTRL4_IRQ_MASK ( \
@@ -207,6 +215,7 @@ struct pcf2127 {
 	bool irq_enabled;
 	time64_t ts[PCF2127_MAX_TS_SUPPORTED]; /* Timestamp values. */
 	bool ts_valid[PCF2127_MAX_TS_SUPPORTED];  /* Timestamp valid indication. */
+	struct pps_device *pps;
 };
 
 /*
@@ -604,6 +613,20 @@ static int pcf2127_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *alrm)
 	return pcf2127_rtc_alarm_irq_enable(dev, alrm->enabled);
 }
 
+static int pcf2127_rtc_pps_irq_enable(struct device *dev, u32 enable)
+{
+	struct pcf2127 *pcf2127 = dev_get_drvdata(dev);
+	int ret;
+
+	ret = regmap_update_bits(pcf2127->regmap, PCF2127_REG_CTRL1,
+				 PCF2127_CTRL1_MSI_MASK,
+				 enable ? PCF2127_BIT_CTRL1_SI : 0);
+	if (ret)
+		return ret;
+
+	return pcf2127_wdt_active_ping(&pcf2127->wdd);
+}
+
 /*
  * This function reads one timestamp function data, caller is responsible for
  * calling pcf2127_wdt_active_ping()
@@ -667,8 +690,12 @@ static void pcf2127_rtc_ts_snapshot(struct device *dev, int ts_id)
 static irqreturn_t pcf2127_rtc_irq(int irq, void *dev)
 {
 	struct pcf2127 *pcf2127 = dev_get_drvdata(dev);
+	struct pps_event_time ts;
 	unsigned int ctrl2;
 	int ret = 0;
+
+	/* First of all we get the time stamp... */
+	pps_get_ts(&ts);
 
 	ret = regmap_read(pcf2127->regmap, PCF2127_REG_CTRL2, &ctrl2);
 	if (ret)
@@ -728,6 +755,8 @@ static irqreturn_t pcf2127_rtc_irq(int irq, void *dev)
 
 	if (ctrl2 & PCF2127_BIT_CTRL2_AF)
 		rtc_update_irq(pcf2127->rtc, 1, RTC_IRQF | RTC_AF);
+	else if (ctrl2 & PCF2127_BIT_CTRL2_MSF)
+		pps_event(pps, &ts, PPS_CAPTUREASSERT, NULL);
 
 	pcf2127_wdt_active_ping(&pcf2127->wdd);
 
@@ -1157,6 +1186,26 @@ static int pcf2127_probe(struct device *dev, struct regmap *regmap,
 	if (alarm_irq > 0 || device_property_read_bool(dev, "wakeup-source")) {
 		device_init_wakeup(dev, true);
 		set_bit(RTC_FEATURE_ALARM, pcf2127->rtc->features);
+	}
+
+	if (alarm_irq > 0 && device_property_read_bool(dev, "pps-source")) {
+		struct pps_source_info pps_info = {
+			.mode = PPS_CAPTUREASSERT | PPS_OFFSETASSERT |
+				PPS_ECHOASSERT | PPS_CANWAIT | PPS_TSFMT_TSPEC,
+			.owner = THIS_MODULE,
+		};
+
+		snprintf(&pps_info.name, PPS_MAX_NAME_LEN - 1, "%s", dev_name(dev));
+
+		pcf2127->pps = pps_register_source(&pps_info, PPS_CAPTUREASSERT | PPS_OFFSETASSERT);
+		if (IS_ERR(pcf2127->pps)) {
+			dev_err(dev, "failed to register PPS source\n");
+			return PTR_ERR(pcf2127->pps);
+		}
+
+		ret = pcf2127_rtc_pps_irq_enable(dev, TRUE);
+		if (ret)
+			return ret;
 	}
 
 	if (pcf2127->cfg->has_int_a_b) {
