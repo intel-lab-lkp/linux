@@ -474,6 +474,7 @@ struct lan78xx_net {
 
 /* define external phy id */
 #define	PHY_LAN8835			(0x0007C130)
+#define PHY_LAN8841			(0x00221650)
 #define	PHY_KSZ9031RNX			(0x00221620)
 
 /* use ethtool to change the level for any given device */
@@ -2322,6 +2323,13 @@ static struct phy_device *lan7801_phy_init(struct lan78xx_net *dev)
 			netdev_err(dev->net, "Failed to register fixup for PHY_LAN8835\n");
 			return NULL;
 		}
+		/* external PHY fixup for LAN8841 */
+		ret = phy_register_fixup_for_uid(PHY_LAN8841, 0xfffffff0,
+						 lan8835_fixup);
+		if (ret < 0) {
+			netdev_err(dev->net, "Failed to register fixup for PHY_LAN8841\n");
+			return NULL;
+		}
 		/* add more external PHY fixup here if needed */
 
 		phydev->is_internal = false;
@@ -2384,6 +2392,8 @@ static int lan78xx_phy_init(struct lan78xx_net *dev)
 				phy_unregister_fixup_for_uid(PHY_KSZ9031RNX,
 							     0xfffffff0);
 				phy_unregister_fixup_for_uid(PHY_LAN8835,
+							     0xfffffff0);
+				phy_unregister_fixup_for_uid(PHY_LAN8841,
 							     0xfffffff0);
 			}
 		}
@@ -4243,6 +4253,7 @@ static void lan78xx_disconnect(struct usb_interface *intf)
 
 	phy_unregister_fixup_for_uid(PHY_KSZ9031RNX, 0xfffffff0);
 	phy_unregister_fixup_for_uid(PHY_LAN8835, 0xfffffff0);
+	phy_unregister_fixup_for_uid(PHY_LAN8841, 0xfffffff0);
 
 	phy_disconnect(net->phydev);
 
