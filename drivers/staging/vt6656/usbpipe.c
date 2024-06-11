@@ -287,7 +287,7 @@ static int vnt_rx_data(struct vnt_private *priv, struct vnt_rcb *ptr_rcb,
 		return false;
 	}
 
-	if ((bytes_received > 2372) || (bytes_received <= 40)) {
+	if (bytes_received > 2372 || bytes_received <= 40) {
 		/* Frame Size error drop this packet.*/
 		dev_dbg(&priv->usb->dev, "------ WRONG Length 2\n");
 		return false;
@@ -299,9 +299,9 @@ static int vnt_rx_data(struct vnt_private *priv, struct vnt_rcb *ptr_rcb,
 	/* if SQ3 the range is 24~27, if no SQ3 the range is 20~23 */
 
 	/*Fix hardware bug => PLCP_Length error */
-	if (((bytes_received - head->pay_load_len) > 27) ||
-	    ((bytes_received - head->pay_load_len) < 24) ||
-	    (bytes_received < head->pay_load_len)) {
+	if ((bytes_received - head->pay_load_len) > 27 ||
+	    (bytes_received - head->pay_load_len) < 24 ||
+	    bytes_received < head->pay_load_len) {
 		dev_dbg(&priv->usb->dev, "Wrong PLCP Length %x\n",
 			head->pay_load_len);
 		return false;

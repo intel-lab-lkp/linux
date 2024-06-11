@@ -11,7 +11,7 @@ TODO:
 - switch to use LIB80211
 - switch to use MAC80211
 - use kernel coding style
-- checkpatch.pl fixes
+- checkpatch.pl fixes -- done
 - sparse fixes
 - integrate with drivers/net/wireless
 

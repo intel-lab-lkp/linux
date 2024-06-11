@@ -339,8 +339,8 @@ static int vnt_init_registers(struct vnt_private *priv)
 
 	/* load vt3266 calibration parameters in EEPROM */
 	if (priv->rf_type == RF_VT3226D0) {
-		if ((priv->eeprom[EEP_OFS_MAJOR_VER] == 0x1) &&
-		    (priv->eeprom[EEP_OFS_MINOR_VER] >= 0x4)) {
+		if (priv->eeprom[EEP_OFS_MAJOR_VER] == 0x1 &&
+		    priv->eeprom[EEP_OFS_MINOR_VER] >= 0x4) {
 			calib_tx_iq = priv->eeprom[EEP_OFS_CALIB_TX_IQ];
 			calib_tx_dc = priv->eeprom[EEP_OFS_CALIB_TX_DC];
 			calib_rx_iq = priv->eeprom[EEP_OFS_CALIB_RX_IQ];
