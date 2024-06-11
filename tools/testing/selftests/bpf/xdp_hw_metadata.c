@@ -495,31 +495,6 @@ peek:
 	return 0;
 }
 
-static int rxq_num(const char *ifname)
-{
-	struct ethtool_channels ch = {
-		.cmd = ETHTOOL_GCHANNELS,
-	};
-
-	struct ifreq ifr = {
-		.ifr_data = (void *)&ch,
-	};
-	strncpy(ifr.ifr_name, ifname, IF_NAMESIZE - 1);
-	int fd, ret;
-
-	fd = socket(AF_UNIX, SOCK_DGRAM, 0);
-	if (fd < 0)
-		error(1, errno, "socket");
-
-	ret = ioctl(fd, SIOCETHTOOL, &ifr);
-	if (ret < 0)
-		error(1, errno, "ioctl(SIOCETHTOOL)");
-
-	close(fd);
-
-	return ch.rx_count + ch.combined_count;
-}
-
 static void hwtstamp_ioctl(int op, const char *ifname, struct hwtstamp_config *cfg)
 {
 	struct ifreq ifr = {
@@ -668,6 +643,8 @@ int main(int argc, char *argv[])
 	read_args(argc, argv);
 
 	rxq = rxq_num(ifname);
+	if (rxq < 0)
+		error(1, -rxq, "rxq_num");
 
 	printf("rxq: %d\n", rxq);
 

@@ -579,6 +579,33 @@ int set_hw_ring_size(char *ifname, struct ethtool_ringparam *ring_param)
 	return 0;
 }
 
+int rxq_num(const char *ifname)
+{
+	struct ethtool_channels ch = {
+		.cmd = ETHTOOL_GCHANNELS,
+	};
+	struct ifreq ifr = {
+		.ifr_data = (void *)&ch,
+	};
+	strncpy(ifr.ifr_name, ifname, IF_NAMESIZE - 1);
+	int fd, ret, err;
+
+	fd = socket(AF_UNIX, SOCK_DGRAM, 0);
+	if (fd < 0)
+		return -errno;
+
+	ret = ioctl(fd, SIOCETHTOOL, &ifr);
+	if (ret < 0) {
+		err = errno;
+		close(fd);
+		return -err;
+	}
+
+	close(fd);
+
+	return ch.rx_count + ch.combined_count;
+}
+
 struct send_recv_arg {
 	int		fd;
 	uint32_t	bytes;
