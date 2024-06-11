@@ -47,4 +47,40 @@
 			#power-domain-cells = <1>;
 		};
 	};
+
+	soc {
+		aobus_pinctrl: pinctrl@fe08e700 {
+			compatible = "amlogic,a4-aobus-pinctrl";
+			#address-cells = <2>;
+			#size-cells = <2>;
+			ranges;
+
+			ao_gpio: bank@fe08e700 {
+				reg = <0x0 0xfe08e700 0x0 0x04>,
+				      <0x0 0xfe08e704 0x0 0x60>;
+				reg-names = "mux", "gpio";
+				gpio-controller;
+				#gpio-cells = <2>;
+				gpio-ranges = <&aobus_pinctrl 0 0 8>;
+			};
+		};
+	};
+};
+
+&apb {
+	periphs_pinctrl: pinctrl@4000 {
+		compatible = "amlogic,a4-periphs-pinctrl";
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		gpio: bank@4000 {
+			reg = <0x0 0x4000 0x0 0x0050>,
+			      <0x0 0x40c0 0x0 0x0220>;
+			reg-names = "mux", "gpio";
+			gpio-controller;
+			#gpio-cells = <2>;
+			gpio-ranges = <&periphs_pinctrl 0 0 73>;
+		};
+	};
 };
