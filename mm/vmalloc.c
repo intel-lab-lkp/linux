@@ -3249,14 +3249,9 @@ static void vm_reset_perms(struct vm_struct *area)
 		}
 	}
 
-	/*
-	 * Set direct map to something invalid so that it won't be cached if
-	 * there are any accesses after the TLB flush, then flush the TLB and
-	 * reset the direct map permissions to the default.
-	 */
-	set_area_direct_map(area, set_direct_map_invalid_noflush);
-	_vm_unmap_aliases(start, end, flush_dmap);
+	/* Reset direct map permissions to default, then flush the TLB */
 	set_area_direct_map(area, set_direct_map_default_noflush);
+	_vm_unmap_aliases(start, end, flush_dmap);
 }
 
 static void delayed_vfree_work(struct work_struct *w)
