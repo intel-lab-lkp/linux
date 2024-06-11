@@ -3236,7 +3236,7 @@ static long kfd_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	amdkfd_ioctl_t *func;
 	const struct amdkfd_ioctl_desc *ioctl = NULL;
 	unsigned int nr = _IOC_NR(cmd);
-	char stack_kdata[128];
+	char stack_kdata[128] __attribute__((aligned(__alignof__(u64))));
 	char *kdata = NULL;
 	unsigned int usize, asize;
 	int retcode = -EINVAL;
