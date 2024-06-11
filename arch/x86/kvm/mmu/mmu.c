@@ -1307,15 +1307,6 @@ static bool __rmap_clear_dirty(struct kvm *kvm, struct kvm_rmap_head *rmap_head,
 	return flush;
 }
 
-/**
- * kvm_mmu_write_protect_pt_masked - write protect selected PT level pages
- * @kvm: kvm instance
- * @slot: slot to protect
- * @gfn_offset: start of the BITS_PER_LONG pages we care about
- * @mask: indicates which pages we should protect
- *
- * Used when we do not need to care about huge page mappings.
- */
 static void kvm_mmu_write_protect_pt_masked(struct kvm *kvm,
 				     struct kvm_memory_slot *slot,
 				     gfn_t gfn_offset, unsigned long mask)
@@ -1339,16 +1330,6 @@ static void kvm_mmu_write_protect_pt_masked(struct kvm *kvm,
 	}
 }
 
-/**
- * kvm_mmu_clear_dirty_pt_masked - clear MMU D-bit for PT level pages, or write
- * protect the page if the D-bit isn't supported.
- * @kvm: kvm instance
- * @slot: slot to clear D-bit
- * @gfn_offset: start of the BITS_PER_LONG pages we care about
- * @mask: indicates which pages we should clear D-bit
- *
- * Used for PML to re-log the dirty GPAs after userspace querying dirty_bitmap.
- */
 static void kvm_mmu_clear_dirty_pt_masked(struct kvm *kvm,
 					 struct kvm_memory_slot *slot,
 					 gfn_t gfn_offset, unsigned long mask)
@@ -1373,14 +1354,26 @@ static void kvm_mmu_clear_dirty_pt_masked(struct kvm *kvm,
 }
 
 /**
- * kvm_arch_mmu_enable_log_dirty_pt_masked - enable dirty logging for selected
- * PT level pages.
+ * kvm_arch_mmu_enable_log_dirty_pt_masked - (Re)Enable dirty logging for a set
+ * of GFNs
  *
- * It calls kvm_mmu_write_protect_pt_masked to write protect selected pages to
- * enable dirty logging for them.
+ * @kvm: kvm instance
+ * @slot: slot to containing the gfns to dirty log
+ * @gfn_offset: start of the BITS_PER_LONG pages we care about
+ * @mask: indicates which gfns to dirty log (1 == enable)
  *
- * We need to care about huge page mappings: e.g. during dirty logging we may
- * have such mappings.
+ * (Re)Enable dirty logging for the set of GFNs indicated by the slot,
+ * gfn_offset, and mask, e.g. after userspace has harvested dirty information
+ * and wants to re-log dirty GFNs for the next round of migration.
+ *
+ * If the slot was assumed to be "initially all dirty", write-protect hugepages
+ * to ensure they are split to 4KiB on the first write (KVM dirty logs at 4KiB
+ * granularity).  If eager page splitting is enabled, immediately try to split
+ * hugepages, e.g. so that vCPUs don't get saddled with the cost of the split.
+ *
+ * If Page-Modification Logging (PML) is enabled and the GFN doesn't need to be
+ * write-protected for other reasons, e.g. shadow paging, clear the Dirty Bit.
+ * Otherwise write-protect the GFN, i.e. clear the Writable Bit.
  */
 void kvm_arch_mmu_enable_log_dirty_pt_masked(struct kvm *kvm,
 				struct kvm_memory_slot *slot,
