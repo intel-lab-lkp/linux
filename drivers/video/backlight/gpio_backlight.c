@@ -5,7 +5,6 @@
 
 #include <linux/backlight.h>
 #include <linux/err.h>
-#include <linux/fb.h>
 #include <linux/gpio/consumer.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
@@ -81,12 +80,12 @@ static int gpio_backlight_probe(struct platform_device *pdev)
 	/* Set the initial power state */
 	if (!of_node || !of_node->phandle)
 		/* Not booted with device tree or no phandle link to the node */
-		bl->props.power = def_value ? FB_BLANK_UNBLANK
-					    : FB_BLANK_POWERDOWN;
+		bl->props.power = def_value ? BL_CORE_UNBLANK
+					    : BL_CORE_POWERDOWN;
 	else if (gpiod_get_value_cansleep(gbl->gpiod) == 0)
-		bl->props.power = FB_BLANK_POWERDOWN;
+		bl->props.power = BL_CORE_POWERDOWN;
 	else
-		bl->props.power = FB_BLANK_UNBLANK;
+		bl->props.power = BL_CORE_UNBLANK;
 
 	bl->props.brightness = 1;
 
