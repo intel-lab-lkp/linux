@@ -85,6 +85,20 @@ struct nstoken *open_netns(const char *name);
 void close_netns(struct nstoken *token);
 int send_recv_data(int lfd, int fd, uint32_t total_bytes);
 
+static inline __wsum checksum_nofold(const void *data, size_t len, __wsum sum)
+{
+	const uint16_t *words = (const uint16_t *)data;
+	int i;
+
+	for (i = 0; i < len / 2; i++)
+		sum += words[i];
+
+	if (len & 1)
+		sum += ((const unsigned char *)data)[len - 1];
+
+	return sum;
+}
+
 static __u16 csum_fold(__u32 csum)
 {
 	csum = (csum & 0xffff) + (csum >> 16);
