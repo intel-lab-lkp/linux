@@ -25,6 +25,7 @@
 #include <net/net_failover.h>
 #include <net/netdev_rx_queue.h>
 #include <net/netdev_queues.h>
+#include <uapi/linux/virtio_ring.h>
 
 static int napi_weight = NAPI_POLL_WEIGHT;
 module_param(napi_weight, int, 0444);
@@ -276,6 +277,25 @@ struct virtnet_rq_dma {
 	u16 need_sync;
 };
 
+struct virtnet_sq_dma {
+	union {
+		struct virtnet_sq_dma *next;
+		void *data;
+	};
+	dma_addr_t addr;
+	u32 len;
+	u8 num;
+};
+
+struct virtnet_sq_dma_info {
+	/* record for kfree */
+	void *p;
+
+	u32 free_num;
+
+	struct virtnet_sq_dma *free;
+};
+
 /* Internal representation of a send virtqueue */
 struct send_queue {
 	/* Virtqueue associated with this send _queue */
@@ -295,6 +315,11 @@ struct send_queue {
 
 	/* Record whether sq is in reset state. */
 	bool reset;
+
+	/* SQ is premapped mode or not. */
+	bool premapped;
+
+	struct virtnet_sq_dma_info dmainfo;
 };
 
 /* Internal representation of a receive virtqueue */
@@ -492,9 +517,11 @@ static void virtnet_sq_free_unused_buf(struct virtqueue *vq, void *buf);
 enum virtnet_xmit_type {
 	VIRTNET_XMIT_TYPE_SKB,
 	VIRTNET_XMIT_TYPE_XDP,
+	VIRTNET_XMIT_TYPE_DMA,
 };
 
-#define VIRTNET_XMIT_TYPE_MASK (VIRTNET_XMIT_TYPE_SKB | VIRTNET_XMIT_TYPE_XDP)
+#define VIRTNET_XMIT_TYPE_MASK (VIRTNET_XMIT_TYPE_SKB | VIRTNET_XMIT_TYPE_XDP \
+				| VIRTNET_XMIT_TYPE_DMA)
 
 static enum virtnet_xmit_type virtnet_xmit_ptr_strip(void **ptr)
 {
@@ -510,12 +537,178 @@ static void *virtnet_xmit_ptr_mix(void *ptr, enum virtnet_xmit_type type)
 	return (void *)((unsigned long)ptr | type);
 }
 
+static void virtnet_sq_unmap(struct send_queue *sq, void **data)
+{
+	struct virtnet_sq_dma *head, *tail, *p;
+	int i;
+
+	head = *data;
+
+	p = head;
+
+	for (i = 0; i < head->num; ++i) {
+		virtqueue_dma_unmap_page_attrs(sq->vq, p->addr, p->len,
+					       DMA_TO_DEVICE, 0);
+		tail = p;
+		p = p->next;
+	}
+
+	*data = tail->data;
+
+	tail->next = sq->dmainfo.free;
+	sq->dmainfo.free = head;
+	sq->dmainfo.free_num += head->num;
+}
+
+static void *virtnet_dma_chain_update(struct send_queue *sq,
+				      struct virtnet_sq_dma *head,
+				      struct virtnet_sq_dma *tail,
+				      u8 num, void *data)
+{
+	sq->dmainfo.free = tail->next;
+	sq->dmainfo.free_num -= num;
+	head->num = num;
+
+	tail->data = data;
+
+	return virtnet_xmit_ptr_mix(head, VIRTNET_XMIT_TYPE_DMA);
+}
+
+static struct virtnet_sq_dma *virtnet_sq_map_sg(struct send_queue *sq, int num, void *data)
+{
+	struct virtnet_sq_dma *head, *tail, *p;
+	struct scatterlist *sg;
+	dma_addr_t addr;
+	int i, err;
+
+	if (num > sq->dmainfo.free_num)
+		return NULL;
+
+	head = sq->dmainfo.free;
+	p = head;
+
+	tail = NULL;
+
+	for (i = 0; i < num; ++i) {
+		sg = &sq->sg[i];
+
+		addr = virtqueue_dma_map_page_attrs(sq->vq, sg_page(sg),
+						    sg->offset,
+						    sg->length, DMA_TO_DEVICE,
+						    0);
+		err = virtqueue_dma_mapping_error(sq->vq, addr);
+		if (err)
+			goto err;
+
+		sg->dma_address = addr;
+
+		tail = p;
+		tail->addr = sg->dma_address;
+		tail->len = sg->length;
+
+		p = p->next;
+	}
+
+	return virtnet_dma_chain_update(sq, head, tail, num, data);
+
+err:
+	if (tail) {
+		virtnet_dma_chain_update(sq, head, tail, i, data);
+		virtnet_sq_unmap(sq, (void **)&head);
+	}
+
+	return NULL;
+}
+
 static int virtnet_add_outbuf(struct send_queue *sq, int num, void *data,
 			      enum virtnet_xmit_type type)
 {
-	return virtqueue_add_outbuf(sq->vq, sq->sg, num,
-				    virtnet_xmit_ptr_mix(data, type),
-				    GFP_ATOMIC);
+	int ret;
+
+	data = virtnet_xmit_ptr_mix(data, type);
+
+	if (sq->premapped) {
+		data = virtnet_sq_map_sg(sq, num, data);
+		if (!data)
+			return -ENOMEM;
+	}
+
+	ret = virtqueue_add_outbuf(sq->vq, sq->sg, num, data, GFP_ATOMIC);
+	if (ret && sq->premapped) {
+		virtnet_xmit_ptr_strip(&data);
+		virtnet_sq_unmap(sq, &data);
+	}
+
+	return ret;
+}
+
+static int virtnet_sq_alloc_dma_meta(struct send_queue *sq)
+{
+	struct virtnet_sq_dma *d;
+	int num, i;
+
+	num = virtqueue_get_vring_size(sq->vq);
+
+	/* Currently, the SQ premapped mode is operational only with af-xdp. In
+	 * this mode, af-xdp, the kernel stack, and xdp tx/redirect will share
+	 * the same SQ. Af-xdp independently manages its DMA. The kernel stack
+	 * and xdp tx/redirect utilize this DMA metadata to manage the DMA info.
+	 *
+	 * If the indirect descriptor feature be supported, the volume of DMA
+	 * details we need to maintain becomes quite substantial. Here, we have
+	 * a cap on the amount of DMA info we manage, effectively limiting it to
+	 * twice the size of the ring buffer.
+	 *
+	 * If the kernel stack and xdp tx/redirect attempt to use more
+	 * descriptors than allowed by this double ring buffer size,
+	 * virtnet_add_outbuf() will return an -ENOMEM error. But the af-xdp can
+	 * work continually.
+	 */
+	if (virtio_has_feature(sq->vq->vdev, VIRTIO_RING_F_INDIRECT_DESC))
+		num = num * 2;
+
+	sq->dmainfo.free = kcalloc(num, sizeof(*sq->dmainfo.free), GFP_KERNEL);
+	if (!sq->dmainfo.free)
+		return -ENOMEM;
+
+	sq->dmainfo.p = sq->dmainfo.free;
+	sq->dmainfo.free_num = num;
+
+	for (i = 0; i < num; ++i) {
+		d = &sq->dmainfo.free[i];
+		d->next = d + 1;
+	}
+
+	d->next = NULL;
+
+	return 0;
+}
+
+static void virtnet_sq_free_dma_meta(struct send_queue *sq)
+{
+	kfree(sq->dmainfo.p);
+
+	sq->dmainfo.p = NULL;
+	sq->dmainfo.free = NULL;
+	sq->dmainfo.free_num = 0;
+}
+
+/* This function must be called immediately after creating the vq, or after vq
+ * reset, and before adding any buffers to it.
+ */
+static int virtnet_sq_set_premapped(struct send_queue *sq, bool premapped)
+{
+	if (premapped) {
+		if (virtnet_sq_alloc_dma_meta(sq))
+			return -ENOMEM;
+	} else {
+		virtnet_sq_free_dma_meta(sq);
+	}
+
+	BUG_ON(virtqueue_set_dma_premapped(sq->vq, premapped));
+
+	sq->premapped = premapped;
+	return 0;
 }
 
 static void __free_old_xmit(struct send_queue *sq, bool in_napi,
@@ -529,6 +722,7 @@ static void __free_old_xmit(struct send_queue *sq, bool in_napi,
 	while ((ptr = virtqueue_get_buf(sq->vq, &len)) != NULL) {
 		++stats->packets;
 
+retry:
 		switch (virtnet_xmit_ptr_strip(&ptr)) {
 		case VIRTNET_XMIT_TYPE_SKB:
 			skb = ptr;
@@ -545,6 +739,10 @@ static void __free_old_xmit(struct send_queue *sq, bool in_napi,
 			stats->bytes += xdp_get_frame_len(frame);
 			xdp_return_frame(frame);
 			break;
+
+		case VIRTNET_XMIT_TYPE_DMA:
+			virtnet_sq_unmap(sq, &ptr);
+			goto retry;
 		}
 	}
 }
@@ -5232,6 +5430,8 @@ static void virtnet_free_queues(struct virtnet_info *vi)
 	for (i = 0; i < vi->max_queue_pairs; i++) {
 		__netif_napi_del(&vi->rq[i].napi);
 		__netif_napi_del(&vi->sq[i].napi);
+
+		virtnet_sq_free_dma_meta(&vi->sq[i]);
 	}
 
 	/* We called __netif_napi_del(),
@@ -5280,6 +5480,13 @@ static void free_receive_page_frags(struct virtnet_info *vi)
 
 static void virtnet_sq_free_unused_buf(struct virtqueue *vq, void *buf)
 {
+	struct virtnet_info *vi = vq->vdev->priv;
+	struct send_queue *sq;
+	int i = vq2rxq(vq);
+
+	sq = &vi->sq[i];
+
+retry:
 	switch (virtnet_xmit_ptr_strip(&buf)) {
 	case VIRTNET_XMIT_TYPE_SKB:
 		dev_kfree_skb(buf);
@@ -5288,6 +5495,10 @@ static void virtnet_sq_free_unused_buf(struct virtqueue *vq, void *buf)
 	case VIRTNET_XMIT_TYPE_XDP:
 		xdp_return_frame(buf);
 		break;
+
+	case VIRTNET_XMIT_TYPE_DMA:
+		virtnet_sq_unmap(sq, &buf);
+		goto retry;
 	}
 }
 
