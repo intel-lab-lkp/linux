@@ -939,9 +939,10 @@ static int armv8pmu_get_event_idx(struct pmu_hw_events *cpuc,
 	struct arm_pmu *cpu_pmu = to_arm_pmu(event->pmu);
 	struct hw_perf_event *hwc = &event->hw;
 	unsigned long evtype = hwc->config_base & ARMV8_PMU_EVTYPE_EVENT;
+	bool has_threshold = !!(hwc->config_base & ARMV8_PMU_EVTYPE_TH);
 
 	/* Always prefer to place a cycle counter into the cycle counter. */
-	if (evtype == ARMV8_PMUV3_PERFCTR_CPU_CYCLES) {
+	if ((evtype == ARMV8_PMUV3_PERFCTR_CPU_CYCLES) && !has_threshold) {
 		if (!test_and_set_bit(ARMV8_IDX_CYCLE_COUNTER, cpuc->used_mask))
 			return ARMV8_IDX_CYCLE_COUNTER;
 		else if (armv8pmu_event_is_64bit(event) &&
