@@ -249,6 +249,8 @@ int regulator_get_hardware_vsel_register(struct regulator *regulator,
 					 unsigned *vsel_mask);
 int regulator_list_hardware_vsel(struct regulator *regulator,
 				 unsigned selector);
+int regulator_set_hardware_enable_register(struct regulator *regulator,
+					   bool enable);
 
 /* regulator notifier block */
 int regulator_register_notifier(struct regulator *regulator,
@@ -560,6 +562,12 @@ static inline int regulator_get_hardware_vsel_register(struct regulator *regulat
 
 static inline int regulator_list_hardware_vsel(struct regulator *regulator,
 					       unsigned selector)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int regulator_set_hardware_enable_register(struct regulator *regulator,
+							 bool enable)
 {
 	return -EOPNOTSUPP;
 }
