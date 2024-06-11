@@ -33,6 +33,7 @@
 #include <linux/ssb/ssb_regs.h>
 #include <linux/smp.h>
 #include <asm/bootinfo.h>
+#include <asm/bmips.h>
 #include <bcm47xx.h>
 #include <bcm47xx_board.h>
 #include "bcm47xx_private.h"
@@ -110,6 +111,8 @@ static __init void prom_init_mem(void)
 
 void __init prom_init(void)
 {
+	/* Cache CBR addr before CPU/DMA setup */
+	bmips_cbr_addr = BMIPS_GET_CBR();
 	prom_init_mem();
 	setup_8250_early_printk_port(CKSEG1ADDR(BCM47XX_SERIAL_ADDR), 0, 0);
 }
