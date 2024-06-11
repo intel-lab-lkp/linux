@@ -99,6 +99,8 @@ Documentation/dev-tools/kcov.rst 是能够构建在内核之中，用于在每�
   参阅 Documentation/dev-tools/kfence.rst
 * lockdep是一个锁定正确性检测器。参阅
   Documentation/locking/lockdep-design.rst
+* Runtime Verification (RV) 支持检查给定子系统的特定行为。参阅
+  Documentation/trace/rv/runtime-verification.rst。
 * 除此以外，在内核中还有一些其它的调试工具，大多数能在
   lib/Kconfig.debug 中找到。
 
