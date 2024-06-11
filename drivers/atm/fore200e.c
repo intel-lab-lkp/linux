@@ -1906,8 +1906,7 @@ fore200e_change_qos(struct atm_vcc* vcc,struct atm_qos* qos, int flags)
 	    return -EAGAIN;
 	}
 
-	fore200e->available_cell_rate += vcc->qos.txtp.max_pcr;
-	fore200e->available_cell_rate -= qos->txtp.max_pcr;
+	fore200e->available_cell_rate += vcc->qos.txtp.max_pcr - qos->txtp.max_pcr;
 
 	mutex_unlock(&fore200e->rate_mtx);
 	
