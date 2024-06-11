@@ -7,6 +7,7 @@ GPU Driver Documentation
 
    amdgpu/index
    i915
+   guc
    imagination/index
    mcde
    meson
