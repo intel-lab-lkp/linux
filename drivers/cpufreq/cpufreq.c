@@ -1495,6 +1495,35 @@ static int cpufreq_online(unsigned int cpu)
 
 		blocking_notifier_call_chain(&cpufreq_policy_notifier_list,
 				CPUFREQ_CREATE_POLICY, policy);
+	} else {
+		/*
+		 * Call freq_qos_update_request() for the per-policy boost flag mirror
+		 * the cpufreq_driver boost during hotplug online.
+		 * Register an online callback if the default mirroring of the global
+		 * boost setting is not intended.
+		 */
+		if (!cpufreq_driver->online) {
+			ret = freq_qos_update_request(policy->max_freq_req, policy->max);
+			if (ret)
+				pr_err("%s: freq qos update failed\n", __func__);
+		} else {
+			/*
+			 * Let the per-policy boost flag mirror the cpufreq_driver
+			 * boost if an illegal state occurs after hotplug
+			 */
+			if (policy->boost_enabled && !cpufreq_driver->boost_enabled) {
+				pr_info("%s: per-policy boost flag mirror the cpufreq_driver
+					boost\n", __func__);
+				policy->boost_enabled = cpufreq_driver->boost_enabled;
+				ret = cpufreq_driver->set_boost(policy,
+							cpufreq_driver->boost_enabled);
+				if (ret) {
+					policy->boost_enabled = !policy->boost_enabled;
+					pr_err("%s: per-policy boost flag mirror the cpufreq_driver
+						boost failed\n", __func__);
+				}
+			}
+		}
 	}
 
 	if (cpufreq_driver->get && has_target()) {
