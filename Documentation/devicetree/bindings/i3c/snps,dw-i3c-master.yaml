@@ -20,7 +20,16 @@ properties:
     maxItems: 1
 
   clocks:
-    maxItems: 1
+    minItems: 1
+    items:
+      - description: Core interface clock
+      - description: APB interface clock
+
+  clock-names:
+    minItems: 1
+    items:
+      - const: core_clk
+      - const: pclk
 
   interrupts:
     maxItems: 1
@@ -48,5 +57,13 @@ examples:
             reg = <0x57 0x0 0x10>;
             pagesize = <0x8>;
         };
+    };
+  - |
+    i3c@10400 {
+      compatible = "snps,dw-i3c-master-1.00a";
+      reg = <0x10400 0x1000>;
+      interrupts = <8>;
+      clocks = <&i3c0_cclk>,<&i3c0_pclk>;
+      clock-names = "core_clk", "pclk";
     };
 ...
