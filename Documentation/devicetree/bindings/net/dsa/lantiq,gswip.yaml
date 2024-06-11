@@ -146,7 +146,13 @@ examples:
 
                     port@6 {
                             reg = <0x6>;
+                            phy-mode = "internal";
                             ethernet = <&eth0>;
+
+                            fixed-link {
+                                    speed = <1000>;
+                                    full-duplex;
+                            };
                     };
             };
 
