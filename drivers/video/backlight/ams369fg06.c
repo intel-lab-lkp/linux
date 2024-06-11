@@ -10,7 +10,6 @@
 
 #include <linux/backlight.h>
 #include <linux/delay.h>
-#include <linux/fb.h>
 #include <linux/lcd.h>
 #include <linux/module.h>
 #include <linux/spi/spi.h>
@@ -300,7 +299,7 @@ static int ams369fg06_ldi_disable(struct ams369fg06 *lcd)
 
 static int ams369fg06_power_is_on(int power)
 {
-	return power <= FB_BLANK_NORMAL;
+	return power <= BL_CORE_NORMAL;
 }
 
 static int ams369fg06_power_on(struct ams369fg06 *lcd)
@@ -396,8 +395,8 @@ static int ams369fg06_set_power(struct lcd_device *ld, int power)
 {
 	struct ams369fg06 *lcd = lcd_get_data(ld);
 
-	if (power != FB_BLANK_UNBLANK && power != FB_BLANK_POWERDOWN &&
-		power != FB_BLANK_NORMAL) {
+	if (power != BL_CORE_UNBLANK && power != BL_CORE_POWERDOWN &&
+		power != BL_CORE_NORMAL) {
 		dev_err(lcd->dev, "power value should be 0, 1 or 4.\n");
 		return -EINVAL;
 	}
@@ -492,11 +491,11 @@ static int ams369fg06_probe(struct spi_device *spi)
 		 * current lcd status is powerdown and then
 		 * it enables lcd panel.
 		 */
-		lcd->power = FB_BLANK_POWERDOWN;
+		lcd->power = BL_CORE_POWERDOWN;
 
-		ams369fg06_power(lcd, FB_BLANK_UNBLANK);
+		ams369fg06_power(lcd, BL_CORE_UNBLANK);
 	} else {
-		lcd->power = FB_BLANK_UNBLANK;
+		lcd->power = BL_CORE_UNBLANK;
 	}
 
 	spi_set_drvdata(spi, lcd);
@@ -510,7 +509,7 @@ static void ams369fg06_remove(struct spi_device *spi)
 {
 	struct ams369fg06 *lcd = spi_get_drvdata(spi);
 
-	ams369fg06_power(lcd, FB_BLANK_POWERDOWN);
+	ams369fg06_power(lcd, BL_CORE_POWERDOWN);
 }
 
 #ifdef CONFIG_PM_SLEEP
@@ -524,16 +523,16 @@ static int ams369fg06_suspend(struct device *dev)
 	 * when lcd panel is suspend, lcd panel becomes off
 	 * regardless of status.
 	 */
-	return ams369fg06_power(lcd, FB_BLANK_POWERDOWN);
+	return ams369fg06_power(lcd, BL_CORE_POWERDOWN);
 }
 
 static int ams369fg06_resume(struct device *dev)
 {
 	struct ams369fg06 *lcd = dev_get_drvdata(dev);
 
-	lcd->power = FB_BLANK_POWERDOWN;
+	lcd->power = BL_CORE_POWERDOWN;
 
-	return ams369fg06_power(lcd, FB_BLANK_UNBLANK);
+	return ams369fg06_power(lcd, BL_CORE_UNBLANK);
 }
 #endif
 
@@ -544,7 +543,7 @@ static void ams369fg06_shutdown(struct spi_device *spi)
 {
 	struct ams369fg06 *lcd = spi_get_drvdata(spi);
 
-	ams369fg06_power(lcd, FB_BLANK_POWERDOWN);
+	ams369fg06_power(lcd, BL_CORE_POWERDOWN);
 }
 
 static struct spi_driver ams369fg06_driver = {
