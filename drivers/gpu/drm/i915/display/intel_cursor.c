@@ -524,7 +524,7 @@ static void wa_16021440873(struct intel_plane *plane,
 
 	intel_de_write_fw(dev_priv, SEL_FETCH_CUR_CTL(pipe), ctl);
 
-	intel_de_write(dev_priv, PIPE_SRCSZ_ERLY_TPT(pipe),
+	intel_de_write(dev_priv, CURPOS_ERLY_TPT(dev_priv, pipe),
 		       PIPESRC_HEIGHT(et_y_position));
 }
 
