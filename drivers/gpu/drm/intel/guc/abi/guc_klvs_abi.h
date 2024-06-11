@@ -112,6 +112,13 @@
 #define GUC_KLV_SELF_CFG_G2H_CTB_SIZE_LEN		1u
 
 /*
+ * Global scheduling policy update keys.
+ */
+enum {
+	GUC_SCHEDULING_POLICIES_KLV_ID_RENDER_COMPUTE_YIELD	= 0x1001,
+};
+
+/*
  * Per context scheduling policy update keys.
  */
 enum  {
@@ -347,6 +354,7 @@ enum  {
  * Workaround keys:
  */
 enum xe_guc_klv_ids {
+	GUC_WORKAROUND_KLV_SERIALIZED_RA_MODE						= 0x9001,
 	GUC_WORKAROUND_KLV_BLOCK_INTERRUPTS_WHEN_MGSR_BLOCKED				= 0x9002,
 	GUC_WORKAROUND_KLV_ID_GAM_PFQ_SHADOW_TAIL_POLLING				= 0x9005,
 	GUC_WORKAROUND_KLV_ID_DISABLE_MTP_DURING_ASYNC_COMPUTE				= 0x9007,
