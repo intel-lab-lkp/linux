@@ -57,8 +57,8 @@ static int adxl313_spi_setup(struct device *dev, struct regmap *regmap)
 			return ret;
 	}
 
-	return regmap_update_bits(regmap, ADXL313_REG_POWER_CTL,
-				  ADXL313_I2C_DISABLE, ADXL313_I2C_DISABLE);
+	return regmap_set_bits(regmap, ADXL313_REG_POWER_CTL,
+			       ADXL313_I2C_DISABLE);
 }
 
 static int adxl313_spi_probe(struct spi_device *spi)
