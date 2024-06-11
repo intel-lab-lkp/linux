@@ -4852,7 +4852,7 @@ vm_fault_t finish_fault(struct vm_fault *vmf)
 
 	if (pmd_none(*vmf->pmd)) {
 		if (PageTransCompound(page)) {
-			ret = do_set_pmd(vmf, page);
+			ret = do_set_pmd(vmf, compound_head(page));
 			if (ret != VM_FAULT_FALLBACK)
 				return ret;
 		}
