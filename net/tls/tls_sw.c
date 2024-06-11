@@ -2099,6 +2099,8 @@ put_on_rx_list:
 					rxm->full_len = 0;
 					if (err == __SK_DROP)
 						consume_skb(skb);
+					if (err == __SK_REDIRECT && flags & MSG_DONTWAIT)
+						tls_rx_rec_wait(sk, psock, false, released);
 					continue;
 				}
 			}
