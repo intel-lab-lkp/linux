@@ -35,6 +35,11 @@ uses_generated_oob := \
 
 $(uses_generated_oob): $(generated_oob)
 
+# Shared ABI definitions
+subdir-ccflags-y += \
+	-I$(srctree)/drivers/gpu/drm/intel/guc/ \
+	-I$(srctree)/drivers/gpu/drm/intel/guc/abi
+
 # Please keep these build lists sorted!
 
 # core driver code

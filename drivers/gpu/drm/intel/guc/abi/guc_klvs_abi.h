@@ -66,23 +66,23 @@
  *      Refers to 64 bit Global Gfx address of H2G `CT Buffer`_.
  *      Should be above WOPCM address but below APIC base address for native mode.
  *
- * _`GUC_KLV_SELF_CFG_H2G_CTB_DESCRIPTOR_ADDR : 0x0903
+ * _`GUC_KLV_SELF_CFG_H2G_CTB_DESCRIPTOR_ADDR` : 0x0903
  *      Refers to 64 bit Global Gfx address of H2G `CTB Descriptor`_.
  *      Should be above WOPCM address but below APIC base address for native mode.
  *
- * _`GUC_KLV_SELF_CFG_H2G_CTB_SIZE : 0x0904
+ * _`GUC_KLV_SELF_CFG_H2G_CTB_SIZE` : 0x0904
  *      Refers to size of H2G `CT Buffer`_ in bytes.
  *      Should be a multiple of 4K.
  *
- * _`GUC_KLV_SELF_CFG_G2H_CTB_ADDR : 0x0905
+ * _`GUC_KLV_SELF_CFG_G2H_CTB_ADDR` : 0x0905
  *      Refers to 64 bit Global Gfx address of G2H `CT Buffer`_.
  *      Should be above WOPCM address but below APIC base address for native mode.
  *
- * _GUC_KLV_SELF_CFG_G2H_CTB_DESCRIPTOR_ADDR : 0x0906
+ * _`GUC_KLV_SELF_CFG_G2H_CTB_DESCRIPTOR_ADDR` : 0x0906
  *      Refers to 64 bit Global Gfx address of G2H `CTB Descriptor`_.
  *      Should be above WOPCM address but below APIC base address for native mode.
  *
- * _GUC_KLV_SELF_CFG_G2H_CTB_SIZE : 0x0907
+ * _`GUC_KLV_SELF_CFG_G2H_CTB_SIZE` : 0x0907
  *      Refers to size of G2H `CT Buffer`_ in bytes.
  *      Should be a multiple of 4K.
  */
