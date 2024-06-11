@@ -4827,6 +4827,8 @@ static bool tcp_try_coalesce(struct sock *sk,
 	TCP_SKB_CB(to)->tcp_flags |= TCP_SKB_CB(from)->tcp_flags;
 
 	if (TCP_SKB_CB(from)->has_rxtstamp) {
+		trace_tcp_rxtstamp_coalesce(sk, to, from);
+
 		TCP_SKB_CB(to)->has_rxtstamp = true;
 		to->tstamp = from->tstamp;
 		skb_hwtstamps(to)->hwtstamp = skb_hwtstamps(from)->hwtstamp;

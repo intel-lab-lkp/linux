@@ -411,6 +411,67 @@ TRACE_EVENT(tcp_cong_state_set,
 		  __entry->cong_state)
 );
 
+/*
+ * When called, TCP_SKB_CB(from)->has_rxtstamp must be true, but TCP_SKB_CB(to)->has_rxtstamp may
+ * not. So has_rxtstamp is checked before reading timestamps of skb "to".
+ */
+TRACE_EVENT(tcp_rxtstamp_coalesce,
+
+	TP_PROTO(const struct sock *sk, const struct sk_buff *to, const struct sk_buff *from),
+
+	TP_ARGS(sk, to, from),
+
+	TP_STRUCT__entry(
+		__field(__u16, sport)
+		__field(__u16, dport)
+		__field(__u16, family)
+		__array(__u8, saddr, 4)
+		__array(__u8, daddr, 4)
+		__array(__u8, saddr_v6, 16)
+		__array(__u8, daddr_v6, 16)
+		__field(__u64, to_tstamp)
+		__field(__u64, to_hwtstamp)
+		__field(__u64, from_tstamp)
+		__field(__u64, from_hwtstamp)
+	),
+
+	TP_fast_assign(
+		const struct inet_sock *inet = inet_sk(sk);
+		__be32 *p32;
+
+		__entry->sport = ntohs(inet->inet_sport);
+		__entry->dport = ntohs(inet->inet_dport);
+		__entry->family = sk->sk_family;
+
+		p32 = (__be32 *) __entry->saddr;
+		*p32 = inet->inet_saddr;
+
+		p32 = (__be32 *) __entry->daddr;
+		*p32 = inet->inet_daddr;
+
+		TP_STORE_ADDRS(__entry, inet->inet_saddr, inet->inet_daddr,
+			       sk->sk_v6_rcv_saddr, sk->sk_v6_daddr);
+
+		if (TCP_SKB_CB(to)->has_rxtstamp) {
+			__entry->to_tstamp = to->tstamp;
+			__entry->to_hwtstamp = skb_shinfo(to)->hwtstamps.hwtstamp;
+		} else {
+			__entry->to_tstamp = 0;
+			__entry->to_hwtstamp = 0;
+		}
+
+		__entry->from_tstamp = from->tstamp;
+		__entry->from_hwtstamp = skb_shinfo(from)->hwtstamps.hwtstamp;
+	),
+
+	TP_printk("family=%s sport=%hu dport=%hu saddr=%pI4 daddr=%pI4 saddrv6=%pI6c daddrv6=%pI6c to_tstamp=%llu to_hwtstamp=%llu from_tstamp=%llu from_hwtstamp=%llu",
+		  show_family_name(__entry->family),
+		  __entry->sport, __entry->dport, __entry->saddr, __entry->daddr,
+		  __entry->saddr_v6, __entry->daddr_v6,
+		  __entry->to_tstamp, __entry->to_hwtstamp,
+		  __entry->from_tstamp, __entry->from_hwtstamp)
+);
+
 #endif /* _TRACE_TCP_H */
 
 /* This part must be outside protection */
