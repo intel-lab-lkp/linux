@@ -254,6 +254,7 @@ lookup_protocol:
 		err = sk->sk_prot->hash(sk);
 		if (err) {
 			sk_common_release(sk);
+			sock->sk = NULL;
 			goto out;
 		}
 	}
@@ -261,6 +262,7 @@ lookup_protocol:
 		err = sk->sk_prot->init(sk);
 		if (err) {
 			sk_common_release(sk);
+			sock->sk = NULL;
 			goto out;
 		}
 	}
@@ -269,6 +271,7 @@ lookup_protocol:
 		err = BPF_CGROUP_RUN_PROG_INET_SOCK(sk);
 		if (err) {
 			sk_common_release(sk);
+			sock->sk = NULL;
 			goto out;
 		}
 	}
