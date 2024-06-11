@@ -231,6 +231,77 @@ out:
 EXPORT_SYMBOL(rproc_da_to_va);
 
 /**
+ * rproc_pa_to_va() - lookup the kernel virtual address for a physical address of a remoteproc
+ * memory
+ *
+ * @rproc: handle of a remote processor
+ * @pa: remoteproc physical address
+ * @len: length of the memory region @pa is pointing to
+ * @is_iomem: optional pointer filled in to indicate if @da is iomapped memory
+ *
+ * Some remote processors will ask us to allocate them physically contiguous
+ * memory regions (which we call "carveouts"), and map them to specific
+ * device addresses (which are hardcoded in the firmware). They may also have
+ * dedicated memory regions internal to the processors, and use them either
+ * exclusively or alongside carveouts.
+ *
+ * They may then ask us to copy objects into specific addresses (e.g.
+ * code/data sections) or expose us certain symbols in other device address
+ * (e.g. their trace buffer).
+ *
+ * This function is a helper function with which we can go over the allocated
+ * carveouts and translate specific physical addresses to kernel virtual addresses
+ * so we can access the referenced memory. This function also allows to perform
+ * translations on the internal remoteproc memory regions through a platform
+ * implementation specific pa_to_va ops, if present.
+ *
+ * Note: phys_to_virt(iommu_iova_to_phys(rproc->domain, da)) will work too,
+ * but only on kernel direct mapped RAM memory. Instead, we're just using
+ * here the output of the DMA API for the carveouts, which should be more
+ * correct.
+ *
+ * Return: a valid kernel address on success or NULL on failure
+ */
+void *rproc_pa_to_va(struct rproc *rproc, phys_addr_t pa, size_t len, bool *is_iomem)
+{
+	struct rproc_mem_entry *carveout;
+	void *ptr = NULL;
+
+	if (rproc->ops->da_to_va) {
+		ptr = rproc->ops->pa_to_va(rproc, pa, len);
+		if (ptr)
+			goto out;
+	}
+
+	list_for_each_entry(carveout, &rproc->carveouts, node) {
+		int offset = pa - carveout->dma;
+
+		/*  Verify that carveout is allocated */
+		if (!carveout->va)
+			continue;
+
+		/* try next carveout if da is too small */
+		if (offset < 0)
+			continue;
+
+		/* try next carveout if da is too large */
+		if (offset + len > carveout->len)
+			continue;
+
+		ptr = carveout->va + offset;
+
+		if (is_iomem)
+			*is_iomem = carveout->is_iomem;
+
+		break;
+	}
+
+out:
+	return ptr;
+}
+EXPORT_SYMBOL(rproc_pa_to_va);
+
+/**
  * rproc_find_carveout_by_name() - lookup the carveout region by a name
  * @rproc: handle of a remote processor
  * @name: carveout name to find (format string)
@@ -724,8 +795,7 @@ static int rproc_alloc_carveout(struct rproc *rproc,
 	 * firmware was compiled with.
 	 *
 	 * In this case, we must use the IOMMU API directly and map
-	 * the memory to the device address as expected by the remote
-	 * processor.
+	 * the memory to the device address as etable
 	 *
 	 * Obviously such remote processor devices should not be configured
 	 * to use the iommu-based DMA API: we expect 'dma' to contain the
