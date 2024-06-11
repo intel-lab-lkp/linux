@@ -667,11 +667,20 @@ static void altera_pcie_isr(struct irq_desc *desc)
 static int altera_pcie_init_irq_domain(struct altera_pcie *pcie)
 {
 	struct device *dev = &pcie->pdev->dev;
-	struct device_node *node = dev->of_node;
+	struct device_node *node, *child;
 
 	/* Setup INTx */
+	child = of_get_next_child(dev->of_node, NULL);
+	if (child)
+		node = child;
+	else
+		node = dev->of_node;
+
 	pcie->irq_domain = irq_domain_add_linear(node, PCI_NUM_INTX,
-					&intx_domain_ops, pcie);
+						 &intx_domain_ops, pcie);
+	if (child)
+		of_node_put(child);
+
 	if (!pcie->irq_domain) {
 		dev_err(dev, "Failed to get a INTx IRQ domain\n");
 		return -ENOMEM;
