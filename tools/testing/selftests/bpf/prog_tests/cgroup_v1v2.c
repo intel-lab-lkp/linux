@@ -9,9 +9,6 @@
 
 static int run_test(int cgroup_fd, int server_fd, bool classid)
 {
-	struct network_helper_opts opts = {
-		.must_fail = true,
-	};
 	struct connect4_dropper *skel;
 	int fd, err = 0;
 
@@ -32,7 +29,7 @@ static int run_test(int cgroup_fd, int server_fd, bool classid)
 		goto out;
 	}
 
-	fd = connect_to_fd_opts(server_fd, &opts);
+	fd = __connect_to_fd_opts(server_fd, 0, false, true, NULL);
 	if (fd < 0)
 		err = -1;
 	else

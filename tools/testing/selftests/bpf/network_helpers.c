@@ -293,7 +293,7 @@ int connect_to_addr(int type, const struct sockaddr_storage *addr, socklen_t add
 	if (settimeo(fd, opts->timeout_ms))
 		goto error_close;
 
-	if (connect_fd_to_addr(fd, addr, addrlen, opts->must_fail))
+	if (connect_fd_to_addr(fd, addr, addrlen, false))
 		goto error_close;
 
 	return fd;
@@ -303,7 +303,7 @@ error_close:
 	return -1;
 }
 
-int __connect_to_fd_opts(int server_fd, int type, bool noconnect,
+int __connect_to_fd_opts(int server_fd, int type, bool noconnect, bool must_fail,
 			 const struct network_helper_opts *opts)
 {
 	struct sockaddr_storage addr;
@@ -353,7 +353,7 @@ int __connect_to_fd_opts(int server_fd, int type, bool noconnect,
 		goto error_close;
 
 	if (!noconnect)
-		if (connect_fd_to_addr(fd, &addr, addrlen, opts->must_fail))
+		if (connect_fd_to_addr(fd, &addr, addrlen, must_fail))
 			goto error_close;
 
 	return fd;
@@ -365,7 +365,7 @@ error_close:
 
 int connect_to_fd_opts(int server_fd, const struct network_helper_opts *opts)
 {
-	return __connect_to_fd_opts(server_fd, 0, false, opts);
+	return __connect_to_fd_opts(server_fd, 0, false, false, opts);
 }
 
 int connect_to_fd(int server_fd, int timeout_ms)

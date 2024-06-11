@@ -198,7 +198,7 @@ void test_bpf_ip_check_defrag_ok(bool ipv6)
 	nstoken = open_netns(NS0);
 	if (!ASSERT_OK_PTR(nstoken, "setns ns0"))
 		goto out;
-	client_tx_fd = __connect_to_fd_opts(srv_fd, SOCK_RAW, true, &tx_ops);
+	client_tx_fd = __connect_to_fd_opts(srv_fd, SOCK_RAW, true, false, &tx_ops);
 	close_netns(nstoken);
 	if (!ASSERT_GE(client_tx_fd, 0, "connect_to_fd_opts"))
 		goto out;
@@ -207,7 +207,7 @@ void test_bpf_ip_check_defrag_ok(bool ipv6)
 	nstoken = open_netns(NS0);
 	if (!ASSERT_OK_PTR(nstoken, "setns ns0"))
 		goto out;
-	client_rx_fd = __connect_to_fd_opts(srv_fd, 0, true, &rx_opts);
+	client_rx_fd = __connect_to_fd_opts(srv_fd, 0, true, false, &rx_opts);
 	close_netns(nstoken);
 	if (!ASSERT_GE(client_rx_fd, 0, "connect_to_fd_opts"))
 		goto out;
