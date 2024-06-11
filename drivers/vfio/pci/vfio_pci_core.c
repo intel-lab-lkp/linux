@@ -1174,7 +1174,7 @@ static int vfio_pci_ioctl_get_irq_info(struct vfio_pci_core_device *vdev,
 		return -EINVAL;
 	}
 
-	info.flags = VFIO_IRQ_INFO_EVENTFD;
+	info.flags = VFIO_IRQ_INFO_EVENTFD | VFIO_IRQ_INFO_CPUSET;
 
 	info.count = vfio_pci_get_irq_count(vdev, info.index);
 

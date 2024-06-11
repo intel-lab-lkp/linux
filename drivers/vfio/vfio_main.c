@@ -1505,23 +1505,30 @@ int vfio_set_irqs_validate_and_prepare(struct vfio_irq_set *hdr, int num_irqs,
 		size = 0;
 		break;
 	case VFIO_IRQ_SET_DATA_BOOL:
-		size = sizeof(uint8_t);
+		size = size_mul(hdr->count, sizeof(uint8_t));
 		break;
 	case VFIO_IRQ_SET_DATA_EVENTFD:
-		size = sizeof(int32_t);
+		size = size_mul(hdr->count, sizeof(int32_t));
+		break;
+	case VFIO_IRQ_SET_DATA_CPUSET:
+		size = hdr->argsz - minsz;
+		if (size < cpumask_size())
+			return -EINVAL;
+		if (size > cpumask_size())
+			size = cpumask_size();
 		break;
 	default:
 		return -EINVAL;
 	}
 
 	if (size) {
-		if (hdr->argsz - minsz < hdr->count * size)
+		if (hdr->argsz - minsz < size)
 			return -EINVAL;
 
 		if (!data_size)
 			return -EINVAL;
 
-		*data_size = hdr->count * size;
+		*data_size = size;
 	}
 
 	return 0;

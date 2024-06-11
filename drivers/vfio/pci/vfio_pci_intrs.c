@@ -19,6 +19,7 @@
 #include <linux/vfio.h>
 #include <linux/wait.h>
 #include <linux/slab.h>
+#include <linux/cpuset.h>
 
 #include "vfio_pci_priv.h"
 
@@ -80,6 +81,40 @@ vfio_irq_ctx_alloc(struct vfio_pci_core_device *vdev, unsigned long index)
 	}
 
 	return ctx;
+}
+
+static int vfio_pci_set_affinity(struct vfio_pci_core_device *vdev,
+				 unsigned int start, unsigned int count,
+				 struct cpumask *irq_mask)
+{
+	cpumask_var_t allowed_mask;
+	int irq, err = 0;
+	unsigned int i;
+
+	if (!alloc_cpumask_var(&allowed_mask, GFP_KERNEL))
+		return -ENOMEM;
+
+	cpuset_cpus_allowed(current, allowed_mask);
+	if (!cpumask_subset(irq_mask, allowed_mask)) {
+		err = -EPERM;
+		goto finish;
+	}
+
+	for (i = start; i < start + count; i++) {
+		irq = pci_irq_vector(vdev->pdev, i);
+		if (irq < 0) {
+			err = -EINVAL;
+			break;
+		}
+
+		err = irq_set_affinity(irq, irq_mask);
+		if (err)
+			break;
+	}
+
+finish:
+	free_cpumask_var(allowed_mask);
+	return err;
 }
 
 /*
@@ -665,6 +700,9 @@ static int vfio_pci_set_intx_trigger(struct vfio_pci_core_device *vdev,
 	if (!is_intx(vdev))
 		return -EINVAL;
 
+	if (flags & VFIO_IRQ_SET_DATA_CPUSET)
+		return vfio_pci_set_affinity(vdev, start, count, data);
+
 	if (flags & VFIO_IRQ_SET_DATA_NONE) {
 		vfio_send_intx_eventfd(vdev, vfio_irq_ctx_get(vdev, 0));
 	} else if (flags & VFIO_IRQ_SET_DATA_BOOL) {
@@ -712,6 +750,9 @@ static int vfio_pci_set_msi_trigger(struct vfio_pci_core_device *vdev,
 
 	if (!irq_is(vdev, index))
 		return -EINVAL;
+
+	if (flags & VFIO_IRQ_SET_DATA_CPUSET)
+		return vfio_pci_set_affinity(vdev, start, count, data);
 
 	for (i = start; i < start + count; i++) {
 		ctx = vfio_irq_ctx_get(vdev, i);
