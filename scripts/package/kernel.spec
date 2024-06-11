@@ -132,3 +132,8 @@ fi
 /usr/src/kernels/%{KERNELRELEASE}
 /lib/modules/%{KERNELRELEASE}/build
 %endif
+
+%changelog
+* %(echo "$(LC_ALL=C; date +'%a %b %d %Y') $(git config --get user.name) \
+<$(git config --get user.email)>") - %{version}-%{release}
+- Custom built Linux kernel.
