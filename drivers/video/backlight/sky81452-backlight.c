@@ -315,7 +315,7 @@ static void sky81452_bl_remove(struct platform_device *pdev)
 
 	sysfs_remove_group(&bd->dev.kobj, &sky81452_bl_attr_group);
 
-	bd->props.power = FB_BLANK_UNBLANK;
+	bd->props.power = BL_CORE_UNBLANK;
 	bd->props.brightness = 0;
 	backlight_update_status(bd);
 
