@@ -19,6 +19,11 @@ properties:
   reg:
     maxItems: 1
 
+  arm-sbmr,skip-bootprogress-response:
+    type: boolean
+    description:
+      Skipping ARM SBMR “Send Boot Progress Code” response.
+
 required:
   - compatible
   - reg
