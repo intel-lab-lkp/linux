@@ -55,6 +55,7 @@ struct timerlat_hist_params {
 	int			entries;
 	int			warmup;
 	int			buffer_size;
+	int			disable_idle_states;
 };
 
 struct timerlat_hist_cpu {
@@ -655,7 +656,7 @@ static void timerlat_hist_usage(char *usage)
 		"         [-t[file]] [-e sys[:event]] [--filter <filter>] [--trigger <trigger>] [-c cpu-list] [-H cpu-list]\\",
 		"	  [-P priority] [-E N] [-b N] [--no-irq] [--no-thread] [--no-header] [--no-summary] \\",
 		"	  [--no-index] [--with-zeros] [--dma-latency us] [-C[=cgroup_name]] [--no-aa] [--dump-task] [-u|-k]",
-		"	  [--warm-up s]",
+		"	  [--warm-up s] [--disable-idle-states]",
 		"",
 		"	  -h/--help: print this menu",
 		"	  -a/--auto: set automatic trace mode, stopping the session if argument in us latency is hit",
@@ -695,6 +696,7 @@ static void timerlat_hist_usage(char *usage)
 		"	  -U/--user-load: enable timerlat for user-defined user-space workload",
 		"	     --warm-up s: let the workload run for s seconds before collecting data",
 		"	     --trace-buffer-size kB: set the per-cpu trace buffer size in kB",
+		"	     --disable-idle-states: disable all idle states for cpus used by timerlat to reduce exit from idle latency",
 		NULL,
 	};
 
@@ -731,6 +733,9 @@ static struct timerlat_hist_params
 
 	/* disabled by default */
 	params->dma_latency = -1;
+
+	/* disabled by default */
+	params->disable_idle_states = 0;
 
 	/* display data in microseconds */
 	params->output_divisor = 1000;
@@ -772,6 +777,7 @@ static struct timerlat_hist_params
 			{"dump-task",		no_argument,		0, '\1'},
 			{"warm-up",		required_argument,	0, '\2'},
 			{"trace-buffer-size",	required_argument,	0, '\3'},
+			{"disable-idle-states",	no_argument,		0, '\4'},
 			{0, 0, 0, 0}
 		};
 
@@ -959,6 +965,9 @@ static struct timerlat_hist_params
 			break;
 		case '\3':
 			params->buffer_size = get_llong_from_str(optarg);
+			break;
+		case '\4':
+			params->disable_idle_states = 1;
 			break;
 		default:
 			timerlat_hist_usage("Invalid option");
@@ -1152,6 +1161,7 @@ int timerlat_hist_main(int argc, char *argv[])
 	int return_value = 1;
 	pthread_t timerlat_u;
 	int retval;
+	int i;
 
 	params = timerlat_hist_parse_args(argc, argv);
 	if (!params)
@@ -1198,6 +1208,21 @@ int timerlat_hist_main(int argc, char *argv[])
 		if (dma_latency_fd < 0) {
 			err_msg("Could not set /dev/cpu_dma_latency.\n");
 			goto out_free;
+		}
+	}
+
+	if (params->disable_idle_states) {
+		for (i = 0; i < sysconf(_SC_NPROCESSORS_CONF); i++) {
+			if (params->cpus && !CPU_ISSET(i, &params->monitored_cpus))
+				continue;
+			if (save_cpu_idle_disable_state(i) < 0) {
+				err_msg("Could not save cpu idle state.\n");
+				goto out_free;
+			}
+			if (set_cpu_idle_disable_state(i, 1) < 0) {
+				err_msg("Could not disable cpu idle state.\n");
+				goto out_free;
+			}
 		}
 	}
 
@@ -1332,6 +1357,13 @@ out_hist:
 	timerlat_aa_destroy();
 	if (dma_latency_fd >= 0)
 		close(dma_latency_fd);
+	if (params->disable_idle_states) {
+		for (i = 0; i < sysconf(_SC_NPROCESSORS_CONF); i++) {
+			if (params->cpus && !CPU_ISSET(i, &params->monitored_cpus))
+				continue;
+			restore_cpu_idle_disable_state(i);
+		}
+	}
 	trace_events_destroy(&record->trace, params->events);
 	params->events = NULL;
 out_free:
@@ -1340,6 +1372,7 @@ out_free:
 	osnoise_destroy_tool(record);
 	osnoise_destroy_tool(tool);
 	free(params);
+	free_cpu_idle_disable_states();
 out_exit:
 	exit(return_value);
 }
