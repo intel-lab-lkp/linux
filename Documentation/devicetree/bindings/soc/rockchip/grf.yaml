@@ -178,7 +178,7 @@ allOf:
       patternProperties:
         "phy@[0-9a-f]+$":
           description:
-            Documentation/devicetree/bindings/phy/rockchip-emmc-phy.txt
+            Documentation/devicetree/bindings/phy/rockchip,emmc-phy.yaml
 
   - if:
       properties:
