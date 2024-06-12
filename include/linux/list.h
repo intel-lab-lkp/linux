@@ -520,6 +520,26 @@ static inline void list_cut_before(struct list_head *list,
 	entry->prev = head;
 }
 
+/**
+ * list_cut - cut a list into two from the entry
+ * @list: a new list to add all removed entries
+ * @head: a list with entries
+ * @entry: an entry within head, could be the head itself
+ *
+ * This helper removes elements from @head starting at @entry until the end,
+ * and appends them to @lists.
+ */
+static inline void list_cut(struct list_head *list,
+		struct list_head *head, struct list_head *entry)
+{
+	list->next = entry;
+	list->prev = head->prev;
+	head->prev = entry->prev;
+	entry->prev->next = head;
+	entry->prev = list;
+	list->prev->next = list;
+}
+
 static inline void __list_splice(const struct list_head *list,
 				 struct list_head *prev,
 				 struct list_head *next)
