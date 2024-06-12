@@ -19,6 +19,7 @@
 /* ------------------------------------------------------------------ */
 
 MODULE_AUTHOR("Gerd Knorr <kraxel@bytesex.org> [SuSE Labs]");
+MODULE_DESCRIPTION("Simple DVB helper framework for videobuf2");
 MODULE_LICENSE("GPL");
 
 /* ------------------------------------------------------------------ */
