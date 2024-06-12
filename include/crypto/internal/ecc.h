@@ -80,6 +80,15 @@ void ecc_digits_from_bytes(const u8 *in, unsigned int nbytes,
 void ecc_digits_to_bytes(const u64 *in, unsigned int ndigits,
 			 u8 *out, unsigned int nbytes);
 
+/*
+ * ecc_curve_get_nbytes() - Get the number of bytes the curve requires
+ * @curve:   The curve
+ */
+static inline unsigned int ecc_curve_get_nbytes(const struct ecc_curve *curve)
+{
+	return DIV_ROUND_UP(curve->nbits, 8);
+}
+
 /**
  * ecc_is_key_valid() - Validate a given ECDH private key
  *

@@ -27,11 +27,13 @@ static int ecdh_set_secret(struct crypto_kpp *tfm, const void *buf,
 			   unsigned int len)
 {
 	struct ecdh_ctx *ctx = ecdh_get_ctx(tfm);
+	const struct ecc_curve *curve = ecc_get_curve(ctx->curve_id);
+	unsigned int nbytes = ecc_curve_get_nbytes(curve);
 	struct ecdh params;
 	int ret = 0;
 
 	if (crypto_ecdh_decode_key(buf, len, &params) < 0 ||
-	    params.key_size > sizeof(u64) * ctx->ndigits)
+	    params.key_size > nbytes)
 		return -EINVAL;
 
 	memset(ctx->private_key, 0, sizeof(ctx->private_key));
@@ -56,13 +58,14 @@ static int ecdh_compute_value(struct kpp_request *req)
 {
 	struct crypto_kpp *tfm = crypto_kpp_reqtfm(req);
 	struct ecdh_ctx *ctx = ecdh_get_ctx(tfm);
+	const struct ecc_curve *curve = ecc_get_curve(ctx->curve_id);
+	unsigned int nbytes = ecc_curve_get_nbytes(curve);
 	u64 *public_key;
 	u64 *shared_secret = NULL;
 	void *buf;
-	size_t copied, nbytes, public_key_sz;
+	size_t copied, public_key_sz;
 	int ret = -ENOMEM;
 
-	nbytes = ctx->ndigits << ECC_DIGITS_TO_BYTES_SHIFT;
 	/* Public part is a point thus it has both coordinates */
 	public_key_sz = 2 * nbytes;
 
@@ -123,9 +126,11 @@ free_pubkey:
 static unsigned int ecdh_max_size(struct crypto_kpp *tfm)
 {
 	struct ecdh_ctx *ctx = ecdh_get_ctx(tfm);
+	const struct ecc_curve *curve = ecc_get_curve(ctx->curve_id);
+	unsigned int nbytes = ecc_curve_get_nbytes(curve);
 
-	/* Public key is made of two coordinates, add one to the left shift */
-	return ctx->ndigits << (ECC_DIGITS_TO_BYTES_SHIFT + 1);
+	/* Public key is made of two coordinates */
+	return nbytes * 2;
 }
 
 static int ecdh_nist_p192_init_tfm(struct crypto_kpp *tfm)

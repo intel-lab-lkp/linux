@@ -1522,10 +1522,8 @@ static int __ecc_is_key_valid(const struct ecc_curve *curve,
 int ecc_is_key_valid(unsigned int curve_id, unsigned int ndigits,
 		     const u64 *private_key, unsigned int private_key_len)
 {
-	int nbytes;
 	const struct ecc_curve *curve = ecc_get_curve(curve_id);
-
-	nbytes = ndigits << ECC_DIGITS_TO_BYTES_SHIFT;
+	unsigned int nbytes = ecc_curve_get_nbytes(curve);
 
 	if (private_key_len != nbytes)
 		return -EINVAL;
