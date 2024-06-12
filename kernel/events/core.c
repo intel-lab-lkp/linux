@@ -2295,7 +2295,7 @@ event_sched_out(struct perf_event *event, struct perf_event_context *ctx)
 			task_work_add(current, &event->pending_task, TWA_RESUME);
 		}
 		if (dec)
-			local_dec(&event->ctx->nr_pending);
+			local_dec(&event->ctx->nr_no_switch_fast);
 	}
 
 	perf_event_set_state(event, state);
@@ -3531,9 +3531,9 @@ perf_event_context_sched_out(struct task_struct *task, struct task_struct *next)
 
 			perf_ctx_disable(ctx, false);
 
-			/* PMIs are disabled; ctx->nr_pending is stable. */
-			if (local_read(&ctx->nr_pending) ||
-			    local_read(&next_ctx->nr_pending)) {
+			/* PMIs are disabled; ctx->nr_no_switch_fast is stable. */
+			if (local_read(&ctx->nr_no_switch_fast) ||
+			    local_read(&next_ctx->nr_no_switch_fast)) {
 				/*
 				 * Must not swap out ctx when there's pending
 				 * events that rely on the ctx->task relation.
@@ -6755,7 +6755,7 @@ static void __perf_pending_irq(struct perf_event *event)
 		if (event->pending_sigtrap) {
 			event->pending_sigtrap = 0;
 			perf_sigtrap(event);
-			local_dec(&event->ctx->nr_pending);
+			local_dec(&event->ctx->nr_no_switch_fast);
 		}
 		if (event->pending_disable) {
 			event->pending_disable = 0;
@@ -6828,7 +6828,7 @@ static void perf_pending_task(struct callback_head *head)
 	if (event->pending_work) {
 		event->pending_work = 0;
 		perf_sigtrap(event);
-		local_dec(&event->ctx->nr_pending);
+		local_dec(&event->ctx->nr_no_switch_fast);
 	}
 
 	if (rctx >= 0)
@@ -9698,7 +9698,7 @@ static int __perf_event_overflow(struct perf_event *event,
 			pending_id = hash32_ptr((void *)instruction_pointer(regs)) ?: 1;
 		if (!event->pending_sigtrap) {
 			event->pending_sigtrap = pending_id;
-			local_inc(&event->ctx->nr_pending);
+			local_inc(&event->ctx->nr_no_switch_fast);
 		} else if (event->attr.exclude_kernel && valid_sample) {
 			/*
 			 * Should not be able to return to user space without
