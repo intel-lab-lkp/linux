@@ -39,6 +39,11 @@
 #define SSIF_IPMI_MULTIPART_READ_START          0x3
 #define SSIF_IPMI_MULTIPART_READ_MIDDLE         0x9
 
+#define GET_NETFN(netfn_lun)                    ((netfn_lun >> 2) & 0xfe)
+#define IPMI_GROUP_EXT_NETFN                    0x2C
+#define IPMI_SBMR_GROUP                         0xAE
+#define IPMI_SBMR_BOOTPROGRESS_CMD              0x02
+
 /*
  * IPMI 2.0 Spec, section 12.7 SSIF Timing,
  * Request-to-Response Time is T6max(250ms) - T1max(20ms) - 3ms = 227ms
@@ -102,6 +107,8 @@ struct ssif_bmc_ctx {
 	struct ssif_part_buffer part_buf;
 	struct ipmi_ssif_msg    response;
 	struct ipmi_ssif_msg    request;
+	/* Flag to skip response of Send Boot Progress Code */
+	bool                    skip_bootprogress_resp;
 };
 
 static inline struct ssif_bmc_ctx *to_ssif_bmc(struct file *file)
@@ -187,6 +194,20 @@ static ssize_t ssif_bmc_write(struct file *file, const char __user *buf, size_t 
 		return -EINVAL;
 
 	spin_lock_irqsave(&ssif_bmc->lock, flags);
+	if (ssif_bmc->skip_bootprogress_resp &&
+	    GET_NETFN(msg.payload[0]) == IPMI_GROUP_EXT_NETFN &&
+	    msg.payload[1] == IPMI_SBMR_BOOTPROGRESS_CMD &&
+	    msg.payload[3] == IPMI_SBMR_GROUP) {
+		if (ssif_bmc->response_timer_inited) {
+			del_timer(&ssif_bmc->response_timer);
+			ssif_bmc->response_timer_inited = false;
+		}
+		ssif_bmc->busy = false;
+		memset(&ssif_bmc->request, 0, sizeof(struct ipmi_ssif_msg));
+		spin_unlock_irqrestore(&ssif_bmc->lock, flags);
+		return count;
+	}
+
 	while (ssif_bmc->response_in_progress) {
 		spin_unlock_irqrestore(&ssif_bmc->lock, flags);
 		if (file->f_flags & O_NONBLOCK)
@@ -805,6 +826,10 @@ static int ssif_bmc_probe(struct i2c_client *client)
 	ssif_bmc = devm_kzalloc(&client->dev, sizeof(*ssif_bmc), GFP_KERNEL);
 	if (!ssif_bmc)
 		return -ENOMEM;
+
+	if (of_property_read_bool(client->dev.of_node,
+				  "arm-sbmr,skip-bootprogress-response"))
+		ssif_bmc->skip_bootprogress_resp = true;
 
 	spin_lock_init(&ssif_bmc->lock);
 
