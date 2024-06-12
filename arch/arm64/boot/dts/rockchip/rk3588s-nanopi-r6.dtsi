@@ -740,6 +740,17 @@
 	status = "okay";
 };
 
+/* USB2 PHY for USB 3.0 Type-A (lower port)*/
+&u2phy0 {
+	status = "okay";
+};
+
+&u2phy0_otg {
+	phy-supply = <&vcc5v0_usb_otg0>;
+	status = "okay";
+};
+
+/* USB2 PHY for USB 2.0 Type-A (upper port)*/
 &u2phy2 {
 	status = "okay";
 };
@@ -755,10 +766,27 @@
 	status = "okay";
 };
 
+/* USB 2.0 Type-A (upper port) */
+/* PHY: <&u2phy2_host> */
 &usb_host0_ehci {
 	status = "okay";
 };
 
+/* USB 2.0 Type-A (upper port) */
+/* PHY: <&u2phy2_host> */
 &usb_host0_ohci {
+	status = "okay";
+};
+
+/* USB 3.0 Type-A (lower port) */
+/* PHYs: <&u2phy0_otg>, <&usbdp_phy0> */
+&usb_host0_xhci {
+	dr_mode = "host";
+	extcon = <&u2phy0>;
+	status = "okay";
+};
+
+/* USB3 PHY for USB 3.0 Type-A (lower port)*/
+&usbdp_phy0 {
 	status = "okay";
 };
