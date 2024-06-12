@@ -90,6 +90,28 @@ void ecc_digits_from_bytes(const u8 *in, unsigned int nbytes,
 }
 EXPORT_SYMBOL(ecc_digits_from_bytes);
 
+void ecc_digits_to_bytes(const u64 *in, unsigned int ndigits,
+			 u8 *out, unsigned int nbytes)
+{
+	unsigned int o = nbytes & 7;
+	__be64 msd;
+	int i;
+
+	if (o) {
+		msd = cpu_to_be64(in[--ndigits]);
+		memcpy(out, (u8 *)&msd + sizeof(msd) - o, o);
+		out += o;
+		nbytes -= o;
+	}
+
+	for (i = ndigits - 1; i >= 0 && nbytes > 0; i--) {
+		put_unaligned_be64(in[i], out);
+		out += sizeof(u64);
+		nbytes -= sizeof(u64);
+	}
+}
+EXPORT_SYMBOL(ecc_digits_to_bytes);
+
 static u64 *ecc_alloc_digits_space(unsigned int ndigits)
 {
 	size_t len = ndigits * sizeof(u64);

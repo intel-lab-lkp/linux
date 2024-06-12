@@ -68,6 +68,19 @@ void ecc_digits_from_bytes(const u8 *in, unsigned int nbytes,
 			   u64 *out, unsigned int ndigits);
 
 /**
+ * ecc_digits_to_bytes() - Copy digits into a byte array of size nbytes
+ * @in:      Input digits array
+ * @ndigits: Number of digits in input digits array
+ * @out:     Output byte array
+ * @nbytes:  Number of bytes to copy into byte array
+ *
+ * The first byte in the byte array will have the most significant bits of the
+ * large integer.
+ */
+void ecc_digits_to_bytes(const u64 *in, unsigned int ndigits,
+			 u8 *out, unsigned int nbytes);
+
+/**
  * ecc_is_key_valid() - Validate a given ECDH private key
  *
  * @curve_id:		id representing the curve to use
