@@ -12,4 +12,13 @@ config PCI_SW_SWITCHTEC
 	 devices. See <file:Documentation/driver-api/switchtec.rst> for more
 	 information.
 
+config PCI_SW_DISCOVERY
+	depends on PCI
+	tristate "PCI Switch discovery module"
+	help
+	 This kernel module discovers the PCI-to-PCI bridges of PCIe switches
+	 and forms the virtual switch links if the bridges belong to the same
+	 Physical switch. The switch links help to identify shorter distances
+	 for P2P configurations.
+
 endmenu

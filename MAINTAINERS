@@ -17359,6 +17359,19 @@ F:	Documentation/driver-api/pci/p2pdma.rst
 F:	drivers/pci/p2pdma.c
 F:	include/linux/pci-p2pdma.h
 
+PCI SWITCH DISCOVERY
+M:	Shivasharan S <shivasharan.srikanteshwara@broadcom.com>
+M:	Sumanesh Samanta <sumanesh.samanta@broadcom.com>
+L:	linux-pci@vger.kernel.org
+S:	Maintained
+Q:	https://patchwork.kernel.org/project/linux-pci/list/
+B:	https://bugzilla.kernel.org
+C:	irc://irc.oftc.net/linux-pci
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/pci/pci.git
+F:	Documentation/driver-api/pci/switch_discovery.rst
+F:	drivers/pci/switch/switch_discovery.c
+F:	drivers/pci/switch/switch_discovery.h
+
 PCI SUBSYSTEM
 M:	Bjorn Helgaas <bhelgaas@google.com>
 L:	linux-pci@vger.kernel.org
