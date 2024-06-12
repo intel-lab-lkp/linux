@@ -123,13 +123,15 @@ int ecc_gen_privkey(unsigned int curve_id, unsigned int ndigits,
  * @curve_id:		id representing the curve to use
  * @ndigits:		curve's number of digits
  * @private_key:	pregenerated private key for the given curve
- * @public_key:		buffer for storing the generated public key
+ * @public_key:		2 * nbytes buffer for storing the generated public key
+ * @nbytes:		size of one coordinate of the public key
  *
  * Returns 0 if the public key was generated successfully, a negative value
  * if an error occurred.
  */
 int ecc_make_pub_key(const unsigned int curve_id, unsigned int ndigits,
-		     const u64 *private_key, u64 *public_key);
+		     const u64 *private_key, u8 *public_key,
+		     unsigned int nbytes);
 
 /**
  * crypto_ecdh_shared_secret() - Compute a shared secret
@@ -137,8 +139,9 @@ int ecc_make_pub_key(const unsigned int curve_id, unsigned int ndigits,
  * @curve_id:		id representing the curve to use
  * @ndigits:		curve's number of digits
  * @private_key:	private key of part A
- * @public_key:		public key of counterpart B
- * @secret:		buffer for storing the calculated shared secret
+ * @public_key:		2 * nbytes buffer with public key of counterpart B
+ * @nbytes:		size of one coordinate of the public key
+ * @secret:		nbytes buffer for storing the calculated shared secret
  *
  * Note: It is recommended that you hash the result of crypto_ecdh_shared_secret
  * before using it for symmetric encryption or HMAC.
@@ -147,8 +150,8 @@ int ecc_make_pub_key(const unsigned int curve_id, unsigned int ndigits,
  * if an error occurred.
  */
 int crypto_ecdh_shared_secret(unsigned int curve_id, unsigned int ndigits,
-			      const u64 *private_key, const u64 *public_key,
-			      u64 *secret);
+			      const u64 *private_key, const u8 *public_key,
+			      unsigned int nbytes, u8 *secret);
 
 /**
  * ecc_is_pubkey_valid_partial() - Partial public key validation
