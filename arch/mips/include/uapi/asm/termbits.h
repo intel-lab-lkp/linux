@@ -78,96 +78,96 @@ struct ktermios {
 #define VEOL		17		/* End-of-line character [ICANON] */
 
 /* c_iflag bits */
-#define IUCLC	0x0200		/* Map upper case to lower case on input */
-#define IXON	0x0400		/* Enable start/stop output control */
-#define IXOFF	0x1000		/* Enable start/stop input control */
-#define IMAXBEL	0x2000		/* Ring bell when input queue is full */
-#define IUTF8	0x4000		/* Input is UTF-8 */
+#define IUCLC	0x0200U		/* Map upper case to lower case on input */
+#define IXON	0x0400U		/* Enable start/stop output control */
+#define IXOFF	0x1000U		/* Enable start/stop input control */
+#define IMAXBEL	0x2000U		/* Ring bell when input queue is full */
+#define IUTF8	0x4000U		/* Input is UTF-8 */
 
 /* c_oflag bits */
-#define OLCUC	0x00002		/* Map lower case to upper case on output */
-#define ONLCR	0x00004		/* Map NL to CR-NL on output */
-#define NLDLY	0x00100
-#define   NL0	0x00000
-#define   NL1	0x00100
-#define CRDLY	0x00600
-#define   CR0	0x00000
-#define   CR1	0x00200
-#define   CR2	0x00400
-#define   CR3	0x00600
-#define TABDLY	0x01800
-#define   TAB0	0x00000
-#define   TAB1	0x00800
-#define   TAB2	0x01000
-#define   TAB3	0x01800
-#define   XTABS	0x01800
-#define BSDLY	0x02000
-#define   BS0	0x00000
-#define   BS1	0x02000
-#define VTDLY	0x04000
-#define   VT0	0x00000
-#define   VT1	0x04000
-#define FFDLY	0x08000
-#define   FF0	0x00000
-#define   FF1	0x08000
+#define OLCUC	0x00002U	/* Map lower case to upper case on output */
+#define ONLCR	0x00004U	/* Map NL to CR-NL on output */
+#define NLDLY	0x00100U
+#define   NL0	0x00000U
+#define   NL1	0x00100U
+#define CRDLY	0x00600U
+#define   CR0	0x00000U
+#define   CR1	0x00200U
+#define   CR2	0x00400U
+#define   CR3	0x00600U
+#define TABDLY	0x01800U
+#define   TAB0	0x00000U
+#define   TAB1	0x00800U
+#define   TAB2	0x01000U
+#define   TAB3	0x01800U
+#define   XTABS	0x01800U
+#define BSDLY	0x02000U
+#define   BS0	0x00000U
+#define   BS1	0x02000U
+#define VTDLY	0x04000U
+#define   VT0	0x00000U
+#define   VT1	0x04000U
+#define FFDLY	0x08000U
+#define   FF0	0x00000U
+#define   FF1	0x08000U
 /*
 #define PAGEOUT ???
 #define WRAP	???
  */
 
 /* c_cflag bit meaning */
-#define CBAUD		0x0000100f
-#define CSIZE		0x00000030	/* Number of bits per byte (mask) */
-#define   CS5		0x00000000	/* 5 bits per byte */
-#define   CS6		0x00000010	/* 6 bits per byte */
-#define   CS7		0x00000020	/* 7 bits per byte */
-#define   CS8		0x00000030	/* 8 bits per byte */
-#define CSTOPB		0x00000040	/* Two stop bits instead of one */
-#define CREAD		0x00000080	/* Enable receiver */
-#define PARENB		0x00000100	/* Parity enable */
-#define PARODD		0x00000200	/* Odd parity instead of even */
-#define HUPCL		0x00000400	/* Hang up on last close */
-#define CLOCAL		0x00000800	/* Ignore modem status lines */
-#define CBAUDEX		0x00001000
-#define BOTHER		0x00001000
-#define     B57600	0x00001001
-#define    B115200	0x00001002
-#define    B230400	0x00001003
-#define    B460800	0x00001004
-#define    B500000	0x00001005
-#define    B576000	0x00001006
-#define    B921600	0x00001007
-#define   B1000000	0x00001008
-#define   B1152000	0x00001009
-#define   B1500000	0x0000100a
-#define   B2000000	0x0000100b
-#define   B2500000	0x0000100c
-#define   B3000000	0x0000100d
-#define   B3500000	0x0000100e
-#define   B4000000	0x0000100f
-#define CIBAUD		0x100f0000	/* input baud rate */
+#define CBAUD		0x0000100fU
+#define CSIZE		0x00000030U	/* Number of bits per byte (mask) */
+#define   CS5		0x00000000U	/* 5 bits per byte */
+#define   CS6		0x00000010U	/* 6 bits per byte */
+#define   CS7		0x00000020U	/* 7 bits per byte */
+#define   CS8		0x00000030U	/* 8 bits per byte */
+#define CSTOPB		0x00000040U	/* Two stop bits instead of one */
+#define CREAD		0x00000080U	/* Enable receiver */
+#define PARENB		0x00000100U	/* Parity enable */
+#define PARODD		0x00000200U	/* Odd parity instead of even */
+#define HUPCL		0x00000400U	/* Hang up on last close */
+#define CLOCAL		0x00000800U	/* Ignore modem status lines */
+#define CBAUDEX		0x00001000U
+#define BOTHER		0x00001000U
+#define     B57600	0x00001001U
+#define    B115200	0x00001002U
+#define    B230400	0x00001003U
+#define    B460800	0x00001004U
+#define    B500000	0x00001005U
+#define    B576000	0x00001006U
+#define    B921600	0x00001007U
+#define   B1000000	0x00001008U
+#define   B1152000	0x00001009U
+#define   B1500000	0x0000100aU
+#define   B2000000	0x0000100bU
+#define   B2500000	0x0000100cU
+#define   B3000000	0x0000100dU
+#define   B3500000	0x0000100eU
+#define   B4000000	0x0000100fU
+#define CIBAUD		0x100f0000U	/* input baud rate */
 
 /* c_lflag bits */
-#define ISIG	0x00001		/* Enable signals */
-#define ICANON	0x00002		/* Do erase and kill processing */
-#define XCASE	0x00004
-#define ECHO	0x00008		/* Enable echo */
-#define ECHOE	0x00010		/* Visual erase for ERASE */
-#define ECHOK	0x00020		/* Echo NL after KILL */
-#define ECHONL	0x00040		/* Echo NL even if ECHO is off */
-#define NOFLSH	0x00080		/* Disable flush after interrupt */
-#define IEXTEN	0x00100		/* Enable DISCARD and LNEXT */
-#define ECHOCTL	0x00200		/* Echo control characters as ^X */
-#define ECHOPRT	0x00400		/* Hardcopy visual erase */
-#define ECHOKE	0x00800		/* Visual erase for KILL */
-#define FLUSHO	0x02000
-#define PENDIN	0x04000		/* Retype pending input (state) */
-#define TOSTOP	0x08000		/* Send SIGTTOU for background output */
+#define ISIG	0x00001U	/* Enable signals */
+#define ICANON	0x00002U	/* Do erase and kill processing */
+#define XCASE	0x00004U
+#define ECHO	0x00008U	/* Enable echo */
+#define ECHOE	0x00010U	/* Visual erase for ERASE */
+#define ECHOK	0x00020U	/* Echo NL after KILL */
+#define ECHONL	0x00040U	/* Echo NL even if ECHO is off */
+#define NOFLSH	0x00080U	/* Disable flush after interrupt */
+#define IEXTEN	0x00100U	/* Enable DISCARD and LNEXT */
+#define ECHOCTL	0x00200U	/* Echo control characters as ^X */
+#define ECHOPRT	0x00400U	/* Hardcopy visual erase */
+#define ECHOKE	0x00800U	/* Visual erase for KILL */
+#define FLUSHO	0x02000U
+#define PENDIN	0x04000U	/* Retype pending input (state) */
+#define TOSTOP	0x08000U	/* Send SIGTTOU for background output */
 #define ITOSTOP	TOSTOP
-#define EXTPROC	0x10000		/* External processing on pty */
+#define EXTPROC	0x10000U	/* External processing on pty */
 
 /* ioctl (fd, TIOCSERGETLSR, &result) where result may be as below */
-#define TIOCSER_TEMT	0x01	/* Transmitter physically empty */
+#define TIOCSER_TEMT	0x01U	/* Transmitter physically empty */
 
 /* tcsetattr uses these */
 #define TCSANOW		TCSETS	/* Change immediately */
