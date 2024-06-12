@@ -21,6 +21,8 @@
 #include <linux/seq_buf.h>
 #include <linux/xarray.h>
 
+extern bool sw_disc_check_virtual_link(struct pci_dev *a, struct pci_dev *b);
+
 struct pci_p2pdma {
 	struct gen_pool *pool;
 	bool p2pmem_published;
@@ -576,7 +578,7 @@ calc_map_type_and_dist(struct pci_dev *provider, struct pci_dev *client,
 		int *dist, bool verbose)
 {
 	enum pci_p2pdma_map_type map_type = PCI_P2PDMA_MAP_THRU_HOST_BRIDGE;
-	struct pci_dev *a = provider, *b = client, *bb;
+	struct pci_dev *a = provider, *b = client, *bb, *b_virtual_link = NULL;
 	bool acs_redirects = false;
 	struct pci_p2pdma *p2pdma;
 	struct seq_buf acs_list;
@@ -606,6 +608,17 @@ calc_map_type_and_dist(struct pci_dev *provider, struct pci_dev *client,
 			if (a == bb)
 				goto check_b_path_acs;
 
+			// Physical Broadcom PEX switches can be provisioned into
+			// multiple virtual switches.
+			// if both upstream bridges belong to the same physical
+			// switch, and the switch supports P2P,
+			// p2p_dma_distance() should take into account of such
+			// scenarios.
+			if (sw_disc_check_virtual_link(a, bb)) {
+				b_virtual_link = bb;
+				goto check_b_path_acs;
+			}
+
 			bb = pci_upstream_bridge(bb);
 			dist_b++;
 		}
@@ -628,6 +641,9 @@ check_b_path_acs:
 			seq_buf_print_bus_devfn(&acs_list, bb);
 			acs_cnt++;
 		}
+
+		if (b_virtual_link && bb == b_virtual_link)
+			break;
 
 		bb = pci_upstream_bridge(bb);
 	}
