@@ -66,7 +66,12 @@ static int bnx2x_calc_num_queues(struct bnx2x *bp)
 	if (is_kdump_kernel())
 		nq = 1;
 
-	nq = clamp(nq, 1, BNX2X_MAX_QUEUES(bp));
+	int max_nq = FP_SB_MAX_E1x - 1;
+
+	if(NO_FCOE(bp))
+		max_nq = FP_SB_MAX_E1x;
+
+	nq = clamp(nq, 1, max_nq);
 	return nq;
 }
 
