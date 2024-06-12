@@ -373,12 +373,32 @@ struct drm_mode_get_plane_res {
 #define DRM_MODE_ENCODER_DPI	8
 
 struct drm_mode_get_encoder {
+	/**
+	 * @encoder_id: Object ID of the encoder whose information
+	 * should be retrieved. Set by caller.
+	 */
 	__u32 encoder_id;
+	/** @encoder_type: Type of the encoder */
 	__u32 encoder_type;
 
-	__u32 crtc_id; /**< Id of crtc */
+	/** @crtc_id: Object ID of the current CRTC. */
+	__u32 crtc_id;
 
+	/**
+	 * @possible_crtcs: Bitmask of CRTCs compatible with the encoder.
+	 * CRTCs are created and they receive an index, which corresponds
+	 * to their position in the bitmask. Bit N corresponds to
+	 * :ref:`CRTC index<crtc_index>` N.
+	 */
 	__u32 possible_crtcs;
+	/**
+	 * @possible_clones: Bitmask of encoders compatible with the
+	 * encoder for cloning. A set of cloned encoders all source
+	 * their data from the same CRTC.
+	 * Encoders are created and they receive an index, which corresponds
+	 * to their position in the bitmask. Bit N corresponds to
+	 * :ref:`encoder index<encoder_index>` N.
+	 */
 	__u32 possible_clones;
 };
 

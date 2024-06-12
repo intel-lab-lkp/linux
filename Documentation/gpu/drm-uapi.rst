@@ -564,6 +564,19 @@ CRTC ID's, and the CRTC index is its position in this array.
 .. kernel-doc:: include/uapi/drm/drm_mode.h
    :internal:
 
+encoder index
+-------------
+
+encoders have both an object ID and an index, and they are not the same thing.
+The index is used in cases where a densely packed identifier for an encoder is
+needed, for instance a bitmask of encoders. The member possible_clones of struct
+drm_mode_get_encoder is an example.
+
+:c:macro:`DRM_IOCTL_MODE_GETRESOURCES` populates a structure with an array of
+encoder IDs, and the encoder index is its position in this array.
+
+.. kernel-doc:: include/uapi/drm/drm_mode.h
+   :internal:
 
 dma-buf interoperability
 ========================
