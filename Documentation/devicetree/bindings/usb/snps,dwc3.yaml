@@ -242,6 +242,13 @@ properties:
       When set, all HighSpeed bus instances in park mode are disabled.
     type: boolean
 
+  snps,p2p3tranok-quirk:
+    description:
+      When set, the controller transitions directly from phy power state
+      P2 to P3 or from state P3 to P2. Note that this can only be set
+      if the USB3 PHY supports direct p3 to p2 or p2 to p3 conversion.
+    type: boolean
+
   snps,dis_metastability_quirk:
     description:
       When set, disable metastability workaround. CAUTION! Use only if you are
