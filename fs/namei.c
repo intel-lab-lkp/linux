@@ -3657,8 +3657,12 @@ static int do_open(struct nameidata *nd,
 		do_truncate = true;
 	}
 	error = may_open(idmap, &nd->path, acc_mode, open_flag);
-	if (!error && !(file->f_mode & FMODE_OPENED))
-		error = vfs_open(&nd->path, file);
+	if (!error) {
+		if (file->f_mode & FMODE_OPENED)
+			fsnotify_open(file);
+		else
+			error = vfs_open(&nd->path, file);
+	}
 	if (!error)
 		error = security_file_post_open(file, op->acc_mode);
 	if (!error && do_truncate)
@@ -3717,6 +3721,7 @@ int vfs_tmpfile(struct mnt_idmap *idmap,
 	error = may_open(idmap, &file->f_path, 0, file->f_flags);
 	if (error)
 		return error;
+	fsnotify_open(file);
 	inode = file_inode(file);
 	if (!(open_flag & O_EXCL)) {
 		spin_lock(&inode->i_lock);
