@@ -1,0 +1,28 @@
+drm drm-fixes 83a7eefedc9b56fe7bfeff13b6c7356688ffa670
+	Linux 6.10-rc3
+drm-misc drm-misc-fixes c38896ca6318c2df20bbe6c8e3f633e071fda910
+	drm/mediatek: Call drm_atomic_helper_shutdown() at shutdown time
+drm-intel drm-intel-fixes c3f38fa61af77b49866b006939479069cd451173
+	Linux 6.10-rc2
+drm-xe drm-xe-fixes a9f9b30e1748252d158f78a0c0affdc949671dd1
+	MAINTAINERS: Update Xe driver maintainers
+drm drm-next 1ddaaa244021aba8496536a6627b4ad2bc0f936a
+	Merge tag 'amd-drm-next-6.11-2024-06-07' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm-misc drm-misc-next-fixes 539d33b5783804f22a62bd62ff463dfd1cef4265
+	drm/komeda: remove unused struct 'gamma_curve_segment'
+drm-intel drm-intel-next-fixes 1613e604df0cd359cf2a7fbd9be7a0bcfacfabd0
+	Linux 6.10-rc1
+drm-xe drm-xe-next-fixes d69c3d4b53829097b8948d6791ea32c07de3faab
+	drm/xe/ads: Use flexible-array
+drm-misc drm-misc-next 6b4468b0c6ba37a16795da567b58dc80bc7fb439
+	drm/bridge-connector: implement glue code for HDMI connector
+drm-intel drm-intel-next ca8a170f73d93cca2be791162fcbf12941c47558
+	drm/i915/psr: Wake time is aux less wake time for Panel Replay
+drm-intel drm-intel-gt-next 79655e867ad6dfde2734c67c7704c0dd5bf1e777
+	drm/i915/mtl: Update workaround 14018575942
+drm-xe drm-xe-next 513ea833c20109d475b4ace9e6a18f6c0c25de4c
+	drm/xe/vf: Ignore force-wake requests if VF
+drm-intel topic/core-for-CI 0c0631ea625eb06be7499ab010b5539227e72a8b
+	thunderbolt: Add Kconfig option to disable PCIe tunneling
+drm-xe topic/xe-for-CI 428c3ef38ef5565140b2104f0d3dafdae9056ca9
+	Revert "drm/xe/gsc: define GSC FW for LNL"
