@@ -386,6 +386,9 @@ struct drm_mode_get_encoder {
 
 	/**
 	 * @possible_crtcs: Bitmask of CRTCs compatible with the encoder.
+	 * If multiple CRTCs are possible userspace should generally try
+	 * to utilize CRTCs bottom up as that may result in lower power
+	 * consumption on some systems.
 	 * CRTCs are created and they receive an index, which corresponds
 	 * to their position in the bitmask. Bit N corresponds to
 	 * :ref:`CRTC index<crtc_index>` N.
