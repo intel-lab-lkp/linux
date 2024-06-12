@@ -267,7 +267,7 @@ static bool __read_mostly pci_seg_supported = true;
 
 static int xen_initdom_setup_msi_irqs(struct pci_dev *dev, int nvec, int type)
 {
-	int ret = 0;
+	int ret;
 	struct msi_desc *msidesc;
 
 	msi_for_each_desc(msidesc, &dev->dev, MSI_DESC_NOTASSOCIATED) {
@@ -353,7 +353,7 @@ out:
 
 bool xen_initdom_restore_msi(struct pci_dev *dev)
 {
-	int ret = 0;
+	int ret;
 
 	if (!xen_initial_domain())
 		return true;
