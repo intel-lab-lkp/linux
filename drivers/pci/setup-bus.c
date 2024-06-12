@@ -960,7 +960,7 @@ static inline resource_size_t calculate_mem_align(resource_size_t *aligns,
 	for (order = 0; order <= max_order; order++) {
 		resource_size_t align1 = 1;
 
-		align1 <<= (order + __ffs(SZ_1M));
+		align1 <<= order + __ffs(SZ_1M);
 
 		if (!align)
 			min_align = align1;
