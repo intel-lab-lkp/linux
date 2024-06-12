@@ -625,6 +625,35 @@ Contact: Thomas Zimmermann <tzimmermann@suse.de>, Daniel Vetter
 
 Level: Advanced
 
+Improve HDMI Infrastructure
+---------------------------
+
+We have a bunch of helpers to handle HDMI and reduce the boilerplate in
+drivers. Support so far includes HDMI 1.4 support, but we need to extend
+it with:
+
+  - CEC handling support. CEC requires a bit of integration into every
+    HDMI driver to set the device physical address according to the EDID
+    in `.get_modes`, and to clear/reset it in the hotplug detection
+    path. We should create the ``drm_atomic_helper_connector_hdmi_get_modes()``
+    and ``drm_atomic_helper_connector_hdmi_handle_hotplug()`` helpers to handle
+    this properly, and convert drivers to use them.
+
+  - In order to support HDMI 2.0 properly, the scrambler parameters need
+    to be moved into the state. This includes figuring out in
+    drm_atomic_helper_connector_hdmi_check() if the scrambler and TMDS ratio
+    need to be changed, and make the
+    ``drm_atomic_helper_connector_hdmi_handle_hotplug()`` helper reset the
+    scrambler status when the device is plugged and unplugged.
+
+  - We need to support YUV420 too.
+
+The `vc4` driver is a good example for all this.
+
+Contact: Maxime Ripard <mripard@kernel.org>
+
+Level: Intermediate
+
 
 Better Testing
 ==============
