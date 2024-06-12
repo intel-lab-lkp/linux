@@ -625,6 +625,26 @@ Contact: Thomas Zimmermann <tzimmermann@suse.de>, Daniel Vetter
 
 Level: Advanced
 
+Improve MIPI-DSI infrastructure
+-------------------------------
+
+The MIPI-DSI infrastructure in KMS supports MIPI-DSI devices in part
+through a dedicated bus (`drm_mipi_dsi.c`) and in part through ad-hoc
+calls in drivers, especially to handle the power state of the bus.
+
+This is an oddity as far as the device model is concerned, but is also
+an issue when multiple devices are chained (like bridges) and have
+different requirements.
+
+It would be a good idea to move all the power state handling out of KMS
+and into the bus support itself.
+
+See `[RFC PATCH 03/10] drm/mipi-dsi: add API for manual control over the DSI link power state <https://lore.kernel.org/dri-devel/20231016165355.1327217-4-dmitry.baryshkov@linaro.org/>`_
+
+Contact: Maxime Ripard <mripard@kernel.org>, Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+
+Level: Advanced
+
 Improve HDMI Infrastructure
 ---------------------------
 
