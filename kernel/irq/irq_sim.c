@@ -17,6 +17,7 @@ struct irq_sim_work_ctx {
 	unsigned int		irq_count;
 	unsigned long		*pending;
 	struct irq_domain	*domain;
+	struct blocking_notifier_head notifier;
 };
 
 struct irq_sim_irq_ctx {
@@ -88,6 +89,28 @@ static int irq_sim_set_irqchip_state(struct irq_data *data,
 	return 0;
 }
 
+static int irq_sim_request_resources(struct irq_data *data)
+{
+	struct irq_sim_irq_ctx *irq_ctx = irq_data_get_irq_chip_data(data);
+	struct irq_sim_work_ctx *work_ctx = irq_ctx->work_ctx;
+	irq_hw_number_t hwirq = irqd_to_hwirq(data);
+
+	blocking_notifier_call_chain(&work_ctx->notifier,
+				     IRQ_SIM_DOMAIN_IRQ_REQUESTED, &hwirq);
+
+	return 0;
+}
+
+static void irq_sim_release_resources(struct irq_data *data)
+{
+	struct irq_sim_irq_ctx *irq_ctx = irq_data_get_irq_chip_data(data);
+	struct irq_sim_work_ctx *work_ctx = irq_ctx->work_ctx;
+	irq_hw_number_t hwirq = irqd_to_hwirq(data);
+
+	blocking_notifier_call_chain(&work_ctx->notifier,
+				     IRQ_SIM_DOMAIN_IRQ_RELEASED, &hwirq);
+}
+
 static struct irq_chip irq_sim_irqchip = {
 	.name			= "irq_sim",
 	.irq_mask		= irq_sim_irqmask,
@@ -95,6 +118,8 @@ static struct irq_chip irq_sim_irqchip = {
 	.irq_set_type		= irq_sim_set_type,
 	.irq_get_irqchip_state	= irq_sim_get_irqchip_state,
 	.irq_set_irqchip_state	= irq_sim_set_irqchip_state,
+	.irq_request_resources	= irq_sim_request_resources,
+	.irq_release_resources	= irq_sim_release_resources,
 };
 
 static void irq_sim_handle_irq(struct irq_work *work)
@@ -183,6 +208,7 @@ struct irq_domain *irq_domain_create_sim(struct fwnode_handle *fwnode,
 	work_ctx->irq_count = num_irqs;
 	work_ctx->work = IRQ_WORK_INIT_HARD(irq_sim_handle_irq);
 	work_ctx->pending = no_free_ptr(pending);
+	BLOCKING_INIT_NOTIFIER_HEAD(&work_ctx->notifier);
 
 	return no_free_ptr(work_ctx)->domain;
 }
@@ -242,3 +268,41 @@ struct irq_domain *devm_irq_domain_create_sim(struct device *dev,
 	return domain;
 }
 EXPORT_SYMBOL_GPL(devm_irq_domain_create_sim);
+
+/**
+ * irq_sim_domain_register_notifier - Start listening for events on this
+ *                                    interrupt simulator.
+ *
+ * @domain:     The interrupt simulator domain to register with.
+ * @nb:         Notifier block called on domain events.
+ *
+ * On success: return 0.
+ * On failure: return negative error code.
+ */
+int irq_sim_domain_register_notifier(struct irq_domain *domain,
+				     struct notifier_block *nb)
+{
+	struct irq_sim_work_ctx *work_ctx = domain->host_data;
+
+	return blocking_notifier_chain_register(&work_ctx->notifier, nb);
+}
+EXPORT_SYMBOL_GPL(irq_sim_domain_register_notifier);
+
+/**
+ * irq_sim_domain_unregister_notifier - Stop listening for events on this
+ *                                      interrupt simulator.
+ *
+ * @domain:     The interrupt simulator domain to register with.
+ * @nb:         Notifier block called on domain events.
+ *
+ * On success: return 0.
+ * On failure: return negative error code.
+ */
+int irq_sim_domain_unregister_notifier(struct irq_domain *domain,
+				       struct notifier_block *nb)
+{
+	struct irq_sim_work_ctx *work_ctx = domain->host_data;
+
+	return blocking_notifier_chain_unregister(&work_ctx->notifier, nb);
+}
+EXPORT_SYMBOL_GPL(irq_sim_domain_unregister_notifier);
