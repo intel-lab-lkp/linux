@@ -7,8 +7,36 @@
 / {
 	model = "FriendlyElec NanoPi R6C";
 	compatible = "friendlyarm,nanopi-r6c", "rockchip,rk3588s";
+
+	/* MP2143DJ power switch (U9536 in schematics) */
+	vcc3v3_pcie: regulator-vcc3v3-pcie {
+		compatible = "regulator-fixed";
+		enable-active-high;
+		gpios = <&gpio3 RK_PC6 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pcie20x1_2_con_pwren>;
+		regulator-always-on;
+		regulator-boot-on;
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-name = "vcc3v3_pcie";
+		vin-supply = <&vcc_5v0>;
+	};
 };
 
 &lan2_led {
 	label = "user_led";
+};
+
+/* M.2 M-Key socket */
+&pcie2x1l2 {
+	vpcie3v3-supply = <&vcc3v3_pcie>;
+};
+
+&pinctrl {
+	pcie {
+		pcie20x1_2_con_pwren: pcie20x1-2-con-pwren {
+			rockchip,pins = <3 RK_PC6 RK_FUNC_GPIO &pcfg_pull_none>;
+		};
+	};
 };
