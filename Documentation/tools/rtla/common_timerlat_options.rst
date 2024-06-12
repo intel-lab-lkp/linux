@@ -31,6 +31,12 @@
         *cyclictest* sets this value to *0* by default, use **--dma-latency** *0* to have
         similar results.
 
+**--disable-idle-states**
+        Set the /sys/devices/system/cpu/cpu<n>/cpuidle/state*/disable files to 1 for cpus
+        that are running timerlat threads to avoid exit from idle latencies. On exit from
+        timerlat, the state*/disable setting is restored to its original value before
+        running timerlat.
+
 **-k**, **--kernel-threads**
 
         Use timerlat kernel-space threads, in contrast of **-u**.
