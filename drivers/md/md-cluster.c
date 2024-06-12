@@ -130,8 +130,13 @@ static int dlm_lock_sync(struct dlm_lock_resource *res, int mode)
 			0, sync_ast, res, res->bast);
 	if (ret)
 		return ret;
-	wait_event(res->sync_locking, res->sync_locking_done);
+	ret = wait_event_timeout(res->sync_locking, res->sync_locking_done,
+				60 * HZ);
 	res->sync_locking_done = false;
+	if (!ret) {
+		pr_err("locking DLM '%s' timeout!\n", res->name);
+		return -EBUSY;
+	}
 	if (res->lksb.sb_status == 0)
 		res->mode = mode;
 	return res->lksb.sb_status;
@@ -744,12 +749,14 @@ static void unlock_comm(struct md_cluster_info *cinfo)
 static int __sendmsg(struct md_cluster_info *cinfo, struct cluster_msg *cmsg)
 {
 	int error;
+	int ret = 0;
 	int slot = cinfo->slot_number - 1;
 
 	cmsg->slot = cpu_to_le32(slot);
 	/*get EX on Message*/
 	error = dlm_lock_sync(cinfo->message_lockres, DLM_LOCK_EX);
 	if (error) {
+		ret = error;
 		pr_err("md-cluster: failed to get EX on MESSAGE (%d)\n", error);
 		goto failed_message;
 	}
@@ -759,6 +766,7 @@ static int __sendmsg(struct md_cluster_info *cinfo, struct cluster_msg *cmsg)
 	/*down-convert EX to CW on Message*/
 	error = dlm_lock_sync(cinfo->message_lockres, DLM_LOCK_CW);
 	if (error) {
+		ret = error;
 		pr_err("md-cluster: failed to convert EX to CW on MESSAGE(%d)\n",
 				error);
 		goto failed_ack;
@@ -767,6 +775,7 @@ static int __sendmsg(struct md_cluster_info *cinfo, struct cluster_msg *cmsg)
 	/*up-convert CR to EX on Ack*/
 	error = dlm_lock_sync(cinfo->ack_lockres, DLM_LOCK_EX);
 	if (error) {
+		ret = error;
 		pr_err("md-cluster: failed to convert CR to EX on ACK(%d)\n",
 				error);
 		goto failed_ack;
@@ -775,6 +784,7 @@ static int __sendmsg(struct md_cluster_info *cinfo, struct cluster_msg *cmsg)
 	/*down-convert EX to CR on Ack*/
 	error = dlm_lock_sync(cinfo->ack_lockres, DLM_LOCK_CR);
 	if (error) {
+		ret = error;
 		pr_err("md-cluster: failed to convert EX to CR on ACK(%d)\n",
 				error);
 		goto failed_ack;
@@ -789,7 +799,7 @@ failed_ack:
 		goto failed_ack;
 	}
 failed_message:
-	return error;
+	return ret;
 }
 
 static int sendmsg(struct md_cluster_info *cinfo, struct cluster_msg *cmsg,
