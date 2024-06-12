@@ -711,8 +711,15 @@ static int abx80x_nvmem_xfer(struct abx80x_priv *priv, unsigned int offset,
 		else
 			ret = i2c_smbus_read_i2c_block_data(priv->client, reg,
 							    len, val);
-		if (ret)
+		if (ret < 0)
 			return ret;
+
+		if (!write) {
+			if (ret)
+				len = ret;
+			else
+				return -EIO;
+		}
 
 		offset += len;
 		val += len;
