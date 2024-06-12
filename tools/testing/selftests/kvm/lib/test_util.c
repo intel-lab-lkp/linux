@@ -121,17 +121,6 @@ struct timespec timespec_div(struct timespec ts, int divisor)
 	return timespec_add_ns((struct timespec){0}, ns);
 }
 
-void print_skip(const char *fmt, ...)
-{
-	va_list ap;
-
-	assert(fmt);
-	va_start(ap, fmt);
-	vprintf(fmt, ap);
-	va_end(ap);
-	puts(", skipping test");
-}
-
 bool thp_configured(void)
 {
 	int ret;

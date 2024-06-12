@@ -353,8 +353,7 @@ int main(int argc, char *argv[])
 
 int main(void)
 {
-	print_skip("__NR_userfaultfd must be present for userfaultfd test");
-	return KSFT_SKIP;
+	ksft_exit_skip("__NR_userfaultfd must be present for userfaultfd test\n");
 }
 
 #endif /* __NR_userfaultfd */

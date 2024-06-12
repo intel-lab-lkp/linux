@@ -85,10 +85,8 @@ test_assert(bool exp, const char *exp_str,
 		}
 		va_end(ap);
 
-		if (errno == EACCES) {
-			print_skip("Access denied - Exiting");
-			exit(KSFT_SKIP);
-		}
+		if (errno == EACCES)
+			ksft_exit_skip("Access denied - Exiting\n");
 		exit(254);
 	}
 

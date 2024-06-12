@@ -757,8 +757,8 @@ int main(int ac, char **av)
 	}
 
 	if (!cnt_impl) {
-		print_skip("No GICv2 nor GICv3 support");
-		exit(KSFT_SKIP);
+		ksft_exit_skip("No GICv2 nor GICv3 support\n");
 	}
+
 	return 0;
 }

@@ -884,10 +884,8 @@ static void test_copy_key_fetch_prot_override(void)
 
 	guest_0_page = vm_vaddr_alloc(t.kvm_vm, PAGE_SIZE, 0);
 	guest_last_page = vm_vaddr_alloc(t.kvm_vm, PAGE_SIZE, last_page_addr);
-	if (guest_0_page != 0 || guest_last_page != last_page_addr) {
-		print_skip("did not allocate guest pages at required positions");
-		goto out;
-	}
+	if (guest_0_page != 0 || guest_last_page != last_page_addr)
+		ksft_exit_skip("did not allocate guest pages at required positions\n");
 
 	HOST_SYNC(t.vcpu, STAGE_INITED);
 	t.run->s.regs.crs[0] |= CR0_FETCH_PROTECTION_OVERRIDE;
@@ -923,10 +921,8 @@ static void test_errors_key_fetch_prot_override_not_enabled(void)
 
 	guest_0_page = vm_vaddr_alloc(t.kvm_vm, PAGE_SIZE, 0);
 	guest_last_page = vm_vaddr_alloc(t.kvm_vm, PAGE_SIZE, last_page_addr);
-	if (guest_0_page != 0 || guest_last_page != last_page_addr) {
-		print_skip("did not allocate guest pages at required positions");
-		goto out;
-	}
+	if (guest_0_page != 0 || guest_last_page != last_page_addr)
+		ksft_exit_skip("did not allocate guest pages at required positions\n");
 	HOST_SYNC(t.vcpu, STAGE_INITED);
 	HOST_SYNC(t.vcpu, STAGE_SKEYS_SET);
 
@@ -944,10 +940,8 @@ static void test_errors_key_fetch_prot_override_enabled(void)
 
 	guest_0_page = vm_vaddr_alloc(t.kvm_vm, PAGE_SIZE, 0);
 	guest_last_page = vm_vaddr_alloc(t.kvm_vm, PAGE_SIZE, last_page_addr);
-	if (guest_0_page != 0 || guest_last_page != last_page_addr) {
-		print_skip("did not allocate guest pages at required positions");
-		goto out;
-	}
+	if (guest_0_page != 0 || guest_last_page != last_page_addr)
+		ksft_exit_skip("did not allocate guest pages at required positions");
 	HOST_SYNC(t.vcpu, STAGE_INITED);
 	t.run->s.regs.crs[0] |= CR0_FETCH_PROTECTION_OVERRIDE;
 	t.run->kvm_dirty_regs = KVM_SYNC_CRS;

@@ -144,10 +144,9 @@ int main(int argc, char *argv[])
 	free((void *)hv_cpuid_entries);
 
 	if (!kvm_cpu_has(X86_FEATURE_VMX) ||
-	    !kvm_has_cap(KVM_CAP_HYPERV_ENLIGHTENED_VMCS)) {
-		print_skip("Enlightened VMCS is unsupported");
-		goto do_sys;
-	}
+	    !kvm_has_cap(KVM_CAP_HYPERV_ENLIGHTENED_VMCS))
+		ksft_exit_skip("Enlightened VMCS is unsupported\n");
+
 	vcpu_enable_evmcs(vcpu);
 	hv_cpuid_entries = vcpu_get_supported_hv_cpuid(vcpu);
 	test_hv_cpuid(hv_cpuid_entries, true);
@@ -155,10 +154,8 @@ int main(int argc, char *argv[])
 
 do_sys:
 	/* Test system ioctl version */
-	if (!kvm_has_cap(KVM_CAP_SYS_HYPERV_CPUID)) {
-		print_skip("KVM_CAP_SYS_HYPERV_CPUID not supported");
-		goto out;
-	}
+	if (!kvm_has_cap(KVM_CAP_SYS_HYPERV_CPUID))
+		ksft_exit_skip("KVM_CAP_SYS_HYPERV_CPUID not supported\n");
 
 	test_hv_cpuid_e2big(vm, NULL);
 

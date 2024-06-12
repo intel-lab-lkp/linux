@@ -273,10 +273,8 @@ int main(int argc, char *argv[])
 	kvm_ioctl(vm->kvm_fd, KVM_X86_GET_MCE_CAP_SUPPORTED,
 		  &supported_mcg_caps);
 
-	if (!(supported_mcg_caps & MCG_CMCI_P)) {
-		print_skip("MCG_CMCI_P is not supported");
-		exit(KSFT_SKIP);
-	}
+	if (!(supported_mcg_caps & MCG_CMCI_P))
+		ksft_exit_skip("MCG_CMCI_P is not supported\n");
 
 	ucna_vcpu = create_vcpu_with_mce_cap(vm, 0, true, ucna_injection_guest_code);
 	cmcidis_vcpu = create_vcpu_with_mce_cap(vm, 1, false, cmci_disabled_guest_code);

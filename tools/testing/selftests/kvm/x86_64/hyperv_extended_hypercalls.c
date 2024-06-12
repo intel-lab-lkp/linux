@@ -47,10 +47,8 @@ int main(void)
 
 	/* Verify if extended hypercalls are supported */
 	if (!kvm_cpuid_has(kvm_get_supported_hv_cpuid(),
-			   HV_ENABLE_EXTENDED_HYPERCALLS)) {
-		print_skip("Extended calls not supported by the kernel");
-		exit(KSFT_SKIP);
-	}
+			   HV_ENABLE_EXTENDED_HYPERCALLS))
+		ksft_exit_skip("Extended calls not supported by the kernel\n");
 
 	vm = vm_create_with_one_vcpu(&vcpu, guest_code);
 	run = vcpu->run;

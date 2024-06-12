@@ -692,11 +692,9 @@ static void run_test(enum vm_guest_mode mode, void *arg)
 	uint32_t ring_buf_idx = 0;
 	int sem_val;
 
-	if (!log_mode_supported()) {
-		print_skip("Log mode '%s' not supported",
-			   log_modes[host_log_mode].name);
-		return;
-	}
+	if (!log_mode_supported())
+		ksft_exit_skip("Log mode '%s' not supported\n",
+			       log_modes[host_log_mode].name);
 
 	/*
 	 * We reserve page table for 2 times of extra dirty mem which
