@@ -237,7 +237,7 @@ static void ttm_bo_unreserve_basic(struct kunit *test)
 	struct ttm_place *place;
 	struct ttm_resource_manager *man;
 	unsigned int bo_prio = TTM_MAX_BO_PRIORITY - 1;
-	uint32_t mem_type = TTM_PL_SYSTEM;
+	u32 mem_type = TTM_PL_SYSTEM;
 	int err;
 
 	place = ttm_place_kunit_init(test, mem_type, 0);
@@ -278,7 +278,7 @@ static void ttm_bo_unreserve_pinned(struct kunit *test)
 	struct ttm_device *ttm_dev;
 	struct ttm_resource *res1, *res2;
 	struct ttm_place *place;
-	uint32_t mem_type = TTM_PL_SYSTEM;
+	u32 mem_type = TTM_PL_SYSTEM;
 	int err;
 
 	ttm_dev = kunit_kzalloc(test, sizeof(*ttm_dev), GFP_KERNEL);
@@ -322,7 +322,7 @@ static void ttm_bo_unreserve_bulk(struct kunit *test)
 	struct ttm_device *ttm_dev;
 	struct ttm_place *place;
 	struct dma_resv *resv;
-	uint32_t mem_type = TTM_PL_SYSTEM;
+	u32 mem_type = TTM_PL_SYSTEM;
 	unsigned int bo_priority = 0;
 	int err;
 
@@ -380,7 +380,7 @@ static void ttm_bo_put_basic(struct kunit *test)
 	struct ttm_resource *res;
 	struct ttm_device *ttm_dev;
 	struct ttm_place *place;
-	uint32_t mem_type = TTM_PL_SYSTEM;
+	u32 mem_type = TTM_PL_SYSTEM;
 	int err;
 
 	place = ttm_place_kunit_init(test, mem_type, 0);
@@ -495,7 +495,7 @@ static void ttm_bo_pin_unpin_resource(struct kunit *test)
 	struct ttm_resource *res;
 	struct ttm_device *ttm_dev;
 	struct ttm_place *place;
-	uint32_t mem_type = TTM_PL_SYSTEM;
+	u32 mem_type = TTM_PL_SYSTEM;
 	unsigned int bo_priority = 0;
 	int err;
 
@@ -546,7 +546,7 @@ static void ttm_bo_multiple_pin_one_unpin(struct kunit *test)
 	struct ttm_resource *res;
 	struct ttm_device *ttm_dev;
 	struct ttm_place *place;
-	uint32_t mem_type = TTM_PL_SYSTEM;
+	u32 mem_type = TTM_PL_SYSTEM;
 	unsigned int bo_priority = 0;
 	int err;
 
