@@ -495,8 +495,8 @@ struct page *cma_alloc(struct cma *cma, unsigned long count,
 	}
 
 	if (ret && !no_warn) {
-		pr_err_ratelimited("%s: %s: alloc failed, req-size: %lu pages, ret: %d\n",
-				   __func__, cma->name, count, ret);
+		pr_debug("%s: alloc failed, req-size: %lu pages, ret: %d, try to use default cma\n",
+			    cma->name, count, ret);
 		cma_debug_show_areas(cma);
 	}
 

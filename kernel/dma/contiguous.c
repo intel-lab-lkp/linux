@@ -357,8 +357,13 @@ struct page *dma_alloc_contiguous(struct device *dev, size_t size, gfp_t gfp)
 	/* CMA can be used only in the context which permits sleeping */
 	if (!gfpflags_allow_blocking(gfp))
 		return NULL;
-	if (dev->cma_area)
-		return cma_alloc_aligned(dev->cma_area, size, gfp);
+	if (dev->cma_area) {
+		struct page *page = NULL;
+
+		page = cma_alloc_aligned(dev->cma_area, size, gfp);
+		if (page)
+			return page;
+	}
 	if (size <= PAGE_SIZE)
 		return NULL;
 
@@ -405,6 +410,8 @@ void dma_free_contiguous(struct device *dev, struct page *page, size_t size)
 	/* if dev has its own cma, free page from there */
 	if (dev->cma_area) {
 		if (cma_release(dev->cma_area, page, count))
+			return;
+		if (cma_release(dma_contiguous_default_area, page, count))
 			return;
 	} else {
 		/*
