@@ -88,7 +88,6 @@ enum version_8190_loopback {
 	VERSION_8190_BE
 };
 
-#define IC_VersionCut_C	0x2
 #define IC_VersionCut_D	0x3
 #define IC_VersionCut_E	0x4
 
