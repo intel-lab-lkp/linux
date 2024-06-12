@@ -2263,7 +2263,12 @@ int pci_set_pcie_reset_state(struct pci_dev *dev, enum pcie_reset_state state)
 }
 EXPORT_SYMBOL_GPL(pci_set_pcie_reset_state);
 
-#ifdef CONFIG_PCIEAER
+/**
+ * pcie_clear_device_status - Clear device status.
+ * @dev: the PCI device.
+ *
+ * Clear the device status for the PCI device.
+ */
 void pcie_clear_device_status(struct pci_dev *dev)
 {
 	u16 sta;
@@ -2271,7 +2276,6 @@ void pcie_clear_device_status(struct pci_dev *dev)
 	pcie_capability_read_word(dev, PCI_EXP_DEVSTA, &sta);
 	pcie_capability_write_word(dev, PCI_EXP_DEVSTA, sta);
 }
-#endif
 
 /**
  * pcie_clear_root_pme_status - Clear root port PME interrupt status.
