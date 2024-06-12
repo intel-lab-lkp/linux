@@ -228,7 +228,8 @@ static void __init kvmclock_init_mem(void)
 		r = set_memory_decrypted((unsigned long) hvclock_mem,
 					 1UL << order);
 		if (r) {
-			__free_pages(p, order);
+			if (!set_memory_encrypted((unsigned long)hvclock_mem, 1UL << order))
+				__free_pages(p, order);
 			hvclock_mem = NULL;
 			pr_warn("kvmclock: set_memory_decrypted() failed. Disabling\n");
 			return;
