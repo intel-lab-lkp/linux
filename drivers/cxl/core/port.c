@@ -2196,7 +2196,7 @@ int cxl_endpoint_get_perf_coordinates(struct cxl_port *port,
 		},
 	};
 	struct cxl_port *iter = port;
-	struct cxl_dport *dport;
+	struct cxl_dport *dport = port->parent_dport;
 	struct pci_dev *pdev;
 	struct device *dev;
 	unsigned int bw;
@@ -2258,6 +2258,26 @@ int cxl_endpoint_get_perf_coordinates(struct cxl_port *port,
 	return 0;
 }
 EXPORT_SYMBOL_NS_GPL(cxl_endpoint_get_perf_coordinates, CXL);
+
+int cxl_port_get_switch_dport_bandwidth(struct cxl_port *port,
+					struct access_coordinate *c)
+{
+	struct cxl_dport *dport = port->parent_dport;
+
+	/* Check this port is connected to a switch DSP and not an RP */
+	if (parent_port_is_cxl_root(to_cxl_port(port->dev.parent)))
+		return -ENODEV;
+
+	if (!coordinates_valid(dport->coord))
+		return -EINVAL;
+
+	for (int i = 0; i < ACCESS_COORDINATE_MAX; i++) {
+		c[i].read_bandwidth = dport->coord[i].read_bandwidth;
+		c[i].write_bandwidth = dport->coord[i].write_bandwidth;
+	}
+
+	return 0;
+}
 
 /* for user tooling to ensure port disable work has completed */
 static ssize_t flush_store(const struct bus_type *bus, const char *buf, size_t count)
