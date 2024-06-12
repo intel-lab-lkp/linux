@@ -53,6 +53,7 @@ struct gpio_sim_chip {
 	struct irq_domain *irq_sim;
 	struct mutex lock;
 	const struct attribute_group **attr_groups;
+	struct notifier_block nb;
 };
 
 struct gpio_sim_attribute {
@@ -227,6 +228,24 @@ static void gpio_sim_free(struct gpio_chip *gc, unsigned int offset)
 	}
 }
 
+static int gpio_sim_irq_domain_notify(struct notifier_block *nb,
+				      unsigned long action, void *data)
+{
+	struct gpio_sim_chip *chip = container_of(nb, struct gpio_sim_chip, nb);
+	irq_hw_number_t *offset = data;
+
+	switch (action) {
+	case IRQ_SIM_DOMAIN_IRQ_REQUESTED:
+		gpiochip_lock_as_irq(&chip->gc, *offset);
+		return NOTIFY_OK;
+	case IRQ_SIM_DOMAIN_IRQ_RELEASED:
+		gpiochip_unlock_as_irq(&chip->gc, *offset);
+		return NOTIFY_OK;
+	}
+
+	return NOTIFY_DONE;
+}
+
 static void gpio_sim_dbg_show(struct seq_file *seq, struct gpio_chip *gc)
 {
 	struct gpio_sim_chip *chip = gpiochip_get_data(gc);
@@ -315,13 +334,15 @@ static void gpio_sim_put_device(void *data)
 	put_device(dev);
 }
 
-static void gpio_sim_dispose_mappings(void *data)
+static void gpio_sim_teardown_irq_sim(void *data)
 {
 	struct gpio_sim_chip *chip = data;
 	unsigned int i;
 
 	for (i = 0; i < chip->gc.ngpio; i++)
 		irq_dispose_mapping(irq_find_mapping(chip->irq_sim, i));
+
+	irq_sim_domain_unregister_notifier(chip->irq_sim, &chip->nb);
 }
 
 static void gpio_sim_sysfs_remove(void *data)
@@ -447,7 +468,12 @@ static int gpio_sim_add_bank(struct fwnode_handle *swnode, struct device *dev)
 	if (IS_ERR(chip->irq_sim))
 		return PTR_ERR(chip->irq_sim);
 
-	ret = devm_add_action_or_reset(dev, gpio_sim_dispose_mappings, chip);
+	chip->nb.notifier_call = gpio_sim_irq_domain_notify;
+	ret = irq_sim_domain_register_notifier(chip->irq_sim, &chip->nb);
+	if (ret)
+		return ret;
+
+	ret = devm_add_action_or_reset(dev, gpio_sim_teardown_irq_sim, chip);
 	if (ret)
 		return ret;
 
