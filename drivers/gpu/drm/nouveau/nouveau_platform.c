@@ -49,6 +49,11 @@ static void nouveau_platform_remove(struct platform_device *pdev)
 	nouveau_drm_device_remove(dev);
 }
 
+static void nouveau_platform_shutdown(struct platform_device *pdev)
+{
+	nouveau_drm_device_shutdown(platform_get_drvdata(pdev));
+}
+
 #if IS_ENABLED(CONFIG_OF)
 static const struct nvkm_device_tegra_func gk20a_platform_data = {
 	.iommu_bit = 34,
@@ -93,4 +98,5 @@ struct platform_driver nouveau_platform_driver = {
 	},
 	.probe = nouveau_platform_probe,
 	.remove_new = nouveau_platform_remove,
+	.shutdown = nouveau_platform_shutdown,
 };
