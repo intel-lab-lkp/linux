@@ -19,6 +19,7 @@
 #include "build-id.h"
 #include "cap.h"
 #include "dso.h"
+#include "vdso.h"
 #include "util.h" // lsdir()
 #include "debug.h"
 #include "event.h"
@@ -44,6 +45,7 @@
 
 static int dso__load_kernel_sym(struct dso *dso, struct map *map);
 static int dso__load_guest_kernel_sym(struct dso *dso, struct map *map);
+static int dso__load_vdso_sym(struct dso *dso, struct map *map);
 static bool symbol__is_idle(const char *name);
 
 int vmlinux_path__nr_entries;
@@ -1833,6 +1835,12 @@ int dso__load(struct dso *dso, struct map *map)
 		goto out;
 	}
 
+	if (dso__is_vdso(dso)) {
+		ret = dso__load_vdso_sym(dso, map);
+		if (ret > 0)
+			goto out;
+	}
+
 	dso__set_adjust_symbols(dso, false);
 
 	if (perfmap) {
@@ -2346,6 +2354,72 @@ static int vmlinux_path__init(struct perf_env *env)
 
 out_fail:
 	vmlinux_path__exit();
+	return -1;
+}
+
+int parse_vdso_pathnames(const struct option *opt __maybe_unused,
+			 const char *arg, int unset __maybe_unused)
+{
+	char *tmp, *tok, *str = strdup(arg);
+	unsigned int i = 0;
+
+	for (tok = strtok_r(str, ",", &tmp); tok && i < ARRAY_SIZE(symbol_conf.vdso_name);
+	     tok = strtok_r(NULL, ",", &tmp)) {
+		symbol_conf.vdso_name[i++] = strdup(tok);
+	}
+
+	free(str);
+	return 0;
+}
+
+static int dso__load_vdso(struct dso *dso, struct map *map,
+			  const char *vdso)
+{
+	int err = -1;
+	struct symsrc ss;
+	char symfs_vdso[PATH_MAX];
+
+	if (vdso[0] == '/')
+		snprintf(symfs_vdso, sizeof(symfs_vdso), "%s", vdso);
+	else
+		symbol__join_symfs(symfs_vdso, vdso);
+
+	if (symsrc__init(&ss, dso, symfs_vdso, DSO_BINARY_TYPE__SYSTEM_PATH_DSO))
+		return -1;
+
+	/*
+	 * dso__load_sym() may copy 'dso' which will result in the copies having
+	 * an incorrect long name unless we set it here first.
+	 */
+	dso__set_long_name(dso, vdso, false);
+	dso__set_binary_type(dso, DSO_BINARY_TYPE__SYSTEM_PATH_DSO);
+
+	err = dso__load_sym(dso, map, &ss, &ss, 0);
+	symsrc__destroy(&ss);
+
+	if (err > 0) {
+		dso__set_loaded(dso);
+		pr_debug("Using %s for %s symbols\n", symfs_vdso, dso__short_name(dso));
+	}
+
+	return err;
+}
+
+static int dso__load_vdso_sym(struct dso *dso, struct map *map)
+{
+	int ret;
+
+	if (!dso__is_vdso(dso))
+		return -1;
+
+	for (unsigned int i = 0; i < ARRAY_SIZE(symbol_conf.vdso_name); i++) {
+		if (symbol_conf.vdso_name[i] != NULL) {
+			ret = dso__load_vdso(dso, map, symbol_conf.vdso_name[i]);
+			if (ret > 0)
+				return ret;
+		}
+	}
+
 	return -1;
 }
 
