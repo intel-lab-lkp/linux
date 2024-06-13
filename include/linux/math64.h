@@ -3,6 +3,7 @@
 #define _LINUX_MATH64_H
 
 #include <linux/types.h>
+#include <linux/log2.h>
 #include <linux/math.h>
 #include <asm/div64.h>
 #include <vdso/math64.h>
@@ -11,6 +12,20 @@
 
 #define div64_long(x, y) div64_s64((x), (y))
 #define div64_ul(x, y)   div64_u64((x), (y))
+
+/**
+ * rem_u64 - remainder of unsigned 64bit divide with 32bit divisor
+ * @dividend: unsigned 64bit dividend
+ * @divisor: unsigned 32bit divisor
+ *
+ * Return: dividend % divisor
+ */
+static inline u32 rem_u64(u64 dividend, u32 divisor)
+{
+	if (is_power_of_2(divisor))
+		return dividend & (divisor - 1);
+	return dividend % divisor;
+}
 
 /**
  * div_u64_rem - unsigned 64bit divide with 32bit divisor with remainder
@@ -85,6 +100,13 @@ static inline s64 div64_s64(s64 dividend, s64 divisor)
 
 #define div64_long(x, y) div_s64((x), (y))
 #define div64_ul(x, y)   div_u64((x), (y))
+
+static inline u32 rem_u64(u64 dividend, u32 divisor)
+{
+	if (is_power_of_2(divisor))
+		return dividend & (divisor - 1);
+	return do_div(dividend, divisor);
+}
 
 #ifndef div_u64_rem
 static inline u64 div_u64_rem(u64 dividend, u32 divisor, u32 *remainder)
