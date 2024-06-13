@@ -671,6 +671,65 @@ xfs_allocbt_calc_size(
 	return xfs_btree_calc_size(mp->m_alloc_mnr, len);
 }
 
+/*
+ * Calculate the maximum alloc btree size.  This is for a single allocbt.
+ * Callers wishing to compute both the size of the bnobt and cnobt must double
+ * this result.
+ */
+xfs_extlen_t
+xfs_allocbt_max_size(
+	struct xfs_mount	*mp,
+	xfs_agblock_t		agblocks)
+{
+
+	/* Don't proceed if uninitialized.  Can happen in mkfs. */
+	if (mp->m_alloc_mxr[0] == 0)
+		return 0;
+
+	return xfs_allocbt_calc_size(mp, agblocks);
+}
+
+/*
+ * Work out how many blocks to reserve for the bnobt and the cnobt as well as
+ * how many blocks are in use by these trees.
+ */
+int
+xfs_allocbt_calc_reserves(
+	struct xfs_mount	*mp,
+	struct xfs_trans	*tp,
+	struct xfs_perag	*pag,
+	xfs_extlen_t		*ask,
+	xfs_extlen_t		*used)
+{
+	struct xfs_buf		*agbp;
+	struct xfs_agf		*agf;
+	xfs_agblock_t		agblocks;
+	xfs_extlen_t		tree_len;
+	int			error;
+
+	error = xfs_alloc_read_agf(pag, tp, 0, &agbp);
+	if (error)
+		return error;
+
+	agf = agbp->b_addr;
+	agblocks = be32_to_cpu(agf->agf_length);
+	tree_len = be32_to_cpu(agf->agf_btreeblks);
+	xfs_trans_brelse(tp, agbp);
+
+	/*
+	 * The log is permanently allocated. The space it occupies will never be
+	 * available for btree expansion.  Pretend the space is not there.
+	 */
+	if (xfs_ag_contains_log(mp, pag->pag_agno))
+		agblocks -= mp->m_sb.sb_logblocks;
+
+	/* Reserve 1% of the AG or enough for one block per record per tree. */
+	*ask += max(agblocks / 100, 2 * xfs_allocbt_max_size(mp, agblocks));
+	*used += tree_len;
+
+	return error;
+}
+
 int __init
 xfs_allocbt_init_cur_cache(void)
 {

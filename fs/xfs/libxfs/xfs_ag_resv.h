@@ -28,6 +28,8 @@ xfs_perag_resv(
 		return &pag->pag_meta_resv;
 	case XFS_AG_RESV_RMAPBT:
 		return &pag->pag_rmapbt_resv;
+	case XFS_AG_RESV_AGFL:
+		return &pag->pag_agfl_resv;
 	default:
 		return NULL;
 	}
@@ -48,6 +50,8 @@ xfs_ag_resv_rmapbt_alloc(
 
 	args.len = 1;
 	pag = xfs_perag_get(mp, agno);
+	/* Transfer this reservation from the AGFL to RMAPBT */
+	xfs_ag_resv_free_extent(pag, XFS_AG_RESV_AGFL, NULL, 1);
 	xfs_ag_resv_alloc_extent(pag, XFS_AG_RESV_RMAPBT, &args);
 	xfs_perag_put(pag);
 }

@@ -56,6 +56,11 @@ struct xfs_btree_cur *xfs_cntbt_init_cursor(struct xfs_mount *mp,
 extern int xfs_allocbt_maxrecs(struct xfs_mount *, int, int);
 extern xfs_extlen_t xfs_allocbt_calc_size(struct xfs_mount *mp,
 		unsigned long long len);
+extern xfs_extlen_t xfs_allocbt_max_size(struct xfs_mount *mp,
+		xfs_agblock_t agblocks);
+
+extern int xfs_allocbt_calc_reserves(struct xfs_mount *mp, struct xfs_trans *tp,
+		struct xfs_perag *pag, xfs_extlen_t *ask, xfs_extlen_t *used);
 
 void xfs_allocbt_commit_staged_btree(struct xfs_btree_cur *cur,
 		struct xfs_trans *tp, struct xfs_buf *agbp);

@@ -62,6 +62,8 @@ struct xfs_perag {
 	struct xfs_ag_resv	pag_meta_resv;
 	/* Blocks reserved for the reverse mapping btree. */
 	struct xfs_ag_resv	pag_rmapbt_resv;
+	/* Blocks reserved for the AGFL. */
+	struct xfs_ag_resv	pag_agfl_resv;
 
 	/* for rcu-safe freeing */
 	struct rcu_head	rcu_head;

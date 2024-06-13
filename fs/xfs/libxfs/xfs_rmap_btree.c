@@ -121,6 +121,7 @@ xfs_rmapbt_free_block(
 	struct xfs_buf		*agbp = cur->bc_ag.agbp;
 	struct xfs_agf		*agf = agbp->b_addr;
 	struct xfs_perag	*pag = cur->bc_ag.pag;
+	struct xfs_alloc_arg	args = { NULL };
 	xfs_agblock_t		bno;
 	int			error;
 
@@ -135,6 +136,10 @@ xfs_rmapbt_free_block(
 			      XFS_EXTENT_BUSY_SKIP_DISCARD);
 
 	xfs_ag_resv_free_extent(pag, XFS_AG_RESV_RMAPBT, NULL, 1);
+	args.len = 1;
+	/* Transfer this reservation back to the AGFL. */
+	xfs_ag_resv_alloc_extent(pag, XFS_AG_RESV_AGFL, &args);
+
 	return 0;
 }
 

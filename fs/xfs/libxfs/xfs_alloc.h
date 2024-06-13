@@ -80,7 +80,8 @@ int xfs_alloc_get_freelist(struct xfs_perag *pag, struct xfs_trans *tp,
 int xfs_alloc_put_freelist(struct xfs_perag *pag, struct xfs_trans *tp,
 		struct xfs_buf *agfbp, struct xfs_buf *agflbp,
 		xfs_agblock_t bno, int btreeblk);
-
+int xfs_alloc_agfl_calc_reserves(struct xfs_mount *mp, struct xfs_trans *tp,
+		struct xfs_perag *pag, xfs_extlen_t *ask, xfs_extlen_t *used);
 /*
  * Compute and fill in value of m_alloc_maxlevels.
  */

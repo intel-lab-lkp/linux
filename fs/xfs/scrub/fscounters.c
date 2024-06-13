@@ -338,6 +338,7 @@ retry:
 		 */
 		fsc->fdblocks -= pag->pag_meta_resv.ar_reserved;
 		fsc->fdblocks -= pag->pag_rmapbt_resv.ar_orig_reserved;
+		fsc->fdblocks -= pag->pag_agfl_resv.ar_orig_reserved;
 
 	}
 	if (pag)

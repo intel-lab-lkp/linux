@@ -17,6 +17,7 @@
 #include "xfs_trans.h"
 #include "xfs_rmap_btree.h"
 #include "xfs_btree.h"
+#include "xfs_alloc_btree.h"
 #include "xfs_refcount_btree.h"
 #include "xfs_ialloc_btree.h"
 #include "xfs_ag.h"
@@ -75,12 +76,14 @@ xfs_ag_resv_critical(
 
 	switch (type) {
 	case XFS_AG_RESV_METADATA:
-		avail = pag->pagf_freeblks - pag->pag_rmapbt_resv.ar_reserved;
+		avail = pag->pagf_freeblks - pag->pag_rmapbt_resv.ar_reserved -
+		    pag->pag_agfl_resv.ar_reserved;
 		orig = pag->pag_meta_resv.ar_asked;
 		break;
 	case XFS_AG_RESV_RMAPBT:
 		avail = pag->pagf_freeblks + pag->pagf_flcount -
-			pag->pag_meta_resv.ar_reserved;
+			pag->pag_meta_resv.ar_reserved -
+			pag->pag_agfl_resv.ar_reserved;
 		orig = pag->pag_rmapbt_resv.ar_asked;
 		break;
 	default:
@@ -107,10 +110,14 @@ xfs_ag_resv_needed(
 {
 	xfs_extlen_t			len;
 
-	len = pag->pag_meta_resv.ar_reserved + pag->pag_rmapbt_resv.ar_reserved;
+	len = pag->pag_meta_resv.ar_reserved +
+	    pag->pag_rmapbt_resv.ar_reserved +
+	    pag->pag_agfl_resv.ar_reserved;
+
 	switch (type) {
 	case XFS_AG_RESV_METADATA:
 	case XFS_AG_RESV_RMAPBT:
+	case XFS_AG_RESV_AGFL:
 		len -= xfs_perag_resv(pag, type)->ar_reserved;
 		break;
 	case XFS_AG_RESV_NONE:
@@ -144,7 +151,7 @@ __xfs_ag_resv_free(
 	 * considered "free", so whatever was reserved at mount time must be
 	 * given back at umount.
 	 */
-	if (type == XFS_AG_RESV_RMAPBT)
+	if (type == XFS_AG_RESV_RMAPBT || type == XFS_AG_RESV_AGFL)
 		oldresv = resv->ar_orig_reserved;
 	else
 		oldresv = resv->ar_reserved;
@@ -161,6 +168,7 @@ xfs_ag_resv_free(
 {
 	__xfs_ag_resv_free(pag, XFS_AG_RESV_RMAPBT);
 	__xfs_ag_resv_free(pag, XFS_AG_RESV_METADATA);
+	__xfs_ag_resv_free(pag, XFS_AG_RESV_AGFL);
 }
 
 static int
@@ -180,11 +188,13 @@ __xfs_ag_resv_init(
 
 	switch (type) {
 	case XFS_AG_RESV_RMAPBT:
+	case XFS_AG_RESV_AGFL:
 		/*
-		 * Space taken by the rmapbt is not subtracted from fdblocks
-		 * because the rmapbt lives in the free space.  Here we must
-		 * subtract the entire reservation from fdblocks so that we
-		 * always have blocks available for rmapbt expansion.
+		 * Space taken by the rmapbt and agfl are not subtracted from
+		 * fdblocks because they both live in the free space.  Here we
+		 * must subtract the entire reservation from fdblocks so that we
+		 * always have blocks available for rmapbt expansion and agfl
+		 * refilling.
 		 */
 		hidden_space = ask;
 		break;
@@ -299,6 +309,25 @@ xfs_ag_resv_init(
 			has_resv = true;
 	}
 
+	/* Create the AGFL reservation */
+	if (pag->pag_agfl_resv.ar_asked == 0) {
+		ask = used = 0;
+
+		error = xfs_allocbt_calc_reserves(mp, tp, pag, &ask, &used);
+		if (error)
+			goto out;
+
+		error = xfs_alloc_agfl_calc_reserves(mp, tp, pag, &ask, &used);
+		if (error)
+			goto out;
+
+		error = __xfs_ag_resv_init(pag, XFS_AG_RESV_AGFL, ask, used);
+		if (error)
+			goto out;
+		if (ask)
+			has_resv = true;
+	}
+
 out:
 	/*
 	 * Initialize the pagf if we have at least one active reservation on the
@@ -324,7 +353,8 @@ out:
 		 */
 		if (!error &&
 		    xfs_perag_resv(pag, XFS_AG_RESV_METADATA)->ar_reserved +
-		    xfs_perag_resv(pag, XFS_AG_RESV_RMAPBT)->ar_reserved >
+		    xfs_perag_resv(pag, XFS_AG_RESV_RMAPBT)->ar_reserved +
+		    xfs_perag_resv(pag, XFS_AG_RESV_AGFL)->ar_reserved >
 		    pag->pagf_freeblks + pag->pagf_flcount)
 			error = -ENOSPC;
 	}
@@ -347,7 +377,6 @@ xfs_ag_resv_alloc_extent(
 
 	switch (type) {
 	case XFS_AG_RESV_AGFL:
-		return;
 	case XFS_AG_RESV_METADATA:
 	case XFS_AG_RESV_RMAPBT:
 		resv = xfs_perag_resv(pag, type);
@@ -364,7 +393,7 @@ xfs_ag_resv_alloc_extent(
 
 	len = min_t(xfs_extlen_t, args->len, resv->ar_reserved);
 	resv->ar_reserved -= len;
-	if (type == XFS_AG_RESV_RMAPBT)
+	if (type == XFS_AG_RESV_RMAPBT || type == XFS_AG_RESV_AGFL)
 		return;
 	/* Allocations of reserved blocks only need on-disk sb updates... */
 	xfs_trans_mod_sb(args->tp, XFS_TRANS_SB_RES_FDBLOCKS, -(int64_t)len);
@@ -389,7 +418,6 @@ xfs_ag_resv_free_extent(
 
 	switch (type) {
 	case XFS_AG_RESV_AGFL:
-		return;
 	case XFS_AG_RESV_METADATA:
 	case XFS_AG_RESV_RMAPBT:
 		resv = xfs_perag_resv(pag, type);
@@ -406,7 +434,7 @@ xfs_ag_resv_free_extent(
 
 	leftover = min_t(xfs_extlen_t, len, resv->ar_asked - resv->ar_reserved);
 	resv->ar_reserved += leftover;
-	if (type == XFS_AG_RESV_RMAPBT)
+	if (type == XFS_AG_RESV_RMAPBT || type == XFS_AG_RESV_AGFL)
 		return;
 	/* Freeing into the reserved pool only requires on-disk update... */
 	xfs_trans_mod_sb(tp, XFS_TRANS_SB_RES_FDBLOCKS, len);

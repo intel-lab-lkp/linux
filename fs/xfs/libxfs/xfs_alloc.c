@@ -1176,12 +1176,14 @@ xfs_alloc_ag_vextent_small(
 
 	/*
 	 * If we're feeding an AGFL block to something that doesn't live in the
-	 * free space, we need to clear out the OWN_AG rmap.
+	 * free space, we need to clear out the OWN_AG rmap and remove it from
+	 * the AGFL reservation.
 	 */
 	error = xfs_rmap_free(args->tp, args->agbp, args->pag, fbno, 1,
 			      &XFS_RMAP_OINFO_AG);
 	if (error)
 		goto error;
+	xfs_ag_resv_free_extent(args->pag, XFS_AG_RESV_AGFL, args->tp, 1);
 
 	*stat = 0;
 	return 0;
@@ -2779,6 +2781,43 @@ out:
 #endif
 
 /*
+ * Work out how many blocks to reserve for the AGFL as well as how many are in
+ * use currently.
+ */
+int
+xfs_alloc_agfl_calc_reserves(
+	struct xfs_mount	*mp,
+	struct xfs_trans	*tp,
+	struct xfs_perag	*pag,
+	xfs_extlen_t		*ask,
+	xfs_extlen_t		*used)
+{
+	struct xfs_buf		*agbp;
+	struct xfs_agf		*agf;
+	xfs_extlen_t		agfl_blocks;
+	xfs_extlen_t		list_len;
+	int			error;
+
+	error = xfs_alloc_read_agf(pag, tp, 0, &agbp);
+	if (error)
+		return error;
+
+	agf = agbp->b_addr;
+	agfl_blocks = xfs_alloc_min_freelist(mp, NULL);
+	list_len = be32_to_cpu(agf->agf_flcount);
+	xfs_trans_brelse(tp, agbp);
+
+	/*
+	 * Reserve enough space to refill AGFL to minimum fullness if btrees are
+	 * at maximum height.
+	 */
+	*ask += agfl_blocks;
+	*used += list_len;
+
+	return error;
+}
+
+/*
  * Decide whether to use this allocation group for this allocation.
  * If so, fix up the btree freelist's size.
  */
@@ -2943,6 +2982,8 @@ xfs_alloc_fix_freelist(
 						  -((long)(targs.len)));
 		if (error)
 			goto out_agflbp_relse;
+
+		xfs_ag_resv_alloc_extent(targs.pag, targs.resv, &targs);
 
 		/*
 		 * Put each allocated block on the list.
