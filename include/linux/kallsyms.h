@@ -88,6 +88,14 @@ const char *kallsyms_lookup(unsigned long addr,
 			    unsigned long *offset,
 			    char **modname, char *namebuf);
 
+/*
+ * Check if the name is of a hole symbol
+ */
+static inline int kallsyms_is_hole_symbol(const char *name)
+{
+	return !strcmp(name, "__hole_symbol_XXXXX");
+}
+
 /* Look up a kernel symbol and return it in a text buffer. */
 extern int sprint_symbol(char *buffer, unsigned long address);
 extern int sprint_symbol_build_id(char *buffer, unsigned long address);
@@ -117,6 +125,11 @@ static inline const char *kallsyms_lookup(unsigned long addr,
 					  char **modname, char *namebuf)
 {
 	return NULL;
+}
+
+static inline int kallsyms_is_hole_symbol(const char *name)
+{
+	return 0;
 }
 
 static inline int sprint_symbol(char *buffer, unsigned long addr)

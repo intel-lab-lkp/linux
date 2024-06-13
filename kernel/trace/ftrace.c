@@ -6474,6 +6474,19 @@ static void test_is_sorted(unsigned long *start, unsigned long count)
 }
 #endif
 
+static int is_invalid_rec(struct module *mod, unsigned long addr)
+{
+	char str[KSYM_SYMBOL_LEN];
+
+	if (mod)
+		return !module_kallsyms_find_symbol(mod, addr, NULL, NULL);
+
+	if (!kallsyms_lookup(addr, NULL, NULL, NULL, str))
+		return 1;
+	/* record locates in hole is invalid */
+	return kallsyms_is_hole_symbol(str);
+}
+
 static int ftrace_process_locs(struct module *mod,
 			       unsigned long *start,
 			       unsigned long *end)
@@ -6545,7 +6558,7 @@ static int ftrace_process_locs(struct module *mod,
 		 * object files to satisfy alignments.
 		 * Skip any NULL pointers.
 		 */
-		if (!addr) {
+		if (!addr || is_invalid_rec(mod, addr)) {
 			skipped++;
 			continue;
 		}
