@@ -33,6 +33,7 @@
 #define KSYM_NAME_LEN		512
 
 struct sym_entry {
+	struct sym_entry *next;
 	unsigned long long addr;
 	unsigned int len;
 	unsigned int seq;
@@ -60,7 +61,8 @@ static struct addr_range percpu_range = {
 };
 
 static struct sym_entry **table;
-static unsigned int table_size, table_cnt;
+static struct sym_entry *sym_list;
+static unsigned int table_cnt;
 static int all_symbols;
 static int absolute_percpu;
 static int base_relative;
@@ -267,6 +269,7 @@ static void read_map(const char *in)
 	struct sym_entry *sym;
 	char *buf = NULL;
 	size_t buflen = 0;
+	int i;
 
 	fp = fopen(in, "r");
 	if (!fp) {
@@ -280,18 +283,22 @@ static void read_map(const char *in)
 			continue;
 
 		sym->start_pos = table_cnt;
-
-		if (table_cnt >= table_size) {
-			table_size += 10000;
-			table = realloc(table, sizeof(*table) * table_size);
-			if (!table) {
-				fprintf(stderr, "out of memory\n");
-				fclose(fp);
-				exit (1);
-			}
-		}
-
-		table[table_cnt++] = sym;
+		table_cnt++;
+		sym->next = sym_list;
+		sym_list = sym;
+	}
+	table = malloc(sizeof(*table) * table_cnt);
+	if (!table) {
+		fprintf(stderr, "unable to allocate memory for table\n");
+		free(buf);
+		fclose(fp);
+		exit(EXIT_FAILURE);
+	}
+	sym = sym_list;
+	i = table_cnt - 1;
+	while (sym) {
+		table[i--] = sym;
+		sym = sym->next;
 	}
 
 	free(buf);
