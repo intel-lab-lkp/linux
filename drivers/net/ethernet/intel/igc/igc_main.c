@@ -4976,9 +4976,6 @@ void igc_up(struct igc_adapter *adapter)
 	/* start the watchdog. */
 	hw->mac.get_link_status = true;
 	schedule_work(&adapter->watchdog_task);
-
-	adapter->eee_advert = MDIO_EEE_100TX | MDIO_EEE_1000T |
-			      MDIO_EEE_2_5GT;
 }
 
 /**
