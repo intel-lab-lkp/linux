@@ -1018,11 +1018,15 @@ static int dspi_setup(struct spi_device *spi)
 	pdata = dev_get_platdata(&dspi->pdev->dev);
 
 	if (!pdata) {
-		of_property_read_u32(spi->dev.of_node, "fsl,spi-cs-sck-delay",
-				     &cs_sck_delay);
+		cs_sck_delay = spi_delay_to_ns(&spi->cs_setup, NULL);
+		if (!cs_sck_delay)
+			of_property_read_u32(spi->dev.of_node, "fsl,spi-cs-sck-delay",
+					     &cs_sck_delay);
 
-		of_property_read_u32(spi->dev.of_node, "fsl,spi-sck-cs-delay",
-				     &sck_cs_delay);
+		sck_cs_delay = spi_delay_to_ns(&spi->cs_hold, NULL);
+		if (!sck_cs_delay)
+			of_property_read_u32(spi->dev.of_node, "fsl,spi-sck-cs-delay",
+					     &sck_cs_delay);
 	} else {
 		cs_sck_delay = pdata->cs_sck_delay;
 		sck_cs_delay = pdata->sck_cs_delay;
