@@ -25,7 +25,8 @@ int xfs_bmbt_to_iomap(struct xfs_inode *ip, struct iomap *iomap,
 
 int xfs_zero_range(struct xfs_inode *ip, loff_t pos, loff_t len,
 		bool *did_zero);
-int xfs_truncate_page(struct xfs_inode *ip, loff_t pos, bool *did_zero);
+int xfs_truncate_page(struct xfs_inode *ip, loff_t pos,
+		unsigned int blocksize, bool *did_zero);
 
 static inline xfs_filblks_t
 xfs_aligned_fsb_count(

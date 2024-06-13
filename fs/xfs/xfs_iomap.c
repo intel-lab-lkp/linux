@@ -1468,10 +1468,10 @@ int
 xfs_truncate_page(
 	struct xfs_inode	*ip,
 	loff_t			pos,
+	unsigned int		blocksize,
 	bool			*did_zero)
 {
 	struct inode		*inode = VFS_I(ip);
-	unsigned int		blocksize = i_blocksize(inode);
 
 	if (IS_DAX(inode))
 		return dax_truncate_page(inode, pos, blocksize, did_zero,
