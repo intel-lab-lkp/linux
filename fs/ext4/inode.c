@@ -1156,6 +1156,9 @@ static int ext4_write_begin(struct file *file, struct address_space *mapping,
 	 * the folio (if needed) without using GFP_NOFS.
 	 */
 retry_grab:
+	if (IS_ENABLED(CONFIG_FS_ENCRYPTION))
+		mapping_set_gfp_mask(mapping,
+				     mapping_gfp_mask(mapping) | __GFP_ZERO);
 	folio = __filemap_get_folio(mapping, index, FGP_WRITEBEGIN,
 					mapping_gfp_mask(mapping));
 	if (IS_ERR(folio))
@@ -2882,6 +2885,9 @@ static int ext4_da_write_begin(struct file *file, struct address_space *mapping,
 	}
 
 retry:
+	if (IS_ENABLED(CONFIG_FS_ENCRYPTION))
+		mapping_set_gfp_mask(mapping,
+				     mapping_gfp_mask(mapping) | __GFP_ZERO);
 	folio = __filemap_get_folio(mapping, index, FGP_WRITEBEGIN,
 			mapping_gfp_mask(mapping));
 	if (IS_ERR(folio))
