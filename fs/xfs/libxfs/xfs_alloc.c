@@ -2325,17 +2325,22 @@ xfs_alloc_longest_free_extent(
 
 /*
  * Compute the minimum length of the AGFL in the given AG.  If @pag is NULL,
- * return the largest possible minimum length.
+ * return the largest possible minimum length. If @level_inc is greater than
+ * zero, increment the level being computed by cur + level_inc.
  */
 unsigned int
 xfs_alloc_min_freelist(
 	struct xfs_mount	*mp,
-	struct xfs_perag	*pag)
+	struct xfs_perag	*pag,
+	unsigned int		level_inc)
 {
 	/* AG btrees have at least 1 level. */
-	const unsigned int	bno_level = pag ? pag->pagf_bno_level : 1;
-	const unsigned int	cnt_level = pag ? pag->pagf_cnt_level : 1;
-	const unsigned int	rmap_level = pag ? pag->pagf_rmap_level : 1;
+	const unsigned int	bno_level =
+	    pag ? pag->pagf_bno_level + level_inc : 1;
+	const unsigned int	cnt_level =
+	    pag ? pag->pagf_cnt_level + level_inc : 1;
+	const unsigned int	rmap_level =
+	    pag ? pag->pagf_rmap_level + level_inc : 1;
 	unsigned int		min_free;
 
 	ASSERT(mp->m_alloc_maxlevels > 0);
@@ -2803,7 +2808,7 @@ xfs_alloc_agfl_calc_reserves(
 		return error;
 
 	agf = agbp->b_addr;
-	agfl_blocks = xfs_alloc_min_freelist(mp, NULL);
+	agfl_blocks = xfs_alloc_min_freelist(mp, NULL, 0);
 	list_len = be32_to_cpu(agf->agf_flcount);
 	xfs_trans_brelse(tp, agbp);
 
@@ -2861,7 +2866,7 @@ xfs_alloc_fix_freelist(
 		goto out_agbp_relse;
 	}
 
-	need = xfs_alloc_min_freelist(mp, pag);
+	need = xfs_alloc_min_freelist(mp, pag, 0);
 	if (!xfs_alloc_space_available(args, need, alloc_flags |
 			XFS_ALLOC_FLAG_CHECK))
 		goto out_agbp_relse;
@@ -2885,7 +2890,7 @@ xfs_alloc_fix_freelist(
 		xfs_agfl_reset(tp, agbp, pag);
 
 	/* If there isn't enough total space or single-extent, reject it. */
-	need = xfs_alloc_min_freelist(mp, pag);
+	need = xfs_alloc_min_freelist(mp, pag, 0);
 	if (!xfs_alloc_space_available(args, need, alloc_flags))
 		goto out_agbp_relse;
 

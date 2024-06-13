@@ -3047,7 +3047,7 @@ xfs_ialloc_calc_rootino(
 	first_bno += 1;
 
 	/* ...the initial AGFL... */
-	first_bno += xfs_alloc_min_freelist(mp, NULL);
+	first_bno += xfs_alloc_min_freelist(mp, NULL, 0);
 
 	/* ...the free inode btree root... */
 	if (xfs_has_finobt(mp))
