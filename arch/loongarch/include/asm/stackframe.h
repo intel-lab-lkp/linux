@@ -38,6 +38,17 @@
 	cfi_restore \reg \offset \docfi
 	.endm
 
+	.macro SETUP_DMWS temp1
+	li.d	\temp1, CSR_DMW0_INIT
+	csrwr	\temp1, LOONGARCH_CSR_DMWIN0
+	li.d	\temp1, CSR_DMW1_INIT
+	csrwr	\temp1, LOONGARCH_CSR_DMWIN1
+	li.d	\temp1, CSR_DMW2_INIT
+	csrwr	\temp1, LOONGARCH_CSR_DMWIN2
+	li.d	\temp1, CSR_DMW3_INIT
+	csrwr	\temp1, LOONGARCH_CSR_DMWIN3
+	.endm
+
 /* Jump to the runtime virtual address. */
 	.macro JUMP_VIRT_ADDR temp1 temp2
 	li.d	\temp1, CACHE_BASE

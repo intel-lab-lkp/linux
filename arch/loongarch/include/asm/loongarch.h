@@ -889,6 +889,10 @@
 #define CSR_DMW1_BASE		(CSR_DMW1_VSEG << DMW_PABITS)
 #define CSR_DMW1_INIT		(CSR_DMW1_BASE | CSR_DMW1_MAT | CSR_DMW1_PLV0)
 
+/* Direct Map window 2/3 - unused */
+#define CSR_DMW2_INIT		0
+#define CSR_DMW3_INIT		0
+
 /* Performance Counter registers */
 #define LOONGARCH_CSR_PERFCTRL0		0x200	/* 32 perf event 0 config */
 #define LOONGARCH_CSR_PERFCNTR0		0x201	/* 64 perf event 0 count value */
