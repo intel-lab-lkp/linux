@@ -243,3 +243,19 @@ config FW_DEVLINK_SYNC_STATE_TIMEOUT
 	  work on.
 
 endmenu
+
+config DEVICE_SHUTDOWN_TIMEOUT
+	bool "device shutdown timeout"
+	help
+	   Enable timeout for device shutdown. In case of device shutdown is
+	   broken or device is not responding, system shutdown or restart may hang.
+	   This timeout handles such situation and triggers emergency_restart or
+	   machine_power_off. Also dumps call trace of shutdown process.
+
+
+config DEVICE_SHUTDOWN_TIMEOUT_SEC
+	int "device shutdown timeout in seconds"
+	default 10
+	depends on DEVICE_SHUTDOWN_TIMEOUT
+	help
+	  sets time for device shutdown timeout in seconds

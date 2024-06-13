@@ -35,6 +35,12 @@
 #include "base.h"
 #include "physical_location.h"
 #include "power/power.h"
+#include <linux/sched/debug.h>
+#include <linux/reboot.h>
+
+#ifdef CONFIG_DEVICE_SHUTDOWN_TIMEOUT
+struct device_shutdown_timeout devs_shutdown;
+#endif
 
 /* Device links support. */
 static LIST_HEAD(deferred_sync);
@@ -4820,6 +4826,38 @@ out:
 }
 EXPORT_SYMBOL_GPL(device_change_owner);
 
+#ifdef CONFIG_DEVICE_SHUTDOWN_TIMEOUT
+static void device_shutdown_timeout_handler(struct timer_list *t)
+{
+	pr_emerg("**** device shutdown timeout ****\n");
+	show_stack(devs_shutdown.task, NULL, KERN_EMERG);
+	if (system_state == SYSTEM_RESTART)
+		emergency_restart();
+	else
+		machine_power_off();
+}
+
+static void device_shutdown_timer_set(void)
+{
+	devs_shutdown.task = current;
+	timer_setup(&devs_shutdown.timer, device_shutdown_timeout_handler, 0);
+	devs_shutdown.timer.expires = jiffies + SHUTDOWN_TIMEOUT * HZ;
+	add_timer(&devs_shutdown.timer);
+}
+
+static void device_shutdown_timer_clr(void)
+{
+	del_timer(&devs_shutdown.timer);
+}
+#else
+static inline void device_shutdown_timer_set(void)
+{
+}
+static inline void device_shutdown_timer_clr(void)
+{
+}
+#endif
+
 /**
  * device_shutdown - call ->shutdown() on each device to shutdown.
  */
@@ -4831,6 +4869,7 @@ void device_shutdown(void)
 	device_block_probing();
 
 	cpufreq_suspend();
+	device_shutdown_timer_set();
 
 	spin_lock(&devices_kset->list_lock);
 	/*
@@ -4890,6 +4929,7 @@ void device_shutdown(void)
 		spin_lock(&devices_kset->list_lock);
 	}
 	spin_unlock(&devices_kset->list_lock);
+	device_shutdown_timer_clr();
 }
 
 /*
