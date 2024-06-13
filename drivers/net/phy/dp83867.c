@@ -53,6 +53,7 @@
 #define DP83867_RXFSOP2	0x013A
 #define DP83867_RXFSOP3	0x013B
 #define DP83867_IO_MUX_CFG	0x0170
+#define DP83867_MSE_REG_1	0x0225
 #define DP83867_SGMIICTL	0x00D3
 #define DP83867_10M_SGMII_CFG   0x016F
 #define DP83867_10M_SGMII_RATE_ADAPT_MASK BIT(7)
@@ -153,6 +154,9 @@
 /* FLD_THR_CFG */
 #define DP83867_FLD_THR_CFG_ENERGY_LOST_THR_MASK	0x7
 
+/* SQI */
+#define DP83867_MAX_SQI	0x07
+
 #define DP83867_LED_COUNT	4
 
 /* LED_DRV bits */
@@ -194,6 +198,24 @@ struct dp83867_private {
 	bool set_clk_output;
 	u32 clk_output_sel;
 	bool sgmii_ref_clk_en;
+};
+
+/* Register values are converted to SNR(dB) as suggested by
+ * "How to utilize diagnostic test suite of Ethernet PHY":
+ * SNR(dB) = -10 * log10 (VAL/2^17) - 3 dB.
+ * SQI ranges are implemented according to "OPEN ALLIANCE - Advanced diagnostic
+ * features for 100BASE-T1 automotive Ethernet PHYs"
+ */
+
+static const u16 dp83867_mse_sqi_map[] = {
+	0x0411, /* < 18dB */
+	0x033b, /* 18dB =< SNR < 19dB */
+	0x0290, /* 19dB =< SNR < 20dB */
+	0x0209, /* 20dB =< SNR < 21dB */
+	0x019e, /* 21dB =< SNR < 22dB */
+	0x0149, /* 22dB =< SNR < 23dB */
+	0x0105, /* 23dB =< SNR < 24dB */
+	0x0000  /* 24dB =< SNR */
 };
 
 static int dp83867_ack_interrupt(struct phy_device *phydev)
@@ -1015,6 +1037,32 @@ static int dp83867_loopback(struct phy_device *phydev, bool enable)
 			  enable ? BMCR_LOOPBACK : 0);
 }
 
+static int dp83867_get_sqi(struct phy_device *phydev)
+{
+	u16 mse_val;
+	int sqi;
+	int ret;
+
+	if (phydev->speed == SPEED_10)
+		return -EOPNOTSUPP;
+
+	ret = phy_read_mmd(phydev, DP83867_DEVADDR, DP83867_MSE_REG_1);
+	if (ret < 0)
+		return ret;
+
+	mse_val = 0xFFFF & ret;
+	for (sqi = 0; sqi < ARRAY_SIZE(dp83867_mse_sqi_map); sqi++) {
+		if (mse_val >= dp83867_mse_sqi_map[sqi])
+			return sqi;
+	}
+	return -EINVAL;
+}
+
+static int dp83867_get_sqi_max(struct phy_device *phydev)
+{
+	return DP83867_MAX_SQI;
+}
+
 static int
 dp83867_led_brightness_set(struct phy_device *phydev,
 			   u8 index, enum led_brightness brightness)
@@ -1194,6 +1242,9 @@ static struct phy_driver dp83867_driver[] = {
 		/* IRQ related */
 		.config_intr	= dp83867_config_intr,
 		.handle_interrupt = dp83867_handle_interrupt,
+
+		.get_sqi	= dp83867_get_sqi,
+		.get_sqi_max	= dp83867_get_sqi_max,
 
 		.suspend	= dp83867_suspend,
 		.resume		= dp83867_resume,
