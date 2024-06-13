@@ -70,7 +70,7 @@ struct recent_entry {
 	u_int16_t		family;
 	u_int8_t		ttl;
 	u_int8_t		index;
-	u_int16_t		nstamps;
+	u_int8_t		nstamps;
 	unsigned long		stamps[];
 };
 
