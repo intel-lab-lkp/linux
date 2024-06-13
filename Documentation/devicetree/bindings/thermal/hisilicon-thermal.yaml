@@ -1,0 +1,71 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/thermal/hisilicon-thermal.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Temperature Sensor on hisilicon SoCs
+
+maintainers:
+  - Abdulrasaq Lawani <abdulrasaqolawani@gmail.com>
+
+properties:
+  compatible:
+    items:
+      - enum:
+          - hisilicon,tsensor
+          - hisilicon,hi3660-tsensor
+
+  reg:
+    description: physical base address of thermal sensor and length of memory mapped region.
+    minItems: 1
+    maxItems: 2
+
+  clocks:
+    maxItems: 1
+
+  clock-names:
+    items:
+      - const: thermal_clk
+
+  interrupts:
+    description:
+      The interrupt number to the cpu. Defines the interrupt used
+      by /SOCTHERM/tsensor.
+    maxItems: 1
+
+  # See Documentation/devicetree/bindings/thermal/thermal-sensor.yaml for details
+  '#thermal-sensor-cells':
+    const: 1
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - '#thermal-sensor-cells'
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/clock/hi6220-clock.h>
+
+     // for Hi6220:
+     tsensor: tsensor@0,f7030700 {
+     compatible = "hisilicon,tsensor";
+     reg = <0x0 0xf7030700 0x0 0x1000>;
+     interrupts = <0 7 0x4>;
+     clocks = <&sys_ctrl HI6220_TSENSOR_CLK>;
+     clock-names = "thermal_clk";
+     #thermal-sensor-cells = <1>;
+     };
+
+     // for Hi3660:
+     tsensor1: tsensor@fff30000 {
+     compatible = "hisilicon,hi3660-tsensor";
+     reg = <0x0 0xfff30000 0x0 0x1000>;
+     interrupts = <GIC_SPI 145 IRQ_TYPE_LEVEL_HIGH>;
+     #thermal-sensor-cells = <1>;
+     };
+
