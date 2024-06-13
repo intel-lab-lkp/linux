@@ -121,8 +121,8 @@ static void remove_board(struct controller *ctrl, bool safe_removal)
 		msleep(1000);
 
 		/* Ignore link or presence changes caused by power off */
-		atomic_and(~(PCI_EXP_SLTSTA_DLLSC | PCI_EXP_SLTSTA_PDC),
-			   &ctrl->pending_events);
+		atomic_andnot(PCI_EXP_SLTSTA_DLLSC | PCI_EXP_SLTSTA_PDC,
+			      &ctrl->pending_events);
 	}
 
 	pciehp_set_indicators(ctrl, PCI_EXP_SLTCTL_PWR_IND_OFF,
