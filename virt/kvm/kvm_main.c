@@ -1208,8 +1208,10 @@ static struct kvm *kvm_create_vm(unsigned long type, const char *fdname)
 	for (i = 0; i < KVM_NR_BUSES; i++) {
 		rcu_assign_pointer(kvm->buses[i],
 			kzalloc(sizeof(struct kvm_io_bus), GFP_KERNEL_ACCOUNT));
-		if (!kvm->buses[i])
+		if (!kvm->buses[i]) {
+			r = -ENOMEM;
 			goto out_err_no_arch_destroy_vm;
+		}
 	}
 
 	r = kvm_arch_init_vm(kvm, type);
