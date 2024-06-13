@@ -59,9 +59,9 @@ MODULE_PARM_DESC(ip_list_gid, "default owning group of /proc/net/xt_recent/* fil
 /* retained for backwards compatibility */
 static unsigned int ip_pkt_list_tot __read_mostly;
 module_param(ip_pkt_list_tot, uint, 0400);
-MODULE_PARM_DESC(ip_pkt_list_tot, "number of packets per IP address to remember (max. 255)");
+MODULE_PARM_DESC(ip_pkt_list_tot, "number of packets per IP address to remember (max. 2^32 - 1)");
 
-#define XT_RECENT_MAX_NSTAMPS	256
+#define XT_RECENT_MAX_NSTAMPS	(1ULL << 32)
 
 struct recent_entry {
 	struct list_head	list;
@@ -69,8 +69,8 @@ struct recent_entry {
 	union nf_inet_addr	addr;
 	u_int16_t		family;
 	u_int8_t		ttl;
-	u_int8_t		index;
-	u_int8_t		nstamps;
+	u_int32_t		index;
+	u_int32_t		nstamps;
 	unsigned long		stamps[];
 };
 
@@ -80,7 +80,7 @@ struct recent_table {
 	union nf_inet_addr	mask;
 	unsigned int		refcnt;
 	unsigned int		entries;
-	u8			nstamps_max_mask;
+	uint32_t		nstamps_max_mask;
 	struct list_head	lru_list;
 	struct list_head	iphash[];
 };
@@ -360,11 +360,6 @@ static int recent_mt_check(const struct xt_mtchk_param *par,
 		return -EINVAL;
 	if ((info->check_set & XT_RECENT_REAP) && !info->seconds)
 		return -EINVAL;
-	if (info->hit_count >= XT_RECENT_MAX_NSTAMPS) {
-		pr_info_ratelimited("hitcount (%u) is larger than allowed maximum (%u)\n",
-				    info->hit_count, XT_RECENT_MAX_NSTAMPS - 1);
-		return -EINVAL;
-	}
 	ret = xt_check_proc_name(info->name, sizeof(info->name));
 	if (ret)
 		return ret;
