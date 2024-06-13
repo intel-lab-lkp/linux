@@ -1669,9 +1669,6 @@ static int kvm_prepare_memory_region(struct kvm *kvm,
 			r = kvm_alloc_dirty_bitmap(new);
 			if (r)
 				return r;
-
-			if (kvm_dirty_log_manual_protect_and_init_set(kvm))
-				bitmap_set(new->dirty_bitmap, 0, new->npages);
 		}
 	}
 
