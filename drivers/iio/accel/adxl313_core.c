@@ -362,8 +362,8 @@ static int adxl313_setup(struct device *dev, struct adxl313_data *data,
 			return ret;
 
 		/* Enables full resolution */
-		ret = regmap_update_bits(data->regmap, ADXL313_REG_DATA_FORMAT,
-					 ADXL313_FULL_RES, ADXL313_FULL_RES);
+		ret = regmap_set_bits(data->regmap, ADXL313_REG_DATA_FORMAT,
+				      ADXL313_FULL_RES);
 		if (ret)
 			return ret;
 	}
