@@ -440,7 +440,7 @@ static void set_thread_esr(unsigned long address, unsigned long esr)
 			 */
 			esr &= ESR_ELx_EC_MASK | ESR_ELx_IL |
 				ESR_ELx_CM | ESR_ELx_WNR;
-			esr |= ESR_ELx_FSC_FAULT;
+			esr |= ESR_ELx_FSC_FAULT_L0;
 			break;
 		case ESR_ELx_EC_IABT_LOW:
 			/*
@@ -449,7 +449,7 @@ static void set_thread_esr(unsigned long address, unsigned long esr)
 			 * reported with that DFSC value, so we clear them.
 			 */
 			esr &= ESR_ELx_EC_MASK | ESR_ELx_IL;
-			esr |= ESR_ELx_FSC_FAULT;
+			esr |= ESR_ELx_FSC_FAULT_L0;
 			break;
 		default:
 			/*

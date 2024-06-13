@@ -109,14 +109,23 @@
 
 /* Shared ISS fault status code(IFSC/DFSC) for Data/Instruction aborts */
 #define ESR_ELx_FSC		(0x3F)
-#define ESR_ELx_FSC_TYPE	(0x3C)
 #define ESR_ELx_FSC_LEVEL	(0x03)
 #define ESR_ELx_FSC_EXTABT	(0x10)
 #define ESR_ELx_FSC_MTE		(0x11)
 #define ESR_ELx_FSC_SERROR	(0x11)
-#define ESR_ELx_FSC_ACCESS	(0x08)
-#define ESR_ELx_FSC_FAULT	(0x04)
-#define ESR_ELx_FSC_PERM	(0x0C)
+#define ESR_ELx_FSC_ACCESS_L0	(0x08)
+#define ESR_ELx_FSC_ACCESS_L1	(0x09)
+#define ESR_ELx_FSC_ACCESS_L2	(0x0A)
+#define ESR_ELx_FSC_ACCESS_L3	(0x0B)
+#define ESR_ELx_FSC_FAULT_LN1	(0x2B)
+#define ESR_ELx_FSC_FAULT_L0	(0x04)
+#define ESR_ELx_FSC_FAULT_L1	(0x05)
+#define ESR_ELx_FSC_FAULT_L2	(0x06)
+#define ESR_ELx_FSC_FAULT_L3	(0x07)
+#define ESR_ELx_FSC_PERM_L0	(0x0C)
+#define ESR_ELx_FSC_PERM_L1	(0x0D)
+#define ESR_ELx_FSC_PERM_L2	(0x0E)
+#define ESR_ELx_FSC_PERM_L3	(0x0F)
 #define ESR_ELx_FSC_SEA_TTW(n)	(0x14 + (n))
 #define ESR_ELx_FSC_SECC	(0x18)
 #define ESR_ELx_FSC_SECC_TTW(n)	(0x1c + (n))
@@ -388,20 +397,33 @@ static inline bool esr_is_data_abort(unsigned long esr)
 
 static inline bool esr_fsc_is_translation_fault(unsigned long esr)
 {
-	/* Translation fault, level -1 */
-	if ((esr & ESR_ELx_FSC) == 0b101011)
-		return true;
-	return (esr & ESR_ELx_FSC_TYPE) == ESR_ELx_FSC_FAULT;
+	esr = esr & ESR_ELx_FSC;
+
+	return (esr == ESR_ELx_FSC_FAULT_L3) ||
+	       (esr == ESR_ELx_FSC_FAULT_L2) ||
+	       (esr == ESR_ELx_FSC_FAULT_L1) ||
+	       (esr == ESR_ELx_FSC_FAULT_L0) ||
+	       (esr == ESR_ELx_FSC_FAULT_LN1);
 }
 
 static inline bool esr_fsc_is_permission_fault(unsigned long esr)
 {
-	return (esr & ESR_ELx_FSC_TYPE) == ESR_ELx_FSC_PERM;
+	esr = esr & ESR_ELx_FSC;
+
+	return (esr == ESR_ELx_FSC_PERM_L3) ||
+	       (esr == ESR_ELx_FSC_PERM_L2) ||
+	       (esr == ESR_ELx_FSC_PERM_L1) ||
+	       (esr == ESR_ELx_FSC_PERM_L0);
 }
 
 static inline bool esr_fsc_is_access_flag_fault(unsigned long esr)
 {
-	return (esr & ESR_ELx_FSC_TYPE) == ESR_ELx_FSC_ACCESS;
+	esr = esr & ESR_ELx_FSC;
+
+	return (esr == ESR_ELx_FSC_ACCESS_L3) ||
+	       (esr == ESR_ELx_FSC_ACCESS_L2) ||
+	       (esr == ESR_ELx_FSC_ACCESS_L1) ||
+	       (esr == ESR_ELx_FSC_ACCESS_L0);
 }
 
 /* Indicate whether ESR.EC==0x1A is for an ERETAx instruction */
