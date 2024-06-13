@@ -17,6 +17,22 @@
 #include <scsi/sas_ata.h>
 #include "scsi_sas_internal.h"
 
+static void sas_destruct_ports(struct asd_sas_port *port)
+{
+	struct sas_port *sas_port, *p;
+
+	list_for_each_entry_safe(sas_port, p, &port->sas_port_del_list, del_list) {
+		list_del_init(&sas_port->del_list);
+		sas_port_delete(sas_port);
+	}
+}
+
+static void sas_destruct_devices_and_ports(struct asd_sas_port *port)
+{
+	sas_destruct_devices(port);
+	sas_destruct_ports(port);
+}
+
 /* ---------- Basic task processing for discovery purposes ---------- */
 
 void sas_init_dev(struct domain_device *dev)
@@ -226,6 +242,9 @@ static void sas_probe_devices(struct asd_sas_port *port)
 		else
 			list_del_init(&dev->disco_list_node);
 	}
+
+	/* destruct devices and ports after probe failed */
+	sas_destruct_devices_and_ports(port);
 }
 
 static void sas_suspend_devices(struct work_struct *work)
@@ -347,16 +366,6 @@ void sas_destruct_devices(struct asd_sas_port *port)
 		sas_remove_children(&dev->rphy->dev);
 		sas_rphy_delete(dev->rphy);
 		sas_unregister_common_dev(port, dev);
-	}
-}
-
-static void sas_destruct_ports(struct asd_sas_port *port)
-{
-	struct sas_port *sas_port, *p;
-
-	list_for_each_entry_safe(sas_port, p, &port->sas_port_del_list, del_list) {
-		list_del_init(&sas_port->del_list);
-		sas_port_delete(sas_port);
 	}
 }
 
@@ -538,8 +547,7 @@ static void sas_revalidate_domain(struct work_struct *work)
  out:
 	mutex_unlock(&ha->disco_mutex);
 
-	sas_destruct_devices(port);
-	sas_destruct_ports(port);
+	sas_destruct_devices_and_ports(port);
 	sas_probe_devices(port);
 }
 

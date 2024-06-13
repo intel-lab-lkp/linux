@@ -50,6 +50,7 @@ void sas_discover_event(struct asd_sas_port *port, enum discover_event ev);
 
 void sas_init_dev(struct domain_device *dev);
 void sas_unregister_dev(struct asd_sas_port *port, struct domain_device *dev);
+void sas_ex_unregister_end_dev(struct domain_device *dev);
 
 void sas_scsi_recover_host(struct Scsi_Host *shost);
 
@@ -145,7 +146,10 @@ static inline void sas_fail_probe(struct domain_device *dev, const char *func, i
 		func, dev->parent ? "exp-attached" :
 		"direct-attached",
 		SAS_ADDR(dev->sas_addr), err);
-	sas_unregister_dev(dev->port, dev);
+	if (dev->parent && !dev_is_expander(dev->dev_type))
+		sas_ex_unregister_end_dev(dev);
+	else
+		sas_unregister_dev(dev->port, dev);
 }
 
 static inline void sas_fill_in_rphy(struct domain_device *dev,

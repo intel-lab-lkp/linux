@@ -1878,6 +1878,14 @@ static void sas_unregister_devs_sas_addr(struct domain_device *parent,
 	}
 }
 
+void sas_ex_unregister_end_dev(struct domain_device *dev)
+{
+	struct domain_device *parent = dev->parent;
+	struct sas_phy *phy = dev->phy;
+
+	sas_unregister_devs_sas_addr(parent, phy->number, true);
+}
+
 static int sas_discover_bfs_by_root_level(struct domain_device *root,
 					  const int level)
 {
