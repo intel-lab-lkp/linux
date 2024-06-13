@@ -1103,6 +1103,11 @@ static int dso__disassemble_filename(struct dso *dso, char *filename, size_t fil
 	    !dso__is_kcore(dso))
 		return SYMBOL_ANNOTATE_ERRNO__NO_VMLINUX;
 
+	if (dso__symsrc_filename(dso)) {
+		strlcpy(filename, dso__symsrc_filename(dso), filename_size);
+		return 0;
+	}
+
 	build_id_filename = dso__build_id_filename(dso, NULL, 0, false);
 	if (build_id_filename) {
 		__symbol__join_symfs(filename, filename_size, build_id_filename);

@@ -2025,12 +2025,14 @@ int dso__load_vmlinux(struct dso *dso, struct map *map,
 		dso__set_binary_type(dso, DSO_BINARY_TYPE__VMLINUX);
 
 	err = dso__load_sym(dso, map, &ss, &ss, 0);
-	symsrc__destroy(&ss);
-
 	if (err > 0) {
 		dso__set_loaded(dso);
 		pr_debug("Using %s for symbols\n", symfs_vmlinux);
+
+		if (symsrc__has_symtab(&ss) && !dso__symsrc_filename(dso))
+			dso__set_symsrc_filename(dso, strdup(symfs_vmlinux));
 	}
+	symsrc__destroy(&ss);
 
 	return err;
 }
@@ -2395,12 +2397,14 @@ static int dso__load_vdso(struct dso *dso, struct map *map,
 	dso__set_binary_type(dso, DSO_BINARY_TYPE__SYSTEM_PATH_DSO);
 
 	err = dso__load_sym(dso, map, &ss, &ss, 0);
-	symsrc__destroy(&ss);
-
 	if (err > 0) {
 		dso__set_loaded(dso);
 		pr_debug("Using %s for %s symbols\n", symfs_vdso, dso__short_name(dso));
+
+		if (symsrc__has_symtab(&ss) && !dso__symsrc_filename(dso))
+			dso__set_symsrc_filename(dso, strdup(symfs_vdso));
 	}
+	symsrc__destroy(&ss);
 
 	return err;
 }
