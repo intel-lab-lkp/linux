@@ -61,13 +61,15 @@ config KVM
 
 config KVM_WERROR
 	bool "Compile KVM with -Werror"
-	# Disallow KVM's -Werror if KASAN is enabled, e.g. to guard against
-	# randomized configs from selecting KVM_WERROR=y, which doesn't play
-	# nice with KASAN.  KASAN builds generates warnings for the default
-	# FRAME_WARN, i.e. KVM_WERROR=y with KASAN=y requires special tuning.
-	# Building KVM with -Werror and KASAN is still doable via enabling
-	# the kernel-wide WERROR=y.
-	depends on KVM && ((EXPERT && !KASAN) || WERROR)
+	# Disallow KVM's -Werror if one or more sanitizers that requires extra
+	# memory is enabled and FRAME_WARN is also enabled, e.g. to guard
+	# against randomized configs selecting KVM_WERROR=y.  Sanitizers often
+	# trip FRAME_WARN in KVM, i.e. enabling sanitizers+KVM_WERROR typically
+	# requires a hand-tuned config.
+	#
+	# Note, building KVM with -Werror and sanitizers is still doable via
+	# enabling the kernel-wide WERROR=y.
+	depends on KVM && ((EXPERT && ((!KASAN && !KCSAN && !KMSAN) || FRAME_WARN=0)) || WERROR)
 	help
 	  Add -Werror to the build flags for KVM.
 
