@@ -71,9 +71,12 @@ struct msghdr {
 		void __user	*msg_control_user;
 	};
 	bool		msg_control_is_user : 1;
+	bool		use_msg_control_user_tx : 1;
 	bool		msg_get_inq : 1;/* return INQ after receive */
 	unsigned int	msg_flags;	/* flags on received message */
+	void __user	*msg_control_user_tx;	/* msg_control_user in TX piggyback path */
 	__kernel_size_t	msg_controllen;	/* ancillary data buffer length */
+	__kernel_size_t msg_controllen_user_tx; /* msg_controllen in TX piggyback path */
 	struct kiocb	*msg_iocb;	/* ptr to iocb for async requests */
 	struct ubuf_info *msg_ubuf;
 	int (*sg_from_iter)(struct sock *sk, struct sk_buff *skb,
@@ -391,6 +394,7 @@ struct ucred {
 
 extern int move_addr_to_kernel(void __user *uaddr, int ulen, struct sockaddr_storage *kaddr);
 extern int put_cmsg(struct msghdr*, int level, int type, int len, void *data);
+extern int put_cmsg_user_tx(struct msghdr *msg, int level, int type, int len, void *data);
 
 struct timespec64;
 struct __kernel_timespec;

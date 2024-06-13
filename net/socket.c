@@ -2561,6 +2561,8 @@ static int ____sys_sendmsg(struct socket *sock, struct msghdr *msg_sys,
 		err = -EFAULT;
 		if (copy_from_user(ctl_buf, msg_sys->msg_control_user, ctl_len))
 			goto out_freectl;
+		msg_sys->msg_control_user_tx = msg_sys->msg_control_user;
+		msg_sys->msg_controllen_user_tx = msg_sys->msg_controllen;
 		msg_sys->msg_control = ctl_buf;
 		msg_sys->msg_control_is_user = false;
 	}

@@ -211,6 +211,8 @@ int cmsghdr_from_user_compat_to_kern(struct msghdr *kmsg, struct sock *sk,
 		goto Einval;
 
 	/* Ok, looks like we made it.  Hook it up and return success. */
+	kmsg->msg_control_user_tx = kmsg->msg_control_user;
+	kmsg->msg_controllen_user_tx = kcmlen;
 	kmsg->msg_control_is_user = false;
 	kmsg->msg_control = kcmsg_base;
 	kmsg->msg_controllen = kcmlen;
@@ -226,13 +228,22 @@ Efault:
 
 int put_cmsg_compat(struct msghdr *kmsg, int level, int type, int len, void *data)
 {
-	struct compat_cmsghdr __user *cm = (struct compat_cmsghdr __user *) kmsg->msg_control_user;
+	struct compat_cmsghdr __user *cm;
 	struct compat_cmsghdr cmhdr;
 	struct old_timeval32 ctv;
 	struct old_timespec32 cts[3];
+	compat_size_t msg_controllen;
 	int cmlen;
 
-	if (cm == NULL || kmsg->msg_controllen < sizeof(*cm)) {
+	if (kmsg->use_msg_control_user_tx) {
+		cm = (struct compat_cmsghdr __user *)kmsg->msg_control_user_tx;
+		msg_controllen = kmsg->msg_controllen_user_tx;
+	} else {
+		cm = (struct compat_cmsghdr __user *)kmsg->msg_control_user;
+		msg_controllen = kmsg->msg_controllen;
+	}
+
+	if (!cm || msg_controllen < sizeof(*cm)) {
 		kmsg->msg_flags |= MSG_CTRUNC;
 		return 0; /* XXX: return error? check spec. */
 	}
@@ -260,9 +271,9 @@ int put_cmsg_compat(struct msghdr *kmsg, int level, int type, int len, void *dat
 	}
 
 	cmlen = CMSG_COMPAT_LEN(len);
-	if (kmsg->msg_controllen < cmlen) {
+	if (msg_controllen < cmlen) {
 		kmsg->msg_flags |= MSG_CTRUNC;
-		cmlen = kmsg->msg_controllen;
+		cmlen = msg_controllen;
 	}
 	cmhdr.cmsg_level = level;
 	cmhdr.cmsg_type = type;
@@ -273,10 +284,16 @@ int put_cmsg_compat(struct msghdr *kmsg, int level, int type, int len, void *dat
 	if (copy_to_user(CMSG_COMPAT_DATA(cm), data, cmlen - sizeof(struct compat_cmsghdr)))
 		return -EFAULT;
 	cmlen = CMSG_COMPAT_SPACE(len);
-	if (kmsg->msg_controllen < cmlen)
-		cmlen = kmsg->msg_controllen;
-	kmsg->msg_control_user += cmlen;
-	kmsg->msg_controllen -= cmlen;
+	if (msg_controllen < cmlen)
+		cmlen = msg_controllen;
+
+	if (kmsg->use_msg_control_user_tx) {
+		kmsg->msg_control_user_tx += cmlen;
+		kmsg->msg_controllen_user_tx -= cmlen;
+	} else {
+		kmsg->msg_control_user += cmlen;
+		kmsg->msg_controllen -= cmlen;
+	}
 	return 0;
 }
 

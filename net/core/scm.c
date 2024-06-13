@@ -228,25 +228,29 @@ error:
 }
 EXPORT_SYMBOL(__scm_send);
 
-int put_cmsg(struct msghdr * msg, int level, int type, int len, void *data)
+static int __put_cmsg(struct msghdr *msg, int level, int type, int len, void *data)
 {
 	int cmlen = CMSG_LEN(len);
+	__kernel_size_t msg_controllen;
 
+	msg_controllen = msg->use_msg_control_user_tx ?
+		msg->msg_controllen_user_tx : msg->msg_controllen;
 	if (msg->msg_flags & MSG_CMSG_COMPAT)
 		return put_cmsg_compat(msg, level, type, len, data);
 
-	if (!msg->msg_control || msg->msg_controllen < sizeof(struct cmsghdr)) {
+	if (!msg->msg_control || msg_controllen < sizeof(struct cmsghdr)) {
 		msg->msg_flags |= MSG_CTRUNC;
 		return 0; /* XXX: return error? check spec. */
 	}
-	if (msg->msg_controllen < cmlen) {
+	if (msg_controllen < cmlen) {
 		msg->msg_flags |= MSG_CTRUNC;
-		cmlen = msg->msg_controllen;
+		cmlen = msg_controllen;
 	}
 
-	if (msg->msg_control_is_user) {
-		struct cmsghdr __user *cm = msg->msg_control_user;
+	if (msg->use_msg_control_user_tx || msg->msg_control_is_user) {
+		struct cmsghdr __user *cm;
 
+		cm = msg->msg_control_is_user ? msg->msg_control_user : msg->msg_control_user_tx;
 		check_object_size(data, cmlen - sizeof(*cm), true);
 
 		if (!user_write_access_begin(cm, cmlen))
@@ -267,12 +271,17 @@ int put_cmsg(struct msghdr * msg, int level, int type, int len, void *data)
 		memcpy(CMSG_DATA(cm), data, cmlen - sizeof(*cm));
 	}
 
-	cmlen = min(CMSG_SPACE(len), msg->msg_controllen);
-	if (msg->msg_control_is_user)
+	cmlen = min(CMSG_SPACE(len), msg_controllen);
+	if (msg->msg_control_is_user) {
 		msg->msg_control_user += cmlen;
-	else
+		msg->msg_controllen -= cmlen;
+	} else if (msg->use_msg_control_user_tx) {
+		msg->msg_control_user_tx += cmlen;
+		msg->msg_controllen_user_tx -= cmlen;
+	} else {
 		msg->msg_control += cmlen;
-	msg->msg_controllen -= cmlen;
+		msg->msg_controllen -= cmlen;
+	}
 	return 0;
 
 efault_end:
@@ -280,7 +289,20 @@ efault_end:
 efault:
 	return -EFAULT;
 }
+
+int put_cmsg(struct msghdr *msg, int level, int type, int len, void *data)
+{
+	msg->use_msg_control_user_tx = false;
+	return __put_cmsg(msg, level, type, len, data);
+}
 EXPORT_SYMBOL(put_cmsg);
+
+int put_cmsg_user_tx(struct msghdr *msg, int level, int type, int len, void *data)
+{
+	msg->use_msg_control_user_tx = true;
+	return __put_cmsg(msg, level, type, len, data);
+}
+EXPORT_SYMBOL(put_cmsg_user_tx);
 
 void put_cmsg_scm_timestamping64(struct msghdr *msg, struct scm_timestamping_internal *tss_internal)
 {
