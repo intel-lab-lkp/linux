@@ -691,16 +691,11 @@ struct rq *task_rq_lock(struct task_struct *p, struct rq_flags *rf)
  * RQ-clock updating methods:
  */
 
-static void update_rq_clock_task(struct rq *rq, s64 delta)
-{
-/*
- * In theory, the compile should just see 0 here, and optimize out the call
- * to sched_rt_avg_update. But I don't trust it...
- */
-	s64 __maybe_unused steal = 0, irq_delta = 0;
 
 #ifdef CONFIG_IRQ_TIME_ACCOUNTING
-	irq_delta = irq_time_read(cpu_of(rq)) - rq->prev_irq_time;
+static inline s64 get_irq_delta(struct rq *rq, s64 delta)
+{
+	s64 irq_delta = irq_time_read(cpu_of(rq)) - rq->prev_irq_time;
 
 	/*
 	 * Since irq_time is only updated on {soft,}irq_exit, we might run into
@@ -719,7 +714,45 @@ static void update_rq_clock_task(struct rq *rq, s64 delta)
 	 */
 	if (irq_delta > delta)
 		irq_delta = delta;
+	return irq_delta;
+}
+#else
+static inline s64 get_irq_delta(struct rq *rq, s64 delta)
+{
+	return 0;
+}
+#endif
 
+#ifdef CONFIG_PARAVIRT_TIME_ACCOUNTING
+static inline s64 get_steal_time(struct rq *rq, s64 delta)
+{
+	s64 steal;
+
+	if (!static_key_false(&paravirt_steal_rq_enabled))
+		return 0;
+	steal = paravirt_steal_clock(cpu_of(rq));
+	steal -= rq->prev_steal_time_rq;
+	if (unlikely(steal > delta))
+		steal = delta;
+	return steal;
+}
+#else
+static inline s64 get_steal_time(struct rq *rq, s64 delta)
+{
+	return 0;
+}
+#endif
+
+static void update_rq_clock_task(struct rq *rq, s64 delta)
+{
+/*
+ * In theory, the compile should just see 0 here, and optimize out the call
+ * to sched_rt_avg_update. But I don't trust it...
+ */
+	s64 __maybe_unused steal = 0, irq_delta = 0;
+
+#ifdef CONFIG_IRQ_TIME_ACCOUNTING
+	irq_delta = get_irq_delta(rq, delta);
 	rq->prev_irq_time += irq_delta;
 	delta -= irq_delta;
 	psi_account_irqtime(rq->curr, irq_delta);
@@ -727,12 +760,7 @@ static void update_rq_clock_task(struct rq *rq, s64 delta)
 #endif
 #ifdef CONFIG_PARAVIRT_TIME_ACCOUNTING
 	if (static_key_false((&paravirt_steal_rq_enabled))) {
-		steal = paravirt_steal_clock(cpu_of(rq));
-		steal -= rq->prev_steal_time_rq;
-
-		if (unlikely(steal > delta))
-			steal = delta;
-
+		steal = get_steal_time(rq, delta);
 		rq->prev_steal_time_rq += steal;
 		delta -= steal;
 	}
@@ -5523,23 +5551,6 @@ EXPORT_PER_CPU_SYMBOL(kstat);
 EXPORT_PER_CPU_SYMBOL(kernel_cpustat);
 
 /*
- * The function fair_sched_class.update_curr accesses the struct curr
- * and its field curr->exec_start; when called from task_sched_runtime(),
- * we observe a high rate of cache misses in practice.
- * Prefetching this data results in improved performance.
- */
-static inline void prefetch_curr_exec_start(struct task_struct *p)
-{
-#ifdef CONFIG_FAIR_GROUP_SCHED
-	struct sched_entity *curr = (&p->se)->cfs_rq->curr;
-#else
-	struct sched_entity *curr = (&task_rq(p)->cfs)->curr;
-#endif
-	prefetch(curr);
-	prefetch(&curr->exec_start);
-}
-
-/*
  * Return accounted runtime for the task.
  * In case the task is currently running, return the runtime plus current's
  * pending runtime that have not been accounted yet.
@@ -5548,6 +5559,7 @@ unsigned long long task_sched_runtime(struct task_struct *p)
 {
 	struct rq_flags rf;
 	struct rq *rq;
+	s64 delta_exec = 0;
 	u64 ns;
 
 #if defined(CONFIG_64BIT) && defined(CONFIG_SMP)
@@ -5573,11 +5585,11 @@ unsigned long long task_sched_runtime(struct task_struct *p)
 	 * thread, breaking clock_gettime().
 	 */
 	if (task_current(rq, p) && task_on_rq_queued(p)) {
-		prefetch_curr_exec_start(p);
-		update_rq_clock(rq);
-		p->sched_class->update_curr(rq);
+		delta_exec = sched_clock_cpu(cpu_of(rq)) - p->se.exec_start;
+		delta_exec -= get_irq_delta(rq, delta_exec);
+		delta_exec -= get_steal_time(rq, delta_exec);
 	}
-	ns = p->se.sum_exec_runtime;
+	ns = p->se.sum_exec_runtime + delta_exec;
 	task_rq_unlock(rq, p, &rf);
 
 	return ns;
