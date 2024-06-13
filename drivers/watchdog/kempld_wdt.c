@@ -73,7 +73,6 @@ struct kempld_wdt_stage {
 struct kempld_wdt_data {
 	struct kempld_device_data	*pld;
 	struct watchdog_device		wdd;
-	unsigned int			pretimeout;
 	struct kempld_wdt_stage		stage[KEMPLD_WDT_MAX_STAGES];
 	u8				pm_status_store;
 };
@@ -205,8 +204,8 @@ static int kempld_wdt_set_timeout(struct watchdog_device *wdd,
 	timeout_stage = &wdt_data->stage[STAGE_TIMEOUT];
 	pretimeout_stage = &wdt_data->stage[STAGE_PRETIMEOUT];
 
-	if (pretimeout_stage->mask && wdt_data->pretimeout > 0)
-		timeout = wdt_data->pretimeout;
+	if (pretimeout_stage->mask && wdd->pretimeout > 0)
+		timeout = wdd->pretimeout;
 
 	ret = kempld_wdt_set_stage_action(wdt_data, timeout_stage,
 						ACTION_RESET);
@@ -249,13 +248,14 @@ static int kempld_wdt_set_pretimeout(struct watchdog_device *wdd,
 	if (ret)
 		return ret;
 
-	wdt_data->pretimeout = pretimeout;
+	wdd->pretimeout = pretimeout;
 	return 0;
 }
 
 static void kempld_wdt_update_timeouts(struct kempld_wdt_data *wdt_data)
 {
 	struct kempld_device_data *pld = wdt_data->pld;
+	struct watchdog_device *wdd = &wdt_data->wdd;
 	struct kempld_wdt_stage *pretimeout_stage;
 	struct kempld_wdt_stage *timeout_stage;
 	unsigned int pretimeout, timeout;
@@ -269,11 +269,11 @@ static void kempld_wdt_update_timeouts(struct kempld_wdt_data *wdt_data)
 	kempld_release_mutex(pld);
 
 	if (pretimeout)
-		wdt_data->pretimeout = timeout;
+		wdd->pretimeout = timeout;
 	else
-		wdt_data->pretimeout = 0;
+		wdd->pretimeout = 0;
 
-	wdt_data->wdd.timeout = pretimeout + timeout;
+	wdd->timeout = pretimeout + timeout;
 }
 
 static int kempld_wdt_start(struct watchdog_device *wdd)
@@ -336,7 +336,6 @@ static int kempld_wdt_keepalive(struct watchdog_device *wdd)
 static long kempld_wdt_ioctl(struct watchdog_device *wdd, unsigned int cmd,
 				unsigned long arg)
 {
-	struct kempld_wdt_data *wdt_data = watchdog_get_drvdata(wdd);
 	void __user *argp = (void __user *)arg;
 	int ret = -ENOIOCTLCMD;
 	int __user *p = argp;
@@ -352,7 +351,7 @@ static long kempld_wdt_ioctl(struct watchdog_device *wdd, unsigned int cmd,
 		ret = kempld_wdt_keepalive(wdd);
 		break;
 	case WDIOC_GETPRETIMEOUT:
-		ret = put_user(wdt_data->pretimeout, (int __user *)arg);
+		ret = put_user(wdd->pretimeout, (int __user *)arg);
 		break;
 	}
 
