@@ -2389,11 +2389,13 @@ xfs_alloc_space_available(
 	int			flags)
 {
 	struct xfs_perag	*pag = args->pag;
+	struct xfs_ag_resv	*resv;
 	enum xfs_ag_resv_type	resv_type = args->resv;
 	xfs_extlen_t		alloc_len, longest;
 	xfs_extlen_t		reservation; /* blocks that are still reserved */
 	int			available;
 	xfs_extlen_t		agflcount;
+	unsigned int		agfl_refill;
 
 	if (flags & XFS_ALLOC_FLAG_FREEING)
 		return true;
@@ -2428,6 +2430,21 @@ xfs_alloc_space_available(
 			  reservation - min_free - args->minleft);
 	if (available < (int)max(args->total, alloc_len))
 		return false;
+
+	/*
+	 * If this is the first allocation in a transaction that may perform
+	 * multiple allocations, check the AGFL reserve to see if it contains
+	 * enough blocks to refill the AGFL if freespace b-trees split as part
+	 * of the first allocation.  This is done to ensure that subsequent
+	 * allocations can utilize the reserve space instead of running out and
+	 * triggering a shutdown.
+	 */
+	if (args->tp->t_highest_agno == NULLAGNUMBER && args->minleft > 0) {
+		agfl_refill = xfs_alloc_min_freelist(args->mp, pag, 1);
+		resv = xfs_perag_resv(pag, XFS_AG_RESV_AGFL);
+		if (resv->ar_asked > 0 && agfl_refill > resv->ar_reserved)
+			return false;
+	}
 
 	/*
 	 * Clamp maxlen to the amount of free space available for the actual
