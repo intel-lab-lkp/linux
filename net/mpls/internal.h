@@ -153,9 +153,13 @@ struct mpls_route { /* next hop label forwarding entry */
 	u8			rt_nhn_alive;
 	u8			rt_nh_size;
 	u8			rt_via_offset;
-	u8			rt_reserved1;
+	u8			rt_flags;
 	struct mpls_nh		rt_nh[];
 };
+
+/* rt_flags */
+#define MPLS_RT_F_P2MP                 0x01
+#define MPLS_RT_F_UPSTREAM_ASSIGNED    0x02 /* upstream assigned labels  - rfc5332 */
 
 #define for_nexthops(rt) {						\
 	int nhsel; const struct mpls_nh *nh;				\

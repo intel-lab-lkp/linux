@@ -339,75 +339,17 @@ static bool mpls_egress(struct net *net, struct mpls_route *rt,
 	return success;
 }
 
-static int mpls_forward(struct sk_buff *skb, struct net_device *dev,
-			struct packet_type *pt, struct net_device *orig_dev)
+static int mpls_forward_finish(struct sk_buff *skb, struct mpls_dev *mdev,
+			       struct mpls_entry_decoded *dec,
+			       struct mpls_route *rt, const struct mpls_nh *nh)
 {
-	struct net *net = dev_net(dev);
 	struct mpls_shim_hdr *hdr;
-	const struct mpls_nh *nh;
-	struct mpls_route *rt;
-	struct mpls_entry_decoded dec;
 	struct net_device *out_dev;
 	struct mpls_dev *out_mdev;
-	struct mpls_dev *mdev;
 	unsigned int hh_len;
 	unsigned int new_header_size;
 	unsigned int mtu;
 	int err;
-
-	/* Careful this entire function runs inside of an rcu critical section */
-
-	mdev = mpls_dev_get(dev);
-	if (!mdev)
-		goto drop;
-
-	MPLS_INC_STATS_LEN(mdev, skb->len, rx_packets,
-			   rx_bytes);
-
-	if (!mdev->input_enabled) {
-		MPLS_INC_STATS(mdev, rx_dropped);
-		goto drop;
-	}
-
-	if (skb->pkt_type != PACKET_HOST)
-		goto err;
-
-	if ((skb = skb_share_check(skb, GFP_ATOMIC)) == NULL)
-		goto err;
-
-	if (!pskb_may_pull(skb, sizeof(*hdr)))
-		goto err;
-
-	skb_dst_drop(skb);
-
-	/* Read and decode the label */
-	hdr = mpls_hdr(skb);
-	dec = mpls_entry_decode(hdr);
-
-	rt = mpls_route_input_rcu(net, dec.label);
-	if (!rt) {
-		MPLS_INC_STATS(mdev, rx_noroute);
-		goto drop;
-	}
-
-	nh = mpls_select_multipath(rt, skb);
-	if (!nh)
-		goto err;
-
-	/* Pop the label */
-	skb_pull(skb, sizeof(*hdr));
-	skb_reset_network_header(skb);
-
-	skb_orphan(skb);
-
-	if (skb_warn_if_lro(skb))
-		goto err;
-
-	skb_forward_csum(skb);
-
-	/* Verify ttl is valid */
-	if (dec.ttl <= 1)
-		goto err;
 
 	/* Find the output device */
 	out_dev = nh->nh_dev;
@@ -431,10 +373,9 @@ static int mpls_forward(struct sk_buff *skb, struct net_device *dev,
 	skb->dev = out_dev;
 	skb->protocol = htons(ETH_P_MPLS_UC);
 
-	dec.ttl -= 1;
-	if (unlikely(!new_header_size && dec.bos)) {
+	if (unlikely(!new_header_size && dec->bos)) {
 		/* Penultimate hop popping */
-		if (!mpls_egress(dev_net(out_dev), rt, skb, dec))
+		if (!mpls_egress(dev_net(out_dev), rt, skb, *dec))
 			goto err;
 	} else {
 		bool bos;
@@ -443,10 +384,10 @@ static int mpls_forward(struct sk_buff *skb, struct net_device *dev,
 		skb_reset_network_header(skb);
 		/* Push the new labels */
 		hdr = mpls_hdr(skb);
-		bos = dec.bos;
+		bos = dec->bos;
 		for (i = nh->nh_labels - 1; i >= 0; i--) {
 			hdr[i] = mpls_entry_encode(nh->nh_label[i],
-						   dec.ttl, 0, bos);
+						   dec->ttl, 0, bos);
 			bos = false;
 		}
 	}
@@ -477,6 +418,139 @@ drop:
 	return NET_RX_DROP;
 }
 
+static int mpls_forward_p2mp(struct sk_buff *skb, struct mpls_dev *mdev,
+			     struct mpls_entry_decoded *dec,
+			     struct mpls_route *rt)
+{
+	unsigned int nh_flags;
+	int one_err;
+	int err = 0;
+	u8 alive;
+
+	if (rt->rt_nhn == 1)
+		goto out;
+
+	alive = READ_ONCE(rt->rt_nhn_alive);
+	if (alive == 0)
+		goto drop;
+
+	for_nexthops(rt) {
+		struct sk_buff *clone;
+
+		/* Skip the first next-hop for now and handle this one
+		 * on the way out to avoid one clone.
+		 */
+		if (nhsel == 0)
+			continue;
+
+		nh_flags = READ_ONCE(nh->nh_flags);
+		if (nh_flags & (RTNH_F_DEAD | RTNH_F_LINKDOWN))
+			continue;
+
+		clone = skb_clone(skb, GFP_ATOMIC);
+		if (!clone)
+			goto drop;
+
+		one_err = mpls_forward_finish(clone, mdev, dec, rt, nh);
+		if (one_err)
+			err = one_err;
+	}
+	endfor_nexthops(rt);
+
+out:
+	nh_flags = READ_ONCE(rt->rt_nh->nh_flags);
+	if (nh_flags & (RTNH_F_DEAD | RTNH_F_LINKDOWN)) {
+		kfree_skb(skb);
+		return err;
+	}
+
+	one_err = mpls_forward_finish(skb, mdev, dec, rt, rt->rt_nh);
+	if (one_err)
+		err = one_err;
+	return err;
+drop:
+	kfree_skb(skb);
+	return NET_RX_DROP;
+}
+
+static int mpls_forward(struct sk_buff *skb, struct net_device *dev,
+			struct packet_type *pt, struct net_device *orig_dev)
+{
+	struct net *net = dev_net(dev);
+	struct mpls_shim_hdr *hdr;
+	const struct mpls_nh *nh;
+	struct mpls_route *rt;
+	struct mpls_entry_decoded dec;
+	struct mpls_dev *mdev;
+
+	/* Careful this entire function runs inside of an rcu critical section */
+
+	mdev = mpls_dev_get(dev);
+	if (!mdev)
+		goto drop;
+
+	MPLS_INC_STATS_LEN(mdev, skb->len, rx_packets, rx_bytes);
+
+	if (!mdev->input_enabled) {
+		MPLS_INC_STATS(mdev, rx_dropped);
+		goto drop;
+	}
+
+	if (skb->pkt_type != PACKET_HOST)
+		goto err;
+
+	skb = skb_share_check(skb, GFP_ATOMIC);
+	if (!skb)
+		goto err;
+
+	if (!pskb_may_pull(skb, sizeof(*hdr)))
+		goto err;
+
+	skb_dst_drop(skb);
+
+	/* Read and decode the label */
+	hdr = mpls_hdr(skb);
+	dec = mpls_entry_decode(hdr);
+
+	rt = mpls_route_input_rcu(net, dec.label);
+	if (!rt) {
+		MPLS_INC_STATS(mdev, rx_noroute);
+		goto drop;
+	}
+
+	if (!(rt->rt_flags & MPLS_RT_F_P2MP)) {
+		nh = mpls_select_multipath(rt, skb);
+		if (!nh)
+			goto err;
+	}
+
+	/* Pop the label */
+	skb_pull(skb, sizeof(*hdr));
+	skb_reset_network_header(skb);
+
+	skb_orphan(skb);
+
+	if (skb_warn_if_lro(skb))
+		goto err;
+
+	skb_forward_csum(skb);
+
+	/* Verify ttl is valid */
+	if (dec.ttl <= 1)
+		goto err;
+
+	dec.ttl -= 1;
+	if (rt->rt_flags & MPLS_RT_F_P2MP)
+		return mpls_forward_p2mp(skb, mdev, &dec, rt);
+
+	return mpls_forward_finish(skb, mdev, &dec, rt, nh);
+err:
+	MPLS_INC_STATS(mdev, rx_errors);
+drop:
+	kfree_skb(skb);
+	return NET_RX_DROP;
+}
+
 static struct packet_type mpls_packet_type __read_mostly = {
 	.type = cpu_to_be16(ETH_P_MPLS_UC),
 	.func = mpls_forward,
@@ -491,6 +565,7 @@ static const struct nla_policy rtm_mpls_policy[RTA_MAX+1] = {
 struct mpls_route_config {
 	u32			rc_protocol;
 	u32			rc_ifindex;
+	u8			rc_flags;
 	u8			rc_via_table;
 	u8			rc_via_alen;
 	u8			rc_via[MAX_VIA_ALEN];
@@ -1029,6 +1104,7 @@ static int mpls_route_add(struct mpls_route_config *cfg,
 	rt->rt_protocol = cfg->rc_protocol;
 	rt->rt_payload_type = cfg->rc_payload_type;
 	rt->rt_ttl_propagate = cfg->rc_ttl_propagate;
+	rt->rt_flags = cfg->rc_flags;
 
 	if (cfg->rc_mp)
 		err = mpls_nh_build_multi(cfg, rt, max_labels, extack);
@@ -1837,9 +1913,11 @@ static int rtm_to_route_config(struct sk_buff *skb,
 			       "Invalid route scope  - MPLS only supports UNIVERSE");
 		goto errout;
 	}
-	if (rtm->rtm_type != RTN_UNICAST) {
+	if (rtm->rtm_type == RTN_MULTICAST) {
+		cfg->rc_flags = MPLS_RT_F_P2MP;
+	} else if (rtm->rtm_type != RTN_UNICAST) {
 		NL_SET_ERR_MSG(extack,
-			       "Invalid route type - MPLS only supports UNICAST");
+			       "Invalid route type - MPLS only supports UNICAST and MULTICAST");
 		goto errout;
 	}
 	if (rtm->rtm_flags != 0) {
@@ -1988,7 +2066,7 @@ static int mpls_dump_route(struct sk_buff *skb, u32 portid, u32 seq, int event,
 	rtm->rtm_table = RT_TABLE_MAIN;
 	rtm->rtm_protocol = rt->rt_protocol;
 	rtm->rtm_scope = RT_SCOPE_UNIVERSE;
-	rtm->rtm_type = RTN_UNICAST;
+	rtm->rtm_type = rt->rt_flags & MPLS_RT_F_P2MP ? RTN_MULTICAST : RTN_UNICAST;
 	rtm->rtm_flags = 0;
 
 	if (nla_put_labels(skb, RTA_DST, 1, &label))
@@ -2386,7 +2464,7 @@ static int mpls_getroute(struct sk_buff *in_skb, struct nlmsghdr *in_nlh,
 		goto errout;
 	}
 
-	if (rtm->rtm_flags & RTM_F_FIB_MATCH) {
+	if (rtm->rtm_flags & RTM_F_FIB_MATCH || rt->rt_flags & MPLS_RT_F_P2MP) {
 		skb = nlmsg_new(lfib_nlmsg_size(rt), GFP_KERNEL);
 		if (!skb) {
 			err = -ENOBUFS;
