@@ -5,6 +5,7 @@
  */
 
 #include <linux/ethtool.h>
+#include <linux/ethtool_netlink.h>
 #include <linux/kernel.h>
 #include <linux/mii.h>
 #include <linux/module.h>
@@ -53,6 +54,14 @@
 #define DP83867_RXFSOP2	0x013A
 #define DP83867_RXFSOP3	0x013B
 #define DP83867_IO_MUX_CFG	0x0170
+#define DP83867_TDR_GEN_CFG5	0x0186
+#define DP83867_TDR_GEN_CFG6	0x0187
+#define DP83867_TDR_GEN_CFG7	0x0189
+#define DP83867_TDR_PEAKS_LOC_1	0x0190
+#define DP83867_TDR_PEAKS_AMP_1	0x019A
+#define DP83867_TDR_GEN_STATUS	0x01A4
+#define DP83867_TDR_PEAKS_SIGN_1	0x01A5
+#define DP83867_TDR_PEAKS_SIGN_2	0x01A6
 #define DP83867_MSE_REG_1	0x0225
 #define DP83867_SGMIICTL	0x00D3
 #define DP83867_10M_SGMII_CFG   0x016F
@@ -156,6 +165,22 @@
 
 /* SQI */
 #define DP83867_MAX_SQI	0x07
+
+/* TDR bits */
+#define DP83867_TDR_GEN_CFG5_FLAGS	0x294A
+#define DP83867_TDR_GEN_CFG6_FLAGS	0x0A9B
+#define DP83867_TDR_GEN_CFG7_FLAGS	0x0000
+#define DP83867_TDR_START	BIT(0)
+#define DP83867_TDR_DONE	BIT(1)
+#define DP83867_TDR_FAIL	BIT(2)
+#define DP83867_TDR_PEAKS_LOC_LOW	GENMASK(7, 0)
+#define DP83867_TDR_PEAKS_LOC_HIGH	GENMASK(15, 8)
+#define DP83867_TDR_PEAKS_AMP_LOW	GENMASK(6, 0)
+#define DP83867_TDR_PEAKS_AMP_HIGH	GENMASK(14, 8)
+#define DP83867_TDR_INITIAL_THRESHOLD 10
+#define DP83867_TDR_FINAL_THRESHOLD 24
+#define DP83867_TDR_OFFSET	16
+#define DP83867_TDR_P_LOC_CROSS_MODE_SHIFT	8
 
 #define DP83867_LED_COUNT	4
 
@@ -1037,6 +1062,205 @@ static int dp83867_loopback(struct phy_device *phydev, bool enable)
 			  enable ? BMCR_LOOPBACK : 0);
 }
 
+static u32 dp83867_cycles2cm(u32 cycles)
+{
+	/* for cat. 6 cable, signals travel at 5 ns / m */
+	return cycles * 8 * 20;
+}
+
+static int dp83867_cable_test_start(struct phy_device *phydev)
+{
+	int ret;
+
+	ret = phy_write_mmd(phydev, DP83867_DEVADDR, DP83867_TDR_GEN_CFG7,
+			    DP83867_TDR_GEN_CFG7_FLAGS);
+	if (ret < 0)
+		return ret;
+
+	ret = phy_write_mmd(phydev, DP83867_DEVADDR, DP83867_TDR_GEN_CFG6,
+			    DP83867_TDR_GEN_CFG6_FLAGS);
+	if (ret < 0)
+		return ret;
+
+	ret = phy_write_mmd(phydev, DP83867_DEVADDR, DP83867_TDR_GEN_CFG5,
+			    DP83867_TDR_GEN_CFG5_FLAGS);
+	if (ret < 0)
+		return ret;
+
+	return phy_write_mmd(phydev, DP83867_DEVADDR, DP83867_CFG3,
+			     DP83867_TDR_START);
+}
+
+static int dp83867_cable_test_report_trans(struct phy_device *phydev, s8 pair,
+					   int *peak_location, int *peak_value,
+					   int *peak_sign,
+					   unsigned int number_peaks)
+{
+	int fault_rslt = ETHTOOL_A_CABLE_RESULT_CODE_OK;
+	int threshold = DP83867_TDR_INITIAL_THRESHOLD;
+	unsigned long cross_result;
+	u32 fault_location = 0;
+	int i;
+	int ret;
+
+	for (i = number_peaks; i >= 0; --i) {
+		if (peak_value[i] > threshold) {
+			fault_location =
+				dp83867_cycles2cm(peak_location[i] -
+					DP83867_TDR_OFFSET) / 2;
+			if (peak_sign[i] == 1) {
+				fault_rslt =
+					ETHTOOL_A_CABLE_RESULT_CODE_SAME_SHORT;
+			} else {
+				fault_rslt = ETHTOOL_A_CABLE_RESULT_CODE_OPEN;
+			}
+			break;
+		}
+		if (i == 1)
+			threshold = DP83867_TDR_FINAL_THRESHOLD;
+	}
+
+	ret = phy_read_mmd(phydev, DP83867_DEVADDR, DP83867_TDR_GEN_STATUS);
+	if (ret < 0)
+		return ret;
+
+	cross_result = ret;
+
+	if (test_bit(DP83867_TDR_P_LOC_CROSS_MODE_SHIFT + pair -
+		     ETHTOOL_A_CABLE_PAIR_A, &cross_result))
+		fault_rslt = ETHTOOL_A_CABLE_RESULT_CODE_CROSS_SHORT;
+
+	ret = ethnl_cable_test_result(phydev, pair, fault_rslt);
+	if (ret < 0)
+		return ret;
+
+	if (fault_rslt != ETHTOOL_A_CABLE_RESULT_CODE_OK) {
+		return ethnl_cable_test_fault_length(phydev, pair,
+						     fault_location);
+	}
+	return 0;
+}
+
+static int dp83867_read_tdr_registers(struct phy_device *phydev, s8 pair,
+				      int *peak_loc, int *peak_val,
+				      int *peak_sign,
+				      unsigned int number_peaks)
+{
+	u32 segment_dist, register_dist;
+	unsigned long peak_sign_result;
+	int ret;
+	int i;
+
+	segment_dist = (pair - ETHTOOL_A_CABLE_PAIR_A) * 5;
+	for (i = 0; i < number_peaks; ++i) {
+		register_dist = (segment_dist + i) / 2;
+		ret = phy_read_mmd(phydev, DP83867_DEVADDR,
+				   DP83867_TDR_PEAKS_LOC_1 + register_dist);
+		if (ret < 0)
+			return ret;
+		if (((register_dist + i) % 2) == 0)
+			peak_loc[i] = FIELD_GET(DP83867_TDR_PEAKS_LOC_LOW, ret);
+		else
+			peak_loc[i] = FIELD_GET(DP83867_TDR_PEAKS_LOC_HIGH, ret);
+
+		ret = phy_read_mmd(phydev, DP83867_DEVADDR,
+				   DP83867_TDR_PEAKS_AMP_1 + register_dist);
+		if (ret < 0)
+			return ret;
+		if (((register_dist + i) % 2) == 0)
+			peak_val[i] = FIELD_GET(DP83867_TDR_PEAKS_AMP_LOW, ret);
+		else
+			peak_val[i] = FIELD_GET(DP83867_TDR_PEAKS_AMP_HIGH, ret);
+	}
+
+	switch (pair) {
+	case ETHTOOL_A_CABLE_PAIR_A:
+	case ETHTOOL_A_CABLE_PAIR_B:
+		ret = phy_read_mmd(phydev, DP83867_DEVADDR,
+				   DP83867_TDR_PEAKS_SIGN_1);
+		break;
+	case ETHTOOL_A_CABLE_PAIR_C:
+	case ETHTOOL_A_CABLE_PAIR_D:
+		ret = phy_read_mmd(phydev, DP83867_DEVADDR,
+				   DP83867_TDR_PEAKS_SIGN_2);
+		break;
+	default:
+		return -EOPNOTSUPP;
+	}
+	if (ret < 0)
+		return ret;
+
+	peak_sign_result = ret;
+
+	switch (pair) {
+	case ETHTOOL_A_CABLE_PAIR_A:
+	case ETHTOOL_A_CABLE_PAIR_C:
+		for (i = 0; i < number_peaks; i++)
+			peak_sign[i] = test_bit(i, &peak_sign_result);
+		break;
+	case ETHTOOL_A_CABLE_PAIR_B:
+	case ETHTOOL_A_CABLE_PAIR_D:
+		for (i = 0; i < number_peaks; i++)
+			peak_sign[i] = test_bit(i + 5, &peak_sign_result);
+		break;
+	}
+
+	return 0;
+}
+
+static int dp83867_cable_test_report_pair(struct phy_device *phydev, s8 pair)
+{
+	int peak_sign[5];
+	int peak_loc[ARRAY_SIZE(peak_sign)];
+	int peak_val[ARRAY_SIZE(peak_sign)];
+	int ret;
+
+	ret = dp83867_read_tdr_registers(phydev, pair, peak_loc, peak_val,
+					 peak_sign, ARRAY_SIZE(peak_sign));
+	if (ret < 0)
+		return ret;
+	return dp83867_cable_test_report_trans(phydev, pair, peak_loc,
+					       peak_val, peak_sign,
+					       ARRAY_SIZE(peak_sign));
+}
+
+static int dp83867_cable_test_report(struct phy_device *phydev)
+{
+	s8 pair;
+	int ret;
+
+	for (pair = ETHTOOL_A_CABLE_PAIR_A; pair <= ETHTOOL_A_CABLE_PAIR_D;
+	     ++pair) {
+		ret = dp83867_cable_test_report_pair(phydev, pair);
+		if (ret < 0)
+			return ret;
+	}
+
+	return 0;
+}
+
+static int dp83867_cable_test_get_status(struct phy_device *phydev,
+					 bool *finished)
+{
+	int ret;
+
+	*finished = false;
+
+	ret = phy_read_mmd(phydev, DP83867_DEVADDR, DP83867_CFG3);
+	if (ret < 0)
+		return ret;
+
+	if (!(ret & DP83867_TDR_DONE))
+		return 0;
+
+	*finished = true;
+
+	if (ret & DP83867_TDR_FAIL)
+		return -EBUSY;
+
+	return dp83867_cable_test_report(phydev);
+}
+
 static int dp83867_get_sqi(struct phy_device *phydev)
 {
 	u16 mse_val;
@@ -1226,6 +1450,7 @@ static struct phy_driver dp83867_driver[] = {
 		.phy_id		= DP83867_PHY_ID,
 		.phy_id_mask	= 0xfffffff0,
 		.name		= "TI DP83867",
+		.flags		= PHY_POLL_CABLE_TEST,
 		/* PHY_GBIT_FEATURES */
 
 		.probe          = dp83867_probe,
@@ -1251,6 +1476,9 @@ static struct phy_driver dp83867_driver[] = {
 
 		.link_change_notify = dp83867_link_change_notify,
 		.set_loopback	= dp83867_loopback,
+
+		.cable_test_start	= dp83867_cable_test_start,
+		.cable_test_get_status	= dp83867_cable_test_get_status,
 
 		.led_brightness_set = dp83867_led_brightness_set,
 		.led_hw_is_supported = dp83867_led_hw_is_supported,
