@@ -757,7 +757,9 @@ list on :ref:`design doc <damon_design_damos_action>`.
  - 2: ``pageout``
  - 3: ``hugepage``
  - 4: ``nohugepage``
- - 5: ``stat``
+ - 5: ``lru_prio``
+ - 6: ``lru_deprio``
+ - 7: ``stat``
 
 Quota
 ~~~~~
