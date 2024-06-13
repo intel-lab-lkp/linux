@@ -835,17 +835,6 @@ void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 			  ctx->id, q->type, ctx->state, ctx->decoded_frame_cnt);
 
 	if (q->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
-		while ((src_buf = v4l2_m2m_src_buf_remove(ctx->m2m_ctx))) {
-			if (src_buf != &ctx->empty_flush_buf.vb) {
-				struct media_request *req =
-					src_buf->vb2_buf.req_obj.req;
-
-				if (req)
-					v4l2_ctrl_request_complete(req, &ctx->ctrl_hdl);
-				v4l2_m2m_buf_done(src_buf, VB2_BUF_STATE_ERROR);
-			}
-		}
-
 		if (ctx->state >= MTK_STATE_HEADER) {
 			/* Until STREAMOFF is called on the CAPTURE queue
 			 * (acknowledging the event), the driver operates
@@ -866,6 +855,17 @@ void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 			ret = ctx->dev->vdec_pdata->flush_decoder(ctx);
 			if (ret)
 				mtk_v4l2_vdec_err(ctx, "DecodeFinal failed, ret=%d", ret);
+		}
+
+		while ((src_buf = v4l2_m2m_src_buf_remove(ctx->m2m_ctx))) {
+			if (src_buf != &ctx->empty_flush_buf.vb) {
+				struct media_request *req =
+					src_buf->vb2_buf.req_obj.req;
+
+				if (req)
+					v4l2_ctrl_request_complete(req, &ctx->ctrl_hdl);
+				v4l2_m2m_buf_done(src_buf, VB2_BUF_STATE_ERROR);
+			}
 		}
 
 		ctx->state = MTK_STATE_FLUSH;
