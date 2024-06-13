@@ -3206,15 +3206,125 @@ static const match_table_t qos_tokens = {
 	{ NR_QOS_PARAMS,	NULL		},
 };
 
+struct ioc_qos_params {
+	u32 qos[NR_QOS_PARAMS];
+	bool enable;
+	bool user;
+};
+
+static void ioc_qos_params_init(struct ioc *ioc, struct ioc_qos_params *params)
+{
+	memcpy(params->qos, ioc->params.qos, sizeof(params->qos));
+	params->enable = ioc->enabled;
+	params->user = ioc->user_qos_params;
+}
+
+static int ioc_qos_params_parse(struct blkg_conf_ctx *ctx,
+				struct ioc_qos_params *params)
+{
+	char *body = ctx->body;
+	char *p;
+
+	while ((p = strsep(&body, " \t\n"))) {
+		substring_t args[MAX_OPT_ARGS];
+		char buf[32];
+		int tok;
+		s64 v;
+
+		if (!*p)
+			continue;
+
+		switch (match_token(p, qos_ctrl_tokens, args)) {
+		case QOS_ENABLE:
+			if (match_u64(&args[0], &v))
+				return -EINVAL;
+			params->enable = v;
+			continue;
+		case QOS_CTRL:
+			match_strlcpy(buf, &args[0], sizeof(buf));
+			if (!strcmp(buf, "auto"))
+				params->user = false;
+			else if (!strcmp(buf, "user"))
+				params->user = true;
+			else
+				return -EINVAL;
+			continue;
+		}
+
+		tok = match_token(p, qos_tokens, args);
+		switch (tok) {
+		case QOS_RPPM:
+		case QOS_WPPM:
+			if (match_strlcpy(buf, &args[0], sizeof(buf)) >=
+			    sizeof(buf))
+				return -EINVAL;
+			if (cgroup_parse_float(buf, 2, &v))
+				return -EINVAL;
+			if (v < 0 || v > 10000)
+				return -EINVAL;
+			params->qos[tok] = v * 100;
+			break;
+		case QOS_RLAT:
+		case QOS_WLAT:
+			if (match_u64(&args[0], &v))
+				return -EINVAL;
+			params->qos[tok] = v;
+			break;
+		case QOS_MIN:
+		case QOS_MAX:
+			if (match_strlcpy(buf, &args[0], sizeof(buf)) >=
+			    sizeof(buf))
+				return -EINVAL;
+			if (cgroup_parse_float(buf, 2, &v))
+				return -EINVAL;
+			if (v < 0)
+				return -EINVAL;
+			params->qos[tok] = clamp_t(s64, v * 100,
+						   VRATE_MIN_PPM,
+						   VRATE_MAX_PPM);
+			break;
+		default:
+			return -EINVAL;
+		}
+		params->user = true;
+	}
+
+	if (params->qos[QOS_MIN] > params->qos[QOS_MAX])
+		return -EINVAL;
+
+	return 0;
+}
+
+static void ioc_qos_params_update(struct gendisk *disk, struct ioc *ioc,
+				  struct ioc_qos_params *params)
+{
+	if (params->enable && !ioc->enabled) {
+		blk_stat_enable_accounting(disk->queue);
+		blk_queue_flag_set(QUEUE_FLAG_RQ_ALLOC_TIME, disk->queue);
+		ioc->enabled = true;
+	} else if (!params->enable && ioc->enabled) {
+		blk_stat_disable_accounting(disk->queue);
+		blk_queue_flag_clear(QUEUE_FLAG_RQ_ALLOC_TIME, disk->queue);
+		ioc->enabled = false;
+	}
+
+	if (params->user) {
+		memcpy(ioc->params.qos, params->qos, sizeof(params->qos));
+		ioc->user_qos_params = true;
+	} else {
+		ioc->user_qos_params = false;
+	}
+
+	ioc_refresh_params(ioc, true);
+}
+
 static ssize_t ioc_qos_write(struct kernfs_open_file *of, char *input,
 			     size_t nbytes, loff_t off)
 {
+	struct ioc_qos_params params;
 	struct blkg_conf_ctx ctx;
 	struct gendisk *disk;
 	struct ioc *ioc;
-	u32 qos[NR_QOS_PARAMS];
-	bool enable, user;
-	char *body, *p;
 	int ret;
 
 	blkg_conf_init(&ctx, input);
@@ -3223,7 +3333,6 @@ static ssize_t ioc_qos_write(struct kernfs_open_file *of, char *input,
 	if (ret)
 		goto err;
 
-	body = ctx.body;
 	disk = ctx.bdev->bd_disk;
 	if (!queue_is_mq(disk->queue)) {
 		ret = -EOPNOTSUPP;
@@ -3242,97 +3351,16 @@ static ssize_t ioc_qos_write(struct kernfs_open_file *of, char *input,
 	blk_mq_quiesce_queue(disk->queue);
 
 	spin_lock_irq(&ioc->lock);
-	memcpy(qos, ioc->params.qos, sizeof(qos));
-	enable = ioc->enabled;
-	user = ioc->user_qos_params;
+	ioc_qos_params_init(ioc, &params);
 
-	while ((p = strsep(&body, " \t\n"))) {
-		substring_t args[MAX_OPT_ARGS];
-		char buf[32];
-		int tok;
-		s64 v;
+	ret = ioc_qos_params_parse(&ctx, &params);
+	if (ret)
+		goto err_parse;
 
-		if (!*p)
-			continue;
-
-		switch (match_token(p, qos_ctrl_tokens, args)) {
-		case QOS_ENABLE:
-			if (match_u64(&args[0], &v))
-				goto einval;
-			enable = v;
-			continue;
-		case QOS_CTRL:
-			match_strlcpy(buf, &args[0], sizeof(buf));
-			if (!strcmp(buf, "auto"))
-				user = false;
-			else if (!strcmp(buf, "user"))
-				user = true;
-			else
-				goto einval;
-			continue;
-		}
-
-		tok = match_token(p, qos_tokens, args);
-		switch (tok) {
-		case QOS_RPPM:
-		case QOS_WPPM:
-			if (match_strlcpy(buf, &args[0], sizeof(buf)) >=
-			    sizeof(buf))
-				goto einval;
-			if (cgroup_parse_float(buf, 2, &v))
-				goto einval;
-			if (v < 0 || v > 10000)
-				goto einval;
-			qos[tok] = v * 100;
-			break;
-		case QOS_RLAT:
-		case QOS_WLAT:
-			if (match_u64(&args[0], &v))
-				goto einval;
-			qos[tok] = v;
-			break;
-		case QOS_MIN:
-		case QOS_MAX:
-			if (match_strlcpy(buf, &args[0], sizeof(buf)) >=
-			    sizeof(buf))
-				goto einval;
-			if (cgroup_parse_float(buf, 2, &v))
-				goto einval;
-			if (v < 0)
-				goto einval;
-			qos[tok] = clamp_t(s64, v * 100,
-					   VRATE_MIN_PPM, VRATE_MAX_PPM);
-			break;
-		default:
-			goto einval;
-		}
-		user = true;
-	}
-
-	if (qos[QOS_MIN] > qos[QOS_MAX])
-		goto einval;
-
-	if (enable && !ioc->enabled) {
-		blk_stat_enable_accounting(disk->queue);
-		blk_queue_flag_set(QUEUE_FLAG_RQ_ALLOC_TIME, disk->queue);
-		ioc->enabled = true;
-	} else if (!enable && ioc->enabled) {
-		blk_stat_disable_accounting(disk->queue);
-		blk_queue_flag_clear(QUEUE_FLAG_RQ_ALLOC_TIME, disk->queue);
-		ioc->enabled = false;
-	}
-
-	if (user) {
-		memcpy(ioc->params.qos, qos, sizeof(qos));
-		ioc->user_qos_params = true;
-	} else {
-		ioc->user_qos_params = false;
-	}
-
-	ioc_refresh_params(ioc, true);
+	ioc_qos_params_update(disk, ioc, &params);
 	spin_unlock_irq(&ioc->lock);
 
-	if (enable)
+	if (params.enable)
 		wbt_disable_default(disk);
 	else
 		wbt_enable_default(disk);
@@ -3342,13 +3370,12 @@ static ssize_t ioc_qos_write(struct kernfs_open_file *of, char *input,
 
 	blkg_conf_exit(&ctx);
 	return nbytes;
-einval:
+
+err_parse:
 	spin_unlock_irq(&ioc->lock);
 
 	blk_mq_unquiesce_queue(disk->queue);
 	blk_mq_unfreeze_queue(disk->queue);
-
-	ret = -EINVAL;
 err:
 	blkg_conf_exit(&ctx);
 	return ret;
