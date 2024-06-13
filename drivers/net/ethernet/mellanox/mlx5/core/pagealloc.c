@@ -582,11 +582,15 @@ out_free:
 	return err;
 }
 
+#define MAX_RECLAIM_NPAGES -50000
 static void pages_work_handler(struct work_struct *work)
 {
 	struct mlx5_pages_req *req = container_of(work, struct mlx5_pages_req, work);
 	struct mlx5_core_dev *dev = req->dev;
 	int err = 0;
+
+	if (req->npages < MAX_RECLAIM_NPAGES)
+		req->npages = MAX_RECLAIM_NPAGES;
 
 	if (req->release_all)
 		release_all_pages(dev, req->func_id, req->ec_function);
