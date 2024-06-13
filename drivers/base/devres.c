@@ -194,14 +194,12 @@ void devres_for_each_res(struct device *dev, dr_release_t release,
 {
 	struct devres_node *node;
 	struct devres_node *tmp;
-	unsigned long flags;
 
 	if (!fn)
 		return;
 
-	spin_lock_irqsave(&dev->devres_lock, flags);
-	list_for_each_entry_safe_reverse(node, tmp,
-			&dev->devres_head, entry) {
+	guard(spinlock_irqsave)(&dev->devres_lock);
+	list_for_each_entry_safe_reverse(node, tmp, &dev->devres_head, entry) {
 		struct devres *dr = container_of(node, struct devres, node);
 
 		if (node->release != release)
@@ -210,7 +208,6 @@ void devres_for_each_res(struct device *dev, dr_release_t release,
 			continue;
 		fn(dev, dr->data, data);
 	}
-	spin_unlock_irqrestore(&dev->devres_lock, flags);
 }
 EXPORT_SYMBOL_GPL(devres_for_each_res);
 
@@ -243,11 +240,9 @@ EXPORT_SYMBOL_GPL(devres_free);
 void devres_add(struct device *dev, void *res)
 {
 	struct devres *dr = container_of(res, struct devres, data);
-	unsigned long flags;
 
-	spin_lock_irqsave(&dev->devres_lock, flags);
+	guard(spinlock_irqsave)(&dev->devres_lock);
 	add_dr(dev, &dr->node);
-	spin_unlock_irqrestore(&dev->devres_lock, flags);
 }
 EXPORT_SYMBOL_GPL(devres_add);
 
@@ -287,11 +282,8 @@ void * devres_find(struct device *dev, dr_release_t release,
 		   dr_match_t match, void *match_data)
 {
 	struct devres *dr;
-	unsigned long flags;
-
-	spin_lock_irqsave(&dev->devres_lock, flags);
+	guard(spinlock_irqsave)(&dev->devres_lock);
 	dr = find_dr(dev, release, match, match_data);
-	spin_unlock_irqrestore(&dev->devres_lock, flags);
 
 	if (dr)
 		return dr->data;
@@ -318,16 +310,14 @@ void * devres_get(struct device *dev, void *new_res,
 {
 	struct devres *new_dr = container_of(new_res, struct devres, data);
 	struct devres *dr;
-	unsigned long flags;
-
-	spin_lock_irqsave(&dev->devres_lock, flags);
-	dr = find_dr(dev, new_dr->node.release, match, match_data);
-	if (!dr) {
-		add_dr(dev, &new_dr->node);
-		dr = new_dr;
-		new_res = NULL;
+	scoped_guard(spinlock_irqsave, &dev->devres_lock) {
+		dr = find_dr(dev, new_dr->node.release, match, match_data);
+		if (!dr) {
+			add_dr(dev, &new_dr->node);
+			dr = new_dr;
+			new_res = NULL;
+		}
 	}
-	spin_unlock_irqrestore(&dev->devres_lock, flags);
 	devres_free(new_res);
 
 	return dr->data;
@@ -353,15 +343,13 @@ void * devres_remove(struct device *dev, dr_release_t release,
 		     dr_match_t match, void *match_data)
 {
 	struct devres *dr;
-	unsigned long flags;
-
-	spin_lock_irqsave(&dev->devres_lock, flags);
-	dr = find_dr(dev, release, match, match_data);
-	if (dr) {
-		list_del_init(&dr->node.entry);
-		devres_log(dev, &dr->node, "REM");
+	scoped_guard(spinlock_irqsave, &dev->devres_lock) {
+		dr = find_dr(dev, release, match, match_data);
+		if (dr) {
+			list_del_init(&dr->node.entry);
+			devres_log(dev, &dr->node, "REM");
+		}
 	}
-	spin_unlock_irqrestore(&dev->devres_lock, flags);
 
 	if (dr)
 		return dr->data;
@@ -516,7 +504,6 @@ static void release_nodes(struct device *dev, struct list_head *todo)
  */
 int devres_release_all(struct device *dev)
 {
-	unsigned long flags;
 	LIST_HEAD(todo);
 	int cnt;
 
@@ -528,9 +515,9 @@ int devres_release_all(struct device *dev)
 	if (list_empty(&dev->devres_head))
 		return 0;
 
-	spin_lock_irqsave(&dev->devres_lock, flags);
-	cnt = remove_nodes(dev, dev->devres_head.next, &dev->devres_head, &todo);
-	spin_unlock_irqrestore(&dev->devres_lock, flags);
+	scoped_guard(spinlock_irqsave, &dev->devres_lock) {
+		cnt = remove_nodes(dev, dev->devres_head.next, &dev->devres_head, &todo);
+	}
 
 	release_nodes(dev, &todo);
 	return cnt;
@@ -552,7 +539,6 @@ int devres_release_all(struct device *dev)
 void * devres_open_group(struct device *dev, void *id, gfp_t gfp)
 {
 	struct devres_group *grp;
-	unsigned long flags;
 
 	grp = kmalloc(sizeof(*grp), gfp);
 	if (unlikely(!grp))
@@ -568,9 +554,8 @@ void * devres_open_group(struct device *dev, void *id, gfp_t gfp)
 	if (id)
 		grp->id = id;
 
-	spin_lock_irqsave(&dev->devres_lock, flags);
+	guard(spinlock_irqsave)(&dev->devres_lock);
 	add_dr(dev, &grp->node[0]);
-	spin_unlock_irqrestore(&dev->devres_lock, flags);
 	return grp->id;
 }
 EXPORT_SYMBOL_GPL(devres_open_group);
@@ -609,17 +594,14 @@ static struct devres_group * find_group(struct device *dev, void *id)
 void devres_close_group(struct device *dev, void *id)
 {
 	struct devres_group *grp;
-	unsigned long flags;
 
-	spin_lock_irqsave(&dev->devres_lock, flags);
+	guard(spinlock_irqsave)(&dev->devres_lock);
 
 	grp = find_group(dev, id);
 	if (grp)
 		add_dr(dev, &grp->node[1]);
 	else
 		WARN_ON(1);
-
-	spin_unlock_irqrestore(&dev->devres_lock, flags);
 }
 EXPORT_SYMBOL_GPL(devres_close_group);
 
@@ -635,19 +617,16 @@ EXPORT_SYMBOL_GPL(devres_close_group);
 void devres_remove_group(struct device *dev, void *id)
 {
 	struct devres_group *grp;
-	unsigned long flags;
 
-	spin_lock_irqsave(&dev->devres_lock, flags);
-
-	grp = find_group(dev, id);
-	if (grp) {
-		list_del_init(&grp->node[0].entry);
-		list_del_init(&grp->node[1].entry);
-		devres_log(dev, &grp->node[0], "REM");
-	} else
-		WARN_ON(1);
-
-	spin_unlock_irqrestore(&dev->devres_lock, flags);
+	scoped_guard(spinlock_irqsave, &dev->devres_lock) {
+		grp = find_group(dev, id);
+		if (grp) {
+			list_del_init(&grp->node[0].entry);
+			list_del_init(&grp->node[1].entry);
+			devres_log(dev, &grp->node[0], "REM");
+		} else
+			WARN_ON(1);
+	}
 
 	kfree(grp);
 }
@@ -668,11 +647,10 @@ EXPORT_SYMBOL_GPL(devres_remove_group);
 int devres_release_group(struct device *dev, void *id)
 {
 	struct devres_group *grp;
-	unsigned long flags;
 	LIST_HEAD(todo);
 	int cnt = 0;
 
-	spin_lock_irqsave(&dev->devres_lock, flags);
+	guard(spinlock_irqsave)(&dev->devres_lock);
 
 	grp = find_group(dev, id);
 	if (grp) {
@@ -683,12 +661,9 @@ int devres_release_group(struct device *dev, void *id)
 			end = grp->node[1].entry.next;
 
 		cnt = remove_nodes(dev, first, end, &todo);
-		spin_unlock_irqrestore(&dev->devres_lock, flags);
-
 		release_nodes(dev, &todo);
 	} else {
 		WARN_ON(1);
-		spin_unlock_irqrestore(&dev->devres_lock, flags);
 	}
 
 	return cnt;
@@ -860,7 +835,6 @@ void *devm_krealloc(struct device *dev, void *ptr, size_t new_size, gfp_t gfp)
 {
 	size_t total_new_size, total_old_size;
 	struct devres *old_dr, *new_dr;
-	unsigned long flags;
 
 	if (unlikely(!new_size)) {
 		devm_kfree(dev, ptr);
@@ -906,19 +880,16 @@ void *devm_krealloc(struct device *dev, void *ptr, size_t new_size, gfp_t gfp)
 	 * The spinlock protects the linked list against concurrent
 	 * modifications but not the resource itself.
 	 */
-	spin_lock_irqsave(&dev->devres_lock, flags);
+	scoped_guard(spinlock_irqsave, &dev->devres_lock) {
+		old_dr = find_dr(dev, devm_kmalloc_release, devm_kmalloc_match, ptr);
+		if (!old_dr) {
+			kfree(new_dr);
+			WARN(1, "Memory chunk not managed or managed by a different device.");
+			return NULL;
+		}
 
-	old_dr = find_dr(dev, devm_kmalloc_release, devm_kmalloc_match, ptr);
-	if (!old_dr) {
-		spin_unlock_irqrestore(&dev->devres_lock, flags);
-		kfree(new_dr);
-		WARN(1, "Memory chunk not managed or managed by a different device.");
-		return NULL;
+		replace_dr(dev, &old_dr->node, &new_dr->node);
 	}
-
-	replace_dr(dev, &old_dr->node, &new_dr->node);
-
-	spin_unlock_irqrestore(&dev->devres_lock, flags);
 
 	/*
 	 * We can copy the memory contents after releasing the lock as we're
