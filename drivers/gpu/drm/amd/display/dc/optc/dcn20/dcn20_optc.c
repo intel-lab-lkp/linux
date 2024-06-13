@@ -37,6 +37,8 @@
 #define FN(reg_name, field_name) \
 	optc1->tg_shift->field_name, optc1->tg_mask->field_name
 
+#define OPTC_SRC_SEL_FIELD OPTC_SEG0_SRC_SEL
+
 /**
  * optc2_enable_crtc() - Enable CRTC - call ASIC Control Object to enable Timing generator.
  *
@@ -47,32 +49,7 @@
  */
 bool optc2_enable_crtc(struct timing_generator *optc)
 {
-	/* TODO FPGA wait for answer
-	 * OTG_MASTER_UPDATE_MODE != CRTC_MASTER_UPDATE_MODE
-	 * OTG_MASTER_UPDATE_LOCK != CRTC_MASTER_UPDATE_LOCK
-	 */
-	struct optc *optc1 = DCN10TG_FROM_TG(optc);
-
-	/* opp instance for OTG. For DCN1.0, ODM is remoed.
-	 * OPP and OPTC should 1:1 mapping
-	 */
-	REG_UPDATE(OPTC_DATA_SOURCE_SELECT,
-			OPTC_SEG0_SRC_SEL, optc->inst);
-
-	/* VTG enable first is for HW workaround */
-	REG_UPDATE(CONTROL,
-			VTG0_ENABLE, 1);
-
-	REG_SEQ_START();
-
-	/* Enable CRTC */
-	REG_UPDATE_2(OTG_CONTROL,
-			OTG_DISABLE_POINT_CNTL, 3,
-			OTG_MASTER_EN, 1);
-
-	REG_SEQ_SUBMIT();
-	REG_SEQ_WAIT_DONE();
-
+	_optc1_enable_crtc(optc);
 	return true;
 }
 
