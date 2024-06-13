@@ -9,7 +9,28 @@
 
 #include <linux/buffer_head.h>
 #include <linux/fs.h>
+#include <linux/types.h>
 #include "swab.h"
+#include "ufs_fs.h"
+
+#ifndef ARRAY_SIZE
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
+#endif
+
+struct ufs_de_type_mapping {
+	umode_t mode_mask;
+	unsigned char d_type;
+};
+
+static const struct ufs_de_type_mapping ufs_type_table[] = {
+	{ S_IFSOCK, DT_SOCK },
+	{ S_IFLNK,  DT_LNK },
+	{ S_IFREG,  DT_REG },
+	{ S_IFBLK,  DT_BLK },
+	{ S_IFDIR,  DT_DIR },
+	{ S_IFCHR,  DT_CHR },
+	{ S_IFIFO,  DT_FIFO },
+};
 
 /*
  * functions used for retyping
@@ -153,32 +174,18 @@ ufs_set_de_type(struct super_block *sb, struct ufs_dir_entry *de, int mode)
 		return;
 
 	/*
-	 * TODO turn this into a table lookup
+	 * Table lookup to set d_type based on mode & S_IFMT
 	 */
-	switch (mode & S_IFMT) {
-	case S_IFSOCK:
-		de->d_u.d_44.d_type = DT_SOCK;
-		break;
-	case S_IFLNK:
-		de->d_u.d_44.d_type = DT_LNK;
-		break;
-	case S_IFREG:
-		de->d_u.d_44.d_type = DT_REG;
-		break;
-	case S_IFBLK:
-		de->d_u.d_44.d_type = DT_BLK;
-		break;
-	case S_IFDIR:
-		de->d_u.d_44.d_type = DT_DIR;
-		break;
-	case S_IFCHR:
-		de->d_u.d_44.d_type = DT_CHR;
-		break;
-	case S_IFIFO:
-		de->d_u.d_44.d_type = DT_FIFO;
-		break;
-	default:
-		de->d_u.d_44.d_type = DT_UNKNOWN;
+
+	size_t i;
+	/* Default to DT_UNKNOWN if not found */
+	de->d_u.d_44.d_type = DT_UNKNOWN;
+
+	for (i = 0; i < ARRAY_SIZE(ufs_type_table); i++) {
+		if ((mode & S_IFMT) == ufs_type_table[i].mode_mask) {
+			de->d_u.d_44.d_type = ufs_type_table[i].d_type;
+			break;
+		}
 	}
 }
 
