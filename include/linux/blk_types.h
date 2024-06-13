@@ -234,7 +234,7 @@ struct bio {
 	 */
 	struct blkcg_gq		*bi_blkg;
 	struct bio_issue	bi_issue;
-#ifdef CONFIG_BLK_CGROUP_IOCOST
+#if IS_ENABLED(CONFIG_BLK_CGROUP_IOCOST)
 	u64			bi_iocost_cost;
 #endif
 #endif
