@@ -285,7 +285,7 @@ static void drm_panic_blit(struct drm_scanout_buffer *sb, struct drm_rect *clip,
 		return drm_panic_blit_pixel(sb, clip, sbuf8, spitch, fg_color);
 
 	map = sb->map[0];
-	iosys_map_incr(&map, clip->y1 * sb->pitch[0] + clip->x1 * sb->format->cpp[0]);
+	iosys_map_incr(&map, drm_fb_clip_offset(sb->pitch[0], sb->format, clip));
 
 	switch (sb->format->cpp[0]) {
 	case 2:
@@ -373,7 +373,7 @@ static void drm_panic_fill(struct drm_scanout_buffer *sb, struct drm_rect *clip,
 		return drm_panic_fill_pixel(sb, clip, color);
 
 	map = sb->map[0];
-	iosys_map_incr(&map, clip->y1 * sb->pitch[0] + clip->x1 * sb->format->cpp[0]);
+	iosys_map_incr(&map, drm_fb_clip_offset(sb->pitch[0], sb->format, clip));
 
 	switch (sb->format->cpp[0]) {
 	case 2:
