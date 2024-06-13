@@ -300,6 +300,10 @@ from the file and their meaning are same to those of the list on
 The ``apply_interval_us`` file is for setting and getting the scheme's
 :ref:`apply_interval <damon_design_damos>` in microseconds.
 
+The ``target_nid`` file is for setting the migration target node, which is
+only meaningful when the ``action`` is either ``migrate_hot`` or
+``migrate_cold``.
+
 .. _sysfs_access_pattern:
 
 schemes/<N>/access_pattern/
@@ -759,7 +763,9 @@ list on :ref:`design doc <damon_design_damos_action>`.
  - 4: ``nohugepage``
  - 5: ``lru_prio``
  - 6: ``lru_deprio``
- - 7: ``stat``
+ - 7: ``migrate_hot``
+ - 8: ``migrate_cold``
+ - 9: ``stat``
 
 Quota
 ~~~~~
