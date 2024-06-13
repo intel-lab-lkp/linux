@@ -45,7 +45,7 @@
 static inline bool lockref_trywait_unlocked(struct lockref *lockref)
 {
 	struct lockref old;
-	int retry = 100;
+	int retry = 256;
 
 	for (;;) {
 		cpu_relax();
