@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 #
 # sed script to filter out symbols that are not needed for System.map,
-# or not suitable for kallsyms. The input should be 'nm -n <file>'.
+# or not suitable for kallsyms. The input should be 'nm -nS <file>'.
 #
 # System.map is used by module-init tools and some debugging
 # tools to retrieve the actual addresses of symbols in the kernel.
