@@ -374,11 +374,14 @@ static void request_wait_answer(struct fuse_req *req)
 		if (!err)
 			return;
 
-		set_bit(FR_INTERRUPTED, &req->flags);
-		/* matches barrier in fuse_dev_do_read() */
-		smp_mb__after_atomic();
-		if (test_bit(FR_SENT, &req->flags))
-			queue_interrupt(req);
+		/* Any signal except fatal can generate an interrupt request */
+		if (!__fatal_signal_pending(current)) {
+			set_bit(FR_INTERRUPTED, &req->flags);
+			/* matches barrier in fuse_dev_do_read() */
+			smp_mb__after_atomic();
+			if (test_bit(FR_SENT, &req->flags))
+				queue_interrupt(req);
+		}
 	}
 
 	if (!test_bit(FR_FORCE, &req->flags)) {
