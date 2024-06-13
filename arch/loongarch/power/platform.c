@@ -34,22 +34,34 @@ void enable_pci_wakeup(void)
 		acpi_write_bit_register(ACPI_BITREG_PCIEXP_WAKE_DISABLE, 0);
 }
 
+static void acpi_suspend_register_fallback(void)
+{
+	acpi_enter_sleep_state(ACPI_STATE_S3);
+}
+
 static int __init loongson3_acpi_suspend_init(void)
 {
 #ifdef CONFIG_ACPI
 	acpi_status status;
 	uint64_t suspend_addr = 0;
 
-	if (acpi_disabled || acpi_gbl_reduced_hardware)
+	if (acpi_disabled)
 		return 0;
 
-	acpi_write_bit_register(ACPI_BITREG_SCI_ENABLE, 1);
+	if (!acpi_sleep_state_supported(ACPI_STATE_S3))
+		return 0;
+
+	if (!acpi_gbl_reduced_hardware)
+		acpi_write_bit_register(ACPI_BITREG_SCI_ENABLE, 1);
+
 	status = acpi_evaluate_integer(NULL, "\\SADR", NULL, &suspend_addr);
-	if (ACPI_FAILURE(status) || !suspend_addr) {
-		pr_err("ACPI S3 is not support!\n");
-		return -1;
+	if (!ACPI_FAILURE(status) && suspend_addr) {
+		loongson_sysconf.suspend_addr = (u64)phys_to_virt(PHYSADDR(suspend_addr));
+		return 0;
 	}
-	loongson_sysconf.suspend_addr = (u64)phys_to_virt(PHYSADDR(suspend_addr));
+
+	pr_info("ACPI S3 supported with hw register fallback\n");
+	loongson_sysconf.suspend_addr = (u64)acpi_suspend_register_fallback;
 #endif
 	return 0;
 }
