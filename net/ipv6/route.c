@@ -6736,7 +6736,7 @@ int __init ip6_route_init(void)
 
 	ret = rtnl_register_module(THIS_MODULE, PF_INET6, RTM_GETROUTE,
 				   inet6_rtm_getroute, NULL,
-				   RTNL_FLAG_DOIT_UNLOCKED);
+				   RTNL_FLAG_DOIT_UNLOCKED | RTNL_FLAG_DUMP_SPLIT_NLM_DONE);
 	if (ret < 0)
 		goto out_register_late_subsys;
 
