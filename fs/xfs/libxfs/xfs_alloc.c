@@ -2389,6 +2389,7 @@ xfs_alloc_space_available(
 	int			flags)
 {
 	struct xfs_perag	*pag = args->pag;
+	enum xfs_ag_resv_type	resv_type = args->resv;
 	xfs_extlen_t		alloc_len, longest;
 	xfs_extlen_t		reservation; /* blocks that are still reserved */
 	int			available;
@@ -2397,7 +2398,19 @@ xfs_alloc_space_available(
 	if (flags & XFS_ALLOC_FLAG_FREEING)
 		return true;
 
-	reservation = xfs_ag_resv_needed(pag, args->resv);
+	/*
+	 * If this allocation is a subsequent allocation in a transaction with
+	 * multiple allocations, allow it to tap the AGFL reserve in order to
+	 * ensure that it can refill its freelist if a prior transaction has
+	 * depleted it.  This is done to ensure that the available space checks
+	 * below don't stop an allocation that's up against the reservation
+	 * space limits when there is AGFL space still reserved and available.
+	 */
+	if (args->tp->t_highest_agno != NULLAGNUMBER &&
+	    args->resv == XFS_AG_RESV_NONE) {
+		resv_type = XFS_AG_RESV_AGFL;
+	}
+	reservation = xfs_ag_resv_needed(pag, resv_type);
 
 	/* do we have enough contiguous free space for the allocation? */
 	alloc_len = args->minlen + (args->alignment - 1) + args->minalignslop;
