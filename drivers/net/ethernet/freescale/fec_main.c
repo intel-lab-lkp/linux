@@ -4500,10 +4500,6 @@ fec_probe(struct platform_device *pdev)
 	/* Decide which interrupt line is wakeup capable */
 	fec_enet_get_wakeup_irq(pdev);
 
-	ret = fec_enet_mii_init(pdev);
-	if (ret)
-		goto failed_mii_init;
-
 	/* Carrier starts down, phylib will bring it up */
 	netif_carrier_off(ndev);
 	fec_enet_clk_enable(ndev, false);
@@ -4514,6 +4510,10 @@ fec_probe(struct platform_device *pdev)
 	ret = register_netdev(ndev);
 	if (ret)
 		goto failed_register;
+
+	ret = fec_enet_mii_init(pdev);
+	if (ret)
+		goto failed_mii_init;
 
 	device_init_wakeup(&ndev->dev, fep->wol_flag &
 			   FEC_WOL_HAS_MAGIC_PACKET);
@@ -4528,9 +4528,9 @@ fec_probe(struct platform_device *pdev)
 
 	return 0;
 
-failed_register:
-	fec_enet_mii_remove(fep);
 failed_mii_init:
+	unregister_netdev(ndev);
+failed_register:
 failed_irq:
 	fec_enet_deinit(ndev);
 failed_init:
@@ -4577,8 +4577,8 @@ fec_drv_remove(struct platform_device *pdev)
 
 	cancel_work_sync(&fep->tx_timeout_work);
 	fec_ptp_stop(pdev);
-	unregister_netdev(ndev);
 	fec_enet_mii_remove(fep);
+	unregister_netdev(ndev);
 	if (fep->reg_phy)
 		regulator_disable(fep->reg_phy);
 
