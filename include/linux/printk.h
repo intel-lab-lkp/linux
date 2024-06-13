@@ -60,6 +60,8 @@ static inline const char *printk_skip_headers(const char *buffer)
 #define CONSOLE_LOGLEVEL_DEFAULT CONFIG_CONSOLE_LOGLEVEL_DEFAULT
 #define CONSOLE_LOGLEVEL_QUIET	 CONFIG_CONSOLE_LOGLEVEL_QUIET
 
+int update_preferred_console(const char *match, const char *name, const short idx);
+
 extern int console_printk[];
 
 #define console_loglevel (console_printk[0])
