@@ -1487,6 +1487,7 @@ xfs_itruncate_extents_flags(
 	struct xfs_trans	*tp = *tpp;
 	xfs_fileoff_t		first_unmap_block;
 	int			error = 0;
+	unsigned int		unitsize = xfs_inode_alloc_unitsize(ip);
 
 	xfs_assert_ilocked(ip, XFS_ILOCK_EXCL);
 	if (atomic_read(&VFS_I(ip)->i_count))
@@ -1510,9 +1511,14 @@ xfs_itruncate_extents_flags(
 	 *
 	 * We have to free all the blocks to the bmbt maximum offset, even if
 	 * the page cache can't scale that far.
+	 *
+	 * For big realtime inode, don't aligned to allocation unitsize,
+	 * it'll split the extent and convert the tail blocks to unwritten.
 	 */
-	first_unmap_block = XFS_B_TO_FSB(mp,
-			roundup_64(new_size, xfs_inode_alloc_unitsize(ip)));
+	if (xfs_inode_has_bigrtalloc(ip))
+		unitsize = i_blocksize(VFS_I(ip));
+	first_unmap_block = XFS_B_TO_FSB(mp, roundup_64(new_size, unitsize));
+
 	if (!xfs_verify_fileoff(mp, first_unmap_block)) {
 		WARN_ON_ONCE(first_unmap_block > XFS_MAX_FILEOFF);
 		return 0;

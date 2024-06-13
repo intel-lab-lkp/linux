@@ -863,6 +863,15 @@ xfs_setattr_truncate_data(
 	blocksize = xfs_inode_alloc_unitsize(ip);
 
 	/*
+	 * If it's a big realtime inode, zero out the entire EOF extent could
+	 * get slow down as the rtextsize increases, speed it up by adjusting
+	 * the blocksize to the filesystem blocksize, let __xfs_bunmapi() to
+	 * split the extent and convert the tail blocks to unwritten.
+	 */
+	if (xfs_inode_has_bigrtalloc(ip))
+		blocksize = i_blocksize(inode);
+
+	/*
 	 * iomap won't detect a dirty page over an unwritten block (or a cow
 	 * block over a hole) and subsequently skips zeroing the newly post-EOF
 	 * portion of the page. Flush the new EOF to convert the block before
