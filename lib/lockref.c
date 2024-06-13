@@ -26,9 +26,45 @@
 	}									\
 } while (0)
 
+/*
+ * Most routines only ever inc/dec the reference, but the lock may be
+ * transiently held forcing them to take it as well.
+ *
+ * Should the lock be taken for any reason (including outside of lockref),
+ * a steady stream of ref/unref requests may find itself unable to go back
+ * to lockless operation.
+ *
+ * Combat the problem by giving the routines a way to speculatively wait in
+ * hopes of avoiding having to take the lock.
+ *
+ * The spin count is limited to guarantee forward progress, although the
+ * value is arbitrarily chosen.
+ *
+ * Note this routine is only used if the lock was found to be taken.
+ */
+static inline bool lockref_trywait_unlocked(struct lockref *lockref)
+{
+	struct lockref old;
+	int retry = 100;
+
+	for (;;) {
+		cpu_relax();
+		old.lock_count = READ_ONCE(lockref->lock_count);
+		if (arch_spin_value_unlocked(old.lock.rlock.raw_lock))
+			return true;
+		if (!--retry)
+			return false;
+	}
+}
+
 #else
 
 #define CMPXCHG_LOOP(CODE, SUCCESS) do { } while (0)
+
+static inline bool lockref_trywait_unlocked(struct lockref *lockref)
+{
+	return false;
+}
 
 #endif
 
@@ -46,6 +82,14 @@ void lockref_get(struct lockref *lockref)
 	,
 		return;
 	);
+
+	if (lockref_trywait_unlocked(lockref)) {
+		CMPXCHG_LOOP(
+			new.count++;
+		,
+			return;
+		);
+	}
 
 	spin_lock(&lockref->lock);
 	lockref->count++;
@@ -69,6 +113,16 @@ int lockref_get_not_zero(struct lockref *lockref)
 	,
 		return 1;
 	);
+
+	if (lockref_trywait_unlocked(lockref)) {
+		CMPXCHG_LOOP(
+			new.count++;
+			if (old.count <= 0)
+				return 0;
+		,
+			return 1;
+		);
+	}
 
 	spin_lock(&lockref->lock);
 	retval = 0;
@@ -98,6 +152,16 @@ int lockref_put_not_zero(struct lockref *lockref)
 		return 1;
 	);
 
+	if (lockref_trywait_unlocked(lockref)) {
+		CMPXCHG_LOOP(
+			new.count--;
+			if (old.count <= 1)
+				return 0;
+		,
+			return 1;
+		);
+	}
+
 	spin_lock(&lockref->lock);
 	retval = 0;
 	if (lockref->count > 1) {
@@ -125,6 +189,17 @@ int lockref_put_return(struct lockref *lockref)
 	,
 		return new.count;
 	);
+
+	if (lockref_trywait_unlocked(lockref)) {
+		CMPXCHG_LOOP(
+			new.count--;
+			if (old.count <= 0)
+				return -1;
+		,
+			return new.count;
+		);
+	}
+
 	return -1;
 }
 EXPORT_SYMBOL(lockref_put_return);
@@ -180,6 +255,16 @@ int lockref_get_not_dead(struct lockref *lockref)
 	,
 		return 1;
 	);
+
+	if (lockref_trywait_unlocked(lockref)) {
+		CMPXCHG_LOOP(
+			new.count++;
+			if (old.count < 0)
+				return 0;
+		,
+			return 1;
+		);
+	}
 
 	spin_lock(&lockref->lock);
 	retval = 0;
