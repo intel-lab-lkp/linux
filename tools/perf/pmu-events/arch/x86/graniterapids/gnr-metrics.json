@@ -1,0 +1,108 @@
+[
+	{
+		"BriefDescription": "TPEBS testing metric",
+		"MetricExpr": " min((MEM_LOAD_RETIRED.L3_HIT * MEM_LOAD_RETIRED.L3_HIT:R * ( 1 + MEM_LOAD_RETIRED.FB_HIT / MEM_LOAD_RETIRED.L1_MISS / 2 ) / CPU_CLK_UNHALTED.THREAD), 1)",
+		"MetricGroup": "",
+		"MetricName": "tma_l3_hit_latency",
+		"ScaleUnit": "100%"
+	},
+	{
+			"BriefDescription": "TPEBS testing metric",
+			"MetricExpr": "BR_MISP_RETIRED.COND_NTAKEN_COST * BR_MISP_RETIRED.COND_NTAKEN_COST:R / CPU_CLK_UNHALTED.THREAD",
+			"MetricGroup": "",
+			"MetricName": "tma_cond_nt_mispredicts",
+			"ScaleUnit": "100%"
+	},
+	{
+			"BriefDescription": "TPEBS testing metric",
+			"MetricExpr": "BR_MISP_RETIRED.COND_TAKEN_COST * BR_MISP_RETIRED.COND_TAKEN_COST:R / CPU_CLK_UNHALTED.THREAD",
+			"MetricGroup": "",
+			"MetricName": "tma_cond_tk_mispredicts",
+			"ScaleUnit": "100%"
+	},
+	{
+		"BriefDescription": "TPEBS testing metric",
+		"MetricExpr": "min((MEM_INST_RETIRED.STLB_HIT_STORES * MEM_INST_RETIRED.STLB_HIT_STORES:R + MEM_INST_RETIRED.STLB_MISS_STORES * MEM_INST_RETIRED.STLB_MISS_STORES:R) / CPU_CLK_UNHALTED.THREAD, 1)",
+		"MetricGroup": "",
+		"MetricName": "tma_dtlb_store",
+		"ScaleUnit": "100%"
+	},
+	{
+		"BriefDescription": "TPEBS testing metric",
+		"MetricExpr": "min(tma_dtlb_store - tma_store_stlb_miss, 1)",
+		"MetricGroup": "",
+		"MetricName": "tma_store_stlb_hit",
+		"ScaleUnit": "100%"
+	},
+	{
+		"BriefDescription": "TPEBS testing metric",
+		"MetricExpr": "MEM_INST_RETIRED.SPLIT_STORES * MEM_INST_RETIRED.SPLIT_STORES:R / CPU_CLK_UNHALTED.THREAD",
+		"MetricGroup": "",
+		"MetricName": "tma_split_stores",
+		"ScaleUnit": "100%"
+	},
+	{
+		"BriefDescription": "TPEBS testing metric",
+		"MetricExpr": "min( MEM_INST_RETIRED.STLB_MISS_STORES * MEM_INST_RETIRED.STLB_MISS_STORES:R / CPU_CLK_UNHALTED.THREAD, 1 )",
+		"MetricGroup": "",
+		"MetricName": "tma_store_stlb_miss",
+		"ScaleUnit": "100%"
+	},
+	{
+		"BriefDescription": "TPEBS testing metric",
+		"MetricExpr": "FRONTEND_RETIRED.L1I_MISS * FRONTEND_RETIRED.L1I_MISS:R / CPU_CLK_UNHALTED.THREAD - FRONTEND_RETIRED.L2_MISS * FRONTEND_RETIRED.L2_MISS:R / CPU_CLK_UNHALTED.THREAD ",
+		"MetricGroup": "",
+		"MetricName": "tma_code_l2_hit",
+		"ScaleUnit": "100%"
+	},
+	{
+		"BriefDescription": "TPEBS testing metric",
+		"MetricExpr": "FRONTEND_RETIRED.L1I_MISS * cpu_core@RONTEND_RETIRED.L1I_MISS@R / CPU_CLK_UNHALTED.THREAD - FRONTEND_RETIRED.L2_MISS * FRONTEND_RETIRED.L2_MISS:R / CPU_CLK_UNHALTED.THREAD ",
+		"MetricGroup": "",
+		"MetricName": "tma_code_l2_hit_fake_r",
+		"ScaleUnit": "100%"
+	},
+	{
+		"BriefDescription": "TPEBS testing metric",
+		"MetricExpr": "FRONTEND_RETIRED.L1I_MISS / CPU_CLK_UNHALTED.THREAD - tma_code_l2_miss_fake",
+		"MetricGroup": "",
+		"MetricName": "tma_code_l2_hit_fake",
+		"ScaleUnit": "100%"
+	},
+	{
+		"BriefDescription": "TPEBS testing metric",
+		"MetricExpr": "FRONTEND_RETIRED.L2_MISS * FRONTEND_RETIRED.L2_MISS:R / CPU_CLK_UNHALTED.THREAD",
+		"MetricGroup": "",
+		"MetricName": "tma_code_l2_miss",
+		"ScaleUnit": "100%"
+	},
+	{
+		"BriefDescription": "TPEBS testing metric",
+		"MetricExpr": "FRONTEND_RETIRED.L2_MISS / CPU_CLK_UNHALTED.THREAD",
+		"MetricGroup": "",
+		"MetricName": "tma_code_l2_miss_fake",
+		"ScaleUnit": "100%"
+	},
+
+	{
+		"BriefDescription": "TPEBS testing metric",
+		"MetricExpr": "BR_MISP_RETIRED.COND_NTAKEN_COST / CPU_CLK_UNHALTED.THREAD",
+		"MetricGroup": "",
+		"MetricName": "tma_cond_nt_mispredicts_fake",
+		"ScaleUnit": "100%"
+  },
+  {
+		"BriefDescription": "TPEBS testing metric",
+		"MetricExpr": "BR_MISP_RETIRED.COND_TAKEN_COST / CPU_CLK_UNHALTED.THREAD",
+		"MetricGroup": "",
+		"MetricName": "tma_cond_tk_mispredicts_fake",
+		"ScaleUnit": "100%"
+  },
+	{
+		"BriefDescription": "TPEBS testing metric",
+		"MetricExpr": " min((MEM_LOAD_RETIRED.L3_HIT * ( 1 + MEM_LOAD_RETIRED.FB_HIT / MEM_LOAD_RETIRED.L1_MISS / 2 ) / CPU_CLK_UNHALTED.THREAD), 1)",
+		"MetricGroup": "",
+		"MetricName": "tma_l3_hit_latency_fake",
+		"ScaleUnit": "100%"
+	}
+]
