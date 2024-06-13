@@ -11,8 +11,8 @@
 #define __LINUX_LOCKDEP_H
 
 #include <linux/lockdep_types.h>
+#include <linux/lockdep_irqflags.h>
 #include <linux/smp.h>
-#include <asm/percpu.h>
 
 struct task_struct;
 
@@ -552,72 +552,10 @@ do {									\
 	lock_release(&(lock)->dep_map, _THIS_IP_);			\
 } while (0)
 
-DECLARE_PER_CPU(int, hardirqs_enabled);
-DECLARE_PER_CPU(int, hardirq_context);
-DECLARE_PER_CPU(unsigned int, lockdep_recursion);
-
-#define __lockdep_enabled	(debug_locks && !this_cpu_read(lockdep_recursion))
-
-#define lockdep_assert_irqs_enabled()					\
-do {									\
-	WARN_ON_ONCE(__lockdep_enabled && !this_cpu_read(hardirqs_enabled)); \
-} while (0)
-
-#define lockdep_assert_irqs_disabled()					\
-do {									\
-	WARN_ON_ONCE(__lockdep_enabled && this_cpu_read(hardirqs_enabled)); \
-} while (0)
-
-#define lockdep_assert_in_irq()						\
-do {									\
-	WARN_ON_ONCE(__lockdep_enabled && !this_cpu_read(hardirq_context)); \
-} while (0)
-
-#define lockdep_assert_no_hardirq()					\
-do {									\
-	WARN_ON_ONCE(__lockdep_enabled && (this_cpu_read(hardirq_context) || \
-					   !this_cpu_read(hardirqs_enabled))); \
-} while (0)
-
-#define lockdep_assert_preemption_enabled()				\
-do {									\
-	WARN_ON_ONCE(IS_ENABLED(CONFIG_PREEMPT_COUNT)	&&		\
-		     __lockdep_enabled			&&		\
-		     (preempt_count() != 0		||		\
-		      !this_cpu_read(hardirqs_enabled)));		\
-} while (0)
-
-#define lockdep_assert_preemption_disabled()				\
-do {									\
-	WARN_ON_ONCE(IS_ENABLED(CONFIG_PREEMPT_COUNT)	&&		\
-		     __lockdep_enabled			&&		\
-		     (preempt_count() == 0		&&		\
-		      this_cpu_read(hardirqs_enabled)));		\
-} while (0)
-
-/*
- * Acceptable for protecting per-CPU resources accessed from BH.
- * Much like in_softirq() - semantics are ambiguous, use carefully.
- */
-#define lockdep_assert_in_softirq()					\
-do {									\
-	WARN_ON_ONCE(__lockdep_enabled			&&		\
-		     (!in_softirq() || in_irq() || in_nmi()));		\
-} while (0)
-
 #else
 # define might_lock(lock) do { } while (0)
 # define might_lock_read(lock) do { } while (0)
 # define might_lock_nested(lock, subclass) do { } while (0)
-
-# define lockdep_assert_irqs_enabled() do { } while (0)
-# define lockdep_assert_irqs_disabled() do { } while (0)
-# define lockdep_assert_in_irq() do { } while (0)
-# define lockdep_assert_no_hardirq() do { } while (0)
-
-# define lockdep_assert_preemption_enabled() do { } while (0)
-# define lockdep_assert_preemption_disabled() do { } while (0)
-# define lockdep_assert_in_softirq() do { } while (0)
 #endif
 
 #ifdef CONFIG_PROVE_RAW_LOCK_NESTING

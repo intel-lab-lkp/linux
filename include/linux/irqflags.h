@@ -191,6 +191,8 @@ extern void warn_bogus_irq_restore(void);
  */
 #ifdef CONFIG_TRACE_IRQFLAGS
 
+#include <linux/lockdep_irqflags.h>
+
 #define local_irq_enable()				\
 	do {						\
 		trace_hardirqs_on();			\
@@ -203,6 +205,8 @@ extern void warn_bogus_irq_restore(void);
 		raw_local_irq_disable();		\
 		if (!was_disabled)			\
 			trace_hardirqs_off();		\
+		else					\
+			lockdep_assert_irqs_disabled();	\
 	} while (0)
 
 #define local_irq_save(flags)				\
@@ -210,6 +214,8 @@ extern void warn_bogus_irq_restore(void);
 		raw_local_irq_save(flags);		\
 		if (!raw_irqs_disabled_flags(flags))	\
 			trace_hardirqs_off();		\
+		else					\
+			lockdep_assert_irqs_disabled();	\
 	} while (0)
 
 #define local_irq_restore(flags)			\
