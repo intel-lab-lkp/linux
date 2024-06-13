@@ -6966,6 +6966,7 @@ int cgroup_parse_float(const char *input, unsigned dec_shift, s64 *v)
 	*v = whole * power_of_ten(dec_shift) + frac;
 	return 0;
 }
+EXPORT_SYMBOL_GPL(cgroup_parse_float);
 
 /*
  * sock->sk_cgrp_data handling.  For more info, see sock_cgroup_data
