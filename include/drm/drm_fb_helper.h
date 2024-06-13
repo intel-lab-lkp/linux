@@ -143,6 +143,8 @@ struct drm_fb_helper {
 	spinlock_t damage_lock;
 	struct work_struct damage_work;
 	struct work_struct resume_work;
+	struct work_struct lid_work;
+	struct workqueue_struct *input_wq;
 
 	/**
 	 * @lock:

@@ -30,6 +30,8 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/console.h>
+#include <linux/input.h>
+#include <linux/mod_devicetable.h>
 #include <linux/pci.h>
 #include <linux/sysrq.h>
 #include <linux/vga_switcheroo.h>
@@ -406,6 +408,128 @@ static void drm_fb_helper_damage_work(struct work_struct *work)
 	drm_fb_helper_fb_dirty(helper);
 }
 
+static void drm_fb_helper_lid_event(struct input_handle *handle, unsigned int type,
+				    unsigned int code, int value)
+{
+	if (type == EV_SW && code == SW_LID) {
+		struct drm_fb_helper *fb_helper = handle->handler->private;
+
+		if (value != fb_helper->dev->lid_closed) {
+			fb_helper->dev->lid_closed = value;
+			queue_work(fb_helper->input_wq, &fb_helper->lid_work);
+		}
+	}
+}
+
+struct drm_fb_lid {
+	struct input_handle handle;
+};
+
+static int drm_fb_helper_lid_connect(struct input_handler *handler,
+				     struct input_dev *dev,
+				     const struct input_device_id *id)
+{
+	struct drm_fb_helper *fb_helper = handler->private;
+	struct drm_fb_lid *lid;
+	char *name;
+	int error;
+
+	lid = kzalloc(sizeof(*lid), GFP_KERNEL);
+	if (!lid)
+		return -ENOMEM;
+
+	name = kasprintf(GFP_KERNEL, "drm-fb-helper-lid-%s", dev_name(&dev->dev));
+	if (!name) {
+		error = -ENOMEM;
+		goto err_free_lid;
+	}
+
+	lid->handle.dev = dev;
+	lid->handle.handler = handler;
+	lid->handle.name = name;
+	lid->handle.private = lid;
+
+	error = input_register_handle(&lid->handle);
+	if (error)
+		goto err_free_name;
+
+	error = input_open_device(&lid->handle);
+	if (error)
+		goto err_unregister_handle;
+
+	fb_helper->dev->lid_closed = dev->sw[SW_LID];
+	drm_dbg_kms(fb_helper->dev, "initial lid state is set to %d\n", fb_helper->dev->lid_closed);
+
+	return 0;
+
+err_unregister_handle:
+	input_unregister_handle(&lid->handle);
+err_free_name:
+	kfree(name);
+err_free_lid:
+	kfree(lid);
+	return error;
+}
+
+static void drm_fb_helper_lid_disconnect(struct input_handle *handle)
+{
+	struct drm_fb_lid *lid = handle->private;
+
+	input_close_device(handle);
+	input_unregister_handle(handle);
+
+	kfree(handle->name);
+	kfree(lid);
+}
+
+static const struct input_device_id drm_fb_helper_lid_ids[] = {
+	{
+		.flags = INPUT_DEVICE_ID_MATCH_EVBIT | INPUT_DEVICE_ID_MATCH_SWBIT,
+		.evbit = { BIT_MASK(EV_SW) },
+		.swbit = { [BIT_WORD(SW_LID)] = BIT_MASK(SW_LID) },
+	},
+	{ },
+};
+
+static struct input_handler drm_fb_helper_lid_handler = {
+	.event =	drm_fb_helper_lid_event,
+	.connect =	drm_fb_helper_lid_connect,
+	.disconnect =	drm_fb_helper_lid_disconnect,
+	.name =		"drm-fb-helper-lid",
+	.id_table =	drm_fb_helper_lid_ids,
+};
+
+static void drm_fb_helper_lid_work(struct work_struct *work)
+{
+	struct drm_fb_helper *fb_helper = container_of(work, struct drm_fb_helper,
+						       lid_work);
+	drm_fb_helper_hotplug_event(fb_helper);
+}
+
+static int drm_fb_helper_create_lid_handler(struct drm_fb_helper *fb_helper)
+{
+	int ret = 0;
+
+	if (fb_helper->deferred_setup)
+		return 0;
+
+	fb_helper->input_wq = create_singlethread_workqueue("drm-fb-lid");
+	if (fb_helper->input_wq == NULL)
+		return -ENOMEM;
+
+	drm_fb_helper_lid_handler.private = fb_helper;
+	ret = input_register_handler(&drm_fb_helper_lid_handler);
+	if (ret)
+		goto remove_wq;
+
+	return 0;
+
+remove_wq:
+	destroy_workqueue(fb_helper->input_wq);
+	fb_helper->input_wq = NULL;
+	return ret;
+}
+
 /**
  * drm_fb_helper_prepare - setup a drm_fb_helper structure
  * @dev: DRM device
@@ -438,6 +562,7 @@ void drm_fb_helper_prepare(struct drm_device *dev, struct drm_fb_helper *helper,
 	spin_lock_init(&helper->damage_lock);
 	INIT_WORK(&helper->resume_work, drm_fb_helper_resume_worker);
 	INIT_WORK(&helper->damage_work, drm_fb_helper_damage_work);
+	INIT_WORK(&helper->lid_work, drm_fb_helper_lid_work);
 	helper->damage_clip.x1 = helper->damage_clip.y1 = ~0;
 	mutex_init(&helper->lock);
 	helper->funcs = funcs;
@@ -585,6 +710,9 @@ void drm_fb_helper_fini(struct drm_fb_helper *fb_helper)
 
 	if (!drm_fbdev_emulation)
 		return;
+
+	input_unregister_handler(&drm_fb_helper_lid_handler);
+	destroy_workqueue(fb_helper->input_wq);
 
 	cancel_work_sync(&fb_helper->resume_work);
 	cancel_work_sync(&fb_helper->damage_work);
@@ -1834,6 +1962,10 @@ __drm_fb_helper_initial_config_and_unlock(struct drm_fb_helper *fb_helper)
 
 	width = dev->mode_config.max_width;
 	height = dev->mode_config.max_height;
+
+	ret = drm_fb_helper_create_lid_handler(fb_helper);
+	if (ret)
+		return ret;
 
 	drm_client_modeset_probe(&fb_helper->client, width, height);
 	ret = drm_fb_helper_single_fb_probe(fb_helper);

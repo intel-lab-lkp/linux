@@ -316,6 +316,12 @@ struct drm_device {
 	 * Root directory for debugfs files.
 	 */
 	struct dentry *debugfs_root;
+
+	/**
+	 * @lid_closed: Flag to tell the lid switch state
+	 */
+	bool lid_closed;
+
 };
 
 #endif
