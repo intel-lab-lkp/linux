@@ -174,9 +174,14 @@ static inline bool is_local_ether_addr(const u8 *addr)
  */
 static inline bool is_broadcast_ether_addr(const u8 *addr)
 {
+#if defined(CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS)
+	return (*(const s32 *)(addr + 0) &
+		*(const s16 *)(addr + 4)) == (s32)0xffffffff;
+#else
 	return (*(const u16 *)(addr + 0) &
 		*(const u16 *)(addr + 2) &
 		*(const u16 *)(addr + 4)) == 0xffff;
+#endif
 }
 
 /**
