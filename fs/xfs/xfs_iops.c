@@ -858,7 +858,7 @@ xfs_setattr_truncate_data(
 	}
 
 	/* Truncate down */
-	blocksize = i_blocksize(inode);
+	blocksize = xfs_inode_alloc_unitsize(ip);
 
 	/*
 	 * iomap won't detect a dirty page over an unwritten block (or a cow

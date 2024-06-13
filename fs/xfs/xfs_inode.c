@@ -1511,7 +1511,8 @@ xfs_itruncate_extents_flags(
 	 * We have to free all the blocks to the bmbt maximum offset, even if
 	 * the page cache can't scale that far.
 	 */
-	first_unmap_block = XFS_B_TO_FSB(mp, (xfs_ufsize_t)new_size);
+	first_unmap_block = XFS_B_TO_FSB(mp,
+			roundup_64(new_size, xfs_inode_alloc_unitsize(ip)));
 	if (!xfs_verify_fileoff(mp, first_unmap_block)) {
 		WARN_ON_ONCE(first_unmap_block > XFS_MAX_FILEOFF);
 		return 0;
