@@ -1123,12 +1123,16 @@ drop:
 }
 
 static void reqsk_queue_hash_req(struct request_sock *req,
-				 unsigned long timeout)
+				 unsigned long timeout, bool *found_dup_sk)
 {
+	inet_ehash_insert(req_to_sk(req), NULL, found_dup_sk);
+	if (found_dup_sk && *found_dup_sk)
+		return;
+
+	/* The timer needs to be setup after a successful insertion. */
 	timer_setup(&req->rsk_timer, reqsk_timer_handler, TIMER_PINNED);
 	mod_timer(&req->rsk_timer, jiffies + timeout);
 
-	inet_ehash_insert(req_to_sk(req), NULL, NULL);
 	/* before letting lookups find us, make sure all req fields
 	 * are committed to memory and refcnt initialized.
 	 */
@@ -1137,9 +1141,12 @@ static void reqsk_queue_hash_req(struct request_sock *req,
 }
 
 void inet_csk_reqsk_queue_hash_add(struct sock *sk, struct request_sock *req,
-				   unsigned long timeout)
+				   unsigned long timeout, bool *found_dup_sk)
 {
-	reqsk_queue_hash_req(req, timeout);
+	reqsk_queue_hash_req(req, timeout, found_dup_sk);
+	if (found_dup_sk && *found_dup_sk)
+		return;
+
 	inet_csk_reqsk_queue_added(sk);
 }
 EXPORT_SYMBOL_GPL(inet_csk_reqsk_queue_hash_add);

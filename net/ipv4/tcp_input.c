@@ -7255,8 +7255,17 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 	} else {
 		tcp_rsk(req)->tfo_listener = false;
 		if (!want_cookie) {
+			bool found_dup_sk = false;
+
 			req->timeout = tcp_timeout_init((struct sock *)req);
-			inet_csk_reqsk_queue_hash_add(sk, req, req->timeout);
+			inet_csk_reqsk_queue_hash_add(sk, req, req->timeout,
+						      &found_dup_sk);
+
+			if (unlikely(found_dup_sk)) {
+				reqsk_free(req);
+				return 0;
+			}
+
 		}
 		af_ops->send_synack(sk, dst, &fl, req, &foc,
 				    !want_cookie ? TCP_SYNACK_NORMAL :
