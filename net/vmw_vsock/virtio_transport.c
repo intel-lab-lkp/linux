@@ -214,7 +214,9 @@ virtio_transport_send_pkt(struct sk_buff *skb)
 {
 	struct virtio_vsock_hdr *hdr;
 	struct virtio_vsock *vsock;
+	bool use_worker = true;
 	int len = skb->len;
+	int ret = -1;
 
 	hdr = virtio_vsock_hdr(skb);
 
@@ -235,8 +237,34 @@ virtio_transport_send_pkt(struct sk_buff *skb)
 	if (virtio_vsock_skb_reply(skb))
 		atomic_inc(&vsock->queued_replies);
 
-	virtio_vsock_skb_queue_tail(&vsock->send_pkt_queue, skb);
-	queue_work(virtio_vsock_workqueue, &vsock->send_pkt_work);
+	/* If the send_pkt_queue is empty there is no need to enqueue the packet.
+	 * Just put it on the ringbuff using virtio_transport_send_skb.
+	 */
+
+	if (skb_queue_empty_lockless(&vsock->send_pkt_queue)) {
+		bool restart_rx = false;
+		struct virtqueue *vq;
+
+		mutex_lock(&vsock->tx_lock);
+
+		vq = vsock->vqs[VSOCK_VQ_TX];
+
+		ret = virtio_transport_send_skb(skb, vq, vsock, &restart_rx);
+		if (ret == 0) {
+			use_worker = false;
+			virtqueue_kick(vq);
+		}
+
+		mutex_unlock(&vsock->tx_lock);
+
+		if (restart_rx)
+			queue_work(virtio_vsock_workqueue, &vsock->rx_work);
+	}
+
+	if (use_worker) {
+		virtio_vsock_skb_queue_tail(&vsock->send_pkt_queue, skb);
+		queue_work(virtio_vsock_workqueue, &vsock->send_pkt_work);
+	}
 
 out_rcu:
 	rcu_read_unlock();
