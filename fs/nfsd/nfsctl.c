@@ -2214,6 +2214,9 @@ int nfsd_nl_pool_mode_get_doit(struct sk_buff *skb, struct genl_info *info)
 	void *hdr;
 	int err;
 
+	if (sunrpc_get_pool_mode(buf, ARRAY_SIZE(buf)) >= ARRAY_SIZE(buf))
+		return -ERANGE;
+
 	skb = genlmsg_new(GENLMSG_DEFAULT_SIZE, GFP_KERNEL);
 	if (!skb)
 		return -ENOMEM;
@@ -2223,11 +2226,7 @@ int nfsd_nl_pool_mode_get_doit(struct sk_buff *skb, struct genl_info *info)
 	if (!hdr)
 		goto err_free_msg;
 
-	err = -ERANGE;
-	if (sunrpc_get_pool_mode(buf, ARRAY_SIZE(buf)) >= ARRAY_SIZE(buf))
-		goto err_free_msg;
-
-	err = nla_put_string(skb, NFSD_A_POOL_MODE_MODE, buf) ||
+	err = nla_put_string(skb, NFSD_A_POOL_MODE_MODE, buf) |
 	      nla_put_u32(skb, NFSD_A_POOL_MODE_NPOOLS, nfsd_nrpools(net));
 	if (err)
 		goto err_free_msg;
