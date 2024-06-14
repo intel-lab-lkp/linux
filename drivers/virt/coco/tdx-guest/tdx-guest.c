@@ -125,7 +125,7 @@ static void *alloc_quote_buf(void)
 		return NULL;
 
 	if (set_memory_decrypted((unsigned long)addr, count)) {
-		free_pages_exact(addr, len);
+		pr_err("Failed to set Quote buffer decrypted, leak the buffer\n");
 		return NULL;
 	}
 
