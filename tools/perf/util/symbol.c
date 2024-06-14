@@ -41,6 +41,7 @@
 #include <limits.h>
 #include <symbol/kallsyms.h>
 #include <sys/utsname.h>
+#include <regex.h>
 
 static int dso__load_kernel_sym(struct dso *dso, struct map *map);
 static int dso__load_guest_kernel_sym(struct dso *dso, struct map *map);
@@ -1797,9 +1798,18 @@ int dso__load(struct dso *dso, struct map *map)
 	struct nscookie nsc;
 	char newmapname[PATH_MAX];
 	const char *map_path = dso__long_name(dso);
+	regex_t    regex;
+	const char *pattern =  "(^/tmp/perf-).*(map)";
 
 	mutex_lock(dso__lock(dso));
-	perfmap = strncmp(dso__name(dso), "/tmp/perf-", 10) == 0;
+	if (regcomp(&regex, pattern, REG_EXTENDED)) {
+		pr_debug("regcomp() failed in dso__load\n");
+		ret = -1;
+		goto out;
+	}
+
+	perfmap = !regexec(&regex, dso__name(dso), 0, NULL, 0);
+
 	if (perfmap) {
 		if (dso__nsinfo(dso) &&
 		    (dso__find_perf_map(newmapname, sizeof(newmapname),
