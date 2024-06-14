@@ -616,6 +616,10 @@ static int write_and_verify(struct ctl_data *ctl,
 	if (!snd_ctl_elem_info_is_readable(ctl->info))
 		return err;
 
+	/* Skip the verification for volatile controls, too */
+	if (snd_ctl_elem_info_is_volatile(ctl->info))
+		return err;
+
 	snd_ctl_elem_value_set_id(read_val, ctl->id);
 
 	err = snd_ctl_elem_read(ctl->card->handle, read_val);
