@@ -1317,7 +1317,8 @@ static int snd_ctl_elem_write(struct snd_card *card, struct snd_ctl_file *file,
 	snd_ctl_build_ioff(&control->id, kctl, index_offset);
 	result = snd_power_ref_and_wait(card);
 	/* validate input values */
-	if (IS_ENABLED(CONFIG_SND_CTL_INPUT_VALIDATION) && !result) {
+	if ((IS_ENABLED(CONFIG_SND_CTL_INPUT_VALIDATION) ||
+	     (vd->access & SNDRV_CTL_ELEM_ACCESS_USER)) && !result) {
 		struct snd_ctl_elem_info info;
 
 		memset(&info, 0, sizeof(info));
