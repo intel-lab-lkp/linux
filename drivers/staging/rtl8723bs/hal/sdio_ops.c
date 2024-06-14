@@ -478,9 +478,6 @@ void sdio_set_intf_ops(struct adapter *adapter, struct _io_ops *ops)
 	ops->_write_port = &sdio_write_port;
 }
 
-/*
- * Todo: align address to 4 bytes.
- */
 static s32 _sdio_local_read(
 	struct adapter *adapter,
 	u32 addr,
@@ -494,6 +491,7 @@ static s32 _sdio_local_read(
 	u8 *tmpbuf;
 	u32 n;
 
+	addr = addr & ~3;
 	intfhdl = &adapter->iopriv.intf;
 
 	hal_sdio_get_cmd_addr_8723b(adapter, SDIO_LOCAL_DEVICE_ID, addr, &addr);
@@ -516,9 +514,6 @@ static s32 _sdio_local_read(
 	return err;
 }
 
-/*
- * Todo: align address to 4 bytes.
- */
 s32 sdio_local_read(
 	struct adapter *adapter,
 	u32 addr,
@@ -532,6 +527,7 @@ s32 sdio_local_read(
 	u8 *tmpbuf;
 	u32 n;
 
+	addr = addr & ~3;
 	intfhdl = &adapter->iopriv.intf;
 
 	hal_sdio_get_cmd_addr_8723b(adapter, SDIO_LOCAL_DEVICE_ID, addr, &addr);
@@ -557,9 +553,6 @@ s32 sdio_local_read(
 	return err;
 }
 
-/*
- * Todo: align address to 4 bytes.
- */
 s32 sdio_local_write(
 	struct adapter *adapter,
 	u32 addr,
@@ -572,6 +565,7 @@ s32 sdio_local_write(
 	s32 err;
 	u8 *tmpbuf;
 
+	addr = addr & ~3;
 	intfhdl = &adapter->iopriv.intf;
 
 	hal_sdio_get_cmd_addr_8723b(adapter, SDIO_LOCAL_DEVICE_ID, addr, &addr);
