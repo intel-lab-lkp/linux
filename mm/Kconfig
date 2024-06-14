@@ -644,6 +644,14 @@ config MIGRATION
 config DEVICE_MIGRATION
 	def_bool MIGRATION && ZONE_DEVICE
 
+config DMA_MIGRATION
+	bool "Migrate Pages offloading copy to DMA"
+	def_bool n
+	depends on MIGRATION
+	help
+	 An interface allowing external modules or driver to offload
+	 page copying in page migration.
+
 config ARCH_ENABLE_HUGEPAGE_MIGRATION
 	bool
 

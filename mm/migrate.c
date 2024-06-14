@@ -50,6 +50,7 @@
 #include <linux/random.h>
 #include <linux/sched/sysctl.h>
 #include <linux/memory-tiers.h>
+#include <linux/migrate_dma.h>
 
 #include <asm/tlbflush.h>
 
@@ -658,6 +659,37 @@ void folio_migrate_copy(struct folio *newfolio, struct folio *folio)
 	folio_migrate_flags(newfolio, folio);
 }
 EXPORT_SYMBOL(folio_migrate_copy);
+
+DEFINE_STATIC_CALL(_folios_copy, folios_copy);
+DEFINE_STATIC_CALL(_can_dma_migrate, can_dma_migrate);
+
+#ifdef CONFIG_DMA_MIGRATION
+void srcu_mig_cb(struct rcu_head *head)
+{
+	static_call_query(_folios_copy);
+}
+
+void dma_update_migrator(struct migrator *mig)
+{
+	int index;
+
+	mutex_lock(&migrator_mut);
+	index = srcu_read_lock(&mig_srcu);
+	strscpy(migrator.name, mig ? mig->name : "kernel", MIGRATOR_NAME_LEN);
+	static_call_update(_folios_copy, mig ? mig->migrate_dma : folios_copy);
+	static_call_update(_can_dma_migrate, mig ? mig->can_migrate_dma : can_dma_migrate);
+	if (READ_ONCE(migrator.owner))
+		module_put(migrator.owner);
+	xchg(&migrator.owner, mig ? mig->owner : NULL);
+	if (READ_ONCE(migrator.owner))
+		try_module_get(migrator.owner);
+	srcu_read_unlock(&mig_srcu, index);
+	mutex_unlock(&migrator_mut);
+	call_srcu(&mig_srcu, &migrator.srcu_head, srcu_mig_cb);
+	srcu_barrier(&mig_srcu);
+}
+
+#endif /* CONFIG_DMA_MIGRATION */
 
 /************************************************************
  *                    Migration functions
@@ -1689,6 +1721,7 @@ static void migrate_folios_batch_move(struct list_head *src_folios,
 	struct anon_vma *anon_vma = NULL;
 	bool is_lru;
 	int is_thp = 0;
+	bool can_migrate = true;
 	struct migrate_folio_info *mig_info, *mig_info2;
 	LIST_HEAD(temp_src_folios);
 	LIST_HEAD(temp_dst_folios);
@@ -1723,7 +1756,10 @@ static void migrate_folios_batch_move(struct list_head *src_folios,
 		 * This does everything except the page copy. The actual page copy
 		 * is handled later in a batch manner.
 		 */
-		if (likely(is_lru)) {
+		can_migrate = static_call(_can_dma_migrate)(dst, folio);
+		if (unlikely(!can_migrate))
+			rc = -EAGAIN;
+		else if (likely(is_lru)) {
 			struct address_space *mapping = folio_mapping(folio);
 
 			if (!mapping)
@@ -1789,7 +1825,7 @@ static void migrate_folios_batch_move(struct list_head *src_folios,
 		goto out;
 
 	/* Batch copy the folios */
-	folios_copy(dst_folios, src_folios);
+	static_call(_folios_copy)(dst_folios, src_folios);
 
 	/*
 	 * Iterate the folio lists to remove migration pte and restore them
