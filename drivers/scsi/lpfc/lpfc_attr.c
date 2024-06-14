@@ -1907,6 +1907,8 @@ lpfc_xcvr_data_show(struct device *dev, struct device_attribute *attr,
 
 	/* Get transceiver information */
 	rdp_context = kmalloc(sizeof(*rdp_context), GFP_KERNEL);
+	if (!rdp_context)
+		goto out_free_rdp;
 
 	rc = lpfc_get_sfp_info_wait(phba, rdp_context);
 	if (rc) {
