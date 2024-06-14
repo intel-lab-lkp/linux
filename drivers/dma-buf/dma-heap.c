@@ -126,7 +126,7 @@ static unsigned int dma_heap_ioctl_cmds[] = {
 static long dma_heap_ioctl(struct file *file, unsigned int ucmd,
 			   unsigned long arg)
 {
-	char stack_kdata[128];
+	_Alignas(u64) char stack_kdata[128];
 	char *kdata = stack_kdata;
 	unsigned int kcmd;
 	unsigned int in_size, out_size, drv_size, ksize;

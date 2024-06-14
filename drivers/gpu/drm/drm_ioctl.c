@@ -768,7 +768,7 @@ long drm_ioctl(struct file *filp,
 	drm_ioctl_t *func;
 	unsigned int nr = DRM_IOCTL_NR(cmd);
 	int retcode = -EINVAL;
-	char stack_kdata[128];
+	_Alignas(u64) char stack_kdata[128];
 	char *kdata = NULL;
 	unsigned int in_size, out_size, drv_size, ksize;
 	bool is_driver_ioctl;
