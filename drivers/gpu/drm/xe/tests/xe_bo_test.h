@@ -10,5 +10,6 @@ struct kunit;
 
 void xe_ccs_migrate_kunit(struct kunit *test);
 void xe_bo_evict_kunit(struct kunit *test);
+void xe_bo_shrink_kunit(struct kunit *test);
 
 #endif

@@ -222,6 +222,9 @@ struct ttm_lru_walk {
 long ttm_lru_walk_for_evict(struct ttm_lru_walk *walk, struct ttm_device *bdev,
 			    struct ttm_resource_manager *man, long target);
 
+long ttm_bo_try_shrink(struct ttm_lru_walk *walk, struct ttm_buffer_object *bo,
+		       bool purge, bool writeback);
+
 /**
  * ttm_bo_get - reference a struct ttm_buffer_object
  *
