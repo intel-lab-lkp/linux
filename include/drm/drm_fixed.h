@@ -214,4 +214,27 @@ static inline s64 drm_fixp_exp(s64 x)
 	return sum;
 }
 
+static inline int drm_x16_from_int(int val_int)
+{
+	return val_int << 4;
+}
+
+static inline int drm_x16_to_int(int val_x16)
+{
+	return val_x16 >> 4;
+}
+
+static inline int drm_x16_to_int_roundup(int val_x16)
+{
+	return (val_x16 + 0xf) >> 4;
+}
+
+static inline int drm_x16_to_frac(int val_x16)
+{
+	return val_x16 & 0xf;
+}
+
+#define DRM_X16_FMT		"%d.%04d"
+#define DRM_X16_ARGS(val_x16)	drm_x16_to_int(val_x16), (drm_x16_to_frac(val_x16) * 625)
+
 #endif
