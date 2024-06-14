@@ -116,4 +116,9 @@ mt76_dma_should_drop_buf(bool *drop, u32 ctrl, u32 buf1, u32 info)
 	}
 }
 
+static inline struct mt76_dev *mt76_from_netdev(struct net_device *dev)
+{
+	return *(struct mt76_dev **)netdev_priv(dev);
+}
+
 #endif
