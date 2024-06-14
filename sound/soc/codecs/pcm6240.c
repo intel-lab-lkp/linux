@@ -2088,8 +2088,7 @@ static int pcmdevice_i2c_probe(struct i2c_client *i2c)
 
 	pcm_dev = devm_kzalloc(&i2c->dev, sizeof(*pcm_dev), GFP_KERNEL);
 	if (!pcm_dev) {
-		ret = -ENOMEM;
-		goto out;
+		return -ENOMEM;
 	}
 
 	pcm_dev->chip_id = (id != NULL) ? id->driver_data : 0;
