@@ -3447,7 +3447,6 @@ static void virtnet_get_drvinfo(struct net_device *dev,
 
 }
 
-/* TODO: Eliminate OOO packets during switching */
 static int virtnet_set_channels(struct net_device *dev,
 				struct ethtool_channels *channels)
 {
@@ -3471,6 +3470,15 @@ static int virtnet_set_channels(struct net_device *dev,
 	if (vi->rq[0].xdp_prog)
 		return -EINVAL;
 
+	/* Disable network device to prevent packet processing during
+	 * the switch.
+	 */
+	netif_tx_disable(dev);
+	netif_carrier_off(dev);
+
+	/* Make certain that all in-flight packets are processed. */
+	synchronize_net();
+
 	cpus_read_lock();
 	err = virtnet_set_queues(vi, queue_pairs);
 	if (err) {
@@ -3482,7 +3490,12 @@ static int virtnet_set_channels(struct net_device *dev,
 
 	netif_set_real_num_tx_queues(dev, queue_pairs);
 	netif_set_real_num_rx_queues(dev, queue_pairs);
- err:
+
+	/* Restart the network device */
+	netif_carrier_on(dev);
+	netif_tx_wake_all_queues(dev);
+
+err:
 	return err;
 }
 
