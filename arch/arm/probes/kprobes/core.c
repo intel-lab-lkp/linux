@@ -45,6 +45,38 @@ DEFINE_PER_CPU(struct kprobe *, current_kprobe) = NULL;
 DEFINE_PER_CPU(struct kprobe_ctlblk, kprobe_ctlblk);
 
 
+kprobe_opcode_t *arch_adjust_kprobe_addr(unsigned long addr, unsigned long offset,
+					 bool *on_func_entry)
+{
+#ifdef CONFIG_KPROBES_ON_FTRACE
+	unsigned long nop_offset = 0;
+	u32 insn = 0;
+
+	/*
+	 * Since 'addr' is not guaranteed to be safe to access, use
+	 * copy_from_kernel_nofault() to read the instruction:
+	 */
+	if (copy_from_kernel_nofault(&insn, (void *)(addr + nop_offset),
+				     sizeof(u32)))
+		return NULL;
+
+	while (insn != NOP) {
+		nop_offset += 4;
+		if (copy_from_kernel_nofault(&insn, (void *)(addr + nop_offset),
+					     sizeof(u32)))
+			return NULL;
+	}
+
+	*on_func_entry = offset <= nop_offset;
+	if (*on_func_entry)
+		offset = nop_offset;
+#else
+	*on_func_entry = !offset;
+#endif
+
+	return (kprobe_opcode_t *)(addr + offset);
+}
+
 int __kprobes arch_prepare_kprobe(struct kprobe *p)
 {
 	kprobe_opcode_t insn;
