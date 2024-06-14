@@ -702,6 +702,13 @@ static void test_ctl_write_default(struct ctl_data *ctl)
 		return;
 	}
 
+	if (snd_ctl_elem_info_is_volatile(ctl->info)) {
+		ksft_print_msg("%s is volatile\n", ctl->name);
+		ksft_test_result_skip("write_default.%d.%d\n",
+				      ctl->card->card, ctl->elem);
+		return;
+	}
+
 	err = write_and_verify(ctl, ctl->def_val, NULL);
 
 	ksft_test_result(err >= 0, "write_default.%d.%d\n",
@@ -822,6 +829,13 @@ static void test_ctl_write_valid(struct ctl_data *ctl)
 
 	if (!snd_ctl_elem_info_is_writable(ctl->info)) {
 		ksft_print_msg("%s is not writeable\n", ctl->name);
+		ksft_test_result_skip("write_valid.%d.%d\n",
+				      ctl->card->card, ctl->elem);
+		return;
+	}
+
+	if (snd_ctl_elem_info_is_volatile(ctl->info)) {
+		ksft_print_msg("%s is volatile\n", ctl->name);
 		ksft_test_result_skip("write_valid.%d.%d\n",
 				      ctl->card->card, ctl->elem);
 		return;
@@ -1034,6 +1048,13 @@ static void test_ctl_write_invalid(struct ctl_data *ctl)
 
 	if (!snd_ctl_elem_info_is_writable(ctl->info)) {
 		ksft_print_msg("%s is not writeable\n", ctl->name);
+		ksft_test_result_skip("write_invalid.%d.%d\n",
+				      ctl->card->card, ctl->elem);
+		return;
+	}
+
+	if (!snd_ctl_elem_info_is_volatile(ctl->info)) {
+		ksft_print_msg("%s is volatile\n", ctl->name);
 		ksft_test_result_skip("write_invalid.%d.%d\n",
 				      ctl->card->card, ctl->elem);
 		return;
