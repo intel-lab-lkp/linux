@@ -1967,7 +1967,7 @@ xelpd_dsc_compute_link_config(struct intel_dp *intel_dp,
 	     compressed_bppx16 >= dsc_min_bpp;
 	     compressed_bppx16 -= bppx16_step) {
 		if (intel_dp->force_dsc_fractional_bpp_en &&
-		    !to_bpp_frac(compressed_bppx16))
+		    !drm_x16_to_frac(compressed_bppx16))
 			continue;
 		ret = dsc_compute_link_config(intel_dp,
 					      pipe_config,
@@ -1977,7 +1977,7 @@ xelpd_dsc_compute_link_config(struct intel_dp *intel_dp,
 		if (ret == 0) {
 			pipe_config->dsc.compressed_bpp_x16 = compressed_bppx16;
 			if (intel_dp->force_dsc_fractional_bpp_en &&
-			    to_bpp_frac(compressed_bppx16))
+			    drm_x16_to_frac(compressed_bppx16))
 				drm_dbg_kms(&i915->drm, "Forcing DSC fractional bpp\n");
 
 			return 0;
