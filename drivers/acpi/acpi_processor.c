@@ -597,6 +597,8 @@ static bool __init acpi_early_processor_osc(void)
 
 void __init acpi_early_processor_control_setup(void)
 {
+	if (!boot_cpu_has(X86_FEATURE_HWP))
+		return;
 	if (acpi_early_processor_osc()) {
 		pr_info("_OSC evaluated successfully for all CPUs\n");
 	} else {
