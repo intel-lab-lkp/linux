@@ -41,6 +41,7 @@
 #include "t7xx_pcie_mac.h"
 #include "t7xx_reg.h"
 #include "t7xx_state_monitor.h"
+#include "t7xx_port_proxy.h"
 
 #define T7XX_PCI_IREG_BASE		0
 #define T7XX_PCI_EREG_BASE		2
@@ -59,6 +60,8 @@ static const char * const t7xx_mode_names[] = {
 	[T7XX_FASTBOOT_SWITCHING] = "fastboot_switching",
 	[T7XX_FASTBOOT_DOWNLOAD] = "fastboot_download",
 	[T7XX_FASTBOOT_DUMP] = "fastboot_dump",
+	[T7XX_DEBUG] = "debug",
+	[T7XX_NORMAL] = "normal",
 };
 
 static_assert(ARRAY_SIZE(t7xx_mode_names) == T7XX_MODE_LAST);
@@ -82,6 +85,10 @@ static ssize_t t7xx_mode_store(struct device *dev,
 	} else if (index == T7XX_RESET) {
 		WRITE_ONCE(t7xx_dev->mode, T7XX_RESET);
 		t7xx_acpi_pldr_func(t7xx_dev);
+	} else if (index == T7XX_DEBUG) {
+		t7xx_proxy_port_debug(t7xx_dev, true);
+	} else if (index == T7XX_NORMAL) {
+		t7xx_proxy_port_debug(t7xx_dev, false);
 	}
 
 	return count;

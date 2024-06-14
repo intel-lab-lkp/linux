@@ -27,6 +27,7 @@
 #include <linux/types.h>
 #include <linux/wait.h>
 #include <linux/wwan.h>
+#include <linux/cdev.h>
 
 #include "t7xx_hif_cldma.h"
 #include "t7xx_pci.h"
@@ -42,6 +43,8 @@ enum port_ch {
 	/* to AP */
 	PORT_CH_AP_CONTROL_RX = 0x1000,
 	PORT_CH_AP_CONTROL_TX = 0x1001,
+	PORT_CH_AP_ADB_RX = 0x100a,
+	PORT_CH_AP_ADB_TX = 0x100b,
 
 	/* to MD */
 	PORT_CH_CONTROL_RX = 0x2000,
@@ -100,6 +103,16 @@ struct t7xx_port_conf {
 	struct port_ops		*ops;
 	char			*name;
 	enum wwan_port_type	port_type;
+	bool			debug;
+	char			*class_name;
+	unsigned char		baseminor;
+};
+
+struct t7xx_cdev {
+	struct t7xx_port	*port;
+	struct cdev		cdev;
+	dev_t			dev_num;
+	struct class		*dev_class;
 };
 
 struct t7xx_port {
@@ -134,6 +147,9 @@ struct t7xx_port {
 		struct {
 			struct rchan			*relaych;
 		} log;
+		struct {
+			struct t7xx_cdev		*debug_port;
+		} debug;
 	};
 };
 
