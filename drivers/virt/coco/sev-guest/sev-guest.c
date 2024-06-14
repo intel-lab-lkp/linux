@@ -730,8 +730,7 @@ static void *alloc_shared_pages(struct device *dev, size_t sz)
 
 	ret = set_memory_decrypted((unsigned long)page_address(page), npages);
 	if (ret) {
-		dev_err(dev, "failed to mark page shared, ret=%d\n", ret);
-		__free_pages(page, get_order(sz));
+		dev_err(dev, "failed to mark page shared, leak page, ret=%d\n", ret);
 		return NULL;
 	}
 
