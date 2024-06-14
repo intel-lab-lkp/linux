@@ -74,7 +74,7 @@ static const unsigned short normal_i2c[] = {
 
 struct spd5118_data {
 	struct regmap *regmap;
-	struct mutex nvmem_lock;
+	struct mutex access_lock;
 };
 
 /* hwmon */
@@ -90,6 +90,29 @@ static u16 spd5118_temp_to_reg(long temp)
 {
 	temp = clamp_val(temp, SPD5118_TEMP_RANGE_MIN, SPD5118_TEMP_RANGE_MAX);
 	return (DIV_ROUND_CLOSEST(temp, SPD5118_TEMP_UNIT) & 0x7ff) << 2;
+}
+
+static int spd5118_set_page(struct regmap *regmap, int page)
+{
+	unsigned int old_page;
+	int err;
+
+	err = regmap_read(regmap, SPD5118_REG_I2C_LEGACY_MODE, &old_page);
+	if (err)
+		return err;
+
+	if (page != (old_page & SPD5118_LEGACY_MODE_MASK)) {
+		/* Update page and explicitly select 1-byte addressing */
+		err = regmap_update_bits(regmap, SPD5118_REG_I2C_LEGACY_MODE,
+					 SPD5118_LEGACY_MODE_MASK, page);
+		if (err)
+			return err;
+
+		/* Selected new NVMEM page, drop cached data */
+		regcache_drop_region(regmap, SPD5118_EEPROM_BASE, 0xff);
+	}
+
+	return 0;
 }
 
 static int spd5118_read_temp(struct regmap *regmap, u32 attr, long *val)
@@ -174,10 +197,18 @@ static int spd5118_read_enable(struct regmap *regmap, long *val)
 static int spd5118_read(struct device *dev, enum hwmon_sensor_types type,
 			u32 attr, int channel, long *val)
 {
-	struct regmap *regmap = dev_get_drvdata(dev);
+	struct spd5118_data *data = dev_get_drvdata(dev);
+	struct regmap *regmap = data->regmap;
+	int err;
 
 	if (type != hwmon_temp)
 		return -EOPNOTSUPP;
+
+	mutex_lock(&data->access_lock);
+
+	err = spd5118_set_page(regmap, 0);
+	if (err)
+		goto unlock;
 
 	switch (attr) {
 	case hwmon_temp_input:
@@ -185,17 +216,25 @@ static int spd5118_read(struct device *dev, enum hwmon_sensor_types type,
 	case hwmon_temp_min:
 	case hwmon_temp_crit:
 	case hwmon_temp_lcrit:
-		return spd5118_read_temp(regmap, attr, val);
+		err = spd5118_read_temp(regmap, attr, val);
+		break;
 	case hwmon_temp_max_alarm:
 	case hwmon_temp_min_alarm:
 	case hwmon_temp_crit_alarm:
 	case hwmon_temp_lcrit_alarm:
-		return spd5118_read_alarm(regmap, attr, val);
+		err = spd5118_read_alarm(regmap, attr, val);
+		break;
 	case hwmon_temp_enable:
-		return spd5118_read_enable(regmap, val);
+		err = spd5118_read_enable(regmap, val);
+		break;
 	default:
-		return -EOPNOTSUPP;
+		err = -EOPNOTSUPP;
+		break;
 	}
+
+unlock:
+	mutex_unlock(&data->access_lock);
+	return err;
 }
 
 static int spd5118_write_temp(struct regmap *regmap, u32 attr, long val)
@@ -256,14 +295,28 @@ static int spd5118_temp_write(struct regmap *regmap, u32 attr, long val)
 static int spd5118_write(struct device *dev, enum hwmon_sensor_types type,
 			 u32 attr, int channel, long val)
 {
-	struct regmap *regmap = dev_get_drvdata(dev);
+	struct spd5118_data *data = dev_get_drvdata(dev);
+	struct regmap *regmap = data->regmap;
+	int err;
+
+	mutex_lock(&data->access_lock);
+
+	err = spd5118_set_page(regmap, 0);
+	if (err)
+		goto unlock;
 
 	switch (type) {
 	case hwmon_temp:
-		return spd5118_temp_write(regmap, attr, val);
+		err = spd5118_temp_write(regmap, attr, val);
+		break;
 	default:
-		return -EOPNOTSUPP;
+		err = -EOPNOTSUPP;
+		break;
 	}
+
+unlock:
+	mutex_unlock(&data->access_lock);
+	return err;
 }
 
 static umode_t spd5118_is_visible(const void *_data, enum hwmon_sensor_types type,
@@ -382,35 +435,12 @@ static const struct hwmon_chip_info spd5118_chip_info = {
 
 /* nvmem */
 
-static int spd5118_nvmem_set_page(struct regmap *regmap, int page)
-{
-	unsigned int old_page;
-	int err;
-
-	err = regmap_read(regmap, SPD5118_REG_I2C_LEGACY_MODE, &old_page);
-	if (err)
-		return err;
-
-	if (page != (old_page & SPD5118_LEGACY_MODE_MASK)) {
-		/* Update page and explicitly select 1-byte addressing */
-		err = regmap_update_bits(regmap, SPD5118_REG_I2C_LEGACY_MODE,
-					 SPD5118_LEGACY_MODE_MASK, page);
-		if (err)
-			return err;
-
-		/* Selected new NVMEM page, drop cached data */
-		regcache_drop_region(regmap, SPD5118_EEPROM_BASE, 0xff);
-	}
-
-	return 0;
-}
-
 static ssize_t spd5118_nvmem_read_page(struct regmap *regmap, char *buf,
 				       unsigned int offset, size_t count)
 {
 	int err;
 
-	err = spd5118_nvmem_set_page(regmap, offset >> SPD5118_PAGE_SHIFT);
+	err = spd5118_set_page(regmap, offset >> SPD5118_PAGE_SHIFT);
 	if (err)
 		return err;
 
@@ -439,19 +469,19 @@ static int spd5118_nvmem_read(void *priv, unsigned int off, void *val, size_t co
 	if (off + count > SPD5118_EEPROM_SIZE)
 		return -EINVAL;
 
-	mutex_lock(&data->nvmem_lock);
+	mutex_lock(&data->access_lock);
 
 	while (count) {
 		ret = spd5118_nvmem_read_page(data->regmap, buf, off, count);
 		if (ret < 0) {
-			mutex_unlock(&data->nvmem_lock);
+			mutex_unlock(&data->access_lock);
 			return ret;
 		}
 		buf += ret;
 		off += ret;
 		count -= ret;
 	}
-	mutex_unlock(&data->nvmem_lock);
+	mutex_unlock(&data->access_lock);
 	return 0;
 }
 
@@ -524,14 +554,64 @@ static const struct regmap_config spd5118_regmap_config = {
 	.cache_type = REGCACHE_MAPLE,
 };
 
+static int spd5118_init(struct i2c_client *client)
+{
+	struct i2c_adapter *adapter = client->adapter;
+	int err, regval, mode;
+
+	if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_BYTE_DATA |
+				     I2C_FUNC_SMBUS_WORD_DATA))
+		return -ENODEV;
+
+	regval = i2c_smbus_read_word_swapped(client, SPD5118_REG_TYPE);
+	if (regval < 0 || (regval && regval != 0x5118))
+		return -ENODEV;
+
+	/*
+	 * If the type register returns 0, it is possible that the chip has a
+	 * non-zero page selected and takes the specification literally, i.e.
+	 * disables access to volatile registers besides the page register if
+	 * the page is not 0. Try to identify such chips.
+	 */
+	if (!regval) {
+		mode = i2c_smbus_read_byte_data(client, SPD5118_REG_I2C_LEGACY_MODE);
+		if (mode < 0 || (mode & 0xf0) || !(mode & 0x07))
+			return -ENODEV;
+
+		err = i2c_smbus_write_byte_data(client, SPD5118_REG_I2C_LEGACY_MODE, 0);
+		if (err)
+			return -ENODEV;
+
+		regval = i2c_smbus_read_word_swapped(client, SPD5118_REG_TYPE);
+		if (regval != 0x5118) {
+			i2c_smbus_write_byte_data(client, SPD5118_REG_I2C_LEGACY_MODE, mode);
+			return -ENODEV;
+		}
+	}
+
+	regval = i2c_smbus_read_byte_data(client, SPD5118_REG_CAPABILITY);
+	if (regval < 0)
+		return -ENODEV;
+
+	if (!(regval & SPD5118_CAP_TS_SUPPORT))
+		return -ENODEV;
+
+	/* We are reasonably sure that this is really a SPD5118 hub controller */
+	return 0;
+}
+
 static int spd5118_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
-	unsigned int regval, revision, vendor, bank;
+	unsigned int revision, vendor, bank;
 	struct spd5118_data *data;
 	struct device *hwmon_dev;
 	struct regmap *regmap;
 	int err;
+
+	err = spd5118_init(client);
+	if (err)
+		return err;
 
 	data = devm_kzalloc(dev, sizeof(*data), GFP_KERNEL);
 	if (!data)
@@ -540,12 +620,6 @@ static int spd5118_probe(struct i2c_client *client)
 	regmap = devm_regmap_init_i2c(client, &spd5118_regmap_config);
 	if (IS_ERR(regmap))
 		return dev_err_probe(dev, PTR_ERR(regmap), "regmap init failed\n");
-
-	err = regmap_read(regmap, SPD5118_REG_CAPABILITY, &regval);
-	if (err)
-		return err;
-	if (!(regval & SPD5118_CAP_TS_SUPPORT))
-		return -ENODEV;
 
 	err = regmap_read(regmap, SPD5118_REG_REVISION, &revision);
 	if (err)
@@ -561,7 +635,7 @@ static int spd5118_probe(struct i2c_client *client)
 		return -ENODEV;
 
 	data->regmap = regmap;
-	mutex_init(&data->nvmem_lock);
+	mutex_init(&data->access_lock);
 	dev_set_drvdata(dev, data);
 
 	err = spd5118_nvmem_init(dev, data);
@@ -572,7 +646,7 @@ static int spd5118_probe(struct i2c_client *client)
 	}
 
 	hwmon_dev = devm_hwmon_device_register_with_info(dev, "spd5118",
-							 regmap, &spd5118_chip_info,
+							 data, &spd5118_chip_info,
 							 NULL);
 	if (IS_ERR(hwmon_dev))
 		return PTR_ERR(hwmon_dev);
