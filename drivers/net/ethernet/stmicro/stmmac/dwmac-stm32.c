@@ -53,7 +53,18 @@
 #define SYSCFG_MCU_ETH_SEL_MII		0
 #define SYSCFG_MCU_ETH_SEL_RMII		1
 
-/* STM32MP1 register definitions
+/* STM32MP2 register definitions */
+#define SYSCFG_MP2_ETH_MASK		GENMASK(31, 0)
+
+#define SYSCFG_ETHCR_ETH_PTP_CLK_SEL	BIT(2)
+#define SYSCFG_ETHCR_ETH_CLK_SEL	BIT(1)
+#define SYSCFG_ETHCR_ETH_REF_CLK_SEL	BIT(0)
+
+#define SYSCFG_ETHCR_ETH_SEL_MII	0
+#define SYSCFG_ETHCR_ETH_SEL_RGMII	BIT(4)
+#define SYSCFG_ETHCR_ETH_SEL_RMII	BIT(6)
+
+/* STM32MPx register definitions
  *
  * Below table summarizes the clock requirement and clock sources for
  * supported phy interface modes.
@@ -277,6 +288,49 @@ static int stm32mp1_configure_pmcr(struct plat_stmmacenet_data *plat_dat)
 				 dwmac->mode_mask, val);
 }
 
+static int stm32mp2_configure_syscfg(struct plat_stmmacenet_data *plat_dat)
+{
+	struct stm32_dwmac *dwmac = plat_dat->bsp_priv;
+	u32 reg = dwmac->mode_reg;
+	int val = 0;
+
+	switch (plat_dat->mac_interface) {
+	case PHY_INTERFACE_MODE_MII:
+		break;
+	case PHY_INTERFACE_MODE_GMII:
+		if (dwmac->enable_eth_ck)
+			val |= SYSCFG_ETHCR_ETH_CLK_SEL;
+		break;
+	case PHY_INTERFACE_MODE_RMII:
+		val = SYSCFG_ETHCR_ETH_SEL_RMII;
+		if (dwmac->enable_eth_ck)
+			val |= SYSCFG_ETHCR_ETH_REF_CLK_SEL;
+		break;
+	case PHY_INTERFACE_MODE_RGMII:
+	case PHY_INTERFACE_MODE_RGMII_ID:
+	case PHY_INTERFACE_MODE_RGMII_RXID:
+	case PHY_INTERFACE_MODE_RGMII_TXID:
+		val = SYSCFG_ETHCR_ETH_SEL_RGMII;
+		if (dwmac->enable_eth_ck)
+			val |= SYSCFG_ETHCR_ETH_CLK_SEL;
+		break;
+	default:
+		dev_err(dwmac->dev, "Mode %s not supported",
+			phy_modes(plat_dat->mac_interface));
+		/* Do not manage others interfaces */
+		return -EINVAL;
+	}
+
+	dev_dbg(dwmac->dev, "Mode %s", phy_modes(plat_dat->mac_interface));
+
+	/*  select PTP (IEEE1588) clock selection from RCC (ck_ker_ethxptp) */
+	val |= SYSCFG_ETHCR_ETH_PTP_CLK_SEL;
+
+	/* Update ETHCR (set register) */
+	return regmap_update_bits(dwmac->regmap, reg,
+				 SYSCFG_MP2_ETH_MASK, val);
+}
+
 static int stm32mp1_set_mode(struct plat_stmmacenet_data *plat_dat)
 {
 	int ret;
@@ -290,6 +344,21 @@ static int stm32mp1_set_mode(struct plat_stmmacenet_data *plat_dat)
 		return ret;
 
 	return stm32mp1_configure_pmcr(plat_dat);
+}
+
+static int stm32mp2_set_mode(struct plat_stmmacenet_data *plat_dat)
+{
+	int ret;
+
+	ret = stm32mp1_select_ethck_external(plat_dat);
+	if (ret)
+		return ret;
+
+	ret = stm32mp1_validate_ethck_rate(plat_dat);
+	if (ret)
+		return ret;
+
+	return stm32mp2_configure_syscfg(plat_dat);
 }
 
 static int stm32mcu_set_mode(struct plat_stmmacenet_data *plat_dat)
@@ -348,12 +417,6 @@ static int stm32_dwmac_parse_data(struct stm32_dwmac *dwmac,
 		return PTR_ERR(dwmac->clk_rx);
 	}
 
-	if (dwmac->ops->parse_data) {
-		err = dwmac->ops->parse_data(dwmac, dev);
-		if (err)
-			return err;
-	}
-
 	/* Get mode register */
 	dwmac->regmap = syscon_regmap_lookup_by_phandle(np, "st,syscon");
 	if (IS_ERR(dwmac->regmap))
@@ -365,20 +428,14 @@ static int stm32_dwmac_parse_data(struct stm32_dwmac *dwmac,
 		return err;
 	}
 
-	dwmac->mode_mask = SYSCFG_MP1_ETH_MASK;
-	err = of_property_read_u32_index(np, "st,syscon", 2, &dwmac->mode_mask);
-	if (err) {
-		if (dwmac->ops->is_mp13)
-			dev_err(dev, "Sysconfig register mask must be set (%d)\n", err);
-		else
-			dev_dbg(dev, "Warning sysconfig register mask not set\n");
-	}
+	if (dwmac->ops->parse_data)
+		err = dwmac->ops->parse_data(dwmac, dev);
 
 	return err;
 }
 
-static int stm32mp1_parse_data(struct stm32_dwmac *dwmac,
-			       struct device *dev)
+static int stm32mpx_common_parse_data(struct stm32_dwmac *dwmac,
+				      struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct device_node *np = dev->of_node;
@@ -436,6 +493,27 @@ static int stm32mp1_parse_data(struct stm32_dwmac *dwmac,
 		}
 		device_set_wakeup_enable(&pdev->dev, false);
 	}
+	return err;
+}
+
+static int stm32mp1_parse_data(struct stm32_dwmac *dwmac,
+			       struct device *dev)
+{
+	struct device_node *np = dev->of_node;
+	int err = 0;
+
+	if (stm32mpx_common_parse_data(dwmac, dev))
+		return err;
+
+	dwmac->mode_mask = SYSCFG_MP1_ETH_MASK;
+	err = of_property_read_u32_index(np, "st,syscon", 2, &dwmac->mode_mask);
+	if (err) {
+		if (dwmac->ops->is_mp13)
+			dev_err(dev, "Sysconfig register mask must be set (%d)\n", err);
+		else
+			dev_dbg(dev, "Warning sysconfig register mask not set\n");
+	}
+
 	return err;
 }
 
@@ -586,10 +664,19 @@ static struct stm32_ops stm32mp13_dwmac_data = {
 	.clk_rx_enable_in_suspend = true
 };
 
+static struct stm32_ops stm32mp25_dwmac_data = {
+	.set_mode = stm32mp2_set_mode,
+	.suspend = stm32mp1_suspend,
+	.resume = stm32mp1_resume,
+	.parse_data = stm32mpx_common_parse_data,
+	.clk_rx_enable_in_suspend = true
+};
+
 static const struct of_device_id stm32_dwmac_match[] = {
 	{ .compatible = "st,stm32-dwmac", .data = &stm32mcu_dwmac_data},
 	{ .compatible = "st,stm32mp1-dwmac", .data = &stm32mp1_dwmac_data},
 	{ .compatible = "st,stm32mp13-dwmac", .data = &stm32mp13_dwmac_data},
+	{ .compatible = "st,stm32mp25-dwmac", .data = &stm32mp25_dwmac_data},
 	{ }
 };
 MODULE_DEVICE_TABLE(of, stm32_dwmac_match);
