@@ -308,8 +308,8 @@ static int intel_dp_mst_compute_link_config(struct intel_encoder *encoder,
 	 * YUV420 is only half of the pipe bpp value.
 	 */
 	slots = intel_dp_mst_find_vcpi_slots_for_bpp(encoder, crtc_state,
-						     to_bpp_int(limits->link.max_bpp_x16),
-						     to_bpp_int(limits->link.min_bpp_x16),
+						     drm_x16_to_int(limits->link.max_bpp_x16),
+						     drm_x16_to_int(limits->link.min_bpp_x16),
 						     limits,
 						     conn_state, 2 * 3, false);
 
@@ -374,7 +374,7 @@ static int intel_dp_dsc_mst_compute_link_config(struct intel_encoder *encoder,
 								  crtc_state,
 								  max_bpp / 3);
 	max_compressed_bpp = min(max_compressed_bpp,
-				 to_bpp_int(limits->link.max_bpp_x16));
+				 drm_x16_to_int(limits->link.max_bpp_x16));
 
 	min_compressed_bpp = intel_dp_dsc_sink_min_compressed_bpp(crtc_state);
 	min_compressed_bpp = max(min_compressed_bpp,
