@@ -2598,7 +2598,12 @@ static int read_capacity_16(struct scsi_disk *sdkp, struct scsi_device *sdp,
 		if (buffer[14] & 0x40) /* LBPRZ */
 			sdkp->lbprz = 1;
 
-		sd_config_discard(sdkp, SD_LBP_WS16);
+		/*
+		 * When the discard mode has been set to UNMAP, it should not be set to
+		 * WRITE SAME with UNMAP.
+		 */
+		if (!sdkp->max_unmap_blocks)
+			sd_config_discard(sdkp, SD_LBP_WS16);
 	}
 
 	sdkp->capacity = lba + 1;
