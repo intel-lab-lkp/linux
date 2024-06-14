@@ -1,0 +1,7 @@
+config DCBM_DMA
+	bool "DMA Core Batch Migrator"
+	depends on DMA_ENGINE
+	default n
+	help
+	  Interface driver for batch page migration offloading. Say Y
+	  if you want to try offloading with DMAEngine APIs.
