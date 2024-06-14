@@ -113,6 +113,7 @@ int module_sig_check(struct load_info *info, int flags)
 		 * unparseable signatures, and signature check failures --
 		 * even if signatures aren't required.
 		 */
+		pr_notice("Loading module failed (errno=%d)\n", -err);
 		return err;
 	}
 
