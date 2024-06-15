@@ -48,6 +48,7 @@ struct bpf_arena {
 	struct maple_tree mt;
 	struct list_head vma_list;
 	struct mutex lock;
+	atomic_t mmap_count;
 };
 
 u64 bpf_arena_get_kern_vm_start(struct bpf_arena *arena)
@@ -227,12 +228,22 @@ static int remember_vma(struct bpf_arena *arena, struct vm_area_struct *vma)
 	return 0;
 }
 
+static void arena_vm_open(struct vm_area_struct *vma)
+{
+	struct bpf_map *map = vma->vm_file->private_data;
+	struct bpf_arena *arena = container_of(map, struct bpf_arena, map);
+
+	atomic_inc(&arena->mmap_count);
+}
+
 static void arena_vm_close(struct vm_area_struct *vma)
 {
 	struct bpf_map *map = vma->vm_file->private_data;
 	struct bpf_arena *arena = container_of(map, struct bpf_arena, map);
 	struct vma_list *vml;
 
+	if (!atomic_dec_and_test(&arena->mmap_count))
+		return;
 	guard(mutex)(&arena->lock);
 	vml = vma->vm_private_data;
 	list_del(&vml->head);
@@ -287,6 +298,7 @@ out:
 }
 
 static const struct vm_operations_struct arena_vm_ops = {
+	.open		= arena_vm_open,
 	.close		= arena_vm_close,
 	.fault          = arena_vm_fault,
 };
@@ -361,6 +373,7 @@ static int arena_map_mmap(struct bpf_map *map, struct vm_area_struct *vma)
 	 */
 	vm_flags_set(vma, VM_DONTEXPAND);
 	vma->vm_ops = &arena_vm_ops;
+	atomic_set(&arena->mmap_count, 1);
 	return 0;
 }
 
