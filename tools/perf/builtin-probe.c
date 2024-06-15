@@ -667,6 +667,8 @@ __cmd_probe(int argc, const char **argv)
 	 * Only consider the user's kernel image path if given.
 	 */
 	symbol_conf.try_vmlinux_path = (symbol_conf.vmlinux_name == NULL);
+	symbol_conf.try_vdso_path = (symbol_conf.vdso_name[0] == NULL &&
+				     symbol_conf.vdso_name[1] == NULL);
 
 	/*
 	 * Except for --list, --del and --add, other command doesn't depend
