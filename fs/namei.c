@@ -4111,8 +4111,8 @@ SYSCALL_DEFINE3(mknod, const char __user *, filename, umode_t, mode, unsigned, d
 /**
  * vfs_mkdir - create directory
  * @idmap:	idmap of the mount the inode was found from
- * @dir:	inode of @dentry
- * @dentry:	pointer to dentry of the base directory
+ * @dir:	inode of parent dentry of @dentry
+ * @dentry:	pointer to dentry of the new directory
  * @mode:	mode of the new directory
  *
  * Create a directory.
