@@ -21,12 +21,9 @@ void kvm_flush_tlb_all(void)
 	local_irq_restore(flags);
 }
 
+/* Called with irq disabled */
 void kvm_flush_tlb_gpa(struct kvm_vcpu *vcpu, unsigned long gpa)
 {
-	unsigned long flags;
-
-	local_irq_save(flags);
 	gpa &= (PAGE_MASK << 1);
 	invtlb(INVTLB_GID_ADDR, read_csr_gstat() & CSR_GSTAT_GID, gpa);
-	local_irq_restore(flags);
 }
