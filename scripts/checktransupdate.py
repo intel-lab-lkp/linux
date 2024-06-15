@@ -4,19 +4,9 @@
 """
 This script helps track the translation status of the documentation
 in different locales, e.g., zh_CN. More specially, it uses `git log`
-commit to find the latest english commit from the translation commit
-(order by author date) and the latest english commits from HEAD. If
+command to find the latest English commit from the translation commit
+(order by author date) and the latest English commits from HEAD. If
 differences occur, report the file and commits that need to be updated.
-
-The usage is as follows:
-- ./scripts/checktransupdate.py -l zh_CN
-This will print all the files that need to be updated in the zh_CN locale.
-- ./scripts/checktransupdate.py Documentation/translations/zh_CN/dev-tools/testing-overview.rst
-This will only print the status of the specified file.
-
-The output is something like:
-Documentation/translations/zh_CN/dev-tools/testing-overview.rst (1 commits)
-commit 42fb9cfd5b18 ("Documentation: dev-tools: Add link to RV docs")
 """
 
 import os
@@ -29,12 +19,14 @@ flag_debug = False
 
 
 def dprint(*args, **kwargs):
+    """Print debug information if the debug flag is set"""
     if flag_debug:
         print("[DEBUG] ", end="")
         print(*args, **kwargs)
 
 
 def get_origin_path(file_path):
+    """Get the origin path from the translation path"""
     paths = file_path.split("/")
     tidx = paths.index("translations")
     opaths = paths[:tidx]
@@ -43,9 +35,8 @@ def get_origin_path(file_path):
 
 
 def get_latest_commit_from(file_path, commit):
-    command = "git log --pretty=format:%H%n%aD%n%cD%n%n%B {} -1 -- {}".format(
-        commit, file_path
-    )
+    """Get the latest commit from the specified commit for the specified file"""
+    command = f"git log --pretty=format:%H%n%aD%n%cD%n%n%B {commit} -1 -- {file_path}"
     dprint(command)
     pipe = os.popen(command)
     result = pipe.read()
@@ -53,7 +44,7 @@ def get_latest_commit_from(file_path, commit):
     if len(result) <= 1:
         return None
 
-    dprint("Result: {}".format(result[0]))
+    dprint(f"Result: {result[0]}")
 
     return {
         "hash": result[0],
@@ -64,16 +55,18 @@ def get_latest_commit_from(file_path, commit):
 
 
 def get_origin_from_trans(origin_path, t_from_head):
+    """Get the latest origin commit from the translation commit"""
     o_from_t = get_latest_commit_from(origin_path, t_from_head["hash"])
     while o_from_t is not None and o_from_t["author_date"] > t_from_head["author_date"]:
         o_from_t = get_latest_commit_from(origin_path, o_from_t["hash"] + "^")
     if o_from_t is not None:
-        dprint("tracked origin commit id: {}".format(o_from_t["hash"]))
+        dprint(f"tracked origin commit id: {o_from_t['hash']}")
     return o_from_t
 
 
 def get_commits_count_between(opath, commit1, commit2):
-    command = "git log --pretty=format:%H {}...{} -- {}".format(commit1, commit2, opath)
+    """Get the commits count between two commits for the specified file"""
+    command = f"git log --pretty=format:%H {commit1}...{commit2} -- {opath}"
     dprint(command)
     pipe = os.popen(command)
     result = pipe.read().split("\n")
@@ -83,50 +76,52 @@ def get_commits_count_between(opath, commit1, commit2):
 
 
 def pretty_output(commit):
-    command = "git log --pretty='format:%h (\"%s\")' -1 {}".format(commit)
+    """Pretty print the commit message"""
+    command = f"git log --pretty='format:%h (\"%s\")' -1 {commit}"
     dprint(command)
     pipe = os.popen(command)
     return pipe.read()
 
 
 def check_per_file(file_path):
+    """Check the translation status for the specified file"""
     opath = get_origin_path(file_path)
 
     if not os.path.isfile(opath):
-        dprint("Error: Cannot find the origin path for {}".format(file_path))
+        dprint(f"Error: Cannot find the origin path for {file_path}")
         return
 
     o_from_head = get_latest_commit_from(opath, "HEAD")
     t_from_head = get_latest_commit_from(file_path, "HEAD")
 
     if o_from_head is None or t_from_head is None:
-        print("Error: Cannot find the latest commit for {}".format(file_path))
+        print(f"Error: Cannot find the latest commit for {file_path}")
         return
 
     o_from_t = get_origin_from_trans(opath, t_from_head)
 
     if o_from_t is None:
-        print("Error: Cannot find the latest origin commit for {}".format(file_path))
+        print(f"Error: Cannot find the latest origin commit for {file_path}")
         return
 
     if o_from_head["hash"] == o_from_t["hash"]:
         if flag_p_uf:
-            print("No update needed for {}".format(file_path))
-        return
+            print(f"No update needed for {file_path}")
     else:
-        print("{}".format(file_path), end="\t")
+        print(f"{file_path}", end="\t")
         commits = get_commits_count_between(
             opath, o_from_t["hash"], o_from_head["hash"]
         )
-        print("({} commits)".format(len(commits)))
+        print(f"({len(commits)} commits)")
         if flag_p_c:
             for commit in commits:
                 msg = pretty_output(commit)
                 if "Merge tag" not in msg:
-                    print("commit", msg)
+                    print(f"commit {msg}")
 
 
 def main():
+    """Main function of the script"""
     script_path = os.path.dirname(os.path.abspath(__file__))
     linux_path = os.path.join(script_path, "..")
 
@@ -173,9 +168,7 @@ def main():
         if args.locale is not None:
             files = (
                 os.popen(
-                    "find {}/Documentation/translations/{} -type f".format(
-                        linux_path, args.locale
-                    )
+                    f"find {linux_path}/Documentation/translations/{args.locale} -type f"
                 )
                 .read()
                 .split("\n")
@@ -183,7 +176,7 @@ def main():
         else:
             files = (
                 os.popen(
-                    "find {}/Documentation/translations -type f".format(linux_path)
+                    f"find {linux_path}/Documentation/translations -type f"
                 )
                 .read()
                 .split("\n")
