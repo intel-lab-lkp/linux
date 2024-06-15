@@ -1566,7 +1566,9 @@ int bch2_delete_dead_snapshots(struct bch_fs *c)
 		return 0;
 
 	if (!test_bit(BCH_FS_started, &c->flags)) {
+		down_write(&c->state_lock);
 		ret = bch2_fs_read_write_early(c);
+		up_write(&c->state_lock);
 		bch_err_msg(c, ret, "deleting dead snapshots: error going rw");
 		if (ret)
 			return ret;
