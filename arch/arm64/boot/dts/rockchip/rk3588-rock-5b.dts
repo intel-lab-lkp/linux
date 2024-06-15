@@ -368,6 +368,10 @@
 	status = "okay";
 };
 
+&rkvdec0 {
+	status = "okay";
+};
+
 &saradc {
 	vref-supply = <&avcc_1v8_s0>;
 	status = "okay";
