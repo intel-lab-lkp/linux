@@ -321,44 +321,44 @@ void note_interrupt(struct irq_desc *desc, irqreturn_t action_ret)
 			 */
 			if (!(desc->threads_handled_last & SPURIOUS_DEFERRED)) {
 				desc->threads_handled_last |= SPURIOUS_DEFERRED;
-				return;
-			}
-			/*
-			 * Check whether one of the threaded handlers
-			 * returned IRQ_HANDLED since the last
-			 * interrupt happened.
-			 *
-			 * For simplicity we just set bit 31, as it is
-			 * set in threads_handled_last as well. So we
-			 * avoid extra masking. And we really do not
-			 * care about the high bits of the handled
-			 * count. We just care about the count being
-			 * different than the one we saw before.
-			 */
-			handled = atomic_read(&desc->threads_handled);
-			handled |= SPURIOUS_DEFERRED;
-			if (handled != desc->threads_handled_last) {
-				action_ret = IRQ_HANDLED;
-				/*
-				 * Note: We keep the SPURIOUS_DEFERRED
-				 * bit set. We are handling the
-				 * previous invocation right now.
-				 * Keep it for the current one, so the
-				 * next hardware interrupt will
-				 * account for it.
-				 */
-				desc->threads_handled_last = handled;
 			} else {
 				/*
-				 * None of the threaded handlers felt
-				 * responsible for the last interrupt
+				 * Check whether one of the threaded handlers
+				 * returned IRQ_HANDLED since the last
+				 * interrupt happened.
 				 *
-				 * We keep the SPURIOUS_DEFERRED bit
-				 * set in threads_handled_last as we
-				 * need to account for the current
-				 * interrupt as well.
+				 * For simplicity we just set bit 31, as it is
+				 * set in threads_handled_last as well. So we
+				 * avoid extra masking. And we really do not
+				 * care about the high bits of the handled
+				 * count. We just care about the count being
+				 * different than the one we saw before.
 				 */
-				action_ret = IRQ_NONE;
+				handled = atomic_read(&desc->threads_handled);
+				handled |= SPURIOUS_DEFERRED;
+				if (handled != desc->threads_handled_last) {
+					action_ret = IRQ_HANDLED;
+					/*
+					 * Note: We keep the SPURIOUS_DEFERRED
+					 * bit set. We are handling the
+					 * previous invocation right now.
+					 * Keep it for the current one, so the
+					 * next hardware interrupt will
+					 * account for it.
+					 */
+					desc->threads_handled_last = handled;
+				} else {
+					/*
+					 * None of the threaded handlers felt
+					 * responsible for the last interrupt
+					 *
+					 * We keep the SPURIOUS_DEFERRED bit
+					 * set in threads_handled_last as we
+					 * need to account for the current
+					 * interrupt as well.
+					 */
+					action_ret = IRQ_NONE;
+				}
 			}
 		} else {
 			/*
