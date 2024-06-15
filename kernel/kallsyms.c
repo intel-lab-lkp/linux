@@ -322,8 +322,8 @@ static unsigned long get_symbol_pos(unsigned long addr,
 				    unsigned long *symbolsize,
 				    unsigned long *offset)
 {
-	unsigned long symbol_start = 0, symbol_end = 0;
-	unsigned long i, low, high, mid;
+	unsigned long symbol_start;
+	unsigned long low, high, mid;
 
 	/* Do a binary search on the sorted kallsyms_addresses array. */
 	low = 0;
@@ -344,28 +344,35 @@ static unsigned long get_symbol_pos(unsigned long addr,
 	while (low && kallsyms_sym_address(low-1) == kallsyms_sym_address(low))
 		--low;
 
+	if (unlikely(!symbolsize && !offset))
+		return low;
+
 	symbol_start = kallsyms_sym_address(low);
 
-	/* Search for next non-aliased symbol. */
-	for (i = low + 1; i < kallsyms_num_syms; i++) {
-		if (kallsyms_sym_address(i) > symbol_start) {
-			symbol_end = kallsyms_sym_address(i);
-			break;
+	if (symbolsize) {
+		unsigned long symbol_end = 0;
+		unsigned long i;
+
+		/* Search for next non-aliased symbol. */
+		for (i = low + 1; i < kallsyms_num_syms; i++) {
+			if (kallsyms_sym_address(i) > symbol_start) {
+				symbol_end = kallsyms_sym_address(i);
+				break;
+			}
 		}
-	}
 
-	/* If we found no next symbol, we use the end of the section. */
-	if (!symbol_end) {
-		if (is_kernel_inittext(addr))
-			symbol_end = (unsigned long)_einittext;
-		else if (IS_ENABLED(CONFIG_KALLSYMS_ALL))
-			symbol_end = (unsigned long)_end;
-		else
-			symbol_end = (unsigned long)_etext;
-	}
+		/* If we found no next symbol, we use the end of the section. */
+		if (!symbol_end) {
+			if (is_kernel_inittext(addr))
+				symbol_end = (unsigned long)_einittext;
+			else if (IS_ENABLED(CONFIG_KALLSYMS_ALL))
+				symbol_end = (unsigned long)_end;
+			else
+				symbol_end = (unsigned long)_etext;
+		}
 
-	if (symbolsize)
 		*symbolsize = symbol_end - symbol_start;
+	}
 	if (offset)
 		*offset = addr - symbol_start;
 
