@@ -101,8 +101,12 @@ static inline int __symbol__join_symfs(char *bf, size_t size, const char *path)
 
 #define symbol__join_symfs(bf, path) __symbol__join_symfs(bf, sizeof(bf), path)
 
-extern int vmlinux_path__nr_entries;
-extern char **vmlinux_path;
+struct dso_filename_paths {
+	int nr_entries;
+	char **paths;
+};
+
+extern struct dso_filename_paths vmlinux_paths;
 
 static inline void *symbol__priv(struct symbol *sym)
 {
