@@ -318,9 +318,77 @@
 	.endm
 #endif /* !CONFIG_CPU_MIPSR2 && !CONFIG_CPU_MIPSR5 && !CONFIG_CPU_MIPSR6 */
 
-/*
- * Temporary until all gas have MT ASE support
- */
+#ifdef TOOLCHAIN_SUPPORTS_MT
+	.macro	_dmt	reg = $0
+	.set	push
+	.set	mt
+	dmt	\reg
+	.set	pop
+	.endm
+
+	.macro	_emt	reg = $0
+	.set	push
+	.set	mt
+	emt	\reg
+	.set	pop
+	.endm
+
+	.macro	_dvpe	reg = $0
+	.set	push
+	.set	mt
+	dvpe	\reg
+	.set	pop
+	.endm
+
+	.macro	_evpe	reg = $0
+	.set	push
+	.set	mt
+	evpe	\reg
+	.set	pop
+	.endm
+
+	.macro	_mftr	rs, rt, u, sel, h = 0
+	.set	push
+	.set	mt
+	mftr	\rs, \rt, \u, \sel, \h
+	.set	pop
+	.endm
+
+	.macro	_mttr	rt, rs, u, sel, h = 0
+	.set	push
+	.set	mt
+	mttr	\rt, \rs, \u, \sel, \h
+	.set	pop
+	.endm
+
+	.macro	_mftc0	rs, rt, sel = 0
+	.set	push
+	.set	mt
+	mftc0	\rs, \rt, \sel
+	.set	pop
+	.endm
+
+	.macro	_mttc0	rt, rs, sel = 0
+	.set	push
+	.set	mt
+	mttc0	\rt, \rs, \sel
+	.set	pop
+	.endm
+
+	.macro	_mftgpr	rs, rt
+	.set	push
+	.set	mt
+	mftgpr	\rs, \rt
+	.set	pop
+	.endm
+
+	.macro	_mttgpr	rs, rt
+	.set	push
+	.set	mt
+	mttgpr	\rs, \rt
+	.set	pop
+	.endm
+#else
 	.macro	_dmt	reg = $0
 	parse_r		__reg, \reg
 	insn_if_mips	0x41600bc1 | (__reg << 16)
@@ -374,6 +442,7 @@
 	.macro	_mttgpr	rs, rt
 	_mttr		\rt, \rs, 1, 0, 0
 	.endm
+#endif
 
 #ifdef TOOLCHAIN_SUPPORTS_MSA
 	.macro	_cfcmsa	rd, cs

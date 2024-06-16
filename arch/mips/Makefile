@@ -257,6 +257,8 @@ toolchain-dsp				:= $(call cc-option-yn,$(mips-cflags) -Wa$(comma)-mdsp)
 cflags-$(toolchain-dsp)			+= -DTOOLCHAIN_SUPPORTS_DSP
 toolchain-ginv				:= $(call cc-option-yn,$(mips-cflags) -Wa$(comma)-mginv)
 cflags-$(toolchain-ginv)		+= -DTOOLCHAIN_SUPPORTS_GINV
+toolchain-mt				:= $(call cc-option-yn,$(mips-cflags) -Wa$(comma)-mt)
+cflags-$(toolchain-mt)			+= -DTOOLCHAIN_SUPPORTS_MT
 
 #
 # Firmware support

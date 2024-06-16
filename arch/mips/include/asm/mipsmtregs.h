@@ -189,11 +189,16 @@ static inline unsigned core_nvpes(void)
 	return ((conf0 & MVPCONF0_PVPE) >> MVPCONF0_PVPE_SHIFT) + 1;
 }
 
+#ifndef TOOLCHAIN_SUPPORTS_MT
 #define _ASM_SET_DVPE							\
 	_ASM_MACRO_1R(dvpe, rt,						\
 			_ASM_INSN_IF_MIPS(0x41600001 | __rt << 16)	\
 			_ASM_INSN32_IF_MM(0x0000157C | __rt << 21))
 #define _ASM_UNSET_DVPE ".purgem dvpe\n\t"
+#else
+#define _ASM_SET_DVPE ".set\tmt\n\t"
+#define _ASM_UNSET_DVPE
+#endif
 
 static inline unsigned int dvpe(void)
 {
@@ -214,11 +219,16 @@ static inline unsigned int dvpe(void)
 	return res;
 }
 
+#ifndef TOOLCHAIN_SUPPORTS_MT
 #define _ASM_SET_EVPE							\
 	_ASM_MACRO_1R(evpe, rt,					\
 			_ASM_INSN_IF_MIPS(0x41600021 | __rt << 16)	\
 			_ASM_INSN32_IF_MM(0x0000357C | __rt << 21))
 #define _ASM_UNSET_EVPE ".purgem evpe\n\t"
+#else
+#define _ASM_SET_EVPE ".set\tmt\n\t"
+#define _ASM_UNSET_EVPE
+#endif
 
 static inline void __raw_evpe(void)
 {
@@ -243,11 +253,16 @@ static inline void evpe(int previous)
 		__raw_evpe();
 }
 
+#ifndef TOOLCHAIN_SUPPORTS_MT
 #define _ASM_SET_DMT							\
 	_ASM_MACRO_1R(dmt, rt,						\
 			_ASM_INSN_IF_MIPS(0x41600bc1 | __rt << 16)	\
 			_ASM_INSN32_IF_MM(0x0000057C | __rt << 21))
 #define _ASM_UNSET_DMT ".purgem dmt\n\t"
+#else
+#define _ASM_SET_DMT ".set\tmt\n\t"
+#define _ASM_UNSET_DMT
+#endif
 
 static inline unsigned int dmt(void)
 {
@@ -268,11 +283,16 @@ static inline unsigned int dmt(void)
 	return res;
 }
 
+#ifndef TOOLCHAIN_SUPPORTS_MT
 #define _ASM_SET_EMT							\
 	_ASM_MACRO_1R(emt, rt,						\
 			_ASM_INSN_IF_MIPS(0x41600be1 | __rt << 16)	\
 			_ASM_INSN32_IF_MM(0x0000257C | __rt << 21))
 #define _ASM_UNSET_EMT ".purgem emt\n\t"
+#else
+#define _ASM_SET_EMT ".set\tmt\n\t"
+#define _ASM_UNSET_EMT
+#endif
 
 static inline void __raw_emt(void)
 {
@@ -306,6 +326,7 @@ static inline void ehb(void)
 	"	.set	pop				\n");
 }
 
+#ifndef TOOLCHAIN_SUPPORTS_MT
 #define _ASM_SET_MFTC0							\
 	_ASM_MACRO_2R_1S(mftc0, rs, rt, sel,				\
 			_ASM_INSN_IF_MIPS(0x41000000 | __rt << 16 |	\
@@ -313,6 +334,10 @@ static inline void ehb(void)
 			_ASM_INSN32_IF_MM(0x0000000E | __rt << 21 |	\
 				__rs << 16 | \\sel << 4))
 #define _ASM_UNSET_MFTC0 ".purgem mftc0\n\t"
+#else
+#define _ASM_SET_MFTC0 ".set\tmt\n\t"
+#define _ASM_UNSET_MFTC0
+#endif
 
 #define mftc0(rt, sel)							\
 ({									\
@@ -330,6 +355,7 @@ static inline void ehb(void)
 	__res;								\
 })
 
+#ifndef TOOLCHAIN_SUPPORTS_MT
 #define _ASM_SET_MFTGPR							\
 	_ASM_MACRO_2R(mftgpr, rs, rt,					\
 			_ASM_INSN_IF_MIPS(0x41000020 | __rt << 16 |	\
@@ -337,6 +363,10 @@ static inline void ehb(void)
 			_ASM_INSN32_IF_MM(0x0000040E | __rt << 21 |	\
 				__rs << 16))
 #define _ASM_UNSET_MFTGPR ".purgem mftgpr\n\t"
+#else
+#define _ASM_SET_MFTGPR ".set\tmt\n\t"
+#define _ASM_UNSET_MFTGPR
+#endif
 
 #define mftgpr(rt)							\
 ({									\
@@ -365,6 +395,7 @@ static inline void ehb(void)
 	__res;								\
 })
 
+#ifndef TOOLCHAIN_SUPPORTS_MT
 #define _ASM_SET_MTTGPR							\
 	_ASM_MACRO_2R(mttgpr, rt, rs,					\
 			_ASM_INSN_IF_MIPS(0x41800020 | __rt << 16 |	\
@@ -372,6 +403,10 @@ static inline void ehb(void)
 			_ASM_INSN32_IF_MM(0x00000406 | __rt << 21 |	\
 				__rs << 16))
 #define _ASM_UNSET_MTTGPR ".purgem mttgpr\n\t"
+#else
+#define _ASM_SET_MTTGPR ".set\tmt\n\t"
+#define _ASM_UNSET_MTTGPR
+#endif
 
 #define mttgpr(rs, v)							\
 do {									\
@@ -385,6 +420,7 @@ do {									\
 	: : "r" (v));							\
 } while (0)
 
+#ifndef TOOLCHAIN_SUPPORTS_MT
 #define _ASM_SET_MTTC0							\
 	_ASM_MACRO_2R_1S(mttc0, rt, rs, sel,				\
 			_ASM_INSN_IF_MIPS(0x41800000 | __rt << 16 |	\
@@ -392,6 +428,10 @@ do {									\
 			_ASM_INSN32_IF_MM(0x0000040E | __rt << 21 |	\
 				__rs << 16 | \\sel << 4))
 #define _ASM_UNSET_MTTC0 ".purgem mttc0\n\t"
+#else
+#define _ASM_SET_MTTC0 ".set\tmt\n\t"
+#define _ASM_UNSET_MTTC0
+#endif
 
 #define mttc0(rs, sel, v)							\
 ({									\
