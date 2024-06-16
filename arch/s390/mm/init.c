@@ -65,12 +65,13 @@ static void __init setup_zero_pages(void)
 	unsigned int order;
 	struct page *page;
 	int i;
+	unsigned long total_pages = PHYS_PFN(memblock_phys_mem_size() - memblock_reserved_size());
 
 	/* Latest machines require a mapping granularity of 512KB */
 	order = 7;
 
 	/* Limit number of empty zero pages for small memory sizes */
-	while (order > 2 && (totalram_pages() >> 10) < (1UL << order))
+	while (order > 2 && (total_pages >> 10) < (1UL << order))
 		order--;
 
 	empty_zero_page = __get_free_pages(GFP_KERNEL | __GFP_ZERO, order);
