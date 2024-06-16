@@ -149,6 +149,7 @@ struct ce_variant {
 	bool hash_t_dlen_in_bits;
 	bool prng_t_dlen_in_bytes;
 	bool trng_t_dlen_in_bytes;
+	bool needs_word_addresses;
 	struct ce_clock ce_clks[CE_MAX_CLOCKS];
 	int esr;
 	unsigned char prng;
@@ -240,6 +241,15 @@ struct sun8i_ce_dev {
 #endif
 #endif
 };
+
+static inline __le32 sun8i_ce_desc_addr(struct sun8i_ce_dev *dev,
+					dma_addr_t addr)
+{
+	if (dev->variant->needs_word_addresses)
+		return cpu_to_le32(addr / 4);
+
+	return cpu_to_le32(addr);
+}
 
 /*
  * struct sun8i_cipher_req_ctx - context for a skcipher request

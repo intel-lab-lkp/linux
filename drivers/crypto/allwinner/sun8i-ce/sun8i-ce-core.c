@@ -172,7 +172,8 @@ int sun8i_ce_run_task(struct sun8i_ce_dev *ce, int flow, const char *name)
 	writel(v, ce->base + CE_ICR);
 
 	reinit_completion(&ce->chanlist[flow].complete);
-	writel(ce->chanlist[flow].t_phy, ce->base + CE_TDQ);
+	writel(sun8i_ce_desc_addr(ce, ce->chanlist[flow].t_phy),
+	       ce->base + CE_TDQ);
 
 	ce->chanlist[flow].status = 0;
 	/* Be sure all data is written before enabling the task */
