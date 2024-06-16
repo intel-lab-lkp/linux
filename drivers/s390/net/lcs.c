@@ -2380,5 +2380,6 @@ module_init(lcs_init_module);
 module_exit(lcs_cleanup_module);
 
 MODULE_AUTHOR("Frank Pavlic <fpavlic@de.ibm.com>");
+MODULE_DESCRIPTION("S/390 Lan Channel Station Network Driver");
 MODULE_LICENSE("GPL");
 
