@@ -195,15 +195,11 @@ LEAF(mips_cps_core_init)
 	/* Check that the core implements the MT ASE */
 	has_mt	t0, 3f
 
-	.set	push
-	.set	MIPS_ISA_LEVEL_RAW
-	.set	mt
-
 	/* Only allow 1 TC per VPE to execute... */
-	dmt
+	_dmt
 
 	/* ...and for the moment only 1 VPE */
-	dvpe
+	_dvpe
 	PTR_LA	t1, 1f
 	jr.hb	t1
 	 nop
@@ -231,20 +227,20 @@ LEAF(mips_cps_core_init)
 	ehb
 
 	/* Bind TC to VPE (1:1 TC:VPE mapping) */
-	mttc0	ta1, CP0_TCBIND
+	_mttc0	ta1, CP0_TCBIND
 
 	/* Set exclusive TC, non-active, master */
 	li	t0, VPECONF0_MVP
 	sll	t1, ta1, VPECONF0_XTC_SHIFT
 	or	t0, t0, t1
-	mttc0	t0, CP0_VPECONF0
+	_mttc0	t0, CP0_VPECONF0
 
 	/* Set TC non-active, non-allocatable */
-	mttc0	zero, CP0_TCSTATUS
+	_mttc0	zero, CP0_TCSTATUS
 
 	/* Set TC halted */
 	li	t0, TCHALT_H
-	mttc0	t0, CP0_TCHALT
+	_mttc0	t0, CP0_TCHALT
 
 	/* Next VPE */
 	addiu	ta1, ta1, 1
@@ -257,7 +253,7 @@ LEAF(mips_cps_core_init)
 	xori	t0, t0, MVPCONTROL_VPC
 	mtc0	t0, CP0_MVPCONTROL
 
-3:	.set	pop
+3:
 #endif
 	jr	ra
 	 nop
@@ -353,11 +349,7 @@ LEAF(mips_cps_boot_vpes)
 	has_mt	t0, 5f
 
 	/* Enter VPE configuration state */
-	.set	push
-	.set	MIPS_ISA_LEVEL_RAW
-	.set	mt
-	dvpe
-	.set	pop
+	_dvpe
 
 	PTR_LA	t1, 1f
 	jr.hb	t1
@@ -384,12 +376,8 @@ LEAF(mips_cps_boot_vpes)
 	mtc0	t0, CP0_VPECONTROL
 	ehb
 
-	.set	push
-	.set	MIPS_ISA_LEVEL_RAW
-	.set	mt
-
 	/* Skip the VPE if its TC is not halted */
-	mftc0	t0, CP0_TCHALT
+	_mftc0	t0, CP0_TCHALT
 	beqz	t0, 2f
 	 nop
 
@@ -400,19 +388,19 @@ LEAF(mips_cps_boot_vpes)
 
 	/* Set the TC restart PC */
 	lw	t1, VPEBOOTCFG_PC(t0)
-	mttc0	t1, CP0_TCRESTART
+	_mttc0	t1, CP0_TCRESTART
 
 	/* Set the TC stack pointer */
 	lw	t1, VPEBOOTCFG_SP(t0)
-	mttgpr	t1, sp
+	_mttgpr	t1, sp
 
 	/* Set the TC global pointer */
 	lw	t1, VPEBOOTCFG_GP(t0)
-	mttgpr	t1, gp
+	_mttgpr	t1, gp
 
 	/* Copy config from this VPE */
 	mfc0	t0, CP0_CONFIG
-	mttc0	t0, CP0_CONFIG
+	_mttc0	t0, CP0_CONFIG
 
 	/*
 	 * Copy the EVA config from this VPE if the CPU supports it.
@@ -423,30 +411,30 @@ LEAF(mips_cps_boot_vpes)
 	beqz	t0, 3f
 	 nop
 	mfc0    t0, CP0_SEGCTL0
-	mttc0	t0, CP0_SEGCTL0
+	_mttc0	t0, CP0_SEGCTL0
 	mfc0    t0, CP0_SEGCTL1
-	mttc0	t0, CP0_SEGCTL1
+	_mttc0	t0, CP0_SEGCTL1
 	mfc0    t0, CP0_SEGCTL2
-	mttc0	t0, CP0_SEGCTL2
+	_mttc0	t0, CP0_SEGCTL2
 3:
 	/* Ensure no software interrupts are pending */
-	mttc0	zero, CP0_CAUSE
-	mttc0	zero, CP0_STATUS
+	_mttc0	zero, CP0_CAUSE
+	_mttc0	zero, CP0_STATUS
 
 	/* Set TC active, not interrupt exempt */
-	mftc0	t0, CP0_TCSTATUS
+	_mftc0	t0, CP0_TCSTATUS
 	li	t1, ~TCSTATUS_IXMT
 	and	t0, t0, t1
 	ori	t0, t0, TCSTATUS_A
-	mttc0	t0, CP0_TCSTATUS
+	_mttc0	t0, CP0_TCSTATUS
 
 	/* Clear the TC halt bit */
-	mttc0	zero, CP0_TCHALT
+	_mttc0	zero, CP0_TCHALT
 
 	/* Set VPE active */
-	mftc0	t0, CP0_VPECONF0
+	_mftc0	t0, CP0_VPECONF0
 	ori	t0, t0, VPECONF0_VPA
-	mttc0	t0, CP0_VPECONF0
+	_mttc0	t0, CP0_VPECONF0
 
 	/* Next VPE */
 2:	srl	ta2, ta2, 1
@@ -459,9 +447,7 @@ LEAF(mips_cps_boot_vpes)
 	xori	t1, t1, MVPCONTROL_VPC
 	mtc0	t1, CP0_MVPCONTROL
 	ehb
-	evpe
-
-	.set	pop
+	_evpe
 
 	/* Check whether this VPE is meant to be running */
 	li	t0, 1
