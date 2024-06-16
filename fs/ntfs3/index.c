@@ -1802,122 +1802,130 @@ indx_insert_into_buffer(struct ntfs_index *indx, struct ntfs_inode *ni,
 	u16 sp_size;
 	void *hdr1_saved = NULL;
 
-	/* Try the most easy case. */
-	e = fnd->level - 1 == level ? fnd->de[level] : NULL;
-	e = hdr_insert_de(indx, hdr1, new_de, e, ctx);
-	fnd->de[level] = e;
-	if (e) {
-		/* Just write updated index into disk. */
-		indx_write(indx, ni, n1, 0);
-		return 0;
-	}
+	while (true) {
+		/* Try the most easy case. */
+		e = fnd->level - 1 == level ? fnd->de[level] : NULL;
+		e = hdr_insert_de(indx, hdr1, new_de, e, ctx);
+		fnd->de[level] = e;
+		if (e) {
+			/* Just write updated index into disk. */
+			indx_write(indx, ni, n1, 0);
+			return 0;
+		}
 
-	/*
-	 * No space to insert into buffer. Split it.
-	 * To split we:
-	 *  - Save split point ('cause index buffers will be changed)
-	 * - Allocate NewBuffer and copy all entries <= sp into new buffer
-	 * - Remove all entries (sp including) from TargetBuffer
-	 * - Insert NewEntry into left or right buffer (depending on sp <=>
-	 *     NewEntry)
-	 * - Insert sp into parent buffer (or root)
-	 * - Make sp a parent for new buffer
-	 */
-	sp = hdr_find_split(hdr1);
-	if (!sp)
-		return -EINVAL;
-
-	sp_size = le16_to_cpu(sp->size);
-	up_e = kmalloc(sp_size + sizeof(u64), GFP_NOFS);
-	if (!up_e)
-		return -ENOMEM;
-	memcpy(up_e, sp, sp_size);
-
-	used1 = le32_to_cpu(hdr1->used);
-	hdr1_saved = kmemdup(hdr1, used1, GFP_NOFS);
-	if (!hdr1_saved) {
-		err = -ENOMEM;
-		goto out;
-	}
-
-	if (!hdr1->flags) {
-		up_e->flags |= NTFS_IE_HAS_SUBNODES;
-		up_e->size = cpu_to_le16(sp_size + sizeof(u64));
-		sub_vbn = NULL;
-	} else {
-		t_vbn = de_get_vbn_le(up_e);
-		sub_vbn = &t_vbn;
-	}
-
-	/* Allocate on disk a new index allocation buffer. */
-	err = indx_add_allocate(indx, ni, &new_vbn);
-	if (err)
-		goto out;
-
-	/* Allocate and format memory a new index buffer. */
-	n2 = indx_new(indx, ni, new_vbn, sub_vbn);
-	if (IS_ERR(n2)) {
-		err = PTR_ERR(n2);
-		goto out;
-	}
-
-	hdr2 = &n2->index->ihdr;
-
-	/* Make sp a parent for new buffer. */
-	de_set_vbn(up_e, new_vbn);
-
-	/* Copy all the entries <= sp into the new buffer. */
-	de_t = hdr_first_de(hdr1);
-	to_copy = PtrOffset(de_t, sp);
-	hdr_insert_head(hdr2, de_t, to_copy);
-
-	/* Remove all entries (sp including) from hdr1. */
-	used = used1 - to_copy - sp_size;
-	memmove(de_t, Add2Ptr(sp, sp_size), used - le32_to_cpu(hdr1->de_off));
-	hdr1->used = cpu_to_le32(used);
-
-	/*
-	 * Insert new entry into left or right buffer
-	 * (depending on sp <=> new_de).
-	 */
-	hdr_insert_de(indx,
-		      (*indx->cmp)(new_de + 1, le16_to_cpu(new_de->key_size),
-				   up_e + 1, le16_to_cpu(up_e->key_size),
-				   ctx) < 0 ?
-			      hdr2 :
-			      hdr1,
-		      new_de, NULL, ctx);
-
-	indx_mark_used(indx, ni, new_vbn >> indx->idx2vbn_bits);
-
-	indx_write(indx, ni, n1, 0);
-	indx_write(indx, ni, n2, 0);
-
-	put_indx_node(n2);
-
-	/*
-	 * We've finished splitting everybody, so we are ready to
-	 * insert the promoted entry into the parent.
-	 */
-	if (!level) {
-		/* Insert in root. */
-		err = indx_insert_into_root(indx, ni, up_e, NULL, ctx, fnd, 0);
-	} else {
 		/*
-		 * The target buffer's parent is another index buffer.
-		 * TODO: Remove recursion.
+		 * No space to insert into buffer. Split it.
+		 * To split we:
+		 * - Save split point because index buffers will be changed
+		 * - Allocate NewBuffer and copy all entries <= sp into new
+		 *   buffer
+		 * - Remove all entries (sp including) from TargetBuffer
+		 * - Insert NewEntry into left or right buffer
+		 *   (depending on sp <=> NewEntry)
+		 * - Insert sp into parent buffer (or root)
+		 * - Make sp a parent for new buffer
 		 */
-		err = indx_insert_into_buffer(indx, ni, root, up_e, ctx,
-					      level - 1, fnd);
-	}
+		sp = hdr_find_split(hdr1);
+		if (!sp)
+			return -EINVAL;
 
-	if (err) {
+		sp_size = le16_to_cpu(sp->size);
+		up_e = kmalloc(sp_size + sizeof(u64), GFP_NOFS);
+		if (!up_e)
+			return -ENOMEM;
+		memcpy(up_e, sp, sp_size);
+
+		used1 = le32_to_cpu(hdr1->used);
+		hdr1_saved = kmemdup(hdr1, used1, GFP_NOFS);
+		if (!hdr1_saved) {
+			err = -ENOMEM;
+			goto out;
+		}
+
+		if (!hdr1->flags) {
+			up_e->flags |= NTFS_IE_HAS_SUBNODES;
+			up_e->size = cpu_to_le16(sp_size + sizeof(u64));
+			sub_vbn = NULL;
+		} else {
+			t_vbn = de_get_vbn_le(up_e);
+			sub_vbn = &t_vbn;
+		}
+
+		/* Allocate on disk a new index allocation buffer. */
+		err = indx_add_allocate(indx, ni, &new_vbn);
+		if (err)
+			goto out;
+
+		/* Allocate and format memory a new index buffer. */
+		n2 = indx_new(indx, ni, new_vbn, sub_vbn);
+		if (IS_ERR(n2)) {
+			err = PTR_ERR(n2);
+			goto out;
+		}
+
+		hdr2 = &n2->index->ihdr;
+
+		/* Make sp a parent for new buffer. */
+		de_set_vbn(up_e, new_vbn);
+
+		/* Copy all the entries <= sp into the new buffer. */
+		de_t = hdr_first_de(hdr1);
+		to_copy = PtrOffset(de_t, sp);
+		hdr_insert_head(hdr2, de_t, to_copy);
+
+		/* Remove all entries (sp including) from hdr1. */
+		used = used1 - to_copy - sp_size;
+		memmove(de_t, Add2Ptr(sp, sp_size),
+				used - le32_to_cpu(hdr1->de_off));
+		hdr1->used = cpu_to_le32(used);
+
 		/*
-		 * Undo critical operations.
+		 * Insert new entry into left or right buffer
+		 * (depending on sp <=> new_de).
 		 */
-		indx_mark_free(indx, ni, new_vbn >> indx->idx2vbn_bits);
-		memcpy(hdr1, hdr1_saved, used1);
+		hdr_insert_de(indx,
+				(*indx->cmp)(new_de + 1,
+				le16_to_cpu(new_de->key_size),
+				up_e + 1, le16_to_cpu(up_e->key_size),
+				ctx) < 0 ? hdr2 : hdr1,
+				new_de, NULL, ctx);
+
+		indx_mark_used(indx, ni, new_vbn >> indx->idx2vbn_bits);
+
 		indx_write(indx, ni, n1, 0);
+		indx_write(indx, ni, n2, 0);
+
+		put_indx_node(n2);
+
+		/*
+		 * We've finished splitting everybody, so we are ready to
+		 * insert the promoted entry into the parent.
+		 */
+		if (!level) {
+			/* Insert in root. */
+			err = indx_insert_into_root(indx, ni, up_e,
+					NULL, ctx, fnd, 0);
+		} else {
+			/*
+			 * The target buffer's parent is another index
+			 * buffer. Move to the parent buffer for next
+			 * iteration.
+			 */
+			n1 = fnd->nodes[--level];
+			hrd1 = &n1->index->ihdr;
+			new_de = up_e;
+			continue;
+		}
+
+		if (err) {
+			/*
+			 * Undo critical operations.
+			 */
+			indx_mark_free(indx, ni,
+					new_vbn >> indx->idx2vbn_bits);
+			memcpy(hdr1, hdr1_saved, used1);
+			indx_write(indx, ni, n1, 0);
+		}
 	}
 
 out:
