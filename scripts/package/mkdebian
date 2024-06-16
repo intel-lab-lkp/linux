@@ -6,6 +6,18 @@
 
 set -e
 
+# Optional user-specified environment variables
+
+# Set target Debian architecture (skip auto-detection)
+: "${KBUILD_DEBARCH:=}"
+
+# Set target Debian distribution (skipping auto-detection)
+: "${KDEB_CHANGELOG_DIST:=}"
+
+# Overwrite the automatically determined package version.
+: "${KDEB_PKGVERSION:=}"
+
+
 is_enabled() {
 	grep -q "^$1=y" include/config/auto.conf
 }
