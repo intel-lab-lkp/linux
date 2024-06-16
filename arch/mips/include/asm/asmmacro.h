@@ -44,6 +44,112 @@
 	.endm
 #endif
 
+/*
+ * parse_r var, r - Helper assembler macro for parsing register names.
+ */
+.macro	parse_r var r
+	\var = -1
+	.ifc \r, $0
+	\var = 0
+	.endif
+	.ifc \r, $1
+	\var = 1
+	.endif
+	.ifc \r, $2
+	\var = 2
+	.endif
+	.ifc \r, $3
+	\var = 3
+	.endif
+	.ifc \r, $4
+	\var = 4
+	.endif
+	.ifc \r, $5
+	\var = 5
+	.endif
+	.ifc \r, $6
+	\var = 6
+	.endif
+	.ifc \r, $7
+	\var = 7
+	.endif
+	.ifc \r, $8
+	\var = 8
+	.endif
+	.ifc \r, $9
+	\var = 9
+	.endif
+	.ifc \r, $10
+	\var = 10
+	.endif
+	.ifc \r, $11
+	\var = 11
+	.endif
+	.ifc \r, $12
+	\var = 12
+	.endif
+	.ifc \r, $13
+	\var = 13
+	.endif
+	.ifc \r, $14
+	\var = 14
+	.endif
+	.ifc \r, $15
+	\var = 15
+	.endif
+	.ifc \r, $16
+	\var = 16
+	.endif
+	.ifc \r, $17
+	\var = 17
+	.endif
+	.ifc \r, $18
+	\var = 18
+	.endif
+	.ifc \r, $19
+	\var = 19
+	.endif
+	.ifc \r, $20
+	\var = 20
+	.endif
+	.ifc \r, $21
+	\var = 21
+	.endif
+	.ifc \r, $22
+	\var = 22
+	.endif
+	.ifc \r, $23
+	\var = 23
+	.endif
+	.ifc \r, $24
+	\var = 24
+	.endif
+	.ifc \r, $25
+	\var = 25
+	.endif
+	.ifc \r, $26
+	\var = 26
+	.endif
+	.ifc \r, $27
+	\var = 27
+	.endif
+	.ifc \r, $28
+	\var = 28
+	.endif
+	.ifc \r, $29
+	\var = 29
+	.endif
+	.ifc \r, $30
+	\var = 30
+	.endif
+	.ifc \r, $31
+	\var = 31
+	.endif
+	.iflt	\var
+	.error "Unable to parse register name \r"
+	.endif
+.endm
+
 #ifdef CONFIG_CPU_HAS_DIEI
 	.macro	local_irq_enable
 	ei
@@ -215,34 +321,58 @@
 /*
  * Temporary until all gas have MT ASE support
  */
-	.macro	DMT	reg=0
-	insn_if_mips	0x41600bc1 | (\reg << 16)
-	insn32_if_mm    0x0000057C | (\reg << 21)
+	.macro	_dmt	reg = $0
+	parse_r		__reg, \reg
+	insn_if_mips	0x41600bc1 | (__reg << 16)
+	insn32_if_mm    0x0000057C | (__reg << 21)
 	.endm
 
-	.macro	EMT	reg=0
-	insn_if_mips	0x41600be1 | (\reg << 16)
-	insn32_if_mm    0x0000257C | (\reg << 21)
+	.macro	_emt	reg = $0
+	parse_r		__reg, \reg
+	insn_if_mips	0x41600be1 | (__reg << 16)
+	insn32_if_mm    0x0000257C | (__reg << 21)
 	.endm
 
-	.macro	DVPE	reg=0
-	insn_if_mips	0x41600001 | (\reg << 16)
-	insn32_if_mm    0x0000157C | (\reg << 21)
+	.macro	_dvpe	reg = $0
+	parse_r		__reg, \reg
+	insn_if_mips	0x41600001 | (__reg << 16)
+	insn32_if_mm    0x0000157C | (__reg << 21)
 	.endm
 
-	.macro	EVPE	reg=0
-	insn_if_mips	0x41600021 | (\reg << 16)
-	insn32_if_mm    0x0000357C | (\reg << 21)
+	.macro	_evpe	reg = $0
+	parse_r		__reg, \reg
+	insn_if_mips	0x41600021 | (__reg << 16)
+	insn32_if_mm    0x0000357C | (__reg << 21)
 	.endm
 
-	.macro	MFTR	rs=0, rt=0, u=0, sel=0
-	insn_if_mips	0x41000000 | (\rt << 16) | (\rs << 11) | (\u << 5) | (\sel)
-	insn32_if_mm	0x0000000E | (\rt << 21) | (\rs << 16) | (\u << 10) | (\sel << 4)
+	.macro	_mftr	rs, rt, u, sel, h = 0
+	parse_r		__rs, \rs
+	parse_r		__rt, \rt
+	insn_if_mips	0x41000000 | (__rt << 16) | (__rs << 11) | (\u << 5) | (\h << 3) | (\sel)
+	insn32_if_mm	0x0000000E | (__rt << 21) | (__rs << 16) | (\u << 10) | (\h << 9) | (\sel << 4)
 	.endm
 
-	.macro	MTTR	rt=0, rs=0, u=0, sel=0
-	insn_if_mips	0x41800000 | (\rt << 16) | (\rs << 11) | (\u << 5) | (\sel)
-	insn32_if_mm	0x00000006 | (\rt << 21) | (\rs << 16) | (\u << 10) | (\sel << 4)
+	.macro	_mttr	rt, rs, u, sel, h = 0
+	parse_r		__rs, \rs
+	parse_r		__rt, \rt
+	insn_if_mips	0x41800000 | (__rt << 16) | (__rs << 11) | (\u << 5) | (\h << 3) | (\sel)
+	insn32_if_mm	0x00000006 | (__rt << 21) | (__rs << 16) | (\u << 10) | (\h << 9) | (\sel << 4)
+	.endm
+
+	.macro	_mftc0	rs, rt, sel = 0
+	_mftr		\rs, \rt, 0, \sel, 0
+	.endm
+
+	.macro	_mttc0	rt, rs, sel = 0
+	_mttr		\rt, \rs, 0, \sel, 0
+	.endm
+
+	.macro	_mftgpr	rs, rt
+	_mftr		\rs, \rt, 1, 0, 0
+	.endm
+
+	.macro	_mttgpr	rs, rt
+	_mttr		\rt, \rs, 1, 0, 0
 	.endm
 
 #ifdef TOOLCHAIN_SUPPORTS_MSA
