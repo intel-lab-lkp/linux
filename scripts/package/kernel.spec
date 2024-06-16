@@ -70,13 +70,11 @@ ln -fns /usr/src/kernels/%{KERNELRELEASE} %{buildroot}/lib/modules/%{KERNELRELEA
 %endif
 
 {
-	for x in System.map config kernel modules.builtin \
-			modules.builtin.modinfo modules.order vmlinuz; do
-		echo "/lib/modules/%{KERNELRELEASE}/${x}"
-	done
+	echo "/lib/modules/%{KERNELRELEASE}"
 
 	for x in alias alias.bin builtin.alias.bin builtin.bin dep dep.bin \
 					devname softdep symbols symbols.bin; do
+		rm -f "%{buildroot}/lib/modules/%{KERNELRELEASE}/modules.${x}"
 		echo "%ghost /lib/modules/%{KERNELRELEASE}/modules.${x}"
 	done
 
