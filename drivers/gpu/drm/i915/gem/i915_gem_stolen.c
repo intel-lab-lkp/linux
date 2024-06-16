@@ -937,10 +937,10 @@ i915_gem_stolen_lmem_setup(struct drm_i915_private *i915, u16 type,
 		/* Use DSM base address instead for stolen memory */
 		dsm_base = intel_uncore_read64(uncore, GEN6_DSMBASE) & GEN11_BDSM_MASK;
 		if (lmem_size < dsm_base) {
-			drm_dbg(&i915->drm,
+			drm_err(&i915->drm,
 				"Disabling stolen memory support due to OOB placement: lmem_size = %lli vs dsm_base = %lli\n",
 				lmem_size, dsm_base);
-			return 0;
+			return ERR_PTR(-EINVAL);
 		}
 		dsm_size = ALIGN_DOWN(lmem_size - dsm_base, SZ_1M);
 	}
