@@ -23,4 +23,7 @@
 #include "../ptdma/ptdma.h"
 #include "../../virt-dma.h"
 
+void pt_start_queue(struct pt_cmd_queue *cmd_q);
+void pt_stop_queue(struct pt_cmd_queue *cmd_q);
+
 #endif
