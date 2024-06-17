@@ -1112,6 +1112,8 @@ patternProperties:
     description: Parade Technologies Inc.
   "^parallax,.*":
     description: Parallax Inc.
+  "^pci14e4,.*":
+    description: Broadcom Corporation
   "^pda,.*":
     description: Precision Design Associates, Inc.
   "^pericom,.*":
