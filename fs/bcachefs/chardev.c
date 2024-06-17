@@ -135,6 +135,11 @@ struct fsck_thread {
 static void bch2_fsck_thread_exit(struct thread_with_stdio *_thr)
 {
 	struct fsck_thread *thr = container_of(_thr, struct fsck_thread, thr);
+	struct bch_fs *c = thr->c;
+
+	if (refcount_read(&c->ro_ref) > 1)
+		refcount_set(&c->ro_ref, 1);
+
 	kfree(thr);
 }
 
