@@ -3200,7 +3200,7 @@ static int cifs_swap_rw(struct kiocb *iocb, struct iov_iter *iter)
 {
 	ssize_t ret;
 
-	WARN_ON_ONCE(iov_iter_count(iter) != PAGE_SIZE);
+	WARN_ON_ONCE(iov_iter_count(iter) != iov_iter_npages(iter, INT_MAX) * PAGE_SIZE);
 
 	if (iov_iter_rw(iter) == READ)
 		ret = netfs_unbuffered_read_iter_locked(iocb, iter);
