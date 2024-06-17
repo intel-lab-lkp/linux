@@ -77,6 +77,16 @@ void intel_frontbuffer_bits_or(struct intel_frontbuffer *front, unsigned int bit
 	atomic_or(bits, &front->bits);
 }
 
+bool intel_frontbuffer_get_unless_zero_raw(struct intel_frontbuffer *front)
+{
+	return kref_get_unless_zero(&front->ref);
+}
+
+void intel_frontbuffer_get_raw(struct intel_frontbuffer *front)
+{
+	kref_get(&front->ref);
+}
+
 /**
  * frontbuffer_flush - flush frontbuffer
  * @i915: i915 device

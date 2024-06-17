@@ -79,6 +79,9 @@ void intel_frontbuffer_flip(struct drm_i915_private *i915,
 
 void intel_frontbuffer_put(struct intel_frontbuffer *front);
 
+bool intel_frontbuffer_get_unless_zero_raw(struct intel_frontbuffer *front);
+void intel_frontbuffer_get_raw(struct intel_frontbuffer *front);
+
 struct intel_frontbuffer *
 intel_frontbuffer_get(struct drm_i915_gem_object *obj);
 

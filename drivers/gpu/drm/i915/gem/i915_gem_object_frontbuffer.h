@@ -56,7 +56,7 @@ i915_gem_object_get_frontbuffer(const struct drm_i915_gem_object *obj)
 		if (!front)
 			break;
 
-		if (unlikely(!kref_get_unless_zero(&front->ref)))
+		if (unlikely(!intel_frontbuffer_get_unless_zero_raw(front)))
 			continue;
 
 		if (likely(front == rcu_access_pointer(obj->frontbuffer)))
@@ -92,7 +92,7 @@ i915_gem_object_set_frontbuffer(struct drm_i915_gem_object *obj,
 		drm_gem_object_put(intel_bo_to_drm_bo(obj));
 	} else if (rcu_access_pointer(obj->frontbuffer)) {
 		cur = rcu_dereference_protected(obj->frontbuffer, true);
-		kref_get(&cur->ref);
+		intel_frontbuffer_get_raw(cur);
 	} else {
 		drm_gem_object_get(intel_bo_to_drm_bo(obj));
 		rcu_assign_pointer(obj->frontbuffer, front);
