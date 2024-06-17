@@ -15,6 +15,7 @@
 #define MAX_AE4_HW_QUEUES		16
 
 #define AE4_DESC_COMPLETED		0x3
+#define AE4_DMA_VERSION			4
 
 struct ae4_msix {
 	int msix_count;

@@ -21,6 +21,7 @@
 #include <linux/wait.h>
 
 #include "../ptdma/ptdma.h"
+#include "../ae4dma/ae4dma.h"
 #include "../../virt-dma.h"
 
 void pt_start_queue(struct pt_cmd_queue *cmd_q);
