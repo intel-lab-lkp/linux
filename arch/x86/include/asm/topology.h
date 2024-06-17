@@ -41,6 +41,14 @@
 /* Mappings between logical cpu number and node number */
 DECLARE_EARLY_PER_CPU(int, x86_cpu_to_node_map);
 
+#define X86_CPU_TYPE_INTEL_SHIFT	24
+
+enum x86_topo_cpu_type {
+	X86_CPU_TYPE_UNKNOWN		= 0,
+	X86_CPU_TYPE_INTEL_ATOM		= 0x20,
+	X86_CPU_TYPE_INTEL_CORE		= 0x40,
+};
+
 #ifdef CONFIG_DEBUG_PER_CPU_MAPS
 /*
  * override generic percpu implementation of cpu_to_node
@@ -139,6 +147,7 @@ extern const struct cpumask *cpu_clustergroup_mask(int cpu);
 #define topology_logical_die_id(cpu)		(cpu_data(cpu).topo.logical_die_id)
 #define topology_die_id(cpu)			(cpu_data(cpu).topo.die_id)
 #define topology_core_id(cpu)			(cpu_data(cpu).topo.core_id)
+#define topology_cpu_type(cpu)			(cpu_data(cpu).topo.cpu_type)
 #define topology_ppin(cpu)			(cpu_data(cpu).ppin)
 
 #define topology_amd_node_id(cpu)		(cpu_data(cpu).topo.amd_node_id)

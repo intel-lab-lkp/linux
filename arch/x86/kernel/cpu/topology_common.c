@@ -140,6 +140,14 @@ static void parse_topology(struct topo_scan *tscan, bool early)
 	}
 }
 
+static void topo_set_cpu_type(struct cpuinfo_x86 *c)
+{
+	c->topo.cpu_type = X86_CPU_TYPE_UNKNOWN;
+
+	if (c->x86_vendor == X86_VENDOR_INTEL && cpuid_eax(0) >= 0x1a)
+		c->topo.cpu_type = cpuid_eax(0x1a) >> X86_CPU_TYPE_INTEL_SHIFT;
+}
+
 static void topo_set_ids(struct topo_scan *tscan, bool early)
 {
 	struct cpuinfo_x86 *c = tscan->c;
@@ -190,6 +198,7 @@ void cpu_parse_topology(struct cpuinfo_x86 *c)
 	}
 
 	topo_set_ids(&tscan, false);
+	topo_set_cpu_type(c);
 }
 
 void __init cpu_init_topology(struct cpuinfo_x86 *c)

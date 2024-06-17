@@ -95,6 +95,9 @@ struct cpuinfo_topology {
 	// Core ID relative to the package
 	u32			core_id;
 
+	// CPU-type e.g. performance, efficiency etc.
+	u8			cpu_type;
+
 	// Logical ID mappings
 	u32			logical_pkg_id;
 	u32			logical_die_id;
