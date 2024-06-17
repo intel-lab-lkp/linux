@@ -85,7 +85,7 @@ static inline void arch_exit_to_user_mode_prepare(struct pt_regs *regs,
 	 * Therefore, final stack offset entropy will be 5 (x86_64) or
 	 * 6 (ia32) bits.
 	 */
-	choose_random_kstack_offset(rdtsc() & 0xFF);
+	choose_random_kstack_offset(rdtsc());
 }
 #define arch_exit_to_user_mode_prepare arch_exit_to_user_mode_prepare
 
