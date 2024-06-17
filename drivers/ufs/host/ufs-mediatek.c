@@ -1715,7 +1715,7 @@ static irqreturn_t ufs_mtk_mcq_intr(int irq, void *__intr_info)
 		ufshcd_mcq_write_cqis(hba, events, qid);
 
 	if (events & UFSHCD_MCQ_CQIS_TAIL_ENT_PUSH_STS)
-		ufshcd_mcq_poll_cqe_lock(hba, hwq);
+		ufshcd_mcq_poll_cqe_lock(hba, hwq, NULL);
 
 	return IRQ_HANDLED;
 }
