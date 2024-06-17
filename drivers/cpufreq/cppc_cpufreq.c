@@ -319,11 +319,10 @@ static unsigned int cppc_cpufreq_fast_switch(struct cpufreq_policy *policy,
 {
 	struct cppc_cpudata *cpu_data = policy->driver_data;
 	unsigned int cpu = policy->cpu;
-	u32 desired_perf;
 	int ret;
 
-	desired_perf = cppc_khz_to_perf(&cpu_data->perf_caps, target_freq);
-	cpu_data->perf_ctrls.desired_perf = desired_perf;
+	cpu_data->perf_ctrls.desired_perf =
+			cppc_khz_to_perf(&cpu_data->perf_caps, target_freq);
 	ret = cppc_set_perf(cpu, &cpu_data->perf_ctrls);
 
 	if (ret) {
