@@ -268,30 +268,13 @@ static struct file *vfio_device_open_file(struct vfio_device *device)
 	if (ret)
 		goto err_free;
 
-	/*
-	 * We can't use anon_inode_getfd() because we need to modify
-	 * the f_mode flags directly to allow more than just ioctls
-	 */
-	filep = anon_inode_getfile("[vfio-device]", &vfio_device_fops,
-				   df, O_RDWR);
+	filep = vfio_device_get_pseudo_file(device);
 	if (IS_ERR(filep)) {
 		ret = PTR_ERR(filep);
 		goto err_close_device;
 	}
-
-	/*
-	 * TODO: add an anon_inode interface to do this.
-	 * Appears to be missing by lack of need rather than
-	 * explicitly prevented.  Now there's need.
-	 */
+	filep->private_data = df;
 	filep->f_mode |= (FMODE_PREAD | FMODE_PWRITE);
-
-	/*
-	 * Use the pseudo fs inode on the device to link all mmaps
-	 * to the same address space, allowing us to unmap all vmas
-	 * associated to this device using unmap_mapping_range().
-	 */
-	filep->f_mapping = device->inode->i_mapping;
 
 	if (device->group->type == VFIO_NO_IOMMU)
 		dev_warn(device->dev, "vfio-noiommu device opened by user "

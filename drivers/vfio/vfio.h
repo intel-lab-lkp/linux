@@ -35,6 +35,7 @@ struct vfio_device_file *
 vfio_allocate_device_file(struct vfio_device *device);
 
 extern const struct file_operations vfio_device_fops;
+struct file *vfio_device_get_pseudo_file(struct vfio_device *device);
 
 #ifdef CONFIG_VFIO_NOIOMMU
 extern bool vfio_noiommu __read_mostly;
@@ -420,6 +421,7 @@ static inline void vfio_cdev_cleanup(void)
 {
 }
 #endif /* CONFIG_VFIO_DEVICE_CDEV */
+struct file *vfio_device_get_pseduo_file(struct vfio_device *device);
 
 #if IS_ENABLED(CONFIG_VFIO_VIRQFD)
 int __init vfio_virqfd_init(void);

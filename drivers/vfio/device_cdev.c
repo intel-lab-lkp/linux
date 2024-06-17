@@ -40,12 +40,11 @@ int vfio_device_fops_cdev_open(struct inode *inode, struct file *filep)
 	filep->private_data = df;
 
 	/*
-	 * Use the pseudo fs inode on the device to link all mmaps
-	 * to the same address space, allowing us to unmap all vmas
-	 * associated to this device using unmap_mapping_range().
+	 * mmaps are linked to the address space of the inode of device cdev.
+	 * Save the inode of device cdev in device->inode to allow
+	 * unmap_mapping_range() to unmap all vmas.
 	 */
-	filep->f_mapping = device->inode->i_mapping;
-
+	device->inode = inode;
 	return 0;
 
 err_put_registration:

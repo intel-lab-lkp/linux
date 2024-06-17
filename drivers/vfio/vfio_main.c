@@ -192,7 +192,6 @@ static void vfio_device_release(struct device *dev)
 	if (device->ops->release)
 		device->ops->release(device);
 
-	iput(device->inode);
 	simple_release_fs(&vfio.vfs_mount, &vfio.fs_count);
 	kvfree(device);
 }
@@ -248,20 +247,50 @@ static struct file_system_type vfio_fs_type = {
 	.kill_sb = kill_anon_super,
 };
 
-static struct inode *vfio_fs_inode_new(void)
+/*
+ * Alloc pseudo file from inode associated of vfio.vfs_mount.
+ * This is called when vfio device is opened via pseudo file.
+ * mmaps are linked to the address space of the inode of the pseudo file.
+ * Save the inode in device->inode for unmap_mapping_range() to unmap all vmas.
+ */
+struct file *vfio_device_get_pseudo_file(struct vfio_device *device)
 {
+	const struct file_operations *fops = &vfio_device_fops;
 	struct inode *inode;
+	struct file *filep;
 	int ret;
+
+	if (!fops_get(fops))
+		return ERR_PTR(-ENODEV);
 
 	ret = simple_pin_fs(&vfio_fs_type, &vfio.vfs_mount, &vfio.fs_count);
 	if (ret)
-		return ERR_PTR(ret);
+		goto err_pin_fs;
 
 	inode = alloc_anon_inode(vfio.vfs_mount->mnt_sb);
-	if (IS_ERR(inode))
-		simple_release_fs(&vfio.vfs_mount, &vfio.fs_count);
+	if (IS_ERR(inode)) {
+		ret = PTR_ERR(inode);
+		goto err_inode;
+	}
 
-	return inode;
+	filep = alloc_file_pseudo(inode, vfio.vfs_mount, "[vfio-device]",
+				  O_RDWR, fops);
+
+	if (IS_ERR(filep)) {
+		ret = PTR_ERR(filep);
+		goto err_file;
+	}
+	device->inode = inode;
+	return filep;
+
+err_file:
+	iput(inode);
+err_inode:
+	simple_release_fs(&vfio.vfs_mount, &vfio.fs_count);
+err_pin_fs:
+	fops_put(fops);
+
+	return ERR_PTR(ret);
 }
 
 /*
@@ -282,11 +311,6 @@ static int vfio_init_device(struct vfio_device *device, struct device *dev,
 	init_completion(&device->comp);
 	device->dev = dev;
 	device->ops = ops;
-	device->inode = vfio_fs_inode_new();
-	if (IS_ERR(device->inode)) {
-		ret = PTR_ERR(device->inode);
-		goto out_inode;
-	}
 
 	if (ops->init) {
 		ret = ops->init(device);
@@ -301,9 +325,6 @@ static int vfio_init_device(struct vfio_device *device, struct device *dev,
 	return 0;
 
 out_uninit:
-	iput(device->inode);
-	simple_release_fs(&vfio.vfs_mount, &vfio.fs_count);
-out_inode:
 	vfio_release_device_set(device);
 	ida_free(&vfio.device_ida, device->index);
 	return ret;
