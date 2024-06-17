@@ -558,6 +558,10 @@ void * devres_open_group(struct device *dev, void *id, gfp_t gfp)
 	if (unlikely(!grp))
 		return NULL;
 
+	/* No need to clear memory twice */
+	if (!(gfp & __GFP_ZERO))
+		memset(grp, 0, sizeof(*grp));
+
 	grp->node[0].release = &group_open_release;
 	grp->node[1].release = &group_close_release;
 	INIT_LIST_HEAD(&grp->node[0].entry);
