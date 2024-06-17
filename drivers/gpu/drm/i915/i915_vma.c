@@ -1975,7 +1975,7 @@ int _i915_vma_move_to_active(struct i915_vma *vma,
 		front = i915_gem_object_get_frontbuffer(obj);
 		if (unlikely(front)) {
 			if (intel_frontbuffer_invalidate(front, ORIGIN_CS))
-				i915_active_add_request(&front->write, rq);
+				i915_active_add_request(intel_frontbuffer_active(front), rq);
 			intel_frontbuffer_put(front);
 		}
 	}

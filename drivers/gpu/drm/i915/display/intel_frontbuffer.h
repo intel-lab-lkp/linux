@@ -134,4 +134,6 @@ void intel_frontbuffer_track(struct intel_frontbuffer *old,
 			     struct intel_frontbuffer *new,
 			     unsigned int frontbuffer_bits);
 
+struct i915_active *intel_frontbuffer_active(struct intel_frontbuffer *front);
+
 #endif /* __INTEL_FRONTBUFFER_H__ */

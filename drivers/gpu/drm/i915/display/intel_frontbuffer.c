@@ -87,6 +87,11 @@ void intel_frontbuffer_get_raw(struct intel_frontbuffer *front)
 	kref_get(&front->ref);
 }
 
+struct i915_active *intel_frontbuffer_active(struct intel_frontbuffer *front)
+{
+	return &front->write;
+}
+
 /**
  * frontbuffer_flush - flush frontbuffer
  * @i915: i915 device
