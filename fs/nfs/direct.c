@@ -141,7 +141,7 @@ int nfs_swap_rw(struct kiocb *iocb, struct iov_iter *iter)
 {
 	ssize_t ret;
 
-	VM_BUG_ON(iov_iter_count(iter) != PAGE_SIZE);
+	VM_WARN_ON(iov_iter_count(iter) != iov_iter_npages(iter, INT_MAX) * PAGE_SIZE);
 
 	if (iov_iter_rw(iter) == READ)
 		ret = nfs_file_direct_read(iocb, iter, true);
