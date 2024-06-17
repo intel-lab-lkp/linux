@@ -176,9 +176,12 @@ allOf:
             Documentation/devicetree/bindings/phy/rockchip-pcie-phy.txt
 
       patternProperties:
-        "phy@[0-9a-f]+$":
-          description:
-            Documentation/devicetree/bindings/phy/rockchip-emmc-phy.txt
+        "^phy@[0-9a-f]+$":
+          type: object
+
+          $ref: /schemas/phy/rockchip,rk3399-emmc-phy.yaml#
+
+          unevaluatedProperties: false
 
   - if:
       properties:
