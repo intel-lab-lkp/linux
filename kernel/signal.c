@@ -2675,6 +2675,7 @@ bool get_signal(struct ksignal *ksig)
 	struct sighand_struct *sighand = current->sighand;
 	struct signal_struct *signal = current->signal;
 	int signr;
+	int ret;
 
 	clear_notify_signal();
 	if (unlikely(task_work_pending(current)))
@@ -2891,7 +2892,9 @@ relock:
 			 * first and our do_group_exit call below will use
 			 * that value and ignore the one we pass it.
 			 */
-			do_coredump(&ksig->info);
+			ret = do_coredump(&ksig->info);
+			if (ret)
+				pr_err("coredump has not been created, error %d\n", ret);
 		}
 
 		/*
