@@ -512,11 +512,15 @@ static int cxl_pci_setup_regs(struct pci_dev *pdev, enum cxl_regloc_type type,
 	 * is an RCH and try to extract the Component Registers from
 	 * an RCRB.
 	 */
-	if (rc && type == CXL_REGLOC_RBI_COMPONENT && is_cxl_restricted(pdev))
+	if (rc && type == CXL_REGLOC_RBI_COMPONENT && is_cxl_restricted(pdev)) {
 		rc = cxl_rcrb_get_comp_regs(pdev, map);
+		if (rc)
+			return rc;
 
-	if (rc)
+		cxl_dport_map_rcd_linkcap(pdev);
+	} else if (rc) {
 		return rc;
+	}
 
 	return cxl_setup_regs(map);
 }

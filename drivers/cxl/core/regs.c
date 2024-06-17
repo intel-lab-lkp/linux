@@ -506,6 +506,67 @@ out:
 	return offset;
 }
 
+resource_size_t cxl_rcrb_to_linkcap(struct device *dev, struct cxl_dport *dport)
+{
+	resource_size_t rcrb = dport->rcrb.base;
+	void __iomem *addr;
+	u32 cap_hdr;
+	u16 offset;
+
+	if (!request_mem_region(rcrb, SZ_4K, "CXL RCRB"))
+		return CXL_RESOURCE_NONE;
+
+	addr = ioremap(rcrb, SZ_4K);
+	if (!addr) {
+		dev_err(dev, "Failed to map region %pr\n", addr);
+		release_mem_region(rcrb, SZ_4K);
+		return CXL_RESOURCE_NONE;
+	}
+
+	offset = FIELD_GET(PCI_RCRB_CAP_LIST_ID_MASK, readw(addr + PCI_CAPABILITY_LIST));
+	cap_hdr = readl(addr + offset);
+	while ((FIELD_GET(PCI_RCRB_CAP_HDR_ID_MASK, cap_hdr)) != PCI_CAP_ID_EXP) {
+		offset = FIELD_GET(PCI_RCRB_CAP_HDR_NEXT_MASK, cap_hdr);
+		if (offset == 0 || offset > SZ_4K) {
+			offset = 0;
+			break;
+		}
+		cap_hdr = readl(addr + offset);
+	}
+
+	iounmap(addr);
+	release_mem_region(rcrb, SZ_4K);
+	if (offset > 0)
+		return offset;
+	else
+		return CXL_RESOURCE_NONE;
+}
+
+int cxl_dport_map_rcd_linkcap(struct pci_dev *pdev)
+{
+	void __iomem *dport_pcie_cap = NULL;
+	resource_size_t rcd_pcie_offset;
+	struct cxl_rcrb_info *ri;
+	struct cxl_dport *dport;
+	struct cxl_port *port;
+
+	port = cxl_pci_find_port(pdev, &dport);
+	if (!port)
+		return -EPROBE_DEFER;
+
+	ri = &dport->rcrb;
+	rcd_pcie_offset = cxl_rcrb_to_linkcap(&pdev->dev, dport);
+	if (rcd_pcie_offset > 0)
+		dport_pcie_cap = devm_cxl_iomap_block(&pdev->dev,
+						      ri->base + rcd_pcie_offset,
+						      PCI_CAP_EXP_SIZEOF);
+
+	dport->regs.rcd_pcie_cap = dport_pcie_cap;
+	
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_dport_map_rcd_linkcap, CXL);
+
 resource_size_t __rcrb_to_component(struct device *dev, struct cxl_rcrb_info *ri,
 				    enum cxl_rcrb which)
 {
