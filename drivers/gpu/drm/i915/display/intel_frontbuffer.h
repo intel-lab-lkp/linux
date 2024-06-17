@@ -79,9 +79,8 @@ void intel_frontbuffer_put(struct intel_frontbuffer *front);
 struct intel_frontbuffer *
 intel_frontbuffer_get(struct drm_i915_gem_object *obj);
 
-void __intel_fb_invalidate(struct intel_frontbuffer *front,
-			   enum fb_op_origin origin,
-			   unsigned int frontbuffer_bits);
+bool __intel_frontbuffer_invalidate(struct intel_frontbuffer *front,
+				    enum fb_op_origin origin);
 
 /**
  * intel_frontbuffer_invalidate - invalidate frontbuffer object
@@ -97,22 +96,14 @@ void __intel_fb_invalidate(struct intel_frontbuffer *front,
 static inline bool intel_frontbuffer_invalidate(struct intel_frontbuffer *front,
 						enum fb_op_origin origin)
 {
-	unsigned int frontbuffer_bits;
-
 	if (!front)
 		return false;
 
-	frontbuffer_bits = atomic_read(&front->bits);
-	if (!frontbuffer_bits)
-		return false;
-
-	__intel_fb_invalidate(front, origin, frontbuffer_bits);
-	return true;
+	return __intel_frontbuffer_invalidate(front, origin);
 }
 
-void __intel_fb_flush(struct intel_frontbuffer *front,
-		      enum fb_op_origin origin,
-		      unsigned int frontbuffer_bits);
+void __intel_frontbuffer_flush(struct intel_frontbuffer *front,
+			       enum fb_op_origin origin);
 
 /**
  * intel_frontbuffer_flush - flush frontbuffer object
@@ -125,16 +116,10 @@ void __intel_fb_flush(struct intel_frontbuffer *front,
 static inline void intel_frontbuffer_flush(struct intel_frontbuffer *front,
 					   enum fb_op_origin origin)
 {
-	unsigned int frontbuffer_bits;
-
 	if (!front)
 		return;
 
-	frontbuffer_bits = atomic_read(&front->bits);
-	if (!frontbuffer_bits)
-		return;
-
-	__intel_fb_flush(front, origin, frontbuffer_bits);
+	__intel_frontbuffer_flush(front, origin);
 }
 
 void intel_frontbuffer_queue_flush(struct intel_frontbuffer *front);
