@@ -13,7 +13,9 @@
  * @type:	the type of the container struct this is embedded in.
  * @member:	the name of the member within the struct.
  *
- * WARNING: any const qualifier of @ptr is lost.
+ * WARNING: any const qualifier of @ptr is lost. container_of() should only be
+ * used in cases where @ptr is const and its container is not and you know what
+ * you're doing. Otherwise always use container_of_const().
  */
 #define container_of(ptr, type, member) ({				\
 	void *__mptr = (void *)(ptr);					\
