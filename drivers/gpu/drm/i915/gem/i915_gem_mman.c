@@ -223,6 +223,7 @@ static vm_fault_t i915_error_to_vmf_fault(int err)
 	default:
 		WARN_ONCE(err, "unhandled error in %s: %i\n", __func__, err);
 		fallthrough;
+	case -EINVAL: /* the memory parameters provided are wrong */
 	case -EIO: /* shmemfs failure from swap device */
 	case -EFAULT: /* purged object */
 	case -ENODEV: /* bad object, how did you get here! */
