@@ -8922,7 +8922,28 @@ out:
 
 static enum scsi_timeout_action ufshcd_eh_timed_out(struct scsi_cmnd *scmd)
 {
-	struct ufs_hba *hba = shost_priv(scmd->device->host);
+	struct scsi_device *sdev = scmd->device;
+	struct ufs_hba *hba = shost_priv(sdev->host);
+	struct scsi_cmnd *cmd2 = scmd;
+	const u32 unique_tag = blk_mq_unique_tag(scsi_cmd_to_rq(scmd));
+
+	WARN_ON_ONCE(!scmd);
+
+	if (is_mcq_enabled(hba)) {
+		struct request *rq = scsi_cmd_to_rq(scmd);
+		struct ufs_hw_queue *hwq = ufshcd_mcq_req_to_hwq(hba, rq);
+
+		ufshcd_mcq_poll_cqe_lock(hba, hwq, &cmd2);
+	} else {
+		__ufshcd_poll(hba->host, UFSHCD_POLL_FROM_INTERRUPT_CONTEXT,
+			      &cmd2);
+	}
+	if (cmd2 == NULL) {
+		sdev_printk(KERN_INFO, sdev,
+			    "%s: cmd with tag %#x has already been completed\n",
+			    __func__, unique_tag);
+		return SCSI_EH_DONE;
+	}
 
 	if (!hba->system_suspending) {
 		/* Activate the error handler in the SCSI core. */
