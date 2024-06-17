@@ -41,28 +41,28 @@
 #define MUX_FUNC_MASK		GENMASK(31, 16)
 
 /* PIN capabilities */
-#define PIN_CFG_IOLH_A			BIT(0)
-#define PIN_CFG_IOLH_B			BIT(1)
-#define PIN_CFG_SR			BIT(2)
-#define PIN_CFG_IEN			BIT(3)
-#define PIN_CFG_PUPD			BIT(4)
-#define PIN_CFG_IO_VMC_SD0		BIT(5)
-#define PIN_CFG_IO_VMC_SD1		BIT(6)
-#define PIN_CFG_IO_VMC_QSPI		BIT(7)
-#define PIN_CFG_IO_VMC_ETH0		BIT(8)
-#define PIN_CFG_IO_VMC_ETH1		BIT(9)
-#define PIN_CFG_FILONOFF		BIT(10)
-#define PIN_CFG_FILNUM			BIT(11)
-#define PIN_CFG_FILCLKSEL		BIT(12)
-#define PIN_CFG_IOLH_C			BIT(13)
-#define PIN_CFG_SOFT_PS			BIT(14)
-#define PIN_CFG_OEN			BIT(15)
-#define PIN_CFG_VARIABLE		BIT(16)
-#define PIN_CFG_NOGPIO_INT		BIT(17)
-#define PIN_CFG_NOD			BIT(18)	/* N-ch Open Drain */
-#define PIN_CFG_SMT			BIT(19)	/* Schmitt-trigger input control */
-#define PIN_CFG_ELC			BIT(20)
-#define PIN_CFG_IOLH_RZV2H		BIT(21)
+#define PIN_CFG_IOLH_A			BIT_ULL(0)
+#define PIN_CFG_IOLH_B			BIT_ULL(1)
+#define PIN_CFG_SR			BIT_ULL(2)
+#define PIN_CFG_IEN			BIT_ULL(3)
+#define PIN_CFG_PUPD			BIT_ULL(4)
+#define PIN_CFG_IO_VMC_SD0		BIT_ULL(5)
+#define PIN_CFG_IO_VMC_SD1		BIT_ULL(6)
+#define PIN_CFG_IO_VMC_QSPI		BIT_ULL(7)
+#define PIN_CFG_IO_VMC_ETH0		BIT_ULL(8)
+#define PIN_CFG_IO_VMC_ETH1		BIT_ULL(9)
+#define PIN_CFG_FILONOFF		BIT_ULL(10)
+#define PIN_CFG_FILNUM			BIT_ULL(11)
+#define PIN_CFG_FILCLKSEL		BIT_ULL(12)
+#define PIN_CFG_IOLH_C			BIT_ULL(13)
+#define PIN_CFG_SOFT_PS			BIT_ULL(14)
+#define PIN_CFG_OEN			BIT_ULL(15)
+#define PIN_CFG_VARIABLE		BIT_ULL(16)
+#define PIN_CFG_NOGPIO_INT		BIT_ULL(17)
+#define PIN_CFG_NOD			BIT_ULL(18)	/* N-ch Open Drain */
+#define PIN_CFG_SMT			BIT_ULL(19)	/* Schmitt-trigger input control */
+#define PIN_CFG_ELC			BIT_ULL(20)
+#define PIN_CFG_IOLH_RZV2H		BIT_ULL(21)
 
 #define RZG2L_MPXED_COMMON_PIN_FUNCS(group) \
 					(PIN_CFG_IOLH_##group | \
