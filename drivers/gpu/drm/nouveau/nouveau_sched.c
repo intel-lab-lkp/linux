@@ -45,10 +45,10 @@ nouveau_job_init(struct nouveau_job *job,
 		if (job->sync)
 			return -EINVAL;
 
-		job->in_sync.data = kmemdup(args->in_sync.s,
-					 sizeof(*args->in_sync.s) *
-					 args->in_sync.count,
-					 GFP_KERNEL);
+		job->in_sync.data = kmemdup_array(args->in_sync.s,
+					args->in_sync.count,
+					sizeof(*args->in_sync.s),
+					GFP_KERNEL);
 		if (!job->in_sync.data)
 			return -ENOMEM;
 	}
@@ -60,10 +60,10 @@ nouveau_job_init(struct nouveau_job *job,
 			goto err_free_in_sync;
 		}
 
-		job->out_sync.data = kmemdup(args->out_sync.s,
-					  sizeof(*args->out_sync.s) *
-					  args->out_sync.count,
-					  GFP_KERNEL);
+		job->out_sync.data = kmemdup_array(args->out_sync.s,
+					args->out_sync.count,
+					sizeof(*args->out_sync.s),
+					GFP_KERNEL);
 		if (!job->out_sync.data) {
 			ret = -ENOMEM;
 			goto err_free_in_sync;
