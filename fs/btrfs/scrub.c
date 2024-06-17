@@ -1033,15 +1033,35 @@ static void scrub_read_endio(struct btrfs_bio *bbio)
 {
 	struct scrub_stripe *stripe = bbio->private;
 	struct bio_vec *bvec;
-	int sector_nr = calc_sector_number(stripe, bio_first_bvec_all(&bbio->bio));
+	int sector_nr;
 	int num_sectors;
 	u32 bio_size = 0;
 	int i;
 
-	ASSERT(sector_nr < stripe->nr_sectors);
 	bio_for_each_bvec_all(bvec, &bbio->bio, i)
 		bio_size += bvec->bv_len;
-	num_sectors = bio_size >> stripe->bg->fs_info->sectorsize_bits;
+	/*
+	 * For RST scrub we can error out with empty bbio. In that case mark
+	 * the range until the end as error.
+	 */
+	if (unlikely(bio_size == 0)) {
+		/*
+		 * Since the bbio didn't really get submitted, the logical
+		 * (bi_sector) should be untouched.
+		 */
+		u64 logical = bbio->bio.bi_iter.bi_sector << SECTOR_SHIFT;
+
+		ASSERT(logical >= stripe->logical &&
+		       logical < stripe->logical + BTRFS_STRIPE_LEN);
+		ASSERT(bbio->bio.bi_status);
+		sector_nr = (logical - stripe->logical) >>
+			    bbio->fs_info->sectorsize_bits;
+		num_sectors = stripe->nr_sectors - sector_nr;
+	} else {
+		sector_nr = calc_sector_number(stripe, bio_first_bvec_all(&bbio->bio));
+		ASSERT(sector_nr < stripe->nr_sectors);
+		num_sectors = bio_size >> stripe->bg->fs_info->sectorsize_bits;
+	}
 
 	if (bbio->bio.bi_status) {
 		bitmap_set(&stripe->io_error_bitmap, sector_nr, num_sectors);
