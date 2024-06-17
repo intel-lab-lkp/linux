@@ -1652,3 +1652,10 @@ int dso__strerror_load(struct dso *dso, char *buf, size_t buflen)
 	scnprintf(buf, buflen, "%s", dso_load__error_str[idx]);
 	return 0;
 }
+
+bool is_perf_pid_map_name(const char *dso_name)
+{
+	int tid;
+
+	return sscanf(dso_name, "/tmp/perf-%d.map", &tid) == 1;
+}
