@@ -67,6 +67,16 @@
 #include "intel_psr.h"
 #include "intel_tdf.h"
 
+unsigned int intel_frontbuffer_bits(struct intel_frontbuffer *front)
+{
+	return atomic_read(&front->bits);
+}
+
+void intel_frontbuffer_bits_or(struct intel_frontbuffer *front, unsigned int bits)
+{
+	atomic_or(bits, &front->bits);
+}
+
 /**
  * frontbuffer_flush - flush frontbuffer
  * @i915: i915 device

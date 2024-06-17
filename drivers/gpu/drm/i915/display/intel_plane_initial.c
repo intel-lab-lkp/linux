@@ -391,7 +391,7 @@ valid_fb:
 	plane_state->uapi.crtc = &crtc->base;
 	intel_plane_copy_uapi_to_hw_state(plane_state, plane_state, crtc);
 
-	atomic_or(plane->frontbuffer_bit, &to_intel_frontbuffer(fb)->bits);
+	intel_frontbuffer_bits_or(to_intel_frontbuffer(fb), plane->frontbuffer_bit);
 }
 
 static void plane_config_fini(struct intel_initial_plane_config *plane_config)

@@ -1965,7 +1965,7 @@ static int intel_user_framebuffer_dirty(struct drm_framebuffer *fb,
 	struct frontbuffer_fence_cb *cb;
 	int ret = 0;
 
-	if (!atomic_read(&front->bits))
+	if (!intel_frontbuffer_bits(front))
 		return 0;
 
 	if (dma_resv_test_signaled(intel_bo_to_drm_bo(obj)->resv, dma_resv_usage_rw(false)))

@@ -67,6 +67,9 @@ struct intel_frontbuffer {
 	GENMASK(INTEL_FRONTBUFFER_BITS_PER_PIPE * ((pipe) + 1) - 1,	\
 		INTEL_FRONTBUFFER_BITS_PER_PIPE * (pipe))
 
+unsigned int intel_frontbuffer_bits(struct intel_frontbuffer *front);
+void intel_frontbuffer_bits_or(struct intel_frontbuffer *front, unsigned int bits);
+
 void intel_frontbuffer_flip_prepare(struct drm_i915_private *i915,
 				    unsigned frontbuffer_bits);
 void intel_frontbuffer_flip_complete(struct drm_i915_private *i915,
