@@ -3743,6 +3743,17 @@ void sk_common_release(struct sock *sk)
 	sk->sk_prot->unhash(sk);
 
 	/*
+	 * struct net_proto_family create functions like inet_create() or
+	 * inet6_create() have an error path, which call this function. This sk
+	 * may have already been associated with a struct socket, so ensure to
+	 * clear this reference not to leave a dangling pointer in the
+	 * struct socket instance.
+	 */
+
+	if (sk->sk_socket)
+		sk->sk_socket->sk = NULL;
+
+	/*
 	 * In this point socket cannot receive new packets, but it is possible
 	 * that some packets are in flight because some CPU runs receiver and
 	 * did hash table lookup before we unhashed socket. They will achieve
