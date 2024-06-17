@@ -79,8 +79,7 @@ static int
 interfaces(const char __user *str, size_t size)
 {
 	if (set_aoe_iflist(str, size)) {
-		printk(KERN_ERR
-			"aoe: could not set interface list: too many interfaces\n");
+		pr_err("could not set interface list: too many interfaces\n");
 		return -EINVAL;
 	}
 	return 0;
@@ -173,7 +172,7 @@ aoechr_write(struct file *filp, const char __user *buf, size_t cnt, loff_t *offp
 
 	switch ((unsigned long) filp->private_data) {
 	default:
-		printk(KERN_INFO "aoe: can't write to that file.\n");
+		pr_info("can't write to that file.\n");
 		break;
 	case MINOR_DISCOVER:
 		ret = discover();
@@ -290,7 +289,7 @@ aoechr_init(void)
 
 	n = register_chrdev(AOE_MAJOR, "aoechr", &aoe_fops);
 	if (n < 0) {
-		printk(KERN_ERR "aoe: can't register char device\n");
+		pr_err("can't register char device\n");
 		return n;
 	}
 	init_completion(&emsgs_comp);

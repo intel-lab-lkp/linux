@@ -255,7 +255,7 @@ newframe(struct aoedev *d)
 	int has_untainted;
 
 	if (!d->targets || !d->targets[0]) {
-		printk(KERN_ERR "aoe: NULL TARGETS!\n");
+		pr_err("NULL TARGETS!\n");
 		return NULL;
 	}
 	tt = d->tgt;	/* last used target */
@@ -426,7 +426,7 @@ aoecmd_cfg_pkts(ushort aoemajor, unsigned char aoeminor, struct sk_buff_head *qu
 
 		skb = new_skb(sizeof *h + sizeof *ch);
 		if (skb == NULL) {
-			printk(KERN_INFO "aoe: skb alloc failure\n");
+			pr_info("skb alloc failure\n");
 			dev_put(ifp);
 			continue;
 		}
@@ -955,8 +955,7 @@ ataid_complete(struct aoedev *d, struct aoetgt *t, unsigned char *id)
 	memcpy(d->ident, id, sizeof(d->ident));
 
 	if (d->ssize != ssize)
-		printk(KERN_INFO
-			"aoe: %pm e%ld.%d v%04x has %llu sectors\n",
+		pr_info("%pm e%ld.%d v%04x has %llu sectors\n",
 			t->addr,
 			d->aoemajor, d->aoeminor,
 			d->fw_ver, (long long)ssize);
@@ -1533,7 +1532,7 @@ aoecmd_cfg_rsp(struct sk_buff *skb)
 	 */
 	aoemajor = get_unaligned_be16(&h->major);
 	if (aoemajor == 0xfff) {
-		printk(KERN_ERR "aoe: Warning: shelf address is all ones.  "
+		pr_err("Warning: shelf address is all ones.  "
 			"Check shelf dip switches.\n");
 		return;
 	}

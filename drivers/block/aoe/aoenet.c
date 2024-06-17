@@ -102,7 +102,7 @@ set_aoe_iflist(const char __user *user_str, size_t size)
 		return -EINVAL;
 
 	if (copy_from_user(aoe_iflist, user_str, size)) {
-		printk(KERN_INFO "aoe: copy from user failed\n");
+		pr_info("copy from user failed\n");
 		return -EFAULT;
 	}
 	aoe_iflist[size] = 0x00;
@@ -160,9 +160,8 @@ aoenet_rcv(struct sk_buff *skb, struct net_device *ifp, struct packet_type *pt, 
 		if (n > NECODES)
 			n = 0;
 		if (net_ratelimit())
-			printk(KERN_ERR
-				"%s%d.%d@%s; ecode=%d '%s'\n",
-				"aoe: error packet from ",
+			pr_err("%s%d.%d@%s; ecode=%d '%s'\n",
+				"error packet from ",
 				get_unaligned_be16(&h->major),
 				h->minor, skb->dev->name,
 				h->err, aoe_errlist[n]);

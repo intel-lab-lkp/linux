@@ -5,6 +5,9 @@
 #define AOE_MAJOR 152
 #define DEVICE_NAME "aoe"
 
+#undef pr_fmt
+#define pr_fmt(fmt) DEVICE_NAME ": " fmt
+
 /* set AOE_PARTITIONS to 1 to use whole-disks only
  * default is 16, which is 15 partitions plus the whole disk
  */

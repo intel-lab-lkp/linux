@@ -411,8 +411,7 @@ skbfree(struct sk_buff *skb)
 	while (atomic_read(&skb_shinfo(skb)->dataref) != 1 && i-- > 0)
 		msleep(Sms);
 	if (i < 0) {
-		printk(KERN_ERR
-			"aoe: %s holds ref: %s\n",
+		pr_err("%s holds ref: %s\n",
 			skb->dev ? skb->dev->name : "netif",
 			"cannot free skb -- memory leaked.");
 		return;

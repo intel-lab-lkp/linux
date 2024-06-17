@@ -274,7 +274,7 @@ aoeblk_getgeo(struct block_device *bdev, struct hd_geometry *geo)
 	struct aoedev *d = bdev->bd_disk->private_data;
 
 	if ((d->flags & DEVFL_UP) == 0) {
-		printk(KERN_ERR "aoe: disk not up\n");
+		pr_err("disk not up\n");
 		return -ENODEV;
 	}
 
@@ -356,7 +356,7 @@ aoeblk_gdalloc(void *vp)
 	mp = mempool_create(MIN_BUFS, mempool_alloc_slab, mempool_free_slab,
 		buf_pool_cache);
 	if (mp == NULL) {
-		printk(KERN_ERR "aoe: cannot allocate bufpool for %ld.%d\n",
+		pr_err("cannot allocate bufpool for %ld.%d\n",
 			d->aoemajor, d->aoeminor);
 		goto err;
 	}

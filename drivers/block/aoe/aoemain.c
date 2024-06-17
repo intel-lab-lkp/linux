@@ -65,10 +65,10 @@ aoe_init(void)
 		goto cmd_fail;
 	ret = register_blkdev(AOE_MAJOR, DEVICE_NAME);
 	if (ret < 0) {
-		printk(KERN_ERR "aoe: can't register major\n");
+		pr_err("can't register major\n");
 		goto blkreg_fail;
 	}
-	printk(KERN_INFO "aoe: AoE v%s initialised.\n", VERSION);
+	pr_info("AoE v%s initialised.\n", VERSION);
 
 	timer_setup(&timer, discover_timer, 0);
 	discover_timer(&timer);
@@ -86,7 +86,7 @@ aoe_init(void)
  dev_fail:
 	destroy_workqueue(aoe_wq);
 
-	printk(KERN_INFO "aoe: initialisation failure.\n");
+	pr_info("initialisation failure.\n");
 	return ret;
 }
 
