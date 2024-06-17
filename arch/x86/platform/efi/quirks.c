@@ -337,10 +337,26 @@ void __init efi_reserve_boot_services(void)
 		    md->type != EFI_BOOT_SERVICES_DATA)
 			continue;
 
+		/*
+		 * Checks if the current region has been partially or fully
+		 * reserved by someone else.
+		 */
 		already_reserved = memblock_is_region_reserved(start, size);
 
 		/*
-		 * Because the following memblock_reserve() is paired
+		 * If someone else has already reserved part of the EFI Boot
+		 * Data region (e.g. efi_memattr_init()), we should also
+		 * reserve the remaining part. This is because some efi drivers
+		 * rely on reserving EFI Boot Data here in advance, such as
+		 * bgrt (see efi_bgrt_init()), otherwise the memory reserved
+		 * by bgrt via efi_mem_reserve() will conflict with the memory
+		 * reserved by others via memblock_reserve(). So here
+		 * unconditionally reserve the whole EFI Boot Data region.
+		 */
+		memblock_reserve(start, size);
+
+		/*
+		 * Because the above memblock_reserve() is paired
 		 * with memblock_free_late() for this region in
 		 * efi_free_boot_services(), we must be extremely
 		 * careful not to reserve, and subsequently free,
@@ -352,18 +368,13 @@ void __init efi_reserve_boot_services(void)
 		 * freed is page zero (first 4Kb of memory), which may
 		 * contain boot services code/data but is marked
 		 * E820_TYPE_RESERVED by trim_bios_range().
+		 *
+		 * If we are the first to reserve the region, no
+		 * one else cares about it. We own it and can
+		 * free it later.
 		 */
-		if (!already_reserved) {
-			memblock_reserve(start, size);
-
-			/*
-			 * If we are the first to reserve the region, no
-			 * one else cares about it. We own it and can
-			 * free it later.
-			 */
-			if (can_free_region(start, size))
-				continue;
-		}
+		if (!already_reserved && can_free_region(start, size))
+			continue;
 
 		/*
 		 * We don't own the region. We must not free it.
