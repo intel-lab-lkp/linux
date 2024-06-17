@@ -24,13 +24,13 @@
 #ifndef __INTEL_FRONTBUFFER_H__
 #define __INTEL_FRONTBUFFER_H__
 
-#include <linux/atomic.h>
 #include <linux/bits.h>
-#include <linux/kref.h>
+#include <linux/types.h>
 
-#include "i915_active_types.h"
-
+struct drm_i915_gem_object;
 struct drm_i915_private;
+struct i915_active;
+struct intel_frontbuffer;
 
 enum fb_op_origin {
 	ORIGIN_CPU = 0,
@@ -38,16 +38,6 @@ enum fb_op_origin {
 	ORIGIN_FLIP,
 	ORIGIN_DIRTYFB,
 	ORIGIN_CURSOR_UPDATE,
-};
-
-struct intel_frontbuffer {
-	struct kref ref;
-	atomic_t bits;
-	struct i915_active write;
-	struct drm_i915_gem_object *obj;
-	struct rcu_head rcu;
-
-	struct work_struct flush_work;
 };
 
 /*
