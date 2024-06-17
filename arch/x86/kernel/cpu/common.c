@@ -1209,6 +1209,9 @@ static const __initconst struct x86_cpu_id cpu_vuln_whitelist[] = {
 #define VULNBL_INTEL_STEPPINGS(vfm, steppings, issues)	\
 	X86_MATCH_VFM_STEPPINGS(INTEL_##vfm, steppings, issues)
 
+#define VULNBL_INTEL_CPU_TYPE(vfm, cpu_type, issues)	\
+	X86_MATCH_VFM_CPU_TYPE(INTEL_##vfm, cpu_type, issues)
+
 #define VULNBL_AMD(family, blacklist)		\
 	VULNBL(AMD, family, X86_MODEL_ANY, blacklist)
 
@@ -1255,9 +1258,7 @@ static const struct x86_cpu_id cpu_vuln_blacklist[] __initconst = {
 	VULNBL_INTEL(TIGERLAKE,		GDS),
 	VULNBL_INTEL(LAKEFIELD,		MMIO | MMIO_SBDS | RETBLEED),
 	VULNBL_INTEL(ROCKETLAKE,	MMIO | RETBLEED | GDS),
-	VULNBL_INTEL(ALDERLAKE,		RFDS),
 	VULNBL_INTEL(ALDERLAKE_L,	RFDS),
-	VULNBL_INTEL(RAPTORLAKE,	RFDS),
 	VULNBL_INTEL(RAPTORLAKE_P,	RFDS),
 	VULNBL_INTEL(RAPTORLAKE_S,	RFDS),
 	VULNBL_INTEL(ATOM_GRACEMONT,	RFDS),
@@ -1271,6 +1272,8 @@ static const struct x86_cpu_id cpu_vuln_blacklist[] __initconst = {
 	/* Match more than Vendor/Family/Model */
 	VULNBL_INTEL_STEPPINGS(COMETLAKE_L,	X86_STEPPINGS(0x0, 0x0),	MMIO | RETBLEED),
 	VULNBL_INTEL	      (COMETLAKE_L,					MMIO | MMIO_SBDS | RETBLEED | GDS),
+	VULNBL_INTEL_CPU_TYPE (RAPTORLAKE,	X86_CPU_TYPE_INTEL_ATOM,	RFDS),
+	VULNBL_INTEL_CPU_TYPE (ALDERLAKE,	X86_CPU_TYPE_INTEL_ATOM,	RFDS),
 
 	VULNBL_AMD(0x15, RETBLEED),
 	VULNBL_AMD(0x16, RETBLEED),
