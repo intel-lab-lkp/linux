@@ -81,6 +81,10 @@ int eeh_phb_pe_create(struct pci_controller *phb)
 {
 	struct eeh_pe *pe;
 
+	phb->eeh_in_progress = false;
+	INIT_LIST_HEAD(&phb->eeh_eventlist);
+	spin_lock_init(&phb->eeh_eventlist_lock);
+
 	/* Allocate PHB PE */
 	pe = eeh_pe_alloc(phb, EEH_PE_PHB);
 	if (!pe) {

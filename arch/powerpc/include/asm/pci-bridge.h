@@ -138,6 +138,10 @@ struct pci_controller {
 
 	/* iommu_ops support */
 	struct iommu_device	iommu;
+
+	bool eeh_in_progress;
+	struct list_head eeh_eventlist;
+	spinlock_t eeh_eventlist_lock;
 };
 
 /* These are used for config access before all the PCI probing
