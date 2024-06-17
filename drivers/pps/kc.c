@@ -2,7 +2,7 @@
 /*
  * PPS kernel consumer API
  *
- * Copyright (C) 2009-2010   Alexander Gordeev <lasaine@lvk.cs.msu.su>
+ * Copyright (C) 2009-2010   Alexander Gordeev <alex@gordius.net>
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt

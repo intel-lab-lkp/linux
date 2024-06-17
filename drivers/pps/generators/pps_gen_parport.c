@@ -2,7 +2,7 @@
 /*
  * pps_gen_parport.c -- kernel parallel port PPS signal generator
  *
- * Copyright (C) 2009   Alexander Gordeev <lasaine@lvk.cs.msu.su>
+ * Copyright (C) 2009   Alexander Gordeev <alex@gordius.net>
  */
 
 
@@ -236,6 +236,6 @@ static struct parport_driver pps_gen_parport_driver = {
 };
 module_parport_driver(pps_gen_parport_driver);
 
-MODULE_AUTHOR("Alexander Gordeev <lasaine@lvk.cs.msu.su>");
+MODULE_AUTHOR("Alexander Gordeev <alex@gordius.net>");
 MODULE_DESCRIPTION("parallel port PPS signal generator");
 MODULE_LICENSE("GPL");

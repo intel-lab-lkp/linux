@@ -2,7 +2,7 @@
 /*
  * PPS kernel consumer API header
  *
- * Copyright (C) 2009-2010   Alexander Gordeev <lasaine@lvk.cs.msu.su>
+ * Copyright (C) 2009-2010   Alexander Gordeev <alex@gordius.net>
  */
 
 #ifndef LINUX_PPS_KC_H
