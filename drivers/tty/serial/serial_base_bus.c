@@ -210,13 +210,7 @@ void serial_base_port_device_remove(struct serial_port_device *port_dev)
 static int serial_base_add_one_prefcon(const char *match, const char *dev_name,
 				       int port_id)
 {
-	int ret;
-
-	ret = add_preferred_console_match(match, dev_name, port_id);
-	if (ret == -ENOENT)
-		return 0;
-
-	return ret;
+	return 0;
 }
 
 #ifdef __sparc__
