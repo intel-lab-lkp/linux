@@ -283,7 +283,21 @@ static struct clk_rcg2 gcc_sdm670_cpuss_rbcpr_clk_src = {
 	},
 };
 
+/*
+ * This is a frequency table for "General Purpose" clocks.
+ * These clocks can be muxed to the SoC pins and may be used by
+ * external devices. They're often used as PWM source.
+ *
+ * See comment in gcc-mam8916.c at ftbl_gcc_gp1_3_clk.
+ */
 static const struct freq_tbl ftbl_gcc_gp1_clk_src[] = {
+	F(10000,   P_BI_TCXO,    16,  1, 120),
+	F(20000,   P_BI_TCXO,    16,  1, 60),
+	F(100000,  P_BI_TCXO,    16,  1,  12),
+	F(500000,  P_GPLL0_OUT_EVEN, 12, 1, 100),
+	F(1000000, P_GPLL0_OUT_EVEN, 12, 1, 50),
+	F(2500000, P_GPLL0_OUT_EVEN, 12, 1, 10),
+	F(5000000, P_GPLL0_OUT_EVEN, 12, 1, 5),
 	F(19200000, P_BI_TCXO, 1, 0, 0),
 	F(25000000, P_GPLL0_OUT_EVEN, 12, 0, 0),
 	F(50000000, P_GPLL0_OUT_EVEN, 6, 0, 0),
