@@ -455,9 +455,9 @@ static const struct snd_soc_component_driver soc_codec_dev_rk817 = {
 static void rk817_codec_parse_dt_property(struct device *dev,
 					 struct rk817_codec_priv *rk817)
 {
-	struct device_node *node;
+	struct device_node *node __free(device_node) = of_get_child_by_name(dev->parent->of_node,
+									    "codec");
 
-	node = of_get_child_by_name(dev->parent->of_node, "codec");
 	if (!node) {
 		dev_dbg(dev, "%s() Can not get child: codec\n",
 			__func__);
@@ -465,8 +465,6 @@ static void rk817_codec_parse_dt_property(struct device *dev,
 
 	rk817->mic_in_differential =
 			of_property_read_bool(node, "rockchip,mic-in-differential");
-
-	of_node_put(node);
 }
 
 static int rk817_platform_probe(struct platform_device *pdev)
