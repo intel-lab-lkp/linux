@@ -3383,8 +3383,12 @@ static int perf_sched__replay(struct perf_sched *sched)
 	sched->thread_funcs_exit = false;
 	create_tasks(sched);
 	printf("------------------------------------------------------------\n");
-	for (i = 0; i < sched->replay_repeat; i++)
+
+	i = 0;
+	while (sched->replay_repeat == 0 || i < sched->replay_repeat) {
 		run_one_test(sched);
+		i++;
+	}
 
 	sched->thread_funcs_exit = true;
 	destroy_tasks(sched);
@@ -3548,7 +3552,7 @@ int cmd_sched(int argc, const char **argv)
 	};
 	const struct option replay_options[] = {
 	OPT_UINTEGER('r', "repeat", &sched.replay_repeat,
-		     "repeat the workload replay N times (-1: infinite)"),
+		     "repeat the workload replay N times (0: infinite)"),
 	OPT_PARENT(sched_options)
 	};
 	const struct option map_options[] = {
