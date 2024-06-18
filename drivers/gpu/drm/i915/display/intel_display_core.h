@@ -286,6 +286,9 @@ struct intel_display {
 	/* drm device backpointer */
 	struct drm_device *drm;
 
+	/* Platform identification */
+	struct intel_display_is is;
+
 	/* Display functions */
 	struct {
 		/* Top level crtc-ish functions */

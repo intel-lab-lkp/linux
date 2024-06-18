@@ -1269,8 +1269,25 @@ find_subplatform_desc(struct pci_dev *pdev, const struct platform_desc *desc)
 	return NULL;
 }
 
+static void mem_or(void *_dst, const void *_src, size_t size)
+{
+	const u8 *src = _src;
+	u8 *dst = _dst;
+	size_t i;
+
+	for (i = 0; i < size; i++)
+		dst[i] |= src[i];
+}
+
+static void merge_display_is(struct intel_display_is *dst,
+			     const struct intel_display_is *src)
+{
+	mem_or(dst, src, sizeof(*dst));
+}
+
 void intel_display_device_probe(struct drm_i915_private *i915)
 {
+	struct intel_display *display = &i915->display;
 	struct pci_dev *pdev = to_pci_dev(i915->drm.dev);
 	const struct intel_display_device_info *info;
 	struct intel_display_ip_ver ip_ver = {};
@@ -1308,11 +1325,13 @@ void intel_display_device_probe(struct drm_i915_private *i915)
 
 	drm_WARN_ON(&i915->drm, !desc->platform || !desc->name);
 	DISPLAY_RUNTIME_INFO(i915)->platform = desc->platform;
+	display->is = desc->is;
 
 	subdesc = find_subplatform_desc(pdev, desc);
 	if (subdesc) {
 		drm_WARN_ON(&i915->drm, !subdesc->subplatform || !subdesc->name);
 		DISPLAY_RUNTIME_INFO(i915)->subplatform = subdesc->subplatform;
+		merge_display_is(&display->is, &subdesc->is);
 	}
 
 	if (ip_ver.ver || ip_ver.rel || ip_ver.step)
