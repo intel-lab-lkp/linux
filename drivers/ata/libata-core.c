@@ -5591,6 +5591,7 @@ struct ata_host *ata_host_alloc(struct device *dev, int n_ports)
 			goto err_out;
 
 		ap->port_no = i;
+		ap->local_port_no = i + 1;
 		host->ports[i] = ap;
 	}
 
@@ -5901,10 +5902,6 @@ int ata_host_register(struct ata_host *host, const struct scsi_host_template *sh
 	 */
 	for (i = host->n_ports; host->ports[i]; i++)
 		WARN_ON(host->ports[i]);
-
-	/* give ports names and add SCSI hosts */
-	for (i = 0; i < host->n_ports; i++)
-		host->ports[i]->local_port_no = i + 1;
 
 	/* Create associated sysfs transport objects  */
 	for (i = 0; i < host->n_ports; i++) {
