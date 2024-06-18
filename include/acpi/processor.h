@@ -358,10 +358,10 @@ int acpi_map_cpuid(phys_cpuid_t phys_id, u32 acpi_id);
 int acpi_get_cpuid(acpi_handle, int type, u32 acpi_id);
 
 #ifdef CONFIG_ACPI_CPPC_LIB
-extern int acpi_cppc_processor_probe(struct acpi_processor *pr);
+extern int acpi_cppc_processor_probe(struct acpi_processor *pr, bool ignore_osc_cppc_bit);
 extern void acpi_cppc_processor_exit(struct acpi_processor *pr);
 #else
-static inline int acpi_cppc_processor_probe(struct acpi_processor *pr)
+static inline int acpi_cppc_processor_probe(struct acpi_processor *pr, bool ignore_osc_cppc_bit)
 {
 	return 0;
 }

@@ -673,7 +673,7 @@ static inline void arch_init_invariance_cppc(void) { }
  *
  *	Return: 0 for success or negative value for err.
  */
-int acpi_cppc_processor_probe(struct acpi_processor *pr)
+int acpi_cppc_processor_probe(struct acpi_processor *pr, bool ignore_osc_cppc_bit)
 {
 	struct acpi_buffer output = {ACPI_ALLOCATE_BUFFER, NULL};
 	union acpi_object *out_obj, *cpc_obj;
@@ -688,7 +688,7 @@ int acpi_cppc_processor_probe(struct acpi_processor *pr)
 
 	if (!osc_sb_cppc2_support_acked) {
 		pr_debug("CPPC v2 _OSC not acked\n");
-		if (!cpc_supported_by_cpu()) {
+		if (!ignore_osc_cppc_bit && !cpc_supported_by_cpu()) {
 			pr_debug("CPPC is not supported by the CPU\n");
 			return -ENODEV;
 		}

@@ -33,6 +33,11 @@ MODULE_AUTHOR("Paul Diefenbaugh");
 MODULE_DESCRIPTION("ACPI Processor Driver");
 MODULE_LICENSE("GPL");
 
+static bool ignore_osc_cppc_bit = false;
+module_param(ignore_osc_cppc_bit, bool, 0);
+MODULE_PARM_DESC(ignore_osc_cppc_bit,
+	"Ignore _OSC CPPC bit, assume CPPC v2 is present");
+
 static int acpi_processor_start(struct device *dev);
 static int acpi_processor_stop(struct device *dev);
 
@@ -170,7 +175,7 @@ static int __acpi_processor_start(struct acpi_device *device)
 	if (pr->flags.need_hotplug_init)
 		return 0;
 
-	result = acpi_cppc_processor_probe(pr);
+	result = acpi_cppc_processor_probe(pr, ignore_osc_cppc_bit);
 	if (result && !IS_ENABLED(CONFIG_ACPI_CPU_FREQ_PSS))
 		dev_dbg(&device->dev, "CPPC data invalid or not present\n");
 
