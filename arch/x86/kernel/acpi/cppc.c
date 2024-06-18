@@ -11,6 +11,14 @@
 
 /* Refer to drivers/acpi/cppc_acpi.c for the description of functions */
 
+static bool ignore_osc_cppc_bit;
+static int __init parse_ignore_osc_cppc_bit(char *arg)
+{
+	ignore_osc_cppc_bit = true;
+	return 0;
+}
+early_param("ignore_osc_cppc_bit", parse_ignore_osc_cppc_bit);
+
 bool cpc_supported_by_cpu(void)
 {
 	switch (boot_cpu_data.x86_vendor) {
@@ -23,6 +31,10 @@ bool cpc_supported_by_cpu(void)
 			 boot_cpu_data.x86_model >= 0x30 && boot_cpu_data.x86_model <= 0x7f)
 			return true;
 		return boot_cpu_has(X86_FEATURE_CPPC);
+	}
+
+	if (ignore_osc_cppc_bit) {
+		return true;
 	}
 	return false;
 }

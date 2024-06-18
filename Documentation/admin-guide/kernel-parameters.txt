@@ -2063,6 +2063,12 @@
 			could change it dynamically, usually by
 			/sys/module/printk/parameters/ignore_loglevel.
 
+	ignore_osc_cppc_bit
+			Assume CPPC is present and ignore the CPPC v2 bit from
+			the ACPI _OSC method. This is useful for working
+			around buggy firmware where CPPC is supported, but
+			_OSC incorrectly reports it as being absent.
+
 	ignore_rlimit_data
 			Ignore RLIMIT_DATA setting for data mappings,
 			print warning at first misuse.  Can be changed via
