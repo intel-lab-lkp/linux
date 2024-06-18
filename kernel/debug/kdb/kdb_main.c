@@ -1611,11 +1611,6 @@ static int kdb_md(int argc, const char **argv)
 
 	if (isdigit(argv[0][2])) {
 		bytesperword = (int)(argv[0][2] - '0');
-		if (bytesperword == 0) {
-			bytesperword = last_bytesperword;
-			if (bytesperword == 0)
-				bytesperword = 4;
-		}
 		last_bytesperword = bytesperword;
 		repeat = mdcount * 16 / bytesperword;
 		if (!argv[0][3])
