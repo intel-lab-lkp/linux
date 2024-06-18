@@ -999,10 +999,10 @@ struct file {
 	 */
 	spinlock_t		f_lock;
 	fmode_t			f_mode;
+	unsigned int		f_flags;
 	atomic_long_t		f_count;
 	struct mutex		f_pos_lock;
 	loff_t			f_pos;
-	unsigned int		f_flags;
 	struct fown_struct	f_owner;
 	const struct cred	*f_cred;
 	struct file_ra_state	f_ra;
