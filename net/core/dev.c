@@ -11203,7 +11203,10 @@ static void netdev_rss_contexts_free(struct net_device *dev)
 		rxfh.rss_delete = true;
 
 		xa_erase(&dev->ethtool->rss_ctx, context);
-		if (dev->ethtool_ops->cap_rss_ctx_supported)
+		if (dev->ethtool_ops->create_rxfh_context)
+			dev->ethtool_ops->remove_rxfh_context(dev, ctx,
+							      context);
+		else if (dev->ethtool_ops->cap_rss_ctx_supported)
 			dev->ethtool_ops->set_rxfh(dev, &rxfh, NULL);
 		else /* can't happen */
 			pr_warn_once("No callback to remove RSS context from %s\n",
