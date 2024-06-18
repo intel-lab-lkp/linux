@@ -1612,11 +1612,8 @@ static int kdb_md(int argc, const char **argv)
 		bytesperword = (int)(argv[0][2] - '0');
 		if (!argv[0][3])
 			valid = true;
-		else if (argv[0][3] == 'c' && argv[0][4]) {
-			char *p;
-			repeat = simple_strtoul(argv[0] + 4, &p, 10);
-			valid = !*p;
-		}
+		else if (argv[0][3] == 'c' && argv[0][4])
+			valid = kstrtouint(argv[0] + 4, 10, &repeat) == 0;
 	} else if (strcmp(argv[0], "md") == 0)
 		valid = true;
 	else if (strcmp(argv[0], "mds") == 0)
