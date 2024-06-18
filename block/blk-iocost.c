@@ -324,6 +324,7 @@ enum ioc_running {
 enum {
 	QOS_ENABLE,
 	QOS_CTRL,
+	QOS_FREE,
 	NR_QOS_CTRL_PARAMS,
 };
 
@@ -2847,11 +2848,9 @@ static void ioc_rqos_queue_depth_changed(struct rq_qos *rqos)
 	spin_unlock_irq(&ioc->lock);
 }
 
-static void ioc_rqos_exit(struct rq_qos *rqos)
+static void __ioc_exit(struct ioc *ioc)
 {
-	struct ioc *ioc = rqos_to_ioc(rqos);
-
-	blkcg_deactivate_policy(rqos->disk, &blkcg_policy_iocost);
+	blkcg_deactivate_policy(ioc->rqos.disk, &blkcg_policy_iocost);
 
 	spin_lock_irq(&ioc->lock);
 	ioc->running = IOC_STOP;
@@ -2860,6 +2859,13 @@ static void ioc_rqos_exit(struct rq_qos *rqos)
 	timer_shutdown_sync(&ioc->timer);
 	free_percpu(ioc->pcpu_stat);
 	kfree(ioc);
+}
+
+static void ioc_rqos_exit(struct rq_qos *rqos)
+{
+	struct ioc *ioc = rqos_to_ioc(rqos);
+
+	__ioc_exit(ioc);
 }
 
 static const struct rq_qos_ops ioc_rqos_ops = {
@@ -3193,6 +3199,7 @@ static int ioc_qos_show(struct seq_file *sf, void *v)
 static const match_table_t qos_ctrl_tokens = {
 	{ QOS_ENABLE,		"enable=%u"	},
 	{ QOS_CTRL,		"ctrl=%s"	},
+	{ QOS_FREE,		"free"		},
 	{ NR_QOS_CTRL_PARAMS,	NULL		},
 };
 
@@ -3210,6 +3217,7 @@ struct ioc_qos_params {
 	u32 qos[NR_QOS_PARAMS];
 	bool enable;
 	bool user;
+	bool free;
 };
 
 static void ioc_qos_params_init(struct ioc *ioc, struct ioc_qos_params *params)
@@ -3228,6 +3236,8 @@ static void ioc_qos_params_init(struct ioc *ioc, struct ioc_qos_params *params)
 		params->enable = false;
 		params->user = false;
 	}
+
+	params->free = false;
 }
 
 static int ioc_qos_params_parse(struct blkg_conf_ctx *ctx,
@@ -3259,6 +3269,9 @@ static int ioc_qos_params_parse(struct blkg_conf_ctx *ctx,
 				params->user = true;
 			else
 				return -EINVAL;
+			continue;
+		case QOS_FREE:
+			params->free = true;
 			continue;
 		}
 
@@ -3338,6 +3351,15 @@ static void ioc_qos_params_update(struct gendisk *disk, struct ioc *ioc,
 	ioc_refresh_params(ioc, true);
 }
 
+static void ioc_free(struct ioc *ioc)
+{
+	if (!ioc)
+		return;
+
+	rq_qos_del(&ioc->rqos);
+	__ioc_exit(ioc);
+}
+
 static ssize_t ioc_qos_write(struct kernfs_open_file *of, char *input,
 			     size_t nbytes, loff_t off)
 {
@@ -3366,7 +3388,7 @@ static ssize_t ioc_qos_write(struct kernfs_open_file *of, char *input,
 	if (ret)
 		goto err;
 
-	if (!ioc) {
+	if (!params.free && !ioc) {
 		ret = blk_iocost_init(disk);
 		if (ret)
 			goto err;
@@ -3375,6 +3397,11 @@ static ssize_t ioc_qos_write(struct kernfs_open_file *of, char *input,
 
 	blk_mq_freeze_queue(disk->queue);
 	blk_mq_quiesce_queue(disk->queue);
+
+	if (params.free) {
+		ioc_free(ioc);
+		goto out;
+	}
 
 	spin_lock_irq(&ioc->lock);
 
@@ -3386,6 +3413,7 @@ static ssize_t ioc_qos_write(struct kernfs_open_file *of, char *input,
 	else
 		wbt_enable_default(disk);
 
+out:
 	blk_mq_unquiesce_queue(disk->queue);
 	blk_mq_unfreeze_queue(disk->queue);
 
