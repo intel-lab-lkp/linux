@@ -1521,8 +1521,8 @@ static int kdb_mdr(unsigned long addr, unsigned int count)
  * See the kdb help for syntax.
  */
 static void kdb_md_line(const char *fmtstr, unsigned long addr,
-			int symbolic, int nosect, int bytesperword,
-			int num, int repeat, int phys)
+			bool symbolic, bool nosect, int bytesperword,
+			int num, int repeat, bool phys)
 {
 	/* print just one line of data */
 	kdb_symtab_t symtab;
@@ -1590,15 +1590,15 @@ static int kdb_md(int argc, const char **argv)
 	static unsigned long last_addr;
 	static int last_radix, last_bytesperword, last_repeat;
 	int radix = 16, mdcount = 8, bytesperword = KDB_WORD_SIZE, repeat;
-	int nosect = 0;
 	char fmtchar, fmtstr[64];
 	unsigned long addr;
 	unsigned long word;
 	long offset = 0;
-	int symbolic = 0;
-	int valid = 0;
-	int phys = 0;
-	int raw = 0;
+	bool nosect = false;
+	bool symbolic = false;
+	bool valid = false;
+	bool phys = false;
+	bool raw = false;
 
 	kdbgetintenv("MDCOUNT", &mdcount);
 	kdbgetintenv("RADIX", &radix);
@@ -1609,7 +1609,7 @@ static int kdb_md(int argc, const char **argv)
 
 	if (strcmp(argv[0], "mdr") == 0) {
 		if (argc == 2 || (argc == 0 && last_addr != 0))
-			valid = raw = 1;
+			valid = raw = true;
 		else
 			return KDB_ARGCOUNT;
 	} else if (isdigit(argv[0][2])) {
@@ -1622,7 +1622,7 @@ static int kdb_md(int argc, const char **argv)
 		last_bytesperword = bytesperword;
 		repeat = mdcount * 16 / bytesperword;
 		if (!argv[0][3])
-			valid = 1;
+			valid = true;
 		else if (argv[0][3] == 'c' && argv[0][4]) {
 			char *p;
 			repeat = simple_strtoul(argv[0] + 4, &p, 10);
@@ -1631,11 +1631,11 @@ static int kdb_md(int argc, const char **argv)
 		}
 		last_repeat = repeat;
 	} else if (strcmp(argv[0], "md") == 0)
-		valid = 1;
+		valid = true;
 	else if (strcmp(argv[0], "mds") == 0)
-		valid = 1;
+		valid = true;
 	else if (strcmp(argv[0], "mdp") == 0) {
-		phys = valid = 1;
+		phys = valid = true;
 	}
 	if (!valid)
 		return KDB_NOTFOUND;
@@ -1730,13 +1730,19 @@ static int kdb_md(int argc, const char **argv)
 	last_bytesperword = bytesperword;
 
 	if (strcmp(argv[0], "mds") == 0) {
-		symbolic = 1;
-		/* Do not save these changes as last_*, they are temporary mds
+		int tmp;
+
+		symbolic = true;
+
+		/*
+		 * Do not save these changes as last_*, they are temporary mds
 		 * overrides.
 		 */
 		bytesperword = KDB_WORD_SIZE;
 		repeat = mdcount;
-		kdbgetintenv("NOSECT", &nosect);
+
+		if (!kdbgetintenv("NOSECT", &tmp))
+			nosect = tmp;
 	}
 
 	/* Round address down modulo BYTESPERWORD */
