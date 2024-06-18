@@ -97,6 +97,7 @@ extern int kdb_putarea_size(unsigned long, void *, size_t);
 #define kdb_getarea(x, addr) kdb_getarea_size(&(x), addr, sizeof((x)))
 #define kdb_putarea(addr, x) kdb_putarea_size(addr, &(x), sizeof((x)))
 
+extern int kdb_getioword(unsigned long *word, unsigned long addr, size_t size);
 extern int kdb_getphysword(unsigned long *word,
 			unsigned long addr, size_t size);
 extern int kdb_getword(unsigned long *, unsigned long, size_t);

@@ -1526,7 +1526,7 @@ static int kdb_mdr(int argc, const char **argv)
  */
 static void kdb_md_line(const char *fmtstr, unsigned long addr,
 			bool symbolic, bool nosect, int bytesperword,
-			int num, int repeat, bool phys)
+			int num, int repeat, bool phys, bool do_iomap)
 {
 	/* print just one line of data */
 	kdb_symtab_t symtab;
@@ -1543,7 +1543,10 @@ static void kdb_md_line(const char *fmtstr, unsigned long addr,
 		kdb_printf(kdb_machreg_fmt0 " ", addr);
 
 	for (i = 0; i < num && repeat--; i++) {
-		if (phys) {
+		if (do_iomap) {
+			if (kdb_getioword(&word, addr, bytesperword))
+				break;
+		} else if (phys) {
 			if (kdb_getphysword(&word, addr, bytesperword))
 				break;
 		} else if (kdb_getword(&word, addr, bytesperword))
@@ -1646,6 +1649,7 @@ static int kdb_md(int argc, const char **argv)
 	bool symbolic = false;
 	bool valid = false;
 	bool phys = false;
+	bool do_iomap = false;
 
 	kdbgetintenv("MDCOUNT", &mdcount);
 	kdbgetintenv("RADIX", &radix);
@@ -1655,6 +1659,8 @@ static int kdb_md(int argc, const char **argv)
 		valid = true;
 	else if (kdb_md_parse_arg0("mdp", argv[0], &repeat, &bytesperword))
 		phys = valid = true;
+	else if (kdb_md_parse_arg0("mdi", argv[0], &repeat, &bytesperword))
+		do_iomap = valid = true;
 	else if (strcmp(argv[0], "mds") == 0)
 		valid = true;
 
@@ -1765,7 +1771,11 @@ static int kdb_md(int argc, const char **argv)
 		if (KDB_FLAG(CMD_INTERRUPT))
 			return 0;
 		for (a = addr, z = 0; z < repeat; a += bytesperword, ++z) {
-			if (phys) {
+			if (do_iomap) {
+				if (kdb_getioword(&word, a, bytesperword)
+						|| word)
+					break;
+			} else if (phys) {
 				if (kdb_getphysword(&word, a, bytesperword)
 						|| word)
 					break;
@@ -1774,7 +1784,7 @@ static int kdb_md(int argc, const char **argv)
 		}
 		n = min(num, repeat);
 		kdb_md_line(fmtstr, addr, symbolic, nosect, bytesperword,
-			    num, repeat, phys);
+			    num, repeat, phys, do_iomap);
 		addr += bytesperword * n;
 		repeat -= n;
 		z = (z + num - 1) / num;
@@ -2604,7 +2614,7 @@ static int kdb_per_cpu(int argc, const char **argv)
 		kdb_printf("%5d ", cpu);
 		kdb_md_line(fmtstr, addr,
 			bytesperword == KDB_WORD_SIZE,
-			1, bytesperword, 1, 1, 0);
+			true, bytesperword, 1, 1, false, false);
 	}
 #undef KDB_PCU
 	return 0;
@@ -2715,6 +2725,24 @@ static kdbtab_t maintab[] = {
 		.func = kdb_md,
 		.usage = "<paddr> [<lines> [<radix>]]",
 		.help = "Display RAM given a PA using word size (W); show N words",
+		.flags = KDB_ENABLE_MEM_READ | KDB_REPEAT_NO_ARGS,
+	},
+	{	.name = "mdi",
+		.func = kdb_md,
+		.usage = "<paddr> <bytes>",
+		.help = "Display IO Memory",
+		.flags = KDB_ENABLE_MEM_READ | KDB_REPEAT_NO_ARGS,
+	},
+	{	.name = "mdiW",
+		.func = kdb_md,
+		.usage = "<paddr> <bytes>",
+		.help = "Display IO Memory using word size (W)",
+		.flags = KDB_ENABLE_MEM_READ | KDB_REPEAT_NO_ARGS,
+	},
+	{	.name = "mdiWcN",
+		.func = kdb_md,
+		.usage = "<paddr> <bytes>",
+		.help = "Display IO Memory using word size (W); show N words",
 		.flags = KDB_ENABLE_MEM_READ | KDB_REPEAT_NO_ARGS,
 	},
 	{	.name = "mdr",

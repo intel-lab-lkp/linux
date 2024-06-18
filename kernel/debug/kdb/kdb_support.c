@@ -19,6 +19,7 @@
 #include <linux/ptrace.h>
 #include <linux/highmem.h>
 #include <linux/hardirq.h>
+#include <linux/io.h>
 #include <linux/delay.h>
 #include <linux/uaccess.h>
 #include <linux/kdb.h>
@@ -329,6 +330,53 @@ static int kdb_getphys(void *res, unsigned long addr, size_t size)
 	kunmap_atomic(vaddr);
 
 	return 0;
+}
+
+/*
+ * kdb_getioword
+ * Inputs:
+ *	word	Pointer to the word to receive the result.
+ *	addr	Address of the area to copy.
+ *	size	Size of the area.
+ * Returns:
+ *	0 for success, < 0 for error.
+ */
+int kdb_getioword(unsigned long *word, unsigned long addr, size_t size)
+{
+	void __iomem *mapped = ioremap(addr, size);
+	int diag = 0;
+
+	*word = 0;	/* Default value if addr or size is invalid */
+
+	if (!mapped)
+		return KDB_BADADDR;
+
+	switch (size) {
+	case 1:
+		*word = readb(mapped);
+		break;
+	case 2:
+		*word = readw(mapped);
+		break;
+	case 4:
+		*word = readl(mapped);
+		break;
+	case 8:
+#ifdef CONFIG_64BIT
+		if (size <= sizeof(*word)) {
+			*word = readq(mapped);
+			break;
+		}
+#endif
+		fallthrough;
+	default:
+		kdb_func_printf("bad width %zu\n", size);
+		diag = KDB_BADWIDTH;
+	}
+
+	iounmap(mapped);
+
+	return diag;
 }
 
 /*
