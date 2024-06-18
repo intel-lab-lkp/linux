@@ -107,7 +107,6 @@ static void qp_event_handler(struct ib_event *event, void *context)
 	case IB_EVENT_PATH_MIG:
 	case IB_EVENT_COMM_EST:
 	case IB_EVENT_SQ_DRAINED:
-	case IB_EVENT_QP_LAST_WQE_REACHED:
 		break;
 
 	/* These are considered fatal events */
