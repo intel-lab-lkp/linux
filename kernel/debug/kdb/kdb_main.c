@@ -1516,14 +1516,9 @@ static int kdb_mdr(unsigned long addr, unsigned int count)
 }
 
 /*
- * kdb_md - This function implements the 'md', 'md1', 'md2', 'md4',
- *	'md8' 'mdr' and 'mds' commands.
+ * kdb_md - This function implements the guts of the various 'md' commands.
  *
- *	md|mds  [<addr arg> [<line count> [<radix>]]]
- *	mdWcN	[<addr arg> [<line count> [<radix>]]]
- *		where W = is the width (1, 2, 4 or 8) and N is the count.
- *		for eg., md1c20 reads 20 bytes, 1 at a time.
- *	mdr  <addr arg>,<byte count>
+ * See the kdb help for syntax.
  */
 static void kdb_md_line(const char *fmtstr, unsigned long addr,
 			int symbolic, int nosect, int bytesperword,
@@ -2677,26 +2672,38 @@ EXPORT_SYMBOL_GPL(kdb_unregister);
 static kdbtab_t maintab[] = {
 	{	.name = "md",
 		.func = kdb_md,
-		.usage = "<vaddr>",
-		.help = "Display Memory Contents, also mdWcN, e.g. md8c1",
+		.usage = "<vaddr> [<lines> [<radix>]]",
+		.help = "Display RAM using BYTESPERWORD; show MDCOUNT lines",
+		.flags = KDB_ENABLE_MEM_READ | KDB_REPEAT_NO_ARGS,
+	},
+	{	.name = "mdW",
+		.func = kdb_md,
+		.usage = "<vaddr> [<lines> [<radix>]]",
+		.help = "Display RAM using word size (W) of 1, 2, 4, or 8",
+		.flags = KDB_ENABLE_MEM_READ | KDB_REPEAT_NO_ARGS,
+	},
+	{	.name = "mdWcN",
+		.func = kdb_md,
+		.usage = "<vaddr> [<lines> [<radix>]]",
+		.help = "Display RAM using word size (W); show N words",
+		.flags = KDB_ENABLE_MEM_READ | KDB_REPEAT_NO_ARGS,
+	},
+	{	.name = "mdp",
+		.func = kdb_md,
+		.usage = "<paddr> [<lines> [<radix>]]",
+		.help = "Display RAM given a physical address",
 		.flags = KDB_ENABLE_MEM_READ | KDB_REPEAT_NO_ARGS,
 	},
 	{	.name = "mdr",
 		.func = kdb_md,
 		.usage = "<vaddr> <bytes>",
-		.help = "Display Raw Memory",
-		.flags = KDB_ENABLE_MEM_READ | KDB_REPEAT_NO_ARGS,
-	},
-	{	.name = "mdp",
-		.func = kdb_md,
-		.usage = "<paddr> <bytes>",
-		.help = "Display Physical Memory",
+		.help = "Display RAM as a stream of raw bytes",
 		.flags = KDB_ENABLE_MEM_READ | KDB_REPEAT_NO_ARGS,
 	},
 	{	.name = "mds",
 		.func = kdb_md,
-		.usage = "<vaddr>",
-		.help = "Display Memory Symbolically",
+		.usage = "<vaddr> [<lines>]",
+		.help = "Display RAM 1 native word/line; find words in kallsyms",
 		.flags = KDB_ENABLE_MEM_READ | KDB_REPEAT_NO_ARGS,
 	},
 	{	.name = "mm",
