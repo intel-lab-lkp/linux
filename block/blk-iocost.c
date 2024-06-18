@@ -1954,7 +1954,7 @@ static void transfer_surpluses(struct list_head *surpluses, struct ioc_now *now)
 				 iocg->hweight_donating <= 1 ||
 				 iocg->hweight_after_donation == 0)) {
 			pr_warn("iocg: invalid donation weights in ");
-			pr_cont_cgroup_path(iocg_to_blkg(iocg)->blkcg->css.cgroup);
+			pr_cont_blkg_path(iocg_to_blkg(iocg));
 			pr_cont(": active=%u donating=%u after=%u\n",
 				iocg->hweight_active, iocg->hweight_donating,
 				iocg->hweight_after_donation);

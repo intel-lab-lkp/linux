@@ -2196,5 +2196,11 @@ bool blk_cgroup_congested(void)
 	return ret;
 }
 
+void pr_cont_blkg_path(struct blkcg_gq *blkg)
+{
+	return pr_cont_cgroup_path(blkg->blkcg->css.cgroup);
+}
+EXPORT_SYMBOL_GPL(pr_cont_blkg_path);
+
 module_param(blkcg_debug_stats, bool, 0644);
 MODULE_PARM_DESC(blkcg_debug_stats, "True if you want debug stats, false if not");
