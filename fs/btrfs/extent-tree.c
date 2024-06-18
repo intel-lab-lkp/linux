@@ -126,11 +126,6 @@ int btrfs_lookup_extent_info(struct btrfs_trans_handle *trans,
 	if (!path)
 		return -ENOMEM;
 
-	if (!trans) {
-		path->skip_locking = 1;
-		path->search_commit_root = 1;
-	}
-
 search_again:
 	key.objectid = bytenr;
 	key.offset = offset;
@@ -186,9 +181,6 @@ search_again:
 		ret = 0;
 	}
 
-	if (!trans)
-		goto out;
-
 	delayed_refs = &trans->transaction->delayed_refs;
 	spin_lock(&delayed_refs->lock);
 	head = btrfs_find_delayed_ref_head(delayed_refs, bytenr);
@@ -219,7 +211,7 @@ search_again:
 		mutex_unlock(&head->mutex);
 	}
 	spin_unlock(&delayed_refs->lock);
-out:
+
 	WARN_ON(num_refs == 0);
 	if (refs)
 		*refs = num_refs;
