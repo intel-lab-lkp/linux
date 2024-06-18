@@ -82,6 +82,14 @@ properties:
     $ref: /schemas/types.yaml#/definitions/uint32
     maximum: 15
 
+  qcom,csr-atid-offset:
+    description:
+      Offset to the coresight slave register component's ATID register
+      that is used by specific TMC ETR. The ATID register can be programed according
+      to the trace id to filter out specific trace data which gets through the ETR
+      to the downstream components.
+    $ref: /schemas/types.yaml#/definitions/uint32
+
   in-ports:
     $ref: /schemas/graph.yaml#/properties/ports
     additionalProperties: false
