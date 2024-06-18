@@ -1611,7 +1611,6 @@ static int kdb_md(int argc, const char **argv)
 
 	if (isdigit(argv[0][2])) {
 		bytesperword = (int)(argv[0][2] - '0');
-		last_bytesperword = bytesperword;
 		repeat = mdcount * 16 / bytesperword;
 		if (!argv[0][3])
 			valid = true;
@@ -1621,7 +1620,6 @@ static int kdb_md(int argc, const char **argv)
 			mdcount = ((repeat * bytesperword) + 15) / 16;
 			valid = !*p;
 		}
-		last_repeat = repeat;
 	} else if (strcmp(argv[0], "md") == 0)
 		valid = true;
 	else if (strcmp(argv[0], "mds") == 0)
