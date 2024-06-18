@@ -3214,9 +3214,20 @@ struct ioc_qos_params {
 
 static void ioc_qos_params_init(struct ioc *ioc, struct ioc_qos_params *params)
 {
-	memcpy(params->qos, ioc->params.qos, sizeof(params->qos));
-	params->enable = ioc->enabled;
-	params->user = ioc->user_qos_params;
+	if (ioc) {
+		memcpy(params->qos, ioc->params.qos, sizeof(params->qos));
+		params->enable = ioc->enabled;
+		params->user = ioc->user_qos_params;
+	} else {
+		params->qos[QOS_RPPM] = 0;
+		params->qos[QOS_RLAT] = 0;
+		params->qos[QOS_WPPM] = 0;
+		params->qos[QOS_WLAT] = 0;
+		params->qos[QOS_MIN] = VRATE_MIN_PPM;
+		params->qos[QOS_MAX] = VRATE_MAX_PPM;
+		params->enable = false;
+		params->user = false;
+	}
 }
 
 static int ioc_qos_params_parse(struct blkg_conf_ctx *ctx,
@@ -3309,7 +3320,16 @@ static void ioc_qos_params_update(struct gendisk *disk, struct ioc *ioc,
 	}
 
 	if (params->user) {
-		memcpy(ioc->params.qos, params->qos, sizeof(params->qos));
+		if (params->qos[QOS_RPPM])
+			ioc->params.qos[QOS_RPPM] = params->qos[QOS_RPPM];
+		if (params->qos[QOS_RLAT])
+			ioc->params.qos[QOS_RLAT] = params->qos[QOS_RLAT];
+		if (params->qos[QOS_WPPM])
+			ioc->params.qos[QOS_RPPM] = params->qos[QOS_WPPM];
+		if (params->qos[QOS_WLAT])
+			ioc->params.qos[QOS_WLAT] = params->qos[QOS_WLAT];
+		ioc->params.qos[QOS_MIN] = params->qos[QOS_MIN];
+		ioc->params.qos[QOS_MAX] = params->qos[QOS_MAX];
 		ioc->user_qos_params = true;
 	} else {
 		ioc->user_qos_params = false;
@@ -3340,6 +3360,12 @@ static ssize_t ioc_qos_write(struct kernfs_open_file *of, char *input,
 	}
 
 	ioc = q_to_ioc(disk->queue);
+	ioc_qos_params_init(ioc, &params);
+
+	ret = ioc_qos_params_parse(&ctx, &params);
+	if (ret)
+		goto err;
+
 	if (!ioc) {
 		ret = blk_iocost_init(disk);
 		if (ret)
@@ -3351,11 +3377,6 @@ static ssize_t ioc_qos_write(struct kernfs_open_file *of, char *input,
 	blk_mq_quiesce_queue(disk->queue);
 
 	spin_lock_irq(&ioc->lock);
-	ioc_qos_params_init(ioc, &params);
-
-	ret = ioc_qos_params_parse(&ctx, &params);
-	if (ret)
-		goto err_parse;
 
 	ioc_qos_params_update(disk, ioc, &params);
 	spin_unlock_irq(&ioc->lock);
@@ -3371,11 +3392,6 @@ static ssize_t ioc_qos_write(struct kernfs_open_file *of, char *input,
 	blkg_conf_exit(&ctx);
 	return nbytes;
 
-err_parse:
-	spin_unlock_irq(&ioc->lock);
-
-	blk_mq_unquiesce_queue(disk->queue);
-	blk_mq_unfreeze_queue(disk->queue);
 err:
 	blkg_conf_exit(&ctx);
 	return ret;
