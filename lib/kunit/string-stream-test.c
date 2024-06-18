@@ -534,3 +534,5 @@ static struct kunit_suite string_stream_test_suite = {
 	.init = string_stream_test_init,
 };
 kunit_test_suites(&string_stream_test_suite);
+MODULE_IMPORT_NS(EXPORTED_FOR_KUNIT_TESTING);
+MODULE_LICENSE("GPL");
