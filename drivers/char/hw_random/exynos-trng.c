@@ -47,7 +47,8 @@
 struct exynos_trng_dev {
 	struct device	*dev;
 	void __iomem	*mem;
-	struct clk	*clk;
+	struct clk	*clk;	/* operating clock */
+	struct clk	*pclk;	/* bus clock */
 	struct hwrng	rng;
 };
 
@@ -141,10 +142,23 @@ static int exynos_trng_probe(struct platform_device *pdev)
 		goto err_clock;
 	}
 
+	trng->pclk = devm_clk_get_optional(&pdev->dev, "pclk");
+	if (IS_ERR(trng->pclk)) {
+		ret = dev_err_probe(&pdev->dev, PTR_ERR(trng->pclk),
+				    "cannot get pclk");
+		goto err_clock;
+	}
+
+	ret = clk_prepare_enable(trng->pclk);
+	if (ret) {
+		dev_err(&pdev->dev, "Could not enable the pclk.\n");
+		goto err_clock;
+	}
+
 	ret = clk_prepare_enable(trng->clk);
 	if (ret) {
 		dev_err(&pdev->dev, "Could not enable the clk.\n");
-		goto err_clock;
+		goto err_clock_enable;
 	}
 
 	ret = devm_hwrng_register(&pdev->dev, &trng->rng);
@@ -160,6 +174,9 @@ static int exynos_trng_probe(struct platform_device *pdev)
 err_register:
 	clk_disable_unprepare(trng->clk);
 
+err_clock_enable:
+	clk_disable_unprepare(trng->pclk);
+
 err_clock:
 	pm_runtime_put_noidle(&pdev->dev);
 
@@ -174,6 +191,7 @@ static void exynos_trng_remove(struct platform_device *pdev)
 	struct exynos_trng_dev *trng = platform_get_drvdata(pdev);
 
 	clk_disable_unprepare(trng->clk);
+	clk_disable_unprepare(trng->pclk);
 
 	pm_runtime_put_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
