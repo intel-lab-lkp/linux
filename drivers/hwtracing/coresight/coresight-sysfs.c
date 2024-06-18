@@ -8,7 +8,9 @@
 #include <linux/idr.h>
 #include <linux/kernel.h>
 
+#include "coresight-csr.h"
 #include "coresight-priv.h"
+#include "coresight-tmc.h"
 
 /*
  * Use IDR to map the hash of the source's device name
@@ -162,6 +164,43 @@ static int coresight_validate_source_sysfs(struct coresight_device *csdev,
 	return 0;
 }
 
+/** coresight_set_traceid_to_etr_sysfs: Store the traceid value in the TMC ETR device's driver data.
+ *  @csdev:	the device structure.
+ *
+ * Find the actived sink and store the traceid that obtained from the source device if the sink device is a TMC ETR device.
+ *
+ * Returns 0 indicates success. Non-zero result means failure.
+ */
+static int coresight_set_traceid_to_etr_sysfs(struct coresight_device *csdev)
+{
+	int ret = 0;
+	int trace_id = 0;
+	struct coresight_device *sink = NULL;
+	struct tmc_drvdata *drvdata = NULL;
+
+	ret = coresight_validate_source_sysfs(csdev, __func__);
+	if (ret)
+		return -EINVAL;
+
+	sink = coresight_find_activated_sysfs_sink(csdev);
+	if (!sink)
+		return -EINVAL;
+
+	drvdata = dev_get_drvdata(sink->dev.parent);
+
+	if (drvdata->config_type == TMC_CONFIG_TYPE_ETR) {
+		trace_id = csr_get_traceid(csdev);
+		if (!trace_id)
+			return -EINVAL;
+
+		drvdata->traceid = trace_id;
+	} else {
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 int coresight_enable_sysfs(struct coresight_device *csdev)
 {
 	int cpu, ret = 0;
@@ -208,7 +247,11 @@ int coresight_enable_sysfs(struct coresight_device *csdev)
 		goto out;
 	}
 
-	ret = coresight_enable_path(path, CS_MODE_SYSFS, NULL);
+	ret = coresight_set_traceid_to_etr_sysfs(csdev);
+	if (ret)
+		dev_dbg(&csdev->dev, "Set traceid to ETR failed\n");
+
+	ret = coresight_enable_path(path, CS_MODE_SYSFS, sink);
 	if (ret)
 		goto err_path;
 

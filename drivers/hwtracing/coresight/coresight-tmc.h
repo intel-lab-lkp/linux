@@ -188,6 +188,7 @@ struct etr_buf {
  * @idr_mutex:	Access serialisation for idr.
  * @sysfs_buf:	SYSFS buffer for ETR.
  * @perf_buf:	PERF buffer for ETR.
+ * @traceid:    Store the trace id collects from trace source for ETR.
  */
 struct tmc_drvdata {
 	struct clk		*pclk;
@@ -213,6 +214,7 @@ struct tmc_drvdata {
 	struct mutex		idr_mutex;
 	struct etr_buf		*sysfs_buf;
 	struct etr_buf		*perf_buf;
+	u32			traceid;
 };
 
 struct etr_buf_operations {

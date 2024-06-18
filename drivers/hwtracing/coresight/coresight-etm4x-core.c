@@ -2090,6 +2090,7 @@ static int etm4_add_coresight_dev(struct etm4_init_arg *init_arg)
 		return ret;
 	}
 
+	etm4_read_alloc_trace_id(drvdata);
 	etmdrvdata[drvdata->cpu] = drvdata;
 
 	dev_info(&drvdata->csdev->dev, "CPU%d: %s v%d.%d initialized\n",

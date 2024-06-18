@@ -501,6 +501,7 @@ static int __tmc_probe(struct device *dev, struct resource *res)
 	/* This device is not associated with a session */
 	drvdata->pid = -1;
 	drvdata->etr_mode = ETR_MODE_AUTO;
+	drvdata->traceid = 0;
 
 	if (drvdata->config_type == TMC_CONFIG_TYPE_ETR) {
 		drvdata->size = tmc_etr_get_default_buffer_size(dev);
