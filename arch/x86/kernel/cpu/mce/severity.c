@@ -394,7 +394,7 @@ static noinstr int mce_severity_intel(struct mce *m, struct pt_regs *regs, char 
 			continue;
 		if (msg)
 			*msg = s->msg;
-		s->covered = 1;
+		s->covered++;
 
 		return s->sev;
 	}
