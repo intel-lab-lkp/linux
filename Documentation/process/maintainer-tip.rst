@@ -375,14 +375,26 @@ following tag ordering scheme:
    For referring to an email on LKML or other kernel mailing lists,
    please use the lore.kernel.org redirector URL::
 
-     https://lore.kernel.org/r/email-message@id
+     Link: https://lore.kernel.org/email-message@id
 
-   The kernel.org redirector is considered a stable URL, unlike other email
-   archives.
+   This URL should be used when referring to relevant mailing list
+   resources, related patch sets, or other notable discussion threads.
+   A convenient way to associate Link trailers with the accompanying
+   message is to use markdown-like bracketed notation, for example::
 
-   Maintainers will add a Link tag referencing the email of the patch
-   submission when they apply a patch to the tip tree. This tag is useful
-   for later reference and is also used for commit notifications.
+     A similar approach was attempted before as part of a different
+     effort [1], but the initial implementation caused too many
+     regressions [2], so it was backed out and reimplemented.
+
+     Link: https://lore.kernel.org/some-msgid@here # [1]
+     Link: https://bugzilla.example.org/bug/12345  # [2]
+
+   When using the ``Link:`` trailer to indicate the provenance of the
+   patch, you should use the dedicated ``patch.msgid.link`` domain. This
+   makes it possible for automated tooling to establish which link leads
+   to the original patch submission. For example::
+
+     Link: https://patch.msgid.link/patch-source-msgid@here
 
 Please do not use combined tags, e.g. ``Reported-and-tested-by``, as
 they just complicate automated extraction of tags.
