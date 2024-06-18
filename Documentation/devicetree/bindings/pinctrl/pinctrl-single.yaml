@@ -74,6 +74,7 @@ properties:
   pinctrl-single,gpio-range:
     description: Optional list of pin base, nr pins & gpio function
     $ref: /schemas/types.yaml#/definitions/phandle-array
+    maxItems: 100
     items:
       - items:
           - description: phandle of a gpio-range node
