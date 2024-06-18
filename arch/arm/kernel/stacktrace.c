@@ -194,4 +194,69 @@ here:
 
 	walk_stackframe(&frame, consume_entry, cookie);
 }
+
+/*
+ * The registers we're interested in are at the end of the variable
+ * length saved register structure. The fp points at the end of this
+ * structure so the address of this struct is:
+ * (struct frame_tail *)(xxx->fp)-1
+ *
+ * This code has been adapted from the ARM OProfile support.
+ */
+struct frame_tail {
+	struct frame_tail __user *fp;
+	unsigned long sp;
+	unsigned long lr;
+} __packed;
+
+/*
+ * Get the return address for a single stackframe and return a pointer to the
+ * next frame tail.
+ */
+static struct frame_tail __user *
+unwind_user_frame(struct frame_tail __user *tail, void *cookie,
+		  stack_trace_consume_fn consume_entry)
+{
+	struct frame_tail buftail;
+	unsigned long err;
+
+	if (!access_ok(tail, sizeof(buftail)))
+		return NULL;
+
+	pagefault_disable();
+	err = __copy_from_user_inatomic(&buftail, tail, sizeof(buftail));
+	pagefault_enable();
+
+	if (err)
+		return NULL;
+
+	if (!consume_entry(cookie, buftail.lr))
+		return NULL;
+
+	/*
+	 * Frame pointers should strictly progress back up the stack
+	 * (towards higher addresses).
+	 */
+	if (tail + 1 >= buftail.fp)
+		return NULL;
+
+	return buftail.fp - 1;
+}
+
+void arch_stack_walk_user(stack_trace_consume_fn consume_entry, void *cookie,
+			  const struct pt_regs *regs)
+{
+	struct frame_tail __user *tail;
+
+	if (!consume_entry(cookie, regs->ARM_pc))
+		return;
+
+	if (!current->mm)
+		return;
+
+	tail = (struct frame_tail __user *)regs->ARM_fp - 1;
+
+	while (tail && !((unsigned long)tail & 0x3))
+		tail = unwind_user_frame(tail, cookie, consume_entry);
+}
 #endif
