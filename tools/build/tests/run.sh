@@ -1,20 +1,20 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-2.0
 
-function test_ex {
+test_ex() {
 	make -C ex V=1 clean > ex.out 2>&1
 	make -C ex V=1 >> ex.out 2>&1
 
 	if [ ! -x ./ex/ex ]; then
 	  echo FAILED
-	  exit -1
+	  exit 255
 	fi
 
 	make -C ex V=1 clean > /dev/null 2>&1
 	rm -f ex.out
 }
 
-function test_ex_suffix {
+test_ex_suffix() {
 	make -C ex V=1 clean > ex.out 2>&1
 
 	# use -rR to disable make's builtin rules
@@ -24,19 +24,19 @@ function test_ex_suffix {
 
 	if [ -x ./ex/ex ]; then
 	  echo FAILED
-	  exit -1
+	  exit 255
 	fi
 
 	if [ ! -f ./ex/ex.o -o ! -f ./ex/ex.i -o ! -f ./ex/ex.s ]; then
 	  echo FAILED
-	  exit -1
+	  exit 255
 	fi
 
 	make -C ex V=1 clean > /dev/null 2>&1
 	rm -f ex.out
 }
 
-function test_ex_include {
+test_ex_include() {
 	make -C ex V=1 clean > ex.out 2>&1
 
 	# build with krava.h include
@@ -45,7 +45,7 @@ function test_ex_include {
 
 	if [ ! -x ./ex/ex ]; then
 	  echo FAILED
-	  exit -1
+	  exit 255
 	fi
 
 	# build without the include
@@ -54,7 +54,7 @@ function test_ex_include {
 
 	if [ ! -x ./ex/ex ]; then
 	  echo FAILED
-	  exit -1
+	  exit 255
 	fi
 
 	make -C ex V=1 clean > /dev/null 2>&1
