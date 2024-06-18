@@ -332,6 +332,7 @@ ebusy:
 	blk_mq_unfreeze_queue(q);
 	return -EBUSY;
 }
+EXPORT_SYMBOL_GPL(rq_qos_add);
 
 void rq_qos_del(struct rq_qos *rqos)
 {
@@ -353,3 +354,4 @@ void rq_qos_del(struct rq_qos *rqos)
 	blk_mq_debugfs_unregister_rqos(rqos);
 	mutex_unlock(&q->debugfs_mutex);
 }
+EXPORT_SYMBOL_GPL(rq_qos_del);
