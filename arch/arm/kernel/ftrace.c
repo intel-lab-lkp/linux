@@ -25,23 +25,6 @@
 #include <asm/stacktrace.h>
 #include <asm/patch.h>
 
-/*
- * The compiler emitted profiling hook consists of
- *
- *   PUSH    {LR}
- *   BL	     __gnu_mcount_nc
- *
- * To turn this combined sequence into a NOP, we need to restore the value of
- * SP before the PUSH. Let's use an ADD rather than a POP into LR, as LR is not
- * modified anyway, and reloading LR from memory is highly likely to be less
- * efficient.
- */
-#ifdef CONFIG_THUMB2_KERNEL
-#define	NOP		0xf10d0d04	/* add.w sp, sp, #4 */
-#else
-#define	NOP		0xe28dd004	/* add   sp, sp, #4 */
-#endif
-
 #ifdef CONFIG_DYNAMIC_FTRACE
 
 static int __ftrace_modify_code(void *data)
@@ -60,7 +43,7 @@ void arch_ftrace_update_code(int command)
 
 static unsigned long ftrace_nop_replace(struct dyn_ftrace *rec)
 {
-	return NOP;
+	return FTRACE_NOP;
 }
 
 void ftrace_caller_from_init(void);
