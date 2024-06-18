@@ -3913,6 +3913,9 @@ static int ksz_hsr_join(struct dsa_switch *ds, int port, struct net_device *hsr,
 	if (ret)
 		return ret;
 
+	if (dev->chip_id == KSZ9477_CHIP_ID && hweight8(dev->hsr_ports) > 1)
+		return -EOPNOTSUPP;
+
 	ksz9477_hsr_join(ds, port, hsr);
 	dev->hsr_dev = hsr;
 	dev->hsr_ports |= BIT(port);
