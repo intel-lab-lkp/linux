@@ -1591,6 +1591,49 @@ static void kdb_md_line(const char *fmtstr, unsigned long addr,
 
 #define KDB_MD_BYTES_PER_LINE	16
 
+/**
+ * kdb_md_parse_arg0() - Parse argv[0] for "md" command
+ *
+ * @cmd:         The name of the command, like "md"
+ * @arg0:        The value of argv[0].
+ * @repeat:      If argv0 modifies repeat count we'll adjust here.
+ * @bytesperword Ifargv0 modifies bytesperword we'll adjust here.
+ *
+ * Return: true if this was a valid cmd; false otherwise.
+ */
+static bool kdb_md_parse_arg0(const char *cmd, const char *arg0,
+			      int *repeat, int *bytesperword)
+{
+	int cmdlen = strlen(cmd);
+
+	/* arg0 must _start_ with the command string or it's a no-go. */
+	if (strncmp(cmd, arg0, cmdlen) != 0)
+		return false;
+
+	/* If it's just the base command, we're done and it's good. */
+	if (arg0[cmdlen] == '\0')
+		return true;
+
+	/*
+	 * The first byte after the base command must be bytes per word, a
+	 * digit. The actual value of bytesperword will be validated later.
+	 */
+	if (!isdigit(arg0[cmdlen]))
+		return false;
+	*bytesperword = (int)(arg0[cmdlen] - '0');
+	cmdlen++;
+
+	/* After the bytes per word must be end of string or a 'c'. */
+	if (arg0[cmdlen] == '\0')
+		return true;
+	if (arg0[cmdlen] != 'c')
+		return false;
+	cmdlen++;
+
+	/* After the "c" is the repeat. */
+	return kstrtouint(arg0 + cmdlen, 10, repeat) == 0;
+}
+
 static int kdb_md(int argc, const char **argv)
 {
 	static unsigned long last_addr;
@@ -1608,19 +1651,13 @@ static int kdb_md(int argc, const char **argv)
 	kdbgetintenv("RADIX", &radix);
 	kdbgetintenv("BYTESPERWORD", &bytesperword);
 
-	if (isdigit(argv[0][2])) {
-		bytesperword = (int)(argv[0][2] - '0');
-		if (!argv[0][3])
-			valid = true;
-		else if (argv[0][3] == 'c' && argv[0][4])
-			valid = kstrtouint(argv[0] + 4, 10, &repeat) == 0;
-	} else if (strcmp(argv[0], "md") == 0)
+	if (kdb_md_parse_arg0("md", argv[0], &repeat, &bytesperword))
 		valid = true;
 	else if (strcmp(argv[0], "mds") == 0)
 		valid = true;
-	else if (strcmp(argv[0], "mdp") == 0) {
+	else if (strcmp(argv[0], "mdp") == 0)
 		phys = valid = true;
-	}
+
 	if (!valid)
 		return KDB_NOTFOUND;
 
