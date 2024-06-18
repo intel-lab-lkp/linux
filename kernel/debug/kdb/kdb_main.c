@@ -2679,7 +2679,6 @@ static kdbtab_t maintab[] = {
 		.func = kdb_md,
 		.usage = "<vaddr>",
 		.help = "Display Memory Contents, also mdWcN, e.g. md8c1",
-		.minlen = 1,
 		.flags = KDB_ENABLE_MEM_READ | KDB_REPEAT_NO_ARGS,
 	},
 	{	.name = "mdr",
