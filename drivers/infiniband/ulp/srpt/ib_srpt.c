@@ -231,11 +231,6 @@ static void srpt_qp_event(struct ib_event *event, void *ptr)
 		else
 			ib_cm_notify(ch->ib_cm.cm_id, event->event);
 		break;
-	case IB_EVENT_QP_LAST_WQE_REACHED:
-		pr_debug("%s-%d, state %s: received Last WQE event.\n",
-			 ch->sess_name, ch->qp->qp_num,
-			 get_ch_state_name(ch->state));
-		break;
 	default:
 		pr_err("received unrecognized IB QP event %d\n", event->event);
 		break;
