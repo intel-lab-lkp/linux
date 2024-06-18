@@ -1594,8 +1594,8 @@ static void kdb_md_line(const char *fmtstr, unsigned long addr,
 static int kdb_md(int argc, const char **argv)
 {
 	static unsigned long last_addr;
-	static int last_radix, last_bytesperword, last_repeat;
-	int radix = 16, mdcount = 8, bytesperword = KDB_WORD_SIZE, repeat = 0;
+	static unsigned int last_radix, last_bytesperword, last_repeat;
+	unsigned int radix = 16, mdcount = 8, bytesperword = KDB_WORD_SIZE, repeat = 0;
 	char fmtchar, fmtstr[64];
 	unsigned long addr;
 	unsigned long word;
@@ -1722,11 +1722,11 @@ static int kdb_md(int argc, const char **argv)
 
 	/* Round address down modulo BYTESPERWORD */
 
-	addr &= ~(bytesperword-1);
+	addr &= ~((unsigned long)bytesperword - 1);
 
 	while (repeat > 0) {
 		unsigned long a;
-		int n, z, num = (symbolic ? 1 : (16 / bytesperword));
+		unsigned int n, z, num = (symbolic ? 1 : (16 / bytesperword));
 
 		if (KDB_FLAG(CMD_INTERRUPT))
 			return 0;
@@ -1745,7 +1745,7 @@ static int kdb_md(int argc, const char **argv)
 		repeat -= n;
 		z = (z + num - 1) / num;
 		if (z > 2) {
-			int s = num * (z-2);
+			unsigned int s = num * (z-2);
 			kdb_printf(kdb_machreg_fmt0 "-" kdb_machreg_fmt0
 				   " zero suppressed\n",
 				addr, addr + bytesperword * s - 1);
