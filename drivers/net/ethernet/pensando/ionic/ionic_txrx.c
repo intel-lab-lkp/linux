@@ -487,14 +487,13 @@ static bool ionic_run_xdp(struct ionic_rx_stats *stats,
 			  struct ionic_buf_info *buf_info,
 			  int len)
 {
+	int remain_len, frag_len, i, err = 0;
+	struct skb_shared_info *sinfo;
 	u32 xdp_action = XDP_ABORTED;
 	struct xdp_buff xdp_buf;
 	struct ionic_queue *txq;
 	struct netdev_queue *nq;
 	struct xdp_frame *xdpf;
-	int remain_len;
-	int frag_len;
-	int err = 0;
 
 	xdp_init_buff(&xdp_buf, IONIC_PAGE_SIZE, rxq->xdp_rxq_info);
 	frag_len = min_t(u16, len, IONIC_XDP_MAX_LINEAR_MTU + VLAN_ETH_HLEN);
@@ -513,7 +512,6 @@ static bool ionic_run_xdp(struct ionic_rx_stats *stats,
 	 */
 	remain_len = len - frag_len;
 	if (remain_len) {
-		struct skb_shared_info *sinfo;
 		struct ionic_buf_info *bi;
 		skb_frag_t *frag;
 
@@ -576,7 +574,6 @@ static bool ionic_run_xdp(struct ionic_rx_stats *stats,
 
 		dma_unmap_page(rxq->dev, buf_info->dma_addr,
 			       IONIC_PAGE_SIZE, DMA_FROM_DEVICE);
-
 		err = ionic_xdp_post_frame(txq, xdpf, XDP_TX,
 					   buf_info->page,
 					   buf_info->page_offset,
@@ -587,12 +584,22 @@ static bool ionic_run_xdp(struct ionic_rx_stats *stats,
 			goto out_xdp_abort;
 		}
 		buf_info->page = NULL;
+		if (xdp_frame_has_frags(xdpf)) {
+			for (i = 0; i < sinfo->nr_frags; i++) {
+				buf_info++;
+				dma_unmap_page(rxq->dev, buf_info->dma_addr,
+					       IONIC_PAGE_SIZE, DMA_FROM_DEVICE);
+				buf_info->page = NULL;
+			}
+		}
+
 		stats->xdp_tx++;
 
 		/* the Tx completion will free the buffers */
 		break;
 
 	case XDP_REDIRECT:
+		xdpf = xdp_convert_buff_to_frame(&xdp_buf);
 		/* unmap the pages before handing them to a different device */
 		dma_unmap_page(rxq->dev, buf_info->dma_addr,
 			       IONIC_PAGE_SIZE, DMA_FROM_DEVICE);
@@ -603,6 +610,15 @@ static bool ionic_run_xdp(struct ionic_rx_stats *stats,
 			goto out_xdp_abort;
 		}
 		buf_info->page = NULL;
+		if (xdp_frame_has_frags(xdpf)) {
+			for (i = 0; i < sinfo->nr_frags; i++) {
+				buf_info++;
+				dma_unmap_page(rxq->dev, buf_info->dma_addr,
+					       IONIC_PAGE_SIZE, DMA_FROM_DEVICE);
+				buf_info->page = NULL;
+			}
+		}
+
 		rxq->xdp_flush = true;
 		stats->xdp_redirect++;
 		break;
