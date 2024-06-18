@@ -376,10 +376,14 @@ int cxl_clear_poison(struct cxl_memdev *cxlmd, u64 dpa)
 		goto out;
 
 	cxlr = cxl_dpa_to_region(cxlmd, dpa);
-	if (cxlr)
+	if (cxlr) {
+		u64 hpa = cxl_trace_hpa(cxlr, cxlmd, dpa);
+
+		cxl_mce_clear(hpa);
 		dev_warn_once(mds->cxlds.dev,
 			      "poison clear dpa:%#llx region: %s\n", dpa,
 			      dev_name(&cxlr->dev));
+	}
 
 	record = (struct cxl_poison_record) {
 		.address = cpu_to_le64(dpa),

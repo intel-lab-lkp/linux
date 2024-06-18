@@ -501,6 +501,7 @@ struct cxl_memdev_state {
 	struct cxl_fw_state fw;
 
 	struct rcuwait mbox_wait;
+	struct notifier_block mce_notifier;
 	int (*mbox_send)(struct cxl_memdev_state *mds,
 			 struct cxl_mbox_cmd *cmd);
 };
@@ -836,6 +837,8 @@ int cxl_mem_get_poison(struct cxl_memdev *cxlmd, u64 offset, u64 len,
 int cxl_trigger_poison_list(struct cxl_memdev *cxlmd);
 int cxl_inject_poison(struct cxl_memdev *cxlmd, u64 dpa);
 int cxl_clear_poison(struct cxl_memdev *cxlmd, u64 dpa);
+bool cxl_mce_recorded(u64 pfn);
+void cxl_mce_clear(u64 pfn);
 
 #ifdef CONFIG_CXL_SUSPEND
 void cxl_mem_active_inc(void);
