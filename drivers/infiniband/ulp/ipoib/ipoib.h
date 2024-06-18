@@ -198,37 +198,10 @@ struct ipoib_cm_data {
 	__be32 mtu;
 };
 
-/*
- * Quoting 10.3.1 Queue Pair and EE Context States:
- *
- * Note, for QPs that are associated with an SRQ, the Consumer should take the
- * QP through the Error State before invoking a Destroy QP or a Modify QP to the
- * Reset State.  The Consumer may invoke the Destroy QP without first performing
- * a Modify QP to the Error State and waiting for the Affiliated Asynchronous
- * Last WQE Reached Event. However, if the Consumer does not wait for the
- * Affiliated Asynchronous Last WQE Reached Event, then WQE and Data Segment
- * leakage may occur. Therefore, it is good programming practice to tear down a
- * QP that is associated with an SRQ by using the following process:
- *
- * - Put the QP in the Error State
- * - Wait for the Affiliated Asynchronous Last WQE Reached Event;
- * - either:
- *       drain the CQ by invoking the Poll CQ verb and either wait for CQ
- *       to be empty or the number of Poll CQ operations has exceeded
- *       CQ capacity size;
- * - or
- *       post another WR that completes on the same CQ and wait for this
- *       WR to return as a WC;
- * - and then invoke a Destroy QP or Reset QP.
- *
- * We use the second option and wait for a completion on the
- * same CQ before destroying QPs attached to our SRQ.
- */
-
 enum ipoib_cm_state {
 	IPOIB_CM_RX_LIVE,
 	IPOIB_CM_RX_ERROR, /* Ignored by stale task */
-	IPOIB_CM_RX_FLUSH  /* Last WQE Reached event observed */
+	IPOIB_CM_RX_FLUSH
 };
 
 struct ipoib_cm_rx {
@@ -267,9 +240,7 @@ struct ipoib_cm_dev_priv {
 	struct ib_cm_id	       *id;
 	struct list_head	passive_ids;   /* state: LIVE */
 	struct list_head	rx_error_list; /* state: ERROR */
-	struct list_head	rx_flush_list; /* state: FLUSH, drain not started */
-	struct list_head	rx_drain_list; /* state: FLUSH, drain started */
-	struct list_head	rx_reap_list;  /* state: FLUSH, drain done */
+	struct list_head	rx_reap_list;  /* state: FLUSH */
 	struct work_struct      start_task;
 	struct work_struct      reap_task;
 	struct work_struct      skb_task;

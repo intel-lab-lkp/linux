@@ -71,12 +71,6 @@ static struct ib_qp_attr ipoib_cm_err_attr = {
 	.qp_state = IB_QPS_ERR
 };
 
-#define IPOIB_CM_RX_DRAIN_WRID 0xffffffff
-
-static struct ib_send_wr ipoib_cm_rx_drain_wr = {
-	.opcode = IB_WR_SEND,
-};
-
 static int ipoib_cm_tx_handler(struct ib_cm_id *cm_id,
 			       const struct ib_cm_event *event);
 
@@ -208,50 +202,11 @@ static void ipoib_cm_free_rx_ring(struct net_device *dev,
 	vfree(rx_ring);
 }
 
-static void ipoib_cm_start_rx_drain(struct ipoib_dev_priv *priv)
-{
-	struct ipoib_cm_rx *p;
-
-	/* We only reserved 1 extra slot in CQ for drain WRs, so
-	 * make sure we have at most 1 outstanding WR. */
-	if (list_empty(&priv->cm.rx_flush_list) ||
-	    !list_empty(&priv->cm.rx_drain_list))
-		return;
-
-	/*
-	 * QPs on flush list are error state.  This way, a "flush
-	 * error" WC will be immediately generated for each WR we post.
-	 */
-	p = list_entry(priv->cm.rx_flush_list.next, typeof(*p), list);
-	ipoib_cm_rx_drain_wr.wr_id = IPOIB_CM_RX_DRAIN_WRID;
-	if (ib_post_send(p->qp, &ipoib_cm_rx_drain_wr, NULL))
-		ipoib_warn(priv, "failed to post drain wr\n");
-
-	list_splice_init(&priv->cm.rx_flush_list, &priv->cm.rx_drain_list);
-}
-
-static void ipoib_cm_rx_event_handler(struct ib_event *event, void *ctx)
-{
-	struct ipoib_cm_rx *p = ctx;
-	struct ipoib_dev_priv *priv = ipoib_priv(p->dev);
-	unsigned long flags;
-
-	if (event->event != IB_EVENT_QP_LAST_WQE_REACHED)
-		return;
-
-	spin_lock_irqsave(&priv->lock, flags);
-	list_move(&p->list, &priv->cm.rx_flush_list);
-	p->state = IPOIB_CM_RX_FLUSH;
-	ipoib_cm_start_rx_drain(priv);
-	spin_unlock_irqrestore(&priv->lock, flags);
-}
-
 static struct ib_qp *ipoib_cm_create_rx_qp(struct net_device *dev,
 					   struct ipoib_cm_rx *p)
 {
 	struct ipoib_dev_priv *priv = ipoib_priv(dev);
 	struct ib_qp_init_attr attr = {
-		.event_handler = ipoib_cm_rx_event_handler,
 		.send_cq = priv->recv_cq, /* For drain WR */
 		.recv_cq = priv->recv_cq,
 		.srq = priv->cm.srq,
@@ -479,8 +434,7 @@ static int ipoib_cm_req_handler(struct ib_cm_id *cm_id,
 	spin_lock_irq(&priv->lock);
 	queue_delayed_work(priv->wq,
 			   &priv->cm.stale_task, IPOIB_CM_RX_DELAY);
-	/* Add this entry to passive ids list head, but do not re-add it
-	 * if IB_EVENT_QP_LAST_WQE_REACHED has moved it to flush list. */
+	/* Add this entry to passive ids list head. */
 	p->jiffies = jiffies;
 	if (p->state == IPOIB_CM_RX_LIVE)
 		list_move(&p->list, &priv->cm.passive_ids);
@@ -574,15 +528,8 @@ void ipoib_cm_handle_rx_wc(struct net_device *dev, struct ib_wc *wc)
 		       wr_id, wc->status);
 
 	if (unlikely(wr_id >= ipoib_recvq_size)) {
-		if (wr_id == (IPOIB_CM_RX_DRAIN_WRID & ~(IPOIB_OP_CM | IPOIB_OP_RECV))) {
-			spin_lock_irqsave(&priv->lock, flags);
-			list_splice_init(&priv->cm.rx_drain_list, &priv->cm.rx_reap_list);
-			ipoib_cm_start_rx_drain(priv);
-			queue_work(priv->wq, &priv->cm.rx_reap_task);
-			spin_unlock_irqrestore(&priv->lock, flags);
-		} else
-			ipoib_warn(priv, "cm recv completion event with wrid %d (> %d)\n",
-				   wr_id, ipoib_recvq_size);
+		ipoib_warn(priv, "cm recv completion event with wrid %d (> %d)\n",
+			   wr_id, ipoib_recvq_size);
 		return;
 	}
 
@@ -603,6 +550,7 @@ void ipoib_cm_handle_rx_wc(struct net_device *dev, struct ib_wc *wc)
 		else {
 			if (!--p->recv_count) {
 				spin_lock_irqsave(&priv->lock, flags);
+				p->state = IPOIB_CM_RX_FLUSH;
 				list_move(&p->list, &priv->cm.rx_reap_list);
 				spin_unlock_irqrestore(&priv->lock, flags);
 				queue_work(priv->wq, &priv->cm.rx_reap_task);
@@ -912,6 +860,7 @@ static void ipoib_cm_free_rx_reap_list(struct net_device *dev)
 	spin_unlock_irq(&priv->lock);
 
 	list_for_each_entry_safe(rx, n, &list, list) {
+		ib_drain_qp(rx->qp);
 		ib_destroy_cm_id(rx->id);
 		ib_destroy_qp(rx->qp);
 		if (!ipoib_cm_has_srq(dev)) {
@@ -952,20 +901,14 @@ void ipoib_cm_dev_stop(struct net_device *dev)
 	/* Wait for all RX to be drained */
 	begin = jiffies;
 
-	while (!list_empty(&priv->cm.rx_error_list) ||
-	       !list_empty(&priv->cm.rx_flush_list) ||
-	       !list_empty(&priv->cm.rx_drain_list)) {
+	while (!list_empty(&priv->cm.rx_error_list)) {
 		if (time_after(jiffies, begin + 5 * HZ)) {
 			ipoib_warn(priv, "RX drain timing out\n");
 
 			/*
 			 * assume the HW is wedged and just free up everything.
 			 */
-			list_splice_init(&priv->cm.rx_flush_list,
-					 &priv->cm.rx_reap_list);
 			list_splice_init(&priv->cm.rx_error_list,
-					 &priv->cm.rx_reap_list);
-			list_splice_init(&priv->cm.rx_drain_list,
 					 &priv->cm.rx_reap_list);
 			break;
 		}
@@ -1589,8 +1532,6 @@ int ipoib_cm_dev_init(struct net_device *dev)
 	INIT_LIST_HEAD(&priv->cm.reap_list);
 	INIT_LIST_HEAD(&priv->cm.start_list);
 	INIT_LIST_HEAD(&priv->cm.rx_error_list);
-	INIT_LIST_HEAD(&priv->cm.rx_flush_list);
-	INIT_LIST_HEAD(&priv->cm.rx_drain_list);
 	INIT_LIST_HEAD(&priv->cm.rx_reap_list);
 	INIT_WORK(&priv->cm.start_task, ipoib_cm_tx_start);
 	INIT_WORK(&priv->cm.reap_task, ipoib_cm_tx_reap);
