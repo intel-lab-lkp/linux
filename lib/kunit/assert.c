@@ -38,6 +38,7 @@ void kunit_assert_print_msg(const struct va_format *message,
 	if (message->fmt)
 		string_stream_add(stream, "\n%pV", message);
 }
+EXPORT_SYMBOL_IF_KUNIT(kunit_assert_print_msg);
 
 void kunit_fail_assert_format(const struct kunit_assert *assert,
 			      const struct va_format *message,
@@ -91,7 +92,8 @@ void kunit_ptr_not_err_assert_format(const struct kunit_assert *assert,
 EXPORT_SYMBOL_GPL(kunit_ptr_not_err_assert_format);
 
 /* Checks if `text` is a literal representing `value`, e.g. "5" and 5 */
-VISIBLE_IF_KUNIT bool is_literal(const char *text, long long value)
+VISIBLE_IF_KUNIT
+bool kunit_assert_is_literal(const char *text, long long value)
 {
 	char *buffer;
 	int len;
@@ -112,6 +114,7 @@ VISIBLE_IF_KUNIT bool is_literal(const char *text, long long value)
 
 	return ret;
 }
+EXPORT_SYMBOL_IF_KUNIT(kunit_assert_is_literal);
 
 void kunit_binary_assert_format(const struct kunit_assert *assert,
 				const struct va_format *message,
@@ -127,12 +130,12 @@ void kunit_binary_assert_format(const struct kunit_assert *assert,
 			  binary_assert->text->left_text,
 			  binary_assert->text->operation,
 			  binary_assert->text->right_text);
-	if (!is_literal(binary_assert->text->left_text, binary_assert->left_value))
+	if (!kunit_assert_is_literal(binary_assert->text->left_text, binary_assert->left_value))
 		string_stream_add(stream, KUNIT_SUBSUBTEST_INDENT "%s == %lld (0x%llx)\n",
 				  binary_assert->text->left_text,
 				  binary_assert->left_value,
 				  binary_assert->left_value);
-	if (!is_literal(binary_assert->text->right_text, binary_assert->right_value))
+	if (!kunit_assert_is_literal(binary_assert->text->right_text, binary_assert->right_value))
 		string_stream_add(stream, KUNIT_SUBSUBTEST_INDENT "%s == %lld (0x%llx)",
 				  binary_assert->text->right_text,
 				  binary_assert->right_value,
@@ -168,7 +171,8 @@ EXPORT_SYMBOL_GPL(kunit_binary_ptr_assert_format);
 /* Checks if KUNIT_EXPECT_STREQ() args were string literals.
  * Note: `text` will have ""s where as `value` will not.
  */
-VISIBLE_IF_KUNIT bool is_str_literal(const char *text, const char *value)
+VISIBLE_IF_KUNIT
+bool kunit_assert_is_str_literal(const char *text, const char *value)
 {
 	int len;
 
@@ -180,6 +184,7 @@ VISIBLE_IF_KUNIT bool is_str_literal(const char *text, const char *value)
 
 	return strncmp(text + 1, value, len - 2) == 0;
 }
+EXPORT_SYMBOL_IF_KUNIT(kunit_assert_is_str_literal);
 
 void kunit_binary_str_assert_format(const struct kunit_assert *assert,
 				    const struct va_format *message,
@@ -195,11 +200,12 @@ void kunit_binary_str_assert_format(const struct kunit_assert *assert,
 			  binary_assert->text->left_text,
 			  binary_assert->text->operation,
 			  binary_assert->text->right_text);
-	if (!is_str_literal(binary_assert->text->left_text, binary_assert->left_value))
+	if (!kunit_assert_is_str_literal(binary_assert->text->left_text, binary_assert->left_value))
 		string_stream_add(stream, KUNIT_SUBSUBTEST_INDENT "%s == \"%s\"\n",
 				  binary_assert->text->left_text,
 				  binary_assert->left_value);
-	if (!is_str_literal(binary_assert->text->right_text, binary_assert->right_value))
+	if (!kunit_assert_is_str_literal(binary_assert->text->right_text,
+					 binary_assert->right_value))
 		string_stream_add(stream, KUNIT_SUBSUBTEST_INDENT "%s == \"%s\"",
 				  binary_assert->text->right_text,
 				  binary_assert->right_value);
@@ -232,6 +238,7 @@ void kunit_assert_hexdump(struct string_stream *stream,
 			string_stream_add(stream, " %02x ", buf1[i]);
 	}
 }
+EXPORT_SYMBOL_IF_KUNIT(kunit_assert_hexdump);
 
 void kunit_mem_assert_format(const struct kunit_assert *assert,
 			     const struct va_format *message,

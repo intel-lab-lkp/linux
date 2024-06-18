@@ -11,28 +11,28 @@
 #define ASSERT_TEST_EXPECT_CONTAIN(test, str, substr) KUNIT_EXPECT_TRUE(test, strstr(str, substr))
 #define ASSERT_TEST_EXPECT_NCONTAIN(test, str, substr) KUNIT_EXPECT_FALSE(test, strstr(str, substr))
 
-static void kunit_test_is_literal(struct kunit *test)
+static void kunit_test_assert_is_literal(struct kunit *test)
 {
-	KUNIT_EXPECT_TRUE(test, is_literal("5", 5));
-	KUNIT_EXPECT_TRUE(test, is_literal("0", 0));
-	KUNIT_EXPECT_TRUE(test, is_literal("1234567890", 1234567890));
-	KUNIT_EXPECT_TRUE(test, is_literal("-1234567890", -1234567890));
-	KUNIT_EXPECT_FALSE(test, is_literal("05", 5));
-	KUNIT_EXPECT_FALSE(test, is_literal("", 0));
-	KUNIT_EXPECT_FALSE(test, is_literal("-0", 0));
-	KUNIT_EXPECT_FALSE(test, is_literal("12#45", 1245));
+	KUNIT_EXPECT_TRUE(test, kunit_assert_is_literal("5", 5));
+	KUNIT_EXPECT_TRUE(test, kunit_assert_is_literal("0", 0));
+	KUNIT_EXPECT_TRUE(test, kunit_assert_is_literal("1234567890", 1234567890));
+	KUNIT_EXPECT_TRUE(test, kunit_assert_is_literal("-1234567890", -1234567890));
+	KUNIT_EXPECT_FALSE(test, kunit_assert_is_literal("05", 5));
+	KUNIT_EXPECT_FALSE(test, kunit_assert_is_literal("", 0));
+	KUNIT_EXPECT_FALSE(test, kunit_assert_is_literal("-0", 0));
+	KUNIT_EXPECT_FALSE(test, kunit_assert_is_literal("12#45", 1245));
 }
 
-static void kunit_test_is_str_literal(struct kunit *test)
+static void kunit_test_assert_is_str_literal(struct kunit *test)
 {
-	KUNIT_EXPECT_TRUE(test, is_str_literal("\"Hello, World!\"", "Hello, World!"));
-	KUNIT_EXPECT_TRUE(test, is_str_literal("\"\"", ""));
-	KUNIT_EXPECT_TRUE(test, is_str_literal("\"\"\"", "\""));
-	KUNIT_EXPECT_FALSE(test, is_str_literal("", ""));
-	KUNIT_EXPECT_FALSE(test, is_str_literal("\"", "\""));
-	KUNIT_EXPECT_FALSE(test, is_str_literal("\"Abacaba", "Abacaba"));
-	KUNIT_EXPECT_FALSE(test, is_str_literal("Abacaba\"", "Abacaba"));
-	KUNIT_EXPECT_FALSE(test, is_str_literal("\"Abacaba\"", "\"Abacaba\""));
+	KUNIT_EXPECT_TRUE(test, kunit_assert_is_str_literal("\"Hello, World!\"", "Hello, World!"));
+	KUNIT_EXPECT_TRUE(test, kunit_assert_is_str_literal("\"\"", ""));
+	KUNIT_EXPECT_TRUE(test, kunit_assert_is_str_literal("\"\"\"", "\""));
+	KUNIT_EXPECT_FALSE(test, kunit_assert_is_str_literal("", ""));
+	KUNIT_EXPECT_FALSE(test, kunit_assert_is_str_literal("\"", "\""));
+	KUNIT_EXPECT_FALSE(test, kunit_assert_is_str_literal("\"Abacaba", "Abacaba"));
+	KUNIT_EXPECT_FALSE(test, kunit_assert_is_str_literal("Abacaba\"", "Abacaba"));
+	KUNIT_EXPECT_FALSE(test, kunit_assert_is_str_literal("\"Abacaba\"", "\"Abacaba\""));
 }
 
 KUNIT_DEFINE_ACTION_WRAPPER(kfree_wrapper, kfree, const void *);
@@ -366,8 +366,8 @@ static void kunit_test_mem_assert_format(struct kunit *test)
 }
 
 static struct kunit_case assert_test_cases[] = {
-	KUNIT_CASE(kunit_test_is_literal),
-	KUNIT_CASE(kunit_test_is_str_literal),
+	KUNIT_CASE(kunit_test_assert_is_literal),
+	KUNIT_CASE(kunit_test_assert_is_str_literal),
 	KUNIT_CASE(kunit_test_assert_prologue),
 	KUNIT_CASE(kunit_test_assert_print_msg),
 	KUNIT_CASE(kunit_test_unary_assert_format),
