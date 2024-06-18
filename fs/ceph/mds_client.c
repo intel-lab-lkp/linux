@@ -5695,9 +5695,9 @@ static int ceph_mds_auth_match(struct ceph_mds_client *mdsc,
 				if (!_tpath)
 					return -ENOMEM;
 				/* remove the leading '/' */
-				snprintf(_tpath, n, "%s/%s", spath + 1, tpath);
+				tlen = snprintf(_tpath, n, "%s/%s",
+						spath + 1, tpath);
 				free_tpath = true;
-				tlen = strlen(_tpath);
 			}
 
 			/*
