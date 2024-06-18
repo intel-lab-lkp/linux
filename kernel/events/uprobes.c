@@ -1476,8 +1476,9 @@ static int xol_add_vma(struct mm_struct *mm, struct xol_area *area)
 
 void * __weak arch_uprobe_trampoline(unsigned long *psize)
 {
-	static uprobe_opcode_t insn = UPROBE_SWBP_INSN;
+	static uprobe_opcode_t insn;
 
+	insn = insn ?: UPROBE_SWBP_INSN;
 	*psize = UPROBE_SWBP_INSN_SIZE;
 	return &insn;
 }
