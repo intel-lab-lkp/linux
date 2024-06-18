@@ -2850,6 +2850,7 @@ static void ioc_rqos_queue_depth_changed(struct rq_qos *rqos)
 
 static void __ioc_exit(struct ioc *ioc)
 {
+	module_put(THIS_MODULE);
 	blkcg_deactivate_policy(ioc->rqos.disk, &blkcg_policy_iocost);
 
 	spin_lock_irq(&ioc->lock);
@@ -2882,13 +2883,19 @@ static int blk_iocost_init(struct gendisk *disk)
 	struct ioc *ioc;
 	int i, cpu, ret;
 
+	if (!try_module_get(THIS_MODULE))
+		return -ENODEV;
+
 	ioc = kzalloc(sizeof(*ioc), GFP_KERNEL);
-	if (!ioc)
+	if (!ioc) {
+		module_put(THIS_MODULE);
 		return -ENOMEM;
+	}
 
 	ioc->pcpu_stat = alloc_percpu(struct ioc_pcpu_stat);
 	if (!ioc->pcpu_stat) {
 		kfree(ioc);
+		module_put(THIS_MODULE);
 		return -ENOMEM;
 	}
 
@@ -2938,6 +2945,7 @@ err_del_qos:
 	rq_qos_del(&ioc->rqos);
 err_free_ioc:
 	free_percpu(ioc->pcpu_stat);
+	module_put(THIS_MODULE);
 	kfree(ioc);
 	return ret;
 }
@@ -3616,3 +3624,7 @@ static void __exit ioc_exit(void)
 
 module_init(ioc_init);
 module_exit(ioc_exit);
+
+MODULE_AUTHOR("Tejun Heo");
+MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("Cost model based cgroup IO controller");
