@@ -575,7 +575,8 @@ int cmd_test(int argc, const char **argv)
 
 	symbol_conf.priv_size = sizeof(int);
 	symbol_conf.try_vmlinux_path = true;
-
+	symbol_conf.try_vdso_path = (symbol_conf.vdso_name[0] == NULL &&
+				     symbol_conf.vdso_name[1] == NULL);
 	if (symbol__init(NULL) < 0)
 		return -1;
 
