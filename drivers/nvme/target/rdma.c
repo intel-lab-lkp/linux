@@ -1520,10 +1520,6 @@ static void nvmet_rdma_qp_event(struct ib_event *event, void *priv)
 	case IB_EVENT_COMM_EST:
 		rdma_notify(queue->cm_id, event->event);
 		break;
-	case IB_EVENT_QP_LAST_WQE_REACHED:
-		pr_debug("received last WQE reached event for queue=0x%p\n",
-			 queue);
-		break;
 	default:
 		pr_err("received IB QP event: %s (%d)\n",
 		       ib_event_msg(event->event), event->event);
