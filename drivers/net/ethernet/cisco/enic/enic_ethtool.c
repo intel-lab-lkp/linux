@@ -608,6 +608,23 @@ static int enic_get_ts_info(struct net_device *netdev,
 	return 0;
 }
 
+static void enic_get_channels(struct net_device *netdev,
+			      struct ethtool_channels *channels)
+{
+	struct enic *enic = netdev_priv(netdev);
+
+	channels->max_rx = ENIC_RQ_MAX;
+	channels->max_tx = ENIC_WQ_MAX;
+	channels->rx_count = enic->rq_count;
+	channels->tx_count = enic->wq_count;
+
+	/* enic doesn't use other channels or combined channels */
+	channels->combined_count = 0;
+	channels->max_combined = 0;
+	channels->max_other = 0;
+	channels->other_count = 0;
+}
+
 static const struct ethtool_ops enic_ethtool_ops = {
 	.supported_coalesce_params = ETHTOOL_COALESCE_USECS |
 				     ETHTOOL_COALESCE_USE_ADAPTIVE_RX |
@@ -632,6 +649,7 @@ static const struct ethtool_ops enic_ethtool_ops = {
 	.set_rxfh = enic_set_rxfh,
 	.get_link_ksettings = enic_get_ksettings,
 	.get_ts_info = enic_get_ts_info,
+	.get_channels = enic_get_channels,
 };
 
 void enic_set_ethtool_ops(struct net_device *netdev)
