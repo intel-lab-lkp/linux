@@ -101,6 +101,14 @@ enum intel_display_platform {
 
 #undef ENUM
 
+#define MEMBER(name) u32 name:1;
+
+struct intel_display_is {
+	INTEL_DISPLAY_PLATFORMS(MEMBER);
+};
+
+#undef MEMBER
+
 #define DEV_INFO_DISPLAY_FOR_EACH_FLAG(func) \
 	/* Keep in alphabetical order */ \
 	func(cursor_needs_physical); \

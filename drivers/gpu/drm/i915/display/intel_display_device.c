@@ -21,6 +21,7 @@ __diag_push();
 __diag_ignore_all("-Woverride-init", "Allow field initialization overrides for display info");
 
 struct subplatform_desc {
+	struct intel_display_is is;
 	enum intel_display_platform subplatform;
 	const char *name;
 	const u16 *pciidlist;
@@ -28,9 +29,11 @@ struct subplatform_desc {
 
 #define SUBPLATFORM(_platform, _subplatform)				\
 	.subplatform = (INTEL_DISPLAY_##_platform##_##_subplatform),	\
-	.name = #_subplatform
+	.name = #_subplatform,						\
+	.is._platform##_##_subplatform = 1
 
 struct platform_desc {
+	struct intel_display_is is;
 	enum intel_display_platform platform;
 	const char *name;
 	const struct subplatform_desc *subplatforms;
@@ -39,7 +42,8 @@ struct platform_desc {
 
 #define PLATFORM(_platform)			 \
 	.platform = (INTEL_DISPLAY_##_platform), \
-	.name = #_platform
+	.name = #_platform,			 \
+	.is._platform = 1
 
 #define ID(id) (id)
 
