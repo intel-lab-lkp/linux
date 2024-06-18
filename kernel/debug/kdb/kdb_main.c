@@ -1480,23 +1480,42 @@ int kdb_main_loop(kdb_reason_t reason, kdb_reason_t reason2, int error,
 /*
  * kdb_mdr - This function implements the guts of the 'mdr', memory
  * read command.
- *	mdr  <addr arg>,<byte count>
- * Inputs:
- *	addr	Start address
- *	count	Number of bytes
- * Returns:
- *	Always 0.  Any errors are detected and printed by kdb_getarea.
+ *	mdr  <addr arg> <byte count>
  */
-static int kdb_mdr(unsigned long addr, unsigned int count)
+static int kdb_mdr(int argc, const char **argv)
 {
+	static unsigned long addr;
+	static unsigned long count;
 	unsigned char c;
-	while (count--) {
+	unsigned long i;
+	int diag;
+
+	/*
+	 * Parse args. The only valid options are argc == 2 (both address and
+	 * byte_count provided) and argc == 0 ("repeat" AKA continue previous
+	 * display).
+	 */
+	if (argc == 2) {
+		int nextarg = 1;
+
+		diag = kdbgetaddrarg(argc, argv, &nextarg, &addr);
+		if (diag)
+			return diag;
+		diag = kdbgetularg(argv[nextarg], &count);
+		if (diag)
+			return diag;
+	} else if (argc != 0) {
+		return KDB_ARGCOUNT;
+	}
+
+	for (i = 0; i < count; i++) {
 		if (kdb_getarea(c, addr))
 			return 0;
 		kdb_printf("%02x", c);
 		addr++;
 	}
 	kdb_printf("\n");
+
 	return 0;
 }
 
@@ -1582,7 +1601,6 @@ static int kdb_md(int argc, const char **argv)
 	bool symbolic = false;
 	bool valid = false;
 	bool phys = false;
-	bool raw = false;
 
 	kdbgetintenv("MDCOUNT", &mdcount);
 	kdbgetintenv("RADIX", &radix);
@@ -1591,12 +1609,7 @@ static int kdb_md(int argc, const char **argv)
 	/* Assume 'md <addr>' and start with environment values */
 	repeat = mdcount * 16 / bytesperword;
 
-	if (strcmp(argv[0], "mdr") == 0) {
-		if (argc == 2 || (argc == 0 && last_addr != 0))
-			valid = raw = true;
-		else
-			return KDB_ARGCOUNT;
-	} else if (isdigit(argv[0][2])) {
+	if (isdigit(argv[0][2])) {
 		bytesperword = (int)(argv[0][2] - '0');
 		if (bytesperword == 0) {
 			bytesperword = last_bytesperword;
@@ -1631,10 +1644,7 @@ static int kdb_md(int argc, const char **argv)
 		radix = last_radix;
 		bytesperword = last_bytesperword;
 		repeat = last_repeat;
-		if (raw)
-			mdcount = repeat;
-		else
-			mdcount = ((repeat * bytesperword) + 15) / 16;
+		mdcount = ((repeat * bytesperword) + 15) / 16;
 	}
 
 	if (argc) {
@@ -1650,10 +1660,7 @@ static int kdb_md(int argc, const char **argv)
 			diag = kdbgetularg(argv[nextarg], &val);
 			if (!diag) {
 				mdcount = (int) val;
-				if (raw)
-					repeat = mdcount;
-				else
-					repeat = mdcount * 16 / bytesperword;
+				repeat = mdcount * 16 / bytesperword;
 			}
 		}
 		if (argc >= nextarg+1) {
@@ -1661,16 +1668,6 @@ static int kdb_md(int argc, const char **argv)
 			if (!diag)
 				radix = (int) val;
 		}
-	}
-
-	if (strcmp(argv[0], "mdr") == 0) {
-		int ret;
-		last_addr = addr;
-		ret = kdb_mdr(addr, mdcount);
-		last_addr += mdcount;
-		last_repeat = mdcount;
-		last_bytesperword = bytesperword; // to make REPEAT happy
-		return ret;
 	}
 
 	switch (radix) {
@@ -2680,7 +2677,7 @@ static kdbtab_t maintab[] = {
 		.flags = KDB_ENABLE_MEM_READ | KDB_REPEAT_NO_ARGS,
 	},
 	{	.name = "mdr",
-		.func = kdb_md,
+		.func = kdb_mdr,
 		.usage = "<vaddr> <bytes>",
 		.help = "Display RAM as a stream of raw bytes",
 		.flags = KDB_ENABLE_MEM_READ | KDB_REPEAT_NO_ARGS,
