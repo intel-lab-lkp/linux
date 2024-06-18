@@ -3,6 +3,7 @@
 #define __PERF_SYMBOL_CONF 1
 
 #include <stdbool.h>
+#include <subcmd/parse-options.h>
 
 struct strlist;
 struct intlist;
@@ -56,6 +57,7 @@ struct symbol_conf {
 	const char	*default_guest_vmlinux_name,
 			*default_guest_kallsyms,
 			*default_guest_modules;
+	const char	*vdso_name[2];
 	const char	*guestmount;
 	const char	*dso_list_str,
 			*comm_list_str,
@@ -85,5 +87,8 @@ struct symbol_conf {
 };
 
 extern struct symbol_conf symbol_conf;
+
+int parse_vdso_pathnames(const struct option *opt __maybe_unused,
+			 const char *arg, int unset __maybe_unused);
 
 #endif // __PERF_SYMBOL_CONF

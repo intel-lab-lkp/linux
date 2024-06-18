@@ -62,6 +62,9 @@ OPTIONS
 --kallsyms=<file>::
 	kallsyms pathname
 
+--vdso=<vdso1[,vdso2]>::
+	Specify vdso pathnames. You can specify up to two for multiarch-support.
+
 --itrace::
 	Decode Instruction Tracing data, replacing it with synthesized events.
 	Options are:
