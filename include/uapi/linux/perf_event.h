@@ -467,6 +467,7 @@ struct perf_event_attr {
 		__u32		wakeup_watermark; /* bytes before wakeup   */
 	};
 
+	__u8			bp_priv;
 	__u32			bp_type;
 	union {
 		__u64		bp_addr;

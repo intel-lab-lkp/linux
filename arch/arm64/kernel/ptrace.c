@@ -309,6 +309,7 @@ static struct perf_event *ptrace_hbp_create(unsigned int note_type,
 	attr.bp_addr	= 0;
 	attr.bp_len	= HW_BREAKPOINT_LEN_4;
 	attr.bp_type	= type;
+	attr.bp_priv	= AARCH64_BREAKPOINT_EL0;
 	attr.disabled	= 1;
 
 	bp = register_user_hw_breakpoint(&attr, ptrace_hbptriggered, NULL, tsk);
@@ -352,6 +353,7 @@ static int ptrace_hbp_fill_attr_ctrl(unsigned int note_type,
 	attr->bp_len	= len;
 	attr->bp_type	= type;
 	attr->bp_addr	+= offset;
+	attr->bp_priv	= ctrl.privilege;
 
 	return 0;
 }
