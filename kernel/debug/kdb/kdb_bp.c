@@ -279,8 +279,6 @@ static int kdb_bp(int argc, const char **argv)
 	int i, bpno;
 	kdb_bp_t *bp, *bp_check;
 	int diag;
-	char *symname = NULL;
-	long offset = 0ul;
 	int nextarg;
 	kdb_bp_t template = {0};
 
@@ -299,8 +297,7 @@ static int kdb_bp(int argc, const char **argv)
 	}
 
 	nextarg = 1;
-	diag = kdbgetaddrarg(argc, argv, &nextarg, &template.bp_addr,
-			     &offset, &symname);
+	diag = kdbgetaddrarg(argc, argv, &nextarg, &template.bp_addr);
 	if (diag)
 		return diag;
 	if (!template.bp_addr)

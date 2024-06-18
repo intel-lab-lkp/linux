@@ -105,8 +105,8 @@ extern int kdb_putword(unsigned long, unsigned long, size_t);
 extern int kdbgetularg(const char *, unsigned long *);
 extern int kdbgetu64arg(const char *, u64 *);
 extern char *kdbgetenv(const char *);
-extern int kdbgetaddrarg(int, const char **, int*, unsigned long *,
-			 long *, char **);
+extern int kdbgetaddrarg(int argc, const char **argv, int *nextarg,
+			 unsigned long *value);
 extern int kdbgetsymval(const char *, kdb_symtab_t *);
 extern int kdbnearsym(unsigned long, kdb_symtab_t *);
 extern char *kdb_strdup(const char *str, gfp_t type);

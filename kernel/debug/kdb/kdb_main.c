@@ -532,16 +532,12 @@ static int kdb_check_regs(void)
  *	regs	- Register state at time of KDB entry
  * Outputs:
  *	*value	- receives the value of the address-expression
- *	*offset - receives the offset specified, if any
- *	*name   - receives the symbol name, if any
  *	*nextarg - index to next unparsed argument in argv[]
  * Returns:
  *	zero is returned on success, a kdb diagnostic code is
  *      returned on error.
  */
-int kdbgetaddrarg(int argc, const char **argv, int *nextarg,
-		  unsigned long *value,  long *offset,
-		  char **name)
+int kdbgetaddrarg(int argc, const char **argv, int *nextarg, unsigned long *value)
 {
 	unsigned long addr;
 	unsigned long off = 0;
@@ -615,12 +611,8 @@ int kdbgetaddrarg(int argc, const char **argv, int *nextarg,
 
 	(*nextarg)++;
 
-	if (name)
-		*name = symname;
 	if (value)
 		*value = addr;
-	if (offset && name && *name)
-		*offset = addr - symtab.sym_start;
 
 	if ((*nextarg > argc)
 	 && (symbol == '\0'))
@@ -663,9 +655,6 @@ int kdbgetaddrarg(int argc, const char **argv, int *nextarg,
 
 	if (!positive)
 		off = -off;
-
-	if (offset)
-		*offset += off;
 
 	if (value)
 		*value += off;
@@ -1116,14 +1105,10 @@ int kdb_parse(const char *cmdstr)
 	 */
 	{
 		unsigned long value;
-		char *name = NULL;
-		long offset;
 		int nextarg = 0;
 
-		if (kdbgetaddrarg(0, (const char **)argv, &nextarg,
-				  &value, &offset, &name)) {
+		if (kdbgetaddrarg(0, (const char **)argv, &nextarg, &value))
 			return KDB_NOTFOUND;
-		}
 
 		kdb_printf("%s = ", argv[0]);
 		kdb_symbol_print(value, NULL, KDB_SP_DEFAULT);
@@ -1593,7 +1578,6 @@ static int kdb_md(int argc, const char **argv)
 	char fmtchar, fmtstr[64];
 	unsigned long addr;
 	unsigned long word;
-	long offset = 0;
 	bool nosect = false;
 	bool symbolic = false;
 	bool valid = false;
@@ -1656,8 +1640,7 @@ static int kdb_md(int argc, const char **argv)
 	if (argc) {
 		unsigned long val;
 		int diag, nextarg = 1;
-		diag = kdbgetaddrarg(argc, argv, &nextarg, &addr,
-				     &offset, NULL);
+		diag = kdbgetaddrarg(argc, argv, &nextarg, &addr);
 		if (diag)
 			return diag;
 		if (argc > nextarg+2)
@@ -1793,7 +1776,6 @@ static int kdb_mm(int argc, const char **argv)
 {
 	int diag;
 	unsigned long addr;
-	long offset = 0;
 	unsigned long contents;
 	int nextarg;
 	int width;
@@ -1805,13 +1787,13 @@ static int kdb_mm(int argc, const char **argv)
 		return KDB_ARGCOUNT;
 
 	nextarg = 1;
-	diag = kdbgetaddrarg(argc, argv, &nextarg, &addr, &offset, NULL);
+	diag = kdbgetaddrarg(argc, argv, &nextarg, &addr);
 	if (diag)
 		return diag;
 
 	if (nextarg > argc)
 		return KDB_ARGCOUNT;
-	diag = kdbgetaddrarg(argc, argv, &nextarg, &contents, NULL, NULL);
+	diag = kdbgetaddrarg(argc, argv, &nextarg, &contents);
 	if (diag)
 		return diag;
 
@@ -1837,7 +1819,6 @@ static int kdb_go(int argc, const char **argv)
 	unsigned long addr;
 	int diag;
 	int nextarg;
-	long offset;
 
 	if (raw_smp_processor_id() != kdb_initial_cpu) {
 		kdb_printf("go must execute on the entry cpu, "
@@ -1847,8 +1828,7 @@ static int kdb_go(int argc, const char **argv)
 	}
 	if (argc == 1) {
 		nextarg = 1;
-		diag = kdbgetaddrarg(argc, argv, &nextarg,
-				     &addr, &offset, NULL);
+		diag = kdbgetaddrarg(argc, argv, &nextarg, &addr);
 		if (diag)
 			return diag;
 	} else if (argc) {
@@ -2043,14 +2023,13 @@ static int kdb_ef(int argc, const char **argv)
 {
 	int diag;
 	unsigned long addr;
-	long offset;
 	int nextarg;
 
 	if (argc != 1)
 		return KDB_ARGCOUNT;
 
 	nextarg = 1;
-	diag = kdbgetaddrarg(argc, argv, &nextarg, &addr, &offset, NULL);
+	diag = kdbgetaddrarg(argc, argv, &nextarg, &addr);
 	if (diag)
 		return diag;
 	show_regs((struct pt_regs *)addr);
@@ -2547,7 +2526,7 @@ static int kdb_per_cpu(int argc, const char **argv)
 	if (argc < 1 || argc > 3)
 		return KDB_ARGCOUNT;
 
-	diag = kdbgetaddrarg(argc, argv, &nextarg, &symaddr, NULL, NULL);
+	diag = kdbgetaddrarg(argc, argv, &nextarg, &symaddr);
 	if (diag)
 		return diag;
 

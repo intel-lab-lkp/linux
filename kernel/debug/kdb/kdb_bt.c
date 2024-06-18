@@ -130,7 +130,6 @@ kdb_bt(int argc, const char **argv)
 	int btaprompt = 1;
 	int nextarg;
 	unsigned long addr;
-	long offset;
 
 	/* Prompt after each proc in bta */
 	kdbgetintenv("BTAPROMPT", &btaprompt);
@@ -205,8 +204,7 @@ kdb_bt(int argc, const char **argv)
 	} else {
 		if (argc) {
 			nextarg = 1;
-			diag = kdbgetaddrarg(argc, argv, &nextarg, &addr,
-					     &offset, NULL);
+			diag = kdbgetaddrarg(argc, argv, &nextarg, &addr);
 			if (diag)
 				return diag;
 			kdb_show_stack(kdb_current_task, (void *)addr);
