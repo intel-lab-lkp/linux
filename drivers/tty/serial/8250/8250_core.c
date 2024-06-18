@@ -42,7 +42,7 @@
 
 #include <asm/irq.h>
 
-#include "../serial_base.h"	/* For serial_base_add_isa_preferred_console() */
+#include "../serial_base.h"	/* For serial_base_match_and_update_isa_preferred_console() */
 
 #include "8250.h"
 
@@ -564,7 +564,7 @@ static void __init serial8250_isa_init_ports(void)
 		if (serial8250_isa_config != NULL)
 			serial8250_isa_config(i, &up->port, &up->capabilities);
 
-		serial_base_add_isa_preferred_console(serial8250_reg.dev_name, i);
+		serial_base_match_and_update_isa_preferred_console(serial8250_reg.dev_name, i);
 	}
 }
 

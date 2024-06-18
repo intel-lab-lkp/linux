@@ -207,8 +207,9 @@ void serial_base_port_device_remove(struct serial_port_device *port_dev)
 
 #ifdef CONFIG_SERIAL_CORE_CONSOLE
 
-static int serial_base_add_one_prefcon(const char *match, const char *dev_name,
-				       int port_id)
+static int serial_base_match_and_update_one_prefcon(const char *match,
+						    const char *dev_name,
+						    int port_id)
 {
 	int ret;
 
@@ -237,7 +238,7 @@ static int serial_base_add_sparc_console(const char *dev_name, int idx)
 		return 0;
 	}
 
-	return serial_base_add_one_prefcon(name, dev_name, idx);
+	return serial_base_match_and_update_one_prefcon(name, dev_name, idx);
 }
 
 #else
@@ -249,7 +250,7 @@ static inline int serial_base_add_sparc_console(const char *dev_name, int idx)
 
 #endif
 
-static int serial_base_add_prefcon(const char *name, int idx)
+static int serial_base_match_and_update_prefcon(const char *name, int idx)
 {
 	const char *char_match __free(kfree) = NULL;
 	const char *nmbr_match __free(kfree) = NULL;
@@ -262,7 +263,7 @@ static int serial_base_add_prefcon(const char *name, int idx)
 		if (!nmbr_match)
 			return -ENODEV;
 
-		ret = serial_base_add_one_prefcon(nmbr_match, name, idx);
+		ret = serial_base_match_and_update_one_prefcon(nmbr_match, name, idx);
 		if (ret)
 			return ret;
 
@@ -277,7 +278,7 @@ static int serial_base_add_prefcon(const char *name, int idx)
 	if (!char_match)
 		return -ENOMEM;
 
-	return serial_base_add_one_prefcon(char_match, name, idx);
+	return serial_base_match_and_update_one_prefcon(char_match, name, idx);
 }
 
 /**
@@ -304,7 +305,7 @@ int serial_base_add_preferred_console(struct uart_driver *drv,
 	const char *port_match __free(kfree) = NULL;
 	int ret;
 
-	ret = serial_base_add_prefcon(drv->dev_name, port->line);
+	ret = serial_base_match_and_update_prefcon(drv->dev_name, port->line);
 	if (ret)
 		return ret;
 
@@ -314,7 +315,7 @@ int serial_base_add_preferred_console(struct uart_driver *drv,
 		return -ENOMEM;
 
 	/* Translate a hardware addressing style console=DEVNAME:0.0 */
-	return serial_base_add_one_prefcon(port_match, drv->dev_name, port->line);
+	return serial_base_match_and_update_one_prefcon(port_match, drv->dev_name, port->line);
 }
 
 #endif
@@ -326,9 +327,9 @@ int serial_base_add_preferred_console(struct uart_driver *drv,
  * This should be only called from serial8250_isa_init_preferred_console(),
  * other callers are likely wrong and should rely on earlycon instead.
  */
-int serial_base_add_isa_preferred_console(const char *name, int idx)
+int serial_base_match_and_update_isa_preferred_console(const char *name, int idx)
 {
-	return serial_base_add_prefcon(name, idx);
+	return serial_base_match_and_update_prefcon(name, idx);
 }
 
 #endif
