@@ -340,6 +340,17 @@ static void __vb2_buf_mem_prepare(struct vb2_buffer *vb)
 	vb->synced = 1;
 	for (plane = 0; plane < vb->num_planes; ++plane)
 		call_void_memop(vb, prepare, vb->planes[plane].mem_priv);
+
+	if (vb->memory != VB2_MEMORY_DMABUF)
+		return;
+	for (plane = 0; plane < vb->num_planes; ++plane) {
+		struct dma_buf *dbuf = vb->planes[plane].dbuf;
+
+		if (!dbuf)
+			continue;
+
+		dma_buf_end_cpu_access(dbuf, vb->vb2_queue->dma_dir);
+	}
 }
 
 /*
@@ -356,6 +367,17 @@ static void __vb2_buf_mem_finish(struct vb2_buffer *vb)
 	vb->synced = 0;
 	for (plane = 0; plane < vb->num_planes; ++plane)
 		call_void_memop(vb, finish, vb->planes[plane].mem_priv);
+
+	if (vb->memory != VB2_MEMORY_DMABUF)
+		return;
+	for (plane = 0; plane < vb->num_planes; ++plane) {
+		struct dma_buf *dbuf = vb->planes[plane].dbuf;
+
+		if (!dbuf)
+			continue;
+
+		dma_buf_begin_cpu_access(dbuf, vb->vb2_queue->dma_dir);
+	}
 }
 
 /*
