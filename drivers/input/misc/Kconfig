@@ -233,6 +233,17 @@ config INPUT_MAX77693_HAPTIC
 	  To compile this driver as module, choose M here: the
 	  module will be called max77693-haptic.
 
+config INPUT_MAX77705_HAPTIC
+	tristate "MAXIM MAX77705 haptic controller support"
+	depends on MFD_MAX77705 && PWM
+	select INPUT_FF_MEMLESS
+	help
+	  This option enables support for the haptic controller on
+	  MAXIM MAX77705 chip.
+
+	  To compile this driver as module, choose M here: the
+	  module will be called max77705-haptic.
+
 config INPUT_MAX8925_ONKEY
 	tristate "MAX8925 ONKEY support"
 	depends on MFD_MAX8925
