@@ -1589,11 +1589,13 @@ static void kdb_md_line(const char *fmtstr, unsigned long addr,
 		   " ", cbuf);
 }
 
+#define KDB_MD_BYTES_PER_LINE	16
+
 static int kdb_md(int argc, const char **argv)
 {
 	static unsigned long last_addr;
 	static int last_radix, last_bytesperword, last_repeat;
-	int radix = 16, mdcount = 8, bytesperword = KDB_WORD_SIZE, repeat;
+	int radix = 16, mdcount = 8, bytesperword = KDB_WORD_SIZE, repeat = 0;
 	char fmtchar, fmtstr[64];
 	unsigned long addr;
 	unsigned long word;
@@ -1606,18 +1608,13 @@ static int kdb_md(int argc, const char **argv)
 	kdbgetintenv("RADIX", &radix);
 	kdbgetintenv("BYTESPERWORD", &bytesperword);
 
-	/* Assume 'md <addr>' and start with environment values */
-	repeat = mdcount * 16 / bytesperword;
-
 	if (isdigit(argv[0][2])) {
 		bytesperword = (int)(argv[0][2] - '0');
-		repeat = mdcount * 16 / bytesperword;
 		if (!argv[0][3])
 			valid = true;
 		else if (argv[0][3] == 'c' && argv[0][4]) {
 			char *p;
 			repeat = simple_strtoul(argv[0] + 4, &p, 10);
-			mdcount = ((repeat * bytesperword) + 15) / 16;
 			valid = !*p;
 		}
 	} else if (strcmp(argv[0], "md") == 0)
@@ -1637,10 +1634,7 @@ static int kdb_md(int argc, const char **argv)
 		radix = last_radix;
 		bytesperword = last_bytesperword;
 		repeat = last_repeat;
-		mdcount = ((repeat * bytesperword) + 15) / 16;
-	}
-
-	if (argc) {
+	} else {
 		unsigned long val;
 		int diag, nextarg = 1;
 		diag = kdbgetaddrarg(argc, argv, &nextarg, &addr);
@@ -1652,8 +1646,9 @@ static int kdb_md(int argc, const char **argv)
 		if (argc >= nextarg) {
 			diag = kdbgetularg(argv[nextarg], &val);
 			if (!diag) {
-				mdcount = (int) val;
-				repeat = mdcount * 16 / bytesperword;
+				mdcount = val;
+				/* Specifying <lines> overrides repeat count. */
+				repeat = 0;
 			}
 		}
 		if (argc >= nextarg+1) {
@@ -1699,6 +1694,13 @@ static int kdb_md(int argc, const char **argv)
 		return KDB_BADWIDTH;
 	}
 
+	/* If repeat is non-zero then it overrides */
+	if (repeat)
+		mdcount = DIV_ROUND_UP(repeat * bytesperword, KDB_MD_BYTES_PER_LINE);
+	else
+		repeat = mdcount * 16 / bytesperword;
+
+	/* Always just save `repeat` since `mdcount` can be calculated from it */
 	last_repeat = repeat;
 	last_bytesperword = bytesperword;
 
