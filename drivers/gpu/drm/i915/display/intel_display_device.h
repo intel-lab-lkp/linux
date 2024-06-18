@@ -93,14 +93,6 @@ struct drm_printer;
 	func(DG2_G11) \
 	func(DG2_G12)
 
-#define ENUM(x) INTEL_DISPLAY_ ## x,
-
-enum intel_display_platform {
-	INTEL_DISPLAY_PLATFORMS(ENUM)
-};
-
-#undef ENUM
-
 #define MEMBER(name) u32 name:1;
 
 struct intel_display_is {
@@ -207,9 +199,6 @@ struct intel_display_is {
 	(DISPLAY_VER(i915) >= (from) && DISPLAY_VER(i915) <= (until))
 
 struct intel_display_runtime_info {
-	enum intel_display_platform platform;
-	enum intel_display_platform subplatform;
-
 	struct intel_display_ip_ver {
 		u16 ver;
 		u16 rel;
