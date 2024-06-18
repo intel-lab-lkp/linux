@@ -1653,10 +1653,10 @@ static int kdb_md(int argc, const char **argv)
 
 	if (kdb_md_parse_arg0("md", argv[0], &repeat, &bytesperword))
 		valid = true;
+	else if (kdb_md_parse_arg0("mdp", argv[0], &repeat, &bytesperword))
+		phys = valid = true;
 	else if (strcmp(argv[0], "mds") == 0)
 		valid = true;
-	else if (strcmp(argv[0], "mdp") == 0)
-		phys = valid = true;
 
 	if (!valid)
 		return KDB_NOTFOUND;
@@ -2703,6 +2703,18 @@ static kdbtab_t maintab[] = {
 		.func = kdb_md,
 		.usage = "<paddr> [<lines> [<radix>]]",
 		.help = "Display RAM given a physical address",
+		.flags = KDB_ENABLE_MEM_READ | KDB_REPEAT_NO_ARGS,
+	},
+	{	.name = "mdpW",
+		.func = kdb_md,
+		.usage = "<paddr> [<lines> [<radix>]]",
+		.help = "Display RAM given a PA using word size (W)",
+		.flags = KDB_ENABLE_MEM_READ | KDB_REPEAT_NO_ARGS,
+	},
+	{	.name = "mdpWcN",
+		.func = kdb_md,
+		.usage = "<paddr> [<lines> [<radix>]]",
+		.help = "Display RAM given a PA using word size (W); show N words",
 		.flags = KDB_ENABLE_MEM_READ | KDB_REPEAT_NO_ARGS,
 	},
 	{	.name = "mdr",
