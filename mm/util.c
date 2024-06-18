@@ -646,7 +646,8 @@ void *kvmalloc_node_noprof(size_t size, gfp_t flags, int node)
 
 	/* Don't even allow crazy sizes */
 	if (unlikely(size > INT_MAX)) {
-		WARN_ON_ONCE(!(flags & __GFP_NOWARN));
+		WARN_RATELIMIT(!(flags & __GFP_NOWARN), "size = %zu > INT_MAX",
+			       size);
 		return NULL;
 	}
 
