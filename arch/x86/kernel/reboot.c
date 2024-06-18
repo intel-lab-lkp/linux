@@ -631,8 +631,10 @@ static void native_machine_emergency_restart(void)
 	int orig_reboot_type = reboot_type;
 	unsigned short mode;
 
-	if (reboot_emergency)
+	if (reboot_emergency) {
+		do_kernel_pre_restart(NULL);
 		emergency_reboot_disable_virtualization();
+	}
 
 	tboot_shutdown(TB_SHUTDOWN_REBOOT);
 
@@ -760,12 +762,13 @@ static void __machine_emergency_restart(int emergency)
 	machine_ops.emergency_restart();
 }
 
-static void native_machine_restart(char *__unused)
+static void native_machine_restart(char *cmd)
 {
 	pr_notice("machine restart\n");
 
 	if (!reboot_force)
 		machine_shutdown();
+	do_kernel_pre_restart(cmd);
 	__machine_emergency_restart(0);
 }
 
