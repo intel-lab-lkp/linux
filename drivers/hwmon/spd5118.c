@@ -489,6 +489,31 @@ static bool spd5118_volatile_reg(struct device *dev, unsigned int reg)
 	}
 }
 
+static int spd5118_regmap_reg_read(void *context, unsigned int reg,
+				   unsigned int *val)
+{
+	int ret;
+
+	ret = i2c_smbus_read_byte_data(context, reg);
+	if (ret < 0)
+		return ret;
+
+	*val = ret;
+
+	return 0;
+}
+
+static int spd5118_regmap_reg_write(void *context, unsigned int reg,
+				    unsigned int val)
+{
+	return i2c_smbus_write_byte_data(context, reg, val);
+}
+
+static const struct regmap_bus spd5118_regmap_bus = {
+	.reg_write = spd5118_regmap_reg_write,
+	.reg_read = spd5118_regmap_reg_read,
+};
+
 static const struct regmap_range_cfg spd5118_regmap_range_cfg[] = {
 	{
 	.selector_reg   = SPD5118_REG_I2C_LEGACY_MODE,
@@ -526,7 +551,8 @@ static int spd5118_probe(struct i2c_client *client)
 	if (!data)
 		return -ENOMEM;
 
-	regmap = devm_regmap_init_i2c(client, &spd5118_regmap_config);
+	regmap = devm_regmap_init(dev, &spd5118_regmap_bus, client,
+				  &spd5118_regmap_config);
 	if (IS_ERR(regmap))
 		return dev_err_probe(dev, PTR_ERR(regmap), "regmap init failed\n");
 
