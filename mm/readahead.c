@@ -571,7 +571,7 @@ static void ondemand_readahead(struct readahead_control *ractl,
 	/*
 	 * start of file
 	 */
-	if (!index)
+	if (!folio && !index)
 		goto initial_readahead;
 
 	/*
