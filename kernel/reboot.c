@@ -235,6 +235,57 @@ void do_kernel_restart(char *cmd)
 	atomic_notifier_call_chain(&restart_handler_list, reboot_mode, cmd);
 }
 
+/*
+ *	Notifier list for kernel code which wants to be called immediately
+ *	before restarting the system.
+ */
+static ATOMIC_NOTIFIER_HEAD(pre_restart_handler_list);
+
+/**
+ *	register_pre_restart_handler - Register function to be called in preparation
+ *				       to reset the system
+ *	@nb: Info about handler function to be called
+ *
+ *	Registers a function with code to be called in preparation to restart
+ *	the system.
+ *
+ *	Currently always returns zero, as atomic_notifier_chain_register()
+ *	always returns zero.
+ */
+int register_pre_restart_handler(struct notifier_block *nb)
+{
+	return atomic_notifier_chain_register(&pre_restart_handler_list, nb);
+}
+EXPORT_SYMBOL(register_pre_restart_handler);
+
+/**
+ *	unregister_pre_restart_handler - Unregister previously registered
+ *					 pre-restart handler
+ *	@nb: Hook to be unregistered
+ *
+ *	Unregisters a previously registered pre-restart handler function.
+ *
+ *	Returns zero on success, or %-ENOENT on failure.
+ */
+int unregister_pre_restart_handler(struct notifier_block *nb)
+{
+	return atomic_notifier_chain_unregister(&pre_restart_handler_list, nb);
+}
+EXPORT_SYMBOL(unregister_pre_restart_handler);
+
+/**
+ *	do_kernel_pre_restart - Execute kernel pre-restart handler call chain
+ *
+ *	Calls functions registered with register_pre_restart_handler.
+ *
+ *	Expected to be called from machine_restart and
+ *	machine_emergency_restart before invoking the restart handlers.
+ */
+void do_kernel_pre_restart(char *cmd)
+{
+	atomic_notifier_call_chain(&pre_restart_handler_list, reboot_mode, cmd);
+}
+
 void migrate_to_reboot_cpu(void)
 {
 	/* The boot cpu is always logical cpu 0 */
