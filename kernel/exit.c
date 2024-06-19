@@ -1009,15 +1009,8 @@ do_group_exit(int exit_code)
 		if (sig->flags & SIGNAL_GROUP_EXIT)
 			/* Another thread got here before we took the lock.  */
 			exit_code = sig->group_exit_code;
-		else {
-			struct task_struct *t;
-
-			sig->group_exit_code = exit_code;
-			sig->flags = SIGNAL_GROUP_EXIT;
-			sig->group_stop_count = 0;
-			__for_each_thread(sig, t)
-				schedule_task_exit_locked(t);
-		}
+		else
+			schedule_group_exit_locked(sig, exit_code);
 		spin_unlock_irq(&sighand->siglock);
 	}
 

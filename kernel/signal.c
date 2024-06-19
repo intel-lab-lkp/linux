@@ -999,6 +999,23 @@ static inline bool wants_signal(int sig, struct task_struct *p)
 	return task_curr(p) || !task_sigpending(p);
 }
 
+void schedule_group_exit_locked(struct signal_struct *signal, int exit_code)
+{
+	/*
+	 * Start a group exit and wake everybody up.
+	 * This way we don't have other threads
+	 * running and doing things after a slower
+	 * thread has the fatal signal pending.
+	 */
+	struct task_struct *t;
+
+	signal->flags = SIGNAL_GROUP_EXIT;
+	signal->group_exit_code = exit_code;
+	signal->group_stop_count = 0;
+	__for_each_thread(signal, t)
+		schedule_task_exit_locked(t);
+}
+
 static void complete_signal(int sig, struct task_struct *p, enum pid_type type)
 {
 	struct signal_struct *signal = p->signal;
@@ -1046,18 +1063,7 @@ static void complete_signal(int sig, struct task_struct *p, enum pid_type type)
 		 * This signal will be fatal to the whole group.
 		 */
 		if (!sig_kernel_coredump(sig)) {
-			/*
-			 * Start a group exit and wake everybody up.
-			 * This way we don't have other threads
-			 * running and doing things after a slower
-			 * thread has the fatal signal pending.
-			 */
-			signal->flags = SIGNAL_GROUP_EXIT;
-			signal->group_exit_code = sig;
-			signal->group_stop_count = 0;
-			__for_each_thread(signal, t) {
-				schedule_task_exit_locked(t);
-			}
+			schedule_group_exit_locked(signal, sig);
 			return;
 		}
 	}
@@ -2727,7 +2733,6 @@ relock:
 	for (;;) {
 		bool group_exit_needed = false;
 		struct k_sigaction *ka;
-		struct task_struct *t;
 		enum pid_type type;
 		int exit_code;
 
@@ -2872,13 +2877,8 @@ relock:
 		exit_code = signr;
 		if (sig_kernel_coredump(signr))
 			group_exit_needed = true;
-		else {
-			signal->group_exit_code = exit_code;
-			signal->flags = SIGNAL_GROUP_EXIT;
-			signal->group_stop_count = 0;
-			__for_each_thread(signal, t)
-				schedule_task_exit_locked(t);
-		}
+		else
+			schedule_group_exit_locked(signal, exit_code);
 	fatal:
 		spin_unlock_irq(&sighand->siglock);
 		if (unlikely(cgroup_task_frozen(current)))

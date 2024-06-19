@@ -366,14 +366,10 @@ static int zap_process(struct task_struct *start, int exit_code)
 	struct task_struct *t;
 	int nr = 0;
 
-	start->signal->flags = SIGNAL_GROUP_EXIT;
-	start->signal->group_exit_code = exit_code;
-	start->signal->group_stop_count = 0;
+	schedule_group_exit_locked(start->signal, exit_code);
 
-	for_each_thread(start, t) {
-		schedule_task_exit_locked(t);
+	for_each_thread(start, t)
 		nr += (t != current) && !(t->flags & PF_POSTCOREDUMP);
-	}
 
 	return nr;
 }
