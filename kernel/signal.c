@@ -2876,12 +2876,8 @@ relock:
 			signal->group_exit_code = exit_code;
 			signal->flags = SIGNAL_GROUP_EXIT;
 			signal->group_stop_count = 0;
-			__for_each_thread(signal, t) {
-				if (t == current)
-					continue;
+			__for_each_thread(signal, t)
 				schedule_task_exit_locked(t);
-			}
-			current->jobctl |= JOBCTL_WILL_EXIT;
 		}
 	fatal:
 		spin_unlock_irq(&sighand->siglock);
