@@ -97,6 +97,65 @@ retry:
 	return folio;
 }
 
+static bool large_folio_pin_setexc(struct folio *folio, unsigned int pins)
+{
+	unsigned int old_pincount, new_pincount;
+
+	if (WARN_ON_ONCE(pins >= GUP_PIN_EXCLUSIVE_BIAS))
+		return false;
+
+	do {
+		old_pincount = atomic_read(&folio->_pincount);
+
+		if (old_pincount > 0)
+			return false;
+
+		if (check_add_overflow(old_pincount, pins + GUP_PIN_EXCLUSIVE_BIAS, &new_pincount))
+			return false;
+	} while (atomic_cmpxchg(&folio->_pincount, old_pincount, pins) != old_pincount);
+
+	return true;
+}
+
+static bool __try_grab_folio_excl(struct folio *folio, int pincount, int refcount)
+{
+	if (WARN_ON_ONCE(!IS_ENABLED(CONFIG_EXCLUSIVE_PIN)))
+		return false;
+
+	if (folio_test_large(folio)) {
+		if (!large_folio_pin_setexc(folio, pincount))
+			return false;
+	} else if (!folio_ref_setexc(folio, refcount)) {
+		return false;
+	}
+
+	if (!PageAnonExclusive(&folio->page))
+		SetPageAnonExclusive(&folio->page);
+
+	return true;
+}
+
+static bool try_grab_folio_excl(struct folio *folio, int refs)
+{
+	/*
+	 * When pinning a large folio, use an exact count to track it.
+	 *
+	 * However, be sure to *also* increment the normal folio
+	 * refcount field at least once, so that the folio really
+	 * is pinned.  That's why the refcount from the earlier
+	 * try_get_folio() is left intact.
+	 */
+	return __try_grab_folio_excl(folio, refs,
+				     refs * (GUP_PIN_COUNTING_BIAS - 1));
+}
+
+static bool try_grab_page_excl(struct page *page)
+{
+	struct folio *folio = page_folio(page);
+
+	return __try_grab_folio_excl(folio, 1, GUP_PIN_COUNTING_BIAS);
+}
+
 /**
  * try_grab_folio() - Attempt to get or pin a folio.
  * @page:  pointer to page to be grabbed
@@ -161,19 +220,41 @@ struct folio *try_grab_folio(struct page *page, int refs, unsigned int flags)
 		return NULL;
 	}
 
-	/*
-	 * When pinning a large folio, use an exact count to track it.
-	 *
-	 * However, be sure to *also* increment the normal folio
-	 * refcount field at least once, so that the folio really
-	 * is pinned.  That's why the refcount from the earlier
-	 * try_get_folio() is left intact.
-	 */
-	if (folio_test_large(folio))
-		atomic_add(refs, &folio->_pincount);
-	else
-		folio_ref_add(folio,
-				refs * (GUP_PIN_COUNTING_BIAS - 1));
+	if (unlikely(folio_maybe_exclusive_pinned(folio))) {
+		if (!put_devmap_managed_folio_refs(folio, refs))
+			folio_put_refs(folio, refs);
+		return NULL;
+	}
+
+	if (unlikely(flags & FOLL_EXCLUSIVE)) {
+		if (!try_grab_folio_excl(folio, refs))
+			return NULL;
+	} else {
+		/*
+		 * When pinning a large folio, use an exact count to track it.
+		 *
+		 * However, be sure to *also* increment the normal folio
+		 * refcount field at least once, so that the folio really
+		 * is pinned.  That's why the refcount from the earlier
+		 * try_get_folio() is left intact.
+		 */
+		if (folio_test_large(folio))
+			atomic_add(refs, &folio->_pincount);
+		else
+			folio_ref_add(folio,
+				      refs * (GUP_PIN_COUNTING_BIAS - 1));
+
+		if (unlikely(folio_maybe_exclusive_pinned(folio))) {
+			if (folio_test_large(folio))
+				atomic_sub(refs, &folio->_pincount);
+			else
+				folio_put_refs(folio,
+					       refs * (GUP_PIN_COUNTING_BIAS - 1));
+
+			return NULL;
+		}
+	}
+
 	/*
 	 * Adjust the pincount before re-checking the PTE for changes.
 	 * This is essentially a smp_mb() and is paired with a memory
@@ -198,6 +279,26 @@ static void gup_put_folio(struct folio *folio, int refs, unsigned int flags)
 			refs *= GUP_PIN_COUNTING_BIAS;
 	}
 
+	if (unlikely(flags & FOLL_EXCLUSIVE)) {
+		if (WARN_ON_ONCE(!IS_ENABLED(CONFIG_EXCLUSIVE_PIN)))
+			goto out;
+		if (is_zero_folio(folio))
+			return;
+		if (folio_test_large(folio)) {
+			if (WARN_ON_ONCE((atomic_read(&folio->_pincount) < GUP_PIN_EXCLUSIVE_BIAS)))
+				goto out;
+			atomic_sub(GUP_PIN_EXCLUSIVE_BIAS, &folio->_pincount);
+		} else {
+			if (WARN_ON_ONCE((unsigned int)refs >= GUP_PIN_EXCLUSIVE_BIAS))
+				goto out;
+			if (WARN_ON_ONCE(folio_ref_count(folio) < GUP_PIN_EXCLUSIVE_BIAS))
+				goto out;
+
+			refs += GUP_PIN_EXCLUSIVE_BIAS;
+		}
+	}
+
+out:
 	if (!put_devmap_managed_folio_refs(folio, refs))
 		folio_put_refs(folio, refs);
 }
@@ -242,16 +343,35 @@ int __must_check try_grab_page(struct page *page, unsigned int flags)
 		if (is_zero_page(page))
 			return 0;
 
-		/*
-		 * Similar to try_grab_folio(): be sure to *also*
-		 * increment the normal page refcount field at least once,
-		 * so that the page really is pinned.
-		 */
-		if (folio_test_large(folio)) {
-			folio_ref_add(folio, 1);
-			atomic_add(1, &folio->_pincount);
+		if (unlikely(folio_maybe_exclusive_pinned(folio)))
+			return -EBUSY;
+
+		if (unlikely(flags & FOLL_EXCLUSIVE)) {
+			if (!try_grab_page_excl(page))
+				return -EBUSY;
 		} else {
-			folio_ref_add(folio, GUP_PIN_COUNTING_BIAS);
+			/*
+			 * Similar to try_grab_folio(): be sure to *also*
+			 * increment the normal page refcount field at least once,
+			 * so that the page really is pinned.
+			 */
+			if (folio_test_large(folio)) {
+				folio_ref_add(folio, 1);
+				atomic_add(1, &folio->_pincount);
+			} else {
+				folio_ref_add(folio, GUP_PIN_COUNTING_BIAS);
+			}
+
+			if (unlikely(folio_maybe_exclusive_pinned(folio))) {
+				if (folio_test_large(folio)) {
+					folio_put_refs(folio, 1);
+					atomic_sub(1, &folio->_pincount);
+				} else {
+					folio_put_refs(folio, GUP_PIN_COUNTING_BIAS);
+				}
+
+				return -EBUSY;
+			}
 		}
 
 		node_stat_mod_folio(folio, NR_FOLL_PIN_ACQUIRED, 1);
@@ -288,6 +408,9 @@ void folio_add_pin(struct folio *folio)
 	if (is_zero_folio(folio))
 		return;
 
+	if (unlikely(folio_maybe_exclusive_pinned(folio)))
+		return;
+
 	/*
 	 * Similar to try_grab_folio(): be sure to *also* increment the normal
 	 * page refcount field at least once, so that the page really is
@@ -300,6 +423,15 @@ void folio_add_pin(struct folio *folio)
 	} else {
 		WARN_ON_ONCE(folio_ref_count(folio) < GUP_PIN_COUNTING_BIAS);
 		folio_ref_add(folio, GUP_PIN_COUNTING_BIAS);
+	}
+
+	if (unlikely(folio_maybe_exclusive_pinned(folio))) {
+		if (folio_test_large(folio)) {
+			folio_put_refs(folio, 1);
+			atomic_sub(1, &folio->_pincount);
+		} else {
+			folio_put_refs(folio, GUP_PIN_COUNTING_BIAS);
+		}
 	}
 }
 
@@ -355,8 +487,8 @@ static inline struct folio *gup_folio_next(struct page **list,
  * set_page_dirty_lock(), unpin_user_page().
  *
  */
-void unpin_user_pages_dirty_lock(struct page **pages, unsigned long npages,
-				 bool make_dirty)
+static void __unpin_user_pages_dirty_lock(struct page **pages, unsigned long npages,
+					  bool make_dirty, unsigned int flags)
 {
 	unsigned long i;
 	struct folio *folio;
@@ -395,10 +527,27 @@ void unpin_user_pages_dirty_lock(struct page **pages, unsigned long npages,
 			folio_mark_dirty(folio);
 			folio_unlock(folio);
 		}
-		gup_put_folio(folio, nr, FOLL_PIN);
+		gup_put_folio(folio, nr, flags);
 	}
 }
+
+void unpin_user_pages_dirty_lock(struct page **pages, unsigned long npages,
+				 bool make_dirty)
+{
+	__unpin_user_pages_dirty_lock(pages, npages, make_dirty, FOLL_PIN);
+}
 EXPORT_SYMBOL(unpin_user_pages_dirty_lock);
+
+void unpin_exc_pages_dirty_lock(struct page **pages, unsigned long npages,
+				bool make_dirty)
+{
+	if (WARN_ON_ONCE(!IS_ENABLED(CONFIG_EXCLUSIVE_PIN)))
+		return;
+
+	__unpin_user_pages_dirty_lock(pages, npages, make_dirty,
+				      FOLL_PIN | FOLL_EXCLUSIVE);
+}
+EXPORT_SYMBOL(unpin_exc_pages_dirty_lock);
 
 /**
  * unpin_user_page_range_dirty_lock() - release and optionally dirty
@@ -466,7 +615,7 @@ static void gup_fast_unpin_user_pages(struct page **pages, unsigned long npages)
  *
  * Please see the unpin_user_page() documentation for details.
  */
-void unpin_user_pages(struct page **pages, unsigned long npages)
+static void __unpin_user_pages(struct page **pages, unsigned long npages, unsigned int flags)
 {
 	unsigned long i;
 	struct folio *folio;
@@ -483,10 +632,34 @@ void unpin_user_pages(struct page **pages, unsigned long npages)
 	sanity_check_pinned_pages(pages, npages);
 	for (i = 0; i < npages; i += nr) {
 		folio = gup_folio_next(pages, npages, i, &nr);
-		gup_put_folio(folio, nr, FOLL_PIN);
+		gup_put_folio(folio, nr, flags);
 	}
 }
+
+void unpin_user_pages(struct page **pages, unsigned long npages)
+{
+	__unpin_user_pages(pages, npages, FOLL_PIN);
+}
 EXPORT_SYMBOL(unpin_user_pages);
+
+void unpin_exc_pages(struct page **pages, unsigned long npages)
+{
+	if (WARN_ON_ONCE(!IS_ENABLED(CONFIG_EXCLUSIVE_PIN)))
+		return;
+
+	__unpin_user_pages(pages, npages, FOLL_PIN | FOLL_EXCLUSIVE);
+}
+EXPORT_SYMBOL(unpin_exc_pages);
+
+void unexc_user_page(struct page *page)
+{
+	if (WARN_ON_ONCE(!IS_ENABLED(CONFIG_EXCLUSIVE_PIN)))
+		return;
+
+	sanity_check_pinned_pages(&page, 1);
+	gup_put_folio(page_folio(page), 0, FOLL_EXCLUSIVE);
+}
+EXPORT_SYMBOL(unexc_user_page);
 
 /*
  * Set the MMF_HAS_PINNED if not set yet; after set it'll be there for the mm's
@@ -2608,6 +2781,18 @@ static bool is_valid_gup_args(struct page **pages, int *locked,
 
 	/* LONGTERM can only be specified when pinning */
 	if (WARN_ON_ONCE(!(gup_flags & FOLL_PIN) && (gup_flags & FOLL_LONGTERM)))
+		return false;
+
+	/* EXCLUSIVE can only be specified when config is enabled */
+	if (WARN_ON_ONCE(!IS_ENABLED(CONFIG_EXCLUSIVE_PIN) && (gup_flags & FOLL_EXCLUSIVE)))
+		return false;
+
+	/* EXCLUSIVE can only be specified when pinning */
+	if (WARN_ON_ONCE(!(gup_flags & FOLL_PIN) && (gup_flags & FOLL_EXCLUSIVE)))
+		return false;
+
+	/* EXCLUSIVE can only be specified when LONGTERM */
+	if (WARN_ON_ONCE(!(gup_flags & FOLL_LONGTERM) && (gup_flags & FOLL_EXCLUSIVE)))
 		return false;
 
 	/* Pages input must be given if using GET/PIN */

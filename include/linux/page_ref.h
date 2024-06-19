@@ -94,6 +94,14 @@ static inline void __page_ref_unfreeze(struct page *page, int v)
  */
 #define GUP_PIN_COUNTING_BIAS (1U << 10)
 
+/*
+ * GUP_PIN_EXCLUSIVE_BIAS is used to grab an exclusive pin over a page.
+ * This exclusive pin can only be taken once, and only if no other GUP pins
+ * exist for the page.
+ * After it's taken, no other gup pins can be taken.
+ */
+#define GUP_PIN_EXCLUSIVE_BIAS (1U << 30)
+
 static inline int page_ref_count(const struct page *page)
 {
 	return atomic_read(&page->_refcount);
@@ -145,6 +153,34 @@ static inline void folio_set_count(struct folio *folio, int v)
 static inline void init_page_count(struct page *page)
 {
 	set_page_count(page, 1);
+}
+
+static __must_check inline bool page_ref_setexc(struct page *page, unsigned int refs)
+{
+	unsigned int old_count, new_count;
+
+	if (WARN_ON_ONCE(refs >= GUP_PIN_EXCLUSIVE_BIAS))
+		return false;
+
+	do {
+		old_count = atomic_read(&page->_refcount);
+
+		if (old_count >= GUP_PIN_COUNTING_BIAS)
+			return false;
+
+		if (check_add_overflow(old_count, refs + GUP_PIN_EXCLUSIVE_BIAS, &new_count))
+			return false;
+	} while (atomic_cmpxchg(&page->_refcount, old_count, new_count) != old_count);
+
+	if (page_ref_tracepoint_active(page_ref_mod))
+		__page_ref_mod(page, refs);
+
+	return true;
+}
+
+static __must_check inline bool folio_ref_setexc(struct folio *folio, unsigned int refs)
+{
+	return page_ref_setexc(&folio->page, refs);
 }
 
 static inline void page_ref_add(struct page *page, int nr)

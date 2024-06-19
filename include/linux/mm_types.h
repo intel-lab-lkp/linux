@@ -1465,6 +1465,8 @@ enum {
 	 * hinting faults.
 	 */
 	FOLL_HONOR_NUMA_FAULT = 1 << 12,
+	/* exclusive PIN only if there aren't other pins (including this) */
+	FOLL_EXCLUSIVE = 1 << 13,
 
 	/* See also internal only FOLL flags in mm/internal.h */
 };

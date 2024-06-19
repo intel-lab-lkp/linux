@@ -1583,9 +1583,13 @@ static inline void put_page(struct page *page)
 void unpin_user_page(struct page *page);
 void unpin_user_pages_dirty_lock(struct page **pages, unsigned long npages,
 				 bool make_dirty);
+void unpin_exc_pages_dirty_lock(struct page **pages, unsigned long npages,
+				bool make_dirty);
 void unpin_user_page_range_dirty_lock(struct page *page, unsigned long npages,
 				      bool make_dirty);
 void unpin_user_pages(struct page **pages, unsigned long npages);
+void unpin_exc_pages(struct page **pages, unsigned long npages);
+void unexc_user_page(struct page *page);
 
 static inline bool is_cow_mapping(vm_flags_t flags)
 {
@@ -1956,6 +1960,26 @@ static inline bool folio_needs_cow_for_dma(struct vm_area_struct *vma,
 		return false;
 
 	return folio_maybe_dma_pinned(folio);
+}
+
+static inline bool folio_maybe_exclusive_pinned(const struct folio *folio)
+{
+	unsigned int count;
+
+	if (!IS_ENABLED(CONFIG_EXCLUSIVE_PIN))
+		return false;
+
+	if (folio_test_large(folio))
+		count = atomic_read(&folio->_pincount);
+	else
+		count = folio_ref_count(folio);
+
+	return count >= GUP_PIN_EXCLUSIVE_BIAS;
+}
+
+static inline bool page_maybe_exclusive_pinned(const struct page *page)
+{
+	return folio_maybe_exclusive_pinned(page_folio(page));
 }
 
 /**

@@ -1249,6 +1249,11 @@ config IOMMU_MM_DATA
 config EXECMEM
 	bool
 
+config EXCLUSIVE_PIN
+	def_bool y
+	help
+	  Add support for exclusive pins of pages.
+
 source "mm/damon/Kconfig"
 
 endmenu
