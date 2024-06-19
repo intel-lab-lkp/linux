@@ -65,7 +65,7 @@ static const struct v4l2_ctrl_ops brx_ctrl_ops = {
  */
 
 static int brx_enum_mbus_code(struct v4l2_subdev *subdev,
-			      struct v4l2_subdev_state *sd_state,
+			      struct v4l2_subdev_state *state,
 			      struct v4l2_subdev_mbus_code_enum *code)
 {
 	static const unsigned int codes[] = {
@@ -73,12 +73,12 @@ static int brx_enum_mbus_code(struct v4l2_subdev *subdev,
 		MEDIA_BUS_FMT_AYUV8_1X32,
 	};
 
-	return vsp1_subdev_enum_mbus_code(subdev, sd_state, code, codes,
+	return vsp1_subdev_enum_mbus_code(subdev, state, code, codes,
 					  ARRAY_SIZE(codes));
 }
 
 static int brx_enum_frame_size(struct v4l2_subdev *subdev,
-			       struct v4l2_subdev_state *sd_state,
+			       struct v4l2_subdev_state *state,
 			       struct v4l2_subdev_frame_size_enum *fse)
 {
 	if (fse->index)
@@ -97,7 +97,7 @@ static int brx_enum_frame_size(struct v4l2_subdev *subdev,
 }
 
 static void brx_try_format(struct vsp1_brx *brx,
-			   struct v4l2_subdev_state *sd_state,
+			   struct v4l2_subdev_state *state,
 			   unsigned int pad, struct v4l2_mbus_framefmt *fmt)
 {
 	struct v4l2_mbus_framefmt *format;
@@ -112,8 +112,7 @@ static void brx_try_format(struct vsp1_brx *brx,
 
 	default:
 		/* The BRx can't perform format conversion. */
-		format = v4l2_subdev_state_get_format(sd_state,
-						      BRX_PAD_SINK(0));
+		format = v4l2_subdev_state_get_format(state, BRX_PAD_SINK(0));
 		fmt->code = format->code;
 		break;
 	}

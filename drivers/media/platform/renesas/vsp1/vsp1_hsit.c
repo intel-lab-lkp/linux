@@ -34,7 +34,7 @@ static inline void vsp1_hsit_write(struct vsp1_hsit *hsit,
  */
 
 static int hsit_enum_mbus_code(struct v4l2_subdev *subdev,
-			       struct v4l2_subdev_state *sd_state,
+			       struct v4l2_subdev_state *state,
 			       struct v4l2_subdev_mbus_code_enum *code)
 {
 	struct vsp1_hsit *hsit = to_hsit(subdev);
@@ -52,10 +52,10 @@ static int hsit_enum_mbus_code(struct v4l2_subdev *subdev,
 }
 
 static int hsit_enum_frame_size(struct v4l2_subdev *subdev,
-				struct v4l2_subdev_state *sd_state,
+				struct v4l2_subdev_state *state,
 				struct v4l2_subdev_frame_size_enum *fse)
 {
-	return vsp1_subdev_enum_frame_size(subdev, sd_state, fse,
+	return vsp1_subdev_enum_frame_size(subdev, state, fse,
 					   HSIT_MIN_SIZE,
 					   HSIT_MIN_SIZE, HSIT_MAX_SIZE,
 					   HSIT_MAX_SIZE);

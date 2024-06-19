@@ -21,7 +21,7 @@
  */
 
 static int vsp1_rwpf_enum_mbus_code(struct v4l2_subdev *subdev,
-				    struct v4l2_subdev_state *sd_state,
+				    struct v4l2_subdev_state *state,
 				    struct v4l2_subdev_mbus_code_enum *code)
 {
 	static const unsigned int codes[] = {
@@ -39,12 +39,12 @@ static int vsp1_rwpf_enum_mbus_code(struct v4l2_subdev *subdev,
 }
 
 static int vsp1_rwpf_enum_frame_size(struct v4l2_subdev *subdev,
-				     struct v4l2_subdev_state *sd_state,
+				     struct v4l2_subdev_state *state,
 				     struct v4l2_subdev_frame_size_enum *fse)
 {
 	struct vsp1_rwpf *rwpf = to_rwpf(subdev);
 
-	return vsp1_subdev_enum_frame_size(subdev, sd_state, fse,
+	return vsp1_subdev_enum_frame_size(subdev, state, fse,
 					   RWPF_MIN_WIDTH,
 					   RWPF_MIN_HEIGHT, rwpf->max_width,
 					   rwpf->max_height);

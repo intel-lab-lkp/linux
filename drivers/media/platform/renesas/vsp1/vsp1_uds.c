@@ -111,7 +111,7 @@ static unsigned int uds_compute_ratio(unsigned int input, unsigned int output)
  */
 
 static int uds_enum_mbus_code(struct v4l2_subdev *subdev,
-			      struct v4l2_subdev_state *sd_state,
+			      struct v4l2_subdev_state *state,
 			      struct v4l2_subdev_mbus_code_enum *code)
 {
 	static const unsigned int codes[] = {
@@ -119,7 +119,7 @@ static int uds_enum_mbus_code(struct v4l2_subdev *subdev,
 		MEDIA_BUS_FMT_AYUV8_1X32,
 	};
 
-	return vsp1_subdev_enum_mbus_code(subdev, sd_state, code, codes,
+	return vsp1_subdev_enum_mbus_code(subdev, state, code, codes,
 					  ARRAY_SIZE(codes));
 }
 
@@ -150,7 +150,7 @@ static int uds_enum_frame_size(struct v4l2_subdev *subdev,
 }
 
 static void uds_try_format(struct vsp1_uds *uds,
-			   struct v4l2_subdev_state *sd_state,
+			   struct v4l2_subdev_state *state,
 			   unsigned int pad, struct v4l2_mbus_framefmt *fmt)
 {
 	struct v4l2_mbus_framefmt *format;
@@ -170,7 +170,7 @@ static void uds_try_format(struct vsp1_uds *uds,
 
 	case UDS_PAD_SOURCE:
 		/* The UDS scales but can't perform format conversion. */
-		format = v4l2_subdev_state_get_format(sd_state, UDS_PAD_SINK);
+		format = v4l2_subdev_state_get_format(state, UDS_PAD_SINK);
 		fmt->code = format->code;
 
 		uds_output_limits(format->width, &minimum, &maximum);

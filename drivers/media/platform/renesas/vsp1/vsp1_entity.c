@@ -268,7 +268,7 @@ int vsp1_subdev_set_pad_format(struct v4l2_subdev *subdev,
 }
 
 static int vsp1_entity_init_state(struct v4l2_subdev *subdev,
-				  struct v4l2_subdev_state *sd_state)
+				  struct v4l2_subdev_state *state)
 {
 	unsigned int pad;
 
@@ -278,7 +278,7 @@ static int vsp1_entity_init_state(struct v4l2_subdev *subdev,
 			.pad = pad,
 		};
 
-		v4l2_subdev_call(subdev, pad, set_fmt, sd_state, &format);
+		v4l2_subdev_call(subdev, pad, set_fmt, state, &format);
 	}
 
 	return 0;

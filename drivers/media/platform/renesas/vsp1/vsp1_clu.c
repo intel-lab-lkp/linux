@@ -123,28 +123,28 @@ static const unsigned int clu_codes[] = {
 };
 
 static int clu_enum_mbus_code(struct v4l2_subdev *subdev,
-			      struct v4l2_subdev_state *sd_state,
+			      struct v4l2_subdev_state *state,
 			      struct v4l2_subdev_mbus_code_enum *code)
 {
-	return vsp1_subdev_enum_mbus_code(subdev, sd_state, code, clu_codes,
+	return vsp1_subdev_enum_mbus_code(subdev, state, code, clu_codes,
 					  ARRAY_SIZE(clu_codes));
 }
 
 static int clu_enum_frame_size(struct v4l2_subdev *subdev,
-			       struct v4l2_subdev_state *sd_state,
+			       struct v4l2_subdev_state *state,
 			       struct v4l2_subdev_frame_size_enum *fse)
 {
-	return vsp1_subdev_enum_frame_size(subdev, sd_state, fse,
+	return vsp1_subdev_enum_frame_size(subdev, state, fse,
 					   CLU_MIN_SIZE,
 					   CLU_MIN_SIZE, CLU_MAX_SIZE,
 					   CLU_MAX_SIZE);
 }
 
 static int clu_set_format(struct v4l2_subdev *subdev,
-			  struct v4l2_subdev_state *sd_state,
+			  struct v4l2_subdev_state *state,
 			  struct v4l2_subdev_format *fmt)
 {
-	return vsp1_subdev_set_pad_format(subdev, sd_state, fmt, clu_codes,
+	return vsp1_subdev_set_pad_format(subdev, state, fmt, clu_codes,
 					  ARRAY_SIZE(clu_codes),
 					  CLU_MIN_SIZE, CLU_MIN_SIZE,
 					  CLU_MAX_SIZE, CLU_MAX_SIZE);
