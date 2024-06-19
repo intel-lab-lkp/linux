@@ -93,6 +93,13 @@ properties:
       the turn around line low at end of the control phase of the
       MDIO transaction.
 
+  brr-mode:
+    $ref: /schemas/types.yaml#/definitions/flag
+    description:
+      Request the PHY to operate in BroadR-Reach mode. This means the
+      PHY will use the BroadR-Reach protocol to communicate with the other
+      end of the link, including LDS auto-negotiation if applicable.
+
   clocks:
     maxItems: 1
     description:
