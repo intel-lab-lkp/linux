@@ -1843,6 +1843,9 @@ mwifiex_parse_single_response_buf(struct mwifiex_private *priv, u8 **bss_info,
 			return 0;
 		}
 
+		if (!priv->wdev.wiphy)
+			return 0;
+
 		band = BAND_G;
 		if (radio_type)
 			band = mwifiex_radio_type_to_band(*radio_type &
