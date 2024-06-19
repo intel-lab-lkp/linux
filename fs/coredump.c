@@ -366,18 +366,17 @@ static int zap_process(struct task_struct *start, int exit_code)
 	struct task_struct *t;
 	int nr = 0;
 
-	/* Allow SIGKILL, see prepare_signal() */
 	start->signal->flags = SIGNAL_GROUP_EXIT;
 	start->signal->group_exit_code = exit_code;
 	start->signal->group_stop_count = 0;
 
 	for_each_thread(start, t) {
 		task_clear_jobctl_pending(t, JOBCTL_PENDING_MASK);
-		if (t != current && !(t->flags & PF_POSTCOREDUMP)) {
+		if (!(t->flags & PF_POSTCOREDUMP)) {
 			sigaddset(&t->pending.signal, SIGKILL);
 			signal_wake_up(t, 1);
-			nr++;
 		}
+		nr += (t != current) && !(t->flags & PF_POSTCOREDUMP);
 	}
 
 	return nr;
@@ -393,9 +392,12 @@ static int zap_threads(struct task_struct *tsk,
 	if (!(signal->flags & SIGNAL_GROUP_EXIT) && !signal->group_exec_task) {
 		signal->core_state = core_state;
 		nr = zap_process(tsk, exit_code);
-		clear_tsk_thread_flag(tsk, TIF_SIGPENDING);
-		tsk->flags |= PF_DUMPCORE;
 		atomic_set(&core_state->nr_threads, nr);
+
+		/* Allow SIGKILL, see prepare_signal() */
+		clear_tsk_thread_flag(tsk, TIF_SIGPENDING);
+		sigdelset(&tsk->pending.signal, SIGKILL);
+		tsk->flags |= PF_DUMPCORE;
 	}
 	spin_unlock_irq(&tsk->sighand->siglock);
 	return nr;
