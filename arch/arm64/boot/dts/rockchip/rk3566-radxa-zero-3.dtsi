@@ -7,7 +7,7 @@
 
 / {
 	aliases {
-		mmc0 = &sdmmc0;
+		mmc1 = &sdmmc0;
 	};
 
 	chosen {
