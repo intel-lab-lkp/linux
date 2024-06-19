@@ -62,7 +62,9 @@ allOf:
         properties:
           compatible:
             contains:
-              const: mediatek,mt8195-gce
+              enum:
+                - mediatek,mt8188-gce
+                - mediatek,mt8195-gce
     then:
       required:
         - clock-names
