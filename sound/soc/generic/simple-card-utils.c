@@ -799,10 +799,14 @@ int simple_util_init_jack(struct snd_soc_card *card,
 		sjack->gpio.desc	= desc;
 		sjack->gpio.debounce_time = 150;
 
-		snd_soc_card_jack_new_pins(card, pin_name, mask, &sjack->jack,
+		error = snd_soc_card_jack_new_pins(card, pin_name, mask, &sjack->jack,
 					   &sjack->pin, 1);
+		if (error)
+			return error;
 
-		snd_soc_jack_add_gpios(&sjack->jack, 1, &sjack->gpio);
+		error = snd_soc_jack_add_gpios(&sjack->jack, 1, &sjack->gpio);
+		if (error)
+			return error;
 	}
 
 	return 0;
