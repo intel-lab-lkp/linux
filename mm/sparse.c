@@ -195,9 +195,6 @@ void __init subsection_map_init(unsigned long pfn, unsigned long nr_pages)
 	int end_sec = pfn_to_section_nr(pfn + nr_pages - 1);
 	unsigned long nr, start_sec = pfn_to_section_nr(pfn);
 
-	if (!nr_pages)
-		return;
-
 	for (nr = start_sec; nr <= end_sec; nr++) {
 		struct mem_section *ms;
 		unsigned long pfns;
