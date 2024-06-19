@@ -347,7 +347,7 @@ int import_ubuf(int type, void __user *buf, size_t len, struct iov_iter *i);
 static inline void iov_iter_ubuf(struct iov_iter *i, unsigned int direction,
 			void __user *buf, size_t count)
 {
-	WARN_ON(direction & ~(READ | WRITE));
+	WARN_ON(direction & ~(ITER_DEST | ITER_SOURCE));
 	*i = (struct iov_iter) {
 		.iter_type = ITER_UBUF,
 		.data_source = direction,
