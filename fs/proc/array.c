@@ -525,6 +525,9 @@ static int do_task_stat(struct seq_file *m, struct pid_namespace *ns,
 
 		rsslim = READ_ONCE(sig->rlim[RLIMIT_RSS].rlim_cur);
 
+		if (task_is_traced(task) && !(task->jobctl & JOBCTL_LISTENING))
+			exit_code = task->ptrace_code;
+
 		if (whole) {
 			if (sig->flags & (SIGNAL_GROUP_EXIT | SIGNAL_STOP_STOPPED))
 				exit_code = sig->group_exit_code;

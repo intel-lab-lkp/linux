@@ -2193,7 +2193,7 @@ static void do_notify_parent_cldstop(struct task_struct *tsk,
  		info.si_status = tsk->signal->group_exit_code & 0x7f;
  		break;
  	case CLD_TRAPPED:
- 		info.si_status = tsk->exit_code & 0x7f;
+		info.si_status = tsk->ptrace_code & 0x7f;
  		break;
  	default:
  		BUG();
@@ -2223,7 +2223,7 @@ static void do_notify_parent_cldstop(struct task_struct *tsk,
  * with.  If the code did not stop because the tracer is gone,
  * the stop signal remains unchanged unless clear_code.
  */
-static int ptrace_stop(int exit_code, int why, unsigned long message,
+static int ptrace_stop(int code, int why, unsigned long message,
 		       kernel_siginfo_t *info)
 	__releases(&current->sighand->siglock)
 	__acquires(&current->sighand->siglock)
@@ -2246,12 +2246,12 @@ static int ptrace_stop(int exit_code, int why, unsigned long message,
 
 	/* Do not stop if ptrace_unlink has happened. */
 	if (!current->ptrace)
-		return exit_code;
+		return code;
 
 	/* Do not stop in a killed task except for PTRACE_EVENT_EXIT */
 	if (task_exit_pending(current) &&
-	    ((exit_code >> 8) != PTRACE_EVENT_EXIT))
-		return exit_code;
+	    ((code >> 8) != PTRACE_EVENT_EXIT))
+		return code;
 
 	/*
 	 * After this point ptrace_unlink or a fatal signal will clear
@@ -2282,7 +2282,7 @@ static int ptrace_stop(int exit_code, int why, unsigned long message,
 
 	current->ptrace_message = message;
 	current->last_siginfo = info;
-	current->exit_code = exit_code;
+	current->ptrace_code = code;
 
 	/*
 	 * If @why is CLD_STOPPED, we're trapping to participate in a group
@@ -2361,10 +2361,10 @@ static int ptrace_stop(int exit_code, int why, unsigned long message,
 	 * any signal-sending on another CPU that wants to examine it.
 	 */
 	spin_lock_irq(&current->sighand->siglock);
-	exit_code = current->exit_code;
+	code = current->ptrace_code;
 	current->last_siginfo = NULL;
 	current->ptrace_message = 0;
-	current->exit_code = 0;
+	current->ptrace_code = 0;
 
 	/* LISTENING can be set only during STOP traps, clear it */
 	current->jobctl &= ~(JOBCTL_LISTENING | JOBCTL_PTRACE_FROZEN);
@@ -2375,7 +2375,7 @@ static int ptrace_stop(int exit_code, int why, unsigned long message,
 	 * This sets TIF_SIGPENDING, but never clears it.
 	 */
 	recalc_sigpending_tsk(current);
-	return exit_code;
+	return code;
 }
 
 static int ptrace_do_notify(int signr, int exit_code, int why, unsigned long message)
@@ -2535,11 +2535,11 @@ static bool do_signal_stop(int signr)
  *
  * When PT_SEIZED, it's used for both group stop and explicit
  * SEIZE/INTERRUPT traps.  Both generate PTRACE_EVENT_STOP trap with
- * accompanying siginfo.  If stopped, lower eight bits of exit_code contain
+ * accompanying siginfo.  If stopped, lower eight bits of ptrace_code contain
  * the stop signal; otherwise, %SIGTRAP.
  *
  * When !PT_SEIZED, it's used only for group stop trap with stop signal
- * number as exit_code and no siginfo.
+ * number as ptrace_code and no siginfo.
  *
  * CONTEXT:
  * Must be called with @current->sighand->siglock held, which may be
