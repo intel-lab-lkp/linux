@@ -801,6 +801,7 @@ static void synchronize_group_exit(struct task_struct *tsk, long code)
 	struct signal_struct *signal = tsk->signal;
 
 	spin_lock_irq(&sighand->siglock);
+	tsk->jobctl |= JOBCTL_WILL_EXIT;
 	signal->quick_threads--;
 	if ((signal->quick_threads == 0) &&
 	    !(signal->flags & SIGNAL_GROUP_EXIT)) {
@@ -1012,6 +1013,7 @@ do_group_exit(int exit_code)
 			sig->group_exit_code = exit_code;
 			sig->flags = SIGNAL_GROUP_EXIT;
 			zap_other_threads(current);
+			current->jobctl |= JOBCTL_WILL_EXIT;
 		}
 		spin_unlock_irq(&sighand->siglock);
 	}

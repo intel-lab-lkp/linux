@@ -443,6 +443,7 @@ static void coredump_finish(bool core_dumped)
 		current->signal->group_exit_code |= 0x80;
 	next = current->signal->core_state->dumper.next;
 	current->signal->core_state = NULL;
+	current->jobctl |= JOBCTL_WILL_EXIT;
 	spin_unlock_irq(&current->sighand->siglock);
 
 	while ((curr = next) != NULL) {

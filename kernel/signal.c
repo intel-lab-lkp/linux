@@ -2253,15 +2253,19 @@ static int ptrace_stop(int exit_code, int why, unsigned long message,
 		spin_lock_irq(&current->sighand->siglock);
 	}
 
-	/*
-	 * After this point ptrace_signal_wake_up or signal_wake_up
-	 * will clear TASK_TRACED if ptrace_unlink happens or a fatal
-	 * signal comes in.  Handle previous ptrace_unlinks and fatal
-	 * signals here to prevent ptrace_stop sleeping in schedule.
-	 */
-	if (!current->ptrace || __fatal_signal_pending(current))
+	/* Do not stop if ptrace_unlink has happened. */
+	if (!current->ptrace)
 		return exit_code;
 
+	/* Do not stop in a killed task except for PTRACE_EVENT_EXIT */
+	if (task_exit_pending(current) &&
+	    ((exit_code >> 8) != PTRACE_EVENT_EXIT))
+		return exit_code;
+
+	/*
+	 * After this point ptrace_unlink or a fatal signal will clear
+	 * TASK_TRACED preventing ptrace_stop from sleeping.
+	 */
 	set_special_state(TASK_TRACED);
 	current->jobctl |= JOBCTL_TRACED;
 
@@ -2746,7 +2750,6 @@ relock:
 		if ((signal->flags & SIGNAL_GROUP_EXIT) ||
 		     signal->group_exec_task) {
 			signr = SIGKILL;
-			current->jobctl &= ~JOBCTL_WILL_EXIT;
 			trace_signal_deliver(SIGKILL, SEND_SIG_NOINFO,
 					     &sighand->action[SIGKILL-1]);
 			recalc_sigpending();
@@ -2889,6 +2892,7 @@ relock:
 			signal->group_exit_code = exit_code;
 			signal->flags = SIGNAL_GROUP_EXIT;
 			zap_other_threads(current);
+			current->jobctl |= JOBCTL_WILL_EXIT;
 		}
 	fatal:
 		spin_unlock_irq(&sighand->siglock);
