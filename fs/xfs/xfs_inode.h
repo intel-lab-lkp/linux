@@ -37,12 +37,6 @@ typedef struct xfs_inode {
 	struct xfs_ifork	i_df;		/* data fork */
 	struct xfs_ifork	i_af;		/* attribute fork */
 
-	/* Transaction and locking information. */
-	struct xfs_inode_log_item *i_itemp;	/* logging information */
-	struct rw_semaphore	i_lock;		/* inode lock */
-	atomic_t		i_pincount;	/* inode pin count */
-	struct llist_node	i_gclist;	/* deferred inactivation list */
-
 	/*
 	 * Bitsets of inode metadata that have been checked and/or are sick.
 	 * Callers must hold i_flags_lock before accessing this field.
@@ -87,6 +81,12 @@ typedef struct xfs_inode {
 
 	/* VFS inode */
 	struct inode		i_vnode;	/* embedded VFS inode */
+
+	/* Transaction and locking information. */
+	struct xfs_inode_log_item *i_itemp;	/* logging information */
+	struct rw_semaphore	i_lock;		/* inode lock */
+	struct llist_node	i_gclist;	/* deferred inactivation list */
+	atomic_t		i_pincount;	/* inode pin count */
 
 	/* pending io completions */
 	spinlock_t		i_ioend_lock;
