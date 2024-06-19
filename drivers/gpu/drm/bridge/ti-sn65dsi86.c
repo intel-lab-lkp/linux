@@ -696,6 +696,7 @@ static struct ti_sn65dsi86 *bridge_to_ti_sn65dsi86(struct drm_bridge *bridge)
 
 static int ti_sn_attach_host(struct auxiliary_device *adev, struct ti_sn65dsi86 *pdata)
 {
+	int ret;
 	int val;
 	struct mipi_dsi_host *host;
 	struct mipi_dsi_device *dsi;
@@ -720,8 +721,11 @@ static int ti_sn_attach_host(struct auxiliary_device *adev, struct ti_sn65dsi86 
 
 	/* check if continuous dsi clock is required or not */
 	pm_runtime_get_sync(dev);
-	regmap_read(pdata->regmap, SN_DPPLL_SRC_REG, &val);
+	ret = regmap_read(pdata->regmap, SN_DPPLL_SRC_REG, &val);
 	pm_runtime_put_autosuspend(dev);
+	if (ret)
+		return ret;
+
 	if (!(val & DPPLL_CLK_SRC_DSICLK))
 		dsi->mode_flags |= MIPI_DSI_CLOCK_NON_CONTINUOUS;
 
