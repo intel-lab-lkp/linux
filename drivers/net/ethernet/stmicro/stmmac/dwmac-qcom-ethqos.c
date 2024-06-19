@@ -7,6 +7,7 @@
 #include <linux/platform_device.h>
 #include <linux/phy.h>
 #include <linux/phy/phy.h>
+#include <linux/interconnect.h>
 
 #include "stmmac.h"
 #include "stmmac_platform.h"
@@ -113,6 +114,9 @@ struct qcom_ethqos {
 	unsigned int num_por;
 	bool rgmii_config_loopback_en;
 	bool has_emac_ge_3;
+
+	struct icc_path *axi_icc_path;
+	struct icc_path *ahb_icc_path;
 };
 
 static int rgmii_readl(struct qcom_ethqos *ethqos, unsigned int offset)
@@ -668,12 +672,19 @@ static int ethqos_configure(struct qcom_ethqos *ethqos)
 	return ethqos->configure_func(ethqos);
 }
 
+static void ethqos_set_icc_bw(struct qcom_ethqos *ethqos, unsigned int speed)
+{
+	icc_set_bw(ethqos->axi_icc_path, Mbps_to_icc(speed), Mbps_to_icc(speed));
+	icc_set_bw(ethqos->ahb_icc_path, Mbps_to_icc(speed), Mbps_to_icc(speed));
+}
+
 static void ethqos_fix_mac_speed(void *priv, unsigned int speed, unsigned int mode)
 {
 	struct qcom_ethqos *ethqos = priv;
 
 	ethqos->speed = speed;
 	ethqos_update_link_clk(ethqos, speed);
+	ethqos_set_icc_bw(ethqos, speed);
 	ethqos_configure(ethqos);
 }
 
@@ -812,6 +823,14 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	if (IS_ERR(ethqos->link_clk))
 		return dev_err_probe(dev, PTR_ERR(ethqos->link_clk),
 				     "Failed to get link_clk\n");
+
+	ethqos->axi_icc_path = devm_of_icc_get(dev, "axi_icc_path");
+	if (IS_ERR(ethqos->axi_icc_path))
+		return PTR_ERR(ethqos->axi_icc_path);
+
+	ethqos->ahb_icc_path = devm_of_icc_get(dev, "ahb_icc_path");
+	if (IS_ERR(ethqos->axi_icc_path))
+		return PTR_ERR(ethqos->axi_icc_path);
 
 	ret = ethqos_clks_config(ethqos, true);
 	if (ret)
