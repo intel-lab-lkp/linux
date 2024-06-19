@@ -608,6 +608,7 @@ enum {
 	RELEASE_ALL_PAGES_MASK = 0x4000,
 };
 
+#define MAX_RECLAIM_NPAGES -50000
 static int req_pages_handler(struct notifier_block *nb,
 			     unsigned long type, void *data)
 {
@@ -639,9 +640,13 @@ static int req_pages_handler(struct notifier_block *nb,
 
 	req->dev = dev;
 	req->func_id = func_id;
-	req->npages = npages;
 	req->ec_function = ec_function;
 	req->release_all = release_all;
+	if (npages < MAX_RECLAIM_NPAGES)
+		req->npages = MAX_RECLAIM_NPAGES;
+	else
+		req->npages = npages;
+
 	INIT_WORK(&req->work, pages_work_handler);
 	queue_work(dev->priv.pg_wq, &req->work);
 	return NOTIFY_OK;
