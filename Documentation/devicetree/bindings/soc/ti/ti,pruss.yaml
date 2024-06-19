@@ -92,6 +92,13 @@ properties:
     description: |
       This property is as per sci-pm-domain.txt.
 
+  ethernet:
+    description: |
+      ICSSG PRUSS Ethernet. Configuration for an Ethernet controller running
+      on the PRU-ICSS.
+    $ref: /schemas/net/ti,icssg-prueth.yaml#
+    type: object
+
 patternProperties:
 
   memories@[a-f0-9]+$:
