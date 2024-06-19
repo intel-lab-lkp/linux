@@ -66,6 +66,26 @@ static void verify_dma_pinned(unsigned int cmd, struct page **pages,
 	}
 }
 
+static void verify_exclusive_pinned(unsigned int gup_flags, struct page **pages,
+				    unsigned long nr_pages)
+{
+	unsigned long i;
+	const struct folio *folio;
+
+	if (!(gup_flags & FOLL_EXCLUSIVE))
+		return;
+
+	for (i = 0; i < nr_pages; i++) {
+		folio = page_folio(pages[i]);
+
+		if (WARN(!folio_maybe_exclusive_pinned(folio),
+			 "pages[%lu] is not exclusive pinned\n", i)) {
+			dump_page(&folio->page, "gup_test failure");
+			break;
+		}
+	}
+}
+
 static void dump_pages_test(struct gup_test *gup, struct page **pages,
 			    unsigned long nr_pages)
 {
@@ -184,6 +204,8 @@ static int __gup_test_ioctl(unsigned int cmd,
 	 * state: print a warning if any non-dma-pinned pages are found:
 	 */
 	verify_dma_pinned(cmd, pages, nr_pages);
+
+	verify_exclusive_pinned(gup->gup_flags, pages, nr_pages);
 
 	if (cmd == DUMP_USER_PAGES_TEST)
 		dump_pages_test(gup, pages, nr_pages);
