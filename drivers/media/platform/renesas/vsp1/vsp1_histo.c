@@ -199,25 +199,14 @@ static int histo_enum_frame_size(struct v4l2_subdev *subdev,
 }
 
 static int histo_get_selection(struct v4l2_subdev *subdev,
-			       struct v4l2_subdev_state *sd_state,
+			       struct v4l2_subdev_state *state,
 			       struct v4l2_subdev_selection *sel)
 {
-	struct vsp1_histogram *histo = subdev_to_histo(subdev);
-	struct v4l2_subdev_state *state;
 	struct v4l2_mbus_framefmt *format;
 	struct v4l2_rect *crop;
-	int ret = 0;
 
 	if (sel->pad != HISTO_PAD_SINK)
 		return -EINVAL;
-
-	mutex_lock(&histo->entity.lock);
-
-	state = vsp1_entity_get_state(&histo->entity, sd_state, sel->which);
-	if (!state) {
-		ret = -EINVAL;
-		goto done;
-	}
 
 	switch (sel->target) {
 	case V4L2_SEL_TGT_COMPOSE_BOUNDS:
@@ -247,13 +236,10 @@ static int histo_get_selection(struct v4l2_subdev *subdev,
 		break;
 
 	default:
-		ret = -EINVAL;
-		break;
+		return -EINVAL;
 	}
 
-done:
-	mutex_unlock(&histo->entity.lock);
-	return ret;
+	return 0;
 }
 
 static int histo_set_crop(struct v4l2_subdev *subdev,
@@ -326,34 +312,18 @@ static int histo_set_compose(struct v4l2_subdev *subdev,
 }
 
 static int histo_set_selection(struct v4l2_subdev *subdev,
-			       struct v4l2_subdev_state *sd_state,
+			       struct v4l2_subdev_state *state,
 			       struct v4l2_subdev_selection *sel)
 {
-	struct vsp1_histogram *histo = subdev_to_histo(subdev);
-	struct v4l2_subdev_state *state;
-	int ret;
-
 	if (sel->pad != HISTO_PAD_SINK)
 		return -EINVAL;
 
-	mutex_lock(&histo->entity.lock);
-
-	state = vsp1_entity_get_state(&histo->entity, sd_state, sel->which);
-	if (!state) {
-		ret = -EINVAL;
-		goto done;
-	}
-
 	if (sel->target == V4L2_SEL_TGT_CROP)
-		ret = histo_set_crop(subdev, state, sel);
+		return histo_set_crop(subdev, state, sel);
 	else if (sel->target == V4L2_SEL_TGT_COMPOSE)
-		ret = histo_set_compose(subdev, state, sel);
+		return histo_set_compose(subdev, state, sel);
 	else
-		ret = -EINVAL;
-
-done:
-	mutex_unlock(&histo->entity.lock);
-	return ret;
+		return -EINVAL;
 }
 
 static int histo_set_format(struct v4l2_subdev *subdev,
@@ -381,7 +351,7 @@ static int histo_set_format(struct v4l2_subdev *subdev,
 static const struct v4l2_subdev_pad_ops histo_pad_ops = {
 	.enum_mbus_code = histo_enum_mbus_code,
 	.enum_frame_size = histo_enum_frame_size,
-	.get_fmt = vsp1_subdev_get_pad_format,
+	.get_fmt = v4l2_subdev_get_fmt,
 	.set_fmt = histo_set_format,
 	.get_selection = histo_get_selection,
 	.set_selection = histo_set_selection,

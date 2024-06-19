@@ -486,9 +486,14 @@ static void vsp1_pipeline_propagate_partition(struct vsp1_pipeline *pipe,
 	struct vsp1_entity *entity;
 
 	list_for_each_entry_reverse(entity, &pipe->entities, list_pipe) {
-		if (entity->ops->partition)
-			entity->ops->partition(entity, entity->state, pipe,
-					       partition, index, window);
+		struct v4l2_subdev_state *state;
+
+		if (!entity->ops->partition)
+			continue;
+
+		state = v4l2_subdev_get_locked_active_state(&entity->subdev);
+		entity->ops->partition(entity, state, pipe, partition, index,
+				       window);
 	}
 }
 
@@ -507,6 +512,7 @@ void vsp1_pipeline_calculate_partition(struct vsp1_pipeline *pipe,
 				       unsigned int index)
 {
 	const struct v4l2_mbus_framefmt *format;
+	struct v4l2_subdev_state *state;
 	struct v4l2_rect window;
 	unsigned int modulus;
 
@@ -514,8 +520,8 @@ void vsp1_pipeline_calculate_partition(struct vsp1_pipeline *pipe,
 	 * Partitions are computed on the size before rotation, use the format
 	 * at the WPF sink.
 	 */
-	format = v4l2_subdev_state_get_format(pipe->output->entity.state,
-					      RWPF_PAD_SINK);
+	state = v4l2_subdev_get_locked_active_state(&pipe->output->entity.subdev);
+	format = v4l2_subdev_state_get_format(state, RWPF_PAD_SINK);
 
 	/* Initialise the partition with sane starting conditions. */
 	window.left = index * div_size;

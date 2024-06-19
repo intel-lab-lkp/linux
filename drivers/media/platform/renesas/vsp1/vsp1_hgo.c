@@ -205,6 +205,8 @@ struct vsp1_hgo *vsp1_hgo_create(struct vsp1_device *vsp1)
 	/* Initialize the control handler. */
 	v4l2_ctrl_handler_init(&hgo->ctrls.handler,
 			       vsp1->info->gen >= 3 ? 2 : 1);
+	hgo->ctrls.handler.lock = &hgo->histo.entity.subdev.active_state->_lock;
+
 	hgo->ctrls.max_rgb = v4l2_ctrl_new_custom(&hgo->ctrls.handler,
 						  &hgo_max_rgb_control, NULL);
 	if (vsp1->info->gen >= 3)

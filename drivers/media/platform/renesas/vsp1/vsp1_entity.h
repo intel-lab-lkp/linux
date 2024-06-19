@@ -10,7 +10,6 @@
 #define __VSP1_ENTITY_H__
 
 #include <linux/list.h>
-#include <linux/mutex.h>
 
 #include <media/v4l2-subdev.h>
 
@@ -125,9 +124,6 @@ struct vsp1_entity {
 	unsigned int sink_pad;
 
 	struct v4l2_subdev subdev;
-	struct v4l2_subdev_state *state;
-
-	struct mutex lock;	/* Protects the state */
 };
 
 static inline struct vsp1_entity *to_vsp1_entity(struct v4l2_subdev *subdev)
@@ -143,11 +139,6 @@ void vsp1_entity_destroy(struct vsp1_entity *entity);
 int vsp1_entity_link_setup(struct media_entity *entity,
 			   const struct media_pad *local,
 			   const struct media_pad *remote, u32 flags);
-
-struct v4l2_subdev_state *
-vsp1_entity_get_state(struct vsp1_entity *entity,
-		      struct v4l2_subdev_state *sd_state,
-		      enum v4l2_subdev_format_whence which);
 
 void vsp1_entity_route_setup(struct vsp1_entity *entity,
 			     struct vsp1_pipeline *pipe,
@@ -172,21 +163,18 @@ void vsp1_entity_configure_partition(struct vsp1_entity *entity,
 
 struct media_pad *vsp1_entity_remote_pad(struct media_pad *pad);
 
-int vsp1_subdev_get_pad_format(struct v4l2_subdev *subdev,
-			       struct v4l2_subdev_state *sd_state,
-			       struct v4l2_subdev_format *fmt);
 int vsp1_subdev_set_pad_format(struct v4l2_subdev *subdev,
-			       struct v4l2_subdev_state *sd_state,
+			       struct v4l2_subdev_state *state,
 			       struct v4l2_subdev_format *fmt,
 			       const unsigned int *codes, unsigned int ncodes,
 			       unsigned int min_width, unsigned int min_height,
 			       unsigned int max_width, unsigned int max_height);
 int vsp1_subdev_enum_mbus_code(struct v4l2_subdev *subdev,
-			       struct v4l2_subdev_state *sd_state,
+			       struct v4l2_subdev_state *state,
 			       struct v4l2_subdev_mbus_code_enum *code,
 			       const unsigned int *codes, unsigned int ncodes);
 int vsp1_subdev_enum_frame_size(struct v4l2_subdev *subdev,
-				struct v4l2_subdev_state *sd_state,
+				struct v4l2_subdev_state *state,
 				struct v4l2_subdev_frame_size_enum *fse,
 				unsigned int min_w, unsigned int min_h,
 				unsigned int max_w, unsigned int max_h);

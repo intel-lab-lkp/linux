@@ -157,7 +157,7 @@ static int clu_set_format(struct v4l2_subdev *subdev,
 static const struct v4l2_subdev_pad_ops clu_pad_ops = {
 	.enum_mbus_code = clu_enum_mbus_code,
 	.enum_frame_size = clu_enum_frame_size,
-	.get_fmt = vsp1_subdev_get_pad_format,
+	.get_fmt = v4l2_subdev_get_fmt,
 	.set_fmt = clu_set_format,
 };
 
@@ -266,6 +266,8 @@ struct vsp1_clu *vsp1_clu_create(struct vsp1_device *vsp1)
 
 	/* Initialize the control handler. */
 	v4l2_ctrl_handler_init(&clu->ctrls, 2);
+	clu->ctrls.lock = &clu->entity.subdev.active_state->_lock;
+
 	v4l2_ctrl_new_custom(&clu->ctrls, &clu_table_control, NULL);
 	v4l2_ctrl_new_custom(&clu->ctrls, &clu_mode_control, NULL);
 

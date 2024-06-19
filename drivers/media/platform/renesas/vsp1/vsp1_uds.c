@@ -124,26 +124,15 @@ static int uds_enum_mbus_code(struct v4l2_subdev *subdev,
 }
 
 static int uds_enum_frame_size(struct v4l2_subdev *subdev,
-			       struct v4l2_subdev_state *sd_state,
+			       struct v4l2_subdev_state *state,
 			       struct v4l2_subdev_frame_size_enum *fse)
 {
-	struct vsp1_uds *uds = to_uds(subdev);
-	struct v4l2_subdev_state *state;
 	struct v4l2_mbus_framefmt *format;
-	int ret = 0;
-
-	state = vsp1_entity_get_state(&uds->entity, sd_state, fse->which);
-	if (!state)
-		return -EINVAL;
 
 	format = v4l2_subdev_state_get_format(state, UDS_PAD_SINK);
 
-	mutex_lock(&uds->entity.lock);
-
-	if (fse->index || fse->code != format->code) {
-		ret = -EINVAL;
-		goto done;
-	}
+	if (fse->index || fse->code != format->code)
+		return -EINVAL;
 
 	if (fse->pad == UDS_PAD_SINK) {
 		fse->min_width = UDS_MIN_SIZE;
@@ -157,9 +146,7 @@ static int uds_enum_frame_size(struct v4l2_subdev *subdev,
 				  &fse->max_height);
 	}
 
-done:
-	mutex_unlock(&uds->entity.lock);
-	return ret;
+	return 0;
 }
 
 static void uds_try_format(struct vsp1_uds *uds,
@@ -198,21 +185,11 @@ static void uds_try_format(struct vsp1_uds *uds,
 }
 
 static int uds_set_format(struct v4l2_subdev *subdev,
-			  struct v4l2_subdev_state *sd_state,
+			  struct v4l2_subdev_state *state,
 			  struct v4l2_subdev_format *fmt)
 {
 	struct vsp1_uds *uds = to_uds(subdev);
-	struct v4l2_subdev_state *state;
 	struct v4l2_mbus_framefmt *format;
-	int ret = 0;
-
-	mutex_lock(&uds->entity.lock);
-
-	state = vsp1_entity_get_state(&uds->entity, sd_state, fmt->which);
-	if (!state) {
-		ret = -EINVAL;
-		goto done;
-	}
 
 	uds_try_format(uds, state, fmt->pad, &fmt->format);
 
@@ -227,9 +204,7 @@ static int uds_set_format(struct v4l2_subdev *subdev,
 		uds_try_format(uds, state, UDS_PAD_SOURCE, format);
 	}
 
-done:
-	mutex_unlock(&uds->entity.lock);
-	return ret;
+	return 0;
 }
 
 /* -----------------------------------------------------------------------------
@@ -239,7 +214,7 @@ done:
 static const struct v4l2_subdev_pad_ops uds_pad_ops = {
 	.enum_mbus_code = uds_enum_mbus_code,
 	.enum_frame_size = uds_enum_frame_size,
-	.get_fmt = vsp1_subdev_get_pad_format,
+	.get_fmt = v4l2_subdev_get_fmt,
 	.set_fmt = uds_set_format,
 };
 

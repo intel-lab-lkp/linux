@@ -62,21 +62,11 @@ static int hsit_enum_frame_size(struct v4l2_subdev *subdev,
 }
 
 static int hsit_set_format(struct v4l2_subdev *subdev,
-			   struct v4l2_subdev_state *sd_state,
+			   struct v4l2_subdev_state *state,
 			   struct v4l2_subdev_format *fmt)
 {
 	struct vsp1_hsit *hsit = to_hsit(subdev);
-	struct v4l2_subdev_state *state;
 	struct v4l2_mbus_framefmt *format;
-	int ret = 0;
-
-	mutex_lock(&hsit->entity.lock);
-
-	state = vsp1_entity_get_state(&hsit->entity, sd_state, fmt->which);
-	if (!state) {
-		ret = -EINVAL;
-		goto done;
-	}
 
 	format = v4l2_subdev_state_get_format(state, fmt->pad);
 
@@ -86,7 +76,7 @@ static int hsit_set_format(struct v4l2_subdev *subdev,
 		 * modified.
 		 */
 		fmt->format = *format;
-		goto done;
+		return 0;
 	}
 
 	format->code = hsit->inverse ? MEDIA_BUS_FMT_AHSV8888_1X32
@@ -106,15 +96,13 @@ static int hsit_set_format(struct v4l2_subdev *subdev,
 	format->code = hsit->inverse ? MEDIA_BUS_FMT_ARGB8888_1X32
 		     : MEDIA_BUS_FMT_AHSV8888_1X32;
 
-done:
-	mutex_unlock(&hsit->entity.lock);
-	return ret;
+	return 0;
 }
 
 static const struct v4l2_subdev_pad_ops hsit_pad_ops = {
 	.enum_mbus_code = hsit_enum_mbus_code,
 	.enum_frame_size = hsit_enum_frame_size,
-	.get_fmt = vsp1_subdev_get_pad_format,
+	.get_fmt = v4l2_subdev_get_fmt,
 	.set_fmt = hsit_set_format,
 };
 

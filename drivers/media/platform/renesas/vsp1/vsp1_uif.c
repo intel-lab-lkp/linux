@@ -82,24 +82,13 @@ static int uif_set_format(struct v4l2_subdev *subdev,
 }
 
 static int uif_get_selection(struct v4l2_subdev *subdev,
-			     struct v4l2_subdev_state *sd_state,
+			     struct v4l2_subdev_state *state,
 			     struct v4l2_subdev_selection *sel)
 {
-	struct vsp1_uif *uif = to_uif(subdev);
-	struct v4l2_subdev_state *state;
 	struct v4l2_mbus_framefmt *format;
-	int ret = 0;
 
 	if (sel->pad != UIF_PAD_SINK)
 		return -EINVAL;
-
-	mutex_lock(&uif->entity.lock);
-
-	state = vsp1_entity_get_state(&uif->entity, sd_state, sel->which);
-	if (!state) {
-		ret = -EINVAL;
-		goto done;
-	}
 
 	switch (sel->target) {
 	case V4L2_SEL_TGT_CROP_BOUNDS:
@@ -116,36 +105,22 @@ static int uif_get_selection(struct v4l2_subdev *subdev,
 		break;
 
 	default:
-		ret = -EINVAL;
-		break;
+		return -EINVAL;
 	}
 
-done:
-	mutex_unlock(&uif->entity.lock);
-	return ret;
+	return 0;
 }
 
 static int uif_set_selection(struct v4l2_subdev *subdev,
-			     struct v4l2_subdev_state *sd_state,
+			     struct v4l2_subdev_state *state,
 			     struct v4l2_subdev_selection *sel)
 {
-	struct vsp1_uif *uif = to_uif(subdev);
-	struct v4l2_subdev_state *state;
 	struct v4l2_mbus_framefmt *format;
 	struct v4l2_rect *selection;
-	int ret = 0;
 
 	if (sel->pad != UIF_PAD_SINK ||
 	    sel->target != V4L2_SEL_TGT_CROP)
 		return -EINVAL;
-
-	mutex_lock(&uif->entity.lock);
-
-	state = vsp1_entity_get_state(&uif->entity, sd_state, sel->which);
-	if (!state) {
-		ret = -EINVAL;
-		goto done;
-	}
 
 	/* The crop rectangle must be inside the input frame. */
 	format = v4l2_subdev_state_get_format(state, UIF_PAD_SINK);
@@ -161,9 +136,7 @@ static int uif_set_selection(struct v4l2_subdev *subdev,
 	selection = v4l2_subdev_state_get_crop(state, sel->pad);
 	*selection = sel->r;
 
-done:
-	mutex_unlock(&uif->entity.lock);
-	return ret;
+	return 0;
 }
 
 /* -----------------------------------------------------------------------------
@@ -173,7 +146,7 @@ done:
 static const struct v4l2_subdev_pad_ops uif_pad_ops = {
 	.enum_mbus_code = uif_enum_mbus_code,
 	.enum_frame_size = uif_enum_frame_size,
-	.get_fmt = vsp1_subdev_get_pad_format,
+	.get_fmt = v4l2_subdev_get_fmt,
 	.set_fmt = uif_set_format,
 	.get_selection = uif_get_selection,
 	.set_selection = uif_set_selection,

@@ -152,9 +152,13 @@ static void rpf_configure_stream(struct vsp1_entity *entity,
 
 	/* Output location. */
 	if (pipe->brx) {
+		struct v4l2_subdev *brx_subdev = &pipe->brx->subdev;
+		struct v4l2_subdev_state *brx_state;
 		const struct v4l2_rect *compose;
 
-		compose = v4l2_subdev_state_get_compose(pipe->brx->state,
+		brx_state = v4l2_subdev_get_locked_active_state(brx_subdev);
+
+		compose = v4l2_subdev_state_get_compose(brx_state,
 							rpf->brx_input);
 		left = compose->left;
 		top = compose->top;
