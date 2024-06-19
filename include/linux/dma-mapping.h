@@ -74,7 +74,11 @@
  */
 #define DMA_MAPPING_ERROR		(~(dma_addr_t)0)
 
+#ifdef CONFIG_ARCH_64BIT_HAS_DMA32_ONLY
+#define DMA_BIT_MASK(n)	(((n) > 32) ? ((1ULL<<(32))-1) : ((1ULL<<(n))-1))
+#else
 #define DMA_BIT_MASK(n)	(((n) == 64) ? ~0ULL : ((1ULL<<(n))-1))
+#endif
 
 #ifdef CONFIG_DMA_API_DEBUG
 void debug_dma_mapping_error(struct device *dev, dma_addr_t dma_addr);
