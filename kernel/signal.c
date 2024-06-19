@@ -1013,7 +1013,7 @@ void schedule_group_exit_locked(struct signal_struct *signal, int exit_code)
 	signal->group_exit_code = exit_code;
 	signal->group_stop_count = 0;
 	__for_each_thread(signal, t)
-		schedule_task_exit_locked(t);
+		schedule_task_exit_locked(t, exit_code);
 }
 
 static void complete_signal(int sig, struct task_struct *p, enum pid_type type)
@@ -1373,11 +1373,12 @@ int force_sig_info(struct kernel_siginfo *info)
 	return force_sig_info_to_task(info, current, HANDLER_CURRENT);
 }
 
-void schedule_task_exit_locked(struct task_struct *task)
+void schedule_task_exit_locked(struct task_struct *task, int exit_code)
 {
 	if (!(task->jobctl & JOBCTL_WILL_EXIT)) {
 		task_clear_jobctl_pending(task, JOBCTL_PENDING_MASK);
 		task->jobctl |= JOBCTL_WILL_EXIT;
+		task->exit_code = exit_code;
 		signal_wake_up(task, true);
 	}
 }
@@ -2749,7 +2750,7 @@ relock:
 			if (signal->flags & SIGNAL_GROUP_EXIT)
 				exit_code = signal->group_exit_code;
 			else
-				exit_code = 0;
+				exit_code = current->exit_code;
 			goto fatal;
 		}
 

@@ -461,7 +461,7 @@ static inline void ptrace_signal_wake_up(struct task_struct *t, bool resume)
 	signal_wake_up_state(t, state);
 }
 
-void schedule_task_exit_locked(struct task_struct *task);
+void schedule_task_exit_locked(struct task_struct *task, int exit_code);
 void schedule_group_exit_locked(struct signal_struct *signal, int exit_code);
 
 void task_join_group_stop(struct task_struct *task);
