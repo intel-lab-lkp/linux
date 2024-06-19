@@ -1344,6 +1344,11 @@ prepare: tools/bpf/resolve_btfids
 endif
 endif
 
+# README
+# The tools build system is not a part of Kbuild. Before adding yet another
+# tools/* here, please consider if the standard "hostprogs" syntax satisfies
+# your needs.
+
 PHONY += resolve_btfids_clean
 
 resolve_btfids_O = $(abspath $(objtree))/tools/bpf/resolve_btfids
