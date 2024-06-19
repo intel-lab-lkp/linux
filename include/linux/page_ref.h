@@ -92,7 +92,8 @@ static inline void __page_ref_unfreeze(struct page *page, int v)
  * provides safe operation for get_user_pages(), page_mkclean() and
  * other calls that race to set up page table entries.
  */
-#define GUP_PIN_COUNTING_BIAS (1U << 10)
+#define GUP_PIN_COUNTING_SHIFT (10)
+#define GUP_PIN_COUNTING_BIAS (1U << GUP_PIN_COUNTING_SHIFT)
 
 /*
  * GUP_PIN_EXCLUSIVE_BIAS is used to grab an exclusive pin over a page.
@@ -100,7 +101,8 @@ static inline void __page_ref_unfreeze(struct page *page, int v)
  * exist for the page.
  * After it's taken, no other gup pins can be taken.
  */
-#define GUP_PIN_EXCLUSIVE_BIAS (1U << 30)
+#define GUP_PIN_EXCLUSIVE_SHIFT (30)
+#define GUP_PIN_EXCLUSIVE_BIAS (1U << GUP_PIN_EXCLUSIVE_SHIFT)
 
 static inline int page_ref_count(const struct page *page)
 {
@@ -155,7 +157,9 @@ static inline void init_page_count(struct page *page)
 	set_page_count(page, 1);
 }
 
-static __must_check inline bool page_ref_setexc(struct page *page, unsigned int refs)
+static __must_check inline bool page_ref_setexc(struct page *page,
+						unsigned int expected_pins,
+						unsigned int refs)
 {
 	unsigned int old_count, new_count;
 
@@ -165,7 +169,7 @@ static __must_check inline bool page_ref_setexc(struct page *page, unsigned int 
 	do {
 		old_count = atomic_read(&page->_refcount);
 
-		if (old_count >= GUP_PIN_COUNTING_BIAS)
+		if ((old_count >> GUP_PIN_COUNTING_SHIFT) != expected_pins)
 			return false;
 
 		if (check_add_overflow(old_count, refs + GUP_PIN_EXCLUSIVE_BIAS, &new_count))
@@ -178,9 +182,11 @@ static __must_check inline bool page_ref_setexc(struct page *page, unsigned int 
 	return true;
 }
 
-static __must_check inline bool folio_ref_setexc(struct folio *folio, unsigned int refs)
+static __must_check inline bool folio_ref_setexc(struct folio *folio,
+						 unsigned int expected_pins,
+						 unsigned int refs)
 {
-	return page_ref_setexc(&folio->page, refs);
+	return page_ref_setexc(&folio->page, expected_pins, refs);
 }
 
 static inline void page_ref_add(struct page *page, int nr)

@@ -97,7 +97,9 @@ retry:
 	return folio;
 }
 
-static bool large_folio_pin_setexc(struct folio *folio, unsigned int pins)
+static bool large_folio_pin_setexc(struct folio *folio,
+				   unsigned int expected_pins,
+				   unsigned int pins)
 {
 	unsigned int old_pincount, new_pincount;
 
@@ -107,7 +109,7 @@ static bool large_folio_pin_setexc(struct folio *folio, unsigned int pins)
 	do {
 		old_pincount = atomic_read(&folio->_pincount);
 
-		if (old_pincount > 0)
+		if (old_pincount != expected_pins)
 			return false;
 
 		if (check_add_overflow(old_pincount, pins + GUP_PIN_EXCLUSIVE_BIAS, &new_pincount))
@@ -117,15 +119,18 @@ static bool large_folio_pin_setexc(struct folio *folio, unsigned int pins)
 	return true;
 }
 
-static bool __try_grab_folio_excl(struct folio *folio, int pincount, int refcount)
+static bool __try_grab_folio_excl(struct folio *folio,
+				  unsigned int expected_pins,
+				  int pincount,
+				  int refcount)
 {
 	if (WARN_ON_ONCE(!IS_ENABLED(CONFIG_EXCLUSIVE_PIN)))
 		return false;
 
 	if (folio_test_large(folio)) {
-		if (!large_folio_pin_setexc(folio, pincount))
+		if (!large_folio_pin_setexc(folio, expected_pins, pincount))
 			return false;
-	} else if (!folio_ref_setexc(folio, refcount)) {
+	} else if (!folio_ref_setexc(folio, expected_pins, refcount)) {
 		return false;
 	}
 
@@ -135,7 +140,9 @@ static bool __try_grab_folio_excl(struct folio *folio, int pincount, int refcoun
 	return true;
 }
 
-static bool try_grab_folio_excl(struct folio *folio, int refs)
+static bool try_grab_folio_excl(struct folio *folio,
+				unsigned int expected_pins,
+				int refs)
 {
 	/*
 	 * When pinning a large folio, use an exact count to track it.
@@ -145,15 +152,17 @@ static bool try_grab_folio_excl(struct folio *folio, int refs)
 	 * is pinned.  That's why the refcount from the earlier
 	 * try_get_folio() is left intact.
 	 */
-	return __try_grab_folio_excl(folio, refs,
+	return __try_grab_folio_excl(folio, expected_pins, refs,
 				     refs * (GUP_PIN_COUNTING_BIAS - 1));
 }
 
-static bool try_grab_page_excl(struct page *page)
+static bool try_grab_page_excl(struct page *page,
+			       unsigned int expected_pins)
 {
 	struct folio *folio = page_folio(page);
 
-	return __try_grab_folio_excl(folio, 1, GUP_PIN_COUNTING_BIAS);
+	return __try_grab_folio_excl(folio, expected_pins, 1,
+				     GUP_PIN_COUNTING_BIAS);
 }
 
 /**
@@ -227,7 +236,7 @@ struct folio *try_grab_folio(struct page *page, int refs, unsigned int flags)
 	}
 
 	if (unlikely(flags & FOLL_EXCLUSIVE)) {
-		if (!try_grab_folio_excl(folio, refs))
+		if (!try_grab_folio_excl(folio, 0, refs))
 			return NULL;
 	} else {
 		/*
@@ -347,7 +356,7 @@ int __must_check try_grab_page(struct page *page, unsigned int flags)
 			return -EBUSY;
 
 		if (unlikely(flags & FOLL_EXCLUSIVE)) {
-			if (!try_grab_page_excl(page))
+			if (!try_grab_page_excl(page, 0))
 				return -EBUSY;
 		} else {
 			/*
@@ -660,6 +669,23 @@ void unexc_user_page(struct page *page)
 	gup_put_folio(page_folio(page), 0, FOLL_EXCLUSIVE);
 }
 EXPORT_SYMBOL(unexc_user_page);
+
+int reexc_user_page(struct page *page)
+{
+	if (WARN_ON_ONCE(!IS_ENABLED(CONFIG_EXCLUSIVE_PIN)))
+		return -EINVAL;
+
+	sanity_check_pinned_pages(&page, 1);
+
+	if (!PageAnonExclusive(page))
+		return -EINVAL;
+
+	if (!try_grab_page_excl(page, 1))
+		return -EBUSY;
+
+	return 0;
+}
+EXPORT_SYMBOL(reexc_user_page);
 
 /*
  * Set the MMF_HAS_PINNED if not set yet; after set it'll be there for the mm's

@@ -1590,6 +1590,7 @@ void unpin_user_page_range_dirty_lock(struct page *page, unsigned long npages,
 void unpin_user_pages(struct page **pages, unsigned long npages);
 void unpin_exc_pages(struct page **pages, unsigned long npages);
 void unexc_user_page(struct page *page);
+int reexc_user_page(struct page *page);
 
 static inline bool is_cow_mapping(vm_flags_t flags)
 {
