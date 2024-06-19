@@ -546,9 +546,12 @@ static bool ghes_handle_arm_hw_error(struct acpi_hest_generic_data *gdata,
 	p = (char *)(err + 1);
 	for (i = 0; i < err->err_info_num; i++) {
 		struct cper_arm_err_info *err_info = (struct cper_arm_err_info *)p;
-		bool is_cache = (err_info->type == CPER_ARM_CACHE_ERROR);
+		bool is_cache = (err_info->type & CPER_ARM_CACHE_ERROR);
 		bool has_pa = (err_info->validation_bits & CPER_ARM_INFO_VALID_PHYSICAL_ADDR);
-		const char *error_type = "unknown error";
+		char error_type[120] = "";
+		char *s = error_type;
+		int len = 0;
+		int i;
 
 		/*
 		 * The field (err_info->error_info & BIT(26)) is fixed to set to
@@ -562,8 +565,16 @@ static bool ghes_handle_arm_hw_error(struct acpi_hest_generic_data *gdata,
 			continue;
 		}
 
-		if (err_info->type < ARRAY_SIZE(cper_proc_error_type_strs))
-			error_type = cper_proc_error_type_strs[err_info->type];
+		for (i = 0; i < ARRAY_SIZE(cper_proc_error_type_strs); i++) {
+			if (!(err_info->type & (1U << i)))
+				continue;
+
+			len += snprintf(s, sizeof(err_info->type) - len, "%s ", cper_proc_error_type_strs[i]);
+			s += len;
+		}
+
+		if (!*error_type)
+			strscpy(error_type, "unknown error", sizeof(error_type));
 
 		pr_warn_ratelimited(FW_WARN GHES_PFX
 				    "Unhandled processor error type: %s\n",
