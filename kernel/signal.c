@@ -1056,11 +1056,7 @@ static void complete_signal(int sig, struct task_struct *p, enum pid_type type)
 			signal->group_exit_code = sig;
 			signal->group_stop_count = 0;
 			__for_each_thread(signal, t) {
-				if (!(t->jobctl & JOBCTL_WILL_EXIT)) {
-					task_clear_jobctl_pending(t, JOBCTL_PENDING_MASK);
-					t->jobctl |= JOBCTL_WILL_EXIT;
-					signal_wake_up(t, 1);
-				}
+				schedule_task_exit_locked(t);
 			}
 			return;
 		}
@@ -1371,6 +1367,15 @@ int force_sig_info(struct kernel_siginfo *info)
 	return force_sig_info_to_task(info, current, HANDLER_CURRENT);
 }
 
+void schedule_task_exit_locked(struct task_struct *task)
+{
+	if (!(task->jobctl & JOBCTL_WILL_EXIT)) {
+		task_clear_jobctl_pending(task, JOBCTL_PENDING_MASK);
+		task->jobctl |= JOBCTL_WILL_EXIT;
+		signal_wake_up(task, true);
+	}
+}
+
 /*
  * Nuke all other threads in the group.
  */
@@ -1383,16 +1388,8 @@ int zap_other_threads(struct task_struct *p)
 
 	for_other_threads(p, t) {
 		count++;
-
-		/* Only bother with threads that might be alive */
-		if (t->jobctl & JOBCTL_WILL_EXIT)
-			continue;
-
-		task_clear_jobctl_pending(t, JOBCTL_PENDING_MASK);
-		t->jobctl |= JOBCTL_WILL_EXIT;
-		signal_wake_up(t, 1);
+		schedule_task_exit_locked(t);
 	}
-
 	return count;
 }
 
