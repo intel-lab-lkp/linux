@@ -70,7 +70,7 @@ static int lif_set_format(struct v4l2_subdev *subdev,
 static const struct v4l2_subdev_pad_ops lif_pad_ops = {
 	.enum_mbus_code = lif_enum_mbus_code,
 	.enum_frame_size = lif_enum_frame_size,
-	.get_fmt = vsp1_subdev_get_pad_format,
+	.get_fmt = v4l2_subdev_get_fmt,
 	.set_fmt = lif_set_format,
 };
 

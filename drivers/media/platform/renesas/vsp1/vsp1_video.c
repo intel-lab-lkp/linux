@@ -670,6 +670,7 @@ static int vsp1_video_pipeline_setup_partitions(struct vsp1_pipeline *pipe)
 {
 	struct vsp1_device *vsp1 = pipe->output->entity.vsp1;
 	const struct v4l2_mbus_framefmt *format;
+	struct v4l2_subdev_state *state;
 	struct vsp1_entity *entity;
 	unsigned int div_size;
 	unsigned int i;
@@ -678,8 +679,8 @@ static int vsp1_video_pipeline_setup_partitions(struct vsp1_pipeline *pipe)
 	 * Partitions are computed on the size before rotation, use the format
 	 * at the WPF sink.
 	 */
-	format = v4l2_subdev_state_get_format(pipe->output->entity.state,
-					      RWPF_PAD_SINK);
+	state = v4l2_subdev_get_locked_active_state(&pipe->output->entity.subdev);
+	format = v4l2_subdev_state_get_format(state, RWPF_PAD_SINK);
 	div_size = format->width;
 
 	/*
@@ -693,9 +694,8 @@ static int vsp1_video_pipeline_setup_partitions(struct vsp1_pipeline *pipe)
 			if (!entity->ops->max_width)
 				continue;
 
-			entity_max = entity->ops->max_width(entity,
-							    entity->state,
-							    pipe);
+			state = v4l2_subdev_get_locked_active_state(&entity->subdev);
+			entity_max = entity->ops->max_width(entity, state, pipe);
 			if (entity_max)
 				div_size = min(div_size, entity_max);
 		}
@@ -755,8 +755,11 @@ static int vsp1_video_setup_pipeline(struct vsp1_pipeline *pipe)
 		return -ENOMEM;
 
 	list_for_each_entry(entity, &pipe->entities, list_pipe) {
+		struct v4l2_subdev_state *state;
+
+		state = v4l2_subdev_get_locked_active_state(&entity->subdev);
 		vsp1_entity_route_setup(entity, pipe, pipe->stream_config);
-		vsp1_entity_configure_stream(entity, entity->state, pipe, NULL,
+		vsp1_entity_configure_stream(entity, state, pipe, NULL,
 					     pipe->stream_config);
 	}
 

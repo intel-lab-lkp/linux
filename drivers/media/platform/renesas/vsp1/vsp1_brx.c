@@ -125,21 +125,11 @@ static void brx_try_format(struct vsp1_brx *brx,
 }
 
 static int brx_set_format(struct v4l2_subdev *subdev,
-			  struct v4l2_subdev_state *sd_state,
+			  struct v4l2_subdev_state *state,
 			  struct v4l2_subdev_format *fmt)
 {
 	struct vsp1_brx *brx = to_brx(subdev);
-	struct v4l2_subdev_state *state;
 	struct v4l2_mbus_framefmt *format;
-	int ret = 0;
-
-	mutex_lock(&brx->entity.lock);
-
-	state = vsp1_entity_get_state(&brx->entity, sd_state, fmt->which);
-	if (!state) {
-		ret = -EINVAL;
-		goto done;
-	}
 
 	brx_try_format(brx, state, fmt->pad, &fmt->format);
 
@@ -167,17 +157,14 @@ static int brx_set_format(struct v4l2_subdev *subdev,
 		}
 	}
 
-done:
-	mutex_unlock(&brx->entity.lock);
-	return ret;
+	return 0;
 }
 
 static int brx_get_selection(struct v4l2_subdev *subdev,
-			     struct v4l2_subdev_state *sd_state,
+			     struct v4l2_subdev_state *state,
 			     struct v4l2_subdev_selection *sel)
 {
 	struct vsp1_brx *brx = to_brx(subdev);
-	struct v4l2_subdev_state *state;
 
 	if (sel->pad == brx->entity.source_pad)
 		return -EINVAL;
@@ -191,14 +178,7 @@ static int brx_get_selection(struct v4l2_subdev *subdev,
 		return 0;
 
 	case V4L2_SEL_TGT_COMPOSE:
-		state = vsp1_entity_get_state(&brx->entity, sd_state,
-					      sel->which);
-		if (!state)
-			return -EINVAL;
-
-		mutex_lock(&brx->entity.lock);
 		sel->r = *v4l2_subdev_state_get_compose(state, sel->pad);
-		mutex_unlock(&brx->entity.lock);
 		return 0;
 
 	default:
@@ -207,28 +187,18 @@ static int brx_get_selection(struct v4l2_subdev *subdev,
 }
 
 static int brx_set_selection(struct v4l2_subdev *subdev,
-			     struct v4l2_subdev_state *sd_state,
+			     struct v4l2_subdev_state *state,
 			     struct v4l2_subdev_selection *sel)
 {
 	struct vsp1_brx *brx = to_brx(subdev);
-	struct v4l2_subdev_state *state;
 	struct v4l2_mbus_framefmt *format;
 	struct v4l2_rect *compose;
-	int ret = 0;
 
 	if (sel->pad == brx->entity.source_pad)
 		return -EINVAL;
 
 	if (sel->target != V4L2_SEL_TGT_COMPOSE)
 		return -EINVAL;
-
-	mutex_lock(&brx->entity.lock);
-
-	state = vsp1_entity_get_state(&brx->entity, sd_state, sel->which);
-	if (!state) {
-		ret = -EINVAL;
-		goto done;
-	}
 
 	/*
 	 * The compose rectangle top left corner must be inside the output
@@ -249,15 +219,13 @@ static int brx_set_selection(struct v4l2_subdev *subdev,
 	compose = v4l2_subdev_state_get_compose(state, sel->pad);
 	*compose = sel->r;
 
-done:
-	mutex_unlock(&brx->entity.lock);
-	return ret;
+	return 0;
 }
 
 static const struct v4l2_subdev_pad_ops brx_pad_ops = {
 	.enum_mbus_code = brx_enum_mbus_code,
 	.enum_frame_size = brx_enum_frame_size,
-	.get_fmt = vsp1_subdev_get_pad_format,
+	.get_fmt = v4l2_subdev_get_fmt,
 	.set_fmt = brx_set_format,
 	.get_selection = brx_get_selection,
 	.set_selection = brx_set_selection,
@@ -425,6 +393,8 @@ struct vsp1_brx *vsp1_brx_create(struct vsp1_device *vsp1,
 
 	/* Initialize the control handler. */
 	v4l2_ctrl_handler_init(&brx->ctrls, 1);
+	brx->ctrls.lock = &brx->entity.subdev.active_state->_lock;
+
 	v4l2_ctrl_new_std(&brx->ctrls, &brx_ctrl_ops, V4L2_CID_BG_COLOR,
 			  0, 0xffffff, 1, 0);
 

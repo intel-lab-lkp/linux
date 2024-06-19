@@ -51,21 +51,11 @@ static int vsp1_rwpf_enum_frame_size(struct v4l2_subdev *subdev,
 }
 
 static int vsp1_rwpf_set_format(struct v4l2_subdev *subdev,
-				struct v4l2_subdev_state *sd_state,
+				struct v4l2_subdev_state *state,
 				struct v4l2_subdev_format *fmt)
 {
 	struct vsp1_rwpf *rwpf = to_rwpf(subdev);
-	struct v4l2_subdev_state *state;
 	struct v4l2_mbus_framefmt *format;
-	int ret = 0;
-
-	mutex_lock(&rwpf->entity.lock);
-
-	state = vsp1_entity_get_state(&rwpf->entity, sd_state, fmt->which);
-	if (!state) {
-		ret = -EINVAL;
-		goto done;
-	}
 
 	/* Default to YUV if the requested format is not supported. */
 	if (fmt->format.code != MEDIA_BUS_FMT_ARGB8888_1X32 &&
@@ -82,7 +72,7 @@ static int vsp1_rwpf_set_format(struct v4l2_subdev *subdev,
 		 */
 		format->code = fmt->format.code;
 		fmt->format = *format;
-		goto done;
+		return 0;
 	}
 
 	format->code = fmt->format.code;
@@ -115,19 +105,15 @@ static int vsp1_rwpf_set_format(struct v4l2_subdev *subdev,
 		format->height = fmt->format.width;
 	}
 
-done:
-	mutex_unlock(&rwpf->entity.lock);
-	return ret;
+	return 0;
 }
 
 static int vsp1_rwpf_get_selection(struct v4l2_subdev *subdev,
-				   struct v4l2_subdev_state *sd_state,
+				   struct v4l2_subdev_state *state,
 				   struct v4l2_subdev_selection *sel)
 {
 	struct vsp1_rwpf *rwpf = to_rwpf(subdev);
-	struct v4l2_subdev_state *state;
 	struct v4l2_mbus_framefmt *format;
-	int ret = 0;
 
 	/*
 	 * Cropping is only supported on the RPF and is implemented on the sink
@@ -135,14 +121,6 @@ static int vsp1_rwpf_get_selection(struct v4l2_subdev *subdev,
 	 */
 	if (rwpf->entity.type == VSP1_ENTITY_WPF || sel->pad != RWPF_PAD_SINK)
 		return -EINVAL;
-
-	mutex_lock(&rwpf->entity.lock);
-
-	state = vsp1_entity_get_state(&rwpf->entity, sd_state, sel->which);
-	if (!state) {
-		ret = -EINVAL;
-		goto done;
-	}
 
 	switch (sel->target) {
 	case V4L2_SEL_TGT_CROP:
@@ -158,24 +136,19 @@ static int vsp1_rwpf_get_selection(struct v4l2_subdev *subdev,
 		break;
 
 	default:
-		ret = -EINVAL;
-		break;
+		return -EINVAL;
 	}
 
-done:
-	mutex_unlock(&rwpf->entity.lock);
-	return ret;
+	return 0;
 }
 
 static int vsp1_rwpf_set_selection(struct v4l2_subdev *subdev,
-				   struct v4l2_subdev_state *sd_state,
+				   struct v4l2_subdev_state *state,
 				   struct v4l2_subdev_selection *sel)
 {
 	struct vsp1_rwpf *rwpf = to_rwpf(subdev);
-	struct v4l2_subdev_state *state;
 	struct v4l2_mbus_framefmt *format;
 	struct v4l2_rect *crop;
-	int ret = 0;
 
 	/*
 	 * Cropping is only supported on the RPF and is implemented on the sink
@@ -186,14 +159,6 @@ static int vsp1_rwpf_set_selection(struct v4l2_subdev *subdev,
 
 	if (sel->target != V4L2_SEL_TGT_CROP)
 		return -EINVAL;
-
-	mutex_lock(&rwpf->entity.lock);
-
-	state = vsp1_entity_get_state(&rwpf->entity, sd_state, sel->which);
-	if (!state) {
-		ret = -EINVAL;
-		goto done;
-	}
 
 	/* Make sure the crop rectangle is entirely contained in the image. */
 	format = v4l2_subdev_state_get_format(state, RWPF_PAD_SINK);
@@ -224,15 +189,13 @@ static int vsp1_rwpf_set_selection(struct v4l2_subdev *subdev,
 	format->width = crop->width;
 	format->height = crop->height;
 
-done:
-	mutex_unlock(&rwpf->entity.lock);
-	return ret;
+	return 0;
 }
 
 static const struct v4l2_subdev_pad_ops vsp1_rwpf_pad_ops = {
 	.enum_mbus_code = vsp1_rwpf_enum_mbus_code,
 	.enum_frame_size = vsp1_rwpf_enum_frame_size,
-	.get_fmt = vsp1_subdev_get_pad_format,
+	.get_fmt = v4l2_subdev_get_fmt,
 	.set_fmt = vsp1_rwpf_set_format,
 	.get_selection = vsp1_rwpf_get_selection,
 	.set_selection = vsp1_rwpf_set_selection,
@@ -267,6 +230,8 @@ static const struct v4l2_ctrl_ops vsp1_rwpf_ctrl_ops = {
 int vsp1_rwpf_init_ctrls(struct vsp1_rwpf *rwpf, unsigned int ncontrols)
 {
 	v4l2_ctrl_handler_init(&rwpf->ctrls, ncontrols + 1);
+	rwpf->ctrls.lock = &rwpf->entity.subdev.active_state->_lock;
+
 	v4l2_ctrl_new_std(&rwpf->ctrls, &vsp1_rwpf_ctrl_ops,
 			  V4L2_CID_ALPHA_COMPONENT, 0, 255, 1, 255);
 

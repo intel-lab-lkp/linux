@@ -203,6 +203,8 @@ struct vsp1_hgt *vsp1_hgt_create(struct vsp1_device *vsp1)
 
 	/* Initialize the control handler. */
 	v4l2_ctrl_handler_init(&hgt->ctrls, 1);
+	hgt->ctrls.lock = &hgt->histo.entity.subdev.active_state->_lock;
+
 	v4l2_ctrl_new_custom(&hgt->ctrls, &hgt_hue_areas, NULL);
 
 	hgt->histo.entity.subdev.ctrl_handler = &hgt->ctrls;

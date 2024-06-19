@@ -44,6 +44,7 @@ enum wpf_flip_ctrl {
 static int vsp1_wpf_set_rotation(struct vsp1_rwpf *wpf, unsigned int rotation)
 {
 	struct vsp1_video *video = wpf->video;
+	struct v4l2_subdev_state *state;
 	struct v4l2_mbus_framefmt *sink_format;
 	struct v4l2_mbus_framefmt *source_format;
 	bool rotate;
@@ -65,12 +66,10 @@ static int vsp1_wpf_set_rotation(struct vsp1_rwpf *wpf, unsigned int rotation)
 		goto done;
 	}
 
-	sink_format = v4l2_subdev_state_get_format(wpf->entity.state,
-						   RWPF_PAD_SINK);
-	source_format = v4l2_subdev_state_get_format(wpf->entity.state,
-						     RWPF_PAD_SOURCE);
+	state = v4l2_subdev_get_locked_active_state(&wpf->entity.subdev);
 
-	mutex_lock(&wpf->entity.lock);
+	sink_format = v4l2_subdev_state_get_format(state, RWPF_PAD_SINK);
+	source_format = v4l2_subdev_state_get_format(state, RWPF_PAD_SOURCE);
 
 	if (rotate) {
 		source_format->width = sink_format->height;
@@ -81,8 +80,6 @@ static int vsp1_wpf_set_rotation(struct vsp1_rwpf *wpf, unsigned int rotation)
 	}
 
 	wpf->flip.rotate = rotate;
-
-	mutex_unlock(&wpf->entity.lock);
 
 done:
 	mutex_unlock(&video->lock);

@@ -550,9 +550,6 @@ static void vsp1_du_pipeline_configure(struct vsp1_pipeline *pipe)
 	struct vsp1_dl_body *dlb;
 	unsigned int dl_flags = 0;
 
-	vsp1_pipeline_calculate_partition(pipe, &pipe->part_table[0],
-					  drm_pipe->width, 0);
-
 	if (drm_pipe->force_brx_release)
 		dl_flags |= VSP1_DL_FRAME_END_INTERNAL;
 	if (pipe->output->writeback)
@@ -561,8 +558,11 @@ static void vsp1_du_pipeline_configure(struct vsp1_pipeline *pipe)
 	dl = vsp1_dl_list_get(pipe->output->dlm);
 	dlb = vsp1_dl_list_get_body0(dl);
 
+	/*
+	 * Lock the state for all entities in the pipeline, disconnecting
+	 * unused entities along the way.
+	 */
 	list_for_each_entry_safe(entity, next, &pipe->entities, list_pipe) {
-		/* Disconnect unused entities from the pipeline. */
 		if (!entity->pipe) {
 			vsp1_dl_body_write(dlb, entity->route->reg,
 					   VI6_DPR_NODE_UNUSED);
@@ -573,12 +573,31 @@ static void vsp1_du_pipeline_configure(struct vsp1_pipeline *pipe)
 			continue;
 		}
 
+		v4l2_subdev_get_locked_active_state(&entity->subdev);
+	}
+
+	vsp1_pipeline_calculate_partition(pipe, &pipe->part_table[0],
+					  drm_pipe->width, 0);
+
+	/* Configure the pipeline. */
+	list_for_each_entry(entity, &pipe->entities, list_pipe) {
+		struct v4l2_subdev_state *state;
+
+		state = v4l2_subdev_get_locked_active_state(&entity->subdev);
+
 		vsp1_entity_route_setup(entity, pipe, dlb);
-		vsp1_entity_configure_stream(entity, entity->state, pipe,
-					     dl, dlb);
+		vsp1_entity_configure_stream(entity, state, pipe, dl, dlb);
 		vsp1_entity_configure_frame(entity, pipe, dl, dlb);
 		vsp1_entity_configure_partition(entity, pipe,
 						&pipe->part_table[0], dl, dlb);
+	}
+
+	/* Unlock all states. */
+	list_for_each_entry_reverse(entity, &pipe->entities, list_pipe) {
+		struct v4l2_subdev_state *state;
+
+		state = v4l2_subdev_get_unlocked_active_state(&entity->subdev);
+		v4l2_subdev_unlock_state(state);
 	}
 
 	vsp1_dl_list_commit(dl, dl_flags);

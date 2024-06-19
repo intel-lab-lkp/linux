@@ -119,26 +119,15 @@ static int sru_enum_mbus_code(struct v4l2_subdev *subdev,
 }
 
 static int sru_enum_frame_size(struct v4l2_subdev *subdev,
-			       struct v4l2_subdev_state *sd_state,
+			       struct v4l2_subdev_state *state,
 			       struct v4l2_subdev_frame_size_enum *fse)
 {
-	struct vsp1_sru *sru = to_sru(subdev);
-	struct v4l2_subdev_state *state;
 	struct v4l2_mbus_framefmt *format;
-	int ret = 0;
-
-	state = vsp1_entity_get_state(&sru->entity, sd_state, fse->which);
-	if (!state)
-		return -EINVAL;
 
 	format = v4l2_subdev_state_get_format(state, SRU_PAD_SINK);
 
-	mutex_lock(&sru->entity.lock);
-
-	if (fse->index || fse->code != format->code) {
-		ret = -EINVAL;
-		goto done;
-	}
+	if (fse->index || fse->code != format->code)
+		return -EINVAL;
 
 	if (fse->pad == SRU_PAD_SINK) {
 		fse->min_width = SRU_MIN_SIZE;
@@ -158,9 +147,7 @@ static int sru_enum_frame_size(struct v4l2_subdev *subdev,
 		}
 	}
 
-done:
-	mutex_unlock(&sru->entity.lock);
-	return ret;
+	return 0;
 }
 
 static void sru_try_format(struct vsp1_sru *sru,
@@ -215,21 +202,11 @@ static void sru_try_format(struct vsp1_sru *sru,
 }
 
 static int sru_set_format(struct v4l2_subdev *subdev,
-			  struct v4l2_subdev_state *sd_state,
+			  struct v4l2_subdev_state *state,
 			  struct v4l2_subdev_format *fmt)
 {
 	struct vsp1_sru *sru = to_sru(subdev);
-	struct v4l2_subdev_state *state;
 	struct v4l2_mbus_framefmt *format;
-	int ret = 0;
-
-	mutex_lock(&sru->entity.lock);
-
-	state = vsp1_entity_get_state(&sru->entity, sd_state, fmt->which);
-	if (!state) {
-		ret = -EINVAL;
-		goto done;
-	}
 
 	sru_try_format(sru, state, fmt->pad, &fmt->format);
 
@@ -244,15 +221,13 @@ static int sru_set_format(struct v4l2_subdev *subdev,
 		sru_try_format(sru, state, SRU_PAD_SOURCE, format);
 	}
 
-done:
-	mutex_unlock(&sru->entity.lock);
-	return ret;
+	return 0;
 }
 
 static const struct v4l2_subdev_pad_ops sru_pad_ops = {
 	.enum_mbus_code = sru_enum_mbus_code,
 	.enum_frame_size = sru_enum_frame_size,
-	.get_fmt = vsp1_subdev_get_pad_format,
+	.get_fmt = v4l2_subdev_get_fmt,
 	.set_fmt = sru_set_format,
 };
 
@@ -371,6 +346,8 @@ struct vsp1_sru *vsp1_sru_create(struct vsp1_device *vsp1)
 
 	/* Initialize the control handler. */
 	v4l2_ctrl_handler_init(&sru->ctrls, 1);
+	sru->ctrls.lock = &sru->entity.subdev.active_state->_lock;
+
 	v4l2_ctrl_new_custom(&sru->ctrls, &sru_intensity_control, NULL);
 
 	sru->intensity = 1;

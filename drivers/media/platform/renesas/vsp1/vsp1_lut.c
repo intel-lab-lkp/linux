@@ -133,7 +133,7 @@ static int lut_set_format(struct v4l2_subdev *subdev,
 static const struct v4l2_subdev_pad_ops lut_pad_ops = {
 	.enum_mbus_code = lut_enum_mbus_code,
 	.enum_frame_size = lut_enum_frame_size,
-	.get_fmt = vsp1_subdev_get_pad_format,
+	.get_fmt = v4l2_subdev_get_fmt,
 	.set_fmt = lut_set_format,
 };
 
@@ -225,6 +225,8 @@ struct vsp1_lut *vsp1_lut_create(struct vsp1_device *vsp1)
 
 	/* Initialize the control handler. */
 	v4l2_ctrl_handler_init(&lut->ctrls, 1);
+	lut->ctrls.lock = &lut->entity.subdev.active_state->_lock;
+
 	v4l2_ctrl_new_custom(&lut->ctrls, &lut_table_control, NULL);
 
 	lut->entity.subdev.ctrl_handler = &lut->ctrls;
