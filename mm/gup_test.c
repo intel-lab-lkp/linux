@@ -86,6 +86,89 @@ static void verify_exclusive_pinned(unsigned int gup_flags, struct page **pages,
 	}
 }
 
+static int verify_gup_twice(unsigned int cmd, struct gup_test *gup,
+			    struct page **expected_pages,
+			    unsigned long expected_nr_pages)
+{
+	unsigned long i, nr_pages, addr, next;
+	long nr;
+	struct page **pages __free(kfree) = NULL;
+	int ret = 0;
+
+	nr_pages = gup->size / PAGE_SIZE;
+	pages = kvcalloc(nr_pages, sizeof(void *), GFP_KERNEL);
+	if (!pages)
+		return -ENOMEM;
+
+	i = 0;
+	nr = gup->nr_pages_per_call;
+	for (addr = gup->addr; addr < gup->addr + gup->size; addr = next) {
+		if (nr != gup->nr_pages_per_call)
+			break;
+
+		next = addr + nr * PAGE_SIZE;
+		if (next > gup->addr + gup->size) {
+			next = gup->addr + gup->size;
+			nr = (next - addr) / PAGE_SIZE;
+		}
+
+		switch (cmd) {
+		case GUP_FAST_BENCHMARK:
+			nr = get_user_pages_fast(addr, nr, gup->gup_flags,
+						 pages + i);
+			break;
+		case GUP_BASIC_TEST:
+			nr = get_user_pages(addr, nr, gup->gup_flags, pages + i);
+			break;
+		case PIN_FAST_BENCHMARK:
+			nr = pin_user_pages_fast(addr, nr, gup->gup_flags,
+						 pages + i);
+			break;
+		case PIN_BASIC_TEST:
+			nr = pin_user_pages(addr, nr, gup->gup_flags, pages + i);
+			break;
+		case PIN_LONGTERM_BENCHMARK:
+			nr = pin_user_pages(addr, nr,
+					    gup->gup_flags | FOLL_LONGTERM,
+					    pages + i);
+			break;
+		default:
+			pr_err("cmd %d not supported for %s\n", cmd, __func__);
+			return -EINVAL;
+		}
+
+		if (nr <= 0)
+			break;
+		i += nr;
+	}
+
+	nr_pages = i;
+
+	if (gup->gup_flags & FOLL_EXCLUSIVE) {
+		if (WARN(nr_pages,
+			 "Able to acquire exclusive pin twice for %ld of %ld pages",
+			 nr_pages, expected_nr_pages)) {
+			dump_page(pages[0],
+				  "gup_test: verify_gup_twice() test");
+			ret = -EIO;
+		}
+	} else if (nr_pages != expected_nr_pages) {
+		pr_err("%s: Expected %ld pages, got %ld\n", __func__,
+		       expected_nr_pages, nr_pages);
+		ret = -EIO;
+	} else {
+		for (i = 0; i < nr_pages; i++) {
+			if (WARN(pages[i] != expected_pages[i],
+				 "pages[%lu] mismatch\n", i))
+				break;
+		}
+	}
+
+	put_back_pages(cmd, pages, nr_pages, gup->test_flags);
+
+	return ret;
+}
+
 static void dump_pages_test(struct gup_test *gup, struct page **pages,
 			    unsigned long nr_pages)
 {
@@ -209,6 +292,9 @@ static int __gup_test_ioctl(unsigned int cmd,
 
 	if (cmd == DUMP_USER_PAGES_TEST)
 		dump_pages_test(gup, pages, nr_pages);
+
+	if (gup->test_flags & GUP_TEST_FLAG_GUP_TWICE)
+		ret = verify_gup_twice(cmd, gup, pages, nr_pages);
 
 	start_time = ktime_get();
 

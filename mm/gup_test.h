@@ -17,6 +17,7 @@
 #define GUP_TEST_MAX_PAGES_TO_DUMP		8
 
 #define GUP_TEST_FLAG_DUMP_PAGES_USE_PIN	0x1
+#define GUP_TEST_FLAG_GUP_TWICE			0x2
 
 struct gup_test {
 	__u64 get_delta_usec;

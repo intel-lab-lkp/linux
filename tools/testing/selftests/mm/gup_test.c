@@ -98,7 +98,7 @@ int main(int argc, char **argv)
 	pthread_t *tid;
 	char *p;
 
-	while ((opt = getopt(argc, argv, "m:r:n:F:f:abcj:tTLUuwWSHpz")) != -1) {
+	while ((opt = getopt(argc, argv, "m:r:n:F:f:abcj:dtTLUuwWSHpz")) != -1) {
 		switch (opt) {
 		case 'a':
 			cmd = PIN_FAST_BENCHMARK;
@@ -171,6 +171,9 @@ int main(int argc, char **argv)
 		case 'z':
 			/* fault pages in gup, do not fault in userland */
 			touch = 1;
+			break;
+		case 'd':
+			gup.test_flags |= GUP_TEST_FLAG_GUP_TWICE;
 			break;
 		default:
 			ksft_exit_fail_msg("Wrong argument\n");
