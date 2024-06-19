@@ -1204,7 +1204,7 @@ static void ionic_tx_clean(struct ionic_queue *q,
 	desc_info->bytes = skb->len;
 	stats->clean++;
 
-	napi_consume_skb(skb, 1);
+	napi_consume_skb(skb, likely(softirq_count()) ? 1 : 0);
 }
 
 static bool ionic_tx_service(struct ionic_cq *cq,
