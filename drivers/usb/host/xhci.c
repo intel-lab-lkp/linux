@@ -3682,6 +3682,8 @@ void xhci_free_device_endpoint_resources(struct xhci_hcd *xhci,
 				xhci->num_active_eps);
 }
 
+static void xhci_free_dev(struct usb_hcd *hcd, struct usb_device *udev);
+
 /*
  * This submits a Reset Device Command, which will set the device state to 0,
  * set the device address to 0, and disable all the endpoints except the default
@@ -3751,6 +3753,20 @@ static int xhci_discover_or_reset_device(struct usb_hcd *hcd,
 	if (GET_SLOT_STATE(le32_to_cpu(slot_ctx->dev_state)) ==
 						SLOT_STATE_DISABLED)
 		return 0;
+
+	if (dev_is_pci(hcd->self.controller) &&
+		to_pci_dev(hcd->self.controller)->vendor == 0x1b6f) {
+		/*
+		 * Disabling and then enabling device slot ID to inform xHCI
+		 * host that the USB device has been reset.
+		 */
+		xhci_free_dev(hcd, udev);
+		ret = xhci_alloc_dev(hcd, udev);
+		if (ret == 1)
+			return 0;
+		else
+			return -EINVAL;
+	}
 
 	trace_xhci_discover_or_reset_device(slot_ctx);
 
