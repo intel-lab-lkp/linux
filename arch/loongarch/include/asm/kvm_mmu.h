@@ -55,7 +55,7 @@ static inline void kvm_set_pte(kvm_pte_t *ptep, kvm_pte_t val)
 static inline int kvm_pte_write(kvm_pte_t pte) { return pte & _PAGE_WRITE; }
 static inline int kvm_pte_dirty(kvm_pte_t pte) { return pte & _PAGE_DIRTY; }
 static inline int kvm_pte_young(kvm_pte_t pte) { return pte & _PAGE_ACCESSED; }
-static inline int kvm_pte_huge(kvm_pte_t pte) { return pte & _PAGE_HUGE; }
+static inline int kvm_pte_huge(kvm_pte_t pte)  { return !!(pte & _PAGE_HUGE); }
 
 static inline kvm_pte_t kvm_pte_mkyoung(kvm_pte_t pte)
 {
