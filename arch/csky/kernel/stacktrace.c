@@ -17,6 +17,7 @@ void notrace walk_stackframe(struct task_struct *task, struct pt_regs *regs,
 			     bool (*fn)(unsigned long, void *), void *arg)
 {
 	unsigned long fp, sp, pc;
+	int graph_idx = 0;
 
 	if (regs) {
 		fp = frame_pointer(regs);
@@ -50,7 +51,7 @@ void notrace walk_stackframe(struct task_struct *task, struct pt_regs *regs,
 		frame = (struct stackframe *)fp;
 		sp = fp;
 		fp = frame->fp;
-		pc = ftrace_graph_ret_addr(current, NULL, frame->ra,
+		pc = ftrace_graph_ret_addr(current, &graph_idx, frame->ra,
 					   (unsigned long *)(fp - 8));
 	}
 }
