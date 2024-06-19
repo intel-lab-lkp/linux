@@ -534,11 +534,12 @@ struct kvm_pmc {
 
 /* More counters may conflict with other existing Architectural MSRs */
 #define KVM_INTEL_PMC_MAX_GENERIC	8
-#define MSR_ARCH_PERFMON_PERFCTR_MAX	(MSR_ARCH_PERFMON_PERFCTR0 + KVM_INTEL_PMC_MAX_GENERIC - 1)
-#define MSR_ARCH_PERFMON_EVENTSEL_MAX	(MSR_ARCH_PERFMON_EVENTSEL0 + KVM_INTEL_PMC_MAX_GENERIC - 1)
+#define KVM_AMD_PMC_MAX_GENERIC	6
+#define KVM_PMC_MAX_GENERIC		KVM_INTEL_PMC_MAX_GENERIC
+#define MSR_ARCH_PERFMON_PERFCTR_MAX	(MSR_ARCH_PERFMON_PERFCTR0 + KVM_PMC_MAX_GENERIC - 1)
+#define MSR_ARCH_PERFMON_EVENTSEL_MAX	(MSR_ARCH_PERFMON_EVENTSEL0 + KVM_PMC_MAX_GENERIC - 1)
 #define KVM_PMC_MAX_FIXED	3
 #define MSR_ARCH_PERFMON_FIXED_CTR_MAX	(MSR_ARCH_PERFMON_FIXED_CTR0 + KVM_PMC_MAX_FIXED - 1)
-#define KVM_AMD_PMC_MAX_GENERIC	6
 
 struct kvm_pmu {
 	u8 version;
@@ -554,7 +555,7 @@ struct kvm_pmu {
 	u64 global_status_rsvd;
 	u64 reserved_bits;
 	u64 raw_event_mask;
-	struct kvm_pmc gp_counters[KVM_INTEL_PMC_MAX_GENERIC];
+	struct kvm_pmc gp_counters[KVM_PMC_MAX_GENERIC];
 	struct kvm_pmc fixed_counters[KVM_PMC_MAX_FIXED];
 
 	/*
