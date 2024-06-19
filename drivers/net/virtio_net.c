@@ -2684,20 +2684,14 @@ static int virtnet_tx_resize(struct virtnet_info *vi,
 	return err;
 }
 
-/*
- * Send command via the control virtqueue and check status.  Commands
- * supported by the hypervisor, as indicated by feature bits, should
- * never fail unless improperly formatted.
- */
-static bool virtnet_send_command_reply(struct virtnet_info *vi,
-				       u8 class, u8 cmd,
-				       struct control_buf *ctrl,
-				       struct scatterlist *out,
-				       struct scatterlist *in)
+static bool virtnet_add_command_reply(struct virtnet_info *vi,
+				      u8 class, u8 cmd,
+				      struct control_buf *ctrl,
+				      struct scatterlist *out,
+				      struct scatterlist *in)
 {
 	struct scatterlist *sgs[5], hdr, stat;
-	u32 out_num = 0, tmp, in_num = 0;
-	bool ok;
+	u32 out_num = 0, in_num = 0;
 	int ret;
 
 	/* Caller should know better */
@@ -2731,16 +2725,45 @@ static bool virtnet_send_command_reply(struct virtnet_info *vi,
 		return false;
 	}
 
-	if (unlikely(!virtqueue_kick(vi->cvq)))
-		goto unlock;
+	if (unlikely(!virtqueue_kick(vi->cvq))) {
+		mutex_unlock(&vi->cvq_lock);
+		return false;
+	}
+
+	return true;
+}
+
+static bool virtnet_wait_command_response(struct virtnet_info *vi,
+					  struct control_buf *ctrl)
+{
+	unsigned int tmp;
+	bool ok;
 
 	wait_for_completion(&ctrl->completion);
 	virtqueue_get_buf(vi->cvq, &tmp);
 
-unlock:
 	ok = ctrl->status == VIRTIO_NET_OK;
 	mutex_unlock(&vi->cvq_lock);
 	return ok;
+}
+
+/* Send command via the control virtqueue and check status. Commands
+ * supported by the hypervisor, as indicated by feature bits, should
+ * never fail unless improperly formatted.
+ */
+static bool virtnet_send_command_reply(struct virtnet_info *vi,
+				       u8 class, u8 cmd,
+				       struct control_buf *ctrl,
+				       struct scatterlist *out,
+				       struct scatterlist *in)
+{
+	bool ret;
+
+	ret = virtnet_add_command_reply(vi, class, cmd, ctrl, out, in);
+	if (!ret)
+		return ret;
+
+	return virtnet_wait_command_response(vi, ctrl);
 }
 
 static bool virtnet_send_command(struct virtnet_info *vi, u8 class, u8 cmd,
