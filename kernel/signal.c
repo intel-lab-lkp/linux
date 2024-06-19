@@ -911,8 +911,10 @@ static bool prepare_signal(int sig, struct task_struct *p, bool force)
 		if (signal->core_state && (sig == SIGKILL)) {
 			struct task_struct *dumper =
 				signal->core_state->dumper.task;
-			dumper->jobctl |= JOBCTL_WILL_EXIT;
-			signal_wake_up(dumper, 1);
+			if (!(dumper->jobctl & JOBCTL_WILL_EXIT)) {
+				dumper->jobctl |= JOBCTL_WILL_EXIT;
+				signal_wake_up(dumper, 1);
+			}
 		}
 		/*
 		 * The process is in the middle of dying, drop the signal.
@@ -1054,9 +1056,11 @@ static void complete_signal(int sig, struct task_struct *p, enum pid_type type)
 			signal->group_exit_code = sig;
 			signal->group_stop_count = 0;
 			__for_each_thread(signal, t) {
-				task_clear_jobctl_pending(t, JOBCTL_PENDING_MASK);
-				t->jobctl |= JOBCTL_WILL_EXIT;
-				signal_wake_up(t, 1);
+				if (!(t->jobctl & JOBCTL_WILL_EXIT)) {
+					task_clear_jobctl_pending(t, JOBCTL_PENDING_MASK);
+					t->jobctl |= JOBCTL_WILL_EXIT;
+					signal_wake_up(t, 1);
+				}
 			}
 			return;
 		}
@@ -1378,12 +1382,13 @@ int zap_other_threads(struct task_struct *p)
 	p->signal->group_stop_count = 0;
 
 	for_other_threads(p, t) {
-		task_clear_jobctl_pending(t, JOBCTL_PENDING_MASK);
 		count++;
 
-		/* Don't bother with already dead threads */
-		if (t->exit_state)
+		/* Only bother with threads that might be alive */
+		if (t->jobctl & JOBCTL_WILL_EXIT)
 			continue;
+
+		task_clear_jobctl_pending(t, JOBCTL_PENDING_MASK);
 		t->jobctl |= JOBCTL_WILL_EXIT;
 		signal_wake_up(t, 1);
 	}

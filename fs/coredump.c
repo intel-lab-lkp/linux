@@ -371,8 +371,8 @@ static int zap_process(struct task_struct *start, int exit_code)
 	start->signal->group_stop_count = 0;
 
 	for_each_thread(start, t) {
-		task_clear_jobctl_pending(t, JOBCTL_PENDING_MASK);
-		if (!(t->flags & PF_POSTCOREDUMP)) {
+		if (!(t->jobctl & JOBCTL_WILL_EXIT)) {
+			task_clear_jobctl_pending(t, JOBCTL_PENDING_MASK);
 			t->jobctl |= JOBCTL_WILL_EXIT;
 			signal_wake_up(t, 1);
 		}
