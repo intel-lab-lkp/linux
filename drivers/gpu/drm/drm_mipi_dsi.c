@@ -237,13 +237,15 @@ mipi_dsi_device_register_full(struct mipi_dsi_host *host,
 }
 EXPORT_SYMBOL(mipi_dsi_device_register_full);
 
+static void mipi_dsi_do_device_unregister(struct mipi_dsi_device *dsi, bool devres);
+
 /**
  * mipi_dsi_device_unregister - unregister MIPI DSI device
  * @dsi: DSI peripheral device
  */
 void mipi_dsi_device_unregister(struct mipi_dsi_device *dsi)
 {
-	device_unregister(&dsi->dev);
+	mipi_dsi_do_device_unregister(dsi, false);
 }
 EXPORT_SYMBOL(mipi_dsi_device_unregister);
 
@@ -251,7 +253,15 @@ static void devm_mipi_dsi_device_unregister(void *arg)
 {
 	struct mipi_dsi_device *dsi = arg;
 
-	mipi_dsi_device_unregister(dsi);
+	mipi_dsi_do_device_unregister(dsi, true);
+}
+
+static void mipi_dsi_do_device_unregister(struct mipi_dsi_device *dsi, bool devres)
+{
+	if (!devres && dsi->devres_register_dev)
+		devm_remove_action(dsi->devres_register_dev, devm_mipi_dsi_device_unregister, dsi);
+
+	device_unregister(&dsi->dev);
 }
 
 /**
@@ -288,6 +298,8 @@ devm_mipi_dsi_device_register_full(struct device *dev,
 				       dsi);
 	if (ret)
 		return ERR_PTR(ret);
+
+	dsi->devres_register_dev = dev;
 
 	return dsi;
 }
@@ -386,23 +398,15 @@ int mipi_dsi_attach(struct mipi_dsi_device *dsi)
 }
 EXPORT_SYMBOL(mipi_dsi_attach);
 
+static int mipi_dsi_do_detach(struct mipi_dsi_device *dsi, bool devres);
+
 /**
  * mipi_dsi_detach - detach a DSI device from its DSI host
  * @dsi: DSI peripheral
  */
 int mipi_dsi_detach(struct mipi_dsi_device *dsi)
 {
-	const struct mipi_dsi_host_ops *ops = dsi->host->ops;
-
-	if (WARN_ON(!dsi->attached))
-		return -EINVAL;
-
-	if (!ops || !ops->detach)
-		return -ENOSYS;
-
-	dsi->attached = false;
-
-	return ops->detach(dsi->host, dsi);
+	return mipi_dsi_do_detach(dsi, false);
 }
 EXPORT_SYMBOL(mipi_dsi_detach);
 
@@ -410,7 +414,25 @@ static void devm_mipi_dsi_detach(void *arg)
 {
 	struct mipi_dsi_device *dsi = arg;
 
-	mipi_dsi_detach(dsi);
+	mipi_dsi_do_detach(dsi, true);
+}
+
+static int mipi_dsi_do_detach(struct mipi_dsi_device *dsi, bool devres)
+{
+	const struct mipi_dsi_host_ops *ops = dsi->host->ops;
+
+	if (WARN_ON(!dsi->attached))
+		return -EINVAL;
+
+	if (!devres && dsi->devres_attach_dev)
+		devm_remove_action(dsi->devres_attach_dev, devm_mipi_dsi_detach, dsi);
+
+	if (!ops || !ops->detach)
+		return -ENOSYS;
+
+	dsi->attached = false;
+
+	return ops->detach(dsi->host, dsi);
 }
 
 /**
@@ -436,6 +458,8 @@ int devm_mipi_dsi_attach(struct device *dev,
 	ret = devm_add_action_or_reset(dev, devm_mipi_dsi_detach, dsi);
 	if (ret)
 		return ret;
+
+	dsi->devres_attach_dev = dev;
 
 	return 0;
 }
