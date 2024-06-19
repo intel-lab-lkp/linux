@@ -281,7 +281,7 @@ bool task_set_jobctl_pending(struct task_struct *task, unsigned long mask)
 			JOBCTL_STOP_SIGMASK | JOBCTL_TRAPPING));
 	BUG_ON((mask & JOBCTL_TRAPPING) && !(mask & JOBCTL_PENDING_MASK));
 
-	if (unlikely(fatal_signal_pending(task) || (task->flags & PF_EXITING)))
+	if (unlikely(task->jobctl & JOBCTL_WILL_EXIT))
 		return false;
 
 	if (mask & JOBCTL_STOP_SIGMASK)
@@ -985,7 +985,7 @@ static inline bool wants_signal(int sig, struct task_struct *p)
 	if (sigismember(&p->blocked, sig))
 		return false;
 
-	if (p->flags & PF_EXITING)
+	if (p->jobctl & JOBCTL_WILL_EXIT)
 		return false;
 
 	if (sig == SIGKILL)
@@ -2998,7 +2998,7 @@ static void retarget_shared_pending(struct task_struct *tsk, sigset_t *which)
 		return;
 
 	for_other_threads(tsk, t) {
-		if (t->flags & PF_EXITING)
+		if (t->jobctl & JOBCTL_WILL_EXIT)
 			continue;
 
 		if (!has_pending_signals(&retarget, &t->blocked))
