@@ -373,7 +373,7 @@ static int zap_process(struct task_struct *start, int exit_code)
 	for_each_thread(start, t) {
 		task_clear_jobctl_pending(t, JOBCTL_PENDING_MASK);
 		if (!(t->flags & PF_POSTCOREDUMP)) {
-			sigaddset(&t->pending.signal, SIGKILL);
+			t->jobctl |= JOBCTL_WILL_EXIT;
 			signal_wake_up(t, 1);
 		}
 		nr += (t != current) && !(t->flags & PF_POSTCOREDUMP);
@@ -396,7 +396,7 @@ static int zap_threads(struct task_struct *tsk,
 
 		/* Allow SIGKILL, see prepare_signal() */
 		clear_tsk_thread_flag(tsk, TIF_SIGPENDING);
-		sigdelset(&tsk->pending.signal, SIGKILL);
+		tsk->jobctl &= ~JOBCTL_WILL_EXIT;
 		tsk->flags |= PF_DUMPCORE;
 	}
 	spin_unlock_irq(&tsk->sighand->siglock);

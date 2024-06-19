@@ -393,9 +393,14 @@ static inline int signal_pending(struct task_struct *p)
 	return task_sigpending(p);
 }
 
+static inline bool task_exit_pending(struct task_struct *p)
+{
+	return unlikely(READ_ONCE(p->jobctl) & JOBCTL_WILL_EXIT);
+}
+
 static inline int __fatal_signal_pending(struct task_struct *p)
 {
-	return unlikely(sigismember(&p->pending.signal, SIGKILL));
+	return task_exit_pending(p);
 }
 
 static inline int fatal_signal_pending(struct task_struct *p)

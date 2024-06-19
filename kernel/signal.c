@@ -156,7 +156,8 @@ static inline bool has_pending_signals(sigset_t *signal, sigset_t *blocked)
 
 static bool recalc_sigpending_tsk(struct task_struct *t)
 {
-	if ((t->jobctl & (JOBCTL_PENDING_MASK | JOBCTL_TRAP_FREEZE)) ||
+	if ((t->jobctl & (JOBCTL_PENDING_MASK | JOBCTL_TRAP_FREEZE |
+			  JOBCTL_WILL_EXIT)) ||
 	    PENDING(&t->pending, &t->blocked) ||
 	    PENDING(&t->signal->shared_pending, &t->blocked) ||
 	    cgroup_task_frozen(t)) {
@@ -910,7 +911,7 @@ static bool prepare_signal(int sig, struct task_struct *p, bool force)
 		if (signal->core_state && (sig == SIGKILL)) {
 			struct task_struct *dumper =
 				signal->core_state->dumper.task;
-			sigaddset(&dumper->pending.signal, SIGKILL);
+			dumper->jobctl |= JOBCTL_WILL_EXIT;
 			signal_wake_up(dumper, 1);
 		}
 		/*
@@ -1054,7 +1055,7 @@ static void complete_signal(int sig, struct task_struct *p, enum pid_type type)
 			signal->group_stop_count = 0;
 			__for_each_thread(signal, t) {
 				task_clear_jobctl_pending(t, JOBCTL_PENDING_MASK);
-				sigaddset(&t->pending.signal, SIGKILL);
+				t->jobctl |= JOBCTL_WILL_EXIT;
 				signal_wake_up(t, 1);
 			}
 			return;
@@ -1383,7 +1384,7 @@ int zap_other_threads(struct task_struct *p)
 		/* Don't bother with already dead threads */
 		if (t->exit_state)
 			continue;
-		sigaddset(&t->pending.signal, SIGKILL);
+		t->jobctl |= JOBCTL_WILL_EXIT;
 		signal_wake_up(t, 1);
 	}
 
@@ -2745,7 +2746,7 @@ relock:
 		if ((signal->flags & SIGNAL_GROUP_EXIT) ||
 		     signal->group_exec_task) {
 			signr = SIGKILL;
-			sigdelset(&current->pending.signal, SIGKILL);
+			current->jobctl &= ~JOBCTL_WILL_EXIT;
 			trace_signal_deliver(SIGKILL, SEND_SIG_NOINFO,
 					     &sighand->action[SIGKILL-1]);
 			recalc_sigpending();
