@@ -1708,6 +1708,8 @@ struct intel_psr {
 	bool sink_support;
 	bool source_support;
 	bool enabled;
+	bool delayed_vblank;
+	bool is_dpkgc_configured;
 	bool paused;
 	enum pipe pipe;
 	enum transcoder transcoder;
