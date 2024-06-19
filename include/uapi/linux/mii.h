@@ -9,6 +9,7 @@
 #ifndef _UAPI__LINUX_MII_H__
 #define _UAPI__LINUX_MII_H__
 
+#include <linux/bits.h>
 #include <linux/types.h>
 #include <linux/ethtool.h>
 
@@ -69,23 +70,23 @@
 #define BMSR_100BASE4		0x8000	/* Can do 100mbps, 4k packets  */
 
 /* Advertisement control register. */
-#define ADVERTISE_SLCT		0x001f	/* Selector bits               */
-#define ADVERTISE_CSMA		0x0001	/* Only selector supported     */
-#define ADVERTISE_10HALF	0x0020	/* Try for 10mbps half-duplex  */
-#define ADVERTISE_1000XFULL	0x0020	/* Try for 1000BASE-X full-duplex */
-#define ADVERTISE_10FULL	0x0040	/* Try for 10mbps full-duplex  */
-#define ADVERTISE_1000XHALF	0x0040	/* Try for 1000BASE-X half-duplex */
-#define ADVERTISE_100HALF	0x0080	/* Try for 100mbps half-duplex */
-#define ADVERTISE_1000XPAUSE	0x0080	/* Try for 1000BASE-X pause    */
-#define ADVERTISE_100FULL	0x0100	/* Try for 100mbps full-duplex */
-#define ADVERTISE_1000XPSE_ASYM	0x0100	/* Try for 1000BASE-X asym pause */
-#define ADVERTISE_100BASE4	0x0200	/* Try for 100mbps 4k packets  */
-#define ADVERTISE_PAUSE_CAP	0x0400	/* Try for pause               */
-#define ADVERTISE_PAUSE_ASYM	0x0800	/* Try for asymetric pause     */
-#define ADVERTISE_RESV		0x1000	/* Unused...                   */
-#define ADVERTISE_RFAULT	0x2000	/* Say we can detect faults    */
-#define ADVERTISE_LPACK		0x4000	/* Ack link partners response  */
-#define ADVERTISE_NPAGE		0x8000	/* Next page bit               */
+#define ADVERTISE_SLCT		__GENMASK(4, 0)	/* Selector bits               */
+#define ADVERTISE_CSMA		(1 << 0)	/* Only selector supported     */
+#define ADVERTISE_10HALF	(1 << 5)	/* Try for 10mbps half-duplex  */
+#define ADVERTISE_1000XFULL	(1 << 5)	/* Try for 1000BASE-X full-duplex */
+#define ADVERTISE_10FULL	(1 << 6)	/* Try for 10mbps full-duplex  */
+#define ADVERTISE_1000XHALF	(1 << 6)	/* Try for 1000BASE-X half-duplex */
+#define ADVERTISE_100HALF	(1 << 7)	/* Try for 100mbps half-duplex */
+#define ADVERTISE_1000XPAUSE	(1 << 7)	/* Try for 1000BASE-X pause    */
+#define ADVERTISE_100FULL	(1 << 8)	/* Try for 100mbps full-duplex */
+#define ADVERTISE_1000XPSE_ASYM	(1 << 8)	/* Try for 1000BASE-X asym pause */
+#define ADVERTISE_100BASE4	(1 << 9)	/* Try for 100mbps 4k packets  */
+#define ADVERTISE_PAUSE_CAP	(1 << 10)	/* Try for pause               */
+#define ADVERTISE_PAUSE_ASYM	(1 << 11)	/* Try for asymmetric pause     */
+#define ADVERTISE_RESV		(1 << 12)	/* Unused...                   */
+#define ADVERTISE_RFAULT	(1 << 13)	/* Say we can detect faults    */
+#define ADVERTISE_LPACK		(1 << 14)	/* Ack link partners response  */
+#define ADVERTISE_NPAGE		(1 << 15)	/* Next page bit               */
 
 #define ADVERTISE_FULL		(ADVERTISE_100FULL | ADVERTISE_10FULL | \
 				  ADVERTISE_CSMA)
