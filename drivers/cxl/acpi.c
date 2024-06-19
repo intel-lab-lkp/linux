@@ -482,6 +482,7 @@ struct cxl_chbs_context {
 	unsigned long long uid;
 	resource_size_t base;
 	u32 cxl_version;
+	int count;
 };
 
 static int cxl_get_chbs_iter(union acpi_subtable_headers *header, void *arg,
@@ -490,20 +491,23 @@ static int cxl_get_chbs_iter(union acpi_subtable_headers *header, void *arg,
 	struct cxl_chbs_context *ctx = arg;
 	struct acpi_cedt_chbs *chbs;
 
-	if (ctx->base != CXL_RESOURCE_NONE)
+	chbs = (struct acpi_cedt_chbs *) header;
+
+	if (chbs->cxl_version == ACPI_CEDT_CHBS_VERSION_CXL11 &&
+	    chbs->length != CXL_RCRB_SIZE)
 		return 0;
 
-	chbs = (struct acpi_cedt_chbs *) header;
+	if (ctx->cxl_version != chbs->cxl_version)
+		ctx->count++;
+
+	if (ctx->base != CXL_RESOURCE_NONE)
+		return 0;
 
 	if (ctx->uid != chbs->uid)
 		return 0;
 
 	ctx->cxl_version = chbs->cxl_version;
 	if (!chbs->base)
-		return 0;
-
-	if (chbs->cxl_version == ACPI_CEDT_CHBS_VERSION_CXL11 &&
-	    chbs->length != CXL_RCRB_SIZE)
 		return 0;
 
 	ctx->base = chbs->base;
@@ -532,6 +536,10 @@ static int cxl_get_chbs(struct device *dev, struct acpi_device *hb,
 	};
 
 	acpi_table_parse_cedt(ACPI_CEDT_TYPE_CHBS, cxl_get_chbs_iter, ctx);
+
+	if (ctx->count > 1)
+		/* Disclaim eRCD support given some component register may only be found via CHBCR */
+		dev_info(dev, "Unsupported platform config, mixed Virtual Host and Restricted CXL Host hierarchy.");
 
 	return 0;
 }
