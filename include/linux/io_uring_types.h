@@ -226,6 +226,11 @@ struct io_alloc_cache {
 	size_t			elem_size;
 };
 
+struct iopoll_info {
+	long		last_runtime;
+	long		last_irqtime;
+};
+
 struct io_ring_ctx {
 	/* const or read-mostly hot data */
 	struct {
@@ -429,6 +434,7 @@ struct io_ring_ctx {
 	unsigned short			n_sqe_pages;
 	struct page			**ring_pages;
 	struct page			**sqe_pages;
+	struct xarray		poll_array;
 };
 
 struct io_tw_state {
@@ -592,6 +598,12 @@ static inline void io_kiocb_cmd_sz_check(size_t cmd_sz)
 )
 #define cmd_to_io_kiocb(ptr)	((struct io_kiocb *) ptr)
 
+struct hy_poll_time {
+	int		poll_state;
+	struct timespec64		iopoll_start;
+	struct timespec64		iopoll_end;
+};
+
 struct io_kiocb {
 	union {
 		/*
@@ -667,6 +679,8 @@ struct io_kiocb {
 		u64			extra1;
 		u64			extra2;
 	} big_cqe;
+    /* for hybrid iopoll */
+	struct hy_poll_time		*hy_poll;
 };
 
 struct io_overflow_cqe {

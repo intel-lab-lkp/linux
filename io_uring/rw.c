@@ -772,6 +772,46 @@ static bool need_complete_io(struct io_kiocb *req)
 		S_ISBLK(file_inode(req->file)->i_mode);
 }
 
+static void init_hybrid_poll(struct io_ring_ctx *ctx, struct io_kiocb *req)
+{
+	/*
+	 * In multiple concurrency, a thread may operate several files
+	 * under different file systems, the inode numbers may be
+	 * duplicated. Each device has a different IO command processing
+	 * capability, so using device number to record the running time
+	 * of device
+	 */
+	u32 index = req->file->f_inode->i_rdev;
+	struct iopoll_info *entry = xa_load(&ctx->poll_array, index);
+	struct hy_poll_time *hpt = kmalloc(sizeof(struct hy_poll_time), GFP_KERNEL);
+
+	/* if alloc fail, go to regular poll */
+	if (!hpt) {
+		ctx->flags &= ~IORING_SETUP_HY_POLL;
+		return;
+	}
+	hpt->poll_state = 0;
+	req->hy_poll = hpt;
+
+	if (!entry) {
+		entry = kmalloc(sizeof(struct iopoll_info), GFP_KERNEL);
+		if (!entry) {
+			ctx->flags &= ~IORING_SETUP_HY_POLL;
+			return;
+		}
+		entry->last_runtime = 0;
+		entry->last_irqtime = 0;
+		xa_store(&ctx->poll_array, index, entry, GFP_KERNEL);
+	}
+
+	/*
+	 * Here we need nanosecond timestamps, some ways of reading
+	 * timestamps directly are only accurate to microseconds, so
+	 * there's no better alternative here for now
+	 */
+	ktime_get_ts64(&hpt->iopoll_start);
+}
+
 static int io_rw_init_file(struct io_kiocb *req, fmode_t mode)
 {
 	struct io_rw *rw = io_kiocb_to_cmd(req, struct io_rw);
@@ -809,6 +849,8 @@ static int io_rw_init_file(struct io_kiocb *req, fmode_t mode)
 		kiocb->ki_flags |= IOCB_HIPRI;
 		kiocb->ki_complete = io_complete_rw_iopoll;
 		req->iopoll_completed = 0;
+		if (ctx->flags & IORING_SETUP_HY_POLL)
+			init_hybrid_poll(ctx, req);
 	} else {
 		if (kiocb->ki_flags & IOCB_HIPRI)
 			return -EINVAL;
@@ -1106,6 +1148,75 @@ void io_rw_fail(struct io_kiocb *req)
 	io_req_set_res(req, res, req->cqe.flags);
 }
 
+static void io_delay(struct hy_poll_time *hpt, struct iopoll_info *entry)
+{
+	struct hrtimer_sleeper timer;
+	struct timespec64 tc, oldtc;
+	enum hrtimer_mode mode;
+	ktime_t kt;
+	long sleep_ti;
+
+	if (hpt->poll_state == 1)
+		return;
+
+	if (entry->last_runtime <= entry->last_irqtime)
+		return;
+
+	/*
+	 * Avoid excessive scheduling time affecting performance
+	 * by using only 25 per cent of the remaining time
+	 */
+	sleep_ti = (entry->last_runtime - entry->last_irqtime) / 4;
+
+	/*
+	 * If the time available for sleep is too short, i.e. the
+	 * totle running time and the context switching loss time
+	 * are very close to each other, the scheduling operation
+	 * is not performed to avoid increasing latency
+	 */
+	if (sleep_ti < MIN_SCHETIME)
+		return;
+
+	ktime_get_ts64(&oldtc);
+	kt = ktime_set(0, sleep_ti);
+	hpt->poll_state = 1;
+
+	mode = HRTIMER_MODE_REL;
+	hrtimer_init_sleeper_on_stack(&timer, CLOCK_MONOTONIC, mode);
+	hrtimer_set_expires(&timer.timer, kt);
+	set_current_state(TASK_UNINTERRUPTIBLE);
+	hrtimer_sleeper_start_expires(&timer, mode);
+
+	if (timer.task)
+		io_schedule();
+
+	hrtimer_cancel(&timer.timer);
+	mode = HRTIMER_MODE_ABS;
+	__set_current_state(TASK_RUNNING);
+	destroy_hrtimer_on_stack(&timer.timer);
+
+	ktime_get_ts64(&tc);
+	entry->last_irqtime = tc.tv_nsec - oldtc.tv_nsec - sleep_ti;
+}
+
+static int io_uring_hybrid_poll(struct io_kiocb *req,
+				struct io_comp_batch *iob, unsigned int poll_flags)
+{
+	struct io_rw *rw = io_kiocb_to_cmd(req, struct io_rw);
+	struct io_ring_ctx *ctx = req->ctx;
+	struct hy_poll_time *hpt = req->hy_poll;
+	u32 index = req->file->f_inode->i_rdev;
+	struct iopoll_info *entry = xa_load(&ctx->poll_array, index);
+	int ret;
+
+	io_delay(hpt, entry);
+	ret = req->file->f_op->iopoll(&rw->kiocb, iob, poll_flags);
+
+	ktime_get_ts64(&hpt->iopoll_end);
+	entry->last_runtime = hpt->iopoll_end.tv_nsec - hpt->iopoll_start.tv_nsec;
+	return ret;
+}
+
 int io_do_iopoll(struct io_ring_ctx *ctx, bool force_nonspin)
 {
 	struct io_wq_work_node *pos, *start, *prev;
@@ -1133,7 +1244,9 @@ int io_do_iopoll(struct io_ring_ctx *ctx, bool force_nonspin)
 		if (READ_ONCE(req->iopoll_completed))
 			break;
 
-		if (req->opcode == IORING_OP_URING_CMD) {
+		if (ctx->flags & IORING_SETUP_HY_POLL) {
+			ret = io_uring_hybrid_poll(req, &iob, poll_flags);
+		} else if (req->opcode == IORING_OP_URING_CMD) {
 			struct io_uring_cmd *ioucmd;
 
 			ioucmd = io_kiocb_to_cmd(req, struct io_uring_cmd);

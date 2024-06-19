@@ -148,6 +148,9 @@ static inline void io_submit_flush_completions(struct io_ring_ctx *ctx)
 		__io_submit_flush_completions(ctx);
 }
 
+/* if sleep time less than 1us, then do not do the schedule op */
+#define MIN_SCHETIME 1000
+
 #define io_for_each_link(pos, head) \
 	for (pos = (head); pos; pos = pos->link)
 
