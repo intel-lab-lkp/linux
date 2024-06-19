@@ -54,28 +54,28 @@ static const unsigned int uif_codes[] = {
 };
 
 static int uif_enum_mbus_code(struct v4l2_subdev *subdev,
-			      struct v4l2_subdev_state *sd_state,
+			      struct v4l2_subdev_state *state,
 			      struct v4l2_subdev_mbus_code_enum *code)
 {
-	return vsp1_subdev_enum_mbus_code(subdev, sd_state, code, uif_codes,
+	return vsp1_subdev_enum_mbus_code(subdev, state, code, uif_codes,
 					  ARRAY_SIZE(uif_codes));
 }
 
 static int uif_enum_frame_size(struct v4l2_subdev *subdev,
-			       struct v4l2_subdev_state *sd_state,
+			       struct v4l2_subdev_state *state,
 			       struct v4l2_subdev_frame_size_enum *fse)
 {
-	return vsp1_subdev_enum_frame_size(subdev, sd_state, fse,
+	return vsp1_subdev_enum_frame_size(subdev, state, fse,
 					   UIF_MIN_SIZE,
 					   UIF_MIN_SIZE, UIF_MAX_SIZE,
 					   UIF_MAX_SIZE);
 }
 
 static int uif_set_format(struct v4l2_subdev *subdev,
-			    struct v4l2_subdev_state *sd_state,
+			    struct v4l2_subdev_state *state,
 			    struct v4l2_subdev_format *fmt)
 {
-	return vsp1_subdev_set_pad_format(subdev, sd_state, fmt, uif_codes,
+	return vsp1_subdev_set_pad_format(subdev, state, fmt, uif_codes,
 					  ARRAY_SIZE(uif_codes),
 					  UIF_MIN_SIZE, UIF_MIN_SIZE,
 					  UIF_MAX_SIZE, UIF_MAX_SIZE);

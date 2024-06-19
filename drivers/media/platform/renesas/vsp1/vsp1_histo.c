@@ -170,7 +170,7 @@ static const struct vb2_ops histo_video_queue_qops = {
  */
 
 static int histo_enum_mbus_code(struct v4l2_subdev *subdev,
-				struct v4l2_subdev_state *sd_state,
+				struct v4l2_subdev_state *state,
 				struct v4l2_subdev_mbus_code_enum *code)
 {
 	struct vsp1_histogram *histo = subdev_to_histo(subdev);
@@ -180,19 +180,19 @@ static int histo_enum_mbus_code(struct v4l2_subdev *subdev,
 		return 0;
 	}
 
-	return vsp1_subdev_enum_mbus_code(subdev, sd_state, code,
+	return vsp1_subdev_enum_mbus_code(subdev, state, code,
 					  histo->formats,
 					  histo->num_formats);
 }
 
 static int histo_enum_frame_size(struct v4l2_subdev *subdev,
-				 struct v4l2_subdev_state *sd_state,
+				 struct v4l2_subdev_state *state,
 				 struct v4l2_subdev_frame_size_enum *fse)
 {
 	if (fse->pad != HISTO_PAD_SINK)
 		return -EINVAL;
 
-	return vsp1_subdev_enum_frame_size(subdev, sd_state, fse,
+	return vsp1_subdev_enum_frame_size(subdev, state, fse,
 					   HISTO_MIN_SIZE,
 					   HISTO_MIN_SIZE, HISTO_MAX_SIZE,
 					   HISTO_MAX_SIZE);
@@ -243,13 +243,13 @@ static int histo_get_selection(struct v4l2_subdev *subdev,
 }
 
 static int histo_set_crop(struct v4l2_subdev *subdev,
-			  struct v4l2_subdev_state *sd_state,
+			  struct v4l2_subdev_state *state,
 			  struct v4l2_subdev_selection *sel)
 {
 	struct v4l2_mbus_framefmt *format;
 
 	/* The crop rectangle must be inside the input frame. */
-	format = v4l2_subdev_state_get_format(sd_state, HISTO_PAD_SINK);
+	format = v4l2_subdev_state_get_format(state, HISTO_PAD_SINK);
 	sel->r.left = clamp_t(unsigned int, sel->r.left, 0, format->width - 1);
 	sel->r.top = clamp_t(unsigned int, sel->r.top, 0, format->height - 1);
 	sel->r.width = clamp_t(unsigned int, sel->r.width, HISTO_MIN_SIZE,
@@ -258,14 +258,14 @@ static int histo_set_crop(struct v4l2_subdev *subdev,
 				format->height - sel->r.top);
 
 	/* Set the crop rectangle and reset the compose rectangle. */
-	*v4l2_subdev_state_get_crop(sd_state, sel->pad) = sel->r;
-	*v4l2_subdev_state_get_compose(sd_state, sel->pad) = sel->r;
+	*v4l2_subdev_state_get_crop(state, sel->pad) = sel->r;
+	*v4l2_subdev_state_get_compose(state, sel->pad) = sel->r;
 
 	return 0;
 }
 
 static int histo_set_compose(struct v4l2_subdev *subdev,
-			     struct v4l2_subdev_state *sd_state,
+			     struct v4l2_subdev_state *state,
 			     struct v4l2_subdev_selection *sel)
 {
 	struct v4l2_rect *compose;
@@ -280,7 +280,7 @@ static int histo_set_compose(struct v4l2_subdev *subdev,
 	sel->r.left = 0;
 	sel->r.top = 0;
 
-	crop = v4l2_subdev_state_get_crop(sd_state, sel->pad);
+	crop = v4l2_subdev_state_get_crop(state, sel->pad);
 
 	/*
 	 * Clamp the width and height to acceptable values first and then
@@ -305,7 +305,7 @@ static int histo_set_compose(struct v4l2_subdev *subdev,
 	ratio = 1 << (crop->height * 2 / sel->r.height / 3);
 	sel->r.height = crop->height / ratio;
 
-	compose = v4l2_subdev_state_get_compose(sd_state, sel->pad);
+	compose = v4l2_subdev_state_get_compose(state, sel->pad);
 	*compose = sel->r;
 
 	return 0;
@@ -327,7 +327,7 @@ static int histo_set_selection(struct v4l2_subdev *subdev,
 }
 
 static int histo_set_format(struct v4l2_subdev *subdev,
-			    struct v4l2_subdev_state *sd_state,
+			    struct v4l2_subdev_state *state,
 			    struct v4l2_subdev_format *fmt)
 {
 	struct vsp1_histogram *histo = subdev_to_histo(subdev);
@@ -342,7 +342,7 @@ static int histo_set_format(struct v4l2_subdev *subdev,
 		return 0;
 	}
 
-	return vsp1_subdev_set_pad_format(subdev, sd_state, fmt,
+	return vsp1_subdev_set_pad_format(subdev, state, fmt,
 					  histo->formats, histo->num_formats,
 					  HISTO_MIN_SIZE, HISTO_MIN_SIZE,
 					  HISTO_MAX_SIZE, HISTO_MAX_SIZE);
