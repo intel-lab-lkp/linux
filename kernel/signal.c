@@ -2882,7 +2882,13 @@ relock:
 		 * Anything else is fatal, maybe with a core dump.
 		 */
 		exit_code = signr;
-		group_exit_needed = true;
+		if (sig_kernel_coredump(signr))
+			group_exit_needed = true;
+		else {
+			signal->group_exit_code = exit_code;
+			signal->flags = SIGNAL_GROUP_EXIT;
+			zap_other_threads(current);
+		}
 	fatal:
 		spin_unlock_irq(&sighand->siglock);
 		if (unlikely(cgroup_task_frozen(current)))
