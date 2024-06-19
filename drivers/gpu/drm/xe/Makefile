@@ -24,10 +24,13 @@ $(obj)/generated/%_wa_oob.c $(obj)/generated/%_wa_oob.h: $(obj)/xe_gen_wa_oob \
 	$(call cmd,wa_oob)
 
 uses_generated_oob := \
+	$(obj)/xe_device.o \
 	$(obj)/xe_gsc.o \
+	$(obj)/xe_gt.o \
 	$(obj)/xe_guc.o \
 	$(obj)/xe_guc_ads.o \
 	$(obj)/xe_migrate.o \
+	$(obj)/xe_pat.o \
 	$(obj)/xe_ring_ops.o \
 	$(obj)/xe_vm.o \
 	$(obj)/xe_wa.o \
