@@ -23,8 +23,8 @@
 	aliases {
 		ethernet0 = &gmac2io;
 		ethernet1 = &gmac2phy;
-		mmc0 = &sdmmc;
-		mmc1 = &emmc;
+		mmc0 = &emmc;
+		mmc1 = &sdmmc;
 	};
 
 	chosen {
