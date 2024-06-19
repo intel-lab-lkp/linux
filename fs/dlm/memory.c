@@ -34,8 +34,7 @@ int __init dlm_memory_init(void)
 	if (!mhandle_cache)
 		goto mhandle;
 
-	lkb_cache = kmem_cache_create("dlm_lkb", sizeof(struct dlm_lkb),
-				__alignof__(struct dlm_lkb), 0, NULL);
+	lkb_cache = KMEM_CACHE(dlm_lkb, 0);
 	if (!lkb_cache)
 		goto lkb;
 
@@ -43,14 +42,11 @@ int __init dlm_memory_init(void)
 	if (!msg_cache)
 		goto msg;
 
-	rsb_cache = kmem_cache_create("dlm_rsb", sizeof(struct dlm_rsb),
-				__alignof__(struct dlm_rsb), 0, NULL);
+	rsb_cache = KMEM_CACHE(dlm_rsb, 0);
 	if (!rsb_cache)
 		goto rsb;
 
-	cb_cache = kmem_cache_create("dlm_cb", sizeof(struct dlm_callback),
-				     __alignof__(struct dlm_callback), 0,
-				     NULL);
+	cb_cache = KMEM_CACHE(dlm_callback, 0);
 	if (!cb_cache)
 		goto cb;
 
