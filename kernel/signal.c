@@ -2450,8 +2450,7 @@ static bool do_signal_stop(int signr)
 		WARN_ON_ONCE(signr & ~JOBCTL_STOP_SIGMASK);
 
 		if (!likely(current->jobctl & JOBCTL_STOP_DEQUEUED) ||
-		    unlikely(sig->flags & SIGNAL_GROUP_EXIT) ||
-		    unlikely(sig->group_exec_task))
+		    unlikely(task_exit_pending(current)))
 			return false;
 		/*
 		 * There is no group stop already in progress.  We must
@@ -2747,8 +2746,7 @@ relock:
 		int exit_code;
 
 		/* Has this task already been marked for death? */
-		if ((signal->flags & SIGNAL_GROUP_EXIT) ||
-		     signal->group_exec_task) {
+		if (task_exit_pending(current)) {
 			signr = SIGKILL;
 			trace_signal_deliver(SIGKILL, SEND_SIG_NOINFO,
 					     &sighand->action[SIGKILL-1]);

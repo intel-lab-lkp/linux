@@ -389,7 +389,7 @@ static int zap_threads(struct task_struct *tsk,
 	int nr = -EAGAIN;
 
 	spin_lock_irq(&tsk->sighand->siglock);
-	if (!(signal->flags & SIGNAL_GROUP_EXIT) && !signal->group_exec_task) {
+	if (!task_exit_pending(tsk)) {
 		signal->core_state = core_state;
 		nr = zap_process(tsk, exit_code);
 		atomic_set(&core_state->nr_threads, nr);
