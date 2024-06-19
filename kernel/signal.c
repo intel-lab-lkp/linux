@@ -1009,9 +1009,6 @@ void schedule_group_exit_locked(struct signal_struct *signal, int exit_code)
 	 */
 	struct task_struct *t;
 
-	signal->flags = SIGNAL_GROUP_EXIT;
-	signal->group_exit_code = exit_code;
-	signal->group_stop_count = 0;
 	__for_each_thread(signal, t)
 		schedule_task_exit_locked(t, exit_code);
 }
@@ -1376,10 +1373,17 @@ int force_sig_info(struct kernel_siginfo *info)
 void schedule_task_exit_locked(struct task_struct *task, int exit_code)
 {
 	if (!(task->jobctl & JOBCTL_WILL_EXIT)) {
+		struct signal_struct *signal = task->signal;
 		task_clear_jobctl_pending(task, JOBCTL_PENDING_MASK);
 		task->jobctl |= JOBCTL_WILL_EXIT;
 		task->exit_code = exit_code;
 		signal_wake_up(task, true);
+		signal->quick_threads--;
+		if (signal->quick_threads == 0) {
+			signal->flags = SIGNAL_GROUP_EXIT;
+			signal->group_exit_code = exit_code;
+			signal->group_stop_count = 0;
+		}
 	}
 }
 
