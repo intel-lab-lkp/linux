@@ -63,6 +63,14 @@ properties:
 
   dma-coherent: true
 
+  interconnects:
+    maxItems: 2
+
+  interconnect-names:
+    items:
+      - const: axi_icc_path
+      - const: ahb_icc_path
+
   phys: true
 
   phy-names:
