@@ -1010,9 +1010,16 @@ do_group_exit(int exit_code)
 			/* Another thread got here before we took the lock.  */
 			exit_code = sig->group_exit_code;
 		else {
+			struct task_struct *t;
+
 			sig->group_exit_code = exit_code;
 			sig->flags = SIGNAL_GROUP_EXIT;
-			zap_other_threads(current);
+			sig->group_stop_count = 0;
+			__for_each_thread(sig, t) {
+				if (t == current)
+					continue;
+				schedule_task_exit_locked(t);
+			}
 			current->jobctl |= JOBCTL_WILL_EXIT;
 		}
 		spin_unlock_irq(&sighand->siglock);

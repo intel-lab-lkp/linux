@@ -1376,23 +1376,6 @@ void schedule_task_exit_locked(struct task_struct *task)
 	}
 }
 
-/*
- * Nuke all other threads in the group.
- */
-int zap_other_threads(struct task_struct *p)
-{
-	struct task_struct *t;
-	int count = 0;
-
-	p->signal->group_stop_count = 0;
-
-	for_other_threads(p, t) {
-		count++;
-		schedule_task_exit_locked(t);
-	}
-	return count;
-}
-
 struct sighand_struct *__lock_task_sighand(struct task_struct *tsk,
 					   unsigned long *flags)
 {
@@ -2744,6 +2727,7 @@ relock:
 	for (;;) {
 		bool group_exit_needed = false;
 		struct k_sigaction *ka;
+		struct task_struct *t;
 		enum pid_type type;
 		int exit_code;
 
@@ -2891,7 +2875,12 @@ relock:
 		else {
 			signal->group_exit_code = exit_code;
 			signal->flags = SIGNAL_GROUP_EXIT;
-			zap_other_threads(current);
+			signal->group_stop_count = 0;
+			__for_each_thread(signal, t) {
+				if (t == current)
+					continue;
+				schedule_task_exit_locked(t);
+			}
 			current->jobctl |= JOBCTL_WILL_EXIT;
 		}
 	fatal:
