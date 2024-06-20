@@ -106,6 +106,46 @@ void cper_print_bits(const char *pfx, unsigned int bits,
 		printk("%s\n", buf);
 }
 
+/*
+ * cper_bits_to_str - return a string for set bits
+ * @buf: buffer to store the output string
+ * @buf_size: size of the output string buffer
+ * @bits: bit mask
+ * @strs: string array, indexed by bit position
+ * @strs_size: size of the string array: @strs
+ *
+ * add to @buf the bitmask in hexadecimal. Then, for each set bit in @bits,
+ * add the corresponding string in @strs to @buf.
+ */
+char *cper_bits_to_str(char *buf, int buf_size, unsigned int bits,
+		       const char * const strs[], unsigned int strs_size)
+{
+	int len = buf_size;
+	char *str = buf;
+	int i, size;
+
+	if (strs_size < 16)
+		size = snprintf(str, len, "%02x ", bits);
+	if (strs_size < 32)
+		size = snprintf(str, len, "%04x ", bits);
+	else
+		size = snprintf(str, len, "%08x ", bits);
+
+	len -= size;
+	str += size;
+
+	for (i = 0; i < strs_size; i++) {
+		if (!(bits & (1U << i)))
+			continue;
+
+		size = snprintf(str, buf_size - len, "%s ", strs[i]);
+		len -= size;
+		str += size;
+	}
+	return buf;
+}
+EXPORT_SYMBOL_GPL(cper_bits_to_str);
+
 static const char * const proc_type_strs[] = {
 	"IA32/X64",
 	"IA64",
