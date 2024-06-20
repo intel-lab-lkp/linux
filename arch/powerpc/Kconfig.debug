@@ -1,5 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0
 
+config HAVE_MMIOTRACE_SUPPORT
+	def_bool y
+
 config PPC_DISABLE_WERROR
 	bool "Don't build arch/powerpc code with -Werror"
 	help
