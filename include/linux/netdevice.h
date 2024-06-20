@@ -2416,11 +2416,16 @@ struct net_device {
 	((dev)->devlink_port = (port));				\
 })
 
-static inline bool netif_elide_gro(const struct net_device *dev)
+static inline bool netif_elide_gro(const struct sk_buff *skb)
 {
-	if (!(dev->features & NETIF_F_GRO) || dev->xdp_prog)
+	if (!(skb->dev->features & NETIF_F_GRO) || skb->dev->xdp_prog)
 		return true;
+
+#ifdef CONFIG_SKB_GRO_CONTROL
+	return skb->gro_disabled;
+#else
 	return false;
+#endif
 }
 
 #define	NETDEV_ALIGN		32

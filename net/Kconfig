@@ -289,6 +289,16 @@ config MAX_SKB_FRAGS
 	  and in drivers using build_skb().
 	  If unsure, say 17.
 
+config SKB_GRO_CONTROL
+	bool "allow disable GRO on per-packet basis"
+	default y
+	help
+	  By default GRO can only be enabled or disabled per network device.
+	  This can be cumbersome for certain scenarios.
+	  Toggling this option will allow disabling GRO for selected packets,
+	  e.g. by XDP programs, so that it is more flexibile.
+	  Extra overhead should be minimal.
+
 config RPS
 	bool "Receive packet steering"
 	depends on SMP && SYSFS

@@ -1008,6 +1008,9 @@ struct sk_buff {
 #if IS_ENABLED(CONFIG_IP_SCTP)
 	__u8			csum_not_inet:1;
 #endif
+#ifdef CONFIG_SKB_GRO_CONTROL
+	__u8			gro_disabled:1;
+#endif
 
 #if defined(CONFIG_NET_SCHED) || defined(CONFIG_NET_XGRESS)
 	__u16			tc_index;	/* traffic control index */
@@ -1212,6 +1215,13 @@ static inline bool skb_wifi_acked_valid(const struct sk_buff *skb)
 	return skb->wifi_acked_valid;
 #else
 	return 0;
+#endif
+}
+
+static inline void skb_disable_gro(struct sk_buff *skb)
+{
+#ifdef CONFIG_SKB_GRO_CONTROL
+	skb->gro_disabled = 1;
 #endif
 }
 

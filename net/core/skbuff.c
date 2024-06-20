@@ -6045,6 +6045,10 @@ void skb_scrub_packet(struct sk_buff *skb, bool xnet)
 	ipvs_reset(skb);
 	skb->mark = 0;
 	skb_clear_tstamp(skb);
+#ifdef CONFIG_SKB_GRO_CONTROL
+	/* hand back GRO control to next netns */
+	skb->gro_disabled = 0;
+#endif
 }
 EXPORT_SYMBOL_GPL(skb_scrub_packet);
 
