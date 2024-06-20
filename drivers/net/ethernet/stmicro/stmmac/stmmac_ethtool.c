@@ -491,9 +491,16 @@ static void stmmac_get_ringparam(struct net_device *netdev,
 				 struct netlink_ext_ack *extack)
 {
 	struct stmmac_priv *priv = netdev_priv(netdev);
+	u32 dma_max_rx_size = DMA_MAX_RX_SIZE;
+	u32 dma_max_tx_size = DMA_MAX_TX_SIZE;
 
-	ring->rx_max_pending = DMA_MAX_RX_SIZE;
-	ring->tx_max_pending = DMA_MAX_TX_SIZE;
+	if (priv->plat->has_xgmac) {
+		dma_max_rx_size = XGMAC_DMA_MAX_RX_SIZE;
+		dma_max_tx_size = XGMAC_DMA_MAX_TX_SIZE;
+	}
+
+	ring->rx_max_pending = dma_max_rx_size;
+	ring->tx_max_pending = dma_max_tx_size;
 	ring->rx_pending = priv->dma_conf.dma_rx_size;
 	ring->tx_pending = priv->dma_conf.dma_tx_size;
 }
@@ -503,12 +510,21 @@ static int stmmac_set_ringparam(struct net_device *netdev,
 				struct kernel_ethtool_ringparam *kernel_ring,
 				struct netlink_ext_ack *extack)
 {
+	struct stmmac_priv *priv = netdev_priv(netdev);
+	u32 dma_max_rx_size = DMA_MAX_RX_SIZE;
+	u32 dma_max_tx_size = DMA_MAX_TX_SIZE;
+
+	if (priv->plat->has_xgmac) {
+		dma_max_rx_size = XGMAC_DMA_MAX_RX_SIZE;
+		dma_max_tx_size = XGMAC_DMA_MAX_TX_SIZE;
+	}
+
 	if (ring->rx_mini_pending || ring->rx_jumbo_pending ||
 	    ring->rx_pending < DMA_MIN_RX_SIZE ||
-	    ring->rx_pending > DMA_MAX_RX_SIZE ||
+	    ring->rx_pending > dma_max_rx_size ||
 	    !is_power_of_2(ring->rx_pending) ||
 	    ring->tx_pending < DMA_MIN_TX_SIZE ||
-	    ring->tx_pending > DMA_MAX_TX_SIZE ||
+	    ring->tx_pending > dma_max_tx_size ||
 	    !is_power_of_2(ring->tx_pending))
 		return -EINVAL;
 

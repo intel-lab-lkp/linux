@@ -11,6 +11,8 @@
 
 /* Misc */
 #define XGMAC_JUMBO_LEN			16368
+#define XGMAC_DMA_MAX_TX_SIZE		65536
+#define XGMAC_DMA_MAX_RX_SIZE		65536
 
 /* MAC Registers */
 #define XGMAC_TX_CONFIG			0x00000000
