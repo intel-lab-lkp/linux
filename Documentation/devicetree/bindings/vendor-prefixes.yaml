@@ -422,6 +422,8 @@ patternProperties:
     description: Emtop Embedded Solutions
   "^eeti,.*":
     description: eGalax_eMPIA Technology Inc
+  "^efnx,.*":
+    description: Efinix, Inc.
   "^einfochips,.*":
     description: Einfochips
   "^eink,.*":
