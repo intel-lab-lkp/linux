@@ -1724,6 +1724,9 @@ static const struct encoding_to_trap_config encoding_to_fgt[] __initconst = {
 	SR_FGT(SYS_AMEVCNTR0_EL0(2),	HAFGRTR, AMEVCNTR02_EL0, 1),
 	SR_FGT(SYS_AMEVCNTR0_EL0(1),	HAFGRTR, AMEVCNTR01_EL0, 1),
 	SR_FGT(SYS_AMEVCNTR0_EL0(0),	HAFGRTR, AMEVCNTR00_EL0, 1),
+
+	/* HDFGRTR2_EL2 */
+	SR_FGT(SYS_MDSELR_EL1,		HDFGRTR2, nMDSELR_EL1, 1),
 };
 
 static union trap_config get_trap_config(u32 sysreg)
@@ -1979,6 +1982,10 @@ static bool check_fgt_bit(struct kvm *kvm, bool is_read,
 		sr = is_read ? HDFGRTR_EL2 : HDFGWTR_EL2;
 		break;
 
+	case HDFGRTR2_GROUP:
+		sr = is_read ? HDFGRTR2_EL2 : HDFGWTR2_EL2;
+		break;
+
 	case HAFGRTR_GROUP:
 		sr = HAFGRTR_EL2;
 		break;
@@ -2051,6 +2058,13 @@ bool triage_sysreg_trap(struct kvm_vcpu *vcpu, int *sr_index)
 			val = __vcpu_sys_reg(vcpu, HDFGRTR_EL2);
 		else
 			val = __vcpu_sys_reg(vcpu, HDFGWTR_EL2);
+		break;
+
+	case HDFGRTR2_GROUP:
+		if (is_read)
+			val = __vcpu_sys_reg(vcpu, HDFGRTR2_EL2);
+		else
+			val = __vcpu_sys_reg(vcpu, HDFGWTR2_EL2);
 		break;
 
 	case HAFGRTR_GROUP:

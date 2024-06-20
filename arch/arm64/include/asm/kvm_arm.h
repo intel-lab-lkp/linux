@@ -354,6 +354,14 @@
 #define __HFGRTR_EL2_MASK	GENMASK(49, 0)
 #define __HFGRTR_EL2_nMASK	~(__HFGRTR_EL2_RES0 | __HFGRTR_EL2_MASK)
 
+#define __HDFGRTR2_EL2_RES0	HDFGRTR2_EL2_RES0
+#define __HDFGRTR2_EL2_MASK	(GENMASK(22, 22) | GENMASK(20, 0))
+#define __HDFGRTR2_EL2_nMASK	~(__HDFGRTR2_EL2_RES0 | __HDFGRTR2_EL2_MASK)
+
+#define __HDFGWTR2_EL2_RES0	HDFGWTR2_EL2_RES0
+#define __HDFGWTR2_EL2_MASK	(GENMASK(22, 19) | GENMASK(16, 7) | GENMASK(5, 0))
+#define __HDFGWTR2_EL2_nMASK	~(__HDFGWTR2_EL2_RES0 | __HDFGWTR2_EL2_MASK)
+
 /*
  * The HFGWTR bits are a subset of HFGRTR bits. To ensure we don't miss any
  * future additions, define __HFGWTR* macros relative to __HFGRTR* ones.
