@@ -267,6 +267,9 @@ static unsigned long ksm_pages_unshared;
 /* The number of rmap_items in use: to calculate pages_volatile */
 static unsigned long ksm_rmap_items;
 
+/* The number of ksm_mm_slot in use */
+static atomic_long_t ksm_mm_slots = ATOMIC_LONG_INIT(0);
+
 /* The number of stable_node chains */
 static unsigned long ksm_stable_node_chains;
 
@@ -1241,6 +1244,7 @@ mm_exiting:
 			spin_unlock(&ksm_mmlist_lock);
 
 			mm_slot_free(mm_slot_cache, mm_slot);
+			atomic_long_dec(&ksm_mm_slots);
 			clear_bit(MMF_VM_MERGEABLE, &mm->flags);
 			clear_bit(MMF_VM_MERGE_ANY, &mm->flags);
 			mmdrop(mm);
@@ -2627,6 +2631,7 @@ no_vmas:
 		spin_unlock(&ksm_mmlist_lock);
 
 		mm_slot_free(mm_slot_cache, mm_slot);
+		atomic_long_dec(&ksm_mm_slots);
 		clear_bit(MMF_VM_MERGEABLE, &mm->flags);
 		clear_bit(MMF_VM_MERGE_ANY, &mm->flags);
 		mmap_read_unlock(mm);
@@ -2910,6 +2915,7 @@ int __ksm_enter(struct mm_struct *mm)
 		list_add_tail(&slot->mm_node, &ksm_scan.mm_slot->slot.mm_node);
 	spin_unlock(&ksm_mmlist_lock);
 
+	atomic_long_inc(&ksm_mm_slots);
 	set_bit(MMF_VM_MERGEABLE, &mm->flags);
 	mmgrab(mm);
 
@@ -2952,6 +2958,7 @@ void __ksm_exit(struct mm_struct *mm)
 
 	if (easy_to_free) {
 		mm_slot_free(mm_slot_cache, mm_slot);
+		atomic_long_dec(&ksm_mm_slots);
 		clear_bit(MMF_VM_MERGE_ANY, &mm->flags);
 		clear_bit(MMF_VM_MERGEABLE, &mm->flags);
 		mmdrop(mm);
@@ -3283,7 +3290,8 @@ static void wait_while_offlining(void)
 long ksm_process_profit(struct mm_struct *mm)
 {
 	return (long)(mm->ksm_merging_pages + mm_ksm_zero_pages(mm)) * PAGE_SIZE -
-		mm->ksm_rmap_items * sizeof(struct ksm_rmap_item);
+		mm->ksm_rmap_items * sizeof(struct ksm_rmap_item) -
+		(test_bit(MMF_VM_MERGEABLE, &mm->flags) ? sizeof(struct ksm_mm_slot) : 0);
 }
 #endif /* CONFIG_PROC_FS */
 
@@ -3581,7 +3589,8 @@ static ssize_t general_profit_show(struct kobject *kobj,
 	long general_profit;
 
 	general_profit = (ksm_pages_sharing + atomic_long_read(&ksm_zero_pages)) * PAGE_SIZE -
-				ksm_rmap_items * sizeof(struct ksm_rmap_item);
+				ksm_rmap_items * sizeof(struct ksm_rmap_item) -
+				atomic_long_read(&ksm_mm_slots) * sizeof(struct ksm_mm_slot);
 
 	return sysfs_emit(buf, "%ld\n", general_profit);
 }
