@@ -3,6 +3,7 @@
 import json as _json
 import random
 import re
+import socket
 import subprocess
 import time
 
@@ -81,7 +82,17 @@ def rand_port():
     """
     Get unprivileged port, for now just random, one day we may decide to check if used.
     """
-    return random.randint(10000, 65535)
+    while True:
+        port = random.randint(10000, 65535)
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(("", port))
+            with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as s:
+                s.bind(("", port))
+            return port
+        except OSError as e:
+            if e.errno != 98:  # already in use
+                raise
 
 
 def wait_port_listen(port, proto="tcp", ns=None, host=None, sleep=0.005, deadline=5):
