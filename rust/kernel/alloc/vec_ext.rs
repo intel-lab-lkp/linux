@@ -4,6 +4,8 @@
 
 use super::{AllocError, Flags};
 use alloc::vec::Vec;
+
+#[cfg(not(any(test, testlib)))]
 use core::ptr;
 
 /// Extensions to [`Vec`].
