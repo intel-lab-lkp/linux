@@ -106,6 +106,65 @@ void cper_print_bits(const char *pfx, unsigned int bits,
 		printk("%s\n", buf);
 }
 
+/*
+ * cper_bits_to_str - return a string for set bits
+ * @buf: buffer to store the output string
+ * @buf_size: size of the output string buffer
+ * @bits: bit mask
+ * @strs: string array, indexed by bit position
+ * @strs_size: size of the string array: @strs
+ *
+ * add to @buf the bitmask in hexadecimal. Then, for each set bit in @bits,
+ * add the corresponding string in @strs to @buf.
+ */
+char *cper_bits_to_str(char *buf, int buf_size, unsigned int bits,
+		       const char * const strs[], unsigned int strs_size,
+		       unsigned int mask)
+{
+	int i, size, first_bit;
+	int len = buf_size;
+	const char *start;
+	char *str = buf;
+
+	if (strs_size < 16)
+		size = snprintf(str, len, "0x%02x: ", bits);
+	if (strs_size < 32)
+		size = snprintf(str, len, "0x%04x: ", bits);
+
+	len -= size;
+	str += size;
+
+	start = str;
+
+	if (mask) {
+		first_bit = ffs(mask) - 1;
+		if (bits & ~mask) {
+			size = strscpy(str, "reserved bit(s)", len);
+			len -= size;
+			str += size;
+		}
+	} else {
+		first_bit = 0;
+	}
+
+	for (i = 0; i < strs_size; i++) {
+		if (!(bits & (1U << (i + first_bit))))
+			continue;
+
+		if (*start && len > 0) {
+			*str = '|';
+			len--;
+			str++;
+		}
+
+		size = strscpy(str, strs[i], len);
+		len -= size;
+		str += size;
+	}
+	return buf;
+}
+EXPORT_SYMBOL_GPL(cper_bits_to_str);
+
 static const char * const proc_type_strs[] = {
 	"IA32/X64",
 	"IA64",
