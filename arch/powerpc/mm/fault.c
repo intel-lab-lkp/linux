@@ -22,6 +22,7 @@
 #include <linux/ptrace.h>
 #include <linux/mman.h>
 #include <linux/mm.h>
+#include <linux/mmiotrace.h>
 #include <linux/interrupt.h>
 #include <linux/highmem.h>
 #include <linux/extable.h>
@@ -49,6 +50,19 @@
 /*
  * do_page_fault error handling helpers
  */
+
+/*
+ * Returns 0 if mmiotrace is disabled, or if the fault is not
+ * handled by mmiotrace:
+ */
+static nokprobe_inline int
+kmmio_fault(struct pt_regs *regs, unsigned long addr)
+{
+	if (unlikely(is_kmmio_active()))
+		if (kmmio_handler(regs, addr) == 1)
+			return -1;
+	return 0;
+}
 
 static int
 __bad_area_nosemaphore(struct pt_regs *regs, unsigned long address, int si_code)
@@ -421,6 +435,9 @@ static int ___do_page_fault(struct pt_regs *regs, unsigned long address,
 	int is_write = page_fault_is_write(error_code);
 	vm_fault_t fault, major = 0;
 	bool kprobe_fault = kprobe_page_fault(regs, 11);
+
+	if (unlikely(kmmio_fault(regs, address)))
+		return 0;
 
 	if (unlikely(debugger_fault_handler(regs) || kprobe_fault))
 		return 0;

@@ -3,12 +3,15 @@
 #include <linux/io.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
+#include <linux/mmiotrace.h>
 
 void __iomem *__ioremap_caller(phys_addr_t addr, unsigned long size,
 			       pgprot_t prot, void *caller)
 {
 	phys_addr_t paligned, offset;
 	void __iomem *ret;
+	phys_addr_t unaligned_phys_addr = addr;
+	const unsigned long unaligned_size = size;
 	int err;
 
 	/* We don't support the 4K PFN hack with ioremap */
@@ -28,8 +31,11 @@ void __iomem *__ioremap_caller(phys_addr_t addr, unsigned long size,
 	if (size == 0 || paligned == 0)
 		return NULL;
 
-	if (slab_is_available())
-		return generic_ioremap_prot(addr, size, prot);
+	if (slab_is_available()) {
+		ret = generic_ioremap_prot(addr, size, prot);
+		mmiotrace_ioremap(unaligned_phys_addr, unaligned_size, ret);
+		return ret;
+	}
 
 	pr_warn("ioremap() called early from %pS. Use early_ioremap() instead\n", caller);
 
@@ -52,6 +58,7 @@ void iounmap(volatile void __iomem *token)
 	if (!slab_is_available())
 		return;
 
+	mmiotrace_iounmap(token);
 	generic_iounmap(PCI_FIX_ADDR(token));
 }
 EXPORT_SYMBOL(iounmap);
