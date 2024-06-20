@@ -11,6 +11,7 @@
 #include <linux/delay.h>
 #include <linux/firmware.h>
 #include <linux/interrupt.h>
+#include <linux/iopoll.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -258,6 +259,94 @@ release_dtb_firmware:
 	return ret;
 }
 
+static int adsp_signal_q6v5(struct qcom_adsp *adsp)
+{
+	unsigned int val;
+	int ret;
+
+	if (adsp->q6v5.rmb_base) {
+		ret = readl_poll_timeout(adsp->q6v5.rmb_base + RMB_BOOT_WAIT_REG,
+					 val, val, 20000,
+					 RMB_POLL_MAX_TIMES * 20000);
+		if (ret < 0)
+			return ret;
+
+		writel_relaxed(1, adsp->q6v5.rmb_base + RMB_BOOT_CONT_REG);
+	}
+
+	return 0;
+}
+
+static int adsp_attach(struct rproc *rproc)
+{
+	struct qcom_adsp *adsp = (struct qcom_adsp *)rproc->priv;
+	int ret;
+
+	ret = qcom_q6v5_prepare(&adsp->q6v5);
+	if (ret)
+		return ret;
+
+	ret = adsp_pds_enable(adsp, adsp->proxy_pds, adsp->proxy_pd_count);
+	if (ret < 0)
+		goto disable_irqs;
+
+	ret = clk_prepare_enable(adsp->xo);
+	if (ret)
+		goto disable_proxy_pds;
+
+	ret = clk_prepare_enable(adsp->aggre2_clk);
+	if (ret)
+		goto disable_xo_clk;
+
+	if (adsp->cx_supply) {
+		ret = regulator_enable(adsp->cx_supply);
+		if (ret)
+			goto disable_aggre2_clk;
+	}
+
+	if (adsp->px_supply) {
+		ret = regulator_enable(adsp->px_supply);
+		if (ret)
+			goto disable_cx_supply;
+	}
+
+	/* if needed, signal Q6 to continute booting */
+	ret = adsp_signal_q6v5(adsp);
+	if (ret < 0) {
+		dev_err(adsp->dev, "Didn't get rmb signal from  %s\n", rproc->name);
+		goto disable_px_supply;
+	};
+
+	ret = qcom_q6v5_wait_for_start(&adsp->q6v5, msecs_to_jiffies(5000));
+	if (ret == -ETIMEDOUT) {
+		dev_err(adsp->dev, "start timed out\n");
+		qcom_scm_pas_shutdown(adsp->pas_id);
+		goto disable_px_supply;
+	}
+
+	return 0;
+
+disable_px_supply:
+	if (adsp->px_supply)
+		regulator_disable(adsp->px_supply);
+disable_cx_supply:
+	if (adsp->cx_supply)
+		regulator_disable(adsp->cx_supply);
+disable_aggre2_clk:
+	clk_disable_unprepare(adsp->aggre2_clk);
+disable_xo_clk:
+	clk_disable_unprepare(adsp->xo);
+disable_proxy_pds:
+	adsp_pds_disable(adsp, adsp->proxy_pds, adsp->proxy_pd_count);
+disable_irqs:
+	qcom_q6v5_unprepare(&adsp->q6v5);
+
+	/* Remove pointer to the loaded firmware, only valid in adsp_load() & adsp_start() */
+	adsp->firmware = NULL;
+
+	return ret;
+}
+
 static int adsp_start(struct rproc *rproc)
 {
 	struct qcom_adsp *adsp = rproc->priv;
@@ -317,6 +406,13 @@ static int adsp_start(struct rproc *rproc)
 	if (ret) {
 		dev_err(adsp->dev,
 			"failed to authenticate image and release reset\n");
+		goto release_pas_metadata;
+	}
+
+	/* if needed, signal Q6 to continute booting */
+	ret = adsp_signal_q6v5(adsp);
+	if (ret < 0) {
+		dev_err(adsp->dev, "Didn't get rmb signal from  %s\n", rproc->name);
 		goto release_pas_metadata;
 	}
 
@@ -432,6 +528,7 @@ static unsigned long adsp_panic(struct rproc *rproc)
 static const struct rproc_ops adsp_ops = {
 	.unprepare = adsp_unprepare,
 	.start = adsp_start,
+	.attach = adsp_attach,
 	.stop = adsp_stop,
 	.da_to_va = adsp_da_to_va,
 	.parse_fw = qcom_register_dump_segments,
@@ -442,6 +539,7 @@ static const struct rproc_ops adsp_ops = {
 static const struct rproc_ops adsp_minidump_ops = {
 	.unprepare = adsp_unprepare,
 	.start = adsp_start,
+	.attach = adsp_attach,
 	.stop = adsp_stop,
 	.da_to_va = adsp_da_to_va,
 	.parse_fw = qcom_register_dump_segments,
@@ -778,6 +876,10 @@ static int adsp_probe(struct platform_device *pdev)
 			     qcom_pas_handover);
 	if (ret)
 		goto detach_proxy_pds;
+
+	if (adsp->q6v5.rmb_base &&
+			readl_relaxed(adsp->q6v5.rmb_base + RMB_Q6_BOOT_STATUS_REG))
+		rproc->state = RPROC_DETACHED;
 
 	qcom_add_glink_subdev(rproc, &adsp->glink_subdev, desc->ssr_name);
 	qcom_add_smd_subdev(rproc, &adsp->smd_subdev);
