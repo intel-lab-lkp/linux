@@ -18,15 +18,27 @@ class GenerateTraffic:
                                  background=True, host=env.remote)
 
         # Wait for traffic to ramp up
-        pkt = ip("-s link show dev " + env.ifname, json=True)[0]["stats64"]["rx"]["packets"]
+        if not self._wait_pkts(pps=1000):
+            self.stop(verbose=True)
+            raise Exception("iperf3 traffic did not ramp up")
+
+    def _wait_pkts(self, pkt_cnt=None, pps=None):
+        pkt = ip("-s link show dev " + self.env.ifname, json=True)[0]["stats64"]["rx"]["packets"]
         for _ in range(50):
             time.sleep(0.1)
-            now = ip("-s link show dev " + env.ifname, json=True)[0]["stats64"]["rx"]["packets"]
-            if now - pkt > 1000:
-                return
-            pkt = now
-        self.stop(verbose=True)
-        raise Exception("iperf3 traffic did not ramp up")
+            now = ip("-s link show dev " + self.env.ifname, json=True)[0]["stats64"]["rx"]["packets"]
+            if pps:
+                if now - pkt > pps / 10:
+                    return True
+                pkt = now
+            elif pkt_cnt:
+                if now - pkt > pkt_cnt:
+                    return True
+        return False
+
+    def wait_pkts_and_stop(self, pkt_cnt):
+        failed = not self._wait_pkts(pkt_cnt=pkt_cnt)
+        self.stop(verbose=failed)
 
     def stop(self, verbose=None):
         self._iperf_client.process(terminate=True)
