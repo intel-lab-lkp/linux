@@ -75,6 +75,7 @@ enum xdp_buff_flags {
 	XDP_FLAGS_FRAGS_PF_MEMALLOC	= BIT(1), /* xdp paged memory is under
 						   * pressure
 						   */
+	XDP_FLAGS_GRO_DISABLED          = BIT(2), /* GRO disabled */
 };
 
 struct xdp_buff {
@@ -113,12 +114,35 @@ static __always_inline void xdp_buff_set_frag_pfmemalloc(struct xdp_buff *xdp)
 	xdp->flags |= XDP_FLAGS_FRAGS_PF_MEMALLOC;
 }
 
+static __always_inline void xdp_buff_disable_gro(struct xdp_buff *xdp)
+{
+	xdp->flags |= XDP_FLAGS_GRO_DISABLED;
+}
+
+static __always_inline bool xdp_buff_gro_disabled(struct xdp_buff *xdp)
+{
+	return !!(xdp->flags & XDP_FLAGS_GRO_DISABLED);
+}
+
+static __always_inline void
+xdp_buff_fixup_skb_offloading(struct xdp_buff *xdp, struct sk_buff *skb)
+{
+	if (xdp_buff_gro_disabled(xdp))
+		skb_disable_gro(skb);
+}
+
+static __always_inline void
+xdp_init_buff_minimal(struct xdp_buff *xdp)
+{
+	xdp->flags = 0;
+}
+
 static __always_inline void
 xdp_init_buff(struct xdp_buff *xdp, u32 frame_sz, struct xdp_rxq_info *rxq)
 {
 	xdp->frame_sz = frame_sz;
 	xdp->rxq = rxq;
-	xdp->flags = 0;
+	xdp_init_buff_minimal(xdp);
 }
 
 static __always_inline void
@@ -185,6 +209,18 @@ static __always_inline bool xdp_frame_has_frags(struct xdp_frame *frame)
 static __always_inline bool xdp_frame_is_frag_pfmemalloc(struct xdp_frame *frame)
 {
 	return !!(frame->flags & XDP_FLAGS_FRAGS_PF_MEMALLOC);
+}
+
+static __always_inline bool xdp_frame_gro_disabled(struct xdp_frame *frame)
+{
+	return !!(frame->flags & XDP_FLAGS_GRO_DISABLED);
+}
+
+static __always_inline void
+xdp_frame_fixup_skb_offloading(struct xdp_frame *frame, struct sk_buff *skb)
+{
+	if (xdp_frame_gro_disabled(frame))
+		skb_disable_gro(skb);
 }
 
 #define XDP_BULK_QUEUE_SIZE	16
