@@ -73,7 +73,6 @@ module_param(fnlock_default, bool, 0444);
 #define NOTIFY_LID_FLIP_ROG		0xbd
 
 #define ASUS_WMI_FNLOCK_BIOS_DISABLED	BIT(0)
-#define ASUS_WMI_DEVID_CAMERA_LED		0x00060079
 
 #define ASUS_MID_FAN_DESC		"mid_fan"
 #define ASUS_GPU_FAN_DESC		"gpu_fan"
@@ -93,6 +92,10 @@ module_param(fnlock_default, bool, 0444);
 #define ASUS_FAN_BOOST_MODE_SILENT		2
 #define ASUS_FAN_BOOST_MODE_SILENT_MASK		0x02
 #define ASUS_FAN_BOOST_MODES_MASK		0x03
+
+#define ASUS_FAN_BOOST_MODE2_NORMAL		0
+#define ASUS_FAN_BOOST_MODE2_SILENT		1
+#define ASUS_FAN_BOOST_MODE2_OVERBOOST		2
 
 #define ASUS_THROTTLE_THERMAL_POLICY_DEFAULT	0
 #define ASUS_THROTTLE_THERMAL_POLICY_OVERBOOST	1
@@ -268,6 +271,7 @@ struct asus_wmi {
 	int agfn_pwm;
 
 	bool fan_boost_mode_available;
+	u32 fan_boost_mode_dev_id;
 	u8 fan_boost_mode_mask;
 	u8 fan_boost_mode;
 
@@ -3019,14 +3023,14 @@ static int asus_wmi_fan_init(struct asus_wmi *asus)
 
 /* Fan mode *******************************************************************/
 
-static int fan_boost_mode_check_present(struct asus_wmi *asus)
+static int fan_boost_mode1_check_present(struct asus_wmi *asus)
 {
 	u32 result;
 	int err;
 
-	asus->fan_boost_mode_available = false;
+	asus->fan_boost_mode_dev_id = ASUS_WMI_DEVID_FAN_BOOST_MODE;
 
-	err = asus_wmi_get_devstate(asus, ASUS_WMI_DEVID_FAN_BOOST_MODE,
+	err = asus_wmi_get_devstate(asus, asus->fan_boost_mode_dev_id,
 				    &result);
 	if (err) {
 		if (err == -ENODEV)
@@ -3044,16 +3048,87 @@ static int fan_boost_mode_check_present(struct asus_wmi *asus)
 	return 0;
 }
 
+static int fan_boost_mode2_check_present(struct asus_wmi *asus)
+{
+	u32 result;
+	int err;
+
+	asus->fan_boost_mode_mask = ASUS_FAN_BOOST_MODES_MASK;
+	asus->fan_boost_mode_dev_id = ASUS_WMI_DEVID_FAN_BOOST_MODE2;
+
+	err = asus_wmi_get_devstate(asus, ASUS_WMI_DEVID_FAN_BOOST_MODE2,
+				    &result);
+	if (err) {
+		if (err == -ENODEV)
+			return 0;
+		else
+			return err;
+	}
+
+	if (! (result & ASUS_WMI_DSTS_PRESENCE_BIT))
+		return 0;
+
+	asus->fan_boost_mode_available = true;
+
+	if (result & ASUS_FAN_BOOST_MODE2_SILENT) {
+		asus->fan_boost_mode = ASUS_FAN_BOOST_MODE_SILENT;
+	} else if(result & ASUS_FAN_BOOST_MODE2_OVERBOOST) {
+		asus->fan_boost_mode = ASUS_FAN_BOOST_MODE_OVERBOOST;
+	} else {
+		asus->fan_boost_mode = ASUS_FAN_BOOST_MODE_NORMAL;
+	}
+
+	return 0;
+}
+
+static int fan_boost_mode_check_present(struct asus_wmi *asus)
+{
+	int err;
+
+	asus->fan_boost_mode_available = false;
+
+	err = fan_boost_mode1_check_present(asus);
+	if (err)
+		return err;
+
+	if (!asus->fan_boost_mode_available) {
+		err = fan_boost_mode2_check_present(asus);
+	}
+
+	return err;
+}
+
 static int fan_boost_mode_write(struct asus_wmi *asus)
 {
 	u32 retval;
 	u8 value;
+	u8 hw_value;
 	int err;
 
 	value = asus->fan_boost_mode;
 
-	pr_info("Set fan boost mode: %u\n", value);
-	err = asus_wmi_set_devstate(ASUS_WMI_DEVID_FAN_BOOST_MODE, value,
+	/* transform userspace values into hardware values */
+	if(asus->fan_boost_mode_dev_id == ASUS_WMI_DEVID_FAN_BOOST_MODE2) {
+		switch(value) {
+			case ASUS_FAN_BOOST_MODE_SILENT:
+				hw_value = ASUS_FAN_BOOST_MODE2_SILENT;
+				break;
+			case ASUS_FAN_BOOST_MODE_OVERBOOST:
+				hw_value = ASUS_FAN_BOOST_MODE2_OVERBOOST;
+				break;
+			case ASUS_FAN_BOOST_MODE_NORMAL:
+				hw_value = ASUS_FAN_BOOST_MODE2_NORMAL;
+				break;
+			default:
+				return -EINVAL;
+
+		}
+	} else {
+		hw_value = value;
+	}
+
+	pr_info("Set fan boost mode: user=%u hw=%u\n", value, hw_value);
+	err = asus_wmi_set_devstate(asus->fan_boost_mode_dev_id, hw_value,
 				    &retval);
 
 	sysfs_notify(&asus->platform_device->dev.kobj, NULL,
