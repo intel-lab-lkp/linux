@@ -845,8 +845,10 @@ int ice_clean_rx_irq_zc(struct ice_rx_ring *rx_ring, int budget)
 	xdp_prog = READ_ONCE(rx_ring->xdp_prog);
 	xdp_ring = rx_ring->xdp_ring;
 
-	if (ntc != rx_ring->first_desc)
+	if (ntc != rx_ring->first_desc) {
 		first = *ice_xdp_buf(rx_ring, rx_ring->first_desc);
+		xdp_init_buff_minimal(first);
+	}
 
 	while (likely(total_rx_packets < (unsigned int)budget)) {
 		union ice_32b_rx_flex_desc *rx_desc;
@@ -920,6 +922,7 @@ construct_skb:
 			break;
 		}
 
+		xdp = first;
 		first = NULL;
 		rx_ring->first_desc = ntc;
 
@@ -934,6 +937,7 @@ construct_skb:
 		vlan_tci = ice_get_vlan_tci(rx_desc);
 
 		ice_process_skb_fields(rx_ring, rx_desc, skb);
+		xdp_buff_fixup_skb_offloading(xdp, skb);
 		ice_receive_skb(rx_ring, skb, vlan_tci);
 	}
 
