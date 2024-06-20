@@ -26,6 +26,11 @@ struct stackframe {
 #endif
 };
 
+static inline bool on_thread_stack(void)
+{
+	return !(((unsigned long)(current->stack) ^ current_stack_pointer) & ~(THREAD_SIZE - 1));
+}
+
 static __always_inline
 void arm_get_current_stackframe(struct pt_regs *regs, struct stackframe *frame)
 {
