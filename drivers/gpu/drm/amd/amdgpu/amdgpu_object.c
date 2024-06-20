@@ -58,7 +58,12 @@ static void amdgpu_bo_destroy(struct ttm_buffer_object *tbo)
 {
 	struct amdgpu_bo *bo = ttm_to_amdgpu_bo(tbo);
 
-	amdgpu_bo_kunmap(bo);
+	/*
+	 * BO memory pages should be unmapped at this point. Call
+	 * amdgpu_bo_kunmap() before releasing the BO.
+	 */
+	if (drm_WARN_ON_ONCE(bo->tbo.base.dev, bo->kmap.bo))
+		amdgpu_bo_kunmap(bo);
 
 	if (bo->tbo.base.import_attach)
 		drm_prime_gem_destroy(&bo->tbo.base, bo->tbo.sg);
@@ -450,9 +455,7 @@ void amdgpu_bo_free_kernel(struct amdgpu_bo **bo, u64 *gpu_addr,
 	WARN_ON(amdgpu_ttm_adev((*bo)->tbo.bdev)->in_suspend);
 
 	if (likely(amdgpu_bo_reserve(*bo, true) == 0)) {
-		if (cpu_addr)
-			amdgpu_bo_kunmap(*bo);
-
+		amdgpu_bo_kunmap(*bo);
 		amdgpu_bo_unpin(*bo);
 		amdgpu_bo_unreserve(*bo);
 	}
