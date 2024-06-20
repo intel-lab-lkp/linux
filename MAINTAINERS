@@ -8928,6 +8928,7 @@ L:	alsa-devel@alsa-project.org (moderated for non-subscribers)
 L:	linuxppc-dev@lists.ozlabs.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/sound/nxp,lpc3220-i2s.yaml
+F:	sound/soc/fsl/lpc3xxx-*
 N:	lpc32xx
 
 FREESCALE SOC SOUND QMC DRIVER
