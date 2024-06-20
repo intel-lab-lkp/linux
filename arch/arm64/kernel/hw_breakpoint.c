@@ -103,9 +103,39 @@ int hw_breakpoint_slots(int type)
 	WRITE_WB_REG_CASE(OFF, 14, REG, VAL);	\
 	WRITE_WB_REG_CASE(OFF, 15, REG, VAL)
 
+static int set_bank_index(int n)
+{
+	int mdsel_bank;
+	int bank = n / 16, index = n % 16;
+
+	switch (bank) {
+	case 0:
+		mdsel_bank = MDSELR_EL1_BANK_BANK_0;
+		break;
+	case 1:
+		mdsel_bank = MDSELR_EL1_BANK_BANK_1;
+		break;
+	case 2:
+		mdsel_bank = MDSELR_EL1_BANK_BANK_2;
+		break;
+	case 3:
+		mdsel_bank = MDSELR_EL1_BANK_BANK_3;
+		break;
+	default:
+		pr_warn("Unknown register bank %d\n", bank);
+	}
+	preempt_disable();
+	write_sysreg_s(mdsel_bank << MDSELR_EL1_BANK_SHIFT, SYS_MDSELR_EL1);
+	isb();
+	return index;
+}
+
 static u64 read_wb_reg(int reg, int n)
 {
 	u64 val = 0;
+
+	if (is_debug_v8p9_enabled())
+		n = set_bank_index(n);
 
 	switch (reg + n) {
 	GEN_READ_WB_REG_CASES(AARCH64_DBG_REG_BVR, AARCH64_DBG_REG_NAME_BVR, val);
@@ -122,6 +152,9 @@ NOKPROBE_SYMBOL(read_wb_reg);
 
 static void write_wb_reg(int reg, int n, u64 val)
 {
+	if (is_debug_v8p9_enabled())
+		n = set_bank_index(n);
+
 	switch (reg + n) {
 	GEN_WRITE_WB_REG_CASES(AARCH64_DBG_REG_BVR, AARCH64_DBG_REG_NAME_BVR, val);
 	GEN_WRITE_WB_REG_CASES(AARCH64_DBG_REG_BCR, AARCH64_DBG_REG_NAME_BCR, val);
