@@ -8556,6 +8556,18 @@ static int btrfs_getattr(struct mnt_idmap *idmap,
 	stat->result_mask |= STATX_BTIME;
 	stat->btime.tv_sec = BTRFS_I(inode)->i_otime_sec;
 	stat->btime.tv_nsec = BTRFS_I(inode)->i_otime_nsec;
+
+	if ((request_mask & STATX_DIOALIGN) && S_ISREG(inode->i_mode)) {
+		btrfs_fs_info *fs_info = inode_to_fs_info(inode);
+		struct block_device *bdev = fs_info->fs_devices->latest_dev->bdev;
+
+		stat->result_mask |= STATX_DIOALIGN;
+		stat->dio_mem_align = max_t(u32, (bdev_dma_alignment(bdev) + 1),
+			fs_info->sectorsize);
+		stat->dio_offset_align = max_t(u32, bdev_logical_block_size(bdev),
+			fs_info->sectorsize);
+	}
+
 	if (bi_flags & BTRFS_INODE_APPEND)
 		stat->attributes |= STATX_ATTR_APPEND;
 	if (bi_flags & BTRFS_INODE_COMPRESS)
