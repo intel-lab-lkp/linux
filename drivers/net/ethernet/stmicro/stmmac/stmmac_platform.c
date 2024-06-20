@@ -497,6 +497,8 @@ stmmac_probe_config_dt(struct platform_device *pdev, u8 *mac)
 
 	of_property_read_u32(np, "rx-fifo-depth", &plat->rx_fifo_size);
 
+	of_property_read_u32(np, "host-dma-width", &plat->host_dma_width);
+
 	plat->force_sf_dma_mode =
 		of_property_read_bool(np, "snps,force_sf_dma_mode");
 
@@ -561,6 +563,8 @@ stmmac_probe_config_dt(struct platform_device *pdev, u8 *mac)
 		plat->pmt = 1;
 		if (of_property_read_bool(np, "snps,tso"))
 			plat->flags |= STMMAC_FLAG_TSO_EN;
+		if (of_property_read_bool(np, "snps,no-sph"))
+			plat->flags |= STMMAC_FLAG_SPH_DISABLE;
 	}
 
 	if (of_device_is_compatible(np, "snps,dwmac-3.610") ||
@@ -573,8 +577,11 @@ stmmac_probe_config_dt(struct platform_device *pdev, u8 *mac)
 	if (of_device_is_compatible(np, "snps,dwxgmac")) {
 		plat->has_xgmac = 1;
 		plat->pmt = 1;
+		of_property_read_u32(np, "max-frame-size", &plat->maxmtu);
 		if (of_property_read_bool(np, "snps,tso"))
 			plat->flags |= STMMAC_FLAG_TSO_EN;
+		if (of_property_read_bool(np, "snps,no-sph"))
+			plat->flags |= STMMAC_FLAG_SPH_DISABLE;
 	}
 
 	dma_cfg = devm_kzalloc(&pdev->dev, sizeof(*dma_cfg),
