@@ -240,8 +240,6 @@ static void xe_device_destroy(struct drm_device *dev, void *dummy)
 
 	if (xe->unordered_wq)
 		destroy_workqueue(xe->unordered_wq);
-
-	ttm_device_fini(&xe->ttm);
 }
 
 struct xe_device *xe_device_create(struct pci_dev *pdev,
@@ -259,12 +257,6 @@ struct xe_device *xe_device_create(struct pci_dev *pdev,
 	xe = devm_drm_dev_alloc(&pdev->dev, &driver, struct xe_device, drm);
 	if (IS_ERR(xe))
 		return xe;
-
-	err = ttm_device_init(&xe->ttm, &xe_ttm_funcs, xe->drm.dev,
-			      xe->drm.anon_inode->i_mapping,
-			      xe->drm.vma_offset_manager, false, false);
-	if (WARN_ON(err))
-		goto err;
 
 	err = drmm_add_action_or_reset(&xe->drm, xe_device_destroy, NULL);
 	if (err)
@@ -556,6 +548,13 @@ static int xe_device_set_has_flat_ccs(struct  xe_device *xe)
 	return xe_force_wake_put(gt_to_fw(gt), XE_FW_GT);
 }
 
+static void xe_device_destroy_ttm_device(struct drm_device *dev, void *dummy)
+{
+	struct xe_device *xe = to_xe_device(dev);
+
+	ttm_device_fini(&xe->ttm);
+}
+
 int xe_device_probe(struct xe_device *xe)
 {
 	struct xe_tile *tile;
@@ -563,6 +562,7 @@ int xe_device_probe(struct xe_device *xe)
 	int err;
 	u8 last_gt;
 	u8 id;
+	unsigned int ttm_pool_flags = 0;
 
 	xe_pat_init_early(xe);
 
@@ -584,6 +584,26 @@ int xe_device_probe(struct xe_device *xe)
 		return err;
 
 	xe_ttm_sys_mgr_init(xe);
+
+	/* On iGFX device with flat CCS we clear CCS metadata, let's extend that
+	 * and use GPU to clear  pages as well.
+	 */
+	if (xe_device_has_flat_ccs(xe) && !IS_DGFX(xe)) {
+		ttm_pool_flags = TTM_POOL_FLAG_SKIP_CLEAR_ON_FREE;
+		xe->mem.gpu_page_clear = true;
+	}
+
+	err = ttm_device_init_with_pool_flags(&xe->ttm, &xe_ttm_funcs,
+					      xe->drm.dev,
+					      xe->drm.anon_inode->i_mapping,
+					      xe->drm.vma_offset_manager,
+					      false, false, ttm_pool_flags);
+	if (WARN_ON(err))
+		return err;
+
+	err = drmm_add_action_or_reset(&xe->drm, xe_device_destroy_ttm_device, NULL);
+	if (err)
+		return err;
 
 	for_each_gt(gt, xe, id) {
 		err = xe_gt_init_early(gt);
