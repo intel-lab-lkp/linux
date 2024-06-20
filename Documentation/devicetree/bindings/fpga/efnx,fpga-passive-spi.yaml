@@ -1,0 +1,76 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/fpga/efnx,fpga-passive-spi.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Efinix SPI FPGA Manager
+
+description: |
+  Efinix Trion and Titanium Series FPGAs support a method of loading the
+  bitstream over what is referred to as "SPI Passive Programming".
+  Only serial (1x bus width) is supported, setting the programming mode
+  is not in the scope the this manager and must be done elsewhere.
+
+  References:
+  - https://www.efinixinc.com/docs/an033-configuring-titanium-fpgas-v2.6.pdf
+  - https://www.efinixinc.com/docs/an006-configuring-trion-fpgas-v6.0.pdf
+
+allOf:
+  - $ref: /schemas/spi/spi-peripheral-props.yaml#
+
+properties:
+  compatible:
+    enum:
+      - efnx,fpga-spi-passive
+
+  spi-cpha: true
+  spi-cpol: true
+
+  spi-max-frequency:
+    maximum: 25000000
+
+  reg:
+    maxItems: 1
+
+  reset-gpios:
+    description:
+      reset pin (low active)
+    maxItems: 1
+
+  cs-gpios:
+    description:
+      chip-select pin (low active)
+    maxItems: 1
+
+  done-gpios:
+    description:
+      optional programming done pin, referred as CDONE (high active)
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+  - reset-gpios
+  - cs-gpios
+
+additionalProperties: false
+
+examples:
+  - |
+    &spi2 {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      fpga_mgr_spi: fpga-mgr@0 {
+        compatible = "efnx,fpga-spi-passive";
+        spi-max-frequency = <25000000>;
+        spi-cpha;
+        spi-cpol;
+        reg = <0>;
+        reset-gpios = <&gpio4 17 GPIO_ACTIVE_LOW>;
+        cs-gpios = <&gpio5 13 GPIO_ACTIVE_LOW>;
+        done-gpios = <&gpio0 9 GPIO_ACTIVE_HIGH>;
+      };
+    };
+...
