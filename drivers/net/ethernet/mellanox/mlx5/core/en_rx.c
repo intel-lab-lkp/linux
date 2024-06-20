@@ -1670,6 +1670,8 @@ mlx5e_skb_from_cqe_linear(struct mlx5e_rq *rq, struct mlx5e_wqe_frag_info *wi,
 	dma_addr_t addr;
 	u32 frag_size;
 
+	xdp_init_buff_minimal(&mxbuf->xdp);
+
 	va             = page_address(frag_page->page) + wi->offset;
 	data           = va + rx_headroom;
 	frag_size      = MLX5_SKB_FRAG_SZ(rx_headroom + cqe_bcnt);
@@ -1721,6 +1723,7 @@ mlx5e_skb_from_cqe_nonlinear(struct mlx5e_rq *rq, struct mlx5e_wqe_frag_info *wi
 	void *va;
 
 	frag_page = wi->frag_page;
+	xdp_init_buff_minimal(&mxbuf->xdp);
 
 	va = page_address(frag_page->page) + wi->offset;
 	frag_consumed_bytes = min_t(u32, frag_info->frag_size, cqe_bcnt);
@@ -1837,6 +1840,7 @@ static void mlx5e_handle_rx_cqe(struct mlx5e_rq *rq, struct mlx5_cqe64 *cqe)
 	}
 
 	mlx5e_complete_rx_cqe(rq, cqe, cqe_bcnt, skb);
+	xdp_buff_fixup_skb_offloading(&mxbuf.xdp, skb);
 
 	if (mlx5e_cqe_regb_chain(cqe))
 		if (!mlx5e_tc_update_skb_nic(cqe, skb)) {
@@ -1885,6 +1889,7 @@ static void mlx5e_handle_rx_cqe_rep(struct mlx5e_rq *rq, struct mlx5_cqe64 *cqe)
 	}
 
 	mlx5e_complete_rx_cqe(rq, cqe, cqe_bcnt, skb);
+	xdp_buff_fixup_skb_offloading(&mxbuf.xdp, skb);
 
 	if (rep->vlan && skb_vlan_tag_present(skb))
 		skb_vlan_pop(skb);
@@ -1935,6 +1940,7 @@ static void mlx5e_handle_rx_cqe_mpwrq_rep(struct mlx5e_rq *rq, struct mlx5_cqe64
 		goto mpwrq_cqe_out;
 
 	mlx5e_complete_rx_cqe(rq, cqe, cqe_bcnt, skb);
+	xdp_buff_fixup_skb_offloading(&mxbuf.xdp, skb);
 
 	mlx5e_rep_tc_receive(cqe, rq, skb);
 
@@ -2137,6 +2143,8 @@ mlx5e_skb_from_cqe_mpwrq_linear(struct mlx5e_rq *rq, struct mlx5e_mpw_info *wi,
 		rq->stats->oversize_pkts_sw_drop++;
 		return NULL;
 	}
+
+	xdp_init_buff_minimal(&mxbuf->xdp);
 
 	va             = page_address(frag_page->page) + head_offset;
 	data           = va + rx_headroom;
@@ -2345,6 +2353,8 @@ static void mlx5e_handle_rx_cqe_mpwrq_shampo(struct mlx5e_rq *rq, struct mlx5_cq
 	}
 
 	mlx5e_shampo_complete_rx_cqe(rq, cqe, cqe_bcnt, *skb);
+	xdp_buff_fixup_skb_offloading(&mxbuf.xdp, *skb);
+
 	if (flush && rq->hw_gro_data->skb)
 		mlx5e_shampo_flush_skb(rq, cqe, match);
 free_hd_entry:
@@ -2404,6 +2414,7 @@ static void mlx5e_handle_rx_cqe_mpwrq(struct mlx5e_rq *rq, struct mlx5_cqe64 *cq
 		goto mpwrq_cqe_out;
 
 	mlx5e_complete_rx_cqe(rq, cqe, cqe_bcnt, skb);
+	xdp_buff_fixup_skb_offloading(&mxbuf.xdp, skb);
 
 	if (mlx5e_cqe_regb_chain(cqe))
 		if (!mlx5e_tc_update_skb_nic(cqe, skb)) {
@@ -2649,6 +2660,8 @@ static void mlx5i_handle_rx_cqe(struct mlx5e_rq *rq, struct mlx5_cqe64 *cqe)
 		goto wq_cyc_pop;
 
 	mlx5i_complete_rx_cqe(rq, cqe, cqe_bcnt, skb);
+	xdp_buff_fixup_skb_offloading(&mxbuf.xdp, skb);
+
 	if (unlikely(!skb->dev)) {
 		dev_kfree_skb_any(skb);
 		goto wq_cyc_pop;
@@ -2740,6 +2753,7 @@ static void mlx5e_trap_handle_rx_cqe(struct mlx5e_rq *rq, struct mlx5_cqe64 *cqe
 
 	mlx5e_complete_rx_cqe(rq, cqe, cqe_bcnt, skb);
 	skb_push(skb, ETH_HLEN);
+	xdp_buff_fixup_skb_offloading(&mxbuf.xdp, skb);
 
 	mlx5_devlink_trap_report(rq->mdev, trap_id, skb,
 				 rq->netdev->devlink_port);
