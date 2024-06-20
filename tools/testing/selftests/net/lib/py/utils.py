@@ -78,6 +78,10 @@ def ip(args, json=None, ns=None, host=None):
     return tool('ip', args, json=json, host=host)
 
 
+def ethtool(args, json=None, ns=None, host=None):
+    return tool('ethtool', args,  json=json, ns=ns, host=host)
+
+
 def rand_port():
     """
     Get unprivileged port, for now just random, one day we may decide to check if used.
