@@ -99,6 +99,7 @@
 #define MCFINT2_PIT1		14
 #define MCFINT2_PIT2		15
 #define MCFINT2_PIT3		16
+#define MCFINT2_NFC		25
 #define MCFINT2_RTC		26
 
 /*
@@ -333,4 +334,10 @@
 #define MCF_IRQ_BOFF1		(MCFINT1_VECBASE + MCFINT1_FLEXCAN1_BOFF)
 #define MCF_IRQ_ERR1		(MCFINT1_VECBASE + MCFINT1_FLEXCAN1_ERR)
 
+/*
+ * Flash module
+ */
+#define MCF_NFC_BASE		0xfc0fc000
+#define MCF_NFC_SIZE		(0xfc0fff3b - 0xfc0fc000)
+#define MCF_NFC_ISR		(MCFINT2_VECBASE + MCFINT2_NFC)
 #endif /* m5441xsim_h */

@@ -146,6 +146,7 @@
 
 enum vf610_nfc_variant {
 	NFC_VFC610 = 1,
+	NFC_M54418 = 2,
 };
 
 struct vf610_nfc {
@@ -486,10 +487,24 @@ static void vf610_nfc_select_target(struct nand_chip *chip, unsigned int cs)
 	if (nfc->variant != NFC_VFC610)
 		return;
 
-	tmp = vf610_nfc_read(nfc, NFC_ROW_ADDR);
-	tmp &= ~(ROW_ADDR_CHIP_SEL_RB_MASK | ROW_ADDR_CHIP_SEL_MASK);
-	tmp |= 1 << ROW_ADDR_CHIP_SEL_RB_SHIFT;
-	tmp |= BIT(cs) << ROW_ADDR_CHIP_SEL_SHIFT;
+	if (nfc->variant == NFC_M54418) {
+		/*
+		 * According to the Reference Manual:
+		 * bit 24: Reserved, must be set (ROW_ADDR_CHIP_SEL_SHIFT)
+		 * bit 25-27: Reserved, must be cleared
+		 * bit 28: Reserved, must be set (ROW_ADDR_CHIP_SEL_RB_SHIFT)
+		 * bit 29-31: Reserved, must be cleared
+		 */
+		tmp = vf610_nfc_read(nfc, NFC_ROW_ADDR);
+		tmp &= ~(ROW_ADDR_CHIP_SEL_RB_MASK | ROW_ADDR_CHIP_SEL_MASK);
+		tmp |= 1 << ROW_ADDR_CHIP_SEL_RB_SHIFT;
+		tmp |= 1 << ROW_ADDR_CHIP_SEL_SHIFT;
+	} else {
+		tmp = vf610_nfc_read(nfc, NFC_ROW_ADDR);
+		tmp &= ~(ROW_ADDR_CHIP_SEL_RB_MASK | ROW_ADDR_CHIP_SEL_MASK);
+		tmp |= 1 << ROW_ADDR_CHIP_SEL_RB_SHIFT;
+		tmp |= BIT(cs) << ROW_ADDR_CHIP_SEL_SHIFT;
+	}
 
 	vf610_nfc_write(nfc, NFC_ROW_ADDR, tmp);
 }
@@ -700,11 +715,26 @@ static int vf610_nfc_write_oob(struct nand_chip *chip, int page)
 	return nand_prog_page_end_op(chip);
 }
 
+#ifdef CONFIG_OF
 static const struct of_device_id vf610_nfc_dt_ids[] = {
 	{ .compatible = "fsl,vf610-nfc", .data = (void *)NFC_VFC610 },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, vf610_nfc_dt_ids);
+#endif
+
+static const struct platform_device_id vf610_nfc_id_table[] = {
+	{
+		.name = "mcf5441x-nfc",
+		.driver_data = (kernel_ulong_t)NFC_M54418,
+	}, {
+		.name = "vf610-nfc",
+		.driver_data = (kernel_ulong_t)NFC_VFC610,
+	}, {
+		/* sentinel */
+	},
+};
+MODULE_DEVICE_TABLE(platform, vf610_nfc_id_table);
 
 static void vf610_nfc_preinit_controller(struct vf610_nfc *nfc)
 {
@@ -810,6 +840,7 @@ static int vf610_nfc_probe(struct platform_device *pdev)
 	struct vf610_nfc *nfc;
 	struct mtd_info *mtd;
 	struct nand_chip *chip;
+	struct nand_chip *pdata;
 	struct device_node *child;
 	int err;
 	int irq;
@@ -820,30 +851,53 @@ static int vf610_nfc_probe(struct platform_device *pdev)
 
 	nfc->dev = &pdev->dev;
 	chip = &nfc->chip;
+	pdata = dev_get_platdata(&pdev->dev);
+	if (pdata)
+		*chip = *pdata;
+
 	mtd = nand_to_mtd(chip);
 
 	mtd->owner = THIS_MODULE;
 	mtd->dev.parent = nfc->dev;
-	mtd->name = DRV_NAME;
+
+	/*
+	 * We keep the MTD name unchanged to avoid breaking platforms
+	 * where the MTD cmdline parser is used and the bootloader
+	 * has not been updated to use the new naming scheme.
+	 */
+	if (!nfc->dev->of_node)
+		mtd->name = "NAND";
+	else
+		mtd->name = DRV_NAME;
 
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0)
 		return irq;
 
 	nfc->regs = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(nfc->regs))
+	if (IS_ERR(nfc->regs)) {
+		dev_err(nfc->dev, "Unable to map registers!\n");
 		return PTR_ERR(nfc->regs);
+	}
 
+#ifdef CONFIG_OF
 	nfc->clk = devm_clk_get_enabled(&pdev->dev, NULL);
 	if (IS_ERR(nfc->clk)) {
 		dev_err(nfc->dev, "Unable to get and enable clock!\n");
 		return PTR_ERR(nfc->clk);
 	}
 
-	nfc->variant = (enum vf610_nfc_variant)device_get_match_data(&pdev->dev);
-	if (!nfc->variant)
-		return -ENODEV;
+	const void *data = device_get_match_data(&pdev->dev);
 
+	nfc->variant = (enum vf610_nfc_variant)data;
+	if (!nfc->variant) {
+		dev_err(nfc->dev, "No variant data found!\n");
+		return -ENODEV;
+	}
+#else
+	nfc->variant = (enum vf610_nfc_variant)platform_get_device_id(pdev)->driver_data;
+#endif
+#ifdef CONFIG_OF
 	for_each_available_child_of_node(nfc->dev->of_node, child) {
 		if (of_device_is_compatible(child, "fsl,vf610-nfc-nandcs")) {
 
@@ -862,6 +916,10 @@ static int vf610_nfc_probe(struct platform_device *pdev)
 		dev_err(nfc->dev, "NAND chip sub-node missing!\n");
 		return -ENODEV;
 	}
+#else
+	nfc->clk = NULL;
+	mtd->dev.parent = &pdev->dev;
+#endif
 
 	chip->options |= NAND_NO_SUBPAGE_WRITE;
 
@@ -937,11 +995,12 @@ static SIMPLE_DEV_PM_OPS(vf610_nfc_pm_ops, vf610_nfc_suspend, vf610_nfc_resume);
 static struct platform_driver vf610_nfc_driver = {
 	.driver		= {
 		.name	= DRV_NAME,
-		.of_match_table = vf610_nfc_dt_ids,
+		.of_match_table = of_match_ptr(vf610_nfc_dt_ids),
 		.pm	= &vf610_nfc_pm_ops,
 	},
 	.probe		= vf610_nfc_probe,
 	.remove_new	= vf610_nfc_remove,
+	.id_table = vf610_nfc_id_table,
 };
 
 module_platform_driver(vf610_nfc_driver);
