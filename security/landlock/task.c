@@ -13,6 +13,8 @@
 #include <linux/lsm_hooks.h>
 #include <linux/rcupdate.h>
 #include <linux/sched.h>
+#include <net/sock.h>
+#include <net/af_unix.h>
 
 #include "common.h"
 #include "cred.h"
@@ -108,9 +110,102 @@ static int hook_ptrace_traceme(struct task_struct *const parent)
 	return task_ptrace(parent, current);
 }
 
+static access_mask_t
+get_scoped_accesses(const struct landlock_ruleset *const domain)
+{
+	access_mask_t access_dom = 0;
+	size_t layer_level;
+
+	for (layer_level = 0; layer_level < domain->num_layers; layer_level++)
+		access_dom |= landlock_get_scope_mask(domain, layer_level);
+	return access_dom;
+}
+
+/**
+ * optional_domain_scope - Checks domain ordering for scoped unix sockets
+ *
+ * @client: client domain.
+ * @server: Potential child of @client.
+ *
+ * Checks if the @client domain is less or equal to (i.e. an ancestor, which
+ * means a subset of) the @server domain.
+ * Same as domain_scope_le, only for optional scoping unix sockets.
+ */
+static bool optional_domain_scope(const struct landlock_ruleset *const client,
+				  const struct landlock_ruleset *const server)
+{
+	const struct landlock_hierarchy *walker;
+	access_mask_t scoped;
+
+	if (!client)
+		return true;
+
+	/* quick return if server does not have domain */
+	if (!server)
+		return false;
+
+	for (walker = server->hierarchy; walker; walker = walker->parent) {
+		scoped = get_scoped_accesses(walker->curr_ruleset);
+		if (walker == client->hierarchy)
+			/* @client is in the scoped hierarchy of @server. */
+			return true;
+		if (scoped)
+			/* There is a node between client and server that is scoped */
+			return false;
+	}
+	/* There is no relationship between @parent and @child. */
+	return false;
+}
+
+static bool sock_is_scoped(struct sock *const other)
+{
+	bool is_scoped = true;
+	const struct landlock_ruleset *dom_other;
+	const struct landlock_ruleset *const dom =
+		landlock_get_current_domain();
+
+	/* quick return if there is no domain or .scoped is not set */
+	if (!dom || !get_scoped_accesses(dom))
+		return true;
+
+	/* the credentials will not change */
+	lockdep_assert_held(&unix_sk(other)->lock);
+	if (other->sk_type != SOCK_DGRAM) {
+		dom_other = landlock_cred(other->sk_peer_cred)->domain;
+	} else {
+		dom_other =
+			landlock_cred(other->sk_socket->file->f_cred)->domain;
+	}
+	is_scoped = optional_domain_scope(dom, dom_other);
+	return is_scoped;
+}
+
+static int hook_unix_stream_connect(struct sock *const sock,
+				    struct sock *const other,
+				    struct sock *const newsk)
+{
+	if (sock_is_scoped(other))
+		return 0;
+
+	return -EPERM;
+}
+
+static int hook_unix_may_send(struct socket *const sock,
+			      struct socket *const other)
+{
+	pr_warn("XXX %s:%d sock->file:%p other->file:%p\n", __func__, __LINE__,
+		sock->file, other->file);
+	if (sock_is_scoped(other->sk))
+		return 0;
+
+	return -EPERM;
+}
+
 static struct security_hook_list landlock_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(ptrace_access_check, hook_ptrace_access_check),
 	LSM_HOOK_INIT(ptrace_traceme, hook_ptrace_traceme),
+	LSM_HOOK_INIT(unix_stream_connect, hook_unix_stream_connect),
+	LSM_HOOK_INIT(unix_may_send, hook_unix_may_send),
 };
 
 __init void landlock_add_task_hooks(void)

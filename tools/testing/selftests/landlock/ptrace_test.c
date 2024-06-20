@@ -17,6 +17,10 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <stddef.h>
+
 #include "common.h"
 
 /* Copied from security/yama/yama_lsm.c */
@@ -429,6 +433,263 @@ TEST_F(hierarchy, trace)
 
 	/* Signals that the parent PTRACE_ATTACH test is done. */
 	ASSERT_EQ(1, write(pipe_parent[1], ".", 1));
+	ASSERT_EQ(child, waitpid(child, &status, 0));
+
+	if (WIFSIGNALED(status) || !WIFEXITED(status) ||
+	    WEXITSTATUS(status) != EXIT_SUCCESS)
+		_metadata->exit_code = KSFT_FAIL;
+}
+
+static void create_unix_domain(struct __test_metadata *const _metadata)
+{
+	int ruleset_fd;
+	const struct landlock_ruleset_attr ruleset_attr = {
+		.scoped = LANDLOCK_SCOPED_ABSTRACT_UNIX_SOCKET,
+	};
+
+	ruleset_fd =
+		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
+	EXPECT_LE(0, ruleset_fd)
+	{
+		TH_LOG("Failed to create a ruleset: %s", strerror(errno));
+	}
+	enforce_ruleset(_metadata, ruleset_fd);
+	EXPECT_EQ(0, close(ruleset_fd));
+}
+
+/* clang-format off */
+FIXTURE(unix_socket)
+{
+	int server, client;
+};
+/* clang-format on */
+
+FIXTURE_VARIANT(unix_socket)
+{
+	int type;
+	bool domain_both;
+	bool domain_parent;
+	bool domain_child;
+	bool connect_to_parent;
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(unix_socket, allow_without_domain) {
+	/* clang-format on */
+	.type = SOCK_STREAM,	   .domain_both = false,
+	.domain_parent = false,	   .domain_child = false,
+	.connect_to_parent = true,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(unix_socket, deny_child_connection_with_domain) {
+	/* clang-format on */
+	.type = SOCK_STREAM,  .domain_both = false,	 .domain_parent = false,
+	.domain_child = true, .connect_to_parent = true,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(unix_socket, allow_child_connection_and_parent_domain) {
+	/* clang-format on */
+	.type = SOCK_STREAM,   .domain_both = false,	  .domain_parent = true,
+	.domain_child = false, .connect_to_parent = true,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(unix_socket, deny_parent_connection_with_domain) {
+	/* clang-format on */
+	.type = SOCK_STREAM,	    .domain_both = false,
+	.domain_parent = true,	    .domain_child = false,
+	.connect_to_parent = false,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(unix_socket, allow_parent_connection_without_domain) {
+	/* clang-format on */
+	.type = SOCK_STREAM,	    .domain_both = false,
+	.domain_parent = false,	    .domain_child = false,
+	.connect_to_parent = false,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(unix_socket, allow_parent_connection_with_sibling_domain) {
+	/* clang-format on */
+	.type = SOCK_STREAM,	    .domain_both = true,
+	.domain_parent = false,	    .domain_child = false,
+	.connect_to_parent = false,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(unix_socket, dgrm_allow_without_domain) {
+	/* clang-format on */
+	.type = SOCK_DGRAM,	   .domain_both = false,
+	.domain_parent = false,	   .domain_child = false,
+	.connect_to_parent = true,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(unix_socket, dgrm_deny_child_connection_with_domain) {
+	/* clang-format on */
+	.type = SOCK_DGRAM,   .domain_both = false,	 .domain_parent = false,
+	.domain_child = true, .connect_to_parent = true,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(unix_socket, dgrm_allow_child_with_sibling_domain) {
+	/* clang-format on */
+	.type = SOCK_DGRAM,	   .domain_both = true,
+	.domain_parent = false,	   .domain_child = false,
+	.connect_to_parent = true,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(unix_socket, dgrm_deny_parent_connection_with_domain) {
+	/* clang-format on */
+	.type = SOCK_DGRAM,	    .domain_both = false,
+	.domain_parent = true,	    .domain_child = false,
+	.connect_to_parent = false,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(unix_socket, dgrm_allow_parent_connection_with_child_domain) {
+	/* clang-format on */
+	.type = SOCK_DGRAM,	    .domain_both = false,
+	.domain_parent = false,	    .domain_child = true,
+	.connect_to_parent = false,
+};
+
+FIXTURE_SETUP(unix_socket)
+{
+}
+
+FIXTURE_TEARDOWN(unix_socket)
+{
+	close(self->server);
+	close(self->client);
+}
+
+/* Test UNIX_STREAM_CONNECT for parent and child. */
+TEST_F(unix_socket, abstract_unix_socket)
+{
+	int status;
+	pid_t child;
+	socklen_t addrlen;
+	int sock_len = 5;
+	struct sockaddr_un addr = {
+		.sun_family = AF_UNIX,
+	};
+	const char sun_path[8] = "\0test";
+	bool can_connect_to_parent, can_connect_to_child;
+	int err;
+	int pipe_child[2], pipe_parent[2];
+	char buf_parent;
+	/*
+         * can_connect_to_child is true if a parent process can connect to its
+         * child process. The parent process is not isolated from the child
+	 * with a dedicated Landlock domain.
+         */
+	can_connect_to_child = !variant->domain_parent;
+	/*
+         * can_connect_to_parent is true if a child process can connect to its parent
+         * process. This depends on the child process is not isolated from
+	 * the parent with a dedicated Landlock domain.
+         */
+	can_connect_to_parent = !variant->domain_child;
+
+	ASSERT_EQ(0, pipe2(pipe_child, O_CLOEXEC));
+	ASSERT_EQ(0, pipe2(pipe_parent, O_CLOEXEC));
+	if (variant->domain_both) {
+		create_unix_domain(_metadata);
+		if (!__test_passed(_metadata))
+			return;
+	}
+
+	addrlen = offsetof(struct sockaddr_un, sun_path) + sock_len;
+	memcpy(&addr.sun_path, sun_path, sock_len);
+
+	child = fork();
+	ASSERT_LE(0, child);
+	if (child == 0) {
+		int child_ret;
+		char buf_child;
+
+		ASSERT_EQ(0, close(pipe_parent[1]));
+		ASSERT_EQ(0, close(pipe_child[0]));
+		if (variant->domain_child)
+			create_unix_domain(_metadata);
+
+		/* Waits for the parent to be in a domain, if any. */
+		ASSERT_EQ(1, read(pipe_parent[0], &buf_child, 1));
+
+		/* create a socket for child process */
+		if (variant->connect_to_parent) {
+			self->client = socket(AF_UNIX, variant->type, 0);
+			ASSERT_NE(-1, self->client);
+
+			ASSERT_EQ(1, read(pipe_parent[0], &buf_child, 1));
+			child_ret = connect(self->client,
+					    (struct sockaddr *)&addr, addrlen);
+			if (can_connect_to_parent) {
+				EXPECT_EQ(0, child_ret);
+			} else {
+				EXPECT_EQ(-1, child_ret);
+				EXPECT_EQ(EPERM, errno);
+			}
+		} else {
+			/* child process should create a listening socket */
+			self->server = socket(AF_UNIX, variant->type, 0);
+			ASSERT_NE(-1, self->server);
+
+			ASSERT_EQ(0, bind(self->server,
+					  (struct sockaddr *)&addr, addrlen));
+			if (variant->type == SOCK_STREAM) {
+				err = listen(self->server, 32);
+				ASSERT_EQ(0, err);
+			}
+			/* signal to parent that child is listening */
+			ASSERT_EQ(1, write(pipe_child[1], ".", 1));
+			/* wait to connect */
+			ASSERT_EQ(1, read(pipe_parent[0], &buf_child, 1));
+		}
+		_exit(_metadata->exit_code);
+		return;
+	}
+
+	ASSERT_EQ(0, close(pipe_child[1]));
+	ASSERT_EQ(0, close(pipe_parent[0]));
+
+	if (variant->domain_parent)
+		create_unix_domain(_metadata);
+
+	/* Signals that the parent is in a domain, if any. */
+	ASSERT_EQ(1, write(pipe_parent[1], ".", 1));
+
+	if (!variant->connect_to_parent) {
+		self->client = socket(AF_UNIX, variant->type, 0);
+		ASSERT_NE(-1, self->client);
+		/* Waits for the child to listen */
+		ASSERT_EQ(1, read(pipe_child[0], &buf_parent, 1));
+		err = connect(self->client, (struct sockaddr *)&addr, addrlen);
+		if (can_connect_to_child) {
+			EXPECT_EQ(0, err);
+		} else {
+			EXPECT_EQ(-1, err);
+			EXPECT_EQ(EPERM, errno);
+		}
+		ASSERT_EQ(1, write(pipe_parent[1], ".", 1));
+	} else {
+		self->server = socket(AF_UNIX, variant->type, 0);
+		ASSERT_NE(-1, self->server);
+		ASSERT_EQ(0, bind(self->server, (struct sockaddr *)&addr,
+				  addrlen));
+		if (variant->type == SOCK_STREAM) {
+			err = listen(self->server, 32);
+			ASSERT_EQ(0, err);
+		}
+		/* signal to child that parent is listening */
+		ASSERT_EQ(1, write(pipe_parent[1], ".", 1));
+	}
+
 	ASSERT_EQ(child, waitpid(child, &status, 0));
 
 	if (WIFSIGNALED(status) || !WIFEXITED(status) ||
