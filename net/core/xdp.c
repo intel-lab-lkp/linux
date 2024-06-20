@@ -770,6 +770,20 @@ __bpf_kfunc int bpf_xdp_metadata_rx_vlan_tag(const struct xdp_md *ctx,
 	return -EOPNOTSUPP;
 }
 
+/**
+ * bpf_xdp_disable_gro - Set a flag on underlying XDP buffer, indicating
+ * the stack to skip this packet for GRO processing. This flag which be
+ * passed on when the driver builds the skb.
+ *
+ * Return:
+ * * always returns 0
+ */
+__bpf_kfunc int bpf_xdp_disable_gro(struct xdp_md *ctx)
+{
+	xdp_buff_disable_gro((struct xdp_buff *)ctx);
+	return 0;
+}
+
 __bpf_kfunc_end_defs();
 
 BTF_KFUNCS_START(xdp_metadata_kfunc_ids)
@@ -799,9 +813,20 @@ bool bpf_dev_bound_kfunc_id(u32 btf_id)
 	return btf_id_set8_contains(&xdp_metadata_kfunc_ids, btf_id);
 }
 
+BTF_KFUNCS_START(xdp_common_kfunc_ids)
+BTF_ID_FLAGS(func, bpf_xdp_disable_gro, KF_TRUSTED_ARGS)
+BTF_KFUNCS_END(xdp_common_kfunc_ids)
+
+static const struct btf_kfunc_id_set xdp_common_kfunc_set = {
+	.owner = THIS_MODULE,
+	.set = &xdp_common_kfunc_ids,
+};
+
 static int __init xdp_metadata_init(void)
 {
-	return register_btf_kfunc_id_set(BPF_PROG_TYPE_XDP, &xdp_metadata_kfunc_set);
+	int ret = register_btf_kfunc_id_set(BPF_PROG_TYPE_XDP, &xdp_metadata_kfunc_set);
+
+	return ret ?: register_btf_kfunc_id_set(BPF_PROG_TYPE_XDP, &xdp_common_kfunc_set);
 }
 late_initcall(xdp_metadata_init);
 
