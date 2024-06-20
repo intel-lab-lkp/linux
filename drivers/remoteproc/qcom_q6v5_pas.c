@@ -770,6 +770,10 @@ static int adsp_probe(struct platform_device *pdev)
 		goto free_rproc;
 	adsp->proxy_pd_count = ret;
 
+	adsp->q6v5.rmb_base = devm_platform_ioremap_resource_byname(pdev, "rmb");
+	if (IS_ERR(adsp->q6v5.rmb_base))
+		adsp->q6v5.rmb_base = NULL;
+
 	ret = qcom_q6v5_init(&adsp->q6v5, pdev, rproc, desc->crash_reason_smem, desc->load_state,
 			     qcom_pas_handover);
 	if (ret)
