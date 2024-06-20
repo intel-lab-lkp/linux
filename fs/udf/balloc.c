@@ -18,6 +18,7 @@
 #include "udfdecl.h"
 
 #include <linux/bitops.h>
+#include <linux/overflow.h>
 
 #include "udf_i.h"
 #include "udf_sb.h"
@@ -133,6 +134,7 @@ static void udf_bitmap_free_blocks(struct super_block *sb,
 	unsigned long block;
 	unsigned long block_group;
 	unsigned long bit;
+	unsigned int total_offset;
 	unsigned long i;
 	int bitmap_nr;
 	unsigned long overflow;
@@ -140,16 +142,19 @@ static void udf_bitmap_free_blocks(struct super_block *sb,
 	mutex_lock(&sbi->s_alloc_mutex);
 	partmap = &sbi->s_partmaps[bloc->partitionReferenceNum];
 	if (bloc->logicalBlockNum + count < count ||
-	    (bloc->logicalBlockNum + count) > partmap->s_partition_len) {
-		udf_debug("%u < %d || %u + %u > %u\n",
+	    (bloc->logicalBlockNum + count) > partmap->s_partition_len ||
+	    check_add_overflow(offset,
+			       sizeof(struct spaceBitmapDesc) << 3, &total_offset) ||
+	    check_add_overflow(bloc->logicalBlockNum, total_offset, &block)) {
+		udf_debug("%u < %d || %u + %u > %u || %u + %zu > %u || %u + %u + %zu > %u\n",
 			  bloc->logicalBlockNum, 0,
 			  bloc->logicalBlockNum, count,
-			  partmap->s_partition_len);
+			  partmap->s_partition_len,
+			  offset, sizeof(struct spaceBitmapDesc) << 3, UINT_MAX,
+			  bloc->logicalBlockNum, offset,
+			  sizeof(struct spaceBitmapDesc) << 3, UINT_MAX);
 		goto error_return;
 	}
-
-	block = bloc->logicalBlockNum + offset +
-		(sizeof(struct spaceBitmapDesc) << 3);
 
 	do {
 		overflow = 0;
