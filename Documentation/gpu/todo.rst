@@ -716,6 +716,40 @@ Contact: Maxime Ripard <mripard@kernel.org>
 
 Level: Intermediate
 
+Create lints for KMS drivers
+----------------------------
+
+Over time, we've accumulated a list of dark patterns in KMS drivers that
+should be avoided. However, none of them are published anywhere, and not
+all reviewers are aware of them. It creates a situation where we have
+more drivers with problematic / deprecated code, even though we know
+that they shouldn't.
+
+We should create a set of coccinelle scripts that match these patterns,
+and make new drivers run that list. And possibly integrate them in CI.
+
+These patterns include:
+
+  - Drivers using kzalloc() or devm_kzalloc() to allocate their memory,
+    instead of drmm_kzalloc().
+
+  - Drivers not protecting their device resources (MMIO, clocks,
+    regulators, etc.) by drm_dev_enter() and drm_dev_exit().
+
+  - Drivers using drm_dev_unregister() instead of drm_dev_unplug().
+
+  - Drivers not calling drm_atomic_helper_shutdown() at shutdown
+
+  - Drivers using drm_dp_cec_set_edid(), cec_get_edid_phys_addr(), or
+    cec_s_phys_addr_from_edid() instead of drm_dp_cec_attach() or
+    cec_s_phys_addr().
+
+  - Drivers setting drm_atomic_state->allow_modeset manually.
+
+Contact: Maxime Ripard <mripard@kernel.org>
+
+Level: Intermediate
+
 Enable trinity for DRM
 ----------------------
 
