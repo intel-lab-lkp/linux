@@ -7229,6 +7229,9 @@ static bool klp_override;
 
 static void __sched_dynamic_update(int mode)
 {
+	if (mode == preempt_dynamic_mode)
+		return;
+
 	/*
 	 * Avoid {NONE,VOLUNTARY} -> FULL transitions from ever ending up in
 	 * the ZERO state, which is invalid.
