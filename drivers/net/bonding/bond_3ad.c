@@ -1185,6 +1185,8 @@ static void ad_mux_machine(struct port *port, bool *update_slave_arr)
 		default:
 			break;
 		}
+
+		call_netdevice_notifiers(NETDEV_LACP_STATE_CHANGE, port->slave->dev);
 	}
 }
 
