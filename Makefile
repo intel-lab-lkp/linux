@@ -1967,7 +1967,9 @@ quiet_cmd_tags = GEN     $@
 tags TAGS cscope gtags: FORCE
 	$(call cmd,tags)
 
-# IDE support targets
+# Generate rust-project.json, which does for Rust what clangd's
+# compile_commands.json does for C/C++: provides a symbol browsing database for
+# code editors and IDEs (Integrated Development Environments).
 PHONY += rust-analyzer
 rust-analyzer:
 	$(Q)$(CONFIG_SHELL) $(srctree)/scripts/rust_is_available.sh
