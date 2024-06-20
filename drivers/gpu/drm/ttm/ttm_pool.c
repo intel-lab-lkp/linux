@@ -224,15 +224,6 @@ static void ttm_pool_unmap(struct ttm_pool *pool, dma_addr_t dma_addr,
 /* Give pages into a specific pool_type */
 static void ttm_pool_type_give(struct ttm_pool_type *pt, struct page *p)
 {
-	unsigned int i, num_pages = 1 << pt->order;
-
-	for (i = 0; i < num_pages; ++i) {
-		if (PageHighMem(p))
-			clear_highpage(p + i);
-		else
-			clear_page(page_address(p + i));
-	}
-
 	spin_lock(&pt->lock);
 	list_add(&p->lru, &pt->pages);
 	spin_unlock(&pt->lock);
@@ -240,15 +231,26 @@ static void ttm_pool_type_give(struct ttm_pool_type *pt, struct page *p)
 }
 
 /* Take pages from a specific pool_type, return NULL when nothing available */
-static struct page *ttm_pool_type_take(struct ttm_pool_type *pt)
+static struct page *ttm_pool_type_take(struct ttm_pool_type *pt, bool clear)
 {
 	struct page *p;
 
 	spin_lock(&pt->lock);
 	p = list_first_entry_or_null(&pt->pages, typeof(*p), lru);
 	if (p) {
+		unsigned int i, num_pages = 1 << pt->order;
+
 		atomic_long_sub(1 << pt->order, &allocated_pages);
 		list_del(&p->lru);
+		if (clear) {
+			for (i = 0; i < num_pages; ++i) {
+				if (PageHighMem(p))
+					clear_highpage(p + i);
+				else
+					clear_page(page_address(p + i));
+			}
+		}
+
 	}
 	spin_unlock(&pt->lock);
 
@@ -279,7 +281,7 @@ static void ttm_pool_type_fini(struct ttm_pool_type *pt)
 	list_del(&pt->shrinker_list);
 	spin_unlock(&shrinker_lock);
 
-	while ((p = ttm_pool_type_take(pt)))
+	while ((p = ttm_pool_type_take(pt, false)))
 		ttm_pool_free_page(pt->pool, pt->caching, pt->order, p);
 }
 
@@ -330,7 +332,7 @@ static unsigned int ttm_pool_shrink(void)
 	list_move_tail(&pt->shrinker_list, &shrinker_list);
 	spin_unlock(&shrinker_lock);
 
-	p = ttm_pool_type_take(pt);
+	p = ttm_pool_type_take(pt, false);
 	if (p) {
 		ttm_pool_free_page(pt->pool, pt->caching, pt->order, p);
 		num_pages = 1 << pt->order;
@@ -457,10 +459,11 @@ int ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 	     num_pages;
 	     order = min_t(unsigned int, order, __fls(num_pages))) {
 		struct ttm_pool_type *pt;
+		bool clear = tt->page_flags & TTM_TT_FLAG_ZERO_ALLOC;
 
 		page_caching = tt->caching;
 		pt = ttm_pool_select_type(pool, tt->caching, order);
-		p = pt ? ttm_pool_type_take(pt) : NULL;
+		p = pt ? ttm_pool_type_take(pt, clear) : NULL;
 		if (p) {
 			r = ttm_pool_apply_caching(caching, pages,
 						   tt->caching);
@@ -480,7 +483,7 @@ int ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 				if (num_pages < (1 << order))
 					break;
 
-				p = ttm_pool_type_take(pt);
+				p = ttm_pool_type_take(pt, clear);
 			} while (p);
 		}
 
