@@ -28,6 +28,8 @@
 #ifndef __AMDGPU_OBJECT_H__
 #define __AMDGPU_OBJECT_H__
 
+#include <linux/iosys-map.h>
+
 #include <drm/amdgpu_drm.h>
 #include "amdgpu.h"
 #include "amdgpu_res_cursor.h"
@@ -99,7 +101,7 @@ struct amdgpu_bo {
 	struct ttm_place		placements[AMDGPU_BO_MAX_PLACEMENTS];
 	struct ttm_placement		placement;
 	struct ttm_buffer_object	tbo;
-	struct ttm_bo_kmap_obj		kmap;
+	struct iosys_map		map;
 	u64				flags;
 	/* per VM structure for page tables and with virtual addresses */
 	struct amdgpu_vm_bo_base	*vm_bo;

@@ -62,7 +62,7 @@ static void amdgpu_bo_destroy(struct ttm_buffer_object *tbo)
 	 * BO memory pages should be unmapped at this point. Call
 	 * amdgpu_bo_kunmap() before releasing the BO.
 	 */
-	if (drm_WARN_ON_ONCE(bo->tbo.base.dev, bo->kmap.bo))
+	if (drm_WARN_ON_ONCE(bo->tbo.base.dev, !iosys_map_is_null(&bo->map)))
 		amdgpu_bo_kunmap(bo);
 
 	if (bo->tbo.base.import_attach)
@@ -804,7 +804,7 @@ int amdgpu_bo_kmap(struct amdgpu_bo *bo, void **ptr)
 		return 0;
 	}
 
-	r = ttm_bo_kmap(&bo->tbo, 0, PFN_UP(bo->tbo.base.size), &bo->kmap);
+	r = ttm_bo_vmap(&bo->tbo, &bo->map);
 	if (r)
 		return r;
 
@@ -825,9 +825,12 @@ int amdgpu_bo_kmap(struct amdgpu_bo *bo, void **ptr)
  */
 void *amdgpu_bo_kptr(struct amdgpu_bo *bo)
 {
-	bool is_iomem;
+	if (iosys_map_is_null(&bo->map))
+		return NULL;
+	if (bo->map.is_iomem)
+		return (void __force *)bo->map.vaddr_iomem;
 
-	return ttm_kmap_obj_virtual(&bo->kmap, &is_iomem);
+	return bo->map.vaddr;
 }
 
 /**
@@ -838,8 +841,9 @@ void *amdgpu_bo_kptr(struct amdgpu_bo *bo)
  */
 void amdgpu_bo_kunmap(struct amdgpu_bo *bo)
 {
-	if (bo->kmap.bo)
-		ttm_bo_kunmap(&bo->kmap);
+	if (iosys_map_is_null(&bo->map))
+		return;
+	ttm_bo_vunmap(&bo->tbo, &bo->map);
 }
 
 /**
