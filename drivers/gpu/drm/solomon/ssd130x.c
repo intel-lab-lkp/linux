@@ -32,6 +32,7 @@
 #include <drm/drm_managed.h>
 #include <drm/drm_modes.h>
 #include <drm/drm_rect.h>
+#include <drm/drm_panic.h>
 #include <drm/drm_probe_helper.h>
 
 #include "ssd130x.h"
@@ -1386,6 +1387,63 @@ static void ssd133x_primary_plane_atomic_disable(struct drm_plane *plane,
 	drm_dev_exit(idx);
 }
 
+static int ssd130x_primary_plane_helper_get_scanout_buffer(struct drm_plane *plane,
+							   struct drm_scanout_buffer *sb)
+{
+	struct drm_plane_state *plane_state = plane->state;
+	struct drm_shadow_plane_state *shadow_plane_state;
+
+	if (!plane_state || !plane_state->fb || !plane_state->crtc)
+		return -EINVAL;
+
+	shadow_plane_state = to_drm_shadow_plane_state(plane_state);
+
+	sb->format = plane->state->fb->format;
+	sb->width = plane->state->fb->width;
+	sb->height = plane->state->fb->height;
+	sb->pitch[0] = plane->state->fb->pitches[0];
+	sb->map[0] = shadow_plane_state->data[0];
+
+	return 0;
+}
+
+static void ssd130x_primary_plane_helper_panic_flush(struct drm_plane *plane)
+{
+	struct drm_plane_state *plane_state = plane->state;
+	struct ssd130x_plane_state *ssd130x_plane_state = to_ssd130x_plane_state(plane_state);
+	struct drm_shadow_plane_state *shadow_plane_state = to_drm_shadow_plane_state(plane_state);
+	struct drm_crtc *crtc = plane_state->crtc;
+	struct ssd130x_crtc_state *ssd130x_crtc_state = to_ssd130x_crtc_state(crtc->state);
+
+	ssd130x_fb_blit_rect(plane_state->fb, &shadow_plane_state->data[0], &plane_state->dst,
+			     ssd130x_plane_state->buffer, ssd130x_crtc_state->data_array,
+			     &shadow_plane_state->fmtcnv_state);
+}
+
+static void ssd132x_primary_plane_helper_panic_flush(struct drm_plane *plane)
+{
+	struct drm_plane_state *plane_state = plane->state;
+	struct ssd130x_plane_state *ssd130x_plane_state = to_ssd130x_plane_state(plane_state);
+	struct drm_shadow_plane_state *shadow_plane_state = to_drm_shadow_plane_state(plane_state);
+	struct drm_crtc *crtc = plane_state->crtc;
+	struct ssd130x_crtc_state *ssd130x_crtc_state = to_ssd130x_crtc_state(crtc->state);
+
+	ssd132x_fb_blit_rect(plane_state->fb, &shadow_plane_state->data[0], &plane_state->dst,
+			     ssd130x_plane_state->buffer, ssd130x_crtc_state->data_array,
+			     &shadow_plane_state->fmtcnv_state);
+}
+
+static void ssd133x_primary_plane_helper_panic_flush(struct drm_plane *plane)
+{
+	struct drm_plane_state *plane_state = plane->state;
+	struct drm_shadow_plane_state *shadow_plane_state = to_drm_shadow_plane_state(plane_state);
+	struct drm_crtc *crtc = plane_state->crtc;
+	struct ssd130x_crtc_state *ssd130x_crtc_state = to_ssd130x_crtc_state(crtc->state);
+
+	ssd133x_fb_blit_rect(plane_state->fb, &shadow_plane_state->data[0], &plane_state->dst,
+			     ssd130x_crtc_state->data_array, &shadow_plane_state->fmtcnv_state);
+}
+
 /* Called during init to allocate the plane's atomic state. */
 static void ssd130x_primary_plane_reset(struct drm_plane *plane)
 {
@@ -1442,18 +1500,24 @@ static const struct drm_plane_helper_funcs ssd130x_primary_plane_helper_funcs[] 
 		.atomic_check = ssd130x_primary_plane_atomic_check,
 		.atomic_update = ssd130x_primary_plane_atomic_update,
 		.atomic_disable = ssd130x_primary_plane_atomic_disable,
+		.get_scanout_buffer = ssd130x_primary_plane_helper_get_scanout_buffer,
+		.panic_flush = ssd130x_primary_plane_helper_panic_flush,
 	},
 	[SSD132X_FAMILY] = {
 		DRM_GEM_SHADOW_PLANE_HELPER_FUNCS,
 		.atomic_check = ssd132x_primary_plane_atomic_check,
 		.atomic_update = ssd132x_primary_plane_atomic_update,
 		.atomic_disable = ssd132x_primary_plane_atomic_disable,
+		.get_scanout_buffer = ssd130x_primary_plane_helper_get_scanout_buffer,
+		.panic_flush = ssd132x_primary_plane_helper_panic_flush,
 	},
 	[SSD133X_FAMILY] = {
 		DRM_GEM_SHADOW_PLANE_HELPER_FUNCS,
 		.atomic_check = ssd133x_primary_plane_atomic_check,
 		.atomic_update = ssd133x_primary_plane_atomic_update,
 		.atomic_disable = ssd133x_primary_plane_atomic_disable,
+		.get_scanout_buffer = ssd130x_primary_plane_helper_get_scanout_buffer,
+		.panic_flush = ssd133x_primary_plane_helper_panic_flush,
 	}
 };
 
