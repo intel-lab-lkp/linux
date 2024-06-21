@@ -1350,8 +1350,9 @@ static void z3fold_page_putback(struct page *page)
 {
 	struct z3fold_header *zhdr;
 	struct z3fold_pool *pool;
+	struct zpdesc *zpdesc = page_zpdesc(page);
 
-	zhdr = page_address(page);
+	zhdr = zpdesc_address(zpdesc);
 	pool = zhdr_to_pool(zhdr);
 
 	z3fold_page_lock(zhdr);
@@ -1362,7 +1363,7 @@ static void z3fold_page_putback(struct page *page)
 		return;
 	if (list_empty(&zhdr->buddy))
 		add_to_unbuddied(pool, zhdr);
-	clear_bit(PAGE_CLAIMED, &page->private);
+	clear_bit(PAGE_CLAIMED, &zpdesc->zppage_flag);
 	z3fold_page_unlock(zhdr);
 }
 
