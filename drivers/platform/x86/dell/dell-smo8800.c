@@ -310,32 +310,31 @@ static int smo8800_probe(struct platform_device *device)
 	init_waitqueue_head(&smo8800->misc_wait);
 	INIT_WORK(&smo8800->i2c_work, smo8800_instantiate_i2c_client);
 
-	err = misc_register(&smo8800->miscdev);
-	if (err) {
-		dev_err(&device->dev, "failed to register misc dev: %d\n", err);
-		return err;
+	err = platform_get_irq_optional(device, 0);
+	if (err > 0)
+		smo8800->irq = err;
+
+	if (smo8800->irq) {
+		err = misc_register(&smo8800->miscdev);
+		if (err) {
+			dev_err(&device->dev, "failed to register misc dev: %d\n", err);
+			return err;
+		}
+
+		err = request_threaded_irq(smo8800->irq, smo8800_interrupt_quick,
+					   smo8800_interrupt_thread,
+					   IRQF_TRIGGER_RISING | IRQF_ONESHOT,
+					   DRIVER_NAME, smo8800);
+		if (err) {
+			dev_err(&device->dev,
+				"failed to request thread for IRQ %d: %d\n",
+				smo8800->irq, err);
+			goto error;
+		}
+
+		dev_dbg(&device->dev, "device /dev/freefall registered with IRQ %d\n",
+			 smo8800->irq);
 	}
-
-	platform_set_drvdata(device, smo8800);
-
-	err = platform_get_irq(device, 0);
-	if (err < 0)
-		goto error;
-	smo8800->irq = err;
-
-	err = request_threaded_irq(smo8800->irq, smo8800_interrupt_quick,
-				   smo8800_interrupt_thread,
-				   IRQF_TRIGGER_RISING | IRQF_ONESHOT,
-				   DRIVER_NAME, smo8800);
-	if (err) {
-		dev_err(&device->dev,
-			"failed to request thread for IRQ %d: %d\n",
-			smo8800->irq, err);
-		goto error;
-	}
-
-	dev_dbg(&device->dev, "device /dev/freefall registered with IRQ %d\n",
-		 smo8800->irq);
 
 	if (dmi_check_system(smo8800_lis3lv02d_devices)) {
 		/*
@@ -350,14 +349,20 @@ static int smo8800_probe(struct platform_device *device)
 	} else {
 		dev_warn(&device->dev,
 			 "lis3lv02d accelerometer is present on SMBus but its address is unknown, skipping registration\n");
+		if (!smo8800->irq)
+			return -ENODEV;
 	}
 
+	platform_set_drvdata(device, smo8800);
 	return 0;
 
 error_free_irq:
-	free_irq(smo8800->irq, smo8800);
+	if (smo8800->irq) {
+		free_irq(smo8800->irq, smo8800);
 error:
-	misc_deregister(&smo8800->miscdev);
+		misc_deregister(&smo8800->miscdev);
+	}
+
 	return err;
 }
 
@@ -371,9 +376,11 @@ static void smo8800_remove(struct platform_device *device)
 		i2c_unregister_device(smo8800->i2c_dev);
 	}
 
-	free_irq(smo8800->irq, smo8800);
-	misc_deregister(&smo8800->miscdev);
-	dev_dbg(&device->dev, "device /dev/freefall unregistered\n");
+	if (smo8800->irq) {
+		free_irq(smo8800->irq, smo8800);
+		misc_deregister(&smo8800->miscdev);
+		dev_dbg(&device->dev, "device /dev/freefall unregistered\n");
+	}
 }
 
 static const struct acpi_device_id smo8800_ids[] = {
