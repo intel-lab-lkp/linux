@@ -1686,6 +1686,7 @@ static int wx_set_interrupt_capability(struct wx *wx)
 	}
 
 	pdev->irq = pci_irq_vector(pdev, 0);
+	wx->num_q_vectors = 1;
 
 	return 0;
 }
@@ -1996,7 +1997,8 @@ void wx_free_irq(struct wx *wx)
 	int vector;
 
 	if (!(pdev->msix_enabled)) {
-		free_irq(pdev->irq, wx);
+		if (wx->mac.type == wx_mac_em)
+			free_irq(pdev->irq, wx);
 		return;
 	}
 
@@ -2026,6 +2028,9 @@ int wx_setup_isb_resources(struct wx *wx)
 {
 	struct pci_dev *pdev = wx->pdev;
 
+	if (wx->isb_mem)
+		return 0;
+
 	wx->isb_mem = dma_alloc_coherent(&pdev->dev,
 					 sizeof(u32) * 4,
 					 &wx->isb_dma,
@@ -2048,6 +2053,9 @@ EXPORT_SYMBOL(wx_setup_isb_resources);
 void wx_free_isb_resources(struct wx *wx)
 {
 	struct pci_dev *pdev = wx->pdev;
+
+	if (!wx->isb_mem)
+		return;
 
 	dma_free_coherent(&pdev->dev, sizeof(u32) * 4,
 			  wx->isb_mem, wx->isb_dma);
@@ -2385,7 +2393,8 @@ static void wx_free_all_tx_resources(struct wx *wx)
 
 void wx_free_resources(struct wx *wx)
 {
-	wx_free_isb_resources(wx);
+	if (wx->mac.type == wx_mac_em)
+		wx_free_isb_resources(wx);
 	wx_free_all_rx_resources(wx);
 	wx_free_all_tx_resources(wx);
 }
