@@ -317,10 +317,9 @@ static inline void free_handle(unsigned long handle, struct z3fold_header *zhdr)
 }
 
 /* Initializes the z3fold header of a newly allocated z3fold page */
-static struct z3fold_header *init_z3fold_page(struct page *page, bool headless,
+static struct z3fold_header *init_z3fold_page(struct zpdesc *zpdesc, bool headless,
 					struct z3fold_pool *pool, gfp_t gfp)
 {
-	struct zpdesc *zpdesc = page_zpdesc(page);
 	struct z3fold_header *zhdr = zpdesc_address(zpdesc);
 	struct z3fold_buddy_slots *slots;
 
@@ -1006,7 +1005,7 @@ static int z3fold_alloc(struct z3fold_pool *pool, size_t size, gfp_t gfp,
 {
 	int chunks = size_to_chunks(size);
 	struct z3fold_header *zhdr = NULL;
-	struct page *page = NULL;
+	struct zpdesc *zpdesc = NULL;
 	enum buddy bud;
 	bool can_sleep = gfpflags_allow_blocking(gfp);
 
@@ -1030,35 +1029,35 @@ retry:
 				WARN_ON(1);
 				goto retry;
 			}
-			page = virt_to_page(zhdr);
+			zpdesc = page_zpdesc(virt_to_page(zhdr));
 			goto found;
 		}
 		bud = FIRST;
 	}
 
-	page = alloc_page(gfp);
-	if (!page)
+	zpdesc = page_zpdesc(alloc_page(gfp));
+	if (!zpdesc)
 		return -ENOMEM;
 
-	zhdr = init_z3fold_page(page, bud == HEADLESS, pool, gfp);
+	zhdr = init_z3fold_page(zpdesc, bud == HEADLESS, pool, gfp);
 	if (!zhdr) {
-		__free_page(page);
+		__free_page(zpdesc_page(zpdesc));
 		return -ENOMEM;
 	}
 	atomic64_inc(&pool->pages_nr);
 
 	if (bud == HEADLESS) {
-		set_bit(PAGE_HEADLESS, &page->private);
+		set_bit(PAGE_HEADLESS, &zpdesc->zppage_flag);
 		goto headless;
 	}
 	if (can_sleep) {
-		lock_page(page);
-		__SetPageMovable(page, &z3fold_mops);
-		unlock_page(page);
+		zpdesc_lock(zpdesc);
+		__SetPageMovable(zpdesc_page(zpdesc), &z3fold_mops);
+		zpdesc_unlock(zpdesc);
 	} else {
-		WARN_ON(!trylock_page(page));
-		__SetPageMovable(page, &z3fold_mops);
-		unlock_page(page);
+		WARN_ON(!zpdesc_trylock(zpdesc));
+		__SetPageMovable(zpdesc_page(zpdesc), &z3fold_mops);
+		zpdesc_unlock(zpdesc);
 	}
 	z3fold_page_lock(zhdr);
 

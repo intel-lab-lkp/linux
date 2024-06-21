@@ -63,6 +63,11 @@ static inline void zpdesc_lock(struct zpdesc *zpdesc)
 	folio_lock(zpdesc_folio(zpdesc));
 }
 
+static inline bool zpdesc_trylock(struct zpdesc *zpdesc)
+{
+	return folio_trylock(zpdesc_folio(zpdesc));
+}
+
 static inline void zpdesc_unlock(struct zpdesc *zpdesc)
 {
 	folio_unlock(zpdesc_folio(zpdesc));
