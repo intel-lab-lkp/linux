@@ -43,6 +43,7 @@ static LIST_HEAD(memory_tiers);
 static LIST_HEAD(default_memory_types);
 static struct node_memory_type_map node_memory_types[MAX_NUMNODES];
 struct memory_dev_type *default_dram_type;
+static nodemask_t default_dram_nodes __initdata = NODE_MASK_NONE;
 
 static const struct bus_type memory_tier_subsys = {
 	.name = "memory_tiering",
@@ -123,6 +124,11 @@ static const char *default_dram_perf_ref_source;
 static inline struct memory_tier *to_memory_tier(struct device *device)
 {
 	return container_of(device, struct memory_tier, dev);
+}
+
+nodemask_t __init mt_get_default_dram_nodemask(void)
+{
+	return default_dram_nodes;
 }
 
 static __always_inline nodemask_t get_memtier_nodemask(struct memory_tier *memtier)
@@ -671,27 +677,38 @@ EXPORT_SYMBOL_GPL(mt_put_memory_types);
 
 /*
  * This is invoked via `late_initcall()` to initialize memory tiers for
- * CPU-less memory nodes after driver initialization, which is
- * expected to provide `adistance` algorithms.
+ * memory nodes, both with and without CPUs. After the initialization of
+ * firmware and devices, adistance algorithms are expected to be provided.
  */
 static int __init memory_tier_late_init(void)
 {
 	int nid;
+	struct memory_tier *memtier;
 
 	guard(mutex)(&memory_tier_lock);
+	/*
+	 * Look at all the existing and uninitialized N_MEMORY nodes and
+	 * add them to default memory tier or to a tier if we already have
+	 * memory types assigned.
+	 */
 	for_each_node_state(nid, N_MEMORY) {
-		/*
-		 * Some device drivers may have initialized memory tiers
-		 * between `memory_tier_init()` and `memory_tier_late_init()`,
-		 * potentially bringing online memory nodes and
-		 * configuring memory tiers. Exclude them here.
-		 */
-		if (node_memory_types[nid].memtype)
-			continue;
+		if (!node_state(nid, N_CPU))
+			/*
+			 * Some device drivers may have initialized
+			 * memory tiers, potentially bringing memory nodes
+			 * online and configuring memory tiers.
+			 * Exclude them here.
+			 */
+			if (node_memory_types[nid].memtype)
+				continue;
 
-		set_node_memory_tier(nid);
+		memtier = set_node_memory_tier(nid);
+		if (IS_ERR(memtier))
+			/*
+			 * Continue with memtiers we are able to setup.
+			 */
+			break;
 	}
-
 	establish_demotion_targets();
 
 	return 0;
@@ -876,7 +893,6 @@ static int __meminit memtier_hotplug_callback(struct notifier_block *self,
 static int __init memory_tier_init(void)
 {
 	int ret, node;
-	struct memory_tier *memtier;
 
 	ret = subsys_virtual_register(&memory_tier_subsys, NULL);
 	if (ret)
@@ -887,7 +903,8 @@ static int __init memory_tier_init(void)
 				GFP_KERNEL);
 	WARN_ON(!node_demotion);
 #endif
-	mutex_lock(&memory_tier_lock);
+
+	guard(mutex)(&memory_tier_lock);
 	/*
 	 * For now we can have 4 faster memory tiers with smaller adistance
 	 * than default DRAM tier.
@@ -898,28 +915,11 @@ static int __init memory_tier_init(void)
 		panic("%s() failed to allocate default DRAM tier\n", __func__);
 
 	/*
-	 * Look at all the existing N_MEMORY nodes and add them to
-	 * default memory tier or to a tier if we already have memory
-	 * types assigned.
+	 * Record nodes with memory and CPU to set default DRAM performance.
 	 */
-	for_each_node_state(node, N_MEMORY) {
-		if (!node_state(node, N_CPU))
-			/*
-			 * Defer memory tier initialization on
-			 * CPUless numa nodes. These will be initialized
-			 * after firmware and devices are initialized.
-			 */
-			continue;
-
-		memtier = set_node_memory_tier(node);
-		if (IS_ERR(memtier))
-			/*
-			 * Continue with memtiers we are able to setup
-			 */
-			break;
-	}
-	establish_demotion_targets();
-	mutex_unlock(&memory_tier_lock);
+	for_each_node_state(node, N_MEMORY)
+		if (node_state(node, N_CPU))
+			node_set(node, default_dram_nodes);
 
 	hotplug_memory_notifier(memtier_hotplug_callback, MEMTIER_HOTPLUG_PRI);
 	return 0;

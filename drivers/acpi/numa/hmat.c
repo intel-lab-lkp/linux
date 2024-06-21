@@ -939,11 +939,13 @@ static int hmat_set_default_dram_perf(void)
 	int nid, pxm;
 	struct memory_target *target;
 	struct access_coordinate *attrs;
+	nodemask_t default_dram_nodes;
 
 	if (!default_dram_type)
 		return -EIO;
 
-	for_each_node_mask(nid, default_dram_type->nodes) {
+	default_dram_nodes = mt_get_default_dram_nodemask();
+	for_each_node_mask(nid, default_dram_nodes) {
 		pxm = node_to_pxm(nid);
 		target = find_mem_target(pxm);
 		if (!target)
