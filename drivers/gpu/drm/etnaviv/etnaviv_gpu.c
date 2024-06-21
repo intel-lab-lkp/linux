@@ -1537,6 +1537,7 @@ static irqreturn_t irq_handler(int irq, void *data)
 	u32 intr = gpu_read(gpu, VIVS_HI_INTR_ACKNOWLEDGE);
 
 	if (intr != 0) {
+		ktime_t now = ktime_get();
 		int event;
 
 		pm_runtime_mark_last_busy(gpu->dev);
@@ -1586,7 +1587,7 @@ static irqreturn_t irq_handler(int irq, void *data)
 			 */
 			if (fence_after(fence->seqno, gpu->completed_fence))
 				gpu->completed_fence = fence->seqno;
-			dma_fence_signal(fence);
+			dma_fence_signal_timestamp(fence, now);
 
 			event_free(gpu, event);
 		}
