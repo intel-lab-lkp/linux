@@ -770,10 +770,6 @@ struct task_struct {
 	unsigned int			flags;
 	unsigned int			ptrace;
 
-#ifdef CONFIG_MEM_ALLOC_PROFILING
-	struct alloc_tag		*alloc_tag;
-#endif
-
 #ifdef CONFIG_SMP
 	int				on_cpu;
 	struct __call_single_node	wake_entry;
@@ -1552,6 +1548,9 @@ struct task_struct {
 
 #ifdef CONFIG_USER_EVENTS
 	struct user_event_mm		*user_event_mm;
+#endif
+#ifdef CONFIG_MEM_ALLOC_PROFILING
+	struct alloc_tag		*alloc_tag;
 #endif
 
 	/*
