@@ -19,6 +19,8 @@ properties:
       - items:
           - enum:
               - cisco,sg220-26
+              - realtek,RTL9302C
           - const: realtek,rtl8382-soc
+          - const: realtek,rtl930x-soc
 
 additionalProperties: true
