@@ -11,9 +11,22 @@
 #include <linux/smp.h>
 #include <linux/cpu.h>
 #include <linux/group_cpus.h>
+#include <linux/sched/isolation.h>
 
 #include "blk.h"
 #include "blk-mq.h"
+
+unsigned int blk_mq_num_possible_queues(void)
+{
+	const struct cpumask *io_queue_mask;
+
+	io_queue_mask = housekeeping_cpumask(HK_TYPE_IO_QUEUE);
+	if (!cpumask_empty(io_queue_mask))
+		return cpumask_weight(io_queue_mask);
+
+	return num_possible_cpus();
+}
+EXPORT_SYMBOL_GPL(blk_mq_num_possible_queues);
 
 void blk_mq_map_queues(struct blk_mq_queue_map *qmap)
 {
