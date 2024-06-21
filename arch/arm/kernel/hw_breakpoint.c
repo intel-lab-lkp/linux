@@ -568,9 +568,7 @@ static int arch_build_bp_info(struct perf_event *bp,
 	hw->address = attr->bp_addr;
 
 	/* Privilege */
-	hw->ctrl.privilege = ARM_BREAKPOINT_USER;
-	if (arch_check_bp_in_kernelspace(hw))
-		hw->ctrl.privilege |= ARM_BREAKPOINT_PRIV;
+	hw->ctrl.privilege = attr->bp_priv;
 
 	/* Enabled? */
 	hw->ctrl.enabled = !attr->disabled;
