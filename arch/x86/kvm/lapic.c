@@ -2583,6 +2583,8 @@ void kvm_lapic_set_base(struct kvm_vcpu *vcpu, u64 value)
 
 	if ((value & MSR_IA32_APICBASE_ENABLE) &&
 	     apic->base_address != APIC_DEFAULT_PHYS_BASE) {
+		vcpu_unimpl(vcpu, "APIC base %#llx is not %#llx",
+			    apic->base_address, APIC_DEFAULT_PHYS_BASE);
 		kvm_set_apicv_inhibit(apic->vcpu->kvm,
 				      APICV_INHIBIT_REASON_APIC_BASE_MODIFIED);
 	}
