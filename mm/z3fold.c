@@ -790,7 +790,7 @@ static inline struct z3fold_header *__z3fold_alloc(struct z3fold_pool *pool,
 						size_t size, bool can_sleep)
 {
 	struct z3fold_header *zhdr = NULL;
-	struct page *page;
+	struct zpdesc *zpdesc;
 	struct list_head *unbuddied;
 	int chunks = size_to_chunks(size), i;
 
@@ -823,9 +823,9 @@ lookup:
 		zhdr->cpu = -1;
 		spin_unlock(&pool->lock);
 
-		page = virt_to_page(zhdr);
-		if (test_bit(NEEDS_COMPACTING, &page->private) ||
-		    test_bit(PAGE_CLAIMED, &page->private)) {
+		zpdesc = page_zpdesc(virt_to_page(zhdr));
+		if (test_bit(NEEDS_COMPACTING, &zpdesc->zppage_flag) ||
+		    test_bit(PAGE_CLAIMED, &zpdesc->zppage_flag)) {
 			z3fold_page_unlock(zhdr);
 			zhdr = NULL;
 			migrate_enable();
@@ -868,9 +868,9 @@ lookup:
 			zhdr->cpu = -1;
 			spin_unlock(&pool->lock);
 
-			page = virt_to_page(zhdr);
-			if (test_bit(NEEDS_COMPACTING, &page->private) ||
-			    test_bit(PAGE_CLAIMED, &page->private)) {
+			zpdesc = page_zpdesc(virt_to_page(zhdr));
+			if (test_bit(NEEDS_COMPACTING, &zpdesc->zppage_flag) ||
+			    test_bit(PAGE_CLAIMED, &zpdesc->zppage_flag)) {
 				z3fold_page_unlock(zhdr);
 				zhdr = NULL;
 				if (can_sleep)
