@@ -347,11 +347,9 @@ static struct z3fold_header *init_z3fold_page(struct zpdesc *zpdesc, bool headle
 	return zhdr;
 }
 
-/* Resets the struct page fields and frees the page */
-static void free_z3fold_page(struct page *page, bool headless)
+/* Resets the struct zpdesc fields and frees the page */
+static void free_z3fold_page(struct zpdesc *zpdesc, bool headless)
 {
-	struct zpdesc *zpdesc = page_zpdesc(page);
-
 	if (!headless) {
 		zpdesc_lock(zpdesc);
 		__ClearPageMovable(zpdesc_page(zpdesc));
@@ -507,7 +505,7 @@ static void free_pages_work(struct work_struct *w)
 			continue;
 		spin_unlock(&pool->stale_lock);
 		cancel_work_sync(&zhdr->work);
-		free_z3fold_page(zpdesc_page(zpdesc), false);
+		free_z3fold_page(zpdesc, false);
 		cond_resched();
 		spin_lock(&pool->stale_lock);
 	}
@@ -1095,15 +1093,15 @@ headless:
 static void z3fold_free(struct z3fold_pool *pool, unsigned long handle)
 {
 	struct z3fold_header *zhdr;
-	struct page *page;
+	struct zpdesc *zpdesc;
 	enum buddy bud;
 	bool page_claimed;
 
 	zhdr = get_z3fold_header(handle);
-	page = virt_to_page(zhdr);
-	page_claimed = test_and_set_bit(PAGE_CLAIMED, &page->private);
+	zpdesc = page_zpdesc(virt_to_page(zhdr));
+	page_claimed = test_and_set_bit(PAGE_CLAIMED, &zpdesc->zppage_flag);
 
-	if (test_bit(PAGE_HEADLESS, &page->private)) {
+	if (test_bit(PAGE_HEADLESS, &zpdesc->zppage_flag)) {
 		/* if a headless page is under reclaim, just leave.
 		 * NB: we use test_and_set_bit for a reason: if the bit
 		 * has not been set before, we release this page
@@ -1111,7 +1109,7 @@ static void z3fold_free(struct z3fold_pool *pool, unsigned long handle)
 		 */
 		if (!page_claimed) {
 			put_z3fold_header(zhdr);
-			free_z3fold_page(page, true);
+			free_z3fold_page(zpdesc, true);
 			atomic64_dec(&pool->pages_nr);
 		}
 		return;
@@ -1146,20 +1144,20 @@ static void z3fold_free(struct z3fold_pool *pool, unsigned long handle)
 		put_z3fold_header(zhdr);
 		return;
 	}
-	if (test_and_set_bit(NEEDS_COMPACTING, &page->private)) {
-		clear_bit(PAGE_CLAIMED, &page->private);
+	if (test_and_set_bit(NEEDS_COMPACTING, &zpdesc->zppage_flag)) {
+		clear_bit(PAGE_CLAIMED, &zpdesc->zppage_flag);
 		put_z3fold_header(zhdr);
 		return;
 	}
 	if (zhdr->cpu < 0 || !cpu_online(zhdr->cpu)) {
 		zhdr->cpu = -1;
 		kref_get(&zhdr->refcount);
-		clear_bit(PAGE_CLAIMED, &page->private);
+		clear_bit(PAGE_CLAIMED, &zpdesc->zppage_flag);
 		do_compact_page(zhdr, true);
 		return;
 	}
 	kref_get(&zhdr->refcount);
-	clear_bit(PAGE_CLAIMED, &page->private);
+	clear_bit(PAGE_CLAIMED, &zpdesc->zppage_flag);
 	queue_work_on(zhdr->cpu, pool->compact_wq, &zhdr->work);
 	put_z3fold_header(zhdr);
 }
