@@ -108,20 +108,14 @@ static int attach_reuseport(int sock_fd, struct bpf_program *reuseport_prog)
 	return 0;
 }
 
-static socklen_t inetaddr_len(const struct sockaddr_storage *addr)
-{
-	return (addr->ss_family == AF_INET ? sizeof(struct sockaddr_in) :
-		addr->ss_family == AF_INET6 ? sizeof(struct sockaddr_in6) : 0);
-}
-
 static int make_socket(int sotype, const char *ip, int port,
-		       struct sockaddr_storage *addr)
+		       struct sockaddr_storage *addr, socklen_t *len)
 {
 	struct timeval timeo = { .tv_sec = IO_TIMEOUT_SEC };
 	int err, family, fd;
 
 	family = is_ipv6(ip) ? AF_INET6 : AF_INET;
-	err = make_sockaddr(family, ip, port, addr, NULL);
+	err = make_sockaddr(family, ip, port, addr, len);
 	if (CHECK(err, "make_address", "failed\n"))
 		return -1;
 
@@ -231,13 +225,14 @@ fail:
 static int make_client(int sotype, const char *ip, int port)
 {
 	struct sockaddr_storage addr = {0};
+	socklen_t len;
 	int err, fd;
 
-	fd = make_socket(sotype, ip, port, &addr);
+	fd = make_socket(sotype, ip, port, &addr, &len);
 	if (fd < 0)
 		return -1;
 
-	err = connect(fd, (void *)&addr, inetaddr_len(&addr));
+	err = connect(fd, (void *)&addr, len);
 	if (CHECK(err, "make_client", "connect")) {
 		log_err("failed to connect client socket");
 		goto fail;
@@ -876,6 +871,7 @@ static void drop_on_lookup(const struct test *t)
 	struct sockaddr_storage dst = {};
 	int client_fd, server_fd, err;
 	struct bpf_link *lookup_link;
+	socklen_t len;
 	ssize_t n;
 
 	lookup_link = attach_lookup_prog(t->lookup_prog);
@@ -888,11 +884,11 @@ static void drop_on_lookup(const struct test *t)
 		goto detach;
 
 	client_fd = make_socket(t->sotype, t->connect_to.ip,
-				t->connect_to.port, &dst);
+				t->connect_to.port, &dst, &len);
 	if (client_fd < 0)
 		goto close_srv;
 
-	err = connect(client_fd, (void *)&dst, inetaddr_len(&dst));
+	err = connect(client_fd, (void *)&dst, len);
 	if (t->sotype == SOCK_DGRAM) {
 		err = send_byte(client_fd);
 		if (err)
@@ -990,6 +986,7 @@ static void drop_on_reuseport(const struct test *t)
 	struct sockaddr_storage dst = { 0 };
 	int client, server1, server2, err;
 	struct bpf_link *lookup_link;
+	socklen_t len;
 	ssize_t n;
 
 	lookup_link = attach_lookup_prog(t->lookup_prog);
@@ -1012,11 +1009,11 @@ static void drop_on_reuseport(const struct test *t)
 		goto close_srv1;
 
 	client = make_socket(t->sotype, t->connect_to.ip,
-			     t->connect_to.port, &dst);
+			     t->connect_to.port, &dst, &len);
 	if (client < 0)
 		goto close_srv2;
 
-	err = connect(client, (void *)&dst, inetaddr_len(&dst));
+	err = connect(client, (void *)&dst, len);
 	if (t->sotype == SOCK_DGRAM) {
 		err = send_byte(client);
 		if (err)
@@ -1230,6 +1227,7 @@ static void run_multi_prog_lookup(const struct test_multi_prog *t)
 	int map_fd, server_fd, client_fd;
 	struct bpf_link *link1, *link2;
 	int prog_idx, done, err;
+	socklen_t len;
 
 	map_fd = bpf_map__fd(t->run_map);
 
@@ -1259,11 +1257,11 @@ static void run_multi_prog_lookup(const struct test_multi_prog *t)
 	if (err)
 		goto out_close_server;
 
-	client_fd = make_socket(SOCK_STREAM, EXT_IP4, EXT_PORT, &dst);
+	client_fd = make_socket(SOCK_STREAM, EXT_IP4, EXT_PORT, &dst, &len);
 	if (client_fd < 0)
 		goto out_close_server;
 
-	err = connect(client_fd, (void *)&dst, inetaddr_len(&dst));
+	err = connect(client_fd, (void *)&dst, len);
 	if (CHECK(err && !t->expect_errno, "connect",
 		  "unexpected error %d\n", errno))
 		goto out_close_client;
