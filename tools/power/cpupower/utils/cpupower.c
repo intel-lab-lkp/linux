@@ -12,6 +12,8 @@
 #include <unistd.h>
 #include <errno.h>
 #include <sched.h>
+#include <libgen.h>
+#include <limits.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/utsname.h>
@@ -21,6 +23,8 @@
 #include "helpers/bitmask.h"
 
 #define ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
+#define MAN_REL_PATH "/../man/man1/"
+#define MAN_SUFFIX ".1"
 
 static int cmd_help(int argc, const char **argv);
 
@@ -80,14 +84,17 @@ static void print_help(void)
 
 static int print_man_page(const char *subpage)
 {
-	int len;
-	char *page;
+	char *page, *man_path, *exec_dir;
+	char exec_path[PATH_MAX];
+	int subpage_len;
 
-	len = 10; /* enough for "cpupower-" */
-	if (subpage != NULL)
-		len += strlen(subpage);
+	if (!subpage)
+		return -EINVAL;
 
-	page = malloc(len);
+	subpage_len = 10; /* enough for "cpupower-" */
+	subpage_len += strlen(subpage);
+
+	page = malloc(subpage_len);
 	if (!page)
 		return -ENOMEM;
 
@@ -97,7 +104,40 @@ static int print_man_page(const char *subpage)
 		strcat(page, subpage);
 	}
 
-	execlp("man", "man", page, NULL);
+	/* Get current process image name full path */
+	if (readlink("/proc/self/exe", exec_path, PATH_MAX) > 0) {
+
+		man_path = malloc(PATH_MAX);
+		if (!man_path) {
+			free(page);
+			return -ENOMEM;
+		}
+
+		exec_dir = strdup(exec_path);
+		if (!exec_dir) {
+			free(page);
+			free(man_path);
+			return -ENOMEM;
+		}
+
+		*man_path = '\0';
+		strncat(man_path, dirname(exec_dir), strlen(exec_dir));
+		strncat(man_path, MAN_REL_PATH, strlen(MAN_REL_PATH));
+		strncat(man_path, page, strlen(page));
+		strncat(man_path, MAN_SUFFIX, strlen(MAN_SUFFIX));
+
+		free(exec_dir);
+
+		/* Check if file exists */
+		if (access(man_path, F_OK) == -1) {
+			free(man_path);
+			man_path = page;
+		}
+	} else {
+		man_path = page;
+	}
+
+	execlp("man", "man", man_path, NULL);
 
 	/* should not be reached */
 	return -EINVAL;
