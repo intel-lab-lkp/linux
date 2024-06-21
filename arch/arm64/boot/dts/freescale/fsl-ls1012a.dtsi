@@ -560,6 +560,7 @@
 		rcpm: power-controller@1ee2140 {
 			compatible = "fsl,ls1012a-rcpm", "fsl,qoriq-rcpm-2.1+";
 			reg = <0x0 0x1ee2140 0x0 0x4>;
+			#power-domain-cells = <0>;
 			#fsl,rcpm-wakeup-cells = <1>;
 		};
 

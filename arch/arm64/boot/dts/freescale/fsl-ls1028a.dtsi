@@ -1321,6 +1321,7 @@
 		rcpm: power-controller@1e34040 {
 			compatible = "fsl,ls1028a-rcpm", "fsl,qoriq-rcpm-2.1+";
 			reg = <0x0 0x1e34040 0x0 0x1c>;
+			#power-domain-cells = <0>;
 			#fsl,rcpm-wakeup-cells = <7>;
 			little-endian;
 		};
