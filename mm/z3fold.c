@@ -320,15 +320,16 @@ static inline void free_handle(unsigned long handle, struct z3fold_header *zhdr)
 static struct z3fold_header *init_z3fold_page(struct page *page, bool headless,
 					struct z3fold_pool *pool, gfp_t gfp)
 {
-	struct z3fold_header *zhdr = page_address(page);
+	struct zpdesc *zpdesc = page_zpdesc(page);
+	struct z3fold_header *zhdr = zpdesc_address(zpdesc);
 	struct z3fold_buddy_slots *slots;
 
-	clear_bit(PAGE_HEADLESS, &page->private);
-	clear_bit(MIDDLE_CHUNK_MAPPED, &page->private);
-	clear_bit(NEEDS_COMPACTING, &page->private);
-	clear_bit(PAGE_STALE, &page->private);
-	clear_bit(PAGE_CLAIMED, &page->private);
-	clear_bit(PAGE_MIGRATED, &page->private);
+	clear_bit(PAGE_HEADLESS, &zpdesc->zppage_flag);
+	clear_bit(MIDDLE_CHUNK_MAPPED, &zpdesc->zppage_flag);
+	clear_bit(NEEDS_COMPACTING, &zpdesc->zppage_flag);
+	clear_bit(PAGE_STALE, &zpdesc->zppage_flag);
+	clear_bit(PAGE_CLAIMED, &zpdesc->zppage_flag);
+	clear_bit(PAGE_MIGRATED, &zpdesc->zppage_flag);
 	if (headless)
 		return zhdr;
 
