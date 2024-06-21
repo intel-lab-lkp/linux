@@ -40,6 +40,7 @@
 #include <linux/spinlock.h>
 #include <linux/zpool.h>
 #include <linux/kmemleak.h>
+#include "zpdesc.h"
 
 /*
  * NCHUNKS_ORDER determines the internal allocation granularity, effectively
@@ -1251,22 +1252,23 @@ static bool z3fold_page_isolate(struct page *page, isolate_mode_t mode)
 {
 	struct z3fold_header *zhdr;
 	struct z3fold_pool *pool;
+	struct zpdesc *zpdesc = page_zpdesc(page);
 
-	VM_BUG_ON_PAGE(PageIsolated(page), page);
+	VM_BUG_ON_PAGE(PageIsolated(zpdesc_page(zpdesc)), zpdesc_page(zpdesc));
 
-	if (test_bit(PAGE_HEADLESS, &page->private))
+	if (test_bit(PAGE_HEADLESS, &zpdesc->zppage_flag))
 		return false;
 
-	zhdr = page_address(page);
+	zhdr = zpdesc_address(zpdesc);
 	z3fold_page_lock(zhdr);
-	if (test_bit(NEEDS_COMPACTING, &page->private) ||
-	    test_bit(PAGE_STALE, &page->private))
+	if (test_bit(NEEDS_COMPACTING, &zpdesc->zppage_flag) ||
+	    test_bit(PAGE_STALE, &zpdesc->zppage_flag))
 		goto out;
 
 	if (zhdr->mapped_count != 0 || zhdr->foreign_handles != 0)
 		goto out;
 
-	if (test_and_set_bit(PAGE_CLAIMED, &page->private))
+	if (test_and_set_bit(PAGE_CLAIMED, &zpdesc->zppage_flag))
 		goto out;
 	pool = zhdr_to_pool(zhdr);
 	spin_lock(&pool->lock);
