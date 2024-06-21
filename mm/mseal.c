@@ -26,6 +26,11 @@ static inline void set_vma_sealed(struct vm_area_struct *vma)
 	vm_flags_set(vma, VM_SEALED);
 }
 
+static inline void clear_vma_sealed(struct vm_area_struct *vma)
+{
+	vm_flags_clear(vma, VM_SEALED);
+}
+
 /*
  * check if a vma is sealed for modification.
  * return true, if modification is allowed.
@@ -109,7 +114,7 @@ bool can_modify_mm_madv(struct mm_struct *mm, unsigned long start, unsigned long
 
 static int mseal_fixup(struct vma_iterator *vmi, struct vm_area_struct *vma,
 		struct vm_area_struct **prev, unsigned long start,
-		unsigned long end, vm_flags_t newflags)
+		unsigned long end, vm_flags_t newflags, bool seal)
 {
 	int ret = 0;
 	vm_flags_t oldflags = vma->vm_flags;
@@ -123,7 +128,10 @@ static int mseal_fixup(struct vma_iterator *vmi, struct vm_area_struct *vma,
 		goto out;
 	}
 
-	set_vma_sealed(vma);
+	if (seal)
+		set_vma_sealed(vma);
+	else
+		clear_vma_sealed(vma);
 out:
 	*prev = vma;
 	return ret;
@@ -159,9 +167,9 @@ static int check_mm_seal(unsigned long start, unsigned long end)
 }
 
 /*
- * Apply sealing.
+ * Apply sealing / unsealing.
  */
-static int apply_mm_seal(unsigned long start, unsigned long end)
+static int apply_mm_seal(unsigned long start, unsigned long end, bool seal)
 {
 	unsigned long nstart;
 	struct vm_area_struct *vma, *prev;
@@ -183,17 +191,51 @@ static int apply_mm_seal(unsigned long start, unsigned long end)
 		unsigned long tmp;
 		vm_flags_t newflags;
 
-		newflags = vma->vm_flags | VM_SEALED;
+		if (seal)
+			newflags = vma->vm_flags | VM_SEALED;
+		else
+			newflags = vma->vm_flags & ~(VM_SEALED);
 		tmp = vma->vm_end;
 		if (tmp > end)
 			tmp = end;
-		error = mseal_fixup(&vmi, vma, &prev, nstart, tmp, newflags);
+		error = mseal_fixup(&vmi, vma, &prev, nstart, tmp, newflags, seal);
 		if (error)
 			return error;
 		nstart = vma_iter_end(&vmi);
 	}
 
 	return 0;
+}
+
+int do_mseal(unsigned long start, unsigned long end, bool seal)
+{
+	int ret;
+
+	if (end < start)
+		return -EINVAL;
+
+	if (end == start)
+		return 0;
+
+	/*
+	 * First pass, this helps to avoid
+	 * partial sealing in case of error in input address range,
+	 * e.g. ENOMEM error.
+	 */
+	ret = check_mm_seal(start, end);
+	if (ret)
+		goto out;
+
+	/*
+	 * Second pass, this should success, unless there are errors
+	 * from vma_modify_flags, e.g. merge/split error, or process
+	 * reaching the max supported VMAs, however, those cases shall
+	 * be rare.
+	 */
+	ret = apply_mm_seal(start, end, seal);
+
+out:
+	return ret;
 }
 
 /*
@@ -248,7 +290,7 @@ static int apply_mm_seal(unsigned long start, unsigned long end)
  *
  *  unseal() is not supported.
  */
-static int do_mseal(unsigned long start, size_t len_in, unsigned long flags)
+static int __do_mseal(unsigned long start, size_t len_in, unsigned long flags)
 {
 	size_t len;
 	int ret = 0;
@@ -269,33 +311,12 @@ static int do_mseal(unsigned long start, size_t len_in, unsigned long flags)
 		return -EINVAL;
 
 	end = start + len;
-	if (end < start)
-		return -EINVAL;
-
-	if (end == start)
-		return 0;
 
 	if (mmap_write_lock_killable(mm))
 		return -EINTR;
 
-	/*
-	 * First pass, this helps to avoid
-	 * partial sealing in case of error in input address range,
-	 * e.g. ENOMEM error.
-	 */
-	ret = check_mm_seal(start, end);
-	if (ret)
-		goto out;
+	ret = do_mseal(start, end, true);
 
-	/*
-	 * Second pass, this should success, unless there are errors
-	 * from vma_modify_flags, e.g. merge/split error, or process
-	 * reaching the max supported VMAs, however, those cases shall
-	 * be rare.
-	 */
-	ret = apply_mm_seal(start, end);
-
-out:
 	mmap_write_unlock(current->mm);
 	return ret;
 }
@@ -303,5 +324,5 @@ out:
 SYSCALL_DEFINE3(mseal, unsigned long, start, size_t, len, unsigned long,
 		flags)
 {
-	return do_mseal(start, len, flags);
+	return __do_mseal(start, len, flags);
 }
