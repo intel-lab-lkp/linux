@@ -109,6 +109,98 @@ int mtk_phy_write_page(struct phy_device *phydev, int page)
 }
 EXPORT_SYMBOL_GPL(mtk_phy_write_page);
 
+/* This function deals with the case that 1G AN starts but isn't completed. We
+ * set AN_NEW_LP_CNT_LIMIT with different values time after time to let our
+ * 1G->100Mbps hardware automatic downshift to fit more partner devices.
+ */
+static int extend_an_new_lp_cnt_limit(struct phy_device *phydev)
+{
+	int mmd_read_ret;
+	u32 reg_val;
+	int timeout;
+
+	/* According to table 28-9 & Figure 28-18 in IEEE 802.3,
+	 * link_fail_inhibit_timer of 10/100/1000 Mbps devices ranges from 750
+	 * to "1000ms". Once MTK_PHY_FINAL_SPEED_1000 is set, it means that we
+	 * enter "FLP LINK GOOD CHECK" state, link_fail_inhibit_timer starts and
+	 * this PHY's 1G training starts. If 1G training never starts, we do
+	 * nothing but leave.
+	 */
+	timeout = read_poll_timeout(mmd_read_ret = phy_read_mmd, reg_val,
+				    (mmd_read_ret < 0) ||
+				    reg_val & MTK_PHY_FINAL_SPEED_1000,
+				    10000, 1000000, false, phydev,
+				    MDIO_MMD_VEND1, MTK_PHY_LINK_STATUS_MISC);
+	if (mmd_read_ret < 0)
+		return mmd_read_ret;
+
+	if (!timeout) {
+		/* Once we found MTK_PHY_FINAL_SPEED_1000 is set, no matter 1G
+		 * AN is completed or not, we'll set AN_NEW_LP_CNT_LIMIT again
+		 * and again.
+		 */
+		mtk_tr_modify(phydev, 0x0, 0xf, 0x3c, AN_NEW_LP_CNT_LIMIT_MASK,
+			      FIELD_PREP(AN_NEW_LP_CNT_LIMIT_MASK, 0xf));
+		mdelay(1500);
+
+		timeout = read_poll_timeout(mtk_tr_read, reg_val,
+					    (reg_val & AN_STATE_MASK) !=
+					    (AN_STATE_TX_DISABLE <<
+					     AN_STATE_SHIFT),
+					    10000, 1000000, false, phydev,
+					    0x0, 0xf, 0x2);
+		if (!timeout) {
+			mdelay(625);
+			mtk_tr_modify(phydev, 0x0, 0xf, 0x3c,
+				      AN_NEW_LP_CNT_LIMIT_MASK,
+				      FIELD_PREP(AN_NEW_LP_CNT_LIMIT_MASK,
+						 0x8));
+			mdelay(500);
+			mtk_tr_modify(phydev, 0x0, 0xf, 0x3c,
+				      AN_NEW_LP_CNT_LIMIT_MASK,
+				      FIELD_PREP(AN_NEW_LP_CNT_LIMIT_MASK,
+						 0xf));
+		} else {
+			return -ETIMEDOUT;
+		}
+	}
+
+	return 0;
+}
+
+int mtk_gphy_cl22_read_status(struct phy_device *phydev)
+{
+	int ret;
+
+	ret = genphy_read_status(phydev);
+	if (ret)
+		return ret;
+
+	if (phydev->autoneg == AUTONEG_ENABLE && !phydev->autoneg_complete) {
+		ret = phy_read_paged(phydev, MTK_PHY_PAGE_EXTENDED_1,
+				     MTK_PHY_AUX_CTRL_AND_STATUS);
+		if (ret < 0)
+			return ret;
+
+		/* Once LP_DETECTED is set, it means that"ability_match" in
+		 * IEEE 802.3 Figure 28-18 is set. This happens after we plug in
+		 * cable. Also, LP_DETECTED will be cleared after AN complete.
+		 */
+		if (!FIELD_GET(MTK_PHY_LP_DETECTED_MASK, ret))
+			return 0;
+
+		ret = phy_read(phydev, MII_CTRL1000);
+		if (ret & (ADVERTISE_1000FULL | ADVERTISE_1000HALF)) {
+			ret = extend_an_new_lp_cnt_limit(phydev);
+			if (ret < 0)
+				return ret;
+		}
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(mtk_gphy_cl22_read_status);
+
 int mtk_phy_led_hw_is_supported(struct phy_device *phydev, u8 index,
 				unsigned long rules,
 				unsigned long supported_triggers)
