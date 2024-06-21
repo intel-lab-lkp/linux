@@ -585,6 +585,21 @@ config NSM
 	  To compile this driver as a module, choose M here.
 	  The module will be called nsm.
 
+config PROCLOCAL_TEST
+	tristate "Proclocal allocator test driver"
+	depends on SECRETMEM
+	help
+	  This driver allows to perform functional and stress tests for
+	  proclocal memory allocator.  It exposes /dev/proclocal-test that
+	  userland test programs can use to create and manipulate proclocal
+	  kernel allocations.
+
+	  To compile this driver as a module, choose M here: the module will be
+	  called proclocal-test.
+
+	  If unsure, say N.
+	  This driver is not meant to be used on production systems.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
