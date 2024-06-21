@@ -1050,11 +1050,11 @@ retry:
 	}
 	if (can_sleep) {
 		zpdesc_lock(zpdesc);
-		__SetPageMovable(zpdesc_page(zpdesc), &z3fold_mops);
+		__zpdesc_set_movable(zpdesc, &z3fold_mops);
 		zpdesc_unlock(zpdesc);
 	} else {
 		WARN_ON(!zpdesc_trylock(zpdesc));
-		__SetPageMovable(zpdesc_page(zpdesc), &z3fold_mops);
+		__zpdesc_set_movable(zpdesc, &z3fold_mops);
 		zpdesc_unlock(zpdesc);
 	}
 	z3fold_page_lock(zhdr);
@@ -1334,7 +1334,7 @@ static int z3fold_page_migrate(struct page *newpage, struct page *page,
 		encode_handle(new_zhdr, MIDDLE);
 	set_bit(NEEDS_COMPACTING, &newzpdesc->zppage_flag);
 	new_zhdr->cpu = smp_processor_id();
-	__SetPageMovable(zpdesc_page(newzpdesc), &z3fold_mops);
+	__zpdesc_set_movable(newzpdesc, &z3fold_mops);
 	z3fold_page_unlock(new_zhdr);
 
 	queue_work_on(new_zhdr->cpu, pool->compact_wq, &new_zhdr->work);
