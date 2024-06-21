@@ -461,6 +461,8 @@ static void pci_read_bridge_windows(struct pci_dev *bridge)
 	u32 buses;
 	u16 io;
 	u32 pmem, tmp;
+	u16 ven_id, dev_id;
+	u16 en1k = 0;
 	struct resource res;
 
 	pci_read_config_dword(bridge, PCI_PRIMARY_BUS, &buses);
@@ -478,6 +480,26 @@ static void pci_read_bridge_windows(struct pci_dev *bridge)
 	}
 	if (io) {
 		bridge->io_window = 1;
+		if (pci_is_root_bus(bridge->bus)) {
+			list_for_each_entry(dev, &bridge->bus->devices, bus_list) {
+				pci_read_config_word(dev, PCI_VENDOR_ID, &ven_id);
+				pci_read_config_word(dev, PCI_DEVICE_ID, &dev_id);
+				if (ven_id == PCI_VENDOR_ID_INTEL && dev_id == 0x09a2) {
+					/*IIO MISC Control offset 0x1c0*/
+					pci_read_config_word(dev, 0x1c0, &en1k);
+				}
+			}
+		/*
+		 *Intel ICX SPR EMR GNR
+		 *IIO MISC Control (IIOMISCCTRL_1_5_0_CFG) — Offset 1C0h
+		 *bit 2:Enable 1K (EN1K)
+		 *This bit when set, enables 1K granularity for I/O space decode
+		 *in each of the virtual P2P bridges
+		 *corresponding to root ports, and DMI ports.
+		 */
+		if (en1k & 0x4)
+			bridge->io_window_1k = 1;
+		}
 		pci_read_bridge_io(bridge, &res, true);
 	}
 
