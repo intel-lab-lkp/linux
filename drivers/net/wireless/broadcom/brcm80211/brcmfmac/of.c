@@ -129,7 +129,8 @@ void brcmf_of_probe(struct device *dev, enum brcmf_bus_type bus_type,
 		sdio->drive_strength = val;
 
 	/* make sure there are interrupts defined in the node */
-	if (!of_property_present(np, "interrupts"))
+	if (!of_property_present(np, "interrupts") &&
+	    !of_property_present(np, "interrupts-extended"))
 		return;
 
 	irq = irq_of_parse_and_map(np, 0);
