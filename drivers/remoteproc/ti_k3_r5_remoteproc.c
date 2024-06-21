@@ -636,16 +636,8 @@ static int k3_r5_rproc_stop(struct rproc *rproc)
 	struct k3_r5_core *core1, *core = kproc->core;
 	int ret;
 
-	/* halt all applicable cores */
-	if (cluster->mode == CLUSTER_MODE_LOCKSTEP) {
-		list_for_each_entry(core, &cluster->cores, elem) {
-			ret = k3_r5_core_halt(core);
-			if (ret) {
-				core = list_prev_entry(core, elem);
-				goto unroll_core_halt;
-			}
-		}
-	} else {
+
+	if (cluster->mode != CLUSTER_MODE_LOCKSTEP) {
 		/* do not allow core 0 to stop before core 1 */
 		core1 = list_last_entry(&cluster->cores, struct k3_r5_core,
 					elem);
@@ -656,6 +648,18 @@ static int k3_r5_rproc_stop(struct rproc *rproc)
 			ret = -EPERM;
 			goto out;
 		}
+	}
+
+	/* halt all applicable cores */
+	if (cluster->mode == CLUSTER_MODE_LOCKSTEP) {
+		list_for_each_entry(core, &cluster->cores, elem) {
+			ret = k3_r5_core_halt(core);
+			if (ret) {
+				core = list_prev_entry(core, elem);
+				goto unroll_core_halt;
+			}
+		}
+	} else {
 
 		ret = k3_r5_core_halt(core);
 		if (ret)
