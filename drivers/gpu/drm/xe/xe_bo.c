@@ -1436,7 +1436,7 @@ __xe_bo_create_locked(struct xe_device *xe,
 
 		if (flags & XE_BO_FLAG_FIXED_PLACEMENT) {
 			err = xe_ggtt_insert_bo_at(tile->mem.ggtt, bo,
-						   start + bo->size, U64_MAX);
+						   start, end);
 		} else {
 			err = xe_ggtt_insert_bo(tile->mem.ggtt, bo);
 		}
