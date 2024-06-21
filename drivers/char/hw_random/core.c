@@ -525,6 +525,7 @@ static int hwrng_fillfn(void *unused)
 
 int hwrng_register(struct hwrng *rng)
 {
+	unsigned short rng_quality, cur_quality;
 	int err = -EINVAL;
 	struct hwrng *tmp;
 
@@ -545,8 +546,14 @@ int hwrng_register(struct hwrng *rng)
 	complete(&rng->cleanup_done);
 	init_completion(&rng->dying);
 
+	/* Quality field not set in struct hwrng means 1024 */
+	rng_quality = rng->quality ? rng->quality : 1024;
+	cur_quality = current_rng ?
+		(current_rng->quality ? current_rng->quality : 1024) :
+		0;
+
 	if (!current_rng ||
-	    (!cur_rng_set_by_user && rng->quality > current_rng->quality)) {
+	    (!cur_rng_set_by_user && rng_quality > cur_quality)) {
 		/*
 		 * Set new rng as current as the new rng source
 		 * provides better entropy quality and was not
