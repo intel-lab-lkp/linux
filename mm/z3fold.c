@@ -254,9 +254,9 @@ static inline struct z3fold_header *get_z3fold_header(unsigned long handle)
 			locked = z3fold_page_trylock(zhdr);
 			read_unlock(&slots->lock);
 			if (locked) {
-				struct page *page = virt_to_page(zhdr);
+				struct zpdesc *zpdesc = page_zpdesc(virt_to_page(zhdr));
 
-				if (!test_bit(PAGE_MIGRATED, &page->private))
+				if (!test_bit(PAGE_MIGRATED, &zpdesc->zppage_flag))
 					break;
 				z3fold_page_unlock(zhdr);
 			}
@@ -271,9 +271,9 @@ static inline struct z3fold_header *get_z3fold_header(unsigned long handle)
 
 static inline void put_z3fold_header(struct z3fold_header *zhdr)
 {
-	struct page *page = virt_to_page(zhdr);
+	struct zpdesc *zpdesc = page_zpdesc(virt_to_page(zhdr));
 
-	if (!test_bit(PAGE_HEADLESS, &page->private))
+	if (!test_bit(PAGE_HEADLESS, &zpdesc->zppage_flag))
 		z3fold_page_unlock(zhdr);
 }
 
