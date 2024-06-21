@@ -528,8 +528,9 @@ int ufshcd_mcq_sq_cleanup(struct ufs_hba *hba, int task_tag)
 		return -ETIMEDOUT;
 
 	if (task_tag != hba->nutrs - UFSHCD_NUM_RESERVED) {
-		if (!cmd)
-			return -EINVAL;
+		/* Should return 0 if cmd is already complete by irq */
+		if (!cmd || !ufshcd_cmd_inflight(cmd))
+			return 0;
 		hwq = ufshcd_mcq_req_to_hwq(hba, scsi_cmd_to_rq(cmd));
 	} else {
 		hwq = hba->dev_cmd_queue;
