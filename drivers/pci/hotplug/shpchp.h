@@ -48,16 +48,15 @@ do {									\
 #define ctrl_dbg(ctrl, format, arg...)					\
 	do {								\
 		if (shpchp_debug)					\
-			pci_printk(KERN_DEBUG, ctrl->pci_dev,		\
+			pci_printk(KERN_DEBUG, (ctrl)->pci_dev,		\
 					format, ## arg);		\
 	} while (0)
 #define ctrl_err(ctrl, format, arg...)					\
-	pci_err(ctrl->pci_dev, format, ## arg)
+	pci_err((ctrl)->pci_dev, format, ## arg)
 #define ctrl_info(ctrl, format, arg...)					\
-	pci_info(ctrl->pci_dev, format, ## arg)
+	pci_info((ctrl)->pci_dev, format, ## arg)
 #define ctrl_warn(ctrl, format, arg...)					\
-	pci_warn(ctrl->pci_dev, format, ## arg)
-
+	pci_warn((ctrl)->pci_dev, format, ## arg)
 
 #define SLOT_NAME_SIZE 10
 struct slot {
@@ -72,7 +71,6 @@ struct slot {
 	u8 latch_save;
 	u8 pwr_save;
 	struct controller *ctrl;
-	const struct hpc_ops *hpc_ops;
 	struct hotplug_slot hotplug_slot;
 	struct list_head	slot_list;
 	struct delayed_work work;	/* work for button event */
@@ -94,7 +92,6 @@ struct controller {
 	int slot_num_inc;		/* 1 or -1 */
 	struct pci_dev *pci_dev;
 	struct list_head slot_list;
-	const struct hpc_ops *hpc_ops;
 	wait_queue_head_t queue;	/* sleep & wake process */
 	u8 slot_device_offset;
 	u32 pcix_misc2_reg;	/* for amd pogo errata */
@@ -175,20 +172,20 @@ static inline const char *slot_name(struct slot *slot)
 }
 
 struct ctrl_reg {
-	volatile u32 base_offset;
-	volatile u32 slot_avail1;
-	volatile u32 slot_avail2;
-	volatile u32 slot_config;
-	volatile u16 sec_bus_config;
-	volatile u8  msi_ctrl;
-	volatile u8  prog_interface;
-	volatile u16 cmd;
-	volatile u16 cmd_status;
-	volatile u32 intr_loc;
-	volatile u32 serr_loc;
-	volatile u32 serr_intr_enable;
-	volatile u32 slot1;
-} __attribute__ ((packed));
+	u32 base_offset;
+	u32 slot_avail1;
+	u32 slot_avail2;
+	u32 slot_config;
+	u16 sec_bus_config;
+	u8  msi_ctrl;
+	u8  prog_interface;
+	u16 cmd;
+	u16 cmd_status;
+	u32 intr_loc;
+	u32 serr_loc;
+	u32 serr_intr_enable;
+	u32 slot1;
+} __packed;
 
 /* offsets to the controller registers based on the above structure layout */
 enum ctrl_offsets {
@@ -252,18 +249,21 @@ static inline void amd_pogo_errata_restore_misc_reg(struct slot *p_slot)
 	u8  rse_set;
 
 	/* write-one-to-clear Bridge_Errors[ PERR_OBSERVED ] */
-	pci_read_config_dword(p_slot->ctrl->pci_dev, PCIX_MISC_BRIDGE_ERRORS_OFFSET, &pcix_bridge_errors_reg);
+	pci_read_config_dword(p_slot->ctrl->pci_dev, PCIX_MISC_BRIDGE_ERRORS_OFFSET,
+			      &pcix_bridge_errors_reg);
 	perr_set = pcix_bridge_errors_reg & PERR_OBSERVED_MASK;
 	if (perr_set) {
 		ctrl_dbg(p_slot->ctrl,
 			 "Bridge_Errors[ PERR_OBSERVED = %08X] (W1C)\n",
 			 perr_set);
 
-		pci_write_config_dword(p_slot->ctrl->pci_dev, PCIX_MISC_BRIDGE_ERRORS_OFFSET, perr_set);
+		pci_write_config_dword(p_slot->ctrl->pci_dev, PCIX_MISC_BRIDGE_ERRORS_OFFSET,
+				       perr_set);
 	}
 
 	/* write-one-to-clear Memory_Base_Limit[ RSE ] */
-	pci_read_config_dword(p_slot->ctrl->pci_dev, PCIX_MEM_BASE_LIMIT_OFFSET, &pcix_mem_base_reg);
+	pci_read_config_dword(p_slot->ctrl->pci_dev, PCIX_MEM_BASE_LIMIT_OFFSET,
+			      &pcix_mem_base_reg);
 	rse_set = pcix_mem_base_reg & RSE_MASK;
 	if (rse_set) {
 		ctrl_dbg(p_slot->ctrl, "Memory_Base_Limit[ RSE ] (W1C)\n");
@@ -300,24 +300,22 @@ static inline void amd_pogo_errata_restore_misc_reg(struct slot *p_slot)
 	pci_write_config_dword(p_slot->ctrl->pci_dev, PCIX_MISCII_OFFSET, pcix_misc2_temp);
 }
 
-struct hpc_ops {
-	int (*power_on_slot)(struct slot *slot);
-	int (*slot_enable)(struct slot *slot);
-	int (*slot_disable)(struct slot *slot);
-	int (*set_bus_speed_mode)(struct slot *slot, enum pci_bus_speed speed);
-	int (*get_power_status)(struct slot *slot, u8 *status);
-	int (*get_attention_status)(struct slot *slot, u8 *status);
-	int (*set_attention_status)(struct slot *slot, u8 status);
-	int (*get_latch_status)(struct slot *slot, u8 *status);
-	int (*get_adapter_status)(struct slot *slot, u8 *status);
-	int (*get_adapter_speed)(struct slot *slot, enum pci_bus_speed *speed);
-	int (*get_prog_int)(struct slot *slot, u8 *prog_int);
-	int (*query_power_fault)(struct slot *slot);
-	void (*green_led_on)(struct slot *slot);
-	void (*green_led_off)(struct slot *slot);
-	void (*green_led_blink)(struct slot *slot);
-	void (*release_ctlr)(struct controller *ctrl);
-	int (*check_cmd_status)(struct controller *ctrl);
-};
+int shpchp_power_on_slot(struct slot *slot);
+int shpchp_slot_enable(struct slot *slot);
+int shpchp_slot_disable(struct slot *slot);
+int shpchp_set_bus_speed_mode(struct slot *slot, enum pci_bus_speed speed);
+int shpchp_get_power_status(struct slot *slot, u8 *status);
+int shpchp_get_attention_status(struct slot *slot, u8 *status);
+int shpchp_set_attention_status(struct slot *slot, u8 status);
+int shpchp_get_latch_status(struct slot *slot, u8 *status);
+int shpchp_get_adapter_status(struct slot *slot, u8 *status);
+int shpchp_get_adapter_speed(struct slot *slot, enum pci_bus_speed *speed);
+int shpchp_get_prog_int(struct slot *slot, u8 *prog_int);
+int shpchp_query_power_fault(struct slot *slot);
+void shpchp_green_led_on(struct slot *slot);
+void shpchp_green_led_off(struct slot *slot);
+void shpchp_green_led_blink(struct slot *slot);
+void shpchp_release_ctlr(struct controller *ctrl);
+int shpchp_check_cmd_status(struct controller *ctrl);
 
 #endif				/* _SHPCHP_H */
