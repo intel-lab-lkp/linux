@@ -486,15 +486,8 @@ static int arch_build_bp_info(struct perf_event *bp,
 	/* Address */
 	hw->address = attr->bp_addr;
 
-	/*
-	 * Privilege
-	 * Note that we disallow combined EL0/EL1 breakpoints because
-	 * that would complicate the stepping code.
-	 */
-	if (arch_check_bp_in_kernelspace(hw))
-		hw->ctrl.privilege = AARCH64_BREAKPOINT_EL1;
-	else
-		hw->ctrl.privilege = AARCH64_BREAKPOINT_EL0;
+	/* Privilege */
+	hw->ctrl.privilege = attr->bp_priv;
 
 	/* Enabled? */
 	hw->ctrl.enabled = !attr->disabled;
