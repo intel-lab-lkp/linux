@@ -635,12 +635,12 @@ static void __init of_parse_and_init_cpus(void)
 		u64 hwid = of_get_cpu_hwid(dn, 0);
 
 		if (hwid & ~MPIDR_HWID_BITMASK)
-			goto next;
+			continue;
 
 		if (is_mpidr_duplicate(cpu_count, hwid)) {
 			pr_err("%pOF: duplicate cpu reg properties in the DT\n",
 				dn);
-			goto next;
+			continue;
 		}
 
 		/*
@@ -653,7 +653,7 @@ static void __init of_parse_and_init_cpus(void)
 			if (bootcpu_valid) {
 				pr_err("%pOF: duplicate boot cpu reg property in DT\n",
 					dn);
-				goto next;
+				continue;
 			}
 
 			bootcpu_valid = true;
