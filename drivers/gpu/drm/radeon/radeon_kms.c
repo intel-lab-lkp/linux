@@ -91,7 +91,7 @@ done_free:
 /**
  * radeon_driver_load_kms - Main load function for KMS.
  *
- * @dev: drm dev pointer
+ * @rdev: radeon dev pointer
  * @flags: device flags
  *
  * This is the main load function for KMS (all asics).
@@ -101,24 +101,18 @@ done_free:
  * (crtcs, encoders, hotplug detect, etc.).
  * Returns 0 on success, error on failure.
  */
-int radeon_driver_load_kms(struct drm_device *dev, unsigned long flags)
+int radeon_driver_load_kms(struct radeon_device *rdev, unsigned long flags)
 {
-	struct pci_dev *pdev = to_pci_dev(dev->dev);
-	struct radeon_device *rdev;
+	struct pci_dev *pdev = rdev->pdev;
+	struct drm_device *dev = rdev_to_drm(rdev);
 	int r, acpi_status;
-
-	rdev = kzalloc(sizeof(struct radeon_device), GFP_KERNEL);
-	if (rdev == NULL) {
-		return -ENOMEM;
-	}
-	dev->dev_private = (void *)rdev;
 
 #ifdef __alpha__
 	rdev->hose = pdev->sysdata;
 #endif
 
 	if (pci_find_capability(pdev, PCI_CAP_ID_AGP))
-		rdev->agp = radeon_agp_head_init(dev);
+		rdev->agp = radeon_agp_head_init(rdev_to_drm(rdev));
 	if (rdev->agp) {
 		rdev->agp->agp_mtrr = arch_phys_wc_add(
 			rdev->agp->agp_info.aper_base,
@@ -147,7 +141,7 @@ int radeon_driver_load_kms(struct drm_device *dev, unsigned long flags)
 	 * properly initialize the GPU MC controller and permit
 	 * VRAM allocation
 	 */
-	r = radeon_device_init(rdev, dev, pdev, flags);
+	r = radeon_device_init(rdev, flags);
 	if (r) {
 		dev_err(dev->dev, "Fatal error during GPU init\n");
 		goto out;
