@@ -501,14 +501,14 @@ static void free_pages_work(struct work_struct *w)
 	while (!list_empty(&pool->stale)) {
 		struct z3fold_header *zhdr = list_first_entry(&pool->stale,
 						struct z3fold_header, buddy);
-		struct page *page = virt_to_page(zhdr);
+		struct zpdesc *zpdesc = page_zpdesc(virt_to_page(zhdr));
 
 		list_del(&zhdr->buddy);
-		if (WARN_ON(!test_bit(PAGE_STALE, &page->private)))
+		if (WARN_ON(!test_bit(PAGE_STALE, &zpdesc->zppage_flag)))
 			continue;
 		spin_unlock(&pool->stale_lock);
 		cancel_work_sync(&zhdr->work);
-		free_z3fold_page(page, false);
+		free_z3fold_page(zpdesc_page(zpdesc), false);
 		cond_resched();
 		spin_lock(&pool->stale_lock);
 	}
