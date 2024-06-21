@@ -1290,18 +1290,20 @@ static int z3fold_page_migrate(struct page *newpage, struct page *page,
 {
 	struct z3fold_header *zhdr, *new_zhdr;
 	struct z3fold_pool *pool;
+	struct zpdesc *zpdesc = page_zpdesc(page);
+	struct zpdesc *newzpdesc = page_zpdesc(newpage);
 
-	VM_BUG_ON_PAGE(!PageIsolated(page), page);
-	VM_BUG_ON_PAGE(!test_bit(PAGE_CLAIMED, &page->private), page);
-	VM_BUG_ON_PAGE(!PageLocked(newpage), newpage);
+	VM_BUG_ON_PAGE(!PageIsolated(zpdesc_page(zpdesc)), zpdesc_page(zpdesc));
+	VM_BUG_ON_PAGE(!test_bit(PAGE_CLAIMED, &zpdesc->zppage_flag), zpdesc_page(zpdesc));
+	VM_BUG_ON_PAGE(!PageLocked(zpdesc_page(newzpdesc)), zpdesc_page(newzpdesc));
 
-	zhdr = page_address(page);
+	zhdr = zpdesc_address(zpdesc);
 	pool = zhdr_to_pool(zhdr);
 
 	if (!z3fold_page_trylock(zhdr))
 		return -EAGAIN;
 	if (zhdr->mapped_count != 0 || zhdr->foreign_handles != 0) {
-		clear_bit(PAGE_CLAIMED, &page->private);
+		clear_bit(PAGE_CLAIMED, &zpdesc->zppage_flag);
 		z3fold_page_unlock(zhdr);
 		return -EBUSY;
 	}
@@ -1309,10 +1311,10 @@ static int z3fold_page_migrate(struct page *newpage, struct page *page,
 		z3fold_page_unlock(zhdr);
 		return -EAGAIN;
 	}
-	new_zhdr = page_address(newpage);
+	new_zhdr = zpdesc_address(newzpdesc);
 	memcpy(new_zhdr, zhdr, PAGE_SIZE);
-	newpage->private = page->private;
-	set_bit(PAGE_MIGRATED, &page->private);
+	newzpdesc->zppage_flag = zpdesc->zppage_flag;
+	set_bit(PAGE_MIGRATED, &zpdesc->zppage_flag);
 	z3fold_page_unlock(zhdr);
 	spin_lock_init(&new_zhdr->page_lock);
 	INIT_WORK(&new_zhdr->work, compact_page_work);
@@ -1321,9 +1323,9 @@ static int z3fold_page_migrate(struct page *newpage, struct page *page,
 	 * so we only have to reinitialize it.
 	 */
 	INIT_LIST_HEAD(&new_zhdr->buddy);
-	__ClearPageMovable(page);
+	__ClearPageMovable(zpdesc_page(zpdesc));
 
-	get_page(newpage);
+	zpdesc_get(newzpdesc);
 	z3fold_page_lock(new_zhdr);
 	if (new_zhdr->first_chunks)
 		encode_handle(new_zhdr, FIRST);
@@ -1331,16 +1333,16 @@ static int z3fold_page_migrate(struct page *newpage, struct page *page,
 		encode_handle(new_zhdr, LAST);
 	if (new_zhdr->middle_chunks)
 		encode_handle(new_zhdr, MIDDLE);
-	set_bit(NEEDS_COMPACTING, &newpage->private);
+	set_bit(NEEDS_COMPACTING, &newzpdesc->zppage_flag);
 	new_zhdr->cpu = smp_processor_id();
-	__SetPageMovable(newpage, &z3fold_mops);
+	__SetPageMovable(zpdesc_page(newzpdesc), &z3fold_mops);
 	z3fold_page_unlock(new_zhdr);
 
 	queue_work_on(new_zhdr->cpu, pool->compact_wq, &new_zhdr->work);
 
 	/* PAGE_CLAIMED and PAGE_MIGRATED are cleared now. */
-	page->private = 0;
-	put_page(page);
+	zpdesc->zppage_flag = 0;
+	zpdesc_put(zpdesc);
 	return 0;
 }
 

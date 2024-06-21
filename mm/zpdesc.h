@@ -48,4 +48,14 @@ static inline void *zpdesc_address(const struct zpdesc *zpdesc)
 	return folio_address(zpdesc_folio(zpdesc));
 }
 
+static inline void zpdesc_get(struct zpdesc *zpdesc)
+{
+	folio_get(zpdesc_folio(zpdesc));
+}
+
+static inline void zpdesc_put(struct zpdesc *zpdesc)
+{
+	folio_put(zpdesc_folio(zpdesc));
+}
+
 #endif
