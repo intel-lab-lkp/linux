@@ -286,6 +286,9 @@ static inline unsigned int work_static(struct work_struct *work) { return 0; }
 		lockdep_init_map(&(_work)->lockdep_map, "(work_completion)"#_work, (_key), 0); \
 		INIT_LIST_HEAD(&(_work)->entry);			\
 		(_work)->func = (_func);				\
+		(_work)->ioprio = 0;					\
+		(_work)->ori_ioprio = 0;				\
+		(_work)->ioprio_flag = 0;				\
 	} while (0)
 #else
 #define __INIT_WORK_KEY(_work, _func, _onstack, _key)			\
@@ -294,6 +297,9 @@ static inline unsigned int work_static(struct work_struct *work) { return 0; }
 		(_work)->data = (atomic_long_t) WORK_DATA_INIT();	\
 		INIT_LIST_HEAD(&(_work)->entry);			\
 		(_work)->func = (_func);				\
+		(_work)->ioprio = 0;					\
+		(_work)->ori_ioprio = 0;				\
+		(_work)->ioprio_flag = 0;				\
 	} while (0)
 #endif
 
@@ -585,6 +591,9 @@ extern struct work_struct *current_work(void);
 extern bool current_is_workqueue_rescuer(void);
 extern bool workqueue_congested(int cpu, struct workqueue_struct *wq);
 extern unsigned int work_busy(struct work_struct *work);
+extern void set_work_ioprio(struct work_struct *work, unsigned short ioprio);
+extern void may_adjust_work_task_ioprio(struct work_struct *work);
+extern void restore_work_task_ioprio(struct work_struct *work);
 extern __printf(1, 2) void set_worker_desc(const char *fmt, ...);
 extern void print_worker_info(const char *log_lvl, struct task_struct *task);
 extern void show_all_workqueues(void);

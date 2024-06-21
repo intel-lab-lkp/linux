@@ -55,6 +55,7 @@
 #include <linux/kvm_para.h>
 #include <linux/delay.h>
 #include <linux/irq_work.h>
+#include <linux/ioprio.h>
 
 #include "workqueue_internal.h"
 
@@ -6007,6 +6008,56 @@ unsigned int work_busy(struct work_struct *work)
 	return ret;
 }
 EXPORT_SYMBOL_GPL(work_busy);
+
+/**
+ * set_work_ioprio - set io priority for the current work
+ * @work: the work to be set
+ * @ioprio: desired io priority
+ *
+ * This function can be called after INIT_WORK if the io priority
+ * of the work needs to adjust. And it is recommended to use this
+ * function together with may_adjust_work_task_ioprio() and
+ * restore_work_task_ioprio().
+ */
+void set_work_ioprio(struct work_struct *work, unsigned short ioprio)
+{
+	work->ioprio = ioprio;
+	work->ioprio_flag = 1;
+}
+EXPORT_SYMBOL_GPL(set_work_ioprio);
+
+/**
+ * may_adjust_work_task_ioprio - adjust the io priority of kworker
+ * @work: the work that kworker will do
+ *
+ * It is recommended to use this function together with set_work_ioprio()
+ * and restore_work_task_ioprio().
+ */
+void may_adjust_work_task_ioprio(struct work_struct *work)
+{
+	if (work->ioprio_flag) {
+		work->ori_ioprio = get_current_ioprio();
+		set_task_ioprio(current, work->ioprio);
+	}
+}
+EXPORT_SYMBOL_GPL(may_adjust_work_task_ioprio);
+
+/**
+ * restore_work_task_ioprio - restore the io priority of kworker
+ * @work: the work that kworker just did
+ *
+ * When kworker finishes the work, the original io priority of
+ * kworker should be restored. It is recommended to use this function
+ * together with set_work_ioprio() and may_adjust_work_task_ioprio().
+ */
+void restore_work_task_ioprio(struct work_struct *work)
+{
+	if (work->ioprio_flag) {
+		set_task_ioprio(current, work->ori_ioprio);
+		work->ioprio_flag = 0;
+	}
+}
+EXPORT_SYMBOL_GPL(restore_work_task_ioprio);
 
 /**
  * set_worker_desc - set description for the current work item
