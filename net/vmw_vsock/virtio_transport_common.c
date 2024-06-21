@@ -441,6 +441,7 @@ static bool virtio_transport_inc_rx_pkt(struct virtio_vsock_sock *vvs,
 		return false;
 
 	vvs->rx_bytes += len;
+	vvs->rx_cnt += len;
 	return true;
 }
 
@@ -558,7 +559,6 @@ virtio_transport_stream_do_dequeue(struct vsock_sock *vsk,
 	size_t bytes, total = 0;
 	struct sk_buff *skb;
 	u32 fwd_cnt_delta;
-	bool low_rx_bytes;
 	int err = -EFAULT;
 	u32 free_space;
 
@@ -603,9 +603,7 @@ virtio_transport_stream_do_dequeue(struct vsock_sock *vsk,
 	}
 
 	fwd_cnt_delta = vvs->fwd_cnt - vvs->last_fwd_cnt;
-	free_space = vvs->buf_alloc - fwd_cnt_delta;
-	low_rx_bytes = (vvs->rx_bytes <
-			sock_rcvlowat(sk_vsock(vsk), 0, INT_MAX));
+	free_space = vvs->buf_alloc - (vvs->rx_cnt - vvs->last_fwd_cnt);
 
 	spin_unlock_bh(&vvs->rx_lock);
 
@@ -619,7 +617,7 @@ virtio_transport_stream_do_dequeue(struct vsock_sock *vsk,
 	 * number of bytes in rx queue is not enough to wake up reader.
 	 */
 	if (fwd_cnt_delta &&
-	    (free_space < VIRTIO_VSOCK_MAX_PKT_BUF_SIZE || low_rx_bytes))
+	    (free_space < VIRTIO_VSOCK_MAX_PKT_BUF_SIZE))
 		virtio_transport_send_credit_update(vsk);
 
 	return total;

@@ -135,6 +135,7 @@ struct virtio_vsock_sock {
 	u32 peer_buf_alloc;
 
 	/* Protected by rx_lock */
+	u32 rx_cnt;
 	u32 fwd_cnt;
 	u32 last_fwd_cnt;
 	u32 rx_bytes;
