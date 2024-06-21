@@ -2119,7 +2119,7 @@ static int tsi148_slot_get(struct vme_bridge *tsi148_bridge)
 		slot = ioread32be(bridge->base + TSI148_LCSR_VSTAT);
 		slot = slot & TSI148_LCSR_VSTAT_GA_M;
 	} else {
-		slot = geoid;
+		slot = geoid & TSI148_LCSR_VSTAT_GA_M;
 	}
 
 	return (int)slot;
