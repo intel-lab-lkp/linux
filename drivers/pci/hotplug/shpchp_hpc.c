@@ -47,24 +47,24 @@
 /*
  * Interrupt Locator Register definitions
  */
-#define CMD_INTR_PENDING	(1 << 0)
-#define SLOT_INTR_PENDING(i)	(1 << (i + 1))
+#define CMD_INTR_PENDING	BIT(0)
+#define SLOT_INTR_PENDING(i)	BIT((i) + 1)
 
 /*
  * Controller SERR-INT Register
  */
-#define GLOBAL_INTR_MASK	(1 << 0)
-#define GLOBAL_SERR_MASK	(1 << 1)
-#define COMMAND_INTR_MASK	(1 << 2)
-#define ARBITER_SERR_MASK	(1 << 3)
-#define COMMAND_DETECTED	(1 << 16)
-#define ARBITER_DETECTED	(1 << 17)
+#define GLOBAL_INTR_MASK	BIT(0)
+#define GLOBAL_SERR_MASK	BIT(1)
+#define COMMAND_INTR_MASK	BIT(2)
+#define ARBITER_SERR_MASK	BIT(3)
+#define COMMAND_DETECTED	BIT(16)
+#define ARBITER_DETECTED	BIT(17)
 #define SERR_INTR_RSVDZ_MASK	0xfffc0000
 
 /*
  * Logical Slot Register definitions
  */
-#define SLOT_REG(i)		(SLOT1 + (4 * i))
+#define SLOT_REG(i)		(SLOT1 + (4 * (i)))
 
 #define SLOT_STATE_SHIFT	(0)
 #define SLOT_STATE_MASK		(3 << 0)
@@ -78,27 +78,27 @@
 #define ATN_LED_STATE_ON	(1)
 #define ATN_LED_STATE_BLINK	(2)
 #define ATN_LED_STATE_OFF	(3)
-#define POWER_FAULT		(1 << 6)
-#define ATN_BUTTON		(1 << 7)
-#define MRL_SENSOR		(1 << 8)
-#define MHZ66_CAP		(1 << 9)
+#define POWER_FAULT		BIT(6)
+#define ATN_BUTTON		BIT(7)
+#define MRL_SENSOR		BIT(8)
+#define MHZ66_CAP		BIT(9)
 #define PRSNT_SHIFT		(10)
 #define PRSNT_MASK		(3 << 10)
 #define PCIX_CAP_SHIFT		(12)
 #define PCIX_CAP_MASK_PI1	(3 << 12)
 #define PCIX_CAP_MASK_PI2	(7 << 12)
-#define PRSNT_CHANGE_DETECTED	(1 << 16)
-#define ISO_PFAULT_DETECTED	(1 << 17)
-#define BUTTON_PRESS_DETECTED	(1 << 18)
-#define MRL_CHANGE_DETECTED	(1 << 19)
-#define CON_PFAULT_DETECTED	(1 << 20)
-#define PRSNT_CHANGE_INTR_MASK	(1 << 24)
-#define ISO_PFAULT_INTR_MASK	(1 << 25)
-#define BUTTON_PRESS_INTR_MASK	(1 << 26)
-#define MRL_CHANGE_INTR_MASK	(1 << 27)
-#define CON_PFAULT_INTR_MASK	(1 << 28)
-#define MRL_CHANGE_SERR_MASK	(1 << 29)
-#define CON_PFAULT_SERR_MASK	(1 << 30)
+#define PRSNT_CHANGE_DETECTED	BIT(16)
+#define ISO_PFAULT_DETECTED	BIT(17)
+#define BUTTON_PRESS_DETECTED	BIT(18)
+#define MRL_CHANGE_DETECTED	BIT(19)
+#define CON_PFAULT_DETECTED	BIT(20)
+#define PRSNT_CHANGE_INTR_MASK	BIT(24)
+#define ISO_PFAULT_INTR_MASK	BIT(25)
+#define BUTTON_PRESS_INTR_MASK	BIT(26)
+#define MRL_CHANGE_INTR_MASK	BIT(27)
+#define CON_PFAULT_INTR_MASK	BIT(28)
+#define MRL_CHANGE_SERR_MASK	BIT(29)
+#define CON_PFAULT_SERR_MASK	BIT(30)
 #define SLOT_REG_RSVDZ_MASK	((1 << 15) | (7 << 21))
 
 /*
@@ -228,7 +228,7 @@ static void int_poll_timeout(struct timer_list *t)
 static void start_int_poll_timer(struct controller *ctrl, int sec)
 {
 	/* Clamp to sane value */
-	if ((sec <= 0) || (sec > 60))
+	if (sec <= 0 || sec > 60)
 		sec = 2;
 
 	ctrl->poll_timer.expires = jiffies + sec * HZ;
@@ -238,6 +238,7 @@ static void start_int_poll_timer(struct controller *ctrl, int sec)
 static inline int is_ctrl_busy(struct controller *ctrl)
 {
 	u16 cmd_status = shpc_readw(ctrl, CMD_STATUS);
+
 	return cmd_status & 0x1;
 }
 
@@ -272,7 +273,7 @@ static inline int shpc_wait_cmd(struct controller *ctrl)
 		rc = shpc_poll_ctrl_busy(ctrl);
 	else
 		rc = wait_event_interruptible_timeout(ctrl->queue,
-						!is_ctrl_busy(ctrl), timeout);
+						      !is_ctrl_busy(ctrl), timeout);
 	if (!rc && is_ctrl_busy(ctrl)) {
 		retval = -EIO;
 		ctrl_err(ctrl, "Command not completed in 1000 msec\n");
@@ -355,7 +356,6 @@ int shpchp_check_cmd_status(struct controller *ctrl)
 	return retval;
 }
 
-
 int shpchp_get_attention_status(struct slot *slot, u8 *status)
 {
 	struct controller *ctrl = slot->ctrl;
@@ -403,7 +403,6 @@ int shpchp_get_power_status(struct slot *slot, u8 *status)
 
 	return 0;
 }
-
 
 int shpchp_get_latch_status(struct slot *slot, u8 *status)
 {
@@ -502,22 +501,21 @@ int shpchp_set_attention_status(struct slot *slot, u8 value)
 	u8 slot_cmd = 0;
 
 	switch (value) {
-		case 0:
-			slot_cmd = SET_ATTN_OFF;	/* OFF */
-			break;
-		case 1:
-			slot_cmd = SET_ATTN_ON;		/* ON */
-			break;
-		case 2:
-			slot_cmd = SET_ATTN_BLINK;	/* BLINK */
-			break;
-		default:
-			return -1;
+	case 0:
+		slot_cmd = SET_ATTN_OFF;	/* OFF */
+		break;
+	case 1:
+		slot_cmd = SET_ATTN_ON;		/* ON */
+		break;
+	case 2:
+		slot_cmd = SET_ATTN_BLINK;	/* BLINK */
+		break;
+	default:
+		return -1;
 	}
 
 	return shpc_write_cmd(slot, slot->hp_slot, slot_cmd);
 }
-
 
 void shpchp_green_led_on(struct slot *slot)
 {
@@ -563,9 +561,9 @@ void shpchp_release_ctlr(struct controller *ctrl)
 	serr_int &= ~SERR_INTR_RSVDZ_MASK;
 	shpc_writel(ctrl, SERR_INTR_ENABLE, serr_int);
 
-	if (shpchp_poll_mode)
+	if (shpchp_poll_mode) {
 		del_timer(&ctrl->poll_timer);
-	else {
+	} else {
 		free_irq(ctrl->pci_dev->irq, ctrl);
 		pci_disable_msi(ctrl->pci_dev);
 	}
@@ -591,7 +589,7 @@ int shpchp_slot_enable(struct slot *slot)
 
 	/* Slot - Enable, Power Indicator - Blink, Attention Indicator - Off */
 	retval = shpc_write_cmd(slot, slot->hp_slot,
-			SET_SLOT_ENABLE | SET_PWR_BLINK | SET_ATTN_OFF);
+				SET_SLOT_ENABLE | SET_PWR_BLINK | SET_ATTN_OFF);
 	if (retval)
 		ctrl_err(slot->ctrl, "%s: Write command failed!\n", __func__);
 
@@ -620,7 +618,7 @@ static int shpc_get_cur_bus_speed(struct controller *ctrl)
 	u8 pi = shpc_readb(ctrl, PROG_INTERFACE);
 	u8 speed_mode = (pi == 2) ? (sec_bus_reg & 0xF) : (sec_bus_reg & 0x7);
 
-	if ((pi == 1) && (speed_mode > 4)) {
+	if (pi == 1 && speed_mode > 4) {
 		retval = -ENODEV;
 		goto out;
 	}
@@ -679,7 +677,6 @@ static int shpc_get_cur_bus_speed(struct controller *ctrl)
 	return retval;
 }
 
-
 int shpchp_set_bus_speed_mode(struct slot *slot, enum pci_bus_speed value)
 {
 	int retval;
@@ -687,7 +684,7 @@ int shpchp_set_bus_speed_mode(struct slot *slot, enum pci_bus_speed value)
 	u8 pi, cmd;
 
 	pi = shpc_readb(ctrl, PROG_INTERFACE);
-	if ((pi == 1) && (value > PCI_SPEED_133MHz_PCIX))
+	if (pi == 1 && value > PCI_SPEED_133MHz_PCIX)
 		return -EINVAL;
 
 	switch (value) {

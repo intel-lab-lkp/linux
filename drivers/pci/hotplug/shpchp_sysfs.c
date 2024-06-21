@@ -18,7 +18,6 @@
 #include <linux/pci.h>
 #include "shpchp.h"
 
-
 /* A few routines that create sysfs entries for the hot plug controller */
 
 static ssize_t show_ctrl(struct device *dev, struct device_attribute *attr, char *buf)
@@ -35,7 +34,7 @@ static ssize_t show_ctrl(struct device *dev, struct device_attribute *attr, char
 	len += sysfs_emit_at(buf, len, "Free resources: memory\n");
 	pci_bus_for_each_resource(bus, res) {
 		if (res && (res->flags & IORESOURCE_MEM) &&
-				!(res->flags & IORESOURCE_PREFETCH)) {
+		    !(res->flags & IORESOURCE_PREFETCH)) {
 			len += sysfs_emit_at(buf, len,
 					     "start = %8.8llx, length = %8.8llx\n",
 					     (unsigned long long)res->start,
@@ -45,7 +44,7 @@ static ssize_t show_ctrl(struct device *dev, struct device_attribute *attr, char
 	len += sysfs_emit_at(buf, len, "Free resources: prefetchable memory\n");
 	pci_bus_for_each_resource(bus, res) {
 		if (res && (res->flags & IORESOURCE_MEM) &&
-			       (res->flags & IORESOURCE_PREFETCH)) {
+		    (res->flags & IORESOURCE_PREFETCH)) {
 			len += sysfs_emit_at(buf, len,
 					     "start = %8.8llx, length = %8.8llx\n",
 					     (unsigned long long)res->start,
@@ -73,7 +72,7 @@ static ssize_t show_ctrl(struct device *dev, struct device_attribute *attr, char
 
 	return len;
 }
-static DEVICE_ATTR(ctrl, S_IRUGO, show_ctrl, NULL);
+static DEVICE_ATTR(ctrl, 0444, show_ctrl, NULL);
 
 int shpchp_create_ctrl_files(struct controller *ctrl)
 {
