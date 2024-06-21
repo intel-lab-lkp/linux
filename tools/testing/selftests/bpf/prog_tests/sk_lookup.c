@@ -47,8 +47,6 @@
 #define INT_IP6		"fd00::2"
 #define INT_PORT	8008
 
-#define IO_TIMEOUT_SEC	3
-
 enum server {
 	SERVER_A = 0,
 	SERVER_B = 1,
@@ -106,40 +104,6 @@ static int attach_reuseport(int sock_fd, struct bpf_program *reuseport_prog)
 		return -1;
 
 	return 0;
-}
-
-static int make_socket(int sotype, const char *ip, int port,
-		       struct sockaddr_storage *addr, socklen_t *len)
-{
-	struct timeval timeo = { .tv_sec = IO_TIMEOUT_SEC };
-	int err, family, fd;
-
-	family = is_ipv6(ip) ? AF_INET6 : AF_INET;
-	err = make_sockaddr(family, ip, port, addr, len);
-	if (CHECK(err, "make_address", "failed\n"))
-		return -1;
-
-	fd = socket(addr->ss_family, sotype, 0);
-	if (CHECK(fd < 0, "socket", "failed\n")) {
-		log_err("failed to make socket");
-		return -1;
-	}
-
-	err = setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeo, sizeof(timeo));
-	if (CHECK(err, "setsockopt(SO_SNDTIMEO)", "failed\n")) {
-		log_err("failed to set SNDTIMEO");
-		close(fd);
-		return -1;
-	}
-
-	err = setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeo, sizeof(timeo));
-	if (CHECK(err, "setsockopt(SO_RCVTIMEO)", "failed\n")) {
-		log_err("failed to set RCVTIMEO");
-		close(fd);
-		return -1;
-	}
-
-	return fd;
 }
 
 static int setsockopts(int fd, void *opts)
@@ -224,24 +188,22 @@ fail:
 
 static int make_client(int sotype, const char *ip, int port)
 {
+	int family = is_ipv6(ip) ? AF_INET6 : AF_INET;
 	struct sockaddr_storage addr = {0};
 	socklen_t len;
 	int err, fd;
 
-	fd = make_socket(sotype, ip, port, &addr, &len);
-	if (fd < 0)
+	err = make_sockaddr(family, ip, port, &addr, &len);
+	if (err)
 		return -1;
 
-	err = connect(fd, (void *)&addr, len);
-	if (CHECK(err, "make_client", "connect")) {
+	fd = connect_to_addr(sotype, &addr, len, NULL);
+	if (CHECK(fd < 0, "connect_to_addr", "connect")) {
 		log_err("failed to connect client socket");
-		goto fail;
+		return -1;
 	}
 
 	return fd;
-fail:
-	close(fd);
-	return -1;
 }
 
 static __u64 socket_cookie(int fd)
