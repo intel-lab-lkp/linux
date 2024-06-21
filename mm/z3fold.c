@@ -351,12 +351,14 @@ static struct z3fold_header *init_z3fold_page(struct page *page, bool headless,
 /* Resets the struct page fields and frees the page */
 static void free_z3fold_page(struct page *page, bool headless)
 {
+	struct zpdesc *zpdesc = page_zpdesc(page);
+
 	if (!headless) {
-		lock_page(page);
-		__ClearPageMovable(page);
-		unlock_page(page);
+		zpdesc_lock(zpdesc);
+		__ClearPageMovable(zpdesc_page(zpdesc));
+		zpdesc_unlock(zpdesc);
 	}
-	__free_page(page);
+	__free_page(zpdesc_page(zpdesc));
 }
 
 /* Helper function to build the index */
