@@ -172,6 +172,8 @@ static void f2fs_verify_bio(struct work_struct *work)
 	struct bio *bio = ctx->bio;
 	bool may_have_compressed_pages = (ctx->enabled_steps & STEP_DECOMPRESS);
 
+	may_adjust_work_task_ioprio(work);
+
 	/*
 	 * fsverity_verify_bio() may call readahead() again, and while verity
 	 * will be disabled for this, decryption and/or decompression may still
@@ -204,6 +206,8 @@ static void f2fs_verify_bio(struct work_struct *work)
 	}
 
 	f2fs_finish_read_bio(bio, true);
+
+	restore_work_task_ioprio(work);
 }
 
 /*
@@ -221,6 +225,7 @@ static void f2fs_verify_and_finish_bio(struct bio *bio, bool in_task)
 
 	if (ctx && (ctx->enabled_steps & STEP_VERITY)) {
 		INIT_WORK(&ctx->work, f2fs_verify_bio);
+		set_work_ioprio(&ctx->work, bio->bi_ioprio);
 		fsverity_enqueue_verify_work(&ctx->work);
 	} else {
 		f2fs_finish_read_bio(bio, in_task);
