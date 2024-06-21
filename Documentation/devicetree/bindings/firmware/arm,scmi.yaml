@@ -121,6 +121,12 @@ properties:
       atomic mode of operation, even if requested.
     default: 0
 
+  max-rx-timeout-ms:
+    description:
+      An optional time value, expressed in milliseconds, representing, on this
+      platform, the mailbox maximum timeout value for receive channel.
+    default: 0
+
   arm,smc-id:
     $ref: /schemas/types.yaml#/definitions/uint32
     description:
