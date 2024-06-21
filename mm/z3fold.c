@@ -352,7 +352,7 @@ static void free_z3fold_page(struct zpdesc *zpdesc, bool headless)
 {
 	if (!headless) {
 		zpdesc_lock(zpdesc);
-		__ClearPageMovable(zpdesc_page(zpdesc));
+		__zpdesc_clear_movable(zpdesc);
 		zpdesc_unlock(zpdesc);
 	}
 	__free_page(zpdesc_page(zpdesc));
@@ -1322,7 +1322,7 @@ static int z3fold_page_migrate(struct page *newpage, struct page *page,
 	 * so we only have to reinitialize it.
 	 */
 	INIT_LIST_HEAD(&new_zhdr->buddy);
-	__ClearPageMovable(zpdesc_page(zpdesc));
+	__zpdesc_clear_movable(zpdesc);
 
 	zpdesc_get(newzpdesc);
 	z3fold_page_lock(new_zhdr);
