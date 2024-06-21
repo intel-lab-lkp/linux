@@ -373,6 +373,7 @@ void bch2_fs_mark_clean(struct bch_fs *c)
 
 	entry = sb_clean->start;
 	bch2_journal_super_entries_add_common(c, &entry, 0);
+	mutex_unlock(&c->sb_lock);
 	entry = bch2_btree_roots_to_journal_entries(c, entry, 0);
 	BUG_ON((void *) entry > vstruct_end(&sb_clean->field));
 
@@ -383,6 +384,7 @@ void bch2_fs_mark_clean(struct bch_fs *c)
 	 * this should be in the write path, and we should be validating every
 	 * superblock section:
 	 */
+	mutex_lock(&c->sb_lock);
 	ret = bch2_sb_clean_validate_late(c, sb_clean, WRITE);
 	if (ret) {
 		bch_err(c, "error writing marking filesystem clean: validate error");
