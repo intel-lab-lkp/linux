@@ -691,12 +691,12 @@ out_fail:
 /* Has to be called with lock held */
 static int z3fold_compact_page(struct z3fold_header *zhdr)
 {
-	struct page *page = virt_to_page(zhdr);
+	struct zpdesc *zpdesc = page_zpdesc(virt_to_page(zhdr));
 
-	if (test_bit(MIDDLE_CHUNK_MAPPED, &page->private))
+	if (test_bit(MIDDLE_CHUNK_MAPPED, &zpdesc->zppage_flag))
 		return 0; /* can't move middle chunk, it's used */
 
-	if (unlikely(PageIsolated(page)))
+	if (unlikely(PageIsolated(zpdesc_page(zpdesc))))
 		return 0;
 
 	if (zhdr->middle_chunks == 0)
@@ -739,14 +739,13 @@ static int z3fold_compact_page(struct z3fold_header *zhdr)
 static void do_compact_page(struct z3fold_header *zhdr, bool locked)
 {
 	struct z3fold_pool *pool = zhdr_to_pool(zhdr);
-	struct page *page;
+	struct zpdesc *zpdesc = page_zpdesc(virt_to_page(zhdr));
 
-	page = virt_to_page(zhdr);
 	if (locked)
 		WARN_ON(z3fold_page_trylock(zhdr));
 	else
 		z3fold_page_lock(zhdr);
-	if (WARN_ON(!test_and_clear_bit(NEEDS_COMPACTING, &page->private))) {
+	if (WARN_ON(!test_and_clear_bit(NEEDS_COMPACTING, &zpdesc->zppage_flag))) {
 		z3fold_page_unlock(zhdr);
 		return;
 	}
@@ -757,8 +756,8 @@ static void do_compact_page(struct z3fold_header *zhdr, bool locked)
 	if (put_z3fold_locked(zhdr))
 		return;
 
-	if (test_bit(PAGE_STALE, &page->private) ||
-	    test_and_set_bit(PAGE_CLAIMED, &page->private)) {
+	if (test_bit(PAGE_STALE, &zpdesc->zppage_flag) ||
+	    test_and_set_bit(PAGE_CLAIMED, &zpdesc->zppage_flag)) {
 		z3fold_page_unlock(zhdr);
 		return;
 	}
@@ -766,7 +765,7 @@ static void do_compact_page(struct z3fold_header *zhdr, bool locked)
 	if (!zhdr->foreign_handles && buddy_single(zhdr) &&
 	    zhdr->mapped_count == 0 && compact_single_buddy(zhdr)) {
 		if (!put_z3fold_locked(zhdr)) {
-			clear_bit(PAGE_CLAIMED, &page->private);
+			clear_bit(PAGE_CLAIMED, &zpdesc->zppage_flag);
 			z3fold_page_unlock(zhdr);
 		}
 		return;
@@ -774,7 +773,7 @@ static void do_compact_page(struct z3fold_header *zhdr, bool locked)
 
 	z3fold_compact_page(zhdr);
 	add_to_unbuddied(pool, zhdr);
-	clear_bit(PAGE_CLAIMED, &page->private);
+	clear_bit(PAGE_CLAIMED, &zpdesc->zppage_flag);
 	z3fold_page_unlock(zhdr);
 }
 
