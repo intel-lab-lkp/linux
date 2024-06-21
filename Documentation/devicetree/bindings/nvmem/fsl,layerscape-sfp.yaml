@@ -42,6 +42,23 @@ properties:
       The regulator for the TA_PROG_SFP pin. It will be enabled for programming
       and disabled for reading.
 
+patternProperties:
+  '^unique-id@[0-9a-f]*$':
+    type: object
+    description:
+      Chip unique id.
+
+    properties:
+      reg:
+        description:
+          Byte offset where the unique id is stored
+        maxItems: 1
+
+    required:
+      - reg
+
+    additionalProperties: false
+
 required:
   - compatible
   - reg
