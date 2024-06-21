@@ -176,6 +176,20 @@ static const struct dmi_system_id smo8800_lis3lv02d_devices[] = {
 	{
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Latitude E6330"),
+		},
+		.driver_data = (void *)0x29L,
+	},
+	{
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Latitude E6430"),
+		},
+		.driver_data = (void *)0x29L,
+	},
+	{
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
 			DMI_MATCH(DMI_PRODUCT_NAME, "Precision 3540"),
 		},
 		.driver_data = (void *)0x29L,
@@ -191,6 +205,13 @@ static const struct dmi_system_id smo8800_lis3lv02d_devices[] = {
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
 			DMI_MATCH(DMI_PRODUCT_NAME, "Vostro 5568"),
+		},
+		.driver_data = (void *)0x29L,
+	},
+	{
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "XPS 15 9550"),
 		},
 		.driver_data = (void *)0x29L,
 	},
