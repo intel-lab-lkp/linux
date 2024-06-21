@@ -1,0 +1,78 @@
+// SPDX-License-Identifier: GPL-2.0-or-later OR BSD-2-Clause
+
+#include "rtl83xx.dtsi"
+
+/ {
+	compatible = "realtek,rtl930x-soc";
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu@0 {
+			compatible = "mips,mips34Kc";
+			reg = <0>;
+			clocks = <&baseclk 0>;
+			clock-names = "cpu";
+		};
+	};
+
+	baseclk: baseclk {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <800000000>;
+	};
+
+	lx_clk: lx_clk {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency  = <175000000>;
+	};
+};
+
+&soc {
+	intc: interrupt-controller@3000 {
+		compatible = "realtek,rtl9300-intc", "realtek,rtl-intc";
+		reg = <0x3000 0x18>, <0x3018 0x18>;
+		interrupt-controller;
+		#interrupt-cells = <2>;
+
+		interrupt-parent = <&cpuintc>;
+		interrupts = <2>, <3>, <4>, <5>, <6>, <7>;
+	};
+
+	spi0: spi@1200 {
+		compatible = "realtek,rtl8380-spi";
+		reg = <0x1200 0x100>;
+
+		#address-cells = <1>;
+		#size-cells = <0>;
+	};
+
+	timer0: timer@3200 {
+		compatible = "realtek,rtl930x-timer", "realtek,otto-timer";
+		reg = <0x3200 0x10>, <0x3210 0x10>, <0x3220 0x10>,
+		    <0x3230 0x10>, <0x3240 0x10>;
+
+		interrupt-parent = <&intc>;
+		interrupts = <7 4>, <8 4>, <9 4>, <10 4>, <11 4>;
+		clocks = <&lx_clk>;
+	};
+};
+
+&uart0 {
+	/delete-property/ clock-frequency;
+	clocks = <&lx_clk>;
+
+	interrupt-parent = <&intc>;
+	interrupts = <30 1>;
+};
+
+&uart1 {
+	/delete-property/ clock-frequency;
+	clocks = <&lx_clk>;
+
+	interrupt-parent = <&intc>;
+	interrupts = <31 0>;
+};
+
