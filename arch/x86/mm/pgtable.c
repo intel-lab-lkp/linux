@@ -691,7 +691,6 @@ void native_set_fixmap(unsigned /* enum fixed_addresses */ idx,
 }
 
 #ifdef CONFIG_HAVE_ARCH_HUGE_VMAP
-#ifdef CONFIG_X86_5LEVEL
 /**
  * p4d_set_huge - setup kernel P4D mapping
  *
@@ -710,7 +709,6 @@ int p4d_set_huge(p4d_t *p4d, phys_addr_t addr, pgprot_t prot)
 void p4d_clear_huge(p4d_t *p4d)
 {
 }
-#endif
 
 /**
  * pud_set_huge - setup kernel PUD mapping
