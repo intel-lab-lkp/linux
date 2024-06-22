@@ -147,7 +147,13 @@ getname_flags(const char __user *filename, int flags, int *empty)
 	kname = (char *)result->iname;
 	result->name = kname;
 
-	len = strncpy_from_user(kname, filename, EMBEDDED_NAME_MAX);
+	if (!(flags & LOOKUP_EMPTY_NOCHECK))
+		len = strncpy_from_user(kname, filename, EMBEDDED_NAME_MAX);
+	else {
+		len = 0;
+		kname[0] = '\0';
+	}
+
 	if (unlikely(len < 0)) {
 		__putname(result);
 		return ERR_PTR(len);

@@ -45,8 +45,12 @@ enum {LAST_NORM, LAST_ROOT, LAST_DOT, LAST_DOTDOT};
 #define LOOKUP_IN_ROOT		0x100000 /* Treat dirfd as fs root. */
 #define LOOKUP_CACHED		0x200000 /* Only do cached lookup */
 #define LOOKUP_LINKAT_EMPTY	0x400000 /* Linkat request with empty path. */
+
 /* LOOKUP_* flags which do scope-related checks based on the dirfd. */
 #define LOOKUP_IS_SCOPED (LOOKUP_BENEATH | LOOKUP_IN_ROOT)
+
+/* If this is set, LOOKUP_EMPTY must be set as well. */
+#define LOOKUP_EMPTY_NOCHECK	0x800000 /* Consider path empty. */
 
 extern int path_pts(struct path *path);
 

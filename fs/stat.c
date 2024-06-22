@@ -210,6 +210,8 @@ int getname_statx_lookup_flags(int flags)
 		lookup_flags |= LOOKUP_AUTOMOUNT;
 	if (flags & AT_EMPTY_PATH)
 		lookup_flags |= LOOKUP_EMPTY;
+	if (flags & AT_EMPTY_PATH_NOCHECK)
+		lookup_flags |= LOOKUP_EMPTY | LOOKUP_EMPTY_NOCHECK;
 
 	return lookup_flags;
 }
@@ -237,7 +239,7 @@ static int vfs_statx(int dfd, struct filename *filename, int flags,
 	int error;
 
 	if (flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT | AT_EMPTY_PATH |
-		      AT_STATX_SYNC_TYPE))
+		      AT_STATX_SYNC_TYPE | AT_EMPTY_PATH_NOCHECK))
 		return -EINVAL;
 
 retry:

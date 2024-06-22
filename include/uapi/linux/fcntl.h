@@ -113,6 +113,9 @@
 #define AT_STATX_DONT_SYNC	0x4000	/* - Don't sync attributes with the server */
 
 #define AT_RECURSIVE		0x8000	/* Apply to the entire subtree */
+#define AT_EMPTY_PATH_NOCHECK	0x10000	/* Like AT_EMPTY_PATH, but the path
+                                           is not checked and it's just
+                                           assumed to be empty */
 
 /* Flags for name_to_handle_at(2). We reuse AT_ flag space to save bits... */
 #define AT_HANDLE_FID		AT_REMOVEDIR	/* file handle is needed to
