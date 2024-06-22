@@ -66,6 +66,7 @@
 #include <linux/seq_buf.h>
 #include <linux/sched/isolation.h>
 #include <linux/kmemleak.h>
+#include <linux/qpw.h>
 #include "internal.h"
 #include <net/sock.h>
 #include <net/ip.h>
@@ -2422,7 +2423,7 @@ struct memcg_stock_pcp {
 	int nr_slab_unreclaimable_b;
 #endif
 
-	struct work_struct work;
+	struct qpw_struct qpw;
 	unsigned long flags;
 #define FLUSHING_CACHED_CHARGE	0
 };
@@ -2510,25 +2511,26 @@ static void drain_stock(struct memcg_stock_pcp *stock)
 	WRITE_ONCE(stock->cached, NULL);
 }
 
-static void drain_local_stock(struct work_struct *dummy)
+static void drain_local_stock(struct work_struct *w)
 {
 	struct memcg_stock_pcp *stock;
 	struct obj_cgroup *old = NULL;
 	unsigned long flags;
+	int cpu = qpw_get_cpu(w);
 
 	/*
 	 * The only protection from cpu hotplug (memcg_hotplug_cpu_dead) vs.
 	 * drain_stock races is that we always operate on local CPU stock
 	 * here with IRQ disabled
 	 */
-	local_lock_irqsave(&memcg_stock.stock_lock, flags);
+	qpw_lock_irqsave(&memcg_stock.stock_lock, flags, cpu);
 
-	stock = this_cpu_ptr(&memcg_stock);
+	stock = per_cpu_ptr(&memcg_stock, cpu);
 	old = drain_obj_stock(stock);
 	drain_stock(stock);
 	clear_bit(FLUSHING_CACHED_CHARGE, &stock->flags);
 
-	local_unlock_irqrestore(&memcg_stock.stock_lock, flags);
+	qpw_unlock_irqrestore(&memcg_stock.stock_lock, flags, cpu);
 	obj_cgroup_put(old);
 }
 
@@ -2599,9 +2601,9 @@ static void drain_all_stock(struct mem_cgroup *root_memcg)
 		if (flush &&
 		    !test_and_set_bit(FLUSHING_CACHED_CHARGE, &stock->flags)) {
 			if (cpu == curcpu)
-				drain_local_stock(&stock->work);
+				drain_local_stock(&stock->qpw.work);
 			else if (!cpu_is_isolated(cpu))
-				schedule_work_on(cpu, &stock->work);
+				queue_percpu_work_on(cpu, system_wq, &stock->qpw);
 		}
 	}
 	migrate_enable();
@@ -7963,8 +7965,8 @@ static int __init mem_cgroup_init(void)
 				  memcg_hotplug_cpu_dead);
 
 	for_each_possible_cpu(cpu)
-		INIT_WORK(&per_cpu_ptr(&memcg_stock, cpu)->work,
-			  drain_local_stock);
+		INIT_QPW(&per_cpu_ptr(&memcg_stock, cpu)->qpw,
+			 drain_local_stock, cpu);
 
 	for_each_node(node) {
 		struct mem_cgroup_tree_per_node *rtpn;
