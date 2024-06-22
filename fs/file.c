@@ -515,27 +515,34 @@ repeat:
 	if (fd < files->next_fd)
 		fd = files->next_fd;
 
-	if (fd < fdt->max_fds)
+	error = -EMFILE;
+	if (likely(fd < fdt->max_fds)) {
+		if (~fdt->open_fds[0] && !start) {
+			fd = find_next_zero_bit(fdt->open_fds, BITS_PER_LONG, fd);
+			goto fastreturn;
+		}
 		fd = find_next_fd(fdt, fd);
+	}
 
+	if (unlikely(fd >= fdt->max_fds)) {
+		error = expand_files(files, fd);
+		if (error < 0)
+			goto out;
+		/*
+		 * If we needed to expand the fs array we
+		 * might have blocked - try again.
+		 */
+		if (error)
+			goto repeat;
+	}
+
+fastreturn:
 	/*
 	 * N.B. For clone tasks sharing a files structure, this test
 	 * will limit the total number of files that can be opened.
 	 */
-	error = -EMFILE;
-	if (fd >= end)
+	if (unlikely(fd >= end))
 		goto out;
-
-	error = expand_files(files, fd);
-	if (error < 0)
-		goto out;
-
-	/*
-	 * If we needed to expand the fs array we
-	 * might have blocked - try again.
-	 */
-	if (error)
-		goto repeat;
 
 	if (start <= files->next_fd)
 		files->next_fd = fd + 1;
