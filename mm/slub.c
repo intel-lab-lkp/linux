@@ -42,6 +42,7 @@
 #include <kunit/test.h>
 #include <kunit/test-bug.h>
 #include <linux/sort.h>
+#include <linux/qpw.h>
 
 #include <linux/debugfs.h>
 #include <trace/events/kmem.h>
@@ -3080,13 +3081,14 @@ static inline void put_partials_cpu(struct kmem_cache *s,
 
 #endif	/* CONFIG_SLUB_CPU_PARTIAL */
 
-static inline void flush_slab(struct kmem_cache *s, struct kmem_cache_cpu *c)
+static inline void flush_slab(struct kmem_cache *s, struct kmem_cache_cpu *c,
+			      int cpu)
 {
 	unsigned long flags;
 	struct slab *slab;
 	void *freelist;
 
-	local_lock_irqsave(&s->cpu_slab->lock, flags);
+	qpw_lock_irqsave(&s->cpu_slab->lock, flags, cpu);
 
 	slab = c->slab;
 	freelist = c->freelist;
@@ -3095,7 +3097,7 @@ static inline void flush_slab(struct kmem_cache *s, struct kmem_cache_cpu *c)
 	c->freelist = NULL;
 	c->tid = next_tid(c->tid);
 
-	local_unlock_irqrestore(&s->cpu_slab->lock, flags);
+	qpw_unlock_irqrestore(&s->cpu_slab->lock, flags, cpu);
 
 	if (slab) {
 		deactivate_slab(s, slab, freelist);
@@ -3122,10 +3124,12 @@ static inline void __flush_cpu_slab(struct kmem_cache *s, int cpu)
 }
 
 struct slub_flush_work {
-	struct work_struct work;
+	struct qpw_struct qpw;
 	struct kmem_cache *s;
 	bool skip;
 };
+
+static DEFINE_PER_CPU(struct slub_flush_work, slub_flush);
 
 /*
  * Flush cpu slab.
@@ -3137,14 +3141,15 @@ static void flush_cpu_slab(struct work_struct *w)
 	struct kmem_cache *s;
 	struct kmem_cache_cpu *c;
 	struct slub_flush_work *sfw;
+	int cpu = qpw_get_cpu(w);
 
-	sfw = container_of(w, struct slub_flush_work, work);
+	sfw = &per_cpu(slub_flush, cpu);
 
 	s = sfw->s;
-	c = this_cpu_ptr(s->cpu_slab);
+	c = per_cpu_ptr(s->cpu_slab, cpu);
 
 	if (c->slab)
-		flush_slab(s, c);
+		flush_slab(s, c, cpu);
 
 	put_partials(s);
 }
@@ -3157,7 +3162,6 @@ static bool has_cpu_slab(int cpu, struct kmem_cache *s)
 }
 
 static DEFINE_MUTEX(flush_lock);
-static DEFINE_PER_CPU(struct slub_flush_work, slub_flush);
 
 static void flush_all_cpus_locked(struct kmem_cache *s)
 {
@@ -3173,17 +3177,17 @@ static void flush_all_cpus_locked(struct kmem_cache *s)
 			sfw->skip = true;
 			continue;
 		}
-		INIT_WORK(&sfw->work, flush_cpu_slab);
+		INIT_QPW(&sfw->qpw, flush_cpu_slab, cpu);
 		sfw->skip = false;
 		sfw->s = s;
-		queue_work_on(cpu, flushwq, &sfw->work);
+		queue_percpu_work_on(cpu, flushwq, &sfw->qpw);
 	}
 
 	for_each_online_cpu(cpu) {
 		sfw = &per_cpu(slub_flush, cpu);
 		if (sfw->skip)
 			continue;
-		flush_work(&sfw->work);
+		flush_percpu_work(&sfw->qpw);
 	}
 
 	mutex_unlock(&flush_lock);
