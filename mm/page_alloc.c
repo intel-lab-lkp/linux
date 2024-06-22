@@ -4110,7 +4110,7 @@ bool gfp_pfmemalloc_allowed(gfp_t gfp_mask)
 static inline bool
 should_reclaim_retry(gfp_t gfp_mask, unsigned order,
 		     struct alloc_context *ac, int alloc_flags,
-		     bool did_some_progress, int *no_progress_loops)
+		     bool did_some_progress, int *reclaim_retries)
 {
 	struct zone *zone;
 	struct zoneref *z;
@@ -4122,11 +4122,11 @@ should_reclaim_retry(gfp_t gfp_mask, unsigned order,
 	 * always increment the no progress counter for them
 	 */
 	if (did_some_progress && order <= PAGE_ALLOC_COSTLY_ORDER)
-		*no_progress_loops = 0;
+		*reclaim_retries = 0;
 	else
-		(*no_progress_loops)++;
+		(*reclaim_retries)++;
 
-	if (*no_progress_loops > MAX_RECLAIM_RETRIES)
+	if (*reclaim_retries > MAX_RECLAIM_RETRIES)
 		goto out;
 
 
@@ -4153,7 +4153,7 @@ should_reclaim_retry(gfp_t gfp_mask, unsigned order,
 		wmark = __zone_watermark_ok(zone, order, min_wmark,
 				ac->highest_zoneidx, alloc_flags, available);
 		trace_reclaim_retry_zone(z, order, reclaimable,
-				available, min_wmark, *no_progress_loops, wmark);
+				available, min_wmark, *reclaim_retries, wmark);
 		if (wmark) {
 			ret = true;
 			break;
@@ -4225,14 +4225,14 @@ __alloc_pages_slowpath(gfp_t gfp_mask, unsigned int order,
 	enum compact_priority compact_priority;
 	enum compact_result compact_result;
 	int compaction_retries;
-	int no_progress_loops;
+	int reclaim_retries;
 	unsigned int cpuset_mems_cookie;
 	unsigned int zonelist_iter_cookie;
 	int reserve_flags;
 
 restart:
 	compaction_retries = 0;
-	no_progress_loops = 0;
+	reclaim_retries = 0;
 	compact_priority = DEF_COMPACT_PRIORITY;
 	cpuset_mems_cookie = read_mems_allowed_begin();
 	zonelist_iter_cookie = zonelist_iter_begin();
@@ -4393,7 +4393,7 @@ retry:
 		goto nopage;
 
 	if (should_reclaim_retry(gfp_mask, order, ac, alloc_flags,
-				 did_some_progress > 0, &no_progress_loops))
+				 did_some_progress > 0, &reclaim_retries))
 		goto retry;
 
 	/*
@@ -4430,7 +4430,7 @@ retry:
 
 	/* Retry as long as the OOM killer is making progress */
 	if (did_some_progress) {
-		no_progress_loops = 0;
+		reclaim_retries = 0;
 		goto retry;
 	}
 
