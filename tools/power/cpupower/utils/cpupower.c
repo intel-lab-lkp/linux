@@ -12,6 +12,8 @@
 #include <unistd.h>
 #include <errno.h>
 #include <sched.h>
+#include <libgen.h>
+#include <limits.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/utsname.h>
@@ -80,14 +82,17 @@ static void print_help(void)
 
 static int print_man_page(const char *subpage)
 {
-	int len;
-	char *page;
+	char *page, *man_path, *exec_dir;
+	char exec_path[PATH_MAX];
+	int subpage_len;
 
-	len = 10; /* enough for "cpupower-" */
-	if (subpage != NULL)
-		len += strlen(subpage);
+	if (!subpage)
+		return -EINVAL;
 
-	page = malloc(len);
+	subpage_len = 10; /* enough for "cpupower-" */
+	subpage_len += strlen(subpage);
+
+	page = malloc(subpage_len);
 	if (!page)
 		return -ENOMEM;
 
@@ -95,6 +100,30 @@ static int print_man_page(const char *subpage)
 	if ((subpage != NULL) && strcmp(subpage, "help")) {
 		strcat(page, "-");
 		strcat(page, subpage);
+	}
+
+	/* Get current process image name full path */
+	if (readlink("/proc/self/exe", exec_path, PATH_MAX) > 0) {
+		exec_dir = strdup(exec_path);
+		if (!exec_dir) {
+			free(page);
+			free(man_path);
+			return -ENOMEM;
+		}
+
+		/* Prepend standard search path for man pages with relative path
+		 * to custom install man directory
+		 */
+		if (asprintf(&man_path, "%s/../man:", dirname(exec_dir)) > 0) {
+			setenv("MANPATH", man_path, 1);
+			free(exec_dir);
+			free(man_path);
+		} else {
+			free(page);
+			free(exec_dir);
+			free(man_path);
+			return -ENOMEM;
+		}
 	}
 
 	execlp("man", "man", page, NULL);
