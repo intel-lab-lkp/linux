@@ -1,0 +1,108 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/sound/fsl,imx-audio-sgtl5000.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Freescale i.MX audio complex with SGTL5000 codec
+
+maintainers:
+  - Animesh Agarwal <animeshagarwal28@gmail.com>
+
+properties:
+  compatible:
+    oneOf:
+      - items:
+          - enum:
+              - fsl,imx25-pdk-sgtl5000
+              - fsl,imx51-babbage-sgtl5000
+              - fsl,imx53-m53evk-sgtl5000
+              - tq,imx53-mba53-sgtl5000
+              - fsl,imx53-cpuvo-sgtl5000
+              - fsl,imx53-qsb-sgtl5000
+              - karo,tx53-audio-sgtl5000
+              - fsl,imx53-voipac-sgtl5000
+              - fsl,imx6q-ba16-sgtl5000
+              - fsl,imx6q-ventana-sgtl5000
+              - fsl,imx-sgtl5000
+              - fsl,imx6-armadeus-sgtl5000
+              - fsl,imx6dl-nit6xlite-sgtl5000
+              - fsl,imx6q-nitrogen6_max-sgtl5000
+              - fsl,imx6q-nitrogen6_som2-sgtl5000
+              - fsl,imx6q-nitrogen6x-sgtl5000
+              - fsl,imx6-rex-sgtl5000
+              - fsl,imx6q-sabrelite-sgtl5000
+              - fsl,imx6-wandboard-sgtl5000
+          - const: fsl,imx-audio-sgtl5000
+      - const: fsl,imx-audio-sgtl5000
+
+  model:
+    $ref: /schemas/types.yaml#/definitions/string
+    description: The user-visible name of this sound complex.
+
+  audio-cpu:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: The phandle of an CPU DAI controller
+
+  ssi-controller:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: The phandle of the i.MX SSI controller.
+
+  audio-codec:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: The phandle of the SGTL5000 audio codec.
+
+  audio-routing:
+    $ref: /schemas/types.yaml#/definitions/non-unique-string-array
+    description: |
+      A list of the connections between audio components. Each entry is a pair
+      of strings, the first being the connection's sink, the second being the
+      connection's source. Valid names could be:
+
+      Power supplies:
+        * Mic Bias
+
+      SGTL5000 pins:
+        * MIC_IN
+        * LINE_IN
+        * HP_OUT
+        * LINE_OUT
+
+      Board connectors:
+        * Mic Jack
+        * Line In Jack
+        * Headphone Jack
+        * Line Out Jack
+        * Ext Spk
+
+  mux-int-port:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: The internal port of the i.MX audio muxer (AUDMUX).
+    enum: [1, 2]
+
+  mux-ext-port:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: The external port of the i.MX audio muxer.
+    enum: [3, 4, 5, 6]
+
+required:
+  - compatible
+  - model
+
+additionalProperties: false
+
+examples:
+  - |
+    sound {
+        compatible = "fsl,imx51-babbage-sgtl5000",
+            "fsl,imx-audio-sgtl5000";
+        model = "imx51-babbage-sgtl5000";
+        ssi-controller = <&ssi1>;
+        audio-codec = <&sgtl5000>;
+        audio-routing =
+            "MIC_IN", "Mic Jack",
+            "Mic Jack", "Mic Bias",
+            "Headphone Jack", "HP_OUT";
+        mux-int-port = <1>;
+        mux-ext-port = <3>;
+    };
