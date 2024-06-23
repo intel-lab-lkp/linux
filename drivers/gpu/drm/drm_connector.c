@@ -2610,6 +2610,11 @@ int drm_connector_attach_max_bpc_property(struct drm_connector *connector,
 
 	prop = connector->max_bpc_property;
 	if (!prop) {
+		u32 flags = 0;
+
+		if (min == max)
+			flags |= DRM_MODE_PROP_IMMUTABLE;
+
 		prop = drm_property_create_range(dev, 0, "max bpc", min, max);
 		if (!prop)
 			return -ENOMEM;
