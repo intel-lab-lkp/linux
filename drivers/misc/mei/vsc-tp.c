@@ -350,6 +350,8 @@ void vsc_tp_reset(struct vsc_tp *tp)
 	disable_irq(tp->spi->irq);
 
 	/* toggle reset pin */
+	gpiod_set_value_cansleep(tp->resetfw, 1);
+	msleep(VSC_TP_RESET_PIN_TOGGLE_INTERVAL_MS);
 	gpiod_set_value_cansleep(tp->resetfw, 0);
 	msleep(VSC_TP_RESET_PIN_TOGGLE_INTERVAL_MS);
 	gpiod_set_value_cansleep(tp->resetfw, 1);
