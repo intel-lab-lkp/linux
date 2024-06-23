@@ -1090,7 +1090,9 @@ static int axi_dmac_probe(struct platform_device *pdev)
 
 	INIT_LIST_HEAD(&dmac->chan.active_descs);
 
-	dma_set_max_seg_size(&pdev->dev, UINT_MAX);
+	ret = dma_set_max_seg_size(&pdev->dev, UINT_MAX);
+	if (ret)
+		return ret;
 
 	dma_dev = &dmac->dma_dev;
 	dma_cap_set(DMA_SLAVE, dma_dev->cap_mask);
