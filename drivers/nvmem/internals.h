@@ -16,6 +16,7 @@ struct nvmem_device {
 	int			id;
 	struct kref		refcnt;
 	size_t			size;
+	bool			default_read_only;
 	bool			read_only;
 	bool			root_only;
 	int			flags;
