@@ -2526,6 +2526,8 @@ xlog_write(
 			xlog_write_full(lv, ticket, iclog, &log_offset,
 					 &len, &record_cnt, &data_cnt);
 		}
+		if (lv->lv_flags & XFS_LOG_VEC_DYNAMIC)
+			kvfree(lv->lv_iovecp);
 	}
 	ASSERT(len == 0);
 

@@ -6,6 +6,8 @@
 #ifndef	__XFS_LOG_H__
 #define __XFS_LOG_H__
 
+#define XFS_LOG_VEC_DYNAMIC	(1 << 0)
+
 struct xfs_cil_ctx;
 
 struct xfs_log_vec {
@@ -17,7 +19,8 @@ struct xfs_log_vec {
 	char			*lv_buf;	/* formatted buffer */
 	int			lv_bytes;	/* accounted space in buffer */
 	int			lv_buf_len;	/* aligned size of buffer */
-	int			lv_size;	/* size of allocated lv */
+	int			lv_size;	/* size of allocated iovec + buffer */
+	int			lv_flags;	/* lv flags */
 };
 
 #define XFS_LOG_VEC_ORDERED	(-1)
@@ -40,6 +43,7 @@ static inline void
 xlog_finish_iovec(struct xfs_log_vec *lv, struct xfs_log_iovec *vec,
 		int data_len)
 {
+	struct xfs_log_iovec	*lvec = lv->lv_iovecp;
 	struct xlog_op_header	*oph = vec->i_addr;
 	int			len;
 
@@ -69,7 +73,7 @@ xlog_finish_iovec(struct xfs_log_vec *lv, struct xfs_log_iovec *vec,
 	vec->i_len = len;
 
 	/* Catch buffer overruns */
-	ASSERT((void *)lv->lv_buf + lv->lv_bytes <= (void *)lv + lv->lv_size);
+	ASSERT((void *)lv->lv_buf + lv->lv_bytes <= (void *)lvec + lv->lv_size);
 }
 
 /*

@@ -219,8 +219,7 @@ static inline int
 xlog_cil_iovec_space(
 	uint	niovecs)
 {
-	return round_up((sizeof(struct xfs_log_vec) +
-					niovecs * sizeof(struct xfs_log_iovec)),
+	return round_up(niovecs * sizeof(struct xfs_log_iovec),
 			sizeof(uint64_t));
 }
 
@@ -279,6 +278,7 @@ xlog_cil_alloc_shadow_bufs(
 
 	list_for_each_entry(lip, &tp->t_items, li_trans) {
 		struct xfs_log_vec *lv;
+		struct xfs_log_iovec *lvec;
 		int	niovecs = 0;
 		int	nbytes = 0;
 		int	buf_size;
@@ -339,18 +339,23 @@ xlog_cil_alloc_shadow_bufs(
 			 * the buffer, only the log vector header and the iovec
 			 * storage.
 			 */
-			kvfree(lip->li_lv_shadow);
-			lv = xlog_kvmalloc(buf_size);
+			if (lip->li_lv_shadow) {
+				kvfree(lip->li_lv_shadow->lv_iovecp);
+				kvfree(lip->li_lv_shadow);
+			}
+			lv = xlog_kvmalloc(sizeof(struct xfs_log_vec));
+			memset(lv, 0, sizeof(struct xfs_log_vec));
+			lvec = xlog_kvmalloc(buf_size);
+			memset(lvec, 0, xlog_cil_iovec_space(niovecs));
 
-			memset(lv, 0, xlog_cil_iovec_space(niovecs));
-
+			lv->lv_flags |= XFS_LOG_VEC_DYNAMIC;
 			INIT_LIST_HEAD(&lv->lv_list);
 			lv->lv_item = lip;
 			lv->lv_size = buf_size;
 			if (ordered)
 				lv->lv_buf_len = XFS_LOG_VEC_ORDERED;
 			else
-				lv->lv_iovecp = (struct xfs_log_iovec *)&lv[1];
+				lv->lv_iovecp = lvec;
 			lip->li_lv_shadow = lv;
 		} else {
 			/* same or smaller, optimise common overwrite case */
@@ -366,9 +371,9 @@ xlog_cil_alloc_shadow_bufs(
 		lv->lv_niovecs = niovecs;
 
 		/* The allocated data region lies beyond the iovec region */
-		lv->lv_buf = (char *)lv + xlog_cil_iovec_space(niovecs);
+		lv->lv_buf = (char *)lv->lv_iovecp +
+				xlog_cil_iovec_space(niovecs);
 	}
-
 }
 
 /*
@@ -502,7 +507,7 @@ xlog_cil_insert_format_items(
 			/* reset the lv buffer information for new formatting */
 			lv->lv_buf_len = 0;
 			lv->lv_bytes = 0;
-			lv->lv_buf = (char *)lv +
+			lv->lv_buf = (char *)lv->lv_iovecp +
 					xlog_cil_iovec_space(lv->lv_niovecs);
 		} else {
 			/* switch to shadow buffer! */
@@ -1544,6 +1549,7 @@ xlog_cil_process_intents(
 		set_bit(XFS_LI_WHITEOUT, &ilip->li_flags);
 		trace_xfs_cil_whiteout_mark(ilip);
 		len += ilip->li_lv->lv_bytes;
+		kvfree(ilip->li_lv->lv_iovecp);
 		kvfree(ilip->li_lv);
 		ilip->li_lv = NULL;
 
