@@ -41,3 +41,15 @@ install: $(OUTPUT)cpufreq-bench
 clean:
 	rm -f $(OUTPUT)*.o
 	rm -f $(OUTPUT)cpufreq-bench
+
+help:
+	@echo  'Build targets:'
+	@echo  '  all		  - Default target. Could be omitted. Put build artifacts'
+	@echo  '                    to "O" cmdline option dir (default: current dir)'
+	@echo  '  install	  - Install previously built project files from the output'
+	@echo  '                    dir defined by "O" cmdline option (default: current dir)'
+	@echo  '                    to the install dir  defined by "DESTDIR" cmdline'
+	@echo  ''
+	@echo  'Clean targets:'
+	@echo  '  clean		  - Clean build artifacts from the dir defined by "O" cmdline'
+	@echo  '                    option (default: current dir)'
