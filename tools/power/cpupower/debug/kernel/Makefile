@@ -21,3 +21,15 @@ install: default
 	/sbin/depmod -a
 
 all:	default
+
+help:
+	@echo  'Build targets:'
+	@echo  '  all		  - Default target. Could be omitted. Builds "cpufreq-test_tsc"'
+	@echo  '                    kernel module against the running kernel if the "CONFIG_X86_TSC"'
+	@echo  '                    kernel config parameter is enabled. Puts the built module'
+	@echo  '                    to the current dir'
+	@echo  '  install	  - Install previously built "cpufreq-test_tsc.ko" module'
+	@echo  '                    to the running kernel "modules" dir'
+	@echo  ''
+	@echo  'Clean targets:'
+	@echo  '  clean		  - Clean "cpufreq-test_tsc" module build artifacts'
