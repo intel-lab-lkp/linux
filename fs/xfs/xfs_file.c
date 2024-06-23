@@ -1231,6 +1231,9 @@ xfs_file_release(
 	 * one file after another without going back to it while keeping the
 	 * preallocation for files that have recurring open/write/close cycles.
 	 *
+	 * This heuristic is skipped for inodes with the append-only flag as
+	 * that flags is rather pointless for inodes written oly once.
+	 *
 	 * There is no point in freeing blocks here for open but unlinked files
 	 * as they will be taken care of by the inactivation path soon.
 	 *
@@ -1245,6 +1248,7 @@ xfs_file_release(
 	 */
 	if (inode->i_nlink &&
 	    (file->f_mode & FMODE_WRITE) &&
+	    !(ip->i_diflags & XFS_DIFLAG_APPEND) &&
 	    !xfs_iflags_test(ip, XFS_EOFBLOCKS_RELEASED) &&
 	    xfs_ilock_nowait(ip, XFS_IOLOCK_EXCL)) {
 		if (xfs_can_free_eofblocks(ip)) {
