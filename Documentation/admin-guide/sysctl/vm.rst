@@ -47,6 +47,7 @@ Currently, these files are in /proc/sys/vm:
 - mem_profiling         (only if CONFIG_MEM_ALLOC_PROFILING=y)
 - memory_failure_early_kill
 - memory_failure_recovery
+- memory_high_autoset_ratio
 - min_free_kbytes
 - min_slab_ratio
 - min_unmapped_ratio
@@ -509,6 +510,15 @@ Enable memory failure recovery (when supported by the platform)
 1: Attempt recovery.
 
 0: Always panic on a memory failure.
+
+
+memory_high_autoset_ratio
+=========================
+
+Specify a ratio by which memory.high should be set as a fraction of
+memory.max if it hasn't been explicitly set before.  It allows a range
+of 0-100.  The default value of 0 means auto setting will be disabled.
+For any non-zero value "n", the actual ratio used will be "n/(n+1)".
 
 
 min_free_kbytes

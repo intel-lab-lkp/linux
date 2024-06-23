@@ -227,6 +227,9 @@ struct mem_cgroup {
 	 */
 	bool oom_group;
 
+	/* %true if memory.high has been explicitly set */
+	bool memory_high_set;
+
 	/* protected by memcg_oom_lock */
 	bool		oom_lock;
 	int		under_oom;

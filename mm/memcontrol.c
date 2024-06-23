@@ -48,6 +48,7 @@
 #include <linux/swap.h>
 #include <linux/swapops.h>
 #include <linux/spinlock.h>
+#include <linux/sysctl.h>
 #include <linux/eventfd.h>
 #include <linux/poll.h>
 #include <linux/sort.h>
@@ -6891,6 +6892,35 @@ static void mem_cgroup_attach(struct cgroup_taskset *tset)
 }
 #endif
 
+/*
+ * The memory.high autoset ratio specifies a ratio by which memory.high
+ * should be set as a fraction of memory.max if it hasn't been explicitly
+ * set before. The default value of 0 means auto setting will be disabled.
+ * For any non-zero value "n", the actual ratio is "n/(n+1)".
+ */
+static int sysctl_memory_high_autoset_ratio;
+
+#ifdef CONFIG_SYSCTL
+static struct ctl_table memcg_table[] = {
+	{
+		.procname	= "memory_high_autoset_ratio",
+		.data		= &sysctl_memory_high_autoset_ratio,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE_HUNDRED,
+	},
+};
+
+static inline void memcg_sysctl_init(void)
+{
+	register_sysctl_init("vm", memcg_table);
+}
+#else
+static void memcg_sysctl_init(void)	{ }
+#endif /* CONFIG_SYSCTL */
+
 static int seq_puts_memcg_tunable(struct seq_file *m, unsigned long value)
 {
 	if (value == PAGE_COUNTER_MAX)
@@ -6984,6 +7014,7 @@ static ssize_t memory_high_write(struct kernfs_open_file *of,
 		return err;
 
 	page_counter_set_high(&memcg->memory, high);
+	memcg->memory_high_set = true;
 
 	for (;;) {
 		unsigned long nr_pages = page_counter_read(&memcg->memory);
@@ -7025,6 +7056,7 @@ static ssize_t memory_max_write(struct kernfs_open_file *of,
 	unsigned int nr_reclaims = MAX_RECLAIM_RETRIES;
 	bool drained = false;
 	unsigned long max;
+	unsigned int high_ratio = sysctl_memory_high_autoset_ratio;
 	int err;
 
 	buf = strstrip(buf);
@@ -7033,6 +7065,13 @@ static ssize_t memory_max_write(struct kernfs_open_file *of,
 		return err;
 
 	xchg(&memcg->memory.max, max);
+
+	if (high_ratio && !memcg->memory_high_set) {
+		/* Set memory.high as a fraction of memory.max */
+		unsigned long high = max * high_ratio / (high_ratio + 1);
+
+		page_counter_set_high(&memcg->memory, high);
+	}
 
 	for (;;) {
 		unsigned long nr_pages = page_counter_read(&memcg->memory);
@@ -8011,6 +8050,8 @@ static int __init mem_cgroup_init(void)
 		spin_lock_init(&rtpn->lock);
 		soft_limit_tree.rb_tree_per_node[node] = rtpn;
 	}
+
+	memcg_sysctl_init();
 
 	return 0;
 }
