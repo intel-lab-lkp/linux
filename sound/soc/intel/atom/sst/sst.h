@@ -391,7 +391,7 @@ struct intel_sst_drv {
 	unsigned int		csr_value;
 	void			*fw_in_mem;
 	struct sst_sg_list	fw_sg_list, library_list;
-	struct intel_sst_ops	*ops;
+	const struct intel_sst_ops	*ops;
 	struct sst_info		info;
 	struct pm_qos_request	*qos;
 	unsigned int		use_dma;

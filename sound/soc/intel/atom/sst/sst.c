@@ -158,7 +158,7 @@ static int sst_save_dsp_context_v2(struct intel_sst_drv *sst)
 }
 
 
-static struct intel_sst_ops mrfld_ops = {
+static const struct intel_sst_ops mrfld_ops = {
 	.interrupt = intel_sst_interrupt_mrfld,
 	.irq_thread = intel_sst_irq_thread_mrfld,
 	.clear_interrupt = intel_sst_clear_intr_mrfld,
