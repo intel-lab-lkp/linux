@@ -1664,6 +1664,7 @@ static void __exit kprobe_test_exit(void)
 
 module_init(run_all_tests)
 module_exit(kprobe_test_exit)
+MODULE_DESCRIPTION("ARM kprobes test module");
 MODULE_LICENSE("GPL");
 
 #else /* !MODULE */
