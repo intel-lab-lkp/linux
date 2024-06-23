@@ -1,0 +1,111 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/net/davinci_emac.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Texas Instruments Davici EMAC
+
+maintainers:
+  - Adam Ford <aford@gmail.com>
+
+description:
+  Ethernet based on the Programmable Real-Time Unit and Industrial
+  Communication Subsystem.
+
+allOf:
+  - $ref: ethernet-controller.yaml#
+
+properties:
+  compatible:
+    items:
+      - enum:
+          - ti,davinci-dm6467-emac # da850
+          - ti,dm816-emac
+          - ti,am3517-emac
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    minItems: 4
+
+  clocks:
+    maxItems: 1
+
+  clock-names:
+    items:
+      - const: ick
+
+  power-domains:
+    maxItems: 1
+
+  resets:
+    maxItems: 1
+
+  local-mac-address: true
+  mac-address: true
+
+  syscon:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: a phandle to the global system controller on
+      to enable/disable interrupts
+
+  ti,davinci-ctrl-reg-offset:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Offset to control register
+
+  ti,davinci-ctrl-mod-reg-offset:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Offset to control module register
+
+  ti,davinci-ctrl-ram-offset:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Offset to control module ram
+
+  ti,davinci-ctrl-ram-size:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Size of control module ram
+
+  ti,davinci-rmii-en:
+    $ref: /schemas/types.yaml#/definitions/uint8
+    description:
+      RMII enable means use RMII
+
+  ti,davinci-no-bd-ram:
+    type: boolean
+    description:
+      Enable if EMAC have BD RAM
+
+additionalProperties: false
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - clocks
+  - ti,davinci-ctrl-reg-offset
+  - ti,davinci-ctrl-mod-reg-offset
+  - ti,davinci-ctrl-ram-offset
+  - ti,davinci-ctrl-ram-size
+
+examples:
+  - |
+    eth0: ethernet@220000 {
+      compatible = "ti,davinci-dm6467-emac";
+      reg = <0x220000 0x4000>;
+      ti,davinci-ctrl-reg-offset = <0x3000>;
+      ti,davinci-ctrl-mod-reg-offset = <0x2000>;
+      ti,davinci-ctrl-ram-offset = <0>;
+      ti,davinci-ctrl-ram-size = <0x2000>;
+      local-mac-address = [ 00 00 00 00 00 00 ];
+      interrupts = <33>, <34>, <35>,<36>;
+      clocks = <&psc1 5>;
+      power-domains = <&psc1 5>;
+      status = "disabled";
+    };
+
