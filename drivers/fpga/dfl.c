@@ -1911,7 +1911,7 @@ static int do_set_irq_trigger(struct dfl_feature *feature, unsigned int idx,
 			  feature->irq_ctx[idx].name, trigger);
 	if (!ret) {
 		feature->irq_ctx[idx].trigger = trigger;
-		return ret;
+		goto free_name;
 	}
 
 	eventfd_ctx_put(trigger);
