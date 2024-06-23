@@ -1245,9 +1245,9 @@ xfs_file_release(
 	 */
 	if (inode->i_nlink &&
 	    (file->f_mode & FMODE_WRITE) &&
+	    !xfs_iflags_test(ip, XFS_EOFBLOCKS_RELEASED) &&
 	    xfs_ilock_nowait(ip, XFS_IOLOCK_EXCL)) {
-		if (xfs_can_free_eofblocks(ip) &&
-		    !xfs_iflags_test(ip, XFS_EOFBLOCKS_RELEASED)) {
+		if (xfs_can_free_eofblocks(ip)) {
 			xfs_free_eofblocks(ip);
 			xfs_iflags_set(ip, XFS_EOFBLOCKS_RELEASED);
 		}
