@@ -88,9 +88,10 @@ static ssize_t online_store(struct device *dev,
 	 * the zqueue objects, we make sure they exist after lock release.
 	 */
 	list_for_each_entry(zq, &zc->zqueues, list)
-		maxzqs++;
+		if (!!zq->online != !!online)
+			maxzqs++;
 	if (maxzqs > 0)
-		zq_uelist = kcalloc(maxzqs + 1, sizeof(*zq_uelist), GFP_ATOMIC);
+		zq_uelist = kcalloc(maxzqs, sizeof(*zq_uelist), GFP_ATOMIC);
 	list_for_each_entry(zq, &zc->zqueues, list)
 		if (zcrypt_queue_force_online(zq, online))
 			if (zq_uelist) {
@@ -98,14 +99,11 @@ static ssize_t online_store(struct device *dev,
 				zq_uelist[i++] = zq;
 			}
 	spin_unlock(&zcrypt_list_lock);
-	if (zq_uelist) {
-		for (i = 0; zq_uelist[i]; i++) {
-			zq = zq_uelist[i];
-			ap_send_online_uevent(&zq->queue->ap_dev, online);
-			zcrypt_queue_put(zq);
-		}
-		kfree(zq_uelist);
+	while (i--) {
+		ap_send_online_uevent(&zq->queue->ap_dev, online);
+		zcrypt_queue_put(zq_uelist[i]);
 	}
+	kfree(zq_uelist);
 
 	return count;
 }
