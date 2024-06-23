@@ -8,27 +8,6 @@
 #include <drm/display/drm_hdmi_helper.h>
 #include <drm/display/drm_hdmi_state_helper.h>
 
-/**
- * __drm_atomic_helper_connector_hdmi_reset() - Initializes all HDMI @drm_connector_state resources
- * @connector: DRM connector
- * @new_conn_state: connector state to reset
- *
- * Initializes all HDMI resources from a @drm_connector_state without
- * actually allocating it. This is useful for HDMI drivers, in
- * combination with __drm_atomic_helper_connector_reset() or
- * drm_atomic_helper_connector_reset().
- */
-void __drm_atomic_helper_connector_hdmi_reset(struct drm_connector *connector,
-					      struct drm_connector_state *new_conn_state)
-{
-	unsigned int max_bpc = connector->max_bpc;
-
-	new_conn_state->max_bpc = max_bpc;
-	new_conn_state->max_requested_bpc = max_bpc;
-	new_conn_state->hdmi.broadcast_rgb = DRM_HDMI_BROADCAST_RGB_AUTO;
-}
-EXPORT_SYMBOL(__drm_atomic_helper_connector_hdmi_reset);
-
 static const struct drm_display_mode *
 connector_state_get_mode(const struct drm_connector_state *conn_state)
 {

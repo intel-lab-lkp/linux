@@ -8,9 +8,6 @@ struct drm_connector;
 struct drm_connector_state;
 struct hdmi_audio_infoframe;
 
-void __drm_atomic_helper_connector_hdmi_reset(struct drm_connector *connector,
-					      struct drm_connector_state *new_conn_state);
-
 int drm_atomic_helper_connector_hdmi_check(struct drm_connector *connector,
 					   struct drm_atomic_state *state);
 
