@@ -3178,6 +3178,22 @@ uclamp_se_set(struct uclamp_se *uc_se, unsigned int value, bool user_defined)
 	uc_se->user_defined = user_defined;
 }
 
+static inline void util_bias_enqueue(struct rq *rq, struct task_struct *p)
+{
+	int rq_val = READ_ONCE(rq->cfs.avg.util_avg_bias);
+	int p_val = READ_ONCE(p->se.avg.util_avg_bias);
+
+	WRITE_ONCE(rq->cfs.avg.util_avg_bias, rq_val + p_val);
+}
+
+static inline void util_bias_dequeue(struct rq *rq, struct task_struct *p)
+{
+	int rq_val = READ_ONCE(rq->cfs.avg.util_avg_bias);
+	int p_val = READ_ONCE(p->se.avg.util_avg_bias);
+
+	WRITE_ONCE(rq->cfs.avg.util_avg_bias, rq_val - p_val);
+}
+
 #else /* !CONFIG_UCLAMP_TASK: */
 
 static inline unsigned long
@@ -3213,6 +3229,14 @@ uclamp_rq_set(struct rq *rq, enum uclamp_id clamp_id, unsigned int value)
 static inline bool uclamp_rq_is_idle(struct rq *rq)
 {
 	return false;
+}
+
+static inline void util_bias_enqueue(struct rq *rq, struct task_struct *p)
+{
+}
+
+static inline void util_bias_dequeue(struct rq *rq, struct task_struct *p)
+{
 }
 
 #endif /* !CONFIG_UCLAMP_TASK */

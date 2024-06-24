@@ -476,7 +476,8 @@ struct sched_avg {
 	u32				period_contrib;
 	unsigned long			load_avg;
 	unsigned long			runnable_avg;
-	unsigned long			util_avg;
+	unsigned int			util_avg;
+	int				util_avg_bias;
 	unsigned int			util_est;
 } ____cacheline_aligned;
 

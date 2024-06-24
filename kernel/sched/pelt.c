@@ -266,6 +266,39 @@ ___update_load_avg(struct sched_avg *sa, unsigned long load)
 	WRITE_ONCE(sa->util_avg, sa->util_sum / divider);
 }
 
+#ifdef CONFIG_UCLAMP_TASK
+/* avg must belong to the queue this se is on. */
+static void util_bias_update(struct task_struct *p)
+{
+	unsigned int util, uclamp_min, uclamp_max;
+	struct rq *rq;
+	int old, new;
+
+	util = READ_ONCE(p->se.avg.util_avg);
+	uclamp_min = uclamp_eff_value(p, UCLAMP_MIN);
+	uclamp_max = uclamp_eff_value(p, UCLAMP_MAX);
+	/*
+	 * uclamp_max at the max value means there is no uclamp_max, and should
+	 * not have any clamping effect at all here.
+	 */
+	if (uclamp_max == SCHED_CAPACITY_SCALE)
+		uclamp_max = UINT_MAX;
+	old = READ_ONCE(p->se.avg.util_avg_bias);
+	new = (int)clamp(util, uclamp_min, uclamp_max) - (int)util;
+
+	WRITE_ONCE(p->se.avg.util_avg_bias, new);
+	if (!p->se.on_rq)
+		return;
+	rq = task_rq(p);
+	WRITE_ONCE(rq->cfs.avg.util_avg_bias,
+		   READ_ONCE(rq->cfs.avg.util_avg_bias) + new - old);
+}
+#else /* !CONFIG_UCLAMP_TASK */
+static void util_bias_update(struct task_struct *p)
+{
+}
+#endif
+
 /*
  * sched_entity:
  *
@@ -296,6 +329,8 @@ int __update_load_avg_blocked_se(u64 now, struct sched_entity *se)
 {
 	if (___update_load_sum(now, &se->avg, 0, 0, 0)) {
 		___update_load_avg(&se->avg, se_weight(se));
+		if (entity_is_task(se))
+			util_bias_update(task_of(se));
 		trace_pelt_se_tp(se);
 		return 1;
 	}
@@ -310,6 +345,8 @@ int __update_load_avg_se(u64 now, struct cfs_rq *cfs_rq, struct sched_entity *se
 
 		___update_load_avg(&se->avg, se_weight(se));
 		cfs_se_util_change(&se->avg);
+		if (entity_is_task(se))
+			util_bias_update(task_of(se));
 		trace_pelt_se_tp(se);
 		return 1;
 	}

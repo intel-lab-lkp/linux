@@ -1089,6 +1089,7 @@ void post_init_entity_util_avg(struct task_struct *p)
 	}
 
 	sa->runnable_avg = sa->util_avg;
+	sa->util_avg_bias = 0;
 }
 
 #else /* !CONFIG_SMP */
@@ -4844,6 +4845,32 @@ static inline unsigned long task_util_est(struct task_struct *p)
 	return max(task_util(p), _task_util_est(p));
 }
 
+#ifdef CONFIG_UCLAMP_TASK
+static inline long task_util_bias(struct task_struct *p)
+{
+	return READ_ONCE(p->se.avg.util_avg_bias);
+}
+
+static inline unsigned long task_util_uclamp(struct task_struct *p)
+{
+	long ret = task_util(p);
+
+	ret += task_util_bias(p);
+
+	return max(ret, 0L);
+}
+#else
+static inline long task_util_bias(struct task_struct *p)
+{
+	return 0;
+}
+
+static inline unsigned long task_util_uclamp(struct task_struct *p)
+{
+	return task_util(p);
+}
+#endif
+
 static inline void util_est_enqueue(struct cfs_rq *cfs_rq,
 				    struct task_struct *p)
 {
@@ -6807,6 +6834,9 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 
 	/* At this point se is NULL and we are at root level*/
 	add_nr_running(rq, 1);
+	util_bias_enqueue(rq, p);
+	/* XXX: We should skip the update above and only do it once here. */
+	cpufreq_update_util(rq, 0);
 
 	/*
 	 * Since new tasks are assigned an initial util_avg equal to
@@ -6898,6 +6928,7 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 
 	/* At this point se is NULL and we are at root level*/
 	sub_nr_running(rq, 1);
+	util_bias_dequeue(rq, p);
 
 	/* balance early to pull high priority tasks */
 	if (unlikely(!was_sched_idle && sched_idle_rq(rq)))
