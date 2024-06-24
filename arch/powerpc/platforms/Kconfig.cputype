@@ -47,7 +47,6 @@ config 44x
 	bool "AMCC 44x, 46x or 47x"
 	select PPC_DCR_NATIVE
 	select PPC_UDBG_16550
-	select 4xx_SOC
 	select HAVE_PCI
 	select PHYS_64BIT
 	select PPC_KUEP
@@ -325,11 +324,6 @@ config FSL_EMB_PERF_EVENT_E500
 	depends on FSL_EMB_PERF_EVENT && PPC_E500
 	default y
 
-config 4xx
-	bool
-	depends on 44x
-	default y
-
 config BOOKE
 	bool
 	depends on PPC_E500 || 44x
@@ -564,7 +558,7 @@ config NR_CPUS
 
 config NOT_COHERENT_CACHE
 	bool
-	depends on 4xx || PPC_8xx || PPC_MPC512x || \
+	depends on 44x || PPC_8xx || PPC_MPC512x || \
 		GAMECUBE_COMMON || AMIGAONE
 	select ARCH_HAS_DMA_PREP_COHERENT
 	select ARCH_HAS_SYNC_DMA_FOR_DEVICE
