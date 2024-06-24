@@ -77,6 +77,12 @@ struct test {
 	bool reuseport_has_conns; /* Add a connected socket to reuseport group */
 };
 
+struct cb_opts {
+	int family;
+	int sotype;
+	bool reuseport;
+};
+
 static __u32 duration;		/* for CHECK macro */
 
 static bool is_ipv6(const char *ip)
@@ -142,19 +148,14 @@ static int make_socket(int sotype, const char *ip, int port,
 	return fd;
 }
 
-static int make_server(int sotype, const char *ip, int port,
-		       struct bpf_program *reuseport_prog)
+static int setsockopts(int fd, void *opts)
 {
-	struct sockaddr_storage addr = {0};
+	struct cb_opts *co = (struct cb_opts *)opts;
 	const int one = 1;
-	int err, fd = -1;
-
-	fd = make_socket(sotype, ip, port, &addr);
-	if (fd < 0)
-		return -1;
+	int err = 0;
 
 	/* Enabled for UDPv6 sockets for IPv4-mapped IPv6 to work. */
-	if (sotype == SOCK_DGRAM) {
+	if (co->sotype == SOCK_DGRAM) {
 		err = setsockopt(fd, SOL_IP, IP_RECVORIGDSTADDR, &one,
 				 sizeof(one));
 		if (CHECK(err, "setsockopt(IP_RECVORIGDSTADDR)", "failed\n")) {
@@ -163,7 +164,7 @@ static int make_server(int sotype, const char *ip, int port,
 		}
 	}
 
-	if (sotype == SOCK_DGRAM && addr.ss_family == AF_INET6) {
+	if (co->sotype == SOCK_DGRAM && co->family == AF_INET6) {
 		err = setsockopt(fd, SOL_IPV6, IPV6_RECVORIGDSTADDR, &one,
 				 sizeof(one));
 		if (CHECK(err, "setsockopt(IPV6_RECVORIGDSTADDR)", "failed\n")) {
@@ -172,7 +173,7 @@ static int make_server(int sotype, const char *ip, int port,
 		}
 	}
 
-	if (sotype == SOCK_STREAM) {
+	if (co->sotype == SOCK_STREAM) {
 		err = setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one,
 				 sizeof(one));
 		if (CHECK(err, "setsockopt(SO_REUSEADDR)", "failed\n")) {
@@ -181,7 +182,7 @@ static int make_server(int sotype, const char *ip, int port,
 		}
 	}
 
-	if (reuseport_prog) {
+	if (co->reuseport) {
 		err = setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &one,
 				 sizeof(one));
 		if (CHECK(err, "setsockopt(SO_REUSEPORT)", "failed\n")) {
@@ -190,24 +191,8 @@ static int make_server(int sotype, const char *ip, int port,
 		}
 	}
 
-	err = bind(fd, (void *)&addr, inetaddr_len(&addr));
-	if (CHECK(err, "bind", "failed\n")) {
-		log_err("failed to bind listen socket");
-		goto fail;
-	}
-
-	if (sotype == SOCK_STREAM) {
-		err = listen(fd, SOMAXCONN);
-		if (CHECK(err, "make_server", "listen")) {
-			log_err("failed to listen on port %d", port);
-			goto fail;
-		}
-	}
-
-	return fd;
 fail:
-	close(fd);
-	return -1;
+	return err;
 }
 
 static int make_client(int sotype, const char *ip, int port)
@@ -588,6 +573,17 @@ close:
 
 static void run_lookup_prog(const struct test *t)
 {
+	int family = is_ipv6(t->listen_at.ip) ? AF_INET6 : AF_INET;
+	struct cb_opts cb_opts = {
+		.family = family,
+		.sotype = t->sotype,
+		.reuseport = t->reuseport_prog,
+	};
+	struct network_helper_opts srv_opts = {
+		.backlog	= SOMAXCONN,
+		.post_socket_cb = setsockopts,
+		.cb_opts	= &cb_opts,
+	};
 	int server_fds[] = { [0 ... MAX_SERVERS - 1] = -1 };
 	int client_fd, reuse_conn_fd = -1;
 	struct bpf_link *lookup_link;
@@ -598,9 +594,8 @@ static void run_lookup_prog(const struct test *t)
 		return;
 
 	for (i = 0; i < ARRAY_SIZE(server_fds); i++) {
-		server_fds[i] = make_server(t->sotype, t->listen_at.ip,
-					    t->listen_at.port,
-					    t->reuseport_prog);
+		server_fds[i] = start_server_str(family, t->sotype, t->listen_at.ip,
+						 t->listen_at.port, &srv_opts);
 		if (server_fds[i] < 0 ||
 		    attach_reuseport(server_fds[i], t->reuseport_prog))
 			goto close;
@@ -625,9 +620,8 @@ static void run_lookup_prog(const struct test *t)
 		socklen_t len = sizeof(addr);
 
 		/* Add an extra socket to reuseport group */
-		reuse_conn_fd = make_server(t->sotype, t->listen_at.ip,
-					    t->listen_at.port,
-					    t->reuseport_prog);
+		reuse_conn_fd = start_server_str(family, t->sotype, t->listen_at.ip,
+						 t->listen_at.port, &srv_opts);
 		if (reuse_conn_fd < 0 ||
 		    attach_reuseport(reuse_conn_fd, t->reuseport_prog))
 			goto close;
@@ -857,6 +851,16 @@ static void test_redirect_lookup(struct test_sk_lookup *skel)
 
 static void drop_on_lookup(const struct test *t)
 {
+	struct cb_opts cb_opts = {
+		.family = is_ipv6(t->listen_at.ip) ? AF_INET6 : AF_INET,
+		.sotype = t->sotype,
+		.reuseport = t->reuseport_prog,
+	};
+	struct network_helper_opts opts = {
+		.backlog	= SOMAXCONN,
+		.post_socket_cb = setsockopts,
+		.cb_opts	= &cb_opts,
+	};
 	struct sockaddr_storage dst = {};
 	int client_fd, server_fd, err;
 	struct bpf_link *lookup_link;
@@ -866,8 +870,8 @@ static void drop_on_lookup(const struct test *t)
 	if (!lookup_link)
 		return;
 
-	server_fd = make_server(t->sotype, t->listen_at.ip, t->listen_at.port,
-				t->reuseport_prog);
+	server_fd = start_server_str(cb_opts.family, t->sotype, t->listen_at.ip,
+				     t->listen_at.port, &opts);
 	if (server_fd < 0)
 		goto detach;
 
@@ -974,6 +978,25 @@ static void test_drop_on_lookup(struct test_sk_lookup *skel)
 
 static void drop_on_reuseport(const struct test *t)
 {
+	struct cb_opts cb_opts1 = {
+		.family = is_ipv6(t->listen_at.ip) ? AF_INET6 : AF_INET,
+		.sotype = t->sotype,
+		.reuseport = t->reuseport_prog,
+	};
+	struct network_helper_opts opts1 = {
+		.backlog	= SOMAXCONN,
+		.post_socket_cb = setsockopts,
+		.cb_opts	= &cb_opts1,
+	};
+	struct cb_opts cb_opts2 = {
+		.family = is_ipv6(t->connect_to.ip) ? AF_INET6 : AF_INET,
+		.sotype = t->sotype,
+	};
+	struct network_helper_opts opts2 = {
+		.backlog	= SOMAXCONN,
+		.post_socket_cb = setsockopts,
+		.cb_opts	= &cb_opts2,
+	};
 	struct sockaddr_storage dst = { 0 };
 	int client, server1, server2, err;
 	struct bpf_link *lookup_link;
@@ -983,8 +1006,8 @@ static void drop_on_reuseport(const struct test *t)
 	if (!lookup_link)
 		return;
 
-	server1 = make_server(t->sotype, t->listen_at.ip, t->listen_at.port,
-			      t->reuseport_prog);
+	server1 = start_server_str(cb_opts1.family, t->sotype, t->listen_at.ip,
+				   t->listen_at.port, &opts1);
 	if (server1 < 0)
 		goto detach;
 
@@ -996,8 +1019,8 @@ static void drop_on_reuseport(const struct test *t)
 		goto close_srv1;
 
 	/* second server on destination address we should never reach */
-	server2 = make_server(t->sotype, t->connect_to.ip, t->connect_to.port,
-			      NULL /* reuseport prog */);
+	server2 = start_server_str(cb_opts2.family, t->sotype, t->connect_to.ip,
+				   t->connect_to.port, &opts2);
 	if (server2 < 0)
 		goto close_srv1;
 
@@ -1082,6 +1105,15 @@ static void run_sk_assign(struct test_sk_lookup *skel,
 			  struct bpf_program *lookup_prog,
 			  const char *remote_ip, const char *local_ip)
 {
+	struct cb_opts cb_opts = {
+		.family = is_ipv6(local_ip) ? AF_INET6 : AF_INET,
+		.sotype = SOCK_STREAM,
+	};
+	struct network_helper_opts srv_opts = {
+		.backlog	= SOMAXCONN,
+		.post_socket_cb = setsockopts,
+		.cb_opts	= &cb_opts,
+	};
 	int server_fds[] = { [0 ... MAX_SERVERS - 1] = -1 };
 	struct bpf_sk_lookup ctx;
 	__u64 server_cookie;
@@ -1100,7 +1132,8 @@ static void run_sk_assign(struct test_sk_lookup *skel,
 	ctx.protocol = IPPROTO_TCP;
 
 	for (i = 0; i < ARRAY_SIZE(server_fds); i++) {
-		server_fds[i] = make_server(SOCK_STREAM, local_ip, 0, NULL);
+		server_fds[i] = start_server_str(cb_opts.family, SOCK_STREAM,
+						 local_ip, 0, &srv_opts);
 		if (server_fds[i] < 0)
 			goto close_servers;
 
@@ -1146,10 +1179,19 @@ static void run_sk_assign_v6(struct test_sk_lookup *skel,
 static void run_sk_assign_connected(struct test_sk_lookup *skel,
 				    int sotype)
 {
+	struct cb_opts cb_opts = {
+		.family = AF_INET,
+		.sotype = sotype,
+	};
+	struct network_helper_opts opts = {
+		.backlog	= SOMAXCONN,
+		.post_socket_cb = setsockopts,
+		.cb_opts	= &cb_opts,
+	};
 	int err, client_fd, connected_fd, server_fd;
 	struct bpf_link *lookup_link;
 
-	server_fd = make_server(sotype, EXT_IP4, EXT_PORT, NULL);
+	server_fd = start_server_str(AF_INET, sotype, EXT_IP4, EXT_PORT, &opts);
 	if (server_fd < 0)
 		return;
 
@@ -1216,6 +1258,15 @@ struct test_multi_prog {
 
 static void run_multi_prog_lookup(const struct test_multi_prog *t)
 {
+	struct cb_opts cb_opts = {
+		.family = is_ipv6(t->listen_at.ip) ? AF_INET6 : AF_INET,
+		.sotype = SOCK_STREAM,
+	};
+	struct network_helper_opts srv_opts = {
+		.backlog	= SOMAXCONN,
+		.post_socket_cb = setsockopts,
+		.cb_opts	= &cb_opts,
+	};
 	struct sockaddr_storage dst = {};
 	int map_fd, server_fd, client_fd;
 	struct bpf_link *link1, *link2;
@@ -1240,8 +1291,8 @@ static void run_multi_prog_lookup(const struct test_multi_prog *t)
 	if (!link2)
 		goto out_unlink1;
 
-	server_fd = make_server(SOCK_STREAM, t->listen_at.ip,
-				t->listen_at.port, NULL);
+	server_fd = start_server_str(cb_opts.family, SOCK_STREAM, t->listen_at.ip,
+				     t->listen_at.port, &srv_opts);
 	if (server_fd < 0)
 		goto out_unlink2;
 
