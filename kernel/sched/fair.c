@@ -7864,16 +7864,17 @@ static inline void eenv_pd_busy_time(struct energy_env *eenv,
 				     struct cpumask *pd_cpus,
 				     struct task_struct *p)
 {
-	unsigned long busy_time = 0;
 	int cpu;
+
+	eenv->pd_busy_time = 0;
 
 	for_each_cpu(cpu, pd_cpus) {
 		unsigned long util = cpu_util(cpu, p, -1, 0);
 
-		busy_time += effective_cpu_util(cpu, util, NULL, NULL);
+		util = effective_cpu_util(cpu, util, NULL, NULL);
+		util = min(eenv->cpu_cap, util);
+		eenv->pd_busy_time += util;
 	}
-
-	eenv->pd_busy_time = min(eenv->pd_cap, busy_time);
 }
 
 /*
