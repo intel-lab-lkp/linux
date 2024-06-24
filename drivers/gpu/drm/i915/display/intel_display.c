@@ -6249,6 +6249,9 @@ static int intel_async_flip_check_hw(struct intel_atomic_state *state, struct in
 		case I915_FORMAT_MOD_Y_TILED:
 		case I915_FORMAT_MOD_Yf_TILED:
 		case I915_FORMAT_MOD_4_TILED:
+		case I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS:
+		case I915_FORMAT_MOD_4_TILED_MTL_RC_CCS:
+		case I915_FORMAT_MOD_4_TILED_DG2_RC_CCS:
 			break;
 		default:
 			drm_dbg_kms(&i915->drm,
@@ -6258,7 +6261,8 @@ static int intel_async_flip_check_hw(struct intel_atomic_state *state, struct in
 			return -EINVAL;
 		}
 
-		if (new_plane_state->hw.fb->format->num_planes > 1) {
+		if (intel_format_info_is_yuv_semiplanar(new_plane_state->hw.fb->format,
+							new_plane_state->hw.fb->modifier)) {
 			drm_dbg_kms(&i915->drm,
 				    "[PLANE:%d:%s] Planar formats do not support async flips\n",
 				    plane->base.base.id, plane->base.name);
@@ -6300,6 +6304,14 @@ static int intel_async_flip_check_hw(struct intel_atomic_state *state, struct in
 		    new_plane_state->hw.rotation) {
 			drm_dbg_kms(&i915->drm,
 				    "[PLANE:%d:%s] Rotation cannot be changed in async flip\n",
+				    plane->base.base.id, plane->base.name);
+			return -EINVAL;
+		}
+
+		if (skl_plane_aux_dist(old_plane_state, 0) !=
+		    skl_plane_aux_dist(new_plane_state, 0)) {
+			drm_dbg_kms(&i915->drm,
+				    "[PLANE:%d:%s] AUX_DIST cannot be changed in async flip\n",
 				    plane->base.base.id, plane->base.name);
 			return -EINVAL;
 		}
