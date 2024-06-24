@@ -322,8 +322,6 @@ int pt_core_perform_passthru(struct pt_cmd_queue *cmd_q,
 			     struct pt_passthru_engine *pt_engine);
 
 void pt_check_status_trans(struct pt_device *pt, struct pt_cmd_queue *cmd_q);
-void pt_start_queue(struct pt_cmd_queue *cmd_q);
-void pt_stop_queue(struct pt_cmd_queue *cmd_q);
 
 static inline void pt_core_disable_queue_interrupts(struct pt_device *pt)
 {

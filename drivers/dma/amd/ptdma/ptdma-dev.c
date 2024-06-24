@@ -17,7 +17,7 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 
-#include "ptdma.h"
+#include "../common/amd_dma.h"
 
 /* Human-readable error strings */
 static char *pt_error_codes[] = {
@@ -52,18 +52,6 @@ static char *pt_error_codes[] = {
 static void pt_log_error(struct pt_device *d, int e)
 {
 	dev_err(d->dev, "PTDMA error: %s (0x%x)\n", pt_error_codes[e], e);
-}
-
-void pt_start_queue(struct pt_cmd_queue *cmd_q)
-{
-	/* Turn on the run bit */
-	iowrite32(cmd_q->qcontrol | CMD_Q_RUN, cmd_q->reg_control);
-}
-
-void pt_stop_queue(struct pt_cmd_queue *cmd_q)
-{
-	/* Turn off the run bit */
-	iowrite32(cmd_q->qcontrol & ~CMD_Q_RUN, cmd_q->reg_control);
 }
 
 static int pt_core_execute_cmd(struct ptdma_desc *desc, struct pt_cmd_queue *cmd_q)
