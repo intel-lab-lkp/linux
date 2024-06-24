@@ -303,6 +303,10 @@ static void note_page(struct ptdump_state *pt_st, unsigned long addr, int level,
 		   addr >= st->marker[1].start_address) {
 		const char *unit = units;
 		unsigned long delta;
+		unsigned int i;
+
+		for (i = 0; i < st->level; i++)
+			pt_dump_seq_printf(st->seq, "  ");
 
 		if (st->current_prot) {
 			note_prot_uxn(st, addr);
@@ -322,6 +326,10 @@ static void note_page(struct ptdump_state *pt_st, unsigned long addr, int level,
 			pt_dump_seq_printf(st->seq, "0x%016lx-0x%016lx   ",
 					   st->start_address, addr);
 		}
+
+		/* Align region information regardlesss of level */
+		for (i = st->level; i < 4; i++)
+			pt_dump_seq_printf(st->seq, "  ");
 
 		delta >>= 10;
 		while (!(delta & 1023) && unit[1]) {
