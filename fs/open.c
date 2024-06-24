@@ -980,6 +980,7 @@ static int do_dentry_open(struct file *f,
 	if ((f->f_flags & O_DIRECT) && !(f->f_mode & FMODE_CAN_ODIRECT))
 		return -EINVAL;
 
+#ifdef CONFIG_READ_ONLY_THP_FOR_FS
 	/*
 	 * XXX: Huge page cache doesn't support writing yet. Drop all page
 	 * cache for this file before processing writes.
@@ -1007,6 +1008,7 @@ static int do_dentry_open(struct file *f,
 			filemap_invalidate_unlock(inode->i_mapping);
 		}
 	}
+#endif
 
 	return 0;
 
