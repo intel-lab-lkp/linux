@@ -201,6 +201,14 @@ config PTDUMP_DEBUGFS
 
 	  If in doubt, say N.
 
+config ARCH_SUPPORTS_NON_LEAF_PTDUMP
+	bool "Include intermediate directory entries in pagetable dumps"
+	help
+	  Enable the inclusion of intermediate page directory entries in calls
+	  to the ptdump API. Once an architecture defines correct ptdump
+	  behavior for PGD, PUD, P4D, and PMD entries, this config can be
+	  selected.
+
 config HAVE_DEBUG_KMEMLEAK
 	bool
 
