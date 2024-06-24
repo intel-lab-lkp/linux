@@ -127,41 +127,6 @@ struct pbl_context {
 	u8 physically_continuous;
 };
 
-static inline struct efa_dev *to_edev(struct ib_device *ibdev)
-{
-	return container_of(ibdev, struct efa_dev, ibdev);
-}
-
-static inline struct efa_ucontext *to_eucontext(struct ib_ucontext *ibucontext)
-{
-	return container_of(ibucontext, struct efa_ucontext, ibucontext);
-}
-
-static inline struct efa_pd *to_epd(struct ib_pd *ibpd)
-{
-	return container_of(ibpd, struct efa_pd, ibpd);
-}
-
-static inline struct efa_mr *to_emr(struct ib_mr *ibmr)
-{
-	return container_of(ibmr, struct efa_mr, ibmr);
-}
-
-static inline struct efa_qp *to_eqp(struct ib_qp *ibqp)
-{
-	return container_of(ibqp, struct efa_qp, ibqp);
-}
-
-static inline struct efa_cq *to_ecq(struct ib_cq *ibcq)
-{
-	return container_of(ibcq, struct efa_cq, ibcq);
-}
-
-static inline struct efa_ah *to_eah(struct ib_ah *ibah)
-{
-	return container_of(ibah, struct efa_ah, ibah);
-}
-
 static inline struct efa_user_mmap_entry *
 to_emmap(struct rdma_user_mmap_entry *rdma_entry)
 {
