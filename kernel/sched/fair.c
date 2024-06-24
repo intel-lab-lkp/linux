@@ -4980,7 +4980,7 @@ static inline int util_fits_cpu(unsigned long util,
 				int cpu)
 {
 	unsigned long capacity = capacity_of(cpu);
-	unsigned long capacity_orig;
+	unsigned long capacity_actual;
 	bool fits, uclamp_max_fits;
 
 	/*
@@ -4992,15 +4992,15 @@ static inline int util_fits_cpu(unsigned long util,
 		return fits;
 
 	/*
-	 * We must use arch_scale_cpu_capacity() for comparing against uclamp_min and
+	 * We must use actual_cpu_capacity() for comparing against uclamp_min and
 	 * uclamp_max. We only care about capacity pressure (by using
 	 * capacity_of()) for comparing against the real util.
 	 *
 	 * If a task is boosted to 1024 for example, we don't want a tiny
 	 * pressure to skew the check whether it fits a CPU or not.
 	 *
-	 * Similarly if a task is capped to arch_scale_cpu_capacity(little_cpu), it
-	 * should fit a little cpu even if there's some pressure.
+	 * Similarly if a task is capped to actual_cpu_capacity, it should fit
+	 * the cpu even if there's some pressure.
 	 *
 	 * Only exception is for HW or cpufreq pressure since it has a direct impact
 	 * on available OPP of the system.
@@ -5011,7 +5011,7 @@ static inline int util_fits_cpu(unsigned long util,
 	 * For uclamp_max, we can tolerate a drop in performance level as the
 	 * goal is to cap the task. So it's okay if it's getting less.
 	 */
-	capacity_orig = arch_scale_cpu_capacity(cpu);
+	capacity_actual = get_actual_cpu_capacity(cpu);
 
 	/*
 	 * We want to force a task to fit a cpu as implied by uclamp_max.
@@ -5039,7 +5039,7 @@ static inline int util_fits_cpu(unsigned long util,
 	 *     uclamp_max request.
 	 *
 	 *   which is what we're enforcing here. A task always fits if
-	 *   uclamp_max <= capacity_orig. But when uclamp_max > capacity_orig,
+	 *   uclamp_max <= capacity_actual. But when uclamp_max > capacity_actual,
 	 *   the normal upmigration rules should withhold still.
 	 *
 	 *   Only exception is when we are on max capacity, then we need to be
@@ -5050,8 +5050,8 @@ static inline int util_fits_cpu(unsigned long util,
 	 *     2. The system is being saturated when we're operating near
 	 *        max capacity, it doesn't make sense to block overutilized.
 	 */
-	uclamp_max_fits = (capacity_orig == SCHED_CAPACITY_SCALE) && (uclamp_max == SCHED_CAPACITY_SCALE);
-	uclamp_max_fits = !uclamp_max_fits && (uclamp_max <= capacity_orig);
+	uclamp_max_fits = (capacity_actual == SCHED_CAPACITY_SCALE) && (uclamp_max == SCHED_CAPACITY_SCALE);
+	uclamp_max_fits = !uclamp_max_fits && (uclamp_max <= capacity_actual);
 	fits = fits || uclamp_max_fits;
 
 	/*
@@ -5086,8 +5086,7 @@ static inline int util_fits_cpu(unsigned long util,
 	 * handle the case uclamp_min > uclamp_max.
 	 */
 	uclamp_min = min(uclamp_min, uclamp_max);
-	if (fits && (util < uclamp_min) &&
-	    (uclamp_min > get_actual_cpu_capacity(cpu)))
+	if (fits && (util < uclamp_min) && (uclamp_min > capacity_actual))
 		return -1;
 
 	return fits;
