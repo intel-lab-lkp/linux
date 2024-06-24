@@ -7,6 +7,21 @@
 #
 # When adding new entries keep the list in alphabetical order
 
+menu "Frequency Measurements"
+
+config AMLOGIC_CLK_MSR_IO
+	tristate "Amlogic IO Clock Measure"
+	default ARCH_MESON
+	depends on REGMAP_MMIO && COMMON_CLK
+	help
+	  Say yes here to build support for Amlogic Clock Measure
+	  HW found in Amlogic SoC, with IIO support
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called amlogic-clk-msr-io.
+
+endmenu
+
 menu "Frequency Synthesizers DDS/PLL"
 
 menu "Clock Generator/Distribution"
