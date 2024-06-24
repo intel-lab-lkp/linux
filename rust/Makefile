@@ -264,6 +264,7 @@ rusttest-prepare: FORCE
 
 quiet_cmd_rustdoc_test_macros = RUSTDOC T $<
       cmd_rustdoc_test_macros = \
+	export RUST_MODFILE=test.rs; \
 	OBJTREE=$(abspath $(objtree)) \
 	$(RUSTDOC) --test $(rust_common_flags) \
 		@$(objtree)/include/generated/rustc_cfg \

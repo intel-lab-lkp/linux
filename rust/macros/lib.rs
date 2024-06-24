@@ -26,8 +26,12 @@ use proc_macro::TokenStream;
 ///
 /// # Examples
 ///
-/// ```ignore
+/// ```rust
+/// #[macro_use] extern crate macros;
+/// #[macro_use] extern crate kernel;
 /// use kernel::prelude::*;
+///
+/// struct MyModule(i32);
 ///
 /// module!{
 ///     type: MyModule,
@@ -37,22 +41,15 @@ use proc_macro::TokenStream;
 ///     license: "GPL",
 /// }
 ///
-/// struct MyModule;
-///
 /// impl kernel::Module for MyModule {
-///     fn init() -> Result<Self> {
-///         // If the parameter is writeable, then the kparam lock must be
-///         // taken to read the parameter:
-///         {
-///             let lock = THIS_MODULE.kernel_param_lock();
-///             pr_info!("i32 param is:  {}\n", writeable_i32.read(&lock));
-///         }
-///         // If the parameter is read only, it can be read without locking
-///         // the kernel parameters:
-///         pr_info!("i32 param is:  {}\n", my_i32.read());
-///         Ok(Self)
+///     fn init(module: &'static ThisModule) -> Result<Self> {
+///         let foo: i32 = 42;
+///         pr_info!("I contain:  {}\n", foo);
+///         Ok(Self(foo))
 ///     }
 /// }
+///
+/// # fn main() {}
 /// ```
 ///
 /// # Supported argument types
