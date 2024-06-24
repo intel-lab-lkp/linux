@@ -856,7 +856,6 @@ static enum lru_status inode_lru_isolate(struct list_head *item,
 			mm_account_reclaimed_pages(reap);
 		}
 		iput(inode);
-		spin_lock(lru_lock);
 		return LRU_RETRY;
 	}
 
