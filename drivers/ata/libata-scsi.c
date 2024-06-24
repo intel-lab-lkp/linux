@@ -245,9 +245,9 @@ static void ata_scsi_set_passthru_sense_fields(struct ata_queued_cmd *qc)
 	struct scsi_cmnd *cmd = qc->scsicmd;
 	struct ata_taskfile *tf = &qc->result_tf;
 	unsigned char *sb = cmd->sense_buffer;
-	unsigned char *desc = sb + 8;
 
-	if ((cmd->sense_buffer[0] & 0x7f) >= 0x72) {
+	if ((sb[0] & 0x7f) >= 0x72) {
+		unsigned char *desc;
 		u8 len;
 
 		/* descriptor format */
@@ -286,21 +286,21 @@ static void ata_scsi_set_passthru_sense_fields(struct ata_queued_cmd *qc)
 		}
 	} else {
 		/* Fixed sense format */
-		desc[0] = tf->error;
-		desc[1] = tf->status;
-		desc[2] = tf->device;
-		desc[3] = tf->nsect;
-		desc[7] = 0;
+		sb[0] |= 0x80;
+		sb[3] = tf->error;
+		sb[4] = tf->status;
+		sb[5] = tf->device;
+		sb[6] = tf->nsect;
 		if (tf->flags & ATA_TFLAG_LBA48)  {
-			desc[8] |= 0x80;
+			sb[8] |= 0x80;
 			if (tf->hob_nsect)
-				desc[8] |= 0x40;
+				sb[8] |= 0x40;
 			if (tf->hob_lbal || tf->hob_lbam || tf->hob_lbah)
-				desc[8] |= 0x20;
+				sb[8] |= 0x20;
 		}
-		desc[9] = tf->lbal;
-		desc[10] = tf->lbam;
-		desc[11] = tf->lbah;
+		sb[9] = tf->lbal;
+		sb[10] = tf->lbam;
+		sb[11] = tf->lbah;
 	}
 }
 
