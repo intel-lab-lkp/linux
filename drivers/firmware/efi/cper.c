@@ -106,6 +106,47 @@ void cper_print_bits(const char *pfx, unsigned int bits,
 		printk("%s\n", buf);
 }
 
+/*
+ * cper_bits_to_str - return a string for set bits
+ * @buf: buffer to store the output string
+ * @buf_size: size of the output string buffer
+ * @bits: bit mask
+ * @strs: string array, indexed by bit position
+ * @strs_size: size of the string array: @strs
+ * @mask: a continuous bitmask used to detect the first valid bit of the
+ *        bitmap.
+ *
+ * Add to @buf the bitmask in hexadecimal. Then, for each set bit in @bits
+ * mask, add the corresponding string describing the bit in @strs to @buf.
+ */
+char *cper_bits_to_str(char *buf, int buf_size, unsigned long bits,
+		       const char * const strs[], unsigned int strs_size)
+{
+	int len = buf_size;
+	char *str = buf;
+	int i, size;
+
+	for_each_set_bit(i, &bits, strs_size) {
+		if (!(bits & (1U << (i))))
+			continue;
+
+		if (*buf && len > 0) {
+			*str = '|';
+			len--;
+			str++;
+		}
+
+		size = strscpy(str, strs[i], len);
+		if (size < 0)
+			break;
+
+		len -= size;
+		str += size;
+	}
+	return buf;
+}
+EXPORT_SYMBOL_GPL(cper_bits_to_str);
+
 static const char * const proc_type_strs[] = {
 	"IA32/X64",
 	"IA64",
