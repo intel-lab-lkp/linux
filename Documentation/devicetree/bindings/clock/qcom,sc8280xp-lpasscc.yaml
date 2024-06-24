@@ -21,6 +21,7 @@ properties:
     enum:
       - qcom,sc8280xp-lpassaudiocc
       - qcom,sc8280xp-lpasscc
+      - qcom,x1e80100-lpassaudiocc
 
   reg:
     maxItems: 1
