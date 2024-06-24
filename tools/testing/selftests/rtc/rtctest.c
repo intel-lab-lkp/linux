@@ -82,6 +82,22 @@ static void nanosleep_with_retries(long ns)
 	}
 }
 
+static int rtc_get_features(int fd, uint64_t *features)
+{
+	struct rtc_param param = { 0 };
+	int rc;
+
+	param.param = RTC_PARAM_FEATURES;
+	param.index = 0;
+	rc = ioctl(fd, RTC_PARAM_GET, &param);
+	if (rc < 0)
+		return rc;
+
+	*features = param.uvalue;
+
+	return 0;
+}
+
 TEST_F_TIMEOUT(rtc, date_read_loop, READ_LOOP_DURATION_SEC + 2) {
 	int rc;
 	long iter_count = 0;
@@ -197,6 +213,13 @@ TEST_F(rtc, alarm_alm_set) {
 	fd_set readfds;
 	time_t secs, new;
 	int rc;
+	int rc_feat;
+	uint64_t rtc_feat;
+
+	rc_feat = rtc_get_features(self->fd, &rtc_feat);
+
+	if (!rc_feat && (rtc_feat & _BITUL(RTC_FEATURE_ALARM_RES_MINUTE)))
+		SKIP(return, "Skipping test since only one minute resolution alarms are supported.");
 
 	if (self->fd == -1 && errno == ENOENT)
 		SKIP(return, "Skipping test since %s does not exist", rtc_file);
@@ -255,6 +278,13 @@ TEST_F(rtc, alarm_wkalm_set) {
 	fd_set readfds;
 	time_t secs, new;
 	int rc;
+	int rc_feat;
+	uint64_t rtc_feat;
+
+	rc_feat = rtc_get_features(self->fd, &rtc_feat);
+
+	if (!rc_feat && (rtc_feat & _BITUL(RTC_FEATURE_ALARM_RES_MINUTE)))
+		SKIP(return, "Skipping test since only one minute resolution alarms are supported.");
 
 	if (self->fd == -1 && errno == ENOENT)
 		SKIP(return, "Skipping test since %s does not exist", rtc_file);
