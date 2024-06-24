@@ -101,12 +101,9 @@ int apei_smca_report_x86_error(struct cper_ia_proc_ctx *ctx_info, u64 lapic_id)
 	if (ctx_info->reg_arr_size < 48)
 		return -EINVAL;
 
-	mce_prep_record(&m);
+	mce_prep_record_common(&m);
+	mce_prep_record_per_cpu(cpu, &m);
 
-	m.extcpu   = cpu;
-	m.socketid = cpu_data(cpu).topo.pkg_id;
-
-	m.apicid = lapic_id;
 	m.bank = (ctx_info->msr_addr >> 4) & 0xFF;
 	m.status = *i_mce;
 	m.addr = *(i_mce + 1);
