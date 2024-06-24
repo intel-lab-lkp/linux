@@ -263,8 +263,15 @@
 	popl	%eax
 .endm
 
-.macro RESTORE_REGS pop=0
+.macro RESTORE_REGS pop=0 clear_cpu_buf=0
 	RESTORE_INT_REGS
+	/*
+	 * CLEAR_CPU_BUFFERS must be done before restoring segment
+	 * registers to avoid #GP when executing VERW in vm86 mode.
+	 */
+	.if \clear_cpu_buf
+	CLEAR_CPU_BUFFERS
+	.endif
 1:	popl	%ds
 2:	popl	%es
 3:	popl	%fs
@@ -299,7 +306,7 @@
 
 	BUG_IF_WRONG_CR3
 
-	RESTORE_REGS pop=\pop
+	RESTORE_REGS pop=\pop clear_cpu_buf=1
 .endm
 
 .macro CHECK_AND_APPLY_ESPFIX
@@ -950,8 +957,7 @@ restore_all_switch_stack:
 	BUG_IF_WRONG_CR3
 
 	/* Restore user state */
-	RESTORE_REGS pop=4			# skip orig_eax/error_code
-	CLEAR_CPU_BUFFERS
+	RESTORE_REGS pop=4 clear_cpu_buf=1	# skip orig_eax/error_code
 .Lirq_return:
 	/*
 	 * ARCH_HAS_MEMBARRIER_SYNC_CORE rely on IRET core serialization
@@ -1144,7 +1150,6 @@ SYM_CODE_START(asm_exc_nmi)
 
 	/* Not on SYSENTER stack. */
 	call	exc_nmi
-	CLEAR_CPU_BUFFERS
 	jmp	.Lnmi_return
 
 .Lnmi_from_sysenter_stack:
