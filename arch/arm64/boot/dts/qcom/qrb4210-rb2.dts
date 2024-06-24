@@ -662,6 +662,10 @@
 	status = "okay";
 };
 
+&usb_dwc3 {
+	role-switch-default-mode = "host";
+};
+
 &usb_dwc3_hs {
 	remote-endpoint = <&pmi632_hs_in>;
 };

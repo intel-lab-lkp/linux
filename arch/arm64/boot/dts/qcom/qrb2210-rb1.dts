@@ -594,6 +594,10 @@
 	status = "okay";
 };
 
+&usb_dwc3 {
+	role-switch-default-mode = "host";
+};
+
 &usb_dwc3_hs {
 	remote-endpoint = <&pm4125_hs_in>;
 };
