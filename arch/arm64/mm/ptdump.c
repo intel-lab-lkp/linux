@@ -24,6 +24,7 @@
 #include <asm/memory.h>
 #include <asm/pgtable-hwdef.h>
 #include <asm/ptdump.h>
+#include <asm/pgalloc.h>
 
 
 #define pt_dump_seq_printf(m, fmt, args...)	\
@@ -64,7 +65,7 @@ struct prot_bits {
 	const char	*clear;
 };
 
-static const struct prot_bits pte_bits[] = {
+static const struct prot_bits blk_bits[] = {
 	{
 		.mask	= PTE_VALID,
 		.val	= PTE_VALID,
@@ -78,13 +79,13 @@ static const struct prot_bits pte_bits[] = {
 	}, {
 		.mask	= PTE_RDONLY,
 		.val	= PTE_RDONLY,
-		.set	= "ro",
+		.set	= "RO",
 		.clear	= "RW",
 	}, {
 		.mask	= PTE_PXN,
 		.val	= PTE_PXN,
 		.set	= "NX",
-		.clear	= "x ",
+		.clear	= "X ",
 	}, {
 		.mask	= PTE_SHARED,
 		.val	= PTE_SHARED,
@@ -142,44 +143,101 @@ static const struct prot_bits pte_bits[] = {
 		.set	= "MEM/NORMAL-TAGGED",
 	}
 };
+static const size_t num_blk_bits = ARRAY_SIZE(blk_bits);
+
+static const struct prot_bits tbl_bits[] = {
+	{
+		.mask	= PTE_VALID,
+		.val	= PTE_VALID,
+		.set	= " ",
+		.clear	= "F",
+	}, {
+		.mask	= PMD_TABLE_BIT,
+		.val	= PMD_TABLE_BIT,
+		.set	= "TBL",
+		.clear	= "   ",
+	}, {
+		.mask	= PTE_AF,
+		.val	= PTE_AF,
+		.set	= "AF",
+		.clear	= "  ",
+	}, {
+		.mask	= PMD_TABLE_PXN,
+		.val	= PMD_TABLE_PXN,
+		.set	= "NX",
+		.clear	= "     ",
+	}, {
+		.mask	= PMD_TABLE_UXN,
+		.val	= PMD_TABLE_UXN,
+		.set	= "UXN",
+		.clear	= "      ",
+	}, {
+		.mask	= PMD_TABLE_KERN,
+		.val	= PMD_TABLE_KERN,
+		.set	= "KRN",
+		.clear	= "    "
+	}, {
+		.mask	= PMD_TABLE_PRDONLY,
+		.val	= PMD_TABLE_PRDONLY,
+		.set	= "RO",
+		.clear	= "RW"
+	}
+};
+static const size_t num_tbl_bits = ARRAY_SIZE(tbl_bits);
 
 struct pg_level {
-	const struct prot_bits *bits;
+	const struct prot_bits *blk_bits;
+	const struct prot_bits *tbl_bits;
 	char name[4];
-	int num;
 	u64 mask;
+	unsigned long size;
 };
 
 static struct pg_level pg_level[] __ro_after_init = {
 	{ /* pgd */
-		.name	= "PGD",
-		.bits	= pte_bits,
-		.num	= ARRAY_SIZE(pte_bits),
+		.name		= "PGD",
+		.blk_bits	= blk_bits,
+		.size		= PGDIR_SIZE,
+		.tbl_bits	= tbl_bits
 	}, { /* p4d */
-		.name	= "P4D",
-		.bits	= pte_bits,
-		.num	= ARRAY_SIZE(pte_bits),
+		.name		= "P4D",
+		.blk_bits	= blk_bits,
+		.size		= P4D_SIZE,
+		.tbl_bits	= tbl_bits
 	}, { /* pud */
-		.name	= "PUD",
-		.bits	= pte_bits,
-		.num	= ARRAY_SIZE(pte_bits),
+		.name		= "PUD",
+		.blk_bits	= blk_bits,
+		.size		= PUD_SIZE,
+		.tbl_bits	= tbl_bits
 	}, { /* pmd */
-		.name	= "PMD",
-		.bits	= pte_bits,
-		.num	= ARRAY_SIZE(pte_bits),
+		.name		= "PMD",
+		.blk_bits	= blk_bits,
+		.size		= PMD_SIZE,
+		.tbl_bits	= tbl_bits
 	}, { /* pte */
-		.name	= "PTE",
-		.bits	= pte_bits,
-		.num	= ARRAY_SIZE(pte_bits),
+		.name		= "PTE",
+		.blk_bits	= blk_bits,
+		.size		= PAGE_SIZE,
+		.tbl_bits	= NULL
 	},
 };
 
-static void dump_prot(struct pg_state *st, const struct prot_bits *bits,
-			size_t num)
+static void dump_prot(struct pg_state *st, struct pg_level level)
 {
 	unsigned i;
+	const struct prot_bits *bits;
+	int num_bits;
 
-	for (i = 0; i < num; i++, bits++) {
+	if ((st->current_prot & PTE_TABLE_BIT) == PTE_TABLE_BIT &&
+	    level.tbl_bits) {
+		bits = level.tbl_bits;
+		num_bits = num_tbl_bits;
+	} else {
+		bits = level.blk_bits;
+		num_bits = num_blk_bits;
+	}
+
+	for (i = 0; i < num_bits; i++, bits++) {
 		const char *s;
 
 		if ((st->current_prot & bits->mask) == bits->val)
@@ -251,21 +309,30 @@ static void note_page(struct ptdump_state *pt_st, unsigned long addr, int level,
 			note_prot_wx(st, addr);
 		}
 
-		pt_dump_seq_printf(st->seq, "0x%016lx-0x%016lx   ",
-				   st->start_address, addr);
+		if (st->start_address == addr) {
+			if (check_add_overflow(addr, pg_level[st->level].size,
+					       &delta))
+				delta = ULONG_MAX - addr + 1;
+			else
+				delta = pg_level[st->level].size;
+			pt_dump_seq_printf(st->seq, "0x%016lx-0x%016lx   ",
+					   addr, addr + delta);
+		} else {
+			delta = (addr - st->start_address);
+			pt_dump_seq_printf(st->seq, "0x%016lx-0x%016lx   ",
+					   st->start_address, addr);
+		}
 
-		delta = (addr - st->start_address) >> 10;
+		delta >>= 10;
 		while (!(delta & 1023) && unit[1]) {
 			delta >>= 10;
 			unit++;
 		}
 		pt_dump_seq_printf(st->seq, "%9lu%c %s", delta, *unit,
 				   pg_level[st->level].name);
-		if (st->current_prot && pg_level[st->level].bits)
-			dump_prot(st, pg_level[st->level].bits,
-				  pg_level[st->level].num);
+		if (st->current_prot && pg_level[st->level].blk_bits)
+			dump_prot(st, pg_level[st->level]);
 		pt_dump_seq_puts(st->seq, "\n");
-
 		if (addr >= st->marker[1].start_address) {
 			st->marker++;
 			pt_dump_seq_printf(st->seq, "---[ %s ]---\n", st->marker->name);
@@ -311,11 +378,16 @@ void ptdump_walk(struct seq_file *s, struct ptdump_info *info)
 static void __init ptdump_initialize(void)
 {
 	unsigned i, j;
+	struct pg_level *level = pg_level;
 
-	for (i = 0; i < ARRAY_SIZE(pg_level); i++)
-		if (pg_level[i].bits)
-			for (j = 0; j < pg_level[i].num; j++)
-				pg_level[i].mask |= pg_level[i].bits[j].mask;
+	for (i = 0; i < ARRAY_SIZE(pg_level); i++, level++) {
+		if (level->blk_bits)
+			for (j = 0; j < num_blk_bits; j++)
+				level->mask |= level->blk_bits[j].mask;
+		if (level->tbl_bits)
+			for (j = 0; j < num_tbl_bits; j++)
+				level->mask |= level->tbl_bits[j].mask;
+	}
 }
 
 static struct ptdump_info kernel_ptdump_info __ro_after_init = {
