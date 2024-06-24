@@ -1055,9 +1055,8 @@ void binder_alloc_vma_close(struct binder_alloc *alloc)
  */
 enum lru_status binder_alloc_free_page(struct list_head *item,
 				       struct list_lru_one *lru,
-				       spinlock_t *lock,
 				       void *cb_arg)
-	__must_hold(lock)
+	__must_hold(&lru->lock)
 {
 	struct binder_lru_page *page = container_of(item, typeof(*page), lru);
 	struct binder_alloc *alloc = page->alloc;
@@ -1092,7 +1091,7 @@ enum lru_status binder_alloc_free_page(struct list_head *item,
 
 	list_lru_isolate(lru, item);
 	spin_unlock(&alloc->lock);
-	spin_unlock(lock);
+	spin_unlock(&lru->lock);
 
 	if (vma) {
 		trace_binder_unmap_user_start(alloc, index);
