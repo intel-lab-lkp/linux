@@ -204,15 +204,6 @@ static int make_server(int sotype, const char *ip, int port,
 		}
 	}
 
-	/* Late attach reuseport prog so we can have one init path */
-	if (reuseport_prog) {
-		err = attach_reuseport(fd, reuseport_prog);
-		if (CHECK(err, "attach_reuseport", "failed\n")) {
-			log_err("failed to attach reuseport prog");
-			goto fail;
-		}
-	}
-
 	return fd;
 fail:
 	close(fd);
@@ -610,7 +601,8 @@ static void run_lookup_prog(const struct test *t)
 		server_fds[i] = make_server(t->sotype, t->listen_at.ip,
 					    t->listen_at.port,
 					    t->reuseport_prog);
-		if (server_fds[i] < 0)
+		if (server_fds[i] < 0 ||
+		    attach_reuseport(server_fds[i], t->reuseport_prog))
 			goto close;
 
 		err = update_lookup_map(t->sock_map, i, server_fds[i]);
@@ -636,7 +628,8 @@ static void run_lookup_prog(const struct test *t)
 		reuse_conn_fd = make_server(t->sotype, t->listen_at.ip,
 					    t->listen_at.port,
 					    t->reuseport_prog);
-		if (reuse_conn_fd < 0)
+		if (reuse_conn_fd < 0 ||
+		    attach_reuseport(reuse_conn_fd, t->reuseport_prog))
 			goto close;
 
 		/* Connect the extra socket to itself */
@@ -878,6 +871,9 @@ static void drop_on_lookup(const struct test *t)
 	if (server_fd < 0)
 		goto detach;
 
+	if (attach_reuseport(server_fd, t->reuseport_prog))
+		goto close_srv;
+
 	client_fd = make_socket(t->sotype, t->connect_to.ip,
 				t->connect_to.port, &dst);
 	if (client_fd < 0)
@@ -991,6 +987,9 @@ static void drop_on_reuseport(const struct test *t)
 			      t->reuseport_prog);
 	if (server1 < 0)
 		goto detach;
+
+	if (attach_reuseport(server1, t->reuseport_prog))
+		goto close_srv1;
 
 	err = update_lookup_map(t->sock_map, SERVER_A, server1);
 	if (err)
