@@ -366,9 +366,45 @@ static void seg6_update_csum(struct sk_buff *skb)
 			   (__be32 *)addr);
 }
 
-static int ipv6_srh_rcv(struct sk_buff *skb)
+static int ipv6_rthdr_rcv_last(struct sk_buff *skb)
 {
 	struct inet6_skb_parm *opt = IP6CB(skb);
+	struct net *net = dev_net(skb->dev);
+	const struct ipv6_rt_hdr *hdr;
+
+	hdr = (struct ipv6_rt_hdr *)skb_transport_header(skb);
+
+	if (hdr->nexthdr == NEXTHDR_IPV6 || hdr->nexthdr == NEXTHDR_IPV4) {
+		int offset = (hdr->hdrlen + 1) << 3;
+
+		skb_postpull_rcsum(skb, skb_network_header(skb),
+				   skb_network_header_len(skb));
+		skb_pull(skb, offset);
+		skb_postpull_rcsum(skb, skb_transport_header(skb), offset);
+
+		skb_reset_network_header(skb);
+		skb_reset_transport_header(skb);
+		skb->encapsulation = 0;
+		if (hdr->nexthdr == NEXTHDR_IPV4)
+			skb->protocol = htons(ETH_P_IP);
+		__skb_tunnel_rx(skb, skb->dev, net);
+
+		netif_rx(skb);
+		return -1;
+	}
+
+	opt->srcrt = skb_network_header_len(skb);
+	opt->lastopt = opt->srcrt;
+	skb->transport_header += (hdr->hdrlen + 1) << 3;
+	opt->dst0 = opt->dst1;
+	opt->dst1 = 0;
+	opt->nhoff = (&hdr->nexthdr) - skb_network_header(skb);
+
+	return 1;
+}
+
+static int ipv6_srh_rcv(struct sk_buff *skb)
+{
 	struct net *net = dev_net(skb->dev);
 	struct ipv6_sr_hdr *hdr;
 	struct inet6_dev *idev;
@@ -395,34 +431,8 @@ static int ipv6_srh_rcv(struct sk_buff *skb)
 #endif
 
 looped_back:
-	if (hdr->segments_left == 0) {
-		if (hdr->nexthdr == NEXTHDR_IPV6 || hdr->nexthdr == NEXTHDR_IPV4) {
-			int offset = (hdr->hdrlen + 1) << 3;
-
-			skb_postpull_rcsum(skb, skb_network_header(skb),
-					   skb_network_header_len(skb));
-			skb_pull(skb, offset);
-			skb_postpull_rcsum(skb, skb_transport_header(skb),
-					   offset);
-
-			skb_reset_network_header(skb);
-			skb_reset_transport_header(skb);
-			skb->encapsulation = 0;
-			if (hdr->nexthdr == NEXTHDR_IPV4)
-				skb->protocol = htons(ETH_P_IP);
-			__skb_tunnel_rx(skb, skb->dev, net);
-
-			netif_rx(skb);
-			return -1;
-		}
-
-		opt->srcrt = skb_network_header_len(skb);
-		opt->lastopt = opt->srcrt;
-		skb->transport_header += (hdr->hdrlen + 1) << 3;
-		opt->nhoff = (&hdr->nexthdr) - skb_network_header(skb);
-
-		return 1;
-	}
+	if (hdr->segments_left == 0)
+		return ipv6_rthdr_rcv_last(skb);
 
 	if (hdr->segments_left >= (hdr->hdrlen >> 1)) {
 		__IP6_INC_STATS(net, idev, IPSTATS_MIB_INHDRERRORS);
@@ -482,7 +492,6 @@ looped_back:
 static int ipv6_rpl_srh_rcv(struct sk_buff *skb)
 {
 	struct ipv6_rpl_sr_hdr *hdr, *ohdr, *chdr;
-	struct inet6_skb_parm *opt = IP6CB(skb);
 	struct net *net = dev_net(skb->dev);
 	struct inet6_dev *idev;
 	struct ipv6hdr *oldhdr;
@@ -506,33 +515,8 @@ static int ipv6_rpl_srh_rcv(struct sk_buff *skb)
 looped_back:
 	hdr = (struct ipv6_rpl_sr_hdr *)skb_transport_header(skb);
 
-	if (hdr->segments_left == 0) {
-		if (hdr->nexthdr == NEXTHDR_IPV6) {
-			int offset = (hdr->hdrlen + 1) << 3;
-
-			skb_postpull_rcsum(skb, skb_network_header(skb),
-					   skb_network_header_len(skb));
-			skb_pull(skb, offset);
-			skb_postpull_rcsum(skb, skb_transport_header(skb),
-					   offset);
-
-			skb_reset_network_header(skb);
-			skb_reset_transport_header(skb);
-			skb->encapsulation = 0;
-
-			__skb_tunnel_rx(skb, skb->dev, net);
-
-			netif_rx(skb);
-			return -1;
-		}
-
-		opt->srcrt = skb_network_header_len(skb);
-		opt->lastopt = opt->srcrt;
-		skb->transport_header += (hdr->hdrlen + 1) << 3;
-		opt->nhoff = (&hdr->nexthdr) - skb_network_header(skb);
-
-		return 1;
-	}
+	if (hdr->segments_left == 0)
+		return ipv6_rthdr_rcv_last(skb);
 
 	n = (hdr->hdrlen << 3) - hdr->pad - (16 - hdr->cmpre);
 	r = do_div(n, (16 - hdr->cmpri));
@@ -648,7 +632,6 @@ looped_back:
 static int ipv6_rthdr_rcv(struct sk_buff *skb)
 {
 	struct inet6_dev *idev = __in6_dev_get(skb->dev);
-	struct inet6_skb_parm *opt = IP6CB(skb);
 	struct in6_addr *addr = NULL;
 	int n, i;
 	struct ipv6_rt_hdr *hdr;
@@ -709,13 +692,7 @@ looped_back:
 		default:
 			break;
 		}
-
-		opt->lastopt = opt->srcrt = skb_network_header_len(skb);
-		skb->transport_header += (hdr->hdrlen + 1) << 3;
-		opt->dst0 = opt->dst1;
-		opt->dst1 = 0;
-		opt->nhoff = (&hdr->nexthdr) - skb_network_header(skb);
-		return 1;
+		return ipv6_rthdr_rcv_last(skb);
 	}
 
 	switch (hdr->type) {
