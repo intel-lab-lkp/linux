@@ -2187,8 +2187,13 @@ static int fw_devlink_create_devlink(struct device *con,
 		}
 
 		if (con != sup_dev && !device_link_add(con, sup_dev, flags)) {
-			dev_err(con, "Failed to create device link (0x%x) with %s\n",
-				flags, dev_name(sup_dev));
+			if (flags & DL_FLAG_SYNC_STATE_ONLY &&
+			    con->links.status != DL_DEV_NO_DRIVER &&
+			    con->links.status != DL_DEV_PROBING)
+				dev_dbg(con, "Skipping device link creation for probed device\n");
+			else
+				dev_err(con, "Failed to create device link (0x%x) with %s\n",
+					flags, dev_name(sup_dev));
 			ret = -EINVAL;
 		}
 
