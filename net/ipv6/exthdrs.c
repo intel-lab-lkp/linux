@@ -662,17 +662,6 @@ static int ipv6_rthdr_rcv(struct sk_buff *skb)
 		return -1;
 	}
 
-	switch (hdr->type) {
-	case IPV6_SRCRT_TYPE_4:
-		/* segment routing */
-		return ipv6_srh_rcv(skb);
-	case IPV6_SRCRT_TYPE_3:
-		/* rpl segment routing */
-		return ipv6_rpl_srh_rcv(skb);
-	default:
-		break;
-	}
-
 looped_back:
 	if (hdr->segments_left == 0) {
 		switch (hdr->type) {
@@ -708,6 +697,12 @@ looped_back:
 		}
 		break;
 #endif
+	case IPV6_SRCRT_TYPE_3:
+		/* rpl segment routing */
+		return ipv6_rpl_srh_rcv(skb);
+	case IPV6_SRCRT_TYPE_4:
+		/* segment routing */
+		return ipv6_srh_rcv(skb);
 	default:
 		goto unknown_rh;
 	}
