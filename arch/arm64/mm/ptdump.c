@@ -320,11 +320,11 @@ static void note_page(struct ptdump_state *pt_st, unsigned long addr, int level,
 			else
 				delta = pg_level[st->level].size;
 			pt_dump_seq_printf(st->seq, "0x%016lx-0x%016lx   ",
-					   addr, addr + delta);
+					   addr, addr + delta - 1);
 		} else {
 			delta = (addr - st->start_address);
 			pt_dump_seq_printf(st->seq, "0x%016lx-0x%016lx   ",
-					   st->start_address, addr);
+					   st->start_address, addr - 1);
 		}
 
 		/* Align region information regardlesss of level */
