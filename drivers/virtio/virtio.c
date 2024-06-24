@@ -127,7 +127,7 @@ static void __virtio_config_changed(struct virtio_device *dev)
 {
 	struct virtio_driver *drv = drv_to_virtio(dev->dev.driver);
 
-	if (!dev->config_enabled)
+	if (dev->config_enabled < 1)
 		dev->config_change_pending = true;
 	else if (drv && drv->config_changed)
 		drv->config_changed(dev);
@@ -146,17 +146,23 @@ EXPORT_SYMBOL_GPL(virtio_config_changed);
 static void virtio_config_disable(struct virtio_device *dev)
 {
 	spin_lock_irq(&dev->config_lock);
-	dev->config_enabled = false;
+	--dev->config_enabled;
 	spin_unlock_irq(&dev->config_lock);
 }
 
 static void virtio_config_enable(struct virtio_device *dev)
 {
 	spin_lock_irq(&dev->config_lock);
-	dev->config_enabled = true;
-	if (dev->config_change_pending)
-		__virtio_config_changed(dev);
-	dev->config_change_pending = false;
+
+	if (dev->config_enabled < 1) {
+		++dev->config_enabled;
+		if (dev->config_enabled == 1 &&
+		    dev->config_change_pending) {
+			__virtio_config_changed(dev);
+			dev->config_change_pending = false;
+		}
+	}
+
 	spin_unlock_irq(&dev->config_lock);
 }
 
@@ -452,7 +458,7 @@ int register_virtio_device(struct virtio_device *dev)
 		goto out_ida_remove;
 
 	spin_lock_init(&dev->config_lock);
-	dev->config_enabled = false;
+	dev->config_enabled = 0;
 	dev->config_change_pending = false;
 
 	INIT_LIST_HEAD(&dev->vqs);
