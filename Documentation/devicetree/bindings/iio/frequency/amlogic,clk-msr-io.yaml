@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/frequency/amlogic,clk-msr-io.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Amlogic System Clock Measurer
+
+description:
+  Internal clock rate sensor within Amlogic SoCs
+
+maintainers:
+  - Neil Armstrong <neil.armstrong@linaro.org>
+
+properties:
+  compatible:
+    enum:
+      - amlogic,meson8-clk-msr-io
+      - amlogic,gx-clk-msr-io
+      - amlogic,axg-clk-msr-io
+      - amlogic,g12a-clk-msr-io
+      - amlogic,sm1-clk-msr-io
+
+  reg:
+    maxItems: 2
+
+  reg-names:
+    items:
+      - const: reg
+      - const: duty
+
+  "#io-channel-cells":
+    const: 1
+
+required:
+  - compatible
+  - reg
+  - reg-names
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    clk_msr: rate-sensor@18000 {
+      compatible = "amlogic,axg-clk-msr-io";
+      reg = <0x18004 0xc>,
+            <0x18000 0x4>;
+      reg-names = "reg", "duty";
+      #io-channel-cells = <1>;
+    };
