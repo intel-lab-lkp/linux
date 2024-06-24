@@ -1046,7 +1046,7 @@ int efa_destroy_cq(struct ib_cq *ibcq, struct ib_udata *udata)
 
 static struct efa_eq *efa_vec2eq(struct efa_dev *dev, int vec)
 {
-	return &dev->eqs[vec];
+	return vec < dev->neqs ? &dev->eqs[vec] : NULL;
 }
 
 static int cq_mmap_entries_setup(struct efa_dev *dev, struct efa_cq *cq,
@@ -1173,6 +1173,11 @@ int efa_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 	params.set_src_addr = set_src_addr;
 	if (cmd.flags & EFA_CREATE_CQ_WITH_COMPLETION_CHANNEL) {
 		cq->eq = efa_vec2eq(dev, attr->comp_vector);
+		if (!cq->eq) {
+			ibdev_dbg(ibdev, "Invalid EQ requested[%u]\n", attr->comp_vector);
+			err = -EINVAL;
+			goto err_free_mapped;
+		}
 		params.eqn = cq->eq->eeq.eqn;
 		params.interrupt_mode_enabled = true;
 	}
