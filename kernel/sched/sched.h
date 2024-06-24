@@ -3140,6 +3140,10 @@ static inline void util_bias_dequeue(struct rq *rq, struct task_struct *p)
 {
 }
 
+static inline void propagate_negative_bias(struct task_struct *p)
+{
+}
+
 #endif /* !CONFIG_UCLAMP_TASK */
 
 #ifdef CONFIG_HAVE_SCHED_AVG_IRQ

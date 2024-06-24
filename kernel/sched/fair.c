@@ -4878,6 +4878,45 @@ static inline unsigned long root_cfs_util_uclamp(struct rq *rq)
 
 	return max(ret, 0L);
 }
+
+/*
+ * Negative biases are tricky. If we remove them right away then dequeuing a
+ * uclamp_max task has the interesting effect that dequeuing results in a higher
+ * rq utilization. Solve this by applying PELT decay to the bias itself.
+ *
+ * Keeping track of a PELT-decayed negative bias is extra overhead. However, we
+ * observe this interesting math property, where y is the decay factor and p is
+ * the number of periods elapsed:
+ *
+ *	util_new = util_old * y^p - neg_bias * y^p
+ *		 = (util_old - neg_bias) * y^p
+ *
+ * Therefore, we simply subtract the negative bias from util_avg the moment we
+ * dequeue, then the PELT signal itself is the total of util_avg and the decayed
+ * negative bias, and we no longer need to track the decayed bias separately.
+ */
+static void propagate_negative_bias(struct task_struct *p)
+{
+	if (task_util_bias(p) < 0 && !task_on_rq_migrating(p)) {
+		unsigned long neg_bias = -task_util_bias(p);
+		struct sched_entity *se = &p->se;
+		struct cfs_rq *cfs_rq;
+
+		p->se.avg.util_avg_bias = 0;
+
+		for_each_sched_entity(se) {
+			u32 divider, neg_sum;
+
+			cfs_rq = cfs_rq_of(se);
+			divider = get_pelt_divider(&cfs_rq->avg);
+			neg_sum = neg_bias * divider;
+			sub_positive(&se->avg.util_avg, neg_bias);
+			sub_positive(&se->avg.util_sum, neg_sum);
+			sub_positive(&cfs_rq->avg.util_avg, neg_bias);
+			sub_positive(&cfs_rq->avg.util_sum, neg_sum);
+		}
+	}
+}
 #else
 static inline long task_util_bias(struct task_struct *p)
 {
@@ -6869,6 +6908,7 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	/* At this point se is NULL and we are at root level*/
 	sub_nr_running(rq, 1);
 	util_bias_dequeue(rq, p);
+	propagate_negative_bias(p);
 
 	/* balance early to pull high priority tasks */
 	if (unlikely(!was_sched_idle && sched_idle_rq(rq)))
