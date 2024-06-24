@@ -286,8 +286,6 @@ static const struct snd_soc_dapm_widget es8326_dapm_widgets[] = {
 	/* Analog Power Supply*/
 	SND_SOC_DAPM_DAC("Right DAC", NULL, ES8326_ANA_PDN, 0, 1),
 	SND_SOC_DAPM_DAC("Left DAC", NULL, ES8326_ANA_PDN, 1, 1),
-	SND_SOC_DAPM_SUPPLY("MICBIAS1", ES8326_ANA_MICBIAS, 2, 0, NULL, 0),
-	SND_SOC_DAPM_SUPPLY("MICBIAS2", ES8326_ANA_MICBIAS, 3, 0, NULL, 0),
 
 	SND_SOC_DAPM_PGA("LHPMIX", ES8326_DAC2HPMIX, 7, 0, NULL, 0),
 	SND_SOC_DAPM_PGA("RHPMIX", ES8326_DAC2HPMIX, 3, 0, NULL, 0),
@@ -697,28 +695,6 @@ static struct snd_soc_dai_driver es8326_dai = {
 	.symmetric_rate = 1,
 };
 
-static void es8326_enable_micbias(struct snd_soc_component *component)
-{
-	struct snd_soc_dapm_context *dapm = snd_soc_component_get_dapm(component);
-
-	snd_soc_dapm_mutex_lock(dapm);
-	snd_soc_dapm_force_enable_pin_unlocked(dapm, "MICBIAS1");
-	snd_soc_dapm_force_enable_pin_unlocked(dapm, "MICBIAS2");
-	snd_soc_dapm_sync_unlocked(dapm);
-	snd_soc_dapm_mutex_unlock(dapm);
-}
-
-static void es8326_disable_micbias(struct snd_soc_component *component)
-{
-	struct snd_soc_dapm_context *dapm = snd_soc_component_get_dapm(component);
-
-	snd_soc_dapm_mutex_lock(dapm);
-	snd_soc_dapm_disable_pin_unlocked(dapm, "MICBIAS1");
-	snd_soc_dapm_disable_pin_unlocked(dapm, "MICBIAS2");
-	snd_soc_dapm_sync_unlocked(dapm);
-	snd_soc_dapm_mutex_unlock(dapm);
-}
-
 /*
  *	For button detection, set the following in soundcard
  *	snd_jack_set_key(jack->jack, SND_JACK_BTN_0, KEY_PLAYPAUSE);
@@ -822,7 +798,7 @@ static void es8326_jack_detect_handler(struct work_struct *work)
 	if ((iface & ES8326_HPINSERT_FLAG) == 0) {
 		/* Jack unplugged or spurious IRQ */
 		dev_dbg(comp->dev, "No headset detected\n");
-		es8326_disable_micbias(es8326->component);
+		regmap_update_bits(es8326->regmap, ES8326_ANA_MICBIAS, 0x0C, 0x00);
 		if (es8326->jack->status & SND_JACK_HEADPHONE) {
 			dev_dbg(comp->dev, "Report hp remove event\n");
 			snd_soc_jack_report(es8326->jack, 0, SND_JACK_HEADSET);
@@ -860,7 +836,7 @@ static void es8326_jack_detect_handler(struct work_struct *work)
 			regmap_write(es8326->regmap, ES8326_INT_SOURCE, 0x00);
 			regmap_update_bits(es8326->regmap, ES8326_HPDET_TYPE, 0x03, 0x01);
 			regmap_update_bits(es8326->regmap, ES8326_HPDET_TYPE, 0x10, 0x00);
-			es8326_enable_micbias(es8326->component);
+			regmap_update_bits(es8326->regmap, ES8326_ANA_MICBIAS, 0x0C, 0x0C);
 			usleep_range(50000, 70000);
 			regmap_update_bits(es8326->regmap, ES8326_HPDET_TYPE, 0x03, 0x00);
 			regmap_update_bits(es8326->regmap, ES8326_HPDET_TYPE, 0x10, 0x10);
@@ -1034,7 +1010,7 @@ static int es8326_resume(struct snd_soc_component *component)
 			(ES8326_HP_DET_SRC_PIN9 | es8326->jack_pol) :
 			(ES8326_HP_DET_SRC_PIN9 | es8326->jack_pol | 0x04)));
 	usleep_range(5000, 10000);
-	es8326_enable_micbias(es8326->component);
+	regmap_update_bits(es8326->regmap, ES8326_ANA_MICBIAS, 0x0C, 0x0C);
 	usleep_range(50000, 70000);
 	regmap_update_bits(es8326->regmap, ES8326_HPDET_TYPE, 0x03, 0x00);
 	regmap_write(es8326->regmap, ES8326_INT_SOURCE, ES8326_INT_SRC_PIN9);
@@ -1063,7 +1039,7 @@ static int es8326_suspend(struct snd_soc_component *component)
 	struct es8326_priv *es8326 = snd_soc_component_get_drvdata(component);
 
 	cancel_delayed_work_sync(&es8326->jack_detect_work);
-	es8326_disable_micbias(component);
+	regmap_update_bits(es8326->regmap, ES8326_ANA_MICBIAS, 0x0C, 0x00);
 	es8326->calibrated = false;
 	regmap_write(es8326->regmap, ES8326_CLK_MUX, 0x2d);
 	regmap_write(es8326->regmap, ES8326_DAC2HPMIX, 0x00);
@@ -1142,7 +1118,7 @@ static void es8326_disable_jack_detect(struct snd_soc_component *component)
 
 	mutex_lock(&es8326->lock);
 	if (es8326->jack->status & SND_JACK_MICROPHONE) {
-		es8326_disable_micbias(component);
+		regmap_update_bits(es8326->regmap, ES8326_ANA_MICBIAS, 0x0C, 0x00);
 		snd_soc_jack_report(es8326->jack, 0, SND_JACK_HEADSET);
 	}
 	es8326->jack = NULL;
