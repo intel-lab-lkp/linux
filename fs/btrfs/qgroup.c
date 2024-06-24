@@ -3364,6 +3364,10 @@ int btrfs_qgroup_inherit(struct btrfs_trans_handle *trans, u64 srcid,
 	}
 
 	if (inherit) {
+		if (inherit->num_ref_copies > 0 || inherit->num_excl_copies > 0) {
+			ret = -EINVAL;
+			goto out;
+		}
 		i_qgroups = (u64 *)(inherit + 1);
 		nums = inherit->num_qgroups + 2 * inherit->num_ref_copies +
 		       2 * inherit->num_excl_copies;
