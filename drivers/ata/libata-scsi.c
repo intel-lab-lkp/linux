@@ -929,8 +929,6 @@ static void ata_gen_passthru_sense(struct ata_queued_cmd *qc)
 	unsigned char *sb = cmd->sense_buffer;
 	u8 sense_key, asc, ascq;
 
-	memset(sb, 0, SCSI_SENSE_BUFFERSIZE);
-
 	/*
 	 * Use ata_to_sense_error() to map status register bits
 	 * onto sense key, asc & ascq.
@@ -967,8 +965,6 @@ static void ata_gen_ata_sense(struct ata_queued_cmd *qc)
 	unsigned char *sb = cmd->sense_buffer;
 	u64 block;
 	u8 sense_key, asc, ascq;
-
-	memset(sb, 0, SCSI_SENSE_BUFFERSIZE);
 
 	if (ata_dev_disabled(dev)) {
 		/* Device disabled after error recovery */
