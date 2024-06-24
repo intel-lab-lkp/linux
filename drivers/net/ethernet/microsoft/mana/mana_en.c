@@ -2825,8 +2825,10 @@ static int add_adev(struct gdma_dev *gd)
 
 	adev = &madev->adev;
 	ret = mana_adev_idx_alloc();
-	if (ret < 0)
-		goto idx_fail;
+	if (ret < 0) {
+		kfree(madev);
+		return ret;
+	}
 	adev->id = ret;
 
 	adev->name = "rdma";
@@ -2835,26 +2837,21 @@ static int add_adev(struct gdma_dev *gd)
 	madev->mdev = gd;
 
 	ret = auxiliary_device_init(adev);
-	if (ret)
-		goto init_fail;
+	if (ret) {
+		mana_adev_idx_free(adev->id);
+		kfree(madev);
+		return ret;
+	}
 
 	ret = auxiliary_device_add(adev);
-	if (ret)
-		goto add_fail;
+	if (ret) {
+		auxiliary_device_uninit(adev);
+		mana_adev_idx_free(adev->id);
+		return ret;
+	}
 
 	gd->adev = adev;
 	return 0;
-
-add_fail:
-	auxiliary_device_uninit(adev);
-
-init_fail:
-	mana_adev_idx_free(adev->id);
-
-idx_fail:
-	kfree(madev);
-
-	return ret;
 }
 
 int mana_probe(struct gdma_dev *gd, bool resuming)
