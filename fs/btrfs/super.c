@@ -963,6 +963,7 @@ static int btrfs_fill_super(struct super_block *sb,
 	}
 
 	sb->s_flags |= SB_ACTIVE;
+	super_set_sysfs_name_uuid(sb);
 	return 0;
 
 fail_close:
