@@ -196,7 +196,7 @@ static int ip_map_parse(struct cache_detail *cd,
 	struct auth_domain *dom;
 	time64_t expiry;
 
-	if (mesg[mlen-1] != '\n')
+	if (mlen && mesg[mlen - 1] != '\n')
 		return -EINVAL;
 	mesg[mlen-1] = 0;
 
