@@ -22,6 +22,7 @@ properties:
       - qcom,sc8280xp-lpassaudiocc
       - qcom,sc8280xp-lpasscc
       - qcom,x1e80100-lpassaudiocc
+      - qcom,x1e80100-lpasscc
 
   reg:
     maxItems: 1
