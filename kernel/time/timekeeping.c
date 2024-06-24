@@ -799,7 +799,7 @@ static void timekeeping_forward_now(struct timekeeper *tk)
 
 	while (delta > 0) {
 		u64 max = tk->tkr_mono.clock->max_cycles;
-		u64 incr = delta < max ? delta : max;
+		u64 incr = min(delta, max);
 
 		tk->tkr_mono.xtime_nsec += incr * tk->tkr_mono.mult;
 		tk->tkr_raw.xtime_nsec += incr * tk->tkr_raw.mult;
