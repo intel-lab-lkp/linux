@@ -1265,6 +1265,24 @@ config ROCKCHIP_ERRATUM_3588001
 
 	  If unsure, say Y.
 
+config ARM64_ERRATUM_2195890
+	bool "GIC-700: 2195890: LPIs may be held in Pending Table until specific external events happen"
+	default y
+	help
+	  This option adds a workaround for Arm GIC-700 erratum 2195890.
+
+	  In affected GIC-700 versions (r0p0, r0p1, r1p0) under certain
+	  conditions LPIs may remain in the Pending Table until one of a number
+	  of external events occurs.
+
+	  No LPIs are lost and this can happen on physical or virtual PEs but
+	  this erratum means they may not be delivered in a finite time.
+
+	  Work around the issue by inserting an INV command for an unused but
+	  valid LPI INTID every so often to retrigger the search.
+
+	  If unsure, say Y.
+
 config SOCIONEXT_SYNQUACER_PREITS
 	bool "Socionext Synquacer: Workaround for GICv3 pre-ITS"
 	default y
