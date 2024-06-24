@@ -66,11 +66,15 @@ EXPORT_SYMBOL_GPL(apei_mce_report_mem_error);
 int apei_smca_report_x86_error(struct cper_ia_proc_ctx *ctx_info, u64 lapic_id)
 {
 	const u64 *i_mce = ((const u64 *) (ctx_info + 1));
-	unsigned int cpu;
 	struct mce m;
+	int cpu;
 
 	if (!boot_cpu_has(X86_FEATURE_SMCA))
 		return -EINVAL;
+
+	cpu = topology_get_cpunr(lapic_id);
+	if (cpu < 0)
+		return cpu;
 
 	/*
 	 * The starting address of the register array extracted from BERT must
@@ -99,16 +103,8 @@ int apei_smca_report_x86_error(struct cper_ia_proc_ctx *ctx_info, u64 lapic_id)
 
 	mce_setup(&m);
 
-	m.extcpu = -1;
-	m.socketid = -1;
-
-	for_each_possible_cpu(cpu) {
-		if (cpu_data(cpu).topo.initial_apicid == lapic_id) {
-			m.extcpu = cpu;
-			m.socketid = cpu_data(m.extcpu).topo.pkg_id;
-			break;
-		}
-	}
+	m.extcpu   = cpu;
+	m.socketid = cpu_data(cpu).topo.pkg_id;
 
 	m.apicid = lapic_id;
 	m.bank = (ctx_info->msr_addr >> 4) & 0xFF;
