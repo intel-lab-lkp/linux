@@ -11,6 +11,7 @@
 
 static DEFINE_SPINLOCK(cgroup_rstat_lock);
 static DEFINE_PER_CPU(raw_spinlock_t, cgroup_rstat_cpu_lock);
+static atomic_t root_rstat_flush_ongoing = ATOMIC_INIT(0);
 
 static void cgroup_base_stat_flush(struct cgroup *cgrp, int cpu);
 
@@ -350,8 +351,25 @@ __bpf_kfunc void cgroup_rstat_flush(struct cgroup *cgrp)
 {
 	might_sleep();
 
+	/*
+	 * This avoids thundering herd problem on global rstat lock. When an
+	 * ongoing flush of the entire tree is in progress, then skip flush.
+	 */
+	if (atomic_read(&root_rstat_flush_ongoing))
+		return;
+
+	/* Grab right to be ongoing flusher, return if loosing race */
+	if (cgroup_is_root(cgrp) &&
+	    atomic_xchg(&root_rstat_flush_ongoing, 1))
+		return;
+
 	__cgroup_rstat_lock(cgrp, -1);
+
 	cgroup_rstat_flush_locked(cgrp);
+
+	if (cgroup_is_root(cgrp))
+		atomic_set(&root_rstat_flush_ongoing, 0);
+
 	__cgroup_rstat_unlock(cgrp, -1);
 }
 
@@ -362,13 +380,20 @@ __bpf_kfunc void cgroup_rstat_flush(struct cgroup *cgrp)
  * Flush stats in @cgrp's subtree and prevent further flushes.  Must be
  * paired with cgroup_rstat_flush_release().
  *
+ * Current invariant, not called with root cgrp.
+ *
  * This function may block.
  */
 void cgroup_rstat_flush_hold(struct cgroup *cgrp)
 	__acquires(&cgroup_rstat_lock)
 {
 	might_sleep();
+
 	__cgroup_rstat_lock(cgrp, -1);
+
+	if (atomic_read(&root_rstat_flush_ongoing))
+		return;
+
 	cgroup_rstat_flush_locked(cgrp);
 }
 
