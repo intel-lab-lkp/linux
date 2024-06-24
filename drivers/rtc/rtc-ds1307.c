@@ -181,6 +181,8 @@ struct ds1307 {
 
 struct chip_desc {
 	unsigned		alarm:1;
+	unsigned		alarm_res_min:1;
+	unsigned		no_upd_irq:1;
 	u16			nvram_offset;
 	u16			nvram_size;
 	u8			offset; /* register's offset */
@@ -1015,6 +1017,8 @@ static const struct chip_desc chips[last_ds_type] = {
 	},
 	[rx_8130] = {
 		.alarm		= 1,
+		.alarm_res_min  = 1,
+		.no_upd_irq     = 1,
 		/* this is battery backed SRAM */
 		.nvram_offset	= 0x20,
 		.nvram_size	= 4,	/* 32bit (4 word x 8 bit) */
@@ -1946,10 +1950,16 @@ static int ds1307_probe(struct i2c_client *client)
 	if (IS_ERR(ds1307->rtc))
 		return PTR_ERR(ds1307->rtc);
 
-	if (want_irq || ds1307_can_wakeup_device)
+	if (want_irq || ds1307_can_wakeup_device) {
 		device_set_wakeup_capable(ds1307->dev, true);
-	else
+		if (chip->alarm_res_min)
+			set_bit(RTC_FEATURE_ALARM_RES_MINUTE, ds1307->rtc->features);
+	} else {
 		clear_bit(RTC_FEATURE_ALARM, ds1307->rtc->features);
+	}
+
+	if (chip->no_upd_irq)
+		clear_bit(RTC_FEATURE_UPDATE_INTERRUPT, ds1307->rtc->features);
 
 	if (ds1307_can_wakeup_device && !want_irq) {
 		dev_info(ds1307->dev,
