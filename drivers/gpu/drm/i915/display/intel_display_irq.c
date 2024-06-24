@@ -14,6 +14,7 @@
 #include "intel_display_trace.h"
 #include "intel_display_types.h"
 #include "intel_dp_aux.h"
+#include "intel_dsb.h"
 #include "intel_fdi_regs.h"
 #include "intel_fifo_underrun.h"
 #include "intel_gmbus.h"
@@ -1143,6 +1144,17 @@ void gen8_de_irq_handler(struct drm_i915_private *dev_priv, u32 master_ctl)
 
 		intel_uncore_write(&dev_priv->uncore, GEN8_DE_PIPE_IIR(pipe), iir);
 
+		if (HAS_DSB(dev_priv)) {
+			if (iir & GEN12_DSB_INT(INTEL_DSB_0))
+				intel_dsb_irq_handler(&dev_priv->display, pipe, INTEL_DSB_0);
+
+			if (iir & GEN12_DSB_INT(INTEL_DSB_1))
+				intel_dsb_irq_handler(&dev_priv->display, pipe, INTEL_DSB_1);
+
+			if (iir & GEN12_DSB_INT(INTEL_DSB_2))
+				intel_dsb_irq_handler(&dev_priv->display, pipe, INTEL_DSB_2);
+		}
+
 		if (iir & GEN8_PIPE_VBLANK)
 			intel_handle_vblank(dev_priv, pipe);
 
@@ -1717,6 +1729,11 @@ void gen8_de_irq_postinstall(struct drm_i915_private *dev_priv)
 		if (intel_bios_is_dsi_present(dev_priv, &port))
 			de_port_masked |= DSI0_TE | DSI1_TE;
 	}
+
+	if (HAS_DSB(dev_priv))
+		de_pipe_masked |= GEN12_DSB_INT(INTEL_DSB_0) |
+			GEN12_DSB_INT(INTEL_DSB_1) |
+			GEN12_DSB_INT(INTEL_DSB_2);
 
 	de_pipe_enables = de_pipe_masked |
 		GEN8_PIPE_VBLANK |
