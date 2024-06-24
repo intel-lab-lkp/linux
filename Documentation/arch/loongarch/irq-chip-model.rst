@@ -85,6 +85,38 @@ to CPUINTC directly::
     | Devices |
     +---------+
 
+Virtual extended IRQ model
+==========================
+
+In this model, IPI (Inter-Processor Interrupt) and CPU Local Timer interrupt
+go to CPUINTC directly, CPU UARTS interrupts go to PCH-PIC, while all other
+devices interrupts go to PCH-PIC/PCH-MSI and gathered by V-EIOINTC (Virtual
+Extended I/O Interrupt Controller), and then go to CPUINTC directly::
+
+       +-----+    +-------------------+     +-------+
+       | IPI |--> | CPUINTC(0-255vcpu)| <-- | Timer |
+       +-----+    +-------------------+     +-------+
+                            ^
+                            |
+                      +-----------+
+                      | V-EIOINTC |
+                      +-----------+
+                       ^         ^
+                       |         |
+                +---------+ +---------+
+                | PCH-PIC | | PCH-MSI |
+                +---------+ +---------+
+                  ^      ^          ^
+                  |      |          |
+           +--------+ +---------+ +---------+
+           | UARTs  | | Devices | | Devices |
+           +--------+ +---------+ +---------+
+
+
+V-EIOINTC (Virtual Extended I/O Interrupt Controller) is an extension of EIOINTC,
+it only works in hypervior mode. Interrupts can be routed to up to four virtual
+cpus via EIOINTC, but interrupts can be routed to up to 256 virtual cpus via V-EIOINTC.
+
 ACPI-related definitions
 ========================
 
