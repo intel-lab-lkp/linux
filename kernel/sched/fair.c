@@ -4859,6 +4859,16 @@ static inline unsigned long task_util_uclamp(struct task_struct *p)
 
 	return max(ret, 0L);
 }
+
+static inline unsigned long _task_util_est_uclamp(struct task_struct *p)
+{
+	return READ_ONCE(p->se.avg.util_est_uclamp);
+}
+
+static inline unsigned long task_util_est_uclamp(struct task_struct *p)
+{
+	return max(task_util_uclamp(p), _task_util_est_uclamp(p));
+}
 #else
 static inline long task_util_bias(struct task_struct *p)
 {
@@ -4868,6 +4878,16 @@ static inline long task_util_bias(struct task_struct *p)
 static inline unsigned long task_util_uclamp(struct task_struct *p)
 {
 	return task_util(p);
+}
+
+static inline unsigned long _task_util_est_uclamp(struct task_struct *p)
+{
+	return _task_util_est(p);
+}
+
+static inline unsigned long task_util_est_uclamp(struct task_struct *p)
+{
+	return task_util_est(p);
 }
 #endif
 
@@ -4883,6 +4903,9 @@ static inline void util_est_enqueue(struct cfs_rq *cfs_rq,
 	enqueued  = cfs_rq->avg.util_est;
 	enqueued += _task_util_est(p);
 	WRITE_ONCE(cfs_rq->avg.util_est, enqueued);
+	enqueued  = cfs_rq->avg.util_est_uclamp;
+	enqueued += _task_util_est_uclamp(p);
+	WRITE_ONCE(cfs_rq->avg.util_est_uclamp, enqueued);
 
 	trace_sched_util_est_cfs_tp(cfs_rq);
 }
@@ -4899,6 +4922,9 @@ static inline void util_est_dequeue(struct cfs_rq *cfs_rq,
 	enqueued  = cfs_rq->avg.util_est;
 	enqueued -= min_t(unsigned int, enqueued, _task_util_est(p));
 	WRITE_ONCE(cfs_rq->avg.util_est, enqueued);
+	enqueued  = cfs_rq->avg.util_est_uclamp;
+	enqueued -= min_t(unsigned int, enqueued, _task_util_est_uclamp(p));
+	WRITE_ONCE(cfs_rq->avg.util_est_uclamp, enqueued);
 
 	trace_sched_util_est_cfs_tp(cfs_rq);
 }
@@ -4986,6 +5012,10 @@ static inline void util_est_update(struct cfs_rq *cfs_rq,
 	ewma  -= last_ewma_diff;
 	ewma >>= UTIL_EST_WEIGHT_SHIFT;
 done:
+	WRITE_ONCE(p->se.avg.util_est_uclamp,
+		   clamp(ewma,
+			 (unsigned int)uclamp_eff_value(p, UCLAMP_MIN),
+			 (unsigned int)uclamp_eff_value(p, UCLAMP_MAX)));
 	ewma |= UTIL_AVG_UNCHANGED;
 	WRITE_ONCE(p->se.avg.util_est, ewma);
 

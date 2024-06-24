@@ -479,6 +479,7 @@ struct sched_avg {
 	unsigned int			util_avg;
 	int				util_avg_bias;
 	unsigned int			util_est;
+	unsigned int			util_est_uclamp;
 } ____cacheline_aligned;
 
 /*
