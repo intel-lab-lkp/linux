@@ -520,6 +520,8 @@ static void __setscheduler_uclamp(struct task_struct *p,
 		uclamp_se_set(&p->uclamp_req[UCLAMP_MAX],
 			      attr->sched_util_max, true);
 	}
+
+	uclamp_update_active_nolock(p);
 }
 
 #else /* !CONFIG_UCLAMP_TASK: */
