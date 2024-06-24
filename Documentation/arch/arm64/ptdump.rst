@@ -29,68 +29,64 @@ configurations and mount debugfs::
  mount -t debugfs nodev /sys/kernel/debug
  cat /sys/kernel/debug/kernel_page_tables
 
-On analysing the output of ``cat /sys/kernel/debug/kernel_page_tables``
-one can derive information about the virtual address range of the entry,
-followed by size of the memory region covered by this entry, the
-hierarchical structure of the page tables and finally the attributes
-associated with each page. The page attributes provide information about
-access permissions, execution capability, type of mapping such as leaf
-level PTE or block level PGD, PMD and PUD, and access status of a page
-within the kernel memory. Assessing these attributes can assist in
-understanding the memory layout, access patterns and security
-characteristics of the kernel pages.
+``/sys/kernel/debug/kernel_page_tables`` provides a line of information
+for each group of page table entries sharing the same attributes and
+type of mapping, i.e. page descriptor PTE or table descriptor PGD, PMD,
+and PUD.  Assessing these attributes can assist in determining memory
+layout, access patterns and security characteristics of the kernel
+pages.
 
-Kernel virtual memory layout example::
+Lines are formatted as follows::
 
- start address        end address         size             attributes
- +---------------------------------------------------------------------------------------+
- | ---[ Linear Mapping start ]---------------------------------------------------------- |
- | ..................                                                                    |
- | 0xfff0000000000000-0xfff0000000210000  2112K PTE RW NX SHD AF  UXN  MEM/NORMAL-TAGGED |
- | 0xfff0000000210000-0xfff0000001c00000 26560K PTE ro NX SHD AF  UXN  MEM/NORMAL        |
- | ..................                                                                    |
- | ---[ Linear Mapping end ]------------------------------------------------------------ |
- +---------------------------------------------------------------------------------------+
- | ---[ Modules start ]----------------------------------------------------------------- |
- | ..................                                                                    |
- | 0xffff800000000000-0xffff800008000000   128M PTE                                      |
- | ..................                                                                    |
- | ---[ Modules end ]------------------------------------------------------------------- |
- +---------------------------------------------------------------------------------------+
- | ---[ vmalloc() area ]---------------------------------------------------------------- |
- | ..................                                                                    |
- | 0xffff800008010000-0xffff800008200000  1984K PTE ro x  SHD AF       UXN  MEM/NORMAL   |
- | 0xffff800008200000-0xffff800008e00000    12M PTE ro x  SHD AF  CON  UXN  MEM/NORMAL   |
- | ..................                                                                    |
- | ---[ vmalloc() end ]----------------------------------------------------------------- |
- +---------------------------------------------------------------------------------------+
- | ---[ Fixmap start ]------------------------------------------------------------------ |
- | ..................                                                                    |
- | 0xfffffbfffdb80000-0xfffffbfffdb90000    64K PTE ro x  SHD AF  UXN  MEM/NORMAL        |
- | 0xfffffbfffdb90000-0xfffffbfffdba0000    64K PTE ro NX SHD AF  UXN  MEM/NORMAL        |
- | ..................                                                                    |
- | ---[ Fixmap end ]-------------------------------------------------------------------- |
- +---------------------------------------------------------------------------------------+
- | ---[ PCI I/O start ]----------------------------------------------------------------- |
- | ..................                                                                    |
- | 0xfffffbfffe800000-0xfffffbffff800000    16M PTE                                      |
- | ..................                                                                    |
- | ---[ PCI I/O end ]------------------------------------------------------------------- |
- +---------------------------------------------------------------------------------------+
- | ---[ vmemmap start ]----------------------------------------------------------------- |
- | ..................                                                                    |
- | 0xfffffc0002000000-0xfffffc0002200000     2M PTE RW NX SHD AF  UXN  MEM/NORMAL        |
- | 0xfffffc0002200000-0xfffffc0020000000   478M PTE                                      |
- | ..................                                                                    |
- | ---[ vmemmap end ]------------------------------------------------------------------- |
- +---------------------------------------------------------------------------------------+
+ <start_vaddr>-<end_vaddr> <size> <type> <attributes>
 
-``cat /sys/kernel/debug/kernel_page_tables`` output::
+Note that the set of attributes, and therefore formatting, is not
+equivalent between block (or page) and table descriptor entries. For
+example, PMD table descriptors can support the PXNTable permission bit
+and do not share that same set of attributes as PTEs.
 
- 0xfff0000001c00000-0xfff0000080000000     2020M PTE  RW NX SHD AF   UXN    MEM/NORMAL-TAGGED
- 0xfff0000080000000-0xfff0000800000000       30G PMD
- 0xfff0000800000000-0xfff0000800700000        7M PTE  RW NX SHD AF   UXN    MEM/NORMAL-TAGGED
- 0xfff0000800700000-0xfff0000800710000       64K PTE  ro NX SHD AF   UXN    MEM/NORMAL-TAGGED
- 0xfff0000800710000-0xfff0000880000000  2089920K PTE  RW NX SHD AF   UXN    MEM/NORMAL-TAGGED
- 0xfff0000880000000-0xfff0040000000000     4062G PMD
- 0xfff0040000000000-0xffff800000000000     3964T PGD
+The following attributes are presently supported::
+
+F		Entry is invalid
+RO		Memory is read-only
+RW		Memory is read-write
+X		Memory is privileged executable
+NX		Memory is privileged execute never
+UXN		Memory is unprivileged execute never
+USR		Memory is unprivileged accessible
+KRN		Memory is unprivileged inaccessible (e.g. APTable bits)
+SHD		Memory is shared
+AF		Entry accessed flag is set
+NG		Entry Not-Global flag is set
+CON		Entry contiguous bit is set
+GP		Page is guarded with branch target integrity protection
+TBL		Entry is a table descriptor
+BLK		Entry is a block descriptor
+DEVICE/*	Entry is device memory, see ARM reference for types
+MEM/*		Entry is non-device memory, see ARM reference for types
+
+The beginning and end of each region is also delineated by a single line
+tag in the following format::
+
+ ---[ <marker_name> ]---
+
+With supported address markers including the kernel's linear mapping,
+kasan shadow memory, kernel modules memory, vmalloc memory, PCI I/O
+memory, and the kernel's fixmap region.
+
+Example ``cat /sys/kernel/debug/kernel_page_tables`` output::
+
+ ---[ Linear Mapping start ]---
+ 0xffff000000000000-0xffff1affffffffff                  27T PGD
+ 0xffff1b0000000000-0xffffffffffffffff                 229T PGD   TBL    NX UXN      RW
+     0xffff1b0000000000-0xffff1b397fffffff             230G PUD
+     0xffff1b3980000000-0xffff1b39bfffffff               1G PUD   TBL    NX UXN      RW
+       0xffff1b3980000000-0xffff1b39801fffff             2M PMD   TBL    NX UXN      RW
+         0xffff1b3980000000-0xffff1b39801fffff           2M PTE       RW NX SHD AF NG         UXN    MEM/NORMAL-TAGGED
+       0xffff1b3980200000-0xffff1b39803fffff             2M PMD   TBL    NX UXN      RW
+         0xffff1b3980200000-0xffff1b398020ffff          64K PTE       RW NX SHD AF NG         UXN    MEM/NORMAL-TAGGED
+         0xffff1b3980210000-0xffff1b39803fffff        1984K PTE       RO NX SHD AF NG         UXN    MEM/NORMAL
+       0xffff1b3980400000-0xffff1b3981dfffff            26M PMD       RO NX SHD AF NG     BLK UXN    MEM/NORMAL
+       0xffff1b3981e00000-0xffff1b3981ffffff             2M PMD   TBL    NX UXN      RW
+         0xffff1b3981e00000-0xffff1b3981e1ffff         128K PTE       RO NX SHD AF NG         UXN    MEM/NORMAL
+         0xffff1b3981e20000-0xffff1b3981ffffff        1920K PTE       RW NX SHD AF NG         UXN    MEM/NORMAL-TAGGED
