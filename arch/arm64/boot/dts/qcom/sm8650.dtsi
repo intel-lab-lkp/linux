@@ -3858,6 +3858,7 @@
 				snps,usb2-lpm-disable;
 				snps,has-lpm-erratum;
 				tx-fifo-resize;
+				usb-role-switch;
 
 				dma-coherent;
 
