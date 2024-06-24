@@ -5880,7 +5880,7 @@ long kvm_arch_vcpu_ioctl(struct file *filp,
 		if (!lapic_in_kernel(vcpu))
 			goto out;
 		u.lapic = kzalloc(sizeof(struct kvm_lapic_state),
-				GFP_KERNEL_ACCOUNT);
+				GFP_KERNEL);
 
 		r = -ENOMEM;
 		if (!u.lapic)
@@ -6073,7 +6073,7 @@ long kvm_arch_vcpu_ioctl(struct file *filp,
 		if (vcpu->arch.guest_fpu.uabi_size > sizeof(struct kvm_xsave))
 			break;
 
-		u.xsave = kzalloc(sizeof(struct kvm_xsave), GFP_KERNEL_ACCOUNT);
+		u.xsave = kzalloc(sizeof(struct kvm_xsave), GFP_KERNEL);
 		r = -ENOMEM;
 		if (!u.xsave)
 			break;
@@ -6104,7 +6104,7 @@ long kvm_arch_vcpu_ioctl(struct file *filp,
 	case KVM_GET_XSAVE2: {
 		int size = vcpu->arch.guest_fpu.uabi_size;
 
-		u.xsave = kzalloc(size, GFP_KERNEL_ACCOUNT);
+		u.xsave = kzalloc(size, GFP_KERNEL);
 		r = -ENOMEM;
 		if (!u.xsave)
 			break;
@@ -6122,7 +6122,7 @@ long kvm_arch_vcpu_ioctl(struct file *filp,
 	}
 
 	case KVM_GET_XCRS: {
-		u.xcrs = kzalloc(sizeof(struct kvm_xcrs), GFP_KERNEL_ACCOUNT);
+		u.xcrs = kzalloc(sizeof(struct kvm_xcrs), GFP_KERNEL);
 		r = -ENOMEM;
 		if (!u.xcrs)
 			break;
