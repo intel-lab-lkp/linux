@@ -3,6 +3,7 @@
  * udl_cursor.h
  *
  * Copyright (c) 2015 The Chromium OS Authors
+ * Copyright (c) 2024 Synaptics Incorporated. All Rights Reserved.
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -27,12 +28,15 @@
 #define UDL_CURSOR_W 64
 #define UDL_CURSOR_H 64
 #define UDL_CURSOR_BUF (UDL_CURSOR_W * UDL_CURSOR_H)
+
 struct udl_cursor {
 	uint32_t buffer[UDL_CURSOR_BUF];
+	struct drm_rect damage; // damage on primary
 	bool enabled;
 	int x;
 	int y;
 };
+
 struct udl_cursor_hline {
 	uint32_t *buffer;
 	int width;
@@ -43,5 +47,9 @@ extern void udl_cursor_get_hline(struct udl_cursor *cursor, int x, int y,
 		struct udl_cursor_hline *hline);
 extern int udl_cursor_move(struct udl_cursor *cursor, int x, int y);
 extern int udl_cursor_download(struct udl_cursor *cursor, const struct iosys_map *map);
+void udl_cursor_damage_clear(struct udl_cursor *cursor);
+void udl_rect_merge(struct drm_rect *rect, struct drm_rect *rect2);
+void udl_cursor_mark_damage_from_plane(struct udl_cursor *cursor,
+		struct drm_plane_state *state);
 
 #endif

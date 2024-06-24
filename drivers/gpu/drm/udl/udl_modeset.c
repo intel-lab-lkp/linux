@@ -6,6 +6,7 @@
  * Copyright (C) 2009 Roberto De Ioris <roberto@unbit.it>
  * Copyright (C) 2009 Jaya Kumar <jayakumar.lkml@gmail.com>
  * Copyright (C) 2009 Bernie Thompson <bernie@plugable.com>
+ * Copyright (c) 2024 Synaptics Incorporated. All Rights Reserved.
  */
 
 #include <linux/bitfield.h>
@@ -202,6 +203,23 @@ static long udl_log_cpp(unsigned int cpp)
 	return __ffs(cpp);
 }
 
+static void udl_trim_rect_to_framebuffer(
+				const struct drm_framebuffer *fb,
+				struct drm_rect *clip)
+{
+	if (clip->x1 > fb->width)
+		clip->x1 = fb->width;
+
+	if (clip->y1 > fb->height)
+		clip->y1 = fb->height;
+
+	if (clip->x2 > fb->width)
+		clip->x2 = fb->width;
+
+	if (clip->y2 > fb->height)
+		clip->y2 = fb->height;
+}
+
 static int udl_handle_damage(struct drm_framebuffer *fb,
 			     const struct iosys_map *map,
 			     const struct drm_rect *clip)
@@ -254,20 +272,21 @@ static int udl_handle_damage(struct drm_framebuffer *fb,
 }
 
 /*
- * Primary plane
+ * Primary and cursor planes
  */
 
-static const uint32_t udl_primary_plane_formats[] = {
+static const uint32_t udl_plane_formats[] = {
 	DRM_FORMAT_RGB565,
 	DRM_FORMAT_XRGB8888,
+	DRM_FORMAT_ARGB8888,
 };
 
-static const uint64_t udl_primary_plane_fmtmods[] = {
+static const uint64_t udl_plane_fmtmods[] = {
 	DRM_FORMAT_MOD_LINEAR,
 	DRM_FORMAT_MOD_INVALID
 };
 
-static int udl_primary_plane_helper_atomic_check(struct drm_plane *plane,
+static int udl_plane_helper_atomic_check(struct drm_plane *plane,
 						 struct drm_atomic_state *state)
 {
 	struct drm_plane_state *new_plane_state = drm_atomic_get_new_plane_state(state, plane);
@@ -280,7 +299,36 @@ static int udl_primary_plane_helper_atomic_check(struct drm_plane *plane,
 	return drm_atomic_helper_check_plane_state(new_plane_state, new_crtc_state,
 						   DRM_PLANE_NO_SCALING,
 						   DRM_PLANE_NO_SCALING,
-						   false, false);
+						   plane->type == DRM_PLANE_TYPE_CURSOR, false);
+}
+
+static void
+udl_cursor_plane_helper_atomic_update(struct drm_plane *plane,
+						   struct drm_atomic_state *state)
+{
+	struct drm_device *dev = plane->dev;
+	struct drm_plane_state *plane_state = drm_atomic_get_new_plane_state(state, plane);
+	struct drm_shadow_plane_state *shadow_plane_state = to_drm_shadow_plane_state(plane_state);
+	struct drm_framebuffer *fb = plane_state->fb;
+	struct drm_plane_state *old_plane_state = drm_atomic_get_old_plane_state(state, plane);
+	struct udl_device *udl = to_udl(dev);
+	struct udl_cursor *cursor = &udl->cursor;
+
+	WARN_ON(old_plane_state->plane->type != DRM_PLANE_TYPE_CURSOR);
+
+	udl_cursor_move(cursor, plane_state->crtc_x, plane_state->crtc_y);
+	cursor->enabled = fb != NULL;
+
+	udl_cursor_mark_damage_from_plane(&udl->cursor, old_plane_state);
+	udl_cursor_mark_damage_from_plane(&udl->cursor, plane_state);
+
+	if (!fb)
+		return;
+
+	if (plane_state->fb == old_plane_state->fb)
+		return;
+
+	udl_cursor_download(cursor, &shadow_plane_state->data[0]);
 }
 
 static void udl_primary_plane_helper_atomic_update(struct drm_plane *plane,
@@ -291,6 +339,7 @@ static void udl_primary_plane_helper_atomic_update(struct drm_plane *plane,
 	struct drm_shadow_plane_state *shadow_plane_state = to_drm_shadow_plane_state(plane_state);
 	struct drm_framebuffer *fb = plane_state->fb;
 	struct drm_plane_state *old_plane_state = drm_atomic_get_old_plane_state(state, plane);
+	struct udl_device *udl = to_udl(dev);
 	struct drm_atomic_helper_damage_iter iter;
 	struct drm_rect damage;
 	int ret, idx;
@@ -305,10 +354,15 @@ static void udl_primary_plane_helper_atomic_update(struct drm_plane *plane,
 	if (!drm_dev_enter(dev, &idx))
 		goto out_drm_gem_fb_end_cpu_access;
 
-	drm_atomic_helper_damage_iter_init(&iter, old_plane_state, plane_state);
-	drm_atomic_for_each_plane_damage(&iter, &damage) {
-		udl_handle_damage(fb, &shadow_plane_state->data[0], &damage);
+	if (plane_state->fb != old_plane_state->fb) {
+		drm_atomic_helper_damage_iter_init(&iter, old_plane_state, plane_state);
+		drm_atomic_for_each_plane_damage(&iter, &damage)
+			udl_handle_damage(fb, &shadow_plane_state->data[0], &damage);
 	}
+
+	udl_trim_rect_to_framebuffer(fb, &udl->cursor.damage);
+	udl_handle_damage(fb, &shadow_plane_state->data[0], &udl->cursor.damage);
+	udl_cursor_damage_clear(&udl->cursor);
 
 	drm_dev_exit(idx);
 
@@ -316,13 +370,23 @@ out_drm_gem_fb_end_cpu_access:
 	drm_gem_fb_end_cpu_access(fb, DMA_FROM_DEVICE);
 }
 
-static const struct drm_plane_helper_funcs udl_primary_plane_helper_funcs = {
+static void
+udl_plane_helper_atomic_update(struct drm_plane *plane,
+			       struct drm_atomic_state *state)
+{
+	if (plane->type == DRM_PLANE_TYPE_CURSOR)
+		udl_cursor_plane_helper_atomic_update(plane, state);
+	else
+		udl_primary_plane_helper_atomic_update(plane, state);
+}
+
+static const struct drm_plane_helper_funcs udl_plane_helper_funcs = {
 	DRM_GEM_SHADOW_PLANE_HELPER_FUNCS,
-	.atomic_check = udl_primary_plane_helper_atomic_check,
-	.atomic_update = udl_primary_plane_helper_atomic_update,
+	.atomic_check = udl_plane_helper_atomic_check,
+	.atomic_update = udl_plane_helper_atomic_update,
 };
 
-static const struct drm_plane_funcs udl_primary_plane_funcs = {
+static const struct drm_plane_funcs udl_plane_funcs = {
 	.update_plane = drm_atomic_helper_update_plane,
 	.disable_plane = drm_atomic_helper_disable_plane,
 	.destroy = drm_plane_cleanup,
@@ -393,8 +457,20 @@ out:
 	drm_dev_exit(idx);
 }
 
+static int udl_crtc_helper_atomic_check(struct drm_crtc *crtc,
+	struct drm_atomic_state *state)
+{
+	int ret;
+
+	ret = drm_crtc_helper_atomic_check(crtc, state);
+	if (ret)
+		return ret;
+
+	return drm_atomic_add_affected_planes(state, crtc);
+}
+
 static const struct drm_crtc_helper_funcs udl_crtc_helper_funcs = {
-	.atomic_check = drm_crtc_helper_atomic_check,
+	.atomic_check = udl_crtc_helper_atomic_check,
 	.atomic_enable = udl_crtc_helper_atomic_enable,
 	.atomic_disable = udl_crtc_helper_atomic_disable,
 };
@@ -573,6 +649,7 @@ int udl_modeset_init(struct drm_device *dev)
 {
 	struct udl_device *udl = to_udl(dev);
 	struct drm_plane *primary_plane;
+	struct drm_plane *cursor_plane;
 	struct drm_crtc *crtc;
 	struct drm_encoder *encoder;
 	struct drm_connector *connector;
@@ -589,20 +666,34 @@ int udl_modeset_init(struct drm_device *dev)
 	dev->mode_config.preferred_depth = 16;
 	dev->mode_config.funcs = &udl_mode_config_funcs;
 
+	cursor_plane = &udl->cursor_plane;
+	// Add cursor plane first as this is an order of plane atomic_update calls
+	// That allows to gather cursor damage before primary plane update
+	ret = drm_universal_plane_init(dev, cursor_plane, 0,
+				       &udl_plane_funcs,
+				       udl_plane_formats,
+				       ARRAY_SIZE(udl_plane_formats),
+				       udl_plane_fmtmods,
+				       DRM_PLANE_TYPE_CURSOR, NULL);
+	if (ret)
+		return ret;
+	drm_plane_helper_add(cursor_plane, &udl_plane_helper_funcs);
+
 	primary_plane = &udl->primary_plane;
 	ret = drm_universal_plane_init(dev, primary_plane, 0,
-				       &udl_primary_plane_funcs,
-				       udl_primary_plane_formats,
-				       ARRAY_SIZE(udl_primary_plane_formats),
-				       udl_primary_plane_fmtmods,
+				       &udl_plane_funcs,
+				       udl_plane_formats,
+				       ARRAY_SIZE(udl_plane_formats),
+				       udl_plane_fmtmods,
 				       DRM_PLANE_TYPE_PRIMARY, NULL);
 	if (ret)
 		return ret;
-	drm_plane_helper_add(primary_plane, &udl_primary_plane_helper_funcs);
+	drm_plane_helper_add(primary_plane, &udl_plane_helper_funcs);
 	drm_plane_enable_fb_damage_clips(primary_plane);
 
+
 	crtc = &udl->crtc;
-	ret = drm_crtc_init_with_planes(dev, crtc, primary_plane, NULL,
+	ret = drm_crtc_init_with_planes(dev, crtc, primary_plane, cursor_plane,
 					&udl_crtc_funcs, NULL);
 	if (ret)
 		return ret;

@@ -68,6 +68,7 @@ struct udl_device {
 	struct device *dmadev;
 
 	struct drm_plane primary_plane;
+	struct drm_plane cursor_plane;
 	struct drm_crtc crtc;
 	struct drm_encoder encoder;
 
