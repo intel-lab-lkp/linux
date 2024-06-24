@@ -146,6 +146,11 @@
 #define PMD_SECT_UXN		(_AT(pmdval_t, 1) << 54)
 #define PMD_TABLE_PXN		(_AT(pmdval_t, 1) << 59)
 #define PMD_TABLE_UXN		(_AT(pmdval_t, 1) << 60)
+/*
+ * APTable[1:0] encoding for hierarchical data access control
+ */
+#define PMD_TABLE_KERN		(_AT(pmdval_t, 1) << 61)
+#define PMD_TABLE_PRDONLY	(_AT(pmdval_t, 1) << 62)
 
 /*
  * AttrIndx[2:0] encoding (mapping attributes defined in the MAIR* registers).
