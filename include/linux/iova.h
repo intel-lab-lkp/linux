@@ -93,6 +93,8 @@ struct iova *alloc_iova(struct iova_domain *iovad, unsigned long size,
 	bool size_aligned);
 void free_iova_fast(struct iova_domain *iovad, unsigned long pfn,
 		    unsigned long size);
+void free_iova_fast_cpu(struct iova_domain *iovad, unsigned long pfn,
+			unsigned long size, int cpu);
 unsigned long alloc_iova_fast(struct iova_domain *iovad, unsigned long size,
 			      unsigned long limit_pfn, bool flush_rcache);
 struct iova *reserve_iova(struct iova_domain *iovad, unsigned long pfn_lo,
@@ -131,6 +133,11 @@ static inline struct iova *alloc_iova(struct iova_domain *iovad,
 static inline void free_iova_fast(struct iova_domain *iovad,
 				  unsigned long pfn,
 				  unsigned long size)
+{
+}
+
+static inline void free_iova_fast_cpu(struct iova_domain *iovad, unsigned long pfn,
+				      unsigned long size, int cpu);
 {
 }
 

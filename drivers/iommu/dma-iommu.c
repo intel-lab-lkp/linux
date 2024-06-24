@@ -145,7 +145,8 @@ static inline unsigned int fq_ring_add(struct iova_fq *fq)
 	return idx;
 }
 
-static void fq_ring_free_locked(struct iommu_dma_cookie *cookie, struct iova_fq *fq)
+static void fq_ring_free_locked(struct iommu_dma_cookie *cookie, struct iova_fq *fq,
+				int cpu)
 {
 	u64 counter = atomic64_read(&cookie->fq_flush_finish_cnt);
 	unsigned int idx;
@@ -158,20 +159,21 @@ static void fq_ring_free_locked(struct iommu_dma_cookie *cookie, struct iova_fq 
 			break;
 
 		iommu_put_pages_list(&fq->entries[idx].freelist);
-		free_iova_fast(&cookie->iovad,
+		free_iova_fast_cpu(&cookie->iovad,
 			       fq->entries[idx].iova_pfn,
-			       fq->entries[idx].pages);
+			       fq->entries[idx].pages, cpu);
 
 		fq->head = (fq->head + 1) & fq->mod_mask;
 	}
 }
 
-static void fq_ring_free(struct iommu_dma_cookie *cookie, struct iova_fq *fq)
+static void fq_ring_free(struct iommu_dma_cookie *cookie, struct iova_fq *fq,
+			 int cpu)
 {
 	unsigned long flags;
 
 	spin_lock_irqsave(&fq->lock, flags);
-	fq_ring_free_locked(cookie, fq);
+	fq_ring_free_locked(cookie, fq, cpu);
 	spin_unlock_irqrestore(&fq->lock, flags);
 }
 
@@ -191,10 +193,11 @@ static void fq_flush_timeout(struct timer_list *t)
 	fq_flush_iotlb(cookie);
 
 	if (cookie->options.qt == IOMMU_DMA_OPTS_SINGLE_QUEUE) {
-		fq_ring_free(cookie, cookie->single_fq);
+		cpu = smp_processor_id();
+		fq_ring_free(cookie, cookie->single_fq, cpu);
 	} else {
 		for_each_possible_cpu(cpu)
-			fq_ring_free(cookie, per_cpu_ptr(cookie->percpu_fq, cpu));
+			fq_ring_free(cookie, per_cpu_ptr(cookie->percpu_fq, cpu), cpu);
 	}
 }
 
@@ -205,6 +208,7 @@ static void queue_iova(struct iommu_dma_cookie *cookie,
 	struct iova_fq *fq;
 	unsigned long flags;
 	unsigned int idx;
+	int cpu = smp_processor_id();
 
 	/*
 	 * Order against the IOMMU driver's pagetable update from unmapping
@@ -227,11 +231,11 @@ static void queue_iova(struct iommu_dma_cookie *cookie,
 	 * flushed out on another CPU. This makes the fq_full() check below less
 	 * likely to be true.
 	 */
-	fq_ring_free_locked(cookie, fq);
+	fq_ring_free_locked(cookie, fq, cpu);
 
 	if (fq_full(fq)) {
 		fq_flush_iotlb(cookie);
-		fq_ring_free_locked(cookie, fq);
+		fq_ring_free_locked(cookie, fq, cpu);
 	}
 
 	idx = fq_ring_add(fq);
