@@ -533,6 +533,38 @@ ipv6_ping_frag_asym()
 	ipv6_ping_frag asym
 }
 
+ipv4_ping_local()
+{
+	local ttype="$1"
+
+	[ "x$ttype" = "x" ] && ttype="$DEFAULT_TTYPE"
+
+	log_section "IPv4 ($ttype route): VRF ICMP local error route lookup ping"
+
+	setup_"$ttype"
+
+	check_connectivity || return
+
+	run_cmd ip netns exec $r1 ip vrf exec blue ping -c1 -w1 ${H2_N2_IP}
+	log_test $? 0 "VRF ICMP local IPv4"
+}
+
+ipv6_ping_local()
+{
+	local ttype="$1"
+
+	[ "x$ttype" = "x" ] && ttype="$DEFAULT_TTYPE"
+
+	log_section "IPv6 ($ttype route): VRF ICMP local error route lookup ping"
+
+	setup_"$ttype"
+
+	check_connectivity6 || return
+
+	run_cmd ip netns exec $r1 ip vrf exec blue ${ping6} -c1 -w1 ${H2_N2_IP6}
+	log_test $? 0 "VRF ICMP local IPv6"
+}
+
 ################################################################################
 # usage
 
@@ -555,8 +587,8 @@ EOF
 # Some systems don't have a ping6 binary anymore
 command -v ping6 > /dev/null 2>&1 && ping6=$(command -v ping6) || ping6=$(command -v ping)
 
-TESTS_IPV4="ipv4_ping_ttl ipv4_traceroute ipv4_ping_frag ipv4_ping_ttl_asym ipv4_traceroute_asym"
-TESTS_IPV6="ipv6_ping_ttl ipv6_traceroute ipv6_ping_ttl_asym ipv6_traceroute_asym"
+TESTS_IPV4="ipv4_ping_ttl ipv4_traceroute ipv4_ping_frag ipv4_ping_local ipv4_ping_ttl_asym ipv4_traceroute_asym"
+TESTS_IPV6="ipv6_ping_ttl ipv6_traceroute ipv6_ping_local ipv6_ping_ttl_asym ipv6_traceroute_asym"
 
 ret=0
 nsuccess=0
@@ -594,12 +626,14 @@ do
 	ipv4_traceroute|traceroute)      ipv4_traceroute;;&
 	ipv4_traceroute_asym|traceroute) ipv4_traceroute_asym;;&
 	ipv4_ping_frag|ping)             ipv4_ping_frag;;&
+	ipv4_ping_local|ping)            ipv4_ping_local;;&
 
 	ipv6_ping_ttl|ping)              ipv6_ping_ttl;;&
 	ipv6_ping_ttl_asym|ping)         ipv6_ping_ttl_asym;;&
 	ipv6_traceroute|traceroute)      ipv6_traceroute;;&
 	ipv6_traceroute_asym|traceroute) ipv6_traceroute_asym;;&
 	ipv6_ping_frag|ping)             ipv6_ping_frag;;&
+	ipv6_ping_local|ping)            ipv6_ping_local;;&
 
 	# setup namespaces and config, but do not run any tests
 	setup_sym|setup)                 setup_sym; exit 0;;
