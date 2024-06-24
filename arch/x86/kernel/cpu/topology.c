@@ -95,7 +95,15 @@ static inline u32 topo_apicid(u32 apicid, enum x86_topology_domains dom)
 	return apicid & (UINT_MAX << x86_topo_system.dom_shifts[dom - 1]);
 }
 
-static int topo_lookup_cpuid(u32 apic_id)
+/**
+ * topology_get_cpunr - Retrieve the CPU number for the given APIC ID
+ * @apic_id:		The APIC ID for which to lookup the CPU number
+ *
+ * Returns:
+ *  - >= 0:	The CPU number for the given APIC ID
+ *  - -ENODEV:	@apic_id does not match any known CPU
+ */
+int topology_get_cpunr(u32 apic_id)
 {
 	int i;
 
@@ -106,10 +114,11 @@ static int topo_lookup_cpuid(u32 apic_id)
 	}
 	return -ENODEV;
 }
+EXPORT_SYMBOL_GPL(topology_get_cpunr);
 
 static __init int topo_get_cpunr(u32 apic_id)
 {
-	int cpu = topo_lookup_cpuid(apic_id);
+	int cpu = topology_get_cpunr(apic_id);
 
 	if (cpu >= 0)
 		return cpu;
@@ -388,7 +397,7 @@ int topology_hotplug_apic(u32 apic_id, u32 acpi_id)
 	if (!test_bit(apic_id, apic_maps[TOPO_SMT_DOMAIN].map))
 		return -ENODEV;
 
-	cpu = topo_lookup_cpuid(apic_id);
+	cpu = topology_get_cpunr(apic_id);
 	if (cpu < 0)
 		return -ENOSPC;
 

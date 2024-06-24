@@ -171,10 +171,16 @@ static inline unsigned int topology_num_threads_per_package(void)
 
 #ifdef CONFIG_X86_LOCAL_APIC
 int topology_get_logical_id(u32 apicid, enum x86_topology_domains at_level);
+int topology_get_cpunr(u32 apic_id);
 #else
 static inline int topology_get_logical_id(u32 apicid, enum x86_topology_domains at_level)
 {
 	return 0;
+}
+
+static inline int topology_get_cpunr(u32 apic_id)
+{
+	return -ENODEV;
 }
 #endif
 
