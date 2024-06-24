@@ -3089,9 +3089,8 @@ static inline unsigned long cpu_util_dl(struct rq *rq)
 	return READ_ONCE(rq->avg_dl.util_avg);
 }
 
-
 extern unsigned long cpu_util_cfs(int cpu);
-extern unsigned long cpu_util_cfs_boost(int cpu);
+extern unsigned long cpu_util_cfs_boost_uclamp(int cpu);
 
 static inline unsigned long cpu_util_rt(struct rq *rq)
 {
@@ -3119,21 +3118,6 @@ static inline void uclamp_rq_set(struct rq *rq, enum uclamp_id clamp_id,
 static inline bool uclamp_rq_is_idle(struct rq *rq)
 {
 	return rq->uclamp_flags & UCLAMP_FLAG_IDLE;
-}
-
-/* Is the rq being capped/throttled by uclamp_max? */
-static inline bool uclamp_rq_is_capped(struct rq *rq)
-{
-	unsigned long rq_util;
-	unsigned long max_util;
-
-	if (!static_branch_likely(&sched_uclamp_used))
-		return false;
-
-	rq_util = cpu_util_cfs(cpu_of(rq)) + cpu_util_rt(rq);
-	max_util = READ_ONCE(rq->uclamp[UCLAMP_MAX].value);
-
-	return max_util != SCHED_CAPACITY_SCALE && rq_util >= max_util;
 }
 
 /*
@@ -3204,8 +3188,6 @@ uclamp_eff_value(struct task_struct *p, enum uclamp_id clamp_id)
 
 	return SCHED_CAPACITY_SCALE;
 }
-
-static inline bool uclamp_rq_is_capped(struct rq *rq) { return false; }
 
 static inline bool uclamp_is_used(void)
 {
