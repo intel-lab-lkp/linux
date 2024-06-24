@@ -147,6 +147,23 @@ rusttestlib-macros: private rustc_test_library_proc = yes
 rusttestlib-macros: $(src)/macros/lib.rs rusttest-prepare FORCE
 	+$(call if_changed,rustc_test_library)
 
+rusttestlib-build_error: $(src)/build_error.rs $(obj)/compiler_builtins.o FORCE
+	+$(call if_changed,rustc_test_library)
+
+rusttestlib-uapi: $(src)/uapi/lib.rs \
+    $(obj)/compiler_builtins.o \
+    $(obj)/uapi/uapi_generated.rs FORCE
+	+$(call if_changed,rustc_test_library)
+
+rusttestlib-kernel: private rustc_target_flags = --extern alloc \
+    --extern build_error --extern macros=$(objtree)/$(obj)/libmacros.so \
+    --extern bindings --extern uapi
+rusttestlib-kernel: $(src)/kernel/lib.rs rustdoc-compiler_builtins \
+    rustdoc-alloc rusttestlib-bindings rusttestlib-uapi rusttestlib-build_error \
+    $(obj)/libmacros.so \
+    $(obj)/bindings.o FORCE
+	+$(call if_changed,rustc_test_library)
+
 rusttestlib-bindings: $(src)/bindings/lib.rs rusttest-prepare FORCE
 	+$(call if_changed,rustc_test_library)
 
@@ -245,11 +262,24 @@ quiet_cmd_rustsysroot = RUSTSYSROOT
 rusttest-prepare: FORCE
 	+$(call if_changed,rustsysroot)
 
-rusttest-macros: private rustc_target_flags = --extern proc_macro
+quiet_cmd_rustdoc_test_macros = RUSTDOC T $<
+      cmd_rustdoc_test_macros = \
+	OBJTREE=$(abspath $(objtree)) \
+	$(RUSTDOC) --test $(rust_common_flags) \
+		@$(objtree)/include/generated/rustc_cfg \
+		$(rustc_target_flags) $(rustdoc_test_target_flags) \
+		--sysroot $(objtree)/$(obj)/test/sysroot $(rustdoc_test_quiet) \
+		-L$(objtree)/$(obj)/test --output $(rustdoc_output) \
+		-Zproc-macro-backtrace \
+		--crate-name $(subst rusttest-,,$@) $<
+
+rusttest-macros: private rustc_target_flags = --extern proc_macro \
+	--extern macros=$(objtree)/$(obj)/libmacros.so --extern kernel
 rusttest-macros: private rustdoc_test_target_flags = --crate-type proc-macro
-rusttest-macros: $(src)/macros/lib.rs rusttest-prepare FORCE
+rusttest-macros: $(src)/macros/lib.rs rusttest-prepare \
+    rusttestlib-macros rusttestlib-kernel FORCE
 	+$(call if_changed,rustc_test)
-	+$(call if_changed,rustdoc_test)
+	+$(call if_changed,rustdoc_test_macros)
 
 rusttest-kernel: private rustc_target_flags = --extern alloc \
     --extern build_error --extern macros --extern bindings --extern uapi
