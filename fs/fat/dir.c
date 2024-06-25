@@ -583,15 +583,14 @@ static int __fat_readdir(struct inode *inode, struct file *file,
 	mutex_lock(&sbi->s_lock);
 
 	cpos = ctx->pos;
-	/* Fake . and .. for the root directory. */
-	if (inode->i_ino == MSDOS_ROOT_INO) {
-		if (!dir_emit_dots(file, ctx))
-			goto out;
-		if (ctx->pos == 2) {
-			fake_offset = 1;
-			cpos = 0;
-		}
+
+	if (!dir_emit_dots(file, ctx))
+		goto out;
+	if (ctx->pos == 2) {
+		fake_offset = 1;
+		cpos = 0;
 	}
+
 	if (cpos & (sizeof(struct msdos_dir_entry) - 1)) {
 		ret = -ENOENT;
 		goto out;
@@ -671,13 +670,8 @@ start_filldir:
 	if (fake_offset && ctx->pos < 2)
 		ctx->pos = 2;
 
-	if (!memcmp(de->name, MSDOS_DOT, MSDOS_NAME)) {
-		if (!dir_emit_dot(file, ctx))
-			goto fill_failed;
-	} else if (!memcmp(de->name, MSDOS_DOTDOT, MSDOS_NAME)) {
-		if (!dir_emit_dotdot(file, ctx))
-			goto fill_failed;
-	} else {
+	if (memcmp(de->name, MSDOS_DOT, MSDOS_NAME) &&
+	    memcmp(de->name, MSDOS_DOTDOT, MSDOS_NAME)) {
 		unsigned long inum;
 		loff_t i_pos = fat_make_i_pos(sb, bh, de);
 		struct inode *tmp = fat_iget(sb, i_pos);
