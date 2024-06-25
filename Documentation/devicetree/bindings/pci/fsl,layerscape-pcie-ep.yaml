@@ -22,12 +22,15 @@ description:
 
 properties:
   compatible:
-    enum:
-      - fsl,ls2088a-pcie-ep
-      - fsl,ls1088a-pcie-ep
-      - fsl,ls1046a-pcie-ep
-      - fsl,ls1028a-pcie-ep
-      - fsl,lx2160ar2-pcie-ep
+    items:
+      - enum:
+          - fsl,ls2088a-pcie-ep
+          - fsl,ls1088a-pcie-ep
+          - fsl,ls1046a-pcie-ep
+          - fsl,ls1028a-pcie-ep
+          - fsl,lx2160ar2-pcie-ep
+      - const: fsl,ls-pcie-ep
+    minItems: 1
 
   reg:
     maxItems: 2
