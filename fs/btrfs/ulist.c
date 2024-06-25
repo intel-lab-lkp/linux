@@ -110,7 +110,7 @@ struct ulist *ulist_alloc(gfp_t gfp_mask)
 
 void ulist_prealloc(struct ulist *ulist, gfp_t gfp_mask)
 {
-	if (ulist && !ulist->prealloc)
+	if (!ulist->prealloc)
 		ulist->prealloc = kzalloc(sizeof(*ulist->prealloc), gfp_mask);
 }
 
