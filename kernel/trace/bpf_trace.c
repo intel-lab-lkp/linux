@@ -3176,14 +3176,11 @@ struct bpf_uprobe_multi_run_ctx {
 	struct bpf_uprobe *uprobe;
 };
 
-static void bpf_uprobe_unregister(struct path *path, struct bpf_uprobe *uprobes,
-				  u32 cnt)
+static struct uprobe_consumer *umulti_link_get_uprobe_consumer(size_t idx, void *ctx)
 {
-	u32 i;
+	struct bpf_uprobe_multi_link *link = ctx;
 
-	for (i = 0; i < cnt; i++) {
-		uprobe_unregister(d_real_inode(path->dentry), &uprobes[i].consumer);
-	}
+	return &link->uprobes[idx].consumer;
 }
 
 static void bpf_uprobe_multi_link_release(struct bpf_link *link)
@@ -3191,7 +3188,8 @@ static void bpf_uprobe_multi_link_release(struct bpf_link *link)
 	struct bpf_uprobe_multi_link *umulti_link;
 
 	umulti_link = container_of(link, struct bpf_uprobe_multi_link, link);
-	bpf_uprobe_unregister(&umulti_link->path, umulti_link->uprobes, umulti_link->cnt);
+	uprobe_unregister_batch(d_real_inode(umulti_link->path.dentry), umulti_link->cnt,
+				umulti_link_get_uprobe_consumer, umulti_link);
 	if (umulti_link->task)
 		put_task_struct(umulti_link->task);
 	path_put(&umulti_link->path);
@@ -3477,13 +3475,10 @@ int bpf_uprobe_multi_link_attach(const union bpf_attr *attr, struct bpf_prog *pr
 	bpf_link_init(&link->link, BPF_LINK_TYPE_UPROBE_MULTI,
 		      &bpf_uprobe_multi_link_lops, prog);
 
-	for (i = 0; i < cnt; i++) {
-		err = uprobe_register(d_real_inode(link->path.dentry), &uprobes[i].consumer);
-		if (err) {
-			bpf_uprobe_unregister(&path, uprobes, i);
-			goto error_free;
-		}
-	}
+	err = uprobe_register_batch(d_real_inode(link->path.dentry), cnt,
+				    umulti_link_get_uprobe_consumer, link);
+	if (err)
+		goto error_free;
 
 	err = bpf_link_prime(&link->link, &link_primer);
 	if (err)
