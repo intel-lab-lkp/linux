@@ -1195,90 +1195,169 @@ __uprobe_unregister(struct uprobe *uprobe, struct uprobe_consumer *uc)
 }
 
 /*
+ * uprobe_unregister_batch - unregister a batch of already registered uprobe
+ * consumers.
+ * @inode: the file in which the probes have to be removed.
+ * @cnt: number of consumers to unregister
+ * @get_uprobe_consumer: a callback that returns Nth uprobe_consumer to attach
+ * @ctx: an arbitrary context passed through into get_uprobe_consumer callback
+ */
+void uprobe_unregister_batch(struct inode *inode, int cnt, uprobe_consumer_fn get_uprobe_consumer, void *ctx)
+{
+	struct uprobe *uprobe;
+	struct uprobe_consumer *uc;
+	int i;
+
+	for (i = 0; i < cnt; i++) {
+		uc = get_uprobe_consumer(i, ctx);
+		uprobe = uc->uprobe;
+
+		if (WARN_ON(!uprobe))
+			continue;
+
+		down_write(&uprobe->register_rwsem);
+		__uprobe_unregister(uprobe, uc);
+		up_write(&uprobe->register_rwsem);
+		put_uprobe(uprobe);
+
+		uc->uprobe = NULL;
+	}
+}
+
+static struct uprobe_consumer *uprobe_consumer_identity(size_t idx, void *ctx)
+{
+	return (struct uprobe_consumer *)ctx;
+}
+
+/*
  * uprobe_unregister - unregister an already registered probe.
  * @inode: the file in which the probe has to be removed.
  * @uc: identify which probe consumer to unregister.
  */
 void uprobe_unregister(struct inode *inode, struct uprobe_consumer *uc)
 {
-	struct uprobe *uprobe;
-
-	uprobe = find_uprobe(inode, uc->offset);
-	if (WARN_ON(!uprobe))
-		return;
-
-	down_write(&uprobe->register_rwsem);
-	__uprobe_unregister(uprobe, uc);
-	up_write(&uprobe->register_rwsem);
-	put_uprobe(uprobe);
+	uprobe_unregister_batch(inode, 1, uprobe_consumer_identity, uc);
 }
 EXPORT_SYMBOL_GPL(uprobe_unregister);
 
 /*
- * __uprobe_register - register a probe
- * @inode: the file in which the probe has to be placed.
- * @offset: offset from the start of the file.
- * @uc: information on howto handle the probe..
+ * uprobe_register_batch - register a batch of probes for a given inode
+ * @inode: the file in which the probes have to be placed.
+ * @cnt: number of probes to register
+ * @get_uprobe_consumer: a callback that returns Nth uprobe_consumer
+ * @ctx: an arbitrary context passed through into get_uprobe_consumer callback
  *
- * Apart from the access refcount, __uprobe_register() takes a creation
- * refcount (thro alloc_uprobe) if and only if this @uprobe is getting
- * inserted into the rbtree (i.e first consumer for a @inode:@offset
- * tuple).  Creation refcount stops uprobe_unregister from freeing the
- * @uprobe even before the register operation is complete. Creation
- * refcount is released when the last @uc for the @uprobe
- * unregisters. Caller of __uprobe_register() is required to keep @inode
- * (and the containing mount) referenced.
+ * uprobe_consumer instance itself contains offset and (optional)
+ * ref_ctr_offset within inode to attach to.
+ *
+ * On success, each attached uprobe_consumer assumes one refcount taken for
+ * respective uprobe instance (uniquely identified by inode+offset
+ * combination). Each uprobe_consumer is expected to eventually be detached
+ * through uprobe_unregister() or uprobe_unregister_batch() call, dropping
+ * their owning refcount.
+ *
+ * Caller of uprobe_register()/uprobe_register_batch() is required to keep
+ * @inode (and the containing mount) referenced.
+ *
+ * If not all probes are successfully installed, then all the successfully
+ * installed ones are rolled back. Note, there is no atomicity guarantees
+ * w.r.t. batch attachment. Some probes might start firing before batch
+ * attachment is completed. Even more so, some consumers might fire even if
+ * overall batch attachment ultimately fails.
  *
  * Return errno if it cannot successully install probes
  * else return 0 (success)
  */
-static int __uprobe_register(struct inode *inode, loff_t offset,
-			     loff_t ref_ctr_offset, struct uprobe_consumer *uc)
+int uprobe_register_batch(struct inode *inode, int cnt,
+			  uprobe_consumer_fn get_uprobe_consumer, void *ctx)
 {
 	struct uprobe *uprobe;
-	int ret;
-
-	/* Uprobe must have at least one set consumer */
-	if (!uc->handler && !uc->ret_handler)
-		return -EINVAL;
+	struct uprobe_consumer *uc;
+	int ret, i;
 
 	/* copy_insn() uses read_mapping_page() or shmem_read_mapping_page() */
 	if (!inode->i_mapping->a_ops->read_folio &&
 	    !shmem_mapping(inode->i_mapping))
 		return -EIO;
-	/* Racy, just to catch the obvious mistakes */
-	if (offset > i_size_read(inode))
+
+	if (cnt <= 0 || !get_uprobe_consumer)
 		return -EINVAL;
 
-	/*
-	 * This ensures that copy_from_page(), copy_to_page() and
-	 * __update_ref_ctr() can't cross page boundary.
-	 */
-	if (!IS_ALIGNED(offset, UPROBE_SWBP_INSN_SIZE))
-		return -EINVAL;
-	if (!IS_ALIGNED(ref_ctr_offset, sizeof(short)))
-		return -EINVAL;
+	for (i = 0; i < cnt; i++) {
+		uc = get_uprobe_consumer(i, ctx);
 
-	uprobe = alloc_uprobe(inode, offset, ref_ctr_offset);
-	if (IS_ERR(uprobe))
-		return PTR_ERR(uprobe);
+		/* Each consumer must have at least one set consumer */
+		if (!uc || (!uc->handler && !uc->ret_handler))
+			return -EINVAL;
+		/* Racy, just to catch the obvious mistakes */
+		if (uc->offset > i_size_read(inode))
+			return -EINVAL;
+		if (uc->uprobe)
+			return -EINVAL;
+		/*
+		 * This ensures that copy_from_page(), copy_to_page() and
+		 * __update_ref_ctr() can't cross page boundary.
+		 */
+		if (!IS_ALIGNED(uc->offset, UPROBE_SWBP_INSN_SIZE))
+			return -EINVAL;
+		if (!IS_ALIGNED(uc->ref_ctr_offset, sizeof(short)))
+			return -EINVAL;
+	}
 
-	down_write(&uprobe->register_rwsem);
-	consumer_add(uprobe, uc);
-	ret = register_for_each_vma(uprobe, uc);
-	if (ret)
-		__uprobe_unregister(uprobe, uc);
-	up_write(&uprobe->register_rwsem);
+	for (i = 0; i < cnt; i++) {
+		uc = get_uprobe_consumer(i, ctx);
 
-	if (ret)
-		put_uprobe(uprobe);
+		uprobe = alloc_uprobe(inode, uc->offset, uc->ref_ctr_offset);
+		if (IS_ERR(uprobe)) {
+			ret = PTR_ERR(uprobe);
+			goto cleanup_uprobes;
+		}
 
+		uc->uprobe = uprobe;
+	}
+
+	for (i = 0; i < cnt; i++) {
+		uc = get_uprobe_consumer(i, ctx);
+		uprobe = uc->uprobe;
+
+		down_write(&uprobe->register_rwsem);
+		consumer_add(uprobe, uc);
+		ret = register_for_each_vma(uprobe, uc);
+		if (ret)
+			__uprobe_unregister(uprobe, uc);
+		up_write(&uprobe->register_rwsem);
+
+		if (ret) {
+			put_uprobe(uprobe);
+			goto cleanup_unreg;
+		}
+	}
+
+	return 0;
+
+cleanup_unreg:
+	/* unregister all uprobes we managed to register until failure */
+	for (i--; i >= 0; i--) {
+		uc = get_uprobe_consumer(i, ctx);
+
+		down_write(&uprobe->register_rwsem);
+		__uprobe_unregister(uc->uprobe, uc);
+		up_write(&uprobe->register_rwsem);
+	}
+cleanup_uprobes:
+	/* put all the successfully allocated/reused uprobes */
+	for (i = cnt - 1; i >= 0; i--) {
+		uc = get_uprobe_consumer(i, ctx);
+
+		put_uprobe(uc->uprobe);
+		uc->uprobe = NULL;
+	}
 	return ret;
 }
 
 int uprobe_register(struct inode *inode, struct uprobe_consumer *uc)
 {
-	return __uprobe_register(inode, uc->offset, uc->ref_ctr_offset, uc);
+	return uprobe_register_batch(inode, 1, uprobe_consumer_identity, uc);
 }
 EXPORT_SYMBOL_GPL(uprobe_register);
 

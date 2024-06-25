@@ -33,6 +33,8 @@ enum uprobe_filter_ctx {
 	UPROBE_FILTER_MMAP,
 };
 
+typedef struct uprobe_consumer *(*uprobe_consumer_fn)(size_t idx, void *ctx);
+
 struct uprobe_consumer {
 	int (*handler)(struct uprobe_consumer *self, struct pt_regs *regs);
 	int (*ret_handler)(struct uprobe_consumer *self,
@@ -48,6 +50,8 @@ struct uprobe_consumer {
 	loff_t ref_ctr_offset;
 	/* for internal uprobe infra use, consumers shouldn't touch fields below */
 	struct uprobe_consumer *next;
+	/* associated uprobe instance (or NULL if consumer isn't attached) */
+	struct uprobe *uprobe;
 };
 
 #ifdef CONFIG_UPROBES
@@ -116,8 +120,12 @@ extern unsigned long uprobe_get_swbp_addr(struct pt_regs *regs);
 extern unsigned long uprobe_get_trap_addr(struct pt_regs *regs);
 extern int uprobe_write_opcode(struct arch_uprobe *auprobe, struct mm_struct *mm, unsigned long vaddr, uprobe_opcode_t);
 extern int uprobe_register(struct inode *inode, struct uprobe_consumer *uc);
+extern int uprobe_register_batch(struct inode *inode, int cnt,
+				 uprobe_consumer_fn get_uprobe_consumer, void *ctx);
 extern int uprobe_apply(struct inode *inode, loff_t offset, struct uprobe_consumer *uc, bool);
 extern void uprobe_unregister(struct inode *inode, struct uprobe_consumer *uc);
+extern void uprobe_unregister_batch(struct inode *inode, int cnt,
+				    uprobe_consumer_fn get_uprobe_consumer, void *ctx);
 extern int uprobe_mmap(struct vm_area_struct *vma);
 extern void uprobe_munmap(struct vm_area_struct *vma, unsigned long start, unsigned long end);
 extern void uprobe_start_dup_mmap(void);
@@ -160,6 +168,11 @@ uprobe_register(struct inode *inode, struct uprobe_consumer *uc)
 {
 	return -ENOSYS;
 }
+static inline int uprobe_register_batch(struct inode *inode, int cnt,
+					uprobe_consumer_fn get_uprobe_consumer, void *ctx)
+{
+	return -ENOSYS;
+}
 static inline int
 uprobe_apply(struct inode *inode, loff_t offset, struct uprobe_consumer *uc, bool add)
 {
@@ -167,6 +180,10 @@ uprobe_apply(struct inode *inode, loff_t offset, struct uprobe_consumer *uc, boo
 }
 static inline void
 uprobe_unregister(struct inode *inode, struct uprobe_consumer *uc)
+{
+}
+static inline void uprobe_unregister_batch(struct inode *inode, int cnt,
+					     uprobe_consumer_fn get_uprobe_consumer, void *ctx)
 {
 }
 static inline int uprobe_mmap(struct vm_area_struct *vma)
