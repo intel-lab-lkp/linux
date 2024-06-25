@@ -23,6 +23,8 @@
 #include "../common/mtk-dsp-sof-common.h"
 #include "../common/mtk-soc-card.h"
 
+#define DRIVER_NAME "mt8188_mt6359"
+
 #define CKSYS_AUD_TOP_CFG	0x032c
  #define RG_TEST_ON		BIT(0)
  #define RG_TEST_TYPE		BIT(2)
@@ -1240,6 +1242,9 @@ static void mt8188_fixup_controls(struct snd_soc_card *card)
 }
 
 static struct snd_soc_card mt8188_mt6359_soc_card = {
+#if IS_ENABLED(CONFIG_SND_SOC_MTK_READABLE_DRIVER_NAME)
+	.driver_name = DRIVER_NAME,
+#endif
 	.owner = THIS_MODULE,
 	.dai_link = mt8188_mt6359_dai_links,
 	.num_links = ARRAY_SIZE(mt8188_mt6359_dai_links),
@@ -1392,7 +1397,7 @@ MODULE_DEVICE_TABLE(of, mt8188_mt6359_dt_match);
 
 static struct platform_driver mt8188_mt6359_driver = {
 	.driver = {
-		.name = "mt8188_mt6359",
+		.name = DRIVER_NAME,
 		.of_match_table = mt8188_mt6359_dt_match,
 		.pm = &snd_soc_pm_ops,
 	},

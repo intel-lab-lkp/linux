@@ -31,6 +31,8 @@
 #include "mt8186-afe-gpio.h"
 #include "mt8186-mt6366-common.h"
 
+#define DRIVER_NAME "mt8186_mt6366"
+
 #define RT1019_CODEC_DAI	"HiFi"
 #define RT1019_DEV0_NAME	"rt1019p"
 
@@ -1119,6 +1121,9 @@ mt8186_mt6366_rt1019_rt5682s_controls[] = {
 
 static struct snd_soc_card mt8186_mt6366_da7219_max98357_soc_card = {
 	.name = "mt8186_da7219_max98357",
+#if IS_ENABLED(CONFIG_SND_SOC_MTK_READABLE_DRIVER_NAME)
+	.driver_name = DRIVER_NAME,
+#endif
 	.owner = THIS_MODULE,
 	.dai_link = mt8186_mt6366_rt1019_rt5682s_dai_links,
 	.num_links = ARRAY_SIZE(mt8186_mt6366_rt1019_rt5682s_dai_links),
@@ -1134,6 +1139,9 @@ static struct snd_soc_card mt8186_mt6366_da7219_max98357_soc_card = {
 
 static struct snd_soc_card mt8186_mt6366_rt1019_rt5682s_soc_card = {
 	.name = "mt8186_rt1019_rt5682s",
+#if IS_ENABLED(CONFIG_SND_SOC_MTK_READABLE_DRIVER_NAME)
+	.driver_name = DRIVER_NAME,
+#endif
 	.owner = THIS_MODULE,
 	.dai_link = mt8186_mt6366_rt1019_rt5682s_dai_links,
 	.num_links = ARRAY_SIZE(mt8186_mt6366_rt1019_rt5682s_dai_links),
@@ -1149,6 +1157,9 @@ static struct snd_soc_card mt8186_mt6366_rt1019_rt5682s_soc_card = {
 
 static struct snd_soc_card mt8186_mt6366_rt5682s_max98360_soc_card = {
 	.name = "mt8186_rt5682s_max98360",
+#if IS_ENABLED(CONFIG_SND_SOC_MTK_READABLE_DRIVER_NAME)
+	.driver_name = DRIVER_NAME,
+#endif
 	.owner = THIS_MODULE,
 	.dai_link = mt8186_mt6366_rt1019_rt5682s_dai_links,
 	.num_links = ARRAY_SIZE(mt8186_mt6366_rt1019_rt5682s_dai_links),
@@ -1164,6 +1175,9 @@ static struct snd_soc_card mt8186_mt6366_rt5682s_max98360_soc_card = {
 
 static struct snd_soc_card mt8186_mt6366_rt5650_soc_card = {
 	.name = "mt8186_rt5650",
+#if IS_ENABLED(CONFIG_SND_SOC_MTK_READABLE_DRIVER_NAME)
+	.driver_name = DRIVER_NAME,
+#endif
 	.owner = THIS_MODULE,
 	.dai_link = mt8186_mt6366_rt1019_rt5682s_dai_links,
 	.num_links = ARRAY_SIZE(mt8186_mt6366_rt1019_rt5682s_dai_links),
@@ -1380,7 +1394,7 @@ MODULE_DEVICE_TABLE(of, mt8186_mt6366_dt_match);
 
 static struct platform_driver mt8186_mt6366_driver = {
 	.driver = {
-		.name = "mt8186_mt6366",
+		.name = DRIVER_NAME,
 #if IS_ENABLED(CONFIG_OF)
 		.of_match_table = mt8186_mt6366_dt_match,
 #endif

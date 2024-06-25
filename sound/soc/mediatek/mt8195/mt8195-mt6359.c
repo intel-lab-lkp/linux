@@ -26,6 +26,8 @@
 #include "mt8195-afe-clk.h"
 #include "mt8195-afe-common.h"
 
+#define DRIVER_NAME "mt8195_mt6359"
+
 #define RT1011_SPEAKER_AMP_PRESENT		BIT(0)
 #define RT1019_SPEAKER_AMP_PRESENT		BIT(1)
 #define MAX98390_SPEAKER_AMP_PRESENT		BIT(2)
@@ -1231,6 +1233,9 @@ static struct snd_soc_codec_conf max98390_codec_conf[] = {
 };
 
 static struct snd_soc_card mt8195_mt6359_soc_card = {
+#if IS_ENABLED(CONFIG_SND_SOC_MTK_READABLE_DRIVER_NAME)
+	.driver_name = DRIVER_NAME,
+#endif
 	.owner = THIS_MODULE,
 	.dai_link = mt8195_mt6359_dai_links,
 	.num_links = ARRAY_SIZE(mt8195_mt6359_dai_links),
@@ -1530,7 +1535,7 @@ MODULE_DEVICE_TABLE(of, mt8195_mt6359_dt_match);
 
 static struct platform_driver mt8195_mt6359_driver = {
 	.driver = {
-		.name = "mt8195_mt6359",
+		.name = DRIVER_NAME,
 		.of_match_table = mt8195_mt6359_dt_match,
 		.pm = &snd_soc_pm_ops,
 	},

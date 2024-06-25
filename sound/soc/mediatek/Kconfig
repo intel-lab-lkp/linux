@@ -281,6 +281,16 @@ config SND_SOC_MT8195
 	  Select Y if you have such device.
 	  If unsure select "N".
 
+config SND_SOC_MTK_READABLE_DRIVER_NAME
+	bool "Readable driver name for MediaTek sound cards"
+	help
+	  This explicitly sets the driver name for the MediaTek sound cards to
+	  prevent it from potentially being truncated and harder to read. The
+	  new names require support in the audio configuration userspace
+	  utilities (like UCM), so only select this once they have been updated
+	  to support the new names to ensure working audio.
+	  If unsure select "N".
+
 config SND_SOC_MT8195_MT6359
 	tristate "ASoC Audio driver for MT8195 with MT6359 and I2S codecs"
 	depends on I2C && GPIOLIB

@@ -173,6 +173,9 @@ static struct snd_soc_codec_conf mt8173_rt5650_rt5514_codec_conf[] = {
 
 static struct snd_soc_card mt8173_rt5650_rt5514_card = {
 	.name = "mtk-rt5650-rt5514",
+#if IS_ENABLED(CONFIG_SND_SOC_MTK_READABLE_DRIVER_NAME)
+	.driver_name = "mtk-rt5514",
+#endif
 	.owner = THIS_MODULE,
 	.dai_link = mt8173_rt5650_rt5514_dais,
 	.num_links = ARRAY_SIZE(mt8173_rt5650_rt5514_dais),

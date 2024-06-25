@@ -19,6 +19,8 @@
 #include "../common/mtk-afe-platform-driver.h"
 #include "mt8183-afe-common.h"
 
+#define DRIVER_NAME "mt8183_da7219"
+
 #define DA7219_CODEC_DAI "da7219-hifi"
 #define DA7219_DEV_NAME "da7219.5-001a"
 #define RT1015_CODEC_DAI "rt1015-aif"
@@ -649,6 +651,9 @@ static const struct snd_soc_dapm_route mt8183_da7219_max98357_dapm_routes[] = {
 
 static struct snd_soc_card mt8183_da7219_max98357_card = {
 	.name = "mt8183_da7219_max98357",
+#if IS_ENABLED(CONFIG_SND_SOC_MTK_READABLE_DRIVER_NAME)
+	.driver_name = DRIVER_NAME,
+#endif
 	.owner = THIS_MODULE,
 	.controls = mt8183_da7219_max98357_snd_controls,
 	.num_controls = ARRAY_SIZE(mt8183_da7219_max98357_snd_controls),
@@ -706,6 +711,9 @@ static const struct snd_soc_dapm_route mt8183_da7219_rt1015_dapm_routes[] = {
 
 static struct snd_soc_card mt8183_da7219_rt1015_card = {
 	.name = "mt8183_da7219_rt1015",
+#if IS_ENABLED(CONFIG_SND_SOC_MTK_READABLE_DRIVER_NAME)
+	.driver_name = DRIVER_NAME,
+#endif
 	.owner = THIS_MODULE,
 	.controls = mt8183_da7219_rt1015_snd_controls,
 	.num_controls = ARRAY_SIZE(mt8183_da7219_rt1015_snd_controls),
@@ -723,6 +731,9 @@ static struct snd_soc_card mt8183_da7219_rt1015_card = {
 
 static struct snd_soc_card mt8183_da7219_rt1015p_card = {
 	.name = "mt8183_da7219_rt1015p",
+#if IS_ENABLED(CONFIG_SND_SOC_MTK_READABLE_DRIVER_NAME)
+	.driver_name = DRIVER_NAME,
+#endif
 	.owner = THIS_MODULE,
 	.controls = mt8183_da7219_max98357_snd_controls,
 	.num_controls = ARRAY_SIZE(mt8183_da7219_max98357_snd_controls),
@@ -875,7 +886,7 @@ MODULE_DEVICE_TABLE(of, mt8183_da7219_max98357_dt_match);
 
 static struct platform_driver mt8183_da7219_max98357_driver = {
 	.driver = {
-		.name = "mt8183_da7219",
+		.name = DRIVER_NAME,
 #ifdef CONFIG_OF
 		.of_match_table = mt8183_da7219_max98357_dt_match,
 #endif
