@@ -6747,8 +6747,7 @@ static bool prepare_kswapd_sleep(pg_data_t *pgdat, int order,
  * zone that is currently unbalanced.
  *
  * Returns true if kswapd scanned at least the requested number of pages to
- * reclaim or if the lack of progress was due to pages under writeback.
- * This is used to determine if the scanning priority needs to be raised.
+ * reclaim. This is used to determine if the scanning priority needs to be raised.
  */
 static bool kswapd_shrink_node(pg_data_t *pgdat,
 			       struct scan_control *sc)
