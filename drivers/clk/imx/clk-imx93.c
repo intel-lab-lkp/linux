@@ -257,6 +257,20 @@ static const struct imx93_clk_ccgr {
 static struct clk_hw_onecell_data *clk_hw_data;
 static struct clk_hw **clks;
 
+static int imx_clks_get_num(void)
+{
+	u32 val = 0;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(root_array); i++)
+		val = max_t(u32, val, root_array[i].clk);
+
+	for (i = 0; i < ARRAY_SIZE(ccgr_array); i++)
+		val = max_t(u32, val, ccgr_array[i].clk);
+
+	return val + 1;
+}
+
 static int imx93_clocks_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -264,14 +278,17 @@ static int imx93_clocks_probe(struct platform_device *pdev)
 	const struct imx93_clk_root *root;
 	const struct imx93_clk_ccgr *ccgr;
 	void __iomem *base, *anatop_base;
+	int clks_num;
 	int i, ret;
 
+	clks_num = imx_clks_get_num();
+
 	clk_hw_data = devm_kzalloc(dev, struct_size(clk_hw_data, hws,
-					  IMX93_CLK_END), GFP_KERNEL);
+					  clks_num), GFP_KERNEL);
 	if (!clk_hw_data)
 		return -ENOMEM;
 
-	clk_hw_data->num = IMX93_CLK_END;
+	clk_hw_data->num = clks_num;
 	clks = clk_hw_data->hws;
 
 	clks[IMX93_CLK_DUMMY] = imx_clk_hw_fixed("dummy", 0);
@@ -335,7 +352,7 @@ static int imx93_clocks_probe(struct platform_device *pdev)
 						  clks[IMX93_CLK_ARM_PLL]->clk,
 						  clks[IMX93_CLK_A55_GATE]->clk);
 
-	imx_check_clk_hws(clks, IMX93_CLK_END);
+	imx_check_clk_hws(clks, clks_num);
 
 	ret = of_clk_add_hw_provider(np, of_clk_hw_onecell_get, clk_hw_data);
 	if (ret < 0) {
@@ -348,7 +365,7 @@ static int imx93_clocks_probe(struct platform_device *pdev)
 	return 0;
 
 unregister_hws:
-	imx_unregister_hw_clocks(clks, IMX93_CLK_END);
+	imx_unregister_hw_clocks(clks, clks_num);
 
 	return ret;
 }
