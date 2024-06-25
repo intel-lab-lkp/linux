@@ -642,6 +642,18 @@ stmmac_probe_config_dt(struct platform_device *pdev, u8 *mac)
 		dev_dbg(&pdev->dev, "PTP rate %d\n", plat->clk_ptp_rate);
 	}
 
+	plat->axi_icc_path = devm_of_icc_get(&pdev->dev, "axi");
+	if (IS_ERR(plat->axi_icc_path)) {
+		ret = (void *)plat->axi_icc_path;
+		goto error_hw_init;
+	}
+
+	plat->ahb_icc_path = devm_of_icc_get(&pdev->dev, "ahb");
+	if (IS_ERR(plat->ahb_icc_path)) {
+		ret = (void *)plat->ahb_icc_path;
+		goto error_hw_init;
+	}
+
 	plat->stmmac_rst = devm_reset_control_get_optional(&pdev->dev,
 							   STMMAC_RESOURCE_NAME);
 	if (IS_ERR(plat->stmmac_rst)) {

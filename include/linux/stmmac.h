@@ -283,6 +283,8 @@ struct plat_stmmacenet_data {
 	struct reset_control *stmmac_rst;
 	struct reset_control *stmmac_ahb_rst;
 	struct stmmac_axi *axi;
+	struct icc_path *axi_icc_path;
+	struct icc_path *ahb_icc_path;
 	int has_gmac4;
 	int rss_en;
 	int mac_port_sel_speed;
