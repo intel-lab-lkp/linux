@@ -30,7 +30,7 @@ static DEFINE_MUTEX(page_pools_lock);
  */
 
 typedef int (*pp_nl_fill_cb)(struct sk_buff *rsp, const struct page_pool *pool,
-			     const struct genl_info *info);
+			     const struct genl_info *info, int ifindex);
 
 static int
 netdev_nl_page_pool_get_do(struct genl_info *info, u32 id, pp_nl_fill_cb fill)
@@ -53,7 +53,7 @@ netdev_nl_page_pool_get_do(struct genl_info *info, u32 id, pp_nl_fill_cb fill)
 		goto err_unlock;
 	}
 
-	err = fill(rsp, pool, info);
+	err = fill(rsp, pool, info, pool->slow.netdev->ifindex);
 	if (err)
 		goto err_free_msg;
 
@@ -92,7 +92,7 @@ netdev_nl_page_pool_get_dump(struct sk_buff *skb, struct netlink_callback *cb,
 				continue;
 
 			state->pp_id = pool->user.id;
-			err = fill(skb, pool, info);
+			err = fill(skb, pool, info, pool->slow.netdev->ifindex);
 			if (err)
 				goto out;
 		}
@@ -108,7 +108,7 @@ out:
 
 static int
 page_pool_nl_stats_fill(struct sk_buff *rsp, const struct page_pool *pool,
-			const struct genl_info *info)
+			const struct genl_info *info, int ifindex)
 {
 #ifdef CONFIG_PAGE_POOL_STATS
 	struct page_pool_stats stats = {};
@@ -125,9 +125,8 @@ page_pool_nl_stats_fill(struct sk_buff *rsp, const struct page_pool *pool,
 	nest = nla_nest_start(rsp, NETDEV_A_PAGE_POOL_STATS_INFO);
 
 	if (nla_put_uint(rsp, NETDEV_A_PAGE_POOL_ID, pool->user.id) ||
-	    (pool->slow.netdev->ifindex != LOOPBACK_IFINDEX &&
-	     nla_put_u32(rsp, NETDEV_A_PAGE_POOL_IFINDEX,
-			 pool->slow.netdev->ifindex)))
+	    (ifindex != LOOPBACK_IFINDEX &&
+	     nla_put_u32(rsp, NETDEV_A_PAGE_POOL_IFINDEX, ifindex)))
 		goto err_cancel_nest;
 
 	nla_nest_end(rsp, nest);
@@ -210,7 +209,7 @@ int netdev_nl_page_pool_stats_get_dumpit(struct sk_buff *skb,
 
 static int
 page_pool_nl_fill(struct sk_buff *rsp, const struct page_pool *pool,
-		  const struct genl_info *info)
+		  const struct genl_info *info, int ifindex)
 {
 	size_t inflight, refsz;
 	void *hdr;
@@ -222,9 +221,8 @@ page_pool_nl_fill(struct sk_buff *rsp, const struct page_pool *pool,
 	if (nla_put_uint(rsp, NETDEV_A_PAGE_POOL_ID, pool->user.id))
 		goto err_cancel;
 
-	if (pool->slow.netdev->ifindex != LOOPBACK_IFINDEX &&
-	    nla_put_u32(rsp, NETDEV_A_PAGE_POOL_IFINDEX,
-			pool->slow.netdev->ifindex))
+	if (ifindex != LOOPBACK_IFINDEX &&
+	    nla_put_u32(rsp, NETDEV_A_PAGE_POOL_IFINDEX, ifindex))
 		goto err_cancel;
 	if (pool->user.napi_id &&
 	    nla_put_uint(rsp, NETDEV_A_PAGE_POOL_NAPI_ID, pool->user.napi_id))
@@ -271,7 +269,7 @@ static void netdev_nl_page_pool_event(const struct page_pool *pool, u32 cmd)
 	if (!ntf)
 		return;
 
-	if (page_pool_nl_fill(ntf, pool, &info)) {
+	if (page_pool_nl_fill(ntf, pool, &info, pool->slow.netdev->ifindex)) {
 		nlmsg_free(ntf);
 		return;
 	}
