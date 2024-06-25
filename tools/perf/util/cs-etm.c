@@ -1619,6 +1619,7 @@ static int cs_etm__synth_event(struct perf_session *session,
 
 	memset(&cs_etm_synth, 0, sizeof(struct cs_etm_synth));
 	cs_etm_synth.session = session;
+	perf_tool__init(&cs_etm_synth.dummy_tool, /*ordered_events=*/false);
 
 	return perf_event__synthesize_attr(&cs_etm_synth.dummy_tool, attr, 1,
 					   &id, cs_etm__event_synth);

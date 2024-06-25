@@ -1097,6 +1097,7 @@ static int arm_spe_synth_event(struct perf_session *session,
 
 	memset(&arm_spe_synth, 0, sizeof(struct arm_spe_synth));
 	arm_spe_synth.session = session;
+	perf_tool__init(&arm_spe_synth.dummy_tool, /*ordered_events=*/false);
 
 	return perf_event__synthesize_attr(&arm_spe_synth.dummy_tool, attr, 1,
 					   &id, arm_spe_event_synth);

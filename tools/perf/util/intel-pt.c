@@ -3687,7 +3687,7 @@ static int intel_pt_synth_event(struct perf_session *session, const char *name,
 
 	memset(&intel_pt_synth, 0, sizeof(struct intel_pt_synth));
 	intel_pt_synth.session = session;
-
+	perf_tool__init(&intel_pt_synth.dummy_tool, /*ordered_events=*/false);
 	err = perf_event__synthesize_attr(&intel_pt_synth.dummy_tool, attr, 1,
 					  &id, intel_pt_event_synth);
 	if (err)

@@ -953,7 +953,6 @@ s390_cpumsf_process_event(struct perf_session *session,
 }
 
 struct s390_cpumsf_synth {
-	struct perf_tool cpumsf_tool;
 	struct perf_session *session;
 };
 

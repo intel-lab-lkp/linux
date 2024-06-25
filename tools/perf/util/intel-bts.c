@@ -761,6 +761,7 @@ static int intel_bts_synth_event(struct perf_session *session,
 
 	memset(&intel_bts_synth, 0, sizeof(struct intel_bts_synth));
 	intel_bts_synth.session = session;
+	perf_tool__init(&intel_bts_synth.dummy_tool, /*ordered_events=*/false);
 
 	return perf_event__synthesize_attr(&intel_bts_synth.dummy_tool, attr, 1,
 					   &id, intel_bts_event_synth);
