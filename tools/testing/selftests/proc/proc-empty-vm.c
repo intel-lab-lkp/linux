@@ -382,7 +382,12 @@ static int test_proc_pid_statm(pid_t pid)
 	assert(rv >= 0);
 	assert(rv <= sizeof(buf));
 	if (0) {
-		write(1, buf, rv);
+		ssize_t bytes_written = write(1, buf, rv);
+
+		if (bytes_written != rv) {
+			perror("write");
+			return EXIT_FAILURE;
+		}
 	}
 
 	const char *p = buf;
