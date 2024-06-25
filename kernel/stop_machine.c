@@ -243,8 +243,18 @@ static int multi_cpu_stop(void *data)
 			ack_state(msdata);
 
 		} else {
-			/* No state change, chill out */
-			stop_machine_yield(cpumask);
+			/*
+			 * No state change, chill out. Delay here to prevent
+			 * the watchdogs and RCU being hit too hard by lots
+			 * of CPUs, which can cause contention and slowdowns.
+			 */
+			unsigned long t = jiffies + msecs_to_jiffies(10);
+
+			while (time_before(jiffies, t)) {
+				if (READ_ONCE(msdata->state) != curstate)
+					break;
+				stop_machine_yield(cpumask);
+			}
 			if (curstate > MULTI_STOP_PREPARE) {
 				/*
 				 * At this stage all other CPUs we depend on
