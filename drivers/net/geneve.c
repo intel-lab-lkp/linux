@@ -1198,10 +1198,14 @@ static void geneve_setup(struct net_device *dev)
 	dev->features    |= NETIF_F_SG | NETIF_F_HW_CSUM | NETIF_F_FRAGLIST;
 	dev->features    |= NETIF_F_RXCSUM;
 	dev->features    |= NETIF_F_GSO_SOFTWARE;
+	dev->features    |= NETIF_F_GSO_UDP;
+	dev->features    |= NETIF_F_GSO_UDP_L4;
 
 	dev->hw_features |= NETIF_F_SG | NETIF_F_HW_CSUM | NETIF_F_FRAGLIST;
 	dev->hw_features |= NETIF_F_RXCSUM;
 	dev->hw_features |= NETIF_F_GSO_SOFTWARE;
+	dev->features    |= NETIF_F_GSO_UDP;
+	dev->features    |= NETIF_F_GSO_UDP_L4;
 
 	dev->pcpu_stat_type = NETDEV_PCPU_STAT_TSTATS;
 	/* MTU range: 68 - (something less than 65535) */
