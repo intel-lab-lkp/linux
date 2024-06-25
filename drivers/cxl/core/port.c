@@ -1808,6 +1808,7 @@ static int cxl_switch_decoder_init(struct cxl_port *port,
  * @port: owning CXL root of this decoder
  * @nr_targets: static number of downstream targets
  * @calc_hb: which host bridge covers the n'th position by granularity
+ * @translate: decoder specific address translation function
  *
  * Return: A new cxl decoder to be registered by cxl_decoder_add(). A
  * 'CXL root' decoder is one that decodes from a top-level / static platform
@@ -1816,7 +1817,8 @@ static int cxl_switch_decoder_init(struct cxl_port *port,
  */
 struct cxl_root_decoder *cxl_root_decoder_alloc(struct cxl_port *port,
 						unsigned int nr_targets,
-						cxl_calc_hb_fn calc_hb)
+						cxl_calc_hb_fn calc_hb,
+						cxl_translate_fn translate)
 {
 	struct cxl_root_decoder *cxlrd;
 	struct cxl_switch_decoder *cxlsd;
@@ -1839,6 +1841,7 @@ struct cxl_root_decoder *cxl_root_decoder_alloc(struct cxl_port *port,
 	}
 
 	cxlrd->calc_hb = calc_hb;
+	cxlrd->translate = translate;
 	mutex_init(&cxlrd->range_lock);
 
 	cxld = &cxlsd->cxld;
