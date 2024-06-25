@@ -71,6 +71,9 @@ REPORT OPTIONS
 --vmlinux=<file>::
 	vmlinux pathname
 
+--vdso=<vdso1[,vdso2]>::
+	Specify vdso pathnames. You can specify up to two for multiarch-support.
+
 -v::
 --verbose::
 	Be more verbose (show counter open errors, etc).
