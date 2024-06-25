@@ -2114,16 +2114,19 @@ static int dmar_domain_attach_device(struct dmar_domain *domain,
 	if (ret)
 		return ret;
 
+	info->domain = domain;
+	spin_lock_irqsave(&domain->lock, flags);
+	list_add(&info->link, &domain->devices);
+	spin_unlock_irqrestore(&domain->lock, flags);
+
+	if (sm_supported(info->iommu) || !domain_type_is_si(info->domain))
+		iommu_enable_pci_caps(info);
+
 	ret = cache_tag_assign_domain(domain, dev, IOMMU_NO_PASID);
 	if (ret) {
 		domain_detach_iommu(domain, iommu);
 		return ret;
 	}
-
-	info->domain = domain;
-	spin_lock_irqsave(&domain->lock, flags);
-	list_add(&info->link, &domain->devices);
-	spin_unlock_irqrestore(&domain->lock, flags);
 
 	if (dev_is_real_dma_subdevice(dev))
 		return 0;
@@ -2141,9 +2144,6 @@ static int dmar_domain_attach_device(struct dmar_domain *domain,
 		device_block_translation(dev);
 		return ret;
 	}
-
-	if (sm_supported(info->iommu) || !domain_type_is_si(info->domain))
-		iommu_enable_pci_caps(info);
 
 	return 0;
 }
