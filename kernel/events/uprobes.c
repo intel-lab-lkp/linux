@@ -842,40 +842,6 @@ ref_ctr_mismatch_warn(struct uprobe *cur_uprobe, struct uprobe *uprobe)
 		(unsigned long long) uprobe->ref_ctr_offset);
 }
 
-static struct uprobe *alloc_uprobe(struct inode *inode, loff_t offset,
-				   loff_t ref_ctr_offset)
-{
-	struct uprobe *uprobe, *cur_uprobe;
-
-	uprobe = kzalloc(sizeof(struct uprobe), GFP_KERNEL);
-	if (!uprobe)
-		return ERR_PTR(-ENOMEM);
-
-	uprobe->inode = inode;
-	uprobe->offset = offset;
-	uprobe->ref_ctr_offset = ref_ctr_offset;
-	init_rwsem(&uprobe->register_rwsem);
-	init_rwsem(&uprobe->consumer_rwsem);
-	RB_CLEAR_NODE(&uprobe->rb_node);
-	atomic64_set(&uprobe->ref, 1);
-
-	/* add to uprobes_tree, sorted on inode:offset */
-	cur_uprobe = insert_uprobe(uprobe);
-	/* a uprobe exists for this inode:offset combination */
-	if (cur_uprobe != uprobe) {
-		if (cur_uprobe->ref_ctr_offset != uprobe->ref_ctr_offset) {
-			ref_ctr_mismatch_warn(cur_uprobe, uprobe);
-			put_uprobe(cur_uprobe);
-			kfree(uprobe);
-			return ERR_PTR(-EINVAL);
-		}
-		kfree(uprobe);
-		uprobe = cur_uprobe;
-	}
-
-	return uprobe;
-}
-
 static void consumer_add(struct uprobe *uprobe, struct uprobe_consumer *uc)
 {
 	down_write(&uprobe->consumer_rwsem);
@@ -1305,12 +1271,37 @@ int uprobe_register_batch(struct inode *inode, int cnt,
 	}
 
 	for (i = 0; i < cnt; i++) {
+		struct uprobe *cur_uprobe;
+
 		uc = get_uprobe_consumer(i, ctx);
 
-		uprobe = alloc_uprobe(inode, uc->offset, uc->ref_ctr_offset);
-		if (IS_ERR(uprobe)) {
-			ret = PTR_ERR(uprobe);
+		uprobe = kzalloc(sizeof(struct uprobe), GFP_KERNEL);
+		if (!uprobe) {
+			ret = -ENOMEM;
 			goto cleanup_uprobes;
+		}
+
+		uprobe->inode = inode;
+		uprobe->offset = uc->offset;
+		uprobe->ref_ctr_offset = uc->ref_ctr_offset;
+		init_rwsem(&uprobe->register_rwsem);
+		init_rwsem(&uprobe->consumer_rwsem);
+		RB_CLEAR_NODE(&uprobe->rb_node);
+		atomic64_set(&uprobe->ref, 1);
+
+		/* add to uprobes_tree, sorted on inode:offset */
+		cur_uprobe = insert_uprobe(uprobe);
+		/* a uprobe exists for this inode:offset combination */
+		if (cur_uprobe != uprobe) {
+			if (cur_uprobe->ref_ctr_offset != uprobe->ref_ctr_offset) {
+				ref_ctr_mismatch_warn(cur_uprobe, uprobe);
+				put_uprobe(cur_uprobe);
+				kfree(uprobe);
+				ret = -EINVAL;
+				goto cleanup_uprobes;
+			}
+			kfree(uprobe);
+			uprobe = cur_uprobe;
 		}
 
 		uc->uprobe = uprobe;
