@@ -42,6 +42,7 @@ properties:
     items:
       - description: WAKEUPMIX Audio XCVR Interrupt 1
       - description: WAKEUPMIX Audio XCVR Interrupt 2
+      - description: SPDIF wakeup interrupt from PHY
     minItems: 1
 
   clocks:
@@ -88,6 +89,7 @@ required:
   - dma-names
 
 allOf:
+  - $ref: dai-common.yaml#
   - if:
       properties:
         compatible:
@@ -112,7 +114,7 @@ allOf:
     else:
       properties:
         interrupts:
-          maxItems: 1
+          maxItems: 3
 
   - if:
       properties:
@@ -128,7 +130,7 @@ allOf:
         clock-names:
           maxItems: 4
 
-additionalProperties: false
+unevaluatedProperties: false
 
 examples:
   - |
