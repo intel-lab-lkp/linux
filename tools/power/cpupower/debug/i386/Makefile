@@ -39,4 +39,10 @@ install:
 	$(INSTALL) $(OUTPUT)dump_psb $(DESTDIR)${bindir}
 	$(INSTALL) $(OUTPUT)intel_gsic $(DESTDIR)${bindir}
 
-.PHONY: all default clean install
+uninstall:
+	- rm -f $(DESTDIR)${bindir}/centrino-decode
+	- rm -f $(DESTDIR)${bindir}/powernow-k8-decode
+	- rm -f $(DESTDIR)${bindir}/dump_psb
+	- rm -f $(DESTDIR)${bindir}/intel_gsic
+
+.PHONY: all default clean install uninstall
