@@ -2782,10 +2782,21 @@ static unsigned int __get_next_segno(struct f2fs_sb_info *sbi, int type)
 {
 	struct curseg_info *curseg = CURSEG_I(sbi, type);
 	unsigned short seg_type = curseg->seg_type;
+	unsigned int hint;
 
 	sanity_check_seg_type(sbi, seg_type);
-	if (f2fs_need_rand_seg(sbi))
-		return get_random_u32_below(MAIN_SECS(sbi) * SEGS_PER_SEC(sbi));
+	if (f2fs_need_rand_seg(sbi)) {
+		if (__is_large_section(sbi)) {
+			hint = GET_SEC_FROM_SEG(sbi, curseg->segno);
+			if (GET_SEC_FROM_SEG(sbi, curseg->segno + 1) != hint)
+				return curseg->segno;
+			return get_random_u32_inclusive(curseg->segno + 1,
+					GET_SEG_FROM_SEC(sbi, hint + 1) - 1);
+		} else {
+			return get_random_u32_below(MAIN_SECS(sbi) *
+						SEGS_PER_SEC(sbi));
+		}
+	}
 
 	if (__is_large_section(sbi))
 		return curseg->segno;
