@@ -699,20 +699,24 @@ static unsigned long samsung_dsim_set_pll(struct samsung_dsim *dsi,
 
 static int samsung_dsim_enable_clock(struct samsung_dsim *dsi)
 {
-	unsigned long hs_clk, byte_clk, esc_clk, pix_clk;
+	unsigned long hs_clk, byte_clk, esc_clk;
 	unsigned long esc_div;
 	u32 reg;
 	struct drm_display_mode *m = &dsi->mode;
 	int bpp = mipi_dsi_pixel_format_to_bpp(dsi->format);
 
-	/* m->clock is in KHz */
-	pix_clk = m->clock * 1000;
-
-	/* Use burst_clk_rate if available, otherwise use the pix_clk */
+	/*
+	 * Use burst_clk_rate if available, otherwise use the mode clock
+	 * if mode is already set and available, otherwise fall back to
+	 * PLL input clock and operate in 1:1 lowest frequency mode until
+	 * a mode is set.
+	 */
 	if (dsi->burst_clk_rate)
 		hs_clk = samsung_dsim_set_pll(dsi, dsi->burst_clk_rate);
+	else if (m)	/* m->clock is in KHz */
+		hs_clk = samsung_dsim_set_pll(dsi, DIV_ROUND_UP(m->clock * 1000 * bpp, dsi->lanes));
 	else
-		hs_clk = samsung_dsim_set_pll(dsi, DIV_ROUND_UP(pix_clk * bpp, dsi->lanes));
+		hs_clk = dsi->pll_clk_rate;
 
 	if (!hs_clk) {
 		dev_err(dsi->dev, "failed to configure DSI PLL\n");
@@ -1622,9 +1626,21 @@ static int samsung_dsim_attach(struct drm_bridge *bridge,
 			       enum drm_bridge_attach_flags flags)
 {
 	struct samsung_dsim *dsi = bridge_to_dsi(bridge);
+	int ret;
 
-	return drm_bridge_attach(bridge->encoder, dsi->out_bridge, bridge,
-				 flags);
+	ret = pm_runtime_resume_and_get(dsi->dev);
+	if (ret < 0)
+		return ret;
+
+	ret = samsung_dsim_init(dsi);
+	if (ret < 0)
+		goto err;
+
+	ret = drm_bridge_attach(bridge->encoder, dsi->out_bridge, bridge,
+				flags);
+err:
+	pm_runtime_put_sync(dsi->dev);
+	return ret;
 }
 
 static const struct drm_bridge_funcs samsung_dsim_bridge_funcs = {
