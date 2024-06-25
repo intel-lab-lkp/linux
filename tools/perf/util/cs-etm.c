@@ -788,7 +788,7 @@ static void cs_etm__dump_event(struct cs_etm_queue *etmq,
 }
 
 static int cs_etm__flush_events(struct perf_session *session,
-				struct perf_tool *tool)
+				const struct perf_tool *tool)
 {
 	struct cs_etm_auxtrace *etm = container_of(session->auxtrace,
 						   struct cs_etm_auxtrace,
@@ -1600,7 +1600,7 @@ struct cs_etm_synth {
 	struct perf_session *session;
 };
 
-static int cs_etm__event_synth(struct perf_tool *tool,
+static int cs_etm__event_synth(const struct perf_tool *tool,
 			       union perf_event *event,
 			       struct perf_sample *sample __maybe_unused,
 			       struct machine *machine __maybe_unused)
@@ -2740,7 +2740,7 @@ static int cs_etm__process_switch_cpu_wide(struct cs_etm_auxtrace *etm,
 static int cs_etm__process_event(struct perf_session *session,
 				 union perf_event *event,
 				 struct perf_sample *sample,
-				 struct perf_tool *tool)
+				 const struct perf_tool *tool)
 {
 	struct cs_etm_auxtrace *etm = container_of(session->auxtrace,
 						   struct cs_etm_auxtrace,
@@ -2810,7 +2810,7 @@ static void dump_queued_data(struct cs_etm_auxtrace *etm,
 
 static int cs_etm__process_auxtrace_event(struct perf_session *session,
 					  union perf_event *event,
-					  struct perf_tool *tool __maybe_unused)
+					  const struct perf_tool *tool __maybe_unused)
 {
 	struct cs_etm_auxtrace *etm = container_of(session->auxtrace,
 						   struct cs_etm_auxtrace,

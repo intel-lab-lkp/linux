@@ -591,7 +591,7 @@ static int intel_bts_process_queues(struct intel_bts *bts, u64 timestamp)
 static int intel_bts_process_event(struct perf_session *session,
 				   union perf_event *event,
 				   struct perf_sample *sample,
-				   struct perf_tool *tool)
+				   const struct perf_tool *tool)
 {
 	struct intel_bts *bts = container_of(session->auxtrace, struct intel_bts,
 					     auxtrace);
@@ -634,7 +634,7 @@ static int intel_bts_process_event(struct perf_session *session,
 
 static int intel_bts_process_auxtrace_event(struct perf_session *session,
 					    union perf_event *event,
-					    struct perf_tool *tool __maybe_unused)
+					    const struct perf_tool *tool __maybe_unused)
 {
 	struct intel_bts *bts = container_of(session->auxtrace, struct intel_bts,
 					     auxtrace);
@@ -675,7 +675,7 @@ static int intel_bts_process_auxtrace_event(struct perf_session *session,
 }
 
 static int intel_bts_flush(struct perf_session *session,
-			   struct perf_tool *tool __maybe_unused)
+			   const struct perf_tool *tool __maybe_unused)
 {
 	struct intel_bts *bts = container_of(session->auxtrace, struct intel_bts,
 					     auxtrace);
@@ -742,7 +742,7 @@ struct intel_bts_synth {
 	struct perf_session *session;
 };
 
-static int intel_bts_event_synth(struct perf_tool *tool,
+static int intel_bts_event_synth(const struct perf_tool *tool,
 				 union perf_event *event,
 				 struct perf_sample *sample __maybe_unused,
 				 struct machine *machine __maybe_unused)
