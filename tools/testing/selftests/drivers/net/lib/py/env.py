@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: GPL-2.0
 
 import os
+import time
 from pathlib import Path
 from lib.py import KsftSkipEx, KsftXfailEx
-from lib.py import cmd, ip
+from lib.py import cmd, ethtool, ip
 from lib.py import NetNS, NetdevSimDev
 from .remote import Remote
 
@@ -81,6 +82,8 @@ class NetDrvEpEnv:
     def __init__(self, src_path, nsim_test=None):
 
         self.env = _load_env_file(src_path)
+
+        self._stats_settle_time = None
 
         # Things we try to destroy
         self.remote = None
@@ -222,3 +225,18 @@ class NetDrvEpEnv:
         if remote:
             if not self._require_cmd(comm, "remote"):
                 raise KsftSkipEx("Test requires (remote) command: " + comm)
+
+    def wait_hw_stats_settle(self):
+        """
+        Wait for HW stats to become consistent, some devices DMA HW stats
+        periodically so events won't be reflected until next sync.
+        Good drivers will tell us via ethtool what their sync period is.
+        """
+        if self._stats_settle_time is None:
+            self._stats_settle_time = 0.025
+
+            data = ethtool("-c " + self.ifname, json=True)[0]
+            if 'stats-block-usecs' in data:
+                self._stats_settle_time += data['stats-block-usecs'] / 1000 / 1000
+
+        time.sleep(self._stats_settle_time)
