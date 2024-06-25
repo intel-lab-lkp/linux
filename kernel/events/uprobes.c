@@ -1270,9 +1270,8 @@ int uprobe_register_batch(struct inode *inode, int cnt,
 			return -EINVAL;
 	}
 
+	/* pre-allocate new uprobe instances */
 	for (i = 0; i < cnt; i++) {
-		struct uprobe *cur_uprobe;
-
 		uc = get_uprobe_consumer(i, ctx);
 
 		uprobe = kzalloc(sizeof(struct uprobe), GFP_KERNEL);
@@ -1289,6 +1288,15 @@ int uprobe_register_batch(struct inode *inode, int cnt,
 		RB_CLEAR_NODE(&uprobe->rb_node);
 		atomic64_set(&uprobe->ref, 1);
 
+		uc->uprobe = uprobe;
+	}
+
+	for (i = 0; i < cnt; i++) {
+		struct uprobe *cur_uprobe;
+
+		uc = get_uprobe_consumer(i, ctx);
+		uprobe = uc->uprobe;
+
 		/* add to uprobes_tree, sorted on inode:offset */
 		cur_uprobe = insert_uprobe(uprobe);
 		/* a uprobe exists for this inode:offset combination */
@@ -1296,15 +1304,12 @@ int uprobe_register_batch(struct inode *inode, int cnt,
 			if (cur_uprobe->ref_ctr_offset != uprobe->ref_ctr_offset) {
 				ref_ctr_mismatch_warn(cur_uprobe, uprobe);
 				put_uprobe(cur_uprobe);
-				kfree(uprobe);
 				ret = -EINVAL;
 				goto cleanup_uprobes;
 			}
 			kfree(uprobe);
-			uprobe = cur_uprobe;
+			uc->uprobe = cur_uprobe;
 		}
-
-		uc->uprobe = uprobe;
 	}
 
 	for (i = 0; i < cnt; i++) {
@@ -1318,10 +1323,8 @@ int uprobe_register_batch(struct inode *inode, int cnt,
 			__uprobe_unregister(uprobe, uc);
 		up_write(&uprobe->register_rwsem);
 
-		if (ret) {
-			put_uprobe(uprobe);
+		if (ret)
 			goto cleanup_unreg;
-		}
 	}
 
 	return 0;
