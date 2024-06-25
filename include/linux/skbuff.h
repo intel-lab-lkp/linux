@@ -3320,7 +3320,7 @@ static inline void *netdev_alloc_frag(unsigned int fragsz)
 static inline void *netdev_alloc_frag_align(unsigned int fragsz,
 					    unsigned int align)
 {
-	WARN_ON_ONCE(!is_power_of_2(align));
+	WARN_ON_ONCE(!is_power_of_2(align) || align > PAGE_SIZE);
 	return __netdev_alloc_frag_align(fragsz, -align);
 }
 
@@ -3391,7 +3391,7 @@ static inline void *napi_alloc_frag(unsigned int fragsz)
 static inline void *napi_alloc_frag_align(unsigned int fragsz,
 					  unsigned int align)
 {
-	WARN_ON_ONCE(!is_power_of_2(align));
+	WARN_ON_ONCE(!is_power_of_2(align) || align > PAGE_SIZE);
 	return __napi_alloc_frag_align(fragsz, -align);
 }
 
