@@ -118,6 +118,7 @@ static void mipi_dsi_dev_release(struct device *dev)
 {
 	struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
 
+	of_node_clear_flag(dev->of_node, OF_POPULATED);
 	of_node_put(dev->of_node);
 	kfree(dsi);
 }
@@ -158,6 +159,7 @@ static struct mipi_dsi_device *
 of_mipi_dsi_device_add(struct mipi_dsi_host *host, struct device_node *node)
 {
 	struct mipi_dsi_device_info info = { };
+	struct mipi_dsi_device *device;
 	int ret;
 	u32 reg;
 
@@ -175,9 +177,70 @@ of_mipi_dsi_device_add(struct mipi_dsi_host *host, struct device_node *node)
 
 	info.channel = reg;
 	info.node = of_node_get(node);
+	of_node_set_flag(node, OF_POPULATED);
 
-	return mipi_dsi_device_register_full(host, &info);
+	device = mipi_dsi_device_register_full(host, &info);
+	if (IS_ERR(device))
+		of_node_clear_flag(node, OF_POPULATED);
+
+	return device;
 }
+
+#if IS_ENABLED(CONFIG_OF_DYNAMIC)
+static int of_mipi_dsi_notify(struct notifier_block *nb, unsigned long action, void *arg)
+{
+	struct of_reconfig_data *rd = arg;
+	struct mipi_dsi_host *host;
+	struct mipi_dsi_device *device;
+
+	switch (of_reconfig_get_state_change(action, rd)) {
+	case OF_RECONFIG_CHANGE_ADD:
+		host = of_find_mipi_dsi_host_by_node(rd->dn->parent);
+		if (!host)
+			return NOTIFY_OK;	/* not for us */
+
+		if (of_node_test_and_set_flag(rd->dn, OF_POPULATED))
+			return NOTIFY_OK;
+
+		/*
+		 * Clear the flag before adding the device so that fw_devlink
+		 * doesn't skip adding consumers to this device.
+		 */
+		rd->dn->fwnode.flags &= ~FWNODE_FLAG_NOT_DEVICE;
+		device = of_mipi_dsi_device_add(host, rd->dn);
+		if (IS_ERR(device)) {
+			dev_err(host->dev, "failed to create device for '%pOF'\n", rd->dn);
+			of_node_clear_flag(rd->dn, OF_POPULATED);
+			return notifier_from_errno(PTR_ERR(device));
+		}
+		break;
+	case OF_RECONFIG_CHANGE_REMOVE:
+		/* already depopulated? */
+		if (!of_node_check_flag(rd->dn, OF_POPULATED))
+			return NOTIFY_OK;
+
+		/* find our device by node */
+		device = of_find_mipi_dsi_device_by_node(rd->dn);
+		if (!device)
+			return NOTIFY_OK;	/* no? not meant for us */
+
+		/* unregister takes one ref away */
+		mipi_dsi_device_unregister(device);
+
+		/* and put the reference of the find */
+		put_device(&device->dev);
+		break;
+	}
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block mipi_dsi_of_notifier = {
+	.notifier_call = of_mipi_dsi_notify,
+};
+#else
+static struct notifier_block mipi_dsi_of_notifier __always_unused;
+#endif
 #else
 static struct mipi_dsi_device *
 of_mipi_dsi_device_add(struct mipi_dsi_host *host, struct device_node *node)
@@ -1703,6 +1766,8 @@ EXPORT_SYMBOL(mipi_dsi_driver_unregister);
 
 static int __init mipi_dsi_bus_init(void)
 {
+	if (IS_ENABLED(CONFIG_OF_DYNAMIC))
+		WARN_ON(of_reconfig_notifier_register(&mipi_dsi_of_notifier));
 	return bus_register(&mipi_dsi_bus_type);
 }
 postcore_initcall(mipi_dsi_bus_init);
