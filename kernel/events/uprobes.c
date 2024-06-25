@@ -53,7 +53,7 @@ DEFINE_STATIC_PERCPU_RWSEM(dup_mmap_sem);
 
 struct uprobe {
 	struct rb_node		rb_node;	/* node in the rb tree */
-	refcount_t		ref;
+	atomic64_t		ref;		/* see UPROBE_REFCNT_GET below */
 	struct rw_semaphore	register_rwsem;
 	struct rw_semaphore	consumer_rwsem;
 	struct list_head	pending_list;
@@ -587,15 +587,114 @@ set_orig_insn(struct arch_uprobe *auprobe, struct mm_struct *mm, unsigned long v
 			*(uprobe_opcode_t *)&auprobe->insn);
 }
 
-static struct uprobe *get_uprobe(struct uprobe *uprobe)
+/*
+ * Uprobe's 64-bit refcount is actually two independent counters co-located in
+ * a single u64 value:
+ *   - lower 32 bits are just a normal refcount with is increment and
+ *   decremented on get and put, respectively, just like normal refcount
+ *   would;
+ *   - upper 32 bits are a tag (or epoch, if you will), which is always
+ *   incremented by one, no matter whether get or put operation is done.
+ *
+ * This upper counter is meant to distinguish between:
+ *   - one CPU dropping refcnt from 1 -> 0 and proceeding with "destruction",
+ *   - while another CPU continuing further meanwhile with 0 -> 1 -> 0 refcnt
+ *   sequence, also proceeding to "destruction".
+ *
+ * In both cases refcount drops to zero, but in one case it will have epoch N,
+ * while the second drop to zero will have a different epoch N + 2, allowing
+ * first destructor to bail out because epoch changed between refcount going
+ * to zero and put_uprobe() taking uprobes_treelock (under which overall
+ * 64-bit refcount is double-checked, see put_uprobe() for details).
+ *
+ * Lower 32-bit counter is not meant to over overflow, while it's expected
+ * that upper 32-bit counter will overflow occasionally. Note, though, that we
+ * can't allow upper 32-bit counter to "bleed over" into lower 32-bit counter,
+ * so whenever epoch counter gets highest bit set to 1, __get_uprobe() and
+ * put_uprobe() will attempt to clear upper bit with cmpxchg(). This makes
+ * epoch effectively a 31-bit counter with highest bit used as a flag to
+ * perform a fix-up. This ensures epoch and refcnt parts do not "interfere".
+ *
+ * UPROBE_REFCNT_GET constant is chosen such that it will *increment both*
+ * epoch and refcnt parts atomically with one atomic_add().
+ * UPROBE_REFCNT_PUT is chosen such that it will *decrement* refcnt part and
+ * *increment* epoch part.
+ */
+#define UPROBE_REFCNT_GET ((1LL << 32) | 1LL)
+#define UPROBE_REFCNT_PUT (0xffffffffLL)
+
+/**
+ * Caller has to make sure that:
+ *   a) either uprobe's refcnt is positive before this call;
+ *   b) or uprobes_treelock is held (doesn't matter if for read or write),
+ *      preventing uprobe's destructor from removing it from uprobes_tree.
+ *
+ * In the latter case, uprobe's destructor will "resurrect" uprobe instance if
+ * it detects that its refcount went back to being positive again inbetween it
+ * dropping to zero at some point and (potentially delayed) destructor
+ * callback actually running.
+ */
+static struct uprobe *__get_uprobe(struct uprobe *uprobe)
 {
-	refcount_inc(&uprobe->ref);
+	s64 v;
+
+	v = atomic64_add_return(UPROBE_REFCNT_GET, &uprobe->ref);
+
+	/*
+	 * If the highest bit is set, we need to clear it. If cmpxchg() fails,
+	 * we don't retry because there is another CPU that just managed to
+	 * update refcnt and will attempt the same "fix up". Eventually one of
+	 * them will succeed to clear highset bit.
+	 */
+	if (unlikely(v < 0))
+		(void)atomic64_cmpxchg(&uprobe->ref, v, v & ~(1ULL << 63));
+
 	return uprobe;
+}
+
+static inline bool uprobe_is_active(struct uprobe *uprobe)
+{
+	return !RB_EMPTY_NODE(&uprobe->rb_node);
 }
 
 static void put_uprobe(struct uprobe *uprobe)
 {
-	if (refcount_dec_and_test(&uprobe->ref)) {
+	s64 v;
+
+	v = atomic64_add_return(UPROBE_REFCNT_PUT, &uprobe->ref);
+
+	if (unlikely((u32)v == 0)) {
+		bool destroy;
+
+		write_lock(&uprobes_treelock);
+		/*
+		 * We might race with find_uprobe()->__get_uprobe() executed
+		 * from inside read-locked uprobes_treelock, which can bump
+		 * refcount from zero back to one, after we got here. Even
+		 * worse, it's possible for another CPU to do 0 -> 1 -> 0
+		 * transition between this CPU doing atomic_add() and taking
+		 * uprobes_treelock. In either case this CPU should bail out
+		 * and not proceed with destruction.
+		 *
+		 * So now that we have exclusive write lock, we double check
+		 * the total 64-bit refcount value, which includes the epoch.
+		 * If nothing changed (i.e., epoch is the same and refcnt is
+		 * still zero), we are good and we proceed with the clean up.
+		 *
+		 * But if it managed to be updated back at least once, we just
+		 * pretend it never went to zero. If lower 32-bit refcnt part
+		 * drops to zero again, another CPU will proceed with
+		 * destruction, due to more up to date epoch.
+		 */
+		destroy = atomic64_read(&uprobe->ref) == v;
+		if (destroy && uprobe_is_active(uprobe))
+			rb_erase(&uprobe->rb_node, &uprobes_tree);
+		write_unlock(&uprobes_treelock);
+
+		/* uprobe got resurrected, pretend we never tried to free it */
+		if (!destroy)
+			return;
+
 		/*
 		 * If application munmap(exec_vma) before uprobe_unregister()
 		 * gets called, we don't get a chance to remove uprobe from
@@ -604,8 +703,19 @@ static void put_uprobe(struct uprobe *uprobe)
 		mutex_lock(&delayed_uprobe_lock);
 		delayed_uprobe_remove(uprobe, NULL);
 		mutex_unlock(&delayed_uprobe_lock);
+
 		kfree(uprobe);
+		return;
 	}
+
+	/*
+	 * If the highest bit is set, we need to clear it. If cmpxchg() fails,
+	 * we don't retry because there is another CPU that just managed to
+	 * update refcnt and will attempt the same "fix up". Eventually one of
+	 * them will succeed to clear highset bit.
+	 */
+	if (unlikely(v < 0))
+		(void)atomic64_cmpxchg(&uprobe->ref, v, v & ~(1ULL << 63));
 }
 
 static __always_inline
@@ -653,12 +763,15 @@ static struct uprobe *__find_uprobe(struct inode *inode, loff_t offset)
 		.inode = inode,
 		.offset = offset,
 	};
-	struct rb_node *node = rb_find(&key, &uprobes_tree, __uprobe_cmp_key);
+	struct rb_node *node;
+	struct uprobe *u = NULL;
 
+	node = rb_find(&key, &uprobes_tree, __uprobe_cmp_key);
 	if (node)
-		return get_uprobe(__node_2_uprobe(node));
+		/* we hold uprobes_treelock, so it's safe to __get_uprobe() */
+		u = __get_uprobe(__node_2_uprobe(node));
 
-	return NULL;
+	return u;
 }
 
 /*
@@ -676,26 +789,37 @@ static struct uprobe *find_uprobe(struct inode *inode, loff_t offset)
 	return uprobe;
 }
 
+/*
+ * Attempt to insert a new uprobe into uprobes_tree.
+ *
+ * If uprobe already exists (for given inode+offset), we just increment
+ * refcount of previously existing uprobe.
+ *
+ * If not, a provided new instance of uprobe is inserted into the tree (with
+ * assumed initial refcount == 1).
+ *
+ * In any case, we return a uprobe instance that ends up being in uprobes_tree.
+ * Caller has to clean up new uprobe instance, if it ended up not being
+ * inserted into the tree.
+ *
+ * We assume that uprobes_treelock is held for writing.
+ */
 static struct uprobe *__insert_uprobe(struct uprobe *uprobe)
 {
 	struct rb_node *node;
+	struct uprobe *u = uprobe;
 
 	node = rb_find_add(&uprobe->rb_node, &uprobes_tree, __uprobe_cmp);
 	if (node)
-		return get_uprobe(__node_2_uprobe(node));
+		/* we hold uprobes_treelock, so it's safe to __get_uprobe() */
+		u = __get_uprobe(__node_2_uprobe(node));
 
-	/* get access + creation ref */
-	refcount_set(&uprobe->ref, 2);
-	return NULL;
+	return u;
 }
 
 /*
- * Acquire uprobes_treelock.
- * Matching uprobe already exists in rbtree;
- *	increment (access refcount) and return the matching uprobe.
- *
- * No matching uprobe; insert the uprobe in rb_tree;
- *	get a double refcount (access + creation) and return NULL.
+ * Acquire uprobes_treelock and insert uprobe into uprobes_tree
+ * (or reuse existing one, see __insert_uprobe() comments above).
  */
 static struct uprobe *insert_uprobe(struct uprobe *uprobe)
 {
@@ -732,11 +856,13 @@ static struct uprobe *alloc_uprobe(struct inode *inode, loff_t offset,
 	uprobe->ref_ctr_offset = ref_ctr_offset;
 	init_rwsem(&uprobe->register_rwsem);
 	init_rwsem(&uprobe->consumer_rwsem);
+	RB_CLEAR_NODE(&uprobe->rb_node);
+	atomic64_set(&uprobe->ref, 1);
 
 	/* add to uprobes_tree, sorted on inode:offset */
 	cur_uprobe = insert_uprobe(uprobe);
 	/* a uprobe exists for this inode:offset combination */
-	if (cur_uprobe) {
+	if (cur_uprobe != uprobe) {
 		if (cur_uprobe->ref_ctr_offset != uprobe->ref_ctr_offset) {
 			ref_ctr_mismatch_warn(cur_uprobe, uprobe);
 			put_uprobe(cur_uprobe);
@@ -921,27 +1047,6 @@ remove_breakpoint(struct uprobe *uprobe, struct mm_struct *mm, unsigned long vad
 	return set_orig_insn(&uprobe->arch, mm, vaddr);
 }
 
-static inline bool uprobe_is_active(struct uprobe *uprobe)
-{
-	return !RB_EMPTY_NODE(&uprobe->rb_node);
-}
-/*
- * There could be threads that have already hit the breakpoint. They
- * will recheck the current insn and restart if find_uprobe() fails.
- * See find_active_uprobe().
- */
-static void delete_uprobe(struct uprobe *uprobe)
-{
-	if (WARN_ON(!uprobe_is_active(uprobe)))
-		return;
-
-	write_lock(&uprobes_treelock);
-	rb_erase(&uprobe->rb_node, &uprobes_tree);
-	write_unlock(&uprobes_treelock);
-	RB_CLEAR_NODE(&uprobe->rb_node); /* for uprobe_is_active() */
-	put_uprobe(uprobe);
-}
-
 struct map_info {
 	struct map_info *next;
 	struct mm_struct *mm;
@@ -1082,15 +1187,11 @@ register_for_each_vma(struct uprobe *uprobe, struct uprobe_consumer *new)
 static void
 __uprobe_unregister(struct uprobe *uprobe, struct uprobe_consumer *uc)
 {
-	int err;
-
 	if (WARN_ON(!consumer_del(uprobe, uc)))
 		return;
 
-	err = register_for_each_vma(uprobe, NULL);
 	/* TODO : cant unregister? schedule a worker thread */
-	if (!uprobe->consumers && !err)
-		delete_uprobe(uprobe);
+	(void)register_for_each_vma(uprobe, NULL);
 }
 
 /*
@@ -1159,28 +1260,20 @@ static int __uprobe_register(struct inode *inode, loff_t offset,
 	if (!IS_ALIGNED(ref_ctr_offset, sizeof(short)))
 		return -EINVAL;
 
- retry:
 	uprobe = alloc_uprobe(inode, offset, ref_ctr_offset);
 	if (IS_ERR(uprobe))
 		return PTR_ERR(uprobe);
 
-	/*
-	 * We can race with uprobe_unregister()->delete_uprobe().
-	 * Check uprobe_is_active() and retry if it is false.
-	 */
 	down_write(&uprobe->register_rwsem);
-	ret = -EAGAIN;
-	if (likely(uprobe_is_active(uprobe))) {
-		consumer_add(uprobe, uc);
-		ret = register_for_each_vma(uprobe, uc);
-		if (ret)
-			__uprobe_unregister(uprobe, uc);
-	}
+	consumer_add(uprobe, uc);
+	ret = register_for_each_vma(uprobe, uc);
+	if (ret)
+		__uprobe_unregister(uprobe, uc);
 	up_write(&uprobe->register_rwsem);
-	put_uprobe(uprobe);
 
-	if (unlikely(ret == -EAGAIN))
-		goto retry;
+	if (ret)
+		put_uprobe(uprobe);
+
 	return ret;
 }
 
@@ -1303,15 +1396,15 @@ static void build_probe_list(struct inode *inode,
 			u = rb_entry(t, struct uprobe, rb_node);
 			if (u->inode != inode || u->offset < min)
 				break;
+			__get_uprobe(u); /* uprobes_treelock is held */
 			list_add(&u->pending_list, head);
-			get_uprobe(u);
 		}
 		for (t = n; (t = rb_next(t)); ) {
 			u = rb_entry(t, struct uprobe, rb_node);
 			if (u->inode != inode || u->offset > max)
 				break;
+			__get_uprobe(u); /* uprobes_treelock is held */
 			list_add(&u->pending_list, head);
-			get_uprobe(u);
 		}
 	}
 	read_unlock(&uprobes_treelock);
@@ -1769,7 +1862,14 @@ static int dup_utask(struct task_struct *t, struct uprobe_task *o_utask)
 			return -ENOMEM;
 
 		*n = *o;
-		get_uprobe(n->uprobe);
+		/*
+		 * uprobe's refcnt has to be positive at this point, kept by
+		 * utask->return_instances items; return_instances can't be
+		 * removed right now, as task is blocked due to duping; so
+		 * __get_uprobe() is safe to use here without holding
+		 * uprobes_treelock.
+		 */
+		__get_uprobe(n->uprobe);
 		n->next = NULL;
 
 		*p = n;
@@ -1911,8 +2011,11 @@ static void prepare_uretprobe(struct uprobe *uprobe, struct pt_regs *regs)
 		}
 		orig_ret_vaddr = utask->return_instances->orig_ret_vaddr;
 	}
-
-	ri->uprobe = get_uprobe(uprobe);
+	 /*
+	  * uprobe's refcnt is positive, held by caller, so it's safe to
+	  * unconditionally bump it one more time here
+	  */
+	ri->uprobe = __get_uprobe(uprobe);
 	ri->func = instruction_pointer(regs);
 	ri->stack = user_stack_pointer(regs);
 	ri->orig_ret_vaddr = orig_ret_vaddr;
