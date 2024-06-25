@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Completely Fair Scheduling (CFS) Class (SCHED_NORMAL/SCHED_BATCH)
+ * Earliest Elegible Deadline First (EEVDF) Class (SCHED_NORMAL/SCHED_BATCH)
+ * also known as the fair time-sharing scheduler, refactored from the
+ * Completely Fair Scheduler (CFS).
  *
  *  Copyright (C) 2007 Red Hat, Inc., Ingo Molnar <mingo@redhat.com>
  *
@@ -17,7 +19,8 @@
  *  Scaled math optimizations by Thomas Gleixner
  *  Copyright (C) 2007, Thomas Gleixner <tglx@linutronix.de>
  *
- *  Adaptive scheduling granularity, math enhancements by Peter Zijlstra
+ *  Adaptive scheduling granularity, math enhancements and rewrite to EEVDF
+ *  by Peter Zijlstra
  *  Copyright (C) 2007 Red Hat, Inc., Peter Zijlstra
  */
 #include <linux/energy_model.h>
@@ -297,7 +300,7 @@ static inline u64 calc_delta_fair(u64 delta, struct sched_entity *se)
 const struct sched_class fair_sched_class;
 
 /**************************************************************
- * CFS operations on generic schedulable entities:
+ * Operations on generic schedulable entities:
  */
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
@@ -5540,7 +5543,7 @@ entity_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr, int queued)
 
 
 /**************************************************
- * CFS bandwidth control machinery
+ * Bandwidth control machinery
  */
 
 #ifdef CONFIG_CFS_BANDWIDTH
@@ -6630,7 +6633,7 @@ static inline void sched_fair_update_stop_tick(struct rq *rq, struct task_struct
 #endif
 
 /**************************************************
- * CFS operations on tasks:
+ * Operations on tasks:
  */
 
 #ifdef CONFIG_SCHED_HRTICK
@@ -7666,7 +7669,7 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
 }
 
 /**
- * cpu_util() - Estimates the amount of CPU capacity used by CFS tasks.
+ * cpu_util() - Estimates the amount of CPU capacity used by tasks.
  * @cpu: the CPU to get the utilization for
  * @p: task for which the CPU utilization should be predicted or NULL
  * @dst_cpu: CPU @p migrates to, -1 if @p moves from @cpu or @p == NULL
@@ -7677,7 +7680,7 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
  *
  * CPU utilization is the sum of running time of runnable tasks plus the
  * recent utilization of currently non-runnable tasks on that CPU.
- * It represents the amount of CPU capacity currently used by CFS tasks in
+ * It represents the amount of CPU capacity currently used by tasks in
  * the range [0..max CPU capacity] with max CPU capacity being the CPU
  * capacity at f_max.
  *
@@ -7689,7 +7692,7 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
  * of such a task would be significantly decayed at this point of time.
  *
  * Boosted CPU utilization is defined as max(CPU runnable, CPU utilization).
- * CPU contention for CFS tasks can be detected by CPU runnable > CPU
+ * CPU contention for tasks can be detected by CPU runnable > CPU
  * utilization. Boosting is implemented in cpu_util() so that internal
  * users (e.g. EAS) can use it next to external users (e.g. schedutil),
  * latter via cpu_util_cfs_boost().
@@ -9359,7 +9362,7 @@ static bool __update_blocked_others(struct rq *rq, bool *done)
 
 	/*
 	 * update_load_avg() can call cpufreq_update_util(). Make sure that RT,
-	 * DL and IRQ signals have been updated before updating CFS.
+	 * DL and IRQ signals have been updated before updating the scheduler.
 	 */
 	curr_class = rq->curr->sched_class;
 
@@ -9517,7 +9520,7 @@ struct sg_lb_stats {
 	unsigned long group_util;		/* Total utilization   over the CPUs of the group */
 	unsigned long group_runnable;		/* Total runnable time over the CPUs of the group */
 	unsigned int sum_nr_running;		/* Nr of all tasks running in the group */
-	unsigned int sum_h_nr_running;		/* Nr of CFS tasks running in the group */
+	unsigned int sum_h_nr_running;		/* Nr of tasks running in the group */
 	unsigned int idle_cpus;                 /* Nr of idle CPUs         in the group */
 	unsigned int group_weight;
 	enum group_type group_type;
@@ -9721,7 +9724,7 @@ static inline int sg_imbalanced(struct sched_group *group)
  * be used by some tasks.
  * We consider that a group has spare capacity if the number of task is
  * smaller than the number of CPUs or if the utilization is lower than the
- * available capacity for CFS tasks.
+ * available capacity for fairly scheduled tasks.
  * For the latter, we use a threshold to stabilize the state, to take into
  * account the variance of the tasks' load and to return true if the available
  * capacity in meaningful for the load balancer.
@@ -11211,7 +11214,7 @@ static int need_active_balance(struct lb_env *env)
 		return 1;
 
 	/*
-	 * The dst_cpu is idle and the src_cpu CPU has only 1 CFS task.
+	 * The dst_cpu is idle and the src_cpu CPU has only 1 task.
 	 * It's worth migrating the task if the src_cpu's capacity is reduced
 	 * because of other sched_class or IRQs if more capacity stays
 	 * available on dst_cpu.
@@ -11952,7 +11955,7 @@ static void nohz_balancer_kick(struct rq *rq)
 	sd = rcu_dereference(rq->sd);
 	if (sd) {
 		/*
-		 * If there's a runnable CFS task and the current CPU has reduced
+		 * If there's a runnable task and the current CPU has reduced
 		 * capacity, kick the ILB to see if there's a better CPU to run on:
 		 */
 		if (rq->cfs.h_nr_running >= 1 && check_cpu_capacity(rq, sd)) {
@@ -12577,7 +12580,7 @@ static inline void task_tick_core(struct rq *rq, struct task_struct *curr)
 }
 
 /*
- * se_fi_update - Update the cfs_rq->min_vruntime_fi in a CFS hierarchy if needed.
+ * se_fi_update - Update the cfs_rq->min_vruntime_fi in the hierarchy if needed.
  */
 static void se_fi_update(const struct sched_entity *se, unsigned int fi_seq,
 			 bool forceidle)
