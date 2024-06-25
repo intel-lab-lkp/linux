@@ -400,8 +400,8 @@ static int folio_expected_refs(struct address_space *mapping,
  * 2 for folios with a mapping
  * 3 for folios with a mapping and PagePrivate/PagePrivate2 set.
  */
-static void __folio_migrate_mapping(struct address_space *mapping,
-		struct folio *newfolio, struct folio *folio, int expected_cnt)
+static int __folio_migrate_mapping(struct address_space *mapping,
+		struct folio *newfolio, struct folio *folio, int expected_count)
 {
 	XA_STATE(xas, &mapping->i_pages, folio_index(folio));
 	struct zone *oldzone, *newzone;
@@ -415,13 +415,18 @@ static void __folio_migrate_mapping(struct address_space *mapping,
 		newfolio->mapping = folio->mapping;
 		if (folio_test_swapbacked(folio))
 			__folio_set_swapbacked(newfolio);
-		return;
+		return MIGRATEPAGE_SUCCESS;
 	}
 
 	oldzone = folio_zone(folio);
 	newzone = folio_zone(newfolio);
 
 	xas_lock_irq(&xas);
+	if (!folio_ref_freeze(folio, expected_count)) {
+		xas_unlock_irq(&xas);
+		return -EAGAIN;
+	}
+
 	/* Now we know that no one else is looking at the folio */
 	newfolio->index = folio->index;
 	newfolio->mapping = folio->mapping;
@@ -456,7 +461,7 @@ static void __folio_migrate_mapping(struct address_space *mapping,
 	 * old folio by unfreezing to one less reference.
 	 * We know this isn't the last reference.
 	 */
-	folio_ref_unfreeze(folio, expected_cnt - nr);
+	folio_ref_unfreeze(folio, expected_count - nr);
 
 	xas_unlock(&xas);
 	/* Leave irq disabled to prevent preemption while updating stats */
@@ -504,23 +509,19 @@ static void __folio_migrate_mapping(struct address_space *mapping,
 		}
 	}
 	local_irq_enable();
+
+	return MIGRATEPAGE_SUCCESS;
 }
 
 int folio_migrate_mapping(struct address_space *mapping, struct folio *newfolio,
 			  struct folio *folio, int extra_count)
 {
-	int expected_cnt = folio_expected_refs(mapping, folio) + extra_count;
+	int expected_count = folio_expected_refs(mapping, folio) + extra_count;
 
-	if (!mapping) {
-		if (folio_ref_count(folio) != expected_cnt)
-			return -EAGAIN;
-	} else {
-		if (!folio_ref_freeze(folio, expected_cnt))
-			return -EAGAIN;
-	}
+	if (folio_ref_count(folio) != expected_count)
+		return -EAGAIN;
 
-	__folio_migrate_mapping(mapping, newfolio, folio, expected_cnt);
-	return MIGRATEPAGE_SUCCESS;
+	return __folio_migrate_mapping(mapping, newfolio, folio, expected_count);
 }
 EXPORT_SYMBOL(folio_migrate_mapping);
 
@@ -534,16 +535,18 @@ int migrate_huge_page_move_mapping(struct address_space *mapping,
 	XA_STATE(xas, &mapping->i_pages, folio_index(src));
 	int ret, expected_count = folio_expected_refs(mapping, src);
 
-	if (!folio_ref_freeze(src, expected_count))
+	if (folio_ref_count(src) != expected_count)
 		return -EAGAIN;
 
 	ret = folio_mc_copy(dst, src);
-	if (unlikely(ret)) {
-		folio_ref_unfreeze(src, expected_count);
+	if (unlikely(ret))
 		return ret;
-	}
 
 	xas_lock_irq(&xas);
+	if (!folio_ref_freeze(src, expected_count)) {
+		xas_unlock_irq(&xas);
+		return -EAGAIN;
+	}
 
 	dst->index = src->index;
 	dst->mapping = src->mapping;
@@ -660,24 +663,18 @@ static int __migrate_folio(struct address_space *mapping, struct folio *dst,
 			   struct folio *src, void *src_private,
 			   enum migrate_mode mode)
 {
-	int ret, expected_cnt = folio_expected_refs(mapping, src);
+	int ret, expected_count = folio_expected_refs(mapping, src);
 
-	if (!mapping) {
-		if (folio_ref_count(src) != expected_cnt)
-			return -EAGAIN;
-	} else {
-		if (!folio_ref_freeze(src, expected_cnt))
-			return -EAGAIN;
-	}
+	if (folio_ref_count(src) != expected_count)
+		return -EAGAIN;
 
 	ret = folio_mc_copy(dst, src);
-	if (unlikely(ret)) {
-		if (mapping)
-			folio_ref_unfreeze(src, expected_cnt);
+	if (unlikely(ret))
 		return ret;
-	}
 
-	__folio_migrate_mapping(mapping, dst, src, expected_cnt);
+	ret = __folio_migrate_mapping(mapping, dst, src, expected_count);
+	if (ret != MIGRATEPAGE_SUCCESS)
+		return ret;
 
 	if (src_private)
 		folio_attach_private(dst, folio_detach_private(src));
