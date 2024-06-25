@@ -22406,9 +22406,11 @@ F:	drivers/platform/x86/toshiba-wmi.c
 
 TOUCHNETIX AXIOM I2C TOUCHSCREEN DRIVER
 M:	Kamel Bouhara <kamel.bouhara@bootlin.com>
+M:	bsp-development.geo@leica-geosystems.com
 L:	linux-input@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/input/touchscreen/touchnetix,ax54a.yaml
+F:	drivers/input/touchscreen/touchnetix_axiom.c
 
 TPM DEVICE DRIVER
 M:	Peter Huewe <peterhuewe@gmx.de>
