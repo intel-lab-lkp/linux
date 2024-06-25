@@ -39,7 +39,7 @@ static struct rb_root uprobes_tree = RB_ROOT;
  */
 #define no_uprobe_events()	RB_EMPTY_ROOT(&uprobes_tree)
 
-static DEFINE_RWLOCK(uprobes_treelock);	/* serialize rbtree access */
+DEFINE_STATIC_PERCPU_RWSEM(uprobes_treelock);	/* serialize rbtree access */
 
 #define UPROBES_HASH_SZ	13
 /* serialize uprobe->pending_list */
@@ -667,7 +667,7 @@ static void __put_uprobe(struct uprobe *uprobe, bool tree_locked)
 		bool destroy;
 
 		if (!tree_locked)
-			write_lock(&uprobes_treelock);
+			percpu_down_write(&uprobes_treelock);
 		/*
 		 * We might race with find_uprobe()->__get_uprobe() executed
 		 * from inside read-locked uprobes_treelock, which can bump
@@ -691,7 +691,7 @@ static void __put_uprobe(struct uprobe *uprobe, bool tree_locked)
 		if (destroy && uprobe_is_active(uprobe))
 			rb_erase(&uprobe->rb_node, &uprobes_tree);
 		if (!tree_locked)
-			write_unlock(&uprobes_treelock);
+			percpu_up_write(&uprobes_treelock);
 
 		/* uprobe got resurrected, pretend we never tried to free it */
 		if (!destroy)
@@ -789,9 +789,9 @@ static struct uprobe *find_uprobe(struct inode *inode, loff_t offset)
 {
 	struct uprobe *uprobe;
 
-	read_lock(&uprobes_treelock);
+	percpu_down_read(&uprobes_treelock);
 	uprobe = __find_uprobe(inode, offset);
-	read_unlock(&uprobes_treelock);
+	percpu_up_read(&uprobes_treelock);
 
 	return uprobe;
 }
@@ -1178,7 +1178,7 @@ void uprobe_unregister_batch(struct inode *inode, int cnt, uprobe_consumer_fn ge
 		up_write(&uprobe->register_rwsem);
 	}
 
-	write_lock(&uprobes_treelock);
+	percpu_down_write(&uprobes_treelock);
 	for (i = 0; i < cnt; i++) {
 		uc = get_uprobe_consumer(i, ctx);
 		uprobe = uc->uprobe;
@@ -1189,7 +1189,7 @@ void uprobe_unregister_batch(struct inode *inode, int cnt, uprobe_consumer_fn ge
 		__put_uprobe(uprobe, true);
 		uc->uprobe = NULL;
 	}
-	write_unlock(&uprobes_treelock);
+	percpu_up_write(&uprobes_treelock);
 }
 
 static struct uprobe_consumer *uprobe_consumer_identity(size_t idx, void *ctx)
@@ -1294,7 +1294,7 @@ int uprobe_register_batch(struct inode *inode, int cnt,
 	}
 
 	ret = 0;
-	write_lock(&uprobes_treelock);
+	percpu_down_write(&uprobes_treelock);
 	for (i = 0; i < cnt; i++) {
 		struct uprobe *cur_uprobe;
 
@@ -1317,7 +1317,7 @@ int uprobe_register_batch(struct inode *inode, int cnt,
 		}
 	}
 unlock_treelock:
-	write_unlock(&uprobes_treelock);
+	percpu_up_write(&uprobes_treelock);
 	if (ret)
 		goto cleanup_uprobes;
 
@@ -1349,14 +1349,14 @@ cleanup_unreg:
 	}
 cleanup_uprobes:
 	/* put all the successfully allocated/reused uprobes */
-	write_lock(&uprobes_treelock);
+	percpu_down_write(&uprobes_treelock);
 	for (i = cnt - 1; i >= 0; i--) {
 		uc = get_uprobe_consumer(i, ctx);
 
 		__put_uprobe(uc->uprobe, true);
 		uc->uprobe = NULL;
 	}
-	write_unlock(&uprobes_treelock);
+	percpu_up_write(&uprobes_treelock);
 	return ret;
 }
 
@@ -1464,7 +1464,7 @@ static void build_probe_list(struct inode *inode,
 	min = vaddr_to_offset(vma, start);
 	max = min + (end - start) - 1;
 
-	read_lock(&uprobes_treelock);
+	percpu_down_read(&uprobes_treelock);
 	n = find_node_in_range(inode, min, max);
 	if (n) {
 		for (t = n; t; t = rb_prev(t)) {
@@ -1482,7 +1482,7 @@ static void build_probe_list(struct inode *inode,
 			list_add(&u->pending_list, head);
 		}
 	}
-	read_unlock(&uprobes_treelock);
+	percpu_up_read(&uprobes_treelock);
 }
 
 /* @vma contains reference counter, not the probed instruction. */
@@ -1573,9 +1573,9 @@ vma_has_uprobes(struct vm_area_struct *vma, unsigned long start, unsigned long e
 	min = vaddr_to_offset(vma, start);
 	max = min + (end - start) - 1;
 
-	read_lock(&uprobes_treelock);
+	percpu_down_read(&uprobes_treelock);
 	n = find_node_in_range(inode, min, max);
-	read_unlock(&uprobes_treelock);
+	percpu_up_read(&uprobes_treelock);
 
 	return !!n;
 }
