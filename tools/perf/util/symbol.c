@@ -49,11 +49,13 @@ static int dso__load_vdso_sym(struct dso *dso, struct map *map);
 static bool symbol__is_idle(const char *name);
 
 struct dso_filename_paths vmlinux_paths;
+struct dso_filename_paths vdso_paths;
 
 struct symbol_conf symbol_conf = {
 	.nanosecs		= false,
 	.use_modules		= true,
 	.try_vmlinux_path	= true,
+	.try_vdso_path		= true,
 	.demangle		= true,
 	.demangle_kernel	= false,
 	.cumulate_callchain	= true,
@@ -2304,6 +2306,16 @@ struct dso_filename_pattern vmlinux_patterns[] = {
 	{"/usr/lib/debug/boot/vmlinux-%s.debug", 1},
 };
 
+struct dso_filename_pattern vdso_patterns[] = {
+	{"/lib/modules/%s/vdso/vdso.so", 1},
+	{"/lib/modules/%s/vdso/vdso64.so", 1},
+	{"/lib/modules/%s/vdso/vdso32.so", 1},
+	{"/lib/modules/%s/build/arch/%s/vdso/vdso.so.dbg", 2},
+	{"/lib/modules/%s/build/arch/%s/kernel/vdso/vdso.so.dbg", 2},
+	{"/lib/modules/%s/build/arch/%s/entry/vdso/vdso32.so.dbg", 2},
+	{"/lib/modules/%s/build/arch/%s/entry/vdso/vdso64.so.dbg", 2},
+};
+
 static int dso_filename_path__add(struct dso_filename_paths *paths, const char *new_entry)
 {
 	paths->paths[paths->nr_entries] = strdup(new_entry);
@@ -2418,6 +2430,22 @@ static int dso__load_vdso(struct dso *dso, struct map *map,
 	return err;
 }
 
+static int dso__load_vdso_path(struct dso *dso, struct map *map)
+{
+	int i, ret = 0;
+
+	pr_debug("Looking at the vdso_path (%d entries long)\n",
+		 vdso_paths.nr_entries + 1);
+
+	for (i = 0; i < vdso_paths.nr_entries; ++i) {
+		ret = dso__load_vdso(dso, map, vdso_paths.paths[i]);
+		if (ret > 0)
+			return ret;
+	}
+
+	return ret;
+}
+
 static int dso__load_vdso_sym(struct dso *dso, struct map *map)
 {
 	int ret;
@@ -2431,6 +2459,12 @@ static int dso__load_vdso_sym(struct dso *dso, struct map *map)
 			if (ret > 0)
 				return ret;
 		}
+	}
+
+	if (vdso_paths.paths != NULL) {
+		ret = dso__load_vdso_path(dso, map);
+		if (ret > 0)
+			return ret;
 	}
 
 	return -1;
@@ -2566,6 +2600,12 @@ int symbol__init(struct perf_env *env)
 		return -1;
 	}
 
+	if (symbol_conf.try_vdso_path &&
+	    dso_filename_path__init(&vdso_paths, vdso_patterns,
+				    ARRAY_SIZE(vdso_patterns), env) < 0) {
+		return -1;
+	}
+
 	if (symbol_conf.field_sep && *symbol_conf.field_sep == '.') {
 		pr_err("'.' is the only non valid --field-separator argument\n");
 		return -1;
@@ -2642,6 +2682,7 @@ void symbol__exit(void)
 	intlist__delete(symbol_conf.pid_list);
 	intlist__delete(symbol_conf.addr_list);
 	dso_filename_path__exit(&vmlinux_paths);
+	dso_filename_path__exit(&vdso_paths);
 	symbol_conf.sym_list = symbol_conf.dso_list = symbol_conf.comm_list = NULL;
 	symbol_conf.bt_stop_list = NULL;
 	symbol_conf.initialized = false;

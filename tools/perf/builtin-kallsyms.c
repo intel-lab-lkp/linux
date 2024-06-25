@@ -63,6 +63,8 @@ int cmd_kallsyms(int argc, const char **argv)
 		usage_with_options(kallsyms_usage, options);
 
 	symbol_conf.try_vmlinux_path = (symbol_conf.vmlinux_name == NULL);
+	symbol_conf.try_vdso_path = (symbol_conf.vdso_name[0] == NULL &&
+				     symbol_conf.vdso_name[1] == NULL);
 	if (symbol__init(NULL) < 0)
 		return -1;
 

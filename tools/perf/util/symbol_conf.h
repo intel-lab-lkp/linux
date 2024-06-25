@@ -12,6 +12,7 @@ struct symbol_conf {
 	bool		nanosecs;
 	unsigned short	priv_size;
 	bool		try_vmlinux_path,
+			try_vdso_path,
 			init_annotation,
 			force,
 			ignore_vmlinux,

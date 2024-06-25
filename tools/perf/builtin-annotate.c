@@ -883,6 +883,7 @@ int cmd_annotate(int argc, const char **argv)
 		goto out_delete;
 
 	symbol_conf.try_vmlinux_path = true;
+	symbol_conf.try_vdso_path = true;
 
 	ret = symbol__init(&annotate.session->header.env);
 	if (ret < 0)
