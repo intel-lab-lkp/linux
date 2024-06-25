@@ -99,6 +99,10 @@
 	};
 };
 
+&mdio3 {
+	status = "okay";
+};
+
 &fmc {
 	status = "okay";
 	flash@0 {
@@ -333,10 +337,6 @@
 };
 
 &i2c10 {
-	status = "okay";
-};
-
-&i2c11 {
 	status = "okay";
 };
 
