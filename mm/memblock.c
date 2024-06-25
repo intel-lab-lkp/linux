@@ -883,6 +883,9 @@ void __init_memblock memblock_free(void *ptr, size_t size)
 	if (ptr)
 		memblock_phys_free(__pa(ptr), size);
 }
+#ifdef CONFIG_ARCH_KEEP_MEMBLOCK
+EXPORT_SYMBOL_GPL(memblock_free);
+#endif
 
 /**
  * memblock_phys_free - free boot memory block
