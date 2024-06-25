@@ -29,10 +29,36 @@ static void *page_frag_cache_current_va(struct page_frag_cache *nc)
 static struct page *__page_frag_cache_refill(struct page_frag_cache *nc,
 					     gfp_t gfp_mask)
 {
-	struct page *page = NULL;
+	struct encoded_va *encoded_va = nc->encoded_va;
 	gfp_t gfp = gfp_mask;
 	unsigned int order;
+	struct page *page;
 
+	if (unlikely(!encoded_va))
+		goto alloc;
+
+	page = virt_to_page(encoded_va);
+	if (!page_ref_sub_and_test(page, nc->pagecnt_bias))
+		goto alloc;
+
+	if (unlikely(encoded_page_pfmemalloc(encoded_va))) {
+		VM_BUG_ON(compound_order(page) !=
+			  encoded_page_order(encoded_va));
+		free_unref_page(page, encoded_page_order(encoded_va));
+		goto alloc;
+	}
+
+	/* OK, page count is 0, we can safely set it */
+	set_page_count(page, PAGE_FRAG_CACHE_MAX_SIZE + 1);
+
+	/* reset page count bias and remaining of new frag */
+	nc->pagecnt_bias = PAGE_FRAG_CACHE_MAX_SIZE + 1;
+	nc->remaining = page_frag_cache_page_size(encoded_va);
+
+	return page;
+
+alloc:
+	page = NULL;
 #if (PAGE_SIZE < PAGE_FRAG_CACHE_MAX_SIZE)
 	gfp_mask = (gfp_mask & ~__GFP_DIRECT_RECLAIM) |  __GFP_COMP |
 		   __GFP_NOWARN | __GFP_NORETRY | __GFP_NOMEMALLOC;
@@ -89,40 +115,15 @@ void *__page_frag_alloc_va_align(struct page_frag_cache *nc,
 				 unsigned int fragsz, gfp_t gfp_mask,
 				 unsigned int align_mask)
 {
-	struct encoded_va *encoded_va = nc->encoded_va;
-	struct page *page;
-	int remaining;
+	int remaining = nc->remaining & align_mask;
 	void *va;
 
-	if (unlikely(!encoded_va)) {
-refill:
+	remaining -= fragsz;
+	if (unlikely(remaining < 0)) {
 		if (unlikely(!__page_frag_cache_refill(nc, gfp_mask)))
 			return NULL;
 
-		encoded_va = nc->encoded_va;
-	}
-
-	remaining = nc->remaining & align_mask;
-	remaining -= fragsz;
-	if (unlikely(remaining < 0)) {
-		page = virt_to_page(encoded_va);
-		if (!page_ref_sub_and_test(page, nc->pagecnt_bias))
-			goto refill;
-
-		if (unlikely(encoded_page_pfmemalloc(encoded_va))) {
-			VM_BUG_ON(compound_order(page) !=
-				  encoded_page_order(encoded_va));
-			free_unref_page(page, encoded_page_order(encoded_va));
-			goto refill;
-		}
-
-		/* OK, page count is 0, we can safely set it */
-		set_page_count(page, PAGE_FRAG_CACHE_MAX_SIZE + 1);
-
-		/* reset page count bias and remaining of new frag */
-		nc->pagecnt_bias = PAGE_FRAG_CACHE_MAX_SIZE + 1;
-		nc->remaining = remaining = page_frag_cache_page_size(encoded_va);
-		remaining -= fragsz;
+		remaining = nc->remaining - fragsz;
 		if (unlikely(remaining < 0)) {
 			/*
 			 * The caller is trying to allocate a fragment
