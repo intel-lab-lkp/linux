@@ -811,18 +811,28 @@ struct raw3270 __init *raw3270_setup_console(void)
 	if (IS_ERR(cdev))
 		return ERR_CAST(cdev);
 
-	rp = kzalloc(sizeof(*rp), GFP_KERNEL | GFP_DMA);
-	ascebc = kzalloc(256, GFP_KERNEL);
+	rp = kmalloc(sizeof(*rp), GFP_KERNEL | GFP_DMA);
+	if (!rp)
+		return ERR_PTR(-ENOMEM);
+	ascebc = kmalloc(256, GFP_KERNEL);
+	if (!ascebc) {
+		kfree(rp);
+		return ERR_PTR(-ENOMEM);
+	}
 	rc = raw3270_setup_device(cdev, rp, ascebc);
-	if (rc)
+	if (rc) {
+		kfree(ascebc);
+		kfree(rp);
 		return ERR_PTR(rc);
-	set_bit(RAW3270_FLAGS_CONSOLE, &rp->flags);
-
+	}
 	rc = ccw_device_enable_console(cdev);
 	if (rc) {
 		ccw_device_destroy_console(cdev);
+		kfree(ascebc);
+		kfree(rp);
 		return ERR_PTR(rc);
 	}
+	set_bit(RAW3270_FLAGS_CONSOLE, &rp->flags);
 
 	spin_lock_irqsave(get_ccwdev_lock(rp->cdev), flags);
 	do {
