@@ -21,6 +21,7 @@ struct fbnic_dev {
 	u32 __iomem *uc_addr4;
 	const struct fbnic_mac *mac;
 	unsigned int fw_msix_vector;
+	unsigned int mac_msix_vector;
 	unsigned short num_irqs;
 
 	struct delayed_work service_task;
@@ -38,6 +39,13 @@ struct fbnic_dev {
 	u32 mps;
 	u32 readrq;
 
+	/* Tri-state value indicating state of link.
+	 *  0 - Up
+	 *  1 - Down
+	 *  2 - Event - Requires checking as link state may have changed
+	 */
+	s8 link_state;
+
 	/* Number of TCQs/RCQs available on hardware */
 	u16 max_num_queues;
 };
@@ -49,6 +57,7 @@ struct fbnic_dev {
  */
 enum {
 	FBNIC_FW_MSIX_ENTRY,
+	FBNIC_MAC_MSIX_ENTRY,
 	FBNIC_NON_NAPI_VECTORS
 };
 
@@ -109,6 +118,9 @@ void fbnic_devlink_unregister(struct fbnic_dev *fbd);
 
 int fbnic_fw_enable_mbx(struct fbnic_dev *fbd);
 void fbnic_fw_disable_mbx(struct fbnic_dev *fbd);
+
+int fbnic_mac_enable(struct fbnic_dev *fbd);
+void fbnic_mac_disable(struct fbnic_dev *fbd);
 
 int fbnic_request_irq(struct fbnic_dev *dev, int nr, irq_handler_t handler,
 		      unsigned long flags, const char *name, void *data);

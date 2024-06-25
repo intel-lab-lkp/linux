@@ -5,6 +5,7 @@
 #include <linux/types.h>
 
 #include "fbnic.h"
+#include "fbnic_netdev.h"
 #include "fbnic_txrx.h"
 
 static irqreturn_t fbnic_fw_msix_intr(int __always_unused irq, void *data)
@@ -83,6 +84,86 @@ void fbnic_fw_disable_mbx(struct fbnic_dev *fbd)
 	fbnic_mbx_clean(fbd);
 }
 
+static irqreturn_t fbnic_mac_msix_intr(int __always_unused irq, void *data)
+{
+	struct fbnic_dev *fbd = data;
+	struct fbnic_net *fbn;
+
+	if (!fbd->mac->get_link_event(fbd)) {
+		fbnic_wr32(fbd, FBNIC_INTR_MASK_CLEAR(0),
+			   1u << FBNIC_MAC_MSIX_ENTRY);
+		return IRQ_HANDLED;
+	}
+
+	fbd->link_state = FBNIC_LINK_EVENT;
+	fbn = netdev_priv(fbd->netdev);
+
+	phylink_mac_change(fbn->phylink, fbd->link_state == FBNIC_LINK_UP);
+
+	return IRQ_HANDLED;
+}
+
+/**
+ * fbnic_mac_enable - Configure the MAC to enable it to advertise link
+ * @fbd: Pointer to device to initialize
+ *
+ * This function provides basic bringup for the CMAC and sets the link
+ * state to FBNIC_LINK_EVENT which tells the link state check that the
+ * current state is unknown and that interrupts must be enabled after the
+ * check is completed.
+ *
+ * Return: non-zero on failure.
+ **/
+int fbnic_mac_enable(struct fbnic_dev *fbd)
+{
+	struct fbnic_net *fbn = netdev_priv(fbd->netdev);
+	u32 vector = fbd->mac_msix_vector;
+	int err;
+
+	/* Request the IRQ for MAC link vector.
+	 * Map MAC cause to it, and unmask it
+	 */
+	err = request_irq(vector, &fbnic_mac_msix_intr, 0,
+			  fbd->netdev->name, fbd);
+	if (err)
+		return err;
+
+	fbnic_wr32(fbd, FBNIC_INTR_MSIX_CTRL(FBNIC_INTR_MSIX_CTRL_PCS_IDX),
+		   FBNIC_MAC_MSIX_ENTRY | FBNIC_INTR_MSIX_CTRL_ENABLE);
+
+	phylink_start(fbn->phylink);
+
+	fbnic_wr32(fbd, FBNIC_INTR_SET(0), 1u << FBNIC_MAC_MSIX_ENTRY);
+
+	return 0;
+}
+
+/**
+ * fbnic_mac_disable - Teardown the MAC to prepare for stopping
+ * @fbd: Pointer to device that is stopping
+ *
+ * This function undoes the work done in fbnic_mac_enable and prepares the
+ * device to no longer receive traffic on the host interface.
+ **/
+void fbnic_mac_disable(struct fbnic_dev *fbd)
+{
+	struct fbnic_net *fbn = netdev_priv(fbd->netdev);
+
+	/* Nothing to do if link is already disabled */
+	if (fbd->link_state == FBNIC_LINK_DISABLED)
+		return;
+
+	phylink_stop(fbn->phylink);
+
+	/* Disable interrupt */
+	fbnic_wr32(fbd, FBNIC_INTR_MSIX_CTRL(FBNIC_INTR_MSIX_CTRL_PCS_IDX),
+		   FBNIC_MAC_MSIX_ENTRY);
+	fbnic_wr32(fbd, FBNIC_INTR_MASK_SET(0), 1u << FBNIC_MAC_MSIX_ENTRY);
+
+	/* Free the vector */
+	free_irq(fbd->mac_msix_vector, fbd);
+}
+
 int fbnic_request_irq(struct fbnic_dev *fbd, int nr, irq_handler_t handler,
 		      unsigned long flags, const char *name, void *data)
 {
@@ -110,6 +191,7 @@ void fbnic_free_irqs(struct fbnic_dev *fbd)
 {
 	struct pci_dev *pdev = to_pci_dev(fbd->dev);
 
+	fbd->mac_msix_vector = 0;
 	fbd->fw_msix_vector = 0;
 
 	fbd->num_irqs = 0;
@@ -137,6 +219,7 @@ int fbnic_alloc_irqs(struct fbnic_dev *fbd)
 
 	fbd->num_irqs = num_irqs;
 
+	fbd->mac_msix_vector = pci_irq_vector(pdev, FBNIC_MAC_MSIX_ENTRY);
 	fbd->fw_msix_vector = pci_irq_vector(pdev, FBNIC_FW_MSIX_ENTRY);
 
 	return 0;
