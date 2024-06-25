@@ -568,17 +568,9 @@ static void correct_endian_ret_unlink(struct usbip_header_ret_unlink *pdu,
 
 void usbip_header_correct_endian(struct usbip_header *pdu, int send)
 {
-	__u32 cmd = 0;
-
-	if (send)
-		cmd = pdu->base.command;
-
 	correct_endian_basic(&pdu->base, send);
 
-	if (!send)
-		cmd = pdu->base.command;
-
-	switch (cmd) {
+	switch (pdu->base.command) {
 	case USBIP_CMD_SUBMIT:
 		correct_endian_cmd_submit(&pdu->u.cmd_submit, send);
 		break;
