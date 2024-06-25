@@ -657,7 +657,7 @@ static inline bool uprobe_is_active(struct uprobe *uprobe)
 	return !RB_EMPTY_NODE(&uprobe->rb_node);
 }
 
-static void put_uprobe(struct uprobe *uprobe)
+static void __put_uprobe(struct uprobe *uprobe, bool tree_locked)
 {
 	s64 v;
 
@@ -666,7 +666,8 @@ static void put_uprobe(struct uprobe *uprobe)
 	if (unlikely((u32)v == 0)) {
 		bool destroy;
 
-		write_lock(&uprobes_treelock);
+		if (!tree_locked)
+			write_lock(&uprobes_treelock);
 		/*
 		 * We might race with find_uprobe()->__get_uprobe() executed
 		 * from inside read-locked uprobes_treelock, which can bump
@@ -689,7 +690,8 @@ static void put_uprobe(struct uprobe *uprobe)
 		destroy = atomic64_read(&uprobe->ref) == v;
 		if (destroy && uprobe_is_active(uprobe))
 			rb_erase(&uprobe->rb_node, &uprobes_tree);
-		write_unlock(&uprobes_treelock);
+		if (!tree_locked)
+			write_unlock(&uprobes_treelock);
 
 		/* uprobe got resurrected, pretend we never tried to free it */
 		if (!destroy)
@@ -716,6 +718,11 @@ static void put_uprobe(struct uprobe *uprobe)
 	 */
 	if (unlikely(v < 0))
 		(void)atomic64_cmpxchg(&uprobe->ref, v, v & ~(1ULL << 63));
+}
+
+static void put_uprobe(struct uprobe *uprobe)
+{
+	__put_uprobe(uprobe, false);
 }
 
 static __always_inline
@@ -813,21 +820,6 @@ static struct uprobe *__insert_uprobe(struct uprobe *uprobe)
 	if (node)
 		/* we hold uprobes_treelock, so it's safe to __get_uprobe() */
 		u = __get_uprobe(__node_2_uprobe(node));
-
-	return u;
-}
-
-/*
- * Acquire uprobes_treelock and insert uprobe into uprobes_tree
- * (or reuse existing one, see __insert_uprobe() comments above).
- */
-static struct uprobe *insert_uprobe(struct uprobe *uprobe)
-{
-	struct uprobe *u;
-
-	write_lock(&uprobes_treelock);
-	u = __insert_uprobe(uprobe);
-	write_unlock(&uprobes_treelock);
 
 	return u;
 }
@@ -1291,6 +1283,8 @@ int uprobe_register_batch(struct inode *inode, int cnt,
 		uc->uprobe = uprobe;
 	}
 
+	ret = 0;
+	write_lock(&uprobes_treelock);
 	for (i = 0; i < cnt; i++) {
 		struct uprobe *cur_uprobe;
 
@@ -1298,19 +1292,24 @@ int uprobe_register_batch(struct inode *inode, int cnt,
 		uprobe = uc->uprobe;
 
 		/* add to uprobes_tree, sorted on inode:offset */
-		cur_uprobe = insert_uprobe(uprobe);
+		cur_uprobe = __insert_uprobe(uprobe);
 		/* a uprobe exists for this inode:offset combination */
 		if (cur_uprobe != uprobe) {
 			if (cur_uprobe->ref_ctr_offset != uprobe->ref_ctr_offset) {
 				ref_ctr_mismatch_warn(cur_uprobe, uprobe);
-				put_uprobe(cur_uprobe);
+
+				__put_uprobe(cur_uprobe, true);
 				ret = -EINVAL;
-				goto cleanup_uprobes;
+				goto unlock_treelock;
 			}
 			kfree(uprobe);
 			uc->uprobe = cur_uprobe;
 		}
 	}
+unlock_treelock:
+	write_unlock(&uprobes_treelock);
+	if (ret)
+		goto cleanup_uprobes;
 
 	for (i = 0; i < cnt; i++) {
 		uc = get_uprobe_consumer(i, ctx);
@@ -1340,12 +1339,14 @@ cleanup_unreg:
 	}
 cleanup_uprobes:
 	/* put all the successfully allocated/reused uprobes */
+	write_lock(&uprobes_treelock);
 	for (i = cnt - 1; i >= 0; i--) {
 		uc = get_uprobe_consumer(i, ctx);
 
-		put_uprobe(uc->uprobe);
+		__put_uprobe(uc->uprobe, true);
 		uc->uprobe = NULL;
 	}
+	write_unlock(&uprobes_treelock);
 	return ret;
 }
 
