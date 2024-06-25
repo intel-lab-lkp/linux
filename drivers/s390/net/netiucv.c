@@ -855,6 +855,9 @@ static void conn_action_start(fsm_instance *fi, int event, void *arg)
 
 	fsm_newstate(fi, CONN_STATE_SETUPWAIT);
 	conn->path = iucv_path_alloc(NETIUCV_QUEUELEN_DEFAULT, 0, GFP_KERNEL);
+	if (!conn->path)
+		return;
+
 	IUCV_DBF_TEXT_(setup, 2, "%s: connecting to %s ...\n",
 		netdev->name, netiucv_printuser(conn));
 
