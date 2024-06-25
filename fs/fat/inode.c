@@ -534,7 +534,7 @@ int fat_fill_inode(struct inode *inode, struct msdos_dir_entry *de)
 			return error;
 		MSDOS_I(inode)->mmu_private = inode->i_size;
 
-		set_nlink(inode, fat_subdirs(inode));
+		set_nlink(inode, fat_subdirs(inode)+2);
 
 		error = fat_validate_dir(inode);
 		if (error < 0)
