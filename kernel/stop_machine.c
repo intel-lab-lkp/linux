@@ -225,8 +225,6 @@ static int multi_cpu_stop(void *data)
 
 	/* Simple state machine */
 	do {
-		/* Chill out and ensure we re-read multi_stop_state. */
-		stop_machine_yield(cpumask);
 		newstate = READ_ONCE(msdata->state);
 		if (newstate != curstate) {
 			curstate = newstate;
@@ -243,15 +241,22 @@ static int multi_cpu_stop(void *data)
 				break;
 			}
 			ack_state(msdata);
-		} else if (curstate > MULTI_STOP_PREPARE) {
-			/*
-			 * At this stage all other CPUs we depend on must spin
-			 * in the same loop. Any reason for hard-lockup should
-			 * be detected and reported on their side.
-			 */
-			touch_nmi_watchdog();
+
+		} else {
+			/* No state change, chill out */
+			stop_machine_yield(cpumask);
+			if (curstate > MULTI_STOP_PREPARE) {
+				/*
+				 * At this stage all other CPUs we depend on
+				 * must spin in the same loop. Any reason for
+				 * hard-lockup should be detected and reported
+				 * on their side.
+				 */
+				touch_nmi_watchdog();
+			}
+			rcu_momentary_dyntick_idle();
 		}
-		rcu_momentary_dyntick_idle();
+
 	} while (curstate != MULTI_STOP_EXIT);
 
 	local_irq_restore(flags);
