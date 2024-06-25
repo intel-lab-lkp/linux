@@ -552,7 +552,10 @@ static int sk_psock_skb_ingress_enqueue(struct sk_buff *skb,
 	msg->skb = skb;
 
 	sk_psock_queue_msg(psock, msg);
-	sk_psock_data_ready(sk, psock);
+	if (skb_bpf_strparser(skb))
+		__sk_psock_data_ready(sk, psock);
+	else
+		sk_psock_data_ready(sk, psock);
 	return copied;
 }
 

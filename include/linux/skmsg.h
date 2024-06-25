@@ -461,13 +461,18 @@ static inline void sk_psock_put(struct sock *sk, struct sk_psock *psock)
 		sk_psock_drop(sk, psock);
 }
 
-static inline void sk_psock_data_ready(struct sock *sk, struct sk_psock *psock)
+static inline void __sk_psock_data_ready(struct sock *sk, struct sk_psock *psock)
 {
-	read_lock_bh(&sk->sk_callback_lock);
 	if (psock->saved_data_ready)
 		psock->saved_data_ready(sk);
 	else
 		sk->sk_data_ready(sk);
+}
+
+static inline void sk_psock_data_ready(struct sock *sk, struct sk_psock *psock)
+{
+	read_lock_bh(&sk->sk_callback_lock);
+	__sk_psock_data_ready(sk, psock);
 	read_unlock_bh(&sk->sk_callback_lock);
 }
 
