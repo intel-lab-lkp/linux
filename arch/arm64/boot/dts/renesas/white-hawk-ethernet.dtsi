@@ -27,7 +27,8 @@
 		reset-post-delay-us = <4000>;
 
 		avb1_phy: ethernet-phy@0 {
-			compatible = "ethernet-phy-ieee802.3-c45";
+			compatible = "ethernet-phy-id002b.0980",
+				     "ethernet-phy-ieee802.3-c22";
 			reg = <0>;
 			interrupt-parent = <&gpio6>;
 			interrupts = <3 IRQ_TYPE_LEVEL_LOW>;
@@ -49,7 +50,8 @@
 		reset-post-delay-us = <4000>;
 
 		avb2_phy: ethernet-phy@0 {
-			compatible = "ethernet-phy-ieee802.3-c45";
+			compatible = "ethernet-phy-id002b.0980",
+				     "ethernet-phy-ieee802.3-c22";
 			reg = <0>;
 			interrupt-parent = <&gpio5>;
 			interrupts = <4 IRQ_TYPE_LEVEL_LOW>;
