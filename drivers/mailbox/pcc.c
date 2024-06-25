@@ -280,6 +280,7 @@ static irqreturn_t pcc_mbox_irq(int irq, void *p)
 {
 	struct pcc_chan_info *pchan;
 	struct mbox_chan *chan = p;
+	struct pcc_mbox_chan *pmchan;
 	u64 val;
 	int ret;
 
@@ -304,6 +305,8 @@ static irqreturn_t pcc_mbox_irq(int irq, void *p)
 	if (pcc_chan_reg_read_modify_write(&pchan->plat_irq_ack))
 		return IRQ_NONE;
 
+	pmchan = &pchan->chan;
+	pmchan->ack_rx = true;  //TODO default to False
 	mbox_chan_received_data(chan, NULL);
 
 	/*
@@ -312,7 +315,8 @@ static irqreturn_t pcc_mbox_irq(int irq, void *p)
 	 *
 	 * The PCC master subspace channel clears chan_in_use to free channel.
 	 */
-	if (pchan->type == ACPI_PCCT_TYPE_EXT_PCC_SLAVE_SUBSPACE)
+	if (pchan->type == ACPI_PCCT_TYPE_EXT_PCC_SLAVE_SUBSPACE &&
+	    pmchan->ack_rx)
 		pcc_send_data(chan, NULL);
 	pchan->chan_in_use = false;
 

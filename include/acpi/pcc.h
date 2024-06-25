@@ -16,6 +16,7 @@ struct pcc_mbox_chan {
 	u32 latency;
 	u32 max_access_rate;
 	u16 min_turnaround_time;
+	bool ack_rx;
 };
 
 /* Generic Communications Channel Shared Memory Region */
