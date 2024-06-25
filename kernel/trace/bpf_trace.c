@@ -3157,8 +3157,6 @@ struct bpf_uprobe_multi_link;
 
 struct bpf_uprobe {
 	struct bpf_uprobe_multi_link *link;
-	loff_t offset;
-	unsigned long ref_ctr_offset;
 	u64 cookie;
 	struct uprobe_consumer consumer;
 };
@@ -3184,8 +3182,7 @@ static void bpf_uprobe_unregister(struct path *path, struct bpf_uprobe *uprobes,
 	u32 i;
 
 	for (i = 0; i < cnt; i++) {
-		uprobe_unregister(d_real_inode(path->dentry), uprobes[i].offset,
-				  &uprobes[i].consumer);
+		uprobe_unregister(d_real_inode(path->dentry), &uprobes[i].consumer);
 	}
 }
 
@@ -3265,10 +3262,10 @@ static int bpf_uprobe_multi_link_fill_link_info(const struct bpf_link *link,
 
 	for (i = 0; i < ucount; i++) {
 		if (uoffsets &&
-		    put_user(umulti_link->uprobes[i].offset, uoffsets + i))
+		    put_user(umulti_link->uprobes[i].consumer.offset, uoffsets + i))
 			return -EFAULT;
 		if (uref_ctr_offsets &&
-		    put_user(umulti_link->uprobes[i].ref_ctr_offset, uref_ctr_offsets + i))
+		    put_user(umulti_link->uprobes[i].consumer.ref_ctr_offset, uref_ctr_offsets + i))
 			return -EFAULT;
 		if (ucookies &&
 		    put_user(umulti_link->uprobes[i].cookie, ucookies + i))
@@ -3442,15 +3439,16 @@ int bpf_uprobe_multi_link_attach(const union bpf_attr *attr, struct bpf_prog *pr
 		goto error_free;
 
 	for (i = 0; i < cnt; i++) {
-		if (__get_user(uprobes[i].offset, uoffsets + i)) {
+		if (__get_user(uprobes[i].consumer.offset, uoffsets + i)) {
 			err = -EFAULT;
 			goto error_free;
 		}
-		if (uprobes[i].offset < 0) {
+		if (uprobes[i].consumer.offset < 0) {
 			err = -EINVAL;
 			goto error_free;
 		}
-		if (uref_ctr_offsets && __get_user(uprobes[i].ref_ctr_offset, uref_ctr_offsets + i)) {
+		if (uref_ctr_offsets &&
+		    __get_user(uprobes[i].consumer.ref_ctr_offset, uref_ctr_offsets + i)) {
 			err = -EFAULT;
 			goto error_free;
 		}
@@ -3480,10 +3478,7 @@ int bpf_uprobe_multi_link_attach(const union bpf_attr *attr, struct bpf_prog *pr
 		      &bpf_uprobe_multi_link_lops, prog);
 
 	for (i = 0; i < cnt; i++) {
-		err = uprobe_register_refctr(d_real_inode(link->path.dentry),
-					     uprobes[i].offset,
-					     uprobes[i].ref_ctr_offset,
-					     &uprobes[i].consumer);
+		err = uprobe_register(d_real_inode(link->path.dentry), &uprobes[i].consumer);
 		if (err) {
 			bpf_uprobe_unregister(&path, uprobes, i);
 			goto error_free;

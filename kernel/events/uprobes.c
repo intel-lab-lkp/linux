@@ -1197,14 +1197,13 @@ __uprobe_unregister(struct uprobe *uprobe, struct uprobe_consumer *uc)
 /*
  * uprobe_unregister - unregister an already registered probe.
  * @inode: the file in which the probe has to be removed.
- * @offset: offset from the start of the file.
- * @uc: identify which probe if multiple probes are colocated.
+ * @uc: identify which probe consumer to unregister.
  */
-void uprobe_unregister(struct inode *inode, loff_t offset, struct uprobe_consumer *uc)
+void uprobe_unregister(struct inode *inode, struct uprobe_consumer *uc)
 {
 	struct uprobe *uprobe;
 
-	uprobe = find_uprobe(inode, offset);
+	uprobe = find_uprobe(inode, uc->offset);
 	if (WARN_ON(!uprobe))
 		return;
 
@@ -1277,19 +1276,11 @@ static int __uprobe_register(struct inode *inode, loff_t offset,
 	return ret;
 }
 
-int uprobe_register(struct inode *inode, loff_t offset,
-		    struct uprobe_consumer *uc)
+int uprobe_register(struct inode *inode, struct uprobe_consumer *uc)
 {
-	return __uprobe_register(inode, offset, 0, uc);
+	return __uprobe_register(inode, uc->offset, uc->ref_ctr_offset, uc);
 }
 EXPORT_SYMBOL_GPL(uprobe_register);
-
-int uprobe_register_refctr(struct inode *inode, loff_t offset,
-			   loff_t ref_ctr_offset, struct uprobe_consumer *uc)
-{
-	return __uprobe_register(inode, offset, ref_ctr_offset, uc);
-}
-EXPORT_SYMBOL_GPL(uprobe_register_refctr);
 
 /*
  * uprobe_apply - unregister an already registered probe.

@@ -413,7 +413,6 @@ uprobe_ret_handler(struct uprobe_consumer *self, unsigned long func,
 
 struct testmod_uprobe {
 	struct path path;
-	loff_t offset;
 	struct uprobe_consumer consumer;
 };
 
@@ -427,25 +426,24 @@ static int testmod_register_uprobe(loff_t offset)
 {
 	int err = -EBUSY;
 
-	if (uprobe.offset)
+	if (uprobe.consumer.offset)
 		return -EBUSY;
 
 	mutex_lock(&testmod_uprobe_mutex);
 
-	if (uprobe.offset)
+	if (uprobe.consumer.offset)
 		goto out;
 
 	err = kern_path("/proc/self/exe", LOOKUP_FOLLOW, &uprobe.path);
 	if (err)
 		goto out;
 
-	err = uprobe_register_refctr(d_real_inode(uprobe.path.dentry),
-				     offset, 0, &uprobe.consumer);
-	if (err)
+	uprobe.consumer.offset = offset;
+	err = uprobe_register(d_real_inode(uprobe.path.dentry), &uprobe.consumer);
+	if (err) {
 		path_put(&uprobe.path);
-	else
-		uprobe.offset = offset;
-
+		uprobe.consumer.offset = 0;
+	}
 out:
 	mutex_unlock(&testmod_uprobe_mutex);
 	return err;
@@ -455,10 +453,9 @@ static void testmod_unregister_uprobe(void)
 {
 	mutex_lock(&testmod_uprobe_mutex);
 
-	if (uprobe.offset) {
-		uprobe_unregister(d_real_inode(uprobe.path.dentry),
-				  uprobe.offset, &uprobe.consumer);
-		uprobe.offset = 0;
+	if (uprobe.consumer.offset) {
+		uprobe_unregister(d_real_inode(uprobe.path.dentry), &uprobe.consumer);
+		uprobe.consumer.offset = 0;
 	}
 
 	mutex_unlock(&testmod_uprobe_mutex);

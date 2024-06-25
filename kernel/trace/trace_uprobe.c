@@ -60,8 +60,6 @@ struct trace_uprobe {
 	struct path			path;
 	struct inode			*inode;
 	char				*filename;
-	unsigned long			offset;
-	unsigned long			ref_ctr_offset;
 	unsigned long			nhit;
 	struct trace_probe		tp;
 };
@@ -205,7 +203,7 @@ static unsigned long translate_user_vaddr(unsigned long file_offset)
 
 	udd = (void *) current->utask->vaddr;
 
-	base_addr = udd->bp_addr - udd->tu->offset;
+	base_addr = udd->bp_addr - udd->tu->consumer.offset;
 	return base_addr + file_offset;
 }
 
@@ -286,13 +284,13 @@ static bool trace_uprobe_match_command_head(struct trace_uprobe *tu,
 	if (strncmp(tu->filename, argv[0], len) || argv[0][len] != ':')
 		return false;
 
-	if (tu->ref_ctr_offset == 0)
-		snprintf(buf, sizeof(buf), "0x%0*lx",
-				(int)(sizeof(void *) * 2), tu->offset);
+	if (tu->consumer.ref_ctr_offset == 0)
+		snprintf(buf, sizeof(buf), "0x%0*llx",
+				(int)(sizeof(void *) * 2), tu->consumer.offset);
 	else
-		snprintf(buf, sizeof(buf), "0x%0*lx(0x%lx)",
-				(int)(sizeof(void *) * 2), tu->offset,
-				tu->ref_ctr_offset);
+		snprintf(buf, sizeof(buf), "0x%0*llx(0x%llx)",
+				(int)(sizeof(void *) * 2), tu->consumer.offset,
+				tu->consumer.ref_ctr_offset);
 	if (strcmp(buf, &argv[0][len + 1]))
 		return false;
 
@@ -410,7 +408,7 @@ static bool trace_uprobe_has_same_uprobe(struct trace_uprobe *orig,
 
 	list_for_each_entry(orig, &tpe->probes, tp.list) {
 		if (comp_inode != d_real_inode(orig->path.dentry) ||
-		    comp->offset != orig->offset)
+		    comp->consumer.offset != orig->consumer.offset)
 			continue;
 
 		/*
@@ -472,8 +470,8 @@ static int validate_ref_ctr_offset(struct trace_uprobe *new)
 
 	for_each_trace_uprobe(tmp, pos) {
 		if (new_inode == d_real_inode(tmp->path.dentry) &&
-		    new->offset == tmp->offset &&
-		    new->ref_ctr_offset != tmp->ref_ctr_offset) {
+		    new->consumer.offset == tmp->consumer.offset &&
+		    new->consumer.ref_ctr_offset != tmp->consumer.ref_ctr_offset) {
 			pr_warn("Reference counter offset mismatch.");
 			return -EINVAL;
 		}
@@ -675,8 +673,8 @@ static int __trace_uprobe_create(int argc, const char **argv)
 		WARN_ON_ONCE(ret != -ENOMEM);
 		goto fail_address_parse;
 	}
-	tu->offset = offset;
-	tu->ref_ctr_offset = ref_ctr_offset;
+	tu->consumer.offset = offset;
+	tu->consumer.ref_ctr_offset = ref_ctr_offset;
 	tu->path = path;
 	tu->filename = filename;
 
@@ -746,12 +744,12 @@ static int trace_uprobe_show(struct seq_file *m, struct dyn_event *ev)
 	char c = is_ret_probe(tu) ? 'r' : 'p';
 	int i;
 
-	seq_printf(m, "%c:%s/%s %s:0x%0*lx", c, trace_probe_group_name(&tu->tp),
+	seq_printf(m, "%c:%s/%s %s:0x%0*llx", c, trace_probe_group_name(&tu->tp),
 			trace_probe_name(&tu->tp), tu->filename,
-			(int)(sizeof(void *) * 2), tu->offset);
+			(int)(sizeof(void *) * 2), tu->consumer.offset);
 
-	if (tu->ref_ctr_offset)
-		seq_printf(m, "(0x%lx)", tu->ref_ctr_offset);
+	if (tu->consumer.ref_ctr_offset)
+		seq_printf(m, "(0x%llx)", tu->consumer.ref_ctr_offset);
 
 	for (i = 0; i < tu->tp.nr_args; i++)
 		seq_printf(m, " %s=%s", tu->tp.args[i].name, tu->tp.args[i].comm);
@@ -1089,12 +1087,7 @@ static int trace_uprobe_enable(struct trace_uprobe *tu, filter_func_t filter)
 	tu->consumer.filter = filter;
 	tu->inode = d_real_inode(tu->path.dentry);
 
-	if (tu->ref_ctr_offset)
-		ret = uprobe_register_refctr(tu->inode, tu->offset,
-				tu->ref_ctr_offset, &tu->consumer);
-	else
-		ret = uprobe_register(tu->inode, tu->offset, &tu->consumer);
-
+	ret = uprobe_register(tu->inode, &tu->consumer);
 	if (ret)
 		tu->inode = NULL;
 
@@ -1112,7 +1105,7 @@ static void __probe_event_disable(struct trace_probe *tp)
 		if (!tu->inode)
 			continue;
 
-		uprobe_unregister(tu->inode, tu->offset, &tu->consumer);
+		uprobe_unregister(tu->inode, &tu->consumer);
 		tu->inode = NULL;
 	}
 }
@@ -1310,7 +1303,7 @@ static int uprobe_perf_close(struct trace_event_call *call,
 		return 0;
 
 	list_for_each_entry(tu, trace_probe_probe_list(tp), tp.list) {
-		ret = uprobe_apply(tu->inode, tu->offset, &tu->consumer, false);
+		ret = uprobe_apply(tu->inode, tu->consumer.offset, &tu->consumer, false);
 		if (ret)
 			break;
 	}
@@ -1334,7 +1327,7 @@ static int uprobe_perf_open(struct trace_event_call *call,
 		return 0;
 
 	list_for_each_entry(tu, trace_probe_probe_list(tp), tp.list) {
-		err = uprobe_apply(tu->inode, tu->offset, &tu->consumer, true);
+		err = uprobe_apply(tu->inode, tu->consumer.offset, &tu->consumer, true);
 		if (err) {
 			uprobe_perf_close(call, event);
 			break;
@@ -1464,7 +1457,7 @@ int bpf_get_uprobe_info(const struct perf_event *event, u32 *fd_type,
 	*fd_type = is_ret_probe(tu) ? BPF_FD_TYPE_URETPROBE
 				    : BPF_FD_TYPE_UPROBE;
 	*filename = tu->filename;
-	*probe_offset = tu->offset;
+	*probe_offset = tu->consumer.offset;
 	*probe_addr = 0;
 	return 0;
 }
@@ -1627,9 +1620,9 @@ create_local_trace_uprobe(char *name, unsigned long offs,
 		return ERR_CAST(tu);
 	}
 
-	tu->offset = offs;
+	tu->consumer.offset = offs;
 	tu->path = path;
-	tu->ref_ctr_offset = ref_ctr_offset;
+	tu->consumer.ref_ctr_offset = ref_ctr_offset;
 	tu->filename = kstrdup(name, GFP_KERNEL);
 	if (!tu->filename) {
 		ret = -ENOMEM;
