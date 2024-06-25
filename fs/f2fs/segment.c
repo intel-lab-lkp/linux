@@ -236,6 +236,9 @@ retry:
 		return err;
 	}
 
+	if (__is_valid_data_blkaddr(dn.data_blkaddr))
+		f2fs_wait_on_block_writeback_range(inode, dn.data_blkaddr, 1);
+
 	if (recover) {
 		/* dn.data_blkaddr is always valid */
 		if (!__is_valid_data_blkaddr(new_addr)) {
@@ -339,6 +342,9 @@ static int __f2fs_commit_atomic_write(struct inode *inode)
 				goto out;
 			}
 
+			f2fs_wait_on_block_writeback_range(cow_inode,
+								blkaddr, 1);
+
 			new = f2fs_kmem_cache_alloc(revoke_entry_slab, GFP_NOFS,
 							true, NULL);
 
@@ -379,16 +385,28 @@ int f2fs_commit_atomic_write(struct inode *inode)
 	struct f2fs_inode_info *fi = F2FS_I(inode);
 	int err;
 
+	f2fs_down_write(&fi->i_gc_rwsem[WRITE]);
+
 	err = filemap_write_and_wait_range(inode->i_mapping, 0, LLONG_MAX);
 	if (err)
 		return err;
 
-	f2fs_down_write(&fi->i_gc_rwsem[WRITE]);
+	/* writeback GCing page of cow_inode */
+	err = filemap_write_and_wait_range(fi->cow_inode->i_mapping,
+							0, LLONG_MAX);
+	if (err)
+		return err;
+
+	filemap_invalidate_lock(inode->i_mapping);
+
+	/* don't allow clean page loaded by GC to pollute atomic_file */
+	truncate_pagecache(inode, 0);
+
 	f2fs_lock_op(sbi);
-
 	err = __f2fs_commit_atomic_write(inode);
-
 	f2fs_unlock_op(sbi);
+
+	filemap_invalidate_unlock(inode->i_mapping);
 	f2fs_up_write(&fi->i_gc_rwsem[WRITE]);
 
 	return err;
