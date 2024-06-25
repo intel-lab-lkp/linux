@@ -1021,6 +1021,11 @@ static void page_pool_disable_direct_recycling(struct page_pool *pool)
 	 */
 	WRITE_ONCE(pool->cpuid, -1);
 
+	page_pool_unlink_napi(pool);
+}
+
+void page_pool_unlink_napi(struct page_pool *pool)
+{
 	if (!pool->p.napi)
 		return;
 
@@ -1032,6 +1037,7 @@ static void page_pool_disable_direct_recycling(struct page_pool *pool)
 
 	WRITE_ONCE(pool->p.napi, NULL);
 }
+EXPORT_SYMBOL(page_pool_unlink_napi);
 
 void page_pool_destroy(struct page_pool *pool)
 {
