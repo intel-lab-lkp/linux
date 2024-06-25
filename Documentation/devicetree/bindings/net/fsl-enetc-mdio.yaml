@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/net/fsl-enetc-mdio.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: ENETC the central MDIO PCIe endpoint device
+
+description:
+  In this case, the mdio node should be defined as another PCIe
+  endpoint node, at the same level with the ENETC port nodes
+
+maintainers:
+  - Frank Li <Frank.Li@nxp.com>.
+
+properties:
+  compatible:
+    items:
+      - enum:
+          - pci1957,ee01
+      - const: fsl,enetc-mdio
+
+  reg:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+
+allOf:
+  - $ref: mdio.yaml
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    mdio@0,3 {
+        compatible = "pci1957,ee01", "fsl,enetc-mdio";
+        reg = <0x000300 0>;
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        sgmii_phy0: ethernet-phy@2 {
+            reg = <0x2>;
+        };
+    };
