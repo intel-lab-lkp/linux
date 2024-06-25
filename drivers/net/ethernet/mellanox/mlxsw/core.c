@@ -2337,6 +2337,12 @@ int mlxsw_core_skb_transmit(struct mlxsw_core *mlxsw_core, struct sk_buff *skb,
 }
 EXPORT_SYMBOL(mlxsw_core_skb_transmit);
 
+struct hlist_head mlxsw_core_page_pools_head(struct mlxsw_core *mlxsw_core)
+{
+	return mlxsw_core->bus->page_pools_head(mlxsw_core->bus_priv);
+}
+EXPORT_SYMBOL(mlxsw_core_page_pools_head);
+
 void mlxsw_core_ptp_transmitted(struct mlxsw_core *mlxsw_core,
 				struct sk_buff *skb, u16 local_port)
 {

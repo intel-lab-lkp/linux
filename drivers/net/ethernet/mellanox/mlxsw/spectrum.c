@@ -1826,6 +1826,7 @@ static int mlxsw_sp_port_create(struct mlxsw_sp *mlxsw_sp, u16 local_port,
 		goto err_register_netdev;
 	}
 
+	dev->page_pools = mlxsw_core_page_pools_head(mlxsw_sp->core);
 	mlxsw_core_schedule_dw(&mlxsw_sp_port->periodic_hw_stats.update_dw, 0);
 	return 0;
 
@@ -1880,6 +1881,7 @@ static void mlxsw_sp_port_remove(struct mlxsw_sp *mlxsw_sp, u16 local_port)
 	u8 module = mlxsw_sp_port->mapping.module;
 
 	cancel_delayed_work_sync(&mlxsw_sp_port->periodic_hw_stats.update_dw);
+	INIT_HLIST_HEAD(&mlxsw_sp_port->dev->page_pools); /* Reset list head. */
 	cancel_delayed_work_sync(&mlxsw_sp_port->ptp.shaper_dw);
 	unregister_netdev(mlxsw_sp_port->dev); /* This calls ndo_stop */
 	mlxsw_sp_port_ptp_clear(mlxsw_sp_port);

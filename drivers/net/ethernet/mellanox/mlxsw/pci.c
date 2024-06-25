@@ -2179,6 +2179,13 @@ mlxsw_pci_flood_mode(void *bus_priv)
 	return mlxsw_pci->flood_mode;
 }
 
+static struct hlist_head mlxsw_pci_page_pools_head(void *bus_priv)
+{
+	struct mlxsw_pci *mlxsw_pci = bus_priv;
+
+	return mlxsw_pci->napi_dev_rx->page_pools;
+}
+
 static const struct mlxsw_bus mlxsw_pci_bus = {
 	.kind			= "pci",
 	.init			= mlxsw_pci_init,
@@ -2192,6 +2199,7 @@ static const struct mlxsw_bus mlxsw_pci_bus = {
 	.read_utc_nsec		= mlxsw_pci_read_utc_nsec,
 	.lag_mode		= mlxsw_pci_lag_mode,
 	.flood_mode		= mlxsw_pci_flood_mode,
+	.page_pools_head	= mlxsw_pci_page_pools_head,
 	.features		= MLXSW_BUS_F_TXRX | MLXSW_BUS_F_RESET,
 };
 

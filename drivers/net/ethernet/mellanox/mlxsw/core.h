@@ -95,6 +95,7 @@ bool mlxsw_core_skb_transmit_busy(struct mlxsw_core *mlxsw_core,
 				  const struct mlxsw_tx_info *tx_info);
 int mlxsw_core_skb_transmit(struct mlxsw_core *mlxsw_core, struct sk_buff *skb,
 			    const struct mlxsw_tx_info *tx_info);
+struct hlist_head mlxsw_core_page_pools_head(struct mlxsw_core *mlxsw_core);
 void mlxsw_core_ptp_transmitted(struct mlxsw_core *mlxsw_core,
 				struct sk_buff *skb, u16 local_port);
 
@@ -498,6 +499,7 @@ struct mlxsw_bus {
 	u32 (*read_utc_nsec)(void *bus_priv);
 	enum mlxsw_cmd_mbox_config_profile_lag_mode (*lag_mode)(void *bus_priv);
 	enum mlxsw_cmd_mbox_config_profile_flood_mode (*flood_mode)(void *priv);
+	struct hlist_head (*page_pools_head)(void *bus_priv);
 	u8 features;
 };
 
