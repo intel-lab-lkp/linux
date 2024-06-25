@@ -28,4 +28,8 @@ install:
 	$(INSTALL) $(OUTPUT)centrino-decode $(DESTDIR)${bindir}
 	$(INSTALL) $(OUTPUT)powernow-k8-decode $(DESTDIR)${bindir}
 
-.PHONY: all default clean install
+uninstall:
+	- rm -f $(DESTDIR)${bindir}/centrino-decode
+	- rm -f $(DESTDIR)${bindir}/powernow-k8-decode
+
+.PHONY: all default clean install uninstall
