@@ -92,7 +92,7 @@ netdev_nl_page_pool_get_dump(struct sk_buff *skb, struct netlink_callback *cb,
 				continue;
 
 			state->pp_id = pool->user.id;
-			err = fill(skb, pool, info, pool->slow.netdev->ifindex);
+			err = fill(skb, pool, info, netdev->ifindex);
 			if (err)
 				goto out;
 		}
