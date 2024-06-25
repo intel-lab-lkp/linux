@@ -193,6 +193,8 @@ static DEFINE_RAW_SPINLOCK(vmovp_lock);
 
 static DEFINE_IDA(its_vpeid_ida);
 
+static DEFINE_PER_CPU(struct its_node *, its_on_cpu);
+
 #define gic_data_rdist()		(raw_cpu_ptr(gic_rdists->rdist))
 #define gic_data_rdist_cpu(cpu)		(per_cpu_ptr(gic_rdists->rdist, cpu))
 #define gic_data_rdist_rd_base()	(gic_data_rdist()->rd_base)
@@ -4078,19 +4080,25 @@ static struct irq_chip its_vpe_irq_chip = {
 
 static struct its_node *find_4_1_its(void)
 {
-	static struct its_node *its = NULL;
+	struct its_node *its = NULL;
+	struct its_node *its_non_cpu_node = NULL;
+	int cpu = smp_processor_id();
 
-	if (!its) {
-		list_for_each_entry(its, &its_nodes, entry) {
-			if (is_v4_1(its))
-				return its;
-		}
+	if (per_cpu(its_on_cpu, cpu))
+		return per_cpu(its_on_cpu, cpu);
 
-		/* Oops? */
-		its = NULL;
+	list_for_each_entry(its, &its_nodes, entry) {
+		if (is_v4_1(its) && its->numa_node == cpu_to_node(cpu)) {
+			per_cpu(its_on_cpu, cpu) = its;
+			return its;
+		} else if (is_v4_1(its))
+			its_non_cpu_node = its;
 	}
 
-	return its;
+	if (!per_cpu(its_on_cpu, cpu) && its_non_cpu_node)
+		per_cpu(its_on_cpu, cpu) = its_non_cpu_node;
+
+	return its_non_cpu_node;
 }
 
 static void its_vpe_4_1_send_inv(struct irq_data *d)
