@@ -65,6 +65,7 @@ perf-y += map.o
 perf-y += maps.o
 perf-y += pstack.o
 perf-y += session.o
+perf-y += tool.o
 perf-y += sample-raw.o
 perf-y += s390-sample-raw.o
 perf-y += amd-sample-raw.o
