@@ -2448,12 +2448,17 @@ static int tsi148_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	data = ioread32be(tsi148_device->base + TSI148_LCSR_VSTAT);
 	dev_info(&pdev->dev, "Board is%s the VME system controller\n",
 		(data & TSI148_LCSR_VSTAT_SCONS) ? "" : " not");
-	if (!geoid)
+	if (!geoid) {
 		dev_info(&pdev->dev, "VME geographical address is %d\n",
 			data & TSI148_LCSR_VSTAT_GA_M);
-	else
+	} else if (geoid & ~TSI148_LCSR_VSTAT_GA_M) {
+		dev_err(&pdev->dev, "VME geographical address is out of range\n");
+		retval = -EINVAL;
+		goto err_crcsr;
+	} else {
 		dev_info(&pdev->dev, "VME geographical address is set to %d\n",
 			geoid);
+	}
 
 	dev_info(&pdev->dev, "VME Write and flush and error check is %s\n",
 		err_chk ? "enabled" : "disabled");
