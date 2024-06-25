@@ -208,6 +208,7 @@ struct mtk_jpegdec_comp_dev {
  * @reg_decbase:	jpg decode register base addr
  * @dec_hw_dev:	jpg decode hardware device
  * @hw_index:		jpg hw index
+ * @support_34bit:	flag to check if support dma_address 34bit
  */
 struct mtk_jpeg_dev {
 	struct mutex		lock;
@@ -230,6 +231,7 @@ struct mtk_jpeg_dev {
 	void __iomem *reg_decbase[MTK_JPEGDEC_HW_MAX];
 	struct mtk_jpegdec_comp_dev *dec_hw_dev[MTK_JPEGDEC_HW_MAX];
 	atomic_t hw_index;
+	bool support_34bit;
 };
 
 /**
