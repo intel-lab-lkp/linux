@@ -1162,8 +1162,8 @@ __uprobe_unregister(struct uprobe *uprobe, struct uprobe_consumer *uc)
  */
 void uprobe_unregister_batch(struct inode *inode, int cnt, uprobe_consumer_fn get_uprobe_consumer, void *ctx)
 {
-	struct uprobe *uprobe;
 	struct uprobe_consumer *uc;
+	struct uprobe *uprobe;
 	int i;
 
 	for (i = 0; i < cnt; i++) {
@@ -1176,10 +1176,20 @@ void uprobe_unregister_batch(struct inode *inode, int cnt, uprobe_consumer_fn ge
 		down_write(&uprobe->register_rwsem);
 		__uprobe_unregister(uprobe, uc);
 		up_write(&uprobe->register_rwsem);
-		put_uprobe(uprobe);
+	}
 
+	write_lock(&uprobes_treelock);
+	for (i = 0; i < cnt; i++) {
+		uc = get_uprobe_consumer(i, ctx);
+		uprobe = uc->uprobe;
+
+		if (!uprobe)
+			continue;
+
+		__put_uprobe(uprobe, true);
 		uc->uprobe = NULL;
 	}
+	write_unlock(&uprobes_treelock);
 }
 
 static struct uprobe_consumer *uprobe_consumer_identity(size_t idx, void *ctx)
