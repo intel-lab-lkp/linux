@@ -1185,6 +1185,8 @@ static void ad_mux_machine(struct port *port, bool *update_slave_arr)
 		default:
 			break;
 		}
+
+		rtmsg_ifinfo(RTM_NEWLINK, port->slave->dev, 0, GFP_KERNEL, 0, NULL);
 	}
 }
 
