@@ -256,6 +256,15 @@ static int amd_pstate_set_epp(struct amd_cpudata *cpudata, u32 epp)
 			cpudata->epp_cached = epp;
 	} else {
 		perf_ctrls.energy_perf = epp;
+		perf_ctrls.max_perf = cpudata->max_limit_perf;
+		perf_ctrls.min_perf = cpudata->min_limit_perf;
+		perf_ctrls.desired_perf = 0U;
+
+		ret = cppc_set_perf(cpudata->cpu, &perf_ctrls);
+		if (ret) {
+			pr_debug("failed to set min max limits (%d)\n", ret);
+			return ret;
+		}
 		ret = cppc_set_epp_perf(cpudata->cpu, &perf_ctrls, 1);
 		if (ret) {
 			pr_debug("failed to set energy perf value (%d)\n", ret);
@@ -1541,6 +1550,7 @@ static void amd_pstate_epp_update_limit(struct cpufreq_policy *policy)
 	}
 
 	WRITE_ONCE(cpudata->cppc_req_cached, value);
+
 	amd_pstate_set_epp(cpudata, epp);
 }
 
