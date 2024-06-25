@@ -1732,10 +1732,30 @@ static const struct drm_connector_funcs tc_connector_funcs = {
 	.atomic_destroy_state = drm_atomic_helper_connector_destroy_state,
 };
 
+static void tc_bridge_reset(struct tc_data *tc)
+{
+	if (!tc->reset_gpio)
+		return;
+
+	gpiod_set_value_cansleep(tc->reset_gpio, 0);
+	usleep_range(10000, 11000);
+	gpiod_set_value_cansleep(tc->reset_gpio, 1);
+	usleep_range(5000, 10000);
+}
+
 static int tc_dpi_bridge_attach(struct drm_bridge *bridge,
 				enum drm_bridge_attach_flags flags)
 {
 	struct tc_data *tc = bridge_to_tc(bridge);
+	int ret;
+
+	if (tc->reset_gpio) {
+		tc_bridge_reset(tc);
+
+		ret = tc_set_syspllparam(tc);
+		if (ret)
+			return ret;
+	}
 
 	if (!tc->panel_bridge)
 		return 0;
@@ -1751,6 +1771,36 @@ static int tc_edp_bridge_attach(struct drm_bridge *bridge,
 	struct tc_data *tc = bridge_to_tc(bridge);
 	struct drm_device *drm = bridge->dev;
 	int ret;
+
+	if (tc->reset_gpio) {
+		/*
+		 * In case the chip is released from reset using the RESX
+		 * signal while the DSI lanes are in non-LP11 mode, the chip
+		 * may enter some sort of debug mode, where its internal
+		 * clock run at 1/6th of expected clock rate. In this mode,
+		 * the AUX channel also operates at 1/6th of the 10 MHz
+		 * mandated by DP specification, which breaks DPCD
+		 * communication.
+		 *
+		 * There is no known software way of bringing the chip out of
+		 * this state once the chip enters it, except for toggling
+		 * the RESX signal and performing full reset.
+		 *
+		 * The chip may enter this mode when the chip was released
+		 * from reset in probe(), because at that point the DSI lane
+		 * mode is undefined.
+		 *
+		 * At this point, the DSI link is surely in LP11 mode. Toggle
+		 * the RESX signal here and reconfigure the AUX channel. That
+		 * way, the AUX channel communication from this point on does
+		 * surely run at 10 MHz as it should.
+		 */
+		tc_bridge_reset(tc);
+
+		ret = tc_aux_link_setup(tc);
+		if (ret)
+			return ret;
+	}
 
 	if (tc->panel_bridge) {
 		/* If a connector is required then this driver shall create it */
