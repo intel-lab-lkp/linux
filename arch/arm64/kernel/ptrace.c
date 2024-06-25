@@ -29,6 +29,7 @@
 #include <linux/regset.h>
 #include <linux/elf.h>
 #include <linux/rseq.h>
+#include <linux/entry-common.h>
 
 #include <asm/compat.h>
 #include <asm/cpufeature.h>
@@ -42,7 +43,6 @@
 #include <asm/system_misc.h>
 
 #define CREATE_TRACE_POINTS
-#include <trace/events/syscalls.h>
 
 struct pt_regs_offset {
 	const char *name;
@@ -2184,10 +2184,10 @@ enum ptrace_syscall_dir {
 	PTRACE_SYSCALL_EXIT,
 };
 
-static void report_syscall(struct pt_regs *regs, enum ptrace_syscall_dir dir)
+unsigned long arch_prepare_report_syscall_entry(struct pt_regs *regs)
 {
-	int regno;
 	unsigned long saved_reg;
+	int regno;
 
 	/*
 	 * We have some ABI weirdness here in the way that we handle syscall
@@ -2207,63 +2207,51 @@ static void report_syscall(struct pt_regs *regs, enum ptrace_syscall_dir dir)
 	 */
 	regno = (is_compat_task() ? 12 : 7);
 	saved_reg = regs->regs[regno];
-	regs->regs[regno] = dir;
+	regs->regs[regno] = PTRACE_SYSCALL_ENTER;
 
-	if (dir == PTRACE_SYSCALL_ENTER) {
-		if (ptrace_report_syscall_entry(regs))
-			forget_syscall(regs);
-		regs->regs[regno] = saved_reg;
-	} else if (!test_thread_flag(TIF_SINGLESTEP)) {
-		ptrace_report_syscall_exit(regs, 0);
-		regs->regs[regno] = saved_reg;
-	} else {
-		regs->regs[regno] = saved_reg;
+	return saved_reg;
+}
 
+void arch_post_report_syscall_entry(struct pt_regs *regs, unsigned long saved_reg)
+{
+	int regno = (is_compat_task() ? 12 : 7);
+
+	regs->regs[regno] = saved_reg;
+}
+
+unsigned long arch_prepare_report_syscall_exit(struct pt_regs *regs, unsigned long work)
+{
+	unsigned long saved_reg;
+	int regno;
+
+	regno = (is_compat_task() ? 12 : 7);
+	saved_reg = regs->regs[regno];
+	regs->regs[regno] = PTRACE_SYSCALL_EXIT;
+
+	if (report_single_step(work)) {
 		/*
 		 * Signal a pseudo-step exception since we are stepping but
 		 * tracer modifications to the registers may have rewound the
 		 * state machine.
 		 */
-		ptrace_report_syscall_exit(regs, 1);
-	}
-}
-
-int syscall_trace_enter(struct pt_regs *regs)
-{
-	unsigned long flags = read_thread_flags();
-
-	if (flags & (_TIF_SYSCALL_EMU | _TIF_SYSCALL_TRACE)) {
-		report_syscall(regs, PTRACE_SYSCALL_ENTER);
-		if (flags & _TIF_SYSCALL_EMU)
-			return NO_SYSCALL;
+		regs->regs[regno] = saved_reg;
 	}
 
-	/* Do the secure computing after ptrace; failures should be fast. */
-	if (secure_computing() == -1)
-		return NO_SYSCALL;
-
-	if (test_thread_flag(TIF_SYSCALL_TRACEPOINT))
-		trace_sys_enter(regs, regs->syscallno);
-
-	audit_syscall_entry(regs->syscallno, regs->orig_x0, regs->regs[1],
-			    regs->regs[2], regs->regs[3]);
-
-	return regs->syscallno;
+	return saved_reg;
 }
 
-void syscall_trace_exit(struct pt_regs *regs)
+void arch_post_report_syscall_exit(struct pt_regs *regs, unsigned long saved_reg,
+				   unsigned long work)
 {
-	unsigned long flags = read_thread_flags();
+	int regno = (is_compat_task() ? 12 : 7);
 
-	audit_syscall_exit(regs);
+	if (!report_single_step(work))
+		regs->regs[regno] = saved_reg;
+}
 
-	if (flags & _TIF_SYSCALL_TRACEPOINT)
-		trace_sys_exit(regs, syscall_get_return_value(current, regs));
-
-	if (flags & (_TIF_SYSCALL_TRACE | _TIF_SINGLESTEP))
-		report_syscall(regs, PTRACE_SYSCALL_EXIT);
-
-	rseq_syscall(regs);
+void arch_forget_syscall(struct pt_regs *regs)
+{
+	forget_syscall(regs);
 }
 
 /*
