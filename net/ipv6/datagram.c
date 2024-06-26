@@ -776,6 +776,9 @@ int ip6_datagram_send_ctl(struct net *net, struct sock *sk,
 			goto exit_f;
 		}
 
+		if (cmsg_copy_to_user(cmsg))
+			msg->msg_flags |= MSG_CMSG_COPY_TO_USER;
+
 		if (cmsg->cmsg_level == SOL_SOCKET) {
 			err = __sock_cmsg_send(sk, cmsg, &ipc6->sockc);
 			if (err)

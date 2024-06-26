@@ -2621,6 +2621,39 @@ static int sendmsg_copy_msghdr(struct msghdr *msg,
 	return 0;
 }
 
+static int sendmsg_copy_cmsg_to_user(struct msghdr *msg_sys,
+				     struct user_msghdr __user *umsg)
+{
+	struct compat_msghdr __user *umsg_compat =
+				(struct compat_msghdr __user *)umsg;
+	unsigned long cmsg_ptr = (unsigned long)umsg->msg_control;
+	unsigned int flags = msg_sys->msg_flags;
+	struct msghdr msg_user = *msg_sys;
+	struct cmsghdr *cmsg;
+	int err;
+
+	msg_user.msg_control = umsg->msg_control;
+	msg_user.msg_control_is_user = true;
+	for_each_cmsghdr(cmsg, msg_sys) {
+		if (!CMSG_OK(msg_sys, cmsg))
+			break;
+		if (cmsg_copy_to_user(cmsg))
+			put_cmsg(&msg_user, cmsg->cmsg_level, cmsg->cmsg_type,
+				 cmsg->cmsg_len - sizeof(*cmsg), CMSG_DATA(cmsg));
+	}
+
+	err = __put_user((msg_sys->msg_flags & ~MSG_CMSG_COMPAT), COMPAT_FLAGS(umsg));
+	if (err)
+		return err;
+	if (MSG_CMSG_COMPAT & flags)
+		err = __put_user((unsigned long)msg_user.msg_control - cmsg_ptr,
+				 &umsg_compat->msg_controllen);
+	else
+		err = __put_user((unsigned long)msg_user.msg_control - cmsg_ptr,
+				 &umsg->msg_controllen);
+	return err;
+}
+
 static int ___sys_sendmsg(struct socket *sock, struct user_msghdr __user *msg,
 			 struct msghdr *msg_sys, unsigned int flags,
 			 struct used_address *used_address,
@@ -2638,6 +2671,18 @@ static int ___sys_sendmsg(struct socket *sock, struct user_msghdr __user *msg,
 
 	err = ____sys_sendmsg(sock, msg_sys, flags, used_address,
 				allowed_msghdr_flags);
+	if (err < 0)
+		goto out;
+
+	if (msg_sys->msg_flags & MSG_CMSG_COPY_TO_USER) {
+		ssize_t len = err;
+
+		err = sendmsg_copy_cmsg_to_user(msg_sys, msg);
+		if (err)
+			goto out;
+		err = len;
+	}
+out:
 	kfree(iov);
 	return err;
 }

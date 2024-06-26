@@ -2879,6 +2879,8 @@ int sock_cmsg_send(struct sock *sk, struct msghdr *msg,
 	for_each_cmsghdr(cmsg, msg) {
 		if (!CMSG_OK(msg, cmsg))
 			return -EINVAL;
+		if (cmsg_copy_to_user(cmsg))
+			msg->msg_flags |= MSG_CMSG_COPY_TO_USER;
 		if (cmsg->cmsg_level != SOL_SOCKET)
 			continue;
 		ret = __sock_cmsg_send(sk, cmsg, sockc);
