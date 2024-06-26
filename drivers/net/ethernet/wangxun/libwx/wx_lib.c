@@ -1996,7 +1996,8 @@ void wx_free_irq(struct wx *wx)
 	int vector;
 
 	if (!(pdev->msix_enabled)) {
-		free_irq(pdev->irq, wx);
+		if (wx->mac.type == wx_mac_em)
+			free_irq(pdev->irq, wx);
 		return;
 	}
 
