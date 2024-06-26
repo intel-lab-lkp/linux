@@ -5,6 +5,7 @@
 
 #include <linux/math.h>
 #include "i915_reg.h"
+#include "intel_cx0_phy_regs.h"
 #include "intel_ddi.h"
 #include "intel_ddi_buf_trans.h"
 #include "intel_de.h"
@@ -248,5 +249,69 @@ int intel_snps_phy_compute_hdmi_tmds_pll(u64 pixel_clock, struct intel_mpllb_sta
 	pll_state->mpllb_sscen =
 		REG_FIELD_PREP(SNPS_PHY_MPLLB_SSC_UP_SPREAD, pll_params.ssc_up_spread);
 
+	return 0;
+}
+
+int intel_c10_phy_compute_hdmi_tmds_pll(u64 pixel_clock, struct intel_c10pll_state *pll_state)
+{
+	struct pll_output_params pll_params;
+	u32 refclk = 38400000;
+	u32 prescaler_divider = 0;
+	u32 ref_range = 1;
+	u32 ana_cp_int_gs = 30;
+	u32 ana_cp_prop_gs = 28;
+	int ret;
+	/* x axis frequencies. One curve in each array per v2i point */
+	const u64 c10_curve_freq_hz[2][8] = {
+		{2500000000, 3000000000, 3000000000, 3500000000, 3500000000, 4000000000, 4000000000, 5000000000},
+		{4000000000, 4600000000, 4601000000, 5400000000, 5401000000, 6600000000, 6601000000, 8001000000}};
+	/* y axis heights multiplied with 1000000000 */
+
+	const u64 c10_curve_0[2][8] = {
+		{41174500, 48605500, 42973700, 49433100, 42408600, 47681900, 40297400, 49131400},
+		{82056800, 94420700, 82323400, 96370600, 81273300, 98630100, 81728700, 99105700}};
+
+	const u64 c10_curve_1[2][8] = {
+		{73300000000000, 66000000000000, 83100000000000, 75300000000000, 99700000000000, 92300000000000, 125000000000000, 110000000000000},
+		{53700000000000, 47700000000000, 62200000000000, 54400000000000, 75100000000000, 63400000000000, 90600000000000, 76300000000000}};
+
+	/* Multiplied with 1000000000000 */
+	const u64 c10_curve_2[2][8] = {
+		{2415790000, 3136460000, 2581990000, 3222670000, 2529330000, 3042020000, 2336970000, 3191460000},
+		{4808390000, 5994250000, 4832730000, 6193730000, 4737700000, 6428750000, 4779200000, 6479340000}};
+
+	ret = _intel_phy_compute_hdmi_tmds_pll(pixel_clock, refclk, ref_range,
+					       ana_cp_int_gs, ana_cp_prop_gs,
+					       c10_curve_freq_hz, c10_curve_0,
+					       c10_curve_1, c10_curve_2, prescaler_divider,
+					       &pll_params);
+	if (ret)
+		return ret;
+
+	pll_state->tx = 0x10;
+	pll_state->cmn = 0x1;
+	pll_state->pll[0] = REG_FIELD_PREP(C10_PLL0_DIV5CLK_EN, pll_params.mpll_div5_en) |
+			    REG_FIELD_PREP(C10_PLL0_FRACEN, pll_params.fracn_en) |
+			    REG_FIELD_PREP(C10_PLL0_PMIX_EN, pll_params.pmix_en) |
+			    REG_FIELD_PREP(C10_PLL0_ANA_FREQ_VCO_MASK, pll_params.ana_freq_vco);
+	pll_state->pll[2] = REG_FIELD_PREP(C10_PLL2_MULTIPLIERL_MASK, pll_params.multiplier);
+	pll_state->pll[3] = REG_FIELD_PREP(C10_PLL3_MULTIPLIERH_MASK, pll_params.multiplier >> 8);
+	pll_state->pll[8] = REG_FIELD_PREP(C10_PLL8_SSC_UP_SPREAD, pll_params.ssc_up_spread);
+	pll_state->pll[9] = REG_FIELD_PREP(C10_PLL9_FRACN_DENL_MASK, pll_params.fracn_den);
+	pll_state->pll[10] = REG_FIELD_PREP(C10_PLL10_FRACN_DENH_MASK, pll_params.fracn_den >> 8);
+	pll_state->pll[11] = REG_FIELD_PREP(C10_PLL11_FRACN_QUOT_L_MASK, pll_params.fracn_quot);
+	pll_state->pll[12] = REG_FIELD_PREP(C10_PLL12_FRACN_QUOT_H_MASK, pll_params.fracn_quot >> 8);
+	pll_state->pll[13] = REG_FIELD_PREP(C10_PLL13_FRACN_REM_L_MASK, pll_params.fracn_rem);
+	pll_state->pll[14] = REG_FIELD_PREP(C10_PLL14_FRACN_REM_H_MASK, pll_params.fracn_rem >> 8);
+	pll_state->pll[15] = REG_FIELD_PREP(C10_PLL15_TXCLKDIV_MASK, pll_params.tx_clk_div) |
+			     REG_FIELD_PREP(C10_PLL15_HDMIDIV_MASK, pll_params.hdmi_div);
+	pll_state->pll[16] = REG_FIELD_PREP(C10_PLL16_ANA_CPINT, pll_params.ana_cp_int) |
+			     REG_FIELD_PREP(C10_PLL16_ANA_CPINTGS_L, ana_cp_int_gs);
+	pll_state->pll[17] = REG_FIELD_PREP(C10_PLL17_ANA_CPINTGS_H_MASK, ana_cp_int_gs >> 1) |
+			     REG_FIELD_PREP(C10_PLL17_ANA_CPPROP_L_MASK, pll_params.ana_cp_prop);
+	pll_state->pll[18] = REG_FIELD_PREP(C10_PLL18_ANA_CPPROP_H_MASK, pll_params.ana_cp_prop >> 2) |
+			     REG_FIELD_PREP(C10_PLL18_ANA_CPPROPGS_L_MASK, ana_cp_prop_gs);
+	pll_state->pll[19] = REG_FIELD_PREP(C10_PLL19_ANA_CPPROPGS_H_MASK, ana_cp_prop_gs >> 3) |
+			     REG_FIELD_PREP(C10_PLL19_ANA_V2I_MASK, pll_params.mpll_ana_v2i);
 	return 0;
 }

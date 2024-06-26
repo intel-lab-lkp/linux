@@ -10,6 +10,7 @@
 
 struct drm_i915_private;
 struct intel_atomic_state;
+struct intel_c10pll_state;
 struct intel_crtc;
 struct intel_crtc_state;
 struct intel_encoder;
@@ -35,5 +36,6 @@ struct pll_output_params {
 };
 
 int intel_snps_phy_compute_hdmi_tmds_pll(u64 pixel_clock, struct intel_mpllb_state *pll_state);
+int intel_c10_phy_compute_hdmi_tmds_pll(u64 pixel_clock, struct intel_c10pll_state *pll_state);
 
 #endif /* __INTEL_PLL_ALGORITHM_H__ */

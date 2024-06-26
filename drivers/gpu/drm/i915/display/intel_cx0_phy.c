@@ -15,6 +15,7 @@
 #include "intel_dp.h"
 #include "intel_hdmi.h"
 #include "intel_panel.h"
+#include "intel_pll_algorithm.h"
 #include "intel_psr.h"
 #include "intel_tc.h"
 
@@ -1980,6 +1981,9 @@ static int intel_c10_phy_check_hdmi_link_rate(int clock)
 			return MODE_OK;
 	}
 
+	if (clock >= 25175 && clock <= 594000)
+		return MODE_OK;
+
 	return MODE_CLOCK_RANGE;
 }
 
@@ -2029,6 +2033,17 @@ static int intel_c10pll_calc_state(struct intel_crtc_state *crtc_state,
 {
 	const struct intel_c10pll_state * const *tables;
 	int i;
+
+	/* try computed C10 HDMI tables before using consolidated tables */
+	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_HDMI)) {
+		if (intel_c10_phy_compute_hdmi_tmds_pll(crtc_state->port_clock,
+							&crtc_state->dpll_hw_state.cx0pll.c10) == 0) {
+			intel_c10pll_update_pll(crtc_state, encoder);
+			crtc_state->dpll_hw_state.cx0pll.use_c10 = true;
+		}
+
+			return 0;
+	}
 
 	tables = intel_c10pll_tables_get(crtc_state, encoder);
 	if (!tables)
