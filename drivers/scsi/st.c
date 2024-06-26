@@ -1575,8 +1575,7 @@ static int setup_buffering(struct scsi_tape *STp, const char __user *buf,
 
 	if (!STbp->do_dio) {
 		if (STp->block_size)
-			bufsize = STp->block_size > st_fixed_buffer_size ?
-				STp->block_size : st_fixed_buffer_size;
+			bufsize = max(STp->block_size, st_fixed_buffer_size);
 		else {
 			bufsize = count;
 			/* Make sure that data from previous user is not leaked even if
@@ -2187,8 +2186,7 @@ st_read(struct file *filp, char __user *buf, size_t count, loff_t * ppos)
 					  STps->eof, STbp->buffer_bytes,
 					  (int)(count - total));
 			) /* end DEB */
-			transfer = STbp->buffer_bytes < count - total ?
-			    STbp->buffer_bytes : count - total;
+			transfer = min(STbp->buffer_bytes, count - total);
 			if (!do_dio) {
 				i = from_buffer(STbp, buf, transfer);
 				if (i) {
@@ -3997,7 +3995,7 @@ static int append_to_buffer(const char __user *ubp, struct st_buffer * st_bp, in
 	}
 	for (; i < st_bp->frp_segs && do_count > 0; i++) {
 		struct page *page = st_bp->reserved_pages[i];
-		cnt = length - offset < do_count ? length - offset : do_count;
+		cnt = min(length - offset, do_count);
 		res = copy_from_user(page_address(page) + offset, ubp, cnt);
 		if (res)
 			return (-EFAULT);
@@ -4029,7 +4027,7 @@ static int from_buffer(struct st_buffer * st_bp, char __user *ubp, int do_count)
 	}
 	for (; i < st_bp->frp_segs && do_count > 0; i++) {
 		struct page *page = st_bp->reserved_pages[i];
-		cnt = length - offset < do_count ? length - offset : do_count;
+		cnt = min(length - offset, do_count);
 		res = copy_to_user(ubp, page_address(page) + offset, cnt);
 		if (res)
 			return (-EFAULT);
