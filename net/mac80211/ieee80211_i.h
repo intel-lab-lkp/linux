@@ -1329,6 +1329,11 @@ enum mac80211_scan_state {
 
 DECLARE_STATIC_KEY_FALSE(aql_disable);
 
+struct radar_info {
+	struct list_head list;
+	struct ieee80211_channel *channel;
+};
+
 struct ieee80211_local {
 	/* embed the driver visible part.
 	 * don't cast (use the static inlines below), but we keep
@@ -1430,6 +1435,7 @@ struct ieee80211_local {
 	bool wowlan;
 
 	struct wiphy_work radar_detected_work;
+	struct list_head radar_info_list;
 
 	/* number of RX chains the hardware has */
 	u8 rx_chains;

@@ -3488,12 +3488,12 @@ void ieee80211_dfs_cac_cancel(struct ieee80211_local *local)
 	}
 }
 
-void ieee80211_dfs_radar_detected_work(struct wiphy *wiphy,
-				       struct wiphy_work *work)
+static void
+ieee80211_dfs_handle_radar_detection(struct ieee80211_local *local,
+				     struct ieee80211_channel *radar_channel)
 {
-	struct ieee80211_local *local =
-		container_of(work, struct ieee80211_local, radar_detected_work);
 	struct cfg80211_chan_def chandef = local->hw.conf.chandef;
+	struct cfg80211_chan_def *radar_chandef = NULL;
 	struct ieee80211_chanctx *ctx;
 	int num_chanctx = 0;
 
@@ -3505,22 +3505,68 @@ void ieee80211_dfs_radar_detected_work(struct wiphy *wiphy,
 
 		num_chanctx++;
 		chandef = ctx->conf.def;
+
+		if (radar_channel &&
+		    (chandef.chan == radar_channel))
+			radar_chandef = &ctx->conf.def;
 	}
 
 	ieee80211_dfs_cac_cancel(local);
 
-	if (num_chanctx > 1)
-		/* XXX: multi-channel is not supported yet */
-		WARN_ON(1);
-	else
+	if (num_chanctx > 1) {
+		if (local->hw.wiphy->flags & WIPHY_FLAG_SUPPORTS_MLO) {
+			if (WARN_ON(!radar_chandef))
+				return;
+
+			cfg80211_radar_event(local->hw.wiphy, radar_chandef, GFP_KERNEL);
+		} else {
+			/* XXX: multi-channel is not supported yet */
+			WARN_ON(1);
+		}
+	} else {
 		cfg80211_radar_event(local->hw.wiphy, &chandef, GFP_KERNEL);
+	}
 }
 
-void ieee80211_radar_detected(struct ieee80211_hw *hw)
+void ieee80211_dfs_radar_detected_work(struct wiphy *wiphy,
+				       struct wiphy_work *work)
+{
+	struct ieee80211_local *local =
+		container_of(work, struct ieee80211_local, radar_detected_work);
+	struct radar_info *radar_info, *temp;
+	struct ieee80211_channel *radar_channel;
+
+	lockdep_assert_wiphy(local->hw.wiphy);
+
+	if (list_empty(&local->radar_info_list)) {
+		ieee80211_dfs_handle_radar_detection(local, NULL);
+		return;
+	}
+
+	list_for_each_entry_safe(radar_info, temp, &local->radar_info_list,
+				 list) {
+		radar_channel = radar_info->channel;
+		ieee80211_dfs_handle_radar_detection(local, radar_channel);
+		list_del(&radar_info->list);
+		kfree(radar_info);
+	}
+}
+
+void ieee80211_radar_detected(struct ieee80211_hw *hw,
+			      struct ieee80211_channel *radar_channel)
 {
 	struct ieee80211_local *local = hw_to_local(hw);
+	struct radar_info *radar_info;
 
 	trace_api_radar_detected(local);
+
+	radar_info = kzalloc(sizeof(*radar_info), GFP_ATOMIC);
+	if (!radar_info)
+		return;
+
+	INIT_LIST_HEAD(&radar_info->list);
+	radar_info->channel = radar_channel;
+	list_add_tail(&radar_info->list, &local->radar_info_list);
 
 	wiphy_work_queue(hw->wiphy, &local->radar_detected_work);
 }

@@ -943,6 +943,7 @@ struct ieee80211_hw *ieee80211_alloc_hw_nm(size_t priv_data_len,
 
 	INIT_LIST_HEAD(&local->interfaces);
 	INIT_LIST_HEAD(&local->mon_list);
+	INIT_LIST_HEAD(&local->radar_info_list);
 
 	__hw_addr_init(&local->mc_list);
 
@@ -1638,6 +1639,7 @@ EXPORT_SYMBOL(ieee80211_register_hw);
 void ieee80211_unregister_hw(struct ieee80211_hw *hw)
 {
 	struct ieee80211_local *local = hw_to_local(hw);
+	struct radar_info *radar_info, *temp;
 
 	tasklet_kill(&local->tx_pending_tasklet);
 	tasklet_kill(&local->tasklet);
@@ -1672,6 +1674,12 @@ void ieee80211_unregister_hw(struct ieee80211_hw *hw)
 
 	ieee80211_clear_tx_pending(local);
 	rate_control_deinitialize(local);
+
+	list_for_each_entry_safe(radar_info, temp, &local->radar_info_list,
+				 list) {
+		list_del(&radar_info->list);
+		kfree(radar_info);
+	}
 
 	if (skb_queue_len(&local->skb_queue) ||
 	    skb_queue_len(&local->skb_queue_unreliable))
