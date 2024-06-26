@@ -5257,10 +5257,7 @@ bfa_sgpg_mfree(struct bfa_s *bfa, struct list_head *sgpg_q, int nsgpg)
 	 */
 	do {
 		wqe = bfa_q_first(&mod->sgpg_wait_q);
-		if (mod->free_sgpgs < wqe->nsgpg)
-			nsgpg = mod->free_sgpgs;
-		else
-			nsgpg = wqe->nsgpg;
+		nsgpg = min(mod->free_sgpgs, wqe->nsgpg);
 		bfa_sgpg_malloc(bfa, &wqe->sgpg_q, nsgpg);
 		wqe->nsgpg -= nsgpg;
 		if (wqe->nsgpg == 0) {
