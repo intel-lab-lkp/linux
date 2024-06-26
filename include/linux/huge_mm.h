@@ -390,7 +390,7 @@ static inline spinlock_t *pud_trans_huge_lock(pud_t *pud,
  * folio_test_pmd_mappable - Can we map this folio with a PMD?
  * @folio: The folio to test
  */
-static inline bool folio_test_pmd_mappable(struct folio *folio)
+static inline bool folio_test_pmd_mappable(const struct folio *folio)
 {
 	return folio_order(folio) >= HPAGE_PMD_ORDER;
 }
