@@ -760,7 +760,7 @@ static int acpi_dev_pm_get_state(struct device *dev, struct acpi_device *adev,
 			if (!adev->power.states[ret].flags.valid)
 				ret = ACPI_STATE_D3_COLD;
 
-			d_max = ret > d_min ? ret : d_min;
+			d_max = max(ret, d_min);
 		} else {
 			return -ENODATA;
 		}
