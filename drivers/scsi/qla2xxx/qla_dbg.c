@@ -685,8 +685,7 @@ qla25xx_copy_mq(struct qla_hw_data *ha, void *ptr, __be32 **last_chain)
 	mq->type = htonl(DUMP_CHAIN_MQ);
 	mq->chain_size = htonl(sizeof(struct qla2xxx_mq_chain));
 
-	que_cnt = ha->max_req_queues > ha->max_rsp_queues ?
-		ha->max_req_queues : ha->max_rsp_queues;
+	que_cnt = max(ha->max_req_queues, ha->max_rsp_queues);
 	mq->count = htonl(que_cnt);
 	for (cnt = 0; cnt < que_cnt; cnt++) {
 		reg = ISP_QUE_REG(ha, cnt);
