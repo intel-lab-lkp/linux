@@ -1540,24 +1540,72 @@ map__findnew_thread(struct perf_sched *sched, struct machine *machine, pid_t pid
 	return thread;
 }
 
-static bool sched_match_task(const char *comm_str, const char *commands)
+struct CommandList {
+	char **command_list;
+	int command_count;
+};
+
+static void free_command_list(struct CommandList *cmd_list)
+{
+	if (cmd_list) {
+		for (int i = 0; i < cmd_list->command_count; i++)
+			free(cmd_list->command_list[i]);
+		free(cmd_list->command_list);
+		free(cmd_list);
+	}
+}
+
+static struct CommandList *parse_commands(const char *commands)
 {
 	char *commands_copy = NULL;
+	struct CommandList *cmd_list = NULL;
 	char *token = NULL;
-	bool match_found = false;
 
 	commands_copy = strdup(commands);
 	if (commands_copy == NULL)
 		return NULL;
 
-	token = strtok(commands_copy, ",");
+	cmd_list = malloc(sizeof(struct CommandList));
+	if (cmd_list == NULL) {
+		free(commands_copy);
+		return NULL;
+	}
 
-	while (token != NULL && !match_found) {
-		match_found = !strcmp(comm_str, token);
+	cmd_list->command_count = 0;
+	cmd_list->command_list = NULL;
+
+	token = strtok(commands_copy, ",");
+	while (token != NULL) {
+		cmd_list->command_list = realloc(cmd_list->command_list, sizeof(char *)
+							*(cmd_list->command_count + 1));
+		if (cmd_list->command_list == NULL) {
+			free_command_list(cmd_list);
+			free(commands_copy);
+			return NULL;
+		}
+
+		cmd_list->command_list[cmd_list->command_count] = strdup(token);
+		if (cmd_list->command_list[cmd_list->command_count] == NULL) {
+			free_command_list(cmd_list);
+			free(commands_copy);
+			return NULL;
+		}
+
+		cmd_list->command_count++;
 		token = strtok(NULL, ",");
 	}
 
 	free(commands_copy);
+	return cmd_list;
+}
+
+static bool sched_match_task(const char *comm_str, struct CommandList *cmd_list)
+{
+	bool match_found = false;
+
+	for (int i = 0; i < cmd_list->command_count && !match_found; i++)
+		match_found = !strcmp(comm_str, cmd_list->command_list[i]);
+
 	return match_found;
 }
 
@@ -1624,6 +1672,8 @@ static int map_switch_event(struct perf_sched *sched, struct evsel *evsel,
 	char stimestamp[32];
 	const char *str;
 
+	struct CommandList *cmd_list = NULL;
+
 	BUG_ON(this_cpu.cpu >= MAX_CPUS || this_cpu.cpu < 0);
 
 	if (this_cpu.cpu > sched->max_cpu.cpu)
@@ -1664,7 +1714,11 @@ static int map_switch_event(struct perf_sched *sched, struct evsel *evsel,
 	sched->curr_thread[this_cpu.cpu] = thread__get(sched_in);
 	sched->curr_out_thread[this_cpu.cpu] = thread__get(sched_out);
 
+	if (sched->map.task_name)
+		cmd_list = parse_commands(sched->map.task_name);
+
 	new_shortname = 0;
+	str = thread__comm_str(sched_in);
 	if (!tr->shortname[0]) {
 		if (!strcmp(thread__comm_str(sched_in), "swapper")) {
 			/*
@@ -1673,8 +1727,7 @@ static int map_switch_event(struct perf_sched *sched, struct evsel *evsel,
 			 */
 			tr->shortname[0] = '.';
 			tr->shortname[1] = ' ';
-		} else if (!sched->map.task_name || sched_match_task(thread__comm_str(sched_in),
-								sched->map.task_name)) {
+		} else if (!sched->map.task_name || sched_match_task(str, cmd_list)) {
 			tr->shortname[0] = sched->next_shortname1;
 			tr->shortname[1] = sched->next_shortname2;
 
@@ -1703,15 +1756,15 @@ static int map_switch_event(struct perf_sched *sched, struct evsel *evsel,
 	 * Check which of sched_in and sched_out matches the passed --task-name
 	 * arguments and call the corresponding print_sched_map.
 	 */
-	if (sched->map.task_name && !sched_match_task(str, sched->map.task_name)) {
-		if (!sched_match_task(thread__comm_str(sched_out), sched->map.task_name))
+	if (sched->map.task_name && !sched_match_task(str, cmd_list)) {
+		if (!sched_match_task(thread__comm_str(sched_out), cmd_list))
 			goto out;
 		else
 			goto sched_out;
 
 	} else {
 		str = thread__comm_str(sched_out);
-		if (!(sched->map.task_name && !sched_match_task(str, sched->map.task_name)))
+		if (!(sched->map.task_name && !sched_match_task(str, cmd_list)))
 			proceed = 1;
 	}
 
@@ -1758,8 +1811,10 @@ sched_out:
 	color_fprintf(stdout, color, "\n");
 
 out:
-	if (sched->map.task_name)
+	if (sched->map.task_name) {
+		free_command_list(cmd_list);
 		thread__put(sched_out);
+	}
 
 	thread__put(sched_in);
 
@@ -3651,7 +3706,7 @@ int cmd_sched(int argc, const char **argv)
 	OPT_STRING(0, "cpus", &sched.map.cpus_str, "cpus",
                     "display given CPUs in map"),
 	OPT_STRING(0, "task-name", &sched.map.task_name, "task",
-		"map output only for the given task name"),
+		"map output only for the given task name(s)."),
 	OPT_PARENT(sched_options)
 	};
 	const struct option timehist_options[] = {
