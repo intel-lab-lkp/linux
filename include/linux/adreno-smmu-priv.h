@@ -49,7 +49,10 @@ struct adreno_smmu_fault_info {
  *                 before set_ttbr0_cfg().  If stalling on fault is enabled,
  *                 the GPU driver must call resume_translation()
  * @resume_translation: Resume translation after a fault
- *
+ * @set_prr:	   Extendible interface to be used by GPU to modify the
+ *		    ACTLR register bits, currently used to configure
+ *		    Partially-Resident-Region (PRR) feature's
+ *		    setup and reset sequence as requested.
  *
  * The GPU driver (drm/msm) and adreno-smmu work together for controlling
  * the GPU's SMMU instance.  This is by necessity, as the GPU is directly
@@ -67,6 +70,7 @@ struct adreno_smmu_priv {
     void (*get_fault_info)(const void *cookie, struct adreno_smmu_fault_info *info);
     void (*set_stall)(const void *cookie, bool enabled);
     void (*resume_translation)(const void *cookie, bool terminate);
+    void (*set_prr)(const void *cookie, phys_addr_t page_addr, bool set);
 };
 
 #endif /* __ADRENO_SMMU_PRIV_H */
