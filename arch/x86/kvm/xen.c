@@ -881,7 +881,7 @@ int kvm_xen_vcpu_set_attr(struct kvm_vcpu *vcpu, struct kvm_xen_vcpu_attr *data)
 			r = kvm_gpc_activate(&vcpu->arch.xen.vcpu_info_cache,
 					     data->u.gpa, sizeof(struct vcpu_info));
 		} else {
-			if (data->u.hva == 0) {
+			if (data->u.hva == 0 || kvm_is_error_hva(data->u.hva)) {
 				kvm_gpc_deactivate(&vcpu->arch.xen.vcpu_info_cache);
 				r = 0;
 				break;
