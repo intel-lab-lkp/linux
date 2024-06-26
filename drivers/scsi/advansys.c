@@ -7691,7 +7691,7 @@ adv_build_req(struct asc_board *boardp, struct scsi_cmnd *scp,
 	/* Set CDB length and copy it to the request structure.  */
 	scsiqp->cdb_len = scp->cmd_len;
 	/* Copy first 12 CDB bytes to cdb[]. */
-	memcpy(scsiqp->cdb, scp->cmnd, scp->cmd_len < 12 ? scp->cmd_len : 12);
+	memcpy(scsiqp->cdb, scp->cmnd, min(scp->cmd_len, 12));
 	/* Copy last 4 CDB bytes, if present, to cdb16[]. */
 	if (scp->cmd_len > 12) {
 		int cdb16_len = scp->cmd_len - 12;
