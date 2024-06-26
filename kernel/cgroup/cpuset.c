@@ -5134,8 +5134,15 @@ int proc_cpuset_show(struct seq_file *m, struct pid_namespace *ns,
 		goto out;
 
 	css = task_get_css(tsk, cpuset_cgrp_id);
-	retval = cgroup_path_ns(css->cgroup, buf, PATH_MAX,
-				current->nsproxy->cgroup_ns);
+	rcu_read_lock();
+	spin_lock_irq(&css_set_lock);
+	/* In case the root has already been unmounted. */
+	if (css->cgroup)
+		retval = cgroup_path_ns_locked(css->cgroup, buf, PATH_MAX,
+			current->nsproxy->cgroup_ns);
+
+	spin_unlock_irq(&css_set_lock);
+	rcu_read_unlock();
 	css_put(css);
 	if (retval == -E2BIG)
 		retval = -ENAMETOOLONG;
