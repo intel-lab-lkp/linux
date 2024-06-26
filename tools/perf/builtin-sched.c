@@ -157,6 +157,7 @@ struct perf_sched_map {
 	struct perf_cpu_map	*color_cpus;
 	const char		*color_cpus_str;
 	const char		*task_name;
+	bool			fuzzy;
 	struct perf_cpu_map	*cpus;
 	const char		*cpus_str;
 };
@@ -1599,12 +1600,16 @@ static struct CommandList *parse_commands(const char *commands)
 	return cmd_list;
 }
 
-static bool sched_match_task(const char *comm_str, struct CommandList *cmd_list)
+static bool sched_match_task(const char *comm_str, struct CommandList *cmd_list, bool fuzzy_match)
 {
 	bool match_found = false;
 
-	for (int i = 0; i < cmd_list->command_count && !match_found; i++)
-		match_found = !strcmp(comm_str, cmd_list->command_list[i]);
+	for (int i = 0; i < cmd_list->command_count && !match_found; i++) {
+		if (fuzzy_match)
+			match_found = !!strstr(comm_str, cmd_list->command_list[i]);
+		else
+			match_found = !strcmp(comm_str, cmd_list->command_list[i]);
+	}
 
 	return match_found;
 }
@@ -1727,7 +1732,8 @@ static int map_switch_event(struct perf_sched *sched, struct evsel *evsel,
 			 */
 			tr->shortname[0] = '.';
 			tr->shortname[1] = ' ';
-		} else if (!sched->map.task_name || sched_match_task(str, cmd_list)) {
+		} else if (!sched->map.task_name || sched_match_task(str, cmd_list,
+								sched->map.fuzzy)) {
 			tr->shortname[0] = sched->next_shortname1;
 			tr->shortname[1] = sched->next_shortname2;
 
@@ -1756,15 +1762,15 @@ static int map_switch_event(struct perf_sched *sched, struct evsel *evsel,
 	 * Check which of sched_in and sched_out matches the passed --task-name
 	 * arguments and call the corresponding print_sched_map.
 	 */
-	if (sched->map.task_name && !sched_match_task(str, cmd_list)) {
-		if (!sched_match_task(thread__comm_str(sched_out), cmd_list))
+	if (sched->map.task_name && !sched_match_task(str, cmd_list, sched->map.fuzzy)) {
+		if (!sched_match_task(thread__comm_str(sched_out), cmd_list, sched->map.fuzzy))
 			goto out;
 		else
 			goto sched_out;
 
 	} else {
 		str = thread__comm_str(sched_out);
-		if (!(sched->map.task_name && !sched_match_task(str, cmd_list)))
+		if (!(sched->map.task_name && !sched_match_task(str, cmd_list, sched->map.fuzzy)))
 			proceed = 1;
 	}
 
@@ -3707,6 +3713,8 @@ int cmd_sched(int argc, const char **argv)
                     "display given CPUs in map"),
 	OPT_STRING(0, "task-name", &sched.map.task_name, "task",
 		"map output only for the given task name(s)."),
+	OPT_BOOLEAN(0, "fuzzy-name", &sched.map.fuzzy,
+		"given command name can be partially matched (fuzzy matching)"),
 	OPT_PARENT(sched_options)
 	};
 	const struct option timehist_options[] = {
