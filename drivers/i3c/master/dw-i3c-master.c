@@ -1546,6 +1546,9 @@ static int dw_i3c_probe(struct platform_device *pdev)
 	if (!master)
 		return -ENOMEM;
 
+	if (of_property_read_bool(pdev->dev.of_node, "ibi-capable"))
+		master->ibi_capable = true;
+
 	return dw_i3c_common_probe(master, pdev);
 }
 
