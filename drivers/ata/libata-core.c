@@ -5463,7 +5463,7 @@ struct ata_port *ata_port_alloc(struct ata_host *host)
 
 	ap->pflags |= ATA_PFLAG_INITIALIZING | ATA_PFLAG_FROZEN;
 	ap->lock = &host->lock;
-	ap->print_id = -1;
+	ap->print_id = atomic_inc_return(&ata_print_id);
 	ap->host = host;
 	ap->dev = host->dev;
 
@@ -5909,10 +5909,6 @@ int ata_host_register(struct ata_host *host, const struct scsi_host_template *sh
 	 */
 	for (i = host->n_ports; host->ports[i]; i++)
 		WARN_ON(host->ports[i]);
-
-	/* give ports names and add SCSI hosts */
-	for (i = 0; i < host->n_ports; i++)
-		host->ports[i]->print_id = atomic_inc_return(&ata_print_id);
 
 	/* Create associated sysfs transport objects  */
 	for (i = 0; i < host->n_ports; i++) {
