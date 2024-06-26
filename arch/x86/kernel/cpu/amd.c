@@ -29,6 +29,10 @@
 
 #include "cpu.h"
 
+#define CPPC_HIGHEST_PERF_MAX		255
+#define CPPC_HIGHEST_PERF_PERFORMANCE	196
+#define CPPC_HIGHEST_PERF_DEFAULT	166
+
 static inline int rdmsrl_amd_safe(unsigned msr, unsigned long long *p)
 {
 	u32 gprs[8] = { 0 };
@@ -1194,15 +1198,27 @@ u32 amd_get_highest_perf(void)
 {
 	struct cpuinfo_x86 *c = &boot_cpu_data;
 
-	if (c->x86 == 0x17 && ((c->x86_model >= 0x30 && c->x86_model < 0x40) ||
-			       (c->x86_model >= 0x70 && c->x86_model < 0x80)))
-		return 166;
+	if (cpu_feature_enabled(X86_FEATURE_ZEN2)) {
+		switch (c->x86_model) {
+		case 0x30 ... 0x40:
+		case 0x70 ... 0x80:
+			return CPPC_HIGHEST_PERF_DEFAULT;
+		default:
+			return CPPC_HIGHEST_PERF_MAX;
+		}
+	}
 
-	if (c->x86 == 0x19 && ((c->x86_model >= 0x20 && c->x86_model < 0x30) ||
-			       (c->x86_model >= 0x40 && c->x86_model < 0x70)))
-		return 166;
+	if (cpu_feature_enabled(X86_FEATURE_ZEN3)) {
+		switch (c->x86_model) {
+		case 0x20 ... 0x30:
+		case 0x40 ... 0x70:
+			return CPPC_HIGHEST_PERF_DEFAULT;
+		default:
+			return CPPC_HIGHEST_PERF_MAX;
+		}
+	}
 
-	return 255;
+	return CPPC_HIGHEST_PERF_MAX;
 }
 EXPORT_SYMBOL_GPL(amd_get_highest_perf);
 
