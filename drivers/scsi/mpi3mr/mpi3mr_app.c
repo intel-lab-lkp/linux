@@ -1171,11 +1171,8 @@ static int mpi3mr_map_data_buffer_dma(struct mpi3mr_ioc *mrioc,
 		drv_buf->dma_desc[i].addr = mrioc->ioctl_sge[desc_count].addr;
 		drv_buf->dma_desc[i].dma_addr =
 		    mrioc->ioctl_sge[desc_count].dma_addr;
-		if (buf_len < mrioc->ioctl_sge[desc_count].size)
-			drv_buf->dma_desc[i].size = buf_len;
-		else
-			drv_buf->dma_desc[i].size =
-			    mrioc->ioctl_sge[desc_count].size;
+		drv_buf->dma_desc[i].size = min(buf_len,
+						mrioc->ioctl_sge[desc_count].size);
 		buf_len -= drv_buf->dma_desc[i].size;
 		memset(drv_buf->dma_desc[i].addr, 0,
 		       mrioc->ioctl_sge[desc_count].size);
