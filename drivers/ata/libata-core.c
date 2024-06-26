@@ -5490,6 +5490,18 @@ struct ata_port *ata_port_alloc(struct ata_host *host)
 	return ap;
 }
 
+void ata_port_free(struct ata_port *ap)
+{
+	if (!ap)
+		return;
+
+	kfree(ap->pmp_link);
+	kfree(ap->slave_link);
+	kfree(ap->ncq_sense_buf);
+	kfree(ap);
+}
+EXPORT_SYMBOL_GPL(ata_port_free);
+
 static void ata_devres_release(struct device *gendev, void *res)
 {
 	struct ata_host *host = dev_get_drvdata(gendev);
@@ -5518,12 +5530,7 @@ static void ata_host_release(struct kref *kref)
 	for (i = 0; i < host->n_ports; i++) {
 		struct ata_port *ap = host->ports[i];
 
-		if (ap) {
-			kfree(ap->pmp_link);
-			kfree(ap->slave_link);
-			kfree(ap->ncq_sense_buf);
-			kfree(ap);
-		}
+		ata_port_free(ap);
 		host->ports[i] = NULL;
 	}
 	kfree(host);
