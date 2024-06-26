@@ -111,10 +111,32 @@ static void ieee80211_tear_down_links(struct ieee80211_sub_if_data *sdata,
 static void ieee80211_free_links(struct ieee80211_sub_if_data *sdata,
 				 struct link_container **links)
 {
+	struct ieee80211_bss_conf *link_conf;
+	struct ieee80211_link_data *link_data;
+	struct cfg80211_chan_def chandef;
 	unsigned int link_id;
 
-	for (link_id = 0; link_id < IEEE80211_MLD_MAX_NUM_LINKS; link_id++)
+	for (link_id = 0; link_id < IEEE80211_MLD_MAX_NUM_LINKS; link_id++) {
+		link_data = &links[link_id]->data;
+		link_conf = &links[link_id]->conf;
+
+		if (!link_data || !link_conf)
+			continue;
+
+		wiphy_delayed_work_cancel(sdata->local->hw.wiphy,
+					  &link_data->dfs_cac_timer_work);
+
+		if (sdata->wdev.links[link_id].cac_started) {
+			chandef = link_conf->chanreq.oper;
+			ieee80211_link_release_channel(link_data);
+			cfg80211_cac_event(sdata->dev,
+					   &chandef,
+					   NL80211_RADAR_CAC_ABORTED,
+					   GFP_KERNEL, link_id);
+		}
+
 		kfree(links[link_id]);
+	}
 }
 
 static int ieee80211_check_dup_link_addrs(struct ieee80211_sub_if_data *sdata)
