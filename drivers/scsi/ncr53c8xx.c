@@ -6410,7 +6410,7 @@ static void ncr_sir_to_redo(struct ncb *np, int num, struct ccb *cp)
 					"CCBs\n", busy_cnt, disc_cnt);
 		}
 		if (disc_cnt < lp->numtags) {
-			lp->numtags	= disc_cnt > 2 ? disc_cnt : 2;
+			lp->numtags	= max(disc_cnt, 2);
 			lp->num_good	= 0;
 			ncr_setup_tags (np, cmd->device);
 		}
