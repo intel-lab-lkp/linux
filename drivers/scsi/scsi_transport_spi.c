@@ -783,7 +783,7 @@ spi_dv_retrain(struct scsi_device *sdev, u8 *buffer, u8 *ptr,
 			DV_SET(qas, 0);
 		} else {
 			newperiod = spi_period(starget);
-			period = newperiod > period ? newperiod : period;
+			period = max(newperiod, period);
 			if (period < 0x0d)
 				period++;
 			else
