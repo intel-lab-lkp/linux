@@ -10,6 +10,7 @@
  */
 
 #include <linux/async.h>
+#include <linux/capability.h>
 #include <linux/device/bus.h>
 #include <linux/device.h>
 #include <linux/module.h>
@@ -635,6 +636,25 @@ static ssize_t uevent_store(struct device_driver *drv, const char *buf,
 }
 static DRIVER_ATTR_WO(uevent);
 
+static ssize_t async_shutdown_enable_show(struct device_driver *drv, char *buf)
+{
+	return sysfs_emit(buf, "%d\n", drv->async_shutdown_enable);
+}
+
+static ssize_t async_shutdown_enable_store(struct device_driver *drv, const char *buf,
+			      size_t count)
+{
+	if (!capable(CAP_SYS_BOOT))
+		return -EPERM;
+
+	if (kstrtobool(buf, &drv->async_shutdown_enable) < 0)
+		return -EINVAL;
+
+	return count;
+}
+
+static DRIVER_ATTR_RW(async_shutdown_enable);
+
 /**
  * bus_add_driver - Add a driver to the bus.
  * @drv: driver.
@@ -700,6 +720,12 @@ int bus_add_driver(struct device_driver *drv)
 			printk(KERN_ERR "%s: add_bind_files(%s) failed\n",
 				__func__, drv->name);
 		}
+	}
+
+	error = driver_create_file(drv, &driver_attr_async_shutdown_enable);
+	if (error) {
+		pr_err("%s: async_shutdown attr (%s) failed\n",
+			__func__, drv->name);
 	}
 
 	return 0;
