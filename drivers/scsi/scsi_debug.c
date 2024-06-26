@@ -4579,10 +4579,7 @@ static int resp_get_lba_status(struct scsi_cmnd *scp,
 		mapped = 1;
 		/* following just in case virtual_gb changed */
 		sdebug_capacity = get_sdebug_capacity();
-		if (sdebug_capacity - lba <= 0xffffffff)
-			num = sdebug_capacity - lba;
-		else
-			num = 0xffffffff;
+		num = min(sdebug_capacity - lba, 0xffffffff);
 	}
 
 	memset(arr, 0, SDEBUG_GET_LBA_STATUS_LEN);
