@@ -12,6 +12,7 @@
 #include "intel_display_types.h"
 #include "intel_snps_phy.h"
 #include "intel_snps_phy_regs.h"
+#include "intel_pll_algorithm.h"
 
 /**
  * DOC: Synopsis PHY support
@@ -1787,22 +1788,14 @@ intel_mpllb_tables_get(struct intel_crtc_state *crtc_state,
 int intel_mpllb_calc_state(struct intel_crtc_state *crtc_state,
 			   struct intel_encoder *encoder)
 {
-	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
 	const struct intel_mpllb_state * const *tables;
 	int i;
 
 	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_HDMI)) {
-		if (intel_snps_phy_check_hdmi_link_rate(crtc_state->port_clock)
-		    != MODE_OK) {
-			/*
-			 * FIXME: Can only support fixed HDMI frequencies
-			 * until we have a proper algorithm under a valid
-			 * license.
-			 */
-			drm_dbg_kms(&i915->drm, "Can't support HDMI link rate %d\n",
-				    crtc_state->port_clock);
-			return -EINVAL;
-		}
+		/* try computed SNPS_PHY HDMI tables before using consolidated tables */
+		if (intel_snps_phy_compute_hdmi_tmds_pll(crtc_state->port_clock,
+							 &crtc_state->dpll_hw_state.mpllb) == 0)
+			return 0;
 	}
 
 	tables = intel_mpllb_tables_get(crtc_state, encoder);
@@ -1990,6 +1983,9 @@ int intel_snps_phy_check_hdmi_link_rate(int clock)
 		if (clock == tables[i]->clock)
 			return MODE_OK;
 	}
+
+	if (clock >= 25175 && clock <= 594000)
+		return MODE_OK;
 
 	return MODE_CLOCK_RANGE;
 }
