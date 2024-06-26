@@ -25,6 +25,10 @@ properties:
   interrupts:
     maxItems: 1
 
+  ibi-capable:
+    description: Set to select IBI ops.
+    type: boolean
+
 required:
   - compatible
   - reg
