@@ -901,7 +901,7 @@ static int __stm_probe(struct device *dev, struct resource *res)
 		goto stm_unregister;
 	}
 
-	trace_id = coresight_trace_id_get_system_id();
+	trace_id = coresight_trace_id_get_system_id(TRACE_ID_ANY);
 	if (trace_id < 0) {
 		ret = trace_id;
 		goto cs_unregister;
