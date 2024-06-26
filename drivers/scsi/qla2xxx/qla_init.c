@@ -3999,10 +3999,8 @@ qla2x00_alloc_outstanding_cmds(struct qla_hw_data *ha, struct req_que *req)
 	if (!IS_FWI2_CAPABLE(ha))
 		req->num_outstanding_cmds = DEFAULT_OUTSTANDING_COMMANDS;
 	else {
-		if (ha->cur_fw_xcb_count <= ha->cur_fw_iocb_count)
-			req->num_outstanding_cmds = ha->cur_fw_xcb_count;
-		else
-			req->num_outstanding_cmds = ha->cur_fw_iocb_count;
+		req->num_outstanding_cmds = min(ha->cur_fw_xcb_count,
+						ha->cur_fw_iocb_count);
 	}
 
 	req->outstanding_cmds = kcalloc(req->num_outstanding_cmds,

@@ -3625,7 +3625,7 @@ qla24xx_read_fcp_prio_cfg(scsi_qla_host_t *vha)
 	max_len = FCP_PRIO_CFG_SIZE - FCP_PRIO_CFG_HDR_SIZE;
 
 	ha->isp_ops->read_optrom(vha, &ha->fcp_prio_cfg->entry[0],
-			fcp_prio_addr << 2, (len < max_len ? len : max_len));
+			fcp_prio_addr << 2, min(len, max_len));
 
 	/* revalidate the entire FCP priority config data, including entries */
 	if (!qla24xx_fcp_prio_cfg_valid(vha, ha->fcp_prio_cfg, 1))
