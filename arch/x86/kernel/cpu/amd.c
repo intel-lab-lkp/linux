@@ -1218,7 +1218,21 @@ u32 amd_get_highest_perf(void)
 		}
 	}
 
-	return CPPC_HIGHEST_PERF_MAX;
+	/*
+	 * For AMD CPUs with Family ID 19H and Model ID range 0x70 to 0x7f,
+	 * the highest performance level is set to 196.
+	 * https://bugzilla.kernel.org/show_bug.cgi?id=218759
+	 */
+	if (cpu_feature_enabled(X86_FEATURE_ZEN4)) {
+		switch (c->x86_model) {
+		case 0x70 ... 0x7f:
+			return CPPC_HIGHEST_PERF_PERFORMANCE;
+		default:
+			return CPPC_HIGHEST_PERF_DEFAULT;
+		}
+	}
+
+	return CPPC_HIGHEST_PERF_DEFAULT;
 }
 EXPORT_SYMBOL_GPL(amd_get_highest_perf);
 
