@@ -78,6 +78,7 @@ static struct kmem_cache *mnt_cache __ro_after_init;
 static DECLARE_RWSEM(namespace_sem);
 static HLIST_HEAD(unmounted);	/* protected by namespace_sem */
 static LIST_HEAD(ex_mountpoints); /* protected by namespace_sem */
+static bool lazy_unlock = false; /* protected by namespace_sem */
 
 struct mount_kattr {
 	unsigned int attr_set;
@@ -1555,6 +1556,7 @@ EXPORT_SYMBOL(may_umount);
 
 static void namespace_unlock(void)
 {
+	bool lazy;
 	struct hlist_head head;
 	struct hlist_node *p;
 	struct mount *m;
@@ -1563,6 +1565,9 @@ static void namespace_unlock(void)
 	hlist_move_list(&unmounted, &head);
 	list_splice_init(&ex_mountpoints, &list);
 
+	lazy = lazy_unlock;
+	lazy_unlock = false;
+
 	up_write(&namespace_sem);
 
 	shrink_dentry_list(&list);
@@ -1570,7 +1575,8 @@ static void namespace_unlock(void)
 	if (likely(hlist_empty(&head)))
 		return;
 
-	synchronize_rcu_expedited();
+	if (!lazy)
+		synchronize_rcu_expedited();
 
 	hlist_for_each_entry_safe(m, p, &head, mnt_umount) {
 		hlist_del(&m->mnt_umount);
@@ -1798,6 +1804,7 @@ static int do_umount(struct mount *mnt, int flags)
 	}
 out:
 	unlock_mount_hash();
+	lazy_unlock = flags & MNT_DETACH ? true : false;
 	namespace_unlock();
 	return retval;
 }
