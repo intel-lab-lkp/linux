@@ -419,6 +419,7 @@ R:	Esteban Blanc <eblanc@baylibre.com>
 S:	Supported
 W:	https://ez.analog.com/linux-software-drivers
 F:	Documentation/devicetree/bindings/iio/adc/adi,ad4630.yaml
+F:	drivers/iio/adc/ad4030.c
 
 AD5110 ANALOG DEVICES DIGITAL POTENTIOMETERS DRIVER
 M:	Mugilraj Dhavachelvan <dmugil2000@gmail.com>
