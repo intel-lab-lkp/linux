@@ -19,6 +19,7 @@
 #include <linux/ratelimit.h>
 #include <linux/rseq.h>
 #include <linux/syscalls.h>
+#include <linux/entry-common.h>
 
 #include <asm/daifflags.h>
 #include <asm/debug-monitors.h>
@@ -1266,7 +1267,7 @@ static void handle_signal(struct ksignal *ksig, struct pt_regs *regs)
  * the kernel can handle, and then we build all the user-level signal handling
  * stack-frames in one go after that.
  */
-void do_signal(struct pt_regs *regs)
+void arch_do_signal_or_restart(struct pt_regs *regs)
 {
 	unsigned long continue_addr = 0, restart_addr = 0;
 	int retval = 0;
