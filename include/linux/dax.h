@@ -218,7 +218,9 @@ static inline int dax_wait_page_idle(struct page *page,
 				void (cb)(struct inode *),
 				struct inode *inode)
 {
-	return ___wait_var_event(page, page_ref_count(page) == 1,
+	int i = 0;
+
+	return ___wait_var_event(page, page_ref_count(page) == 1 || i++,
 				TASK_INTERRUPTIBLE, 0, 0, cb(inode));
 }
 

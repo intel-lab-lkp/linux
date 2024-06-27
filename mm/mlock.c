@@ -373,6 +373,8 @@ static int mlock_pte_range(pmd_t *pmd, unsigned long addr,
 	unsigned long start = addr;
 
 	ptl = pmd_trans_huge_lock(pmd, vma);
+	if (vma_is_dax(vma))
+		ptl = NULL;
 	if (ptl) {
 		if (!pmd_present(*pmd))
 			goto out;

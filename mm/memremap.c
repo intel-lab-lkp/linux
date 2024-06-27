@@ -485,18 +485,20 @@ void free_zone_device_folio(struct folio *folio)
 	 * handled differently or not done at all, so there is no need
 	 * to clear folio->mapping.
 	 */
-	folio->mapping = NULL;
 	page_dev_pagemap(&folio->page)->ops->page_free(folio_page(folio, 0));
 
 	if (folio->page.pgmap->type == MEMORY_DEVICE_PRIVATE ||
 	    folio->page.pgmap->type == MEMORY_DEVICE_COHERENT)
 		put_dev_pagemap(folio->page.pgmap);
-	else if (folio->page.pgmap->type != MEMORY_DEVICE_PCI_P2PDMA)
+	else if (folio->page.pgmap->type != MEMORY_DEVICE_PCI_P2PDMA &&
+		 folio->page.pgmap->type != MEMORY_DEVICE_FS_DAX)
 		/*
 		 * Reset the refcount to 1 to prepare for handing out the page
 		 * again.
 		 */
 		folio_set_count(folio, 1);
+
+	folio->mapping = NULL;
 }
 
 void zone_device_page_init(struct page *page)
@@ -510,21 +512,3 @@ void zone_device_page_init(struct page *page)
 	lock_page(page);
 }
 EXPORT_SYMBOL_GPL(zone_device_page_init);
-
-#ifdef CONFIG_FS_DAX
-bool __put_devmap_managed_folio_refs(struct folio *folio, int refs)
-{
-	if (folio->page.pgmap->type != MEMORY_DEVICE_FS_DAX)
-		return false;
-
-	/*
-	 * fsdax page refcounts are 1-based, rather than 0-based: if
-	 * refcount is 1, then the page is free and the refcount is
-	 * stable because nobody holds a reference on the page.
-	 */
-	if (folio_ref_sub_return(folio, refs) == 1)
-		wake_up_var(&folio->_refcount);
-	return true;
-}
-EXPORT_SYMBOL(__put_devmap_managed_folio_refs);
-#endif /* CONFIG_FS_DAX */
