@@ -54,7 +54,9 @@ void log_non_standard_event(const guid_t *sec_type, const guid_t *fru_id,
 
 void log_arm_hw_error(struct cper_sec_proc_arm *err)
 {
+#if defined(CONFIG_ARM) || defined(CONFIG_ARM64)
 	trace_arm_event(err);
+#endif
 }
 
 static int __init ras_init(void)
