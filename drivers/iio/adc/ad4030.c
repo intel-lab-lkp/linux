@@ -32,6 +32,8 @@
 #define AD4030_REG_PRODUCT_ID_H					0x05
 #define AD4030_REG_CHIP_GRADE					0x06
 #define     AD4030_REG_CHIP_GRADE_AD4030_24_GRADE		0x10
+#define     AD4030_REG_CHIP_GRADE_AD4630_16_GRADE		0x03
+#define     AD4030_REG_CHIP_GRADE_AD4630_24_GRADE		0x00
 #define     AD4030_REG_CHIP_GRADE_MASK_CHIP_GRADE		GENMASK(7, 3)
 #define AD4030_REG_SCRATCH_PAD					0x0A
 #define AD4030_REG_SPI_REVISION					0x0B
@@ -391,7 +393,10 @@ static int ad4030_set_avg_frame_len(struct iio_dev *dev, unsigned int avg_len)
 static bool ad4030_is_common_byte_asked(struct ad4030_state *st,
 					unsigned int mask)
 {
-	return mask & BIT(st->chip->num_channels);
+	if (st->chip->num_channels == 1)
+		return mask & BIT(st->chip->num_channels);
+
+	return mask & GENMASK(st->chip->num_channels + 1, st->chip->num_channels);
 }
 
 static int ad4030_set_mode(struct iio_dev *indio_dev, unsigned long mask)
@@ -410,6 +415,45 @@ static int ad4030_set_mode(struct iio_dev *indio_dev, unsigned long mask)
 	return regmap_update_bits(st->regmap, AD4030_REG_MODES,
 				AD4030_REG_MODES_MASK_OUT_DATA_MODE,
 				st->mode);
+}
+
+/*
+ * @brief Descramble 2 32bits numbers out of a 64bits. The bits are interleaved: 1 bit for first
+ * number, 1 bit for the second, and so on...
+ */
+static void ad4030_extract_interleaved(u8 *src, u32 *out)
+{
+	u8 h0, h1, l0, l1;
+	u32 out0, out1;
+	u8 *out0_raw = (u8 *)&out0;
+	u8 *out1_raw = (u8 *)&out1;
+
+	for (int i = 0; i < 4; i++) {
+		h0 = src[i * 2];
+		l1 = src[i * 2 + 1];
+		h1 = h0 << 1;
+		l0 = l1 >> 1;
+
+		h0 &= 0xAA;
+		l0 &= 0x55;
+		h1 &= 0xAA;
+		l1 &= 0x55;
+
+		h0 = (h0 | h0 << 001) & 0xCC;
+		h1 = (h1 | h1 << 001) & 0xCC;
+		l0 = (l0 | l0 >> 001) & 0x33;
+		l1 = (l1 | l1 >> 001) & 0x33;
+		h0 = (h0 | h0 << 002) & 0xF0;
+		h1 = (h1 | h1 << 002) & 0xF0;
+		l0 = (l0 | l0 >> 002) & 0x0F;
+		l1 = (l1 | l1 >> 002) & 0x0F;
+
+		out0_raw[i] = h0 | l0;
+		out1_raw[i] = h1 | l1;
+	}
+
+	out[0] = out0;
+	out[1] = out1;
 }
 
 static int ad4030_conversion(struct ad4030_state *st, const struct iio_chan_spec *chan)
@@ -437,9 +481,15 @@ static int ad4030_conversion(struct ad4030_state *st, const struct iio_chan_spec
 	ndelay(AD4030_TCONV_NS);
 
 	ret = spi_sync_transfer(st->spi, &xfer, 1);
-	if (ret || (st->mode != AD4030_OUT_DATA_MD_16_DIFF_8_COM &&
-		    st->mode != AD4030_OUT_DATA_MD_24_DIFF_8_COM))
+	if (ret)
 		return ret;
+
+	if (st->chip->num_channels == 2)
+		ad4030_extract_interleaved(st->rx_data.raw, st->rx_data.val);
+
+	if (st->mode != AD4030_OUT_DATA_MD_16_DIFF_8_COM &&
+	    st->mode != AD4030_OUT_DATA_MD_24_DIFF_8_COM)
+		return 0;
 
 	byte_index = st->chip->precision_bits == 16 ? 3 : 4;
 	for (i = 0; i < st->chip->num_channels; i++)
@@ -776,11 +826,24 @@ static int ad4030_detect_chip_info(const struct ad4030_state *st)
 
 static int ad4030_config(struct ad4030_state *st)
 {
+	int ret;
+	u8 reg_modes = 0;
+
 	st->min_offset = (int)BIT(st->chip->precision_bits) * -1;
 	st->max_offset = BIT(st->chip->precision_bits) - 1;
 	st->offset_avail[0] = st->min_offset;
 	st->offset_avail[1] = 1;
 	st->offset_avail[2] = st->max_offset;
+
+	if (st->chip->num_channels > 1)
+		reg_modes |= FIELD_PREP(AD4030_REG_MODES_MASK_LANE_MODE,
+					AD4030_LANE_MD_INTERLEAVED);
+	else
+		reg_modes |= FIELD_PREP(AD4030_REG_MODES_MASK_LANE_MODE, AD4030_LANE_MD_1_PER_CH);
+
+	ret = regmap_write(st->regmap, AD4030_REG_MODES, reg_modes);
+	if (ret)
+		return ret;
 
 	if (st->vio_uv < AD4030_VIO_THRESHOLD_UV)
 		return regmap_write(st->regmap, AD4030_REG_IO,
@@ -863,8 +926,14 @@ static const unsigned long ad4030_channel_masks[] = {
 	0,
 };
 
+static const unsigned long ad4630_channel_masks[] = {
+	GENMASK(1, 0),
+	GENMASK(3, 0),
+	0,
+};
+
 static const struct iio_scan_type ad4030_24_scan_types[] = {
-	[AD4030_SCAN_TYPE_NORMAL] = {
+	[AD4030_OUT_DATA_MD_24_DIFF] = {
 		.sign = 's',
 		.storagebits = 32,
 		.realbits = 24,
@@ -878,6 +947,23 @@ static const struct iio_scan_type ad4030_24_scan_types[] = {
 		.shift = 2,
 		.endianness = IIO_BE,
 	},
+};
+
+static const struct iio_scan_type ad4030_16_scan_types[] = {
+	[AD4030_SCAN_TYPE_NORMAL] = {
+		.sign = 's',
+		.storagebits = 32,
+		.realbits = 16,
+		.shift = 16,
+		.endianness = IIO_BE,
+	},
+	[AD4030_SCAN_TYPE_AVG] = {
+		.sign = 's',
+		.storagebits = 32,
+		.realbits = 30,
+		.shift = 2,
+		.endianness = IIO_BE,
+	}
 };
 
 static const struct ad4030_chip_info ad4030_24_chip_info = {
@@ -894,14 +980,50 @@ static const struct ad4030_chip_info ad4030_24_chip_info = {
 	.num_channels = 1,
 };
 
+static const struct ad4030_chip_info ad4630_16_chip_info = {
+	.name = "ad4630-16",
+	.available_masks = ad4630_channel_masks,
+	.available_masks_len = ARRAY_SIZE(ad4630_channel_masks),
+	.channels = {
+		AD4030_CHAN_IN(0, ad4030_16_scan_types),
+		AD4030_CHAN_IN(1, ad4030_16_scan_types),
+		AD4030_CHAN_CMO(2),
+		AD4030_CHAN_CMO(3),
+		IIO_CHAN_SOFT_TIMESTAMP(4),
+	},
+	.grade = AD4030_REG_CHIP_GRADE_AD4630_16_GRADE,
+	.precision_bits = 16,
+	.num_channels = 2,
+};
+
+static const struct ad4030_chip_info ad4630_24_chip_info = {
+	.name = "ad4630-24",
+	.available_masks = ad4630_channel_masks,
+	.available_masks_len = ARRAY_SIZE(ad4630_channel_masks),
+	.channels = {
+		AD4030_CHAN_IN(0, ad4030_24_scan_types),
+		AD4030_CHAN_IN(1, ad4030_24_scan_types),
+		AD4030_CHAN_CMO(2),
+		AD4030_CHAN_CMO(3),
+		IIO_CHAN_SOFT_TIMESTAMP(4),
+	},
+	.grade = AD4030_REG_CHIP_GRADE_AD4630_24_GRADE,
+	.precision_bits = 24,
+	.num_channels = 2,
+};
+
 static const struct spi_device_id ad4030_id_table[] = {
 	{ "ad4030-24", (kernel_ulong_t)&ad4030_24_chip_info },
+	{ "ad4630-16", (kernel_ulong_t)&ad4630_16_chip_info },
+	{ "ad4630-24", (kernel_ulong_t)&ad4630_24_chip_info },
 	{}
 };
 MODULE_DEVICE_TABLE(spi, ad4030_id_table);
 
 static const struct of_device_id ad4030_of_match[] = {
 	{ .compatible = "adi,ad4030-24", .data = &ad4030_24_chip_info },
+	{ .compatible = "adi,ad4630-16", .data = &ad4630_16_chip_info },
+	{ .compatible = "adi,ad4630-24", .data = &ad4630_24_chip_info },
 	{}
 };
 MODULE_DEVICE_TABLE(of, ad4030_of_match);
