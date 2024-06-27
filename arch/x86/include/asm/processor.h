@@ -105,6 +105,9 @@ struct cpuinfo_topology {
 	// Cache level topology IDs
 	u32			llc_id;
 	u32			l2c_id;
+
+	// Hardware defined CPU-type
+	u8			hw_cpu_type;
 };
 
 struct cpuinfo_x86 {

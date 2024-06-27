@@ -33,6 +33,14 @@
 #include <linux/numa.h>
 #include <linux/cpumask.h>
 
+#define X86_CPU_TYPE_INTEL_SHIFT	24
+
+enum x86_hw_topo_cpu_type {
+	X86_HW_CPU_TYPE_UNKNOWN		= 0,
+	X86_HW_CPU_TYPE_INTEL_ATOM	= 0x20,
+	X86_HW_CPU_TYPE_INTEL_CORE	= 0x40,
+};
+
 #ifdef CONFIG_NUMA
 
 #include <asm/mpspec.h>
@@ -139,6 +147,7 @@ extern const struct cpumask *cpu_clustergroup_mask(int cpu);
 #define topology_logical_die_id(cpu)		(cpu_data(cpu).topo.logical_die_id)
 #define topology_die_id(cpu)			(cpu_data(cpu).topo.die_id)
 #define topology_core_id(cpu)			(cpu_data(cpu).topo.core_id)
+#define topology_hw_cpu_type(cpu)		(cpu_data(cpu).topo.hw_cpu_type)
 #define topology_ppin(cpu)			(cpu_data(cpu).ppin)
 
 #define topology_amd_node_id(cpu)		(cpu_data(cpu).topo.amd_node_id)
