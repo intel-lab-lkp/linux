@@ -488,15 +488,15 @@ void free_zone_device_folio(struct folio *folio)
 	folio->mapping = NULL;
 	folio->page.pgmap->ops->page_free(folio_page(folio, 0));
 
-	if (folio->page.pgmap->type != MEMORY_DEVICE_PRIVATE &&
-	    folio->page.pgmap->type != MEMORY_DEVICE_COHERENT)
+	if (folio->page.pgmap->type == MEMORY_DEVICE_PRIVATE ||
+	    folio->page.pgmap->type == MEMORY_DEVICE_COHERENT)
+		put_dev_pagemap(folio->page.pgmap);
+	else if (folio->page.pgmap->type != MEMORY_DEVICE_PCI_P2PDMA)
 		/*
 		 * Reset the refcount to 1 to prepare for handing out the page
 		 * again.
 		 */
 		folio_set_count(folio, 1);
-	else
-		put_dev_pagemap(folio->page.pgmap);
 }
 
 void zone_device_page_init(struct page *page)
