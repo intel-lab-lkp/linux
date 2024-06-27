@@ -349,7 +349,7 @@
 	uart1_pins: uart1-pins {
 		mux {
 			function = "uart";
-			groups = "uart1_rx_tx";
+			groups = "uart1";
 		};
 	};
 
