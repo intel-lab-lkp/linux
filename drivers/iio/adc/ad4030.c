@@ -108,6 +108,18 @@ enum ad4030_out_mode {
 	AD4030_OUT_DATA_MD_32_PATTERN = 0x04
 };
 
+enum {
+	AD4030_LANE_MD_1_PER_CH,
+	AD4030_LANE_MD_2_PER_CH,
+	AD4030_LANE_MD_4_PER_CH,
+	AD4030_LANE_MD_INTERLEAVED = 0b11,
+};
+
+enum {
+	AD4030_SCAN_TYPE_NORMAL,
+	AD4030_SCAN_TYPE_AVG,
+};
+
 struct ad4030_chip_info {
 	const char *name;
 	const unsigned long *available_masks;
@@ -128,6 +140,7 @@ struct ad4030_state {
 	int min_offset;
 	int max_offset;
 	int offset_avail[3];
+	unsigned int avg_len;
 	u32 conversion_speed_hz;
 	enum ad4030_out_mode mode;
 
@@ -167,8 +180,11 @@ struct ad4030_state {
 	},								\
 }
 
-#define AD4030_CHAN_IN(_idx, _storage, _real, _shift) {			\
-	.info_mask_shared_by_all = BIT(IIO_CHAN_INFO_SCALE),		\
+#define AD4030_CHAN_IN(_idx, _scan_type) {				\
+	.info_mask_shared_by_all = BIT(IIO_CHAN_INFO_SCALE) |		\
+		BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO),			\
+	.info_mask_shared_by_all_available =				\
+		BIT(IIO_CHAN_INFO_OVERSAMPLING_RATIO),			\
 	.info_mask_separate = BIT(IIO_CHAN_INFO_CALIBSCALE) |		\
 		BIT(IIO_CHAN_INFO_CALIBBIAS) |				\
 		BIT(IIO_CHAN_INFO_RAW),					\
@@ -178,14 +194,15 @@ struct ad4030_state {
 	.indexed = 1,							\
 	.channel = _idx,						\
 	.scan_index = _idx,						\
-	.scan_type = {							\
-		.sign = 's',						\
-		.storagebits = _storage,				\
-		.realbits = _real,					\
-		.shift = _shift,					\
-		.endianness = IIO_BE,					\
-	},								\
+	.has_ext_scan_type = 1,						\
+	.ext_scan_type = _scan_type,					\
+	.num_ext_scan_type = ARRAY_SIZE(_scan_type),			\
 }
+
+static const int ad4030_average_modes[] = {
+	1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384,
+	32768, 65536
+};
 
 static int ad4030_spi_read(void *context, const void *reg, size_t reg_size,
 			   void *val, size_t val_size)
@@ -313,6 +330,13 @@ static int ad4030_get_chan_offset(struct iio_dev *indio_dev, int ch, int *val)
 	return 0;
 }
 
+static int ad4030_get_avg_frame_len(struct iio_dev *dev)
+{
+	const struct ad4030_state *st = iio_priv(dev);
+
+	return 1L << st->avg_len;
+}
+
 static int ad4030_set_chan_gain(struct iio_dev *indio_dev, int ch, int gain_int,
 				int gain_frac)
 {
@@ -348,6 +372,22 @@ static int ad4030_set_chan_offset(struct iio_dev *indio_dev, int ch, int offset)
 	return regmap_bulk_write(st->regmap, AD4030_REG_OFFSET_CHAN(ch), &val, 3);
 }
 
+static int ad4030_set_avg_frame_len(struct iio_dev *dev, unsigned int avg_len)
+{
+	struct ad4030_state *st = iio_priv(dev);
+	unsigned int avg_val = ilog2(avg_len);
+	int ret;
+
+	ret = regmap_write(st->regmap, AD4030_REG_AVG, AD4030_REG_AVG_MASK_AVG_SYNC |
+		    FIELD_PREP(AD4030_REG_AVG_MASK_AVG_VAL, avg_val));
+	if (ret)
+		return ret;
+
+	st->avg_len = avg_val;
+
+	return 0;
+}
+
 static bool ad4030_is_common_byte_asked(struct ad4030_state *st,
 					unsigned int mask)
 {
@@ -358,7 +398,9 @@ static int ad4030_set_mode(struct iio_dev *indio_dev, unsigned long mask)
 {
 	struct ad4030_state *st = iio_priv(indio_dev);
 
-	if (ad4030_is_common_byte_asked(st, mask))
+	if (st->avg_len)
+		st->mode = AD4030_OUT_DATA_MD_30_AVERAGED_DIFF;
+	else if (ad4030_is_common_byte_asked(st, mask))
 		st->mode = st->chip->precision_bits == 24 ?
 			AD4030_OUT_DATA_MD_24_DIFF_8_COM :
 			AD4030_OUT_DATA_MD_16_DIFF_8_COM;
@@ -376,6 +418,7 @@ static int ad4030_conversion(struct ad4030_state *st, const struct iio_chan_spec
 			     ((st->mode == AD4030_OUT_DATA_MD_24_DIFF_8_COM ||
 			     st->mode == AD4030_OUT_DATA_MD_16_DIFF_8_COM) ? 1 : 0)) *
 			     st->chip->num_channels;
+	unsigned long cnv_nb = 1UL << st->avg_len;
 	struct spi_transfer xfer = {
 		.rx_buf = st->rx_data.raw,
 		.len = bytes_to_read,
@@ -384,10 +427,14 @@ static int ad4030_conversion(struct ad4030_state *st, const struct iio_chan_spec
 	unsigned int i;
 	int ret;
 
-	gpiod_set_value_cansleep(st->cnv_gpio, 1);
-	ndelay(AD4030_TCNVH_NS);
-	gpiod_set_value_cansleep(st->cnv_gpio, 0);
-	ndelay(AD4030_TCNVL_NS + AD4030_TCONV_NS);
+	for (i = 0; i < cnv_nb; i++) {
+		gpiod_set_value_cansleep(st->cnv_gpio, 1);
+		ndelay(AD4030_TCNVH_NS);
+		gpiod_set_value_cansleep(st->cnv_gpio, 0);
+		ndelay(AD4030_TCNVL_NS);
+	}
+
+	ndelay(AD4030_TCONV_NS);
 
 	ret = spi_sync_transfer(st->spi, &xfer, 1);
 	if (ret || (st->mode != AD4030_OUT_DATA_MD_16_DIFF_8_COM &&
@@ -478,6 +525,13 @@ static int ad4030_read_avail(struct iio_dev *indio_dev,
 		*vals = (void *)ad4030_gain_avail;
 		*type = IIO_VAL_INT_PLUS_MICRO;
 		return IIO_AVAIL_RANGE;
+
+	case IIO_CHAN_INFO_OVERSAMPLING_RATIO:
+		*vals = ad4030_average_modes;
+		*type = IIO_VAL_INT;
+		*length = ARRAY_SIZE(ad4030_average_modes);
+		return IIO_AVAIL_LIST;
+
 	default:
 		return -EINVAL;
 	}
@@ -514,6 +568,10 @@ static int ad4030_read_raw(struct iio_dev *indio_dev,
 				return ret;
 			return IIO_VAL_INT;
 
+		case IIO_CHAN_INFO_OVERSAMPLING_RATIO:
+			*val = ad4030_get_avg_frame_len(indio_dev);
+			return IIO_VAL_INT;
+
 		default:
 			return -EINVAL;
 		}
@@ -535,6 +593,9 @@ static int ad4030_write_raw(struct iio_dev *indio_dev,
 		case IIO_CHAN_INFO_CALIBBIAS:
 			return ad4030_set_chan_offset(indio_dev, chan->channel,
 						      val);
+
+		case IIO_CHAN_INFO_OVERSAMPLING_RATIO:
+			return ad4030_set_avg_frame_len(indio_dev, val);
 
 		default:
 			return -EINVAL;
@@ -559,11 +620,20 @@ static int ad4030_reg_access(struct iio_dev *indio_dev, unsigned int reg,
 	unreachable();
 }
 
+static int ad4030_get_current_scan_type(const struct iio_dev *indio_dev,
+					const struct iio_chan_spec *chan)
+{
+	struct ad4030_state *st = iio_priv(indio_dev);
+
+	return st->avg_len ? AD4030_SCAN_TYPE_AVG : AD4030_SCAN_TYPE_NORMAL;
+}
+
 static const struct iio_info ad4030_iio_info = {
 	.read_avail = ad4030_read_avail,
 	.read_raw = ad4030_read_raw,
 	.write_raw = ad4030_write_raw,
 	.debugfs_reg_access = ad4030_reg_access,
+	.get_current_scan_type = ad4030_get_current_scan_type,
 };
 
 static int ad4030_buffer_preenable(struct iio_dev *indio_dev)
@@ -596,9 +666,21 @@ static int ad4030_buffer_postdisable(struct iio_dev *indio_dev)
 	return ad4030_enter_config_mode(st);
 }
 
+static bool ad4030_validate_scan_mask(struct iio_dev *indio_dev, const unsigned long *scan_mask)
+{
+	struct ad4030_state *st = iio_priv(indio_dev);
+
+	/* Asking for both common channels and averaging */
+	if (st->avg_len && ad4030_is_common_byte_asked(st, *scan_mask))
+		return false;
+
+	return true;
+}
+
 static const struct iio_buffer_setup_ops ad4030_buffer_setup_ops = {
 	.preenable = ad4030_buffer_preenable,
 	.postdisable = ad4030_buffer_postdisable,
+	.validate_scan_mask = ad4030_validate_scan_mask,
 };
 
 static int ad4030_regulators_get(struct ad4030_state *st)
@@ -781,12 +863,29 @@ static const unsigned long ad4030_channel_masks[] = {
 	0,
 };
 
+static const struct iio_scan_type ad4030_24_scan_types[] = {
+	[AD4030_SCAN_TYPE_NORMAL] = {
+		.sign = 's',
+		.storagebits = 32,
+		.realbits = 24,
+		.shift = 8,
+		.endianness = IIO_BE,
+	},
+	[AD4030_SCAN_TYPE_AVG] = {
+		.sign = 's',
+		.storagebits = 32,
+		.realbits = 30,
+		.shift = 2,
+		.endianness = IIO_BE,
+	},
+};
+
 static const struct ad4030_chip_info ad4030_24_chip_info = {
 	.name = "ad4030-24",
 	.available_masks = ad4030_channel_masks,
 	.available_masks_len = ARRAY_SIZE(ad4030_channel_masks),
 	.channels = {
-		AD4030_CHAN_IN(0, 32, 24, 8),
+		AD4030_CHAN_IN(0, ad4030_24_scan_types),
 		AD4030_CHAN_CMO(1),
 		IIO_CHAN_SOFT_TIMESTAMP(2),
 	},
