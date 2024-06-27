@@ -458,8 +458,8 @@ EXPORT_SYMBOL_GPL(get_dev_pagemap);
 
 void free_zone_device_folio(struct folio *folio)
 {
-	if (WARN_ON_ONCE(!folio->page.pgmap->ops ||
-			!folio->page.pgmap->ops->page_free))
+	if (WARN_ON_ONCE(!page_dev_pagemap(&folio->page)->ops ||
+			!page_dev_pagemap(&folio->page)->ops->page_free))
 		return;
 
 	mem_cgroup_uncharge(folio);
@@ -486,7 +486,7 @@ void free_zone_device_folio(struct folio *folio)
 	 * to clear folio->mapping.
 	 */
 	folio->mapping = NULL;
-	folio->page.pgmap->ops->page_free(folio_page(folio, 0));
+	page_dev_pagemap(&folio->page)->ops->page_free(folio_page(folio, 0));
 
 	if (folio->page.pgmap->type == MEMORY_DEVICE_PRIVATE ||
 	    folio->page.pgmap->type == MEMORY_DEVICE_COHERENT)
@@ -505,7 +505,7 @@ void zone_device_page_init(struct page *page)
 	 * Drivers shouldn't be allocating pages after calling
 	 * memunmap_pages().
 	 */
-	WARN_ON_ONCE(!percpu_ref_tryget_live(&page->pgmap->ref));
+	WARN_ON_ONCE(!percpu_ref_tryget_live(&page_dev_pagemap(page)->ref));
 	set_page_count(page, 1);
 	lock_page(page);
 }

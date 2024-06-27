@@ -195,7 +195,7 @@ static int dmirror_fops_release(struct inode *inode, struct file *filp)
 
 static struct dmirror_chunk *dmirror_page_to_chunk(struct page *page)
 {
-	return container_of(page->pgmap, struct dmirror_chunk, pagemap);
+	return container_of(page_dev_pagemap(page), struct dmirror_chunk, pagemap);
 }
 
 static struct dmirror_device *dmirror_page_to_device(struct page *page)
