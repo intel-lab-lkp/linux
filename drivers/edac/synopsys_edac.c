@@ -664,36 +664,35 @@ static enum dev_type zynq_get_dtype(const void __iomem *base)
 }
 
 /**
- * zynqmp_get_dtype - Return the controller memory width.
+ * zynqmp_get_dtype - Return the DDR memory chips type.
  * @base:	DDR memory controller base address.
  *
- * Get the EDAC device type width appropriate for the current controller
+ * Get the attached DDR chips type based on the current controller
  * configuration.
  *
- * Return: a device type width enumeration.
+ * Return: type of the memory DRAM chips.
  */
 static enum dev_type zynqmp_get_dtype(const void __iomem *base)
 {
-	enum dev_type dt;
-	u32 width;
+	u32 regval;
 
-	width = readl(base + CTRL_OFST);
-	width = (width & ECC_CTRL_BUSWIDTH_MASK) >> ECC_CTRL_BUSWIDTH_SHIFT;
-	switch (width) {
-	case DDRCTL_EWDTH_16:
-		dt = DEV_X2;
-		break;
-	case DDRCTL_EWDTH_32:
-		dt = DEV_X4;
-		break;
-	case DDRCTL_EWDTH_64:
-		dt = DEV_X8;
-		break;
-	default:
-		dt = DEV_UNKNOWN;
+	regval = readl(base + CTRL_OFST);
+	if (!(regval & MEM_TYPE_DDR4))
+		return DEV_UNKNOWN;
+
+	regval = (regval & DDRC_MSTR_CFG_MASK) >> DDRC_MSTR_CFG_SHIFT;
+	switch (regval) {
+	case DDRC_MSTR_CFG_X4_MASK:
+		return DEV_X4;
+	case DDRC_MSTR_CFG_X8_MASK:
+		return DEV_X8;
+	case DDRC_MSTR_CFG_X16_MASK:
+		return DEV_X16;
+	case DDRC_MSTR_CFG_X32_MASK:
+		return DEV_X32;
 	}
 
-	return dt;
+	return DEV_UNKNOWN;
 }
 
 /**
@@ -730,19 +729,11 @@ static bool zynq_get_ecc_state(void __iomem *base)
  */
 static bool zynqmp_get_ecc_state(void __iomem *base)
 {
-	enum dev_type dt;
-	u32 ecctype;
+	u32 regval;
 
-	dt = zynqmp_get_dtype(base);
-	if (dt == DEV_UNKNOWN)
-		return false;
+	regval = readl(base + ECC_CFG0_OFST) & SCRUB_MODE_MASK;
 
-	ecctype = readl(base + ECC_CFG0_OFST) & SCRUB_MODE_MASK;
-	if ((ecctype == SCRUB_MODE_SECDED) &&
-	    ((dt == DEV_X2) || (dt == DEV_X4) || (dt == DEV_X8)))
-		return true;
-
-	return false;
+	return (regval == SCRUB_MODE_SECDED);
 }
 
 /**
