@@ -11,9 +11,29 @@
 #include <linux/smp.h>
 #include <linux/cpu.h>
 #include <linux/group_cpus.h>
+#include <linux/sched/isolation.h>
 
 #include "blk.h"
 #include "blk-mq.h"
+
+/**
+ * blk_mq_num_possible_queues - Calc nr of queues for managed devices
+ *
+ * Calculate the number of queues which should be used for a multiqueue
+ * device which uses the managed IRQ API. The helper is considering
+ * isolcpus settings.
+ */
+unsigned int blk_mq_num_possible_queues(void)
+{
+	const struct cpumask *hk_mask;
+
+	hk_mask = housekeeping_cpumask(HK_TYPE_MANAGED_IRQ);
+	if (!cpumask_empty(hk_mask))
+		return cpumask_weight(hk_mask);
+
+	return num_possible_cpus();
+}
+EXPORT_SYMBOL_GPL(blk_mq_num_possible_queues);
 
 void blk_mq_map_queues(struct blk_mq_queue_map *qmap)
 {
