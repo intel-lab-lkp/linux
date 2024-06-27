@@ -84,6 +84,18 @@ static __always_inline void arch_enter_from_user_mode(struct pt_regs *regs);
 static __always_inline void arch_enter_from_user_mode(struct pt_regs *regs) {}
 #endif
 
+static __always_inline void arch_enter_from_kernel_mode(struct pt_regs *regs);
+
+#ifndef arch_enter_from_kernel_mode
+static __always_inline void arch_enter_from_kernel_mode(struct pt_regs *regs) {}
+#endif
+
+static __always_inline void arch_exit_to_kernel_mode_prepare(struct pt_regs *regs);
+
+#ifndef arch_exit_to_kernel_mode_prepare
+static __always_inline void arch_exit_to_kernel_mode_prepare(struct pt_regs *regs) {}
+#endif
+
 /**
  * enter_from_user_mode - Establish state when coming from user mode
  *
@@ -297,6 +309,42 @@ static __always_inline void arch_exit_to_user_mode(void) { }
  * Invoked from exit_to_user_mode_loop().
  */
 void arch_do_signal_or_restart(struct pt_regs *regs);
+
+/**
+ * arch_irqentry_exit_need_resched - Architecture specific need resched function
+ */
+bool arch_irqentry_exit_need_resched(void);
+
+/**
+ * arch_prepare_report_syscall_entry - Architecture specific report_syscall_entry()
+ * prepare function
+ */
+unsigned long arch_prepare_report_syscall_entry(struct pt_regs *regs);
+
+/**
+ * arch_post_report_syscall_entry - Architecture specific report_syscall_entry()
+ * post function
+ */
+void arch_post_report_syscall_entry(struct pt_regs *regs, unsigned long saved_reg);
+
+/**
+ * arch_prepare_report_syscall_exit - Architecture specific report_syscall_exit()
+ * prepare function
+ */
+unsigned long arch_prepare_report_syscall_exit(struct pt_regs *regs, unsigned long work);
+
+/**
+ * arch_post_report_syscall_exit - Architecture specific report_syscall_exit()
+ * post function
+ */
+void arch_post_report_syscall_exit(struct pt_regs *regs, unsigned long saved_reg,
+				   unsigned long work);
+
+/**
+ * arch_forget_syscall - Architecture specific function called if
+ * ptrace_report_syscall_entry() return nonzero
+ */
+void arch_forget_syscall(struct pt_regs *regs);
 
 /**
  * exit_to_user_mode_loop - do any pending work before leaving to user space
@@ -551,5 +599,8 @@ irqentry_state_t noinstr irqentry_nmi_enter(struct pt_regs *regs);
  * Counterpart to irqentry_nmi_enter().
  */
 void noinstr irqentry_nmi_exit(struct pt_regs *regs, irqentry_state_t irq_state);
+
+bool report_single_step(unsigned long work);
+void syscall_exit_work(struct pt_regs *regs, unsigned long work);
 
 #endif
