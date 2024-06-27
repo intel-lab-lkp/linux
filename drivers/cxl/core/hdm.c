@@ -125,8 +125,73 @@ static bool should_emulate_decoders(struct cxl_endpoint_dvsec_info *info)
 	return true;
 }
 
+static int match_root_decoder(struct device *dev, void *dport_dev)
+{
+	struct cxl_switch_decoder *cxlsd;
+
+	if (!is_switch_decoder(dev))
+		return 0;
+
+	cxlsd = to_cxl_switch_decoder(dev);
+
+	guard(rwsem_read)(&cxl_region_rwsem);
+
+	for (int i = 0; i < cxlsd->nr_targets; i++) {
+		if (dport_dev == cxlsd->target[i]->dport_dev)
+			return 1;
+	}
+
+	return 0;
+}
+
+static struct cxl_decoder *find_root_decoder(struct cxl_port *port,
+					     struct device *dport_dev)
+{
+	struct device *dev;
+
+	dev = device_find_child(&port->dev, dport_dev, match_root_decoder);
+
+	return dev ? to_cxl_decoder(dev) : NULL;
+}
+
+static void setup_base_hpa_cfmws(struct cxl_hdm *cxlhdm,
+				 struct cxl_root *cxl_root)
+{
+	struct cxl_port *port = cxlhdm->port;
+	struct cxl_decoder *cxld;
+	u64 base;
+
+	if (!port->host_bridge) {
+		dev_dbg(&port->dev, "No host bridge found for port.\n");
+		return;
+	}
+
+	cxld = find_root_decoder(&cxl_root->port, port->host_bridge);
+	if (!cxld) {
+		dev_dbg(&port->dev,
+			"CFMWS missing for host bridge %s, HPA range not found.\n",
+			dev_name(port->host_bridge));
+		return;
+	}
+
+	base = cxld->hpa_range.start;
+	dev_dbg(&port->dev,
+		"HPA translation for decoders enabled, base 0x%08llx\n",
+		base);
+	put_device(&cxld->dev);
+
+	cxlhdm->base_hpa = base;
+}
+
 static void setup_base_hpa(struct cxl_hdm *cxlhdm)
 {
+	struct cxl_port *port = cxlhdm->port;
+
+	struct cxl_root *cxl_root __free(put_cxl_root) = find_cxl_root(port);
+
+	if (!cxl_root)
+		return;
+
 	/*
 	 * Address translation is not needed on platforms with HPA ==
 	 * SPA. HDM decoder addresses all base on system addresses,
@@ -134,6 +199,10 @@ static void setup_base_hpa(struct cxl_hdm *cxlhdm)
 	 * == 0). Nothing to do here as it is already pre-initialized
 	 * zero.
 	 */
+	if (!cxl_root->hpa_xlat_enable)
+		return;
+
+	setup_base_hpa_cfmws(cxlhdm, cxl_root);
 }
 
 /**
