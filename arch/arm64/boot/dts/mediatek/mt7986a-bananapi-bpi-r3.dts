@@ -235,6 +235,13 @@
 };
 
 &pio {
+	boot_mode_hog: boot-mode-hog {
+		gpio-hog;
+		gpios = <5 GPIO_ACTIVE_HIGH>,
+			<6 GPIO_ACTIVE_HIGH>;
+		input;
+	};
+
 	i2c_pins: i2c-pins {
 		mux {
 			function = "i2c";
