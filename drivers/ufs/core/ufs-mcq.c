@@ -138,18 +138,21 @@ EXPORT_SYMBOL_GPL(ufshcd_mcq_queue_cfg_addr);
  *
  * MAC - Max. Active Command of the Host Controller (HC)
  * HC wouldn't send more than this commands to the device.
- * It is mandatory to implement get_hba_mac() to enable MCQ mode.
  * Calculates and adjusts the queue depth based on the depth
  * supported by the HC and ufs device.
  */
 int ufshcd_mcq_decide_queue_depth(struct ufs_hba *hba)
 {
-	int mac = -EOPNOTSUPP;
+	int mac;
 
-	if (!hba->vops || !hba->vops->get_hba_mac)
-		goto err;
-
-	mac = hba->vops->get_hba_mac(hba);
+	if (!hba->vops || !hba->vops->get_hba_mac) {
+		hba->capabilities =
+			ufshcd_readl(hba, REG_CONTROLLER_CAPABILITIES);
+		mac = hba->capabilities & MASK_TRANSFER_REQUESTS_SLOTS_MCQ;
+		mac++;
+	} else {
+		mac = hba->vops->get_hba_mac(hba);
+	}
 	if (mac < 0)
 		goto err;
 
