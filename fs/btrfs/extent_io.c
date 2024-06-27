@@ -695,22 +695,10 @@ error:
 	return -ENOMEM;
 }
 
-/*
- * Populate every free slot in a provided array with pages.
- *
- * @nr_pages:   number of pages to allocate
- * @page_array: the array to fill with pages; any existing non-null entries in
- * 		the array will be skipped
- * @extra_gfp:	the extra GFP flags for the allocation.
- *
- * Return: 0        if all pages were able to be allocated;
- *         -ENOMEM  otherwise, the partially allocated pages would be freed and
- *                  the array slots zeroed
- */
-int btrfs_alloc_page_array(unsigned int nr_pages, struct page **page_array,
-			   gfp_t extra_gfp)
+static int __btrfs_alloc_page_array(unsigned int nr_pages,
+				    struct page **page_array, bool nofail)
 {
-	const gfp_t gfp = GFP_NOFS | extra_gfp;
+	const gfp_t gfp = nofail ? (GFP_NOFS | __GFP_NOFAIL) : GFP_NOFS;
 	unsigned int allocated;
 
 	for (allocated = 0; allocated < nr_pages;) {
@@ -728,19 +716,34 @@ int btrfs_alloc_page_array(unsigned int nr_pages, struct page **page_array,
 	}
 	return 0;
 }
+/*
+ * Populate every free slot in a provided array with pages, using GFP_NOFS.
+ *
+ * @nr_pages:   number of pages to allocate
+ * @page_array: the array to fill with pages; any existing non-null entries in
+ *		the array will be skipped
+ *
+ * Return: 0        if all pages were able to be allocated;
+ *         -ENOMEM  otherwise, the partially allocated pages would be freed and
+ *                  the array slots zeroed
+ */
+int btrfs_alloc_page_array(unsigned int nr_pages, struct page **page_array)
+{
+	return __btrfs_alloc_page_array(nr_pages, page_array, false);
+}
 
 /*
  * Populate needed folios for the extent buffer.
  *
  * For now, the folios populated are always in order 0 (aka, single page).
  */
-static int alloc_eb_folio_array(struct extent_buffer *eb, gfp_t extra_gfp)
+static int alloc_eb_folio_array(struct extent_buffer *eb, bool nofail)
 {
 	struct page *page_array[INLINE_EXTENT_BUFFER_PAGES] = { 0 };
 	int num_pages = num_extent_pages(eb);
 	int ret;
 
-	ret = btrfs_alloc_page_array(num_pages, page_array, extra_gfp);
+	ret = __btrfs_alloc_page_array(num_pages, page_array, nofail);
 	if (ret < 0)
 		return ret;
 
@@ -2722,7 +2725,7 @@ struct extent_buffer *btrfs_clone_extent_buffer(const struct extent_buffer *src)
 	 */
 	set_bit(EXTENT_BUFFER_UNMAPPED, &new->bflags);
 
-	ret = alloc_eb_folio_array(new, 0);
+	ret = alloc_eb_folio_array(new, false);
 	if (ret) {
 		btrfs_release_extent_buffer(new);
 		return NULL;
@@ -2755,7 +2758,7 @@ struct extent_buffer *__alloc_dummy_extent_buffer(struct btrfs_fs_info *fs_info,
 	if (!eb)
 		return NULL;
 
-	ret = alloc_eb_folio_array(eb, 0);
+	ret = alloc_eb_folio_array(eb, false);
 	if (ret)
 		goto err;
 
@@ -3121,7 +3124,7 @@ struct extent_buffer *alloc_extent_buffer(struct btrfs_fs_info *fs_info,
 
 reallocate:
 	/* Allocate all pages first. */
-	ret = alloc_eb_folio_array(eb, __GFP_NOFAIL);
+	ret = alloc_eb_folio_array(eb, true);
 	if (ret < 0) {
 		btrfs_free_subpage(prealloc);
 		goto out;
