@@ -627,10 +627,12 @@ struct cxl_port {
  *
  * @port: cxl_port member
  * @ops: cxl root operations
+ * @hpa_xlat_enable: enable HPA translation
  */
 struct cxl_root {
 	struct cxl_port port;
 	const struct cxl_root_ops *ops;
+	bool hpa_xlat_enable;
 };
 
 static inline struct cxl_root *
