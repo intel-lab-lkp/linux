@@ -194,6 +194,8 @@
 	};
 
 	mdio: mdio-bus {
+		pinctrl-names = "default";
+		pinctrl-0 = <&mdio_pins>;
 		#address-cells = <1>;
 		#size-cells = <0>;
 	};
@@ -206,6 +208,8 @@
 		interrupt-controller;
 		#interrupt-cells = <1>;
 		interrupts-extended = <&pio 66 IRQ_TYPE_LEVEL_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&switch_pins>;
 		reset-gpios = <&pio 32 GPIO_ACTIVE_HIGH>;
 	};
 };
@@ -335,6 +339,13 @@
 		};
 	};
 
+	uart0_pins: uart0-pins {
+		mux {
+			function = "uart";
+			groups = "uart0";
+		};
+	};
+
 	uart1_pins: uart1-pins {
 		mux {
 			function = "uart";
@@ -346,6 +357,20 @@
 		mux {
 			function = "uart";
 			groups = "uart2_0_rx_tx";
+		};
+	};
+
+	mdio_pins: mdio-pins {
+		mux {
+			function = "eth";
+			groups = "mdc_mdio";
+		};
+	};
+
+	switch_pins: switch-pins {
+		mux {
+			function = "eth";
+			groups = "switch_int";
 		};
 	};
 
@@ -471,6 +496,8 @@
 };
 
 &uart0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart0_pins>;
 	status = "okay";
 };
 
