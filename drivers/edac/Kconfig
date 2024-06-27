@@ -488,7 +488,7 @@ config EDAC_ARMADA_XP
 
 config EDAC_SYNOPSYS
 	tristate "Synopsys DDR Memory Controller"
-	depends on ARCH_ZYNQ || ARCH_ZYNQMP || ARCH_INTEL_SOCFPGA || ARCH_MXC
+	depends on ARCH_ZYNQMP || ARCH_INTEL_SOCFPGA || ARCH_MXC
 	help
 	  Support for error detection and correction on the Synopsys DDR
 	  memory controller.
@@ -542,6 +542,13 @@ config EDAC_DMC520
 	help
 	  Support for error detection and correction on the
 	  SoCs with ARM DMC-520 DRAM controller.
+
+config EDAC_ZYNQ
+	tristate "Xilinx Zynq A05 DDR Memory Controller"
+	depends on ARCH_ZYNQ || COMPILE_TEST
+	help
+	  Support for error detection and correction on the Xilinx Zynq A05
+	  DDR memory controller.
 
 config EDAC_ZYNQMP
 	tristate "Xilinx ZynqMP OCM Controller"
