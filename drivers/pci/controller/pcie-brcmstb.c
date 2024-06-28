@@ -266,6 +266,7 @@ struct brcm_pcie {
 	struct reset_control	*rescal;
 	struct reset_control	*perst_reset;
 	struct reset_control	*bridge;
+	struct reset_control	*swinit;
 	int			num_memc;
 	u64			memc_size[PCIE_BRCM_MAX_MEMC];
 	u32			hw_rev;
@@ -1626,6 +1627,25 @@ static int brcm_pcie_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "could not enable clock\n");
 		return ret;
 	}
+
+	pcie->swinit = devm_reset_control_get_optional_exclusive(&pdev->dev, "swinit");
+	if (IS_ERR(pcie->swinit)) {
+		ret = dev_err_probe(&pdev->dev, PTR_ERR(pcie->swinit),
+				    "failed to get 'swinit' reset\n");
+		goto clk_out;
+	}
+
+	ret = reset_control_assert(pcie->swinit);
+	if (ret) {
+		dev_err_probe(&pdev->dev, ret, "could not assert reset 'swinit'\n");
+		goto clk_out;
+	} else {
+		ret = dev_err_probe(&pdev->dev, reset_control_deassert(pcie->swinit),
+				    "could not de-assert reset 'swinit' after asserting\n");
+		if (ret)
+			goto clk_out;
+	}
+
 	pcie->rescal = devm_reset_control_get_optional_shared(&pdev->dev, "rescal");
 	if (IS_ERR(pcie->rescal)) {
 		ret = PTR_ERR(pcie->rescal);
