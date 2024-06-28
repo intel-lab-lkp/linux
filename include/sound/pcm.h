@@ -116,12 +116,13 @@ struct snd_pcm_ops {
 #define SNDRV_PCM_RATE_64000		(1U<<8)		/* 64000Hz */
 #define SNDRV_PCM_RATE_88200		(1U<<9)		/* 88200Hz */
 #define SNDRV_PCM_RATE_96000		(1U<<10)	/* 96000Hz */
-#define SNDRV_PCM_RATE_176400		(1U<<11)	/* 176400Hz */
-#define SNDRV_PCM_RATE_192000		(1U<<12)	/* 192000Hz */
-#define SNDRV_PCM_RATE_352800		(1U<<13)	/* 352800Hz */
-#define SNDRV_PCM_RATE_384000		(1U<<14)	/* 384000Hz */
-#define SNDRV_PCM_RATE_705600		(1U<<15)	/* 705600Hz */
-#define SNDRV_PCM_RATE_768000		(1U<<16)	/* 768000Hz */
+#define SNDRV_PCM_RATE_128000		(1U<<11)	/* 128000Hz */
+#define SNDRV_PCM_RATE_176400		(1U<<12)	/* 176400Hz */
+#define SNDRV_PCM_RATE_192000		(1U<<13)	/* 192000Hz */
+#define SNDRV_PCM_RATE_352800		(1U<<14)	/* 352800Hz */
+#define SNDRV_PCM_RATE_384000		(1U<<15)	/* 384000Hz */
+#define SNDRV_PCM_RATE_705600		(1U<<16)	/* 705600Hz */
+#define SNDRV_PCM_RATE_768000		(1U<<17)	/* 768000Hz */
 
 #define SNDRV_PCM_RATE_CONTINUOUS	(1U<<30)	/* continuous range */
 #define SNDRV_PCM_RATE_KNOT		(1U<<31)	/* supports more non-continuous rates */
