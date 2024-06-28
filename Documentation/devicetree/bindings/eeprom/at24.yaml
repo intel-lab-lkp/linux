@@ -132,6 +132,10 @@ properties:
               - renesas,r1ex24128
               - samsung,s524ad0xd1
           - const: atmel,24c128
+      - items:
+          - const: microchip,24aa025e48
+      - items:
+          - const: microchip,24aa025e64
       - pattern: '^atmel,24c(32|64)d-wl$' # Actual vendor is st
 
   label:
