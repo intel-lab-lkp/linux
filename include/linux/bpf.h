@@ -840,6 +840,11 @@ struct bpf_func_proto {
 	bool (*allowed)(const struct bpf_prog *prog);
 };
 
+extern const struct bpf_func_proto bpf_xdp_get_buff_len_trace_proto;
+extern const struct bpf_func_proto bpf_skb_output_proto;
+extern const struct bpf_func_proto bpf_xdp_output_proto;
+extern const struct bpf_func_proto bpf_sk_storage_get_cg_sock_proto;
+
 /* bpf_context is intentionally undefined structure. Pointer to bpf_context is
  * the first argument to eBPF programs.
  * For socket filters: 'struct bpf_context *' == 'struct sk_buff *'

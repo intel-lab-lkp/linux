@@ -1954,10 +1954,6 @@ static const struct bpf_func_proto bpf_perf_event_output_proto_raw_tp = {
 	.arg5_type	= ARG_CONST_SIZE_OR_ZERO,
 };
 
-extern const struct bpf_func_proto bpf_skb_output_proto;
-extern const struct bpf_func_proto bpf_xdp_output_proto;
-extern const struct bpf_func_proto bpf_xdp_get_buff_len_trace_proto;
-
 BPF_CALL_3(bpf_get_stackid_raw_tp, struct bpf_raw_tracepoint_args *, args,
 	   struct bpf_map *, map, u64, flags)
 {
