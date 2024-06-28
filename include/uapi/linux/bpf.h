@@ -6292,12 +6292,12 @@ struct bpf_tunnel_key {
  */
 struct bpf_xfrm_state {
 	__u32 reqid;
-	__u32 spi;	/* Stored in network byte order */
+	__be32 spi;	/* Stored in network byte order */
 	__u16 family;
 	__u16 ext;	/* Padding, future use. */
 	union {
-		__u32 remote_ipv4;	/* Stored in network byte order */
-		__u32 remote_ipv6[4];	/* Stored in network byte order */
+		__be32 remote_ipv4;	/* Stored in network byte order */
+		__be32 remote_ipv6[4];	/* Stored in network byte order */
 	};
 };
 
