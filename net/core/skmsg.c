@@ -1184,7 +1184,7 @@ static int sk_psock_verdict_recv(struct sock *sk, struct sk_buff *skb)
 
 	rcu_read_lock();
 	psock = sk_psock(sk);
-	if (unlikely(!psock)) {
+	if (unlikely(!psock || !len)) {
 		len = 0;
 		tcp_eat_skb(sk, skb);
 		sock_drop(sk, skb);
