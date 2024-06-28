@@ -7,12 +7,13 @@ $schema: http://devicetree.org/meta-schemas/core.yaml#
 title: Brcmstb PCIe Host Controller
 
 maintainers:
-  - Nicolas Saenz Julienne <nsaenzjulienne@suse.de>
+  - Jim Quinlan <james.quinlan@broadcom.com>
 
 properties:
   compatible:
     items:
       - enum:
+          - brcm,bcm7712-pcie # STB sibling SOC of Raspberry Pi 5
           - brcm,bcm2711-pcie # The Raspberry Pi 4
           - brcm,bcm4908-pcie
           - brcm,bcm7211-pcie # Broadcom STB version of RPi4
@@ -142,6 +143,27 @@ allOf:
         reset-names:
           items:
             - const: rescal
+
+      required:
+        - resets
+        - reset-names
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: brcm,bcm7712-pcie
+    then:
+      properties:
+        resets:
+          items:
+            - description: phandle pointing to the RESCAL reset controller
+            - description: phandle pointing to the BRIDGE reset controller
+            - description: phandle pointing to the core SWINIT reset controller
+
+        reset-names:
+          items:
+            - const: rescal
+            - const: bridge
 
       required:
         - resets
