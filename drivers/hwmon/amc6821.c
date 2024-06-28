@@ -601,7 +601,7 @@ static ssize_t fan_show(struct device *dev, struct device_attribute *devattr,
 	struct amc6821_data *data = amc6821_update_device(dev);
 	int ix = to_sensor_dev_attr(devattr)->index;
 	if (0 == data->fan[ix])
-		return sprintf(buf, "0");
+		return sprintf(buf, "6000000");
 	return sprintf(buf, "%d\n", (int)(6000000 / data->fan[ix]));
 }
 
@@ -625,10 +625,10 @@ static ssize_t fan_store(struct device *dev, struct device_attribute *attr,
 	int ret = kstrtol(buf, 10, &val);
 	if (ret)
 		return ret;
-	val = 1 > val ? 0xFFFF : 6000000/val;
+	val = val < 1 ? 0xFFFF : 6000000 / val;
 
 	mutex_lock(&data->update_lock);
-	data->fan[ix] = (u16) clamp_val(val, 1, 0xFFFF);
+	data->fan[ix] = (u16)clamp_val(val, 0, 0xFFFF);
 	if (i2c_smbus_write_byte_data(client, fan_reg_low[ix],
 			data->fan[ix] & 0xFF)) {
 		dev_err(&client->dev, "Register write error, aborting.\n");
