@@ -378,9 +378,9 @@ int sk_msg_memcopy_from_iter(struct sock *sk, struct iov_iter *from,
 		/* This is possible if a trim operation shrunk the buffer */
 		if (msg->sg.copybreak >= sge->length) {
 			msg->sg.copybreak = 0;
-			sk_msg_iter_var_next(i);
 			if (i == msg->sg.end)
 				break;
+			sk_msg_iter_var_next(i);
 			sge = sk_msg_elem(msg, i);
 		}
 
