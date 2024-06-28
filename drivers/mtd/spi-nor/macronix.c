@@ -247,6 +247,11 @@ static const struct flash_info macronix_nor_parts[] = {
 		.size = SZ_16M,
 		.flags = SPI_NOR_HAS_LOCK | SPI_NOR_4BIT_BP,
 		.no_sfdp_flags = SECT_4K,
+	}, {	/* Yes, Same JEDEC-id as mx25l12805d */
+		.id = SNOR_ID(0xc2, 0x20, 0x18),
+		.name = "mx25l12833f",
+		.flags = SPI_NOR_HAS_LOCK | SPI_NOR_4BIT_BP,
+		.otp = SNOR_OTP(512, 2, 0x000, 0x200),
 	}, {
 		.id = SNOR_ID(0xc2, 0x20, 0x19),
 		.name = "mx25l25635e",
