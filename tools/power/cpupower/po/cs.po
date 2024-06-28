@@ -1,17 +1,17 @@
 # translation of cs.po to Czech
 # Czech translation for cpufrequtils package
 # Czech messages for cpufrequtils.
-# Copyright (C) 2007 kavol
+# Copyright (C) 2007 kavol, 2024 Daniel Hejduk
 # This file is distributed under the same license as the cpufrequtils package.
 #
-# Karel Volný <kavol@seznam.cz>, 2007, 2008.
+# Karel Volný <kavol@seznam.cz>, 2007, 2008, Daniel Hejduk 2024.
 msgid ""
 msgstr ""
 "Project-Id-Version: cs\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2011-03-08 17:03+0100\n"
 "PO-Revision-Date: 2008-06-11 16:26+0200\n"
-"Last-Translator: Karel Volný <kavol@seznam.cz>\n"
+"Last-Translator: Daniel Hejduk <danielhejduk@disroot.org>\n"
 "Language-Team: Czech <diskuze@lists.l10n.cz>\n"
 "Language: cs\n"
 "MIME-Version: 1.0\n"
@@ -217,7 +217,7 @@ msgstr ""
 msgid "Report errors and bugs to %s, please.\n"
 msgstr ""
 "Chyby v programu prosím hlaste na %s (anglicky).\n"
-"Chyby v překladu prosím hlaste na kavol@seznam.cz (česky ;-)\n"
+"Chyby v překladu prosím hlaste na danielhejduk@disroot.org (česky ;-)\n"
 
 #: utils/cpupower.c:114
 #, c-format
