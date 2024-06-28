@@ -974,6 +974,9 @@ void ath12k_dp_pdev_free(struct ath12k_base *ab)
 {
 	int i;
 
+	if (!ab->mon_reap_timer.function)
+		return;
+
 	del_timer_sync(&ab->mon_reap_timer);
 
 	for (i = 0; i < ab->num_radios; i++)
@@ -1266,6 +1269,9 @@ void ath12k_dp_free(struct ath12k_base *ab)
 	struct ath12k_dp *dp = &ab->dp;
 	int i;
 
+	if (!dp->ab)
+		return;
+
 	ath12k_dp_link_desc_cleanup(ab, dp->link_desc_banks,
 				    HAL_WBM_IDLE_LINK, &dp->wbm_idle_ring);
 
@@ -1281,6 +1287,7 @@ void ath12k_dp_free(struct ath12k_base *ab)
 
 	ath12k_dp_rx_free(ab);
 	/* Deinit any SOC level resource */
+	dp->ab = NULL;
 }
 
 void ath12k_dp_cc_config(struct ath12k_base *ab)
