@@ -1733,7 +1733,8 @@ intel_fb_stride_alignment(const struct drm_framebuffer *fb, int color_plane)
 	}
 
 	tile_width = intel_tile_width_bytes(fb, color_plane);
-	if (intel_fb_is_ccs_modifier(fb->modifier)) {
+	if (intel_fb_is_ccs_modifier(fb->modifier) ||
+	    (GRAPHICS_VER(dev_priv) >= 20 && fb->modifier == I915_FORMAT_MOD_4_TILED)) {
 		/*
 		 * On TGL the surface stride must be 4 tile aligned, mapped by
 		 * one 64 byte cacheline on the CCS AUX surface.
