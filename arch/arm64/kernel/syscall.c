@@ -7,6 +7,7 @@
 #include <linux/ptrace.h>
 #include <linux/randomize_kstack.h>
 #include <linux/syscalls.h>
+#include <linux/entry-common.h>
 
 #include <asm/debug-monitors.h>
 #include <asm/exception.h>
@@ -66,14 +67,15 @@ static void invoke_syscall(struct pt_regs *regs, unsigned int scno,
 	choose_random_kstack_offset(get_random_u16() & 0x1FF);
 }
 
-static inline bool has_syscall_work(unsigned long flags)
+static inline bool has_syscall_work(unsigned long work)
 {
-	return unlikely(flags & _TIF_SYSCALL_WORK);
+	return unlikely(work & SYSCALL_WORK_ENTER);
 }
 
 static void el0_svc_common(struct pt_regs *regs, int scno, int sc_nr,
 			   const syscall_fn_t syscall_table[])
 {
+	unsigned long work = READ_ONCE(current_thread_info()->syscall_work);
 	unsigned long flags = read_thread_flags();
 
 	regs->orig_x0 = regs->regs[0];
@@ -107,7 +109,7 @@ static void el0_svc_common(struct pt_regs *regs, int scno, int sc_nr,
 		return;
 	}
 
-	if (has_syscall_work(flags)) {
+	if (has_syscall_work(work)) {
 		/*
 		 * The de-facto standard way to skip a system call using ptrace
 		 * is to set the system call to -1 (NO_SYSCALL) and set x0 to a
@@ -125,7 +127,7 @@ static void el0_svc_common(struct pt_regs *regs, int scno, int sc_nr,
 		 */
 		if (scno == NO_SYSCALL)
 			syscall_set_return_value(current, regs, -ENOSYS, 0);
-		scno = syscall_trace_enter(regs);
+		scno = syscall_trace_enter(regs, regs->syscallno, work);
 		if (scno == NO_SYSCALL)
 			goto trace_exit;
 	}
@@ -137,14 +139,14 @@ static void el0_svc_common(struct pt_regs *regs, int scno, int sc_nr,
 	 * check again. However, if we were tracing entry, then we always trace
 	 * exit regardless, as the old entry assembly did.
 	 */
-	if (!has_syscall_work(flags) && !IS_ENABLED(CONFIG_DEBUG_RSEQ)) {
-		flags = read_thread_flags();
-		if (!has_syscall_work(flags) && !(flags & _TIF_SINGLESTEP))
+	if (!has_syscall_work(work) && !IS_ENABLED(CONFIG_DEBUG_RSEQ)) {
+		work = READ_ONCE(current_thread_info()->syscall_work);
+		if (!has_syscall_work(work) && !report_single_step(work))
 			return;
 	}
 
 trace_exit:
-	syscall_trace_exit(regs);
+	syscall_exit_work(regs, work);
 }
 
 void do_el0_svc(struct pt_regs *regs)
