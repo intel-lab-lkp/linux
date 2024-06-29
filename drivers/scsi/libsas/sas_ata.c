@@ -618,7 +618,7 @@ int sas_ata_init(struct domain_device *found_dev)
 	return 0;
 
 destroy_port:
-	kfree(ap);
+	ata_port_free(ap);
 free_host:
 	ata_host_put(ata_host);
 	return rc;
