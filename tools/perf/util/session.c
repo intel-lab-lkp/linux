@@ -1764,6 +1764,36 @@ int perf_session__deliver_synth_event(struct perf_session *session,
 	return machines__deliver_event(&session->machines, evlist, event, sample, tool, 0, NULL);
 }
 
+int perf_session__deliver_synth_attr_event(struct perf_session *session,
+					   const struct perf_event_attr *attr,
+					   u64 id)
+{
+	union {
+		struct {
+			struct perf_record_header_attr attr;
+			u64 ids[1];
+		} attr_id;
+		union perf_event ev;
+	} ev = {
+		.attr_id = {
+			.attr = {
+				.header = {
+					.type = PERF_RECORD_HEADER_ATTR,
+					.size = PERF_ALIGN(sizeof(struct perf_event_attr),
+							   sizeof(u64))
+					    + sizeof(struct perf_event_header)
+					    + sizeof(u64),
+				},
+			},
+			.ids = { id, }
+		},
+	};
+
+	memcpy(&ev.attr_id.attr.attr, attr, min((u32)sizeof(struct perf_event_attr), attr->size));
+	ev.attr_id.attr.attr.size = sizeof(struct perf_event_attr);
+	return perf_session__deliver_synth_event(session, &ev.ev, NULL);
+}
+
 static void event_swap(union perf_event *event, bool sample_id_all)
 {
 	perf_event__swap_op swap;
