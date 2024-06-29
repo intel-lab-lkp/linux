@@ -2533,18 +2533,14 @@ static int pwrap_probe(struct platform_device *pdev)
 	}
 
 	clk = devm_clk_get_optional_enabled(wrp->dev, "sys");
-	if (IS_ERR(clk)) {
+	if (IS_ERR(clk))
 		return dev_err_probe(wrp->dev, PTR_ERR(clk),
-				     "failed to get clock: %pe\n",
-				     clk);
-	}
+				     "failed to get sys clock\n");
 
 	clk = devm_clk_get_optional_enabled(wrp->dev, "tmr");
-	if (IS_ERR(clk)) {
+	if (IS_ERR(clk))
 		return dev_err_probe(wrp->dev, PTR_ERR(clk),
-				     "failed to get clock: %pe\n",
-				     clk);
-	}
+				     "failed to get tmr clock\n");
 
 	/* Enable internal dynamic clock */
 	if (HAS_CAP(wrp->master->caps, PWRAP_CAP_DCM)) {
