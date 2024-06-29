@@ -2060,17 +2060,17 @@ static void cros_ec_proto_test_get_next_event_no_mkbp_event(struct kunit *test)
 
 	/* For get_keyboard_state_event(). */
 	{
-		union ec_response_get_next_data_v1 *data;
+		union ec_response_get_next_data *data;
 
 		mock = cros_kunit_ec_xfer_mock_add(test, sizeof(*data));
 		KUNIT_ASSERT_PTR_NE(test, mock, NULL);
 
-		data = (union ec_response_get_next_data_v1 *)mock->o_data;
+		data = (union ec_response_get_next_data *)mock->o_data;
 		data->host_event = 0xbeef;
 	}
 
 	ret = cros_ec_get_next_event(ec_dev, &wake_event, &more_events);
-	KUNIT_EXPECT_EQ(test, ret, sizeof(union ec_response_get_next_data_v1));
+	KUNIT_EXPECT_EQ(test, ret, sizeof(union ec_response_get_next_data));
 
 	KUNIT_EXPECT_EQ(test, ec_dev->event_data.event_type, EC_MKBP_EVENT_KEY_MATRIX);
 	KUNIT_EXPECT_EQ(test, ec_dev->event_data.data.host_event, 0xbeef);
@@ -2085,7 +2085,7 @@ static void cros_ec_proto_test_get_next_event_no_mkbp_event(struct kunit *test)
 
 		KUNIT_EXPECT_EQ(test, mock->msg.version, 0);
 		KUNIT_EXPECT_EQ(test, mock->msg.command, EC_CMD_MKBP_STATE);
-		KUNIT_EXPECT_EQ(test, mock->msg.insize, sizeof(union ec_response_get_next_data_v1));
+		KUNIT_EXPECT_EQ(test, mock->msg.insize, sizeof(union ec_response_get_next_data));
 		KUNIT_EXPECT_EQ(test, mock->msg.outsize, 0);
 	}
 }
@@ -2170,18 +2170,18 @@ static void cros_ec_proto_test_get_next_event_mkbp_event_version2(struct kunit *
 
 	/* For get_next_event_xfer(). */
 	{
-		struct ec_response_get_next_event_v1 *data;
+		struct ec_response_get_next_event *data;
 
 		mock = cros_kunit_ec_xfer_mock_add(test, sizeof(*data));
 		KUNIT_ASSERT_PTR_NE(test, mock, NULL);
 
-		data = (struct ec_response_get_next_event_v1 *)mock->o_data;
+		data = (struct ec_response_get_next_event *)mock->o_data;
 		data->event_type = EC_MKBP_EVENT_FINGERPRINT;
 		data->data.sysrq = 0xbeef;
 	}
 
 	ret = cros_ec_get_next_event(ec_dev, &wake_event, &more_events);
-	KUNIT_EXPECT_EQ(test, ret, sizeof(struct ec_response_get_next_event_v1));
+	KUNIT_EXPECT_EQ(test, ret, sizeof(struct ec_response_get_next_event));
 
 	KUNIT_EXPECT_EQ(test, ec_dev->event_data.event_type, EC_MKBP_EVENT_FINGERPRINT);
 	KUNIT_EXPECT_EQ(test, ec_dev->event_data.data.sysrq, 0xbeef);
@@ -2197,7 +2197,7 @@ static void cros_ec_proto_test_get_next_event_mkbp_event_version2(struct kunit *
 		KUNIT_EXPECT_EQ(test, mock->msg.version, 2);
 		KUNIT_EXPECT_EQ(test, mock->msg.command, EC_CMD_GET_NEXT_EVENT);
 		KUNIT_EXPECT_EQ(test, mock->msg.insize,
-				sizeof(struct ec_response_get_next_event_v1));
+				sizeof(struct ec_response_get_next_event));
 		KUNIT_EXPECT_EQ(test, mock->msg.outsize, 0);
 	}
 }
@@ -2209,7 +2209,7 @@ static void cros_ec_proto_test_get_next_event_mkbp_event_host_event_rtc(struct k
 	struct ec_xfer_mock *mock;
 	int ret;
 	bool wake_event;
-	struct ec_response_get_next_event_v1 *data;
+	struct ec_response_get_next_event *data;
 
 	ec_dev->max_request = 0xff;
 	ec_dev->max_response = 0xee;
@@ -2226,7 +2226,7 @@ static void cros_ec_proto_test_get_next_event_mkbp_event_host_event_rtc(struct k
 						   sizeof(data->data.host_event));
 		KUNIT_ASSERT_PTR_NE(test, mock, NULL);
 
-		data = (struct ec_response_get_next_event_v1 *)mock->o_data;
+		data = (struct ec_response_get_next_event *)mock->o_data;
 		data->event_type = EC_MKBP_EVENT_HOST_EVENT;
 		put_unaligned_le32(EC_HOST_EVENT_MASK(EC_HOST_EVENT_RTC), &data->data.host_event);
 	}
@@ -2246,7 +2246,7 @@ static void cros_ec_proto_test_get_next_event_mkbp_event_host_event_rtc(struct k
 		KUNIT_EXPECT_EQ(test, mock->msg.version, 2);
 		KUNIT_EXPECT_EQ(test, mock->msg.command, EC_CMD_GET_NEXT_EVENT);
 		KUNIT_EXPECT_EQ(test, mock->msg.insize,
-				sizeof(struct ec_response_get_next_event_v1));
+				sizeof(struct ec_response_get_next_event));
 		KUNIT_EXPECT_EQ(test, mock->msg.outsize, 0);
 	}
 }
@@ -2258,7 +2258,7 @@ static void cros_ec_proto_test_get_next_event_mkbp_event_host_event_masked(struc
 	struct ec_xfer_mock *mock;
 	int ret;
 	bool wake_event;
-	struct ec_response_get_next_event_v1 *data;
+	struct ec_response_get_next_event *data;
 
 	ec_dev->max_request = 0xff;
 	ec_dev->max_response = 0xee;
@@ -2275,7 +2275,7 @@ static void cros_ec_proto_test_get_next_event_mkbp_event_host_event_masked(struc
 						   sizeof(data->data.host_event));
 		KUNIT_ASSERT_PTR_NE(test, mock, NULL);
 
-		data = (struct ec_response_get_next_event_v1 *)mock->o_data;
+		data = (struct ec_response_get_next_event *)mock->o_data;
 		data->event_type = EC_MKBP_EVENT_HOST_EVENT;
 		put_unaligned_le32(EC_HOST_EVENT_MASK(EC_HOST_EVENT_AC_DISCONNECTED),
 				   &data->data.host_event);
@@ -2296,7 +2296,7 @@ static void cros_ec_proto_test_get_next_event_mkbp_event_host_event_masked(struc
 		KUNIT_EXPECT_EQ(test, mock->msg.version, 2);
 		KUNIT_EXPECT_EQ(test, mock->msg.command, EC_CMD_GET_NEXT_EVENT);
 		KUNIT_EXPECT_EQ(test, mock->msg.insize,
-				sizeof(struct ec_response_get_next_event_v1));
+				sizeof(struct ec_response_get_next_event));
 		KUNIT_EXPECT_EQ(test, mock->msg.outsize, 0);
 	}
 }
