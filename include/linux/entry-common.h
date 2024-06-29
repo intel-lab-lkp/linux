@@ -291,6 +291,94 @@ static __always_inline void arch_exit_to_user_mode(void) { }
 #endif
 
 /**
+ * arch_enter_from_kernel_mode - Architecture specific check work.
+ */
+static inline void arch_enter_from_kernel_mode(struct pt_regs *regs);
+
+#ifndef arch_enter_from_kernel_mode
+static inline void arch_enter_from_kernel_mode(struct pt_regs *regs) { }
+#endif
+
+/**
+ * arch_exit_to_kernel_mode_prepare - Architecture specific final work before
+ *				      exit to kernel mode.
+ */
+static inline void arch_exit_to_kernel_mode_prepare(struct pt_regs *regs);
+
+#ifndef arch_exit_to_kernel_mode_prepare
+static inline void arch_exit_to_kernel_mode_prepare(struct pt_regs *regs) { }
+#endif
+
+/**
+ * arch_prepare_report_syscall_entry - Architecture specific work before
+ *			               report_syscall_entry().
+ */
+static inline unsigned long arch_prepare_report_syscall_entry(struct pt_regs *regs);
+
+#ifndef arch_prepare_report_syscall_entry
+static inline unsigned long arch_prepare_report_syscall_entry(struct pt_regs *regs)
+{
+	return 0;
+}
+#endif
+
+/**
+ * arch_post_report_syscall_entry - Architecture specific work after
+ *			            report_syscall_entry().
+ */
+static inline void arch_post_report_syscall_entry(struct pt_regs *regs,
+						  unsigned long saved_reg,
+						  long ret);
+
+#ifndef arch_post_report_syscall_entry
+static inline void arch_post_report_syscall_entry(struct pt_regs *regs,
+						  unsigned long saved_reg,
+						  long ret)
+{
+}
+#endif
+
+/**
+ * arch_prepare_report_syscall_exit - Architecture specific work before
+ *			              report_syscall_exit().
+ */
+static inline unsigned long arch_prepare_report_syscall_exit(struct pt_regs *regs,
+							     unsigned long work);
+
+#ifndef arch_prepare_report_syscall_exit
+static inline unsigned long arch_prepare_report_syscall_exit(struct pt_regs *regs,
+							     unsigned long work)
+{
+	return 0;
+}
+#endif
+
+/**
+ * arch_post_report_syscall_exit - Architecture specific work after
+ *			           report_syscall_exit().
+ */
+static inline void arch_post_report_syscall_exit(struct pt_regs *regs,
+						 unsigned long saved_reg,
+						 unsigned long work);
+
+#ifndef arch_post_report_syscall_exit
+static inline void arch_post_report_syscall_exit(struct pt_regs *regs,
+						 unsigned long saved_reg,
+						 unsigned long work)
+{
+}
+#endif
+
+/**
+ * arch_irqentry_exit_need_resched - Architecture specific need resched function
+ */
+static inline bool arch_irqentry_exit_need_resched(void);
+
+#ifndef arch_irqentry_exit_need_resched
+static inline bool arch_irqentry_exit_need_resched(void) { return true; }
+#endif
+
+/**
  * arch_do_signal_or_restart -  Architecture specific signal delivery function
  * @regs:	Pointer to currents pt_regs
  *
@@ -551,5 +639,7 @@ irqentry_state_t noinstr irqentry_nmi_enter(struct pt_regs *regs);
  * Counterpart to irqentry_nmi_enter().
  */
 void noinstr irqentry_nmi_exit(struct pt_regs *regs, irqentry_state_t irq_state);
+
+void syscall_exit_work(struct pt_regs *regs, unsigned long work);
 
 #endif
