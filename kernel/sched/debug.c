@@ -712,6 +712,56 @@ void print_cfs_rq(struct seq_file *m, int cpu, struct cfs_rq *cfs_rq)
 #endif
 }
 
+static void print_rt_se(struct seq_file *m, struct sched_rt_entity *rt_se)
+{
+	struct task_struct *task;
+
+#ifdef CONFIG_RT_GROUP_SCHED
+	if (rt_se->my_q) {
+		SEQ_printf_task_group_path(m, rt_se->my_q->tg, "%s\n");
+		return;
+	}
+#endif
+	task = container_of(rt_se, struct task_struct, rt);
+	SEQ_printf(m, "	prio-%d, pid-%d, %s\n", task->prio, task->pid, task->comm);
+}
+
+/*shall be called in rq lock*/
+void print_rt_rq_task(struct seq_file *m, struct rt_rq *rt_rq)
+{
+	struct rt_prio_array *array = &rt_rq->active;
+	struct sched_rt_entity *rt_se;
+	struct list_head *queue, *head;
+	unsigned long bitmap[2];
+	int idx;
+	int count = 0;
+
+	if (!rt_rq->rt_nr_running)
+		return;
+
+	memcpy(bitmap, array->bitmap, sizeof(unsigned long) * 2);
+	idx = sched_find_first_bit(bitmap);
+	WARN_ON_ONCE(idx >= MAX_RT_PRIO);
+
+	while (1) {
+		clear_bit(idx, bitmap);
+		queue = array->queue + idx;
+		head = queue;
+		queue = queue->next;
+		do {
+			rt_se = list_entry(queue, struct sched_rt_entity, run_list);
+			print_rt_se(m, rt_se);
+			queue = queue->next;
+			count++;
+		} while (queue != head);
+		idx = sched_find_first_bit(bitmap);
+		if (idx >= MAX_RT_PRIO)
+			break;
+	}
+
+	WARN_ON_ONCE(count != rt_rq->rt_nr_running);
+}
+
 void print_rt_rq(struct seq_file *m, int cpu, struct rt_rq *rt_rq)
 {
 #ifdef CONFIG_RT_GROUP_SCHED
