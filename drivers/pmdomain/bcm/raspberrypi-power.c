@@ -86,7 +86,14 @@ static void rpi_common_init_power_domain(struct rpi_power_domains *rpi_domains,
 
 	dom->base.name = name;
 	dom->base.power_on = rpi_domain_on;
-	dom->base.power_off = rpi_domain_off;
+
+	/*
+	 * During supend to idle any request to power off the USB domain
+	 * leads to a timeout. As a temporary workaround don't register
+	 * the relevant power off handler.
+	 */
+	if (strcmp("USB", name))
+		dom->base.power_off = rpi_domain_off;
 
 	/*
 	 * Treat all power domains as off at boot.
