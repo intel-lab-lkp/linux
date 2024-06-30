@@ -288,6 +288,8 @@ int mipi_dsi_generic_write_chatty(struct mipi_dsi_device *dsi,
 				  const void *payload, size_t size);
 void mipi_dsi_generic_write_multi(struct mipi_dsi_multi_context *ctx,
 				  const void *payload, size_t size);
+ssize_t mipi_dsi_generic_write_raw_multi(struct mipi_dsi_multi_context *ctx, u8 type,
+				    const void *payload, size_t size);
 ssize_t mipi_dsi_generic_read(struct mipi_dsi_device *dsi, const void *params,
 			      size_t num_params, void *data, size_t size);
 
@@ -431,6 +433,20 @@ void mipi_dsi_dcs_set_tear_on_multi(struct mipi_dsi_multi_context *ctx,
 	do {                                                            \
 		static const u8 d[] = { cmd, seq };                     \
 		mipi_dsi_dcs_write_buffer_multi(ctx, d, ARRAY_SIZE(d)); \
+	} while (0)
+
+/**
+ * mipi_dsi_dcs_write_long_multi - transmit a DCS long command with payload
+ * @ctx: Context for multiple DSI transactions
+ * @cmd: Commands
+ * @seq: buffer containing data to be transmitted
+ */
+#define mipi_dsi_dcs_write_long_multi(ctx, cmd, seq...)                    \
+	do {                                                               \
+		static const u8 d[] = { cmd, seq };                        \
+		mipi_dsi_generic_write_raw_multi(ctx,                      \
+						  MIPI_DSI_DCS_LONG_WRITE, \
+						  d, ARRAY_SIZE(d));       \
 	} while (0)
 
 /**
