@@ -3592,6 +3592,13 @@ static int vc5_hdmi_init_resources(struct drm_device *drm,
 static int vc4_hdmi_runtime_suspend(struct device *dev)
 {
 	struct vc4_hdmi *vc4_hdmi = dev_get_drvdata(dev);
+	struct drm_device *drm = vc4_hdmi->connector.dev;
+
+	/*
+	 * Don't disable polling if it was never initialized
+	 */
+	if (drm && drm->mode_config.poll_enabled)
+		drm_kms_helper_poll_disable(drm);
 
 	clk_disable_unprepare(vc4_hdmi->hsm_clock);
 
@@ -3601,6 +3608,7 @@ static int vc4_hdmi_runtime_suspend(struct device *dev)
 static int vc4_hdmi_runtime_resume(struct device *dev)
 {
 	struct vc4_hdmi *vc4_hdmi = dev_get_drvdata(dev);
+	struct drm_device *drm = vc4_hdmi->connector.dev;
 	unsigned long __maybe_unused flags;
 	u32 __maybe_unused value;
 	unsigned long rate;
@@ -3644,6 +3652,9 @@ static int vc4_hdmi_runtime_resume(struct device *dev)
 		spin_unlock_irqrestore(&vc4_hdmi->hw_lock, flags);
 	}
 #endif
+
+	if (drm && drm->mode_config.poll_enabled)
+		drm_kms_helper_poll_enable(drm);
 
 	return 0;
 
