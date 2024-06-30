@@ -435,6 +435,22 @@ void mipi_dsi_dcs_set_tear_on_multi(struct mipi_dsi_multi_context *ctx,
 		mipi_dsi_dcs_write_buffer_multi(ctx, d, ARRAY_SIZE(d)); \
 	} while (0)
 
+#define mipi_dsi_dcs_set_column_address_multi(ctx, start, end)          \
+	do {                                                            \
+		static const u8 d[] = { MIPI_DCS_SET_COLUMN_ADDRESS,    \
+					(start) >> 8, (start) & 0xff,   \
+					(end) >> 8, (end) & 0xff };     \
+		mipi_dsi_dcs_write_buffer_multi(ctx, d, ARRAY_SIZE(d)); \
+	} while (0)
+
+#define mipi_dsi_dcs_set_page_address_multi(ctx, start, end)            \
+	do {                                                            \
+		static const u8 d[] = { MIPI_DCS_SET_PAGE_ADDRESS,      \
+					(start) >> 8, (start) & 0xff,   \
+					(end) >> 8, (end) & 0xff };     \
+		mipi_dsi_dcs_write_buffer_multi(ctx, d, ARRAY_SIZE(d)); \
+	} while (0)
+
 /**
  * mipi_dsi_dcs_write_long_multi - transmit a DCS long command with payload
  * @ctx: Context for multiple DSI transactions
