@@ -1,0 +1,68 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/input/touchscreen/syna,tcm-oncell.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Synaptics TCM Oncell i2c touchscreen
+
+maintainers:
+  - Caleb Connolly <caleb@postmarketos.org>
+
+allOf:
+  - $ref: touchscreen.yaml#
+
+properties:
+  compatible:
+    enum:
+      - syna,s3908
+
+  reg:
+    maxItems: 1
+
+  interrupts-extended:
+    maxItems: 1
+
+  reset-gpios:
+    maxItems: 1
+    description: Reset GPIO the chip is connected to.
+
+  vdd-supply:
+    description: a phandle for the regulator supplying 3V power.
+
+  vcc-supply:
+    description: a phandle for the regulator supplying IO power.
+
+additionalProperties: false
+
+required:
+  - compatible
+  - reg
+  - interrupts-extended
+  - reset-gpios
+  - vdd-supply
+  - vcc-supply
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    #include <dt-bindings/gpio/gpio.h>
+
+    i2c {
+      #address-cells = <1>;
+      #size-cells = <0>;
+      clock-frequency = <400000>;
+      status = "okay";
+
+      touchscreen@4b {
+        compatible = "syna,s3908";
+        reg = <0x4B>;
+
+        interrupts-extended = <&tlmm 39 0x2008>;
+
+        reset-gpios = <&tlmm 38 GPIO_ACTIVE_LOW>;
+
+        vdd-supply = <&vreg_l13a_ts_3p0>;
+        vcc-supply = <&vreg_l1c_1p8>;
+      };
+    };
