@@ -1165,21 +1165,26 @@ gss:
 }
 
 struct svc_export *
-rqst_exp_find(struct svc_rqst *rqstp,  struct nfsd_net *nn,
+rqst_exp_find(struct svc_rqst *rqstp, struct nfsd_net *nn,
+	      struct auth_domain *client,
 	      int fsid_type, u32 *fsidv)
 {
 	struct svc_export *gssexp, *exp = ERR_PTR(-ENOENT);
 	struct cache_detail *cd;
+	bool try_gss = rqstp && !client;
 
 	if (!nn)
 		nn = net_generic(SVC_NET(rqstp), nfsd_net_id);
 	cd = nn->svc_export_cache;
 
-	if (rqstp->rq_client == NULL)
+	if (!client && rqstp)
+		client = rqstp->rq_client;
+
+	if (client == NULL)
 		goto gss;
 
 	/* First try the auth_unix client: */
-	exp = exp_find(cd, rqstp->rq_client, fsid_type,
+	exp = exp_find(cd, client, fsid_type,
 		       fsidv, &rqstp->rq_chandle);
 	if (PTR_ERR(exp) == -ENOENT)
 		goto gss;
@@ -1190,7 +1195,7 @@ rqst_exp_find(struct svc_rqst *rqstp,  struct nfsd_net *nn,
 		return exp;
 gss:
 	/* Otherwise, try falling back on gss client */
-	if (rqstp->rq_gssclient == NULL)
+	if (!try_gss || rqstp->rq_gssclient == NULL)
 		return exp;
 	gssexp = exp_find(cd, rqstp->rq_gssclient, fsid_type, fsidv,
 						&rqstp->rq_chandle);
@@ -1224,7 +1229,7 @@ struct svc_export *rqst_find_fsidzero_export(struct svc_rqst *rqstp)
 
 	mk_fsid(FSID_NUM, fsidv, 0, 0, 0, NULL);
 
-	return rqst_exp_find(rqstp, NULL, FSID_NUM, fsidv);
+	return rqst_exp_find(rqstp, NULL, NULL, FSID_NUM, fsidv);
 }
 
 /*

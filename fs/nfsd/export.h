@@ -130,6 +130,6 @@ static inline struct svc_export *exp_get(struct svc_export *exp)
 }
 struct nfsd_net;
 struct svc_export * rqst_exp_find(struct svc_rqst *, struct nfsd_net *,
-				  int, u32 *);
+				  struct auth_domain *, int, u32 *);
 
 #endif /* NFSD_EXPORT_H */

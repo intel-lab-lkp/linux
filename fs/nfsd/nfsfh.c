@@ -155,7 +155,7 @@ static inline __be32 check_pseudo_root(int nfs_vers,
  */
 static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct nfsd_net *nn,
 				 struct svc_cred *cred, int nfs_vers,
-				 struct svc_fh *fhp)
+				 struct auth_domain *client, struct svc_fh *fhp)
 {
 	struct knfsd_fh	*fh = &fhp->fh_handle;
 	struct fid *fid = NULL;
@@ -199,7 +199,7 @@ static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct nfsd_net *nn,
 	data_left -= len;
 	if (data_left < 0)
 		return error;
-	exp = rqst_exp_find(rqstp, nn, fh->fh_fsid_type, fh->fh_fsid);
+	exp = rqst_exp_find(rqstp, nn, client, fh->fh_fsid_type, fh->fh_fsid);
 	fid = (struct fid *)(fh->fh_fsid + len);
 
 	error = nfserr_stale;
@@ -331,7 +331,7 @@ out:
 static __be32
 __fh_verify(struct svc_rqst *rqstp,
 	    struct nfsd_net *nn, struct svc_cred *cred,
-	    int nfs_vers,
+	    int nfs_vers, struct auth_domain *client,
 	    struct svc_fh *fhp, umode_t type, int access)
 {
 	struct svc_export *exp = NULL;
@@ -339,7 +339,8 @@ __fh_verify(struct svc_rqst *rqstp,
 	__be32		error;
 
 	if (!fhp->fh_dentry) {
-		error = nfsd_set_fh_dentry(rqstp, nn, cred, nfs_vers, fhp);
+		error = nfsd_set_fh_dentry(rqstp, nn, cred, nfs_vers, client,
+					   fhp);
 		if (error)
 			goto out;
 	}
@@ -415,7 +416,7 @@ fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, umode_t type, int access)
 	else /* must be NLM */
 		nfs_vers = rqstp->rq_vers == 4 ? 3 : 2;
 	return __fh_verify(rqstp, net_generic(SVC_NET(rqstp), nfsd_net_id),
-			   &rqstp->rq_cred, nfs_vers,
+			   &rqstp->rq_cred, nfs_vers, rqstp->rq_client,
 			   fhp, type, access);
 }
 
