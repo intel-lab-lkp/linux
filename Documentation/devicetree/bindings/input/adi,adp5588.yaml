@@ -46,6 +46,11 @@ properties:
   '#gpio-cells':
     const: 2
 
+  gpio-only:
+    description:
+      This property applies if keypad,num-rows, keypad,num-columns and
+      linux,keypad are not specified. All keys will be marked as gpio.
+
   interrupt-controller:
     description:
       This property applies if either keypad,num-rows lower than 8 or
@@ -68,10 +73,6 @@ properties:
 required:
   - compatible
   - reg
-  - interrupts
-  - keypad,num-rows
-  - keypad,num-columns
-  - linux,keymap
 
 unevaluatedProperties: false
 
@@ -108,4 +109,23 @@ examples:
             >;
         };
     };
+
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    #include <dt-bindings/input/input.h>
+    #include <dt-bindings/gpio/gpio.h>
+
+    i2c {
+      #address-cells = <1>;
+      #size-cells = <0>;
+        gpio@34 {
+            compatible = "adi,adp5588";
+            reg = <0x34>;
+
+            #gpio-cells = <2>;
+            gpio-controller;
+            gpio-only;
+            };
+        };
+
 ...
