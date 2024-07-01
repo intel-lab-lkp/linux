@@ -38,6 +38,32 @@ patternProperties:
     additionalProperties: false
 
     patternProperties:
+      "^sdhci-[a-z0-9_-]+-cfg$":
+        description: Config settings for SDHCI devices.
+          SDHCI has configuration based on device speed modes.
+          - common is set on all speeds and can be overridden by speed mode.
+          - List of speed modes and their config name
+            "default", /* MMC_TIMING_LEGACY */
+            "sd-mmc-highspeed", /* MMC_TIMING_MMC_HS */
+            "sd-mmc-highspeed", /* MMC_TIMING_SD_HS */
+            "uhs-sdr12", /* MMC_TIMING_UHS_SDR12 */
+            "uhs-sdr25", /* MMC_TIMING_UHS_SDR25 */
+            "uhs-sdr50", /* MMC_TIMING_UHS_SDR50 */
+            "uhs-sdr104", /* MMC_TIMING_UHS_SDR104 */
+            "uhs-ddr52", /* MMC_TIMING_UHS_DDR50 */
+            "uhs-ddr52", /* MMC_TIMING_MMC_DDR52 */
+            "mmc-hs200", /* MMC_TIMING_MMC_HS200 */
+            "mmc-hs400", /* MMC_TIMING_MMC_HS400 */
+        type: object
+        additionalProperties: false
+
+        properties:
+          nvidia,mmc-num-tuning-iter:
+            description: Specify DQS trim value for HS400 timing.
+            $ref: /schemas/types.yaml#/definitions/uint32
+            minimum: 0
+            maximum: 0xffff
+
       "^i2c-[a-z0-9_]+-cfg$":
         description: Config settings for I2C devices.
         type: object
@@ -122,6 +148,11 @@ examples:
             i2c-fastplus-cfg {
                 nvidia,i2c-clk-divisor-fs-mode = <0x4f>;
                 nvidia,i2c-sclk-high-period = <0x07>;
+            };
+        };
+        configmmc1: config-mmc3400000 {
+            sdhci-mmc-hs200-cfg {
+                nvidia,mmc-num-tuning-iter = <0x02>;
             };
         };
     };
