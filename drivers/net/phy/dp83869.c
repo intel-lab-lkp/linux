@@ -786,6 +786,10 @@ static int dp83869_configure_mode(struct phy_device *phydev,
 		return -EINVAL;
 	}
 
+	ret = phy_write(phydev, DP83869_CTRL, DP83869_SW_RESTART);
+
+	usleep_range(10, 20);
+
 	return ret;
 }
 
