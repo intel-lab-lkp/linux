@@ -127,6 +127,21 @@ struct rcu_work {
 	struct workqueue_struct *wq;
 };
 
+/*
+ * If a work may do disk IO, it is recommended to use struct io_work
+ * instead of struct work_struct.
+ */
+struct io_work {
+	struct work_struct work;
+
+	/* If the work does submit_bio, io priority may be needed. */
+	unsigned short ioprio;
+	/* Record kworker's original io priority. */
+	unsigned short ori_ioprio;
+	/* Whether the work has set io priority? */
+	long ioprio_flag;
+};
+
 enum wq_affn_scope {
 	WQ_AFFN_DFL,			/* use system default */
 	WQ_AFFN_CPU,			/* one pod per CPU */
@@ -216,6 +231,11 @@ static inline struct delayed_work *to_delayed_work(struct work_struct *work)
 static inline struct rcu_work *to_rcu_work(struct work_struct *work)
 {
 	return container_of(work, struct rcu_work, work);
+}
+
+static inline struct io_work *to_io_work(struct work_struct *work)
+{
+	return container_of(work, struct io_work, work);
 }
 
 struct execute_work {
@@ -346,6 +366,18 @@ static inline unsigned int work_static(struct work_struct *work) { return 0; }
 
 #define INIT_RCU_WORK_ONSTACK(_work, _func)				\
 	INIT_WORK_ONSTACK(&(_work)->work, (_func))
+
+#define INIT_IO_WORK(_work, _func)					\
+	do {								\
+		INIT_WORK(&(_work)->work, (_func));			\
+		(_work)->ioprio_flag = 0;				\
+	} while (0)
+
+#define INIT_IO_WORK_ONSTACK(_work, _func)				\
+	do {								\
+		INIT_WORK_ONSTACK(&(_work)->work, (_func));		\
+		(_work)->ioprio_flag = 0;				\
+	} while (0)
 
 /**
  * work_pending - Find out whether a work item is currently pending
@@ -552,6 +584,10 @@ extern bool mod_delayed_work_on(int cpu, struct workqueue_struct *wq,
 			struct delayed_work *dwork, unsigned long delay);
 extern bool queue_rcu_work(struct workqueue_struct *wq, struct rcu_work *rwork);
 
+extern void set_io_work_ioprio(struct io_work *work, unsigned short ioprio);
+extern void may_adjust_io_work_task_ioprio(struct io_work *work);
+extern void restore_io_work_task_ioprio(struct io_work *work);
+
 extern void __flush_workqueue(struct workqueue_struct *wq);
 extern void drain_workqueue(struct workqueue_struct *wq);
 
@@ -634,6 +670,17 @@ static inline bool queue_delayed_work(struct workqueue_struct *wq,
 				      unsigned long delay)
 {
 	return queue_delayed_work_on(WORK_CPU_UNBOUND, wq, dwork, delay);
+}
+
+/**
+ * queue_io_work - queue io work on a workqueue
+ * @wq: workqueue to use
+ * @iowork: io work to queue
+ */
+static inline bool queue_io_work(struct workqueue_struct *wq,
+				      struct io_work *iowork)
+{
+	return queue_work(wq, &(iowork->work));
 }
 
 /**

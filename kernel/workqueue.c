@@ -2651,6 +2651,56 @@ bool queue_rcu_work(struct workqueue_struct *wq, struct rcu_work *rwork)
 }
 EXPORT_SYMBOL(queue_rcu_work);
 
+/**
+ * set_io_work_ioprio - set io priority for the current io work
+ * @iowork: the io work to be set
+ * @ioprio: desired io priority
+ *
+ * This function can be called after INIT_IO_WORK if the io priority
+ * of the io work needs to adjust. And it is recommended to use this
+ * function together with may_adjust_io_work_task_ioprio() and
+ * restore_io_work_task_ioprio().
+ */
+void set_io_work_ioprio(struct io_work *iowork, unsigned short ioprio)
+{
+	iowork->ioprio = ioprio;
+	iowork->ioprio_flag = 1;
+}
+EXPORT_SYMBOL(set_io_work_ioprio);
+
+/**
+ * may_adjust_io_work_task_ioprio - maybe adjust the io priority of kworker
+ * @iowork: the io work that kworker will do
+ *
+ * It is recommended to use this function together with set_io_work_ioprio()
+ * and restore_io_work_task_ioprio().
+ */
+void may_adjust_io_work_task_ioprio(struct io_work *iowork)
+{
+	if (iowork->ioprio_flag) {
+		iowork->ori_ioprio = get_current_ioprio();
+		set_task_ioprio(current, iowork->ioprio);
+	}
+}
+EXPORT_SYMBOL(may_adjust_io_work_task_ioprio);
+
+/**
+ * restore_io_work_task_ioprio - restore the io priority of kworker
+ * @iowork: the io work that kworker just did
+ *
+ * When kworker finishes the io work, the original io priority of
+ * kworker should be restored. It is recommended to use this function
+ * together with set_io_work_ioprio() and may_adjust_io_work_task_ioprio().
+ */
+void restore_io_work_task_ioprio(struct io_work *iowork)
+{
+	if (iowork->ioprio_flag) {
+		set_task_ioprio(current, iowork->ori_ioprio);
+		iowork->ioprio_flag = 0;
+	}
+}
+EXPORT_SYMBOL(restore_io_work_task_ioprio);
+
 static struct worker *alloc_worker(int node)
 {
 	struct worker *worker;
