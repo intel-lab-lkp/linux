@@ -125,6 +125,17 @@ static bool should_emulate_decoders(struct cxl_endpoint_dvsec_info *info)
 	return true;
 }
 
+static void setup_base_hpa(struct cxl_hdm *cxlhdm)
+{
+	/*
+	 * Address translation is not needed on platforms with HPA ==
+	 * SPA. HDM decoder addresses all base on system addresses,
+	 * there is no offset and the base is zero (cxlhdm->base_hpa
+	 * == 0). Nothing to do here as it is already pre-initialized
+	 * zero.
+	 */
+}
+
 /**
  * devm_cxl_setup_hdm - map HDM decoder component registers
  * @port: cxl_port to map
@@ -143,6 +154,8 @@ struct cxl_hdm *devm_cxl_setup_hdm(struct cxl_port *port,
 		return ERR_PTR(-ENOMEM);
 	cxlhdm->port = port;
 	dev_set_drvdata(dev, cxlhdm);
+
+	setup_base_hpa(cxlhdm);
 
 	/* Memory devices can configure device HDM using DVSEC range regs. */
 	if (reg_map->resource == CXL_RESOURCE_NONE) {
@@ -611,6 +624,23 @@ static int cxld_await_commit(void __iomem *hdm, int id)
 	return -ETIMEDOUT;
 }
 
+/*
+ * Default expectation is that decoder base addresses match
+ * HPA resource values (that is cxlhdm->base_hpa == 0).
+ */
+
+static inline resource_size_t cxl_xlat_to_hpa(resource_size_t base,
+					      struct cxl_hdm *cxlhdm)
+{
+	return cxlhdm->base_hpa + base;
+}
+
+static inline resource_size_t cxl_xlat_to_base(resource_size_t hpa,
+					       struct cxl_hdm *cxlhdm)
+{
+	return hpa - cxlhdm->base_hpa;
+}
+
 static int cxl_decoder_commit(struct cxl_decoder *cxld)
 {
 	struct cxl_port *port = to_cxl_port(cxld->dev.parent);
@@ -655,7 +685,7 @@ static int cxl_decoder_commit(struct cxl_decoder *cxld)
 	ctrl = readl(hdm + CXL_HDM_DECODER0_CTRL_OFFSET(cxld->id));
 	cxld_set_interleave(cxld, &ctrl);
 	cxld_set_type(cxld, &ctrl);
-	base = cxld->hpa_range.start;
+	base = cxl_xlat_to_base(cxld->hpa_range.start, cxlhdm);
 	size = range_len(&cxld->hpa_range);
 
 	writel(upper_32_bits(base), hdm + CXL_HDM_DECODER0_BASE_HIGH_OFFSET(id));
@@ -746,22 +776,27 @@ static int cxl_setup_hdm_decoder_from_dvsec(
 	struct cxl_port *port, struct cxl_decoder *cxld, u64 *dpa_base,
 	int which, struct cxl_endpoint_dvsec_info *info)
 {
+	struct cxl_hdm *cxlhdm = dev_get_drvdata(&port->dev);
 	struct cxl_endpoint_decoder *cxled;
-	u64 len;
+	u64 base, size;
 	int rc;
 
 	if (!is_cxl_endpoint(port))
 		return -EOPNOTSUPP;
 
 	cxled = to_cxl_endpoint_decoder(&cxld->dev);
-	len = range_len(&info->dvsec_range[which]);
-	if (!len)
+	size = range_len(&info->dvsec_range[which]);
+	if (!size)
 		return -ENOENT;
+	base = cxl_xlat_to_hpa(info->dvsec_range[which].start, cxlhdm);
 
 	cxld->target_type = CXL_DECODER_HOSTONLYMEM;
 	cxld->commit = NULL;
 	cxld->reset = NULL;
-	cxld->hpa_range = info->dvsec_range[which];
+	cxld->hpa_range = (struct range) {
+		.start = base,
+		.end = base + size -1,
+	};
 
 	/*
 	 * Set the emulated decoder as locked pending additional support to
@@ -770,14 +805,14 @@ static int cxl_setup_hdm_decoder_from_dvsec(
 	cxld->flags |= CXL_DECODER_F_ENABLE | CXL_DECODER_F_LOCK;
 	port->commit_end = cxld->id;
 
-	rc = devm_cxl_dpa_reserve(cxled, *dpa_base, len, 0);
+	rc = devm_cxl_dpa_reserve(cxled, *dpa_base, size, 0);
 	if (rc) {
 		dev_err(&port->dev,
 			"decoder%d.%d: Failed to reserve DPA range %#llx - %#llx\n (%d)",
-			port->id, cxld->id, *dpa_base, *dpa_base + len - 1, rc);
+			port->id, cxld->id, *dpa_base, *dpa_base + size - 1, rc);
 		return rc;
 	}
-	*dpa_base += len;
+	*dpa_base += size;
 	cxled->state = CXL_DECODER_STATE_AUTO;
 
 	return 0;
@@ -787,6 +822,7 @@ static int init_hdm_decoder(struct cxl_port *port, struct cxl_decoder *cxld,
 			    int *target_map, void __iomem *hdm, int which,
 			    u64 *dpa_base, struct cxl_endpoint_dvsec_info *info)
 {
+	struct cxl_hdm *cxlhdm = dev_get_drvdata(&port->dev);
 	struct cxl_endpoint_decoder *cxled = NULL;
 	u64 size, base, skip, dpa_size, lo, hi;
 	bool committed;
@@ -823,6 +859,9 @@ static int init_hdm_decoder(struct cxl_port *port, struct cxl_decoder *cxld,
 
 	if (info)
 		cxled = to_cxl_endpoint_decoder(&cxld->dev);
+
+	base = cxl_xlat_to_hpa(base, cxlhdm);
+
 	cxld->hpa_range = (struct range) {
 		.start = base,
 		.end = base + size - 1,
@@ -1107,16 +1146,20 @@ int cxl_hdm_decode_init(struct cxl_dev_state *cxlds, struct cxl_hdm *cxlhdm,
 	}
 
 	for (i = 0, allowed = 0; info->mem_enabled && i < info->ranges; i++) {
-		struct device *cxld_dev;
-
-		cxld_dev = device_find_child(&root->dev, &info->dvsec_range[i],
-					     dvsec_range_allowed);
+		u64 base = cxl_xlat_to_hpa(info->dvsec_range[i].start, cxlhdm);
+		u64 size = range_len(&info->dvsec_range[i]);
+		struct range hpa_range = {
+			.start = base,
+			.end = base + size -1,
+		};
+		struct device *cxld_dev __free(put_device) =
+			cxld_dev = device_find_child(&root->dev, &hpa_range,
+						     dvsec_range_allowed);
 		if (!cxld_dev) {
 			dev_dbg(dev, "DVSEC Range%d denied by platform\n", i);
 			continue;
 		}
 		dev_dbg(dev, "DVSEC Range%d allowed by platform\n", i);
-		put_device(cxld_dev);
 		allowed++;
 	}
 
