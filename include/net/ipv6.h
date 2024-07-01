@@ -1157,8 +1157,21 @@ void ipv6_push_nfrag_opts(struct sk_buff *skb, struct ipv6_txoptions *opt,
 void ipv6_push_frag_opts(struct sk_buff *skb, struct ipv6_txoptions *opt,
 			 u8 *proto);
 
-int ipv6_skip_exthdr(const struct sk_buff *, int start, u8 *nexthdrp,
-		     __be16 *frag_offp);
+int __ipv6_skip_exthdr(const struct sk_buff *skb, int start, u8 *nexthdrp,
+		       __be16 *frag_offp, bool no_rthdr);
+
+static inline int ipv6_skip_exthdr(const struct sk_buff *skb, int start,
+				   u8 *nexthdrp, __be16 *frag_offp)
+{
+	return __ipv6_skip_exthdr(skb, start, nexthdrp, frag_offp, false);
+}
+
+static inline int ipv6_skip_exthdr_no_rthdr(const struct sk_buff *skb,
+					    int start, u8 *nexthdrp,
+					    __be16 *frag_offp)
+{
+	return __ipv6_skip_exthdr(skb, start, nexthdrp, frag_offp, true);
+}
 
 bool ipv6_ext_hdr(u8 nexthdr);
 

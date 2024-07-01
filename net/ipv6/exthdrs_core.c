@@ -69,8 +69,8 @@ EXPORT_SYMBOL(ipv6_ext_hdr);
  * --ANK (980726)
  */
 
-int ipv6_skip_exthdr(const struct sk_buff *skb, int start, u8 *nexthdrp,
-		     __be16 *frag_offp)
+int __ipv6_skip_exthdr(const struct sk_buff *skb, int start, u8 *nexthdrp,
+		       __be16 *frag_offp, bool no_rthdr)
 {
 	u8 nexthdr = *nexthdrp;
 
@@ -85,7 +85,8 @@ int ipv6_skip_exthdr(const struct sk_buff *skb, int start, u8 *nexthdrp,
 		hp = skb_header_pointer(skb, start, sizeof(_hdr), &_hdr);
 		if (!hp)
 			return -1;
-		if (nexthdr == NEXTHDR_FRAGMENT) {
+		switch (nexthdr) {
+		case NEXTHDR_FRAGMENT: {
 			__be16 _frag_off, *fp;
 			fp = skb_header_pointer(skb,
 						start+offsetof(struct frag_hdr,
@@ -99,10 +100,19 @@ int ipv6_skip_exthdr(const struct sk_buff *skb, int start, u8 *nexthdrp,
 			if (ntohs(*frag_offp) & ~0x7)
 				break;
 			hdrlen = 8;
-		} else if (nexthdr == NEXTHDR_AUTH)
+			break;
+		}
+		case NEXTHDR_AUTH:
 			hdrlen = ipv6_authlen(hp);
-		else
+			break;
+		case NEXTHDR_ROUTING:
+			if (no_rthdr)
+				return -1;
+			fallthrough;
+		default:
 			hdrlen = ipv6_optlen(hp);
+			break;
+		}
 
 		nexthdr = hp->nexthdr;
 		start += hdrlen;
@@ -111,7 +121,7 @@ int ipv6_skip_exthdr(const struct sk_buff *skb, int start, u8 *nexthdrp,
 	*nexthdrp = nexthdr;
 	return start;
 }
-EXPORT_SYMBOL(ipv6_skip_exthdr);
+EXPORT_SYMBOL(__ipv6_skip_exthdr);
 
 int ipv6_find_tlv(const struct sk_buff *skb, int offset, int type)
 {
