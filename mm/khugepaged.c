@@ -1578,13 +1578,18 @@ int collapse_pte_mapped_thp(struct mm_struct *mm, unsigned long addr,
 	if (userfaultfd_armed(vma) && !(vma->vm_flags & VM_SHARED))
 		pml = pmd_lock(mm, pmd);
 
-	start_pte = pte_offset_map_nolock(mm, pmd, NULL, haddr, &ptl);
+	start_pte = pte_offset_map_nolock(mm, pmd, &pgt_pmd, haddr, &ptl);
 	if (!start_pte)		/* mmap_lock + page lock should prevent this */
 		goto abort;
 	if (!pml)
 		spin_lock(ptl);
 	else if (ptl != pml)
 		spin_lock_nested(ptl, SINGLE_DEPTH_NESTING);
+
+	/* pmd entry may be changed by others */
+	if (unlikely(IS_ENABLED(CONFIG_PT_RECLAIM) && !pml &&
+		     !pmd_same(pgt_pmd, pmdp_get_lockless(pmd))))
+		goto abort;
 
 	/* step 2: clear page table and adjust rmap */
 	for (i = 0, addr = haddr, pte = start_pte;
@@ -1633,6 +1638,12 @@ int collapse_pte_mapped_thp(struct mm_struct *mm, unsigned long addr,
 		pml = pmd_lock(mm, pmd);
 		if (ptl != pml)
 			spin_lock_nested(ptl, SINGLE_DEPTH_NESTING);
+
+		if (unlikely(IS_ENABLED(CONFIG_PT_RECLAIM) &&
+			     !pmd_same(pgt_pmd, pmdp_get_lockless(pmd)))) {
+			spin_unlock(ptl);
+			goto unlock;
+		}
 	}
 	pgt_pmd = pmdp_collapse_flush(vma, haddr, pmd);
 	pmdp_get_lockless_sync();
@@ -1660,6 +1671,7 @@ abort:
 	}
 	if (start_pte)
 		pte_unmap_unlock(start_pte, ptl);
+unlock:
 	if (pml && pml != ptl)
 		spin_unlock(pml);
 	if (notified)
@@ -1719,6 +1731,14 @@ static void retract_page_tables(struct address_space *mapping, pgoff_t pgoff)
 		mmu_notifier_invalidate_range_start(&range);
 
 		pml = pmd_lock(mm, pmd);
+#ifdef CONFIG_PT_RECLAIM
+		/* check if the pmd is still valid */
+		if (check_pmd_still_valid(mm, addr, pmd) != SCAN_SUCCEED) {
+			spin_unlock(pml);
+			mmu_notifier_invalidate_range_end(&range);
+			continue;
+		}
+#endif
 		ptl = pte_lockptr(mm, pmd);
 		if (ptl != pml)
 			spin_lock_nested(ptl, SINGLE_DEPTH_NESTING);

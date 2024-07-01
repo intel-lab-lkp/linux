@@ -423,6 +423,7 @@ void pmd_install(struct mm_struct *mm, pmd_t *pmd, unsigned long addr,
 	spinlock_t *ptl = pmd_lock(mm, pmd);
 
 	if (likely(pmd_none(*pmd))) {	/* Has another populated it ? */
+		arch_flush_tlb_before_set_pte_page(mm, addr);
 		mm_inc_nr_ptes(mm);
 		/*
 		 * Ensure all pte setup (eg. pte page lock and page clearing) are
@@ -1931,6 +1932,7 @@ void zap_page_range_single(struct vm_area_struct *vma, unsigned long address,
 	 * could have been expanded for hugetlb pmd sharing.
 	 */
 	unmap_single_vma(&tlb, vma, address, end, details, false);
+	try_to_reclaim_pgtables(&tlb, vma, address, end, details);
 	mmu_notifier_invalidate_range_end(&range);
 	tlb_finish_mmu(&tlb);
 	hugetlb_zap_end(vma, details);
