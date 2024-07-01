@@ -213,6 +213,7 @@ virtio_transport_send_pkt(struct sk_buff *skb)
 {
 	struct virtio_vsock_hdr *hdr;
 	struct virtio_vsock *vsock;
+	bool use_worker = true;
 	int len = skb->len;
 
 	hdr = virtio_vsock_hdr(skb);
@@ -234,8 +235,41 @@ virtio_transport_send_pkt(struct sk_buff *skb)
 	if (virtio_vsock_skb_reply(skb))
 		atomic_inc(&vsock->queued_replies);
 
-	virtio_vsock_skb_queue_tail(&vsock->send_pkt_queue, skb);
-	queue_work(virtio_vsock_workqueue, &vsock->send_pkt_work);
+	/* If the workqueue (send_pkt_queue) is empty there is no need to enqueue the packet.
+	 * Just put it on the virtqueue using virtio_transport_send_skb.
+	 */
+	if (skb_queue_empty_lockless(&vsock->send_pkt_queue)) {
+		bool restart_rx = false;
+		struct virtqueue *vq;
+		int ret;
+
+		/* Inside RCU, can't sleep! */
+		ret = mutex_trylock(&vsock->tx_lock);
+		if (unlikely(ret == 0))
+			goto out_worker;
+
+		/* Driver is being removed, no need to enqueue the packet */
+		if (!vsock->tx_run)
+			goto out_rcu;
+
+		vq = vsock->vqs[VSOCK_VQ_TX];
+
+		if (!virtio_transport_send_skb(skb, vq, vsock, &restart_rx)) {
+			use_worker = false;
+			virtqueue_kick(vq);
+		}
+
+		mutex_unlock(&vsock->tx_lock);
+
+		if (restart_rx)
+			queue_work(virtio_vsock_workqueue, &vsock->rx_work);
+	}
+
+out_worker:
+	if (use_worker) {
+		virtio_vsock_skb_queue_tail(&vsock->send_pkt_queue, skb);
+		queue_work(virtio_vsock_workqueue, &vsock->send_pkt_work);
+	}
 
 out_rcu:
 	rcu_read_unlock();
