@@ -536,6 +536,11 @@ static int cxl_get_chbs(struct device *dev, struct acpi_device *hb,
 	return 0;
 }
 
+static void setup_platform_quirks(struct cxl_root *root)
+{
+	root->hpa_xlat_enable = 0;
+}
+
 static int get_genport_coordinates(struct device *dev, struct cxl_dport *dport)
 {
 	struct acpi_device *hb = to_cxl_host_bridge(NULL, dev);
@@ -837,6 +842,8 @@ static int cxl_acpi_probe(struct platform_device *pdev)
 	if (IS_ERR(cxl_root))
 		return PTR_ERR(cxl_root);
 	root_port = &cxl_root->port;
+
+	setup_platform_quirks(cxl_root);
 
 	rc = bus_for_each_dev(adev->dev.bus, NULL, root_port,
 			      add_host_bridge_dport);
