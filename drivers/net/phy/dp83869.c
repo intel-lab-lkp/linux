@@ -43,6 +43,7 @@
 #define DP83869_IO_MUX_CFG	0x0170
 #define DP83869_OP_MODE		0x01df
 #define DP83869_FX_CTRL		0x0c00
+#define DP83869_FX_STS		0x0c01
 
 #define DP83869_SW_RESET	BIT(15)
 #define DP83869_SW_RESTART	BIT(14)
@@ -71,6 +72,10 @@
 
 /* This is the same bit mask as the BMCR so re-use the BMCR default */
 #define DP83869_FX_CTRL_DEFAULT	MII_DP83869_BMCR_DEFAULT
+
+/* FX_STS bits */
+#define DP83869_FX_LSTATUS         BIT(2)
+#define DP83869_FX_ANEGCOMPLETE    BIT(5)
 
 /* CFG1 bits */
 #define DP83869_CFG1_DEFAULT	(ADVERTISE_1000HALF | \
@@ -160,7 +165,8 @@ struct dp83869_private {
 static int dp83869_read_status(struct phy_device *phydev)
 {
 	struct dp83869_private *dp83869 = phydev->priv;
-	int ret;
+	int ret, old_link = phydev->link;
+	u32 status;
 
 	ret = genphy_read_status(phydev);
 	if (ret)
@@ -173,6 +179,38 @@ static int dp83869_read_status(struct phy_device *phydev)
 		} else {
 			phydev->speed = SPEED_UNKNOWN;
 			phydev->duplex = DUPLEX_UNKNOWN;
+		}
+	}
+
+	if (dp83869->mode == DP83869_RGMII_SGMII_BRIDGE) {
+		/* check if SGMII link is up */
+		status = phy_read_mmd(phydev, DP83869_DEVADDR, DP83869_FX_STS);
+
+		phydev->link = status & DP83869_FX_LSTATUS ? 1 : 0;
+		phydev->autoneg_complete = status & DP83869_FX_ANEGCOMPLETE ? 1 : 0;
+
+		if (!phydev->autoneg_complete) {
+			phydev->link = 0;
+		} else if (phydev->link && !old_link) {
+			/* It seems like link status and duplex resolved from
+			 * SGMII autonegotiation are incorrectly reported in
+			 * the fiber link partner capabilities register and in
+			 * the PHY status register. If there is a handle to the
+			 * downstream PHY, read link parameters from it. If
+			 * not, fallback to unknown.
+			 */
+
+			if (dp83869->mod_phy) {
+				ret = phy_read_status(dp83869->mod_phy);
+				if (ret)
+					return ret;
+
+				phydev->speed = dp83869->mod_phy->speed;
+				phydev->duplex = dp83869->mod_phy->duplex;
+			} else {
+				phydev->speed = SPEED_UNKNOWN;
+				phydev->duplex = DUPLEX_UNKNOWN;
+			}
 		}
 	}
 
