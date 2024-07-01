@@ -328,7 +328,7 @@ out:
  * @access is formed from the NFSD_MAY_* constants defined in
  * fs/nfsd/vfs.h.
  */
-static __be32
+__be32
 __fh_verify(struct svc_rqst *rqstp,
 	    struct nfsd_net *nn, struct svc_cred *cred,
 	    int nfs_vers, struct auth_domain *client,
