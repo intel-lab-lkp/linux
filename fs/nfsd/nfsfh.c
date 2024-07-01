@@ -62,7 +62,7 @@ static int nfsd_acceptable(void *expv, struct dentry *dentry)
  * the write call).
  */
 static inline __be32
-nfsd_mode_check(struct svc_rqst *rqstp, struct dentry *dentry,
+nfsd_mode_check(int nfs_vers, struct dentry *dentry,
 		umode_t requested)
 {
 	umode_t mode = d_inode(dentry)->i_mode & S_IFMT;
@@ -80,7 +80,7 @@ nfsd_mode_check(struct svc_rqst *rqstp, struct dentry *dentry,
 	 * v4 has an error more specific than err_notdir which we should
 	 * return in preference to err_notdir:
 	 */
-	if (rqstp->rq_vers == 4 && mode == S_IFLNK)
+	if (nfs_vers == 4 && mode == S_IFLNK)
 		return nfserr_symlink;
 	if (requested == S_IFDIR)
 		return nfserr_notdir;
@@ -117,8 +117,9 @@ static __be32 nfsd_setuser_and_check_port(struct svc_rqst *rqstp,
 	return nfserrno(nfsd_setuser(cred, exp));
 }
 
-static inline __be32 check_pseudo_root(struct svc_rqst *rqstp,
-	struct dentry *dentry, struct svc_export *exp)
+static inline __be32 check_pseudo_root(int nfs_vers,
+				       struct dentry *dentry,
+				       struct svc_export *exp)
 {
 	if (!(exp->ex_flags & NFSEXP_V4ROOT))
 		return nfs_ok;
@@ -128,7 +129,7 @@ static inline __be32 check_pseudo_root(struct svc_rqst *rqstp,
 	 * in v4-specific code, in which case v2/v3 clients could bypass
 	 * them.
 	 */
-	if (!nfsd_v4client(rqstp))
+	if (nfs_vers != 4)
 		return nfserr_stale;
 	/*
 	 * We're exposing only the directories and symlinks that have to be
@@ -153,7 +154,7 @@ static inline __be32 check_pseudo_root(struct svc_rqst *rqstp,
  * fh_dentry.
  */
 static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct nfsd_net *nn,
-				 struct svc_cred *cred,
+				 struct svc_cred *cred, int nfs_vers,
 				 struct svc_fh *fhp)
 {
 	struct knfsd_fh	*fh = &fhp->fh_handle;
@@ -166,9 +167,9 @@ static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct nfsd_net *nn,
 	__be32 error;
 
 	error = nfserr_stale;
-	if (rqstp->rq_vers > 2)
+	if (nfs_vers > 2)
 		error = nfserr_badhandle;
-	if (rqstp->rq_vers == 4 && fh->fh_size == 0)
+	if (nfs_vers == 4 && fh->fh_size == 0)
 		return nfserr_nofilehandle;
 
 	if (fh->fh_version != 1)
@@ -241,7 +242,7 @@ static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct nfsd_net *nn,
 	 * Look up the dentry using the NFS file handle.
 	 */
 	error = nfserr_stale;
-	if (rqstp->rq_vers > 2)
+	if (nfs_vers > 2)
 		error = nfserr_badhandle;
 
 	fileid_type = fh->fh_fileid_type;
@@ -281,7 +282,7 @@ static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct nfsd_net *nn,
 	fhp->fh_dentry = dentry;
 	fhp->fh_export = exp;
 
-	switch (rqstp->rq_vers) {
+	switch (nfs_vers) {
 	case 4:
 		if (dentry->d_sb->s_export_op->flags & EXPORT_OP_NOATOMIC_ATTR)
 			fhp->fh_no_atomic_attr = true;
@@ -330,6 +331,7 @@ out:
 static __be32
 __fh_verify(struct svc_rqst *rqstp,
 	    struct nfsd_net *nn, struct svc_cred *cred,
+	    int nfs_vers,
 	    struct svc_fh *fhp, umode_t type, int access)
 {
 	struct svc_export *exp = NULL;
@@ -337,7 +339,7 @@ __fh_verify(struct svc_rqst *rqstp,
 	__be32		error;
 
 	if (!fhp->fh_dentry) {
-		error = nfsd_set_fh_dentry(rqstp, nn, cred, fhp);
+		error = nfsd_set_fh_dentry(rqstp, nn, cred, nfs_vers, fhp);
 		if (error)
 			goto out;
 	}
@@ -362,7 +364,7 @@ __fh_verify(struct svc_rqst *rqstp,
 	 *	  (for example, if different id-squashing options are in
 	 *	  effect on the new filesystem).
 	 */
-	error = check_pseudo_root(rqstp, dentry, exp);
+	error = check_pseudo_root(nfs_vers, dentry, exp);
 	if (error)
 		goto out;
 
@@ -370,7 +372,7 @@ __fh_verify(struct svc_rqst *rqstp,
 	if (error)
 		goto out;
 
-	error = nfsd_mode_check(rqstp, dentry, type);
+	error = nfsd_mode_check(nfs_vers, dentry, type);
 	if (error)
 		goto out;
 
@@ -407,11 +409,15 @@ out:
 __be32
 fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, umode_t type, int access)
 {
+	int nfs_vers;
+	if (rqstp->rq_prog == NFS_PROGRAM)
+		nfs_vers = rqstp->rq_vers;
+	else /* must be NLM */
+		nfs_vers = rqstp->rq_vers == 4 ? 3 : 2;
 	return __fh_verify(rqstp, net_generic(SVC_NET(rqstp), nfsd_net_id),
-			   &rqstp->rq_cred,
+			   &rqstp->rq_cred, nfs_vers,
 			   fhp, type, access);
 }
-
 
 /*
  * Compose a file handle for an NFS reply.
