@@ -151,7 +151,8 @@ static inline __be32 check_pseudo_root(struct svc_rqst *rqstp,
  * dentry.  On success, the results are used to set fh_export and
  * fh_dentry.
  */
-static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct svc_fh *fhp)
+static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct nfsd_net *nn,
+				 struct svc_fh *fhp)
 {
 	struct knfsd_fh	*fh = &fhp->fh_handle;
 	struct fid *fid = NULL;
@@ -195,7 +196,7 @@ static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct svc_fh *fhp)
 	data_left -= len;
 	if (data_left < 0)
 		return error;
-	exp = rqst_exp_find(rqstp, fh->fh_fsid_type, fh->fh_fsid);
+	exp = rqst_exp_find(rqstp, nn, fh->fh_fsid_type, fh->fh_fsid);
 	fid = (struct fid *)(fh->fh_fsid + len);
 
 	error = nfserr_stale;
@@ -324,16 +325,16 @@ out:
  * @access is formed from the NFSD_MAY_* constants defined in
  * fs/nfsd/vfs.h.
  */
-__be32
-fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, umode_t type, int access)
+static __be32
+__fh_verify(struct svc_rqst *rqstp, struct nfsd_net *nn,
+	    struct svc_fh *fhp, umode_t type, int access)
 {
-	struct nfsd_net *nn = net_generic(SVC_NET(rqstp), nfsd_net_id);
 	struct svc_export *exp = NULL;
 	struct dentry	*dentry;
 	__be32		error;
 
 	if (!fhp->fh_dentry) {
-		error = nfsd_set_fh_dentry(rqstp, fhp);
+		error = nfsd_set_fh_dentry(rqstp, nn, fhp);
 		if (error)
 			goto out;
 	}
@@ -398,6 +399,13 @@ out:
 	if (error == nfserr_stale)
 		nfsd_stats_fh_stale_inc(nn, exp);
 	return error;
+}
+
+__be32
+fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, umode_t type, int access)
+{
+	return __fh_verify(rqstp, net_generic(SVC_NET(rqstp), nfsd_net_id),
+			   fhp, type, access);
 }
 
 

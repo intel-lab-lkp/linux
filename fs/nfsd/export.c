@@ -1165,11 +1165,15 @@ gss:
 }
 
 struct svc_export *
-rqst_exp_find(struct svc_rqst *rqstp, int fsid_type, u32 *fsidv)
+rqst_exp_find(struct svc_rqst *rqstp,  struct nfsd_net *nn,
+	      int fsid_type, u32 *fsidv)
 {
 	struct svc_export *gssexp, *exp = ERR_PTR(-ENOENT);
-	struct nfsd_net *nn = net_generic(SVC_NET(rqstp), nfsd_net_id);
-	struct cache_detail *cd = nn->svc_export_cache;
+	struct cache_detail *cd;
+
+	if (!nn)
+		nn = net_generic(SVC_NET(rqstp), nfsd_net_id);
+	cd = nn->svc_export_cache;
 
 	if (rqstp->rq_client == NULL)
 		goto gss;
@@ -1220,7 +1224,7 @@ struct svc_export *rqst_find_fsidzero_export(struct svc_rqst *rqstp)
 
 	mk_fsid(FSID_NUM, fsidv, 0, 0, 0, NULL);
 
-	return rqst_exp_find(rqstp, FSID_NUM, fsidv);
+	return rqst_exp_find(rqstp, NULL, FSID_NUM, fsidv);
 }
 
 /*

@@ -2231,7 +2231,7 @@ nfsd4_getdeviceinfo(struct svc_rqst *rqstp,
 		return nfserr_noent;
 	}
 
-	exp = rqst_exp_find(rqstp, map->fsid_type, map->fsid);
+	exp = rqst_exp_find(rqstp, NULL, map->fsid_type, map->fsid);
 	if (IS_ERR(exp)) {
 		dprintk("%s: could not find device id\n", __func__);
 		return nfserr_noent;

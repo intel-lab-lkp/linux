@@ -127,6 +127,8 @@ static inline struct svc_export *exp_get(struct svc_export *exp)
 	cache_get(&exp->h);
 	return exp;
 }
-struct svc_export * rqst_exp_find(struct svc_rqst *, int, u32 *);
+struct nfsd_net;
+struct svc_export * rqst_exp_find(struct svc_rqst *, struct nfsd_net *,
+				  int, u32 *);
 
 #endif /* NFSD_EXPORT_H */
