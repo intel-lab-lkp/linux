@@ -70,6 +70,8 @@ int cxl_query_cmd(struct cxl_memdev *cxlmd,
 int cxl_send_cmd(struct cxl_memdev *cxlmd, struct cxl_send_command __user *s);
 void __iomem *devm_cxl_iomap_block(struct device *dev, resource_size_t addr,
 				   resource_size_t length);
+struct cxl_dev_state;
+int devm_cxl_enable_mem(struct device *host, struct cxl_dev_state *cxlds);
 
 struct dentry *cxl_debugfs_create_dir(const char *dir);
 int cxl_dpa_set_mode(struct cxl_endpoint_decoder *cxled,
