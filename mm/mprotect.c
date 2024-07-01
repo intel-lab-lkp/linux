@@ -330,11 +330,11 @@ pgtable_populate_needed(struct vm_area_struct *vma, unsigned long cp_flags)
  * allocation failures during page faults by kicking OOM and returning
  * error.
  */
-#define  change_pmd_prepare(vma, pmd, cp_flags)				\
+#define  change_pmd_prepare(vma, pmd, addr, cp_flags)			\
 	({								\
 		long err = 0;						\
 		if (unlikely(pgtable_populate_needed(vma, cp_flags))) {	\
-			if (pte_alloc(vma->vm_mm, pmd))			\
+			if (pte_alloc(vma->vm_mm, pmd, addr))		\
 				err = -ENOMEM;				\
 		}							\
 		err;							\
@@ -375,7 +375,7 @@ static inline long change_pmd_range(struct mmu_gather *tlb,
 again:
 		next = pmd_addr_end(addr, end);
 
-		ret = change_pmd_prepare(vma, pmd, cp_flags);
+		ret = change_pmd_prepare(vma, pmd, addr, cp_flags);
 		if (ret) {
 			pages = ret;
 			break;
@@ -402,7 +402,7 @@ again:
 				 * cleared; make sure pmd populated if
 				 * necessary, then fall-through to pte level.
 				 */
-				ret = change_pmd_prepare(vma, pmd, cp_flags);
+				ret = change_pmd_prepare(vma, pmd, addr, cp_flags);
 				if (ret) {
 					pages = ret;
 					break;
