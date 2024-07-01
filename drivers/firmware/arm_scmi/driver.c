@@ -126,6 +126,22 @@ struct scmi_debug_info {
 };
 
 /**
+ * struct scmi_debug_stats - Debug statistics
+ * @sent_ok: Count of successful sends
+ * @sent_fail: Count of failed sends
+ * @response_ok: Count of successful responses
+ * @dlyd_response_ok: Count of successful delayed responses
+ * @xfers_response_timeout: Count of xfer response timeouts
+ */
+struct scmi_debug_stats {
+	atomic_t sent_ok;
+	atomic_t sent_fail;
+	atomic_t response_ok;
+	atomic_t dlyd_response_ok;
+	atomic_t xfers_response_timeout;
+};
+
+/**
  * struct scmi_info - Structure representing a SCMI instance
  *
  * @id: A sequence number starting from zero identifying this instance
@@ -141,6 +157,7 @@ struct scmi_debug_info {
  * @protocols: IDR for protocols' instance descriptors initialized for
  *	       this SCMI instance: populated on protocol's first attempted
  *	       usage.
+ * @stats: Contains several atomic_t's for tracking various statistics
  * @protocols_mtx: A mutex to protect protocols instances initialization.
  * @protocols_imp: List of protocols implemented, currently maximum of
  *		   scmi_revision_info.num_protocols elements allocated by the
@@ -174,6 +191,7 @@ struct scmi_info {
 	struct idr tx_idr;
 	struct idr rx_idr;
 	struct idr protocols;
+	struct scmi_debug_stats stats;
 	/* Ensure mutual exclusive access to protocols instance array */
 	struct mutex protocols_mtx;
 	u8 *protocols_imp;
@@ -1143,7 +1161,12 @@ static void scmi_handle_response(struct scmi_chan_info *cinfo,
 						SCMI_RAW_REPLY_QUEUE,
 						cinfo->id);
 	}
-
+	if (IS_ENABLED(CONFIG_ARM_SCMI_DEBUG_STATISTICS)) {
+		if (xfer->hdr.type == MSG_TYPE_DELAYED_RESP)
+			atomic_inc(&info->stats.dlyd_response_ok);
+		else
+			atomic_inc(&info->stats.response_ok);
+	}
 	scmi_xfer_command_release(info, xfer);
 }
 
@@ -1277,6 +1300,12 @@ static int scmi_wait_for_reply(struct device *dev, const struct scmi_desc *desc,
 				(void *)_RET_IP_);
 			ret = -ETIMEDOUT;
 		}
+	}
+
+	if (IS_ENABLED(CONFIG_ARM_SCMI_DEBUG_STATISTICS) && ret == -ETIMEDOUT) {
+		struct scmi_info *info =
+					handle_to_scmi_info(cinfo->handle);
+		atomic_inc(&info->stats.xfers_response_timeout);
 	}
 
 	return ret;
@@ -1413,6 +1442,13 @@ static int do_xfer(const struct scmi_protocol_handle *ph,
 
 	trace_scmi_xfer_end(xfer->transfer_id, xfer->hdr.id,
 			    xfer->hdr.protocol_id, xfer->hdr.seq, ret);
+
+	if (IS_ENABLED(CONFIG_ARM_SCMI_DEBUG_STATISTICS)) {
+		if (ret == 0)
+			atomic_inc(&info->stats.sent_ok);
+		else
+			atomic_inc(&info->stats.sent_fail);
+	}
 
 	return ret;
 }
@@ -2993,6 +3029,14 @@ static int scmi_probe(struct platform_device *pdev)
 	handle->devm_protocol_acquire = scmi_devm_protocol_acquire;
 	handle->devm_protocol_get = scmi_devm_protocol_get;
 	handle->devm_protocol_put = scmi_devm_protocol_put;
+
+	if (IS_ENABLED(CONFIG_ARM_SCMI_DEBUG_STATISTICS)) {
+		atomic_set(&info->stats.response_ok, 0);
+		atomic_set(&info->stats.sent_fail, 0);
+		atomic_set(&info->stats.sent_ok, 0);
+		atomic_set(&info->stats.dlyd_response_ok, 0);
+		atomic_set(&info->stats.xfers_response_timeout, 0);
+	}
 
 	/* System wide atomic threshold for atomic ops .. if any */
 	if (!of_property_read_u32(np, "atomic-threshold-us",
