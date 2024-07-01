@@ -2884,7 +2884,7 @@ static void scmi_debugfs_common_cleanup(void *d)
 static struct scmi_debug_info *scmi_debugfs_common_setup(struct scmi_info *info)
 {
 	char top_dir[16];
-	struct dentry *trans, *top_dentry;
+	struct dentry *trans, *top_dentry, *stats;
 	struct scmi_debug_info *dbg;
 	const char *c_ptr = NULL;
 
@@ -2935,6 +2935,19 @@ static struct scmi_debug_info *scmi_debugfs_common_setup(struct scmi_info *info)
 	debugfs_create_u32("rx_max_msg", 0400, trans,
 			   (u32 *)&info->rx_minfo.max_msg);
 
+	if (IS_ENABLED(CONFIG_ARM_SCMI_DEBUG_STATISTICS)) {
+		stats = debugfs_create_dir("stats", trans);
+		debugfs_create_atomic_t("response_ok", 0400, stats,
+					&info->stats.response_ok);
+		debugfs_create_atomic_t("dlyd_response_ok", 0400, stats,
+					&info->stats.dlyd_response_ok);
+		debugfs_create_atomic_t("sent_ok", 0400, stats,
+					&info->stats.sent_ok);
+		debugfs_create_atomic_t("sent_fail", 0400, stats,
+					&info->stats.sent_fail);
+		debugfs_create_atomic_t("xfers_response_timeout", 0400, stats,
+					&info->stats.xfers_response_timeout);
+	}
 	dbg->top_dentry = top_dentry;
 
 	if (devm_add_action_or_reset(info->dev,
