@@ -18,7 +18,7 @@ EXPORT_SYMBOL(physical_mask);
 #define PGTABLE_HIGHMEM 0
 #endif
 
-#ifndef CONFIG_PARAVIRT
+#if !defined(CONFIG_PARAVIRT) && !defined(CONFIG_PT_RECLAIM)
 static inline
 void paravirt_tlb_remove_table(struct mmu_gather *tlb, void *table)
 {
