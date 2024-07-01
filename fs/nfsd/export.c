@@ -1077,7 +1077,13 @@ static struct svc_export *exp_find(struct cache_detail *cd,
 __be32 check_nfsd_access(struct svc_export *exp, struct svc_rqst *rqstp)
 {
 	struct exp_flavor_info *f, *end = exp->ex_flavors + exp->ex_nflavors;
-	struct svc_xprt *xprt = rqstp->rq_xprt;
+	struct svc_xprt *xprt;
+
+	if (!rqstp)
+		/* Always allow LOCALIO */
+		return 0;
+
+	xprt = rqstp->rq_xprt;
 
 	if (exp->ex_xprtsec_modes & NFSEXP_XPRTSEC_NONE) {
 		if (!test_bit(XPT_TLS_SESSION, &xprt->xpt_flags))
@@ -1185,7 +1191,7 @@ rqst_exp_find(struct svc_rqst *rqstp, struct nfsd_net *nn,
 
 	/* First try the auth_unix client: */
 	exp = exp_find(cd, client, fsid_type,
-		       fsidv, &rqstp->rq_chandle);
+		       fsidv, rqstp ? &rqstp->rq_chandle : NULL);
 	if (PTR_ERR(exp) == -ENOENT)
 		goto gss;
 	if (IS_ERR(exp))
@@ -1198,7 +1204,7 @@ gss:
 	if (!try_gss || rqstp->rq_gssclient == NULL)
 		return exp;
 	gssexp = exp_find(cd, rqstp->rq_gssclient, fsid_type, fsidv,
-						&rqstp->rq_chandle);
+			  rqstp ? &rqstp->rq_chandle : NULL);
 	if (PTR_ERR(gssexp) == -ENOENT)
 		return exp;
 	if (!IS_ERR(exp))
