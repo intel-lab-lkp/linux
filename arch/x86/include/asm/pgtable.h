@@ -1663,6 +1663,12 @@ void arch_check_zapped_pte(struct vm_area_struct *vma, pte_t pte);
 #define arch_check_zapped_pmd arch_check_zapped_pmd
 void arch_check_zapped_pmd(struct vm_area_struct *vma, pmd_t pmd);
 
+#ifdef CONFIG_PT_RECLAIM
+#define arch_flush_tlb_before_set_huge_page arch_flush_tlb_before_set_huge_page
+void arch_flush_tlb_before_set_huge_page(struct mm_struct *mm,
+					 unsigned long addr);
+#endif
+
 #ifdef CONFIG_XEN_PV
 #define arch_has_hw_nonleaf_pmd_young arch_has_hw_nonleaf_pmd_young
 static inline bool arch_has_hw_nonleaf_pmd_young(void)
