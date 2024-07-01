@@ -604,51 +604,18 @@ static int tegra_i2c_wait_for_config_load(struct tegra_i2c_dev *i2c_dev)
 	return 0;
 }
 
-static int tegra_i2c_init(struct tegra_i2c_dev *i2c_dev)
+static void tegra_i2c_set_clk_params(struct tegra_i2c_dev *i2c_dev)
 {
-	u32 val, clk_divisor, clk_multiplier, tsu_thd, tlow, thigh, non_hs_mode;
-	acpi_handle handle = ACPI_HANDLE(i2c_dev->dev);
-	struct i2c_timings *t = &i2c_dev->timings;
-	int err;
+	u32 val, clk_divisor, tsu_thd, tlow, thigh, non_hs_mode;
 
-	/*
-	 * The reset shouldn't ever fail in practice. The failure will be a
-	 * sign of a severe problem that needs to be resolved. Still we don't
-	 * want to fail the initialization completely because this may break
-	 * kernel boot up since voltage regulators use I2C. Hence, we will
-	 * emit a noisy warning on error, which won't stay unnoticed and
-	 * won't hose machine entirely.
-	 */
-	if (handle)
-		err = acpi_evaluate_object(handle, "_RST", NULL, NULL);
-	else
-		err = reset_control_reset(i2c_dev->rst);
-
-	WARN_ON_ONCE(err);
-
-	if (IS_DVC(i2c_dev))
-		tegra_dvc_init(i2c_dev);
-
-	val = I2C_CNFG_NEW_MASTER_FSM | I2C_CNFG_PACKET_MODE_EN |
-	      FIELD_PREP(I2C_CNFG_DEBOUNCE_CNT, 2);
-
-	if (i2c_dev->hw->has_multi_master_mode)
-		val |= I2C_CNFG_MULTI_MASTER_MODE;
-
-	i2c_writel(i2c_dev, val, I2C_CNFG);
-	i2c_writel(i2c_dev, 0, I2C_INT_MASK);
-
-	if (IS_VI(i2c_dev))
-		tegra_i2c_vi_init(i2c_dev);
-
-	switch (t->bus_freq_hz) {
+	switch (i2c_dev->timings.bus_freq_hz) {
 	case I2C_MAX_STANDARD_MODE_FREQ + 1 ... I2C_MAX_FAST_MODE_PLUS_FREQ:
 	default:
 		tlow = i2c_dev->hw->tlow_fast_fastplus_mode;
 		thigh = i2c_dev->hw->thigh_fast_fastplus_mode;
 		tsu_thd = i2c_dev->hw->setup_hold_time_fast_fast_plus_mode;
 
-		if (t->bus_freq_hz > I2C_MAX_FAST_MODE_FREQ)
+		if (i2c_dev->timings.bus_freq_hz > I2C_MAX_FAST_MODE_FREQ)
 			non_hs_mode = i2c_dev->hw->clk_divisor_fast_plus_mode;
 		else
 			non_hs_mode = i2c_dev->hw->clk_divisor_fast_mode;
@@ -680,15 +647,75 @@ static int tegra_i2c_init(struct tegra_i2c_dev *i2c_dev)
 	 */
 	if (i2c_dev->hw->has_interface_timing_reg && tsu_thd)
 		i2c_writel(i2c_dev, tsu_thd, I2C_INTERFACE_TIMING_1);
+}
 
-	clk_multiplier = (tlow + thigh + 2) * (non_hs_mode + 1);
+static int tegra_i2c_set_div_clk(struct tegra_i2c_dev *i2c_dev)
+{
+	u32 clk_multiplier, tlow, thigh, non_hs_mode;
+	u32 timing, clk_divisor;
+	int err;
+
+	timing = i2c_readl(i2c_dev, I2C_INTERFACE_TIMING_0);
+
+	tlow = FIELD_GET(I2C_INTERFACE_TIMING_TLOW, timing);
+	thigh = FIELD_GET(I2C_INTERFACE_TIMING_THIGH, timing);
+
+	clk_divisor = i2c_readl(i2c_dev, I2C_CLK_DIVISOR);
+
+	non_hs_mode = FIELD_GET(I2C_CLK_DIVISOR_STD_FAST_MODE, clk_divisor);
+
+	clk_multiplier = (thigh + tlow + 2) * (non_hs_mode + 1);
 
 	err = clk_set_rate(i2c_dev->div_clk,
-			   t->bus_freq_hz * clk_multiplier);
+			   i2c_dev->timings.bus_freq_hz * clk_multiplier);
 	if (err) {
-		dev_err(i2c_dev->dev, "failed to set div-clk rate: %d\n", err);
+		dev_err(i2c_dev->dev, "failed to set div_clk rate: %d\n", err);
 		return err;
 	}
+
+	return 0;
+}
+
+static int tegra_i2c_init(struct tegra_i2c_dev *i2c_dev)
+{
+	u32 val;
+	int err;
+	acpi_handle handle = ACPI_HANDLE(i2c_dev->dev);
+
+	/*
+	 * The reset shouldn't ever fail in practice. The failure will be a
+	 * sign of a severe problem that needs to be resolved. Still we don't
+	 * want to fail the initialization completely because this may break
+	 * kernel boot up since voltage regulators use I2C. Hence, we will
+	 * emit a noisy warning on error, which won't stay unnoticed and
+	 * won't hose machine entirely.
+	 */
+	if (handle)
+		err = acpi_evaluate_object(handle, "_RST", NULL, NULL);
+	else
+		err = reset_control_reset(i2c_dev->rst);
+
+	WARN_ON_ONCE(err);
+
+	if (IS_DVC(i2c_dev))
+		tegra_dvc_init(i2c_dev);
+
+	val = I2C_CNFG_NEW_MASTER_FSM | I2C_CNFG_PACKET_MODE_EN |
+	      FIELD_PREP(I2C_CNFG_DEBOUNCE_CNT, 2);
+
+	if (i2c_dev->hw->has_multi_master_mode)
+		val |= I2C_CNFG_MULTI_MASTER_MODE;
+
+	i2c_writel(i2c_dev, val, I2C_CNFG);
+	i2c_writel(i2c_dev, 0, I2C_INT_MASK);
+
+	if (IS_VI(i2c_dev))
+		tegra_i2c_vi_init(i2c_dev);
+
+	tegra_i2c_set_clk_params(i2c_dev);
+	err = tegra_i2c_set_div_clk(i2c_dev);
+	if (err)
+		return err;
 
 	if (!IS_DVC(i2c_dev) && !IS_VI(i2c_dev)) {
 		u32 sl_cfg = i2c_readl(i2c_dev, I2C_SL_CNFG);
