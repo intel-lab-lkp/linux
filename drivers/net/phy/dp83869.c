@@ -713,17 +713,20 @@ static int dp83869_configure_mode(struct phy_device *phydev,
 	if (ret)
 		return ret;
 
-	phy_ctrl_val = (dp83869->rx_fifo_depth << DP83869_RX_FIFO_SHIFT |
+	/* The FORCE_LINK_GOOD bit 10 in the PHYCTRL register should be
+	 * unset after a hardware reset but it is not. make sure it is
+	 * cleared so that the PHY can function properly.
+	 * Also configure TX/RX FIFO depth for modes that require it.
+	 */
+	ret = phy_write(phydev, MII_DP83869_PHYCTRL,
+			dp83869->rx_fifo_depth << DP83869_RX_FIFO_SHIFT |
 			dp83869->tx_fifo_depth << DP83869_TX_FIFO_SHIFT |
 			DP83869_PHY_CTRL_DEFAULT);
+	if (ret)
+		return ret;
 
 	switch (dp83869->mode) {
 	case DP83869_RGMII_COPPER_ETHERNET:
-		ret = phy_write(phydev, MII_DP83869_PHYCTRL,
-				phy_ctrl_val);
-		if (ret)
-			return ret;
-
 		ret = phy_write(phydev, MII_CTRL1000, DP83869_CFG1_DEFAULT);
 		if (ret)
 			return ret;
@@ -746,28 +749,14 @@ static int dp83869_configure_mode(struct phy_device *phydev,
 
 		break;
 	case DP83869_1000M_MEDIA_CONVERT:
-		ret = phy_write(phydev, MII_DP83869_PHYCTRL,
-				phy_ctrl_val);
-		if (ret)
-			return ret;
-
 		ret = phy_write_mmd(phydev, DP83869_DEVADDR,
 				    DP83869_FX_CTRL, DP83869_FX_CTRL_DEFAULT);
 		if (ret)
 			return ret;
 		break;
 	case DP83869_100M_MEDIA_CONVERT:
-		ret = phy_write(phydev, MII_DP83869_PHYCTRL,
-				phy_ctrl_val);
-		if (ret)
-			return ret;
 		break;
 	case DP83869_SGMII_COPPER_ETHERNET:
-		ret = phy_write(phydev, MII_DP83869_PHYCTRL,
-				phy_ctrl_val);
-		if (ret)
-			return ret;
-
 		ret = phy_write(phydev, MII_CTRL1000, DP83869_CFG1_DEFAULT);
 		if (ret)
 			return ret;
