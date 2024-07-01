@@ -1361,6 +1361,74 @@ dev_err:
 	return err;
 }
 
+static int vdpa_nl_cmd_dev_attr_set_doit(struct sk_buff *skb,
+					 struct genl_info *info)
+{
+	struct vdpa_dev_set_config set_config = {};
+	struct nlattr **nl_attrs = info->attrs;
+	struct vdpa_mgmt_dev *mdev;
+	const u8 *macaddr;
+	const char *name;
+	int err = 0;
+	struct device *dev;
+	struct vdpa_device *vdev;
+	u64 classes;
+
+	if (!info->attrs[VDPA_ATTR_DEV_NAME])
+		return -EINVAL;
+
+	name = nla_data(info->attrs[VDPA_ATTR_DEV_NAME]);
+
+	down_write(&vdpa_dev_lock);
+	dev = bus_find_device(&vdpa_bus, NULL, name, vdpa_name_match);
+	if (!dev) {
+		NL_SET_ERR_MSG_MOD(info->extack, "device not found");
+		err = -ENODEV;
+		goto dev_err;
+	}
+	vdev = container_of(dev, struct vdpa_device, dev);
+	if (!vdev->mdev) {
+		NL_SET_ERR_MSG_MOD(
+			info->extack,
+			"Fail to find the specified management device");
+		err = -EINVAL;
+		goto mdev_err;
+	}
+	mdev = vdev->mdev;
+	classes = vdpa_mgmtdev_get_classes(mdev, NULL);
+	if ((classes & BIT_ULL(VIRTIO_ID_NET)) &&
+	    nl_attrs[VDPA_ATTR_DEV_NET_CFG_MACADDR]) {
+		if (!(mdev->supported_features & BIT_ULL(VIRTIO_NET_F_MAC))) {
+			NL_SET_ERR_MSG_FMT_MOD(
+				info->extack,
+				"Missing features 0x%llx for provided attributes",
+				BIT_ULL(VIRTIO_NET_F_MAC));
+			err = -EINVAL;
+			goto mdev_err;
+		}
+		macaddr = nla_data(nl_attrs[VDPA_ATTR_DEV_NET_CFG_MACADDR]);
+		memcpy(set_config.net.mac, macaddr, ETH_ALEN);
+		set_config.mask |= BIT_ULL(VDPA_ATTR_DEV_NET_CFG_MACADDR);
+		if (mdev->ops->dev_set_attr) {
+			err = mdev->ops->dev_set_attr(mdev, vdev, &set_config);
+		} else {
+			NL_SET_ERR_MSG_FMT_MOD(info->extack,
+					       "features 0x%llx not supported",
+					       BIT_ULL(VIRTIO_NET_F_MAC));
+		}
+
+	} else {
+		NL_SET_ERR_MSG_FMT_MOD(info->extack, "%s device not supported",
+				       name);
+	}
+
+mdev_err:
+	put_device(dev);
+dev_err:
+	up_write(&vdpa_dev_lock);
+	return err;
+}
+
 static int vdpa_dev_config_dump(struct device *dev, void *data)
 {
 	struct vdpa_device *vdev = container_of(dev, struct vdpa_device, dev);
@@ -1495,6 +1563,11 @@ static const struct genl_ops vdpa_nl_ops[] = {
 	{
 		.cmd = VDPA_CMD_DEV_VSTATS_GET,
 		.doit = vdpa_nl_cmd_dev_stats_get_doit,
+		.flags = GENL_ADMIN_PERM,
+	},
+	{
+		.cmd = VDPA_CMD_DEV_ATTR_SET,
+		.doit = vdpa_nl_cmd_dev_attr_set_doit,
 		.flags = GENL_ADMIN_PERM,
 	},
 };
