@@ -1,0 +1,107 @@
+// SPDX-License-Identifier: GPL-2.0-only
+
+#include "tegra234-cfg.dtsi"
+
+/ {
+	config-i2c3160000 {
+			i2c-fast-cfg {
+				nvidia,i2c-clk-divisor-fs-mode = <0x3c>;
+				nvidia,i2c-sclk-high-period = <0x02>;
+				nvidia,i2c-sclk-low-period = <0x02>;
+				nvidia,i2c-bus-free-time = <0x02>;
+				nvidia,i2c-stop-setup-time = <0x02>;
+				nvidia,i2c-start-hold-time = <0x02>;
+				nvidia,i2c-start-setup-time = <0x02>;
+			};
+			i2c-fastplus-cfg {
+				nvidia,i2c-clk-divisor-fs-mode = <0x16>;
+				nvidia,i2c-sclk-high-period = <0x02>;
+				nvidia,i2c-sclk-low-period = <0x02>;
+				nvidia,i2c-bus-free-time = <0x02>;
+				nvidia,i2c-stop-setup-time = <0x02>;
+				nvidia,i2c-start-hold-time = <0x02>;
+				nvidia,i2c-start-setup-time = <0x02>;
+			};
+	};
+
+	config-i2c3180000 {
+			i2c-fastplus-cfg {
+				nvidia,i2c-clk-divisor-fs-mode = <0x16>;
+				nvidia,i2c-sclk-high-period = <0x02>;
+				nvidia,i2c-sclk-low-period = <0x02>;
+				nvidia,i2c-bus-free-time = <0x02>;
+				nvidia,i2c-stop-setup-time = <0x02>;
+				nvidia,i2c-start-hold-time = <0x02>;
+				nvidia,i2c-start-setup-time = <0x02>;
+			};
+			i2c-standard-cfg {
+				nvidia,i2c-clk-divisor-fs-mode = <0x4f>;
+				nvidia,i2c-sclk-high-period = <0x07>;
+				nvidia,i2c-sclk-low-period = <0x08>;
+				nvidia,i2c-bus-free-time = <0x08>;
+				nvidia,i2c-stop-setup-time = <0x08>;
+				nvidia,i2c-start-hold-time = <0x08>;
+				nvidia,i2c-start-setup-time = <0x08>;
+			};
+	};
+
+	config-i2c3190000 {
+			i2c-fast-cfg {
+				nvidia,i2c-clk-divisor-fs-mode = <0x3c>;
+				nvidia,i2c-sclk-high-period = <0x02>;
+				nvidia,i2c-sclk-low-period = <0x02>;
+				nvidia,i2c-bus-free-time = <0x02>;
+				nvidia,i2c-stop-setup-time = <0x02>;
+				nvidia,i2c-start-hold-time = <0x02>;
+				nvidia,i2c-start-setup-time = <0x02>;
+			};
+	};
+
+	config-i2c31c0000 {
+			i2c-fast-cfg {
+				nvidia,i2c-clk-divisor-fs-mode = <0x3c>;
+				nvidia,i2c-sclk-high-period = <0x02>;
+				nvidia,i2c-sclk-low-period = <0x02>;
+				nvidia,i2c-bus-free-time = <0x02>;
+				nvidia,i2c-stop-setup-time = <0x02>;
+				nvidia,i2c-start-hold-time = <0x02>;
+				nvidia,i2c-start-setup-time = <0x02>;
+			};
+	};
+
+	config-i2c31e0000 {
+			i2c-fast-cfg {
+				nvidia,i2c-clk-divisor-fs-mode = <0x3c>;
+				nvidia,i2c-sclk-high-period = <0x02>;
+				nvidia,i2c-sclk-low-period = <0x02>;
+				nvidia,i2c-bus-free-time = <0x02>;
+				nvidia,i2c-stop-setup-time = <0x02>;
+				nvidia,i2c-start-hold-time = <0x02>;
+				nvidia,i2c-start-setup-time = <0x02>;
+			};
+	};
+
+	config-i2cc240000 {
+			i2c-fastplus-cfg {
+				nvidia,i2c-clk-divisor-fs-mode = <0x16>;
+				nvidia,i2c-sclk-high-period = <0x02>;
+				nvidia,i2c-sclk-low-period = <0x02>;
+				nvidia,i2c-bus-free-time = <0x02>;
+				nvidia,i2c-stop-setup-time = <0x02>;
+				nvidia,i2c-start-hold-time = <0x02>;
+				nvidia,i2c-start-setup-time = <0x02>;
+			};
+	};
+
+	config-i2cc250000 {
+			i2c-fastplus-cfg {
+				nvidia,i2c-clk-divisor-fs-mode = <0x16>;
+				nvidia,i2c-sclk-high-period = <0x02>;
+				nvidia,i2c-sclk-low-period = <0x02>;
+				nvidia,i2c-bus-free-time = <0x02>;
+				nvidia,i2c-stop-setup-time = <0x02>;
+				nvidia,i2c-start-hold-time = <0x02>;
+				nvidia,i2c-start-setup-time = <0x02>;
+			};
+	};
+};

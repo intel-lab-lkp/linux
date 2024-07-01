@@ -2,6 +2,7 @@
 
 #include "tegra234.dtsi"
 #include "tegra234-p3701.dtsi"
+#include "tegra234-p3701-0000-cfg.dtsi"
 
 / {
 	model = "NVIDIA Jetson AGX Orin";
