@@ -647,6 +647,21 @@ static int dp83869_configure_fiber(struct phy_device *phydev,
 	linkmode_set_bit(ETHTOOL_LINK_MODE_FIBRE_BIT, phydev->supported);
 	linkmode_set_bit(ADVERTISED_FIBRE, phydev->advertising);
 
+	/* Auto neg is not supported in 100/1000base FX modes */
+	bmcr = phy_read(phydev, MII_BMCR);
+	if (bmcr < 0)
+		return bmcr;
+
+	phydev->autoneg = AUTONEG_DISABLE;
+	linkmode_clear_bit(ETHTOOL_LINK_MODE_Autoneg_BIT, phydev->supported);
+	linkmode_clear_bit(ETHTOOL_LINK_MODE_Autoneg_BIT, phydev->advertising);
+
+	if (bmcr & BMCR_ANENABLE) {
+		ret =  phy_modify(phydev, MII_BMCR, BMCR_ANENABLE, 0);
+		if (ret < 0)
+			return ret;
+	}
+
 	if (dp83869->mode == DP83869_RGMII_1000_BASE) {
 		linkmode_set_bit(ETHTOOL_LINK_MODE_1000baseX_Full_BIT,
 				 phydev->supported);
@@ -655,21 +670,6 @@ static int dp83869_configure_fiber(struct phy_device *phydev,
 				 phydev->supported);
 		linkmode_set_bit(ETHTOOL_LINK_MODE_100baseFX_Half_BIT,
 				 phydev->supported);
-
-		/* Auto neg is not supported in 100base FX mode */
-		bmcr = phy_read(phydev, MII_BMCR);
-		if (bmcr < 0)
-			return bmcr;
-
-		phydev->autoneg = AUTONEG_DISABLE;
-		linkmode_clear_bit(ETHTOOL_LINK_MODE_Autoneg_BIT, phydev->supported);
-		linkmode_clear_bit(ETHTOOL_LINK_MODE_Autoneg_BIT, phydev->advertising);
-
-		if (bmcr & BMCR_ANENABLE) {
-			ret =  phy_modify(phydev, MII_BMCR, BMCR_ANENABLE, 0);
-			if (ret < 0)
-				return ret;
-		}
 	}
 
 	/* Update advertising from supported */
