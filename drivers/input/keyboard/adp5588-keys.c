@@ -188,6 +188,7 @@ struct adp5588_kpad {
 	u32 cols;
 	u32 unlock_keys[2];
 	int nkeys_unlock;
+	bool gpio_only;
 	unsigned short keycode[ADP5588_KEYMAPSIZE];
 	unsigned char gpiomap[ADP5588_MAXGPIO];
 	struct gpio_chip gc;
@@ -647,6 +648,32 @@ static int adp5588_fw_parse(struct adp5588_kpad *kpad)
 	struct i2c_client *client = kpad->client;
 	int ret, i;
 
+	kpad->gpio_only = device_property_present(&client->dev, "gpio-only");
+	/*
+	 * Check if the device is to be operated purely in GPIO mode. If so,
+	 * confirm that no keypad rows or columns have been specified, since
+	 * all GPINS should be configured as GPIO.
+	 */
+	if (kpad->gpio_only) {
+		ret = device_property_present(&client->dev,
+				"keypad,num-rows");
+		if (ret) {
+			dev_err(&client->dev,
+				"Specified num-rows with mode gpio-only\n");
+			return -EINVAL;
+		}
+
+		ret = device_property_present(&client->dev,
+				"keypad,num-columns");
+		if (ret) {
+			dev_err(&client->dev,
+				"Specified num-columns with mode gpio-only\n");
+			return -EINVAL;
+		}
+
+		return 0;
+	}
+
 	ret = matrix_keypad_parse_properties(&client->dev, &kpad->rows,
 					     &kpad->cols);
 	if (ret)
@@ -789,6 +816,11 @@ static int adp5588_probe(struct i2c_client *client)
 	error = adp5588_gpio_add(kpad);
 	if (error)
 		return error;
+
+	if (kpad->gpio_only) {
+		dev_info(&client->dev, "Rev.%d, started as GPIO only\n", revid);
+		return 0;
+	}
 
 	error = devm_request_threaded_irq(&client->dev, client->irq,
 					  adp5588_hard_irq, adp5588_thread_irq,
