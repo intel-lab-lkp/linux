@@ -3007,3 +3007,21 @@ out:
 	gd->gdma_context = NULL;
 	kfree(ac);
 }
+
+/* the caller should hold rcu_read_lock */
+struct net_device *mana_get_master_netdev_rcu(struct mana_context *ac, u32 port_index)
+{
+	struct net_device *ndev;
+
+	if (port_index >= ac->num_ports)
+		return NULL;
+
+	/* When mana is used in netvsc, the upper netdevice should be returned. */
+	if (ac->ports[port_index]->flags & IFF_SLAVE)
+		ndev = netdev_master_upper_dev_get_rcu(ac->ports[port_index]);
+	else
+		ndev = ac->ports[port_index];
+
+	return ndev;
+}
+EXPORT_SYMBOL_NS(mana_get_master_netdev_rcu, NET_MANA);
