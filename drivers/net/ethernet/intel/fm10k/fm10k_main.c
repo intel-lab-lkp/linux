@@ -832,9 +832,11 @@ static void fm10k_tx_csum(struct fm10k_ring *tx_ring,
 		if (likely((transport_hdr - network_hdr.raw) ==
 			   sizeof(struct ipv6hdr)))
 			break;
-		ipv6_skip_exthdr(skb, network_hdr.raw - skb->data +
-				      sizeof(struct ipv6hdr),
-				 &l4_hdr, &frag_off);
+		if (ipv6_skip_exthdr_no_rthdr(skb, network_hdr.raw - skb->data +
+					      sizeof(struct ipv6hdr),
+					      &l4_hdr, &frag_off) < 0)
+			goto no_csum_offload;
+
 		if (unlikely(frag_off))
 			l4_hdr = NEXTHDR_FRAGMENT;
 		break;
@@ -851,6 +853,7 @@ static void fm10k_tx_csum(struct fm10k_ring *tx_ring,
 			break;
 		fallthrough;
 	default:
+no_csum_offload:
 		if (unlikely(net_ratelimit())) {
 			dev_warn(tx_ring->dev,
 				 "partial checksum, version=%d l4 proto=%x\n",
