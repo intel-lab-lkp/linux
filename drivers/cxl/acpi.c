@@ -11,6 +11,10 @@
 #include "cxlpci.h"
 #include "cxl.h"
 
+#ifdef CONFIG_X86
+#include <asm/cpu.h>
+#endif
+
 #define CXL_RCRB_SIZE	SZ_8K
 
 struct cxl_cxims_data {
@@ -538,7 +542,12 @@ static int cxl_get_chbs(struct device *dev, struct acpi_device *hb,
 
 static void setup_platform_quirks(struct cxl_root *root)
 {
-	root->hpa_xlat_enable = 0;
+#ifdef CONFIG_X86_64
+	bool is_amd_zen4 = boot_cpu_has(X86_FEATURE_ZEN4);
+#else
+	bool is_amd_zen4 = false;
+#endif
+	root->hpa_xlat_enable = is_amd_zen4;
 }
 
 static int get_genport_coordinates(struct device *dev, struct cxl_dport *dport)
