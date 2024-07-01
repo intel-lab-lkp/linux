@@ -357,8 +357,10 @@ static int offload_csum(struct hinic_sq_task *task, u32 *queue_info,
 	u32 offset, l4_len, network_hdr_len;
 	enum hinic_l3_offload_type l3_type;
 	u32 tunnel_type = NOT_TUNNEL;
+	unsigned char *exthdr;
 	union hinic_l3 ip;
 	union hinic_l4 l4;
+	__be16 frag_off;
 	u8 l4_proto;
 
 	if (skb->ip_summed != CHECKSUM_PARTIAL)
@@ -374,17 +376,15 @@ static int offload_csum(struct hinic_sq_task *task, u32 *queue_info,
 			l3_type = IPV4_PKT_NO_CHKSUM_OFFLOAD;
 			l4_proto = ip.v4->protocol;
 		} else if (ip.v4->version == 6) {
-			unsigned char *exthdr;
-			__be16 frag_off;
-
 			l3_type = IPV6_PKT;
 			tunnel_type = TUNNEL_UDP_CSUM;
 			exthdr = ip.hdr + sizeof(*ip.v6);
 			l4_proto = ip.v6->nexthdr;
 			l4.hdr = skb_transport_header(skb);
-			if (l4.hdr != exthdr)
-				ipv6_skip_exthdr(skb, exthdr - skb->data,
-						 &l4_proto, &frag_off);
+			if (l4.hdr != exthdr &&
+			    ipv6_skip_exthdr_no_rthdr(skb, exthdr - skb->data,
+						      &l4_proto, &frag_off) < 0)
+				goto no_csum_offload;
 		} else {
 			l3_type = L3TYPE_UNKNOWN;
 			l4_proto = IPPROTO_RAW;
@@ -411,6 +411,7 @@ static int offload_csum(struct hinic_sq_task *task, u32 *queue_info,
 			network_hdr_len = skb_network_header_len(skb);
 			break;
 		default:
+no_csum_offload:
 			/* Unsupported tunnel packet, disable csum offload */
 			skb_checksum_help(skb);
 			return 0;
@@ -421,6 +422,16 @@ static int offload_csum(struct hinic_sq_task *task, u32 *queue_info,
 		ip.hdr = skb_network_header(skb);
 		l4.hdr = skb_transport_header(skb);
 		network_hdr_len = skb_network_header_len(skb);
+
+		if (ip.v4->version == 6) {
+			exthdr = ip.hdr + sizeof(*ip.v6);
+			l4_proto = ip.v6->nexthdr;
+			l4.hdr = skb_transport_header(skb);
+			if (l4.hdr != exthdr &&
+			    ipv6_skip_exthdr_no_rthdr(skb, exthdr - skb->data,
+						      &l4_proto, &frag_off) < 0)
+				goto no_csum_offload;
+		}
 	}
 
 	get_inner_l3_l4_type(skb, &ip, &l4, TX_OFFLOAD_CSUM, &l3_type,
