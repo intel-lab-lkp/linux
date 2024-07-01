@@ -10,6 +10,8 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/phy.h>
+#include <linux/phylink.h>
+#include <linux/sfp.h>
 #include <linux/delay.h>
 #include <linux/bitfield.h>
 
@@ -843,6 +845,62 @@ static int dp83869_config_init(struct phy_device *phydev)
 	return ret;
 }
 
+static int dp83869_module_insert(void *upstream, const struct sfp_eeprom_id *id)
+{
+	__ETHTOOL_DECLARE_LINK_MODE_MASK(phy_support);
+	__ETHTOOL_DECLARE_LINK_MODE_MASK(sfp_support);
+	DECLARE_PHY_INTERFACE_MASK(interfaces);
+	struct phy_device *phydev = upstream;
+	struct dp83869_private *dp83869;
+	phy_interface_t interface;
+
+	linkmode_zero(phy_support);
+	phylink_set(phy_support, 1000baseX_Full);
+	phylink_set(phy_support, 100baseFX_Full);
+	phylink_set(phy_support, FIBRE);
+
+	linkmode_zero(sfp_support);
+	sfp_parse_support(phydev->sfp_bus, id, sfp_support, interfaces);
+
+	linkmode_and(sfp_support, phy_support, sfp_support);
+
+	if (linkmode_empty(sfp_support)) {
+		dev_err(&phydev->mdio.dev, "incompatible SFP module inserted\n");
+		return -EINVAL;
+	}
+
+	interface = sfp_select_interface(phydev->sfp_bus, sfp_support);
+
+	dev_info(&phydev->mdio.dev, "%s SFP compatible link mode: %s\n", __func__,
+		 phy_modes(interface));
+
+	dp83869 = phydev->priv;
+
+	switch (interface) {
+	case PHY_INTERFACE_MODE_100BASEX:
+		dp83869->mode = DP83869_RGMII_100_BASE;
+		phydev->port = PORT_FIBRE;
+		break;
+	case PHY_INTERFACE_MODE_1000BASEX:
+		dp83869->mode = DP83869_RGMII_1000_BASE;
+		phydev->port = PORT_FIBRE;
+		break;
+	default:
+		dev_err(&phydev->mdio.dev,
+			"incompatible PHY-to-SFP module link mode %s!\n",
+			phy_modes(interface));
+		return -EINVAL;
+	}
+
+	return dp83869_configure_mode(phydev, dp83869);
+}
+
+static const struct sfp_upstream_ops dp83869_sfp_ops = {
+	.attach = phy_sfp_attach,
+	.detach = phy_sfp_detach,
+	.module_insert = dp83869_module_insert,
+};
+
 static int dp83869_probe(struct phy_device *phydev)
 {
 	struct dp83869_private *dp83869;
@@ -856,6 +914,10 @@ static int dp83869_probe(struct phy_device *phydev)
 	phydev->priv = dp83869;
 
 	ret = dp83869_of_init(phydev);
+	if (ret)
+		return ret;
+
+	ret = phy_sfp_probe(phydev, &dp83869_sfp_ops);
 	if (ret)
 		return ret;
 
