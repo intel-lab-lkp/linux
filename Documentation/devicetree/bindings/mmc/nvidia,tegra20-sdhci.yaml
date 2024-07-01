@@ -88,6 +88,10 @@ properties:
     items:
       - description: phandle to the core power domain
 
+  config-settings:
+    description: phandle to the sdhci configuration settings
+    $ref: /schemas/types.yaml#/definitions/phandle
+
   nvidia,default-tap:
     description: Specify the default inbound sampling clock trimmer value for
       non-tunable modes.
