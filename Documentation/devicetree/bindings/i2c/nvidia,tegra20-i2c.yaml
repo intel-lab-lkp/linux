@@ -119,6 +119,11 @@ properties:
       - const: rx
       - const: tx
 
+  config-settings:
+    items:
+      - description: phandle to the i2c configuration settings
+      - $ref: /schemas/types.yaml#/definitions/phandle
+
 allOf:
   - $ref: /schemas/i2c/i2c-controller.yaml
   - if:
