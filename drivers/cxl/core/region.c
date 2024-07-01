@@ -3281,6 +3281,10 @@ static int cxl_region_probe(struct device *dev)
 		goto out;
 	}
 
+	down_read(&cxl_dpa_rwsem);
+	cxl_region_shared_upstream_perf_update(cxlr);
+	up_read(&cxl_dpa_rwsem);
+
 	/*
 	 * From this point on any path that changes the region's state away from
 	 * CXL_CONFIG_COMMIT is also responsible for releasing the driver.
