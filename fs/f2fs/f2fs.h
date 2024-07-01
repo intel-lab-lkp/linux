@@ -4236,6 +4236,7 @@ void f2fs_unregister_sysfs(struct f2fs_sb_info *sbi);
 
 /* verity.c */
 extern const struct fsverity_operations f2fs_verityops;
+void f2fs_enqueue_verify_io_work(struct io_work *iowork);
 
 /*
  * crypto support

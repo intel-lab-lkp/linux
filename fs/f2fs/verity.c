@@ -292,3 +292,8 @@ const struct fsverity_operations f2fs_verityops = {
 	.read_merkle_tree_page	= f2fs_read_merkle_tree_page,
 	.write_merkle_tree_block = f2fs_write_merkle_tree_block,
 };
+
+void f2fs_enqueue_verify_io_work(struct io_work *iowork)
+{
+	fsverity_enqueue_verify_work(&(iowork->work));
+}

@@ -110,7 +110,7 @@ enum bio_post_read_step {
 struct bio_post_read_ctx {
 	struct bio *bio;
 	struct f2fs_sb_info *sbi;
-	struct work_struct work;
+	struct io_work iowork;
 	unsigned int enabled_steps;
 	/*
 	 * decompression_attempted keeps track of whether
@@ -168,9 +168,11 @@ static void f2fs_finish_read_bio(struct bio *bio, bool in_task)
 static void f2fs_verify_bio(struct work_struct *work)
 {
 	struct bio_post_read_ctx *ctx =
-		container_of(work, struct bio_post_read_ctx, work);
+		container_of(to_io_work(work), struct bio_post_read_ctx, iowork);
 	struct bio *bio = ctx->bio;
 	bool may_have_compressed_pages = (ctx->enabled_steps & STEP_DECOMPRESS);
+
+	may_adjust_io_work_task_ioprio(to_io_work(work));
 
 	/*
 	 * fsverity_verify_bio() may call readahead() again, and while verity
@@ -204,6 +206,7 @@ static void f2fs_verify_bio(struct work_struct *work)
 	}
 
 	f2fs_finish_read_bio(bio, true);
+	restore_io_work_task_ioprio(to_io_work(work));
 }
 
 /*
@@ -220,8 +223,8 @@ static void f2fs_verify_and_finish_bio(struct bio *bio, bool in_task)
 	struct bio_post_read_ctx *ctx = bio->bi_private;
 
 	if (ctx && (ctx->enabled_steps & STEP_VERITY)) {
-		INIT_WORK(&ctx->work, f2fs_verify_bio);
-		fsverity_enqueue_verify_work(&ctx->work);
+		INIT_IO_WORK(&ctx->iowork, f2fs_verify_bio);
+		f2fs_enqueue_verify_io_work(&ctx->iowork);
 	} else {
 		f2fs_finish_read_bio(bio, in_task);
 	}
@@ -270,7 +273,7 @@ static void f2fs_handle_step_decompress(struct bio_post_read_ctx *ctx,
 static void f2fs_post_read_work(struct work_struct *work)
 {
 	struct bio_post_read_ctx *ctx =
-		container_of(work, struct bio_post_read_ctx, work);
+		container_of(to_io_work(work), struct bio_post_read_ctx, iowork);
 	struct bio *bio = ctx->bio;
 
 	if ((ctx->enabled_steps & STEP_DECRYPT) && !fscrypt_decrypt_bio(bio)) {
@@ -313,8 +316,8 @@ static void f2fs_read_end_io(struct bio *bio)
 				!f2fs_low_mem_mode(sbi)) {
 			f2fs_handle_step_decompress(ctx, intask);
 		} else if (enabled_steps) {
-			INIT_WORK(&ctx->work, f2fs_post_read_work);
-			queue_work(ctx->sbi->post_read_wq, &ctx->work);
+			INIT_IO_WORK(&ctx->iowork, f2fs_post_read_work);
+			queue_io_work(ctx->sbi->post_read_wq, &ctx->iowork);
 			return;
 		}
 	}
