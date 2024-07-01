@@ -426,6 +426,34 @@
 
 		};
 
+		configmmc1: config-mmc3400000 {
+
+			sdhci-mmc-hs200-cfg {
+				nvidia,num-tuning-iter = <0x2>;
+			};
+
+			sdhci-uhs-sdr104-cfg {
+				nvidia,num-tuning-iter = <0x2>;
+			};
+
+			sdhci-uhs-sdr50-cfg {
+				nvidia,num-tuning-iter = <0x4>;
+			};
+
+		};
+
+		configmmc2: config-mmc3460000 {
+
+			sdhci-mmc-hs200-cfg {
+				nvidia,num-tuning-iter = <0x2>;
+			};
+
+			sdhci-mmc-hs400-cfg {
+				nvidia,num-tuning-iter = <0x2>;
+			};
+
+		};
+
 	};
 
 	bus@0 {
@@ -459,6 +487,14 @@
 
 		i2c@c250000 {
 			config-settings = <&configi2c8>;
+		};
+
+		mmc@3400000 {
+			config-settings = <&configmmc1>;
+		};
+
+		mmc@3460000 {
+			config-settings = <&configmmc2>;
 		};
 
 	};
