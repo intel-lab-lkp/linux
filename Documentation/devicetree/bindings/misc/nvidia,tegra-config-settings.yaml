@@ -38,17 +38,74 @@ patternProperties:
     additionalProperties: false
 
     patternProperties:
-      "^[a-z0-9_]+-cfg$":
-        description:
-          Config profiles applied conditionally.
+      "^i2c-[a-z0-9_]+-cfg$":
+        description: Config settings for I2C devices.
         type: object
-        patternProperties:
-	  "nvidia,[a-z0-9_]+$":
-	    description:
-	      Register field configuration.
-	    $ref: /schemas/types.yaml#/definitions/uint32
+        additionalProperties: false
 
-additionalProperties: true
+        properties:
+          nvidia,i2c-clk-divisor-hs-mode:
+            description: I2C clock divisor for HS mode.
+            $ref: /schemas/types.yaml#/definitions/uint32
+            minimum: 0
+            maximum: 0xffff
+          nvidia,i2c-clk-divisor-fs-mode:
+            description: I2C clock divisor for FS mode.
+            $ref: /schemas/types.yaml#/definitions/uint32
+            minimum: 0
+            maximum: 0xffff
+          nvidia,i2c-hs-sclk-high-period:
+            description: I2C high speed sclk high period.
+            $ref: /schemas/types.yaml#/definitions/uint32
+            minimum: 0
+            maximum: 0xffff
+          nvidia,i2c-hs-sclk-low-period:
+            description: I2C high speed sclk low period.
+            $ref: /schemas/types.yaml#/definitions/uint32
+            minimum: 0
+            maximum: 0xffff
+          nvidia,i2c-hs-stop-setup-time:
+            description: I2C high speed stop setup time.
+            $ref: /schemas/types.yaml#/definitions/uint32
+            minimum: 0
+            maximum: 0xffff
+          nvidia,i2c-hs-start-hold-time:
+            description: I2C high speed start hold time.
+            $ref: /schemas/types.yaml#/definitions/uint32
+            minimum: 0
+            maximum: 0xffff
+          nvidia,i2c-hs-start-setup-time:
+            description: I2C high speed start setup time.
+            $ref: /schemas/types.yaml#/definitions/uint32
+            minimum: 0
+            maximum: 0xffff
+          nvidia,i2c-sclk-high-period:
+            description: I2C sclk high period.
+            $ref: /schemas/types.yaml#/definitions/uint32
+            minimum: 0
+            maximum: 0xffff
+          nvidia,i2c-sclk-low-period:
+            description: I2C sclk low period.
+            $ref: /schemas/types.yaml#/definitions/uint32
+            minimum: 0
+            maximum: 0xffff
+          nvidia,i2c-bus-free-time:
+            description: I2C bus free time.
+            $ref: /schemas/types.yaml#/definitions/uint32
+            minimum: 0
+            maximum: 0xffff
+          nvidia,i2c-stop-setup-time:
+            description: I2C stop setup time.
+            $ref: /schemas/types.yaml#/definitions/uint32
+            minimum: 0
+            maximum: 0xffff
+          nvidia,i2c-start-hold-time:
+            description: I2C start hold time.
+            $ref: /schemas/types.yaml#/definitions/uint32
+            minimum: 0
+            maximum: 0xffff
+
+additionalProperties: false
 
 examples:
   - |
@@ -57,6 +114,14 @@ examples:
             i2c-common-cfg {
                 nvidia,i2c-hs-sclk-high-period = <0x03>;
                 nvidia,i2c-hs-sclk-low-period = <0x08>;
+            };
+            i2c-fast-cfg {
+                nvidia,i2c-clk-divisor-fs-mode = <0x3c>;
+                nvidia,i2c-sclk-high-period = <0x02>;
+            };
+            i2c-fastplus-cfg {
+                nvidia,i2c-clk-divisor-fs-mode = <0x4f>;
+                nvidia,i2c-sclk-high-period = <0x07>;
             };
         };
     };
