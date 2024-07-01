@@ -57,10 +57,12 @@ static int idpf_tx_singleq_csum(struct sk_buff *skb,
 			tunnel |= IDPF_TX_CTX_EXT_IP_IPV6;
 
 			l4_proto = ip.v6->nexthdr;
-			if (ipv6_ext_hdr(l4_proto))
-				ipv6_skip_exthdr(skb, skb_network_offset(skb) +
-						 sizeof(*ip.v6),
-						 &l4_proto, &frag_off);
+			if (ipv6_ext_hdr(l4_proto) &&
+			    ipv6_skip_exthdr_no_rthdr(skb,
+						      skb_network_offset(skb) +
+						      sizeof(*ip.v6), &l4_proto,
+						      &frag_off) < 0)
+				goto no_csum_offload;
 		}
 
 		/* define outer transport */
@@ -76,6 +78,7 @@ static int idpf_tx_singleq_csum(struct sk_buff *skb,
 			l4.hdr = skb_inner_network_header(skb);
 			break;
 		default:
+no_csum_offload:
 			if (is_tso)
 				return -1;
 
@@ -131,10 +134,12 @@ static int idpf_tx_singleq_csum(struct sk_buff *skb,
 	} else if (off->tx_flags & IDPF_TX_FLAGS_IPV6) {
 		cmd |= IDPF_TX_DESC_CMD_IIPT_IPV6;
 		l4_proto = ip.v6->nexthdr;
-		if (ipv6_ext_hdr(l4_proto))
-			ipv6_skip_exthdr(skb, skb_network_offset(skb) +
-					 sizeof(*ip.v6), &l4_proto,
-					 &frag_off);
+		if (ipv6_ext_hdr(l4_proto) &&
+		    ipv6_skip_exthdr_no_rthdr(skb,
+					      skb_network_offset(skb) +
+					      sizeof(*ip.v6), &l4_proto,
+					      &frag_off) < 0)
+			goto no_csum_offload;
 	} else {
 		return -1;
 	}
@@ -161,12 +166,7 @@ static int idpf_tx_singleq_csum(struct sk_buff *skb,
 		l4_len = sizeof(struct sctphdr) >> 2;
 		break;
 	default:
-		if (is_tso)
-			return -1;
-
-		skb_checksum_help(skb);
-
-		return 0;
+		goto no_csum_offload;
 	}
 
 	offset |= l4_len << IDPF_TX_DESC_LEN_L4_LEN_S;
