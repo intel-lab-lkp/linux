@@ -100,9 +100,10 @@ static bool nfsd_originating_port_ok(struct svc_rqst *rqstp, int flags)
 }
 
 static __be32 nfsd_setuser_and_check_port(struct svc_rqst *rqstp,
+					  struct svc_cred *cred,
 					  struct svc_export *exp)
 {
-	int flags = nfsexp_flags(rqstp, exp);
+	int flags = nfsexp_flags(cred, exp);
 
 	/* Check if the request originated from a secure port. */
 	if (!nfsd_originating_port_ok(rqstp, flags)) {
@@ -113,7 +114,7 @@ static __be32 nfsd_setuser_and_check_port(struct svc_rqst *rqstp,
 	}
 
 	/* Set user creds for this exportpoint */
-	return nfserrno(nfsd_setuser(rqstp, exp));
+	return nfserrno(nfsd_setuser(cred, exp));
 }
 
 static inline __be32 check_pseudo_root(struct svc_rqst *rqstp,
@@ -152,6 +153,7 @@ static inline __be32 check_pseudo_root(struct svc_rqst *rqstp,
  * fh_dentry.
  */
 static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct nfsd_net *nn,
+				 struct svc_cred *cred,
 				 struct svc_fh *fhp)
 {
 	struct knfsd_fh	*fh = &fhp->fh_handle;
@@ -230,7 +232,7 @@ static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct nfsd_net *nn,
 		put_cred(override_creds(new));
 		put_cred(new);
 	} else {
-		error = nfsd_setuser_and_check_port(rqstp, exp);
+		error = nfsd_setuser_and_check_port(rqstp, cred, exp);
 		if (error)
 			goto out;
 	}
@@ -326,7 +328,8 @@ out:
  * fs/nfsd/vfs.h.
  */
 static __be32
-__fh_verify(struct svc_rqst *rqstp, struct nfsd_net *nn,
+__fh_verify(struct svc_rqst *rqstp,
+	    struct nfsd_net *nn, struct svc_cred *cred,
 	    struct svc_fh *fhp, umode_t type, int access)
 {
 	struct svc_export *exp = NULL;
@@ -334,7 +337,7 @@ __fh_verify(struct svc_rqst *rqstp, struct nfsd_net *nn,
 	__be32		error;
 
 	if (!fhp->fh_dentry) {
-		error = nfsd_set_fh_dentry(rqstp, nn, fhp);
+		error = nfsd_set_fh_dentry(rqstp, nn, cred, fhp);
 		if (error)
 			goto out;
 	}
@@ -363,7 +366,7 @@ __fh_verify(struct svc_rqst *rqstp, struct nfsd_net *nn,
 	if (error)
 		goto out;
 
-	error = nfsd_setuser_and_check_port(rqstp, exp);
+	error = nfsd_setuser_and_check_port(rqstp, cred, exp);
 	if (error)
 		goto out;
 
@@ -393,7 +396,7 @@ __fh_verify(struct svc_rqst *rqstp, struct nfsd_net *nn,
 
 skip_pseudoflavor_check:
 	/* Finally, check access permissions. */
-	error = nfsd_permission(rqstp, exp, dentry, access);
+	error = nfsd_permission(cred, exp, dentry, access);
 out:
 	trace_nfsd_fh_verify_err(rqstp, fhp, type, access, error);
 	if (error == nfserr_stale)
@@ -405,6 +408,7 @@ __be32
 fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, umode_t type, int access)
 {
 	return __fh_verify(rqstp, net_generic(SVC_NET(rqstp), nfsd_net_id),
+			   &rqstp->rq_cred,
 			   fhp, type, access);
 }
 
