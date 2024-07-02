@@ -175,6 +175,11 @@ int nfs42_proc_deallocate(struct file *filep, loff_t offset, loff_t len)
 	return err;
 }
 
+/* Wait this long before checking progress on a COPY operation */
+enum {
+	NFS42_COPY_TIMEOUT	= 5 * HZ,
+};
+
 static int handle_async_copy(struct nfs42_copy_res *res,
 			     struct nfs_server *dst_server,
 			     struct nfs_server *src_server,
@@ -184,9 +189,10 @@ static int handle_async_copy(struct nfs42_copy_res *res,
 			     bool *restart)
 {
 	struct nfs4_copy_state *copy, *tmp_copy = NULL, *iter;
-	int status = NFS4_OK;
 	struct nfs_open_context *dst_ctx = nfs_file_open_context(dst);
 	struct nfs_open_context *src_ctx = nfs_file_open_context(src);
+	int status = NFS4_OK;
+	u64 copied;
 
 	copy = kzalloc(sizeof(struct nfs4_copy_state), GFP_KERNEL);
 	if (!copy)
@@ -224,7 +230,9 @@ static int handle_async_copy(struct nfs42_copy_res *res,
 		spin_unlock(&src_server->nfs_client->cl_lock);
 	}
 
-	status = wait_for_completion_interruptible(&copy->completion);
+wait:
+	status = wait_for_completion_interruptible_timeout(&copy->completion,
+							   NFS42_COPY_TIMEOUT);
 	spin_lock(&dst_server->nfs_client->cl_lock);
 	list_del_init(&copy->copies);
 	spin_unlock(&dst_server->nfs_client->cl_lock);
@@ -233,12 +241,17 @@ static int handle_async_copy(struct nfs42_copy_res *res,
 		list_del_init(&copy->src_copies);
 		spin_unlock(&src_server->nfs_client->cl_lock);
 	}
-	if (status == -ERESTARTSYS) {
+	switch (status) {
+	case 0:
+		goto timeout;
+	case -ERESTARTSYS:
 		goto out_cancel;
-	} else if (copy->flags || copy->error == NFS4ERR_PARTNER_NO_AUTH) {
-		status = -EAGAIN;
-		*restart = true;
-		goto out_cancel;
+	default:
+		if (copy->flags || copy->error == NFS4ERR_PARTNER_NO_AUTH) {
+			status = -EAGAIN;
+			*restart = true;
+			goto out_cancel;
+		}
 	}
 out:
 	res->write_res.count = copy->count;
@@ -253,6 +266,19 @@ out_cancel:
 	if (!nfs42_files_from_same_server(src, dst))
 		nfs42_do_offload_cancel_async(src, src_stateid);
 	goto out_free;
+timeout:
+	status = nfs42_proc_offload_status(src, src_stateid, &copied);
+	switch (status) {
+	case 0:
+	case -EREMOTEIO:
+		res->write_res.count = copied;
+		memcpy(&res->write_res.verifier, &copy->verf, sizeof(copy->verf));
+		goto out_free;
+	case -EINPROGRESS:
+	case -EOPNOTSUPP:
+		goto wait;
+	}
+	goto out;
 }
 
 static int process_copy_commit(struct file *dst, loff_t pos_dst,
