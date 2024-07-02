@@ -1291,7 +1291,6 @@ struct bnxt_vnic_info {
 };
 
 struct bnxt_rss_ctx {
-	struct list_head list;
 	struct bnxt_vnic_info vnic;
 	u16	*rss_indir_tbl;
 	u8	index;
@@ -2330,7 +2329,6 @@ struct bnxt {
 	/* grp_info indexed by completion ring index */
 	struct bnxt_ring_grp_info	*grp_info;
 	struct bnxt_vnic_info	*vnic_info;
-	struct list_head	rss_ctx_list;
 	u32			num_rss_ctx;
 	int			nr_vnics;
 	u16			*rss_indir_tbl;
