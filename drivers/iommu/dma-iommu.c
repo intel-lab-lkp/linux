@@ -597,19 +597,6 @@ static int iova_reserve_iommu_regions(struct device *dev,
 	return ret;
 }
 
-static bool dev_is_untrusted(struct device *dev)
-{
-	return dev_is_pci(dev) && to_pci_dev(dev)->untrusted;
-}
-
-static bool dev_use_swiotlb(struct device *dev, size_t size,
-			    enum dma_data_direction dir)
-{
-	return IS_ENABLED(CONFIG_SWIOTLB) &&
-		(dev_is_untrusted(dev) ||
-		 dma_kmalloc_needs_bounce(dev, size, dir));
-}
-
 static bool dev_use_sg_swiotlb(struct device *dev, struct scatterlist *sg,
 			       int nents, enum dma_data_direction dir)
 {

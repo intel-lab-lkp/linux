@@ -968,3 +968,35 @@ void dma_free_iova(struct dma_iova_attrs *iova)
 	ops->free_iova(dev, iova->addr, iova->size);
 }
 EXPORT_SYMBOL_GPL(dma_free_iova);
+
+/**
+ * dma_can_use_iova - check if the device type is valid
+ *                    and won't take SWIOTLB path
+ * @state: IOVA state
+ * @size: size of the buffer
+ *
+ * Return %true if the device should use swiotlb for the given buffer, else
+ * %false.
+ */
+bool dma_can_use_iova(struct dma_iova_state *state, size_t size)
+{
+	struct device *dev = state->iova->dev;
+	const struct dma_map_ops *ops = get_dma_ops(dev);
+	struct dma_memory_type *type = state->type;
+	enum pci_p2pdma_map_type map;
+
+	if (is_swiotlb_force_bounce(dev) ||
+	    dev_use_swiotlb(dev, size, state->iova->dir))
+		return false;
+
+	if (dma_map_direct(dev, ops) || !ops->alloc_iova)
+		return false;
+
+	if (type->type == DMA_MEMORY_TYPE_P2P) {
+		map = pci_p2pdma_map_type(type->p2p_pgmap, dev);
+		return map == PCI_P2PDMA_MAP_THRU_HOST_BRIDGE;
+	}
+
+	return type->type == DMA_MEMORY_TYPE_NORMAL;
+}
+EXPORT_SYMBOL_GPL(dma_can_use_iova);

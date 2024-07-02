@@ -100,6 +100,11 @@ struct dma_iova_attrs {
 	unsigned long attrs;
 };
 
+struct dma_iova_state {
+	struct dma_iova_attrs *iova;
+	struct dma_memory_type *type;
+};
+
 #ifdef CONFIG_DMA_API_DEBUG
 void debug_dma_mapping_error(struct device *dev, dma_addr_t dma_addr);
 void debug_dma_map_single(struct device *dev, const void *addr,
@@ -178,6 +183,7 @@ int dma_mmap_noncontiguous(struct device *dev, struct vm_area_struct *vma,
 		size_t size, struct sg_table *sgt);
 
 void dma_get_memory_type(struct page *page, struct dma_memory_type *type);
+bool dma_can_use_iova(struct dma_iova_state *state, size_t size);
 #else /* CONFIG_HAS_DMA */
 static inline int dma_alloc_iova(struct dma_iova_attrs *iova)
 {
@@ -318,6 +324,10 @@ static inline int dma_mmap_noncontiguous(struct device *dev,
 static inline void dma_get_memory_type(struct page *page,
 				       struct dma_memory_type *type)
 {
+}
+static inline bool dma_can_use_iova(struct dma_iova_state *state, size_t size)
+{
+	return false;
 }
 #endif /* CONFIG_HAS_DMA */
 
