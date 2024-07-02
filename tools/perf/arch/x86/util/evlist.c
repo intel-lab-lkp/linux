@@ -73,9 +73,11 @@ int arch_evlist__add_default_attrs(struct evlist *evlist,
 	return ___evlist__add_default_attrs(evlist, attrs, nr_attrs);
 }
 
-int arch_evlist__cmp(const struct evsel *lhs, const struct evsel *rhs)
+int arch_evlist__cmp(const struct evsel *lhs, const struct evsel *rhs, void *priv)
 {
-	if (topdown_sys_has_perf_metrics() &&
+	struct sort_priv *_priv = priv;
+
+	if (topdown_sys_has_perf_metrics() && _priv->topdown_metrics_in_group &&
 	    (arch_evsel__must_be_in_group(lhs) || arch_evsel__must_be_in_group(rhs))) {
 		/* Ensure the topdown slots comes first. */
 		if (strcasestr(lhs->name, "slots") && !strcasestr(lhs->name, "uops_retired.slots"))

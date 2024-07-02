@@ -89,6 +89,11 @@ struct evsel_str_handler {
 	void	   *handler;
 };
 
+struct sort_priv {
+	int force_grouped_idx;
+	bool topdown_metrics_in_group;
+};
+
 struct evlist *evlist__new(void);
 struct evlist *evlist__new_default(void);
 struct evlist *evlist__new_dummy(void);
@@ -112,7 +117,7 @@ int arch_evlist__add_default_attrs(struct evlist *evlist,
 #define evlist__add_default_attrs(evlist, array) \
 	arch_evlist__add_default_attrs(evlist, array, ARRAY_SIZE(array))
 
-int arch_evlist__cmp(const struct evsel *lhs, const struct evsel *rhs);
+int arch_evlist__cmp(const struct evsel *lhs, const struct evsel *rhs, void *priv);
 
 int evlist__add_dummy(struct evlist *evlist);
 struct evsel *evlist__add_aux_dummy(struct evlist *evlist, bool system_wide);

@@ -1962,19 +1962,21 @@ static int evsel__compute_group_pmu_name(struct evsel *evsel,
 	return evsel->group_pmu_name ? 0 : -ENOMEM;
 }
 
-__weak int arch_evlist__cmp(const struct evsel *lhs, const struct evsel *rhs)
+__weak int arch_evlist__cmp(const struct evsel *lhs, const struct evsel *rhs,
+			    void *priv __maybe_unused)
 {
 	/* Order by insertion index. */
 	return lhs->core.idx - rhs->core.idx;
 }
 
-static int evlist__cmp(void *_fg_idx, const struct list_head *l, const struct list_head *r)
+static int evlist__cmp(void *_sort_priv, const struct list_head *l, const struct list_head *r)
 {
 	const struct perf_evsel *lhs_core = container_of(l, struct perf_evsel, node);
 	const struct evsel *lhs = container_of(lhs_core, struct evsel, core);
 	const struct perf_evsel *rhs_core = container_of(r, struct perf_evsel, node);
 	const struct evsel *rhs = container_of(rhs_core, struct evsel, core);
-	int *force_grouped_idx = _fg_idx;
+	struct sort_priv *sort_priv = _sort_priv;
+	int force_grouped_idx = sort_priv->force_grouped_idx;
 	int lhs_sort_idx, rhs_sort_idx, ret;
 	const char *lhs_pmu_name, *rhs_pmu_name;
 	bool lhs_has_group, rhs_has_group;
@@ -1992,8 +1994,8 @@ static int evlist__cmp(void *_fg_idx, const struct list_head *l, const struct li
 		lhs_sort_idx = lhs_core->leader->idx;
 	} else {
 		lhs_has_group = false;
-		lhs_sort_idx = *force_grouped_idx != -1 && arch_evsel__must_be_in_group(lhs)
-			? *force_grouped_idx
+		lhs_sort_idx = force_grouped_idx != -1 && arch_evsel__must_be_in_group(lhs)
+			? force_grouped_idx
 			: lhs_core->idx;
 	}
 	if (rhs_core->leader != rhs_core || rhs_core->nr_members > 1) {
@@ -2001,8 +2003,8 @@ static int evlist__cmp(void *_fg_idx, const struct list_head *l, const struct li
 		rhs_sort_idx = rhs_core->leader->idx;
 	} else {
 		rhs_has_group = false;
-		rhs_sort_idx = *force_grouped_idx != -1 && arch_evsel__must_be_in_group(rhs)
-			? *force_grouped_idx
+		rhs_sort_idx = force_grouped_idx != -1 && arch_evsel__must_be_in_group(rhs)
+			? force_grouped_idx
 			: rhs_core->idx;
 	}
 
@@ -2019,16 +2021,17 @@ static int evlist__cmp(void *_fg_idx, const struct list_head *l, const struct li
 	}
 
 	/* Architecture specific sorting. */
-	return arch_evlist__cmp(lhs, rhs);
+	return arch_evlist__cmp(lhs, rhs, _sort_priv);
 }
 
 static int parse_events__sort_events_and_fix_groups(struct list_head *list)
 {
-	int idx = 0, force_grouped_idx = -1;
 	struct evsel *pos, *cur_leader = NULL;
 	struct perf_evsel *cur_leaders_grp = NULL;
 	bool idx_changed = false, cur_leader_force_grouped = false;
 	int orig_num_leaders = 0, num_leaders = 0;
+	struct sort_priv sort_priv = {-1, false};
+	int idx = 0;
 	int ret;
 
 	/*
@@ -2053,13 +2056,17 @@ static int parse_events__sort_events_and_fix_groups(struct list_head *list)
 		pos->core.idx = idx++;
 
 		/* Remember an index to sort all forced grouped events together to. */
-		if (force_grouped_idx == -1 && pos == pos_leader && pos->core.nr_members < 2 &&
-		    arch_evsel__must_be_in_group(pos))
-			force_grouped_idx = pos->core.idx;
+		if (sort_priv.force_grouped_idx == -1 && pos == pos_leader &&
+		    pos->core.nr_members < 2 && arch_evsel__must_be_in_group(pos))
+			sort_priv.force_grouped_idx = pos->core.idx;
+
+		if (!sort_priv.topdown_metrics_in_group &&
+		    strcasestr(pos->name, "topdown"))
+			sort_priv.topdown_metrics_in_group = true;
 	}
 
 	/* Sort events. */
-	list_sort(&force_grouped_idx, list, evlist__cmp);
+	list_sort(&sort_priv, list, evlist__cmp);
 
 	/*
 	 * Recompute groups, splitting for PMUs and adding groups for events
@@ -2070,7 +2077,7 @@ static int parse_events__sort_events_and_fix_groups(struct list_head *list)
 		const struct evsel *pos_leader = evsel__leader(pos);
 		const char *pos_pmu_name = pos->group_pmu_name;
 		const char *cur_leader_pmu_name;
-		bool pos_force_grouped = force_grouped_idx != -1 &&
+		bool pos_force_grouped = sort_priv.force_grouped_idx != -1 &&
 			arch_evsel__must_be_in_group(pos);
 
 		/* Reset index and nr_members. */
