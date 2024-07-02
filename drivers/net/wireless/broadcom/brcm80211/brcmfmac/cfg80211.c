@@ -8084,7 +8084,7 @@ brcmf_cfg80211_dump_survey(struct wiphy *wiphy, struct net_device *ndev,
 	struct ieee80211_supported_band *band;
 	enum nl80211_band band_id;
 	struct cca_msrmnt_query req;
-	u32 noise;
+	u32 noise = 0;
 	int err;
 
 	brcmf_dbg(TRACE, "Enter: channel idx=%d\n", idx);
