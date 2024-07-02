@@ -86,7 +86,7 @@ static unsigned int ata_dev_set_xfermode(struct ata_device *dev);
 static void ata_dev_xfermask(struct ata_device *dev);
 static unsigned long ata_dev_blacklisted(const struct ata_device *dev);
 
-atomic_t ata_print_id = ATOMIC_INIT(0);
+static DEFINE_IDA(ata_ida);
 
 #ifdef CONFIG_ATA_FORCE
 struct ata_force_param {
@@ -5455,6 +5455,7 @@ int sata_link_init_spd(struct ata_link *link)
 struct ata_port *ata_port_alloc(struct ata_host *host)
 {
 	struct ata_port *ap;
+	int id;
 
 	ap = kzalloc(sizeof(*ap), GFP_KERNEL);
 	if (!ap)
@@ -5462,7 +5463,12 @@ struct ata_port *ata_port_alloc(struct ata_host *host)
 
 	ap->pflags |= ATA_PFLAG_INITIALIZING | ATA_PFLAG_FROZEN;
 	ap->lock = &host->lock;
-	ap->print_id = atomic_inc_return(&ata_print_id);
+	id = ida_alloc_min(&ata_ida, 1, GFP_KERNEL);
+	if (id < 0) {
+		kfree(ap);
+		return NULL;
+	}
+	ap->print_id = id;
 	ap->host = host;
 	ap->dev = host->dev;
 
@@ -5496,6 +5502,7 @@ void ata_port_free(struct ata_port *ap)
 	kfree(ap->pmp_link);
 	kfree(ap->slave_link);
 	kfree(ap->ncq_sense_buf);
+	ida_free(&ata_ida, ap->print_id);
 	kfree(ap);
 }
 EXPORT_SYMBOL_GPL(ata_port_free);
