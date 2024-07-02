@@ -1035,16 +1035,20 @@ static bool chk_code_allowed(u16 code_to_probe)
 	return codes[code_to_probe];
 }
 
-static bool bpf_check_basics_ok(const struct sock_filter *filter,
-				unsigned int flen)
-{
-	if (filter == NULL)
-		return false;
-	if (flen == 0 || flen > BPF_MAXINSNS)
-		return false;
-
-	return true;
-}
+ /* macro instead of a function to avoid woring about _filter which might be a
+  * user or kernel pointer. It does not matter for the NULL check.
+  */
+#define bpf_check_basics_ok(fprog_filter, fprog_flen)	\
+({							\
+	bool __ret = true;				\
+	u16 __flen = fprog_flen;			\
+							\
+	if (!(fprog_filter))				\
+		__ret = false;				\
+	else if (__flen == 0 || __flen > BPF_MAXINSNS)	\
+		__ret = false;				\
+	__ret;						\
+})
 
 /**
  *	bpf_check_classic - verify socket filter code
