@@ -267,8 +267,6 @@ skip_cbs:
 
 	tqavctrl |= IGC_TQAVCTRL_TRANSMIT_MODE_TSN | IGC_TQAVCTRL_ENHANCED_QAV;
 
-	adapter->qbv_count++;
-
 	cycle = adapter->cycle_time;
 	base_time = adapter->base_time;
 

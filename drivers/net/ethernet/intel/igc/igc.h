@@ -254,7 +254,6 @@ struct igc_adapter {
 	bool taprio_offload_enable;
 	u32 qbv_config_change_errors;
 	bool qbv_transition;
-	unsigned int qbv_count;
 	/* Access to oper_gate_closed, admin_gate_closed and qbv_transition
 	 * are protected by the qbv_tx_lock.
 	 */
