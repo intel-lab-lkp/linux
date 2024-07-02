@@ -614,6 +614,8 @@ static void nfs42_offload_status_done(struct rpc_task *task, void *calldata)
 {
 	struct nfs42_offload_data *data = calldata;
 
+	trace_nfs4_offload_status(&data->args, task->tk_status);
+
 	if (!nfs4_sequence_done(task, &data->res.osr_seq_res))
 		return;
 
