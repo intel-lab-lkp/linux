@@ -159,3 +159,17 @@ const struct ethnl_request_ops ethnl_rss_request_ops = {
 	.fill_reply		= rss_fill_reply,
 	.cleanup_data		= rss_cleanup_data,
 };
+
+void ethtool_rxfh_context_lost(struct net_device *dev, u32 context_id)
+{
+	struct ethtool_rxfh_context *ctx;
+
+	WARN_ONCE(!rtnl_is_locked() &&
+		  !lockdep_is_held_type(&dev->ethtool->rss_lock, -1),
+		  "RSS context lock assertion failed\n");
+
+	netdev_err(dev, "device error, RSS context %d lost\n", context_id);
+	ctx = xa_erase(&dev->ethtool->rss_ctx, context_id);
+	kfree(ctx);
+}
+EXPORT_SYMBOL(ethtool_rxfh_context_lost);
