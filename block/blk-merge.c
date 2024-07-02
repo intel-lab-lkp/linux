@@ -190,7 +190,7 @@ static inline unsigned get_max_io_size(struct bio *bio,
  *
  * Returns the maximum number of bytes that can be added as a single segment.
  */
-static inline unsigned get_max_segment_size(const struct queue_limits *lim,
+inline unsigned get_max_segment_size(const struct queue_limits *lim,
 		struct page *start_page, unsigned long offset)
 {
 	unsigned long mask = lim->seg_boundary_mask;
@@ -203,6 +203,7 @@ static inline unsigned get_max_segment_size(const struct queue_limits *lim,
 	 */
 	return min(mask - offset, (unsigned long)lim->max_segment_size - 1) + 1;
 }
+EXPORT_SYMBOL_GPL(get_max_segment_size);
 
 /**
  * bvec_split_segs - verify whether or not a bvec should be split in the middle

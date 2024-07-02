@@ -1150,4 +1150,7 @@ static inline int blk_rq_map_sg(struct request_queue *q, struct request *rq,
 }
 void blk_dump_rq_flags(struct request *, char *);
 
+unsigned get_max_segment_size(const struct queue_limits *lim,
+		struct page *start_page, unsigned long offset);
+
 #endif /* BLK_MQ_H */
