@@ -7101,6 +7101,39 @@ static ssize_t memory_reclaim(struct kernfs_open_file *of, char *buf,
 	return nbytes;
 }
 
+/**
+ * This function use to reaper all cache pages by cycling scan.
+ * The scan interval time depends on @reaper_wait which can set by `keys` nest
+ * key.
+ * Default, each memcg which enabled cache will be reapered every 5s.
+ */
+static void pmc_reaper(struct work_struct *worker)
+{
+	struct mem_cgroup_per_node_cache *node_cachep = container_of(
+		to_delayed_work(worker), struct mem_cgroup_per_node_cache,
+		reaper_work);
+	struct mem_cgroup *memcg;
+	int num;
+
+	if (!READ_ONCE(node_cachep->reaper_wait))
+		return;
+
+	memcg = node_cachep->memcg;
+	rcu_read_lock();
+	if (!css_tryget(&memcg->css)) {
+		rcu_read_unlock();
+		return;
+	}
+	rcu_read_unlock();
+
+	num = mem_cgroup_release_cache(node_cachep);
+
+	css_put(&memcg->css);
+
+	schedule_delayed_work(&node_cachep->reaper_work,
+			      usecs_to_jiffies(node_cachep->reaper_wait));
+}
+
 static int __enable_mem_cgroup_cache(struct mem_cgroup *memcg)
 {
 	int nid, idx;
@@ -7141,8 +7174,13 @@ static int __enable_mem_cgroup_cache(struct mem_cgroup *memcg)
 		p->memcg = memcg;
 		p->hold_limit = DEFAULT_PMC_HOLD_LIMIX;
 		p->allow_watermark = DEFAULT_PMC_GAP_WATERMARK;
+		p->reaper_wait = DEFAULT_PMC_REAPER_TIME;
 
 		atomic_inc(&pmc_nr_enabled);
+
+		INIT_DELAYED_WORK(&p->reaper_work, pmc_reaper);
+		schedule_delayed_work(&p->reaper_work,
+				      usecs_to_jiffies(p->reaper_wait));
 	}
 
 	if (static_branch_likely(&pmc_key))
@@ -7184,6 +7222,7 @@ static int __disable_mem_cgroup_cache(struct mem_cgroup *memcg)
 
 		p = nodeinfo->cachep;
 
+		cancel_delayed_work_sync(&p->reaper_work);
 		mem_cgroup_release_cache(p);
 
 		kfree(p);
@@ -7207,7 +7246,8 @@ static int mem_cgroup_cache_show(struct seq_file *m, void *v)
 	if (!READ_ONCE(memcg->cache_enabled))
 		return -EINVAL;
 
-	seq_printf(m, "%4s %16s %16s\n", "NODE", "WATERMARK", "HOLD_LIMIT");
+	seq_printf(m, "%4s %16s %16s %16s\n", "NODE", "WATERMARK",
+		   "HOLD_LIMIT", "REAPER_TIME");
 	for_each_online_node(nid) {
 		struct mem_cgroup_per_node *nodeinfo = memcg->nodeinfo[nid];
 		struct mem_cgroup_per_node_cache *p;
@@ -7216,13 +7256,15 @@ static int mem_cgroup_cache_show(struct seq_file *m, void *v)
 		if (!p)
 			continue;
 
-		seq_printf(m, "%4d %14uKB %14uKB\n", nid,
+		seq_printf(m, "%4d %14uKB %14uKB %16u\n", nid,
 			   (READ_ONCE(p->allow_watermark) << (PAGE_SHIFT - 10)),
-			   (READ_ONCE(p->hold_limit) << (PAGE_SHIFT - 10)));
+			   (READ_ONCE(p->hold_limit) << (PAGE_SHIFT - 10)),
+			   READ_ONCE(p->reaper_wait));
 	}
 
 	seq_puts(m, "===========\n");
-	seq_printf(m, "%4s %16s %16s %16s\n", "NODE", "ZONE", "CACHE", "HIT");
+	seq_printf(m, "%4s %16s %16s %16s %16s\n", "NODE", "ZONE", "CACHE",
+		   "REAPER", "HIT");
 
 	for_each_online_node(nid) {
 		struct mem_cgroup_per_node *nodeinfo = memcg->nodeinfo[nid];
@@ -7242,8 +7284,11 @@ static int mem_cgroup_cache_show(struct seq_file *m, void *v)
 				continue;
 
 			zc = &p->zone_cachep[idx];
-			seq_printf(m, "%4d %16s %14dKB %14dKB\n", nid, z->name,
+			seq_printf(m, "%4d %16s %14dKB %14dKB %14dKB\n", nid,
+				   z->name,
 				   (atomic_read(&zc->nr_pages)
+				    << (PAGE_SHIFT - 10)),
+				   (atomic_read(&zc->nr_reapered)
 				    << (PAGE_SHIFT - 10)),
 				   (atomic_read(&zc->nr_alloced)
 				    << (PAGE_SHIFT - 10)));
@@ -7257,6 +7302,7 @@ static int mem_cgroup_cache_show(struct seq_file *m, void *v)
 enum {
 	OPT_KEY_NID,
 	OPT_KEY_WATERMARK,
+	OPT_KEY_REAPER_TIME,
 	OPT_KEY_HOLD_LIMIT,
 	OPT_KEY_ERR,
 	NR_PMC_KEY_OPTS = OPT_KEY_ERR
@@ -7265,6 +7311,7 @@ enum {
 static const match_table_t fc_tokens = {
 	{ OPT_KEY_NID, "nid=%d" },
 	{ OPT_KEY_WATERMARK, "watermark=%u" },
+	{ OPT_KEY_REAPER_TIME, "reaper_time=%u" },
 	{ OPT_KEY_HOLD_LIMIT, "limit=%u" },
 	{ OPT_KEY_ERR, NULL}
 };
@@ -7281,6 +7328,12 @@ __apply_status_for_mem_cgroup_cache(struct mem_cgroup_per_node_cache *p,
 			if (opts[OPT_KEY_WATERMARK] !=
 			    STATUS_UNSET_DEFAULT_VALUE)
 				p->allow_watermark = opts[OPT_KEY_WATERMARK];
+			break;
+		case OPT_KEY_REAPER_TIME:
+			if (opts[OPT_KEY_REAPER_TIME] !=
+			    STATUS_UNSET_DEFAULT_VALUE)
+				WRITE_ONCE(p->reaper_wait,
+					   opts[OPT_KEY_REAPER_TIME]);
 			break;
 		case OPT_KEY_HOLD_LIMIT:
 			if (opts[OPT_KEY_HOLD_LIMIT] !=
@@ -7319,7 +7372,7 @@ mem_cgroup_apply_cache_status(struct mem_cgroup *memcg,
 }
 
 /**
- * Support nid=x,watermark=bytes,limit=bytes args
+ * Support nid=x,watermark=bytes,limit=bytes,reaper=us args
  */
 static int __mem_cgroup_cache_control_key(char *buf,
 					      struct mem_cgroup *memcg)
@@ -7360,6 +7413,14 @@ static int __mem_cgroup_cache_control_key(char *buf,
 			if (v < MIN_WATERMARK_LIMIT)
 				return -EINVAL;
 			opts[OPT_KEY_WATERMARK] = v;
+			break;
+		case OPT_KEY_REAPER_TIME:
+			if (match_uint(&args[0], &v))
+				return -EINVAL;
+#define MAX_REAPER_TIME ((10 * 1000 * 1000))
+			if (v > MAX_REAPER_TIME)
+				return -EINVAL;
+			opts[OPT_KEY_REAPER_TIME] = v;
 			break;
 		case OPT_KEY_HOLD_LIMIT:
 			if (match_uint(&args[0], &v))
@@ -7402,7 +7463,9 @@ static const match_table_t ctrl_tokens = {
  *   1. nid=x, if input, will only change target NODE's cache status. Else, all.
  *   2. watermark=bytes, change cache hold behavior, only zone free pages above
  *      high watermark+watermark, can hold.
- *   3. limit=bytes, change max pages can cache. Max can change to 500MB
+ *   3. reaper_time=us, change reaper time, default is 10s. Set 0 can disable,
+ *      max can change to 10s
+ *   4. limit=bytes, change max pages can cache. Max can change to 500MB
  * Enable and keys can both input, split by space, so can set args after enable,
  * if cache not enable, can't set keys.
  */

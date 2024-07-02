@@ -608,6 +608,7 @@ struct mem_cgroup_zone_cache {
 	struct list_head pages;
 	spinlock_t pages_lock;
 	atomic_t nr_pages;
+	atomic_t nr_reapered;
 	atomic_t nr_alloced;
 };
 
@@ -615,6 +616,11 @@ struct mem_cgroup_per_node_cache {
 	/* per zone cache */
 	struct mem_cgroup_zone_cache zone_cachep[MAX_NR_ZONES];
 	struct mem_cgroup *memcg;
+
+	/* cycle cache reclaim time unit, us, default 5s, 0 means disable reaper */
+#define DEFAULT_PMC_REAPER_TIME ((5 * 1000 * 1000))
+	unsigned int reaper_wait;
+	struct delayed_work reaper_work;
 
 	/* max number to hold page, unit page, default 100MB */
 #define DEFAULT_PMC_HOLD_LIMIX ((100 << 20) >> PAGE_SHIFT)

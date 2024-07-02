@@ -1310,6 +1310,7 @@ int mem_cgroup_release_cache(struct mem_cgroup_per_node_cache *nodep)
 		}
 
 		num += i;
+		atomic_add(i, &zc->nr_reapered);
 		atomic_sub(i, &zc->nr_pages);
 	}
 
