@@ -5511,7 +5511,7 @@ brcmf_cfg80211_mgmt_tx(struct wiphy *wiphy, struct wireless_dev *wdev,
 	struct brcmf_fil_af_params_le *af_params;
 	bool ack;
 	s32 chan_nr;
-	u32 freq;
+	u32 freq = 0;
 
 	brcmf_dbg(TRACE, "Enter\n");
 
