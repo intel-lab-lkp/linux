@@ -58,6 +58,9 @@ OPTIONS
 --ignore-vmlinux::
 	Ignore vmlinux files.
 
+--vdso=<vdso1[,vdso2]>::
+	Specify vdso pathnames. You can specify up to two for multiarch-support.
+
 --itrace::
 	Options for decoding instruction tracing data. The options are:
 

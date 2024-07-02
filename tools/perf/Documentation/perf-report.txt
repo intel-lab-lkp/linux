@@ -345,6 +345,9 @@ OPTIONS
         Load module symbols. WARNING: This should only be used with -k and
         a LIVE kernel.
 
+--vdso=<vdso1[,vdso2]>::
+	Specify vdso pathnames. You can specify up to two for multiarch-support.
+
 -f::
 --force::
         Don't do ownership validation.
