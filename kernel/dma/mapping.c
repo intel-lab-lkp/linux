@@ -924,3 +924,47 @@ void dma_get_memory_type(struct page *page, struct dma_memory_type *type)
 	type->type = DMA_MEMORY_TYPE_NORMAL;
 }
 EXPORT_SYMBOL_GPL(dma_get_memory_type);
+
+/**
+ * dma_alloc_iova - Allocate an IOVA space
+ * @iova: IOVA attributes
+ *
+ * Allocate an IOVA space for the given IOVA attributes. The IOVA space
+ * is allocated to the worst case when whole range is going to be used.
+ */
+int dma_alloc_iova(struct dma_iova_attrs *iova)
+{
+	struct device *dev = iova->dev;
+	const struct dma_map_ops *ops = get_dma_ops(dev);
+
+	if (dma_map_direct(dev, ops) || !ops->alloc_iova) {
+		/* dma_map_direct(..) check is for HMM range fault callers */
+		iova->addr = 0;
+		return 0;
+	}
+
+	iova->addr = ops->alloc_iova(dev, iova->size);
+	if (dma_mapping_error(dev, iova->addr))
+		return -ENOMEM;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(dma_alloc_iova);
+
+/**
+ * dma_free_iova - Free an IOVA space
+ * @iova: IOVA attributes
+ *
+ * Free an IOVA space for the given IOVA attributes.
+ */
+void dma_free_iova(struct dma_iova_attrs *iova)
+{
+	struct device *dev = iova->dev;
+	const struct dma_map_ops *ops = get_dma_ops(dev);
+
+	if (dma_map_direct(dev, ops) || !ops->free_iova || !iova->addr)
+		return;
+
+	ops->free_iova(dev, iova->addr, iova->size);
+}
+EXPORT_SYMBOL_GPL(dma_free_iova);
