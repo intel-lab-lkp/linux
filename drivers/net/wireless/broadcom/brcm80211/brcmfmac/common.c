@@ -127,7 +127,7 @@ static int brcmf_c_download_blob(struct brcmf_if *ifp,
 	u32 datalen;
 	u32 cumulative_len;
 	u16 dl_flag = DL_BEGIN;
-	u32 status;
+	u32 status = 0;
 	s32 err;
 
 	brcmf_dbg(TRACE, "Enter\n");
