@@ -683,13 +683,11 @@ static int ip_tun_build_state(struct net *net, struct nlattr *attr,
 		return err;
 	}
 
-#ifdef CONFIG_DST_CACHE
 	err = dst_cache_init(&tun_info->dst_cache, GFP_KERNEL);
 	if (err) {
 		lwtstate_free(new_state);
 		return err;
 	}
-#endif
 
 	if (tb[LWTUNNEL_IP_ID])
 		tun_info->key.tun_id = nla_get_be64(tb[LWTUNNEL_IP_ID]);
@@ -727,11 +725,9 @@ static int ip_tun_build_state(struct net *net, struct nlattr *attr,
 
 static void ip_tun_destroy_state(struct lwtunnel_state *lwtstate)
 {
-#ifdef CONFIG_DST_CACHE
 	struct ip_tunnel_info *tun_info = lwt_tun_info(lwtstate);
 
 	dst_cache_destroy(&tun_info->dst_cache);
-#endif
 }
 
 static int ip_tun_fill_encap_opts_geneve(struct sk_buff *skb,

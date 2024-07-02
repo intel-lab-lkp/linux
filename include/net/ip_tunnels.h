@@ -102,9 +102,7 @@ struct ip_tunnel_encap {
 struct ip_tunnel_info {
 	struct ip_tunnel_key	key;
 	struct ip_tunnel_encap	encap;
-#ifdef CONFIG_DST_CACHE
 	struct dst_cache	dst_cache;
-#endif
 	u8			options_len;
 	u8			mode;
 };

@@ -78,7 +78,6 @@ config WIREGUARD
 	depends on IPV6 || !IPV6
 	depends on !KMSAN # KMSAN doesn't support the crypto configs below
 	select NET_UDP_TUNNEL
-	select DST_CACHE
 	select CRYPTO
 	select CRYPTO_LIB_CURVE25519
 	select CRYPTO_LIB_CHACHA20POLY1305

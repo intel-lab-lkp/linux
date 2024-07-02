@@ -124,7 +124,6 @@ config IPV6_MIP6
 config IPV6_ILA
 	tristate "IPv6: Identifier Locator Addressing (ILA)"
 	depends on NETFILTER
-	select DST_CACHE
 	select LWTUNNEL
 	help
 	  Support for IPv6 Identifier Locator Addressing (ILA).
@@ -203,7 +202,6 @@ config IPV6_NDISC_NODETYPE
 config IPV6_TUNNEL
 	tristate "IPv6: IP-in-IPv6 tunnel (RFC2473)"
 	select INET6_TUNNEL
-	select DST_CACHE
 	select GRO_CELLS
 	help
 	  Support for IPv6-in-IPv6 and IPv4-in-IPv6 tunnels described in
@@ -291,7 +289,6 @@ config IPV6_SEG6_LWTUNNEL
 	bool "IPv6: Segment Routing Header encapsulation support"
 	depends on IPV6
 	select LWTUNNEL
-	select DST_CACHE
 	select IPV6_MULTIPLE_TABLES
 	help
 	  Support for encapsulation of packets within an outer IPv6
@@ -333,7 +330,6 @@ config IPV6_IOAM6_LWTUNNEL
 	bool "IPv6: IOAM Pre-allocated Trace insertion support"
 	depends on IPV6
 	select LWTUNNEL
-	select DST_CACHE
 	help
 	  Support for the insertion of IOAM Pre-allocated Trace
 	  Header using the lightweight tunnels mechanism.

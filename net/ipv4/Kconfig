@@ -185,7 +185,6 @@ config NET_IPGRE_DEMUX
 
 config NET_IP_TUNNEL
 	tristate
-	select DST_CACHE
 	select GRO_CELLS
 	default n
 

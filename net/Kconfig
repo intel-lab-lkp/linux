@@ -447,10 +447,6 @@ config LWTUNNEL_BPF
 	  Allows to run BPF programs as a nexthop action following a route
 	  lookup for incoming and outgoing packets.
 
-config DST_CACHE
-	bool
-	default n
-
 config GRO_CELLS
 	bool
 	default n

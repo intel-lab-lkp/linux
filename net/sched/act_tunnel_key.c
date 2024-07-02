@@ -476,11 +476,9 @@ static int tunnel_key_init(struct net *net, struct nlattr *nla,
 			goto err_out;
 		}
 
-#ifdef CONFIG_DST_CACHE
 		ret = dst_cache_init(&metadata->u.tun_info.dst_cache, GFP_KERNEL);
 		if (ret)
 			goto release_tun_meta;
-#endif
 
 		if (opts_len) {
 			ret = tunnel_key_opts_set(tb[TCA_TUNNEL_KEY_ENC_OPTS],

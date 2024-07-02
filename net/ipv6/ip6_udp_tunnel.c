@@ -145,13 +145,11 @@ struct dst_entry *udp_tunnel6_dst_lookup(struct sk_buff *skb,
 	struct dst_entry *dst = NULL;
 	struct flowi6 fl6;
 
-#ifdef CONFIG_DST_CACHE
 	if (dst_cache) {
 		dst = dst_cache_get_ip6(dst_cache, saddr);
 		if (dst)
 			return dst;
 	}
-#endif
 	memset(&fl6, 0, sizeof(fl6));
 	fl6.flowi6_mark = skb->mark;
 	fl6.flowi6_proto = IPPROTO_UDP;
@@ -173,10 +171,8 @@ struct dst_entry *udp_tunnel6_dst_lookup(struct sk_buff *skb,
 		dst_release(dst);
 		return ERR_PTR(-ELOOP);
 	}
-#ifdef CONFIG_DST_CACHE
 	if (dst_cache)
 		dst_cache_set_ip6(dst_cache, dst, &fl6.saddr);
-#endif
 	*saddr = fl6.saddr;
 	return dst;
 }

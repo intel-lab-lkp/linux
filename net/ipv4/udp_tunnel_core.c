@@ -216,13 +216,11 @@ struct rtable *udp_tunnel_dst_lookup(struct sk_buff *skb,
 	struct rtable *rt = NULL;
 	struct flowi4 fl4;
 
-#ifdef CONFIG_DST_CACHE
 	if (dst_cache) {
 		rt = dst_cache_get_ip4(dst_cache, saddr);
 		if (rt)
 			return rt;
 	}
-#endif
 
 	memset(&fl4, 0, sizeof(fl4));
 	fl4.flowi4_mark = skb->mark;
@@ -245,10 +243,8 @@ struct rtable *udp_tunnel_dst_lookup(struct sk_buff *skb,
 		ip_rt_put(rt);
 		return ERR_PTR(-ELOOP);
 	}
-#ifdef CONFIG_DST_CACHE
 	if (dst_cache)
 		dst_cache_set_ip4(dst_cache, &rt->dst, fl4.saddr);
-#endif
 	*saddr = fl4.saddr;
 	return rt;
 }
