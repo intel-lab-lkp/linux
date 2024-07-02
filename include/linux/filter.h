@@ -728,7 +728,7 @@ struct bpf_skb_data_end {
 struct bpf_nh_params {
 	u32 nh_family;
 	union {
-		u32 ipv4_nh;
+		__be32 ipv4_nh;
 		struct in6_addr ipv6_nh;
 	};
 };

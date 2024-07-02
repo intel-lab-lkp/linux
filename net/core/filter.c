@@ -1939,13 +1939,13 @@ BPF_CALL_5(bpf_l3_csum_replace, struct sk_buff *, skb, u32, offset,
 		if (unlikely(from != 0))
 			return -EINVAL;
 
-		csum_replace_by_diff(ptr, to);
+		csum_replace_by_diff(ptr, (__force __wsum)to);
 		break;
 	case 2:
-		csum_replace2(ptr, from, to);
+		csum_replace2(ptr, (__force __be16)from, (__force __be16)to);
 		break;
 	case 4:
-		csum_replace4(ptr, from, to);
+		csum_replace4(ptr, (__force __be32)from, (__force __be32)to);
 		break;
 	default:
 		return -EINVAL;
@@ -1990,13 +1990,15 @@ BPF_CALL_5(bpf_l4_csum_replace, struct sk_buff *, skb, u32, offset,
 		if (unlikely(from != 0))
 			return -EINVAL;
 
-		inet_proto_csum_replace_by_diff(ptr, skb, to, is_pseudo);
+		inet_proto_csum_replace_by_diff(ptr, skb, (__force __wsum)to, is_pseudo);
 		break;
 	case 2:
-		inet_proto_csum_replace2(ptr, skb, from, to, is_pseudo);
+		inet_proto_csum_replace2(ptr, skb, (__force __be16)from, (__force __be16)to,
+					 is_pseudo);
 		break;
 	case 4:
-		inet_proto_csum_replace4(ptr, skb, from, to, is_pseudo);
+		inet_proto_csum_replace4(ptr, skb, (__force __be32)from, (__force __be32)to,
+					 is_pseudo);
 		break;
 	default:
 		return -EINVAL;
@@ -2046,7 +2048,7 @@ BPF_CALL_5(bpf_csum_diff, __be32 *, from, u32, from_size,
 
 	ret = csum_partial(sp->diff, diff_size, seed);
 	local_unlock_nested_bh(&bpf_sp.bh_lock);
-	return ret;
+	return (__force __u32)ret;
 }
 
 static const struct bpf_func_proto bpf_csum_diff_proto = {
@@ -2068,7 +2070,7 @@ BPF_CALL_2(bpf_csum_update, struct sk_buff *, skb, __wsum, csum)
 	 * as emulating csum_sub() can be done from the eBPF program.
 	 */
 	if (skb->ip_summed == CHECKSUM_COMPLETE)
-		return (skb->csum = csum_add(skb->csum, csum));
+		return (__force __u32)(skb->csum = csum_add(skb->csum, csum));
 
 	return -ENOTSUPP;
 }
