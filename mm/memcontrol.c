@@ -7253,29 +7253,168 @@ static int mem_cgroup_cache_show(struct seq_file *m, void *v)
 	return 0;
 }
 
+#define STATUS_UNSET_DEFAULT_VALUE -1
+enum {
+	OPT_KEY_NID,
+	OPT_KEY_WATERMARK,
+	OPT_KEY_HOLD_LIMIT,
+	OPT_KEY_ERR,
+	NR_PMC_KEY_OPTS = OPT_KEY_ERR
+};
+
+static const match_table_t fc_tokens = {
+	{ OPT_KEY_NID, "nid=%d" },
+	{ OPT_KEY_WATERMARK, "watermark=%u" },
+	{ OPT_KEY_HOLD_LIMIT, "limit=%u" },
+	{ OPT_KEY_ERR, NULL}
+};
+
+static void
+__apply_status_for_mem_cgroup_cache(struct mem_cgroup_per_node_cache *p,
+				    unsigned int opts[])
+{
+	int i;
+
+	for (i = OPT_KEY_WATERMARK; i < NR_PMC_KEY_OPTS; ++i) {
+		switch (i) {
+		case OPT_KEY_WATERMARK:
+			if (opts[OPT_KEY_WATERMARK] !=
+			    STATUS_UNSET_DEFAULT_VALUE)
+				p->allow_watermark = opts[OPT_KEY_WATERMARK];
+			break;
+		case OPT_KEY_HOLD_LIMIT:
+			if (opts[OPT_KEY_HOLD_LIMIT] !=
+			    STATUS_UNSET_DEFAULT_VALUE)
+				p->hold_limit = opts[OPT_KEY_HOLD_LIMIT];
+			break;
+		default:
+			break;
+		}
+	}
+}
+
+static __always_inline int
+mem_cgroup_apply_cache_status(struct mem_cgroup *memcg,
+				   unsigned int opts[])
+{
+	struct mem_cgroup_per_node_cache *p;
+	unsigned int nid = opts[OPT_KEY_NID];
+
+	if (nid != STATUS_UNSET_DEFAULT_VALUE) {
+		p = memcg->nodeinfo[nid]->cachep;
+		if (unlikely(!p))
+			return -EINVAL;
+		__apply_status_for_mem_cgroup_cache(p, opts);
+		return 0;
+	}
+
+	for_each_node(nid) {
+		p = memcg->nodeinfo[nid]->cachep;
+		if (!p)
+			continue;
+		__apply_status_for_mem_cgroup_cache(p, opts);
+	}
+
+	return 0;
+}
+
+/**
+ * Support nid=x,watermark=bytes,limit=bytes args
+ */
+static int __mem_cgroup_cache_control_key(char *buf,
+					      struct mem_cgroup *memcg)
+{
+	char *p;
+	unsigned int opts[NR_PMC_KEY_OPTS];
+
+	memset(opts, STATUS_UNSET_DEFAULT_VALUE, sizeof(opts));
+
+	if (!READ_ONCE(memcg->cache_enabled))
+		return -EINVAL;
+
+	if (!buf)
+		return -EINVAL;
+
+	while ((p = strsep(&buf, ",")) != NULL) {
+		int token;
+		u32 v;
+		substring_t args[MAX_OPT_ARGS];
+
+		p = strstrip(p);
+
+		if (!*p)
+			continue;
+
+		token = match_token(p, fc_tokens, args);
+		switch (token) {
+		case OPT_KEY_NID:
+			if (match_uint(&args[0], &v) || v >= MAX_NUMNODES)
+				return -EINVAL;
+			opts[OPT_KEY_NID] = v;
+			break;
+		case OPT_KEY_WATERMARK:
+#define MIN_WATERMARK_LIMIT ((10 << 20) >> PAGE_SHIFT)
+			if (match_uint(&args[0], &v))
+				return -EINVAL;
+			v >>= PAGE_SHIFT;
+			if (v < MIN_WATERMARK_LIMIT)
+				return -EINVAL;
+			opts[OPT_KEY_WATERMARK] = v;
+			break;
+		case OPT_KEY_HOLD_LIMIT:
+			if (match_uint(&args[0], &v))
+				return -EINVAL;
+			v >>= PAGE_SHIFT;
+#define MAX_CACHE_LIMIT_NR ((500 << 20) >> PAGE_SHIFT)
+			if (v > MAX_CACHE_LIMIT_NR)
+				return -EINVAL;
+			opts[OPT_KEY_HOLD_LIMIT] = v;
+			break;
+		case OPT_KEY_ERR:
+		default:
+			break;
+		}
+	}
+
+	if (mem_cgroup_apply_cache_status(memcg, opts))
+		return -EINVAL;
+
+	return 0;
+}
+
 enum {
 	OPT_CTRL_ENABLE,
+	OPT_CTRL_KEYS,
 	OPT_CTRL_ERR,
 	OPR_CTRL_NR = OPT_CTRL_ERR,
 };
 
 static const match_table_t ctrl_tokens = {
 					   { OPT_CTRL_ENABLE, "enable=%s" },
+					   { OPT_CTRL_KEYS, "keys=%s" },
 					   { OPT_CTRL_ERR, NULL } };
 
 /**
  * This function  can control target memcg's cache. include enable\keys set.
  * To enable\disable this cache, by `echo enable=[y|n] > memory.cace`
  * in target memcg.
+ * To set keys, by `echo keys=[key=args;..] > memory.cache`, current support keys:
+ *   1. nid=x, if input, will only change target NODE's cache status. Else, all.
+ *   2. watermark=bytes, change cache hold behavior, only zone free pages above
+ *      high watermark+watermark, can hold.
+ *   3. limit=bytes, change max pages can cache. Max can change to 500MB
+ * Enable and keys can both input, split by space, so can set args after enable,
+ * if cache not enable, can't set keys.
  */
 static ssize_t mem_cgroup_cache_control(struct kernfs_open_file *of, char *buf,
 					size_t nbytes, loff_t off)
 {
 	bool enable;
-	bool opt_enable_set = false;
+	bool opt_enable_set = false, opt_key_set = false;
 	int err = 0;
 	char *sub;
 	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+	char keybuf[256];
 
 	buf = strstrip(buf);
 	if (!strlen(buf))
@@ -7300,6 +7439,14 @@ static ssize_t mem_cgroup_cache_control(struct kernfs_open_file *of, char *buf,
 				return -EINVAL;
 			opt_enable_set = true;
 			break;
+		case OPT_CTRL_KEYS:
+			if (match_strlcpy(tbuf, &args[0], sizeof(tbuf)) >=
+			    sizeof(tbuf))
+				return -EINVAL;
+
+			memcpy(keybuf, tbuf, sizeof(keybuf));
+			opt_key_set = true;
+			break;
 		case OPT_CTRL_ERR:
 		default:
 			return -EINVAL;
@@ -7314,6 +7461,9 @@ static ssize_t mem_cgroup_cache_control(struct kernfs_open_file *of, char *buf,
 			return nbytes;
 		}
 	}
+
+	if (opt_key_set)
+		err = __mem_cgroup_cache_control_key(keybuf, memcg);
 
 	return err ? err : nbytes;
 }
