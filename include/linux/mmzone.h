@@ -622,6 +622,9 @@ struct mem_cgroup_per_node_cache {
 	unsigned int reaper_wait;
 	struct delayed_work reaper_work;
 
+	/* listen oom event, release hold cache */
+	struct notifier_block oom_nb;
+
 	/* max number to hold page, unit page, default 100MB */
 #define DEFAULT_PMC_HOLD_LIMIX ((100 << 20) >> PAGE_SHIFT)
 	unsigned int hold_limit;

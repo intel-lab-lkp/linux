@@ -7102,6 +7102,33 @@ static ssize_t memory_reclaim(struct kernfs_open_file *of, char *buf,
 }
 
 /**
+ * This function listen to oom event, if oom will trigger, check and release
+ * all holded pages.
+ */
+static int pmc_oom_notify(struct notifier_block *self,
+				     unsigned long notused, void *nfreed)
+{
+	struct mem_cgroup_per_node_cache *node_cachep =
+		container_of(self, struct mem_cgroup_per_node_cache, oom_nb);
+	struct mem_cgroup *memcg = node_cachep->memcg;
+
+	unsigned long *nf = (unsigned long *)nfreed;
+
+	rcu_read_lock();
+	if (!css_tryget(&memcg->css)) {
+		rcu_read_unlock();
+		return NOTIFY_STOP;
+	}
+	rcu_read_unlock();
+
+	nf += mem_cgroup_release_cache(node_cachep);
+
+	css_put(&memcg->css);
+
+	return NOTIFY_OK;
+}
+
+/**
  * This function use to reaper all cache pages by cycling scan.
  * The scan interval time depends on @reaper_wait which can set by `keys` nest
  * key.
@@ -7176,6 +7203,9 @@ static int __enable_mem_cgroup_cache(struct mem_cgroup *memcg)
 		p->allow_watermark = DEFAULT_PMC_GAP_WATERMARK;
 		p->reaper_wait = DEFAULT_PMC_REAPER_TIME;
 
+		p->oom_nb.notifier_call = pmc_oom_notify;
+		register_oom_notifier(&p->oom_nb);
+
 		atomic_inc(&pmc_nr_enabled);
 
 		INIT_DELAYED_WORK(&p->reaper_work, pmc_reaper);
@@ -7222,6 +7252,7 @@ static int __disable_mem_cgroup_cache(struct mem_cgroup *memcg)
 
 		p = nodeinfo->cachep;
 
+		unregister_oom_notifier(&p->oom_nb);
 		cancel_delayed_work_sync(&p->reaper_work);
 		mem_cgroup_release_cache(p);
 
