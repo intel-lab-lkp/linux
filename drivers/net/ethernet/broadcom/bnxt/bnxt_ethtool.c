@@ -1868,6 +1868,7 @@ static int bnxt_set_rxfh_context(struct bnxt *bp,
 	struct bnxt_rss_ctx *rss_ctx;
 	struct bnxt_vnic_info *vnic;
 	bool modify = false;
+	bool delete;
 	int bit_id;
 	int rc;
 
@@ -1876,7 +1877,8 @@ static int bnxt_set_rxfh_context(struct bnxt *bp,
 		return -EOPNOTSUPP;
 	}
 
-	if (!netif_running(bp->dev)) {
+	delete = *rss_context != ETH_RXFH_CONTEXT_ALLOC && rxfh->rss_delete;
+	if (!netif_running(bp->dev) && !delete) {
 		NL_SET_ERR_MSG_MOD(extack, "Unable to set RSS contexts when interface is down");
 		return -EAGAIN;
 	}
@@ -1888,7 +1890,7 @@ static int bnxt_set_rxfh_context(struct bnxt *bp,
 					       *rss_context);
 			return -EINVAL;
 		}
-		if (*rss_context && rxfh->rss_delete) {
+		if (delete) {
 			bnxt_del_one_rss_ctx(bp, rss_ctx, true);
 			return 0;
 		}
