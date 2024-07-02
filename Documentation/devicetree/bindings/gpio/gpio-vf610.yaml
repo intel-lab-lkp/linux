@@ -50,6 +50,7 @@ properties:
     const: 2
 
   gpio-controller: true
+  gpio-line-names: true
 
   clocks:
     items:
