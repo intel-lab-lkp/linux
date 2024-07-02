@@ -190,6 +190,11 @@ static inline void *ethtool_rxfh_context_priv(struct ethtool_rxfh_context *ctx)
 	return ctx->data;
 }
 
+static inline struct ethtool_rxfh_context *ethtool_rxfh_priv_context(void *priv)
+{
+	return container_of((u8(*)[])priv, struct ethtool_rxfh_context, data);
+}
+
 static inline u32 *ethtool_rxfh_context_indir(struct ethtool_rxfh_context *ctx)
 {
 	return (u32 *)(ctx->data + ALIGN(ctx->priv_size, sizeof(u32)));
