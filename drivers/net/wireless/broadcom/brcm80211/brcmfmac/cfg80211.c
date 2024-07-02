@@ -2782,7 +2782,7 @@ brcmf_cfg80211_add_key(struct wiphy *wiphy, struct net_device *ndev,
 	struct brcmf_pub *drvr = cfg->pub;
 	struct brcmf_wsec_key *key;
 	s32 val;
-	s32 wsec;
+	s32 wsec = 0;
 	s32 err;
 	u8 keybuf[8];
 	bool ext_key;
