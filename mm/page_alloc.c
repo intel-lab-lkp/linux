@@ -530,6 +530,14 @@ static inline int pindex_to_order(unsigned int pindex)
 	return order;
 }
 
+/**
+ * Per memcg cache currently only allow order 0.
+ */
+static inline bool pmc_allow_order(unsigned int order)
+{
+	return !order;
+}
+
 static inline bool pcp_allowed_order(unsigned int order)
 {
 	if (order <= PAGE_ALLOC_COSTLY_ORDER)
@@ -1269,6 +1277,43 @@ void __free_pages_core(struct page *page, unsigned int order)
 	 * relevant for memory onlining.
 	 */
 	__free_pages_ok(page, order, FPI_TO_TAIL);
+}
+
+int mem_cgroup_release_cache(struct mem_cgroup_per_node_cache *nodep)
+{
+	LIST_HEAD(temp_list);
+	int zid, num = 0;
+
+	for (zid = 0; zid < MAX_NR_ZONES; ++zid) {
+		struct mem_cgroup_zone_cache *zc = &nodep->zone_cachep[zid];
+		int i = 0;
+
+		if (!atomic_read(&zc->nr_pages))
+			continue;
+
+		spin_lock(&zc->pages_lock);
+		list_splice_init(&zc->pages, &temp_list);
+		spin_unlock(&zc->pages_lock);
+
+		while (!list_empty(&temp_list)) {
+			struct page *page =
+				list_first_entry(&temp_list, struct page, lru);
+			struct zone *zone = page_zone(page);
+			unsigned long pfn = page_to_pfn(page);
+
+			list_del(&page->lru);
+
+
+			// is good to put into pcp?
+			free_one_page(zone, page, pfn, 0, FPI_NONE);
+			++i;
+		}
+
+		num += i;
+		atomic_sub(i, &zc->nr_pages);
+	}
+
+	return num;
 }
 
 /*
@@ -2603,6 +2648,41 @@ static void free_unref_page_commit(struct zone *zone, struct per_cpu_pages *pcp,
 	}
 }
 
+static bool free_unref_page_to_pmc(struct page *page, struct zone *zone,
+				   int order)
+{
+	struct mem_cgroup *memcg;
+	struct mem_cgroup_per_node_cache *cachp;
+	struct mem_cgroup_zone_cache *zc;
+	unsigned long flags;
+	bool ret = false;
+
+	if (pmc_disabled())
+		return false;
+
+	memcg = get_mem_cgroup_from_current();
+	if (!memcg || mem_cgroup_is_root(memcg) ||
+	    mem_cgroup_cache_disabled(memcg))
+		goto out;
+
+	cachp = mem_cgroup_get_node_cachep(memcg, page_to_nid(page));
+	zc = &cachp->zone_cachep[page_zonenum(page)];
+
+	if (high_wmark_pages(zone) + READ_ONCE(cachp->allow_watermark) >=
+	    zone_page_state(zone, NR_FREE_PAGES))
+		goto out;
+
+	spin_lock_irqsave(&zc->pages_lock, flags);
+	list_add(&page->lru, &zc->pages);
+	spin_unlock_irqrestore(&zc->pages_lock, flags);
+	atomic_inc(&zc->nr_pages);
+
+	ret = true;
+out:
+	mem_cgroup_put(memcg);
+	return ret;
+}
+
 /*
  * Free a pcp page
  */
@@ -2634,6 +2714,17 @@ void free_unref_page(struct page *page, unsigned int order)
 	}
 
 	zone = page_zone(page);
+
+	/**
+	 * This function can cache release page before free into pcp if current
+	 * memcg enabled cache feature.
+	 * Compared to PCP, PMC is unique, only processes in PMC can access it.
+	 * So, if the conditions are met, it should be prioritized to be
+	 * released to PMC before being released to the public CPU cache.
+	 */
+	if (pmc_allow_order(order) && free_unref_page_to_pmc(page, zone, order))
+		return;
+
 	pcp_trylock_prepare(UP_flags);
 	pcp = pcp_spin_trylock(zone->per_cpu_pageset);
 	if (pcp) {
@@ -3012,6 +3103,49 @@ static struct page *rmqueue_pcplist(struct zone *preferred_zone,
 	return page;
 }
 
+static struct page *rmqueue_mem_cgroup_cache(struct zone *preferred_zone,
+					     struct zone *zone,
+					     unsigned int order,
+					     int migratetype)
+{
+	struct mem_cgroup *memcg;
+	struct mem_cgroup_per_node_cache *cachp;
+	struct mem_cgroup_zone_cache *zc;
+	unsigned long flags;
+	int nid = zone->zone_pgdat->node_id;
+	struct page *page = NULL;
+
+	if (pmc_disabled())
+		return NULL;
+
+	memcg = get_mem_cgroup_from_current();
+	if (!memcg || mem_cgroup_is_root(memcg) ||
+	    mem_cgroup_cache_disabled(memcg))
+		goto out;
+
+	cachp = mem_cgroup_get_node_cachep(memcg, nid);
+
+	zc = &cachp->zone_cachep[zone_idx(zone)];
+	if (!atomic_read(&zc->nr_pages))
+		goto out;
+
+	spin_lock_irqsave(&zc->pages_lock, flags);
+	if (list_empty(&zc->pages)) {
+		spin_unlock_irqrestore(&zc->pages_lock, flags);
+		goto out;
+	}
+	page = list_first_entry(&zc->pages, struct page, lru);
+	list_del(&page->lru);
+	spin_unlock_irqrestore(&zc->pages_lock, flags);
+
+	atomic_dec(&zc->nr_pages);
+	atomic_inc(&zc->nr_alloced);
+
+out:
+	mem_cgroup_put(memcg);
+	return page;
+}
+
 /*
  * Allocate a page from the given zone.
  * Use pcplists for THP or "cheap" high-order allocations.
@@ -3037,6 +3171,18 @@ struct page *rmqueue(struct zone *preferred_zone,
 	 * allocate greater than order-1 page units with __GFP_NOFAIL.
 	 */
 	WARN_ON_ONCE((gfp_flags & __GFP_NOFAIL) && (order > 1));
+
+	/*
+	 * Before disturb public pcp or buddy, current may in a memcg
+	 * which already enabled cache feature.
+	 * If that's true, first get page from private pool can boost alloc.
+	 */
+	if (pmc_allow_order(order)) {
+		page = rmqueue_mem_cgroup_cache(preferred_zone, zone, order,
+						migratetype);
+		if (page)
+			goto out;
+	}
 
 	if (likely(pcp_allowed_order(order))) {
 		page = rmqueue_pcplist(preferred_zone, zone, order,

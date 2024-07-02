@@ -603,6 +603,31 @@ static inline void lru_gen_soft_reclaim(struct mem_cgroup *memcg, int nid)
 
 #endif /* CONFIG_LRU_GEN */
 
+struct mem_cgroup_zone_cache {
+	/* cache pages, current only hold order 0 */
+	struct list_head pages;
+	spinlock_t pages_lock;
+	atomic_t nr_pages;
+	atomic_t nr_alloced;
+};
+
+struct mem_cgroup_per_node_cache {
+	/* per zone cache */
+	struct mem_cgroup_zone_cache zone_cachep[MAX_NR_ZONES];
+	struct mem_cgroup *memcg;
+
+	/* max number to hold page, unit page, default 100MB */
+#define DEFAULT_PMC_HOLD_LIMIX ((100 << 20) >> PAGE_SHIFT)
+	unsigned int hold_limit;
+
+#define DEFAULT_PMC_GAP_WATERMARK ((50 << 20) >> PAGE_SHIFT)
+	/*
+	 * Only when zone free pages above high+allow watermark, can hold cache,
+	 * unit page, default 50MB
+	 */
+	unsigned int allow_watermark;
+};
+
 struct lruvec {
 	struct list_head		lists[NR_LRU_LISTS];
 	/* per lruvec lru_lock for memcg */

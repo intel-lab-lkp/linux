@@ -130,6 +130,7 @@ struct mem_cgroup_per_node {
 	bool			on_tree;
 	struct mem_cgroup	*memcg;		/* Back pointer, we cannot */
 						/* use container_of	   */
+	struct mem_cgroup_per_node_cache *cachep;
 };
 
 struct mem_cgroup_threshold {
@@ -335,6 +336,8 @@ struct mem_cgroup {
 	/* per-memcg mm_struct list */
 	struct lru_gen_mm_list mm_list;
 #endif
+
+	bool cache_enabled;
 
 	struct mem_cgroup_per_node *nodeinfo[];
 };
@@ -556,6 +559,8 @@ retry:
 
 	return memcg;
 }
+
+extern struct static_key_true pmc_key;
 
 #ifdef CONFIG_MEMCG_KMEM
 /*
@@ -1185,6 +1190,25 @@ unsigned long mem_cgroup_soft_limit_reclaim(pg_data_t *pgdat, int order,
 						gfp_t gfp_mask,
 						unsigned long *total_scanned);
 
+static inline bool pmc_disabled(void)
+{
+	return static_branch_likely(&pmc_key);
+}
+
+static inline bool mem_cgroup_cache_disabled(struct mem_cgroup *memcg)
+{
+	return !READ_ONCE(memcg->cache_enabled);
+}
+
+
+static inline struct mem_cgroup_per_node_cache *
+mem_cgroup_get_node_cachep(struct mem_cgroup *memcg, int nid)
+{
+	struct mem_cgroup_per_node *nodeinfo = memcg->nodeinfo[nid];
+
+	return nodeinfo->cachep;
+}
+
 #else /* CONFIG_MEMCG */
 
 #define MEM_CGROUP_ID_SHIFT	0
@@ -1647,6 +1671,23 @@ unsigned long mem_cgroup_soft_limit_reclaim(pg_data_t *pgdat, int order,
 					    unsigned long *total_scanned)
 {
 	return 0;
+}
+
+static inline bool pmc_disabled(void)
+{
+	return true;
+}
+
+static inline bool mem_cgroup_cache_disabled(struct mem_cgroup *memcg)
+{
+	return true;
+}
+
+
+static inline struct mem_cgroup_per_node_cache *
+mem_cgroup_get_node_cachep(struct mem_cgroup *memcg, int nid)
+{
+	return NULL;
 }
 #endif /* CONFIG_MEMCG */
 

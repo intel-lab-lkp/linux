@@ -420,6 +420,7 @@ extern unsigned long mem_cgroup_shrink_node(struct mem_cgroup *mem,
 extern unsigned long shrink_all_memory(unsigned long nr_pages);
 extern int vm_swappiness;
 long remove_mapping(struct address_space *mapping, struct folio *folio);
+extern int mem_cgroup_release_cache(struct mem_cgroup_per_node_cache *fc);
 
 #ifdef CONFIG_NUMA
 extern int node_reclaim_mode;

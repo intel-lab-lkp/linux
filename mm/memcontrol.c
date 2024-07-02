@@ -95,6 +95,15 @@ static bool cgroup_memory_nokmem __ro_after_init;
 /* BPF memory accounting disabled? */
 static bool cgroup_memory_nobpf __ro_after_init;
 
+/*
+ * How many memcg enabled cache? If none, static branch will enable
+ * so none task free/alloc will into PMC path.
+ * Else, hold/free cache in target memcg, disable static branch.
+ */
+static atomic_t pmc_nr_enabled;
+DEFINE_STATIC_KEY_TRUE(pmc_key);
+
+
 #ifdef CONFIG_CGROUP_WRITEBACK
 static DECLARE_WAIT_QUEUE_HEAD(memcg_cgwb_frn_waitq);
 #endif
@@ -5738,6 +5747,8 @@ static void mem_cgroup_css_released(struct cgroup_subsys_state *css)
 	lru_gen_release_memcg(memcg);
 }
 
+static int __disable_mem_cgroup_cache(struct mem_cgroup *memcg);
+
 static void mem_cgroup_css_free(struct cgroup_subsys_state *css)
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
@@ -5762,6 +5773,8 @@ static void mem_cgroup_css_free(struct cgroup_subsys_state *css)
 	cancel_work_sync(&memcg->high_work);
 	mem_cgroup_remove_from_trees(memcg);
 	free_shrinker_info(memcg);
+	if (READ_ONCE(memcg->cache_enabled))
+		__disable_mem_cgroup_cache(memcg);
 	mem_cgroup_free(memcg);
 }
 
@@ -7088,6 +7101,223 @@ static ssize_t memory_reclaim(struct kernfs_open_file *of, char *buf,
 	return nbytes;
 }
 
+static int __enable_mem_cgroup_cache(struct mem_cgroup *memcg)
+{
+	int nid, idx;
+
+	if (!mem_cgroup_cache_disabled(memcg))
+		return -EINVAL;
+
+	for_each_node(nid) {
+		struct mem_cgroup_per_node *nodeinfo = memcg->nodeinfo[nid];
+		struct mem_cgroup_per_node_cache *p = kvzalloc_node(
+			sizeof(struct mem_cgroup_per_node_cache),
+			GFP_KERNEL, nid);
+
+		if (unlikely(!p))
+			goto fail;
+
+		nodeinfo->cachep = p;
+	}
+
+	for_each_node(nid) {
+		struct mem_cgroup_per_node *nodeinfo = memcg->nodeinfo[nid];
+		pg_data_t *pgdat = NODE_DATA(nid);
+		struct mem_cgroup_per_node_cache *p = nodeinfo->cachep;
+
+		for (idx = 0; idx < MAX_NR_ZONES; idx++) {
+			struct zone *z = &pgdat->node_zones[idx];
+			struct mem_cgroup_zone_cache *zc;
+
+			if (!populated_zone(z))
+				continue;
+
+			zc = &p->zone_cachep[idx];
+
+			INIT_LIST_HEAD(&zc->pages);
+			spin_lock_init(&zc->pages_lock);
+		}
+
+		p->memcg = memcg;
+		p->hold_limit = DEFAULT_PMC_HOLD_LIMIX;
+		p->allow_watermark = DEFAULT_PMC_GAP_WATERMARK;
+
+		atomic_inc(&pmc_nr_enabled);
+	}
+
+	if (static_branch_likely(&pmc_key))
+		static_branch_disable(&pmc_key);
+
+	//online
+	smp_wmb();
+	WRITE_ONCE(memcg->cache_enabled, true);
+	atomic_inc(&pmc_nr_enabled);
+
+	return 0;
+
+fail:
+	for_each_node(nid) {
+		struct mem_cgroup_per_node *nodeinfo = memcg->nodeinfo[nid];
+
+		if (nodeinfo->cachep) {
+			kvfree(nodeinfo->cachep);
+			nodeinfo->cachep = NULL;
+		}
+	}
+
+	return -ENOMEM;
+}
+
+static int __disable_mem_cgroup_cache(struct mem_cgroup *memcg)
+{
+	int nid;
+
+	if (unlikely(mem_cgroup_cache_disabled(memcg)))
+		return -EINVAL;
+
+	//offline
+	WRITE_ONCE(memcg->cache_enabled, false);
+
+	for_each_node(nid) {
+		struct mem_cgroup_per_node *nodeinfo = memcg->nodeinfo[nid];
+		struct mem_cgroup_per_node_cache *p;
+
+		p = nodeinfo->cachep;
+
+		mem_cgroup_release_cache(p);
+
+		kfree(p);
+	}
+
+	if (atomic_dec_and_test(&pmc_nr_enabled))
+		static_branch_enable(&pmc_key);
+
+	return 0;
+}
+
+static int mem_cgroup_cache_show(struct seq_file *m, void *v)
+{
+	struct mem_cgroup *memcg;
+	int nid;
+
+	if (static_branch_likely(&pmc_key))
+		return -EINVAL;
+
+	memcg = mem_cgroup_from_seq(m);
+	if (!READ_ONCE(memcg->cache_enabled))
+		return -EINVAL;
+
+	seq_printf(m, "%4s %16s %16s\n", "NODE", "WATERMARK", "HOLD_LIMIT");
+	for_each_online_node(nid) {
+		struct mem_cgroup_per_node *nodeinfo = memcg->nodeinfo[nid];
+		struct mem_cgroup_per_node_cache *p;
+
+		p = nodeinfo->cachep;
+		if (!p)
+			continue;
+
+		seq_printf(m, "%4d %14uKB %14uKB\n", nid,
+			   (READ_ONCE(p->allow_watermark) << (PAGE_SHIFT - 10)),
+			   (READ_ONCE(p->hold_limit) << (PAGE_SHIFT - 10)));
+	}
+
+	seq_puts(m, "===========\n");
+	seq_printf(m, "%4s %16s %16s %16s\n", "NODE", "ZONE", "CACHE", "HIT");
+
+	for_each_online_node(nid) {
+		struct mem_cgroup_per_node *nodeinfo = memcg->nodeinfo[nid];
+		struct mem_cgroup_per_node_cache *p;
+		pg_data_t *pgdat = NODE_DATA(nid);
+		int idx;
+
+		p = nodeinfo->cachep;
+		if (!p)
+			continue;
+
+		for (idx = 0; idx < MAX_NR_ZONES; idx++) {
+			struct mem_cgroup_zone_cache *zc;
+			struct zone *z = &pgdat->node_zones[idx];
+
+			if (!populated_zone(z))
+				continue;
+
+			zc = &p->zone_cachep[idx];
+			seq_printf(m, "%4d %16s %14dKB %14dKB\n", nid, z->name,
+				   (atomic_read(&zc->nr_pages)
+				    << (PAGE_SHIFT - 10)),
+				   (atomic_read(&zc->nr_alloced)
+				    << (PAGE_SHIFT - 10)));
+		}
+	}
+
+	return 0;
+}
+
+enum {
+	OPT_CTRL_ENABLE,
+	OPT_CTRL_ERR,
+	OPR_CTRL_NR = OPT_CTRL_ERR,
+};
+
+static const match_table_t ctrl_tokens = {
+					   { OPT_CTRL_ENABLE, "enable=%s" },
+					   { OPT_CTRL_ERR, NULL } };
+
+/**
+ * This function  can control target memcg's cache. include enable\keys set.
+ * To enable\disable this cache, by `echo enable=[y|n] > memory.cace`
+ * in target memcg.
+ */
+static ssize_t mem_cgroup_cache_control(struct kernfs_open_file *of, char *buf,
+					size_t nbytes, loff_t off)
+{
+	bool enable;
+	bool opt_enable_set = false;
+	int err = 0;
+	char *sub;
+	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+
+	buf = strstrip(buf);
+	if (!strlen(buf))
+		return -EINVAL;
+
+	while ((sub = strsep(&buf, " ")) != NULL) {
+		int token;
+		substring_t args[MAX_OPT_ARGS];
+		char tbuf[256];
+
+		sub = strstrip(sub);
+
+		token = match_token(sub, ctrl_tokens, args);
+		switch (token) {
+		case OPT_CTRL_ENABLE:
+			if (match_strlcpy(tbuf, &args[0], sizeof(tbuf)) >=
+			    sizeof(tbuf))
+				return -EINVAL;
+
+			err = kstrtobool(tbuf, &enable);
+			if (err)
+				return -EINVAL;
+			opt_enable_set = true;
+			break;
+		case OPT_CTRL_ERR:
+		default:
+			return -EINVAL;
+		}
+	}
+
+	if (opt_enable_set) {
+		if (enable) {
+			__enable_mem_cgroup_cache(memcg);
+		} else {
+			__disable_mem_cgroup_cache(memcg);
+			return nbytes;
+		}
+	}
+
+	return err ? err : nbytes;
+}
+
 static struct cftype memory_files[] = {
 	{
 		.name = "current",
@@ -7155,6 +7385,13 @@ static struct cftype memory_files[] = {
 		.name = "reclaim",
 		.flags = CFTYPE_NS_DELEGATABLE,
 		.write = memory_reclaim,
+	},
+	/* free cache field */
+	{
+		.name = "cache",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.write = mem_cgroup_cache_control,
+		.seq_show = mem_cgroup_cache_show,
 	},
 	{ }	/* terminate */
 };
