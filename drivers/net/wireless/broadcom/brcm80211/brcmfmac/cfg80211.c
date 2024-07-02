@@ -2975,7 +2975,7 @@ brcmf_cfg80211_reconfigure_wep(struct brcmf_if *ifp)
 	s32 err;
 	u8 key_idx;
 	struct brcmf_wsec_key *key;
-	s32 wsec;
+	s32 wsec = 0;
 
 	for (key_idx = 0; key_idx < BRCMF_MAX_DEFAULT_KEYS; key_idx++) {
 		key = &ifp->vif->profile.key[key_idx];
