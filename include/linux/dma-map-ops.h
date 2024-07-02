@@ -90,6 +90,12 @@ struct dma_map_ops {
 
 	dma_addr_t (*alloc_iova)(struct device *dev, size_t size);
 	void (*free_iova)(struct device *dev, dma_addr_t dma_addr, size_t size);
+	int (*link_range)(struct dma_iova_state *state, phys_addr_t phys,
+			  dma_addr_t addr, size_t size);
+	void (*unlink_range)(struct dma_iova_state *state,
+			     dma_addr_t dma_handle, size_t size);
+	int (*start_range)(struct dma_iova_state *state);
+	void (*end_range)(struct dma_iova_state *state);
 };
 
 #ifdef CONFIG_DMA_OPS

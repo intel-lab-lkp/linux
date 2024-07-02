@@ -11,6 +11,7 @@
 #include <linux/scatterlist.h>
 #include <linux/bug.h>
 #include <linux/mem_encrypt.h>
+#include <linux/iommu.h>
 
 /**
  * List of possible attributes associated with a DMA mapping. The semantics
@@ -103,6 +104,8 @@ struct dma_iova_attrs {
 struct dma_iova_state {
 	struct dma_iova_attrs *iova;
 	struct dma_memory_type *type;
+	struct iommu_domain *domain;
+	size_t range_size;
 };
 
 #ifdef CONFIG_DMA_API_DEBUG
@@ -184,6 +187,10 @@ int dma_mmap_noncontiguous(struct device *dev, struct vm_area_struct *vma,
 
 void dma_get_memory_type(struct page *page, struct dma_memory_type *type);
 bool dma_can_use_iova(struct dma_iova_state *state, size_t size);
+int dma_start_range(struct dma_iova_state *state);
+void dma_end_range(struct dma_iova_state *state);
+int dma_link_range(struct dma_iova_state *state, phys_addr_t phys, size_t size);
+void dma_unlink_range(struct dma_iova_state *state);
 #else /* CONFIG_HAS_DMA */
 static inline int dma_alloc_iova(struct dma_iova_attrs *iova)
 {
@@ -328,6 +335,21 @@ static inline void dma_get_memory_type(struct page *page,
 static inline bool dma_can_use_iova(struct dma_iova_state *state, size_t size)
 {
 	return false;
+}
+static inline int dma_start_range(struct dma_iova_state *state)
+{
+	return -EOPNOTSUPP;
+}
+static inline void dma_end_range(struct dma_iova_state *state)
+{
+}
+static inline int dma_link_range(struct dma_iova_state *state, phys_addr_t phys,
+				 size_t size)
+{
+	return -EOPNOTSUPP;
+}
+static inline void dma_unlink_range(struct dma_iova_state *state)
+{
 }
 #endif /* CONFIG_HAS_DMA */
 

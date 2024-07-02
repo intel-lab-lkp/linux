@@ -989,7 +989,8 @@ bool dma_can_use_iova(struct dma_iova_state *state, size_t size)
 	    dev_use_swiotlb(dev, size, state->iova->dir))
 		return false;
 
-	if (dma_map_direct(dev, ops) || !ops->alloc_iova)
+	if (dma_map_direct(dev, ops) || !ops->alloc_iova || !ops->link_range ||
+	    !ops->start_range)
 		return false;
 
 	if (type->type == DMA_MEMORY_TYPE_P2P) {
@@ -1000,3 +1001,78 @@ bool dma_can_use_iova(struct dma_iova_state *state, size_t size)
 	return type->type == DMA_MEMORY_TYPE_NORMAL;
 }
 EXPORT_SYMBOL_GPL(dma_can_use_iova);
+
+/**
+ * dma_start_range - Start a range of IOVA space
+ * @state: IOVA state
+ *
+ * Start a range of IOVA space for the given IOVA state.
+ */
+int dma_start_range(struct dma_iova_state *state)
+{
+	struct device *dev = state->iova->dev;
+	const struct dma_map_ops *ops = get_dma_ops(dev);
+
+	if (!ops->start_range)
+		return 0;
+
+	return ops->start_range(state);
+}
+EXPORT_SYMBOL_GPL(dma_start_range);
+
+/**
+ * dma_end_range - End a range of IOVA space
+ * @state: IOVA state
+ *
+ * End a range of IOVA space for the given IOVA state.
+ */
+void dma_end_range(struct dma_iova_state *state)
+{
+	struct device *dev = state->iova->dev;
+	const struct dma_map_ops *ops = get_dma_ops(dev);
+
+	if (!ops->end_range)
+		return;
+
+	ops->end_range(state);
+}
+EXPORT_SYMBOL_GPL(dma_end_range);
+
+/**
+ * dma_link_range - Link a range of IOVA space
+ * @state: IOVA state
+ * @phys: physical address to link
+ * @size: size of the buffer
+ *
+ * Link a range of IOVA space for the given IOVA state.
+ */
+int dma_link_range(struct dma_iova_state *state, phys_addr_t phys, size_t size)
+{
+	struct device *dev = state->iova->dev;
+	dma_addr_t addr = state->iova->addr + state->range_size;
+	const struct dma_map_ops *ops = get_dma_ops(dev);
+	int ret;
+
+	ret = ops->link_range(state, phys, addr, size);
+	if (ret)
+		return ret;
+
+	state->range_size += size;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(dma_link_range);
+
+/**
+ * dma_unlink_range - Unlink a range of IOVA space
+ * @state: IOVA state
+ *
+ * Unlink a range of IOVA space for the given IOVA state.
+ */
+void dma_unlink_range(struct dma_iova_state *state)
+{
+	struct device *dev = state->iova->dev;
+	const struct dma_map_ops *ops = get_dma_ops(dev);
+
+	ops->unlink_range(state, state->iova->addr, state->range_size);
+}
+EXPORT_SYMBOL_GPL(dma_unlink_range);
