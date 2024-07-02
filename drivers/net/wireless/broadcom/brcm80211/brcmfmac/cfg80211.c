@@ -2085,7 +2085,7 @@ brcmf_set_key_mgmt(struct net_device *ndev, struct cfg80211_connect_params *sme)
 	struct brcmf_if *ifp = netdev_priv(ndev);
 	struct brcmf_cfg80211_profile *profile = &ifp->vif->profile;
 	struct brcmf_pub *drvr = ifp->drvr;
-	s32 val;
+	s32 val = 0;
 	s32 err;
 	const struct brcmf_tlv *rsn_ie;
 	const u8 *ie;
