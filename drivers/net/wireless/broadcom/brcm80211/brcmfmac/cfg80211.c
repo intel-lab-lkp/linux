@@ -2707,7 +2707,7 @@ brcmf_cfg80211_config_default_key(struct wiphy *wiphy, struct net_device *ndev,
 	struct brcmf_if *ifp = netdev_priv(ndev);
 	struct brcmf_pub *drvr = ifp->drvr;
 	u32 index;
-	u32 wsec;
+	u32 wsec = 0;
 	s32 err = 0;
 
 	brcmf_dbg(TRACE, "Enter\n");
@@ -2907,7 +2907,7 @@ brcmf_cfg80211_get_key(struct wiphy *wiphy, struct net_device *ndev,
 	struct brcmf_cfg80211_profile *profile = &ifp->vif->profile;
 	struct brcmf_pub *drvr = cfg->pub;
 	struct brcmf_cfg80211_security *sec;
-	s32 wsec;
+	s32 wsec = 0;
 	s32 err = 0;
 
 	brcmf_dbg(TRACE, "Enter\n");
