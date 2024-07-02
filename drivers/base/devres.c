@@ -1176,9 +1176,8 @@ static void devm_percpu_release(struct device *dev, void *pdata)
 
 static int devm_percpu_match(struct device *dev, void *data, void *p)
 {
-	struct devres *devr = container_of(data, struct devres, data);
-
-	return *(void **)devr->data == p;
+	/* @data is already and must be (void *)devr->data */
+	return *(void **)data == p;
 }
 
 /**
