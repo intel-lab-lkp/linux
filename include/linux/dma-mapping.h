@@ -76,6 +76,20 @@
 
 #define DMA_BIT_MASK(n)	(((n) == 64) ? ~0ULL : ((1ULL<<(n))-1))
 
+enum dma_memory_types {
+	/* Normal memory without any extra properties like P2P, e.t.c */
+	DMA_MEMORY_TYPE_NORMAL,
+	/* Memory which is p2p capable */
+	DMA_MEMORY_TYPE_P2P,
+	/* Encrypted memory (TDX) */
+	DMA_MEMORY_TYPE_ENCRYPTED,
+};
+
+struct dma_memory_type {
+	enum dma_memory_types type;
+	struct dev_pagemap *p2p_pgmap;
+};
+
 #ifdef CONFIG_DMA_API_DEBUG
 void debug_dma_mapping_error(struct device *dev, dma_addr_t dma_addr);
 void debug_dma_map_single(struct device *dev, const void *addr,
@@ -149,6 +163,8 @@ void *dma_vmap_noncontiguous(struct device *dev, size_t size,
 void dma_vunmap_noncontiguous(struct device *dev, void *vaddr);
 int dma_mmap_noncontiguous(struct device *dev, struct vm_area_struct *vma,
 		size_t size, struct sg_table *sgt);
+
+void dma_get_memory_type(struct page *page, struct dma_memory_type *type);
 #else /* CONFIG_HAS_DMA */
 static inline dma_addr_t dma_map_page_attrs(struct device *dev,
 		struct page *page, size_t offset, size_t size,
@@ -278,6 +294,10 @@ static inline int dma_mmap_noncontiguous(struct device *dev,
 		struct vm_area_struct *vma, size_t size, struct sg_table *sgt)
 {
 	return -EINVAL;
+}
+static inline void dma_get_memory_type(struct page *page,
+				       struct dma_memory_type *type)
+{
 }
 #endif /* CONFIG_HAS_DMA */
 

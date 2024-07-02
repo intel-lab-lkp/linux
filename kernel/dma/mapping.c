@@ -6,6 +6,7 @@
  * Copyright (c) 2006  Tejun Heo <teheo@suse.de>
  */
 #include <linux/memblock.h> /* for max_pfn */
+#include <linux/memremap.h>
 #include <linux/acpi.h>
 #include <linux/dma-map-ops.h>
 #include <linux/export.h>
@@ -14,6 +15,7 @@
 #include <linux/of_device.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
+#include <linux/cc_platform.h>
 #include "debug.h"
 #include "direct.h"
 
@@ -894,3 +896,31 @@ unsigned long dma_get_merge_boundary(struct device *dev)
 	return ops->get_merge_boundary(dev);
 }
 EXPORT_SYMBOL_GPL(dma_get_merge_boundary);
+
+/**
+ * dma_get_memory_type - get the DMA memory type of the page supplied
+ * @page: page to check
+ * @type: memory type of that page
+ *
+ * Return the DMA memory type for the struct page. Pages with the same
+ * memory type can be combined into the same IOVA mapping. Users of the
+ * dma_iova family of functions must seperate the memory they want to map
+ * into same-memory type ranges.
+ */
+void dma_get_memory_type(struct page *page, struct dma_memory_type *type)
+{
+	/* TODO: Rewrite this check to rely on specific struct page flags */
+	if (cc_platform_has(CC_ATTR_MEM_ENCRYPT)) {
+		type->type = DMA_MEMORY_TYPE_ENCRYPTED;
+		return;
+	}
+
+	if (is_pci_p2pdma_page(page)) {
+		type->type = DMA_MEMORY_TYPE_P2P;
+		type->p2p_pgmap = page->pgmap;
+		return;
+	}
+
+	type->type = DMA_MEMORY_TYPE_NORMAL;
+}
+EXPORT_SYMBOL_GPL(dma_get_memory_type);
