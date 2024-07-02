@@ -8249,7 +8249,7 @@ struct brcmf_cfg80211_info *brcmf_cfg80211_attach(struct brcmf_pub *drvr,
 	struct brcmf_cfg80211_vif *vif;
 	struct brcmf_if *ifp;
 	s32 err = 0;
-	s32 io_type;
+	s32 io_type = 0;
 	u16 *cap = NULL;
 
 	if (!ndev) {
