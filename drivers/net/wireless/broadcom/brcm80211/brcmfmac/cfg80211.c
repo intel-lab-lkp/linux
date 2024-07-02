@@ -5678,7 +5678,7 @@ static int brcmf_cfg80211_get_channel(struct wiphy *wiphy,
 	struct brcmu_chan ch;
 	enum nl80211_band band = 0;
 	enum nl80211_chan_width width = 0;
-	u32 chanspec;
+	u32 chanspec = 0;
 	int freq, err;
 
 	if (!ndev || drvr->bus_if->state != BRCMF_BUS_UP)
