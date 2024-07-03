@@ -503,7 +503,7 @@ static int j721e_pcie_probe(struct platform_device *pdev)
 
 	switch (mode) {
 	case PCI_MODE_RC:
-		gpiod = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_LOW);
+		gpiod = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_HIGH);
 		if (IS_ERR(gpiod)) {
 			ret = PTR_ERR(gpiod);
 			if (ret != -EPROBE_DEFER)
@@ -541,7 +541,7 @@ static int j721e_pcie_probe(struct platform_device *pdev)
 		 */
 		if (gpiod) {
 			usleep_range(100, 200);
-			gpiod_set_value_cansleep(gpiod, 1);
+			gpiod_set_value_cansleep(gpiod, 0);
 		}
 
 		ret = cdns_pcie_host_setup(rc);
