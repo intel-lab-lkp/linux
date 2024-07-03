@@ -1201,6 +1201,7 @@
 				interrupt-controller;
 				reg = <0xfffff100 0x100>;
 				atmel,external-irqs = <31>;
+				microchip,nr-irqs = <50>;
 			};
 
 			dbgu: serial@fffff200 {
