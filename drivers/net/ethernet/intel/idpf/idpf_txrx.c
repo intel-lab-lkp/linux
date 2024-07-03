@@ -2804,7 +2804,7 @@ static void idpf_rx_csum(struct idpf_queue *rxq, struct sk_buff *skb,
 		}
 		break;
 	case IDPF_RX_PTYPE_INNER_PROT_SCTP:
-		skb->ip_summed = CHECKSUM_UNNECESSARY;
+		skb_set_csum_crc32_unnecessary(skb);
 		break;
 	default:
 		break;

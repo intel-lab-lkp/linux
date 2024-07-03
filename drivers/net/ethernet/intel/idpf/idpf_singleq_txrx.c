@@ -698,8 +698,10 @@ static void idpf_rx_singleq_csum(struct idpf_queue *rxq, struct sk_buff *skb,
 	case IDPF_RX_PTYPE_INNER_PROT_ICMP:
 	case IDPF_RX_PTYPE_INNER_PROT_TCP:
 	case IDPF_RX_PTYPE_INNER_PROT_UDP:
-	case IDPF_RX_PTYPE_INNER_PROT_SCTP:
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
+		return;
+	case IDPF_RX_PTYPE_INNER_PROT_SCTP:
+		skb_set_csum_crc32_unnecessary(skb);
 		return;
 	default:
 		return;
