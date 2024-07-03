@@ -1612,10 +1612,12 @@ static inline int fcoe_filter_frames(struct fc_lport *lport,
 	 * it's solicited data, in which case, the FCP layer would
 	 * check it during the copy.
 	 */
-	if (lport->crc_offload && skb->ip_summed == CHECKSUM_UNNECESSARY)
+	if (lport->crc_offload && skb_csum_crc32_unnecessary(skb)) {
 		fr_flags(fp) &= ~FCPHF_CRC_UNCHECKED;
-	else
+		skb_reset_csum_crc32_unnecessary(skb);
+	} else {
 		fr_flags(fp) |= FCPHF_CRC_UNCHECKED;
+	}
 
 	fh = fc_frame_header_get(fp);
 	if (fh->fh_r_ctl == FC_RCTL_DD_SOL_DATA && fh->fh_type == FC_TYPE_FCP)
