@@ -556,7 +556,10 @@ static void hns_nic_rx_checksum(struct hns_nic_ring_data *ring_data,
 		return;
 
 	/* now, this has to be a packet with valid RX checksum */
-	skb->ip_summed = CHECKSUM_UNNECESSARY;
+	if (l4id == HNS_RX_FLAG_L4ID_SCTP)
+		skb_set_csum_crc32_unnecessary(skb);
+	else
+		skb->ip_summed = CHECKSUM_UNNECESSARY;
 }
 
 static int hns_nic_poll_rx_skb(struct hns_nic_ring_data *ring_data,

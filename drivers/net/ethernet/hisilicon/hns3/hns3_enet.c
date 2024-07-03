@@ -3908,11 +3908,19 @@ static void hns3_rx_handle_csum(struct sk_buff *skb, u32 l234info,
 					  HNS3_RXD_L4ID_S);
 		/* Can checksum ipv4 or ipv6 + UDP/TCP/SCTP packets */
 		if ((l3_type == HNS3_L3_TYPE_IPV4 ||
-		     l3_type == HNS3_L3_TYPE_IPV6) &&
-		    (l4_type == HNS3_L4_TYPE_UDP ||
-		     l4_type == HNS3_L4_TYPE_TCP ||
-		     l4_type == HNS3_L4_TYPE_SCTP))
-			skb->ip_summed = CHECKSUM_UNNECESSARY;
+		     l3_type == HNS3_L3_TYPE_IPV6)) {
+			switch (l4_type) {
+			case HNS3_L4_TYPE_UDP:
+			case HNS3_L4_TYPE_TCP:
+				skb->ip_summed = CHECKSUM_UNNECESSARY;
+				break;
+			case HNS3_L4_TYPE_SCTP:
+				skb_set_csum_crc32_unnecessary(skb);
+				break;
+			default:
+				break;
+			}
+		}
 		break;
 	default:
 		break;
