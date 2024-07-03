@@ -180,7 +180,7 @@
 	num-lanes = <1>;
 	phys = <&serdes0 PHY_TYPE_PCIE 1>;
 	phy-names = "pcie-phy0";
-	reset-gpios = <&wkup_gpio0 27 GPIO_ACTIVE_HIGH>;
+	reset-gpios = <&wkup_gpio0 27 GPIO_ACTIVE_LOW>;
 	status = "okay";
 };
 

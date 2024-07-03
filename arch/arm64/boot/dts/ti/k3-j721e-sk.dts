@@ -1179,7 +1179,7 @@
 	status = "okay";
 	pinctrl-names = "default";
 	pinctrl-0 = <&ekey_reset_pins_default>;
-	reset-gpios = <&main_gpio0 72 GPIO_ACTIVE_HIGH>;
+	reset-gpios = <&main_gpio0 72 GPIO_ACTIVE_LOW>;
 
 	phys = <&serdes0_pcie_link>;
 	phy-names = "pcie-phy";
@@ -1190,7 +1190,7 @@
 	status = "okay";
 	pinctrl-names = "default";
 	pinctrl-0 = <&mkey_reset_pins_default>;
-	reset-gpios = <&wkup_gpio0 11 GPIO_ACTIVE_HIGH>;
+	reset-gpios = <&wkup_gpio0 11 GPIO_ACTIVE_LOW>;
 
 	phys = <&serdes1_pcie_link>;
 	phy-names = "pcie-phy";

@@ -925,7 +925,7 @@
 
 &pcie0_rc {
 	status = "okay";
-	reset-gpios = <&exp1 6 GPIO_ACTIVE_HIGH>;
+	reset-gpios = <&exp1 6 GPIO_ACTIVE_LOW>;
 	phys = <&serdes0_pcie_link>;
 	phy-names = "pcie-phy";
 	num-lanes = <1>;
@@ -933,7 +933,7 @@
 
 &pcie1_rc {
 	status = "okay";
-	reset-gpios = <&exp1 2 GPIO_ACTIVE_HIGH>;
+	reset-gpios = <&exp1 2 GPIO_ACTIVE_LOW>;
 	phys = <&serdes1_pcie_link>;
 	phy-names = "pcie-phy";
 	num-lanes = <2>;
@@ -941,7 +941,7 @@
 
 &pcie2_rc {
 	status = "okay";
-	reset-gpios = <&exp2 20 GPIO_ACTIVE_HIGH>;
+	reset-gpios = <&exp2 20 GPIO_ACTIVE_LOW>;
 	phys = <&serdes2_pcie_link>;
 	phy-names = "pcie-phy";
 	num-lanes = <2>;

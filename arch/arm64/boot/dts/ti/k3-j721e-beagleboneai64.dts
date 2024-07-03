@@ -858,7 +858,7 @@
 	phy-names = "pcie-phy";
 	num-lanes = <2>;
 	max-link-speed = <3>;
-	reset-gpios = <&main_gpio0 22 GPIO_ACTIVE_HIGH>;
+	reset-gpios = <&main_gpio0 22 GPIO_ACTIVE_LOW>;
 };
 
 &ufs_wrapper {

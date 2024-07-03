@@ -522,7 +522,7 @@
 };
 
 &pcie0_rc {
-	reset-gpios = <&exp1 18 GPIO_ACTIVE_HIGH>;
+	reset-gpios = <&exp1 18 GPIO_ACTIVE_LOW>;
 	phys = <&serdes1_pcie_link>;
 	phy-names = "pcie-phy";
 	status = "okay";
