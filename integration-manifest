@@ -1,0 +1,28 @@
+drm drm-fixes 22a40d14b572deb80c0648557f4bd502d7e83826
+	Linux 6.10-rc6
+drm-misc drm-misc-fixes 740b8dad05bee39e1e3b926f05bb4a8274b8ba49
+	drm/fbdev-generic: Fix framebuffer on big endian devices
+drm-intel drm-intel-fixes f72383371e8c5d1d108532d7e395ff2c277233e5
+	drm/i915/display: For MTL+ platforms skip mg dp programming
+drm-xe drm-xe-fixes f2661062f16b2de5d7b6a5c42a9a5c96326b8454
+	Linux 6.10-rc5
+drm drm-next fb625bf6187d97c3cd28d680b14bf80f84207e5a
+	Merge tag 'drm-habanalabs-next-2024-06-23' of https://github.com/HabanaAI/drivers.accel.habanalabs.kernel into drm-next
+drm-misc drm-misc-next-fixes 539d33b5783804f22a62bd62ff463dfd1cef4265
+	drm/komeda: remove unused struct 'gamma_curve_segment'
+drm-intel drm-intel-next-fixes 1613e604df0cd359cf2a7fbd9be7a0bcfacfabd0
+	Linux 6.10-rc1
+drm-xe drm-xe-next-fixes d69c3d4b53829097b8948d6791ea32c07de3faab
+	drm/xe/ads: Use flexible-array
+drm-misc drm-misc-next 3f5ea7ed705e8effe9cfabf912e769ccb6b7d389
+	drm/managed: Simplify if condition
+drm-intel drm-intel-next 9fc97277eb2d17492de636b68cf7d2f5c4f15c1b
+	drm/i915: Skip programming FIA link enable bits for MTL+
+drm-intel drm-intel-gt-next 3b85152cb167bd24fe84ceb91b719b5904ca354f
+	drm/i915/gem: Suppress oom warning in favour of ENOMEM to userspace
+drm-xe drm-xe-next 7c0389c615b5c6aef1b0e38e30db759b3cbff885
+	drm/xe/guc: Demote GuC IDs usage message to debug
+drm-intel topic/core-for-CI 02c064d8d8d913a528cdae3e5173de4d1a52b566
+	Revert "e1000e: move force SMBUS near the end of enable_ulp function"
+drm-xe topic/xe-for-CI 428c3ef38ef5565140b2104f0d3dafdae9056ca9
+	Revert "drm/xe/gsc: define GSC FW for LNL"
