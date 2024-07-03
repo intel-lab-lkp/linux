@@ -126,6 +126,22 @@ struct scmi_debug_info {
 };
 
 /**
+ * struct scmi_debug_stats - Debug statistics
+ * @sent_ok: Count of successful sends
+ * @sent_fail: Count of failed sends
+ * @response_ok: Count of successful responses
+ * @dlyd_response_ok: Count of successful delayed responses
+ * @xfers_response_timeout: Count of xfer response timeouts
+ */
+struct scmi_debug_stats {
+	atomic_t sent_ok;
+	atomic_t sent_fail;
+	atomic_t response_ok;
+	atomic_t dlyd_response_ok;
+	atomic_t xfers_response_timeout;
+};
+
+/**
  * struct scmi_info - Structure representing a SCMI instance
  *
  * @id: A sequence number starting from zero identifying this instance
@@ -161,6 +177,7 @@ struct scmi_debug_info {
  *		bus
  * @devreq_mtx: A mutex to serialize device creation for this SCMI instance
  * @dbg: A pointer to debugfs related data (if any)
+ * @stats: Contains several atomic_t's for tracking various statistics
  * @raw: An opaque reference handle used by SCMI Raw mode.
  */
 struct scmi_info {
@@ -187,6 +204,7 @@ struct scmi_info {
 	/* Serialize device creation process for this instance */
 	struct mutex devreq_mtx;
 	struct scmi_debug_info *dbg;
+	struct scmi_debug_stats stats;
 	void *raw;
 };
 

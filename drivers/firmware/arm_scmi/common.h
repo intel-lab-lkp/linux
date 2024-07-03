@@ -301,6 +301,15 @@ extern const struct scmi_desc scmi_optee_desc;
 
 void scmi_rx_callback(struct scmi_chan_info *cinfo, u32 msg_hdr, void *priv);
 
+#ifdef CONFIG_ARM_SCMI_DEBUG_STATISTICS
+static inline void scmi_log_stats(atomic_t *atm)
+{
+	atomic_inc(atm);
+}
+#else
+static inline void scmi_log_stats(atomic_t *atm) {}
+#endif
+
 enum scmi_bad_msg {
 	MSG_UNEXPECTED = -1,
 	MSG_INVALID = -2,
