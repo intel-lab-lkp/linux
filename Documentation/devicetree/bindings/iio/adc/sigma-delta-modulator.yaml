@@ -18,18 +18,38 @@ properties:
       - sd-modulator
       - ads1201
 
+  '#io-backend-cells':
+    const: 0
+
   '#io-channel-cells':
     const: 0
 
+  reg:
+    maxItems: 1
+
+  vref-supply:
+    description: Phandle to the vref input analog reference voltage.
+
 required:
   - compatible
-  - '#io-channel-cells'
+
+allOf:
+  - anyOf:
+    - required: ['#io-backend-cells']
+    - required: ['#io-channel-cells']
 
 additionalProperties: false
 
 examples:
   - |
-    ads1202: adc {
+    // Exemple1: SD modulator is an IIO backend device
+    ads1201_0 {
+      compatible = "ti,ads1201";
+      #io-backend-cells = <0>;
+    };
+
+    //Example2: SD modulator is an IIO channel provider
+    ads1201_1 {
       compatible = "sd-modulator";
       #io-channel-cells = <0>;
     };
