@@ -1407,6 +1407,10 @@ void __init trap_init(void)
 	/* Init cpu_entry_area before IST entries are set up */
 	setup_cpu_entry_areas();
 
+	/* FRED RSPs pointing to memory from CPU entry areas */
+	if (cpu_feature_enabled(X86_FEATURE_FRED))
+		cpu_init_fred_rsps();
+
 	/* Init GHCB memory pages when running as an SEV-ES guest */
 	sev_es_init_vc_handling();
 

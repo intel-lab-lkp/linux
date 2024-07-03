@@ -64,6 +64,7 @@
 #include <asm/acpi.h>
 #include <asm/cacheinfo.h>
 #include <asm/desc.h>
+#include <asm/fred.h>
 #include <asm/nmi.h>
 #include <asm/irq.h>
 #include <asm/realmode.h>
@@ -247,6 +248,11 @@ static void notrace start_secondary(void *unused)
 	}
 
 	cpu_init_exception_handling();
+
+	if (cpu_feature_enabled(X86_FEATURE_FRED)) {
+		cpu_init_fred_exceptions();
+		cpu_init_fred_rsps();
+	}
 
 	/*
 	 * Load the microcode before reaching the AP alive synchronization
