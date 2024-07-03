@@ -16,7 +16,8 @@ struct sk_buff;
  * struct flow_dissector_key_control:
  * @thoff:     Transport header offset
  * @addr_type: Type of key. One of FLOW_DISSECTOR_KEY_*
- * @flags:     Key flags. Any of FLOW_DIS_(IS_FRAGMENT|FIRST_FRAGENCAPSULATION)
+ * @flags:     Key flags.
+ *             Any of FLOW_DIS_(IS_FRAGMENT|FIRST_FRAG|ENCAPSULATION|F_*)
  */
 struct flow_dissector_key_control {
 	u16	thoff;
@@ -24,9 +25,17 @@ struct flow_dissector_key_control {
 	u32	flags;
 };
 
-#define FLOW_DIS_IS_FRAGMENT	BIT(0)
-#define FLOW_DIS_FIRST_FRAG	BIT(1)
-#define FLOW_DIS_ENCAPSULATION	BIT(2)
+/* Please keep these flags in sync with TCA_FLOWER_KEY_FLAGS_*
+ * in include/uapi/linux/pkt_cls.h, as these bit flags are exposed
+ * to userspace in some error paths, ie. unsupported flags.
+ */
+#define FLOW_DIS_IS_FRAGMENT		BIT(0)
+#define FLOW_DIS_FIRST_FRAG		BIT(1)
+#define FLOW_DIS_ENCAPSULATION		BIT(2)
+#define FLOW_DIS_F_TUNNEL_CSUM		BIT(3)
+#define FLOW_DIS_F_TUNNEL_DONT_FRAGMENT	BIT(4)
+#define FLOW_DIS_F_TUNNEL_OAM		BIT(5)
+#define FLOW_DIS_F_TUNNEL_CRIT_OPT	BIT(6)
 
 enum flow_dissect_ret {
 	FLOW_DISSECT_RET_OUT_GOOD,
