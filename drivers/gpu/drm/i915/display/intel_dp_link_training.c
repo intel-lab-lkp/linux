@@ -199,6 +199,24 @@ out_reset_lttpr_count:
 	return 0;
 }
 
+static void intel_dp_dump_lttpr_phy_desc(struct intel_dp *intel_dp, enum drm_dp_phy dp_phy)
+{
+	struct drm_i915_private *i915 = dp_to_i915(intel_dp);
+	struct drm_dp_dpcd_ident ident;
+
+	if (drm_dp_dpcd_read(&intel_dp->aux, DP_OUI_PHY_REPEATER(dp_phy),
+			     &ident, sizeof(ident)) < 0)
+		return;
+
+	drm_dbg_kms(&i915->drm,
+		    "%s: %s: OUI %*phD dev-ID %*pE HW-rev %d.%d SW-rev %d.%d\n",
+		    intel_dp->aux.name, drm_dp_phy_name(dp_phy),
+		    (int)sizeof(ident.oui), ident.oui,
+		    (int)strnlen(ident.device_id, sizeof(ident.device_id)), ident.device_id,
+		    ident.hw_rev >> 4, ident.hw_rev & 0xf,
+		    ident.sw_major_rev, ident.sw_minor_rev);
+}
+
 static int intel_dp_init_lttpr(struct intel_dp *intel_dp, const u8 dpcd[DP_RECEIVER_CAP_SIZE])
 {
 	int lttpr_count;
@@ -206,8 +224,10 @@ static int intel_dp_init_lttpr(struct intel_dp *intel_dp, const u8 dpcd[DP_RECEI
 
 	lttpr_count = intel_dp_init_lttpr_phys(intel_dp, dpcd);
 
-	for (i = 0; i < lttpr_count; i++)
+	for (i = 0; i < lttpr_count; i++) {
 		intel_dp_read_lttpr_phy_caps(intel_dp, dpcd, DP_PHY_LTTPR(i));
+		intel_dp_dump_lttpr_phy_desc(intel_dp, DP_PHY_LTTPR(i));
+	}
 
 	return lttpr_count;
 }
