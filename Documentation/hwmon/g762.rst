@@ -68,5 +68,3 @@ is performed to match that target value. The fan speed value is computed
 based on the parameters associated with the physical characteristics of the
 system: a reference clock source frequency, a number of pulses per fan
 revolution, etc.
-
-Note that the driver will update its values at most once per second.
