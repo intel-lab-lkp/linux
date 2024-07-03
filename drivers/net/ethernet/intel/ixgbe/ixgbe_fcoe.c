@@ -398,7 +398,7 @@ int ixgbe_fcoe_ddp(struct ixgbe_adapter *adapter,
 	if (fcerr == cpu_to_le32(IXGBE_FCERR_BADCRC))
 		skb->ip_summed = CHECKSUM_NONE;
 	else
-		skb->ip_summed = CHECKSUM_UNNECESSARY;
+		skb_set_csum_crc32_unnecessary(skb);
 
 	if (eth_hdr(skb)->h_proto == htons(ETH_P_8021Q))
 		fh = (struct fc_frame_header *)(skb->data +
