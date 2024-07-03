@@ -5547,12 +5547,17 @@ static int init_rescuer(struct workqueue_struct *wq)
 		return ret;
 	}
 
+	/* lock wq_pool_attach_mutex for wq_unbound_cpumask */
+	mutex_lock(&wq_pool_attach_mutex);
+
 	wq->rescuer = rescuer;
 	if (wq->flags & WQ_UNBOUND)
 		kthread_bind_mask(rescuer->task, wq_unbound_cpumask);
 	else
 		kthread_bind_mask(rescuer->task, cpu_possible_mask);
 	wake_up_process(rescuer->task);
+
+	mutex_unlock(&wq_pool_attach_mutex);
 
 	return 0;
 }
