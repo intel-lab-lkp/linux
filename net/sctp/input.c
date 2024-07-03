@@ -124,14 +124,12 @@ int sctp_rcv(struct sk_buff *skb)
 	/* Pull up the IP header. */
 	__skb_pull(skb, skb_transport_offset(skb));
 
-	skb->csum_valid = 0; /* Previous value not applicable */
-	if (skb_csum_unnecessary(skb))
-		__skb_decr_checksum_unnecessary(skb);
+	if (skb_csum_crc32_unnecessary(skb))
+		skb_reset_csum_crc32_unnecessary(skb);
 	else if (!sctp_checksum_disable &&
 		 !is_gso &&
 		 sctp_rcv_checksum(net, skb) < 0)
 		goto discard_it;
-	skb->csum_valid = 1;
 
 	__skb_pull(skb, sizeof(struct sctphdr));
 
