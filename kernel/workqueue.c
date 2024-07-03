@@ -5718,11 +5718,11 @@ struct workqueue_struct *alloc_workqueue(const char *fmt,
 			goto err_unreg_lockdep;
 	}
 
-	if (alloc_and_link_pwqs(wq) < 0)
+	if (wq_online && init_rescuer(wq) < 0)
 		goto err_free_node_nr_active;
 
-	if (wq_online && init_rescuer(wq) < 0)
-		goto err_destroy;
+	if (alloc_and_link_pwqs(wq) < 0)
+		goto err_free_rescuer;
 
 	/*
 	 * wq_pool_mutex protects global freeze state and workqueues list.
@@ -5744,6 +5744,8 @@ struct workqueue_struct *alloc_workqueue(const char *fmt,
 
 	return wq;
 
+err_free_rescuer:
+	destroy_rescuer(wq);
 err_free_node_nr_active:
 	if (wq->flags & WQ_UNBOUND)
 		free_node_nr_active(wq->node_nr_active);
