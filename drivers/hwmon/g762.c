@@ -38,19 +38,12 @@
 #include <linux/hwmon-sysfs.h>
 #include <linux/jiffies.h>
 #include <linux/kernel.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
-#include <linux/of.h>
+#include <linux/property.h>
 
 #define DRVNAME "g762"
-
-static const struct i2c_device_id g762_id[] = {
-	{ "g761" },
-	{ "g762" },
-	{ "g763" },
-	{ }
-};
-MODULE_DEVICE_TABLE(i2c, g762_id);
 
 enum g762_regs {
 	G762_REG_SET_CNT  = 0x00,
@@ -317,7 +310,7 @@ static int do_set_fan_div(struct device *dev, unsigned long val)
 }
 
 /* Set fan gear mode. Accepts either 0, 1 or 2. */
-static int do_set_fan_gear_mode(struct device *dev, unsigned long val)
+static int do_set_fan_gear_mode(struct device *dev, u32 val)
 {
 	struct g762_data *data = g762_update_client(dev);
 	int ret;
@@ -508,103 +501,6 @@ static int do_set_fan_startv(struct device *dev, unsigned long val)
 
 	return ret;
 }
-
-/*
- * Helper to import hardware characteristics from .dts file and push
- * those to the chip.
- */
-
-#ifdef CONFIG_OF
-static const struct of_device_id g762_dt_match[] = {
-	{ .compatible = "gmt,g761" },
-	{ .compatible = "gmt,g762" },
-	{ .compatible = "gmt,g763" },
-	{ },
-};
-MODULE_DEVICE_TABLE(of, g762_dt_match);
-
-/*
- * Grab clock (a required property), enable it, get (fixed) clock frequency
- * and store it.
- */
-static int g762_of_clock_enable(struct device *dev, bool *internal)
-{
-	unsigned long clk_freq = 32768;
-	struct clk *clk;
-	bool _internal;
-	int ret;
-
-	_internal = of_device_is_compatible(dev->of_node, "gmt,g761") &&
-			       !of_property_present(dev->of_node, "clocks");
-	if (!_internal) {
-		clk = devm_clk_get_enabled(dev, NULL);
-		if (IS_ERR(clk)) {
-			if (dev->of_node)
-				return dev_err_probe(dev, PTR_ERR(clk), "failed to enable clock\n");
-		} else {
-			clk_freq = clk_get_rate(clk);
-		}
-	}
-
-	ret = do_set_clk_freq(dev, clk_freq);
-	if (ret)
-		return dev_err_probe(dev, ret, "invalid clock freq %lu\n", clk_freq);
-
-	*internal = _internal;
-	return 0;
-}
-
-static int g762_of_prop_import_one(struct i2c_client *client,
-				   const char *pname,
-				   int (*psetter)(struct device *dev,
-						  unsigned long val))
-{
-	int ret;
-	u32 pval;
-
-	if (of_property_read_u32(client->dev.of_node, pname, &pval))
-		return 0;
-
-	dev_dbg(&client->dev, "found %s (%d)\n", pname, pval);
-	ret = (*psetter)(&client->dev, pval);
-	if (ret)
-		dev_err(&client->dev, "unable to set %s (%d)\n", pname, pval);
-
-	return ret;
-}
-
-static int g762_of_prop_import(struct i2c_client *client)
-{
-	int ret;
-
-	if (!client->dev.of_node)
-		return 0;
-
-	ret = g762_of_prop_import_one(client, "fan_gear_mode",
-				      do_set_fan_gear_mode);
-	if (ret)
-		return ret;
-
-	ret = g762_of_prop_import_one(client, "pwm_polarity",
-				      do_set_pwm_polarity);
-	if (ret)
-		return ret;
-
-	return g762_of_prop_import_one(client, "fan_startv",
-				       do_set_fan_startv);
-}
-
-#else
-static int g762_of_prop_import(struct i2c_client *client)
-{
-	return 0;
-}
-
-static int g762_of_clock_enable(struct device *dev)
-{
-	return 0;
-}
-#endif
 
 /*
  * sysfs attributes
@@ -937,12 +833,77 @@ static inline int g762_fan_init(struct device *dev, bool internal)
 					 data->fan_cmd2);
 }
 
+/*
+ * Grab clock (a required property), enable it, get (fixed) clock frequency
+ * and store it.
+ */
+static int g762_clock_enable(struct device *dev, bool *internal)
+{
+	unsigned long clk_freq = 32768;
+	struct clk *clk;
+	bool _internal;
+	int ret;
+
+	_internal = device_is_compatible(dev, "gmt,g761") &&
+			       !device_property_present(dev, "clocks");
+	if (!_internal) {
+		clk = devm_clk_get_enabled(dev, NULL);
+		if (IS_ERR(clk)) {
+			if (dev_fwnode(dev))
+				return dev_err_probe(dev, PTR_ERR(clk), "failed to enable clock\n");
+		} else {
+			clk_freq = clk_get_rate(clk);
+		}
+	}
+
+	ret = do_set_clk_freq(dev, clk_freq);
+	if (ret)
+		return dev_err_probe(dev, ret, "invalid clock freq %lu\n", clk_freq);
+
+	*internal = _internal;
+	return 0;
+}
+
+static int g762_configure(struct device *dev)
+{
+	bool internal;
+	u32 property;
+	int ret;
+
+	ret = g762_clock_enable(dev, &internal);
+	if (ret)
+		return ret;
+
+	/* Enable fan failure detection and fan out of control protection */
+	ret = g762_fan_init(dev, internal);
+	if (ret)
+		return ret;
+
+	if (!device_property_read_u32(dev, "fan_gear_mode", &property)) {
+		ret = do_set_fan_gear_mode(dev, property);
+		if (ret)
+			return ret;
+	}
+
+	if (!device_property_read_u32(dev, "pwm_polarity", &property)) {
+		ret = do_set_pwm_polarity(dev, property);
+		if (ret)
+			return ret;
+	}
+
+	if (!device_property_read_u32(dev, "fan_startv", &property)) {
+		ret = do_set_fan_startv(dev, property);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+
 static int g762_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
 	struct device *hwmon_dev;
 	struct g762_data *data;
-	bool internal;
 	int ret;
 
 	if (!i2c_check_functionality(client->adapter,
@@ -953,21 +914,11 @@ static int g762_probe(struct i2c_client *client)
 	if (!data)
 		return -ENOMEM;
 
-	i2c_set_clientdata(client, data);
+	dev_set_drvdata(dev, data);
 	data->client = client;
 	mutex_init(&data->update_lock);
 
-	/* Get configuration via DT ... */
-	ret = g762_of_clock_enable(dev, &internal);
-	if (ret)
-		return ret;
-
-	/* Enable fan failure detection and fan out of control protection */
-	ret = g762_fan_init(dev, internal);
-	if (ret)
-		return ret;
-
-	ret = g762_of_prop_import(client);
+	ret = g762_configure(dev);
 	if (ret)
 		return ret;
 
@@ -976,10 +927,26 @@ static int g762_probe(struct i2c_client *client)
 	return PTR_ERR_OR_ZERO(hwmon_dev);
 }
 
+static const struct of_device_id g762_dt_match[] = {
+	{ .compatible = "gmt,g761" },
+	{ .compatible = "gmt,g762" },
+	{ .compatible = "gmt,g763" },
+	{ },
+};
+MODULE_DEVICE_TABLE(of, g762_dt_match);
+
+static const struct i2c_device_id g762_id[] = {
+	{ "g761" },
+	{ "g762" },
+	{ "g763" },
+	{ }
+};
+MODULE_DEVICE_TABLE(i2c, g762_id);
+
 static struct i2c_driver g762_driver = {
 	.driver = {
 		.name = DRVNAME,
-		.of_match_table = of_match_ptr(g762_dt_match),
+		.of_match_table = g762_dt_match,
 	},
 	.probe = g762_probe,
 	.id_table = g762_id,
