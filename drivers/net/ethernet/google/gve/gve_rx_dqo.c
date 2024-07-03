@@ -625,8 +625,10 @@ static void gve_rx_skb_csum(struct sk_buff *skb,
 	case GVE_L4_TYPE_TCP:
 	case GVE_L4_TYPE_UDP:
 	case GVE_L4_TYPE_ICMP:
-	case GVE_L4_TYPE_SCTP:
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
+		break;
+	case GVE_L4_TYPE_SCTP:
+		skb_set_csum_crc32_unnecessary(skb);
 		break;
 	default:
 		break;
