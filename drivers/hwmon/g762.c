@@ -117,8 +117,6 @@ enum g762_regs {
 
 struct g762_data {
 	struct i2c_client *client;
-	bool internal_clock;
-	struct clk *clk;
 
 	/* update mutex */
 	struct mutex update_lock;
@@ -578,80 +576,33 @@ MODULE_DEVICE_TABLE(of, g762_dt_match);
 
 /*
  * Grab clock (a required property), enable it, get (fixed) clock frequency
- * and store it. Note: upon success, clock has been prepared and enabled; it
- * must later be unprepared and disabled (e.g. during module unloading) by a
- * call to g762_of_clock_disable(). Note that a reference to clock is kept
- * in our private data structure to be used in this function.
+ * and store it.
  */
-static void g762_of_clock_disable(void *data)
+static int g762_of_clock_enable(struct device *dev, bool *internal)
 {
-	struct g762_data *g762 = data;
-
-	clk_disable_unprepare(g762->clk);
-	clk_put(g762->clk);
-}
-
-static int g762_of_clock_enable(struct i2c_client *client)
-{
-	struct g762_data *data;
-	unsigned long clk_freq;
+	unsigned long clk_freq = 32768;
 	struct clk *clk;
+	bool _internal;
 	int ret;
 
-	if (!client->dev.of_node)
-		return 0;
-
-	data = i2c_get_clientdata(client);
-
-	/*
-	 * Skip CLK detection and handling if we use internal clock.
-	 * This is only valid for g761.
-	 */
-	data->internal_clock = of_device_is_compatible(client->dev.of_node,
-						       "gmt,g761") &&
-			       !of_property_present(client->dev.of_node,
-						    "clocks");
-	if (data->internal_clock) {
-		do_set_clk_freq(&client->dev, 32768);
-		return 0;
+	_internal = of_device_is_compatible(dev->of_node, "gmt,g761") &&
+			       !of_property_present(dev->of_node, "clocks");
+	if (!_internal) {
+		clk = devm_clk_get_enabled(dev, NULL);
+		if (IS_ERR(clk)) {
+			if (dev->of_node)
+				return dev_err_probe(dev, PTR_ERR(clk), "failed to enable clock\n");
+		} else {
+			clk_freq = clk_get_rate(clk);
+		}
 	}
 
-	clk = of_clk_get(client->dev.of_node, 0);
-	if (IS_ERR(clk)) {
-		dev_err(&client->dev, "failed to get clock\n");
-		return PTR_ERR(clk);
-	}
+	ret = do_set_clk_freq(dev, clk_freq);
+	if (ret)
+		return dev_err_probe(dev, ret, "invalid clock freq %lu\n", clk_freq);
 
-	ret = clk_prepare_enable(clk);
-	if (ret) {
-		dev_err(&client->dev, "failed to enable clock\n");
-		goto clk_put;
-	}
-
-	clk_freq = clk_get_rate(clk);
-	ret = do_set_clk_freq(&client->dev, clk_freq);
-	if (ret) {
-		dev_err(&client->dev, "invalid clock freq %lu\n", clk_freq);
-		goto clk_unprep;
-	}
-
-	data->clk = clk;
-
-	ret = devm_add_action(&client->dev, g762_of_clock_disable, data);
-	if (ret) {
-		dev_err(&client->dev, "failed to add disable clock action\n");
-		goto clk_unprep;
-	}
-
+	*internal = _internal;
 	return 0;
-
- clk_unprep:
-	clk_disable_unprepare(clk);
-
- clk_put:
-	clk_put(clk);
-
-	return ret;
 }
 
 static int g762_of_prop_import_one(struct i2c_client *client,
@@ -700,7 +651,7 @@ static int g762_of_prop_import(struct i2c_client *client)
 	return 0;
 }
 
-static int g762_of_clock_enable(struct i2c_client *client)
+static int g762_of_clock_enable(struct device *dev)
 {
 	return 0;
 }
@@ -1040,7 +991,7 @@ ATTRIBUTE_GROUPS(g762);
  * function does not protect change/access to data structure; it must thus
  * only be called during initialization.
  */
-static inline int g762_fan_init(struct device *dev)
+static inline int g762_fan_init(struct device *dev, bool internal)
 {
 	struct g762_data *data = g762_update_client(dev);
 	int ret;
@@ -1049,7 +1000,7 @@ static inline int g762_fan_init(struct device *dev)
 		return PTR_ERR(data);
 
 	/* internal_clock can only be set with compatible g761 */
-	if (data->internal_clock)
+	if (internal)
 		data->fan_cmd2 |= G761_REG_FAN_CMD2_FAN_CLOCK;
 
 	data->fan_cmd1 |= G762_REG_FAN_CMD1_DET_FAN_FAIL;
@@ -1070,6 +1021,7 @@ static int g762_probe(struct i2c_client *client)
 	struct device *dev = &client->dev;
 	struct device *hwmon_dev;
 	struct g762_data *data;
+	bool internal;
 	int ret;
 
 	if (!i2c_check_functionality(client->adapter,
@@ -1085,12 +1037,12 @@ static int g762_probe(struct i2c_client *client)
 	mutex_init(&data->update_lock);
 
 	/* Get configuration via DT ... */
-	ret = g762_of_clock_enable(client);
+	ret = g762_of_clock_enable(dev, &internal);
 	if (ret)
 		return ret;
 
 	/* Enable fan failure detection and fan out of control protection */
-	ret = g762_fan_init(dev);
+	ret = g762_fan_init(dev, internal);
 	if (ret)
 		return ret;
 
