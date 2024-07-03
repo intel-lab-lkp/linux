@@ -40,6 +40,7 @@
 #include "namespaces.h"
 #include "thread.h"
 #include "hashmap.h"
+#include "strbuf.h"
 #include <regex.h>
 #include <linux/bitops.h>
 #include <linux/kernel.h>
@@ -47,6 +48,7 @@
 #include <linux/zalloc.h>
 #include <subcmd/parse-options.h>
 #include <subcmd/run-command.h>
+#include <math.h>
 
 /* FIXME: For the HE_COLORSET */
 #include "ui/browser.h"
@@ -1704,6 +1706,105 @@ static void ipc_coverage_string(char *bf, int size, struct annotation *notes)
 
 	scnprintf(bf, size, "(Average IPC: %.2f, IPC Coverage: %.1f%%)",
 		  ipc, coverage);
+}
+
+int annotation_br_cntr_abbr_list(char **str, struct evsel *evsel, bool header)
+{
+	struct evsel *pos;
+	struct strbuf sb;
+
+	if (evsel->evlist->nr_br_cntr <= 0)
+		return -ENOTSUP;
+
+	strbuf_init(&sb, /*hint=*/ 0);
+
+	if (header && strbuf_addf(&sb, "# Branch counter abbr list:\n"))
+		goto err;
+
+	evlist__for_each_entry(evsel->evlist, pos) {
+		if (!(pos->core.attr.branch_sample_type & PERF_SAMPLE_BRANCH_COUNTERS))
+			continue;
+		if (header && strbuf_addf(&sb, "#"))
+			goto err;
+
+		if (strbuf_addf(&sb, " %s = %s\n", pos->name, pos->abbr_name))
+			goto err;
+	}
+
+	if (header && strbuf_addf(&sb, "#"))
+		goto err;
+	if (strbuf_addf(&sb, " '-' No event occurs\n"))
+		goto err;
+
+	if (header && strbuf_addf(&sb, "#"))
+		goto err;
+	if (strbuf_addf(&sb, " '+' Event occurrences may be lost due to branch counter saturated\n"))
+		goto err;
+
+	*str = strbuf_detach(&sb, NULL);
+
+	return 0;
+err:
+	strbuf_release(&sb);
+	return -ENOMEM;
+}
+
+int annotation_br_cntr_entry(char **str, int br_cntr_nr,
+			     u64 *br_cntr, int num_aggr,
+			     struct evsel *evsel)
+{
+	struct evsel *pos = evsel ? evlist__first(evsel->evlist) : NULL;
+	int i, j, avg, used;
+	struct strbuf sb;
+
+	strbuf_init(&sb, /*hint=*/ 0);
+	for (i = 0; i < br_cntr_nr; i++) {
+		used = 0;
+		avg = ceil((double)(br_cntr[i] & ~ANNOTATION__BR_CNTR_SATURATED_FLAG) /
+			   (double)num_aggr);
+
+		if (strbuf_addch(&sb, '|'))
+			goto err;
+
+		if (!br_cntr[i]) {
+			if (strbuf_addch(&sb, '-'))
+				goto err;
+			used++;
+		} else {
+			evlist__for_each_entry_from(evsel->evlist, pos) {
+				if ((pos->core.attr.branch_sample_type & PERF_SAMPLE_BRANCH_COUNTERS) &&
+				    (pos->br_cntr_idx == i))
+					break;
+			}
+			for (j = 0; j < avg; j++, used++) {
+				if (strbuf_addstr(&sb, pos->abbr_name))
+					goto err;
+			}
+
+			if (br_cntr[i] & ANNOTATION__BR_CNTR_SATURATED_FLAG) {
+				if (strbuf_addch(&sb, '+'))
+					goto err;
+				used++;
+			}
+			pos = list_next_entry(pos, core.node);
+		}
+
+		/* Assume the branch counter saturated at 3 */
+		for (j = used; j < 4; j++) {
+			if (strbuf_addch(&sb, ' '))
+				goto err;
+		}
+	}
+
+	if (strbuf_addch(&sb, br_cntr_nr ? '|' : ' '))
+		goto err;
+
+	*str = strbuf_detach(&sb, NULL);
+
+	return 0;
+err:
+	strbuf_release(&sb);
+	return -ENOMEM;
 }
 
 static void __annotation_line__write(struct annotation_line *al, struct annotation *notes,
