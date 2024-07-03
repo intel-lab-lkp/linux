@@ -1061,6 +1061,18 @@ static void dwc3_set_incr_burst_type(struct dwc3 *dwc)
 
 	cfg = dwc3_readl(dwc->regs, DWC3_GSBUSCFG0);
 
+	if (of_device_is_compatible(dev->of_node, "fsl,ls-dwc3")) {
+
+		cfg &= ~(DWC3_GSBUSCFG0_DATARD | DWC3_GSBUSCFG0_DESCRD |
+			 DWC3_GSBUSCFG0_DATAWR | DWC3_GSBUSCFG0_DESCWR);
+		cfg |= FIELD_PREP(DWC3_GSBUSCFG0_DATARD, 2) |
+		       FIELD_PREP(DWC3_GSBUSCFG0_DESCRD, 2) |
+		       FIELD_PREP(DWC3_GSBUSCFG0_DATAWR, 2) |
+		       FIELD_PREP(DWC3_GSBUSCFG0_DESCWR, 2);
+
+		dwc3_writel(dwc->regs, DWC3_GSBUSCFG0, cfg);
+	}
+
 	/*
 	 * Handle property "snps,incr-burst-type-adjustment".
 	 * Get the number of value from this property:
