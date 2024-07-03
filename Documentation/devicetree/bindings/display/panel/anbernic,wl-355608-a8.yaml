@@ -39,6 +39,9 @@ examples:
         #address-cells = <1>;
         #size-cells = <0>;
 
+        sck-gpios = <&pio 8 9 GPIO_ACTIVE_HIGH>; // PI9
+        num-chipselects = <1>;
+
         panel@0 {
             compatible = "anbernic,wl-355608-a8";
             reg = <0>;
