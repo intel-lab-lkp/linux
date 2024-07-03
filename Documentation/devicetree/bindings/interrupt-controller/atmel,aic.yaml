@@ -54,6 +54,10 @@ properties:
     $ref: /schemas/types.yaml#/definitions/uint32-array
     description: u32 array of external irqs.
 
+  microchip,nr-irqs:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    description: u32 array of nr_irqs.
+
 allOf:
   - $ref: /schemas/interrupt-controller.yaml#
   - if:
@@ -71,6 +75,14 @@ allOf:
         atmel,external-irqs:
           minItems: 1
           maxItems: 1
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: microchip,sam9x7-aic
+    then:
+      required:
+        - microchip,nr-irqs
 
 required:
   - compatible
