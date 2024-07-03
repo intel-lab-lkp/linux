@@ -32,6 +32,7 @@ properties:
   compatible:
     contains:
       oneOf:
+        - const: fsl,ls-dwc3
         - const: snps,dwc3
         - const: synopsys,dwc3
           deprecated: true
