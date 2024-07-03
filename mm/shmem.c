@@ -2509,8 +2509,8 @@ static struct inode *__shmem_get_inode(struct mnt_idmap *idmap,
 	inode->i_ino = ino;
 	inode_init_owner(idmap, inode, dir, mode);
 	inode->i_blocks = 0;
-	simple_inode_init_ts(inode);
 	inode->i_generation = get_random_u32();
+	simple_inode_init_ts(inode);
 	info = SHMEM_I(inode);
 	memset(info, 0, (char *)inode - (char *)info);
 	spin_lock_init(&info->lock);
