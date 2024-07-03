@@ -49,7 +49,10 @@ properties:
   interrupt-controller:
     description:
       This property applies if either keypad,num-rows lower than 8 or
-      keypad,num-columns lower than 10.
+      keypad,num-columns lower than 10. This property does not apply if
+      keypad,num-rows or keypad,num-columns are not specified since the
+      device then acts as gpio only, during which interrupts are not
+      utilized.
 
   '#interrupt-cells':
     const: 2
@@ -65,13 +68,15 @@ properties:
     minItems: 1
     maxItems: 2
 
+dependencies:
+  keypad,num-rows: ["keypad,num-columns"]
+  keypad,num-cols: ["keypad,num-rows"]
+  linux,keymap: ["keypad,num-rows"]
+  interrupts: ["linux,keymap"]
+
 required:
   - compatible
   - reg
-  - interrupts
-  - keypad,num-rows
-  - keypad,num-columns
-  - linux,keymap
 
 unevaluatedProperties: false
 
@@ -108,4 +113,22 @@ examples:
             >;
         };
     };
+
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    #include <dt-bindings/input/input.h>
+    #include <dt-bindings/gpio/gpio.h>
+
+    i2c {
+      #address-cells = <1>;
+      #size-cells = <0>;
+        gpio@34 {
+            compatible = "adi,adp5588";
+            reg = <0x34>;
+
+            #gpio-cells = <2>;
+            gpio-controller;
+            };
+        };
+
 ...
