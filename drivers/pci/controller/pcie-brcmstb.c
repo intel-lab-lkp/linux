@@ -1216,7 +1216,9 @@ static void brcm_config_clkreq(struct brcm_pcie *pcie)
 		 * atypical and should happen only with older devices.
 		 */
 		clkreq_cntl |= PCIE_MISC_HARD_PCIE_HARD_DEBUG_L1SS_ENABLE_MASK;
-		brcm_extend_rbus_timeout(pcie);
+		/* 7712 does not have this (RGR1) timer */
+		if (pcie->type != BCM7712)
+			brcm_extend_rbus_timeout(pcie);
 
 	} else {
 		/*
@@ -1628,6 +1630,13 @@ static const int pcie_offsets_bmips_7425[] = {
 	[PCIE_INTR2_CPU_BASE] = 0x4300,
 };
 
+static const int pcie_offset_bcm7712[] = {
+	[EXT_CFG_INDEX]  = 0x9000,
+	[EXT_CFG_DATA]   = 0x9004,
+	[PCIE_HARD_DEBUG] = 0x4304,
+	[PCIE_INTR2_CPU_BASE] = 0x4400,
+};
+
 static const struct pcie_cfg_data generic_cfg = {
 	.offsets	= pcie_offsets,
 	.type		= GENERIC,
@@ -1686,6 +1695,13 @@ static const struct pcie_cfg_data bcm7216_cfg = {
 	.has_phy	= true,
 };
 
+static const struct pcie_cfg_data bcm7712_cfg = {
+	.offsets	= pcie_offset_bcm7712,
+	.perst_set	= brcm_pcie_perst_set_7278,
+	.bridge_sw_init_set = brcm_pcie_bridge_sw_init_set_generic,
+	.type		= BCM7712,
+};
+
 static const struct of_device_id brcm_pcie_match[] = {
 	{ .compatible = "brcm,bcm2711-pcie", .data = &bcm2711_cfg },
 	{ .compatible = "brcm,bcm4908-pcie", .data = &bcm4908_cfg },
@@ -1695,6 +1711,7 @@ static const struct of_device_id brcm_pcie_match[] = {
 	{ .compatible = "brcm,bcm7445-pcie", .data = &generic_cfg },
 	{ .compatible = "brcm,bcm7435-pcie", .data = &bcm7435_cfg },
 	{ .compatible = "brcm,bcm7425-pcie", .data = &bcm7425_cfg },
+	{ .compatible = "brcm,bcm7712-pcie", .data = &bcm7712_cfg },
 	{},
 };
 
