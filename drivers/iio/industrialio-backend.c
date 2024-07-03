@@ -357,6 +357,36 @@ int devm_iio_backend_request_buffer(struct device *dev,
 }
 EXPORT_SYMBOL_NS_GPL(devm_iio_backend_request_buffer, IIO_BACKEND);
 
+/**
+ * iio_backend_read_scale - Request channel scale from the IIO backend.
+ * @back:	Backend device
+ * @chan:	IIO channel reference
+ * @scale:	returned scale value
+ *
+ * RETURNS:
+ * 0 on success, negative error number on failure.
+ */
+int iio_backend_read_scale(struct iio_backend *back, struct iio_chan_spec const *chan, int *scale)
+{
+	return iio_backend_op_call(back, read_raw, chan, scale, 0, IIO_CHAN_INFO_SCALE);
+}
+EXPORT_SYMBOL_NS_GPL(iio_backend_read_scale, IIO_BACKEND);
+
+/**
+ * iio_backend_read_offset - Request channel offset from the IIO backend.
+ * @back:	Backend device
+ * @chan:	IIO channel reference
+ * @offset:	returned offset value
+ *
+ * RETURNS:
+ * 0 on success, negative error number on failure.
+ */
+int iio_backend_read_offset(struct iio_backend *back, struct iio_chan_spec const *chan, int *offset)
+{
+	return iio_backend_op_call(back, read_raw, chan, offset, 0, IIO_CHAN_INFO_OFFSET);
+}
+EXPORT_SYMBOL_NS_GPL(iio_backend_read_offset, IIO_BACKEND);
+
 static struct iio_backend *iio_backend_from_indio_dev_parent(const struct device *dev)
 {
 	struct iio_backend *back = ERR_PTR(-ENODEV), *iter;
