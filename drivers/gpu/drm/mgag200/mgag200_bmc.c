@@ -14,7 +14,7 @@ static struct mgag200_bmc_connector *to_mgag200_bmc_connector(struct drm_connect
 	return container_of(connector, struct mgag200_bmc_connector, base);
 }
 
-static void mgag200_bmc_disable_vidrst(struct mga_device *mdev)
+static void mgag200_bmc_stop_scanout(struct mga_device *mdev)
 {
 	u8 tmp;
 	int iter_max;
@@ -78,11 +78,11 @@ static void mgag200_bmc_encoder_helper_atomic_disable(struct drm_encoder *encode
 {
 	struct mga_device *mdev = to_mga_device(encoder->dev);
 
-	if (mdev->info->has_vidrst)
-		mgag200_bmc_disable_vidrst(mdev);
+	if (mdev->info->sync_bmc)
+		mgag200_bmc_stop_scanout(mdev);
 }
 
-static void mgag200_bmc_enable_vidrst(struct mga_device *mdev)
+static void mgag200_bmc_start_scanout(struct mga_device *mdev)
 {
 	u8 tmp;
 
@@ -117,8 +117,8 @@ static void mgag200_bmc_encoder_helper_atomic_enable(struct drm_encoder *encoder
 {
 	struct mga_device *mdev = to_mga_device(encoder->dev);
 
-	if (mdev->info->has_vidrst)
-		mgag200_bmc_enable_vidrst(mdev);
+	if (mdev->info->sync_bmc)
+		mgag200_bmc_start_scanout(mdev);
 }
 
 static int mgag200_bmc_encoder_helper_atomic_check(struct drm_encoder *encoder,
@@ -128,7 +128,7 @@ static int mgag200_bmc_encoder_helper_atomic_check(struct drm_encoder *encoder,
 	struct mga_device *mdev = to_mga_device(encoder->dev);
 	struct mgag200_crtc_state *mgag200_crtc_state = to_mgag200_crtc_state(crtc_state);
 
-	if (mdev->info->has_vidrst)
+	if (mdev->info->sync_bmc)
 		mgag200_crtc_state->set_vidrst = true;
 	else
 		mgag200_crtc_state->set_vidrst = false;
