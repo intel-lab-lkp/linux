@@ -6,6 +6,8 @@
 #ifndef _SUNXI_ENGINE_H_
 #define _SUNXI_ENGINE_H_
 
+#include <drm/drm_color_mgmt.h>
+
 struct drm_plane;
 struct drm_device;
 struct drm_crtc_state;
@@ -147,6 +149,9 @@ struct sunxi_engine {
 	struct regmap			*regs;
 
 	int id;
+
+	u32				format;
+	enum drm_color_encoding		encoding;
 
 	/* Engine list management */
 	struct list_head		list;
