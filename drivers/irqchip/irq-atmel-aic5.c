@@ -403,6 +403,12 @@ IRQCHIP_DECLARE(sama5d4_aic5, "atmel,sama5d4-aic", sama5d4_aic5_of_init);
 static int __init sam9x60_aic5_of_init(struct device_node *node,
 				       struct device_node *parent)
 {
-	return aic5_of_init(node, parent, NR_SAM9X60_IRQS);
+	int ret, nr_irqs;
+
+	ret = of_property_read_u32(node, "microchip,nr-irqs", &nr_irqs);
+	if (ret)
+		return aic5_of_init(node, parent, NR_SAM9X60_IRQS);
+
+	return aic5_of_init(node, parent, nr_irqs);
 }
 IRQCHIP_DECLARE(sam9x60_aic5, "microchip,sam9x60-aic", sam9x60_aic5_of_init);
