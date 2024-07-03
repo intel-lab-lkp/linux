@@ -442,9 +442,7 @@ int mgag200_mode_config_init(struct mga_device *mdev, resource_size_t vram_avail
 /* mgag200_vga.c */
 int mgag200_vga_output_init(struct mga_device *mdev);
 
-				/* mgag200_bmc.c */
-void mgag200_bmc_disable_vidrst(struct mga_device *mdev);
-void mgag200_bmc_enable_vidrst(struct mga_device *mdev);
+/* mgag200_bmc.c */
 int mgag200_bmc_output_init(struct mga_device *mdev, struct drm_connector *physical_connector);
 
 #endif				/* __MGAG200_DRV_H__ */
