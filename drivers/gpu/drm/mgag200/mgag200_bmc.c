@@ -77,11 +77,6 @@ void mgag200_bmc_enable_vidrst(struct mga_device *mdev)
 {
 	u8 tmp;
 
-	/* Ensure that the vrsten and hrsten are set */
-	WREG8(MGAREG_CRTCEXT_INDEX, 1);
-	tmp = RREG8(MGAREG_CRTCEXT_DATA);
-	WREG8(MGAREG_CRTCEXT_DATA, tmp | 0x88);
-
 	/* Assert rstlvl2 */
 	WREG8(DAC_INDEX, MGA1064_REMHEADCTL2);
 	tmp = RREG8(DAC_DATA);
@@ -107,6 +102,25 @@ void mgag200_bmc_enable_vidrst(struct mga_device *mdev)
 	tmp &= ~0x10;
 	WREG_DAC(MGA1064_GEN_IO_DATA, tmp);
 }
+
+static int mgag200_bmc_encoder_helper_atomic_check(struct drm_encoder *encoder,
+						   struct drm_crtc_state *crtc_state,
+						   struct drm_connector_state *conn_state)
+{
+	struct mga_device *mdev = to_mga_device(encoder->dev);
+	struct mgag200_crtc_state *mgag200_crtc_state = to_mgag200_crtc_state(crtc_state);
+
+	if (mdev->info->has_vidrst)
+		mgag200_crtc_state->set_vidrst = true;
+	else
+		mgag200_crtc_state->set_vidrst = false;
+
+	return 0;
+}
+
+static const struct drm_encoder_helper_funcs mgag200_bmc_encoder_helper_funcs = {
+	.atomic_check = mgag200_bmc_encoder_helper_atomic_check,
+};
 
 static const struct drm_encoder_funcs mgag200_bmc_encoder_funcs = {
 	.destroy = drm_encoder_cleanup,
@@ -190,6 +204,8 @@ int mgag200_bmc_output_init(struct mga_device *mdev, struct drm_connector *physi
 			       DRM_MODE_ENCODER_VIRTUAL, NULL);
 	if (ret)
 		return ret;
+	drm_encoder_helper_add(encoder, &mgag200_bmc_encoder_helper_funcs);
+
 	encoder->possible_crtcs = drm_crtc_mask(crtc);
 
 	bmc_connector = &mdev->output.bmc.bmc_connector;
