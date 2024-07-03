@@ -2858,6 +2858,24 @@ static int scmi_device_request_notifier(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
+static void scmi_debugfs_stats_setup(struct scmi_info *info,
+				     struct dentry *trans)
+{
+	struct dentry *stats;
+
+	stats = debugfs_create_dir("stats", trans);
+	debugfs_create_atomic_t("response_ok", 0400, stats,
+				&info->stats.response_ok);
+	debugfs_create_atomic_t("dlyd_response_ok", 0400, stats,
+				&info->stats.dlyd_response_ok);
+	debugfs_create_atomic_t("sent_ok", 0400, stats,
+				&info->stats.sent_ok);
+	debugfs_create_atomic_t("sent_fail", 0400, stats,
+				&info->stats.sent_fail);
+	debugfs_create_atomic_t("xfers_response_timeout", 0400, stats,
+				&info->stats.xfers_response_timeout);
+}
+
 static void scmi_debugfs_common_cleanup(void *d)
 {
 	struct scmi_debug_info *dbg = d;
@@ -2923,6 +2941,9 @@ static struct scmi_debug_info *scmi_debugfs_common_setup(struct scmi_info *info)
 
 	debugfs_create_u32("rx_max_msg", 0400, trans,
 			   (u32 *)&info->rx_minfo.max_msg);
+
+	if (IS_ENABLED(CONFIG_ARM_SCMI_DEBUG_STATISTICS))
+		scmi_debugfs_stats_setup(info, trans);
 
 	dbg->top_dentry = top_dentry;
 
