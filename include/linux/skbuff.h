@@ -119,8 +119,6 @@
  *       zero UDP checksum for either IPv4 or IPv6, the networking stack
  *       may perform further validation in this case.
  *     - GRE: only if the checksum is present in the header.
- *     - SCTP: indicates the CRC in SCTP header has been validated.
- *     - FCOE: indicates the CRC in FC frame has been validated.
  *
  *   &sk_buff.csum_level indicates the number of consecutive checksums found in
  *   the packet minus one that have been verified as %CHECKSUM_UNNECESSARY.
@@ -142,7 +140,6 @@
  *
  *   - Even if device supports only some protocols, but is able to produce
  *     skb->csum, it MUST use CHECKSUM_COMPLETE, not CHECKSUM_UNNECESSARY.
- *   - CHECKSUM_COMPLETE is not applicable to SCTP and FCoE protocols.
  *
  * - %CHECKSUM_PARTIAL
  *
@@ -155,6 +152,15 @@
  *   checksums in the packet are considered verified. Any checksums in the
  *   packet that are after the checksum being offloaded are not considered to
  *   be verified.
+ *
+ * SCTP or FCOE CRC in received packets verfied by device
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ *
+ * An SCTP or FCOE CRC may be verified by device and reported as valid by a
+ * driver. This is done by setting skb->csum_valid_crc32 to 1. The helper
+ * function skb_set_csum_crc32_unnecessary should be called to do that.
+ * The CRC validation can be checked by calling skb_csum_crc32_unnecessary
+ * and cleared by calling skb_reset_csum_crc32_unnecessary
  *
  * Checksumming on transmit for non-GSO
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1007,6 +1013,9 @@ struct sk_buff {
 	__u8			slow_gro:1;
 #if IS_ENABLED(CONFIG_IP_SCTP)
 	__u8			csum_is_crc32:1;
+#endif
+#if IS_ENABLED(CONFIG_IP_SCTP) || IS_ENABLED(CONFIG_FCOE)
+	__u8			csum_valid_crc32:1;
 #endif
 
 #if defined(CONFIG_NET_SCHED) || defined(CONFIG_NET_XGRESS)
@@ -4454,6 +4463,31 @@ static inline int skb_csum_unnecessary(const struct sk_buff *skb)
 		skb->csum_valid ||
 		(skb->ip_summed == CHECKSUM_PARTIAL &&
 		 skb_checksum_start_offset(skb) >= 0));
+}
+
+static inline int skb_csum_crc32_unnecessary(const struct sk_buff *skb)
+{
+#if IS_ENABLED(CONFIG_IP_SCTP) || IS_ENABLED(CONFIG_FCOE)
+	return (skb->csum_valid_crc32 ||
+		(skb->ip_summed == CHECKSUM_PARTIAL &&
+		 skb_checksum_start_offset(skb) >= 0));
+#else
+	return 0;
+#endif
+}
+
+static inline void skb_reset_csum_crc32_unnecessary(struct sk_buff *skb)
+{
+#if IS_ENABLED(CONFIG_IP_SCTP) || IS_ENABLED(CONFIG_FCOE)
+	skb->csum_valid_crc32 = 0;
+#endif
+}
+
+static inline void skb_set_csum_crc32_unnecessary(struct sk_buff *skb)
+{
+#if IS_ENABLED(CONFIG_IP_SCTP) || IS_ENABLED(CONFIG_FCOE)
+	skb->csum_valid_crc32 = 1;
+#endif
 }
 
 /**
