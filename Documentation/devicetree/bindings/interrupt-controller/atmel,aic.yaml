@@ -17,12 +17,16 @@ description:
 
 properties:
   compatible:
-    enum:
-      - atmel,at91rm9200-aic
-      - atmel,sama5d2-aic
-      - atmel,sama5d3-aic
-      - atmel,sama5d4-aic
-      - microchip,sam9x60-aic
+    oneOf:
+      - enum:
+          - atmel,at91rm9200-aic
+          - atmel,sama5d2-aic
+          - atmel,sama5d3-aic
+          - atmel,sama5d4-aic
+          - microchip,sam9x60-aic
+      - items:
+          - const: microchip,sam9x7-aic
+          - const: microchip,sam9x60-aic
 
   reg:
     maxItems: 1
