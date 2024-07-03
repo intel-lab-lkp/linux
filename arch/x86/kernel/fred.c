@@ -26,27 +26,27 @@ void cpu_init_fred_exceptions(void)
 	/* When FRED is enabled by default, remove this log message */
 	pr_info("Initialize FRED on CPU%d\n", smp_processor_id());
 
-	wrmsrl(MSR_IA32_FRED_CONFIG,
-	       /* Reserve for CALL emulation */
-	       FRED_CONFIG_REDZONE |
-	       FRED_CONFIG_INT_STKLVL(0) |
-	       FRED_CONFIG_ENTRYPOINT(asm_fred_entrypoint_user));
+	wrmsrns(MSR_IA32_FRED_CONFIG,
+		/* Reserve for CALL emulation */
+		FRED_CONFIG_REDZONE |
+		FRED_CONFIG_INT_STKLVL(0) |
+		FRED_CONFIG_ENTRYPOINT(asm_fred_entrypoint_user));
 
 	/*
 	 * The purpose of separate stacks for NMI, #DB and #MC *in the kernel*
 	 * (remember that user space faults are always taken on stack level 0)
 	 * is to avoid overflowing the kernel stack.
 	 */
-	wrmsrl(MSR_IA32_FRED_STKLVLS,
-	       FRED_STKLVL(X86_TRAP_DB,  FRED_DB_STACK_LEVEL) |
-	       FRED_STKLVL(X86_TRAP_NMI, FRED_NMI_STACK_LEVEL) |
-	       FRED_STKLVL(X86_TRAP_MC,  FRED_MC_STACK_LEVEL) |
-	       FRED_STKLVL(X86_TRAP_DF,  FRED_DF_STACK_LEVEL));
+	wrmsrns(MSR_IA32_FRED_STKLVLS,
+		FRED_STKLVL(X86_TRAP_DB,  FRED_DB_STACK_LEVEL) |
+		FRED_STKLVL(X86_TRAP_NMI, FRED_NMI_STACK_LEVEL) |
+		FRED_STKLVL(X86_TRAP_MC,  FRED_MC_STACK_LEVEL) |
+		FRED_STKLVL(X86_TRAP_DF,  FRED_DF_STACK_LEVEL));
 
 	/* The FRED equivalents to IST stacks... */
-	wrmsrl(MSR_IA32_FRED_RSP1, __this_cpu_ist_top_va(DB));
-	wrmsrl(MSR_IA32_FRED_RSP2, __this_cpu_ist_top_va(NMI));
-	wrmsrl(MSR_IA32_FRED_RSP3, __this_cpu_ist_top_va(DF));
+	wrmsrns(MSR_IA32_FRED_RSP1, __this_cpu_ist_top_va(DB));
+	wrmsrns(MSR_IA32_FRED_RSP2, __this_cpu_ist_top_va(NMI));
+	wrmsrns(MSR_IA32_FRED_RSP3, __this_cpu_ist_top_va(DF));
 
 	/* Enable FRED */
 	cr4_set_bits(X86_CR4_FRED);
