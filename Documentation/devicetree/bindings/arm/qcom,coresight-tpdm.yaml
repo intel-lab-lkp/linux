@@ -44,6 +44,12 @@ properties:
     minItems: 1
     maxItems: 2
 
+  arm,cs-dev-name:
+    $ref: /schemas/types.yaml#/definitions/string
+    description:
+      Define the name which can describe what kind of HW or system the
+      coresight device belongs to.
+
   qcom,dsb-element-bits:
     description:
       Specifies the DSB(Discrete Single Bit) element size supported by

@@ -51,6 +51,12 @@ properties:
       - const: stm-base
       - const: stm-stimulus-base
 
+  arm,cs-dev-name:
+    $ref: /schemas/types.yaml#/definitions/string
+    description:
+      Define the name which can describe what kind of HW or system the
+      coresight device belongs to.
+
   clocks:
     minItems: 1
     maxItems: 2
