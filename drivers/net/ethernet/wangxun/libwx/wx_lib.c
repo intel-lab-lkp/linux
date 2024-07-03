@@ -558,7 +558,10 @@ static void wx_rx_checksum(struct wx_ring *ring,
 	}
 
 	/* It must be a TCP or UDP or SCTP packet with a valid checksum */
-	skb->ip_summed = CHECKSUM_UNNECESSARY;
+	if (dptype.prot == WX_DEC_PTYPE_PROT_SCTP)
+		skb_set_csum_crc32_unnecessary(skb);
+	else
+		skb->ip_summed = CHECKSUM_UNNECESSARY;
 
 	/* If there is an outer header present that might contain a checksum
 	 * we need to bump the checksum level by 1 to reflect the fact that
