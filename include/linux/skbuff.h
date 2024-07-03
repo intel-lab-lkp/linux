@@ -185,7 +185,7 @@
  *   skb_csum_hwoffload_help() can be called to resolve %CHECKSUM_PARTIAL based
  *   on network device checksumming capabilities: if a packet does not match
  *   them, skb_checksum_help() or skb_crc32c_help() (depending on the value of
- *   &sk_buff.csum_not_inet, see :ref:`crc`)
+ *   &sk_buff.csum_is_crc32, see :ref:`crc`)
  *   is called to resolve the checksum.
  *
  * - %CHECKSUM_NONE
@@ -215,12 +215,12 @@
  *     - This feature indicates that a device is capable of
  *	 offloading the SCTP CRC in a packet. To perform this offload the stack
  *	 will set csum_start and csum_offset accordingly, set ip_summed to
- *	 %CHECKSUM_PARTIAL and set csum_not_inet to 1, to provide an indication
+ *	 %CHECKSUM_PARTIAL and set csum_is_crc32 to 1, to provide an indication
  *	 in the skbuff that the %CHECKSUM_PARTIAL refers to CRC32c.
  *	 A driver that supports both IP checksum offload and SCTP CRC32c offload
  *	 must verify which offload is configured for a packet by testing the
- *	 value of &sk_buff.csum_not_inet; skb_crc32c_csum_help() is provided to
- *	 resolve %CHECKSUM_PARTIAL on skbs where csum_not_inet is set to 1.
+ *	 value of &sk_buff.csum_is_crc32; skb_crc32c_csum_help() is provided to
+ *	 resolve %CHECKSUM_PARTIAL on skbs where csum_is_crc32 is set to 1.
  *
  *   * - %NETIF_F_FCOE_CRC
  *     - This feature indicates that a device is capable of offloading the FCOE
@@ -822,7 +822,7 @@ enum skb_tstamp_type {
  *	@encapsulation: indicates the inner headers in the skbuff are valid
  *	@encap_hdr_csum: software checksum is needed
  *	@csum_valid: checksum is already valid
- *	@csum_not_inet: use CRC32c to resolve CHECKSUM_PARTIAL
+ *	@csum_is_crc32: use CRC32c to resolve CHECKSUM_PARTIAL
  *	@csum_complete_sw: checksum was completed by software
  *	@csum_level: indicates the number of consecutive checksums found in
  *		the packet minus one that have been verified as
@@ -1006,7 +1006,7 @@ struct sk_buff {
 #endif
 	__u8			slow_gro:1;
 #if IS_ENABLED(CONFIG_IP_SCTP)
-	__u8			csum_not_inet:1;
+	__u8			csum_is_crc32:1;
 #endif
 
 #if defined(CONFIG_NET_SCHED) || defined(CONFIG_NET_XGRESS)
@@ -5101,17 +5101,17 @@ static inline void skb_set_redirected_noclear(struct sk_buff *skb,
 static inline bool skb_csum_is_sctp(struct sk_buff *skb)
 {
 #if IS_ENABLED(CONFIG_IP_SCTP)
-	return skb->csum_not_inet;
+	return skb->csum_is_crc32;
 #else
 	return 0;
 #endif
 }
 
-static inline void skb_reset_csum_not_inet(struct sk_buff *skb)
+static inline void skb_reset_csum_is_crc32(struct sk_buff *skb)
 {
 	skb->ip_summed = CHECKSUM_NONE;
 #if IS_ENABLED(CONFIG_IP_SCTP)
-	skb->csum_not_inet = 0;
+	skb->csum_is_crc32 = 0;
 #endif
 }
 

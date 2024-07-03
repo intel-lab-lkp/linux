@@ -553,7 +553,7 @@ merge:
 	} else {
 chksum:
 		head->ip_summed = CHECKSUM_PARTIAL;
-		head->csum_not_inet = 1;
+		head->csum_is_crc32 = 1;
 		head->csum_start = skb_transport_header(head) - head->head;
 		head->csum_offset = offsetof(struct sctphdr, checksum);
 	}

@@ -376,7 +376,7 @@ static int tcf_csum_sctp(struct sk_buff *skb, unsigned int ihl,
 
 	sctph->checksum = sctp_compute_cksum(skb,
 					     skb_network_offset(skb) + ihl);
-	skb_reset_csum_not_inet(skb);
+	skb_reset_csum_is_crc32(skb);
 
 	return 1;
 }

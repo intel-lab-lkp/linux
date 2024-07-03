@@ -3382,7 +3382,7 @@ int skb_crc32c_csum_help(struct sk_buff *skb)
 						  skb->len - start, ~(__u32)0,
 						  crc32c_csum_stub));
 	*(__le32 *)(skb->data + offset) = crc32c_csum;
-	skb_reset_csum_not_inet(skb);
+	skb_reset_csum_is_crc32(skb);
 out:
 	return ret;
 }
