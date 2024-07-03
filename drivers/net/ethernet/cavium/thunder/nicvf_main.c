@@ -824,7 +824,10 @@ static void nicvf_rcv_pkt_handler(struct net_device *netdev,
 	skb_record_rx_queue(skb, rq_idx);
 	if (netdev->hw_features & NETIF_F_RXCSUM) {
 		/* HW by default verifies TCP/UDP/SCTP checksums */
-		skb->ip_summed = CHECKSUM_UNNECESSARY;
+		if (cqe_rx->l4_type == L4TYPE_SCTP)
+			skb_set_csum_crc32_unnecessary(skb);
+		else
+			skb->ip_summed = CHECKSUM_UNNECESSARY;
 	} else {
 		skb_checksum_none_assert(skb);
 	}
