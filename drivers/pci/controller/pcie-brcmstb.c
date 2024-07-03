@@ -1644,6 +1644,11 @@ static int brcm_pcie_probe(struct platform_device *pdev)
 		ret = PTR_ERR(pcie->perst_reset);
 		goto clk_out;
 	}
+	pcie->bridge = devm_reset_control_get_optional_exclusive(&pdev->dev, "bridge");
+	if (IS_ERR(pcie->bridge)) {
+		ret = PTR_ERR(pcie->bridge);
+		goto clk_out;
+	}
 
 	ret = reset_control_assert(pcie->swinit);
 	if (ret) {
@@ -1659,12 +1664,6 @@ static int brcm_pcie_probe(struct platform_device *pdev)
 	ret = reset_control_reset(pcie->rescal);
 	if (ret) {
 		dev_err(&pdev->dev, "failed to deassert 'rescal'\n");
-		goto clk_out;
-	}
-
-	pcie->bridge = devm_reset_control_get_optional_exclusive(&pdev->dev, "bridge");
-	if (IS_ERR(pcie->bridge)) {
-		ret = PTR_ERR(pcie->bridge);
 		goto clk_out;
 	}
 
