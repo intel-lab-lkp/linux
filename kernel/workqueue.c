@@ -5562,6 +5562,22 @@ static int init_rescuer(struct workqueue_struct *wq)
 	return 0;
 }
 
+static void destroy_rescuer(struct workqueue_struct *wq)
+{
+	struct worker *rescuer = wq->rescuer;
+
+	if (rescuer) {
+		/* this prevents new queueing */
+		raw_spin_lock_irq(&wq_mayday_lock);
+		wq->rescuer = NULL;
+		raw_spin_unlock_irq(&wq_mayday_lock);
+
+		/* rescuer will empty maydays list before exiting */
+		kthread_stop(rescuer->task);
+		kfree(rescuer);
+	}
+}
+
 /**
  * wq_adjust_max_active - update a wq's max_active to the current setting
  * @wq: target workqueue
@@ -5786,18 +5802,7 @@ void destroy_workqueue(struct workqueue_struct *wq)
 	drain_workqueue(wq);
 
 	/* kill rescuer, if sanity checks fail, leave it w/o rescuer */
-	if (wq->rescuer) {
-		struct worker *rescuer = wq->rescuer;
-
-		/* this prevents new queueing */
-		raw_spin_lock_irq(&wq_mayday_lock);
-		wq->rescuer = NULL;
-		raw_spin_unlock_irq(&wq_mayday_lock);
-
-		/* rescuer will empty maydays list before exiting */
-		kthread_stop(rescuer->task);
-		kfree(rescuer);
-	}
+	destroy_rescuer(wq);
 
 	/*
 	 * Sanity checks - grab all the locks so that we wait for all
