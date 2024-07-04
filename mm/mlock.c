@@ -409,6 +409,17 @@ out:
 	return 0;
 }
 
+static int mlock_test_walk(unsigned long start, unsigned long end,
+			   struct mm_walk *walk)
+{
+	struct vm_area_struct *vma = walk->vma;
+
+	if (is_vm_hugetlb_page(vma))
+		return 1;
+
+	return 0;
+}
+
 /*
  * mlock_vma_pages_range() - mlock any pages already in the range,
  *                           or munlock all pages in the range.
@@ -425,6 +436,7 @@ static void mlock_vma_pages_range(struct vm_area_struct *vma,
 {
 	static const struct mm_walk_ops mlock_walk_ops = {
 		.pmd_entry = mlock_pte_range,
+		.test_walk = mlock_test_walk,
 		.walk_lock = PGWALK_WRLOCK_VERIFY,
 	};
 
