@@ -9,6 +9,7 @@
 #include <linux/string.h>
 #include <linux/userfaultfd_k.h>
 #include <linux/swapops.h>
+#include <linux/hugetlb.h>
 
 /**
  * folio_is_file_lru - Should the folio be on a file LRU or anon LRU?
@@ -588,6 +589,32 @@ static inline bool vma_has_recency(struct vm_area_struct *vma)
 		return false;
 
 	return true;
+}
+
+static inline spinlock_t *pmd_huge_lock(pmd_t *pmd, struct vm_area_struct *vma)
+{
+	spinlock_t *ptl;
+
+	if (pmd_leaf(*pmd)) {
+		ptl = pmd_lock(vma->vm_mm, pmd);
+		if (pmd_leaf(*pmd))
+			return ptl;
+		spin_unlock(ptl);
+	}
+	return NULL;
+}
+
+static inline spinlock_t *pud_huge_lock(pud_t *pud, struct vm_area_struct *vma)
+{
+	spinlock_t *ptl = pud_lock(vma->vm_mm, pud);
+
+	if (pud_leaf(*pud)) {
+		ptl = pud_lock(vma->vm_mm, pud);
+		if (pud_leaf(*pud))
+			return ptl;
+		spin_unlock(ptl);
+	}
+	return NULL;
 }
 
 #endif
