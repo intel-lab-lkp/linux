@@ -4518,8 +4518,9 @@ int megasas_alloc_cmds(struct megasas_instance *instance)
  * Return 0 for only Fusion adapter, if driver load/unload is not in progress
  * or FW is not under OCR.
  */
-inline int
-dcmd_timeout_ocr_possible(struct megasas_instance *instance) {
+static int
+dcmd_timeout_ocr_possible(struct megasas_instance *instance)
+{
 
 	if (instance->adapter_type == MFI_SERIES)
 		return KILL_ADAPTER;
