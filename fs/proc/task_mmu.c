@@ -1579,6 +1579,9 @@ static int clear_refs_test_walk(unsigned long start, unsigned long end,
 	struct clear_refs_private *cp = walk->private;
 	struct vm_area_struct *vma = walk->vma;
 
+	if (is_vm_hugetlb_page(vma))
+		return 1;
+
 	if (vma->vm_flags & VM_PFNMAP)
 		return 1;
 
