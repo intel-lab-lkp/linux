@@ -3175,6 +3175,7 @@ static int gather_pte_stats(pmd_t *pmd, unsigned long addr,
 	spinlock_t *ptl;
 	pte_t *orig_pte;
 	pte_t *pte;
+	unsigned long size = PAGE_SIZE, cont_ptes = 1;
 
 #ifdef CONFIG_PGTABLE_HAS_HUGE_LEAVES
 	ptl = pmd_huge_lock(pmd, vma);
@@ -3200,6 +3201,10 @@ static int gather_pte_stats(pmd_t *pmd, unsigned long addr,
 		walk->action = ACTION_AGAIN;
 		return 0;
 	}
+	if (pte_cont(ptep_get(pte))) {
+		size = PAGE_SIZE * CONT_PTES;
+		cont_ptes = CONT_PTES;
+	}
 	do {
 		pte_t ptent = ptep_get(pte);
 		struct page *page = can_gather_numa_stats(ptent, vma, addr);
@@ -3207,7 +3212,7 @@ static int gather_pte_stats(pmd_t *pmd, unsigned long addr,
 			continue;
 		gather_stats(page, md, pte_dirty(ptent), 1);
 
-	} while (pte++, addr += PAGE_SIZE, addr != end);
+	} while (pte += cont_ptes, addr += size, addr != end);
 	pte_unmap_unlock(orig_pte, ptl);
 	cond_resched();
 	return 0;
