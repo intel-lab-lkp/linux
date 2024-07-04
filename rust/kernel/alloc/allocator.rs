@@ -16,6 +16,12 @@ use crate::bindings;
 /// `bindings::krealloc`.
 pub struct Kmalloc;
 
+/// The virtually contiguous kernel allocator.
+///
+/// The vmalloc allocator allocates pages from the page level allocator and maps them into the
+/// contiguous kernel virtual space.
+pub struct Vmalloc;
+
 /// Returns a proper size to alloc a new object aligned to `new_layout`'s alignment.
 fn aligned_size(new_layout: Layout) -> usize {
     // Customized layouts from `Layout::from_size_align()` can have size < align, so pad first.
@@ -109,6 +115,55 @@ unsafe impl GlobalAlloc for Kmalloc {
             Ok(ptr) => ptr.as_ptr().cast(),
             Err(_) => ptr::null_mut(),
         }
+    }
+}
+
+unsafe impl Allocator for Vmalloc {
+    unsafe fn realloc(
+        &self,
+        src: *mut u8,
+        old_size: usize,
+        layout: Layout,
+        flags: Flags,
+    ) -> Result<NonNull<[u8]>, AllocError> {
+        let mut size = aligned_size(layout);
+
+        let dst = if size == 0 {
+            // SAFETY: `src` is guaranteed to be previously allocated with this `Allocator` or NULL.
+            unsafe { bindings::vfree(src.cast()) };
+            NonNull::dangling()
+        } else if size <= old_size {
+            size = old_size;
+            NonNull::new(src).ok_or(AllocError)?
+        } else {
+            // SAFETY: `src` is guaranteed to point to valid memory with a size of at least
+            // `old_size`, which was previously allocated with this `Allocator` or NULL.
+            let dst = unsafe { bindings::__vmalloc_noprof(size as u64, flags.0) };
+
+            // Validate that we actually allocated the requested memory.
+            let dst = NonNull::new(dst.cast()).ok_or(AllocError)?;
+
+            if !src.is_null() {
+                // SAFETY: `src` is guaranteed to point to valid memory with a size of at least
+                // `old_size`; `dst` is guaranteed to point to valid memory with a size of at least
+                // `size`.
+                unsafe {
+                    core::ptr::copy_nonoverlapping(
+                        src,
+                        dst.as_ptr(),
+                        core::cmp::min(old_size, size),
+                    )
+                };
+
+                // SAFETY: `src` is guaranteed to be previously allocated with this `Allocator` or
+                // NULL.
+                unsafe { bindings::vfree(src.cast()) }
+            }
+
+            dst
+        };
+
+        Ok(NonNull::slice_from_raw_parts(dst, size))
     }
 }
 
