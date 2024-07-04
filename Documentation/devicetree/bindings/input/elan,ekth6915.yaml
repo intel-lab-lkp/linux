@@ -20,6 +20,7 @@ properties:
   compatible:
     enum:
       - elan,ekth6915
+      - elan,ekth6a12nay
       - ilitek,ili2901
 
   reg:
