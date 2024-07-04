@@ -33,24 +33,19 @@ impl<T> BoxExt<T> for Box<T> {
     #[cfg(not(any(test, testlib)))]
     fn new_uninit(flags: Flags) -> Result<Box<MaybeUninit<T>>, AllocError> {
         let ptr = if core::mem::size_of::<MaybeUninit<T>>() == 0 {
-            core::ptr::NonNull::<_>::dangling().as_ptr()
+            core::ptr::NonNull::dangling()
         } else {
+            let alloc: &dyn super::Allocator = &super::allocator::Kmalloc;
             let layout = core::alloc::Layout::new::<MaybeUninit<T>>();
 
             // SAFETY: Memory is being allocated (first arg is null). The only other source of
             // safety issues is sleeping on atomic context, which is addressed by klint. Lastly,
             // the type is not a SZT (checked above).
-            let ptr =
-                unsafe { super::allocator::krealloc_aligned(core::ptr::null_mut(), layout, flags) };
-            if ptr.is_null() {
-                return Err(AllocError);
-            }
-
-            ptr.cast::<MaybeUninit<T>>()
+            alloc.alloc(layout, flags)?.cast()
         };
 
         // SAFETY: For non-zero-sized types, we allocate above using the global allocator. For
         // zero-sized types, we use `NonNull::dangling`.
-        Ok(unsafe { Box::from_raw(ptr) })
+        Ok(unsafe { Box::from_raw(ptr.as_ptr()) })
     }
 }

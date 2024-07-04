@@ -118,6 +118,7 @@ impl<T> VecExt<T> for Vec<T> {
 
     #[cfg(not(any(test, testlib)))]
     fn reserve(&mut self, additional: usize, flags: Flags) -> Result<(), AllocError> {
+        let alloc: &dyn super::Allocator = &super::allocator::Kmalloc;
         let len = self.len();
         let cap = self.capacity();
 
@@ -145,16 +146,18 @@ impl<T> VecExt<T> for Vec<T> {
 
         // SAFETY: `ptr` is valid because it's either NULL or comes from a previous call to
         // `krealloc_aligned`. We also verified that the type is not a ZST.
-        let new_ptr = unsafe { super::allocator::krealloc_aligned(ptr.cast(), layout, flags) };
-        if new_ptr.is_null() {
-            // SAFETY: We are just rebuilding the existing `Vec` with no changes.
-            unsafe { rebuild(self, old_ptr, len, cap) };
-            Err(AllocError)
-        } else {
-            // SAFETY: `ptr` has been reallocated with the layout for `new_cap` elements. New cap
-            // is greater than `cap`, so it continues to be >= `len`.
-            unsafe { rebuild(self, new_ptr.cast::<T>(), len, new_cap) };
-            Ok(())
+        match unsafe { alloc.realloc(ptr.cast(), cap, layout, flags) } {
+            Ok(ptr) => {
+                // SAFETY: `ptr` has been reallocated with the layout for `new_cap` elements.
+                // `new_cap` is greater than `cap`, so it continues to be >= `len`.
+                unsafe { rebuild(self, ptr.as_ptr().cast(), len, new_cap) };
+                Ok(())
+            }
+            Err(err) => {
+                // SAFETY: We are just rebuilding the existing `Vec` with no changes.
+                unsafe { rebuild(self, old_ptr, len, cap) };
+                Err(err)
+            }
         }
     }
 }
