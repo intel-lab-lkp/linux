@@ -2263,8 +2263,8 @@ static void make_uffd_wp_pte(struct vm_area_struct *vma,
 	}
 }
 
-#ifdef CONFIG_TRANSPARENT_HUGEPAGE
-static unsigned long pagemap_thp_category(struct pagemap_scan_private *p,
+#ifdef CONFIG_PGTABLE_HAS_HUGE_LEAVES
+static unsigned long pagemap_pmd_category(struct pagemap_scan_private *p,
 					  struct vm_area_struct *vma,
 					  unsigned long addr, pmd_t pmd)
 {
@@ -2296,7 +2296,8 @@ static unsigned long pagemap_thp_category(struct pagemap_scan_private *p,
 		if (pmd_swp_soft_dirty(pmd))
 			categories |= PAGE_IS_SOFT_DIRTY;
 
-		if (p->masks_of_interest & PAGE_IS_FILE) {
+		if ((p->masks_of_interest & PAGE_IS_FILE) &&
+		    !is_vm_hugetlb_page(vma)) {
 			swp = pmd_to_swp_entry(pmd);
 			if (is_pfn_swap_entry(swp) &&
 			    !folio_test_anon(pfn_swap_entry_folio(swp)))
@@ -2321,7 +2322,7 @@ static void make_uffd_wp_pmd(struct vm_area_struct *vma,
 		set_pmd_at(vma->vm_mm, addr, pmdp, pmd);
 	}
 }
-#endif /* CONFIG_TRANSPARENT_HUGEPAGE */
+#endif /* CONFIG_PGTABLE_HAS_HUGE_LEAVES */
 
 #ifdef CONFIG_HUGETLB_PAGE
 static unsigned long pagemap_hugetlb_category(pte_t pte)
@@ -2522,22 +2523,22 @@ static int pagemap_scan_output(unsigned long categories,
 	return ret;
 }
 
-static int pagemap_scan_thp_entry(pmd_t *pmd, unsigned long start,
+static int pagemap_scan_huge_entry(pmd_t *pmd, unsigned long start,
 				  unsigned long end, struct mm_walk *walk)
 {
-#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+#ifdef CONFIG_PGTABLE_HAS_HUGE_LEAVES
 	struct pagemap_scan_private *p = walk->private;
 	struct vm_area_struct *vma = walk->vma;
 	unsigned long categories;
 	spinlock_t *ptl;
 	int ret = 0;
 
-	ptl = pmd_trans_huge_lock(pmd, vma);
+	ptl = pmd_huge_lock(pmd, vma);
 	if (!ptl)
 		return -ENOENT;
 
 	categories = p->cur_vma_category |
-		     pagemap_thp_category(p, vma, start, *pmd);
+		     pagemap_pmd_category(p, vma, start, *pmd);
 
 	if (!pagemap_scan_is_interesting_page(categories, p))
 		goto out_unlock;
@@ -2556,19 +2557,29 @@ static int pagemap_scan_thp_entry(pmd_t *pmd, unsigned long start,
 	 * needs to be performed on a portion of the huge page.
 	 */
 	if (end != start + HPAGE_SIZE) {
-		spin_unlock(ptl);
-		split_huge_pmd(vma, pmd, start);
 		pagemap_scan_backout_range(p, start, end);
-		/* Report as if there was no THP */
-		return -ENOENT;
+		if (!is_vm_hugetlb_page(vma)) {
+			/* Report as if there was no THP */
+			spin_unlock(ptl);
+			split_huge_pmd(vma, pmd, start);
+			ret = -ENOENT;
+			goto out;
+		}
+		ret = 0;
+		p->arg.walk_end = start;
+		goto out_unlock;
 	}
 
 	make_uffd_wp_pmd(vma, start, pmd);
-	flush_tlb_range(vma, start, end);
+	if (is_vm_hugetlb_page(vma))
+		flush_hugetlb_tlb_range(vma, start, end);
+	else
+		flush_tlb_range(vma, start, end);
 out_unlock:
 	spin_unlock(ptl);
+out:
 	return ret;
-#else /* !CONFIG_TRANSPARENT_HUGEPAGE */
+#else /* CONFIG_PGTABLE_HAS_HUGE_LEAVES */
 	return -ENOENT;
 #endif
 }
@@ -2585,7 +2596,7 @@ static int pagemap_scan_pmd_entry(pmd_t *pmd, unsigned long start,
 
 	arch_enter_lazy_mmu_mode();
 
-	ret = pagemap_scan_thp_entry(pmd, start, end, walk);
+	ret = pagemap_scan_huge_entry(pmd, start, end, walk);
 	if (ret != -ENOENT) {
 		arch_leave_lazy_mmu_mode();
 		return ret;
