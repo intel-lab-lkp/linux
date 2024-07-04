@@ -159,6 +159,8 @@ static void subpage_mark_vma_nohuge(struct mm_struct *mm, unsigned long addr,
 	 * VM_NOHUGEPAGE and split them.
 	 */
 	for_each_vma_range(vmi, vma, addr + len) {
+		if (is_vm_hugetlb_page(vma))
+			continue;
 		vm_flags_set(vma, VM_NOHUGEPAGE);
 		walk_page_vma(vma, &subpage_walk_ops, NULL);
 	}
