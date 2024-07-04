@@ -595,6 +595,7 @@ static inline pmd_t pmd_mkdevmap(pmd_t pmd)
 #define pud_write(pud)		pte_write(pud_pte(pud))
 
 #define pud_mkhuge(pud)		(__pud(pud_val(pud) & ~PUD_TABLE_BIT))
+#define pud_mkinvalid(pud)	pte_pud(pte_mkinvalid(pud_pte(pud)))
 
 #define __pud_to_phys(pud)	__pte_to_phys(pud_pte(pud))
 #define __phys_to_pud_val(phys)	__phys_to_pte_val(phys)
@@ -1341,6 +1342,16 @@ static inline pmd_t pmdp_establish(struct vm_area_struct *vma,
 {
 	page_table_check_pmd_set(vma->vm_mm, pmdp, pmd);
 	return __pmd(xchg_relaxed(&pmd_val(*pmdp), pmd_val(pmd)));
+}
+#endif
+
+#ifdef CONFIG_HUGETLB_PAGE
+#define pudp_establish pudp_establish
+static inline pud_t pudp_establish(struct vm_area_struct *vma,
+		unsigned long address, pud_t *pudp, pud_t pud)
+{
+	page_table_check_pud_set(vma->vm_mm, pudp, pud);
+	return __pud(xchg_relaxed(&pud_val(*pudp), pud_val(pud)));
 }
 #endif
 

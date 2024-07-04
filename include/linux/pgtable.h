@@ -956,6 +956,11 @@ extern pmd_t pmdp_invalidate(struct vm_area_struct *vma, unsigned long address,
 			    pmd_t *pmdp);
 #endif
 
+#ifndef __HAVE_ARCH_PUDP_INVALIDATE
+extern pud_t pudp_invalidate(struct vm_area_struct *vma, unsigned long address,
+			    pud_t *pudp);
+#endif
+
 #ifndef __HAVE_ARCH_PMDP_INVALIDATE_AD
 
 /*
@@ -974,6 +979,26 @@ extern pmd_t pmdp_invalidate(struct vm_area_struct *vma, unsigned long address,
  */
 extern pmd_t pmdp_invalidate_ad(struct vm_area_struct *vma,
 				unsigned long address, pmd_t *pmdp);
+#endif
+
+#ifndef __HAVE_ARCH_PUDP_INVALIDATE_AD
+
+/*
+ * pudp_invalidate_ad() invalidates the PMD while changing a hugetlb mapping in
+ * the page tables. This function is similar to pudp_invalidate(), but should
+ * only be used if the access and dirty bits would  not be cleared by the software
+ * in the new PUD value. The function ensures  that hardware changes of the access
+ * and dirty bits updates would not be lost.
+ *
+ * Doing so can allow in certain architectures to avoid a TLB flush in most
+ * cases. Yet, another TLB flush might be necessary later if the PUD update
+ * itself requires such flush (e.g., if protection was set to be stricter). Yet,
+ * even when a TLB flush is needed because of the update, the caller may be able
+ * to batch these TLB flushing operations, so fewer TLB flush operations are
+ * needed.
+ */
+extern pud_t pudp_invalidate_ad(struct vm_area_struct *vma,
+				unsigned long address, pud_t *pudp);
 #endif
 
 #ifndef __HAVE_ARCH_PTE_SAME
@@ -1406,7 +1431,16 @@ static inline pgprot_t pgprot_modify(pgprot_t oldprot, pgprot_t newprot)
 #endif
 
 #ifdef CONFIG_HAVE_ARCH_SOFT_DIRTY
-#ifndef CONFIG_ARCH_ENABLE_THP_MIGRATION
+static inline int pud_soft_dirty(pud_t pud)
+{
+	return 0;
+}
+#if !defined(CONFIG_ARCH_ENABLE_THP_MIGRATION) && !defined(CONFIG_HUGETLB_PAGE)
+static inline int pud_swp_soft_dirty(pud_t pud)
+{
+	return 0;
+}
+
 static inline pmd_t pmd_swp_mksoft_dirty(pmd_t pmd)
 {
 	return pmd;
@@ -1486,6 +1520,11 @@ static inline int pmd_swp_soft_dirty(pmd_t pmd)
 static inline pmd_t pmd_swp_clear_soft_dirty(pmd_t pmd)
 {
 	return pmd;
+}
+
+static inline int pud_swp_soft_dirty(pud_t pud)
+{
+	return 0;
 }
 #endif
 

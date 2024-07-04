@@ -657,6 +657,11 @@ static inline unsigned long pud_pfn(pud_t pud)
 	return ((__pud_to_phys(pud) & PUD_MASK) >> PAGE_SHIFT);
 }
 
+static inline pud_t pud_mkinvalid(pud_t pud)
+{
+	return __pud(pud_val(pud) & ~(_PAGE_PRESENT|_PAGE_PROT_NONE));
+}
+
 static inline pmd_t pmd_modify(pmd_t pmd, pgprot_t newprot)
 {
 	return pte_pmd(pte_modify(pmd_pte(pmd), newprot));
@@ -803,6 +808,16 @@ static inline pmd_t pmdp_establish(struct vm_area_struct *vma,
 extern pmd_t pmdp_collapse_flush(struct vm_area_struct *vma,
 				 unsigned long address, pmd_t *pmdp);
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE */
+
+#ifdef CONFIG_HUGETLB_PAGE
+#define pudp_establish pudp_establish
+static inline pud_t pudp_establish(struct vm_area_struct *vma,
+				unsigned long address, pud_t *pudp, pud_t pud)
+{
+	page_table_check_pud_set(vma->vm_mm, pudp, pud);
+	return __pud(atomic_long_xchg((atomic_long_t *)pudp, pud_val(pud)));
+}
+#endif
 
 /*
  * Encode/decode swap entries and swap PTEs. Swap PTEs are all PTEs that

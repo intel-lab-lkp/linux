@@ -581,6 +581,14 @@ static inline pmd_t pmd_mkinvalid(pmd_t pmd)
 	return pmd;
 }
 
+static inline pud_t pud_mkinvalid(pud_t pud)
+{
+	pud_val(pud) |= _PAGE_PRESENT_INVALID;
+	pud_val(pud) &= ~(_PAGE_PRESENT | _PAGE_VALID | _PAGE_DIRTY | _PAGE_PROTNONE);
+
+	return pud;
+}
+
 /*
  * The generic version pmdp_huge_get_and_clear uses a version of pmd_clear() with a
  * different prototype.
