@@ -2,7 +2,7 @@
 
 //! Implementation of [`KVec`].
 
-use super::{allocator::Kmalloc, AllocError, Allocator, Flags};
+use super::{allocator::Kmalloc, flags::*, AllocError, Allocator, Flags};
 use crate::types::Unique;
 use core::{
     fmt,
@@ -657,6 +657,87 @@ where
 {
     fn as_raw_mut_slice(&mut self) -> *mut [T] {
         ptr::slice_from_raw_parts_mut(self.ptr, self.len)
+    }
+
+    fn allocator(&self) -> &A {
+        &self.alloc
+    }
+
+    fn into_raw_parts(self) -> (*mut T, NonNull<T>, usize, usize, A) {
+        let me = ManuallyDrop::new(self);
+        let ptr = me.ptr;
+        let buf = me.buf;
+        let len = me.len;
+        let cap = me.cap;
+        let alloc = unsafe { ptr::read(me.allocator()) };
+        (ptr, buf, len, cap, alloc)
+    }
+
+    /// Same as `Iterator::collect` but specialized for `KVec`'s `IntoIter`.
+    ///
+    /// Currently, we can't implement `FromIterator`. There are a couple of issues with this trait
+    /// in the kernel, namely:
+    ///
+    /// - Rust's specialization feature is unstable. This prevents us to optimze for the special
+    ///   case where `I::IntoIter` equals `KVec`'s `IntoIter` type.
+    /// - We also can't use `I::IntoIter`'s type ID either to work around this, since `FromIterator`
+    ///   doesn't require this type to be `'static`.
+    /// - `FromIterator::from_iter` does return `Self` instead of `Result<Self, AllocError>`, hence
+    ///   we can't properly handle allocation failures.
+    /// - Neither `Iterator::collect` nor `FromIterator::from_iter` can handle additional allocation
+    ///   flags.
+    ///
+    /// Instead, provide `IntoIter::collect`, such that we can at least convert a `IntoIter` into a
+    /// `KVec` again.
+    ///
+    /// Note that `IntoIter::collect` doesn't require `Flags`, since it re-uses the existing backing
+    /// buffer. However, this backing buffer may be shrunk to the actual count of elements.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let v = kernel::kvec![1, 2, 3]?;
+    /// let mut it = v.into_iter();
+    ///
+    /// assert_eq!(it.next(), Some(1));
+    ///
+    /// let v = it.collect()?;
+    /// assert_eq!(v, [2, 3]);
+    ///
+    /// # Ok::<(), Error>(())
+    /// ```
+    pub fn collect(self) -> Result<KVec<T, A>, AllocError> {
+        let (mut ptr, buf, len, mut cap, alloc) = self.into_raw_parts();
+        let has_advanced = ptr != buf.as_ptr();
+
+        if has_advanced {
+            // SAFETY: Copy the contents we have advanced to at the beginning of the buffer.
+            // `ptr` is guaranteed to be between `buf` and `buf.add(cap)` and `ptr.add(len)` is
+            // guaranteed to be smaller than `buf.add(cap)`.
+            unsafe { ptr::copy(ptr, buf.as_ptr(), len) };
+            ptr = buf.as_ptr();
+        }
+
+        // Do not allow for too much spare capacity.
+        if len < cap / 2 {
+            let layout = core::alloc::Layout::array::<T>(len).map_err(|_| AllocError)?;
+            // SAFETY: `ptr` points to the start of the backing buffer, `cap` is the capacity of
+            // the original `KVec` and `len` is guaranteed to be smaller than `cap`. Depending on
+            // `alloc` this operation may shrink the buffer or leaves it as it is.
+            ptr = unsafe {
+                alloc.realloc(ptr.cast(), KVec::<T>::buffer_size(cap)?, layout, GFP_KERNEL)
+            }?
+            .as_ptr()
+            .cast();
+            cap = len;
+        }
+
+        // SAFETY: If the iterator has been advanced, the advanced elements have been copied to
+        // the beginning of the buffer and `len` has been adjusted accordingly. `ptr` is guaranteed
+        // to point to the start of the backing buffer. `cap` is either the original capacity or,
+        // after shrinking the buffer, equal to `len`. `alloc` is guaranteed to be unchanged since
+        // `into_iter` has been called on the original `KVec`.
+        Ok(unsafe { KVec::from_raw_parts_alloc(ptr, len, cap, alloc) })
     }
 }
 
