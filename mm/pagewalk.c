@@ -81,11 +81,18 @@ static int walk_pmd_range(pud_t *pud, unsigned long addr, unsigned long end,
 	const struct mm_walk_ops *ops = walk->ops;
 	int err = 0;
 	int depth = real_depth(3);
+	int cont_pmds;
 
 	pmd = pmd_offset(pud, addr);
 	do {
 again:
-		next = pmd_addr_end(addr, end);
+		if (pmd_cont(*pmd)) {
+			cont_pmds = CONT_PMDS;
+			next = pmd_cont_addr_end(addr, end);
+		} else {
+			cont_pmds = 1;
+			next = pmd_addr_end(addr, end);
+		}
 		if (pmd_none(*pmd)) {
 			if (ops->pte_hole)
 				err = ops->pte_hole(addr, next, depth, walk);
@@ -126,8 +133,7 @@ again:
 
 		if (walk->action == ACTION_AGAIN)
 			goto again;
-
-	} while (pmd++, addr = next, addr != end);
+	} while (pmd += cont_pmds, addr = next, addr != end);
 
 	return err;
 }
