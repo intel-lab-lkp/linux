@@ -22,6 +22,12 @@ pub struct Kmalloc;
 /// contiguous kernel virtual space.
 pub struct Vmalloc;
 
+/// The kvmalloc kernel allocator.
+///
+/// Attempt to allocate physically contiguous memory, but upon failure, fall back to non-contiguous
+/// (vmalloc) allocation.
+pub struct KVmalloc;
+
 /// Returns a proper size to alloc a new object aligned to `new_layout`'s alignment.
 fn aligned_size(new_layout: Layout) -> usize {
     // Customized layouts from `Layout::from_size_align()` can have size < align, so pad first.
@@ -164,6 +170,35 @@ unsafe impl Allocator for Vmalloc {
         };
 
         Ok(NonNull::slice_from_raw_parts(dst, size))
+    }
+}
+
+unsafe impl Allocator for KVmalloc {
+    unsafe fn realloc(
+        &self,
+        old_ptr: *mut u8,
+        old_size: usize,
+        layout: Layout,
+        flags: Flags,
+    ) -> Result<NonNull<[u8]>, AllocError> {
+        let size = aligned_size(layout);
+
+        let ptr = if size == 0 {
+            // SAFETY: `old_ptr` is guaranteed to be previously allocated with this `Allocator` or
+            // NULL.
+            unsafe { bindings::kvfree(old_ptr.cast()) };
+            NonNull::dangling()
+        } else {
+            // SAFETY: `old_ptr` is guaranteed to point to valid memory with a size of at least
+            // `old_size`, which was previously allocated with this `Allocator` or NULL.
+            let raw_ptr = unsafe {
+                bindings::kvrealloc_noprof(old_ptr.cast(), old_size, size, flags.0).cast()
+            };
+
+            NonNull::new(raw_ptr).ok_or(AllocError)?
+        };
+
+        Ok(NonNull::slice_from_raw_parts(ptr, size))
     }
 }
 
