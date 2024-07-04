@@ -269,7 +269,6 @@ static int walk_hugetlb_range(unsigned long addr, unsigned long end,
 	const struct mm_walk_ops *ops = walk->ops;
 	int err = 0;
 
-	hugetlb_vma_lock_read(vma);
 	do {
 		next = hugetlb_entry_end(h, addr, end);
 		pte = hugetlb_walk(vma, addr & hmask, sz);
@@ -280,7 +279,6 @@ static int walk_hugetlb_range(unsigned long addr, unsigned long end,
 		if (err)
 			break;
 	} while (addr = next, addr != end);
-	hugetlb_vma_unlock_read(vma);
 
 	return err;
 }
@@ -339,11 +337,13 @@ static int __walk_page_range(unsigned long start, unsigned long end,
 			return err;
 	}
 
+	vma_pgtable_walk_begin(vma);
 	if (is_vm_hugetlb_page(vma)) {
 		if (ops->hugetlb_entry)
 			err = walk_hugetlb_range(start, end, walk);
 	} else
 		err = walk_pgd_range(start, end, walk);
+	vma_pgtable_walk_end(vma);
 
 	if (ops->post_vma)
 		ops->post_vma(walk);
