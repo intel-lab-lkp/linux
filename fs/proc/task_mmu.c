@@ -3141,7 +3141,7 @@ static struct page *can_gather_numa_stats(pte_t pte, struct vm_area_struct *vma,
 	return page;
 }
 
-#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+#ifdef CONFIG_PGTABLE_HAS_HUGE_LEAVES
 static struct page *can_gather_numa_stats_pmd(pmd_t pmd,
 					      struct vm_area_struct *vma,
 					      unsigned long addr)
@@ -3176,15 +3176,21 @@ static int gather_pte_stats(pmd_t *pmd, unsigned long addr,
 	pte_t *orig_pte;
 	pte_t *pte;
 
-#ifdef CONFIG_TRANSPARENT_HUGEPAGE
-	ptl = pmd_trans_huge_lock(pmd, vma);
+#ifdef CONFIG_PGTABLE_HAS_HUGE_LEAVES
+	ptl = pmd_huge_lock(pmd, vma);
 	if (ptl) {
+		unsigned long nr_pages;
 		struct page *page;
+
+		if (is_vm_hugetlb_page(vma))
+			nr_pages = 1;
+		else
+			nr_pages = HPAGE_PMD_SIZE / PAGE_SIZE;
 
 		page = can_gather_numa_stats_pmd(*pmd, vma, addr);
 		if (page)
 			gather_stats(page, md, pmd_dirty(*pmd),
-				     HPAGE_PMD_SIZE/PAGE_SIZE);
+				     nr_pages);
 		spin_unlock(ptl);
 		return 0;
 	}
