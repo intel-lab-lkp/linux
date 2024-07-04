@@ -151,9 +151,21 @@ static int vmemmap_pte_entry(pte_t *pte, unsigned long addr,
 	return 0;
 }
 
+static int vmemmap_test_walk(unsigned long start, unsigned long end,
+			     struct mm_walk *walk)
+{
+	struct vm_area_struct *vma = walk->vma;
+
+	if (is_vm_hugetlb_page(vma))
+		return 1;
+
+	return 0;
+}
+
 static const struct mm_walk_ops vmemmap_remap_ops = {
 	.pmd_entry	= vmemmap_pmd_entry,
 	.pte_entry	= vmemmap_pte_entry,
+	.test_walk	= vmemmap_test_walk,
 };
 
 static int vmemmap_remap_range(unsigned long start, unsigned long end,
