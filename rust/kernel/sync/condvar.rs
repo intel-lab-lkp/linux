@@ -44,6 +44,7 @@ pub use new_condvar;
 /// The following is an example of using a condvar with a mutex:
 ///
 /// ```
+/// use kernel::alloc::KBox;
 /// use kernel::sync::{new_condvar, new_mutex, CondVar, Mutex};
 ///
 /// #[pin_data]
@@ -70,8 +71,8 @@ pub use new_condvar;
 /// }
 ///
 /// /// Allocates a new boxed `Example`.
-/// fn new_example() -> Result<Pin<Box<Example>>> {
-///     Box::pin_init(pin_init!(Example {
+/// fn new_example() -> Result<Pin<KBox<Example>>> {
+///     KBox::pin_init(pin_init!(Example {
 ///         value <- new_mutex!(0),
 ///         value_changed <- new_condvar!(),
 ///     }), GFP_KERNEL)

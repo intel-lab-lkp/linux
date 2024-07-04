@@ -32,6 +32,7 @@ pub use new_spinlock;
 /// contains an inner struct (`Inner`) that is protected by a spinlock.
 ///
 /// ```
+/// use kernel::alloc::KBox;
 /// use kernel::sync::{new_spinlock, SpinLock};
 ///
 /// struct Inner {
@@ -56,7 +57,7 @@ pub use new_spinlock;
 /// }
 ///
 /// // Allocate a boxed `Example`.
-/// let e = Box::pin_init(Example::new(), GFP_KERNEL)?;
+/// let e = KBox::pin_init(Example::new(), GFP_KERNEL)?;
 /// assert_eq!(e.c, 10);
 /// assert_eq!(e.d.lock().a, 20);
 /// assert_eq!(e.d.lock().b, 30);
