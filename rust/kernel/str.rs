@@ -523,7 +523,6 @@ macro_rules! c_str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloc::format;
 
     const ALL_ASCII_CHARS: &'static str =
         "\\x01\\x02\\x03\\x04\\x05\\x06\\x07\\x08\\x09\\x0a\\x0b\\x0c\\x0d\\x0e\\x0f\
@@ -538,6 +537,33 @@ mod tests {
         \\xd0\\xd1\\xd2\\xd3\\xd4\\xd5\\xd6\\xd7\\xd8\\xd9\\xda\\xdb\\xdc\\xdd\\xde\\xdf\
         \\xe0\\xe1\\xe2\\xe3\\xe4\\xe5\\xe6\\xe7\\xe8\\xe9\\xea\\xeb\\xec\\xed\\xee\\xef\
         \\xf0\\xf1\\xf2\\xf3\\xf4\\xf5\\xf6\\xf7\\xf8\\xf9\\xfa\\xfb\\xfc\\xfd\\xfe\\xff";
+
+    fn format_into_buf<'a>(args: fmt::Arguments<'_>, buf: &'a mut [u8]) -> Result<&'a str, Error> {
+        let mut f = RawFormatter::new();
+        f.write_fmt(args)?;
+        let size = f.bytes_written();
+
+        assert!(buf.len() >= size);
+
+        // SAFETY: `buf` has at least a size of `size` bytes and is valid for writes.
+        let mut f = unsafe { Formatter::from_buffer(buf.as_mut_ptr(), size) };
+        f.write_fmt(args)?;
+
+        Ok(core::str::from_utf8(&buf[0..size])?)
+    }
+
+    macro_rules! fmt_assert_eq {
+        ($str:expr, $($f:tt)*) => ({
+            let mut buf = [0_u8; ALL_ASCII_CHARS.len()];
+
+            let s = match format_into_buf(kernel::fmt!($($f)*), &mut buf) {
+                Ok(s) => s,
+                Err(_) => panic!("Could not format into buffer."),
+            };
+
+            assert_eq!($str, s);
+        })
+    }
 
     #[test]
     fn test_cstr_to_str() {
@@ -566,13 +592,13 @@ mod tests {
     #[test]
     fn test_cstr_display() {
         let hello_world = CStr::from_bytes_with_nul(b"hello, world!\0").unwrap();
-        assert_eq!(format!("{}", hello_world), "hello, world!");
+        fmt_assert_eq!("hello, world!", "{}", hello_world);
         let non_printables = CStr::from_bytes_with_nul(b"\x01\x09\x0a\0").unwrap();
-        assert_eq!(format!("{}", non_printables), "\\x01\\x09\\x0a");
+        fmt_assert_eq!("\\x01\\x09\\x0a", "{}", non_printables);
         let non_ascii = CStr::from_bytes_with_nul(b"d\xe9j\xe0 vu\0").unwrap();
-        assert_eq!(format!("{}", non_ascii), "d\\xe9j\\xe0 vu");
+        fmt_assert_eq!("d\\xe9j\\xe0 vu", "{}", non_ascii);
         let good_bytes = CStr::from_bytes_with_nul(b"\xf0\x9f\xa6\x80\0").unwrap();
-        assert_eq!(format!("{}", good_bytes), "\\xf0\\x9f\\xa6\\x80");
+        fmt_assert_eq!("\\xf0\\x9f\\xa6\\x80", "{}", good_bytes);
     }
 
     #[test]
@@ -583,47 +609,47 @@ mod tests {
             bytes[i as usize] = i.wrapping_add(1);
         }
         let cstr = CStr::from_bytes_with_nul(&bytes).unwrap();
-        assert_eq!(format!("{}", cstr), ALL_ASCII_CHARS);
+        fmt_assert_eq!(ALL_ASCII_CHARS, "{}", cstr);
     }
 
     #[test]
     fn test_cstr_debug() {
         let hello_world = CStr::from_bytes_with_nul(b"hello, world!\0").unwrap();
-        assert_eq!(format!("{:?}", hello_world), "\"hello, world!\"");
+        fmt_assert_eq!("\"hello, world!\"", "{:?}", hello_world);
         let non_printables = CStr::from_bytes_with_nul(b"\x01\x09\x0a\0").unwrap();
-        assert_eq!(format!("{:?}", non_printables), "\"\\x01\\x09\\x0a\"");
+        fmt_assert_eq!("\"\\x01\\x09\\x0a\"", "{:?}", non_printables);
         let non_ascii = CStr::from_bytes_with_nul(b"d\xe9j\xe0 vu\0").unwrap();
-        assert_eq!(format!("{:?}", non_ascii), "\"d\\xe9j\\xe0 vu\"");
+        fmt_assert_eq!("\"d\\xe9j\\xe0 vu\"", "{:?}", non_ascii);
         let good_bytes = CStr::from_bytes_with_nul(b"\xf0\x9f\xa6\x80\0").unwrap();
-        assert_eq!(format!("{:?}", good_bytes), "\"\\xf0\\x9f\\xa6\\x80\"");
+        fmt_assert_eq!("\"\\xf0\\x9f\\xa6\\x80\"", "{:?}", good_bytes);
     }
 
     #[test]
     fn test_bstr_display() {
         let hello_world = BStr::from_bytes(b"hello, world!");
-        assert_eq!(format!("{}", hello_world), "hello, world!");
+        fmt_assert_eq!("hello, world!", "{}", hello_world);
         let escapes = BStr::from_bytes(b"_\t_\n_\r_\\_\'_\"_");
-        assert_eq!(format!("{}", escapes), "_\\t_\\n_\\r_\\_'_\"_");
+        fmt_assert_eq!("_\\t_\\n_\\r_\\_'_\"_", "{}", escapes);
         let others = BStr::from_bytes(b"\x01");
-        assert_eq!(format!("{}", others), "\\x01");
+        fmt_assert_eq!("\\x01", "{}", others);
         let non_ascii = BStr::from_bytes(b"d\xe9j\xe0 vu");
-        assert_eq!(format!("{}", non_ascii), "d\\xe9j\\xe0 vu");
+        fmt_assert_eq!("d\\xe9j\\xe0 vu", "{}", non_ascii);
         let good_bytes = BStr::from_bytes(b"\xf0\x9f\xa6\x80");
-        assert_eq!(format!("{}", good_bytes), "\\xf0\\x9f\\xa6\\x80");
+        fmt_assert_eq!("\\xf0\\x9f\\xa6\\x80", "{}", good_bytes);
     }
 
     #[test]
     fn test_bstr_debug() {
         let hello_world = BStr::from_bytes(b"hello, world!");
-        assert_eq!(format!("{:?}", hello_world), "\"hello, world!\"");
+        fmt_assert_eq!("\"hello, world!\"", "{:?}", hello_world);
         let escapes = BStr::from_bytes(b"_\t_\n_\r_\\_\'_\"_");
-        assert_eq!(format!("{:?}", escapes), "\"_\\t_\\n_\\r_\\\\_'_\\\"_\"");
+        fmt_assert_eq!("\"_\\t_\\n_\\r_\\\\_'_\\\"_\"", "{:?}", escapes);
         let others = BStr::from_bytes(b"\x01");
-        assert_eq!(format!("{:?}", others), "\"\\x01\"");
+        fmt_assert_eq!("\"\\x01\"", "{:?}", others);
         let non_ascii = BStr::from_bytes(b"d\xe9j\xe0 vu");
-        assert_eq!(format!("{:?}", non_ascii), "\"d\\xe9j\\xe0 vu\"");
+        fmt_assert_eq!("\"d\\xe9j\\xe0 vu\"", "{:?}", non_ascii);
         let good_bytes = BStr::from_bytes(b"\xf0\x9f\xa6\x80");
-        assert_eq!(format!("{:?}", good_bytes), "\"\\xf0\\x9f\\xa6\\x80\"");
+        fmt_assert_eq!("\"\\xf0\\x9f\\xa6\\x80\"", "{:?}", good_bytes);
     }
 }
 
