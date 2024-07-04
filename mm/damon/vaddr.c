@@ -443,30 +443,35 @@ static int damon_young_pmd_entry(pmd_t *pmd, unsigned long addr,
 	struct folio *folio;
 	struct damon_young_walk_private *priv = walk->private;
 
-#ifdef CONFIG_TRANSPARENT_HUGEPAGE
-	if (pmd_trans_huge(pmdp_get(pmd))) {
-		pmd_t pmde;
+#ifdef CONFIG_PGTABLE_HAS_HUGE_LEAVES
+	ptl = pmd_huge_lock(vma, pmd);
+	if (ptl) {
+		unsigned long pfn;
 
-		ptl = pmd_lock(walk->mm, pmd);
-		pmde = pmdp_get(pmd);
-
-		if (!pmd_present(pmde)) {
+		if (!pmd_present(*pmd)) {
 			spin_unlock(ptl);
 			return 0;
 		}
 
-		if (!pmd_trans_huge(pmde)) {
-			spin_unlock(ptl);
-			goto regular_page;
+		pfn = pmd_pfn(*pmd);
+		if (is_vm_hugetlb_page(walk->vma)) {
+			folio = pfn_folio(pfn);
+			if (folio)
+				folio_get(folio);
+		} else {
+			folio = damon_get_folio(pfn);
 		}
-		folio = damon_get_folio(pmd_pfn(pmde));
 		if (!folio)
 			goto huge_out;
 		if (pmd_young(pmde) || !folio_test_idle(folio) ||
 					mmu_notifier_test_young(walk->mm,
 						addr))
 			priv->young = true;
-		*priv->folio_sz = HPAGE_PMD_SIZE;
+
+		if (is_vm_hugetlb_page(walk->vma))
+			*priv->folio_sz = huge_page_size(h);
+		else
+			*priv->folio_sz = HPAGE_PMD_SIZE;
 		folio_put(folio);
 huge_out:
 		spin_unlock(ptl);
@@ -474,7 +479,7 @@ huge_out:
 	}
 
 regular_page:
-#endif	/* CONFIG_TRANSPARENT_HUGEPAGE */
+#endif	/* CONFIG_PGTABLE_HAS_HUGE_LEAVES */
 
 	pte = pte_offset_map_lock(walk->mm, pmd, addr, &ptl);
 	if (!pte) {
