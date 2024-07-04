@@ -279,8 +279,20 @@ next:
 	return 0;
 }
 
+static int migrate_vma_test_walk(unsigned long start, unsigned long end,
+				 struct mm_walk *walk)
+{
+	struct vm_area_struct *vma = walk->vma;
+
+	if (is_vm_hugetlb_page(vma))
+		return 1;
+
+	return 0;
+}
+
 static const struct mm_walk_ops migrate_vma_walk_ops = {
 	.pmd_entry		= migrate_vma_collect_pmd,
+	.test_walk		= migrate_vma_test_walk,
 	.pte_hole		= migrate_vma_collect_hole,
 	.walk_lock		= PGWALK_RDLOCK,
 };
