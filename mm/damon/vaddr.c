@@ -329,6 +329,37 @@ out:
 	return 0;
 }
 
+static int damon_mkold_pud_entry(pmd_t *pud, unsigned long addr,
+				 unsigned long next, struct mm_walk *walk)
+{
+#ifdef CONFIG_PGTABLE_HAS_HUGE_LEAVES
+	spinlock_t *ptl;
+	struct folio *folio;
+	struct vm_area_struct *vma = walk->vma;
+	unsigned long size = huge_page_size(hstate_vma(vma));
+
+	ptl = pud_huge_lock(vma, pud);
+	if (!ptl)
+		return 0;
+
+	if (!pud_present(*pud))
+		goto out;
+
+	folio = pfn_folio(pud_pfn(*pud));
+	folio_get(folio);
+
+	if (pudp_test_and_clear_young(vma, addr, pud) ||
+	    mmu_notifier_clear_young(mm, addr, addr + size))
+		folio_set_young(folio);
+
+	folio_set_idle(folio);
+	folio_put(folio);
+out:
+	spin_unlock(ptl);
+#endif
+	return 0;
+}
+
 #ifdef CONFIG_HUGETLB_PAGE
 static void damon_hugetlb_mkold(pte_t *pte, struct mm_struct *mm,
 				struct vm_area_struct *vma, unsigned long addr)
@@ -383,6 +414,7 @@ out:
 #endif /* CONFIG_HUGETLB_PAGE */
 
 static const struct mm_walk_ops damon_mkold_ops = {
+	.pud_entry = damon_mkold_pud_entry,
 	.pmd_entry = damon_mkold_pmd_entry,
 	.hugetlb_entry = damon_mkold_hugetlb_entry,
 	.walk_lock = PGWALK_RDLOCK,
