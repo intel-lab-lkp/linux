@@ -1,0 +1,45 @@
+What:		/sys/bus/iio/devices/iio:deviceX/resolution_bits
+KernelVersion:	6.10
+Contact:	linux-iio@vger.kernel.org
+Description:
+		ADC measurement resolution. Can be either 11 bits or 14 bits
+		(default). The driver sets the same resolution for both VBUS and
+		VSENSE measurements even if the hardware could be configured to
+		measure VBUS and VSENSE with different resolutions.
+		This attribute affects the integration time: with 14 bits
+		resolution the integration time is increased by a factor of
+		1.9 (the driver considers a factor of 2). See Table 4-5 in
+		device datasheet for details.
+
+What:		/sys/bus/iio/devices/iio:deviceX/resolution_bits_available
+KernelVersion:	6.10
+Contact:	linux-iio@vger.kernel.org
+Description:
+		List all possible ADC measurement resolutions: "11 14"
+
+What:		/sys/bus/iio/devices/iio:deviceX/integration_samples
+KernelVersion:	6.10
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Number of samples taken during a full integration period. Can be
+		set to any power of 2 value from 1 (default) to 2048.
+		This attribute affects the integration time: higher the number
+		of samples, longer the integration time. See Table 4-5 in device
+		datasheet for details.
+
+What:		/sys/bus/iio/devices/iio:deviceX/integration_samples_available
+KernelVersion:	6.10
+Contact:	linux-iio@vger.kernel.org
+Description:
+		List all possible numbers of integration samples:
+		"1 2 4 8 16 32 64 128 256 512 1024 2048"
+
+What:		/sys/bus/iio/devices/iio:devices/filters_en
+KernelVersion:	6.10
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Attribute to enable/disable ADC post filters. Enabled by
+		default.
+		This attribute affects the integration time: with filters
+		enabled the integration time is increased by 50%. See Table 4-5
+		in device datasheet for details.
