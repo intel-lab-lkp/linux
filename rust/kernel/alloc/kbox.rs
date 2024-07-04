@@ -2,7 +2,7 @@
 
 //! Implementation of [`KBox`].
 
-use super::{allocator::Kmalloc, AllocError, Allocator, Flags};
+use super::{allocator::Kmalloc, AllocError, Allocator, Flags, KVec};
 use core::fmt;
 use core::mem::ManuallyDrop;
 use core::mem::MaybeUninit;
@@ -117,6 +117,20 @@ where
         // SAFETY: It's not possible to move or replace the insides of a `Pin<KBox<T>>` when
         // `T: !Unpin`, so it's safe to pin it directly without any additional requirements.
         unsafe { Pin::new_unchecked(b) }
+    }
+}
+
+impl<T, A, const N: usize> KBox<[T; N], A>
+where
+    A: Allocator,
+{
+    /// Convert a `KBox<[T], A>` to a `KVec<T, A>`.
+    pub fn into_vec(self) -> KVec<T, A> {
+        let len = self.len();
+        unsafe {
+            let (ptr, alloc) = self.into_raw_alloc();
+            KVec::from_raw_parts_alloc(ptr as _, len, len, alloc)
+        }
     }
 }
 

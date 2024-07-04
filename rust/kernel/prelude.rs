@@ -14,7 +14,7 @@
 #[doc(no_inline)]
 pub use core::pin::Pin;
 
-pub use crate::alloc::{flags::*, vec_ext::VecExt, KBox};
+pub use crate::alloc::{flags::*, vec_ext::VecExt, KBox, KVec};
 
 #[doc(no_inline)]
 pub use alloc::vec::Vec;
