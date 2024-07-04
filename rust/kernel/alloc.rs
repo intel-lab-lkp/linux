@@ -15,6 +15,7 @@ pub mod allocator_test;
 pub use self::allocator_test as allocator;
 
 pub use self::kbox::KBox;
+pub use self::kvec::IntoIter;
 pub use self::kvec::KVec;
 
 /// Indicates an allocation error.
