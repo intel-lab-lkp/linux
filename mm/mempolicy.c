@@ -455,7 +455,8 @@ static const struct mempolicy_operations mpol_ops[MPOL_MAX] = {
 };
 
 static bool migrate_folio_add(struct folio *folio, struct list_head *foliolist,
-				unsigned long flags);
+				unsigned long flags, struct vm_area_struct *vma,
+				bool shared);
 static nodemask_t *policy_nodemask(gfp_t gfp, struct mempolicy *pol,
 				pgoff_t ilx, int *nid);
 
@@ -518,7 +519,8 @@ static void queue_folios_pmd(pmd_t *pmd, struct mm_walk *walk)
 		return;
 	if (!(qp->flags & (MPOL_MF_MOVE | MPOL_MF_MOVE_ALL)) ||
 	    !vma_migratable(walk->vma) ||
-	    !migrate_folio_add(folio, qp->pagelist, qp->flags))
+	    !migrate_folio_add(folio, qp->pagelist, qp->flags, walk->vma,
+			       is_shared_pmd(pmd, walk->vma)))
 		qp->nr_failed++;
 }
 
@@ -543,7 +545,7 @@ static int queue_folios_pte_range(pmd_t *pmd, unsigned long addr,
 	pte_t ptent;
 	spinlock_t *ptl;
 
-	ptl = pmd_trans_huge_lock(pmd, vma);
+	ptl = pmd_huge_lock(pmd, vma);
 	if (ptl) {
 		queue_folios_pmd(pmd, walk);
 		spin_unlock(ptl);
@@ -598,7 +600,7 @@ static int queue_folios_pte_range(pmd_t *pmd, unsigned long addr,
 		}
 		if (!(flags & (MPOL_MF_MOVE | MPOL_MF_MOVE_ALL)) ||
 		    !vma_migratable(vma) ||
-		    !migrate_folio_add(folio, qp->pagelist, flags)) {
+		    !migrate_folio_add(folio, qp->pagelist, flags, vma, false)) {
 			qp->nr_failed++;
 			if (strictly_unmovable(flags))
 				break;
@@ -1025,8 +1027,11 @@ static long do_get_mempolicy(int *policy, nodemask_t *nmask,
 
 #ifdef CONFIG_MIGRATION
 static bool migrate_folio_add(struct folio *folio, struct list_head *foliolist,
-				unsigned long flags)
+			      unsigned long flags, struct vm_area_struct *vma,
+			      bool shared)
 {
+	bool ret = true;
+	bool is_hugetlb = is_vm_hugetlb_page(vma);
 	/*
 	 * Unless MPOL_MF_MOVE_ALL, we try to avoid migrating a shared folio.
 	 * Choosing not to migrate a shared folio is not counted as a failure.
@@ -1034,23 +1039,27 @@ static bool migrate_folio_add(struct folio *folio, struct list_head *foliolist,
 	 * See folio_likely_mapped_shared() on possible imprecision when we
 	 * cannot easily detect if a folio is shared.
 	 */
-	if ((flags & MPOL_MF_MOVE_ALL) || !folio_likely_mapped_shared(folio)) {
-		if (folio_isolate_lru(folio)) {
-			list_add_tail(&folio->lru, foliolist);
-			node_stat_mod_folio(folio,
-				NR_ISOLATED_ANON + folio_is_file_lru(folio),
-				folio_nr_pages(folio));
-		} else {
+	if ((flags & MPOL_MF_MOVE_ALL) ||
+	    (!folio_likely_mapped_shared(folio) && !shared)) {
+		if (is_hugetlb)
+			return isolate_hugetlb(folio, foliolist);
+
+		ret = folio_isolate_lru(folio);
+		if (!ret)
 			/*
 			 * Non-movable folio may reach here.  And, there may be
 			 * temporary off LRU folios or non-LRU movable folios.
 			 * Treat them as unmovable folios since they can't be
 			 * isolated, so they can't be moved at the moment.
 			 */
-			return false;
-		}
+			return ret;
+
+		list_add_tail(&folio->lru, foliolist);
+		node_stat_mod_folio(folio,
+			NR_ISOLATED_ANON + folio_is_file_lru(folio),
+			folio_nr_pages(folio));
 	}
-	return true;
+	return ret;
 }
 
 /*
@@ -1239,7 +1248,8 @@ static struct folio *alloc_migration_target_by_mpol(struct folio *src,
 #else
 
 static bool migrate_folio_add(struct folio *folio, struct list_head *foliolist,
-				unsigned long flags)
+				unsigned long flags, struct vm_area_struct *vma,
+				bool shared)
 {
 	return false;
 }

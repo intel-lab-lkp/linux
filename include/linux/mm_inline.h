@@ -591,6 +591,13 @@ static inline bool vma_has_recency(struct vm_area_struct *vma)
 	return true;
 }
 
+static inline bool is_shared_pmd(pmd_t *pmd, struct vm_area_struct *vma)
+{
+	if (!is_vm_hugetlb_page(vma))
+		return false;
+	return hugetlb_pmd_shared((pte_t *)pmd);
+}
+
 static inline spinlock_t *pmd_huge_lock(pmd_t *pmd, struct vm_area_struct *vma)
 {
 	spinlock_t *ptl;
