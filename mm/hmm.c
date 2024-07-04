@@ -463,59 +463,6 @@ out_unlock:
 #define hmm_vma_walk_pud	NULL
 #endif
 
-#ifdef CONFIG_HUGETLB_PAGE
-static int hmm_vma_walk_hugetlb_entry(pte_t *pte, unsigned long hmask,
-				      unsigned long start, unsigned long end,
-				      struct mm_walk *walk)
-{
-	unsigned long addr = start, i, pfn;
-	struct hmm_vma_walk *hmm_vma_walk = walk->private;
-	struct hmm_range *range = hmm_vma_walk->range;
-	struct vm_area_struct *vma = walk->vma;
-	unsigned int required_fault;
-	unsigned long pfn_req_flags;
-	unsigned long cpu_flags;
-	spinlock_t *ptl;
-	pte_t entry;
-
-	ptl = huge_pte_lock(hstate_vma(vma), walk->mm, pte);
-	entry = huge_ptep_get(walk->mm, addr, pte);
-
-	i = (start - range->start) >> PAGE_SHIFT;
-	pfn_req_flags = range->hmm_pfns[i];
-	cpu_flags = pte_to_hmm_pfn_flags(range, entry) |
-		    hmm_pfn_flags_order(huge_page_order(hstate_vma(vma)));
-	required_fault =
-		hmm_pte_need_fault(hmm_vma_walk, pfn_req_flags, cpu_flags);
-	if (required_fault) {
-		int ret;
-
-		spin_unlock(ptl);
-		hugetlb_vma_unlock_read(vma);
-		/*
-		 * Avoid deadlock: drop the vma lock before calling
-		 * hmm_vma_fault(), which will itself potentially take and
-		 * drop the vma lock. This is also correct from a
-		 * protection point of view, because there is no further
-		 * use here of either pte or ptl after dropping the vma
-		 * lock.
-		 */
-		ret = hmm_vma_fault(addr, end, required_fault, walk);
-		hugetlb_vma_lock_read(vma);
-		return ret;
-	}
-
-	pfn = pte_pfn(entry) + ((start & ~hmask) >> PAGE_SHIFT);
-	for (; addr < end; addr += PAGE_SIZE, i++, pfn++)
-		range->hmm_pfns[i] = pfn | cpu_flags;
-
-	spin_unlock(ptl);
-	return 0;
-}
-#else
-#define hmm_vma_walk_hugetlb_entry NULL
-#endif /* CONFIG_HUGETLB_PAGE */
-
 static int hmm_vma_walk_test(unsigned long start, unsigned long end,
 			     struct mm_walk *walk)
 {
@@ -554,7 +501,6 @@ static const struct mm_walk_ops hmm_walk_ops = {
 	.pud_entry	= hmm_vma_walk_pud,
 	.pmd_entry	= hmm_vma_walk_pmd,
 	.pte_hole	= hmm_vma_walk_hole,
-	.hugetlb_entry	= hmm_vma_walk_hugetlb_entry,
 	.test_walk	= hmm_vma_walk_test,
 	.walk_lock	= PGWALK_RDLOCK,
 };

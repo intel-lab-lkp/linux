@@ -555,15 +555,6 @@ static int prot_none_pte_entry(pte_t *pte, unsigned long addr,
 		0 : -EACCES;
 }
 
-static int prot_none_hugetlb_entry(pte_t *pte, unsigned long hmask,
-				   unsigned long addr, unsigned long next,
-				   struct mm_walk *walk)
-{
-	return pfn_modify_allowed(pte_pfn(ptep_get(pte)),
-				  *(pgprot_t *)(walk->private)) ?
-		0 : -EACCES;
-}
-
 static int prot_none_test(unsigned long addr, unsigned long next,
 			  struct mm_walk *walk)
 {
@@ -572,7 +563,6 @@ static int prot_none_test(unsigned long addr, unsigned long next,
 
 static const struct mm_walk_ops prot_none_walk_ops = {
 	.pte_entry		= prot_none_pte_entry,
-	.hugetlb_entry		= prot_none_hugetlb_entry,
 	.test_walk		= prot_none_test,
 	.walk_lock		= PGWALK_WRLOCK,
 };

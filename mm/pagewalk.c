@@ -257,49 +257,6 @@ static int walk_pgd_range(unsigned long addr, unsigned long end,
 	return err;
 }
 
-#ifdef CONFIG_HUGETLB_PAGE
-static unsigned long hugetlb_entry_end(struct hstate *h, unsigned long addr,
-				       unsigned long end)
-{
-	unsigned long boundary = (addr & huge_page_mask(h)) + huge_page_size(h);
-	return boundary < end ? boundary : end;
-}
-
-static int walk_hugetlb_range(unsigned long addr, unsigned long end,
-			      struct mm_walk *walk)
-{
-	struct vm_area_struct *vma = walk->vma;
-	struct hstate *h = hstate_vma(vma);
-	unsigned long next;
-	unsigned long hmask = huge_page_mask(h);
-	unsigned long sz = huge_page_size(h);
-	pte_t *pte;
-	const struct mm_walk_ops *ops = walk->ops;
-	int err = 0;
-
-	do {
-		next = hugetlb_entry_end(h, addr, end);
-		pte = hugetlb_walk(vma, addr & hmask, sz);
-		if (pte)
-			err = ops->hugetlb_entry(pte, hmask, addr, next, walk);
-		else if (ops->pte_hole)
-			err = ops->pte_hole(addr, next, -1, walk);
-		if (err)
-			break;
-	} while (addr = next, addr != end);
-
-	return err;
-}
-
-#else /* CONFIG_HUGETLB_PAGE */
-static int walk_hugetlb_range(unsigned long addr, unsigned long end,
-			      struct mm_walk *walk)
-{
-	return 0;
-}
-
-#endif /* CONFIG_HUGETLB_PAGE */
-
 /*
  * Decide whether we really walk over the current vma on [@start, @end)
  * or skip it via the returned value. Return 0 if we do walk over the
@@ -346,11 +303,7 @@ static int __walk_page_range(unsigned long start, unsigned long end,
 	}
 
 	vma_pgtable_walk_begin(vma);
-	if (is_vm_hugetlb_page(vma)) {
-		if (ops->hugetlb_entry)
-			err = walk_hugetlb_range(start, end, walk);
-	} else
-		err = walk_pgd_range(start, end, walk);
+	err = walk_pgd_range(start, end, walk);
 	vma_pgtable_walk_end(vma);
 
 	if (ops->post_vma)

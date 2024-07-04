@@ -882,26 +882,9 @@ out:
 	return ret;
 }
 
-#ifdef CONFIG_HUGETLB_PAGE
-static int hwpoison_hugetlb_range(pte_t *ptep, unsigned long hmask,
-			    unsigned long addr, unsigned long end,
-			    struct mm_walk *walk)
-{
-	struct hwpoison_walk *hwp = walk->private;
-	pte_t pte = huge_ptep_get(walk->mm, addr, ptep);
-	struct hstate *h = hstate_vma(walk->vma);
-
-	return check_hwpoisoned_entry(pte, addr, huge_page_shift(h),
-				      hwp->pfn, &hwp->tk);
-}
-#else
-#define hwpoison_hugetlb_range	NULL
-#endif
-
 static const struct mm_walk_ops hwpoison_walk_ops = {
 	.pud_entry = hwpoison_pud_range,
 	.pmd_entry = hwpoison_pte_range,
-	.hugetlb_entry = hwpoison_hugetlb_range,
 	.walk_lock = PGWALK_RDLOCK,
 };
 

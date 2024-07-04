@@ -645,51 +645,6 @@ out:
 	return 0;
 }
 
-static int queue_folios_hugetlb(pte_t *pte, unsigned long hmask,
-			       unsigned long addr, unsigned long end,
-			       struct mm_walk *walk)
-{
-#ifdef CONFIG_HUGETLB_PAGE
-	struct queue_pages *qp = walk->private;
-	unsigned long flags = qp->flags;
-	struct folio *folio;
-	spinlock_t *ptl;
-	pte_t entry;
-
-	ptl = huge_pte_lock(hstate_vma(walk->vma), walk->mm, pte);
-	entry = huge_ptep_get(walk->mm, addr, pte);
-	if (!pte_present(entry)) {
-		if (unlikely(is_hugetlb_entry_migration(entry)))
-			qp->nr_failed++;
-		goto unlock;
-	}
-	folio = pfn_folio(pte_pfn(entry));
-	if (!queue_folio_required(folio, qp))
-		goto unlock;
-	if (!(flags & (MPOL_MF_MOVE | MPOL_MF_MOVE_ALL)) ||
-	    !vma_migratable(walk->vma)) {
-		qp->nr_failed++;
-		goto unlock;
-	}
-	/*
-	 * Unless MPOL_MF_MOVE_ALL, we try to avoid migrating a shared folio.
-	 * Choosing not to migrate a shared folio is not counted as a failure.
-	 *
-	 * See folio_likely_mapped_shared() on possible imprecision when we
-	 * cannot easily detect if a folio is shared.
-	 */
-	if ((flags & MPOL_MF_MOVE_ALL) ||
-	    (!folio_likely_mapped_shared(folio) && !hugetlb_pmd_shared(pte)))
-		if (!isolate_hugetlb(folio, qp->pagelist))
-			qp->nr_failed++;
-unlock:
-	spin_unlock(ptl);
-	if (qp->nr_failed && strictly_unmovable(flags))
-		return -EIO;
-#endif
-	return 0;
-}
-
 #ifdef CONFIG_NUMA_BALANCING
 /*
  * This is used to mark a range of virtual addresses to be inaccessible.
@@ -760,7 +715,6 @@ static int queue_pages_test_walk(unsigned long start, unsigned long end,
 }
 
 static const struct mm_walk_ops queue_pages_walk_ops = {
-	.hugetlb_entry		= queue_folios_hugetlb,
 	.pud_entry		= queue_folios_pud,
 	.pmd_entry		= queue_folios_pte_range,
 	.test_walk		= queue_pages_test_walk,
@@ -768,7 +722,6 @@ static const struct mm_walk_ops queue_pages_walk_ops = {
 };
 
 static const struct mm_walk_ops queue_pages_lock_vma_walk_ops = {
-	.hugetlb_entry		= queue_folios_hugetlb,
 	.pmd_entry		= queue_folios_pte_range,
 	.test_walk		= queue_pages_test_walk,
 	.walk_lock		= PGWALK_WRLOCK,

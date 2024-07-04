@@ -2743,34 +2743,7 @@ static int __s390_enable_skey_pmd(pmd_t *pmd, unsigned long addr,
 	return 0;
 }
 
-static int __s390_enable_skey_hugetlb(pte_t *pte, unsigned long addr,
-				      unsigned long hmask, unsigned long next,
-				      struct mm_walk *walk)
-{
-	pmd_t *pmd = (pmd_t *)pte;
-	unsigned long start, end;
-	struct page *page = pmd_page(*pmd);
-
-	/*
-	 * The write check makes sure we do not set a key on shared
-	 * memory. This is needed as the walker does not differentiate
-	 * between actual guest memory and the process executable or
-	 * shared libraries.
-	 */
-	if (pmd_val(*pmd) & _SEGMENT_ENTRY_INVALID ||
-	    !(pmd_val(*pmd) & _SEGMENT_ENTRY_WRITE))
-		return 0;
-
-	start = pmd_val(*pmd) & HPAGE_MASK;
-	end = start + HPAGE_SIZE;
-	__storage_key_init_range(start, end);
-	set_bit(PG_arch_1, &page->flags);
-	cond_resched();
-	return 0;
-}
-
 static const struct mm_walk_ops enable_skey_walk_ops = {
-	.hugetlb_entry		= __s390_enable_skey_hugetlb,
 	.pte_entry		= __s390_enable_skey_pte,
 	.pmd_entry		= __s390_enable_skey_pmd,
 	.walk_lock		= PGWALK_WRLOCK,

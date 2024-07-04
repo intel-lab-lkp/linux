@@ -360,63 +360,9 @@ out:
 	return 0;
 }
 
-#ifdef CONFIG_HUGETLB_PAGE
-static void damon_hugetlb_mkold(pte_t *pte, struct mm_struct *mm,
-				struct vm_area_struct *vma, unsigned long addr)
-{
-	bool referenced = false;
-	pte_t entry = huge_ptep_get(mm, addr, pte);
-	struct folio *folio = pfn_folio(pte_pfn(entry));
-	unsigned long psize = huge_page_size(hstate_vma(vma));
-
-	folio_get(folio);
-
-	if (pte_young(entry)) {
-		referenced = true;
-		entry = pte_mkold(entry);
-		set_huge_pte_at(mm, addr, pte, entry, psize);
-	}
-
-#ifdef CONFIG_MMU_NOTIFIER
-	if (mmu_notifier_clear_young(mm, addr,
-				     addr + huge_page_size(hstate_vma(vma))))
-		referenced = true;
-#endif /* CONFIG_MMU_NOTIFIER */
-
-	if (referenced)
-		folio_set_young(folio);
-
-	folio_set_idle(folio);
-	folio_put(folio);
-}
-
-static int damon_mkold_hugetlb_entry(pte_t *pte, unsigned long hmask,
-				     unsigned long addr, unsigned long end,
-				     struct mm_walk *walk)
-{
-	struct hstate *h = hstate_vma(walk->vma);
-	spinlock_t *ptl;
-	pte_t entry;
-
-	ptl = huge_pte_lock(h, walk->mm, pte);
-	entry = huge_ptep_get(walk->mm, addr, pte);
-	if (!pte_present(entry))
-		goto out;
-
-	damon_hugetlb_mkold(pte, walk->mm, walk->vma, addr);
-
-out:
-	spin_unlock(ptl);
-	return 0;
-}
-#else
-#define damon_mkold_hugetlb_entry NULL
-#endif /* CONFIG_HUGETLB_PAGE */
-
 static const struct mm_walk_ops damon_mkold_ops = {
 	.pud_entry = damon_mkold_pud_entry,
 	.pmd_entry = damon_mkold_pmd_entry,
-	.hugetlb_entry = damon_mkold_hugetlb_entry,
 	.walk_lock = PGWALK_RDLOCK,
 };
 
@@ -562,44 +508,9 @@ out:
 	return 0;
 }
 
-#ifdef CONFIG_HUGETLB_PAGE
-static int damon_young_hugetlb_entry(pte_t *pte, unsigned long hmask,
-				     unsigned long addr, unsigned long end,
-				     struct mm_walk *walk)
-{
-	struct damon_young_walk_private *priv = walk->private;
-	struct hstate *h = hstate_vma(walk->vma);
-	struct folio *folio;
-	spinlock_t *ptl;
-	pte_t entry;
-
-	ptl = huge_pte_lock(h, walk->mm, pte);
-	entry = huge_ptep_get(walk->mm, addr, pte);
-	if (!pte_present(entry))
-		goto out;
-
-	folio = pfn_folio(pte_pfn(entry));
-	folio_get(folio);
-
-	if (pte_young(entry) || !folio_test_idle(folio) ||
-	    mmu_notifier_test_young(walk->mm, addr))
-		priv->young = true;
-	*priv->folio_sz = huge_page_size(h);
-
-	folio_put(folio);
-
-out:
-	spin_unlock(ptl);
-	return 0;
-}
-#else
-#define damon_young_hugetlb_entry NULL
-#endif /* CONFIG_HUGETLB_PAGE */
-
 static const struct mm_walk_ops damon_young_ops = {
 	.pud_entry = damon_young_pud_entry,
 	.pmd_entry = damon_young_pmd_entry,
-	.hugetlb_entry = damon_young_hugetlb_entry,
 	.walk_lock = PGWALK_RDLOCK,
 };
 
