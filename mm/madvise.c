@@ -565,8 +565,20 @@ restart:
 	return 0;
 }
 
+static int madvise_cold_test_walk(unsigned long start, unsigned long end,
+			   struct mm_walk *walk)
+{
+	struct vm_area_struct *vma = walk->vma;
+
+	if (is_vm_hugetlb_page(vma))
+		return 1;
+
+	return 0;
+}
+
 static const struct mm_walk_ops cold_walk_ops = {
 	.pmd_entry = madvise_cold_or_pageout_pte_range,
+	.test_walk = madvise_cold_test_walk,
 	.walk_lock = PGWALK_RDLOCK,
 };
 
