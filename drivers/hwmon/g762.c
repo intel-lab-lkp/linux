@@ -35,7 +35,6 @@
 #include <linux/i2c.h>
 #include <linux/init.h>
 #include <linux/hwmon.h>
-#include <linux/hwmon-sysfs.h>
 #include <linux/kernel.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
@@ -117,7 +116,7 @@ static inline unsigned int rpm_from_cnt(u8 cnt, u32 clk_freq, u16 p,
 }
 
 /*
- * Convert fan RPM value from sysfs into count value for fan controller
+ * Convert fan RPM value into count value for fan controller
  * register (FAN_SET_CNT).
  */
 static inline unsigned char cnt_from_rpm(unsigned long rpm, u32 clk_freq, u16 p,
@@ -156,11 +155,11 @@ static int do_set_clk_freq(struct device *dev, unsigned long val)
 }
 
 /* Set pwm mode. Accepts either 0 (PWM mode) or 1 (DC mode) */
-static int do_set_pwm_mode(struct device *dev, unsigned long val)
+static int do_set_pwm_mode(struct device *dev, long val)
 {
 	struct g762_data *data = dev_get_drvdata(dev);
 
-	if (val && val != 1)
+	if (val < 0 || val > 1)
 		return -EINVAL;
 
 	return regmap_update_bits(data->regmap, G762_REG_FAN_CMD1,
@@ -169,11 +168,11 @@ static int do_set_pwm_mode(struct device *dev, unsigned long val)
 }
 
 /* Set fan clock divisor. Accepts either 1, 2, 4 or 8. */
-static int do_set_fan_div(struct device *dev, unsigned long val)
+static int do_set_fan_div(struct device *dev, long val)
 {
 	struct g762_data *data = dev_get_drvdata(dev);
 
-	if (hweight_long(val) != 1 || val > 8)
+	if (val < 0 || hweight_long(val) != 1 || val > 8)
 		return -EINVAL;
 
 	return regmap_update_bits(data->regmap, G762_REG_FAN_CMD1,
@@ -195,7 +194,7 @@ static int do_set_fan_gear_mode(struct device *dev, u32 val)
 }
 
 /* Set number of fan pulses per revolution. Accepts either 2 or 4. */
-static int do_set_fan_pulses(struct device *dev, unsigned long val)
+static int do_set_fan_pulses(struct device *dev, long val)
 {
 	struct g762_data *data = dev_get_drvdata(dev);
 
@@ -208,7 +207,7 @@ static int do_set_fan_pulses(struct device *dev, unsigned long val)
 }
 
 /* Set fan mode. Accepts either 1 (open-loop) or 2 (closed-loop). */
-static int do_set_pwm_enable(struct device *dev, unsigned long val)
+static int do_set_pwm_enable(struct device *dev, long val)
 {
 	struct g762_data *data = dev_get_drvdata(dev);
 	struct regmap *regmap = data->regmap;
@@ -257,11 +256,11 @@ static int do_set_pwm_polarity(struct device *dev, unsigned long val)
  * Set pwm value. Accepts values between 0 (stops the fan) and
  * 255 (full speed). This only makes sense in open-loop mode.
  */
-static int do_set_pwm(struct device *dev, unsigned long val)
+static int do_set_pwm(struct device *dev, long val)
 {
 	struct g762_data *data = dev_get_drvdata(dev);
 
-	if (val > 255)
+	if (val < 0 || val > 255)
 		return -EINVAL;
 
 	return regmap_write(data->regmap, G762_REG_SET_OUT, val);
@@ -271,13 +270,16 @@ static int do_set_pwm(struct device *dev, unsigned long val)
  * Set fan RPM value. Can be called both in closed and open-loop mode
  * but effect will only be seen after closed-loop mode is configured.
  */
-static int do_set_fan_target(struct device *dev, unsigned long val)
+static int do_set_fan_target(struct device *dev, long val)
 {
 	struct g762_data *data = dev_get_drvdata(dev);
 	struct regmap *regmap = data->regmap;
 	u32 cmd1, cmd2;
 	u8 set_cnt;
 	int ret;
+
+	if (val < 0)
+		return -EINVAL;
 
 	mutex_lock(&data->update_lock);
 
@@ -311,9 +313,7 @@ static int do_set_fan_startv(struct device *dev, unsigned long val)
 				  FIELD_PREP(G762_REG_FAN_CMD2_FAN_STARTV_MASK, val));
 }
 
-/*
- * sysfs attributes
- */
+/* hwmon API access and helper functions */
 
 static int get_fan_rpm_locked(struct g762_data *data, int reg)
 {
@@ -348,317 +348,201 @@ static int get_fan_rpm(struct g762_data *data, int reg)
 	return ret;
 }
 
-/*
- * Read function for fan1_input sysfs file. Return current fan RPM value, or
- * 0 if fan is out of control.
- */
-static ssize_t fan1_input_show(struct device *dev,
-			       struct device_attribute *da, char *buf)
+static int g762_fan_read(struct device *dev, u32 attr, long *val)
 {
 	struct g762_data *data = dev_get_drvdata(dev);
-	u32 status;
+	u32 regval;
 	int ret;
 
-	mutex_lock(&data->update_lock);
-	ret = regmap_read(data->regmap, G762_REG_FAN_STA, &status);
-	/* reverse logic: fan out of control reporting is enabled low */
-	if (ret || !(status & G762_REG_FAN_STA_OOC))
-		goto unlock;
-
-	ret = get_fan_rpm_locked(data, G762_REG_ACT_CNT);
-	if (ret < 0)
-		goto unlock;
-
-	ret = sprintf(buf, "%u\n", ret);
-unlock:
-	mutex_unlock(&data->update_lock);
-	return ret;
+	switch (attr) {
+	case hwmon_fan_target:
+		ret = get_fan_rpm(data, G762_REG_SET_CNT);
+		if (ret < 0)
+			return ret;
+		*val = ret;
+		break;
+	case hwmon_fan_div:
+		ret = regmap_read(data->regmap, G762_REG_FAN_CMD1, &regval);
+		if (ret < 0)
+			return ret;
+		*val = G762_CLKDIV_FROM_REG(regval);
+		break;
+	case hwmon_fan_pulses:
+		ret = regmap_read(data->regmap, G762_REG_FAN_CMD1, &regval);
+		if (ret < 0)
+			return ret;
+		*val = G762_PULSE_FROM_REG(regval);
+		break;
+	case hwmon_fan_input:
+		mutex_lock(&data->update_lock);
+		ret = regmap_read(data->regmap, G762_REG_FAN_STA, &regval);
+		if (ret || !(regval & G762_REG_FAN_STA_OOC)) {
+			mutex_unlock(&data->update_lock);
+			return ret ? : -ENODATA;
+		}
+		ret = get_fan_rpm_locked(data, G762_REG_ACT_CNT);
+		mutex_unlock(&data->update_lock);
+		if (ret < 0)
+			return ret;
+		*val = ret;
+		break;
+	case hwmon_fan_alarm:
+		ret = regmap_read(data->regmap, G762_REG_FAN_STA, &regval);
+		if (ret < 0)
+			return ret;
+		/* G762_REG_FAN_STA_OOC is active low */
+		*val = !(regval & G762_REG_FAN_STA_OOC);
+		break;
+	case hwmon_fan_fault:
+		ret = regmap_read(data->regmap, G762_REG_FAN_STA, &regval);
+		if (ret < 0)
+			return ret;
+		*val = !!(regval & G762_REG_FAN_STA_FAIL);
+		break;
+	default:
+		return -EOPNOTSUPP;
+	}
+	return 0;
 }
 
-/*
- * Read and write functions for pwm1_mode sysfs file. Get and set fan speed
- * control mode i.e. PWM (1) or DC (0).
- */
-static ssize_t pwm1_mode_show(struct device *dev, struct device_attribute *da,
-			      char *buf)
+static int g762_pwm_read(struct device *dev, u32 attr, long *val)
 {
 	struct g762_data *data = dev_get_drvdata(dev);
-	u32 cmd1;
+	u32 regval;
 	int ret;
 
-	ret = regmap_read(data->regmap, G762_REG_FAN_CMD1, &cmd1);
-	if (ret < 0)
-		return ret;
-
-	return sprintf(buf, "%d\n", !!(cmd1 & G762_REG_FAN_CMD1_OUT_MODE));
+	switch (attr) {
+	case hwmon_pwm_input:
+		ret = regmap_read(data->regmap, G762_REG_SET_OUT, &regval);
+		if (ret < 0)
+			return ret;
+		*val = regval;
+		break;
+	case hwmon_pwm_mode:
+		ret = regmap_read(data->regmap, G762_REG_FAN_CMD1, &regval);
+		if (ret < 0)
+			return ret;
+		*val = !!(regval & G762_REG_FAN_CMD1_OUT_MODE);
+		break;
+	case hwmon_pwm_enable:
+		ret = regmap_read(data->regmap, G762_REG_FAN_CMD1, &regval);
+		if (ret < 0)
+			return ret;
+		*val = !!(regval & G762_REG_FAN_CMD1_FAN_MODE) + 1;
+		break;
+	default:
+		return -EOPNOTSUPP;
+	}
+	return 0;
 }
 
-static ssize_t pwm1_mode_store(struct device *dev,
-			       struct device_attribute *da, const char *buf,
-			       size_t count)
+static int g762_read(struct device *dev, enum hwmon_sensor_types type,
+		     u32 attr, int channel, long *val)
 {
-	unsigned long val;
-	int ret;
-
-	if (kstrtoul(buf, 10, &val))
-		return -EINVAL;
-
-	ret = do_set_pwm_mode(dev, val);
-	if (ret < 0)
-		return ret;
-
-	return count;
+	switch (type) {
+	case hwmon_fan:
+		return g762_fan_read(dev, attr, val);
+	case hwmon_pwm:
+		return g762_pwm_read(dev, attr, val);
+	default:
+		return -EOPNOTSUPP;
+	}
 }
 
-/*
- * Read and write functions for fan1_div sysfs file. Get and set fan
- * controller prescaler value
- */
-static ssize_t fan1_div_show(struct device *dev, struct device_attribute *da,
-			     char *buf)
+static int g762_fan_write(struct device *dev, u32 attr, long val)
 {
-	struct g762_data *data = dev_get_drvdata(dev);
-	u32 cmd1;
-	int ret;
-
-	ret = regmap_read(data->regmap, G762_REG_FAN_CMD1, &cmd1);
-	if (ret < 0)
-		return ret;
-
-	return sprintf(buf, "%ld\n", G762_CLKDIV_FROM_REG(cmd1));
+	switch (attr) {
+	case hwmon_fan_target:
+		return do_set_fan_target(dev, val);
+	case hwmon_fan_div:
+		return do_set_fan_div(dev, val);
+	case hwmon_fan_pulses:
+		return do_set_fan_pulses(dev, val);
+	default:
+		return -EOPNOTSUPP;
+	}
 }
 
-static ssize_t fan1_div_store(struct device *dev, struct device_attribute *da,
-			      const char *buf, size_t count)
+static int g762_pwm_write(struct device *dev, u32 attr, long val)
 {
-	unsigned long val;
-	int ret;
-
-	if (kstrtoul(buf, 10, &val))
-		return -EINVAL;
-
-	ret = do_set_fan_div(dev, val);
-	if (ret < 0)
-		return ret;
-
-	return count;
+	switch (attr) {
+	case hwmon_pwm_input:
+		return do_set_pwm(dev, val);
+	case hwmon_pwm_mode:
+		return do_set_pwm_mode(dev, val);
+	case hwmon_pwm_enable:
+		return do_set_pwm_enable(dev, val);
+	default:
+		return -EOPNOTSUPP;
+	}
 }
 
-/*
- * Read and write functions for fan1_pulses sysfs file. Get and set number
- * of tachometer pulses per fan revolution.
- */
-static ssize_t fan1_pulses_show(struct device *dev,
-				struct device_attribute *da, char *buf)
+static int g762_write(struct device *dev, enum hwmon_sensor_types type,
+		      u32 attr, int channel, long val)
 {
-	struct g762_data *data = dev_get_drvdata(dev);
-	u32 cmd1;
-	int ret;
-
-	ret = regmap_read(data->regmap, G762_REG_FAN_CMD1, &cmd1);
-	if (ret < 0)
-		return ret;
-
-	return sprintf(buf, "%ld\n", G762_PULSE_FROM_REG(cmd1));
+	switch (type) {
+	case hwmon_fan:
+		return g762_fan_write(dev, attr, val);
+	case hwmon_pwm:
+		return g762_pwm_write(dev, attr, val);
+	default:
+		return -EOPNOTSUPP;
+	}
 }
 
-static ssize_t fan1_pulses_store(struct device *dev,
-				 struct device_attribute *da, const char *buf,
-				 size_t count)
+static umode_t g762_is_visible(const void *_data, enum hwmon_sensor_types type,
+			       u32 attr, int channel)
 {
-	unsigned long val;
-	int ret;
-
-	if (kstrtoul(buf, 10, &val))
-		return -EINVAL;
-
-	ret = do_set_fan_pulses(dev, val);
-	if (ret < 0)
-		return ret;
-
-	return count;
+	switch (type) {
+	case hwmon_fan:
+		switch (attr) {
+		case hwmon_fan_input:
+		case hwmon_fan_alarm:
+		case hwmon_fan_fault:
+			return 0444;
+		case hwmon_fan_target:
+		case hwmon_fan_div:
+		case hwmon_fan_pulses:
+			return 0644;
+		default:
+			break;
+		}
+		break;
+	case hwmon_pwm:
+		switch (attr) {
+		case hwmon_pwm_input:
+		case hwmon_pwm_mode:
+		case hwmon_pwm_enable:
+			return 0644;
+		default:
+			break;
+		}
+		break;
+	default:
+		break;
+	}
+	return 0;
 }
 
-/*
- * Read and write functions for pwm1_enable. Get and set fan speed control mode
- * (i.e. closed or open-loop).
- *
- * Following documentation about hwmon's sysfs interface, a pwm1_enable node
- * should accept the following:
- *
- *  0 : no fan speed control (i.e. fan at full speed)
- *  1 : manual fan speed control enabled (use pwm[1-*]) (open-loop)
- *  2+: automatic fan speed control enabled (use fan[1-*]_target) (closed-loop)
- *
- * but we do not accept 0 as this mode is not natively supported by the chip
- * and it is not emulated by g762 driver. -EINVAL is returned in this case.
- */
-static ssize_t pwm1_enable_show(struct device *dev,
-				struct device_attribute *da, char *buf)
-{
-	struct g762_data *data = dev_get_drvdata(dev);
-	u32 cmd1;
-	int ret;
-
-	ret = regmap_read(data->regmap, G762_REG_FAN_CMD1, &cmd1);
-	if (ret < 0)
-		return ret;
-
-	return sprintf(buf, "%d\n",
-		       !!(cmd1 & G762_REG_FAN_CMD1_FAN_MODE) + 1);
-}
-
-static ssize_t pwm1_enable_store(struct device *dev,
-				 struct device_attribute *da, const char *buf,
-				 size_t count)
-{
-	unsigned long val;
-	int ret;
-
-	if (kstrtoul(buf, 10, &val))
-		return -EINVAL;
-
-	ret = do_set_pwm_enable(dev, val);
-	if (ret < 0)
-		return ret;
-
-	return count;
-}
-
-/*
- * Read and write functions for pwm1 sysfs file. Get and set pwm value
- * (which affects fan speed) in open-loop mode. 0 stops the fan and 255
- * makes it run at full speed.
- */
-static ssize_t pwm1_show(struct device *dev, struct device_attribute *da,
-			 char *buf)
-{
-	struct g762_data *data = dev_get_drvdata(dev);
-	int ret;
-	u32 pwm;
-
-	ret = regmap_read(data->regmap, G762_REG_SET_OUT, &pwm);
-	if (ret < 0)
-		return ret;
-
-	return sprintf(buf, "%u\n", pwm);
-}
-
-static ssize_t pwm1_store(struct device *dev, struct device_attribute *da,
-			  const char *buf, size_t count)
-{
-	unsigned long val;
-	int ret;
-
-	if (kstrtoul(buf, 10, &val))
-		return -EINVAL;
-
-	ret = do_set_pwm(dev, val);
-	if (ret < 0)
-		return ret;
-
-	return count;
-}
-
-/*
- * Read and write function for fan1_target sysfs file. Get/set the fan speed in
- * closed-loop mode. Speed is given as a RPM value; then the chip will regulate
- * the fan speed using pulses from fan tachometer.
- *
- * Refer to rpm_from_cnt() implementation above to get info about count number
- * calculation.
- *
- * Also note that due to rounding errors it is possible that you don't read
- * back exactly the value you have set.
- */
-static ssize_t fan1_target_show(struct device *dev,
-				struct device_attribute *da, char *buf)
-{
-	struct g762_data *data = dev_get_drvdata(dev);
-	int rpm;
-
-	rpm = get_fan_rpm(data, G762_REG_SET_CNT);
-	if (rpm < 0)
-		return rpm;
-
-	return sprintf(buf, "%d\n", rpm);
-}
-
-static ssize_t fan1_target_store(struct device *dev,
-				 struct device_attribute *da, const char *buf,
-				 size_t count)
-{
-	unsigned long val;
-	int ret;
-
-	if (kstrtoul(buf, 10, &val))
-		return -EINVAL;
-
-	ret = do_set_fan_target(dev, val);
-	if (ret < 0)
-		return ret;
-
-	return count;
-}
-
-/* read function for fan1_fault sysfs file. */
-static ssize_t fan1_fault_show(struct device *dev, struct device_attribute *da,
-			       char *buf)
-{
-	struct g762_data *data = dev_get_drvdata(dev);
-	u32 status;
-	int ret;
-
-	ret = regmap_read(data->regmap, G762_REG_FAN_STA, &status);
-	if (ret < 0)
-		return ret;
-
-	return sprintf(buf, "%u\n", !!(status & G762_REG_FAN_STA_FAIL));
-}
-
-/*
- * read function for fan1_alarm sysfs file. Note that OOC condition is
- * enabled low
- */
-static ssize_t fan1_alarm_show(struct device *dev,
-			       struct device_attribute *da, char *buf)
-{
-	struct g762_data *data = dev_get_drvdata(dev);
-	u32 status;
-	int ret;
-
-	ret = regmap_read(data->regmap, G762_REG_FAN_STA, &status);
-	if (ret < 0)
-		return ret;
-
-	return sprintf(buf, "%u\n", !(status & G762_REG_FAN_STA_OOC));
-}
-
-static DEVICE_ATTR_RW(pwm1);
-static DEVICE_ATTR_RW(pwm1_mode);
-static DEVICE_ATTR_RW(pwm1_enable);
-static DEVICE_ATTR_RO(fan1_input);
-static DEVICE_ATTR_RO(fan1_alarm);
-static DEVICE_ATTR_RO(fan1_fault);
-static DEVICE_ATTR_RW(fan1_target);
-static DEVICE_ATTR_RW(fan1_div);
-static DEVICE_ATTR_RW(fan1_pulses);
-
-/* Driver data */
-static struct attribute *g762_attrs[] = {
-	&dev_attr_fan1_input.attr,
-	&dev_attr_fan1_alarm.attr,
-	&dev_attr_fan1_fault.attr,
-	&dev_attr_fan1_target.attr,
-	&dev_attr_fan1_div.attr,
-	&dev_attr_fan1_pulses.attr,
-	&dev_attr_pwm1.attr,
-	&dev_attr_pwm1_mode.attr,
-	&dev_attr_pwm1_enable.attr,
+static const struct hwmon_channel_info * const g762_info[] = {
+	HWMON_CHANNEL_INFO(fan,
+			   HWMON_F_INPUT | HWMON_F_ALARM | HWMON_F_FAULT |
+			   HWMON_F_TARGET | HWMON_F_DIV | HWMON_F_PULSES),
+	HWMON_CHANNEL_INFO(pwm,
+			   HWMON_PWM_INPUT | HWMON_PWM_MODE | HWMON_PWM_ENABLE),
 	NULL
 };
 
-ATTRIBUTE_GROUPS(g762);
+static const struct hwmon_ops g762_hwmon_ops = {
+	.is_visible = g762_is_visible,
+	.read = g762_read,
+	.write = g762_write,
+};
+
+static const struct hwmon_chip_info g762_chip_info = {
+	.ops = &g762_hwmon_ops,
+	.info = g762_info,
+};
 
 /*
  * Enable both fan failure detection and fan out of control protection.
@@ -788,8 +672,9 @@ static int g762_probe(struct i2c_client *client)
 	if (ret)
 		return ret;
 
-	hwmon_dev = devm_hwmon_device_register_with_groups(dev, client->name,
-							    data, g762_groups);
+	hwmon_dev = devm_hwmon_device_register_with_info(dev, client->name,
+							 data, &g762_chip_info,
+							 NULL);
 	return PTR_ERR_OR_ZERO(hwmon_dev);
 }
 
