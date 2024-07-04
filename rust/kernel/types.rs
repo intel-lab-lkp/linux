@@ -2,6 +2,7 @@
 
 //! Kernel types.
 
+use crate::alloc::KBox;
 use crate::init::{self, PinInit};
 use alloc::boxed::Box;
 use core::{
@@ -86,6 +87,28 @@ impl<T: 'static> ForeignOwnable for Box<T> {
         // SAFETY: The safety requirements of this function ensure that `ptr` comes from a previous
         // call to `Self::into_foreign`.
         unsafe { Box::from_raw(ptr as _) }
+    }
+}
+
+impl<T: 'static> ForeignOwnable for KBox<T> {
+    type Borrowed<'a> = &'a T;
+
+    fn into_foreign(self) -> *const core::ffi::c_void {
+        KBox::into_raw(self) as _
+    }
+
+    unsafe fn borrow<'a>(ptr: *const core::ffi::c_void) -> &'a T {
+        // SAFETY: The safety requirements for this function ensure that the object is still alive,
+        // so it is safe to dereference the raw pointer.
+        // The safety requirements of `from_foreign` also ensure that the object remains alive for
+        // the lifetime of the returned value.
+        unsafe { &*ptr.cast() }
+    }
+
+    unsafe fn from_foreign(ptr: *const core::ffi::c_void) -> Self {
+        // SAFETY: The safety requirements of this function ensure that `ptr` comes from a previous
+        // call to `Self::into_foreign`.
+        unsafe { KBox::from_raw(ptr as _) }
     }
 }
 
