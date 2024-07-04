@@ -155,7 +155,7 @@ static int walk_pud_range(p4d_t *p4d, unsigned long addr, unsigned long end,
 
 		walk->action = ACTION_SUBTREE;
 
-		if (ops->pud_entry)
+		if (ops->pud_entry && pud_leaf(*pud))
 			err = ops->pud_entry(pud, addr, next, walk);
 		if (err)
 			break;
