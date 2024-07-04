@@ -434,6 +434,39 @@ struct damon_young_walk_private {
 	bool young;
 };
 
+static int damon_young_pud_entry(pmd_t *pud, unsigned long addr,
+				 unsigned long next, struct mm_walk *walk)
+{
+#ifdef CONFIG_PGTABLE_HAS_HUGE_LEAVES
+	spinlock_t *ptl;
+	struct folio *folio;
+	struct damon_young_walk_private *priv = walk->private;
+
+	ptl = pud_huge_lock(vma, pud);
+	if (!ptl)
+		return 0;
+
+	if (!pud_present(*pud))
+		goto out;
+
+	folio = pfn_folio(pud_pfn(*pud));
+	if (!folio)
+		goto out;
+	folio_get(folio);
+
+	if (pud_young(pmde) || !folio_test_idle(folio) ||
+	    mmu_notifier_test_young(walk->mm, addr))
+		priv->young = true;
+
+	*priv->folio_sz = huge_page_size(h);
+	folio_put(folio);
+out:
+	spin_unlock(ptl);
+#endif
+	return 0;
+}
+
+
 static int damon_young_pmd_entry(pmd_t *pmd, unsigned long addr,
 		unsigned long next, struct mm_walk *walk)
 {
@@ -537,6 +570,7 @@ out:
 #endif /* CONFIG_HUGETLB_PAGE */
 
 static const struct mm_walk_ops damon_young_ops = {
+	.pud_entry = damon_young_pud_entry,
 	.pmd_entry = damon_young_pmd_entry,
 	.hugetlb_entry = damon_young_hugetlb_entry,
 	.walk_lock = PGWALK_RDLOCK,
