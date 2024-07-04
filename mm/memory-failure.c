@@ -772,6 +772,43 @@ static int check_hwpoisoned_entry(pte_t pte, unsigned long addr, short shift,
 }
 
 #ifdef CONFIG_PGTABLE_HAS_HUGE_LEAVES
+static int hwpoison_pud_range(pud_t *pudp, unsigned long addr,
+			      unsigned long end, struct mm_walk *walk)
+{
+	int ret = 0;
+	spinlock_t *ptl;
+	pud_t pud = *pudp;
+	unsigned long pfn;
+	struct hwpoison_walk *hwp = walk->private;
+
+	ptl = pud_huge_lock(pudp, walk->vma);
+	if (!ptl)
+		return 0;
+
+	if (pud_present(pud)) {
+		pfn = pud_pfn(pud);
+	} else {
+		swp_entry_t swp = pud_to_swp_entry(pud);
+
+		if (!is_hwpoison_entry(swp))
+			goto out_unlock;
+		pfn = swp_offset_pfn(swp);
+	}
+
+	if (!pfn || pfn != hwp->pfn)
+		goto out_unlock;
+
+	set_to_kill(&hwp->tk, addr, huge_page_shift(hstate_vma(walk->vma)));
+	ret = 1;
+out_unlock:
+	spin_unlock(ptl);
+	return ret;
+}
+#else
+hwpoison_pud_range NULL
+#endif
+
+#ifdef CONFIG_PGTABLE_HAS_HUGE_LEAVES
 static int check_hwpoisoned_pmd_entry(pmd_t *pmdp, unsigned long addr,
 				      struct hwpoison_walk *hwp,
 				      struct vm_area_struct *vma)
@@ -862,6 +899,7 @@ static int hwpoison_hugetlb_range(pte_t *ptep, unsigned long hmask,
 #endif
 
 static const struct mm_walk_ops hwpoison_walk_ops = {
+	.pud_entry = hwpoison_pud_range,
 	.pmd_entry = hwpoison_pte_range,
 	.hugetlb_entry = hwpoison_hugetlb_range,
 	.walk_lock = PGWALK_RDLOCK,
