@@ -386,28 +386,6 @@ static vm_fault_t kernfs_vma_fault(struct vm_fault *vmf)
 	return ret;
 }
 
-static vm_fault_t kernfs_vma_page_mkwrite(struct vm_fault *vmf)
-{
-	struct file *file = vmf->vma->vm_file;
-	struct kernfs_open_file *of = kernfs_of(file);
-	vm_fault_t ret;
-
-	if (!of->vm_ops)
-		return VM_FAULT_SIGBUS;
-
-	if (!kernfs_get_active(of->kn))
-		return VM_FAULT_SIGBUS;
-
-	ret = 0;
-	if (of->vm_ops->page_mkwrite)
-		ret = of->vm_ops->page_mkwrite(vmf);
-	else
-		file_update_time(file);
-
-	kernfs_put_active(of->kn);
-	return ret;
-}
-
 static int kernfs_vma_access(struct vm_area_struct *vma, unsigned long addr,
 			     void *buf, int len, int write)
 {
@@ -432,7 +410,6 @@ static int kernfs_vma_access(struct vm_area_struct *vma, unsigned long addr,
 static const struct vm_operations_struct kernfs_vm_ops = {
 	.open		= kernfs_vma_open,
 	.fault		= kernfs_vma_fault,
-	.page_mkwrite	= kernfs_vma_page_mkwrite,
 	.access		= kernfs_vma_access,
 };
 
@@ -481,6 +458,8 @@ static int kernfs_fop_mmap(struct file *file, struct vm_area_struct *vma)
 	 */
 	if (vma->vm_ops && vma->vm_ops->close)
 		goto out_put;
+
+	WARN_ON(vma->vm_ops && vma->vm_ops->page_mkwrite);
 
 	rc = 0;
 	if (!of->mmapped) {
