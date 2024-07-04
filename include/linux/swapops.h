@@ -126,6 +126,21 @@ static inline int is_swap_pte(pte_t pte)
 	return !pte_none(pte) && !pte_present(pte);
 }
 
+#ifdef CONFIG_HUGETLB_PAGE
+static inline int is_swap_pud(pud_t pud)
+{
+	return !pud_none(pud) && !pud_present(pud);
+}
+
+static inline swp_entry_t pud_to_swp_entry(pud_t pud)
+{
+	swp_entry_t arch_entry;
+
+	arch_entry = __pud_to_swp_entry(pud);
+	return swp_entry(__swp_type(arch_entry), __swp_offset(arch_entry));
+}
+#endif
+
 /*
  * Convert the arch-dependent pte representation of a swp_entry_t into an
  * arch-independent swp_entry_t.
