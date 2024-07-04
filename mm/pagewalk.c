@@ -119,7 +119,8 @@ again:
 		 * Check this here so we only break down trans_huge
 		 * pages when we _need_ to
 		 */
-		if ((!walk->vma && (pmd_leaf(*pmd) || !pmd_present(*pmd))) ||
+		if (((!walk->vma || is_vm_hugetlb_page(walk->vma)) &&
+		    (pmd_leaf(*pmd) || !pmd_present(*pmd))) ||
 		    walk->action == ACTION_CONTINUE ||
 		    !(ops->pte_entry))
 			continue;
@@ -169,7 +170,8 @@ static int walk_pud_range(p4d_t *p4d, unsigned long addr, unsigned long end,
 		if (walk->action == ACTION_AGAIN)
 			goto again;
 
-		if ((!walk->vma && (pud_leaf(*pud) || !pud_present(*pud))) ||
+		if (((!walk->vma || is_vm_hugetlb_page(walk->vma)) &&
+		    (pud_leaf(*pud) || !pud_present(*pud))) ||
 		    walk->action == ACTION_CONTINUE ||
 		    !(ops->pmd_entry || ops->pte_entry))
 			continue;
