@@ -2723,6 +2723,20 @@ static int __s390_enable_skey_pte(pte_t *pte, unsigned long addr,
 static int __s390_enable_skey_pmd(pmd_t *pmd, unsigned long addr,
 				  unsigned long next, struct mm_walk *walk)
 {
+	if (pmd_leaf(*pmd) && is_vm_hugetlb_page(vma))
+		unsigned long start, end;
+		struct page *page = pmd_page(*pmd);
+
+		if (pmd_val(*pmd) & _SEGMENT_ENTRY_INVALID ||
+		    !(pmd_val(*pmd) & _SEGMENT_ENTRY_WRITE))
+			return 0;
+
+		start = pmd_val(*pmd) & HPAGE_MASK;
+		end = start + HPAGE_SIZE;
+		__storage_key_init_range(start, end);
+		set_bit(PG_arch_1, &page->flags);
+	}
+
 	cond_resched();
 	return 0;
 }
