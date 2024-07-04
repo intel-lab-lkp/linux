@@ -18,6 +18,7 @@
 #include <linux/shmem_fs.h>
 #include <linux/hugetlb.h>
 #include <linux/pgtable.h>
+#include <linux/mm_inline.h>
 
 #include <linux/uaccess.h>
 #include "swap.h"
@@ -106,8 +107,9 @@ static int mincore_pte_range(pmd_t *pmd, unsigned long addr, unsigned long end,
 	unsigned char *vec = walk->private;
 	int nr = (end - addr) >> PAGE_SHIFT;
 
-	ptl = pmd_trans_huge_lock(pmd, vma);
+	ptl = pmd_huge_lock(pmd, vma);
 	if (ptl) {
+		/* Better handling of hugetlb is required (pte marker etc.) */
 		memset(vec, 1, nr);
 		spin_unlock(ptl);
 		goto out;
