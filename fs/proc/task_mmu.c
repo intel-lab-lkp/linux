@@ -825,6 +825,7 @@ static void smaps_pte_entry(pte_t *pte, unsigned long addr,
 	struct page *page = NULL;
 	bool present = false, young = false, dirty = false;
 	pte_t ptent = ptep_get(pte);
+	unsigned long size = pte_cont(ptent) ? PAGE_SIZE * CONT_PTES : PAGE_SIZE;
 
 	if (pte_present(ptent)) {
 		page = vm_normal_page(vma, addr, ptent);
@@ -834,18 +835,18 @@ static void smaps_pte_entry(pte_t *pte, unsigned long addr,
 	} else if (is_swap_pte(ptent)) {
 		swp_entry_t swpent = pte_to_swp_entry(ptent);
 
-		if (!non_swap_entry(swpent)) {
+		if (!is_vm_hugetlb_page(vma) && !non_swap_entry(swpent)) {
 			int mapcount;
 
-			mss->swap += PAGE_SIZE;
+			mss->swap += size;
 			mapcount = swp_swapcount(swpent);
 			if (mapcount >= 2) {
-				u64 pss_delta = (u64)PAGE_SIZE << PSS_SHIFT;
+				u64 pss_delta = (u64)size << PSS_SHIFT;
 
 				do_div(pss_delta, mapcount);
 				mss->swap_pss += pss_delta;
 			} else {
-				mss->swap_pss += (u64)PAGE_SIZE << PSS_SHIFT;
+				mss->swap_pss += (u64)size << PSS_SHIFT;
 			}
 		} else if (is_pfn_swap_entry(swpent)) {
 			if (is_device_private_entry(swpent))
@@ -860,7 +861,10 @@ static void smaps_pte_entry(pte_t *pte, unsigned long addr,
 	if (!page)
 		return;
 
-	smaps_account(mss, page, false, young, dirty, locked, present);
+	if (is_vm_hugetlb_page(vma))
+		mss_hugetlb_update(mss, page_folio(page), vma, pte);
+	else
+		smaps_account(mss, page, false, young, dirty, locked, present);
 }
 
 #ifdef CONFIG_PGTABLE_HAS_HUGE_LEAVES
@@ -952,6 +956,7 @@ static int smaps_pte_range(pmd_t *pmd, unsigned long addr, unsigned long end,
 	struct vm_area_struct *vma = walk->vma;
 	pte_t *pte;
 	spinlock_t *ptl;
+	unsigned long size, cont_ptes;
 
 	ptl = pmd_huge_lock(pmd, vma);
 	if (ptl) {
@@ -965,7 +970,9 @@ static int smaps_pte_range(pmd_t *pmd, unsigned long addr, unsigned long end,
 		walk->action = ACTION_AGAIN;
 		return 0;
 	}
-	for (; addr != end; pte++, addr += PAGE_SIZE)
+	size = pte_cont(ptep_get(pte)) ? PAGE_SIZE * CONT_PTES : PAGE_SIZE;
+	cont_ptes = pte_cont(ptep_get(pte)) ? CONT_PTES : 1;
+	for (; addr != end; pte += cont_ptes, addr += size)
 		smaps_pte_entry(pte, addr, walk);
 	pte_unmap_unlock(pte - 1, ptl);
 out:
