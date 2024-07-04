@@ -212,8 +212,20 @@ static int swapin_walk_pmd_entry(pmd_t *pmd, unsigned long start,
 	return 0;
 }
 
+static int swapin_test_walk(unsigned long start, unsigned long end,
+			    struct mm_walk *walk)
+{
+	struct vm_area_struct *vma = walk->vma;
+
+	if (is_vm_hugetlb_page(vma))
+		return 1;
+
+	return 0;
+}
+
 static const struct mm_walk_ops swapin_walk_ops = {
 	.pmd_entry		= swapin_walk_pmd_entry,
+	.test_walk		= swapin_test_walk,
 	.walk_lock		= PGWALK_RDLOCK,
 };
 
