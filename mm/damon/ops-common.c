@@ -53,18 +53,29 @@ void damon_ptep_mkold(pte_t *pte, struct vm_area_struct *vma, unsigned long addr
 
 void damon_pmdp_mkold(pmd_t *pmd, struct vm_area_struct *vma, unsigned long addr)
 {
-#ifdef CONFIG_TRANSPARENT_HUGEPAGE
-	struct folio *folio = damon_get_folio(pmd_pfn(pmdp_get(pmd)));
+#ifdef CONFIG_PGTABLE_HAS_HUGE_LEAVES
+	struct folio *folio;
+	unsigned long size;
+
+	if (is_vm_hugetlb_page(vma)) {
+		folio = pfn_folio(pdm_pfn(*pmd))
+		folio_get(folio);
+		size = huge_page_size(hstate_vma(vma));
+	} else {
+		folio = damon_get_folio(pmd_pfn(*pmd));
+		size = PMD_SIZE;
+	}
 
 	if (!folio)
-		return;
+		return 0;
 
-	if (pmdp_clear_young_notify(vma, addr, pmd))
+	if (pmdp_test_and_clear_young(vma, addr, pmd) ||
+	    mmu_notifier_clear_young(mm, addr, addr + size))
 		folio_set_young(folio);
 
 	folio_set_idle(folio);
 	folio_put(folio);
-#endif /* CONFIG_TRANSPARENT_HUGEPAGE */
+#endif /*CONFIG_PGTABLE_HAS_HUGE_LEAVES */
 }
 
 #define DAMON_MAX_SUBSCORE	(100)

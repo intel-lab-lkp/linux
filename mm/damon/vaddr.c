@@ -304,21 +304,16 @@ static int damon_mkold_pmd_entry(pmd_t *pmd, unsigned long addr,
 	pmd_t pmde;
 	spinlock_t *ptl;
 
-	if (pmd_trans_huge(pmdp_get(pmd))) {
-		ptl = pmd_lock(walk->mm, pmd);
-		pmde = pmdp_get(pmd);
-
-		if (!pmd_present(pmde)) {
+	ptl = pmd_huge_lock(walk->vma, pmd);
+	if (ptl) {
+		if (!pmd_present(*pmd)) {
 			spin_unlock(ptl);
 			return 0;
 		}
 
-		if (pmd_trans_huge(pmde)) {
-			damon_pmdp_mkold(pmd, walk->vma, addr);
-			spin_unlock(ptl);
-			return 0;
-		}
+		damon_pmdp_mkold(pmd, walk->vma, addr);
 		spin_unlock(ptl);
+		return 0;
 	}
 
 	pte = pte_offset_map_lock(walk->mm, pmd, addr, &ptl);
