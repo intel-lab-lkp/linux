@@ -912,6 +912,40 @@ static void smaps_pmd_entry(pmd_t *pmd, unsigned long addr,
 }
 #endif
 
+#ifdef CONFIG_HUGETLB_PAGE
+static int smaps_pud_range(pud_t *pudp, unsigned long addr, unsigned long end,
+			   struct mm_walk *walk)
+{
+	spinlock_t *ptl;
+	struct folio *folio;
+	struct vm_area_struct *vma = walk->vma;
+	struct mem_size_stats *mss = walk->private;
+
+	ptl = pud_huge_lock(pudp, vma);
+	if (!ptl)
+		return 0;
+
+	if (pud_present(*pudp)) {
+		folio = vm_normal_folio_pud(vma, addr, *pudp);
+	} else if (is_swap_pud(*pudp)) {
+		/* PUD-hugetlbs can have swap entries */
+		swp_entry_t swpent = pud_to_swp_entry(*pudp);
+
+		if (is_pfn_swap_entry(swpent))
+			folio = pfn_swap_entry_folio(swpent);
+	}
+
+	if (folio)
+		/* Only for now hugetlb pages can end up here */
+		mss_hugetlb_update(mss, folio, vma, (pte_t *)pudp);
+
+	spin_unlock(ptl);
+	return 0;
+}
+#else
+#define smaps_pud_range NULL
+#endif
+
 static int smaps_pte_range(pmd_t *pmd, unsigned long addr, unsigned long end,
 			   struct mm_walk *walk)
 {
@@ -1061,12 +1095,14 @@ static int smaps_hugetlb_range(pte_t *pte, unsigned long hmask,
 #endif /* HUGETLB_PAGE */
 
 static const struct mm_walk_ops smaps_walk_ops = {
+	.pud_entry              = smaps_pud_range,
 	.pmd_entry		= smaps_pte_range,
 	.hugetlb_entry		= smaps_hugetlb_range,
 	.walk_lock		= PGWALK_RDLOCK,
 };
 
 static const struct mm_walk_ops smaps_shmem_walk_ops = {
+	.pud_entry              = smaps_pud_range,
 	.pmd_entry		= smaps_pte_range,
 	.hugetlb_entry		= smaps_hugetlb_range,
 	.pte_hole		= smaps_pte_hole,
