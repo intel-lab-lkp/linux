@@ -805,8 +805,20 @@ static int madvise_free_pte_range(pmd_t *pmd, unsigned long addr,
 	return 0;
 }
 
+static int madvise_free_test_walk(unsigned long start, unsigned long end,
+				  struct mm_walk *walk)
+{
+	struct vm_area_struct *vma = walk->vma;
+
+	if (is_vm_hugetlb_page(vma))
+		return 1;
+
+	return 0;
+}
+
 static const struct mm_walk_ops madvise_free_walk_ops = {
 	.pmd_entry		= madvise_free_pte_range,
+	.test_walk		= madvise_free_test_walk,
 	.walk_lock		= PGWALK_RDLOCK,
 };
 
