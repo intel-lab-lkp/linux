@@ -804,6 +804,18 @@ static void smaps_pte_hole_lookup(unsigned long addr, struct mm_walk *walk)
 #endif
 }
 
+#ifdef CONFIG_HUGETLB_PAGE
+static void mss_hugetlb_update(struct mem_size_stats *mss, struct folio *folio,
+			       struct vm_area_struct *vma, pte_t *pte)
+{
+	if (folio_likely_mapped_shared(folio) ||
+	    hugetlb_pmd_shared(pte))
+		mss->shared_hugetlb += huge_page_size(hstate_vma(vma));
+	else
+		mss->private_hugetlb += huge_page_size(hstate_vma(vma));
+}
+#endif
+
 static void smaps_pte_entry(pte_t *pte, unsigned long addr,
 		struct mm_walk *walk)
 {
@@ -851,12 +863,13 @@ static void smaps_pte_entry(pte_t *pte, unsigned long addr,
 	smaps_account(mss, page, false, young, dirty, locked, present);
 }
 
-#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+#ifdef CONFIG_PGTABLE_HAS_HUGE_LEAVES
 static void smaps_pmd_entry(pmd_t *pmd, unsigned long addr,
 		struct mm_walk *walk)
 {
 	struct mem_size_stats *mss = walk->private;
 	struct vm_area_struct *vma = walk->vma;
+	bool hugetlb = is_vm_hugetlb_page(vma);
 	bool locked = !!(vma->vm_flags & VM_LOCKED);
 	struct page *page = NULL;
 	bool present = false;
@@ -865,7 +878,7 @@ static void smaps_pmd_entry(pmd_t *pmd, unsigned long addr,
 	if (pmd_present(*pmd)) {
 		page = vm_normal_page_pmd(vma, addr, *pmd);
 		present = true;
-	} else if (unlikely(thp_migration_supported() && is_swap_pmd(*pmd))) {
+	} else if (is_swap_pmd(*pmd)) {
 		swp_entry_t entry = pmd_to_swp_entry(*pmd);
 
 		if (is_pfn_swap_entry(entry))
@@ -874,6 +887,12 @@ static void smaps_pmd_entry(pmd_t *pmd, unsigned long addr,
 	if (IS_ERR_OR_NULL(page))
 		return;
 	folio = page_folio(page);
+
+	if (hugetlb) {
+		mss_hugetlb_update(mss, folio, vma, (pte_t *)pmd);
+		return;
+	}
+
 	if (folio_test_anon(folio))
 		mss->anonymous_thp += HPAGE_PMD_SIZE;
 	else if (folio_test_swapbacked(folio))
@@ -900,7 +919,7 @@ static int smaps_pte_range(pmd_t *pmd, unsigned long addr, unsigned long end,
 	pte_t *pte;
 	spinlock_t *ptl;
 
-	ptl = pmd_trans_huge_lock(pmd, vma);
+	ptl = pmd_huge_lock(pmd, vma);
 	if (ptl) {
 		smaps_pmd_entry(pmd, addr, walk);
 		spin_unlock(ptl);
