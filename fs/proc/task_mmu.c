@@ -3141,6 +3141,61 @@ static struct page *can_gather_numa_stats(pte_t pte, struct vm_area_struct *vma,
 	return page;
 }
 
+#ifdef CONFIG_HUGETLB_PAGE
+static struct page *can_gather_numa_stats_pud(pud_t pud,
+					      struct vm_area_struct *vma,
+					      unsigned long addr)
+{
+	struct page *page;
+	int nid;
+
+	if (!pud_present(pud))
+		return NULL;
+
+	page = pud_page(pud);
+	if (!page)
+		return NULL;
+
+	if (PageReserved(page))
+		return NULL;
+
+	nid = page_to_nid(page);
+	if (!node_isset(nid, node_states[N_MEMORY]))
+		return NULL;
+
+	return page;
+}
+
+static int gather_pud_stats(pud_t *pud, unsigned long addr,
+			    unsigned long end, struct mm_walk *walk)
+{
+	spinlock_t *ptl;
+	struct page *page;
+	unsigned long nr_pages;
+	struct numa_maps *md = walk->private;
+	struct vm_area_struct *vma = walk->vma;
+
+	ptl = pud_huge_lock(pud, vma);
+	if (!ptl)
+		return 0;
+
+	if (is_vm_hugetlb_page(vma))
+		nr_pages = 1;
+	else
+		nr_pages = HPAGE_PUD_SIZE / PAGE_SIZE;
+
+	page = can_gather_numa_stats_pud(*pud, vma, addr);
+	if (page)
+		gather_stats(page, md, pud_dirty(*pud),
+			     nr_pages);
+
+	spin_unlock(ptl);
+	return 0;
+}
+#else
+#define gather_pud_stats	NULL
+#endif
+
 #ifdef CONFIG_PGTABLE_HAS_HUGE_LEAVES
 static struct page *can_gather_numa_stats_pmd(pmd_t pmd,
 					      struct vm_area_struct *vma,
@@ -3245,6 +3300,7 @@ static int gather_hugetlb_stats(pte_t *pte, unsigned long hmask,
 
 static const struct mm_walk_ops show_numa_ops = {
 	.hugetlb_entry = gather_hugetlb_stats,
+	.pud_entry = gather_pud_stats,
 	.pmd_entry = gather_pte_stats,
 	.walk_lock = PGWALK_RDLOCK,
 };
