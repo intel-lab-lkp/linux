@@ -952,6 +952,23 @@ bool bvec_try_merge_hw_page(struct request_queue *q, struct bio_vec *bv,
 		struct page *page, unsigned len, unsigned offset,
 		bool *same_page)
 {
+	struct folio *folio = page_folio(page);
+
+	return bvec_try_merge_hw_folio(q, bv, folio, len,
+			((size_t)folio_page_idx(folio, page) << PAGE_SHIFT) +
+			offset, same_page);
+}
+
+/*
+ * Try to merge a folio into a segment, while obeying the hardware segment
+ * size limit.  This is not for normal read/write bios, but for passthrough
+ * or Zone Append operations that we can't split.
+ */
+bool bvec_try_merge_hw_folio(struct request_queue *q, struct bio_vec *bv,
+		struct folio *folio, size_t len, size_t offset,
+		bool *same_page)
+{
+	struct page *page = folio_page(folio, 0);
 	unsigned long mask = queue_segment_boundary(q);
 	phys_addr_t addr1 = page_to_phys(bv->bv_page) + bv->bv_offset;
 	phys_addr_t addr2 = page_to_phys(page) + offset + len - 1;

@@ -95,6 +95,10 @@ bool bvec_try_merge_hw_page(struct request_queue *q, struct bio_vec *bv,
 		struct page *page, unsigned len, unsigned offset,
 		bool *same_page);
 
+bool bvec_try_merge_hw_folio(struct request_queue *q, struct bio_vec *bv,
+		struct folio *folio, size_t len, size_t offset,
+		bool *same_page);
+
 static inline bool biovec_phys_mergeable(struct request_queue *q,
 		struct bio_vec *vec1, struct bio_vec *vec2)
 {
