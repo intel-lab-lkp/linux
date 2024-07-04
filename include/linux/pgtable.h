@@ -51,6 +51,7 @@
 #endif
 
 #define pmd_folio(pmd) page_folio(pmd_page(pmd))
+#define pud_folio(pud) page_folio(pud_page(pud))
 
 /*
  * A page table page can be thought of an array like this: pXd_t[PTRS_PER_PxD]

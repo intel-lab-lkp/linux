@@ -542,6 +542,18 @@ static inline bool is_pfn_swap_entry(swp_entry_t entry)
 
 struct page_vma_mapped_walk;
 
+#ifdef CONFIG_HUGETLB_PAGE
+static inline int is_pud_migration_entry(pud_t pud)
+{
+	return is_swap_pud(pud) && is_migration_entry(pud_to_swp_entry(pud));
+}
+#else
+static inline int is_pud_migration_entry(pud_t pud)
+{
+	return 0;
+}
+#endif
+
 #ifdef CONFIG_ARCH_ENABLE_THP_MIGRATION
 extern int set_pmd_migration_entry(struct page_vma_mapped_walk *pvmw,
 		struct page *page);

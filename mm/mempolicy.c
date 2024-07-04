@@ -501,6 +501,37 @@ static inline bool queue_folio_required(struct folio *folio,
 	return node_isset(nid, *qp->nmask) == !(flags & MPOL_MF_INVERT);
 }
 
+static int queue_folios_pud(pud_t *pud, unsigned long addr, unsigned long end,
+			     struct mm_walk *walk)
+{
+	spinlock_t *ptl;
+	struct folio *folio;
+	struct vm_area_struct *vma = walk->vma;
+	struct queue_pages *qp = walk->private;
+
+	ptl = pud_huge_lock(pud, vma);
+	if (!ptl)
+		return 0;
+
+	if (unlikely(is_pud_migration_entry(*pud))) {
+		qp->nr_failed++;
+		goto out;
+	}
+	folio = pud_folio(*pud);
+	if (!queue_folio_required(folio, qp))
+		goto out;
+	if (!(qp->flags & (MPOL_MF_MOVE | MPOL_MF_MOVE_ALL)) ||
+	    !vma_migratable(walk->vma) ||
+	    !migrate_folio_add(folio, qp->pagelist, qp->flags, walk->vma, false))
+		qp->nr_failed++;
+
+	spin_unlock(ptl);
+out:
+	if (qp->nr_failed && strictly_unmovable(qp->flags))
+		return -EIO;
+	return 0;
+}
+
 static void queue_folios_pmd(pmd_t *pmd, struct mm_walk *walk)
 {
 	struct folio *folio;
@@ -730,6 +761,7 @@ static int queue_pages_test_walk(unsigned long start, unsigned long end,
 
 static const struct mm_walk_ops queue_pages_walk_ops = {
 	.hugetlb_entry		= queue_folios_hugetlb,
+	.pud_entry		= queue_folios_pud,
 	.pmd_entry		= queue_folios_pte_range,
 	.test_walk		= queue_pages_test_walk,
 	.walk_lock		= PGWALK_RDLOCK,
