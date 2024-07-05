@@ -3154,6 +3154,17 @@ static const char * const policy_modes[] =
 	[MPOL_PREFERRED_MANY]  = "prefer (many)",
 };
 
+/*
+ * Lookup array containing only uapi flags where the lowest user flag starts at
+ * array index zero.
+ */
+#define MPOL_FLAG_STR_INDEX(f) (ilog2(f) - __builtin_ffs(MPOL_MODE_FLAGS) + 1)
+static const char * const policy_flags[] = {
+	[MPOL_FLAG_STR_INDEX(MPOL_F_STATIC_NODES)] = "static",
+	[MPOL_FLAG_STR_INDEX(MPOL_F_RELATIVE_NODES)] = "relative",
+	[MPOL_FLAG_STR_INDEX(MPOL_F_NUMA_BALANCING)] = "balancing",
+};
+
 #ifdef CONFIG_TMPFS
 /**
  * mpol_parse_str - parse string to mempolicy, for tmpfs mpol mount option.
@@ -3306,14 +3317,21 @@ void mpol_to_str(char *buffer, int maxlen, struct mempolicy *pol)
 	char *p = buffer;
 	nodemask_t nodes = NODE_MASK_NONE;
 	unsigned short mode = MPOL_DEFAULT;
-	unsigned short flags = 0;
+	unsigned int bit, cnt;
+	unsigned long flags = 0;
+	int res;
 
 	if (pol &&
 	    pol != &default_policy &&
 	    !(pol >= &preferred_node_policy[0] &&
 	      pol <= &preferred_node_policy[MAX_NUMNODES - 1])) {
 		mode = pol->mode;
-		flags = pol->flags;
+		/*
+		 * Filter out internal flags and also move user flags to lsb for
+		 * easy lookup, matching the policy_flags[] indices.
+		 */
+		flags = (pol->flags & MPOL_MODE_FLAGS) >>
+			__ffs(MPOL_MODE_FLAGS);
 	}
 
 	switch (mode) {
@@ -3333,29 +3351,31 @@ void mpol_to_str(char *buffer, int maxlen, struct mempolicy *pol)
 		return;
 	}
 
-	p += snprintf(p, maxlen, "%s", policy_modes[mode]);
+	res = scnprintf(p, maxlen, "%s", policy_modes[mode]);
+	p += res;
+	maxlen -= res;
 
-	if (flags & MPOL_MODE_FLAGS) {
-		p += snprintf(p, buffer + maxlen - p, "=");
+	cnt = 0;
+	for_each_set_bit(bit, &flags,
+			 __fls(MPOL_MODE_FLAGS) - __ffs(MPOL_MODE_FLAGS) + 1) {
+		char prefix;
 
-		/*
-		 * Static and relative are mutually exclusive.
-		 */
-		if (flags & MPOL_F_STATIC_NODES)
-			p += snprintf(p, buffer + maxlen - p, "static");
-		else if (flags & MPOL_F_RELATIVE_NODES)
-			p += snprintf(p, buffer + maxlen - p, "relative");
+		if (WARN_ON_ONCE(bit >= ARRAY_SIZE(policy_flags) ||
+				 !policy_flags[bit]))
+			continue;
 
-		if (flags & MPOL_F_NUMA_BALANCING) {
-			if (hweight16(flags & MPOL_MODE_FLAGS) > 1)
-				p += snprintf(p, buffer + maxlen - p, "|");
-			p += snprintf(p, buffer + maxlen - p, "balancing");
-		}
+		if (cnt++ == 0)
+			prefix = '=';
+		else
+			prefix = '|';
+
+		res = scnprintf(p, maxlen, "%c%s", prefix, policy_flags[bit]);
+		p += res;
+		maxlen -= res;
 	}
 
 	if (!nodes_empty(nodes))
-		p += scnprintf(p, buffer + maxlen - p, ":%*pbl",
-			       nodemask_pr_args(&nodes));
+		scnprintf(p, maxlen, ":%*pbl", nodemask_pr_args(&nodes));
 }
 
 #ifdef CONFIG_SYSFS
