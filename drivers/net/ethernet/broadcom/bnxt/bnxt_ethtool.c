@@ -4132,17 +4132,23 @@ err:
 	return rc;
 }
 
-static void bnxt_get_pkgver(struct net_device *dev)
+static int bnxt_get_pkgver(struct net_device *dev)
 {
 	struct bnxt *bp = netdev_priv(dev);
 	char buf[FW_VER_STR_LEN];
-	int len;
 
 	if (!bnxt_get_pkginfo(dev, buf, sizeof(buf))) {
-		len = strlen(bp->fw_ver_str);
-		snprintf(bp->fw_ver_str + len, FW_VER_STR_LEN - len - 1,
-			 "/pkg %s", buf);
+		int offset, size, rc;
+
+		offset = strlen(bp->fw_ver_str);
+		size = FW_VER_STR_LEN - offset - 1;
+
+		rc = snprintf(bp->fw_ver_str + offset, size, "/pkg %s", buf);
+		if (rc >= size)
+			return -E2BIG;
 	}
+
+	return 0;
 }
 
 static int bnxt_get_eeprom(struct net_device *dev,
@@ -5052,8 +5058,11 @@ void bnxt_ethtool_init(struct bnxt *bp)
 	struct net_device *dev = bp->dev;
 	int i, rc;
 
-	if (!(bp->fw_cap & BNXT_FW_CAP_PKG_VER))
-		bnxt_get_pkgver(dev);
+	if (!(bp->fw_cap & BNXT_FW_CAP_PKG_VER)) {
+		rc = bnxt_get_pkgver(dev);
+		if (rc)
+			return;
+	}
 
 	bp->num_tests = 0;
 	if (bp->hwrm_spec_code < 0x10704 || !BNXT_PF(bp))
