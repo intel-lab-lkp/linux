@@ -17,6 +17,9 @@ bool intel_fbdev_fb_prefer_stolen(struct intel_display *display,
 	struct xe_device *xe = to_xe_device(display->drm);
 	struct ttm_resource_manager *stolen;
 
+	if (IS_DGFX(xe))
+		return false;
+
 	stolen = ttm_manager_type(&xe->ttm, XE_PL_STOLEN);
 	if (!stolen)
 		return false;
@@ -55,7 +58,7 @@ struct intel_framebuffer *intel_fbdev_fb_alloc(struct drm_fb_helper *helper,
 	size = PAGE_ALIGN(size);
 	obj = ERR_PTR(-ENODEV);
 
-	if (!IS_DGFX(xe)) {
+	if (intel_fbdev_fb_prefer_stolen(&xe->display, size)) {
 		obj = xe_bo_create_pin_map(xe, xe_device_get_root_tile(xe),
 					   NULL, size,
 					   ttm_bo_type_kernel, XE_BO_FLAG_SCANOUT |
