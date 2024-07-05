@@ -75,12 +75,6 @@ extern int __cpu_logical_map[NR_CPUS];
 #define SMP_CALL_FUNCTION	BIT(ACTION_CALL_FUNCTION)
 #define SMP_IRQ_WORK		BIT(ACTION_IRQ_WORK)
 
-struct secondary_data {
-	unsigned long stack;
-	unsigned long thread_info;
-};
-extern struct secondary_data cpuboot_data;
-
 extern asmlinkage void smpboot_entry(void);
 extern asmlinkage void start_secondary(void);
 
