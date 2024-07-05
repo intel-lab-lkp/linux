@@ -2055,8 +2055,9 @@ struct dentry *d_add_ci(struct dentry *dentry, struct inode *inode,
 		return found;
 	}
 	if (d_in_lookup(dentry)) {
-		found = d_alloc_parallel(dentry->d_parent, name,
-					dentry->d_wait);
+		found = d_alloc_parallel_check_existing(dentry,
+							dentry->d_parent, name,
+							dentry->d_wait);
 		if (IS_ERR(found) || !d_in_lookup(found)) {
 			iput(inode);
 			return found;
@@ -2458,9 +2459,10 @@ static void d_wait_lookup(struct dentry *dentry)
 	}
 }
 
-struct dentry *d_alloc_parallel(struct dentry *parent,
-				const struct qstr *name,
-				wait_queue_head_t *wq)
+struct dentry *d_alloc_parallel_check_existing(struct dentry *d_check,
+					       struct dentry *parent,
+					       const struct qstr *name,
+					       wait_queue_head_t *wq)
 {
 	unsigned int hash = name->hash;
 	struct hlist_bl_head *b = in_lookup_hash(parent, hash);
@@ -2529,6 +2531,14 @@ retry:
 		}
 
 		rcu_read_unlock();
+
+		/* if the entry we found is the same as the original we
+		 * are checking against, then return it
+		 */
+		if (d_check == dentry) {
+			dput(new);
+			return dentry;
+		}
 		/*
 		 * somebody is likely to be still doing lookup for it;
 		 * wait for them to finish
@@ -2566,8 +2576,15 @@ mismatch:
 	dput(dentry);
 	goto retry;
 }
-EXPORT_SYMBOL(d_alloc_parallel);
+EXPORT_SYMBOL(d_alloc_parallel_check_existing);
 
+struct dentry *d_alloc_parallel(struct dentry *parent,
+				const struct qstr *name,
+				wait_queue_head_t *wq)
+{
+	return d_alloc_parallel_check_existing(NULL, parent, name, wq);
+}
+EXPORT_SYMBOL(d_alloc_parallel);
 /*
  * - Unhash the dentry
  * - Retrieve and clear the waitqueue head in dentry
