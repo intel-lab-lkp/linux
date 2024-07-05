@@ -55,6 +55,7 @@
 #include "intel_display_limits.h"
 #include "intel_display_power.h"
 #include "intel_dpll_mgr.h"
+#include "intel_sharpen_filter.h"
 #include "intel_wm_types.h"
 
 struct drm_printer;
@@ -828,6 +829,13 @@ struct intel_scaler {
 	u32 mode;
 };
 
+struct intel_sharpness_filter {
+	struct scaler_filter_coeff coeff[7];
+	u32 scaler_coefficient[119];
+	bool strength_changed;
+	u8 win_size;
+};
+
 struct intel_crtc_scaler_state {
 #define SKL_NUM_SCALERS 2
 	struct intel_scaler scalers[SKL_NUM_SCALERS];
@@ -1072,6 +1080,7 @@ struct intel_crtc_state {
 		struct drm_property_blob *degamma_lut, *gamma_lut, *ctm;
 		struct drm_display_mode mode, pipe_mode, adjusted_mode;
 		enum drm_scaling_filter scaling_filter;
+		struct intel_sharpness_filter casf_params;
 	} hw;
 
 	/* actual state of LUTs */
