@@ -4301,7 +4301,9 @@ xfs_inode_alloc_unitsize(
 {
 	unsigned int		blocks = 1;
 
-	if (XFS_IS_REALTIME_INODE(ip))
+	if (xfs_inode_has_forcealign(ip))
+		blocks = ip->i_extsize;
+	else if (XFS_IS_REALTIME_INODE(ip))
 		blocks = ip->i_mount->m_sb.sb_rextsize;
 
 	return XFS_FSB_TO_B(ip->i_mount, blocks);
