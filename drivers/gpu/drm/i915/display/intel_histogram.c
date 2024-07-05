@@ -183,6 +183,7 @@ static void intel_histogram_disable(struct intel_crtc *intel_crtc)
 
 	cancel_delayed_work(&histogram->handle_histogram_int_work);
 	histogram->enable = false;
+	intel_crtc->config->histogram_en = false;
 }
 
 int intel_histogram_update(struct intel_crtc *intel_crtc, bool enable)
