@@ -11,6 +11,7 @@
 #include "intel_display.h"
 #include "intel_display_types.h"
 #include "intel_fb.h"
+#include "intel_fbdev_fb.h"
 #include "intel_frontbuffer.h"
 #include "intel_plane_initial.h"
 
@@ -160,15 +161,10 @@ initial_plane_vma(struct drm_i915_private *i915,
 			mem->min_page_size);
 	size -= base;
 
-	/*
-	 * If the FB is too big, just don't use it since fbdev is not very
-	 * important and we should probably use that space with FBC or other
-	 * features.
-	 */
 	if (IS_ENABLED(CONFIG_FRAMEBUFFER_CONSOLE) &&
 	    mem == i915->mm.stolen_region &&
-	    size * 2 > i915->dsm.usable_size) {
-		drm_dbg_kms(&i915->drm, "Initial FB size exceeds half of stolen, discarding\n");
+	    !intel_fbdev_fb_prefer_stolen(&i915->display, size)) {
+		drm_dbg_kms(&i915->drm, "Initial FB size uses too much stolen, discarding\n");
 		return NULL;
 	}
 
