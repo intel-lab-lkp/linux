@@ -76,6 +76,8 @@ enum intel_global_hist_lut {
 
 struct intel_histogram {
 	struct drm_i915_private *i915;
+	struct workqueue_struct *wq;
+	struct delayed_work handle_histogram_int_work;
 	bool enable;
 	bool can_enable;
 	enum pipe pipe;
@@ -83,6 +85,7 @@ struct intel_histogram {
 };
 
 int intel_histogram_can_enable(struct intel_crtc *intel_crtc);
+void intel_histogram_irq_handler(struct drm_i915_private *i915, enum pipe pipe);
 int intel_histogram_update(struct intel_crtc *intel_crtc, bool enable);
 int intel_histogram_set_iet_lut(struct intel_crtc *intel_crtc, u32 *data);
 int intel_histogram_init(struct intel_crtc *intel_crtc);

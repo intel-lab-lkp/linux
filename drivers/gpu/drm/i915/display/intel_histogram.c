@@ -11,6 +11,85 @@
 #include "intel_de.h"
 #include "intel_histogram.h"
 
+static void intel_histogram_handle_int_work(struct work_struct *work)
+{
+	struct intel_histogram *histogram = container_of(work,
+		struct intel_histogram, handle_histogram_int_work.work);
+	struct drm_i915_private *i915 = histogram->i915;
+	struct intel_crtc *intel_crtc =
+		to_intel_crtc(drm_crtc_from_index(&i915->drm, histogram->pipe));
+	char *histogram_event[] = {"HISTOGRAM=1", NULL};
+	u32 dpstbin;
+	int i, try = 0;
+
+	/*
+	 * TODO: PSR to be exited while reading the Histogram data
+	 * Set DPST_CTL Bin Reg function select to TC
+	 * Set DPST_CTL Bin Register Index to 0
+	 */
+	intel_de_rmw(i915, DPST_CTL(histogram->pipe),
+		     DPST_CTL_BIN_REG_FUNC_SEL | DPST_CTL_BIN_REG_MASK, 0);
+
+	for (i = 0; i < HISTOGRAM_BIN_COUNT; i++) {
+		dpstbin = intel_de_read(i915, DPST_BIN(histogram->pipe));
+		if (dpstbin & DPST_BIN_BUSY) {
+			/*
+			 * If DPST_BIN busy bit is set, then set the
+			 * DPST_CTL bin reg index to 0 and proceed
+			 * from beginning.
+			 */
+			intel_de_rmw(i915, DPST_CTL(histogram->pipe),
+				     DPST_CTL_BIN_REG_MASK, 0);
+			i = 0;
+			if (try++ == 5) {
+				drm_err(&i915->drm,
+					"Histogram block is busy, failed to read\n");
+				intel_de_rmw(i915, DPST_GUARD(histogram->pipe),
+					     DPST_GUARD_HIST_EVENT_STATUS, 1);
+				return;
+			}
+		}
+		histogram->bindata[i] = dpstbin & DPST_BIN_DATA_MASK;
+		drm_dbg_atomic(&i915->drm, "Histogram[%d]=%x\n",
+			       i, histogram->bindata[i]);
+	}
+
+	/* Notify user for Histogram rediness */
+	if (kobject_uevent_env(&i915->drm.primary->kdev->kobj, KOBJ_CHANGE,
+			       histogram_event))
+		drm_err(&i915->drm, "sending HISTOGRAM event failed\n");
+
+	/* Enable histogram interrupt */
+	intel_de_rmw(i915, DPST_GUARD(histogram->pipe), DPST_GUARD_HIST_INT_EN,
+		     DPST_GUARD_HIST_INT_EN);
+
+	/* Clear histogram interrupt by setting histogram interrupt status bit*/
+	intel_de_rmw(i915, DPST_GUARD(histogram->pipe),
+		     DPST_GUARD_HIST_EVENT_STATUS, 1);
+
+	drm_property_replace_global_blob(&i915->drm,
+			&intel_crtc->config->histogram,
+			sizeof(histogram->bindata),
+			histogram->bindata, &intel_crtc->base.base,
+			intel_crtc->histogram_property);
+}
+
+void intel_histogram_irq_handler(struct drm_i915_private *i915, enum pipe pipe)
+{
+	struct intel_crtc *intel_crtc =
+		to_intel_crtc(drm_crtc_from_index(&i915->drm, pipe));
+	struct intel_histogram *histogram = intel_crtc->histogram;
+
+	if (!histogram->enable) {
+		drm_err(&i915->drm,
+			"spurious interrupt, histogram not enabled\n");
+		return;
+	}
+
+	queue_delayed_work(histogram->wq,
+			   &histogram->handle_histogram_int_work, 0);
+}
+
 int intel_histogram_can_enable(struct intel_crtc *intel_crtc)
 {
 	struct intel_histogram *histogram = intel_crtc->histogram;
@@ -102,6 +181,7 @@ static void intel_histogram_disable(struct intel_crtc *intel_crtc)
 	intel_de_rmw(i915, DPST_CTL(pipe),
 		     DPST_CTL_IE_HIST_EN, 0);
 
+	cancel_delayed_work(&histogram->handle_histogram_int_work);
 	histogram->enable = false;
 }
 
@@ -160,6 +240,8 @@ void intel_histogram_deinit(struct intel_crtc *intel_crtc)
 {
 	struct intel_histogram *histogram = intel_crtc->histogram;
 
+	cancel_delayed_work(&histogram->handle_histogram_int_work);
+	destroy_workqueue(histogram->wq);
 	kfree(histogram);
 }
 
@@ -180,6 +262,17 @@ int intel_histogram_init(struct intel_crtc *intel_crtc)
 	intel_crtc->histogram = histogram;
 	histogram->pipe = intel_crtc->pipe;
 	histogram->can_enable = false;
+	histogram->wq = alloc_ordered_workqueue("histogram_wq",
+						WQ_MEM_RECLAIM);
+	if (!histogram->wq) {
+		drm_err(&i915->drm,
+			"failed to create work queue\n");
+		kfree(histogram);
+		return -ENOMEM;
+	}
+
+	INIT_DEFERRABLE_WORK(&histogram->handle_histogram_int_work,
+			     intel_histogram_handle_int_work);
 
 	histogram->i915 = i915;
 
