@@ -341,6 +341,7 @@ config KEYSTONE_IRQ
 config MIPS_GIC
 	bool
 	select GENERIC_IRQ_IPI if SMP
+	select GENERIC_IRQ_IPI_MUX if SMP
 	select IRQ_DOMAIN_HIERARCHY
 	select MIPS_CM
 

@@ -17,12 +17,14 @@
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/irqchip.h>
+#include <linux/irqchip/chained_irq.h>
 #include <linux/irqdomain.h>
 #include <linux/of_address.h>
 #include <linux/percpu.h>
 #include <linux/sched.h>
 #include <linux/smp.h>
 
+#include <asm/ipi.h>
 #include <asm/mips-cps.h>
 #include <asm/setup.h>
 #include <asm/traps.h>
@@ -58,7 +60,7 @@ static struct irq_chip gic_level_irq_controller, gic_edge_irq_controller;
 
 #ifdef CONFIG_GENERIC_IRQ_IPI
 static DECLARE_BITMAP(ipi_resrv, GIC_MAX_INTRS);
-static DECLARE_BITMAP(ipi_available, GIC_MAX_INTRS);
+static int cpu_ipi_intr[NR_CPUS] __read_mostly;
 #endif /* CONFIG_GENERIC_IRQ_IPI */
 
 static struct gic_all_vpes_chip_data {
@@ -106,13 +108,6 @@ static void gic_bind_eic_interrupt(int irq, int set)
 
 	/* Set irq to use shadow set */
 	write_gic_vl_eic_shadow_set(irq, set);
-}
-
-static void gic_send_ipi(struct irq_data *d, unsigned int cpu)
-{
-	irq_hw_number_t hwirq = GIC_HWIRQ_TO_SHARED(irqd_to_hwirq(d));
-
-	write_gic_wedge(GIC_WEDGE_RW | hwirq);
 }
 
 int gic_get_c0_compare_int(void)
@@ -181,6 +176,11 @@ static void gic_mask_irq(struct irq_data *d)
 	unsigned int intr = GIC_HWIRQ_TO_SHARED(d->hwirq);
 
 	write_gic_rmask(intr);
+
+#ifdef CONFIG_GENERIC_IRQ_IPI
+	if (test_bit(intr, ipi_resrv))
+		return;
+#endif
 	gic_clear_pcpu_masks(intr);
 }
 
@@ -191,6 +191,10 @@ static void gic_unmask_irq(struct irq_data *d)
 
 	write_gic_smask(intr);
 
+#ifdef CONFIG_GENERIC_IRQ_IPI
+	if (test_bit(intr, ipi_resrv))
+		return;
+#endif
 	gic_clear_pcpu_masks(intr);
 	cpu = cpumask_first(irq_data_get_effective_affinity_mask(d));
 	set_bit(intr, per_cpu_ptr(pcpu_masks, cpu));
@@ -263,6 +267,11 @@ static int gic_set_affinity(struct irq_data *d, const struct cpumask *cpumask,
 	unsigned long flags;
 	unsigned int cpu;
 
+#ifdef CONFIG_GENERIC_IRQ_IPI
+	if (test_bit(irq, ipi_resrv))
+		return -EINVAL;
+#endif
+
 	cpu = cpumask_first_and(cpumask, cpu_online_mask);
 	if (cpu >= NR_CPUS)
 		return -EINVAL;
@@ -304,7 +313,6 @@ static struct irq_chip gic_edge_irq_controller = {
 #ifdef CONFIG_SMP
 	.irq_set_affinity	=	gic_set_affinity,
 #endif
-	.ipi_send_single	=	gic_send_ipi,
 };
 
 static void gic_handle_local_int(bool chained)
@@ -475,12 +483,6 @@ static int gic_irq_domain_map(struct irq_domain *d, unsigned int virq,
 	u32 map;
 
 	if (hwirq >= GIC_SHARED_HWIRQ_BASE) {
-#ifdef CONFIG_GENERIC_IRQ_IPI
-		/* verify that shared irqs don't conflict with an IPI irq */
-		if (test_bit(GIC_HWIRQ_TO_SHARED(hwirq), ipi_resrv))
-			return -EBUSY;
-#endif /* CONFIG_GENERIC_IRQ_IPI */
-
 		err = irq_domain_set_hwirq_and_chip(d, virq, hwirq,
 						    &gic_level_irq_controller,
 						    NULL);
@@ -570,146 +572,74 @@ static const struct irq_domain_ops gic_irq_domain_ops = {
 };
 
 #ifdef CONFIG_GENERIC_IRQ_IPI
-
-static int gic_ipi_domain_xlate(struct irq_domain *d, struct device_node *ctrlr,
-				const u32 *intspec, unsigned int intsize,
-				irq_hw_number_t *out_hwirq,
-				unsigned int *out_type)
+static void gic_handle_ipi_irq(struct irq_desc *desc)
 {
-	/*
-	 * There's nothing to translate here. hwirq is dynamically allocated and
-	 * the irq type is always edge triggered.
-	 * */
-	*out_hwirq = 0;
-	*out_type = IRQ_TYPE_EDGE_RISING;
+	struct irq_chip *chip = irq_desc_get_chip(desc);
 
-	return 0;
+	chained_irq_enter(chip, desc);
+	ipi_mux_process();
+	chained_irq_exit(chip, desc);
 }
 
-static int gic_ipi_domain_alloc(struct irq_domain *d, unsigned int virq,
-				unsigned int nr_irqs, void *arg)
+static void gic_ipi_send(unsigned int cpu)
 {
-	struct cpumask *ipimask = arg;
-	irq_hw_number_t hwirq, base_hwirq;
-	int cpu, ret, i;
-
-	base_hwirq = find_first_bit(ipi_available, gic_shared_intrs);
-	if (base_hwirq == gic_shared_intrs)
-		return -ENOMEM;
-
-	/* check that we have enough space */
-	for (i = base_hwirq; i < nr_irqs; i++) {
-		if (!test_bit(i, ipi_available))
-			return -EBUSY;
-	}
-	bitmap_clear(ipi_available, base_hwirq, nr_irqs);
-
-	/* map the hwirq for each cpu consecutively */
-	i = 0;
-	for_each_cpu(cpu, ipimask) {
-		hwirq = GIC_SHARED_TO_HWIRQ(base_hwirq + i);
-
-		ret = irq_domain_set_hwirq_and_chip(d, virq + i, hwirq,
-						    &gic_edge_irq_controller,
-						    NULL);
-		if (ret)
-			goto error;
-
-		ret = irq_domain_set_hwirq_and_chip(d->parent, virq + i, hwirq,
-						    &gic_edge_irq_controller,
-						    NULL);
-		if (ret)
-			goto error;
-
-		ret = irq_set_irq_type(virq + i, IRQ_TYPE_EDGE_RISING);
-		if (ret)
-			goto error;
-
-		ret = gic_shared_irq_domain_map(d, virq + i, hwirq, cpu);
-		if (ret)
-			goto error;
-
-		i++;
-	}
-
-	return 0;
-error:
-	bitmap_set(ipi_available, base_hwirq, nr_irqs);
-	return ret;
+	write_gic_wedge(GIC_WEDGE_RW | cpu_ipi_intr[cpu]);
 }
 
-static void gic_ipi_domain_free(struct irq_domain *d, unsigned int virq,
-				unsigned int nr_irqs)
+static int gic_ipi_mux_init(struct device_node *node, struct irq_domain *d)
 {
-	irq_hw_number_t base_hwirq;
-	struct irq_data *data;
-
-	data = irq_get_irq_data(virq);
-	if (!data)
-		return;
-
-	base_hwirq = GIC_HWIRQ_TO_SHARED(irqd_to_hwirq(data));
-	bitmap_set(ipi_available, base_hwirq, nr_irqs);
-}
-
-static int gic_ipi_domain_match(struct irq_domain *d, struct device_node *node,
-				enum irq_domain_bus_token bus_token)
-{
-	bool is_ipi;
-
-	switch (bus_token) {
-	case DOMAIN_BUS_IPI:
-		is_ipi = d->bus_token == bus_token;
-		return (!node || to_of_node(d->fwnode) == node) && is_ipi;
-		break;
-	default:
-		return 0;
-	}
-}
-
-static const struct irq_domain_ops gic_ipi_domain_ops = {
-	.xlate = gic_ipi_domain_xlate,
-	.alloc = gic_ipi_domain_alloc,
-	.free = gic_ipi_domain_free,
-	.match = gic_ipi_domain_match,
-};
-
-static int gic_register_ipi_domain(struct device_node *node)
-{
-	struct irq_domain *gic_ipi_domain;
-	unsigned int v[2], num_ipis;
-
-	gic_ipi_domain = irq_domain_add_hierarchy(gic_irq_domain,
-						  IRQ_DOMAIN_FLAG_IPI_PER_CPU,
-						  GIC_NUM_LOCAL_INTRS + gic_shared_intrs,
-						  node, &gic_ipi_domain_ops, NULL);
-	if (!gic_ipi_domain) {
-		pr_err("Failed to add IPI domain");
-		return -ENXIO;
-	}
-
-	irq_domain_update_bus_token(gic_ipi_domain, DOMAIN_BUS_IPI);
+	unsigned int i, v[2], num_ipis;
+	int ipi_virq, cpu = 0;
 
 	if (node &&
 	    !of_property_read_u32_array(node, "mti,reserved-ipi-vectors", v, 2)) {
 		bitmap_set(ipi_resrv, v[0], v[1]);
 	} else {
 		/*
-		 * Reserve 2 interrupts per possible CPU/VP for use as IPIs,
-		 * meeting the requirements of arch/mips SMP.
+		 * Reserve 1 interrupts per possible CPU/VP for use as IPIs
 		 */
-		num_ipis = 2 * num_possible_cpus();
+		num_ipis = num_possible_cpus();
 		bitmap_set(ipi_resrv, gic_shared_intrs - num_ipis, num_ipis);
 	}
 
-	bitmap_copy(ipi_available, ipi_resrv, GIC_MAX_INTRS);
+	ipi_virq = ipi_mux_create(IPI_MAX, gic_ipi_send);
+
+	WARN_ON(bitmap_weight(ipi_resrv, GIC_MAX_INTRS) < num_possible_cpus());
+
+	for_each_set_bit(i, ipi_resrv, GIC_MAX_INTRS) {
+		struct irq_fwspec fwspec;
+		int virq;
+
+		fwspec.fwnode = of_node_to_fwnode(node);
+		fwspec.param_count = 3;
+		fwspec.param[0] = GIC_SHARED;
+		fwspec.param[1] = i;
+		fwspec.param[2] = IRQ_TYPE_EDGE_RISING;
+
+		virq = irq_create_fwspec_mapping(&fwspec);
+		if (!virq)
+			return -EINVAL;
+
+		gic_shared_irq_domain_map(d, virq, GIC_SHARED_TO_HWIRQ(i), cpu);
+		irq_set_chained_handler(virq, gic_handle_ipi_irq);
+		gic_clear_pcpu_masks(i);
+		set_bit(i, per_cpu_ptr(pcpu_masks, cpu));
+
+		cpu_ipi_intr[cpu] = i;
+
+		cpu++;
+		if (cpu >= num_possible_cpus())
+			break;
+	}
+
+	mips_smp_ipi_set_virq_range(ipi_virq, IPI_MAX);
 
 	return 0;
 }
 
 #else /* !CONFIG_GENERIC_IRQ_IPI */
 
-static inline int gic_register_ipi_domain(struct device_node *node)
+static inline int gic_ipi_mux_init(struct device_node *node)
 {
 	return 0;
 }
@@ -809,10 +739,6 @@ static int __init gic_of_init(struct device_node *node,
 		return -ENXIO;
 	}
 
-	ret = gic_register_ipi_domain(node);
-	if (ret)
-		return ret;
-
 	board_bind_eic_interrupt = &gic_bind_eic_interrupt;
 
 	/* Setup defaults */
@@ -821,6 +747,10 @@ static int __init gic_of_init(struct device_node *node,
 		change_gic_trig(i, GIC_TRIG_LEVEL);
 		write_gic_rmask(i);
 	}
+
+	ret = gic_ipi_mux_init(node, gic_irq_domain);
+	if (ret)
+		return ret;
 
 	return cpuhp_setup_state(CPUHP_AP_IRQ_MIPS_GIC_STARTING,
 				 "irqchip/mips/gic:starting",
