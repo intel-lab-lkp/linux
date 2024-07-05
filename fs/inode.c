@@ -22,6 +22,9 @@
 #include <linux/iversion.h>
 #include <linux/rw_hint.h>
 #include <trace/events/writeback.h>
+#define CREATE_TRACE_POINTS
+#include <trace/events/timestamp.h>
+
 #include "internal.h"
 
 /*
@@ -2570,6 +2573,7 @@ struct timespec64 inode_set_ctime_to_ts(struct inode *inode, struct timespec64 t
 {
 	inode->i_ctime_sec = ts.tv_sec;
 	inode->i_ctime_nsec = ts.tv_nsec & ~I_CTIME_QUERIED;
+	trace_inode_set_ctime_to_ts(inode, &ts);
 	return ts;
 }
 EXPORT_SYMBOL(inode_set_ctime_to_ts);
@@ -2667,6 +2671,7 @@ struct timespec64 inode_set_ctime_current(struct inode *inode)
 retry:
 	/* Try to swap the nsec value into place. */
 	cur = cmpxchg(&inode->i_ctime_nsec, cns, now_ts.tv_nsec);
+	trace_ctime_ns_xchg(inode, cns, now_ts.tv_nsec, cur);
 
 	/* If swap occurred, then we're (mostly) done */
 	if (cur == cns) {
