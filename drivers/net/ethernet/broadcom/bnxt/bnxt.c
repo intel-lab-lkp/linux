@@ -10538,7 +10538,7 @@ static int bnxt_trim_rings(struct bnxt *bp, int *rx, int *tx, int max,
 	return __bnxt_trim_rings(bp, rx, tx, max, sh);
 }
 
-static void bnxt_setup_msix(struct bnxt *bp)
+static int bnxt_setup_msix(struct bnxt *bp)
 {
 	const int len = sizeof(bp->irq_tbl[0].name);
 	struct net_device *dev = bp->dev;
@@ -10558,6 +10558,7 @@ static void bnxt_setup_msix(struct bnxt *bp)
 	for (i = 0; i < bp->cp_nr_rings; i++) {
 		int map_idx = bnxt_cp_num_to_irq_num(bp, i);
 		char *attr;
+		int rc;
 
 		if (bp->flags & BNXT_FLAG_SHARED_RINGS)
 			attr = "TxRx";
@@ -10566,24 +10567,35 @@ static void bnxt_setup_msix(struct bnxt *bp)
 		else
 			attr = "tx";
 
-		snprintf(bp->irq_tbl[map_idx].name, len, "%s-%s-%d", dev->name,
-			 attr, i);
+		rc = snprintf(bp->irq_tbl[map_idx].name, len, "%s-%s-%d",
+			      dev->name, attr, i);
+		if (rc >= len)
+			return -E2BIG;
 		bp->irq_tbl[map_idx].handler = bnxt_msix;
 	}
+
+	return 0;
 }
 
-static void bnxt_setup_inta(struct bnxt *bp)
+static int bnxt_setup_inta(struct bnxt *bp)
 {
 	const int len = sizeof(bp->irq_tbl[0].name);
+	int rc;
+
 
 	if (bp->num_tc) {
 		netdev_reset_tc(bp->dev);
 		bp->num_tc = 0;
 	}
 
-	snprintf(bp->irq_tbl[0].name, len, "%s-%s-%d", bp->dev->name, "TxRx",
-		 0);
+	rc = snprintf(bp->irq_tbl[0].name, len, "%s-%s-%d", bp->dev->name,
+		      "TxRx", 0);
+	if (rc >= len)
+		return -E2BIG;
+
 	bp->irq_tbl[0].handler = bnxt_inta;
+
+	return 0;
 }
 
 static int bnxt_init_int_mode(struct bnxt *bp);
@@ -10599,9 +10611,11 @@ static int bnxt_setup_int_mode(struct bnxt *bp)
 	}
 
 	if (bp->flags & BNXT_FLAG_USING_MSIX)
-		bnxt_setup_msix(bp);
+		rc = bnxt_setup_msix(bp);
 	else
-		bnxt_setup_inta(bp);
+		rc = bnxt_setup_inta(bp);
+	if (rc)
+		return rc;
 
 	rc = bnxt_set_real_num_queues(bp);
 	return rc;
