@@ -1834,6 +1834,19 @@ static struct dentry *ext4_lookup(struct inode *dir, struct dentry *dentry, unsi
 		return NULL;
 	}
 
+	/* Create a case-insensitive cache entry with the real
+	 * name stored, in case our search pattern differs
+	 * in terms of case.
+	 */
+	if (inode && IS_CASEFOLDED(dir) &&
+	    memcmp(de->name, dentry->d_name.name, de->name_len)) {
+		struct qstr dname;
+
+		dname.len = de->name_len;
+		dname.name = de->name;
+		return d_add_ci(dentry, inode, &dname);
+	}
+
 	return d_splice_alias(inode, dentry);
 }
 
