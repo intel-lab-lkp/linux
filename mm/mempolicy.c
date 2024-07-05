@@ -3166,6 +3166,47 @@ static const char * const policy_flags[] = {
 };
 
 #ifdef CONFIG_TMPFS
+static int mpol_lookup_flag(char *str)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(policy_flags); i++) {
+		if (policy_flags[i] && !strcmp(str, policy_flags[i]))
+			return BIT(i + __ffs(MPOL_MODE_FLAGS));
+	}
+
+	return -1;
+}
+
+static bool mpol_parse_flags(char *str, int *mode, unsigned short *flags)
+{
+	char buf[128], *opt;
+	int flag;
+
+	/* Make a local copy since caller wants the original untouched. */
+	if (WARN_ON_ONCE(strscpy(buf, str, sizeof(buf)) < 0))
+		return false;
+
+	str = buf;
+	for (;;) {
+		opt = strsep(&str, "|");
+
+		if (!opt)
+			break;
+		else if (*opt == '\0')
+			continue;
+
+		flag = mpol_lookup_flag(opt);
+		if (flag < 0)
+			return false;
+		*flags |= flag;
+	}
+
+	*mode |= *flags;
+
+	return sanitize_mpol_flags(mode, flags) == 0;
+}
+
 /**
  * mpol_parse_str - parse string to mempolicy, for tmpfs mpol mount option.
  * @str:  string containing mempolicy to parse
@@ -3251,18 +3292,8 @@ int mpol_parse_str(char *str, struct mempolicy **mpol)
 	}
 
 	mode_flags = 0;
-	if (flags) {
-		/*
-		 * Currently, we only support two mutually exclusive
-		 * mode flags.
-		 */
-		if (!strcmp(flags, "static"))
-			mode_flags |= MPOL_F_STATIC_NODES;
-		else if (!strcmp(flags, "relative"))
-			mode_flags |= MPOL_F_RELATIVE_NODES;
-		else
-			goto out;
-	}
+	if (flags && !mpol_parse_flags(flags, &mode, &mode_flags))
+		goto out;
 
 	new = mpol_new(mode, mode_flags, &nodes);
 	if (IS_ERR(new))
