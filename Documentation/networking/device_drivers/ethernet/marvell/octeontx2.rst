@@ -14,6 +14,7 @@ Contents
 - `Basic packet flow`_
 - `Devlink health reporters`_
 - `Quality of service`_
+- `Switchdev`_
 
 Overview
 ========
@@ -340,3 +341,51 @@ Setup HTB offload
         # tc class add dev <interface> parent 1: classid 1:2 htb rate 10Gbit prio 2 quantum 188416
 
         # tc class add dev <interface> parent 1: classid 1:3 htb rate 10Gbit prio 2 quantum 32768
+
+
+Switchdev
+=========
+
+The RVU representor driver implements support to create representors for PFs/VFs when switchdev mode is enabled.
+
+ - Change device to switchdev mode::
+
+	# devlink dev eswitch set pci/0002:1c:00.0 mode switchdev
+
+ - List the representor devices::
+
+	# ip link show
+
+For example::
+
+	# ip link show
+	eth0: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN mode DEFAULT group default qlen 1000 link/ether 7e:58:2d:b6:97:51 brd ff:ff:ff:ff:ff:ff
+	r0p1v0: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN mode DEFAULT group default qlen 1000 link/ether 7e:5a:66:ea:fe:d6 brd ff:ff:ff:ff:ff:ff
+	r1p1v1: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN mode DEFAULT group default qlen 1000 link/ether de:29:be:10:9e:bf brd ff:ff:ff:ff:ff:ff
+	r2p1v2: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN mode DEFAULT group default qlen 1000 link/ether 4a:12:c7:a2:66:ad brd ff:ff:ff:ff:ff:ff
+	r3p1v3: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN mode DEFAULT group default qlen 1000 link/ether c2:b8:a8:0e:73:fd brd ff:ff:ff:ff:ff:ff
+
+ - List the representor ports::
+
+	# devlink port
+
+For example::
+
+	pci/0002:1c:00.0/0: type eth netdev r0p1v0 flavour pcipf controller 0 pfnum 1 vfnum 0 external false splittable false
+	pci/0002:1c:00.0/1: type eth netdev r1p1v1 flavour pcivf controller 0 pfnum 1 vfnum 1 external false splittable false
+	pci/0002:1c:00.0/2: type eth netdev r2p1v2 flavour pcivf controller 0 pfnum 1 vfnum 2 external false splittable false
+	pci/0002:1c:00.0/3: type eth netdev r3p1v3 flavour pcivf controller 0 pfnum 1 vfnum 3 external false splittable false
+
+
+To remove the representors from the system. Change the device to legacy mode.
+
+ - Change device to legacy mode::
+
+	# devlink dev eswitch set pci/0002:1c:00.0 mode legacy
+
+ Representor devices are not listed in the system devices list.
+
+ - List the devices::
+
+	# ip link show
+	eth0: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN mode DEFAULT group default qlen 1000 link/ether 7e:58:2d:b6:97:51 brd ff:ff:ff:ff:ff:ff
