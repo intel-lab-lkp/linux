@@ -133,6 +133,12 @@ config CORESIGHT_STM
 	  To compile this driver as a module, choose M here: the
 	  module will be called coresight-stm.
 
+config CORESIGHT_CCU
+	tristate "CoreSight Control Unit driver"
+	help
+	  This driver provides support for CoreSight Control Unit block
+	  that hosts miscellaneous configuration registers.
+
 config CORESIGHT_CPU_DEBUG
 	tristate "CoreSight CPU Debug driver"
 	depends on ARM || ARM64
