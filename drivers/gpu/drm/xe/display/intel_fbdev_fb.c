@@ -11,6 +11,24 @@
 #include "xe_gt.h"
 #include "xe_ttm_stolen_mgr.h"
 
+bool intel_fbdev_fb_prefer_stolen(struct intel_display *display,
+				  unsigned int size)
+{
+	struct xe_device *xe = to_xe_device(display->drm);
+	struct ttm_resource_manager *stolen;
+
+	stolen = ttm_manager_type(&xe->ttm, XE_PL_STOLEN);
+	if (!stolen)
+		return false;
+
+	/*
+	 * If the FB is too big, just don't use it since fbdev is not very
+	 * important and we should probably use that space with FBC or other
+	 * features.
+	 */
+	return stolen->size >= size * 2;
+}
+
 struct intel_framebuffer *intel_fbdev_fb_alloc(struct drm_fb_helper *helper,
 					       struct drm_fb_helper_surface_size *sizes)
 {
