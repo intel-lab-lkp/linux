@@ -52,58 +52,6 @@ static inline uint32_t __div64_32(uint64_t *n, uint32_t base)
 
 #else
 
-static inline uint64_t __arch_xprod_64(uint64_t m, uint64_t n, bool bias)
-{
-	unsigned long long res;
-	register unsigned int tmp asm("ip") = 0;
-
-	if (!bias) {
-		asm (	"umull	%Q0, %R0, %Q1, %Q2\n\t"
-			"mov	%Q0, #0"
-			: "=&r" (res)
-			: "r" (m), "r" (n)
-			: "cc");
-	} else if (!(m & ((1ULL << 63) | (1ULL << 31)))) {
-		res = m;
-		asm (	"umlal	%Q0, %R0, %Q1, %Q2\n\t"
-			"mov	%Q0, #0"
-			: "+&r" (res)
-			: "r" (m), "r" (n)
-			: "cc");
-	} else {
-		asm (	"umull	%Q0, %R0, %Q2, %Q3\n\t"
-			"cmn	%Q0, %Q2\n\t"
-			"adcs	%R0, %R0, %R2\n\t"
-			"adc	%Q0, %1, #0"
-			: "=&r" (res), "+&r" (tmp)
-			: "r" (m), "r" (n)
-			: "cc");
-	}
-
-	if (!(m & ((1ULL << 63) | (1ULL << 31)))) {
-		asm (	"umlal	%R0, %Q0, %R1, %Q2\n\t"
-			"umlal	%R0, %Q0, %Q1, %R2\n\t"
-			"mov	%R0, #0\n\t"
-			"umlal	%Q0, %R0, %R1, %R2"
-			: "+&r" (res)
-			: "r" (m), "r" (n)
-			: "cc");
-	} else {
-		asm (	"umlal	%R0, %Q0, %R2, %Q3\n\t"
-			"umlal	%R0, %1, %Q2, %R3\n\t"
-			"mov	%R0, #0\n\t"
-			"adds	%Q0, %1, %Q0\n\t"
-			"adc	%R0, %R0, #0\n\t"
-			"umlal	%Q0, %R0, %R2, %R3"
-			: "+&r" (res), "+&r" (tmp)
-			: "r" (m), "r" (n)
-			: "cc");
-	}
-
-	return res;
-}
-#define __arch_xprod_64 __arch_xprod_64
-
 #include <asm-generic/div64.h>
 
 #endif
