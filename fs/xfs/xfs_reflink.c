@@ -1467,8 +1467,9 @@ xfs_reflink_remap_prep(
 
 	/* Check file eligibility and prepare for block sharing. */
 	ret = -EINVAL;
-	/* Don't reflink realtime inodes */
-	if (XFS_IS_REALTIME_INODE(src) || XFS_IS_REALTIME_INODE(dest))
+	/* Don't reflink realtime or forcealign inodes */
+	if (XFS_IS_REALTIME_INODE(src) || XFS_IS_REALTIME_INODE(dest) ||
+	    xfs_inode_has_forcealign(src) || xfs_inode_has_forcealign(dest))
 		goto out_unlock;
 
 	/* Don't share DAX file data with non-DAX file. */
