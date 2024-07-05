@@ -31,6 +31,7 @@
 #include <asm/ginvt.h>
 #include <asm/processor.h>
 #include <asm/idle.h>
+#include <asm/ipi.h>
 #include <asm/r4k-timer.h>
 #include <asm/mips-cps.h>
 #include <asm/mmu_context.h>
@@ -91,11 +92,6 @@ static int __init early_smt(char *s)
 	return 0;
 }
 early_param("smt", early_smt);
-
-#ifdef CONFIG_GENERIC_IRQ_IPI
-static struct irq_desc *call_desc;
-static struct irq_desc *sched_desc;
-#endif
 
 static inline void set_cpu_sibling_map(int cpu)
 {
@@ -164,13 +160,42 @@ void register_smp_ops(const struct plat_smp_ops *ops)
 	mp_ops = ops;
 }
 
-#ifdef CONFIG_GENERIC_IRQ_IPI
-void mips_smp_send_ipi_single(int cpu, unsigned int action)
+static irqreturn_t ipi_resched_interrupt(int irq, void *dev_id)
 {
-	mips_smp_send_ipi_mask(cpumask_of(cpu), action);
+	scheduler_ipi();
+
+	return IRQ_HANDLED;
 }
 
-void mips_smp_send_ipi_mask(const struct cpumask *mask, unsigned int action)
+static irqreturn_t ipi_call_interrupt(int irq, void *dev_id)
+{
+	generic_smp_call_function_interrupt();
+
+	return IRQ_HANDLED;
+}
+
+
+const char *ipi_names[IPI_MAX] __read_mostly = {
+	[IPI_RESCHEDULE]	= "Rescheduling interrupts",
+	[IPI_CALL_FUNC]		= "Function call interrupts",
+};
+
+irq_handler_t ipi_handlers[IPI_MAX] __read_mostly = {
+	[IPI_RESCHEDULE]	= ipi_resched_interrupt,
+	[IPI_CALL_FUNC]		= ipi_call_interrupt,
+};
+
+#ifdef CONFIG_GENERIC_IRQ_IPI
+static int ipi_virqs[IPI_MAX] __ro_after_init;
+static struct irq_desc *ipi_desc[IPI_MAX] __read_mostly;
+
+void mips_smp_send_ipi_single(int cpu, enum ipi_message_type op)
+{
+	mips_smp_send_ipi_mask(cpumask_of(cpu), op);
+}
+
+void mips_smp_send_ipi_mask(const struct cpumask *mask,
+			    enum ipi_message_type op)
 {
 	unsigned long flags;
 	unsigned int core;
@@ -178,18 +203,7 @@ void mips_smp_send_ipi_mask(const struct cpumask *mask, unsigned int action)
 
 	local_irq_save(flags);
 
-	switch (action) {
-	case SMP_CALL_FUNCTION:
-		__ipi_send_mask(call_desc, mask);
-		break;
-
-	case SMP_RESCHEDULE_YOURSELF:
-		__ipi_send_mask(sched_desc, mask);
-		break;
-
-	default:
-		BUG();
-	}
+	__ipi_send_mask(ipi_desc[op], mask);
 
 	if (mips_cpc_present()) {
 		for_each_cpu(cpu, mask) {
@@ -211,21 +225,6 @@ void mips_smp_send_ipi_mask(const struct cpumask *mask, unsigned int action)
 	local_irq_restore(flags);
 }
 
-
-static irqreturn_t ipi_resched_interrupt(int irq, void *dev_id)
-{
-	scheduler_ipi();
-
-	return IRQ_HANDLED;
-}
-
-static irqreturn_t ipi_call_interrupt(int irq, void *dev_id)
-{
-	generic_smp_call_function_interrupt();
-
-	return IRQ_HANDLED;
-}
-
 static void smp_ipi_init_one(unsigned int virq, const char *name,
 			     irq_handler_t handler)
 {
@@ -236,11 +235,9 @@ static void smp_ipi_init_one(unsigned int virq, const char *name,
 	BUG_ON(ret);
 }
 
-static unsigned int call_virq, sched_virq;
-
 int mips_smp_ipi_allocate(const struct cpumask *mask)
 {
-	int virq;
+	int virq, i;
 	struct irq_domain *ipidomain;
 	struct device_node *node;
 
@@ -267,33 +264,30 @@ int mips_smp_ipi_allocate(const struct cpumask *mask)
 	 * setup, if we're running with only a single CPU.
 	 */
 	if (!ipidomain) {
-		BUG_ON(num_present_cpus() > 1);
+		WARN_ON(num_present_cpus() > 1);
 		return 0;
 	}
 
-	virq = irq_reserve_ipi(ipidomain, mask);
-	BUG_ON(!virq);
-	if (!call_virq)
-		call_virq = virq;
-
-	virq = irq_reserve_ipi(ipidomain, mask);
-	BUG_ON(!virq);
-	if (!sched_virq)
-		sched_virq = virq;
+	for (i = 0; i < IPI_MAX; i++) {
+		virq = irq_reserve_ipi(ipidomain, mask);
+		WARN_ON(!virq);
+		ipi_virqs[i] = virq;
+	}
 
 	if (irq_domain_is_ipi_per_cpu(ipidomain)) {
 		int cpu;
 
 		for_each_cpu(cpu, mask) {
-			smp_ipi_init_one(call_virq + cpu, "IPI call",
-					 ipi_call_interrupt);
-			smp_ipi_init_one(sched_virq + cpu, "IPI resched",
-					 ipi_resched_interrupt);
+			for (i = 0; i < IPI_MAX; i++) {
+				smp_ipi_init_one(ipi_virqs[i] + cpu, ipi_names[i],
+						 ipi_handlers[i]);
+			}
 		}
 	} else {
-		smp_ipi_init_one(call_virq, "IPI call", ipi_call_interrupt);
-		smp_ipi_init_one(sched_virq, "IPI resched",
-				 ipi_resched_interrupt);
+		for (i = 0; i < IPI_MAX; i++) {
+			smp_ipi_init_one(ipi_virqs[i], ipi_names[i],
+					 ipi_handlers[i]);
+		}
 	}
 
 	return 0;
@@ -301,6 +295,7 @@ int mips_smp_ipi_allocate(const struct cpumask *mask)
 
 int mips_smp_ipi_free(const struct cpumask *mask)
 {
+	int i;
 	struct irq_domain *ipidomain;
 	struct device_node *node;
 
@@ -321,25 +316,32 @@ int mips_smp_ipi_free(const struct cpumask *mask)
 		int cpu;
 
 		for_each_cpu(cpu, mask) {
-			free_irq(call_virq + cpu, NULL);
-			free_irq(sched_virq + cpu, NULL);
+			for (i = 0; i < IPI_MAX; i++)
+				free_irq(ipi_virqs[i] + cpu, NULL);
 		}
 	}
-	irq_destroy_ipi(call_virq, mask);
-	irq_destroy_ipi(sched_virq, mask);
+
+	for (i = 0; i < IPI_MAX; i++)
+		irq_destroy_ipi(ipi_virqs[i], mask);
+
 	return 0;
 }
 
 
 static int __init mips_smp_ipi_init(void)
 {
+	int i;
+
 	if (num_possible_cpus() == 1)
 		return 0;
 
 	mips_smp_ipi_allocate(cpu_possible_mask);
 
-	call_desc = irq_to_desc(call_virq);
-	sched_desc = irq_to_desc(sched_virq);
+	for (i = 0; i < IPI_MAX; i++) {
+		ipi_desc[i] = irq_to_desc(ipi_virqs[i]);
+		if (!ipi_desc[i])
+			return -ENODEV;
+	}
 
 	return 0;
 }

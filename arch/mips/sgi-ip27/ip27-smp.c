@@ -94,15 +94,17 @@ static __init void intr_clear_all(nasid_t nasid)
 		REMOTE_HUB_CLR_INTR(nasid, i);
 }
 
-static void ip27_send_ipi_single(int destid, unsigned int action)
+static void ip27_send_ipi_single(int destid, enum ipi_message_type op)
 {
 	int irq;
 
-	switch (action) {
-	case SMP_RESCHEDULE_YOURSELF:
+	BUILD_BUG_ON(IPI_MAX > 2);
+
+	switch (op) {
+	case IPI_RESCHEDULE:
 		irq = CPU_RESCHED_A_IRQ;
 		break;
-	case SMP_CALL_FUNCTION:
+	case IPI_CALL_FUNC:
 		irq = CPU_CALL_A_IRQ;
 		break;
 	default:
@@ -118,12 +120,13 @@ static void ip27_send_ipi_single(int destid, unsigned int action)
 	REMOTE_HUB_SEND_INTR(cpu_to_node(destid), irq);
 }
 
-static void ip27_send_ipi_mask(const struct cpumask *mask, unsigned int action)
+static void ip27_send_ipi_mask(const struct cpumask *mask,
+			       enum ipi_message_type op)
 {
 	unsigned int i;
 
 	for_each_cpu(i, mask)
-		ip27_send_ipi_single(i, action);
+		ip27_send_ipi_single(i, op);
 }
 
 static void ip27_init_cpu(void)

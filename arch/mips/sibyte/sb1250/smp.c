@@ -12,6 +12,7 @@
 
 #include <asm/mmu_context.h>
 #include <asm/io.h>
+#include <asm/ipi.h>
 #include <asm/fw/cfe/cfe_api.h>
 #include <asm/sibyte/sb1250.h>
 #include <asm/sibyte/sb1250_regs.h>
@@ -53,18 +54,18 @@ void sb1250_smp_init(void)
  * Simple enough; everything is set up, so just poke the appropriate mailbox
  * register, and we should be set
  */
-static void sb1250_send_ipi_single(int cpu, unsigned int action)
+static void sb1250_send_ipi_single(int cpu, enum ipi_message_type op)
 {
-	__raw_writeq((((u64)action) << 48), mailbox_set_regs[cpu]);
+	__raw_writeq((((u64)BIT_ULL(op)) << 48), mailbox_set_regs[cpu]);
 }
 
 static inline void sb1250_send_ipi_mask(const struct cpumask *mask,
-					unsigned int action)
+					enum ipi_message_type op)
 {
 	unsigned int i;
 
 	for_each_cpu(i, mask)
-		sb1250_send_ipi_single(i, action);
+		sb1250_send_ipi_single(i, op);
 }
 
 /*
@@ -157,10 +158,10 @@ void sb1250_mailbox_interrupt(void)
 	/* Clear the mailbox to clear the interrupt */
 	____raw_writeq(((u64)action) << 48, mailbox_clear_regs[cpu]);
 
-	if (action & SMP_RESCHEDULE_YOURSELF)
+	if (action & BIT(IPI_RESCHEDULE))
 		scheduler_ipi();
 
-	if (action & SMP_CALL_FUNCTION) {
+	if (action & BIT(IPI_CALL_FUNC)) {
 		irq_enter();
 		generic_smp_call_function_interrupt();
 		irq_exit();

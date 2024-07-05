@@ -17,6 +17,7 @@
 #include <linux/export.h>
 #include <linux/kexec.h>
 
+#include <asm/ipi.h>
 #include <asm/mmu_context.h>
 #include <asm/time.h>
 #include <asm/setup.h>
@@ -40,30 +41,19 @@ EXPORT_SYMBOL(octeon_bootloader_entry_addr);
 
 extern void kernel_entry(unsigned long arg1, ...);
 
-static void octeon_icache_flush(void)
+static irqreturn_t octeon_icache_flush(int irq, void *dev_id)
 {
 	asm volatile ("synci 0($0)\n");
+	return IRQ_HANDLED;
 }
-
-static void (*octeon_message_functions[8])(void) = {
-	scheduler_ipi,
-	generic_smp_call_function_interrupt,
-	octeon_icache_flush,
-};
 
 static irqreturn_t mailbox_interrupt(int irq, void *dev_id)
 {
 	u64 mbox_clrx = CVMX_CIU_MBOX_CLRX(cvmx_get_core_num());
-	u64 action;
-	int i;
+	unsigned long action;
+	int op;
 
-	/*
-	 * Make sure the function array initialization remains
-	 * correct.
-	 */
-	BUILD_BUG_ON(SMP_RESCHEDULE_YOURSELF != (1 << 0));
-	BUILD_BUG_ON(SMP_CALL_FUNCTION       != (1 << 1));
-	BUILD_BUG_ON(SMP_ICACHE_FLUSH        != (1 << 2));
+	BUILD_BUG_ON(IPI_MAX > 8);
 
 	/*
 	 * Load the mailbox register to figure out what we're supposed
@@ -79,16 +69,10 @@ static irqreturn_t mailbox_interrupt(int irq, void *dev_id)
 	/* Clear the mailbox to clear the interrupt */
 	cvmx_write_csr(mbox_clrx, action);
 
-	for (i = 0; i < ARRAY_SIZE(octeon_message_functions) && action;) {
-		if (action & 1) {
-			void (*fn)(void) = octeon_message_functions[i];
-
-			if (fn)
-				fn();
-		}
-		action >>= 1;
-		i++;
+	for_each_set_bit(op, &action, IPI_MAX) {
+		ipi_handlers[op](0, NULL);
 	}
+
 	return IRQ_HANDLED;
 }
 
@@ -97,23 +81,23 @@ static irqreturn_t mailbox_interrupt(int irq, void *dev_id)
  * cpu.	 When the function has finished, increment the finished field of
  * call_data.
  */
-void octeon_send_ipi_single(int cpu, unsigned int action)
+void octeon_send_ipi_single(int cpu, enum ipi_message_type op)
 {
 	int coreid = cpu_logical_map(cpu);
 	/*
 	pr_info("SMP: Mailbox send cpu=%d, coreid=%d, action=%u\n", cpu,
 	       coreid, action);
 	*/
-	cvmx_write_csr(CVMX_CIU_MBOX_SETX(coreid), action);
+	cvmx_write_csr(CVMX_CIU_MBOX_SETX(coreid), op);
 }
 
-static inline void octeon_send_ipi_mask(const struct cpumask *mask,
-					unsigned int action)
+static void octeon_send_ipi_mask(const struct cpumask *mask,
+				 enum ipi_message_type op)
 {
 	unsigned int i;
 
 	for_each_cpu(i, mask)
-		octeon_send_ipi_single(i, action);
+		octeon_send_ipi_single(i, op);
 }
 
 /*
@@ -148,6 +132,9 @@ static void __init octeon_smp_setup(void)
 	int core_mask = octeon_get_boot_coremask();
 	unsigned int num_cores = cvmx_octeon_num_cores();
 #endif
+
+	ipi_handlers[IPI_ICACHE_FLUSH] = octeon_icache_flush;
+	ipi_names[IPI_ICACHE_FLUSH] = "Octeon ICache Flush";
 
 	/* The present CPUs are initially just the boot cpu (CPU 0). */
 	for (id = 0; id < NR_CPUS; id++) {
@@ -427,67 +414,41 @@ static const struct plat_smp_ops octeon_smp_ops = {
 #endif
 };
 
-static irqreturn_t octeon_78xx_reched_interrupt(int irq, void *dev_id)
-{
-	scheduler_ipi();
-	return IRQ_HANDLED;
-}
-
-static irqreturn_t octeon_78xx_call_function_interrupt(int irq, void *dev_id)
-{
-	generic_smp_call_function_interrupt();
-	return IRQ_HANDLED;
-}
-
-static irqreturn_t octeon_78xx_icache_flush_interrupt(int irq, void *dev_id)
-{
-	octeon_icache_flush();
-	return IRQ_HANDLED;
-}
-
 /*
  * Callout to firmware before smp_init
  */
 static void octeon_78xx_prepare_cpus(unsigned int max_cpus)
 {
-	if (request_irq(OCTEON_IRQ_MBOX0 + 0,
-			octeon_78xx_reched_interrupt,
-			IRQF_PERCPU | IRQF_NO_THREAD, "Scheduler",
-			octeon_78xx_reched_interrupt)) {
-		panic("Cannot request_irq for SchedulerIPI");
-	}
-	if (request_irq(OCTEON_IRQ_MBOX0 + 1,
-			octeon_78xx_call_function_interrupt,
-			IRQF_PERCPU | IRQF_NO_THREAD, "SMP-Call",
-			octeon_78xx_call_function_interrupt)) {
-		panic("Cannot request_irq for SMP-Call");
-	}
-	if (request_irq(OCTEON_IRQ_MBOX0 + 2,
-			octeon_78xx_icache_flush_interrupt,
-			IRQF_PERCPU | IRQF_NO_THREAD, "ICache-Flush",
-			octeon_78xx_icache_flush_interrupt)) {
-		panic("Cannot request_irq for ICache-Flush");
+	int i;
+
+	/*
+	 * FIXME: Hardware have 10 MBOX but only 4 virqs are reserved
+	 * for CIU3 MBOX.
+	 */
+	BUILD_BUG_ON(IPI_MAX > 4);
+
+	for (i = 0; i < IPI_MAX; i++) {
+		if (request_irq(OCTEON_IRQ_MBOX0 + i,
+				ipi_handlers[i],
+				IRQF_PERCPU | IRQF_NO_THREAD, "IPI",
+				ipi_handlers[i])) {
+			panic("Cannot request_irq for %s", ipi_names[i]);
+		}
 	}
 }
 
-static void octeon_78xx_send_ipi_single(int cpu, unsigned int action)
+static void octeon_78xx_send_ipi_single(int cpu, enum ipi_message_type op)
 {
-	int i;
-
-	for (i = 0; i < 8; i++) {
-		if (action & 1)
-			octeon_ciu3_mbox_send(cpu, i);
-		action >>= 1;
-	}
+	octeon_ciu3_mbox_send(cpu, op);
 }
 
 static void octeon_78xx_send_ipi_mask(const struct cpumask *mask,
-				      unsigned int action)
+				      enum ipi_message_type op)
 {
 	unsigned int cpu;
 
 	for_each_cpu(cpu, mask)
-		octeon_78xx_send_ipi_single(cpu, action);
+		octeon_78xx_send_ipi_single(cpu, op);
 }
 
 static const struct plat_smp_ops octeon_78xx_smp_ops = {

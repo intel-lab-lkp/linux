@@ -32,6 +32,7 @@
 #include <asm/processor.h>
 #include <asm/bootinfo.h>
 #include <asm/cacheflush.h>
+#include <asm/ipi.h>
 #include <asm/tlbflush.h>
 #include <asm/mipsregs.h>
 #include <asm/bmips.h>
@@ -282,36 +283,31 @@ static void bmips_smp_finish(void)
  * BMIPS5000 raceless IPIs
  *
  * Each CPU has two inbound SW IRQs which are independent of all other CPUs.
- * IPI0 is used for SMP_RESCHEDULE_YOURSELF
- * IPI1 is used for SMP_CALL_FUNCTION
  */
 
-static void bmips5000_send_ipi_single(int cpu, unsigned int action)
+static void bmips5000_send_ipi_single(int cpu, enum ipi_message_type op)
 {
-	write_c0_brcm_action(ACTION_SET_IPI(cpu, action == SMP_CALL_FUNCTION));
+	write_c0_brcm_action(ACTION_SET_IPI(cpu, op));
 }
 
 static irqreturn_t bmips5000_ipi_interrupt(int irq, void *dev_id)
 {
 	int action = irq - IPI0_IRQ;
 
+	BUILD_BUG_ON(IPI_MAX > 2);
+
 	write_c0_brcm_action(ACTION_CLR_IPI(smp_processor_id(), action));
 
-	if (action == 0)
-		scheduler_ipi();
-	else
-		generic_smp_call_function_interrupt();
-
-	return IRQ_HANDLED;
+	return ipi_handlers[action](0, NULL);
 }
 
 static void bmips5000_send_ipi_mask(const struct cpumask *mask,
-	unsigned int action)
+	enum ipi_message_type op)
 {
 	unsigned int i;
 
 	for_each_cpu(i, mask)
-		bmips5000_send_ipi_single(i, action);
+		bmips5000_send_ipi_single(i, op);
 }
 
 /*
@@ -325,23 +321,26 @@ static void bmips5000_send_ipi_mask(const struct cpumask *mask,
  */
 
 static DEFINE_SPINLOCK(ipi_lock);
-static DEFINE_PER_CPU(int, ipi_action_mask);
+static DEFINE_PER_CPU(unsigned long, ipi_action_mask);
 
-static void bmips43xx_send_ipi_single(int cpu, unsigned int action)
+static void bmips43xx_send_ipi_single(int cpu, enum ipi_message_type op)
 {
 	unsigned long flags;
 
 	spin_lock_irqsave(&ipi_lock, flags);
 	set_c0_cause(cpu ? C_SW1 : C_SW0);
-	per_cpu(ipi_action_mask, cpu) |= action;
+	per_cpu(ipi_action_mask, cpu) |= BIT(op);
 	irq_enable_hazard();
 	spin_unlock_irqrestore(&ipi_lock, flags);
 }
 
 static irqreturn_t bmips43xx_ipi_interrupt(int irq, void *dev_id)
 {
-	unsigned long flags;
-	int action, cpu = irq - IPI0_IRQ;
+	unsigned long flags, action;
+	int cpu = irq - IPI0_IRQ;
+	int op;
+
+	BUILD_BUG_ON(IPI_MAX > BITS_PER_LONG);
 
 	spin_lock_irqsave(&ipi_lock, flags);
 	action = __this_cpu_read(ipi_action_mask);
@@ -349,21 +348,19 @@ static irqreturn_t bmips43xx_ipi_interrupt(int irq, void *dev_id)
 	clear_c0_cause(cpu ? C_SW1 : C_SW0);
 	spin_unlock_irqrestore(&ipi_lock, flags);
 
-	if (action & SMP_RESCHEDULE_YOURSELF)
-		scheduler_ipi();
-	if (action & SMP_CALL_FUNCTION)
-		generic_smp_call_function_interrupt();
+	for_each_set_bit(op, &action, IPI_MAX)
+		ipi_handlers[op](0, NULL);
 
 	return IRQ_HANDLED;
 }
 
 static void bmips43xx_send_ipi_mask(const struct cpumask *mask,
-	unsigned int action)
+	enum ipi_message_type op)
 {
 	unsigned int i;
 
 	for_each_cpu(i, mask)
-		bmips43xx_send_ipi_single(i, action);
+		bmips43xx_send_ipi_single(i, op);
 }
 
 #ifdef CONFIG_HOTPLUG_CPU

@@ -13,8 +13,8 @@
 #include <linux/smp.h>
 #include <linux/cpufreq.h>
 #include <linux/kexec.h>
+#include <asm/ipi.h>
 #include <asm/processor.h>
-#include <asm/smp.h>
 #include <asm/time.h>
 #include <asm/tlbflush.h>
 #include <asm/cacheflush.h>
@@ -368,44 +368,44 @@ static void ipi_mailbox_buf_init(void)
 /*
  * Simple enough, just poke the appropriate ipi register
  */
-static void loongson3_send_ipi_single(int cpu, unsigned int action)
+static void loongson3_send_ipi_single(int cpu, enum ipi_message_type op)
 {
-	ipi_write_action(cpu_logical_map(cpu), (u32)action);
+	ipi_write_action(cpu_logical_map(cpu), BIT(op));
 }
 
 static void
-loongson3_send_ipi_mask(const struct cpumask *mask, unsigned int action)
+loongson3_send_ipi_mask(const struct cpumask *mask, enum ipi_message_type op)
 {
 	unsigned int i;
 
 	for_each_cpu(i, mask)
-		ipi_write_action(cpu_logical_map(i), (u32)action);
+		ipi_write_action(cpu_logical_map(i), BIT(op));
 }
 
+static irqreturn_t loongson3_ask_c0count(int irq, void *dev_id)
+{
+	int i, cpu = smp_processor_id();
+	unsigned long c0count;
+
+	BUG_ON(cpu != 0);
+	c0count = read_c0_count();
+	c0count = c0count ? c0count : 1;
+	for (i = 1; i < nr_cpu_ids; i++)
+		core0_c0count[i] = c0count;
+	nudge_writes(); /* Let others see the result ASAP */
+
+	return IRQ_HANDLED;
+}
 
 static irqreturn_t loongson3_ipi_interrupt(int irq, void *dev_id)
 {
-	int i, cpu = smp_processor_id();
-	unsigned int action, c0count;
+	int op, cpu = smp_processor_id();
+	unsigned long action;
 
 	action = ipi_read_clear(cpu);
 
-	if (action & SMP_RESCHEDULE_YOURSELF)
-		scheduler_ipi();
-
-	if (action & SMP_CALL_FUNCTION) {
-		irq_enter();
-		generic_smp_call_function_interrupt();
-		irq_exit();
-	}
-
-	if (action & SMP_ASK_C0COUNT) {
-		BUG_ON(cpu != 0);
-		c0count = read_c0_count();
-		c0count = c0count ? c0count : 1;
-		for (i = 1; i < nr_cpu_ids; i++)
-			core0_c0count[i] = c0count;
-		nudge_writes(); /* Let others see the result ASAP */
+	for_each_set_bit(op, &action, IPI_MAX) {
+		ipi_handlers[op](0, NULL);
 	}
 
 	return IRQ_HANDLED;
@@ -435,7 +435,7 @@ static void loongson3_init_secondary(void)
 
 	i = 0;
 	core0_c0count[cpu] = 0;
-	loongson3_send_ipi_single(0, SMP_ASK_C0COUNT);
+	loongson3_send_ipi_single(0, IPI_ASK_C0COUNT);
 	while (!core0_c0count[cpu]) {
 		i++;
 		cpu_relax();
@@ -505,6 +505,10 @@ static void __init loongson3_smp_setup(void)
 		__cpu_logical_map[num] = -1;
 		num++;
 	}
+
+	ipi_handlers[IPI_ASK_C0COUNT] = loongson3_ask_c0count;
+	ipi_names[IPI_ASK_C0COUNT] = "Loongson Ask C0 Count";
+
 	csr_ipi_probe();
 	ipi_set0_regs_init();
 	ipi_clear0_regs_init();

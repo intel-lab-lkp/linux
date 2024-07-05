@@ -49,6 +49,8 @@ extern void octeon_init_cvmcount(void);
 extern void octeon_setup_delays(void);
 extern void octeon_io_clk_delay(unsigned long);
 
+extern void octeon_send_ipi_single(int cpu, enum ipi_message_type op);
+
 #define OCTEON_ARGV_MAX_ARGS	64
 #define OCTEON_SERIAL_LEN	20
 

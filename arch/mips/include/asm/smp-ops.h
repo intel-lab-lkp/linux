@@ -20,8 +20,8 @@
 struct task_struct;
 
 struct plat_smp_ops {
-	void (*send_ipi_single)(int cpu, unsigned int action);
-	void (*send_ipi_mask)(const struct cpumask *mask, unsigned int action);
+	void (*send_ipi_single)(int cpu, enum ipi_message_type op);
+	void (*send_ipi_mask)(const struct cpumask *mask, enum ipi_message_type op);
 	void (*init_secondary)(void);
 	void (*smp_finish)(void);
 	int (*boot_secondary)(int cpu, struct task_struct *idle);
@@ -46,10 +46,6 @@ static inline void plat_smp_setup(void)
 
 	mp_ops->smp_setup();
 }
-
-extern void mips_smp_send_ipi_single(int cpu, unsigned int action);
-extern void mips_smp_send_ipi_mask(const struct cpumask *mask,
-				      unsigned int action);
 
 #else /* !CONFIG_SMP */
 

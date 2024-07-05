@@ -12,7 +12,6 @@
 
 #include <asm/bootinfo.h>
 #include <asm/sgialib.h>
-#include <asm/smp-ops.h>
 
 #undef DEBUG_PROM_INIT
 

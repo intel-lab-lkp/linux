@@ -16,8 +16,6 @@
 #include <linux/threads.h>
 #include <linux/cpumask.h>
 
-#include <asm/smp-ops.h>
-
 extern int smp_num_siblings;
 extern cpumask_t cpu_sibling_map[];
 extern cpumask_t cpu_core_map[];
@@ -46,12 +44,6 @@ extern int __cpu_logical_map[NR_CPUS];
 
 #define NO_PROC_ID	(-1)
 
-#define SMP_RESCHEDULE_YOURSELF 0x1	/* XXX braindead */
-#define SMP_CALL_FUNCTION	0x2
-/* Octeon - Tell another core to flush its icache */
-#define SMP_ICACHE_FLUSH	0x4
-#define SMP_ASK_C0COUNT		0x8
-
 /* Mask of CPUs which are currently definitely operating coherently */
 extern cpumask_t cpu_coherent_mask;
 
@@ -63,6 +55,20 @@ extern void calculate_cpu_foreign_map(void);
 
 asmlinkage void start_secondary(void);
 
+enum ipi_message_type {
+	IPI_RESCHEDULE,
+	IPI_CALL_FUNC,
+#ifdef CONFIG_CAVIUM_OCTEON_SOC
+	IPI_ICACHE_FLUSH,
+#endif
+#ifdef CONFIG_MACH_LOONGSON64
+	IPI_ASK_C0COUNT,
+#endif
+	IPI_MAX
+};
+
+#include <asm/smp-ops.h>
+
 /*
  * this function sends a 'reschedule' IPI to another CPU.
  * it goes straight through and wastes no time serializing
@@ -72,7 +78,7 @@ static inline void arch_smp_send_reschedule(int cpu)
 {
 	extern const struct plat_smp_ops *mp_ops;	/* private */
 
-	mp_ops->send_ipi_single(cpu, SMP_RESCHEDULE_YOURSELF);
+	mp_ops->send_ipi_single(cpu, IPI_RESCHEDULE);
 }
 
 #ifdef CONFIG_HOTPLUG_CPU
@@ -109,32 +115,18 @@ static inline void *kexec_nonboot_cpu_func(void)
 }
 #endif
 
-/*
- * This function will set up the necessary IPIs for Linux to communicate
- * with the CPUs in mask.
- * Return 0 on success.
- */
-int mips_smp_ipi_allocate(const struct cpumask *mask);
-
-/*
- * This function will free up IPIs allocated with mips_smp_ipi_allocate to the
- * CPUs in mask, which must be a subset of the IPIs that have been configured.
- * Return 0 on success.
- */
-int mips_smp_ipi_free(const struct cpumask *mask);
-
 static inline void arch_send_call_function_single_ipi(int cpu)
 {
 	extern const struct plat_smp_ops *mp_ops;	/* private */
 
-	mp_ops->send_ipi_single(cpu, SMP_CALL_FUNCTION);
+	mp_ops->send_ipi_single(cpu, IPI_CALL_FUNC);
 }
 
 static inline void arch_send_call_function_ipi_mask(const struct cpumask *mask)
 {
 	extern const struct plat_smp_ops *mp_ops;	/* private */
 
-	mp_ops->send_ipi_mask(mask, SMP_CALL_FUNCTION);
+	mp_ops->send_ipi_mask(mask, IPI_CALL_FUNC);
 }
 
 #endif /* __ASM_SMP_H */

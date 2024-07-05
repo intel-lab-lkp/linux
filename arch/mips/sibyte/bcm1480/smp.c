@@ -12,6 +12,7 @@
 
 #include <asm/mmu_context.h>
 #include <asm/io.h>
+#include <asm/ipi.h>
 #include <asm/fw/cfe/cfe_api.h>
 #include <asm/sibyte/sb1250.h>
 #include <asm/sibyte/bcm1480_regs.h>
@@ -64,18 +65,18 @@ void bcm1480_smp_init(void)
  * Simple enough; everything is set up, so just poke the appropriate mailbox
  * register, and we should be set
  */
-static void bcm1480_send_ipi_single(int cpu, unsigned int action)
+static void bcm1480_send_ipi_single(int cpu, enum ipi_message_type op)
 {
-	__raw_writeq((((u64)action)<< 48), mailbox_0_set_regs[cpu]);
+	__raw_writeq((((u64)BIT_ULL(op)) << 48), mailbox_0_set_regs[cpu]);
 }
 
 static void bcm1480_send_ipi_mask(const struct cpumask *mask,
-				  unsigned int action)
+				  enum ipi_message_type op)
 {
 	unsigned int i;
 
 	for_each_cpu(i, mask)
-		bcm1480_send_ipi_single(i, action);
+		bcm1480_send_ipi_single(i, op);
 }
 
 /*
@@ -159,19 +160,21 @@ void bcm1480_mailbox_interrupt(void)
 {
 	int cpu = smp_processor_id();
 	int irq = K_BCM1480_INT_MBOX_0_0;
-	unsigned int action;
+	u64 action;
+
+	BUILD_BUG_ON(IPI_MAX > 2);
 
 	kstat_incr_irq_this_cpu(irq);
 	/* Load the mailbox register to figure out what we're supposed to do */
 	action = (__raw_readq(mailbox_0_regs[cpu]) >> 48) & 0xffff;
 
 	/* Clear the mailbox to clear the interrupt */
-	__raw_writeq(((u64)action)<<48, mailbox_0_clear_regs[cpu]);
+	__raw_writeq(((u64)action) << 48, mailbox_0_clear_regs[cpu]);
 
-	if (action & SMP_RESCHEDULE_YOURSELF)
+	if (action & BIT_ULL(IPI_RESCHEDULE))
 		scheduler_ipi();
 
-	if (action & SMP_CALL_FUNCTION) {
+	if (action & BIT_ULL(IPI_CALL_FUNC)) {
 		irq_enter();
 		generic_smp_call_function_interrupt();
 		irq_exit();
