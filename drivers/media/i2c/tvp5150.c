@@ -1812,7 +1812,7 @@ static const struct regmap_access_table tvp5150_readable_table = {
 	.n_yes_ranges = ARRAY_SIZE(tvp5150_readable_ranges),
 };
 
-static struct regmap_config tvp5150_config = {
+static const struct regmap_config tvp5150_config = {
 	.reg_bits = 8,
 	.val_bits = 8,
 	.max_register = 0xff,
