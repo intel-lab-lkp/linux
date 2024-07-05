@@ -116,98 +116,55 @@
 		___m = (~0ULL / ___b) * ___p;				\
 		___m += ((~0ULL % ___b + 1) * ___p) / ___b;		\
 	} else {							\
-		/*							\
-		 * Reduce m / p, and try to clear bit 31 of m when	\
-		 * possible, otherwise that'll need extra overflow	\
-		 * handling later.					\
-		 */							\
-		uint32_t ___bits = -(___m & -___m);			\
-		___bits |= ___m >> 32;					\
-		___bits = (~___bits) << 1;				\
-		/*							\
-		 * If ___bits == 0 then setting bit 31 is  unavoidable.	\
-		 * Simply apply the maximum possible reduction in that	\
-		 * case. Otherwise the MSB of ___bits indicates the	\
-		 * best reduction we should apply.			\
-		 */							\
-		if (!___bits) {						\
-			___p /= (___m & -___m);				\
-			___m /= (___m & -___m);				\
-		} else {						\
-			___p >>= ilog2(___bits);			\
-			___m >>= ilog2(___bits);			\
-		}							\
+		/* Reduce m / p */					\
+		___p /= (___m & -___m);					\
+		___m /= (___m & -___m);					\
 		/* No bias needed. */					\
 		___bias = 0;						\
 	}								\
 									\
 	/*								\
-	 * Now we have a combination of 2 conditions:			\
-	 *								\
-	 * 1) whether or not we need to apply a bias, and		\
-	 *								\
-	 * 2) whether or not there might be an overflow in the cross	\
-	 *    product determined by (___m & ((1 << 63) | (1 << 31))).	\
-	 *								\
-	 * Select the best way to do (m_bias + m * n) / (1 << 64).	\
+	 * Perform (m_bias + m * n) / (1 << 64).			\
 	 * From now on there will be actual runtime code generated.	\
 	 */								\
-	___res = __arch_xprod_64(___m, ___n, ___bias);			\
+	___res = __xprod_64(___m, ___n, ___bias);			\
 									\
 	___res /= ___p;							\
 })
 
-#ifndef __arch_xprod_64
 /*
- * Default C implementation for __arch_xprod_64()
- *
- * Prototype: uint64_t __arch_xprod_64(const uint64_t m, uint64_t n, bool bias)
  * Semantic:  retval = ((bias ? m : 0) + m * n) >> 64
  *
  * The product is a 128-bit value, scaled down to 64 bits.
- * Assuming constant propagation to optimize away unused conditional code.
- * Architectures may provide their own optimized assembly implementation.
  */
-static inline uint64_t __arch_xprod_64(const uint64_t m, uint64_t n, bool bias)
+static inline uint64_t __xprod_64(const uint64_t m, uint64_t n, bool bias)
 {
-	uint32_t m_lo = m;
-	uint32_t m_hi = m >> 32;
-	uint32_t n_lo = n;
-	uint32_t n_hi = n >> 32;
-	uint64_t res;
-	uint32_t res_lo, res_hi, tmp;
-
-	if (!bias) {
-		res = ((uint64_t)m_lo * n_lo) >> 32;
-	} else if (!(m & ((1ULL << 63) | (1ULL << 31)))) {
-		/* there can't be any overflow here */
-		res = (m + (uint64_t)m_lo * n_lo) >> 32;
-	} else {
-		res = m + (uint64_t)m_lo * n_lo;
-		res_lo = res >> 32;
-		res_hi = (res_lo < m_hi);
-		res = res_lo | ((uint64_t)res_hi << 32);
-	}
-
-	if (!(m & ((1ULL << 63) | (1ULL << 31)))) {
-		/* there can't be any overflow here */
-		res += (uint64_t)m_lo * n_hi;
-		res += (uint64_t)m_hi * n_lo;
-		res >>= 32;
-	} else {
-		res += (uint64_t)m_lo * n_hi;
-		tmp = res >> 32;
-		res += (uint64_t)m_hi * n_lo;
-		res_lo = res >> 32;
-		res_hi = (res_lo < tmp);
-		res = res_lo | ((uint64_t)res_hi << 32);
-	}
-
-	res += (uint64_t)m_hi * n_hi;
-
-	return res;
-}
+	union {
+		uint64_t v;
+		struct {
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+			uint32_t l;
+			uint32_t h;
+#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+			uint32_t h;
+			uint32_t l;
+#else
+#error "unknown endianness"
 #endif
+		};
+	} A, B, X, Y, Z;
+
+	A.v = m;
+	B.v = n;
+
+	X.v = (uint64_t)A.l * B.l + (bias ? m : 0);
+	Y.v = (uint64_t)A.l * B.h + X.h;
+	Z.v = (uint64_t)A.h * B.h + Y.h;
+	Y.v = (uint64_t)A.h * B.l + Y.l;
+	Z.v += Y.h;
+
+	return Z.v;
+}
 
 #ifndef __div64_32
 extern uint32_t __div64_32(uint64_t *dividend, uint32_t divisor);
