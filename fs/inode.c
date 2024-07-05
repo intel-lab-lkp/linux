@@ -21,6 +21,8 @@
 #include <linux/list_lru.h>
 #include <linux/iversion.h>
 #include <linux/rw_hint.h>
+#include <linux/seq_file.h>
+#include <linux/debugfs.h>
 #include <trace/events/writeback.h>
 #define CREATE_TRACE_POINTS
 #include <trace/events/timestamp.h>
@@ -69,6 +71,11 @@ static __cacheline_aligned_in_smp DEFINE_SPINLOCK(inode_hash_lock);
  * converted to the realtime clock on an as-needed basis.
  */
 static __cacheline_aligned_in_smp ktime_t ctime_floor;
+
+static struct percpu_counter mg_ctime_updates;
+static struct percpu_counter mg_floor_swaps;
+static struct percpu_counter mg_ctime_swaps;
+
 /*
  * Empty aops. Can be used for the cases where the user does not
  * define any of the address_space operations.
@@ -2662,11 +2669,14 @@ struct timespec64 inode_set_ctime_current(struct inode *inode)
 			 * as good, so keep it.
 			 */
 			old = cmpxchg(&ctime_floor, floor, fine);
-			if (old != floor)
+			if (old == floor)
+				percpu_counter_inc(&mg_floor_swaps);
+			else
 				fine = old;
 			now = ktime_mono_to_real(fine);
 		}
 	}
+	percpu_counter_inc(&mg_ctime_updates);
 	now_ts = ktime_to_timespec64(now);
 retry:
 	/* Try to swap the nsec value into place. */
@@ -2676,6 +2686,7 @@ retry:
 	/* If swap occurred, then we're (mostly) done */
 	if (cur == cns) {
 		inode->i_ctime_sec = now_ts.tv_sec;
+		percpu_counter_inc(&mg_ctime_swaps);
 	} else {
 		/*
 		 * Was the change due to someone marking the old ctime QUERIED?
@@ -2745,3 +2756,39 @@ umode_t mode_strip_sgid(struct mnt_idmap *idmap,
 	return mode & ~S_ISGID;
 }
 EXPORT_SYMBOL(mode_strip_sgid);
+
+static int mgts_show(struct seq_file *s, void *p)
+{
+	u64 ctime_updates = percpu_counter_sum(&mg_ctime_updates);
+	u64 floor_swaps = percpu_counter_sum(&mg_floor_swaps);
+	u64 ctime_swaps = percpu_counter_sum(&mg_ctime_swaps);
+
+	seq_printf(s, "%llu %llu %llu\n", ctime_updates, ctime_swaps, floor_swaps);
+	return 0;
+}
+
+DEFINE_SHOW_ATTRIBUTE(mgts);
+
+static int __init mg_debugfs_init(void)
+{
+	int ret = percpu_counter_init(&mg_ctime_updates, 0, GFP_KERNEL);
+
+	if (ret)
+		return ret;
+
+	ret = percpu_counter_init(&mg_floor_swaps, 0, GFP_KERNEL);
+	if (ret) {
+		percpu_counter_destroy(&mg_ctime_updates);
+		return ret;
+	}
+
+	ret = percpu_counter_init(&mg_ctime_swaps, 0, GFP_KERNEL);
+	if (ret) {
+		percpu_counter_destroy(&mg_floor_swaps);
+		percpu_counter_destroy(&mg_ctime_updates);
+		return ret;
+	}
+	debugfs_create_file("multigrain_timestamps", S_IFREG | S_IRUGO, NULL, NULL, &mgts_fops);
+	return 0;
+}
+late_initcall(mg_debugfs_init);
