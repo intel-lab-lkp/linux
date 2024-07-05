@@ -1905,6 +1905,23 @@ static int intel_sanitize_fbc_option(struct intel_display *display)
 	return 0;
 }
 
+unsigned int intel_fbc_preferred_cfb_size(struct intel_display *display)
+{
+	unsigned int cpp, width, height, stride;
+
+	if (!HAS_FBC(display))
+		return 0;
+
+	intel_fbc_max_plane_size(display, &width, &height);
+
+	cpp = intel_fbc_cfb_cpp();
+
+	/* assume stride matches width to keep this simple */
+	stride = _intel_fbc_cfb_stride(display, cpp, width, width * cpp);
+
+	return _intel_fbc_cfb_size(display, height, stride);
+}
+
 void intel_fbc_add_plane(struct intel_fbc *fbc, struct intel_plane *plane)
 {
 	plane->fbc = fbc;
