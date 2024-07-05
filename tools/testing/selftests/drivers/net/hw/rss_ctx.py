@@ -63,6 +63,22 @@ def _get_rx_cnts(cfg, prev=None):
     return queue_stats
 
 
+def _send_traffic_check(cfg, port, name, params):
+    cnts = _get_rx_cnts(cfg)
+    GenerateTraffic(cfg, port=port).wait_pkts_and_stop(20000)
+    cnts = _get_rx_cnts(cfg, prev=cnts)
+
+    directed = sum(cnts[i] for i in params['target'])
+
+    ksft_ge(directed, 20000, f"traffic on {name}: " + str(cnts))
+    if params.get('noise'):
+        ksft_lt(sum(cnts[i] for i in params['noise']), directed / 2,
+                "traffic on other queues:" + str(cnts))
+    if params.get('empty'):
+        ksft_eq(sum(cnts[i] for i in params['empty']), 0,
+                "traffic on inactive queues: " + str(cnts))
+
+
 def test_rss_key_indir(cfg):
     """Test basics like updating the main RSS key and indirection table."""
 
@@ -170,15 +186,10 @@ def test_rss_context(cfg, ctx_cnt=1, create_with_cfg=None):
         defer(ethtool, f"-N {cfg.ifname} delete {ntuple}")
 
     for i in range(ctx_cnt):
-        cnts = _get_rx_cnts(cfg)
-        GenerateTraffic(cfg, port=ports[i]).wait_pkts_and_stop(20000)
-        cnts = _get_rx_cnts(cfg, prev=cnts)
-
-        directed = sum(cnts[2+i*2:4+i*2])
-
-        ksft_lt(sum(cnts[ :2]), directed / 2, "traffic on main context:" + str(cnts))
-        ksft_ge(directed, 20000, f"traffic on context {i}: " + str(cnts))
-        ksft_eq(sum(cnts[2:2+i*2] + cnts[4+i*2:]), 0, "traffic on other contexts: " + str(cnts))
+        _send_traffic_check(cfg, ports[i], f"context {i}",
+                            { 'target': (2+i*2, 3+i*2),
+                              'noise': (0, 1),
+                              'empty': list(range(2, 2+i*2)) + list(range(4+i*2, 2+2*ctx_cnt)) })
 
     if requested_ctx_cnt != ctx_cnt:
         raise KsftSkipEx(f"Tested only {ctx_cnt} contexts, wanted {requested_ctx_cnt}")
@@ -230,18 +241,19 @@ def test_rss_context_out_of_order(cfg, ctx_cnt=4):
 
     def check_traffic():
         for i in range(ctx_cnt):
-            cnts = _get_rx_cnts(cfg)
-            GenerateTraffic(cfg, port=ports[i]).wait_pkts_and_stop(20000)
-            cnts = _get_rx_cnts(cfg, prev=cnts)
-
             if ctx[i]:
-                directed = sum(cnts[2+i*2:4+i*2])
-                ksft_lt(sum(cnts[ :2]), directed / 2, "traffic on main context:" + str(cnts))
-                ksft_ge(directed, 20000, f"traffic on context {i}: " + str(cnts))
-                ksft_eq(sum(cnts[2:2+i*2] + cnts[4+i*2:]), 0, "traffic on other contexts: " + str(cnts))
+                expected = {
+                    'target': (2+i*2, 3+i*2),
+                    'noise': (0, 1),
+                    'empty': list(range(2, 2+i*2)) + list(range(4+i*2, 2+2*ctx_cnt))
+                }
             else:
-                ksft_ge(sum(cnts[ :2]), 20000, "traffic on main context:" + str(cnts))
-                ksft_eq(sum(cnts[2: ]),     0, "traffic on other contexts: " + str(cnts))
+                expected = {
+                    'target': range(2),
+                    'empty':  range(2, 2+2*ctx_cnt)
+                }
+
+            _send_traffic_check(cfg, ports[i], f"context {i}", expected)
 
     # Use queues 0 and 1 for normal traffic
     ethtool(f"-X {cfg.ifname} equal 2")
