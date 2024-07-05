@@ -16,12 +16,11 @@ bool intel_fbdev_fb_prefer_stolen(struct intel_display *display,
 {
 	struct drm_i915_private *i915 = to_i915(display->drm);
 
-	/*
-	 * If the FB is too big, just don't use it since fbdev is not very
-	 * important and we should probably use that space with FBC or other
-	 * features.
-	 */
-	return i915->dsm.usable_size >= size * 2;
+	if (size > i915->dsm.usable_size)
+		return false;
+
+	/* try to ensure FBC has enough stolen to do its job well */
+	return i915->dsm.usable_size - size >= intel_fbc_preferred_cfb_size(&i915->display);
 }
 
 struct intel_framebuffer *intel_fbdev_fb_alloc(struct drm_fb_helper *helper,
