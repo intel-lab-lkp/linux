@@ -36,12 +36,17 @@ void mips_smp_ipi_disable(void);
 extern bool mips_smp_ipi_have_virq_range(void);
 void mips_smp_ipi_set_irqdomain(struct irq_domain *d);
 extern void mips_smp_ipi_set_virq_range(int virq, int nr);
+extern void mips_smp_show_ipi_stats(struct seq_file *p, int prec);
 #else
 static inline void mips_smp_ipi_enable(void)
 {
 }
 
 static inline void mips_smp_ipi_disable(void)
+{
+}
+
+static inline void mips_smp_show_ipi_stats(struct seq_file *p, int prec)
 {
 }
 #endif /* CONFIG_GENERIC_IRQ_IPI */
@@ -57,6 +62,10 @@ void mips_smp_ipi_set_irqdomain(struct irq_domain *d)
 static inline bool mips_smp_ipi_have_virq_range(void)
 {
 	return false;
+}
+
+static inline void mips_smp_show_ipi_stats(struct seq_file *p, int prec)
+{
 }
 #endif /* CONFIG_SMP */
 #endif
