@@ -24,12 +24,11 @@ bool intel_fbdev_fb_prefer_stolen(struct intel_display *display,
 	if (!stolen)
 		return false;
 
-	/*
-	 * If the FB is too big, just don't use it since fbdev is not very
-	 * important and we should probably use that space with FBC or other
-	 * features.
-	 */
-	return stolen->size >= size * 2;
+	if (size > stolen->size)
+		return false;
+
+	/* try to ensure FBC has enough stolen to do its job well */
+	return stolen->size - size >= intel_fbc_preferred_cfb_size(&xe->display);
 }
 
 struct intel_framebuffer *intel_fbdev_fb_alloc(struct drm_fb_helper *helper,
