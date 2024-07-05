@@ -552,6 +552,7 @@ static int cps_cpu_disable(void)
 	smp_mb__after_atomic();
 	set_cpu_online(cpu, false);
 	calculate_cpu_foreign_map();
+	mips_smp_ipi_disable();
 	irq_migrate_all_off_this_cpu();
 
 	return 0;
