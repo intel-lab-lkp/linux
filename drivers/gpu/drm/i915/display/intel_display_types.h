@@ -834,6 +834,7 @@ struct intel_sharpness_filter {
 	u32 scaler_coefficient[119];
 	bool strength_changed;
 	u8 win_size;
+	bool need_scaler;
 };
 
 struct intel_crtc_scaler_state {

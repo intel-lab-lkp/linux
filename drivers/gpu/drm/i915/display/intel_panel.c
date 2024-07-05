@@ -451,7 +451,9 @@ static int pch_panel_fitting(struct intel_crtc_state *crtc_state,
 
 	drm_rect_init(&crtc_state->pch_pfit.dst,
 		      x, y, width, height);
-	crtc_state->pch_pfit.enabled = true;
+
+	if (!crtc_state->hw.casf_params.need_scaler)
+		crtc_state->pch_pfit.enabled = true;
 
 	return 0;
 }
