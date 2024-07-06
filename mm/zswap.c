@@ -171,6 +171,7 @@ static struct list_lru zswap_list_lru;
 /* The lock protects zswap_next_shrink updates. */
 static DEFINE_SPINLOCK(zswap_shrink_lock);
 static struct mem_cgroup *zswap_next_shrink;
+static bool zswap_next_shrink_changed;
 static struct work_struct zswap_shrink_work;
 static struct shrinker *zswap_shrinker;
 
@@ -775,12 +776,39 @@ void zswap_folio_swapin(struct folio *folio)
 	}
 }
 
+/*
+ * This function should be called when a memcg is being offlined.
+ *
+ * Since the global shrinker shrink_worker() may hold a reference
+ * of the memcg, we must check and release the reference in
+ * zswap_next_shrink.
+ *
+ * shrink_worker() must handle the case where this function releases
+ * the reference of memcg being shrunk.
+ */
 void zswap_memcg_offline_cleanup(struct mem_cgroup *memcg)
 {
 	/* lock out zswap shrinker walking memcg tree */
 	spin_lock(&zswap_shrink_lock);
-	if (zswap_next_shrink == memcg)
-		zswap_next_shrink = mem_cgroup_iter(NULL, zswap_next_shrink, NULL);
+	if (zswap_next_shrink == memcg) {
+		/*
+		 * We advances the cursor to put back the offlined memcg.
+		 * shrink_worker() should not advance the cursor again.
+		 */
+		zswap_next_shrink_changed = true;
+
+		do {
+			zswap_next_shrink = mem_cgroup_iter(NULL,
+					zswap_next_shrink, NULL);
+		} while (zswap_next_shrink &&
+				!mem_cgroup_online(zswap_next_shrink));
+		/*
+		 * We verified the next memcg is online.  Even if the next
+		 * memcg is being offlined here, another cleaner must be
+		 * waiting for our lock.  We can leave the online memcg
+		 * reference.
+		 */
+	}
 	spin_unlock(&zswap_shrink_lock);
 }
 
@@ -1319,18 +1347,42 @@ static void shrink_worker(struct work_struct *w)
 	/* Reclaim down to the accept threshold */
 	thr = zswap_accept_thr_pages();
 
-	/* global reclaim will select cgroup in a round-robin fashion. */
+	/* global reclaim will select cgroup in a round-robin fashion.
+	 *
+	 * We save iteration cursor memcg into zswap_next_shrink,
+	 * which can be modified by the offline memcg cleaner
+	 * zswap_memcg_offline_cleanup().
+	 *
+	 * Since the offline cleaner is called only once, we cannot leave an
+	 * offline memcg reference in zswap_next_shrink.
+	 * We can rely on the cleaner only if we get online memcg under lock.
+	 *
+	 * If we get an offline memcg, we cannot determine the cleaner has
+	 * already been called or will be called later. We must put back the
+	 * reference before returning from this function. Otherwise, the
+	 * offline memcg left in zswap_next_shrink will hold the reference
+	 * until the next run of shrink_worker().
+	 */
 	do {
 		spin_lock(&zswap_shrink_lock);
-		zswap_next_shrink = mem_cgroup_iter(NULL, zswap_next_shrink, NULL);
-		memcg = zswap_next_shrink;
 
 		/*
-		 * We need to retry if we have gone through a full round trip, or if we
-		 * got an offline memcg (or else we risk undoing the effect of the
-		 * zswap memcg offlining cleanup callback). This is not catastrophic
-		 * per se, but it will keep the now offlined memcg hostage for a while.
-		 *
+		 * Start shrinking from the next memcg after zswap_next_shrink.
+		 * To not skip a memcg, do not advance the cursor when it has
+		 * already been advanced by the offline cleaner.
+		 */
+		do {
+			if (zswap_next_shrink_changed) {
+				/* cleaner advanced the cursor */
+				zswap_next_shrink_changed = false;
+			} else {
+				zswap_next_shrink = mem_cgroup_iter(NULL,
+						zswap_next_shrink, NULL);
+			}
+			memcg = zswap_next_shrink;
+		} while (memcg && !mem_cgroup_tryget_online(memcg));
+
+		/*
 		 * Note that if we got an online memcg, we will keep the extra
 		 * reference in case the original reference obtained by mem_cgroup_iter
 		 * is dropped by the zswap memcg offlining callback, ensuring that the
@@ -1344,17 +1396,11 @@ static void shrink_worker(struct work_struct *w)
 			goto resched;
 		}
 
-		if (!mem_cgroup_tryget_online(memcg)) {
-			/* drop the reference from mem_cgroup_iter() */
-			mem_cgroup_iter_break(NULL, memcg);
-			zswap_next_shrink = NULL;
-			spin_unlock(&zswap_shrink_lock);
-
-			if (++failures == MAX_RECLAIM_RETRIES)
-				break;
-
-			goto resched;
-		}
+		/*
+		 * We verified the memcg is online and got an extra memcg
+		 * reference.  Our memcg might be offlined concurrently but the
+		 * respective offline cleaner must be waiting for our lock.
+		 */
 		spin_unlock(&zswap_shrink_lock);
 
 		ret = shrink_memcg(memcg);
@@ -1368,6 +1414,12 @@ static void shrink_worker(struct work_struct *w)
 resched:
 		cond_resched();
 	} while (zswap_total_pages() > thr);
+
+	/*
+	 * We can still hold the original memcg reference.
+	 * The reference is stored in zswap_next_shrink, and then reused
+	 * by the next shrink_worker().
+	 */
 }
 
 /*********************************
