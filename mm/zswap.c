@@ -1806,7 +1806,7 @@ static int zswap_setup(void)
 		goto hp_fail;
 
 	shrink_wq = alloc_workqueue("zswap-shrink",
-			WQ_UNBOUND|WQ_MEM_RECLAIM, 1);
+			WQ_UNBOUND, 1);
 	if (!shrink_wq)
 		goto shrink_wq_fail;
 
