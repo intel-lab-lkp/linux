@@ -35,6 +35,8 @@
 #include <linux/pagemap.h>
 #include <linux/workqueue.h>
 #include <linux/list_lru.h>
+#include <linux/delay.h>
+#include <linux/jiffies.h>
 
 #include "swap.h"
 #include "internal.h"
@@ -177,6 +179,14 @@ static struct work_struct zswap_shrink_work;
 static struct shrinker *zswap_shrinker;
 
 /*
+ * To avoid IO contention between pagein/out and global shrinker writeback,
+ * track the last jiffies of pagein/out and delay the writeback.
+ * Default to 500msec in alignment with mq-deadline read timeout.
+ */
+#define ZSWAP_GLOBAL_SHRINKER_DELAY_MS 500
+static unsigned long zswap_shrinker_delay_start;
+
+/*
  * struct zswap_entry
  *
  * This structure contains the metadata for tracking a single compressed
@@ -243,6 +253,14 @@ static inline struct xarray *swap_zswap_tree(swp_entry_t swp)
 #define zswap_pool_debug(msg, p)				\
 	pr_debug("%s pool %s/%s\n", msg, (p)->tfm_name,		\
 		 zpool_get_type((p)->zpools[0]))
+
+static inline void zswap_shrinker_delay_update(void)
+{
+	unsigned long now = jiffies;
+
+	if (now != zswap_shrinker_delay_start)
+		zswap_shrinker_delay_start = now;
+}
 
 /*********************************
 * pool functions
@@ -1378,6 +1396,8 @@ static void shrink_worker(struct work_struct *w)
 	struct mem_cgroup *memcg;
 	int ret, failures = 0, progress;
 	unsigned long thr;
+	unsigned long now, sleepuntil;
+	const unsigned long delay = msecs_to_jiffies(ZSWAP_GLOBAL_SHRINKER_DELAY_MS);
 
 	/* Reclaim down to the accept threshold */
 	thr = zswap_accept_thr_pages();
@@ -1405,6 +1425,21 @@ static void shrink_worker(struct work_struct *w)
 	 * until the next run of shrink_worker().
 	 */
 	do {
+		/*
+		 * delay shrinking to allow the last rejected page completes
+		 * its writeback
+		 */
+		sleepuntil = delay + READ_ONCE(zswap_shrinker_delay_start);
+		now = jiffies;
+		/*
+		 * If zswap did not reject pages for long, sleepuntil-now may
+		 * underflow.  We assume the timestamp is valid only if
+		 * now < sleepuntil < now + delay + 1
+		 */
+		if (time_before(now, sleepuntil) &&
+				time_before(sleepuntil, now + delay + 1))
+			fsleep(jiffies_to_usecs(sleepuntil - now));
+
 		spin_lock(&zswap_shrink_lock);
 
 		/*
@@ -1526,8 +1561,10 @@ bool zswap_store(struct folio *folio)
 	VM_WARN_ON_ONCE(!folio_test_swapcache(folio));
 
 	/* Large folios aren't supported */
-	if (folio_test_large(folio))
+	if (folio_test_large(folio)) {
+		zswap_shrinker_delay_update();
 		return false;
+	}
 
 	if (!zswap_enabled)
 		goto check_old;
@@ -1648,6 +1685,8 @@ freepage:
 	zswap_entry_cache_free(entry);
 reject:
 	obj_cgroup_put(objcg);
+	zswap_shrinker_delay_update();
+
 	if (need_global_shrink)
 		queue_work(shrink_wq, &zswap_shrink_work);
 check_old:
@@ -1691,8 +1730,10 @@ bool zswap_load(struct folio *folio)
 	else
 		entry = xa_load(tree, offset);
 
-	if (!entry)
+	if (!entry) {
+		zswap_shrinker_delay_update();
 		return false;
+	}
 
 	if (entry->length)
 		zswap_decompress(entry, page);
@@ -1834,6 +1875,8 @@ static int zswap_setup(void)
 				      zswap_cpu_comp_dead);
 	if (ret)
 		goto hp_fail;
+
+	zswap_shrinker_delay_update();
 
 	shrink_wq = alloc_workqueue("zswap-shrink",
 			WQ_UNBOUND, 1);
