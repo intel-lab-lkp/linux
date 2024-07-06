@@ -3477,10 +3477,9 @@ void amdgpu_dm_update_connector_after_detect(
 			aconnector->drm_edid = drm_edid_alloc(edid, sink->dc_edid.length);
 			drm_edid_connector_update(connector, aconnector->drm_edid);
 
-			/* FIXME: Get rid of drm_edid_raw() */
 			if (aconnector->dc_link->aux_mode)
-				drm_dp_cec_set_edid(&aconnector->dm_dp_aux.aux,
-						    drm_edid_raw(aconnector->drm_edid));
+				drm_dp_cec_attach(&aconnector->dm_dp_aux.aux,
+						  connector->display_info.source_physical_address);
 		}
 
 		if (!aconnector->timing_requested) {
