@@ -71,8 +71,6 @@ static u64 zswap_reject_kmemcache_fail;
 
 /* Shrinker work queue */
 static struct workqueue_struct *shrink_wq;
-/* Pool limit was hit, we need to calm down */
-static bool zswap_pool_reached_full;
 
 /*********************************
 * tunables
@@ -118,7 +116,10 @@ module_param_cb(zpool, &zswap_zpool_param_ops, &zswap_zpool_type, 0644);
 static unsigned int zswap_max_pool_percent = 20;
 module_param_named(max_pool_percent, zswap_max_pool_percent, uint, 0644);
 
-/* The threshold for accepting new pages after the max_pool_percent was hit */
+/*
+ * The percentage of pool size that the global shrinker keeps in memory.
+ * It does not protect old pages from the dynamic shrinker.
+ */
 static unsigned int zswap_accept_thr_percent = 90; /* of max pool size */
 module_param_named(accept_threshold_percent, zswap_accept_thr_percent,
 		   uint, 0644);
@@ -488,6 +489,20 @@ static unsigned long zswap_accept_thr_pages(void)
 	return zswap_max_pages() * zswap_accept_thr_percent / 100;
 }
 
+/*
+ * Returns threshold to start proactive global shrinking.
+ */
+static inline unsigned long zswap_shrink_start_pages(void)
+{
+	/*
+	 * Shrinker will evict pages to the accept threshold.
+	 * We add 1% to not schedule shrinker too frequently
+	 * for small swapout.
+	 */
+	return zswap_max_pages() *
+		min(100, zswap_accept_thr_percent + 1) / 100;
+}
+
 unsigned long zswap_total_pages(void)
 {
 	struct zswap_pool *pool;
@@ -503,21 +518,6 @@ unsigned long zswap_total_pages(void)
 	rcu_read_unlock();
 
 	return total;
-}
-
-static bool zswap_check_limits(void)
-{
-	unsigned long cur_pages = zswap_total_pages();
-	unsigned long max_pages = zswap_max_pages();
-
-	if (cur_pages >= max_pages) {
-		zswap_pool_limit_hit++;
-		zswap_pool_reached_full = true;
-	} else if (zswap_pool_reached_full &&
-		   cur_pages <= zswap_accept_thr_pages()) {
-			zswap_pool_reached_full = false;
-	}
-	return zswap_pool_reached_full;
 }
 
 /*********************************
@@ -1489,6 +1489,8 @@ bool zswap_store(struct folio *folio)
 	struct obj_cgroup *objcg = NULL;
 	struct mem_cgroup *memcg = NULL;
 	unsigned long value;
+	unsigned long cur_pages;
+	bool need_global_shrink = false;
 
 	VM_WARN_ON_ONCE(!folio_test_locked(folio));
 	VM_WARN_ON_ONCE(!folio_test_swapcache(folio));
@@ -1511,8 +1513,17 @@ bool zswap_store(struct folio *folio)
 		mem_cgroup_put(memcg);
 	}
 
-	if (zswap_check_limits())
+	cur_pages = zswap_total_pages();
+
+	if (cur_pages >= zswap_max_pages()) {
+		zswap_pool_limit_hit++;
+		need_global_shrink = true;
 		goto reject;
+	}
+
+	/* schedule shrink for incoming pages */
+	if (cur_pages >= zswap_shrink_start_pages())
+		queue_work(shrink_wq, &zswap_shrink_work);
 
 	/* allocate entry */
 	entry = zswap_entry_cache_alloc(GFP_KERNEL, folio_nid(folio));
@@ -1555,6 +1566,9 @@ store_entry:
 
 		WARN_ONCE(err != -ENOMEM, "unexpected xarray error: %d\n", err);
 		zswap_reject_alloc_fail++;
+
+		/* reduce entry in array */
+		need_global_shrink = true;
 		goto store_failed;
 	}
 
@@ -1604,7 +1618,7 @@ freepage:
 	zswap_entry_cache_free(entry);
 reject:
 	obj_cgroup_put(objcg);
-	if (zswap_pool_reached_full)
+	if (need_global_shrink)
 		queue_work(shrink_wq, &zswap_shrink_work);
 check_old:
 	/*
