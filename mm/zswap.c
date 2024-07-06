@@ -186,6 +186,8 @@ static struct shrinker *zswap_shrinker;
  * length - the length in bytes of the compressed page data.  Needed during
  *          decompression. For a same value filled page length is 0, and both
  *          pool and lru are invalid and must be ignored.
+ *          If length is equal to PAGE_SIZE, the data stored in handle is
+ *          not compressed. The data must be copied to page as-is.
  * pool - the zswap_pool the entry's data is in
  * handle - zpool allocation handle that stores the compressed page data
  * value - value of the same-value filled pages which have same content
@@ -969,9 +971,23 @@ static bool zswap_compress(struct folio *folio, struct zswap_entry *entry)
 	 */
 	comp_ret = crypto_wait_req(crypto_acomp_compress(acomp_ctx->req), &acomp_ctx->wait);
 	dlen = acomp_ctx->req->dlen;
-	if (comp_ret)
+
+	/* coa_compress returns -EINVAL for errors including insufficient dlen */
+	if (comp_ret && comp_ret != -EINVAL)
 		goto unlock;
 
+	/*
+	 * If the data cannot be compressed well, store the data as-is.
+	 * Switching by a threshold at
+	 * PAGE_SIZE - (allocation granularity)
+	 * zbud and z3fold use 64B granularity.
+	 * zsmalloc stores >3632B in one page for 4K page arch.
+	 */
+	if (comp_ret || dlen > PAGE_SIZE - 64) {
+		/* we do not use compressed result anymore */
+		comp_ret = 0;
+		dlen = PAGE_SIZE;
+	}
 	zpool = zswap_find_zpool(entry);
 	gfp = __GFP_NORETRY | __GFP_NOWARN | __GFP_KSWAPD_RECLAIM;
 	if (zpool_malloc_support_movable(zpool))
@@ -981,14 +997,20 @@ static bool zswap_compress(struct folio *folio, struct zswap_entry *entry)
 		goto unlock;
 
 	buf = zpool_map_handle(zpool, handle, ZPOOL_MM_WO);
-	memcpy(buf, dst, dlen);
+
+	/* PAGE_SIZE indicates not compressed. */
+	if (dlen == PAGE_SIZE)
+		memcpy_from_folio(buf, folio, 0, PAGE_SIZE);
+	else
+		memcpy(buf, dst, dlen);
+
 	zpool_unmap_handle(zpool, handle);
 
 	entry->handle = handle;
 	entry->length = dlen;
 
 unlock:
-	if (comp_ret == -ENOSPC || alloc_ret == -ENOSPC)
+	if (alloc_ret == -ENOSPC)
 		zswap_reject_compress_poor++;
 	else if (comp_ret)
 		zswap_reject_compress_fail++;
@@ -1005,6 +1027,14 @@ static void zswap_decompress(struct zswap_entry *entry, struct page *page)
 	struct scatterlist input, output;
 	struct crypto_acomp_ctx *acomp_ctx;
 	u8 *src;
+
+	if (entry->length == PAGE_SIZE) {
+		/* the content is not compressed. copy back as-is.  */
+		src = zpool_map_handle(zpool, entry->handle, ZPOOL_MM_RO);
+		memcpy_to_page(page, 0, src, entry->length);
+		zpool_unmap_handle(zpool, entry->handle);
+		return;
+	}
 
 	acomp_ctx = raw_cpu_ptr(entry->pool->acomp_ctx);
 	mutex_lock(&acomp_ctx->mutex);
