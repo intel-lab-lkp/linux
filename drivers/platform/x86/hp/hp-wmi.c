@@ -14,6 +14,8 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/kernel.h>
+#include <linux/led-class-multicolor.h>
+#include <linux/leds.h>
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/slab.h>
@@ -24,6 +26,7 @@
 #include <linux/platform_profile.h>
 #include <linux/hwmon.h>
 #include <linux/acpi.h>
+#include <linux/bits.h>
 #include <linux/rfkill.h>
 #include <linux/string.h>
 #include <linux/dmi.h>
@@ -43,6 +46,14 @@ MODULE_ALIAS("wmi:5FB7F034-2C63-45E9-BE91-3D44E2C707E4");
 #define HP_OMEN_EC_THERMAL_PROFILE_OFFSET 0x95
 
 #define zero_if_sup(tmp) (zero_insize_support?0:sizeof(tmp)) // use when zero insize is required
+
+#define FOURZONE_LIGHTING_SUPPORTED_BIT	0x01
+#define FOURZONE_LIGHTING_ON		228
+#define FOURZONE_LIGHTING_OFF		100
+
+#define FOURZONE_COLOR_R		GENMASK(23, 16)
+#define FOURZONE_COLOR_G		GENMASK(15, 8)
+#define FOURZONE_COLOR_B		GENMASK(7, 0)
 
 /* DMI board names of devices that should use the omen specific path for
  * thermal profiles.
@@ -143,18 +154,36 @@ enum hp_wmi_commandtype {
 };
 
 enum hp_wmi_gm_commandtype {
-	HPWMI_FAN_SPEED_GET_QUERY = 0x11,
-	HPWMI_SET_PERFORMANCE_MODE = 0x1A,
-	HPWMI_FAN_SPEED_MAX_GET_QUERY = 0x26,
-	HPWMI_FAN_SPEED_MAX_SET_QUERY = 0x27,
-	HPWMI_GET_SYSTEM_DESIGN_DATA = 0x28,
+	HPWMI_FAN_SPEED_GET_QUERY	= 0x11,
+	HPWMI_SET_PERFORMANCE_MODE	= 0x1A,
+	HPWMI_FAN_SPEED_MAX_GET_QUERY	= 0x26,
+	HPWMI_FAN_SPEED_MAX_SET_QUERY	= 0x27,
+	HPWMI_GET_SYSTEM_DESIGN_DATA	= 0x28,
+	HPWMI_GET_KEYBOARD_TYPE		= 0x2B,
+};
+
+enum hp_wmi_fourzone_commandtype {
+	HPWMI_SUPPORTS_LIGHTNING	= 0x01,
+	HPWMI_FOURZONE_COLOR_GET	= 0x02,
+	HPWMI_FOURZONE_COLOR_SET	= 0x03,
+	HPWMI_LED_BRIGHTNESS_GET	= 0x04,
+	HPWMI_LED_BRIGHTNESS_SET	= 0x05,
+};
+
+enum hp_wmi_keyboardtype {
+	HPWMI_KEYBOARD_INVALID        = 0x00,
+	HPWMI_KEYBOARD_NORMAL         = 0x01,
+	HPWMI_KEYBOARD_WITH_NUMPAD    = 0x02,
+	HPWMI_KEYBOARD_WITHOUT_NUMPAD = 0x03,
+	HPWMI_KEYBOARD_RGB	      = 0x04,
 };
 
 enum hp_wmi_command {
-	HPWMI_READ	= 0x01,
-	HPWMI_WRITE	= 0x02,
-	HPWMI_ODM	= 0x03,
-	HPWMI_GM	= 0x20008,
+	HPWMI_READ     = 0x01,
+	HPWMI_WRITE    = 0x02,
+	HPWMI_ODM      = 0x03,
+	HPWMI_GM       = 0x20008,
+	HPWMI_FOURZONE = 0x20009,
 };
 
 enum hp_wmi_hardware_mask {
@@ -265,6 +294,7 @@ static struct platform_device *hp_wmi_platform_dev;
 static struct platform_profile_handler platform_profile_handler;
 static bool platform_profile_support;
 static bool zero_insize_support;
+static bool fourzone_lightning_support;
 
 static struct rfkill *wifi_rfkill;
 static struct rfkill *bluetooth_rfkill;
@@ -821,6 +851,40 @@ static struct attribute *hp_wmi_attrs[] = {
 };
 ATTRIBUTE_GROUPS(hp_wmi);
 
+static const char * const fourzone_zone_names[4] = {
+	"hp:rgb:kbd_zoned_backlight-right",
+	"hp:rgb:kbd_zoned_backlight-middle",
+	"hp:rgb:kbd_zoned_backlight-left",
+	"hp:rgb:kbd_zoned_backlight-wasd"
+};
+
+struct hp_fourzone_leds {
+	struct led_classdev_mc leds[4];
+	struct mc_subled subleds[4];
+	u32 color_cache[4];
+};
+static struct hp_fourzone_leds fourzone_leds;
+
+static enum led_brightness get_fourzone_brightness(struct led_classdev *led_cdev)
+{
+	u8 buff[4];
+
+	hp_wmi_perform_query(HPWMI_LED_BRIGHTNESS_GET, HPWMI_FOURZONE,
+		&buff, sizeof(buff), sizeof(buff));
+
+	return buff[0] == FOURZONE_LIGHTING_ON ? LED_ON : LED_OFF;
+}
+
+static void fourzone_update_brightness(void)
+{
+	unsigned int br;
+
+	/* synchronize the brightness level on all zones */
+	br = get_fourzone_brightness(NULL);
+	for (size_t i = 0; i < 4; i++)
+		fourzone_leds.leds[i].led_cdev.brightness = br;
+}
+
 static void hp_wmi_notify(u32 value, void *context)
 {
 	struct acpi_buffer response = { ACPI_ALLOCATE_BUFFER, NULL };
@@ -932,6 +996,14 @@ static void hp_wmi_notify(u32 value, void *context)
 	case HPWMI_PROXIMITY_SENSOR:
 		break;
 	case HPWMI_BACKLIT_KB_BRIGHTNESS:
+		if (fourzone_lightning_support) {
+			input_report_key(hp_wmi_input_dev, KEY_KBDILLUMTOGGLE, true);
+			input_sync(hp_wmi_input_dev);
+			input_report_key(hp_wmi_input_dev, KEY_KBDILLUMTOGGLE, false);
+			input_sync(hp_wmi_input_dev);
+
+			fourzone_update_brightness();
+		}
 		break;
 	case HPWMI_PEAKSHIFT_PERIOD:
 		break;
@@ -1505,6 +1577,154 @@ static int thermal_profile_setup(void)
 	return 0;
 }
 
+static int fourzone_set_colors(u32 color, size_t zone)
+{
+	u8 buff[128];
+	int ret;
+
+	ret = hp_wmi_perform_query(HPWMI_FOURZONE_COLOR_GET, HPWMI_FOURZONE,
+		&buff, sizeof(buff), sizeof(buff));
+	if (ret != 0)
+		return -EINVAL;
+
+	buff[25 + zone * 3]     = FIELD_GET(FOURZONE_COLOR_R, color);
+	buff[25 + zone * 3 + 1] = FIELD_GET(FOURZONE_COLOR_G, color);
+	buff[25 + zone * 3 + 2] = FIELD_GET(FOURZONE_COLOR_B, color);
+
+	return hp_wmi_perform_query(HPWMI_FOURZONE_COLOR_SET, HPWMI_FOURZONE,
+		&buff, sizeof(buff), sizeof(buff));
+}
+
+static int fourzone_get_colors(u32 *colors)
+{
+	u8 buff[128];
+	int ret;
+
+	ret = hp_wmi_perform_query(HPWMI_FOURZONE_COLOR_GET, HPWMI_FOURZONE,
+		&buff, sizeof(buff), sizeof(buff));
+	if (ret != 0)
+		return -EINVAL;
+
+	for (int i = 0; i < 4; i++) {
+		colors[i] = FIELD_PREP(FOURZONE_COLOR_R, buff[25 + i * 3])
+			  | FIELD_PREP(FOURZONE_COLOR_G, buff[25 + i * 3 + 1])
+			  | FIELD_PREP(FOURZONE_COLOR_B, buff[25 + i * 3 + 2]);
+	}
+
+	return 0;
+}
+
+static void set_fourzone_brightness(struct led_classdev *led_cdev, enum led_brightness brightness)
+{
+	size_t zone;
+
+	for (size_t i = 0; i < 4; i++)
+		if (strcmp(led_cdev->name, fourzone_zone_names[i]) == 0)
+			zone = i;
+
+	if (fourzone_leds.leds[zone].subled_info->intensity == fourzone_leds.color_cache[zone]) {
+		u8 buff[4] = {
+			brightness == LED_ON ? FOURZONE_LIGHTING_ON : FOURZONE_LIGHTING_OFF,
+			0, 0, 0
+		};
+
+		hp_wmi_perform_query(HPWMI_LED_BRIGHTNESS_SET, HPWMI_FOURZONE, &buff,
+			sizeof(buff), 0);
+
+		fourzone_update_brightness();
+	} else {
+		fourzone_set_colors(fourzone_leds.leds[zone].subled_info->intensity, zone);
+		fourzone_leds.color_cache[zone] = fourzone_leds.leds[zone].subled_info->intensity;
+	}
+}
+
+static int __init fourzone_leds_init(struct platform_device *device)
+{
+	enum led_brightness brightness;
+	u32 colors[4];
+	int ret;
+
+	ret = fourzone_get_colors(colors);
+	if (ret < 0)
+		return ret;
+
+	memcpy(fourzone_leds.color_cache, colors, sizeof(colors));
+
+	brightness = get_fourzone_brightness(NULL);
+
+	for (size_t i = 0; i < 4; i++) {
+		fourzone_leds.subleds[i] = (struct mc_subled) {
+			.color_index = LED_COLOR_ID_RGB,
+			.brightness = 1,
+			.intensity = colors[i]
+		};
+
+		fourzone_leds.leds[i] = (struct led_classdev_mc) {
+			.led_cdev = {
+				.name = fourzone_zone_names[i],
+				.brightness = brightness,
+				.max_brightness = 1,
+				.brightness_set = set_fourzone_brightness,
+				.brightness_get = get_fourzone_brightness,
+				.color = LED_COLOR_ID_RGB,
+				.flags = LED_BRIGHT_HW_CHANGED
+			},
+			.num_colors = 1,
+			.subled_info = &fourzone_leds.subleds[i]
+		};
+
+		ret = devm_led_classdev_multicolor_register(&device->dev, &fourzone_leds.leds[i]);
+		if (ret)
+			return -ENODEV;
+	}
+
+	return 0;
+}
+
+static enum hp_wmi_keyboardtype fourzone_get_keyboard_type(void)
+{
+	u8 buff[128];
+	int ret;
+
+	ret = hp_wmi_perform_query(HPWMI_GET_KEYBOARD_TYPE, HPWMI_GM,
+		&buff, sizeof(buff), sizeof(buff));
+	if (ret != 0)
+		return HPWMI_KEYBOARD_INVALID;
+
+	/* the first byte in the response represents the keyboard type */
+	return (enum hp_wmi_keyboardtype)(buff[0] + 1);
+}
+
+static bool fourzone_supports_lighting(void)
+{
+	u8 buff[128];
+	int ret;
+
+	ret = hp_wmi_perform_query(HPWMI_SUPPORTS_LIGHTNING, HPWMI_FOURZONE,
+		&buff, sizeof(buff), sizeof(buff));
+	if (ret != 0)
+		return false;
+
+	return buff[0] & FOURZONE_LIGHTING_SUPPORTED_BIT;
+}
+
+static int fourzone_setup(struct platform_device *device)
+{
+	if (!fourzone_supports_lighting())
+		return -ENODEV;
+
+	if (fourzone_get_keyboard_type() != HPWMI_KEYBOARD_WITHOUT_NUMPAD)
+		return -ENODEV;
+
+	/* register leds */
+	if (fourzone_leds_init(device) < 0)
+		return -ENODEV;
+
+	input_set_capability(hp_wmi_input_dev, KE_KEY, KEY_KBDILLUMTOGGLE);
+
+	return 0;
+}
+
 static int hp_wmi_hwmon_init(void);
 
 static int __init hp_wmi_bios_setup(struct platform_device *device)
@@ -1534,6 +1754,10 @@ static int __init hp_wmi_bios_setup(struct platform_device *device)
 
 	thermal_profile_setup();
 
+	/* setup 4 zone rgb */
+	if (!fourzone_setup(device))
+		fourzone_lightning_support = true;
+
 	return 0;
 }
 
@@ -1561,6 +1785,12 @@ static void __exit hp_wmi_bios_remove(struct platform_device *device)
 
 	if (platform_profile_support)
 		platform_profile_remove();
+
+	if (fourzone_lightning_support)
+		for (size_t i = 0; i < 4; i++) {
+			devm_led_classdev_multicolor_unregister(&device->dev,
+				&fourzone_leds.leds[i]);
+		}
 }
 
 static int hp_wmi_resume_handler(struct device *device)
