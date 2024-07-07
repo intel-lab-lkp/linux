@@ -2694,6 +2694,10 @@ bool get_signal(struct ksignal *ksig)
 	try_to_freeze();
 
 relock:
+	clear_notify_signal();
+	if (unlikely(task_work_pending(current)))
+		task_work_run();
+
 	spin_lock_irq(&sighand->siglock);
 
 	/*
