@@ -2326,7 +2326,7 @@ static int rmqueue_bulk(struct zone *zone, unsigned int order,
 int decay_pcp_high(struct zone *zone, struct per_cpu_pages *pcp)
 {
 	int high_min, to_drain, batch;
-	int todo = 0;
+	int todo = 0, count = 0;
 
 	high_min = READ_ONCE(pcp->high_min);
 	batch = READ_ONCE(pcp->batch);
@@ -2336,18 +2336,25 @@ int decay_pcp_high(struct zone *zone, struct per_cpu_pages *pcp)
 	 * control latency.  This caps pcp->high decrement too.
 	 */
 	if (pcp->high > high_min) {
-		pcp->high = max3(pcp->count - (batch << CONFIG_PCP_BATCH_SCALE_MAX),
+		/* When tuning the pcp batch scale value, we want to ensure that
+		 * the pcp->high decay rate is not slowed down. Therefore, we
+		 * hard-code the historical default scale value of 5 here to
+		 * prevent any unintended effects.
+		 */
+		pcp->high = max3(pcp->count - (batch << 5),
 				 pcp->high - (pcp->high >> 3), high_min);
 		if (pcp->high > high_min)
 			todo++;
 	}
 
 	to_drain = pcp->count - pcp->high;
-	if (to_drain > 0) {
+	while (count < to_drain) {
 		spin_lock(&pcp->lock);
-		free_pcppages_bulk(zone, to_drain, pcp, 0);
+		free_pcppages_bulk(zone, batch, pcp, 0);
 		spin_unlock(&pcp->lock);
+		count += batch;
 		todo++;
+		cond_resched();
 	}
 
 	return todo;
