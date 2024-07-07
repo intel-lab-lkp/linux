@@ -1397,10 +1397,10 @@ static void __pairs_redir_to_connected(int cli0, int peer0, int cli1, int peer1,
 			return;
 	}
 
-	n = xsend(cli1, "a", 1, send_flags);
-	if (n == 0)
+	n = xsend(cli1, "ab", 2, send_flags);
+	if (n >= 0 && n < 2)
 		FAIL("%s: incomplete send", log_prefix);
-	if (n < 1)
+	if (n < 2)
 		return;
 
 	key = SK_PASS;
@@ -1415,6 +1415,19 @@ static void __pairs_redir_to_connected(int cli0, int peer0, int cli1, int peer1,
 		FAIL_ERRNO("%s: recv_timeout", log_prefix);
 	if (n == 0)
 		FAIL("%s: incomplete recv", log_prefix);
+
+	if (send_flags & MSG_OOB) {
+		key = 0;
+		xbpf_map_delete_elem(sock_mapfd, &key);
+		key = 1;
+		xbpf_map_delete_elem(sock_mapfd, &key);
+
+		n = recv(peer1, &b, 1, MSG_OOB | MSG_DONTWAIT);
+		if (n > 0)
+			FAIL("%s: recv(MSG_OOB) succeeded", log_prefix);
+		if (n == 0)
+			FAIL("%s: recv(MSG_OOB) returned 0", log_prefix);
+	}
 }
 
 static void pairs_redir_to_connected(int cli0, int peer0, int cli1, int peer1,
@@ -1883,6 +1896,10 @@ static void unix_inet_skb_redir_to_connected(struct test_sockmap_listen *skel,
 	unix_inet_redir_to_connected(family, SOCK_STREAM,
 				     sock_map, nop_map, verdict_map,
 				     REDIR_EGRESS);
+	__unix_inet_redir_to_connected(family, SOCK_STREAM,
+				       sock_map, nop_map, verdict_map,
+				       REDIR_EGRESS, MSG_OOB);
+
 	skel->bss->test_ingress = true;
 	unix_inet_redir_to_connected(family, SOCK_DGRAM,
 				     sock_map, -1, verdict_map,
@@ -1897,6 +1914,9 @@ static void unix_inet_skb_redir_to_connected(struct test_sockmap_listen *skel,
 	unix_inet_redir_to_connected(family, SOCK_STREAM,
 				     sock_map, nop_map, verdict_map,
 				     REDIR_INGRESS);
+	__unix_inet_redir_to_connected(family, SOCK_STREAM,
+				       sock_map, nop_map, verdict_map,
+				       REDIR_INGRESS, MSG_OOB);
 
 	xbpf_prog_detach2(verdict, sock_map, BPF_SK_SKB_VERDICT);
 }
