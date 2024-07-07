@@ -132,7 +132,6 @@ static int smc_chan_setup(struct scmi_chan_info *cinfo, struct device *dev,
 	struct scmi_smc *scmi_info;
 	resource_size_t size;
 	struct resource res;
-	struct device_node *np;
 	u32 func_id;
 	int ret;
 
@@ -143,25 +142,9 @@ static int smc_chan_setup(struct scmi_chan_info *cinfo, struct device *dev,
 	if (!scmi_info)
 		return -ENOMEM;
 
-	np = of_parse_phandle(cdev->of_node, "shmem", 0);
-	if (!of_device_is_compatible(np, "arm,scmi-shmem")) {
-		of_node_put(np);
-		return -ENXIO;
-	}
-
-	ret = of_address_to_resource(np, 0, &res);
-	of_node_put(np);
-	if (ret) {
-		dev_err(cdev, "failed to get SCMI Tx shared memory\n");
-		return ret;
-	}
-
-	size = resource_size(&res);
-	scmi_info->shmem = devm_ioremap(dev, res.start, size);
-	if (!scmi_info->shmem) {
-		dev_err(dev, "failed to ioremap SCMI Tx shared memory\n");
-		return -EADDRNOTAVAIL;
-	}
+	scmi_info->shmem = setup_shmem_iomap(cinfo, dev, tx);
+	if (IS_ERR(scmi_info->shmem))
+		return PTR_ERR(scmi_info->shmem);
 
 	ret = of_property_read_u32(dev->of_node, "arm,smc-id", &func_id);
 	if (ret < 0)

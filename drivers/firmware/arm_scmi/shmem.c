@@ -7,6 +7,8 @@
 
 #include <linux/ktime.h>
 #include <linux/io.h>
+#include <linux/of.h>
+#include <linux/of_address.h>
 #include <linux/processor.h>
 #include <linux/types.h>
 
@@ -132,4 +134,38 @@ bool shmem_channel_free(struct scmi_shared_mem __iomem *shmem)
 bool shmem_channel_intr_enabled(struct scmi_shared_mem __iomem *shmem)
 {
 	return ioread32(&shmem->flags) & SCMI_SHMEM_FLAG_INTR_ENABLED;
+}
+
+void *__iomem
+setup_shmem_iomap(struct scmi_chan_info *cinfo, struct device *dev, bool tx)
+{
+	const char *desc = tx ? "Tx" : "Rx";
+	int ret, idx = tx ? 0 : 1;
+	struct device *cdev = cinfo->dev;
+	struct device_node *shmem;
+	resource_size_t size;
+	struct resource res;
+	void __iomem *addr;
+
+	shmem = of_parse_phandle(cdev->of_node, "shmem", idx);
+	if (!of_device_is_compatible(shmem, "arm,scmi-shmem")) {
+		of_node_put(shmem);
+		return ERR_PTR(-ENXIO);
+	}
+
+	ret = of_address_to_resource(shmem, 0, &res);
+	of_node_put(shmem);
+	if (ret) {
+		dev_err(cdev, "failed to get SCMI %s shared memory\n", desc);
+		return ERR_PTR(ret);
+	}
+
+	size = resource_size(&res);
+	addr = devm_ioremap(dev, res.start, size);
+	if (!addr) {
+		dev_err(dev, "failed to ioremap SCMI %s shared memory\n", desc);
+		return ERR_PTR(-EADDRNOTAVAIL);
+	}
+
+	return addr;
 }
