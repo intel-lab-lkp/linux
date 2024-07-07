@@ -2267,9 +2267,25 @@ sort__typeoff_sort(struct hist_entry *left, struct hist_entry *right)
 		right_type = right->mem_type;
 	}
 
+	/*
+	 * Compare type_name first. Next, ompare var_name if it exists
+	 * for left and right hist_entry. If both entries doesn't have
+	 * var_name, but one of them has, return non-zero. This is to
+	 * indicate entries are not the same if one has var_name, but the
+	 * other doesn't.
+	 * If type_name and var_name is same, use mem_type_off field.
+	 */
 	ret = strcmp(left_type->self.type_name, right_type->self.type_name);
 	if (ret)
 		return ret;
+
+	if (left_type->self.var_name && right_type->self.var_name) {
+		ret = strcmp(left_type->self.var_name, right_type->self.var_name);
+		if (ret)
+			return ret;
+	} else if (right_type->self.var_name || left_type->self.var_name)
+		return 1;
+
 	return left->mem_type_off - right->mem_type_off;
 }
 
@@ -2305,9 +2321,12 @@ static int hist_entry__typeoff_snprintf(struct hist_entry *he, char *bf,
 	char buf[4096];
 
 	buf[0] = '\0';
-	if (list_empty(&he_type->self.children))
+	if (list_empty(&he_type->self.children)) {
 		snprintf(buf, sizeof(buf), "no field");
-	else
+		if (he_type->self.var_name)
+			strcpy(buf, he_type->self.var_name);
+
+	} else
 		fill_member_name(buf, sizeof(buf), &he_type->self,
 				 he->mem_type_off, true);
 	buf[4095] = '\0';
