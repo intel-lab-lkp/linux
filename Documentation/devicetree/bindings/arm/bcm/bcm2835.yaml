@@ -54,6 +54,18 @@ properties:
               - raspberrypi,model-zero-2-w
           - const: brcm,bcm2837
 
+  system:
+    type: object
+    additionalProperties: true
+    properties:
+
+      linux,revision:
+        $ref: /schemas/types.yaml#/definitions/string-array
+        description:
+          The "system revision" number, as determined by the bootloader.
+          https://www.raspberrypi.com/documentation/computers/raspberry-pi.html#new-style-revision-codes
+
+
 additionalProperties: true
 
 ...
