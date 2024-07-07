@@ -1374,9 +1374,10 @@ static void test_redir(struct test_sockmap_listen *skel, struct bpf_map *map,
 	}
 }
 
-static void pairs_redir_to_connected(int cli0, int peer0, int cli1, int peer1,
-				     int sock_mapfd, int nop_mapfd,
-				     int verd_mapfd, enum redir_mode mode)
+static void __pairs_redir_to_connected(int cli0, int peer0, int cli1, int peer1,
+				       int sock_mapfd, int nop_mapfd,
+				       int verd_mapfd, enum redir_mode mode,
+				       int send_flags)
 {
 	const char *log_prefix = redir_mode_str(mode);
 	unsigned int pass;
@@ -1396,11 +1397,9 @@ static void pairs_redir_to_connected(int cli0, int peer0, int cli1, int peer1,
 			return;
 	}
 
-	n = write(cli1, "a", 1);
-	if (n < 0)
-		FAIL_ERRNO("%s: write", log_prefix);
+	n = xsend(cli1, "a", 1, send_flags);
 	if (n == 0)
-		FAIL("%s: incomplete write", log_prefix);
+		FAIL("%s: incomplete send", log_prefix);
 	if (n < 1)
 		return;
 
@@ -1416,6 +1415,14 @@ static void pairs_redir_to_connected(int cli0, int peer0, int cli1, int peer1,
 		FAIL_ERRNO("%s: recv_timeout", log_prefix);
 	if (n == 0)
 		FAIL("%s: incomplete recv", log_prefix);
+}
+
+static void pairs_redir_to_connected(int cli0, int peer0, int cli1, int peer1,
+				     int sock_mapfd, int nop_mapfd,
+				     int verd_mapfd, enum redir_mode mode)
+{
+	__pairs_redir_to_connected(cli0, peer0, cli1, peer1, sock_mapfd,
+				   nop_mapfd, verd_mapfd, mode, 0);
 }
 
 static void unix_redir_to_connected(int sotype, int sock_mapfd,
@@ -1815,10 +1822,9 @@ static void inet_unix_skb_redir_to_connected(struct test_sockmap_listen *skel,
 	xbpf_prog_detach2(verdict, sock_map, BPF_SK_SKB_VERDICT);
 }
 
-static void unix_inet_redir_to_connected(int family, int type,
-					int sock_mapfd, int nop_mapfd,
-					int verd_mapfd,
-					enum redir_mode mode)
+static void __unix_inet_redir_to_connected(int family, int type, int sock_mapfd,
+					   int nop_mapfd, int verd_mapfd,
+					   enum redir_mode mode, int send_flags)
 {
 	int c0, c1, p0, p1;
 	int sfd[2];
@@ -1832,14 +1838,22 @@ static void unix_inet_redir_to_connected(int family, int type,
 		goto close_cli0;
 	c1 = sfd[0], p1 = sfd[1];
 
-	pairs_redir_to_connected(c0, p0, c1, p1,
-				 sock_mapfd, nop_mapfd, verd_mapfd, mode);
+	__pairs_redir_to_connected(c0, p0, c1, p1, sock_mapfd, nop_mapfd,
+				   verd_mapfd, mode, send_flags);
 
 	xclose(c1);
 	xclose(p1);
 close_cli0:
 	xclose(c0);
 	xclose(p0);
+}
+
+static void unix_inet_redir_to_connected(int family, int type, int sock_mapfd,
+					 int nop_mapfd, int verd_mapfd,
+					 enum redir_mode mode)
+{
+	__unix_inet_redir_to_connected(family, type, sock_mapfd, nop_mapfd,
+				       verd_mapfd, mode, 0);
 }
 
 static void unix_inet_skb_redir_to_connected(struct test_sockmap_listen *skel,
