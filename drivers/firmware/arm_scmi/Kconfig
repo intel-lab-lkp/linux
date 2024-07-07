@@ -102,7 +102,7 @@ config ARM_SCMI_TRANSPORT_OPTEE
 	  transport based on OP-TEE SCMI service, answer Y.
 
 config ARM_SCMI_TRANSPORT_SMC
-	bool "SCMI transport based on SMC"
+	tristate "SCMI transport based on SMC"
 	depends on HAVE_ARM_SMCCC_DISCOVERY
 	select ARM_SCMI_HAVE_TRANSPORT
 	select ARM_SCMI_HAVE_SHMEM
@@ -112,6 +112,8 @@ config ARM_SCMI_TRANSPORT_SMC
 
 	  If you want the ARM SCMI PROTOCOL stack to include support for a
 	  transport based on SMC, answer Y.
+	  This driver can also be built as a module.  If so, the module
+	  will be called scmi_transport_smc.
 
 config ARM_SCMI_TRANSPORT_SMC_ATOMIC_ENABLE
 	bool "Enable atomic mode support for SCMI SMC transport"
