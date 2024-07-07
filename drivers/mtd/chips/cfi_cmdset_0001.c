@@ -62,8 +62,10 @@
 
 static int cfi_intelext_read (struct mtd_info *, loff_t, size_t, size_t *, u_char *);
 static int cfi_intelext_write_words(struct mtd_info *, loff_t, size_t, size_t *, const u_char *);
+#if !FORCE_WORD_WRITE
 static int cfi_intelext_write_buffers(struct mtd_info *, loff_t, size_t, size_t *, const u_char *);
 static int cfi_intelext_writev(struct mtd_info *, const struct kvec *, unsigned long, loff_t, size_t *);
+#endif
 static int cfi_intelext_erase_varsize(struct mtd_info *, struct erase_info *);
 static void cfi_intelext_sync (struct mtd_info *);
 static int cfi_intelext_lock(struct mtd_info *mtd, loff_t ofs, uint64_t len);
@@ -305,6 +307,7 @@ static void fixup_use_point(struct mtd_info *mtd)
 	}
 }
 
+#if !FORCE_WORD_WRITE
 static void fixup_use_write_buffers(struct mtd_info *mtd)
 {
 	struct map_info *map = mtd->priv;
@@ -315,6 +318,7 @@ static void fixup_use_write_buffers(struct mtd_info *mtd)
 		mtd->_writev = cfi_intelext_writev;
 	}
 }
+#endif /* !FORCE_WORD_WRITE */
 
 /*
  * Some chips power-up with all sectors locked by default.
@@ -1720,6 +1724,7 @@ static int cfi_intelext_write_words (struct mtd_info *mtd, loff_t to , size_t le
 }
 
 
+#if !FORCE_WORD_WRITE
 static int __xipram do_write_buffer(struct map_info *map, struct flchip *chip,
 				    unsigned long adr, const struct kvec **pvec,
 				    unsigned long *pvec_seek, int len)
@@ -1948,6 +1953,7 @@ static int cfi_intelext_write_buffers (struct mtd_info *mtd, loff_t to,
 
 	return cfi_intelext_writev(mtd, &vec, 1, to, retlen);
 }
+#endif /* !FORCE_WORD_WRITE */
 
 static int __xipram do_erase_oneblock(struct map_info *map, struct flchip *chip,
 				      unsigned long adr, int len, void *thunk)
