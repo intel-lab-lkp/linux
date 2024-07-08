@@ -1859,12 +1859,12 @@ static const struct reserved_mem_ops rmem_swiotlb_ops = {
 
 static int __init rmem_swiotlb_setup(struct reserved_mem *rmem)
 {
-	struct device_node *node = rmem->dev_node;
+	unsigned long node = rmem->fdt_node;
 
-	if (of_property_present(node, "reusable") ||
-	    of_property_present(node, "linux,cma-default") ||
-	    of_property_present(node, "linux,dma-default") ||
-	    of_property_present(node, "no-map"))
+	if (of_get_flat_dt_prop(node, "reusable", NULL) ||
+	    of_get_flat_dt_prop(node, "linux,cma-default", NULL) ||
+	    of_get_flat_dt_prop(node, "linux,dma-default", NULL) ||
+	    of_get_flat_dt_prop(node, "no-map", NULL))
 		return -EINVAL;
 
 	rmem->ops = &rmem_swiotlb_ops;
