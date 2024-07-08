@@ -82,11 +82,6 @@ int arch_evlist__cmp(const struct evsel *lhs, const struct evsel *rhs)
 			return -1;
 		if (arch_is_topdown_slots(rhs))
 			return 1;
-		/* Followed by topdown events. */
-		if (arch_is_topdown_metrics(lhs) && !arch_is_topdown_metrics(rhs))
-			return -1;
-		if (!arch_is_topdown_metrics(lhs) && arch_is_topdown_metrics(rhs))
-			return 1;
 	}
 
 	/* Default ordering by insertion index. */
