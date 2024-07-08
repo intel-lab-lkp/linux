@@ -214,6 +214,12 @@ test_leader_sampling() {
     index=$(($index+1))
     prev_branches=$branches
   done < $script_output
+  if ! perf record -o "${perfdata}" -e "{instructions,slots,topdown-retiring}:S" true 2> /dev/null
+  then
+    echo "Leader sampling [Failed topdown events not reordered correctly]"
+    err=1
+    return
+  fi
   echo "Basic leader sampling test [Success]"
 }
 
