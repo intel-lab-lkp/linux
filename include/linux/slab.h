@@ -683,7 +683,24 @@ static __always_inline __alloc_size(1) void *kmalloc_noprof(size_t size, gfp_t f
 	}
 	return __kmalloc_noprof(size, flags);
 }
-#define kmalloc(...)				alloc_hooks(kmalloc_noprof(__VA_ARGS__))
+#define kmalloc_sized(...)			alloc_hooks(kmalloc_noprof(__VA_ARGS__))
+
+#define __size_force_positive(x)				\
+	({							\
+		typeof(__force_integral_expr(x)) __forced_val =	\
+			__force_integral_expr(x);		\
+		__forced_val < 0 ? SIZE_MAX : __forced_val;	\
+	})
+
+#define kmalloc(p, gfp)		_Generic((p),    \
+	unsigned char:  kmalloc_sized(__force_integral_expr(p), gfp), \
+	unsigned short: kmalloc_sized(__force_integral_expr(p), gfp), \
+	unsigned int:   kmalloc_sized(__force_integral_expr(p), gfp), \
+	unsigned long:  kmalloc_sized(__force_integral_expr(p), gfp), \
+	signed char:    kmalloc_sized(__size_force_positive(p), gfp), \
+	signed short:   kmalloc_sized(__size_force_positive(p), gfp), \
+	signed int:     kmalloc_sized(__size_force_positive(p), gfp), \
+	signed long:    kmalloc_sized(__size_force_positive(p), gfp))
 
 #define kmem_buckets_alloc(_b, _size, _flags)	\
 	alloc_hooks(__kmalloc_node_noprof(PASS_BUCKET_PARAMS(_size, _b), _flags, NUMA_NO_NODE))
