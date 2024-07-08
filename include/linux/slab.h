@@ -684,6 +684,7 @@ static __always_inline __alloc_size(1) void *kmalloc_noprof(size_t size, gfp_t f
 	return __kmalloc_noprof(size, flags);
 }
 #define kmalloc_sized(...)			alloc_hooks(kmalloc_noprof(__VA_ARGS__))
+#define kmalloc_aligned(size, align, gfp)	alloc_hooks(kmalloc_noprof(size, gfp))
 
 #define __size_force_positive(x)				\
 	({							\
@@ -700,7 +701,10 @@ static __always_inline __alloc_size(1) void *kmalloc_noprof(size_t size, gfp_t f
 	signed char:    kmalloc_sized(__size_force_positive(p), gfp), \
 	signed short:   kmalloc_sized(__size_force_positive(p), gfp), \
 	signed int:     kmalloc_sized(__size_force_positive(p), gfp), \
-	signed long:    kmalloc_sized(__size_force_positive(p), gfp))
+	signed long:    kmalloc_sized(__size_force_positive(p), gfp), \
+	default:	(typeof(__force_ptr_expr(p)))kmalloc_aligned(  \
+				sizeof(*__force_ptr_expr(p)),	      \
+				__alignof__(*__force_ptr_expr(p)), gfp))
 
 #define kmem_buckets_alloc(_b, _size, _flags)	\
 	alloc_hooks(__kmalloc_node_noprof(PASS_BUCKET_PARAMS(_size, _b), _flags, NUMA_NO_NODE))
@@ -815,14 +819,11 @@ static inline __alloc_size(1, 2) void *kmalloc_array_node_noprof(size_t n, size_
 
 /**
  * kzalloc - allocate memory. The memory is set to zero.
- * @size: how many bytes of memory are required.
+ * @p: either a pointer to an object to be allocated or bytes of memory are required.
  * @flags: the type of memory to allocate (see kmalloc).
  */
-static inline __alloc_size(1) void *kzalloc_noprof(size_t size, gfp_t flags)
-{
-	return kmalloc_noprof(size, flags | __GFP_ZERO);
-}
-#define kzalloc(...)				alloc_hooks(kzalloc_noprof(__VA_ARGS__))
+#define kzalloc(_p, _flags)			kmalloc(_p, (_flags)|__GFP_ZERO)
+#define kzalloc_noprof(_size, _flags)		kmalloc_noprof(_size, (_flags)|__GFP_ZERO)
 #define kzalloc_node(_size, _flags, _node)	kmalloc_node(_size, (_flags)|__GFP_ZERO, _node)
 
 void *__kvmalloc_node_noprof(DECL_BUCKET_PARAMS(size, b), gfp_t flags, int node) __alloc_size(1);
