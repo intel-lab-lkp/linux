@@ -985,6 +985,12 @@ static void stmmac_fpe_link_state_handle(struct stmmac_priv *priv, bool is_up)
 	}
 }
 
+static void stmmac_set_icc_bw(struct stmmac_priv *priv, unsigned int speed)
+{
+	icc_set_bw(priv->plat->axi_icc_path, Mbps_to_icc(speed), Mbps_to_icc(speed));
+	icc_set_bw(priv->plat->ahb_icc_path, Mbps_to_icc(speed), Mbps_to_icc(speed));
+}
+
 static void stmmac_mac_link_down(struct phylink_config *config,
 				 unsigned int mode, phy_interface_t interface)
 {
@@ -1079,6 +1085,8 @@ static void stmmac_mac_link_up(struct phylink_config *config,
 
 	if (priv->plat->fix_mac_speed)
 		priv->plat->fix_mac_speed(priv->plat->bsp_priv, speed, mode);
+
+	stmmac_set_icc_bw(priv, speed);
 
 	if (!duplex)
 		ctrl &= ~priv->hw->link.duplex;
