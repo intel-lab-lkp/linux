@@ -191,6 +191,16 @@ static void ufs_renesas_param_indirect_poll(struct ufs_hba *hba, u32 gpio,
 	ufs_renesas_param_write(hba, 0xf0, 0);
 }
 
+static void ufs_renesas_param_write_phy_10ad_10af(struct ufs_hba *hba,
+						  u32 data_10ad, u32 data_10af)
+{
+	ufs_renesas_param_write_phy(hba, 0x10ae, 0x0001);
+	ufs_renesas_param_write_phy(hba, 0x10ad, data_10ad);
+	ufs_renesas_param_write_phy(hba, 0x10af, data_10af);
+	ufs_renesas_param_write_phy(hba, 0x10b6, 0x0001);
+	ufs_renesas_param_write_phy(hba, 0x10ae, 0x0000);
+}
+
 static void ufs_renesas_pre_init(struct ufs_hba *hba)
 {
 	u32 timer_val;
@@ -266,29 +276,10 @@ static void ufs_renesas_pre_init(struct ufs_hba *hba)
 	ufs_renesas_param_write_phy(hba, 0x4000, 0x0000);
 	ufs_renesas_param_write_phy(hba, 0x4001, 0x0000);
 
-	ufs_renesas_param_write_phy(hba, 0x10ae, 0x0001);
-	ufs_renesas_param_write_phy(hba, 0x10ad, 0x0000);
-	ufs_renesas_param_write_phy(hba, 0x10af, 0x0001);
-	ufs_renesas_param_write_phy(hba, 0x10b6, 0x0001);
-	ufs_renesas_param_write_phy(hba, 0x10ae, 0x0000);
-
-	ufs_renesas_param_write_phy(hba, 0x10ae, 0x0001);
-	ufs_renesas_param_write_phy(hba, 0x10ad, 0x0000);
-	ufs_renesas_param_write_phy(hba, 0x10af, 0x0002);
-	ufs_renesas_param_write_phy(hba, 0x10b6, 0x0001);
-	ufs_renesas_param_write_phy(hba, 0x10ae, 0x0000);
-
-	ufs_renesas_param_write_phy(hba, 0x10ae, 0x0001);
-	ufs_renesas_param_write_phy(hba, 0x10ad, 0x0080);
-	ufs_renesas_param_write_phy(hba, 0x10af, 0x0000);
-	ufs_renesas_param_write_phy(hba, 0x10b6, 0x0001);
-	ufs_renesas_param_write_phy(hba, 0x10ae, 0x0000);
-
-	ufs_renesas_param_write_phy(hba, 0x10ae, 0x0001);
-	ufs_renesas_param_write_phy(hba, 0x10ad, 0x0080);
-	ufs_renesas_param_write_phy(hba, 0x10af, 0x001a);
-	ufs_renesas_param_write_phy(hba, 0x10b6, 0x0001);
-	ufs_renesas_param_write_phy(hba, 0x10ae, 0x0000);
+	ufs_renesas_param_write_phy_10ad_10af(hba, 0x0000, 0x0001);
+	ufs_renesas_param_write_phy_10ad_10af(hba, 0x0000, 0x0002);
+	ufs_renesas_param_write_phy_10ad_10af(hba, 0x0080, 0x0000);
+	ufs_renesas_param_write_phy_10ad_10af(hba, 0x0080, 0x001a);
 
 	ufs_renesas_param_indirect_write(hba, 7, 0x70, 0x0016);
 	ufs_renesas_param_indirect_write(hba, 7, 0x71, 0x0016);
