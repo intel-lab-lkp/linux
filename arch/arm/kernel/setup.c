@@ -1012,6 +1012,7 @@ static void __init reserve_crashkernel(void)
 				&crash_size, &crash_base,
 				NULL, NULL);
 	/* invalid value specified or crashkernel=0 */
+	crash_size = (phys_addr_t)crash_size;
 	if (ret || !crash_size)
 		return;
 
