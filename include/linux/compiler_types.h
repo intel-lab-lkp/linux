@@ -450,6 +450,29 @@ struct ftrace_likely_data {
 /* Are two types/vars the same type (ignoring qualifiers)? */
 #define __same_type(a, b) __builtin_types_compatible_p(typeof(a), typeof(b))
 
+/* Is the variable addressable? */
+#define __is_ptr_or_array(p)			\
+	(__builtin_classify_type(p) == __builtin_classify_type(NULL))
+
+/* Return an array decayed to a pointer. */
+#define __decay(p)				\
+	(&*__builtin_choose_expr(__is_ptr_or_array(p), p, NULL))
+
+/* Report if variable is a pointer type. */
+#define __is_ptr(p)		__same_type(p, __decay(p))
+
+/* Always produce an integral expression, with specific type/vale fallback. */
+#define ___force_integral_expr(x, type, val)	\
+	__builtin_choose_expr(!__is_ptr(x), (x), (type)val)
+#define __force_integral_expr(x)	\
+	___force_integral_expr(x, int, 0)
+
+/* Always produce a pointer expression, with specific type/value fallback. */
+#define ___force_ptr_expr(x, type, value)	\
+	__builtin_choose_expr(__is_ptr(x), (x), &(type){ value })
+#define __force_ptr_expr(x)	\
+	__builtin_choose_expr(__is_ptr(x), (x), NULL)
+
 /*
  * __unqual_scalar_typeof(x) - Declare an unqualified scalar type, leaving
  *			       non-scalar types unchanged.
