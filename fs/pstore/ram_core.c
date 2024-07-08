@@ -588,7 +588,7 @@ struct persistent_ram_zone *persistent_ram_new(phys_addr_t start, size_t size,
 	struct persistent_ram_zone *prz;
 	int ret = -ENOMEM;
 
-	prz = kzalloc(sizeof(struct persistent_ram_zone), GFP_KERNEL);
+	prz = kzalloc(prz, GFP_KERNEL);
 	if (!prz) {
 		pr_err("failed to allocate persistent ram zone\n");
 		goto err;

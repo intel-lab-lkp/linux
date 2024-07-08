@@ -1165,7 +1165,7 @@ static struct pstore_zone *psz_init_zone(enum pstore_type_id type,
 		return ERR_PTR(-ENOMEM);
 	}
 
-	zone = kzalloc(sizeof(struct pstore_zone), GFP_KERNEL);
+	zone = kzalloc(zone, GFP_KERNEL);
 	if (!zone)
 		return ERR_PTR(-ENOMEM);
 
