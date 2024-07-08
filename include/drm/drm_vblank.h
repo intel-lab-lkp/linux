@@ -79,6 +79,24 @@ struct drm_pending_vblank_event {
 };
 
 /**
+ * struct drm_vblank_config - vblank configuration for a CRTC
+ */
+struct drm_vblank_crtc_config {
+	/**
+	 * @offdelay_ms: Vblank off delay in ms, used to determine how long
+	 * @disable_timer waits before disabling.
+	 */
+	int offdelay_ms;
+
+	/**
+	 * @disable_immediate: See @struct drm_device.vblank_disable_immediate.
+	 * Additonally, this tracks the disable_immediate value per crtc, just
+	 * in case it needs to differ from the default value for a given device.
+	 */
+	bool disable_immediate;
+};
+
+/**
  * struct drm_vblank_crtc - vblank tracking for a CRTC
  *
  * This structure tracks the vblank state for one CRTC.
@@ -199,6 +217,11 @@ struct drm_vblank_crtc {
 	struct drm_display_mode hwmode;
 
 	/**
+	 * config: Stores vblank configuration values for a given CRTC.
+	 */
+	struct drm_vblank_crtc_config config;
+
+	/**
 	 * @enabled: Tracks the enabling state of the corresponding &drm_crtc to
 	 * avoid double-disabling and hence corrupting saved state. Needed by
 	 * drivers not using atomic KMS, since those might go through their CRTC
@@ -246,6 +269,8 @@ void drm_wait_one_vblank(struct drm_device *dev, unsigned int pipe);
 void drm_crtc_wait_one_vblank(struct drm_crtc *crtc);
 void drm_crtc_vblank_off(struct drm_crtc *crtc);
 void drm_crtc_vblank_reset(struct drm_crtc *crtc);
+void drm_crtc_vblank_on_config(struct drm_crtc *crtc,
+			       const struct drm_vblank_crtc_config *config);
 void drm_crtc_vblank_on(struct drm_crtc *crtc);
 u64 drm_crtc_accurate_vblank_count(struct drm_crtc *crtc);
 void drm_crtc_vblank_restore(struct drm_crtc *crtc);
