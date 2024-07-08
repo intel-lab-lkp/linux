@@ -30,15 +30,19 @@ required:
   - compatible
   - reg
   - clocks
+  - power-domains
 
 unevaluatedProperties: false
 
 examples:
   - |
+    #include <dt-bindings/power/meson-a1-power.h>
+
     spi@fd000400 {
         compatible = "amlogic,a1-spifc";
         reg = <0xfd000400 0x290>;
         clocks = <&clkc_clkid_spifc>;
         #address-cells = <1>;
         #size-cells = <0>;
+        power-domains = <&pwrc PWRC_SPIFC_ID>;
     };
