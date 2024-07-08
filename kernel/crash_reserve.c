@@ -390,6 +390,11 @@ void __init reserve_crashkernel_generic(char *cmdline,
 	} else if (high) {
 		search_base = CRASH_ADDR_LOW_MAX;
 		search_end = CRASH_ADDR_HIGH_MAX;
+
+		if (search_base >= search_end) {
+			pr_warn("crashkernel high memory reservation failed.\n");
+			return;
+		}
 	}
 
 retry:
@@ -410,7 +415,8 @@ retry:
 		 * low memory, fall back to high memory, the minimum required
 		 * low memory will be reserved later.
 		 */
-		if (!high && search_end == CRASH_ADDR_LOW_MAX) {
+		if (!high && search_end == CRASH_ADDR_LOW_MAX &&
+		    CRASH_ADDR_HIGH_MAX > CRASH_ADDR_LOW_MAX) {
 			search_end = CRASH_ADDR_HIGH_MAX;
 			search_base = CRASH_ADDR_LOW_MAX;
 			crash_low_size = DEFAULT_CRASH_KERNEL_LOW_SIZE;
