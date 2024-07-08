@@ -15,6 +15,8 @@
  * @next:		Next zpdesc in a zspage in zsmalloc zpool
  * @handle:		For huge zspage in zsmalloc zpool
  * @zspage:		Pointer to zspage in zsmalloc
+ * @first_obj_offset:	First object offset in zsmalloc zpool
+ * @_refcount:		Indirectly use by page migration
  * @memcg_data:		Memory Control Group data.
  *
  * This struct overlays struct page for now. Do not modify without a good
@@ -31,7 +33,8 @@ struct zpdesc {
 		unsigned long handle;
 	};
 	struct zspage *zspage;
-	unsigned long _zp_pad_1;
+	unsigned int first_obj_offset;
+	atomic_t _refcount;
 #ifdef CONFIG_MEMCG
 	unsigned long memcg_data;
 #endif
@@ -45,6 +48,8 @@ ZPDESC_MATCH(mapping, mops);
 ZPDESC_MATCH(index, next);
 ZPDESC_MATCH(index, handle);
 ZPDESC_MATCH(private, zspage);
+ZPDESC_MATCH(page_type, first_obj_offset);
+ZPDESC_MATCH(_refcount, _refcount);
 #ifdef CONFIG_MEMCG
 ZPDESC_MATCH(memcg_data, memcg_data);
 #endif
