@@ -25,7 +25,6 @@ struct ufs_renesas_priv {
 enum ufs_renesas_init_param_mode {
 	MODE_POLL,
 	MODE_READ,
-	MODE_WAIT,
 	MODE_WRITE,
 };
 
@@ -34,7 +33,6 @@ struct ufs_renesas_init_param {
 	u32 reg;
 	union {
 		u32 expected;
-		u32 delay_us;
 		u32 val;
 	} u;
 	u32 mask;
@@ -65,12 +63,6 @@ static u32 ufs_renesas_reg_control(struct ufs_hba *hba,
 			dev_err(hba->dev, "%s: poll failed %d (%08x, %08x, %08x)\n",
 				__func__, ret, val, p->mask, p->u.expected);
 		break;
-	case MODE_WAIT:
-		if (p->u.delay_us > 1000)
-			mdelay(DIV_ROUND_UP(p->u.delay_us, 1000));
-		else
-			udelay(p->u.delay_us);
-		break;
 	case MODE_WRITE:
 		ufshcd_writel(hba, p->u.val, p->reg);
 		break;
@@ -100,16 +92,6 @@ static void ufs_renesas_param_poll(struct ufs_hba *hba, u32 reg, u32 expected,
 	param.reg = reg;
 	param.u.expected = expected;
 	param.mask = mask;
-
-	ufs_renesas_reg_control(hba, &param);
-}
-
-static void ufs_renesas_param_wait(struct ufs_hba *hba, u32 delay_us)
-{
-	struct ufs_renesas_init_param param = { 0 };
-
-	param.mode = MODE_WAIT;
-	param.u.delay_us = delay_us;
 
 	ufs_renesas_reg_control(hba, &param);
 }
@@ -216,13 +198,13 @@ static void ufs_renesas_pre_init(struct ufs_hba *hba)
 	/* This setting is for SERIES B */
 	ufs_renesas_param_write(hba, 0xc0, 0x49425308);
 	ufs_renesas_param_write_d0_d4(hba, 0x00000104, 0x00000002);
-	ufs_renesas_param_wait(hba, 1);
+	udelay(1);
 	ufs_renesas_param_write_d0_d4(hba, 0x00000828, 0x00000200);
-	ufs_renesas_param_wait(hba, 1);
+	udelay(1);
 	ufs_renesas_param_write_d0_d4(hba, 0x00000828, 0x00000000);
 	ufs_renesas_param_write_d0_d4(hba, 0x00000104, 0x00000001);
 	ufs_renesas_param_write_d0_d4(hba, 0x00000940, 0x00000001);
-	ufs_renesas_param_wait(hba, 1);
+	udelay(1);
 	ufs_renesas_param_write_d0_d4(hba, 0x00000940, 0x00000000);
 
 	ufs_renesas_param_write(hba, 0xc0, 0x49425308);
