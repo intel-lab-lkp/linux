@@ -1239,7 +1239,7 @@ void __init unflatten_device_tree(void)
 	unittest_unflatten_overlay_base();
 
 	/* initialize the reserved memory regions */
-	fdt_init_reserved_mem();
+	fdt_scan_reserved_mem_reg_nodes();
 }
 
 /**
