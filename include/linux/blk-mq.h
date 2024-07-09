@@ -664,12 +664,14 @@ enum {
 	BLK_MQ_F_ALLOC_POLICY_START_BIT = 8,
 	BLK_MQ_F_ALLOC_POLICY_BITS = 1,
 
+	/* Keep hctx_state_name[] in sync with the definitions below */
 	BLK_MQ_S_STOPPED	= 0,
 	BLK_MQ_S_TAG_ACTIVE	= 1,
 	BLK_MQ_S_SCHED_RESTART	= 2,
 
 	/* hw queue is inactive after all its CPUs become offline */
 	BLK_MQ_S_INACTIVE	= 3,
+	BLK_MQ_S_MAX,
 
 	BLK_MQ_MAX_DEPTH	= 10240,
 
