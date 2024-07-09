@@ -422,6 +422,7 @@ static struct perf_event *ptrace_hbp_create(struct task_struct *tsk, int type)
 	attr.bp_addr	= 0;
 	attr.bp_len	= HW_BREAKPOINT_LEN_4;
 	attr.bp_type	= type;
+	attr.bp_priv	= ARM_BREAKPOINT_USER;
 	attr.disabled	= 1;
 
 	return register_user_hw_breakpoint(&attr, ptrace_hbptriggered, NULL,
@@ -530,6 +531,7 @@ static int ptrace_sethbpregs(struct task_struct *tsk, long num,
 
 		attr.bp_len	= gen_len;
 		attr.bp_type	= gen_type;
+		attr.bp_priv	= ctrl.privilege;
 		attr.disabled	= !ctrl.enabled;
 	}
 
