@@ -1502,7 +1502,6 @@ static int cs_dsp_load(struct cs_dsp *dsp, const struct firmware *firmware,
 		goto out_fw;
 	}
 
-	cs_dsp_info(dsp, "Firmware version: %d\n", header->ver);
 	dsp->fw_ver = header->ver;
 
 	if (header->core != dsp->type) {
@@ -1552,7 +1551,7 @@ static int cs_dsp_load(struct cs_dsp *dsp, const struct firmware *firmware,
 		case WMFW_INFO_TEXT:
 		case WMFW_NAME_TEXT:
 			region_name = "Info/Name";
-			cs_dsp_info(dsp, "%s: %.*s\n", file,
+			cs_dsp_info(dsp, "%s (rev %d): %.*s\n", file, dsp->fw_ver,
 				    min(le32_to_cpu(region->len), 100), region->data);
 			break;
 		case WMFW_ALGORITHM_DATA:
