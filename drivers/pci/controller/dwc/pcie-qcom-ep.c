@@ -904,6 +904,7 @@ static const struct qcom_pcie_ep_cfg cfg_1_34_0 = {
 };
 
 static const struct of_device_id qcom_pcie_ep_match[] = {
+	{ .compatible = "qcom,qcs9100-pcie-ep", .data = &cfg_1_34_0},
 	{ .compatible = "qcom,sa8775p-pcie-ep", .data = &cfg_1_34_0},
 	{ .compatible = "qcom,sdx55-pcie-ep", },
 	{ .compatible = "qcom,sm8450-pcie-ep", },
