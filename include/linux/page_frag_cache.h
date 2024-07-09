@@ -3,17 +3,14 @@
 #ifndef _LINUX_PAGE_FRAG_CACHE_H
 #define _LINUX_PAGE_FRAG_CACHE_H
 
-#include <linux/align.h>
 #include <linux/bits.h>
 #include <linux/build_bug.h>
 #include <linux/log2.h>
 #include <linux/types.h>
 #include <linux/mm.h>
+#include <linux/mm_types_task.h>
 #include <linux/mmdebug.h>
 #include <asm/page.h>
-
-#define PAGE_FRAG_CACHE_MAX_SIZE	__ALIGN_MASK(32768, ~PAGE_MASK)
-#define PAGE_FRAG_CACHE_MAX_ORDER	get_order(PAGE_FRAG_CACHE_MAX_SIZE)
 
 #define PAGE_FRAG_CACHE_ORDER_MASK		GENMASK(7, 0)
 #define PAGE_FRAG_CACHE_PFMEMALLOC_BIT		BIT(8)
@@ -52,21 +49,6 @@ static inline void *encoded_page_address(unsigned long encoded_va)
 {
 	return (void *)(encoded_va & PAGE_MASK);
 }
-
-struct page_frag_cache {
-	/* encoded_va consists of the virtual address, pfmemalloc bit and order
-	 * of a page.
-	 */
-	unsigned long encoded_va;
-
-#if (PAGE_SIZE < PAGE_FRAG_CACHE_MAX_SIZE) && (BITS_PER_LONG <= 32)
-	__u16 remaining;
-	__u16 pagecnt_bias;
-#else
-	__u32 remaining;
-	__u32 pagecnt_bias;
-#endif
-};
 
 static inline void page_frag_cache_init(struct page_frag_cache *nc)
 {
