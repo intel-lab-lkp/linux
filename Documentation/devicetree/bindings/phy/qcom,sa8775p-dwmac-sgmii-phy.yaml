@@ -15,7 +15,10 @@ description:
 
 properties:
   compatible:
-    const: qcom,sa8775p-dwmac-sgmii-phy
+    items:
+      - enum:
+          - qcom,qcs9100-dwmac-sgmii-phy
+          - qcom,sa8775p-dwmac-sgmii-phy
 
   reg:
     items:
