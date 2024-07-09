@@ -21,6 +21,7 @@ properties:
   compatible:
     enum:
       - qcom,qdu1000-llcc
+      - qcom,qcs9100-llcc
       - qcom,sa8775p-llcc
       - qcom,sc7180-llcc
       - qcom,sc7280-llcc
@@ -85,6 +86,7 @@ allOf:
         compatible:
           contains:
             enum:
+              - qcom,qcs9100-llcc
               - qcom,sa8775p-llcc
     then:
       properties:
