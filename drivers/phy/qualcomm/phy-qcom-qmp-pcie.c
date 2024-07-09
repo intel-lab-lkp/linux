@@ -4340,6 +4340,12 @@ static const struct of_device_id qmp_pcie_of_match_table[] = {
 		.compatible = "qcom,msm8998-qmp-pcie-phy",
 		.data = &msm8998_pciephy_cfg,
 	}, {
+		.compatible = "qcom,qcs9100-qmp-gen4x2-pcie-phy",
+		.data = &sa8775p_qmp_gen4x2_pciephy_cfg,
+	}, {
+		.compatible = "qcom,qcs9100-qmp-gen4x4-pcie-phy",
+		.data = &sa8775p_qmp_gen4x4_pciephy_cfg,
+	}, {
 		.compatible = "qcom,sa8775p-qmp-gen4x2-pcie-phy",
 		.data = &sa8775p_qmp_gen4x2_pciephy_cfg,
 	}, {
