@@ -107,11 +107,13 @@ static const struct constant_table dax_param_enums[] = {
 enum {
 	OPT_DAX,
 	OPT_DAX_ENUM,
+	OPT_FILE,
 };
 
 static const struct fs_parameter_spec virtio_fs_parameters[] = {
 	fsparam_flag("dax", OPT_DAX),
 	fsparam_enum("dax", OPT_DAX_ENUM, dax_param_enums),
+	fsparam_flag("file", OPT_FILE),
 	{}
 };
 
@@ -132,6 +134,10 @@ static int virtio_fs_parse_param(struct fs_context *fsc,
 		break;
 	case OPT_DAX_ENUM:
 		ctx->dax_mode = result.uint_32;
+		break;
+	case OPT_FILE:
+		ctx->rootmode = S_IFREG;
+		ctx->rootmode_present = true;
 		break;
 	default:
 		return -EINVAL;
@@ -1402,7 +1408,8 @@ static const struct fuse_iqueue_ops virtio_fs_fiq_ops = {
 
 static inline void virtio_fs_ctx_set_defaults(struct fuse_fs_context *ctx)
 {
-	ctx->rootmode = S_IFDIR;
+	if (!ctx->rootmode_present)
+		ctx->rootmode = S_IFDIR;
 	ctx->default_permissions = 1;
 	ctx->allow_other = 1;
 	ctx->max_read = UINT_MAX;
