@@ -584,6 +584,7 @@ static const struct qcom_cc_desc gpu_cc_sa8775p_desc = {
 
 static const struct of_device_id gpu_cc_sa8775p_match_table[] = {
 	{ .compatible = "qcom,sa8775p-gpucc" },
+	{ .compatible = "qcom,qcs9100-gpucc" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, gpu_cc_sa8775p_match_table);
