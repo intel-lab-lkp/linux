@@ -31,7 +31,14 @@
 #define   REG_RESET_CONTROL_PCIE1	BIT(27)
 #define   REG_RESET_CONTROL_PCIE2	BIT(26)
 /* EN7581 */
-#define REG_CRYPTO_CLKSRC2		0x20c
+#define REG_GSW_CLK_DIV_SEL2		0x00
+#define REG_EMI_CLK_DIV_SEL2		0x04
+#define REG_BUS_CLK_DIV_SEL2		0x08
+#define REG_SPI_CLK_DIV_SEL2		0x10
+#define REG_SPI_CLK_FREQ_SEL2		0x14
+#define REG_NPU_CLK_DIV_SEL2		0x48
+#define REG_CRYPTO_CLKSRC2		0x58
+
 #define REG_PCIE0_MEM			0x00
 #define REG_PCIE0_MEM_MASK		0x04
 #define REG_PCIE1_MEM			0x08
@@ -203,7 +210,7 @@ static const struct en_clk_desc en7581_base_clks[] = {
 		.id = EN7523_CLK_GSW,
 		.name = "gsw",
 
-		.base_reg = REG_GSW_CLK_DIV_SEL,
+		.base_reg = REG_GSW_CLK_DIV_SEL2,
 		.base_bits = 1,
 		.base_shift = 8,
 		.base_values = gsw_base,
@@ -217,7 +224,7 @@ static const struct en_clk_desc en7581_base_clks[] = {
 		.id = EN7523_CLK_EMI,
 		.name = "emi",
 
-		.base_reg = REG_EMI_CLK_DIV_SEL,
+		.base_reg = REG_EMI_CLK_DIV_SEL2,
 		.base_bits = 2,
 		.base_shift = 8,
 		.base_values = emi7581_base,
@@ -231,7 +238,7 @@ static const struct en_clk_desc en7581_base_clks[] = {
 		.id = EN7523_CLK_BUS,
 		.name = "bus",
 
-		.base_reg = REG_BUS_CLK_DIV_SEL,
+		.base_reg = REG_BUS_CLK_DIV_SEL2,
 		.base_bits = 1,
 		.base_shift = 8,
 		.base_values = bus_base,
@@ -245,13 +252,13 @@ static const struct en_clk_desc en7581_base_clks[] = {
 		.id = EN7523_CLK_SLIC,
 		.name = "slic",
 
-		.base_reg = REG_SPI_CLK_FREQ_SEL,
+		.base_reg = REG_SPI_CLK_FREQ_SEL2,
 		.base_bits = 1,
 		.base_shift = 0,
 		.base_values = slic_base,
 		.n_base_values = ARRAY_SIZE(slic_base),
 
-		.div_reg = REG_SPI_CLK_DIV_SEL,
+		.div_reg = REG_SPI_CLK_DIV_SEL2,
 		.div_bits = 5,
 		.div_shift = 24,
 		.div_val0 = 20,
@@ -260,7 +267,7 @@ static const struct en_clk_desc en7581_base_clks[] = {
 		.id = EN7523_CLK_SPI,
 		.name = "spi",
 
-		.base_reg = REG_SPI_CLK_DIV_SEL,
+		.base_reg = REG_SPI_CLK_DIV_SEL2,
 
 		.base_value = 400000000,
 
@@ -272,7 +279,7 @@ static const struct en_clk_desc en7581_base_clks[] = {
 		.id = EN7523_CLK_NPU,
 		.name = "npu",
 
-		.base_reg = REG_NPU_CLK_DIV_SEL,
+		.base_reg = REG_NPU_CLK_DIV_SEL2,
 		.base_bits = 2,
 		.base_shift = 8,
 		.base_values = npu7581_base,
