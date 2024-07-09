@@ -754,6 +754,7 @@ static void hw_breakpoint_copy_attr(struct perf_event_attr *to,
 	to->bp_addr = from->bp_addr;
 	to->bp_type = from->bp_type;
 	to->bp_len  = from->bp_len;
+	to->bp_priv = from->bp_priv;
 	to->disabled = from->disabled;
 }
 

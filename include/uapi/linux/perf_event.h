@@ -521,7 +521,10 @@ struct perf_event_attr {
 	 */
 	__u64	sig_data;
 
-	__u64	config3; /* extension of config2 */
+	union {
+		__u8	bp_priv; /* privilege level of breakpoint */
+		__u64	config3; /* extension of config2 */
+	};
 };
 
 /*
