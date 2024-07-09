@@ -17,7 +17,10 @@ allOf:
 
 properties:
   compatible:
-    const: qcom,sa8775p-tlmm
+    items:
+      - enum:
+          - qcom,qcs9100-tlmm
+          - qcom,sa8775p-tlmm
 
   reg:
     maxItems: 1
