@@ -68,7 +68,7 @@ struct page_frag_cache {
 
 static inline void page_frag_cache_init(struct page_frag_cache *nc)
 {
-	nc->encoded_va = 0;
+	memset(nc, 0, sizeof(*nc));
 }
 
 static inline bool page_frag_cache_is_pfmemalloc(struct page_frag_cache *nc)
