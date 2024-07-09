@@ -2483,7 +2483,7 @@ static int bnxt_re_build_send_wqe(struct bnxt_re_qp *qp,
 		break;
 	case IB_WR_SEND_WITH_INV:
 		wqe->type = BNXT_QPLIB_SWQE_TYPE_SEND_WITH_INV;
-		wqe->send.inv_key = wr->ex.invalidate_rkey;
+		wqe->send.inv_key = cpu_to_le32(wr->ex.invalidate_rkey);
 		break;
 	default:
 		return -EINVAL;
@@ -2513,7 +2513,7 @@ static int bnxt_re_build_rdma_wqe(const struct ib_send_wr *wr,
 		break;
 	case IB_WR_RDMA_READ:
 		wqe->type = BNXT_QPLIB_SWQE_TYPE_RDMA_READ;
-		wqe->rdma.inv_key = wr->ex.invalidate_rkey;
+		wqe->rdma.inv_key = cpu_to_le32(wr->ex.invalidate_rkey);
 		break;
 	default:
 		return -EINVAL;
@@ -2563,7 +2563,7 @@ static int bnxt_re_build_inv_wqe(const struct ib_send_wr *wr,
 				 struct bnxt_qplib_swqe *wqe)
 {
 	wqe->type = BNXT_QPLIB_SWQE_TYPE_LOCAL_INV;
-	wqe->local_inv.inv_l_key = wr->ex.invalidate_rkey;
+	wqe->local_inv.inv_l_key = cpu_to_le32(wr->ex.invalidate_rkey);
 
 	if (wr->send_flags & IB_SEND_SIGNALED)
 		wqe->flags |= BNXT_QPLIB_SWQE_FLAGS_SIGNAL_COMP;

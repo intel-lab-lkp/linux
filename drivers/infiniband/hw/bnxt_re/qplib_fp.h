@@ -165,7 +165,7 @@ struct bnxt_qplib_swqe {
 		struct {
 			union {
 				__le32	imm_data;
-				u32	inv_key;
+				__le32	inv_key;
 			};
 			u32		q_key;
 			u32		dst_qp;
@@ -183,7 +183,7 @@ struct bnxt_qplib_swqe {
 		struct {
 			union {
 				__le32	imm_data;
-				u32	inv_key;
+				__le32	inv_key;
 			};
 			u64		remote_va;
 			u32		r_key;
@@ -199,7 +199,7 @@ struct bnxt_qplib_swqe {
 
 		/* Local Invalidate */
 		struct {
-			u32		inv_l_key;
+			__le32		inv_l_key;
 		} local_inv;
 
 		/* FR-PMR */
