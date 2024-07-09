@@ -41,9 +41,11 @@ static void test_dummy_init_ret_value(void)
 
 	fd = bpf_program__fd(skel->progs.test_1);
 	err = bpf_prog_test_run_opts(fd, &attr);
-	ASSERT_OK(err, "test_run");
+	if (!ASSERT_OK(err, "test_run"))
+		goto out;
 	ASSERT_EQ(attr.retval, 0xf2f3f4f5, "test_ret");
 
+out:
 	dummy_st_ops_success__destroy(skel);
 }
 
@@ -115,13 +117,15 @@ static void test_dummy_multiple_args(void)
 
 	fd = bpf_program__fd(skel->progs.test_2);
 	err = bpf_prog_test_run_opts(fd, &attr);
-	ASSERT_OK(err, "test_run");
+	if (!ASSERT_OK(err, "test_run"))
+		goto out;
 	args[0] = 7;
 	for (i = 0; i < ARRAY_SIZE(args); i++) {
 		snprintf(name, sizeof(name), "arg %zu", i);
 		ASSERT_EQ(skel->bss->test_2_args[i], args[i], name);
 	}
 
+out:
 	dummy_st_ops_success__destroy(skel);
 }
 
