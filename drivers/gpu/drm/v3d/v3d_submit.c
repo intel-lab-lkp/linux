@@ -645,6 +645,7 @@ v3d_get_cpu_reset_performance_params(struct drm_file *file_priv,
 	struct drm_v3d_reset_performance_query reset;
 	struct v3d_performance_query_info *qinfo = &job->performance_query;
 	unsigned int i, j;
+	int err;
 
 	if (!job) {
 		DRM_DEBUG("CPU job extension was attached to a GPU job.\n");
@@ -680,32 +681,36 @@ v3d_get_cpu_reset_performance_params(struct drm_file *file_priv,
 		u32 id;
 
 		if (get_user(sync, syncs++)) {
-			kvfree(qinfo->queries);
-			return -EFAULT;
+			err = -EFAULT;
+			goto error;
 		}
 
-		qinfo->queries[i].syncobj = drm_syncobj_find(file_priv, sync);
-
 		if (get_user(ids, kperfmon_ids++)) {
-			kvfree(qinfo->queries);
-			return -EFAULT;
+			err = -EFAULT;
+			goto error;
 		}
 
 		ids_pointer = u64_to_user_ptr(ids);
 
 		for (j = 0; j < reset.nperfmons; j++) {
 			if (get_user(id, ids_pointer++)) {
-				kvfree(qinfo->queries);
-				return -EFAULT;
+				err = -EFAULT;
+				goto error;
 			}
 
 			qinfo->queries[i].kperfmon_ids[j] = id;
 		}
+
+		qinfo->queries[i].syncobj = drm_syncobj_find(file_priv, sync);
 	}
 	qinfo->count = reset.count;
 	qinfo->nperfmons = reset.nperfmons;
 
 	return 0;
+
+error:
+	__v3d_performance_query_info_free(qinfo, i);
+	return err;
 }
 
 static int
@@ -718,6 +723,7 @@ v3d_get_cpu_copy_performance_query_params(struct drm_file *file_priv,
 	struct drm_v3d_copy_performance_query copy;
 	struct v3d_performance_query_info *qinfo = &job->performance_query;
 	unsigned int i, j;
+	int err;
 
 	if (!job) {
 		DRM_DEBUG("CPU job extension was attached to a GPU job.\n");
@@ -756,27 +762,27 @@ v3d_get_cpu_copy_performance_query_params(struct drm_file *file_priv,
 		u32 id;
 
 		if (get_user(sync, syncs++)) {
-			kvfree(qinfo->queries);
-			return -EFAULT;
+			err = -EFAULT;
+			goto error;
 		}
 
-		qinfo->queries[i].syncobj = drm_syncobj_find(file_priv, sync);
-
 		if (get_user(ids, kperfmon_ids++)) {
-			kvfree(qinfo->queries);
-			return -EFAULT;
+			err = -EFAULT;
+			goto error;
 		}
 
 		ids_pointer = u64_to_user_ptr(ids);
 
 		for (j = 0; j < copy.nperfmons; j++) {
 			if (get_user(id, ids_pointer++)) {
-				kvfree(qinfo->queries);
-				return -EFAULT;
+				err = -EFAULT;
+				goto error;
 			}
 
 			qinfo->queries[i].kperfmon_ids[j] = id;
 		}
+
+		qinfo->queries[i].syncobj = drm_syncobj_find(file_priv, sync);
 	}
 	qinfo->count = copy.count;
 	qinfo->nperfmons = copy.nperfmons;
@@ -789,6 +795,10 @@ v3d_get_cpu_copy_performance_query_params(struct drm_file *file_priv,
 	job->copy.stride = copy.stride;
 
 	return 0;
+
+error:
+	__v3d_performance_query_info_free(qinfo, i);
+	return err;
 }
 
 /* Whenever userspace sets ioctl extensions, v3d_get_extensions parses data
