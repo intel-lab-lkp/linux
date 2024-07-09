@@ -674,10 +674,20 @@ copy_query_info(struct v3d_performance_query_info *qinfo,
 			goto error;
 		}
 
+		query->kperfmon_ids =
+			kvmalloc_array(nperfmons,
+				       sizeof(struct v3d_performance_query *),
+				       GFP_KERNEL);
+		if (!query->kperfmon_ids) {
+			err = -ENOMEM;
+			goto error;
+		}
+
 		ids_pointer = u64_to_user_ptr(ids);
 
 		for (j = 0; j < nperfmons; j++) {
 			if (get_user(id, ids_pointer++)) {
+				kvfree(query->kperfmon_ids);
 				err = -EFAULT;
 				goto error;
 			}
@@ -687,6 +697,7 @@ copy_query_info(struct v3d_performance_query_info *qinfo,
 
 		query->syncobj = drm_syncobj_find(fpriv, sync);
 		if (!query->syncobj) {
+			kvfree(query->kperfmon_ids);
 			err = -ENOENT;
 			goto error;
 		}
@@ -720,9 +731,6 @@ v3d_get_cpu_reset_performance_params(struct drm_file *file_priv,
 
 	if (copy_from_user(&reset, ext, sizeof(reset)))
 		return -EFAULT;
-
-	if (reset.nperfmons > V3D_MAX_PERFMONS)
-		return -EINVAL;
 
 	job->job_type = V3D_CPU_JOB_TYPE_RESET_PERFORMANCE_QUERY;
 
@@ -768,9 +776,6 @@ v3d_get_cpu_copy_performance_query_params(struct drm_file *file_priv,
 		return -EFAULT;
 
 	if (copy.pad)
-		return -EINVAL;
-
-	if (copy.nperfmons > V3D_MAX_PERFMONS)
 		return -EINVAL;
 
 	job->job_type = V3D_CPU_JOB_TYPE_COPY_PERFORMANCE_QUERY;
