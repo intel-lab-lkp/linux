@@ -280,6 +280,7 @@ int __blk_mq_debugfs_rq_show(struct seq_file *m, struct request *rq)
 	const char *op_str = blk_op_str(op);
 
 	BUILD_BUG_ON(ARRAY_SIZE(cmd_flag_name) != __REQ_NR_BITS);
+	BUILD_BUG_ON(ARRAY_SIZE(rqf_name) != RQF_MAX);
 
 	seq_printf(m, "%p {.op=", rq);
 	if (strcmp(op_str, "UNKNOWN") == 0)

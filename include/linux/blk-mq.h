@@ -27,6 +27,7 @@ typedef enum rq_end_io_ret (rq_end_io_fn)(struct request *, blk_status_t);
  * request flags */
 typedef __u32 __bitwise req_flags_t;
 
+/* Keep rqf_name[] in sync with the definitions below */
 enum {
 	/* drive already may have started this one */
 	RQF_STARTED		=	((__force req_flags_t)(1 << 0)),
@@ -60,6 +61,7 @@ enum {
 	/* ->timeout has been called, don't expire again */
 	RQF_TIMED_OUT		=	((__force req_flags_t)(1 << 14)),
 	RQF_RESV		=	((__force req_flags_t)(1 << 15)),
+	RQF_MAX			=	16
 };
 
 /* flags that prevent us from merging requests: */
