@@ -4,6 +4,8 @@
 #define _LINUX_PAGE_FRAG_CACHE_H
 
 #include <linux/align.h>
+#include <linux/bits.h>
+#include <linux/build_bug.h>
 #include <linux/log2.h>
 #include <linux/types.h>
 #include <asm/page.h>
@@ -11,29 +13,72 @@
 #define PAGE_FRAG_CACHE_MAX_SIZE	__ALIGN_MASK(32768, ~PAGE_MASK)
 #define PAGE_FRAG_CACHE_MAX_ORDER	get_order(PAGE_FRAG_CACHE_MAX_SIZE)
 
-struct page_frag_cache {
-	void *va;
+#define PAGE_FRAG_CACHE_ORDER_MASK		GENMASK(7, 0)
+#define PAGE_FRAG_CACHE_PFMEMALLOC_BIT		BIT(8)
+#define PAGE_FRAG_CACHE_PFMEMALLOC_SHIFT	8
+
+static inline unsigned long encode_aligned_va(void *va, unsigned int order,
+					      bool pfmemalloc)
+{
+	BUILD_BUG_ON(PAGE_FRAG_CACHE_MAX_ORDER > PAGE_FRAG_CACHE_ORDER_MASK);
+	BUILD_BUG_ON(PAGE_FRAG_CACHE_PFMEMALLOC_SHIFT >= PAGE_SHIFT);
+
 #if (PAGE_SIZE < PAGE_FRAG_CACHE_MAX_SIZE)
+	return (unsigned long)va | order |
+		(pfmemalloc << PAGE_FRAG_CACHE_PFMEMALLOC_SHIFT);
+#else
+	return (unsigned long)va |
+		(pfmemalloc << PAGE_FRAG_CACHE_PFMEMALLOC_SHIFT);
+#endif
+}
+
+static inline unsigned long encoded_page_order(unsigned long encoded_va)
+{
+#if (PAGE_SIZE < PAGE_FRAG_CACHE_MAX_SIZE)
+	return encoded_va & PAGE_FRAG_CACHE_ORDER_MASK;
+#else
+	return 0;
+#endif
+}
+
+static inline bool encoded_page_pfmemalloc(unsigned long encoded_va)
+{
+	return encoded_va & PAGE_FRAG_CACHE_PFMEMALLOC_BIT;
+}
+
+static inline void *encoded_page_address(unsigned long encoded_va)
+{
+	return (void *)(encoded_va & PAGE_MASK);
+}
+
+struct page_frag_cache {
+	/* encoded_va consists of the virtual address, pfmemalloc bit and order
+	 * of a page.
+	 */
+	unsigned long encoded_va;
+
+#if (PAGE_SIZE < PAGE_FRAG_CACHE_MAX_SIZE) && (BITS_PER_LONG <= 32)
 	__u16 remaining;
-	__u16 size;
+	__u16 pagecnt_bias;
 #else
 	__u32 remaining;
+	__u32 pagecnt_bias;
 #endif
-	/* we maintain a pagecount bias, so that we dont dirty cache line
-	 * containing page->_refcount every time we allocate a fragment.
-	 */
-	unsigned int		pagecnt_bias;
-	bool pfmemalloc;
 };
 
 static inline void page_frag_cache_init(struct page_frag_cache *nc)
 {
-	nc->va = NULL;
+	nc->encoded_va = 0;
 }
 
 static inline bool page_frag_cache_is_pfmemalloc(struct page_frag_cache *nc)
 {
-	return !!nc->pfmemalloc;
+	return encoded_page_pfmemalloc(nc->encoded_va);
+}
+
+static inline unsigned int page_frag_cache_page_size(unsigned long encoded_va)
+{
+	return PAGE_SIZE << encoded_page_order(encoded_va);
 }
 
 void page_frag_cache_drain(struct page_frag_cache *nc);
