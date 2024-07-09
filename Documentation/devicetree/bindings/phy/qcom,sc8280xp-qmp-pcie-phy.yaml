@@ -16,6 +16,8 @@ description:
 properties:
   compatible:
     enum:
+      - qcom,qcs9100-qmp-gen4x2-pcie-phy
+      - qcom,qcs9100-qmp-gen4x4-pcie-phy
       - qcom,sa8775p-qmp-gen4x2-pcie-phy
       - qcom,sa8775p-qmp-gen4x4-pcie-phy
       - qcom,sc8180x-qmp-pcie-phy
@@ -181,6 +183,8 @@ allOf:
         compatible:
           contains:
             enum:
+              - qcom,qcs9100-qmp-gen4x2-pcie-phy
+              - qcom,qcs9100-qmp-gen4x4-pcie-phy
               - qcom,sa8775p-qmp-gen4x2-pcie-phy
               - qcom,sa8775p-qmp-gen4x4-pcie-phy
     then:
