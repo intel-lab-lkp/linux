@@ -4373,6 +4373,8 @@ static void svm_vcpu_after_set_cpuid(struct kvm_vcpu *vcpu)
 		set_msr_interception(vcpu, svm->msrpm, MSR_IA32_FLUSH_CMD, 0,
 				     !!guest_cpuid_has(vcpu, X86_FEATURE_FLUSH_L1D));
 
+	kvm_governed_feature_check_and_set(vcpu, X86_FEATURE_BUS_LOCK_THRESHOLD);
+
 	if (cpu_feature_enabled(X86_FEATURE_BUS_LOCK_THRESHOLD) &&
 	    vcpu->kvm->arch.bus_lock_detection_enabled) {
 		svm_set_intercept(svm, INTERCEPT_BUSLOCK);
@@ -5182,6 +5184,9 @@ static __init void svm_set_cpu_caps(void)
 
 		if (vnmi)
 			kvm_cpu_cap_set(X86_FEATURE_VNMI);
+
+		if (cpu_feature_enabled(X86_FEATURE_BUS_LOCK_THRESHOLD))
+			kvm_cpu_cap_set(X86_FEATURE_BUS_LOCK_THRESHOLD);
 
 		/* Nested VM can receive #VMEXIT instead of triggering #GP */
 		kvm_cpu_cap_set(X86_FEATURE_SVME_ADDR_CHK);

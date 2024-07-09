@@ -363,6 +363,7 @@ void __nested_copy_vmcb_control_to_cache(struct kvm_vcpu *vcpu,
 	to->virt_ext            = from->virt_ext;
 	to->pause_filter_count  = from->pause_filter_count;
 	to->pause_filter_thresh = from->pause_filter_thresh;
+	to->bus_lock_counter    = from->bus_lock_counter;
 
 	/* Copy asid here because nested_vmcb_check_controls will check it.  */
 	to->asid           = from->asid;
@@ -758,6 +759,16 @@ static void nested_vmcb02_prepare_control(struct vcpu_svm *svm,
 		}
 	}
 
+	/*
+	 * If guest intercepts BUSLOCK, use guest's bus_lock_counter value,
+	 * otherwise use host bus_lock_counter value.
+	 */
+	if (guest_can_use(vcpu, X86_FEATURE_BUS_LOCK_THRESHOLD) &&
+	    vmcb12_is_intercept(&svm->nested.ctl, INTERCEPT_BUSLOCK))
+		vmcb02->control.bus_lock_counter = svm->nested.ctl.bus_lock_counter;
+	else
+		vmcb02->control.bus_lock_counter = vmcb01->control.bus_lock_counter;
+
 	nested_svm_transition_tlb_flush(vcpu);
 
 	/* Enter Guest-Mode */
@@ -1034,6 +1045,12 @@ int nested_svm_vmexit(struct vcpu_svm *svm)
 		vmcb_mark_dirty(vmcb01, VMCB_INTERCEPTS);
 
 	}
+
+	if (guest_can_use(vcpu, X86_FEATURE_BUS_LOCK_THRESHOLD) &&
+	    vmcb12_is_intercept(&svm->nested.ctl, INTERCEPT_BUSLOCK))
+		vmcb12->control.bus_lock_counter = vmcb02->control.bus_lock_counter;
+	else
+		vmcb01->control.bus_lock_counter = vmcb02->control.bus_lock_counter;
 
 	nested_svm_copy_common_state(svm->nested.vmcb02.ptr, svm->vmcb01.ptr);
 
@@ -1333,6 +1350,13 @@ static int nested_svm_intercept(struct vcpu_svm *svm)
 		vmexit = NESTED_EXIT_DONE;
 		break;
 	}
+	case SVM_EXIT_BUS_LOCK: {
+		if (!(vmcb12_is_intercept(&svm->nested.ctl, INTERCEPT_BUSLOCK)))
+			vmexit = NESTED_EXIT_HOST;
+		else
+			vmexit = NESTED_EXIT_DONE;
+		break;
+	}
 	default: {
 		if (vmcb12_is_intercept(&svm->nested.ctl, exit_code))
 			vmexit = NESTED_EXIT_DONE;
@@ -1572,6 +1596,7 @@ static void nested_copy_vmcb_cache_to_control(struct vmcb_control_area *dst,
 	dst->virt_ext              = from->virt_ext;
 	dst->pause_filter_count   = from->pause_filter_count;
 	dst->pause_filter_thresh  = from->pause_filter_thresh;
+	dst->bus_lock_counter     = from->bus_lock_counter;
 	/* 'clean' and 'hv_enlightenments' are not changed by KVM */
 }
 
