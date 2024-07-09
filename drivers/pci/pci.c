@@ -6453,7 +6453,12 @@ struct pci_dev __weak *pci_real_dma_dev(struct pci_dev *dev)
 
 resource_size_t __weak pcibios_default_alignment(void)
 {
-	return 0;
+	/*
+	 * Avoid MSI-X tables being mapped in the same 4k region as other data
+	 * according to PCIe 6.1 specification section 7.7.2 MSI-X Capability
+	 * and Table Structure.
+	 */
+	return 4 * 1024;
 }
 
 /*
