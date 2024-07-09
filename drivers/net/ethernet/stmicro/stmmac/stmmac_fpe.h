@@ -4,6 +4,8 @@
  * stmmac FPE(802.3 Qbu) handling
  */
 
+#define FPE_CTRL_STS_GMAC4_OFFSET	0x00000234
+
 #define FPE_CTRL_STS_TRSP		BIT(19)
 #define FPE_CTRL_STS_TVER		BIT(18)
 #define FPE_CTRL_STS_RRSP		BIT(17)
