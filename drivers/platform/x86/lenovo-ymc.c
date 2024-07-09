@@ -62,19 +62,14 @@ static const struct dmi_system_id allowed_chasis_types_dmi_table[] = {
 
 struct lenovo_ymc_private {
 	struct input_dev *input_dev;
-	struct acpi_device *ec_acpi_dev;
 };
 
-static void lenovo_ymc_trigger_ec(struct wmi_device *wdev, struct lenovo_ymc_private *priv)
+static void lenovo_ymc_trigger_ec(void)
 {
-	int err;
-
-	if (!priv->ec_acpi_dev)
+	if (!ec_trigger)
 		return;
 
-	err = write_ec_cmd(priv->ec_acpi_dev->handle, VPCCMD_W_YMC, 1);
-	if (err)
-		dev_warn(&wdev->dev, "Could not write YMC: %d\n", err);
+	ideapad_ymc_trigger_ec();
 }
 
 static const struct key_entry lenovo_ymc_keymap[] = {
@@ -125,10 +120,8 @@ static void lenovo_ymc_notify(struct wmi_device *wdev, union acpi_object *data)
 
 free_obj:
 	kfree(obj);
-	lenovo_ymc_trigger_ec(wdev, priv);
+	lenovo_ymc_trigger_ec();
 }
-
-static void acpi_dev_put_helper(void *p) { acpi_dev_put(p); }
 
 static int lenovo_ymc_probe(struct wmi_device *wdev, const void *ctx)
 {
@@ -148,23 +141,6 @@ static int lenovo_ymc_probe(struct wmi_device *wdev, const void *ctx)
 	priv = devm_kzalloc(&wdev->dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
-
-	if (ec_trigger) {
-		pr_debug("Lenovo YMC enable EC triggering.\n");
-		priv->ec_acpi_dev = acpi_dev_get_first_match_dev("VPC2004", NULL, -1);
-
-		if (!priv->ec_acpi_dev) {
-			dev_err(&wdev->dev, "Could not find EC ACPI device.\n");
-			return -ENODEV;
-		}
-		err = devm_add_action_or_reset(&wdev->dev,
-				acpi_dev_put_helper, priv->ec_acpi_dev);
-		if (err) {
-			dev_err(&wdev->dev,
-				"Could not clean up EC ACPI device: %d\n", err);
-			return err;
-		}
-	}
 
 	input_dev = devm_input_allocate_device(&wdev->dev);
 	if (!input_dev)
@@ -192,7 +168,7 @@ static int lenovo_ymc_probe(struct wmi_device *wdev, const void *ctx)
 	dev_set_drvdata(&wdev->dev, priv);
 
 	/* Report the state for the first time on probe */
-	lenovo_ymc_trigger_ec(wdev, priv);
+	lenovo_ymc_trigger_ec();
 	lenovo_ymc_notify(wdev, NULL);
 	return 0;
 }

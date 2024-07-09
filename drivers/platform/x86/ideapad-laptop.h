@@ -13,6 +13,8 @@
 #include <linux/jiffies.h>
 #include <linux/errno.h>
 
+void ideapad_ymc_trigger_ec(void);
+
 enum {
 	VPCCMD_R_VPC1 = 0x10,
 	VPCCMD_R_BL_MAX,
