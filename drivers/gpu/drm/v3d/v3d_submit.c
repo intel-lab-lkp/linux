@@ -453,6 +453,7 @@ v3d_get_cpu_timestamp_query_params(struct drm_file *file_priv,
 	u32 __user *offsets, *syncs;
 	struct drm_v3d_timestamp_query timestamp;
 	struct v3d_timestamp_query_info *qinfo = &job->timestamp_query;
+	unsigned int i;
 
 	if (!job) {
 		DRM_DEBUG("CPU job extension was attached to a GPU job.\n");
@@ -481,7 +482,7 @@ v3d_get_cpu_timestamp_query_params(struct drm_file *file_priv,
 	offsets = u64_to_user_ptr(timestamp.offsets);
 	syncs = u64_to_user_ptr(timestamp.syncs);
 
-	for (int i = 0; i < timestamp.count; i++) {
+	for (i = 0; i < timestamp.count; i++) {
 		u32 offset, sync;
 
 		if (get_user(offset, offsets++)) {
@@ -511,6 +512,7 @@ v3d_get_cpu_reset_timestamp_params(struct drm_file *file_priv,
 	u32 __user *syncs;
 	struct drm_v3d_reset_timestamp_query reset;
 	struct v3d_timestamp_query_info *qinfo = &job->timestamp_query;
+	unsigned int i;
 
 	if (!job) {
 		DRM_DEBUG("CPU job extension was attached to a GPU job.\n");
@@ -535,7 +537,7 @@ v3d_get_cpu_reset_timestamp_params(struct drm_file *file_priv,
 
 	syncs = u64_to_user_ptr(reset.syncs);
 
-	for (int i = 0; i < reset.count; i++) {
+	for (i = 0; i < reset.count; i++) {
 		u32 sync;
 
 		qinfo->queries[i].offset = reset.offset + 8 * i;
@@ -561,7 +563,7 @@ v3d_get_cpu_copy_query_results_params(struct drm_file *file_priv,
 	u32 __user *offsets, *syncs;
 	struct drm_v3d_copy_timestamp_query copy;
 	struct v3d_timestamp_query_info *qinfo = &job->timestamp_query;
-	int i;
+	unsigned int i;
 
 	if (!job) {
 		DRM_DEBUG("CPU job extension was attached to a GPU job.\n");
@@ -627,6 +629,7 @@ v3d_get_cpu_reset_performance_params(struct drm_file *file_priv,
 	u64 __user *kperfmon_ids;
 	struct drm_v3d_reset_performance_query reset;
 	struct v3d_performance_query_info *qinfo = &job->performance_query;
+	unsigned int i, j;
 
 	if (!job) {
 		DRM_DEBUG("CPU job extension was attached to a GPU job.\n");
@@ -655,7 +658,7 @@ v3d_get_cpu_reset_performance_params(struct drm_file *file_priv,
 	syncs = u64_to_user_ptr(reset.syncs);
 	kperfmon_ids = u64_to_user_ptr(reset.kperfmon_ids);
 
-	for (int i = 0; i < reset.count; i++) {
+	for (i = 0; i < reset.count; i++) {
 		u32 sync;
 		u64 ids;
 		u32 __user *ids_pointer;
@@ -675,7 +678,7 @@ v3d_get_cpu_reset_performance_params(struct drm_file *file_priv,
 
 		ids_pointer = u64_to_user_ptr(ids);
 
-		for (int j = 0; j < reset.nperfmons; j++) {
+		for (j = 0; j < reset.nperfmons; j++) {
 			if (get_user(id, ids_pointer++)) {
 				kvfree(qinfo->queries);
 				return -EFAULT;
@@ -699,6 +702,7 @@ v3d_get_cpu_copy_performance_query_params(struct drm_file *file_priv,
 	u64 __user *kperfmon_ids;
 	struct drm_v3d_copy_performance_query copy;
 	struct v3d_performance_query_info *qinfo = &job->performance_query;
+	unsigned int i, j;
 
 	if (!job) {
 		DRM_DEBUG("CPU job extension was attached to a GPU job.\n");
@@ -730,7 +734,7 @@ v3d_get_cpu_copy_performance_query_params(struct drm_file *file_priv,
 	syncs = u64_to_user_ptr(copy.syncs);
 	kperfmon_ids = u64_to_user_ptr(copy.kperfmon_ids);
 
-	for (int i = 0; i < copy.count; i++) {
+	for (i = 0; i < copy.count; i++) {
 		u32 sync;
 		u64 ids;
 		u32 __user *ids_pointer;
@@ -750,7 +754,7 @@ v3d_get_cpu_copy_performance_query_params(struct drm_file *file_priv,
 
 		ids_pointer = u64_to_user_ptr(ids);
 
-		for (int j = 0; j < copy.nperfmons; j++) {
+		for (j = 0; j < copy.nperfmons; j++) {
 			if (get_user(id, ids_pointer++)) {
 				kvfree(qinfo->queries);
 				return -EFAULT;
