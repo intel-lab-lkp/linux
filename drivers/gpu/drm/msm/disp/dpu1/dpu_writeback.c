@@ -39,6 +39,13 @@ static int dpu_wb_conn_atomic_check(struct drm_connector *connector,
 
 	DPU_DEBUG("[atomic_check:%d]\n", connector->base.id);
 
+	crtc = conn_state->crtc;
+	if (!crtc)
+		return 0;
+
+	if (!conn_state->writeback_job || !conn_state->writeback_job->fb)
+		return 0;
+
 	if (!conn_state || !conn_state->connector) {
 		DPU_ERROR("invalid connector state\n");
 		return -EINVAL;
@@ -46,13 +53,6 @@ static int dpu_wb_conn_atomic_check(struct drm_connector *connector,
 		DPU_ERROR("connector not connected %d\n", conn_state->connector->status);
 		return -EINVAL;
 	}
-
-	crtc = conn_state->crtc;
-	if (!crtc)
-		return 0;
-
-	if (!conn_state->writeback_job || !conn_state->writeback_job->fb)
-		return 0;
 
 	crtc_state = drm_atomic_get_crtc_state(state, crtc);
 	if (IS_ERR(crtc_state))
