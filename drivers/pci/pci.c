@@ -6632,8 +6632,10 @@ void pci_reassigndev_resource_alignment(struct pci_dev *dev)
 	}
 
 	pci_read_config_word(dev, PCI_COMMAND, &command);
-	command &= ~PCI_COMMAND_MEMORY;
-	pci_write_config_word(dev, PCI_COMMAND, command);
+	if (command & PCI_COMMAND_MEMORY) {
+		command &= ~PCI_COMMAND_MEMORY;
+		pci_write_config_word(dev, PCI_COMMAND, command);
+	}
 
 	for (i = 0; i <= PCI_ROM_RESOURCE; i++)
 		pci_request_resource_alignment(dev, i, align, resize);
