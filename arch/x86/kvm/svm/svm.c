@@ -191,6 +191,9 @@ module_param(pause_filter_count_shrink, ushort, 0444);
 static unsigned short pause_filter_count_max = KVM_SVM_DEFAULT_PLE_WINDOW_MAX;
 module_param(pause_filter_count_max, ushort, 0444);
 
+static unsigned short bus_lock_counter = KVM_SVM_DEFAULT_BUS_LOCK_COUNTER;
+module_param(bus_lock_counter, ushort, 0644);
+
 /*
  * Use nested page tables by default.  Note, NPT may get forced off by
  * svm_hardware_setup() if it's unsupported by hardware or the host kernel.
@@ -3231,6 +3234,19 @@ static int invpcid_interception(struct kvm_vcpu *vcpu)
 	return kvm_handle_invpcid(vcpu, type, gva);
 }
 
+static int bus_lock_exit(struct kvm_vcpu *vcpu)
+{
+	struct vcpu_svm *svm = to_svm(vcpu);
+
+	vcpu->run->exit_reason = KVM_EXIT_X86_BUS_LOCK;
+	vcpu->run->flags |= KVM_RUN_X86_BUS_LOCK;
+
+	/* Reload the counter again */
+	svm->vmcb->control.bus_lock_counter = bus_lock_counter;
+
+	return 0;
+}
+
 static int (*const svm_exit_handlers[])(struct kvm_vcpu *vcpu) = {
 	[SVM_EXIT_READ_CR0]			= cr_interception,
 	[SVM_EXIT_READ_CR3]			= cr_interception,
@@ -3298,6 +3314,7 @@ static int (*const svm_exit_handlers[])(struct kvm_vcpu *vcpu) = {
 	[SVM_EXIT_CR4_WRITE_TRAP]		= cr_trap,
 	[SVM_EXIT_CR8_WRITE_TRAP]		= cr_trap,
 	[SVM_EXIT_INVPCID]                      = invpcid_interception,
+	[SVM_EXIT_BUS_LOCK]			= bus_lock_exit,
 	[SVM_EXIT_NPF]				= npf_interception,
 	[SVM_EXIT_RSM]                          = rsm_interception,
 	[SVM_EXIT_AVIC_INCOMPLETE_IPI]		= avic_incomplete_ipi_interception,
@@ -4356,6 +4373,27 @@ static void svm_vcpu_after_set_cpuid(struct kvm_vcpu *vcpu)
 		set_msr_interception(vcpu, svm->msrpm, MSR_IA32_FLUSH_CMD, 0,
 				     !!guest_cpuid_has(vcpu, X86_FEATURE_FLUSH_L1D));
 
+	if (cpu_feature_enabled(X86_FEATURE_BUS_LOCK_THRESHOLD) &&
+	    vcpu->kvm->arch.bus_lock_detection_enabled) {
+		svm_set_intercept(svm, INTERCEPT_BUSLOCK);
+
+		/*
+		 * The CPU decrements the bus lock counter every time a bus lock
+		 * is detected. Once the counter reaches zero a VMEXIT_BUSLOCK
+		 * is generated. A value of zero for bus lock counter means a
+		 * VMEXIT_BUSLOCK at every bus lock detection.
+		 *
+		 * Currently, default value for bus_lock_counter is set to 10.
+		 * So, the VMEXIT_BUSLOCK is generated after every 10 bus locks
+		 * detected.
+		 */
+		svm->vmcb->control.bus_lock_counter = bus_lock_counter;
+		pr_debug("Setting buslock counter to %u\n", bus_lock_counter);
+	} else {
+		svm_clr_intercept(svm, INTERCEPT_BUSLOCK);
+		svm->vmcb->control.bus_lock_counter = 0;
+	}
+
 	if (sev_guest(vcpu->kvm))
 		sev_vcpu_after_set_cpuid(svm);
 
@@ -5147,6 +5185,11 @@ static __init void svm_set_cpu_caps(void)
 
 		/* Nested VM can receive #VMEXIT instead of triggering #GP */
 		kvm_cpu_cap_set(X86_FEATURE_SVME_ADDR_CHK);
+	}
+
+	if (cpu_feature_enabled(X86_FEATURE_BUS_LOCK_THRESHOLD)) {
+		pr_info("Bus Lock Threashold supported\n");
+		kvm_caps.has_bus_lock_exit = true;
 	}
 
 	/* CPUID 0x80000008 */

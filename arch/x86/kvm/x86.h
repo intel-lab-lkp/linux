@@ -58,6 +58,7 @@ void kvm_spurious_fault(void);
 #define KVM_VMX_DEFAULT_PLE_WINDOW_MAX	UINT_MAX
 #define KVM_SVM_DEFAULT_PLE_WINDOW_MAX	USHRT_MAX
 #define KVM_SVM_DEFAULT_PLE_WINDOW	3000
+#define KVM_SVM_DEFAULT_BUS_LOCK_COUNTER	10
 
 static inline unsigned int __grow_ple_window(unsigned int val,
 		unsigned int base, unsigned int modifier, unsigned int max)
