@@ -483,14 +483,14 @@ v3d_get_cpu_timestamp_query_params(struct drm_file *file_priv,
 	for (int i = 0; i < timestamp.count; i++) {
 		u32 offset, sync;
 
-		if (copy_from_user(&offset, offsets++, sizeof(offset))) {
+		if (get_user(offset, offsets++)) {
 			kvfree(job->timestamp_query.queries);
 			return -EFAULT;
 		}
 
 		job->timestamp_query.queries[i].offset = offset;
 
-		if (copy_from_user(&sync, syncs++, sizeof(sync))) {
+		if (get_user(sync, syncs++)) {
 			kvfree(job->timestamp_query.queries);
 			return -EFAULT;
 		}
@@ -538,7 +538,7 @@ v3d_get_cpu_reset_timestamp_params(struct drm_file *file_priv,
 
 		job->timestamp_query.queries[i].offset = reset.offset + 8 * i;
 
-		if (copy_from_user(&sync, syncs++, sizeof(sync))) {
+		if (get_user(sync, syncs++)) {
 			kvfree(job->timestamp_query.queries);
 			return -EFAULT;
 		}
@@ -590,14 +590,14 @@ v3d_get_cpu_copy_query_results_params(struct drm_file *file_priv,
 	for (i = 0; i < copy.count; i++) {
 		u32 offset, sync;
 
-		if (copy_from_user(&offset, offsets++, sizeof(offset))) {
+		if (get_user(offset, offsets++)) {
 			kvfree(job->timestamp_query.queries);
 			return -EFAULT;
 		}
 
 		job->timestamp_query.queries[i].offset = offset;
 
-		if (copy_from_user(&sync, syncs++, sizeof(sync))) {
+		if (get_user(sync, syncs++)) {
 			kvfree(job->timestamp_query.queries);
 			return -EFAULT;
 		}
@@ -657,14 +657,14 @@ v3d_get_cpu_reset_performance_params(struct drm_file *file_priv,
 		u32 __user *ids_pointer;
 		u32 id;
 
-		if (copy_from_user(&sync, syncs++, sizeof(sync))) {
+		if (get_user(sync, syncs++)) {
 			kvfree(job->performance_query.queries);
 			return -EFAULT;
 		}
 
 		job->performance_query.queries[i].syncobj = drm_syncobj_find(file_priv, sync);
 
-		if (copy_from_user(&ids, kperfmon_ids++, sizeof(ids))) {
+		if (get_user(ids, kperfmon_ids++)) {
 			kvfree(job->performance_query.queries);
 			return -EFAULT;
 		}
@@ -672,7 +672,7 @@ v3d_get_cpu_reset_performance_params(struct drm_file *file_priv,
 		ids_pointer = u64_to_user_ptr(ids);
 
 		for (int j = 0; j < reset.nperfmons; j++) {
-			if (copy_from_user(&id, ids_pointer++, sizeof(id))) {
+			if (get_user(id, ids_pointer++)) {
 				kvfree(job->performance_query.queries);
 				return -EFAULT;
 			}
@@ -731,14 +731,14 @@ v3d_get_cpu_copy_performance_query_params(struct drm_file *file_priv,
 		u32 __user *ids_pointer;
 		u32 id;
 
-		if (copy_from_user(&sync, syncs++, sizeof(sync))) {
+		if (get_user(sync, syncs++)) {
 			kvfree(job->performance_query.queries);
 			return -EFAULT;
 		}
 
 		job->performance_query.queries[i].syncobj = drm_syncobj_find(file_priv, sync);
 
-		if (copy_from_user(&ids, kperfmon_ids++, sizeof(ids))) {
+		if (get_user(ids, kperfmon_ids++)) {
 			kvfree(job->performance_query.queries);
 			return -EFAULT;
 		}
@@ -746,7 +746,7 @@ v3d_get_cpu_copy_performance_query_params(struct drm_file *file_priv,
 		ids_pointer = u64_to_user_ptr(ids);
 
 		for (int j = 0; j < copy.nperfmons; j++) {
-			if (copy_from_user(&id, ids_pointer++, sizeof(id))) {
+			if (get_user(id, ids_pointer++)) {
 				kvfree(job->performance_query.queries);
 				return -EFAULT;
 			}
