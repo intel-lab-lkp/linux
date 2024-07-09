@@ -283,8 +283,11 @@ static void pcibios_allocate_dev_resources(struct pci_dev *dev, int pass)
 						/* We'll assign a new address later */
 						pcibios_save_fw_addr(dev,
 								idx, r->start);
-						r->end -= r->start;
-						r->start = 0;
+						if (!(r->flags &
+						      IORESOURCE_STARTALIGN)) {
+							r->end -= r->start;
+							r->start = 0;
+						}
 					}
 				}
 			}
