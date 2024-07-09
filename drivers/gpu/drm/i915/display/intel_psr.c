@@ -1523,7 +1523,7 @@ static bool _psr_compute_config(struct intel_dp *intel_dp,
 	 * Current PSR panels don't work reliably with VRR enabled
 	 * So if VRR is enabled, do not enable PSR.
 	 */
-	if (crtc_state->vrr.enable)
+	if (crtc_state->vrr.enable && !crtc_state->vrr.fixed_rr)
 		return false;
 
 	if (!CAN_PSR(intel_dp))
