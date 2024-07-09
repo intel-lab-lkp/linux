@@ -27,38 +27,40 @@ typedef enum rq_end_io_ret (rq_end_io_fn)(struct request *, blk_status_t);
  * request flags */
 typedef __u32 __bitwise req_flags_t;
 
-/* drive already may have started this one */
-#define RQF_STARTED		((__force req_flags_t)(1 << 1))
-/* request for flush sequence */
-#define RQF_FLUSH_SEQ		((__force req_flags_t)(1 << 4))
-/* merge of different types, fail separately */
-#define RQF_MIXED_MERGE		((__force req_flags_t)(1 << 5))
-/* don't call prep for this one */
-#define RQF_DONTPREP		((__force req_flags_t)(1 << 7))
-/* use hctx->sched_tags */
-#define RQF_SCHED_TAGS		((__force req_flags_t)(1 << 8))
-/* use an I/O scheduler for this request */
-#define RQF_USE_SCHED		((__force req_flags_t)(1 << 9))
-/* vaguely specified driver internal error.  Ignored by the block layer */
-#define RQF_FAILED		((__force req_flags_t)(1 << 10))
-/* don't warn about errors */
-#define RQF_QUIET		((__force req_flags_t)(1 << 11))
-/* account into disk and partition IO statistics */
-#define RQF_IO_STAT		((__force req_flags_t)(1 << 13))
-/* runtime pm request */
-#define RQF_PM			((__force req_flags_t)(1 << 15))
-/* on IO scheduler merge hash */
-#define RQF_HASHED		((__force req_flags_t)(1 << 16))
-/* track IO completion time */
-#define RQF_STATS		((__force req_flags_t)(1 << 17))
-/* Look at ->special_vec for the actual data payload instead of the
-   bio chain. */
-#define RQF_SPECIAL_PAYLOAD	((__force req_flags_t)(1 << 18))
-/* The request completion needs to be signaled to zone write pluging. */
-#define RQF_ZONE_WRITE_PLUGGING	((__force req_flags_t)(1 << 20))
-/* ->timeout has been called, don't expire again */
-#define RQF_TIMED_OUT		((__force req_flags_t)(1 << 21))
-#define RQF_RESV		((__force req_flags_t)(1 << 23))
+enum {
+	/* drive already may have started this one */
+	RQF_STARTED		=	((__force req_flags_t)(1 << 0)),
+	/* request for flush sequence */
+	RQF_FLUSH_SEQ		=	((__force req_flags_t)(1 << 1)),
+	/* merge of different types, fail separately */
+	RQF_MIXED_MERGE		=	((__force req_flags_t)(1 << 2)),
+	/* don't call prep for this one */
+	RQF_DONTPREP		=	((__force req_flags_t)(1 << 3)),
+	/* use hctx->sched_tags */
+	RQF_SCHED_TAGS		=	((__force req_flags_t)(1 << 4)),
+	/* use an I/O scheduler for this request */
+	RQF_USE_SCHED		=	((__force req_flags_t)(1 << 5)),
+	/* vaguely specified driver internal error.  Ignored by the block layer */
+	RQF_FAILED		=	((__force req_flags_t)(1 << 6)),
+	/* don't warn about errors */
+	RQF_QUIET		=	((__force req_flags_t)(1 << 7)),
+	/* account into disk and partition IO statistics */
+	RQF_IO_STAT		=	((__force req_flags_t)(1 << 8)),
+	/* runtime pm request */
+	RQF_PM			=	((__force req_flags_t)(1 << 9)),
+	/* on IO scheduler merge hash */
+	RQF_HASHED		=	((__force req_flags_t)(1 << 10)),
+	/* track IO completion time */
+	RQF_STATS		=	((__force req_flags_t)(1 << 11)),
+	/* Look at ->special_vec for the actual data payload instead of the
+	   bio chain. */
+	RQF_SPECIAL_PAYLOAD	=	((__force req_flags_t)(1 << 12)),
+	/* The request completion needs to be signaled to zone write pluging. */
+	RQF_ZONE_WRITE_PLUGGING	=	((__force req_flags_t)(1 << 13)),
+	/* ->timeout has been called, don't expire again */
+	RQF_TIMED_OUT		=	((__force req_flags_t)(1 << 14)),
+	RQF_RESV		=	((__force req_flags_t)(1 << 15)),
+};
 
 /* flags that prevent us from merging requests: */
 #define RQF_NOMERGE_FLAGS \
