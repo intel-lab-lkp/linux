@@ -499,6 +499,10 @@ v3d_get_cpu_timestamp_query_params(struct drm_file *file_priv,
 		}
 
 		qinfo->queries[i].syncobj = drm_syncobj_find(file_priv, sync);
+		if (!qinfo->queries[i].syncobj) {
+			err = -ENOENT;
+			goto error;
+		}
 	}
 	qinfo->count = timestamp.count;
 
@@ -554,6 +558,10 @@ v3d_get_cpu_reset_timestamp_params(struct drm_file *file_priv,
 		}
 
 		qinfo->queries[i].syncobj = drm_syncobj_find(file_priv, sync);
+		if (!qinfo->queries[i].syncobj) {
+			err = -ENOENT;
+			goto error;
+		}
 	}
 	qinfo->count = reset.count;
 
@@ -619,6 +627,10 @@ v3d_get_cpu_copy_query_results_params(struct drm_file *file_priv,
 		}
 
 		qinfo->queries[i].syncobj = drm_syncobj_find(file_priv, sync);
+		if (!qinfo->queries[i].syncobj) {
+			err = -ENOENT;
+			goto error;
+		}
 	}
 	qinfo->count = copy.count;
 
