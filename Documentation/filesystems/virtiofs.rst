@@ -43,7 +43,10 @@ Mount options
 -------------
 
 virtiofs supports general VFS mount options, for example, remount,
-ro, rw, context, etc. It also supports FUSE mount options.
+ro, rw, context, etc.
+
+The ``file`` mount option allows mounting a filesystem whose root node is not a
+directory but a regular file.
 
 atime behavior
 ^^^^^^^^^^^^^^
