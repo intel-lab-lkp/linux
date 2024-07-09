@@ -7,6 +7,7 @@
 #include "stmmac.h"
 #include "stmmac_fpe.h"
 #include "dwmac4.h"
+#include "dwxgmac2.h"
 
 static int __fpe_irq_status(void __iomem *ioaddr, struct net_device *dev)
 {
@@ -91,4 +92,40 @@ const struct stmmac_fpe_ops dwmac4_fpe_ops = {
 	.configure = dwmac4_fpe_configure,
 	.irq_status = dwmac4_fpe_irq_status,
 	.send_mpacket = dwmac4_fpe_send_mpacket,
+};
+
+static void dwxgmac_fpe_configure(void __iomem *ioaddr,
+				  struct stmmac_fpe_cfg *cfg,
+				  u32 num_txq, u32 num_rxq, bool enable)
+{
+	u32 value;
+
+	if (enable) {
+		cfg->fpe_csr = FPE_CTRL_STS_EFPE;
+		value = readl(ioaddr + XGMAC_RXQ_CTRL1);
+		value &= ~XGMAC_FPRQ;
+		value |= (num_rxq - 1) << XGMAC_FPRQ_SHIFT;
+		writel(value, ioaddr + XGMAC_RXQ_CTRL1);
+	} else {
+		cfg->fpe_csr = 0;
+	}
+
+	writel(cfg->fpe_csr, ioaddr + FPE_CTRL_STS_XGMAC_OFFSET);
+}
+
+static int dwxgmac_fpe_irq_status(void __iomem *ioaddr, struct net_device *dev)
+{
+	return __fpe_irq_status(ioaddr + FPE_CTRL_STS_XGMAC_OFFSET, dev);
+}
+
+static void dwxgmac_fpe_send_mpacket(void __iomem *ioaddr, struct stmmac_fpe_cfg *cfg,
+				     enum stmmac_mpacket_type type)
+{
+	__fpe_send_mpacket(ioaddr + FPE_CTRL_STS_XGMAC_OFFSET, cfg, type);
+}
+
+const struct stmmac_fpe_ops dwxgmac_fpe_ops = {
+	.configure = dwxgmac_fpe_configure,
+	.irq_status = dwxgmac_fpe_irq_status,
+	.send_mpacket = dwxgmac_fpe_send_mpacket,
 };
