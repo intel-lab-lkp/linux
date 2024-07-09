@@ -16,7 +16,10 @@ description:
 
 properties:
   compatible:
-    const: qcom,pcie-sa8775p
+    items:
+      - enum:
+          - qcom,pcie-qcs9100
+          - qcom,pcie-sa8775p
 
   reg:
     minItems: 6
