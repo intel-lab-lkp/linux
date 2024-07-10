@@ -2430,10 +2430,16 @@ out:
 
 static u64 kvm_supported_mem_attributes(struct kvm *kvm)
 {
+	u64 attributes = 0;
 	if (!kvm || kvm_arch_has_private_mem(kvm))
-		return KVM_MEMORY_ATTRIBUTE_PRIVATE;
+		attributes |= KVM_MEMORY_ATTRIBUTE_PRIVATE;
 
-	return 0;
+#ifdef CONFIG_KVM_USERFAULT
+	if (!kvm || kvm_userfault_enabled(kvm))
+		attributes |= KVM_MEMORY_ATTRIBUTE_USERFAULT;
+#endif
+
+	return attributes;
 }
 
 static __always_inline void kvm_handle_gfn_range(struct kvm *kvm,
@@ -4946,6 +4952,84 @@ bool kvm_are_all_memslots_empty(struct kvm *kvm)
 }
 EXPORT_SYMBOL_GPL(kvm_are_all_memslots_empty);
 
+#ifdef CONFIG_KVM_USERFAULT
+static int kvm_disable_userfault(struct kvm *kvm)
+{
+	struct kvm_userfault_ctx *ctx;
+
+	mutex_lock(&kvm->slots_lock);
+
+	ctx = rcu_replace_pointer(kvm->userfault_ctx, NULL,
+				  mutex_is_locked(&kvm->slots_lock));
+
+	mutex_unlock(&kvm->slots_lock);
+
+	if (!ctx)
+		return 0;
+
+	/* Wait for everyone to stop using userfault. */
+	synchronize_srcu(&kvm->srcu);
+
+	eventfd_ctx_put(ctx->ev_fd);
+	kfree(ctx);
+	return 0;
+}
+
+static int kvm_enable_userfault(struct kvm *kvm, int event_fd)
+{
+	struct kvm_userfault_ctx *userfault_ctx;
+	struct eventfd_ctx *ev_fd;
+	int ret;
+
+	mutex_lock(&kvm->slots_lock);
+
+	ret = -EEXIST;
+	if (kvm_userfault_enabled(kvm))
+		goto out;
+
+	ret = -ENOMEM;
+	userfault_ctx = kmalloc(sizeof(*userfault_ctx), GFP_KERNEL);
+	if (!userfault_ctx)
+		goto out;
+
+	ev_fd = eventfd_ctx_fdget(event_fd);
+	if (IS_ERR(ev_fd)) {
+		ret = PTR_ERR(ev_fd);
+		kfree(userfault_ctx);
+		goto out;
+	}
+
+	ret = 0;
+	userfault_ctx->ev_fd = ev_fd;
+
+	rcu_assign_pointer(kvm->userfault_ctx, userfault_ctx);
+out:
+	mutex_unlock(&kvm->slots_lock);
+	return ret;
+}
+
+static int kvm_vm_ioctl_enable_userfault(struct kvm *kvm, int options,
+					 int event_fd)
+{
+	u64 allowed_options = KVM_USERFAULT_ENABLE |
+			      KVM_USERFAULT_DISABLE;
+	bool enable;
+
+	if (options & ~allowed_options)
+		return -EINVAL;
+	/* Exactly one of ENABLE or DISABLE must be set. */
+	if (options == allowed_options || !options)
+		return -EINVAL;
+
+	enable = options & KVM_USERFAULT_ENABLE;
+
+	if (enable)
+		return kvm_enable_userfault(kvm, event_fd);
+	else
+		return kvm_disable_userfault(kvm);
+}
+#endif
+
 static int kvm_vm_ioctl_enable_cap_generic(struct kvm *kvm,
 					   struct kvm_enable_cap *cap)
 {
@@ -5009,6 +5093,14 @@ static int kvm_vm_ioctl_enable_cap_generic(struct kvm *kvm,
 
 		return r;
 	}
+#ifdef CONFIG_KVM_USERFAULT
+	case KVM_CAP_USERFAULT:
+		if (cap->flags)
+			return -EINVAL;
+
+		return kvm_vm_ioctl_enable_userfault(kvm, cap->args[0],
+						     cap->args[1]);
+#endif
 	default:
 		return kvm_vm_ioctl_enable_cap(kvm, cap);
 	}

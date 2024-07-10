@@ -917,6 +917,7 @@ struct kvm_enable_cap {
 #define KVM_CAP_MEMORY_ATTRIBUTES 233
 #define KVM_CAP_GUEST_MEMFD 234
 #define KVM_CAP_VM_TYPES 235
+#define KVM_CAP_USERFAULT 236
 
 struct kvm_irq_routing_irqchip {
 	__u32 irqchip;
@@ -1539,6 +1540,7 @@ struct kvm_memory_attributes {
 };
 
 #define KVM_MEMORY_ATTRIBUTE_PRIVATE           (1ULL << 3)
+#define KVM_MEMORY_ATTRIBUTE_USERFAULT         (1ULL << 4)
 
 #define KVM_CREATE_GUEST_MEMFD	_IOWR(KVMIO,  0xd4, struct kvm_create_guest_memfd)
 
@@ -1547,5 +1549,8 @@ struct kvm_create_guest_memfd {
 	__u64 flags;
 	__u64 reserved[6];
 };
+
+#define KVM_USERFAULT_ENABLE		(1ULL << 0)
+#define KVM_USERFAULT_DISABLE		(1ULL << 1)
 
 #endif /* __LINUX_KVM_H */

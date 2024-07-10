@@ -730,6 +730,10 @@ struct kvm_memslots {
 	int node_idx;
 };
 
+struct kvm_userfault_ctx {
+	struct eventfd_ctx *ev_fd;
+};
+
 struct kvm {
 #ifdef KVM_HAVE_MMU_RWLOCK
 	rwlock_t mmu_lock;
@@ -831,6 +835,7 @@ struct kvm {
 	bool dirty_ring_with_bitmap;
 	bool vm_bugged;
 	bool vm_dead;
+	struct kvm_userfault_ctx __rcu *userfault_ctx;
 
 #ifdef CONFIG_HAVE_KVM_PM_NOTIFIER
 	struct notifier_block pm_notifier;
@@ -2476,5 +2481,14 @@ long kvm_gmem_populate(struct kvm *kvm, gfn_t gfn, void __user *src, long npages
 #ifdef CONFIG_HAVE_KVM_GMEM_INVALIDATE
 void kvm_arch_gmem_invalidate(kvm_pfn_t start, kvm_pfn_t end);
 #endif
+
+static inline bool kvm_userfault_enabled(struct kvm *kvm)
+{
+#ifdef CONFIG_KVM_USERFAULT
+	return !!rcu_access_pointer(kvm->userfault_ctx);
+#else
+	return false;
+#endif
+}
 
 #endif

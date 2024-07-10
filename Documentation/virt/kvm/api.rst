@@ -8070,6 +8070,29 @@ error/annotated fault.
 
 See KVM_EXIT_MEMORY_FAULT for more information.
 
+7.35 KVM_CAP_USERFAULT
+------------------------------
+
+:Architectures: none
+:Parameters: args[0] - whether or not to enable KVM Userfault. To enable,
+                       pass KVM_USERFAULT_ENABLE, and to disable pass
+                       KVM_USERFAULT_DISABLE.
+             args[1] - the eventfd to be notified when asynchronous userfaults
+                       occur.
+
+:Returns: 0 on success, -EINVAL if args[0] is not KVM_USERFAULT_ENABLE
+          or KVM_USERFAULT_DISABLE, or if KVM Userfault is not supported.
+
+This capability, if enabled with KVM_ENABLE_CAP, allows userspace to mark
+regions of memory as KVM_MEMORY_ATTRIBUTE_USERFAULT, in which case, attempted
+accesses to these regions of memory by KVM_RUN will fail with
+KVM_EXIT_MEMORY_FAULT. Attempted accesses by other ioctls will fail with
+EFAULT.
+
+Enabling this capability will cause all future faults to create
+small-page-sized sptes. Collapsing these sptes back into their optimal size
+is done with KVM_COLLAPSE_PAGE_TABLES.
+
 8. Other capabilities.
 ======================
 
