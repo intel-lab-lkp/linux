@@ -2849,6 +2849,10 @@ do_vmi_align_munmap(struct vma_iterator *vmi, struct vm_area_struct *vma,
 	struct vma_munmap_struct vms;
 	int error;
 
+	/* Prevent unmapping a sealed VMA. */
+	if (unlikely(!can_modify_mm(mm, start, end)))
+		return -EPERM;
+
 	init_vma_munmap(&vms, vmi, vma, start, end, uf, unlock);
 	error = vms_gather_munmap_vmas(&vms, &mas_detach);
 	if (error)
@@ -2898,13 +2902,6 @@ int do_vmi_munmap(struct vma_iterator *vmi, struct mm_struct *mm,
 	end = start + PAGE_ALIGN(len);
 	if (end == start)
 		return -EINVAL;
-
-	/*
-	 * Prevent unmapping a sealed VMA.
-	 * can_modify_mm assumes we have acquired the lock on MM.
-	 */
-	if (unlikely(!can_modify_mm(mm, start, end)))
-		return -EPERM;
 
 	/* Find the first overlapping VMA */
 	vma = vma_find(vmi, end);
@@ -2963,13 +2960,15 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 	if (!may_expand_vm(mm, vm_flags, pglen - nr_pages))
 		return -ENOMEM;
 
-	if (unlikely(!can_modify_mm(mm, addr, end)))
-		return -EPERM;
 
 	/* Find the first overlapping VMA */
 	vma = vma_find(&vmi, end);
 	init_vma_munmap(&vms, &vmi, vma, addr, end, uf, /* unlock = */ false);
 	if (vma) {
+		/* Prevent unmapping a sealed VMA. */
+		if (unlikely(!can_modify_mm(mm, addr, end)))
+			return -EPERM;
+
 		mt_init_flags(&mt_detach, vmi.mas.tree->ma_flags & MT_FLAGS_LOCK_MASK);
 		mt_on_stack(mt_detach);
 		mas_init(&mas_detach, &mt_detach, /* addr = */ 0);
@@ -3340,13 +3339,6 @@ int do_vma_munmap(struct vma_iterator *vmi, struct vm_area_struct *vma,
 		bool unlock)
 {
 	struct mm_struct *mm = vma->vm_mm;
-
-	/*
-	 * Prevent unmapping a sealed VMA.
-	 * can_modify_mm assumes we have acquired the lock on MM.
-	 */
-	if (unlikely(!can_modify_mm(mm, start, end)))
-		return -EPERM;
 
 	return do_vmi_align_munmap(vmi, vma, mm, start, end, uf, unlock);
 }
