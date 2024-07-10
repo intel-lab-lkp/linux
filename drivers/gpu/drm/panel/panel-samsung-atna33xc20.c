@@ -333,6 +333,7 @@ static void atana33xc20_remove(struct dp_aux_ep_device *aux_ep)
 
 static const struct of_device_id atana33xc20_dt_match[] = {
 	{ .compatible = "samsung,atna33xc20", },
+	{ .compatible = "samsung,atna45af01", },
 	{ /* sentinal */ }
 };
 MODULE_DEVICE_TABLE(of, atana33xc20_dt_match);
