@@ -1503,6 +1503,7 @@ struct vma_munmap_struct {
 	unsigned long stack_vm;
 	unsigned long data_vm;
 	bool unlock;			/* Unlock after the munmap */
+	bool clear_ptes;		/* If there are outstanding PTE to be cleared */
 };
 
 void __meminit __init_single_page(struct page *page, unsigned long pfn,
