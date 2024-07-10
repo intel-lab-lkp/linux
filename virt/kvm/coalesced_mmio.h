@@ -19,7 +19,7 @@ struct kvm_coalesced_mmio_dev {
 	struct list_head list;
 	struct kvm_io_device dev;
 	struct kvm *kvm;
-	struct kvm_coalesced_mmio_zone zone;
+	struct kvm_coalesced_mmio_zone2 zone;
 	struct kvm_coalesced_mmio_buffer_dev *buffer_dev;
 };
 
@@ -34,9 +34,10 @@ struct kvm_coalesced_mmio_buffer_dev {
 int kvm_coalesced_mmio_init(struct kvm *kvm);
 void kvm_coalesced_mmio_free(struct kvm *kvm);
 int kvm_vm_ioctl_register_coalesced_mmio(struct kvm *kvm,
-					struct kvm_coalesced_mmio_zone *zone);
+					struct kvm_coalesced_mmio_zone2 *zone,
+					bool use_buffer_fd);
 int kvm_vm_ioctl_unregister_coalesced_mmio(struct kvm *kvm,
-					struct kvm_coalesced_mmio_zone *zone);
+					struct kvm_coalesced_mmio_zone2 *zone);
 int kvm_vm_ioctl_create_coalesced_mmio_buffer(struct kvm *kvm);
 
 #else
