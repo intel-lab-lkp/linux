@@ -1095,22 +1095,15 @@ __uprobe_unregister(struct uprobe *uprobe, struct uprobe_consumer *uc)
 
 /*
  * uprobe_unregister - unregister an already registered probe.
- * @inode: the file in which the probe has to be removed.
+ * @uprobe: uprobe to remove
  * @offset: offset from the start of the file.
  * @uc: identify which probe if multiple probes are colocated.
  */
-void uprobe_unregister(struct inode *inode, loff_t offset, struct uprobe_consumer *uc)
+void uprobe_unregister(struct uprobe *uprobe, struct uprobe_consumer *uc)
 {
-	struct uprobe *uprobe;
-
-	uprobe = find_uprobe(inode, offset);
-	if (WARN_ON(!uprobe))
-		return;
-
 	down_write(&uprobe->register_rwsem);
 	__uprobe_unregister(uprobe, uc);
 	up_write(&uprobe->register_rwsem);
-	put_uprobe(uprobe);
 }
 EXPORT_SYMBOL_GPL(uprobe_unregister);
 
@@ -1128,41 +1121,39 @@ EXPORT_SYMBOL_GPL(uprobe_unregister);
  * refcount is released when the last @uc for the @uprobe
  * unregisters. Caller of uprobe_register() is required to keep @inode
  * (and the containing mount) referenced.
- *
- * Return errno if it cannot successully install probes
- * else return 0 (success)
  */
-int uprobe_register(struct inode *inode, loff_t offset, loff_t ref_ctr_offset,
-		    struct uprobe_consumer *uc)
+struct uprobe *uprobe_register(struct inode *inode,
+				loff_t offset, loff_t ref_ctr_offset,
+				struct uprobe_consumer *uc)
 {
 	struct uprobe *uprobe;
 	int ret;
 
 	/* Uprobe must have at least one set consumer */
 	if (!uc->handler && !uc->ret_handler)
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 
 	/* copy_insn() uses read_mapping_page() or shmem_read_mapping_page() */
 	if (!inode->i_mapping->a_ops->read_folio &&
 	    !shmem_mapping(inode->i_mapping))
-		return -EIO;
+		return ERR_PTR(-EIO);
 	/* Racy, just to catch the obvious mistakes */
 	if (offset > i_size_read(inode))
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 
 	/*
 	 * This ensures that copy_from_page(), copy_to_page() and
 	 * __update_ref_ctr() can't cross page boundary.
 	 */
 	if (!IS_ALIGNED(offset, UPROBE_SWBP_INSN_SIZE))
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 	if (!IS_ALIGNED(ref_ctr_offset, sizeof(short)))
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 
  retry:
 	uprobe = alloc_uprobe(inode, offset, ref_ctr_offset);
 	if (IS_ERR(uprobe))
-		return PTR_ERR(uprobe);
+		return uprobe;
 
 	/*
 	 * We can race with uprobe_unregister()->delete_uprobe().
@@ -1181,27 +1172,20 @@ int uprobe_register(struct inode *inode, loff_t offset, loff_t ref_ctr_offset,
 
 	if (unlikely(ret == -EAGAIN))
 		goto retry;
-	return ret;
+
+	return ret ? ERR_PTR(ret) : uprobe;
 }
 EXPORT_SYMBOL_GPL(uprobe_register);
 
 /*
  * uprobe_apply - unregister an already registered probe.
- * @inode: the file in which the probe has to be removed.
- * @offset: offset from the start of the file.
  * @uc: consumer which wants to add more or remove some breakpoints
  * @add: add or remove the breakpoints
  */
-int uprobe_apply(struct inode *inode, loff_t offset,
-			struct uprobe_consumer *uc, bool add)
+int uprobe_apply(struct uprobe *uprobe, struct uprobe_consumer *uc, bool add)
 {
-	struct uprobe *uprobe;
 	struct uprobe_consumer *con;
 	int ret = -ENOENT;
-
-	uprobe = find_uprobe(inode, offset);
-	if (WARN_ON(!uprobe))
-		return ret;
 
 	down_write(&uprobe->register_rwsem);
 	for (con = uprobe->consumers; con && con != uc ; con = con->next)
@@ -1209,7 +1193,6 @@ int uprobe_apply(struct inode *inode, loff_t offset,
 	if (con)
 		ret = register_for_each_vma(uprobe, add ? uc : NULL);
 	up_write(&uprobe->register_rwsem);
-	put_uprobe(uprobe);
 
 	return ret;
 }
