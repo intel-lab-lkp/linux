@@ -77,6 +77,9 @@ by the PCI controller driver.
 
    Cleanup the pci_epc_mem structure allocated during pci_epc_mem_init().
 
+* pci_epc_dstate_notify()
+
+   Notify all the function drivers that the EPC device has changed its D-state.
 
 EPC APIs for the PCI Endpoint Function Driver
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

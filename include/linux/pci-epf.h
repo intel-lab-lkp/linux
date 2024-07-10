@@ -75,6 +75,7 @@ struct pci_epf_ops {
  * @link_up: Callback for the EPC link up event
  * @link_down: Callback for the EPC link down event
  * @bus_master_enable: Callback for the EPC Bus Master Enable event
+ * @dstate_notify: Callback for the EPC D-state change event
  */
 struct pci_epc_event_ops {
 	int (*epc_init)(struct pci_epf *epf);
@@ -82,6 +83,7 @@ struct pci_epc_event_ops {
 	int (*link_up)(struct pci_epf *epf);
 	int (*link_down)(struct pci_epf *epf);
 	int (*bus_master_enable)(struct pci_epf *epf);
+	int (*dstate_notify)(struct pci_epf *epf, pci_power_t state);
 };
 
 /**

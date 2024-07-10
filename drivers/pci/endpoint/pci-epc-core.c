@@ -829,6 +829,30 @@ void pci_epc_bus_master_enable_notify(struct pci_epc *epc)
 EXPORT_SYMBOL_GPL(pci_epc_bus_master_enable_notify);
 
 /**
+ * pci_epc_dstate_notify() - Notify the EPF driver that EPC device D-state
+ *			has changed
+ * @epc: the EPC device which has change in D-state
+ * @state: the changed D-state
+ *
+ * Invoke to Notify the EPF device that the EPC device D-state has
+ * changed.
+ */
+void pci_epc_dstate_notify(struct pci_epc *epc, pci_power_t state)
+{
+	struct pci_epf *epf;
+
+	mutex_lock(&epc->list_lock);
+	list_for_each_entry(epf, &epc->pci_epf, list) {
+		mutex_lock(&epf->lock);
+		if (epf->event_ops && epf->event_ops->dstate_notify)
+			epf->event_ops->dstate_notify(epf, state);
+		mutex_unlock(&epf->lock);
+	}
+	mutex_unlock(&epc->list_lock);
+}
+EXPORT_SYMBOL_GPL(pci_epc_dstate_notify);
+
+/**
  * pci_epc_destroy() - destroy the EPC device
  * @epc: the EPC device that has to be destroyed
  *

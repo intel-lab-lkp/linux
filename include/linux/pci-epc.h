@@ -276,6 +276,8 @@ void __iomem *pci_epc_mem_alloc_addr(struct pci_epc *epc,
 void pci_epc_mem_free_addr(struct pci_epc *epc, phys_addr_t phys_addr,
 			   void __iomem *virt_addr, size_t size);
 
+void pci_epc_dstate_notify(struct pci_epc *epc, pci_power_t state);
+
 #else
 static inline void pci_epc_init_notify(struct pci_epc *epc)
 {
