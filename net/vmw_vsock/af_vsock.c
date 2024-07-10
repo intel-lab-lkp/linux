@@ -1463,7 +1463,7 @@ int vsock_dgram_recvmsg(struct socket *sock, struct msghdr *msg,
 		return prot->recvmsg(sk, msg, len, flags, NULL);
 #endif
 
-	if (flags & MSG_OOB || flags & MSG_ERRQUEUE)
+	if (unlikely(flags & MSG_OOB))
 		return -EOPNOTSUPP;
 
 	if (unlikely(flags & MSG_ERRQUEUE))
