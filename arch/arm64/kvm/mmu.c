@@ -1434,7 +1434,7 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 	 * logging_active is guaranteed to never be true for VM_PFNMAP
 	 * memslots.
 	 */
-	if (logging_active) {
+	if (logging_active || kvm->userfault) {
 		force_pte = true;
 		vma_shift = PAGE_SHIFT;
 	} else {
@@ -1494,8 +1494,15 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 		kvm_send_hwpoison_signal(hva, vma_shift);
 		return 0;
 	}
-	if (is_error_noslot_pfn(pfn))
+	if (is_error_noslot_pfn(pfn)) {
+		if (pfn == KVM_PFN_ERR_USERFAULT)
+			kvm_prepare_memory_fault_exit(vcpu, gfn << PAGE_SHIFT,
+						      PAGE_SIZE, write_fault,
+						      /*exec=*/false,
+						      /*private=*/false,
+						      /*userfault=*/true);
 		return -EFAULT;
+	}
 
 	if (kvm_is_device_pfn(pfn)) {
 		/*
@@ -2105,3 +2112,28 @@ void kvm_toggle_cache(struct kvm_vcpu *vcpu, bool was_enabled)
 
 	trace_kvm_toggle_cache(*vcpu_pc(vcpu), was_enabled, now_enabled);
 }
+
+#ifdef CONFIG_KVM_GENERIC_MEMORY_ATTRIBUTES
+bool kvm_arch_pre_set_memory_attributes(struct kvm *kvm,
+					struct kvm_gfn_range *range)
+{
+	unsigned long attrs = range->arg.attributes;
+
+	/*
+	 * We only need to unmap if we're enabling userfault. Disabling it
+	 * does not need an unmap. An unmap to get huge mappings will come
+	 * later.
+	 */
+	if (attrs & KVM_MEMORY_ATTRIBUTE_USERFAULT)
+		kvm_unmap_gfn_range(kvm, range);
+
+	return false;
+}
+
+bool kvm_arch_post_set_memory_attributes(struct kvm *kvm,
+					 struct kvm_gfn_range *range)
+{
+	/* Nothing to do! */
+	return false;
+}
+#endif
