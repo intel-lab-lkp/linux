@@ -150,11 +150,15 @@ struct drm_scanout_buffer {
 
 void drm_panic_register(struct drm_device *dev);
 void drm_panic_unregister(struct drm_device *dev);
+void drm_panic_init(void);
+void drm_panic_exit(void);
 
 #else
 
 static inline void drm_panic_register(struct drm_device *dev) {}
 static inline void drm_panic_unregister(struct drm_device *dev) {}
+static inline void drm_panic_init(void) {}
+static inline void drm_panic_exit(void) {}
 
 #endif
 
