@@ -28,6 +28,13 @@ static uint64_t guest_percpu_mem_size = DEFAULT_PER_VCPU_MEM_SIZE;
 
 static size_t demand_paging_size;
 static char *guest_data_prototype;
+bool userfault_enabled = false;
+
+static void resolve_kvm_userfault(u64 gpa, u64 size)
+{
+	/* Toggle KVM_MEMORY_ATTRIBUTE_USERFAULT off */
+	vm_set_memory_attributes(memstress_args.vm, gpa, size, 0);
+}
 
 static void vcpu_worker(struct memstress_vcpu_args *vcpu_args)
 {
@@ -41,8 +48,22 @@ static void vcpu_worker(struct memstress_vcpu_args *vcpu_args)
 	clock_gettime(CLOCK_MONOTONIC, &start);
 
 	/* Let the guest access its memory */
+restart:
 	ret = _vcpu_run(vcpu);
-	TEST_ASSERT(ret == 0, "vcpu_run failed: %d", ret);
+	if (ret < 0 && errno == EFAULT && userfault_enabled) {
+		/* Check for userfault. */
+		TEST_ASSERT(run->exit_reason == KVM_EXIT_MEMORY_FAULT,
+			    "Got invalid exit reason: %llx", run->exit_reason);
+		TEST_ASSERT(run->memory_fault.flags ==
+			    KVM_MEMORY_EXIT_FLAG_USERFAULT,
+			    "Got invalid memory fault exit: %llx",
+			    run->memory_fault.flags);
+		resolve_kvm_userfault(run->memory_fault.gpa,
+				      run->memory_fault.size);
+		goto restart;
+	} else
+		TEST_ASSERT(ret == 0, "vcpu_run failed: %d", ret);
+
 	if (get_ucall(vcpu, NULL) != UCALL_SYNC) {
 		TEST_ASSERT(false,
 			    "Invalid guest sync status: exit_reason=%s",
@@ -136,6 +157,7 @@ struct test_params {
 	int readers_per_uffd;
 	enum vm_mem_backing_src_type src_type;
 	bool partition_vcpu_memory_access;
+	bool kvm_userfault;
 };
 
 static void prefault_mem(void *alias, uint64_t len)
@@ -206,6 +228,17 @@ static void run_test(enum vm_guest_mode mode, void *arg)
 		}
 	}
 
+	if (p->kvm_userfault) {
+		TEST_REQUIRE(kvm_has_cap(KVM_CAP_USERFAULT));
+		vm_enable_cap(vm, KVM_CAP_USERFAULT, KVM_USERFAULT_ENABLE);
+		TEST_REQUIRE(kvm_check_cap(KVM_CAP_MEMORY_ATTRIBUTES) &
+			     KVM_MEMORY_ATTRIBUTE_USERFAULT);
+		vm_set_memory_attributes(vm, memstress_args.gpa,
+					 memstress_args.size,
+					 KVM_MEMORY_ATTRIBUTE_USERFAULT);
+		userfault_enabled = true;
+	}
+
 	pr_info("Finished creating vCPUs and starting uffd threads\n");
 
 	clock_gettime(CLOCK_MONOTONIC, &start);
@@ -231,6 +264,11 @@ static void run_test(enum vm_guest_mode mode, void *arg)
 		vcpu_paging_rate);
 	pr_info("Overall demand paging rate:\t%f pgs/sec\n",
 		vcpu_paging_rate * nr_vcpus);
+
+	if (p->kvm_userfault) {
+		vm_enable_cap(vm, KVM_CAP_USERFAULT, KVM_USERFAULT_DISABLE);
+		userfault_enabled = false;
+	}
 
 	memstress_destroy_vm(vm);
 
@@ -263,6 +301,7 @@ static void help(char *name)
 	printf(" -v: specify the number of vCPUs to run.\n");
 	printf(" -o: Overlap guest memory accesses instead of partitioning\n"
 	       "     them into a separate region of memory for each vCPU.\n");
+	printf(" -k: Use KVM Userfault\n");
 	puts("");
 	exit(0);
 }
@@ -281,7 +320,7 @@ int main(int argc, char *argv[])
 
 	guest_modes_append_default();
 
-	while ((opt = getopt(argc, argv, "ahom:u:d:b:s:v:c:r:")) != -1) {
+	while ((opt = getopt(argc, argv, "ahokm:u:d:b:s:v:c:r:")) != -1) {
 		switch (opt) {
 		case 'm':
 			guest_modes_cmdline(optarg);
@@ -323,6 +362,9 @@ int main(int argc, char *argv[])
 			TEST_ASSERT(p.readers_per_uffd >= 1,
 				    "Invalid number of readers per uffd %d: must be >=1",
 				    p.readers_per_uffd);
+			break;
+		case 'k':
+			p.kvm_userfault = true;
 			break;
 		case 'h':
 		default:
