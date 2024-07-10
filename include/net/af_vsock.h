@@ -120,8 +120,6 @@ struct vsock_transport {
 
 	/* DGRAM. */
 	int (*dgram_bind)(struct vsock_sock *, struct sockaddr_vm *);
-	int (*dgram_dequeue)(struct vsock_sock *vsk, struct msghdr *msg,
-			     size_t len, int flags);
 	int (*dgram_enqueue)(struct vsock_sock *, struct sockaddr_vm *,
 			     struct msghdr *, size_t len);
 	bool (*dgram_allow)(u32 cid, u32 port);
@@ -218,6 +216,15 @@ void vsock_for_each_connected_socket(struct vsock_transport *transport,
 				     void (*fn)(struct sock *sk));
 int vsock_assign_transport(struct vsock_sock *vsk, struct vsock_sock *psk);
 bool vsock_find_cid(unsigned int cid);
+
+struct vsock_skb_cb {
+	unsigned int src_cid;
+	unsigned int src_port;
+};
+
+static inline struct vsock_skb_cb *vsock_skb_cb(struct sk_buff *skb) {
+	return (struct vsock_skb_cb *)skb->cb;
+};
 
 /**** TAP ****/
 
