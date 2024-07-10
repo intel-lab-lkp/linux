@@ -636,7 +636,7 @@ reject:
 }
 
 
-/**
+/*
  * crush_choose_indep: alternative breadth-first positionally stable mapping
  *
  */
