@@ -154,7 +154,8 @@ static int vsock_connect(unsigned int cid, unsigned int port, int type)
 	int ret;
 	int fd;
 
-	control_expectln("LISTENING");
+	if (type != SOCK_DGRAM)
+		control_expectln("LISTENING");
 
 	fd = socket(AF_VSOCK, type, 0);
 	if (fd < 0) {
@@ -187,6 +188,11 @@ int vsock_stream_connect(unsigned int cid, unsigned int port)
 int vsock_seqpacket_connect(unsigned int cid, unsigned int port)
 {
 	return vsock_connect(cid, port, SOCK_SEQPACKET);
+}
+
+int vsock_dgram_connect(unsigned int cid, unsigned int port)
+{
+	return vsock_connect(cid, port, SOCK_DGRAM);
 }
 
 /* Listen on <cid, port> and return the file descriptor. */
@@ -285,6 +291,34 @@ int vsock_seqpacket_accept(unsigned int cid, unsigned int port,
 			   struct sockaddr_vm *clientaddrp)
 {
 	return vsock_accept(cid, port, clientaddrp, SOCK_SEQPACKET);
+}
+
+int vsock_dgram_bind(unsigned int cid, unsigned int port)
+{
+	union {
+		struct sockaddr sa;
+		struct sockaddr_vm svm;
+	} addr = {
+		.svm = {
+			.svm_family = AF_VSOCK,
+			.svm_port = port,
+			.svm_cid = cid,
+		},
+	};
+	int fd;
+
+	fd = socket(AF_VSOCK, SOCK_DGRAM, 0);
+	if (fd < 0) {
+		perror("socket");
+		exit(EXIT_FAILURE);
+	}
+
+	if (bind(fd, &addr.sa, sizeof(addr.svm)) < 0) {
+		perror("bind");
+		exit(EXIT_FAILURE);
+	}
+
+	return fd;
 }
 
 /* Transmit bytes from a buffer and check the return value.
@@ -418,6 +452,147 @@ void recv_byte(int fd, int expected_ret, int flags)
 	uint8_t byte;
 
 	recv_buf(fd, &byte, sizeof(byte), flags, expected_ret);
+
+	if (byte != 'A') {
+		fprintf(stderr, "unexpected byte read %c\n", byte);
+		exit(EXIT_FAILURE);
+	}
+}
+
+/* Transmit bytes to the given address from a buffer and check the return value.
+ *
+ * expected_ret:
+ *  <0 Negative errno (for testing errors)
+ *   0 End-of-file
+ *  >0 Success (bytes successfully written)
+ */
+void sendto_buf(int fd, void *buf, size_t len, struct sockaddr *dst, socklen_t addrlen,
+		int flags, ssize_t expected_ret)
+{
+	ssize_t nwritten = 0;
+	ssize_t ret;
+
+	timeout_begin(TIMEOUT);
+	do {
+		ret = sendto(fd, buf + nwritten, len - nwritten, flags, dst, addrlen);
+		timeout_check("sendto");
+
+		if (ret == 0 || (ret < 0 && errno != EINTR))
+			break;
+
+		nwritten += ret;
+	} while (nwritten < len);
+	timeout_end();
+
+	if (expected_ret < 0) {
+		if (nwritten != -1) {
+			fprintf(stderr, "bogus sendto(2) return value %zd\n",
+				nwritten);
+			exit(EXIT_FAILURE);
+		}
+		if (errno != -expected_ret) {
+			perror("sendto");
+			exit(EXIT_FAILURE);
+		}
+		return;
+	}
+
+	if (ret < 0) {
+		perror("sendto");
+		exit(EXIT_FAILURE);
+	}
+
+	if (nwritten != expected_ret) {
+		if (ret == 0)
+			fprintf(stderr, "unexpected EOF while sending bytes\n");
+
+		fprintf(stderr, "bogus sendto(2) bytes written %zd (expected %zd)\n",
+			nwritten, expected_ret);
+		exit(EXIT_FAILURE);
+	}
+}
+
+/* Receive bytes from the given address in a buffer and check the return value.
+ *
+ * expected_ret:
+ *  <0 Negative errno (for testing errors)
+ *   0 End-of-file
+ *  >0 Success (bytes successfully read)
+ */
+void recvfrom_buf(int fd, void *buf, size_t len, struct sockaddr *src, socklen_t *addrlen,
+		  int flags, ssize_t expected_ret)
+{
+	ssize_t nread = 0;
+	ssize_t ret;
+
+	timeout_begin(TIMEOUT);
+	do {
+		ret = recvfrom(fd, buf + nread, len - nread, flags, src, addrlen);
+		timeout_check("recvfrom");
+
+		if (ret == 0 || (ret < 0 && errno != EINTR))
+			break;
+
+		nread += ret;
+	} while (nread < len);
+	timeout_end();
+
+	if (expected_ret < 0) {
+		if (nread != -1) {
+			fprintf(stderr, "bogus recvfrom(2) return value %zd\n",
+				nread);
+			exit(EXIT_FAILURE);
+		}
+		if (errno != -expected_ret) {
+			perror("recvfrom");
+			exit(EXIT_FAILURE);
+		}
+		return;
+	}
+
+	if (ret < 0) {
+		perror("recvfrom");
+		exit(EXIT_FAILURE);
+	}
+
+	if (nread != expected_ret) {
+		if (ret == 0)
+			fprintf(stderr, "unexpected EOF while receiving bytes\n");
+
+		fprintf(stderr, "bogus recv(2) bytes read %zd (expected %zd)\n",
+			nread, expected_ret);
+		exit(EXIT_FAILURE);
+	}
+}
+
+/* Transmit one byte to the given address and check the return value.
+ *
+ * expected_ret:
+ *  <0 Negative errno (for testing errors)
+ *   0 End-of-file
+ *   1 Success
+ */
+void sendto_byte(int fd, struct sockaddr *dst, socklen_t addrlen,
+		 int expected_ret, int flags)
+{
+	uint8_t byte = 'A';
+
+	sendto_buf(fd, &byte, sizeof(byte), dst, addrlen, flags, expected_ret);
+}
+
+/* Receive one byte from the given address and check the return value.
+ *
+ * expected_ret:
+ *  <0 Negative errno (for testing errors)
+ *   0 End-of-file
+ *   1 Success
+ */
+void recvfrom_byte(int fd, struct sockaddr *src, socklen_t *addrlen,
+		   int expected_ret, int flags)
+{
+	uint8_t byte;
+
+	recvfrom_buf(fd, &byte, sizeof(byte), src, addrlen, flags, expected_ret);
 
 	if (byte != 'A') {
 		fprintf(stderr, "unexpected byte read %c\n", byte);

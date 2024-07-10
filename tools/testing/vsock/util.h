@@ -43,17 +43,27 @@ int vsock_stream_connect(unsigned int cid, unsigned int port);
 int vsock_bind_connect(unsigned int cid, unsigned int port,
 		       unsigned int bind_port, int type);
 int vsock_seqpacket_connect(unsigned int cid, unsigned int port);
+int vsock_dgram_connect(unsigned int cid, unsigned int port);
 int vsock_stream_accept(unsigned int cid, unsigned int port,
 			struct sockaddr_vm *clientaddrp);
 int vsock_stream_listen(unsigned int cid, unsigned int port);
 int vsock_seqpacket_accept(unsigned int cid, unsigned int port,
 			   struct sockaddr_vm *clientaddrp);
+int vsock_dgram_bind(unsigned int cid, unsigned int port);
 void vsock_wait_remote_close(int fd);
 void send_buf(int fd, const void *buf, size_t len, int flags,
 	      ssize_t expected_ret);
 void recv_buf(int fd, void *buf, size_t len, int flags, ssize_t expected_ret);
 void send_byte(int fd, int expected_ret, int flags);
 void recv_byte(int fd, int expected_ret, int flags);
+void sendto_buf(int fd, void *buf, size_t len, struct sockaddr *dst,
+		socklen_t addrlen, int flags, ssize_t expected_ret);
+void recvfrom_buf(int fd, void *buf, size_t len, struct sockaddr *src,
+		  socklen_t *addrlen, int flags, ssize_t expected_ret);
+void sendto_byte(int fd, struct sockaddr *dst, socklen_t addrlen,
+		 int expected_ret, int flags);
+void recvfrom_byte(int fd, struct sockaddr *src, socklen_t *addrlen,
+		   int expected_ret, int flags);
 void run_tests(const struct test_case *test_cases,
 	       const struct test_opts *opts);
 void list_tests(const struct test_case *test_cases);
