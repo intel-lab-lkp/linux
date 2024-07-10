@@ -89,8 +89,8 @@ config ARM_SCMI_TRANSPORT_MAILBOX
 	  will be called scmi_transport_mailbox.
 
 config ARM_SCMI_TRANSPORT_OPTEE
-	bool "SCMI transport based on OP-TEE service"
-	depends on OPTEE=y || OPTEE=ARM_SCMI_PROTOCOL
+	tristate "SCMI transport based on OP-TEE service"
+	depends on OPTEE
 	select ARM_SCMI_HAVE_TRANSPORT
 	select ARM_SCMI_HAVE_SHMEM
 	select ARM_SCMI_HAVE_MSG
@@ -100,6 +100,8 @@ config ARM_SCMI_TRANSPORT_OPTEE
 
 	  If you want the ARM SCMI PROTOCOL stack to include support for a
 	  transport based on OP-TEE SCMI service, answer Y.
+	  This driver can also be built as a module.  If so, the module
+	  will be called scmi_transport_optee.
 
 config ARM_SCMI_TRANSPORT_SMC
 	tristate "SCMI transport based on SMC"
