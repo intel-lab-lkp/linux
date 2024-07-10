@@ -25,6 +25,17 @@ config DHT11
 	  Other sensors should work as well as long as they speak the
 	  same protocol.
 
+config ENS21X
+	tristate "ENS21X temperature and humidity sensor"
+	depends on I2C
+	help
+	  Say yes here to get support for the ScioSense ENS21X family of
+	  humidity and temperature sensors.
+
+	  This driver can also be built as a module. If so, the module will be
+	  called ens21x.
+
+
 config HDC100X
 	tristate "TI HDC100x relative humidity and temperature sensor"
 	depends on I2C
