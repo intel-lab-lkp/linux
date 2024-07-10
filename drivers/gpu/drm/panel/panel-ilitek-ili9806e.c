@@ -35,6 +35,12 @@ struct ili9806e_panel {
 	enum drm_panel_orientation orientation;
 };
 
+#define ILI9806E_DCS_SWITCH_PAGE	0xff
+
+#define ili9806e_switch_page(ctx, page) \
+	mipi_dsi_dcs_write_seq_multi(ctx, ILI9806E_DCS_SWITCH_PAGE, \
+				     0xff, 0x98, 0x06, 0x04, (page))
+
 static const char * const regulator_names[] = {
 	"vdd",
 	"vccio",
@@ -227,7 +233,7 @@ static void ili9806e_dsi_remove(struct mipi_dsi_device *dsi)
 static void com35h3p70ulc_init(struct mipi_dsi_multi_context *ctx)
 {
 	/* Switch to page 1 */
-	mipi_dsi_dcs_write_seq_multi(ctx, 0xff, 0xff, 0x98, 0x06, 0x04, 0x01);
+	ili9806e_switch_page(ctx, 0x01);
 	/* Interface Settings */
 	mipi_dsi_dcs_write_seq_multi(ctx, 0x08, 0x18);
 	mipi_dsi_dcs_write_seq_multi(ctx, 0x21, 0x01);
@@ -285,14 +291,14 @@ static void com35h3p70ulc_init(struct mipi_dsi_multi_context *ctx)
 	mipi_dsi_dcs_write_seq_multi(ctx, 0xcf, 0x0a);
 
 	/* Switch to page 7 */
-	mipi_dsi_dcs_write_seq_multi(ctx, 0xff, 0xff, 0x98, 0x06, 0x04, 0x07);
+	ili9806e_switch_page(ctx, 0x07);
 	/* Power Control */
 	mipi_dsi_dcs_write_seq_multi(ctx, 0x06, 0x00);
 	mipi_dsi_dcs_write_seq_multi(ctx, 0x18, 0x1d);
 	mipi_dsi_dcs_write_seq_multi(ctx, 0x17, 0x32);
 
 	/* Switch to page 6 */
-	mipi_dsi_dcs_write_seq_multi(ctx, 0xff, 0xff, 0x98, 0x06, 0x04, 0x06);
+	ili9806e_switch_page(ctx, 0x06);
 	/* GIP settings */
 	mipi_dsi_dcs_write_seq_multi(ctx, 0x00, 0x20);
 	mipi_dsi_dcs_write_seq_multi(ctx, 0x01, 0x02);
@@ -352,7 +358,7 @@ static void com35h3p70ulc_init(struct mipi_dsi_multi_context *ctx)
 	mipi_dsi_dcs_write_seq_multi(ctx, 0x53, 0x12);
 
 	/* Switch to page 0 */
-	mipi_dsi_dcs_write_seq_multi(ctx, 0xff, 0xff, 0x98, 0x06, 0x04, 0x00);
+	ili9806e_switch_page(ctx, 0x00);
 	/* Interface Pixel format */
 	mipi_dsi_dcs_write_seq_multi(ctx, 0x3a, 0x60);
 };
