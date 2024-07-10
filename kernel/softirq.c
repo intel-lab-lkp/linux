@@ -34,6 +34,8 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/irq.h>
 
+#include "sched/smp.h"
+
 /*
    - No shared variables, all the data are CPU local.
    - If a softirq needs serialization, let it serialize itself
@@ -413,7 +415,13 @@ static inline void ksoftirqd_run_end(void)
 
 static inline bool should_wake_ksoftirqd(void)
 {
-	return true;
+	/*
+	 * Avoid waking up ksoftirqd when a softirq is raised from a
+	 * call-function executed by flush_smp_call_function_queue()
+	 * in idle, migration thread's context since it'll soon call
+	 * do_softirq_post_smp_call_flush().
+	 */
+	return !do_softirq_pending();
 }
 
 static inline void invoke_softirq(void)

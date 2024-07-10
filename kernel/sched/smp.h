@@ -9,7 +9,9 @@ extern void sched_ttwu_pending(void *arg);
 extern bool call_function_single_prep_ipi(int cpu);
 
 #ifdef CONFIG_SMP
+extern bool do_softirq_pending(void);
 extern void flush_smp_call_function_queue(void);
 #else
+static inline bool do_softirq_pending(void) { return false; }
 static inline void flush_smp_call_function_queue(void) { }
 #endif

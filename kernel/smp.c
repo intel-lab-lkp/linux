@@ -559,6 +559,36 @@ static void __flush_smp_call_function_queue(bool warn_cpu_offline)
 	}
 }
 
+/* Indicate an impending call to do_softirq_post_smp_call_flush() */
+static DEFINE_PER_CPU_ALIGNED(bool, will_do_softirq_post_flush);
+
+static __always_inline void __set_will_do_softirq_post_flush(void)
+{
+	this_cpu_write(will_do_softirq_post_flush, true);
+}
+
+static __always_inline void __clr_will_do_softirq_post_flush(void)
+{
+	this_cpu_write(will_do_softirq_post_flush, false);
+}
+
+/**
+ * do_softirq_pending - Check if do_softirq_post_smp_call_flush() will
+ *			be called after the invocation of
+ *			__flush_smp_call_function_queue()
+ *
+ * When flush_smp_call_function_queue() executes in the context of idle,
+ * migration thread, a softirq raised from the smp-call-function ends up
+ * waking ksoftirqd despite an impending softirq processing via
+ * do_softirq_post_smp_call_flush().
+ *
+ * Indicate an impending do_softirq() to should_wake_ksoftirqd() despite
+ * not being in an interrupt context.
+ */
+__always_inline bool do_softirq_pending(void)
+{
+	return this_cpu_read(will_do_softirq_post_flush);
+}
 
 /**
  * flush_smp_call_function_queue - Flush pending smp-call-function callbacks
@@ -583,7 +613,9 @@ void flush_smp_call_function_queue(void)
 	local_irq_save(flags);
 	/* Get the already pending soft interrupts for RT enabled kernels */
 	was_pending = local_softirq_pending();
+	__set_will_do_softirq_post_flush();
 	__flush_smp_call_function_queue(true);
+	__clr_will_do_softirq_post_flush();
 	if (local_softirq_pending())
 		do_softirq_post_smp_call_flush(was_pending);
 
