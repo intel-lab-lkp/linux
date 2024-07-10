@@ -1613,31 +1613,30 @@ static int brcm_pcie_probe(struct platform_device *pdev)
 
 	pcie->ssc = of_property_read_bool(np, "brcm,enable-ssc");
 
+	pcie->rescal = devm_reset_control_get_optional_shared(&pdev->dev, "rescal");
+	if (IS_ERR(pcie->rescal))
+		return PTR_ERR(pcie->rescal);
+
+	pcie->perst_reset = devm_reset_control_get_optional_exclusive(&pdev->dev, "perst");
+	if (IS_ERR(pcie->perst_reset))
+		return PTR_ERR(pcie->perst_reset);
+
 	ret = clk_prepare_enable(pcie->clk);
 	if (ret) {
 		dev_err(&pdev->dev, "could not enable clock\n");
 		return ret;
 	}
-	pcie->rescal = devm_reset_control_get_optional_shared(&pdev->dev, "rescal");
-	if (IS_ERR(pcie->rescal)) {
-		clk_disable_unprepare(pcie->clk);
-		return PTR_ERR(pcie->rescal);
-	}
-	pcie->perst_reset = devm_reset_control_get_optional_exclusive(&pdev->dev, "perst");
-	if (IS_ERR(pcie->perst_reset)) {
-		clk_disable_unprepare(pcie->clk);
-		return PTR_ERR(pcie->perst_reset);
-	}
 
 	ret = reset_control_reset(pcie->rescal);
-	if (ret)
+	if (ret) {
 		dev_err(&pdev->dev, "failed to deassert 'rescal'\n");
+		goto clk_out;
+	}
 
 	ret = brcm_phy_start(pcie);
 	if (ret) {
 		reset_control_rearm(pcie->rescal);
-		clk_disable_unprepare(pcie->clk);
-		return ret;
+		goto clk_out;
 	}
 
 	ret = brcm_pcie_setup(pcie);
@@ -1675,6 +1674,10 @@ static int brcm_pcie_probe(struct platform_device *pdev)
 	}
 
 	return 0;
+
+clk_out:
+	clk_disable_unprepare(pcie->clk);
+	return ret;
 
 fail:
 	__brcm_pcie_remove(pcie);
