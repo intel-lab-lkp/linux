@@ -145,6 +145,20 @@ allOf:
         - samsung,uart-fifosize
       properties:
         reg-io-width: false
+        clocks:
+          description: |
+            Note that for earlycon to work, the respective ipclk and pclk need
+            to be running! The bootloader normally leaves them enabled, but the
+            serial driver will start handling those clocks before the console
+            driver takes over from earlycon, breaking earlycon. If earlycon is
+            required, please revert the patch "clk: samsung: gs101: don't mark
+            non-essential (UART) clocks critical" locally first to mark them
+            CLK_IS_CRITICAL and avoid this problem.
+          maxItems: 2
+        clock-names:
+          items:
+            - const: uart
+            - const: clk_uart_baud0
 
 unevaluatedProperties: false
 
