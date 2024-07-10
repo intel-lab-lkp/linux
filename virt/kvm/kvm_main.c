@@ -1769,6 +1769,7 @@ static void kvm_copy_memslot(struct kvm_memory_slot *dest,
 	dest->flags = src->flags;
 	dest->id = src->id;
 	dest->as_id = src->as_id;
+	dest->kvm = src->kvm;
 }
 
 static void kvm_invalidate_memslot(struct kvm *kvm,
@@ -2078,6 +2079,7 @@ int __kvm_set_memory_region(struct kvm *kvm,
 	new->npages = npages;
 	new->flags = mem->flags;
 	new->userspace_addr = mem->userspace_addr;
+	new->kvm = kvm;
 	if (mem->flags & KVM_MEM_GUEST_MEMFD) {
 		r = kvm_gmem_bind(kvm, new, mem->guest_memfd, mem->guest_memfd_offset);
 		if (r)
