@@ -1554,4 +1554,11 @@ struct kvm_create_guest_memfd {
 #define KVM_USERFAULT_ENABLE		(1ULL << 0)
 #define KVM_USERFAULT_DISABLE		(1ULL << 1)
 
+struct kvm_fault {
+	__u64 address;
+	/* TODO: reserved fields */
+};
+
+#define KVM_READ_USERFAULT		_IOR(KVMIO, 0xd5, struct kvm_fault)
+
 #endif /* __LINUX_KVM_H */

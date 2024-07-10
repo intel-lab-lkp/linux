@@ -734,8 +734,15 @@ struct kvm_memslots {
 	int node_idx;
 };
 
+struct kvm_userfault_list_entry {
+	struct list_head list;
+	gfn_t gfn;
+};
+
 struct kvm_userfault_ctx {
 	struct eventfd_ctx *ev_fd;
+	spinlock_t list_lock;
+	struct list_head gfn_list;
 };
 
 struct kvm {

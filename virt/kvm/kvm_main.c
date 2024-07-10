@@ -2678,6 +2678,43 @@ static bool memslot_is_readonly(const struct kvm_memory_slot *slot)
 	return slot->flags & KVM_MEM_READONLY;
 }
 
+static int read_userfault(struct kvm_userfault_ctx __rcu *ctx, gfn_t *gfn)
+{
+	struct kvm_userfault_list_entry *entry;
+
+	spin_lock(&ctx->list_lock);
+
+	entry = list_first_entry_or_null(&ctx->gfn_list,
+					 struct kvm_userfault_list_entry,
+					 list);
+
+	list_del(&entry->list);
+
+	spin_unlock(&ctx->list_lock);
+
+	if (!entry)
+		return -ENOENT;
+
+	*gfn = entry->gfn;
+	return 0;
+}
+
+static void signal_userfault(struct kvm *kvm, gfn_t gfn)
+{
+	struct kvm_userfault_ctx __rcu *ctx =
+		srcu_dereference(kvm->userfault_ctx, &kvm->srcu);
+	struct kvm_userfault_list_entry entry;
+
+	entry.gfn = gfn;
+	INIT_LIST_HEAD(&entry.list);
+
+	spin_lock(&ctx->list_lock);
+	list_add(&entry.list, &ctx->gfn_list);
+	spin_unlock(&ctx->list_lock);
+
+	eventfd_signal(ctx->ev_fd);
+}
+
 static unsigned long __gfn_to_hva_many(const struct kvm_memory_slot *slot, gfn_t gfn,
 				       gfn_t *nr_pages, bool write, bool atomic)
 {
@@ -2687,8 +2724,14 @@ static unsigned long __gfn_to_hva_many(const struct kvm_memory_slot *slot, gfn_t
 	if (memslot_is_readonly(slot) && write)
 		return KVM_HVA_ERR_RO_BAD;
 
-	if (gfn_has_userfault(slot->kvm, gfn))
-		return KVM_HVA_ERR_USERFAULT;
+	if (gfn_has_userfault(slot->kvm, gfn)) {
+		if (atomic)
+			return KVM_HVA_ERR_USERFAULT;
+		signal_userfault(slot->kvm, gfn);
+		while (gfn_has_userfault(slot->kvm, gfn))
+			/* TODO: don't busy-wait */
+			cpu_relax();
+	}
 
 	if (nr_pages)
 		*nr_pages = slot->npages - (gfn - slot->base_gfn);
@@ -5009,6 +5052,10 @@ static int kvm_enable_userfault(struct kvm *kvm, int event_fd)
 	}
 
 	ret = 0;
+
+	INIT_LIST_HEAD(&userfault_ctx->gfn_list);
+	spin_lock_init(&userfault_ctx->list_lock);
+
 	userfault_ctx->ev_fd = ev_fd;
 
 	rcu_assign_pointer(kvm->userfault_ctx, userfault_ctx);
@@ -5036,6 +5083,27 @@ static int kvm_vm_ioctl_enable_userfault(struct kvm *kvm, int options,
 		return kvm_enable_userfault(kvm, event_fd);
 	else
 		return kvm_disable_userfault(kvm);
+}
+
+static int kvm_vm_ioctl_read_userfault(struct kvm *kvm, gfn_t *gfn)
+{
+	int ret;
+	int idx;
+	struct kvm_userfault_ctx __rcu *ctx;
+
+	idx = srcu_read_lock(&kvm->srcu);
+
+	ctx = srcu_dereference(kvm->userfault_ctx, &kvm->srcu);
+
+	ret = -ENOENT;
+	if (!ctx)
+		goto out;
+
+	ret = read_userfault(ctx, gfn);
+
+out:
+	srcu_read_unlock(&kvm->srcu, idx);
+	return ret;
 }
 #endif
 
@@ -5401,6 +5469,26 @@ static long kvm_vm_ioctl(struct file *filp,
 			goto out;
 
 		r = kvm_gmem_create(kvm, &guest_memfd);
+		break;
+	}
+#endif
+#ifdef CONFIG_KVM_USERFAULT
+	case KVM_READ_USERFAULT: {
+		struct kvm_fault fault;
+		gfn_t gfn;
+
+		r = kvm_vm_ioctl_read_userfault(kvm, &gfn);
+		if (r)
+			goto out;
+
+		fault.address = gfn;
+
+		/* TODO: if this fails, this gfn is lost. */
+		r = -EFAULT;
+		if (copy_to_user(&fault, argp, sizeof(fault)))
+			goto out;
+
+		r = 0;
 		break;
 	}
 #endif
