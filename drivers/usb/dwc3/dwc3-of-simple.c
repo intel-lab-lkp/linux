@@ -18,6 +18,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/clk.h>
 #include <linux/of.h>
+#include <linux/of_address.h>
 #include <linux/of_platform.h>
 #include <linux/pm_runtime.h>
 #include <linux/reset.h>
@@ -51,6 +52,26 @@ static int dwc3_of_simple_probe(struct platform_device *pdev)
 	 */
 	if (of_device_is_compatible(np, "rockchip,rk3399-dwc3"))
 		simple->need_reset = true;
+
+	if (of_device_is_compatible(np, "fsl,ls1028a-dwc3")) {
+		struct device_node *np = dev->of_node;
+		struct property_entry props[2] = {};
+		int prop_idx = 0, ret = 0;
+		struct device_node *dwc3_np __free(device_node)
+				    = of_get_compatible_child(np, "snps,dwc3");
+
+		if (!dwc3_np)
+			return dev_err_probe(dev, -ENODEV, "failed to find dwc3 core child\n");
+
+		if (of_dma_is_coherent(dwc3_np))
+			props[prop_idx++] = PROPERTY_ENTRY_U16("snps,gsbuscfg0-reqinfo", 0x2222);
+
+		if (prop_idx)
+			ret = device_create_managed_software_node(dev, props, NULL);
+
+		if (ret)
+			return ret;
+	}
 
 	simple->resets = of_reset_control_array_get_optional_exclusive(np);
 	if (IS_ERR(simple->resets)) {
@@ -174,6 +195,7 @@ static const struct of_device_id of_dwc3_simple_match[] = {
 	{ .compatible = "hisilicon,hi3670-dwc3" },
 	{ .compatible = "hisilicon,hi3798mv200-dwc3" },
 	{ .compatible = "intel,keembay-dwc3" },
+	{ .compatible = "fsl,ls1028a-dwc3" },
 	{ /* Sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, of_dwc3_simple_match);
