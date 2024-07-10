@@ -3110,6 +3110,13 @@ static int __kvm_mmu_max_mapping_level(struct kvm *kvm,
 	struct kvm_lpage_info *linfo;
 	int host_level;
 
+	/*
+	 * KVM Userfault requires new mappings to be 4K, as userfault check was
+	 * done only for the particular page was faulted on.
+	 */
+	if (kvm_userfault_enabled(kvm))
+		return PG_LEVEL_4K;
+
 	max_level = min(max_level, max_huge_page_level);
 	for ( ; max_level > PG_LEVEL_4K; max_level--) {
 		linfo = lpage_info_slot(gfn, slot, max_level);
@@ -3264,6 +3271,9 @@ static int kvm_handle_error_pfn(struct kvm_vcpu *vcpu, struct kvm_page_fault *fa
 		kvm_send_hwpoison_signal(fault->slot, fault->gfn);
 		return RET_PF_RETRY;
 	}
+
+	if (fault->pfn == KVM_PFN_ERR_USERFAULT)
+		kvm_mmu_prepare_memory_fault_exit(vcpu, fault);
 
 	return -EFAULT;
 }
@@ -4316,6 +4326,9 @@ static u8 kvm_max_private_mapping_level(struct kvm *kvm, kvm_pfn_t pfn,
 {
 	u8 req_max_level;
 
+	if (kvm_userfault_enabled(kvm))
+		return PG_LEVEL_4K;
+
 	if (max_level == PG_LEVEL_4K)
 		return PG_LEVEL_4K;
 
@@ -4334,6 +4347,12 @@ static int kvm_faultin_pfn_private(struct kvm_vcpu *vcpu,
 				   struct kvm_page_fault *fault)
 {
 	int max_order, r;
+
+	/*
+	 * Make sure a pfn is set so that kvm_mmu_prepare_memory_fault_exit
+	 * doesn't read uninitialized memory.
+	 */
+	fault->pfn = KVM_PFN_ERR_FAULT;
 
 	if (!kvm_slot_can_be_private(fault->slot)) {
 		kvm_mmu_prepare_memory_fault_exit(vcpu, fault);
@@ -7390,21 +7409,37 @@ void kvm_mmu_pre_destroy_vm(struct kvm *kvm)
 bool kvm_arch_pre_set_memory_attributes(struct kvm *kvm,
 					struct kvm_gfn_range *range)
 {
+	unsigned long attrs = range->arg.attributes;
+
 	/*
-	 * Zap SPTEs even if the slot can't be mapped PRIVATE.  KVM x86 only
-	 * supports KVM_MEMORY_ATTRIBUTE_PRIVATE, and so it *seems* like KVM
-	 * can simply ignore such slots.  But if userspace is making memory
-	 * PRIVATE, then KVM must prevent the guest from accessing the memory
-	 * as shared.  And if userspace is making memory SHARED and this point
-	 * is reached, then at least one page within the range was previously
-	 * PRIVATE, i.e. the slot's possible hugepage ranges are changing.
-	 * Zapping SPTEs in this case ensures KVM will reassess whether or not
-	 * a hugepage can be used for affected ranges.
+	 * For KVM_MEMORY_ATTRIBUTE_PRIVATE:
+	 *  Zap SPTEs even if the slot can't be mapped PRIVATE.  It *seems* like
+	 *  KVM can simply ignore such slots.  But if userspace is making memory
+	 *  PRIVATE, then KVM must prevent the guest from accessing the memory
+	 *  as shared.  And if userspace is making memory SHARED and this point
+	 *  is reached, then at least one page within the range was previously
+	 *  PRIVATE, i.e. the slot's possible hugepage ranges are changing.
+	 *  Zapping SPTEs in this case ensures KVM will reassess whether or not
+	 *  a hugepage can be used for affected ranges.
+	 *
+	 * For KVM_MEMORY_ATTRIBUTE_USERFAULT:
+	 *  When enabling, we want to zap the mappings that land in @range,
+	 *  otherwise we will not be able to trap vCPU accesses.
+	 *  When disabling, we don't need to zap anything.
 	 */
-	if (WARN_ON_ONCE(!kvm_arch_has_private_mem(kvm)))
+	if (WARN_ON_ONCE(!kvm_userfault_enabled(kvm) &&
+			 !kvm_arch_has_private_mem(kvm)))
 		return false;
 
-	return kvm_unmap_gfn_range(kvm, range);
+	if (kvm_arch_has_private_mem(kvm) ||
+			(attrs & KVM_MEMORY_ATTRIBUTE_USERFAULT))
+		return kvm_unmap_gfn_range(kvm, range);
+
+	/*
+	 * We are disabling USERFAULT. No unmap necessary. An unmap to get
+	 * huge mappings again will come later.
+	 */
+	return false;
 }
 
 static bool hugepage_test_mixed(struct kvm_memory_slot *slot, gfn_t gfn,
@@ -7458,7 +7493,8 @@ bool kvm_arch_post_set_memory_attributes(struct kvm *kvm,
 	 * a range that has PRIVATE GFNs, and conversely converting a range to
 	 * SHARED may now allow hugepages.
 	 */
-	if (WARN_ON_ONCE(!kvm_arch_has_private_mem(kvm)))
+	if (WARN_ON_ONCE(!kvm_userfault_enabled(kvm) &&
+			 !kvm_arch_has_private_mem(kvm)))
 		return false;
 
 	/*
