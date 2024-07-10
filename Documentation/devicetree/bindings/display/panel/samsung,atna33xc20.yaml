@@ -14,7 +14,11 @@ allOf:
 
 properties:
   compatible:
-    const: samsung,atna33xc20
+    enum:
+      # Samsung 13.3" FHD (1920x1080 pixels) eDP AMOLED panel
+      - samsung,atna33xc20
+      # Samsung 14.5" WQXGA+ (2880x1800 pixels) eDP AMOLED panel
+      - samsung,atna45af01
 
   enable-gpios: true
   port: true
