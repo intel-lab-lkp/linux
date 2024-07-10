@@ -784,7 +784,13 @@ static void smap_gather_stats(struct vm_area_struct *vma,
 	/* Invalid start */
 	if (start >= vma->vm_end)
 		return;
-
+	/*
+	 * The memory of DMABUF needs to be mmaped using vm_insert_page in order to
+	 * support direct_io. It will not with VM_PFNMAP flag, but it does have the
+	 * VM_DMABUF_DIO flag memory will be counted in the process's RSS.
+	 */
+	if (vma->vm_flags & VM_DMABUF_DIO)
+		return;
 	if (vma->vm_file && shmem_mapping(vma->vm_file->f_mapping)) {
 		/*
 		 * For shared or readonly shmem mappings we know that all

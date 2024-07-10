@@ -1441,10 +1441,10 @@ static __always_inline void __folio_add_file_rmap(struct folio *folio,
 	VM_WARN_ON_FOLIO(folio_test_anon(folio), folio);
 
 	nr = __folio_add_rmap(folio, page, nr_pages, level, &nr_pmdmapped);
-	if (nr_pmdmapped)
+	if (nr_pmdmapped && !(vma->vm_flags & VM_DMABUF_DIO))
 		__mod_node_page_state(pgdat, folio_test_swapbacked(folio) ?
 			NR_SHMEM_PMDMAPPED : NR_FILE_PMDMAPPED, nr_pmdmapped);
-	if (nr)
+	if (nr && !(vma->vm_flags & VM_DMABUF_DIO))
 		__lruvec_stat_mod_folio(folio, NR_FILE_MAPPED, nr);
 
 	/* See comments in folio_add_anon_rmap_*() */
@@ -1545,7 +1545,7 @@ static __always_inline void __folio_remove_rmap(struct folio *folio,
 		/* NR_{FILE/SHMEM}_PMDMAPPED are not maintained per-memcg */
 		if (folio_test_anon(folio))
 			__lruvec_stat_mod_folio(folio, NR_ANON_THPS, -nr_pmdmapped);
-		else
+		else if (likely(!(vma->vm_flags & VM_DMABUF_DIO)))
 			__mod_node_page_state(pgdat,
 					folio_test_swapbacked(folio) ?
 					NR_SHMEM_PMDMAPPED : NR_FILE_PMDMAPPED,
@@ -1553,7 +1553,8 @@ static __always_inline void __folio_remove_rmap(struct folio *folio,
 	}
 	if (nr) {
 		idx = folio_test_anon(folio) ? NR_ANON_MAPPED : NR_FILE_MAPPED;
-		__lruvec_stat_mod_folio(folio, idx, -nr);
+		if (likely(!(vma->vm_flags & VM_DMABUF_DIO)))
+			__lruvec_stat_mod_folio(folio, idx, -nr);
 
 		/*
 		 * Queue anon large folio for deferred split if at least one

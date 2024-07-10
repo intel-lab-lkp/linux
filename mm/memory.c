@@ -1003,7 +1003,8 @@ copy_present_ptes(struct vm_area_struct *dst_vma, struct vm_area_struct *src_vma
 			VM_WARN_ON_FOLIO(PageAnonExclusive(page), folio);
 		} else {
 			folio_dup_file_rmap_ptes(folio, page, nr);
-			rss[mm_counter_file(folio)] += nr;
+			if (likely(!(src_vma->vm_flags & VM_DMABUF_DIO)))
+				rss[mm_counter_file(folio)] += nr;
 		}
 		if (any_writable)
 			pte = pte_mkwrite(pte, src_vma);
@@ -1031,7 +1032,8 @@ copy_present_ptes(struct vm_area_struct *dst_vma, struct vm_area_struct *src_vma
 		VM_WARN_ON_FOLIO(PageAnonExclusive(page), folio);
 	} else {
 		folio_dup_file_rmap_pte(folio, page);
-		rss[mm_counter_file(folio)]++;
+		if (likely(!(src_vma->vm_flags & VM_DMABUF_DIO)))
+			rss[mm_counter_file(folio)]++;
 	}
 
 copy_pte:
@@ -1488,7 +1490,8 @@ static __always_inline void zap_present_folio_ptes(struct mmu_gather *tlb,
 		}
 		if (pte_young(ptent) && likely(vma_has_recency(vma)))
 			folio_mark_accessed(folio);
-		rss[mm_counter(folio)] -= nr;
+		if (likely(!(vma->vm_flags & VM_DMABUF_DIO)))
+			rss[mm_counter(folio)] -= nr;
 	} else {
 		/* We don't need up-to-date accessed/dirty bits. */
 		clear_full_ptes(mm, addr, pte, nr, tlb->fullmm);
@@ -1997,7 +2000,8 @@ static int insert_page_into_pte_locked(struct vm_area_struct *vma, pte_t *pte,
 		return -EBUSY;
 	/* Ok, finally just insert the thing.. */
 	folio_get(folio);
-	inc_mm_counter(vma->vm_mm, mm_counter_file(folio));
+	if (likely(!(vma->vm_flags & VM_DMABUF_DIO)))
+		inc_mm_counter(vma->vm_mm, mm_counter_file(folio));
 	folio_add_file_rmap_pte(folio, page, vma);
 	set_pte_at(vma->vm_mm, addr, pte, mk_pte(page, prot));
 	return 0;
@@ -4641,7 +4645,8 @@ vm_fault_t do_set_pmd(struct vm_fault *vmf, struct page *page)
 	if (write)
 		entry = maybe_pmd_mkwrite(pmd_mkdirty(entry), vma);
 
-	add_mm_counter(vma->vm_mm, mm_counter_file(folio), HPAGE_PMD_NR);
+	if (likely(!(vma->vm_flags & VM_DMABUF_DIO)))
+		add_mm_counter(vma->vm_mm, mm_counter_file(folio), HPAGE_PMD_NR);
 	folio_add_file_rmap_pmd(folio, page, vma);
 
 	/*
