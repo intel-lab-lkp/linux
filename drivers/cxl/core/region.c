@@ -1897,6 +1897,7 @@ static int cxl_region_attach(struct cxl_region *cxlr,
 		 * then the region is already committed.
 		 */
 		p->state = CXL_CONFIG_COMMIT;
+		cxl_region_shared_upstream_bandwidth_update(cxlr);
 
 		return 0;
 	}
@@ -1918,6 +1919,7 @@ static int cxl_region_attach(struct cxl_region *cxlr,
 		if (rc)
 			return rc;
 		p->state = CXL_CONFIG_ACTIVE;
+		cxl_region_shared_upstream_bandwidth_update(cxlr);
 	}
 
 	cxled->cxld.interleave_ways = p->interleave_ways;
