@@ -140,6 +140,7 @@ static inline bool is_noslot_pfn(kvm_pfn_t pfn)
 
 #define KVM_HVA_ERR_BAD		(PAGE_OFFSET)
 #define KVM_HVA_ERR_RO_BAD	(PAGE_OFFSET + PAGE_SIZE)
+#define KVM_HVA_ERR_USERFAULT	(PAGE_OFFSET + 2 * PAGE_SIZE)
 
 static inline bool kvm_is_error_hva(unsigned long addr)
 {
@@ -2488,6 +2489,17 @@ static inline bool kvm_userfault_enabled(struct kvm *kvm)
 {
 #ifdef CONFIG_KVM_USERFAULT
 	return !!rcu_access_pointer(kvm->userfault_ctx);
+#else
+	return false;
+#endif
+}
+
+static inline bool gfn_has_userfault(struct kvm *kvm, gfn_t gfn)
+{
+#ifdef CONFIG_KVM_USERFAULT
+	return kvm_userfault_enabled(kvm) &&
+		(kvm_get_memory_attributes(kvm, gfn) &
+		 KVM_MEMORY_ATTRIBUTE_USERFAULT);
 #else
 	return false;
 #endif
