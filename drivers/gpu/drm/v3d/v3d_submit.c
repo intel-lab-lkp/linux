@@ -486,14 +486,14 @@ v3d_get_cpu_timestamp_query_params(struct drm_file *file_priv,
 	for (i = 0; i < timestamp.count; i++) {
 		u32 offset, sync;
 
-		if (copy_from_user(&offset, offsets++, sizeof(offset))) {
+		if (get_user(offset, offsets++)) {
 			err = -EFAULT;
 			goto error;
 		}
 
 		qinfo->queries[i].offset = offset;
 
-		if (copy_from_user(&sync, syncs++, sizeof(sync))) {
+		if (get_user(sync, syncs++)) {
 			err = -EFAULT;
 			goto error;
 		}
@@ -552,7 +552,7 @@ v3d_get_cpu_reset_timestamp_params(struct drm_file *file_priv,
 
 		qinfo->queries[i].offset = reset.offset + 8 * i;
 
-		if (copy_from_user(&sync, syncs++, sizeof(sync))) {
+		if (get_user(sync, syncs++)) {
 			err = -EFAULT;
 			goto error;
 		}
@@ -614,14 +614,14 @@ v3d_get_cpu_copy_query_results_params(struct drm_file *file_priv,
 	for (i = 0; i < copy.count; i++) {
 		u32 offset, sync;
 
-		if (copy_from_user(&offset, offsets++, sizeof(offset))) {
+		if (get_user(offset, offsets++)) {
 			err = -EFAULT;
 			goto error;
 		}
 
 		qinfo->queries[i].offset = offset;
 
-		if (copy_from_user(&sync, syncs++, sizeof(sync))) {
+		if (get_user(sync, syncs++)) {
 			err = -EFAULT;
 			goto error;
 		}
