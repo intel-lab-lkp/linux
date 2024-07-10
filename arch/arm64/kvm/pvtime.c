@@ -10,7 +10,7 @@
 
 #include <kvm/arm_hypercalls.h>
 
-void kvm_update_stolen_time(struct kvm_vcpu *vcpu)
+int kvm_update_stolen_time(struct kvm_vcpu *vcpu)
 {
 	struct kvm *kvm = vcpu->kvm;
 	u64 base = vcpu->arch.steal.base;
@@ -20,9 +20,14 @@ void kvm_update_stolen_time(struct kvm_vcpu *vcpu)
 	int idx;
 
 	if (base == INVALID_GPA)
-		return;
+		return 1;
 
 	idx = srcu_read_lock(&kvm->srcu);
+	if (gfn_to_hva(kvm, base + offset) == KVM_HVA_ERR_USERFAULT) {
+		kvm_prepare_memory_fault_exit(vcpu, base + offset, PAGE_SIZE,
+					      true, false, false, true);
+		return -EFAULT;
+	}
 	if (!kvm_get_guest(kvm, base + offset, steal)) {
 		steal = le64_to_cpu(steal);
 		vcpu->arch.steal.last_steal = READ_ONCE(current->sched_info.run_delay);
@@ -30,6 +35,8 @@ void kvm_update_stolen_time(struct kvm_vcpu *vcpu)
 		kvm_put_guest(kvm, base + offset, cpu_to_le64(steal));
 	}
 	srcu_read_unlock(&kvm->srcu, idx);
+
+	return 1;
 }
 
 long kvm_hypercall_pv_features(struct kvm_vcpu *vcpu)

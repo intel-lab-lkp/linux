@@ -974,8 +974,12 @@ static int check_vcpu_requests(struct kvm_vcpu *vcpu)
 		 */
 		kvm_check_request(KVM_REQ_IRQ_PENDING, vcpu);
 
-		if (kvm_check_request(KVM_REQ_RECORD_STEAL, vcpu))
-			kvm_update_stolen_time(vcpu);
+		if (kvm_check_request(KVM_REQ_RECORD_STEAL, vcpu)) {
+			int ret = kvm_update_stolen_time(vcpu);
+
+			if (ret <= 0)
+				return ret;
+		}
 
 		if (kvm_check_request(KVM_REQ_RELOAD_GICv4, vcpu)) {
 			/* The distributor enable bits were changed */
