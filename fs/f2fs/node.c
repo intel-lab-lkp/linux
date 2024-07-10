@@ -1514,6 +1514,8 @@ static void flush_inline_data(struct f2fs_sb_info *sbi, nid_t ino)
 {
 	struct inode *inode;
 	struct page *page;
+	loff_t i_size;
+	pgoff_t end_index;
 	int ret;
 
 	/* should flush inline_data before evict_inode */
@@ -1521,7 +1523,9 @@ static void flush_inline_data(struct f2fs_sb_info *sbi, nid_t ino)
 	if (!inode)
 		return;
 
-	page = f2fs_pagecache_get_page(inode->i_mapping, 0,
+	i_size = i_size_read(inode);
+	end_index = i_size >> PAGE_SHIFT;
+	page = f2fs_pagecache_get_page(inode->i_mapping, end_index,
 					FGP_LOCK|FGP_NOWAIT, 0);
 	if (!page)
 		goto iput_out;
