@@ -152,6 +152,7 @@ struct virtio_vsock_pkt_info {
 	u16 op;
 	u32 flags;
 	bool reply;
+	u8 remote_flags;
 };
 
 struct virtio_transport {

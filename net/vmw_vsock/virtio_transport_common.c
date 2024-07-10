@@ -1040,13 +1040,98 @@ int virtio_transport_shutdown(struct vsock_sock *vsk, int mode)
 }
 EXPORT_SYMBOL_GPL(virtio_transport_shutdown);
 
+static int virtio_transport_dgram_send_pkt_info(struct vsock_sock *vsk,
+						struct virtio_vsock_pkt_info *info)
+{
+	u32 src_cid, src_port, dst_cid, dst_port;
+	const struct vsock_transport *transport;
+	const struct virtio_transport *t_ops;
+	struct sock *sk = sk_vsock(vsk);
+	struct virtio_vsock_hdr *hdr;
+	struct sk_buff *skb;
+	void *payload;
+	int noblock = 0;
+	int err;
+
+	info->type = virtio_transport_get_type(sk_vsock(vsk));
+
+	if (info->pkt_len > VIRTIO_VSOCK_MAX_PKT_BUF_SIZE)
+		return -EMSGSIZE;
+
+	transport = vsock_dgram_lookup_transport(info->remote_cid, info->remote_flags);
+	t_ops = container_of(transport, struct virtio_transport, transport);
+	if (unlikely(!t_ops))
+		return -EFAULT;
+
+	if (info->msg)
+		noblock = info->msg->msg_flags & MSG_DONTWAIT;
+
+	/* Use sock_alloc_send_skb to throttle by sk_sndbuf. This helps avoid
+	 * triggering the OOM.
+	 */
+	skb = sock_alloc_send_skb(sk, info->pkt_len + VIRTIO_VSOCK_SKB_HEADROOM,
+				  noblock, &err);
+	if (!skb)
+		return err;
+
+	skb_reserve(skb, VIRTIO_VSOCK_SKB_HEADROOM);
+
+	src_cid = t_ops->transport.get_local_cid();
+	src_port = vsk->local_addr.svm_port;
+	dst_cid = info->remote_cid;
+	dst_port = info->remote_port;
+
+	hdr = virtio_vsock_hdr(skb);
+	hdr->type	= cpu_to_le16(info->type);
+	hdr->op		= cpu_to_le16(info->op);
+	hdr->src_cid	= cpu_to_le64(src_cid);
+	hdr->dst_cid	= cpu_to_le64(dst_cid);
+	hdr->src_port	= cpu_to_le32(src_port);
+	hdr->dst_port	= cpu_to_le32(dst_port);
+	hdr->flags	= cpu_to_le32(info->flags);
+	hdr->len	= cpu_to_le32(info->pkt_len);
+
+	if (info->msg && info->pkt_len > 0) {
+		payload = skb_put(skb, info->pkt_len);
+		err = memcpy_from_msg(payload, info->msg, info->pkt_len);
+		if (err)
+			goto out;
+	}
+
+	trace_virtio_transport_alloc_pkt(src_cid, src_port,
+					 dst_cid, dst_port,
+					 info->pkt_len,
+					 info->type,
+					 info->op,
+					 info->flags,
+					 false);
+
+	return t_ops->send_pkt(skb);
+out:
+	kfree_skb(skb);
+	return err;
+}
+
 int
 virtio_transport_dgram_enqueue(struct vsock_sock *vsk,
 			       struct sockaddr_vm *remote_addr,
 			       struct msghdr *msg,
 			       size_t dgram_len)
 {
-	return -EOPNOTSUPP;
+	/* Here we are only using the info struct to retain style uniformity
+	 * and to ease future refactoring and merging.
+	 */
+	struct virtio_vsock_pkt_info info = {
+		.op = VIRTIO_VSOCK_OP_RW,
+		.remote_cid = remote_addr->svm_cid,
+		.remote_port = remote_addr->svm_port,
+		.remote_flags = remote_addr->svm_flags,
+		.msg = msg,
+		.vsk = vsk,
+		.pkt_len = dgram_len,
+	};
+
+	return virtio_transport_dgram_send_pkt_info(vsk, &info);
 }
 EXPORT_SYMBOL_GPL(virtio_transport_dgram_enqueue);
 

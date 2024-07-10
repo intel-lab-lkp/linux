@@ -216,6 +216,8 @@ void vsock_for_each_connected_socket(struct vsock_transport *transport,
 				     void (*fn)(struct sock *sk));
 int vsock_assign_transport(struct vsock_sock *vsk, struct vsock_sock *psk);
 bool vsock_find_cid(unsigned int cid);
+const struct vsock_transport *vsock_dgram_lookup_transport(unsigned int cid,
+							   __u8 flags);
 
 struct vsock_skb_cb {
 	unsigned int src_cid;
