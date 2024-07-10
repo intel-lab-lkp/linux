@@ -95,13 +95,19 @@ static int ltc4286_probe(struct i2c_client *client)
 				     "Failed to read manufacturer model\n");
 	}
 
-	for (mid = ltc4286_id; mid->name[0]; mid++) {
+	for (mid = ltc4286_id; mid->name[0]; mid++)
+		/*
+		 * Note that by limiting the comparison to strlen(mid->name)
+		 * chars, the device reporting "lTc4286chocolade" is accepted,
+		 * too.
+		 */
 		if (!strncasecmp(mid->name, block_buffer, strlen(mid->name)))
 			break;
-	}
+
 	if (!mid->name[0])
 		return dev_err_probe(&client->dev, -ENODEV,
-				     "Unsupported device\n");
+				     "Unsupported device (reported: \"%*pE\")\n",
+				     ret, block_buffer);
 
 	if (of_property_read_u32(client->dev.of_node,
 				 "shunt-resistor-micro-ohms", &rsense))
