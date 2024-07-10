@@ -589,8 +589,23 @@ static int init_vqs(struct virtio_balloon *vb)
 
 	err = virtio_find_vqs(vb->vdev, VIRTIO_BALLOON_VQ_MAX, vqs,
 			      vqs_info, NULL);
-	if (err)
-		return err;
+	if (err) {
+		/*
+		 * Try to work around QEMU bug which since 2020 confused vq numbers
+		 * when VIRTIO_BALLOON_F_REPORTING but not
+		 * VIRTIO_BALLOON_F_FREE_PAGE_HINT are offered.
+		 */
+		if (virtio_has_feature(vb->vdev, VIRTIO_BALLOON_F_REPORTING) &&
+		    !virtio_has_feature(vb->vdev, VIRTIO_BALLOON_F_FREE_PAGE_HINT)) {
+			vqs_info[VIRTIO_BALLOON_VQ_FREE_PAGE].name = "reporting_vq";
+			vqs_info[VIRTIO_BALLOON_VQ_FREE_PAGE].callback = balloon_ack;
+			err = virtio_find_vqs(vb->vdev,
+					      VIRTIO_BALLOON_VQ_REPORTING, vqs_info, NULL);
+		}
+
+		if (err)
+			return err;
+	}
 
 	vb->inflate_vq = vqs[VIRTIO_BALLOON_VQ_INFLATE];
 	vb->deflate_vq = vqs[VIRTIO_BALLOON_VQ_DEFLATE];
