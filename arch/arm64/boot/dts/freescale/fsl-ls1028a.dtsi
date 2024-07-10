@@ -615,24 +615,33 @@
 			little-endian;
 		};
 
-		usb0: usb@3100000 {
-			compatible = "fsl,ls1028a-dwc3", "snps,dwc3";
-			reg = <0x0 0x3100000 0x0 0x10000>;
-			interrupts = <GIC_SPI 80 IRQ_TYPE_LEVEL_HIGH>;
-			snps,dis_rxdet_inp3_quirk;
-			snps,quirk-frame-length-adjustment = <0x20>;
-			snps,incr-burst-type-adjustment = <1>, <4>, <8>, <16>;
-			status = "disabled";
-		};
+		usb {
+			compatible = "fsl,ls1028a-dwc3";
+			#address-cells = <2>;
+			#size-cells = <2>;
+			ranges;
 
-		usb1: usb@3110000 {
-			compatible = "fsl,ls1028a-dwc3", "snps,dwc3";
-			reg = <0x0 0x3110000 0x0 0x10000>;
-			interrupts = <GIC_SPI 81 IRQ_TYPE_LEVEL_HIGH>;
-			snps,dis_rxdet_inp3_quirk;
-			snps,quirk-frame-length-adjustment = <0x20>;
-			snps,incr-burst-type-adjustment = <1>, <4>, <8>, <16>;
-			status = "disabled";
+			usb0: usb@3100000 {
+				compatible = "snps,dwc3";
+				reg = <0x0 0x3100000 0x0 0x10000>;
+				interrupts = <GIC_SPI 80 IRQ_TYPE_LEVEL_HIGH>;
+				dma-coherent;
+				snps,dis_rxdet_inp3_quirk;
+				snps,quirk-frame-length-adjustment = <0x20>;
+				snps,incr-burst-type-adjustment = <1>, <4>, <8>, <16>;
+				status = "disabled";
+			};
+
+			usb1: usb@3110000 {
+				compatible = "snps,dwc3";
+				reg = <0x0 0x3110000 0x0 0x10000>;
+				interrupts = <GIC_SPI 81 IRQ_TYPE_LEVEL_HIGH>;
+				dma-coherent;
+				snps,dis_rxdet_inp3_quirk;
+				snps,quirk-frame-length-adjustment = <0x20>;
+				snps,incr-burst-type-adjustment = <1>, <4>, <8>, <16>;
+				status = "disabled";
+			};
 		};
 
 		sata: sata@3200000 {
