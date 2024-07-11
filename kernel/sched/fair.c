@@ -12935,6 +12935,14 @@ static void task_change_group_fair(struct task_struct *p)
 #endif
 	set_task_rq(p, task_cpu(p));
 	attach_task_cfs_rq(p);
+
+	if (!cfs_bandwidth_used())
+		return;
+
+	if (task_needs_throttling(p))
+		task_throttle_setup(p);
+	else
+		task_throttle_cancel(p);
 }
 
 void free_fair_sched_group(struct task_group *tg)
