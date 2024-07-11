@@ -719,24 +719,7 @@ static inline bool spi_nor_needs_sfdp(const struct spi_nor *nor)
  */
 static inline bool spi_nor_try_sfdp(const struct spi_nor *nor)
 {
-	if (nor->info->no_sfdp_flags & SPI_NOR_SKIP_SFDP)
-		return false;
-	if (nor->info->no_sfdp_flags & SPI_NOR_TRY_SFDP)
-		return true;
-
-	/* Deprecated/legacy way for triggering optional SFDP parsing.
-	 * If one of the no_sfdp_flags indicating dual, quad or octal read is
-	 * set, SFDP parsing will be tried.
-	 * When all drivers have been converted to set SPI_NOR_TRY_SFDP where
-	 * needed, this deprecated mechanism can be removed.
-	 */
-	if (nor->info->no_sfdp_flags & (SPI_NOR_DUAL_READ |
-					SPI_NOR_QUAD_READ |
-					SPI_NOR_OCTAL_READ |
-					SPI_NOR_OCTAL_DTR_READ))
-		return true;
-
-	return false;
+	return (nor->info->no_sfdp_flags & SPI_NOR_TRY_SFDP)
 }
 
 #ifdef CONFIG_DEBUG_FS
