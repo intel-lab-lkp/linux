@@ -485,9 +485,12 @@ struct spi_nor_id {
  *
  * @no_sfdp_flags:  flags that indicate support that can be discovered via SFDP.
  *                  Used when SFDP tables are not defined in the flash. These
- *                  flags are used together with the SPI_NOR_SKIP_SFDP flag.
+ *                  flags are used together with the SPI_NOR_SKIP_SFDP or
+ *                  SPI_NOR_TRY_SFDP flag.
  *   SPI_NOR_SKIP_SFDP:       skip parsing of SFDP tables.
  *   SECT_4K:                 SPINOR_OP_BE_4K works uniformly.
+ *   SPI_NOR_TRY_SFDP:        try parsing SFDP tables before using the
+ *                            parameters specified in this struct.
  *   SPI_NOR_DUAL_READ:       flash supports Dual Read.
  *   SPI_NOR_QUAD_READ:       flash supports Quad Read.
  *   SPI_NOR_OCTAL_READ:      flash supports Octal Read.
@@ -535,6 +538,7 @@ struct flash_info {
 	u8 no_sfdp_flags;
 #define SPI_NOR_SKIP_SFDP		BIT(0)
 #define SECT_4K				BIT(1)
+#define SPI_NOR_TRY_SFDP		BIT(2)
 #define SPI_NOR_DUAL_READ		BIT(3)
 #define SPI_NOR_QUAD_READ		BIT(4)
 #define SPI_NOR_OCTAL_READ		BIT(5)
@@ -704,6 +708,35 @@ static inline bool spi_nor_needs_sfdp(const struct spi_nor *nor)
 	 * SFDP should be used.
 	 */
 	return !nor->info->size;
+}
+
+/**
+ * spi_nor_try_sfdp() - returns true if optional SFDP parsing should be tried
+ * for this flash, with fallback to static parameters and settings based on
+ * flash ID if SFDP parsing fails.
+ *
+ * Return: true if optional SFDP parsing should be tried
+ */
+static inline bool spi_nor_try_sfdp(const struct spi_nor *nor)
+{
+	if (nor->info->no_sfdp_flags & SPI_NOR_SKIP_SFDP)
+		return false;
+	if (nor->info->no_sfdp_flags & SPI_NOR_TRY_SFDP)
+		return true;
+
+	/* Deprecated/legacy way for triggering optional SFDP parsing.
+	 * If one of the no_sfdp_flags indicating dual, quad or octal read is
+	 * set, SFDP parsing will be tried.
+	 * When all drivers have been converted to set SPI_NOR_TRY_SFDP where
+	 * needed, this deprecated mechanism can be removed.
+	 */
+	if (nor->info->no_sfdp_flags & (SPI_NOR_DUAL_READ |
+					SPI_NOR_QUAD_READ |
+					SPI_NOR_OCTAL_READ |
+					SPI_NOR_OCTAL_DTR_READ))
+		return true;
+
+	return false;
 }
 
 #ifdef CONFIG_DEBUG_FS

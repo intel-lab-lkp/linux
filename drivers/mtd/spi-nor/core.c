@@ -2717,11 +2717,10 @@ static void spi_nor_manufacturer_init_params(struct spi_nor *nor)
 
 /**
  * spi_nor_no_sfdp_init_params() - Initialize the flash's parameters and
- * settings based on nor->info->sfdp_flags. This method should be called only by
- * flashes that do not define SFDP tables. If the flash supports SFDP but the
- * information is wrong and the settings from this function can not be retrieved
- * by parsing SFDP, one should instead use the fixup hooks and update the wrong
- * bits.
+ * settings based on nor->info->sfdp_flags. This method is for flashes that do
+ * not define SFDP tables. If the flash supports SFDP but the information is
+ * wrong and the settings from this function can not be retrieved by parsing
+ * SFDP, one should instead use the fixup hooks and update the wrong bits.
  * @nor:	pointer to a 'struct spi_nor'.
  */
 static void spi_nor_no_sfdp_init_params(struct spi_nor *nor)
@@ -2899,14 +2898,15 @@ static int spi_nor_late_init_params(struct spi_nor *nor)
 }
 
 /**
- * spi_nor_sfdp_init_params_deprecated() - Deprecated way of initializing flash
- * parameters and settings based on JESD216 SFDP standard.
+ * spi_nor_try_sfdp_init_params() - Try to initialize flash parameters and
+ * settings based on JESD216 SFDP standard, with fallback to pre-initialized
+ * flash parameters and settings if SFP parsing fails.
  * @nor:	pointer to a 'struct spi_nor'.
  *
  * The method has a roll-back mechanism: in case the SFDP parsing fails, the
  * legacy flash parameters and settings will be restored.
  */
-static void spi_nor_sfdp_init_params_deprecated(struct spi_nor *nor)
+static void spi_nor_try_sfdp_init_params(struct spi_nor *nor)
 {
 	struct spi_nor_flash_parameter sfdp_params;
 
@@ -2916,28 +2916,6 @@ static void spi_nor_sfdp_init_params_deprecated(struct spi_nor *nor)
 		memcpy(nor->params, &sfdp_params, sizeof(*nor->params));
 		nor->flags &= ~SNOR_F_4B_OPCODES;
 	}
-}
-
-/**
- * spi_nor_init_params_deprecated() - Deprecated way of initializing flash
- * parameters and settings.
- * @nor:	pointer to a 'struct spi_nor'.
- *
- * The method assumes that flash doesn't support SFDP so it initializes flash
- * parameters in spi_nor_no_sfdp_init_params() which later on can be overwritten
- * when parsing SFDP, if supported.
- */
-static void spi_nor_init_params_deprecated(struct spi_nor *nor)
-{
-	spi_nor_no_sfdp_init_params(nor);
-
-	spi_nor_manufacturer_init_params(nor);
-
-	if (nor->info->no_sfdp_flags & (SPI_NOR_DUAL_READ |
-					SPI_NOR_QUAD_READ |
-					SPI_NOR_OCTAL_READ |
-					SPI_NOR_OCTAL_DTR_READ))
-		spi_nor_sfdp_init_params_deprecated(nor);
 }
 
 /**
@@ -3046,13 +3024,16 @@ static int spi_nor_init_params(struct spi_nor *nor)
 	if (spi_nor_needs_sfdp(nor)) {
 		ret = spi_nor_parse_sfdp(nor);
 		if (ret) {
-			dev_err(nor->dev, "BFPT parsing failed. Please consider using SPI_NOR_SKIP_SFDP when declaring the flash\n");
+			dev_err(nor->dev, "BFPT parsing failed. Please consider using SPI_NOR_SKIP_SFDP or SPI_NOR_TRY_SFDP when declaring the flash\n");
 			return ret;
 		}
-	} else if (nor->info->no_sfdp_flags & SPI_NOR_SKIP_SFDP) {
-		spi_nor_no_sfdp_init_params(nor);
 	} else {
-		spi_nor_init_params_deprecated(nor);
+		spi_nor_no_sfdp_init_params(nor);
+		if (!(nor->info->no_sfdp_flags & SPI_NOR_SKIP_SFDP))
+			spi_nor_manufacturer_init_params(nor);
+
+		if (spi_nor_try_sfdp(nor))
+			spi_nor_try_sfdp_init_params(nor);
 	}
 
 	return spi_nor_late_init_params(nor);
