@@ -51,7 +51,7 @@ TC_INDIRECT_SCOPE int tcf_vlan_act(struct sk_buff *skb,
 	case TCA_VLAN_ACT_PUSH:
 		err = skb_vlan_push(skb, p->tcfv_push_proto, p->tcfv_push_vid |
 				    (p->tcfv_push_prio << VLAN_PRIO_SHIFT),
-				    VLAN_HLEN);
+				    0);
 		if (err)
 			goto drop;
 		break;
@@ -94,8 +94,11 @@ TC_INDIRECT_SCOPE int tcf_vlan_act(struct sk_buff *skb,
 	}
 
 out:
-	if (skb_at_tc_ingress(skb))
+	if (skb_at_tc_ingress(skb)) {
 		skb_pull_rcsum(skb, skb->mac_len);
+		skb_reset_network_header(skb);
+		skb_reset_mac_len(skb);
+	}
 
 	return action;
 
