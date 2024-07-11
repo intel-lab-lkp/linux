@@ -983,20 +983,20 @@ bool bvec_try_merge_hw_page(struct request_queue *q, struct bio_vec *bv,
 }
 
 /**
- * bio_add_hw_page - attempt to add a page to a bio with hw constraints
+ * bio_add_hw_folio - attempt to add a folio to a bio with hw constraints
  * @q: the target queue
  * @bio: destination bio
- * @page: page to add
+ * @folio: folio to add
  * @len: vec entry length
- * @offset: vec entry offset
+ * @offset: vec entry offset in the folio
  * @max_sectors: maximum number of sectors that can be added
- * @same_page: return if the segment has been merged inside the same page
+ * @same_page: return if the segment has been merged inside the same folio
  *
- * Add a page to a bio while respecting the hardware max_sectors, max_segment
+ * Add a folio to a bio while respecting the hardware max_sectors, max_segment
  * and gap limitations.
  */
-int bio_add_hw_page(struct request_queue *q, struct bio *bio,
-		struct page *page, unsigned int len, unsigned int offset,
+int bio_add_hw_folio(struct request_queue *q, struct bio *bio,
+		struct folio *folio, size_t len, size_t offset,
 		unsigned int max_sectors, bool *same_page)
 {
 	unsigned int max_size = max_sectors << SECTOR_SHIFT;
@@ -1011,8 +1011,8 @@ int bio_add_hw_page(struct request_queue *q, struct bio *bio,
 	if (bio->bi_vcnt > 0) {
 		struct bio_vec *bv = &bio->bi_io_vec[bio->bi_vcnt - 1];
 
-		if (bvec_try_merge_hw_page(q, bv, page, len, offset,
-				same_page)) {
+		if (bvec_try_merge_hw_folio(q, bv, folio, len, offset,
+					    same_page)) {
 			bio->bi_iter.bi_size += len;
 			return len;
 		}
@@ -1029,10 +1029,32 @@ int bio_add_hw_page(struct request_queue *q, struct bio *bio,
 			return 0;
 	}
 
-	bvec_set_page(&bio->bi_io_vec[bio->bi_vcnt], page, len, offset);
-	bio->bi_vcnt++;
-	bio->bi_iter.bi_size += len;
+	bio_add_folio_nofail(bio, folio, len, offset);
 	return len;
+}
+
+/**
+ * bio_add_hw_page - attempt to add a page to a bio with hw constraints
+ * @q: the target queue
+ * @bio: destination bio
+ * @page: page to add
+ * @len: vec entry length
+ * @offset: vec entry offset
+ * @max_sectors: maximum number of sectors that can be added
+ * @same_page: return if the segment has been merged inside the same page
+ *
+ * Add a page to a bio while respecting the hardware max_sectors, max_segment
+ * and gap limitations.
+ */
+int bio_add_hw_page(struct request_queue *q, struct bio *bio,
+		struct page *page, unsigned int len, unsigned int offset,
+		unsigned int max_sectors, bool *same_page)
+{
+	struct folio *folio = page_folio(page);
+
+	return bio_add_hw_folio(q, bio, folio, len,
+			((size_t)folio_page_idx(folio, page) << PAGE_SHIFT) +
+			offset, max_sectors, same_page);
 }
 
 /**
