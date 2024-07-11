@@ -23,6 +23,7 @@
 #include "thread.h"
 #include "block-info.h"
 #include "ui/progress.h"
+#include "ui/util.h"
 #include <errno.h>
 #include <math.h>
 #include <inttypes.h>
@@ -725,6 +726,7 @@ __hists__add_entry(struct hists *hists,
 		.socket	 = al->socket,
 		.cpu	 = al->cpu,
 		.cpumode = al->cpumode,
+		.off_cpu = sample->off_cpu,
 		.ip	 = al->addr,
 		.level	 = al->level,
 		.code_page_size = sample->code_page_size,
@@ -1076,6 +1078,8 @@ iter_add_single_cumulative_entry(struct hist_entry_iter *iter,
 	callchain_cursor_commit(get_tls_callchain_cursor());
 
 	hists__inc_nr_samples(hists, he->filtered);
+	if (sample->off_cpu)
+		++hists->stats.nr_samples_off_cpu;
 
 	return err;
 }
@@ -1740,6 +1744,7 @@ void hists__reset_stats(struct hists *hists)
 {
 	hists->nr_entries = 0;
 	hists->stats.total_period = 0;
+	hists->stats.total_period_off_cpu = 0;
 
 	hists__reset_filter_stats(hists);
 }
@@ -1757,6 +1762,9 @@ void hists__inc_stats(struct hists *hists, struct hist_entry *h)
 
 	hists->nr_entries++;
 	hists->stats.total_period += h->stat.period;
+
+	if (h->off_cpu)
+		hists->stats.total_period_off_cpu += h->stat.period;
 }
 
 static void hierarchy_recalc_total_periods(struct hists *hists)
@@ -2745,13 +2753,19 @@ int __hists__scnprintf_title(struct hists *hists, char *bf, size_t size, bool sh
 	struct thread *thread = hists->thread_filter;
 	int socket_id = hists->socket_filter;
 	unsigned long nr_samples = hists->stats.nr_samples;
+	unsigned long nr_samples_off_cpu = hists->stats.nr_samples_off_cpu;
 	u64 nr_events = hists->stats.total_period;
+	int nr_events_off_cpu_percentage = (hists->stats.total_period_off_cpu * 100) / nr_events;
 	struct evsel *evsel = hists_to_evsel(hists);
 	const char *ev_name = evsel__name(evsel);
 	char buf[512], sample_freq_str[64] = "";
+	char oncpu_str[128] = "";
+	char offcpu_str[128] = "";
+	char offcpu_percentage_str[128] = "";
 	size_t buflen = sizeof(buf);
 	char ref[30] = " show reference callgraph, ";
 	bool enable_ref = false;
+
 
 	if (symbol_conf.filter_relative) {
 		nr_samples = hists->stats.nr_non_filtered_samples;
@@ -2785,10 +2799,21 @@ int __hists__scnprintf_title(struct hists *hists, char *bf, size_t size, bool sh
 		scnprintf(sample_freq_str, sizeof(sample_freq_str), " %d Hz,", evsel->core.attr.sample_freq);
 
 	nr_samples = convert_unit(nr_samples, &unit);
+
+	scnprintf(oncpu_str, sizeof(oncpu_str), "%lu%c of '%s',",
+		  nr_samples - nr_samples_off_cpu, unit, ev_name);
+
+	if (evsel->core.attr.off_cpu) {
+		scnprintf(offcpu_str, sizeof(offcpu_str), "%lu%c of '%s',",
+			  nr_samples_off_cpu, unit, "offcpu");
+		scnprintf(offcpu_percentage_str, sizeof(offcpu_percentage_str),
+			  "(%d%% offcpu)", nr_events_off_cpu_percentage);
+	}
+
 	printed = scnprintf(bf, size,
-			   "Samples: %lu%c of event%s '%s',%s%sEvent count (approx.): %" PRIu64,
-			   nr_samples, unit, evsel->core.nr_members > 1 ? "s" : "",
-			   ev_name, sample_freq_str, enable_ref ? ref : " ", nr_events);
+			    "Samples: %s %s %s%sEvent count: ~%" PRIu64 " %s",
+			    oncpu_str, offcpu_str, sample_freq_str, enable_ref ? ref : " ",
+			    nr_events, offcpu_percentage_str);
 
 
 	if (hists->uid_filter_str)

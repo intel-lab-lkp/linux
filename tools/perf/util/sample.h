@@ -109,6 +109,7 @@ struct perf_sample {
 		u16 retire_lat;
 	};
 	bool no_hw_idx;		/* No hw_idx collected in branch_stack */
+	bool off_cpu;
 	char insn[MAX_INSN];
 	void *raw_data;
 	struct ip_callchain *callchain;

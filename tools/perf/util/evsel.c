@@ -1155,6 +1155,7 @@ void evsel__config(struct evsel *evsel, struct record_opts *opts,
 	attr->write_backward = opts->overwrite ? 1 : 0;
 	attr->read_format   = PERF_FORMAT_LOST;
 
+	evsel__set_sample_bit(evsel, CPU);
 	evsel__set_sample_bit(evsel, IP);
 	evsel__set_sample_bit(evsel, TID);
 
@@ -2667,6 +2668,7 @@ int evsel__parse_sample(struct evsel *evsel, union perf_event *event,
 			u.val32[0] = bswap_32(u.val32[0]);
 		}
 
+		data->off_cpu = u.val32[1];
 		data->cpu = u.val32[0];
 		array++;
 	}
