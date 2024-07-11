@@ -871,6 +871,8 @@ static void __evsel__config_callchain(struct evsel *evsel, struct record_opts *o
 		attr->exclude_callchain_user = 1;
 	if (opts->user_callchains)
 		attr->exclude_callchain_kernel = 1;
+	if (opts->off_cpu_kernel)
+		attr->off_cpu = 1;
 	if (param->record_mode == CALLCHAIN_LBR) {
 		if (!opts->branch_stack) {
 			if (attr->exclude_user) {

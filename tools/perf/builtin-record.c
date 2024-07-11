@@ -3557,6 +3557,8 @@ static struct option __record_options[] = {
 			    "write collected trace data into several data files using parallel threads",
 			    record__parse_threads),
 	OPT_BOOLEAN(0, "off-cpu", &record.off_cpu, "Enable off-cpu analysis"),
+	OPT_BOOLEAN(0, "off-cpu-kernel", &record.opts.off_cpu_kernel,
+		    "Enable kernel based off-cpu analysis"),
 	OPT_END()
 };
 
