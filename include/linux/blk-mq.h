@@ -278,8 +278,14 @@ enum blk_eh_timer_return {
 	BLK_EH_RESET_TIMER,
 };
 
-#define BLK_TAG_ALLOC_FIFO 0 /* allocate starting from 0 */
-#define BLK_TAG_ALLOC_RR 1 /* allocate starting from last allocated tag */
+/* Keep alloc_policy_name[] in sync with the definitions below */
+enum {
+	/* allocate starting from 0 */
+	BLK_TAG_ALLOC_FIFO	= 0,
+	/* allocate starting from last allocated tag */
+	BLK_TAG_ALLOC_RR,
+	BLK_TAG_ALLOC_MAX
+};
 
 /**
  * struct blk_mq_hw_ctx - State for a hardware queue facing the hardware
