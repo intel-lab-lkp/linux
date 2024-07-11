@@ -7168,10 +7168,8 @@ static void __perf_event_header__init_id(struct perf_sample_data *data,
 	if (sample_type & PERF_SAMPLE_STREAM_ID)
 		data->stream_id = event->id;
 
-	if (sample_type & PERF_SAMPLE_CPU) {
-		data->cpu_entry.cpu	 = raw_smp_processor_id();
-		data->cpu_entry.reserved = 0;
-	}
+	if (sample_type & PERF_SAMPLE_CPU)
+		data->cpu_entry.cpu = raw_smp_processor_id();
 }
 
 void perf_event_header__init_id(struct perf_event_header *header,
@@ -11083,8 +11081,8 @@ static enum hrtimer_restart perf_swevent_hrtimer(struct hrtimer *hrtimer)
 		return HRTIMER_NORESTART;
 
 	event->pmu->read(event);
-
 	perf_sample_data_init(&data, 0, event->hw.last_period);
+	perf_sample_set_on_cpu(&data);
 	regs = get_irq_regs();
 
 	if (regs && !perf_exclude_event(event, regs)) {
@@ -11099,6 +11097,18 @@ static enum hrtimer_restart perf_swevent_hrtimer(struct hrtimer *hrtimer)
 	return ret;
 }
 
+static void perf_swevent_offCPUSample(struct perf_event *event, u64 period)
+{
+	struct perf_sample_data data;
+	struct pt_regs *regs;
+
+	event->pmu->read(event);
+	perf_sample_data_init(&data, 0, period);
+	perf_sample_set_off_cpu(&data);
+	regs = task_pt_regs(current);
+	__perf_event_overflow(event, 1, &data, regs);
+}
+
 static void perf_swevent_start_hrtimer(struct perf_event *event)
 {
 	struct hw_perf_event *hwc = &event->hw;
@@ -11106,6 +11116,11 @@ static void perf_swevent_start_hrtimer(struct perf_event *event)
 
 	if (!is_sampling_event(event))
 		return;
+
+	if (event->attr.off_cpu && event->stop_time && hwc->sample_period) {
+		perf_swevent_offCPUSample(event, perf_clock() - event->stop_time);
+		event->stop_time = 0;
+	}
 
 	period = local64_read(&hwc->period_left);
 	if (period) {
@@ -11128,6 +11143,7 @@ static void perf_swevent_cancel_hrtimer(struct perf_event *event)
 		ktime_t remaining = hrtimer_get_remaining(&hwc->hrtimer);
 		local64_set(&hwc->period_left, ktime_to_ns(remaining));
 
+		event->stop_time = perf_clock();
 		hrtimer_cancel(&hwc->hrtimer);
 	}
 }
@@ -11139,6 +11155,7 @@ static void perf_swevent_init_hrtimer(struct perf_event *event)
 	if (!is_sampling_event(event))
 		return;
 
+	event->stop_time = 0;
 	hrtimer_init(&hwc->hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL_HARD);
 	hwc->hrtimer.function = perf_swevent_hrtimer;
 

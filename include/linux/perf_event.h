@@ -599,6 +599,11 @@ enum perf_event_state {
 	PERF_EVENT_STATE_ACTIVE		=  1,
 };
 
+enum perf_sample_cpu {
+	PERF_SAMPLE_ON_CPU,
+	PERF_SAMPLE_OFF_CPU,
+};
+
 struct file;
 struct perf_sample_data;
 
@@ -828,6 +833,7 @@ struct perf_event {
 	void *security;
 #endif
 	struct list_head		sb_list;
+	u64				stop_time;
 
 	/*
 	 * Certain events gets forwarded to another pmu internally by over-
@@ -1299,6 +1305,16 @@ static inline u32 perf_sample_data_size(struct perf_sample_data *data,
 	size += data->dyn_size;
 
 	return size;
+}
+
+static inline void perf_sample_set_off_cpu(struct perf_sample_data *data)
+{
+	data->cpu_entry.reserved = PERF_SAMPLE_OFF_CPU;
+}
+
+static inline void perf_sample_set_on_cpu(struct perf_sample_data *data)
+{
+	data->cpu_entry.reserved = PERF_SAMPLE_ON_CPU;
 }
 
 /*
