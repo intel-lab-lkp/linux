@@ -452,8 +452,9 @@ static const struct attribute_group hugepage_attr_group = {
 
 static void hugepage_exit_sysfs(struct kobject *hugepage_kobj);
 static void thpsize_release(struct kobject *kobj);
+static void thpsize_child_release(struct kobject *kobj);
 static DEFINE_SPINLOCK(huge_anon_orders_lock);
-static LIST_HEAD(thpsize_list);
+static LIST_HEAD(thpsize_child_list);
 
 static ssize_t thpsize_enabled_show(struct kobject *kobj,
 				    struct kobj_attribute *attr, char *buf)
@@ -537,6 +538,18 @@ static const struct kobj_type thpsize_ktype = {
 	.sysfs_ops = &kobj_sysfs_ops,
 };
 
+static const struct kobj_type thpsize_child_ktype = {
+	.release = &thpsize_child_release,
+	.sysfs_ops = &kobj_sysfs_ops,
+};
+
+struct thpsize_child {
+	struct kobject kobj;
+	struct list_head node;
+};
+
+#define to_thpsize_child(_kobj) container_of(_kobj, struct thpsize, kobj)
+
 DEFINE_PER_CPU(struct mthp_stat, mthp_stats) = {{{0}}};
 
 static unsigned long sum_mthp_stat(int order, enum mthp_stat_item item)
@@ -557,7 +570,7 @@ static unsigned long sum_mthp_stat(int order, enum mthp_stat_item item)
 static ssize_t _name##_show(struct kobject *kobj,			\
 			struct kobj_attribute *attr, char *buf)		\
 {									\
-	int order = to_thpsize(kobj)->order;				\
+	int order = to_thpsize(kobj->parent)->order;			\
 									\
 	return sysfs_emit(buf, "%lu\n", sum_mthp_stat(order, _index));	\
 }									\
@@ -591,41 +604,93 @@ static struct attribute *stats_attrs[] = {
 };
 
 static struct attribute_group stats_attr_group = {
-	.name = "stats",
 	.attrs = stats_attrs,
 };
 
-static struct thpsize *thpsize_create(int order, struct kobject *parent)
+DEFINE_MTHP_STAT_ATTR(file_alloc, MTHP_STAT_FILE_ALLOC);
+DEFINE_MTHP_STAT_ATTR(file_fallback, MTHP_STAT_FILE_FALLBACK);
+DEFINE_MTHP_STAT_ATTR(file_fallback_charge, MTHP_STAT_FILE_FALLBACK_CHARGE);
+
+static struct attribute *file_stats_attrs[] = {
+	&file_alloc_attr.attr,
+	&file_fallback_attr.attr,
+	&file_fallback_charge_attr.attr,
+	NULL,
+};
+
+static struct attribute_group file_stats_attr_group = {
+	.attrs = file_stats_attrs,
+};
+
+static int thpsize_create(int order, struct kobject *parent)
 {
 	unsigned long size = (PAGE_SIZE << order) / SZ_1K;
+	struct thpsize_child *stats;
 	struct thpsize *thpsize;
 	int ret;
 
+	/*
+	 * Each child object (currently only "stats" directory) holds a
+	 * reference to the top-level thpsize object, so we can drop our ref to
+	 * the top-level once stats is setup. Then we just need to drop a
+	 * reference on any children to clean everything up. We can't just use
+	 * the attr group name for the stats subdirectory because there may be
+	 * multiple attribute groups to populate inside stats and overlaying
+	 * using the name property isn't supported in that way; each attr group
+	 * name, if provided, must be unique in the parent directory.
+	 */
+
 	thpsize = kzalloc(sizeof(*thpsize), GFP_KERNEL);
-	if (!thpsize)
-		return ERR_PTR(-ENOMEM);
+	if (!thpsize) {
+		ret = -ENOMEM;
+		goto err;
+	}
+	thpsize->order = order;
 
 	ret = kobject_init_and_add(&thpsize->kobj, &thpsize_ktype, parent,
 				   "hugepages-%lukB", size);
 	if (ret) {
 		kfree(thpsize);
-		return ERR_PTR(ret);
+		goto err;
 	}
 
-	ret = sysfs_create_group(&thpsize->kobj, &thpsize_attr_group);
-	if (ret) {
+	stats = kzalloc(sizeof(*stats), GFP_KERNEL);
+	if (!stats) {
 		kobject_put(&thpsize->kobj);
-		return ERR_PTR(ret);
+		ret = -ENOMEM;
+		goto err;
 	}
 
-	ret = sysfs_create_group(&thpsize->kobj, &stats_attr_group);
+	ret = kobject_init_and_add(&stats->kobj, &thpsize_child_ktype,
+				   &thpsize->kobj, "stats");
+	kobject_put(&thpsize->kobj);
 	if (ret) {
-		kobject_put(&thpsize->kobj);
-		return ERR_PTR(ret);
+		kfree(stats);
+		goto err;
 	}
 
-	thpsize->order = order;
-	return thpsize;
+	if (BIT(order) & THP_ORDERS_ALL_ANON) {
+		ret = sysfs_create_group(&thpsize->kobj, &thpsize_attr_group);
+		if (ret)
+			goto err_put;
+
+		ret = sysfs_create_group(&stats->kobj, &stats_attr_group);
+		if (ret)
+			goto err_put;
+	}
+
+	if (BIT(order) & PAGECACHE_LARGE_ORDERS) {
+		ret = sysfs_create_group(&stats->kobj, &file_stats_attr_group);
+		if (ret)
+			goto err_put;
+	}
+
+	list_add(&stats->node, &thpsize_child_list);
+	return 0;
+err_put:
+	kobject_put(&stats->kobj);
+err:
+	return ret;
 }
 
 static void thpsize_release(struct kobject *kobj)
@@ -633,10 +698,14 @@ static void thpsize_release(struct kobject *kobj)
 	kfree(to_thpsize(kobj));
 }
 
+static void thpsize_child_release(struct kobject *kobj)
+{
+	kfree(to_thpsize_child(kobj));
+}
+
 static int __init hugepage_init_sysfs(struct kobject **hugepage_kobj)
 {
 	int err;
-	struct thpsize *thpsize;
 	unsigned long orders;
 	int order;
 
@@ -665,16 +734,14 @@ static int __init hugepage_init_sysfs(struct kobject **hugepage_kobj)
 		goto remove_hp_group;
 	}
 
-	orders = THP_ORDERS_ALL_ANON;
+	orders = THP_ORDERS_ALL_ANON | PAGECACHE_LARGE_ORDERS;
 	order = highest_order(orders);
 	while (orders) {
-		thpsize = thpsize_create(order, *hugepage_kobj);
-		if (IS_ERR(thpsize)) {
+		err = thpsize_create(order, *hugepage_kobj);
+		if (err) {
 			pr_err("failed to create thpsize for order %d\n", order);
-			err = PTR_ERR(thpsize);
 			goto remove_all;
 		}
-		list_add(&thpsize->node, &thpsize_list);
 		order = next_order(&orders, order);
 	}
 
@@ -692,11 +759,11 @@ delete_obj:
 
 static void __init hugepage_exit_sysfs(struct kobject *hugepage_kobj)
 {
-	struct thpsize *thpsize, *tmp;
+	struct thpsize_child *child, *tmp;
 
-	list_for_each_entry_safe(thpsize, tmp, &thpsize_list, node) {
-		list_del(&thpsize->node);
-		kobject_put(&thpsize->kobj);
+	list_for_each_entry_safe(child, tmp, &thpsize_child_list, node) {
+		list_del(&child->node);
+		kobject_put(&child->kobj);
 	}
 
 	sysfs_remove_group(hugepage_kobj, &khugepaged_attr_group);

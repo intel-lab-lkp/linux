@@ -365,6 +365,7 @@ static inline void mapping_set_gfp_mask(struct address_space *m, gfp_t mask)
  */
 #define MAX_XAS_ORDER		(XA_CHUNK_SHIFT * 2 - 1)
 #define MAX_PAGECACHE_ORDER	min(MAX_XAS_ORDER, PREFERRED_MAX_PAGECACHE_ORDER)
+#define PAGECACHE_LARGE_ORDERS	((BIT(MAX_PAGECACHE_ORDER + 1) - 1) & ~BIT(0))
 
 /**
  * mapping_set_large_folios() - Indicate the file supports large folios.
@@ -562,13 +563,25 @@ static inline void *detach_page_private(struct page *page)
 }
 
 #ifdef CONFIG_NUMA
-struct folio *filemap_alloc_folio_noprof(gfp_t gfp, unsigned int order);
+struct folio *__filemap_alloc_folio_noprof(gfp_t gfp, unsigned int order);
 #else
-static inline struct folio *filemap_alloc_folio_noprof(gfp_t gfp, unsigned int order)
+static inline struct folio *__filemap_alloc_folio_noprof(gfp_t gfp, unsigned int order)
 {
 	return folio_alloc_noprof(gfp, order);
 }
 #endif
+
+static inline struct folio *filemap_alloc_folio_noprof(gfp_t gfp, unsigned int order)
+{
+	struct folio *folio;
+
+	folio = __filemap_alloc_folio_noprof(gfp, order);
+
+	if (!folio)
+		count_mthp_stat(order, MTHP_STAT_FILE_FALLBACK);
+
+	return folio;
+}
 
 #define filemap_alloc_folio(...)				\
 	alloc_hooks(filemap_alloc_folio_noprof(__VA_ARGS__))

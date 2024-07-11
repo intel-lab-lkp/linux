@@ -117,6 +117,9 @@ enum mthp_stat_item {
 	MTHP_STAT_SHMEM_ALLOC,
 	MTHP_STAT_SHMEM_FALLBACK,
 	MTHP_STAT_SHMEM_FALLBACK_CHARGE,
+	MTHP_STAT_FILE_ALLOC,
+	MTHP_STAT_FILE_FALLBACK,
+	MTHP_STAT_FILE_FALLBACK_CHARGE,
 	MTHP_STAT_SPLIT,
 	MTHP_STAT_SPLIT_FAILED,
 	MTHP_STAT_SPLIT_DEFERRED,
@@ -292,11 +295,10 @@ unsigned long thp_vma_allowable_orders(struct vm_area_struct *vma,
 
 struct thpsize {
 	struct kobject kobj;
-	struct list_head node;
 	int order;
 };
 
-#define to_thpsize(kobj) container_of(kobj, struct thpsize, kobj)
+#define to_thpsize(_kobj) container_of(_kobj, struct thpsize, kobj)
 
 #define transparent_hugepage_use_zero_page()				\
 	(transparent_hugepage_flags &					\

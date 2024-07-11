@@ -512,6 +512,19 @@ shmem_fallback_charge
 	falls back to using small pages even though the allocation was
 	successful.
 
+file_alloc
+	is incremented every time a file huge page is successfully
+	allocated.
+
+file_fallback
+	is incremented if a file huge page is attempted to be allocated
+	but fails and instead falls back to using small pages.
+
+file_fallback_charge
+	is incremented if a file huge page cannot be charged and instead
+	falls back to using small pages even though the allocation was
+	successful.
+
 split
 	is incremented every time a huge page is successfully split into
 	smaller orders. This can happen for a variety of reasons but a
