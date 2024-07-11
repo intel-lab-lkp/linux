@@ -3029,8 +3029,7 @@ static int spi_nor_init_params(struct spi_nor *nor)
 		}
 	} else {
 		spi_nor_no_sfdp_init_params(nor);
-		if (!(nor->info->no_sfdp_flags & SPI_NOR_SKIP_SFDP))
-			spi_nor_manufacturer_init_params(nor);
+		spi_nor_manufacturer_init_params(nor);
 
 		if (spi_nor_try_sfdp(nor))
 			spi_nor_try_sfdp_init_params(nor);
