@@ -308,6 +308,17 @@ bool ice_is_e825c(struct ice_hw *hw)
 }
 
 /**
+ * ice_is_e830
+ * @hw: pointer to the hardware structure
+ *
+ * returns true if the device is E830 based, false if not.
+ */
+bool ice_is_e830(const struct ice_hw *hw)
+{
+	return hw->mac_type == ICE_MAC_E830;
+}
+
+/**
  * ice_clear_pf_cfg - Clear PF configuration
  * @hw: pointer to the hardware structure
  *
