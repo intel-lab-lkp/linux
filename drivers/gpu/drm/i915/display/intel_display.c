@@ -8254,7 +8254,8 @@ enum drm_mode_status intel_cpu_transcoder_mode_valid(struct drm_i915_private *de
 enum drm_mode_status
 intel_mode_valid_max_plane_size(struct drm_i915_private *dev_priv,
 				const struct drm_display_mode *mode,
-				bool joiner)
+				bool bigjoiner,
+				bool ultrajoiner)
 {
 	int plane_width_max, plane_height_max;
 
@@ -8271,7 +8272,7 @@ intel_mode_valid_max_plane_size(struct drm_i915_private *dev_priv,
 	 * too big for that.
 	 */
 	if (DISPLAY_VER(dev_priv) >= 11) {
-		plane_width_max = 5120 << joiner;
+		plane_width_max = (5120 << bigjoiner) << ultrajoiner;
 		plane_height_max = 4320;
 	} else {
 		plane_width_max = 5120;
