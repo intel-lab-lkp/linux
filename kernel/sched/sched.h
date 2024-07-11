@@ -690,8 +690,12 @@ struct cfs_rq {
 	u64			throttled_clock_self_time;
 	int			throttled;
 	int			throttle_count;
+	/* Temp storage for updating the counts during unthrottling */
+	unsigned int            unthrottled_h_nr_running;
+	unsigned int            unthrottled_idle_h_nr_running;
 	struct list_head	throttled_list;
 	struct list_head	throttled_csd_list;
+	struct list_head	throttled_limbo_list;
 #endif /* CONFIG_CFS_BANDWIDTH */
 #endif /* CONFIG_FAIR_GROUP_SCHED */
 };

@@ -815,6 +815,7 @@ struct task_struct {
 	struct task_group		*sched_task_group;
 	struct callback_head            sched_throttle_work;
 #ifdef CONFIG_CFS_BANDWIDTH
+	struct list_head                throttle_node;
 	struct irq_work                 unthrottle_irq_work;
 #endif
 #endif
