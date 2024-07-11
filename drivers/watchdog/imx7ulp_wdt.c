@@ -405,7 +405,6 @@ static const struct imx_wdt_hw_feature imx8ulp_wdt_hw = {
 static const struct imx_wdt_hw_feature imx93_wdt_hw = {
 	.prescaler_enable = true,
 	.wdog_clock_rate = 125,
-	.post_rcs_wait = true,
 };
 
 static const struct of_device_id imx7ulp_wdt_dt_ids[] = {
