@@ -110,6 +110,8 @@ static int tpda_get_element_size(struct tpda_drvdata *drvdata,
 		    csdev->pdata->in_conns[i]->dest_port != inport)
 			continue;
 
+		if (csdev->pdata->in_conns[i]->filter_src_dev)
+			in = csdev->pdata->in_conns[i]->filter_src_dev;
 		if (coresight_device_is_tpdm(in)) {
 			if (drvdata->dsb_esize || drvdata->cmb_esize)
 				return -EEXIST;
@@ -123,7 +125,6 @@ static int tpda_get_element_size(struct tpda_drvdata *drvdata,
 				return rc;
 		}
 	}
-
 
 	return rc;
 }
