@@ -485,9 +485,7 @@ struct spi_nor_id {
  *
  * @no_sfdp_flags:  flags that indicate support that can be discovered via SFDP.
  *                  Used when SFDP tables are not defined in the flash. These
- *                  flags are used together with the SPI_NOR_SKIP_SFDP or
- *                  SPI_NOR_TRY_SFDP flag.
- *   SPI_NOR_SKIP_SFDP:       skip parsing of SFDP tables.
+ *                  flags are used together with the SPI_NOR_TRY_SFDP flag.
  *   SECT_4K:                 SPINOR_OP_BE_4K works uniformly.
  *   SPI_NOR_TRY_SFDP:        try parsing SFDP tables before using the
  *                            parameters specified in this struct.
@@ -536,7 +534,6 @@ struct flash_info {
 #define SPI_NOR_RWW			BIT(9)
 
 	u8 no_sfdp_flags;
-#define SPI_NOR_SKIP_SFDP		BIT(0)
 #define SECT_4K				BIT(1)
 #define SPI_NOR_TRY_SFDP		BIT(2)
 #define SPI_NOR_DUAL_READ		BIT(3)
