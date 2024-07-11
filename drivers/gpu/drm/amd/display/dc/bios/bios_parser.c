@@ -1870,7 +1870,7 @@ static enum bp_result get_gpio_i2c_info(struct bios_parser *bp,
 	info->i2c_hw_assist = record->sucI2cId.bfHW_Capable;
 	info->i2c_line = record->sucI2cId.bfI2C_LineMux;
 	info->i2c_engine_id = record->sucI2cId.bfHW_EngineID;
-	info->i2c_slave_address = record->ucI2CAddr;
+	info->i2c_target_address = record->ucI2CAddr;
 
 	info->gpio_info.clk_mask_register_index =
 			le16_to_cpu(header->asGPIO_Info[info->i2c_line].usClkMaskRegisterIndex);

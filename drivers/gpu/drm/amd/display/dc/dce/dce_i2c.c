@@ -28,7 +28,7 @@
 bool dce_i2c_oem_device_present(
 	struct resource_pool *pool,
 	struct ddc_service *ddc,
-	size_t slave_address
+	size_t target_address
 )
 {
 	struct dc *dc = ddc->ctx->dc;
@@ -45,7 +45,7 @@ bool dce_i2c_oem_device_present(
 	if (dcb->funcs->get_i2c_info(dcb, id, &i2c_info) != BP_RESULT_OK)
 		return false;
 
-	if (i2c_info.i2c_slave_address != slave_address)
+	if (i2c_info.i2c_target_address != target_address)
 		return false;
 
 	return true;

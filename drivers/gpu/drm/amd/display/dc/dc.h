@@ -1842,7 +1842,7 @@ int dc_link_aux_transfer_raw(struct ddc_service *ddc,
 
 bool dc_is_oem_i2c_device_present(
 	struct dc *dc,
-	size_t slave_address
+	size_t target_address
 );
 
 /* return true if the connected receiver supports the hdcp version */

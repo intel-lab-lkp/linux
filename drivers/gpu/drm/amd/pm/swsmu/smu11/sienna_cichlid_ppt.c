@@ -2988,8 +2988,8 @@ static void beige_goby_dump_pptable(struct smu_context *smu)
 				pptable->I2cControllers[i].Enabled);
 		dev_info(smu->adev->dev, "                   .Speed = 0x%x\n",
 				pptable->I2cControllers[i].Speed);
-		dev_info(smu->adev->dev, "                   .SlaveAddress = 0x%x\n",
-				pptable->I2cControllers[i].SlaveAddress);
+		dev_info(smu->adev->dev, "                   .TargetAddress = 0x%x\n",
+				pptable->I2cControllers[i].TargetAddress);
 		dev_info(smu->adev->dev, "                   .ControllerPort = 0x%x\n",
 				pptable->I2cControllers[i].ControllerPort);
 		dev_info(smu->adev->dev, "                   .ControllerName = 0x%x\n",
@@ -3627,8 +3627,8 @@ static void sienna_cichlid_dump_pptable(struct smu_context *smu)
 				pptable->I2cControllers[i].Enabled);
 		dev_info(smu->adev->dev, "                   .Speed = 0x%x\n",
 				pptable->I2cControllers[i].Speed);
-		dev_info(smu->adev->dev, "                   .SlaveAddress = 0x%x\n",
-				pptable->I2cControllers[i].SlaveAddress);
+		dev_info(smu->adev->dev, "                   .TargetAddress = 0x%x\n",
+				pptable->I2cControllers[i].TargetAddress);
 		dev_info(smu->adev->dev, "                   .ControllerPort = 0x%x\n",
 				pptable->I2cControllers[i].ControllerPort);
 		dev_info(smu->adev->dev, "                   .ControllerName = 0x%x\n",

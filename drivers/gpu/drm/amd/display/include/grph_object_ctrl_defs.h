@@ -92,7 +92,7 @@ struct graphics_object_i2c_info {
 	bool i2c_hw_assist;
 	uint32_t i2c_line;
 	uint32_t i2c_engine_id;
-	uint32_t i2c_slave_address;
+	uint32_t i2c_target_address;
 };
 
 struct graphics_object_hpd_info {

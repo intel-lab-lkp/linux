@@ -534,7 +534,7 @@ struct atom_firmware_info_v3_2 {
   uint32_t mc_baseaddr_low;
   uint8_t  board_i2c_feature_id;            // enum of atom_board_i2c_feature_id_def
   uint8_t  board_i2c_feature_gpio_id;       // i2c id find in gpio_lut data table gpio_id
-  uint8_t  board_i2c_feature_slave_addr;
+  uint8_t  board_i2c_feature_target_addr;
   uint8_t  reserved3;
   uint16_t bootup_mvddq_mv;
   uint16_t bootup_mvpp_mv;
@@ -562,7 +562,7 @@ struct atom_firmware_info_v3_3
   uint32_t mc_baseaddr_low;
   uint8_t  board_i2c_feature_id;            // enum of atom_board_i2c_feature_id_def
   uint8_t  board_i2c_feature_gpio_id;       // i2c id find in gpio_lut data table gpio_id
-  uint8_t  board_i2c_feature_slave_addr;
+  uint8_t  board_i2c_feature_target_addr;
   uint8_t  reserved3;
   uint16_t bootup_mvddq_mv;
   uint16_t bootup_mvpp_mv;
@@ -590,8 +590,8 @@ struct atom_firmware_info_v3_4 {
 	uint32_t mc_baseaddr_low;
 	uint8_t  board_i2c_feature_id;            // enum of atom_board_i2c_feature_id_def
 	uint8_t  board_i2c_feature_gpio_id;       // i2c id find in gpio_lut data table gpio_id
-	uint8_t  board_i2c_feature_slave_addr;
-	uint8_t  ras_rom_i2c_slave_addr;
+	uint8_t  board_i2c_feature_target_addr;
+	uint8_t  ras_rom_i2c_target_addr;
 	uint16_t bootup_mvddq_mv;
 	uint16_t bootup_mvpp_mv;
 	uint32_t zfbstartaddrin16mb;
@@ -626,8 +626,8 @@ struct atom_firmware_info_v3_5 {
   uint32_t mc_baseaddr_low;
   uint8_t  board_i2c_feature_id;            // enum of atom_board_i2c_feature_id_def
   uint8_t  board_i2c_feature_gpio_id;       // i2c id find in gpio_lut data table gpio_id
-  uint8_t  board_i2c_feature_slave_addr;
-  uint8_t  ras_rom_i2c_slave_addr;
+  uint8_t  board_i2c_feature_target_addr;
+  uint8_t  ras_rom_i2c_target_addr;
   uint32_t bootup_voltage_reserved1;
   uint32_t zfb_reserved;
   // if pplib_pptable_id!=0, pplib get powerplay table inside driver instead of from VBIOS
@@ -830,7 +830,7 @@ struct atom_i2c_record
 {
   struct atom_common_record_header record_header;   //record_type = ATOM_I2C_RECORD_TYPE
   uint8_t i2c_id; 
-  uint8_t i2c_slave_addr;                   //The slave address, it's 0 when the record is attached to connector for DDC
+  uint8_t i2c_target_addr;                   //The target address, it's 0 when the record is attached to connector for DDC
 };
 
 struct atom_hpd_int_record
@@ -2069,7 +2069,7 @@ struct atom_smu_info_v3_5
   uint16_t smuinitoffset;
   uint32_t bootup_dprefclk_10khz;
   uint32_t bootup_usbclk_10khz;
-  uint32_t smb_slave_address;
+  uint32_t smb_target_address;
   uint32_t cg_fdo_ctrl0_val;
   uint32_t cg_fdo_ctrl1_val;
   uint32_t cg_fdo_ctrl2_val;
@@ -2126,7 +2126,7 @@ struct atom_smu_info_v3_6
 	uint16_t smuinitoffset;
 	uint32_t bootup_gfxavsclk_10khz;
 	uint32_t bootup_mpioclk_10khz;
-	uint32_t smb_slave_address;
+	uint32_t smb_target_address;
 	uint32_t cg_fdo_ctrl0_val;
 	uint32_t cg_fdo_ctrl1_val;
 	uint32_t cg_fdo_ctrl2_val;
@@ -2181,7 +2181,7 @@ struct atom_smu_info_v4_0 {
 	uint16_t smuinitoffset;
 	uint32_t bootup_dprefclk_10khz;
 	uint32_t bootup_usbclk_10khz;
-	uint32_t smb_slave_address;
+	uint32_t smb_target_address;
 	uint32_t cg_fdo_ctrl0_val;
 	uint32_t cg_fdo_ctrl1_val;
 	uint32_t cg_fdo_ctrl2_val;
@@ -2392,7 +2392,7 @@ struct atom_smc_dpm_info_v4_3
 
 struct smudpm_i2ccontrollerconfig_t {
   uint32_t  enabled;
-  uint32_t  slaveaddress;
+  uint32_t  targetaddress;
   uint32_t  controllerport;
   uint32_t  controllername;
   uint32_t  thermalthrottler;
@@ -3553,7 +3553,7 @@ struct  atom_i2c_voltage_object_v4
    struct atom_voltage_object_header_v4 header;  // voltage mode = VOLTAGE_OBJ_VR_I2C_INIT_SEQ
    uint8_t  regulator_id;                        //Indicate Voltage Regulator Id
    uint8_t  i2c_id;
-   uint8_t  i2c_slave_addr;
+   uint8_t  i2c_target_addr;
    uint8_t  i2c_control_offset;       
    uint8_t  i2c_flag;                            // Bit0: 0 - One byte data; 1 - Two byte data
    uint8_t  i2c_speed;                           // =0, use default i2c speed, otherwise use it in unit of kHz. 
@@ -4195,7 +4195,7 @@ struct process_i2c_channel_transaction_parameters
   uint16_t  i2c_data_out;
   uint8_t   flag;                    /* enum atom_process_i2c_status */
   uint8_t   trans_bytes;
-  uint8_t   slave_addr;
+  uint8_t   target_addr;
   uint8_t   i2c_id;
 };
 

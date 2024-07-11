@@ -409,7 +409,7 @@ struct radeon_encoder_int_tmds {
 struct radeon_encoder_ext_tmds {
 	/* tmds over dvo */
 	struct radeon_i2c_chan *i2c_bus;
-	uint8_t slave_addr;
+	uint8_t target_addr;
 	enum radeon_dvo_chip dvo_chip;
 };
 
@@ -749,11 +749,11 @@ extern struct radeon_i2c_chan *radeon_i2c_create(struct drm_device *dev,
 						 const char *name);
 extern void radeon_i2c_destroy(struct radeon_i2c_chan *i2c);
 extern void radeon_i2c_get_byte(struct radeon_i2c_chan *i2c_bus,
-				u8 slave_addr,
+				u8 target_addr,
 				u8 addr,
 				u8 *val);
 extern void radeon_i2c_put_byte(struct radeon_i2c_chan *i2c,
-				u8 slave_addr,
+				u8 target_addr,
 				u8 addr,
 				u8 val);
 extern void radeon_router_select_ddc_port(struct radeon_connector *radeon_connector);

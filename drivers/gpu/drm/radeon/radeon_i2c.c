@@ -1038,7 +1038,7 @@ struct radeon_i2c_chan *radeon_i2c_lookup(struct radeon_device *rdev,
 }
 
 void radeon_i2c_get_byte(struct radeon_i2c_chan *i2c_bus,
-			 u8 slave_addr,
+			 u8 target_addr,
 			 u8 addr,
 			 u8 *val)
 {
@@ -1046,13 +1046,13 @@ void radeon_i2c_get_byte(struct radeon_i2c_chan *i2c_bus,
 	u8 in_buf[2];
 	struct i2c_msg msgs[] = {
 		{
-			.addr = slave_addr,
+			.addr = target_addr,
 			.flags = 0,
 			.len = 1,
 			.buf = out_buf,
 		},
 		{
-			.addr = slave_addr,
+			.addr = target_addr,
 			.flags = I2C_M_RD,
 			.len = 1,
 			.buf = in_buf,
@@ -1072,13 +1072,13 @@ void radeon_i2c_get_byte(struct radeon_i2c_chan *i2c_bus,
 }
 
 void radeon_i2c_put_byte(struct radeon_i2c_chan *i2c_bus,
-			 u8 slave_addr,
+			 u8 target_addr,
 			 u8 addr,
 			 u8 val)
 {
 	uint8_t out_buf[2];
 	struct i2c_msg msg = {
-		.addr = slave_addr,
+		.addr = target_addr,
 		.flags = 0,
 		.len = 2,
 		.buf = out_buf,

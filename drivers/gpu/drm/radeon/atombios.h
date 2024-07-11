@@ -1834,7 +1834,7 @@ typedef struct _READ_EDID_FROM_HW_I2C_DATA_PARAMETERS
   USHORT    usVRAMAddress;      //Address in Frame Buffer where to pace raw EDID
   USHORT    usStatus;           //When use output: lower byte EDID checksum, high byte hardware status
                                 //WHen use input:  lower byte as 'byte to read':currently limited to 128byte or 1byte
-  UCHAR     ucSlaveAddr;        //Read from which slave
+  UCHAR     ucTargetAddr;        //Read from which slave
   UCHAR     ucLineNumber;       //Read from which HW assisted line
 }READ_EDID_FROM_HW_I2C_DATA_PARAMETERS;
 #define READ_EDID_FROM_HW_I2C_DATA_PS_ALLOCATION  READ_EDID_FROM_HW_I2C_DATA_PARAMETERS
@@ -1858,7 +1858,7 @@ typedef struct _WRITE_ONE_BYTE_HW_I2C_DATA_PARAMETERS
                                 //blockID+counterID+offsetID
   UCHAR     ucData;             //PS data1
   UCHAR     ucStatus;           //Status byte 1=success, 2=failure, Also is used as PS data2
-  UCHAR     ucSlaveAddr;        //Write to which slave
+  UCHAR     ucTargetAddr;        //Write to which slave
   UCHAR     ucLineNumber;       //Write from which HW assisted line
 }WRITE_ONE_BYTE_HW_I2C_DATA_PARAMETERS;
 
@@ -1867,7 +1867,7 @@ typedef struct _WRITE_ONE_BYTE_HW_I2C_DATA_PARAMETERS
 typedef struct _SET_UP_HW_I2C_DATA_PARAMETERS
 {
   USHORT    usPrescale;         //Ratio between Engine clock and I2C clock
-  UCHAR     ucSlaveAddr;        //Write to which slave
+  UCHAR     ucTargetAddr;        //Write to which slave
   UCHAR     ucLineNumber;       //Write from which HW assisted line
 }SET_UP_HW_I2C_DATA_PARAMETERS;
 
@@ -4741,7 +4741,7 @@ typedef struct _ATOM_POWER_SOURCE_OBJECT
 	UCHAR	ucPwrSrcId;													// Power source
 	UCHAR	ucPwrSensorType;										// GPIO, I2C or none
 	UCHAR	ucPwrSensId;											  // if GPIO detect, it is GPIO id,  if I2C detect, it is I2C id
-	UCHAR	ucPwrSensSlaveAddr;									// Slave address if I2C detect
+	UCHAR	ucPwrSensTargetAddr;									// Target address if I2C detect
 	UCHAR ucPwrSensRegIndex;									// I2C register Index if I2C detect
 	UCHAR ucPwrSensRegBitMask;								// detect which bit is used if I2C detect
 	UCHAR	ucPwrSensActiveState;								// high active or low active
@@ -5449,7 +5449,7 @@ typedef struct _ATOM_I2C_DEVICE_SETUP_INFO
 {
   ATOM_I2C_ID_CONFIG_ACCESS       sucI2cId;               //I2C line and HW/SW assisted cap.
   UCHAR		                        ucSSChipID;             //SS chip being used
-  UCHAR		                        ucSSChipSlaveAddr;      //Slave Address to set up this SS chip
+  UCHAR		                        ucSSChipTargetAddr;      //Target Address to set up this SS chip
   UCHAR                           ucNumOfI2CDataRecords;  //number of data block
   ATOM_I2C_DATA_RECORD            asI2CData[];
 }ATOM_I2C_DEVICE_SETUP_INFO;
@@ -7229,7 +7229,7 @@ typedef struct _PROCESS_I2C_CHANNEL_TRANSACTION_PARAMETERS
 	USHORT  lpI2CDataOut;
   UCHAR   ucFlag;               
   UCHAR   ucTransBytes;
-  UCHAR   ucSlaveAddr;
+  UCHAR   ucTargetAddr;
   UCHAR   ucLineNumber;
 }PROCESS_I2C_CHANNEL_TRANSACTION_PARAMETERS;
 
@@ -7599,8 +7599,8 @@ typedef struct _ATOM_XTMDS_INFO
   UCHAR                      ucSupportedLink;    // Bit field, bit0=1, single link supported;bit1=1,dual link supported
   UCHAR                      ucSequnceAlterID;   // Even with the same external TMDS asic, it's possible that the program seqence alters 
                                                  // due to design. This ID is used to alert driver that the sequence is not "standard"!              
-  UCHAR                      ucMasterAddress;    // Address to control Master xTMDS Chip
-  UCHAR                      ucSlaveAddress;     // Address to control Slave xTMDS Chip
+  UCHAR                      ucControllerAddress;    // Address to control Controller xTMDS Chip
+  UCHAR                      ucTargetAddress;     // Address to control Target xTMDS Chip
 }ATOM_XTMDS_INFO;
 
 typedef struct _DFP_DPMS_STATUS_CHANGE_PARAMETERS

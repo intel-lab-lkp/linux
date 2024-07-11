@@ -1398,7 +1398,7 @@ bool radeon_legacy_get_ext_tmds_info_from_table(struct radeon_encoder *encoder,
 	case CT_MINI_EXTERNAL:
 	default:
 		tmds->dvo_chip = DVO_SIL164;
-		tmds->slave_addr = 0x70 >> 1; /* 7 bit addressing */
+		tmds->target_addr = 0x70 >> 1; /* 7 bit addressing */
 		break;
 	}
 
@@ -1420,14 +1420,14 @@ bool radeon_legacy_get_ext_tmds_info_from_combios(struct radeon_encoder *encoder
 		i2c_bus = combios_setup_i2c_bus(rdev, DDC_MONID, 0, 0);
 		tmds->i2c_bus = radeon_i2c_lookup(rdev, &i2c_bus);
 		tmds->dvo_chip = DVO_SIL164;
-		tmds->slave_addr = 0x70 >> 1; /* 7 bit addressing */
+		tmds->target_addr = 0x70 >> 1; /* 7 bit addressing */
 	} else {
 		offset = combios_get_table_offset(dev, COMBIOS_EXT_TMDS_INFO_TABLE);
 		if (offset) {
 			ver = RBIOS8(offset);
 			DRM_DEBUG_KMS("External TMDS Table revision: %d\n", ver);
-			tmds->slave_addr = RBIOS8(offset + 4 + 2);
-			tmds->slave_addr >>= 1; /* 7 bit addressing */
+			tmds->target_addr = RBIOS8(offset + 4 + 2);
+			tmds->target_addr >>= 1; /* 7 bit addressing */
 			gpio = RBIOS8(offset + 4 + 3);
 			if (gpio == DDC_LCD) {
 				/* MM i2c */
@@ -2846,19 +2846,19 @@ void radeon_external_tmds_setup(struct drm_encoder *encoder)
 	case DVO_SIL164:
 		/* sil 164 */
 		radeon_i2c_put_byte(tmds->i2c_bus,
-				    tmds->slave_addr,
+				    tmds->target_addr,
 				    0x08, 0x30);
 		radeon_i2c_put_byte(tmds->i2c_bus,
-				       tmds->slave_addr,
+				       tmds->target_addr,
 				       0x09, 0x00);
 		radeon_i2c_put_byte(tmds->i2c_bus,
-				    tmds->slave_addr,
+				    tmds->target_addr,
 				    0x0a, 0x90);
 		radeon_i2c_put_byte(tmds->i2c_bus,
-				    tmds->slave_addr,
+				    tmds->target_addr,
 				    0x0c, 0x89);
 		radeon_i2c_put_byte(tmds->i2c_bus,
-				       tmds->slave_addr,
+				       tmds->target_addr,
 				       0x08, 0x3b);
 		break;
 	case DVO_SIL1178:
@@ -2887,7 +2887,7 @@ bool radeon_combios_external_tmds_setup(struct drm_encoder *encoder)
 	struct radeon_device *rdev = dev->dev_private;
 	struct radeon_encoder *radeon_encoder = to_radeon_encoder(encoder);
 	uint16_t offset;
-	uint8_t blocks, slave_addr, rev;
+	uint8_t blocks, target_addr, rev;
 	uint32_t index, id;
 	uint32_t reg, val, and_mask, or_mask;
 	struct radeon_encoder_ext_tmds *tmds = radeon_encoder->enc_priv;
@@ -2934,15 +2934,15 @@ bool radeon_combios_external_tmds_setup(struct drm_encoder *encoder)
 						mdelay(val);
 						break;
 					case 6:
-						slave_addr = id & 0xff;
-						slave_addr >>= 1; /* 7 bit addressing */
+						target_addr = id & 0xff;
+						target_addr >>= 1; /* 7 bit addressing */
 						index++;
 						reg = RBIOS8(index);
 						index++;
 						val = RBIOS8(index);
 						index++;
 						radeon_i2c_put_byte(tmds->i2c_bus,
-								    slave_addr,
+								    target_addr,
 								    reg, val);
 						break;
 					default:
@@ -2997,7 +2997,7 @@ bool radeon_combios_external_tmds_setup(struct drm_encoder *encoder)
 					val = RBIOS8(index);
 					index += 1;
 					radeon_i2c_put_byte(tmds->i2c_bus,
-							    tmds->slave_addr,
+							    tmds->target_addr,
 							    reg, val);
 					break;
 				default:

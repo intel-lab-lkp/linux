@@ -8503,7 +8503,7 @@ typedef struct _PROCESS_I2C_CHANNEL_TRANSACTION_PARAMETERS
    USHORT  lpI2CDataOut;
   UCHAR   ucFlag;
   UCHAR   ucTransBytes;
-  UCHAR   ucSlaveAddr;
+  UCHAR   ucTargetAddr;
   UCHAR   ucLineNumber;
 }PROCESS_I2C_CHANNEL_TRANSACTION_PARAMETERS;
 

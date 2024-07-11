@@ -34,7 +34,7 @@
 #define ATOM_MAX_HW_I2C_READ  255
 
 static int radeon_process_i2c_ch(struct radeon_i2c_chan *chan,
-				 u8 slave_addr, u8 flags,
+				 u8 target_addr, u8 flags,
 				 u8 *buf, int num)
 {
 	struct drm_device *dev = chan->dev;
@@ -75,7 +75,7 @@ static int radeon_process_i2c_ch(struct radeon_i2c_chan *chan,
 	args.ucFlag = flags;
 	args.ucI2CSpeed = TARGET_HW_I2C_CLOCK;
 	args.ucTransBytes = num;
-	args.ucSlaveAddr = slave_addr << 1;
+	args.ucTargetAddr = target_addr << 1;
 	args.ucLineNumber = chan->rec.i2c_id;
 
 	atom_execute_table_scratch_unlocked(rdev->mode_info.atom_context, index, (uint32_t *)&args, sizeof(args));

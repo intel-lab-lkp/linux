@@ -141,13 +141,13 @@ bool dc_link_update_dsc_config(struct pipe_ctx *pipe_ctx)
 
 bool dc_is_oem_i2c_device_present(
 	struct dc *dc,
-	size_t slave_address)
+	size_t target_address)
 {
 	if (dc->res_pool->oem_device)
 		return dce_i2c_oem_device_present(
 			dc->res_pool,
 			dc->res_pool->oem_device,
-			slave_address);
+			target_address);
 
 	return false;
 }

@@ -229,7 +229,7 @@ static uint32_t smu_v11_0_i2c_poll_rx_status(struct i2c_adapter *control)
 
 	reg_c_tx_abrt_source = RREG32_SOC15(SMUIO, 0, mmCKSVII2C_IC_TX_ABRT_SOURCE);
 
-	/* If slave is not present */
+	/* If target is not present */
 	if (REG_GET_FIELD(reg_c_tx_abrt_source,
 			  CKSVII2C_IC_TX_ABRT_SOURCE,
 			  ABRT_7B_ADDR_NOACK) == 1) {
@@ -255,10 +255,10 @@ static uint32_t smu_v11_0_i2c_poll_rx_status(struct i2c_adapter *control)
 }
 
 /**
- * smu_v11_0_i2c_transmit - Send a block of data over the I2C bus to a slave device.
+ * smu_v11_0_i2c_transmit - Send a block of data over the I2C bus to a target device.
  *
  * @control: I2C adapter reference
- * @address: The I2C address of the slave device.
+ * @address: The I2C address of the target device.
  * @data: The data to transmit over the bus.
  * @numbytes: The amount of data to transmit.
  * @i2c_flag: Flags for transmission
@@ -284,7 +284,7 @@ static uint32_t smu_v11_0_i2c_transmit(struct i2c_adapter *control,
 			       16, 1, data, numbytes, false);
 	}
 
-	/* Set the I2C slave address */
+	/* Set the I2C target address */
 	smu_v11_0_i2c_set_address(control, address);
 	/* Enable I2C */
 	smu_v11_0_i2c_enable(control, true);
@@ -354,10 +354,10 @@ Err:
 
 
 /**
- * smu_v11_0_i2c_receive - Receive a block of data over the I2C bus from a slave device.
+ * smu_v11_0_i2c_receive - Receive a block of data over the I2C bus from a target device.
  *
  * @control: I2C adapter reference
- * @address: The I2C address of the slave device.
+ * @address: The I2C address of the target device.
  * @data: Placeholder to store received data.
  * @numbytes: The amount of data to transmit.
  * @i2c_flag: Flags for transmission
@@ -374,7 +374,7 @@ static uint32_t smu_v11_0_i2c_receive(struct i2c_adapter *control,
 
 	bytes_received = 0;
 
-	/* Set the I2C slave address */
+	/* Set the I2C target address */
 	smu_v11_0_i2c_set_address(control, address);
 
 	/* Enable I2C */
@@ -509,7 +509,7 @@ static void smu_v11_0_i2c_init(struct i2c_adapter *control)
 	if (res != I2C_OK)
 		smu_v11_0_i2c_abort(control);
 
-	/* Configure I2C to operate as master and in standard mode */
+	/* Configure I2C to operate as controller and in standard mode */
 	smu_v11_0_i2c_configure(control);
 
 	/* Initialize the clock to 50 kHz default */
@@ -650,11 +650,11 @@ static int smu_v11_0_i2c_xfer(struct i2c_adapter *i2c_adap,
 
 	smu_v11_0_i2c_init(i2c_adap);
 
-	/* From the client's point of view, this sequence of
+	/* From the target's point of view, this sequence of
 	 * messages-- the array i2c_msg *msg, is a single transaction
 	 * on the bus, starting with START and ending with STOP.
 	 *
-	 * The client is welcome to send any sequence of messages in
+	 * The target is welcome to send any sequence of messages in
 	 * this array, as processing under this function here is
 	 * striving to be agnostic.
 	 *

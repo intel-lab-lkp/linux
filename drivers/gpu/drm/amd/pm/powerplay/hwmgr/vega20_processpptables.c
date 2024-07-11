@@ -784,8 +784,8 @@ static int append_vbios_pptable(struct pp_hwmgr *hwmgr, PPTable_t *ppsmc_pptable
 	for (i = 0; i < I2C_CONTROLLER_NAME_COUNT; i++) {
 		ppsmc_pptable->I2cControllers[i].Enabled =
 			smc_dpm_table->i2ccontrollers[i].enabled;
-		ppsmc_pptable->I2cControllers[i].SlaveAddress =
-			smc_dpm_table->i2ccontrollers[i].slaveaddress;
+		ppsmc_pptable->I2cControllers[i].TargetAddress =
+			smc_dpm_table->i2ccontrollers[i].targetaddress;
 		ppsmc_pptable->I2cControllers[i].ControllerPort =
 			smc_dpm_table->i2ccontrollers[i].controllerport;
 		ppsmc_pptable->I2cControllers[i].ThermalThrottler =

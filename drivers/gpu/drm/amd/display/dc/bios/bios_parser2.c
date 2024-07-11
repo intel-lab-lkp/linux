@@ -511,7 +511,7 @@ static enum bp_result get_gpio_i2c_info(
 	info->i2c_hw_assist = (record->i2c_id & I2C_HW_CAP) ? true : false;
 	info->i2c_line = record->i2c_id & I2C_HW_LANE_MUX;
 	info->i2c_engine_id = (record->i2c_id & I2C_HW_ENGINE_ID_MASK) >> 4;
-	info->i2c_slave_address = record->i2c_slave_addr;
+	info->i2c_target_address = record->i2c_target_addr;
 
 	/* TODO: check how to get register offset for en, Y, etc. */
 	info->gpio_info.clk_a_register_index = le16_to_cpu(pin->data_a_reg_index);

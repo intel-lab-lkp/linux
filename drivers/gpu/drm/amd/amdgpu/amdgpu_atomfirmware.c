@@ -630,7 +630,7 @@ bool amdgpu_atomfirmware_ras_rom_addr(struct amdgpu_device *adev,
 		if ((frev == 3 && crev >= 4) || (frev > 3)) {
 			firmware_info = (union firmware_info *)
 				(mode_info->atom_context->bios + data_offset);
-			/* The ras_rom_i2c_slave_addr should ideally
+			/* The ras_rom_i2c_target_addr should ideally
 			 * be a 19-bit EEPROM address, which would be
 			 * used as is by the driver; see top of
 			 * amdgpu_eeprom.c.
@@ -641,13 +641,13 @@ bool amdgpu_atomfirmware_ras_rom_addr(struct amdgpu_device *adev,
 			 * leave the check for the pointer.
 			 *
 			 * The reason this works right now is because
-			 * ras_rom_i2c_slave_addr contains the EEPROM
+			 * ras_rom_i2c_target_addr contains the EEPROM
 			 * device type qualifier 1010b in the top 4
 			 * bits.
 			 */
-			if (firmware_info->v34.ras_rom_i2c_slave_addr) {
+			if (firmware_info->v34.ras_rom_i2c_target_addr) {
 				if (i2c_address)
-					*i2c_address = firmware_info->v34.ras_rom_i2c_slave_addr;
+					*i2c_address = firmware_info->v34.ras_rom_i2c_target_addr;
 				return true;
 			}
 		}

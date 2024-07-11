@@ -287,7 +287,7 @@ typedef enum {
 
 typedef struct {
   uint32_t Enabled;
-  uint32_t SlaveAddress;
+  uint32_t TargetAddress;
   uint32_t ControllerPort;
   uint32_t ControllerName;
 

@@ -167,7 +167,7 @@ typedef enum {
 typedef struct {
   uint8_t   Enabled;
   uint8_t   Speed;
-  uint8_t   SlaveAddress;
+  uint8_t   TargetAddress;
   uint8_t   ControllerPort;
   uint8_t   ThermalThrotter;
   uint8_t   I2cProtocol;

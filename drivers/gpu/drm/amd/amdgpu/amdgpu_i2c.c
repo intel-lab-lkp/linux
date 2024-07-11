@@ -280,7 +280,7 @@ amdgpu_i2c_lookup(struct amdgpu_device *adev,
 }
 
 static int amdgpu_i2c_get_byte(struct amdgpu_i2c_chan *i2c_bus,
-				 u8 slave_addr,
+				 u8 target_addr,
 				 u8 addr,
 				 u8 *val)
 {
@@ -288,13 +288,13 @@ static int amdgpu_i2c_get_byte(struct amdgpu_i2c_chan *i2c_bus,
 	u8 in_buf[2];
 	struct i2c_msg msgs[] = {
 		{
-			.addr = slave_addr,
+			.addr = target_addr,
 			.flags = 0,
 			.len = 1,
 			.buf = out_buf,
 		},
 		{
-			.addr = slave_addr,
+			.addr = target_addr,
 			.flags = I2C_M_RD,
 			.len = 1,
 			.buf = in_buf,
@@ -316,13 +316,13 @@ static int amdgpu_i2c_get_byte(struct amdgpu_i2c_chan *i2c_bus,
 }
 
 static int amdgpu_i2c_put_byte(struct amdgpu_i2c_chan *i2c_bus,
-				 u8 slave_addr,
+				 u8 target_addr,
 				 u8 addr,
 				 u8 val)
 {
 	uint8_t out_buf[2];
 	struct i2c_msg msg = {
-		.addr = slave_addr,
+		.addr = target_addr,
 		.flags = 0,
 		.len = 2,
 		.buf = out_buf,
