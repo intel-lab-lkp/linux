@@ -1018,8 +1018,13 @@ static int ov5675_power_on(struct device *dev)
 
 	gpiod_set_value_cansleep(ov5675->reset_gpio, 0);
 
-	/* 8192 xvclk cycles prior to the first SCCB transation */
-	usleep_range(delay_us, delay_us * 2);
+	/* The spec calls for a minimum delay of 8192 XVCLK cycles prior to
+	 * transacting on the I2C bus, which translates to about 430
+	 * microseconds at 19.2 MHz.
+	 * Testing shows the range 8192 - 16384 cycles to be unreliable.
+	 * Grant a more liberal 2x -3x clock cycle grace time.
+	 */
+	usleep_range(delay_us * 2, delay_us * 3);
 
 	return 0;
 }
