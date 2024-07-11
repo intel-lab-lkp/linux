@@ -46,6 +46,7 @@
 #include <linux/livepatch_sched.h>
 #include <linux/uidgid_types.h>
 #include <asm/kmap_size.h>
+#include <linux/irq_work_types.h>
 
 /* task_struct member predeclarations (sorted alphabetically): */
 struct audit_context;
@@ -813,6 +814,9 @@ struct task_struct {
 #ifdef CONFIG_CGROUP_SCHED
 	struct task_group		*sched_task_group;
 	struct callback_head            sched_throttle_work;
+#ifdef CONFIG_CFS_BANDWIDTH
+	struct irq_work                 unthrottle_irq_work;
+#endif
 #endif
 
 

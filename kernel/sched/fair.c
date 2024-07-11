@@ -5764,11 +5764,17 @@ static void throttle_cfs_rq_work(struct callback_head *work)
 
 }
 
+static void task_throttle_cancel_irq_work_fn(struct irq_work *work)
+{
+       /* Write me */
+}
+
 void init_cfs_throttle_work(struct task_struct *p)
 {
 	/* Protect against double add, see throttle_cfs_rq() and throttle_cfs_rq_work() */
 	p->sched_throttle_work.next = &p->sched_throttle_work;
 	init_task_work(&p->sched_throttle_work, throttle_cfs_rq_work);
+	p->unthrottle_irq_work = IRQ_WORK_INIT_HARD(task_throttle_cancel_irq_work_fn);
 }
 
 static bool throttle_cfs_rq(struct cfs_rq *cfs_rq)
