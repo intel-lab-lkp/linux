@@ -5694,6 +5694,10 @@ static inline int throttled_hierarchy(struct cfs_rq *cfs_rq)
 	return cfs_bandwidth_used() && cfs_rq->throttle_count;
 }
 
+static inline bool task_needs_throttling(struct task_struct *p) { return false; }
+static inline void task_throttle_setup(struct task_struct *p) { }
+static inline void task_throttle_cancel(struct task_struct *p) { }
+
 /*
  * Ensure that neither of the group entities corresponding to src_cpu or
  * dest_cpu are members of a throttled hierarchy when performing group
@@ -6621,6 +6625,10 @@ static inline int throttled_lb_pair(struct task_group *tg,
 {
 	return 0;
 }
+
+static inline bool task_needs_throttling(struct task_struct *p) { return false; }
+static inline void task_throttle_setup(struct task_struct *p) { }
+static inline void task_throttle_cancel(struct task_struct *p) { }
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
 void init_cfs_bandwidth(struct cfs_bandwidth *cfs_b, struct cfs_bandwidth *parent) {}
@@ -12847,11 +12855,15 @@ static void attach_task_cfs_rq(struct task_struct *p)
 static void switched_from_fair(struct rq *rq, struct task_struct *p)
 {
 	detach_task_cfs_rq(p);
+	if (cfs_bandwidth_used())
+		task_throttle_cancel(p);
 }
 
 static void switched_to_fair(struct rq *rq, struct task_struct *p)
 {
 	attach_task_cfs_rq(p);
+	if (cfs_bandwidth_used() && task_needs_throttling(p))
+		task_throttle_setup(p);
 
 	set_task_max_allowed_capacity(p);
 
