@@ -5694,8 +5694,11 @@ static inline int throttled_hierarchy(struct cfs_rq *cfs_rq)
 	return cfs_bandwidth_used() && cfs_rq->throttle_count;
 }
 
+static inline bool task_has_throttle_work(struct task_struct *p) { return false; }
 static inline bool task_needs_throttling(struct task_struct *p) { return false; }
+static inline bool task_needs_migrate_throttling(struct task_struct *p, unsigned int dst_cpu) { return false; }
 static inline void task_throttle_setup(struct task_struct *p) { }
+static inline void task_throttle_cancel_migrate(struct task_struct *p, int dst_cpu) { }
 static inline void task_throttle_cancel(struct task_struct *p) { }
 
 /*
@@ -6626,8 +6629,11 @@ static inline int throttled_lb_pair(struct task_group *tg,
 	return 0;
 }
 
+static inline bool task_has_throttle_work(struct task_struct *p) { return false; }
 static inline bool task_needs_throttling(struct task_struct *p) { return false; }
+static inline bool task_needs_migrate_throttling(struct task_struct *p, unsigned int dst_cpu) { return false; }
 static inline void task_throttle_setup(struct task_struct *p) { }
+static inline void task_throttle_cancel_migrate(struct task_struct *p, int dst_cpu) { }
 static inline void task_throttle_cancel(struct task_struct *p) { }
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
@@ -8308,6 +8314,24 @@ static void migrate_task_rq_fair(struct task_struct *p, int new_cpu)
 	se->avg.last_update_time = 0;
 
 	update_scan_period(p, new_cpu);
+
+	if (!cfs_bandwidth_used())
+		return;
+	/*
+	 * When the runtime within a cfs_bandwidth is depleted, all underlying
+	 * cfs_rq's can have (approximately) sched_cfs_bandwidth_slice() runtime
+	 * remaining.
+	 *
+	 * This means all tg->cfs_rq[]'s do not get throttled at the exact same
+	 * time: some may still have a bit of runtime left. Thus, even if the
+	 * task is staying within the same cgroup, and under the same
+	 * cfs_bandwidth, the cfs_rq it migrates to might have a different
+	 * throttle status - resync is needed.
+	 */
+	if (task_needs_migrate_throttling(p, new_cpu))
+		task_throttle_setup(p);
+	else if (task_has_throttle_work(p))
+		task_throttle_cancel_migrate(p, new_cpu);
 }
 
 static void task_dead_fair(struct task_struct *p)
