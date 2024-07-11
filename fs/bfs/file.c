@@ -45,8 +45,13 @@ static int bfs_move_block(unsigned long from, unsigned long to,
 		ret = -EIO;
 		goto out_err_new;
 	}
+	if (!buffer_uptodate(new)) {
+		ret = -EIO;
+		goto out_err;
+	}
 	memcpy(new->b_data, bh->b_data, bh->b_size);
 	mark_buffer_dirty(new);
+out_err:
 	brelse(new);
 out_err_new:
 	bforget(bh);
