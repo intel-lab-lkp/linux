@@ -497,6 +497,7 @@ struct ov5675 {
 	struct media_pad pad;
 	struct v4l2_ctrl_handler ctrl_handler;
 	struct clk *xvclk;
+	u32 xvclk_rate;
 	struct gpio_desc *reset_gpio;
 	struct regulator_bulk_data supplies[OV5675_NUM_SUPPLIES];
 
@@ -973,10 +974,11 @@ static int ov5675_set_stream(struct v4l2_subdev *sd, int enable)
 static int ov5675_power_off(struct device *dev)
 {
 	/* 512 xvclk cycles after the last SCCB transation or MIPI frame end */
-	u32 delay_us = DIV_ROUND_UP(512, OV5675_XVCLK_19_2 / 1000 / 1000);
 	struct v4l2_subdev *sd = dev_get_drvdata(dev);
 	struct ov5675 *ov5675 = to_ov5675(sd);
+	u32 delay_us;
 
+	delay_us = DIV_ROUND_UP(512, ov5675->xvclk_rate / 1000 / 1000);
 	usleep_range(delay_us, delay_us * 2);
 
 	clk_disable_unprepare(ov5675->xvclk);
@@ -988,10 +990,12 @@ static int ov5675_power_off(struct device *dev)
 
 static int ov5675_power_on(struct device *dev)
 {
-	u32 delay_us = DIV_ROUND_UP(8192, OV5675_XVCLK_19_2 / 1000 / 1000);
 	struct v4l2_subdev *sd = dev_get_drvdata(dev);
 	struct ov5675 *ov5675 = to_ov5675(sd);
+	u32 delay_us;
 	int ret;
+
+	delay_us = DIV_ROUND_UP(8192, ov5675->xvclk_rate / 1000 / 1000);
 
 	ret = clk_prepare_enable(ov5675->xvclk);
 	if (ret < 0) {
@@ -1178,7 +1182,6 @@ static int ov5675_get_hwcfg(struct ov5675 *ov5675, struct device *dev)
 	struct v4l2_fwnode_endpoint bus_cfg = {
 		.bus_type = V4L2_MBUS_CSI2_DPHY
 	};
-	u32 xvclk_rate;
 	int ret;
 	unsigned int i, j;
 
@@ -1192,10 +1195,10 @@ static int ov5675_get_hwcfg(struct ov5675 *ov5675, struct device *dev)
 				     PTR_ERR(ov5675->xvclk));
 
 	if (ov5675->xvclk) {
-		xvclk_rate = clk_get_rate(ov5675->xvclk);
+		ov5675->xvclk_rate = clk_get_rate(ov5675->xvclk);
 	} else {
 		ret = fwnode_property_read_u32(fwnode, "clock-frequency",
-					       &xvclk_rate);
+					       &ov5675->xvclk_rate);
 
 		if (ret) {
 			dev_err(dev, "can't get clock frequency");
@@ -1203,9 +1206,9 @@ static int ov5675_get_hwcfg(struct ov5675 *ov5675, struct device *dev)
 		}
 	}
 
-	if (xvclk_rate != OV5675_XVCLK_19_2) {
+	if (ov5675->xvclk_rate != OV5675_XVCLK_19_2) {
 		dev_err(dev, "external clock rate %u is unsupported",
-			xvclk_rate);
+			ov5675->xvclk_rate);
 		return -EINVAL;
 	}
 
