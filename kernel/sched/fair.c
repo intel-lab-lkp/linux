@@ -5776,6 +5776,17 @@ static void task_throttle_cancel_irq_work_fn(struct irq_work *work)
        /* Write me */
 }
 
+static void task_woken_fair(struct rq *rq, struct task_struct *p)
+{
+	if (!cfs_bandwidth_used())
+		return;
+
+	if (task_needs_throttling(p))
+		task_throttle_setup(p);
+	else
+		task_throttle_cancel(p);
+}
+
 void init_cfs_throttle_work(struct task_struct *p)
 {
 	/* Protect against double add, see throttle_cfs_rq() and throttle_cfs_rq_work() */
@@ -13286,6 +13297,10 @@ DEFINE_SCHED_CLASS(fair) = {
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	.task_change_group	= task_change_group_fair,
+#endif
+
+#ifdef CONFIG_CFS_BANDWIDTH
+	.task_woken             = task_woken_fair,
 #endif
 
 #ifdef CONFIG_SCHED_CORE
