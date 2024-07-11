@@ -931,7 +931,9 @@ static bool bvec_try_merge_page(struct bio_vec *bv, struct page *page,
 	if (!zone_device_pages_have_same_pgmap(bv->bv_page, page))
 		return false;
 
-	*same_page = ((vec_end_addr & PAGE_MASK) == page_addr);
+	if (off < PAGE_SIZE)
+		*same_page = ((vec_end_addr & PAGE_MASK) == page_addr);
+
 	if (!*same_page) {
 		if (IS_ENABLED(CONFIG_KMSAN))
 			return false;
@@ -944,14 +946,15 @@ static bool bvec_try_merge_page(struct bio_vec *bv, struct page *page,
 }
 
 /*
- * Try to merge a page into a segment, while obeying the hardware segment
+ * Try to merge a folio into a segment, while obeying the hardware segment
  * size limit.  This is not for normal read/write bios, but for passthrough
  * or Zone Append operations that we can't split.
  */
-bool bvec_try_merge_hw_page(struct request_queue *q, struct bio_vec *bv,
-		struct page *page, unsigned len, unsigned offset,
+bool bvec_try_merge_hw_folio(struct request_queue *q, struct bio_vec *bv,
+		struct folio *folio, size_t len, size_t offset,
 		bool *same_page)
 {
+	struct page *page = folio_page(folio, 0);
 	unsigned long mask = queue_segment_boundary(q);
 	phys_addr_t addr1 = bvec_phys(bv);
 	phys_addr_t addr2 = page_to_phys(page) + offset + len - 1;
@@ -961,6 +964,22 @@ bool bvec_try_merge_hw_page(struct request_queue *q, struct bio_vec *bv,
 	if (len > queue_max_segment_size(q) - bv->bv_len)
 		return false;
 	return bvec_try_merge_page(bv, page, len, offset, same_page);
+}
+
+/*
+ * Try to merge a page into a segment, while obeying the hardware segment
+ * size limit.  This is not for normal read/write bios, but for passthrough
+ * or Zone Append operations that we can't split.
+ */
+bool bvec_try_merge_hw_page(struct request_queue *q, struct bio_vec *bv,
+		struct page *page, unsigned int len, unsigned int offset,
+		bool *same_page)
+{
+	struct folio *folio = page_folio(page);
+
+	return bvec_try_merge_hw_folio(q, bv, folio, len,
+			((size_t)folio_page_idx(folio, page) << PAGE_SHIFT) +
+			offset, same_page);
 }
 
 /**
