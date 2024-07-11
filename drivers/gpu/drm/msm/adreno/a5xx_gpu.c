@@ -110,7 +110,7 @@ static void a5xx_submit_in_rb(struct msm_gpu *gpu, struct msm_gem_submit *submit
 	}
 
 	a5xx_flush(gpu, ring, true);
-	a5xx_preempt_trigger(gpu);
+	a5xx_preempt_trigger(gpu, true);
 
 	/* we might not necessarily have a cmd from userspace to
 	 * trigger an event to know that submit has completed, so
@@ -240,7 +240,7 @@ static void a5xx_submit(struct msm_gpu *gpu, struct msm_gem_submit *submit)
 	a5xx_flush(gpu, ring, false);
 
 	/* Check to see if we need to start preemption */
-	a5xx_preempt_trigger(gpu);
+	a5xx_preempt_trigger(gpu, true);
 }
 
 static const struct adreno_five_hwcg_regs {
@@ -1296,7 +1296,7 @@ static irqreturn_t a5xx_irq(struct msm_gpu *gpu)
 		a5xx_gpmu_err_irq(gpu);
 
 	if (status & A5XX_RBBM_INT_0_MASK_CP_CACHE_FLUSH_TS) {
-		a5xx_preempt_trigger(gpu);
+		a5xx_preempt_trigger(gpu, false);
 		msm_gpu_retire(gpu);
 	}
 

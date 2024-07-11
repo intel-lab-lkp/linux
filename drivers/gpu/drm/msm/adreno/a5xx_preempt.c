@@ -87,21 +87,33 @@ static void a5xx_preempt_timer(struct timer_list *t)
 }
 
 /* Try to trigger a preemption switch */
-void a5xx_preempt_trigger(struct msm_gpu *gpu)
+void a5xx_preempt_trigger(struct msm_gpu *gpu, bool new_submit)
 {
 	struct adreno_gpu *adreno_gpu = to_adreno_gpu(gpu);
 	struct a5xx_gpu *a5xx_gpu = to_a5xx_gpu(adreno_gpu);
 	unsigned long flags;
 	struct msm_ringbuffer *ring;
+	enum preempt_state state;
 
 	if (gpu->nr_rings == 1)
 		return;
 
 	/*
-	 * Try to start preemption by moving from NONE to START. If
-	 * unsuccessful, a preemption is already in flight
+	 * Try to start preemption by moving from NONE to EVALUATE. If current
+	 * state is EVALUATE/ABORT we can't just quit because then we can't
+	 * guarantee that preempt_trigger will be called after ring is updated
+	 * by new submit.
 	 */
-	if (!try_preempt_state(a5xx_gpu, PREEMPT_NONE, PREEMPT_START))
+	state = atomic_cmpxchg(&a5xx_gpu->preempt_state, PREEMPT_NONE,
+			       PREEMPT_EVALUATE);
+	while (new_submit && (state == PREEMPT_EVALUATE ||
+			      state == PREEMPT_ABORT)) {
+		cpu_relax();
+		state = atomic_cmpxchg(&a5xx_gpu->preempt_state, PREEMPT_NONE,
+				       PREEMPT_EVALUATE);
+	}
+
+	if (state != PREEMPT_NONE)
 		return;
 
 	/* Get the next ring to preempt to */
@@ -129,6 +141,8 @@ void a5xx_preempt_trigger(struct msm_gpu *gpu)
 		set_preempt_state(a5xx_gpu, PREEMPT_NONE);
 		return;
 	}
+
+	set_preempt_state(a5xx_gpu, PREEMPT_START);
 
 	/* Make sure the wptr doesn't update while we're in motion */
 	spin_lock_irqsave(&ring->preempt_lock, flags);
@@ -188,6 +202,8 @@ void a5xx_preempt_irq(struct msm_gpu *gpu)
 	update_wptr(gpu, a5xx_gpu->cur_ring);
 
 	set_preempt_state(a5xx_gpu, PREEMPT_NONE);
+
+	a5xx_preempt_trigger(gpu, false);
 }
 
 void a5xx_preempt_hw_init(struct msm_gpu *gpu)

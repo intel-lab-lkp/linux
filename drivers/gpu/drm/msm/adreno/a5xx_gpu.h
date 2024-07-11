@@ -57,10 +57,12 @@ void a5xx_debugfs_init(struct msm_gpu *gpu, struct drm_minor *minor);
  * through the process.
  *
  * PREEMPT_NONE - no preemption in progress.  Next state START.
- * PREEMPT_START - The trigger is evaulating if preemption is possible. Next
- * states: TRIGGERED, NONE
+ * PREEMPT_EVALUATE - The trigger is evaulating if preemption is possible. Next
+ * states: START, ABORT
  * PREEMPT_ABORT - An intermediate state before moving back to NONE. Next
  * state: NONE.
+ * PREEMPT_START - The trigger is preparing for preemption. Next state:
+ * TRIGGERED
  * PREEMPT_TRIGGERED: A preemption has been executed on the hardware. Next
  * states: FAULTED, PENDING
  * PREEMPT_FAULTED: A preemption timed out (never completed). This will trigger
@@ -71,8 +73,9 @@ void a5xx_debugfs_init(struct msm_gpu *gpu, struct drm_minor *minor);
 
 enum preempt_state {
 	PREEMPT_NONE = 0,
-	PREEMPT_START,
+	PREEMPT_EVALUATE,
 	PREEMPT_ABORT,
+	PREEMPT_START,
 	PREEMPT_TRIGGERED,
 	PREEMPT_FAULTED,
 	PREEMPT_PENDING,
@@ -156,7 +159,7 @@ void a5xx_set_hwcg(struct msm_gpu *gpu, bool state);
 
 void a5xx_preempt_init(struct msm_gpu *gpu);
 void a5xx_preempt_hw_init(struct msm_gpu *gpu);
-void a5xx_preempt_trigger(struct msm_gpu *gpu);
+void a5xx_preempt_trigger(struct msm_gpu *gpu, bool new_submit);
 void a5xx_preempt_irq(struct msm_gpu *gpu);
 void a5xx_preempt_fini(struct msm_gpu *gpu);
 
