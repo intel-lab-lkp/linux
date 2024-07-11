@@ -331,10 +331,10 @@ static struct page *alloc_largest_available(unsigned long size,
 	return NULL;
 }
 
-static struct dma_buf *system_heap_allocate(struct dma_heap *heap,
-					    unsigned long len,
-					    u32 fd_flags,
-					    u64 heap_flags)
+static struct dma_buf *__system_heap_allocate(struct dma_heap *heap,
+					      struct dma_heap_file *heap_file,
+					      unsigned long len, u32 fd_flags,
+					      u64 heap_flags)
 {
 	struct system_heap_buffer *buffer;
 	DEFINE_DMA_BUF_EXPORT_INFO(exp_info);
@@ -346,6 +346,7 @@ static struct dma_buf *system_heap_allocate(struct dma_heap *heap,
 	struct list_head pages;
 	struct page *page, *tmp_page;
 	int i, ret = -ENOMEM;
+	struct dma_heap_file_task *heap_ftask;
 
 	buffer = kzalloc(sizeof(*buffer), GFP_KERNEL);
 	if (!buffer)
@@ -357,6 +358,15 @@ static struct dma_buf *system_heap_allocate(struct dma_heap *heap,
 	buffer->len = len;
 
 	INIT_LIST_HEAD(&pages);
+
+	if (heap_file) {
+		heap_ftask = dma_heap_declare_file_read(heap_file);
+		if (!heap_ftask) {
+			kfree(buffer);
+			return ERR_PTR(-ENOMEM);
+		}
+	}
+
 	i = 0;
 	while (size_remaining > 0) {
 		/*
@@ -372,6 +382,11 @@ static struct dma_buf *system_heap_allocate(struct dma_heap *heap,
 		if (!page)
 			goto free_buffer;
 
+		if (heap_file) {
+			if (dma_heap_prepare_file_read(heap_ftask, page) &&
+			    dma_heap_submit_file_read(heap_ftask))
+				goto free_buffer;
+		}
 		list_add_tail(&page->lru, &pages);
 		size_remaining -= page_size(page);
 		max_order = compound_order(page);
@@ -400,9 +415,18 @@ static struct dma_buf *system_heap_allocate(struct dma_heap *heap,
 		ret = PTR_ERR(dmabuf);
 		goto free_pages;
 	}
+
+	if (heap_file && dma_heap_destroy_file_read(heap_ftask)) {
+		dma_buf_put(dmabuf);
+		dmabuf = ERR_PTR(-EIO);
+	}
+
 	return dmabuf;
 
 free_pages:
+	if (heap_file)
+		dma_heap_wait_for_file_read(heap_ftask);
+
 	for_each_sgtable_sg(table, sg, i) {
 		struct page *p = sg_page(sg);
 
@@ -410,6 +434,9 @@ free_pages:
 	}
 	sg_free_table(table);
 free_buffer:
+	if (heap_file)
+		dma_heap_destroy_file_read(heap_ftask);
+
 	list_for_each_entry_safe(page, tmp_page, &pages, lru)
 		__free_pages(page, compound_order(page));
 	kfree(buffer);
@@ -417,8 +444,26 @@ free_buffer:
 	return ERR_PTR(ret);
 }
 
+static struct dma_buf *system_heap_allocate(struct dma_heap *heap,
+					    unsigned long len, u32 fd_flags,
+					    u64 heap_flags)
+{
+	return __system_heap_allocate(heap, NULL, len, fd_flags, heap_flags);
+}
+
+static struct dma_buf *
+system_heap_allocate_read_file(struct dma_heap *heap,
+			       struct dma_heap_file *heap_file, u32 fd_flags,
+			       u64 heap_flags)
+{
+	return __system_heap_allocate(heap, heap_file,
+				      PAGE_ALIGN(dma_heap_file_size(heap_file)),
+				      fd_flags, heap_flags);
+}
+
 static const struct dma_heap_ops system_heap_ops = {
 	.allocate = system_heap_allocate,
+	.allocate_read_file = system_heap_allocate_read_file,
 };
 
 static int system_heap_create(void)
