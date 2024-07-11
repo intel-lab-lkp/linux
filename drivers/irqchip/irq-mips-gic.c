@@ -98,10 +98,17 @@ static int __gic_with_next_online_cpu(int prev)
  * loop body using read_gic_vo_*() or write_gic_vo_*() accessor functions or
  * their derivatives.
  */
+static inline void gic_unlock_cluster(void)
+{
+	if (mips_cps_multicluster_cpus())
+		mips_cm_unlock_other();
+}
+
 #define for_each_online_cpu_gic(cpu, gic_lock)		\
 	guard(raw_spinlock_irqsave)(gic_lock);		\
 	for ((cpu) = __gic_with_next_online_cpu(-1);	\
 	     (cpu) < nr_cpu_ids;			\
+	     gic_unlock_cluster(),			\
 	     (cpu) = __gic_with_next_online_cpu(cpu))
 
 static void gic_clear_pcpu_masks(unsigned int intr)
