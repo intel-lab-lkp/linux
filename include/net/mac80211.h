@@ -257,6 +257,7 @@ struct ieee80211_chan_req {
  *	after RTS/CTS handshake to receive SMPS MIMO transmissions;
  *	this will always be >= @rx_chains_static.
  * @radar_enabled: whether radar detection is enabled on this channel.
+ * @radar_detected: whether radar got detected on this channel.
  * @drv_priv: data area for driver use, will always be aligned to
  *	sizeof(void *), size is determined in hw information.
  */
@@ -269,6 +270,7 @@ struct ieee80211_chanctx_conf {
 	u8 rx_chains_static, rx_chains_dynamic;
 
 	bool radar_enabled;
+	bool radar_detected;
 
 	u8 drv_priv[] __aligned(sizeof(void *));
 };
@@ -6716,8 +6718,11 @@ void ieee80211_cqm_beacon_loss_notify(struct ieee80211_vif *vif, gfp_t gfp);
  * ieee80211_radar_detected - inform that a radar was detected
  *
  * @hw: pointer as obtained from ieee80211_alloc_hw()
+ * @chanctx_conf: Channel context on which radar is detected. Mandatory to
+ *	pass a valid pointer during MLO. For non-MLO %NULL can be passed
  */
-void ieee80211_radar_detected(struct ieee80211_hw *hw);
+void ieee80211_radar_detected(struct ieee80211_hw *hw,
+			      struct ieee80211_chanctx_conf *chanctx_conf);
 
 /**
  * ieee80211_chswitch_done - Complete channel switch process

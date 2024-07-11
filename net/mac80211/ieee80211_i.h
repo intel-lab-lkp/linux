@@ -1329,6 +1329,11 @@ enum mac80211_scan_state {
 
 DECLARE_STATIC_KEY_FALSE(aql_disable);
 
+struct radar_info {
+	struct list_head list;
+	struct cfg80211_chan_def chandef;
+};
+
 struct ieee80211_local {
 	/* embed the driver visible part.
 	 * don't cast (use the static inlines below), but we keep

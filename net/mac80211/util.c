@@ -3495,34 +3495,87 @@ void ieee80211_dfs_radar_detected_work(struct wiphy *wiphy,
 {
 	struct ieee80211_local *local =
 		container_of(work, struct ieee80211_local, radar_detected_work);
-	struct cfg80211_chan_def chandef = local->hw.conf.chandef;
+	struct radar_info *radar_info, *temp;
+	struct list_head radar_info_list;
 	struct ieee80211_chanctx *ctx;
+	bool trigger_event = true;
 	int num_chanctx = 0;
 
 	lockdep_assert_wiphy(local->hw.wiphy);
+
+	INIT_LIST_HEAD(&radar_info_list);
 
 	list_for_each_entry(ctx, &local->chanctx_list, list) {
 		if (ctx->replace_state == IEEE80211_CHANCTX_REPLACES_OTHER)
 			continue;
 
-		num_chanctx++;
-		chandef = ctx->conf.def;
+		if (ctx->conf.radar_detected) {
+			ctx->conf.radar_detected = false;
+			num_chanctx++;
+
+			radar_info = kzalloc(sizeof(*radar_info), GFP_KERNEL);
+			if (WARN_ON(!radar_info))
+				continue;
+
+			INIT_LIST_HEAD(&radar_info->list);
+			radar_info->chandef = ctx->conf.def;
+			list_add_tail(&radar_info->list, &radar_info_list);
+		}
 	}
 
 	ieee80211_dfs_cac_cancel(local);
 
-	if (num_chanctx > 1)
-		/* XXX: multi-channel is not supported yet */
-		WARN_ON(1);
-	else
-		cfg80211_radar_event(local->hw.wiphy, &chandef, GFP_KERNEL);
+	if (num_chanctx > 1) {
+		/* XXX: multi-channel is not supported yet in case of non-MLO */
+		if (WARN_ON(!(wiphy->flags & WIPHY_FLAG_SUPPORTS_MLO)))
+			trigger_event = false;
+	}
+
+	/* this will clear the nodes which were created and added above.
+	 * trigger_event decides whether to trigger the radar event or not
+	 */
+	list_for_each_entry_safe(radar_info, temp, &radar_info_list,
+				 list) {
+		if (trigger_event)
+			cfg80211_radar_event(local->hw.wiphy,
+					     &radar_info->chandef,
+					     GFP_KERNEL);
+		kfree(radar_info);
+	}
 }
 
-void ieee80211_radar_detected(struct ieee80211_hw *hw)
+static void
+ieee80211_radar_mark_chan_ctx_iterator(struct ieee80211_hw *hw,
+				       struct ieee80211_chanctx_conf *chanctx_conf,
+				       void *data)
+{
+	struct ieee80211_chanctx *ctx =
+		container_of(chanctx_conf, struct ieee80211_chanctx,
+			     conf);
+	struct ieee80211_chanctx_conf *itr_data =
+		(struct ieee80211_chanctx_conf *)data;
+
+	if (ctx->replace_state == IEEE80211_CHANCTX_REPLACES_OTHER)
+		return;
+
+	if (itr_data) {
+		if (itr_data == chanctx_conf)
+			chanctx_conf->radar_detected = true;
+		return;
+	}
+
+	chanctx_conf->radar_detected = true;
+}
+
+void ieee80211_radar_detected(struct ieee80211_hw *hw,
+			      struct ieee80211_chanctx_conf *chanctx_conf)
 {
 	struct ieee80211_local *local = hw_to_local(hw);
 
 	trace_api_radar_detected(local);
+
+	ieee80211_iter_chan_contexts_atomic(hw, ieee80211_radar_mark_chan_ctx_iterator,
+					    chanctx_conf);
 
 	wiphy_work_queue(hw->wiphy, &local->radar_detected_work);
 }
