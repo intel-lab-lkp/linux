@@ -558,6 +558,12 @@ static inline void bio_release_page(struct bio *bio, struct page *page)
 		unpin_user_page(page);
 }
 
+static inline void bio_release_folio(struct bio *bio, struct folio *folio,
+				     unsigned long npages)
+{
+	unpin_user_folio(folio, npages);
+}
+
 struct request_queue *blk_alloc_queue(struct queue_limits *lim, int node_id);
 
 int disk_scan_partitions(struct gendisk *disk, blk_mode_t mode);
