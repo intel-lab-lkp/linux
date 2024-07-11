@@ -3187,7 +3187,7 @@ BPF_CALL_3(bpf_skb_vlan_push, struct sk_buff *, skb, __be16, vlan_proto,
 		vlan_proto = htons(ETH_P_8021Q);
 
 	bpf_push_mac_rcsum(skb);
-	ret = skb_vlan_push(skb, vlan_proto, vlan_tci);
+	ret = skb_vlan_push(skb, vlan_proto, vlan_tci, VLAN_HLEN);
 	bpf_pull_mac_rcsum(skb);
 
 	bpf_compute_data_pointers(skb);

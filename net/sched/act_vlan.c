@@ -50,7 +50,8 @@ TC_INDIRECT_SCOPE int tcf_vlan_act(struct sk_buff *skb,
 		break;
 	case TCA_VLAN_ACT_PUSH:
 		err = skb_vlan_push(skb, p->tcfv_push_proto, p->tcfv_push_vid |
-				    (p->tcfv_push_prio << VLAN_PRIO_SHIFT));
+				    (p->tcfv_push_prio << VLAN_PRIO_SHIFT),
+				    VLAN_HLEN);
 		if (err)
 			goto drop;
 		break;

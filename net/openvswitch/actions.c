@@ -244,7 +244,8 @@ static int push_vlan(struct sk_buff *skb, struct sw_flow_key *key,
 		key->eth.vlan.tpid = vlan->vlan_tpid;
 	}
 	return skb_vlan_push(skb, vlan->vlan_tpid,
-			     ntohs(vlan->vlan_tci) & ~VLAN_CFI_MASK);
+			     ntohs(vlan->vlan_tci) & ~VLAN_CFI_MASK,
+			     VLAN_HLEN);
 }
 
 /* 'src' is already properly masked. */

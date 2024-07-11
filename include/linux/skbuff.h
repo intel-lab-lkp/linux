@@ -4046,7 +4046,7 @@ int skb_ensure_writable(struct sk_buff *skb, unsigned int write_len);
 int skb_ensure_writable_head_tail(struct sk_buff *skb, struct net_device *dev);
 int __skb_vlan_pop(struct sk_buff *skb, u16 *vlan_tci);
 int skb_vlan_pop(struct sk_buff *skb);
-int skb_vlan_push(struct sk_buff *skb, __be16 vlan_proto, u16 vlan_tci);
+int skb_vlan_push(struct sk_buff *skb, __be16 vlan_proto, u16 vlan_tci, u16 hlen);
 int skb_eth_pop(struct sk_buff *skb);
 int skb_eth_push(struct sk_buff *skb, const unsigned char *dst,
 		 const unsigned char *src);
