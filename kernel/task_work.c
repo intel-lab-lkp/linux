@@ -3,6 +3,8 @@
 #include <linux/task_work.h>
 #include <linux/resume_user_mode.h>
 
+#include "sched/task_work_sched.h"
+
 static struct callback_head work_exited; /* all we need is ->next == NULL */
 
 /**
@@ -74,6 +76,32 @@ int task_work_add(struct task_struct *task, struct callback_head *work,
 	return 0;
 }
 
+static struct callback_head *
+task_work_cancel_match_locked(struct task_struct *task,
+		       bool (*match)(struct callback_head *, void *data),
+		       void *data)
+{
+	struct callback_head **pprev = &task->task_works;
+	struct callback_head *work;
+
+	/*
+	 * If cmpxchg() fails we continue without updating pprev.
+	 * Either we raced with task_work_add() which added the
+	 * new entry before this work, we will find it again. Or
+	 * we raced with task_work_run(), *pprev == NULL/exited.
+	 */
+	work = READ_ONCE(*pprev);
+	while (work) {
+		if (!match(work, data)) {
+			pprev = &work->next;
+			work = READ_ONCE(*pprev);
+		} else if (try_cmpxchg(pprev, &work, work->next))
+			break;
+	}
+
+	return work;
+}
+
 /**
  * task_work_cancel_match - cancel a pending work added by task_work_add()
  * @task: the task which should execute the work
@@ -88,27 +116,14 @@ task_work_cancel_match(struct task_struct *task,
 		       bool (*match)(struct callback_head *, void *data),
 		       void *data)
 {
-	struct callback_head **pprev = &task->task_works;
-	struct callback_head *work;
 	unsigned long flags;
+	struct callback_head *work;
 
 	if (likely(!task_work_pending(task)))
 		return NULL;
-	/*
-	 * If cmpxchg() fails we continue without updating pprev.
-	 * Either we raced with task_work_add() which added the
-	 * new entry before this work, we will find it again. Or
-	 * we raced with task_work_run(), *pprev == NULL/exited.
-	 */
+
 	raw_spin_lock_irqsave(&task->pi_lock, flags);
-	work = READ_ONCE(*pprev);
-	while (work) {
-		if (!match(work, data)) {
-			pprev = &work->next;
-			work = READ_ONCE(*pprev);
-		} else if (try_cmpxchg(pprev, &work, work->next))
-			break;
-	}
+	work = task_work_cancel_match_locked(task, match, data);
 	raw_spin_unlock_irqrestore(&task->pi_lock, flags);
 
 	return work;
@@ -134,6 +149,28 @@ struct callback_head *
 task_work_cancel(struct task_struct *task, task_work_func_t func)
 {
 	return task_work_cancel_match(task, task_work_func_match, func);
+}
+
+/**
+ * task_work_cancel - cancel a pending work added by task_work_add()
+ * @task: the task which should execute the work
+ * @func: identifies the work to remove
+ *
+ * Find the last queued pending work with ->func == @func and remove
+ * it from queue.
+ *
+ * RETURNS:
+ * The found work or NULL if not found.
+ */
+struct callback_head *
+task_work_cancel_locked(struct task_struct *task, task_work_func_t func)
+{
+	lockdep_assert_held(&task->pi_lock);
+
+	if (likely(!task_work_pending(task)))
+		return NULL;
+
+	return task_work_cancel_match_locked(task, task_work_func_match, func);
 }
 
 /**
