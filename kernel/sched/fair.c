@@ -5759,6 +5759,18 @@ static int tg_throttle_down(struct task_group *tg, void *data)
 	return 0;
 }
 
+static void throttle_cfs_rq_work(struct callback_head *work)
+{
+
+}
+
+void init_cfs_throttle_work(struct task_struct *p)
+{
+	/* Protect against double add, see throttle_cfs_rq() and throttle_cfs_rq_work() */
+	p->sched_throttle_work.next = &p->sched_throttle_work;
+	init_task_work(&p->sched_throttle_work, throttle_cfs_rq_work);
+}
+
 static bool throttle_cfs_rq(struct cfs_rq *cfs_rq)
 {
 	struct rq *rq = rq_of(cfs_rq);
