@@ -640,6 +640,10 @@ static long vhost_vdpa_new_owner(struct vhost_vdpa *v)
 	struct mm_struct *mm_new = current->mm;
 	long pinned_vm = v->pinned_vm;
 	unsigned long lock_limit = PFN_DOWN(rlimit(RLIMIT_MEMLOCK));
+	u64 features = vhost_vdpa_get_backend_features(v);
+
+	if (!(features & BIT_ULL(VHOST_BACKEND_F_NEW_OWNER)))
+		return -EOPNOTSUPP;
 
 	if (!mm_old)
 		return -EINVAL;
@@ -821,7 +825,8 @@ static long vhost_vdpa_unlocked_ioctl(struct file *filep,
 				 BIT_ULL(VHOST_BACKEND_F_IOTLB_PERSIST) |
 				 BIT_ULL(VHOST_BACKEND_F_SUSPEND) |
 				 BIT_ULL(VHOST_BACKEND_F_RESUME) |
-				 BIT_ULL(VHOST_BACKEND_F_ENABLE_AFTER_DRIVER_OK)))
+				 BIT_ULL(VHOST_BACKEND_F_ENABLE_AFTER_DRIVER_OK) |
+				 BIT_ULL(VHOST_BACKEND_F_NEW_OWNER)))
 			return -EOPNOTSUPP;
 		if ((features & BIT_ULL(VHOST_BACKEND_F_SUSPEND)) &&
 		     !vhost_vdpa_can_suspend(v))
