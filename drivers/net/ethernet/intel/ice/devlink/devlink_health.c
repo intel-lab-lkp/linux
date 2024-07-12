@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /* Copyright (c) 2024, Intel Corporation. */
 
+#include <net/genetlink.h>
 #include "devlink_health.h"
 #include "ice.h"
 #include "ice_ethtool_common.h"
@@ -137,6 +138,188 @@ out:
 }
 
 /**
+ * ice_emit_to_buf - print to @size sized buffer
+ *
+ * @buf: buffer to print into
+ * @at: current pos to write in @buf
+ * @size: total space in @buf (incl. prior to @at)
+ * @fmt: format of the message to print
+ *
+ * Return: position in the @buf for next write, @size at most, to ease out
+ * error handling.
+ */
+static __printf(4, 5)
+int ice_emit_to_buf(char *buf, int size, int at, const char *fmt, ...)
+{
+	va_list args;
+	int len;
+
+	va_start(args, fmt);
+	len = vscnprintf(buf + at, size - at, fmt, args);
+	va_end(args);
+
+	return min(at + len, size);
+}
+
+/**
+ * ice_emit_hex_to_buf - copy of print_hex_dump() from lib/hexdump.c modified to
+ * dump into buffer
+ *
+ * @out: buffer to print to
+ * @out_size: total size of @out
+ * @out_pos: position in @out to write at
+ * @prefix: string to prefix each line with;
+ *  caller supplies trailing spaces for alignment if desired
+ * @buf: data blob to dump
+ * @buf_len: number of bytes in the @buf
+ *
+ * Return: position in the buf for next write, buf_len at most, to ease out
+ * error handling.
+ */
+static int ice_emit_hex_to_buf(char *out, int out_size, int out_pos,
+			       const char *prefix, const void *buf,
+			       size_t buf_len)
+{
+	unsigned char linebuf[32 * 3 + 2 + 32 + 1];
+	const int rowsize = 16, groupsize = 1;
+	int i, linelen, remaining = buf_len;
+	const u8 *ptr = buf;
+
+	for (i = 0; i < buf_len; i += rowsize) {
+		linelen = min(remaining, rowsize);
+		remaining -= rowsize;
+
+		hex_dump_to_buffer(ptr + i, linelen, rowsize, groupsize,
+				   linebuf, sizeof(linebuf), false);
+		out_pos = ice_emit_to_buf(out, out_size, out_pos,
+					  "%s%.8x: %s\n", prefix, i, linebuf);
+
+		if (out_pos == out_size)
+			break;
+	}
+
+	return out_pos;
+}
+
+/**
+ * ice_skb_dump_buf - Dump skb information and contents.
+ *
+ * copy of skb_dump() from net/core/skbuff.c, modified to dump into buffer
+ *
+ * @skb: skb to dump
+ * @buf: buffer to dump into
+ * @buf_size: size of @buf
+ * @buf_pos: current position to write in @buf
+ *
+ * Return: position in the buf for next write.
+ */
+static int ice_skb_dump_buf(char *buf, int buf_size, int buf_pos,
+			    const struct sk_buff *skb)
+{
+	struct skb_shared_info *sh = skb_shinfo(skb);
+	struct net_device *dev = skb->dev;
+	const bool toplvl = !buf_pos;
+	struct sock *sk = skb->sk;
+	struct sk_buff *list_skb;
+	bool has_mac, has_trans;
+	int headroom, tailroom;
+	int i, len, seg_len;
+
+	len = skb->len;
+
+	headroom = skb_headroom(skb);
+	tailroom = skb_tailroom(skb);
+
+	has_mac = skb_mac_header_was_set(skb);
+	has_trans = skb_transport_header_was_set(skb);
+
+	buf_pos = ice_emit_to_buf(buf, buf_size, buf_pos,
+		"skb len=%u headroom=%u headlen=%u tailroom=%u\n"
+		"mac=(%d,%d) net=(%d,%d) trans=%d\n"
+		"shinfo(txflags=%u nr_frags=%u gso(size=%hu type=%u segs=%hu))\n"
+		"csum(0x%x ip_summed=%u complete_sw=%u valid=%u level=%u)\n"
+		"hash(0x%x sw=%u l4=%u) proto=0x%04x pkttype=%u iif=%d\n",
+		skb->len, headroom, skb_headlen(skb), tailroom,
+		has_mac ? skb->mac_header : -1,
+		has_mac ? skb_mac_header_len(skb) : -1,
+		skb->network_header,
+		has_trans ? skb_network_header_len(skb) : -1,
+		has_trans ? skb->transport_header : -1,
+		sh->tx_flags, sh->nr_frags,
+		sh->gso_size, sh->gso_type, sh->gso_segs,
+		skb->csum, skb->ip_summed, skb->csum_complete_sw,
+		skb->csum_valid, skb->csum_level,
+		skb->hash, skb->sw_hash, skb->l4_hash,
+		ntohs(skb->protocol), skb->pkt_type, skb->skb_iif);
+
+	if (dev)
+		buf_pos = ice_emit_to_buf(buf, buf_size, buf_pos,
+					  "dev name=%s feat=%pNF\n", dev->name,
+					  &dev->features);
+	if (sk)
+		buf_pos = ice_emit_to_buf(buf, buf_size, buf_pos,
+					  "sk family=%hu type=%u proto=%u\n",
+					  sk->sk_family, sk->sk_type,
+					  sk->sk_protocol);
+
+	if (headroom)
+		buf_pos = ice_emit_hex_to_buf(buf, buf_size, buf_pos,
+					      "skb headroom: ", skb->head,
+					      headroom);
+
+	seg_len = min_t(int, skb_headlen(skb), len);
+	if (seg_len)
+		buf_pos = ice_emit_hex_to_buf(buf, buf_size, buf_pos,
+					      "skb linear:   ", skb->data,
+					      seg_len);
+	len -= seg_len;
+
+	if (tailroom)
+		buf_pos = ice_emit_hex_to_buf(buf, buf_size, buf_pos,
+					      "skb tailroom: ",
+					      skb_tail_pointer(skb), tailroom);
+
+	for (i = 0; len && i < skb_shinfo(skb)->nr_frags; i++) {
+		skb_frag_t *frag = &skb_shinfo(skb)->frags[i];
+		u32 p_off, p_len, copied;
+		struct page *p;
+		u8 *vaddr;
+
+		skb_frag_foreach_page(frag, skb_frag_off(frag),
+				      skb_frag_size(frag), p, p_off, p_len,
+				      copied) {
+			seg_len = min_t(int, p_len, len);
+			vaddr = kmap_local_page(p);
+			buf_pos = ice_emit_hex_to_buf(buf, buf_size, buf_pos,
+						      "skb frag:     ",
+						      vaddr + p_off, seg_len);
+			kunmap_local(vaddr);
+			len -= seg_len;
+
+			if (!len || buf_pos == buf_size)
+				break;
+		}
+	}
+
+	if (skb_has_frag_list(skb)) {
+		buf_pos = ice_emit_to_buf(buf, buf_size, buf_pos,
+					  "skb fraglist:\n");
+		skb_walk_frags(skb, list_skb) {
+			buf_pos = ice_skb_dump_buf(buf, buf_size, buf_pos,
+						   list_skb);
+
+			if (buf_pos == buf_size)
+				break;
+		}
+	}
+
+	if (toplvl)
+		buf_pos = ice_emit_to_buf(buf, buf_size, buf_pos, ".");
+
+	return buf_pos;
+}
+
+/**
  * ice_fmsg_put_ptr - put hex value of pointer into fmsg
  *
  * @fmsg: devlink fmsg under construction
@@ -167,6 +350,10 @@ static int ice_tx_hang_reporter_dump(struct devlink_health_reporter *reporter,
 				     struct netlink_ext_ack *extack)
 {
 	struct ice_tx_hang_event *event = priv_ctx;
+	char *skb_txt = NULL;
+	struct sk_buff *skb;
+
+	skb = event->tx_ring->tx_buf->skb;
 
 	devlink_fmsg_obj_nest_start(fmsg);
 	ICE_DEVLINK_FMSG_PUT_FIELD(fmsg, event, head);
@@ -178,8 +365,18 @@ static int ice_tx_hang_reporter_dump(struct devlink_health_reporter *reporter,
 	devlink_fmsg_put(fmsg, "irq-mapping", event->tx_ring->q_vector->name);
 	ice_fmsg_put_ptr(fmsg, "desc-ptr", event->tx_ring->desc);
 	ice_fmsg_put_ptr(fmsg, "dma-ptr", (void *)(long)event->tx_ring->dma);
+	ice_fmsg_put_ptr(fmsg, "skb-ptr", skb);
 	devlink_fmsg_binary_pair_put(fmsg, "desc", event->tx_ring->desc,
 				     (event->tx_ring->count * sizeof(struct ice_tx_desc)));
+	if (skb)
+		skb_txt = kvmalloc(GENLMSG_DEFAULT_SIZE, GFP_KERNEL);
+
+	if (skb_txt) {
+		ice_skb_dump_buf(skb_txt, GENLMSG_DEFAULT_SIZE, 0, skb);
+		devlink_fmsg_put(fmsg, "skb", skb_txt);
+		kvfree(skb_txt);
+	}
+
 	ice_dump_ethtool_stats_to_fmsg(fmsg, event->tx_ring->vsi->netdev);
 	devlink_fmsg_obj_nest_end(fmsg);
 
