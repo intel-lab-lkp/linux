@@ -85,6 +85,7 @@
 #include <asm/emulate_prefix.h>
 #include <asm/sgx.h>
 #include <clocksource/hyperv_timer.h>
+#include <asm/asi.h>
 
 #define CREATE_TRACE_POINTS
 #include "trace.h"
@@ -317,6 +318,8 @@ const struct kvm_stats_header kvm_vcpu_stats_header = {
 u64 __read_mostly host_xcr0;
 
 static struct kmem_cache *x86_emulator_cache;
+
+static int __read_mostly kvm_asi_index = -1;
 
 /*
  * When called, it means the previous get/set msr reached an invalid msr.
@@ -9750,6 +9753,11 @@ int kvm_x86_vendor_init(struct kvm_x86_init_ops *ops)
 	if (r)
 		goto out_free_percpu;
 
+	r = asi_register_class("KVM", NULL);
+	if (r < 0)
+		goto out_mmu_exit;
+	kvm_asi_index = r;
+
 	if (boot_cpu_has(X86_FEATURE_XSAVE)) {
 		host_xcr0 = xgetbv(XCR_XFEATURE_ENABLED_MASK);
 		kvm_caps.supported_xcr0 = host_xcr0 & KVM_SUPPORTED_XCR0;
@@ -9767,7 +9775,7 @@ int kvm_x86_vendor_init(struct kvm_x86_init_ops *ops)
 
 	r = ops->hardware_setup();
 	if (r != 0)
-		goto out_mmu_exit;
+		goto out_asi_unregister;
 
 	kvm_ops_update(ops);
 
@@ -9820,6 +9828,8 @@ int kvm_x86_vendor_init(struct kvm_x86_init_ops *ops)
 out_unwind_ops:
 	kvm_x86_ops.hardware_enable = NULL;
 	static_call(kvm_x86_hardware_unsetup)();
+out_asi_unregister:
+	asi_unregister_class(kvm_asi_index);
 out_mmu_exit:
 	kvm_mmu_vendor_module_exit();
 out_free_percpu:
@@ -9851,6 +9861,7 @@ void kvm_x86_vendor_exit(void)
 	cancel_work_sync(&pvclock_gtod_work);
 #endif
 	static_call(kvm_x86_hardware_unsetup)();
+	asi_unregister_class(kvm_asi_index);
 	kvm_mmu_vendor_module_exit();
 	free_percpu(user_return_msrs);
 	kmem_cache_destroy(x86_emulator_cache);
@@ -11436,6 +11447,13 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu)
 
 	r = vcpu_run(vcpu);
 
+	/*
+	 * At present ASI doesn't have the capability to transition directly
+	 * from the restricted address space to the user address space. So we
+	 * just return to the unrestricted address space in between.
+	 */
+	asi_exit();
+
 out:
 	kvm_put_guest_fpu(vcpu);
 	if (kvm_run->kvm_valid_regs)
@@ -12539,9 +12557,13 @@ int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 
 	kvm_mmu_init_vm(kvm);
 
-	ret = static_call(kvm_x86_vm_init)(kvm);
+	ret = asi_init(kvm->mm, kvm_asi_index, &kvm->arch.asi);
 	if (ret)
 		goto out_uninit_mmu;
+
+	ret = static_call(kvm_x86_vm_init)(kvm);
+	if (ret)
+		goto out_asi_destroy;
 
 	INIT_HLIST_HEAD(&kvm->arch.mask_notifier_list);
 	atomic_set(&kvm->arch.noncoherent_dma_count, 0);
@@ -12579,6 +12601,8 @@ int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 
 	return 0;
 
+out_asi_destroy:
+	asi_destroy(kvm->arch.asi);
 out_uninit_mmu:
 	kvm_mmu_uninit_vm(kvm);
 	kvm_page_track_cleanup(kvm);
@@ -12720,6 +12744,7 @@ void kvm_arch_destroy_vm(struct kvm *kvm)
 	kvm_destroy_vcpus(kvm);
 	kvfree(rcu_dereference_check(kvm->arch.apic_map, 1));
 	kfree(srcu_dereference_check(kvm->arch.pmu_event_filter, &kvm->srcu, 1));
+	asi_destroy(kvm->arch.asi);
 	kvm_mmu_uninit_vm(kvm);
 	kvm_page_track_cleanup(kvm);
 	kvm_xen_destroy_vm(kvm);

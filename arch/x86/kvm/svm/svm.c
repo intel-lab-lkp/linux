@@ -4108,6 +4108,7 @@ static noinstr void svm_vcpu_enter_exit(struct kvm_vcpu *vcpu, bool spec_ctrl_in
 	guest_state_enter_irqoff();
 
 	amd_clear_divider();
+	asi_enter(vcpu->kvm->arch.asi);
 
 	if (sev_es_guest(vcpu->kvm))
 		__svm_sev_es_vcpu_run(svm, spec_ctrl_intercepted,
@@ -4115,6 +4116,7 @@ static noinstr void svm_vcpu_enter_exit(struct kvm_vcpu *vcpu, bool spec_ctrl_in
 	else
 		__svm_vcpu_run(svm, spec_ctrl_intercepted);
 
+	asi_relax();
 	guest_state_exit_irqoff();
 }
 
