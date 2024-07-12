@@ -69,7 +69,14 @@
 #define static_asi_enabled() cpu_feature_enabled(X86_FEATURE_ASI)
 
 #define ASI_MAX_NUM_ORDER	2
-#define ASI_MAX_NUM		(1 << ASI_MAX_NUM_ORDER)
+/*
+ * We include an ASI identifier in the higher bits of PCID to use
+ * different PCID for restricted ASIs from non-restricted ASIs (see asi_pcid).
+ * The ASI identifier we use for this is asi_index + 1, as asi_index
+ * starts from 0. The -1 below for ASI_MAX_NUM comes from this PCID
+ * space availability.
+ */
+#define ASI_MAX_NUM		((1 << ASI_MAX_NUM_ORDER) - 1)
 
 struct asi_hooks {
 	/*
@@ -101,6 +108,7 @@ struct asi {
 	struct asi_class *class;
 	struct mm_struct *mm;
 	int64_t ref_count;
+	u16 index;
 };
 
 DECLARE_PER_CPU_ALIGNED(struct asi *, curr_asi);

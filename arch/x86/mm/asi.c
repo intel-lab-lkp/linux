@@ -140,6 +140,7 @@ int asi_init(struct mm_struct *mm, int asi_index, struct asi **out_asi)
 
 	asi->class = &asi_class[asi_index];
 	asi->mm = mm;
+	asi->index = asi_index;
 
 exit_unlock:
 	if (err)
@@ -174,6 +175,7 @@ EXPORT_SYMBOL_GPL(asi_destroy);
 noinstr void __asi_enter(void)
 {
 	u64 asi_cr3;
+	u16 pcid;
 	struct asi *target = asi_get_target(current);
 
 	/*
@@ -200,9 +202,8 @@ noinstr void __asi_enter(void)
 	 */
 	this_cpu_write(curr_asi, target);
 
-	asi_cr3 = build_cr3(target->pgd,
-			    this_cpu_read(cpu_tlbstate.loaded_mm_asid),
-			    tlbstate_lam_cr3_mask());
+	pcid = asi_pcid(target, this_cpu_read(cpu_tlbstate.loaded_mm_asid));
+	asi_cr3 = build_cr3_pcid(target->pgd, pcid, tlbstate_lam_cr3_mask(), false);
 	write_cr3(asi_cr3);
 
 	if (target->class->ops.post_asi_enter)
