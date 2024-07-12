@@ -1670,10 +1670,10 @@ vm_fault_t do_huge_pmd_numa_page(struct vm_fault *vmf)
 	pmd_t pmd;
 	struct folio *folio;
 	unsigned long haddr = vmf->address & HPAGE_PMD_MASK;
-	int nid = NUMA_NO_NODE;
-	int target_nid, last_cpupid = (-1 & LAST_CPUPID_MASK);
+	int target_nid = NUMA_NO_NODE;
+	int last_cpupid = (-1 & LAST_CPUPID_MASK);
 	bool writable = false;
-	int flags = 0;
+	int flags = 0, nr_pages;
 
 	vmf->ptl = pmd_lock(vma->vm_mm, vmf->pmd);
 	if (unlikely(!pmd_same(oldpmd, *vmf->pmd))) {
@@ -1693,21 +1693,13 @@ vm_fault_t do_huge_pmd_numa_page(struct vm_fault *vmf)
 		writable = true;
 
 	folio = vm_normal_folio_pmd(vma, haddr, pmd);
-	if (!folio)
+	if (!folio || folio_is_zone_device(folio))
 		goto out_map;
 
-	/* See similar comment in do_numa_page for explanation */
-	if (!writable)
-		flags |= TNF_NO_GROUP;
+	nr_pages = folio_nr_pages(folio);
 
-	nid = folio_nid(folio);
-	/*
-	 * For memory tiering mode, cpupid of slow memory page is used
-	 * to record page access time.  So use default value.
-	 */
-	if (folio_has_cpupid(folio))
-		last_cpupid = folio_last_cpupid(folio);
-	target_nid = numa_migrate_prep(folio, vmf, haddr, nid, &flags);
+	target_nid = numa_migrate_check(folio, vmf, haddr, writable,
+			&flags, &last_cpupid);
 	if (target_nid == NUMA_NO_NODE)
 		goto out_map;
 	if (migrate_misplaced_folio_prepare(folio, vma, target_nid)) {
@@ -1720,8 +1712,8 @@ vm_fault_t do_huge_pmd_numa_page(struct vm_fault *vmf)
 
 	if (!migrate_misplaced_folio(folio, vma, target_nid)) {
 		flags |= TNF_MIGRATED;
-		nid = target_nid;
 	} else {
+		target_nid = NUMA_NO_NODE;
 		flags |= TNF_MIGRATE_FAIL;
 		vmf->ptl = pmd_lock(vma->vm_mm, vmf->pmd);
 		if (unlikely(!pmd_same(oldpmd, *vmf->pmd))) {
@@ -1732,8 +1724,8 @@ vm_fault_t do_huge_pmd_numa_page(struct vm_fault *vmf)
 	}
 
 out:
-	if (nid != NUMA_NO_NODE)
-		task_numa_fault(last_cpupid, nid, HPAGE_PMD_NR, flags);
+	if (target_nid != NUMA_NO_NODE)
+		task_numa_fault(last_cpupid, target_nid, nr_pages, flags);
 
 	return 0;
 
