@@ -90,6 +90,7 @@ struct pcc_chan_reg {
  * @cmd_complete: PCC register bundle for the command complete check register
  * @cmd_update: PCC register bundle for the command complete update register
  * @error: PCC register bundle for the error status register
+ * @shmem_base_addr: the virtual memory address of the shared buffer
  * @plat_irq: platform interrupt
  * @type: PCC subspace type
  * @plat_irq_flags: platform interrupt flags
@@ -107,6 +108,7 @@ struct pcc_chan_info {
 	struct pcc_chan_reg cmd_complete;
 	struct pcc_chan_reg cmd_update;
 	struct pcc_chan_reg error;
+	void __iomem *shmem_base_addr;
 	int plat_irq;
 	u8 type;
 	unsigned int plat_irq_flags;
@@ -269,6 +271,24 @@ static bool pcc_mbox_cmd_complete_check(struct pcc_chan_info *pchan)
 	return !!val;
 }
 
+static void check_and_ack(struct pcc_chan_info *pchan, struct mbox_chan *chan)
+{
+	struct pcc_extended_type_hdr pcc_hdr;
+
+	if (pchan->type != ACPI_PCCT_TYPE_EXT_PCC_SLAVE_SUBSPACE)
+		return;
+	memcpy_fromio(&pcc_hdr, pchan->shmem_base_addr,
+		      sizeof(struct pcc_extended_type_hdr));
+	/*
+	 * The PCC slave subspace channel needs to set the command complete bit
+	 * and ring doorbell after processing message.
+	 *
+	 * The PCC master subspace channel clears chan_in_use to free channel.
+	 */
+	if (le32_to_cpup(&pcc_hdr.flags) & PCC_ACK_FLAG_MASK)
+		pcc_send_data(chan, NULL);
+}
+
 /**
  * pcc_mbox_irq - PCC mailbox interrupt handler
  * @irq:	interrupt number
@@ -306,14 +326,7 @@ static irqreturn_t pcc_mbox_irq(int irq, void *p)
 
 	mbox_chan_received_data(chan, NULL);
 
-	/*
-	 * The PCC slave subspace channel needs to set the command complete bit
-	 * and ring doorbell after processing message.
-	 *
-	 * The PCC master subspace channel clears chan_in_use to free channel.
-	 */
-	if (pchan->type == ACPI_PCCT_TYPE_EXT_PCC_SLAVE_SUBSPACE)
-		pcc_send_data(chan, NULL);
+	check_and_ack(pchan, chan);
 	pchan->chan_in_use = false;
 
 	return IRQ_HANDLED;
@@ -352,6 +365,9 @@ pcc_mbox_request_channel(struct mbox_client *cl, int subspace_id)
 	if (rc)
 		return ERR_PTR(rc);
 
+	pchan->shmem_base_addr = devm_ioremap(chan->mbox->dev,
+					      pchan->chan.shmem_base_addr,
+					      pchan->chan.shmem_size);
 	return &pchan->chan;
 }
 EXPORT_SYMBOL_GPL(pcc_mbox_request_channel);
