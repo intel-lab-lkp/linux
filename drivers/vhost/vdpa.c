@@ -1257,6 +1257,61 @@ free:
 
 }
 
+static int vhost_vdpa_process_iotlb_remap(struct vhost_vdpa *v,
+					  struct vhost_iotlb *iotlb,
+					  struct vhost_iotlb_msg *msg)
+{
+	struct vdpa_device *vdpa = v->vdpa;
+	const struct vdpa_config_ops *ops = vdpa->config;
+	u32 asid = iotlb_to_asid(iotlb);
+	u64 start = msg->iova;
+	u64 last = start + msg->size - 1;
+	struct vhost_iotlb_map *map;
+	int r = 0;
+
+	if (msg->perm || !msg->size)
+		return -EINVAL;
+
+	map = vhost_iotlb_itree_first(iotlb, start, last);
+	if (!map)
+		return -ENOENT;
+
+	if (map->start != start || map->last != last)
+		return -EINVAL;
+
+	/*
+	 * The current implementation does not support the platform iommu
+	 * with use_va.  And if !use_va, remap is not necessary.
+	 */
+	if (!ops->set_map && !ops->dma_map)
+		return -EINVAL;
+
+	/*
+	 * The current implementation supports set_map but not dma_map.
+	 */
+	if (!ops->set_map)
+		return -EINVAL;
+
+	/*
+	 * Do not verify that the new size@uaddr points to the same physical
+	 * pages as the old size@uaddr, because that would take time O(npages),
+	 * and would increase guest down time during live update.  If the app
+	 * is buggy and they differ, then the app may corrupt its own memory,
+	 * but no one else's.
+	 */
+
+	/*
+	 * Batch will finish later in BATCH_END by calling set_map for the new
+	 * addresses collected here.  Non-batch must do it now.
+	 */
+	if (!v->in_batch)
+		r = ops->set_map(vdpa, asid, iotlb);
+	if (!r)
+		map->addr = msg->uaddr;
+
+	return r;
+}
+
 static int vhost_vdpa_process_iotlb_update(struct vhost_vdpa *v,
 					   struct vhost_iotlb *iotlb,
 					   struct vhost_iotlb_msg *msg)
@@ -1335,6 +1390,9 @@ static int vhost_vdpa_process_iotlb_msg(struct vhost_dev *dev, u32 asid,
 		if (v->in_batch && ops->set_map)
 			ops->set_map(vdpa, asid, iotlb);
 		v->in_batch = false;
+		break;
+	case VHOST_IOTLB_REMAP:
+		r = vhost_vdpa_process_iotlb_remap(v, iotlb, msg);
 		break;
 	default:
 		r = -EINVAL;

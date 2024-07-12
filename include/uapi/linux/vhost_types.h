@@ -79,7 +79,7 @@ struct vhost_iotlb_msg {
 /*
  * VHOST_IOTLB_BATCH_BEGIN and VHOST_IOTLB_BATCH_END allow modifying
  * multiple mappings in one go: beginning with
- * VHOST_IOTLB_BATCH_BEGIN, followed by any number of
+ * VHOST_IOTLB_BATCH_BEGIN, followed by any number of VHOST_IOTLB_REMAP or
  * VHOST_IOTLB_UPDATE messages, and ending with VHOST_IOTLB_BATCH_END.
  * When one of these two values is used as the message type, the rest
  * of the fields in the message are ignored. There's no guarantee that
@@ -87,6 +87,15 @@ struct vhost_iotlb_msg {
  */
 #define VHOST_IOTLB_BATCH_BEGIN    5
 #define VHOST_IOTLB_BATCH_END      6
+
+/*
+ * VHOST_IOTLB_REMAP registers a new uaddr for the existing mapping at iova.
+ * The new uaddr must address the same memory object as originally mapped.
+ * Failure to do so will result in user memory corruption and/or device
+ * misbehavior.  iova and size must match the arguments used to create the
+ * an existing mapping.  Protection is not changed, and perm must be 0.
+ */
+#define VHOST_IOTLB_REMAP          7
 	__u8 type;
 };
 
