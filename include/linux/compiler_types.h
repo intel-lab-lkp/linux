@@ -320,6 +320,14 @@ struct ftrace_likely_data {
  */
 #define __cpuidle __noinstr_section(".cpuidle.text")
 
+/*
+ * Can be used for functions which themselves are not strictly noinstr, but
+ * may be called from noinstr code.
+ */
+#define inline_or_noinstr						\
+	inline notrace __attribute((__section__(".noinstr.text")))	\
+	__no_kcsan __no_sanitize_address __no_sanitize_coverage
+
 #endif /* __KERNEL__ */
 
 #endif /* __ASSEMBLY__ */
