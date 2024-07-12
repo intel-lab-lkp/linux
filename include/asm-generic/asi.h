@@ -48,6 +48,10 @@ static inline struct asi *asi_get_target(struct task_struct *p) { return NULL; }
 
 static inline pgd_t *asi_pgd(struct asi *asi) { return NULL; }
 
+#define static_asi_enabled() false
+
+static inline void asi_check_boottime_disable(void) { }
+
 #endif  /* !_ASSEMBLY_ */
 
 #endif /* !CONFIG_MITIGATION_ADDRESS_SPACE_ISOLATION */
