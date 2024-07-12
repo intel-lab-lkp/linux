@@ -8,8 +8,13 @@
 
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
+#include <linux/err.h>
+#include <linux/init.h>
+#include <linux/mutex.h>
 #include <linux/of.h>
+#include <linux/of_clk.h>
 #include <linux/platform_device.h>
+#include <linux/slab.h>
 
 #include <dt-bindings/clock/google,gs101.h>
 
@@ -4381,6 +4386,99 @@ static const struct samsung_cmu_info peric1_cmu_info __initconst = {
 
 /* ---- platform_driver ----------------------------------------------------- */
 
+static struct {
+	struct mutex lock;
+
+	bool bump_refs;
+
+	struct clk **clks;
+	size_t n_clks;
+} gs101_stdout_clks __initdata = {
+	.lock = __MUTEX_INITIALIZER(gs101_stdout_clks.lock),
+};
+
+static int __init gs101_keep_uart_clocks_param(char *str)
+{
+	gs101_stdout_clks.bump_refs = true;
+	return 0;
+}
+early_param("earlycon", gs101_keep_uart_clocks_param);
+
+static void __init gs101_bump_uart_clock_references(void)
+{
+	size_t n_clks;
+
+	/* We only support device trees - do nothing if not available. */
+	if (!IS_ENABLED(CONFIG_OF))
+		return;
+
+	n_clks = of_clk_get_parent_count(of_stdout);
+	if (!n_clks || !of_stdout)
+		return;
+
+	mutex_lock(&gs101_stdout_clks.lock);
+
+	/*
+	 * We only need to run this code if required to do so, and if we have
+	 * not succeeded previously, which will be the case if not all required
+	 * clocks were ready yet during previous attempts.
+	 */
+	if (!gs101_stdout_clks.bump_refs)
+		goto out_unlock;
+
+	if (!gs101_stdout_clks.clks) {
+		gs101_stdout_clks.n_clks = n_clks;
+
+		gs101_stdout_clks.clks = kcalloc(gs101_stdout_clks.n_clks,
+					       sizeof(*gs101_stdout_clks.clks),
+					       GFP_KERNEL);
+		if (!gs101_stdout_clks.clks)
+			goto out_unlock;
+	}
+
+	/* assume that this time we'll be able to grab all required clocks */
+	gs101_stdout_clks.bump_refs = false;
+	for (size_t i = 0; i < n_clks; ++i) {
+		struct clk *clk;
+
+		/* we might have grabbed this clock in a previous attempt */
+		if (gs101_stdout_clks.clks[i])
+			continue;
+
+		clk = of_clk_get(of_stdout, i);
+		if (IS_ERR(clk)) {
+			/*
+			 * clock might not have probed yet so we'll have to try
+			 * again next time
+			 */
+			gs101_stdout_clks.bump_refs = true;
+			continue;
+		}
+
+		if (clk_prepare_enable(clk)) {
+			clk_put(clk);
+			continue;
+		}
+		gs101_stdout_clks.clks[i] = clk;
+	}
+
+out_unlock:
+	mutex_unlock(&gs101_stdout_clks.lock);
+}
+
+static int __init gs101_drop_extra_uart_clock_references(void)
+{
+	for (size_t i = 0; i < gs101_stdout_clks.n_clks; ++i) {
+		clk_disable_unprepare(gs101_stdout_clks.clks[i]);
+		clk_put(gs101_stdout_clks.clks[i]);
+	}
+
+	kfree(gs101_stdout_clks.clks);
+
+	return 0;
+}
+late_initcall_sync(gs101_drop_extra_uart_clock_references);
+
 static int __init gs101_cmu_probe(struct platform_device *pdev)
 {
 	const struct samsung_cmu_info *info;
@@ -4388,6 +4486,8 @@ static int __init gs101_cmu_probe(struct platform_device *pdev)
 
 	info = of_device_get_match_data(dev);
 	exynos_arm64_register_cmu(dev, dev->of_node, info);
+
+	gs101_bump_uart_clock_references();
 
 	return 0;
 }
