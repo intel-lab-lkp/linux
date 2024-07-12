@@ -203,5 +203,7 @@ struct vhost_vdpa_iova_range {
 #define VHOST_BACKEND_F_IOTLB_PERSIST  0x8
 /* Supports VHOST_NEW_OWNER */
 #define VHOST_BACKEND_F_NEW_OWNER  0x9
+/* Supports VHOST_IOTLB_REMAP */
+#define VHOST_BACKEND_F_IOTLB_REMAP  0xa
 
 #endif

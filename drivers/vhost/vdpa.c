@@ -826,7 +826,8 @@ static long vhost_vdpa_unlocked_ioctl(struct file *filep,
 				 BIT_ULL(VHOST_BACKEND_F_SUSPEND) |
 				 BIT_ULL(VHOST_BACKEND_F_RESUME) |
 				 BIT_ULL(VHOST_BACKEND_F_ENABLE_AFTER_DRIVER_OK) |
-				 BIT_ULL(VHOST_BACKEND_F_NEW_OWNER)))
+				 BIT_ULL(VHOST_BACKEND_F_NEW_OWNER) |
+				 BIT_ULL(VHOST_BACKEND_F_IOTLB_REMAP)))
 			return -EOPNOTSUPP;
 		if ((features & BIT_ULL(VHOST_BACKEND_F_SUSPEND)) &&
 		     !vhost_vdpa_can_suspend(v))
@@ -1267,10 +1268,15 @@ static int vhost_vdpa_process_iotlb_remap(struct vhost_vdpa *v,
 	u64 start = msg->iova;
 	u64 last = start + msg->size - 1;
 	struct vhost_iotlb_map *map;
+	u64 features;
 	int r = 0;
 
 	if (msg->perm || !msg->size)
 		return -EINVAL;
+
+	features = ops->get_backend_features(vdpa);
+	if (!(features & BIT_ULL(VHOST_BACKEND_F_IOTLB_REMAP)))
+		return -EOPNOTSUPP;
 
 	map = vhost_iotlb_itree_first(iotlb, start, last);
 	if (!map)
