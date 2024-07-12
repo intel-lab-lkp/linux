@@ -1840,6 +1840,8 @@ struct kvm_x86_init_ops {
 
 	struct kvm_x86_ops *runtime_ops;
 	struct kvm_pmu_ops *pmu_ops;
+
+	void (*post_asi_enter)(void);
 };
 
 struct kvm_arch_async_pf {
