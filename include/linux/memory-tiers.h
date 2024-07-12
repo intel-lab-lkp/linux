@@ -73,6 +73,10 @@ static inline bool node_is_toptier(int node)
 }
 #endif
 
+
+bool folio_has_cpupid(struct folio *folio);
+
+
 #else
 
 #define numa_demotion_enabled	false
@@ -150,6 +154,10 @@ static inline struct memory_dev_type *mt_find_alloc_memory_type(int adist,
 
 static inline void mt_put_memory_types(struct list_head *memory_types)
 {
+}
+static inline bool folio_has_cpupid(struct folio *folio)
+{
+	return true;
 }
 #endif	/* CONFIG_NUMA */
 #endif  /* _LINUX_MEMORY_TIERS_H */
