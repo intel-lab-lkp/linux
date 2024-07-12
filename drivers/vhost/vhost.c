@@ -963,6 +963,21 @@ err_mm:
 }
 EXPORT_SYMBOL_GPL(vhost_dev_set_owner);
 
+/* Caller should have device mutex */
+long vhost_dev_new_owner(struct vhost_dev *dev)
+{
+	if (dev->mm == current->mm)
+		return -EBUSY;
+
+	if (!vhost_dev_has_owner(dev))
+		return -EINVAL;
+
+	vhost_detach_mm(dev);
+	vhost_attach_mm(dev);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(vhost_dev_new_owner);
+
 static struct vhost_iotlb *iotlb_alloc(void)
 {
 	return vhost_iotlb_alloc(max_iotlb_entries,
