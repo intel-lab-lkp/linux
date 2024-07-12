@@ -23,9 +23,9 @@
 #include <stdbool.h>
 #include <errno.h>
 #include <sys/vm86.h>
+#include "../kselftest.h"
 
 static unsigned long load_addr = 0x10000;
-static int nerrs = 0;
 
 static void sethandler(int sig, void (*handler)(int, siginfo_t *, void *),
 		       int flags)
@@ -36,7 +36,7 @@ static void sethandler(int sig, void (*handler)(int, siginfo_t *, void *),
 	sa.sa_flags = SA_SIGINFO | flags;
 	sigemptyset(&sa.sa_mask);
 	if (sigaction(sig, &sa, 0))
-		err(1, "sigaction");
+		ksft_exit_fail_perror("sigaction");
 }
 
 static void clearhandler(int sig)
@@ -46,7 +46,7 @@ static void clearhandler(int sig)
 	sa.sa_handler = SIG_DFL;
 	sigemptyset(&sa.sa_mask);
 	if (sigaction(sig, &sa, 0))
-		err(1, "sigaction");
+		ksft_exit_fail_perror("sigaction");
 }
 
 static sig_atomic_t got_signal;
@@ -56,10 +56,8 @@ static void sighandler(int sig, siginfo_t *info, void *ctx_void)
 	ucontext_t *ctx = (ucontext_t*)ctx_void;
 
 	if (ctx->uc_mcontext.gregs[REG_EFL] & X86_EFLAGS_VM ||
-	    (ctx->uc_mcontext.gregs[REG_CS] & 3) != 3) {
-		printf("[FAIL]\tSignal frame should not reflect vm86 mode\n");
-		nerrs++;
-	}
+	    (ctx->uc_mcontext.gregs[REG_CS] & 3) != 3)
+		ksft_test_result_fail("Signal frame should not reflect vm86 mode\n");
 
 	const char *signame;
 	if (sig == SIGSEGV)
@@ -69,9 +67,9 @@ static void sighandler(int sig, siginfo_t *info, void *ctx_void)
 	else
 		signame = "unexpected signal";
 
-	printf("[INFO]\t%s: FLAGS = 0x%lx, CS = 0x%hx\n", signame,
-	       (unsigned long)ctx->uc_mcontext.gregs[REG_EFL],
-	       (unsigned short)ctx->uc_mcontext.gregs[REG_CS]);
+	ksft_test_result_pass("%s: FLAGS = 0x%lx, CS = 0x%hx\n", signame,
+			      (unsigned long)ctx->uc_mcontext.gregs[REG_EFL],
+			      (unsigned short)ctx->uc_mcontext.gregs[REG_CS]);
 
 	got_signal = 1;
 }
@@ -137,13 +135,13 @@ static bool do_test(struct vm86plus_struct *v86, unsigned long eip,
 {
 	long ret;
 
-	printf("[RUN]\t%s from vm86 mode\n", text);
+	ksft_print_msg("%s from vm86 mode\n", text);
 	v86->regs.eip = eip;
 	ret = vm86(VM86_ENTER, v86);
 
 	if (ret == -1 && (errno == ENOSYS || errno == EPERM)) {
-		printf("[SKIP]\tvm86 %s\n",
-		       errno == ENOSYS ? "not supported" : "not allowed");
+		ksft_test_result_skip("vm86 %s\n",
+				      errno == ENOSYS ? "not supported" : "not allowed");
 		return false;
 	}
 
@@ -159,29 +157,27 @@ static bool do_test(struct vm86plus_struct *v86, unsigned long eip,
 		else
 			sprintf(trapname, "%d", trapno);
 
-		printf("[INFO]\tExited vm86 mode due to #%s\n", trapname);
+		ksft_print_msg("Exited vm86 mode due to #%s\n", trapname);
 	} else if (VM86_TYPE(ret) == VM86_UNKNOWN) {
-		printf("[INFO]\tExited vm86 mode due to unhandled GP fault\n");
+		ksft_print_msg("Exited vm86 mode due to unhandled GP fault\n");
 	} else if (VM86_TYPE(ret) == VM86_TRAP) {
-		printf("[INFO]\tExited vm86 mode due to a trap (arg=%ld)\n",
-		       VM86_ARG(ret));
+		ksft_print_msg("Exited vm86 mode due to a trap (arg=%ld)\n",
+			       VM86_ARG(ret));
 	} else if (VM86_TYPE(ret) == VM86_SIGNAL) {
-		printf("[INFO]\tExited vm86 mode due to a signal\n");
+		ksft_print_msg("Exited vm86 mode due to a signal\n");
 	} else if (VM86_TYPE(ret) == VM86_STI) {
-		printf("[INFO]\tExited vm86 mode due to STI\n");
+		ksft_print_msg("Exited vm86 mode due to STI\n");
 	} else {
-		printf("[INFO]\tExited vm86 mode due to type %ld, arg %ld\n",
-		       VM86_TYPE(ret), VM86_ARG(ret));
+		ksft_print_msg("Exited vm86 mode due to type %ld, arg %ld\n",
+			       VM86_TYPE(ret), VM86_ARG(ret));
 	}
 
 	if (rettype == -1 ||
-	    (VM86_TYPE(ret) == rettype && VM86_ARG(ret) == retarg)) {
-		printf("[OK]\tReturned correctly\n");
-	} else {
-		printf("[FAIL]\tIncorrect return reason (started at eip = 0x%lx, ended at eip = 0x%lx)\n", eip, v86->regs.eip);
-		nerrs++;
-	}
-
+	    (VM86_TYPE(ret) == rettype && VM86_ARG(ret) == retarg))
+		ksft_test_result_pass("Returned correctly\n");
+	else
+		ksft_test_result_fail("Incorrect return reason (started at eip = 0x%lx, ended at eip = 0x%lx)\n",
+				      eip, v86->regs.eip);
 	return true;
 }
 
@@ -215,26 +211,20 @@ void do_umip_tests(struct vm86plus_struct *vm86, unsigned char *test_mem)
 	/* Results when using register operands */
 	msw3 = *(unsigned short *)(test_mem + 2080);
 
-	printf("[INFO]\tResult from SMSW:[0x%04x]\n", msw1);
-	printf("[INFO]\tResult from SIDT: limit[0x%04x]base[0x%08lx]\n",
-	       idt1.limit, idt1.base);
-	printf("[INFO]\tResult from SGDT: limit[0x%04x]base[0x%08lx]\n",
-	       gdt1.limit, gdt1.base);
+	ksft_print_msg("Result from SMSW:[0x%04x]\n", msw1);
+	ksft_print_msg("Result from SIDT: limit[0x%04x]base[0x%08lx]\n",
+		       idt1.limit, idt1.base);
+	ksft_print_msg("Result from SGDT: limit[0x%04x]base[0x%08lx]\n",
+		       gdt1.limit, gdt1.base);
 
-	if (msw1 != msw2 || msw1 != msw3)
-		printf("[FAIL]\tAll the results of SMSW should be the same.\n");
-	else
-		printf("[PASS]\tAll the results from SMSW are identical.\n");
+	ksft_test_result((msw1 == msw2 && msw1 == msw3),
+			 "All the results from SMSW are identical.\n");
 
-	if (memcmp(&gdt1, &gdt2, sizeof(gdt1)))
-		printf("[FAIL]\tAll the results of SGDT should be the same.\n");
-	else
-		printf("[PASS]\tAll the results from SGDT are identical.\n");
+	ksft_test_result(!memcmp(&gdt1, &gdt2, sizeof(gdt1)),
+			 "All the results from SGDT are identical.\n");
 
-	if (memcmp(&idt1, &idt2, sizeof(idt1)))
-		printf("[FAIL]\tAll the results of SIDT should be the same.\n");
-	else
-		printf("[PASS]\tAll the results from SIDT are identical.\n");
+	ksft_test_result(!memcmp(&idt1, &idt2, sizeof(idt1)),
+			 "All the results from SIDT are identical.\n");
 
 	sethandler(SIGILL, sighandler, 0);
 	do_test(vm86, vmcode_umip_str - vmcode, VM86_SIGNAL, 0,
@@ -250,11 +240,15 @@ void do_umip_tests(struct vm86plus_struct *vm86, unsigned char *test_mem)
 int main(void)
 {
 	struct vm86plus_struct v86;
-	unsigned char *addr = mmap((void *)load_addr, 4096,
-				   PROT_READ | PROT_WRITE | PROT_EXEC,
-				   MAP_ANONYMOUS | MAP_PRIVATE, -1,0);
+	unsigned char *addr;
+
+	ksft_print_header();
+	ksft_set_plan(18);
+
+	addr = mmap((void *)load_addr, 4096, PROT_READ | PROT_WRITE | PROT_EXEC,
+		    MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
 	if (addr != (unsigned char *)load_addr)
-		err(1, "mmap");
+		ksft_exit_fail_perror("mmap");
 
 	memcpy(addr, vmcode, end_vmcode - vmcode);
 	addr[2048] = 2;
@@ -270,7 +264,8 @@ int main(void)
 	/* Use the end of the page as our stack. */
 	v86.regs.esp = 4096;
 
-	assert((v86.regs.cs & 3) == 0);	/* Looks like RPL = 0 */
+	if (v86.regs.cs & 3)
+		ksft_exit_fail_msg("Looks like RPL = 0\n");
 
 	/* #BR -- should deliver SIG??? */
 	do_test(&v86, vmcode_bound - vmcode, VM86_INTx, 5, "#BR");
@@ -333,16 +328,18 @@ int main(void)
 	v86.regs.ss = 0;
 	sethandler(SIGSEGV, sighandler, 0);
 	got_signal = 0;
-	if (do_test(&v86, 0, VM86_SIGNAL, 0, "Execute null pointer") &&
-	    !got_signal) {
-		printf("[FAIL]\tDid not receive SIGSEGV\n");
-		nerrs++;
-	}
+	if (do_test(&v86, 0, VM86_SIGNAL, 0, "Execute null pointer"))
+		ksft_test_result(got_signal, "Received SIGSEGV\n");
+	else
+		ksft_test_result_skip("Received SIGSEGV\n");
+
 	clearhandler(SIGSEGV);
 
 	/* Make sure nothing explodes if we fork. */
 	if (fork() == 0)
 		return 0;
 
-	return (nerrs == 0 ? 0 : 1);
+	ksft_test_result_pass("fork succeeded\n");
+
+	ksft_finished();
 }
