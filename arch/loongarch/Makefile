@@ -99,10 +99,8 @@ KBUILD_AFLAGS			+= $(call cc-option,-mno-relax) $(call cc-option,-Wa$(comma)-mno
 KBUILD_CFLAGS			+= $(call cc-option,-mno-relax) $(call cc-option,-Wa$(comma)-mno-relax)
 KBUILD_AFLAGS			+= $(call cc-option,-mthin-add-sub) $(call cc-option,-Wa$(comma)-mthin-add-sub)
 KBUILD_CFLAGS			+= $(call cc-option,-mthin-add-sub) $(call cc-option,-Wa$(comma)-mthin-add-sub)
-
-ifdef CONFIG_OBJTOOL
-KBUILD_CFLAGS			+= -fno-jump-tables
-endif
+KBUILD_AFLAGS			+= $(call cc-option,-mannotate-tablejump) $(call cc-option,-Wa$(comma)-mannotate-tablejump)
+KBUILD_CFLAGS			+= $(call cc-option,-mannotate-tablejump) $(call cc-option,-Wa$(comma)-mannotate-tablejump)
 
 KBUILD_RUSTFLAGS		+= --target=loongarch64-unknown-none-softfloat
 KBUILD_RUSTFLAGS_MODULE		+= -Crelocation-model=pic
