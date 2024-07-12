@@ -494,6 +494,11 @@ struct thread_struct {
 	struct {
 		/* Domain to enter when returning to process context. */
 		struct asi	*target;
+		/*
+		 * The depth of interrupt/exceptions interrupting an ASI
+		 * critical section
+		 */
+		int		intr_nest_depth;
 	} asi_state;
 #endif
 

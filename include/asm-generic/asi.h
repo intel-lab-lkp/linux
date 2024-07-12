@@ -38,6 +38,8 @@ static inline bool asi_is_relaxed(void) { return true; }
 
 static inline bool asi_is_tense(void) { return false; }
 
+static inline bool asi_in_critical_section(void) { return false; }
+
 static inline void asi_exit(void) { }
 
 static inline bool asi_is_restricted(void) { return false; }
@@ -47,6 +49,14 @@ static inline struct asi *asi_get_current(void) { return NULL; }
 static inline struct asi *asi_get_target(struct task_struct *p) { return NULL; }
 
 static inline pgd_t *asi_pgd(struct asi *asi) { return NULL; }
+
+static inline void asi_init_thread_state(struct thread_struct *thread) { }
+
+static inline void asi_intr_enter(void) { }
+
+static inline int asi_intr_nest_depth(void) { return 0; }
+
+static inline void asi_intr_exit(void) { }
 
 #define static_asi_enabled() false
 

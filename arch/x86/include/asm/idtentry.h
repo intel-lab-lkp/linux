@@ -12,6 +12,7 @@
 #include <linux/hardirq.h>
 
 #include <asm/irq_stack.h>
+#include <asm/asi.h>
 
 typedef void (*idtentry_t)(struct pt_regs *regs);
 
@@ -55,12 +56,15 @@ static __always_inline void __##func(struct pt_regs *regs);		\
 									\
 __visible noinstr void func(struct pt_regs *regs)			\
 {									\
-	irqentry_state_t state = irqentry_enter(regs);			\
+	irqentry_state_t state;						\
 									\
+	asi_intr_enter();						\
+	state = irqentry_enter(regs);					\
 	instrumentation_begin();					\
 	__##func (regs);						\
 	instrumentation_end();						\
 	irqentry_exit(regs, state);					\
+	asi_intr_exit();						\
 }									\
 									\
 static __always_inline void __##func(struct pt_regs *regs)
@@ -102,12 +106,15 @@ static __always_inline void __##func(struct pt_regs *regs,		\
 __visible noinstr void func(struct pt_regs *regs,			\
 			    unsigned long error_code)			\
 {									\
-	irqentry_state_t state = irqentry_enter(regs);			\
+	irqentry_state_t state;						\
 									\
+	asi_intr_enter();						\
+	state = irqentry_enter(regs);					\
 	instrumentation_begin();					\
 	__##func (regs, error_code);					\
 	instrumentation_end();						\
 	irqentry_exit(regs, state);					\
+	asi_intr_exit();						\
 }									\
 									\
 static __always_inline void __##func(struct pt_regs *regs,		\
@@ -139,7 +146,16 @@ static __always_inline void __##func(struct pt_regs *regs,		\
  * is required before the enter/exit() helpers are invoked.
  */
 #define DEFINE_IDTENTRY_RAW(func)					\
-__visible noinstr void func(struct pt_regs *regs)
+static __always_inline void __##func(struct pt_regs *regs);		\
+									\
+__visible noinstr void func(struct pt_regs *regs)			\
+{									\
+	asi_intr_enter();						\
+	__##func (regs);						\
+	asi_intr_exit();						\
+}									\
+									\
+static __always_inline void __##func(struct pt_regs *regs)
 
 /**
  * DEFINE_FREDENTRY_RAW - Emit code for raw FRED entry points
@@ -178,7 +194,18 @@ noinstr void fred_##func(struct pt_regs *regs)
  * is required before the enter/exit() helpers are invoked.
  */
 #define DEFINE_IDTENTRY_RAW_ERRORCODE(func)				\
-__visible noinstr void func(struct pt_regs *regs, unsigned long error_code)
+static __always_inline void __##func(struct pt_regs *regs,		\
+				     unsigned long error_code);		\
+									\
+__visible noinstr void func(struct pt_regs *regs, unsigned long error_code)\
+{									\
+	asi_intr_enter();						\
+	__##func (regs, error_code);					\
+	asi_intr_exit();						\
+}									\
+									\
+static __always_inline void __##func(struct pt_regs *regs,		\
+				     unsigned long error_code)
 
 /**
  * DECLARE_IDTENTRY_IRQ - Declare functions for device interrupt IDT entry
@@ -209,14 +236,17 @@ static void __##func(struct pt_regs *regs, u32 vector);			\
 __visible noinstr void func(struct pt_regs *regs,			\
 			    unsigned long error_code)			\
 {									\
-	irqentry_state_t state = irqentry_enter(regs);			\
+	irqentry_state_t state;						\
 	u32 vector = (u32)(u8)error_code;				\
 									\
+	asi_intr_enter();						\
+	state = irqentry_enter(regs);					\
 	instrumentation_begin();					\
 	kvm_set_cpu_l1tf_flush_l1d();					\
 	run_irq_on_irqstack_cond(__##func, regs, vector);		\
 	instrumentation_end();						\
 	irqentry_exit(regs, state);					\
+	asi_intr_exit();						\
 }									\
 									\
 static noinline void __##func(struct pt_regs *regs, u32 vector)
@@ -256,12 +286,15 @@ static __always_inline void instr_##func(struct pt_regs *regs)		\
 									\
 __visible noinstr void func(struct pt_regs *regs)			\
 {									\
-	irqentry_state_t state = irqentry_enter(regs);			\
+	irqentry_state_t state;						\
 									\
+	asi_intr_enter();						\
+	state = irqentry_enter(regs);					\
 	instrumentation_begin();					\
 	instr_##func (regs);						\
 	instrumentation_end();						\
 	irqentry_exit(regs, state);					\
+	asi_intr_exit();						\
 }									\
 									\
 void fred_##func(struct pt_regs *regs)					\
@@ -295,12 +328,15 @@ static __always_inline void instr_##func(struct pt_regs *regs)		\
 									\
 __visible noinstr void func(struct pt_regs *regs)			\
 {									\
-	irqentry_state_t state = irqentry_enter(regs);			\
+	irqentry_state_t state;						\
 									\
+	asi_intr_enter();						\
+	state = irqentry_enter(regs);					\
 	instrumentation_begin();					\
 	instr_##func (regs);						\
 	instrumentation_end();						\
 	irqentry_exit(regs, state);					\
+	asi_intr_exit();						\
 }									\
 									\
 void fred_##func(struct pt_regs *regs)					\

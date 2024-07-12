@@ -127,6 +127,11 @@ void asi_relax(void);
 /* Immediately exit the restricted address space if in it */
 void asi_exit(void);
 
+static inline void asi_init_thread_state(struct thread_struct *thread)
+{
+	thread->asi_state.intr_nest_depth = 0;
+}
+
 /* The target is the domain we'll enter when returning to process context. */
 static __always_inline struct asi *asi_get_target(struct task_struct *p)
 {
@@ -167,9 +172,10 @@ static __always_inline bool asi_is_relaxed(void)
 /*
  * Is the current task in the critical section?
  *
- * This is just the inverse of !asi_is_relaxed(). We have both functions in order to
- * help write intuitive client code. In particular, asi_is_tense returns false
- * when ASI is disabled, which is judged to make user code more obvious.
+ * This is just the inverse of !asi_is_relaxed(). We have both functions in
+ * order to help write intuitive client code. In particular, asi_is_tense
+ * returns false when ASI is disabled, which is judged to make user code more
+ * obvious.
  */
 static __always_inline bool asi_is_tense(void)
 {
@@ -179,6 +185,62 @@ static __always_inline bool asi_is_tense(void)
 static __always_inline pgd_t *asi_pgd(struct asi *asi)
 {
 	return asi ? asi->pgd : NULL;
+}
+
+static __always_inline void asi_intr_enter(void)
+{
+	if (static_asi_enabled() && asi_is_tense()) {
+		current->thread.asi_state.intr_nest_depth++;
+		barrier();
+	}
+}
+
+void __asi_enter(void);
+
+static __always_inline void asi_intr_exit(void)
+{
+	if (static_asi_enabled() && asi_is_tense()) {
+		/*
+		 * If an access to sensitive memory got reordered after the
+		 * decrement, the #PF handler for that access would see a value
+		 * of 0 for the counter and re-__asi_enter before returning to
+		 * the faulting access, triggering an infinite PF loop.
+		 */
+		barrier();
+
+		if (--current->thread.asi_state.intr_nest_depth == 0) {
+			/*
+			 * If the decrement got reordered after __asi_enter, an
+			 * interrupt that came between __asi_enter and the
+			 * decrement would always see a nonzero value for the
+			 * counter so it wouldn't call __asi_enter again and we
+			 * would return to process context in the wrong address
+			 * space.
+			 */
+			barrier();
+			__asi_enter();
+		}
+	}
+}
+
+/*
+ * Returns the nesting depth of interrupts/exceptions that have interrupted the
+ * ongoing critical section. If the current task is not in a critical section
+ * this is 0.
+ */
+static __always_inline int asi_intr_nest_depth(void)
+{
+	return current->thread.asi_state.intr_nest_depth;
+}
+
+/*
+ * Remember that interrupts/exception don't count as the critical section. If
+ * you want to know if the current task is in the critical section use
+ * asi_is_tense().
+ */
+static __always_inline bool asi_in_critical_section(void)
+{
+	return asi_is_tense() && !asi_intr_nest_depth();
 }
 
 #define INIT_MM_ASI(init_mm) \
