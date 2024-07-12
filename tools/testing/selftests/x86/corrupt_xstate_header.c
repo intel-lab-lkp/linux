@@ -39,7 +39,7 @@ static void sethandler(int sig, void (*handler)(int, siginfo_t *, void *),
 	sa.sa_flags = SA_SIGINFO | flags;
 	sigemptyset(&sa.sa_mask);
 	if (sigaction(sig, &sa, 0))
-		err(1, "sigaction");
+		ksft_exit_fail_perror("sigaction");
 }
 
 static void sigusr1(int sig, siginfo_t *info, void *uc_void)
@@ -48,26 +48,29 @@ static void sigusr1(int sig, siginfo_t *info, void *uc_void)
 	uint8_t *fpstate = (uint8_t *)uc->uc_mcontext.fpregs;
 	uint64_t *xfeatures = (uint64_t *)(fpstate + 512);
 
-	printf("\tWreck XSTATE header\n");
+	ksft_print_msg("Wreck XSTATE header\n");
 	/* Wreck the first reserved bytes in the header */
 	*(xfeatures + 2) = 0xfffffff;
 }
 
 static void sigsegv(int sig, siginfo_t *info, void *uc_void)
 {
-	printf("\tGot SIGSEGV\n");
+	ksft_print_msg("Got SIGSEGV\n");
 }
 
 int main(void)
 {
 	cpu_set_t set;
 
+	ksft_print_header();
+	ksft_set_plan(2);
+
 	sethandler(SIGUSR1, sigusr1, 0);
 	sethandler(SIGSEGV, sigsegv, 0);
 
 	if (!xsave_enabled()) {
-		printf("[SKIP] CR4.OSXSAVE disabled.\n");
-		return 0;
+		ksft_print_msg("CR4.OSXSAVE disabled.\n");
+		return KSFT_SKIP;
 	}
 
 	CPU_ZERO(&set);
@@ -79,18 +82,21 @@ int main(void)
 	 */
 	sched_setaffinity(getpid(), sizeof(set), &set);
 
-	printf("[RUN]\tSend ourselves a signal\n");
+	ksft_print_msg("Send ourselves a signal\n");
 	raise(SIGUSR1);
 
-	printf("[OK]\tBack from the signal.  Now schedule.\n");
+	ksft_test_result_pass("Back from the signal. Now schedule.\n");
+
 	pid_t child = fork();
-	if (child < 0)
-		err(1, "fork");
 	if (child == 0)
 		return 0;
-	if (child)
+
+	if (child < 0) {
+		ksft_test_result_fail("fork: %s\n", strerror(errno));
+	} else if (child) {
 		waitpid(child, NULL, 0);
-	printf("[OK]\tBack in the main thread.\n");
+		ksft_test_result_pass("Back in the main thread.\n");
+	}
 
 	/*
 	 * We could try to confirm that extended state is still preserved
@@ -98,5 +104,5 @@ int main(void)
 	 * a warning in the kernel logs.
 	 */
 
-	return 0;
+	ksft_finished();
 }
