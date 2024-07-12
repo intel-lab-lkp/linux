@@ -2880,6 +2880,8 @@ relock:
 		current->flags |= PF_SIGNALED;
 
 		if (sig_kernel_coredump(signr)) {
+			int ret;
+
 			if (print_fatal_signals)
 				print_fatal_signal(signr);
 			proc_coredump_connector(current);
@@ -2891,7 +2893,25 @@ relock:
 			 * first and our do_group_exit call below will use
 			 * that value and ignore the one we pass it.
 			 */
-			do_coredump(&ksig->info);
+			ret = do_coredump(&ksig->info);
+			if (ret)
+				pr_err("coredump has not been created for %s(PID %d), error %d\n",
+					current->comm, current->pid, ret);
+			else if (!IS_ENABLED(CONFIG_COREDUMP)) {
+				/*
+				 * Coredumps are not available, can't fail collecting
+				 * the coredump.
+				 *
+				 * Leave a note though that the coredump is going to be
+				 * not created. This is not an error or a warning as disabling
+				 * support for coredumps isn't commonplace, and the user
+				 * must've built the kernel with the custom config so they know
+				 * that is the case. Let them know all works as prescribed.
+				 */
+				pr_info_ratelimited("No coredump collected for %s(PID %d); "
+					"no coredump support available in the kernel configuration\n",
+					current->comm, current->pid);
+			}
 		}
 
 		/*

@@ -42,9 +42,13 @@ extern int dump_emit(struct coredump_params *cprm, const void *addr, int nr);
 extern int dump_align(struct coredump_params *cprm, int align);
 int dump_user_range(struct coredump_params *cprm, unsigned long start,
 		    unsigned long len);
-extern void do_coredump(const kernel_siginfo_t *siginfo);
+extern int do_coredump(const kernel_siginfo_t *siginfo);
 #else
-static inline void do_coredump(const kernel_siginfo_t *siginfo) {}
+static inline int do_coredump(const kernel_siginfo_t *siginfo)
+{
+	/* Coredump support is not available, can't fail. */
+	return 0;
+}
 #endif
 
 #if defined(CONFIG_COREDUMP) && defined(CONFIG_SYSCTL)
