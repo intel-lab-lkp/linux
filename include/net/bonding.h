@@ -805,8 +805,15 @@ extern const u8 lacpdu_mcast_addr[];
 
 static inline netdev_tx_t bond_tx_drop(struct net_device *dev, struct sk_buff *skb)
 {
+	struct bonding *bond = netdev_priv(dev);
+
 	dev_core_stats_tx_dropped_inc(dev);
 	dev_kfree_skb_any(skb);
+
+	/* monitoring will trigger dev_deactivate soon, imitate noop until then */
+	if (bond_has_slaves(bond))
+		return NET_XMIT_CN;
+
 	return NET_XMIT_DROP;
 }
 
