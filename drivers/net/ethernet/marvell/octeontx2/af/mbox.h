@@ -78,6 +78,7 @@ struct otx2_mbox {
 struct mbox_hdr {
 	u64 msg_size;	/* Total msgs size embedded */
 	u16  num_msgs;   /* No of msgs embedded */
+	u16 sig;
 };
 
 /* Header which precedes every msg and is also part of it */
@@ -1563,6 +1564,7 @@ struct flow_msg {
 	u8 icmp_type;
 	u8 icmp_code;
 	__be16 tcp_flags;
+	u16 sq_id;
 };
 
 struct npc_install_flow_req {
