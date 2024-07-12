@@ -3147,6 +3147,14 @@ static int nested_vmx_check_vmentry_hw(struct kvm_vcpu *vcpu)
 	 */
 	vmcs_writel(GUEST_RFLAGS, 0);
 
+	/*
+	 * Stabilize CR3 to ensure the VM Exit returns to the correct address
+	 * space. This is costly; at the expense of complexity it could be
+	 * optimized away by instead doing an asi_enter() to create an ASI
+	 * critical section, in the case that we are currently restricted.
+	 */
+	asi_exit();
+
 	cr3 = __get_current_cr3_fast();
 	if (unlikely(cr3 != vmx->loaded_vmcs->host_state.cr3)) {
 		vmcs_writel(HOST_CR3, cr3);
