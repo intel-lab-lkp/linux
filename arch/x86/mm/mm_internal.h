@@ -25,4 +25,7 @@ void update_cache_mode_entry(unsigned entry, enum page_cache_mode cache);
 
 extern unsigned long tlb_single_page_flush_ceiling;
 
+extern void preallocate_sub_pgd_pages(pgd_t *pgd_table, ulong start,
+				      ulong end, const char *name);
+
 #endif	/* __X86_MM_INTERNAL_H */

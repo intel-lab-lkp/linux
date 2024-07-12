@@ -11,6 +11,7 @@
 #include <asm/mmu_context.h>
 #include <asm/traps.h>
 
+#include "mm_internal.h"
 #include "../../../mm/internal.h"
 
 static struct asi_class asi_class[ASI_MAX_NUM];
@@ -18,6 +19,13 @@ static DEFINE_SPINLOCK(asi_class_lock);
 
 DEFINE_PER_CPU_ALIGNED(struct asi *, curr_asi);
 EXPORT_SYMBOL(curr_asi);
+
+static __aligned(PAGE_SIZE) pgd_t asi_global_nonsensitive_pgd[PTRS_PER_PGD];
+
+struct asi __asi_global_nonsensitive = {
+	.pgd = asi_global_nonsensitive_pgd,
+	.mm = &init_mm,
+};
 
 static inline bool asi_class_registered(int index)
 {
@@ -154,6 +162,31 @@ void __init asi_check_boottime_disable(void)
 		pr_info("ASI enablement ignored due to incomplete implementation.\n");
 }
 
+static int __init asi_global_init(void)
+{
+	if (!boot_cpu_has(X86_FEATURE_ASI))
+		return 0;
+
+	/*
+	 * Lower-level pagetables for global nonsensitive mappings are shared,
+	 * but the PGD has to be copied into each domain during asi_init. To
+	 * avoid needing to synchronize new mappings into pre-existing domains
+	 * we just pre-allocate all of the relevant level N-1 entries so that
+	 * the global nonsensitive PGD already has pointers that can be copied
+	 * when new domains get asi_init()ed.
+	 */
+	preallocate_sub_pgd_pages(asi_global_nonsensitive_pgd,
+				  PAGE_OFFSET,
+				  PAGE_OFFSET + PFN_PHYS(max_pfn) - 1,
+				  "ASI Global Non-sensitive direct map");
+	preallocate_sub_pgd_pages(asi_global_nonsensitive_pgd,
+				  VMALLOC_START, VMALLOC_END,
+				  "ASI Global Non-sensitive vmalloc");
+
+	return 0;
+}
+subsys_initcall(asi_global_init)
+
 static void __asi_destroy(struct asi *asi)
 {
 	WARN_ON_ONCE(asi->ref_count <= 0);
@@ -168,6 +201,7 @@ int asi_init(struct mm_struct *mm, int asi_index, struct asi **out_asi)
 {
 	struct asi *asi;
 	int err = 0;
+	uint i;
 
 	*out_asi = NULL;
 
@@ -202,6 +236,9 @@ int asi_init(struct mm_struct *mm, int asi_index, struct asi **out_asi)
 	asi->class = &asi_class[asi_index];
 	asi->mm = mm;
 	asi->index = asi_index;
+
+	for (i = KERNEL_PGD_BOUNDARY; i < PTRS_PER_PGD; i++)
+		set_pgd(asi->pgd + i, asi_global_nonsensitive_pgd[i]);
 
 exit_unlock:
 	if (err)

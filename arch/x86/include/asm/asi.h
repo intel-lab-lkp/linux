@@ -78,6 +78,9 @@
  */
 #define ASI_MAX_NUM		((1 << ASI_MAX_NUM_ORDER) - 1)
 
+extern struct asi __asi_global_nonsensitive;
+#define ASI_GLOBAL_NONSENSITIVE	(&__asi_global_nonsensitive)
+
 struct asi_hooks {
 	/*
 	 * Both of these functions MUST be idempotent and re-entrant. They will

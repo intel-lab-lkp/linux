@@ -9,6 +9,8 @@
 #define ASI_MAX_NUM_ORDER		0
 #define ASI_MAX_NUM			0
 
+#define ASI_GLOBAL_NONSENSITIVE		NULL
+
 #ifndef _ASSEMBLY_
 
 struct asi_hooks {};
