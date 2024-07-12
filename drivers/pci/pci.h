@@ -11,6 +11,7 @@ enum pci_reset_type {
 	PCI_DEV_WAIT_BUS_RESET,
 	PCI_DEV_WAIT_RESUME,
 	PCI_DEV_WAIT_DPC,
+	PCI_DEV_WAIT_D3COLD_D0,
 };
 
 /* Number of possible devfns: 0.0 to 1f.7 inclusive */
