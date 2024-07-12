@@ -13,6 +13,15 @@
 #include <asm/auxvec.h>
 #include <asm/fsgsbase.h>
 
+struct xfeat_component {
+	u32 type;
+	u32 size;
+	u32 offset;
+	u32 flags;
+} __packed;
+
+_Static_assert(sizeof(struct xfeat_component)%4 == 0, "xfeat_component is not aligned");
+
 typedef unsigned long elf_greg_t;
 
 #define ELF_NGREG (sizeof(struct user_regs_struct) / sizeof(elf_greg_t))
