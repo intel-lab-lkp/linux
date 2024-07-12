@@ -217,12 +217,29 @@ test_leader_sampling() {
   echo "Basic leader sampling test [Success]"
 }
 
+test_topdown_leader_sampling() {
+  echo "Topdown leader sampling test"
+  if ! perf stat -e "{slots,topdown-retiring}" true 2> /dev/null
+  then
+    echo "Topdown leader sampling [Skipped event parsing failed]"
+    return
+  fi
+  if ! perf record -o "${perfdata}" -e "{instructions,slots,topdown-retiring}:S" true 2> /dev/null
+  then
+    echo "Topdown leader sampling [Failed topdown events not reordered correctly]"
+    err=1
+    return
+  fi
+  echo "Topdown leader sampling test [Success]"
+}
+
 test_per_thread
 test_register_capture
 test_system_wide
 test_workload
 test_branch_counter
 test_leader_sampling
+test_topdown_leader_sampling
 
 cleanup
 exit $err
