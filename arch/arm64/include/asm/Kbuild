@@ -5,6 +5,7 @@ generic-y += qrwlock.h
 generic-y += qspinlock.h
 generic-y += parport.h
 generic-y += user.h
+generic-y += asi.h
 
 generated-y += cpucap-defs.h
 generated-y += sysreg-defs.h

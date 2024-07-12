@@ -2516,6 +2516,25 @@ config MITIGATION_PAGE_TABLE_ISOLATION
 
 	  See Documentation/arch/x86/pti.rst for more details.
 
+config MITIGATION_ADDRESS_SPACE_ISOLATION
+	bool "Allow code to run with a reduced kernel address space"
+	default n
+	depends on X86_64 && !PARAVIRT && !KASAN && !UML
+	help
+	  This feature provides the ability to run some kernel code
+	  with a reduced kernel address space. This can be used to
+	  mitigate some speculative execution attacks.
+
+	  The !PARAVIRT dependency is only because of lack of testing; in theory
+	  the code is written to work under paravirtualization. In practice
+	  there are likely to be unhandled cases, in particular concerning TLB
+	  flushes.
+
+	  The !KASAN dependency is mainly because ASI creates a secondary
+	  direct-map region in order to implement local-nonsensitive memory.
+	  This dependencies will later be removed with extensions to the KASAN
+	  implementation.
+
 config MITIGATION_RETPOLINE
 	bool "Avoid speculative indirect branches in kernel"
 	select OBJTOOL if HAVE_OBJTOOL
