@@ -5,6 +5,7 @@
 #include <asm/processor-flags.h>
 
 /* Forward declaration, a strange C thing */
+struct asi;
 struct task_struct;
 struct mm_struct;
 struct io_bitmap;
@@ -487,6 +488,13 @@ struct thread_struct {
 	unsigned long		features_locked;
 
 	struct thread_shstk	shstk;
+#endif
+
+#ifdef CONFIG_MITIGATION_ADDRESS_SPACE_ISOLATION
+	struct {
+		/* Domain to enter when returning to process context. */
+		struct asi	*target;
+	} asi_state;
 #endif
 
 	/* Floating point and extended processor state */

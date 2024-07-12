@@ -19,8 +19,10 @@
 #include <linux/workqueue.h>
 #include <linux/seqlock.h>
 #include <linux/percpu_counter.h>
+#include <linux/mutex.h>
 
 #include <asm/mmu.h>
+#include <asm/asi.h>
 
 #ifndef AT_VECTOR_SIZE_ARCH
 #define AT_VECTOR_SIZE_ARCH 0
@@ -800,6 +802,11 @@ struct mm_struct {
 		 * cache-line, which needs to be touched by switch_mm().
 		 */
 		atomic_t membarrier_state;
+#endif
+
+#ifdef CONFIG_MITIGATION_ADDRESS_SPACE_ISOLATION
+		struct asi asi[ASI_MAX_NUM];
+		struct mutex asi_init_lock;
 #endif
 
 		/**

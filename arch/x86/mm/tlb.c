@@ -155,7 +155,7 @@ static inline u16 user_pcid(u16 asid)
 	return ret;
 }
 
-static inline_or_noinstr unsigned long build_cr3(pgd_t *pgd, u16 asid, unsigned long lam)
+inline_or_noinstr unsigned long build_cr3(pgd_t *pgd, u16 asid, unsigned long lam)
 {
 	unsigned long cr3 = __sme_pa_nodebug(pgd) | lam;
 

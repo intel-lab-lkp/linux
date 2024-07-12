@@ -391,6 +391,8 @@ static inline bool huge_pmd_needs_flush(pmd_t oldpmd, pmd_t newpmd)
 }
 #define huge_pmd_needs_flush huge_pmd_needs_flush
 
+unsigned long build_cr3(pgd_t *pgd, u16 asid, unsigned long lam);
+
 #ifdef CONFIG_ADDRESS_MASKING
 static inline  u64 tlbstate_lam_cr3_mask(void)
 {

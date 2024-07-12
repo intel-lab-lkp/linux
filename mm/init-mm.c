@@ -12,6 +12,7 @@
 #include <linux/user_namespace.h>
 #include <linux/iommu.h>
 #include <asm/mmu.h>
+#include <asm/asi.h>
 
 #ifndef INIT_MM_CONTEXT
 #define INIT_MM_CONTEXT(name)
@@ -44,6 +45,9 @@ struct mm_struct init_mm = {
 #endif
 	.user_ns	= &init_user_ns,
 	.cpu_bitmap	= CPU_BITS_NONE,
+#ifdef CONFIG_MITIGATION_ADDRESS_SPACE_ISOLATION
+	INIT_MM_ASI(init_mm)
+#endif
 	INIT_MM_CONTEXT(init_mm)
 };
 
