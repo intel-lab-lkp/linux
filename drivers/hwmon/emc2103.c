@@ -27,7 +27,11 @@ static const u8 REG_TEMP_MAX[4] = { 0x34, 0x30, 0x31, 0x32 };
 #define REG_TEMP_MAX_ALARM	0x24
 #define REG_TEMP_MIN_ALARM	0x25
 #define REG_FAN_STATUS		0x27
+#define REG_PWM_BASE_FREQUENCY	0x2b
+#define REG_PWM_DUTY		0x40
+#define REG_PWM_FREQ_DIVIDE	0x41
 #define REG_FAN_CONF1		0x42
+#define REG_FAN_VALID_TACH	0x49
 #define REG_FAN_TARGET_LO	0x4c
 #define REG_FAN_TARGET_HI	0x4d
 #define REG_FAN_TACH_HI		0x4e
@@ -37,6 +41,9 @@ static const u8 REG_TEMP_MAX[4] = { 0x34, 0x30, 0x31, 0x32 };
 
 #define FAN_AUTO_MASK		BIT(7)
 #define FAN_DIV_MASK		GENMASK(6, 5)
+#define FAN_PULSES_MASK		GENMASK(4, 3)
+
+#define FAN_BASE_FREQ_MASK	GENMASK(1, 0)
 
 /* equation 4 from datasheet: rpm = (3932160 * multiplier) / count */
 #define FAN_RPM_FACTOR		3932160
@@ -141,6 +148,8 @@ static int emc2103_fan_read(struct emc2103_data *data, u32 attr, long *val)
 			REG_FAN_TACH_LO, REG_FAN_TACH_HI, REG_FAN_CONF1 };
 	static unsigned int regs_target[3] = {
 			REG_FAN_TARGET_LO, REG_FAN_TARGET_HI, REG_FAN_CONF1 };
+	static unsigned int regs_min[2] = {
+			REG_FAN_TARGET_HI, REG_FAN_CONF1 };
 	u8 regvals[3];
 	u32 regval;
 	int ret;
@@ -174,24 +183,58 @@ static int emc2103_fan_read(struct emc2103_data *data, u32 attr, long *val)
 
 		*val = BIT(3 - FIELD_GET(FAN_DIV_MASK, regval));
 		break;
+	case hwmon_fan_pulses:
+		ret = regmap_read(regmap, REG_FAN_CONF1, &regval);
+		if (ret)
+			return ret;
+		*val = FIELD_GET(FAN_PULSES_MASK, regval) + 1;
+		break;
+	case hwmon_fan_min:
+		ret = regmap_multi_reg_read(regmap, regs_min, regvals, 2);
+		if (ret)
+			return ret;
+		*val = rpm_from_reg((regvals[0] << 5), regvals[1]);
+		break;
+	case hwmon_fan_min_alarm:
+		ret = regmap_read(regmap, REG_FAN_STATUS, &regval);
+		if (ret)
+			return ret;
+		*val = !!(regval & BIT(0));
+		break;
 	default:
 		return -EOPNOTSUPP;
 	}
 	return 0;
 }
 
+static const u16 pwm_frequencies[] = {26000, 19531, 4882, 2441};
+
 static int emc2103_pwm_read(struct emc2103_data *data, u32 attr, long *val)
 {
+	unsigned int regs[2] = {REG_PWM_BASE_FREQUENCY, REG_PWM_FREQ_DIVIDE};
 	struct regmap *regmap = data->regmap;
+	u8 regvals[2];
 	u32 regval;
 	int ret;
 
 	switch (attr) {
+	case hwmon_pwm_input:
+		ret = regmap_read(regmap, REG_PWM_DUTY, &regval);
+		if (ret)
+			return ret;
+		*val = regval;
+		break;
 	case hwmon_pwm_enable:
 		ret = regmap_read(regmap, REG_FAN_CONF1, &regval);
 		if (ret)
 			return ret;
 		*val = (regval & FAN_AUTO_MASK) ? 3 : 0;
+		break;
+	case hwmon_pwm_freq:
+		ret = regmap_multi_reg_read(regmap, regs, regvals, 2);
+		if (ret)
+			return ret;
+		*val = pwm_frequencies[regvals[0] & FAN_BASE_FREQ_MASK] / (regvals[1] ? : 1);
 		break;
 	default:
 		return -EOPNOTSUPP;
@@ -260,6 +303,17 @@ static int emc2103_fan_write(struct emc2103_data *data, u32 attr, long val)
 		regvals[1] = val >> 5;
 		ret = regmap_bulk_write(regmap, REG_FAN_TARGET_LO, regvals, 2);
 		break;
+	case hwmon_fan_min:
+		if (val < 0) {
+			ret = -EINVAL;
+			break;
+		}
+		ret = regmap_read(regmap, REG_FAN_CONF1, &regval);
+		if (ret)
+			break;
+		val = rpm_to_reg(val, regval);
+		ret = regmap_write(regmap, REG_FAN_VALID_TACH, val >> 5);
+		break;
 	case hwmon_fan_div:
 		if (val <= 0 || val > 8 || hweight32(val) != 1) {
 			ret = -EINVAL;
@@ -289,6 +343,14 @@ static int emc2103_fan_write(struct emc2103_data *data, u32 attr, long val)
 		regvals[1] = val >> 5;
 		ret = regmap_bulk_write(regmap, REG_FAN_TARGET_LO, regvals, 2);
 		break;
+	case hwmon_fan_pulses:
+		if (val < 1 || val > 4) {
+			ret = -EINVAL;
+			break;
+		}
+		ret = regmap_update_bits(regmap, REG_FAN_CONF1, FAN_PULSES_MASK,
+					 FIELD_PREP(FAN_PULSES_MASK, val + 1));
+		break;
 	default:
 		ret = -EOPNOTSUPP;
 		break;
@@ -307,6 +369,10 @@ static int emc2103_pwm_write(struct emc2103_data *data, u32 attr, long val)
 			return -EINVAL;
 		return regmap_update_bits(regmap, REG_FAN_CONF1, FAN_AUTO_MASK,
 					  val ? FAN_AUTO_MASK : 0);
+	case hwmon_pwm_input:
+		if (val < 0 || val > 255)
+			return -EINVAL;
+		return regmap_write(regmap, REG_PWM_DUTY, val);
 	default:
 		return -EOPNOTSUPP;
 	}
@@ -355,9 +421,12 @@ static umode_t emc2103_is_visible(const void *_data, enum hwmon_sensor_types typ
 		switch (attr) {
 		case hwmon_fan_input:
 		case hwmon_fan_fault:
+		case hwmon_fan_min_alarm:
 			return 0444;
 		case hwmon_fan_div:
+		case hwmon_fan_pulses:
 		case hwmon_fan_target:
+		case hwmon_fan_min:
 			return 0644;
 		default:
 			break;
@@ -366,7 +435,10 @@ static umode_t emc2103_is_visible(const void *_data, enum hwmon_sensor_types typ
 	case hwmon_pwm:
 		switch (attr) {
 		case hwmon_pwm_enable:
+		case hwmon_pwm_input:
 			return 0644;
+		case hwmon_pwm_freq:
+			return 0444;
 		default:
 			break;
 		}
@@ -389,9 +461,10 @@ static const struct hwmon_channel_info * const emc2103_info[] = {
 			   HWMON_T_FAULT | HWMON_T_MIN_ALARM | HWMON_T_MAX_ALARM),
 	HWMON_CHANNEL_INFO(fan,
 			   HWMON_F_INPUT | HWMON_F_DIV | HWMON_F_TARGET |
-			   HWMON_F_FAULT),
+			   HWMON_F_PULSES | HWMON_F_FAULT | HWMON_F_MIN |
+			   HWMON_F_MIN_ALARM),
 	HWMON_CHANNEL_INFO(pwm,
-			   HWMON_PWM_ENABLE),
+			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE | HWMON_PWM_FREQ),
 	NULL
 };
 
@@ -415,6 +488,7 @@ static bool emc2103_volatile_reg(struct device *dev, unsigned int reg)
 	case REG_FAN_TACH_HI:
 	case REG_FAN_TACH_LO:
 	case REG_FAN_STATUS:
+	case REG_PWM_DUTY:
 		return true;
 	default:
 		return false;
