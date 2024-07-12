@@ -14,6 +14,7 @@ Contents
 - `Basic packet flow`_
 - `Devlink health reporters`_
 - `Quality of service`_
+- `RVU representors`_
 
 Overview
 ========
@@ -340,3 +341,87 @@ Setup HTB offload
         # tc class add dev <interface> parent 1: classid 1:2 htb rate 10Gbit prio 2 quantum 188416
 
         # tc class add dev <interface> parent 1: classid 1:3 htb rate 10Gbit prio 2 quantum 32768
+
+
+RVU Representors
+================
+
+RVU representor driver adds support for creation of representor devices for
+RVU PFs' VFs in the system. Representor devices are created when user enables
+the switchdev mode.
+Switchdev mode can be enabled either before or after setting up SRIOV numVFs.
+All representor devices share a single NIXLF but each has a dedicated queue
+(ie RQ/SQ. RVU PF representor driver registers a separate netdev for each
+RQ/SQ queue pair.
+
+HW doesn't have a in-built switch which can do L2 learning and forward pkts
+between representee and representor. Hence packet patch between representee
+and it's representor is achieved by setting up appropriate NPC MCAM filters.
+Transmit packets matching these filters will be loopbacked through hardware
+loopback channel/interface (ie instead of sending them out of MAC interface).
+Which will again match the installed filters and will be forwarded.
+This way representee => representor and representor => representee packet
+path is achieved.These rules get installed when representors are created
+and gets active/deactivate based on the representor/representee interface state.
+
+Usage example:
+
+ - List of devices on the system before vfs are created::
+
+	# devlink dev
+	pci/0002:02:00.0
+	pci/0002:1c:00.0
+
+- Change device to switchdev mode::
+	# devlink dev eswitch set pci/0002:1c:00.0 mode switchdev
+
+ - List the devices on the system::
+
+	# ip link show
+
+Sample output::
+
+	# ip link show
+	eth0: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN mode DEFAULT group default qlen 1000 link/ether 7e:58:2d:b6:97:51 brd ff:ff:ff:ff:ff:ff
+	r0p1v0: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN mode DEFAULT group default qlen 1000 link/ether 7e:5a:66:ea:fe:d6 brd ff:ff:ff:ff:ff:ff
+	r1p1v1: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN mode DEFAULT group default qlen 1000 link/ether de:29:be:10:9e:bf brd ff:ff:ff:ff:ff:ff
+	r2p1v2: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN mode DEFAULT group default qlen 1000 link/ether 4a:12:c7:a2:66:ad brd ff:ff:ff:ff:ff:ff
+	r3p1v3: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN mode DEFAULT group default qlen 1000 link/ether c2:b8:a8:0e:73:fd brd ff:ff:ff:ff:ff:ff
+
+
+RVU representors can be managed using devlink ports
+(see :ref:`Documentation/networking/devlink/devlink-port.rst <devlink_port>`) interface.
+
+ - Show devlink ports of representors::
+
+	# devlink port
+
+Sample output::
+
+	pci/0002:1c:00.0/0: type eth netdev r0p1v0 flavour pcipf controller 0 pfnum 1 vfnum 0 external false splittable false
+	pci/0002:1c:00.0/1: type eth netdev r1p1v1 flavour pcivf controller 0 pfnum 1 vfnum 1 external false splittable false
+	pci/0002:1c:00.0/2: type eth netdev r2p1v2 flavour pcivf controller 0 pfnum 1 vfnum 2 external false splittable false
+	pci/0002:1c:00.0/3: type eth netdev r3p1v3 flavour pcivf controller 0 pfnum 1 vfnum 3 external false splittable false
+
+Function attributes
+===================
+
+The RVU representor support function attributes for representors
+Port function configuration of the representors are supported through devlink eswitch port.
+
+MAC address setup
+-----------------
+
+RVU representor driver support devlink port function attr mechanism to setup MAC
+address. (refer to Documentation/networking/devlink/devlink-port.rst)
+
+ - To setup MAC address for port 2::
+
+$ devlink port function set  pci/0002:1c:00.0/2 hw_addr 5c:a1:1b:5e:43:11 state active
+
+
+To remove the representors from the system. Change the device to legacy mode.
+
+ - Change device to legacy mode::
+
+	# devlink dev eswitch set pci/0002:1c:00.0 mode legacy
