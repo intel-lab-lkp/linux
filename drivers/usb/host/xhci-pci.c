@@ -825,6 +825,7 @@ static int xhci_pci_poweroff_late(struct usb_hcd *hcd, bool do_wakeup)
 	struct usb_device	*udev;
 	u32			portsc;
 	int			i;
+	bool			wakeup = false;
 
 	/*
 	 * Systems with XHCI_RESET_TO_DEFAULT quirk have boot firmware that
@@ -862,6 +863,14 @@ static int xhci_pci_poweroff_late(struct usb_hcd *hcd, bool do_wakeup)
 			 port->rhub->hcd->self.busnum, port->hcd_portnum + 1);
 		portsc = xhci_port_state_to_neutral(portsc);
 		writel(portsc | PORT_PE, port->addr);
+		wakeup = true;
+	}
+
+	if (!wakeup) {
+		struct pci_dev *pdev = to_pci_dev(hcd->self.controller);
+
+		xhci_shutdown(hcd);
+		pci_set_power_state(pdev, PCI_D3hot);
 	}
 
 	return 0;
