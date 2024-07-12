@@ -5,6 +5,8 @@
 #include <linux/spinlock.h>
 
 #include <linux/init.h>
+#include <linux/pgtable.h>
+
 #include <asm/asi.h>
 #include <asm/cmdline.h>
 #include <asm/pgalloc.h>
@@ -102,10 +104,17 @@ EXPORT_SYMBOL_GPL(asi_unregister_class);
  *    allocator from interrupts and the page allocator ultimately calls this
  *    code.
  *  - They support customizing the allocation flags.
+ *  - They avoid infinite recursion when the page allocator calls back to
+ *    asi_map
  *
  * On the other hand, they do not use the normal page allocation infrastructure,
  * that means that PTE pages do not have the PageTable type nor the PagePgtable
  * flag and we don't increment the meminfo stat (NR_PAGETABLE) as they do.
+ *
+ * As an optimisation we attempt to map the pagetables in
+ * ASI_GLOBAL_NONSENSITIVE, but this can fail, and for simplicity we don't do
+ * anything about that. This means it's invalid to access ASI pagetables from a
+ * critical section.
  */
 static_assert(!IS_ENABLED(CONFIG_PARAVIRT));
 #define DEFINE_ASI_PGTBL_ALLOC(base, level)				\
@@ -114,8 +123,11 @@ static level##_t * asi_##level##_alloc(struct asi *asi,			\
 				       gfp_t flags)			\
 {									\
 	if (unlikely(base##_none(*base))) {				\
-		ulong pgtbl = get_zeroed_page(flags);			\
+		/* Stop asi_map calls causing recursive allocation */	\
+		gfp_t pgtbl_gfp = flags | __GFP_SENSITIVE;		\
+		ulong pgtbl = get_zeroed_page(pgtbl_gfp);		\
 		phys_addr_t pgtbl_pa;					\
+		int err;						\
 									\
 		if (!pgtbl)						\
 			return NULL;					\
@@ -129,6 +141,16 @@ static level##_t * asi_##level##_alloc(struct asi *asi,			\
 		}							\
 									\
 		mm_inc_nr_##level##s(asi->mm);				\
+									\
+		err = asi_map_gfp(ASI_GLOBAL_NONSENSITIVE,		\
+				  (void *)pgtbl, PAGE_SIZE, flags);	\
+		if (err)						\
+			/* Should be rare. Spooky. */			\
+			pr_warn_ratelimited("Created sensitive ASI %s (%pK, maps %luK).\n",\
+				#level, (void *)pgtbl, addr);		\
+		else							\
+			__SetPageGlobalNonSensitive(virt_to_page(pgtbl));\
+									\
 	}								\
 out:									\
 	VM_BUG_ON(base##_leaf(*base));					\
@@ -469,6 +491,9 @@ static bool follow_physaddr(
  * reason for this is that we don't want to unexpectedly undo mappings that
  * weren't created by the present caller.
  *
+ * This must not be called from the critical section, as ASI's pagetables are
+ * not guaranteed to be mapped in the restricted address space.
+ *
  * If the source mapping is a large page and the range being mapped spans the
  * entire large page, then it will be mapped as a large page in the ASI page
  * tables too. If the range does not span the entire huge page, then it will be
@@ -491,6 +516,9 @@ int __must_check asi_map_gfp(struct asi *asi, void *addr, unsigned long len, gfp
 
 	if (!static_asi_enabled())
 		return 0;
+
+	/* ASI pagetables might be sensitive. */
+	WARN_ON_ONCE(asi_in_critical_section());
 
 	VM_BUG_ON(!IS_ALIGNED(start, PAGE_SIZE));
 	VM_BUG_ON(!IS_ALIGNED(len, PAGE_SIZE));
@@ -590,6 +618,9 @@ void asi_unmap(struct asi *asi, void *addr, size_t len)
 
 	if (!static_asi_enabled() || !len)
 		return;
+
+	/* ASI pagetables might be sensitive. */
+	WARN_ON_ONCE(asi_in_critical_section());
 
 	VM_BUG_ON(start & ~PAGE_MASK);
 	VM_BUG_ON(len & ~PAGE_MASK);
