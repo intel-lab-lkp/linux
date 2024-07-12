@@ -85,7 +85,12 @@ int arch_evlist__cmp(const struct evsel *lhs, const struct evsel *rhs)
 		/* Followed by topdown events. */
 		if (arch_is_topdown_metrics(lhs) && !arch_is_topdown_metrics(rhs))
 			return -1;
-		if (!arch_is_topdown_metrics(lhs) && arch_is_topdown_metrics(rhs))
+		/*
+		 * Move topdown events forward only when topdown events
+		 * are not in same group with previous event.
+		 */
+		if (!arch_is_topdown_metrics(lhs) && arch_is_topdown_metrics(rhs) &&
+		    lhs->core.leader != rhs->core.leader)
 			return 1;
 	}
 
