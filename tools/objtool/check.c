@@ -3425,6 +3425,17 @@ static bool pv_call_dest(struct objtool_file *file, struct instruction *insn)
 	return file->pv_ops[idx].clean;
 }
 
+static inline bool allow_noinstr_indirect_call(struct symbol *func)
+{
+	/*
+	 * These functions are noinstr but make indirect calls. The programmer
+	 * solemnly promises that the target functions are noinstr too, but they
+	 * might be in modules so we can't prove it here.
+	 */
+	return (!strcmp(func->name, "asi_exit") ||
+		!strcmp(func->name, "__asi_enter"));
+}
+
 static inline bool noinstr_call_dest(struct objtool_file *file,
 				     struct instruction *insn,
 				     struct symbol *func)
@@ -3436,6 +3447,9 @@ static inline bool noinstr_call_dest(struct objtool_file *file,
 	if (!func) {
 		if (file->pv_ops)
 			return pv_call_dest(file, insn);
+
+		if (allow_noinstr_indirect_call(insn->sym))
+			return true;
 
 		return false;
 	}
