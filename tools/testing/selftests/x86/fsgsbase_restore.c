@@ -30,6 +30,7 @@
 #include <sys/ptrace.h>
 #include <sys/wait.h>
 #include <stdint.h>
+#include "../kselftest.h"
 
 #define EXPECTED_VALUE 0x1337f00d
 
@@ -45,18 +46,18 @@
  */
 unsigned int dereference_seg_base(void);
 
-static void init_seg(void)
+static int init_seg(void)
 {
 	unsigned int *target = mmap(
 		NULL, sizeof(unsigned int),
 		PROT_READ | PROT_WRITE,
 		MAP_PRIVATE | MAP_ANONYMOUS | MAP_32BIT, -1, 0);
 	if (target == MAP_FAILED)
-		err(1, "mmap");
+		ksft_exit_fail_perror("mmap");
 
 	*target = EXPECTED_VALUE;
 
-	printf("\tsegment base address = 0x%lx\n", (unsigned long)target);
+	ksft_print_msg("segment base address = 0x%lx\n", (unsigned long)target);
 
 	struct user_desc desc = {
 		.entry_number    = 0,
@@ -70,7 +71,7 @@ static void init_seg(void)
 		.useable         = 0
 	};
 	if (syscall(SYS_modify_ldt, 1, &desc, sizeof(desc)) == 0) {
-		printf("\tusing LDT slot 0\n");
+		ksft_print_msg("using LDT slot 0\n");
 		asm volatile ("mov %0, %" SEG :: "rm" ((unsigned short)0x7));
 	} else {
 		/* No modify_ldt for us (configured out, perhaps) */
@@ -96,14 +97,16 @@ static void init_seg(void)
 		munmap(low_desc, sizeof(desc));
 
 		if (ret != 0) {
-			printf("[NOTE]\tcould not create a segment -- can't test anything\n");
-			exit(0);
+			ksft_print_msg("could not create a segment -- can't test anything\n");
+			return KSFT_SKIP;
 		}
-		printf("\tusing GDT slot %d\n", desc.entry_number);
+		ksft_print_msg("using GDT slot %d\n", desc.entry_number);
 
 		unsigned short sel = (unsigned short)((desc.entry_number << 3) | 0x3);
 		asm volatile ("mov %0, %" SEG :: "rm" (sel));
 	}
+
+	return 0;
 }
 
 static void tracee_zap_segment(void)
@@ -114,7 +117,7 @@ static void tracee_zap_segment(void)
 	 * we modify a segment register in order to make sure that ptrace
 	 * can correctly restore segment registers.
 	 */
-	printf("\tTracee: in tracee_zap_segment()\n");
+	ksft_print_msg("Tracee: in tracee_zap_segment()\n");
 
 	/*
 	 * Write a nonzero selector with base zero to the segment register.
@@ -129,70 +132,72 @@ static void tracee_zap_segment(void)
 
 	pid_t pid = getpid(), tid = syscall(SYS_gettid);
 
-	printf("\tTracee is going back to sleep\n");
+	ksft_print_msg("Tracee is going back to sleep\n");
 	syscall(SYS_tgkill, pid, tid, SIGSTOP);
 
 	/* Should not get here. */
-	while (true) {
-		printf("[FAIL]\tTracee hit unreachable code\n");
-		pause();
-	}
+	ksft_exit_fail_msg("Tracee hit unreachable code\n");
 }
 
 int main()
 {
-	printf("\tSetting up a segment\n");
-	init_seg();
+	int ret;
+
+	ksft_print_header();
+	ksft_set_plan(2);
+
+	ksft_print_msg("Setting up a segment\n");
+
+	ret = init_seg();
+	if (ret)
+		return ret;
 
 	unsigned int val = dereference_seg_base();
-	if (val != EXPECTED_VALUE) {
-		printf("[FAIL]\tseg[0] == %x; should be %x\n", val, EXPECTED_VALUE);
-		return 1;
-	}
-	printf("[OK]\tThe segment points to the right place.\n");
+	ksft_test_result(val == EXPECTED_VALUE, "The segment points to the right place.\n");
 
 	pid_t chld = fork();
 	if (chld < 0)
-		err(1, "fork");
+		ksft_exit_fail_perror("fork");
 
 	if (chld == 0) {
 		prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0, 0);
 
 		if (ptrace(PTRACE_TRACEME, 0, 0, 0) != 0)
-			err(1, "PTRACE_TRACEME");
+			ksft_exit_fail_perror("PTRACE_TRACEME");
 
 		pid_t pid = getpid(), tid = syscall(SYS_gettid);
 
-		printf("\tTracee will take a nap until signaled\n");
+		ksft_print_msg("Tracee will take a nap until signaled\n");
 		syscall(SYS_tgkill, pid, tid, SIGSTOP);
 
-		printf("\tTracee was resumed.  Will re-check segment.\n");
+		ksft_print_msg("Tracee was resumed. Will re-check segment.\n");
 
 		val = dereference_seg_base();
-		if (val != EXPECTED_VALUE) {
-			printf("[FAIL]\tseg[0] == %x; should be %x\n", val, EXPECTED_VALUE);
-			exit(1);
+
+		if (val == EXPECTED_VALUE) {
+			ksft_print_msg("The segment points to the right place.\n");
+			return EXIT_SUCCESS;
 		}
 
-		printf("[OK]\tThe segment points to the right place.\n");
-		exit(0);
+		ksft_print_msg("seg[0] == %x; should be %x\n", val, EXPECTED_VALUE);
+		return EXIT_FAILURE;
 	}
 
 	int status;
 
 	/* Wait for SIGSTOP. */
 	if (waitpid(chld, &status, 0) != chld || !WIFSTOPPED(status))
-		err(1, "waitpid");
+		ksft_exit_fail_perror("waitpid");
 
 	struct user_regs_struct regs;
 
 	if (ptrace(PTRACE_GETREGS, chld, NULL, &regs) != 0)
-		err(1, "PTRACE_GETREGS");
+		ksft_exit_fail_perror("PTRACE_GETREGS");
 
 #ifdef __x86_64__
-	printf("\tChild GS=0x%lx, GSBASE=0x%lx\n", (unsigned long)regs.gs, (unsigned long)regs.gs_base);
+	ksft_print_msg("Child GS=0x%lx, GSBASE=0x%lx\n", (unsigned long)regs.gs, (unsigned long)regs.gs_base);
 #else
-	printf("\tChild FS=0x%lx\n", (unsigned long)regs.xfs);
+	ksft_print_msg("Child FS=0x%lx\n", (unsigned long)regs.xfs);
 #endif
 
 	struct user_regs_struct regs2 = regs;
@@ -203,42 +208,34 @@ int main()
 	regs2.eip = (unsigned long)tracee_zap_segment;
 #endif
 
-	printf("\tTracer: redirecting tracee to tracee_zap_segment()\n");
+	ksft_print_msg("Tracer: redirecting tracee to tracee_zap_segment()\n");
 	if (ptrace(PTRACE_SETREGS, chld, NULL, &regs2) != 0)
-		err(1, "PTRACE_GETREGS");
+		ksft_exit_fail_perror("PTRACE_GETREGS");
 	if (ptrace(PTRACE_CONT, chld, NULL, NULL) != 0)
-		err(1, "PTRACE_GETREGS");
+		ksft_exit_fail_perror("PTRACE_GETREGS");
 
 	/* Wait for SIGSTOP. */
 	if (waitpid(chld, &status, 0) != chld || !WIFSTOPPED(status))
-		err(1, "waitpid");
+		ksft_exit_fail_perror("waitpid");
 
-	printf("\tTracer: restoring tracee state\n");
+	ksft_print_msg("Tracer: restoring tracee state\n");
 	if (ptrace(PTRACE_SETREGS, chld, NULL, &regs) != 0)
-		err(1, "PTRACE_GETREGS");
+		ksft_exit_fail_perror("PTRACE_GETREGS");
 	if (ptrace(PTRACE_DETACH, chld, NULL, NULL) != 0)
-		err(1, "PTRACE_GETREGS");
+		ksft_exit_fail_perror("PTRACE_GETREGS");
 
 	/* Wait for SIGSTOP. */
 	if (waitpid(chld, &status, 0) != chld)
-		err(1, "waitpid");
+		ksft_exit_fail_perror("waitpid");
 
-	if (WIFSIGNALED(status)) {
-		printf("[FAIL]\tTracee crashed\n");
-		return 1;
-	}
+	if (WIFSIGNALED(status))
+		ksft_test_result_fail("Tracee crashed\n");
+	else if (!WIFEXITED(status))
+		ksft_test_result_fail("Tracee stopped for an unexpected reason: %d\n", status);
+	else if (WEXITSTATUS(status) != 0)
+		ksft_test_result_fail("Tracee reported failure\n");
+	else
+		ksft_test_result_pass("Tracee exited correctly\n");
 
-	if (!WIFEXITED(status)) {
-		printf("[FAIL]\tTracee stopped for an unexpected reason: %d\n", status);
-		return 1;
-	}
-
-	int exitcode = WEXITSTATUS(status);
-	if (exitcode != 0) {
-		printf("[FAIL]\tTracee reported failure\n");
-		return 1;
-	}
-
-	printf("[OK]\tAll is well.\n");
-	return 0;
+	ksft_finished();
 }
