@@ -2255,6 +2255,9 @@ static bool access_zcr_el2(struct kvm_vcpu *vcpu,
 	return true;
 }
 
+__diag_push();
+__diag_ignore_all("-Woverride-init", "Allow field overrides in sys_reg_descs");
+
 /*
  * Architected system registers.
  * Important: Must be sorted ascending by Op0, Op1, CRn, CRm, Op2
@@ -2802,6 +2805,8 @@ static const struct sys_reg_desc sys_reg_descs[] = {
 
 	EL2_REG(SP_EL2, NULL, reset_unknown, 0),
 };
+
+__diag_pop();
 
 static bool kvm_supported_tlbi_s12_op(struct kvm_vcpu *vpcu, u32 instr)
 {

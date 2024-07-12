@@ -291,6 +291,9 @@ static int handle_svc(struct kvm_vcpu *vcpu)
 	return 1;
 }
 
+__diag_push();
+__diag_ignore_all("-Woverride-init", "Allow field overrides in exit_handlers");
+
 static exit_handle_fn arm_exit_handlers[] = {
 	[0 ... ESR_ELx_EC_MAX]	= kvm_handle_unknown_ec,
 	[ESR_ELx_EC_WFx]	= kvm_handle_wfx,
@@ -318,6 +321,8 @@ static exit_handle_fn arm_exit_handlers[] = {
 	[ESR_ELx_EC_FP_ASIMD]	= kvm_handle_fpasimd,
 	[ESR_ELx_EC_PAC]	= kvm_handle_ptrauth,
 };
+
+__diag_pop();
 
 static exit_handle_fn kvm_get_exit_handler(struct kvm_vcpu *vcpu)
 {
