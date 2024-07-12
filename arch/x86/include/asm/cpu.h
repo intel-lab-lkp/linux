@@ -51,6 +51,10 @@ static inline u8 get_this_hybrid_cpu_type(void)
 	return 0;
 }
 #endif
+
+void split_lock_init(void);
+void bus_lock_init(void);
+
 #ifdef CONFIG_IA32_FEAT_CTL
 void init_ia32_feat_ctl(struct cpuinfo_x86 *c);
 #else
