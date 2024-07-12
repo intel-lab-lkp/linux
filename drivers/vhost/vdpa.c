@@ -251,7 +251,7 @@ static int vhost_vdpa_reset(struct vhost_vdpa *v)
 	return _compat_vdpa_reset(v);
 }
 
-static long vhost_vdpa_bind_mm(struct vhost_vdpa *v)
+static long vhost_vdpa_bind_mm(struct vhost_vdpa *v, struct mm_struct *mm)
 {
 	struct vdpa_device *vdpa = v->vdpa;
 	const struct vdpa_config_ops *ops = vdpa->config;
@@ -259,7 +259,7 @@ static long vhost_vdpa_bind_mm(struct vhost_vdpa *v)
 	if (!vdpa->use_va || !ops->bind_mm)
 		return 0;
 
-	return ops->bind_mm(vdpa, v->vdev.mm);
+	return ops->bind_mm(vdpa, mm);
 }
 
 static void vhost_vdpa_unbind_mm(struct vhost_vdpa *v)
@@ -888,7 +888,7 @@ static long vhost_vdpa_unlocked_ioctl(struct file *filep,
 
 	switch (cmd) {
 	case VHOST_SET_OWNER:
-		r = vhost_vdpa_bind_mm(v);
+		r = vhost_vdpa_bind_mm(v, v->vdev.mm);
 		if (r)
 			vhost_dev_reset_owner(d, NULL);
 		break;
