@@ -167,7 +167,7 @@ static void exit_type_state(struct type_state *state)
 }
 
 /*
- * Compare type name and size to maintain them in a tree.
+ * Compare type name, var_name  and size to maintain them in a tree.
  * I'm not sure if DWARF would have information of a single type in many
  * different places (compilation units).  If not, it could compare the
  * offset of the type entry in the .debug_info section.
@@ -176,12 +176,31 @@ static int data_type_cmp(const void *_key, const struct rb_node *node)
 {
 	const struct annotated_data_type *key = _key;
 	struct annotated_data_type *type;
+	int64_t ret = 0;
 
 	type = rb_entry(node, struct annotated_data_type, node);
 
 	if (key->self.size != type->self.size)
 		return key->self.size - type->self.size;
-	return strcmp(key->self.type_name, type->self.type_name);
+
+	ret = strcmp(key->self.type_name, type->self.type_name);
+	if (ret)
+		return ret;
+
+	/*
+	 * Compare var_name if it exists for key and type.
+	 * If both nodes doesn't have var_name, but one of
+	 * them has, return non-zero. This is to indicate nodes
+	 * are not the same if one has var_name, but other doesn't.
+	 */
+	if (key->self.var_name && type->self.var_name) {
+		ret = strcmp(key->self.var_name, type->self.var_name);
+		if (ret)
+			return ret;
+	} else if (!key->self.var_name != !type->self.var_name)
+		return cmp_null(key->self.var_name, type->self.var_name);
+
+	return ret;
 }
 
 static bool data_type_less(struct rb_node *node_a, const struct rb_node *node_b)

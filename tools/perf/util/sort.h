@@ -151,4 +151,5 @@ sort__dcacheline_cmp(struct hist_entry *left, struct hist_entry *right);
 int64_t
 _sort__sym_cmp(struct symbol *sym_l, struct symbol *sym_r);
 char *hist_entry__srcline(struct hist_entry *he);
+int64_t cmp_null(const void *l, const void *r);
 #endif	/* __PERF_SORT_H */
