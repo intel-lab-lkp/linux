@@ -11,6 +11,7 @@ Scheduler
     sched-arch
     sched-bwc
     sched-deadline
+    sched-eevdf
     sched-design-CFS
     sched-domains
     sched-capacity
