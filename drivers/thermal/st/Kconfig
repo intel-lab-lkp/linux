@@ -5,12 +5,14 @@
 
 config ST_THERMAL
 	tristate "Thermal sensors on STMicroelectronics STi series of SoCs"
+	depends on THERMAL_OF
 	help
 	  Support for thermal sensors on STMicroelectronics STi series of SoCs.
 
 config ST_THERMAL_MEMMAP
 	select ST_THERMAL
 	tristate "STi series memory mapped access based thermal sensors"
+	depends on THERMAL_OF
 
 config STM32_THERMAL
 	tristate "Thermal framework support on STMicroelectronics STM32 series of SoCs"
