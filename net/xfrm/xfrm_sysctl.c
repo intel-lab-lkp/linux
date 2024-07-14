@@ -10,34 +10,50 @@ static void __net_init __xfrm_sysctl_init(struct net *net)
 	net->xfrm.sysctl_aevent_rseqth = XFRM_AE_SEQT_SIZE;
 	net->xfrm.sysctl_larval_drop = 1;
 	net->xfrm.sysctl_acq_expires = 30;
+#if IS_ENABLED(CONFIG_XFRM_IPTFS)
+	net->xfrm.sysctl_iptfs_max_qsize = 1024 * 1024; /* 1M */
+	net->xfrm.sysctl_iptfs_drop_time = 1000000; /* 1s */
+	net->xfrm.sysctl_iptfs_init_delay = 0; /* no initial delay */
+	net->xfrm.sysctl_iptfs_reorder_window = 3; /* tcp folks suggested */
+#endif
 }
 
 #ifdef CONFIG_SYSCTL
 static struct ctl_table xfrm_table[] = {
-	{
-		.procname	= "xfrm_aevent_etime",
-		.maxlen		= sizeof(u32),
-		.mode		= 0644,
-		.proc_handler	= proc_douintvec
-	},
-	{
-		.procname	= "xfrm_aevent_rseqth",
-		.maxlen		= sizeof(u32),
-		.mode		= 0644,
-		.proc_handler	= proc_douintvec
-	},
-	{
-		.procname	= "xfrm_larval_drop",
-		.maxlen		= sizeof(int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec
-	},
-	{
-		.procname	= "xfrm_acq_expires",
-		.maxlen		= sizeof(int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec
-	},
+	{ .procname = "xfrm_aevent_etime",
+	  .maxlen = sizeof(u32),
+	  .mode = 0644,
+	  .proc_handler = proc_douintvec },
+	{ .procname = "xfrm_aevent_rseqth",
+	  .maxlen = sizeof(u32),
+	  .mode = 0644,
+	  .proc_handler = proc_douintvec },
+	{ .procname = "xfrm_larval_drop",
+	  .maxlen = sizeof(int),
+	  .mode = 0644,
+	  .proc_handler = proc_dointvec },
+	{ .procname = "xfrm_acq_expires",
+	  .maxlen = sizeof(int),
+	  .mode = 0644,
+	  .proc_handler = proc_dointvec },
+#if IS_ENABLED(CONFIG_XFRM_IPTFS)
+	{ .procname = "xfrm_iptfs_drop_time",
+	  .maxlen = sizeof(uint),
+	  .mode = 0644,
+	  .proc_handler = proc_douintvec },
+	{ .procname = "xfrm_iptfs_init_delay",
+	  .maxlen = sizeof(uint),
+	  .mode = 0644,
+	  .proc_handler = proc_douintvec },
+	{ .procname = "xfrm_iptfs_max_qsize",
+	  .maxlen = sizeof(uint),
+	  .mode = 0644,
+	  .proc_handler = proc_douintvec },
+	{ .procname = "xfrm_iptfs_reorder_window",
+	  .maxlen = sizeof(uint),
+	  .mode = 0644,
+	  .proc_handler = proc_douintvec },
+#endif
 };
 
 int __net_init xfrm_sysctl_init(struct net *net)
@@ -54,6 +70,12 @@ int __net_init xfrm_sysctl_init(struct net *net)
 	table[1].data = &net->xfrm.sysctl_aevent_rseqth;
 	table[2].data = &net->xfrm.sysctl_larval_drop;
 	table[3].data = &net->xfrm.sysctl_acq_expires;
+#if IS_ENABLED(CONFIG_XFRM_IPTFS)
+	table[4].data = &net->xfrm.sysctl_iptfs_drop_time;
+	table[5].data = &net->xfrm.sysctl_iptfs_init_delay;
+	table[6].data = &net->xfrm.sysctl_iptfs_max_qsize;
+	table[7].data = &net->xfrm.sysctl_iptfs_reorder_window;
+#endif
 
 	/* Don't export sysctls to unprivileged users */
 	if (net->user_ns != &init_user_ns)
