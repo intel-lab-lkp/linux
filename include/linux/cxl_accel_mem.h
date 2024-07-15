@@ -19,4 +19,5 @@ void cxl_accel_set_dvsec(cxl_accel_state *cxlds, u16 dvsec);
 void cxl_accel_set_serial(cxl_accel_state *cxlds, u64 serial);
 void cxl_accel_set_resource(struct cxl_dev_state *cxlds, struct resource res,
 			    enum accel_resource);
+int cxl_pci_accel_setup_regs(struct pci_dev *pdev, struct cxl_dev_state *cxlds);
 #endif

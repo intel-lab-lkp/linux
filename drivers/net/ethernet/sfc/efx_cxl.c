@@ -47,6 +47,9 @@ void efx_cxl_init(struct efx_nic *efx)
 
 	res = DEFINE_RES_MEM_NAMED(0, EFX_CTPIO_BUFFER_SIZE, "ram");
 	cxl_accel_set_resource(cxl->cxlds, res, CXL_ACCEL_RES_RAM);
+
+	if (cxl_pci_accel_setup_regs(pci_dev, cxl->cxlds))
+		pci_info(pci_dev, "CXL accel setup regs failed");
 }
 
 
