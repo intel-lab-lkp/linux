@@ -1307,6 +1307,35 @@ static int mxt_soft_reset(struct mxt_data *data)
 	return 0;
 }
 
+static int mxt_power_on(struct mxt_data *data)
+{
+	int error;
+
+	error = regulator_bulk_enable(ARRAY_SIZE(data->regulators),
+				      data->regulators);
+	if (error) {
+		dev_err(&data->client->dev, "failed to enable regulators: %d\n",
+			error);
+		return error;
+	}
+
+	msleep(MXT_BACKUP_TIME);
+
+	if (data->reset_gpio) {
+		/* Wait a while and then de-assert the RESET GPIO line */
+		msleep(MXT_RESET_GPIO_TIME);
+		gpiod_set_value(data->reset_gpio, 0);
+		msleep(MXT_RESET_INVALID_CHG);
+	}
+
+	return 0;
+}
+
+static void mxt_power_off(struct mxt_data *data)
+{
+	regulator_bulk_disable(ARRAY_SIZE(data->regulators), data->regulators);
+}
+
 static void mxt_update_crc(struct mxt_data *data, u8 cmd, u8 value)
 {
 	/*
@@ -3305,25 +3334,9 @@ static int mxt_probe(struct i2c_client *client)
 		return error;
 	}
 
-	error = regulator_bulk_enable(ARRAY_SIZE(data->regulators),
-				      data->regulators);
-	if (error) {
-		dev_err(&client->dev, "failed to enable regulators: %d\n",
-			error);
+	error = mxt_power_on(data);
+	if (error)
 		return error;
-	}
-	/*
-	 * The device takes 40ms to come up after power-on according
-	 * to the mXT224 datasheet, page 13.
-	 */
-	msleep(MXT_BACKUP_TIME);
-
-	if (data->reset_gpio) {
-		/* Wait a while and then de-assert the RESET GPIO line */
-		msleep(MXT_RESET_GPIO_TIME);
-		gpiod_set_value(data->reset_gpio, 0);
-		msleep(MXT_RESET_INVALID_CHG);
-	}
 
 	/*
 	 * Controllers like mXT1386 have a dedicated WAKE line that could be
@@ -3361,8 +3374,8 @@ err_free_object:
 	mxt_free_input_device(data);
 	mxt_free_object_table(data);
 err_disable_regulators:
-	regulator_bulk_disable(ARRAY_SIZE(data->regulators),
-			       data->regulators);
+	mxt_power_off(data);
+
 	return error;
 }
 
@@ -3374,8 +3387,7 @@ static void mxt_remove(struct i2c_client *client)
 	sysfs_remove_group(&client->dev.kobj, &mxt_attr_group);
 	mxt_free_input_device(data);
 	mxt_free_object_table(data);
-	regulator_bulk_disable(ARRAY_SIZE(data->regulators),
-			       data->regulators);
+	mxt_power_off(data);
 }
 
 static int mxt_suspend(struct device *dev)
