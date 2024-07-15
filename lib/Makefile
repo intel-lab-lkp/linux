@@ -408,11 +408,9 @@ targets += $(TEST_FORTIFY_LOGS)
 clean-files += $(TEST_FORTIFY_LOGS)
 clean-files += $(addsuffix .o, $(TEST_FORTIFY_LOGS))
 $(obj)/test_fortify/%.log: $(src)/test_fortify/%.c \
-			   $(src)/test_fortify/test_fortify.h \
-			   $(srctree)/include/linux/fortify-string.h \
 			   $(srctree)/scripts/test_fortify.sh \
 			   FORCE
-	$(call if_changed,test_fortify)
+	$(call if_changed_dep,test_fortify)
 
 quiet_cmd_gen_fortify_log = GEN     $@
       cmd_gen_fortify_log = cat </dev/null $(filter-out FORCE,$^) 2>/dev/null > $@ || true
