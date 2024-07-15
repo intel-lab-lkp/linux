@@ -67,6 +67,8 @@ enum net_attach_type {
 	NET_ATTACH_TYPE_XDP_GENERIC,
 	NET_ATTACH_TYPE_XDP_DRIVER,
 	NET_ATTACH_TYPE_XDP_OFFLOAD,
+	NET_ATTACH_TYPE_TCX_INGRESS,
+	NET_ATTACH_TYPE_TCX_EGRESS,
 };
 
 static const char * const attach_type_strings[] = {
@@ -74,6 +76,8 @@ static const char * const attach_type_strings[] = {
 	[NET_ATTACH_TYPE_XDP_GENERIC]	= "xdpgeneric",
 	[NET_ATTACH_TYPE_XDP_DRIVER]	= "xdpdrv",
 	[NET_ATTACH_TYPE_XDP_OFFLOAD]	= "xdpoffload",
+	[NET_ATTACH_TYPE_TCX_INGRESS]	= "tcxingress",
+	[NET_ATTACH_TYPE_TCX_EGRESS]	= "tcxegress",
 };
 
 static const char * const attach_loc_strings[] = {
@@ -647,6 +651,32 @@ static int do_attach_detach_xdp(int progfd, enum net_attach_type attach_type,
 	return bpf_xdp_attach(ifindex, progfd, flags, NULL);
 }
 
+static int get_tcx_type(enum net_attach_type attach_type)
+{
+	int type = 0;
+
+	if (attach_type == NET_ATTACH_TYPE_TCX_INGRESS)
+		type |= BPF_TCX_INGRESS;
+	else if (attach_type == NET_ATTACH_TYPE_TCX_EGRESS)
+		type |= BPF_TCX_EGRESS;
+
+	return type;
+}
+
+static int do_attach_tcx(int progfd, enum net_attach_type attach_type, int ifindex)
+{
+	int type = get_tcx_type(attach_type);
+
+	return bpf_prog_attach(progfd, ifindex, type, 0);
+}
+
+static int do_detach_tcx(int targetfd, enum net_attach_type attach_type)
+{
+	int type = get_tcx_type(attach_type);
+
+	return bpf_prog_detach(targetfd, type);
+}
+
 static int do_attach(int argc, char **argv)
 {
 	enum net_attach_type attach_type;
@@ -694,6 +724,15 @@ static int do_attach(int argc, char **argv)
 		goto cleanup;
 	}
 
+	/* attach tcx prog */
+	if (is_prefix("tcx", attach_type_strings[attach_type]))
+		err = do_attach_tcx(progfd, attach_type, ifindex);
+	if (err) {
+		p_err("interface %s attach failed: %s",
+		      attach_type_strings[attach_type], strerror(-err));
+		goto cleanup;
+	}
+
 	if (json_output)
 		jsonw_null(json_wtr);
 cleanup:
@@ -725,6 +764,16 @@ static int do_detach(int argc, char **argv)
 	progfd = -1;
 	if (is_prefix("xdp", attach_type_strings[attach_type]))
 		err = do_attach_detach_xdp(progfd, attach_type, ifindex, NULL);
+
+	if (err < 0) {
+		p_err("interface %s detach failed: %s",
+		      attach_type_strings[attach_type], strerror(-err));
+		return err;
+	}
+
+	/* detach tcx prog */
+	if (is_prefix("tcx", attach_type_strings[attach_type]))
+		err = do_detach_tcx(ifindex, attach_type);
 
 	if (err < 0) {
 		p_err("interface %s detach failed: %s",
@@ -928,7 +977,8 @@ static int do_help(int argc, char **argv)
 		"       %1$s %2$s help\n"
 		"\n"
 		"       " HELP_SPEC_PROGRAM "\n"
-		"       ATTACH_TYPE := { xdp | xdpgeneric | xdpdrv | xdpoffload }\n"
+		"       ATTACH_TYPE := { xdp | xdpgeneric | xdpdrv | xdpoffload | tcxingress\n"
+		"			| tcxegress}\n"
 		"       " HELP_SPEC_OPTIONS " }\n"
 		"\n"
 		"Note: Only xdp, tcx, tc, netkit, flow_dissector and netfilter attachments\n"
