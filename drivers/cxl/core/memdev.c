@@ -744,6 +744,19 @@ void cxl_accel_set_resource(struct cxl_dev_state *cxlds, struct resource res,
 }
 EXPORT_SYMBOL_NS_GPL(cxl_accel_set_resource, CXL);
 
+int cxl_accel_request_resource(struct cxl_dev_state *cxlds, bool is_ram)
+{
+	int rc;
+
+	if (is_ram)
+		rc = request_resource(&cxlds->dpa_res, &cxlds->ram_res);
+	else
+		rc = request_resource(&cxlds->dpa_res, &cxlds->pmem_res);
+
+	return rc;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_accel_request_resource, CXL);
+
 static int cxl_memdev_release_file(struct inode *inode, struct file *file)
 {
 	struct cxl_memdev *cxlmd =
