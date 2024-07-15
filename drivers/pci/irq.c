@@ -11,6 +11,7 @@
 #include <linux/errno.h>
 #include <linux/export.h>
 #include <linux/interrupt.h>
+#include <linux/irqdomain.h>
 #include <linux/pci.h>
 
 #include "pci.h"
@@ -258,6 +259,26 @@ bool pci_check_and_unmask_intx(struct pci_dev *dev)
 	return pci_check_and_set_intx_mask(dev, false);
 }
 EXPORT_SYMBOL_GPL(pci_check_and_unmask_intx);
+
+#ifdef CONFIG_IRQ_DOMAIN
+/**
+ * pci_remove_irq_domain - dispose all IRQ mappings and remove IRQ domain
+ * @domain: the IRQ domain to be removed
+ *
+ * Disposes all IRQ mappings of a given IRQ domain before removing the domain.
+ */
+void pci_remove_irq_domain(struct irq_domain *domain)
+{
+	for (irq_hw_number_t i = 0; i < domain->hwirq_max; i++) {
+		unsigned int virq = irq_find_mapping(domain, i);
+
+		if (virq)
+			irq_dispose_mapping(virq);
+	}
+
+	irq_domain_remove(domain);
+}
+#endif
 
 /**
  * pcibios_penalize_isa_irq - penalize an ISA IRQ

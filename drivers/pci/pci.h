@@ -213,6 +213,13 @@ void pci_no_msi(void);
 static inline void pci_no_msi(void) { }
 #endif
 
+struct irq_domain;
+#ifdef CONFIG_IRQ_DOMAIN
+void pci_remove_irq_domain(struct irq_domain *domain);
+#else
+static inline void pci_remove_irq_domain(struct irq_domain *domain) { }
+#endif
+
 void pci_realloc_get_opt(char *);
 
 static inline int pci_no_d1d2(struct pci_dev *dev)
