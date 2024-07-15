@@ -1079,7 +1079,7 @@ _bpftool()
             esac
             ;;
         net)
-            local ATTACH_TYPES='xdp xdpgeneric xdpdrv xdpoffload'
+            local ATTACH_TYPES='xdp xdpgeneric xdpdrv xdpoffload tcxingress tcxegress'
             case $command in
                 show|list)
                     [[ $prev != "$command" ]] && return 0
