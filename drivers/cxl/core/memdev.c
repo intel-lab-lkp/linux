@@ -714,7 +714,6 @@ static int cxl_memdev_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
-
 void cxl_accel_set_dvsec(struct cxl_dev_state *cxlds, u16 dvsec)
 {
 	cxlds->cxl_dvsec = dvsec;
@@ -758,6 +757,12 @@ int cxl_accel_request_resource(struct cxl_dev_state *cxlds, bool is_ram)
 	return rc;
 }
 EXPORT_SYMBOL_NS_GPL(cxl_accel_request_resource, CXL);
+
+void cxl_accel_set_media_ready(struct cxl_dev_state *cxlds)
+{
+	cxlds->media_ready = true;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_accel_set_media_ready, CXL);
 
 static int cxl_memdev_release_file(struct inode *inode, struct file *file)
 {

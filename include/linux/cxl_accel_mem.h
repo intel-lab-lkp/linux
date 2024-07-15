@@ -24,4 +24,6 @@ void cxl_accel_set_resource(struct cxl_dev_state *cxlds, struct resource res,
 			    enum accel_resource);
 int cxl_pci_accel_setup_regs(struct pci_dev *pdev, struct cxl_dev_state *cxlds);
 int cxl_accel_request_resource(struct cxl_dev_state *cxlds, bool is_ram);
+void cxl_accel_set_media_ready(struct cxl_dev_state *cxlds);
+int cxl_await_media_ready(struct cxl_dev_state *cxlds);
 #endif
