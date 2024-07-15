@@ -33,6 +33,7 @@
 #include "selftest.h"
 #include "sriov.h"
 #include "efx_devlink.h"
+#include "efx_cxl.h"
 
 #include "mcdi_port_common.h"
 #include "mcdi_pcol.h"
@@ -899,6 +900,7 @@ static void efx_pci_remove(struct pci_dev *pci_dev)
 	efx_pci_remove_main(efx);
 
 	efx_fini_io(efx);
+
 	pci_dbg(efx->pci_dev, "shutdown successful\n");
 
 	efx_fini_devlink_and_unlock(efx);
@@ -1108,6 +1110,8 @@ static int efx_pci_probe(struct pci_dev *pci_dev,
 			 efx->type->mem_map_size(efx));
 	if (rc)
 		goto fail2;
+
+	efx_cxl_init(efx);
 
 	rc = efx_pci_probe_post_io(efx);
 	if (rc) {

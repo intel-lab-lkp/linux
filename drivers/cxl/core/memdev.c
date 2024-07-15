@@ -8,6 +8,7 @@
 #include <linux/idr.h>
 #include <linux/pci.h>
 #include <cxlmem.h>
+#include <linux/cxl_accel_mem.h>
 #include "trace.h"
 #include "core.h"
 
@@ -615,6 +616,25 @@ static void detach_memdev(struct work_struct *work)
 
 static struct lock_class_key cxl_memdev_key;
 
+struct cxl_dev_state *cxl_accel_state_create(struct device *dev)
+{
+	struct cxl_dev_state *cxlds;
+
+	cxlds = devm_kzalloc(dev, sizeof(*cxlds), GFP_KERNEL);
+	if (!cxlds)
+		return ERR_PTR(-ENOMEM);
+
+	cxlds->dev = dev;
+	cxlds->type = CXL_DEVTYPE_DEVMEM;
+
+	cxlds->dpa_res = DEFINE_RES_MEM_NAMED(0, 0, "dpa");
+	cxlds->ram_res = DEFINE_RES_MEM_NAMED(0, 0, "ram");
+	cxlds->pmem_res = DEFINE_RES_MEM_NAMED(0, 0, "pmem");
+
+	return cxlds;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_accel_state_create, CXL);
+
 static struct cxl_memdev *cxl_memdev_alloc(struct cxl_dev_state *cxlds,
 					   const struct file_operations *fops)
 {
@@ -691,6 +711,38 @@ static int cxl_memdev_open(struct inode *inode, struct file *file)
 
 	return 0;
 }
+
+
+void cxl_accel_set_dvsec(struct cxl_dev_state *cxlds, u16 dvsec)
+{
+	cxlds->cxl_dvsec = dvsec;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_accel_set_dvsec, CXL);
+
+void cxl_accel_set_serial(struct cxl_dev_state *cxlds, u64 serial)
+{
+	cxlds->serial= serial;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_accel_set_serial, CXL);
+
+void cxl_accel_set_resource(struct cxl_dev_state *cxlds, struct resource res,
+			    enum accel_resource type)
+{
+	switch (type) {
+	case CXL_ACCEL_RES_DPA:
+		cxlds->dpa_res = res;
+		return;
+	case CXL_ACCEL_RES_RAM:
+		cxlds->ram_res = res;
+		return;
+	case CXL_ACCEL_RES_PMEM:
+		cxlds->pmem_res = res;
+		return;
+	default:
+		dev_err(cxlds->dev, "unkown resource type (%u)\n", type);
+	}
+}
+EXPORT_SYMBOL_NS_GPL(cxl_accel_set_resource, CXL);
 
 static int cxl_memdev_release_file(struct inode *inode, struct file *file)
 {
