@@ -29,7 +29,7 @@ NET COMMANDS
 | **bpftool** **net help**
 |
 | *PROG* := { **id** *PROG_ID* | **pinned** *FILE* | **tag** *PROG_TAG* | **name** *PROG_NAME* }
-| *ATTACH_TYPE* := { **xdp** | **xdpgeneric** | **xdpdrv** | **xdpoffload** }
+| *ATTACH_TYPE* := { **xdp** | **xdpgeneric** | **xdpdrv** | **xdpoffload** | **tcxingress** | **tcxegress** }
 
 DESCRIPTION
 ===========
@@ -69,6 +69,8 @@ bpftool net attach *ATTACH_TYPE* *PROG* dev *NAME* [ overwrite ]
     **xdpgeneric** - Generic XDP. runs at generic XDP hook when packet already enters receive path as skb;
     **xdpdrv** - Native XDP. runs earliest point in driver's receive path;
     **xdpoffload** - Offload XDP. runs directly on NIC on each packet reception;
+    **tcxingress** - Ingress TC. runs on ingress net traffic;
+    **tcxegress** - Egress TC. runs on egress net traffic;
 
 bpftool net detach *ATTACH_TYPE* dev *NAME*
     Detach bpf program attached to network interface *NAME* with type specified
@@ -178,3 +180,21 @@ EXAMPLES
 ::
 
       xdp:
+
+|
+| **# bpf net attach tcxingress name tc_prog dev lo**
+| **# bpf net**
+|
+
+::
+      tc:
+      lo(1) tcx/ingress tc_prog prog_id 29
+
+|
+| **# bpf net attach tcxingress name tc_prog dev lo**
+| **# bpf net detach tcxingress dev lo**
+| **# bpf net**
+|
+
+::
+      tc:
