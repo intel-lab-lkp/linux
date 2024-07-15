@@ -468,6 +468,9 @@ static umode_t cxl_ram_visible(struct kobject *kobj, struct attribute *a, int n)
 	struct cxl_memdev *cxlmd = to_cxl_memdev(dev);
 	struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlmd->cxlds);
 
+	if (!mds)
+		return 0;
+
 	if (a == &dev_attr_ram_qos_class.attr)
 		if (mds->ram_perf.qos_class == CXL_QOS_CLASS_INVALID)
 			return 0;
@@ -486,6 +489,9 @@ static umode_t cxl_pmem_visible(struct kobject *kobj, struct attribute *a, int n
 	struct device *dev = kobj_to_dev(kobj);
 	struct cxl_memdev *cxlmd = to_cxl_memdev(dev);
 	struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlmd->cxlds);
+
+	if (!mds)
+		return 0;
 
 	if (a == &dev_attr_pmem_qos_class.attr)
 		if (mds->pmem_perf.qos_class == CXL_QOS_CLASS_INVALID)
@@ -506,6 +512,9 @@ static umode_t cxl_memdev_security_visible(struct kobject *kobj,
 	struct device *dev = kobj_to_dev(kobj);
 	struct cxl_memdev *cxlmd = to_cxl_memdev(dev);
 	struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlmd->cxlds);
+
+	if (!mds)
+		return 0;
 
 	if (a == &dev_attr_security_sanitize.attr &&
 	    !test_bit(CXL_SEC_ENABLED_SANITIZE, mds->security.enabled_cmds))

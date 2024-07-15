@@ -57,10 +57,16 @@ void efx_cxl_init(struct efx_nic *efx)
 	if (cxl_accel_request_resource(cxl->cxlds, true))
 		pci_info(pci_dev, "CXL accel resource request failed");
 
-	if (!cxl_await_media_ready(cxl->cxlds))
+	if (!cxl_await_media_ready(cxl->cxlds)) {
 		cxl_accel_set_media_ready(cxl->cxlds);
-	else
+	} else {
 		pci_info(pci_dev, "CXL accel media not active");
+		return;
+	}
+
+	cxl->cxlmd = devm_cxl_add_memdev(&pci_dev->dev, cxl->cxlds);
+	if (IS_ERR(cxl->cxlmd))
+		pci_info(pci_dev, "CXL accel memdev creation failed");
 }
 
 
