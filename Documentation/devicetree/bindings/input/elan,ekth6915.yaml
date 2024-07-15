@@ -22,6 +22,7 @@ properties:
       - items:
           - enum:
               - elan,ekth5015m
+              - elan,ekth6a12nay
           - const: elan,ekth6915
       - const: elan,ekth6915
 
