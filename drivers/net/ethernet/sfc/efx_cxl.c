@@ -21,8 +21,8 @@
 void efx_cxl_init(struct efx_nic *efx)
 {
 	struct pci_dev *pci_dev = efx->pci_dev;
+	resource_size_t start, end, max = 0;
 	struct efx_cxl *cxl = efx->cxl;
-	resource_size_t max = 0;
 	struct resource res;
 	u16 dvsec;
 
@@ -104,6 +104,13 @@ void efx_cxl_init(struct efx_nic *efx)
 		return;
 	}
 
+	cxl_accel_get_region_params(cxl->efx_region, &start, &end);
+
+	cxl->ctpio_cxl = ioremap(start, end - start);
+	if (!cxl->ctpio_cxl) {
+		pci_info(pci_dev, "CXL accel create region failed");
+		cxl_dpa_free(cxl->cxled);
+	}
 out:
 	cxl_release_endpoint(cxl->cxlmd, cxl->endpoint);
 }
@@ -111,6 +118,9 @@ out:
 void efx_cxl_exit(struct efx_nic *efx)
 {
 	struct efx_cxl *cxl = efx->cxl;
+
+	if (cxl->ctpio_cxl)
+		iounmap(cxl->ctpio_cxl);
 
 	if (cxl->efx_region)
 		cxl_region_detach(cxl->cxled);

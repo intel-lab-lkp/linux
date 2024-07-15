@@ -24,6 +24,7 @@
 #include <linux/wait.h>
 #include <linux/workqueue.h>
 #include <net/udp_tunnel.h>
+#include "efx_cxl.h"
 
 /* Hardware control for EF10 architecture including 'Huntington'. */
 
@@ -176,6 +177,12 @@ static int efx_ef10_init_datapath_caps(struct efx_nic *efx)
 			  "firmware did not report num_mac_stats, assuming %u\n",
 			  efx->num_mac_stats);
 	}
+
+	if (outlen < MC_CMD_GET_CAPABILITIES_V7_OUT_LEN)
+		nic_data->datapath_caps3 = 0;
+	else
+		nic_data->datapath_caps3 = MCDI_DWORD(outbuf,
+						      GET_CAPABILITIES_V7_OUT_FLAGS3);
 
 	return 0;
 }
@@ -1275,10 +1282,20 @@ static int efx_ef10_dimension_resources(struct efx_nic *efx)
 			return -ENOMEM;
 		}
 		nic_data->pio_write_vi_base = pio_write_vi_base;
-		nic_data->pio_write_base =
-			nic_data->wc_membase +
-			(pio_write_vi_base * efx->vi_stride + ER_DZ_TX_PIOBUF -
-			 uc_mem_map_size);
+
+		if ((nic_data->datapath_caps3 &
+		    (1 << MC_CMD_GET_CAPABILITIES_V10_OUT_CXL_CONFIG_ENABLE_LBN)) &&
+		    efx->cxl->ctpio_cxl)
+		{
+			nic_data->pio_write_base =
+				efx->cxl->ctpio_cxl +
+				(pio_write_vi_base * efx->vi_stride + ER_DZ_TX_PIOBUF -
+				 uc_mem_map_size);
+		} else {
+			nic_data->pio_write_base =nic_data->wc_membase +
+				(pio_write_vi_base * efx->vi_stride + ER_DZ_TX_PIOBUF -
+				 uc_mem_map_size);
+		}
 
 		rc = efx_ef10_link_piobufs(efx);
 		if (rc)
