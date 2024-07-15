@@ -53,4 +53,6 @@ struct cxl_region *cxl_create_region(struct cxl_root_decoder *cxlrd,
 				     int ways);
 
 int cxl_region_detach(struct cxl_endpoint_decoder *cxled);
+int cxl_accel_get_region_params(struct cxl_region *region,
+				resource_size_t *start, resource_size_t *end);
 #endif

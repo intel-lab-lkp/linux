@@ -3345,6 +3345,22 @@ err:
 	return rc;
 }
 
+int cxl_accel_get_region_params(struct cxl_region *region,
+				resource_size_t *start, resource_size_t *end)
+{
+	if (!region)
+		return -ENODEV;
+
+	if (!region->params.res) {
+		return -ENODEV;
+	}
+	*start = region->params.res->start;
+	*end = region->params.res->end;
+
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_accel_get_region_params, CXL);
+
 static int match_root_decoder_by_range(struct device *dev, void *data)
 {
 	struct range *r1, *r2 = data;
