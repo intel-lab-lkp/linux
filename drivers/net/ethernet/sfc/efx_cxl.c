@@ -65,8 +65,16 @@ void efx_cxl_init(struct efx_nic *efx)
 	}
 
 	cxl->cxlmd = devm_cxl_add_memdev(&pci_dev->dev, cxl->cxlds);
-	if (IS_ERR(cxl->cxlmd))
+	if (IS_ERR(cxl->cxlmd)) {
 		pci_info(pci_dev, "CXL accel memdev creation failed");
+		return;
+	}
+
+	cxl->endpoint = cxl_acquire_endpoint(cxl->cxlmd);
+	if (IS_ERR(cxl->endpoint))
+		pci_info(pci_dev, "CXL accel acquire endpoint failed");
+
+	cxl_release_endpoint(cxl->cxlmd, cxl->endpoint);
 }
 
 
