@@ -899,6 +899,7 @@ __pci_epc_create(struct device *dev, const struct pci_epc_ops *ops,
 	epc->dev.parent = dev;
 	epc->dev.release = pci_epc_release;
 	epc->ops = ops;
+	epc->domain_nr = pci_bus_find_domain_nr(NULL, dev);
 
 	ret = dev_set_name(&epc->dev, "%s", dev_name(dev));
 	if (ret)
