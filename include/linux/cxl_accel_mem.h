@@ -12,8 +12,11 @@ enum accel_resource{
 	CXL_ACCEL_RES_PMEM,
 };
 
+#define CXL_ACCEL_DRIVER_CAP_HDM	0x1
+#define CXL_ACCEL_DRIVER_CAP_MBOX	0x2
+
 typedef struct cxl_dev_state cxl_accel_state;
-cxl_accel_state *cxl_accel_state_create(struct device *dev);
+cxl_accel_state *cxl_accel_state_create(struct device *dev, uint8_t caps);
 
 void cxl_accel_set_dvsec(cxl_accel_state *cxlds, u16 dvsec);
 void cxl_accel_set_serial(cxl_accel_state *cxlds, u64 serial);

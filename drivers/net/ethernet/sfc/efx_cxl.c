@@ -33,7 +33,8 @@ void efx_cxl_init(struct efx_nic *efx)
 
 	pci_info(pci_dev, "CXL CXL_DVSEC_PCIE_DEVICE capability found");
 
-	cxl->cxlds = cxl_accel_state_create(&pci_dev->dev);
+	cxl->cxlds = cxl_accel_state_create(&pci_dev->dev,
+					    CXL_ACCEL_DRIVER_CAP_HDM);
 	if (IS_ERR(cxl->cxlds)) {
 		pci_info(pci_dev, "CXL accel device state failed");
 		return;

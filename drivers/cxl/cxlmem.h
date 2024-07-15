@@ -405,6 +405,9 @@ struct cxl_dpa_perf {
 	int qos_class;
 };
 
+#define CXL_DRIVER_CAP_HDM	0x1
+#define CXL_DRIVER_CAP_MBOX	0x2
+
 /**
  * struct cxl_dev_state - The driver device state
  *
@@ -438,6 +441,7 @@ struct cxl_dev_state {
 	struct resource ram_res;
 	u64 serial;
 	enum cxl_devtype type;
+	uint8_t capabilities;
 };
 
 /**

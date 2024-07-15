@@ -616,7 +616,7 @@ static void detach_memdev(struct work_struct *work)
 
 static struct lock_class_key cxl_memdev_key;
 
-struct cxl_dev_state *cxl_accel_state_create(struct device *dev)
+struct cxl_dev_state *cxl_accel_state_create(struct device *dev, uint8_t caps)
 {
 	struct cxl_dev_state *cxlds;
 
@@ -630,6 +630,8 @@ struct cxl_dev_state *cxl_accel_state_create(struct device *dev)
 	cxlds->dpa_res = DEFINE_RES_MEM_NAMED(0, 0, "dpa");
 	cxlds->ram_res = DEFINE_RES_MEM_NAMED(0, 0, "ram");
 	cxlds->pmem_res = DEFINE_RES_MEM_NAMED(0, 0, "pmem");
+
+	cxlds->capabilities = caps;
 
 	return cxlds;
 }
