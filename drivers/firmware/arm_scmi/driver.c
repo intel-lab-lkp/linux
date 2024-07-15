@@ -2865,6 +2865,41 @@ static int scmi_device_request_notifier(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
+static void scmi_debugfs_stats_setup(struct scmi_info *info,
+				     struct dentry *trans)
+{
+	struct dentry *stats;
+
+	stats = debugfs_create_dir("stats", trans);
+
+	debugfs_create_atomic_t("sent_ok", 0400, stats,
+				&info->dbg_stats[SENT_OK]);
+	debugfs_create_atomic_t("sent_fail", 0400, stats,
+				&info->dbg_stats[SENT_FAIL]);
+	debugfs_create_atomic_t("sent_fail_polling_unsupported", 0400, stats,
+				&info->dbg_stats[SENT_FAIL_POLLING_UNSUPPORTED]);
+	debugfs_create_atomic_t("sent_fail_channel_not_found", 0400, stats,
+				&info->dbg_stats[SENT_FAIL_CHANNEL_NOT_FOUND]);
+	debugfs_create_atomic_t("response_ok", 0400, stats,
+				&info->dbg_stats[RESPONSE_OK]);
+	debugfs_create_atomic_t("notif_ok", 0400, stats,
+				&info->dbg_stats[NOTIF_OK]);
+	debugfs_create_atomic_t("dlyd_resp_ok", 0400, stats,
+				&info->dbg_stats[DLYD_RESPONSE_OK]);
+	debugfs_create_atomic_t("xfers_resp_timeout", 0400, stats,
+				&info->dbg_stats[XFERS_RESPONSE_TIMEOUT]);
+	debugfs_create_atomic_t("response_polled_ok", 0400, stats,
+				&info->dbg_stats[RESPONSE_POLLED_OK]);
+	debugfs_create_atomic_t("err_msg_unexpected", 0400, stats,
+				&info->dbg_stats[ERR_MSG_UNEXPECTED]);
+	debugfs_create_atomic_t("err_msg_invalid", 0400, stats,
+				&info->dbg_stats[ERR_MSG_INVALID]);
+	debugfs_create_atomic_t("err_msg_nomem", 0400, stats,
+				&info->dbg_stats[ERR_MSG_NOMEM]);
+	debugfs_create_atomic_t("err_protocol", 0400, stats,
+				&info->dbg_stats[ERR_PROTOCOL]);
+}
+
 static void scmi_debugfs_common_cleanup(void *d)
 {
 	struct scmi_debug_info *dbg = d;
@@ -2930,6 +2965,9 @@ static struct scmi_debug_info *scmi_debugfs_common_setup(struct scmi_info *info)
 
 	debugfs_create_u32("rx_max_msg", 0400, trans,
 			   (u32 *)&info->rx_minfo.max_msg);
+
+	if (IS_ENABLED(CONFIG_ARM_SCMI_DEBUG_STATISTICS))
+		scmi_debugfs_stats_setup(info, trans);
 
 	dbg->top_dentry = top_dentry;
 
