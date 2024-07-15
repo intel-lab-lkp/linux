@@ -669,6 +669,16 @@ static int max77693_reg_init(struct max77693_charger *chg)
 	if (ret)
 		return ret;
 
+	/* Set OTG current limit to 900 mA */
+	data = (0x1 << CHG_CNFG_02_OTG_ILIM_SHIFT);
+	ret = regmap_update_bits(chg->max77693->regmap,
+				MAX77693_CHG_REG_CHG_CNFG_02,
+				CHG_CNFG_02_OTG_ILIM_MASK, data);
+	if (ret) {
+		dev_err(chg->dev, "Error setting OTG current limit: %d\n", ret);
+		return ret;
+	}
+
 	return max77693_set_charge_input_threshold_volt(chg,
 			chg->charge_input_threshold_volt);
 }
@@ -690,11 +700,42 @@ static int max77693_set_charging(struct max77693_charger *chg, bool enable)
 	return ret;
 }
 
+static int max77693_set_otg(struct max77693_charger *chg, bool enable)
+{
+	struct regmap *regmap = chg->max77693->regmap;
+	unsigned int data;
+	bool is_enabled;
+	int ret;
+
+	ret = regmap_read(regmap, MAX77693_CHG_REG_CHG_CNFG_00, &data);
+	if (ret)
+		return ret;
+
+	is_enabled = !!(data & CHG_CNFG_00_OTG_MASK);
+
+	if (enable && !is_enabled) {
+		/* OTG on, boost on, DIS_MUIC_CTRL on */
+		data |= CHG_CNFG_00_OTG_MASK | CHG_CNFG_00_BOOST_MASK \
+				| CHG_CNFG_00_DIS_MUIC_CTRL_MASK;
+
+	} else if (!enable && is_enabled) {
+		/* OTG off, boost off, DIS_MUIC_CTRL off */
+		data &= ~(CHG_CNFG_00_OTG_MASK | CHG_CNFG_00_BOOST_MASK \
+				| CHG_CNFG_00_DIS_MUIC_CTRL_MASK);
+	}
+
+	return regmap_write(chg->max77693->regmap,
+			MAX77693_CHG_REG_CHG_CNFG_00,
+			data);
+}
+
 static void max77693_charger_extcon_work(struct work_struct *work)
 {
 	struct max77693_charger *chg = container_of(work, struct max77693_charger,
 						  cable.work);
 	struct extcon_dev *edev = chg->cable.edev;
+	bool set_charging, set_otg;
+	unsigned int current_limit;
 	int connector, state;
 	int ret;
 
@@ -707,31 +748,61 @@ static void max77693_charger_extcon_work(struct work_struct *work)
 
 	switch (connector) {
 	case EXTCON_CHG_USB_SDP:
-	case EXTCON_CHG_USB_DCP:
 	case EXTCON_CHG_USB_CDP:
+	case EXTCON_CHG_USB_SLOW:
+		current_limit = 500000; /* 500 mA */
+		set_charging = true;
+		set_otg = false;
+
+		dev_info(chg->dev, "slow charging. connector type: %d\n",
+			 connector);
+		break;
+	case EXTCON_CHG_USB_DCP:
 	case EXTCON_CHG_USB_ACA:
 	case EXTCON_CHG_USB_FAST:
-	case EXTCON_CHG_USB_SLOW:
 	case EXTCON_CHG_USB_PD:
-		ret = max77693_set_charging(chg, true);
-		if (ret) {
-			dev_err(chg->dev, "failed to enable charging\n");
-			break;
-		}
-		dev_info(chg->dev, "charging. connector type: %d\n",
+		current_limit = chg->fast_charge_current;
+		set_charging = true;
+		set_otg = false;
+
+		dev_info(chg->dev, "fast charging. connector type: %d\n",
+			 connector);
+		break;
+	case EXTCON_USB_HOST:
+		current_limit = 500000; /* 500 mA */
+		set_charging = false;
+		set_otg = true;
+
+		dev_info(chg->dev, "USB host. connector type: %d\n",
 			 connector);
 		break;
 	default:
-		ret = max77693_set_charging(chg, false);
-		if (ret) {
-			dev_err(chg->dev, "failed to disable charging\n");
-			break;
-		}
-		dev_info(chg->dev, "charging. connector type: %d\n",
+		current_limit = 500000; /* 500 mA */
+		set_charging = false;
+		set_otg = false;
+
+		dev_info(chg->dev, "disconnected. connector type: %d\n",
 			 connector);
 		break;
 	}
 
+	ret = max77693_set_current_limit(chg, current_limit);
+	if (ret) {
+		dev_err(chg->dev, "failed to set current limit (%d)\n", ret);
+		goto out;
+	}
+
+	ret = max77693_set_charging(chg, set_charging);
+	if (ret) {
+		dev_err(chg->dev, "failed to set charging (%d)\n", ret);
+		goto out;
+	}
+
+	ret = max77693_set_otg(chg, set_otg);
+	if (ret)
+		dev_err(chg->dev, "failed to set OTG (%d)\n", ret);
+
+out:
 	power_supply_changed(chg->charger);
 }
 
@@ -792,6 +863,10 @@ static int max77693_dt_init(struct device *dev, struct max77693_charger *chg)
 	if (of_property_read_u32(np, "maxim,battery-overcurrent-microamp",
 			&chg->batttery_overcurrent))
 		chg->batttery_overcurrent = DEFAULT_BATTERY_OVERCURRENT;
+
+	if (of_property_read_u32(np, "maxim,fast-charge-current-microamp",
+			&chg->fast_charge_current))
+		chg->fast_charge_current = DEFAULT_FAST_CHARGE_CURRENT;
 
 	if (of_property_read_u32(np, "maxim,charge-input-threshold-microvolt",
 			&chg->charge_input_threshold_volt))
