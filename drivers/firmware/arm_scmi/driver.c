@@ -2865,6 +2865,47 @@ static int scmi_device_request_notifier(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
+static int read_atomic(void *atomic, u64 *val)
+{
+	atomic_t *atm = (atomic_t *)atomic;
+
+	*val = atomic_read(atm);
+	return 0;
+}
+
+static int reset_single(void *atomic, u64 val)
+{
+	atomic_t *atm = (atomic_t *)atomic;
+
+	atomic_set(atm, 0);
+	return 0;
+}
+
+static void reset_all_stats(struct scmi_info *info)
+{
+	for (int i = 0; i < LAST; i++)
+		atomic_set(&info->dbg_stats[i], 0);
+}
+
+static ssize_t reset_all_on_write(struct file *filp,
+				  const char __user *buf,
+				  size_t count, loff_t *ppos)
+{
+	struct scmi_info *info = filp->private_data;
+
+	reset_all_stats(info);
+	return count;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(fops_reset_on_write, read_atomic, reset_single, "%llu\n");
+
+static const struct file_operations fops_reset_stats = {
+	.owner = THIS_MODULE,
+	.open = simple_open,
+	.llseek = no_llseek,
+	.write = reset_all_on_write,
+};
+
 static void scmi_debugfs_stats_setup(struct scmi_info *info,
 				     struct dentry *trans)
 {
@@ -2872,32 +2913,43 @@ static void scmi_debugfs_stats_setup(struct scmi_info *info,
 
 	stats = debugfs_create_dir("stats", trans);
 
-	debugfs_create_atomic_t("sent_ok", 0400, stats,
-				&info->dbg_stats[SENT_OK]);
-	debugfs_create_atomic_t("sent_fail", 0400, stats,
-				&info->dbg_stats[SENT_FAIL]);
-	debugfs_create_atomic_t("sent_fail_polling_unsupported", 0400, stats,
-				&info->dbg_stats[SENT_FAIL_POLLING_UNSUPPORTED]);
-	debugfs_create_atomic_t("sent_fail_channel_not_found", 0400, stats,
-				&info->dbg_stats[SENT_FAIL_CHANNEL_NOT_FOUND]);
-	debugfs_create_atomic_t("response_ok", 0400, stats,
-				&info->dbg_stats[RESPONSE_OK]);
-	debugfs_create_atomic_t("notif_ok", 0400, stats,
-				&info->dbg_stats[NOTIF_OK]);
-	debugfs_create_atomic_t("dlyd_resp_ok", 0400, stats,
-				&info->dbg_stats[DLYD_RESPONSE_OK]);
-	debugfs_create_atomic_t("xfers_resp_timeout", 0400, stats,
-				&info->dbg_stats[XFERS_RESPONSE_TIMEOUT]);
-	debugfs_create_atomic_t("response_polled_ok", 0400, stats,
-				&info->dbg_stats[RESPONSE_POLLED_OK]);
-	debugfs_create_atomic_t("err_msg_unexpected", 0400, stats,
-				&info->dbg_stats[ERR_MSG_UNEXPECTED]);
-	debugfs_create_atomic_t("err_msg_invalid", 0400, stats,
-				&info->dbg_stats[ERR_MSG_INVALID]);
-	debugfs_create_atomic_t("err_msg_nomem", 0400, stats,
-				&info->dbg_stats[ERR_MSG_NOMEM]);
-	debugfs_create_atomic_t("err_protocol", 0400, stats,
-				&info->dbg_stats[ERR_PROTOCOL]);
+	debugfs_create_file("sent_ok", 0400, stats, &info->dbg_stats[SENT_OK],
+			    &fops_reset_on_write);
+	debugfs_create_file("sent_fail", 0400, stats,
+			    &info->dbg_stats[SENT_FAIL], &fops_reset_on_write);
+	debugfs_create_file("sent_fail_polling_unsupported", 0400, stats,
+			    &info->dbg_stats[SENT_FAIL_POLLING_UNSUPPORTED],
+			    &fops_reset_on_write);
+	debugfs_create_file("sent_fail_channel_not_found", 0400, stats,
+			    &info->dbg_stats[SENT_FAIL_CHANNEL_NOT_FOUND],
+			    &fops_reset_on_write);
+	debugfs_create_file("response_ok", 0400, stats,
+			    &info->dbg_stats[RESPONSE_OK],
+			    &fops_reset_on_write);
+	debugfs_create_file("notif_ok", 0400, stats, &info->dbg_stats[NOTIF_OK],
+			    &fops_reset_on_write);
+	debugfs_create_file("dlyd_resp_ok", 0400, stats,
+			    &info->dbg_stats[DLYD_RESPONSE_OK],
+			    &fops_reset_on_write);
+	debugfs_create_file("xfers_resp_timeout", 0400, stats,
+			    &info->dbg_stats[XFERS_RESPONSE_TIMEOUT],
+			    &fops_reset_on_write);
+	debugfs_create_file("response_polled_ok", 0400, stats,
+			    &info->dbg_stats[RESPONSE_POLLED_OK],
+			    &fops_reset_on_write);
+	debugfs_create_file("err_msg_unexpected", 0400, stats,
+			    &info->dbg_stats[ERR_MSG_UNEXPECTED],
+			    &fops_reset_on_write);
+	debugfs_create_file("err_msg_invalid", 0400, stats,
+			    &info->dbg_stats[ERR_MSG_INVALID],
+			    &fops_reset_on_write);
+	debugfs_create_file("err_msg_nomem", 0400, stats,
+			    &info->dbg_stats[ERR_MSG_NOMEM],
+			    &fops_reset_on_write);
+	debugfs_create_file("err_protocol", 0400, stats,
+			    &info->dbg_stats[ERR_PROTOCOL],
+			    &fops_reset_on_write);
+	debugfs_create_file("reset", 0200, stats, info, &fops_reset_stats);
 }
 
 static void scmi_debugfs_common_cleanup(void *d)
