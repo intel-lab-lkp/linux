@@ -76,7 +76,11 @@
 #define PLL_LOCK_DELAY_US			10000
 #define PLL_LOCK_TIMEOUT_US			1000000
 
-#define PORT_REGS(p)				((p)->priv->regs + (p)->id * 0x1000)
+enum mvebu_cp110_utmi_type {
+	/* 0 is reserved to avoid clashing with NULL */
+	A380_UTMI = 1,
+	CP110_UTMI = 2,
+};
 
 /**
  * struct mvebu_cp110_utmi - PHY driver data
@@ -104,6 +108,7 @@ struct mvebu_cp110_utmi_port {
 	struct mvebu_cp110_utmi *priv;
 	u32 id;
 	enum usb_dr_mode dr_mode;
+	void __iomem *regs;
 };
 
 static void mvebu_cp110_utmi_port_setup(struct mvebu_cp110_utmi_port *port)
@@ -118,47 +123,47 @@ static void mvebu_cp110_utmi_port_setup(struct mvebu_cp110_utmi_port *port)
 	 * The crystal used for all platform boards is now 25MHz.
 	 * See the functional specification for details.
 	 */
-	reg = readl(PORT_REGS(port) + UTMI_PLL_CTRL_REG);
+	reg = readl(port->regs + UTMI_PLL_CTRL_REG);
 	reg &= ~(PLL_REFDIV_MASK | PLL_FBDIV_MASK | PLL_SEL_LPFR_MASK);
 	reg |= (PLL_REFDIV_VAL << PLL_REFDIV_OFFSET) |
 	       (PLL_FBDIV_VAL << PLL_FBDIV_OFFSET);
-	writel(reg, PORT_REGS(port) + UTMI_PLL_CTRL_REG);
+	writel(reg, port->regs + UTMI_PLL_CTRL_REG);
 
 	/* Impedance Calibration Threshold Setting */
-	reg = readl(PORT_REGS(port) + UTMI_CAL_CTRL_REG);
+	reg = readl(port->regs + UTMI_CAL_CTRL_REG);
 	reg &= ~IMPCAL_VTH_MASK;
 	reg |= IMPCAL_VTH_VAL << IMPCAL_VTH_OFFSET;
-	writel(reg, PORT_REGS(port) + UTMI_CAL_CTRL_REG);
+	writel(reg, port->regs + UTMI_CAL_CTRL_REG);
 
 	/* Set LS TX driver strength coarse control */
-	reg = readl(PORT_REGS(port) + UTMI_TX_CH_CTRL_REG);
+	reg = readl(port->regs + UTMI_TX_CH_CTRL_REG);
 	reg &= ~TX_AMP_MASK;
 	reg |= TX_AMP_VAL << TX_AMP_OFFSET;
-	writel(reg, PORT_REGS(port) + UTMI_TX_CH_CTRL_REG);
+	writel(reg, port->regs + UTMI_TX_CH_CTRL_REG);
 
 	/* Disable SQ and enable analog squelch detect */
-	reg = readl(PORT_REGS(port) + UTMI_RX_CH_CTRL0_REG);
+	reg = readl(port->regs + UTMI_RX_CH_CTRL0_REG);
 	reg &= ~SQ_DET_EN;
 	reg |= SQ_ANA_DTC_SEL;
-	writel(reg, PORT_REGS(port) + UTMI_RX_CH_CTRL0_REG);
+	writel(reg, port->regs + UTMI_RX_CH_CTRL0_REG);
 
 	/*
 	 * Set External squelch calibration number and
 	 * enable the External squelch calibration
 	 */
-	reg = readl(PORT_REGS(port) + UTMI_RX_CH_CTRL1_REG);
+	reg = readl(port->regs + UTMI_RX_CH_CTRL1_REG);
 	reg &= ~SQ_AMP_CAL_MASK;
 	reg |= (SQ_AMP_CAL_VAL << SQ_AMP_CAL_OFFSET) | SQ_AMP_CAL_EN;
-	writel(reg, PORT_REGS(port) + UTMI_RX_CH_CTRL1_REG);
+	writel(reg, port->regs + UTMI_RX_CH_CTRL1_REG);
 
 	/*
 	 * Set Control VDAT Reference Voltage - 0.325V and
 	 * Control VSRC Reference Voltage - 0.6V
 	 */
-	reg = readl(PORT_REGS(port) + UTMI_CHGDTC_CTRL_REG);
+	reg = readl(port->regs + UTMI_CHGDTC_CTRL_REG);
 	reg &= ~(VDAT_MASK | VSRC_MASK);
 	reg |= (VDAT_VAL << VDAT_OFFSET) | (VSRC_VAL << VSRC_OFFSET);
-	writel(reg, PORT_REGS(port) + UTMI_CHGDTC_CTRL_REG);
+	writel(reg, port->regs + UTMI_CHGDTC_CTRL_REG);
 }
 
 static int mvebu_cp110_utmi_phy_power_off(struct phy *phy)
@@ -191,8 +196,15 @@ static int mvebu_cp110_utmi_phy_power_on(struct phy *phy)
 	struct mvebu_cp110_utmi_port *port = phy_get_drvdata(phy);
 	struct mvebu_cp110_utmi *utmi = port->priv;
 	struct device *dev = &phy->dev;
+	const void *match;
+	enum mvebu_cp110_utmi_type type;
 	int ret;
 	u32 reg;
+	u32 sel;
+
+	match = of_device_get_match_data(dev);
+	if (match)
+		type = (enum mvebu_cp110_utmi_type)(uintptr_t)match;
 
 	/* It is necessary to power off UTMI before configuration */
 	ret = mvebu_cp110_utmi_phy_power_off(phy);
@@ -208,16 +220,38 @@ static int mvebu_cp110_utmi_phy_power_on(struct phy *phy)
 	 * to UTMI0 or to UTMI1 PHY port, but not to both.
 	 */
 	if (port->dr_mode == USB_DR_MODE_PERIPHERAL) {
+		switch (type) {
+		case A380_UTMI:
+			/*
+			 * A380 muxes between ports 0/2:
+			 * - 0: Device mode on Port 2
+			 * - 1: Device mode on Port 0
+			 */
+			if (port->id == 1)
+				return -EINVAL;
+			sel = !!(port->id == 0);
+			break;
+		case CP110_UTMI:
+			/*
+			 * CP110 muxes between ports 0/1:
+			 * - 0: Device mode on Port 0
+			 * - 1: Device mode on Port 1
+			 */
+			sel = port->id;
+			break;
+		default:
+			return -EINVAL;
+		}
 		regmap_update_bits(utmi->syscon, SYSCON_USB_CFG_REG,
 				   USB_CFG_DEVICE_EN_MASK | USB_CFG_DEVICE_MUX_MASK,
 				   USB_CFG_DEVICE_EN_MASK |
-				   (port->id << USB_CFG_DEVICE_MUX_OFFSET));
+				   (sel << USB_CFG_DEVICE_MUX_OFFSET));
 	}
 
 	/* Set Test suspendm mode and enable Test UTMI select */
-	reg = readl(PORT_REGS(port) + UTMI_CTRL_STATUS0_REG);
+	reg = readl(port->regs + UTMI_CTRL_STATUS0_REG);
 	reg |= SUSPENDM | TEST_SEL;
-	writel(reg, PORT_REGS(port) + UTMI_CTRL_STATUS0_REG);
+	writel(reg, port->regs + UTMI_CTRL_STATUS0_REG);
 
 	/* Wait for UTMI power down */
 	mdelay(1);
@@ -230,12 +264,12 @@ static int mvebu_cp110_utmi_phy_power_on(struct phy *phy)
 			UTMI_PHY_CFG_PU_MASK);
 
 	/* Disable Test UTMI select */
-	reg = readl(PORT_REGS(port) + UTMI_CTRL_STATUS0_REG);
+	reg = readl(port->regs + UTMI_CTRL_STATUS0_REG);
 	reg &= ~TEST_SEL;
-	writel(reg, PORT_REGS(port) + UTMI_CTRL_STATUS0_REG);
+	writel(reg, port->regs + UTMI_CTRL_STATUS0_REG);
 
 	/* Wait for impedance calibration */
-	ret = readl_poll_timeout(PORT_REGS(port) + UTMI_CAL_CTRL_REG, reg,
+	ret = readl_poll_timeout(port->regs + UTMI_CAL_CTRL_REG, reg,
 				 reg & IMPCAL_DONE,
 				 PLL_LOCK_DELAY_US, PLL_LOCK_TIMEOUT_US);
 	if (ret) {
@@ -244,7 +278,7 @@ static int mvebu_cp110_utmi_phy_power_on(struct phy *phy)
 	}
 
 	/* Wait for PLL calibration */
-	ret = readl_poll_timeout(PORT_REGS(port) + UTMI_CAL_CTRL_REG, reg,
+	ret = readl_poll_timeout(port->regs + UTMI_CAL_CTRL_REG, reg,
 				 reg & PLLCAL_DONE,
 				 PLL_LOCK_DELAY_US, PLL_LOCK_TIMEOUT_US);
 	if (ret) {
@@ -253,7 +287,7 @@ static int mvebu_cp110_utmi_phy_power_on(struct phy *phy)
 	}
 
 	/* Wait for PLL ready */
-	ret = readl_poll_timeout(PORT_REGS(port) + UTMI_PLL_CTRL_REG, reg,
+	ret = readl_poll_timeout(port->regs + UTMI_PLL_CTRL_REG, reg,
 				 reg & PLL_RDY,
 				 PLL_LOCK_DELAY_US, PLL_LOCK_TIMEOUT_US);
 	if (ret) {
@@ -274,7 +308,8 @@ static const struct phy_ops mvebu_cp110_utmi_phy_ops = {
 };
 
 static const struct of_device_id mvebu_cp110_utmi_of_match[] = {
-	{ .compatible = "marvell,cp110-utmi-phy" },
+	{ .compatible = "marvell,armada-380-utmi-phy", .data = (void *)A380_UTMI },
+	{ .compatible = "marvell,cp110-utmi-phy", .data = (void *)CP110_UTMI },
 	{},
 };
 MODULE_DEVICE_TABLE(of, mvebu_cp110_utmi_of_match);
@@ -285,6 +320,8 @@ static int mvebu_cp110_utmi_phy_probe(struct platform_device *pdev)
 	struct mvebu_cp110_utmi *utmi;
 	struct phy_provider *provider;
 	struct device_node *child;
+	const void *match;
+	enum mvebu_cp110_utmi_type type;
 	u32 usb_devices = 0;
 
 	utmi = devm_kzalloc(dev, sizeof(*utmi), GFP_KERNEL);
@@ -292,6 +329,10 @@ static int mvebu_cp110_utmi_phy_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	utmi->dev = dev;
+
+	match = of_device_get_match_data(dev);
+	if (match)
+		type = (enum mvebu_cp110_utmi_type)(uintptr_t)match;
 
 	/* Get system controller region */
 	utmi->syscon = syscon_regmap_lookup_by_phandle(dev->of_node,
@@ -324,6 +365,18 @@ static int mvebu_cp110_utmi_phy_probe(struct platform_device *pdev)
 		if (!port) {
 			of_node_put(child);
 			return -ENOMEM;
+		}
+
+		/* Get port memory region */
+		switch (type) {
+		case A380_UTMI:
+			port->regs = utmi->regs + port_id * 0x1000;
+			break;
+		case CP110_UTMI:
+			port->regs = utmi->regs + port_id * 0x2000;
+			break;
+		default:
+			return -EINVAL;
 		}
 
 		port->dr_mode = of_usb_get_dr_mode_by_phy(child, -1);
