@@ -901,6 +901,8 @@ static void efx_pci_remove(struct pci_dev *pci_dev)
 
 	efx_fini_io(efx);
 
+	efx_cxl_exit(efx);
+
 	pci_dbg(efx->pci_dev, "shutdown successful\n");
 
 	efx_fini_devlink_and_unlock(efx);

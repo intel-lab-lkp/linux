@@ -84,12 +84,28 @@ void efx_cxl_init(struct efx_nic *efx)
 		goto out;
 	}
 
-	if (max < EFX_CTPIO_BUFFER_SIZE)
+	if (max < EFX_CTPIO_BUFFER_SIZE) {
 		pci_info(pci_dev, "CXL accel not enough free HPA space %llu < %u\n",
 				  max, EFX_CTPIO_BUFFER_SIZE);
+		goto out;
+	}
+
+	cxl->cxled = cxl_request_dpa(cxl->endpoint, true, EFX_CTPIO_BUFFER_SIZE,
+				     EFX_CTPIO_BUFFER_SIZE);
+	if (IS_ERR(cxl->cxled))
+		pci_info(pci_dev, "CXL accel request DPA failed");
 out:
 	cxl_release_endpoint(cxl->cxlmd, cxl->endpoint);
 }
 
+void efx_cxl_exit(struct efx_nic *efx)
+{
+	struct efx_cxl *cxl = efx->cxl;
+
+	if (cxl->cxled)
+		cxl_dpa_free(cxl->cxled);
+ 
+ 	return;
+ }
 
 MODULE_IMPORT_NS(CXL);

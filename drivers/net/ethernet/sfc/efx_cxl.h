@@ -26,4 +26,5 @@ struct efx_cxl {
 };
 
 void efx_cxl_init(struct efx_nic *efx);
+void efx_cxl_exit(struct efx_nic *efx);
 #endif
