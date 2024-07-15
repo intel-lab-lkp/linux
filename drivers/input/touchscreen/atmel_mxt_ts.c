@@ -265,6 +265,7 @@ enum v4l_dbg_inputs {
 enum mxt_suspend_mode {
 	MXT_SUSPEND_DEEP_SLEEP	= 0,
 	MXT_SUSPEND_T9_CTRL	= 1,
+	MXT_SUSPEND_POWEROFF	= 2,
 };
 
 /* Config update context */
@@ -1311,6 +1312,10 @@ static int mxt_power_on(struct mxt_data *data)
 {
 	int error;
 
+	/* Make sure the device is in reset before enabling power */
+	if (data->reset_gpio)
+		gpiod_set_value_cansleep(data->reset_gpio, 1);
+
 	error = regulator_bulk_enable(ARRAY_SIZE(data->regulators),
 				      data->regulators);
 	if (error) {
@@ -2270,8 +2275,38 @@ static int mxt_configure_objects(struct mxt_data *data,
 
 static void mxt_config_cb(const struct firmware *cfg, void *ctx)
 {
+	struct mxt_data *data = ctx;
+
 	mxt_configure_objects(ctx, cfg);
 	release_firmware(cfg);
+
+	if ((data->suspend_mode == MXT_SUSPEND_POWEROFF) && !data->in_bootloader) {
+		disable_irq(data->irq);
+		mxt_power_off(data);
+	}
+}
+
+static void mxt_initialize_after_resume(struct mxt_data *data)
+{
+	int error;
+
+	error = mxt_power_on(data);
+	if (error) {
+		dev_err(&data->client->dev, "Failed to power on device\n");
+		return;
+	}
+
+	error = mxt_acquire_irq(data);
+	if (error) {
+		dev_err(&data->client->dev, "Failed to acquire IRQ\n");
+		return;
+	}
+
+	error = mxt_configure_objects(data, NULL);
+	if (error) {
+		dev_err(&data->client->dev, "Failed to configure objects\n");
+		return;
+	}
 }
 
 static int mxt_initialize(struct mxt_data *data)
@@ -2828,15 +2863,18 @@ static int mxt_configure_objects(struct mxt_data *data,
 			dev_warn(dev, "Error %d updating config\n", error);
 	}
 
-	if (data->multitouch) {
-		error = mxt_initialize_input_device(data);
-		if (error)
-			return error;
-	} else {
-		dev_warn(dev, "No touch object detected\n");
-	}
+	/* Do not initialize and register input device twice */
+	if (!data->input_dev) {
+		if (data->multitouch) {
+			error = mxt_initialize_input_device(data);
+			if (error)
+				return error;
+		} else {
+			dev_warn(dev, "No touch object detected\n");
+		}
 
-	mxt_debug_init(data);
+		mxt_debug_init(data);
+	}
 
 	return 0;
 }
@@ -3070,6 +3108,12 @@ static ssize_t mxt_update_fw_store(struct device *dev,
 	struct mxt_data *data = dev_get_drvdata(dev);
 	int error;
 
+	if ((data->suspend_mode == MXT_SUSPEND_POWEROFF) && !data->in_bootloader) {
+		error = mxt_power_on(data);
+		if (error)
+			return error;
+	}
+
 	error = mxt_load_fw(dev, MXT_FW_NAME);
 	if (error) {
 		dev_err(dev, "The firmware update failed(%d)\n", error);
@@ -3104,7 +3148,10 @@ static const struct attribute_group mxt_attr_group = {
 
 static void mxt_start(struct mxt_data *data)
 {
-	mxt_wakeup_toggle(data->client, true, false);
+	if (data->suspend_mode == MXT_SUSPEND_POWEROFF)
+		mxt_initialize_after_resume(data);
+	else
+		mxt_wakeup_toggle(data->client, true, false);
 
 	switch (data->suspend_mode) {
 	case MXT_SUSPEND_T9_CTRL:
@@ -3116,6 +3163,7 @@ static void mxt_start(struct mxt_data *data)
 				MXT_TOUCH_MULTI_T9, MXT_T9_CTRL, 0x83);
 		break;
 
+	case MXT_SUSPEND_POWEROFF:
 	case MXT_SUSPEND_DEEP_SLEEP:
 	default:
 		mxt_set_t7_power_cfg(data, MXT_POWER_CFG_RUN);
@@ -3141,7 +3189,12 @@ static void mxt_stop(struct mxt_data *data)
 		break;
 	}
 
-	mxt_wakeup_toggle(data->client, false, false);
+	if (data->suspend_mode == MXT_SUSPEND_POWEROFF) {
+		disable_irq(data->irq);
+		mxt_power_off(data);
+	} else {
+		mxt_wakeup_toggle(data->client, false, false);
+	}
 }
 
 static int mxt_input_open(struct input_dev *dev)
@@ -3338,6 +3391,9 @@ static int mxt_probe(struct i2c_client *client)
 	if (error)
 		return error;
 
+	if (device_property_read_bool(&client->dev, "atmel,poweroff-sleep"))
+		data->suspend_mode = MXT_SUSPEND_POWEROFF;
+
 	/*
 	 * Controllers like mXT1386 have a dedicated WAKE line that could be
 	 * connected to a GPIO or to I2C SCL pin, or permanently asserted low.
@@ -3387,7 +3443,8 @@ static void mxt_remove(struct i2c_client *client)
 	sysfs_remove_group(&client->dev.kobj, &mxt_attr_group);
 	mxt_free_input_device(data);
 	mxt_free_object_table(data);
-	mxt_power_off(data);
+	if (!(data->suspend_mode == MXT_SUSPEND_POWEROFF))
+		mxt_power_off(data);
 }
 
 static int mxt_suspend(struct device *dev)
@@ -3420,7 +3477,8 @@ static int mxt_resume(struct device *dev)
 	if (!input_dev)
 		return 0;
 
-	enable_irq(data->irq);
+	if (!(data->suspend_mode == MXT_SUSPEND_POWEROFF))
+		enable_irq(data->irq);
 
 	mutex_lock(&input_dev->mutex);
 
