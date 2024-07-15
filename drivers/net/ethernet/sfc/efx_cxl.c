@@ -92,8 +92,18 @@ void efx_cxl_init(struct efx_nic *efx)
 
 	cxl->cxled = cxl_request_dpa(cxl->endpoint, true, EFX_CTPIO_BUFFER_SIZE,
 				     EFX_CTPIO_BUFFER_SIZE);
-	if (IS_ERR(cxl->cxled))
+	if (IS_ERR(cxl->cxled)) {
 		pci_info(pci_dev, "CXL accel request DPA failed");
+		return;
+	}
+
+	cxl->efx_region = cxl_create_region(cxl->cxlrd, &cxl->cxled, 1);
+	if (!cxl->efx_region) {
+		pci_info(pci_dev, "CXL accel create region failed");
+		cxl_dpa_free(cxl->cxled);
+		return;
+	}
+
 out:
 	cxl_release_endpoint(cxl->cxlmd, cxl->endpoint);
 }
@@ -101,6 +111,9 @@ out:
 void efx_cxl_exit(struct efx_nic *efx)
 {
 	struct efx_cxl *cxl = efx->cxl;
+
+	if (cxl->efx_region)
+		cxl_region_detach(cxl->cxled);
 
 	if (cxl->cxled)
 		cxl_dpa_free(cxl->cxled);
