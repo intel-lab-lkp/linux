@@ -1684,7 +1684,7 @@ static void mvebu_pcie_remove(struct platform_device *pdev)
 
 		/* Remove IRQ domains. */
 		if (port->intx_irq_domain)
-			irq_domain_remove(port->intx_irq_domain);
+			pci_remove_irq_domain(port->intx_irq_domain);
 
 		/* Free config space for emulated root bridge. */
 		pci_bridge_emul_cleanup(&port->bridge);
