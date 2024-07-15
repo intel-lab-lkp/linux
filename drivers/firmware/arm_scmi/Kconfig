@@ -55,6 +55,17 @@ config ARM_SCMI_RAW_MODE_SUPPORT_COEX
 	  operate normally, thing which could make an SCMI test suite using the
 	  SCMI Raw mode support unreliable. If unsure, say N.
 
+config ARM_SCMI_DEBUG_STATISTICS
+	bool "Enable SCMI Raw mode statistic tracking"
+	select ARM_SCMI_NEED_DEBUGFS
+	depends on DEBUG_FS
+	help
+	  Enables statistic tracking for the SCMI subsystem.
+
+	  Enable this option to create a new debugfs directory which contains
+	  several useful statistics on various SCMI features. This can be useful
+	  for debugging and SCMI monitoring. If unsure, say N.
+
 config ARM_SCMI_HAVE_TRANSPORT
 	bool
 	help

@@ -125,6 +125,10 @@ struct scmi_debug_info {
 	bool is_atomic;
 };
 
+enum debug_stat_counters {
+	LAST
+};
+
 /**
  * struct scmi_info - Structure representing a SCMI instance
  *
@@ -161,6 +165,7 @@ struct scmi_debug_info {
  *		bus
  * @devreq_mtx: A mutex to serialize device creation for this SCMI instance
  * @dbg: A pointer to debugfs related data (if any)
+ * @dbg_stats: An array of atomic_c's used for tracking statistics (if enabled)
  * @raw: An opaque reference handle used by SCMI Raw mode.
  */
 struct scmi_info {
@@ -187,6 +192,7 @@ struct scmi_info {
 	/* Serialize device creation process for this instance */
 	struct mutex devreq_mtx;
 	struct scmi_debug_info *dbg;
+	atomic_t dbg_stats[LAST];
 	void *raw;
 };
 
