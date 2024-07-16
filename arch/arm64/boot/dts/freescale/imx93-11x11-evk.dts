@@ -241,6 +241,22 @@
 			};
 		};
 	};
+
+	adp5585: mfd@34 {
+		compatible = "adi,adp5585";
+		reg = <0x34>;
+
+		adp5585gpio: gpio {
+			compatible = "adp5585-gpio";
+			gpio-controller;
+			#gpio-cells = <2>;
+		};
+
+		adp5585pwm: pwm {
+			compatible = "adp5585-pwm";
+			#pwm-cells = <3>;
+		};
+	};
 };
 
 &lpi2c3 {
