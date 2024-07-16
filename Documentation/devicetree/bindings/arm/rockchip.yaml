@@ -148,6 +148,11 @@ properties:
           - const: engicam,px30-core
           - const: rockchip,px30
 
+      - description: Firefly Core PX30 JD4
+        items:
+          - const: firefly,core-px30-jd4
+          - const: rockchip,px30
+
       - description: Firefly Firefly-RK3288
         items:
           - enum:
