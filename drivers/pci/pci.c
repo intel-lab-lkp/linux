@@ -6585,6 +6585,9 @@ static bool pci_request_resource_alignment(struct pci_dev *dev, int bar,
 	if (size >= align)
 		return false;
 
+	if (!resize && (r->start > align) && !(r->start & (align - 1)))
+		return false;
+
 	/*
 	 * Increase the alignment of the resource.  There are two ways we
 	 * can do this:
