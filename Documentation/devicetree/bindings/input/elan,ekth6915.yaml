@@ -24,6 +24,7 @@ properties:
               - elan,ekth5015m
           - const: elan,ekth6915
       - const: elan,ekth6915
+      - const: elan,ekth6a12nay
 
   reg:
     const: 0x10
