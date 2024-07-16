@@ -1594,6 +1594,23 @@ static void __pci_bridge_assign_resources(const struct pci_dev *bridge,
 	}
 }
 
+static void restore_child_resource_alignment(struct pci_bus *bus)
+{
+	struct pci_dev *dev;
+
+	list_for_each_entry(dev, &bus->devices, bus_list) {
+		struct pci_bus *b;
+
+		pci_reassigndev_resource_alignment(dev);
+
+		b = dev->subordinate;
+		if (!b)
+			continue;
+
+		restore_child_resource_alignment(b);
+	}
+}
+
 #define PCI_RES_TYPE_MASK \
 	(IORESOURCE_IO | IORESOURCE_MEM | IORESOURCE_PREFETCH |\
 	 IORESOURCE_MEM_64)
@@ -1647,6 +1664,8 @@ static void pci_bridge_release_resources(struct pci_bus *bus,
 		r->end = resource_size(r) - 1;
 		r->start = 0;
 		r->flags = 0;
+
+		restore_child_resource_alignment(bus);
 
 		/* Avoiding touch the one without PREF */
 		if (type & IORESOURCE_PREFETCH)
