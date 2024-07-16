@@ -25,10 +25,21 @@ description:
 
 properties:
   compatible:
-    const: marvell,cp110-utmi-phy
+    enum:
+      - marvell,a38x-utmi-phy
+      - marvell,cp110-utmi-phy
 
   reg:
-    maxItems: 1
+    items:
+      - description: UTMI registers
+      - description: USB config register
+      - description: UTMI config registers
+
+  reg-names:
+    items:
+      - const: utmi
+      - const: usb-cfg
+      - const: utmi-cfg
 
   "#address-cells":
     const: 1
