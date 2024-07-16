@@ -256,7 +256,7 @@ static void alloc_resource(struct pci_dev *dev, int idx, int pass)
 		if (r->flags & IORESOURCE_PCI_FIXED) {
 			dev_info(&dev->dev, "BAR %d %pR is immovable\n",
 				 idx, r);
-		} else {
+		} else if (!(r->flags & IORESOURCE_STARTALIGN)) {
 			/* We'll assign a new address later */
 			pcibios_save_fw_addr(dev, idx, r->start);
 			r->end -= r->start;
