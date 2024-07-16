@@ -2171,12 +2171,14 @@ int vmx_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		break;
 #ifdef CONFIG_X86_64
 	case MSR_FS_BASE:
-		vmx_segment_cache_clear(vmx);
+		vmx_write_segment_cache_start(vmx);
 		vmcs_writel(GUEST_FS_BASE, data);
+		vmx_write_segment_cache_end(vmx);
 		break;
 	case MSR_GS_BASE:
-		vmx_segment_cache_clear(vmx);
+		vmx_write_segment_cache_start(vmx);
 		vmcs_writel(GUEST_GS_BASE, data);
+		vmx_write_segment_cache_end(vmx);
 		break;
 	case MSR_KERNEL_GS_BASE:
 		vmx_write_guest_kernel_gs_base(vmx, data);
@@ -3088,7 +3090,7 @@ static void enter_rmode(struct kvm_vcpu *vcpu)
 
 	vmx->rmode.vm86_active = 1;
 
-	vmx_segment_cache_clear(vmx);
+	vmx_write_segment_cache_start(vmx);
 
 	vmcs_writel(GUEST_TR_BASE, kvm_vmx->tss_addr);
 	vmcs_write32(GUEST_TR_LIMIT, RMODE_TSS_SIZE - 1);
@@ -3109,6 +3111,8 @@ static void enter_rmode(struct kvm_vcpu *vcpu)
 	fix_rmode_seg(VCPU_SREG_DS, &vmx->rmode.segs[VCPU_SREG_DS]);
 	fix_rmode_seg(VCPU_SREG_GS, &vmx->rmode.segs[VCPU_SREG_GS]);
 	fix_rmode_seg(VCPU_SREG_FS, &vmx->rmode.segs[VCPU_SREG_FS]);
+
+	vmx_write_segment_cache_end(vmx);
 }
 
 int vmx_set_efer(struct kvm_vcpu *vcpu, u64 efer)
@@ -3139,8 +3143,9 @@ int vmx_set_efer(struct kvm_vcpu *vcpu, u64 efer)
 static void enter_lmode(struct kvm_vcpu *vcpu)
 {
 	u32 guest_tr_ar;
+	struct vcpu_vmx *vmx = to_vmx(vcpu);
 
-	vmx_segment_cache_clear(to_vmx(vcpu));
+	vmx_write_segment_cache_start(vmx);
 
 	guest_tr_ar = vmcs_read32(GUEST_TR_AR_BYTES);
 	if ((guest_tr_ar & VMX_AR_TYPE_MASK) != VMX_AR_TYPE_BUSY_64_TSS) {
@@ -3150,6 +3155,9 @@ static void enter_lmode(struct kvm_vcpu *vcpu)
 			     (guest_tr_ar & ~VMX_AR_TYPE_MASK)
 			     | VMX_AR_TYPE_BUSY_64_TSS);
 	}
+
+	vmx_write_segment_cache_end(vmx);
+
 	vmx_set_efer(vcpu, vcpu->arch.efer | EFER_LMA);
 }
 
@@ -3571,7 +3579,7 @@ void __vmx_set_segment(struct kvm_vcpu *vcpu, struct kvm_segment *var, int seg)
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
 	const struct kvm_vmx_segment_field *sf = &kvm_vmx_segment_fields[seg];
 
-	vmx_segment_cache_clear(vmx);
+	vmx_write_segment_cache_start(vmx);
 
 	if (vmx->rmode.vm86_active && seg != VCPU_SREG_LDTR) {
 		vmx->rmode.segs[seg] = *var;
@@ -3601,6 +3609,8 @@ void __vmx_set_segment(struct kvm_vcpu *vcpu, struct kvm_segment *var, int seg)
 		var->type |= 0x1; /* Accessed */
 
 	vmcs_write32(sf->ar_bytes, vmx_segment_access_rights(var));
+
+	vmx_write_segment_cache_end(vmx);
 }
 
 void vmx_set_segment(struct kvm_vcpu *vcpu, struct kvm_segment *var, int seg)
@@ -4870,7 +4880,8 @@ void vmx_vcpu_reset(struct kvm_vcpu *vcpu, bool init_event)
 	vmx->hv_deadline_tsc = -1;
 	kvm_set_cr8(vcpu, 0);
 
-	vmx_segment_cache_clear(vmx);
+	vmx_write_segment_cache_start(vmx);
+
 	kvm_register_mark_available(vcpu, VCPU_EXREG_SEGMENTS);
 
 	seg_setup(VCPU_SREG_CS);
@@ -4898,6 +4909,8 @@ void vmx_vcpu_reset(struct kvm_vcpu *vcpu, bool init_event)
 
 	vmcs_writel(GUEST_IDTR_BASE, 0);
 	vmcs_write32(GUEST_IDTR_LIMIT, 0xffff);
+
+	vmx_write_segment_cache_end(vmx);
 
 	vmcs_write32(GUEST_ACTIVITY_STATE, GUEST_ACTIVITY_ACTIVE);
 	vmcs_write32(GUEST_INTERRUPTIBILITY_INFO, 0);

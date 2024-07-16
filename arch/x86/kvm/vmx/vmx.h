@@ -755,9 +755,21 @@ static inline bool vmx_can_use_ipiv(struct kvm_vcpu *vcpu)
 	return  lapic_in_kernel(vcpu) && enable_ipiv;
 }
 
-static inline void vmx_segment_cache_clear(struct vcpu_vmx *vmx)
+static inline void vmx_write_segment_cache_start(struct vcpu_vmx *vmx)
+{
+	/* VMX segment cache can be accessed during preemption.
+	 * (e.g to determine the guest's CPL)
+	 *
+	 * To avoid caching a wrong value during such access, disable
+	 * the preemption
+	 */
+	preempt_disable();
+}
+
+static inline void vmx_write_segment_cache_end(struct vcpu_vmx  *vmx)
 {
 	vmx->segment_cache.bitmask = 0;
+	preempt_enable();
 }
 
 #endif /* __KVM_X86_VMX_H */
