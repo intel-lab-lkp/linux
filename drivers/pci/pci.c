@@ -6677,6 +6677,7 @@ void pci_reassigndev_resource_alignment(struct pci_dev *dev)
 
 	pci_read_config_word(dev, PCI_COMMAND, &command);
 	if (command & PCI_COMMAND_MEMORY) {
+		dev->dev_flags |= PCI_DEV_FLAGS_MEMORY_ENABLE;
 		command &= ~PCI_COMMAND_MEMORY;
 		pci_write_config_word(dev, PCI_COMMAND, command);
 	}
