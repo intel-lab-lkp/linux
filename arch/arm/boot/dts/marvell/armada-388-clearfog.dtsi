@@ -51,16 +51,6 @@
 				vmmc-supply = <&reg_3p3v>;
 				wp-inverted;
 			};
-
-			usb@58000 {
-				/* CON3, nearest  power. */
-				status = "okay";
-			};
-
-			usb3@f8000 {
-				/* CON7 */
-				status = "okay";
-			};
 		};
 
 		pcie {
@@ -241,5 +231,25 @@
 	/* mikrobus uart */
 	pinctrl-0 = <&mikro_uart_pins>;
 	pinctrl-names = "default";
+	status = "okay";
+};
+
+/* USB-2.0 Host, CON3 - nearest power */
+&usb0 {
+	phys = <&utmi0>;
+	phy-names = "utmi";
+	dr_mode = "host";
+	status = "okay";
+};
+
+/* SRDS #3 - USB-2.0/3.0 Host, Type-A connector */
+&usb3_1 {
+	phys = <&utmi2>;
+	phy-names = "utmi";
+	dr_mode = "host";
+	status = "okay";
+};
+
+&utmi {
 	status = "okay";
 };

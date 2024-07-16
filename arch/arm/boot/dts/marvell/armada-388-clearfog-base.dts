@@ -66,3 +66,11 @@
 		marvell,function = "gpio";
 	};
 };
+
+/* SRDS #4 - USB-2.0/3.0 Host, M.2 */
+&usb3_0 {
+	phys = <&utmi1>;
+	phy-names = "utmi";
+	dr_mode = "host";
+	status = "okay";
+};
