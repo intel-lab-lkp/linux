@@ -562,13 +562,25 @@ static inline void *detach_page_private(struct page *page)
 }
 
 #ifdef CONFIG_NUMA
-struct folio *filemap_alloc_folio_noprof(gfp_t gfp, unsigned int order);
+struct folio *__filemap_alloc_folio_noprof(gfp_t gfp, unsigned int order);
 #else
-static inline struct folio *filemap_alloc_folio_noprof(gfp_t gfp, unsigned int order)
+static inline struct folio *__filemap_alloc_folio_noprof(gfp_t gfp, unsigned int order)
 {
 	return folio_alloc_noprof(gfp, order);
 }
 #endif
+
+static inline struct folio *filemap_alloc_folio_noprof(gfp_t gfp, unsigned int order)
+{
+	struct folio *folio;
+
+	folio = __filemap_alloc_folio_noprof(gfp, order);
+
+	if (!folio)
+		count_mthp_stat(order, MTHP_STAT_FILE_FALLBACK);
+
+	return folio;
+}
 
 #define filemap_alloc_folio(...)				\
 	alloc_hooks(filemap_alloc_folio_noprof(__VA_ARGS__))

@@ -608,7 +608,14 @@ static struct attribute_group anon_stats_attr_grp = {
 	.attrs = anon_stats_attrs,
 };
 
+DEFINE_MTHP_STAT_ATTR(file_alloc, MTHP_STAT_FILE_ALLOC);
+DEFINE_MTHP_STAT_ATTR(file_fallback, MTHP_STAT_FILE_FALLBACK);
+DEFINE_MTHP_STAT_ATTR(file_fallback_charge, MTHP_STAT_FILE_FALLBACK_CHARGE);
+
 static struct attribute *file_stats_attrs[] = {
+	&file_alloc_attr.attr,
+	&file_fallback_attr.attr,
+	&file_fallback_charge_attr.attr,
 #ifdef CONFIG_SHMEM
 	&shmem_alloc_attr.attr,
 	&shmem_fallback_attr.attr,

@@ -963,6 +963,8 @@ int filemap_add_folio(struct address_space *mapping, struct folio *folio,
 	int ret;
 
 	ret = mem_cgroup_charge(folio, NULL, gfp);
+	count_mthp_stat(folio_order(folio),
+		ret ? MTHP_STAT_FILE_FALLBACK_CHARGE : MTHP_STAT_FILE_ALLOC);
 	if (ret)
 		return ret;
 
@@ -990,7 +992,7 @@ int filemap_add_folio(struct address_space *mapping, struct folio *folio,
 EXPORT_SYMBOL_GPL(filemap_add_folio);
 
 #ifdef CONFIG_NUMA
-struct folio *filemap_alloc_folio_noprof(gfp_t gfp, unsigned int order)
+struct folio *__filemap_alloc_folio_noprof(gfp_t gfp, unsigned int order)
 {
 	int n;
 	struct folio *folio;
@@ -1007,7 +1009,7 @@ struct folio *filemap_alloc_folio_noprof(gfp_t gfp, unsigned int order)
 	}
 	return folio_alloc_noprof(gfp, order);
 }
-EXPORT_SYMBOL(filemap_alloc_folio_noprof);
+EXPORT_SYMBOL(__filemap_alloc_folio_noprof);
 #endif
 
 /*
