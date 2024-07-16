@@ -392,6 +392,11 @@
 				};
 			};
 
+			syscon0: system-controller@18400 {
+				compatible = "syscon", "simple-mfd";
+				reg = <0x18420 0x30>;
+			};
+
 			coreclk: mvebu-sar@18600 {
 				compatible = "marvell,armada-380-core-clock";
 				reg = <0x18600 0x04>;
@@ -578,6 +583,30 @@
 				interrupts = <GIC_SPI 26 IRQ_TYPE_LEVEL_HIGH>;
 				clocks = <&gateclk 15>;
 				status = "disabled";
+			};
+
+			utmi: utmi@c0000 {
+				compatible = "marvell,a38x-utmi-phy";
+				reg = <0xc0000 0x6000>, <0x18420 4>, <0x18440 12>;
+				reg-names = "utmi", "usb-cfg", "utmi-cfg";
+				#address-cells = <1>;
+				#size-cells = <0>;
+				status = "disabled";
+
+				utmi0: usb-phy@0 {
+					reg = <0>;
+					#phy-cells = <0>;
+				};
+
+				utmi1: usb-phy@1 {
+					reg = <1>;
+					#phy-cells = <0>;
+				};
+
+				utmi2: usb-phy@2 {
+					reg = <2>;
+					#phy-cells = <0>;
+				};
 			};
 
 			bm: bm@c8000 {
