@@ -1249,6 +1249,9 @@ config IOMMU_MM_DATA
 config EXECMEM
 	bool
 
+config NUMA_MEMBLKS
+	bool
+
 source "mm/damon/Kconfig"
 
 endmenu
