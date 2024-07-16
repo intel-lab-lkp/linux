@@ -81,6 +81,29 @@
 	};
 };
 
+&lpi2c2 {
+	clock-frequency = <400000>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_lpi2c2>;
+	status = "okay";
+
+	adp5585: mfd@34 {
+		compatible = "adi,adp5585";
+		reg = <0x34>;
+
+		adp5585gpio: gpio-adp5585 {
+			compatible = "adp5585-gpio";
+			gpio-controller;
+			#gpio-cells = <2>;
+		};
+
+		adp5585pwm: pwm-adp5585 {
+			compatible = "adp5585-pwm";
+			#pwm-cells = <3>;
+		};
+	};
+};
+
 &lpi2c7 {
 	clock-frequency = <1000000>;
 	pinctrl-names = "default";
@@ -159,6 +182,13 @@
 };
 
 &scmi_iomuxc {
+	pinctrl_lpi2c2: lpi2c2grp {
+		fsl,pins = <
+			IMX95_PAD_I2C2_SCL__AONMIX_TOP_LPI2C2_SCL	0x40000b9e
+			IMX95_PAD_I2C2_SDA__AONMIX_TOP_LPI2C2_SDA	0x40000b9e
+		>;
+	};
+
 	pinctrl_i2c7_pcal6524: i2c7pcal6524grp {
 		fsl,pins = <
 			IMX95_PAD_GPIO_IO36__GPIO5_IO_BIT16			0x31e
