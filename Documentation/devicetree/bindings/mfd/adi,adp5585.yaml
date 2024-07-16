@@ -1,0 +1,83 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mfd/adi,adp5585.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: ADI adp5585 GPIO, PWM, keypad controller
+
+maintainers:
+  - Frank Li <Frank.Li@nxp.com>
+
+description:
+  adp5585 is a multifunctional device that can provide GPIO, PWM and keypad.
+
+properties:
+  compatible:
+    const: adi,adp5585
+
+  reg:
+    items:
+      description: I2C device address.
+
+  gpio:
+    type: object
+    properties:
+      compatible:
+        const: adp5585-gpio
+
+      gpio-controller: true
+
+      "#gpio-cells":
+        const: 2
+
+    required:
+      - compatible
+      - gpio-controller
+      - "#gpio-cells"
+
+    additionalProperties: false
+
+  pwm:
+    $ref: /schemas/pwm/pwm.yaml
+    properties:
+      compatible:
+        const: adp5585-pwm
+
+      "#pwm-cells":
+        const: 3
+
+    required:
+      - compatible
+      - "#pwm-cells"
+
+    unevaluatedProperties: false
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        mfd@34 {
+            compatible = "adi,adp5585";
+            reg = <0x34>;
+
+            gpio {
+                compatible = "adp5585-gpio";
+                gpio-controller;
+                #gpio-cells = <2>;
+            };
+
+            pwm {
+                compatible = "adp5585-pwm";
+                #pwm-cells = <3>;
+            };
+        };
+    };
