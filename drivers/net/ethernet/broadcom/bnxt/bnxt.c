@@ -55,6 +55,7 @@
 #include <net/page_pool/helpers.h>
 #include <linux/align.h>
 #include <net/netdev_queues.h>
+#include <linux/pci-tph.h>
 
 #include "bnxt_hsi.h"
 #include "bnxt.h"
@@ -10683,11 +10684,52 @@ static void bnxt_free_irq(struct bnxt *bp)
 				free_cpumask_var(irq->cpu_mask);
 				irq->have_cpumask = 0;
 			}
+			if (pcie_tph_intr_vec_supported(bp->pdev))
+				irq_set_affinity_notifier(irq->vector, NULL);
 			free_irq(irq->vector, bp->bnapi[i]);
 		}
 
 		irq->requested = 0;
 	}
+}
+
+static void bnxt_rtnl_lock_sp(struct bnxt *bp);
+static void bnxt_rtnl_unlock_sp(struct bnxt *bp);
+static void __bnxt_irq_affinity_notify(struct irq_affinity_notify *notify,
+				       const cpumask_t *mask)
+{
+	struct bnxt_irq *irq;
+
+	irq = container_of(notify, struct bnxt_irq, affinity_notify);
+	cpumask_copy(irq->cpu_mask, mask);
+
+	if (!pcie_tph_set_st(irq->bp->pdev, irq->msix_nr,
+			     cpumask_first(irq->cpu_mask),
+			     TPH_MEM_TYPE_VM, PCI_TPH_REQ_TPH_ONLY))
+		netdev_dbg(irq->bp->dev, "error in setting steering tag\n");
+
+	if (netif_running(irq->bp->dev)) {
+		rtnl_lock();
+		bnxt_close_nic(irq->bp, false, false);
+		bnxt_open_nic(irq->bp, false, false);
+		rtnl_unlock();
+	}
+}
+
+static void __bnxt_irq_affinity_release(struct kref __always_unused *ref)
+{
+}
+
+static inline void bnxt_register_affinity_notifier(struct bnxt_irq *irq)
+{
+	struct irq_affinity_notify *notify;
+
+	notify = &irq->affinity_notify;
+	notify->irq = irq->vector;
+	notify->notify = __bnxt_irq_affinity_notify;
+	notify->release = __bnxt_irq_affinity_release;
+
+	irq_set_affinity_notifier(irq->vector, notify);
 }
 
 static int bnxt_request_irq(struct bnxt *bp)
@@ -10735,6 +10777,7 @@ static int bnxt_request_irq(struct bnxt *bp)
 			int numa_node = dev_to_node(&bp->pdev->dev);
 
 			irq->have_cpumask = 1;
+			irq->msix_nr = map_idx;
 			cpumask_set_cpu(cpumask_local_spread(i, numa_node),
 					irq->cpu_mask);
 			rc = irq_set_affinity_hint(irq->vector, irq->cpu_mask);
@@ -10743,6 +10786,17 @@ static int bnxt_request_irq(struct bnxt *bp)
 					    "Set affinity failed, IRQ = %d\n",
 					    irq->vector);
 				break;
+			}
+
+			if (pcie_tph_intr_vec_supported(bp->pdev)) {
+				irq->bp = bp;
+				bnxt_register_affinity_notifier(irq);
+
+				/* first setup */
+				if (!pcie_tph_set_st(bp->pdev, i,
+						     cpumask_first(irq->cpu_mask),
+						     TPH_MEM_TYPE_VM, PCI_TPH_REQ_TPH_ONLY))
+					netdev_dbg(bp->dev, "error in setting steering tag\n");
 			}
 		}
 	}
