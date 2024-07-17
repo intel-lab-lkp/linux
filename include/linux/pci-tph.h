@@ -21,6 +21,9 @@ bool pcie_tph_intr_vec_supported(struct pci_dev *dev);
 int pcie_tph_get_st_from_acpi(struct pci_dev *dev, unsigned int cpu_acpi_uid,
 			      enum tph_mem_type tag_type, u8 req_enable,
 			      u16 *tag);
+int pcie_tph_set_st(struct pci_dev *dev, unsigned int msix_nr,
+		    unsigned int cpu, enum tph_mem_type tag_type,
+		    u8 req_enable);
 #else
 static inline void pcie_tph_disable(struct pci_dev *dev) {}
 static inline void pcie_tph_set_nostmode(struct pci_dev *dev) {}
@@ -29,6 +32,10 @@ static inline bool pcie_tph_intr_vec_supported(struct pci_dev *dev)
 static inline int pcie_tph_get_st_from_acpi(struct pci_dev *dev, unsigned int cpu_acpi_uid,
 					    enum tph_mem_type tag_type, u8 req_enable,
 					    u16 *tag)
+{ return false; }
+static inline int pcie_tph_set_st(struct pci_dev *dev, unsigned int msix_nr,
+				   unsigned int cpu, enum tph_mem_type tag_type,
+				   u8 req_enable)
 { return false; }
 #endif
 
