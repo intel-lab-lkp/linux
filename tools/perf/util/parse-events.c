@@ -1425,12 +1425,13 @@ static int parse_events_add_pmu(struct parse_events_state *parse_state,
 				bool auto_merge_stats)
 {
 	struct perf_event_attr attr;
-	struct perf_pmu_info info;
+	struct perf_pmu_info info = {};
 	struct evsel *evsel;
 	struct parse_events_error *err = parse_state->error;
 	LIST_HEAD(config_terms);
 	struct parse_events_terms parsed_terms;
 	bool alias_rewrote_terms = false;
+	int ret = 0;
 
 	if (verbose > 1) {
 		struct strbuf sb;
@@ -1465,8 +1466,7 @@ static int parse_events_add_pmu(struct parse_events_state *parse_state,
 
 	parse_events_terms__init(&parsed_terms);
 	if (const_parsed_terms) {
-		int ret = parse_events_terms__copy(const_parsed_terms, &parsed_terms);
-
+		ret = parse_events_terms__copy(const_parsed_terms, &parsed_terms);
 		if (ret)
 			return ret;
 	}
@@ -1474,15 +1474,15 @@ static int parse_events_add_pmu(struct parse_events_state *parse_state,
 
 	/* Configure attr/terms with a known PMU, this will set hardcoded terms. */
 	if (config_attr(&attr, &parsed_terms, parse_state->error, config_term_pmu)) {
-		parse_events_terms__exit(&parsed_terms);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto out_err;
 	}
 
 	/* Look for event names in the terms and rewrite into format based terms. */
 	if (!parse_state->fake_pmu && perf_pmu__check_alias(pmu, &parsed_terms,
 							    &info, &alias_rewrote_terms, err)) {
-		parse_events_terms__exit(&parsed_terms);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto out_err;
 	}
 
 	if (verbose > 1) {
@@ -1497,13 +1497,13 @@ static int parse_events_add_pmu(struct parse_events_state *parse_state,
 	/* Configure attr/terms again if an alias was expanded. */
 	if (alias_rewrote_terms &&
 	    config_attr(&attr, &parsed_terms, parse_state->error, config_term_pmu)) {
-		parse_events_terms__exit(&parsed_terms);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto out_err;
 	}
 
 	if (get_config_terms(&parsed_terms, &config_terms)) {
-		parse_events_terms__exit(&parsed_terms);
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto out_err;
 	}
 
 	/*
@@ -1512,24 +1512,23 @@ static int parse_events_add_pmu(struct parse_events_state *parse_state,
 	 */
 	if (pmu->perf_event_attr_init_default &&
 	    get_config_chgs(pmu, &parsed_terms, &config_terms)) {
-		parse_events_terms__exit(&parsed_terms);
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto out_err;
 	}
 
 	if (!parse_state->fake_pmu &&
 	    perf_pmu__config(pmu, &attr, &parsed_terms, parse_state->error)) {
-		free_config_terms(&config_terms);
-		parse_events_terms__exit(&parsed_terms);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto out_err;
 	}
 
 	evsel = __add_event(list, &parse_state->idx, &attr, /*init_attr=*/true,
 			    get_config_name(&parsed_terms),
 			    get_config_metric_id(&parsed_terms), pmu,
-			    &config_terms, auto_merge_stats, /*cpu_list=*/NULL);
+			    &config_terms, auto_merge_stats, info.cpus);
 	if (!evsel) {
-		parse_events_terms__exit(&parsed_terms);
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto out_err;
 	}
 
 	if (evsel->name)
@@ -1542,13 +1541,17 @@ static int parse_events_add_pmu(struct parse_events_state *parse_state,
 		return 0;
 	}
 
-	parse_events_terms__exit(&parsed_terms);
 	free((char *)evsel->unit);
 	evsel->unit = strdup(info.unit);
 	evsel->scale = info.scale;
 	evsel->per_pkg = info.per_pkg;
 	evsel->snapshot = info.snapshot;
-	return 0;
+out_err:
+	parse_events_terms__exit(&parsed_terms);
+	if (ret)
+		free_config_terms(&config_terms);
+	perf_cpu_map__put(info.cpus);
+	return ret;
 }
 
 int parse_events_multi_pmu_add(struct parse_events_state *parse_state,

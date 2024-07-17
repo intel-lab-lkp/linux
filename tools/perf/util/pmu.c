@@ -73,6 +73,11 @@ struct perf_pmu_alias {
 	 * differ from the PMU name as it won't have suffixes.
 	 */
 	char *pmu_name;
+	/**
+	 * @cpus: A possible per-event cpumap that overrides that given for the
+	 * PMU.
+	 */
+	struct perf_cpu_map *cpus;
 	/** @unit: Units for the event, such as bytes or cache lines. */
 	char unit[UNIT_MAX_LEN+1];
 	/** @scale: Value to scale read counter values by. */
@@ -332,6 +337,32 @@ error:
 	return ret;
 }
 
+static void perf_pmu__parse_cpus(struct perf_pmu *pmu, struct perf_pmu_alias *alias)
+{
+	char path[PATH_MAX];
+	size_t len;
+	FILE *file;
+	int fd;
+
+	len = perf_pmu__event_source_devices_scnprintf(path, sizeof(path));
+	if (!len)
+		return;
+	scnprintf(path + len, sizeof(path) - len, "%s/events/%s.cpus", pmu->name, alias->name);
+
+	fd = open(path, O_RDONLY);
+	if (fd == -1)
+		return; /* Expected common case. */
+
+	file = fdopen(fd, "r");
+	if (!file) {
+		close(fd);
+		return;
+	}
+
+	alias->cpus = perf_cpu_map__read(file);
+	fclose(file);
+}
+
 static int perf_pmu__parse_unit(struct perf_pmu *pmu, struct perf_pmu_alias *alias)
 {
 	char path[PATH_MAX];
@@ -493,6 +524,7 @@ static void read_alias_info(struct perf_pmu *pmu, struct perf_pmu_alias *alias)
 	/*
 	 * load unit name and scale if available
 	 */
+	perf_pmu__parse_cpus(pmu, alias);
 	perf_pmu__parse_unit(pmu, alias);
 	perf_pmu__parse_scale(pmu, alias);
 	perf_pmu__parse_per_pkg(pmu, alias);
@@ -618,7 +650,7 @@ static inline bool pmu_alias_info_file(const char *name)
 	size_t len;
 
 	len = strlen(name);
-	if (len > 5 && !strcmp(name + len - 5, ".unit"))
+	if (len > 5 && (!strcmp(name + len - 5, ".cpus") || !strcmp(name + len - 5, ".unit")))
 		return true;
 	if (len > 6 && !strcmp(name + len - 6, ".scale"))
 		return true;
@@ -1560,6 +1592,12 @@ static int check_info_data(struct perf_pmu *pmu,
 	 * define unit, scale and snapshot, fail
 	 * if there's more than one.
 	 */
+	if (!perf_cpu_map__is_empty(info->cpus) && !perf_cpu_map__is_empty(alias->cpus)) {
+		parse_events_error__handle(err, column,
+					strdup("Attempt to set event's cpus twice"),
+					NULL);
+		return -EINVAL;
+	}
 	if (info->unit && alias->unit[0]) {
 		parse_events_error__handle(err, column,
 					strdup("Attempt to set event's unit twice"),
@@ -1578,6 +1616,9 @@ static int check_info_data(struct perf_pmu *pmu,
 					NULL);
 		return -EINVAL;
 	}
+
+	if (!perf_cpu_map__is_empty(alias->cpus))
+		info->cpus = perf_cpu_map__get(alias->cpus);
 
 	if (alias->unit[0])
 		info->unit = alias->unit;
@@ -1610,6 +1651,7 @@ int perf_pmu__check_alias(struct perf_pmu *pmu, struct parse_events_terms *head_
 	 * Mark unit and scale as not set
 	 * (different from default values, see below)
 	 */
+	info->cpus     = NULL;
 	info->unit     = NULL;
 	info->scale    = 0.0;
 	info->snapshot = false;

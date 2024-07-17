@@ -70,6 +70,20 @@ Description:	Per-pmu performance monitoring events specific to the running syste
 		This is referred to as "event parameterization". Event
 		parameters have the format 'param=?'.
 
+What: /sys/bus/event_source/devices/<pmu>/events/<event>.cpus
+Date: 2024/07/17
+Contact:	Linux kernel mailing list <linux-kernel@vger.kernel.org>
+Description:	Perf event CPUs
+
+		A list of CPUs on which a the perf event should be
+		opened by default. This is an event specific variant
+		of /sys/bus/event_source/devices/<pmu>/cpumask.
+
+		Examples (each of these lines would be in a separate file):
+
+			0,2,4,6
+			0-7
+
 What: /sys/bus/event_source/devices/<pmu>/events/<event>.unit
 Date: 2014/02/24
 Contact:	Linux kernel mailing list <linux-kernel@vger.kernel.org>
