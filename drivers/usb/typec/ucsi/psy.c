@@ -30,6 +30,7 @@ static enum power_supply_property ucsi_psy_props[] = {
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_SCOPE,
 	POWER_SUPPLY_PROP_STATUS,
+	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT_MAX,
 };
 
 static int ucsi_psy_get_scope(struct ucsi_connector *con,
@@ -270,9 +271,52 @@ static int ucsi_psy_get_prop(struct power_supply *psy,
 		return ucsi_psy_get_scope(con, val);
 	case POWER_SUPPLY_PROP_STATUS:
 		return ucsi_psy_get_status(con, val);
+	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT_MAX:
+		val->intval = 0;
+		return 0;
 	default:
 		return -EINVAL;
 	}
+}
+
+static int ucsi_psy_set_charge_control_limit_max(struct ucsi_connector *con,
+				 const union power_supply_propval *val)
+{
+	enum typec_role role;
+	/*
+	 * Writing a negative value to the charge control limit max implies the
+	 * port should not accept charge. Set the power role to source for a
+	 * negative charge control limit, and sink otherwise.
+	 */
+	if (val->intval < 0)
+		role = TYPEC_SOURCE;
+	else
+		role = TYPEC_SINK;
+
+	if (!con->typec_cap.ops || !con->typec_cap.ops->pr_set)
+		return -EINVAL;
+
+	return con->typec_cap.ops->pr_set(con->port, role);
+}
+
+static int ucsi_psy_set_prop(struct power_supply *psy,
+			     enum power_supply_property psp,
+			     const union power_supply_propval *val)
+{
+	struct ucsi_connector *con = power_supply_get_drvdata(psy);
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT_MAX:
+		return ucsi_psy_set_charge_control_limit_max(con, val);
+	default:
+		return -EINVAL;
+	}
+}
+
+static int ucsi_psy_prop_is_writeable(struct power_supply *psy,
+			     enum power_supply_property psp)
+{
+	return psp == POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT_MAX;
 }
 
 static enum power_supply_usb_type ucsi_psy_usb_types[] = {
@@ -303,6 +347,8 @@ int ucsi_register_port_psy(struct ucsi_connector *con)
 	con->psy_desc.properties = ucsi_psy_props;
 	con->psy_desc.num_properties = ARRAY_SIZE(ucsi_psy_props);
 	con->psy_desc.get_property = ucsi_psy_get_prop;
+	con->psy_desc.set_property = ucsi_psy_set_prop;
+	con->psy_desc.property_is_writeable = ucsi_psy_prop_is_writeable;
 
 	con->psy = power_supply_register(dev, &con->psy_desc, &psy_cfg);
 
