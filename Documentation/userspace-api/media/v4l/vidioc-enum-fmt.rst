@@ -234,6 +234,17 @@ the ``mbus_code`` field is handled differently:
 	valid. The buffer consists of ``height`` lines, each having ``width``
 	Data Units of data and the offset (in bytes) between the beginning of
 	each two consecutive lines is ``bytesperline``.
+    * - ``V4L2_FMT_FLAG_ENUM_ALL_FORMATS``
+      - 0x0400
+      - Set by userland applications to enumerate all possible pixel formats
+        without taking care of any OUTPUT or CAPTURE queue configuration.
+        This flag is relevant only for mem2mem devices.
+    * - ``V4L2_FMT_FLAG_ALL_FORMATS``
+      - 0x0800
+      - Set by the driver to indicated that format have been enumerated because
+        :ref:`V4L2_FMT_FLAG_ENUM_ALL_FORMATS <v4l2-pix-fmt-flag-set-csc>` has
+        been set by the userland application.
+        This flag is relevant only for mem2mem devices.
 
 Return Value
 ============
