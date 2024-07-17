@@ -1922,6 +1922,8 @@ config RTC_DRV_R7301
 config RTC_DRV_STM32
 	tristate "STM32 RTC"
 	select REGMAP_MMIO
+	select PINMUX
+	select GENERIC_PINCONF
 	depends on ARCH_STM32 || COMPILE_TEST
 	help
 	   If you say yes here you get support for the STM32 On-Chip
