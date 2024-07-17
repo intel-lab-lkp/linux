@@ -39,6 +39,17 @@ static void set_ctrl_reg_req_en(struct pci_dev *pdev, u8 req_type)
 	pci_write_config_dword(pdev, pdev->tph_cap + PCI_TPH_CTRL, reg_val);
 }
 
+static bool int_vec_mode_supported(struct pci_dev *pdev)
+{
+	u32 reg_val;
+	u8 mode;
+
+	pci_read_config_dword(pdev, pdev->tph_cap + PCI_TPH_CAP, &reg_val);
+	mode = FIELD_GET(PCI_TPH_CAP_INT_VEC, reg_val);
+
+	return !!mode;
+}
+
 void pcie_tph_set_nostmode(struct pci_dev *pdev)
 {
 	if (!pdev->tph_cap)
@@ -60,3 +71,21 @@ void pcie_tph_init(struct pci_dev *pdev)
 {
 	pdev->tph_cap = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_TPH);
 }
+
+/**
+ * pcie_tph_intr_vec_supported() - Check if interrupt vector mode supported for dev
+ * @pdev: pci device
+ *
+ * Return:
+ *        true : intr vector mode supported
+ *        false: intr vector mode not supported
+ */
+bool pcie_tph_intr_vec_supported(struct pci_dev *pdev)
+{
+	if (!pdev->tph_cap || pci_tph_disabled() || !pdev->msix_enabled ||
+	    !int_vec_mode_supported(pdev))
+		return false;
+
+	return true;
+}
+EXPORT_SYMBOL(pcie_tph_intr_vec_supported);
