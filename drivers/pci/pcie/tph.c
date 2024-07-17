@@ -7,7 +7,32 @@
  *     Wei Huang <wei.huang2@amd.com>
  */
 
+#include <linux/pci.h>
+#include <linux/bitfield.h>
+#include <linux/pci-tph.h>
+
 #include "../pci.h"
+
+/* Update the TPH Requester Enable field of TPH Control Register */
+static void set_ctrl_reg_req_en(struct pci_dev *pdev, u8 req_type)
+{
+	u32 reg_val;
+
+	pci_read_config_dword(pdev, pdev->tph_cap + PCI_TPH_CTRL, &reg_val);
+
+	reg_val &= ~PCI_TPH_CTRL_REQ_EN_MASK;
+	reg_val |= FIELD_PREP(PCI_TPH_CTRL_REQ_EN_MASK, req_type);
+
+	pci_write_config_dword(pdev, pdev->tph_cap + PCI_TPH_CTRL, reg_val);
+}
+
+void pcie_tph_disable(struct pci_dev *pdev)
+{
+	if (!pdev->tph_cap)
+		return;
+
+	set_ctrl_reg_req_en(pdev, PCI_TPH_REQ_DISABLE);
+}
 
 void pcie_tph_init(struct pci_dev *pdev)
 {
