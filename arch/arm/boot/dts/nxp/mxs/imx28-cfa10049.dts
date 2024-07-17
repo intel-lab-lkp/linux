@@ -143,7 +143,7 @@
 		};
 
 		dac0: dh2228@2 {
-			compatible = "rohm,dh2228fv";
+			compatible = "rohm,bh2228fv";
 			reg = <2>;
 			spi-max-frequency = <100000>;
 		};
