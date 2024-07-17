@@ -68,6 +68,7 @@
 
 int ath12k_acpi_start(struct ath12k_base *ab);
 void ath12k_acpi_stop(struct ath12k_base *ab);
+void ath12k_acpi_set_dsm_func(struct ath12k_base *ab);
 
 #else
 
@@ -77,6 +78,10 @@ static inline int ath12k_acpi_start(struct ath12k_base *ab)
 }
 
 static inline void ath12k_acpi_stop(struct ath12k_base *ab)
+{
+}
+
+static inline void ath12k_acpi_set_dsm_func(struct ath12k_base *ab)
 {
 }
 
