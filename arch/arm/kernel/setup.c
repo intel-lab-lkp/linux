@@ -1015,6 +1015,11 @@ static void __init reserve_crashkernel(void)
 	if (ret || !crash_size)
 		return;
 
+	if (crash_size >= total_mem) {
+		pr_warn("Crashkernel reserve memory cannot exceed physical memory.");
+		return;
+	}
+
 	if (crash_base <= 0) {
 		unsigned long long crash_max = idmap_to_phys((u32)~0);
 		unsigned long long lowmem_max = __pa(high_memory - 1) + 1;
