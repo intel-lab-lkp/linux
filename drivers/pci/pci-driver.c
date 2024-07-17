@@ -324,8 +324,13 @@ static long local_pci_probe(void *_ddi)
 	pci_dev->driver = pci_drv;
 	rc = pci_drv->probe(pci_dev, ddi->id);
 	if (!rc) {
-		if (pci_tph_disabled())
+		if (pci_tph_disabled()) {
 			pcie_tph_disable(pci_dev);
+			return rc;
+		}
+
+		if (pci_tph_nostmode())
+			pcie_tph_set_nostmode(pci_dev);
 
 		return rc;
 	}
