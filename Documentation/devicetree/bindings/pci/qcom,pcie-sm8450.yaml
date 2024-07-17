@@ -55,11 +55,12 @@ properties:
       - const: aggre1 # Aggre NoC PCIe1 AXI clock
 
   interrupts:
-    minItems: 8
-    maxItems: 8
+    minItems: 9
+    maxItems: 9
 
   interrupt-names:
     items:
+      - const: global
       - const: msi0
       - const: msi1
       - const: msi2
@@ -142,7 +143,8 @@ examples:
                           "aggre0",
                           "aggre1";
 
-            interrupts = <GIC_SPI 141 IRQ_TYPE_LEVEL_HIGH>,
+            interrupts = <GIC_SPI 140 IRQ_TYPE_LEVEL_HIGH>,
+                         <GIC_SPI 141 IRQ_TYPE_LEVEL_HIGH>,
                          <GIC_SPI 142 IRQ_TYPE_LEVEL_HIGH>,
                          <GIC_SPI 143 IRQ_TYPE_LEVEL_HIGH>,
                          <GIC_SPI 144 IRQ_TYPE_LEVEL_HIGH>,
@@ -150,7 +152,7 @@ examples:
                          <GIC_SPI 146 IRQ_TYPE_LEVEL_HIGH>,
                          <GIC_SPI 147 IRQ_TYPE_LEVEL_HIGH>,
                          <GIC_SPI 148 IRQ_TYPE_LEVEL_HIGH>;
-            interrupt-names = "msi0", "msi1", "msi2", "msi3",
+            interrupt-names = "global", "msi0", "msi1", "msi2", "msi3",
                               "msi4", "msi5", "msi6", "msi7";
             #interrupt-cells = <1>;
             interrupt-map-mask = <0 0 0 0x7>;
