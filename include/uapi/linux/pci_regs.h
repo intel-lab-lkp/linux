@@ -657,6 +657,7 @@
 #define  PCI_EXP_DEVCAP2_ATOMIC_COMP64	0x00000100 /* 64b AtomicOp completion */
 #define  PCI_EXP_DEVCAP2_ATOMIC_COMP128	0x00000200 /* 128b AtomicOp completion */
 #define  PCI_EXP_DEVCAP2_LTR		0x00000800 /* Latency tolerance reporting */
+#define  PCI_EXP_DEVCAP2_TPH_COMP_MASK	0x00003000 /* TPH completer support */
 #define  PCI_EXP_DEVCAP2_OBFF_MASK	0x000c0000 /* OBFF support mechanism */
 #define  PCI_EXP_DEVCAP2_OBFF_MSG	0x00040000 /* New message signaling */
 #define  PCI_EXP_DEVCAP2_OBFF_WAKE	0x00080000 /* Re-use WAKE# for OBFF */
@@ -1020,15 +1021,34 @@
 #define  PCI_DPA_CAP_SUBSTATE_MASK	0x1F	/* # substates - 1 */
 #define PCI_DPA_BASE_SIZEOF	16	/* size with 0 substates */
 
+/* TPH Completer Support */
+#define PCI_EXP_DEVCAP2_TPH_COMP_NONE		0x0 /* None */
+#define PCI_EXP_DEVCAP2_TPH_COMP_TPH_ONLY	0x1 /* TPH only */
+#define PCI_EXP_DEVCAP2_TPH_COMP_TPH_AND_EXT	0x3 /* TPH and Extended TPH */
+
 /* TPH Requester */
 #define PCI_TPH_CAP		4	/* capability register */
-#define  PCI_TPH_CAP_LOC_MASK	0x600	/* location mask */
-#define   PCI_TPH_LOC_NONE	0x000	/* no location */
-#define   PCI_TPH_LOC_CAP	0x200	/* in capability */
-#define   PCI_TPH_LOC_MSIX	0x400	/* in MSI-X */
+#define  PCI_TPH_CAP_NO_ST	0x00000001 /* no ST mode supported */
+#define  PCI_TPH_CAP_INT_VEC	0x00000002 /* interrupt vector mode supported */
+#define  PCI_TPH_CAP_DS		0x00000004 /* device specific mode supported */
+#define  PCI_TPH_CAP_EXT_TPH	0x00000100 /* extended TPH requestor supported */
+#define  PCI_TPH_CAP_LOC_MASK	0x00000600 /* location mask */
+#define   PCI_TPH_LOC_NONE	0x00000000 /* no location */
+#define   PCI_TPH_LOC_CAP	0x00000200 /* in capability */
+#define   PCI_TPH_LOC_MSIX	0x00000400 /* in MSI-X */
 #define PCI_TPH_CAP_ST_MASK	0x07FF0000	/* ST table mask */
 #define PCI_TPH_CAP_ST_SHIFT	16	/* ST table shift */
 #define PCI_TPH_BASE_SIZEOF	0xc	/* size with no ST table */
+
+#define PCI_TPH_CTRL		8	/* control register */
+#define  PCI_TPH_CTRL_MODE_SEL_MASK	0x00000007 /* ST mode select mask */
+#define   PCI_TPH_NO_ST_MODE		0x0 /*  no ST mode */
+#define   PCI_TPH_INT_VEC_MODE		0x1 /*  interrupt vector mode */
+#define   PCI_TPH_DEV_SPEC_MODE		0x2 /*  device specific mode */
+#define  PCI_TPH_CTRL_REQ_EN_MASK	0x00000300 /* TPH requester mask */
+#define   PCI_TPH_REQ_DISABLE		0x0 /*  no TPH request allowed */
+#define   PCI_TPH_REQ_TPH_ONLY		0x1 /*  8-bit TPH tags allowed */
+#define   PCI_TPH_REQ_EXT_TPH		0x3 /*  16-bit TPH tags allowed */
 
 /* Downstream Port Containment */
 #define PCI_EXP_DPC_CAP			0x04	/* DPC Capability */
