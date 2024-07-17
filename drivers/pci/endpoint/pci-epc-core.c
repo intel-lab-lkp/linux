@@ -838,6 +838,9 @@ void pci_epc_destroy(struct pci_epc *epc)
 {
 	pci_ep_cfs_remove_epc_group(epc->group);
 	device_unregister(&epc->dev);
+
+	if (IS_ENABLED(CONFIG_PCI_DOMAINS_GENERIC))
+		pci_bus_release_domain_nr(NULL, &epc->dev);
 }
 EXPORT_SYMBOL_GPL(pci_epc_destroy);
 
@@ -899,6 +902,13 @@ __pci_epc_create(struct device *dev, const struct pci_epc_ops *ops,
 	epc->dev.parent = dev;
 	epc->dev.release = pci_epc_release;
 	epc->ops = ops;
+
+	/*
+	 * TODO: If the architecture doesn't support generic PCI domains, then
+	 * a custom implementation has to be used.
+	 */
+	if (!WARN_ON_ONCE(!IS_ENABLED(CONFIG_PCI_DOMAINS_GENERIC)))
+		epc->domain_nr = pci_bus_find_domain_nr(NULL, dev);
 
 	ret = dev_set_name(&epc->dev, "%s", dev_name(dev));
 	if (ret)
