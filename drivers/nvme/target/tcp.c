@@ -73,6 +73,10 @@ device_param_cb(idle_poll_period_usecs, &set_param_ops,
 MODULE_PARM_DESC(idle_poll_period_usecs,
 		"nvmet tcp io_work poll till idle time period in usecs: Default 0");
 
+static bool use_unbound_wq;
+module_param(use_unbound_wq, bool, 0444);
+MODULE_PARM_DESC(use_unbound_wq, "use unbound workqueue to handle IO request: Default false");
+
 #ifdef CONFIG_NVME_TARGET_TCP_TLS
 /*
  * TLS handshake timeout
@@ -2182,9 +2186,13 @@ static const struct nvmet_fabrics_ops nvmet_tcp_ops = {
 static int __init nvmet_tcp_init(void)
 {
 	int ret;
+	unsigned int flags;
 
-	nvmet_tcp_wq = alloc_workqueue("nvmet_tcp_wq",
-				WQ_MEM_RECLAIM | WQ_HIGHPRI, 0);
+	flags = WQ_MEM_RECLAIM | WQ_HIGHPRI;
+	if (use_unbound_wq)
+		flags |= (WQ_UNBOUND | WQ_SYSFS);
+
+	nvmet_tcp_wq = alloc_workqueue("nvmet_tcp_wq", flags, 0);
 	if (!nvmet_tcp_wq)
 		return -ENOMEM;
 
