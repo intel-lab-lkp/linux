@@ -1,0 +1,66 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+# Copyright (C) 2024 Amlogic, Inc. All rights reserved
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/net/bluetooth/amlogic,w155s2-bt.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Amlogic Bluetooth chips
+
+description:
+  This binding describes UART-attached Amlogic bluetooth chips.
+
+maintainers:
+  - Yang Li <yang.li@amlogic.com>
+
+properties:
+  compatible:
+    oneOf:
+      - const: amlogic,w155s2-bt
+      - items:
+          - enum:
+              - amlogic,w265s1-bt
+              - amlogic,w265p1-bt
+              - amlogic,w265s2-bt
+          - const: amlogic,w155s2-bt
+
+  bt-enable-gpios:
+    maxItems: 1
+    description: gpio specifier used to enable BT
+
+  bt-supply:
+    description: bluetooth chip 3.3V supply regulator handle
+
+  clocks:
+    maxItems: 1
+    description: clock provided to the controller (32.768KHz)
+
+  antenna-number:
+    default: 1
+    description: device supports up to two antennas
+    $ref: /schemas/types.yaml#/definitions/uint32
+
+  firmware-name:
+    description: specify the path of firmware bin to load
+    $ref: /schemas/types.yaml#/definitions/string-array
+
+required:
+  - compatible
+  - bt-enable-gpios
+  - bt-supply
+  - clocks
+  - firmware-name
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    bluetooth {
+        compatible = "amlogic,w155s2-bt";
+        bt-enable-gpios = <&gpio 17 GPIO_ACTIVE_HIGH>;
+        bt-supply = <&wcn_3v3>;
+        clocks = <&extclk>;
+        firmware-name = "amlogic/aml_w155s2_bt_uart.bin";
+    };
+
