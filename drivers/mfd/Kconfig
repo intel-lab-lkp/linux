@@ -1218,6 +1218,16 @@ config MFD_RT5120
 	  is targeted at providing the CPU voltage, memory, I/O and peripheral
 	  power rails in home entertainment devices.
 
+config MFD_CONGATEC_CGEB
+	tristate "Support for the Congatec CGEB BIOS interface"
+	depends on X86
+	help
+	  The Congatec CGEB BIOS interface provides access to onboard
+	  peripherals like I2C busses and watchdogs. additional drivers must be
+	  enabled in order to use the functionality of the device.
+	  Say y or m here if you are using a congatec module with CGEB interface,
+	  otherwise say n.
+
 config MFD_RC5T583
 	bool "Ricoh RC5T583 Power Management system device"
 	depends on I2C=y
