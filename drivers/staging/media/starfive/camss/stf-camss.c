@@ -416,10 +416,59 @@ static int __maybe_unused stfcamss_runtime_resume(struct device *dev)
 	return 0;
 }
 
+static int __maybe_unused stfcamss_suspend(struct device *dev)
+{
+	struct stfcamss *stfcamss = dev_get_drvdata(dev);
+	struct stfcamss_video *video;
+	unsigned int i;
+
+	for (i = 0; i < STF_CAPTURE_NUM; ++i) {
+		video = &stfcamss->captures[i].video;
+		if (video->vb2_q.streaming) {
+			video->ops->stop_streaming(video);
+			video->ops->flush_buffers(video, VB2_BUF_STATE_ERROR);
+		}
+	}
+
+	return pm_runtime_force_suspend(dev);
+}
+
+static int __maybe_unused stfcamss_resume(struct device *dev)
+{
+	struct stfcamss *stfcamss = dev_get_drvdata(dev);
+	struct stf_isp_dev *isp_dev = &stfcamss->isp_dev;
+	struct v4l2_subdev_state *sd_state;
+	struct stfcamss_video *video;
+	unsigned int i;
+	int ret;
+
+	ret = pm_runtime_force_resume(dev);
+	if (ret < 0) {
+		dev_err(dev, "Failed to resume\n");
+		return ret;
+	}
+
+	sd_state = v4l2_subdev_lock_and_get_active_state(&isp_dev->subdev);
+
+	if (isp_dev->streaming)
+		stf_isp_stream_on(isp_dev, sd_state);
+
+	v4l2_subdev_unlock_state(sd_state);
+
+	for (i = 0; i < STF_CAPTURE_NUM; ++i) {
+		video = &stfcamss->captures[i].video;
+		if (video->vb2_q.streaming)
+			video->ops->start_streaming(video);
+	}
+
+	return 0;
+}
+
 static const struct dev_pm_ops stfcamss_pm_ops = {
 	SET_RUNTIME_PM_OPS(stfcamss_runtime_suspend,
 			   stfcamss_runtime_resume,
 			   NULL)
+	SET_SYSTEM_SLEEP_PM_OPS(stfcamss_suspend, stfcamss_resume)
 };
 
 static struct platform_driver stfcamss_driver = {
