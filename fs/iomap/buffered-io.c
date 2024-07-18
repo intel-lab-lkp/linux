@@ -1385,6 +1385,23 @@ iomap_file_unshare(struct inode *inode, loff_t pos, loff_t len,
 }
 EXPORT_SYMBOL_GPL(iomap_file_unshare);
 
+/*
+ * Scan an unwritten mapping for dirty pagecache and return the length of the
+ * clean or uncached range leading up to it. This is the range that zeroing may
+ * skip once the mapping is validated.
+ */
+static inline loff_t
+iomap_zero_iter_unwritten(struct iomap_iter *iter, loff_t pos, loff_t length)
+{
+	struct address_space *mapping = iter->inode->i_mapping;
+	loff_t fpos = pos;
+
+	if (!filemap_range_has_writeback(mapping, &fpos, length))
+		return length;
+	/* fpos can be smaller if the start folio is dirty */
+	return max(fpos, pos) - pos;
+}
+
 static loff_t iomap_zero_iter(struct iomap_iter *iter, bool *did_zero)
 {
 	const struct iomap *srcmap = iomap_iter_srcmap(iter);
@@ -1393,16 +1410,46 @@ static loff_t iomap_zero_iter(struct iomap_iter *iter, bool *did_zero)
 	loff_t written = 0;
 
 	/* already zeroed?  we're done. */
-	if (srcmap->type == IOMAP_HOLE || srcmap->type == IOMAP_UNWRITTEN)
+	if (srcmap->type == IOMAP_HOLE)
 		return length;
 
 	do {
 		struct folio *folio;
 		int status;
 		size_t offset;
-		size_t bytes = min_t(u64, SIZE_MAX, length);
+		size_t bytes;
+		loff_t pending = 0;
 		bool ret;
 
+		/*
+		 * Determine the range of the unwritten mapping that is clean in
+		 * pagecache. We can skip this range, but only if the mapping is
+		 * still valid after the pagecache scan. This is because
+		 * writeback may have cleaned folios after the mapping lookup
+		 * but before we were able to find them here. If that occurs,
+		 * then the mapping must now be stale and we must reprocess the
+		 * range.
+		 */
+		if (srcmap->type == IOMAP_UNWRITTEN) {
+			pending = iomap_zero_iter_unwritten(iter, pos, length);
+			if (pending == length) {
+				/* no dirty cache, revalidate and bounce as we're
+				 * either done or the mapping is stale */
+				if (iomap_revalidate(iter))
+					written += pending;
+				break;
+			}
+
+			/*
+			 * Found a dirty folio. Update pos/length to point at
+			 * it. written is updated only after the mapping is
+			 * revalidated by iomap_write_begin().
+			 */
+			pos += pending;
+			length -= pending;
+		}
+
+		bytes = min_t(u64, SIZE_MAX, length);
 		status = iomap_write_begin(iter, pos, bytes, &folio);
 		if (status)
 			return status;
@@ -1422,7 +1469,7 @@ static loff_t iomap_zero_iter(struct iomap_iter *iter, bool *did_zero)
 
 		pos += bytes;
 		length -= bytes;
-		written += bytes;
+		written += bytes + pending;
 	} while (length > 0);
 
 	if (did_zero)
