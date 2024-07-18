@@ -756,6 +756,22 @@ static void __iomap_put_folio(struct iomap_iter *iter, loff_t pos, size_t ret,
 	}
 }
 
+/*
+ * Check whether the current mapping of the iter is still valid. If not, mark
+ * the mapping stale.
+ */
+static inline bool iomap_revalidate(struct iomap_iter *iter)
+{
+	const struct iomap_folio_ops *folio_ops = iter->iomap.folio_ops;
+	bool iomap_valid = true;
+
+	if (folio_ops && folio_ops->iomap_valid)
+		iomap_valid = folio_ops->iomap_valid(iter->inode, &iter->iomap);
+	if (!iomap_valid)
+		iter->iomap.flags |= IOMAP_F_STALE;
+	return iomap_valid;
+}
+
 static int iomap_write_begin_inline(const struct iomap_iter *iter,
 		struct folio *folio)
 {
@@ -768,7 +784,6 @@ static int iomap_write_begin_inline(const struct iomap_iter *iter,
 static int iomap_write_begin(struct iomap_iter *iter, loff_t pos,
 		size_t len, struct folio **foliop)
 {
-	const struct iomap_folio_ops *folio_ops = iter->iomap.folio_ops;
 	const struct iomap *srcmap = iomap_iter_srcmap(iter);
 	struct folio *folio;
 	int status = 0;
@@ -797,15 +812,8 @@ static int iomap_write_begin(struct iomap_iter *iter, loff_t pos,
 	 * could do the wrong thing here (zero a page range incorrectly or fail
 	 * to zero) and corrupt data.
 	 */
-	if (folio_ops && folio_ops->iomap_valid) {
-		bool iomap_valid = folio_ops->iomap_valid(iter->inode,
-							 &iter->iomap);
-		if (!iomap_valid) {
-			iter->iomap.flags |= IOMAP_F_STALE;
-			status = 0;
-			goto out_unlock;
-		}
-	}
+	if (!iomap_revalidate(iter))
+		goto out_unlock;
 
 	if (pos + len > folio_pos(folio) + folio_size(folio))
 		len = folio_pos(folio) + folio_size(folio) - pos;
