@@ -177,6 +177,7 @@ struct perf_pmu {
 extern struct perf_pmu perf_pmu__fake;
 
 struct perf_pmu_info {
+	struct perf_cpu_map *cpus;
 	const char *unit;
 	double scale;
 	bool per_pkg;
