@@ -1860,6 +1860,7 @@ __get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
 				  unsigned long, unsigned long, unsigned long)
 				  = NULL;
 
+	bool is_hugetlb = false;
 	unsigned long error = arch_mmap_check(addr, len, flags);
 	if (error)
 		return error;
@@ -1867,6 +1868,9 @@ __get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
 	/* Careful about overflows.. */
 	if (len > TASK_SIZE)
 		return -ENOMEM;
+
+	if (file && is_file_hugepages(file))
+		is_hugetlb = true;
 
 	if (file) {
 		if (file->f_op->get_unmapped_area)
@@ -1885,11 +1889,20 @@ __get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
 
 	if (get_area) {
 		addr = get_area(file, addr, len, pgoff, flags);
-	} else if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE)) {
+	} else if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) && !is_hugetlb) {
 		/* Ensures that larger anonymous mappings are THP aligned. */
 		addr = thp_get_unmapped_area_vmflags(file, addr, len,
 						     pgoff, flags, vm_flags);
 	} else {
+		/*
+		 * Consolidate hugepages checks in one place, and also align addr
+		 * to hugepage size.
+		 */
+		if (is_hugetlb) {
+			addr = hugetlb_mmap_check_and_align(file, addr, len, flags);
+			if (IS_ERR_VALUE(addr))
+				return addr;
+		}
 		addr = mm_get_unmapped_area_vmflags(current->mm, file, addr, len,
 						    pgoff, flags, vm_flags);
 	}
