@@ -4919,6 +4919,8 @@ For the definition of struct kvm_nested_state, see KVM_GET_NESTED_STATE.
 :Parameters: struct kvm_coalesced_mmio_zone
 :Returns: 0 on success, < 0 on error
 
+KVM_(UN)REGISTER_COALESCED_MMIO2 can be used instead if available.
+
 Coalesced I/O is a performance optimization that defers hardware
 register write emulation so that userspace exits are avoided.  It is
 typically used to reduce the overhead of emulating frequently accessed
@@ -6418,6 +6420,95 @@ the capability to be present.
 
 `flags` must currently be zero.
 
+4.144 KVM_CREATE_COALESCED_MMIO_BUFFER
+-------------------------------------
+
+:Capability: KVM_CAP_COALESCED_MMIO2
+:Architectures: all
+:Type: vm ioctl
+:Parameters: none
+:Returns: An fd on success, < 0 on error
+
+Returns an fd, but does not allocate a buffer. Also see
+KVM_REGISTER_COALESCED_MMIO2.
+
+The fd must be first passed to mmap() to allocate a page to be used as a ring
+buffer that is shared between kernel and userspace. The page must be
+interpreted as a struct kvm_coalesced_mmio_ring.
+
+::
+
+  struct kvm_coalesced_mmio_ring {
+  	__u32 first, last;
+  	struct kvm_coalesced_mmio coalesced_mmio[];
+  };
+
+The kernel will increment the last index and userspace is expected to do the
+same with the first index after consuming entries. The upper bound of the
+coalesced_mmio array is defined as KVM_COALESCED_MMIO_MAX.
+
+::
+
+  struct kvm_coalesced_mmio {
+  	__u64 phys_addr;
+  	__u32 len;
+  	union {
+  		__u32 pad;
+  		__u32 pio;
+  	};
+  	__u8  data[8];
+  };
+
+After allocating a buffer with mmap(), the fd must be passed as an argument to
+KVM_REGISTER_COALESCED_MMIO2 to associate an I/O region to which writes are
+coalesced with the ring buffer. Multiple I/O regions can be associated with the
+same ring buffer. Closing the fd after unmapping it automatically deregisters
+all I/O regions associated with it.
+
+poll() is also supported on the fd so that userspace can be notified of I/O
+writes without having to wait until the next exit to userspace.
+
+4.145 KVM_(UN)REGISTER_COALESCED_MMIO2
+-------------------------------------
+
+:Capability: KVM_CAP_COALESCED_MMIO2
+:Architectures: all
+:Type: vm ioctl
+:Parameters: struct kvm_coalesced_mmio_zone2
+:Returns: 0 on success, < 0 on error
+
+Coalesced I/O is a performance optimization that defers hardware register write
+emulation so that userspace exits are avoided. It is typically used to reduce
+the overhead of emulating frequently accessed hardware registers.
+
+When a hardware register is configured for coalesced I/O, write accesses do not
+exit to userspace and their value is recorded in a ring buffer that is shared
+between kernel and userspace.
+
+::
+
+  struct kvm_coalesced_mmio_zone2 {
+  	__u64 addr;
+  	__u32 size;
+  	union {
+  		__u32 pad;
+  		__u32 pio;
+  	};
+  	int buffer_fd;
+  };
+
+KVM_CREATE_COALESCED_MMIO_BUFFER must be used to allocate a buffer fd which
+must be first mmaped before passed to KVM_REGISTER_COALESCED_MMIO2, otherwise
+the ioctl will fail.
+
+Coalesced I/O is used if one or more write accesses to a hardware register can
+be deferred until a read or a write to another hardware register on the same
+device. This last access will cause a vmexit and userspace will process
+accesses from the ring buffer before emulating it. That will avoid exiting to
+userspace on repeated writes.
+
+Alternatively, userspace can call poll() on the buffer fd if it wishes to be
+notified of new I/O writes that way.
 
 5. The kvm_run structure
 ========================
