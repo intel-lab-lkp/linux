@@ -7,6 +7,7 @@
 #define _GNU_SOURCE
 
 #include <stdio.h>
+#include "../kselftest.h"
 
 unsigned long ax, bx, cx, dx, si, di, bp, sp, flags;
 unsigned long r8, r9, r10, r11, r12, r13, r14, r15;
@@ -53,20 +54,19 @@ asm (
 
 int main()
 {
-	int nerrs = 0;
+	ksft_print_header();
+	ksft_set_plan(2);
 
-	if (sp == 0) {
-		printf("[FAIL]\tTest was built incorrectly\n");
-		return 1;
-	}
+	if (sp == 0)
+		ksft_exit_fail_msg("Test was built incorrectly\n");
 
 	if (ax || bx || cx || dx || si || di || bp
 #ifdef __x86_64__
 	    || r8 || r9 || r10 || r11 || r12 || r13 || r14 || r15
 #endif
 		) {
-		printf("[FAIL]\tAll GPRs except SP should be 0\n");
-#define SHOW(x) printf("\t" #x " = 0x%lx\n", x);
+		ksft_test_result_fail("All GPRs except SP should be 0\n");
+#define SHOW(x) ksft_print_msg("\t" #x " = 0x%lx\n", x)
 		SHOW(ax);
 		SHOW(bx);
 		SHOW(cx);
@@ -85,17 +85,15 @@ int main()
 		SHOW(r14);
 		SHOW(r15);
 #endif
-		nerrs++;
 	} else {
-		printf("[OK]\tAll GPRs except SP are 0\n");
+		ksft_test_result_pass("All GPRs except SP are 0\n");
 	}
 
 	if (flags != 0x202) {
-		printf("[FAIL]\tFLAGS is 0x%lx, but it should be 0x202\n", flags);
-		nerrs++;
+		ksft_test_result_fail("FLAGS is 0x%lx, but it should be 0x202\n", flags);
 	} else {
-		printf("[OK]\tFLAGS is 0x202\n");
+		ksft_test_result_pass("FLAGS is 0x202\n");
 	}
 
-	return nerrs ? 1 : 0;
+	ksft_finished();
 }
