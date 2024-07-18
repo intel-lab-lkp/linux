@@ -55,23 +55,30 @@ int stf_isp_init(struct stfcamss *stfcamss)
 	return 0;
 }
 
+void stf_isp_stream_on(struct stf_isp_dev *isp_dev,
+		       struct v4l2_subdev_state *sd_state)
+{
+	struct v4l2_mbus_framefmt *fmt;
+	struct v4l2_rect *crop;
+
+	fmt = v4l2_subdev_state_get_format(sd_state, STF_ISP_PAD_SINK);
+	crop = v4l2_subdev_state_get_crop(sd_state, STF_ISP_PAD_SRC);
+
+	stf_isp_reset(isp_dev);
+	stf_isp_init_cfg(isp_dev);
+	stf_isp_settings(isp_dev, crop, fmt->code);
+	stf_isp_stream_set(isp_dev);
+}
+
 static int isp_set_stream(struct v4l2_subdev *sd, int enable)
 {
 	struct stf_isp_dev *isp_dev = v4l2_get_subdevdata(sd);
 	struct v4l2_subdev_state *sd_state;
-	struct v4l2_mbus_framefmt *fmt;
-	struct v4l2_rect *crop;
 
 	sd_state = v4l2_subdev_lock_and_get_active_state(sd);
-	fmt = v4l2_subdev_state_get_format(sd_state, STF_ISP_PAD_SINK);
-	crop = v4l2_subdev_state_get_crop(sd_state, STF_ISP_PAD_SRC);
 
-	if (enable) {
-		stf_isp_reset(isp_dev);
-		stf_isp_init_cfg(isp_dev);
-		stf_isp_settings(isp_dev, crop, fmt->code);
-		stf_isp_stream_set(isp_dev);
-	}
+	if (enable)
+		stf_isp_stream_on(isp_dev, sd_state);
 
 	v4l2_subdev_call(isp_dev->source_subdev, video, s_stream, enable);
 
