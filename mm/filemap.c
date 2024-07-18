@@ -636,13 +636,13 @@ static bool mapping_needs_writeback(struct address_space *mapping)
 }
 
 bool filemap_range_has_writeback(struct address_space *mapping,
-				 loff_t start_byte, loff_t end_byte)
+				 loff_t *start_byte, loff_t end_byte)
 {
-	XA_STATE(xas, &mapping->i_pages, start_byte >> PAGE_SHIFT);
+	XA_STATE(xas, &mapping->i_pages, *start_byte >> PAGE_SHIFT);
 	pgoff_t max = end_byte >> PAGE_SHIFT;
 	struct folio *folio;
 
-	if (end_byte < start_byte)
+	if (end_byte < *start_byte)
 		return false;
 
 	rcu_read_lock();
@@ -655,6 +655,8 @@ bool filemap_range_has_writeback(struct address_space *mapping,
 				folio_test_writeback(folio))
 			break;
 	}
+	if (folio)
+		*start_byte = folio_pos(folio);
 	rcu_read_unlock();
 	return folio != NULL;
 }

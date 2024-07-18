@@ -1210,7 +1210,7 @@ int __filemap_add_folio(struct address_space *mapping, struct folio *folio,
 		pgoff_t index, gfp_t gfp, void **shadowp);
 
 bool filemap_range_has_writeback(struct address_space *mapping,
-				 loff_t start_byte, loff_t end_byte);
+				 loff_t *start_byte, loff_t end_byte);
 
 /**
  * filemap_range_needs_writeback - check if range potentially needs writeback
@@ -1235,7 +1235,7 @@ static inline bool filemap_range_needs_writeback(struct address_space *mapping,
 	if (!mapping_tagged(mapping, PAGECACHE_TAG_DIRTY) &&
 	    !mapping_tagged(mapping, PAGECACHE_TAG_WRITEBACK))
 		return false;
-	return filemap_range_has_writeback(mapping, start_byte, end_byte);
+	return filemap_range_has_writeback(mapping, &start_byte, end_byte);
 }
 
 /**
