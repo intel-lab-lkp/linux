@@ -386,6 +386,9 @@ static int spinand_read_from_cache_op(struct spinand_device *spinand,
 	else
 		rdesc = spinand->dirmaps[req->pos.plane].rdesc_ecc;
 
+	if (spinand->info->fixups && spinand->info->fixups->read_from_cache)
+		column = spinand->info->fixups->read_from_cache(spinand, req, column);
+
 	while (nbytes) {
 		ret = spi_mem_dirmap_read(rdesc, column, nbytes, buf);
 		if (ret < 0)
@@ -459,6 +462,9 @@ static int spinand_write_to_cache_op(struct spinand_device *spinand,
 		wdesc = spinand->dirmaps[req->pos.plane].wdesc;
 	else
 		wdesc = spinand->dirmaps[req->pos.plane].wdesc_ecc;
+
+	if (spinand->info->fixups && spinand->info->fixups->write_to_cache)
+		column = spinand->info->fixups->write_to_cache(spinand, req, column);
 
 	while (nbytes) {
 		ret = spi_mem_dirmap_write(wdesc, column, nbytes, buf);
@@ -1095,6 +1101,7 @@ int spinand_match_and_init(struct spinand_device *spinand,
 		spinand->flags = table[i].flags;
 		spinand->id.len = 1 + table[i].devid.len;
 		spinand->select_target = table[i].select_target;
+		spinand->info = info;
 
 		op = spinand_select_op_variant(spinand,
 					       info->op_variants.read_cache);

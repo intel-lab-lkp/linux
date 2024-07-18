@@ -354,6 +354,7 @@ struct spinand_info {
 	} op_variants;
 	int (*select_target)(struct spinand_device *spinand,
 			     unsigned int target);
+	const struct spi_nand_fixups *fixups;
 };
 
 #define SPINAND_ID(__method, ...)					\
@@ -379,6 +380,9 @@ struct spinand_info {
 #define SPINAND_SELECT_TARGET(__func)					\
 	.select_target = __func,
 
+#define SPINAND_PLANE_SELECT_BIT(__func)					\
+	.fixups = __func,
+
 #define SPINAND_INFO(__model, __id, __memorg, __eccreq, __op_variants,	\
 		     __flags, ...)					\
 	{								\
@@ -396,6 +400,18 @@ struct spinand_dirmap {
 	struct spi_mem_dirmap_desc *rdesc;
 	struct spi_mem_dirmap_desc *wdesc_ecc;
 	struct spi_mem_dirmap_desc *rdesc_ecc;
+};
+
+/**
+ * struct spi_nand_fixups - SPI NAND fixup hooks
+ * @write_to_cache: program load requires Plane Select bit in CADD.
+ * @read_from_cache: read from cache requires Plane Select bit in CADD.
+ */
+struct spi_nand_fixups {
+	unsigned int (*write_to_cache)(struct spinand_device *spinand,
+				const struct nand_page_io_req *req, unsigned int column);
+	u16 (*read_from_cache)(struct spinand_device *spinand,
+				const struct nand_page_io_req *req, u16 column);
 };
 
 /**
@@ -449,6 +465,7 @@ struct spinand_device {
 	u8 *databuf;
 	u8 *oobbuf;
 	u8 *scratchbuf;
+	const struct spinand_info *info;
 	const struct spinand_manufacturer *manufacturer;
 	void *priv;
 };
