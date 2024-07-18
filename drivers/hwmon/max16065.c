@@ -105,7 +105,7 @@ static const int max16065_csp_adc_range[] = { 7000, 14000 };
 /* ADC registers have 10 bit resolution. */
 static inline int ADC_TO_MV(int adc, int range)
 {
-	return (adc * range) / 1024;
+	return DIV_ROUND_CLOSEST(adc * range, 1024);
 }
 
 /*
@@ -114,7 +114,7 @@ static inline int ADC_TO_MV(int adc, int range)
  */
 static inline int LIMIT_TO_MV(int limit, int range)
 {
-	return limit * range / 256;
+	return DIV_ROUND_CLOSEST(limit * range, 256);
 }
 
 static inline int MV_TO_LIMIT(unsigned long mv, int range)
@@ -125,7 +125,7 @@ static inline int MV_TO_LIMIT(unsigned long mv, int range)
 
 static inline int ADC_TO_CURR(int adc, int gain)
 {
-	return adc * 1400000 / (gain * 255);
+	return DIV_ROUND_CLOSEST(adc * 1400000, gain * 255);
 }
 
 /*
