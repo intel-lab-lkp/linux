@@ -480,6 +480,16 @@ struct kvm_coalesced_mmio_zone {
 	};
 };
 
+struct kvm_coalesced_mmio_zone2 {
+	__u64 addr;
+	__u32 size;
+	union {
+		__u32 pad;
+		__u32 pio;
+	};
+	int buffer_fd;
+};
+
 struct kvm_coalesced_mmio {
 	__u64 phys_addr;
 	__u32 len;
@@ -933,6 +943,7 @@ struct kvm_enable_cap {
 #define KVM_CAP_PRE_FAULT_MEMORY 236
 #define KVM_CAP_X86_APIC_BUS_CYCLES_NS 237
 #define KVM_CAP_X86_GUEST_MODE 238
+#define KVM_CAP_COALESCED_MMIO2 239
 
 struct kvm_irq_routing_irqchip {
 	__u32 irqchip;
@@ -1573,6 +1584,11 @@ struct kvm_pre_fault_memory {
 	__u64 padding[5];
 };
 
+/* Available with KVM_CAP_COALESCED_MMIO2 */
 #define KVM_CREATE_COALESCED_MMIO_BUFFER _IO(KVMIO,   0xd6)
+#define KVM_REGISTER_COALESCED_MMIO2 \
+			_IOW(KVMIO,  0xd7, struct kvm_coalesced_mmio_zone2)
+#define KVM_UNREGISTER_COALESCED_MMIO2 \
+			_IOW(KVMIO,  0xd8, struct kvm_coalesced_mmio_zone2)
 
 #endif /* __LINUX_KVM_H */

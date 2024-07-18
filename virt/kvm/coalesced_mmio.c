@@ -17,6 +17,7 @@
 #include <linux/kvm.h>
 #include <linux/anon_inodes.h>
 #include <linux/poll.h>
+#include <linux/file.h>
 
 #include "coalesced_mmio.h"
 
@@ -279,19 +280,40 @@ int kvm_vm_ioctl_create_coalesced_mmio_buffer(struct kvm *kvm)
 }
 
 int kvm_vm_ioctl_register_coalesced_mmio(struct kvm *kvm,
-					 struct kvm_coalesced_mmio_zone *zone)
+					 struct kvm_coalesced_mmio_zone2 *zone,
+					 bool use_buffer_fd)
 {
-	int ret;
+	int ret = 0;
+	struct file *file;
 	struct kvm_coalesced_mmio_dev *dev;
 	struct kvm_coalesced_mmio_buffer_dev *buffer_dev = NULL;
 
 	if (zone->pio != 1 && zone->pio != 0)
 		return -EINVAL;
 
+	if (use_buffer_fd) {
+		file = fget(zone->buffer_fd);
+		if (!file)
+			return -EBADF;
+
+		if (file->f_op != &coalesced_mmio_buffer_ops) {
+			fput(file);
+			return -EINVAL;
+		}
+
+		buffer_dev = file->private_data;
+		if (!buffer_dev->ring) {
+			fput(file);
+			return -ENOBUFS;
+		}
+	}
+
 	dev = kzalloc(sizeof(struct kvm_coalesced_mmio_dev),
 		      GFP_KERNEL_ACCOUNT);
-	if (!dev)
-		return -ENOMEM;
+	if (!dev) {
+		ret = -ENOMEM;
+		goto out_free_file;
+	}
 
 	kvm_iodevice_init(&dev->dev, &coalesced_mmio_ops);
 	dev->kvm = kvm;
@@ -307,17 +329,20 @@ int kvm_vm_ioctl_register_coalesced_mmio(struct kvm *kvm,
 	list_add_tail(&dev->list, &kvm->coalesced_zones);
 	mutex_unlock(&kvm->slots_lock);
 
-	return 0;
+	goto out_free_file;
 
 out_free_dev:
 	mutex_unlock(&kvm->slots_lock);
 	kfree(dev);
+out_free_file:
+	if (use_buffer_fd)
+		fput(file);
 
 	return ret;
 }
 
 int kvm_vm_ioctl_unregister_coalesced_mmio(struct kvm *kvm,
-					   struct kvm_coalesced_mmio_zone *zone)
+					   struct kvm_coalesced_mmio_zone2 *zone)
 {
 	struct kvm_coalesced_mmio_dev *dev, *tmp;
 	int r;

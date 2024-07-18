@@ -4892,6 +4892,7 @@ static int kvm_vm_ioctl_check_extension_generic(struct kvm *kvm, long arg)
 #ifdef CONFIG_KVM_MMIO
 	case KVM_CAP_COALESCED_MMIO:
 		return KVM_COALESCED_MMIO_PAGE_OFFSET;
+	case KVM_CAP_COALESCED_MMIO2:
 	case KVM_CAP_COALESCED_PIO:
 		return 1;
 #endif
@@ -5230,15 +5231,48 @@ static long kvm_vm_ioctl(struct file *filp,
 #ifdef CONFIG_KVM_MMIO
 	case KVM_REGISTER_COALESCED_MMIO: {
 		struct kvm_coalesced_mmio_zone zone;
+		struct kvm_coalesced_mmio_zone2 zone2;
 
 		r = -EFAULT;
 		if (copy_from_user(&zone, argp, sizeof(zone)))
 			goto out;
-		r = kvm_vm_ioctl_register_coalesced_mmio(kvm, &zone);
+
+		zone2.addr = zone.addr;
+		zone2.size = zone.size;
+		zone2.pio = zone.pio;
+		zone2.buffer_fd = -1;
+
+		r = kvm_vm_ioctl_register_coalesced_mmio(kvm, &zone2, false);
+		break;
+	}
+	case KVM_REGISTER_COALESCED_MMIO2: {
+		struct kvm_coalesced_mmio_zone2 zone;
+
+		r = -EFAULT;
+		if (copy_from_user(&zone, argp, sizeof(zone)))
+			goto out;
+
+		r = kvm_vm_ioctl_register_coalesced_mmio(kvm, &zone, true);
 		break;
 	}
 	case KVM_UNREGISTER_COALESCED_MMIO: {
 		struct kvm_coalesced_mmio_zone zone;
+		struct kvm_coalesced_mmio_zone2 zone2;
+
+		r = -EFAULT;
+		if (copy_from_user(&zone, argp, sizeof(zone)))
+			goto out;
+
+		zone2.addr = zone.addr;
+		zone2.size = zone.size;
+		zone2.pio = zone.pio;
+		zone2.buffer_fd = -1;
+
+		r = kvm_vm_ioctl_unregister_coalesced_mmio(kvm, &zone2);
+		break;
+	}
+	case KVM_UNREGISTER_COALESCED_MMIO2: {
+		struct kvm_coalesced_mmio_zone2 zone;
 
 		r = -EFAULT;
 		if (copy_from_user(&zone, argp, sizeof(zone)))
