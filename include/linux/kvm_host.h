@@ -801,6 +801,7 @@ struct kvm {
 	struct kvm_coalesced_mmio_ring *coalesced_mmio_ring;
 	spinlock_t ring_lock;
 	struct list_head coalesced_zones;
+	struct list_head coalesced_buffers;
 #endif
 
 	struct mutex irq_lock;

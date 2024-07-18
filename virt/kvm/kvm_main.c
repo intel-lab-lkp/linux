@@ -5246,6 +5246,10 @@ static long kvm_vm_ioctl(struct file *filp,
 		r = kvm_vm_ioctl_unregister_coalesced_mmio(kvm, &zone);
 		break;
 	}
+	case KVM_CREATE_COALESCED_MMIO_BUFFER: {
+		r = kvm_vm_ioctl_create_coalesced_mmio_buffer(kvm);
+		break;
+	}
 #endif
 	case KVM_IRQFD: {
 		struct kvm_irqfd data;
