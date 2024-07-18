@@ -11,15 +11,15 @@
  * Copyright (C) 2011 Ericsson AB.
  */
 
-#include <linux/kernel.h>
-#include <linux/module.h>
-#include <linux/init.h>
 #include <linux/err.h>
-#include <linux/slab.h>
-#include <linux/i2c.h>
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
+#include <linux/i2c.h>
+#include <linux/init.h>
 #include <linux/jiffies.h>
+#include <linux/kernel.h>
+#include <linux/module.h>
+#include <linux/slab.h>
 
 enum chips { max16065, max16066, max16067, max16068, max16070, max16071 };
 
