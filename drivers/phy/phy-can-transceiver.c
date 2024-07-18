@@ -89,6 +89,10 @@ static const struct of_device_id can_transceiver_phy_ids[] = {
 		.compatible = "nxp,tjr1443",
 		.data = &tcan1043_drvdata
 	},
+	{
+		.compatible = "microchip,ata6561",
+		.data = &tcan1042_drvdata
+	},
 	{ }
 };
 MODULE_DEVICE_TABLE(of, can_transceiver_phy_ids);
