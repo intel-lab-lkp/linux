@@ -249,6 +249,7 @@ void __init early_reserve_mem(void)
 	u32 zero_base = (u32)__MEMORY_START + (u32)PHYSICAL_OFFSET;
 	u32 start = zero_base + (u32)CONFIG_ZERO_PAGE_OFFSET;
 
+	sh_mv.mv_mem_init();
 	/*
 	 * Partially used pages are not usable - thus
 	 * we are rounding upwards:
@@ -274,14 +275,6 @@ void __init early_reserve_mem(void)
 	 */
 	check_for_initrd();
 	reserve_crashkernel();
-}
-
-void __init paging_init(void)
-{
-	unsigned long max_zone_pfns[MAX_NR_ZONES];
-	unsigned long vaddr, end;
-
-	sh_mv.mv_mem_init();
 
 	/*
 	 * Once the early reservations are out of the way, give the
@@ -289,6 +282,12 @@ void __init paging_init(void)
 	 */
 	if (sh_mv.mv_mem_reserve)
 		sh_mv.mv_mem_reserve();
+}
+
+void __init paging_init(void)
+{
+	unsigned long max_zone_pfns[MAX_NR_ZONES];
+	unsigned long vaddr, end;
 
 	memblock_enforce_memory_limit(memory_limit);
 	memblock_allow_resize();
