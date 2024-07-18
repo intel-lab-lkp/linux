@@ -414,6 +414,7 @@ struct stf_isp_dev {
 	unsigned int nformats;
 	struct v4l2_subdev *source_subdev;
 	const struct stf_isp_format *current_fmt;
+	bool streaming;
 };
 
 int stf_isp_reset(struct stf_isp_dev *isp_dev);

@@ -77,8 +77,12 @@ static int isp_set_stream(struct v4l2_subdev *sd, int enable)
 
 	sd_state = v4l2_subdev_lock_and_get_active_state(sd);
 
-	if (enable)
+	if (enable) {
+		isp_dev->streaming = true;
 		stf_isp_stream_on(isp_dev, sd_state);
+	} else {
+		isp_dev->streaming = false;
+	}
 
 	v4l2_subdev_call(isp_dev->source_subdev, video, s_stream, enable);
 
