@@ -122,21 +122,27 @@ static const struct fs_parameter_spec coda_param_specs[] = {
 static int coda_parse_fd(struct fs_context *fc, int fd)
 {
 	struct coda_fs_context *ctx = fc->fs_private;
-	struct fd f;
+	struct file *file;
 	struct inode *inode;
 	int idx;
 
-	f = fdget(fd);
-	if (!f.file)
+	if (param->type == fs_value_is_file) {
+		file = param->file;
+		param->file = NULL;
+	} else {
+		file = fget(result->uint_32);
+	}
+	if (!file)
 		return -EBADF;
-	inode = file_inode(f.file);
+
+	inode = file_inode(file);
 	if (!S_ISCHR(inode->i_mode) || imajor(inode) != CODA_PSDEV_MAJOR) {
-		fdput(f);
+		fput(file);
 		return invalf(fc, "code: Not coda psdev");
 	}
 
 	idx = iminor(inode);
-	fdput(f);
+	fput(file);
 
 	if (idx < 0 || idx >= MAX_CODADEVS)
 		return invalf(fc, "coda: Bad minor number");
