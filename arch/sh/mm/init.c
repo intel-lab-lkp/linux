@@ -19,6 +19,7 @@
 #include <linux/io.h>
 #include <linux/dma-mapping.h>
 #include <linux/export.h>
+#include <asm/mmu.h>
 #include <asm/mmu_context.h>
 #include <asm/mmzone.h>
 #include <asm/kexec.h>
@@ -242,7 +243,7 @@ static void __init do_init_bootmem(void)
 	sparse_init();
 }
 
-static void __init early_reserve_mem(void)
+void __init early_reserve_mem(void)
 {
 	unsigned long start_pfn;
 	u32 zero_base = (u32)__MEMORY_START + (u32)PHYSICAL_OFFSET;
@@ -281,8 +282,6 @@ void __init paging_init(void)
 	unsigned long vaddr, end;
 
 	sh_mv.mv_mem_init();
-
-	early_reserve_mem();
 
 	/*
 	 * Once the early reservations are out of the way, give the

@@ -40,6 +40,7 @@
 #include <asm/setup.h>
 #include <asm/clock.h>
 #include <asm/smp.h>
+#include <asm/mmu.h>
 #include <asm/mmu_context.h>
 #include <asm/mmzone.h>
 #include <asm/processor.h>
@@ -318,6 +319,8 @@ void __init setup_arch(char **cmdline_p)
 	plat_early_device_setup();
 
 	sh_mv_setup();
+
+	early_reserve_mem();
 
 	/* Let earlyprintk output early console messages */
 	sh_early_platform_driver_probe("earlyprintk", 1, 1);

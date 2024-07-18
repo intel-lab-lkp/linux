@@ -96,6 +96,7 @@ static inline int pmb_unmap(void __iomem *addr)
 
 #endif /* CONFIG_PMB */
 
+void __init early_reserve_mem(void);
 static inline void __iomem *
 pmb_remap(phys_addr_t phys, unsigned long size, pgprot_t prot)
 {
