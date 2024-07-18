@@ -79,3 +79,29 @@ Description:
 			           indicates a lane.
 		crc_err_cnt:  (RO) CRC err count on this port.
 		============= ==== =============================================
+
+What:		/sys/devices/platform/HISI04Bx:00/used_typs
+Date:		July 2024
+KernelVersion:	6.11
+Contact:	Huisong Li <lihuisong@huawei.com>
+Description:
+		This interface is used to show all HCCS type used on current
+		platform, like, HCCS-v1, HCCS-v2 and so on.
+
+What:		/sys/devices/platform/HISI04Bx:00/support_pm_types
+What:		/sys/devices/platform/HISI04Bx:00/dec_lane
+What:		/sys/devices/platform/HISI04Bx:00/inc_lane
+Date:		July 2024
+KernelVersion:	6.11
+Contact:	Huisong Li <lihuisong@huawei.com>
+Description:
+		This series interface under /sys/devices/platform/HISI04Bx/
+		directory is used to support low power of some HCCS type
+		by operating their lane number. The 'inc_lane' and 'dec_lane'
+		are just exposed with root privilege and write-onely attributes
+		when there is the HCCS type supported low power operation.
+		The 'support_pm_types' with read-only attributes is used to
+		expose the HCCS type supported PM. The available input of
+		'inc_lane' and 'dec_lane' is from 'support_pm_types'.
+		Note: allow to decrease lane only when all specified HCCS ports
+		are not busy.
