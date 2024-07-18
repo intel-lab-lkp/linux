@@ -200,7 +200,9 @@ static const struct flash_info macronix_nor_parts[] = {
 		.name = "mx25l3255e",
 		.size = SZ_4M,
 		.no_sfdp_flags = SECT_4K,
-	}
+	},
+	/* Need the manufacturer fixups, Keep this last */
+	{ .id = SNOR_ID(0xc2) }
 };
 
 static int macronix_nor_octal_dtr_en(struct spi_nor *nor)
