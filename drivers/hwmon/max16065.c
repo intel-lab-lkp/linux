@@ -11,6 +11,8 @@
  * Copyright (C) 2011 Ericsson AB.
  */
 
+#include <linux/bitfield.h>
+#include <linux/bits.h>
 #include <linux/err.h>
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
@@ -43,10 +45,11 @@ enum chips { max16065, max16066, max16067, max16068, max16070, max16071 };
 
 #define MAX16065_SW_ENABLE	0x73
 
-#define MAX16065_WARNING_OV	(1 << 3) /* Set if secondary threshold is OV
-					    warning */
+#define MAX16065_WARNING_OV	BIT(3)	/* Set if secondary threshold is OV warning */
 
-#define MAX16065_CURR_ENABLE	(1 << 0)
+#define MAX16065_CURR_ENABLE	BIT(0)
+#define MAX16065_CSP_RANGE	BIT(1)
+#define MAX16065_CURR_GAIN	GENMASK(3, 2)
 
 #define MAX16065_NUM_LIMIT	3
 #define MAX16065_NUM_ADC	12	/* maximum number of ADC channels */
@@ -190,7 +193,7 @@ static ssize_t max16065_alarm_show(struct device *dev,
 	if (val < 0)
 		return val;
 
-	val &= (1 << attr2->index);
+	val &= BIT(attr2->index);
 	if (val)
 		i2c_smbus_write_byte_data(data->client,
 					  MAX16065_FAULT(attr2->nr), val);
@@ -576,9 +579,9 @@ static int max16065_probe(struct i2c_client *client)
 			 * Current gain is 6, 12, 24, 48 based on values in
 			 * bit 2,3.
 			 */
-			data->curr_gain = 6 << ((val >> 2) & 0x03);
+			data->curr_gain = 6 << FIELD_GET(MAX16065_CURR_GAIN, val);
 			data->range[MAX16065_NUM_ADC]
-			  = max16065_csp_adc_range[(val >> 1) & 0x01];
+			  = max16065_csp_adc_range[FIELD_GET(MAX16065_CSP_RANGE, val)];
 			data->groups[groups++] = &max16065_current_group;
 		} else {
 			data->have_current = false;
