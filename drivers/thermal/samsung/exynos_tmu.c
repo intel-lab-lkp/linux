@@ -237,17 +237,17 @@ static void sanitize_temp_error(struct exynos_tmu_data *data, u32 trim_info)
 
 	data->temp_error1 = trim_info & tmu_temp_mask;
 	data->temp_error2 = ((trim_info >> EXYNOS_TRIMINFO_85_SHIFT) &
-				EXYNOS_TMU_TEMP_MASK);
+				tmu_temp_mask);
 
 	if (!data->temp_error1 ||
 	    (data->min_efuse_value > data->temp_error1) ||
 	    (data->temp_error1 > data->max_efuse_value))
-		data->temp_error1 = data->efuse_value & EXYNOS_TMU_TEMP_MASK;
+		data->temp_error1 = data->efuse_value & tmu_temp_mask;
 
 	if (!data->temp_error2)
 		data->temp_error2 =
 			(data->efuse_value >> EXYNOS_TRIMINFO_85_SHIFT) &
-			EXYNOS_TMU_TEMP_MASK;
+			tmu_temp_mask;
 }
 
 static int exynos_tmu_initialize(struct platform_device *pdev)
