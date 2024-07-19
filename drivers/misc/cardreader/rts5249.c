@@ -540,6 +540,7 @@ void rts5249_init_params(struct rtsx_pcr *pcr)
 	struct rtsx_cr_option *option = &(pcr->option);
 
 	pcr->extra_caps = EXTRA_CAPS_SD_SDR50 | EXTRA_CAPS_SD_SDR104;
+	pcr->extra_caps |= EXTRA_CAPS_SDUC;
 	pcr->num_slots = 2;
 	pcr->ops = &rts5249_pcr_ops;
 

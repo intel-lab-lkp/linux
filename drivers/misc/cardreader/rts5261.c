@@ -766,6 +766,7 @@ void rts5261_init_params(struct rtsx_pcr *pcr)
 	u8 val;
 
 	pcr->extra_caps = EXTRA_CAPS_SD_SDR50 | EXTRA_CAPS_SD_SDR104;
+	pcr->extra_caps |= EXTRA_CAPS_SDUC;
 	rtsx_pci_read_register(pcr, RTS5261_FW_STATUS, &val);
 	if (!(val & RTS5261_EXPRESS_LINK_FAIL_MASK))
 		pcr->extra_caps |= EXTRA_CAPS_SD_EXPRESS;

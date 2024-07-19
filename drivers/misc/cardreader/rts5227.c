@@ -331,6 +331,7 @@ static const u32 rts5227_ms_pull_ctl_disable_tbl[] = {
 void rts5227_init_params(struct rtsx_pcr *pcr)
 {
 	pcr->extra_caps = EXTRA_CAPS_SD_SDR50 | EXTRA_CAPS_SD_SDR104;
+	pcr->extra_caps |= EXTRA_CAPS_SDUC;
 	pcr->num_slots = 2;
 	pcr->ops = &rts5227_pcr_ops;
 

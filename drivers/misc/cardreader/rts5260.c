@@ -586,6 +586,7 @@ void rts5260_init_params(struct rtsx_pcr *pcr)
 	struct rtsx_hw_param *hw_param = &pcr->hw_param;
 
 	pcr->extra_caps = EXTRA_CAPS_SD_SDR50 | EXTRA_CAPS_SD_SDR104;
+	pcr->extra_caps |= EXTRA_CAPS_SDUC;
 	pcr->num_slots = 2;
 
 	pcr->flags = 0;
