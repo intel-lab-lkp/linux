@@ -89,5 +89,10 @@ static inline bool mmc_card_sd_express(struct mmc_host *host)
 		host->ios.timing == MMC_TIMING_SD_EXP_1_2V;
 }
 
+static inline bool mmc_host_sduc(struct mmc_host *host)
+{
+	return host->caps2 & MMC_CAP2_SDUC;
+}
+
 #endif
 
