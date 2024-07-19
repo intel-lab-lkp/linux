@@ -329,8 +329,6 @@ struct mem_cgroup {
  */
 #define MEMCG_CHARGE_BATCH 64U
 
-extern struct mem_cgroup *root_mem_cgroup;
-
 enum page_memcg_data_flags {
 	/* page->memcg_data is a pointer to an slabobj_ext vector */
 	MEMCG_DATA_OBJEXTS = (1UL << 0),
@@ -345,6 +343,12 @@ enum page_memcg_data_flags {
 #else /* CONFIG_MEMCG */
 
 #define __FIRST_OBJEXT_FLAG	(1UL << 0)
+
+/*
+ * For CONFIG_MEMCG=n case, still define a root_mem_cgroup, but that will
+ * always be NULL and not taking any global data section space.
+ */
+#define root_mem_cgroup		(NULL)
 
 #endif /* CONFIG_MEMCG */
 
