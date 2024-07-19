@@ -529,7 +529,9 @@ Network support (ABI < 4)
 Starting with the Landlock ABI version 4, it is now possible to restrict TCP
 bind and connect actions to only a set of allowed ports thanks to the new
 ``LANDLOCK_ACCESS_NET_BIND_TCP`` and ``LANDLOCK_ACCESS_NET_CONNECT_TCP``
-access rights.
+access rights.  These restrictions are tied to a socket and are inherited from
+the sandboxed thread that created this socket.  Hence, sockets created before
+sandboxing are not restricted.
 
 IOCTL (ABI < 5)
 ---------------
