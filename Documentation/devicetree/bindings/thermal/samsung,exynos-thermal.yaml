@@ -27,6 +27,7 @@ properties:
       - samsung,exynos5420-tmu-ext-triminfo
       - samsung,exynos5433-tmu
       - samsung,exynos7-tmu
+      - samsung,exynos850-tmu
 
   clocks:
     minItems: 1
@@ -69,8 +70,6 @@ properties:
 
 required:
   - compatible
-  - clocks
-  - clock-names
   - interrupts
   - reg
 
@@ -82,6 +81,9 @@ allOf:
           contains:
             const: samsung,exynos5420-tmu-ext-triminfo
     then:
+      required:
+        - clocks
+        - clock-names
       properties:
         clocks:
           items:
@@ -105,6 +107,9 @@ allOf:
               - samsung,exynos5433-tmu
               - samsung,exynos7-tmu
     then:
+      required:
+        - clocks
+        - clock-names
       properties:
         clocks:
           items:
@@ -132,10 +137,27 @@ allOf:
               - samsung,exynos5260-tmu
               - samsung,exynos5420-tmu
     then:
+      required:
+        - clocks
+        - clock-names
       properties:
         clocks:
           minItems: 1
           maxItems: 1
+        reg:
+          minItems: 1
+          maxItems: 1
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - samsung,exynos850-tmu
+    then:
+      properties:
+        clocks: false
+        clock-names: false
         reg:
           minItems: 1
           maxItems: 1
