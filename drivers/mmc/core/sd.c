@@ -121,6 +121,12 @@ static int mmc_decode_csd(struct mmc_card *card)
 
 	csd_struct = UNSTUFF_BITS(resp, 126, 2);
 
+	if (csd_struct != 2 && mmc_card_ultra_capacity(card)) {
+		pr_err("%s: invalid CSD structure version %d on SDUC\n",
+			mmc_hostname(card->host), csd_struct);
+		return -EINVAL;
+	}
+
 	switch (csd_struct) {
 	case 0:
 		m = UNSTUFF_BITS(resp, 115, 4);
@@ -180,6 +186,35 @@ static int mmc_decode_csd(struct mmc_card *card)
 
 		m = UNSTUFF_BITS(resp, 48, 22);
 		csd->capacity     = (1 + m) << 10;
+
+		csd->read_blkbits = 9;
+		csd->read_partial = 0;
+		csd->write_misalign = 0;
+		csd->read_misalign = 0;
+		csd->r2w_factor = 4; /* Unused */
+		csd->write_blkbits = 9;
+		csd->write_partial = 0;
+		csd->erase_size = 1;
+
+		if (UNSTUFF_BITS(resp, 13, 1))
+			mmc_card_set_readonly(card);
+		break;
+	case 2:
+		/*
+		 * This is a block-addressed SDUC card.
+		 */
+		mmc_card_set_blockaddr(card);
+
+		csd->taac_ns	 = 0; /* Unused */
+		csd->taac_clks	 = 0; /* Unused */
+
+		m = UNSTUFF_BITS(resp, 99, 4);
+		e = UNSTUFF_BITS(resp, 96, 3);
+		csd->max_dtr	  = tran_exp[e] * tran_mant[m];
+		csd->cmdclass	  = UNSTUFF_BITS(resp, 84, 12);
+		csd->c_size	  = UNSTUFF_BITS(resp, 48, 28);
+		m = UNSTUFF_BITS(resp, 48, 28);
+		csd->capacity     = (unsigned long long)(1 + m) << 10;
 
 		csd->read_blkbits = 9;
 		csd->read_partial = 0;
@@ -859,6 +894,14 @@ try_again:
 	if (max_current > 150)
 		ocr |= SD_OCR_XPC;
 
+	/*
+	 * To avoid data corruption via address space mismatch, mutual
+	 * recognition mechanism is implemented via ACMD41 initialization,
+	 * If the host support SDUC card, HO2T should be set to 1.
+	 */
+	if (mmc_host_sduc(host))
+		ocr |= SD_OCR_HO2T;
+
 	err = mmc_send_app_op_cond(host, ocr, rocr);
 	if (err)
 		return err;
@@ -1433,6 +1476,10 @@ retry:
 
 		card->ocr = ocr;
 		card->type = MMC_TYPE_SD;
+
+		if (!mmc_host_is_spi(host) && (rocr & SD_ROCR_CO2T))
+			mmc_card_set_ultra_capacity(card);
+
 		memcpy(card->raw_cid, cid, sizeof(card->raw_cid));
 	}
 

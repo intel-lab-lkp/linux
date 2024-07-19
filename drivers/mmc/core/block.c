@@ -1153,7 +1153,7 @@ static void mmc_blk_issue_erase_rq(struct mmc_queue *mq, struct request *req,
 {
 	struct mmc_blk_data *md = mq->blkdata;
 	struct mmc_card *card = md->queue.card;
-	unsigned int from, nr;
+	unsigned long long from, nr;
 	int err = 0;
 	blk_status_t status = BLK_STS_OK;
 
@@ -1208,7 +1208,7 @@ static void mmc_blk_issue_secdiscard_rq(struct mmc_queue *mq,
 {
 	struct mmc_blk_data *md = mq->blkdata;
 	struct mmc_card *card = md->queue.card;
-	unsigned int from, nr, arg;
+	unsigned long long from, nr, arg;
 	int err = 0, type = MMC_BLK_SECDISCARD;
 	blk_status_t status = BLK_STS_OK;
 
@@ -1712,6 +1712,15 @@ static void mmc_blk_rw_rq_prep(struct mmc_queue_req *mqrq,
 			(do_data_tag ? (1 << 29) : 0);
 		brq->sbc.flags = MMC_RSP_R1 | MMC_CMD_AC;
 		brq->mrq.sbc = &brq->sbc;
+	}
+
+	if (mmc_card_ultra_capacity(card)) {
+		brq->ae.opcode = SD_ADDR_EXT;
+		brq->ae.arg = (blk_rq_pos(req) >> 32) & 0x3F;
+		brq->ae.flags = MMC_RSP_R1 | MMC_CMD_AC;
+		brq->mrq.ae = &brq->ae;
+	} else {
+		brq->mrq.ae = NULL;
 	}
 }
 
