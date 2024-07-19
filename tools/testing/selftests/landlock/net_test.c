@@ -1579,6 +1579,35 @@ TEST_F(ipv4_tcp, with_fs)
 	bind_fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
 	ASSERT_LE(0, bind_fd);
 	EXPECT_EQ(-EACCES, bind_variant(bind_fd, &self->srv1));
+	EXPECT_EQ(0, close(bind_fd));
+}
+
+TEST_F(ipv4_tcp, socket_domain)
+{
+	const struct landlock_ruleset_attr ruleset_attr = {
+		.handled_access_net = LANDLOCK_ACCESS_NET_BIND_TCP,
+	};
+	int ruleset_fd, bind_fd;
+
+	/* Creates socket before sandboxing. */
+	bind_fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+	ASSERT_LE(0, bind_fd);
+
+	ruleset_fd =
+		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
+	ASSERT_LE(0, ruleset_fd);
+	enforce_ruleset(_metadata, ruleset_fd);
+	EXPECT_EQ(0, close(ruleset_fd));
+
+	/* Tests port binding with unsandboxed socket. */
+	EXPECT_EQ(0, bind_variant(bind_fd, &self->srv1));
+	EXPECT_EQ(0, close(bind_fd));
+
+	/* Tests port binding with new sandboxed socket. */
+	bind_fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+	ASSERT_LE(0, bind_fd);
+	EXPECT_EQ(-EACCES, bind_variant(bind_fd, &self->srv1));
+	EXPECT_EQ(0, close(bind_fd));
 }
 
 FIXTURE(port_specific)
