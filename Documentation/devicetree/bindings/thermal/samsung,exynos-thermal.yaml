@@ -40,11 +40,8 @@ properties:
   interrupts:
     description: |
       The Exynos TMU supports generating interrupts when reaching given
-      temperature thresholds. Number of supported thermal trip points depends
-      on the SoC (only first trip points defined in DT will be configured)::
-       - most of SoC: 4
-       - samsung,exynos5433-tmu: 8
-       - samsung,exynos7-tmu: 8
+      temperature thresholds. The trip points will be set dynamically in
+      runtime, which means there is no limit on the number of trip points.
     maxItems: 1
 
   reg:
