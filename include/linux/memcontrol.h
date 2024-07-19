@@ -346,6 +346,12 @@ enum page_memcg_data_flags {
 
 #define __FIRST_OBJEXT_FLAG	(1UL << 0)
 
+/*
+ * For CONFIG_MEMCG=n case, still define a root_mem_cgroup, but that will
+ * always be NULL and not taking any global data section space.
+ */
+#define root_mem_cgroup		(NULL)
+
 #endif /* CONFIG_MEMCG */
 
 enum objext_flags {
