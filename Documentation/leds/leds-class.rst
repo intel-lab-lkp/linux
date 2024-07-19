@@ -116,6 +116,46 @@ above leaves scope for further attributes should they be needed. If sections
 of the name don't apply, just leave that section blank.
 
 
+Keyboard backlight control
+==========================
+
+For backlit keyboards with a single brightness / color settings a
+single (multicolor) LED device should be used to allow userspace
+to change the backlight brightness (and if possible the color).
+This LED device must have a name ending in ':kbd_backlight'.
+
+For RGB backlit keyboards with multiple control zones, one multicolor
+LED device should be used per zone. These LED devices' name
+must follow the following form:
+
+	"<devicename>:rgb:kbd_zoned_backlight-<zone_name>"
+
+and <devicename> must be the same for all zones of the same keyboard.
+
+Where possible <zone_name> should be a value already used by other
+zoned keyboards with a similar or identical zone layout, e.g.:
+
+<devicename>:rgb:kbd_zoned_backlight-right
+<devicename>:rgb:kbd_zoned_backlight-middle
+<devicename>:rgb:kbd_zoned_backlight-left
+<devicename>:rgb:kbd_zoned_backlight-corners
+<devicename>:rgb:kbd_zoned_backlight-wasd
+
+or:
+
+<devicename>:rgb:kbd_zoned_backlight-main
+<devicename>:rgb:kbd_zoned_backlight-cursor
+<devicename>:rgb:kbd_zoned_backlight-numpad
+<devicename>:rgb:kbd_zoned_backlight-corners
+<devicename>:rgb:kbd_zoned_backlight-wasd
+
+Note that this is intended for keyboards with a limited number of zones,
+keyboards with per key addressable backlighting must not use LED
+class devices since the sysfs API is not suitable for rapidly change
+multiple LEDs in one "commit" as is necessary to do animations /
+special effects on such keyboards.
+
+
 Brightness setting API
 ======================
 
