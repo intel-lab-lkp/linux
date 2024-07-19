@@ -839,6 +839,8 @@ static void sd_request(struct work_struct *work)
 	if (!data_size) {
 		sd_send_cmd_get_rsp(host, cmd);
 	} else if (sd_rw_cmd(cmd) || sdio_extblock_cmd(cmd, data)) {
+		if (mrq->ae)
+			sd_send_cmd_get_rsp(host, mrq->ae);
 		cmd->error = sd_rw_multi(host, mrq);
 		if (!host->using_cookie)
 			sdmmc_post_req(host->mmc, host->mrq, 0);
@@ -846,6 +848,8 @@ static void sd_request(struct work_struct *work)
 		if (mmc_op_multi(cmd->opcode) && mrq->stop)
 			sd_send_cmd_get_rsp(host, mrq->stop);
 	} else {
+		if (mrq->ae)
+			sd_send_cmd_get_rsp(host, mrq->ae);
 		sd_normal_rw(host, mrq);
 	}
 
@@ -1445,6 +1449,8 @@ static void init_extra_caps(struct realtek_pci_sdmmc *host)
 		mmc->caps2 |= MMC_CAP2_NO_MMC;
 	if (pcr->extra_caps & EXTRA_CAPS_SD_EXPRESS)
 		mmc->caps2 |= MMC_CAP2_SD_EXP | MMC_CAP2_SD_EXP_1_2V;
+	if (pcr->extra_caps & EXTRA_CAPS_SDUC)
+		mmc->caps2 |= MMC_CAP2_SDUC;
 }
 
 static void realtek_init_host(struct realtek_pci_sdmmc *host)
