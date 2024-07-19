@@ -2128,6 +2128,18 @@ void rapl_remove_package(struct rapl_package *rp)
 }
 EXPORT_SYMBOL_GPL(rapl_remove_package);
 
+/*
+ * Intel systems that enumerate DIE domain have RAPL domains implemented
+ * per-die, however, the same is not true for AMD and Hygon processors
+ * where RAPL domains for PKG energy are in-fact per-PKG. Since
+ * logical_die_id is same as logical_package_id in absence of DIE
+ * enumeration, use topology_logical_die_id() on Intel systems and
+ * topology_logical_package_id() on AMD and Hygon systems.
+ */
+#define rapl_pmu_is_pkg_scope()				\
+	(boot_cpu_data.x86_vendor == X86_VENDOR_AMD ||	\
+	 boot_cpu_data.x86_vendor == X86_VENDOR_HYGON)
+
 /* caller to ensure CPU hotplug lock is held */
 struct rapl_package *rapl_find_package_domain_cpuslocked(int id, struct rapl_if_priv *priv,
 							 bool id_is_cpu)
@@ -2136,7 +2148,8 @@ struct rapl_package *rapl_find_package_domain_cpuslocked(int id, struct rapl_if_
 	int uid;
 
 	if (id_is_cpu)
-		uid = topology_logical_die_id(id);
+		uid = rapl_pmu_is_pkg_scope() ?
+		      topology_physical_package_id(id) : topology_logical_die_id(id);
 	else
 		uid = id;
 
@@ -2168,9 +2181,10 @@ struct rapl_package *rapl_add_package_cpuslocked(int id, struct rapl_if_priv *pr
 		return ERR_PTR(-ENOMEM);
 
 	if (id_is_cpu) {
-		rp->id = topology_logical_die_id(id);
+		rp->id = rapl_pmu_is_pkg_scope() ?
+			 topology_physical_package_id(id) : topology_logical_die_id(id);
 		rp->lead_cpu = id;
-		if (topology_max_dies_per_package() > 1)
+		if (!rapl_pmu_is_pkg_scope() && topology_max_dies_per_package() > 1)
 			snprintf(rp->name, PACKAGE_DOMAIN_NAME_LENGTH, "package-%d-die-%d",
 				 topology_physical_package_id(id), topology_die_id(id));
 		else
