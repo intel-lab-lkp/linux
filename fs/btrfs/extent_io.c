@@ -2971,6 +2971,7 @@ static int attach_eb_folio_to_filemap(struct extent_buffer *eb, int i,
 
 	struct btrfs_fs_info *fs_info = eb->fs_info;
 	struct address_space *mapping = fs_info->btree_inode->i_mapping;
+	struct mem_cgroup *old_memcg;
 	const unsigned long index = eb->start >> PAGE_SHIFT;
 	struct folio *existing_folio = NULL;
 	int ret;
@@ -2981,8 +2982,17 @@ static int attach_eb_folio_to_filemap(struct extent_buffer *eb, int i,
 	ASSERT(eb->folios[i]);
 
 retry:
+	/*
+	 * Btree inode is a btrfs internal inode, and not exposed to any
+	 * user.
+	 * Furthermore we do not want any cgroup limits on this inode.
+	 * So we always use root_mem_cgroup as our active memcg when attaching
+	 * the folios.
+	 */
+	old_memcg = set_active_memcg(root_mem_cgroup);
 	ret = filemap_add_folio(mapping, eb->folios[i], index + i,
 				GFP_NOFS | __GFP_NOFAIL);
+	set_active_memcg(old_memcg);
 	if (!ret)
 		goto finish;
 
