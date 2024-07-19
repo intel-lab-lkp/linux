@@ -50,10 +50,11 @@ get_raw_handled_net_accesses(const struct landlock_ruleset *const domain)
 	return access_dom;
 }
 
-static const struct landlock_ruleset *get_current_net_domain(void)
+static const struct landlock_ruleset *
+get_socket_net_domain(const struct socket *const sock)
 {
 	const struct landlock_ruleset *const dom =
-		landlock_get_current_domain();
+		landlock_cred(sock->file->f_cred)->domain;
 
 	if (!dom || !get_raw_handled_net_accesses(dom))
 		return NULL;
@@ -61,10 +62,9 @@ static const struct landlock_ruleset *get_current_net_domain(void)
 	return dom;
 }
 
-static int current_check_access_socket(struct socket *const sock,
-				       struct sockaddr *const address,
-				       const int addrlen,
-				       access_mask_t access_request)
+static int check_access_socket(struct socket *const sock,
+			       struct sockaddr *const address,
+			       const int addrlen, access_mask_t access_request)
 {
 	__be16 port;
 	layer_mask_t layer_masks[LANDLOCK_NUM_ACCESS_NET] = {};
@@ -72,7 +72,7 @@ static int current_check_access_socket(struct socket *const sock,
 	struct landlock_id id = {
 		.type = LANDLOCK_KEY_NET_PORT,
 	};
-	const struct landlock_ruleset *const dom = get_current_net_domain();
+	const struct landlock_ruleset *const dom = get_socket_net_domain(sock);
 
 	if (!dom)
 		return 0;
@@ -175,16 +175,16 @@ static int current_check_access_socket(struct socket *const sock,
 static int hook_socket_bind(struct socket *const sock,
 			    struct sockaddr *const address, const int addrlen)
 {
-	return current_check_access_socket(sock, address, addrlen,
-					   LANDLOCK_ACCESS_NET_BIND_TCP);
+	return check_access_socket(sock, address, addrlen,
+				   LANDLOCK_ACCESS_NET_BIND_TCP);
 }
 
 static int hook_socket_connect(struct socket *const sock,
 			       struct sockaddr *const address,
 			       const int addrlen)
 {
-	return current_check_access_socket(sock, address, addrlen,
-					   LANDLOCK_ACCESS_NET_CONNECT_TCP);
+	return check_access_socket(sock, address, addrlen,
+				   LANDLOCK_ACCESS_NET_CONNECT_TCP);
 }
 
 static struct security_hook_list landlock_hooks[] __ro_after_init = {
