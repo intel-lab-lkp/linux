@@ -29,6 +29,9 @@ properties:
   reset-gpios:
     maxItems: 1
 
+  boot-gpios:
+    maxItems: 1
+
   vdds-supply: true
 
 required:
@@ -46,6 +49,7 @@ examples:
         clocks = <&sclk_hf 0>, <&sclk_lf 25>;
         clock-names = "sclk_hf", "sclk_lf";
         reset-gpios = <&pio 35 GPIO_ACTIVE_LOW>;
+        boot-gpios = <&pio 36 GPIO_ACTIVE_LOW>;
         vdds-supply = <&vdds>;
       };
     };
