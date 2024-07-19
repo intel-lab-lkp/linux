@@ -1,0 +1,168 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/adc/microchip,pac1944.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Microchip PAC1944 and PAC1954 Power Monitors with Accumulator
+
+maintainers:
+  - Marius Cristea <marius.cristea@microchip.com>
+
+description: |
+  This device is part of the Microchip family of Power Monitors with Accumulator.
+  The datasheet for PAC1941_1, PAC1941_1, PAC1942_1, PAC1942_2, PAC1943_1 and PAC1944_1 can be found here:
+    https://ww1.microchip.com/downloads/aemDocuments/documents/MSLD/ProductDocuments/DataSheets/PAC194X-Family-Data-Sheet-DS20006543.pdf
+  The datasheet for PAC1951_1, PAC1951_1, PAC1952_1, PAC1952_2, PAC1953_1 and PAC1954_1 can be found here:
+    https://ww1.microchip.com/downloads/aemDocuments/documents/MSLD/ProductDocuments/DataSheets/PAC195X-Family-Data-Sheet-DS20006539.pdf
+
+properties:
+  compatible:
+    enum:
+      - microchip,pac1941_1
+      - microchip,pac1941_2
+      - microchip,pac1942_1
+      - microchip,pac1942_2
+      - microchip,pac1943_1
+      - microchip,pac1944_1
+      - microchip,pac1951_1
+      - microchip,pac1951_2
+      - microchip,pac1952_1
+      - microchip,pac1952_2
+      - microchip,pac1953_1
+      - microchip,pac1954_1
+
+  reg:
+    maxItems: 1
+
+  "#address-cells":
+    const: 1
+
+  "#size-cells":
+    const: 0
+
+  interrupts:
+    maxItems: 2
+
+  slow-io-gpios:
+    description:
+      A GPIO used to trigger a change is sampling rate (lowering the chip power
+      consumption). If configured in SLOW mode, if this pin is forced high,
+      sampling rate is forced to eight samples/second. When it is forced low,
+      the sampling rate is 1024 samples/second unless a different sample rate
+      has been programmed.
+
+  microchip,gpio:
+    type: boolean
+    description:
+      In default mode, this pin is a GPIO input pin. It can be
+      configured to be an output pin, as well as the ALERT2
+      function. This pin is an open-drain configuration and
+      needs a pull-up resistor to VDD.
+
+patternProperties:
+  "^channel@[1-4]+$":
+    type: object
+    $ref: adc.yaml
+    description:
+      Represents the external channels which are connected to the ADC.
+
+    properties:
+      reg:
+        items:
+          minimum: 1
+          maximum: 4
+
+      shunt-resistor-micro-ohms:
+        description:
+          Value in micro Ohms of the shunt resistor connected between
+          the SENSE+ and SENSE- inputs, across which the current is measured.
+          Value is needed to compute the scaling of the measured current.
+
+      microchip,vbus-mode:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        description:
+          The VBUS could be configured into the following full scale range (FSR)
+            <0>  -  VBUS has unipolar +32V to 0V FSR (default)
+            <1>  -  VBUS has bipolar +32V to -32V FSR
+            <2>  -  VBUS has bipolar +16V to -16V FSR
+        maximum: 2
+
+      microchip,vsense-mode:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        description:
+          The VSENSE could be configured into the following full scale range (FSR)
+            <0>  -  VSENSE has unipolar +100 mV to 0V FSR (default)
+            <1>  -  VSENSE has bipolar +100 mV to -100 mV FSR
+            <2>  -  VSENSE has bipolar +50 mV to -50 mV FSR
+        maximum: 2
+
+      microchip,accumulation-mode:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        description:
+          The Hardware Accumulator could be configured to accumulate
+          VPOWER, VSENSE or VBUS
+            <0>  -  Accumulator accumulates VPOWER (default)
+            <1>  -  Accumulator accumulates VSENSE
+            <2>  -  Accumulator accumulates VBUS
+        maximum: 2
+
+    required:
+      - reg
+      - shunt-resistor-micro-ohms
+
+    unevaluatedProperties: false
+
+required:
+  - compatible
+  - reg
+  - "#address-cells"
+  - "#size-cells"
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        power-monitor@10 {
+            compatible = "microchip,pac1954_1";
+            reg = <0x10>;
+
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            status = "okay";
+
+            channel@1 {
+                reg = <0x1>;
+                shunt-resistor-micro-ohms = <24900>;
+                label = "CPU";
+                microchip,vbus-mode = <0>;
+                microchip,vsense-mode = <0>;
+                microchip,accumulation-mode = <0>;
+            };
+
+            channel@3 {
+                reg = <0x3>;
+                shunt-resistor-micro-ohms = <75000>;
+                label = "MEM";
+                microchip,vbus-mode = <0>;
+                microchip,vsense-mode = <0>;
+                microchip,accumulation-mode = <0>;
+            };
+
+            channel@4 {
+                reg = <0x4>;
+                shunt-resistor-micro-ohms = <100000>;
+                label = "NET";
+                microchip,vbus-mode = <0>;
+                microchip,vsense-mode = <0>;
+                microchip,accumulation-mode = <0>;
+            };
+        };
+    };
+
+...
