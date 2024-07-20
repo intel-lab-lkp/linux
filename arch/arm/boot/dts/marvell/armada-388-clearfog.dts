@@ -185,5 +185,8 @@
 
 /* USB-2.0 Host, CON2 - nearest CPU */
 &usb3_0 {
+	phys = <&utmi1>;
+	phy-names = "utmi";
+	dr_mode = "host";
 	status = "okay";
 };
