@@ -580,6 +580,30 @@
 				status = "disabled";
 			};
 
+			utmi: utmi@c0000 {
+				compatible = "marvell,a38x-utmi-phy";
+				reg = <0xc0000 0x6000>, <0x18420 4>, <0x18440 12>;
+				reg-names = "utmi", "usb-cfg", "utmi-cfg";
+				#address-cells = <1>;
+				#size-cells = <0>;
+				status = "disabled";
+
+				utmi0: usb-phy@0 {
+					reg = <0>;
+					#phy-cells = <0>;
+				};
+
+				utmi1: usb-phy@1 {
+					reg = <1>;
+					#phy-cells = <0>;
+				};
+
+				utmi2: usb-phy@2 {
+					reg = <2>;
+					#phy-cells = <0>;
+				};
+			};
+
 			bm: bm@c8000 {
 				compatible = "marvell,armada-380-neta-bm";
 				reg = <0xc8000 0xac>;
