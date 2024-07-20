@@ -20,9 +20,12 @@
 #include <linux/overflow.h>
 #include <linux/err.h>
 #include <linux/iopoll.h>
+#include <linux/uio_driver.h>
 
 #define WZRD_NUM_OUTPUTS	7
 #define WZRD_ACLK_MAX_FREQ	250000000UL
+
+#define WZRD_INTR_ENABLE	0x10
 
 #define WZRD_CLK_CFG_REG(v, n)	(0x200 + 0x130 * (v) + 4 * (n))
 
@@ -171,8 +174,9 @@ struct clk_wzrd_divider {
 	spinlock_t *lock;  /* divider lock */
 };
 
-struct versal_clk_data {
+struct clk_wzrd_data {
 	bool is_versal;
+	bool supports_monitor;
 };
 
 #define to_clk_wzrd(_nb) container_of(_nb, struct clk_wzrd, nb)
@@ -958,16 +962,55 @@ static int __maybe_unused clk_wzrd_resume(struct device *dev)
 static SIMPLE_DEV_PM_OPS(clk_wzrd_dev_pm_ops, clk_wzrd_suspend,
 			 clk_wzrd_resume);
 
-static const struct versal_clk_data versal_data = {
-	.is_versal	= true,
+static const struct clk_wzrd_data version_6_0_data = {
+	.is_versal		= false,
+	.supports_monitor	= true,
 };
+
+static const struct clk_wzrd_data versal_data = {
+	.is_versal		= true,
+	.supports_monitor	= true,
+};
+
+static int clk_wzrd_irqcontrol(struct uio_info *info, s32 irq_on)
+{
+	if (irq_on)
+		iowrite32(GENMASK(15, 0), info->mem[0].internal_addr + WZRD_INTR_ENABLE);
+	else
+		iowrite32(0, info->mem[0].internal_addr + WZRD_INTR_ENABLE);
+
+	return 0;
+}
+
+static int clk_wzrd_setup_monitor(struct device *dev, int irq, const struct resource *res)
+{
+	struct clk_wzrd *clk_wzrd = dev_get_drvdata(dev);
+	struct uio_info *info;
+
+	info = devm_kzalloc(dev, sizeof(*info), GFP_KERNEL);
+	if (!info)
+		return -ENOMEM;
+
+	info->name = KBUILD_MODNAME;
+	info->version = "0.0.1";
+
+	info->mem[0].name = "user monitor";
+	info->mem[0].memtype = UIO_MEM_PHYS;
+	info->mem[0].addr = res->start;
+	info->mem[0].size = WZRD_INTR_ENABLE;
+	info->mem[0].internal_addr = clk_wzrd->base;
+
+	info->irq = irq;
+	info->irqcontrol = clk_wzrd_irqcontrol;
+	return devm_uio_register_device(dev, info);
+}
 
 static int clk_wzrd_register_output_clocks(struct device *dev, int nr_outputs)
 {
 	const char *clkout_name, *clk_name, *clk_mul_name;
 	struct clk_wzrd *clk_wzrd = dev_get_drvdata(dev);
 	u32 regl, regh, edge, regld, reghd, edged, div;
-	const struct versal_clk_data *data;
+	const struct clk_wzrd_data *data;
 	unsigned long flags = 0;
 	bool is_versal = false;
 	void __iomem *ctrl_reg;
@@ -1127,10 +1170,11 @@ static int clk_wzrd_register_output_clocks(struct device *dev, int nr_outputs)
 static int clk_wzrd_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
+	const struct clk_wzrd_data *data;
 	struct clk_wzrd *clk_wzrd;
 	unsigned long rate;
 	int nr_outputs;
-	int ret;
+	int irq, ret;
 
 	clk_wzrd = devm_kzalloc(&pdev->dev, sizeof(*clk_wzrd), GFP_KERNEL);
 	if (!clk_wzrd)
@@ -1163,6 +1207,17 @@ static int clk_wzrd_probe(struct platform_device *pdev)
 	if (rate > WZRD_ACLK_MAX_FREQ) {
 		dev_err(&pdev->dev, "s_axi_aclk frequency (%lu) too high\n", rate);
 		return -EINVAL;
+	}
+
+	data = device_get_match_data(&pdev->dev);
+	if (data && data->supports_monitor) {
+		irq = platform_get_irq(pdev, 0);
+		if (irq > 0) {
+			ret = clk_wzrd_setup_monitor(&pdev->dev, irq,
+						     platform_get_resource(pdev, IORESOURCE_IO, 0));
+			if (ret)
+				return dev_err_probe(&pdev->dev, ret, "failed to setup monitor\n");
+		}
 	}
 
 	ret = of_property_read_u32(np, "xlnx,nr-outputs", &nr_outputs);
@@ -1208,7 +1263,7 @@ static const struct of_device_id clk_wzrd_ids[] = {
 	{ .compatible = "xlnx,versal-clk-wizard", .data = &versal_data },
 	{ .compatible = "xlnx,clocking-wizard"   },
 	{ .compatible = "xlnx,clocking-wizard-v5.2"   },
-	{ .compatible = "xlnx,clocking-wizard-v6.0"  },
+	{ .compatible = "xlnx,clocking-wizard-v6.0", .data = &version_6_0_data },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, clk_wzrd_ids);

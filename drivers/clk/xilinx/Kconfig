@@ -21,6 +21,7 @@ config COMMON_CLK_XLNX_CLKWZRD
 	tristate "Xilinx Clocking Wizard"
 	depends on OF
 	depends on HAS_IOMEM
+	depends on UIO
 	help
 	  Support for the Xilinx Clocking Wizard IP core clock generator.
 	  Adds support for clocking wizard and compatible.
