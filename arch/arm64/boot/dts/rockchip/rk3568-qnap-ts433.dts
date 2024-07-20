@@ -102,6 +102,10 @@
 	status = "okay";
 };
 
+&uart0 {
+	status = "okay";
+};
+
 /*
  * Pins available on CN3 connector at TTL voltage level (3V3).
  * ,_  _.
