@@ -40,6 +40,12 @@ properties:
       - const: s_axi_aclk
 
 
+  xlnx,dynamic-reconfig:
+    type: boolean
+    description:
+      Indicate whether the core has been configured with support for dynamic
+      runtime reconfguration of the clocking primitive MMCM/PLL.
+
   xlnx,speed-grade:
     $ref: /schemas/types.yaml#/definitions/uint32
     enum: [1, 2, 3]
@@ -88,6 +94,7 @@ examples:
         compatible = "xlnx,clocking-wizard-v6.0";
         reg = <0xb0000000 0x10000>;
         #clock-cells = <1>;
+        xlnx,dynamic-reconfig;
         xlnx,speed-grade = <1>;
         xlnx,nr-outputs = <6>;
         clock-names = "clk_in1", "s_axi_aclk";
