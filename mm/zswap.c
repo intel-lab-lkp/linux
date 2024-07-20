@@ -1295,10 +1295,10 @@ static struct shrinker *zswap_alloc_shrinker(void)
 
 static int shrink_memcg(struct mem_cgroup *memcg)
 {
-	int nid, shrunk = 0;
+	int nid, shrunk = 0, scanned = 0;
 
 	if (!mem_cgroup_zswap_writeback_enabled(memcg))
-		return -EINVAL;
+		return -ENOENT;
 
 	/*
 	 * Skip zombies because their LRUs are reparented and we would be
@@ -1312,14 +1312,19 @@ static int shrink_memcg(struct mem_cgroup *memcg)
 
 		shrunk += list_lru_walk_one(&zswap_list_lru, nid, memcg,
 					    &shrink_memcg_cb, NULL, &nr_to_walk);
+		scanned += 1 - nr_to_walk;
 	}
+
+	if (!scanned)
+		return -ENOENT;
+
 	return shrunk ? 0 : -EAGAIN;
 }
 
 static void shrink_worker(struct work_struct *w)
 {
 	struct mem_cgroup *memcg;
-	int ret, failures = 0;
+	int ret, failures = 0, progress = 0;
 	unsigned long thr;
 
 	/* Reclaim down to the accept threshold */
@@ -1364,9 +1369,12 @@ static void shrink_worker(struct work_struct *w)
 		 */
 		if (!memcg) {
 			spin_unlock(&zswap_shrink_lock);
-			if (++failures == MAX_RECLAIM_RETRIES)
+
+			/* tree walk completed but no progress */
+			if (!progress && ++failures == MAX_RECLAIM_RETRIES)
 				break;
 
+			progress = 0;
 			goto resched;
 		}
 
@@ -1381,10 +1389,13 @@ static void shrink_worker(struct work_struct *w)
 		/* drop the extra reference */
 		mem_cgroup_put(memcg);
 
-		if (ret == -EINVAL)
-			break;
+		if (ret == -ENOENT)
+			continue;
+
 		if (ret && ++failures == MAX_RECLAIM_RETRIES)
 			break;
+
+		++progress;
 resched:
 		cond_resched();
 	} while (zswap_total_pages() > thr);
