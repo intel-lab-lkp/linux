@@ -182,3 +182,8 @@
 	 */
 	pinctrl-0 = <&spi1_pins &clearfog_spi1_cs_pins &mikro_spi_pins>;
 };
+
+/* USB-2.0 Host, CON2 - nearest CPU */
+&usb3_0 {
+	status = "okay";
+};

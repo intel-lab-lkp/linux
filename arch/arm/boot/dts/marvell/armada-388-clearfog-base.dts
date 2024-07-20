@@ -33,6 +33,22 @@
 	phy = <&phy1>;
 };
 
+&expander0 {
+	m2-full-card-power-off-hog {
+		gpio-hog;
+		gpios = <2 GPIO_ACTIVE_LOW>;
+		output-low;
+		line-name = "m2-full-card-power-off";
+	};
+
+	m2-reset-hog {
+		gpio-hog;
+		gpios = <10 GPIO_ACTIVE_LOW>;
+		output-low;
+		line-name = "m2-reset";
+	};
+};
+
 &gpio0 {
 	phy1_reset {
 		gpio-hog;
@@ -65,4 +81,9 @@
 		marvell,pins = "mpp44";
 		marvell,function = "gpio";
 	};
+};
+
+/* SRDS #4 - USB-2.0/3.0 Host, M.2 */
+&usb3_0 {
+	status = "okay";
 };
