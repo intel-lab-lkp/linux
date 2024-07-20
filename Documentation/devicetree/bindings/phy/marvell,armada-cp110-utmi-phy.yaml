@@ -23,12 +23,36 @@ description:
   UTMI PHY1  --------\
                       1.H----- USB HOST1
 
+  On Armada 380 there is an additional USB-2.0-only controller,
+  and an additional UTMI PHY respectively.
+  The USB device controller can only be connected to a single UTMI PHY port,
+  either UTMI PHY0 or UTMI PHY2.
+
+
+
 properties:
   compatible:
-    const: marvell,cp110-utmi-phy
+    enum:
+      - marvell,a38x-utmi-phy
+      - marvell,cp110-utmi-phy
 
   reg:
-    maxItems: 1
+    anyOf:
+      - items:
+          - description: UTMI registers
+      - items:
+          - description: UTMI registers
+          - description: USB config register
+          - description: UTMI config registers
+
+  reg-names:
+    anyOf:
+      - items:
+          - const: utmi
+      - items:
+          - const: utmi
+          - const: usb-cfg
+          - const: utmi-cfg
 
   "#address-cells":
     const: 1
@@ -38,13 +62,14 @@ properties:
 
   marvell,system-controller:
     description:
-      Phandle to the system controller node
+      Phandle to the system controller node.
+      Optional when usb-cfg and utmi-cfg regs are given.
     $ref: /schemas/types.yaml#/definitions/phandle
 
 # Required child nodes:
 
 patternProperties:
-  "^usb-phy@[0|1]$":
+  "^usb-phy@[0|1|2]$":
     type: object
     description:
       Each UTMI PHY port must be represented as a sub-node.
@@ -68,7 +93,6 @@ required:
   - reg
   - "#address-cells"
   - "#size-cells"
-  - marvell,system-controller
 
 additionalProperties: false
 
