@@ -670,18 +670,25 @@ static int evlist__enable_event_idx(struct evlist *evlist, struct evsel *evsel, 
 int auxtrace_record__read_finish(struct auxtrace_record *itr, int idx)
 {
 	struct evsel *evsel;
+	int ret = -EINVAL;
 
 	if (!itr->evlist || !itr->pmu)
 		return -EINVAL;
 
 	evlist__for_each_entry(itr->evlist, evsel) {
-		if (evsel->core.attr.type == itr->pmu->type) {
+		if (evsel__is_aux_event(evsel)) {
 			if (evsel->disabled)
-				return 0;
-			return evlist__enable_event_idx(itr->evlist, evsel, idx);
+				continue;
+			ret = evlist__enable_event_idx(itr->evlist, evsel, idx);
+			if (ret >= 0)
+				return ret;
 		}
 	}
-	return -EINVAL;
+
+	if (ret < 0)
+		pr_err("Failed to event enable event (idx=%d): %d\n", idx, ret);
+
+	return ret;
 }
 
 /*
