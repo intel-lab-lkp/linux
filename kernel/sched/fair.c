@@ -6444,6 +6444,9 @@ static void destroy_cfs_bandwidth(struct cfs_bandwidth *cfs_b)
 	hrtimer_cancel(&cfs_b->period_timer);
 	hrtimer_cancel(&cfs_b->slack_timer);
 
+	if (cfs_b->quota != RUNTIME_INF)
+		cfs_bandwidth_usage_dec();
+
 	/*
 	 * It is possible that we still have some cfs_rq's pending on a CSD
 	 * list, though this race is very rare. In order for this to occur, we
