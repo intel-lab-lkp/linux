@@ -123,6 +123,9 @@ if major >= 3:
 
             # include/linux/btf.h
             "__bpf_kfunc",
+
+            # include/linux/xz.h
+            "XZ_EXTERN",
         ]
 
 else:
