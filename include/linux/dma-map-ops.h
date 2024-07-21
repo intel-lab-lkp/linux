@@ -13,20 +13,7 @@
 struct cma;
 struct iommu_ops;
 
-/*
- * Values for struct dma_map_ops.flags:
- *
- * DMA_F_PCI_P2PDMA_SUPPORTED: Indicates the dma_map_ops implementation can
- * handle PCI P2PDMA pages in the map_sg/unmap_sg operation.
- * DMA_F_CAN_SKIP_SYNC: DMA sync operations can be skipped if the device is
- * coherent and it's not an SWIOTLB buffer.
- */
-#define DMA_F_PCI_P2PDMA_SUPPORTED     (1 << 0)
-#define DMA_F_CAN_SKIP_SYNC            (1 << 1)
-
 struct dma_map_ops {
-	unsigned int flags;
-
 	void *(*alloc)(struct device *dev, size_t size,
 			dma_addr_t *dma_handle, gfp_t gfp,
 			unsigned long attrs);
@@ -103,6 +90,10 @@ static inline void set_dma_ops(struct device *dev,
 {
 	dev->dma_ops = dma_ops;
 }
+struct page *dma_common_alloc_pages(struct device *dev, size_t size,
+		dma_addr_t *dma_handle, enum dma_data_direction dir, gfp_t gfp);
+void dma_common_free_pages(struct device *dev, size_t size, struct page *vaddr,
+		dma_addr_t dma_handle, enum dma_data_direction dir);
 #else /* CONFIG_DMA_OPS */
 static inline const struct dma_map_ops *get_dma_ops(struct device *dev)
 {
@@ -110,6 +101,18 @@ static inline const struct dma_map_ops *get_dma_ops(struct device *dev)
 }
 static inline void set_dma_ops(struct device *dev,
 			       const struct dma_map_ops *dma_ops)
+{
+}
+static inline struct page *
+dma_common_alloc_pages(struct device *dev, size_t size, dma_addr_t *dma_handle,
+		       enum dma_data_direction dir, gfp_t gfp)
+{
+	return NULL;
+}
+static inline void dma_common_free_pages(struct device *dev, size_t size,
+					 struct page *vaddr,
+					 dma_addr_t dma_handle,
+					 enum dma_data_direction dir)
 {
 }
 #endif /* CONFIG_DMA_OPS */
@@ -239,10 +242,6 @@ int dma_common_get_sgtable(struct device *dev, struct sg_table *sgt,
 int dma_common_mmap(struct device *dev, struct vm_area_struct *vma,
 		void *cpu_addr, dma_addr_t dma_addr, size_t size,
 		unsigned long attrs);
-struct page *dma_common_alloc_pages(struct device *dev, size_t size,
-		dma_addr_t *dma_handle, enum dma_data_direction dir, gfp_t gfp);
-void dma_common_free_pages(struct device *dev, size_t size, struct page *vaddr,
-		dma_addr_t dma_handle, enum dma_data_direction dir);
 
 struct page **dma_common_find_pages(void *cpu_addr);
 void *dma_common_contiguous_remap(struct page *page, size_t size, pgprot_t prot,
