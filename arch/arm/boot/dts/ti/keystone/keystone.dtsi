@@ -225,8 +225,8 @@
 			};
 		};
 
-		wdt: wdt@22f0080 {
-			compatible = "ti,keystone-wdt","ti,davinci-wdt";
+		wdt: watchdog@22f0080 {
+			compatible = "ti,keystone-wdt";
 			reg = <0x022f0080 0x80>;
 			clocks = <&clkwdtimer0>;
 		};

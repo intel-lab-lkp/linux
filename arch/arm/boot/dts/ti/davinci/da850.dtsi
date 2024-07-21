@@ -525,7 +525,7 @@
 			interrupt-names = "tint12", "tint34";
 			clocks = <&pll0_auxclk>;
 		};
-		wdt: wdt@21000 {
+		wdt: watchdog@21000 {
 			compatible = "ti,davinci-wdt";
 			reg = <0x21000 0x1000>;
 			clocks = <&pll0_auxclk>;
