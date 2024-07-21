@@ -171,6 +171,16 @@ struct fwnode_handle *fwnode_get_next_available_child_node(
 struct fwnode_handle *device_get_next_child_node(const struct device *dev,
 						 struct fwnode_handle *child);
 
+/**
+ * device_for_each_child_node - iterate over available child nodes of a device
+ * @dev: Pointer to the struct device
+ * @child: Pointer to an available child node in each loop iteration
+ *
+ * Unavailable nodes are skipped i.e. this macro is implicitly _available_.
+ * The reference to the child node must be dropped on early exits.
+ * See fwnode_handle_put().
+ * For a scoped version of this macro, use device_for_each_child_node_scoped().
+ */
 #define device_for_each_child_node(dev, child)				\
 	for (child = device_get_next_child_node(dev, NULL); child;	\
 	     child = device_get_next_child_node(dev, child))
