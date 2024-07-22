@@ -1235,6 +1235,7 @@ static int __nbcon_atomic_flush_pending_con(struct console *con, u64 stop_seq,
 static void nbcon_atomic_flush_pending_con(struct console *con, u64 stop_seq,
 					   bool allow_unsafe_takeover)
 {
+	struct console_flush_type ft;
 	unsigned long flags;
 	int err;
 
@@ -1267,7 +1268,9 @@ again:
 	 * context must flush those remaining records because there is no
 	 * other context that will do it.
 	 */
-	if (prb_read_valid(prb, nbcon_seq_read(con), NULL)) {
+	printk_get_console_flush_type(&ft, false);
+	if (ft.nbcon_atomic &&
+	    prb_read_valid(prb, nbcon_seq_read(con), NULL)) {
 		stop_seq = prb_next_reserve_seq(prb);
 		goto again;
 	}
@@ -1362,6 +1365,7 @@ void nbcon_cpu_emergency_exit(void)
 {
 	unsigned int *cpu_emergency_nesting;
 	bool do_trigger_flush = false;
+	struct console_flush_type ft;
 
 	cpu_emergency_nesting = nbcon_get_cpu_emergency_nesting();
 
@@ -1374,19 +1378,25 @@ void nbcon_cpu_emergency_exit(void)
 	 * for the emergency messages is NBCON_PRIO_EMERGENCY.
 	 */
 	if (*cpu_emergency_nesting == 1) {
-		nbcon_atomic_flush_pending();
+		printk_get_emergency_console_flush_type(&ft);
+
+		if (ft.nbcon_atomic)
+			nbcon_atomic_flush_pending();
 
 		/*
 		 * Safely attempt to flush the legacy consoles in this
 		 * context. Otherwise an irq_work context is triggered
 		 * to handle it.
 		 */
-		do_trigger_flush = true;
-		if (printing_via_unlock && !is_printk_deferred()) {
+		if (ft.legacy_direct) {
 			if (console_trylock()) {
 				do_trigger_flush = false;
 				console_unlock();
+			} else {
+				do_trigger_flush = true;
 			}
+		} else {
+			do_trigger_flush = ft.legacy_offload;
 		}
 	}
 
@@ -1412,13 +1422,18 @@ void nbcon_cpu_emergency_exit(void)
  */
 void nbcon_cpu_emergency_flush(void)
 {
+	struct console_flush_type ft;
+
 	/* The explicit flush is needed only in the emergency context. */
 	if (*(nbcon_get_cpu_emergency_nesting()) == 0)
 		return;
 
-	nbcon_atomic_flush_pending();
+	printk_get_emergency_console_flush_type(&ft);
 
-	if (printing_via_unlock && !is_printk_deferred()) {
+	if (ft.nbcon_atomic)
+		nbcon_atomic_flush_pending();
+
+	if (ft.legacy_direct) {
 		if (console_trylock())
 			console_unlock();
 	}
@@ -1521,6 +1536,7 @@ EXPORT_SYMBOL_GPL(nbcon_device_try_acquire);
 void nbcon_device_release(struct console *con)
 {
 	struct nbcon_context *ctxt = &ACCESS_PRIVATE(con, nbcon_device_ctxt);
+	struct console_flush_type ft;
 	int cookie;
 
 	if (!nbcon_context_exit_unsafe(ctxt))
@@ -1533,8 +1549,10 @@ void nbcon_device_release(struct console *con)
 	 * was locked. The console_srcu_read_lock must be taken to ensure
 	 * the console is usable throughout flushing.
 	 */
+	printk_get_console_flush_type(&ft, false);
 	cookie = console_srcu_read_lock();
-	if (console_is_usable(con, console_srcu_read_flags(con)) &&
+	if (ft.nbcon_atomic &&
+	    console_is_usable(con, console_srcu_read_flags(con)) &&
 	    prb_read_valid(prb, nbcon_seq_read(con), NULL)) {
 		__nbcon_atomic_flush_pending_con(con, prb_next_reserve_seq(prb), false);
 	}

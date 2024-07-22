@@ -154,15 +154,105 @@ static inline bool console_is_usable(struct console *con, short flags) { return 
 #endif /* CONFIG_PRINTK */
 
 extern bool have_boot_console;
+extern bool have_nbcon_console;
 extern bool have_legacy_console;
+extern bool legacy_allow_panic_sync;
+
+/**
+ * struct console_flush_type - Define how to flush the consoles
+ * @nbcon_atomic:	Flush directly using nbcon_atomic() callback
+ * @legacy_direct:	Call the legacy loop in this context
+ * @legacy_offload:	Offload the legacy loop into IRQ
+ */
+struct console_flush_type {
+	bool	nbcon_atomic;
+	bool	legacy_direct;
+	bool	legacy_offload;
+};
 
 /*
- * Specifies if the console lock/unlock dance is needed for console
- * printing. If @have_boot_console is true, the nbcon consoles will
- * be printed serially along with the legacy consoles because nbcon
- * consoles cannot print simultaneously with boot consoles.
+ * Decide while console flushing methods are to be used. Used
+ * for all flushing except when flushing from emergency state.
+ *
+ * Set @prefer_offload to true if the context is only interested in
+ * offloading. Then offloading types will be set instead of direct,
+ * if appropriate.
  */
-#define printing_via_unlock (have_legacy_console || have_boot_console)
+static inline void printk_get_console_flush_type(struct console_flush_type *ft, bool prefer_offload)
+{
+	memset(ft, 0, sizeof(*ft));
+
+	switch (nbcon_get_default_prio()) {
+	case NBCON_PRIO_NORMAL:
+		if (have_legacy_console || have_boot_console) {
+			if (prefer_offload || is_printk_deferred())
+				ft->legacy_offload = true;
+			else
+				ft->legacy_direct = true;
+		}
+
+		if (have_nbcon_console && !have_boot_console)
+			ft->nbcon_atomic = true;
+		break;
+
+	case NBCON_PRIO_EMERGENCY:
+		/*
+		 * Skip. The consoles will be flushed when exiting emergency
+		 * state. See printk_get_emergency_console_flush_type().
+		 */
+		break;
+
+	case NBCON_PRIO_PANIC:
+		if (have_nbcon_console && !have_boot_console)
+			ft->nbcon_atomic = true;
+
+		/*
+		 * In panic, if nbcon atomic printing occurs, the legacy
+		 * consoles must remain silent until explicitly allowed.
+		 */
+		if (legacy_allow_panic_sync || !ft->nbcon_atomic)
+			ft->legacy_direct = true;
+		break;
+
+	default:
+		WARN_ON_ONCE(1);
+		break;
+	}
+}
+
+/*
+ * Decide while console flushing methods are to be used from
+ * emergency state.
+ */
+static inline void printk_get_emergency_console_flush_type(struct console_flush_type *ft)
+{
+	memset(ft, 0, sizeof(*ft));
+
+	switch (nbcon_get_default_prio()) {
+	case NBCON_PRIO_EMERGENCY:
+		if (have_nbcon_console && !have_boot_console)
+			ft->nbcon_atomic = true;
+
+		if (have_legacy_console || have_boot_console) {
+			if (is_printk_deferred())
+				ft->legacy_offload = true;
+			else
+				ft->legacy_direct = true;
+		}
+		break;
+
+	case NBCON_PRIO_PANIC:
+		/*
+		 * Skip. Console flushing is handled by panic code.
+		 * See printk_get_console_flush_type().
+		 */
+		break;
+
+	default:
+		WARN_ON_ONCE(1);
+		break;
+	}
+}
 
 extern struct printk_buffers printk_shared_pbufs;
 
