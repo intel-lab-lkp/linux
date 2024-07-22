@@ -6744,6 +6744,7 @@ static int ice_up_complete(struct ice_vsi *vsi)
 	    (vsi->port_info->phy.link_info.link_info & ICE_AQ_LINK_UP) &&
 	    vsi->netdev && vsi->type == ICE_VSI_PF) {
 		ice_print_link_msg(vsi, true);
+		netif_device_attach(vsi->netdev);
 		netif_tx_start_all_queues(vsi->netdev);
 		netif_carrier_on(vsi->netdev);
 		ice_ptp_link_change(pf, pf->hw.pf_id, true);
@@ -7220,6 +7221,7 @@ int ice_down(struct ice_vsi *vsi)
 		ice_ptp_link_change(vsi->back, vsi->back->hw.pf_id, false);
 		netif_carrier_off(vsi->netdev);
 		netif_tx_disable(vsi->netdev);
+		netif_device_detach(vsi->netdev);
 	}
 
 	ice_vsi_dis_irq(vsi);
