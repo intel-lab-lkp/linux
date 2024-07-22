@@ -2401,8 +2401,6 @@ asmlinkage int vprintk_emit(int facility, int level,
 		 * printing of all remaining records to all consoles so that
 		 * this context can return as soon as possible. Hopefully
 		 * another printk() caller will take over the printing.
-		 *
-		 * Also, nbcon_get_default_prio() requires migration disabled.
 		 */
 		preempt_disable();
 

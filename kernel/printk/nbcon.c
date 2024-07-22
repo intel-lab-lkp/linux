@@ -970,9 +970,12 @@ static __ref unsigned int *nbcon_get_cpu_emergency_nesting(void)
  * nbcon_get_default_prio - The appropriate nbcon priority to use for nbcon
  *				printing on the current CPU
  *
- * Context:	Any context which could not be migrated to another CPU.
+ * Context:	Any context.
  * Return:	The nbcon_prio to use for acquiring an nbcon console in this
  *		context for printing.
+ *
+ * Allowing migration enabled relies on the fact that a context cannot be
+ * migrated to panic or emergency state CPUs.
  */
 enum nbcon_prio nbcon_get_default_prio(void)
 {
