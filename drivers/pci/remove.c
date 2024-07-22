@@ -16,17 +16,15 @@ static void pci_free_resources(struct pci_dev *dev)
 
 static void pci_stop_dev(struct pci_dev *dev)
 {
+	if (!pci_dev_test_and_clear_added(dev))
+		return;
+
 	pci_pme_active(dev, false);
-
-	if (pci_dev_is_added(dev)) {
-		of_platform_depopulate(&dev->dev);
-		device_release_driver(&dev->dev);
-		pci_proc_detach_device(dev);
-		pci_remove_sysfs_dev_files(dev);
-		of_pci_remove_node(dev);
-
-		pci_dev_assign_added(dev, false);
-	}
+	of_platform_depopulate(&dev->dev);
+	device_release_driver(&dev->dev);
+	pci_proc_detach_device(dev);
+	pci_remove_sysfs_dev_files(dev);
+	of_pci_remove_node(dev);
 }
 
 static void pci_destroy_dev(struct pci_dev *dev)
