@@ -5208,6 +5208,8 @@ static void perf_addr_filters_splice(struct perf_event *event,
 
 static void _free_event(struct perf_event *event)
 {
+	struct module *module;
+
 	irq_work_sync(&event->pending_irq);
 
 	unaccount_event(event);
@@ -5259,7 +5261,13 @@ static void _free_event(struct perf_event *event)
 		put_ctx(event->ctx);
 
 	exclusive_event_destroy(event);
-	module_put(event->pmu->module);
+
+	module = event->pmu->module;
+	event->pmu->put(event->pmu);
+	/* can't touch pmu anymore */
+	event->pmu = NULL;
+
+	module_put(module);
 
 	call_rcu(&event->rcu_head, free_event_rcu);
 }
@@ -11330,6 +11338,11 @@ static int perf_pmu_nop_int(struct pmu *pmu)
 	return 0;
 }
 
+static struct pmu *perf_pmu_nop_pmu(struct pmu *pmu)
+{
+	return pmu;
+}
+
 static int perf_event_nop_int(struct perf_event *event, u64 value)
 {
 	return 0;
@@ -11616,6 +11629,12 @@ int perf_pmu_register(struct pmu *pmu, const char *name, int type)
 	if (!pmu->event_idx)
 		pmu->event_idx = perf_event_idx_default;
 
+	if (!pmu->get)
+		pmu->get = perf_pmu_nop_pmu;
+
+	if (!pmu->put)
+		pmu->put = perf_pmu_nop_void;
+
 	list_add_rcu(&pmu->entry, &pmus);
 	atomic_set(&pmu->exclusive_cnt, 0);
 	ret = 0;
@@ -11694,7 +11713,8 @@ static int perf_try_init_event(struct pmu *pmu, struct perf_event *event)
 		BUG_ON(!ctx);
 	}
 
-	event->pmu = pmu;
+	event->pmu = pmu->get(pmu);
+
 	ret = pmu->event_init(event);
 
 	if (ctx)
@@ -11713,8 +11733,12 @@ static int perf_try_init_event(struct pmu *pmu, struct perf_event *event)
 			event->destroy(event);
 	}
 
-	if (ret)
-		module_put(pmu->module);
+	if (ret) {
+		struct module *module = pmu->module;
+
+		pmu->put(pmu);
+		module_put(module);
+	}
 
 	return ret;
 }

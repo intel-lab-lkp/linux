@@ -540,6 +540,9 @@ struct pmu {
 	 * Check period value for PERF_EVENT_IOC_PERIOD ioctl.
 	 */
 	int (*check_period)		(struct perf_event *event, u64 value); /* optional */
+
+	struct pmu *(*get)		(struct pmu *pmu); /* optional: get a reference */
+	void (*put)			(struct pmu *pmu); /* optional: put a reference */
 };
 
 enum perf_addr_filter_action_t {
