@@ -5,6 +5,7 @@
  */
 
 #include <linux/pm_runtime.h>
+#include <drm/drm_managed.h>
 
 #include "gt/intel_engine.h"
 #include "gt/intel_engine_pm.h"
@@ -1152,6 +1153,17 @@ static void free_event_attributes(struct i915_pmu *pmu)
 	pmu->pmu_attr = NULL;
 }
 
+static void free_pmu(struct drm_device *dev, void *res)
+{
+	struct i915_pmu *pmu = res;
+	struct drm_i915_private *i915 = pmu_to_i915(pmu);
+
+	free_event_attributes(pmu);
+	kfree(pmu->base.attr_groups);
+	if (IS_DGFX(i915))
+		kfree(pmu->name);
+}
+
 static int i915_pmu_cpu_online(unsigned int cpu, struct hlist_node *node)
 {
 	struct i915_pmu *pmu = hlist_entry_safe(node, typeof(*pmu), cpuhp.node);
@@ -1302,6 +1314,9 @@ void i915_pmu_register(struct drm_i915_private *i915)
 	if (ret)
 		goto err_unreg;
 
+	if (drmm_add_action_or_reset(&i915->drm, free_pmu, pmu))
+		goto err_unreg;
+
 	return;
 
 err_unreg:
@@ -1336,11 +1351,7 @@ void i915_pmu_unregister(struct drm_i915_private *i915)
 	hrtimer_cancel(&pmu->timer);
 
 	i915_pmu_unregister_cpuhp_state(pmu);
-
 	perf_pmu_unregister(&pmu->base);
+
 	pmu->base.event_init = NULL;
-	kfree(pmu->base.attr_groups);
-	if (IS_DGFX(i915))
-		kfree(pmu->name);
-	free_event_attributes(pmu);
 }
