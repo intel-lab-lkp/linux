@@ -1158,18 +1158,21 @@ static void free_pmu(struct drm_device *dev, void *res)
 	struct i915_pmu *pmu = res;
 	struct drm_i915_private *i915 = pmu_to_i915(pmu);
 
+	perf_pmu_unregister(&pmu->base);
 	free_event_attributes(pmu);
 	kfree(pmu->base.attr_groups);
 	if (IS_DGFX(i915))
 		kfree(pmu->name);
+
+	/*
+	 * Make sure all currently running (but shortcut on pmu->closed) are
+	 * gone before proceeding with free'ing the pmu object embedded in i915.
+	 */
+	synchronize_rcu();
 }
 
 static int i915_pmu_cpu_online(unsigned int cpu, struct hlist_node *node)
 {
-	struct i915_pmu *pmu = hlist_entry_safe(node, typeof(*pmu), cpuhp.node);
-
-	GEM_BUG_ON(!pmu->base.event_init);
-
 	/* Select the first online CPU as a designated reader. */
 	if (cpumask_empty(&i915_pmu_cpumask))
 		cpumask_set_cpu(cpu, &i915_pmu_cpumask);
@@ -1181,8 +1184,6 @@ static int i915_pmu_cpu_offline(unsigned int cpu, struct hlist_node *node)
 {
 	struct i915_pmu *pmu = hlist_entry_safe(node, typeof(*pmu), cpuhp.node);
 	unsigned int target = i915_pmu_target_cpu;
-
-	GEM_BUG_ON(!pmu->base.event_init);
 
 	/*
 	 * Unregistering an instance generates a CPU offline event which we must
@@ -1337,21 +1338,14 @@ void i915_pmu_unregister(struct drm_i915_private *i915)
 {
 	struct i915_pmu *pmu = &i915->pmu;
 
-	if (!pmu->base.event_init)
-		return;
-
 	/*
-	 * "Disconnect" the PMU callbacks - since all are atomic synchronize_rcu
-	 * ensures all currently executing ones will have exited before we
-	 * proceed with unregistration.
+	 * "Disconnect" the PMU callbacks - unregistering the pmu will be done
+	 * later when all currently open events are gone
 	 */
 	pmu->closed = true;
-	synchronize_rcu();
 
 	hrtimer_cancel(&pmu->timer);
-
 	i915_pmu_unregister_cpuhp_state(pmu);
-	perf_pmu_unregister(&pmu->base);
 
 	pmu->base.event_init = NULL;
 }
