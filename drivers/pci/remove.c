@@ -4,6 +4,9 @@
 #include <linux/of_platform.h>
 #include "pci.h"
 
+static void pci_stop_bus(struct pci_bus *bus);
+static void pci_remove_bus_device(struct pci_dev *dev);
+
 static void pci_free_resources(struct pci_dev *dev)
 {
 	struct resource *res;
@@ -45,8 +48,17 @@ static void pci_destroy_dev(struct pci_dev *dev)
 	put_device(&dev->dev);
 }
 
+static void pci_clear_bus(struct pci_bus *bus)
+{
+	struct pci_dev *dev, *next;
+
+	list_for_each_entry_safe(dev, next, &bus->devices, bus_list)
+		pci_remove_bus_device(dev);
+}
+
 void pci_remove_bus(struct pci_bus *bus)
 {
+	pci_clear_bus(bus);
 	pci_proc_detach_bus(bus);
 
 	down_write(&pci_bus_sem);
@@ -66,7 +78,15 @@ EXPORT_SYMBOL(pci_remove_bus);
 static void pci_stop_bus_device(struct pci_dev *dev)
 {
 	struct pci_bus *bus = dev->subordinate;
-	struct pci_dev *child, *tmp;
+
+	if (bus)
+		pci_stop_bus(bus);
+	pci_stop_dev(dev);
+}
+
+static void pci_stop_bus(struct pci_bus *bus)
+{
+	struct pci_dev *dev, *next;
 
 	/*
 	 * Stopping an SR-IOV PF device removes all the associated VFs,
@@ -74,29 +94,18 @@ static void pci_stop_bus_device(struct pci_dev *dev)
 	 * iterator.  Therefore, iterate in reverse so we remove the VFs
 	 * first, then the PF.
 	 */
-	if (bus) {
-		list_for_each_entry_safe_reverse(child, tmp,
-						 &bus->devices, bus_list)
-			pci_stop_bus_device(child);
-	}
-
-	pci_stop_dev(dev);
+	list_for_each_entry_safe_reverse(dev, next, &bus->devices, bus_list)
+		pci_stop_bus_device(dev);
 }
 
 static void pci_remove_bus_device(struct pci_dev *dev)
 {
 	struct pci_bus *bus = dev->subordinate;
-	struct pci_dev *child, *tmp;
 
 	if (bus) {
-		list_for_each_entry_safe(child, tmp,
-					 &bus->devices, bus_list)
-			pci_remove_bus_device(child);
-
 		pci_remove_bus(bus);
 		dev->subordinate = NULL;
 	}
-
 	pci_destroy_dev(dev);
 }
 
@@ -129,16 +138,13 @@ EXPORT_SYMBOL_GPL(pci_stop_and_remove_bus_device_locked);
 
 void pci_stop_root_bus(struct pci_bus *bus)
 {
-	struct pci_dev *child, *tmp;
 	struct pci_host_bridge *host_bridge;
 
 	if (!pci_is_root_bus(bus))
 		return;
 
 	host_bridge = to_pci_host_bridge(bus->bridge);
-	list_for_each_entry_safe_reverse(child, tmp,
-					 &bus->devices, bus_list)
-		pci_stop_bus_device(child);
+	pci_stop_bus(bus);
 
 	/* stop the host bridge */
 	device_release_driver(&host_bridge->dev);
@@ -147,16 +153,12 @@ EXPORT_SYMBOL_GPL(pci_stop_root_bus);
 
 void pci_remove_root_bus(struct pci_bus *bus)
 {
-	struct pci_dev *child, *tmp;
 	struct pci_host_bridge *host_bridge;
 
 	if (!pci_is_root_bus(bus))
 		return;
 
 	host_bridge = to_pci_host_bridge(bus->bridge);
-	list_for_each_entry_safe(child, tmp,
-				 &bus->devices, bus_list)
-		pci_remove_bus_device(child);
 
 #ifdef CONFIG_PCI_DOMAINS_GENERIC
 	/* Release domain_nr if it was dynamically allocated */
