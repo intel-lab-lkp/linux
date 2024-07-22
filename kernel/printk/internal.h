@@ -21,6 +21,19 @@ int devkmsg_sysctl_set_loglvl(struct ctl_table *table, int write,
 		(con->flags & CON_BOOT) ? "boot" : "",		\
 		con->name, con->index, ##__VA_ARGS__)
 
+/*
+ * Identify if legacy printing is forced in a dedicated kthread. If
+ * true, all printing via console lock occurs within a dedicated
+ * legacy printer thread. The only exception is on panic, after the
+ * nbcon consoles have had their chance to print the panic messages
+ * first.
+ */
+#ifdef CONFIG_PREEMPT_RT
+# define force_legacy_kthread()	(true)
+#else
+# define force_legacy_kthread()	(false)
+#endif
+
 #ifdef CONFIG_PRINTK
 
 #ifdef CONFIG_PRINTK_CALLER
@@ -192,7 +205,7 @@ extern bool legacy_allow_panic_sync;
  * @nbcon_atomic:	Flush directly using nbcon_atomic() callback
  * @nbcon_offload:	Offload flush to printer thread
  * @legacy_direct:	Call the legacy loop in this context
- * @legacy_offload:	Offload the legacy loop into IRQ
+ * @legacy_offload:	Offload the legacy loop into IRQ or legacy thread
  */
 struct console_flush_type {
 	bool	nbcon_atomic;
@@ -216,7 +229,7 @@ static inline void printk_get_console_flush_type(struct console_flush_type *ft, 
 	switch (nbcon_get_default_prio()) {
 	case NBCON_PRIO_NORMAL:
 		if (have_legacy_console || have_boot_console) {
-			if (prefer_offload || is_printk_deferred())
+			if (force_legacy_kthread() || prefer_offload || is_printk_deferred())
 				ft->legacy_offload = true;
 			else
 				ft->legacy_direct = true;
@@ -267,7 +280,7 @@ static inline void printk_get_emergency_console_flush_type(struct console_flush_
 			ft->nbcon_atomic = true;
 
 		if (have_legacy_console || have_boot_console) {
-			if (is_printk_deferred())
+			if (force_legacy_kthread() || is_printk_deferred())
 				ft->legacy_offload = true;
 			else
 				ft->legacy_direct = true;
