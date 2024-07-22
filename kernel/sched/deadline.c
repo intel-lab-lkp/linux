@@ -785,12 +785,11 @@ static inline void replenish_dl_new_period(struct sched_dl_entity *dl_se,
  * one, and to (try to!) reconcile itself with its own scheduling
  * parameters.
  */
-static inline void setup_new_dl_entity(struct sched_dl_entity *dl_se)
+static inline void __setup_new_dl_entity(struct sched_dl_entity *dl_se)
 {
 	struct dl_rq *dl_rq = dl_rq_of_se(dl_se);
 	struct rq *rq = rq_of_dl_rq(dl_rq);
 
-	WARN_ON(is_dl_boosted(dl_se));
 	WARN_ON(dl_time_before(rq_clock(rq), dl_se->deadline));
 
 	/*
@@ -807,6 +806,12 @@ static inline void setup_new_dl_entity(struct sched_dl_entity *dl_se)
 	 * spent on hardirq context, etc.).
 	 */
 	replenish_dl_new_period(dl_se, rq);
+}
+
+static inline void setup_new_dl_entity(struct sched_dl_entity *dl_se)
+{
+	WARN_ON(is_dl_boosted(dl_se));
+	__setup_new_dl_entity(dl_se);
 }
 
 /*
@@ -1755,7 +1760,7 @@ enqueue_dl_entity(struct sched_dl_entity *dl_se, int flags)
 	} else if ((flags & ENQUEUE_RESTORE) &&
 		   !is_dl_boosted(dl_se) &&
 		   dl_time_before(dl_se->deadline, rq_clock(rq_of_dl_se(dl_se)))) {
-		setup_new_dl_entity(dl_se);
+		__setup_new_dl_entity(dl_se);
 	}
 
 	__enqueue_dl_entity(dl_se);
