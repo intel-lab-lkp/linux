@@ -3631,7 +3631,7 @@ void register_console(struct console *newcon)
 
 	if (newcon->flags & CON_NBCON) {
 		have_nbcon_console = true;
-		nbcon_init(newcon, init_seq);
+		nbcon_seq_force(newcon, init_seq);
 	} else {
 		have_legacy_console = true;
 		newcon->seq = init_seq;

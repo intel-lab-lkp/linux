@@ -1343,17 +1343,21 @@ void nbcon_cpu_emergency_flush(void)
 }
 
 /**
- * nbcon_alloc - Allocate buffers needed by the nbcon console
- * @con:	Console to allocate buffers for
+ * nbcon_alloc - Allocate and init the nbcon console specific data
+ * @con:	Console to initialize
  *
- * Return:	True on success. False otherwise and the console cannot
- *		be used.
+ * Return:	True if the console was fully allocated and initialized.
+ *		Otherwise @con must not be registered.
  *
- * This is not part of nbcon_init() because buffer allocation must
- * be performed earlier in the console registration process.
+ * When allocation and init was successful, the console must be properly
+ * freed using nbcon_free() once it is no longer needed.
  */
 bool nbcon_alloc(struct console *con)
 {
+	struct nbcon_state state = { };
+
+	nbcon_state_set(con, &state);
+
 	if (con->flags & CON_BOOT) {
 		/*
 		 * Boot console printing is synchronized with legacy console
@@ -1370,25 +1374,6 @@ bool nbcon_alloc(struct console *con)
 	}
 
 	return true;
-}
-
-/**
- * nbcon_init - Initialize the nbcon console specific data
- * @con:	Console to initialize
- * @init_seq:	Sequence number of the first record to be emitted
- *
- * nbcon_alloc() *must* be called and succeed before this function
- * is called.
- */
-void nbcon_init(struct console *con, u64 init_seq)
-{
-	struct nbcon_state state = { };
-
-	/* nbcon_alloc() must have been called and successful! */
-	BUG_ON(!con->pbufs);
-
-	nbcon_seq_force(con, init_seq);
-	nbcon_state_set(con, &state);
 }
 
 /**
