@@ -52,8 +52,10 @@ static void pci_clear_bus(struct pci_bus *bus)
 {
 	struct pci_dev *dev, *next;
 
+	pci_lock_bus(bus);
 	list_for_each_entry_safe(dev, next, &bus->devices, bus_list)
 		pci_remove_bus_device(dev);
+	pci_unlock_bus(bus);
 }
 
 void pci_remove_bus(struct pci_bus *bus)
@@ -96,8 +98,10 @@ static void pci_stop_bus(struct pci_bus *bus)
 	 * iterator.  Therefore, iterate in reverse so we remove the VFs
 	 * first, then the PF.
 	 */
+	pci_lock_bus(bus);
 	list_for_each_entry_safe_reverse(dev, next, &bus->devices, bus_list)
 		pci_stop_bus_device(dev);
+	pci_unlock_bus(bus);
 }
 
 static void pci_remove_bus_device(struct pci_dev *dev)
@@ -138,9 +142,15 @@ EXPORT_SYMBOL(pci_stop_and_remove_bus_device);
 
 void pci_stop_and_remove_bus_device_locked(struct pci_dev *dev)
 {
+	struct pci_bus *bus = pci_bus_get(dev->bus);
+
 	pci_lock_rescan_remove();
+	pci_lock_bus(bus);
 	pci_stop_and_remove_bus_device(dev);
+	pci_unlock_bus(bus);
 	pci_unlock_rescan_remove();
+
+	pci_bus_put(bus);
 }
 EXPORT_SYMBOL_GPL(pci_stop_and_remove_bus_device_locked);
 

@@ -563,6 +563,7 @@ static struct pci_bus *pci_alloc_bus(struct pci_bus *parent)
 	if (!b)
 		return NULL;
 
+	mutex_init(&b->lock);
 	INIT_LIST_HEAD(&b->node);
 	INIT_LIST_HEAD(&b->children);
 	INIT_LIST_HEAD(&b->devices);
@@ -1359,7 +1360,9 @@ static int pci_scan_bridge_extend(struct pci_bus *bus, struct pci_dev *dev,
 		}
 
 		buses = subordinate - secondary;
+		pci_lock_bus(child);
 		cmax = pci_scan_child_bus_extend(child, buses);
+		pci_unlock_bus(child);
 		if (cmax > subordinate)
 			pci_warn(dev, "bridge has subordinate %02x but max busn %02x\n",
 				 subordinate, cmax);
@@ -3109,7 +3112,9 @@ int pci_host_probe(struct pci_host_bridge *bridge)
 	list_for_each_entry(child, &bus->children, node)
 		pcie_bus_configure_settings(child);
 
+	pci_lock_bus(bus);
 	pci_bus_add_devices(bus);
+	pci_unlock_bus(bus);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(pci_host_probe);
@@ -3284,11 +3289,13 @@ unsigned int pci_rescan_bus_bridge_resize(struct pci_dev *bridge)
 	unsigned int max;
 	struct pci_bus *bus = bridge->subordinate;
 
+	pci_lock_bus(bus);
 	max = pci_scan_child_bus(bus);
 
 	pci_assign_unassigned_bridge_resources(bridge);
 
 	pci_bus_add_devices(bus);
+	pci_unlock_bus(bus);
 
 	return max;
 }
@@ -3306,9 +3313,11 @@ unsigned int pci_rescan_bus(struct pci_bus *bus)
 {
 	unsigned int max;
 
+	pci_lock_bus(bus);
 	max = pci_scan_child_bus(bus);
 	pci_assign_unassigned_bus_resources(bus);
 	pci_bus_add_devices(bus);
+	pci_unlock_bus(bus);
 
 	return max;
 }

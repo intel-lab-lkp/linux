@@ -3117,7 +3117,10 @@ void pci_bridge_d3_update(struct pci_dev *dev)
 		struct pci_bus *bus = pci_dev_get_subordinate(bridge);
 
 		if (bus) {
-			pci_walk_bus(bus, pci_dev_check_d3cold, &d3cold_ok);
+			down_read(&pci_bus_sem);
+			pci_walk_bus_locked(bus, pci_dev_check_d3cold,
+					    &d3cold_ok);
+			up_read(&pci_bus_sem);
 			pci_bus_put(bus);
 		}
 	}

@@ -384,8 +384,11 @@ void pci_bus_add_devices(const struct pci_bus *bus)
 			continue;
 
 		child = pci_dev_get_subordinate(dev);
-		if (child)
+		if (child) {
+			pci_lock_bus(child);
 			pci_bus_add_devices(child);
+			pci_unlock_bus(child);
+		}
 		pci_bus_put(child);
 	}
 }
@@ -406,7 +409,9 @@ static int __pci_walk_bus(struct pci_bus *top, int (*cb)(struct pci_dev *, void 
 
 		bus = pci_dev_get_subordinate(dev);
 		if (bus) {
+			pci_lock_bus(bus);
 			ret = __pci_walk_bus(bus, cb, userdata);
+			pci_unlock_bus(bus);
 			pci_bus_put(bus);
 			if (ret)
 				break;
@@ -430,9 +435,9 @@ static int __pci_walk_bus(struct pci_bus *top, int (*cb)(struct pci_dev *, void 
  */
 void pci_walk_bus(struct pci_bus *top, int (*cb)(struct pci_dev *, void *), void *userdata)
 {
-	down_read(&pci_bus_sem);
+	pci_lock_bus(top);
 	__pci_walk_bus(top, cb, userdata);
-	up_read(&pci_bus_sem);
+	pci_unlock_bus(top);
 }
 EXPORT_SYMBOL_GPL(pci_walk_bus);
 

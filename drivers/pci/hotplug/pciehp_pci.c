@@ -39,8 +39,7 @@ int pciehp_configure_device(struct controller *ctrl)
 	if (!parent)
 		return 0;
 
-	pci_lock_rescan_remove();
-
+	pci_lock_bus(parent);
 	dev = pci_get_slot(parent, PCI_DEVFN(0, 0));
 	if (dev) {
 		/*
@@ -63,6 +62,7 @@ int pciehp_configure_device(struct controller *ctrl)
 
 	for_each_pci_bridge(dev, parent)
 		pci_hp_add_bridge(dev);
+	pci_unlock_bus(parent);
 
 	pci_assign_unassigned_bridge_resources(bridge);
 	pcie_bus_configure_settings(parent);
@@ -72,6 +72,7 @@ int pciehp_configure_device(struct controller *ctrl)
 	 * to avoid AB-BA deadlock with device_lock.
 	 */
 	up_read(&ctrl->reset_lock);
+	pci_lock_bus(parent);
 	pci_bus_add_devices(parent);
 	down_read_nested(&ctrl->reset_lock, ctrl->depth);
 
@@ -80,7 +81,7 @@ int pciehp_configure_device(struct controller *ctrl)
 	pci_dev_put(dev);
 
  out:
-	pci_unlock_rescan_remove();
+	pci_unlock_bus(parent);
 	pci_bus_put(parent);
 	return ret;
 }
@@ -111,7 +112,7 @@ void pciehp_unconfigure_device(struct controller *ctrl, bool presence)
 	if (!presence)
 		pci_walk_bus(parent, pci_dev_set_disconnected, NULL);
 
-	pci_lock_rescan_remove();
+	pci_lock_bus(parent);
 
 	/*
 	 * Stopping an SR-IOV PF device removes all the associated VFs,
@@ -144,6 +145,6 @@ void pciehp_unconfigure_device(struct controller *ctrl, bool presence)
 		pci_dev_put(dev);
 	}
 
-	pci_unlock_rescan_remove();
+	pci_unlock_bus(parent);
 	pci_bus_put(parent);
 }

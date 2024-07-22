@@ -649,6 +649,7 @@ struct pci_bus {
 	struct list_head node;		/* Node in list of buses */
 	struct pci_bus	*parent;	/* Parent bus this bridge is on */
 	struct list_head children;	/* List of child buses */
+	struct mutex	lock;		/* Lock for devices */
 	struct list_head devices;	/* List of devices on this bus */
 	struct pci_dev	*self;		/* Bridge device as seen by parent */
 	struct list_head slots;		/* List of slots on this bus;
@@ -680,6 +681,16 @@ struct pci_bus {
 	unsigned int		is_added:1;
 	unsigned int		unsafe_warn:1;	/* warned about RW1C config write */
 };
+
+static inline void pci_lock_bus(struct pci_bus *bus)
+{
+	mutex_lock_nested(&bus->lock, bus->number);
+}
+
+static inline void pci_unlock_bus(struct pci_bus *bus)
+{
+	mutex_unlock(&bus->lock);
+}
 
 #define to_pci_bus(n)	container_of(n, struct pci_bus, dev)
 
