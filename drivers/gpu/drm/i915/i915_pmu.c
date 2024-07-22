@@ -514,15 +514,6 @@ static enum hrtimer_restart i915_sample(struct hrtimer *hrtimer)
 	return HRTIMER_RESTART;
 }
 
-static void i915_pmu_event_destroy(struct perf_event *event)
-{
-	struct i915_pmu *pmu = event_to_pmu(event);
-	struct drm_i915_private *i915 = pmu_to_i915(pmu);
-
-	drm_WARN_ON(&i915->drm, event->parent);
-
-	drm_dev_put(&i915->drm);
-}
 
 static int
 engine_event_status(struct intel_engine_cs *engine,
@@ -627,11 +618,6 @@ static int i915_pmu_event_init(struct perf_event *event)
 		ret = config_status(i915, event->attr.config);
 	if (ret)
 		return ret;
-
-	if (!event->parent) {
-		drm_dev_get(&i915->drm);
-		event->destroy = i915_pmu_event_destroy;
-	}
 
 	return 0;
 }
@@ -870,6 +856,24 @@ static void i915_pmu_event_del(struct perf_event *event, int flags)
 static int i915_pmu_event_event_idx(struct perf_event *event)
 {
 	return 0;
+}
+
+static struct pmu *i915_pmu_get(struct pmu *base)
+{
+	struct i915_pmu *pmu = container_of(base, struct i915_pmu, base);
+	struct drm_i915_private *i915 = pmu_to_i915(pmu);
+
+	drm_dev_get(&i915->drm);
+
+	return base;
+}
+
+static void i915_pmu_put(struct pmu *base)
+{
+	struct i915_pmu *pmu = container_of(base, struct i915_pmu, base);
+	struct drm_i915_private *i915 = pmu_to_i915(pmu);
+
+	drm_dev_put(&i915->drm);
 }
 
 struct i915_str_attribute {
@@ -1299,6 +1303,8 @@ void i915_pmu_register(struct drm_i915_private *i915)
 	pmu->base.stop		= i915_pmu_event_stop;
 	pmu->base.read		= i915_pmu_event_read;
 	pmu->base.event_idx	= i915_pmu_event_event_idx;
+	pmu->base.get		= i915_pmu_get;
+	pmu->base.put		= i915_pmu_put;
 
 	ret = perf_pmu_register(&pmu->base, pmu->name, -1);
 	if (ret)
