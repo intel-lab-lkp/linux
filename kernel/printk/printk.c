@@ -2382,6 +2382,9 @@ asmlinkage int vprintk_emit(int facility, int level,
 	if (ft.nbcon_atomic)
 		nbcon_atomic_flush_pending();
 
+	if (ft.nbcon_offload)
+		nbcon_wake_kthreads();
+
 	if (!defer_legacy && ft.legacy_direct) {
 		/*
 		 * The caller may be holding system-critical or
@@ -2680,6 +2683,7 @@ void suspend_console(void)
 
 void resume_console(void)
 {
+	struct console_flush_type ft;
 	struct console *con;
 
 	if (!console_suspend_enabled)
@@ -2696,6 +2700,10 @@ void resume_console(void)
 	 * that they are guaranteed to wake up and resume printing.
 	 */
 	synchronize_srcu(&console_srcu);
+
+	printk_get_console_flush_type(&ft, true);
+	if (ft.nbcon_offload)
+		nbcon_wake_kthreads();
 
 	pr_flush(1000, true);
 }
@@ -3007,6 +3015,7 @@ static inline void printk_kthreads_check_locked(void) { }
  */
 static bool console_flush_all(bool do_cond_resched, u64 *next_seq, bool *handover)
 {
+	struct console_flush_type ft;
 	bool any_usable = false;
 	struct console *con;
 	bool any_progress;
@@ -3018,11 +3027,20 @@ static bool console_flush_all(bool do_cond_resched, u64 *next_seq, bool *handove
 	do {
 		any_progress = false;
 
+		printk_get_console_flush_type(&ft, true);
+
 		cookie = console_srcu_read_lock();
 		for_each_console_srcu(con) {
 			short flags = console_srcu_read_flags(con);
 			u64 printk_seq;
 			bool progress;
+
+			/*
+			 * console_flush_all() is only for legacy consoles when
+			 * the nbcon consoles have their printer threads.
+			 */
+			if ((flags & CON_NBCON) && ft.nbcon_offload)
+				continue;
 
 			if (!console_is_usable(con, flags, !do_cond_resched))
 				continue;
@@ -3334,9 +3352,28 @@ EXPORT_SYMBOL(console_stop);
 
 void console_start(struct console *console)
 {
+	struct console_flush_type ft;
+	short flags;
+	int cookie;
+
 	console_list_lock();
 	console_srcu_write_flags(console, console->flags | CON_ENABLED);
 	console_list_unlock();
+
+	/*
+	 * Ensure that all SRCU list walks have completed. The related
+	 * printing context must be able to see it is enabled so that
+	 * it is guaranteed to wake up and resume printing.
+	 */
+	synchronize_srcu(&console_srcu);
+
+	printk_get_console_flush_type(&ft, true);
+	cookie = console_srcu_read_lock();
+	flags = console_srcu_read_flags(console);
+	if ((flags & CON_NBCON) && ft.nbcon_offload)
+		nbcon_kthread_wake(console);
+	console_srcu_read_unlock(cookie);
+
 	__pr_flush(console, 1000, true);
 }
 EXPORT_SYMBOL(console_start);
@@ -4102,8 +4139,10 @@ static bool __pr_flush(struct console *con, int timeout_ms, bool reset_on_progre
 			 * that they make forward progress, so only increment
 			 * @diff for usable consoles.
 			 */
-			if (!console_is_usable(c, flags, true))
+			if (!console_is_usable(c, flags, true) &&
+			    !console_is_usable(c, flags, false)) {
 				continue;
+			}
 
 			if (flags & CON_NBCON) {
 				printk_seq = nbcon_seq_read(c);
@@ -4605,8 +4644,13 @@ EXPORT_SYMBOL_GPL(kmsg_dump_rewind);
  */
 void console_try_replay_all(void)
 {
+	struct console_flush_type ft;
+
+	printk_get_console_flush_type(&ft, true);
 	if (console_trylock()) {
 		__console_rewind_all();
+		if (ft.nbcon_offload)
+			nbcon_wake_kthreads();
 		/* Consoles are flushed as part of console_unlock(). */
 		console_unlock();
 	}

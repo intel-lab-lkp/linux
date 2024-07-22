@@ -1511,10 +1511,10 @@ again:
 
 	/*
 	 * If flushing was successful but more records are available, this
-	 * context must flush those remaining records because there is no
-	 * other context that will do it.
+	 * context must flush those remaining records if the printer thread
+	 * is not available do it.
 	 */
-	printk_get_console_flush_type(&ft, false);
+	printk_get_console_flush_type(&ft, true);
 	if (ft.nbcon_atomic &&
 	    prb_read_valid(prb, nbcon_seq_read(con), NULL)) {
 		stop_seq = prb_next_reserve_seq(prb);
@@ -1809,10 +1809,11 @@ void nbcon_device_release(struct console *con)
 
 	/*
 	 * This context must flush any new records added while the console
-	 * was locked. The console_srcu_read_lock must be taken to ensure
-	 * the console is usable throughout flushing.
+	 * was locked if the printer thread is not available to do it. The
+	 * console_srcu_read_lock must be taken to ensure the console is
+	 * usable throughout flushing.
 	 */
-	printk_get_console_flush_type(&ft, false);
+	printk_get_console_flush_type(&ft, true);
 	cookie = console_srcu_read_lock();
 	if (ft.nbcon_atomic &&
 	    console_is_usable(con, console_srcu_read_flags(con), true) &&

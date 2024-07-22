@@ -190,11 +190,13 @@ extern bool legacy_allow_panic_sync;
 /**
  * struct console_flush_type - Define how to flush the consoles
  * @nbcon_atomic:	Flush directly using nbcon_atomic() callback
+ * @nbcon_offload:	Offload flush to printer thread
  * @legacy_direct:	Call the legacy loop in this context
  * @legacy_offload:	Offload the legacy loop into IRQ
  */
 struct console_flush_type {
 	bool	nbcon_atomic;
+	bool	nbcon_offload;
 	bool	legacy_direct;
 	bool	legacy_offload;
 };
@@ -220,7 +222,9 @@ static inline void printk_get_console_flush_type(struct console_flush_type *ft, 
 				ft->legacy_direct = true;
 		}
 
-		if (have_nbcon_console && !have_boot_console)
+		if (printk_kthreads_running)
+			ft->nbcon_offload = true;
+		else if (have_nbcon_console && !have_boot_console)
 			ft->nbcon_atomic = true;
 		break;
 
