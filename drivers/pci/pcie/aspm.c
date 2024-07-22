@@ -1212,9 +1212,11 @@ static void pcie_update_aspm_capable(struct pcie_link_state *root)
 		link->aspm_capable = link->aspm_support;
 	}
 	list_for_each_entry(link, &link_list, sibling) {
+		struct pci_bus *linkbus;
 		struct pci_dev *child;
-		struct pci_bus *linkbus = link->pdev->subordinate;
-		if (link->root != root)
+
+		linkbus = pci_dev_get_subordinate(link->pdev);
+		if (!linkbus || link->root != root)
 			continue;
 		list_for_each_entry(child, &linkbus->devices, bus_list) {
 			if ((pci_pcie_type(child) != PCI_EXP_TYPE_ENDPOINT) &&
@@ -1222,6 +1224,7 @@ static void pcie_update_aspm_capable(struct pcie_link_state *root)
 				continue;
 			pcie_aspm_check_latency(child);
 		}
+		pci_bus_put(linkbus);
 	}
 }
 

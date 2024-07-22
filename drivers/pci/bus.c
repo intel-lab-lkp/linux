@@ -382,9 +382,11 @@ void pci_bus_add_devices(const struct pci_bus *bus)
 		/* Skip if device attach failed */
 		if (!pci_dev_is_added(dev))
 			continue;
-		child = dev->subordinate;
+
+		child = pci_dev_get_subordinate(dev);
 		if (child)
 			pci_bus_add_devices(child);
+		pci_bus_put(child);
 	}
 }
 EXPORT_SYMBOL(pci_bus_add_devices);
@@ -396,11 +398,16 @@ static int __pci_walk_bus(struct pci_bus *top, int (*cb)(struct pci_dev *, void 
 	int ret = 0;
 
 	list_for_each_entry(dev, &top->devices, bus_list) {
+		struct pci_bus *bus;
+
 		ret = cb(dev, userdata);
 		if (ret)
 			break;
-		if (dev->subordinate) {
-			ret = __pci_walk_bus(dev->subordinate, cb, userdata);
+
+		bus = pci_dev_get_subordinate(dev);
+		if (bus) {
+			ret = __pci_walk_bus(bus, cb, userdata);
+			pci_bus_put(bus);
 			if (ret)
 				break;
 		}
@@ -447,4 +454,9 @@ void pci_bus_put(struct pci_bus *bus)
 {
 	if (bus)
 		put_device(&bus->dev);
+}
+
+struct pci_bus *pci_dev_get_subordinate(struct pci_dev *dev)
+{
+	return pci_bus_get(READ_ONCE(dev->subordinate));
 }

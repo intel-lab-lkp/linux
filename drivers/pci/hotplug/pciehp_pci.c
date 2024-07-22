@@ -33,8 +33,11 @@ int pciehp_configure_device(struct controller *ctrl)
 {
 	struct pci_dev *dev;
 	struct pci_dev *bridge = ctrl->pcie->port;
-	struct pci_bus *parent = bridge->subordinate;
+	struct pci_bus *parent = pci_dev_get_subordinate(bridge);
 	int num, ret = 0;
+
+	if (!parent)
+		return 0;
 
 	pci_lock_rescan_remove();
 
@@ -78,6 +81,7 @@ int pciehp_configure_device(struct controller *ctrl)
 
  out:
 	pci_unlock_rescan_remove();
+	pci_bus_put(parent);
 	return ret;
 }
 
@@ -95,8 +99,11 @@ int pciehp_configure_device(struct controller *ctrl)
 void pciehp_unconfigure_device(struct controller *ctrl, bool presence)
 {
 	struct pci_dev *dev, *temp;
-	struct pci_bus *parent = ctrl->pcie->port->subordinate;
+	struct pci_bus *parent = pci_dev_get_subordinate(ctrl->pcie->port);
 	u16 command;
+
+	if (!parent)
+		return;
 
 	ctrl_dbg(ctrl, "%s: domain:bus:dev = %04x:%02x:00\n",
 		 __func__, pci_domain_nr(parent), parent->number);
@@ -138,4 +145,5 @@ void pciehp_unconfigure_device(struct controller *ctrl, bool presence)
 	}
 
 	pci_unlock_rescan_remove();
+	pci_bus_put(parent);
 }

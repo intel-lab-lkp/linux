@@ -3113,9 +3113,14 @@ void pci_bridge_d3_update(struct pci_dev *dev)
 	 * so we need to go through all children to find out if one of them
 	 * continues to block D3.
 	 */
-	if (d3cold_ok && !bridge->bridge_d3)
-		pci_walk_bus(bridge->subordinate, pci_dev_check_d3cold,
-			     &d3cold_ok);
+	if (d3cold_ok && !bridge->bridge_d3) {
+		struct pci_bus *bus = pci_dev_get_subordinate(bridge);
+
+		if (bus) {
+			pci_walk_bus(bus, pci_dev_check_d3cold, &d3cold_ok);
+			pci_bus_put(bus);
+		}
+	}
 
 	if (bridge->bridge_d3 != d3cold_ok) {
 		bridge->bridge_d3 = d3cold_ok;
@@ -4824,6 +4829,7 @@ static int pci_bus_max_d3cold_delay(const struct pci_bus *bus)
 int pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, char *reset_type)
 {
 	struct pci_dev *child __free(pci_dev_put) = NULL;
+	struct pci_bus *bus;
 	int delay;
 
 	if (pci_dev_is_disconnected(dev))
@@ -4840,7 +4846,17 @@ int pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, char *reset_type)
 	 * board_added(). In case of ACPI hotplug the firmware is expected
 	 * to configure the devices before OS is notified.
 	 */
-	if (!dev->subordinate || list_empty(&dev->subordinate->devices)) {
+	bus = pci_dev_get_subordinate(dev);
+	if (!bus) {
+		up_read(&pci_bus_sem);
+		return 0;
+	}
+
+	child = pci_dev_get(list_first_entry_or_null(&bus->devices,
+						     struct pci_dev,
+						     bus_list));
+	if (!child) {
+		pci_bus_put(bus);
 		up_read(&pci_bus_sem);
 		return 0;
 	}
@@ -4848,12 +4864,12 @@ int pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, char *reset_type)
 	/* Take d3cold_delay requirements into account */
 	delay = pci_bus_max_d3cold_delay(dev->subordinate);
 	if (!delay) {
+		pci_bus_put(bus);
 		up_read(&pci_bus_sem);
 		return 0;
 	}
 
-	child = pci_dev_get(list_first_entry(&dev->subordinate->devices,
-					     struct pci_dev, bus_list));
+	pci_bus_put(bus);
 	up_read(&pci_bus_sem);
 
 	/*

@@ -77,10 +77,12 @@ EXPORT_SYMBOL(pci_remove_bus);
 
 static void pci_stop_bus_device(struct pci_dev *dev)
 {
-	struct pci_bus *bus = dev->subordinate;
+	struct pci_bus *bus = pci_dev_get_subordinate(dev);
 
-	if (bus)
+	if (bus) {
 		pci_stop_bus(bus);
+		pci_bus_put(bus);
+	}
 	pci_stop_dev(dev);
 }
 
@@ -100,12 +102,18 @@ static void pci_stop_bus(struct pci_bus *bus)
 
 static void pci_remove_bus_device(struct pci_dev *dev)
 {
-	struct pci_bus *bus = dev->subordinate;
+	struct pci_bus *bus;
 
+	down_write(&pci_bus_sem);
+	bus = pci_dev_get_subordinate(dev);
 	if (bus) {
+		WRITE_ONCE(dev->subordinate, NULL);
+		up_write(&pci_bus_sem);
+
 		pci_remove_bus(bus);
-		dev->subordinate = NULL;
-	}
+		pci_bus_put(bus);
+	} else
+		up_write(&pci_bus_sem);
 	pci_destroy_dev(dev);
 }
 

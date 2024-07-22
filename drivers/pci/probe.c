@@ -1167,7 +1167,10 @@ static struct pci_bus *pci_alloc_child_bus(struct pci_bus *parent,
 		child->resource[i] = &bridge->resource[PCI_BRIDGE_RESOURCES+i];
 		child->resource[i]->name = child->name;
 	}
-	bridge->subordinate = child;
+
+	down_write(&pci_bus_sem);
+	WRITE_ONCE(bridge->subordinate, child);
+	up_write(&pci_bus_sem);
 
 add_dev:
 	pci_set_bus_msi_domain(child);
@@ -3380,7 +3383,7 @@ int pci_hp_add_bridge(struct pci_dev *dev)
 	/* Scan bridges that need to be reconfigured */
 	pci_scan_bridge_extend(parent, dev, busnr, available_buses, 1);
 
-	if (!dev->subordinate)
+	if (!READ_ONCE(dev->subordinate))
 		return -1;
 
 	return 0;
