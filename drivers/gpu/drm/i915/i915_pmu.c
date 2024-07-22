@@ -303,7 +303,7 @@ void i915_pmu_gt_parked(struct intel_gt *gt)
 {
 	struct i915_pmu *pmu = &gt->i915->pmu;
 
-	if (!pmu->base.event_init)
+	if (pmu->closed)
 		return;
 
 	spin_lock_irq(&pmu->lock);
@@ -325,7 +325,7 @@ void i915_pmu_gt_unparked(struct intel_gt *gt)
 {
 	struct i915_pmu *pmu = &gt->i915->pmu;
 
-	if (!pmu->base.event_init)
+	if (pmu->closed)
 		return;
 
 	spin_lock_irq(&pmu->lock);
@@ -1325,12 +1325,12 @@ err_unreg:
 err_groups:
 	kfree(pmu->base.attr_groups);
 err_attr:
-	pmu->base.event_init = NULL;
 	free_event_attributes(pmu);
 err_name:
 	if (IS_DGFX(i915))
 		kfree(pmu->name);
 err:
+	pmu->closed = true;
 	drm_notice(&i915->drm, "Failed to register PMU!\n");
 }
 
@@ -1346,6 +1346,4 @@ void i915_pmu_unregister(struct drm_i915_private *i915)
 
 	hrtimer_cancel(&pmu->timer);
 	i915_pmu_unregister_cpuhp_state(pmu);
-
-	pmu->base.event_init = NULL;
 }
