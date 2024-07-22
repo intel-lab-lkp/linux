@@ -341,21 +341,24 @@ static int visl_enum_fmt_vid_cap(struct file *file, void *priv,
 				 struct v4l2_fmtdesc *f)
 {
 	struct visl_ctx *ctx = visl_file_to_ctx(file);
+	u32 index = f->index & ~V4L2_FMT_FLAG_ENUM_ALL;
 
-	if (f->index >= ctx->coded_format_desc->num_decoded_fmts)
+	if (index >= ctx->coded_format_desc->num_decoded_fmts)
 		return -EINVAL;
 
-	f->pixelformat = ctx->coded_format_desc->decoded_fmts[f->index];
+	f->pixelformat = ctx->coded_format_desc->decoded_fmts[index];
 	return 0;
 }
 
 static int visl_enum_fmt_vid_out(struct file *file, void *priv,
 				 struct v4l2_fmtdesc *f)
 {
-	if (f->index >= ARRAY_SIZE(visl_coded_fmts))
+	u32 index = f->index & ~V4L2_FMT_FLAG_ENUM_ALL;
+
+	if (index >= ARRAY_SIZE(visl_coded_fmts))
 		return -EINVAL;
 
-	f->pixelformat = visl_coded_fmts[f->index].pixelformat;
+	f->pixelformat = visl_coded_fmts[index].pixelformat;
 	return 0;
 }
 

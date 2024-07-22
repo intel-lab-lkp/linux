@@ -706,6 +706,7 @@ static int enum_fmt(struct v4l2_fmtdesc *f, struct vicodec_ctx *ctx,
 		    bool is_out)
 {
 	bool is_uncomp = (ctx->is_enc && is_out) || (!ctx->is_enc && !is_out);
+	u32 index = f->index & ~V4L2_FMT_FLAG_ENUM_ALL;
 
 	if (V4L2_TYPE_IS_MULTIPLANAR(f->type) && !multiplanar)
 		return -EINVAL;
@@ -718,18 +719,18 @@ static int enum_fmt(struct v4l2_fmtdesc *f, struct vicodec_ctx *ctx,
 
 		if (ctx->is_enc ||
 		    !vb2_is_streaming(&ctx->fh.m2m_ctx->cap_q_ctx.q))
-			info = v4l2_fwht_get_pixfmt(f->index);
+			info = v4l2_fwht_get_pixfmt(index);
 		else
 			info = v4l2_fwht_find_nth_fmt(info->width_div,
 						     info->height_div,
 						     info->components_num,
 						     info->pixenc,
-						     f->index);
+						     index);
 		if (!info)
 			return -EINVAL;
 		f->pixelformat = info->id;
 	} else {
-		if (f->index)
+		if (index)
 			return -EINVAL;
 		f->pixelformat = ctx->is_stateless ?
 			V4L2_PIX_FMT_FWHT_STATELESS : V4L2_PIX_FMT_FWHT;
