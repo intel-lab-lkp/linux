@@ -349,7 +349,7 @@ struct console {
 	/**
 	 * @write_atomic:
 	 *
-	 * NBCON callback to write out text in any context.
+	 * NBCON callback to write out text in any context. (Optional)
 	 *
 	 * This callback is called with the console already acquired. However,
 	 * a higher priority context is allowed to take it over by default.
