@@ -716,6 +716,8 @@ void intel_engines_free(struct intel_gt *gt)
 		kfree(engine);
 		gt->engine[id] = NULL;
 	}
+
+	memset(gt->engine_class, 0, sizeof(gt->engine_class));
 }
 
 static

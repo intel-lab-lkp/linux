@@ -479,6 +479,8 @@ static void add_defaults(struct kobj_engine *parent)
 	if (intel_engine_has_preempt_reset(ke->engine) &&
 	    sysfs_create_file(&ke->base, &preempt_timeout_def.attr))
 		return;
+
+	parent->engine->kobj_defaults = &ke->base;
 }
 
 void intel_engines_add_sysfs(struct drm_i915_private *i915)
@@ -506,6 +508,8 @@ void intel_engines_add_sysfs(struct drm_i915_private *i915)
 	if (!dir)
 		return;
 
+	i915->sysfs_engine = dir;
+
 	for_each_uabi_engine(engine, i915) {
 		struct kobject *kobj;
 
@@ -526,6 +530,8 @@ void intel_engines_add_sysfs(struct drm_i915_private *i915)
 
 		add_defaults(container_of(kobj, struct kobj_engine, base));
 
+		engine->kobj = kobj;
+
 		if (0) {
 err_object:
 			kobject_put(kobj);
@@ -535,4 +541,16 @@ err_engine:
 			break;
 		}
 	}
+}
+
+void intel_engines_remove_sysfs(struct drm_i915_private *i915)
+{
+	struct intel_engine_cs *engine;
+
+	for_each_uabi_engine(engine, i915) {
+		kobject_put(engine->kobj_defaults);
+		kobject_put(engine->kobj);
+	}
+
+	kobject_put(i915->sysfs_engine);
 }

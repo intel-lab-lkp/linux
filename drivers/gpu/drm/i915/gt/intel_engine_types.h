@@ -388,6 +388,9 @@ struct intel_engine_cs {
 	u32 context_size;
 	u32 mmio_base;
 
+	struct kobject *kobj;
+	struct kobject *kobj_defaults;
+
 	struct intel_engine_tlb_inv tlb_inv;
 
 	/*
