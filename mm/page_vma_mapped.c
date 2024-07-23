@@ -325,9 +325,10 @@ next_pte:
  * outside the VMA or not present, returns -EFAULT.
  * Only valid for normal file or anonymous VMAs.
  */
-unsigned long page_mapped_in_vma(struct page *page, struct vm_area_struct *vma)
+unsigned long page_mapped_in_vma(const struct page *page,
+		struct vm_area_struct *vma)
 {
-	struct folio *folio = page_folio(page);
+	const struct folio *folio = page_folio(page);
 	pgoff_t pgoff = folio->index + folio_page_idx(folio, page);
 	struct page_vma_mapped_walk pvmw = {
 		.pfn = page_to_pfn(page),
