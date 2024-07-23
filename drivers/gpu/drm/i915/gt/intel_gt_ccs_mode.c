@@ -165,6 +165,62 @@ static ssize_t num_cslices_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(num_cslices);
 
+/**
+ * DOC: CCS Load Balancing
+ *
+ * CCS load balancing involves distributing the commands submitted to the
+ * compute engine across the various CCS slices.
+ *
+ * The initial design was aimed at automatic load balancing, but it was found
+ * that static load balancing performed better. Static load balancing allows
+ * users to set the desired balancing mode, also referred to as "CCS mode." This
+ * approach enables users to determine how the CCS workload is distributed
+ * among the slices.
+ *
+ * The possible modes for CCS balancing depend on the total number of slices,
+ * which currently does not exceed 4, and applies to DG2 and ATS-M platforms.
+ * (PVC also has more than 1 CCS engine, but the mode is set through an
+ * execbuffer setting.)
+ *
+ * Given a maximum mode of 4, the CCS mode can be set to 1, 2, or 4. Each mode
+ * corresponds to the number of CCS engines exposed to userspace, and the load
+ * is balanced as follows:
+ *
+ * CCS mode 1:
+ *   - slices 0, 1, 2, 3: ccs0
+ *
+ * CCS mode 2:
+ *   - slice 0, 2: ccs0
+ *   - slice 1, 3: ccs1
+ *
+ * CCS mode 4:
+ *   - slice 0: ccs0
+ *   - slice 1: ccs1
+ *   - slice 2: ccs2
+ *   - slice 3: ccs3
+ *
+ * At boot time, the default mode set is '1'.
+ *
+ * Two interfaces are generated for the CCS engine:
+ *
+ * - ccs_mode: This read-write interface, generated only for DG2 and ATSM,
+ *   shows the current CCS mode when read and sets the CCS mode when written to.
+ *
+ *   Setting the CCS mode is only possible when no one is using i915, i.e.,
+ *   when no client is keeping the interface open. This is to ensure a
+ *   consistent engine topology view among different clients and to guarantee
+ *   that no task is impacted by a runtime CCS mode change.
+ *
+ *   Writing to this interface can fail, returning the following error codes:
+ *
+ *   - -EINVAL for attempting to set an invalid mode: when the mode is '0',
+ *     exceeds the number of available slices, or is not a power of 2.
+ *
+ *   - -EBUSY when other clients are attached to i915.
+ *
+ * - num_cslices, read-only: Shows the maximum number of slices and,
+ *   consequently, the highest mode that can be set.
+ */
 static ssize_t ccs_mode_show(struct device *dev,
 			     struct device_attribute *attr, char *buff)
 {

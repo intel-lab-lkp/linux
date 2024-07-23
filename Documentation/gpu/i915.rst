@@ -341,6 +341,9 @@ for execution also include a list of all locations within buffers that
 refer to GPU-addresses so that the kernel can edit the buffer correctly.
 This process is dubbed relocation.
 
+.. kernel-doc:: drivers/gpu/drm/i915/gt/intel_gt_sysfs.c
+   :doc: CCS load balancing
+
 Locking Guidelines
 ------------------
 
