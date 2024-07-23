@@ -294,3 +294,91 @@ int __init pv_time_init(void)
 
 	return 0;
 }
+
+#ifdef CONFIG_PARAVIRT_SPINLOCKS
+static  bool native_vcpu_is_preempted(int cpu)
+{
+	return false;
+}
+
+/**
+ * queued_spin_unlock - release a queued spinlock
+ * @lock : Pointer to queued spinlock structure
+ */
+static void native_queued_spin_unlock(struct qspinlock *lock)
+{
+	/*
+	 * unlock() needs release semantics:
+	 */
+	smp_store_release(&lock->locked, 0);
+}
+
+static void paravirt_nop_kick(int cpu)
+{
+}
+
+static void paravirt_nop_wait(u8 *ptr, u8 val)
+{
+}
+
+static void kvm_wait(u8 *ptr, u8 val)
+{
+	if (READ_ONCE(*ptr) != val)
+		return;
+
+	__asm__ __volatile__("idle 0\n\t" : : : "memory");
+}
+
+/* Kick a cpu. Used to wake up a halted vcpu */
+static void kvm_kick_cpu(int cpu)
+{
+	kvm_hypercall1(KVM_HCALL_FUNC_KICK, cpu_logical_map(cpu));
+}
+
+bool pv_is_native_spin_unlock(void)
+{
+	return pv_lock_ops.queued_spin_unlock == native_queued_spin_unlock;
+}
+
+/*
+ * Setup pv_lock_ops for guest kernel.
+ */
+void __init kvm_spinlock_init(void)
+{
+	int feature;
+
+	/*
+	 * pv_hash()/pv_unhas() need it whatever pv spinlock is
+	 * enabled or not
+	 */
+	__pv_init_lock_hash();
+
+	if (!kvm_para_available())
+		return;
+
+	/* Don't use the pvqspinlock code if there is only 1 vCPU. */
+	if (num_possible_cpus() == 1)
+		return;
+
+	feature = kvm_arch_para_features();
+	if (!(feature & KVM_FEATURE_PARAVIRT_SPINLOCK))
+		return;
+
+	if (nopvspin)
+		return;
+
+	pr_info("Using paravirt qspinlock\n");
+	pv_lock_ops.queued_spin_lock_slowpath = __pv_queued_spin_lock_slowpath;
+	pv_lock_ops.queued_spin_unlock = __pv_queued_spin_unlock;
+	pv_lock_ops.wait = kvm_wait;
+	pv_lock_ops.kick = kvm_kick_cpu;
+}
+
+struct pv_lock_ops pv_lock_ops = {
+	.queued_spin_lock_slowpath = native_queued_spin_lock_slowpath,
+	.queued_spin_unlock = native_queued_spin_unlock,
+	.wait = paravirt_nop_wait,
+	.kick = paravirt_nop_kick,
+	.vcpu_is_preempted = native_vcpu_is_preempted,
+};
+#endif /* CONFIG_PARAVIRT_SPINLOCKS */

@@ -660,6 +660,20 @@ config PARAVIRT_TIME_ACCOUNTING
 
 	  If in doubt, say N here.
 
+config PARAVIRT_SPINLOCKS
+	bool "Paravirtual queued spinlocks"
+	select PARAVIRT
+	depends on SMP
+	help
+	  Paravirtualized spinlocks allow a pvops backend to replace the
+	  spinlock implementation with something virtualization-friendly
+	  (for example, block the virtual CPU rather than spinning).
+
+	  It has a minimal impact on native kernels and gives a nice performance
+	  benefit on paravirtualized kernels.
+
+	  If you are unsure how to answer this question, answer Y.
+
 endmenu
 
 config ARCH_SELECT_MEMORY_MODEL
