@@ -889,7 +889,7 @@ static intel_engine_mask_t init_engine_mask(struct intel_gt *gt)
 		 * Store the number of active cslices before
 		 * changing the CCS engine configuration
 		 */
-		gt->ccs.cslices = CCS_MASK(gt);
+		gt->ccs.cslice_mask = CCS_MASK(gt);
 
 		/* Mask off all the CCS engine */
 		info->engine_mask &= ~GENMASK(CCS3, CCS0);

@@ -212,7 +212,7 @@ struct intel_gt {
 		 * Mask of the non fused CCS slices
 		 * to be used for the load balancing
 		 */
-		intel_engine_mask_t cslices;
+		intel_engine_mask_t cslice_mask;
 	} ccs;
 
 	/*
