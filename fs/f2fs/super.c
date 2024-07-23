@@ -4940,120 +4940,45 @@ static void destroy_inodecache(void)
 	kmem_cache_destroy(f2fs_inode_cachep);
 }
 
-static int __init init_f2fs_fs(void)
+static int register_f2fs(void)
 {
-	int err;
-
-	err = init_inodecache();
-	if (err)
-		goto fail;
-	err = f2fs_create_node_manager_caches();
-	if (err)
-		goto free_inodecache;
-	err = f2fs_create_segment_manager_caches();
-	if (err)
-		goto free_node_manager_caches;
-	err = f2fs_create_checkpoint_caches();
-	if (err)
-		goto free_segment_manager_caches;
-	err = f2fs_create_recovery_cache();
-	if (err)
-		goto free_checkpoint_caches;
-	err = f2fs_create_extent_cache();
-	if (err)
-		goto free_recovery_cache;
-	err = f2fs_create_garbage_collection_cache();
-	if (err)
-		goto free_extent_cache;
-	err = f2fs_init_sysfs();
-	if (err)
-		goto free_garbage_collection_cache;
-	err = f2fs_init_shrinker();
-	if (err)
-		goto free_sysfs;
-	err = register_filesystem(&f2fs_fs_type);
-	if (err)
-		goto free_shrinker;
-	f2fs_create_root_stats();
-	err = f2fs_init_post_read_processing();
-	if (err)
-		goto free_root_stats;
-	err = f2fs_init_iostat_processing();
-	if (err)
-		goto free_post_read;
-	err = f2fs_init_bio_entry_cache();
-	if (err)
-		goto free_iostat;
-	err = f2fs_init_bioset();
-	if (err)
-		goto free_bio_entry_cache;
-	err = f2fs_init_compress_mempool();
-	if (err)
-		goto free_bioset;
-	err = f2fs_init_compress_cache();
-	if (err)
-		goto free_compress_mempool;
-	err = f2fs_create_casefold_cache();
-	if (err)
-		goto free_compress_cache;
-	return 0;
-free_compress_cache:
-	f2fs_destroy_compress_cache();
-free_compress_mempool:
-	f2fs_destroy_compress_mempool();
-free_bioset:
-	f2fs_destroy_bioset();
-free_bio_entry_cache:
-	f2fs_destroy_bio_entry_cache();
-free_iostat:
-	f2fs_destroy_iostat_processing();
-free_post_read:
-	f2fs_destroy_post_read_processing();
-free_root_stats:
-	f2fs_destroy_root_stats();
-	unregister_filesystem(&f2fs_fs_type);
-free_shrinker:
-	f2fs_exit_shrinker();
-free_sysfs:
-	f2fs_exit_sysfs();
-free_garbage_collection_cache:
-	f2fs_destroy_garbage_collection_cache();
-free_extent_cache:
-	f2fs_destroy_extent_cache();
-free_recovery_cache:
-	f2fs_destroy_recovery_cache();
-free_checkpoint_caches:
-	f2fs_destroy_checkpoint_caches();
-free_segment_manager_caches:
-	f2fs_destroy_segment_manager_caches();
-free_node_manager_caches:
-	f2fs_destroy_node_manager_caches();
-free_inodecache:
-	destroy_inodecache();
-fail:
-	return err;
+	return register_filesystem(&f2fs_fs_type);
 }
+
+static void unregister_f2fs(void)
+{
+	unregister_filesystem(&f2fs_fs_type);
+}
+
+static struct subexitcall_rollback rollback;
 
 static void __exit exit_f2fs_fs(void)
 {
-	f2fs_destroy_casefold_cache();
-	f2fs_destroy_compress_cache();
-	f2fs_destroy_compress_mempool();
-	f2fs_destroy_bioset();
-	f2fs_destroy_bio_entry_cache();
-	f2fs_destroy_iostat_processing();
-	f2fs_destroy_post_read_processing();
-	f2fs_destroy_root_stats();
-	unregister_filesystem(&f2fs_fs_type);
-	f2fs_exit_shrinker();
-	f2fs_exit_sysfs();
-	f2fs_destroy_garbage_collection_cache();
-	f2fs_destroy_extent_cache();
-	f2fs_destroy_recovery_cache();
-	f2fs_destroy_checkpoint_caches();
-	f2fs_destroy_segment_manager_caches();
-	f2fs_destroy_node_manager_caches();
-	destroy_inodecache();
+	module_subexit(&rollback);
+}
+
+static int __init init_f2fs_fs(void)
+{
+	module_subinit(init_inodecache, destroy_inodecache, &rollback);
+	module_subinit(f2fs_create_node_manager_caches, f2fs_destroy_node_manager_caches, &rollback);
+	module_subinit(f2fs_create_segment_manager_caches, f2fs_destroy_segment_manager_caches, &rollback);
+	module_subinit(f2fs_create_checkpoint_caches, f2fs_destroy_checkpoint_caches, &rollback);
+	module_subinit(f2fs_create_recovery_cache, f2fs_destroy_recovery_cache, &rollback);
+	module_subinit(f2fs_create_extent_cache, f2fs_destroy_extent_cache, &rollback);
+	module_subinit(f2fs_create_garbage_collection_cache, f2fs_destroy_garbage_collection_cache, &rollback);
+	module_subinit(f2fs_init_sysfs, f2fs_exit_sysfs, &rollback);
+	module_subinit(f2fs_init_shrinker, f2fs_exit_shrinker, &rollback);
+	module_subinit(register_f2fs, unregister_f2fs, &rollback);
+	module_subinit(f2fs_create_root_stats, f2fs_destroy_root_stats, &rollback);
+	module_subinit(f2fs_init_post_read_processing, f2fs_destroy_post_read_processing, &rollback);
+	module_subinit(f2fs_init_iostat_processing, f2fs_destroy_iostat_processing, &rollback);
+	module_subinit(f2fs_init_bio_entry_cache, f2fs_destroy_bio_entry_cache, &rollback);
+	module_subinit(f2fs_init_bioset, f2fs_destroy_bioset, &rollback);
+	module_subinit(f2fs_init_compress_mempool, f2fs_destroy_compress_mempool, &rollback);
+	module_subinit(f2fs_init_compress_cache, f2fs_destroy_compress_cache, &rollback);
+	module_subinit(f2fs_create_casefold_cache, f2fs_destroy_casefold_cache, &rollback);
+
+	return 0;
 }
 
 module_init(init_f2fs_fs)
