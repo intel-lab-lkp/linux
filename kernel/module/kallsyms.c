@@ -253,10 +253,10 @@ static const char *kallsyms_symbol_name(struct mod_kallsyms *kallsyms, unsigned 
  * Given a module and address, find the corresponding symbol and return its name
  * while providing its size and offset if needed.
  */
-static const char *find_kallsyms_symbol(struct module *mod,
-					unsigned long addr,
-					unsigned long *size,
-					unsigned long *offset)
+static const char *__find_kallsyms_symbol(struct module *mod,
+					  unsigned long addr,
+					  unsigned long *size,
+					  unsigned long *offset)
 {
 	unsigned int i, best = 0;
 	unsigned long nextval, bestval;
@@ -326,6 +326,17 @@ found:
 	return kallsyms_symbol_name(kallsyms, best);
 }
 
+int module_kallsyms_find_symbol(struct module *mod, unsigned long addr,
+				unsigned long *size, unsigned long *offset)
+{
+	const char *ret;
+
+	preempt_disable();
+	ret = __find_kallsyms_symbol(mod, addr, size, offset);
+	preempt_enable();
+	return !!ret;
+}
+
 void * __weak dereference_module_function_descriptor(struct module *mod,
 						     void *ptr)
 {
@@ -360,7 +371,7 @@ int module_address_lookup(unsigned long addr,
 #endif
 		}
 
-		sym = find_kallsyms_symbol(mod, addr, size, offset);
+		sym = __find_kallsyms_symbol(mod, addr, size, offset);
 
 		if (sym)
 			ret = strscpy(namebuf, sym, KSYM_NAME_LEN);
@@ -381,7 +392,7 @@ int lookup_module_symbol_name(unsigned long addr, char *symname)
 		if (within_module(addr, mod)) {
 			const char *sym;
 
-			sym = find_kallsyms_symbol(mod, addr, NULL, NULL);
+			sym = __find_kallsyms_symbol(mod, addr, NULL, NULL);
 			if (!sym)
 				goto out;
 
