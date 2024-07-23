@@ -34,6 +34,7 @@
 
 struct sym_entry {
 	unsigned long long addr;
+	unsigned long long size;
 	unsigned int len;
 	unsigned int seq;
 	unsigned int start_pos;
@@ -71,7 +72,6 @@ static int token_profit[0x10000];
 /* the table that holds the result of the compression */
 static unsigned char best_table[256][2];
 static unsigned char best_table_len[256];
-
 
 static void usage(void)
 {
@@ -128,8 +128,16 @@ static struct sym_entry *read_symbol(FILE *in, char **buf, size_t *buf_len)
 	size_t len;
 	ssize_t readlen;
 	struct sym_entry *sym;
+	unsigned long long size = 0;
 
 	errno = 0;
+	/*
+	 * Example of expected symbol format:
+	 * 1. symbol with size info:
+	 *    ffffffff81000070 00000000000001d7 T __startup_64
+	 * 2. symbol without size info:
+	 *    0000000002a00000 A text_size
+	 */
 	readlen = getline(buf, buf_len, in);
 	if (readlen < 0) {
 		if (errno) {
@@ -143,9 +151,24 @@ static struct sym_entry *read_symbol(FILE *in, char **buf, size_t *buf_len)
 		(*buf)[readlen - 1] = 0;
 
 	addr = strtoull(*buf, &p, 16);
+	if (*buf == p || *p++ != ' ') {
+		fprintf(stderr, "line format error: unable to parse address\n");
+		exit(EXIT_FAILURE);
+	}
 
-	if (*buf == p || *p++ != ' ' || !isascii((type = *p++)) || *p++ != ' ') {
-		fprintf(stderr, "line format error\n");
+	if (*p == '0') {
+		char *str = p;
+
+		size = strtoull(str, &p, 16);
+		if (str == p || *p++ != ' ') {
+			fprintf(stderr, "line format error: unable to parse size\n");
+			exit(EXIT_FAILURE);
+		}
+	}
+
+	type = *p++;
+	if (!isascii(type) || *p++ != ' ') {
+		fprintf(stderr, "line format error: unable to parse type\n");
 		exit(EXIT_FAILURE);
 	}
 
@@ -180,6 +203,7 @@ static struct sym_entry *read_symbol(FILE *in, char **buf, size_t *buf_len)
 		exit(EXIT_FAILURE);
 	}
 	sym->addr = addr;
+	sym->size = size;
 	sym->len = len;
 	sym->sym[0] = type;
 	strcpy(sym_name(sym), name);
@@ -788,6 +812,69 @@ static void sort_symbols(void)
 	qsort(table, table_cnt, sizeof(table[0]), compare_symbols);
 }
 
+static bool has_hole(const struct sym_entry *se1, const struct sym_entry *se2)
+{
+	char type = se1->sym[0];
+
+	/* Only check text symbol or weak symbol */
+	if (type != 't' && type != 'T' &&
+	    type != 'w' && type != 'W')
+		return 0;
+	/* Symbol without size has no hole */
+	if (!se1->size)
+		return 0;
+	return se1->addr + se1->size < se2->addr;
+}
+
+static struct sym_entry *gen_hole_symbol(const struct sym_entry *se)
+{
+	struct sym_entry *sym;
+
+	/* Use empty symbol type/name as a special case to represent the hole */
+	sym = malloc(sizeof(*sym) + 1);
+	if (!sym) {
+		fprintf(stderr, "unable to allocate memory for hole symbol\n");
+		exit(EXIT_FAILURE);
+	}
+	sym->addr = se->addr + se->size;
+	sym->size = 0;
+	sym->len = 1;
+	sym->sym[0] = '\0';
+	sym->percpu_absolute = 0;
+	return sym;
+}
+
+static void emit_hole_symbols(void)
+{
+	unsigned int i, j, nr_emit;
+	unsigned int new_cnt;
+
+	nr_emit = 0;
+	for (i = 0; i < table_cnt - 1; i++) {
+		if (has_hole(table[i], table[i+1]))
+			nr_emit++;
+	}
+	if (!nr_emit)
+		return;
+
+	new_cnt = table_cnt + nr_emit;
+	table = realloc(table, sizeof(*table) * new_cnt);
+	if (!table) {
+		fprintf(stderr, "unable to allocate memory for emitting hole symbols\n");
+		exit(EXIT_FAILURE);
+	}
+
+	for (i = table_cnt - 1, j = new_cnt - 1; i >= 0; i--, j--) {
+		if ((i != table_cnt - 1) && has_hole(table[i], table[i+1]))
+			table[j--] = gen_hole_symbol(table[i]);
+		if (j != i)
+			table[j] = table[i];
+		else
+			break;
+	}
+	table_cnt = new_cnt;
+}
+
 static void make_percpus_absolute(void)
 {
 	unsigned int i;
@@ -847,6 +934,7 @@ int main(int argc, char **argv)
 	if (absolute_percpu)
 		make_percpus_absolute();
 	sort_symbols();
+	emit_hole_symbols();
 	if (base_relative)
 		record_relative_base();
 	optimize_token_table();
