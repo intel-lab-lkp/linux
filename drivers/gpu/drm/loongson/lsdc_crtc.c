@@ -84,7 +84,7 @@ static void lsdc_crtc0_enable(struct lsdc_crtc *lcrtc)
 	 * something if it happens.
 	 */
 	if (val & CRTC_ANCHORED) {
-		drm_warn(&ldev->base, "%s stall\n", lcrtc->base.name);
+		drm_warn(ldev->drm, "%s stall\n", lcrtc->base.name);
 		return lsdc_crtc0_soft_reset(lcrtc);
 	}
 
@@ -112,7 +112,7 @@ static void lsdc_crtc1_enable(struct lsdc_crtc *lcrtc)
 	 */
 	val = lsdc_rreg32(ldev, LSDC_CRTC1_CFG_REG);
 	if (val & CRTC_ANCHORED) {
-		drm_warn(&ldev->base, "%s stall\n", lcrtc->base.name);
+		drm_warn(ldev->drm, "%s stall\n", lcrtc->base.name);
 		return lsdc_crtc1_soft_reset(lcrtc);
 	}
 

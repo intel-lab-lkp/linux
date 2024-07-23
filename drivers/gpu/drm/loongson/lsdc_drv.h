@@ -14,11 +14,12 @@
 #include <drm/drm_encoder.h>
 #include <drm/drm_file.h>
 #include <drm/drm_plane.h>
-#include <drm/ttm/ttm_device.h>
+
+#include "loongson_module.h"
+#include "loongson_drv.h"
 
 #include "lsdc_i2c.h"
 #include "lsdc_irq.h"
-#include "lsdc_gfxpll.h"
 #include "lsdc_output.h"
 #include "lsdc_pixpll.h"
 #include "lsdc_regs.h"
@@ -37,12 +38,6 @@
  * display pipe 0 = crtc0 + dvo0 + encoder0 + connector0 + cursor0 + primary0
  * display pipe 1 = crtc1 + dvo1 + encoder1 + connectro1 + cursor1 + primary1
  */
-
-enum loongson_chip_id {
-	CHIP_LS7A1000 = 0,
-	CHIP_LS7A2000 = 1,
-	CHIP_LS_LAST,
-};
 
 const struct lsdc_desc *
 lsdc_device_probe(struct pci_dev *pdev, enum loongson_chip_id chip);
@@ -167,47 +162,23 @@ struct lsdc_cursor {
 	struct lsdc_device *ldev;
 };
 
-struct lsdc_output {
-	struct drm_encoder encoder;
-	struct drm_connector connector;
-};
-
-static inline struct lsdc_output *
-connector_to_lsdc_output(struct drm_connector *connector)
-{
-	return container_of(connector, struct lsdc_output, connector);
-}
-
-static inline struct lsdc_output *
-encoder_to_lsdc_output(struct drm_encoder *encoder)
-{
-	return container_of(encoder, struct lsdc_output, encoder);
-}
-
 struct lsdc_display_pipe {
 	struct lsdc_crtc crtc;
 	struct lsdc_primary primary;
 	struct lsdc_cursor cursor;
-	struct lsdc_output output;
-	struct lsdc_i2c *li2c;
+	struct lsdc_output *output;
 	unsigned int index;
 };
-
-static inline struct lsdc_display_pipe *
-output_to_display_pipe(struct lsdc_output *output)
-{
-	return container_of(output, struct lsdc_display_pipe, output);
-}
 
 struct lsdc_kms_funcs {
 	irqreturn_t (*irq_handler)(int irq, void *arg);
 
-	int (*create_i2c)(struct drm_device *ddev,
-			  struct lsdc_display_pipe *dispipe,
-			  unsigned int index);
+	int (*create_i2c)(struct device *parent,
+			  unsigned int index,
+			  struct i2c_adapter **ppadapter);
 
 	int (*output_init)(struct drm_device *ddev,
-			   struct lsdc_display_pipe *dispipe,
+			   struct lsdc_output *output,
 			   struct i2c_adapter *ddc,
 			   unsigned int index);
 
@@ -256,55 +227,31 @@ struct lsdc_crtc_state {
 	struct lsdc_pixpll_parms pparms;
 };
 
-struct lsdc_gem {
-	/* @mutex: protect objects list */
-	struct mutex mutex;
-	struct list_head objects;
-};
-
 struct lsdc_device {
-	struct drm_device base;
-	struct ttm_device bdev;
+	struct drm_device *drm;
 
 	/* @descp: features description of the DC variant */
 	const struct lsdc_desc *descp;
-	struct pci_dev *dc;
-	struct pci_dev *gpu;
-
-	struct loongson_gfxpll *gfxpll;
 
 	/* @reglock: protects concurrent access */
 	spinlock_t reglock;
-
 	void __iomem *reg_base;
-	resource_size_t vram_base;
-	resource_size_t vram_size;
 
-	resource_size_t gtt_base;
-	resource_size_t gtt_size;
-
+	struct i2c_adapter *i2c[LSDC_NUM_CRTC];
 	struct lsdc_display_pipe dispipe[LSDC_NUM_CRTC];
 
-	struct lsdc_gem gem;
-
 	u32 irq_status;
-
-	/* tracking pinned memory */
-	size_t vram_pinned_size;
-	size_t gtt_pinned_size;
 
 	/* @num_output: count the number of active display pipe */
 	unsigned int num_output;
 };
 
-static inline struct lsdc_device *tdev_to_ldev(struct ttm_device *bdev)
+static inline unsigned int
+lsdc_pitch_align_requirement(struct drm_device *drm, unsigned int pitch)
 {
-	return container_of(bdev, struct lsdc_device, bdev);
-}
+	struct lsdc_device *lsdc = to_lsdc(drm);
 
-static inline struct lsdc_device *to_lsdc(struct drm_device *ddev)
-{
-	return container_of(ddev, struct lsdc_device, base);
+	return ALIGN(pitch, lsdc->descp->pitch_align);
 }
 
 static inline struct lsdc_crtc_state *
@@ -312,8 +259,6 @@ to_lsdc_crtc_state(struct drm_crtc_state *base)
 {
 	return container_of(base, struct lsdc_crtc_state, base);
 }
-
-void lsdc_debugfs_init(struct drm_minor *minor);
 
 int ls7a1000_crtc_init(struct drm_device *ddev,
 		       struct drm_crtc *crtc,

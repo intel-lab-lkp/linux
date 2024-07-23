@@ -10,9 +10,28 @@
 #include <drm/drm_gem.h>
 #include <drm/drm_prime.h>
 
+#include "loongson_drv.h"
 #include "lsdc_drv.h"
 #include "lsdc_gem.h"
 #include "lsdc_ttm.h"
+
+void lsdc_gem_list_add_lbo(struct drm_device *ddev, struct lsdc_bo *lbo)
+{
+	struct loongson_gem *lgem = to_loongson_gem(ddev);
+
+	mutex_lock(&lgem->mutex);
+	list_add_tail(&lbo->list, &lgem->objects);
+	mutex_unlock(&lgem->mutex);
+}
+
+void lsdc_gem_list_rm_lbo(struct drm_device *ddev, struct lsdc_bo *lbo)
+{
+	struct loongson_gem *lgem = to_loongson_gem(ddev);
+
+	mutex_lock(&lgem->mutex);
+	list_del(&lbo->list);
+	mutex_unlock(&lgem->mutex);
+}
 
 static int lsdc_gem_prime_pin(struct drm_gem_object *obj)
 {
@@ -144,7 +163,6 @@ struct drm_gem_object *lsdc_gem_object_create(struct drm_device *ddev,
 					      struct sg_table *sg,
 					      struct dma_resv *resv)
 {
-	struct lsdc_device *ldev = to_lsdc(ddev);
 	struct drm_gem_object *gobj;
 	struct lsdc_bo *lbo;
 	int ret;
@@ -164,9 +182,7 @@ struct drm_gem_object *lsdc_gem_object_create(struct drm_device *ddev,
 	gobj->funcs = &lsdc_gem_object_funcs;
 
 	/* tracking the BOs we created */
-	mutex_lock(&ldev->gem.mutex);
-	list_add_tail(&lbo->list, &ldev->gem.objects);
-	mutex_unlock(&ldev->gem.mutex);
+	lsdc_gem_list_add_lbo(ddev, lbo);
 
 	return gobj;
 }
@@ -197,11 +213,10 @@ lsdc_prime_import_sg_table(struct drm_device *ddev,
 	return gobj;
 }
 
-int lsdc_dumb_create(struct drm_file *file, struct drm_device *ddev,
+int lsdc_dumb_create(struct drm_file *file,
+		     struct drm_device *ddev,
 		     struct drm_mode_create_dumb *args)
 {
-	struct lsdc_device *ldev = to_lsdc(ddev);
-	const struct lsdc_desc *descp = ldev->descp;
 	u32 domain = LSDC_GEM_DOMAIN_VRAM;
 	struct drm_gem_object *gobj;
 	size_t size;
@@ -215,13 +230,12 @@ int lsdc_dumb_create(struct drm_file *file, struct drm_device *ddev,
 	if (args->bpp != 32 && args->bpp != 16)
 		return -EINVAL;
 
-	pitch = args->width * args->bpp / 8;
-	pitch = ALIGN(pitch, descp->pitch_align);
+	pitch = lsdc_pitch_align_requirement(ddev, args->width * args->bpp / 8);
 	size = pitch * args->height;
 	size = ALIGN(size, PAGE_SIZE);
 
 	/* Maximum single bo size allowed is the half vram size available */
-	if (size > ldev->vram_size / 2) {
+	if (size > loongson_drm_vram_size(ddev) / 2) {
 		drm_err(ddev, "Requesting(%zuMiB) failed\n", size >> 20);
 		return -ENOMEM;
 	}
@@ -247,7 +261,7 @@ int lsdc_dumb_create(struct drm_file *file, struct drm_device *ddev,
 }
 
 int lsdc_dumb_map_offset(struct drm_file *filp, struct drm_device *ddev,
-			 u32 handle, uint64_t *offset)
+			     u32 handle, uint64_t *offset)
 {
 	struct drm_gem_object *gobj;
 
@@ -264,17 +278,17 @@ int lsdc_dumb_map_offset(struct drm_file *filp, struct drm_device *ddev,
 
 void lsdc_gem_init(struct drm_device *ddev)
 {
-	struct lsdc_device *ldev = to_lsdc(ddev);
+	struct loongson_gem *lgem = to_loongson_gem(ddev);
 
-	mutex_init(&ldev->gem.mutex);
-	INIT_LIST_HEAD(&ldev->gem.objects);
+	mutex_init(&lgem->mutex);
+	INIT_LIST_HEAD(&lgem->objects);
 }
 
 int lsdc_show_buffer_object(struct seq_file *m, void *arg)
 {
 	struct drm_info_node *node = (struct drm_info_node *)m->private;
 	struct drm_device *ddev = node->minor->dev;
-	struct lsdc_device *ldev = to_lsdc(ddev);
+	struct loongson_drm *ldev = to_loongson_drm(ddev);
 	struct lsdc_bo *lbo;
 	unsigned int i;
 

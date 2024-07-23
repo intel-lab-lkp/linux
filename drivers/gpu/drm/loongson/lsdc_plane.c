@@ -10,6 +10,7 @@
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_gem_atomic_helper.h>
 
+#include "loongson_drv.h"
 #include "lsdc_drv.h"
 #include "lsdc_regs.h"
 #include "lsdc_ttm.h"
@@ -40,10 +41,9 @@ static unsigned int lsdc_get_fb_offset(struct drm_framebuffer *fb,
 
 static u64 lsdc_fb_base_addr(struct drm_framebuffer *fb)
 {
-	struct lsdc_device *ldev = to_lsdc(fb->dev);
 	struct lsdc_bo *lbo = gem_to_lsdc_bo(fb->obj[0]);
 
-	return lsdc_bo_gpu_offset(lbo) + ldev->vram_base;
+	return lsdc_bo_gpu_offset(lbo) + loongson_drm_vram_base(fb->dev);
 }
 
 static int lsdc_primary_atomic_check(struct drm_plane *plane,

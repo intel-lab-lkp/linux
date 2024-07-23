@@ -9,6 +9,7 @@
 #include <drm/drm_managed.h>
 #include <drm/drm_prime.h>
 
+#include "loongson_drv.h"
 #include "lsdc_drv.h"
 #include "lsdc_ttm.h"
 
@@ -219,7 +220,7 @@ static int lsdc_bo_move(struct ttm_buffer_object *tbo,
 static int lsdc_bo_reserve_io_mem(struct ttm_device *bdev,
 				  struct ttm_resource *mem)
 {
-	struct lsdc_device *ldev = tdev_to_ldev(bdev);
+	struct loongson_drm *ldrm = tdev_to_ldrm(bdev);
 
 	switch (mem->mem_type) {
 	case TTM_PL_SYSTEM:
@@ -227,7 +228,7 @@ static int lsdc_bo_reserve_io_mem(struct ttm_device *bdev,
 	case TTM_PL_TT:
 		break;
 	case TTM_PL_VRAM:
-		mem->bus.offset = (mem->start << PAGE_SHIFT) + ldev->vram_base;
+		mem->bus.offset = (mem->start << PAGE_SHIFT) + ldrm->vram_base;
 		mem->bus.is_iomem = true;
 		mem->bus.caching = ttm_write_combined;
 		break;
@@ -287,7 +288,7 @@ int lsdc_bo_pin(struct lsdc_bo *lbo, u32 domain, u64 *gpu_addr)
 {
 	struct ttm_operation_ctx ctx = { false, false };
 	struct ttm_buffer_object *tbo = &lbo->tbo;
-	struct lsdc_device *ldev = tdev_to_ldev(tbo->bdev);
+	struct loongson_drm *ldrm = tdev_to_ldrm(tbo->bdev);
 	int ret;
 
 	if (tbo->pin_count)
@@ -301,14 +302,14 @@ int lsdc_bo_pin(struct lsdc_bo *lbo, u32 domain, u64 *gpu_addr)
 
 	ret = ttm_bo_validate(tbo, &lbo->placement, &ctx);
 	if (unlikely(ret)) {
-		drm_err(&ldev->base, "%p validate failed: %d\n", lbo, ret);
+		drm_err(&ldrm->ddev, "%p validate failed: %d\n", lbo, ret);
 		return ret;
 	}
 
 	if (domain == LSDC_GEM_DOMAIN_VRAM)
-		ldev->vram_pinned_size += lsdc_bo_size(lbo);
+		ldrm->vram_pinned_size += lsdc_bo_size(lbo);
 	else if (domain == LSDC_GEM_DOMAIN_GTT)
-		ldev->gtt_pinned_size += lsdc_bo_size(lbo);
+		ldrm->gtt_pinned_size += lsdc_bo_size(lbo);
 
 bo_pinned:
 	ttm_bo_pin(tbo);
@@ -322,10 +323,10 @@ bo_pinned:
 void lsdc_bo_unpin(struct lsdc_bo *lbo)
 {
 	struct ttm_buffer_object *tbo = &lbo->tbo;
-	struct lsdc_device *ldev = tdev_to_ldev(tbo->bdev);
+	struct loongson_drm *ldrm = tdev_to_ldrm(tbo->bdev);
 
 	if (unlikely(!tbo->pin_count)) {
-		drm_dbg(&ldev->base, "%p unpin is not necessary\n", lbo);
+		drm_dbg(&ldrm->ddev, "%p unpin is not necessary\n", lbo);
 		return;
 	}
 
@@ -333,9 +334,9 @@ void lsdc_bo_unpin(struct lsdc_bo *lbo)
 
 	if (!tbo->pin_count) {
 		if (tbo->resource->mem_type == TTM_PL_VRAM)
-			ldev->vram_pinned_size -= lsdc_bo_size(lbo);
+			ldrm->vram_pinned_size -= lsdc_bo_size(lbo);
 		else if (tbo->resource->mem_type == TTM_PL_TT)
-			ldev->gtt_pinned_size -= lsdc_bo_size(lbo);
+			ldrm->gtt_pinned_size -= lsdc_bo_size(lbo);
 	}
 }
 
@@ -405,27 +406,25 @@ void lsdc_bo_clear(struct lsdc_bo *lbo)
 
 int lsdc_bo_evict_vram(struct drm_device *ddev)
 {
-	struct lsdc_device *ldev = to_lsdc(ddev);
-	struct ttm_device *bdev = &ldev->bdev;
+	struct loongson_drm *ldrm = to_loongson_drm(ddev);
+	struct ttm_device *tdev = &ldrm->bdev;
 	struct ttm_resource_manager *man;
 
-	man = ttm_manager_type(bdev, TTM_PL_VRAM);
+	man = ttm_manager_type(tdev, TTM_PL_VRAM);
 	if (unlikely(!man))
 		return 0;
 
-	return ttm_resource_manager_evict_all(bdev, man);
+	return ttm_resource_manager_evict_all(tdev, man);
 }
 
 static void lsdc_bo_destroy(struct ttm_buffer_object *tbo)
 {
-	struct lsdc_device *ldev = tdev_to_ldev(tbo->bdev);
+	struct drm_gem_object *gobj = &tbo->base;
 	struct lsdc_bo *lbo = to_lsdc_bo(tbo);
 
-	mutex_lock(&ldev->gem.mutex);
-	list_del_init(&lbo->list);
-	mutex_unlock(&ldev->gem.mutex);
+	lsdc_gem_list_rm_lbo(gobj->dev, lbo);
 
-	drm_gem_object_release(&tbo->base);
+	drm_gem_object_release(gobj);
 
 	kfree(lbo);
 }
@@ -437,8 +436,8 @@ struct lsdc_bo *lsdc_bo_create(struct drm_device *ddev,
 			       struct sg_table *sg,
 			       struct dma_resv *resv)
 {
-	struct lsdc_device *ldev = to_lsdc(ddev);
-	struct ttm_device *bdev = &ldev->bdev;
+	struct loongson_drm *ldrm = to_loongson_drm(ddev);
+	struct ttm_device *tdev = &ldrm->bdev;
 	struct ttm_buffer_object *tbo;
 	struct lsdc_bo *lbo;
 	enum ttm_bo_type bo_type;
@@ -464,7 +463,7 @@ struct lsdc_bo *lsdc_bo_create(struct drm_device *ddev,
 		return ERR_PTR(ret);
 	}
 
-	tbo->bdev = bdev;
+	tbo->bdev = tdev;
 
 	if (kernel)
 		bo_type = ttm_bo_type_kernel;
@@ -476,7 +475,7 @@ struct lsdc_bo *lsdc_bo_create(struct drm_device *ddev,
 	lsdc_bo_set_placement(lbo, domain);
 	lbo->size = size;
 
-	ret = ttm_bo_init_validate(bdev, tbo, bo_type, &lbo->placement, 0,
+	ret = ttm_bo_init_validate(tdev, tbo, bo_type, &lbo->placement, 0,
 				   false, sg, resv, lsdc_bo_destroy);
 	if (ret) {
 		kfree(lbo);
@@ -529,62 +528,65 @@ void lsdc_bo_free_kernel_pinned(struct lsdc_bo *lbo)
 
 static void lsdc_ttm_fini(struct drm_device *ddev, void *data)
 {
-	struct lsdc_device *ldev = (struct lsdc_device *)data;
+	struct loongson_drm *ldrm = data;
+	struct ttm_device *bdev = &ldrm->bdev;
 
-	ttm_range_man_fini(&ldev->bdev, TTM_PL_VRAM);
-	ttm_range_man_fini(&ldev->bdev, TTM_PL_TT);
+	ttm_range_man_fini(bdev, TTM_PL_VRAM);
+	ttm_range_man_fini(bdev, TTM_PL_TT);
 
-	ttm_device_fini(&ldev->bdev);
+	ttm_device_fini(bdev);
 
 	drm_dbg(ddev, "ttm finished\n");
 }
 
-int lsdc_ttm_init(struct lsdc_device *ldev)
+int lsdc_ttm_init(struct drm_device *ddev)
 {
-	struct drm_device *ddev = &ldev->base;
+	struct loongson_drm *ldrm = to_loongson_drm(ddev);
+	struct ttm_device *tdev = &ldrm->bdev;
 	unsigned long num_vram_pages;
 	unsigned long num_gtt_pages;
 	int ret;
 
-	ret = ttm_device_init(&ldev->bdev, &lsdc_bo_driver, ddev->dev,
+	ret = ttm_device_init(tdev, &lsdc_bo_driver, ddev->dev,
 			      ddev->anon_inode->i_mapping,
 			      ddev->vma_offset_manager, false, true);
 	if (ret)
 		return ret;
 
-	num_vram_pages = ldev->vram_size >> PAGE_SHIFT;
+	num_vram_pages = ldrm->vram_size >> PAGE_SHIFT;
 
-	ret = ttm_range_man_init(&ldev->bdev, TTM_PL_VRAM, false, num_vram_pages);
+	ret = ttm_range_man_init(tdev, TTM_PL_VRAM, false, num_vram_pages);
 	if (unlikely(ret))
 		return ret;
 
 	drm_info(ddev, "VRAM: %lu pages ready\n", num_vram_pages);
 
 	/* 512M is far enough for us now */
-	ldev->gtt_size = 512 << 20;
+	ldrm->gtt_size = 512 << 20;
 
-	num_gtt_pages = ldev->gtt_size >> PAGE_SHIFT;
+	num_gtt_pages = ldrm->gtt_size >> PAGE_SHIFT;
 
-	ret = ttm_range_man_init(&ldev->bdev, TTM_PL_TT, true, num_gtt_pages);
+	ret = ttm_range_man_init(tdev, TTM_PL_TT, true, num_gtt_pages);
 	if (unlikely(ret))
 		return ret;
 
 	drm_info(ddev, "GTT: %lu pages ready\n", num_gtt_pages);
 
-	return drmm_add_action_or_reset(ddev, lsdc_ttm_fini, ldev);
+	return drmm_add_action_or_reset(ddev, lsdc_ttm_fini, ldrm);
 }
 
-void lsdc_ttm_debugfs_init(struct lsdc_device *ldev)
+void lsdc_ttm_debugfs_init(struct drm_device *ddev)
 {
-	struct ttm_device *bdev = &ldev->bdev;
-	struct drm_device *ddev = &ldev->base;
+	struct loongson_drm *ldrm = to_loongson_drm(ddev);
+	struct ttm_device *tdev = &ldrm->bdev;
+
 	struct drm_minor *minor = ddev->primary;
 	struct dentry *root = minor->debugfs_root;
 	struct ttm_resource_manager *vram_man;
 	struct ttm_resource_manager *gtt_man;
 
-	vram_man = ttm_manager_type(bdev, TTM_PL_VRAM);
-	gtt_man = ttm_manager_type(bdev, TTM_PL_TT);
+	vram_man = ttm_manager_type(tdev, TTM_PL_VRAM);
+	gtt_man = ttm_manager_type(tdev, TTM_PL_TT);
 
 	ttm_resource_manager_create_debugfs(vram_man, root, "vram_mm");
 	ttm_resource_manager_create_debugfs(gtt_man, root, "gtt_mm");

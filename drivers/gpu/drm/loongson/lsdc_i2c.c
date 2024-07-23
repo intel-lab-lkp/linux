@@ -6,6 +6,7 @@
 #include <drm/drm_managed.h>
 
 #include "lsdc_drv.h"
+#include "lsdc_i2c.h"
 #include "lsdc_output.h"
 
 /*
@@ -15,7 +16,7 @@
  */
 static void __lsdc_gpio_i2c_set(struct lsdc_i2c * const li2c, int mask, int state)
 {
-	struct lsdc_device *ldev = to_lsdc(li2c->ddev);
+	struct lsdc_device *ldev = li2c->lsdc;
 	unsigned long flags;
 	u8 val;
 
@@ -51,7 +52,7 @@ static void __lsdc_gpio_i2c_set(struct lsdc_i2c * const li2c, int mask, int stat
  */
 static int __lsdc_gpio_i2c_get(struct lsdc_i2c * const li2c, int mask)
 {
-	struct lsdc_device *ldev = to_lsdc(li2c->ddev);
+	struct lsdc_device *ldev = li2c->lsdc;
 	unsigned long flags;
 	u8 val;
 
@@ -98,7 +99,7 @@ static int lsdc_gpio_i2c_get_scl(void *i2c)
 	return __lsdc_gpio_i2c_get(li2c, li2c->scl);
 }
 
-static void lsdc_destroy_i2c(struct drm_device *ddev, void *data)
+static void lsdc_destroy_i2c(void *data)
 {
 	struct lsdc_i2c *li2c = (struct lsdc_i2c *)data;
 
@@ -114,11 +115,10 @@ static void lsdc_destroy_i2c(struct drm_device *ddev, void *data)
  * @reg_base: gpio reg base
  * @index: output channel index, 0 for PIPE0, 1 for PIPE1
  */
-int lsdc_create_i2c_chan(struct drm_device *ddev,
-			 struct lsdc_display_pipe *dispipe,
-			 unsigned int index)
+int lsdc_create_i2c_chan(struct device *parent, unsigned int index,
+			 struct i2c_adapter **ppadapter)
 {
-	struct lsdc_device *ldev = to_lsdc(ddev);
+	struct lsdc_device *ldev = dev_get_drvdata(parent);
 	struct i2c_adapter *adapter;
 	struct lsdc_i2c *li2c;
 	int ret;
@@ -126,8 +126,6 @@ int lsdc_create_i2c_chan(struct drm_device *ddev,
 	li2c = kzalloc(sizeof(*li2c), GFP_KERNEL);
 	if (!li2c)
 		return -ENOMEM;
-
-	dispipe->li2c = li2c;
 
 	if (index == 0) {
 		li2c->sda = 0x01;  /* pin 0 */
@@ -139,7 +137,7 @@ int lsdc_create_i2c_chan(struct drm_device *ddev,
 		return -ENOENT;
 	}
 
-	li2c->ddev = ddev;
+	li2c->lsdc = ldev;
 	li2c->dir_reg = ldev->reg_base + LS7A_DC_GPIO_DIR_REG;
 	li2c->dat_reg = ldev->reg_base + LS7A_DC_GPIO_DAT_REG;
 
@@ -154,7 +152,7 @@ int lsdc_create_i2c_chan(struct drm_device *ddev,
 	adapter = &li2c->adapter;
 	adapter->algo_data = &li2c->bit;
 	adapter->owner = THIS_MODULE;
-	adapter->dev.parent = ddev->dev;
+	adapter->dev.parent = parent;
 	adapter->nr = -1;
 
 	snprintf(adapter->name, sizeof(adapter->name), "lsdc-i2c%u", index);
@@ -167,12 +165,29 @@ int lsdc_create_i2c_chan(struct drm_device *ddev,
 		return ret;
 	}
 
-	ret = drmm_add_action_or_reset(ddev, lsdc_destroy_i2c, li2c);
+	ret = devm_add_action_or_reset(parent, lsdc_destroy_i2c, li2c);
 	if (ret)
 		return ret;
 
-	drm_info(ddev, "%s(sda pin mask=%u, scl pin mask=%u) created\n",
-		 adapter->name, li2c->sda, li2c->scl);
+	*ppadapter = adapter;
+
+	dev_info(parent, "%s(sda pin mask=%u, scl pin mask=%u) created\n",
+		 dev_name(&adapter->dev), li2c->sda, li2c->scl);
+
+	return 0;
+}
+
+int lsdc_i2c_preinit(struct device *parent, const struct lsdc_desc *descp)
+{
+	struct lsdc_device *lsdc = dev_get_drvdata(parent);
+	unsigned int i;
+	int ret;
+
+	for (i = 0; i < descp->num_of_crtc; ++i) {
+		ret = descp->funcs->create_i2c(parent, i, &lsdc->i2c[i]);
+		if (ret)
+			return ret;
+	}
 
 	return 0;
 }

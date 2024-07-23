@@ -2,6 +2,7 @@
 
 loongson-y := \
 	lsdc_benchmark.o \
+	lsdc_component.o \
 	lsdc_crtc.o \
 	lsdc_debugfs.o \
 	lsdc_drv.o \
@@ -9,6 +10,7 @@ loongson-y := \
 	lsdc_gfxpll.o \
 	lsdc_i2c.o \
 	lsdc_irq.o \
+	lsdc_output.o \
 	lsdc_output_7a1000.o \
 	lsdc_output_7a2000.o \
 	lsdc_plane.o \
@@ -16,7 +18,11 @@ loongson-y := \
 	lsdc_probe.o \
 	lsdc_ttm.o
 
+loongson-y += \
+	loonggpu_pci_drv.o
+
 loongson-y += loongson_device.o \
+	      loongson_drv.o \
 	      loongson_module.o
 
 obj-$(CONFIG_DRM_LOONGSON) += loongson.o

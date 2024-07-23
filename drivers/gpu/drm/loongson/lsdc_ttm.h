@@ -93,7 +93,7 @@ void lsdc_bo_clear(struct lsdc_bo *lbo);
 
 int lsdc_bo_evict_vram(struct drm_device *ddev);
 
-int lsdc_ttm_init(struct lsdc_device *ldev);
-void lsdc_ttm_debugfs_init(struct lsdc_device *ldev);
+int lsdc_ttm_init(struct drm_device *ddev);
+void lsdc_ttm_debugfs_init(struct drm_device *ddev);
 
 #endif

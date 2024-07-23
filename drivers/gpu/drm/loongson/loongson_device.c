@@ -4,6 +4,7 @@
  */
 
 #include <linux/pci.h>
+#include <linux/platform_device.h>
 
 #include "lsdc_drv.h"
 
@@ -99,4 +100,33 @@ const struct lsdc_desc *
 lsdc_device_probe(struct pci_dev *pdev, enum loongson_chip_id chip_id)
 {
 	return __chip_id_desc_table[chip_id];
+}
+
+static void loongson_device_postfini(void *data)
+{
+	struct platform_device *proxy = data;
+
+	platform_device_unregister(proxy);
+}
+
+int loongson_device_preinit(struct device *parent)
+{
+	struct platform_device *proxy;
+	int ret;
+
+	proxy = platform_device_register_resndata(parent,
+						  "loongson",
+						  PLATFORM_DEVID_NONE,
+						  NULL, 0,
+						  NULL, 0);
+	if (IS_ERR(proxy)) {
+		dev_err(parent, "failed to register loongson proxy device\n");
+		return PTR_ERR(proxy);
+	}
+
+	ret = devm_add_action_or_reset(parent, loongson_device_postfini, proxy);
+	if (ret)
+		return ret;
+
+	return 0;
 }

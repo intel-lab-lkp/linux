@@ -6,8 +6,21 @@
 #ifndef __LSDC_GEM_H__
 #define __LSDC_GEM_H__
 
+#include <linux/types.h>
+
 #include <drm/drm_device.h>
 #include <drm/drm_gem.h>
+
+struct loongson_gem {
+	/* @mutex: protect objects list */
+	struct mutex mutex;
+	struct list_head objects;
+};
+
+struct lsdc_bo;
+
+void lsdc_gem_list_add_lbo(struct drm_device *ddev, struct lsdc_bo *lbo);
+void lsdc_gem_list_rm_lbo(struct drm_device *ddev, struct lsdc_bo *lbo);
 
 struct drm_gem_object *
 lsdc_prime_import_sg_table(struct drm_device *ddev,
@@ -15,9 +28,9 @@ lsdc_prime_import_sg_table(struct drm_device *ddev,
 			   struct sg_table *sg);
 
 int lsdc_dumb_map_offset(struct drm_file *file,
-			 struct drm_device *dev,
-			 u32 handle,
-			 uint64_t *offset);
+			     struct drm_device *dev,
+			     u32 handle,
+			     uint64_t *offset);
 
 int lsdc_dumb_create(struct drm_file *file,
 		     struct drm_device *ddev,

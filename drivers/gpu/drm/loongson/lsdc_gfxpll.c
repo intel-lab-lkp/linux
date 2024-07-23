@@ -10,6 +10,7 @@
 #include <drm/drm_print.h>
 
 #include "lsdc_drv.h"
+#include "lsdc_gfxpll.h"
 
 /*
  * GFX PLL is the PLL used by DC, GMC and GPU, the structure of the GFX PLL
@@ -143,8 +144,6 @@ static void loongson_gfxpll_fini(struct drm_device *ddev, void *data)
 	struct loongson_gfxpll *this = (struct loongson_gfxpll *)data;
 
 	iounmap(this->mmio);
-
-	kfree(this);
 }
 
 static int loongson_gfxpll_init(struct loongson_gfxpll * const this)
@@ -160,7 +159,7 @@ static int loongson_gfxpll_init(struct loongson_gfxpll * const this)
 
 	this->funcs->print(this, &printer, false);
 
-	return 0;
+	return drmm_add_action_or_reset(this->ddev, loongson_gfxpll_fini, this);
 }
 
 static const struct loongson_gfxpll_funcs lsdc_gmc_gpu_funcs = {
@@ -170,30 +169,16 @@ static const struct loongson_gfxpll_funcs lsdc_gmc_gpu_funcs = {
 	.print = loongson_gfxpll_print,
 };
 
-int loongson_gfxpll_create(struct drm_device *ddev,
-			   struct loongson_gfxpll **ppout)
+int loongson_gfxpll_preinit(struct drm_device *ddev)
 {
-	struct lsdc_device *ldev = to_lsdc(ddev);
-	const struct loongson_gfx_desc *gfx = to_loongson_gfx(ldev->descp);
-	struct loongson_gfxpll *this;
-	int ret;
-
-	this = kzalloc(sizeof(*this), GFP_KERNEL);
-	if (IS_ERR_OR_NULL(this))
-		return -ENOMEM;
+	struct loongson_drm *ldrm = to_loongson_drm(ddev);
+	const struct loongson_gfx_desc *gfx = ldrm->gfxinfo;
+	struct loongson_gfxpll *this = &ldrm->gfxpll;
 
 	this->ddev = ddev;
 	this->reg_size = gfx->gfxpll.reg_size;
 	this->reg_base = gfx->conf_reg_base + gfx->gfxpll.reg_offset;
 	this->funcs = &lsdc_gmc_gpu_funcs;
 
-	ret = this->funcs->init(this);
-	if (unlikely(ret)) {
-		kfree(this);
-		return ret;
-	}
-
-	*ppout = this;
-
-	return drmm_add_action_or_reset(ddev, loongson_gfxpll_fini, this);
+	return this->funcs->init(this);
 }
