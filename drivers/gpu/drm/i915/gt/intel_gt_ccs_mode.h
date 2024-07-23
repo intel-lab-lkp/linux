@@ -8,7 +8,7 @@
 
 struct intel_gt;
 
-unsigned int intel_gt_apply_ccs_mode(struct intel_gt *gt);
+void intel_gt_apply_ccs_mode(struct intel_gt *gt);
 void intel_gt_sysfs_ccs_init(struct intel_gt *gt);
 void intel_gt_ccs_mode_init(struct intel_gt *gt);
 

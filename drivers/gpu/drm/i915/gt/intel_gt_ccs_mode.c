@@ -18,6 +18,8 @@ void intel_gt_ccs_mode_init(struct intel_gt *gt)
 	unsigned int i;
 	u8 first_ccs;
 
+	mutex_init(&gt->ccs.mutex);
+
 	/* Calculate the slices considering the fused engines */
 	ss_per_ccs = info->sseu.max_subslices / I915_MAX_CCS;
 	fused_mask = intel_slicemask_from_xehp_dssmask(info->sseu.compute_subslice_mask,
@@ -55,14 +57,16 @@ void intel_gt_ccs_mode_init(struct intel_gt *gt)
 	info->engine_mask |= BIT(_CCS(first_ccs));
 }
 
-unsigned int intel_gt_apply_ccs_mode(struct intel_gt *gt)
+void intel_gt_apply_ccs_mode(struct intel_gt *gt)
 {
 	int cslice;
 	u32 mode = 0;
 	int first_ccs = __ffs(CCS_MASK(gt));
 
+	lockdep_assert_held(&gt->ccs.mutex);
+
 	if (!IS_DG2(gt->i915))
-		return 0;
+		return;
 
 	/* Build the value for the fixed CCS load balancing */
 	for (cslice = 0; cslice < I915_MAX_CCS; cslice++) {
@@ -82,7 +86,7 @@ unsigned int intel_gt_apply_ccs_mode(struct intel_gt *gt)
 						     XEHP_CCS_MODE_CSLICE_MASK);
 	}
 
-	return mode;
+	gt->ccs.mode_reg_val = mode;
 }
 
 static ssize_t num_cslices_show(struct device *dev,
