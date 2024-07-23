@@ -20,11 +20,14 @@
 #define AMD_SCL_I3C_OD_TIMING		0x00cf00cf
 #define AMD_SCL_I3C_PP_TIMING		0x00160016
 
+#define QUEUE_THLD_CTRL			0xD0
+
 void amd_i3c_hci_quirks_init(struct i3c_hci *hci)
 {
 	if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD) {
 		hci->quirks |= HCI_QUIRK_AMD_PIO_MODE;
 		hci->quirks |= HCI_QUIRK_AMD_OD_PP_TIMING;
+		hci->quirks |= HCI_QUIRK_AMD_RESP_BUF_THLD;
 	}
 }
 
@@ -38,4 +41,13 @@ void amd_set_od_pp_timing(struct i3c_hci *hci)
 	/* Configure maximum TX hold time */
 	data |= W0_MASK(18, 16);
 	reg_write(HCI_SDA_HOLD_SWITCH_DLY_TIMING, data);
+}
+
+void amd_set_resp_buf_thld(struct i3c_hci *hci)
+{
+	u32 data;
+
+	data = reg_read(QUEUE_THLD_CTRL);
+	data = data & ~W0_MASK(15, 8);
+	reg_write(QUEUE_THLD_CTRL, data);
 }
