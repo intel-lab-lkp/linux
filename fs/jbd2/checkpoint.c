@@ -410,6 +410,7 @@ unsigned long jbd2_journal_shrink_checkpoint_list(journal_t *journal,
 	tid_t tid = 0;
 	unsigned long nr_freed = 0;
 	unsigned long freed;
+	bool is_first = true, is_last = false;
 
 again:
 	spin_lock(&journal->j_list_lock);
@@ -429,8 +430,10 @@ again:
 	else
 		transaction = journal->j_checkpoint_transactions;
 
-	if (!first_tid)
+	if (is_first) {
 		first_tid = transaction->t_tid;
+		is_first = false;
+	}
 	last_transaction = journal->j_checkpoint_transactions->t_cpprev;
 	next_transaction = transaction;
 	last_tid = last_transaction->t_tid;
@@ -455,12 +458,13 @@ again:
 	} else {
 		journal->j_shrink_transaction = NULL;
 		next_tid = 0;
+		is_last = true;
 	}
 
 	spin_unlock(&journal->j_list_lock);
 	cond_resched();
 
-	if (*nr_to_scan && next_tid)
+	if (*nr_to_scan && !is_last)
 		goto again;
 out:
 	trace_jbd2_shrink_checkpoint_list(journal, first_tid, tid, last_tid,
