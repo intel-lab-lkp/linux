@@ -599,6 +599,13 @@ static inline unsigned long kallsyms_symbol_value(const Elf_Sym *sym)
 }
 #endif
 
+#ifndef HAVE_ARCH_KALLSYMS_SYMBOL_TYPE
+static inline unsigned int kallsyms_symbol_type(const Elf_Sym *sym)
+{
+	return ELF_ST_TYPE(sym->st_info);
+}
+#endif
+
 /* FIXME: It'd be nice to isolate modules during init, too, so they
    aren't used before they (may) fail.  But presently too much code
    (IDE & SCSI) require entry into the module during init.*/

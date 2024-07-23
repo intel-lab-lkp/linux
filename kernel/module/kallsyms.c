@@ -262,6 +262,7 @@ static const char *find_kallsyms_symbol(struct module *mod,
 	unsigned long nextval, bestval;
 	struct mod_kallsyms *kallsyms = rcu_dereference_sched(mod->kallsyms);
 	struct module_memory *mod_mem;
+	const Elf_Sym *sym;
 
 	/* At worse, next value is at end of module */
 	if (within_module_init(addr, mod))
@@ -278,9 +279,10 @@ static const char *find_kallsyms_symbol(struct module *mod,
 	 * starts real symbols at 1).
 	 */
 	for (i = 1; i < kallsyms->num_symtab; i++) {
-		const Elf_Sym *sym = &kallsyms->symtab[i];
-		unsigned long thisval = kallsyms_symbol_value(sym);
+		unsigned long thisval;
 
+		sym = &kallsyms->symtab[i];
+		thisval = kallsyms_symbol_value(sym);
 		if (sym->st_shndx == SHN_UNDEF)
 			continue;
 
@@ -292,6 +294,13 @@ static const char *find_kallsyms_symbol(struct module *mod,
 		    is_mapping_symbol(kallsyms_symbol_name(kallsyms, i)))
 			continue;
 
+		if (kallsyms_symbol_type(sym) == STT_FUNC &&
+		    addr >= thisval && addr < thisval + sym->st_size) {
+			best = i;
+			bestval = thisval;
+			nextval = thisval + sym->st_size;
+			goto found;
+		}
 		if (thisval <= addr && thisval > bestval) {
 			best = i;
 			bestval = thisval;
@@ -303,6 +312,12 @@ static const char *find_kallsyms_symbol(struct module *mod,
 	if (!best)
 		return NULL;
 
+	sym = &kallsyms->symtab[best];
+	if (kallsyms_symbol_type(sym) == STT_FUNC && sym->st_size &&
+	    addr >= kallsyms_symbol_value(sym) + sym->st_size)
+		return NULL;
+
+found:
 	if (size)
 		*size = nextval - bestval;
 	if (offset)
