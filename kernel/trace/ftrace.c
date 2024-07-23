@@ -7087,9 +7087,21 @@ static int ftrace_process_locs(struct module *mod,
 		rec->ip = addr;
 	}
 
-	if (pg->next) {
+	if (pg->index == 0) {
+		/* No record is added on the current page, so it's unused */
+		pg_unuse = pg;
+	} else if (pg->next) {
+		/* Current page has records, so it's next page is unused */
 		pg_unuse = pg->next;
 		pg->next = NULL;
+	}
+	/*
+	 * Even the start_pg hasn't been used, that means, no record has
+	 * been added, so restore state of ftrace_pages and just go out.
+	 */
+	if (pg_unuse == start_pg) {
+		ftrace_pages->next = NULL;
+		goto out;
 	}
 
 	/* Assign the last page to ftrace_pages */
@@ -7306,6 +7318,8 @@ void ftrace_release_mod(struct module *mod)
 	 */
 	last_pg = &ftrace_pages_start;
 	for (pg = ftrace_pages_start; pg; pg = *last_pg) {
+		/* The page should have at lease one record */
+		WARN_ON_ONCE(!pg->index);
 		rec = &pg->records[0];
 		if (within_module(rec->ip, mod)) {
 			/*
@@ -7685,6 +7699,8 @@ void ftrace_free_mem(struct module *mod, void *start_ptr, void *end_ptr)
 		mod_map = allocate_ftrace_mod_map(mod, start, end);
 
 	for (pg = ftrace_pages_start; pg; last_pg = &pg->next, pg = *last_pg) {
+		/* The page should have at lease one record */
+		WARN_ON_ONCE(!pg->index);
 		if (end < pg->records[0].ip ||
 		    start >= (pg->records[pg->index - 1].ip + MCOUNT_INSN_SIZE))
 			continue;
