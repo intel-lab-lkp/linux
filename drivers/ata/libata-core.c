@@ -84,7 +84,7 @@ static unsigned int ata_dev_init_params(struct ata_device *dev,
 					u16 heads, u16 sectors);
 static unsigned int ata_dev_set_xfermode(struct ata_device *dev);
 static void ata_dev_xfermask(struct ata_device *dev);
-static unsigned long ata_dev_horkage(const struct ata_device *dev);
+static unsigned int ata_dev_horkage(const struct ata_device *dev);
 
 static DEFINE_IDA(ata_ida);
 
@@ -3987,10 +3987,73 @@ int ata_dev_revalidate(struct ata_device *dev, unsigned int new_class,
 	return rc;
 }
 
+static const char *ata_horkage_names[] = {
+	[__ATA_HORKAGE_DIAGNOSTIC]	= "diagnostic",
+	[__ATA_HORKAGE_NODMA]		= "nodma",
+	[__ATA_HORKAGE_NONCQ]		= "noncq",
+	[__ATA_HORKAGE_MAX_SEC_128]	= "maxsec128",
+	[__ATA_HORKAGE_BROKEN_HPA]	= "brokenhpa",
+	[__ATA_HORKAGE_DISABLE]		= "disable",
+	[__ATA_HORKAGE_HPA_SIZE]	= "hpasize",
+	[__ATA_HORKAGE_IVB]		= "ivb",
+	[__ATA_HORKAGE_STUCK_ERR]	= "stuckerr",
+	[__ATA_HORKAGE_BRIDGE_OK]	= "bridgeok",
+	[__ATA_HORKAGE_ATAPI_MOD16_DMA]	= "atapimod16dma",
+	[__ATA_HORKAGE_FIRMWARE_WARN]	= "firmwarewarn",
+	[__ATA_HORKAGE_1_5_GBPS]	= "1.5gbps",
+	[__ATA_HORKAGE_NOSETXFER]	= "nosetxfer",
+	[__ATA_HORKAGE_BROKEN_FPDMA_AA]	= "brokenfpdmaaa",
+	[__ATA_HORKAGE_DUMP_ID]		= "dumpid",
+	[__ATA_HORKAGE_MAX_SEC_LBA48]	= "maxseclba48",
+	[__ATA_HORKAGE_ATAPI_DMADIR]	= "atapidmadir",
+	[__ATA_HORKAGE_NO_NCQ_TRIM]	= "noncqtrim",
+	[__ATA_HORKAGE_NOLPM]		= "nolpm",
+	[__ATA_HORKAGE_WD_BROKEN_LPM]	= "wdbrokenlpm",
+	[__ATA_HORKAGE_ZERO_AFTER_TRIM]	= "zeroaftertrim",
+	[__ATA_HORKAGE_NO_DMA_LOG]	= "nodmalog",
+	[__ATA_HORKAGE_NOTRIM]		= "notrim",
+	[__ATA_HORKAGE_MAX_SEC_1024]	= "maxsec1024",
+	[__ATA_HORKAGE_MAX_TRIM_128M]	= "maxtrim128m",
+	[__ATA_HORKAGE_NO_NCQ_ON_ATI]	= "noncqonati",
+	[__ATA_HORKAGE_NO_ID_DEV_LOG]	= "noiddevlog",
+	[__ATA_HORKAGE_NO_LOG_DIR]	= "nologdir",
+	[__ATA_HORKAGE_NO_FUA]		= "nofua",
+};
+
+static void ata_dev_print_horkage(const struct ata_device *dev,
+				  const char *model, const char *rev,
+				  unsigned int horkage)
+{
+	int n = 0, i;
+	size_t sz;
+	char *str;
+
+	if (!horkage)
+		return;
+
+	sz = 64 + ARRAY_SIZE(ata_horkage_names) * 16;
+	str = kmalloc(sz, GFP_KERNEL);
+	if (!str)
+		return;
+
+	n = snprintf(str, sz, "Model '%s', rev '%s', applying horkages:",
+		     model, rev);
+
+	for (i = 0; i < ARRAY_SIZE(ata_horkage_names); i++) {
+		if (horkage & (1U << i))
+			n += snprintf(str + n, sz - n,
+				      " %s", ata_horkage_names[i]);
+	}
+
+	ata_dev_warn(dev, "%s", str);
+
+	kfree(str);
+}
+
 struct ata_dev_horkage_entry {
 	const char *model_num;
 	const char *model_rev;
-	unsigned long horkage;
+	unsigned int horkage;
 };
 
 static const struct ata_dev_horkage_entry ata_dev_horkages[] = {
@@ -4266,21 +4329,24 @@ static const struct ata_dev_horkage_entry ata_dev_horkages[] = {
 	{ }
 };
 
-static unsigned long ata_dev_horkage(const struct ata_device *dev)
+static unsigned int ata_dev_horkage(const struct ata_device *dev)
 {
 	unsigned char model_num[ATA_ID_PROD_LEN + 1];
 	unsigned char model_rev[ATA_ID_FW_REV_LEN + 1];
 	const struct ata_dev_horkage_entry *ad = ata_dev_horkages;
 
+	/* dev->horkage is an unsigned int. */
+	BUILD_BUG_ON(__ATA_HORKAGE_MAX > 32);
+
 	ata_id_c_string(dev->id, model_num, ATA_ID_PROD, sizeof(model_num));
 	ata_id_c_string(dev->id, model_rev, ATA_ID_FW_REV, sizeof(model_rev));
 
 	while (ad->model_num) {
-		if (glob_match(ad->model_num, model_num)) {
-			if (ad->model_rev == NULL)
-				return ad->horkage;
-			if (glob_match(ad->model_rev, model_rev))
-				return ad->horkage;
+		if (glob_match(ad->model_num, model_num) &&
+		    (!ad->model_rev || glob_match(ad->model_rev, model_rev))) {
+			ata_dev_print_horkage(dev, model_num, model_rev,
+					      ad->horkage);
+			return ad->horkage;
 		}
 		ad++;
 	}
