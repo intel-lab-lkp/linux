@@ -893,6 +893,12 @@ void mlock_drain_remote(int cpu);
 
 extern pmd_t maybe_pmd_mkwrite(pmd_t pmd, struct vm_area_struct *vma);
 
+static inline pgoff_t page_pgoff(const struct folio *folio,
+		const struct page *page)
+{
+	return folio->index + folio_page_idx(folio, page);
+}
+
 /**
  * vma_address - Find the virtual address a page range is mapped at
  * @vma: The vma which maps this object.

@@ -914,24 +914,6 @@ static inline struct folio *read_mapping_folio(struct address_space *mapping,
 }
 
 /*
- * Get the offset in PAGE_SIZE (even for hugetlb pages).
- */
-static inline pgoff_t page_to_pgoff(struct page *page)
-{
-	struct page *head;
-
-	if (likely(!PageTransTail(page)))
-		return page->index;
-
-	head = compound_head(page);
-	/*
-	 *  We don't initialize ->index for tail pages: calculate based on
-	 *  head page
-	 */
-	return head->index + page - head;
-}
-
-/*
  * Return byte-offset into filesystem object for page.
  */
 static inline loff_t page_offset(struct page *page)
