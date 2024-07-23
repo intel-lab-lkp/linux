@@ -1338,6 +1338,11 @@
 				compatible = "smsc,emc1403";
 				reg = <0x3c>;
 			};
+
+			eeprom@50 {
+				compatible = "atmel,24c64";
+				reg = <0x50>;
+			};
 		};
 
 		imux25: i2c@1 {
@@ -1353,6 +1358,11 @@
 			temperature-sensor@3c {
 				compatible = "smsc,emc1403";
 				reg = <0x3c>;
+			};
+
+			eeprom@50 {
+				compatible = "atmel,24c64";
+				reg = <0x50>;
 			};
 		};
 
@@ -1370,6 +1380,11 @@
 				compatible = "smsc,emc1403";
 				reg = <0x3c>;
 			};
+
+			eeprom@50 {
+				compatible = "atmel,24c64";
+				reg = <0x50>;
+			};
 		};
 
 		imux27: i2c@3 {
@@ -1385,6 +1400,11 @@
 			temperature-sensor@3c {
 				compatible = "smsc,emc1403";
 				reg = <0x3c>;
+			};
+
+			eeprom@50 {
+				compatible = "atmel,24c64";
+				reg = <0x50>;
 			};
 		};
 	};
