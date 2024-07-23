@@ -732,7 +732,7 @@ bool page_vma_mapped_walk(struct page_vma_mapped_walk *pvmw);
 /*
  * Used by swapoff to help locate where page is expected in vma.
  */
-unsigned long page_address_in_vma(struct page *, struct vm_area_struct *);
+unsigned long page_address_in_vma(const struct page *, struct vm_area_struct *);
 
 /*
  * Cleans the PTEs of shared mappings.

@@ -771,9 +771,10 @@ static bool should_defer_flush(struct mm_struct *mm, enum ttu_flags flags)
  * At what user virtual address is page expected in vma?
  * Caller should check the page is actually part of the vma.
  */
-unsigned long page_address_in_vma(struct page *page, struct vm_area_struct *vma)
+unsigned long page_address_in_vma(const struct page *page,
+		struct vm_area_struct *vma)
 {
-	struct folio *folio = page_folio(page);
+	const struct folio *folio = page_folio(page);
 	pgoff_t pgoff;
 
 	if (folio_test_anon(folio)) {
