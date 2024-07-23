@@ -2490,115 +2490,38 @@ static void unregister_btrfs(void)
 	unregister_filesystem(&btrfs_fs_type);
 }
 
-/* Helper structure for long init/exit functions. */
-struct init_sequence {
-	int (*init_func)(void);
-	/* Can be NULL if the init_func doesn't need cleanup. */
-	void (*exit_func)(void);
-};
-
-static const struct init_sequence mod_init_seq[] = {
-	{
-		.init_func = btrfs_props_init,
-		.exit_func = NULL,
-	}, {
-		.init_func = btrfs_init_sysfs,
-		.exit_func = btrfs_exit_sysfs,
-	}, {
-		.init_func = btrfs_init_compress,
-		.exit_func = btrfs_exit_compress,
-	}, {
-		.init_func = btrfs_init_cachep,
-		.exit_func = btrfs_destroy_cachep,
-	}, {
-		.init_func = btrfs_init_dio,
-		.exit_func = btrfs_destroy_dio,
-	}, {
-		.init_func = btrfs_transaction_init,
-		.exit_func = btrfs_transaction_exit,
-	}, {
-		.init_func = btrfs_ctree_init,
-		.exit_func = btrfs_ctree_exit,
-	}, {
-		.init_func = btrfs_free_space_init,
-		.exit_func = btrfs_free_space_exit,
-	}, {
-		.init_func = extent_state_init_cachep,
-		.exit_func = extent_state_free_cachep,
-	}, {
-		.init_func = extent_buffer_init_cachep,
-		.exit_func = extent_buffer_free_cachep,
-	}, {
-		.init_func = btrfs_bioset_init,
-		.exit_func = btrfs_bioset_exit,
-	}, {
-		.init_func = extent_map_init,
-		.exit_func = extent_map_exit,
-	}, {
-		.init_func = ordered_data_init,
-		.exit_func = ordered_data_exit,
-	}, {
-		.init_func = btrfs_delayed_inode_init,
-		.exit_func = btrfs_delayed_inode_exit,
-	}, {
-		.init_func = btrfs_auto_defrag_init,
-		.exit_func = btrfs_auto_defrag_exit,
-	}, {
-		.init_func = btrfs_delayed_ref_init,
-		.exit_func = btrfs_delayed_ref_exit,
-	}, {
-		.init_func = btrfs_prelim_ref_init,
-		.exit_func = btrfs_prelim_ref_exit,
-	}, {
-		.init_func = btrfs_interface_init,
-		.exit_func = btrfs_interface_exit,
-	}, {
-		.init_func = btrfs_print_mod_info,
-		.exit_func = NULL,
-	}, {
-		.init_func = btrfs_run_sanity_tests,
-		.exit_func = NULL,
-	}, {
-		.init_func = register_btrfs,
-		.exit_func = unregister_btrfs,
-	}
-};
-
-static bool mod_init_result[ARRAY_SIZE(mod_init_seq)];
-
-static __always_inline void btrfs_exit_btrfs_fs(void)
-{
-	int i;
-
-	for (i = ARRAY_SIZE(mod_init_seq) - 1; i >= 0; i--) {
-		if (!mod_init_result[i])
-			continue;
-		if (mod_init_seq[i].exit_func)
-			mod_init_seq[i].exit_func();
-		mod_init_result[i] = false;
-	}
-}
+static struct subexitcall_rollback rollback;
 
 static void __exit exit_btrfs_fs(void)
 {
-	btrfs_exit_btrfs_fs();
+	module_subexit(&rollback);
 	btrfs_cleanup_fs_uuids();
 }
 
 static int __init init_btrfs_fs(void)
 {
-	int ret;
-	int i;
+	module_subinit_noexit(btrfs_props_init, &rollback);
+	module_subinit(btrfs_init_sysfs, btrfs_exit_sysfs, &rollback);
+	module_subinit(btrfs_init_compress, btrfs_exit_compress, &rollback);
+	module_subinit(btrfs_init_cachep, btrfs_destroy_cachep, &rollback);
+	module_subinit(btrfs_init_dio, btrfs_destroy_dio, &rollback);
+	module_subinit(btrfs_transaction_init, btrfs_transaction_exit, &rollback);
+	module_subinit(btrfs_ctree_init, btrfs_ctree_exit, &rollback);
+	module_subinit(btrfs_free_space_init, btrfs_free_space_exit, &rollback);
+	module_subinit(extent_state_init_cachep, extent_state_free_cachep, &rollback);
+	module_subinit(extent_buffer_init_cachep, extent_buffer_free_cachep, &rollback);
+	module_subinit(btrfs_bioset_init, btrfs_bioset_exit, &rollback);
+	module_subinit(extent_map_init, extent_map_exit, &rollback);
+	module_subinit(ordered_data_init, ordered_data_exit, &rollback);
+	module_subinit(btrfs_delayed_inode_init, btrfs_delayed_inode_exit, &rollback);
+	module_subinit(btrfs_auto_defrag_init, btrfs_auto_defrag_exit, &rollback);
+	module_subinit(btrfs_delayed_ref_init, btrfs_delayed_ref_exit, &rollback);
+	module_subinit(btrfs_prelim_ref_init, btrfs_prelim_ref_exit, &rollback);
+	module_subinit(btrfs_interface_init, btrfs_interface_exit, &rollback);
+	module_subinit_noexit(btrfs_print_mod_info, &rollback);
+	module_subinit_noexit(btrfs_run_sanity_tests, &rollback);
+	module_subinit(register_btrfs, unregister_btrfs, &rollback);
 
-	for (i = 0; i < ARRAY_SIZE(mod_init_seq); i++) {
-		ASSERT(!mod_init_result[i]);
-		ret = mod_init_seq[i].init_func();
-		if (ret < 0) {
-			btrfs_exit_btrfs_fs();
-			return ret;
-		}
-		mod_init_result[i] = true;
-	}
 	return 0;
 }
 
