@@ -7314,103 +7314,54 @@ static struct file_system_type ext4_fs_type = {
 };
 MODULE_ALIAS_FS("ext4");
 
+static int register_ext(void)
+{
+	register_as_ext3();
+	register_as_ext2();
+	return register_filesystem(&ext4_fs_type);
+}
+
+static void unregister_ext(void)
+{
+	unregister_as_ext2();
+	unregister_as_ext3();
+	unregister_filesystem(&ext4_fs_type);
+}
+
+static struct subexitcall_rollback rollback;
+
+static void __exit ext4_exit_fs(void)
+{
+	ext4_destroy_lazyinit_thread();
+	module_subexit(&rollback);
+}
+
 /* Shared across all ext4 file systems */
 wait_queue_head_t ext4__ioend_wq[EXT4_WQ_HASH_SZ];
 
 static int __init ext4_init_fs(void)
 {
-	int i, err;
-
 	ratelimit_state_init(&ext4_mount_msg_ratelimit, 30 * HZ, 64);
 	ext4_li_info = NULL;
 
 	/* Build-time check for flags consistency */
 	ext4_check_flag_values();
 
-	for (i = 0; i < EXT4_WQ_HASH_SZ; i++)
+	for (int i = 0; i < EXT4_WQ_HASH_SZ; i++)
 		init_waitqueue_head(&ext4__ioend_wq[i]);
 
-	err = ext4_init_es();
-	if (err)
-		return err;
-
-	err = ext4_init_pending();
-	if (err)
-		goto out7;
-
-	err = ext4_init_post_read_processing();
-	if (err)
-		goto out6;
-
-	err = ext4_init_pageio();
-	if (err)
-		goto out5;
-
-	err = ext4_init_system_zone();
-	if (err)
-		goto out4;
-
-	err = ext4_init_sysfs();
-	if (err)
-		goto out3;
-
-	err = ext4_init_mballoc();
-	if (err)
-		goto out2;
-	err = init_inodecache();
-	if (err)
-		goto out1;
-
-	err = ext4_fc_init_dentry_cache();
-	if (err)
-		goto out05;
-
-	register_as_ext3();
-	register_as_ext2();
-	err = register_filesystem(&ext4_fs_type);
-	if (err)
-		goto out;
+	module_subinit(ext4_init_es, ext4_exit_es, &rollback);
+	module_subinit(ext4_init_pending, ext4_exit_pending, &rollback);
+	module_subinit(ext4_init_post_read_processing, ext4_exit_post_read_processing, &rollback);
+	module_subinit(ext4_init_pageio, ext4_exit_pageio, &rollback);
+	module_subinit(ext4_init_system_zone, ext4_exit_system_zone, &rollback);
+	module_subinit(ext4_init_sysfs, ext4_exit_sysfs, &rollback);
+	module_subinit(ext4_init_mballoc, ext4_exit_mballoc, &rollback);
+	module_subinit(init_inodecache, destroy_inodecache, &rollback);
+	module_subinit(ext4_fc_init_dentry_cache, ext4_fc_destroy_dentry_cache, &rollback);
+	module_subinit(register_ext, unregister_ext, &rollback);
 
 	return 0;
-out:
-	unregister_as_ext2();
-	unregister_as_ext3();
-	ext4_fc_destroy_dentry_cache();
-out05:
-	destroy_inodecache();
-out1:
-	ext4_exit_mballoc();
-out2:
-	ext4_exit_sysfs();
-out3:
-	ext4_exit_system_zone();
-out4:
-	ext4_exit_pageio();
-out5:
-	ext4_exit_post_read_processing();
-out6:
-	ext4_exit_pending();
-out7:
-	ext4_exit_es();
-
-	return err;
-}
-
-static void __exit ext4_exit_fs(void)
-{
-	ext4_destroy_lazyinit_thread();
-	unregister_as_ext2();
-	unregister_as_ext3();
-	unregister_filesystem(&ext4_fs_type);
-	ext4_fc_destroy_dentry_cache();
-	destroy_inodecache();
-	ext4_exit_mballoc();
-	ext4_exit_sysfs();
-	ext4_exit_system_zone();
-	ext4_exit_pageio();
-	ext4_exit_post_read_processing();
-	ext4_exit_es();
-	ext4_exit_pending();
 }
 
 MODULE_AUTHOR("Remy Card, Stephen Tweedie, Andrew Morton, Andreas Dilger, Theodore Ts'o and others");
