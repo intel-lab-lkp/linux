@@ -812,32 +812,6 @@ static void engine_mask_apply_media_fuses(struct intel_gt *gt)
 	GEM_BUG_ON(vebox_mask != VEBOX_MASK(gt));
 }
 
-static void engine_mask_apply_compute_fuses(struct intel_gt *gt)
-{
-	struct drm_i915_private *i915 = gt->i915;
-	struct intel_gt_info *info = &gt->info;
-	int ss_per_ccs = info->sseu.max_subslices / I915_MAX_CCS;
-	unsigned long ccs_mask;
-	unsigned int i;
-
-	if (GRAPHICS_VER(i915) < 11)
-		return;
-
-	if (hweight32(CCS_MASK(gt)) <= 1)
-		return;
-
-	ccs_mask = intel_slicemask_from_xehp_dssmask(info->sseu.compute_subslice_mask,
-						     ss_per_ccs);
-	/*
-	 * If all DSS in a quadrant are fused off, the corresponding CCS
-	 * engine is not available for use.
-	 */
-	for_each_clear_bit(i, &ccs_mask, I915_MAX_CCS) {
-		info->engine_mask &= ~BIT(_CCS(i));
-		gt_dbg(gt, "ccs%u fused off\n", i);
-	}
-}
-
 /*
  * Determine which engines are fused off in our particular hardware.
  * Note that we have a catch-22 situation where we need to be able to access
@@ -855,7 +829,6 @@ static intel_engine_mask_t init_engine_mask(struct intel_gt *gt)
 	GEM_BUG_ON(!info->engine_mask);
 
 	engine_mask_apply_media_fuses(gt);
-	engine_mask_apply_compute_fuses(gt);
 
 	/*
 	 * The only use of the GSC CS is to load and communicate with the GSC
@@ -872,29 +845,6 @@ static intel_engine_mask_t init_engine_mask(struct intel_gt *gt)
 	if (__HAS_ENGINE(info->engine_mask, GSC0) && !intel_uc_wants_gsc_uc(&gt->uc)) {
 		gt_notice(gt, "No GSC FW selected, disabling GSC CS and media C6\n");
 		info->engine_mask &= ~BIT(GSC0);
-	}
-
-	/*
-	 * Do not create the command streamer for CCS slices beyond the first.
-	 * All the workload submitted to the first engine will be shared among
-	 * all the slices.
-	 *
-	 * Once the user will be allowed to customize the CCS mode, then this
-	 * check needs to be removed.
-	 */
-	if (IS_DG2(gt->i915)) {
-		u8 first_ccs = __ffs(CCS_MASK(gt));
-
-		/*
-		 * Store the number of active cslices before
-		 * changing the CCS engine configuration
-		 */
-		gt->ccs.cslice_mask = CCS_MASK(gt);
-
-		/* Mask off all the CCS engine */
-		info->engine_mask &= ~GENMASK(CCS3, CCS0);
-		/* Put back in the first CCS engine */
-		info->engine_mask |= BIT(_CCS(first_ccs));
 	}
 
 	return info->engine_mask;

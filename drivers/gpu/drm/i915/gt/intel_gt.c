@@ -17,6 +17,7 @@
 #include "intel_engine_regs.h"
 #include "intel_ggtt_gmch.h"
 #include "intel_gt.h"
+#include "intel_gt_ccs_mode.h"
 #include "intel_gt_buffer_pool.h"
 #include "intel_gt_clock_utils.h"
 #include "intel_gt_debugfs.h"
@@ -135,6 +136,8 @@ int intel_gt_init_mmio(struct intel_gt *gt)
 	intel_uc_init_mmio(&gt->uc);
 	intel_sseu_info_init(gt);
 	intel_gt_mcr_init(gt);
+
+	intel_gt_ccs_mode_init(gt);
 
 	return intel_engines_init_mmio(gt);
 }
