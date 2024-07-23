@@ -20,3 +20,6 @@ config CIO_INJECT
 	  This option provides a debugging facility to inject certain artificial events
 	  and instruction responses to the CIO layer of Linux kernel. The newly created
 	  debugfs user-interfaces will be at /sys/kernel/debug/s390/cio/*
+
+config KVM_S390_UCONTROL
+	def_bool y
