@@ -8816,6 +8816,8 @@ static void cpu_cgroup_css_free(struct cgroup_subsys_state *css)
 {
 	struct task_group *tg = css_tg(css);
 
+	destroy_cfs_bandwidth(tg_cfs_bandwidth(tg));
+
 	/*
 	 * Relies on the RCU grace period between css_released() and this.
 	 */

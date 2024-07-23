@@ -5610,7 +5610,7 @@ void __refill_cfs_bandwidth_runtime(struct cfs_bandwidth *cfs_b)
 	cfs_b->runtime_snap = cfs_b->runtime;
 }
 
-static inline struct cfs_bandwidth *tg_cfs_bandwidth(struct task_group *tg)
+struct cfs_bandwidth *tg_cfs_bandwidth(struct task_group *tg)
 {
 	return &tg->cfs_bandwidth;
 }
@@ -6433,7 +6433,7 @@ void start_cfs_bandwidth(struct cfs_bandwidth *cfs_b)
 	hrtimer_start_expires(&cfs_b->period_timer, HRTIMER_MODE_ABS_PINNED);
 }
 
-static void destroy_cfs_bandwidth(struct cfs_bandwidth *cfs_b)
+void destroy_cfs_bandwidth(struct cfs_bandwidth *cfs_b)
 {
 	int __maybe_unused i;
 
@@ -6467,6 +6467,9 @@ static void destroy_cfs_bandwidth(struct cfs_bandwidth *cfs_b)
 		local_irq_restore(flags);
 	}
 #endif
+	guard(cpus_read_lock)();
+	if (cfs_b->quota != RUNTIME_INF)
+		cfs_bandwidth_usage_dec();
 }
 
 /*
@@ -6609,11 +6612,11 @@ void init_cfs_bandwidth(struct cfs_bandwidth *cfs_b, struct cfs_bandwidth *paren
 static void init_cfs_rq_runtime(struct cfs_rq *cfs_rq) {}
 #endif
 
-static inline struct cfs_bandwidth *tg_cfs_bandwidth(struct task_group *tg)
+struct cfs_bandwidth *tg_cfs_bandwidth(struct task_group *tg)
 {
 	return NULL;
 }
-static inline void destroy_cfs_bandwidth(struct cfs_bandwidth *cfs_b) {}
+void destroy_cfs_bandwidth(struct cfs_bandwidth *cfs_b) {}
 static inline void update_runtime_enabled(struct rq *rq) {}
 static inline void unthrottle_offline_cfs_rqs(struct rq *rq) {}
 #ifdef CONFIG_CGROUP_SCHED
@@ -12986,8 +12989,6 @@ void unregister_fair_sched_group(struct task_group *tg)
 	unsigned long flags;
 	struct rq *rq;
 	int cpu;
-
-	destroy_cfs_bandwidth(tg_cfs_bandwidth(tg));
 
 	for_each_possible_cpu(cpu) {
 		if (tg->se[cpu])

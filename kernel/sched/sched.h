@@ -2944,6 +2944,8 @@ extern void init_dl_rq(struct dl_rq *dl_rq);
 extern void cfs_bandwidth_usage_inc(void);
 extern void cfs_bandwidth_usage_dec(void);
 
+extern struct cfs_bandwidth *tg_cfs_bandwidth(struct task_group *tg);
+extern void destroy_cfs_bandwidth(struct cfs_bandwidth *cfs_b);
 #ifdef CONFIG_NO_HZ_COMMON
 
 #define NOHZ_BALANCE_KICK_BIT	0
