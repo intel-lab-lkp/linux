@@ -9090,6 +9090,9 @@ static int tg_set_cfs_bandwidth(struct task_group *tg, u64 period, u64 quota,
 	guard(cpus_read_lock)();
 	guard(mutex)(&cfs_constraints_mutex);
 
+	if (cfs_b->period == ns_to_ktime(period) && cfs_b->quota == quota && cfs_b->burst == burst)
+		return 0;
+
 	ret = __cfs_schedulable(tg, period, quota);
 	if (ret)
 		return ret;
