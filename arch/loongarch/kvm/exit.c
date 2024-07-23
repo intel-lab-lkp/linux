@@ -50,7 +50,7 @@ static int kvm_emu_cpucfg(struct kvm_vcpu *vcpu, larch_inst inst)
 		vcpu->arch.gprs[rd] = *(unsigned int *)KVM_SIGNATURE;
 		break;
 	case CPUCFG_KVM_FEATURE:
-		ret = KVM_FEATURE_IPI;
+		ret = KVM_FEATURE_IPI | KVM_FEATURE_PARAVIRT_SPINLOCK;
 		if (kvm_pvtime_supported())
 			ret |= KVM_FEATURE_STEAL_TIME;
 		vcpu->arch.gprs[rd] = ret;
@@ -776,6 +776,25 @@ static int kvm_send_pv_ipi(struct kvm_vcpu *vcpu)
 	return 0;
 }
 
+static long kvm_pv_kick_cpu(struct kvm_vcpu *vcpu)
+{
+	int cpu = vcpu->arch.gprs[LOONGARCH_GPR_A1];
+	struct kvm_vcpu *dst;
+
+	dst = kvm_get_vcpu_by_cpuid(vcpu->kvm, cpu);
+	if (!dst)
+		return KVM_HCALL_INVALID_PARAMETER;
+
+	dst->arch.pv.pv_unhalted = true;
+	kvm_make_request(KVM_REQ_EVENT, dst);
+	kvm_vcpu_kick(dst);
+	/* Ignore requests to yield to self */
+	if (dst != vcpu)
+		kvm_vcpu_yield_to(dst);
+
+	return 0;
+}
+
 /*
  * Hypercall emulation always return to guest, Caller should check retval.
  */
@@ -791,6 +810,9 @@ static void kvm_handle_service(struct kvm_vcpu *vcpu)
 		break;
 	case KVM_HCALL_FUNC_NOTIFY:
 		ret = kvm_save_notify(vcpu);
+		break;
+	case KVM_HCALL_FUNC_KICK:
+		ret =  kvm_pv_kick_cpu(vcpu);
 		break;
 	default:
 		ret = KVM_HCALL_INVALID_CODE;

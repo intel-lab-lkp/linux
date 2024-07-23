@@ -95,6 +95,9 @@ static int kvm_check_requests(struct kvm_vcpu *vcpu)
 	if (kvm_check_request(KVM_REQ_STEAL_UPDATE, vcpu))
 		kvm_update_stolen_time(vcpu);
 
+	if (kvm_check_request(KVM_REQ_EVENT, vcpu))
+		vcpu->arch.pv.pv_unhalted = false;
+
 	return RESUME_GUEST;
 }
 
@@ -222,9 +225,17 @@ static int kvm_handle_exit(struct kvm_run *run, struct kvm_vcpu *vcpu)
 	return RESUME_GUEST;
 }
 
+static inline bool kvm_vcpu_has_events(struct kvm_vcpu *vcpu)
+{
+	if (vcpu->arch.pv.pv_unhalted)
+		return true;
+
+	return false;
+}
+
 int kvm_arch_vcpu_runnable(struct kvm_vcpu *vcpu)
 {
-	return !!(vcpu->arch.irq_pending) &&
+	return (!!vcpu->arch.irq_pending || kvm_vcpu_has_events(vcpu)) &&
 		vcpu->arch.mp_state.mp_state == KVM_MP_STATE_RUNNABLE;
 }
 
