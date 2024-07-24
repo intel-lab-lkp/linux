@@ -398,7 +398,7 @@ static inline void *
 xfs_iext_alloc_node(
 	int	size)
 {
-	return kzalloc(size, GFP_KERNEL | __GFP_NOLOCKDEP | __GFP_NOFAIL);
+	return kzalloc(size, GFP_KERNEL | __GFP_NOLOCKDEP | GFP_NOFAIL);
 }
 
 static void
@@ -611,7 +611,7 @@ xfs_iext_realloc_root(
 		new_size = NODE_SIZE;
 
 	new = krealloc(ifp->if_data, new_size,
-			GFP_KERNEL | __GFP_NOLOCKDEP | __GFP_NOFAIL);
+			GFP_KERNEL | __GFP_NOLOCKDEP | GFP_NOFAIL);
 	memset(new + ifp->if_bytes, 0, new_size - ifp->if_bytes);
 	ifp->if_data = new;
 	cur->leaf = new;

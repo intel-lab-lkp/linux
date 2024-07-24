@@ -2316,7 +2316,7 @@ static bool add_free_nid(struct f2fs_sb_info *sbi,
 	i->nid = nid;
 	i->state = FREE_NID;
 
-	radix_tree_preload(GFP_NOFS | __GFP_NOFAIL);
+	radix_tree_preload(GFP_NOFS | GFP_NOFAIL);
 
 	spin_lock(&nm_i->nid_list_lock);
 

@@ -98,7 +98,7 @@ void chtls_set_tcb_field_rpl_skb(struct sock *sk, u16 word,
 	wrlen = sizeof(struct cpl_set_tcb_field) + sizeof(struct ulptx_idata);
 	wrlen = roundup(wrlen, 16);
 
-	skb = alloc_skb(wrlen, GFP_KERNEL | __GFP_NOFAIL);
+	skb = alloc_skb(wrlen, GFP_KERNEL | GFP_NOFAIL);
 	if (!skb)
 		return;
 

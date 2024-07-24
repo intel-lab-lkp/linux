@@ -196,7 +196,7 @@ xfs_buf_get_maps(
 	}
 
 	bp->b_maps = kzalloc(map_count * sizeof(struct xfs_buf_map),
-			GFP_KERNEL | __GFP_NOLOCKDEP | __GFP_NOFAIL);
+			GFP_KERNEL | __GFP_NOLOCKDEP | GFP_NOFAIL);
 	if (!bp->b_maps)
 		return -ENOMEM;
 	return 0;
@@ -229,7 +229,7 @@ _xfs_buf_alloc(
 
 	*bpp = NULL;
 	bp = kmem_cache_zalloc(xfs_buf_cache,
-			GFP_KERNEL | __GFP_NOLOCKDEP | __GFP_NOFAIL);
+			GFP_KERNEL | __GFP_NOLOCKDEP | GFP_NOFAIL);
 
 	/*
 	 * We don't want certain flags to appear in b_flags unless they are
@@ -334,7 +334,7 @@ xfs_buf_alloc_kmem(
 	struct xfs_buf	*bp,
 	xfs_buf_flags_t	flags)
 {
-	gfp_t		gfp_mask = GFP_KERNEL | __GFP_NOLOCKDEP | __GFP_NOFAIL;
+	gfp_t		gfp_mask = GFP_KERNEL | __GFP_NOLOCKDEP | GFP_NOFAIL;
 	size_t		size = BBTOB(bp->b_length);
 
 	/* Assure zeroed buffer for non-read cases. */
@@ -2106,7 +2106,7 @@ xfs_alloc_buftarg(
 #if defined(CONFIG_FS_DAX) && defined(CONFIG_MEMORY_FAILURE)
 	ops = &xfs_dax_holder_operations;
 #endif
-	btp = kzalloc(sizeof(*btp), GFP_KERNEL | __GFP_NOFAIL);
+	btp = kzalloc(sizeof(*btp), GFP_KERNEL | GFP_NOFAIL);
 
 	btp->bt_mount = mp;
 	btp->bt_bdev_file = bdev_file;

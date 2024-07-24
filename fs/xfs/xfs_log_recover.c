@@ -2087,7 +2087,7 @@ xlog_recover_add_item(
 	struct xlog_recover_item *item;
 
 	item = kzalloc(sizeof(struct xlog_recover_item),
-			GFP_KERNEL | __GFP_NOFAIL);
+			GFP_KERNEL | GFP_NOFAIL);
 	INIT_LIST_HEAD(&item->ri_list);
 	list_add_tail(&item->ri_list, head);
 }
@@ -2218,7 +2218,7 @@ xlog_recover_add_to_trans(
 
 		item->ri_total = in_f->ilf_size;
 		item->ri_buf = kzalloc(item->ri_total * sizeof(xfs_log_iovec_t),
-				GFP_KERNEL | __GFP_NOFAIL);
+				GFP_KERNEL | GFP_NOFAIL);
 	}
 
 	if (item->ri_total <= item->ri_cnt) {
@@ -2361,7 +2361,7 @@ xlog_recover_ophdr_to_trans(
 	 * This is a new transaction so allocate a new recovery container to
 	 * hold the recovery ops that will follow.
 	 */
-	trans = kzalloc(sizeof(struct xlog_recover), GFP_KERNEL | __GFP_NOFAIL);
+	trans = kzalloc(sizeof(struct xlog_recover), GFP_KERNEL | GFP_NOFAIL);
 	trans->r_log_tid = tid;
 	trans->r_lsn = be64_to_cpu(rhead->h_lsn);
 	INIT_LIST_HEAD(&trans->r_itemq);

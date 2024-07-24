@@ -192,7 +192,7 @@ static struct iomap_folio_state *ifs_alloc(struct inode *inode,
 	if (flags & IOMAP_NOWAIT)
 		gfp = GFP_NOWAIT;
 	else
-		gfp = GFP_NOFS | __GFP_NOFAIL;
+		gfp = GFP_NOFS | GFP_NOFAIL;
 
 	/*
 	 * ifs->state tracks two sets of state flags when the

@@ -3155,10 +3155,10 @@ suppress_allocation:
 		 * In this case we cannot block, so that we have to fail.
 		 */
 		if (sk->sk_wmem_queued + size >= sk->sk_sndbuf) {
-			/* Force charge with __GFP_NOFAIL */
+			/* Force charge with GFP_NOFAIL */
 			if (memcg && !charged) {
 				mem_cgroup_charge_skmem(memcg, amt,
-					gfp_memcg_charge() | __GFP_NOFAIL);
+					gfp_memcg_charge() | GFP_NOFAIL);
 			}
 			return 1;
 		}

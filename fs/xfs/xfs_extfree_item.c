@@ -148,10 +148,10 @@ xfs_efi_init(
 	ASSERT(nextents > 0);
 	if (nextents > XFS_EFI_MAX_FAST_EXTENTS) {
 		efip = kzalloc(xfs_efi_log_item_sizeof(nextents),
-				GFP_KERNEL | __GFP_NOFAIL);
+				GFP_KERNEL | GFP_NOFAIL);
 	} else {
 		efip = kmem_cache_zalloc(xfs_efi_cache,
-					 GFP_KERNEL | __GFP_NOFAIL);
+					 GFP_KERNEL | GFP_NOFAIL);
 	}
 
 	xfs_log_item_init(mp, &efip->efi_item, XFS_LI_EFI, &xfs_efi_item_ops);
@@ -421,10 +421,10 @@ xfs_extent_free_create_done(
 
 	if (count > XFS_EFD_MAX_FAST_EXTENTS) {
 		efdp = kzalloc(xfs_efd_log_item_sizeof(count),
-				GFP_KERNEL | __GFP_NOFAIL);
+				GFP_KERNEL | GFP_NOFAIL);
 	} else {
 		efdp = kmem_cache_zalloc(xfs_efd_cache,
-					GFP_KERNEL | __GFP_NOFAIL);
+					GFP_KERNEL | GFP_NOFAIL);
 	}
 
 	xfs_log_item_init(tp->t_mountp, &efdp->efd_item, XFS_LI_EFD,
@@ -573,7 +573,7 @@ xfs_efi_recover_work(
 	struct xfs_extent_free_item	*xefi;
 
 	xefi = kmem_cache_zalloc(xfs_extfree_item_cache,
-			       GFP_KERNEL | __GFP_NOFAIL);
+			       GFP_KERNEL | GFP_NOFAIL);
 	xefi->xefi_startblock = extp->ext_start;
 	xefi->xefi_blockcount = extp->ext_len;
 	xefi->xefi_agresv = XFS_AG_RESV_NONE;

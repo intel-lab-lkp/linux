@@ -116,7 +116,7 @@ static void fuse_file_put(struct fuse_file *ff, bool sync)
 		} else {
 			args->end = fuse_release_end;
 			if (fuse_simple_background(ff->fm, args,
-						   GFP_KERNEL | __GFP_NOFAIL))
+						   GFP_KERNEL | GFP_NOFAIL))
 				fuse_release_end(ff->fm, args, -ENOTCONN);
 		}
 		kfree(ff);
@@ -1816,7 +1816,7 @@ __acquires(fi->lock)
 	err = fuse_simple_background(fm, args, GFP_ATOMIC);
 	if (err == -ENOMEM) {
 		spin_unlock(&fi->lock);
-		err = fuse_simple_background(fm, args, GFP_NOFS | __GFP_NOFAIL);
+		err = fuse_simple_background(fm, args, GFP_NOFS | GFP_NOFAIL);
 		spin_lock(&fi->lock);
 	}
 

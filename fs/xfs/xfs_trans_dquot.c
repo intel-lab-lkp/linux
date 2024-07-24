@@ -1013,7 +1013,7 @@ xfs_trans_alloc_dqinfo(
 	xfs_trans_t	*tp)
 {
 	tp->t_dqinfo = kmem_cache_zalloc(xfs_dqtrx_cache,
-					 GFP_KERNEL | __GFP_NOFAIL);
+					 GFP_KERNEL | GFP_NOFAIL);
 }
 
 void

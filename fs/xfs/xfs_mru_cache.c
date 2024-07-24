@@ -333,14 +333,14 @@ xfs_mru_cache_create(
 	if (!(grp_time = msecs_to_jiffies(lifetime_ms) / grp_count))
 		return -EINVAL;
 
-	mru = kzalloc(sizeof(*mru), GFP_KERNEL | __GFP_NOFAIL);
+	mru = kzalloc(sizeof(*mru), GFP_KERNEL | GFP_NOFAIL);
 	if (!mru)
 		return -ENOMEM;
 
 	/* An extra list is needed to avoid reaping up to a grp_time early. */
 	mru->grp_count = grp_count + 1;
 	mru->lists = kzalloc(mru->grp_count * sizeof(*mru->lists),
-				GFP_KERNEL | __GFP_NOFAIL);
+				GFP_KERNEL | GFP_NOFAIL);
 	if (!mru->lists) {
 		err = -ENOMEM;
 		goto exit;

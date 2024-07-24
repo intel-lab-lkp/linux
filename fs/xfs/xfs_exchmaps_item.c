@@ -134,7 +134,7 @@ xfs_xmi_init(
 {
 	struct xfs_xmi_log_item	*xmi_lip;
 
-	xmi_lip = kmem_cache_zalloc(xfs_xmi_cache, GFP_KERNEL | __GFP_NOFAIL);
+	xmi_lip = kmem_cache_zalloc(xfs_xmi_cache, GFP_KERNEL | GFP_NOFAIL);
 
 	xfs_log_item_init(mp, &xmi_lip->xmi_item, XFS_LI_XMI, &xfs_xmi_item_ops);
 	xmi_lip->xmi_format.xmi_id = (uintptr_t)(void *)xmi_lip;
@@ -253,7 +253,7 @@ xfs_exchmaps_create_done(
 	struct xfs_xmi_log_item		*xmi_lip = XMI_ITEM(intent);
 	struct xfs_xmd_log_item		*xmd_lip;
 
-	xmd_lip = kmem_cache_zalloc(xfs_xmd_cache, GFP_KERNEL | __GFP_NOFAIL);
+	xmd_lip = kmem_cache_zalloc(xfs_xmd_cache, GFP_KERNEL | GFP_NOFAIL);
 	xfs_log_item_init(tp->t_mountp, &xmd_lip->xmd_item, XFS_LI_XMD,
 			  &xfs_xmd_item_ops);
 	xmd_lip->xmd_intent_log_item = xmi_lip;

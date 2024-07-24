@@ -141,7 +141,7 @@ static int insert_revoke_hash(journal_t *journal, unsigned long long blocknr,
 	gfp_t gfp_mask = GFP_NOFS;
 
 	if (journal_oom_retry)
-		gfp_mask |= __GFP_NOFAIL;
+		gfp_mask |= GFP_NOFAIL;
 	record = kmem_cache_alloc(jbd2_revoke_record_cache, gfp_mask);
 	if (!record)
 		return -ENOMEM;

@@ -275,7 +275,7 @@ xfs_attri_init(
 {
 	struct xfs_attri_log_item	*attrip;
 
-	attrip = kmem_cache_zalloc(xfs_attri_cache, GFP_KERNEL | __GFP_NOFAIL);
+	attrip = kmem_cache_zalloc(xfs_attri_cache, GFP_KERNEL | GFP_NOFAIL);
 
 	/*
 	 * Grab an extra reference to the name/value buffer for this log item.
@@ -673,7 +673,7 @@ xfs_attri_recover_work(
 	}
 
 	attr = kzalloc(sizeof(struct xfs_attr_intent) +
-			sizeof(struct xfs_da_args), GFP_KERNEL | __GFP_NOFAIL);
+			sizeof(struct xfs_da_args), GFP_KERNEL | GFP_NOFAIL);
 	args = (struct xfs_da_args *)(attr + 1);
 
 	attr->xattri_da_args = args;
@@ -858,7 +858,7 @@ xfs_attr_create_done(
 
 	attrip = ATTRI_ITEM(intent);
 
-	attrdp = kmem_cache_zalloc(xfs_attrd_cache, GFP_KERNEL | __GFP_NOFAIL);
+	attrdp = kmem_cache_zalloc(xfs_attrd_cache, GFP_KERNEL | GFP_NOFAIL);
 
 	xfs_log_item_init(tp->t_mountp, &attrdp->attrd_item, XFS_LI_ATTRD,
 			  &xfs_attrd_item_ops);
@@ -885,7 +885,7 @@ xfs_attr_defer_add(
 	}
 
 	new = kmem_cache_zalloc(xfs_attr_intent_cache,
-			GFP_NOFS | __GFP_NOFAIL);
+			GFP_NOFS | GFP_NOFAIL);
 	new->xattri_da_args = args;
 
 	/* Compute log operation from the higher level op and namespace. */

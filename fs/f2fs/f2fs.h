@@ -2814,7 +2814,7 @@ static inline void *f2fs_kmem_cache_alloc_nofail(struct kmem_cache *cachep,
 
 	entry = kmem_cache_alloc(cachep, flags);
 	if (!entry)
-		entry = kmem_cache_alloc(cachep, flags | __GFP_NOFAIL);
+		entry = kmem_cache_alloc(cachep, flags | GFP_NOFAIL);
 	return entry;
 }
 

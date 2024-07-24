@@ -365,7 +365,7 @@ static inline struct buffer_head *getblk_unmovable(struct block_device *bdev,
 	gfp_t gfp;
 
 	gfp = mapping_gfp_constraint(bdev->bd_mapping, ~__GFP_FS);
-	gfp |= __GFP_NOFAIL;
+	gfp |= GFP_NOFAIL;
 
 	return bdev_getblk(bdev, block, size, gfp);
 }
@@ -376,7 +376,7 @@ static inline struct buffer_head *__getblk(struct block_device *bdev,
 	gfp_t gfp;
 
 	gfp = mapping_gfp_constraint(bdev->bd_mapping, ~__GFP_FS);
-	gfp |= __GFP_MOVABLE | __GFP_NOFAIL;
+	gfp |= __GFP_MOVABLE | GFP_NOFAIL;
 
 	return bdev_getblk(bdev, block, size, gfp);
 }

@@ -555,7 +555,7 @@ __read_extent_tree_block(const char *function, unsigned int line,
 	ext4_fsblk_t			pblk;
 
 	if (flags & EXT4_EX_NOFAIL)
-		gfp_flags |= __GFP_NOFAIL;
+		gfp_flags |= GFP_NOFAIL;
 
 	pblk = ext4_idx_pblock(idx);
 	bh = sb_getblk_gfp(inode->i_sb, pblk, gfp_flags);
@@ -891,7 +891,7 @@ ext4_find_extent(struct inode *inode, ext4_lblk_t block,
 	gfp_t gfp_flags = GFP_NOFS;
 
 	if (flags & EXT4_EX_NOFAIL)
-		gfp_flags |= __GFP_NOFAIL;
+		gfp_flags |= GFP_NOFAIL;
 
 	eh = ext_inode_hdr(inode);
 	depth = ext_depth(inode);
@@ -1067,7 +1067,7 @@ static int ext4_ext_split(handle_t *handle, struct inode *inode,
 	size_t ext_size = 0;
 
 	if (flags & EXT4_EX_NOFAIL)
-		gfp_flags |= __GFP_NOFAIL;
+		gfp_flags |= GFP_NOFAIL;
 
 	/* make decision: where to split? */
 	/* FIXME: now decision is simplest: at current extent */
@@ -2912,7 +2912,7 @@ again:
 				le16_to_cpu(path[k].p_hdr->eh_entries)+1;
 	} else {
 		path = kcalloc(depth + 1, sizeof(struct ext4_ext_path),
-			       GFP_NOFS | __GFP_NOFAIL);
+			       GFP_NOFS | GFP_NOFAIL);
 		if (path == NULL) {
 			ext4_journal_stop(handle);
 			return -ENOMEM;

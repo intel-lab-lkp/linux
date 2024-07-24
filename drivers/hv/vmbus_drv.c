@@ -1170,7 +1170,7 @@ static void vmbus_force_channel_rescinded(struct vmbus_channel *channel)
 	 * otherwise the state of the hv_sock connections ends up in limbo.
 	 */
 	ctx = kzalloc(sizeof(*ctx) + sizeof(*rescind),
-		      GFP_KERNEL | __GFP_NOFAIL);
+		      GFP_KERNEL | GFP_NOFAIL);
 
 	/*
 	 * So far, these are not really used by Linux. Just set them to the

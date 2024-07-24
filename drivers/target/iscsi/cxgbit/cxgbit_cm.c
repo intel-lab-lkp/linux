@@ -697,7 +697,7 @@ no_abort:
 
 void cxgbit_abort_conn(struct cxgbit_sock *csk)
 {
-	struct sk_buff *skb = alloc_skb(0, GFP_KERNEL | __GFP_NOFAIL);
+	struct sk_buff *skb = alloc_skb(0, GFP_KERNEL | GFP_NOFAIL);
 
 	cxgbit_get_csk(csk);
 	cxgbit_init_wr_wait(&csk->com.wr_wait);

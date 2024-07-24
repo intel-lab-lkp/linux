@@ -378,9 +378,9 @@ nouveau_dmem_evict_chunk(struct nouveau_dmem_chunk *chunk)
 	dma_addr_t *dma_addrs;
 	struct nouveau_fence *fence;
 
-	src_pfns = kvcalloc(npages, sizeof(*src_pfns), GFP_KERNEL | __GFP_NOFAIL);
-	dst_pfns = kvcalloc(npages, sizeof(*dst_pfns), GFP_KERNEL | __GFP_NOFAIL);
-	dma_addrs = kvcalloc(npages, sizeof(*dma_addrs), GFP_KERNEL | __GFP_NOFAIL);
+	src_pfns = kvcalloc(npages, sizeof(*src_pfns), GFP_KERNEL | GFP_NOFAIL);
+	dst_pfns = kvcalloc(npages, sizeof(*dst_pfns), GFP_KERNEL | GFP_NOFAIL);
+	dma_addrs = kvcalloc(npages, sizeof(*dma_addrs), GFP_KERNEL | GFP_NOFAIL);
 
 	migrate_device_range(src_pfns, chunk->pagemap.range.start >> PAGE_SHIFT,
 			npages);
@@ -394,7 +394,7 @@ nouveau_dmem_evict_chunk(struct nouveau_dmem_chunk *chunk)
 			 * is nothing sensible we can do if we can't copy the
 			 * data back.
 			 */
-			dpage = alloc_page(GFP_HIGHUSER | __GFP_NOFAIL);
+			dpage = alloc_page(GFP_HIGHUSER | GFP_NOFAIL);
 			dst_pfns[i] = migrate_pfn(page_to_pfn(dpage));
 			nouveau_dmem_copy_one(chunk->drm,
 					migrate_pfn_to_page(src_pfns[i]), dpage,

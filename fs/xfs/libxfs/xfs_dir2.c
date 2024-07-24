@@ -248,7 +248,7 @@ xfs_dir_init(
 	if (error)
 		return error;
 
-	args = kzalloc(sizeof(*args), GFP_KERNEL | __GFP_NOFAIL);
+	args = kzalloc(sizeof(*args), GFP_KERNEL | GFP_NOFAIL);
 	if (!args)
 		return -ENOMEM;
 
@@ -341,7 +341,7 @@ xfs_dir_createname(
 		XFS_STATS_INC(dp->i_mount, xs_dir_create);
 	}
 
-	args = kzalloc(sizeof(*args), GFP_KERNEL | __GFP_NOFAIL);
+	args = kzalloc(sizeof(*args), GFP_KERNEL | GFP_NOFAIL);
 	if (!args)
 		return -ENOMEM;
 
@@ -439,7 +439,7 @@ xfs_dir_lookup(
 	XFS_STATS_INC(dp->i_mount, xs_dir_lookup);
 
 	args = kzalloc(sizeof(*args),
-			GFP_KERNEL | __GFP_NOLOCKDEP | __GFP_NOFAIL);
+			GFP_KERNEL | __GFP_NOLOCKDEP | GFP_NOFAIL);
 	args->geo = dp->i_mount->m_dir_geo;
 	args->name = name->name;
 	args->namelen = name->len;
@@ -504,7 +504,7 @@ xfs_dir_removename(
 	ASSERT(S_ISDIR(VFS_I(dp)->i_mode));
 	XFS_STATS_INC(dp->i_mount, xs_dir_remove);
 
-	args = kzalloc(sizeof(*args), GFP_KERNEL | __GFP_NOFAIL);
+	args = kzalloc(sizeof(*args), GFP_KERNEL | GFP_NOFAIL);
 	if (!args)
 		return -ENOMEM;
 
@@ -564,7 +564,7 @@ xfs_dir_replace(
 	if (rval)
 		return rval;
 
-	args = kzalloc(sizeof(*args), GFP_KERNEL | __GFP_NOFAIL);
+	args = kzalloc(sizeof(*args), GFP_KERNEL | GFP_NOFAIL);
 	if (!args)
 		return -ENOMEM;
 

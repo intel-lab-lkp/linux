@@ -75,7 +75,7 @@ static int _c4iw_write_mem_dma_aligned(struct c4iw_rdev *rdev, u32 addr,
 	wr_len = roundup(sizeof(*req) + sizeof(*sgl), 16);
 
 	if (!skb) {
-		skb = alloc_skb(wr_len, GFP_KERNEL | __GFP_NOFAIL);
+		skb = alloc_skb(wr_len, GFP_KERNEL | GFP_NOFAIL);
 		if (!skb)
 			return -ENOMEM;
 	}
@@ -135,7 +135,7 @@ static int _c4iw_write_mem_inline(struct c4iw_rdev *rdev, u32 addr, u32 len,
 				 16);
 
 		if (!skb) {
-			skb = alloc_skb(wr_len, GFP_KERNEL | __GFP_NOFAIL);
+			skb = alloc_skb(wr_len, GFP_KERNEL | GFP_NOFAIL);
 			if (!skb)
 				return -ENOMEM;
 		}

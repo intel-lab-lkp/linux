@@ -794,7 +794,7 @@ static struct fanotify_event *fanotify_alloc_event(
 	 * target monitoring memcg as it may have security repercussion.
 	 */
 	if (group->max_events == UINT_MAX)
-		gfp |= __GFP_NOFAIL;
+		gfp |= GFP_NOFAIL;
 	else
 		gfp |= __GFP_RETRY_MAYFAIL;
 

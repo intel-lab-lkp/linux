@@ -5592,7 +5592,7 @@ repeat:
 		group = ext4_get_group_number(sb, pa->pa_pstart);
 
 		err = ext4_mb_load_buddy_gfp(sb, group, &e4b,
-					     GFP_NOFS|__GFP_NOFAIL);
+					     GFP_NOFS|GFP_NOFAIL);
 		if (err) {
 			ext4_error_err(sb, -err, "Error %d loading buddy information for %u",
 				       err, group);
@@ -5898,7 +5898,7 @@ ext4_mb_discard_lg_preallocations(struct super_block *sb,
 
 		group = ext4_get_group_number(sb, pa->pa_pstart);
 		err = ext4_mb_load_buddy_gfp(sb, group, &e4b,
-					     GFP_NOFS|__GFP_NOFAIL);
+					     GFP_NOFS|GFP_NOFAIL);
 		if (err) {
 			ext4_error_err(sb, -err, "Error %d loading buddy information for %u",
 				       err, group);
@@ -6449,9 +6449,9 @@ do_more:
 	count_clusters = EXT4_NUM_B2C(sbi, count);
 	trace_ext4_mballoc_free(sb, inode, block_group, bit, count_clusters);
 
-	/* __GFP_NOFAIL: retry infinitely, ignore TIF_MEMDIE and memcg limit. */
+	/* GFP_NOFAIL: retry infinitely, ignore TIF_MEMDIE and memcg limit. */
 	err = ext4_mb_load_buddy_gfp(sb, block_group, &e4b,
-				     GFP_NOFS|__GFP_NOFAIL);
+				     GFP_NOFS|GFP_NOFAIL);
 	if (err)
 		goto error_out;
 
@@ -6488,11 +6488,11 @@ do_more:
 	     !ext4_should_writeback_data(inode))) {
 		struct ext4_free_data *new_entry;
 		/*
-		 * We use __GFP_NOFAIL because ext4_free_blocks() is not allowed
+		 * We use GFP_NOFAIL because ext4_free_blocks() is not allowed
 		 * to fail.
 		 */
 		new_entry = kmem_cache_alloc(ext4_free_data_cachep,
-				GFP_NOFS|__GFP_NOFAIL);
+				GFP_NOFS|GFP_NOFAIL);
 		new_entry->efd_start_cluster = bit;
 		new_entry->efd_group = block_group;
 		new_entry->efd_count = count_clusters;

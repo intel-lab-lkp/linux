@@ -963,7 +963,7 @@ struct buffer_head *alloc_page_buffers(struct page *page, unsigned long size,
 {
 	gfp_t gfp = GFP_NOFS | __GFP_ACCOUNT;
 	if (retry)
-		gfp |= __GFP_NOFAIL;
+		gfp |= GFP_NOFAIL;
 
 	return folio_alloc_buffers(page_folio(page), size, gfp);
 }
@@ -1490,7 +1490,7 @@ struct buffer_head *__bread_gfp(struct block_device *bdev, sector_t block,
 	 * Prefer looping in the allocator rather than here, at least that
 	 * code knows what it's doing.
 	 */
-	gfp |= __GFP_NOFAIL;
+	gfp |= GFP_NOFAIL;
 
 	bh = bdev_getblk(bdev, block, size, gfp);
 
@@ -1666,7 +1666,7 @@ struct buffer_head *create_empty_buffers(struct folio *folio,
 		unsigned long blocksize, unsigned long b_state)
 {
 	struct buffer_head *bh, *head, *tail;
-	gfp_t gfp = GFP_NOFS | __GFP_ACCOUNT | __GFP_NOFAIL;
+	gfp_t gfp = GFP_NOFS | __GFP_ACCOUNT | GFP_NOFAIL;
 
 	head = folio_alloc_buffers(folio, blocksize, gfp);
 	bh = head;

@@ -2142,7 +2142,7 @@ void ceph_oid_copy(struct ceph_object_id *dest,
 	if (src->name != src->inline_name) {
 		/* very rare, see ceph_object_id definition */
 		dest->name = kmalloc(src->name_len + 1,
-				     GFP_NOIO | __GFP_NOFAIL);
+				     GFP_NOIO | GFP_NOFAIL);
 	} else {
 		dest->name = dest->inline_name;
 	}
@@ -2410,7 +2410,7 @@ void __ceph_object_locator_to_pg(struct ceph_pg_pool_info *pi,
 		size_t total = nsl + 1 + oid->name_len;
 
 		if (total > sizeof(stack_buf))
-			buf = kmalloc(total, GFP_NOIO | __GFP_NOFAIL);
+			buf = kmalloc(total, GFP_NOIO | GFP_NOFAIL);
 		memcpy(buf, oloc->pool_ns->str, nsl);
 		buf[nsl] = '\037';
 		memcpy(buf + nsl + 1, oid->name, oid->name_len);

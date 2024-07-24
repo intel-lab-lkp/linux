@@ -700,7 +700,7 @@ static void virtio_fs_requests_done_work(struct work_struct *work)
 		if (req->args->may_block) {
 			struct virtio_fs_req_work *w;
 
-			w = kzalloc(sizeof(*w), GFP_NOFS | __GFP_NOFAIL);
+			w = kzalloc(sizeof(*w), GFP_NOFS | GFP_NOFAIL);
 			INIT_WORK(&w->done_work, virtio_fs_complete_req_work);
 			w->fsvq = fsvq;
 			w->req = req;
@@ -1109,7 +1109,7 @@ __releases(fiq->lock)
 	spin_unlock(&fiq->lock);
 
 	/* Allocate a buffer for the request */
-	forget = kmalloc(sizeof(*forget), GFP_NOFS | __GFP_NOFAIL);
+	forget = kmalloc(sizeof(*forget), GFP_NOFS | GFP_NOFAIL);
 	req = &forget->req;
 
 	req->ih = (struct fuse_in_header){

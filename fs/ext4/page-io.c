@@ -530,7 +530,7 @@ int ext4_bio_write_folio(struct ext4_io_submit *io, struct folio *folio,
 				if (io->io_bio)
 					ext4_io_submit(io);
 				else
-					new_gfp_flags |= __GFP_NOFAIL;
+					new_gfp_flags |= GFP_NOFAIL;
 				memalloc_retry_wait(gfp_flags);
 				gfp_flags = new_gfp_flags;
 				goto retry_encrypt;

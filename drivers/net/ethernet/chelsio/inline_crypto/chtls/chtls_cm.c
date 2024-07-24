@@ -215,7 +215,7 @@ static struct sk_buff *alloc_ctrl_skb(struct sk_buff *skb, int len)
 		__skb_trim(skb, 0);
 		refcount_inc(&skb->users);
 	} else {
-		skb = alloc_skb(len, GFP_KERNEL | __GFP_NOFAIL);
+		skb = alloc_skb(len, GFP_KERNEL | GFP_NOFAIL);
 	}
 	return skb;
 }
@@ -305,7 +305,7 @@ static void chtls_close_conn(struct sock *sk)
 	csk = rcu_dereference_sk_user_data(sk);
 	tid = csk->tid;
 
-	skb = alloc_skb(len, GFP_KERNEL | __GFP_NOFAIL);
+	skb = alloc_skb(len, GFP_KERNEL | GFP_NOFAIL);
 	req = (struct cpl_close_con_req *)__skb_put(skb, len);
 	memset(req, 0, len);
 	req->wr.wr_hi = htonl(FW_WR_OP_V(FW_TP_WR) |
@@ -1990,7 +1990,7 @@ static void send_defer_abort_rpl(struct chtls_dev *cdev, struct sk_buff *skb)
 	struct sk_buff *reply_skb;
 
 	reply_skb = alloc_skb(sizeof(struct cpl_abort_rpl),
-			      GFP_KERNEL | __GFP_NOFAIL);
+			      GFP_KERNEL | GFP_NOFAIL);
 	__skb_put(reply_skb, sizeof(struct cpl_abort_rpl));
 	set_abort_rpl_wr(reply_skb, GET_TID(req),
 			 (req->status & CPL_ABORT_NO_RST));

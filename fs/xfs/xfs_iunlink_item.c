@@ -161,7 +161,7 @@ xfs_iunlink_log_inode(
 		return 0;
 	}
 
-	iup = kmem_cache_zalloc(xfs_iunlink_cache, GFP_KERNEL | __GFP_NOFAIL);
+	iup = kmem_cache_zalloc(xfs_iunlink_cache, GFP_KERNEL | GFP_NOFAIL);
 	xfs_log_item_init(mp, &iup->item, XFS_LI_IUNLINK,
 			  &xfs_iunlink_item_ops);
 

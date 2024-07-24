@@ -196,7 +196,7 @@ struct bio *erofs_fscache_bio_alloc(struct erofs_map_dev *mdev)
 {
 	struct erofs_fscache_bio *io;
 
-	io = kmalloc(sizeof(*io), GFP_KERNEL | __GFP_NOFAIL);
+	io = kmalloc(sizeof(*io), GFP_KERNEL | GFP_NOFAIL);
 	bio_init(&io->bio, NULL, io->bvecs, BIO_MAX_VECS, REQ_OP_READ);
 	io->io.private = mdev->m_fscache->cookie;
 	io->io.end_io = erofs_fscache_bio_endio;

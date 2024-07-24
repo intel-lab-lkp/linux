@@ -1106,7 +1106,7 @@ static void z_erofs_do_decompressed_bvec(struct z_erofs_decompress_backend *be,
 	}
 
 	/* (cold path) one pcluster is requested multiple times */
-	item = kmalloc(sizeof(*item), GFP_KERNEL | __GFP_NOFAIL);
+	item = kmalloc(sizeof(*item), GFP_KERNEL | GFP_NOFAIL);
 	item->bvec = *bvec;
 	list_add(&item->list, &be->decompressed_secondary_bvecs);
 }
@@ -1245,11 +1245,11 @@ static int z_erofs_decompress_pcluster(struct z_erofs_decompress_backend *be,
 	if (!be->decompressed_pages)
 		be->decompressed_pages =
 			kvcalloc(be->nr_pages, sizeof(struct page *),
-				 GFP_KERNEL | __GFP_NOFAIL);
+				 GFP_KERNEL | GFP_NOFAIL);
 	if (!be->compressed_pages)
 		be->compressed_pages =
 			kvcalloc(pclusterpages, sizeof(struct page *),
-				 GFP_KERNEL | __GFP_NOFAIL);
+				 GFP_KERNEL | GFP_NOFAIL);
 
 	z_erofs_parse_out_bvecs(be);
 	err2 = z_erofs_parse_in_bvecs(be, &overlapped);
@@ -1269,7 +1269,7 @@ static int z_erofs_decompress_pcluster(struct z_erofs_decompress_backend *be,
 					.partial_decoding = pcl->partial,
 					.fillgaps = pcl->multibases,
 					.gfp = pcl->besteffort ?
-						GFP_KERNEL | __GFP_NOFAIL :
+						GFP_KERNEL | GFP_NOFAIL :
 						GFP_NOWAIT | __GFP_NORETRY
 				 }, be->pagepool);
 
@@ -1496,7 +1496,7 @@ repeat:
 	folio_unlock(folio);
 	folio_put(folio);
 out_allocfolio:
-	zbv.page = erofs_allocpage(&f->pagepool, gfp | __GFP_NOFAIL);
+	zbv.page = erofs_allocpage(&f->pagepool, gfp | GFP_NOFAIL);
 	spin_lock(&pcl->obj.lockref.lock);
 	if (pcl->compressed_bvecs[nr].page) {
 		erofs_pagepool_add(&f->pagepool, zbv.page);

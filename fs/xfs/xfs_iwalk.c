@@ -659,7 +659,7 @@ xfs_iwalk_threaded(
 			break;
 
 		iwag = kzalloc(sizeof(struct xfs_iwalk_ag),
-				GFP_KERNEL | __GFP_NOFAIL);
+				GFP_KERNEL | GFP_NOFAIL);
 		iwag->mp = mp;
 
 		/*

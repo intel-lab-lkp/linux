@@ -295,9 +295,9 @@ void vduse_domain_remove_user_bounce_pages(struct vduse_iova_domain *domain)
 	count = domain->bounce_size >> PAGE_SHIFT;
 	write_unlock(&domain->bounce_lock);
 
-	pages = kmalloc_array(count, sizeof(*pages), GFP_KERNEL | __GFP_NOFAIL);
+	pages = kmalloc_array(count, sizeof(*pages), GFP_KERNEL | GFP_NOFAIL);
 	for (i = 0; i < count; i++)
-		pages[i] = alloc_page(GFP_KERNEL | __GFP_NOFAIL);
+		pages[i] = alloc_page(GFP_KERNEL | GFP_NOFAIL);
 
 	write_lock(&domain->bounce_lock);
 	if (!domain->user_bounce_pages) {

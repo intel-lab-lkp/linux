@@ -499,7 +499,7 @@ xfs_exchmaps_link_to_sf(
 
 	/* Read the current symlink target into a buffer. */
 	buf = kmalloc(ip->i_disk_size + 1,
-			GFP_KERNEL | __GFP_NOLOCKDEP | __GFP_NOFAIL);
+			GFP_KERNEL | __GFP_NOLOCKDEP | GFP_NOFAIL);
 	if (!buf) {
 		ASSERT(0);
 		return -ENOMEM;
@@ -978,7 +978,7 @@ xfs_exchmaps_init_intent(
 	unsigned int			rs = 0;
 
 	xmi = kmem_cache_zalloc(xfs_exchmaps_intent_cache,
-			GFP_NOFS | __GFP_NOFAIL);
+			GFP_NOFS | GFP_NOFAIL);
 	INIT_LIST_HEAD(&xmi->xmi_list);
 	xmi->xmi_ip1 = req->ip1;
 	xmi->xmi_ip2 = req->ip2;

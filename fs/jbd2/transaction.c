@@ -351,7 +351,7 @@ alloc_transaction:
 		 * inside the fs writeback layer, so we MUST NOT fail.
 		 */
 		if ((gfp_mask & __GFP_FS) == 0)
-			gfp_mask |= __GFP_NOFAIL;
+			gfp_mask |= GFP_NOFAIL;
 		new_transaction = kmem_cache_zalloc(transaction_cache,
 						    gfp_mask);
 		if (!new_transaction)
@@ -1115,7 +1115,7 @@ repeat:
 			JBUFFER_TRACE(jh, "allocate memory for buffer");
 			spin_unlock(&jh->b_state_lock);
 			frozen_buffer = jbd2_alloc(jh2bh(jh)->b_size,
-						   GFP_NOFS | __GFP_NOFAIL);
+						   GFP_NOFS | GFP_NOFAIL);
 			goto repeat;
 		}
 		jh->b_frozen_data = frozen_buffer;
@@ -1393,7 +1393,7 @@ int jbd2_journal_get_undo_access(handle_t *handle, struct buffer_head *bh)
 repeat:
 	if (!jh->b_committed_data)
 		committed_data = jbd2_alloc(jh2bh(jh)->b_size,
-					    GFP_NOFS|__GFP_NOFAIL);
+					    GFP_NOFS|GFP_NOFAIL);
 
 	spin_lock(&jh->b_state_lock);
 	if (!jh->b_committed_data) {

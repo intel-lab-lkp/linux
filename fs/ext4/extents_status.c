@@ -456,7 +456,7 @@ static inline struct pending_reservation *__alloc_pending(bool nofail)
 	if (!nofail)
 		return kmem_cache_alloc(ext4_pending_cachep, GFP_ATOMIC);
 
-	return kmem_cache_zalloc(ext4_pending_cachep, GFP_KERNEL | __GFP_NOFAIL);
+	return kmem_cache_zalloc(ext4_pending_cachep, GFP_KERNEL | GFP_NOFAIL);
 }
 
 static inline void __free_pending(struct pending_reservation *pr)
@@ -482,7 +482,7 @@ static inline struct extent_status *__es_alloc_extent(bool nofail)
 	if (!nofail)
 		return kmem_cache_alloc(ext4_es_cachep, GFP_ATOMIC);
 
-	return kmem_cache_zalloc(ext4_es_cachep, GFP_KERNEL | __GFP_NOFAIL);
+	return kmem_cache_zalloc(ext4_es_cachep, GFP_KERNEL | GFP_NOFAIL);
 }
 
 static void ext4_es_init_extent(struct inode *inode, struct extent_status *es,

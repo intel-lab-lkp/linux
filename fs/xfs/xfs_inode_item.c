@@ -868,7 +868,7 @@ xfs_inode_item_init(
 
 	ASSERT(ip->i_itemp == NULL);
 	iip = ip->i_itemp = kmem_cache_zalloc(xfs_ili_cache,
-					      GFP_KERNEL | __GFP_NOFAIL);
+					      GFP_KERNEL | GFP_NOFAIL);
 
 	iip->ili_inode = ip;
 	spin_lock_init(&iip->ili_lock);

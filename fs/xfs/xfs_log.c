@@ -3244,7 +3244,7 @@ xlog_ticket_alloc(
 	int			unit_res;
 
 	tic = kmem_cache_zalloc(xfs_log_ticket_cache,
-			GFP_KERNEL | __GFP_NOFAIL);
+			GFP_KERNEL | GFP_NOFAIL);
 
 	unit_res = xlog_calc_unit_res(log, unit_bytes, &tic->t_iclog_hdrs);
 

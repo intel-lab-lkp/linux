@@ -2273,7 +2273,7 @@ static void rgblk_free(struct gfs2_sbd *sdp, struct gfs2_rgrpd *rgd,
 		if (bi != bi_prev) {
 			if (!bi->bi_clone) {
 				bi->bi_clone = kmalloc(bi->bi_bh->b_size,
-						      GFP_NOFS | __GFP_NOFAIL);
+						      GFP_NOFS | GFP_NOFAIL);
 				memcpy(bi->bi_clone + bi->bi_offset,
 				       bi->bi_bh->b_data + bi->bi_offset,
 				       bi->bi_bytes);
@@ -2702,7 +2702,7 @@ void gfs2_rlist_add(struct gfs2_inode *ip, struct gfs2_rgrp_list *rlist,
 		new_space = rlist->rl_space + 10;
 
 		tmp = kcalloc(new_space, sizeof(struct gfs2_rgrpd *),
-			      GFP_NOFS | __GFP_NOFAIL);
+			      GFP_NOFS | GFP_NOFAIL);
 
 		if (rlist->rl_rgd) {
 			memcpy(tmp, rlist->rl_rgd,
@@ -2735,7 +2735,7 @@ void gfs2_rlist_alloc(struct gfs2_rgrp_list *rlist,
 
 	rlist->rl_ghs = kmalloc_array(rlist->rl_rgrps,
 				      sizeof(struct gfs2_holder),
-				      GFP_NOFS | __GFP_NOFAIL);
+				      GFP_NOFS | GFP_NOFAIL);
 	for (x = 0; x < rlist->rl_rgrps; x++)
 		gfs2_holder_init(rlist->rl_rgd[x]->rd_gl, state, flags,
 				 &rlist->rl_ghs[x]);

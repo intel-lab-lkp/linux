@@ -53,7 +53,7 @@ xfs_init_local_fork(
 
 	if (size) {
 		char *new_data = kmalloc(mem_size,
-				GFP_KERNEL | __GFP_NOLOCKDEP | __GFP_NOFAIL);
+				GFP_KERNEL | __GFP_NOLOCKDEP | GFP_NOFAIL);
 
 		memcpy(new_data, data, size);
 		if (zero_terminate)
@@ -213,7 +213,7 @@ xfs_iformat_btree(
 
 	ifp->if_broot_bytes = size;
 	ifp->if_broot = kmalloc(size,
-				GFP_KERNEL | __GFP_NOLOCKDEP | __GFP_NOFAIL);
+				GFP_KERNEL | __GFP_NOLOCKDEP | GFP_NOFAIL);
 	ASSERT(ifp->if_broot != NULL);
 	/*
 	 * Copy and convert from the on-disk structure
@@ -411,7 +411,7 @@ xfs_iroot_realloc(
 		if (ifp->if_broot_bytes == 0) {
 			new_size = XFS_BMAP_BROOT_SPACE_CALC(mp, rec_diff);
 			ifp->if_broot = kmalloc(new_size,
-						GFP_KERNEL | __GFP_NOFAIL);
+						GFP_KERNEL | GFP_NOFAIL);
 			ifp->if_broot_bytes = (int)new_size;
 			return;
 		}
@@ -426,7 +426,7 @@ xfs_iroot_realloc(
 		new_max = cur_max + rec_diff;
 		new_size = XFS_BMAP_BROOT_SPACE_CALC(mp, new_max);
 		ifp->if_broot = krealloc(ifp->if_broot, new_size,
-					 GFP_KERNEL | __GFP_NOFAIL);
+					 GFP_KERNEL | GFP_NOFAIL);
 		op = (char *)XFS_BMAP_BROOT_PTR_ADDR(mp, ifp->if_broot, 1,
 						     ifp->if_broot_bytes);
 		np = (char *)XFS_BMAP_BROOT_PTR_ADDR(mp, ifp->if_broot, 1,
@@ -452,7 +452,7 @@ xfs_iroot_realloc(
 	else
 		new_size = 0;
 	if (new_size > 0) {
-		new_broot = kmalloc(new_size, GFP_KERNEL | __GFP_NOFAIL);
+		new_broot = kmalloc(new_size, GFP_KERNEL | GFP_NOFAIL);
 		/*
 		 * First copy over the btree block header.
 		 */
@@ -521,7 +521,7 @@ xfs_idata_realloc(
 
 	if (byte_diff) {
 		ifp->if_data = krealloc(ifp->if_data, new_size,
-					GFP_KERNEL | __GFP_NOFAIL);
+					GFP_KERNEL | GFP_NOFAIL);
 		if (new_size == 0)
 			ifp->if_data = NULL;
 		ifp->if_bytes = new_size;
@@ -701,7 +701,7 @@ xfs_ifork_init_cow(
 		return;
 
 	ip->i_cowfp = kmem_cache_zalloc(xfs_ifork_cache,
-				GFP_KERNEL | __GFP_NOLOCKDEP | __GFP_NOFAIL);
+				GFP_KERNEL | __GFP_NOLOCKDEP | GFP_NOFAIL);
 	ip->i_cowfp->if_format = XFS_DINODE_FMT_EXTENTS;
 }
 

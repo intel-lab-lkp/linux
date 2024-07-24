@@ -2518,7 +2518,7 @@ retry_encrypt:
 		if (PTR_ERR(fio->encrypted_page) == -ENOMEM) {
 			f2fs_flush_merged_writes(fio->sbi);
 			memalloc_retry_wait(GFP_NOFS);
-			gfp_flags |= __GFP_NOFAIL;
+			gfp_flags |= GFP_NOFAIL;
 			goto retry_encrypt;
 		}
 		return PTR_ERR(fio->encrypted_page);
@@ -2998,7 +2998,7 @@ static int f2fs_write_cache_pages(struct address_space *mapping,
 	if (f2fs_compressed_file(inode) &&
 		1 << cc.log_cluster_size > F2FS_ONSTACK_PAGES) {
 		pages = f2fs_kzalloc(sbi, sizeof(struct page *) <<
-				cc.log_cluster_size, GFP_NOFS | __GFP_NOFAIL);
+				cc.log_cluster_size, GFP_NOFS | GFP_NOFAIL);
 		max_pages = 1 << cc.log_cluster_size;
 	}
 #endif

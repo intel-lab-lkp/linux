@@ -33,7 +33,7 @@ xfs_extent_busy_insert_list(
 	struct rb_node		*parent = NULL;
 
 	new = kzalloc(sizeof(struct xfs_extent_busy),
-			GFP_KERNEL | __GFP_NOFAIL);
+			GFP_KERNEL | GFP_NOFAIL);
 	new->agno = pag->pag_agno;
 	new->bno = bno;
 	new->length = len;

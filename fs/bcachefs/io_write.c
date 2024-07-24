@@ -1279,7 +1279,7 @@ retry:
 			/* XXX allocating memory with btree locks held - rare */
 			darray_push_gfp(&buckets, ((struct bucket_to_lock) {
 						   .b = b, .gen = ptr->gen, .l = l,
-						   }), GFP_KERNEL|__GFP_NOFAIL);
+						   }), GFP_KERNEL|GFP_NOFAIL);
 
 			if (ptr->unwritten)
 				op->flags |= BCH_WRITE_CONVERT_UNWRITTEN;
