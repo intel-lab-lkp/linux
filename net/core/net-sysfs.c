@@ -206,7 +206,7 @@ static ssize_t carrier_show(struct device *dev,
 	if (!rtnl_trylock())
 		return restart_syscall();
 
-	if (netif_running(netdev)) {
+	if (netif_running(netdev) && netif_device_present(netdev)) {
 		/* Synchronize carrier state with link watch,
 		 * see also rtnl_getlink().
 		 */
