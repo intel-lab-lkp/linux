@@ -868,5 +868,6 @@ int idpf_idc_init_aux_core_dev(struct idpf_adapter *adapter,
 			       enum idc_function_type ftype);
 void idpf_idc_deinit_core_aux_device(struct idc_rdma_core_dev_info *cdev_info);
 void idpf_idc_deinit_vport_aux_device(struct idc_rdma_vport_dev_info *vdev_info);
+void idpf_idc_issue_reset_event(struct idc_rdma_core_dev_info *cdev_info);
 
 #endif /* !_IDPF_H_ */
