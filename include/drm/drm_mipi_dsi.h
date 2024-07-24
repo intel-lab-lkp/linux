@@ -217,6 +217,16 @@ struct mipi_dsi_multi_context {
 	 * end to see if any of them failed.
 	 */
 	int accum_err;
+
+	/**
+	 * @quiet: Controls if a function calls dev_err or not
+	 *
+	 * Init to 0. When the value of quiet is set to 0, the function
+	 * will  print error messages as required. If this is set to 1,
+	 * the function will not print error messages, but will still
+	 * change the value of accum_err.
+	 */
+	int quiet;
 };
 
 #define MIPI_DSI_MODULE_PREFIX "mipi-dsi:"
