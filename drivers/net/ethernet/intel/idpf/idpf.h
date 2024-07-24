@@ -192,13 +192,19 @@ struct idpf_vport_max_q {
  * @trigger_reset: Trigger a reset to occur
  */
 struct idpf_reg_ops {
-	void (*ctlq_reg_init)(struct idpf_ctlq_create_info *cq);
+	void (*ctlq_reg_init)(struct idpf_adapter *adapter,
+			      struct idpf_ctlq_create_info *cq);
 	int (*intr_reg_init)(struct idpf_vport *vport);
 	void (*mb_intr_reg_init)(struct idpf_adapter *adapter);
 	void (*reset_reg_init)(struct idpf_adapter *adapter);
 	void (*trigger_reset)(struct idpf_adapter *adapter,
 			      enum idpf_flags trig_cause);
 };
+
+#define IDPF_PF_MBX_REGION_SZ		4096
+#define IDPF_PF_RSTAT_REGION_SZ		2048
+#define IDPF_VF_MBX_REGION_SZ		10240
+#define IDPF_VF_RSTAT_REGION_SZ		2048
 
 /**
  * struct idpf_dev_ops - Device specific operations
@@ -208,6 +214,11 @@ struct idpf_dev_ops {
 	struct idpf_reg_ops reg_ops;
 
 	int (*idc_init)(struct idpf_adapter *adapter);
+
+	resource_size_t mbx_reg_start;
+	resource_size_t mbx_reg_sz;
+	resource_size_t rstat_reg_start;
+	resource_size_t rstat_reg_sz;
 };
 
 /**
@@ -731,6 +742,35 @@ static inline u8 idpf_get_min_tx_pkt_len(struct idpf_adapter *adapter)
 }
 
 /**
+ * idpf_get_mbx_reg_addr - Get BAR0 mailbox register address
+ * @adapter: private data struct
+ * @reg_offset: register offset value
+ *
+ * Based on the register offset, return the actual BAR0 register address
+ */
+static inline void __iomem *idpf_get_mbx_reg_addr(struct idpf_adapter *adapter,
+						  resource_size_t reg_offset)
+{
+	return (void __iomem *)(adapter->hw.mbx.addr + reg_offset);
+}
+
+/**
+ * idpf_get_rstat_reg_addr - Get BAR0 rstat register address
+ * @adapter: private data struct
+ * @reg_offset: register offset value
+ *
+ * Based on the register offset, return the actual BAR0 register address
+ */
+static inline
+void __iomem *idpf_get_rstat_reg_addr(struct idpf_adapter *adapter,
+				      resource_size_t reg_offset)
+{
+	reg_offset -= adapter->dev_ops.rstat_reg_start;
+
+	return (void __iomem *)(adapter->hw.rstat.addr + reg_offset);
+}
+
+/**
  * idpf_get_reg_addr - Get BAR0 register address
  * @adapter: private data struct
  * @reg_offset: register offset value
@@ -740,7 +780,27 @@ static inline u8 idpf_get_min_tx_pkt_len(struct idpf_adapter *adapter)
 static inline void __iomem *idpf_get_reg_addr(struct idpf_adapter *adapter,
 					      resource_size_t reg_offset)
 {
-	return (void __iomem *)(adapter->hw.hw_addr + reg_offset);
+	struct idpf_hw *hw = &adapter->hw;
+	int i;
+
+	for (i = 0; i < hw->num_lan_regs; i++) {
+		struct idpf_mmio_reg *region = &hw->lan_regs[i];
+
+		if (reg_offset >= region->addr_start &&
+		    reg_offset < (region->addr_start + region->addr_len)) {
+			reg_offset -= region->addr_start;
+
+			return (u8 __iomem *)(region->addr + reg_offset);
+		}
+	}
+
+	/* It's impossible to hit this case with offsets from the CP. But if we
+	 * do for any other reason, the kernel will panic on that register
+	 * access. Might as well do it here to make it clear what's happening.
+	 */
+	BUG();
+
+	return NULL;
 }
 
 /**
@@ -754,7 +814,7 @@ static inline bool idpf_is_reset_detected(struct idpf_adapter *adapter)
 	if (!adapter->hw.arq)
 		return true;
 
-	return !(readl(idpf_get_reg_addr(adapter, adapter->hw.arq->reg.len)) &
+	return !(readl(idpf_get_mbx_reg_addr(adapter, adapter->hw.arq->reg.len)) &
 		 adapter->hw.arq->reg.len_mask);
 }
 

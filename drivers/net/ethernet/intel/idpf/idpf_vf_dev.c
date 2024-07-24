@@ -9,9 +9,11 @@
 
 /**
  * idpf_vf_ctlq_reg_init - initialize default mailbox registers
+ * @adapter: adapter structure
  * @cq: pointer to the array of create control queues
  */
-static void idpf_vf_ctlq_reg_init(struct idpf_ctlq_create_info *cq)
+static void idpf_vf_ctlq_reg_init(struct idpf_adapter *adapter,
+				  struct idpf_ctlq_create_info *cq)
 {
 	int i;
 
@@ -21,22 +23,22 @@ static void idpf_vf_ctlq_reg_init(struct idpf_ctlq_create_info *cq)
 		switch (ccq->type) {
 		case IDPF_CTLQ_TYPE_MAILBOX_TX:
 			/* set head and tail registers in our local struct */
-			ccq->reg.head = VF_ATQH;
-			ccq->reg.tail = VF_ATQT;
-			ccq->reg.len = VF_ATQLEN;
-			ccq->reg.bah = VF_ATQBAH;
-			ccq->reg.bal = VF_ATQBAL;
+			ccq->reg.head = VF_ATQH - adapter->dev_ops.mbx_reg_start;
+			ccq->reg.tail = VF_ATQT - adapter->dev_ops.mbx_reg_start;
+			ccq->reg.len = VF_ATQLEN - adapter->dev_ops.mbx_reg_start;
+			ccq->reg.bah = VF_ATQBAH - adapter->dev_ops.mbx_reg_start;
+			ccq->reg.bal = VF_ATQBAL - adapter->dev_ops.mbx_reg_start;
 			ccq->reg.len_mask = VF_ATQLEN_ATQLEN_M;
 			ccq->reg.len_ena_mask = VF_ATQLEN_ATQENABLE_M;
 			ccq->reg.head_mask = VF_ATQH_ATQH_M;
 			break;
 		case IDPF_CTLQ_TYPE_MAILBOX_RX:
 			/* set head and tail registers in our local struct */
-			ccq->reg.head = VF_ARQH;
-			ccq->reg.tail = VF_ARQT;
-			ccq->reg.len = VF_ARQLEN;
-			ccq->reg.bah = VF_ARQBAH;
-			ccq->reg.bal = VF_ARQBAL;
+			ccq->reg.head = VF_ARQH - adapter->dev_ops.mbx_reg_start;
+			ccq->reg.tail = VF_ARQT - adapter->dev_ops.mbx_reg_start;
+			ccq->reg.len = VF_ARQLEN - adapter->dev_ops.mbx_reg_start;
+			ccq->reg.bah = VF_ARQBAH - adapter->dev_ops.mbx_reg_start;
+			ccq->reg.bal = VF_ARQBAL - adapter->dev_ops.mbx_reg_start;
 			ccq->reg.len_mask = VF_ARQLEN_ARQLEN_M;
 			ccq->reg.len_ena_mask = VF_ARQLEN_ARQENABLE_M;
 			ccq->reg.head_mask = VF_ARQH_ARQH_M;
@@ -123,7 +125,7 @@ free_reg_vals:
  */
 static void idpf_vf_reset_reg_init(struct idpf_adapter *adapter)
 {
-	adapter->reset_reg.rstat = idpf_get_reg_addr(adapter, VFGEN_RSTAT);
+	adapter->reset_reg.rstat = idpf_get_rstat_reg_addr(adapter, VFGEN_RSTAT);
 	adapter->reset_reg.rstat_m = VFGEN_RSTAT_VFR_STATE_M;
 }
 
@@ -172,4 +174,9 @@ void idpf_vf_dev_ops_init(struct idpf_adapter *adapter)
 	idpf_vf_reg_ops_init(adapter);
 
 	adapter->dev_ops.idc_init = idpf_idc_vf_register;
+
+	adapter->dev_ops.mbx_reg_start = VF_BASE;
+	adapter->dev_ops.mbx_reg_sz = IDPF_VF_MBX_REGION_SZ;
+	adapter->dev_ops.rstat_reg_start = VFGEN_RSTAT;
+	adapter->dev_ops.rstat_reg_sz = IDPF_VF_RSTAT_REGION_SZ;
 }

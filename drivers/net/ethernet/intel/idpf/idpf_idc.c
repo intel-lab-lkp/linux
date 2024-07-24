@@ -394,7 +394,7 @@ int idpf_idc_init_aux_core_dev(struct idpf_adapter *adapter,
 			       enum idc_function_type ftype)
 {
 	struct idc_rdma_core_dev_info *cdev_info;
-	int err;
+	int err, i;
 
 	adapter->cdev_info = (struct idc_rdma_core_dev_info *)
 		kzalloc(sizeof(struct idc_rdma_core_dev_info), GFP_KERNEL);
@@ -407,14 +407,36 @@ int idpf_idc_init_aux_core_dev(struct idpf_adapter *adapter,
 	cdev_info->rdma_protocol = IDC_RDMA_PROTOCOL_ROCEV2;
 	cdev_info->ftype = ftype;
 
+	cdev_info->mapped_mem_regions =
+		kcalloc(adapter->hw.num_lan_regs,
+			sizeof(struct idc_rdma_lan_mapped_mem_region),
+			GFP_KERNEL);
+	if (!cdev_info->mapped_mem_regions) {
+		err = -ENOMEM;
+		goto err_plug_aux_dev;
+	}
+
+	cdev_info->num_memory_regions = cpu_to_le16(adapter->hw.num_lan_regs);
+	for (i = 0; i < adapter->hw.num_lan_regs; i++) {
+		cdev_info->mapped_mem_regions[i].region_addr =
+			adapter->hw.lan_regs[i].addr;
+		cdev_info->mapped_mem_regions[i].size =
+			cpu_to_le64(adapter->hw.lan_regs[i].addr_len);
+		cdev_info->mapped_mem_regions[i].start_offset =
+			cpu_to_le64(adapter->hw.lan_regs[i].addr_start);
+	}
+
 	idpf_idc_init_msix_data(adapter);
 
 	err = idpf_plug_core_aux_dev(cdev_info);
 	if (err)
-		goto err_plug_aux_dev;
+		goto err_free_mem_regions;
 
 	return 0;
 
+err_free_mem_regions:
+	kfree(cdev_info->mapped_mem_regions);
+	cdev_info->mapped_mem_regions = NULL;
 err_plug_aux_dev:
 	kfree(cdev_info);
 	adapter->cdev_info = NULL;

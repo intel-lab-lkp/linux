@@ -94,12 +94,21 @@ struct idpf_mbxq_desc {
 	u32 pf_vf_id;		/* used by CP when sending to PF */
 };
 
+struct idpf_mmio_reg {
+	void __iomem *addr;
+	resource_size_t addr_start;
+	resource_size_t addr_len;
+};
+
 /* Define the driver hardware struct to replace other control structs as needed
  * Align to ctlq_hw_info
  */
 struct idpf_hw {
-	void __iomem *hw_addr;
-	resource_size_t hw_addr_len;
+	struct idpf_mmio_reg mbx;
+	struct idpf_mmio_reg rstat;
+	/* Array of remaining LAN BAR regions */
+	int num_lan_regs;
+	struct idpf_mmio_reg *lan_regs;
 
 	struct idpf_adapter *back;
 

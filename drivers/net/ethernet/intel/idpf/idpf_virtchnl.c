@@ -892,6 +892,7 @@ static int idpf_send_get_caps_msg(struct idpf_adapter *adapter)
 	caps.other_caps =
 		cpu_to_le64(VIRTCHNL2_CAP_SRIOV			|
 			    VIRTCHNL2_CAP_RDMA                  |
+			    VIRTCHNL2_CAP_LAN_MEMORY_REGIONS	|
 			    VIRTCHNL2_CAP_MACFILTER		|
 			    VIRTCHNL2_CAP_SPLITQ_QSCHED		|
 			    VIRTCHNL2_CAP_PROMISC		|
@@ -909,6 +910,133 @@ static int idpf_send_get_caps_msg(struct idpf_adapter *adapter)
 		return reply_sz;
 	if (reply_sz < sizeof(adapter->caps))
 		return -EIO;
+
+	return 0;
+}
+
+/**
+ * idpf_send_get_lan_memory_regions - Send virtchnl get LAN memory regions msg
+ * @adapter: Driver specific private struct
+ */
+static int idpf_send_get_lan_memory_regions(struct idpf_adapter *adapter)
+{
+	struct virtchnl2_get_lan_memory_regions *rcvd_regions;
+	struct idpf_vc_xn_params xn_params = {};
+	int num_regions, size, i;
+	struct idpf_hw *hw;
+	ssize_t reply_sz;
+	int err = 0;
+
+	rcvd_regions = kzalloc(IDPF_CTLQ_MAX_BUF_LEN, GFP_KERNEL);
+	if (!rcvd_regions)
+		return -ENOMEM;
+
+	xn_params.vc_op = VIRTCHNL2_OP_GET_LAN_MEMORY_REGIONS;
+	xn_params.recv_buf.iov_base = rcvd_regions;
+	xn_params.recv_buf.iov_len = IDPF_CTLQ_MAX_BUF_LEN;
+	xn_params.timeout_ms = IDPF_VC_XN_DEFAULT_TIMEOUT_MSEC;
+	reply_sz = idpf_vc_xn_exec(adapter, &xn_params);
+	if (reply_sz < 0) {
+		err = reply_sz;
+		goto send_get_lan_regions_out;
+	}
+
+	num_regions = le16_to_cpu(rcvd_regions->num_memory_regions);
+	size = struct_size(rcvd_regions, mem_reg, num_regions);
+	if (reply_sz < size) {
+		err = -EIO;
+		goto send_get_lan_regions_out;
+	}
+
+	if (size > IDPF_CTLQ_MAX_BUF_LEN) {
+		err = -EINVAL;
+		goto send_get_lan_regions_out;
+	}
+
+	hw = &adapter->hw;
+	hw->lan_regs =
+		kcalloc(num_regions, sizeof(struct idpf_mmio_reg), GFP_ATOMIC);
+	if (!hw->lan_regs) {
+		err = -ENOMEM;
+		goto send_get_lan_regions_out;
+	}
+
+	for (i = 0; i < num_regions; i++) {
+		hw->lan_regs[i].addr_len =
+			le64_to_cpu(rcvd_regions->mem_reg[i].size);
+		hw->lan_regs[i].addr_start =
+			le64_to_cpu(rcvd_regions->mem_reg[i].start_offset);
+	}
+	hw->num_lan_regs = num_regions;
+
+send_get_lan_regions_out:
+	kfree(rcvd_regions);
+
+	return err;
+}
+
+/**
+ * idpf_calc_remaining_mmio_regs - calcuate MMIO regions outside mbx and rstat
+ * @adapter: Driver specific private structure
+ *
+ * Called when idpf_send_get_lan_memory_regions fails or is not supported. This
+ * will calculate the offsets and sizes for the regions before, in between, and
+ * after the mailbox and rstat MMIO mappings.
+ */
+static int idpf_calc_remaining_mmio_regs(struct idpf_adapter *adapter)
+{
+	struct idpf_hw *hw = &adapter->hw;
+
+	hw->num_lan_regs = 3;
+	hw->lan_regs = kcalloc(hw->num_lan_regs,
+			       sizeof(struct idpf_mmio_reg),
+			       GFP_ATOMIC);
+	if (!hw->lan_regs)
+		return -ENOMEM;
+
+	/* Region preceding mailbox */
+	hw->lan_regs[0].addr_start = 0;
+	hw->lan_regs[0].addr_len = adapter->dev_ops.mbx_reg_start;
+	/* Region between mailbox and rstat */
+	hw->lan_regs[1].addr_start = adapter->dev_ops.mbx_reg_start +
+					adapter->dev_ops.mbx_reg_sz;
+	hw->lan_regs[1].addr_len = adapter->dev_ops.rstat_reg_start -
+					hw->lan_regs[1].addr_start;
+	/* Region after rstat */
+	hw->lan_regs[2].addr_start = adapter->dev_ops.rstat_reg_start +
+					adapter->dev_ops.rstat_reg_sz;
+	hw->lan_regs[2].addr_len = pci_resource_len(adapter->pdev, 0) -
+					hw->lan_regs[2].addr_start;
+
+	return 0;
+}
+
+/**
+ * idpf_map_lan_mmio_regs - map remaining LAN BAR regions
+ * @adapter: Driver specific private structure
+ */
+static int idpf_map_lan_mmio_regs(struct idpf_adapter *adapter)
+{
+	struct pci_dev *pdev = adapter->pdev;
+	struct idpf_hw *hw = &adapter->hw;
+	int i;
+
+	for (i = 0; i < hw->num_lan_regs; i++) {
+		resource_size_t res_start;
+		long len;
+
+		len = hw->lan_regs[i].addr_len;
+		if (!len)
+			continue;
+		res_start = hw->lan_regs[i].addr_start;
+		res_start += pci_resource_start(pdev, 0);
+
+		hw->lan_regs[i].addr = ioremap(res_start, len);
+		if (!hw->lan_regs[i].addr) {
+			pci_err(pdev, "failed to allocate bar0 region\n");
+			return -ENOMEM;
+		}
+	}
 
 	return 0;
 }
@@ -2778,7 +2906,7 @@ int idpf_init_dflt_mbx(struct idpf_adapter *adapter)
 	struct idpf_hw *hw = &adapter->hw;
 	int err;
 
-	adapter->dev_ops.reg_ops.ctlq_reg_init(ctlq_info);
+	adapter->dev_ops.reg_ops.ctlq_reg_init(adapter, ctlq_info);
 
 	err = idpf_ctlq_init(hw, IDPF_NUM_DFLT_MBX_Q, ctlq_info);
 	if (err)
@@ -2936,6 +3064,30 @@ restart:
 		 * state machine
 		 */
 		msleep(task_delay);
+	}
+
+	if (idpf_is_cap_ena(adapter, IDPF_OTHER_CAPS, VIRTCHNL2_CAP_LAN_MEMORY_REGIONS)) {
+		err = idpf_send_get_lan_memory_regions(adapter);
+		if (err) {
+			dev_err(&adapter->pdev->dev, "Failed to get LAN memory regions: %d\n",
+				err);
+			return -EINVAL;
+		}
+	} else {
+		/* Fallback to mapping the remaining regions of the entire BAR */
+		err = idpf_calc_remaining_mmio_regs(adapter);
+		if (err) {
+			dev_err(&adapter->pdev->dev, "Failed to allocate bar0 region(s): %d\n",
+				err);
+			return -ENOMEM;
+		}
+	}
+
+	err = idpf_map_lan_mmio_regs(adapter);
+	if (err) {
+		dev_err(&adapter->pdev->dev, "Failed to map bar0 region(s): %d\n",
+			err);
+		return -ENOMEM;
 	}
 
 	pci_sriov_set_totalvfs(adapter->pdev, idpf_get_max_vfs(adapter));

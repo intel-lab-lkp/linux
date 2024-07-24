@@ -76,6 +76,11 @@ destroy_wqs:
 	mutex_destroy(&adapter->queue_lock);
 	mutex_destroy(&adapter->vc_buf_lock);
 
+	iounmap(adapter->hw.mbx.addr);
+	iounmap(adapter->hw.rstat.addr);
+	for (i = 0; i < adapter->hw.num_lan_regs; i++)
+		iounmap(adapter->hw.lan_regs[i].addr);
+
 	pci_set_drvdata(pdev, NULL);
 	kfree(adapter);
 }
@@ -102,13 +107,34 @@ static int idpf_cfg_hw(struct idpf_adapter *adapter)
 {
 	struct pci_dev *pdev = adapter->pdev;
 	struct idpf_hw *hw = &adapter->hw;
+	resource_size_t res_start;
+	long len;
 
-	hw->hw_addr = pcim_iomap_table(pdev)[0];
-	if (!hw->hw_addr) {
-		pci_err(pdev, "failed to allocate PCI iomap table\n");
+	/* Map mailbox space for virtchnl communication */
+	res_start = pci_resource_start(pdev, 0) +
+			adapter->dev_ops.mbx_reg_start;
+	len = adapter->dev_ops.mbx_reg_sz;
+	hw->mbx.addr = ioremap(res_start, len);
+	if (!hw->mbx.addr) {
+		pci_err(pdev, "failed to allocate bar0 mbx region\n");
 
 		return -ENOMEM;
 	}
+	hw->mbx.addr_start = adapter->dev_ops.mbx_reg_start;
+	hw->mbx.addr_len = len;
+
+	/* Map rstat space for resets */
+	res_start = pci_resource_start(pdev, 0) +
+			adapter->dev_ops.rstat_reg_start;
+	len = adapter->dev_ops.rstat_reg_sz;
+	hw->rstat.addr = ioremap(res_start, len);
+	if (!hw->rstat.addr) {
+		pci_err(pdev, "failed to allocate bar0 rstat region\n");
+
+		return -ENOMEM;
+	}
+	hw->rstat.addr_start = adapter->dev_ops.rstat_reg_start;
+	hw->rstat.addr_len = len;
 
 	hw->back = adapter;
 
@@ -155,9 +181,9 @@ static int idpf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (err)
 		goto err_free;
 
-	err = pcim_iomap_regions(pdev, BIT(0), pci_name(pdev));
+	err = pci_request_mem_regions(pdev, pci_name(pdev));
 	if (err) {
-		pci_err(pdev, "pcim_iomap_regions failed %pe\n", ERR_PTR(err));
+		pci_err(pdev, "pci_request_mem_regions failed %pe\n", ERR_PTR(err));
 
 		goto err_free;
 	}

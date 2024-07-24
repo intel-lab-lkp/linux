@@ -9,9 +9,11 @@
 
 /**
  * idpf_ctlq_reg_init - initialize default mailbox registers
+ * @adapter: adapter structure
  * @cq: pointer to the array of create control queues
  */
-static void idpf_ctlq_reg_init(struct idpf_ctlq_create_info *cq)
+static void idpf_ctlq_reg_init(struct idpf_adapter *adapter,
+			       struct idpf_ctlq_create_info *cq)
 {
 	int i;
 
@@ -21,22 +23,22 @@ static void idpf_ctlq_reg_init(struct idpf_ctlq_create_info *cq)
 		switch (ccq->type) {
 		case IDPF_CTLQ_TYPE_MAILBOX_TX:
 			/* set head and tail registers in our local struct */
-			ccq->reg.head = PF_FW_ATQH;
-			ccq->reg.tail = PF_FW_ATQT;
-			ccq->reg.len = PF_FW_ATQLEN;
-			ccq->reg.bah = PF_FW_ATQBAH;
-			ccq->reg.bal = PF_FW_ATQBAL;
+			ccq->reg.head = PF_FW_ATQH - adapter->dev_ops.mbx_reg_start;
+			ccq->reg.tail = PF_FW_ATQT - adapter->dev_ops.mbx_reg_start;
+			ccq->reg.len = PF_FW_ATQLEN - adapter->dev_ops.mbx_reg_start;
+			ccq->reg.bah = PF_FW_ATQBAH - adapter->dev_ops.mbx_reg_start;
+			ccq->reg.bal = PF_FW_ATQBAL - adapter->dev_ops.mbx_reg_start;
 			ccq->reg.len_mask = PF_FW_ATQLEN_ATQLEN_M;
 			ccq->reg.len_ena_mask = PF_FW_ATQLEN_ATQENABLE_M;
 			ccq->reg.head_mask = PF_FW_ATQH_ATQH_M;
 			break;
 		case IDPF_CTLQ_TYPE_MAILBOX_RX:
 			/* set head and tail registers in our local struct */
-			ccq->reg.head = PF_FW_ARQH;
-			ccq->reg.tail = PF_FW_ARQT;
-			ccq->reg.len = PF_FW_ARQLEN;
-			ccq->reg.bah = PF_FW_ARQBAH;
-			ccq->reg.bal = PF_FW_ARQBAL;
+			ccq->reg.head = PF_FW_ARQH - adapter->dev_ops.mbx_reg_start;
+			ccq->reg.tail = PF_FW_ARQT - adapter->dev_ops.mbx_reg_start;
+			ccq->reg.len = PF_FW_ARQLEN - adapter->dev_ops.mbx_reg_start;
+			ccq->reg.bah = PF_FW_ARQBAH - adapter->dev_ops.mbx_reg_start;
+			ccq->reg.bal = PF_FW_ARQBAL - adapter->dev_ops.mbx_reg_start;
 			ccq->reg.len_mask = PF_FW_ARQLEN_ARQLEN_M;
 			ccq->reg.len_ena_mask = PF_FW_ARQLEN_ARQENABLE_M;
 			ccq->reg.head_mask = PF_FW_ARQH_ARQH_M;
@@ -124,7 +126,7 @@ free_reg_vals:
  */
 static void idpf_reset_reg_init(struct idpf_adapter *adapter)
 {
-	adapter->reset_reg.rstat = idpf_get_reg_addr(adapter, PFGEN_RSTAT);
+	adapter->reset_reg.rstat = idpf_get_rstat_reg_addr(adapter, PFGEN_RSTAT);
 	adapter->reset_reg.rstat_m = PFGEN_RSTAT_PFR_STATE_M;
 }
 
@@ -138,9 +140,9 @@ static void idpf_trigger_reset(struct idpf_adapter *adapter,
 {
 	u32 reset_reg;
 
-	reset_reg = readl(idpf_get_reg_addr(adapter, PFGEN_CTRL));
+	reset_reg = readl(idpf_get_rstat_reg_addr(adapter, PFGEN_CTRL));
 	writel(reset_reg | PFGEN_CTRL_PFSWR,
-	       idpf_get_reg_addr(adapter, PFGEN_CTRL));
+	       idpf_get_rstat_reg_addr(adapter, PFGEN_CTRL));
 }
 
 /**
@@ -174,4 +176,9 @@ void idpf_dev_ops_init(struct idpf_adapter *adapter)
 	idpf_reg_ops_init(adapter);
 
 	adapter->dev_ops.idc_init = idpf_idc_register;
+
+	adapter->dev_ops.mbx_reg_start = PF_FW_BASE;
+	adapter->dev_ops.mbx_reg_sz = IDPF_PF_MBX_REGION_SZ;
+	adapter->dev_ops.rstat_reg_start = PFGEN_RTRIG;
+	adapter->dev_ops.rstat_reg_sz = IDPF_PF_RSTAT_REGION_SZ;
 }

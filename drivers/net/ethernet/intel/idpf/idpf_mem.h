@@ -12,9 +12,9 @@ struct idpf_dma_mem {
 	size_t size;
 };
 
-#define wr32(a, reg, value)	writel((value), ((a)->hw_addr + (reg)))
-#define rd32(a, reg)		readl((a)->hw_addr + (reg))
-#define wr64(a, reg, value)	writeq((value), ((a)->hw_addr + (reg)))
-#define rd64(a, reg)		readq((a)->hw_addr + (reg))
+#define wr32(a, reg, value)	writel((value), ((a)->mbx.addr + (reg)))
+#define rd32(a, reg)		readl((a)->mbx.addr + (reg))
+#define wr64(a, reg, value)	writeq((value), ((a)->mbx.addr + (reg)))
+#define rd64(a, reg)		readq((a)->mbx.addr + (reg))
 
 #endif /* _IDPF_MEM_H_ */
