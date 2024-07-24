@@ -180,6 +180,44 @@ out:
 	return ret;
 }
 
+static ssize_t fuse_conn_timeout_read(struct file *file,
+				      char __user *buf, size_t len,
+				      loff_t *ppos)
+{
+	struct fuse_conn *fc;
+	u32 val;
+
+	fc = fuse_ctl_file_conn_get(file);
+	if (!fc)
+		return 0;
+
+	val = READ_ONCE(fc->timeout);
+	fuse_conn_put(fc);
+	return fuse_conn_limit_read(file, buf, len, ppos, val);
+}
+
+static ssize_t fuse_conn_timeout_write(struct file *file,
+				       const char __user *buf,
+				       size_t count, loff_t *ppos)
+{
+	struct fuse_conn *fc;
+	ssize_t ret;
+	u32 val;
+
+	ret = fuse_conn_limit_write(file, buf, count, ppos, &val,
+				    3600);
+	if (ret <= 0)
+		goto out;
+	fc = fuse_ctl_file_conn_get(file);
+	if (!fc)
+		goto out;
+
+	WRITE_ONCE(fc->timeout, val);
+	fuse_conn_put(fc);
+out:
+	return ret;
+}
+
 static const struct file_operations fuse_ctl_abort_ops = {
 	.open = nonseekable_open,
 	.write = fuse_conn_abort_write,
@@ -203,6 +241,13 @@ static const struct file_operations fuse_conn_congestion_threshold_ops = {
 	.open = nonseekable_open,
 	.read = fuse_conn_congestion_threshold_read,
 	.write = fuse_conn_congestion_threshold_write,
+	.llseek = no_llseek,
+};
+
+static const struct file_operations fuse_conn_timeout_ops = {
+	.open = nonseekable_open,
+	.read = fuse_conn_timeout_read,
+	.write = fuse_conn_timeout_write,
 	.llseek = no_llseek,
 };
 
@@ -274,7 +319,10 @@ int fuse_ctl_add_conn(struct fuse_conn *fc)
 				 1, NULL, &fuse_conn_max_background_ops) ||
 	    !fuse_ctl_add_dentry(parent, fc, "congestion_threshold",
 				 S_IFREG | 0600, 1, NULL,
-				 &fuse_conn_congestion_threshold_ops))
+				 &fuse_conn_congestion_threshold_ops) ||
+	    !fuse_ctl_add_dentry(parent, fc, "timeout",
+				 S_IFREG | 0600, 1, NULL,
+				 &fuse_conn_timeout_ops))
 		goto err;
 
 	return 0;
