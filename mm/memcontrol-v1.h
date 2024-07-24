@@ -87,14 +87,6 @@ void memcg1_cancel_attach(struct cgroup_taskset *tset);
 void memcg1_move_task(void);
 void memcg1_css_offline(struct mem_cgroup *memcg);
 
-/* for encoding cft->private value on file */
-enum res_type {
-	_MEM,
-	_MEMSWAP,
-	_KMEM,
-	_TCP,
-};
-
 bool memcg1_oom_prepare(struct mem_cgroup *memcg, bool *locked);
 void memcg1_oom_finish(struct mem_cgroup *memcg, bool locked);
 void memcg1_oom_recover(struct mem_cgroup *memcg);

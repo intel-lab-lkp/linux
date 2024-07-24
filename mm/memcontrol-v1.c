@@ -1497,7 +1497,7 @@ static void mem_cgroup_oom_notify(struct mem_cgroup *memcg)
 }
 
 static int __mem_cgroup_usage_register_event(struct mem_cgroup *memcg,
-	struct eventfd_ctx *eventfd, const char *args, enum res_type type)
+	struct eventfd_ctx *eventfd, const char *args, enum mem_counter_type type)
 {
 	struct mem_cgroup_thresholds *thresholds;
 	struct mem_cgroup_threshold_ary *new;
@@ -1511,10 +1511,10 @@ static int __mem_cgroup_usage_register_event(struct mem_cgroup *memcg,
 
 	mutex_lock(&memcg->thresholds_lock);
 
-	if (type == _MEM) {
+	if (type == MCT_MEM) {
 		thresholds = &memcg->thresholds;
 		usage = mem_cgroup_usage(memcg, false);
-	} else if (type == _MEMSWAP) {
+	} else if (type == MCT_MEMSW) {
 		thresholds = &memcg->memsw_thresholds;
 		usage = mem_cgroup_usage(memcg, true);
 	} else
@@ -1522,7 +1522,7 @@ static int __mem_cgroup_usage_register_event(struct mem_cgroup *memcg,
 
 	/* Check if a threshold crossed before adding a new one */
 	if (thresholds->primary)
-		__mem_cgroup_threshold(memcg, type == _MEMSWAP);
+		__mem_cgroup_threshold(memcg, type == MCT_MEMSW);
 
 	size = thresholds->primary ? thresholds->primary->size + 1 : 1;
 
@@ -1579,17 +1579,17 @@ unlock:
 static int mem_cgroup_usage_register_event(struct mem_cgroup *memcg,
 	struct eventfd_ctx *eventfd, const char *args)
 {
-	return __mem_cgroup_usage_register_event(memcg, eventfd, args, _MEM);
+	return __mem_cgroup_usage_register_event(memcg, eventfd, args, MCT_MEM);
 }
 
 static int memsw_cgroup_usage_register_event(struct mem_cgroup *memcg,
 	struct eventfd_ctx *eventfd, const char *args)
 {
-	return __mem_cgroup_usage_register_event(memcg, eventfd, args, _MEMSWAP);
+	return __mem_cgroup_usage_register_event(memcg, eventfd, args, MCT_MEMSW);
 }
 
 static void __mem_cgroup_usage_unregister_event(struct mem_cgroup *memcg,
-	struct eventfd_ctx *eventfd, enum res_type type)
+	struct eventfd_ctx *eventfd, enum mem_counter_type type)
 {
 	struct mem_cgroup_thresholds *thresholds;
 	struct mem_cgroup_threshold_ary *new;
@@ -1598,10 +1598,10 @@ static void __mem_cgroup_usage_unregister_event(struct mem_cgroup *memcg,
 
 	mutex_lock(&memcg->thresholds_lock);
 
-	if (type == _MEM) {
+	if (type == MCT_MEM) {
 		thresholds = &memcg->thresholds;
 		usage = mem_cgroup_usage(memcg, false);
-	} else if (type == _MEMSWAP) {
+	} else if (type == MCT_MEMSW) {
 		thresholds = &memcg->memsw_thresholds;
 		usage = mem_cgroup_usage(memcg, true);
 	} else
@@ -1611,7 +1611,7 @@ static void __mem_cgroup_usage_unregister_event(struct mem_cgroup *memcg,
 		goto unlock;
 
 	/* Check if a threshold crossed before removing */
-	__mem_cgroup_threshold(memcg, type == _MEMSWAP);
+	__mem_cgroup_threshold(memcg, type == MCT_MEMSW);
 
 	/* Calculate new number of threshold */
 	size = entries = 0;
@@ -1676,13 +1676,13 @@ unlock:
 static void mem_cgroup_usage_unregister_event(struct mem_cgroup *memcg,
 	struct eventfd_ctx *eventfd)
 {
-	return __mem_cgroup_usage_unregister_event(memcg, eventfd, _MEM);
+	return __mem_cgroup_usage_unregister_event(memcg, eventfd, MCT_MEM);
 }
 
 static void memsw_cgroup_usage_unregister_event(struct mem_cgroup *memcg,
 	struct eventfd_ctx *eventfd)
 {
-	return __mem_cgroup_usage_unregister_event(memcg, eventfd, _MEMSWAP);
+	return __mem_cgroup_usage_unregister_event(memcg, eventfd, MCT_MEMSW);
 }
 
 static int mem_cgroup_oom_register_event(struct mem_cgroup *memcg,
@@ -2414,20 +2414,20 @@ static ssize_t mem_cgroup_write(struct kernfs_open_file *of,
 			break;
 		}
 		switch (MEMFILE_TYPE(of_cft(of)->private)) {
-		case _MEM:
+		case MCT_MEM:
 			ret = mem_cgroup_resize_max(memcg, nr_pages, false);
 			break;
-		case _MEMSWAP:
+		case MCT_MEMSW:
 			ret = mem_cgroup_resize_max(memcg, nr_pages, true);
 			break;
-		case _KMEM:
+		case MCT_KMEM:
 			pr_warn_once("kmem.limit_in_bytes is deprecated and will be removed. "
 				     "Writing any value to this file has no effect. "
 				     "Please report your usecase to linux-mm@kvack.org if you "
 				     "depend on this functionality.\n");
 			ret = 0;
 			break;
-		case _TCP:
+		case MCT_TCPMEM:
 			ret = memcg_update_tcp_max(memcg, nr_pages);
 			break;
 		}
@@ -2738,30 +2738,30 @@ static int mem_cgroup_slab_show(struct seq_file *m, void *p)
 struct cftype mem_cgroup_legacy_files[] = {
 	{
 		.name = "usage_in_bytes",
-		.private = MEMFILE_PRIVATE(_MEM, RES_USAGE),
+		.private = MEMFILE_PRIVATE(MCT_MEM, RES_USAGE),
 		.read_u64 = mem_cgroup_read_u64,
 	},
 	{
 		.name = "max_usage_in_bytes",
-		.private = MEMFILE_PRIVATE(_MEM, RES_MAX_USAGE),
+		.private = MEMFILE_PRIVATE(MCT_MEM, RES_MAX_USAGE),
 		.write = mem_cgroup_reset,
 		.read_u64 = mem_cgroup_read_u64,
 	},
 	{
 		.name = "limit_in_bytes",
-		.private = MEMFILE_PRIVATE(_MEM, RES_LIMIT),
+		.private = MEMFILE_PRIVATE(MCT_MEM, RES_LIMIT),
 		.write = mem_cgroup_write,
 		.read_u64 = mem_cgroup_read_u64,
 	},
 	{
 		.name = "soft_limit_in_bytes",
-		.private = MEMFILE_PRIVATE(_MEM, RES_SOFT_LIMIT),
+		.private = MEMFILE_PRIVATE(MCT_MEM, RES_SOFT_LIMIT),
 		.write = mem_cgroup_write,
 		.read_u64 = mem_cgroup_read_u64,
 	},
 	{
 		.name = "failcnt",
-		.private = MEMFILE_PRIVATE(_MEM, RES_FAILCNT),
+		.private = MEMFILE_PRIVATE(MCT_MEM, RES_FAILCNT),
 		.write = mem_cgroup_reset,
 		.read_u64 = mem_cgroup_read_u64,
 	},
@@ -2810,24 +2810,24 @@ struct cftype mem_cgroup_legacy_files[] = {
 #endif
 	{
 		.name = "kmem.limit_in_bytes",
-		.private = MEMFILE_PRIVATE(_KMEM, RES_LIMIT),
+		.private = MEMFILE_PRIVATE(MCT_KMEM, RES_LIMIT),
 		.write = mem_cgroup_write,
 		.read_u64 = mem_cgroup_read_u64,
 	},
 	{
 		.name = "kmem.usage_in_bytes",
-		.private = MEMFILE_PRIVATE(_KMEM, RES_USAGE),
+		.private = MEMFILE_PRIVATE(MCT_KMEM, RES_USAGE),
 		.read_u64 = mem_cgroup_read_u64,
 	},
 	{
 		.name = "kmem.failcnt",
-		.private = MEMFILE_PRIVATE(_KMEM, RES_FAILCNT),
+		.private = MEMFILE_PRIVATE(MCT_KMEM, RES_FAILCNT),
 		.write = mem_cgroup_reset,
 		.read_u64 = mem_cgroup_read_u64,
 	},
 	{
 		.name = "kmem.max_usage_in_bytes",
-		.private = MEMFILE_PRIVATE(_KMEM, RES_MAX_USAGE),
+		.private = MEMFILE_PRIVATE(MCT_KMEM, RES_MAX_USAGE),
 		.write = mem_cgroup_reset,
 		.read_u64 = mem_cgroup_read_u64,
 	},
@@ -2839,24 +2839,24 @@ struct cftype mem_cgroup_legacy_files[] = {
 #endif
 	{
 		.name = "kmem.tcp.limit_in_bytes",
-		.private = MEMFILE_PRIVATE(_TCP, RES_LIMIT),
+		.private = MEMFILE_PRIVATE(MCT_TCPMEM, RES_LIMIT),
 		.write = mem_cgroup_write,
 		.read_u64 = mem_cgroup_read_u64,
 	},
 	{
 		.name = "kmem.tcp.usage_in_bytes",
-		.private = MEMFILE_PRIVATE(_TCP, RES_USAGE),
+		.private = MEMFILE_PRIVATE(MCT_TCPMEM, RES_USAGE),
 		.read_u64 = mem_cgroup_read_u64,
 	},
 	{
 		.name = "kmem.tcp.failcnt",
-		.private = MEMFILE_PRIVATE(_TCP, RES_FAILCNT),
+		.private = MEMFILE_PRIVATE(MCT_TCPMEM, RES_FAILCNT),
 		.write = mem_cgroup_reset,
 		.read_u64 = mem_cgroup_read_u64,
 	},
 	{
 		.name = "kmem.tcp.max_usage_in_bytes",
-		.private = MEMFILE_PRIVATE(_TCP, RES_MAX_USAGE),
+		.private = MEMFILE_PRIVATE(MCT_TCPMEM, RES_MAX_USAGE),
 		.write = mem_cgroup_reset,
 		.read_u64 = mem_cgroup_read_u64,
 	},
@@ -2866,24 +2866,24 @@ struct cftype mem_cgroup_legacy_files[] = {
 struct cftype memsw_files[] = {
 	{
 		.name = "memsw.usage_in_bytes",
-		.private = MEMFILE_PRIVATE(_MEMSWAP, RES_USAGE),
+		.private = MEMFILE_PRIVATE(MCT_MEMSW, RES_USAGE),
 		.read_u64 = mem_cgroup_read_u64,
 	},
 	{
 		.name = "memsw.max_usage_in_bytes",
-		.private = MEMFILE_PRIVATE(_MEMSWAP, RES_MAX_USAGE),
+		.private = MEMFILE_PRIVATE(MCT_MEMSW, RES_MAX_USAGE),
 		.write = mem_cgroup_reset,
 		.read_u64 = mem_cgroup_read_u64,
 	},
 	{
 		.name = "memsw.limit_in_bytes",
-		.private = MEMFILE_PRIVATE(_MEMSWAP, RES_LIMIT),
+		.private = MEMFILE_PRIVATE(MCT_MEMSW, RES_LIMIT),
 		.write = mem_cgroup_write,
 		.read_u64 = mem_cgroup_read_u64,
 	},
 	{
 		.name = "memsw.failcnt",
-		.private = MEMFILE_PRIVATE(_MEMSWAP, RES_FAILCNT),
+		.private = MEMFILE_PRIVATE(MCT_MEMSW, RES_FAILCNT),
 		.write = mem_cgroup_reset,
 		.read_u64 = mem_cgroup_read_u64,
 	},
