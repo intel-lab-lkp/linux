@@ -1630,10 +1630,47 @@ static gfp_t limit_gfp_mask(gfp_t huge_gfp, gfp_t limit_gfp)
 	return result;
 }
 
+/**
+ * shmem_mapping_size_order - Get maximum folio order for the given file size.
+ * @mapping: Target address_space.
+ * @index: The page index.
+ * @size: The suggested size of the folio to create.
+ *
+ * This returns a high order for folios (when supported) based on the file size
+ * which the mapping currently allows at the given index. The index is relevant
+ * due to alignment considerations the mapping might have. The returned order
+ * may be less than the size passed.
+ *
+ * Like __filemap_get_folio order calculation.
+ *
+ * Return: The order.
+ */
+static inline unsigned int
+shmem_mapping_size_order(struct address_space *mapping, pgoff_t index,
+			 size_t size, struct shmem_sb_info *sbinfo)
+{
+	unsigned int order = ilog2(size);
+
+	if ((order <= PAGE_SHIFT) ||
+	    (!mapping_large_folio_support(mapping) || !sbinfo->noswap))
+		return 0;
+
+	order -= PAGE_SHIFT;
+
+	/* If we're not aligned, allocate a smaller folio */
+	if (index & ((1UL << order) - 1))
+		order = __ffs(index);
+
+	order = min_t(size_t, order, MAX_PAGECACHE_ORDER);
+
+	/* Order-1 not supported due to THP dependency */
+	return (order == 1) ? 0 : order;
+}
+
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 unsigned long shmem_allowable_huge_orders(struct inode *inode,
 				struct vm_area_struct *vma, pgoff_t index,
-				bool shmem_huge_force)
+				bool shmem_huge_force, size_t len)
 {
 	unsigned long mask = READ_ONCE(huge_shmem_orders_always);
 	unsigned long within_size_orders = READ_ONCE(huge_shmem_orders_within_size);
@@ -1659,10 +1696,20 @@ unsigned long shmem_allowable_huge_orders(struct inode *inode,
 						vma, vm_flags);
 	if (!vma || !vma_is_anon_shmem(vma)) {
 		/*
-		 * For tmpfs, we now only support PMD sized THP if huge page
-		 * is enabled, otherwise fallback to order 0.
+		 * For tmpfs, if top level huge page is enabled, we just allow
+		 * PMD size THP to keep interface backward compatibility.
 		 */
-		return global_huge ? BIT(HPAGE_PMD_ORDER) : 0;
+		if (global_huge)
+			return BIT(HPAGE_PMD_ORDER);
+
+		/*
+		 * Otherwise, get a highest order hint based on the size of
+		 * write and fallocate paths, then will try each allowable
+		 * huge orders.
+		 */
+		order = shmem_mapping_size_order(inode->i_mapping, index,
+						 len, SHMEM_SB(inode->i_sb));
+		return BIT(order + 1) - 1;
 	}
 
 	/*
@@ -2174,7 +2221,7 @@ repeat:
 	}
 
 	/* Find hugepage orders that are allowed for anonymous shmem and tmpfs. */
-	orders = shmem_allowable_huge_orders(inode, vma, index, false);
+	orders = shmem_allowable_huge_orders(inode, vma, index, false, len);
 	if (orders > 0) {
 		gfp_t huge_gfp;
 

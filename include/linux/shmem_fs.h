@@ -113,11 +113,11 @@ int shmem_unuse(unsigned int type);
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 unsigned long shmem_allowable_huge_orders(struct inode *inode,
 				struct vm_area_struct *vma, pgoff_t index,
-				bool shmem_huge_force);
+				bool shmem_huge_force, size_t len);
 #else
 static inline unsigned long shmem_allowable_huge_orders(struct inode *inode,
 				struct vm_area_struct *vma, pgoff_t index,
-				bool shmem_huge_force)
+				bool shmem_huge_force, size_t len)
 {
 	return 0;
 }
