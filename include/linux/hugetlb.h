@@ -61,7 +61,7 @@ struct resv_map {
 	 * here. If these fields are 0, then either the mapping is shared, or
 	 * cgroup accounting is disabled for this resv_map.
 	 */
-	struct page_counter *reservation_counter;
+	unsigned long reservation_idx;
 	unsigned long pages_per_hpage;
 	struct cgroup_subsys_state *css;
 #endif
@@ -96,7 +96,7 @@ struct file_region {
 	 * file_region in resv_map. These fields hold the info needed to
 	 * uncharge each reservation.
 	 */
-	struct page_counter *reservation_counter;
+	unsigned long reservation_idx;
 	struct cgroup_subsys_state *css;
 #endif
 };

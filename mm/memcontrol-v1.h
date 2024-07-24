@@ -112,7 +112,7 @@ bool memcg1_charge_skmem(struct mem_cgroup *memcg, unsigned int nr_pages,
 			 gfp_t gfp_mask);
 static inline void memcg1_uncharge_skmem(struct mem_cgroup *memcg, unsigned int nr_pages)
 {
-	page_counter_uncharge(&memcg->tcpmem, nr_pages);
+	page_counter_uncharge(&memcg->memory, MCT_TCPMEM, nr_pages);
 }
 
 extern struct cftype memsw_files[];

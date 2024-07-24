@@ -455,7 +455,7 @@ static void copy_hugetlb_cgroup_uncharge_info(struct file_region *nrg,
 					      struct file_region *rg)
 {
 #ifdef CONFIG_CGROUP_HUGETLB
-	nrg->reservation_counter = rg->reservation_counter;
+	nrg->reservation_idx = rg->reservation_idx;
 	nrg->css = rg->css;
 	if (rg->css)
 		css_get(rg->css);
@@ -470,8 +470,7 @@ static void record_hugetlb_cgroup_uncharge_info(struct hugetlb_cgroup *h_cg,
 {
 #ifdef CONFIG_CGROUP_HUGETLB
 	if (h_cg) {
-		nrg->reservation_counter =
-			&h_cg->rsvd_hugepage[hstate_index(h)];
+		nrg->reservation_idx = hstate_index(h);
 		nrg->css = &h_cg->css;
 		/*
 		 * The caller will hold exactly one h_cg->css reference for the
@@ -491,7 +490,7 @@ static void record_hugetlb_cgroup_uncharge_info(struct hugetlb_cgroup *h_cg,
 		 */
 		VM_BUG_ON(resv->pages_per_hpage != pages_per_huge_page(h));
 	} else {
-		nrg->reservation_counter = NULL;
+		nrg->reservation_idx = 0;
 		nrg->css = NULL;
 	}
 #endif
@@ -509,7 +508,7 @@ static bool has_same_uncharge_info(struct file_region *rg,
 				   struct file_region *org)
 {
 #ifdef CONFIG_CGROUP_HUGETLB
-	return rg->reservation_counter == org->reservation_counter &&
+	return rg->reservation_idx == org->reservation_idx &&
 	       rg->css == org->css;
 
 #else
@@ -1068,12 +1067,11 @@ resv_map_set_hugetlb_cgroup_uncharge_info(struct resv_map *resv_map,
 {
 #ifdef CONFIG_CGROUP_HUGETLB
 	if (!h_cg || !h) {
-		resv_map->reservation_counter = NULL;
+		resv_map->reservation_idx = 0;
 		resv_map->pages_per_hpage = 0;
 		resv_map->css = NULL;
 	} else {
-		resv_map->reservation_counter =
-			&h_cg->rsvd_hugepage[hstate_index(h)];
+		resv_map->reservation_idx = hstate_index(h);
 		resv_map->pages_per_hpage = pages_per_huge_page(h);
 		resv_map->css = &h_cg->css;
 	}

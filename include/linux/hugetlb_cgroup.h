@@ -36,14 +36,14 @@ struct hugetlb_cgroup {
 	struct cgroup_subsys_state css;
 
 	/*
-	 * the counter to account for hugepages from hugetlb.
+	 * counters to account for hugepages from hugetlb.
 	 */
-	struct page_counter hugepage[HUGE_MAX_HSTATE];
+	struct page_counter usage;
 
 	/*
-	 * the counter to account for hugepage reservations from hugetlb.
+	 * counters to account for hugepage reservations from hugetlb.
 	 */
-	struct page_counter rsvd_hugepage[HUGE_MAX_HSTATE];
+	struct page_counter rsvd;
 
 	atomic_long_t events[HUGE_MAX_HSTATE][HUGETLB_NR_MEMORY_EVENTS];
 	atomic_long_t events_local[HUGE_MAX_HSTATE][HUGETLB_NR_MEMORY_EVENTS];

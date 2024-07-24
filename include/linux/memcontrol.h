@@ -186,12 +186,7 @@ struct mem_cgroup {
 	struct mem_cgroup_id id;
 
 	/* Accounted resources */
-	struct page_counter memory;		/* Both v1 & v2 */
-
-	union {
-		struct page_counter swap;	/* v2 only */
-		struct page_counter memsw;	/* v1 only */
-	};
+	struct page_counter memory;
 
 	/* registered local peak watchers */
 	struct list_head memory_peaks;
@@ -271,10 +266,6 @@ struct mem_cgroup {
 #endif
 
 #ifdef CONFIG_MEMCG_V1
-	/* Legacy consumer-oriented counters */
-	struct page_counter kmem;		/* v1 only */
-	struct page_counter tcpmem;		/* v1 only */
-
 	unsigned long soft_limit;
 
 	/* protected by memcg_oom_lock */
@@ -638,7 +629,7 @@ static inline bool mem_cgroup_below_low(struct mem_cgroup *target,
 		return false;
 
 	return READ_ONCE(memcg->memory.elow) >=
-		page_counter_read(&memcg->memory);
+		page_counter_read(&memcg->memory, MCT_MEM);
 }
 
 static inline bool mem_cgroup_below_min(struct mem_cgroup *target,
@@ -648,7 +639,7 @@ static inline bool mem_cgroup_below_min(struct mem_cgroup *target,
 		return false;
 
 	return READ_ONCE(memcg->memory.emin) >=
-		page_counter_read(&memcg->memory);
+		page_counter_read(&memcg->memory, MCT_MEM);
 }
 
 void mem_cgroup_commit_charge(struct folio *folio, struct mem_cgroup *memcg);
@@ -824,8 +815,8 @@ static inline void mem_cgroup_put(struct mem_cgroup *memcg)
 		css_put(&memcg->css);
 }
 
-#define mem_cgroup_from_counter(counter, member)	\
-	container_of(counter, struct mem_cgroup, member)
+#define mem_cgroup_from_counter(counter)	\
+	container_of(counter, struct mem_cgroup, memory)
 
 struct mem_cgroup *mem_cgroup_iter(struct mem_cgroup *,
 				   struct mem_cgroup *,

@@ -191,7 +191,7 @@ static void mem_cgroup_remove_exceeded(struct mem_cgroup_per_node *mz,
 
 static unsigned long soft_limit_excess(struct mem_cgroup *memcg)
 {
-	unsigned long nr_pages = page_counter_read(&memcg->memory);
+	unsigned long nr_pages = page_counter_read(&memcg->memory, MCT_MEM);
 	unsigned long soft_limit = READ_ONCE(memcg->soft_limit);
 	unsigned long excess = 0;
 
@@ -1090,7 +1090,7 @@ static void __mem_cgroup_clear_mc(void)
 	if (mc.moved_swap) {
 		/* uncharge swap account from the old cgroup */
 		if (!mem_cgroup_is_root(mc.from))
-			page_counter_uncharge(&mc.from->memsw, mc.moved_swap);
+			page_counter_uncharge(&mc.from->memory, MCT_MEMSW, mc.moved_swap);
 
 		mem_cgroup_id_put_many(mc.from, mc.moved_swap);
 
@@ -1099,7 +1099,7 @@ static void __mem_cgroup_clear_mc(void)
 		 * should uncharge to->memory.
 		 */
 		if (!mem_cgroup_is_root(mc.to))
-			page_counter_uncharge(&mc.to->memory, mc.moved_swap);
+			page_counter_uncharge(&mc.to->memory, MCT_MEM, mc.moved_swap);
 
 		mc.moved_swap = 0;
 	}
@@ -2215,7 +2215,7 @@ static int mem_cgroup_resize_max(struct mem_cgroup *memcg,
 	bool drained = false;
 	int ret;
 	bool limits_invariant;
-	struct page_counter *counter = memsw ? &memcg->memsw : &memcg->memory;
+	unsigned long idx = memsw ? MCT_MEMSW : MCT_MEM;
 
 	do {
 		if (signal_pending(current)) {
@@ -2228,16 +2228,16 @@ static int mem_cgroup_resize_max(struct mem_cgroup *memcg,
 		 * Make sure that the new limit (memsw or memory limit) doesn't
 		 * break our basic invariant rule memory.max <= memsw.max.
 		 */
-		limits_invariant = memsw ? max >= READ_ONCE(memcg->memory.max) :
-					   max <= memcg->memsw.max;
+		limits_invariant = memsw ? max >= READ_ONCE(memcg->memory.max[MCT_MEM]) :
+					   max <= memcg->memory.max[MCT_MEMSW];
 		if (!limits_invariant) {
 			mutex_unlock(&memcg_max_mutex);
 			ret = -EINVAL;
 			break;
 		}
-		if (max > counter->max)
+		if (max > memcg->memory.max[idx])
 			enlarge = true;
-		ret = page_counter_set_max(counter, max);
+		ret = page_counter_set_max(&memcg->memory, idx, max);
 		mutex_unlock(&memcg_max_mutex);
 
 		if (!ret)
@@ -2277,7 +2277,7 @@ static int mem_cgroup_force_empty(struct mem_cgroup *memcg)
 	drain_all_stock(memcg);
 
 	/* try to free all pages in this cgroup */
-	while (nr_retries && page_counter_read(&memcg->memory)) {
+	while (nr_retries && page_counter_read(&memcg->memory, MCT_MEM)) {
 		if (signal_pending(current))
 			return -EINTR;
 
@@ -2323,38 +2323,22 @@ static u64 mem_cgroup_read_u64(struct cgroup_subsys_state *css,
 			       struct cftype *cft)
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
-	struct page_counter *counter;
-
-	switch (MEMFILE_TYPE(cft->private)) {
-	case _MEM:
-		counter = &memcg->memory;
-		break;
-	case _MEMSWAP:
-		counter = &memcg->memsw;
-		break;
-	case _KMEM:
-		counter = &memcg->kmem;
-		break;
-	case _TCP:
-		counter = &memcg->tcpmem;
-		break;
-	default:
-		BUG();
-	}
+	struct page_counter *counter = &memcg->memory;
+	unsigned long idx = MEMFILE_TYPE(cft->private);
 
 	switch (MEMFILE_ATTR(cft->private)) {
 	case RES_USAGE:
-		if (counter == &memcg->memory)
+		if (idx == MCT_MEM)
 			return (u64)mem_cgroup_usage(memcg, false) * PAGE_SIZE;
-		if (counter == &memcg->memsw)
+		if (idx == MCT_MEMSW)
 			return (u64)mem_cgroup_usage(memcg, true) * PAGE_SIZE;
-		return (u64)page_counter_read(counter) * PAGE_SIZE;
+		return (u64)page_counter_read(counter, idx) * PAGE_SIZE;
 	case RES_LIMIT:
-		return (u64)counter->max * PAGE_SIZE;
+		return (u64)counter->max[idx] * PAGE_SIZE;
 	case RES_MAX_USAGE:
-		return (u64)counter->watermark * PAGE_SIZE;
+		return (u64)counter->watermark[idx] * PAGE_SIZE;
 	case RES_FAILCNT:
-		return counter->failcnt;
+		return counter->failcnt[idx];
 	case RES_SOFT_LIMIT:
 		return (u64)READ_ONCE(memcg->soft_limit) * PAGE_SIZE;
 	default:
@@ -2378,7 +2362,7 @@ static int memcg_update_tcp_max(struct mem_cgroup *memcg, unsigned long max)
 
 	mutex_lock(&memcg_max_mutex);
 
-	ret = page_counter_set_max(&memcg->tcpmem, max);
+	ret = page_counter_set_max(&memcg->memory, MCT_TCPMEM, max);
 	if (ret)
 		goto out;
 
@@ -2464,31 +2448,15 @@ static ssize_t mem_cgroup_reset(struct kernfs_open_file *of, char *buf,
 				size_t nbytes, loff_t off)
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
-	struct page_counter *counter;
-
-	switch (MEMFILE_TYPE(of_cft(of)->private)) {
-	case _MEM:
-		counter = &memcg->memory;
-		break;
-	case _MEMSWAP:
-		counter = &memcg->memsw;
-		break;
-	case _KMEM:
-		counter = &memcg->kmem;
-		break;
-	case _TCP:
-		counter = &memcg->tcpmem;
-		break;
-	default:
-		BUG();
-	}
+	struct page_counter *counter = &memcg->memory;
+	unsigned long idx = MEMFILE_TYPE(of_cft(of)->private);
 
 	switch (MEMFILE_ATTR(of_cft(of)->private)) {
 	case RES_MAX_USAGE:
-		page_counter_reset_watermark(counter);
+		page_counter_reset_watermark(counter, idx);
 		break;
 	case RES_FAILCNT:
-		counter->failcnt = 0;
+		counter->failcnt[idx] = 0;
 		break;
 	default:
 		BUG();
@@ -2660,8 +2628,8 @@ void memcg1_stat_format(struct mem_cgroup *memcg, struct seq_buf *s)
 	/* Hierarchical information */
 	memory = memsw = PAGE_COUNTER_MAX;
 	for (mi = memcg; mi; mi = parent_mem_cgroup(mi)) {
-		memory = min(memory, READ_ONCE(mi->memory.max));
-		memsw = min(memsw, READ_ONCE(mi->memsw.max));
+		memory = min(memory, READ_ONCE(mi->memory.max[MCT_MEM]));
+		memsw = min(memsw, READ_ONCE(mi->memory.max[MCT_MEMSW]));
 	}
 	seq_buf_printf(s, "hierarchical_memory_limit %llu\n",
 		       (u64)memory * PAGE_SIZE);
@@ -2926,9 +2894,9 @@ void memcg1_account_kmem(struct mem_cgroup *memcg, int nr_pages)
 {
 	if (!cgroup_subsys_on_dfl(memory_cgrp_subsys)) {
 		if (nr_pages > 0)
-			page_counter_charge(&memcg->kmem, nr_pages);
+			page_counter_charge(&memcg->memory, MCT_KMEM, nr_pages);
 		else
-			page_counter_uncharge(&memcg->kmem, -nr_pages);
+			page_counter_uncharge(&memcg->memory, MCT_KMEM, -nr_pages);
 	}
 }
 
@@ -2937,13 +2905,13 @@ bool memcg1_charge_skmem(struct mem_cgroup *memcg, unsigned int nr_pages,
 {
 	struct page_counter *fail;
 
-	if (page_counter_try_charge(&memcg->tcpmem, nr_pages, &fail)) {
+	if (page_counter_try_charge(&memcg->memory, MCT_TCPMEM, nr_pages, &fail)) {
 		memcg->tcpmem_pressure = 0;
 		return true;
 	}
 	memcg->tcpmem_pressure = 1;
 	if (gfp_mask & __GFP_NOFAIL) {
-		page_counter_charge(&memcg->tcpmem, nr_pages);
+		page_counter_charge(&memcg->memory, MCT_TCPMEM, nr_pages);
 		return true;
 	}
 	return false;
