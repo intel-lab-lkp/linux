@@ -452,11 +452,19 @@
 };
 
 &pcf85063 {
-	/* RTC_EVENT# is connected on MBa93xxLA */
+	/* RTC_EVENT# from SoM is connected on mainboard */
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_pcf85063>;
 	interrupt-parent = <&gpio1>;
 	interrupts = <14 IRQ_TYPE_EDGE_FALLING>;
+};
+
+&se97_som {
+	/* TEMP_EVENT# from SoM is connected on mainboard */
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_temp_sensor_som>;
+	interrupt-parent = <&gpio1>;
+	interrupts = <11 IRQ_TYPE_LEVEL_LOW>;
 };
 
 &tpm5 {
