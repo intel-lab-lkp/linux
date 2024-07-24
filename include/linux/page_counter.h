@@ -114,7 +114,7 @@ static inline void page_counter_init(struct page_counter *counter,
 	unsigned long i;
 
 	for (i = 0; i < MCT_NR_ITEMS; i++) {
-		atomic_long_set(&counter->usage[i], 0);
+		counter->usage[i] = (atomic_long_t)ATOMIC_LONG_INIT(0);
 		counter->max[i] = PAGE_COUNTER_MAX;
 	}
 	counter->parent = parent;
