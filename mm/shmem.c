@@ -1692,26 +1692,6 @@ unsigned long shmem_allowable_huge_orders(struct inode *inode,
 	if (transparent_hugepage_flags & (1 << TRANSPARENT_HUGEPAGE_UNSUPPORTED))
 		return 0;
 
-	global_huge = shmem_huge_global_enabled(inode, index, shmem_huge_force,
-						vma, vm_flags);
-	if (!vma || !vma_is_anon_shmem(vma)) {
-		/*
-		 * For tmpfs, if top level huge page is enabled, we just allow
-		 * PMD size THP to keep interface backward compatibility.
-		 */
-		if (global_huge)
-			return BIT(HPAGE_PMD_ORDER);
-
-		/*
-		 * Otherwise, get a highest order hint based on the size of
-		 * write and fallocate paths, then will try each allowable
-		 * huge orders.
-		 */
-		order = shmem_mapping_size_order(inode->i_mapping, index,
-						 len, SHMEM_SB(inode->i_sb));
-		return BIT(order + 1) - 1;
-	}
-
 	/*
 	 * Following the 'deny' semantics of the top level, force the huge
 	 * option off from all mounts.
@@ -1742,9 +1722,31 @@ unsigned long shmem_allowable_huge_orders(struct inode *inode,
 	if (vm_flags & VM_HUGEPAGE)
 		mask |= READ_ONCE(huge_shmem_orders_madvise);
 
+	global_huge = shmem_huge_global_enabled(inode, index, shmem_huge_force,
+						vma, vm_flags);
 	if (global_huge)
 		mask |= READ_ONCE(huge_shmem_orders_inherit);
 
+	/*
+	 * For the huge orders allowed by writable mmap() faults on tmpfs,
+	 * the mTHP interface is used to control the allowable huge orders,
+	 * while 'huge_shmem_orders_inherit' maintains backward compatibility
+	 * with top-level interface.
+	 *
+	 * For the huge orders allowed by write() and fallocate() paths on tmpfs,
+	 * get a highest order hint based on the size of write and fallocate
+	 * paths, then will try each allowable huge orders filtered by the mTHP
+	 * interfaces if set.
+	 */
+	if (!vma && !global_huge) {
+		int highest_order = shmem_mapping_size_order(inode->i_mapping, index, len,
+							     SHMEM_SB(inode->i_sb));
+
+		if (!mask)
+			return highest_order > 0 ? BIT(highest_order + 1) - 1 : 0;
+
+		mask &= BIT(highest_order + 1) - 1;
+	}
 	return orders & mask;
 }
 
