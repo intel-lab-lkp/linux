@@ -814,6 +814,8 @@ void mipi_dsi_generic_write_multi(struct mipi_dsi_multi_context *ctx,
 	ret = mipi_dsi_generic_write(dsi, payload, size);
 	if (ret < 0) {
 		ctx->accum_err = ret;
+		if (ctx->quiet)
+			return;
 		dev_err(dev, "sending generic data %*ph failed: %d\n",
 			(int)size, payload, ctx->accum_err);
 	}
@@ -958,6 +960,8 @@ void mipi_dsi_dcs_write_buffer_multi(struct mipi_dsi_multi_context *ctx,
 	ret = mipi_dsi_dcs_write_buffer(dsi, data, len);
 	if (ret < 0) {
 		ctx->accum_err = ret;
+		if (ctx->quiet)
+			return;
 		dev_err(dev, "sending dcs data %*ph failed: %d\n",
 			(int)len, data, ctx->accum_err);
 	}
@@ -1450,6 +1454,8 @@ void mipi_dsi_picture_parameter_set_multi(struct mipi_dsi_multi_context *ctx,
 	ret = mipi_dsi_picture_parameter_set(dsi, pps);
 	if (ret < 0) {
 		ctx->accum_err = ret;
+		if (ctx->quiet)
+			return;
 		dev_err(dev, "sending PPS failed: %d\n",
 			ctx->accum_err);
 	}
@@ -1481,6 +1487,8 @@ void mipi_dsi_compression_mode_ext_multi(struct mipi_dsi_multi_context *ctx,
 	ret = mipi_dsi_compression_mode_ext(dsi, enable, algo, pps_selector);
 	if (ret < 0) {
 		ctx->accum_err = ret;
+		if (ctx->quiet)
+			return;
 		dev_err(dev, "sending COMPRESSION_MODE failed: %d\n",
 			ctx->accum_err);
 	}
@@ -1506,6 +1514,8 @@ void mipi_dsi_dcs_nop_multi(struct mipi_dsi_multi_context *ctx)
 	ret = mipi_dsi_dcs_nop(dsi);
 	if (ret < 0) {
 		ctx->accum_err = ret;
+		if (ctx->quiet)
+			return;
 		dev_err(dev, "sending DCS NOP failed: %d\n",
 			ctx->accum_err);
 	}
@@ -1531,6 +1541,8 @@ void mipi_dsi_dcs_enter_sleep_mode_multi(struct mipi_dsi_multi_context *ctx)
 	ret = mipi_dsi_dcs_enter_sleep_mode(dsi);
 	if (ret < 0) {
 		ctx->accum_err = ret;
+		if (ctx->quiet)
+			return;
 		dev_err(dev, "sending DCS ENTER_SLEEP_MODE failed: %d\n",
 			ctx->accum_err);
 	}
@@ -1556,6 +1568,8 @@ void mipi_dsi_dcs_exit_sleep_mode_multi(struct mipi_dsi_multi_context *ctx)
 	ret = mipi_dsi_dcs_exit_sleep_mode(dsi);
 	if (ret < 0) {
 		ctx->accum_err = ret;
+		if (ctx->quiet)
+			return;
 		dev_err(dev, "sending DCS EXIT_SLEEP_MODE failed: %d\n",
 			ctx->accum_err);
 	}
@@ -1581,6 +1595,8 @@ void mipi_dsi_dcs_set_display_off_multi(struct mipi_dsi_multi_context *ctx)
 	ret = mipi_dsi_dcs_set_display_off(dsi);
 	if (ret < 0) {
 		ctx->accum_err = ret;
+		if (ctx->quiet)
+			return;
 		dev_err(dev, "sending DCS SET_DISPLAY_OFF failed: %d\n",
 			ctx->accum_err);
 	}
@@ -1606,6 +1622,8 @@ void mipi_dsi_dcs_set_display_on_multi(struct mipi_dsi_multi_context *ctx)
 	ret = mipi_dsi_dcs_set_display_on(dsi);
 	if (ret < 0) {
 		ctx->accum_err = ret;
+		if (ctx->quiet)
+			return;
 		dev_err(dev, "sending DCS SET_DISPLAY_ON failed: %d\n",
 			ctx->accum_err);
 	}
@@ -1633,6 +1651,8 @@ void mipi_dsi_dcs_set_tear_on_multi(struct mipi_dsi_multi_context *ctx,
 	ret = mipi_dsi_dcs_set_tear_on(dsi, mode);
 	if (ret < 0) {
 		ctx->accum_err = ret;
+		if (ctx->quiet)
+			return;
 		dev_err(dev, "sending DCS SET_TEAR_ON failed: %d\n",
 			ctx->accum_err);
 	}
