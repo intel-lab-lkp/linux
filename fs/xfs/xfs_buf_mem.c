@@ -149,7 +149,8 @@ xmbuf_map_page(
 		return -ENOMEM;
 	}
 
-	error = shmem_get_folio(inode, pos >> PAGE_SHIFT, &folio, SGP_CACHE);
+	error = shmem_get_folio(inode, pos >> PAGE_SHIFT, &folio, SGP_CACHE,
+				PAGE_SIZE);
 	if (error)
 		return error;
 
