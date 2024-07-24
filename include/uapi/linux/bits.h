@@ -12,4 +12,8 @@
         (((~_ULL(0)) - (_ULL(1) << (l)) + 1) & \
          (~_ULL(0) >> (__BITS_PER_LONG_LONG - 1 - (h))))
 
+#define __GENMASK_U128(h, l) \
+	(((~_U128(0)) - (_U128(1) << (l)) + 1) & \
+	 (~_U128(0) >> (__BITS_PER_U128 - 1 - (h))))
+
 #endif /* _UAPI_LINUX_BITS_H */
