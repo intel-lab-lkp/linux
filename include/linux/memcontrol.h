@@ -75,7 +75,7 @@ struct lruvec_stats_percpu;
 struct lruvec_stats;
 
 struct mem_cgroup_reclaim_iter {
-	struct mem_cgroup *position;
+	struct mem_cgroup __rcu *position;
 	/* scan generation, increased every round-trip */
 	unsigned int generation;
 };
