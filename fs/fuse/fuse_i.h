@@ -375,6 +375,7 @@ struct fuse_io_priv {
  * FR_FINISHED:		request is finished
  * FR_PRIVATE:		request is on private list
  * FR_ASYNC:		request is asynchronous
+ * FR_TIMEOUT:		request is timeout
  */
 enum fuse_req_flag {
 	FR_ISREPLY,
@@ -389,6 +390,7 @@ enum fuse_req_flag {
 	FR_FINISHED,
 	FR_PRIVATE,
 	FR_ASYNC,
+	FR_TIMEOUT,
 };
 
 /**

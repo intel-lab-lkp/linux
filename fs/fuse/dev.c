@@ -369,10 +369,27 @@ static void request_wait_answer(struct fuse_req *req)
 
 	if (!fc->no_interrupt) {
 		/* Any signal may interrupt this */
-		err = wait_event_interruptible(req->waitq,
-					test_bit(FR_FINISHED, &req->flags));
-		if (!err)
-			return;
+		if (!fc->timeout) {
+			err = wait_event_interruptible(req->waitq,
+						       test_bit(FR_FINISHED, &req->flags));
+			if (!err)
+				return;
+		} else {
+			err = wait_event_interruptible_timeout(req->waitq,
+							       test_bit(FR_FINISHED, &req->flags),
+							       (long)fc->timeout * HZ);
+			if (err > 0)
+				return;
+
+			/* timeout */
+			if (!err) {
+				req->out.h.error = -EAGAIN;
+				set_bit(FR_TIMEOUT, &req->flags);
+				/* matches barrier in fuse_dev_do_write() */
+				smp_mb__after_atomic();
+				return;
+			}
+		}
 
 		set_bit(FR_INTERRUPTED, &req->flags);
 		/* matches barrier in fuse_dev_do_read() */
@@ -383,10 +400,27 @@ static void request_wait_answer(struct fuse_req *req)
 
 	if (!test_bit(FR_FORCE, &req->flags)) {
 		/* Only fatal signals may interrupt this */
-		err = wait_event_killable(req->waitq,
-					test_bit(FR_FINISHED, &req->flags));
-		if (!err)
-			return;
+		if (!fc->timeout) {
+			err = wait_event_killable(req->waitq,
+						  test_bit(FR_FINISHED, &req->flags));
+			if (!err)
+				return;
+		} else {
+			err = wait_event_killable_timeout(req->waitq,
+							  test_bit(FR_FINISHED, &req->flags),
+							  (long)fc->timeout * HZ);
+			if (err > 0)
+				return;
+
+			/* timeout */
+			if (!err) {
+				req->out.h.error = -EAGAIN;
+				set_bit(FR_TIMEOUT, &req->flags);
+				/* matches barrier in fuse_dev_do_write() */
+				smp_mb__after_atomic();
+				return;
+			}
+		}
 
 		spin_lock(&fiq->lock);
 		/* Request is not yet in userspace, bail out */
@@ -1947,6 +1981,13 @@ static ssize_t fuse_dev_do_write(struct fuse_dev *fud,
 
 	err = -ENOENT;
 	if (!req) {
+		spin_unlock(&fpq->lock);
+		goto copy_finish;
+	}
+
+	/* matches barrier in request_wait_answer() */
+	smp_mb__after_atomic();
+	if (test_and_clear_bit(FR_TIMEOUT, &req->flags)) {
 		spin_unlock(&fpq->lock);
 		goto copy_finish;
 	}
