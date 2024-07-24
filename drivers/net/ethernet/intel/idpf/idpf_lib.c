@@ -1942,6 +1942,8 @@ int idpf_initiate_soft_reset(struct idpf_vport *vport,
 		idpf_vport_calc_num_q_desc(new_vport);
 		break;
 	case IDPF_SR_MTU_CHANGE:
+		idpf_idc_vdev_mtu_event(vport->vdev_info,
+					IDC_RDMA_EVENT_BEFORE_MTU_CHANGE);
 	case IDPF_SR_RSC_CHANGE:
 		break;
 	default:
@@ -1953,6 +1955,7 @@ int idpf_initiate_soft_reset(struct idpf_vport *vport,
 	err = idpf_vport_queues_alloc(new_vport);
 	if (err)
 		goto free_vport;
+
 	if (current_state <= __IDPF_VPORT_DOWN) {
 		idpf_send_delete_queues_msg(vport);
 	} else {
@@ -2029,14 +2032,16 @@ int idpf_initiate_soft_reset(struct idpf_vport *vport,
 	if (current_state == __IDPF_VPORT_UP)
 		err = idpf_vport_open(vport, false);
 
-	kfree(new_vport);
-
-	return err;
+	goto free_vport;
 
 err_reset:
 	idpf_vport_queues_rel(new_vport);
 free_vport:
 	kfree(new_vport);
+
+	if (reset_cause == IDPF_SR_MTU_CHANGE)
+		idpf_idc_vdev_mtu_event(vport->vdev_info,
+					IDC_RDMA_EVENT_AFTER_MTU_CHANGE);
 
 	return err;
 }
