@@ -139,8 +139,7 @@
 	typeof(val) unique_val = (val);						\
 	typeof(lo) unique_lo = (lo);						\
 	typeof(hi) unique_hi = (hi);						\
-	_Static_assert(__builtin_choose_expr(__is_constexpr((lo) > (hi)),	\
-			(lo) <= (hi), true),					\
+	_Static_assert(__if_constexpr((lo) <= (hi), (lo) <= (hi), true),		\
 		"clamp() low limit " #lo " greater than high limit " #hi);	\
 	_Static_assert(__types_ok(val, lo), "clamp() 'lo' signedness error");	\
 	_Static_assert(__types_ok(val, hi), "clamp() 'hi' signedness error");	\
