@@ -55,6 +55,48 @@
 /* defines only for the constants which don't work well as enums */
 #define ATA_TAG_POISON		0xfafbfcfdU
 
+/*
+ * Horkage types. May be set by libata or controller on drives.
+ * Some horkage may be drive/controller pair dependent.
+ * ata_device->horkage is an unsigned int, so __ATA_HORKAGE_MAX must not
+ * exceed 32.
+ */
+enum ata_horkage {
+	__ATA_HORKAGE_DIAGNOSTIC,	/* Failed boot diag */
+	__ATA_HORKAGE_NODMA,		/* DMA problems */
+	__ATA_HORKAGE_NONCQ,		/* Don't use NCQ */
+	__ATA_HORKAGE_MAX_SEC_128,	/* Limit max sects to 128 */
+	__ATA_HORKAGE_BROKEN_HPA,	/* Broken HPA */
+	__ATA_HORKAGE_DISABLE,		/* Disable it */
+	__ATA_HORKAGE_HPA_SIZE,		/* Native size off by one */
+	__ATA_HORKAGE_IVB,		/* cbl det validity bit bugs */
+	__ATA_HORKAGE_STUCK_ERR,	/* Stuck ERR on next PACKET */
+	__ATA_HORKAGE_BRIDGE_OK,	/* No bridge limits */
+	__ATA_HORKAGE_ATAPI_MOD16_DMA,	/* Use ATAPI DMA for commands that are
+					 * not a multiple of 16 bytes */
+	__ATA_HORKAGE_FIRMWARE_WARN,	/* Firmware update warning */
+	__ATA_HORKAGE_1_5_GBPS,		/* Force 1.5 Gbps */
+	__ATA_HORKAGE_NOSETXFER,	/* Skip SETXFER, SATA only */
+	__ATA_HORKAGE_BROKEN_FPDMA_AA,	/* Skip AA */
+	__ATA_HORKAGE_DUMP_ID,		/* Dump IDENTIFY data */
+	__ATA_HORKAGE_MAX_SEC_LBA48,	/* Set max sects to 65535 */
+	__ATA_HORKAGE_ATAPI_DMADIR,	/* Device requires dmadir */
+	__ATA_HORKAGE_NO_NCQ_TRIM,	/* Do not use queued TRIM */
+	__ATA_HORKAGE_NOLPM,		/* Do not use LPM */
+	__ATA_HORKAGE_WD_BROKEN_LPM,	/* Some WDs have broken LPM */
+	__ATA_HORKAGE_ZERO_AFTER_TRIM,	/* Guarantees zero after trim */
+	__ATA_HORKAGE_NO_DMA_LOG,	/* Do not use DMA for log read */
+	__ATA_HORKAGE_NOTRIM,		/* Do not use TRIM */
+	__ATA_HORKAGE_MAX_SEC_1024,	/* Limit max sects to 1024 */
+	__ATA_HORKAGE_MAX_TRIM_128M,	/* Limit max trim size to 128M */
+	__ATA_HORKAGE_NO_NCQ_ON_ATI,	/* Disable NCQ on ATI chipset */
+	__ATA_HORKAGE_NO_ID_DEV_LOG,	/* Identify device log missing */
+	__ATA_HORKAGE_NO_LOG_DIR,	/* Do not read log directory */
+	__ATA_HORKAGE_NO_FUA,		/* Do not use FUA */
+
+	__ATA_HORKAGE_MAX,
+};
+
 enum {
 	/* various global constants */
 	LIBATA_MAX_PRD		= ATA_MAX_PRD / 2,
@@ -362,43 +404,39 @@ enum {
 	 */
 	ATA_EH_CMD_TIMEOUT_TABLE_SIZE = 8,
 
-	/* Horkage types. May be set by libata or controller on drives
-	   (some horkage may be drive/controller pair dependent */
+	/* Horkage flags */
+	ATA_HORKAGE_DIAGNOSTIC      = (1U << __ATA_HORKAGE_DIAGNOSTIC),
+	ATA_HORKAGE_NODMA           = (1U << __ATA_HORKAGE_NODMA),
+	ATA_HORKAGE_NONCQ           = (1U << __ATA_HORKAGE_NONCQ),
+	ATA_HORKAGE_MAX_SEC_128     = (1U << __ATA_HORKAGE_MAX_SEC_128),
+	ATA_HORKAGE_BROKEN_HPA      = (1U << __ATA_HORKAGE_BROKEN_HPA),
+	ATA_HORKAGE_DISABLE         = (1U << __ATA_HORKAGE_DISABLE),
+	ATA_HORKAGE_HPA_SIZE        = (1U << __ATA_HORKAGE_HPA_SIZE),
+	ATA_HORKAGE_IVB             = (1U << __ATA_HORKAGE_IVB),
+	ATA_HORKAGE_STUCK_ERR       = (1U << __ATA_HORKAGE_STUCK_ERR),
+	ATA_HORKAGE_BRIDGE_OK       = (1U << __ATA_HORKAGE_BRIDGE_OK),
+	ATA_HORKAGE_ATAPI_MOD16_DMA = (1U << __ATA_HORKAGE_ATAPI_MOD16_DMA),
+	ATA_HORKAGE_FIRMWARE_WARN   = (1U << __ATA_HORKAGE_FIRMWARE_WARN),
+	ATA_HORKAGE_1_5_GBPS        = (1U << __ATA_HORKAGE_1_5_GBPS),
+	ATA_HORKAGE_NOSETXFER       = (1U << __ATA_HORKAGE_NOSETXFER),
+	ATA_HORKAGE_BROKEN_FPDMA_AA = (1U << __ATA_HORKAGE_BROKEN_FPDMA_AA),
+	ATA_HORKAGE_DUMP_ID         = (1U << __ATA_HORKAGE_DUMP_ID),
+	ATA_HORKAGE_MAX_SEC_LBA48   = (1U << __ATA_HORKAGE_MAX_SEC_LBA48),
+	ATA_HORKAGE_ATAPI_DMADIR    = (1U << __ATA_HORKAGE_ATAPI_DMADIR),
+	ATA_HORKAGE_NO_NCQ_TRIM     = (1U << __ATA_HORKAGE_NO_NCQ_TRIM),
+	ATA_HORKAGE_NOLPM           = (1U << __ATA_HORKAGE_NOLPM),
+	ATA_HORKAGE_WD_BROKEN_LPM   = (1U << __ATA_HORKAGE_WD_BROKEN_LPM),
+	ATA_HORKAGE_ZERO_AFTER_TRIM = (1U << __ATA_HORKAGE_ZERO_AFTER_TRIM),
+	ATA_HORKAGE_NO_DMA_LOG      = (1U << __ATA_HORKAGE_NO_DMA_LOG),
+	ATA_HORKAGE_NOTRIM          = (1U << __ATA_HORKAGE_NOTRIM),
+	ATA_HORKAGE_MAX_SEC_1024    = (1U << __ATA_HORKAGE_MAX_SEC_1024),
+	ATA_HORKAGE_MAX_TRIM_128M   = (1U << __ATA_HORKAGE_MAX_TRIM_128M),
+	ATA_HORKAGE_NO_NCQ_ON_ATI   = (1U << __ATA_HORKAGE_NO_NCQ_ON_ATI),
+	ATA_HORKAGE_NO_ID_DEV_LOG   = (1U << __ATA_HORKAGE_NO_ID_DEV_LOG),
+	ATA_HORKAGE_NO_LOG_DIR      = (1U << __ATA_HORKAGE_NO_LOG_DIR),
+	ATA_HORKAGE_NO_FUA          = (1U << __ATA_HORKAGE_NO_FUA),
 
-	ATA_HORKAGE_DIAGNOSTIC	= (1 << 0),	/* Failed boot diag */
-	ATA_HORKAGE_NODMA	= (1 << 1),	/* DMA problems */
-	ATA_HORKAGE_NONCQ	= (1 << 2),	/* Don't use NCQ */
-	ATA_HORKAGE_MAX_SEC_128	= (1 << 3),	/* Limit max sects to 128 */
-	ATA_HORKAGE_BROKEN_HPA	= (1 << 4),	/* Broken HPA */
-	ATA_HORKAGE_DISABLE	= (1 << 5),	/* Disable it */
-	ATA_HORKAGE_HPA_SIZE	= (1 << 6),	/* native size off by one */
-	ATA_HORKAGE_IVB		= (1 << 8),	/* cbl det validity bit bugs */
-	ATA_HORKAGE_STUCK_ERR	= (1 << 9),	/* stuck ERR on next PACKET */
-	ATA_HORKAGE_BRIDGE_OK	= (1 << 10),	/* no bridge limits */
-	ATA_HORKAGE_ATAPI_MOD16_DMA = (1 << 11), /* use ATAPI DMA for commands
-						    not multiple of 16 bytes */
-	ATA_HORKAGE_FIRMWARE_WARN = (1 << 12),	/* firmware update warning */
-	ATA_HORKAGE_1_5_GBPS	= (1 << 13),	/* force 1.5 Gbps */
-	ATA_HORKAGE_NOSETXFER	= (1 << 14),	/* skip SETXFER, SATA only */
-	ATA_HORKAGE_BROKEN_FPDMA_AA	= (1 << 15),	/* skip AA */
-	ATA_HORKAGE_DUMP_ID	= (1 << 16),	/* dump IDENTIFY data */
-	ATA_HORKAGE_MAX_SEC_LBA48 = (1 << 17),	/* Set max sects to 65535 */
-	ATA_HORKAGE_ATAPI_DMADIR = (1 << 18),	/* device requires dmadir */
-	ATA_HORKAGE_NO_NCQ_TRIM	= (1 << 19),	/* don't use queued TRIM */
-	ATA_HORKAGE_NOLPM	= (1 << 20),	/* don't use LPM */
-	ATA_HORKAGE_WD_BROKEN_LPM = (1 << 21),	/* some WDs have broken LPM */
-	ATA_HORKAGE_ZERO_AFTER_TRIM = (1 << 22),/* guarantees zero after trim */
-	ATA_HORKAGE_NO_DMA_LOG	= (1 << 23),	/* don't use DMA for log read */
-	ATA_HORKAGE_NOTRIM	= (1 << 24),	/* don't use TRIM */
-	ATA_HORKAGE_MAX_SEC_1024 = (1 << 25),	/* Limit max sects to 1024 */
-	ATA_HORKAGE_MAX_TRIM_128M = (1 << 26),	/* Limit max trim size to 128M */
-	ATA_HORKAGE_NO_NCQ_ON_ATI = (1 << 27),	/* Disable NCQ on ATI chipset */
-	ATA_HORKAGE_NO_ID_DEV_LOG = (1 << 28),	/* Identify device log missing */
-	ATA_HORKAGE_NO_LOG_DIR	= (1 << 29),	/* Do not read log directory */
-	ATA_HORKAGE_NO_FUA	= (1 << 30),	/* Do not use FUA */
-
-	 /* DMA mask for user DMA control: User visible values; DO NOT
-	    renumber */
+	/* User visible DMA mask for DMA control. DO NOT renumber. */
 	ATA_DMA_MASK_ATA	= (1 << 0),	/* DMA on ATA Disk */
 	ATA_DMA_MASK_ATAPI	= (1 << 1),	/* DMA on ATAPI */
 	ATA_DMA_MASK_CFA	= (1 << 2),	/* DMA on CF Card */
