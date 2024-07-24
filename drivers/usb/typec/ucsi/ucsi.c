@@ -1545,6 +1545,21 @@ static const struct typec_operations ucsi_ops = {
 	.pr_set = ucsi_pr_swap
 };
 
+int ucsi_set_sink_path(struct ucsi_connector *con, bool sink_path)
+{
+	struct ucsi *ucsi = con->ucsi;
+	u64 command;
+	int ret;
+
+	command = UCSI_SET_SINK_PATH | UCSI_CONNECTOR_NUMBER(con->num);
+	command |= UCSI_SET_SINK_PATH_SINK_PATH(sink_path);
+	ret = ucsi_send_command(ucsi, command, NULL, 0);
+	if (ret < 0)
+		dev_err(con->ucsi->dev, "SET_SINK_PATH failed (%d)\n", ret);
+
+	return ret;
+}
+
 /* Caller must call fwnode_handle_put() after use */
 static struct fwnode_handle *ucsi_find_fwnode(struct ucsi_connector *con)
 {
