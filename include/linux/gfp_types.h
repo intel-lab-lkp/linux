@@ -339,6 +339,10 @@ enum {
  * recurse into the FS layer with a short explanation why. All allocation
  * requests will inherit GFP_NOFS implicitly.
  *
+ * %GFP_NOFAIL employs direct memory reclaim and continuously retries until
+ * successful memory allocation. It should never be used in contexts where
+ * sleeping is not allowed.
+ *
  * %GFP_USER is for userspace allocations that also need to be directly
  * accessibly by the kernel or hardware. It is typically used by hardware
  * for buffers that are mapped to userspace (e.g. graphics) that hardware
@@ -378,6 +382,7 @@ enum {
 #define GFP_NOWAIT	(__GFP_KSWAPD_RECLAIM | __GFP_NOWARN)
 #define GFP_NOIO	(__GFP_RECLAIM)
 #define GFP_NOFS	(__GFP_RECLAIM | __GFP_IO)
+#define GFP_NOFAIL	(__GFP_RECLAIM | __GFP_NOFAIL)
 #define GFP_USER	(__GFP_RECLAIM | __GFP_IO | __GFP_FS | __GFP_HARDWALL)
 #define GFP_DMA		__GFP_DMA
 #define GFP_DMA32	__GFP_DMA32
