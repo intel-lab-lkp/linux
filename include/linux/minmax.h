@@ -48,7 +48,7 @@
 #define __cmp_once(op, x, y, unique_x, unique_y) ({	\
 	typeof(x) unique_x = (x);			\
 	typeof(y) unique_y = (y);			\
-	static_assert(__types_ok(x, y),			\
+	_Static_assert(__types_ok(x, y),			\
 		#op "(" #x ", " #y ") signedness error, fix types or consider u" #op "() before " #op "_t()"); \
 	__cmp(op, unique_x, unique_y); })
 
@@ -137,11 +137,11 @@
 	typeof(val) unique_val = (val);						\
 	typeof(lo) unique_lo = (lo);						\
 	typeof(hi) unique_hi = (hi);						\
-	static_assert(__builtin_choose_expr(__is_constexpr((lo) > (hi)),	\
+	_Static_assert(__builtin_choose_expr(__is_constexpr((lo) > (hi)),	\
 			(lo) <= (hi), true),					\
 		"clamp() low limit " #lo " greater than high limit " #hi);	\
-	static_assert(__types_ok(val, lo), "clamp() 'lo' signedness error");	\
-	static_assert(__types_ok(val, hi), "clamp() 'hi' signedness error");	\
+	_Static_assert(__types_ok(val, lo), "clamp() 'lo' signedness error");	\
+	_Static_assert(__types_ok(val, hi), "clamp() 'hi' signedness error");	\
 	__clamp(unique_val, unique_lo, unique_hi); })
 
 #define __careful_clamp(val, lo, hi) ({					\
