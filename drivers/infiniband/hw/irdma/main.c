@@ -129,6 +129,17 @@ static int __init irdma_init_module(void)
 
 		return ret;
 	}
+
+	ret = auxiliary_driver_register(&ig3rdma_vport_auxiliary_drv.adrv);
+	if (ret) {
+		auxiliary_driver_unregister(&ig3rdma_core_auxiliary_drv.adrv);
+		auxiliary_driver_unregister(&icrdma_core_auxiliary_drv.adrv);
+		auxiliary_driver_unregister(&i40iw_auxiliary_drv);
+		pr_err("Failed ig3rdma vport auxiliary_driver_register() ret=%d\n",
+		       ret);
+
+		return ret;
+	}
 	irdma_register_notifiers();
 
 	return 0;
@@ -168,6 +179,7 @@ static void __exit irdma_exit_module(void)
 	auxiliary_driver_unregister(&icrdma_core_auxiliary_drv.adrv);
 	auxiliary_driver_unregister(&i40iw_auxiliary_drv);
 	auxiliary_driver_unregister(&ig3rdma_core_auxiliary_drv.adrv);
+	auxiliary_driver_unregister(&ig3rdma_vport_auxiliary_drv.adrv);
 }
 
 module_init(irdma_init_module);
