@@ -28,6 +28,7 @@ enum {
 	IRDMA_ALLOC_UCTX_MIN_HW_WQ_SIZE = 1 << 1,
 	IRDMA_ALLOC_UCTX_MAX_HW_SRQ_QUANTA = 1 << 2,
 	IRDMA_SUPPORT_WQE_FORMAT_V2 = 1 << 3,
+	IRDMA_SUPPORT_MAX_HW_PUSH_LEN = 1 << 4,
 };
 
 struct irdma_alloc_ucontext_req {
@@ -58,7 +59,7 @@ struct irdma_alloc_ucontext_resp {
 	__aligned_u64 comp_mask;
 	__u16 min_hw_wq_size;
 	__u32 max_hw_srq_quanta;
-	__u8 rsvd3[2];
+	__u16 max_hw_push_len;
 };
 
 struct irdma_alloc_pd_resp {

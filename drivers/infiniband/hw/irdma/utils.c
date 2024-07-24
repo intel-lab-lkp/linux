@@ -1156,21 +1156,51 @@ int irdma_cqp_qp_create_cmd(struct irdma_sc_dev *dev, struct irdma_sc_qp *qp)
 /**
  * irdma_dealloc_push_page - free a push page for qp
  * @rf: RDMA PCI function
- * @qp: hardware control qp
+ * @iwqp: QP pointer
  */
 static void irdma_dealloc_push_page(struct irdma_pci_f *rf,
-				    struct irdma_sc_qp *qp)
+				    struct irdma_qp *iwqp)
 {
 	struct irdma_cqp_request *cqp_request;
 	struct cqp_cmds_info *cqp_info;
 	int status;
+	struct irdma_sc_qp *qp = &iwqp->sc_qp;
+	struct irdma_pd *pd = iwqp->iwpd;
+	u32 push_pos;
+	bool is_empty;
 
 	if (qp->push_idx == IRDMA_INVALID_PUSH_PAGE_INDEX)
 		return;
 
+	mutex_lock(&pd->push_alloc_mutex);
+
+	push_pos = qp->push_offset / IRDMA_PUSH_WIN_SIZE;
+	__clear_bit(push_pos, pd->push_offset_bmap);
+	is_empty = bitmap_empty(pd->push_offset_bmap, IRDMA_QPS_PER_PUSH_PAGE);
+	if (!is_empty) {
+		qp->push_idx = IRDMA_INVALID_PUSH_PAGE_INDEX;
+		goto exit;
+	}
+
+	if (!rf->sc_dev.privileged) {
+		u32 pg_idx = qp->push_idx;
+
+		status = irdma_vchnl_req_manage_push_pg(&rf->sc_dev, false,
+							qp->qs_handle, &pg_idx);
+		if (!status) {
+			qp->push_idx = IRDMA_INVALID_PUSH_PAGE_INDEX;
+			pd->push_idx = IRDMA_INVALID_PUSH_PAGE_INDEX;
+		} else {
+			__set_bit(push_pos, pd->push_offset_bmap);
+		}
+		goto exit;
+	}
+
 	cqp_request = irdma_alloc_and_get_cqp_request(&rf->cqp, false);
-	if (!cqp_request)
-		return;
+	if (!cqp_request) {
+		__set_bit(push_pos, pd->push_offset_bmap);
+		goto exit;
+	}
 
 	cqp_info = &cqp_request->info;
 	cqp_info->cqp_cmd = IRDMA_OP_MANAGE_PUSH_PAGE;
@@ -1182,9 +1212,15 @@ static void irdma_dealloc_push_page(struct irdma_pci_f *rf,
 	cqp_info->in.u.manage_push_page.cqp = &rf->cqp.sc_cqp;
 	cqp_info->in.u.manage_push_page.scratch = (uintptr_t)cqp_request;
 	status = irdma_handle_cqp_op(rf, cqp_request);
-	if (!status)
+	if (!status) {
 		qp->push_idx = IRDMA_INVALID_PUSH_PAGE_INDEX;
+		pd->push_idx = IRDMA_INVALID_PUSH_PAGE_INDEX;
+	} else {
+		__set_bit(push_pos, pd->push_offset_bmap);
+	}
 	irdma_put_cqp_request(&rf->cqp, cqp_request);
+exit:
+	mutex_unlock(&pd->push_alloc_mutex);
 }
 
 static void irdma_free_gsi_qp_rsrc(struct irdma_qp *iwqp, u32 qp_num)
@@ -1218,7 +1254,7 @@ void irdma_free_qp_rsrc(struct irdma_qp *iwqp)
 	u32 qp_num = iwqp->sc_qp.qp_uk.qp_id;
 
 	irdma_ieq_cleanup_qp(iwdev->vsi.ieq, &iwqp->sc_qp);
-	irdma_dealloc_push_page(rf, &iwqp->sc_qp);
+	irdma_dealloc_push_page(rf, iwqp);
 	if (iwqp->sc_qp.vsi) {
 		irdma_qp_rem_qos(&iwqp->sc_qp);
 		iwqp->sc_qp.dev->ws_remove(iwqp->sc_qp.vsi,

@@ -1289,8 +1289,11 @@ struct irdma_qhash_table_info {
 struct irdma_cqp_manage_push_page_info {
 	u32 push_idx;
 	u16 qs_handle;
+	u16 hmc_fn_id;
 	u8 free_page;
 	u8 push_page_type;
+	u8 page_type;
+	u8 use_hmc_fn_id;
 };
 
 struct irdma_qp_flush_info {

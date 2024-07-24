@@ -66,6 +66,7 @@ int irdma_sc_vchnl_init(struct irdma_sc_dev *dev,
 	dev->privileged = info->privileged;
 	dev->is_pf = info->is_pf;
 	dev->hw_attrs.uk_attrs.hw_rev = info->hw_rev;
+	dev->hw_attrs.uk_attrs.max_hw_push_len = IRDMA_DEFAULT_MAX_PUSH_LEN;
 
 	if (!dev->privileged) {
 		int ret = irdma_vchnl_req_get_ver(dev, IRDMA_VCHNL_CHNL_VER_MAX,
@@ -83,6 +84,7 @@ int irdma_sc_vchnl_init(struct irdma_sc_dev *dev,
 			return ret;
 
 		dev->hw_attrs.uk_attrs.hw_rev = dev->vc_caps.hw_rev;
+		dev->hw_attrs.uk_attrs.max_hw_push_len = dev->vc_caps.max_hw_push_len;
 	}
 
 	return 0;
@@ -107,6 +109,7 @@ static int irdma_vchnl_req_verify_resp(struct irdma_vchnl_req *vchnl_req,
 		if (resp_len < IRDMA_VCHNL_OP_GET_RDMA_CAPS_MIN_SIZE)
 			return -EBADMSG;
 		break;
+	case IRDMA_VCHNL_OP_MANAGE_PUSH_PAGE:
 	case IRDMA_VCHNL_OP_GET_REG_LAYOUT:
 	case IRDMA_VCHNL_OP_QUEUE_VECTOR_MAP:
 	case IRDMA_VCHNL_OP_QUEUE_VECTOR_UNMAP:
@@ -184,6 +187,40 @@ exit:
 	irdma_free_vchnl_req_msg(&vchnl_req);
 
 	return ret;
+}
+
+/**
+ * irdma_vchnl_req_manage_push_pg - manage push page
+ * @dev: rdma device pointer
+ * @add: Add or remove push page
+ * @qs_handle: qs_handle of push page for add
+ * @pg_idx: index of push page that is added or removed
+ */
+int irdma_vchnl_req_manage_push_pg(struct irdma_sc_dev *dev, bool add,
+				   u32 qs_handle, u32 *pg_idx)
+{
+	struct irdma_vchnl_manage_push_page add_push_pg = {};
+	struct irdma_vchnl_req_init_info info = {};
+
+	if (!dev->vchnl_up)
+		return -EBUSY;
+
+	add_push_pg.add = add;
+	add_push_pg.pg_idx = add ? 0 : *pg_idx;
+	add_push_pg.qs_handle = qs_handle;
+
+	info.op_code = IRDMA_VCHNL_OP_MANAGE_PUSH_PAGE;
+	info.op_ver = IRDMA_VCHNL_OP_MANAGE_PUSH_PAGE_V0;
+	info.req_parm = &add_push_pg;
+	info.req_parm_len = sizeof(add_push_pg);
+	info.resp_parm = pg_idx;
+	info.resp_parm_len = sizeof(*pg_idx);
+
+	ibdev_dbg(to_ibdev(dev),
+		  "VIRT: Sending msg: manage_push_pg add = %d, idx %u, qsh %u\n",
+		  add_push_pg.add, add_push_pg.pg_idx, add_push_pg.qs_handle);
+
+	return irdma_vchnl_req_send_sync(dev, &info);
 }
 
 /**
@@ -560,6 +597,9 @@ int irdma_vchnl_req_get_caps(struct irdma_sc_dev *dev)
 
 	if (ret)
 		return ret;
+
+	if (!dev->vc_caps.max_hw_push_len)
+		dev->vc_caps.max_hw_push_len = IRDMA_DEFAULT_MAX_PUSH_LEN;
 
 	if (dev->vc_caps.hw_rev > IRDMA_GEN_MAX ||
 	    dev->vc_caps.hw_rev < IRDMA_GEN_2) {

@@ -8,6 +8,9 @@
 
 #define IRDMA_PKEY_TBL_SZ		1
 #define IRDMA_DEFAULT_PKEY		0xFFFF
+
+#define IRDMA_QPS_PER_PUSH_PAGE		16
+#define IRDMA_PUSH_WIN_SIZE		256
 #define IRDMA_SHADOW_PGCNT		1
 
 struct irdma_ucontext {
@@ -28,6 +31,10 @@ struct irdma_ucontext {
 struct irdma_pd {
 	struct ib_pd ibpd;
 	struct irdma_sc_pd sc_pd;
+	struct mutex push_alloc_mutex; /* protect push page alloc within a PD*/
+	DECLARE_BITMAP(push_offset_bmap, IRDMA_QPS_PER_PUSH_PAGE);
+	u32 push_idx;
+	u16 qs_handle;
 };
 
 union irdma_sockaddr {

@@ -167,6 +167,8 @@ enum irdma_protocol_used {
 #define IRDMA_MAX_RQ_WQE_SHIFT_GEN1 2
 #define IRDMA_MAX_RQ_WQE_SHIFT_GEN2 3
 
+#define IRDMA_DEFAULT_MAX_PUSH_LEN 8192
+
 #define IRDMA_SQ_RSVD	258
 #define IRDMA_RQ_RSVD	1
 
