@@ -233,6 +233,7 @@ struct mmu_notifier {
 	struct mm_struct *mm;
 	struct rcu_head rcu;
 	unsigned int users;
+	bool has_fast_aging;
 };
 
 /**
@@ -387,6 +388,7 @@ extern int __mmu_notifier_clear_young(struct mm_struct *mm,
 extern int __mmu_notifier_test_young(struct mm_struct *mm,
 				     unsigned long address,
 				     bool fast_only);
+extern bool __mm_has_fast_young_notifiers(struct mm_struct *mm);
 extern int __mmu_notifier_invalidate_range_start(struct mmu_notifier_range *r);
 extern void __mmu_notifier_invalidate_range_end(struct mmu_notifier_range *r);
 extern void __mmu_notifier_arch_invalidate_secondary_tlbs(struct mm_struct *mm,
@@ -446,6 +448,13 @@ static inline int mmu_notifier_test_young_fast_only(struct mm_struct *mm,
 {
 	if (mm_has_notifiers(mm))
 		return __mmu_notifier_test_young(mm, address, true);
+	return 0;
+}
+
+static inline bool mm_has_fast_young_notifiers(struct mm_struct *mm)
+{
+	if (mm_has_notifiers(mm))
+		return __mm_has_fast_young_notifiers(mm);
 	return 0;
 }
 
@@ -649,6 +658,11 @@ static inline int mmu_notifier_test_young(struct mm_struct *mm,
 
 static inline int mmu_notifier_test_young_fast_only(struct mm_struct *mm,
 						    unsigned long address)
+{
+	return 0;
+}
+
+static inline bool mm_has_fast_young_notifiers(struct mm_struct *mm)
 {
 	return 0;
 }
