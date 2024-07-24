@@ -1113,7 +1113,15 @@ static int svc_i3c_master_xfer(struct svc_i3c_master *master,
 		 * start.
 		 */
 		if (SVC_I3C_MSTATUS_IBIWON(reg)) {
+			int ibitype = SVC_I3C_MSTATUS_IBITYPE(reg);
+
 			writel(SVC_I3C_MINT_IBIWON, master->regs + SVC_I3C_MSTATUS);
+
+			/* Hardware can't auto emit NACK for hot join and master request */
+			if (ibitype == SVC_I3C_MSTATUS_IBITYPE_HOT_JOIN ||
+			    ibitype == SVC_I3C_MSTATUS_IBITYPE_MASTER_REQUEST)
+				svc_i3c_master_nack_ibi(master);
+
 			continue;
 		}
 
