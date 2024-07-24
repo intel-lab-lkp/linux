@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR Linux-OpenIB
 /* Copyright (c) 2015 - 2021 Intel Corporation */
 #include "main.h"
-#include "../../../net/ethernet/intel/ice/ice.h"
 
 MODULE_ALIAS("i40iw");
 MODULE_AUTHOR("Intel Corporation, <e1000-rdma@lists.sourceforge.net>");
@@ -61,7 +60,7 @@ static void irdma_log_invalid_mtu(u16 mtu, struct irdma_sc_dev *dev)
 }
 
 static void irdma_fill_qos_info(struct irdma_l2params *l2params,
-				struct iidc_qos_params *qos_info)
+				struct iidc_rdma_qos_params *qos_info)
 {
 	int i;
 
@@ -85,12 +84,13 @@ static void irdma_fill_qos_info(struct irdma_l2params *l2params,
 	}
 }
 
-static void irdma_iidc_event_handler(struct ice_pf *pf, struct iidc_event *event)
+static void irdma_idc_event_handler(struct idc_rdma_core_dev_info *cdev_info,
+				    struct idc_rdma_event *event)
 {
-	struct irdma_device *iwdev = dev_get_drvdata(&pf->adev->dev);
+	struct irdma_device *iwdev = dev_get_drvdata(&cdev_info->adev->dev);
 	struct irdma_l2params l2params = {};
 
-	if (*event->type & BIT(IIDC_EVENT_AFTER_MTU_CHANGE)) {
+	if (*event->type & BIT(IDC_RDMA_EVENT_AFTER_MTU_CHANGE)) {
 		ibdev_dbg(&iwdev->ibdev, "CLNT: new MTU = %d\n", iwdev->netdev->mtu);
 		if (iwdev->vsi.mtu != iwdev->netdev->mtu) {
 			l2params.mtu = iwdev->netdev->mtu;
@@ -98,25 +98,26 @@ static void irdma_iidc_event_handler(struct ice_pf *pf, struct iidc_event *event
 			irdma_log_invalid_mtu(l2params.mtu, &iwdev->rf->sc_dev);
 			irdma_change_l2params(&iwdev->vsi, &l2params);
 		}
-	} else if (*event->type & BIT(IIDC_EVENT_BEFORE_TC_CHANGE)) {
+	} else if (*event->type & BIT(IDC_RDMA_EVENT_BEFORE_TC_CHANGE)) {
 		if (iwdev->vsi.tc_change_pending)
 			return;
 
 		irdma_prep_tc_change(iwdev);
-	} else if (*event->type & BIT(IIDC_EVENT_AFTER_TC_CHANGE)) {
-		struct iidc_qos_params qos_info = {};
+	} else if (*event->type & BIT(IDC_RDMA_EVENT_AFTER_TC_CHANGE)) {
+		struct iidc_rdma_priv_dev_info *idc_priv = cdev_info->idc_priv;
 
 		if (!iwdev->vsi.tc_change_pending)
 			return;
 
 		l2params.tc_changed = true;
 		ibdev_dbg(&iwdev->ibdev, "CLNT: TC Change\n");
-		ice_get_qos_params(pf, &qos_info);
-		irdma_fill_qos_info(&l2params, &qos_info);
+
+		irdma_fill_qos_info(&l2params, &idc_priv->qos_info);
 		if (iwdev->rf->protocol_used != IRDMA_IWARP_PROTOCOL_ONLY)
-			iwdev->dcb_vlan_mode = qos_info.num_tc > 1 && !l2params.dscp_mode;
+			iwdev->dcb_vlan_mode =
+				l2params.num_tc > 1 && !l2params.dscp_mode;
 		irdma_change_l2params(&iwdev->vsi, &l2params);
-	} else if (*event->type & BIT(IIDC_EVENT_CRIT_ERR)) {
+	} else if (*event->type & BIT(IDC_RDMA_EVENT_CRIT_ERR)) {
 		ibdev_warn(&iwdev->ibdev, "ICE OICR event notification: oicr = 0x%08x\n",
 			   event->reg);
 		if (event->reg & IRDMAPFINT_OICR_PE_CRITERR_M) {
@@ -151,10 +152,10 @@ static void irdma_iidc_event_handler(struct ice_pf *pf, struct iidc_event *event
  */
 static void irdma_request_reset(struct irdma_pci_f *rf)
 {
-	struct ice_pf *pf = rf->cdev;
+	struct idc_rdma_core_dev_info *cdev_info = rf->cdev;
 
 	ibdev_warn(&rf->iwdev->ibdev, "Requesting a reset\n");
-	ice_rdma_request_reset(pf, IIDC_PFR);
+	cdev_info->ops->request_reset(rf->cdev, IDC_FUNC_RESET);
 }
 
 /**
@@ -166,14 +167,15 @@ static int irdma_lan_register_qset(struct irdma_sc_vsi *vsi,
 				   struct irdma_ws_node *tc_node)
 {
 	struct irdma_device *iwdev = vsi->back_vsi;
-	struct ice_pf *pf = iwdev->rf->cdev;
+	struct idc_rdma_core_dev_info *cdev_info = iwdev->rf->cdev;
+	struct iidc_rdma_priv_dev_info *idc_priv = cdev_info->idc_priv;
 	struct iidc_rdma_qset_params qset = {};
 	int ret;
 
 	qset.qs_handle = tc_node->qs_handle;
 	qset.tc = tc_node->traffic_class;
 	qset.vport_id = vsi->vsi_idx;
-	ret = ice_add_rdma_qset(pf, &qset);
+	ret = idc_priv->priv_ops->alloc_res(cdev_info, &qset);
 	if (ret) {
 		ibdev_dbg(&iwdev->ibdev, "WS: LAN alloc_res for rdma qset failed.\n");
 		return ret;
@@ -194,7 +196,8 @@ static void irdma_lan_unregister_qset(struct irdma_sc_vsi *vsi,
 				      struct irdma_ws_node *tc_node)
 {
 	struct irdma_device *iwdev = vsi->back_vsi;
-	struct ice_pf *pf = iwdev->rf->cdev;
+	struct idc_rdma_core_dev_info *cdev_info = iwdev->rf->cdev;
+	struct iidc_rdma_priv_dev_info *idc_priv = cdev_info->idc_priv;
 	struct iidc_rdma_qset_params qset = {};
 
 	qset.qs_handle = tc_node->qs_handle;
@@ -202,40 +205,48 @@ static void irdma_lan_unregister_qset(struct irdma_sc_vsi *vsi,
 	qset.vport_id = vsi->vsi_idx;
 	qset.teid = tc_node->l2_sched_node_id;
 
-	if (ice_del_rdma_qset(pf, &qset))
+	if (idc_priv->priv_ops->free_res(cdev_info, &qset))
 		ibdev_dbg(&iwdev->ibdev, "WS: LAN free_res for rdma qset failed.\n");
 }
 
 static void irdma_remove(struct auxiliary_device *aux_dev)
 {
-	struct iidc_auxiliary_dev *iidc_adev = container_of(aux_dev,
-							    struct iidc_auxiliary_dev,
-							    adev);
-	struct ice_pf *pf = iidc_adev->pf;
+	struct idc_rdma_core_auxiliary_dev *idc_adev =
+		container_of(aux_dev, struct idc_rdma_core_auxiliary_dev, adev);
+	struct idc_rdma_core_dev_info *cdev_info = idc_adev->cdev_info;
+	struct iidc_rdma_priv_dev_info *idc_priv = cdev_info->idc_priv;
 	struct irdma_device *iwdev = auxiliary_get_drvdata(aux_dev);
 
+	idc_priv->priv_ops->update_vport_filter(cdev_info,
+						iwdev->vsi_num, false);
 	irdma_ib_unregister_device(iwdev);
-	ice_rdma_update_vsi_filter(pf, iwdev->vsi_num, false);
 
-	pr_debug("INIT: Gen2 PF[%d] device remove success\n", PCI_FUNC(pf->pdev->devfn));
+	pr_debug("INIT: Gen2 PF[%d] device remove success\n", PCI_FUNC(cdev_info->pdev->devfn));
 }
 
-static void irdma_fill_device_info(struct irdma_device *iwdev, struct ice_pf *pf,
-				   struct ice_vsi *vsi)
+static void irdma_fill_device_info(struct irdma_device *iwdev,
+				   struct idc_rdma_core_dev_info *cdev_info)
 {
+	struct iidc_rdma_priv_dev_info *idc_priv = cdev_info->idc_priv;
 	struct irdma_pci_f *rf = iwdev->rf;
 
-	rf->cdev = pf;
+	rf->sc_dev.hw = &rf->hw;
+	rf->iwdev = iwdev;
+	rf->cdev = cdev_info;
+	rf->hw.hw_addr = idc_priv->hw_addr;
+	rf->pcidev = cdev_info->pdev;
+	rf->hw.device = &rf->pcidev->dev;
+	rf->msix_count = cdev_info->msix_count;
+	rf->pf_id = idc_priv->pf_id;
+	rf->msix_entries = cdev_info->msix_entries;
+
 	rf->gen_ops.register_qset = irdma_lan_register_qset;
 	rf->gen_ops.unregister_qset = irdma_lan_unregister_qset;
-	rf->hw.hw_addr = pf->hw.hw_addr;
-	rf->pcidev = pf->pdev;
-	rf->msix_count =  pf->num_rdma_msix;
-	rf->pf_id = pf->hw.pf_id;
-	rf->msix_entries = &pf->msix_entries[pf->rdma_base_vector];
-	rf->default_vsi.vsi_idx = vsi->vsi_num;
-	rf->protocol_used = pf->rdma_mode & IIDC_RDMA_PROTOCOL_ROCEV2 ?
-			    IRDMA_ROCE_PROTOCOL_ONLY : IRDMA_IWARP_PROTOCOL_ONLY;
+
+	rf->default_vsi.vsi_idx = idc_priv->vport_id;
+	rf->protocol_used =
+		cdev_info->rdma_protocol == IDC_RDMA_PROTOCOL_ROCEV2 ?
+			IRDMA_ROCE_PROTOCOL_ONLY : IRDMA_IWARP_PROTOCOL_ONLY;
 	rf->rdma_ver = IRDMA_GEN_2;
 	rf->rsrc_profile = IRDMA_HMC_PROFILE_DEFAULT;
 	rf->rst_to = IRDMA_RST_TIMEOUT_HZ;
@@ -243,8 +254,9 @@ static void irdma_fill_device_info(struct irdma_device *iwdev, struct ice_pf *pf
 	rf->limits_sel = 7;
 	rf->iwdev = iwdev;
 	mutex_init(&iwdev->ah_tbl_lock);
-	iwdev->netdev = vsi->netdev;
-	iwdev->vsi_num = vsi->vsi_num;
+
+	iwdev->netdev = idc_priv->netdev;
+	iwdev->vsi_num = idc_priv->vport_id;
 	iwdev->init_state = INITIAL_STATE;
 	iwdev->roce_cwnd = IRDMA_ROCE_CWND_DEFAULT;
 	iwdev->roce_ackcreds = IRDMA_ROCE_ACKCREDS_DEFAULT;
@@ -256,19 +268,15 @@ static void irdma_fill_device_info(struct irdma_device *iwdev, struct ice_pf *pf
 
 static int irdma_probe(struct auxiliary_device *aux_dev, const struct auxiliary_device_id *id)
 {
-	struct iidc_auxiliary_dev *iidc_adev = container_of(aux_dev,
-							    struct iidc_auxiliary_dev,
-							    adev);
-	struct ice_pf *pf = iidc_adev->pf;
-	struct ice_vsi *vsi = ice_get_main_vsi(pf);
-	struct iidc_qos_params qos_info = {};
+	struct idc_rdma_core_auxiliary_dev *idc_adev =
+		container_of(aux_dev, struct idc_rdma_core_auxiliary_dev, adev);
+	struct idc_rdma_core_dev_info *cdev_info = idc_adev->cdev_info;
+	struct iidc_rdma_priv_dev_info *idc_priv = cdev_info->idc_priv;
 	struct irdma_device *iwdev;
 	struct irdma_pci_f *rf;
 	struct irdma_l2params l2params = {};
 	int err;
 
-	if (!vsi)
-		return -EIO;
 	iwdev = ib_alloc_device(irdma_device, ibdev);
 	if (!iwdev)
 		return -ENOMEM;
@@ -278,7 +286,7 @@ static int irdma_probe(struct auxiliary_device *aux_dev, const struct auxiliary_
 		return -ENOMEM;
 	}
 
-	irdma_fill_device_info(iwdev, pf, vsi);
+	irdma_fill_device_info(iwdev, cdev_info);
 	rf = iwdev->rf;
 
 	err = irdma_ctrl_init_hw(rf);
@@ -286,8 +294,7 @@ static int irdma_probe(struct auxiliary_device *aux_dev, const struct auxiliary_
 		goto err_ctrl_init;
 
 	l2params.mtu = iwdev->netdev->mtu;
-	ice_get_qos_params(pf, &qos_info);
-	irdma_fill_qos_info(&l2params, &qos_info);
+	irdma_fill_qos_info(&l2params, &idc_priv->qos_info);
 	if (iwdev->rf->protocol_used != IRDMA_IWARP_PROTOCOL_ONLY)
 		iwdev->dcb_vlan_mode = l2params.num_tc > 1 && !l2params.dscp_mode;
 
@@ -299,7 +306,8 @@ static int irdma_probe(struct auxiliary_device *aux_dev, const struct auxiliary_
 	if (err)
 		goto err_ibreg;
 
-	ice_rdma_update_vsi_filter(pf, iwdev->vsi_num, true);
+	idc_priv->priv_ops->update_vport_filter(cdev_info, iwdev->vsi_num,
+						true);
 
 	ibdev_dbg(&iwdev->ibdev, "INIT: Gen2 PF[%d] device probe success\n", PCI_FUNC(rf->pcidev->devfn));
 	auxiliary_set_drvdata(aux_dev, iwdev);
@@ -325,13 +333,13 @@ static const struct auxiliary_device_id irdma_auxiliary_id_table[] = {
 
 MODULE_DEVICE_TABLE(auxiliary, irdma_auxiliary_id_table);
 
-static struct iidc_auxiliary_drv irdma_auxiliary_drv = {
+static struct idc_rdma_core_auxiliary_drv irdma_auxiliary_drv = {
 	.adrv = {
 	    .id_table = irdma_auxiliary_id_table,
 	    .probe = irdma_probe,
 	    .remove = irdma_remove,
 	},
-	.event_handler = irdma_iidc_event_handler,
+	.event_handler = irdma_idc_event_handler,
 };
 
 static int __init irdma_init_module(void)

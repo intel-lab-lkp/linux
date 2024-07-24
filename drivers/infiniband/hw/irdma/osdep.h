@@ -5,7 +5,9 @@
 
 #include <linux/pci.h>
 #include <linux/bitfield.h>
-#include <linux/net/intel/iidc.h>
+#include <linux/net/intel/idc_rdma.h>
+#include <linux/net/intel/iidc_rdma.h>
+
 #include <crypto/hash.h>
 #include <rdma/ib_verbs.h>
 

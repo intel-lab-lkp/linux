@@ -1286,8 +1286,14 @@ ice_devlink_enable_roce_get(struct devlink *devlink, u32 id,
 			    struct devlink_param_gset_ctx *ctx)
 {
 	struct ice_pf *pf = devlink_priv(devlink);
+	struct idc_rdma_core_dev_info *cdev;
 
-	ctx->val.vbool = pf->rdma_mode & IIDC_RDMA_PROTOCOL_ROCEV2 ? true : false;
+	cdev = pf->cdev_info;
+	if (!cdev)
+		return 0;
+
+	ctx->val.vbool = cdev->rdma_protocol & IDC_RDMA_PROTOCOL_ROCEV2 ?
+			 true : false;
 
 	return 0;
 }
@@ -1297,19 +1303,24 @@ static int ice_devlink_enable_roce_set(struct devlink *devlink, u32 id,
 				       struct netlink_ext_ack *extack)
 {
 	struct ice_pf *pf = devlink_priv(devlink);
+	struct idc_rdma_core_dev_info *cdev;
 	bool roce_ena = ctx->val.vbool;
 	int ret;
 
+	cdev = pf->cdev_info;
+	if (!cdev)
+		return -EINVAL;
+
 	if (!roce_ena) {
 		ice_unplug_aux_dev(pf);
-		pf->rdma_mode &= ~IIDC_RDMA_PROTOCOL_ROCEV2;
+		cdev->rdma_protocol &= ~IDC_RDMA_PROTOCOL_ROCEV2;
 		return 0;
 	}
 
-	pf->rdma_mode |= IIDC_RDMA_PROTOCOL_ROCEV2;
+	cdev->rdma_protocol |= IDC_RDMA_PROTOCOL_ROCEV2;
 	ret = ice_plug_aux_dev(pf);
 	if (ret)
-		pf->rdma_mode &= ~IIDC_RDMA_PROTOCOL_ROCEV2;
+		cdev->rdma_protocol &= ~IDC_RDMA_PROTOCOL_ROCEV2;
 
 	return ret;
 }
@@ -1320,11 +1331,16 @@ ice_devlink_enable_roce_validate(struct devlink *devlink, u32 id,
 				 struct netlink_ext_ack *extack)
 {
 	struct ice_pf *pf = devlink_priv(devlink);
+	struct idc_rdma_core_dev_info *cdev;
+
+	cdev = pf->cdev_info;
+	if (!cdev)
+		return -EINVAL;
 
 	if (!test_bit(ICE_FLAG_RDMA_ENA, pf->flags))
 		return -EOPNOTSUPP;
 
-	if (pf->rdma_mode & IIDC_RDMA_PROTOCOL_IWARP) {
+	if (cdev->rdma_protocol & IDC_RDMA_PROTOCOL_IWARP) {
 		NL_SET_ERR_MSG_MOD(extack, "iWARP is currently enabled. This device cannot enable iWARP and RoCEv2 simultaneously");
 		return -EOPNOTSUPP;
 	}
@@ -1338,7 +1354,8 @@ ice_devlink_enable_iw_get(struct devlink *devlink, u32 id,
 {
 	struct ice_pf *pf = devlink_priv(devlink);
 
-	ctx->val.vbool = pf->rdma_mode & IIDC_RDMA_PROTOCOL_IWARP;
+	ctx->val.vbool = pf->cdev_info->rdma_protocol &
+			 IDC_RDMA_PROTOCOL_IWARP;
 
 	return 0;
 }
@@ -1348,19 +1365,23 @@ static int ice_devlink_enable_iw_set(struct devlink *devlink, u32 id,
 				     struct netlink_ext_ack *extack)
 {
 	struct ice_pf *pf = devlink_priv(devlink);
+	struct idc_rdma_core_dev_info *cdev;
 	bool iw_ena = ctx->val.vbool;
 	int ret;
 
+	cdev = pf->cdev_info;
+	if (!cdev)
+		return -EINVAL;
 	if (!iw_ena) {
 		ice_unplug_aux_dev(pf);
-		pf->rdma_mode &= ~IIDC_RDMA_PROTOCOL_IWARP;
+		cdev->rdma_protocol &= ~IDC_RDMA_PROTOCOL_IWARP;
 		return 0;
 	}
 
-	pf->rdma_mode |= IIDC_RDMA_PROTOCOL_IWARP;
+	cdev->rdma_protocol |= IDC_RDMA_PROTOCOL_IWARP;
 	ret = ice_plug_aux_dev(pf);
 	if (ret)
-		pf->rdma_mode &= ~IIDC_RDMA_PROTOCOL_IWARP;
+		cdev->rdma_protocol &= ~IDC_RDMA_PROTOCOL_IWARP;
 
 	return ret;
 }
@@ -1375,7 +1396,7 @@ ice_devlink_enable_iw_validate(struct devlink *devlink, u32 id,
 	if (!test_bit(ICE_FLAG_RDMA_ENA, pf->flags))
 		return -EOPNOTSUPP;
 
-	if (pf->rdma_mode & IIDC_RDMA_PROTOCOL_ROCEV2) {
+	if (pf->cdev_info->rdma_protocol & IDC_RDMA_PROTOCOL_ROCEV2) {
 		NL_SET_ERR_MSG_MOD(extack, "RoCEv2 is currently enabled. This device cannot enable iWARP and RoCEv2 simultaneously");
 		return -EOPNOTSUPP;
 	}
