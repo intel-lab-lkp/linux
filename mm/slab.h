@@ -273,6 +273,9 @@ struct kmem_cache {
 	int refcount;			/* Refcount for slab cache destroy */
 	void (*ctor)(void *object);	/* Object constructor */
 	unsigned int inuse;		/* Offset to metadata */
+#ifdef CONFIG_SLUB_RCU_DEBUG
+	unsigned int debug_rcu_head_offset;
+#endif
 	unsigned int align;		/* Alignment */
 	unsigned int red_left_pad;	/* Left redzone padding size */
 	const char *name;		/* Name (only for display!) */

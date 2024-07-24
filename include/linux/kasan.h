@@ -349,6 +349,8 @@ static __always_inline void kasan_mempool_unpoison_object(void *ptr,
 		__kasan_mempool_unpoison_object(ptr, size, _RET_IP_);
 }
 
+void kasan_poison_range_as_redzone(void *ptr, size_t size);
+
 /*
  * Unlike kasan_check_read/write(), kasan_check_byte() is performed even for
  * the hardware tag-based mode that doesn't rely on compiler instrumentation.
@@ -360,6 +362,8 @@ static __always_inline bool kasan_check_byte(const void *addr)
 		return __kasan_check_byte(addr, _RET_IP_);
 	return true;
 }
+
+size_t kasan_align(size_t size);
 
 #else /* CONFIG_KASAN */
 
@@ -416,9 +420,15 @@ static inline bool kasan_mempool_poison_object(void *ptr)
 }
 static inline void kasan_mempool_unpoison_object(void *ptr, size_t size) {}
 
+static inline void kasan_poison_range_as_redzone(void *ptr, size_t size) {}
+
 static inline bool kasan_check_byte(const void *address)
 {
 	return true;
+}
+static inline size_t kasan_align(size_t size)
+{
+	return size;
 }
 
 #endif /* CONFIG_KASAN */

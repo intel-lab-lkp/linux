@@ -251,7 +251,8 @@ static inline bool poison_slab_object(struct kmem_cache *cache, void *object,
 	object = kasan_reset_tag(object);
 
 	/* RCU slabs could be legally used after free within the RCU period. */
-	if (unlikely(cache->flags & SLAB_TYPESAFE_BY_RCU))
+	if (unlikely(cache->flags & SLAB_TYPESAFE_BY_RCU) &&
+	    !IS_ENABLED(CONFIG_SLUB_RCU_DEBUG))
 		return false;
 
 	kasan_poison(object, round_up(cache->object_size, KASAN_GRANULE_SIZE),
@@ -566,6 +567,12 @@ void __kasan_mempool_unpoison_object(void *ptr, size_t size, unsigned long ip)
 		poison_kmalloc_redzone(slab->slab_cache, ptr, size, flags);
 }
 
+void kasan_poison_range_as_redzone(void *ptr, size_t size)
+{
+	if (kasan_enabled())
+		kasan_poison(ptr, size, KASAN_SLAB_REDZONE, false);
+}
+
 bool __kasan_check_byte(const void *address, unsigned long ip)
 {
 	if (!kasan_byte_accessible(address)) {
@@ -573,4 +580,9 @@ bool __kasan_check_byte(const void *address, unsigned long ip)
 		return false;
 	}
 	return true;
+}
+
+size_t kasan_align(size_t size)
+{
+	return round_up(size, KASAN_GRANULE_SIZE);
 }
