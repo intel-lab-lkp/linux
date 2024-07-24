@@ -291,7 +291,7 @@ static ssize_t testing_show(struct device *dev,
 {
 	struct net_device *netdev = to_net_dev(dev);
 
-	if (netif_running(netdev))
+	if (netif_running(netdev) && netif_device_present(netdev))
 		return sysfs_emit(buf, fmt_dec, !!netif_testing(netdev));
 
 	return -EINVAL;
