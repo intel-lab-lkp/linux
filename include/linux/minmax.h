@@ -8,7 +8,7 @@
 #include <linux/types.h>
 
 /*
- * min()/max()/clamp() macros must accomplish three things:
+ * min()/max()/clamp() macros must accomplish several things:
  *
  * - Avoid multiple evaluations of the arguments (so side-effects like
  *   "x++" happen only once) when non-constant.
@@ -26,19 +26,17 @@
 #define __typecheck(x, y) \
 	(!!(sizeof((typeof(x) *)1 == (typeof(y) *)1)))
 
-/* is_signed_type() isn't a constexpr for pointer types */
-#define __is_signed(x) 								\
-	__builtin_choose_expr(__is_constexpr(is_signed_type(typeof(x))),	\
-		is_signed_type(typeof(x)), 0)
+/* Allow unsigned compares against non-negative signed constants. */
+#define __is_ok_unsigned(x) \
+	((is_unsigned_type(typeof(x)) ? 0 : __if_constexpr(x, (x) + 0, -1)) >= 0)
 
-/* True for a non-negative signed int constant */
-#define __is_noneg_int(x)	\
-	(__builtin_choose_expr(__is_constexpr(x) && __is_signed(x), x, -1) >= 0)
+/* Check for signed after promoting unsigned char/short to int */
+#define __is_ok_signed(x) is_signed_type(typeof((x) + 0))
 
-#define __types_ok(x, y) 					\
-	(__is_signed(x) == __is_signed(y) ||			\
-		__is_signed((x) + 0) == __is_signed((y) + 0) ||	\
-		__is_noneg_int(x) || __is_noneg_int(y))
+/* Allow if both x and y are valid for either signed or unsigned compares. */
+#define __types_ok(x, y)				\
+	((__is_ok_signed(x) && __is_ok_signed(y)) ||	\
+	 (__is_ok_unsigned(x) && __is_ok_unsigned(y)))
 
 #define __cmp_op_min <
 #define __cmp_op_max >
