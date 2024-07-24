@@ -287,28 +287,44 @@ void vduse_domain_remove_user_bounce_pages(struct vduse_iova_domain *domain)
 {
 	struct vduse_bounce_map *map;
 	unsigned long i, count;
+	struct page **pages = NULL;
 
 	write_lock(&domain->bounce_lock);
 	if (!domain->user_bounce_pages)
 		goto out;
-
 	count = domain->bounce_size >> PAGE_SHIFT;
+	write_unlock(&domain->bounce_lock);
+
+	pages = kmalloc_array(count, sizeof(*pages), GFP_KERNEL | __GFP_NOFAIL);
+	for (i = 0; i < count; i++)
+		pages[i] = alloc_page(GFP_KERNEL | __GFP_NOFAIL);
+
+	write_lock(&domain->bounce_lock);
+	if (!domain->user_bounce_pages) {
+		for (i = 0; i < count; i++)
+			put_page(pages[i]);
+		kfree(pages);
+		goto out;
+	}
+
 	for (i = 0; i < count; i++) {
-		struct page *page = NULL;
+		struct page *page = pages[i];
 
 		map = &domain->bounce_maps[i];
-		if (WARN_ON(!map->bounce_page))
+		if (WARN_ON(!map->bounce_page)) {
+			put_page(page);
 			continue;
+		}
 
 		/* Copy user page to kernel page if it's in use */
 		if (map->orig_phys != INVALID_PHYS_ADDR) {
-			page = alloc_page(GFP_ATOMIC | __GFP_NOFAIL);
 			memcpy_from_page(page_address(page),
 					 map->bounce_page, 0, PAGE_SIZE);
 		}
 		put_page(map->bounce_page);
 		map->bounce_page = page;
 	}
+	kfree(pages);
 	domain->user_bounce_pages = false;
 out:
 	write_unlock(&domain->bounce_lock);
