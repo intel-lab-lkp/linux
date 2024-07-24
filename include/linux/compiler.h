@@ -242,52 +242,29 @@ static inline void *offset_to_ptr(const int *off)
 /* &a[0] degrades to a pointer: a different type from an array */
 #define __must_be_array(a)	BUILD_BUG_ON_ZERO(__same_type((a), &(a)[0]))
 
-/*
- * This returns a constant expression while determining if an argument is
- * a constant expression, most importantly without evaluating the argument.
- * Glory to Martin Uecker <Martin.Uecker@med.uni-goettingen.de>
+/**
+ * __if_constexpr - Check whether an expression is an 'integer
+ *		constant expression' 
+ * @expr: Expression to test, not evaluated, can be a pointer
+ * @if_const: return value if constant
+ * @if_not_const: return value if not constant
  *
- * Details:
- * - sizeof() return an integer constant expression, and does not evaluate
- *   the value of its operand; it only examines the type of its operand.
- * - The results of comparing two integer constant expressions is also
- *   an integer constant expression.
- * - The first literal "8" isn't important. It could be any literal value.
- * - The second literal "8" is to avoid warnings about unaligned pointers;
- *   this could otherwise just be "1".
- * - (long)(x) is used to avoid warnings about 64-bit types on 32-bit
- *   architectures.
- * - The C Standard defines "null pointer constant", "(void *)0", as
- *   distinct from other void pointers.
- * - If (x) is an integer constant expression, then the "* 0l" resolves
- *   it into an integer constant expression of value 0. Since it is cast to
- *   "void *", this makes the second operand a null pointer constant.
- * - If (x) is not an integer constant expression, then the second operand
- *   resolves to a void pointer (but not a null pointer constant: the value
- *   is not an integer constant 0).
- * - The conditional operator's third operand, "(int *)8", is an object
- *   pointer (to type "int").
- * - The behavior (including the return type) of the conditional operator
- *   ("operand1 ? operand2 : operand3") depends on the kind of expressions
- *   given for the second and third operands. This is the central mechanism
- *   of the macro:
- *   - When one operand is a null pointer constant (i.e. when x is an integer
- *     constant expression) and the other is an object pointer (i.e. our
- *     third operand), the conditional operator returns the type of the
- *     object pointer operand (i.e. "int *"). Here, within the sizeof(), we
- *     would then get:
- *       sizeof(*((int *)(...))  == sizeof(int)  == 4
- *   - When one operand is a void pointer (i.e. when x is not an integer
- *     constant expression) and the other is an object pointer (i.e. our
- *     third operand), the conditional operator returns a "void *" type.
- *     Here, within the sizeof(), we would then get:
- *       sizeof(*((void *)(...)) == sizeof(void) == 1
- * - The equality comparison to "sizeof(int)" therefore depends on (x):
- *     sizeof(int) == sizeof(int)     (x) was a constant expression
- *     sizeof(int) != sizeof(void)    (x) was not a constant expression
+ * The return values @if_const and @if_not_const can have different types.
+ *
+ * Relies on typeof(x ? NULL : ptr_type) being ptr_type and
+ * typeof(x ? (void *)y : ptr_type) being 'void *'.
  */
-#define __is_constexpr(x) \
-	(sizeof(int) == sizeof(*(8 ? ((void *)((long)(x) * 0l)) : (int *)8)))
+#define __if_constexpr(expr, if_const, if_not_const)		\
+	_Generic(0 ? ((void *)((long)(expr) * 0l)) : (char *)0,	\
+		char *: (if_const),				\
+		void *: (if_not_const))
+
+/**
+ * __is_constexpr - Return 1 for an 'integer constant expression'
+ *		0 otherwise.
+ * @expr: expression to check, not evaluated
+ */
+#define __is_constexpr(expr) __if_constexpr((expr), 1, 0)
 
 /*
  * Whether 'type' is a signed type or an unsigned type. Supports scalar types,
