@@ -31,6 +31,14 @@ anyOf:
   - required: ['#io-backend-cells']
   - required: ['#io-channel-cells']
 
+if:
+  required:
+    - '#io-backend-cells'
+then:
+  properties:
+    vref-supply:
+      description: Phandle to the vref input analog reference voltage.
+
 additionalProperties: false
 
 examples:
