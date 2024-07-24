@@ -7,6 +7,23 @@ MODULE_AUTHOR("Intel Corporation, <e1000-rdma@lists.sourceforge.net>");
 MODULE_DESCRIPTION("Intel(R) Ethernet Protocol Driver for RDMA");
 MODULE_LICENSE("Dual BSD/GPL");
 
+int irdma_vchnl_send_sync(struct irdma_sc_dev *dev, u8 *msg, u16 len,
+			  u8 *recv_msg, u16 *recv_len)
+{
+	struct idc_rdma_core_dev_info *cdev_info = dev_to_rf(dev)->cdev;
+	int ret;
+
+	ret = cdev_info->ops->vc_send_sync(cdev_info, msg, len, recv_msg,
+					   recv_len);
+	if (ret == -ETIMEDOUT) {
+		ibdev_err(&(dev_to_rf(dev)->iwdev->ibdev),
+			  "Virtual channel Req <-> Resp completion timeout\n");
+		dev->vchnl_up = false;
+	}
+
+	return ret;
+}
+
 static struct notifier_block irdma_inetaddr_notifier = {
 	.notifier_call = irdma_inetaddr_event
 };
@@ -103,7 +120,44 @@ static int __init irdma_init_module(void)
 		return ret;
 	}
 
+	ret = auxiliary_driver_register(&ig3rdma_core_auxiliary_drv.adrv);
+	if (ret) {
+		auxiliary_driver_unregister(&icrdma_core_auxiliary_drv.adrv);
+		auxiliary_driver_unregister(&i40iw_auxiliary_drv);
+		pr_err("Failed ig3rdma(gen_3) core auxiliary_driver_register() ret=%d\n",
+		       ret);
+
+		return ret;
+	}
 	irdma_register_notifiers();
+
+	return 0;
+}
+
+int irdma_vchnl_init(struct irdma_pci_f *rf,
+		     struct idc_rdma_core_dev_info *cdev_info, u8 *rdma_ver)
+{
+	struct irdma_vchnl_init_info virt_info;
+	u8 gen = rf->rdma_ver;
+	int ret;
+
+	rf->vchnl_wq = alloc_ordered_workqueue("irdma-virtchnl-wq", 0);
+	if (!rf->vchnl_wq)
+		return -ENOMEM;
+
+	mutex_init(&rf->sc_dev.vchnl_mutex);
+
+	virt_info.is_pf = !cdev_info->ftype;
+	virt_info.hw_rev = gen;
+	virt_info.privileged = gen == IRDMA_GEN_2;
+	virt_info.vchnl_wq = rf->vchnl_wq;
+	ret = irdma_sc_vchnl_init(&rf->sc_dev, &virt_info);
+	if (ret) {
+		destroy_workqueue(rf->vchnl_wq);
+		return ret;
+	}
+
+	*rdma_ver = rf->sc_dev.hw_attrs.uk_attrs.hw_rev;
 
 	return 0;
 }
@@ -113,6 +167,7 @@ static void __exit irdma_exit_module(void)
 	irdma_unregister_notifiers();
 	auxiliary_driver_unregister(&icrdma_core_auxiliary_drv.adrv);
 	auxiliary_driver_unregister(&i40iw_auxiliary_drv);
+	auxiliary_driver_unregister(&ig3rdma_core_auxiliary_drv.adrv);
 }
 
 module_init(irdma_init_module);

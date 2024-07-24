@@ -55,6 +55,7 @@
 #include "puda.h"
 
 extern struct auxiliary_driver i40iw_auxiliary_drv;
+extern struct idc_rdma_core_auxiliary_drv ig3rdma_core_auxiliary_drv;
 extern struct idc_rdma_core_auxiliary_drv icrdma_core_auxiliary_drv;
 
 #define IRDMA_FW_VER_DEFAULT	2
@@ -326,6 +327,7 @@ struct irdma_pci_f {
 	wait_queue_head_t vchnl_waitq;
 	struct workqueue_struct *cqp_cmpl_wq;
 	struct work_struct cqp_cmpl_work;
+	struct workqueue_struct *vchnl_wq;
 	struct irdma_sc_vsi default_vsi;
 	void *back_fcn;
 	struct irdma_gen_ops gen_ops;
@@ -556,6 +558,8 @@ int irdma_netdevice_event(struct notifier_block *notifier, unsigned long event,
 			  void *ptr);
 void irdma_add_ip(struct irdma_device *iwdev);
 void cqp_compl_worker(struct work_struct *work);
+int irdma_vchnl_init(struct irdma_pci_f *rf,
+		     struct idc_rdma_core_dev_info *cdev_info, u8 *rdma_ver);
 void irdma_fill_qos_info(struct irdma_l2params *l2params,
 			 struct iidc_rdma_qos_params *qos_info);
 void irdma_request_reset(struct irdma_pci_f *rf);
