@@ -18,6 +18,7 @@ struct idpf_vport_max_q;
 #include <linux/ethtool_netlink.h>
 #include <net/gro.h>
 #include <linux/dim.h>
+#include <linux/net/intel/idc_rdma.h>
 
 #include "virtchnl2.h"
 #include "idpf_lan_txrx.h"
@@ -205,6 +206,8 @@ struct idpf_reg_ops {
  */
 struct idpf_dev_ops {
 	struct idpf_reg_ops reg_ops;
+
+	int (*idc_init)(struct idpf_adapter *adapter);
 };
 
 /**
@@ -584,6 +587,7 @@ struct idpf_adapter {
 	struct idpf_vc_xn_manager *vcxn_mngr;
 
 	struct idpf_dev_ops dev_ops;
+	struct idc_rdma_core_dev_info *cdev_info;
 	int num_vfs;
 	bool crc_enable;
 	bool req_tx_splitq;
@@ -857,5 +861,9 @@ int idpf_sriov_configure(struct pci_dev *pdev, int num_vfs);
 
 u8 idpf_vport_get_hsplit(const struct idpf_vport *vport);
 bool idpf_vport_set_hsplit(const struct idpf_vport *vport, u8 val);
+int idpf_idc_init(struct idpf_adapter *adapter);
+int idpf_idc_init_aux_core_dev(struct idpf_adapter *adapter,
+			       enum idc_function_type ftype);
+void idpf_idc_deinit_core_aux_device(struct idc_rdma_core_dev_info *cdev_info);
 
 #endif /* !_IDPF_H_ */
