@@ -38,6 +38,11 @@
 	((__is_ok_signed(x) && __is_ok_signed(y)) ||	\
 	 (__is_ok_unsigned(x) && __is_ok_unsigned(y)))
 
+/* Check three values for min3(), max3() and clamp() */
+#define __types_ok3(x, y, z)							\
+	((__is_ok_signed(x) && __is_ok_signed(y) && __is_ok_signed(z)) ||	\
+	 (__is_ok_unsigned(x) && __is_ok_unsigned(y) && __is_ok_unsigned(z)))
+
 #define __cmp_op_min <
 #define __cmp_op_max >
 
@@ -90,13 +95,24 @@
  */
 #define umax(x, y)	__careful_cmp(max, __zero_extend(x), __zero_extend(y))
 
+#define __cmp_once3(op, x, y, z, uniq) ({	\
+	typeof(x) __x_##uniq = (x);		\
+	typeof(x) __y_##uniq = (y);		\
+	typeof(x) __z_##uniq = (z);		\
+	__cmp(op, __cmp(op, __x_##uniq, __y_##uniq), __z_##uniq); })
+
+#define __careful_cmp3(op, x, y, z, uniq) ({				\
+	static_assert(__types_ok3(x, y, z),				\
+		#op "3(" #x ", " #y ", " #z ") signedness error");	\
+	__cmp_once3(op, x, y, z, uniq); })
+
 /**
  * min3 - return minimum of three values
  * @x: first value
  * @y: second value
  * @z: third value
  */
-#define min3(x, y, z) min((typeof(x))min(x, y), z)
+#define min3(x, y, z) __careful_cmp3(min, x, y, z, __COUNTER__)
 
 /**
  * max3 - return maximum of three values
@@ -104,7 +120,7 @@
  * @y: second value
  * @z: third value
  */
-#define max3(x, y, z) max((typeof(x))max(x, y), z)
+#define max3(x, y, z) __careful_cmp3(max, x, y, z, __COUNTER__)
 
 /**
  * min_t - return minimum of two values, using the specified type
@@ -139,10 +155,9 @@
 	typeof(val) unique_val = (val);						\
 	typeof(lo) unique_lo = (lo);						\
 	typeof(hi) unique_hi = (hi);						\
-	_Static_assert(__if_constexpr((lo) <= (hi), (lo) <= (hi), true),		\
+	_Static_assert(__if_constexpr((lo) <= (hi), (lo) <= (hi), true),	\
 		"clamp() low limit " #lo " greater than high limit " #hi);	\
-	_Static_assert(__types_ok(val, lo), "clamp() 'lo' signedness error");	\
-	_Static_assert(__types_ok(val, hi), "clamp() 'hi' signedness error");	\
+	_Static_assert(__types_ok3(val, lo, hi), "clamp() signedness error");	\
 	__clamp(unique_val, unique_lo, unique_hi); })
 
 #define __careful_clamp(val, lo, hi) ({					\
