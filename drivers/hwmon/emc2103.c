@@ -4,6 +4,7 @@
  * Copyright (c) 2010 SMSC
  */
 
+#include <linux/bits.h>
 #include <linux/err.h>
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
@@ -12,6 +13,7 @@
 #include <linux/jiffies.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/regmap.h>
 #include <linux/slab.h>
 
 /* Addresses scanned */
@@ -53,7 +55,7 @@ struct temperature {
 };
 
 struct emc2103_data {
-	struct i2c_client	*client;
+	struct regmap	*regmap;
 	const struct		attribute_group *groups[4];
 	struct mutex		update_lock;
 	bool			valid;		/* registers are valid */
@@ -70,62 +72,62 @@ struct emc2103_data {
 	u16			fan_target;
 };
 
-static int read_u8_from_i2c(struct i2c_client *client, u8 i2c_reg, u8 *output)
+static int read_u8_from_i2c(struct regmap *regmap, u8 i2c_reg, u8 *output)
 {
-	int status = i2c_smbus_read_byte_data(client, i2c_reg);
-	if (status < 0) {
-		dev_warn(&client->dev, "reg 0x%02x, err %d\n",
-			i2c_reg, status);
-	} else {
-		*output = status;
-	}
-	return status;
+	u32 regval;
+	int status;
+
+	status = regmap_read(regmap, i2c_reg, &regval);
+	if (status < 0)
+		return status;
+	*output = regval;
+	return 0;
 }
 
-static void read_temp_from_i2c(struct i2c_client *client, u8 i2c_reg,
+static void read_temp_from_i2c(struct regmap *regmap, u8 i2c_reg,
 			       struct temperature *temp)
 {
 	u8 degrees, fractional;
 
-	if (read_u8_from_i2c(client, i2c_reg, &degrees) < 0)
+	if (read_u8_from_i2c(regmap, i2c_reg, &degrees) < 0)
 		return;
 
-	if (read_u8_from_i2c(client, i2c_reg + 1, &fractional) < 0)
+	if (read_u8_from_i2c(regmap, i2c_reg + 1, &fractional) < 0)
 		return;
 
 	temp->degrees = degrees;
 	temp->fraction = (fractional & 0xe0) >> 5;
 }
 
-static void read_fan_from_i2c(struct i2c_client *client, u16 *output,
+static void read_fan_from_i2c(struct regmap *regmap, u16 *output,
 			      u8 hi_addr, u8 lo_addr)
 {
 	u8 high_byte, lo_byte;
 
-	if (read_u8_from_i2c(client, hi_addr, &high_byte) < 0)
+	if (read_u8_from_i2c(regmap, hi_addr, &high_byte) < 0)
 		return;
 
-	if (read_u8_from_i2c(client, lo_addr, &lo_byte) < 0)
+	if (read_u8_from_i2c(regmap, lo_addr, &lo_byte) < 0)
 		return;
 
 	*output = ((u16)high_byte << 5) | (lo_byte >> 3);
 }
 
-static void write_fan_target_to_i2c(struct i2c_client *client, u16 new_target)
+static void write_fan_target_to_i2c(struct regmap *regmap, u16 new_target)
 {
 	u8 high_byte = (new_target & 0x1fe0) >> 5;
 	u8 low_byte = (new_target & 0x001f) << 3;
-	i2c_smbus_write_byte_data(client, REG_FAN_TARGET_LO, low_byte);
-	i2c_smbus_write_byte_data(client, REG_FAN_TARGET_HI, high_byte);
+
+	regmap_write(regmap, REG_FAN_TARGET_LO, low_byte);
+	regmap_write(regmap, REG_FAN_TARGET_HI, high_byte);
 }
 
-static void read_fan_config_from_i2c(struct i2c_client *client)
+static void read_fan_config_from_i2c(struct emc2103_data *data)
 
 {
-	struct emc2103_data *data = i2c_get_clientdata(client);
 	u8 conf1;
 
-	if (read_u8_from_i2c(client, REG_FAN_CONF1, &conf1) < 0)
+	if (read_u8_from_i2c(data->regmap, REG_FAN_CONF1, &conf1) < 0)
 		return;
 
 	data->fan_multiplier = 1 << ((conf1 & 0x60) >> 5);
@@ -135,7 +137,7 @@ static void read_fan_config_from_i2c(struct i2c_client *client)
 static struct emc2103_data *emc2103_update_device(struct device *dev)
 {
 	struct emc2103_data *data = dev_get_drvdata(dev);
-	struct i2c_client *client = data->client;
+	struct regmap *regmap = data->regmap;
 
 	mutex_lock(&data->update_lock);
 
@@ -144,23 +146,23 @@ static struct emc2103_data *emc2103_update_device(struct device *dev)
 		int i;
 
 		for (i = 0; i < data->temp_count; i++) {
-			read_temp_from_i2c(client, REG_TEMP[i], &data->temp[i]);
-			read_u8_from_i2c(client, REG_TEMP_MIN[i],
+			read_temp_from_i2c(regmap, REG_TEMP[i], &data->temp[i]);
+			read_u8_from_i2c(regmap, REG_TEMP_MIN[i],
 				&data->temp_min[i]);
-			read_u8_from_i2c(client, REG_TEMP_MAX[i],
+			read_u8_from_i2c(regmap, REG_TEMP_MAX[i],
 				&data->temp_max[i]);
 		}
 
-		read_u8_from_i2c(client, REG_TEMP_MIN_ALARM,
+		read_u8_from_i2c(regmap, REG_TEMP_MIN_ALARM,
 			&data->temp_min_alarm);
-		read_u8_from_i2c(client, REG_TEMP_MAX_ALARM,
+		read_u8_from_i2c(regmap, REG_TEMP_MAX_ALARM,
 			&data->temp_max_alarm);
 
-		read_fan_from_i2c(client, &data->fan_tach,
+		read_fan_from_i2c(regmap, &data->fan_tach,
 			REG_FAN_TACH_HI, REG_FAN_TACH_LO);
-		read_fan_from_i2c(client, &data->fan_target,
+		read_fan_from_i2c(regmap, &data->fan_target,
 			REG_FAN_TARGET_HI, REG_FAN_TARGET_LO);
-		read_fan_config_from_i2c(client);
+		read_fan_config_from_i2c(data);
 
 		data->last_updated = jiffies;
 		data->valid = true;
@@ -233,7 +235,7 @@ static ssize_t temp_min_store(struct device *dev, struct device_attribute *da,
 {
 	int nr = to_sensor_dev_attr(da)->index;
 	struct emc2103_data *data = dev_get_drvdata(dev);
-	struct i2c_client *client = data->client;
+	struct regmap *regmap = data->regmap;
 	long val;
 
 	int result = kstrtol(buf, 10, &val);
@@ -244,7 +246,7 @@ static ssize_t temp_min_store(struct device *dev, struct device_attribute *da,
 
 	mutex_lock(&data->update_lock);
 	data->temp_min[nr] = val;
-	i2c_smbus_write_byte_data(client, REG_TEMP_MIN[nr], val);
+	regmap_write(regmap, REG_TEMP_MIN[nr], val);
 	mutex_unlock(&data->update_lock);
 
 	return count;
@@ -255,7 +257,7 @@ static ssize_t temp_max_store(struct device *dev, struct device_attribute *da,
 {
 	int nr = to_sensor_dev_attr(da)->index;
 	struct emc2103_data *data = dev_get_drvdata(dev);
-	struct i2c_client *client = data->client;
+	struct regmap *regmap = data->regmap;
 	long val;
 
 	int result = kstrtol(buf, 10, &val);
@@ -266,7 +268,7 @@ static ssize_t temp_max_store(struct device *dev, struct device_attribute *da,
 
 	mutex_lock(&data->update_lock);
 	data->temp_max[nr] = val;
-	i2c_smbus_write_byte_data(client, REG_TEMP_MAX[nr], val);
+	regmap_write(regmap, REG_TEMP_MAX[nr], val);
 	mutex_unlock(&data->update_lock);
 
 	return count;
@@ -300,9 +302,10 @@ static ssize_t fan1_div_store(struct device *dev, struct device_attribute *da,
 			      const char *buf, size_t count)
 {
 	struct emc2103_data *data = emc2103_update_device(dev);
-	struct i2c_client *client = data->client;
+	struct regmap *regmap = data->regmap;
 	int new_range_bits, old_div = 8 / data->fan_multiplier;
 	long new_div;
+	u32 regval;
 
 	int status = kstrtol(buf, 10, &new_div);
 	if (status < 0)
@@ -330,16 +333,14 @@ static ssize_t fan1_div_store(struct device *dev, struct device_attribute *da,
 
 	mutex_lock(&data->update_lock);
 
-	status = i2c_smbus_read_byte_data(client, REG_FAN_CONF1);
+	status = regmap_read(regmap, REG_FAN_CONF1, &regval);
 	if (status < 0) {
-		dev_dbg(&client->dev, "reg 0x%02x, err %d\n",
-			REG_FAN_CONF1, status);
 		mutex_unlock(&data->update_lock);
 		return status;
 	}
-	status &= 0x9F;
-	status |= (new_range_bits << 5);
-	i2c_smbus_write_byte_data(client, REG_FAN_CONF1, status);
+	regval &= 0x9F;
+	regval |= (new_range_bits << 5);
+	regmap_write(regmap, REG_FAN_CONF1, regval);
 
 	data->fan_multiplier = 8 / new_div;
 
@@ -347,7 +348,7 @@ static ssize_t fan1_div_store(struct device *dev, struct device_attribute *da,
 	if ((data->fan_target & 0x1fe0) != 0x1fe0) {
 		u16 new_target = (data->fan_target * old_div) / new_div;
 		data->fan_target = min(new_target, (u16)0x1fff);
-		write_fan_target_to_i2c(client, data->fan_target);
+		write_fan_target_to_i2c(regmap, data->fan_target);
 	}
 
 	/* invalidate data to force re-read from hardware */
@@ -376,7 +377,7 @@ static ssize_t fan1_target_store(struct device *dev,
 				 size_t count)
 {
 	struct emc2103_data *data = emc2103_update_device(dev);
-	struct i2c_client *client = data->client;
+	struct regmap *regmap = data->regmap;
 	unsigned long rpm_target;
 
 	int result = kstrtoul(buf, 10, &rpm_target);
@@ -395,7 +396,7 @@ static ssize_t fan1_target_store(struct device *dev,
 			(FAN_RPM_FACTOR * data->fan_multiplier) / rpm_target,
 			0, 0x1fff);
 
-	write_fan_target_to_i2c(client, data->fan_target);
+	write_fan_target_to_i2c(regmap, data->fan_target);
 
 	mutex_unlock(&data->update_lock);
 	return count;
@@ -421,7 +422,7 @@ static ssize_t pwm1_enable_store(struct device *dev,
 				 size_t count)
 {
 	struct emc2103_data *data = dev_get_drvdata(dev);
-	struct i2c_client *client = data->client;
+	struct regmap *regmap = data->regmap;
 	long new_value;
 	u8 conf_reg;
 
@@ -442,7 +443,7 @@ static ssize_t pwm1_enable_store(struct device *dev,
 		goto err;
 	}
 
-	result = read_u8_from_i2c(client, REG_FAN_CONF1, &conf_reg);
+	result = read_u8_from_i2c(regmap, REG_FAN_CONF1, &conf_reg);
 	if (result < 0) {
 		count = result;
 		goto err;
@@ -453,7 +454,7 @@ static ssize_t pwm1_enable_store(struct device *dev,
 	else
 		conf_reg &= ~0x80;
 
-	i2c_smbus_write_byte_data(client, REG_FAN_CONF1, conf_reg);
+	regmap_write(regmap, REG_FAN_CONF1, conf_reg);
 err:
 	mutex_unlock(&data->update_lock);
 	return count;
@@ -550,53 +551,84 @@ static const struct attribute_group emc2103_temp4_group = {
 	.attrs = emc2103_attributes_temp4,
 };
 
+static bool emc2103_volatile_reg(struct device *dev, unsigned int reg)
+{
+	switch (reg) {
+	case 0x00 ... 0x07:	/* temperature registers */
+	case REG_TEMP_MAX_ALARM:
+	case REG_TEMP_MIN_ALARM:
+	case REG_FAN_TACH_HI:
+	case REG_FAN_TACH_LO:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static const struct regmap_config emc2103_regmap_config = {
+	.reg_bits = 8,
+	.val_bits = 8,
+	.volatile_reg = emc2103_volatile_reg,
+	.cache_type = REGCACHE_MAPLE,
+};
+
 static int
 emc2103_probe(struct i2c_client *client)
 {
 	struct emc2103_data *data;
 	struct device *hwmon_dev;
-	int status, idx = 0;
-
-	if (!i2c_check_functionality(client->adapter, I2C_FUNC_SMBUS_BYTE_DATA))
-		return -EIO;
+	struct regmap *regmap;
+	u32 regval;
+	int ret;
+	int idx = 0;
 
 	data = devm_kzalloc(&client->dev, sizeof(struct emc2103_data),
 			    GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
 
-	i2c_set_clientdata(client, data);
-	data->client = client;
+	regmap = devm_regmap_init_i2c(client, &emc2103_regmap_config);
+	if (IS_ERR(regmap))
+		return PTR_ERR(regmap);
+
+	data->regmap = regmap;
 	mutex_init(&data->update_lock);
 
 	/* 2103-2 and 2103-4 have 3 external diodes, 2103-1 has 1 */
-	status = i2c_smbus_read_byte_data(client, REG_PRODUCT_ID);
-	if (status == 0x24) {
+	ret = regmap_read(regmap, REG_PRODUCT_ID, &regval);
+	if (ret < 0)
+		return ret;
+
+	if (regval == 0x24) {
 		/* 2103-1 only has 1 external diode */
 		data->temp_count = 2;
 	} else {
 		/* 2103-2 and 2103-4 have 3 or 4 external diodes */
-		status = i2c_smbus_read_byte_data(client, REG_CONF1);
-		if (status < 0) {
-			dev_dbg(&client->dev, "reg 0x%02x, err %d\n", REG_CONF1,
-				status);
-			return status;
-		}
-
-		/* detect current state of hardware */
-		data->temp_count = (status & 0x01) ? 4 : 3;
 
 		/* force APD state if module parameter is set */
-		if (apd == 0) {
+		switch (apd) {
+		case 0:
 			/* force APD mode off */
 			data->temp_count = 3;
-			status &= ~(0x01);
-			i2c_smbus_write_byte_data(client, REG_CONF1, status);
-		} else if (apd == 1) {
+			ret = regmap_clear_bits(regmap, REG_CONF1, BIT(0));
+			if (ret)
+				return ret;
+			break;
+		case 1:
 			/* force APD mode on */
 			data->temp_count = 4;
-			status |= 0x01;
-			i2c_smbus_write_byte_data(client, REG_CONF1, status);
+			ret = regmap_set_bits(regmap, REG_CONF1, BIT(0));
+			if (ret)
+				return ret;
+			break;
+		default:
+			ret = regmap_read(regmap, REG_CONF1, &regval);
+			if (ret < 0)
+				return ret;
+
+			/* detect current state of hardware */
+			data->temp_count = (regval & BIT(0)) ? 4 : 3;
+			break;
 		}
 	}
 
