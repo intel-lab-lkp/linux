@@ -3,6 +3,8 @@
 //! A kernel spinlock.
 //!
 //! This module allows Rust code to use the kernel's `spinlock_t`.
+use core::marker::*;
+use kernel::{irq::*, prelude::*};
 
 /// Creates a [`SpinLock`] initialiser with the given name and a newly-created lock class.
 ///
@@ -113,5 +115,104 @@ unsafe impl super::Backend for SpinLockBackend {
         // SAFETY: The safety requirements of this function ensure that `ptr` is valid and that the
         // caller is the owner of the spinlock.
         unsafe { bindings::spin_unlock(ptr) }
+    }
+}
+
+/// Creates a [`IrqSpinLock`] initialiser with the given name and a newly-created lock class.
+///
+/// It uses the name if one is given, otherwise it generates one based on the file name and line
+/// number.
+#[macro_export]
+macro_rules! new_irq_spinlock {
+    ($inner:expr $(, $name:literal)? $(,)?) => {
+        $crate::sync::IrqSpinLock::new(
+            $inner, $crate::optional_name!($($name)?), $crate::static_lock_class!())
+    };
+}
+pub use new_irq_spinlock;
+
+/// A spinlock that may be acquired when interrupts are disabled.
+///
+/// A version of [`SpinLock`] that can only be used in contexts where interrupts for the local CPU
+/// are disabled. It requires that the user acquiring the lock provide proof that interrupts are
+/// disabled through [`IrqDisabled`]
+///
+/// For more info, see [`SpinLock`].
+///
+/// # Examples
+///
+/// The following example shows how to declare, allocate initialise and access a struct (`Example`)
+/// that contains an inner struct (`Inner`) that is protected by a spinlock.
+///
+/// ```
+/// use kernel::{
+///     sync::{new_irq_spinlock, IrqSpinLock},
+///     irq::{with_irqs_disabled, IrqDisabled}
+/// };
+///
+/// struct Inner {
+///     a: u32,
+///     b: u32,
+/// }
+///
+/// #[pin_data]
+/// struct Example {
+///     c: u32,
+///     #[pin]
+///     d: IrqSpinLock<Inner>,
+/// }
+///
+/// impl Example {
+///     fn new() -> impl PinInit<Self> {
+///         pin_init!(Self {
+///             c: 10,
+///             d <- new_irq_spinlock!(Inner { a: 20, b: 30 }),
+///         })
+///     }
+/// }
+///
+/// // Accessing an `Example` from a function that can only be called in no-irq contexts
+/// fn noirq_work(e: &Example, irq: &IrqDisabled<'_>) {
+///     assert_eq!(e.c, 10);
+///     assert_eq!(e.d.lock(&irq).a, 20);
+/// }
+///
+/// // Allocate a boxed `Example`
+/// let e = Box::pin_init(Example::new(), GFP_KERNEL)?;
+///
+/// // Accessing an `Example` from a context where IRQs may not be disabled already.
+/// let b = with_irqs_disabled(|irq| {
+///     noirq_work(&e, &irq);
+///     e.d.lock(&irq).b
+/// );
+/// assert_eq!(b, 30);
+/// # Ok::<(), Error>(())
+/// ```
+#[pin_data]
+pub struct IrqSpinLock<T> {
+    #[pin]
+    inner: SpinLock<T>,
+    #[pin]
+    _p: PhantomPinned,
+}
+
+impl<T> IrqSpinLock<T> {
+    /// Constructs a new IRQ spinlock initialiser
+    pub fn new(t: T, name: &'static CStr, key: &'static super::LockClassKey) -> impl PinInit<Self> {
+        pin_init!(Self {
+            inner <- SpinLock::new(t, name, key),
+            _p: PhantomPinned,
+        })
+    }
+
+    /// Acquires the lock and gives the caller access to the data protected by it
+    pub fn lock<'a>(&'a self, _irq: &'a IrqDisabled<'a>) -> super::Guard<'a, T, SpinLockBackend> {
+        self.inner.lock()
+    }
+}
+
+impl<T> super::LockContainer<T, SpinLockBackend> for IrqSpinLock<T> {
+    unsafe fn get_lock_ref(&self) -> &super::Lock<T, SpinLockBackend> {
+        &self.inner
     }
 }
