@@ -3104,13 +3104,19 @@ static irqreturn_t bmp085_eoc_irq(int irq, void *d)
 	return IRQ_HANDLED;
 }
 
-static int bmp085_fetch_eoc_irq(struct device *dev,
-				const char *name,
-				int irq,
-				struct bmp280_data *data)
+static int bmp085_trigger_probe(struct iio_dev *indio_dev)
 {
+	struct bmp280_data *data = iio_priv(indio_dev);
+	struct device *dev = data->dev;
+	struct fwnode_handle *fwnode;
 	unsigned long irq_trig;
-	int ret;
+	int ret, irq;
+
+	fwnode = dev_fwnode(data->dev);
+	if (!fwnode)
+		return -ENODEV;
+
+	irq = fwnode_irq_get(fwnode, 0);
 
 	irq_trig = irqd_get_trigger_type(irq_get_irq_data(irq));
 	if (irq_trig != IRQF_TRIGGER_RISING) {
@@ -3120,13 +3126,12 @@ static int bmp085_fetch_eoc_irq(struct device *dev,
 
 	init_completion(&data->done);
 
-	ret = devm_request_threaded_irq(dev,
-			irq,
-			bmp085_eoc_irq,
-			NULL,
-			irq_trig,
-			name,
-			data);
+	ret = devm_request_irq(dev,
+			       irq,
+			       bmp085_eoc_irq,
+			       irq_trig,
+			       indio_dev->name,
+			       data);
 	if (ret) {
 		/* Bail out without IRQ but keep the driver in place */
 		dev_err(dev, "unable to request DRDY IRQ\n");
@@ -3136,6 +3141,44 @@ static int bmp085_fetch_eoc_irq(struct device *dev,
 	data->use_eoc = true;
 	return 0;
 }
+
+const struct bmp280_chip_info bmp085_chip_info = {
+	.id_reg = bmp180_chip_info.id_reg,
+	.chip_id = bmp180_chip_info.chip_id,
+	.num_chip_id = bmp180_chip_info.num_chip_id,
+	.regmap_config = bmp180_chip_info.regmap_config,
+	.start_up_time = bmp180_chip_info.start_up_time,
+	.channels = bmp180_chip_info.channels,
+	.num_channels = bmp180_chip_info.num_channels,
+	.avail_scan_masks = bmp180_chip_info.avail_scan_masks,
+
+	.oversampling_temp_avail = bmp180_chip_info.oversampling_temp_avail,
+	.num_oversampling_temp_avail =
+		bmp180_chip_info.num_oversampling_temp_avail,
+	.oversampling_temp_default = bmp180_chip_info.oversampling_temp_default,
+
+	.oversampling_press_avail = bmp180_chip_info.oversampling_press_avail,
+	.num_oversampling_press_avail =
+		bmp180_chip_info.num_oversampling_press_avail,
+	.oversampling_press_default =
+		bmp180_chip_info.oversampling_press_default,
+
+	.temp_coeffs = bmp180_chip_info.temp_coeffs,
+	.temp_coeffs_type = bmp180_chip_info.temp_coeffs_type,
+	.press_coeffs = bmp180_chip_info.press_coeffs,
+	.press_coeffs_type = bmp180_chip_info.press_coeffs_type,
+
+	.chip_config = bmp180_chip_info.chip_config,
+	.read_temp = bmp180_chip_info.read_temp,
+	.read_press = bmp180_chip_info.read_press,
+	.read_calib = bmp180_chip_info.read_calib,
+	.set_mode = bmp180_chip_info.set_mode,
+	.wait_conv = bmp180_chip_info.wait_conv,
+
+	.trigger_probe = bmp085_trigger_probe,
+	.trigger_handler = bmp180_trigger_handler,
+};
+EXPORT_SYMBOL_NS(bmp085_chip_info, IIO_BMP280);
 
 static int bmp280_buffer_preenable(struct iio_dev *indio_dev)
 {
@@ -3308,11 +3351,6 @@ int bmp280_common_probe(struct device *dev,
 	 * so we look for an IRQ if we have that.
 	 */
 	if (irq > 0) {
-		if (chip_id == BMP180_CHIP_ID) {
-			ret = bmp085_fetch_eoc_irq(dev, name, irq, data);
-			if (ret)
-				return ret;
-		}
 		if (data->chip_info->trigger_probe) {
 			ret = data->chip_info->trigger_probe(indio_dev);
 			if (ret)
