@@ -1831,7 +1831,36 @@ static int __kvm_set_msr(struct kvm_vcpu *vcpu, u32 index, u64 data,
 	case MSR_KERNEL_GS_BASE:
 	case MSR_CSTAR:
 	case MSR_LSTAR:
-		if (is_noncanonical_address(data, vcpu))
+
+		/*
+		 * Both AMD and Intel cpus tend to allow values which
+		 * are canonical in the 5 level paging mode but are not
+		 * canonical in the 4 level paging mode to be written
+		 * to the above msrs, regardless of the state of the CR4.LA57.
+		 *
+		 * Intel CPUs do honour CR4.LA57 for the MSR_CSTAR/MSR_LSTAR,
+		 * AMD cpus don't even do that.
+		 *
+		 * Both CPUs also allow non canonical values to remain in
+		 * these MSRs if the CPU was in 5 level paging mode and was
+		 * switched back to 4 level paging, and tolerate these values
+		 * both in native MSRs and in vmcs/vmcb fields.
+		 *
+		 * To avoid crashing a guest, which manages using one of the above
+		 * tricks to get non canonical value to one of
+		 * these MSRs, and later migrates, allow the host initiated
+		 * writes regardless of the state of CR4.LA57.
+		 *
+		 * To be on the safe side, don't allow the guest initiated
+		 * writes to bypass the canonical check (e.g be more strict
+		 * than what the actual ucode usually does).
+		 */
+
+		if (!host_initiated && is_noncanonical_address(data, vcpu))
+			return 1;
+
+		if (!__is_canonical_address(data,
+			boot_cpu_has(X86_FEATURE_LA57) ? 57 : 48))
 			return 1;
 		break;
 	case MSR_IA32_SYSENTER_EIP:
