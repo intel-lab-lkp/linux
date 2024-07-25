@@ -2659,26 +2659,7 @@ EXPORT_SYMBOL(unpoison_memory);
 
 static bool mf_isolate_folio(struct folio *folio, struct list_head *pagelist)
 {
-	bool isolated = false;
-
-	if (folio_test_hugetlb(folio)) {
-		isolated = isolate_hugetlb(folio, pagelist);
-	} else {
-		bool lru = !__folio_test_movable(folio);
-
-		if (lru)
-			isolated = folio_isolate_lru(folio);
-		else
-			isolated = isolate_movable_page(&folio->page,
-							ISOLATE_UNEVICTABLE);
-
-		if (isolated) {
-			list_add(&folio->lru, pagelist);
-			if (lru)
-				node_stat_add_folio(folio, NR_ISOLATED_ANON +
-						    folio_is_file_lru(folio));
-		}
-	}
+	bool isolated = isolate_folio_to_list(folio, pagelist);
 
 	/*
 	 * If we succeed to isolate the folio, we grabbed another refcount on

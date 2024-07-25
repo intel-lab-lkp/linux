@@ -408,6 +408,8 @@ extern unsigned long highest_memmap_pfn;
  */
 #define MAX_RECLAIM_RETRIES 16
 
+bool isolate_folio_to_list(struct folio *folio, struct list_head *list);
+
 /*
  * in mm/vmscan.c:
  */
