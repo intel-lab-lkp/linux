@@ -1788,27 +1788,32 @@ static void do_migrate_range(unsigned long start_pfn, unsigned long end_pfn)
 		folio = page_folio(page);
 		head = &folio->page;
 
+		/*
+		 * HWPoison pages have elevated reference counts so the migration would
+		 * fail on them. It also doesn't make any sense to migrate them in the
+		 * first place. Still try to unmap such a page in case it is still mapped
+		 * (keep the unmap as the catch all safety net).
+		 */
+		if (unlikely(PageHWPoison(page))) {
+			folio = page_folio(page);
+
+			if (WARN_ON(folio_test_lru(folio)))
+				folio_isolate_lru(folio);
+
+			if (folio_mapped(folio))
+				unmap_posioned_folio(folio, TTU_IGNORE_MLOCK);
+
+			if (folio_test_large(folio))
+				pfn = folio_pfn(folio) + folio_nr_pages(folio) - 1;
+			continue;
+		}
+
 		if (PageHuge(page)) {
 			pfn = page_to_pfn(head) + compound_nr(head) - 1;
 			isolate_hugetlb(folio, &source);
 			continue;
 		} else if (PageTransHuge(page))
 			pfn = page_to_pfn(head) + thp_nr_pages(page) - 1;
-
-		/*
-		 * HWPoison pages have elevated reference counts so the migration would
-		 * fail on them. It also doesn't make any sense to migrate them in the
-		 * first place. Still try to unmap such a page in case it is still mapped
-		 * (e.g. current hwpoison implementation doesn't unmap KSM pages but keep
-		 * the unmap as the catch all safety net).
-		 */
-		if (PageHWPoison(page)) {
-			if (WARN_ON(folio_test_lru(folio)))
-				folio_isolate_lru(folio);
-			if (folio_mapped(folio))
-				try_to_unmap(folio, TTU_IGNORE_MLOCK);
-			continue;
-		}
 
 		if (!get_page_unless_zero(page))
 			continue;
