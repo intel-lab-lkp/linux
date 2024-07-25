@@ -17,6 +17,11 @@
 	};
 };
 
+&gic {
+	reg = <0x0 0x11900000 0 0x20000>,
+	      <0x0 0x11940000 0 0x20000>;
+};
+
 &soc {
 	/delete-node/ ssi@1004a800;
 	/delete-node/ serial@1004c800;
