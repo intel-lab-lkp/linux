@@ -3018,6 +3018,8 @@ static int perf_c2c__report(int argc, const char **argv)
 	const struct option options[] = {
 	OPT_STRING('k', "vmlinux", &symbol_conf.vmlinux_name,
 		   "file", "vmlinux pathname"),
+	OPT_CALLBACK(0, "vdso", NULL, "vdso1[,vdso2]", "vdso pathnames",
+		     parse_vdso_pathnames),
 	OPT_STRING('i', "input", &input_name, "file",
 		   "the input file to process"),
 	OPT_INCR('N', "node-info", &c2c.node_info,

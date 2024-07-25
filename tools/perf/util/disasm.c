@@ -16,6 +16,7 @@
 #include "debug.h"
 #include "disasm.h"
 #include "dso.h"
+#include "vdso.h"
 #include "env.h"
 #include "evsel.h"
 #include "map.h"
@@ -1126,7 +1127,7 @@ static int dso__disassemble_filename(struct dso *dso, char *filename, size_t fil
 	if (pos && strlen(pos) < SBUILD_ID_SIZE - 2)
 		dirname(build_id_path);
 
-	if (dso__is_kcore(dso))
+	if (dso__is_kcore(dso) || dso__is_vdso(dso))
 		goto fallback;
 
 	len = readlink(build_id_path, linkname, sizeof(linkname) - 1);
@@ -1134,7 +1135,7 @@ static int dso__disassemble_filename(struct dso *dso, char *filename, size_t fil
 		goto fallback;
 
 	linkname[len] = '\0';
-	if (strstr(linkname, DSO__NAME_KALLSYMS) ||
+	if (strstr(linkname, DSO__NAME_KALLSYMS) || strstr(linkname, DSO__NAME_VDSO) ||
 		access(filename, R_OK)) {
 fallback:
 		/*
@@ -1142,7 +1143,7 @@ fallback:
 		 * cache, or is just a kallsyms file, well, lets hope that this
 		 * DSO is the same as when 'perf record' ran.
 		 */
-		if (dso__kernel(dso) && dso__long_name(dso)[0] == '/')
+		if ((dso__kernel(dso) || dso__is_vdso(dso)) && dso__long_name(dso)[0] == '/')
 			snprintf(filename, filename_size, "%s", dso__long_name(dso));
 		else
 			__symbol__join_symfs(filename, filename_size, dso__long_name(dso));

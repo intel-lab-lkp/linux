@@ -296,6 +296,9 @@ OPTIONS
 --kallsyms=<file>::
         kallsyms pathname
 
+--vdso=<vdso1[,vdso2]>::
+	Specify vdso pathnames. You can specify up to two for multiarch-support.
+
 --symfs=<directory>::
         Look for files with symbols relative to this directory.
 
