@@ -28,6 +28,19 @@ void __fsnotify_vfsmount_delete(struct vfsmount *mnt)
 	fsnotify_clear_marks_by_mount(mnt);
 }
 
+bool fsnotify_file_has_content_watches(struct file *file)
+{
+	struct inode *inode = file_inode(file);
+	struct super_block *sb = inode->i_sb;
+	struct mount *mnt = real_mount(file->f_path.mnt);
+	u32 mask = inode->i_fsnotify_mask;
+
+	mask |= mnt->mnt_fsnotify_mask;
+	mask |= sb->s_fsnotify_mask;
+
+	return !!(mask & FSNOTIFY_PRE_CONTENT_EVENTS);
+}
+
 /**
  * fsnotify_unmount_inodes - an sb is unmounting.  handle any watched inodes.
  * @sb: superblock being unmounted.
