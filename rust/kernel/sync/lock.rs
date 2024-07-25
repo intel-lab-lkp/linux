@@ -195,3 +195,23 @@ impl<'a, T: ?Sized, B: Backend> Guard<'a, T, B> {
         }
     }
 }
+
+/// A trait implemented by any type which contains a [`Lock`] with a specific [`Backend`].
+pub trait LockContainer<T: ?Sized, B: Backend> {
+    /// Returns an immutable reference to the lock
+    ///
+    /// # Safety
+    ///
+    /// Since this returns a reference to the contained [`Lock`] without going through the
+    /// [`LockContainer`] implementor, it cannot be guaranteed that it is safe to acquire
+    /// this lock. Thus the caller must promise not to attempt to use the returned immutable
+    /// reference to attempt to grab the underlying lock without ensuring whatever guarantees the
+    /// [`LockContainer`] implementor's interface enforces.
+    unsafe fn get_lock_ref(&self) -> &Lock<T, B>;
+}
+
+impl<T: ?Sized, B: Backend> LockContainer<T, B> for Lock<T, B> {
+    unsafe fn get_lock_ref(&self) -> &Lock<T, B> {
+        &self
+    }
+}

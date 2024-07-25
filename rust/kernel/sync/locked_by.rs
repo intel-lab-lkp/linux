@@ -95,13 +95,20 @@ impl<T, U> LockedBy<T, U> {
     /// data becomes inaccessible; if another instance of the owner is allocated *on the same
     /// memory location*, the data becomes accessible again: none of this affects memory safety
     /// because in any case at most one thread (or CPU) can access the protected data at a time.
-    pub fn new<B: Backend>(owner: &Lock<U, B>, data: T) -> Self {
+    pub fn new<B, L>(owner: &L, data: T) -> Self
+    where
+        B: Backend,
+        L: super::LockContainer<U, B>,
+    {
         build_assert!(
             size_of::<Lock<U, B>>() > 0,
             "The lock type cannot be a ZST because it may be impossible to distinguish instances"
         );
         Self {
-            owner: owner.data.get(),
+            // SAFETY: We never directly acquire the lock through this reference, we simply use it
+            // to ensure that a `Guard` the user provides us to access this container's contents
+            // belongs to the same lock that owns this data
+            owner: unsafe { owner.get_lock_ref() }.data.get(),
             data: UnsafeCell::new(data),
         }
     }
