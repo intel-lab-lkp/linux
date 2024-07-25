@@ -48,8 +48,7 @@ static int dso__load_guest_kernel_sym(struct dso *dso, struct map *map);
 static int dso__load_vdso_sym(struct dso *dso, struct map *map);
 static bool symbol__is_idle(const char *name);
 
-int vmlinux_path__nr_entries;
-char **vmlinux_path;
+struct dso_filename_paths vmlinux_paths;
 
 struct symbol_conf symbol_conf = {
 	.nanosecs		= false,
@@ -2042,10 +2041,10 @@ int dso__load_vmlinux_path(struct dso *dso, struct map *map)
 	char *filename = NULL;
 
 	pr_debug("Looking at the vmlinux_path (%d entries long)\n",
-		 vmlinux_path__nr_entries + 1);
+		 vmlinux_paths.nr_entries + 1);
 
-	for (i = 0; i < vmlinux_path__nr_entries; ++i) {
-		err = dso__load_vmlinux(dso, map, vmlinux_path[i], false);
+	for (i = 0; i < vmlinux_paths.nr_entries; ++i) {
+		err = dso__load_vmlinux(dso, map, vmlinux_paths.paths[i], false);
 		if (err > 0)
 			goto out;
 	}
@@ -2209,7 +2208,7 @@ static int dso__load_kernel_sym(struct dso *dso, struct map *map)
 			return err;
 	}
 
-	if (!symbol_conf.ignore_vmlinux && vmlinux_path != NULL) {
+	if (!symbol_conf.ignore_vmlinux && vmlinux_paths.paths != NULL) {
 		err = dso__load_vmlinux_path(dso, map);
 		if (err > 0)
 			return err;
@@ -2284,57 +2283,55 @@ static int dso__load_guest_kernel_sym(struct dso *dso, struct map *map)
 	return err;
 }
 
-static void vmlinux_path__exit(void)
-{
-	while (--vmlinux_path__nr_entries >= 0)
-		zfree(&vmlinux_path[vmlinux_path__nr_entries]);
-	vmlinux_path__nr_entries = 0;
-
-	zfree(&vmlinux_path);
-}
-
-static const char * const vmlinux_paths[] = {
-	"vmlinux",
-	"/boot/vmlinux"
+struct dso_filename_pattern {
+	const char *pattern;
+	/*
+	 * 0 for matching directly,
+	 * 1 for matching by kernel_version,
+	 * 2 for matching by kernel_version + arch.
+	 */
+	int match_type;
 };
 
-static const char * const vmlinux_paths_upd[] = {
-	"/boot/vmlinux-%s",
-	"/usr/lib/debug/boot/vmlinux-%s",
-	"/lib/modules/%s/build/vmlinux",
-	"/usr/lib/debug/lib/modules/%s/vmlinux",
-	"/usr/lib/debug/boot/vmlinux-%s.debug"
+struct dso_filename_pattern vmlinux_patterns[] = {
+	{"vmlinux", 0},
+	{"/boot/vmlinux", 0},
+	{"/boot/vmlinux-%s", 1},
+	{"/usr/lib/debug/boot/vmlinux-%s", 1},
+	{"/lib/modules/%s/build/vmlinux", 1},
+	{"/usr/lib/debug/lib/modules/%s/vmlinux", 1},
+	{"/usr/lib/debug/boot/vmlinux-%s.debug", 1},
 };
 
-static int vmlinux_path__add(const char *new_entry)
+static int dso_filename_path__add(struct dso_filename_paths *paths, const char *new_entry)
 {
-	vmlinux_path[vmlinux_path__nr_entries] = strdup(new_entry);
-	if (vmlinux_path[vmlinux_path__nr_entries] == NULL)
+	paths->paths[paths->nr_entries] = strdup(new_entry);
+	if (paths->paths[paths->nr_entries] == NULL)
 		return -1;
-	++vmlinux_path__nr_entries;
+	++paths->nr_entries;
 
 	return 0;
 }
 
-static int vmlinux_path__init(struct perf_env *env)
+static void dso_filename_path__exit(struct dso_filename_paths *paths)
+{
+	while (--paths->nr_entries >= 0)
+		zfree(&paths->paths[paths->nr_entries]);
+	paths->nr_entries = 0;
+
+	zfree(&paths->paths);
+}
+
+static int dso_filename_path__init(struct dso_filename_paths *paths,
+				   struct dso_filename_pattern *patterns,
+				   int nr_patterns,
+				   struct perf_env *env)
 {
 	struct utsname uts;
 	char bf[PATH_MAX];
-	char *kernel_version;
-	unsigned int i;
-
-	vmlinux_path = malloc(sizeof(char *) * (ARRAY_SIZE(vmlinux_paths) +
-			      ARRAY_SIZE(vmlinux_paths_upd)));
-	if (vmlinux_path == NULL)
-		return -1;
-
-	for (i = 0; i < ARRAY_SIZE(vmlinux_paths); i++)
-		if (vmlinux_path__add(vmlinux_paths[i]) < 0)
-			goto out_fail;
-
-	/* only try kernel version if no symfs was given */
-	if (symbol_conf.symfs[0] != 0)
-		return 0;
+	const char *kernel_version;
+	const char *arch = perf_env__arch(env);
+	int i;
 
 	if (env) {
 		kernel_version = env->os_release;
@@ -2345,16 +2342,28 @@ static int vmlinux_path__init(struct perf_env *env)
 		kernel_version = uts.release;
 	}
 
-	for (i = 0; i < ARRAY_SIZE(vmlinux_paths_upd); i++) {
-		snprintf(bf, sizeof(bf), vmlinux_paths_upd[i], kernel_version);
-		if (vmlinux_path__add(bf) < 0)
+	paths->paths = malloc(sizeof(char *) * nr_patterns);
+	if (paths->paths == NULL)
+		return -1;
+
+	for (i = 0; i < nr_patterns; i++) {
+		if (patterns[i].match_type == 0)
+			strlcpy(bf, patterns[i].pattern, sizeof(bf));
+		else if (symbol_conf.symfs[0] == 0) {
+			/* only try kernel version if no symfs was given */
+			if (patterns[i].match_type == 1)
+				snprintf(bf, sizeof(bf), patterns[i].pattern, kernel_version);
+			else if (patterns[i].match_type == 2)
+				snprintf(bf, sizeof(bf), patterns[i].pattern, kernel_version, arch);
+		}
+		if (dso_filename_path__add(paths, bf) < 0)
 			goto out_fail;
 	}
 
 	return 0;
 
 out_fail:
-	vmlinux_path__exit();
+	dso_filename_path__exit(paths);
 	return -1;
 }
 
@@ -2550,8 +2559,11 @@ int symbol__init(struct perf_env *env)
 
 	symbol__elf_init();
 
-	if (symbol_conf.try_vmlinux_path && vmlinux_path__init(env) < 0)
+	if (symbol_conf.try_vmlinux_path &&
+	    dso_filename_path__init(&vmlinux_paths, vmlinux_patterns,
+				    ARRAY_SIZE(vmlinux_patterns), env) < 0) {
 		return -1;
+	}
 
 	if (symbol_conf.field_sep && *symbol_conf.field_sep == '.') {
 		pr_err("'.' is the only non valid --field-separator argument\n");
@@ -2628,7 +2640,7 @@ void symbol__exit(void)
 	intlist__delete(symbol_conf.tid_list);
 	intlist__delete(symbol_conf.pid_list);
 	intlist__delete(symbol_conf.addr_list);
-	vmlinux_path__exit();
+	dso_filename_path__exit(&vmlinux_paths);
 	symbol_conf.sym_list = symbol_conf.dso_list = symbol_conf.comm_list = NULL;
 	symbol_conf.bt_stop_list = NULL;
 	symbol_conf.initialized = false;
