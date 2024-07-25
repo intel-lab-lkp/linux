@@ -1,0 +1,9 @@
+/* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
+#ifndef _DT_BINDINGS_SHARP_MEMORY
+#define _DT_BINDINGS_SHARP_MEMORY
+
+#define SHARP_MEMORY_SOFTWARE_VCOM	0
+#define SHARP_MEMORY_EXTERNAL_VCOM	1
+#define SHARP_MEMORY_PWM_VCOM		2
+
+#endif
