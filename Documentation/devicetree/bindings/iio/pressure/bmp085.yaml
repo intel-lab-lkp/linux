@@ -48,8 +48,13 @@ properties:
 
   interrupts:
     description:
-      interrupt mapping for IRQ (BMP085 only)
+      interrupt mapping for IRQ. Supported in BMP085, BMP3xx, BMP5xx
     maxItems: 1
+
+  drive-open-drain:
+    desription:
+      set if the interrupt pin should be configured as open drain.
+      If not set, defaults to push-pull configuration.
 
 required:
   - compatible
