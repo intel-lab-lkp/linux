@@ -238,7 +238,8 @@ static enum free_validation_result check_slab_free(struct kmem_cache *cache,
 }
 
 static inline bool poison_slab_object(struct kmem_cache *cache, void *object,
-				      unsigned long ip, bool init)
+				      unsigned long ip, bool init,
+				      bool after_rcu_delay)
 {
 	void *tagged_object = object;
 	enum free_validation_result valid = check_slab_free(cache, object, ip);
@@ -251,7 +252,8 @@ static inline bool poison_slab_object(struct kmem_cache *cache, void *object,
 	object = kasan_reset_tag(object);
 
 	/* RCU slabs could be legally used after free within the RCU period. */
-	if (unlikely(cache->flags & SLAB_TYPESAFE_BY_RCU))
+	if (unlikely(cache->flags & SLAB_TYPESAFE_BY_RCU) &&
+	    !after_rcu_delay)
 		return false;
 
 	kasan_poison(object, round_up(cache->object_size, KASAN_GRANULE_SIZE),
@@ -270,7 +272,8 @@ bool __kasan_slab_pre_free(struct kmem_cache *cache, void *object,
 }
 
 bool __kasan_slab_free(struct kmem_cache *cache, void *object,
-				unsigned long ip, bool init)
+				unsigned long ip, bool init,
+				bool after_rcu_delay)
 {
 	if (is_kfence_address(object))
 		return false;
@@ -280,7 +283,7 @@ bool __kasan_slab_free(struct kmem_cache *cache, void *object,
 	 * freelist. The object will thus never be allocated again and its
 	 * metadata will never get released.
 	 */
-	if (poison_slab_object(cache, object, ip, init))
+	if (poison_slab_object(cache, object, ip, init, after_rcu_delay))
 		return true;
 
 	/*
@@ -535,7 +538,7 @@ bool __kasan_mempool_poison_object(void *ptr, unsigned long ip)
 		return false;
 
 	slab = folio_slab(folio);
-	return !poison_slab_object(slab->slab_cache, ptr, ip, false);
+	return !poison_slab_object(slab->slab_cache, ptr, ip, false, false);
 }
 
 void __kasan_mempool_unpoison_object(void *ptr, size_t size, unsigned long ip)

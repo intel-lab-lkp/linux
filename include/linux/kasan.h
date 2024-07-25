@@ -186,12 +186,15 @@ static __always_inline bool kasan_slab_pre_free(struct kmem_cache *s,
 }
 
 bool __kasan_slab_free(struct kmem_cache *s, void *object,
-			unsigned long ip, bool init);
+			unsigned long ip, bool init, bool after_rcu_delay);
 static __always_inline bool kasan_slab_free(struct kmem_cache *s,
-						void *object, bool init)
+						void *object, bool init,
+						bool after_rcu_delay)
 {
-	if (kasan_enabled())
-		return __kasan_slab_free(s, object, _RET_IP_, init);
+	if (kasan_enabled()) {
+		return __kasan_slab_free(s, object, _RET_IP_, init,
+				after_rcu_delay);
+	}
 	return false;
 }
 
@@ -387,7 +390,8 @@ static inline bool kasan_slab_pre_free(struct kmem_cache *s, void *object)
 	return false;
 }
 
-static inline bool kasan_slab_free(struct kmem_cache *s, void *object, bool init)
+static inline bool kasan_slab_free(struct kmem_cache *s, void *object,
+				   bool init, bool after_rcu_delay)
 {
 	return false;
 }
