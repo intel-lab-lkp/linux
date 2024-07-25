@@ -28,9 +28,13 @@ test_route_mtu() {
 }
 
 setup_dummy_sink() {
-	ip link add name sink mtu 1500 type dummy
-	ip addr add dev sink 10.0.0.0/24
-	ip addr add dev sink fd00::2/64 nodad
+	mtu="${1:-1500}"
+	prefix4="${2:-10.0.0.2/24}"
+	prefix6="${3:-fd00::2/48}"
+
+	ip link add name sink mtu "${mtu}" type dummy
+	ip addr add dev sink "${prefix4}"
+	ip addr add dev sink "${prefix6}" nodad
 	ip link set dev sink up
 }
 
@@ -50,6 +54,25 @@ test_sw_gso_sw_csum() {
 	setup_dummy_sink
 	ethtool -K sink tx-checksum-ip-generic off >/dev/null
 	ethtool -K sink tx-udp-segmentation off >/dev/null
+}
+
+setup_ipip_tunnel() {
+	setup_dummy_sink 1520 10.1.1.2/24 fd11::2/48
+
+	ip tunnel add iptnl mode ipip local 10.1.1.2 remote 10.1.1.1
+	ip addr add dev iptnl 10.0.0.2/24
+	ip addr add dev iptnl fd00::2/48 nodad
+	ip link set dev iptnl up
+}
+
+test_tunnel_hw_csum() {
+	setup_ipip_tunnel
+	ethtool -K iptnl tx-checksum-ip-generic on >/dev/null
+}
+
+test_tunnel_sw_csum() {
+	setup_ipip_tunnel
+	ethtool -K iptnl tx-checksum-ip-generic off >/dev/null
 }
 
 if [ "$#" -gt 0 ]; then
@@ -99,3 +122,15 @@ echo "ipv4 sw-gso sw-csum"
 
 echo "ipv6 sw-gso sw-csum"
 ./in_netns.sh "$0" test_sw_gso_sw_csum -- ./udpgso -6 -C -R
+
+echo "ipv4 tunnel hw-csum"
+./in_netns.sh "$0" test_tunnel_hw_csum -- ./udpgso -4 -C -R
+
+echo "ipv6 tunnel hw-csum"
+./in_netns.sh "$0" test_tunnel_hw_csum -- ./udpgso -6 -C -R
+
+echo "ipv4 tunnel sw-csum"
+./in_netns.sh "$0" test_tunnel_sw_csum -- ./udpgso -4 -C -R
+
+echo "ipv6 tunnel sw-csum"
+./in_netns.sh "$0" test_tunnel_sw_csum -- ./udpgso -6 -C -R
