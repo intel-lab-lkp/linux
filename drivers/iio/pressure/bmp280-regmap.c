@@ -109,7 +109,7 @@ static bool bmp380_is_writeable_reg(struct device *dev, unsigned int reg)
 	case BMP380_REG_FIFO_WATERMARK_LSB:
 	case BMP380_REG_FIFO_WATERMARK_MSB:
 	case BMP380_REG_POWER_CONTROL:
-	case BMP380_REG_INT_CONTROL:
+	case BMP380_REG_INT_CTRL:
 	case BMP380_REG_IF_CONFIG:
 	case BMP380_REG_ODR:
 	case BMP380_REG_OSR:
