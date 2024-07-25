@@ -593,9 +593,8 @@ static int build_id_cache__add_sdt_cache(const char *sbuild_id,
 #define build_id_cache__add_sdt_cache(sbuild_id, realname, nsi) (0)
 #endif
 
-static char *build_id_cache__find_debug(const char *sbuild_id,
-					struct nsinfo *nsi,
-					const char *root_dir)
+static char *build_id_cache__find_debug_normal(const char *sbuild_id,
+				struct nsinfo *nsi, const char *root_dir)
 {
 	const char *dirname = "/usr/lib/debug/.build-id/";
 	char *realname = NULL;
@@ -644,6 +643,47 @@ static char *build_id_cache__find_debug(const char *sbuild_id,
 out:
 	free(debugfile);
 	return realname;
+}
+
+static char *build_id_cache__find_debug_vdso(const char *sbuild_id)
+{
+	char sbuild_id_tmp[SBUILD_ID_SIZE];
+	struct build_id bid;
+	int i, ret = 0;
+
+	if (!vdso_paths.paths)
+		return NULL;
+
+	pr_debug("Looking at the vdso_path (%d entries long)\n",
+		 vdso_paths.nr_entries + 1);
+
+	for (i = 0; i < vdso_paths.nr_entries; ++i) {
+		ret = filename__read_build_id(vdso_paths.paths[i], &bid);
+		if (ret < 0)
+			continue;
+
+		build_id__sprintf(&bid, sbuild_id_tmp);
+		if (!strcmp(sbuild_id, sbuild_id_tmp)) {
+			pr_debug("Found debugging vdso %s\n", vdso_paths.paths[i]);
+			return strdup(vdso_paths.paths[i]);
+		}
+	}
+
+	return NULL;
+}
+
+static char *build_id_cache__find_debug(const char *sbuild_id,
+					struct nsinfo *nsi,
+					bool is_vdso,
+					const char *root_dir)
+{
+	char *name = NULL;
+
+	if (is_vdso)
+		name = build_id_cache__find_debug_vdso(sbuild_id);
+	if (!name)
+		name = build_id_cache__find_debug_normal(sbuild_id, nsi, root_dir);
+	return name;
 }
 
 int
@@ -702,7 +742,7 @@ build_id_cache__add(const char *sbuild_id, const char *name, const char *realnam
 	 * symtab.
 	 */
 	if (!is_kallsyms && strncmp(".ko", name + strlen(name) - 3, 3)) {
-		debugfile = build_id_cache__find_debug(sbuild_id, nsi, root_dir);
+		debugfile = build_id_cache__find_debug(sbuild_id, nsi, is_vdso, root_dir);
 		if (debugfile) {
 			zfree(&filename);
 			if (asprintf(&filename, "%s/%s", dir_name,
