@@ -1262,6 +1262,13 @@ static int udp_v6_send_skb(struct sk_buff *skb, struct flowi6 *fl6,
 		}
 
 		if (datalen > cork->gso_size) {
+			/* On the TX path CHECKSUM_NONE and CHECKSUM_UNNECESSARY
+			 * have the same meaning. However, check for bad
+			 * offloads in the GSO stack expects the latter, if the
+			 * checksum can be calculated in software.
+			 */
+			if (skb->ip_summed == CHECKSUM_NONE)
+				skb->ip_summed = CHECKSUM_UNNECESSARY;
 			skb_shinfo(skb)->gso_size = cork->gso_size;
 			skb_shinfo(skb)->gso_type = SKB_GSO_UDP_L4;
 			skb_shinfo(skb)->gso_segs = DIV_ROUND_UP(datalen,
