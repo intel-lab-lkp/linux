@@ -21,8 +21,11 @@ static const unsigned short normal_i2c[] = { 0x2E, I2C_CLIENT_END };
 
 static const u8 REG_TEMP_MIN[4] = { 0x3c, 0x38, 0x39, 0x3a };
 static const u8 REG_TEMP_MAX[4] = { 0x34, 0x30, 0x31, 0x32 };
+static const u8 REG_TEMP_CRIT[4] = { 0x1d, 0x19, 0x1a, 0x1b };
 
 #define REG_TEMP(n)		((n) * 2)
+#define REG_TEMP_EMERGENCY	0x0a
+#define REG_TEMP_CRIT_ALARM	0x1f
 #define REG_CONF1		0x20
 #define REG_TEMP_MAX_ALARM	0x24
 #define REG_TEMP_MIN_ALARM	0x25
@@ -117,6 +120,18 @@ static int emc2103_temp_read(struct emc2103_data *data, u32 attr, int channel, l
 			return ret;
 		*val = sign_extend32(regval, 7) * 1000;
 		break;
+	case hwmon_temp_crit:
+		ret = regmap_read(regmap, REG_TEMP_CRIT[channel], &regval);
+		if (ret)
+			return ret;
+		*val = sign_extend32(regval, 7) * 1000;
+		break;
+	case hwmon_temp_emergency:
+		ret = regmap_read(regmap, REG_TEMP_EMERGENCY, &regval);
+		if (ret)
+			return ret;
+		*val = regval * 1000;
+		break;
 	case hwmon_temp_min_alarm:
 		ret = regmap_read(regmap, REG_TEMP_MIN_ALARM, &regval);
 		if (ret)
@@ -125,6 +140,12 @@ static int emc2103_temp_read(struct emc2103_data *data, u32 attr, int channel, l
 		break;
 	case hwmon_temp_max_alarm:
 		ret = regmap_read(regmap, REG_TEMP_MAX_ALARM, &regval);
+		if (ret)
+			return ret;
+		*val = !!(regval & BIT(channel));
+		break;
+	case hwmon_temp_crit_alarm:
+		ret = regmap_read(regmap, REG_TEMP_CRIT_ALARM, &regval);
 		if (ret)
 			return ret;
 		*val = !!(regval & BIT(channel));
@@ -270,6 +291,8 @@ static int emc2103_temp_write(struct emc2103_data *data, u32 attr, int channel, 
 		return regmap_write(regmap, REG_TEMP_MIN[channel], val);
 	case hwmon_temp_max:
 		return regmap_write(regmap, REG_TEMP_MAX[channel], val);
+	case hwmon_temp_crit:
+		return regmap_write(regmap, REG_TEMP_CRIT[channel], val);
 	default:
 		return -EOPNOTSUPP;
 	}
@@ -409,9 +432,12 @@ static umode_t emc2103_is_visible(const void *_data, enum hwmon_sensor_types typ
 		case hwmon_temp_fault:
 		case hwmon_temp_min_alarm:
 		case hwmon_temp_max_alarm:
+		case hwmon_temp_crit_alarm:
+		case hwmon_temp_emergency:
 			return 0444;
 		case hwmon_temp_min:
 		case hwmon_temp_max:
+		case hwmon_temp_crit:
 			return 0644;
 		default:
 			break;
@@ -452,13 +478,17 @@ static umode_t emc2103_is_visible(const void *_data, enum hwmon_sensor_types typ
 static const struct hwmon_channel_info * const emc2103_info[] = {
 	HWMON_CHANNEL_INFO(temp,
 			   HWMON_T_INPUT | HWMON_T_MIN | HWMON_T_MAX |
-			   HWMON_T_FAULT | HWMON_T_MIN_ALARM | HWMON_T_MAX_ALARM,
+			   HWMON_T_FAULT | HWMON_T_MIN_ALARM | HWMON_T_MAX_ALARM |
+			   HWMON_T_CRIT | HWMON_T_CRIT_ALARM | HWMON_T_EMERGENCY,
 			   HWMON_T_INPUT | HWMON_T_MIN | HWMON_T_MAX |
-			   HWMON_T_FAULT | HWMON_T_MIN_ALARM | HWMON_T_MAX_ALARM,
+			   HWMON_T_FAULT | HWMON_T_MIN_ALARM | HWMON_T_MAX_ALARM |
+			   HWMON_T_CRIT | HWMON_T_CRIT_ALARM,
 			   HWMON_T_INPUT | HWMON_T_MIN | HWMON_T_MAX |
-			   HWMON_T_FAULT | HWMON_T_MIN_ALARM | HWMON_T_MAX_ALARM,
+			   HWMON_T_FAULT | HWMON_T_MIN_ALARM | HWMON_T_MAX_ALARM |
+			   HWMON_T_CRIT | HWMON_T_CRIT_ALARM,
 			   HWMON_T_INPUT | HWMON_T_MIN | HWMON_T_MAX |
-			   HWMON_T_FAULT | HWMON_T_MIN_ALARM | HWMON_T_MAX_ALARM),
+			   HWMON_T_FAULT | HWMON_T_MIN_ALARM | HWMON_T_MAX_ALARM |
+			   HWMON_T_CRIT | HWMON_T_CRIT_ALARM),
 	HWMON_CHANNEL_INFO(fan,
 			   HWMON_F_INPUT | HWMON_F_DIV | HWMON_F_TARGET |
 			   HWMON_F_PULSES | HWMON_F_FAULT | HWMON_F_MIN |
@@ -483,6 +513,7 @@ static bool emc2103_volatile_reg(struct device *dev, unsigned int reg)
 {
 	switch (reg) {
 	case 0x00 ... 0x07:	/* temperature registers */
+	case REG_TEMP_CRIT_ALARM:
 	case REG_TEMP_MAX_ALARM:
 	case REG_TEMP_MIN_ALARM:
 	case REG_FAN_TACH_HI:
