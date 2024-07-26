@@ -80,6 +80,7 @@ const char perf_version_string[] = PERF_VERSION;
 
 struct perf_file_attr {
 	struct perf_event_attr	attr;
+	__u64 embed;
 	struct perf_file_section	ids;
 };
 
@@ -3713,6 +3714,7 @@ static int perf_session__do_write_header(struct perf_session *session,
 		}
 		f_attr = (struct perf_file_attr){
 			.attr = evsel->core.attr,
+			.embed = evsel->sample_type_embed,
 			.ids  = {
 				.offset = evsel->id_offset,
 				.size   = evsel->core.ids * sizeof(u64),
@@ -4147,6 +4149,14 @@ static int read_attr(int fd, struct perf_header *ph,
 
 		ret = readn(fd, ptr, left);
 	}
+
+	ret = readn(fd, &f_attr->embed, sizeof(f_attr->embed));
+	if (ret <= 0) {
+		pr_debug("cannot read %d bytes of embedded sample type\n",
+			 PERF_ATTR_SIZE_VER0);
+		return -1;
+	}
+
 	/* read perf_file_section, ids are read in caller */
 	ret = readn(fd, &f_attr->ids, sizeof(f_attr->ids));
 
@@ -4271,6 +4281,8 @@ int perf_session__read_header(struct perf_session *session, int repipe_fd)
 
 		tmp = lseek(fd, 0, SEEK_CUR);
 		evsel = evsel__new(&f_attr.attr);
+
+		evsel->sample_type_embed = f_attr.embed;
 
 		if (evsel == NULL)
 			goto out_delete_evlist;
