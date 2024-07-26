@@ -238,6 +238,9 @@ void fuse_queue_forget(struct fuse_conn *fc, struct fuse_forget_link *forget,
 {
 	struct fuse_iqueue *fiq = &fc->iq;
 
+	if (fc->no_forget)
+		return;
+
 	forget->forget_one.nodeid = nodeid;
 	forget->forget_one.nlookup = nlookup;
 
@@ -256,6 +259,9 @@ void fuse_force_forget(struct fuse_mount *fm, u64 nodeid)
 {
 	struct fuse_forget_in inarg;
 	FUSE_ARGS(args);
+
+	if (fm->fc->no_forget)
+		return;
 
 	memset(&inarg, 0, sizeof(inarg));
 	inarg.nlookup = 1;

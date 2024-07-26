@@ -860,6 +860,9 @@ struct fuse_conn {
 	/** Passthrough support for read/write IO */
 	unsigned int passthrough:1;
 
+	/** Do not send FORGET request */
+	unsigned int no_forget:1;
+
 	/** Maximum stack depth for passthrough backing files */
 	int max_stack_depth;
 
@@ -1028,6 +1031,27 @@ static inline void fuse_sync_bucket_dec(struct fuse_sync_bucket *bucket)
 		wake_up(&bucket->waitq);
 	rcu_read_unlock();
 }
+
+static inline void fuse_nlookup_inc_if_enabled(struct fuse_conn *fc, struct fuse_inode *fi)
+{
+	if (fc->no_forget)
+		return;
+
+	spin_lock(&fi->lock);
+	fi->nlookup++;
+	spin_unlock(&fi->lock);
+}
+
+static inline void fuse_nlookup_dec_if_enabled(struct fuse_conn *fc, struct fuse_inode *fi)
+{
+	if (fc->no_forget)
+		return;
+
+	spin_lock(&fi->lock);
+	fi->nlookup--;
+	spin_lock(&fi->lock);
+}
+
 
 /** Device operations */
 extern const struct file_operations fuse_dev_operations;
