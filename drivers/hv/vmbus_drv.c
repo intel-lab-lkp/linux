@@ -2306,6 +2306,34 @@ static int vmbus_acpi_add(struct platform_device *pdev)
 }
 #endif
 
+static int __maybe_unused vmbus_set_irq(struct platform_device *pdev)
+{
+	struct irq_desc *desc;
+	int irq;
+
+	irq = platform_get_irq(pdev, 0);
+	if (irq == 0) {
+		pr_err("VMBus interrupt mapping failure\n");
+		return -EINVAL;
+	}
+	if (irq < 0) {
+		pr_err("VMBus interrupt data can't be read from DeviceTree, error %d\n", irq);
+		return irq;
+	}
+
+	desc = irq_to_desc(irq);
+	if (!desc) {
+		pr_err("No interrupt descriptor for VMBus virq %d\n", irq);
+		return -ENODEV;
+	}
+
+	vmbus_irq = irq;
+	vmbus_interrupt = desc->irq_data.hwirq;
+	pr_debug("VMBus virq %d, hwirq %d\n", vmbus_irq, vmbus_interrupt);
+
+	return 0;
+}
+
 static int vmbus_device_add(struct platform_device *pdev)
 {
 	struct resource **cur_res = &hyperv_mmio;
@@ -2319,6 +2347,12 @@ static int vmbus_device_add(struct platform_device *pdev)
 	ret = of_range_parser_init(&parser, np);
 	if (ret)
 		return ret;
+
+#ifndef HYPERVISOR_CALLBACK_VECTOR
+	ret = vmbus_set_irq(pdev);
+	if (ret)
+		return ret;
+#endif
 
 	for_each_of_range(&parser, &range) {
 		struct resource *res;
@@ -2337,6 +2371,21 @@ static int vmbus_device_add(struct platform_device *pdev)
 		*cur_res = res;
 		cur_res = &res->sibling;
 	}
+
+	/*
+	 * Hyper-V always assumes DMA cache coherency, and the DMA subsystem
+	 * might default to 'not coherent' on some architectures.
+	 * Avoid high-cost cache coherency maintenance done by the CPU.
+	 */
+#if defined(CONFIG_ARCH_HAS_SYNC_DMA_FOR_DEVICE) || \
+	defined(CONFIG_ARCH_HAS_SYNC_DMA_FOR_CPU) || \
+	defined(CONFIG_ARCH_HAS_SYNC_DMA_FOR_CPU_ALL)
+
+	if (!of_property_read_bool(np, "dma-coherent"))
+		pr_warn("Assuming cache coherent DMA transactions, no 'dma-coherent' node supplied\n");
+	pdev->dev.dma_coherent = true;
+
+#endif
 
 	return ret;
 }
