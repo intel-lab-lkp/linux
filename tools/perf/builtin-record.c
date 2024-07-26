@@ -3325,6 +3325,7 @@ static struct record record = {
 		.ctl_fd              = -1,
 		.ctl_fd_ack          = -1,
 		.synth               = PERF_SYNTH_ALL,
+		.off_cpu_thresh      = ULLONG_MAX,
 	},
 	.tool = {
 		.sample		= process_sample_event,
@@ -3557,6 +3558,7 @@ static struct option __record_options[] = {
 			    "write collected trace data into several data files using parallel threads",
 			    record__parse_threads),
 	OPT_BOOLEAN(0, "off-cpu", &record.off_cpu, "Enable off-cpu analysis"),
+	OPT_U64(0, "off-cpu-thresh", &record.opts.off_cpu_thresh, "time threshold(in ms) for dumping off-cpu events"),
 	OPT_END()
 };
 

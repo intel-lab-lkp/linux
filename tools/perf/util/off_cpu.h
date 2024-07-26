@@ -9,6 +9,7 @@ struct perf_session;
 struct record_opts;
 
 #define OFFCPU_EVENT  "offcpu-time"
+#define OFFCPU_EVENT_DIRECT  "offcpu-time-direct"
 
 #define OFFCPU_SAMPLE_TYPES  (PERF_SAMPLE_IDENTIFIER | PERF_SAMPLE_IP | \
 			      PERF_SAMPLE_TID | PERF_SAMPLE_TIME | \

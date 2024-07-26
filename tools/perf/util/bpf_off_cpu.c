@@ -13,6 +13,7 @@
 #include "util/cgroup.h"
 #include "util/strlist.h"
 #include <bpf/bpf.h>
+#include <internal/xyarray.h>
 
 #include "bpf_skel/off_cpu.skel.h"
 
@@ -45,10 +46,12 @@ static int off_cpu_config(struct evlist *evlist)
 		.size	= sizeof(attr), /* to capture ABI version */
 	};
 	char *evname = strdup(OFFCPU_EVENT);
+	char off_cpu_direct_event[64];
 
 	if (evname == NULL)
 		return -ENOMEM;
 
+	/* off-cpu event in the end */
 	evsel = evsel__new(&attr);
 	if (!evsel) {
 		free(evname);
@@ -65,12 +68,22 @@ static int off_cpu_config(struct evlist *evlist)
 	free(evsel->name);
 	evsel->name = evname;
 
+	/* direct off-cpu event */
+	snprintf(off_cpu_direct_event, sizeof(off_cpu_direct_event), "bpf-output/no-inherit=1,name=%s/", OFFCPU_EVENT_DIRECT);
+	if (parse_event(evlist, off_cpu_direct_event)) {
+		pr_err("Failed to open off-cpu event\n");
+		return -1;
+	}
+
 	return 0;
 }
 
 static void off_cpu_start(void *arg)
 {
 	struct evlist *evlist = arg;
+	struct evsel *evsel;
+	struct perf_cpu pcpu;
+	int i, err;
 
 	/* update task filter for the given workload */
 	if (!skel->bss->has_cpu && !skel->bss->has_task &&
@@ -84,6 +97,27 @@ static void off_cpu_start(void *arg)
 		fd = bpf_map__fd(skel->maps.task_filter);
 		pid = perf_thread_map__pid(evlist->core.threads, 0);
 		bpf_map_update_elem(fd, &pid, &val, BPF_ANY);
+	}
+
+	/* sample id and fds in BPF's perf_event_array can only be set after record__open() */
+	evsel = evlist__find_evsel_by_str(evlist, OFFCPU_EVENT_DIRECT);
+	if (evsel == NULL) {
+		pr_err("%s evsel not found\n", OFFCPU_EVENT_DIRECT);
+		return;
+	}
+
+	if (evsel->core.id)
+		skel->bss->sample_id = evsel->core.id[0];
+
+	perf_cpu_map__for_each_cpu(pcpu, i, evsel->core.cpus) {
+		err = bpf_map__update_elem(skel->maps.offcpu_output,
+					   &pcpu.cpu, sizeof(__u32),
+					   xyarray__entry(evsel->core.fd, pcpu.cpu, 0),
+					   sizeof(__u32), BPF_ANY);
+		if (err) {
+			pr_err("Failed to update perf event map for direct off-cpu dumping\n");
+			return;
+		}
 	}
 
 	skel->bss->enabled = 1;
@@ -130,13 +164,23 @@ int off_cpu_prepare(struct evlist *evlist, struct target *target,
 {
 	int err, fd, i;
 	int ncpus = 1, ntasks = 1, ncgrps = 1;
+	__u64 offcpu_thresh;
 	struct strlist *pid_slist = NULL;
 	struct str_node *pos;
+	struct evsel *evsel;
 
 	if (off_cpu_config(evlist) < 0) {
 		pr_err("Failed to config off-cpu BPF event\n");
 		return -1;
 	}
+
+	evsel = evlist__find_evsel_by_str(evlist, OFFCPU_EVENT_DIRECT);
+	if (evsel == NULL) {
+		pr_err("%s evsel not found\n", OFFCPU_EVENT_DIRECT);
+		return -1 ;
+	}
+
+	evsel->sample_type_embed = OFFCPU_SAMPLE_TYPES;
 
 	skel = off_cpu_bpf__open();
 	if (!skel) {
@@ -250,7 +294,6 @@ int off_cpu_prepare(struct evlist *evlist, struct target *target,
 	}
 
 	if (evlist__first(evlist)->cgrp) {
-		struct evsel *evsel;
 		u8 val = 1;
 
 		skel->bss->has_cgroup = 1;
@@ -271,6 +314,14 @@ int off_cpu_prepare(struct evlist *evlist, struct target *target,
 			bpf_map_update_elem(fd, &cgrp->id, &val, BPF_ANY);
 		}
 	}
+
+	offcpu_thresh = opts->off_cpu_thresh;
+
+	if (opts->off_cpu_thresh != ULLONG_MAX)
+		offcpu_thresh = opts->off_cpu_thresh * 1000000; /* off-cpu-thresh is in ms */
+
+	skel->bss->offcpu_thresh = offcpu_thresh;
+	skel->bss->sample_type   = OFFCPU_SAMPLE_TYPES;
 
 	err = off_cpu_bpf__attach(skel);
 	if (err) {
