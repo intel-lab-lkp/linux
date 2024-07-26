@@ -1150,8 +1150,8 @@ static int exynos_tmu_resume(struct device *dev)
 	return 0;
 }
 
-static SIMPLE_DEV_PM_OPS(exynos_tmu_pm,
-			 exynos_tmu_suspend, exynos_tmu_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(exynos_tmu_pm,
+				exynos_tmu_suspend, exynos_tmu_resume);
 #define EXYNOS_TMU_PM	(&exynos_tmu_pm)
 #else
 #define EXYNOS_TMU_PM	NULL
