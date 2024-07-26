@@ -1528,6 +1528,23 @@ static int evlist__deliver_sample(struct evlist *evlist, struct perf_tool *tool,
 	/* We know evsel != NULL. */
 	u64 sample_type = evsel->core.attr.sample_type;
 	u64 read_format = evsel->core.attr.read_format;
+	struct perf_sample sample_embed;
+
+	if (evsel__is_bpf_output(evsel) && evsel__has_embed(evsel) &&
+	    sample->raw_data && sample->raw_size - sizeof(__u32) > sizeof(struct perf_event_header)) {
+		int err;
+
+		sample_embed.raw_data = sample->raw_data;
+
+		err = evsel__parse_sample(evsel, event, &sample_embed);
+		if (err) {
+			pr_err("Can't parse BPF-embedded sample, err = %d\n", err);
+			return err;
+		}
+
+		sample_type = evsel->sample_type_embed;
+		sample = &sample_embed;
+	}
 
 	/* Standard sample delivery. */
 	if (!(sample_type & PERF_SAMPLE_READ))
@@ -1639,8 +1656,12 @@ static int perf_session__deliver_event(struct perf_session *session,
 				       const char *file_path)
 {
 	struct perf_sample sample;
-	int ret = evlist__parse_sample(session->evlist, event, &sample);
+	int ret;
 
+	/* set to NULL so we don't accidentally parse BPF-embedded sample */
+	sample.raw_data = NULL;
+
+	ret = evlist__parse_sample(session->evlist, event, &sample);
 	if (ret) {
 		pr_err("Can't parse sample, err = %d\n", ret);
 		return ret;
