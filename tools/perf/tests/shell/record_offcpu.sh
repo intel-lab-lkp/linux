@@ -6,6 +6,7 @@ set -e
 
 err=0
 perfdata=$(mktemp /tmp/__perf_test.perf.data.XXXXX)
+TEST_PROGRAM="perf test -w offcpu"
 
 cleanup() {
   rm -f ${perfdata}
@@ -88,6 +89,30 @@ test_offcpu_child() {
   echo "Child task off-cpu test [Success]"
 }
 
+test_offcpu_direct() {
+  echo "Direct off-cpu test"
+  # dump off-cpu samples for tasks blocked for more than 1999ms (1.9s)
+  # -D for initial delay, which is necessary if we want to enable evlist
+  if ! perf record -F 1 -D 999 --off-cpu --off-cpu-thresh 1999 -o ${perfdata} ${TEST_PROGRAM} 2> /dev/null
+  then
+    echo "Direct off-cpu test [Failed record]"
+    err=1
+    return
+  fi
+  if ! perf evlist -i ${perfdata} | grep -q "offcpu-time-direct"
+  then
+    echo "Direct off-cpu test [Failed no event]"
+    err=1
+    return
+  fi
+  if ! perf script -i ${perfdata} | grep -q -E ".*2[0-9]{9}[ ]*offcpu-time-direct" # 2 seconds (2,000,000,000)
+  then
+    echo "Direct off-cpu test [Failed missing output]"
+    err=1
+    return
+  fi
+  echo "Direct off-cpu test [Success]"
+}
 
 test_offcpu_priv
 
@@ -97,6 +122,10 @@ fi
 
 if [ $err = 0 ]; then
   test_offcpu_child
+fi
+
+if [ $err = 0 ]; then
+  test_offcpu_direct
 fi
 
 cleanup
