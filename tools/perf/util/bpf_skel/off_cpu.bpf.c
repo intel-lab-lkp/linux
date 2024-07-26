@@ -18,6 +18,9 @@
 #define MAX_STACKS   32
 #define MAX_ENTRIES  102400
 
+#define MAX_CPUS  4096
+#define MAX_OFFCPU_LEN 128
+
 struct tstamp_data {
 	__u32 stack_id;
 	__u32 state;
@@ -32,12 +35,52 @@ struct offcpu_key {
 	__u64 cgroup_id;
 };
 
+/* for dumping at the end */
 struct {
 	__uint(type, BPF_MAP_TYPE_STACK_TRACE);
 	__uint(key_size, sizeof(__u32));
 	__uint(value_size, MAX_STACKS * sizeof(__u64));
 	__uint(max_entries, MAX_ENTRIES);
 } stacks SEC(".maps");
+
+struct offcpu_data {
+	u64 array[MAX_OFFCPU_LEN];
+};
+
+struct stack_data {
+	u64 array[MAX_STACKS];
+};
+
+struct {
+	__uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
+	__uint(key_size, sizeof(__u32));
+	__uint(value_size, sizeof(__u32));
+	__uint(max_entries, MAX_CPUS);
+} offcpu_output SEC(".maps");
+
+/* temporary offcpu sample */
+struct {
+	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+	__uint(key_size, sizeof(__u32));
+	__uint(value_size, sizeof(struct offcpu_data));
+	__uint(max_entries, 1);
+} offcpu_payload SEC(".maps");
+
+/* temporary stack data */
+struct {
+	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+	__uint(key_size, sizeof(__u32));
+	__uint(value_size, sizeof(struct stack_data));
+	__uint(max_entries, 1);
+} stack_tmp SEC(".maps");
+
+/* cached stack per task storage */
+struct {
+	__uint(type, BPF_MAP_TYPE_TASK_STORAGE);
+	__uint(map_flags, BPF_F_NO_PREALLOC);
+	__type(key, int);
+	__type(value, struct stack_data);
+} stack_cache SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_TASK_STORAGE);
@@ -95,6 +138,8 @@ const volatile bool needs_cgroup = false;
 const volatile bool uses_cgroup_v1 = false;
 
 int perf_subsys_id = -1;
+
+__u64 sample_id, sample_type, offcpu_thresh;
 
 /*
  * Old kernel used to call it task_struct->state and now it's '__state'.
@@ -182,12 +227,87 @@ static inline int can_record(struct task_struct *t, int state)
 	return 1;
 }
 
+static inline bool check_bounds(int index)
+{
+	if (index >= 0 && index < MAX_OFFCPU_LEN)
+		return true;
+
+	return false;
+}
+
+static inline int copy_stack(struct stack_data *from,
+			     struct offcpu_data *to, int n)
+{
+	int max_stacks = MAX_STACKS, len = 0;
+
+	if (!from)
+		return len;
+
+	for (int i = 0; i < max_stacks && from->array[i]; ++i) {
+		if (check_bounds(n + 2 + i)) {
+			to->array[n + 2 + i] = from->array[i];
+			++len;
+		}
+	}
+	return len;
+}
+
+static int off_cpu_dump(void *ctx, struct offcpu_data *data, struct offcpu_key *key,
+			struct stack_data *stack_p, __u64 delta, __u64 timestamp)
+{
+	int size, n = 0, ip_pos = -1, len = 0;
+
+	if (sample_type & PERF_SAMPLE_IDENTIFIER && check_bounds(n))
+		data->array[n++] = sample_id;
+	if (sample_type & PERF_SAMPLE_IP && check_bounds(n)) {
+		ip_pos = n;
+		data->array[n++] = 0;  /* will be updated */
+	}
+	if (sample_type & PERF_SAMPLE_TID && check_bounds(n))
+		data->array[n++] = (u64)key->pid << 32 | key->tgid;
+	if (sample_type & PERF_SAMPLE_TIME && check_bounds(n))
+		data->array[n++] = timestamp;
+	if (sample_type & PERF_SAMPLE_ID && check_bounds(n))
+		data->array[n++] = sample_id;
+	if (sample_type & PERF_SAMPLE_CPU && check_bounds(n))
+		data->array[n++] = 0;
+	if (sample_type & PERF_SAMPLE_PERIOD && check_bounds(n))
+		data->array[n++] = delta;
+	if (sample_type & PERF_SAMPLE_CALLCHAIN && check_bounds(n + 2)) {
+		/* data->array[n] is callchain->nr (updated later) */
+		data->array[n + 1] = PERF_CONTEXT_USER;
+		data->array[n + 2] = 0;
+
+		len = copy_stack(stack_p, data, n);
+
+		/* update length of callchain */
+		data->array[n] = len + 1;
+
+		/* update sample ip with the first callchain entry */
+		if (ip_pos >= 0)
+			data->array[ip_pos] = data->array[n + 2];
+
+		/* calculate sample callchain data->array length */
+		n += len + 2;
+	}
+	if (sample_type & PERF_SAMPLE_CGROUP && check_bounds(n))
+		data->array[n++] = key->cgroup_id;
+
+	size = n * sizeof(u64);
+	if (size >= 0 && size <= MAX_OFFCPU_LEN * sizeof(u64))
+		bpf_perf_event_output(ctx, &offcpu_output, BPF_F_CURRENT_CPU, data, size);
+
+	return 0;
+}
+
 static int off_cpu_stat(u64 *ctx, struct task_struct *prev,
 			struct task_struct *next, int state)
 {
 	__u64 ts;
 	__u32 stack_id;
 	struct tstamp_data *pelem;
+	struct stack_data *stack_tmp_p, *stack_p;
+	int zero = 0, len = 0;
 
 	ts = bpf_ktime_get_ns();
 
@@ -196,6 +316,22 @@ static int off_cpu_stat(u64 *ctx, struct task_struct *prev,
 
 	stack_id = bpf_get_stackid(ctx, &stacks,
 				   BPF_F_FAST_STACK_CMP | BPF_F_USER_STACK);
+
+	/* temporary stack data */
+	stack_tmp_p = bpf_map_lookup_elem(&stack_tmp, &zero);
+	if (stack_tmp_p)
+		len = bpf_get_stack(ctx, stack_tmp_p->array, MAX_STACKS * sizeof(u64),
+				    BPF_F_USER_STACK) / sizeof(u64);
+
+	/* save stacks if collectable */
+	if (len > 0) {
+		stack_p = bpf_task_storage_get(&stack_cache, prev, NULL,
+					       BPF_LOCAL_STORAGE_GET_F_CREATE);
+		if (stack_p) {
+			for (int i = 0; i < len && i < MAX_STACKS; ++i)
+				stack_p->array[i] = stack_tmp_p->array[i];
+		}
+	}
 
 	pelem = bpf_task_storage_get(&tstamp, prev, NULL,
 				     BPF_LOCAL_STORAGE_GET_F_CREATE);
@@ -225,6 +361,13 @@ next:
 			*total += delta;
 		else
 			bpf_map_update_elem(&off_cpu, &key, &delta, BPF_ANY);
+
+		if (delta >= offcpu_thresh) {
+			struct offcpu_data *data = bpf_map_lookup_elem(&offcpu_payload, &zero);
+			stack_p = bpf_task_storage_get(&stack_cache, next, NULL, 0);
+			if (data && stack_p)
+				off_cpu_dump(ctx, data, &key, stack_p, delta, pelem->timestamp);
+		}
 
 		/* prevent to reuse the timestamp later */
 		pelem->timestamp = 0;
