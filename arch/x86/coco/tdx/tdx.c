@@ -234,6 +234,7 @@ static int ve_instr_len(struct ve_info *ve)
 	case EXIT_REASON_MSR_WRITE:
 	case EXIT_REASON_CPUID:
 	case EXIT_REASON_IO_INSTRUCTION:
+	case EXIT_REASON_VMCALL:
 		/* It is safe to use ve->instr_len for #VE due instructions */
 		return ve->instr_len;
 	case EXIT_REASON_EPT_VIOLATION:
@@ -631,6 +632,26 @@ void tdx_get_ve_info(struct ve_info *ve)
 }
 
 /*
+ * Handle user-initiated, hypervisor-specific VMCALLs.
+ */
+static int handle_user_vmcall(struct pt_regs *regs, struct ve_info *ve)
+{
+	int err;
+
+	if (!x86_platform.hyper.tdx_hcall)
+		return -EOPNOTSUPP;
+
+	if (!test_bit(MM_CONTEXT_COCO_USER_HCALL, &current->mm->context.flags))
+		return -EOPNOTSUPP;
+
+	err = x86_platform.hyper.tdx_hcall(regs);
+	if (err)
+		return err;
+
+	return ve_instr_len(ve);
+}
+
+/*
  * Handle the user initiated #VE.
  *
  * On success, returns the number of bytes RIP should be incremented (>=0)
@@ -641,6 +662,8 @@ static int virt_exception_user(struct pt_regs *regs, struct ve_info *ve)
 	switch (ve->exit_reason) {
 	case EXIT_REASON_CPUID:
 		return handle_cpuid(regs, ve);
+	case EXIT_REASON_VMCALL:
+		return handle_user_vmcall(regs, ve);
 	default:
 		pr_warn("Unexpected #VE: %lld\n", ve->exit_reason);
 		return -EIO;

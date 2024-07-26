@@ -1035,6 +1035,24 @@ unsigned long __get_wchan(struct task_struct *p)
 	return addr;
 }
 
+static int get_coco_user_hcall_mode(void)
+{
+	return !test_bit(MM_CONTEXT_COCO_USER_HCALL,
+			&current->mm->context.flags);
+}
+
+static int set_coco_user_hcall_mode(unsigned long enabled)
+{
+	if (enabled)
+		set_bit(MM_CONTEXT_COCO_USER_HCALL,
+			&current->mm->context.flags);
+	else
+		clear_bit(MM_CONTEXT_COCO_USER_HCALL,
+			  &current->mm->context.flags);
+
+	return 0;
+}
+
 long do_arch_prctl_common(int option, unsigned long arg2)
 {
 	switch (option) {
@@ -1048,6 +1066,10 @@ long do_arch_prctl_common(int option, unsigned long arg2)
 	case ARCH_GET_XCOMP_GUEST_PERM:
 	case ARCH_REQ_XCOMP_GUEST_PERM:
 		return fpu_xstate_prctl(option, arg2);
+	case ARCH_GET_COCO_USER_HCALL:
+		return get_coco_user_hcall_mode();
+	case ARCH_SET_COCO_USER_HCALL:
+		return set_coco_user_hcall_mode(arg2);
 	}
 
 	return -EINVAL;

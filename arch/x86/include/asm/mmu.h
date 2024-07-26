@@ -16,6 +16,8 @@
 #define MM_CONTEXT_LOCK_LAM		2
 /* Allow LAM and SVA coexisting */
 #define MM_CONTEXT_FORCE_TAGGED_SVA	3
+/* Allow COCO user-level hypercalls. */
+#define MM_CONTEXT_COCO_USER_HCALL	4
 
 /*
  * x86 has arch-specific MMU state beyond what lives in mm_struct.
