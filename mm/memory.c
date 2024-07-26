@@ -4091,7 +4091,8 @@ static struct folio *alloc_swap_folio(struct vm_fault *vmf)
 	 * and suitable for swapping THP.
 	 */
 	orders = thp_vma_allowable_orders(vma, vma->vm_flags,
-			TVA_IN_PF | TVA_ENFORCE_SYSFS, BIT(PMD_ORDER) - 1);
+			TVA_IN_PF | TVA_IN_SWAPIN | TVA_ENFORCE_SYSFS,
+			BIT(PMD_ORDER) - 1);
 	orders = thp_vma_suitable_orders(vma, vmf->address, orders);
 	orders = thp_swap_suitable_orders(swp_offset(entry), vmf->address, orders);
 

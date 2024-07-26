@@ -80,6 +80,7 @@ unsigned long huge_zero_pfn __read_mostly = ~0UL;
 unsigned long huge_anon_orders_always __read_mostly;
 unsigned long huge_anon_orders_madvise __read_mostly;
 unsigned long huge_anon_orders_inherit __read_mostly;
+unsigned long huge_anon_orders_swapin_always __read_mostly;
 
 unsigned long __thp_vma_allowable_orders(struct vm_area_struct *vma,
 					 unsigned long vm_flags,
@@ -88,6 +89,7 @@ unsigned long __thp_vma_allowable_orders(struct vm_area_struct *vma,
 {
 	bool smaps = tva_flags & TVA_SMAPS;
 	bool in_pf = tva_flags & TVA_IN_PF;
+	bool in_swapin = tva_flags & TVA_IN_SWAPIN;
 	bool enforce_sysfs = tva_flags & TVA_ENFORCE_SYSFS;
 	unsigned long supported_orders;
 
@@ -100,6 +102,8 @@ unsigned long __thp_vma_allowable_orders(struct vm_area_struct *vma,
 		supported_orders = THP_ORDERS_ALL_FILE_DEFAULT;
 
 	orders &= supported_orders;
+	if (in_swapin)
+		orders &= READ_ONCE(huge_anon_orders_swapin_always);
 	if (!orders)
 		return 0;
 
@@ -523,8 +527,48 @@ static ssize_t thpsize_enabled_store(struct kobject *kobj,
 static struct kobj_attribute thpsize_enabled_attr =
 	__ATTR(enabled, 0644, thpsize_enabled_show, thpsize_enabled_store);
 
+static DEFINE_SPINLOCK(huge_anon_orders_swapin_lock);
+
+static ssize_t thpsize_swapin_enabled_show(struct kobject *kobj,
+				    struct kobj_attribute *attr, char *buf)
+{
+	int order = to_thpsize(kobj)->order;
+	const char *output;
+
+	if (test_bit(order, &huge_anon_orders_swapin_always))
+		output = "[always] never";
+	else
+		output = "always [never]";
+
+	return sysfs_emit(buf, "%s\n", output);
+}
+
+static ssize_t thpsize_swapin_enabled_store(struct kobject *kobj,
+				     struct kobj_attribute *attr,
+				     const char *buf, size_t count)
+{
+	int order = to_thpsize(kobj)->order;
+	ssize_t ret = count;
+
+	if (sysfs_streq(buf, "always")) {
+		spin_lock(&huge_anon_orders_swapin_lock);
+		set_bit(order, &huge_anon_orders_swapin_always);
+		spin_unlock(&huge_anon_orders_swapin_lock);
+	} else if (sysfs_streq(buf, "never")) {
+		spin_lock(&huge_anon_orders_swapin_lock);
+		clear_bit(order, &huge_anon_orders_swapin_always);
+		spin_unlock(&huge_anon_orders_swapin_lock);
+	} else
+		ret = -EINVAL;
+
+	return ret;
+}
+static struct kobj_attribute thpsize_swapin_enabled_attr =
+	__ATTR(swapin_enabled, 0644, thpsize_swapin_enabled_show, thpsize_swapin_enabled_store);
+
 static struct attribute *thpsize_attrs[] = {
 	&thpsize_enabled_attr.attr,
+	&thpsize_swapin_enabled_attr.attr,
 #ifdef CONFIG_SHMEM
 	&thpsize_shmem_enabled_attr.attr,
 #endif

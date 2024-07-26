@@ -144,6 +144,12 @@ hugepage sizes have enabled="never". If enabling multiple hugepage
 sizes, the kernel will select the most appropriate enabled size for a
 given allocation.
 
+Transparent Hugepage Swap-in for anonymous memory can be disabled or enabled
+by per-supported-THP-size with one of::
+
+	echo always >/sys/kernel/mm/transparent_hugepage/hugepages-<size>kB/swapin_enabled
+	echo never >/sys/kernel/mm/transparent_hugepage/hugepages-<size>kB/swapin_enabled
+
 It's also possible to limit defrag efforts in the VM to generate
 anonymous hugepages in case they're not immediately free to madvise
 regions or to never try to defrag memory and simply fallback to regular
