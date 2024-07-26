@@ -1640,6 +1640,12 @@ struct xhci_hcd {
 	unsigned		broken_suspend:1;
 	/* Indicates that omitting hcd is supported if root hub has no ports */
 	unsigned		allow_single_roothub:1;
+	/*
+	 * Signal from upper stacks that we lost power during system-wide
+	 * suspend. Its default value is based on XHCI_RESET_ON_RESUME, meaning
+	 * it is safe for wrappers to not modify lost_power at resume.
+	 */
+	unsigned                lost_power:1;
 	/* cached extended protocol port capabilities */
 	struct xhci_port_cap	*port_caps;
 	unsigned int		num_port_caps;

@@ -1029,8 +1029,11 @@ int xhci_resume(struct xhci_hcd *xhci, pm_message_t msg)
 
 	spin_lock_irq(&xhci->lock);
 
-	if (hibernated || xhci->quirks & XHCI_RESET_ON_RESUME || xhci->broken_suspend)
+	if (hibernated || xhci->lost_power || xhci->broken_suspend)
 		reinit_xhc = true;
+
+	/* Reset to default value, parent devices might correct it at next resume. */
+	xhci->lost_power = !!(xhci->quirks & XHCI_RESET_ON_RESUME);
 
 	if (!reinit_xhc) {
 		/*
@@ -5227,6 +5230,9 @@ int xhci_gen_setup(struct usb_hcd *hcd, xhci_get_quirks_t get_quirks)
 
 	if (get_quirks)
 		get_quirks(dev, xhci);
+
+	/* Default value, that can be corrected at resume. */
+	xhci->lost_power = !!(xhci->quirks & XHCI_RESET_ON_RESUME);
 
 	/* In xhci controllers which follow xhci 1.0 spec gives a spurious
 	 * success event after a short transfer. This quirk will ignore such
