@@ -7012,6 +7012,18 @@ static void hns_roce_hw_v2_uninit_instance(struct hnae3_handle *handle,
 
 	handle->rinfo.instance_state = HNS_ROCE_STATE_NON_INIT;
 }
+
+static void hns_roce_v2_reset_notify_user(struct hns_roce_dev *hr_dev)
+{
+	struct hns_roce_ucontext *uctx, *tmp;
+
+	mutex_lock(&hr_dev->uctx_list_mutex);
+	list_for_each_entry_safe(uctx, tmp, &hr_dev->uctx_list, list) {
+		rdma_user_mmap_disassociate(&uctx->ibucontext);
+	}
+	mutex_unlock(&hr_dev->uctx_list_mutex);
+}
+
 static int hns_roce_hw_v2_reset_notify_down(struct hnae3_handle *handle)
 {
 	struct hns_roce_dev *hr_dev;
@@ -7030,6 +7042,9 @@ static int hns_roce_hw_v2_reset_notify_down(struct hnae3_handle *handle)
 
 	hr_dev->active = false;
 	hr_dev->dis_db = true;
+
+	hns_roce_v2_reset_notify_user(hr_dev);
+
 	hr_dev->state = HNS_ROCE_DEVICE_STATE_RST_DOWN;
 
 	return 0;
