@@ -14,7 +14,9 @@ properties:
     oneOf:
       - const: ti,j721e-usb
       - items:
-          - const: ti,am64-usb
+          - enum:
+              - const: ti,am64-usb
+              - const: ti,j7200-usb
           - const: ti,j721e-usb
 
   reg:
