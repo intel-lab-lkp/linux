@@ -34,6 +34,12 @@ properties:
     minItems: 64
     maxItems: 64
 
+  cellwise,dual-cell:
+    description: |
+      This property specifies if the battery is used in a dual-cell series
+      configuration so that the correct voltage is presented to userspace.
+    type: boolean
+
   cellwise,monitor-interval-ms:
     description:
       Specifies the interval in milliseconds gauge values are polled at
