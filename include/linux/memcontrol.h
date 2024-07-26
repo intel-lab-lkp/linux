@@ -684,6 +684,14 @@ int mem_cgroup_swapin_charge_folio(struct folio *folio, struct mm_struct *mm,
 				  gfp_t gfp, swp_entry_t entry);
 void mem_cgroup_swapin_uncharge_swap(swp_entry_t entry);
 
+static inline void mem_cgroup_swapin_uncharge_swap_nr(swp_entry_t entry, int nr)
+{
+	int i;
+
+	for (i = 0; i < nr; i++, entry.val++)
+		mem_cgroup_swapin_uncharge_swap(entry);
+}
+
 void __mem_cgroup_uncharge(struct folio *folio);
 
 /**
@@ -1182,6 +1190,10 @@ static inline int mem_cgroup_swapin_charge_folio(struct folio *folio,
 }
 
 static inline void mem_cgroup_swapin_uncharge_swap(swp_entry_t entry)
+{
+}
+
+static inline void mem_cgroup_swapin_uncharge_swap_nr(swp_entry_t entry, int nr)
 {
 }
 
