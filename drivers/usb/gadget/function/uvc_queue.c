@@ -102,6 +102,7 @@ static int uvc_buffer_prepare(struct vb2_buffer *vb)
 static void uvc_buffer_queue(struct vb2_buffer *vb)
 {
 	struct uvc_video_queue *queue = vb2_get_drv_priv(vb->vb2_queue);
+	struct uvc_video *video = container_of(queue, struct uvc_video, queue);
 	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
 	struct uvc_buffer *buf = container_of(vbuf, struct uvc_buffer, buf);
 	unsigned long flags;
@@ -120,6 +121,8 @@ static void uvc_buffer_queue(struct vb2_buffer *vb)
 	}
 
 	spin_unlock_irqrestore(&queue->irqlock, flags);
+
+	uvc_enqueue_buffer(video, buf);
 }
 
 static const struct vb2_ops uvc_queue_qops = {
