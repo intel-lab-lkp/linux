@@ -1132,7 +1132,6 @@ static void exynos_tmu_remove(struct platform_device *pdev)
 		clk_unprepare(data->clk_sec);
 }
 
-#ifdef CONFIG_PM_SLEEP
 static int exynos_tmu_suspend(struct device *dev)
 {
 	exynos_tmu_control(to_platform_device(dev), false);
@@ -1152,15 +1151,11 @@ static int exynos_tmu_resume(struct device *dev)
 
 static DEFINE_SIMPLE_DEV_PM_OPS(exynos_tmu_pm,
 				exynos_tmu_suspend, exynos_tmu_resume);
-#define EXYNOS_TMU_PM	(&exynos_tmu_pm)
-#else
-#define EXYNOS_TMU_PM	NULL
-#endif
 
 static struct platform_driver exynos_tmu_driver = {
 	.driver = {
 		.name   = "exynos-tmu",
-		.pm     = EXYNOS_TMU_PM,
+		.pm     = pm_sleep_ptr(&exynos_tmu_pm),
 		.of_match_table = exynos_tmu_match,
 	},
 	.probe = exynos_tmu_probe,
