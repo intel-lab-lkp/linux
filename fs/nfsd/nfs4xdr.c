@@ -5748,6 +5748,14 @@ nfsd4_encode_operation(struct nfsd4_compoundres *resp, struct nfsd4_op *op)
 
 	if (op->opnum == OP_ILLEGAL)
 		goto status;
+
+	if (op->status == nfserr_wrong_type &&
+	    resp->cstate.minorversion == 0)
+		/* RFC5661 - 15.1.2.9 */
+		op->status = nfserr_inval;
+	if (op->status == nfserr_symlink_not_dir)
+		op->status = nfserr_symlink;
+
 	if (op->status && opdesc &&
 			!(opdesc->op_flags & OP_NONTRIVIAL_ERROR_ENCODE))
 		goto status;
@@ -5869,6 +5877,13 @@ nfs4svc_encode_compoundres(struct svc_rqst *rqstp, struct xdr_stream *xdr)
 	 * at the top of nfsd4_proc_compound().
 	 */
 	p = resp->statusp;
+
+	if (resp->cstate.status == nfserr_wrong_type &&
+	    resp->cstate.minorversion == 0)
+		/* RFC5661 - 15.1.2.9 */
+		resp->cstate.status = nfserr_inval;
+	if (resp->cstate.status == nfserr_symlink_not_dir)
+		resp->cstate.status = nfserr_symlink;
 
 	*p++ = resp->cstate.status;
 	*p++ = htonl(resp->taglen);

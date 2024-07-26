@@ -290,6 +290,9 @@ enum nfsstat4 {
 	/* xattr (RFC8276) */
 	NFS4ERR_NOXATTR        = 10095,
 	NFS4ERR_XATTR2BIG      = 10096,
+
+	/* can be used for internal errors */
+	NFS4ERR_FIRST_FREE
 };
 
 /* error codes for internal client use */
