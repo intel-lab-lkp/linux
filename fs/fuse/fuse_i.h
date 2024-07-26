@@ -1051,6 +1051,8 @@ int fuse_lookup_name(struct super_block *sb, u64 nodeid, const struct qstr *name
 void fuse_queue_forget(struct fuse_conn *fc, struct fuse_forget_link *forget,
 		       u64 nodeid, u64 nlookup);
 
+void fuse_force_forget(struct fuse_mount *fm, u64 nodeid);
+
 struct fuse_forget_link *fuse_alloc_forget(void);
 
 struct fuse_forget_link *fuse_dequeue_forget(struct fuse_iqueue *fiq,
