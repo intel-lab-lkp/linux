@@ -87,18 +87,6 @@ static inline void cdns_ti_writel(struct cdns_ti *data, u32 offset, u32 value)
 	writel(value, data->usbss + offset);
 }
 
-static struct cdns3_platform_data cdns_ti_pdata = {
-	.quirks = CDNS3_DRD_SUSPEND_RESIDENCY_ENABLE,   /* Errata i2409 */
-};
-
-static const struct of_dev_auxdata cdns_ti_auxdata[] = {
-	{
-		.compatible = "cdns,usb3",
-		.platform_data = &cdns_ti_pdata,
-	},
-	{},
-};
-
 static void cdns_ti_reset_and_init_hw(struct cdns_ti *data)
 {
 	u32 reg;
@@ -142,6 +130,7 @@ static int cdns_ti_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct device_node *node = pdev->dev.of_node;
+	const struct of_dev_auxdata *auxdata;
 	struct cdns_ti *data;
 	unsigned long rate;
 	int error, i;
@@ -203,7 +192,8 @@ static int cdns_ti_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-	error = of_platform_populate(node, NULL, cdns_ti_auxdata, dev);
+	auxdata = device_get_match_data(dev);
+	error = of_platform_populate(node, NULL, auxdata, dev);
 	if (error) {
 		dev_err(dev, "failed to create children: %d\n", error);
 		goto err;
@@ -256,9 +246,21 @@ static const struct dev_pm_ops cdns_ti_pm_ops = {
 	SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend, pm_runtime_force_resume)
 };
 
+static struct cdns3_platform_data cdns_ti_pdata = {
+	.quirks = CDNS3_DRD_SUSPEND_RESIDENCY_ENABLE,   /* Errata i2409 */
+};
+
+static const struct of_dev_auxdata cdns_ti_auxdata[] = {
+	{
+		.compatible = "cdns,usb3",
+		.platform_data = &cdns_ti_pdata,
+	},
+	{},
+};
+
 static const struct of_device_id cdns_ti_of_match[] = {
-	{ .compatible = "ti,j721e-usb", },
-	{ .compatible = "ti,am64-usb", },
+	{ .compatible = "ti,j721e-usb", .data = cdns_ti_auxdata },
+	{ .compatible = "ti,am64-usb", .data = cdns_ti_auxdata },
 	{},
 };
 MODULE_DEVICE_TABLE(of, cdns_ti_of_match);
