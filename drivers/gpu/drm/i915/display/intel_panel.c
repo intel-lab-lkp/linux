@@ -395,6 +395,9 @@ static int pch_panel_fitting(struct intel_crtc_state *crtc_state,
 	u16 crtc_hdisplay = adjusted_mode->crtc_hdisplay;
 	u16 crtc_vdisplay = adjusted_mode->crtc_vdisplay;
 
+	if (crtc_state->joiner_pipes)
+		crtc_hdisplay = adjusted_mode->crtc_hdisplay / 2;
+
 	/* Native modes don't need fitting */
 	if (crtc_hdisplay == pipe_src_w &&
 	    crtc_vdisplay == pipe_src_h &&

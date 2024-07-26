@@ -1251,6 +1251,7 @@ struct intel_crtc_state {
 		struct drm_rect dst;
 		bool enabled;
 		bool force_thru;
+		bool is_required;
 	} pch_pfit;
 
 	/* FDI configuration, only valid if has_pch_encoder is set. */

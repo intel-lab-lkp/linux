@@ -4763,6 +4763,17 @@ intel_modeset_pipe_config(struct intel_atomic_state *state,
 		return ret;
 	}
 
+	for_each_new_connector_in_state(&state->base, connector, connector_state, i) {
+		if (connector_state->crtc != &crtc->base)
+			continue;
+
+		if (crtc_state->pch_pfit.is_required) {
+			ret = intel_panel_fitting(crtc_state, connector_state);
+			if (ret)
+				return ret;
+		}
+	}
+
 	/* Dithering seems to not pass-through bits correctly when it should, so
 	 * only enable it on 6bpc panels and when its not a compliance
 	 * test requesting 6bpc video pattern.

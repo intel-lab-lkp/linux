@@ -2922,11 +2922,8 @@ intel_dp_compute_config(struct intel_encoder *encoder,
 		pipe_config->has_pch_encoder = true;
 
 	fixed_mode = intel_panel_fixed_mode(connector, adjusted_mode);
-	if (intel_dp_is_edp(intel_dp) && fixed_mode) {
-		ret = intel_panel_compute_config(connector, adjusted_mode);
-		if (ret)
-			return ret;
-	}
+	if (intel_dp_is_edp(intel_dp) && fixed_mode)
+		pipe_config->pch_pfit.is_required = true;
 
 	if (adjusted_mode->flags & DRM_MODE_FLAG_DBLSCAN)
 		return -EINVAL;
