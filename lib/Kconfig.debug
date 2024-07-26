@@ -2420,13 +2420,6 @@ config TEST_PRINTF
 config TEST_SCANF
 	tristate "Test scanf() family of functions at runtime"
 
-config TEST_BITMAP
-	tristate "Test bitmap_*() family of functions at runtime"
-	help
-	  Enable this option to test the bitmap functions at boot.
-
-	  If unsure, say N.
-
 config TEST_UUID
 	tristate "Test functions located in the uuid module at runtime"
 
@@ -2812,6 +2805,14 @@ config USERCOPY_KUNIT_TEST
 	  This builds the "usercopy_kunit" module that runs sanity checks
 	  on the copy_to/from_user infrastructure, making sure basic
 	  user/kernel boundary testing is working.
+
+config BITMAP_KUNIT_TEST
+	tristate "KUnit Test for bitmap_*() family of functions"
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  This builds the "bitmap_kunit" module that runs tests for
+	  bitmaps int the kernel making sure that there isn't any bug.
 
 config TEST_UDELAY
 	tristate "udelay test driver"
