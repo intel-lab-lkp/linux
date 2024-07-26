@@ -21,6 +21,7 @@
 #include <media/videobuf2-vmalloc.h>
 
 #include "uvc.h"
+#include "uvc_video.h"
 
 /* ------------------------------------------------------------------------
  * Video buffers queue management.
@@ -86,7 +87,7 @@ static int uvc_queue_setup(struct vb2_queue *vq,
 	}
 
 	video->req_size = req_size;
-	video->uvc_num_requests = nreq;
+	video->uvc_num_requests = nreq * UVCG_STREAMING_MIN_BUFFERS;
 
 	return 0;
 }

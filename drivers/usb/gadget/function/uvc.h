@@ -71,6 +71,8 @@ extern unsigned int uvc_gadget_trace_param;
 
 #define UVCG_REQUEST_HEADER_LEN			12
 
+#define UVCG_STREAMING_MIN_BUFFERS		4
+
 /* ------------------------------------------------------------------------
  * Structures
  */

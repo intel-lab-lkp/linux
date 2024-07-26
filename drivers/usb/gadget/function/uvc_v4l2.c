@@ -357,6 +357,18 @@ static int uvc_v4l2_s_parm(struct file *file, void *fh,
 	return 0;
 }
 
+static int uvc_g_ctrl(struct file *file, void *priv, struct v4l2_control *vc)
+{
+	int ret = -EINVAL;
+
+	if (vc->id == V4L2_CID_MIN_BUFFERS_FOR_OUTPUT) {
+		vc->value = UVCG_STREAMING_MIN_BUFFERS;
+		ret = 0;
+	}
+
+	return ret;
+}
+
 static int
 uvc_v4l2_enum_frameintervals(struct file *file, void *fh,
 		struct v4l2_frmivalenum *fival)
@@ -629,6 +641,7 @@ const struct v4l2_ioctl_ops uvc_v4l2_ioctl_ops = {
 	.vidioc_streamoff = uvc_v4l2_streamoff,
 	.vidioc_s_parm = uvc_v4l2_s_parm,
 	.vidioc_g_parm = uvc_v4l2_g_parm,
+	.vidioc_g_ctrl = uvc_g_ctrl,
 	.vidioc_subscribe_event = uvc_v4l2_subscribe_event,
 	.vidioc_unsubscribe_event = uvc_v4l2_unsubscribe_event,
 	.vidioc_default = uvc_v4l2_ioctl_default,
