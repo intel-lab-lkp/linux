@@ -98,6 +98,10 @@ static int __init hyperv_init(void)
 		return ret;
 	}
 
+	/* Find the VTL */
+	ms_hyperv.vtl = get_vtl();
+	hv_vtl_init_platform();
+
 	ms_hyperv_late_init();
 
 	hyperv_initialized = true;

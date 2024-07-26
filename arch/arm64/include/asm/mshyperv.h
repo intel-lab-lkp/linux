@@ -49,6 +49,13 @@ static inline u64 hv_get_msr(unsigned int reg)
 				ARM_SMCCC_OWNER_VENDOR_HYP,	\
 				HV_SMCCC_FUNC_NUMBER)
 
+#ifdef CONFIG_HYPERV_VTL_MODE
+void __init hv_vtl_init_platform(void);
+int __init hv_vtl_early_init(void);
+#else
+static inline void __init hv_vtl_init_platform(void) {}
+#endif
+
 #include <asm-generic/mshyperv.h>
 
 #define ARM_SMCCC_VENDOR_HYP_UID_HYPERV_REG_0	0x7948734d
