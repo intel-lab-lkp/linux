@@ -303,6 +303,7 @@ static int uvcg_video_usb_req_queue(struct uvc_video *video,
 		 *   between latency and interrupt load.
 		 */
 		if (list_empty(&video->req_free) || ureq->last_buf ||
+				!req->length ||
 			!(video->req_int_count %
 			DIV_ROUND_UP(video->uvc_num_requests, 4))) {
 			video->req_int_count = 0;
