@@ -307,7 +307,7 @@ static int uvcg_video_usb_req_queue(struct uvc_video *video,
 		if (list_empty(&video->req_free) || ureq->last_buf ||
 				!req->length ||
 			!(video->req_int_count %
-			DIV_ROUND_UP(video->uvc_num_requests, 4))) {
+			clamp(DIV_ROUND_UP(video->uvc_num_requests, 4), 4U, 16U))) {
 			video->req_int_count = 0;
 			req->no_interrupt = 0;
 		} else {
