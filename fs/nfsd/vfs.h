@@ -153,7 +153,7 @@ __be32		nfsd_readdir(struct svc_rqst *, struct svc_fh *,
 __be32		nfsd_statfs(struct svc_rqst *, struct svc_fh *,
 				struct kstatfs *, int access);
 
-__be32		nfsd_permission(struct svc_rqst *, struct svc_export *,
+__be32		nfsd_permission(struct svc_cred *, struct svc_export *,
 				struct dentry *, int);
 
 void		nfsd_filp_close(struct file *fp);
