@@ -501,12 +501,6 @@ static inline pid_t clone3_vfork(void)
  * Use once to append a main() to the test file.
  */
 #define TEST_HARNESS_MAIN \
-	static void __attribute__((constructor)) \
-	__constructor_order_last(void) \
-	{ \
-		if (!__constructor_order) \
-			__constructor_order = _CONSTRUCTOR_ORDER_BACKWARD; \
-	} \
 	int main(int argc, char **argv) { \
 		return test_harness_run(argc, argv); \
 	}
@@ -904,7 +898,6 @@ static struct __fixture_metadata *__fixture_list = &_fixture_global;
 static int __constructor_order;
 
 #define _CONSTRUCTOR_ORDER_FORWARD   1
-#define _CONSTRUCTOR_ORDER_BACKWARD -1
 
 static inline void __register_fixture(struct __fixture_metadata *f)
 {
@@ -1332,8 +1325,7 @@ static int test_harness_run(int argc, char **argv)
 
 static void __attribute__((constructor)) __constructor_order_first(void)
 {
-	if (!__constructor_order)
-		__constructor_order = _CONSTRUCTOR_ORDER_FORWARD;
+	__constructor_order = _CONSTRUCTOR_ORDER_FORWARD;
 }
 
 #endif  /* __KSELFTEST_HARNESS_H */
