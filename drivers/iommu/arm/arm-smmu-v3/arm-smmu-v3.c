@@ -338,7 +338,12 @@ static int arm_smmu_cmdq_build_cmd(u64 *cmd, struct arm_smmu_cmdq_ent *ent)
 
 static struct arm_smmu_cmdq *arm_smmu_get_cmdq(struct arm_smmu_device *smmu)
 {
-	return &smmu->cmdq;
+	struct arm_smmu_cmdq *cmdq = NULL;
+
+	if (smmu->impl && smmu->impl->get_secondary_cmdq)
+		cmdq = smmu->impl->get_secondary_cmdq(smmu);
+
+	return cmdq ?: &smmu->cmdq;
 }
 
 static bool arm_smmu_cmdq_needs_busy_polling(struct arm_smmu_device *smmu,
@@ -4044,6 +4049,14 @@ static int arm_smmu_device_reset(struct arm_smmu_device *smmu)
 		return ret;
 	}
 
+	if (smmu->impl && smmu->impl->device_reset) {
+		ret = smmu->impl->device_reset(smmu);
+		if (ret) {
+			dev_err(smmu->dev, "failed to reset impl\n");
+			return ret;
+		}
+	}
+
 	return 0;
 }
 
@@ -4347,8 +4360,23 @@ static void acpi_smmu_get_options(u32 model, struct arm_smmu_device *smmu)
 	dev_notice(smmu->dev, "option mask 0x%x\n", smmu->options);
 }
 
-static int arm_smmu_device_acpi_probe(struct platform_device *pdev,
-				      struct arm_smmu_device *smmu)
+static struct arm_smmu_device *
+arm_smmu_impl_acpi_probe(struct arm_smmu_device *smmu,
+			 struct acpi_iort_node *node)
+{
+	/*
+	 * DSDT might hold some SMMU extension, so we have no option but to go
+	 * through the ACPI tables unconditionally. On success, this returns a
+	 * copy of smmu struct holding an impl pointer. Otherwise, an impl may
+	 * choose to return an ERR_PTR as an error out, or to return the pass-
+	 * in smmu pointer as a fallback to the standard SMMU.
+	 */
+	return arm_smmu_impl_acpi_dsdt_probe(smmu, node);
+}
+
+static struct arm_smmu_device *
+arm_smmu_device_acpi_probe(struct platform_device *pdev,
+			   struct arm_smmu_device *smmu)
 {
 	struct acpi_iort_smmu_v3 *iort_smmu;
 	struct device *dev = smmu->dev;
@@ -4372,18 +4400,20 @@ static int arm_smmu_device_acpi_probe(struct platform_device *pdev,
 		smmu->features |= ARM_SMMU_FEAT_HA;
 	}
 
-	return 0;
+	return arm_smmu_impl_acpi_probe(smmu, node);
 }
 #else
-static inline int arm_smmu_device_acpi_probe(struct platform_device *pdev,
-					     struct arm_smmu_device *smmu)
+static struct arm_smmu_device *
+arm_smmu_device_acpi_probe(struct platform_device *pdev,
+			   struct arm_smmu_device *smmu)
 {
-	return -ENODEV;
+	return ERR_PTR(-ENODEV);
 }
 #endif
 
-static int arm_smmu_device_dt_probe(struct platform_device *pdev,
-				    struct arm_smmu_device *smmu)
+static struct arm_smmu_device *
+arm_smmu_device_dt_probe(struct platform_device *pdev,
+			 struct arm_smmu_device *smmu)
 {
 	struct device *dev = &pdev->dev;
 	u32 cells;
@@ -4401,7 +4431,7 @@ static int arm_smmu_device_dt_probe(struct platform_device *pdev,
 	if (of_dma_is_coherent(dev->of_node))
 		smmu->features |= ARM_SMMU_FEAT_COHERENCY;
 
-	return ret;
+	return ret ? ERR_PTR(ret) : smmu;
 }
 
 static unsigned long arm_smmu_resource_size(struct arm_smmu_device *smmu)
@@ -4453,6 +4483,14 @@ static void arm_smmu_rmr_install_bypass_ste(struct arm_smmu_device *smmu)
 	iort_put_rmr_sids(dev_fwnode(smmu->dev), &rmr_list);
 }
 
+static void arm_smmu_impl_remove(void *data)
+{
+	struct arm_smmu_device *smmu = data;
+
+	if (smmu->impl && smmu->impl->device_remove)
+		smmu->impl->device_remove(smmu);
+}
+
 static int arm_smmu_device_probe(struct platform_device *pdev)
 {
 	int irq, ret;
@@ -4467,10 +4505,14 @@ static int arm_smmu_device_probe(struct platform_device *pdev)
 	smmu->dev = dev;
 
 	if (dev->of_node) {
-		ret = arm_smmu_device_dt_probe(pdev, smmu);
+		smmu = arm_smmu_device_dt_probe(pdev, smmu);
 	} else {
-		ret = arm_smmu_device_acpi_probe(pdev, smmu);
+		smmu = arm_smmu_device_acpi_probe(pdev, smmu);
 	}
+	if (IS_ERR(smmu))
+		return PTR_ERR(smmu);
+
+	ret = devm_add_action_or_reset(dev, arm_smmu_impl_remove, smmu);
 	if (ret)
 		return ret;
 
@@ -4560,6 +4602,7 @@ static void arm_smmu_device_remove(struct platform_device *pdev)
 {
 	struct arm_smmu_device *smmu = platform_get_drvdata(pdev);
 
+	arm_smmu_impl_remove(smmu);
 	iommu_device_unregister(&smmu->iommu);
 	iommu_device_sysfs_remove(&smmu->iommu);
 	arm_smmu_device_disable(smmu);
