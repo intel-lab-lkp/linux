@@ -72,22 +72,26 @@
  */
 #define max(x, y)	__careful_cmp(max, x, y)
 
+/*
+ * Zero extend a non-negative value to 64bits.
+ * Undefined for negative values.
+ * The extension to 64 bits is often optimised away.
+ */
+#define __zero_extend(x) ((x) + 0u + 0ul + 0ull)
+
 /**
  * umin - return minimum of two non-negative values
- *   Signed types are zero extended to match a larger unsigned type.
  * @x: first value
  * @y: second value
  */
-#define umin(x, y)	\
-	__careful_cmp(min, (x) + 0u + 0ul + 0ull, (y) + 0u + 0ul + 0ull)
+#define umin(x, y)	__careful_cmp(min, __zero_extend(x), __zero_extend(y))
 
 /**
  * umax - return maximum of two non-negative values
  * @x: first value
  * @y: second value
  */
-#define umax(x, y)	\
-	__careful_cmp(max, (x) + 0u + 0ul + 0ull, (y) + 0u + 0ul + 0ull)
+#define umax(x, y)	__careful_cmp(max, __zero_extend(x), __zero_extend(y))
 
 /**
  * min3 - return minimum of three values
