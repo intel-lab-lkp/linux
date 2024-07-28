@@ -426,6 +426,8 @@ struct nfsd4_read {
 	struct svc_rqst		*rd_rqstp;          /* response */
 	struct svc_fh		*rd_fhp;            /* response */
 	u32			rd_eof;             /* response */
+
+	struct nfs4_stid	*rd_wd_stid;		/* internal */
 };
 
 struct nfsd4_readdir {
