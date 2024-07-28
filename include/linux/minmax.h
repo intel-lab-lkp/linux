@@ -47,9 +47,9 @@
 #define __cmp(op, x, y)	((x) __cmp_op_##op (y) ? (x) : (y))
 
 #define __cmp_once(op, x, y, unique_x, unique_y) ({	\
-	typeof(x) unique_x = (x);			\
-	typeof(y) unique_y = (y);			\
-	_Static_assert(__types_ok(x, y),			\
+	__auto_type unique_x = (x);			\
+	__auto_type unique_y = (y);			\
+	_Static_assert(__types_ok(x, y),		\
 		#op "(" #x ", " #y ") signedness error, fix types or consider u" #op "() before " #op "_t()"); \
 	__cmp(op, unique_x, unique_y); })
 
@@ -131,18 +131,18 @@
  * @y: value2
  */
 #define min_not_zero(x, y) ({			\
-	typeof(x) __x = (x);			\
-	typeof(y) __y = (y);			\
+	__auto_type __x = (x);			\
+	__auto_type __y = (y);			\
 	__x == 0 ? __y : ((__y == 0) ? __x : min(__x, __y)); })
 
 #define __clamp(val, lo, hi)	\
 	((val) >= (hi) ? (hi) : ((val) <= (lo) ? (lo) : (val)))
 
 #define __clamp_once(val, lo, hi, unique_val, unique_lo, unique_hi) ({		\
-	typeof(val) unique_val = (val);						\
-	typeof(lo) unique_lo = (lo);						\
-	typeof(hi) unique_hi = (hi);						\
-	_Static_assert(__if_constexpr((lo) <= (hi), (lo) <= (hi), true),		\
+	__auto_type unique_val = (val);						\
+	__auto_type unique_lo = (lo);						\
+	__auto_type unique_hi = (hi);						\
+	_Static_assert(__if_constexpr((lo) <= (hi), (lo) <= (hi), true),	\
 		"clamp() low limit " #lo " greater than high limit " #hi);	\
 	_Static_assert(__types_ok(val, lo), "clamp() 'lo' signedness error");	\
 	_Static_assert(__types_ok(val, hi), "clamp() 'hi' signedness error");	\
