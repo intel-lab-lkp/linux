@@ -242,6 +242,23 @@ static inline void *offset_to_ptr(const int *off)
 /* &a[0] degrades to a pointer: a different type from an array */
 #define __must_be_array(a)	BUILD_BUG_ON_ZERO(__same_type((a), &(a)[0]))
 
+/**
+ * __if_constexpr - Check whether an expression is an 'integer
+ *		constant expression'
+ * @expr: Expression to test, not evaluated, can be a pointer
+ * @if_const: return value if constant
+ * @if_not_const: return value if not constant
+ *
+ * The return values @if_const and @if_not_const can have different types.
+ *
+ * Relies on typeof(x ? NULL : ptr_type) being ptr_type and
+ * typeof(x ? (void *)y : ptr_type) being 'void *'.
+ */
+#define __if_constexpr(expr, if_const, if_not_const)		\
+       _Generic(0 ? ((void *)((long)(expr) * 0l)) : (char *)0,	\
+		char *: (if_const),				\
+		void *: (if_not_const))
+
 /*
  * This returns a constant expression while determining if an argument is
  * a constant expression, most importantly without evaluating the argument.
