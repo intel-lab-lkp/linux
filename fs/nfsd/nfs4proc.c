@@ -987,10 +987,13 @@ nfsd4_read(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	 * by nfsd4_read_release when read is done.
 	 */
 	if (!status) {
-		if (read->rd_wd_stid &&
-		    (read->rd_wd_stid->sc_type != SC_TYPE_DELEG ||
-		     delegstateid(read->rd_wd_stid)->dl_type !=
-					NFS4_OPEN_DELEGATE_WRITE)) {
+		if (!read->rd_wd_stid) {
+			/* special stateid? */
+			status = nfsd4_deleg_read_conflict(rqstp, cstate->clp,
+				&cstate->current_fh);
+		} else if (read->rd_wd_stid->sc_type != SC_TYPE_DELEG ||
+			   delegstateid(read->rd_wd_stid)->dl_type !=
+						NFS4_OPEN_DELEGATE_WRITE) {
 			nfs4_put_stid(read->rd_wd_stid);
 			read->rd_wd_stid = NULL;
 		}

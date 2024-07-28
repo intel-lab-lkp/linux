@@ -8804,6 +8804,53 @@ nfsd4_get_writestateid(struct nfsd4_compound_state *cstate,
 }
 
 /**
+ * nfsd4_deleg_read_conflict - Recall if read causes conflict
+ * @rqstp: RPC transaction context
+ * @clp: nfs client
+ * @fhp: nfs file handle
+ * @inode: file to be checked for a conflict
+ * @modified: return true if file was modified
+ * @size: new size of file if modified is true
+ *
+ * This function is called when there is a conflict between a write
+ * delegation and a read that is using a special stateid where the
+ * we cannot derive the client stateid exsistence. The server
+ * must recall a conflicting delegation before allowing the read
+ * to continue.
+ *
+ * Returns 0 if there is no conflict; otherwise an nfs_stat
+ * code is returned.
+ */
+__be32 nfsd4_deleg_read_conflict(struct svc_rqst *rqstp,
+		struct nfs4_client *clp, struct svc_fh *fhp)
+{
+	struct nfs4_file *fp;
+	__be32 status = 0;
+
+	fp = nfsd4_file_hash_lookup(fhp);
+	if (!fp)
+		return nfs_ok;
+
+	spin_lock(&state_lock);
+	spin_lock(&fp->fi_lock);
+	if (!list_empty(&fp->fi_delegations) &&
+	    !nfs4_delegation_exists(clp, fp)) {
+		/* conflict, recall deleg */
+		status = nfserrno(nfsd_open_break_lease(fp->fi_inode,
+					NFSD_MAY_READ));
+		if (status)
+			goto out;
+		if (!nfsd_wait_for_delegreturn(rqstp, fp->fi_inode))
+			status = nfserr_jukebox;
+	}
+out:
+	spin_unlock(&fp->fi_lock);
+	spin_unlock(&state_lock);
+	return status;
+}
+
+
+/**
  * nfsd4_deleg_getattr_conflict - Recall if GETATTR causes conflict
  * @rqstp: RPC transaction context
  * @inode: file to be checked for a conflict

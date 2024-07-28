@@ -780,6 +780,8 @@ static inline bool try_to_expire_client(struct nfs4_client *clp)
 	return clp->cl_state == NFSD4_EXPIRABLE;
 }
 
+extern __be32 nfsd4_deleg_read_conflict(struct svc_rqst *rqstp,
+		struct nfs4_client *clp, struct svc_fh *fhp);
 extern __be32 nfsd4_deleg_getattr_conflict(struct svc_rqst *rqstp,
 		struct inode *inode, bool *file_modified, u64 *size);
 #endif   /* NFSD4_STATE_H */
