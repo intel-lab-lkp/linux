@@ -28,6 +28,10 @@ static const struct loongson_driver_info loongson_driver_array[] = {
 		.type = LOONGSON_DRIVER_FLAG_PCI,
 	},
 	{
+		.driver = &loonggpu_pci_driver.driver,
+		.type = LOONGSON_DRIVER_FLAG_PCI,
+	},
+	{
 		.driver = &loongson_drm_platform_driver.driver,
 		.type = LOONGSON_DRIVER_FLAG_PLATFORM | LOONGSON_DRIVER_FLAG_FAKE_MASTER,
 	},

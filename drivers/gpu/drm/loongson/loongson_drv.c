@@ -19,6 +19,7 @@
 
 #include "loongson_drv.h"
 #include "loongson_module.h"
+#include "loonggpu_pci_drv.h"
 #include "lsdc_drv.h"
 #include "lsdc_gem.h"
 #include "lsdc_output.h"

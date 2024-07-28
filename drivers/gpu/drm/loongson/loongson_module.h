@@ -37,6 +37,7 @@ const struct loongson_driver_info *loongson_get_driver_info_array(int *num);
 extern int loongson_vblank;
 
 extern struct pci_driver lsdc_pci_driver;
+extern struct pci_driver loonggpu_pci_driver;
 extern struct platform_driver lsdc_output_platform_driver;
 extern struct platform_driver loongson_drm_platform_driver;
 
