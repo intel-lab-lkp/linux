@@ -5,6 +5,7 @@
 
 #include <drm/drm_debugfs.h>
 
+#include "loongson_drv.h"
 #include "lsdc_benchmark.h"
 #include "lsdc_drv.h"
 #include "lsdc_gem.h"
@@ -60,7 +61,7 @@ static void lsdc_copy_gtt_to_gtt_cpu(struct lsdc_bo *src_bo,
 	lsdc_bo_kunmap(dst_bo);
 }
 
-static void lsdc_benchmark_copy(struct lsdc_device *ldev,
+static void lsdc_benchmark_copy(struct drm_device *ddev,
 				unsigned int size,
 				unsigned int n,
 				u32 src_domain,
@@ -68,7 +69,6 @@ static void lsdc_benchmark_copy(struct lsdc_device *ldev,
 				lsdc_copy_proc_t copy_proc,
 				struct drm_printer *p)
 {
-	struct drm_device *ddev = &ldev->base;
 	struct lsdc_bo *src_bo;
 	struct lsdc_bo *dst_bo;
 	unsigned long start_jiffies;
@@ -100,12 +100,12 @@ static void lsdc_benchmark_copy(struct lsdc_device *ldev,
 		   time, throughput);
 }
 
-int lsdc_show_benchmark_copy(struct lsdc_device *ldev, struct drm_printer *p)
+int lsdc_show_benchmark_copy(struct drm_device *ddev, struct drm_printer *p)
 {
 	unsigned int buffer_size = 1920 * 1080 * 4;
 	unsigned int iteration = 60;
 
-	lsdc_benchmark_copy(ldev,
+	lsdc_benchmark_copy(ddev,
 			    buffer_size,
 			    iteration,
 			    LSDC_GEM_DOMAIN_GTT,
@@ -113,7 +113,7 @@ int lsdc_show_benchmark_copy(struct lsdc_device *ldev, struct drm_printer *p)
 			    lsdc_copy_gtt_to_gtt_cpu,
 			    p);
 
-	lsdc_benchmark_copy(ldev,
+	lsdc_benchmark_copy(ddev,
 			    buffer_size,
 			    iteration,
 			    LSDC_GEM_DOMAIN_GTT,
@@ -121,7 +121,7 @@ int lsdc_show_benchmark_copy(struct lsdc_device *ldev, struct drm_printer *p)
 			    lsdc_copy_gtt_to_vram_cpu,
 			    p);
 
-	lsdc_benchmark_copy(ldev,
+	lsdc_benchmark_copy(ddev,
 			    buffer_size,
 			    iteration,
 			    LSDC_GEM_DOMAIN_VRAM,

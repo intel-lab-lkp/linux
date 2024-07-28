@@ -9,6 +9,7 @@ loongson-y := \
 	lsdc_gfxpll.o \
 	lsdc_i2c.o \
 	lsdc_irq.o \
+	lsdc_output.o \
 	lsdc_output_7a1000.o \
 	lsdc_output_7a2000.o \
 	lsdc_plane.o \
@@ -17,6 +18,7 @@ loongson-y := \
 	lsdc_ttm.o
 
 loongson-y += loongson_device.o \
+	      loongson_drv.o \
 	      loongson_module.o
 
 obj-$(CONFIG_DRM_LOONGSON) += loongson.o

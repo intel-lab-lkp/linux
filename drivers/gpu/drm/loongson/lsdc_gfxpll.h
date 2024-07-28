@@ -46,7 +46,6 @@ struct loongson_gfxpll {
 	struct loongson_gfxpll_parms parms;
 };
 
-int loongson_gfxpll_create(struct drm_device *ddev,
-			   struct loongson_gfxpll **ppout);
+int loongson_gfxpll_preinit(struct drm_device *ddev);
 
 #endif

@@ -8,6 +8,6 @@
 
 #include "lsdc_drv.h"
 
-int lsdc_show_benchmark_copy(struct lsdc_device *ldev, struct drm_printer *p);
+int lsdc_show_benchmark_copy(struct drm_device *ddev, struct drm_printer *p);
 
 #endif

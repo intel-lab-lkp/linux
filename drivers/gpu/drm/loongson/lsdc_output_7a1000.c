@@ -7,6 +7,7 @@
 #include <drm/drm_edid.h>
 #include <drm/drm_probe_helper.h>
 
+#include "loongson_drv.h"
 #include "lsdc_drv.h"
 #include "lsdc_output.h"
 
@@ -139,11 +140,10 @@ static const struct drm_encoder_funcs ls7a1000_encoder_funcs[2] = {
 };
 
 int ls7a1000_output_init(struct drm_device *ddev,
-			 struct lsdc_display_pipe *dispipe,
+			 struct lsdc_output *output,
 			 struct i2c_adapter *ddc,
 			 unsigned int index)
 {
-	struct lsdc_output *output = &dispipe->output;
 	struct drm_encoder *encoder = &output->encoder;
 	struct drm_connector *connector = &output->connector;
 	int ret;
@@ -160,8 +160,6 @@ int ls7a1000_output_init(struct drm_device *ddev,
 					  DRM_MODE_CONNECTOR_DPI, ddc);
 	if (ret)
 		return ret;
-
-	drm_info(ddev, "display pipe-%u has a DVO\n", index);
 
 	drm_connector_helper_add(connector, &ls7a1000_dpi_connector_helpers);
 

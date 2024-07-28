@@ -470,9 +470,7 @@ int lsdc_pixpll_init(struct lsdc_pixpll * const this,
 		     struct drm_device *ddev,
 		     unsigned int index)
 {
-	struct lsdc_device *ldev = to_lsdc(ddev);
-	const struct lsdc_desc *descp = ldev->descp;
-	const struct loongson_gfx_desc *gfx = to_loongson_gfx(descp);
+	const struct loongson_gfx_desc *gfx = to_loongson_gfxinfo(ddev);
 
 	this->ddev = ddev;
 	this->reg_size = 8;
