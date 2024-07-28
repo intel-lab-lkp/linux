@@ -9,6 +9,9 @@
 #define _MMC_SD_OPS_H
 
 #include <linux/types.h>
+#include <linux/bitfield.h>
+
+#define SDUC_ADDR_EXT_MASK GENMASK(37, 32)
 
 struct mmc_card;
 struct mmc_host;
