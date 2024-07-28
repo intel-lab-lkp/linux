@@ -199,6 +199,20 @@ int mmc_send_app_op_cond(struct mmc_host *host, u32 ocr, u32 *rocr)
 	return 0;
 }
 
+int mmc_send_ext_addr(struct mmc_host *host, u8 ext_addr)
+{
+	struct mmc_command cmd = {};
+
+	if (!mmc_card_is_sduc(host))
+		return 0;
+
+	cmd.opcode = SD_ADDR_EXT;
+	cmd.arg = ext_addr & 0x3F;
+	cmd.flags = MMC_RSP_R1 | MMC_CMD_AC;
+
+	return mmc_wait_for_cmd(host, &cmd, 0);
+}
+
 static int __mmc_send_if_cond(struct mmc_host *host, u32 ocr, u8 pcie_bits,
 			      u32 *resp)
 {
