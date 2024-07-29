@@ -545,12 +545,30 @@ static int vsc73xx_detect(struct vsc73xx *vsc)
 	return 0;
 }
 
+static int vsc73xx_mdio_busy_check(struct vsc73xx *vsc)
+{
+	int val, ret;
+
+	ret = vsc73xx_read(vsc, VSC73XX_BLOCK_MII, VSC73XX_BLOCK_MII_INTERNAL,
+			   VSC73XX_MII_STAT, &val);
+	if (ret)
+		return ret;
+
+	return (val & VSC73XX_MII_STAT_BUSY) ? -EBUSY : 0;
+}
+
 static int vsc73xx_phy_read(struct dsa_switch *ds, int phy, int regnum)
 {
 	struct vsc73xx *vsc = ds->priv;
 	u32 cmd;
 	u32 val;
 	int ret;
+
+	mutex_lock(&vsc->mdio_lock);
+
+	ret = vsc73xx_mdio_busy_check(vsc);
+	if (ret)
+		goto err;
 
 	/* Setting bit 26 means "read" */
 	cmd = VSC73XX_MII_CMD_OPERATION |
@@ -559,23 +577,27 @@ static int vsc73xx_phy_read(struct dsa_switch *ds, int phy, int regnum)
 	ret = vsc73xx_write(vsc, VSC73XX_BLOCK_MII, VSC73XX_BLOCK_MII_INTERNAL,
 			    VSC73XX_MII_CMD, cmd);
 	if (ret)
-		return ret;
-	msleep(2);
+		goto err;
+	usleep_range(100, 200);
 	ret = vsc73xx_read(vsc, VSC73XX_BLOCK_MII, VSC73XX_BLOCK_MII_INTERNAL,
 			   VSC73XX_MII_DATA, &val);
 	if (ret)
-		return ret;
+		goto err;
+
 	if (val & VSC73XX_MII_DATA_FAILURE) {
 		dev_err(vsc->dev, "reading reg %02x from phy%d failed\n",
 			regnum, phy);
-		return -EIO;
+		ret = -EIO;
+		goto err;
 	}
-	val &= VSC73XX_MII_DATA_READ_DATA;
+	ret = val & VSC73XX_MII_DATA_READ_DATA;
 
 	dev_dbg(vsc->dev, "read reg %02x from phy%d = %04x\n",
-		regnum, phy, val);
+		regnum, phy, ret);
 
-	return val;
+err:
+	mutex_unlock(&vsc->mdio_lock);
+	return ret;
 }
 
 static int vsc73xx_phy_write(struct dsa_switch *ds, int phy, int regnum,
@@ -583,7 +605,13 @@ static int vsc73xx_phy_write(struct dsa_switch *ds, int phy, int regnum,
 {
 	struct vsc73xx *vsc = ds->priv;
 	u32 cmd;
-	int ret;
+	int ret = 0;
+
+	mutex_lock(&vsc->mdio_lock);
+
+	ret = vsc73xx_mdio_busy_check(vsc);
+	if (ret)
+		goto err;
 
 	/* It was found through tedious experiments that this router
 	 * chip really hates to have it's PHYs reset. They
@@ -601,12 +629,13 @@ static int vsc73xx_phy_write(struct dsa_switch *ds, int phy, int regnum,
 	      FIELD_PREP(VSC73XX_MII_CMD_WRITE_DATA, val);
 	ret = vsc73xx_write(vsc, VSC73XX_BLOCK_MII, VSC73XX_BLOCK_MII_INTERNAL,
 			    VSC73XX_MII_CMD, cmd);
-	if (ret)
-		return ret;
-
-	dev_dbg(vsc->dev, "write %04x to reg %02x in phy%d\n",
-		val, regnum, phy);
-	return 0;
+	if (!ret)
+		dev_dbg(vsc->dev, "write %04x to reg %02x in phy%d\n",
+			val, regnum, phy);
+	usleep_range(100, 200);
+err:
+	mutex_unlock(&vsc->mdio_lock);
+	return ret;
 }
 
 static enum dsa_tag_protocol vsc73xx_get_tag_protocol(struct dsa_switch *ds,
@@ -1910,6 +1939,8 @@ int vsc73xx_probe(struct vsc73xx *vsc)
 		dev_err(dev, "no chip found (%d)\n", ret);
 		return -ENODEV;
 	}
+
+	mutex_init(&vsc->mdio_lock);
 
 	eth_random_addr(vsc->addr);
 	dev_info(vsc->dev,
