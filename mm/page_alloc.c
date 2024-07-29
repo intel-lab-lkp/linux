@@ -2557,7 +2557,8 @@ static void free_unref_page_commit(struct zone *zone, struct per_cpu_pages *pcp,
 		pcp->flags &= ~PCPF_PREV_FREE_HIGH_ORDER;
 	}
 	if (pcp->free_count < (batch << CONFIG_PCP_BATCH_SCALE_MAX))
-		pcp->free_count += (1 << order);
+		pcp->free_count = min(pcp->free_count + (1 << order),
+				      batch << CONFIG_PCP_BATCH_SCALE_MAX);
 	high = nr_pcp_high(pcp, zone, batch, free_high);
 	if (pcp->count >= high) {
 		free_pcppages_bulk(zone, nr_pcp_free(pcp, batch, high, free_high),
