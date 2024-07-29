@@ -1429,7 +1429,8 @@ static void vsc73xx_phylink_get_caps(struct dsa_switch *dsa, int port,
 		__set_bit(PHY_INTERFACE_MODE_GMII, interfaces);
 	}
 
-	config->mac_capabilities = MAC_SYM_PAUSE | MAC_10 | MAC_100 | MAC_1000;
+	config->mac_capabilities = MAC_SYM_PAUSE | MAC_ASYM_PAUSE |
+				   MAC_10 | MAC_100 | MAC_1000FD;
 }
 
 static int
