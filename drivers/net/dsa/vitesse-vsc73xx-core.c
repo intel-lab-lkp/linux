@@ -229,6 +229,7 @@
 #define VSC73XX_MII_STAT		0x0
 #define VSC73XX_MII_CMD			0x1
 #define VSC73XX_MII_DATA		0x2
+#define VSC73XX_MII_MPRES		0x3
 
 #define VSC73XX_MII_STAT_BUSY		BIT(3)
 #define VSC73XX_MII_STAT_READ		BIT(2)
@@ -242,6 +243,10 @@
 
 #define VSC73XX_MII_DATA_FAILURE	BIT(16)
 #define VSC73XX_MII_DATA_READ_DATA	GENMASK(15, 0)
+
+#define VSC73XX_MII_MPRES_NOPREAMBLE	BIT(6)
+#define VSC73XX_MII_MPRES_PRESCALEVAL	GENMASK(5, 0)
+#define VSC73XX_MII_PRESCALEVAL_MIN	3 /* min allowed mdio clock prescaler */
 
 /* Arbiter block 5 registers */
 #define VSC73XX_ARBEMPTY		0x0c
@@ -578,7 +583,7 @@ static int vsc73xx_phy_read(struct dsa_switch *ds, int phy, int regnum)
 			    VSC73XX_MII_CMD, cmd);
 	if (ret)
 		goto err;
-	usleep_range(100, 200);
+	usleep_range(4, 100);
 	ret = vsc73xx_read(vsc, VSC73XX_BLOCK_MII, VSC73XX_BLOCK_MII_INTERNAL,
 			   VSC73XX_MII_DATA, &val);
 	if (ret)
@@ -632,7 +637,7 @@ static int vsc73xx_phy_write(struct dsa_switch *ds, int phy, int regnum,
 	if (!ret)
 		dev_dbg(vsc->dev, "write %04x to reg %02x in phy%d\n",
 			val, regnum, phy);
-	usleep_range(100, 200);
+	usleep_range(4, 100);
 err:
 	mutex_unlock(&vsc->mdio_lock);
 	return ret;
@@ -741,7 +746,7 @@ vsc73xx_update_vlan_table(struct vsc73xx *vsc, int port, u16 vid, bool set)
 static int vsc73xx_setup(struct dsa_switch *ds)
 {
 	struct vsc73xx *vsc = ds->priv;
-	int i, ret;
+	int i, ret, val;
 
 	dev_info(vsc->dev, "set up the switch\n");
 
@@ -812,6 +817,15 @@ static int vsc73xx_setup(struct dsa_switch *ds)
 		      0xff);
 
 	mdelay(50);
+
+	/* Disable preamble and use maximum allowed clock for the internal
+	 * mdio bus, used for communication with internal PHYs only.
+	 */
+	val = VSC73XX_MII_MPRES_NOPREAMBLE |
+	      FIELD_PREP(VSC73XX_MII_MPRES_PRESCALEVAL,
+			 VSC73XX_MII_PRESCALEVAL_MIN);
+	vsc73xx_write(vsc, VSC73XX_BLOCK_MII, VSC73XX_BLOCK_MII_INTERNAL,
+		      VSC73XX_MII_MPRES, val);
 
 	/* Release reset from the internal PHYs */
 	vsc73xx_write(vsc, VSC73XX_BLOCK_SYSTEM, 0, VSC73XX_GLORESET,
