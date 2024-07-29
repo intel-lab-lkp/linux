@@ -548,6 +548,29 @@ out_val:
 }
 EXPORT_SYMBOL_GPL(of_prop_next_u32);
 
+const __be64 *of_prop_next_u64(struct property *prop, const __be64 *cur,
+			       u64 *pu)
+{
+	const void *curv = cur;
+
+	if (!prop)
+		return NULL;
+
+	if (!cur) {
+		curv = prop->value;
+		goto out_val;
+	}
+
+	curv += sizeof(*cur);
+	if (curv >= prop->value + prop->length)
+		return NULL;
+
+out_val:
+	*pu = be64_to_cpup(curv);
+	return curv;
+}
+EXPORT_SYMBOL_GPL(of_prop_next_u64);
+
 const char *of_prop_next_string(struct property *prop, const char *cur)
 {
 	const void *curv = cur;

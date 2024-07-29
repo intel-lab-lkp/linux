@@ -437,6 +437,16 @@ extern int of_detach_node(struct device_node *);
  */
 const __be32 *of_prop_next_u32(struct property *prop, const __be32 *cur,
 			       u32 *pu);
+
+/*
+ * u64 u;
+ *
+ * of_property_for_each_u64(np, "propname", u)
+ *         printk("U64 value: %llx\n", u);
+ */
+const __be64 *of_prop_next_u64(struct property *prop, const __be64 *cur,
+			       u64 *pu);
+
 /*
  * struct property *prop;
  * const char *s;
@@ -828,6 +838,12 @@ static inline bool of_console_check(const struct device_node *dn, const char *na
 
 static inline const __be32 *of_prop_next_u32(struct property *prop,
 		const __be32 *cur, u32 *pu)
+{
+	return NULL;
+}
+
+static inline const __be64 *of_prop_next_u64(struct property *prop,
+		const __be64 *cur, u64 *pu)
 {
 	return NULL;
 }
@@ -1435,6 +1451,13 @@ static inline int of_property_read_s32(const struct device_node *np,
 		 of_prop_next_u32(_it.prop, NULL, &u)};			\
 	     _it.item;							\
 	     _it.item = of_prop_next_u32(_it.prop, _it.item, &u))
+
+#define of_property_for_each_u64(np, propname, u)			\
+	for (struct {struct property *prop; const __be64 *item; } _it =	\
+		{of_find_property(np, propname, NULL),			\
+		 of_prop_next_u64(_it.prop, NULL, &u)};			\
+		_it.item;						\
+		_it.item = of_prop_next_u64(_it.prop, _it.item, &u))
 
 #define of_property_for_each_string(np, propname, prop, s)	\
 	for (prop = of_find_property(np, propname, NULL),	\
