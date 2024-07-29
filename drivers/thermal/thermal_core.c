@@ -425,59 +425,74 @@ static void handle_critical_trips(struct thermal_zone_device *tz,
 }
 
 static void handle_thermal_trip(struct thermal_zone_device *tz,
-				struct thermal_trip_desc *td,
 				struct list_head *way_up_list,
-				struct list_head *way_down_list)
+				struct list_head *way_down_list,
+				int *low, int *high)
 {
-	const struct thermal_trip *trip = &td->trip;
+	struct thermal_trip_desc *td;
 	int old_threshold;
 
-	if (trip->temperature == THERMAL_TEMP_INVALID)
-		return;
+	for_each_trip_desc(tz, td) {
 
-	/*
-	 * If the trip temperature or hysteresis has been updated recently,
-	 * the threshold needs to be computed again using the new values.
-	 * However, its initial value still reflects the old ones and that
-	 * is what needs to be compared with the previous zone temperature
-	 * to decide which action to take.
-	 */
-	old_threshold = td->threshold;
-	td->threshold = trip->temperature;
+		const struct thermal_trip *trip = &td->trip;
 
-	if (tz->last_temperature >= old_threshold &&
-	    tz->last_temperature != THERMAL_TEMP_INIT) {
+		if (trip->temperature == THERMAL_TEMP_INVALID)
+			continue;
+
+		if (tz->last_temperature < old_threshold ||
+		    tz->last_temperature == THERMAL_TEMP_INIT)
+			continue;
+
 		/*
-		 * Mitigation is under way, so it needs to stop if the zone
-		 * temperature falls below the low temperature of the trip.
-		 * In that case, the trip temperature becomes the new threshold.
+		 * If the trip temperature or hysteresis has been updated recently,
+		 * the threshold needs to be computed again using the new values.
+		 * However, its initial value still reflects the old ones and that
+		 * is what needs to be compared with the previous zone temperature
+		 * to decide which action to take.
 		 */
-		if (tz->temperature < trip->temperature - trip->hysteresis) {
-			list_add(&td->notify_list_node, way_down_list);
-			td->notify_temp = trip->temperature - trip->hysteresis;
+		old_threshold = td->threshold;
+		td->threshold = trip->temperature;
 
-			if (trip->type == THERMAL_TRIP_PASSIVE) {
-				tz->passive--;
-				WARN_ON(tz->passive < 0);
+		if (tz->last_temperature >= old_threshold &&
+		    tz->last_temperature != THERMAL_TEMP_INVALID) {
+			/*
+			 * Mitigation is under way, so it needs to stop if the zone
+			 * temperature falls below the low temperature of the trip.
+			 * In that case, the trip temperature becomes the new threshold.
+			 */
+			if (tz->temperature < trip->temperature - trip->hysteresis) {
+				list_add(&td->notify_list_node, way_down_list);
+				td->notify_temp = trip->temperature - trip->hysteresis;
+
+				if (trip->type == THERMAL_TRIP_PASSIVE) {
+					tz->passive--;
+					WARN_ON(tz->passive < 0);
+				}
+			} else {
+				td->threshold -= trip->hysteresis;
 			}
-		} else {
+		} else if (tz->temperature >= trip->temperature) {
+			/*
+			 * There is no mitigation under way, so it needs to be started
+			 * if the zone temperature exceeds the trip one.  The new
+			 * threshold is then set to the low temperature of the trip.
+			 */
+			list_add_tail(&td->notify_list_node, way_up_list);
+			td->notify_temp = trip->temperature;
 			td->threshold -= trip->hysteresis;
-		}
-	} else if (tz->temperature >= trip->temperature) {
-		/*
-		 * There is no mitigation under way, so it needs to be started
-		 * if the zone temperature exceeds the trip one.  The new
-		 * threshold is then set to the low temperature of the trip.
-		 */
-		list_add_tail(&td->notify_list_node, way_up_list);
-		td->notify_temp = trip->temperature;
-		td->threshold -= trip->hysteresis;
 
-		if (trip->type == THERMAL_TRIP_PASSIVE)
-			tz->passive++;
-		else if (trip->type == THERMAL_TRIP_CRITICAL ||
-			 trip->type == THERMAL_TRIP_HOT)
-			handle_critical_trips(tz, trip);
+			if (trip->type == THERMAL_TRIP_PASSIVE)
+				tz->passive++;
+			else if (trip->type == THERMAL_TRIP_CRITICAL ||
+				 trip->type == THERMAL_TRIP_HOT)
+				handle_critical_trips(tz, trip);
+		}
+
+		if (td->threshold < tz->temperature && td->threshold > *low)
+			*low = td->threshold;
+
+		if (td->threshold > tz->temperature && td->threshold < *high)
+			*high = td->threshold;
 	}
 }
 
@@ -545,6 +560,8 @@ void __thermal_zone_device_update(struct thermal_zone_device *tz,
 {
 	struct thermal_governor *governor = thermal_get_tz_governor(tz);
 	struct thermal_trip_desc *td;
+	int low = -INT_MAX, high = INT_MAX;
+
 	LIST_HEAD(way_down_list);
 	LIST_HEAD(way_up_list);
 	int temp, ret;
@@ -580,10 +597,9 @@ void __thermal_zone_device_update(struct thermal_zone_device *tz,
 
 	tz->notify_event = event;
 
-	for_each_trip_desc(tz, td)
-		handle_thermal_trip(tz, td, &way_up_list, &way_down_list);
+	handle_thermal_trip(tz, &way_up_list, &way_down_list, &low, &high);
 
-	thermal_zone_set_trips(tz);
+	thermal_zone_set_trips(tz, low, high);
 
 	list_sort(NULL, &way_up_list, thermal_trip_notify_cmp);
 	list_for_each_entry(td, &way_up_list, notify_list_node)

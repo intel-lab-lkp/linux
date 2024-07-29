@@ -76,24 +76,14 @@ EXPORT_SYMBOL_GPL(thermal_zone_get_num_trips);
  *
  * It does not return a value
  */
-void thermal_zone_set_trips(struct thermal_zone_device *tz)
+void thermal_zone_set_trips(struct thermal_zone_device *tz, int low, int high)
 {
-	const struct thermal_trip_desc *td;
-	int low = -INT_MAX, high = INT_MAX;
 	int ret;
 
 	lockdep_assert_held(&tz->lock);
 
 	if (!tz->ops.set_trips)
 		return;
-
-	for_each_trip_desc(tz, td) {
-		if (td->threshold < tz->temperature && td->threshold > low)
-			low = td->threshold;
-
-		if (td->threshold > tz->temperature && td->threshold < high)
-			high = td->threshold;
-	}
 
 	/* No need to change trip points */
 	if (tz->prev_low_trip == low && tz->prev_high_trip == high)
