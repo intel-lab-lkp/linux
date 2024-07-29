@@ -40,6 +40,21 @@ config THERMAL_DEBUGFS
 	  Say Y to allow the thermal subsystem to collect diagnostic
 	  information that can be accessed via debugfs.
 
+config THERMAL_THRESHOLDS
+	bool "Thermal thresholds notification mechanism"
+	depends on THERMAL_NETLINK
+	help
+	  The userspace implements thermal engines which needs to get
+	  notified when temperature thresholds are crossed the way up
+	  and down. These notification allow them to analyze the
+	  thermal situation of the platform and take decision to
+	  fulfill specific thermal profile like 'balanced',
+	  'performance' or 'power saving'. In addition, the
+	  temperature of the skin sensor is very important in this
+	  case and must be monitored as well.
+
+	  If in doubt, say Y
+
 config THERMAL_EMERGENCY_POWEROFF_DELAY_MS
 	int "Emergency poweroff delay in milli-seconds"
 	default 0
