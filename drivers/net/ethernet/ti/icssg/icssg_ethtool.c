@@ -90,6 +90,12 @@ static void emac_get_strings(struct net_device *ndev, u32 stringset, u8 *data)
 				p += ETH_GSTRING_LEN;
 			}
 		}
+
+		for (i = 0; i < ICSSG_NUM_PA_STATS; i++) {
+			memcpy(p, icssg_all_pa_stats[i].name, ETH_GSTRING_LEN);
+			p += ETH_GSTRING_LEN;
+		}
+
 		break;
 	default:
 		break;
@@ -100,13 +106,16 @@ static void emac_get_ethtool_stats(struct net_device *ndev,
 				   struct ethtool_stats *stats, u64 *data)
 {
 	struct prueth_emac *emac = netdev_priv(ndev);
-	int i;
+	int i, j;
 
 	emac_update_hardware_stats(emac);
 
 	for (i = 0; i < ARRAY_SIZE(icssg_all_stats); i++)
 		if (!icssg_all_stats[i].standard_stats)
 			*(data++) = emac->stats[i];
+
+	for (j = 0; j < ICSSG_NUM_PA_STATS; j++)
+		*(data++) = emac->stats[i + j];
 }
 
 static int emac_get_ts_info(struct net_device *ndev,
