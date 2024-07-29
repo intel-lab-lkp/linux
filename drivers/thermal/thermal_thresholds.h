@@ -1,8 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 
-#define THERMAL_THRESHOLD_WAY_UP   BIT(0)
-#define THERMAL_THRESHOLD_WAY_DOWN BIT(1)
-
 struct threshold {
 	int temperature;
 	int direction;
@@ -12,9 +9,9 @@ struct threshold {
 #ifdef CONFIG_THERMAL_THRESHOLDS
 int thermal_thresholds_init(struct thermal_zone_device *tz);
 void thermal_thresholds_exit(struct thermal_zone_device *tz);
-void thermal_thresholds_flush(struct thermal_zone_device *tz);
-int thermal_thresholds_add(struct thermal_zone_device *tz, int temperature, int direction);
-int thermal_thresholds_delete(struct thermal_zone_device *tz, int temperature, int direction);
+void thermal_thresholds_flush(struct thermal_zone_device *tz, pid_t pid);
+int thermal_thresholds_add(struct thermal_zone_device *tz, int temperature, int direction, pid_t pid);
+int thermal_thresholds_delete(struct thermal_zone_device *tz, int temperature, int direction, pid_t pid);
 int thermal_thresholds_handle(struct thermal_zone_device *tz, int *low, int *high);
 int thermal_thresholds_for_each(struct thermal_zone_device *tz,
 				int (*cb)(struct threshold *, void *arg), void *arg);
@@ -29,17 +26,17 @@ static inline void thermal_thresholds_exit(struct thermal_zone_device *tz)
 	;
 }
 
-static inline void thermal_thresholds_flush(struct thermal_zone_device *tz)
+static inline void thermal_thresholds_flush(struct thermal_zone_device *tz, pid_t pid)
 {
 	;
 }
 
-static inline int thermal_thresholds_add(struct thermal_zone_device *tz, int temperature, int direction)
+static inline int thermal_thresholds_add(struct thermal_zone_device *tz, int temperature, int direction, pid_t pid)
 {
 	return 0;
 }
 
-static inline int thermal_thresholds_delete(struct thermal_zone_device *tz, int temperature, int direction)
+static inline int thermal_thresholds_delete(struct thermal_zone_device *tz, int temperature, int direction, pid_t pid)
 {
 	return 0;
 }
