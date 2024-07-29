@@ -78,47 +78,89 @@ err:
 	return rc;
 }
 
-static int __set_clk_rates(struct device_node *node, bool clk_supplier)
+static int __set_clk_rate(struct device_node *node, bool clk_supplier, int index,
+			  unsigned long rate)
 {
 	struct of_phandle_args clkspec;
-	int rc, index = 0;
 	struct clk *clk;
-	u32 rate;
+	int rc;
 
-	of_property_for_each_u32(node, "assigned-clock-rates", rate) {
-		if (rate) {
-			rc = of_parse_phandle_with_args(node, "assigned-clocks",
+	rc = of_parse_phandle_with_args(node, "assigned-clocks",
 					"#clock-cells",	index, &clkspec);
-			if (rc < 0) {
-				/* skip empty (null) phandles */
-				if (rc == -ENOENT)
-					continue;
-				else
-					return rc;
-			}
-			if (clkspec.np == node && !clk_supplier) {
-				of_node_put(clkspec.np);
-				return 0;
-			}
+	if (rc < 0)
+		return rc;
 
-			clk = of_clk_get_from_provider(&clkspec);
-			of_node_put(clkspec.np);
-			if (IS_ERR(clk)) {
-				if (PTR_ERR(clk) != -EPROBE_DEFER)
-					pr_warn("clk: couldn't get clock %d for %pOF\n",
-						index, node);
-				return PTR_ERR(clk);
-			}
-
-			rc = clk_set_rate(clk, rate);
-			if (rc < 0)
-				pr_err("clk: couldn't set %s clk rate to %u (%d), current rate: %lu\n",
-				       __clk_get_name(clk), rate, rc,
-				       clk_get_rate(clk));
-			clk_put(clk);
-		}
-		index++;
+	if (clkspec.np == node && !clk_supplier) {
+		of_node_put(clkspec.np);
+		return 1;
 	}
+
+	clk = of_clk_get_from_provider(&clkspec);
+	of_node_put(clkspec.np);
+	if (IS_ERR(clk)) {
+		if (PTR_ERR(clk) != -EPROBE_DEFER)
+			pr_warn("clk: couldn't get clock %d for %pOF\n",
+				index, node);
+		return PTR_ERR(clk);
+	}
+
+	rc = clk_set_rate(clk, rate);
+	if (rc < 0)
+		pr_err("clk: couldn't set %s clk rate to %lu (%d), current rate: %lu\n",
+		       __clk_get_name(clk), rate, rc, clk_get_rate(clk));
+	clk_put(clk);
+
+	return 0;
+}
+
+static int __set_clk_rates(struct device_node *node, bool clk_supplier)
+{
+	int rc, index = 0;
+	u64 rate;
+	u32 rate_32;
+	bool is_rate_32 = false;
+
+	if (!of_find_property(node, "assigned-clock-rates-u64", NULL))
+		is_rate_32 = true;
+
+	if (is_rate_32) {
+		of_property_for_each_u32(node, "assigned-clock-rates", rate_32) {
+			if (rate_32) {
+				rc = __set_clk_rate(node, clk_supplier, index, rate_32);
+
+				if (rc == 1 && !clk_supplier)
+					return 0;
+
+				if (rc < 0) {
+					/* skip empty (null) phandles */
+					if (rc == -ENOENT)
+						continue;
+					else
+						return rc;
+				}
+			}
+			index++;
+		}
+	} else {
+		of_property_for_each_u64(node, "assigned-clock-rates-u64", rate) {
+			if (rate) {
+				rc = __set_clk_rate(node, clk_supplier, index, rate);
+
+				if (rc == 1 && !clk_supplier)
+					return 0;
+
+				if (rc < 0) {
+					/* skip empty (null) phandles */
+					if (rc == -ENOENT)
+						continue;
+					else
+						return rc;
+				}
+			}
+			index++;
+		}
+	}
+
 	return 0;
 }
 
