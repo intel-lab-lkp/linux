@@ -25,6 +25,13 @@ static __be32 map_status(__be32 status)
 	case nfserr_file_open:
 		status = nfserr_acces;
 		break;
+	case nfserr_symlink_not_dir:
+		status = nfserr_notdir;
+		break;
+	case nfserr_symlink:
+	case nfserr_wrong_type:
+		status = nfserr_inval;
+		break;
 	}
 	return status;
 }
