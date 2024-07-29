@@ -92,6 +92,8 @@ examples:
             ovdd-supply = <&camera_vddo_1v8>;
             dvdd-supply = <&camera_vddd_1v2>;
 
+            reset-gpios = <&gpio 50 GPIO_ACTIVE_LOW>;
+
             port {
                 imx335: endpoint {
                     remote-endpoint = <&cam>;
