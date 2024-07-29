@@ -61,6 +61,19 @@ properties:
   mboxes:
     minItems: 2
 
+  ti,partial-io-wakeup-sources:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    description: |
+      Partial-IO is a low power mode in which nearly everything is powered
+      off. Only pins associated with a few hardware units are capable to
+      wakeup the system from this mode. It is a very small subset of all
+      device nodes that have the 'wakeup-source' property.
+      ti,partial-io-wakeup-sources is the list of device nodes that can
+      wakeup the system from Partial-IO.
+
+      This low power mode depends on the capabilities of the SoC and
+      the firmware.
+
   ti,host-id:
     $ref: /schemas/types.yaml#/definitions/uint32
     description: |
