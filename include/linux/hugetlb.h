@@ -553,10 +553,6 @@ unsigned long
 hugetlb_mmap_check_and_align(struct file *file, unsigned long addr,
 			     unsigned long len, unsigned long flags);
 
-unsigned long
-generic_hugetlb_get_unmapped_area(struct file *file, unsigned long addr,
-				  unsigned long len, unsigned long pgoff,
-				  unsigned long flags);
 
 /*
  * huegtlb page specific state flags.  These flags are located in page.private
