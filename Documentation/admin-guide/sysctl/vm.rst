@@ -65,6 +65,7 @@ Currently, these files are in /proc/sys/vm:
 - page-cluster
 - page_lock_unfairness
 - panic_on_oom
+- pcp_batch_scale_max
 - percpu_pagelist_high_fraction
 - stat_interval
 - stat_refresh
@@ -843,6 +844,22 @@ according to your policy of failover.
 
 panic_on_oom=2+kdump gives you very strong tool to investigate
 why oom happens. You can get snapshot.
+
+
+pcp_batch_scale_max
+===================
+
+In page allocator, PCP (Per-CPU pageset) is refilled and drained in
+batches.  The batch number is scaled automatically to improve page
+allocation/free throughput.  But too large scale factor may hurt
+latency.  This option sets the upper limit of scale factor to limit
+the maximum latency.
+
+The range for this parameter spans from 0 to 6, with a default value of 5.
+The value assigned to 'N' signifies that during each refilling or draining
+process, a maximum of (batch << N) pages will be involved, where "batch"
+represents the default batch size automatically computed by the kernel for
+each zone.
 
 
 percpu_pagelist_high_fraction

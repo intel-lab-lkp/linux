@@ -273,6 +273,8 @@ int min_free_kbytes = 1024;
 int user_min_free_kbytes = -1;
 static int watermark_boost_factor __read_mostly = 15000;
 static int watermark_scale_factor = 10;
+static int pcp_batch_scale_max = 5;
+static int sysctl_6 = 6;
 
 /* movable_zone is the "real" zone pages in ZONE_MOVABLE are taken from */
 int movable_zone;
@@ -2334,7 +2336,7 @@ static void drain_pages_zone(unsigned int cpu, struct zone *zone)
 	int count = READ_ONCE(pcp->count);
 
 	while (count) {
-		int to_drain = min(count, pcp->batch << CONFIG_PCP_BATCH_SCALE_MAX);
+		int to_drain = min(count, pcp->batch << pcp_batch_scale_max);
 		count -= to_drain;
 
 		spin_lock(&pcp->lock);
@@ -2462,7 +2464,7 @@ static int nr_pcp_free(struct per_cpu_pages *pcp, int batch, int high, bool free
 
 	/* Free as much as possible if batch freeing high-order pages. */
 	if (unlikely(free_high))
-		return min(pcp->count, batch << CONFIG_PCP_BATCH_SCALE_MAX);
+		return min(pcp->count, batch << pcp_batch_scale_max);
 
 	/* Check for PCP disabled or boot pageset */
 	if (unlikely(high < batch))
@@ -2494,7 +2496,7 @@ static int nr_pcp_high(struct per_cpu_pages *pcp, struct zone *zone,
 		return 0;
 
 	if (unlikely(free_high)) {
-		pcp->high = max(high - (batch << CONFIG_PCP_BATCH_SCALE_MAX),
+		pcp->high = max(high - (batch << pcp_batch_scale_max),
 				high_min);
 		return 0;
 	}
@@ -2564,9 +2566,9 @@ static void free_unref_page_commit(struct zone *zone, struct per_cpu_pages *pcp,
 	} else if (pcp->flags & PCPF_PREV_FREE_HIGH_ORDER) {
 		pcp->flags &= ~PCPF_PREV_FREE_HIGH_ORDER;
 	}
-	if (pcp->free_count < (batch << CONFIG_PCP_BATCH_SCALE_MAX))
+	if (pcp->free_count < (batch << pcp_batch_scale_max))
 		pcp->free_count = min(pcp->free_count + (1 << order),
-				      batch << CONFIG_PCP_BATCH_SCALE_MAX);
+				      batch << pcp_batch_scale_max);
 	high = nr_pcp_high(pcp, zone, batch, free_high);
 	if (pcp->count >= high) {
 		free_pcppages_bulk(zone, nr_pcp_free(pcp, batch, high, free_high),
@@ -2908,7 +2910,7 @@ static int nr_pcp_alloc(struct per_cpu_pages *pcp, struct zone *zone, int order)
 		 * subsequent allocation of order-0 pages without any freeing.
 		 */
 		if (batch <= max_nr_alloc &&
-		    pcp->alloc_factor < CONFIG_PCP_BATCH_SCALE_MAX)
+		    pcp->alloc_factor < pcp_batch_scale_max)
 			pcp->alloc_factor++;
 		batch = min(batch, max_nr_alloc);
 	}
@@ -6274,6 +6276,15 @@ static struct ctl_table page_alloc_sysctl_table[] = {
 		.mode		= 0644,
 		.proc_handler	= percpu_pagelist_high_fraction_sysctl_handler,
 		.extra1		= SYSCTL_ZERO,
+	},
+	{
+		.procname	= "pcp_batch_scale_max",
+		.data		= &pcp_batch_scale_max,
+		.maxlen		= sizeof(pcp_batch_scale_max),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= &sysctl_6,
 	},
 	{
 		.procname	= "lowmem_reserve_ratio",
