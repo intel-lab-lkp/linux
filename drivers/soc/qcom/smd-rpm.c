@@ -224,12 +224,21 @@ static const struct rpmsg_device_id qcom_smd_rpm_id_table[] = {
 };
 MODULE_DEVICE_TABLE(rpmsg, qcom_smd_rpm_id_table);
 
+static const struct of_device_id smd_rpm_of_match[] = {
+	{ .compatible = "qcom,smd-rpm" },
+	{ },
+};
+MODULE_DEVICE_TABLE(of, smd_rpm_of_match);
+
 static struct rpmsg_driver qcom_smd_rpm_driver = {
 	.probe = qcom_smd_rpm_probe,
 	.remove = qcom_smd_rpm_remove,
 	.callback = qcom_smd_rpm_callback,
 	.id_table = qcom_smd_rpm_id_table,
-	.drv.name = "qcom_smd_rpm",
+	.drv = {
+		.name = "qcom_smd_rpm",
+		.of_match_table = smd_rpm_of_match,
+	},
 };
 
 static int __init qcom_smd_rpm_init(void)
