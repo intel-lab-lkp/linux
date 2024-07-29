@@ -618,17 +618,6 @@ static int vsc73xx_phy_write(struct dsa_switch *ds, int phy, int regnum,
 	if (ret)
 		goto err;
 
-	/* It was found through tedious experiments that this router
-	 * chip really hates to have it's PHYs reset. They
-	 * never recover if that happens: autonegotiation stops
-	 * working after a reset. Just filter out this command.
-	 * (Resetting the whole chip is OK.)
-	 */
-	if (regnum == 0 && (val & BIT(15))) {
-		dev_info(vsc->dev, "reset PHY - disallowed\n");
-		return 0;
-	}
-
 	cmd = FIELD_PREP(VSC73XX_MII_CMD_PHY_ADDR, phy) |
 	      FIELD_PREP(VSC73XX_MII_CMD_PHY_REG, regnum) |
 	      FIELD_PREP(VSC73XX_MII_CMD_WRITE_DATA, val);
