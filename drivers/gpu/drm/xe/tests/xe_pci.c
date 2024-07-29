@@ -20,15 +20,15 @@ struct kunit_test_data {
 static int dev_to_xe_device_fn(struct device *dev, void *__data)
 
 {
-	struct drm_device *drm = dev_get_drvdata(dev);
+	struct xe_device *xe = kdev_to_xe_device(dev);
 	struct kunit_test_data *data = __data;
 	int ret = 0;
 	int idx;
 
 	data->ndevs++;
 
-	if (drm_dev_enter(drm, &idx))
-		ret = data->xe_fn(to_xe_device(dev_get_drvdata(dev)));
+	if (drm_dev_enter(&xe->drm, &idx))
+		ret = data->xe_fn(xe);
 	drm_dev_exit(idx);
 
 	return ret;
