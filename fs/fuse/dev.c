@@ -31,6 +31,8 @@ MODULE_ALIAS("devname:fuse");
 
 static struct kmem_cache *fuse_req_cachep;
 
+static void fuse_request_timeout(struct timer_list *timer);
+
 static struct fuse_dev *fuse_get_dev(struct file *file)
 {
 	/*
@@ -48,6 +50,8 @@ static void fuse_request_init(struct fuse_mount *fm, struct fuse_req *req)
 	refcount_set(&req->count, 1);
 	__set_bit(FR_PENDING, &req->flags);
 	req->fm = fm;
+	if (fm->fc->req_timeout)
+		timer_setup(&req->timer, fuse_request_timeout, 0);
 }
 
 static struct fuse_req *fuse_request_alloc(struct fuse_mount *fm, gfp_t flags)
@@ -277,11 +281,14 @@ static void flush_bg_queue(struct fuse_conn *fc)
  * the 'end' callback is called if given, else the reference to the
  * request is released
  */
-void fuse_request_end(struct fuse_req *req)
+static void do_fuse_request_end(struct fuse_req *req, bool from_timer_callback)
 {
 	struct fuse_mount *fm = req->fm;
 	struct fuse_conn *fc = fm->fc;
 	struct fuse_iqueue *fiq = &fc->iq;
+
+	if (from_timer_callback)
+		req->out.h.error = -ETIME;
 
 	if (test_and_set_bit(FR_FINISHED, &req->flags))
 		goto put_request;
@@ -296,8 +303,6 @@ void fuse_request_end(struct fuse_req *req)
 		list_del_init(&req->intr_entry);
 		spin_unlock(&fiq->lock);
 	}
-	WARN_ON(test_bit(FR_PENDING, &req->flags));
-	WARN_ON(test_bit(FR_SENT, &req->flags));
 	if (test_bit(FR_BACKGROUND, &req->flags)) {
 		spin_lock(&fc->bg_lock);
 		clear_bit(FR_BACKGROUND, &req->flags);
@@ -324,12 +329,104 @@ void fuse_request_end(struct fuse_req *req)
 		wake_up(&req->waitq);
 	}
 
+	if (!from_timer_callback && req->timer.function)
+		timer_delete_sync(&req->timer);
+
 	if (test_bit(FR_ASYNC, &req->flags))
 		req->args->end(fm, req->args, req->out.h.error);
 put_request:
 	fuse_put_request(req);
 }
+
+void fuse_request_end(struct fuse_req *req)
+{
+	WARN_ON(test_bit(FR_PENDING, &req->flags));
+	WARN_ON(test_bit(FR_SENT, &req->flags));
+
+	do_fuse_request_end(req, false);
+}
 EXPORT_SYMBOL_GPL(fuse_request_end);
+
+static void timeout_inflight_req(struct fuse_req *req)
+{
+	struct fuse_conn *fc = req->fm->fc;
+	struct fuse_iqueue *fiq = &fc->iq;
+	struct fuse_pqueue *fpq;
+
+	spin_lock(&fiq->lock);
+	fpq = req->fpq;
+	spin_unlock(&fiq->lock);
+
+	/*
+	 * If fpq has not been set yet, then the request is aborting (which
+	 * clears FR_PENDING flag) before dev_do_read (which sets req->fpq)
+	 * has been called. Let the abort handler handle this request.
+	 */
+	if (!fpq)
+		return;
+
+	spin_lock(&fpq->lock);
+	if (!fpq->connected || req->out.h.error == -ECONNABORTED) {
+		/*
+		 * Connection is being aborted or the fuse_dev is being released.
+		 * The abort / release will clean up the request
+		 */
+		spin_unlock(&fpq->lock);
+		return;
+	}
+
+	if (!test_bit(FR_PRIVATE, &req->flags))
+		list_del_init(&req->list);
+
+	spin_unlock(&fpq->lock);
+
+	do_fuse_request_end(req, true);
+}
+
+static void timeout_pending_req(struct fuse_req *req)
+{
+	struct fuse_conn *fc = req->fm->fc;
+	struct fuse_iqueue *fiq = &fc->iq;
+	bool background = test_bit(FR_BACKGROUND, &req->flags);
+
+	if (background)
+		spin_lock(&fc->bg_lock);
+	spin_lock(&fiq->lock);
+
+	if (!test_bit(FR_PENDING, &req->flags)) {
+		spin_unlock(&fiq->lock);
+		if (background)
+			spin_unlock(&fc->bg_lock);
+		timeout_inflight_req(req);
+		return;
+	}
+
+	if (!test_bit(FR_PRIVATE, &req->flags))
+		list_del_init(&req->list);
+
+	spin_unlock(&fiq->lock);
+	if (background)
+		spin_unlock(&fc->bg_lock);
+
+	do_fuse_request_end(req, true);
+}
+
+static void fuse_request_timeout(struct timer_list *timer)
+{
+	struct fuse_req *req = container_of(timer, struct fuse_req, timer);
+
+	/*
+	 * Request reply is being finished by the kernel right now.
+	 * No need to time out the request.
+	 */
+	if (test_and_set_bit(FR_FINISHING, &req->flags))
+		return;
+
+	if (test_bit(FR_PENDING, &req->flags))
+		timeout_pending_req(req);
+	else
+		timeout_inflight_req(req);
+}
 
 static int queue_interrupt(struct fuse_req *req)
 {
@@ -409,7 +506,8 @@ static void request_wait_answer(struct fuse_req *req)
 
 static void __fuse_request_send(struct fuse_req *req)
 {
-	struct fuse_iqueue *fiq = &req->fm->fc->iq;
+	struct fuse_conn *fc = req->fm->fc;
+	struct fuse_iqueue *fiq = &fc->iq;
 
 	BUG_ON(test_bit(FR_BACKGROUND, &req->flags));
 	spin_lock(&fiq->lock);
@@ -421,6 +519,10 @@ static void __fuse_request_send(struct fuse_req *req)
 		/* acquire extra reference, since request is still needed
 		   after fuse_request_end() */
 		__fuse_get_request(req);
+		if (req->timer.function) {
+			req->timer.expires = jiffies + fc->req_timeout;
+			add_timer(&req->timer);
+		}
 		queue_request_and_unlock(fiq, req);
 
 		request_wait_answer(req);
@@ -539,6 +641,10 @@ static bool fuse_request_queue_background(struct fuse_req *req)
 		if (fc->num_background == fc->max_background)
 			fc->blocked = 1;
 		list_add_tail(&req->list, &fc->bg_queue);
+		if (req->timer.function) {
+			req->timer.expires = jiffies + fc->req_timeout;
+			add_timer(&req->timer);
+		}
 		flush_bg_queue(fc);
 		queued = true;
 	}
@@ -1268,6 +1374,9 @@ static ssize_t fuse_dev_do_read(struct fuse_dev *fud, struct file *file,
 	req = list_entry(fiq->pending.next, struct fuse_req, list);
 	clear_bit(FR_PENDING, &req->flags);
 	list_del_init(&req->list);
+	/* Acquire a reference in case the timeout handler starts executing */
+	__fuse_get_request(req);
+	req->fpq = fpq;
 	spin_unlock(&fiq->lock);
 
 	args = req->args;
@@ -1280,6 +1389,7 @@ static ssize_t fuse_dev_do_read(struct fuse_dev *fud, struct file *file,
 		if (args->opcode == FUSE_SETXATTR)
 			req->out.h.error = -E2BIG;
 		fuse_request_end(req);
+		fuse_put_request(req);
 		goto restart;
 	}
 	spin_lock(&fpq->lock);
@@ -1316,13 +1426,33 @@ static ssize_t fuse_dev_do_read(struct fuse_dev *fud, struct file *file,
 	}
 	hash = fuse_req_hash(req->in.h.unique);
 	list_move_tail(&req->list, &fpq->processing[hash]);
-	__fuse_get_request(req);
 	set_bit(FR_SENT, &req->flags);
 	spin_unlock(&fpq->lock);
 	/* matches barrier in request_wait_answer() */
 	smp_mb__after_atomic();
 	if (test_bit(FR_INTERRUPTED, &req->flags))
 		queue_interrupt(req);
+
+	/*
+	 * Check if the timeout handler is running / ran. If it did, we need to
+	 * remove the request from any lists in case the timeout handler finished
+	 * before dev_do_read moved the request to the processing list.
+	 *
+	 * Check FR_SENT to distinguish whether the timeout or the write handler
+	 * is finishing the request. However, there can be the case where the
+	 * timeout handler and resend handler are running concurrently, so we
+	 * need to also check the FR_PENDING bit.
+	 */
+	if (test_bit(FR_FINISHING, &req->flags) &&
+	    (test_bit(FR_SENT, &req->flags) || test_bit(FR_PENDING, &req->flags))) {
+		spin_lock(&fpq->lock);
+		if (!test_bit(FR_PRIVATE, &req->flags))
+			list_del_init(&req->list);
+		spin_unlock(&fpq->lock);
+		fuse_put_request(req);
+		return -ETIME;
+	}
+
 	fuse_put_request(req);
 
 	return reqsize;
@@ -1332,6 +1462,7 @@ out_end:
 		list_del_init(&req->list);
 	spin_unlock(&fpq->lock);
 	fuse_request_end(req);
+	fuse_put_request(req);
 	return err;
 
  err_unlock:
@@ -1806,8 +1937,25 @@ static void fuse_resend(struct fuse_conn *fc)
 		struct fuse_pqueue *fpq = &fud->pq;
 
 		spin_lock(&fpq->lock);
-		for (i = 0; i < FUSE_PQ_HASH_SIZE; i++)
+		for (i = 0; i < FUSE_PQ_HASH_SIZE; i++) {
+			list_for_each_entry(req, &fpq->processing[i], list) {
+				/*
+				 * We must acquire a reference here in case the timeout
+				 * handler is running at the same time. Else the
+				 * request might get freed out from under us
+				 */
+				__fuse_get_request(req);
+
+				/*
+				 * While we have an acquired reference on the request,
+				 * the request must remain on the list so that we
+				 * can release the reference on it
+				 */
+				set_bit(FR_PRIVATE, &req->flags);
+			}
+
 			list_splice_tail_init(&fpq->processing[i], &to_queue);
+		}
 		spin_unlock(&fpq->lock);
 	}
 	spin_unlock(&fc->lock);
@@ -1820,6 +1968,12 @@ static void fuse_resend(struct fuse_conn *fc)
 	}
 
 	spin_lock(&fiq->lock);
+	list_for_each_entry_safe(req, next, &to_queue, list) {
+		if (test_bit(FR_FINISHING, &req->flags))
+			list_del_init(&req->list);
+		clear_bit(FR_PRIVATE, &req->flags);
+		fuse_put_request(req);
+	}
 	/* iq and pq requests are both oldest to newest */
 	list_splice(&to_queue, &fiq->pending);
 	fiq->ops->wake_pending_and_unlock(fiq);
@@ -1951,9 +2105,10 @@ static ssize_t fuse_dev_do_write(struct fuse_dev *fud,
 		goto copy_finish;
 	}
 
+	__fuse_get_request(req);
+
 	/* Is it an interrupt reply ID? */
 	if (oh.unique & FUSE_INT_REQ_BIT) {
-		__fuse_get_request(req);
 		spin_unlock(&fpq->lock);
 
 		err = 0;
@@ -1966,6 +2121,13 @@ static ssize_t fuse_dev_do_write(struct fuse_dev *fud,
 
 		fuse_put_request(req);
 
+		goto copy_finish;
+	}
+
+	if (test_and_set_bit(FR_FINISHING, &req->flags)) {
+		/* timeout handler is already finishing the request */
+		spin_unlock(&fpq->lock);
+		fuse_put_request(req);
 		goto copy_finish;
 	}
 
@@ -1995,6 +2157,7 @@ static ssize_t fuse_dev_do_write(struct fuse_dev *fud,
 	spin_unlock(&fpq->lock);
 
 	fuse_request_end(req);
+	fuse_put_request(req);
 out:
 	return err ? err : nbytes;
 
@@ -2260,13 +2423,21 @@ int fuse_dev_release(struct inode *inode, struct file *file)
 	if (fud) {
 		struct fuse_conn *fc = fud->fc;
 		struct fuse_pqueue *fpq = &fud->pq;
+		struct fuse_req *req;
 		LIST_HEAD(to_end);
 		unsigned int i;
 
 		spin_lock(&fpq->lock);
 		WARN_ON(!list_empty(&fpq->io));
-		for (i = 0; i < FUSE_PQ_HASH_SIZE; i++)
+		for (i = 0; i < FUSE_PQ_HASH_SIZE; i++) {
+			/*
+			 * Set the req error here so that the timeout
+			 * handler knows it's being released
+			 */
+			list_for_each_entry(req, &fpq->processing[i], list)
+				req->out.h.error = -ECONNABORTED;
 			list_splice_init(&fpq->processing[i], &to_end);
+		}
 		spin_unlock(&fpq->lock);
 
 		end_requests(&to_end);

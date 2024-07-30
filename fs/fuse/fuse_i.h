@@ -375,6 +375,8 @@ struct fuse_io_priv {
  * FR_FINISHED:		request is finished
  * FR_PRIVATE:		request is on private list
  * FR_ASYNC:		request is asynchronous
+ * FR_FINISHING:	request is being finished, by either the timeout handler
+ *			or the reply handler
  */
 enum fuse_req_flag {
 	FR_ISREPLY,
@@ -389,6 +391,7 @@ enum fuse_req_flag {
 	FR_FINISHED,
 	FR_PRIVATE,
 	FR_ASYNC,
+	FR_FINISHING,
 };
 
 /**
@@ -435,6 +438,12 @@ struct fuse_req {
 
 	/** fuse_mount this request belongs to */
 	struct fuse_mount *fm;
+
+	/** page queue this request has been added to */
+	struct fuse_pqueue *fpq;
+
+	/** optional timer for request replies, if timeout is enabled */
+	struct timer_list timer;
 };
 
 struct fuse_iqueue;
@@ -574,6 +583,8 @@ struct fuse_fs_context {
 	enum fuse_dax_mode dax_mode;
 	unsigned int max_read;
 	unsigned int blksize;
+	/*  Request timeout (in seconds). 0 = no timeout (infinite wait) */
+	unsigned int req_timeout;
 	const char *subtype;
 
 	/* DAX device, may be NULL */
@@ -632,6 +643,9 @@ struct fuse_conn {
 
 	/** Constrain ->max_pages to this value during feature negotiation */
 	unsigned int max_pages_limit;
+
+	/* Request timeout (in jiffies). 0 = no timeout (infinite wait) */
+	unsigned long req_timeout;
 
 	/** Input queue */
 	struct fuse_iqueue iq;
