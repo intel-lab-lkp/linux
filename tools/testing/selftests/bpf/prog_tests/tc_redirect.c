@@ -68,6 +68,7 @@
 		__FILE__, __LINE__, strerror(errno), ##__VA_ARGS__)
 
 static const char * const namespaces[] = {NS_SRC, NS_FWD, NS_DST, NULL};
+static struct netns_obj *netns_objs[3];
 
 static int write_file(const char *path, const char *newval)
 {
@@ -85,29 +86,52 @@ static int write_file(const char *path, const char *newval)
 	return 0;
 }
 
-static int netns_setup_namespaces(const char *verb)
+enum NETNS_VERB {
+	NETNS_ADD,
+	NETNS_DEL,
+};
+
+static int netns_setup_namespaces(enum NETNS_VERB verb)
 {
 	const char * const *ns = namespaces;
-	char cmd[128];
+	struct netns_obj **ns_obj = netns_objs;
 
 	while (*ns) {
-		snprintf(cmd, sizeof(cmd), "ip netns %s %s", verb, *ns);
-		if (!ASSERT_OK(system(cmd), cmd))
-			return -1;
+		if (verb == NETNS_ADD) {
+			*ns_obj = netns_new(*ns, false);
+			if (!*ns_obj) {
+				log_err("netns_new failed");
+				return -1;
+			}
+		} else {
+			if (!*ns_obj) {
+				log_err("netns_obj is NULL");
+				return -1;
+			}
+			netns_free(*ns_obj);
+			*ns_obj = NULL;
+		}
 		ns++;
+		ns_obj++;
 	}
 	return 0;
 }
 
-static void netns_setup_namespaces_nofail(const char *verb)
+static void netns_setup_namespaces_nofail(enum NETNS_VERB verb)
 {
 	const char * const *ns = namespaces;
-	char cmd[128];
+	struct netns_obj **ns_obj = netns_objs;
 
 	while (*ns) {
-		snprintf(cmd, sizeof(cmd), "ip netns %s %s > /dev/null 2>&1", verb, *ns);
-		system(cmd);
+		if (verb == NETNS_ADD) {
+			*ns_obj = netns_new(*ns, false);
+		} else {
+			if (*ns_obj)
+				netns_free(*ns_obj);
+			*ns_obj = NULL;
+		}
 		ns++;
+		ns_obj++;
 	}
 }
 
@@ -1250,17 +1274,17 @@ fail:
 	({                                                                                  \
 		struct netns_setup_result setup_result = { .dev_mode = mode, };             \
 		if (test__start_subtest(#name))                                             \
-			if (ASSERT_OK(netns_setup_namespaces("add"), "setup namespaces")) { \
+			if (ASSERT_OK(netns_setup_namespaces(NETNS_ADD), "setup namespaces")) { \
 				if (ASSERT_OK(netns_setup_links_and_routes(&setup_result),  \
 					      "setup links and routes"))                    \
 					test_ ## name(&setup_result);                       \
-				netns_setup_namespaces("delete");                           \
+				netns_setup_namespaces(NETNS_DEL);                          \
 			}                                                                   \
 	})
 
 static void *test_tc_redirect_run_tests(void *arg)
 {
-	netns_setup_namespaces_nofail("delete");
+	netns_setup_namespaces_nofail(NETNS_DEL);
 
 	RUN_TEST(tc_redirect_peer, MODE_VETH);
 	RUN_TEST(tc_redirect_peer, MODE_NETKIT);
