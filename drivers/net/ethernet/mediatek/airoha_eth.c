@@ -2096,9 +2096,8 @@ static int airoha_hw_init(struct platform_device *pdev,
 	return 0;
 }
 
-static void airoha_hw_cleanup(struct airoha_eth *eth)
+static void airoha_hw_cleanup(struct airoha_qdma *qdma)
 {
-	struct airoha_qdma *qdma = &eth->qdma[0];
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(qdma->q_rx); i++) {
@@ -2714,7 +2713,9 @@ static int airoha_probe(struct platform_device *pdev)
 	return 0;
 
 error:
-	airoha_hw_cleanup(eth);
+	for (i = 0; i < ARRAY_SIZE(eth->qdma); i++)
+		airoha_hw_cleanup(&eth->qdma[i]);
+
 	for (i = 0; i < ARRAY_SIZE(eth->ports); i++) {
 		struct airoha_gdm_port *port = eth->ports[i];
 
@@ -2732,7 +2733,9 @@ static void airoha_remove(struct platform_device *pdev)
 	struct airoha_eth *eth = platform_get_drvdata(pdev);
 	int i;
 
-	airoha_hw_cleanup(eth);
+	for (i = 0; i < ARRAY_SIZE(eth->qdma); i++)
+		airoha_hw_cleanup(&eth->qdma[i]);
+
 	for (i = 0; i < ARRAY_SIZE(eth->ports); i++) {
 		struct airoha_gdm_port *port = eth->ports[i];
 
