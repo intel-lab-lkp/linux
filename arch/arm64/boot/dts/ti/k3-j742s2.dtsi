@@ -1,0 +1,26 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright (C) 2024 Texas Instruments Incorporated - https://www.ti.com/
+ *
+ * EVM Board Schematics: https://www.ti.com/lit/zip/SPAC001
+ */
+
+#include "k3-j784s4.dtsi"
+
+/ {
+	model = "Texas Instruments K3 J742S2 SoC";
+	compatible = "ti,j742s2";
+
+	cpus {
+		cpu-map {
+			/delete-node/ cluster1;
+		};
+	};
+
+	/delete-node/ cpu4;
+	/delete-node/ cpu5;
+	/delete-node/ cpu6;
+	/delete-node/ cpu7;
+};
+
+#include "k3-j742s2-main.dtsi"
