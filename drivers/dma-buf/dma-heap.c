@@ -417,6 +417,11 @@ size_t dma_heap_file_size(struct dma_heap_file *heap_file)
 	return heap_file->fsize;
 }
 
+#define DEFAULT_DMA_BUF_HEAPS_GATHER_LIMIT (128 << 20)
+static int dma_buf_heaps_gather_limit = DEFAULT_DMA_BUF_HEAPS_GATHER_LIMIT;
+module_param_named(gather_limit, dma_buf_heaps_gather_limit, int, 0644);
+MODULE_PARM_DESC(gather_limit, "Asynchronous file reading, with a maximum limit on the amount to be gathered");
+
 static int init_dma_heap_file(struct dma_heap_file *heap_file, int file_fd)
 {
 	struct file *file;
@@ -442,9 +447,8 @@ static int init_dma_heap_file(struct dma_heap_file *heap_file, int file_fd)
 	}
 
 	heap_file->file = file;
-#define DEFAULT_DMA_BUF_HEAPS_GATHER_LIMIT (128 << 20)
 	heap_file->glimit = min_t(size_t, PAGE_ALIGN(fsz),
-				  DEFAULT_DMA_BUF_HEAPS_GATHER_LIMIT);
+				  PAGE_ALIGN(dma_buf_heaps_gather_limit));
 	heap_file->fsize = fsz;
 
 	heap_file->direct = file->f_flags & O_DIRECT;
