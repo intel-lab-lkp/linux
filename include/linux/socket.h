@@ -71,6 +71,7 @@ struct msghdr {
 		void __user	*msg_control_user;
 	};
 	bool		msg_control_is_user : 1;
+	bool		msg_control_copy_to_user : 1;
 	bool		msg_get_inq : 1;/* return INQ after receive */
 	unsigned int	msg_flags;	/* flags on received message */
 	__kernel_size_t	msg_controllen;	/* ancillary data buffer length */
@@ -166,6 +167,11 @@ static inline struct cmsghdr * __cmsg_nxthdr(void *__ctl, __kernel_size_t __size
 static inline struct cmsghdr * cmsg_nxthdr (struct msghdr *__msg, struct cmsghdr *__cmsg)
 {
 	return __cmsg_nxthdr(__msg->msg_control, __msg->msg_controllen, __cmsg);
+}
+
+static inline bool cmsg_copy_to_user(struct cmsghdr *__cmsg)
+{
+	return 0;
 }
 
 static inline size_t msg_data_left(struct msghdr *msg)
@@ -395,6 +401,8 @@ extern int put_cmsg(struct msghdr*, int level, int type, int len, void *data);
 struct timespec64;
 struct __kernel_timespec;
 struct old_timespec32;
+
+DECLARE_STATIC_KEY_FALSE(tx_copy_cmsg_to_user_key);
 
 struct scm_timestamping_internal {
 	struct timespec64 ts[3];

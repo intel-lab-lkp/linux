@@ -1804,7 +1804,7 @@ static inline void sockcm_init(struct sockcm_cookie *sockc,
 	};
 }
 
-int __sock_cmsg_send(struct sock *sk, struct cmsghdr *cmsg,
+int __sock_cmsg_send(struct sock *sk, struct msghdr *msg, struct cmsghdr *cmsg,
 		     struct sockcm_cookie *sockc);
 int sock_cmsg_send(struct sock *sk, struct msghdr *msg,
 		   struct sockcm_cookie *sockc);
