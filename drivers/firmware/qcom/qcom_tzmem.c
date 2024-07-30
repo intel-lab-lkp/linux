@@ -40,7 +40,6 @@ struct qcom_tzmem_pool {
 };
 
 struct qcom_tzmem_chunk {
-	phys_addr_t paddr;
 	size_t size;
 	struct qcom_tzmem_pool *owner;
 };
@@ -385,7 +384,6 @@ again:
 		return NULL;
 	}
 
-	chunk->paddr = gen_pool_virt_to_phys(pool->genpool, vaddr);
 	chunk->size = size;
 	chunk->owner = pool;
 
@@ -442,14 +440,25 @@ EXPORT_SYMBOL_GPL(qcom_tzmem_free);
 phys_addr_t qcom_tzmem_to_phys(void *vaddr)
 {
 	struct qcom_tzmem_chunk *chunk;
+	struct radix_tree_iter iter;
+	void __rcu **slot;
+	phys_addr_t ret;
 
 	guard(spinlock_irqsave)(&qcom_tzmem_chunks_lock);
 
-	chunk = radix_tree_lookup(&qcom_tzmem_chunks, (unsigned long)vaddr);
-	if (!chunk)
-		return 0;
+	radix_tree_for_each_slot(slot, &qcom_tzmem_chunks, &iter, 0) {
+		chunk = radix_tree_deref_slot_protected(slot,
+						&qcom_tzmem_chunks_lock);
 
-	return chunk->paddr;
+		ret = gen_pool_virt_to_phys(chunk->owner->genpool,
+					    (unsigned long)vaddr);
+		if (ret == -1)
+			continue;
+
+		return ret;
+	}
+
+	return 0;
 }
 EXPORT_SYMBOL_GPL(qcom_tzmem_to_phys);
 
