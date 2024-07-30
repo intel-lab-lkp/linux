@@ -13,11 +13,12 @@
 #include <linux/types.h>
 
 struct dma_heap;
+struct dma_heap_file;
 
 /**
  * struct dma_heap_ops - ops to operate on a given heap
- * @allocate:		allocate dmabuf and return struct dma_buf ptr
- *
+ * @allocate:			allocate dmabuf and return struct dma_buf ptr
+ * @allocate_async_read:	allocate and async read file.
  * allocate returns dmabuf on success, ERR_PTR(-errno) on error.
  */
 struct dma_heap_ops {
@@ -25,6 +26,9 @@ struct dma_heap_ops {
 				    unsigned long len,
 				    u32 fd_flags,
 				    u64 heap_flags);
+	struct dma_buf *(*allocate_async_read)(struct dma_heap *heap,
+					       struct dma_heap_file *heap_file,
+					       u32 fd_flags, u64 heap_flags);
 };
 
 /**

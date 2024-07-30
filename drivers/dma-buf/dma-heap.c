@@ -131,21 +131,27 @@ static int dma_heap_buffer_alloc_and_read(struct dma_heap *heap, int file_fd,
 	struct dma_heap_file heap_file;
 	struct dma_buf *dmabuf;
 	int ret, fd;
+	bool async_read = heap->ops->allocate_async_read ? true : false;
 
 	ret = init_dma_heap_file(&heap_file, file_fd);
 	if (ret)
 		return ret;
 
-	dmabuf = heap->ops->allocate(heap, heap_file.fsize, fd_flags,
-				     heap_flags);
+	if (async_read)
+		dmabuf = heap->ops->allocate_async_read(heap, &heap_file,
+							fd_flags, heap_flags);
+	else
+		dmabuf = heap->ops->allocate(heap, heap_file.fsize, fd_flags,
+					     heap_flags);
 	if (IS_ERR(dmabuf)) {
 		ret = PTR_ERR(dmabuf);
 		goto error_file;
 	}
 
-	ret = dma_heap_read_file_sync(dmabuf, &heap_file);
-	if (ret)
+	if (!async_read && dma_heap_read_file_sync(dmabuf, &heap_file)) {
+		ret = -EIO;
 		goto error_put;
+	}
 
 	ret = dma_buf_fd(dmabuf, fd_flags);
 	if (ret < 0)
