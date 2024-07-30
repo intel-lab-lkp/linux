@@ -121,8 +121,8 @@ static bool decode_insn_reg2i12_fomat(union loongarch_instruction inst,
 {
 	switch (inst.reg2i12_format.opcode) {
 	case addid_op:
-		if ((inst.reg2i12_format.rd == CFI_SP) || (inst.reg2i12_format.rj == CFI_SP)) {
-			/* addi.d sp,sp,si12 or addi.d fp,sp,si12 */
+		if ((inst.reg2i12_format.rd == CFI_SP) && (inst.reg2i12_format.rj == CFI_SP)) {
+			/* addi.d sp,sp,si12 */
 			insn->immediate = sign_extend64(inst.reg2i12_format.immediate, 11);
 			ADD_OP(op) {
 				op->src.type = OP_SRC_ADD;
