@@ -223,6 +223,8 @@ struct execute_work {
 };
 
 #ifdef CONFIG_LOCKDEP
+void wq_init_user_lockdep_map(struct workqueue_struct *wq,
+			      struct lockdep_map *lockdep_map);
 /*
  * NB: because we have to copy the lockdep_map, setting _key
  * here is required, otherwise it could get initialised to the
@@ -401,6 +403,7 @@ enum wq_flags {
 	 * http://thread.gmane.org/gmane.linux.kernel/1480396
 	 */
 	WQ_POWER_EFFICIENT	= 1 << 7,
+	WQ_USER_OWNED_LOCKDEP	= 1 << 8,	/* allow users to define lockdep map */
 
 	__WQ_DESTROYING		= 1 << 15, /* internal: workqueue is destroying */
 	__WQ_DRAINING		= 1 << 16, /* internal: workqueue is draining */

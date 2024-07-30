@@ -364,7 +364,8 @@ struct workqueue_struct {
 #ifdef CONFIG_LOCKDEP
 	char			*lock_name;
 	struct lock_class_key	key;
-	struct lockdep_map	lockdep_map;
+	struct lockdep_map	__lockdep_map;
+	struct lockdep_map	*lockdep_map;
 #endif
 	char			name[WQ_NAME_LEN]; /* I: workqueue name */
 
@@ -3203,7 +3204,7 @@ __acquires(&pool->lock)
 	lockdep_start_depth = lockdep_depth(current);
 	/* see drain_dead_softirq_workfn() */
 	if (!bh_draining)
-		lock_map_acquire(&pwq->wq->lockdep_map);
+		lock_map_acquire(pwq->wq->lockdep_map);
 	lock_map_acquire(&lockdep_map);
 	/*
 	 * Strictly speaking we should mark the invariant state without holding
@@ -3237,7 +3238,7 @@ __acquires(&pool->lock)
 	pwq->stats[PWQ_STAT_COMPLETED]++;
 	lock_map_release(&lockdep_map);
 	if (!bh_draining)
-		lock_map_release(&pwq->wq->lockdep_map);
+		lock_map_release(pwq->wq->lockdep_map);
 
 	if (unlikely((worker->task && in_atomic()) ||
 		     lockdep_depth(current) != lockdep_start_depth ||
@@ -3873,8 +3874,8 @@ static void touch_wq_lockdep_map(struct workqueue_struct *wq)
 	if (wq->flags & WQ_BH)
 		local_bh_disable();
 
-	lock_map_acquire(&wq->lockdep_map);
-	lock_map_release(&wq->lockdep_map);
+	lock_map_acquire(wq->lockdep_map);
+	lock_map_release(wq->lockdep_map);
 
 	if (wq->flags & WQ_BH)
 		local_bh_enable();
@@ -3908,7 +3909,8 @@ void __flush_workqueue(struct workqueue_struct *wq)
 	struct wq_flusher this_flusher = {
 		.list = LIST_HEAD_INIT(this_flusher.list),
 		.flush_color = -1,
-		.done = COMPLETION_INITIALIZER_ONSTACK_MAP(this_flusher.done, wq->lockdep_map),
+		.done = COMPLETION_INITIALIZER_ONSTACK_MAP(this_flusher.done,
+							   (*wq->lockdep_map)),
 	};
 	int next_color;
 
@@ -4758,9 +4760,30 @@ static int init_worker_pool(struct worker_pool *pool)
 }
 
 #ifdef CONFIG_LOCKDEP
+/**
+ * wq_init_user_lockdep_map - init user lockdep map for workqueue
+ * @wq: workqueue to init lockdep map for
+ * @lockdep_map: lockdep map to use for workqueue
+ *
+ * Initialize workqueue with a user defined lockdep map. WQ_USER_OWNED_LOCKDEP
+ * must be set for workqueue.
+ */
+void wq_init_user_lockdep_map(struct workqueue_struct *wq,
+			      struct lockdep_map *lockdep_map)
+{
+	if (WARN_ON_ONCE(!(wq->flags & WQ_USER_OWNED_LOCKDEP)))
+		return;
+
+	wq->lockdep_map = lockdep_map;
+}
+EXPORT_SYMBOL_GPL(wq_init_user_lockdep_map);
+
 static void wq_init_lockdep(struct workqueue_struct *wq)
 {
 	char *lock_name;
+
+	if (wq->flags & WQ_USER_OWNED_LOCKDEP)
+		return;
 
 	lockdep_register_key(&wq->key);
 	lock_name = kasprintf(GFP_KERNEL, "%s%s", "(wq_completion)", wq->name);
@@ -4768,16 +4791,23 @@ static void wq_init_lockdep(struct workqueue_struct *wq)
 		lock_name = wq->name;
 
 	wq->lock_name = lock_name;
-	lockdep_init_map(&wq->lockdep_map, lock_name, &wq->key, 0);
+	wq->lockdep_map = &wq->__lockdep_map;
+	lockdep_init_map(wq->lockdep_map, lock_name, &wq->key, 0);
 }
 
 static void wq_unregister_lockdep(struct workqueue_struct *wq)
 {
+	if (wq->flags & WQ_USER_OWNED_LOCKDEP)
+		return;
+
 	lockdep_unregister_key(&wq->key);
 }
 
 static void wq_free_lockdep(struct workqueue_struct *wq)
 {
+	if (wq->flags & WQ_USER_OWNED_LOCKDEP)
+		return;
+
 	if (wq->lock_name != wq->name)
 		kfree(wq->lock_name);
 }
