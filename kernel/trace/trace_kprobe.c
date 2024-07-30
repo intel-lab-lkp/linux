@@ -202,7 +202,8 @@ unsigned long trace_kprobe_address(struct trace_kprobe *tk)
 
 	if (tk->symbol) {
 		addr = (unsigned long)
-			kallsyms_lookup_name(trace_kprobe_symbol(tk));
+			kallsyms_lookup_name_or_prefix(trace_kprobe_symbol(tk));
+
 		if (addr)
 			addr += tk->rp.kp.offset;
 	} else {
@@ -766,8 +767,13 @@ static unsigned int number_of_same_symbols(const char *mod, const char *func_nam
 {
 	struct sym_count_ctx ctx = { .count = 0, .name = func_name };
 
-	if (!mod)
+	if (!mod) {
 		kallsyms_on_each_match_symbol(count_symbols, func_name, &ctx.count);
+		if (IS_ENABLED(CONFIG_LTO_CLANG) && !ctx.count) {
+			kallsyms_on_each_match_symbol_or_prefix(
+				count_symbols, func_name, &ctx.count);
+		}
+	}
 
 	module_kallsyms_on_each_symbol(mod, count_mod_symbols, &ctx);
 
