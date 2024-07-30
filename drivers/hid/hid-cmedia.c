@@ -204,8 +204,8 @@ static __u8 *cmhid_hs100b_report_fixup(struct hid_device *hid, __u8 *rdesc,
 {
 	if (*rsize == HS100B_RDESC_ORIG_SIZE) {
 		hid_info(hid, "Fixing CMedia HS-100B report descriptor\n");
-		rdesc = hs100b_rdesc_fixed;
 		*rsize = sizeof(hs100b_rdesc_fixed);
+		return hs100b_rdesc_fixed;
 	}
 	return rdesc;
 }
