@@ -50,9 +50,7 @@ static int kvm_emu_cpucfg(struct kvm_vcpu *vcpu, larch_inst inst)
 		vcpu->arch.gprs[rd] = *(unsigned int *)KVM_SIGNATURE;
 		break;
 	case CPUCFG_KVM_FEATURE:
-		ret = KVM_FEATURE_IPI;
-		if (kvm_pvtime_supported())
-			ret |= KVM_FEATURE_STEAL_TIME;
+		ret = vcpu->kvm->arch.pv_features & LOONGARCH_PV_FEAT_MASK;
 		vcpu->arch.gprs[rd] = ret;
 		break;
 	default:
@@ -697,7 +695,7 @@ static long kvm_save_notify(struct kvm_vcpu *vcpu)
 	id   = kvm_read_reg(vcpu, LOONGARCH_GPR_A1);
 	data = kvm_read_reg(vcpu, LOONGARCH_GPR_A2);
 	switch (id) {
-	case KVM_FEATURE_STEAL_TIME:
+	case BIT(KVM_FEATURE_STEAL_TIME):
 		if (!kvm_pvtime_supported())
 			return KVM_HCALL_INVALID_CODE;
 
