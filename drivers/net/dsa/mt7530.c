@@ -1152,7 +1152,8 @@ mt753x_cpu_port_enable(struct dsa_switch *ds, int port)
 	 * the MT7988 SoC. Trapped frames will be forwarded to the CPU port that
 	 * is affine to the inbound user port.
 	 */
-	if (priv->id == ID_MT7531 || priv->id == ID_MT7988)
+	if (priv->id == ID_MT7531 || priv->id == ID_MT7988 ||
+	    priv->id == ID_EN7581)
 		mt7530_set(priv, MT7531_CFC, MT7531_CPU_PMAP(BIT(port)));
 
 	/* CPU port gets connected to all user ports of
@@ -2207,7 +2208,7 @@ mt7530_setup_irq(struct mt7530_priv *priv)
 		return priv->irq ? : -EINVAL;
 	}
 
-	if (priv->id == ID_MT7988)
+	if (priv->id == ID_MT7988 || priv->id == ID_EN7581)
 		priv->irq_domain = irq_domain_add_linear(np, MT7530_NUM_PHYS,
 							 &mt7988_irq_domain_ops,
 							 priv);
@@ -2766,7 +2767,7 @@ static void mt7988_mac_port_get_caps(struct dsa_switch *ds, int port,
 {
 	switch (port) {
 	/* Ports which are connected to switch PHYs. There is no MII pinout. */
-	case 0 ... 3:
+	case 0 ... 4:
 		__set_bit(PHY_INTERFACE_MODE_INTERNAL,
 			  config->supported_interfaces);
 
@@ -2850,6 +2851,23 @@ mt7531_mac_config(struct dsa_switch *ds, int port, unsigned int mode,
 	}
 }
 
+static void
+en7581_mac_config(struct dsa_switch *ds, int port, unsigned int mode,
+		  phy_interface_t interface)
+{
+	/* BIT(31-27): reserved
+	 * BIT(26): TX_CRC_EN: enable(0)/disable(1) CRC insertion
+	 * BIT(25): RX_CRC_EN: enable(0)/disable(1) CRC insertion
+	 * Since the bits above have a different meaning with respect to the
+	 * one described in mt7530.h, set default values.
+	 */
+	mt7530_clear(ds->priv, MT753X_PMCR_P(port), MT7531_FORCE_MODE_MASK);
+	if (dsa_is_cpu_port(ds, port)) {
+		/* enable MT7530_FORCE_MODE on cpu port */
+		mt7530_set(ds->priv, MT753X_PMCR_P(port), MT7530_FORCE_MODE);
+	}
+}
+
 static struct phylink_pcs *
 mt753x_phylink_mac_select_pcs(struct phylink_config *config,
 			      phy_interface_t interface)
@@ -2880,7 +2898,8 @@ mt753x_phylink_mac_config(struct phylink_config *config, unsigned int mode,
 
 	priv = ds->priv;
 
-	if ((port == 5 || port == 6) && priv->info->mac_port_config)
+	if ((port == 5 || port == 6 || priv->id == ID_EN7581) &&
+	    priv->info->mac_port_config)
 		priv->info->mac_port_config(ds, port, mode, state->interface);
 
 	/* Are we connected to external phy */
@@ -3219,6 +3238,17 @@ const struct mt753x_info mt753x_table[] = {
 		.phy_read_c45 = mt7531_ind_c45_phy_read,
 		.phy_write_c45 = mt7531_ind_c45_phy_write,
 		.mac_port_get_caps = mt7988_mac_port_get_caps,
+	},
+	[ID_EN7581] = {
+		.id = ID_EN7581,
+		.pcs_ops = &mt7530_pcs_ops,
+		.sw_setup = mt7988_setup,
+		.phy_read_c22 = mt7531_ind_c22_phy_read,
+		.phy_write_c22 = mt7531_ind_c22_phy_write,
+		.phy_read_c45 = mt7531_ind_c45_phy_read,
+		.phy_write_c45 = mt7531_ind_c45_phy_write,
+		.mac_port_get_caps = mt7988_mac_port_get_caps,
+		.mac_port_config = en7581_mac_config,
 	},
 };
 EXPORT_SYMBOL_GPL(mt753x_table);
