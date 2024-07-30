@@ -1203,6 +1203,7 @@ int hid_open_report(struct hid_device *device)
 {
 	struct hid_parser *parser;
 	struct hid_item item;
+	const __u8 *fixed_up;
 	unsigned int size;
 	__u8 *start;
 	__u8 *buf;
@@ -1232,11 +1233,11 @@ int hid_open_report(struct hid_device *device)
 		return -ENOMEM;
 
 	if (device->driver->report_fixup)
-		start = device->driver->report_fixup(device, buf, &size);
+		fixed_up = device->driver->report_fixup(device, buf, &size);
 	else
-		start = buf;
+		fixed_up = buf;
 
-	start = kmemdup(start, size, GFP_KERNEL);
+	start = kmemdup(fixed_up, size, GFP_KERNEL);
 	kfree(buf);
 	if (start == NULL)
 		return -ENOMEM;
