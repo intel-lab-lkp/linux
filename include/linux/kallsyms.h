@@ -74,9 +74,12 @@ int kallsyms_on_each_symbol(int (*fn)(void *, const char *, unsigned long),
 			    void *data);
 int kallsyms_on_each_match_symbol(int (*fn)(void *, unsigned long),
 				  const char *name, void *data);
+int kallsyms_on_each_match_symbol_or_prefix(int (*fn)(void *, unsigned long),
+					    const char *name, void *data);
 
 /* Lookup the address for a symbol. Returns 0 if not found. */
 unsigned long kallsyms_lookup_name(const char *name);
+unsigned long kallsyms_lookup_name_or_prefix(const char *name);
 
 extern int kallsyms_lookup_size_offset(unsigned long addr,
 				  unsigned long *symbolsize,
@@ -100,6 +103,11 @@ int lookup_symbol_name(unsigned long addr, char *symname);
 #else /* !CONFIG_KALLSYMS */
 
 static inline unsigned long kallsyms_lookup_name(const char *name)
+{
+	return 0;
+}
+
+static inline unsigned long kallsyms_lookup_name_or_prefix(const char *name)
 {
 	return 0;
 }
@@ -162,6 +170,12 @@ static inline int kallsyms_on_each_symbol(int (*fn)(void *, const char *, unsign
 
 static inline int kallsyms_on_each_match_symbol(int (*fn)(void *, unsigned long),
 						const char *name, void *data)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int kallsyms_on_each_match_symbol_or_prefix(int (*fn)(void *, unsigned long),
+							  const char *name, void *data)
 {
 	return -EOPNOTSUPP;
 }

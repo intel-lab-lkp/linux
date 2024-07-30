@@ -164,9 +164,6 @@ static void cleanup_symbol_name(char *s)
 {
 	char *res;
 
-	if (!IS_ENABLED(CONFIG_LTO_CLANG))
-		return;
-
 	/*
 	 * LLVM appends various suffixes for local functions and variables that
 	 * must be promoted to global scope as part of LTO.  This can break
@@ -181,13 +178,13 @@ static void cleanup_symbol_name(char *s)
 	return;
 }
 
-static int compare_symbol_name(const char *name, char *namebuf)
+static int compare_symbol_name(const char *name, char *namebuf, bool exact_match)
 {
-	/* The kallsyms_seqs_of_names is sorted based on names after
-	 * cleanup_symbol_name() (see scripts/kallsyms.c) if clang lto is enabled.
-	 * To ensure correct bisection in kallsyms_lookup_names(), do
-	 * cleanup_symbol_name(namebuf) before comparing name and namebuf.
-	 */
+	int ret = strcmp(name, namebuf);
+
+	if (exact_match || !ret)
+		return ret;
+
 	cleanup_symbol_name(namebuf);
 	return strcmp(name, namebuf);
 }
@@ -204,12 +201,16 @@ static unsigned int get_symbol_seq(int index)
 
 static int kallsyms_lookup_names(const char *name,
 				 unsigned int *start,
-				 unsigned int *end)
+				 unsigned int *end,
+				 bool exact_match)
 {
 	int ret;
 	int low, mid, high;
 	unsigned int seq, off;
 	char namebuf[KSYM_NAME_LEN];
+
+	if (!IS_ENABLED(CONFIG_LTO_CLANG))
+		exact_match = true;
 
 	low = 0;
 	high = kallsyms_num_syms - 1;
@@ -219,7 +220,7 @@ static int kallsyms_lookup_names(const char *name,
 		seq = get_symbol_seq(mid);
 		off = get_symbol_offset(seq);
 		kallsyms_expand_symbol(off, namebuf, ARRAY_SIZE(namebuf));
-		ret = compare_symbol_name(name, namebuf);
+		ret = compare_symbol_name(name, namebuf, exact_match);
 		if (ret > 0)
 			low = mid + 1;
 		else if (ret < 0)
@@ -236,7 +237,7 @@ static int kallsyms_lookup_names(const char *name,
 		seq = get_symbol_seq(low - 1);
 		off = get_symbol_offset(seq);
 		kallsyms_expand_symbol(off, namebuf, ARRAY_SIZE(namebuf));
-		if (compare_symbol_name(name, namebuf))
+		if (compare_symbol_name(name, namebuf, exact_match))
 			break;
 		low--;
 	}
@@ -248,7 +249,7 @@ static int kallsyms_lookup_names(const char *name,
 			seq = get_symbol_seq(high + 1);
 			off = get_symbol_offset(seq);
 			kallsyms_expand_symbol(off, namebuf, ARRAY_SIZE(namebuf));
-			if (compare_symbol_name(name, namebuf))
+			if (compare_symbol_name(name, namebuf, exact_match))
 				break;
 			high++;
 		}
@@ -268,11 +269,33 @@ unsigned long kallsyms_lookup_name(const char *name)
 	if (!*name)
 		return 0;
 
-	ret = kallsyms_lookup_names(name, &i, NULL);
+	ret = kallsyms_lookup_names(name, &i, NULL, true);
 	if (!ret)
 		return kallsyms_sym_address(get_symbol_seq(i));
 
 	return module_kallsyms_lookup_name(name);
+}
+
+/*
+ * Lookup the address for this symbol.
+ *
+ * With CONFIG_LTO_CLANG=y, if there is no exact match, also try lookup
+ * symbol.llvm.<hash>.
+ */
+unsigned long kallsyms_lookup_name_or_prefix(const char *name)
+{
+	unsigned long addr;
+
+	addr = kallsyms_lookup_name(name);
+
+	if (!addr && IS_ENABLED(CONFIG_LTO_CLANG)) {
+		int ret, i;
+
+		ret = kallsyms_lookup_names(name, &i, NULL, false);
+		if (!ret)
+			addr = kallsyms_sym_address(get_symbol_seq(i));
+	}
+	return addr;
 }
 
 /*
@@ -303,7 +326,25 @@ int kallsyms_on_each_match_symbol(int (*fn)(void *, unsigned long),
 	int ret;
 	unsigned int i, start, end;
 
-	ret = kallsyms_lookup_names(name, &start, &end);
+	ret = kallsyms_lookup_names(name, &start, &end, true);
+	if (ret)
+		return 0;
+
+	for (i = start; !ret && i <= end; i++) {
+		ret = fn(data, kallsyms_sym_address(get_symbol_seq(i)));
+		cond_resched();
+	}
+
+	return ret;
+}
+
+int kallsyms_on_each_match_symbol_or_prefix(int (*fn)(void *, unsigned long),
+					    const char *name, void *data)
+{
+	int ret;
+	unsigned int i, start, end;
+
+	ret = kallsyms_lookup_names(name, &start, &end, false);
 	if (ret)
 		return 0;
 
@@ -450,8 +491,6 @@ const char *kallsyms_lookup(unsigned long addr,
 
 int lookup_symbol_name(unsigned long addr, char *symname)
 {
-	int res;
-
 	symname[0] = '\0';
 	symname[KSYM_NAME_LEN - 1] = '\0';
 
@@ -462,16 +501,10 @@ int lookup_symbol_name(unsigned long addr, char *symname)
 		/* Grab name */
 		kallsyms_expand_symbol(get_symbol_offset(pos),
 				       symname, KSYM_NAME_LEN);
-		goto found;
+		return 0;
 	}
 	/* See if it's in a module. */
-	res = lookup_module_symbol_name(addr, symname);
-	if (res)
-		return res;
-
-found:
-	cleanup_symbol_name(symname);
-	return 0;
+	return lookup_module_symbol_name(addr, symname);
 }
 
 /* Look up a kernel symbol and return it in a text buffer. */
