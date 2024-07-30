@@ -43,11 +43,127 @@ struct dma_heap {
 	struct cdev heap_cdev;
 };
 
+/**
+ * struct dma_heap_file - wrap the file, read task for dma_heap allocate use.
+ * @file:		file to read from.
+ * @fsize:		file size.
+ */
+struct dma_heap_file {
+	struct file *file;
+	size_t fsize;
+};
+
 static LIST_HEAD(heap_list);
 static DEFINE_MUTEX(heap_list_lock);
 static dev_t dma_heap_devt;
 static struct class *dma_heap_class;
 static DEFINE_XARRAY_ALLOC(dma_heap_minors);
+
+static int init_dma_heap_file(struct dma_heap_file *heap_file, int file_fd)
+{
+	struct file *file;
+	size_t fsz;
+
+	file = fget(file_fd);
+	if (!file)
+		return -EINVAL;
+
+	// Direct I/O only support PAGE_SIZE aligned files.
+	fsz = i_size_read(file_inode(file));
+	if (file->f_flags & O_DIRECT && !PAGE_ALIGNED(fsz))
+		return -EINVAL;
+
+	heap_file->fsize = fsz;
+	heap_file->file = file;
+
+	return 0;
+}
+
+static void deinit_dma_heap_file(struct dma_heap_file *heap_file)
+{
+	fput(heap_file->file);
+}
+
+/**
+ * Trigger sync file read, read into dma-buf.
+ *
+ * @dmabuf:			which we done alloced and export.
+ * @heap_file:			file info wrapper to read from.
+ *
+ * Whether to use buffer I/O or direct I/O depends on the mode when the
+ * file is opened.
+ * Remember, if use direct I/O, file must be page aligned.
+ * Since the buffer used for file reading is provided by dma-buf, when
+ * using direct I/O, the file content will be directly filled into
+ * dma-buf without the need for additional CPU copying.
+ *
+ * 0 on success, negative if anything wrong.
+ */
+static int dma_heap_read_file_sync(struct dma_buf *dmabuf,
+				   struct dma_heap_file *heap_file)
+{
+	struct iosys_map map;
+	ssize_t bytes;
+	int ret;
+
+	ret = dma_buf_vmap(dmabuf, &map);
+	if (ret)
+		return ret;
+
+	/**
+	 * The kernel_read_file function can handle file reading effectively,
+	 * and if the return value does not match the file size,
+	 * then it indicates an error.
+	 */
+	bytes = kernel_read_file(heap_file->file, 0, &map.vaddr, dmabuf->size,
+				 &heap_file->fsize, READING_POLICY);
+	if (bytes != heap_file->fsize)
+		ret = -EIO;
+
+	dma_buf_vunmap(dmabuf, &map);
+
+	return ret;
+}
+
+static int dma_heap_buffer_alloc_and_read(struct dma_heap *heap, int file_fd,
+					  u32 fd_flags, u64 heap_flags)
+{
+	struct dma_heap_file heap_file;
+	struct dma_buf *dmabuf;
+	int ret, fd;
+
+	ret = init_dma_heap_file(&heap_file, file_fd);
+	if (ret)
+		return ret;
+
+	dmabuf = heap->ops->allocate(heap, heap_file.fsize, fd_flags,
+				     heap_flags);
+	if (IS_ERR(dmabuf)) {
+		ret = PTR_ERR(dmabuf);
+		goto error_file;
+	}
+
+	ret = dma_heap_read_file_sync(dmabuf, &heap_file);
+	if (ret)
+		goto error_put;
+
+	ret = dma_buf_fd(dmabuf, fd_flags);
+	if (ret < 0)
+		goto error_put;
+
+	fd = ret;
+
+	deinit_dma_heap_file(&heap_file);
+
+	return fd;
+
+error_put:
+	dma_buf_put(dmabuf);
+error_file:
+	deinit_dma_heap_file(&heap_file);
+
+	return ret;
+}
 
 static int dma_heap_buffer_alloc(struct dma_heap *heap, size_t len,
 				 u32 fd_flags,
@@ -108,9 +224,14 @@ static long dma_heap_ioctl_allocate(struct file *file, void *data)
 	if (heap_allocation->heap_flags & ~DMA_HEAP_VALID_HEAP_FLAGS)
 		return -EINVAL;
 
-	fd = dma_heap_buffer_alloc(heap, heap_allocation->len,
-				   heap_allocation->fd_flags,
-				   heap_allocation->heap_flags);
+	if (heap_allocation->heap_flags & DMA_HEAP_ALLOC_AND_READ_FILE)
+		fd = dma_heap_buffer_alloc_and_read(
+			heap, heap_allocation->file_fd,
+			heap_allocation->fd_flags, heap_allocation->heap_flags);
+	else
+		fd = dma_heap_buffer_alloc(heap, heap_allocation->len,
+					   heap_allocation->fd_flags,
+					   heap_allocation->heap_flags);
 	if (fd < 0)
 		return fd;
 
