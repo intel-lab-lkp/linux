@@ -26,6 +26,7 @@ struct vmgenid_state {
 static void vmgenid_notify(struct device *device)
 {
 	struct vmgenid_state *state = device->driver_data;
+	char *envp[] = { "NEW_VMGENID=1", NULL };
 	u8 old_id[VMGENID_SIZE];
 
 	memcpy(old_id, state->this_id, sizeof(old_id));
@@ -33,6 +34,7 @@ static void vmgenid_notify(struct device *device)
 	if (!memcmp(old_id, state->this_id, sizeof(old_id)))
 		return;
 	add_vmfork_randomness(state->this_id, sizeof(state->this_id));
+	kobject_uevent_env(&device->kobj, KOBJ_CHANGE, envp);
 }
 
 static void setup_vmgenid_state(struct vmgenid_state *state, void *virt_addr)
