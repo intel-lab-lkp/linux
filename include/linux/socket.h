@@ -171,7 +171,7 @@ static inline struct cmsghdr * cmsg_nxthdr (struct msghdr *__msg, struct cmsghdr
 
 static inline bool cmsg_copy_to_user(struct cmsghdr *__cmsg)
 {
-	return 0;
+	return __cmsg->cmsg_type == SCM_ZC_NOTIFICATION;
 }
 
 static inline size_t msg_data_left(struct msghdr *msg)

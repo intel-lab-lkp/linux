@@ -132,6 +132,8 @@
 #define SO_PASSPIDFD		0x404A
 #define SO_PEERPIDFD		0x404B
 
+#define SCM_ZC_NOTIFICATION	0x404C
+
 #if !defined(__KERNEL__)
 
 #if __BITS_PER_LONG == 64

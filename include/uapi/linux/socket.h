@@ -2,6 +2,8 @@
 #ifndef _UAPI_LINUX_SOCKET_H
 #define _UAPI_LINUX_SOCKET_H
 
+#include <linux/types.h>
+
 /*
  * Desired design of maximum size and alignment (see RFC2553)
  */
@@ -34,5 +36,26 @@ struct __kernel_sockaddr_storage {
 #define SOCK_TXREHASH_DEFAULT	255
 #define SOCK_TXREHASH_DISABLED	0
 #define SOCK_TXREHASH_ENABLED	1
+
+#define ZC_NOTIFICATION_MAX	16
+
+/*
+ * A zc_info_elem represents a completion notification for sendmsgs in range
+ * lo to high, zerocopy represents whether the underlying transmission is
+ * zerocopy or not.
+ */
+struct zc_info_elem {
+	__u32 lo;
+	__u32 hi;
+	__u8 zerocopy;
+};
+
+/*
+ * zc_info is the struct used for the SCM_ZC_NOTIFICATION control message.
+ */
+struct zc_info {
+	__u32 size; /* size of the zc_info_elem arr */
+	struct zc_info_elem arr[];
+};
 
 #endif /* _UAPI_LINUX_SOCKET_H */

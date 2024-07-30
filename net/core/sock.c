@@ -1481,10 +1481,12 @@ set_sndbuf:
 			ret = -EOPNOTSUPP;
 		}
 		if (!ret) {
-			if (val < 0 || val > 1)
+			if (val < 0 || val > 1) {
 				ret = -EINVAL;
-			else
+			} else {
 				sock_valbool_flag(sk, SOCK_ZEROCOPY, valbool);
+				static_branch_enable(&tx_copy_cmsg_to_user_key);
+			}
 		}
 		break;
 
@@ -2826,8 +2828,8 @@ failure:
 }
 EXPORT_SYMBOL(sock_alloc_send_pskb);
 
-int __sock_cmsg_send(struct sock *sk, struct msghdr *msg __always_unused,
-		     struct cmsghdr *cmsg, struct sockcm_cookie *sockc)
+int __sock_cmsg_send(struct sock *sk, struct msghdr *msg, struct cmsghdr *cmsg,
+		     struct sockcm_cookie *sockc)
 {
 	u32 tsflags;
 
@@ -2863,6 +2865,68 @@ int __sock_cmsg_send(struct sock *sk, struct msghdr *msg __always_unused,
 	case SCM_RIGHTS:
 	case SCM_CREDENTIALS:
 		break;
+	case SCM_ZC_NOTIFICATION: {
+		struct zc_info *zc = CMSG_DATA(cmsg);
+		struct sk_buff_head *q, local_q;
+		int cmsg_data_len, i = 0;
+		unsigned long flags;
+		struct sk_buff *skb;
+
+		if (!sock_flag(sk, SOCK_ZEROCOPY) || sk->sk_family == PF_RDS)
+			return -EINVAL;
+
+		cmsg_data_len = cmsg->cmsg_len - sizeof(struct cmsghdr);
+		if (cmsg_data_len < sizeof(struct zc_info))
+			return -EINVAL;
+
+		if (zc->size > ZC_NOTIFICATION_MAX ||
+		    (cmsg_data_len - sizeof(struct zc_info)) !=
+		    (zc->size * sizeof(struct zc_info_elem)))
+			return -EINVAL;
+
+		q = &sk->sk_error_queue;
+		skb_queue_head_init(&local_q);
+
+		/* Get zerocopy error messages from sk_error_queue, and add them
+		 * to a local queue for later processing. This minimizes the
+		 * code while the spinlock is held and irq is disabled.
+		 */
+		spin_lock_irqsave(&q->lock, flags);
+		skb = skb_peek(q);
+		while (skb && i < zc->size) {
+			struct sk_buff *skb_next = skb_peek_next(skb, q);
+			struct sock_exterr_skb *serr = SKB_EXT_ERR(skb);
+
+			if (serr->ee.ee_errno != 0 ||
+			    serr->ee.ee_origin != SO_EE_ORIGIN_ZEROCOPY) {
+				skb = skb_next;
+				continue;
+			}
+
+			__skb_unlink(skb, q);
+			__skb_queue_tail(&local_q, skb);
+			skb = skb_next;
+			i++;
+		}
+		spin_unlock_irqrestore(&q->lock, flags);
+
+		i = 0;
+		while ((skb = skb_peek(&local_q)) != NULL) {
+			struct sock_exterr_skb *serr = SKB_EXT_ERR(skb);
+
+			zc->arr[i].hi = serr->ee.ee_data;
+			zc->arr[i].lo = serr->ee.ee_info;
+			zc->arr[i].zerocopy = !(serr->ee.ee_code
+						& SO_EE_CODE_ZEROCOPY_COPIED);
+			__skb_unlink(skb, &local_q);
+			consume_skb(skb);
+			i++;
+		}
+
+		zc->size = i;
+		msg->msg_control_copy_to_user = true;
+		break;
+	}
 	default:
 		return -EINVAL;
 	}
