@@ -745,7 +745,7 @@ int folio_mkclean(struct folio *);
 int pfn_mkclean_range(unsigned long pfn, unsigned long nr_pages, pgoff_t pgoff,
 		      struct vm_area_struct *vma);
 
-void remove_migration_ptes(struct folio *src, struct folio *dst, bool locked);
+void remove_migration_ptes(struct folio *src, struct folio *dst, bool locked, bool unmap_unused);
 
 /*
  * rmap_walk_control: To control rmap traversing for specific needs
