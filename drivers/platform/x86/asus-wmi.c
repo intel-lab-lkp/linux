@@ -18,7 +18,6 @@
 #include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/dmi.h>
-#include <linux/fb.h>
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
 #include <linux/init.h>
@@ -3860,7 +3859,7 @@ static int read_backlight_power(struct asus_wmi *asus)
 	if (ret < 0)
 		return ret;
 
-	return ret ? FB_BLANK_UNBLANK : FB_BLANK_POWERDOWN;
+	return ret ? BACKLIGHT_POWER_ON : BACKLIGHT_POWER_OFF;
 }
 
 static int read_brightness_max(struct asus_wmi *asus)
@@ -3919,7 +3918,7 @@ static int update_bl_status(struct backlight_device *bd)
 
 	power = read_backlight_power(asus);
 	if (power != -ENODEV && bd->props.power != power) {
-		ctrl_param = !!(bd->props.power == FB_BLANK_UNBLANK);
+		ctrl_param = !!(bd->props.power == BACKLIGHT_POWER_ON);
 		err = asus_wmi_set_devstate(ASUS_WMI_DEVID_BACKLIGHT,
 					    ctrl_param, NULL);
 		if (asus->driver->quirks->store_backlight_power)
@@ -3978,7 +3977,7 @@ static int asus_wmi_backlight_init(struct asus_wmi *asus)
 
 	power = read_backlight_power(asus);
 	if (power == -ENODEV)
-		power = FB_BLANK_UNBLANK;
+		power = BACKLIGHT_POWER_ON;
 	else if (power < 0)
 		return power;
 
@@ -4036,7 +4035,7 @@ static int read_screenpad_backlight_power(struct asus_wmi *asus)
 	if (ret < 0)
 		return ret;
 	/* 1 == powered */
-	return ret ? FB_BLANK_UNBLANK : FB_BLANK_POWERDOWN;
+	return ret ? BACKLIGHT_POWER_ON : BACKLIGHT_POWER_OFF;
 }
 
 static int read_screenpad_brightness(struct backlight_device *bd)
@@ -4049,7 +4048,7 @@ static int read_screenpad_brightness(struct backlight_device *bd)
 	if (err < 0)
 		return err;
 	/* The device brightness can only be read if powered, so return stored */
-	if (err == FB_BLANK_POWERDOWN)
+	if (err == BACKLIGHT_POWER_OFF)
 		return asus->driver->screenpad_brightness - ASUS_SCREENPAD_BRIGHT_MIN;
 
 	err = asus_wmi_get_devstate(asus, ASUS_WMI_DEVID_SCREENPAD_LIGHT, &retval);
@@ -4070,7 +4069,7 @@ static int update_screenpad_bl_status(struct backlight_device *bd)
 		return power;
 
 	if (bd->props.power != power) {
-		if (power != FB_BLANK_UNBLANK) {
+		if (power != BACKLIGHT_POWER_ON) {
 			/* Only brightness > 0 can power it back on */
 			ctrl_param = asus->driver->screenpad_brightness - ASUS_SCREENPAD_BRIGHT_MIN;
 			err = asus_wmi_set_devstate(ASUS_WMI_DEVID_SCREENPAD_LIGHT,
@@ -4078,7 +4077,7 @@ static int update_screenpad_bl_status(struct backlight_device *bd)
 		} else {
 			err = asus_wmi_set_devstate(ASUS_WMI_DEVID_SCREENPAD_POWER, 0, NULL);
 		}
-	} else if (power == FB_BLANK_UNBLANK) {
+	} else if (power == BACKLIGHT_POWER_ON) {
 		/* Only set brightness if powered on or we get invalid/unsync state */
 		ctrl_param = bd->props.brightness + ASUS_SCREENPAD_BRIGHT_MIN;
 		err = asus_wmi_set_devstate(ASUS_WMI_DEVID_SCREENPAD_LIGHT, ctrl_param, NULL);
@@ -4108,7 +4107,7 @@ static int asus_screenpad_init(struct asus_wmi *asus)
 	if (power < 0)
 		return power;
 
-	if (power != FB_BLANK_POWERDOWN) {
+	if (power != BACKLIGHT_POWER_OFF) {
 		err = asus_wmi_get_devstate(asus, ASUS_WMI_DEVID_SCREENPAD_LIGHT, &brightness);
 		if (err < 0)
 			return err;
