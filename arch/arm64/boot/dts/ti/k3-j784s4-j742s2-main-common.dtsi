@@ -2405,19 +2405,6 @@
 		status = "disabled";
 	};
 
-	c71_3: dsp@67800000 {
-		compatible = "ti,j721s2-c71-dsp";
-		reg = <0x00 0x67800000 0x00 0x00080000>,
-		      <0x00 0x67e00000 0x00 0x0000c000>;
-		reg-names = "l2sram", "l1dram";
-		ti,sci = <&sms>;
-		ti,sci-dev-id = <40>;
-		ti,sci-proc-ids = <0x33 0xff>;
-		resets = <&k3_reset 40 1>;
-		firmware-name = "j784s4-c71_3-fw";
-		status = "disabled";
-	};
-
 	main_esm: esm@700000 {
 		compatible = "ti,j721e-esm";
 		reg = <0x00 0x700000 0x00 0x1000>;

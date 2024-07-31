@@ -168,3 +168,5 @@
 		};
 	};
 };
+
+#include "k3-j784s4-main.dtsi"
