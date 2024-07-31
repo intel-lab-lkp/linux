@@ -1277,6 +1277,64 @@ static int expect_vfprintf(int llen, int c, const char *expected, const char *fm
 	return ret;
 }
 
+static int test_scanf(void)
+{
+	unsigned long long ull;
+	unsigned long ul;
+	unsigned int u;
+	long long ll;
+	long l;
+	void *p;
+	int i;
+
+	if (sscanf("", "foo") != EOF)
+		return 1;
+
+	if (sscanf("foo", "foo") != 0)
+		return 2;
+
+	if (sscanf("123", "%d", &i) != 1)
+		return 3;
+
+	if (i != 123)
+		return 4;
+
+	if (sscanf("a123b456c0x90", "a%db%uc%p", &i, &u, &p) != 3)
+		return 5;
+
+	if (i != 123)
+		return 6;
+
+	if (u != 456)
+		return 7;
+
+	if (p != (void *)0x90)
+		return 8;
+
+	if (sscanf("a    b1", "a b%d", &i) != 1)
+		return 9;
+
+	if (i != 1)
+		return 10;
+
+	if (sscanf("a%1", "a%%%d", &i) != 1)
+		return 11;
+
+	if (i != 1)
+		return 12;
+
+	if (sscanf("1|2|3|4|5|6",
+		   "%d|%ld|%lld|%u|%lu|%llu",
+		   &i, &l, &ll, &u, &ul, &ull) != 6)
+		return 13;
+
+	if (i != 1 || l != 2 || ll != 3 ||
+	    u != 4 || ul != 5 || ull != 6)
+		return 14;
+
+	return 0;
+}
+
 static int run_vfprintf(int min, int max)
 {
 	int test;
@@ -1298,6 +1356,7 @@ static int run_vfprintf(int min, int max)
 		CASE_TEST(char);         EXPECT_VFPRINTF(1, "c", "%c", 'c'); break;
 		CASE_TEST(hex);          EXPECT_VFPRINTF(1, "f", "%x", 0xf); break;
 		CASE_TEST(pointer);      EXPECT_VFPRINTF(3, "0x1", "%p", (void *) 0x1); break;
+		CASE_TEST(scanf);        EXPECT_ZR(1, test_scanf()); break;
 		case __LINE__:
 			return ret; /* must be last */
 		/* note: do not set any defaults so as to permit holes above */
