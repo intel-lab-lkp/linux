@@ -1834,6 +1834,7 @@ void ksz8_phylink_mac_link_up(struct phylink_config *config,
 static int ksz8_handle_global_errata(struct dsa_switch *ds)
 {
 	struct ksz_device *dev = ds->priv;
+	u8 data = 0xff;
 	int ret = 0;
 
 	/* KSZ87xx Errata DS80000687C.
@@ -1842,8 +1843,16 @@ static int ksz8_handle_global_errata(struct dsa_switch *ds)
 	 *   KSZ879x/KSZ877x/KSZ876x and some EEE link partners may result in
 	 *   the link dropping.
 	 */
-	if (dev->info->ksz87xx_eee_link_erratum)
-		ret = ksz8_ind_write8(dev, TABLE_EEE, REG_IND_EEE_GLOB2_HI, 0);
+	if (dev->info->ksz87xx_eee_link_erratum) {
+		ret = ksz8_ind_write8(dev, TABLE_EEE, REG_IND_EEE_GLOB2_LO, 0);
+		if (!ret)
+			ret = ksz8_ind_read8(dev, TABLE_EEE, REG_IND_EEE_GLOB2_LO, &data);
+	}
+
+	if (!ret && data) {
+		dev_err(dev->dev, "failed to disable EEE next page exchange (erratum)\n");
+		return -EIO;
+	}
 
 	return ret;
 }

@@ -764,8 +764,8 @@
 #define IND_ACC_TABLE(table)		((table) << 8)
 
 /* */
-#define REG_IND_EEE_GLOB2_LO		0x34
-#define REG_IND_EEE_GLOB2_HI		0x35
+#define REG_IND_EEE_GLOB2_HI		0x34
+#define REG_IND_EEE_GLOB2_LO		0x35
 
 /**
  * MIB_COUNTER_VALUE			00-00000000-3FFFFFFF
