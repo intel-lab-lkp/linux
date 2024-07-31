@@ -3,18 +3,66 @@
 #ifndef _LINUX_PAGE_FRAG_CACHE_H
 #define _LINUX_PAGE_FRAG_CACHE_H
 
+#include <linux/bits.h>
+#include <linux/build_bug.h>
 #include <linux/log2.h>
 #include <linux/types.h>
 #include <linux/mm_types_task.h>
 
+#if (PAGE_SIZE < PAGE_FRAG_CACHE_MAX_SIZE)
+/* Use a full byte here to enable assembler optimization as the shift
+ * operation is usually expecting a byte.
+ */
+#define PAGE_FRAG_CACHE_ORDER_MASK		GENMASK(7, 0)
+#define PAGE_FRAG_CACHE_PFMEMALLOC_BIT		BIT(8)
+#define PAGE_FRAG_CACHE_PFMEMALLOC_SHIFT	8
+#else
+/* Compiler should be able to figure out we don't read things as any value
+ * ANDed with 0 is 0.
+ */
+#define PAGE_FRAG_CACHE_ORDER_MASK		0
+#define PAGE_FRAG_CACHE_PFMEMALLOC_BIT		BIT(0)
+#define PAGE_FRAG_CACHE_PFMEMALLOC_SHIFT	0
+#endif
+
+static inline unsigned long encode_aligned_va(void *va, unsigned int order,
+					      bool pfmemalloc)
+{
+	BUILD_BUG_ON(PAGE_FRAG_CACHE_MAX_ORDER > PAGE_FRAG_CACHE_ORDER_MASK);
+	BUILD_BUG_ON(PAGE_FRAG_CACHE_PFMEMALLOC_SHIFT >= PAGE_SHIFT);
+
+	return (unsigned long)va | (order & PAGE_FRAG_CACHE_ORDER_MASK) |
+		((unsigned long)pfmemalloc << PAGE_FRAG_CACHE_PFMEMALLOC_SHIFT);
+}
+
+static inline unsigned long encoded_page_order(unsigned long encoded_va)
+{
+	return encoded_va & PAGE_FRAG_CACHE_ORDER_MASK;
+}
+
+static inline bool encoded_page_pfmemalloc(unsigned long encoded_va)
+{
+	return !!(encoded_va & PAGE_FRAG_CACHE_PFMEMALLOC_BIT);
+}
+
+static inline void *encoded_page_address(unsigned long encoded_va)
+{
+	return (void *)(encoded_va & PAGE_MASK);
+}
+
 static inline void page_frag_cache_init(struct page_frag_cache *nc)
 {
-	nc->va = NULL;
+	nc->encoded_va = 0;
 }
 
 static inline bool page_frag_cache_is_pfmemalloc(struct page_frag_cache *nc)
 {
-	return !!nc->pfmemalloc;
+	return encoded_page_pfmemalloc(nc->encoded_va);
+}
+
+static inline unsigned int page_frag_cache_page_size(unsigned long encoded_va)
+{
+	return PAGE_SIZE << encoded_page_order(encoded_va);
 }
 
 void page_frag_cache_drain(struct page_frag_cache *nc);
