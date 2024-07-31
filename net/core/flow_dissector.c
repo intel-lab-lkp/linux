@@ -951,8 +951,21 @@ __skb_flow_dissect_udp(const struct sk_buff *skb, struct net *net,
 	ret = FLOW_DISSECT_RET_OUT_GOOD;
 
 	switch (encap_type) {
+	case UDP_ENCAP_ESPINUDP_NON_IKE:
+	case UDP_ENCAP_ESPINUDP:
+		*p_ip_proto = IPPROTO_ESP;
+		ret = FLOW_DISSECT_RET_IPPROTO_AGAIN;
+		break;
+	case UDP_ENCAP_L2TPINUDP:
+		*p_ip_proto = IPPROTO_L2TP;
+		ret = FLOW_DISSECT_RET_IPPROTO_AGAIN;
+		break;
 	case UDP_ENCAP_FOU:
 		*p_ip_proto = fou_protocol;
+		ret = FLOW_DISSECT_RET_IPPROTO_AGAIN;
+		break;
+	case UDP_ENCAP_SCTP:
+		*p_ip_proto = IPPROTO_SCTP;
 		ret = FLOW_DISSECT_RET_IPPROTO_AGAIN;
 		break;
 	case UDP_ENCAP_VXLAN:
