@@ -2970,7 +2970,7 @@ static int amt_socket_create(struct amt_dev *amt)
 	/* Mark socket as an encapsulation socket */
 	memset(&tunnel_cfg, 0, sizeof(tunnel_cfg));
 	tunnel_cfg.sk_user_data = amt;
-	tunnel_cfg.encap_type = 1;
+	tunnel_cfg.encap_type = UDP_ENCAP_AMT;
 	tunnel_cfg.encap_rcv = amt_rcv;
 	tunnel_cfg.encap_err_lookup = amt_err_lookup;
 	tunnel_cfg.encap_destroy = NULL;

@@ -193,7 +193,7 @@ static struct socket *rxe_setup_udp_tunnel(struct net *net, __be16 port,
 	if (err < 0)
 		return ERR_PTR(err);
 
-	tnl_cfg.encap_type = 1;
+	tnl_cfg.encap_type = UDP_ENCAP_RXE;
 	tnl_cfg.encap_rcv = rxe_udp_encap_recv;
 
 	/* Setup UDP tunnel */
