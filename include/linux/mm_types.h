@@ -283,6 +283,64 @@ typedef struct {
 	unsigned long val;
 } swp_entry_t;
 
+/*
+ * encoded_swpentry_t - a type marking the encoded swp_entry_t.
+ *
+ * An 'encoded_swpentry_t' represents a 'swp_enrty_t' with its the highest
+ * bit indicating extra context-dependent information. Only used in swp_entry
+ * asynchronous release path by mmu_swap_gather.
+ */
+typedef struct {
+	unsigned long val;
+} encoded_swpentry_t;
+
+/*
+ * The next item in an encoded_swpentry_t array is the "nr" argument, specifying the
+ * total number of consecutive swap entries associated with the same folio. If this
+ * bit is not set, "nr" is implicitly 1.
+ *
+ * Refer to include\asm\pgtable.h, swp_offset bits: 0 ~ 57, swp_type bits: 58 ~ 62.
+ * Bit63 can be used here.
+ */
+#define ENCODED_SWPENTRY_BIT_NR_ENTRYS_NEXT (1UL << (BITS_PER_LONG - 1))
+
+static __always_inline encoded_swpentry_t
+encode_swpentry(swp_entry_t entry, unsigned long flags)
+{
+	encoded_swpentry_t ret;
+
+	VM_WARN_ON_ONCE(flags & ~ENCODED_SWPENTRY_BIT_NR_ENTRYS_NEXT);
+	ret.val = flags | entry.val;
+	return ret;
+}
+
+static inline unsigned long encoded_swpentry_flags(encoded_swpentry_t entry)
+{
+	return ENCODED_SWPENTRY_BIT_NR_ENTRYS_NEXT & entry.val;
+}
+
+static inline swp_entry_t encoded_swpentry_data(encoded_swpentry_t entry)
+{
+	swp_entry_t ret;
+
+	ret.val = ~ENCODED_SWPENTRY_BIT_NR_ENTRYS_NEXT & entry.val;
+	return ret;
+}
+
+static __always_inline encoded_swpentry_t encode_nr_swpentrys(unsigned long nr)
+{
+	encoded_swpentry_t ret;
+
+	VM_WARN_ON_ONCE(nr & ENCODED_SWPENTRY_BIT_NR_ENTRYS_NEXT);
+	ret.val = nr;
+	return ret;
+}
+
+static __always_inline unsigned long encoded_nr_swpentrys(encoded_swpentry_t entry)
+{
+	return ((~ENCODED_SWPENTRY_BIT_NR_ENTRYS_NEXT) & entry.val);
+}
+
 /**
  * struct folio - Represents a contiguous set of bytes.
  * @flags: Identical to the page flags.

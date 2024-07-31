@@ -9,11 +9,304 @@
 #include <linux/smp.h>
 #include <linux/swap.h>
 #include <linux/rmap.h>
+#include <linux/oom.h>
 
 #include <asm/pgalloc.h>
 #include <asm/tlb.h>
 
 #ifndef CONFIG_MMU_GATHER_NO_GATHER
+/*
+ * The swp_entry asynchronous release mechanism for multiple processes exiting
+ * simultaneously.
+ *
+ * During the multiple exiting processes releasing their own mm simultaneously,
+ * the swap entries in the exiting processes are handled by isolating, caching
+ * and handing over to an asynchronous kworker to complete the release.
+ *
+ * The conditions for the exiting process entering the swp_entry asynchronous
+ * release path:
+ * 1. The exiting process's MM_SWAPENTS count is >= SWAP_CLUSTER_MAX, avoiding
+ *    to alloc struct mmu_swap_gather frequently.
+ * 2. The number of exiting processes is >= NR_MIN_EXITING_PROCESSES.
+ *
+ * Since the time for determining the number of exiting processes is dynamic,
+ * the exiting process may start to enter the swp_entry asynchronous release
+ * at the beginning or middle stage of the exiting process's swp_entry release
+ * path.
+ *
+ * Once an exiting process enters the swp_entry asynchronous release, all remaining
+ * swap entries in this exiting process need to be fully released by asynchronous
+ * kworker theoretically.
+ *
+ * The function of the swp_entry asynchronous release:
+ * 1. Alleviate the high system cpu load caused by multiple exiting processes
+ *    running simultaneously.
+ * 2. Reduce lock competition in swap entry free path by an asynchronous kworker
+ *    instead of multiple exiting processes parallel execution.
+ * 3. Release memory occupied by exiting processes more efficiently.
+ */
+
+/*
+ * The min number of exiting processes required for swp_entry asynchronous release
+ */
+#define NR_MIN_EXITING_PROCESSES 2
+
+atomic_t nr_exiting_processes = ATOMIC_INIT(0);
+static struct kmem_cache *swap_gather_cachep;
+static struct workqueue_struct *swapfree_wq;
+static DEFINE_STATIC_KEY_TRUE(tlb_swap_asyncfree_disabled);
+
+static int __init tlb_swap_async_free_setup(void)
+{
+	swapfree_wq = alloc_workqueue("smfree_wq", WQ_UNBOUND |
+		WQ_HIGHPRI | WQ_MEM_RECLAIM, 1);
+	if (!swapfree_wq)
+		goto fail;
+
+	swap_gather_cachep = kmem_cache_create("swap_gather",
+		sizeof(struct mmu_swap_gather),
+		0, SLAB_TYPESAFE_BY_RCU | SLAB_PANIC | SLAB_ACCOUNT,
+		NULL);
+	if (!swap_gather_cachep)
+		goto kcache_fail;
+
+	static_branch_disable(&tlb_swap_asyncfree_disabled);
+	return 0;
+
+kcache_fail:
+	destroy_workqueue(swapfree_wq);
+fail:
+	return -ENOMEM;
+}
+postcore_initcall(tlb_swap_async_free_setup);
+
+static void __tlb_swap_gather_free(struct mmu_swap_gather *swap_gather)
+{
+	struct mmu_swap_batch *swap_batch, *next;
+
+	for (swap_batch = swap_gather->local.next; swap_batch; swap_batch = next) {
+		next = swap_batch->next;
+		free_page((unsigned long)swap_batch);
+	}
+	swap_gather->local.next = NULL;
+	kmem_cache_free(swap_gather_cachep, swap_gather);
+}
+
+static void tlb_swap_async_free_work(struct work_struct *w)
+{
+	int i, nr_multi, nr_free;
+	swp_entry_t start_entry;
+	struct mmu_swap_batch *swap_batch;
+	struct mmu_swap_gather *swap_gather = container_of(w,
+		struct mmu_swap_gather, free_work);
+
+	/* Release swap entries cached in mmu_swap_batch. */
+	for (swap_batch = &swap_gather->local; swap_batch && swap_batch->nr;
+	    swap_batch = swap_batch->next) {
+		nr_free = 0;
+		for (i = 0; i < swap_batch->nr; i++) {
+			if (unlikely(encoded_swpentry_flags(swap_batch->encoded_entrys[i]) &
+			    ENCODED_SWPENTRY_BIT_NR_ENTRYS_NEXT)) {
+				start_entry = encoded_swpentry_data(swap_batch->encoded_entrys[i]);
+				nr_multi = encoded_nr_swpentrys(swap_batch->encoded_entrys[++i]);
+				free_swap_and_cache_nr(start_entry, nr_multi);
+				nr_free += 2;
+			} else {
+				start_entry = encoded_swpentry_data(swap_batch->encoded_entrys[i]);
+				free_swap_and_cache_nr(start_entry, 1);
+				nr_free++;
+			}
+		}
+		swap_batch->nr -= nr_free;
+		WARN_ON_ONCE(swap_batch->nr);
+	}
+	__tlb_swap_gather_free(swap_gather);
+}
+
+static bool __tlb_swap_gather_mmu_check(struct mmu_gather *tlb)
+{
+	/*
+	 * Only the exiting processes with the MM_SWAPENTS counter >=
+	 * SWAP_CLUSTER_MAX have the opportunity to release their swap
+	 * entries by asynchronous kworker.
+	 */
+	if (!task_is_dying() ||
+	    get_mm_counter(tlb->mm, MM_SWAPENTS) < SWAP_CLUSTER_MAX)
+		return true;
+
+	atomic_inc(&nr_exiting_processes);
+	if (atomic_read(&nr_exiting_processes) < NR_MIN_EXITING_PROCESSES)
+		tlb->swp_freeable = 1;
+	else
+		tlb->swp_freeing = 1;
+
+	return false;
+}
+
+/**
+ * __tlb_swap_gather_init - Initialize an mmu_swap_gather structure
+ * for swp_entry tear-down.
+ * @tlb: the mmu_swap_gather structure belongs to tlb
+ */
+static bool __tlb_swap_gather_init(struct mmu_gather *tlb)
+{
+	tlb->swp = kmem_cache_alloc(swap_gather_cachep, GFP_ATOMIC | GFP_NOWAIT);
+	if (unlikely(!tlb->swp))
+		return false;
+
+	tlb->swp->local.next  = NULL;
+	tlb->swp->local.nr    = 0;
+	tlb->swp->local.max   = ARRAY_SIZE(tlb->swp->__encoded_entrys);
+
+	tlb->swp->active      = &tlb->swp->local;
+	tlb->swp->batch_count = 0;
+
+	INIT_WORK(&tlb->swp->free_work, tlb_swap_async_free_work);
+	return true;
+}
+
+static void __tlb_swap_gather_mmu(struct mmu_gather *tlb)
+{
+	if (static_branch_unlikely(&tlb_swap_asyncfree_disabled))
+		return;
+
+	tlb->swp = NULL;
+	tlb->swp_freeable = 0;
+	tlb->swp_freeing = 0;
+	tlb->swp_disable = 0;
+
+	if (__tlb_swap_gather_mmu_check(tlb))
+		return;
+
+	/*
+	 * If the exiting process meets the conditions of
+	 * swp_entry asynchronous release, an mmu_swap_gather
+	 * structure will be initialized.
+	 */
+	if (tlb->swp_freeing)
+		__tlb_swap_gather_init(tlb);
+}
+
+static void __tlb_swap_gather_queuework(struct mmu_gather *tlb, bool finish)
+{
+	queue_work(swapfree_wq, &tlb->swp->free_work);
+	tlb->swp = NULL;
+	if (!finish)
+		__tlb_swap_gather_init(tlb);
+}
+
+static bool __tlb_swap_next_batch(struct mmu_gather *tlb)
+{
+	struct mmu_swap_batch *swap_batch;
+
+	if (tlb->swp->batch_count == MAX_SWAP_GATHER_BATCH_COUNT)
+		goto free;
+
+	swap_batch = (void *)__get_free_page(GFP_ATOMIC | GFP_NOWAIT);
+	if (unlikely(!swap_batch))
+		goto free;
+
+	swap_batch->next = NULL;
+	swap_batch->nr   = 0;
+	swap_batch->max  = MAX_SWAP_GATHER_BATCH;
+
+	tlb->swp->active->next = swap_batch;
+	tlb->swp->active = swap_batch;
+	tlb->swp->batch_count++;
+	return true;
+free:
+	/* batch move to wq */
+	__tlb_swap_gather_queuework(tlb, false);
+	return false;
+}
+
+/**
+ * __tlb_remove_swap_entries - the swap entries in exiting process are
+ * isolated, batch cached in struct mmu_swap_batch.
+ * @tlb: the current mmu_gather
+ * @entry: swp_entry to be isolated and cached
+ * @nr: the number of consecutive entries starting from entry parameter.
+ */
+bool __tlb_remove_swap_entries(struct mmu_gather *tlb,
+			     swp_entry_t entry, int nr)
+{
+	struct mmu_swap_batch *swap_batch;
+	unsigned long flags = 0;
+	bool ret = false;
+
+	if (tlb->swp_disable)
+		return ret;
+
+	if (!tlb->swp_freeable && !tlb->swp_freeing)
+		return ret;
+
+
+	if (tlb->swp_freeable) {
+		if (atomic_read(&nr_exiting_processes) <
+		    NR_MIN_EXITING_PROCESSES)
+			return ret;
+		/*
+		 * If the current number of exiting processes
+		 * is >= NR_MIN_EXITING_PROCESSES, the exiting
+		 * process with swp_freeable state will enter
+		 * swp_freeing state to start releasing its
+		 * remaining swap entries by the asynchronous
+		 * kworker.
+		 */
+		tlb->swp_freeable = 0;
+		tlb->swp_freeing = 1;
+	}
+
+	VM_BUG_ON(tlb->swp_freeable || !tlb->swp_freeing);
+	if (!tlb->swp && !__tlb_swap_gather_init(tlb))
+		return ret;
+
+	swap_batch = tlb->swp->active;
+	if (unlikely(swap_batch->nr >= swap_batch->max - 1)) {
+		__tlb_swap_gather_queuework(tlb, false);
+		return ret;
+	}
+
+	if (likely(nr == 1)) {
+		swap_batch->encoded_entrys[swap_batch->nr++] = encode_swpentry(entry, flags);
+	} else {
+		flags |= ENCODED_SWPENTRY_BIT_NR_ENTRYS_NEXT;
+		swap_batch->encoded_entrys[swap_batch->nr++] = encode_swpentry(entry, flags);
+		swap_batch->encoded_entrys[swap_batch->nr++] = encode_nr_swpentrys(nr);
+	}
+	ret = true;
+
+	if (swap_batch->nr >= swap_batch->max - 1) {
+		if (!__tlb_swap_next_batch(tlb))
+			goto exit;
+		swap_batch = tlb->swp->active;
+	}
+	VM_BUG_ON(swap_batch->nr > swap_batch->max - 1);
+exit:
+	return ret;
+}
+
+static void __tlb_batch_swap_finish(struct mmu_gather *tlb)
+{
+	if (tlb->swp_disable)
+		return;
+
+	if (!tlb->swp_freeable && !tlb->swp_freeing)
+		return;
+
+	if (tlb->swp_freeable) {
+		tlb->swp_freeable = 0;
+		VM_BUG_ON(tlb->swp_freeing);
+		goto exit;
+	}
+	tlb->swp_freeing = 0;
+	if (unlikely(!tlb->swp))
+		goto exit;
+
+	__tlb_swap_gather_queuework(tlb, true);
+exit:
+	atomic_dec(&nr_exiting_processes);
+}
 
 static bool tlb_next_batch(struct mmu_gather *tlb)
 {
@@ -386,6 +679,9 @@ static void __tlb_gather_mmu(struct mmu_gather *tlb, struct mm_struct *mm,
 	tlb->local.max  = ARRAY_SIZE(tlb->__pages);
 	tlb->active     = &tlb->local;
 	tlb->batch_count = 0;
+
+	tlb->swp_disable = 1;
+	__tlb_swap_gather_mmu(tlb);
 #endif
 	tlb->delayed_rmap = 0;
 
@@ -466,6 +762,7 @@ void tlb_finish_mmu(struct mmu_gather *tlb)
 
 #ifndef CONFIG_MMU_GATHER_NO_GATHER
 	tlb_batch_list_free(tlb);
+	__tlb_batch_swap_finish(tlb);
 #endif
 	dec_tlb_flush_pending(tlb->mm);
 }

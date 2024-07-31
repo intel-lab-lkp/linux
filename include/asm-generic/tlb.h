@@ -294,6 +294,37 @@ extern void tlb_flush_rmaps(struct mmu_gather *tlb, struct vm_area_struct *vma);
 static inline void tlb_flush_rmaps(struct mmu_gather *tlb, struct vm_area_struct *vma) { }
 #endif
 
+#ifndef CONFIG_MMU_GATHER_NO_GATHER
+struct mmu_swap_batch {
+	struct mmu_swap_batch *next;
+	unsigned int nr;
+	unsigned int max;
+	encoded_swpentry_t encoded_entrys[];
+};
+
+#define MAX_SWAP_GATHER_BATCH	\
+	((PAGE_SIZE - sizeof(struct mmu_swap_batch)) / sizeof(void *))
+
+#define MAX_SWAP_GATHER_BATCH_COUNT	(10000UL / MAX_SWAP_GATHER_BATCH)
+
+struct mmu_swap_gather {
+	/*
+	 * the asynchronous kworker to batch
+	 * release swap entries
+	 */
+	struct work_struct free_work;
+
+	/* batch cache swap entries */
+	unsigned int batch_count;
+	struct mmu_swap_batch *active;
+	struct mmu_swap_batch local;
+	encoded_swpentry_t __encoded_entrys[MMU_GATHER_BUNDLE];
+};
+
+bool __tlb_remove_swap_entries(struct mmu_gather *tlb,
+		swp_entry_t entry, int nr);
+#endif
+
 /*
  * struct mmu_gather is an opaque type used by the mm code for passing around
  * any data needed by arch specific code for tlb_remove_page.
@@ -343,6 +374,18 @@ struct mmu_gather {
 	unsigned int		vma_exec : 1;
 	unsigned int		vma_huge : 1;
 	unsigned int		vma_pfn  : 1;
+#ifndef CONFIG_MMU_GATHER_NO_GATHER
+	/*
+	 * Two states of releasing swap entries
+	 * asynchronously:
+	 * swp_freeable - have opportunity to
+	 * release asynchronously future
+	 * swp_freeing - be releasing asynchronously.
+	 */
+	unsigned int		swp_freeable : 1;
+	unsigned int		swp_freeing : 1;
+	unsigned int		swp_disable : 1;
+#endif
 
 	unsigned int		batch_count;
 
@@ -354,6 +397,7 @@ struct mmu_gather {
 #ifdef CONFIG_MMU_GATHER_PAGE_SIZE
 	unsigned int page_size;
 #endif
+	struct mmu_swap_gather *swp;
 #endif
 };
 
