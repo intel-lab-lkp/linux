@@ -1140,6 +1140,14 @@ config DMAPOOL_TEST
 	  provide a consistent way to measure how changes to the
 	  dma_pool_alloc/free routines affect performance.
 
+config PAGE_FRAG_TEST
+	tristate "Test module for page_frag"
+	default n
+	depends on m
+	help
+	  Provides a test module that is used to test the correctness and
+	  performance of page_frag's implementation.
+
 config ARCH_HAS_PTE_SPECIAL
 	bool
 
