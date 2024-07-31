@@ -28,6 +28,8 @@ static inline bool __tlb_remove_page_size(struct mmu_gather *tlb,
 		struct page *page, bool delay_rmap, int page_size);
 static inline bool __tlb_remove_folio_pages(struct mmu_gather *tlb,
 		struct page *page, unsigned int nr_pages, bool delay_rmap);
+static inline bool __tlb_remove_swap_entries(struct mmu_gather *tlb,
+		swp_entry_t entry, int nr);
 
 #define tlb_flush tlb_flush
 #define pte_free_tlb pte_free_tlb
@@ -66,6 +68,12 @@ static inline bool __tlb_remove_folio_pages(struct mmu_gather *tlb,
 	VM_WARN_ON_ONCE(page_folio(page) != page_folio(page + nr_pages - 1));
 
 	free_pages_and_swap_cache(encoded_pages, ARRAY_SIZE(encoded_pages));
+	return false;
+}
+
+static inline bool __tlb_remove_swap_entries(struct mmu_gather *tlb,
+		swp_entry_t entry, int nr)
+{
 	return false;
 }
 
