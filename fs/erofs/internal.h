@@ -288,6 +288,13 @@ struct erofs_inode {
 		};
 #endif	/* CONFIG_EROFS_FS_ZIP */
 	};
+#ifdef CONFIG_EROFS_FS_PAGE_CACHE_SHARE
+	struct list_head pcs_list;
+	struct rw_semaphore pcs_rwsem;
+	char *fprt;
+	int fprt_len;
+	unsigned long fprt_hash;
+#endif
 	/* the corresponding vfs inode */
 	struct inode vfs_inode;
 };
@@ -383,6 +390,7 @@ extern const struct inode_operations erofs_fast_symlink_iops;
 extern const struct inode_operations erofs_dir_iops;
 
 extern const struct file_operations erofs_file_fops;
+extern const struct file_operations erofs_pcs_file_fops;
 extern const struct file_operations erofs_dir_fops;
 
 extern const struct iomap_ops z_erofs_iomap_report_ops;
