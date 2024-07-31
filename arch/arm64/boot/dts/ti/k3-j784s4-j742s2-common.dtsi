@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-only OR MIT
 /*
- * Device Tree Source for J784S4 SoC Family
+ * Device Tree Source for J784S4 and J742S2 SoC Family
  *
- * TRM (SPRUJ43 JULY 2022): https://www.ti.com/lit/zip/spruj52
+ * TRM (j784s4) (SPRUJ43 JULY 2022): https://www.ti.com/lit/zip/spruj52
+ * TRM (j742s2): https://www.ti.com/lit/pdf/spruje3
  *
  * Copyright (C) 2022-2024 Texas Instruments Incorporated - https://www.ti.com/
  *
