@@ -832,6 +832,61 @@ __skb_flow_dissect_geneve(const struct sk_buff *skb,
 	return FLOW_DISSECT_RET_PROTO_AGAIN;
 }
 
+static __u8
+__skb_direct_ip_dissect(void *hdr)
+{
+	/* Direct encapsulation of IPv4 or IPv6 */
+
+	switch (((struct iphdr *)hdr)->version) {
+	case 4:
+		return IPPROTO_IPIP;
+	case 6:
+		return IPPROTO_IPV6;
+	default:
+		return 0;
+	}
+}
+
+static enum flow_dissect_ret
+__skb_flow_dissect_gue(const struct sk_buff *skb,
+		       struct flow_dissector *flow_dissector,
+		       void *target_container, const void *data,
+		       __u8 *p_ip_proto, int *p_nhoff,
+		       int hlen, unsigned int flags)
+{
+	struct guehdr *hdr, _hdr;
+	__u8 proto;
+
+	hdr = __skb_header_pointer(skb, *p_nhoff, sizeof(_hdr), data, hlen,
+				   &_hdr);
+	if (!hdr)
+		return FLOW_DISSECT_RET_OUT_BAD;
+
+	switch (hdr->version) {
+	case 0:
+		if (unlikely(hdr->control))
+			return FLOW_DISSECT_RET_OUT_GOOD;
+
+		*p_nhoff += sizeof(struct guehdr) + (hdr->hlen << 2);
+		*p_ip_proto = hdr->proto_ctype;
+
+		break;
+	case 1:
+		/* Direct encapsulation of IPv4 or IPv6 */
+
+		proto = __skb_direct_ip_dissect(hdr);
+		if (proto) {
+			*p_ip_proto = proto;
+			break;
+		}
+		fallthrough;
+	default:
+		return FLOW_DISSECT_RET_OUT_GOOD;
+	}
+
+	return FLOW_DISSECT_RET_IPPROTO_AGAIN;
+}
+
 /**
  * __skb_flow_dissect_batadv() - dissect batman-adv header
  * @skb: sk_buff to with the batman-adv header
@@ -987,6 +1042,11 @@ __skb_flow_dissect_udp(const struct sk_buff *skb, struct net *net,
 	case UDP_ENCAP_FOU:
 		*p_ip_proto = fou_protocol;
 		ret = FLOW_DISSECT_RET_IPPROTO_AGAIN;
+		break;
+	case UDP_ENCAP_GUE:
+		ret = __skb_flow_dissect_gue(skb, flow_dissector,
+					     target_container, data,
+					     p_ip_proto, p_nhoff, hlen, flags);
 		break;
 	case UDP_ENCAP_SCTP:
 		*p_ip_proto = IPPROTO_SCTP;
