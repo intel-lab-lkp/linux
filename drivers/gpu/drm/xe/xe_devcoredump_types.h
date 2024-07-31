@@ -46,6 +46,10 @@ struct xe_devcoredump_snapshot {
 	struct xe_sched_job_snapshot *job;
 	/** @vm: Snapshot of VM state */
 	struct xe_vm_snapshot *vm;
+	/** @read_data_size: size of read data */
+	ssize_t read_data_size;
+	/** @read_data: Read data */
+	void *read_data;
 };
 
 /**
