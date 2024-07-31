@@ -1284,6 +1284,27 @@ proto_again:
 
 		break;
 	}
+	case htons(ETH_P_TEB): {
+		const struct ethhdr *eth;
+		struct ethhdr _eth;
+
+		eth = __skb_header_pointer(skb, nhoff, sizeof(_eth),
+					   data, hlen, &_eth);
+		if (!eth)
+			goto out_bad;
+
+		proto = eth->h_proto;
+		nhoff += sizeof(*eth);
+
+		/* Cap headers that we access via pointers at the
+		 * end of the Ethernet header as our maximum alignment
+		 * at that point is only 2 bytes.
+		 */
+		if (NET_IP_ALIGN)
+			hlen = nhoff;
+
+		goto proto_again;
+	}
 	case htons(ETH_P_8021AD):
 	case htons(ETH_P_8021Q): {
 		const struct vlan_hdr *vlan = NULL;
