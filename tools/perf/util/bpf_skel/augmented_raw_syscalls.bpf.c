@@ -22,6 +22,10 @@
 
 #define MAX_CPUS  4096
 
+#define MAX_BUF 32 /* maximum size of buffer augmentation */
+
+volatile bool filter_pid;
+
 /* bpf-output associated map */
 struct __augmented_syscalls__ {
 	__uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
@@ -79,6 +83,13 @@ struct pids_filtered {
 	__uint(max_entries, 64);
 } pids_filtered SEC(".maps");
 
+struct pid_filter {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__type(key, pid_t);
+	__type(value, bool);
+	__uint(max_entries, 512);
+} pid_filter SEC(".maps");
+
 /*
  * Desired design of maximum size and alignment (see RFC2553)
  */
@@ -124,6 +135,25 @@ struct augmented_args_tmp {
 	__uint(max_entries, 1);
 } augmented_args_tmp SEC(".maps");
 
+struct beauty_payload_enter {
+	struct syscall_enter_args args;
+	struct augmented_arg aug_args[6];
+};
+
+struct beauty_map_enter {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__type(key, int);
+	__type(value, __u32[6]);
+	__uint(max_entries, 512);
+} beauty_map_enter SEC(".maps");
+
+struct beauty_payload_enter_map {
+	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+	__type(key, int);
+	__type(value, struct beauty_payload_enter);
+	__uint(max_entries, 1);
+} beauty_payload_enter_map SEC(".maps");
+
 static inline struct augmented_args_payload *augmented_args_payload(void)
 {
 	int key = 0;
@@ -134,6 +164,11 @@ static inline int augmented__output(void *ctx, struct augmented_args_payload *ar
 {
 	/* If perf_event_output fails, return non-zero so that it gets recorded unaugmented */
 	return bpf_perf_event_output(ctx, &__augmented_syscalls__, BPF_F_CURRENT_CPU, args, len);
+}
+
+static inline int augmented__beauty_output(void *ctx, void *data, int len)
+{
+	return bpf_perf_event_output(ctx, &__augmented_syscalls__, BPF_F_CURRENT_CPU, data, len);
 }
 
 static inline
@@ -176,6 +211,7 @@ int syscall_unaugmented(struct syscall_enter_args *args)
  * on from there, reading the first syscall arg as a string, i.e. open's
  * filename.
  */
+
 SEC("tp/syscalls/sys_enter_connect")
 int sys_enter_connect(struct syscall_enter_args *args)
 {
@@ -372,6 +408,82 @@ static bool pid_filter__has(struct pids_filtered *pids, pid_t pid)
 	return bpf_map_lookup_elem(pids, &pid) != NULL;
 }
 
+static inline bool not_in_filter(pid_t pid)
+{
+	return bpf_map_lookup_elem(&pid_filter, &pid) == NULL;
+}
+
+static int beauty_enter(void *ctx, struct syscall_enter_args *args)
+{
+	if (args == NULL)
+		return 1;
+
+	int zero = 0;
+	struct beauty_payload_enter *payload = bpf_map_lookup_elem(&beauty_payload_enter_map, &zero);
+	unsigned int nr = (__u32)args->syscall_nr,
+		     *m = bpf_map_lookup_elem(&beauty_map_enter, &nr);
+
+	if (m == NULL || payload == NULL)
+		return 1;
+
+	bool augment = false;
+	int size, err, index, written, output = 0, augsiz = sizeof(payload->aug_args[0].value);
+	void *arg, *arg_offset = (void *)&payload->aug_args;
+
+	__builtin_memcpy(&payload->args, args, sizeof(struct syscall_enter_args));
+
+	for (int i = 0; i < 6; i++) {
+		size = m[i];
+		arg = (void *)args->args[i];
+		written = 0;
+
+		if (size == 0 || arg == NULL)
+			continue;
+
+		if (size == 1) { /* string */
+			size = bpf_probe_read_user_str(((struct augmented_arg *)arg_offset)->value, augsiz, arg);
+			if (size < 0)
+				size = 0;
+
+			/* these three lines can't be moved outside of this if block, sigh. */
+			((struct augmented_arg *)arg_offset)->size = size;
+			augment = true;
+			written = offsetof(struct augmented_arg, value) + size;
+		} else if (size > 0 && size <= augsiz) { /* struct */
+			err = bpf_probe_read_user(((struct augmented_arg *)arg_offset)->value, size, arg);
+			if (err)
+				continue;
+
+			((struct augmented_arg *)arg_offset)->size = size;
+			augment = true;
+			written = offsetof(struct augmented_arg, value) + size;
+		} else if (size < 0 && size >= -6) { /* buffer */
+			index = -(size + 1);
+			size = args->args[index];
+
+			if (size > MAX_BUF)
+				size = MAX_BUF;
+
+			if (size > 0) {
+				err = bpf_probe_read_user(((struct augmented_arg *)arg_offset)->value, size, arg);
+				if (err)
+					continue;
+
+				((struct augmented_arg *)arg_offset)->size = size;
+				augment = true;
+				written = offsetof(struct augmented_arg, value) + size;
+			}
+		}
+		output += written;
+		arg_offset += written;
+	}
+
+	if (!augment)
+		return 1;
+
+	return augmented__beauty_output(ctx, payload, sizeof(struct syscall_enter_args) + output);
+}
+
 SEC("tp/raw_syscalls/sys_enter")
 int sys_enter(struct syscall_enter_args *args)
 {
@@ -389,6 +501,9 @@ int sys_enter(struct syscall_enter_args *args)
 	if (pid_filter__has(&pids_filtered, getpid()))
 		return 0;
 
+	if (filter_pid && not_in_filter(getpid()))
+		return 0;
+
 	augmented_args = augmented_args_payload();
 	if (augmented_args == NULL)
 		return 1;
@@ -400,7 +515,8 @@ int sys_enter(struct syscall_enter_args *args)
 	 * "!raw_syscalls:unaugmented" that will just return 1 to return the
 	 * unaugmented tracepoint payload.
 	 */
-	bpf_tail_call(args, &syscalls_sys_enter, augmented_args->args.syscall_nr);
+	if (beauty_enter(args, &augmented_args->args))
+		bpf_tail_call(args, &syscalls_sys_enter, augmented_args->args.syscall_nr);
 
 	// If not found on the PROG_ARRAY syscalls map, then we're filtering it:
 	return 0;
@@ -410,6 +526,9 @@ SEC("tp/raw_syscalls/sys_exit")
 int sys_exit(struct syscall_exit_args *args)
 {
 	struct syscall_exit_args exit_args;
+
+	if (filter_pid && not_in_filter(getpid()))
+		return 0;
 
 	if (pid_filter__has(&pids_filtered, getpid()))
 		return 0;
