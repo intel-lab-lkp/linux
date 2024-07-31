@@ -113,6 +113,7 @@ struct syscall_arg_fmt {
 	bool	   show_zero;
 #ifdef HAVE_LIBBPF_SUPPORT
 	const struct btf_type *type;
+	int	   type_id;
 #endif
 };
 
@@ -851,6 +852,11 @@ static size_t syscall_arg__scnprintf_filename(char *bf, size_t size,
 
 #define SCA_FILENAME syscall_arg__scnprintf_filename
 
+static size_t syscall_arg__scnprintf_buf(char *bf, size_t size,
+					      struct syscall_arg *arg);
+
+#define SCA_BUF syscall_arg__scnprintf_buf
+
 static size_t syscall_arg__scnprintf_pipe_flags(char *bf, size_t size,
 						struct syscall_arg *arg)
 {
@@ -926,6 +932,24 @@ static void syscall_arg_fmt__cache_btf_enum(struct syscall_arg_fmt *arg_fmt, str
 	arg_fmt->type = btf__type_by_id(btf, id);
 }
 
+static int syscall_arg_fmt__cache_btf_struct(struct syscall_arg_fmt *arg_fmt, struct btf *btf, char *type)
+{
+	/* this function is solely used in trace__bpf_sys_enter_beauty_map */
+	int id;
+
+	if (arg_fmt->type != NULL)
+		return -1;
+
+	id = btf__find_by_name(btf, type);
+	if (id < 0)
+		return -1;
+
+	arg_fmt->type_id = id; /* used for dumping data later */
+	arg_fmt->type    = btf__type_by_id(btf, id);
+
+	return 0;
+}
+
 static bool syscall_arg__strtoul_btf_enum(char *bf, size_t size, struct syscall_arg *arg, u64 *val)
 {
 	const struct btf_type *bt = arg->fmt->type;
@@ -989,8 +1013,56 @@ static size_t btf_enum_scnprintf(const struct btf_type *type, struct btf *btf, c
 	return 0;
 }
 
+#define DUMPSIZ 256
+
+static void btf_dump_snprintf(void *ctx, const char *fmt, va_list args)
+{
+	char *s = ctx, new[DUMPSIZ];
+
+	vsnprintf(new, DUMPSIZ, fmt, args);
+
+	if (strlen(s) + strlen(new) < DUMPSIZ)
+		strncat(s, new, DUMPSIZ);
+}
+
+static size_t btf_dump__struct_scnprintf(const struct btf_type *type, struct btf *btf, char *bf, size_t size, struct syscall_arg *arg, int type_id)
+{
+	char str[DUMPSIZ];
+	int dump_size;
+	int consumed;
+	struct btf_dump *btf_dump;
+	struct augmented_arg *augmented_arg = arg->augmented.args;
+	LIBBPF_OPTS(btf_dump_opts, dump_opts);
+	LIBBPF_OPTS(btf_dump_type_data_opts, dump_data_opts);
+
+	if (arg == NULL || arg->augmented.args == NULL)
+		return 0;
+
+	memset(str, 0, sizeof(str));
+
+	dump_data_opts.compact     = true;
+	dump_data_opts.skip_names  = true;
+
+	btf_dump = btf_dump__new(btf, btf_dump_snprintf, str, &dump_opts);
+	if (btf_dump == NULL)
+		return 0;
+
+	consumed = sizeof(*augmented_arg) + augmented_arg->size;
+
+	dump_size = btf_dump__dump_type_data(btf_dump, type_id, arg->augmented.args->value, type->size, &dump_data_opts);
+	if (dump_size == 0)
+		return 0;
+
+	arg->augmented.args = ((void *)arg->augmented.args) + consumed;
+	arg->augmented.size -= consumed;
+
+	btf_dump__free(btf_dump);
+
+	return scnprintf(bf, size, "%s", str);
+}
+
 static size_t trace__btf_scnprintf(struct trace *trace, struct syscall_arg_fmt *arg_fmt, char *bf,
-				   size_t size, int val, char *type)
+				   size_t size, int val, struct syscall_arg *arg, char *type)
 {
 	if (trace->btf == NULL)
 		return 0;
@@ -1006,6 +1078,8 @@ static size_t trace__btf_scnprintf(struct trace *trace, struct syscall_arg_fmt *
 
 	if (btf_is_enum(arg_fmt->type))
 		return btf_enum_scnprintf(arg_fmt->type, trace->btf, bf, size, val);
+	else if (btf_is_struct(arg_fmt->type))
+		return btf_dump__struct_scnprintf(arg_fmt->type, trace->btf, bf, size, arg, arg_fmt->type_id);
 
 	return 0;
 }
@@ -1692,6 +1766,53 @@ static size_t syscall_arg__scnprintf_filename(char *bf, size_t size,
 	return 0;
 }
 
+#define MAX_CONTROL_CHAR 31
+#define MAX_ASCII 127
+#define MAX_BUF 32
+
+static size_t syscall_arg__scnprintf_augmented_buf(struct syscall_arg *arg, char *bf, size_t size)
+{
+	struct augmented_arg *augmented_arg = arg->augmented.args;
+	size_t printed = 0;
+	unsigned char *start = (unsigned char *)augmented_arg->value;
+	int i = 0, n = augmented_arg->size, consumed, digits;
+	char tmp[MAX_BUF * 4], tens[4];
+
+	memset(tmp, 0, sizeof(tmp));
+
+	for (int j = 0; j < n && i < (int)sizeof(tmp); ++j) {
+		/* print control characters(0~31 and 127), and characters bigger than 127 in \<value> */
+		if (start[j] <= MAX_CONTROL_CHAR || start[j] > MAX_ASCII) {
+			tmp[i++] = '\\';
+			digits = scnprintf(tens, sizeof(tmp) - i, "%d", (int)start[j]);
+			if (digits + i <= (int)sizeof(tmp)) {
+				strncpy(tmp + i, tens, digits);
+				i += digits;
+			}
+		} else  {
+			tmp[i++] = start[j];
+		}
+	}
+
+	printed = scnprintf(bf, size, "\"%s\"", tmp);
+
+	consumed = sizeof(*augmented_arg) + augmented_arg->size;
+
+	arg->augmented.args = ((void *)arg->augmented.args) + consumed;
+	arg->augmented.size -= consumed;
+
+	return printed;
+}
+
+static size_t syscall_arg__scnprintf_buf(char *bf, size_t size,
+					      struct syscall_arg *arg)
+{
+	if (arg->augmented.args)
+		return syscall_arg__scnprintf_augmented_buf(arg, bf, size);
+
+	return 0;
+}
+
 static bool trace__filter_duration(struct trace *trace, double t)
 {
 	return t < (trace->duration_filter * NSEC_PER_MSEC);
@@ -1901,8 +2022,16 @@ syscall_arg_fmt__init_array(struct syscall_arg_fmt *arg, struct tep_format_field
 
 		if (strcmp(field->type, "const char *") == 0 &&
 		    ((len >= 4 && strcmp(field->name + len - 4, "name") == 0) ||
-		     strstr(field->name, "path") != NULL))
+		     strstr(field->name, "path") ||
+		     strstr(field->name, "file") ||
+		     strstr(field->name, "root") ||
+		     strstr(field->name, "key") ||
+		     strstr(field->name, "special") ||
+		     strstr(field->name, "type") ||
+		     strstr(field->name, "description")))
 			arg->scnprintf = SCA_FILENAME;
+		else if (strstr(field->type, "char *") && strstr(field->name, "buf"))
+			arg->scnprintf = SCA_BUF;
 		else if ((field->flags & TEP_FIELD_IS_POINTER) || strstr(field->name, "addr"))
 			arg->scnprintf = SCA_PTR;
 		else if (strcmp(field->type, "pid_t") == 0)
@@ -2261,7 +2390,7 @@ static size_t syscall__scnprintf_args(struct syscall *sc, char *bf, size_t size,
 				printed += scnprintf(bf + printed, size - printed, "%s: ", field->name);
 
 			btf_printed = trace__btf_scnprintf(trace, &sc->arg_fmt[arg.idx], bf + printed,
-							   size - printed, val, field->type);
+							   size - printed, val, &arg, field->type);
 			if (btf_printed) {
 				printed += btf_printed;
 				continue;
@@ -2963,7 +3092,7 @@ static size_t trace__fprintf_tp_fields(struct trace *trace, struct evsel *evsel,
 		if (trace->show_arg_names)
 			printed += scnprintf(bf + printed, size - printed, "%s: ", field->name);
 
-		btf_printed = trace__btf_scnprintf(trace, arg, bf + printed, size - printed, val, field->type);
+		btf_printed = trace__btf_scnprintf(trace, arg, bf + printed, size - printed, val, NULL, field->type);
 		if (btf_printed) {
 			printed += btf_printed;
 			continue;
@@ -3521,6 +3650,82 @@ static int trace__bpf_prog_sys_exit_fd(struct trace *trace, int id)
 	return sc ? bpf_program__fd(sc->bpf_prog.sys_exit) : bpf_program__fd(trace->skel->progs.syscall_unaugmented);
 }
 
+static int trace__bpf_sys_enter_beauty_map(struct trace *trace, int key, unsigned int *beauty_array)
+{
+	struct tep_format_field *field;
+	struct syscall *sc = trace__syscall_info(trace, NULL, key);
+	const struct btf_type *bt;
+	char *struct_offset, *tmp, name[32];
+	bool augmented = false;
+	int i, cnt;
+
+	if (sc == NULL)
+		return -1;
+
+	trace__load_vmlinux_btf(trace);
+	if (trace->btf == NULL)
+		return -1;
+
+	for (i = 0, field = sc->args; field; ++i, field = field->next) {
+		struct_offset = strstr(field->type, "struct ");
+
+		if (field->flags & TEP_FIELD_IS_POINTER && struct_offset) { /* struct */
+			struct_offset += 7;
+
+			/* for 'struct foo *', we only want 'foo' */
+			for (tmp = struct_offset, cnt = 0; *tmp != ' ' && *tmp != '\0'; ++tmp, ++cnt) {
+			}
+
+			strncpy(name, struct_offset, cnt);
+			name[cnt] = '\0';
+
+			if (syscall_arg_fmt__cache_btf_struct(&sc->arg_fmt[i], trace->btf, name))
+				continue;
+
+			bt = sc->arg_fmt[i].type;
+			beauty_array[i] = bt->size;
+			augmented = true;
+		} else if (field->flags & TEP_FIELD_IS_POINTER && /* string */
+		    strcmp(field->type, "const char *") == 0 &&
+		    (strstr(field->name, "name") ||
+		     strstr(field->name, "path") ||
+		     strstr(field->name, "file") ||
+		     strstr(field->name, "root") ||
+		     strstr(field->name, "key") ||
+		     strstr(field->name, "special") ||
+		     strstr(field->name, "type") ||
+		     strstr(field->name, "description"))) {
+			beauty_array[i] = 1;
+			augmented = true;
+		} else if (field->flags & TEP_FIELD_IS_POINTER && /* buffer */
+			   strstr(field->type, "char *") &&
+			   (strstr(field->name, "buf") ||
+			    strstr(field->name, "val") ||
+			    strstr(field->name, "msg"))) {
+			int j;
+			struct tep_format_field *field_tmp;
+
+			/* find the size of the buffer  */
+			for (j = 0, field_tmp = sc->args; field_tmp; ++j, field_tmp = field_tmp->next) {
+				if (!(field_tmp->flags & TEP_FIELD_IS_POINTER) && /* only integers */
+				    (strstr(field_tmp->name, "count") ||
+				     strstr(field_tmp->name, "siz") ||  /* size, bufsiz */
+				     (strstr(field_tmp->name, "len") && strcmp(field_tmp->name, "filename")))) {
+					 /* filename's got 'len' in it, we don't want that */
+					beauty_array[i] = -(j + 1);
+					augmented = true;
+					break;
+				}
+			}
+		}
+	}
+
+	if (augmented)
+		return 0;
+
+	return -1;
+}
+
 static struct bpf_program *trace__find_usable_bpf_prog_entry(struct trace *trace, struct syscall *sc)
 {
 	struct tep_format_field *field, *candidate_field;
@@ -3625,7 +3830,9 @@ static int trace__init_syscalls_bpf_prog_array_maps(struct trace *trace)
 {
 	int map_enter_fd = bpf_map__fd(trace->skel->maps.syscalls_sys_enter);
 	int map_exit_fd  = bpf_map__fd(trace->skel->maps.syscalls_sys_exit);
+	int beauty_map_fd = bpf_map__fd(trace->skel->maps.beauty_map_enter);
 	int err = 0;
+	unsigned int beauty_array[6];
 
 	for (int i = 0; i < trace->sctbl->syscalls.nr_entries; ++i) {
 		int prog_fd, key = syscalltbl__id_at_idx(trace->sctbl, i);
@@ -3642,6 +3849,15 @@ static int trace__init_syscalls_bpf_prog_array_maps(struct trace *trace)
 			break;
 		prog_fd = trace__bpf_prog_sys_exit_fd(trace, key);
 		err = bpf_map_update_elem(map_exit_fd, &key, &prog_fd, BPF_ANY);
+		if (err)
+			break;
+
+		/* set up the size of struct pointer argument for beauty map */
+		memset(beauty_array, 0, sizeof(beauty_array));
+		err = trace__bpf_sys_enter_beauty_map(trace, key, (unsigned int *)beauty_array);
+		if (err)
+			continue;
+		err = bpf_map_update_elem(beauty_map_fd, &key, beauty_array, BPF_ANY);
 		if (err)
 			break;
 	}
@@ -3712,6 +3928,33 @@ static int trace__init_syscalls_bpf_prog_array_maps(struct trace *trace)
 
 	return err;
 }
+
+static void trace__init_pid_filter(struct trace *trace)
+{
+	int pid_filter_fd = bpf_map__fd(trace->skel->maps.pid_filter);
+	bool exists = true;
+	struct str_node *pos;
+	struct strlist *pid_slist = strlist__new(trace->opts.target.pid, NULL);
+
+	trace->skel->bss->filter_pid = false;
+
+	if (pid_slist) {
+		strlist__for_each_entry(pos, pid_slist) {
+			char *end_ptr;
+			int pid = strtol(pos->s, &end_ptr, 10);
+
+			if (pid == INT_MIN || pid == INT_MAX ||
+			    (*end_ptr != '\0' && *end_ptr != ','))
+				continue;
+
+			bpf_map_update_elem(pid_filter_fd, &pid, &exists, BPF_ANY);
+			trace->skel->bss->filter_pid = true;
+		}
+	}
+
+	strlist__delete(pid_slist);
+}
+
 #endif // HAVE_BPF_SKEL
 
 static int trace__set_ev_qualifier_filter(struct trace *trace)
@@ -4106,6 +4349,9 @@ static int trace__run(struct trace *trace, int argc, const char **argv)
 #ifdef HAVE_BPF_SKEL
 	if (trace->skel && trace->skel->progs.sys_enter)
 		trace__init_syscalls_bpf_prog_array_maps(trace);
+
+	if (trace->skel)
+		trace__init_pid_filter(trace);
 #endif
 
 	if (trace->ev_qualifier_ids.nr > 0) {
