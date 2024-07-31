@@ -73,14 +73,10 @@ static void iomap_set_range_uptodate(struct folio *folio, size_t off,
 		size_t len)
 {
 	struct iomap_folio_state *ifs = folio->private;
-	unsigned long flags;
 	bool uptodate = true;
 
-	if (ifs) {
-		spin_lock_irqsave(&ifs->state_lock, flags);
+	if (ifs)
 		uptodate = ifs_set_range_uptodate(folio, ifs, off, len);
-		spin_unlock_irqrestore(&ifs->state_lock, flags);
-	}
 
 	if (uptodate)
 		folio_mark_uptodate(folio);
@@ -395,7 +391,18 @@ static loff_t iomap_readpage_iter(const struct iomap_iter *iter,
 
 	if (iomap_block_needs_zeroing(iter, pos)) {
 		folio_zero_range(folio, poff, plen);
-		iomap_set_range_uptodate(folio, poff, plen);
+		if (ifs) {
+			/*
+			 * Hold state_lock to protect from submitting multiple
+			 * bios for the same locked folio and then get multiple
+			 * callbacks in parallel.
+			 */
+			spin_lock_irq(&ifs->state_lock);
+			iomap_set_range_uptodate(folio, poff, plen);
+			spin_unlock_irq(&ifs->state_lock);
+		} else {
+			folio_mark_uptodate(folio);
+		}
 		goto done;
 	}
 
