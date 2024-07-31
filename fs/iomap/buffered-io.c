@@ -137,14 +137,8 @@ static void ifs_clear_range_dirty(struct folio *folio,
 	unsigned int first_blk = DIV_ROUND_UP(off, i_blocksize(inode));
 	unsigned int last_blk = (off + len) >> inode->i_blkbits;
 	unsigned int nr_blks = last_blk - first_blk;
-	unsigned long flags;
 
-	if (!nr_blks)
-		return;
-
-	spin_lock_irqsave(&ifs->state_lock, flags);
 	bitmap_clear(ifs->state, first_blk + blks_per_folio, nr_blks);
-	spin_unlock_irqrestore(&ifs->state_lock, flags);
 }
 
 static void iomap_clear_range_dirty(struct folio *folio, size_t off, size_t len)
@@ -163,11 +157,8 @@ static void ifs_set_range_dirty(struct folio *folio,
 	unsigned int first_blk = (off >> inode->i_blkbits);
 	unsigned int last_blk = (off + len - 1) >> inode->i_blkbits;
 	unsigned int nr_blks = last_blk - first_blk + 1;
-	unsigned long flags;
 
-	spin_lock_irqsave(&ifs->state_lock, flags);
 	bitmap_set(ifs->state, first_blk + blks_per_folio, nr_blks);
-	spin_unlock_irqrestore(&ifs->state_lock, flags);
 }
 
 static void iomap_set_range_dirty(struct folio *folio, size_t off, size_t len)
