@@ -1045,7 +1045,7 @@ static bool is_pppoe_ses_hdr_valid(const struct pppoe_hdr *hdr)
  *
  * Caller must take care of zeroing target container memory.
  */
-bool __skb_flow_dissect(const struct net *net,
+bool __skb_flow_dissect(struct net *net,
 			const struct sk_buff *skb,
 			struct flow_dissector *flow_dissector,
 			void *target_container, const void *data,
@@ -1854,7 +1854,7 @@ EXPORT_SYMBOL(make_flow_keys_digest);
 
 static struct flow_dissector flow_keys_dissector_symmetric __read_mostly;
 
-u32 __skb_get_hash_symmetric_net(const struct net *net, const struct sk_buff *skb)
+u32 __skb_get_hash_symmetric_net(struct net *net, const struct sk_buff *skb)
 {
 	struct flow_keys keys;
 
@@ -1878,7 +1878,7 @@ EXPORT_SYMBOL_GPL(__skb_get_hash_symmetric_net);
  * on success, zero indicates no valid hash.  Also, sets l4_hash in skb
  * if hash is a canonical 4-tuple hash over transport ports.
  */
-void __skb_get_hash_net(const struct net *net, struct sk_buff *skb)
+void __skb_get_hash_net(struct net *net, struct sk_buff *skb)
 {
 	struct flow_keys keys;
 	u32 hash;

@@ -1504,14 +1504,14 @@ __skb_set_sw_hash(struct sk_buff *skb, __u32 hash, bool is_l4)
 	__skb_set_hash(skb, hash, true, is_l4);
 }
 
-u32 __skb_get_hash_symmetric_net(const struct net *net, const struct sk_buff *skb);
+u32 __skb_get_hash_symmetric_net(struct net *net, const struct sk_buff *skb);
 
 static inline u32 __skb_get_hash_symmetric(const struct sk_buff *skb)
 {
 	return __skb_get_hash_symmetric_net(NULL, skb);
 }
 
-void __skb_get_hash_net(const struct net *net, struct sk_buff *skb);
+void __skb_get_hash_net(struct net *net, struct sk_buff *skb);
 u32 skb_get_poff(const struct sk_buff *skb);
 u32 __skb_get_poff(const struct sk_buff *skb, const void *data,
 		   const struct flow_keys_basic *keys, int hlen);
@@ -1532,7 +1532,7 @@ struct bpf_flow_dissector;
 u32 bpf_flow_dissect(struct bpf_prog *prog, struct bpf_flow_dissector *ctx,
 		     __be16 proto, int nhoff, int hlen, unsigned int flags);
 
-bool __skb_flow_dissect(const struct net *net,
+bool __skb_flow_dissect(struct net *net,
 			const struct sk_buff *skb,
 			struct flow_dissector *flow_dissector,
 			void *target_container, const void *data,
@@ -1556,7 +1556,7 @@ static inline bool skb_flow_dissect_flow_keys(const struct sk_buff *skb,
 }
 
 static inline bool
-skb_flow_dissect_flow_keys_basic(const struct net *net,
+skb_flow_dissect_flow_keys_basic(struct net *net,
 				 const struct sk_buff *skb,
 				 struct flow_keys_basic *flow,
 				 const void *data, __be16 proto,
@@ -1590,7 +1590,7 @@ void skb_flow_dissect_hash(const struct sk_buff *skb,
 			   struct flow_dissector *flow_dissector,
 			   void *target_container);
 
-static inline __u32 skb_get_hash_net(const struct net *net, struct sk_buff *skb)
+static inline __u32 skb_get_hash_net(struct net *net, struct sk_buff *skb)
 {
 	if (!skb->l4_hash && !skb->sw_hash)
 		__skb_get_hash_net(net, skb);
