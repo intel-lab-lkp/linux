@@ -92,6 +92,7 @@ pub struct SpinLockBackend;
 unsafe impl super::Backend for SpinLockBackend {
     type State = bindings::spinlock_t;
     type GuardState = ();
+    type Context<'a> = PhantomData<&'a ()>;
 
     unsafe fn init(
         ptr: *mut Self::State,

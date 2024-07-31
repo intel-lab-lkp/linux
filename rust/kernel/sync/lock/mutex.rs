@@ -4,6 +4,8 @@
 //!
 //! This module allows Rust code to use the kernel's `struct mutex`.
 
+use core::marker::*;
+
 /// Creates a [`Mutex`] initialiser with the given name and a newly-created lock class.
 ///
 /// It uses the name if one is given, otherwise it generates one based on the file name and line
@@ -93,6 +95,7 @@ pub struct MutexBackend;
 unsafe impl super::Backend for MutexBackend {
     type State = bindings::mutex;
     type GuardState = ();
+    type Context<'a> = PhantomData<&'a ()>;
 
     unsafe fn init(
         ptr: *mut Self::State,
