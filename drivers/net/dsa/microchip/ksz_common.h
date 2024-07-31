@@ -174,6 +174,7 @@ struct ksz_device {
 	bool synclko_125;
 	bool synclko_disable;
 	bool wakeup_source;
+	bool pme_active_high;
 
 	struct vlan_table *vlan_cache;
 
@@ -711,6 +712,9 @@ static inline bool is_lan937x_tx_phy(struct ksz_device *dev, int port)
 
 #define PME_ENABLE			BIT(1)
 #define PME_POLARITY			BIT(0)
+
+#define KSZ8795_REG_INT_EN		0x7D
+#define KSZ8795_INT_PME_MASK		BIT(4)
 
 /* Interrupt */
 #define REG_SW_PORT_INT_STATUS__1	0x001B
