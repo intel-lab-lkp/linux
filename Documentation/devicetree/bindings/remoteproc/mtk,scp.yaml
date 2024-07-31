@@ -55,7 +55,9 @@ properties:
       initializing SCP.
 
   memory-region:
-    maxItems: 1
+    description:
+      List of phandles to the reserved memory nodes used by
+      remoteproc devices.
 
   cros-ec-rpmsg:
     $ref: /schemas/mfd/google,cros-ec.yaml
@@ -123,7 +125,9 @@ patternProperties:
           initializing sub cores of multi-core SCP.
 
       memory-region:
-        maxItems: 1
+        description:
+          List of phandles to the reserved memory nodes used by
+          remoteproc devices.
 
       cros-ec-rpmsg:
         $ref: /schemas/mfd/google,cros-ec.yaml
