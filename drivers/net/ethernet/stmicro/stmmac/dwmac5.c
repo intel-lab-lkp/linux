@@ -655,3 +655,15 @@ void dwmac5_fpe_set_add_frag_size(void __iomem *ioaddr, u32 add_frag_size)
 
 	writel(value, ioaddr + MTL_FPE_CTRL_STS);
 }
+
+void dwmac5_fpe_set_preemptible_tcs(void __iomem *ioaddr, unsigned long tcs)
+{
+	u32 value;
+
+	value = readl(ioaddr + MTL_FPE_CTRL_STS);
+
+	value &= ~PEC;
+	value |= FIELD_PREP(PEC, tcs);
+
+	writel(value, ioaddr + MTL_FPE_CTRL_STS);
+}
