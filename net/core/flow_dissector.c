@@ -11,6 +11,7 @@
 #include <net/fou.h>
 #include <net/ip.h>
 #include <net/ipv6.h>
+#include <net/geneve.h>
 #include <net/gre.h>
 #include <net/pptp.h>
 #include <net/tipc.h>
@@ -808,6 +809,29 @@ __skb_flow_dissect_vxlan(const struct sk_buff *skb,
 	return FLOW_DISSECT_RET_PROTO_AGAIN;
 }
 
+static enum flow_dissect_ret
+__skb_flow_dissect_geneve(const struct sk_buff *skb,
+			  struct flow_dissector *flow_dissector,
+			  void *target_container, const void *data,
+			  __be16 *p_proto, int *p_nhoff, int hlen,
+			  unsigned int flags)
+{
+	struct genevehdr *hdr, _hdr;
+
+	hdr = __skb_header_pointer(skb, *p_nhoff, sizeof(_hdr), data, hlen,
+				   &_hdr);
+	if (!hdr)
+		return FLOW_DISSECT_RET_OUT_BAD;
+
+	if (hdr->ver != 0)
+		return FLOW_DISSECT_RET_OUT_GOOD;
+
+	*p_proto = hdr->proto_type;
+	*p_nhoff += sizeof(struct genevehdr) + (hdr->opt_len * 4);
+
+	return FLOW_DISSECT_RET_PROTO_AGAIN;
+}
+
 /**
  * __skb_flow_dissect_batadv() - dissect batman-adv header
  * @skb: sk_buff to with the batman-adv header
@@ -973,6 +997,11 @@ __skb_flow_dissect_udp(const struct sk_buff *skb, struct net *net,
 		ret = __skb_flow_dissect_vxlan(skb, flow_dissector,
 					       target_container, data,
 					       p_proto, &nhoff, hlen, flags);
+		break;
+	case UDP_ENCAP_GENEVE:
+		ret = __skb_flow_dissect_geneve(skb, flow_dissector,
+						target_container, data,
+						p_proto, &nhoff, hlen, flags);
 		break;
 	default:
 		break;
