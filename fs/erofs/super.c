@@ -11,6 +11,7 @@
 #include <linux/fs_parser.h>
 #include <linux/exportfs.h>
 #include "xattr.h"
+#include "pagecache_share.h"
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/erofs.h>
@@ -95,6 +96,10 @@ static struct inode *erofs_alloc_inode(struct super_block *sb)
 
 	/* zero out everything except vfs_inode */
 	memset(vi, 0, offsetof(struct erofs_inode, vfs_inode));
+#ifdef CONFIG_EROFS_FS_PAGE_CACHE_SHARE
+	INIT_LIST_HEAD(&vi->pcs_list);
+	init_rwsem(&vi->pcs_rwsem);
+#endif
 	return &vi->vfs_inode;
 }
 
@@ -107,6 +112,21 @@ static void erofs_free_inode(struct inode *inode)
 	kfree(vi->xattr_shared_xattrs);
 	kmem_cache_free(erofs_inode_cachep, vi);
 }
+
+#ifdef CONFIG_EROFS_FS_PAGE_CACHE_SHARE
+static void erofs_destroy_inode(struct inode *inode)
+{
+	struct erofs_inode *vi = EROFS_I(inode);
+
+	if ((inode->i_mode & S_IFMT) == S_IFREG &&
+	    EROFS_I(inode)->fprt_len > 0) {
+		if (erofs_pcs_remove(inode))
+			erofs_err(inode->i_sb, "pcs: fail to remove inode.");
+		kfree(vi->fprt);
+		vi->fprt = NULL;
+	}
+}
+#endif
 
 static bool check_layout_compatibility(struct super_block *sb,
 				       struct erofs_super_block *dsb)
@@ -953,6 +973,9 @@ static int erofs_show_options(struct seq_file *seq, struct dentry *root)
 const struct super_operations erofs_sops = {
 	.put_super = erofs_put_super,
 	.alloc_inode = erofs_alloc_inode,
+#ifdef CONFIG_EROFS_FS_PAGE_CACHE_SHARE
+	.destroy_inode = erofs_destroy_inode,
+#endif
 	.free_inode = erofs_free_inode,
 	.statfs = erofs_statfs,
 	.show_options = erofs_show_options,

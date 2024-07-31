@@ -5,6 +5,7 @@
  * Copyright (C) 2021, Alibaba Cloud
  */
 #include "xattr.h"
+#include "pagecache_share.h"
 
 #include <trace/events/erofs.h>
 
@@ -229,10 +230,22 @@ static int erofs_fill_inode(struct inode *inode)
 	switch (inode->i_mode & S_IFMT) {
 	case S_IFREG:
 		inode->i_op = &erofs_generic_iops;
+#ifdef CONFIG_EROFS_FS_PAGE_CACHE_SHARE
+		erofs_pcs_fill_inode(inode);
+#endif
 		if (erofs_inode_is_data_compressed(vi->datalayout))
 			inode->i_fop = &generic_ro_fops;
+#ifdef CONFIG_EROFS_FS_PAGE_CACHE_SHARE
+		else {
+			if (vi->fprt_len > 0)
+				inode->i_fop = &erofs_pcs_file_fops;
+			else
+				inode->i_fop = &erofs_file_fops;
+		}
+#else
 		else
 			inode->i_fop = &erofs_file_fops;
+#endif
 		break;
 	case S_IFDIR:
 		inode->i_op = &erofs_dir_iops;
@@ -325,6 +338,16 @@ struct inode *erofs_iget(struct super_block *sb, erofs_nid_t nid)
 			return ERR_PTR(err);
 		}
 		unlock_new_inode(inode);
+#ifdef CONFIG_EROFS_FS_PAGE_CACHE_SHARE
+		if ((inode->i_mode & S_IFMT) == S_IFREG &&
+		    EROFS_I(inode)->fprt_len > 0) {
+			err = erofs_pcs_add(inode);
+			if (err) {
+				iget_failed(inode);
+				return ERR_PTR(err);
+			}
+		}
+#endif
 	}
 	return inode;
 }
