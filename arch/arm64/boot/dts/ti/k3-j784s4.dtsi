@@ -296,10 +296,10 @@
 	};
 
 	thermal_zones: thermal-zones {
-		#include "k3-j784s4-thermal.dtsi"
+		#include "k3-j784s4-j742s2-thermal-common.dtsi"
 	};
 };
 
 /* Now include peripherals from each bus segment */
-#include "k3-j784s4-main.dtsi"
-#include "k3-j784s4-mcu-wakeup.dtsi"
+#include "k3-j784s4-j742s2-main-common.dtsi"
+#include "k3-j784s4-j742s2-mcu-wakeup-common.dtsi"
