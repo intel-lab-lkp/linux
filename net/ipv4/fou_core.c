@@ -21,17 +21,6 @@
 
 #include "fou_nl.h"
 
-struct fou {
-	struct socket *sock;
-	u8 protocol;
-	u8 flags;
-	__be16 port;
-	u8 family;
-	u16 type;
-	struct list_head list;
-	struct rcu_head rcu;
-};
-
 #define FOU_F_REMCSUM_NOPARTIAL BIT(0)
 
 struct fou_cfg {
@@ -47,11 +36,6 @@ struct fou_net {
 	struct list_head fou_list;
 	struct mutex fou_lock;
 };
-
-static inline struct fou *fou_from_sock(struct sock *sk)
-{
-	return sk->sk_user_data;
-}
 
 static int fou_recv_pull(struct sk_buff *skb, struct fou *fou, size_t len)
 {
