@@ -1473,7 +1473,6 @@ static void __brcm_pcie_remove(struct brcm_pcie *pcie)
 		dev_err(pcie->dev, "Could not stop phy\n");
 	if (reset_control_rearm(pcie->rescal))
 		dev_err(pcie->dev, "Could not rearm rescal reset\n");
-	clk_disable_unprepare(pcie->clk);
 }
 
 static void brcm_pcie_remove(struct platform_device *pdev)
@@ -1484,6 +1483,7 @@ static void brcm_pcie_remove(struct platform_device *pdev)
 	pci_stop_root_bus(bridge->bus);
 	pci_remove_root_bus(bridge->bus);
 	__brcm_pcie_remove(pcie);
+	clk_disable_unprepare(pcie->clk);
 }
 
 static const int pcie_offsets[] = {
@@ -1613,31 +1613,26 @@ static int brcm_pcie_probe(struct platform_device *pdev)
 
 	pcie->ssc = of_property_read_bool(np, "brcm,enable-ssc");
 
-	ret = clk_prepare_enable(pcie->clk);
-	if (ret) {
-		dev_err(&pdev->dev, "could not enable clock\n");
-		return ret;
-	}
 	pcie->rescal = devm_reset_control_get_optional_shared(&pdev->dev, "rescal");
-	if (IS_ERR(pcie->rescal)) {
-		clk_disable_unprepare(pcie->clk);
+	if (IS_ERR(pcie->rescal))
 		return PTR_ERR(pcie->rescal);
-	}
+
 	pcie->perst_reset = devm_reset_control_get_optional_exclusive(&pdev->dev, "perst");
-	if (IS_ERR(pcie->perst_reset)) {
-		clk_disable_unprepare(pcie->clk);
+	if (IS_ERR(pcie->perst_reset))
 		return PTR_ERR(pcie->perst_reset);
-	}
+
+	ret = clk_prepare_enable(pcie->clk);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "could not enable clock\n");
 
 	ret = reset_control_reset(pcie->rescal);
-	if (ret)
-		dev_err(&pdev->dev, "failed to deassert 'rescal'\n");
+	if (dev_err_probe(&pdev->dev, ret, "failed to deassert 'rescal'\n"))
+		goto clk_disable_unprepare;
 
 	ret = brcm_phy_start(pcie);
 	if (ret) {
 		reset_control_rearm(pcie->rescal);
-		clk_disable_unprepare(pcie->clk);
-		return ret;
+		goto clk_disable_unprepare;
 	}
 
 	ret = brcm_pcie_setup(pcie);
@@ -1654,10 +1649,8 @@ static int brcm_pcie_probe(struct platform_device *pdev)
 	msi_np = of_parse_phandle(pcie->np, "msi-parent", 0);
 	if (pci_msi_enabled() && msi_np == pcie->np) {
 		ret = brcm_pcie_enable_msi(pcie);
-		if (ret) {
-			dev_err(pcie->dev, "probe of internal MSI failed");
+		if (dev_err_probe(pcie->dev, ret, "probe of internal MSI failed"))
 			goto fail;
-		}
 	}
 
 	bridge->ops = pcie->type == BCM7425 ? &brcm7425_pcie_ops : &brcm_pcie_ops;
@@ -1678,6 +1671,9 @@ static int brcm_pcie_probe(struct platform_device *pdev)
 
 fail:
 	__brcm_pcie_remove(pcie);
+clk_disable_unprepare:
+	clk_disable_unprepare(pcie->clk);
+
 	return ret;
 }
 
