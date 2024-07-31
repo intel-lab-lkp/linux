@@ -19,27 +19,27 @@
 #include <linux/page_frag_cache.h>
 #include "internal.h"
 
-static bool __page_frag_cache_reuse(unsigned long encoded_va,
-				    unsigned int pagecnt_bias)
+static struct page *__page_frag_cache_reuse(unsigned long encoded_va,
+					    unsigned int pagecnt_bias)
 {
 	struct page *page;
 
 	page = virt_to_page((void *)encoded_va);
 	if (!page_ref_sub_and_test(page, pagecnt_bias))
-		return false;
+		return NULL;
 
 	if (unlikely(encoded_page_pfmemalloc(encoded_va))) {
 		free_unref_page(page, encoded_page_order(encoded_va));
-		return false;
+		return NULL;
 	}
 
 	/* OK, page count is 0, we can safely set it */
 	set_page_count(page, PAGE_FRAG_CACHE_MAX_SIZE + 1);
-	return true;
+	return page;
 }
 
-static bool __page_frag_cache_refill(struct page_frag_cache *nc,
-				     gfp_t gfp_mask)
+static struct page *__page_frag_cache_refill(struct page_frag_cache *nc,
+					     gfp_t gfp_mask)
 {
 	unsigned long order = PAGE_FRAG_CACHE_MAX_ORDER;
 	struct page *page = NULL;
@@ -55,7 +55,7 @@ static bool __page_frag_cache_refill(struct page_frag_cache *nc,
 		page = __alloc_pages(gfp, 0, numa_mem_id(), NULL);
 		if (unlikely(!page)) {
 			memset(nc, 0, sizeof(*nc));
-			return false;
+			return NULL;
 		}
 
 		order = 0;
@@ -69,29 +69,151 @@ static bool __page_frag_cache_refill(struct page_frag_cache *nc,
 	 */
 	page_ref_add(page, PAGE_FRAG_CACHE_MAX_SIZE);
 
-	return true;
+	return page;
 }
 
 /* Reload cache by reusing the old cache if it is possible, or
  * refilling from the page allocator.
  */
-static bool __page_frag_cache_reload(struct page_frag_cache *nc,
-				     gfp_t gfp_mask)
+static struct page *__page_frag_cache_reload(struct page_frag_cache *nc,
+					     gfp_t gfp_mask)
 {
+	struct page *page;
+
 	if (likely(nc->encoded_va)) {
-		if (__page_frag_cache_reuse(nc->encoded_va, nc->pagecnt_bias))
+		page = __page_frag_cache_reuse(nc->encoded_va, nc->pagecnt_bias);
+		if (page)
 			goto out;
 	}
 
-	if (unlikely(!__page_frag_cache_refill(nc, gfp_mask)))
-		return false;
+	page = __page_frag_cache_refill(nc, gfp_mask);
+	if (unlikely(!page))
+		return NULL;
 
 out:
 	/* reset page count bias and remaining to start of new frag */
 	nc->pagecnt_bias = PAGE_FRAG_CACHE_MAX_SIZE + 1;
 	nc->remaining = page_frag_cache_page_size(nc->encoded_va);
-	return true;
+	return page;
 }
+
+void *page_frag_alloc_va_prepare(struct page_frag_cache *nc,
+				 unsigned int *fragsz, gfp_t gfp)
+{
+	unsigned int remaining = nc->remaining;
+
+	VM_BUG_ON(!*fragsz);
+	if (likely(remaining >= *fragsz)) {
+		unsigned long encoded_va = nc->encoded_va;
+
+		*fragsz = remaining;
+
+		return encoded_page_address(encoded_va) +
+			(page_frag_cache_page_size(encoded_va) - remaining);
+	}
+
+	if (unlikely(*fragsz > PAGE_SIZE))
+		return NULL;
+
+	/* When reload fails, nc->encoded_va and nc->remaining are both reset
+	 * to zero, so there is no need to check the return value here.
+	 */
+	__page_frag_cache_reload(nc, gfp);
+
+	*fragsz = nc->remaining;
+	return encoded_page_address(nc->encoded_va);
+}
+EXPORT_SYMBOL(page_frag_alloc_va_prepare);
+
+struct page *page_frag_alloc_pg_prepare(struct page_frag_cache *nc,
+					unsigned int *offset,
+					unsigned int *fragsz, gfp_t gfp)
+{
+	unsigned int remaining = nc->remaining;
+	struct page *page;
+
+	VM_BUG_ON(!*fragsz);
+	if (likely(remaining >= *fragsz)) {
+		unsigned long encoded_va = nc->encoded_va;
+
+		*offset = page_frag_cache_page_size(encoded_va) - remaining;
+		*fragsz = remaining;
+
+		return virt_to_page((void *)encoded_va);
+	}
+
+	if (unlikely(*fragsz > PAGE_SIZE))
+		return NULL;
+
+	page = __page_frag_cache_reload(nc, gfp);
+	*offset = 0;
+	*fragsz = nc->remaining;
+	return page;
+}
+EXPORT_SYMBOL(page_frag_alloc_pg_prepare);
+
+struct page *page_frag_alloc_prepare(struct page_frag_cache *nc,
+				     unsigned int *offset,
+				     unsigned int *fragsz,
+				     void **va, gfp_t gfp)
+{
+	unsigned int remaining = nc->remaining;
+	struct page *page;
+
+	VM_BUG_ON(!*fragsz);
+	if (likely(remaining >= *fragsz)) {
+		unsigned long encoded_va = nc->encoded_va;
+
+		*offset = page_frag_cache_page_size(encoded_va) - remaining;
+		*va = encoded_page_address(encoded_va) + *offset;
+		*fragsz = remaining;
+
+		return virt_to_page((void *)encoded_va);
+	}
+
+	if (unlikely(*fragsz > PAGE_SIZE))
+		return NULL;
+
+	page = __page_frag_cache_reload(nc, gfp);
+	*offset = 0;
+	*fragsz = nc->remaining;
+	*va = encoded_page_address(nc->encoded_va);
+
+	return page;
+}
+EXPORT_SYMBOL(page_frag_alloc_prepare);
+
+struct page *page_frag_alloc_pg(struct page_frag_cache *nc,
+				unsigned int *offset, unsigned int fragsz,
+				gfp_t gfp)
+{
+	unsigned int remaining = nc->remaining;
+	struct page *page;
+
+	VM_BUG_ON(!fragsz);
+	if (likely(remaining >= fragsz)) {
+		unsigned long encoded_va = nc->encoded_va;
+
+		*offset = page_frag_cache_page_size(encoded_va) -
+				remaining;
+
+		return virt_to_page((void *)encoded_va);
+	}
+
+	if (unlikely(fragsz > PAGE_SIZE))
+		return NULL;
+
+	page = __page_frag_cache_reload(nc, gfp);
+	if (unlikely(!page))
+		return NULL;
+
+	*offset = 0;
+	nc->remaining = remaining - fragsz;
+	nc->pagecnt_bias--;
+
+	return page;
+}
+EXPORT_SYMBOL(page_frag_alloc_pg);
 
 void page_frag_cache_drain(struct page_frag_cache *nc)
 {
