@@ -9,6 +9,7 @@
 #include <net/dsa.h>
 #include <net/dst_metadata.h>
 #include <net/fou.h>
+#include <net/gtp.h>
 #include <net/ip.h>
 #include <net/ipv6.h>
 #include <net/geneve.h>
@@ -35,6 +36,7 @@
 #include <net/pkt_cls.h>
 #include <scsi/fc/fc_fcoe.h>
 #include <uapi/linux/batadv_packet.h>
+#include <uapi/linux/gtp.h>
 #include <linux/bpf.h>
 #if IS_ENABLED(CONFIG_NF_CONNTRACK)
 #include <net/netfilter/nf_conntrack_core.h>
@@ -887,6 +889,81 @@ __skb_flow_dissect_gue(const struct sk_buff *skb,
 	return FLOW_DISSECT_RET_IPPROTO_AGAIN;
 }
 
+static enum flow_dissect_ret
+__skb_flow_dissect_gtp0(const struct sk_buff *skb,
+			struct flow_dissector *flow_dissector,
+			void *target_container, const void *data,
+			__u8 *p_ip_proto, int *p_nhoff, int hlen,
+			unsigned int flags)
+{
+	__u8 *ip_version, _ip_version, proto;
+	struct gtp0_header *hdr, _hdr;
+
+	hdr = __skb_header_pointer(skb, *p_nhoff, sizeof(_hdr), data, hlen,
+				   &_hdr);
+	if (!hdr)
+		return FLOW_DISSECT_RET_OUT_BAD;
+
+	if ((hdr->flags >> 5) != GTP_V0)
+		return FLOW_DISSECT_RET_OUT_GOOD;
+
+	ip_version = skb_header_pointer(skb, *p_nhoff + sizeof(_hdr),
+					sizeof(*ip_version),
+					&_ip_version);
+	if (!ip_version)
+		return FLOW_DISSECT_RET_OUT_BAD;
+
+	proto = __skb_direct_ip_dissect(ip_version);
+	if (!proto)
+		return FLOW_DISSECT_RET_OUT_GOOD;
+
+	*p_ip_proto = proto;
+	*p_nhoff += sizeof(struct gtp0_header);
+
+	return FLOW_DISSECT_RET_IPPROTO_AGAIN;
+}
+
+static enum flow_dissect_ret
+__skb_flow_dissect_gtp1u(const struct sk_buff *skb,
+			 struct flow_dissector *flow_dissector,
+			 void *target_container, const void *data,
+			 __u8 *p_ip_proto, int *p_nhoff, int hlen,
+			 unsigned int flags)
+{
+	__u8 *ip_version, _ip_version, proto;
+	struct gtp1_header *hdr, _hdr;
+	int hdrlen = sizeof(_hdr);
+
+	hdr = __skb_header_pointer(skb, *p_nhoff, sizeof(_hdr), data, hlen,
+				   &_hdr);
+	if (!hdr)
+		return FLOW_DISSECT_RET_OUT_BAD;
+
+	if ((hdr->flags >> 5) != GTP_V1)
+		return FLOW_DISSECT_RET_OUT_GOOD;
+
+	if (hdr->type != GTP_TPDU)
+		return FLOW_DISSECT_RET_OUT_GOOD;
+
+	if (hdr->flags & GTP1_F_MASK)
+		hdrlen += 4;
+
+	ip_version = skb_header_pointer(skb, *p_nhoff + hdrlen,
+					sizeof(*ip_version),
+					&_ip_version);
+	if (!ip_version)
+		return FLOW_DISSECT_RET_OUT_GOOD;
+
+	proto = __skb_direct_ip_dissect(ip_version);
+	if (!proto)
+		return FLOW_DISSECT_RET_OUT_GOOD;
+
+	*p_ip_proto = proto;
+	*p_nhoff += hdrlen;
+
+	return FLOW_DISSECT_RET_IPPROTO_AGAIN;
+}
+
 /**
  * __skb_flow_dissect_batadv() - dissect batman-adv header
  * @skb: sk_buff to with the batman-adv header
@@ -1038,6 +1115,16 @@ __skb_flow_dissect_udp(const struct sk_buff *skb, struct net *net,
 	case UDP_ENCAP_L2TPINUDP:
 		*p_ip_proto = IPPROTO_L2TP;
 		ret = FLOW_DISSECT_RET_IPPROTO_AGAIN;
+		break;
+	case UDP_ENCAP_GTP0:
+		ret = __skb_flow_dissect_gtp0(skb, flow_dissector,
+					      target_container, data,
+					      p_ip_proto, &nhoff, hlen, flags);
+		break;
+	case UDP_ENCAP_GTP1U:
+		ret = __skb_flow_dissect_gtp1u(skb, flow_dissector,
+					       target_container, data,
+					       p_ip_proto, &nhoff, hlen, flags);
 		break;
 	case UDP_ENCAP_FOU:
 		*p_ip_proto = fou_protocol;
