@@ -162,6 +162,7 @@ struct stmmac_fpe_cfg {
 	enum stmmac_fpe_state lp_fpe_state;	/* Link Partner FPE state */
 	enum stmmac_fpe_state lo_fpe_state;	/* Local station FPE state */
 	u32 fpe_csr;				/* MAC_FPE_CTRL_STS reg cache */
+	u32 verify_time;			/* see struct ethtool_mm_state */
 };
 
 struct stmmac_safety_feature_cfg {

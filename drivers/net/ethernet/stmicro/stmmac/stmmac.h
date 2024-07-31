@@ -345,6 +345,9 @@ struct stmmac_priv {
 	struct work_struct fpe_task;
 	char wq_name[IFNAMSIZ + 4];
 
+	/* Serialize access to MAC Merge state between ethtool requests */
+	struct mutex mm_lock;
+
 	/* TC Handling */
 	unsigned int tc_entries_max;
 	unsigned int tc_off_max;
