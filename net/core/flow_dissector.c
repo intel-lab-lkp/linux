@@ -13,7 +13,9 @@
 #include <net/gre.h>
 #include <net/pptp.h>
 #include <net/tipc.h>
+#include <net/tun_proto.h>
 #include <net/udp.h>
+#include <net/vxlan.h>
 #include <linux/igmp.h>
 #include <linux/icmp.h>
 #include <linux/sctp.h>
@@ -756,6 +758,55 @@ __skb_flow_dissect_gre(const struct sk_buff *skb,
 	return FLOW_DISSECT_RET_PROTO_AGAIN;
 }
 
+static enum flow_dissect_ret
+__skb_flow_dissect_vxlan(const struct sk_buff *skb,
+			 struct flow_dissector *flow_dissector,
+			 void *target_container, const void *data,
+			 __be16 *p_proto, int *p_nhoff, int hlen,
+			 unsigned int flags)
+{
+	struct vxlanhdr *hdr, _hdr;
+	__be16 protocol;
+
+	hdr = __skb_header_pointer(skb, *p_nhoff, sizeof(_hdr), data, hlen,
+				   &_hdr);
+	if (!hdr)
+		return FLOW_DISSECT_RET_OUT_BAD;
+
+	/* VNI flag always required to be set */
+	if (!(hdr->vx_flags & VXLAN_HF_VNI))
+		return FLOW_DISSECT_RET_OUT_BAD;
+
+	if (hdr->vx_flags & VXLAN_F_GPE) {
+		struct vxlanhdr_gpe *gpe = (struct vxlanhdr_gpe *)hdr;
+
+		/* Need to have Next Protocol set for interfaces in GPE mode. */
+		if (!gpe->np_applied)
+			return FLOW_DISSECT_RET_OUT_BAD;
+
+		/* The initial version is 0 */
+		if (gpe->version != 0)
+			return FLOW_DISSECT_RET_OUT_GOOD;
+
+		/* "When the O bit is set to 1, the packet is an OAM packet and
+		 * OAM so ignore
+		 */
+		if (gpe->oam_flag)
+			return FLOW_DISSECT_RET_OUT_GOOD;
+
+		protocol = tun_p_to_eth_p(gpe->next_protocol);
+		if (!protocol)
+			return FLOW_DISSECT_RET_OUT_GOOD;
+	} else {
+		protocol = htons(ETH_P_TEB);
+	}
+
+	*p_nhoff += sizeof(struct vxlanhdr);
+	*p_proto = protocol;
+
+	return FLOW_DISSECT_RET_PROTO_AGAIN;
+}
+
 /**
  * __skb_flow_dissect_batadv() - dissect batman-adv header
  * @skb: sk_buff to with the batman-adv header
@@ -893,6 +944,12 @@ __skb_flow_dissect_udp(const struct sk_buff *skb, struct net *net,
 	ret = FLOW_DISSECT_RET_OUT_GOOD;
 
 	switch (encap_type) {
+	case UDP_ENCAP_VXLAN:
+	case UDP_ENCAP_VXLAN_GPE:
+		ret = __skb_flow_dissect_vxlan(skb, flow_dissector,
+					       target_container, data,
+					       p_proto, &nhoff, hlen, flags);
+		break;
 	default:
 		break;
 	}
