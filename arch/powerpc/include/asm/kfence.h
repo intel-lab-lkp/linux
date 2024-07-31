@@ -15,6 +15,8 @@
 #define ARCH_FUNC_PREFIX "."
 #endif
 
+extern bool kfence_early_init;
+
 #ifdef CONFIG_KFENCE
 extern bool kfence_disabled;
 
