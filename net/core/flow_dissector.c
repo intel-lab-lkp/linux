@@ -13,6 +13,7 @@
 #include <net/gre.h>
 #include <net/pptp.h>
 #include <net/tipc.h>
+#include <net/udp.h>
 #include <linux/igmp.h>
 #include <linux/icmp.h>
 #include <linux/sctp.h>
@@ -806,6 +807,110 @@ __skb_flow_dissect_batadv(const struct sk_buff *skb,
 	return FLOW_DISSECT_RET_PROTO_AGAIN;
 }
 
+static enum flow_dissect_ret
+__skb_flow_dissect_udp(const struct sk_buff *skb, struct net *net,
+		       struct flow_dissector *flow_dissector,
+		       void *target_container, const void *data,
+		       int *p_nhoff, int hlen, __be16 *p_proto,
+		       u8 *p_ip_proto, int bpoff, unsigned int flags)
+{
+	enum flow_dissect_ret ret;
+	const struct udphdr *udph;
+	struct udphdr _udph;
+	struct sock *sk;
+	__u8 encap_type;
+	int nhoff;
+
+	if (!(flags & FLOW_DISSECTOR_F_PARSE_UDP_ENCAPS))
+		return FLOW_DISSECT_RET_OUT_GOOD;
+
+	switch (*p_proto) {
+	case htons(ETH_P_IP): {
+		const struct iphdr *iph;
+		struct iphdr _iph;
+
+		iph = __skb_header_pointer(skb, bpoff, sizeof(_iph), data,
+					   hlen, &_iph);
+		if (!iph)
+			return FLOW_DISSECT_RET_OUT_BAD;
+
+		udph = __skb_header_pointer(skb, *p_nhoff, sizeof(_udph), data,
+					    hlen, &_udph);
+		if (!udph)
+			return FLOW_DISSECT_RET_OUT_BAD;
+
+		rcu_read_lock();
+		/* Look up the UDPv4 socket and get the encap_type */
+		sk = __udp4_lib_lookup(net, iph->saddr, udph->source,
+				       iph->daddr, udph->dest,
+				       inet_iif(skb), inet_sdif(skb),
+				       net->ipv4.udp_table, NULL);
+		if (!sk || !udp_sk(sk)->encap_type) {
+			rcu_read_unlock();
+			return FLOW_DISSECT_RET_OUT_GOOD;
+		}
+
+		encap_type = udp_sk(sk)->encap_type;
+		rcu_read_unlock();
+
+		break;
+	}
+	case htons(ETH_P_IPV6): {
+		const struct ipv6hdr *iph;
+		struct ipv6hdr _iph;
+
+		iph = __skb_header_pointer(skb, bpoff, sizeof(_iph), data,
+					   hlen, &_iph);
+		if (!iph)
+			return FLOW_DISSECT_RET_OUT_BAD;
+
+		udph = __skb_header_pointer(skb, *p_nhoff, sizeof(_udph), data,
+					    hlen, &_udph);
+		if (!udph)
+			return FLOW_DISSECT_RET_OUT_BAD;
+
+		rcu_read_lock();
+		/* Look up the UDPv6 socket and get the encap_type */
+		sk = __udp6_lib_lookup(net, &iph->saddr, udph->source,
+				       &iph->daddr, udph->dest,
+				       inet_iif(skb), inet_sdif(skb),
+				       net->ipv4.udp_table, NULL);
+		if (!sk || !udp_sk(sk)->encap_type) {
+			rcu_read_unlock();
+			return FLOW_DISSECT_RET_OUT_GOOD;
+		}
+
+		encap_type = udp_sk(sk)->encap_type;
+		rcu_read_unlock();
+
+		break;
+	}
+	default:
+		return FLOW_DISSECT_RET_OUT_GOOD;
+	}
+
+	nhoff = *p_nhoff + sizeof(struct udphdr);
+	ret = FLOW_DISSECT_RET_OUT_GOOD;
+
+	switch (encap_type) {
+	default:
+		break;
+	}
+
+	switch (ret) {
+	case FLOW_DISSECT_RET_PROTO_AGAIN:
+		*p_ip_proto = 0;
+		fallthrough;
+	case FLOW_DISSECT_RET_IPPROTO_AGAIN:
+		*p_nhoff = nhoff;
+		break;
+	default:
+		break;
+	}
+
+	return ret;
+}
+
 static void
 __skb_flow_dissect_tcp(const struct sk_buff *skb,
 		       struct flow_dissector *flow_dissector,
@@ -1046,6 +1151,7 @@ bool __skb_flow_dissect(struct net *net,
 	int mpls_lse = 0;
 	int num_hdrs = 0;
 	u8 ip_proto = 0;
+	int bpoff;
 	bool ret;
 
 	if (!data) {
@@ -1168,6 +1274,7 @@ dissect_continue:
 
 proto_again:
 	fdret = FLOW_DISSECT_RET_CONTINUE;
+	bpoff = nhoff;
 
 	switch (proto) {
 	case htons(ETH_P_IP): {
@@ -1633,6 +1740,13 @@ ip_proto_again:
 	case IPPROTO_TCP:
 		__skb_flow_dissect_tcp(skb, flow_dissector, target_container,
 				       data, nhoff, hlen);
+		break;
+
+	case IPPROTO_UDP:
+		fdret = __skb_flow_dissect_udp(skb, net, flow_dissector,
+					       target_container, data, &nhoff,
+					       hlen, &proto, &ip_proto,
+					       bpoff, flags);
 		break;
 
 	case IPPROTO_ICMP:
