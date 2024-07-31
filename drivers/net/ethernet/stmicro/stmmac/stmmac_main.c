@@ -7392,19 +7392,19 @@ static void stmmac_fpe_lp_task(struct work_struct *work)
 		if (*lo_state == FPE_STATE_ENTERING_ON &&
 		    *lp_state == FPE_STATE_ENTERING_ON) {
 
-			netdev_info(priv->dev, "configured FPE\n");
+			netdev_dbg(priv->dev, "configured FPE\n");
 
 			*lo_state = FPE_STATE_ON;
 			*lp_state = FPE_STATE_ON;
-			netdev_info(priv->dev, "!!! BOTH FPE stations ON\n");
+			netdev_dbg(priv->dev, "!!! BOTH FPE stations ON\n");
 			break;
 		}
 
 		if ((*lo_state == FPE_STATE_CAPABLE ||
 		     *lo_state == FPE_STATE_ENTERING_ON) &&
 		     *lp_state != FPE_STATE_ON) {
-			netdev_info(priv->dev, SEND_VERIFY_MPAKCET_FMT,
-				    *lo_state, *lp_state);
+			netdev_dbg(priv->dev, SEND_VERIFY_MPAKCET_FMT,
+				   *lo_state, *lp_state);
 			stmmac_fpe_send_mpacket(priv, priv->ioaddr,
 						fpe_cfg,
 						MPACKET_VERIFY);
