@@ -4,17 +4,7 @@
  *
  * EVM Board Schematics: https://www.ti.com/lit/zip/sprr458
  */
-
-/dts-v1/;
-
-#include <dt-bindings/net/ti-dp83867.h>
-#include <dt-bindings/gpio/gpio.h>
-#include "k3-j784s4.dtsi"
-
 / {
-	compatible = "ti,j784s4-evm", "ti,j784s4";
-	model = "Texas Instruments J784S4 EVM";
-
 	chosen {
 		stdout-path = "serial2:115200n8";
 	};
@@ -29,14 +19,6 @@
 		i2c3 = &main_i2c0;
 		ethernet0 = &mcu_cpsw_port1;
 		ethernet1 = &main_cpsw1_port1;
-	};
-
-	memory@80000000 {
-		device_type = "memory";
-		bootph-all;
-		/* 32G RAM */
-		reg = <0x00000000 0x80000000 0x00000000 0x80000000>,
-		      <0x00000008 0x80000000 0x00000007 0x80000000>;
 	};
 
 	reserved_memory: reserved-memory {
@@ -178,18 +160,6 @@
 		c71_2_memory_region: c71-memory@aa100000 {
 			compatible = "shared-dma-pool";
 			reg = <0x00 0xaa100000 0x00 0xf00000>;
-			no-map;
-		};
-
-		c71_3_dma_memory_region: c71-dma-memory@ab000000 {
-			compatible = "shared-dma-pool";
-			reg = <0x00 0xab000000 0x00 0x100000>;
-			no-map;
-		};
-
-		c71_3_memory_region: c71-memory@ab100000 {
-			compatible = "shared-dma-pool";
-			reg = <0x00 0xab100000 0x00 0xf00000>;
 			no-map;
 		};
 	};
@@ -1133,11 +1103,6 @@
 		ti,mbox-rx = <0 0 0>;
 		ti,mbox-tx = <1 0 0>;
 	};
-
-	mbox_c71_3: mbox-c71-3 {
-		ti,mbox-rx = <2 0 0>;
-		ti,mbox-tx = <3 0 0>;
-	};
 };
 
 &mcu_r5fss0_core0 {
@@ -1215,13 +1180,6 @@
 	mboxes = <&mailbox0_cluster5 &mbox_c71_2>;
 	memory-region = <&c71_2_dma_memory_region>,
 			<&c71_2_memory_region>;
-};
-
-&c71_3 {
-	status = "okay";
-	mboxes = <&mailbox0_cluster5 &mbox_c71_3>;
-	memory-region = <&c71_3_dma_memory_region>,
-			<&c71_3_memory_region>;
 };
 
 &tscadc0 {
