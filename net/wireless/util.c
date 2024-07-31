@@ -2825,6 +2825,23 @@ bool cfg80211_iftype_allowed(struct wiphy *wiphy, enum nl80211_iftype iftype,
 }
 EXPORT_SYMBOL(cfg80211_iftype_allowed);
 
+int cfg80211_link_reconfig_remove(struct wireless_dev *wdev,
+				  const struct cfg80211_link_reconfig_removal_params *params)
+{
+	struct cfg80211_registered_device *rdev = wiphy_to_rdev(wdev->wiphy);
+
+	lockdep_assert_wiphy(wdev->wiphy);
+
+	/* Currently, removal of link from MLD is supported for AP BSS only, it
+	 * can be extended for non-AP/STA MLD as well but that shall use
+	 * action frame to update about its link reconfiguration.
+	 */
+	if (wdev->iftype != NL80211_IFTYPE_AP)
+		return -EINVAL;
+
+	return rdev_link_reconfig_remove(rdev, wdev->netdev, params);
+}
+
 void cfg80211_remove_link(struct wireless_dev *wdev, unsigned int link_id)
 {
 	struct cfg80211_registered_device *rdev = wiphy_to_rdev(wdev->wiphy);

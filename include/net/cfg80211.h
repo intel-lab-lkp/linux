@@ -4182,6 +4182,23 @@ struct mgmt_frame_regs {
 };
 
 /**
+ * struct cfg80211_link_reconfig_removal_params - Contains params needed for
+ *	link reconfig removal
+ * @link_removal_cntdown: TBTT countdown value until which the beacon with ML
+ *	reconfigure element will be sent.
+ * @reconfigure_elem: ML reconfigure element to be updated in beacon in the link going to be
+ *	removed and in all affiliated links.
+ * @elem_len: ML reconfigure element length
+ * @link_id: Link id of the link to be removed.
+ */
+struct cfg80211_link_reconfig_removal_params {
+	u32 link_removal_cntdown;
+	unsigned int link_id;
+	const u8 *reconfigure_elem;
+	size_t elem_len;
+};
+
+/**
  * struct cfg80211_ops - backend description for wireless configuration
  *
  * This struct is registered by fullmac card drivers and/or wireless stacks
@@ -4584,6 +4601,11 @@ struct mgmt_frame_regs {
  * @set_ttlm: set the TID to link mapping.
  * @get_radio_mask: get bitmask of radios in use.
  *	(invoked with the wiphy mutex held)
+ *
+ * @link_reconfig_remove: Notifies the driver about the link to be
+ *	scheduled for removal with ML reconfigure element built for that particular
+ *	link along with the TBTT count until which the beacon with ML
+ *	reconfigure element should be sent.
  */
 struct cfg80211_ops {
 	int	(*suspend)(struct wiphy *wiphy, struct cfg80211_wowlan *wow);
@@ -4946,6 +4968,9 @@ struct cfg80211_ops {
 	int	(*set_ttlm)(struct wiphy *wiphy, struct net_device *dev,
 			    struct cfg80211_ttlm_params *params);
 	u32	(*get_radio_mask)(struct wiphy *wiphy, struct net_device *dev);
+	int	(*link_reconfig_remove)(struct wiphy *wiphy,
+					struct net_device *dev,
+					const struct cfg80211_link_reconfig_removal_params *params);
 };
 
 /*
@@ -9693,5 +9718,32 @@ ssize_t wiphy_locked_debugfs_write(struct wiphy *wiphy, struct file *file,
 						      void *data),
 				   void *data);
 #endif
+
+/**
+ * cfg80211_update_link_reconfig_remove_update - Inform userspace about
+ *	the removal status of link which is scheduled for removal
+ * @dev: the device on which the operation is requested
+ * @link_id: Link which is undergoing removal
+ * @tbtt_count: Current tbtt_count to be updated.
+ * @tsf: Beacon's timestamp value
+ * @cmd: Inform started or completed action to userspace based on the value
+ *
+ * This function is used to inform userspace about the ongoing link removal
+ * status. %NL80211_CMD_LINK_REMOVAL_STARTED is issued when the first beacon with
+ * ML reconfigure element is sent out. This event can be used by userspace to start
+ * the BTM in case of AP mode. And, %NL80211_CMD_LINK_REMOVAL_COMPLETED is issued
+ * when the last beacon is sent with ML reconfigure element. This is used to
+ * initiate the deletion of that link, also to trigger deauth/disassoc for the
+ * associated peer(s).
+ *
+ * Note: This API is currently used by drivers which supports offloaded
+ * Multi-Link reconfigure link removal. Returns failure if FEATURE FLAG is not
+ * set or success if NL message is sent.
+ */
+int
+cfg80211_update_link_reconfig_remove_update(struct net_device *dev,
+					    unsigned int link_id,
+					    u32 tbtt_count, u64 tsf,
+					    enum nl80211_commands cmd);
 
 #endif /* __NET_CFG80211_H */
