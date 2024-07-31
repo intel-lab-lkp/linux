@@ -1006,20 +1006,29 @@ EXPORT_SYMBOL_GPL(scp_mapping_dm_addr);
 
 static int scp_map_memory_region(struct mtk_scp *scp)
 {
-	int ret;
 	const struct mtk_scp_sizes_data *scp_sizes;
+	struct device_node *node = scp->dev->of_node;
+	struct of_phandle_iterator it;
+	int ret, err;
+	int i = 0;
 
-	ret = of_reserved_mem_device_init(scp->dev);
+	of_for_each_phandle(&it, err, node, "memory-region", NULL, 0) {
+		ret = of_reserved_mem_device_init_by_idx(scp->dev, node, i);
 
-	/* reserved memory is optional. */
-	if (ret == -ENODEV) {
-		dev_info(scp->dev, "skipping reserved memory initialization.");
-		return 0;
+		if (ret) {
+			dev_err(scp->dev, "failed to assign memory-region: %s\n",
+				it.node->name);
+			of_node_put(it.node);
+			return -ENOMEM;
+		}
+
+		i++;
 	}
 
-	if (ret) {
-		dev_err(scp->dev, "failed to assign memory-region: %d\n", ret);
-		return -ENOMEM;
+	/* reserved memory is optional. */
+	if (i == 0) {
+		dev_dbg(scp->dev, "skipping reserved memory initialization.");
+		return 0;
 	}
 
 	/* Reserved SCP code size */
