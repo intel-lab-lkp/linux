@@ -102,7 +102,7 @@ int ice_init_interrupt_scheme(struct ice_pf *pf)
 {
 	int total_vectors = pf->hw.func_caps.common_cap.num_msix_vectors;
 	union devlink_param_value value;
-	int vectors, max_vectors, err;
+	int vectors, err;
 
 	/* load default PF MSI-X range */
 	err = devl_param_driverinit_value_get(priv_to_devlink(pf),
@@ -115,20 +115,17 @@ int ice_init_interrupt_scheme(struct ice_pf *pf)
 					      &value);
 	pf->msix.max = err ? total_vectors / 2 : value.vu16;
 
-	if (pci_msix_can_alloc_dyn(pf->pdev)) {
+	if (pci_msix_can_alloc_dyn(pf->pdev))
 		vectors = pf->msix.min;
-		max_vectors = total_vectors;
-	} else {
+	else
 		vectors = pf->msix.max;
-		max_vectors = vectors;
-	}
 
 	vectors = pci_alloc_irq_vectors(pf->pdev, pf->msix.min, vectors,
 					PCI_IRQ_MSIX);
 	if (vectors < pf->msix.min)
 		return -ENOMEM;
 
-	ice_init_irq_tracker(pf, max_vectors, vectors);
+	ice_init_irq_tracker(pf, pf->msix.max, vectors);
 
 	return 0;
 }
