@@ -38,8 +38,9 @@ struct udmabuf_folio {
 	struct list_head list;
 };
 
-static struct sg_table *get_sg_table(struct device *dev, struct dma_buf *buf,
-				     enum dma_data_direction direction);
+static struct sg_table *udmabuf_get_sg_table(struct device *dev,
+					     struct dma_buf *buf,
+					     enum dma_data_direction direction);
 
 static int mmap_udmabuf(struct dma_buf *buf, struct vm_area_struct *vma)
 {
@@ -52,12 +53,9 @@ static int mmap_udmabuf(struct dma_buf *buf, struct vm_area_struct *vma)
 	if ((vma->vm_flags & (VM_SHARED | VM_MAYSHARE)) == 0)
 		return -EINVAL;
 
-	if (!table) {
-		table = get_sg_table(NULL, buf, 0);
-		if (IS_ERR(table))
-			return PTR_ERR(table);
-		ubuf->sg = table;
-	}
+	table = udmabuf_get_sg_table(NULL, buf, 0);
+	if (IS_ERR(table))
+		return PTR_ERR(table);
 
 	for_each_sgtable_page(table, &piter, vma->vm_pgoff) {
 		struct page *page = sg_page_iter_page(&piter);
@@ -84,12 +82,9 @@ static int vmap_udmabuf(struct dma_buf *buf, struct iosys_map *map)
 
 	dma_resv_assert_held(buf->resv);
 
-	if (!sg) {
-		sg = get_sg_table(NULL, buf, 0);
-		if (IS_ERR(sg))
-			return PTR_ERR(sg);
-		ubuf->sg = sg;
-	}
+	sg = udmabuf_get_sg_table(NULL, buf, 0);
+	if (IS_ERR(sg))
+		return PTR_ERR(sg);
 
 	pages = kvmalloc_array(ubuf->pagecount, sizeof(*pages), GFP_KERNEL);
 	if (!pages)
@@ -152,6 +147,39 @@ err_map:
 err_alloc:
 	kfree(sg);
 	return ERR_PTR(ret);
+}
+
+static struct sg_table *udmabuf_get_sg_table(struct device *dev,
+					     struct dma_buf *buf,
+					     enum dma_data_direction direction)
+{
+	struct udmabuf *ubuf = buf->priv;
+	struct sg_table *sg = READ_ONCE(ubuf->sg);
+	int ret = 0;
+
+	if (sg)
+		return sg;
+
+	sg = get_sg_table(dev, buf, direction);
+	if (IS_ERR(sg))
+		return sg;
+
+	// Success update ubuf's sg, just return.
+	if (!cmpxchg(&ubuf->sg, NULL, sg))
+		return sg;
+
+	// use the new sg table.
+	sg_free_table(sg);
+	kfree(sg);
+	sg = READ_ONCE(ubuf->sg);
+
+	if (dev)
+		ret = dma_map_sgtable(dev, sg, direction, 0);
+
+	if (ret < 0)
+		return ERR_PTR(ret);
+
+	return sg;
 }
 
 static void put_sg_table(struct device *dev, struct sg_table *sg,
@@ -230,11 +258,9 @@ static int begin_cpu_udmabuf(struct dma_buf *buf,
 		return 0;
 	}
 
-	sg = get_sg_table(dev, buf, direction);
+	sg = udmabuf_get_sg_table(dev, buf, direction);
 	if (IS_ERR(sg))
 		return PTR_ERR(sg);
-
-	ubuf->sg = sg;
 
 	return 0;
 }
