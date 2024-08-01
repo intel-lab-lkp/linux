@@ -1314,6 +1314,10 @@ out_free_interp:
 		   emulate the SVr4 behavior. Sigh. */
 		error = vm_mmap(NULL, 0, PAGE_SIZE, PROT_READ | PROT_EXEC,
 				MAP_FIXED | MAP_PRIVATE, 0);
+
+#ifdef CONFIG_64BIT
+		do_mseal(0, PAGE_SIZE, 0);
+#endif
 	}
 
 	regs = current_pt_regs();
