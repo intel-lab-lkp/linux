@@ -38,36 +38,39 @@ struct udmabuf_folio {
 	struct list_head list;
 };
 
-static vm_fault_t udmabuf_vm_fault(struct vm_fault *vmf)
-{
-	struct vm_area_struct *vma = vmf->vma;
-	struct udmabuf *ubuf = vma->vm_private_data;
-	pgoff_t pgoff = vmf->pgoff;
-	unsigned long pfn;
-
-	if (pgoff >= ubuf->pagecount)
-		return VM_FAULT_SIGBUS;
-
-	pfn = folio_pfn(ubuf->folios[pgoff]);
-	pfn += ubuf->offsets[pgoff] >> PAGE_SHIFT;
-
-	return vmf_insert_pfn(vma, vmf->address, pfn);
-}
-
-static const struct vm_operations_struct udmabuf_vm_ops = {
-	.fault = udmabuf_vm_fault,
-};
+static struct sg_table *get_sg_table(struct device *dev, struct dma_buf *buf,
+				     enum dma_data_direction direction);
 
 static int mmap_udmabuf(struct dma_buf *buf, struct vm_area_struct *vma)
 {
 	struct udmabuf *ubuf = buf->priv;
+	struct sg_table *table = ubuf->sg;
+	unsigned long addr = vma->vm_start;
+	struct sg_page_iter piter;
+	int ret;
 
 	if ((vma->vm_flags & (VM_SHARED | VM_MAYSHARE)) == 0)
 		return -EINVAL;
 
-	vma->vm_ops = &udmabuf_vm_ops;
-	vma->vm_private_data = ubuf;
-	vm_flags_set(vma, VM_PFNMAP | VM_DONTEXPAND | VM_DONTDUMP);
+	if (!table) {
+		table = get_sg_table(NULL, buf, 0);
+		if (IS_ERR(table))
+			return PTR_ERR(table);
+		ubuf->sg = table;
+	}
+
+	for_each_sgtable_page(table, &piter, vma->vm_pgoff) {
+		struct page *page = sg_page_iter_page(&piter);
+
+		ret = remap_pfn_range(vma, addr, page_to_pfn(page), PAGE_SIZE,
+				      vma->vm_page_prot);
+		if (ret)
+			return ret;
+		addr += PAGE_SIZE;
+		if (addr >= vma->vm_end)
+			return 0;
+	}
+
 	return 0;
 }
 
@@ -125,6 +128,10 @@ static struct sg_table *get_sg_table(struct device *dev, struct dma_buf *buf,
 	for_each_sg(sg->sgl, sgl, ubuf->pagecount, i)
 		sg_set_folio(sgl, ubuf->folios[i], PAGE_SIZE,
 			     ubuf->offsets[i]);
+
+	// if dev is NULL, no need to sync.
+	if (!dev)
+		return sg;
 
 	ret = dma_map_sgtable(dev, sg, direction, 0);
 	if (ret < 0)
@@ -206,20 +213,21 @@ static int begin_cpu_udmabuf(struct dma_buf *buf,
 {
 	struct udmabuf *ubuf = buf->priv;
 	struct device *dev = ubuf->device->this_device;
-	int ret = 0;
+	struct sg_table *sg;
 
-	if (!ubuf->sg) {
-		ubuf->sg = get_sg_table(dev, buf, direction);
-		if (IS_ERR(ubuf->sg)) {
-			ret = PTR_ERR(ubuf->sg);
-			ubuf->sg = NULL;
-		}
-	} else {
+	if (ubuf->sg) {
 		dma_sync_sg_for_cpu(dev, ubuf->sg->sgl, ubuf->sg->nents,
 				    direction);
+		return 0;
 	}
 
-	return ret;
+	sg = get_sg_table(dev, buf, direction);
+	if (IS_ERR(sg))
+		return PTR_ERR(sg);
+
+	ubuf->sg = sg;
+
+	return 0;
 }
 
 static int end_cpu_udmabuf(struct dma_buf *buf,
