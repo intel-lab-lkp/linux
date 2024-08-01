@@ -629,9 +629,9 @@ static struct page *swiotlb_alloc_tlb(struct device *dev, size_t bytes,
 	}
 
 	gfp &= ~GFP_ZONEMASK;
-	if (phys_limit <= DMA_BIT_MASK(zone_dma_bits))
+	if (phys_limit < DMA_BIT_MASK(32))
 		gfp |= __GFP_DMA;
-	else if (phys_limit <= DMA_BIT_MASK(32))
+	else if (phys_limit < memblock_end_of_DRAM())
 		gfp |= __GFP_DMA32;
 
 	while (IS_ERR(page = alloc_dma_pages(gfp, bytes, phys_limit))) {
