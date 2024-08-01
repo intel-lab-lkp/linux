@@ -916,7 +916,8 @@ struct kvm_enable_cap {
 #define KVM_CAP_MEMORY_FAULT_INFO 232
 #define KVM_CAP_MEMORY_ATTRIBUTES 233
 #define KVM_CAP_GUEST_MEMFD 234
-#define KVM_CAP_VM_TYPES 235
+#define KVM_CAP_GUEST_MEMFD_MAPPABLE 235
+#define KVM_CAP_VM_TYPES 236
 
 struct kvm_irq_routing_irqchip {
 	__u32 irqchip;
