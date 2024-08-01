@@ -45,6 +45,11 @@ properties:
     description:
       Set if the output SYNCLKO frequency should be set to 125MHz instead of 25MHz.
 
+  microchip,no-tag-protocol:
+    $ref: /schemas/types.yaml#/definitions/flag
+    description:
+      Set if no switch tag protocol should be enabled.
+
   microchip,synclko-disable:
     $ref: /schemas/types.yaml#/definitions/flag
     description:
