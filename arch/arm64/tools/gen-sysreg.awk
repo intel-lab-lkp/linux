@@ -56,6 +56,13 @@ function define_field(reg, field, msb, lsb) {
 	define(reg "_" field "_WIDTH", msb - lsb + 1)
 }
 
+function define_field_128(reg, field, msb, lsb) {
+	define(reg "_" field, "GENMASK_U128(" msb ", " lsb ")")
+	define(reg "_" field "_MASK", "GENMASK_U128(" msb ", " lsb ")")
+	define(reg "_" field "_SHIFT", lsb)
+	define(reg "_" field "_WIDTH", msb - lsb + 1)
+}
+
 # Print a field _SIGNED definition for a field
 function define_field_sign(reg, field, sign) {
 	define(reg "_" field "_SIGNED", sign)
@@ -89,6 +96,33 @@ function parse_bitdef(reg, field, bitdef, _bits)
 	next_bit = lsb - 1
 }
 
+function parse_bitdef_128(reg, field, bitdef, _bits)
+{
+	if (bitdef ~ /^[0-9]+$/) {
+		msb = bitdef
+		lsb = bitdef
+	} else if (split(bitdef, _bits, ":") == 2) {
+		msb = _bits[1]
+		lsb = _bits[2]
+	} else {
+		fatal("invalid bit-range definition '" bitdef "'")
+	}
+
+
+	if (msb != next_bit)
+		fatal(reg "." field " starts at " msb " not " next_bit)
+	if (127 < msb || msb < 0)
+		fatal(reg "." field " invalid high bit in '" bitdef "'")
+	if (127 < lsb || lsb < 0)
+		fatal(reg "." field " invalid low bit in '" bitdef "'")
+	if (msb < lsb)
+		fatal(reg "." field " invalid bit-range '" bitdef "'")
+	if (low > high)
+		fatal(reg "." field " has invalid range " high "-" low)
+
+	next_bit = lsb - 1
+}
+
 BEGIN {
 	print "#ifndef __ASM_SYSREG_DEFS_H"
 	print "#define __ASM_SYSREG_DEFS_H"
@@ -110,6 +144,99 @@ END {
 # skip blank lines and comment lines
 /^$/ { next }
 /^[\t ]*#/ { next }
+
+/^SysregFields128/ && block_current() == "Root" {
+	block_push("SysregFields128")
+
+	expect_fields(2)
+
+	reg = $2
+
+	res0 = "UL(0)"
+	res1 = "UL(0)"
+	unkn = "UL(0)"
+
+	next_bit = 127
+
+	next
+}
+
+/^EndSysregFields128/ && block_current() == "SysregFields128" {
+	if (next_bit > 0)
+		fatal("Unspecified bits in " reg)
+
+	define(reg "_RES0", "(" res0 ")")
+	define(reg "_RES1", "(" res1 ")")
+	define(reg "_UNKN", "(" unkn ")")
+	print ""
+
+	reg = null
+	res0 = null
+	res1 = null
+	unkn = null
+
+	block_pop()
+	next
+}
+
+/^Sysreg128/ && block_current() == "Root" {
+	block_push("Sysreg128")
+
+	expect_fields(7)
+
+	reg = $2
+	op0 = $3
+	op1 = $4
+	crn = $5
+	crm = $6
+	op2 = $7
+
+	res0 = "UL(0)"
+	res1 = "UL(0)"
+	unkn = "UL(0)"
+
+	define("REG_" reg, "S" op0 "_" op1 "_C" crn "_C" crm "_" op2)
+	define("SYS_" reg, "sys_reg(" op0 ", " op1 ", " crn ", " crm ", " op2 ")")
+
+	define("SYS_" reg "_Op0", op0)
+	define("SYS_" reg "_Op1", op1)
+	define("SYS_" reg "_CRn", crn)
+	define("SYS_" reg "_CRm", crm)
+	define("SYS_" reg "_Op2", op2)
+
+	print ""
+
+	next_bit = 127
+
+	next
+}
+
+/^EndSysreg128/ && block_current() == "Sysreg128" {
+	if (next_bit > 0)
+		fatal("Unspecified bits in " reg)
+
+	if (res0 != null)
+		define(reg "_RES0", "(" res0 ")")
+	if (res1 != null)
+		define(reg "_RES1", "(" res1 ")")
+	if (unkn != null)
+		define(reg "_UNKN", "(" unkn ")")
+	if (res0 != null || res1 != null || unkn != null)
+		print ""
+
+	reg = null
+	op0 = null
+	op1 = null
+	crn = null
+	crm = null
+	op2 = null
+	res0 = null
+	res1 = null
+	unkn = null
+
+	block_pop()
+	next
+}
 
 /^SysregFields/ && block_current() == "Root" {
 	block_push("SysregFields")
@@ -223,6 +350,22 @@ END {
 	next
 }
 
+/^Fields/ && block_current() == "Sysreg128" {
+	expect_fields(2)
+
+	if (next_bit != 127)
+		fatal("Some fields already defined for " reg)
+
+	print "/* For " reg " fields see " $2 " */"
+	print ""
+
+        next_bit = 0
+	res0 = null
+	res1 = null
+	unkn = null
+
+	next
+}
 
 /^Res0/ && (block_current() == "Sysreg" || block_current() == "SysregFields") {
 	expect_fields(2)
@@ -230,6 +373,16 @@ END {
 	field = "RES0_" msb "_" lsb
 
 	res0 = res0 " | GENMASK_ULL(" msb ", " lsb ")"
+
+	next
+}
+
+/^Res0/ && (block_current() == "Sysreg128" || block_current() == "SysregFields128") {
+	expect_fields(2)
+	parse_bitdef_128(reg, "RES0", $2)
+	field = "RES0_" msb "_" lsb
+
+	res0 = res0 " | GENMASK_U128(" msb ", " lsb ")"
 
 	next
 }
@@ -244,12 +397,32 @@ END {
 	next
 }
 
+/^Res1/ && (block_current() == "Sysreg128" || block_current() == "SysregFields128") {
+	expect_fields(2)
+	parse_bitdef_128(reg, "RES1", $2)
+	field = "RES1_" msb "_" lsb
+
+	res1 = res1 " | GENMASK_U128(" msb ", " lsb ")"
+
+	next
+}
+
 /^Unkn/ && (block_current() == "Sysreg" || block_current() == "SysregFields") {
 	expect_fields(2)
 	parse_bitdef(reg, "UNKN", $2)
 	field = "UNKN_" msb "_" lsb
 
 	unkn = unkn " | GENMASK_ULL(" msb ", " lsb ")"
+
+	next
+}
+
+/^Unkn/ && (block_current() == "Sysreg128" || block_current() == "SysregFields128") {
+	expect_fields(2)
+	parse_bitdef_128(reg, "UNKN", $2)
+	field = "UNKN_" msb "_" lsb
+
+	unkn = unkn " | GENMASK_U128(" msb ", " lsb ")"
 
 	next
 }
@@ -265,12 +438,31 @@ END {
 	next
 }
 
+/^Field/ && (block_current() == "Sysreg128" || block_current() == "SysregFields128") {
+	expect_fields(3)
+	field = $3
+	parse_bitdef_128(reg, field, $2)
+
+	define_field_128(reg, field, msb, lsb)
+	print ""
+
+	next
+}
+
 /^Raz/ && (block_current() == "Sysreg" || block_current() == "SysregFields") {
 	expect_fields(2)
 	parse_bitdef(reg, field, $2)
 
 	next
 }
+
+/^Raz/ && (block_current() == "Sysreg128" || block_current() == "SysregFields128") {
+	expect_fields(2)
+	parse_bitdef_128(reg, field, $2)
+
+	next
+}
+
 
 /^SignedEnum/ && (block_current() == "Sysreg" || block_current() == "SysregFields") {
 	block_push("Enum")
@@ -280,6 +472,19 @@ END {
 	parse_bitdef(reg, field, $2)
 
 	define_field(reg, field, msb, lsb)
+	define_field_sign(reg, field, "true")
+
+	next
+}
+
+/^SignedEnum/ && (block_current() == "Sysreg128" || block_current() == "SysregFields128") {
+	block_push("Enum")
+
+	expect_fields(3)
+	field = $3
+	parse_bitdef_128(reg, field, $2)
+
+	define_field_128(reg, field, msb, lsb)
 	define_field_sign(reg, field, "true")
 
 	next
@@ -298,6 +503,20 @@ END {
 	next
 }
 
+/^UnsignedEnum/ && (block_current() == "Sysreg128" || block_current() == "SysregFields128") {
+	block_push("Enum")
+
+	expect_fields(3)
+	field = $3
+	parse_bitdef_128(reg, field, $2)
+
+	define_field_128(reg, field, msb, lsb)
+	define_field_sign(reg, field, "false")
+
+	next
+}
+
+
 /^Enum/ && (block_current() == "Sysreg" || block_current() == "SysregFields") {
 	block_push("Enum")
 
@@ -306,6 +525,18 @@ END {
 	parse_bitdef(reg, field, $2)
 
 	define_field(reg, field, msb, lsb)
+
+	next
+}
+
+/^Enum/ && (block_current() == "Sysreg128" || block_current() == "SysregFields128") {
+	block_push("Enum")
+
+	expect_fields(3)
+	field = $3
+	parse_bitdef_128(reg, field, $2)
+
+	define_field_128(reg, field, msb, lsb)
 
 	next
 }
