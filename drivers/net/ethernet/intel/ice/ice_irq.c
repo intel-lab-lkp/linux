@@ -252,7 +252,19 @@ void ice_clear_interrupt_scheme(struct ice_pf *pf)
 int ice_init_interrupt_scheme(struct ice_pf *pf)
 {
 	int total_vectors = pf->hw.func_caps.common_cap.num_msix_vectors;
-	int vectors, max_vectors;
+	union devlink_param_value value;
+	int vectors, max_vectors, err;
+
+	/* load default PF MSI-X range */
+	err = devl_param_driverinit_value_get(priv_to_devlink(pf),
+					      DEVLINK_PARAM_GENERIC_ID_MSIX_VEC_PER_PF_MIN,
+					      &value);
+	pf->msix.min = err ? ICE_MIN_MSIX : value.vu16;
+
+	err = devl_param_driverinit_value_get(priv_to_devlink(pf),
+					      DEVLINK_PARAM_GENERIC_ID_MSIX_VEC_PER_PF_MAX,
+					      &value);
+	pf->msix.max = err ? total_vectors / 2 : value.vu16;
 
 	vectors = ice_ena_msix_range(pf);
 
