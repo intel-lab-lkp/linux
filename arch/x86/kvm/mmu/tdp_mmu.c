@@ -838,7 +838,8 @@ bool kvm_tdp_mmu_zap_sp(struct kvm *kvm, struct kvm_mmu_page *sp)
  * operation can cause a soft lockup.
  */
 static bool tdp_mmu_zap_leafs(struct kvm *kvm, struct kvm_mmu_page *root,
-			      gfn_t start, gfn_t end, bool can_yield, bool flush)
+			      gfn_t start, gfn_t end, bool can_yield,
+			      bool keep_accessed_bit, bool flush)
 {
 	struct tdp_iter iter;
 
@@ -849,17 +850,29 @@ static bool tdp_mmu_zap_leafs(struct kvm *kvm, struct kvm_mmu_page *root,
 	rcu_read_lock();
 
 	for_each_tdp_pte_min_level(iter, root, PG_LEVEL_4K, start, end) {
+		u64 new_spte = SHADOW_NONPRESENT_VALUE;
+
 		if (can_yield &&
 		    tdp_mmu_iter_cond_resched(kvm, &iter, flush, false)) {
 			flush = false;
 			continue;
 		}
 
+		/*
+		 * Note, this will fail to clear non-present, accessed SPTEs,
+		 * but that isn't a functional problem, it can only result in
+		 * a _potential_ false positive  in the unlikely scenario that
+		 * the primary MMU zaps an hva, reinstalls a new hva, and ages
+		 * the new hva, all before KVM accesses the hva.
+		 */
 		if (!is_shadow_present_pte(iter.old_spte) ||
 		    !is_last_spte(iter.old_spte, iter.level))
 			continue;
 
-		tdp_mmu_iter_set_spte(kvm, &iter, SHADOW_NONPRESENT_VALUE);
+		if (keep_accessed_bit)
+			new_spte |= iter.old_spte & shadow_accessed_mask;
+
+		tdp_mmu_iter_set_spte(kvm, &iter, new_spte);
 
 		/*
 		 * Zappings SPTEs in invalid roots doesn't require a TLB flush,
@@ -889,7 +902,7 @@ bool kvm_tdp_mmu_zap_leafs(struct kvm *kvm, gfn_t start, gfn_t end, bool flush)
 
 	lockdep_assert_held_write(&kvm->mmu_lock);
 	for_each_valid_tdp_mmu_root_yield_safe(kvm, root, -1)
-		flush = tdp_mmu_zap_leafs(kvm, root, start, end, true, flush);
+		flush = tdp_mmu_zap_leafs(kvm, root, start, end, true, false, flush);
 
 	return flush;
 }
@@ -1180,11 +1193,13 @@ retry:
 bool kvm_tdp_mmu_unmap_gfn_range(struct kvm *kvm, struct kvm_gfn_range *range,
 				 bool flush)
 {
+	bool keep_a_bit = range->arg.event == MMU_NOTIFY_PROTECTION_VMA ||
+			  range->arg.event == MMU_NOTIFY_PROTECTION_PAGE;
 	struct kvm_mmu_page *root;
 
 	__for_each_tdp_mmu_root_yield_safe(kvm, root, range->slot->as_id, false)
 		flush = tdp_mmu_zap_leafs(kvm, root, range->start, range->end,
-					  range->may_block, flush);
+					  range->may_block, keep_a_bit, flush);
 
 	return flush;
 }
@@ -1201,7 +1216,11 @@ static void kvm_tdp_mmu_age_spte(struct tdp_iter *iter)
 {
 	u64 new_spte;
 
-	if (spte_ad_enabled(iter->old_spte)) {
+	if (spte_ad_enabled(iter->old_spte) ||
+	    !is_shadow_present_pte(iter->old_spte)) {
+		KVM_MMU_WARN_ON(!is_shadow_present_pte(iter->old_spte) &&
+				iter->old_spte != (SHADOW_NONPRESENT_VALUE | shadow_accessed_mask));
+
 		iter->old_spte = tdp_mmu_clear_spte_bits(iter->sptep,
 							 iter->old_spte,
 							 shadow_accessed_mask,
@@ -1235,7 +1254,7 @@ static bool __kvm_tdp_mmu_age_gfn_range(struct kvm *kvm,
 	for_each_valid_tdp_mmu_root(kvm, root, range->slot->as_id) {
 		rcu_read_lock();
 
-		tdp_root_for_each_leaf_pte(iter, root, range->start, range->end) {
+		tdp_root_for_each_pte(iter, root, range->start, range->end) {
 			if (!is_accessed_spte(iter.old_spte))
 				continue;
 
