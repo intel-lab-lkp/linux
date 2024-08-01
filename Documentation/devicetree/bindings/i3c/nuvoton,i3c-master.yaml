@@ -1,0 +1,123 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/i3c/nuvoton,i3c-master.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Nuvoton NPCM845 I3C master
+
+maintainers:
+  - Stanley Chu <yschu@nuvoton.com>
+  - James Chiang <cpchiang1@nuvoton.com>
+
+allOf:
+  - $ref: i3c.yaml#
+
+properties:
+  compatible:
+    const: nuvoton,npcm845-i3c
+
+  reg:
+    items:
+      - description: I3C registers
+      - description: GDMA registers
+      - description: GDMA request control register
+
+  reg-names:
+    items:
+      - const: i3c
+      - const: dma
+      - const: dma_ctl
+
+  interrupts:
+    maxItems: 1
+
+  clocks:
+    items:
+      - description: system clock
+      - description: bus clock
+
+  clock-names:
+    items:
+      - const: pclk
+      - const: fast_clk
+
+  resets:
+    maxItems: 1
+
+  i3c-pp-scl-hi-period-ns:
+    description: |
+      If need to configure SCL with required duty cycle, specify the clock high/low period directly.
+      i3c-pp-scl-hi-perios-ns specifies the high period ns of the SCL clock cycle in push pull mode
+      When i3c-pp-scl-hi-period-ns and i3c-pp-scl-lo-period-ns are specified, the i3c pp frequency is
+      decided by these two properties.
+
+  i3c-pp-scl-lo-period-ns:
+    description: |
+      The low period ns of the SCL clock cycle in push pull mode. i3c-pp-scl-lo-period-ns should not
+      be less than i3c-pp-scl-hi-period-ns and the maximal value is i3c-pp-scl-hi-period-ns + 150.
+
+  i3c-pp-sda-rd-skew:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      The number of MCLK clock periods to delay the SDA transition from the SCL clock edge at push
+      pull operation when transfers i3c private read.
+    maximum: 7
+    default: 0
+
+  i3c-pp-sda-wr-skew:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      The number of MCLK clock periods to delay the SDA transition from the SCL clock edge at push
+      pull operation when transfers i3c private write.
+    maximum: 7
+    default: 0
+
+  i3c-od-scl-hi-period-ns:
+    description: |
+      The i3c open drain frequency is 1MHz by default.
+      If need to use different frequency, specify the clock high/low period directly.
+      i3c-od-scl-hi-perios-ns specifies the high period ns of the SCL clock cycle in open drain mode.
+      When i3c-od-scl-hi-period-ns and i3c-od-scl-lo-period-ns are specified, the i3c od frequency is
+      decided by these two properties.
+      i3c-od-scl-hi-period-ns should be equal to i3c-pp-scl-hi-period-ns or i3c-od-scl-lo-period-ns.
+
+  i3c-od-scl-lo-period-ns:
+    description: |
+      The low period ns of the SCL clock cycle in open drain mode. i3c-od-scl-lo-period-ns should be
+      multiple of i3c-pp-scl-hi-period-ns.
+
+  enable-hj:
+    type: boolean
+    description: |
+      Enable SLVSTART interrupt for receiving hot-join request.
+
+  use-dma:
+    type: boolean
+    description: |
+      Enable the i3c private transfers using DMA.
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - clock-names
+  - clocks
+
+additionalProperties: true
+
+examples:
+  - |
+    i3c@fff10000 {
+        compatible = "nuvoton,npcm845-i3c";
+        clocks = <&clk 4>, <&clk 26>;
+        clock-names = "pclk", "fast_clk";
+        interrupts = <0 224 4>;
+        reg = <0xfff10000 0x1000>,
+              <0xf0850000 0x1000>,
+              <0xf0800300 0x4>;
+        reg-names = "i3c", "dma", "dma_ctl";
+        resets = <&rstc 0x74 8>;
+        #address-cells = <3>;
+        #size-cells = <0>;
+    };
