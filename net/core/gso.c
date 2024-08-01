@@ -122,10 +122,12 @@ struct sk_buff *__skb_gso_segment(struct sk_buff *skb,
 	skb_reset_mac_len(skb);
 
 	segs = skb_mac_gso_segment(skb, features);
+	if (IS_ERR_OR_NULL(segs))
+		goto out;
 
-	if (segs != skb && unlikely(skb_needs_check(skb, tx_path) && !IS_ERR(segs)))
+	if (segs != skb && unlikely(skb_needs_check(skb, tx_path)))
 		skb_warn_bad_offload(skb);
-
+out:
 	return segs;
 }
 EXPORT_SYMBOL(__skb_gso_segment);
