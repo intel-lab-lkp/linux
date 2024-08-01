@@ -5409,6 +5409,25 @@ xfs_bmap_del_extent_real(
 	return 0;
 }
 
+static xfs_extlen_t
+xfs_bunmapi_align(
+	struct xfs_inode	*ip,
+	xfs_fsblock_t		fsbno,
+	xfs_extlen_t *off)
+{
+	struct xfs_mount	*mp = ip->i_mount;
+
+	if (XFS_IS_REALTIME_INODE(ip))
+		return xfs_inode_alloc_fsbsize_align(ip, fsbno, off);
+	/*
+	 * The agbno for the fsbno is aligned to extsize, but the fsbno itself
+	 * is not necessarily aligned (to extsize), so use agbno to determine
+	 * mod+offset to the alloc unit boundary.
+	 */
+	return xfs_inode_alloc_fsbsize_align(ip, XFS_FSB_TO_AGBNO(mp, fsbno),
+					off);
+}
+
 /*
  * Unmap (remove) blocks from a file.
  * If nexts is nonzero then the number of extents to remove is limited to
@@ -5430,7 +5449,8 @@ __xfs_bunmapi(
 	xfs_extnum_t		extno;		/* extent number in list */
 	struct xfs_bmbt_irec	got;		/* current extent record */
 	struct xfs_ifork	*ifp;		/* inode fork pointer */
-	int			isrt;		/* freeing in rt area */
+	bool			isrt;		/* freeing in rt area */
+	bool			isforcealign;	/* forcealign inode */
 	int			logflags;	/* transaction logging flags */
 	xfs_extlen_t		mod;		/* rt extent offset */
 	struct xfs_mount	*mp = ip->i_mount;
@@ -5468,6 +5488,8 @@ __xfs_bunmapi(
 	}
 	XFS_STATS_INC(mp, xs_blk_unmap);
 	isrt = xfs_ifork_is_realtime(ip, whichfork);
+	isforcealign = (whichfork != XFS_ATTR_FORK) &&
+			xfs_inode_has_forcealign(ip);
 	end = start + len;
 
 	if (!xfs_iext_lookup_extent_before(ip, ifp, &end, &icur, &got)) {
@@ -5486,6 +5508,8 @@ __xfs_bunmapi(
 	extno = 0;
 	while (end != (xfs_fileoff_t)-1 && end >= start &&
 	       (nexts == 0 || extno < nexts)) {
+		xfs_extlen_t off;
+
 		/*
 		 * Is the found extent after a hole in which end lives?
 		 * Just back up to the previous extent, if so.
@@ -5519,18 +5543,18 @@ __xfs_bunmapi(
 		if (del.br_startoff + del.br_blockcount > end + 1)
 			del.br_blockcount = end + 1 - del.br_startoff;
 
-		if (!isrt || (flags & XFS_BMAPI_REMAP))
+		if ((!isrt && !isforcealign) || (flags & XFS_BMAPI_REMAP))
 			goto delete;
 
-		mod = xfs_rtb_to_rtxoff(mp,
-				del.br_startblock + del.br_blockcount);
+		mod = xfs_bunmapi_align(ip,
+				del.br_startblock + del.br_blockcount, &off);
 		if (mod) {
 			/*
-			 * Realtime extent not lined up at the end.
+			 * Not aligned to allocation unit on the end.
 			 * The extent could have been split into written
 			 * and unwritten pieces, or we could just be
 			 * unmapping part of it.  But we can't really
-			 * get rid of part of a realtime extent.
+			 * get rid of part of an extent.
 			 */
 			if (del.br_state == XFS_EXT_UNWRITTEN) {
 				/*
@@ -5554,7 +5578,7 @@ __xfs_bunmapi(
 			ASSERT(del.br_state == XFS_EXT_NORM);
 			ASSERT(tp->t_blk_res > 0);
 			/*
-			 * If this spans a realtime extent boundary,
+			 * If this spans an extent boundary,
 			 * chop it back to the start of the one we end at.
 			 */
 			if (del.br_blockcount > mod) {
@@ -5571,14 +5595,12 @@ __xfs_bunmapi(
 			goto nodelete;
 		}
 
-		mod = xfs_rtb_to_rtxoff(mp, del.br_startblock);
+		mod = xfs_bunmapi_align(ip, del.br_startblock, &off);
 		if (mod) {
-			xfs_extlen_t off = mp->m_sb.sb_rextsize - mod;
-
 			/*
-			 * Realtime extent is lined up at the end but not
-			 * at the front.  We'll get rid of full extents if
-			 * we can.
+			 * Extent is lined up to the allocation unit at the
+			 * end but not at the front.  We'll get rid of full
+			 * extents if we can.
 			 */
 			if (del.br_blockcount > off) {
 				del.br_blockcount -= off;

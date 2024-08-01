@@ -3164,3 +3164,19 @@ xfs_is_always_cow_inode(
 {
 	return ip->i_mount->m_always_cow && xfs_has_reflink(ip->i_mount);
 }
+
+/* Return mod+offset for a blkno to an extent boundary */
+xfs_extlen_t
+xfs_inode_alloc_fsbsize_align(
+	struct xfs_inode	*ip,
+	xfs_fileoff_t		blkno,
+	xfs_extlen_t		*off)
+{
+	xfs_fileoff_t		blkno_start = blkno;
+	xfs_fileoff_t		blkno_end = blkno;
+
+	xfs_roundout_to_alloc_fsbsize(ip, &blkno_start, &blkno_end);
+
+	*off = blkno_end - blkno;
+	return blkno - blkno_start;
+}
