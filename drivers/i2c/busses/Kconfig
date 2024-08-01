@@ -1263,6 +1263,13 @@ config I2C_RCAR
 	  This driver can also be built as a module.  If so, the module
 	  will be called i2c-rcar.
 
+config I2C_CONGATEC_CGEB
+	tristate "Congatec CGEB I2C driver"
+	depends on MFD_CONGATEC_CGEB
+	help
+	  This driver provides support for the I2C busses accssable via
+	  the Congatec CGEB interface found on Congatec boards.
+
 comment "External I2C/SMBus adapter drivers"
 
 config I2C_DIOLAN_U2C
