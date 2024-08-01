@@ -77,18 +77,27 @@ static int mmap_udmabuf(struct dma_buf *buf, struct vm_area_struct *vma)
 static int vmap_udmabuf(struct dma_buf *buf, struct iosys_map *map)
 {
 	struct udmabuf *ubuf = buf->priv;
-	struct page **pages;
+	struct page **pages, **tmp;
+	struct sg_table *sg = ubuf->sg;
+	struct sg_page_iter piter;
 	void *vaddr;
-	pgoff_t pg;
 
 	dma_resv_assert_held(buf->resv);
+
+	if (!sg) {
+		sg = get_sg_table(NULL, buf, 0);
+		if (IS_ERR(sg))
+			return PTR_ERR(sg);
+		ubuf->sg = sg;
+	}
 
 	pages = kvmalloc_array(ubuf->pagecount, sizeof(*pages), GFP_KERNEL);
 	if (!pages)
 		return -ENOMEM;
+	tmp = pages;
 
-	for (pg = 0; pg < ubuf->pagecount; pg++)
-		pages[pg] = &ubuf->folios[pg]->page;
+	for_each_sgtable_page(sg, &piter, 0)
+		*tmp++ = sg_page_iter_page(&piter);
 
 	vaddr = vm_map_ram(pages, ubuf->pagecount, -1);
 	kvfree(pages);
