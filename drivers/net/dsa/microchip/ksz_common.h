@@ -174,6 +174,7 @@ struct ksz_device {
 	bool synclko_125;
 	bool synclko_disable;
 	bool wakeup_source;
+	bool no_tag_proto;
 
 	struct vlan_table *vlan_cache;
 

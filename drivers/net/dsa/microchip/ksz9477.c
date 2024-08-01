@@ -1195,7 +1195,7 @@ void ksz9477_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 	/* enable tag tail for host port */
 	if (cpu_port)
 		ksz_port_cfg(dev, port, REG_PORT_CTRL_0, PORT_TAIL_TAG_ENABLE,
-			     true);
+			     !dev->no_tag_proto);
 
 	ksz9477_port_queue_split(dev, port);
 

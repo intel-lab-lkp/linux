@@ -2882,9 +2882,7 @@ static enum dsa_tag_protocol ksz_get_tag_protocol(struct dsa_switch *ds,
 	struct ksz_device *dev = ds->priv;
 	enum dsa_tag_protocol proto = DSA_TAG_PROTO_NONE;
 
-	if (dev->chip_id == KSZ8795_CHIP_ID ||
-	    dev->chip_id == KSZ8794_CHIP_ID ||
-	    dev->chip_id == KSZ8765_CHIP_ID)
+	if (ksz_is_ksz87xx(dev))
 		proto = DSA_TAG_PROTO_KSZ8795;
 
 	if (dev->chip_id == KSZ8830_CHIP_ID ||
@@ -2903,6 +2901,9 @@ static enum dsa_tag_protocol ksz_get_tag_protocol(struct dsa_switch *ds,
 	if (is_lan937x(dev))
 		proto = DSA_TAG_PROTO_LAN937X;
 
+	if (dev->no_tag_proto)
+		proto = DSA_TAG_PROTO_NONE;
+
 	return proto;
 }
 
@@ -2912,6 +2913,8 @@ static int ksz_connect_tag_protocol(struct dsa_switch *ds,
 	struct ksz_tagger_data *tagger_data;
 
 	switch (proto) {
+	case DSA_TAG_PROTO_NONE:
+		return 0;
 	case DSA_TAG_PROTO_KSZ8795:
 		return 0;
 	case DSA_TAG_PROTO_KSZ9893:
@@ -4459,6 +4462,8 @@ int ksz_switch_register(struct ksz_device *dev)
 
 		dev->wakeup_source = of_property_read_bool(dev->dev->of_node,
 							   "wakeup-source");
+		dev->no_tag_proto = of_property_read_bool(dev->dev->of_node,
+							  "microchip,no-tag-protocol");
 	}
 
 	ret = dsa_register_switch(dev->ds);
