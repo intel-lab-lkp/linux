@@ -3129,6 +3129,20 @@ xfs_inode_alloc_unitsize(
 	return XFS_FSB_TO_B(ip->i_mount, xfs_inode_alloc_fsbsize(ip));
 }
 
+void
+xfs_roundout_to_alloc_fsbsize(
+	struct xfs_inode	*ip,
+	xfs_fileoff_t		*start,
+	xfs_fileoff_t		*end)
+{
+	unsigned int		blocks = xfs_inode_alloc_fsbsize(ip);
+
+	if (blocks == 1)
+		return;
+	*start = rounddown_64(*start, blocks);
+	*end = roundup_64(*end, blocks);
+}
+
 /* Should we always be using copy on write for file writes? */
 bool
 xfs_is_always_cow_inode(

@@ -496,6 +496,7 @@ xfs_can_free_eofblocks(
 	struct xfs_mount	*mp = ip->i_mount;
 	xfs_fileoff_t		end_fsb;
 	xfs_fileoff_t		last_fsb;
+	xfs_fileoff_t		dummy_fsb;
 	int			nimaps = 1;
 	int			error;
 
@@ -537,8 +538,10 @@ xfs_can_free_eofblocks(
 	 * forever.
 	 */
 	end_fsb = XFS_B_TO_FSB(mp, (xfs_ufsize_t)XFS_ISIZE(ip));
-	if (xfs_inode_has_bigrtalloc(ip))
-		end_fsb = xfs_rtb_roundup_rtx(mp, end_fsb);
+
+	/* Only try to free beyond the allocation unit that crosses EOF */
+	xfs_roundout_to_alloc_fsbsize(ip, &dummy_fsb, &end_fsb);
+
 	last_fsb = XFS_B_TO_FSB(mp, mp->m_super->s_maxbytes);
 	if (last_fsb <= end_fsb)
 		return false;
