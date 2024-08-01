@@ -1970,6 +1970,10 @@ int kvm_arch_prepare_memory_region(struct kvm *kvm,
 			change != KVM_MR_FLAGS_ONLY)
 		return 0;
 
+	if ((change == KVM_MR_MOVE || change == KVM_MR_FLAGS_ONLY) &&
+	    ((kvm_slot_can_be_private(old)) || (kvm_slot_can_be_private(new))))
+		return -EPERM;
+
 	/*
 	 * Prevent userspace from creating a memory region outside of the IPA
 	 * space addressable by the KVM guest IPA space.
