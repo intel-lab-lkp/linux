@@ -11,6 +11,9 @@ struct kvm_gmem {
 	struct kvm *kvm;
 	struct xarray bindings;
 	struct list_head entry;
+#ifdef CONFIG_KVM_PRIVATE_MEM_MAPPABLE
+	struct xarray unmappable_gfns;
+#endif
 };
 
 static struct folio *kvm_gmem_get_folio(struct inode *inode, pgoff_t index)
@@ -230,6 +233,11 @@ static int kvm_gmem_release(struct inode *inode, struct file *file)
 	mutex_unlock(&kvm->slots_lock);
 
 	xa_destroy(&gmem->bindings);
+
+#ifdef CONFIG_KVM_PRIVATE_MEM_MAPPABLE
+	xa_destroy(&gmem->unmappable_gfns);
+#endif
+
 	kfree(gmem);
 
 	kvm_put_kvm(kvm);
@@ -248,7 +256,105 @@ static inline struct file *kvm_gmem_get_file(struct kvm_memory_slot *slot)
 	return get_file_active(&slot->gmem.file);
 }
 
+#ifdef CONFIG_KVM_PRIVATE_MEM_MAPPABLE
+int kvm_slot_gmem_toggle_mappable(struct kvm_memory_slot *slot, gfn_t start,
+				  gfn_t end, bool is_mappable)
+{
+	struct kvm_gmem *gmem = slot->gmem.file->private_data;
+	void *xval = is_mappable ? NULL : xa_mk_value(true);
+	void *r;
+
+	r = xa_store_range(&gmem->unmappable_gfns, start, end - 1, xval, GFP_KERNEL);
+
+	return xa_err(r);
+}
+
+int kvm_slot_gmem_set_mappable(struct kvm_memory_slot *slot, gfn_t start, gfn_t end)
+{
+	return kvm_slot_gmem_toggle_mappable(slot, start, end, true);
+}
+
+int kvm_slot_gmem_clear_mappable(struct kvm_memory_slot *slot, gfn_t start, gfn_t end)
+{
+	return kvm_slot_gmem_toggle_mappable(slot, start, end, false);
+}
+
+bool kvm_slot_gmem_is_mappable(struct kvm_memory_slot *slot, gfn_t gfn)
+{
+	struct kvm_gmem *gmem = slot->gmem.file->private_data;
+	unsigned long _gfn = gfn;
+
+	return !xa_find(&gmem->unmappable_gfns, &_gfn, ULONG_MAX, XA_PRESENT);
+}
+
+static bool kvm_gmem_isfaultable(struct vm_fault *vmf)
+{
+	struct kvm_gmem *gmem = vmf->vma->vm_file->private_data;
+	struct inode *inode = file_inode(vmf->vma->vm_file);
+	pgoff_t pgoff = vmf->pgoff;
+	struct kvm_memory_slot *slot;
+	unsigned long index;
+	bool r = true;
+
+	filemap_invalidate_lock(inode->i_mapping);
+
+	xa_for_each_range(&gmem->bindings, index, slot, pgoff, pgoff) {
+		pgoff_t base_gfn = slot->base_gfn;
+		pgoff_t gfn_pgoff = slot->gmem.pgoff;
+		pgoff_t gfn = base_gfn + max(gfn_pgoff, pgoff) - gfn_pgoff;
+
+		if (!kvm_slot_gmem_is_mappable(slot, gfn)) {
+			r = false;
+			break;
+		}
+	}
+
+	filemap_invalidate_unlock(inode->i_mapping);
+
+	return r;
+}
+
+static vm_fault_t kvm_gmem_fault(struct vm_fault *vmf)
+{
+	struct folio *folio;
+
+	folio = kvm_gmem_get_folio(file_inode(vmf->vma->vm_file), vmf->pgoff);
+	if (!folio)
+		return VM_FAULT_SIGBUS;
+
+	if (!kvm_gmem_isfaultable(vmf)) {
+		folio_unlock(folio);
+		folio_put(folio);
+		return VM_FAULT_SIGBUS;
+	}
+
+	vmf->page = folio_file_page(folio, vmf->pgoff);
+	return VM_FAULT_LOCKED;
+}
+
+static const struct vm_operations_struct kvm_gmem_vm_ops = {
+	.fault = kvm_gmem_fault,
+};
+
+static int kvm_gmem_mmap(struct file *file, struct vm_area_struct *vma)
+{
+	if ((vma->vm_flags & (VM_SHARED | VM_MAYSHARE)) !=
+	    (VM_SHARED | VM_MAYSHARE)) {
+		return -EINVAL;
+	}
+
+	file_accessed(file);
+	vm_flags_set(vma, VM_DONTDUMP);
+	vma->vm_ops = &kvm_gmem_vm_ops;
+
+	return 0;
+}
+#else
+#define kvm_gmem_mmap NULL
+#endif /* CONFIG_KVM_PRIVATE_MEM_MAPPABLE */
+
 static struct file_operations kvm_gmem_fops = {
+	.mmap		= kvm_gmem_mmap,
 	.open		= generic_file_open,
 	.release	= kvm_gmem_release,
 	.fallocate	= kvm_gmem_fallocate,
@@ -368,6 +474,10 @@ static int __kvm_gmem_create(struct kvm *kvm, loff_t size, u64 flags)
 	gmem->kvm = kvm;
 	xa_init(&gmem->bindings);
 	list_add(&gmem->entry, &inode->i_mapping->i_private_list);
+
+#ifdef CONFIG_KVM_PRIVATE_MEM_MAPPABLE
+	xa_init(&gmem->unmappable_gfns);
+#endif
 
 	fd_install(fd, file);
 	return fd;

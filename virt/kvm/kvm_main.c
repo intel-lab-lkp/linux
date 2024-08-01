@@ -3265,6 +3265,128 @@ static int next_segment(unsigned long len, int offset)
 		return len;
 }
 
+#ifdef CONFIG_KVM_PRIVATE_MEM_MAPPABLE
+static bool __kvm_gmem_is_mappable(struct kvm *kvm, gfn_t start, gfn_t end)
+{
+	struct kvm_memslot_iter iter;
+
+	lockdep_assert_held(&kvm->slots_lock);
+
+	kvm_for_each_memslot_in_gfn_range(&iter, kvm_memslots(kvm), start, end) {
+		struct kvm_memory_slot *memslot = iter.slot;
+		gfn_t gfn_start, gfn_end, i;
+
+		gfn_start = max(start, memslot->base_gfn);
+		gfn_end = min(end, memslot->base_gfn + memslot->npages);
+		if (WARN_ON_ONCE(gfn_start >= gfn_end))
+			continue;
+
+		for (i = gfn_start; i < gfn_end; i++) {
+			if (!kvm_slot_gmem_is_mappable(memslot, i))
+				return false;
+		}
+	}
+
+	return true;
+}
+
+bool kvm_gmem_is_mappable(struct kvm *kvm, gfn_t start, gfn_t end)
+{
+	bool r;
+
+	mutex_lock(&kvm->slots_lock);
+	r = __kvm_gmem_is_mappable(kvm, start, end);
+	mutex_unlock(&kvm->slots_lock);
+
+	return r;
+}
+
+static bool __kvm_gmem_is_mapped(struct kvm *kvm, gfn_t start, gfn_t end)
+{
+	struct kvm_memslot_iter iter;
+
+	lockdep_assert_held(&kvm->slots_lock);
+
+	kvm_for_each_memslot_in_gfn_range(&iter, kvm_memslots(kvm), start, end) {
+		struct kvm_memory_slot *memslot = iter.slot;
+		gfn_t gfn_start, gfn_end, i;
+
+		gfn_start = max(start, memslot->base_gfn);
+		gfn_end = min(end, memslot->base_gfn + memslot->npages);
+		if (WARN_ON_ONCE(gfn_start >= gfn_end))
+			continue;
+
+		for (i = gfn_start; i < gfn_end; i++) {
+			struct page *page;
+			bool is_mapped;
+			kvm_pfn_t pfn;
+
+			if (WARN_ON_ONCE(kvm_gmem_get_pfn_locked(kvm, memslot, i, &pfn, NULL)))
+				continue;
+
+			page = pfn_to_page(pfn);
+			is_mapped = page_mapped(page) || page_maybe_dma_pinned(page);
+			unlock_page(page);
+			put_page(page);
+
+			if (is_mapped)
+				return true;
+		}
+	}
+
+	return false;
+}
+
+bool kvm_gmem_is_mapped(struct kvm *kvm, gfn_t start, gfn_t end)
+{
+	bool r;
+
+	mutex_lock(&kvm->slots_lock);
+	r = __kvm_gmem_is_mapped(kvm, start, end);
+	mutex_unlock(&kvm->slots_lock);
+
+	return r;
+}
+
+static int kvm_gmem_toggle_mappable(struct kvm *kvm, gfn_t start, gfn_t end,
+				    bool is_mappable)
+{
+	struct kvm_memslot_iter iter;
+	int r = 0;
+
+	mutex_lock(&kvm->slots_lock);
+
+	kvm_for_each_memslot_in_gfn_range(&iter, kvm_memslots(kvm), start, end) {
+		struct kvm_memory_slot *memslot = iter.slot;
+		gfn_t gfn_start, gfn_end;
+
+		gfn_start = max(start, memslot->base_gfn);
+		gfn_end = min(end, memslot->base_gfn + memslot->npages);
+		if (WARN_ON_ONCE(start >= end))
+			continue;
+
+		r = kvm_slot_gmem_toggle_mappable(memslot, gfn_start, gfn_end, is_mappable);
+		if (WARN_ON_ONCE(r))
+			break;
+	}
+
+	mutex_unlock(&kvm->slots_lock);
+
+	return r;
+}
+
+int kvm_gmem_set_mappable(struct kvm *kvm, gfn_t start, gfn_t end)
+{
+	return kvm_gmem_toggle_mappable(kvm, start, end, true);
+}
+
+int kvm_gmem_clear_mappable(struct kvm *kvm, gfn_t start, gfn_t end)
+{
+	return kvm_gmem_toggle_mappable(kvm, start, end, false);
+}
+
+#endif /* CONFIG_KVM_PRIVATE_MEM_MAPPABLE */
+
 /* Copy @len bytes from guest memory at '(@gfn * PAGE_SIZE) + @offset' to @data */
 static int __kvm_read_guest_page(struct kvm_memory_slot *slot, gfn_t gfn,
 				 void *data, int offset, int len)
