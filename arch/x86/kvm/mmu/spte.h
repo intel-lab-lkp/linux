@@ -216,15 +216,17 @@ extern u64 __read_mostly shadow_nonpresent_or_rsvd_mask;
  * should not modify the SPTE.
  *
  * Use a semi-arbitrary value that doesn't set RWX bits, i.e. is not-present on
- * both AMD and Intel CPUs, and doesn't set PFN bits, i.e. doesn't create a L1TF
- * vulnerability.
+ * both AMD and Intel CPUs, doesn't set any A/D bits, and doesn't set PFN bits,
+ * i.e. doesn't create a L1TF vulnerability.
  *
  * Only used by the TDP MMU.
  */
-#define FROZEN_SPTE	(SHADOW_NONPRESENT_VALUE | 0x5a0ULL)
+#define FROZEN_SPTE	(SHADOW_NONPRESENT_VALUE | 0x498ULL)
 
 /* Removed SPTEs must not be misconstrued as shadow present PTEs. */
 static_assert(!(FROZEN_SPTE & SPTE_MMU_PRESENT_MASK));
+static_assert(!(FROZEN_SPTE & (PT_ACCESSED_MASK | VMX_EPT_ACCESS_BIT)));
+static_assert(!(FROZEN_SPTE & (PT_DIRTY_MASK | VMX_EPT_DIRTY_BIT)));
 
 static inline bool is_frozen_spte(u64 spte)
 {
