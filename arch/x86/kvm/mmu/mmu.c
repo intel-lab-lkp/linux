@@ -3454,8 +3454,10 @@ static int fast_page_fault(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault)
 		 * uses A/D bits for non-nested MMUs.  Thus, if A/D bits are
 		 * enabled, the SPTE can't be an access-tracked SPTE.
 		 */
-		if (unlikely(!kvm_ad_enabled) && is_access_track_spte(spte))
-			new_spte = restore_acc_track_spte(new_spte);
+		if (unlikely(!kvm_ad_enabled) && is_access_track_spte(spte)) {
+			new_spte = restore_acc_track_spte(new_spte) |
+				   shadow_accessed_mask;
+		}
 
 		/*
 		 * To keep things simple, only SPTEs that are MMU-writable can
