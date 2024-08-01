@@ -926,12 +926,12 @@ xfs_setattr_size(
 	}
 
 	/*
-	 * For realtime inode with more than one block rtextsize, we need the
+	 * For inodes with more than one block alloc unitsize, we need the
 	 * block reservation for bmap btree block allocations/splits that can
 	 * happen since it could split the tail written extent and convert the
 	 * right beyond EOF one to unwritten.
 	 */
-	if (xfs_inode_has_bigrtalloc(ip))
+	if (xfs_inode_alloc_fsbsize(ip) > 1)
 		resblks = XFS_DIOSTRAT_SPACE_RES(mp, 0);
 
 	error = xfs_trans_alloc(mp, &M_RES(mp)->tr_itruncate, resblks,
