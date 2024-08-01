@@ -31,6 +31,9 @@
 #include <linux/swapops.h>
 #include <linux/shmem_fs.h>
 #include <linux/mmu_notifier.h>
+#include <linux/memory-tiers.h>
+#include <linux/migrate.h>
+#include <linux/sched/numa_balancing.h>
 
 #include <asm/tlb.h>
 
@@ -56,6 +59,8 @@ static int madvise_need_mmap_write(int behavior)
 	case MADV_DONTNEED_LOCKED:
 	case MADV_COLD:
 	case MADV_PAGEOUT:
+	case MADV_DEMOTE:
+	case MADV_PROMOTE:
 	case MADV_FREE:
 	case MADV_POPULATE_READ:
 	case MADV_POPULATE_WRITE:
@@ -639,6 +644,242 @@ static long madvise_pageout(struct vm_area_struct *vma,
 	return 0;
 }
 
+static int madvise_demotion_pte_range(pmd_t *pmd,
+				unsigned long addr, unsigned long end,
+				struct mm_walk *walk)
+{
+	struct mmu_gather *tlb = walk->private;
+	struct vm_area_struct *vma = walk->vma;
+	struct mm_struct *mm = tlb->mm;
+	pte_t *start_pte, *pte, ptent;
+	struct folio *folio = NULL;
+	LIST_HEAD(folio_list);
+	spinlock_t *ptl;
+	int nid;
+
+	if (fatal_signal_pending(current))
+		return -EINTR;
+
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+	if (pmd_trans_huge(*pmd))
+		return 0;
+#endif
+	tlb_change_page_size(tlb, PAGE_SIZE);
+	start_pte = pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
+	if (!start_pte)
+		return 0;
+	flush_tlb_batched_pending(mm);
+	arch_enter_lazy_mmu_mode();
+	for (; addr < end; pte++, addr += PAGE_SIZE) {
+		ptent = ptep_get(pte);
+
+		if (pte_none(ptent))
+			continue;
+
+		if (!pte_present(ptent))
+			continue;
+
+		folio = vm_normal_folio(vma, addr, ptent);
+		if (!folio || folio_is_zone_device(folio))
+			continue;
+
+		if (folio_test_large(folio))
+			continue;
+
+		if (!folio_test_anon(folio))
+			continue;
+
+		nid = folio_nid(folio);
+		if (!node_is_toptier(nid))
+			continue;
+
+		/* no tiered memory node */
+		if (next_demotion_node(nid) == NUMA_NO_NODE)
+			continue;
+
+		/*
+		 * Do not interfere with other mappings of this folio and
+		 * non-LRU folio. If we have a large folio at this point, we
+		 * know it is fully mapped so if its mapcount is the same as its
+		 * number of pages, it must be exclusive.
+		 */
+		if (!folio_test_lru(folio) ||
+		    folio_mapcount(folio) != folio_nr_pages(folio))
+			continue;
+
+		folio_clear_referenced(folio);
+		folio_test_clear_young(folio);
+		if (folio_test_active(folio))
+			folio_set_workingset(folio);
+		if (folio_isolate_lru(folio)) {
+			if (folio_test_unevictable(folio))
+				folio_putback_lru(folio);
+			else
+				list_add(&folio->lru, &folio_list);
+		}
+	}
+
+	if (start_pte) {
+		arch_leave_lazy_mmu_mode();
+		pte_unmap_unlock(start_pte, ptl);
+	}
+
+	demotion_pages(&folio_list);
+	cond_resched();
+
+	return 0;
+}
+
+static const struct mm_walk_ops demotion_walk_ops = {
+	.pmd_entry = madvise_demotion_pte_range,
+	.walk_lock = PGWALK_RDLOCK,
+};
+
+static void madvise_demotion_page_range(struct mmu_gather *tlb,
+			     struct vm_area_struct *vma,
+			     unsigned long addr, unsigned long end)
+{
+	tlb_start_vma(tlb, vma);
+	walk_page_range(vma->vm_mm, addr, end, &demotion_walk_ops, tlb);
+	tlb_end_vma(tlb, vma);
+}
+
+static long madvise_demotion(struct vm_area_struct *vma,
+			struct vm_area_struct **prev,
+			unsigned long start_addr, unsigned long end_addr)
+{
+	struct mm_struct *mm = vma->vm_mm;
+	struct mmu_gather tlb;
+
+	*prev = vma;
+	if (!can_madv_lru_vma(vma))
+		return -EINVAL;
+
+	if (!numa_demotion_enabled && !vma_is_anonymous(vma) &&
+				(vma->vm_flags & VM_MAYSHARE))
+		return 0;
+
+	lru_add_drain();
+	tlb_gather_mmu(&tlb, mm);
+	madvise_demotion_page_range(&tlb, vma, start_addr, end_addr);
+	tlb_finish_mmu(&tlb);
+
+	return 0;
+}
+
+static int madvise_promotion_pte_range(pmd_t *pmd,
+				unsigned long addr, unsigned long end,
+				struct mm_walk *walk)
+{
+	struct mmu_gather *tlb = walk->private;
+	struct vm_area_struct *vma = walk->vma;
+	struct mm_struct *mm = tlb->mm;
+	struct folio *folio = NULL;
+	LIST_HEAD(folio_list);
+	int nid, target_nid;
+	pte_t *pte, ptent;
+	spinlock_t *ptl;
+
+	if (fatal_signal_pending(current))
+		return -EINTR;
+
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+	if (pmd_trans_huge(*pmd))
+		return 0;
+#endif
+	tlb_change_page_size(tlb, PAGE_SIZE);
+	pte = pte_offset_map_nolock(vma->vm_mm, pmd, addr, &ptl);
+	if (!pte)
+		return 0;
+	flush_tlb_batched_pending(mm);
+	arch_enter_lazy_mmu_mode();
+	for (; addr < end; pte++, addr += PAGE_SIZE) {
+		ptent = ptep_get(pte);
+
+		if (pte_none(ptent))
+			continue;
+
+		if (!pte_present(ptent))
+			continue;
+
+		folio = vm_normal_folio(vma, addr, ptent);
+		if (!folio || folio_is_zone_device(folio))
+			continue;
+
+		if (folio_test_large(folio))
+			continue;
+
+		if (!folio_test_anon(folio))
+			continue;
+
+		/* skip page on fast node */
+		nid = folio_nid(folio);
+		if (node_is_toptier(nid))
+			continue;
+
+		if (!folio_test_lru(folio) ||
+		    folio_mapcount(folio) != folio_nr_pages(folio))
+			continue;
+
+		/* force update folio last access time */
+		folio_xchg_access_time(folio, jiffies_to_msecs(jiffies));
+
+		target_nid = numa_node_id();
+		if (!should_numa_migrate_memory(current, folio, nid, target_nid))
+			continue;
+
+		/* prepare pormote */
+		if (!folio_isolate_lru(folio))
+			continue;
+
+		/* promote page directly */
+		migrate_misplaced_folio(folio, vma, target_nid);
+		tlb_remove_tlb_entry(tlb, pte, addr);
+	}
+
+	arch_leave_lazy_mmu_mode();
+	cond_resched();
+
+	return 0;
+}
+
+static const struct mm_walk_ops promotion_walk_ops = {
+	.pmd_entry = madvise_promotion_pte_range,
+	.walk_lock = PGWALK_RDLOCK,
+};
+
+static void madvise_promotion_page_range(struct mmu_gather *tlb,
+			     struct vm_area_struct *vma,
+			     unsigned long addr, unsigned long end)
+{
+	tlb_start_vma(tlb, vma);
+	walk_page_range(vma->vm_mm, addr, end, &promotion_walk_ops, tlb);
+	tlb_end_vma(tlb, vma);
+}
+
+static long madvise_promotion(struct vm_area_struct *vma,
+			struct vm_area_struct **prev,
+			unsigned long start_addr, unsigned long end_addr)
+{
+	struct mm_struct *mm = vma->vm_mm;
+	struct mmu_gather tlb;
+
+	*prev = vma;
+	if (!can_madv_lru_vma(vma))
+		return -EINVAL;
+
+	if (!numa_demotion_enabled && !vma_is_anonymous(vma) &&
+				(vma->vm_flags & VM_MAYSHARE))
+		return 0;
+
+	lru_add_drain();
+	tlb_gather_mmu(&tlb, mm);
+	madvise_promotion_page_range(&tlb, vma, start_addr, end_addr);
+	tlb_finish_mmu(&tlb);
+
+	return 0;
+}
+
 static int madvise_free_pte_range(pmd_t *pmd, unsigned long addr,
 				unsigned long end, struct mm_walk *walk)
 
@@ -1040,6 +1281,10 @@ static int madvise_vma_behavior(struct vm_area_struct *vma,
 		return madvise_cold(vma, prev, start, end);
 	case MADV_PAGEOUT:
 		return madvise_pageout(vma, prev, start, end);
+	case MADV_DEMOTE:
+		return madvise_demotion(vma, prev, start, end);
+	case MADV_PROMOTE:
+		return madvise_promotion(vma, prev, start, end);
 	case MADV_FREE:
 	case MADV_DONTNEED:
 	case MADV_DONTNEED_LOCKED:
@@ -1179,6 +1424,8 @@ madvise_behavior_valid(int behavior)
 	case MADV_FREE:
 	case MADV_COLD:
 	case MADV_PAGEOUT:
+	case MADV_DEMOTE:
+	case MADV_PROMOTE:
 	case MADV_POPULATE_READ:
 	case MADV_POPULATE_WRITE:
 #ifdef CONFIG_KSM
@@ -1210,6 +1457,8 @@ static bool process_madvise_behavior_valid(int behavior)
 	switch (behavior) {
 	case MADV_COLD:
 	case MADV_PAGEOUT:
+	case MADV_DEMOTE:
+	case MADV_PROMOTE:
 	case MADV_WILLNEED:
 	case MADV_COLLAPSE:
 		return true;
@@ -1391,6 +1640,8 @@ int madvise_set_anon_name(struct mm_struct *mm, unsigned long start,
  *		triggering read faults if required
  *  MADV_POPULATE_WRITE - populate (prefault) page tables writable by
  *		triggering write faults if required
+ *  MADV_DEMOTE  - the application forces pages into slow node.
+ *  MADV_PROMOTE - the application forces pages into fast node.
  *
  * return values:
  *  zero    - success

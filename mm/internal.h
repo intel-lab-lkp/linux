@@ -1070,6 +1070,7 @@ extern unsigned long  __must_check vm_mmap_pgoff(struct file *, unsigned long,
 extern void set_pageblock_order(void);
 struct folio *alloc_migrate_folio(struct folio *src, unsigned long private);
 unsigned long reclaim_pages(struct list_head *folio_list);
+unsigned long demotion_pages(struct list_head *folio_list);
 unsigned int reclaim_clean_pages_from_list(struct zone *zone,
 					    struct list_head *folio_list);
 /* The ALLOC_WMARK bits are used as an index to zone->watermark */

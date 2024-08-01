@@ -72,6 +72,9 @@
 
 #define MADV_COLLAPSE	25		/* Synchronous hugepage collapse */
 
+#define MADV_DEMOTE	26		/* Demote page into slow node */
+#define MADV_PROMOTE	27		/* Promote page into fast node */
+
 #define MADV_HWPOISON     100		/* poison a page for testing */
 #define MADV_SOFT_OFFLINE 101		/* soft offline page for testing */
 

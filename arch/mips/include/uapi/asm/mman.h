@@ -105,6 +105,9 @@
 
 #define MADV_COLLAPSE	25		/* Synchronous hugepage collapse */
 
+#define MADV_DEMOTE	26		/* Demote page into slow node */
+#define MADV_PROMOTE	27		/* Promote page into fast node */
+
 /* compatibility flags */
 #define MAP_FILE	0
 
