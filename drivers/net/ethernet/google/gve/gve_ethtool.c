@@ -75,7 +75,8 @@ static const char gve_gstrings_adminq_stats[][ETH_GSTRING_LEN] = {
 	"adminq_destroy_tx_queue_cnt", "adminq_destroy_rx_queue_cnt",
 	"adminq_dcfg_device_resources_cnt", "adminq_set_driver_parameter_cnt",
 	"adminq_report_stats_cnt", "adminq_report_link_speed_cnt", "adminq_get_ptype_map_cnt",
-	"adminq_query_flow_rules", "adminq_cfg_flow_rule",
+	"adminq_query_flow_rules", "adminq_cfg_flow_rule", "adminq_cfg_rss_cnt",
+	"adminq_query_rss_cnt",
 };
 
 static const char gve_gstrings_priv_flags[][ETH_GSTRING_LEN] = {
@@ -453,6 +454,8 @@ gve_get_ethtool_stats(struct net_device *netdev,
 	data[i++] = priv->adminq_get_ptype_map_cnt;
 	data[i++] = priv->adminq_query_flow_rules_cnt;
 	data[i++] = priv->adminq_cfg_flow_rule_cnt;
+	data[i++] = priv->adminq_cfg_rss_cnt;
+	data[i++] = priv->adminq_query_rss_cnt;
 }
 
 static void gve_get_channels(struct net_device *netdev,
@@ -838,6 +841,115 @@ static int gve_get_rxnfc(struct net_device *netdev, struct ethtool_rxnfc *cmd, u
 	return err;
 }
 
+static u32 gve_get_rxfh_key_size(struct net_device *netdev)
+{
+	struct gve_priv *priv = netdev_priv(netdev);
+
+	return priv->rss_key_size;
+}
+
+static u32 gve_get_rxfh_indir_size(struct net_device *netdev)
+{
+	struct gve_priv *priv = netdev_priv(netdev);
+
+	return priv->rss_lut_size;
+}
+
+static int gve_get_rxfh(struct net_device *netdev, struct ethtool_rxfh_param *rxfh)
+{
+	struct gve_priv *priv = netdev_priv(netdev);
+	struct gve_rss_config rss_config = {0};
+	u32 *indir = rxfh->indir;
+	u8 *hfunc = &rxfh->hfunc;
+	u8 *key = rxfh->key;
+	int err = 0;
+
+	if (!priv->rss_key_size || !priv->rss_lut_size)
+		return -EOPNOTSUPP;
+
+	rss_config.hash_key = kvcalloc(priv->rss_key_size,
+				       sizeof(*rss_config.hash_key), GFP_KERNEL);
+	if (!rss_config.hash_key)
+		return -ENOMEM;
+
+	rss_config.hash_lut = kvcalloc(priv->rss_lut_size,
+				       sizeof(*rss_config.hash_lut), GFP_KERNEL);
+	if (!rss_config.hash_lut) {
+		err = -ENOMEM;
+		goto out;
+	}
+
+	err = gve_adminq_query_rss_config(priv, &rss_config);
+	if (err)
+		goto out;
+
+	if (hfunc)
+		*hfunc = rss_config.hash_alg;
+
+	if (key)
+		memcpy(key, rss_config.hash_key, priv->rss_key_size);
+
+	if (indir)
+		memcpy(indir, rss_config.hash_lut,
+		       priv->rss_lut_size * sizeof(*rss_config.hash_lut));
+
+out:
+	kvfree(rss_config.hash_lut);
+	kvfree(rss_config.hash_key);
+	return err;
+}
+
+static int gve_set_rxfh(struct net_device *netdev, struct ethtool_rxfh_param *rxfh,
+			struct netlink_ext_ack *extack)
+{
+	struct gve_priv *priv = netdev_priv(netdev);
+	struct gve_rss_config rss_config = {0};
+	u32 *indir = rxfh->indir;
+	u8 hfunc = rxfh->hfunc;
+	u8 *key = rxfh->key;
+	int err = 0;
+
+	if (!priv->rss_key_size || !priv->rss_lut_size)
+		return -EOPNOTSUPP;
+
+	switch (hfunc) {
+	case ETH_RSS_HASH_NO_CHANGE:
+		break;
+	case ETH_RSS_HASH_TOP:
+		rss_config.hash_alg = ETH_RSS_HASH_TOP;
+		break;
+	default:
+		return -EOPNOTSUPP;
+	}
+
+	if (key) {
+		rss_config.hash_key = kvcalloc(priv->rss_key_size,
+					       sizeof(*rss_config.hash_key), GFP_KERNEL);
+		if (!rss_config.hash_key)
+			return -ENOMEM;
+
+		memcpy(rss_config.hash_key, key, priv->rss_key_size * sizeof(*key));
+	}
+
+	if (indir) {
+		rss_config.hash_lut = kvcalloc(priv->rss_lut_size,
+					       sizeof(*rss_config.hash_lut), GFP_KERNEL);
+		if (!rss_config.hash_lut) {
+			err = -ENOMEM;
+			goto out;
+		}
+
+		memcpy(rss_config.hash_lut, indir, priv->rss_lut_size * sizeof(*indir));
+	}
+
+	err = gve_adminq_configure_rss(priv, &rss_config);
+
+out:
+	kvfree(rss_config.hash_lut);
+	kvfree(rss_config.hash_key);
+	return err;
+}
+
 const struct ethtool_ops gve_ethtool_ops = {
 	.supported_coalesce_params = ETHTOOL_COALESCE_USECS,
 	.supported_ring_params = ETHTOOL_RING_USE_TCP_DATA_SPLIT,
@@ -851,6 +963,10 @@ const struct ethtool_ops gve_ethtool_ops = {
 	.get_channels = gve_get_channels,
 	.set_rxnfc = gve_set_rxnfc,
 	.get_rxnfc = gve_get_rxnfc,
+	.get_rxfh_indir_size = gve_get_rxfh_indir_size,
+	.get_rxfh_key_size = gve_get_rxfh_key_size,
+	.get_rxfh = gve_get_rxfh,
+	.set_rxfh = gve_set_rxfh,
 	.get_link = ethtool_op_get_link,
 	.get_coalesce = gve_get_coalesce,
 	.set_coalesce = gve_set_coalesce,
