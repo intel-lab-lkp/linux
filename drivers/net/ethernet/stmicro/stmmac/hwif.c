@@ -36,6 +36,18 @@ static u32 stmmac_get_dev_id(struct stmmac_priv *priv, u32 id_reg)
 	return (reg & GENMASK(15, 8)) >> 8;
 }
 
+static u32 stmmac_get_user_version(struct stmmac_priv *priv, u32 id_reg)
+{
+	u32 reg = readl(priv->ioaddr + id_reg);
+
+	if (!reg) {
+		dev_info(priv->device, "User Version not available\n");
+		return 0x0;
+	}
+
+	return (reg & GENMASK(23, 16)) >> 16;
+}
+
 static void stmmac_dwmac_mode_quirk(struct stmmac_priv *priv)
 {
 	struct mac_device_info *mac = priv->hw;
@@ -79,6 +91,18 @@ static int stmmac_dwmac1_quirks(struct stmmac_priv *priv)
 static int stmmac_dwmac4_quirks(struct stmmac_priv *priv)
 {
 	stmmac_dwmac_mode_quirk(priv);
+	return 0;
+}
+
+static int stmmac_dwxgmac_quirks(struct stmmac_priv *priv)
+{
+	struct mac_device_info *mac = priv->hw;
+	u32 user_ver;
+
+	user_ver = stmmac_get_user_version(priv, GMAC4_VERSION);
+	if (priv->synopsys_id == DWXGMAC_CORE_4_00 &&
+	    user_ver == DWXGMAC_USER_VER_X22)
+		mac->dma = &dwxgmac400_dma_ops;
 	return 0;
 }
 
@@ -256,7 +280,7 @@ static const struct stmmac_hwif_entry {
 		.mmc = &dwxgmac_mmc_ops,
 		.est = &dwmac510_est_ops,
 		.setup = dwxgmac2_setup,
-		.quirks = NULL,
+		.quirks = stmmac_dwxgmac_quirks,
 	}, {
 		.gmac = false,
 		.gmac4 = false,

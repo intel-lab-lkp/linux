@@ -37,10 +37,14 @@
 #define DWXGMAC_CORE_2_10	0x21
 #define DWXGMAC_CORE_2_20	0x22
 #define DWXLGMAC_CORE_2_00	0x20
+#define DWXGMAC_CORE_4_00	0x40
 
 /* Device ID */
 #define DWXGMAC_ID		0x76
 #define DWXLGMAC_ID		0x27
+
+/* User Version */
+#define DWXGMAC_USER_VER_X22	0x22
 
 #define STMMAC_CHAN0	0	/* Always supported and default for all chips */
 
