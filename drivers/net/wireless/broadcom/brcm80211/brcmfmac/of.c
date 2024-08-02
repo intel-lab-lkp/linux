@@ -6,6 +6,7 @@
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/of_net.h>
+#include <linux/clk.h>
 
 #include <defs.h>
 #include "debug.h"
@@ -65,16 +66,20 @@ static int brcmf_of_get_country_codes(struct device *dev,
 	return 0;
 }
 
-void brcmf_of_probe(struct device *dev, enum brcmf_bus_type bus_type,
+int brcmf_of_probe(struct device *dev, enum brcmf_bus_type bus_type,
 		    struct brcmf_mp_device *settings)
 {
 	struct brcmfmac_sdio_pd *sdio = &settings->bus.sdio;
 	struct device_node *root, *np = dev->of_node;
+	struct clk *clk;
 	const char *prop;
 	int irq;
 	int err;
 	u32 irqf;
 	u32 val;
+
+	if (!np || !of_device_is_compatible(np, "brcm,bcm4329-fmac"))
+		return PTR_ERR_OR_ZERO(np);
 
 	/* Apple ARM64 platforms have their own idea of board type, passed in
 	 * via the device tree. They also have an antenna SKU parameter
@@ -105,7 +110,7 @@ void brcmf_of_probe(struct device *dev, enum brcmf_bus_type bus_type,
 		board_type = devm_kstrdup(dev, tmp, GFP_KERNEL);
 		if (!board_type) {
 			of_node_put(root);
-			return;
+			return PTR_ERR_OR_ZERO(board_type);
 		}
 		strreplace(board_type, '/', '-');
 		settings->board_type = board_type;
@@ -113,33 +118,37 @@ void brcmf_of_probe(struct device *dev, enum brcmf_bus_type bus_type,
 		of_node_put(root);
 	}
 
-	if (!np || !of_device_is_compatible(np, "brcm,bcm4329-fmac"))
-		return;
-
 	err = brcmf_of_get_country_codes(dev, settings);
 	if (err)
 		brcmf_err("failed to get OF country code map (err=%d)\n", err);
 
 	of_get_mac_address(np, settings->mac);
 
-	if (bus_type != BRCMF_BUSTYPE_SDIO)
-		return;
+	if (bus_type == BRCMF_BUSTYPE_SDIO) {
+		if (of_property_read_u32(np, "brcm,drive-strength", &val) == 0)
+			sdio->drive_strength = val;
 
-	if (of_property_read_u32(np, "brcm,drive-strength", &val) == 0)
-		sdio->drive_strength = val;
+		/* make sure there are interrupts defined in the node */
+		if (!of_property_present(np, "interrupts"))
+			return PTR_ERR_OR_ZERO(np);
 
-	/* make sure there are interrupts defined in the node */
-	if (!of_property_present(np, "interrupts"))
-		return;
+		irq = irq_of_parse_and_map(np, 0);
+		if (!irq) {
+			brcmf_err("interrupt could not be mapped\n");
+			return -EINVAL;
+		}
+		irqf = irqd_get_trigger_type(irq_get_irq_data(irq));
 
-	irq = irq_of_parse_and_map(np, 0);
-	if (!irq) {
-		brcmf_err("interrupt could not be mapped\n");
-		return;
+		sdio->oob_irq_supported = true;
+		sdio->oob_irq_nr = irq;
+		sdio->oob_irq_flags = irqf;
 	}
-	irqf = irqd_get_trigger_type(irq_get_irq_data(irq));
 
-	sdio->oob_irq_supported = true;
-	sdio->oob_irq_nr = irq;
-	sdio->oob_irq_flags = irqf;
+	clk = devm_clk_get_optional_enabled(dev, "lpo");
+	if (!IS_ERR_OR_NULL(clk)) {
+		brcmf_dbg(INFO, "enabling 32kHz clock\n");
+		return clk_set_rate(clk, 32768);
+	} else {
+		return PTR_ERR_OR_ZERO(clk);
+	}
 }
