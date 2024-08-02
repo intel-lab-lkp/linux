@@ -1831,7 +1831,16 @@ static int __kvm_set_msr(struct kvm_vcpu *vcpu, u32 index, u64 data,
 	case MSR_KERNEL_GS_BASE:
 	case MSR_CSTAR:
 	case MSR_LSTAR:
-		if (is_noncanonical_address(data, vcpu))
+
+		/*
+		 * Both AMD and Intel cpus allow values which
+		 * are canonical in the 5 level paging mode but are not
+		 * canonical in the 4 level paging mode to be written
+		 * to the above MSRs, as long as the host CPU supports
+		 * 5 level paging, regardless of the state of the CR4.LA57.
+		 */
+		if (!__is_canonical_address(data,
+			kvm_cpu_cap_has(X86_FEATURE_LA57) ? 57 : 48))
 			return 1;
 		break;
 	case MSR_IA32_SYSENTER_EIP:
