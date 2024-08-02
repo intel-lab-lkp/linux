@@ -166,9 +166,9 @@ bool pci_ats_disabled(void)
 }
 EXPORT_SYMBOL_GPL(pci_ats_disabled);
 
-/* Disable bridge_d3 for all PCIe ports */
+/* Disable both D3Hot and D3Cold for all PCIe ports */
 static bool pci_bridge_d3_disable;
-/* Force bridge_d3 for all PCIe ports */
+/* Force both D3Hot and D3Cold for all PCIe ports */
 static bool pci_bridge_d3_force;
 
 static int __init pcie_port_pm_setup(char *str)
@@ -2966,14 +2966,11 @@ static const struct dmi_system_id bridge_d3_blacklist[] = {
 	{ }
 };
 
-/**
- * pci_bridge_d3_allowed - Is it allowed to put the bridge into D3
- * @bridge: Bridge to check
- *
- * This function checks if the bridge is allowed to move to D3.
- * Currently we only allow D3 for recent enough PCIe ports and Thunderbolt.
+/*
+ * Helper function to check whether it is allowed to put the bridge into D3
+ * states (D3Hot and D3Cold).
  */
-bool pci_bridge_d3_allowed(struct pci_dev *bridge)
+static bool pci_bridge_d3_allowed(struct pci_dev *bridge, pci_power_t state)
 {
 	if (!pci_is_pcie(bridge))
 		return false;
@@ -3026,6 +3023,32 @@ bool pci_bridge_d3_allowed(struct pci_dev *bridge)
 	return false;
 }
 
+/**
+ * pci_bridge_d3cold_allowed - Is it allowed to put the bridge into D3Cold
+ * @bridge: Bridge to check
+ *
+ * This function checks if the bridge is allowed to move to D3Cold.
+ * Currently we only allow D3Cold for recent enough PCIe ports on ACPI based
+ * platforms and Thunderbolt.
+ */
+bool pci_bridge_d3cold_allowed(struct pci_dev *bridge)
+{
+	return pci_bridge_d3_allowed(bridge, PCI_D3cold);
+}
+
+/**
+ * pci_bridge_d3hot_allowed - Is it allowed to put the bridge into D3Hot
+ * @bridge: Bridge to check
+ *
+ * This function checks if the bridge is allowed to move to D3Hot.
+ * Currently we only allow D3Hot for recent enough PCIe ports on ACPI based
+ * platforms and Thunderbolt.
+ */
+bool pci_bridge_d3hot_allowed(struct pci_dev *bridge)
+{
+	return pci_bridge_d3_allowed(bridge, PCI_D3hot);
+}
+
 static int pci_dev_check_d3cold(struct pci_dev *dev, void *data)
 {
 	bool *d3cold_ok = data;
@@ -3046,55 +3069,55 @@ static int pci_dev_check_d3cold(struct pci_dev *dev, void *data)
 }
 
 /*
- * pci_bridge_d3_update - Update bridge D3 capabilities
+ * pci_bridge_d3cold_update - Update bridge D3Cold capabilities
  * @dev: PCI device which is changed
  *
  * Update upstream bridge PM capabilities accordingly depending on if the
  * device PM configuration was changed or the device is being removed.  The
  * change is also propagated upstream.
  */
-void pci_bridge_d3_update(struct pci_dev *dev)
+void pci_bridge_d3cold_update(struct pci_dev *dev)
 {
 	bool remove = !device_is_registered(&dev->dev);
 	struct pci_dev *bridge;
 	bool d3cold_ok = true;
 
 	bridge = pci_upstream_bridge(dev);
-	if (!bridge || !pci_bridge_d3_allowed(bridge))
+	if (!bridge || !pci_bridge_d3cold_allowed(bridge))
 		return;
 
 	/*
-	 * If D3 is currently allowed for the bridge, removing one of its
+	 * If D3Cold is currently allowed for the bridge, removing one of its
 	 * children won't change that.
 	 */
-	if (remove && bridge->bridge_d3_allowed)
+	if (remove && bridge->bridge_d3cold_allowed)
 		return;
 
 	/*
-	 * If D3 is currently allowed for the bridge and a child is added or
-	 * changed, disallowance of D3 can only be caused by that child, so
+	 * If D3Cold is currently allowed for the bridge and a child is added or
+	 * changed, disallowance of D3Cold can only be caused by that child, so
 	 * we only need to check that single device, not any of its siblings.
 	 *
-	 * If D3 is currently not allowed for the bridge, checking the device
-	 * first may allow us to skip checking its siblings.
+	 * If D3Cold is currently not allowed for the bridge, checking the
+	 * device first may allow us to skip checking its siblings.
 	 */
 	if (!remove)
 		pci_dev_check_d3cold(dev, &d3cold_ok);
 
 	/*
-	 * If D3 is currently not allowed for the bridge, this may be caused
+	 * If D3Cold is currently not allowed for the bridge, this may be caused
 	 * either by the device being changed/removed or any of its siblings,
 	 * so we need to go through all children to find out if one of them
-	 * continues to block D3.
+	 * continues to block D3Cold.
 	 */
-	if (d3cold_ok && !bridge->bridge_d3_allowed)
+	if (d3cold_ok && !bridge->bridge_d3cold_allowed)
 		pci_walk_bus(bridge->subordinate, pci_dev_check_d3cold,
 			     &d3cold_ok);
 
-	if (bridge->bridge_d3_allowed != d3cold_ok) {
-		bridge->bridge_d3_allowed = d3cold_ok;
+	if (bridge->bridge_d3cold_allowed != d3cold_ok) {
+		bridge->bridge_d3cold_allowed = d3cold_ok;
 		/* Propagate change to upstream bridges */
-		pci_bridge_d3_update(bridge);
+		pci_bridge_d3cold_update(bridge);
 	}
 }
 
@@ -3110,7 +3133,7 @@ void pci_d3cold_enable(struct pci_dev *dev)
 {
 	if (dev->no_d3cold) {
 		dev->no_d3cold = false;
-		pci_bridge_d3_update(dev);
+		pci_bridge_d3cold_update(dev);
 	}
 }
 EXPORT_SYMBOL_GPL(pci_d3cold_enable);
@@ -3127,7 +3150,7 @@ void pci_d3cold_disable(struct pci_dev *dev)
 {
 	if (!dev->no_d3cold) {
 		dev->no_d3cold = true;
-		pci_bridge_d3_update(dev);
+		pci_bridge_d3cold_update(dev);
 	}
 }
 EXPORT_SYMBOL_GPL(pci_d3cold_disable);
@@ -3167,7 +3190,8 @@ void pci_pm_init(struct pci_dev *dev)
 	dev->pm_cap = pm;
 	dev->d3hot_delay = PCI_PM_D3HOT_WAIT;
 	dev->d3cold_delay = PCI_PM_D3COLD_WAIT;
-	dev->bridge_d3_allowed = pci_bridge_d3_allowed(dev);
+	dev->bridge_d3cold_allowed = pci_bridge_d3cold_allowed(dev);
+	dev->bridge_d3hot_allowed = pci_bridge_d3hot_allowed(dev);
 	dev->d3cold_allowed = true;
 
 	dev->d1_support = false;

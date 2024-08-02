@@ -346,7 +346,7 @@ void pci_bus_add_device(struct pci_dev *dev)
 		of_pci_make_dev_node(dev);
 	pci_create_sysfs_dev_files(dev);
 	pci_proc_attach_device(dev);
-	pci_bridge_d3_update(dev);
+	pci_bridge_d3cold_update(dev);
 
 	dev->match_driver = !dn || of_device_is_available(dn);
 	retval = device_attach(&dev->dev);

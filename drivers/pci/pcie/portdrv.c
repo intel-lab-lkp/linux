@@ -632,7 +632,7 @@ __setup("pcie_ports=", pcie_port_setup);
 #ifdef CONFIG_PM
 static int pcie_port_runtime_suspend(struct device *dev)
 {
-	if (!to_pci_dev(dev)->bridge_d3_allowed)
+	if (!to_pci_dev(dev)->bridge_d3hot_allowed)
 		return -EBUSY;
 
 	return pcie_port_device_runtime_suspend(dev);
@@ -641,11 +641,11 @@ static int pcie_port_runtime_suspend(struct device *dev)
 static int pcie_port_runtime_idle(struct device *dev)
 {
 	/*
-	 * Assume the PCI core has set bridge_d3_allowed whenever it thinks the
-	 * port should be good to go to D3.  Everything else, including moving
-	 * the port to D3, is handled by the PCI core.
+	 * Assume the PCI core has set bridge_d3hot_allowed whenever it thinks
+	 * the port should be good to go to D3Hot.  Everything else, including
+	 * moving the port to D3Hot, is handled by the PCI core.
 	 */
-	return to_pci_dev(dev)->bridge_d3_allowed ? 0 : -EBUSY;
+	return to_pci_dev(dev)->bridge_d3hot_allowed ? 0 : -EBUSY;
 }
 
 static const struct dev_pm_ops pcie_portdrv_pm_ops = {
@@ -702,7 +702,7 @@ static int pcie_portdrv_probe(struct pci_dev *dev,
 	dev_pm_set_driver_flags(&dev->dev, DPM_FLAG_NO_DIRECT_COMPLETE |
 					   DPM_FLAG_SMART_SUSPEND);
 
-	if (dev->bridge_d3_allowed) {
+	if (dev->bridge_d3hot_allowed) {
 		/*
 		 * Keep the port resumed 100ms to make sure things like
 		 * config space accesses from userspace (lspci) will not
@@ -720,7 +720,7 @@ static int pcie_portdrv_probe(struct pci_dev *dev,
 
 static void pcie_portdrv_remove(struct pci_dev *dev)
 {
-	if (dev->bridge_d3_allowed) {
+	if (dev->bridge_d3hot_allowed) {
 		pm_runtime_forbid(&dev->dev);
 		pm_runtime_get_noresume(&dev->dev);
 		pm_runtime_dont_use_autosuspend(&dev->dev);
@@ -733,7 +733,7 @@ static void pcie_portdrv_remove(struct pci_dev *dev)
 
 static void pcie_portdrv_shutdown(struct pci_dev *dev)
 {
-	if (dev->bridge_d3_allowed) {
+	if (dev->bridge_d3hot_allowed) {
 		pm_runtime_forbid(&dev->dev);
 		pm_runtime_get_noresume(&dev->dev);
 		pm_runtime_dont_use_autosuspend(&dev->dev);

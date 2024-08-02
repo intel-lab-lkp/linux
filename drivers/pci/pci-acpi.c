@@ -1434,7 +1434,7 @@ void pci_acpi_setup(struct device *dev, struct acpi_device *adev)
 	 * reason is that the bridge may have additional methods such as
 	 * _DSW that need to be called.
 	 */
-	if (pci_dev->bridge_d3_allowed)
+	if (pci_dev->bridge_d3cold_allowed && pci_dev->bridge_d3hot_allowed)
 		device_wakeup_enable(dev);
 
 	acpi_pci_wakeup(pci_dev, false);
@@ -1452,7 +1452,8 @@ void pci_acpi_cleanup(struct device *dev, struct acpi_device *adev)
 	pci_acpi_remove_pm_notifier(adev);
 	if (adev->wakeup.flags.valid) {
 		acpi_device_power_remove_dependent(adev, dev);
-		if (pci_dev->bridge_d3_allowed)
+		if (pci_dev->bridge_d3cold_allowed &&
+		    pci_dev->bridge_d3hot_allowed)
 			device_wakeup_disable(dev);
 
 		device_set_wakeup_capable(dev, false);
