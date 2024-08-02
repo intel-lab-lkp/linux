@@ -142,8 +142,8 @@
  */
 
 struct rsvd_info {
-	int delonly_cluster;	/* reserved clusters for delalloc es entry */
-	int delonly_block;	/* reserved blocks for delalloc es entry */
+	int delayed_cluster;	/* reserved clusters for delalloc es entry */
+	int delayed_block;	/* reserved blocks for delalloc es entry */
 };
 
 static struct kmem_cache *ext4_es_cachep;
@@ -945,10 +945,10 @@ error:
 	 * so release the quota reservations made for any previously delayed
 	 * allocated clusters.
 	 */
-	resv_used = rinfo.delonly_cluster + pending;
+	resv_used = rinfo.delayed_cluster + pending;
 	if (resv_used)
 		ext4_da_update_reserve_space(inode, resv_used,
-					     rinfo.delonly_block);
+					     rinfo.delayed_block);
 	if (err1 || err2 || err3 < 0)
 		goto retry;
 
@@ -1069,8 +1069,8 @@ out:
 }
 
 struct rsvd_count {
-	int ndelonly_cluster;
-	int ndelonly_block;
+	int ndelayed_cluster;
+	int ndelayed_block;
 	bool first_do_lblk_found;
 	ext4_lblk_t first_do_lblk;
 	ext4_lblk_t last_do_lblk;
@@ -1096,11 +1096,11 @@ static void init_rsvd(struct inode *inode, ext4_lblk_t lblk,
 	struct ext4_sb_info *sbi = EXT4_SB(inode->i_sb);
 	struct rb_node *node;
 
-	rc->ndelonly_cluster = 0;
-	rc->ndelonly_block = 0;
+	rc->ndelayed_cluster = 0;
+	rc->ndelayed_block = 0;
 
 	/*
-	 * for bigalloc, note the first delonly block in the range has not
+	 * for bigalloc, note the first delayed block in the range has not
 	 * been found, record the extent containing the block to the left of
 	 * the region to be removed, if any, and note that there's no partial
 	 * cluster to track
@@ -1120,9 +1120,8 @@ static void init_rsvd(struct inode *inode, ext4_lblk_t lblk,
 }
 
 /*
- * count_rsvd - count the clusters containing delayed and not unwritten
- *		(delonly) blocks in a range within an extent and add to
- *	        the running tally in rsvd_count
+ * count_rsvd - count the clusters containing delayed blocks in a range
+ *	        within an extent and add to the running tally in rsvd_count
  *
  * @inode - file containing extent
  * @lblk - first block in range
@@ -1145,19 +1144,19 @@ static void count_rsvd(struct inode *inode, ext4_lblk_t lblk, long len,
 	WARN_ON(len <= 0);
 
 	if (sbi->s_cluster_ratio == 1) {
-		rc->ndelonly_cluster += (int) len;
-		rc->ndelonly_block = rc->ndelonly_cluster;
+		rc->ndelayed_cluster += (int) len;
+		rc->ndelayed_block = rc->ndelayed_cluster;
 		return;
 	}
 
 	/* bigalloc */
-	rc->ndelonly_block += (int)len;
+	rc->ndelayed_block += (int)len;
 
 	i = (lblk < es->es_lblk) ? es->es_lblk : lblk;
 	end = lblk + (ext4_lblk_t) len - 1;
 	end = (end > ext4_es_end(es)) ? ext4_es_end(es) : end;
 
-	/* record the first block of the first delonly extent seen */
+	/* record the first block of the first delayed extent seen */
 	if (!rc->first_do_lblk_found) {
 		rc->first_do_lblk = i;
 		rc->first_do_lblk_found = true;
@@ -1171,7 +1170,7 @@ static void count_rsvd(struct inode *inode, ext4_lblk_t lblk, long len,
 	 * doesn't start with it, count it and stop tracking
 	 */
 	if (rc->partial && (rc->lclu != EXT4_B2C(sbi, i))) {
-		rc->ndelonly_cluster++;
+		rc->ndelayed_cluster++;
 		rc->partial = false;
 	}
 
@@ -1181,7 +1180,7 @@ static void count_rsvd(struct inode *inode, ext4_lblk_t lblk, long len,
 	 */
 	if (EXT4_LBLK_COFF(sbi, i) != 0) {
 		if (end >= EXT4_LBLK_CFILL(sbi, i)) {
-			rc->ndelonly_cluster++;
+			rc->ndelayed_cluster++;
 			rc->partial = false;
 			i = EXT4_LBLK_CFILL(sbi, i) + 1;
 		}
@@ -1189,11 +1188,11 @@ static void count_rsvd(struct inode *inode, ext4_lblk_t lblk, long len,
 
 	/*
 	 * if the current cluster starts on a cluster boundary, count the
-	 * number of whole delonly clusters in the extent
+	 * number of whole delayed clusters in the extent
 	 */
 	if ((i + sbi->s_cluster_ratio - 1) <= end) {
 		nclu = (end - i + 1) >> sbi->s_cluster_bits;
-		rc->ndelonly_cluster += nclu;
+		rc->ndelayed_cluster += nclu;
 		i += nclu << sbi->s_cluster_bits;
 	}
 
@@ -1253,10 +1252,9 @@ static struct pending_reservation *__pr_tree_search(struct rb_root *root,
  * @rc - pointer to reserved count data
  *
  * The number of reservations to be released is equal to the number of
- * clusters containing delayed and not unwritten (delonly) blocks within
- * the range, minus the number of clusters still containing delonly blocks
- * at the ends of the range, and minus the number of pending reservations
- * within the range.
+ * clusters containing delayed blocks within the range, minus the number of
+ * clusters still containing delayed blocks at the ends of the range, and
+ * minus the number of pending reservations within the range.
  */
 static unsigned int get_rsvd(struct inode *inode, ext4_lblk_t end,
 			     struct extent_status *right_es,
@@ -1267,33 +1265,33 @@ static unsigned int get_rsvd(struct inode *inode, ext4_lblk_t end,
 	struct ext4_pending_tree *tree = &EXT4_I(inode)->i_pending_tree;
 	struct rb_node *node;
 	ext4_lblk_t first_lclu, last_lclu;
-	bool left_delonly, right_delonly, count_pending;
+	bool left_delayed, right_delayed, count_pending;
 	struct extent_status *es;
 
 	if (sbi->s_cluster_ratio > 1) {
 		/* count any remaining partial cluster */
 		if (rc->partial)
-			rc->ndelonly_cluster++;
+			rc->ndelayed_cluster++;
 
-		if (rc->ndelonly_cluster == 0)
+		if (rc->ndelayed_cluster == 0)
 			return 0;
 
 		first_lclu = EXT4_B2C(sbi, rc->first_do_lblk);
 		last_lclu = EXT4_B2C(sbi, rc->last_do_lblk);
 
 		/*
-		 * decrease the delonly count by the number of clusters at the
-		 * ends of the range that still contain delonly blocks -
+		 * decrease the delayed count by the number of clusters at the
+		 * ends of the range that still contain delayed blocks -
 		 * these clusters still need to be reserved
 		 */
-		left_delonly = right_delonly = false;
+		left_delayed = right_delayed = false;
 
 		es = rc->left_es;
 		while (es && ext4_es_end(es) >=
 		       EXT4_LBLK_CMASK(sbi, rc->first_do_lblk)) {
 			if (ext4_es_is_delayed(es)) {
-				rc->ndelonly_cluster--;
-				left_delonly = true;
+				rc->ndelayed_cluster--;
+				left_delayed = true;
 				break;
 			}
 			node = rb_prev(&es->rb_node);
@@ -1301,7 +1299,7 @@ static unsigned int get_rsvd(struct inode *inode, ext4_lblk_t end,
 				break;
 			es = rb_entry(node, struct extent_status, rb_node);
 		}
-		if (right_es && (!left_delonly || first_lclu != last_lclu)) {
+		if (right_es && (!left_delayed || first_lclu != last_lclu)) {
 			if (end < ext4_es_end(right_es)) {
 				es = right_es;
 			} else {
@@ -1312,8 +1310,8 @@ static unsigned int get_rsvd(struct inode *inode, ext4_lblk_t end,
 			while (es && es->es_lblk <=
 			       EXT4_LBLK_CFILL(sbi, rc->last_do_lblk)) {
 				if (ext4_es_is_delayed(es)) {
-					rc->ndelonly_cluster--;
-					right_delonly = true;
+					rc->ndelayed_cluster--;
+					right_delayed = true;
 					break;
 				}
 				node = rb_next(&es->rb_node);
@@ -1327,21 +1325,21 @@ static unsigned int get_rsvd(struct inode *inode, ext4_lblk_t end,
 		/*
 		 * Determine the block range that should be searched for
 		 * pending reservations, if any.  Clusters on the ends of the
-		 * original removed range containing delonly blocks are
+		 * original removed range containing delayed blocks are
 		 * excluded.  They've already been accounted for and it's not
 		 * possible to determine if an associated pending reservation
 		 * should be released with the information available in the
 		 * extents status tree.
 		 */
 		if (first_lclu == last_lclu) {
-			if (left_delonly | right_delonly)
+			if (left_delayed | right_delayed)
 				count_pending = false;
 			else
 				count_pending = true;
 		} else {
-			if (left_delonly)
+			if (left_delayed)
 				first_lclu++;
-			if (right_delonly)
+			if (right_delayed)
 				last_lclu--;
 			if (first_lclu <= last_lclu)
 				count_pending = true;
@@ -1352,13 +1350,13 @@ static unsigned int get_rsvd(struct inode *inode, ext4_lblk_t end,
 		/*
 		 * a pending reservation found between first_lclu and last_lclu
 		 * represents an allocated cluster that contained at least one
-		 * delonly block, so the delonly total must be reduced by one
+		 * delayed block, so the delayed total must be reduced by one
 		 * for each pending reservation found and released
 		 */
 		if (count_pending) {
 			pr = __pr_tree_search(&tree->root, first_lclu);
 			while (pr && pr->lclu <= last_lclu) {
-				rc->ndelonly_cluster--;
+				rc->ndelayed_cluster--;
 				node = rb_next(&pr->rb_node);
 				rb_erase(&pr->rb_node, &tree->root);
 				__free_pending(pr);
@@ -1369,7 +1367,7 @@ static unsigned int get_rsvd(struct inode *inode, ext4_lblk_t end,
 			}
 		}
 	}
-	return rc->ndelonly_cluster;
+	return rc->ndelayed_cluster;
 }
 
 
@@ -1403,8 +1401,8 @@ static int __es_remove_extent(struct inode *inode, ext4_lblk_t lblk,
 	struct rsvd_count rc;
 
 	if (rinfo) {
-		rinfo->delonly_cluster = 0;
-		rinfo->delonly_block = 0;
+		rinfo->delayed_cluster = 0;
+		rinfo->delayed_block = 0;
 		if (test_opt(inode->i_sb, DELALLOC))
 			count_reserved = true;
 	}
@@ -1506,8 +1504,8 @@ static int __es_remove_extent(struct inode *inode, ext4_lblk_t lblk,
 
 out_get_reserved:
 	if (count_reserved) {
-		rinfo->delonly_cluster = get_rsvd(inode, end, es, &rc);
-		rinfo->delonly_block = rc.ndelonly_block;
+		rinfo->delayed_cluster = get_rsvd(inode, end, es, &rc);
+		rinfo->delayed_block = rc.ndelayed_block;
 	}
 out:
 	return err;
@@ -1565,7 +1563,7 @@ retry:
 		goto retry;
 
 	ext4_es_print_tree(inode);
-	ext4_da_release_space(inode, rinfo.delonly_cluster);
+	ext4_da_release_space(inode, rinfo.delayed_cluster);
 	return;
 }
 
