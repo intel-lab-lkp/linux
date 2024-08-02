@@ -2967,13 +2967,13 @@ static const struct dmi_system_id bridge_d3_blacklist[] = {
 };
 
 /**
- * pci_bridge_d3_possible - Is it possible to put the bridge into D3
+ * pci_bridge_d3_allowed - Is it allowed to put the bridge into D3
  * @bridge: Bridge to check
  *
- * This function checks if it is possible to move the bridge to D3.
+ * This function checks if the bridge is allowed to move to D3.
  * Currently we only allow D3 for recent enough PCIe ports and Thunderbolt.
  */
-bool pci_bridge_d3_possible(struct pci_dev *bridge)
+bool pci_bridge_d3_allowed(struct pci_dev *bridge)
 {
 	if (!pci_is_pcie(bridge))
 		return false;
@@ -3060,14 +3060,14 @@ void pci_bridge_d3_update(struct pci_dev *dev)
 	bool d3cold_ok = true;
 
 	bridge = pci_upstream_bridge(dev);
-	if (!bridge || !pci_bridge_d3_possible(bridge))
+	if (!bridge || !pci_bridge_d3_allowed(bridge))
 		return;
 
 	/*
 	 * If D3 is currently allowed for the bridge, removing one of its
 	 * children won't change that.
 	 */
-	if (remove && bridge->bridge_d3)
+	if (remove && bridge->bridge_d3_allowed)
 		return;
 
 	/*
@@ -3087,12 +3087,12 @@ void pci_bridge_d3_update(struct pci_dev *dev)
 	 * so we need to go through all children to find out if one of them
 	 * continues to block D3.
 	 */
-	if (d3cold_ok && !bridge->bridge_d3)
+	if (d3cold_ok && !bridge->bridge_d3_allowed)
 		pci_walk_bus(bridge->subordinate, pci_dev_check_d3cold,
 			     &d3cold_ok);
 
-	if (bridge->bridge_d3 != d3cold_ok) {
-		bridge->bridge_d3 = d3cold_ok;
+	if (bridge->bridge_d3_allowed != d3cold_ok) {
+		bridge->bridge_d3_allowed = d3cold_ok;
 		/* Propagate change to upstream bridges */
 		pci_bridge_d3_update(bridge);
 	}
@@ -3167,7 +3167,7 @@ void pci_pm_init(struct pci_dev *dev)
 	dev->pm_cap = pm;
 	dev->d3hot_delay = PCI_PM_D3HOT_WAIT;
 	dev->d3cold_delay = PCI_PM_D3COLD_WAIT;
-	dev->bridge_d3 = pci_bridge_d3_possible(dev);
+	dev->bridge_d3_allowed = pci_bridge_d3_allowed(dev);
 	dev->d3cold_allowed = true;
 
 	dev->d1_support = false;

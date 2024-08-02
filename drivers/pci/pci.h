@@ -92,7 +92,7 @@ void pci_pm_init(struct pci_dev *dev);
 void pci_ea_init(struct pci_dev *dev);
 void pci_msi_init(struct pci_dev *dev);
 void pci_msix_init(struct pci_dev *dev);
-bool pci_bridge_d3_possible(struct pci_dev *dev);
+bool pci_bridge_d3_allowed(struct pci_dev *dev);
 void pci_bridge_d3_update(struct pci_dev *dev);
 int pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, char *reset_type);
 
@@ -113,7 +113,7 @@ static inline bool pci_power_manageable(struct pci_dev *pci_dev)
 	 * Currently we allow normal PCI devices and PCI bridges transition
 	 * into D3 if their bridge_d3 is set.
 	 */
-	return !pci_has_subordinate(pci_dev) || pci_dev->bridge_d3;
+	return !pci_has_subordinate(pci_dev) || pci_dev->bridge_d3_allowed;
 }
 
 static inline bool pcie_downstream_port(const struct pci_dev *dev)

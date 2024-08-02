@@ -1429,12 +1429,12 @@ void pci_acpi_setup(struct device *dev, struct acpi_device *adev)
 
 	device_set_wakeup_capable(dev, true);
 	/*
-	 * For bridges that can do D3 we enable wake automatically (as
-	 * we do for the power management itself in that case). The
+	 * For bridges that are allowed to do D3, we enable wake automatically
+	 * (as we do for the power management itself in that case). The
 	 * reason is that the bridge may have additional methods such as
 	 * _DSW that need to be called.
 	 */
-	if (pci_dev->bridge_d3)
+	if (pci_dev->bridge_d3_allowed)
 		device_wakeup_enable(dev);
 
 	acpi_pci_wakeup(pci_dev, false);
@@ -1452,7 +1452,7 @@ void pci_acpi_cleanup(struct device *dev, struct acpi_device *adev)
 	pci_acpi_remove_pm_notifier(adev);
 	if (adev->wakeup.flags.valid) {
 		acpi_device_power_remove_dependent(adev, dev);
-		if (pci_dev->bridge_d3)
+		if (pci_dev->bridge_d3_allowed)
 			device_wakeup_disable(dev);
 
 		device_set_wakeup_capable(dev, false);
