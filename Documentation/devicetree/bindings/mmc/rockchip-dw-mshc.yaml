@@ -39,6 +39,7 @@ properties:
               - rockchip,rk3368-dw-mshc
               - rockchip,rk3399-dw-mshc
               - rockchip,rk3568-dw-mshc
+              - rockchip,rk3576-dw-mshc
               - rockchip,rk3588-dw-mshc
               - rockchip,rv1108-dw-mshc
               - rockchip,rv1126-dw-mshc
@@ -94,6 +95,16 @@ properties:
       The desired number of times that the host execute tuning when needed.
       If not specified, the host will do tuning for 360 times,
       namely tuning for each degree.
+
+  rockchip,use-v2-tuning:
+    $ref: /schemas/types.yaml#/definitions/flag
+    description:
+      If present, use tuning version 2.
+      v2 tuning will inherit pre-stage loader's phase settings for the first
+      time, and do re-tune if necessary.
+      Re-tune will still try the rough degrees, for instance, 90, 180, 270,
+      360 but continue to do the fine tuning if sample window isn't good
+      enough.
 
 required:
   - compatible
