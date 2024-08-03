@@ -809,12 +809,15 @@ static int devm_tegra_devfreq_init_hw(struct device *dev,
 
 	err = devm_add_action_or_reset(dev, devm_tegra_devfreq_deinit_hw,
 				       tegra);
-	if (err)
+	if (err) {
+		clk_disable_unprepare(tegra->clock);
 		return err;
+	}
 
 	err = reset_control_reset(tegra->reset);
 	if (err) {
 		dev_err(dev, "Failed to reset hardware: %d\n", err);
+		clk_disable_unprepare(tegra->clock);
 		return err;
 	}
 
