@@ -380,6 +380,20 @@ struct files_struct *dup_fd(struct files_struct *oldf, unsigned int max_fds, int
 	}
 
 	copy_fd_bitmaps(new_fdt, old_fdt, open_files);
+	if (unlikely(max_fds != NR_OPEN_MAX)) {
+		/*
+		 * if there had been opened descriptors past open_files,
+		 * the last copied word in full_fds_bits might have picked
+		 * stray bits; nothing of that sort happens to open_fds and
+		 * close_on_exec, since there the part that needs to be copied
+		 * will always fall on a word boundary.
+		 */
+		unsigned int n = open_files / BITS_PER_LONG;
+		if (n % BITS_PER_LONG) {
+			unsigned long mask = BITMAP_LAST_WORD_MASK(n);
+			new_fdt->full_fds_bits[n / BITS_PER_LONG] &= mask;
+		}
+	}
 
 	old_fds = old_fdt->fd;
 	new_fds = new_fdt->fd;
