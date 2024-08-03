@@ -229,12 +229,14 @@ static int ade_power_up(struct ade_hw_ctx *ctx)
 	ret = reset_control_deassert(ctx->reset);
 	if (ret) {
 		DRM_ERROR("failed to deassert reset\n");
+		clk_disable_unprepare(ctx->media_noc_clk);
 		return ret;
 	}
 
 	ret = clk_prepare_enable(ctx->ade_core_clk);
 	if (ret) {
 		DRM_ERROR("failed to enable ade_core_clk (%d)\n", ret);
+		clk_disable_unprepare(ctx->media_noc_clk);
 		return ret;
 	}
 
