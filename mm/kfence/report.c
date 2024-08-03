@@ -16,6 +16,7 @@
 #include <linux/sprintf.h>
 #include <linux/stacktrace.h>
 #include <linux/string.h>
+#include <linux/sched/clock.h>
 #include <trace/events/error_report.h>
 
 #include <asm/kfence.h>
@@ -110,9 +111,18 @@ static void kfence_print_stack(struct seq_file *seq, const struct kfence_metadat
 	unsigned long rem_nsec = do_div(ts_sec, NSEC_PER_SEC);
 
 	/* Timestamp matches printk timestamp format. */
-	seq_con_printf(seq, "%s by task %d on cpu %d at %lu.%06lus:\n",
+	if (meta->state == KFENCE_OBJECT_ALLOCATED) {
+		u64 interval_nsec = local_clock() - meta->alloc_track.ts_nsec;
+		unsigned long rem_interval_nsec = do_div(interval_nsec, NSEC_PER_SEC);
+
+		seq_con_printf(seq, "%s by task %d on cpu %d at %lu.%06lus (age: %lu.%06lus):\n",
 		       show_alloc ? "allocated" : "freed", track->pid,
-		       track->cpu, (unsigned long)ts_sec, rem_nsec / 1000);
+		       track->cpu, (unsigned long)ts_sec, rem_nsec / 1000,
+			   (unsigned long)interval_nsec, rem_interval_nsec / 1000);
+	} else
+		seq_con_printf(seq, "%s by task %d on cpu %d at %lu.%06lus:\n",
+				   show_alloc ? "allocated" : "freed", track->pid,
+				   track->cpu, (unsigned long)ts_sec, rem_nsec / 1000);
 
 	if (track->num_stack_entries) {
 		/* Skip allocation/free internals stack. */
