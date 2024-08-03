@@ -8,6 +8,7 @@
  *
  */
 
+#include <linux/auxiliary_bus.h>
 #include <linux/bitfield.h>
 #include <linux/platform_device.h>
 #include <linux/clk.h>
@@ -129,6 +130,7 @@ enum clk_wzrd_int_clks {
  * @axi_clk:		Handle to input clock 's_axi_aclk'
  * @clks_internal:	Internal clocks
  * @speed_grade:	Speed grade of the device
+ * @adev:		User clock monitor auxiliary device
  * @suspended:		Flag indicating power state of the device
  */
 struct clk_wzrd {
@@ -139,6 +141,7 @@ struct clk_wzrd {
 	struct clk_hw *clks_internal[wzrd_clk_int_max];
 	unsigned int speed_grade;
 	bool suspended;
+	struct auxiliary_device adev;
 	struct clk_hw_onecell_data clk_data;
 };
 
@@ -171,8 +174,9 @@ struct clk_wzrd_divider {
 	spinlock_t *lock;  /* divider lock */
 };
 
-struct versal_clk_data {
+struct clk_wzrd_data {
 	bool is_versal;
+	bool supports_monitor;
 };
 
 #define to_clk_wzrd(_nb) container_of(_nb, struct clk_wzrd, nb)
@@ -958,16 +962,58 @@ static int __maybe_unused clk_wzrd_resume(struct device *dev)
 static SIMPLE_DEV_PM_OPS(clk_wzrd_dev_pm_ops, clk_wzrd_suspend,
 			 clk_wzrd_resume);
 
-static const struct versal_clk_data versal_data = {
-	.is_versal	= true,
+static const struct clk_wzrd_data version_6_0_data = {
+	.is_versal		= false,
+	.supports_monitor	= true,
 };
+
+static const struct clk_wzrd_data versal_data = {
+	.is_versal		= true,
+	.supports_monitor	= true,
+};
+
+static void clk_wzrd_unregister_adev(void *_adev)
+{
+	struct auxiliary_device *adev = _adev;
+
+	auxiliary_device_delete(adev);
+	auxiliary_device_uninit(adev);
+}
+
+static int clk_wzrd_setup_monitor(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	const struct clk_wzrd_data *data = device_get_match_data(dev);
+	struct clk_wzrd *clk_wzrd = dev_get_drvdata(dev);
+	struct auxiliary_device *adev = &clk_wzrd->adev;
+	int ret;
+
+	if (!data || !data->supports_monitor)
+		return 0;
+
+	adev->name = "clk-mon";
+	adev->dev.parent = dev;
+	adev->dev.platform_data = (__force void *)clk_wzrd->base;
+
+	ret = auxiliary_device_init(adev);
+	if (ret)
+		return ret;
+
+	ret = auxiliary_device_add(adev);
+	if (ret) {
+		auxiliary_device_uninit(adev);
+		return ret;
+	}
+
+	return devm_add_action_or_reset(dev, clk_wzrd_unregister_adev, adev);
+}
 
 static int clk_wzrd_register_output_clocks(struct device *dev, int nr_outputs)
 {
 	const char *clkout_name, *clk_name, *clk_mul_name;
 	struct clk_wzrd *clk_wzrd = dev_get_drvdata(dev);
 	u32 regl, regh, edge, regld, reghd, edged, div;
-	const struct versal_clk_data *data;
+	const struct clk_wzrd_data *data;
 	unsigned long flags = 0;
 	bool is_versal = false;
 	void __iomem *ctrl_reg;
@@ -1170,6 +1216,10 @@ static int clk_wzrd_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
+	ret = clk_wzrd_setup_monitor(pdev);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "failed to setup monitor\n");
+
 	ret = clk_wzrd_register_output_clocks(&pdev->dev, nr_outputs);
 	if (ret)
 		return ret;
@@ -1204,7 +1254,7 @@ static const struct of_device_id clk_wzrd_ids[] = {
 	{ .compatible = "xlnx,versal-clk-wizard", .data = &versal_data },
 	{ .compatible = "xlnx,clocking-wizard"   },
 	{ .compatible = "xlnx,clocking-wizard-v5.2"   },
-	{ .compatible = "xlnx,clocking-wizard-v6.0"  },
+	{ .compatible = "xlnx,clocking-wizard-v6.0", .data = &version_6_0_data },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, clk_wzrd_ids);
