@@ -164,4 +164,12 @@ config UIO_DFL
 	    opae-sdk/tools/libopaeuio/
 
 	  If you compile this as a module, it will be called uio_dfl.
+
+config UIO_XLNX_CLK_MON
+	tristate "Xilinx user clock monitor support"
+	depends on COMMON_CLK_XLNX_CLKWZRD
+	help
+	  Userspace I/O interface to the user clock monitor logic within the
+	  Xilinx Clocking Wizard IP core.
+
 endif
