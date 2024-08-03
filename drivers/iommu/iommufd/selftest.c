@@ -7,11 +7,13 @@
 #include <linux/fault-inject.h>
 #include <linux/file.h>
 #include <linux/iommu.h>
+#include <linux/msi.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/xarray.h>
 #include <uapi/linux/iommufd.h>
 
+#include "../dma-iommu.h"
 #include "../iommu-priv.h"
 #include "io_pagetable.h"
 #include "iommufd_private.h"
@@ -539,6 +541,24 @@ static int mock_dev_disable_feat(struct device *dev, enum iommu_dev_features fea
 	return 0;
 }
 
+#define MSI_IOVA_BASE			0x80000000
+#define MSI_IOVA_LENGTH			0x100000
+
+static void mock_dev_get_resv_regions(struct device *dev,
+				      struct list_head *head)
+{
+	int prot = IOMMU_WRITE | IOMMU_NOEXEC | IOMMU_MMIO;
+	struct iommu_resv_region *region;
+
+	region = iommu_alloc_resv_region(MSI_IOVA_BASE, MSI_IOVA_LENGTH,
+					 prot, IOMMU_RESV_SW_MSI, GFP_KERNEL);
+	if (!region)
+		return;
+
+	list_add_tail(&region->list, head);
+	iommu_dma_get_resv_regions(dev, head);
+}
+
 static const struct iommu_ops mock_ops = {
 	/*
 	 * IOMMU_DOMAIN_BLOCKED cannot be returned from def_domain_type()
@@ -557,6 +577,7 @@ static const struct iommu_ops mock_ops = {
 	.page_response = mock_domain_page_response,
 	.dev_enable_feat = mock_dev_enable_feat,
 	.dev_disable_feat = mock_dev_disable_feat,
+	.get_resv_regions = mock_dev_get_resv_regions,
 	.user_pasid_table = true,
 	.default_domain_ops =
 		&(struct iommu_domain_ops){
@@ -625,10 +646,20 @@ out:
 	return rc;
 }
 
+static struct iommu_domain *
+mock_domain_get_msi_mapping_domain(struct iommu_domain *domain)
+{
+	struct mock_iommu_domain_nested *mock_nested =
+		container_of(domain, struct mock_iommu_domain_nested, domain);
+
+	return &mock_nested->parent->domain;
+}
+
 static struct iommu_domain_ops domain_nested_ops = {
 	.free = mock_domain_free_nested,
 	.attach_dev = mock_domain_nop_attach,
 	.cache_invalidate_user = mock_domain_cache_invalidate_user,
+	.get_msi_mapping_domain = mock_domain_get_msi_mapping_domain,
 };
 
 static inline struct iommufd_hw_pagetable *
@@ -701,6 +732,7 @@ static struct mock_dev *mock_dev_create(unsigned long dev_flags)
 		return ERR_PTR(-ENOMEM);
 
 	device_initialize(&mdev->dev);
+	iommu_fwspec_init(&mdev->dev, NULL);
 	mdev->flags = dev_flags;
 	mdev->dev.release = mock_dev_release;
 	mdev->dev.bus = &iommufd_mock_bus_type.bus;
@@ -956,6 +988,55 @@ static int iommufd_test_md_check_iotlb(struct iommufd_ucmd *ucmd,
 	if (iotlb_id > MOCK_NESTED_DOMAIN_IOTLB_ID_MAX ||
 	    mock_nested->iotlb[iotlb_id] != iotlb)
 		rc = -EINVAL;
+	iommufd_put_object(ucmd->ictx, &hwpt->obj);
+	return rc;
+}
+
+#define MOCK_MSI_PAGE 0xbeef0000
+static int iommufd_test_md_check_sw_msi(struct iommufd_ucmd *ucmd,
+					u32 mockpt_id, u32 device_id)
+{
+	struct mock_iommu_domain_nested *mock_nested;
+	struct iommufd_hw_pagetable *hwpt;
+	struct iommufd_object *dev_obj;
+	struct mock_iommu_domain *mock;
+	struct selftest_obj *sobj;
+	struct msi_desc desc = {};
+	int rc = 0;
+
+	hwpt = get_md_pagetable(ucmd, mockpt_id, &mock);
+	if (IS_ERR(hwpt)) {
+		/* Try nested domain */
+		hwpt = get_md_pagetable_nested(ucmd, mockpt_id, &mock_nested);
+		if (IS_ERR(hwpt))
+			return PTR_ERR(hwpt);
+		mock = mock_nested->parent;
+	}
+
+	dev_obj =
+		iommufd_get_object(ucmd->ictx, device_id, IOMMUFD_OBJ_SELFTEST);
+	if (IS_ERR(dev_obj)) {
+		rc = PTR_ERR(dev_obj);
+		goto out_put_hwpt;
+	}
+
+	sobj = container_of(dev_obj, struct selftest_obj, obj);
+	if (sobj->type != TYPE_IDEV) {
+		rc = -EINVAL;
+		goto out_dev_obj;
+	}
+
+	desc.dev = sobj->idev.idev->dev;
+	rc = iommu_dma_prepare_msi(&desc, MOCK_MSI_PAGE);
+	if (rc)
+		goto out_dev_obj;
+
+	if (iommu_iova_to_phys(&mock->domain, MSI_IOVA_BASE) != MOCK_MSI_PAGE)
+		rc = -EINVAL;
+
+out_dev_obj:
+	iommufd_put_object(ucmd->ictx, dev_obj);
+out_put_hwpt:
 	iommufd_put_object(ucmd->ictx, &hwpt->obj);
 	return rc;
 }
@@ -1470,6 +1551,9 @@ int iommufd_test(struct iommufd_ucmd *ucmd)
 		return iommufd_test_md_check_iotlb(ucmd, cmd->id,
 						   cmd->check_iotlb.id,
 						   cmd->check_iotlb.iotlb);
+	case IOMMU_TEST_OP_MD_CHECK_SW_MSI:
+		return iommufd_test_md_check_sw_msi(ucmd, cmd->id,
+						    cmd->check_sw_msi.stdev_id);
 	case IOMMU_TEST_OP_CREATE_ACCESS:
 		return iommufd_test_create_access(ucmd, cmd->id,
 						  cmd->create_access.flags);

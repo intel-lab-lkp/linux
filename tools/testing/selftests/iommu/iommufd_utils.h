@@ -130,6 +130,13 @@ static int _test_cmd_mock_domain_flags(int fd, unsigned int ioas_id,
 static int _test_cmd_mock_domain_replace(int fd, __u32 stdev_id, __u32 pt_id,
 					 __u32 *hwpt_id)
 {
+	struct iommu_test_cmd sw_msi = {
+		.size = sizeof(sw_msi),
+		.op = IOMMU_TEST_OP_MD_CHECK_SW_MSI,
+		.check_sw_msi = {
+			.stdev_id = stdev_id,
+		},
+	};
 	struct iommu_test_cmd cmd = {
 		.size = sizeof(cmd),
 		.op = IOMMU_TEST_OP_MOCK_DOMAIN_REPLACE,
@@ -145,6 +152,8 @@ static int _test_cmd_mock_domain_replace(int fd, __u32 stdev_id, __u32 pt_id,
 		return ret;
 	if (hwpt_id)
 		*hwpt_id = cmd.mock_domain_replace.pt_id;
+	sw_msi.id = cmd.mock_domain_replace.pt_id;
+	assert(0 == ioctl(fd, IOMMU_TEST_CMD, &sw_msi));
 	return 0;
 }
 
