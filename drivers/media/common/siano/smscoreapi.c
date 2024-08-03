@@ -1166,10 +1166,15 @@ static int smscore_load_firmware_from_file(struct smscore_device_t *coredev,
 		memcpy(fw_buf, fw->data, fw->size);
 		fw_buf_size = fw->size;
 
+		/*
+		 * Note that loadfirmware_handler can't be NULL due to the
+		 * check above, but it is confusing smatch.
+		 */
 		rc = (coredev->device_flags & SMS_DEVICE_FAMILY2) ?
-			smscore_load_firmware_family2(coredev, fw_buf, fw_buf_size)
-			: loadfirmware_handler(coredev->context, fw_buf,
-			fw_buf_size);
+		      smscore_load_firmware_family2(coredev, fw_buf, fw_buf_size) :
+		      (loadfirmware_handler ?
+		       loadfirmware_handler(coredev->context, fw_buf, fw_buf_size) :
+		       -EINVAL);
 	}
 
 	kfree(fw_buf);
