@@ -117,7 +117,7 @@ static ssize_t virtual_ncidev_write(struct file *file,
 	struct virtual_nci_dev *vdev = file->private_data;
 	struct sk_buff *skb;
 
-	skb = alloc_skb(count, GFP_KERNEL);
+	skb = alloc_skb(count, GFP_KERNEL|__GFP_ZERO);
 	if (!skb)
 		return -ENOMEM;
 
