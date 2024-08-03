@@ -253,8 +253,10 @@ void check_panic_on_warn(const char *origin)
  */
 static void panic_other_cpus_shutdown(bool crash_kexec)
 {
-	if (panic_print & PANIC_PRINT_ALL_CPU_BT)
+	if (panic_print & PANIC_PRINT_ALL_CPU_BT) {
 		trigger_all_cpu_backtrace();
+		console_flush_on_panic(CONSOLE_FLUSH_PENDING);
+	}
 
 	/*
 	 * Note that smp_send_stop() is the usual SMP shutdown function,
