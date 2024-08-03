@@ -37,6 +37,9 @@
 #include <linux/page_idle.h>
 #include <linux/local_lock.h>
 #include <linux/buffer_head.h>
+#include <linux/sched/sysctl.h>
+#include <linux/memory-tiers.h>
+#include <linux/migrate.h>
 
 #include "internal.h"
 
@@ -471,9 +474,26 @@ static void folio_inc_refs(struct folio *folio)
  *
  * When a newly allocated folio is not yet visible, so safe for non-atomic ops,
  * __folio_set_referenced() may be substituted for folio_mark_accessed().
+ *
+ * This call may also attempt to migrate the folio memory to the local node
+ * if it presently resides on a lower memory tier.
  */
 void folio_mark_accessed(struct folio *folio)
 {
+	int nid = folio_nid(folio);
+
+	/* If folio is on lower tier, try to promote to local node */
+	if (sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING &&
+	    (nid == NUMA_NO_NODE || !node_is_toptier(nid))) {
+		int flags;
+
+		nid = numa_migrate_prep(folio, NULL, 0, nid, &flags);
+		if ((nid != NUMA_NO_NODE) &&
+		    !migrate_misplaced_folio_prepare(folio, NULL, nid)) {
+			migrate_misplaced_folio(folio, nid);
+		}
+	}
+
 	if (lru_gen_enabled()) {
 		folio_inc_refs(folio);
 		return;
