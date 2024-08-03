@@ -273,14 +273,21 @@ int squashfs_read_inode(struct inode *inode, long long ino)
 	case SQUASHFS_SYMLINK_TYPE:
 	case SQUASHFS_LSYMLINK_TYPE: {
 		struct squashfs_symlink_inode *sqsh_ino = &squashfs_ino.symlink;
+		loff_t symlink_size;
 
 		err = squashfs_read_metadata(sb, sqsh_ino, &block, &offset,
 				sizeof(*sqsh_ino));
 		if (err < 0)
 			goto failed_read;
 
+		symlink_size = le32_to_cpu(sqsh_ino->symlink_size);
+		if (symlink_size > PAGE_SIZE) {
+			ERROR("Corrupted symlink, size [%llu]\n", symlink_size);
+			return -EINVAL;
+		}
+
 		set_nlink(inode, le32_to_cpu(sqsh_ino->nlink));
-		inode->i_size = le32_to_cpu(sqsh_ino->symlink_size);
+		inode->i_size = symlink_size;
 		inode->i_op = &squashfs_symlink_inode_ops;
 		inode_nohighmem(inode);
 		inode->i_data.a_ops = &squashfs_symlink_aops;
