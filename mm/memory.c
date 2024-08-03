@@ -5371,15 +5371,16 @@ static vm_fault_t do_fault(struct vm_fault *vmf)
 int numa_migrate_prep(struct folio *folio, struct vm_fault *vmf,
 		      unsigned long addr, int page_nid, int *flags)
 {
-	struct vm_area_struct *vma = vmf->vma;
-
-	/* Record the current PID acceesing VMA */
-	vma_set_access_pid_bit(vma);
-
-	count_vm_numa_event(NUMA_HINT_FAULTS);
-	if (page_nid == numa_node_id()) {
-		count_vm_numa_event(NUMA_HINT_FAULTS_LOCAL);
-		*flags |= TNF_FAULT_LOCAL;
+	/* If accessed in fault path, record the current PID acceesing VMA */
+	if (vmf) {
+		vma_set_access_pid_bit(vmf->vma);
+		count_vm_numa_event(NUMA_HINT_FAULTS);
+		if (page_nid == numa_node_id()) {
+			count_vm_numa_event(NUMA_HINT_FAULTS_LOCAL);
+			*flags |= TNF_FAULT_LOCAL;
+		}
+	} else {
+		count_vm_numa_event(NUMA_HINT_PAGE_CACHE);
 	}
 
 	return mpol_misplaced(folio, vmf, addr);

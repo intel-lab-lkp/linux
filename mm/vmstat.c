@@ -1317,6 +1317,7 @@ const char * const vmstat_text[] = {
 	"numa_huge_pte_updates",
 	"numa_hint_faults",
 	"numa_hint_faults_local",
+	"numa_hint_page_cache",
 	"numa_pages_migrated",
 #endif
 #ifdef CONFIG_MIGRATION
