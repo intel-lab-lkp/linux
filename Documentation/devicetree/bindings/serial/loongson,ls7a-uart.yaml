@@ -1,0 +1,74 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/loongson,ls7a-uart.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Loongson UART
+
+maintainers:
+  - Haowei Zheng <zhenghaowei@loongson.cn>
+
+properties:
+  compatible:
+    const: loongson,ls7a-uart
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  clocks:
+    maxItems: 1
+
+  fractional-division:
+    description: Enables fractional-N division. Currently,
+      only LS2K1500 and LS2K2000 support this feature.
+
+  rts-invert:
+    description: Inverts the RTS value in the MCR register.
+      This should be used on Loongson-3 series CPUs, Loongson-2K
+      series CPUs, and Loongson LS7A bridge chips.
+
+  dtr-invert:
+    description: Inverts the DTR value in the MCR register.
+      This should be used on Loongson-3 series CPUs, Loongson-2K
+      series CPUs, and Loongson LS7A bridge chips.
+
+  cts-invert:
+    description: Inverts the CTS value in the MSR register.
+      This should be used on Loongson-2K0500, Loongson-2K1000,
+      and Loongson LS7A bridge chips.
+
+  dsr-invert:
+    description: Inverts the DSR value in the MSR register.
+      This should be used on Loongson-2K0500, Loongson-2K1000,
+      and Loongson LS7A bridge chips.
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - clocks
+
+allOf:
+  - $ref: serial.yaml
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    #include <dt-bindings/clock/loongson,ls2k-clk.h>
+
+    serial@1fe001e0 {
+        compatible = "loongson,ls7a-uart";
+        reg = <0x0 0x1fe001e0 0x0 0x10>;
+        clock-frequency = <100000000>;
+        interrupt-parent = <&liointc>;
+        interrupts = <10 IRQ_TYPE_LEVEL_HIGH>;
+        fractional-division;
+        rts-invert;
+        dtr-invert;
+    };
