@@ -1532,3 +1532,51 @@ Contact:	Bean Huo <beanhuo@micron.com>
 Description:
 		rtc_update_ms indicates how often the host should synchronize or update the
 		UFS RTC. If set to 0, this will disable UFS RTC periodic update.
+
+What:		/sys/bus/platform/drivers/ufshcd/ufshci_capabilities/capabilities
+What:		/sys/bus/platform/devices/*.ufs/ufshci_capabilities/capabilities
+Date:		August 2024
+Contact:	Avri Altman <avri.altman@wdc.com>
+Description:
+		Host Capabilities register group: host controller capabiities register.
+		Symbol - CAP.  Offset: 0x00 - 0x03.
+
+What:		/sys/bus/platform/drivers/ufshcd/ufshci_capabilities/mcq_cap
+What:		/sys/bus/platform/devices/*.ufs/ufshci_capabilities/mcq_cap
+Date:		August 2024
+Contact:	Avri Altman <avri.altman@wdc.com>
+Description:
+		Host Capabilities register group: multi-circular queue capability register.
+		Symbol - MCQCAP.  Offset: 0x04 - 0x07.
+
+What:		/sys/bus/platform/drivers/ufshcd/ufshci_capabilities/version
+What:		/sys/bus/platform/devices/*.ufs/ufshci_capabilities/version
+Date:		August 2024
+Contact:	Avri Altman <avri.altman@wdc.com>
+Description:
+		Host Capabilities register group: UFS version register.
+		Symbol - VER.  Offset: 0x08 - 0x0B.
+
+What:		/sys/bus/platform/drivers/ufshcd/ufshci_capabilities/ext_capabilities
+What:		/sys/bus/platform/devices/*.ufs/ufshci_capabilities/ext_capabilities
+Date:		August 2024
+Contact:	Avri Altman <avri.altman@wdc.com>
+Description:
+		Host Capabilities register group: extended controller capabilities register.
+		Symbol - EXT_CAP.  Offset: 0x0C - 0x0F.
+
+What:		/sys/bus/platform/drivers/ufshcd/ufshci_capabilities/product_id
+What:		/sys/bus/platform/devices/*.ufs/ufshci_capabilities/product_id
+Date:		August 2024
+Contact:	Avri Altman <avri.altman@wdc.com>
+Description:
+		Host Capabilities register group: product ID register.
+		Symbol - HCPID.  Offset: 0x10 - 0x13.
+
+What:		/sys/bus/platform/drivers/ufshcd/ufshci_capabilities/man_id
+What:		/sys/bus/platform/devices/*.ufs/ufshci_capabilities/man_id
+Date:		August 2024
+Contact:	Avri Altman <avri.altman@wdc.com>
+Description:
+		Host Capabilities register group: manufacturer ID register.
+		Symbol - HCMID.  Offset: 0x14 - 0x17.
