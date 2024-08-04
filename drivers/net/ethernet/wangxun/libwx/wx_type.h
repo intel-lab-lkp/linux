@@ -1141,6 +1141,7 @@ struct wx {
 	/* devlink port data */
 	struct devlink_port devlink_port;
 	struct wx_dl_priv *dl_priv;
+	u16 eswitch_mode;		/* current mode of eswitch */
 
 	struct wx_bus_info bus;
 	struct wx_mbx_info mbx;

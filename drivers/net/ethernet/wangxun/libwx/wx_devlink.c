@@ -6,9 +6,12 @@
 
 #include "wx_type.h"
 #include "wx_sriov.h"
+#include "wx_eswitch.h"
 #include "wx_devlink.h"
 
 static const struct devlink_ops wx_pf_devlink_ops = {
+	.eswitch_mode_get = wx_eswitch_mode_get,
+	.eswitch_mode_set = wx_eswitch_mode_set,
 };
 
 static void wx_devlink_free(void *devlink_ptr)
