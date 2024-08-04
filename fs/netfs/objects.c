@@ -27,7 +27,6 @@ struct netfs_io_request *netfs_alloc_request(struct address_space *mapping,
 	bool is_unbuffered = (origin == NETFS_UNBUFFERED_WRITE ||
 			      origin == NETFS_DIO_READ ||
 			      origin == NETFS_DIO_WRITE);
-	bool cached = !is_unbuffered && netfs_is_cache_enabled(ctx);
 	int ret;
 
 	for (;;) {
@@ -56,8 +55,9 @@ struct netfs_io_request *netfs_alloc_request(struct address_space *mapping,
 	refcount_set(&rreq->ref, 1);
 
 	__set_bit(NETFS_RREQ_IN_PROGRESS, &rreq->flags);
-	if (cached) {
-		__set_bit(NETFS_RREQ_WRITE_TO_CACHE, &rreq->flags);
+	if (!is_unbuffered && fscache_cookie_valid(netfs_i_cookie(ctx))) {
+		if(netfs_is_cache_enabled(ctx))
+			__set_bit(NETFS_RREQ_WRITE_TO_CACHE, &rreq->flags);
 		if (test_bit(NETFS_ICTX_USE_PGPRIV2, &ctx->flags))
 			/* Filesystem uses deprecated PG_private_2 marking. */
 			__set_bit(NETFS_RREQ_USE_PGPRIV2, &rreq->flags);
