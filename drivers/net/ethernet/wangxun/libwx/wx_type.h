@@ -8,6 +8,7 @@
 #include <linux/netdevice.h>
 #include <linux/if_vlan.h>
 #include <linux/phylink.h>
+#include <net/devlink.h>
 #include <net/ip.h>
 
 #define WX_NCSI_SUP                             0x8000
@@ -1084,6 +1085,10 @@ enum wx_state {
 
 struct vf_data_storage {
 	struct pci_dev *vfdev;
+	struct wx *vf_priv_wx;
+	/* vf devlink port data */
+	struct devlink_port devlink_port;
+
 	unsigned char vf_mac_addr[ETH_ALEN];
 	bool spoofchk_enabled;
 	bool link_enable;
@@ -1119,6 +1124,10 @@ enum wx_pf_flags {
 	WX_PF_FLAGS_NBITS               /* must be last */
 };
 
+struct wx_dl_priv {
+	struct wx *priv_wx;
+};
+
 struct wx {
 	unsigned long active_vlans[BITS_TO_LONGS(VLAN_N_VID)];
 	DECLARE_BITMAP(state, WX_STATE_NBITS);
@@ -1128,6 +1137,11 @@ struct wx {
 	u8 __iomem *hw_addr;
 	struct pci_dev *pdev;
 	struct net_device *netdev;
+
+	/* devlink port data */
+	struct devlink_port devlink_port;
+	struct wx_dl_priv *dl_priv;
+
 	struct wx_bus_info bus;
 	struct wx_mbx_info mbx;
 	struct wx_mac_info mac;

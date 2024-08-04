@@ -7,6 +7,7 @@
 #include "wx_type.h"
 #include "wx_hw.h"
 #include "wx_mbx.h"
+#include "wx_devlink.h"
 #include "wx_sriov.h"
 
 static void wx_vf_configuration(struct pci_dev *pdev, int event_mask)
@@ -92,6 +93,7 @@ static int __wx_enable_sriov(struct wx *wx, u8 num_vfs)
 	wr32m(wx, WX_PSR_CTL, WX_PSR_CTL_SW_EN, WX_PSR_CTL_SW_EN);
 
 	for (i = 0; i < num_vfs; i++) {
+		wx->vfinfo[i].vf_priv_wx = wx;
 		/* enable spoof checking for all VFs */
 		wx->vfinfo[i].spoofchk_enabled = true;
 		wx->vfinfo[i].link_enable = true;
@@ -130,6 +132,7 @@ void wx_disable_sriov(struct wx *wx)
 	else
 		wx_err(wx, "Unloading driver while VFs are assigned.\n");
 
+	wx_devlink_destroy_vf_port(wx);
 	/* clear flags and free allloced data */
 	wx_sriov_clear_data(wx);
 }
@@ -158,7 +161,15 @@ static int wx_pci_sriov_enable(struct pci_dev *dev,
 		goto err_out;
 	}
 
+	for (i = 0; i < wx->num_vfs; i++) {
+		err = wx_devlink_create_vf_port(wx, i);
+		if (err)
+			goto err_dis_sriov;
+	}
+
 	return num_vfs;
+err_dis_sriov:
+	pci_disable_sriov(dev);
 err_out:
 	wx_sriov_clear_data(wx);
 	return err;
@@ -210,7 +221,7 @@ int wx_pci_sriov_configure(struct pci_dev *pdev, int num_vfs)
 }
 EXPORT_SYMBOL(wx_pci_sriov_configure);
 
-static int wx_set_vf_mac(struct wx *wx, u16 vf, const u8 *mac_addr)
+int wx_set_vf_mac(struct wx *wx, u16 vf, const u8 *mac_addr)
 {
 	u8 hw_addr[ETH_ALEN];
 	int ret = 0;
