@@ -16,6 +16,7 @@
 #include "../libwx/wx_hw.h"
 #include "../libwx/wx_mbx.h"
 #include "../libwx/wx_sriov.h"
+#include "../libwx/wx_devlink.h"
 #include "txgbe_type.h"
 #include "txgbe_hw.h"
 #include "txgbe_phy.h"
@@ -564,6 +565,13 @@ static int txgbe_probe(struct pci_dev *pdev,
 	wx->netdev = netdev;
 	wx->pdev = pdev;
 
+	wx->dl_priv = wx_create_devlink(&pdev->dev);
+	if (!wx->dl_priv) {
+		err = -ENOMEM;
+		goto err_pci_release_regions;
+	}
+
+	wx->dl_priv->priv_wx = wx;
 	wx->msg_enable = (1 << DEFAULT_DEBUG_LEVEL_SHIFT) - 1;
 
 	wx->hw_addr = devm_ioremap(&pdev->dev,
@@ -707,9 +715,14 @@ static int txgbe_probe(struct pci_dev *pdev,
 	if (err)
 		goto err_free_misc_irq;
 
-	err = register_netdev(netdev);
+	err = wx_devlink_create_pf_port(wx);
 	if (err)
 		goto err_remove_phy;
+	SET_NETDEV_DEVLINK_PORT(netdev, &wx->devlink_port);
+
+	err = register_netdev(netdev);
+	if (err)
+		goto err_devlink_create_pf_port;
 
 	pci_set_drvdata(pdev, wx);
 
@@ -731,6 +744,8 @@ static int txgbe_probe(struct pci_dev *pdev,
 
 	return 0;
 
+err_devlink_create_pf_port:
+	devl_port_unregister(&wx->devlink_port);
 err_remove_phy:
 	txgbe_remove_phy(txgbe);
 err_free_misc_irq:
@@ -767,6 +782,7 @@ static void txgbe_remove(struct pci_dev *pdev)
 	wx_disable_sriov(wx);
 	unregister_netdev(netdev);
 
+	devl_port_unregister(&wx->devlink_port);
 	txgbe_remove_phy(txgbe);
 	txgbe_free_misc_irq(txgbe);
 	wx_free_isb_resources(wx);
