@@ -16,6 +16,7 @@
 #include "../libwx/wx_lib.h"
 #include "../libwx/wx_mbx.h"
 #include "../libwx/wx_sriov.h"
+#include "../libwx/wx_devlink.h"
 #include "ngbe_type.h"
 #include "ngbe_mdio.h"
 #include "ngbe_hw.h"
@@ -616,6 +617,13 @@ static int ngbe_probe(struct pci_dev *pdev,
 	wx = netdev_priv(netdev);
 	wx->netdev = netdev;
 	wx->pdev = pdev;
+
+	wx->dl_priv = wx_create_devlink(&pdev->dev);
+	if (!wx->dl_priv) {
+		err = -ENOMEM;
+		goto err_pci_release_regions;
+	}
+	wx->dl_priv->priv_wx = wx;
 	wx->msg_enable = BIT(3) - 1;
 
 	wx->hw_addr = devm_ioremap(&pdev->dev,
@@ -735,6 +743,10 @@ static int ngbe_probe(struct pci_dev *pdev,
 	if (err)
 		goto err_clear_interrupt_scheme;
 
+	err = wx_devlink_create_pf_port(wx);
+	if (err)
+		goto err_devlink_create_pf_port;
+
 	err = register_netdev(netdev);
 	if (err)
 		goto err_register;
@@ -744,6 +756,8 @@ static int ngbe_probe(struct pci_dev *pdev,
 	return 0;
 
 err_register:
+	devl_port_unregister(&wx->devlink_port);
+err_devlink_create_pf_port:
 	phylink_destroy(wx->phylink);
 	wx_control_hw(wx, false);
 err_clear_interrupt_scheme:
@@ -775,6 +789,7 @@ static void ngbe_remove(struct pci_dev *pdev)
 	netdev = wx->netdev;
 	wx_disable_sriov(wx);
 	unregister_netdev(netdev);
+	devl_port_unregister(&wx->devlink_port);
 	phylink_destroy(wx->phylink);
 	pci_release_selected_regions(pdev,
 				     pci_select_bars(pdev, IORESOURCE_MEM));
