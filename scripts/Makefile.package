@@ -144,6 +144,10 @@ snap-pkg:
 # pacman-pkg
 # ---------------------------------------------------------------------------
 
+# Space-separated list of extra packages to build
+# The available extra packages are: headers api-headers
+PACMAN_EXTRAPACKAGES ?=
+
 PHONY += pacman-pkg
 pacman-pkg:
 	@ln -srf $(srctree)/scripts/package/PKGBUILD $(objtree)/PKGBUILD
@@ -152,6 +156,7 @@ pacman-pkg:
 		CARCH="$(UTS_MACHINE)" \
 		KBUILD_MAKEFLAGS="$(MAKEFLAGS)" \
 		KBUILD_REVISION="$(shell $(srctree)/scripts/build-version)" \
+		PACMAN_EXTRAPACKAGES="$(PACMAN_EXTRAPACKAGES)" \
 		makepkg $(MAKEPKGOPTS)
 
 # dir-pkg tar*-pkg - tarball targets
