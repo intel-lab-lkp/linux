@@ -174,12 +174,15 @@
 		};
 
 		uart0: serial@1fe001e0 {
-			compatible = "ns16550a";
+			compatible = "loongson,ls7a-uart";
 			reg = <0x0 0x1fe001e0 0x0 0x10>;
 			clock-frequency = <100000000>;
 			interrupt-parent = <&liointc>;
 			interrupts = <10 IRQ_TYPE_LEVEL_HIGH>;
 			no-loopback-test;
+			fractional-division;
+			rts-invert;
+			dtr-invert;
 			status = "disabled";
 		};
 
