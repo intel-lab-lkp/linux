@@ -1228,9 +1228,13 @@ static int max77693_muic_probe(struct platform_device *pdev)
 	cable_type = max77693_muic_get_cable_type(info,
 					   MAX77693_CABLE_GROUP_ADC, &attached);
 	if (attached && (cable_type == MAX77693_MUIC_ADC_FACTORY_MODE_UART_ON ||
-			 cable_type == MAX77693_MUIC_ADC_FACTORY_MODE_UART_OFF))
-		max77693_muic_set_path(info, info->path_uart, true);
-
+			 cable_type == MAX77693_MUIC_ADC_FACTORY_MODE_UART_OFF)) {
+		ret = max77693_muic_set_path(info, info->path_uart, true);
+                if (ret < 0) {
+			dev_err(&pdev->dev, "failed to set path for UART: %d\n", ret);
+			return ret;
+                }
+        }
 	/* Check revision number of MUIC device*/
 	ret = regmap_read(info->max77693->regmap_muic,
 			MAX77693_MUIC_REG_ID, &id);
