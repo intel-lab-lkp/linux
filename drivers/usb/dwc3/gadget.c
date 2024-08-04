@@ -30,6 +30,11 @@
 #define DWC3_ALIGN_FRAME(d, n)	(((d)->frame_number + ((d)->interval * (n))) \
 					& ~((d)->interval - 1))
 
+struct dwc3_psy_put {
+	struct kthread_work work;
+	struct power_supply *psy;
+};
+
 /**
  * dwc3_gadget_set_test_mode - enables usb2 test modes
  * @dwc: pointer to our context structure
@@ -3047,22 +3052,49 @@ static void dwc3_gadget_set_ssp_rate(struct usb_gadget *g,
 	spin_unlock_irqrestore(&dwc->lock, flags);
 }
 
+static void dwc3_gadget_psy_put(struct kthread_work *work)
+{
+	struct dwc3_psy_put	*psy_put = container_of(work, struct dwc3_psy_put, work);
+
+	power_supply_put(psy_put->psy);
+	kfree(psy_put);
+}
+
 static int dwc3_gadget_vbus_draw(struct usb_gadget *g, unsigned int mA)
 {
-	struct dwc3		*dwc = gadget_to_dwc(g);
+	struct dwc3			*dwc = gadget_to_dwc(g);
+	struct power_supply		*usb_psy;
 	union power_supply_propval	val = {0};
+	struct dwc3_psy_put		*psy_put;
 	int				ret;
 
 	if (dwc->usb2_phy)
 		return usb_phy_set_power(dwc->usb2_phy, mA);
 
-	if (!dwc->usb_psy)
+	if (!dwc->usb_psy_name)
 		return -EOPNOTSUPP;
 
-	val.intval = 1000 * mA;
-	ret = power_supply_set_property(dwc->usb_psy, POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT, &val);
+	usb_psy = power_supply_get_by_name(dwc->usb_psy_name);
+	if (!usb_psy) {
+		dev_err(dwc->dev, "couldn't get usb power supply\n");
+		return -ENODEV;
+	}
 
-	return ret;
+	val.intval = 1000 * mA;
+	ret = power_supply_set_property(usb_psy, POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT, &val);
+	if (ret < 0) {
+		dev_err(dwc->dev, "failed to set power supply property\n");
+		return ret;
+	}
+
+	psy_put = kzalloc(sizeof(*psy_put), GFP_ATOMIC);
+	if (!psy_put)
+		return -ENOMEM;
+	kthread_init_work(&psy_put->work, dwc3_gadget_psy_put);
+	psy_put->psy = usb_psy;
+	kthread_queue_work(dwc->worker, &psy_put->work);
+
+	return 0;
 }
 
 /**
