@@ -19,6 +19,7 @@ properties:
       - qcom,qca2066-bt
       - qcom,qca6174-bt
       - qcom,qca9377-bt
+      - qcom,qca9379-bt
       - qcom,wcn3988-bt
       - qcom,wcn3990-bt
       - qcom,wcn3991-bt
@@ -125,6 +126,7 @@ allOf:
             enum:
               - qcom,qca2066-bt
               - qcom,qca6174-bt
+              - qcom,qca9379-bt
     then:
       required:
         - enable-gpios
