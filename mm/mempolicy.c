@@ -2185,10 +2185,10 @@ bool mempolicy_in_oom_domain(struct task_struct *tsk,
 	return ret;
 }
 
-static struct page *alloc_pages_preferred_many(gfp_t gfp, unsigned int order,
-						int nid, nodemask_t *nodemask)
+static struct folio *folio_alloc_preferred_many(gfp_t gfp, unsigned int order,
+		int nid, nodemask_t *nodemask)
 {
-	struct page *page;
+	struct folio *folio;
 	gfp_t preferred_gfp;
 
 	/*
@@ -2199,11 +2199,11 @@ static struct page *alloc_pages_preferred_many(gfp_t gfp, unsigned int order,
 	 */
 	preferred_gfp = gfp | __GFP_NOWARN;
 	preferred_gfp &= ~(__GFP_DIRECT_RECLAIM | __GFP_NOFAIL);
-	page = __alloc_pages_noprof(preferred_gfp, order, nid, nodemask);
-	if (!page)
-		page = __alloc_pages_noprof(gfp, order, nid, NULL);
+	folio = __folio_alloc_noprof(preferred_gfp, order, nid, nodemask);
+	if (!folio)
+		folio = __folio_alloc_noprof(gfp, order, nid, NULL);
 
-	return page;
+	return folio;
 }
 
 /**
@@ -2226,9 +2226,7 @@ struct folio *folio_alloc_mpol_noprof(gfp_t gfp, unsigned int order,
 	nodemask = policy_nodemask(gfp, pol, ilx, &nid);
 
 	if (pol->mode == MPOL_PREFERRED_MANY)
-		return page_rmappable_folio(
-				alloc_pages_preferred_many(gfp, order,
-					nid, nodemask));
+		return folio_alloc_preferred_many(gfp, order, nid, nodemask);
 
 	if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) &&
 	    /* filter "hugepage" allocation, unless from alloc_pages() */
