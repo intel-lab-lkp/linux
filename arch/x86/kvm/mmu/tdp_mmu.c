@@ -1586,6 +1586,9 @@ static void recover_huge_pages_range(struct kvm *kvm,
 	bool flush = false;
 	u64 huge_spte;
 
+	if (WARN_ON_ONCE(kvm_slot_dirty_track_enabled(slot)))
+		return;
+
 	rcu_read_lock();
 
 	tdp_root_for_each_pte(iter, root, start, end) {
