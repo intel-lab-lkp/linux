@@ -26,6 +26,14 @@ struct guest_memfd_operations {
 };
 
 /**
+ * @GUEST_MEMFD_FLAG_NO_DIRECT_MAP: When making folios inaccessible by host, also
+ *                                  remove them from the kernel's direct map.
+ */
+enum {
+	GUEST_MEMFD_FLAG_NO_DIRECT_MAP		= BIT(0),
+};
+
+/**
  * @GUEST_MEMFD_GRAB_UPTODATE: Ensure pages are zeroed/up to date.
  *                             If trusted hyp will do it, can ommit this flag
  * @GUEST_MEMFD_PREPARE: Call the ->prepare() op, if present.

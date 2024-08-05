@@ -7,9 +7,55 @@
 #include <linux/falloc.h>
 #include <linux/guest_memfd.h>
 #include <linux/pagemap.h>
+#include <linux/set_memory.h>
+
+static inline int guest_memfd_folio_private(struct folio *folio)
+{
+	unsigned long nr_pages = folio_nr_pages(folio);
+	unsigned long i;
+	int r;
+
+	for (i = 0; i < nr_pages; i++) {
+		struct page *page = folio_page(folio, i);
+
+		r = set_direct_map_invalid_noflush(page);
+		if (r < 0)
+			goto out_remap;
+	}
+
+	folio_set_private(folio);
+	return 0;
+out_remap:
+	for (; i > 0; i--) {
+		struct page *page = folio_page(folio, i - 1);
+
+		BUG_ON(set_direct_map_default_noflush(page));
+	}
+	return r;
+}
+
+static inline void guest_memfd_folio_clear_private(struct folio *folio)
+{
+	unsigned long start = (unsigned long)folio_address(folio);
+	unsigned long nr = folio_nr_pages(folio);
+	unsigned long i;
+
+	if (!folio_test_private(folio))
+		return;
+
+	for (i = 0; i < nr; i++) {
+		struct page *page = folio_page(folio, i);
+
+		BUG_ON(set_direct_map_default_noflush(page));
+	}
+	flush_tlb_kernel_range(start, start + folio_size(folio));
+
+	folio_clear_private(folio);
+}
 
 struct folio *guest_memfd_grab_folio(struct file *file, pgoff_t index, u32 flags)
 {
+	unsigned long gmem_flags = (unsigned long)file->private_data;
 	struct inode *inode = file_inode(file);
 	struct guest_memfd_operations *ops = inode->i_private;
 	struct folio *folio;
@@ -40,6 +86,12 @@ struct folio *guest_memfd_grab_folio(struct file *file, pgoff_t index, u32 flags
 	if (flags & GUEST_MEMFD_PREPARE && ops->prepare) {
 		r = ops->prepare(inode, index, folio);
 		if (r < 0)
+			goto out_err;
+	}
+
+	if (gmem_flags & GUEST_MEMFD_FLAG_NO_DIRECT_MAP) {
+		r = guest_memfd_folio_private(folio);
+		if (r)
 			goto out_err;
 	}
 
@@ -213,7 +265,17 @@ static bool gmem_release_folio(struct folio *folio, gfp_t gfp)
 	if (ops->invalidate_end)
 		ops->invalidate_end(inode, offset, nr);
 
+	guest_memfd_folio_clear_private(folio);
+
 	return true;
+}
+
+static void gmem_invalidate_folio(struct folio *folio, size_t offset, size_t len)
+{
+	/* not yet supported */
+	BUG_ON(offset || len != folio_size(folio));
+
+	BUG_ON(!gmem_release_folio(folio, 0));
 }
 
 static const struct address_space_operations gmem_aops = {
@@ -221,6 +283,7 @@ static const struct address_space_operations gmem_aops = {
 	.migrate_folio = gmem_migrate_folio,
 	.error_remove_folio = gmem_error_folio,
 	.release_folio = gmem_release_folio,
+	.invalidate_folio = gmem_invalidate_folio,
 };
 
 static inline bool guest_memfd_check_ops(const struct guest_memfd_operations *ops)
@@ -241,7 +304,7 @@ struct file *guest_memfd_alloc(const char *name,
 	if (!guest_memfd_check_ops(ops))
 		return ERR_PTR(-EINVAL);
 
-	if (flags)
+	if (flags & ~GUEST_MEMFD_FLAG_NO_DIRECT_MAP)
 		return ERR_PTR(-EINVAL);
 
 	/*
