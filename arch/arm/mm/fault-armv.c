@@ -117,7 +117,7 @@ static int adjust_pte(struct vm_area_struct *vma, unsigned long address,
 	 * must use the nested version.  This also means we need to
 	 * open-code the spin-locking.
 	 */
-	pte = pte_offset_map_nolock(vma->vm_mm, pmd, address, &ptl);
+	pte = pte_offset_map_nolock(vma->vm_mm, pmd, NULL, address, &ptl);
 	if (!pte)
 		return 0;
 

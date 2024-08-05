@@ -33,7 +33,7 @@ static bool map_pte(struct page_vma_mapped_walk *pvmw, spinlock_t **ptlp)
 	 * Though, in most cases, page lock already protects this.
 	 */
 	pvmw->pte = pte_offset_map_nolock(pvmw->vma->vm_mm, pvmw->pmd,
-					  pvmw->address, ptlp);
+					  NULL, pvmw->address, ptlp);
 	if (!pvmw->pte)
 		return false;
 
