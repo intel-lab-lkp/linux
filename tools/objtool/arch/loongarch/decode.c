@@ -122,7 +122,7 @@ static bool decode_insn_reg2i12_fomat(union loongarch_instruction inst,
 	switch (inst.reg2i12_format.opcode) {
 	case addid_op:
 		if ((inst.reg2i12_format.rd == CFI_SP) || (inst.reg2i12_format.rj == CFI_SP)) {
-			/* addi.d sp,sp,si12 or addi.d fp,sp,si12 */
+			/* addi.d sp,sp,si12 or addi.d fp,sp,si12 or addi.d sp,fp,si12 */
 			insn->immediate = sign_extend64(inst.reg2i12_format.immediate, 11);
 			ADD_OP(op) {
 				op->src.type = OP_SRC_ADD;
@@ -275,6 +275,8 @@ static bool decode_insn_reg2i16_fomat(union loongarch_instruction inst,
 static bool decode_insn_reg3_fomat(union loongarch_instruction inst,
 				   struct instruction *insn)
 {
+	struct symbol *func;
+
 	switch (inst.reg3_format.opcode) {
 	case subd_op:
 		if ((inst.reg3_format.rd == CFI_SP) && (inst.reg3_format.rj == CFI_SP)) {
@@ -282,6 +284,10 @@ static bool decode_insn_reg3_fomat(union loongarch_instruction inst,
 			 * sub.d sp,sp,t0
 			 * this is a rare case for the secondary stack.
 			 */
+			func = find_func_containing(insn->sec, insn->offset);
+			if (!func)
+				return false;
+			func->secondary_stack = true;
 		}
 		break;
 	default:

@@ -2993,6 +2993,28 @@ static int update_cfi_state(struct instruction *insn,
 				break;
 			}
 
+			if (op->dest.reg == CFI_BP && op->src.reg == CFI_SP) {
+				/* addi.d fp,sp,imm for the secondary stack on LoongArch */
+				if (cfa->base == CFI_SP && cfa->offset == op->src.offset) {
+					if (insn->sym->secondary_stack) {
+						cfa->base = CFI_BP;
+						cfa->offset = 0;
+					}
+				}
+				break;
+			}
+
+			if (op->dest.reg == CFI_SP && op->src.reg == CFI_BP) {
+				/* addi.d sp,fp,imm for the secondary stack on LoongArch */
+				if (cfa->base == CFI_FP && cfa->offset == 0) {
+					if (insn->sym->secondary_stack) {
+						cfa->base = CFI_SP;
+						cfa->offset = -op->src.offset;
+					}
+				}
+				break;
+			}
+
 			if (op->dest.reg == CFI_SP && op->src.reg == CFI_BP) {
 
 				/* lea disp(%rbp), %rsp */
