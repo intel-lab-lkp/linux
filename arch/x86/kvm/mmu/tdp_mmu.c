@@ -1636,9 +1636,7 @@ static void zap_collapsible_spte_range(struct kvm *kvm,
 		    !is_last_spte(iter.old_spte, iter.level))
 			continue;
 
-		max_mapping_level = kvm_mmu_max_mapping_level(kvm, slot,
-							      iter.gfn, PG_LEVEL_NUM);
-
+		max_mapping_level = kvm_mmu_max_mapping_level(kvm, slot, iter.gfn);
 		WARN_ON(max_mapping_level < iter.level);
 
 		/*
