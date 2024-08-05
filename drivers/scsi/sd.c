@@ -103,8 +103,6 @@ MODULE_ALIAS_SCSI_DEVICE(TYPE_ZBC);
 
 #define SD_MINORS	16
 
-static void sd_config_write_same(struct scsi_disk *sdkp,
-		struct queue_limits *lim);
 static int  sd_revalidate_disk(struct gendisk *);
 static void sd_unlock_native_capacity(struct gendisk *disk);
 static void scsi_disk_release(struct device *cdev);
@@ -173,6 +171,73 @@ static void sd_config_discard(struct scsi_disk *sdkp, struct queue_limits *lim,
 
 	lim->max_hw_discard_sectors = max_blocks *
 		(logical_block_size >> SECTOR_SHIFT);
+}
+
+static void sd_disable_write_same(struct scsi_disk *sdkp)
+{
+	sdkp->device->no_write_same = 1;
+	sdkp->max_ws_blocks = 0;
+	blk_queue_disable_write_zeroes(sdkp->disk->queue);
+}
+
+static void sd_config_write_same(struct scsi_disk *sdkp,
+		struct queue_limits *lim)
+{
+	unsigned int logical_block_size = sdkp->device->sector_size;
+
+	if (sdkp->device->no_write_same) {
+		sdkp->max_ws_blocks = 0;
+		goto out;
+	}
+
+	/* Some devices can not handle block counts above 0xffff despite
+	 * supporting WRITE SAME(16). Consequently we default to 64k
+	 * blocks per I/O unless the device explicitly advertises a
+	 * bigger limit.
+	 */
+	if (sdkp->max_ws_blocks > SD_MAX_WS10_BLOCKS)
+		sdkp->max_ws_blocks = min_not_zero(sdkp->max_ws_blocks,
+						   (u32)SD_MAX_WS16_BLOCKS);
+	else if (sdkp->ws16 || sdkp->ws10 || sdkp->device->no_report_opcodes)
+		sdkp->max_ws_blocks = min_not_zero(sdkp->max_ws_blocks,
+						   (u32)SD_MAX_WS10_BLOCKS);
+	else {
+		sdkp->device->no_write_same = 1;
+		sdkp->max_ws_blocks = 0;
+	}
+
+	if (sdkp->lbprz && sdkp->lbpws)
+		sdkp->zeroing_mode = SD_ZERO_WS16_UNMAP;
+	else if (sdkp->lbprz && sdkp->lbpws10)
+		sdkp->zeroing_mode = SD_ZERO_WS10_UNMAP;
+	else if (sdkp->max_ws_blocks)
+		sdkp->zeroing_mode = SD_ZERO_WS;
+	else
+		sdkp->zeroing_mode = SD_ZERO_WRITE;
+
+	if (sdkp->max_ws_blocks &&
+	    sdkp->physical_block_size > logical_block_size) {
+		/*
+		 * Reporting a maximum number of blocks that is not aligned
+		 * on the device physical size would cause a large write same
+		 * request to be split into physically unaligned chunks by
+		 * __blkdev_issue_write_zeroes() even if the caller of this
+		 * functions took care to align the large request. So make sure
+		 * the maximum reported is aligned to the device physical block
+		 * size. This is only an optional optimization for regular
+		 * disks, but this is mandatory to avoid failure of large write
+		 * same requests directed at sequential write required zones of
+		 * host-managed ZBC disks.
+		 */
+		sdkp->max_ws_blocks =
+			round_down(sdkp->max_ws_blocks,
+				   bytes_to_logical(sdkp->device,
+						    sdkp->physical_block_size));
+	}
+
+out:
+	lim->max_write_zeroes_sectors =
+		sdkp->max_ws_blocks * (logical_block_size >> SECTOR_SHIFT);
 }
 
 static void sd_set_flush_flag(struct scsi_disk *sdkp,
@@ -1076,73 +1141,6 @@ static blk_status_t sd_setup_write_zeroes_cmnd(struct scsi_cmnd *cmd)
 		return sd_setup_write_same16_cmnd(cmd, false);
 
 	return sd_setup_write_same10_cmnd(cmd, false);
-}
-
-static void sd_disable_write_same(struct scsi_disk *sdkp)
-{
-	sdkp->device->no_write_same = 1;
-	sdkp->max_ws_blocks = 0;
-	blk_queue_disable_write_zeroes(sdkp->disk->queue);
-}
-
-static void sd_config_write_same(struct scsi_disk *sdkp,
-		struct queue_limits *lim)
-{
-	unsigned int logical_block_size = sdkp->device->sector_size;
-
-	if (sdkp->device->no_write_same) {
-		sdkp->max_ws_blocks = 0;
-		goto out;
-	}
-
-	/* Some devices can not handle block counts above 0xffff despite
-	 * supporting WRITE SAME(16). Consequently we default to 64k
-	 * blocks per I/O unless the device explicitly advertises a
-	 * bigger limit.
-	 */
-	if (sdkp->max_ws_blocks > SD_MAX_WS10_BLOCKS)
-		sdkp->max_ws_blocks = min_not_zero(sdkp->max_ws_blocks,
-						   (u32)SD_MAX_WS16_BLOCKS);
-	else if (sdkp->ws16 || sdkp->ws10 || sdkp->device->no_report_opcodes)
-		sdkp->max_ws_blocks = min_not_zero(sdkp->max_ws_blocks,
-						   (u32)SD_MAX_WS10_BLOCKS);
-	else {
-		sdkp->device->no_write_same = 1;
-		sdkp->max_ws_blocks = 0;
-	}
-
-	if (sdkp->lbprz && sdkp->lbpws)
-		sdkp->zeroing_mode = SD_ZERO_WS16_UNMAP;
-	else if (sdkp->lbprz && sdkp->lbpws10)
-		sdkp->zeroing_mode = SD_ZERO_WS10_UNMAP;
-	else if (sdkp->max_ws_blocks)
-		sdkp->zeroing_mode = SD_ZERO_WS;
-	else
-		sdkp->zeroing_mode = SD_ZERO_WRITE;
-
-	if (sdkp->max_ws_blocks &&
-	    sdkp->physical_block_size > logical_block_size) {
-		/*
-		 * Reporting a maximum number of blocks that is not aligned
-		 * on the device physical size would cause a large write same
-		 * request to be split into physically unaligned chunks by
-		 * __blkdev_issue_write_zeroes() even if the caller of this
-		 * functions took care to align the large request. So make sure
-		 * the maximum reported is aligned to the device physical block
-		 * size. This is only an optional optimization for regular
-		 * disks, but this is mandatory to avoid failure of large write
-		 * same requests directed at sequential write required zones of
-		 * host-managed ZBC disks.
-		 */
-		sdkp->max_ws_blocks =
-			round_down(sdkp->max_ws_blocks,
-				   bytes_to_logical(sdkp->device,
-						    sdkp->physical_block_size));
-	}
-
-out:
-	lim->max_write_zeroes_sectors =
-		sdkp->max_ws_blocks * (logical_block_size >> SECTOR_SHIFT);
 }
 
 static blk_status_t sd_setup_flush_cmnd(struct scsi_cmnd *cmd)
