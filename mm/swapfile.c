@@ -1493,6 +1493,58 @@ static void swap_entry_range_free(struct swap_info_struct *p, swp_entry_t entry,
 	swap_range_free(p, offset, nr_pages);
 }
 
+/*
+ * Free the contiguous swap entries as a whole, caller have to
+ * ensure all entries belong to the same folio.
+ */
+static void swap_entry_range_check_and_free(struct swap_info_struct *p,
+				  swp_entry_t entry, int nr, bool *any_only_cache)
+{
+	const unsigned long start_offset = swp_offset(entry);
+	const unsigned long end_offset = start_offset + nr;
+	unsigned long offset;
+	DECLARE_BITMAP(to_free, SWAPFILE_CLUSTER) = { 0 };
+	struct swap_cluster_info *ci;
+	int i = 0, nr_setbits = 0;
+	unsigned char count;
+
+	/*
+	 * Free and check swap_map count values corresponding to all contiguous
+	 * entries in the whole folio range.
+	 */
+	WARN_ON_ONCE(nr > SWAPFILE_CLUSTER);
+	ci = lock_cluster_or_swap_info(p, start_offset);
+	for (offset = start_offset; offset < end_offset; offset++, i++) {
+		if (data_race(p->swap_map[offset])) {
+			count = __swap_entry_free_locked(p, offset, 1);
+			if (!count) {
+				bitmap_set(to_free, i, 1);
+				nr_setbits++;
+			} else if (count == SWAP_HAS_CACHE) {
+				*any_only_cache = true;
+			}
+		} else {
+			WARN_ON_ONCE(1);
+		}
+	}
+	unlock_cluster_or_swap_info(p, ci);
+
+	/*
+	 * If the swap_map count values corresponding to all contiguous entries are
+	 * all zero excluding SWAP_HAS_CACHE, the entries will be freed directly by
+	 * skippping percpu swp_slots caches, which can avoid frequent swap_info
+	 * locking for every individual entry.
+	 */
+	if (nr > 1 && nr_setbits == nr) {
+		spin_lock(&p->lock);
+		swap_entry_range_free(p, entry, nr);
+		spin_unlock(&p->lock);
+	} else {
+		for_each_set_bit(i, to_free, SWAPFILE_CLUSTER)
+			free_swap_slot(swp_entry(p->type, start_offset + i));
+	}
+}
+
 static void cluster_swap_free_nr(struct swap_info_struct *sis,
 		unsigned long offset, int nr_pages,
 		unsigned char usage)
@@ -1809,6 +1861,14 @@ void free_swap_and_cache_nr(swp_entry_t entry, int nr)
 		goto out;
 
 	/*
+	 * Try to free all contiguous entries about mTHP as a whole.
+	 */
+	if (IS_ENABLED(CONFIG_THP_SWAP) && nr > 1) {
+		swap_entry_range_check_and_free(si, entry, nr, &any_only_cache);
+		goto free_cache;
+	}
+
+	/*
 	 * First free all entries in the range.
 	 */
 	for (offset = start_offset; offset < end_offset; offset++) {
@@ -1821,6 +1881,7 @@ void free_swap_and_cache_nr(swp_entry_t entry, int nr)
 		}
 	}
 
+free_cache:
 	/*
 	 * Short-circuit the below loop if none of the entries had their
 	 * reference drop to zero.
