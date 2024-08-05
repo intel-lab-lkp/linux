@@ -69,7 +69,6 @@ extern struct kmem_cache *delayacct_cache;
 extern void delayacct_init(void);
 
 extern void __delayacct_tsk_init(struct task_struct *);
-extern void __delayacct_tsk_exit(struct task_struct *);
 extern void __delayacct_blkio_start(void);
 extern void __delayacct_blkio_end(struct task_struct *);
 extern int delayacct_add_tsk(struct taskstats *, struct task_struct *);
