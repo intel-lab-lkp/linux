@@ -511,7 +511,7 @@ static void paicrypt_have_samples(void)
 	struct paicrypt_map *cpump = mp->mapptr;
 	struct perf_event *event;
 
-	list_for_each_entry(event, &cpump->syswide_list, hw.tp_list)
+	list_for_each_entry(event, &cpump->syswide_list, hw.pai_node)
 		paicrypt_have_sample(event, cpump);
 }
 

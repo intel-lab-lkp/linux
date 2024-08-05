@@ -179,6 +179,9 @@ struct hw_perf_event {
 			u64	pwr_acc;
 			u64	ptsc;
 		};
+		struct { /* s390 processor assist information counter */
+			struct list_head	pai_node;
+		};
 #ifdef CONFIG_HAVE_HW_BREAKPOINT
 		struct { /* breakpoint */
 			/*
