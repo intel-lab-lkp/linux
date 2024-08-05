@@ -931,7 +931,6 @@ struct perf_event_context {
 	struct list_head		event_list;
 
 	int				nr_events;
-	int				nr_user;
 	int				is_active;
 
 	int				nr_task_data;
