@@ -159,6 +159,7 @@ static bool pcie_ats_disabled;
 
 /* If set, the PCI config space of each device is printed during boot. */
 bool pci_early_dump;
+const char *pci_speed_2_5g;
 
 bool pci_ats_disabled(void)
 {
@@ -374,7 +375,7 @@ free_and_exit:
  * Returns 1 if the string matches the device, 0 if it does not and
  * a negative error code if the string cannot be parsed.
  */
-static int pci_dev_str_match(struct pci_dev *dev, const char *p,
+int pci_dev_str_match(struct pci_dev *dev, const char *p,
 			     const char **endptr)
 {
 	int ret;
@@ -423,6 +424,7 @@ found:
 	*endptr = p;
 	return 1;
 }
+EXPORT_SYMBOL_GPL(pci_dev_str_match);
 
 static u8 __pci_find_next_cap_ttl(struct pci_bus *bus, unsigned int devfn,
 				  u8 pos, int cap, int *ttl)
@@ -6904,6 +6906,8 @@ static int __init pci_setup(char *str)
 				disable_acs_redir_param = str + 18;
 			} else if (!strncmp(str, "config_acs=", 11)) {
 				config_acs_param = str + 11;
+			} else if (!strncmp(str, "speed2_5g=", 10)) {
+				pci_speed_2_5g = str + 10;
 			} else {
 				pr_err("PCI: Unknown option `%s'\n", str);
 			}

@@ -1846,6 +1846,45 @@ static void early_dump_pci_device(struct pci_dev *pdev)
 		       value, 256, false);
 }
 
+static void pcie_retrain_downstream_2_5g(struct pci_dev *pdev)
+{
+	u16 lnkctl2;
+	const char *p;
+	int ret;
+
+	p = pci_speed_2_5g;
+	while (*p) {
+		ret = pci_dev_str_match(pdev, p, &p);
+		if (ret < 0) {
+			pr_info_once("PCI: Can't parse pci_speed_2_5g parameter: %s\n",
+				pci_speed_2_5g);
+			break;
+		} else if (ret == 1) {
+			/* Found a match */
+			break;
+		}
+
+		if (*p != ';' && *p != ',') {
+			/* End of param or invalid format */
+			break;
+		}
+		p++;
+	}
+
+	if (ret != 1)
+		return;
+
+	pci_info(pdev, "set downstream link at 2.5GT/s\n");
+	pcie_capability_read_word(pdev, PCI_EXP_LNKCTL2, &lnkctl2);
+	lnkctl2 &= ~PCI_EXP_LNKCTL2_TLS;
+	lnkctl2 |= PCI_EXP_LNKCTL2_TLS_2_5GT;
+	pcie_capability_write_word(pdev, PCI_EXP_LNKCTL2, lnkctl2);
+
+	if (pcie_retrain_link(pdev, true)) {
+		pci_info(pdev, "retraining failed\n");
+	}
+}
+
 static const char *pci_type_str(struct pci_dev *dev)
 {
 	static const char * const str[] = {
@@ -2041,6 +2080,8 @@ int pci_setup_device(struct pci_dev *dev)
 			pci_read_config_word(dev, pos + PCI_SSVID_VENDOR_ID, &dev->subsystem_vendor);
 			pci_read_config_word(dev, pos + PCI_SSVID_DEVICE_ID, &dev->subsystem_device);
 		}
+		if (pci_speed_2_5g)
+			pcie_retrain_downstream_2_5g(dev);
 		break;
 
 	case PCI_HEADER_TYPE_CARDBUS:		    /* CardBus bridge header */

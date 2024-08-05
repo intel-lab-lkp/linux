@@ -4617,6 +4617,14 @@
 		nomio		[S390] Do not use MIO instructions.
 		norid		[S390] ignore the RID field and force use of
 				one PCI domain per PCI function
+		speed2_5g=
+				Format:
+				[<domain>:]<bus>:<dev>.<func>[/<dev>.<func>]*
+				pci:<vendor>:<device>[:<subvendor>:<subdevice>]
+				Specify one or more PCI bridge devices (in the
+				format specified above) separated by semicolons.
+				Each bridge device specified will limit the bridge
+				and subsystem devices speed to 2.5GT/s.
 
 	pcie_aspm=	[PCIE] Forcibly enable or ignore PCIe Active State Power
 			Management.

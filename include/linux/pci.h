@@ -1184,6 +1184,7 @@ void pci_sort_breadthfirst(void);
 
 u8 pci_bus_find_capability(struct pci_bus *bus, unsigned int devfn, int cap);
 u8 pci_find_capability(struct pci_dev *dev, int cap);
+int pci_dev_str_match(struct pci_dev *dev, const char *p, const char **endptr);
 u8 pci_find_next_capability(struct pci_dev *dev, u8 pos, int cap);
 u8 pci_find_ht_capability(struct pci_dev *dev, int ht_cap);
 u8 pci_find_next_ht_capability(struct pci_dev *dev, u8 pos, int ht_cap);
@@ -1983,6 +1984,8 @@ static inline int pci_register_driver(struct pci_driver *drv)
 { return 0; }
 static inline void pci_unregister_driver(struct pci_driver *drv) { }
 static inline u8 pci_find_capability(struct pci_dev *dev, int cap)
+{ return 0; }
+static inline int pci_dev_str_match(struct pci_dev *dev, const char *p, const char **endptr)
 { return 0; }
 static inline u8 pci_find_next_capability(struct pci_dev *dev, u8 post, int cap)
 { return 0; }
