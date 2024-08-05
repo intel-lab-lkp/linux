@@ -286,7 +286,7 @@ EXPORT_SYMBOL(nr_online_nodes);
 #endif
 
 static bool page_contains_unaccepted(struct page *page, unsigned int order);
-static void accept_page(struct page *page, unsigned int order);
+static void accept_page_memory(struct page *page, unsigned int order);
 static bool cond_accept_memory(struct zone *zone, unsigned int order);
 static inline bool has_unaccepted_memory(void);
 static bool __free_unaccepted(struct page *page);
@@ -1263,7 +1263,7 @@ void __meminit __free_pages_core(struct page *page, unsigned int order,
 		if (order == MAX_PAGE_ORDER && __free_unaccepted(page))
 			return;
 
-		accept_page(page, order);
+		accept_page_memory(page, order);
 	}
 
 	/*
@@ -6946,7 +6946,7 @@ static bool page_contains_unaccepted(struct page *page, unsigned int order)
 	return range_contains_unaccepted_memory(start, end);
 }
 
-static void accept_page(struct page *page, unsigned int order)
+static void accept_page_memory(struct page *page, unsigned int order)
 {
 	phys_addr_t start = page_to_phys(page);
 
@@ -6975,7 +6975,7 @@ static bool try_to_accept_memory_one(struct zone *zone)
 	__ClearPageUnaccepted(page);
 	spin_unlock_irqrestore(&zone->lock, flags);
 
-	accept_page(page, MAX_PAGE_ORDER);
+	accept_page_memory(page, MAX_PAGE_ORDER);
 
 	__free_pages_ok(page, MAX_PAGE_ORDER, FPI_TO_TAIL);
 
@@ -7047,7 +7047,7 @@ static bool page_contains_unaccepted(struct page *page, unsigned int order)
 	return false;
 }
 
-static void accept_page(struct page *page, unsigned int order)
+static void accept_page_memory(struct page *page, unsigned int order)
 {
 }
 
