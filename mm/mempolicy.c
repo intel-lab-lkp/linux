@@ -2207,25 +2207,28 @@ static struct page *alloc_pages_preferred_many(gfp_t gfp, unsigned int order,
 }
 
 /**
- * alloc_pages_mpol - Allocate pages according to NUMA mempolicy.
+ * folio_alloc_mpol_noprof - Allocate pages according to NUMA mempolicy.
  * @gfp: GFP flags.
- * @order: Order of the page allocation.
+ * @order: Order of the folio allocation.
  * @pol: Pointer to the NUMA mempolicy.
  * @ilx: Index for interleave mempolicy (also distinguishes alloc_pages()).
  * @nid: Preferred node (usually numa_node_id() but @mpol may override it).
  *
- * Return: The page on success or NULL if allocation fails.
+ * Return: The folio on success or NULL if allocation fails.
  */
-static struct page *alloc_pages_mpol_noprof(gfp_t gfp, unsigned int order,
+struct folio *folio_alloc_mpol_noprof(gfp_t gfp, unsigned int order,
 		struct mempolicy *pol, pgoff_t ilx, int nid)
 {
 	nodemask_t *nodemask;
-	struct page *page;
+	struct folio *folio;
 
+	gfp |= __GFP_COMP;
 	nodemask = policy_nodemask(gfp, pol, ilx, &nid);
 
 	if (pol->mode == MPOL_PREFERRED_MANY)
-		return alloc_pages_preferred_many(gfp, order, nid, nodemask);
+		return page_rmappable_folio(
+				alloc_pages_preferred_many(gfp, order,
+					nid, nodemask));
 
 	if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) &&
 	    /* filter "hugepage" allocation, unless from alloc_pages() */
@@ -2247,10 +2250,12 @@ static struct page *alloc_pages_mpol_noprof(gfp_t gfp, unsigned int order,
 			 * First, try to allocate THP only on local node, but
 			 * don't reclaim unnecessarily, just compact.
 			 */
-			page = __alloc_pages_node_noprof(nid,
-				gfp | __GFP_THISNODE | __GFP_NORETRY, order);
-			if (page || !(gfp & __GFP_DIRECT_RECLAIM))
-				return page;
+			folio = __folio_alloc_node_noprof(
+					gfp | __GFP_THISNODE | __GFP_NORETRY,
+					order, nid);
+
+			if (folio || !(gfp & __GFP_DIRECT_RECLAIM))
+				return folio;
 			/*
 			 * If hugepage allocations are configured to always
 			 * synchronous compact or the vma has been madvised
@@ -2260,26 +2265,19 @@ static struct page *alloc_pages_mpol_noprof(gfp_t gfp, unsigned int order,
 		}
 	}
 
-	page = __alloc_pages_noprof(gfp, order, nid, nodemask);
+	folio = __folio_alloc_noprof(gfp, order, nid, nodemask);
 
-	if (unlikely(pol->mode == MPOL_INTERLEAVE) && page) {
+	if (unlikely(pol->mode == MPOL_INTERLEAVE) && folio) {
 		/* skip NUMA_INTERLEAVE_HIT update if numa stats is disabled */
 		if (static_branch_likely(&vm_numa_stat_key) &&
-		    page_to_nid(page) == nid) {
+		    folio_nid(folio) == nid) {
 			preempt_disable();
-			__count_numa_event(page_zone(page), NUMA_INTERLEAVE_HIT);
+			__count_numa_event(folio_zone(folio), NUMA_INTERLEAVE_HIT);
 			preempt_enable();
 		}
 	}
 
-	return page;
-}
-
-struct folio *folio_alloc_mpol_noprof(gfp_t gfp, unsigned int order,
-		struct mempolicy *pol, pgoff_t ilx, int nid)
-{
-	return page_rmappable_folio(alloc_pages_mpol_noprof(gfp | __GFP_COMP,
-							order, pol, ilx, nid));
+	return folio;
 }
 
 /**
