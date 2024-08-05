@@ -126,7 +126,7 @@ struct bma180_part_info {
 #define BMA250_SUSPEND_MASK	BIT(7) /* chip will sleep */
 #define BMA250_LOWPOWER_MASK	BIT(6)
 #define BMA250_DATA_INTEN_MASK	BIT(4)
-#define BMA250_INT1_DATA_MASK	BIT(0)
+#define BMA250_INT2_DATA_MASK	BIT(7)
 #define BMA250_INT_RESET_MASK	BIT(7) /* Reset pending interrupts */
 
 struct bma180_data {
@@ -425,10 +425,9 @@ static int bma250_chip_config(struct bma180_data *data)
 	if (ret)
 		goto err;
 	/*
-	 * This enables dataready interrupt on the INT1 pin
-	 * FIXME: support using the INT2 pin
+	 * This enables dataready interrupt on the INT2 pin
 	 */
-	ret = bma180_set_bits(data, BMA250_INT_MAP_REG, BMA250_INT1_DATA_MASK, 1);
+	ret = bma180_set_bits(data, BMA250_INT_MAP_REG, BMA250_INT2_DATA_MASK, 1);
 	if (ret)
 		goto err;
 
