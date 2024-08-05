@@ -521,7 +521,6 @@ idmap_lookup(struct svc_rqst *rqstp,
 		*item = lookup_fn(detail, key);
 		if (*item != prev_item)
 			goto retry;
-		cache_put(&(*item)->h, detail);
 	}
 	return ret;
 }
