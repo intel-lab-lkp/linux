@@ -1619,6 +1619,17 @@ static void recover_huge_pages_range(struct kvm *kvm,
 		while (max_mapping_level > iter.level)
 			tdp_iter_step_up(&iter);
 
+		/*
+		 * Re-check that iter.old_spte still points to a page table.
+		 * Since mmu_lock is held for read and tdp_iter_step_up()
+		 * re-reads iter.sptep, it's possible the SPTE was zapped or
+		 * recovered by another CPU in between stepping down and
+		 * stepping back up.
+		 */
+		if (!is_shadow_present_pte(iter.old_spte) ||
+		    is_last_spte(iter.old_spte, iter.level))
+			continue;
+
 		if (!tdp_mmu_set_spte_atomic(kvm, &iter, huge_spte))
 			flush = true;
 
