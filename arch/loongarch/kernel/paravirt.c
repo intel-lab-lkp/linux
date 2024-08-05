@@ -9,6 +9,7 @@
 #include <linux/static_call.h>
 #include <asm/paravirt.h>
 
+DEFINE_STATIC_KEY_FALSE(virt_spin_lock_key);
 static int has_steal_clock;
 struct static_key paravirt_steal_enabled;
 struct static_key paravirt_steal_rq_enabled;
@@ -299,4 +300,12 @@ int __init pv_time_init(void)
 	pr_info("Using paravirt steal-time\n");
 
 	return 0;
+}
+
+void __init pv_spinlock_init(void)
+{
+	if (!cpu_has_hypervisor)
+		return;
+
+	static_branch_enable(&virt_spin_lock_key);
 }
