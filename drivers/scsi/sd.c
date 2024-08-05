@@ -104,7 +104,6 @@ MODULE_ALIAS_SCSI_DEVICE(TYPE_ZBC);
 #define SD_MINORS	16
 
 static int  sd_revalidate_disk(struct gendisk *);
-static void sd_unlock_native_capacity(struct gendisk *disk);
 
 static DEFINE_IDA(sd_index_ida);
 
@@ -2140,21 +2139,6 @@ static void scsi_disk_free_disk(struct gendisk *disk)
 	put_device(&sdkp->disk_dev);
 }
 
-static const struct block_device_operations sd_fops = {
-	.owner			= THIS_MODULE,
-	.open			= sd_open,
-	.release		= sd_release,
-	.ioctl			= sd_ioctl,
-	.getgeo			= sd_getgeo,
-	.compat_ioctl		= blkdev_compat_ptr_ioctl,
-	.check_events		= sd_check_events,
-	.unlock_native_capacity	= sd_unlock_native_capacity,
-	.report_zones		= sd_zbc_report_zones,
-	.get_unique_id		= sd_get_unique_id,
-	.free_disk		= scsi_disk_free_disk,
-	.pr_ops			= &sd_pr_ops,
-};
-
 /**
  *	sd_eh_reset - reset error handling callback
  *	@scmd:		sd-issued command that has failed
@@ -3844,6 +3828,21 @@ static void sd_unlock_native_capacity(struct gendisk *disk)
 	if (sdev->host->hostt->unlock_native_capacity)
 		sdev->host->hostt->unlock_native_capacity(sdev);
 }
+
+static const struct block_device_operations sd_fops = {
+	.owner			= THIS_MODULE,
+	.open			= sd_open,
+	.release		= sd_release,
+	.ioctl			= sd_ioctl,
+	.getgeo			= sd_getgeo,
+	.compat_ioctl		= blkdev_compat_ptr_ioctl,
+	.check_events		= sd_check_events,
+	.unlock_native_capacity	= sd_unlock_native_capacity,
+	.report_zones		= sd_zbc_report_zones,
+	.get_unique_id		= sd_get_unique_id,
+	.free_disk		= scsi_disk_free_disk,
+	.pr_ops			= &sd_pr_ops,
+};
 
 /**
  *	sd_format_disk_name - format disk name
