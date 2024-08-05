@@ -69,6 +69,7 @@ struct gfn_to_pfn_cache {
 	void *khva;
 	kvm_pfn_t pfn;
 	bool active;
+	bool validating;
 	bool valid;
 };
 
