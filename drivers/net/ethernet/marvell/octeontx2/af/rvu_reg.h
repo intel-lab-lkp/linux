@@ -51,6 +51,8 @@
 #define RVU_AF_SMMU_ADDR_RSP_STS	    (0x6010)
 #define RVU_AF_SMMU_ADDR_TLN		    (0x6018)
 #define RVU_AF_SMMU_TLN_FLIT0		    (0x6020)
+#define RVU_AF_BAR2_SEL			(0x9000000)
+#define RVU_AF_BAR2_PFID		(0x16400)
 
 /* Admin function's privileged PF/VF registers */
 #define RVU_PRIV_CONST                      (0x8000000)
@@ -433,6 +435,7 @@
 #define NIX_AF_MDQX_IN_MD_COUNT(a)	(0x14e0 | (a) << 16)
 #define NIX_AF_SMQX_STATUS(a)		(0x730 | (a) << 16)
 #define NIX_AF_MDQX_OUT_MD_COUNT(a)	(0xdb0 | (a) << 16)
+#define NIX_LF_CINTX_INT_W1S(a)		(0xd30 | (a) << 12)
 
 #define NIX_PRIV_AF_INT_CFG		(0x8000000)
 #define NIX_PRIV_LFX_CFG		(0x8000010)
@@ -445,6 +448,7 @@
 
 #define NIX_CONST_MAX_BPIDS		GENMASK_ULL(23, 12)
 #define NIX_CONST_SDP_CHANS		GENMASK_ULL(11, 0)
+#define NIX_VLAN_ETYPE_MASK		GENMASK_ULL(63, 48)
 
 #define NIX_AF_MDQ_PARENT_MASK         GENMASK_ULL(24, 16)
 #define NIX_AF_TL4_PARENT_MASK         GENMASK_ULL(23, 16)
