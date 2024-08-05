@@ -1274,7 +1274,7 @@ static int __hrtimer_start_range_ns(struct hrtimer *timer, ktime_t tim,
  * hrtimer_start_range_ns - (re)start an hrtimer
  * @timer:	the timer to be added
  * @tim:	expiry time
- * @delta_ns:	"slack" range for the timer
+ * @delta_ns:	"slack" range for the timer for SCHED_OTHER tasks
  * @mode:	timer mode: absolute (HRTIMER_MODE_ABS) or
  *		relative (HRTIMER_MODE_REL), and pinned (HRTIMER_MODE_PINNED);
  *		softirq based mode is considered for debug purpose only!
@@ -1298,6 +1298,10 @@ void hrtimer_start_range_ns(struct hrtimer *timer, ktime_t tim,
 		WARN_ON_ONCE(!(mode & HRTIMER_MODE_HARD) ^ !timer->is_hard);
 
 	base = lock_hrtimer_base(timer, &flags);
+
+	/* rt-tasks do not have a timer slack for obvious reasons */
+	if (rt_task(current))
+		delta_ns = 0;
 
 	if (__hrtimer_start_range_ns(timer, tim, delta_ns, mode, base))
 		hrtimer_reprogram(timer, true);
