@@ -8,6 +8,13 @@
 #ifndef __RENESAS_RZV2H_CPG_H__
 #define __RENESAS_RZV2H_CPG_H__
 
+#define CPG_CDDIV0		(0x400)
+
+#define DDIV_PACK(offset, bitpos, mon) \
+		(((offset) << 9) | ((bitpos) << 5) | (mon))
+
+#define CDDIV0_DIVCTL2	DDIV_PACK(CPG_CDDIV0, 8, 2)
+
 /**
  * Definitions of CPG Core Clocks
  *
