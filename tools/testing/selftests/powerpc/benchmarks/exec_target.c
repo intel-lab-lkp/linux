@@ -7,10 +7,16 @@
  */
 
 #define _GNU_SOURCE
-#include <unistd.h>
 #include <sys/syscall.h>
 
 void _start(void)
 {
-	syscall(SYS_exit, 0);
+	asm volatile (
+		"li %%r0, %[sys_exit];"
+		"li %%r3, 0;"
+		"sc;"
+		:
+		: [sys_exit] "i" (SYS_exit)
+		: "r0", "r3"
+	);
 }
