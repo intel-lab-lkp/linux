@@ -16,12 +16,18 @@
  * @invalidate_end: called after invalidate_begin returns success. Optional.
  * @prepare: called before a folio is mapped into the guest address space.
  *           Optional.
+ * @accessible: called after prepare returns success and before it's mapped
+ *              into the guest address space. Returns 0 if the folio can be
+ *              accessed.
+ *              Optional. If not present, assumes folios are never accessible.
  * @release: Called when releasing the guest_memfd file. Required.
  */
 struct guest_memfd_operations {
 	int (*invalidate_begin)(struct inode *inode, pgoff_t offset, unsigned long nr);
 	void (*invalidate_end)(struct inode *inode, pgoff_t offset, unsigned long nr);
 	int (*prepare)(struct inode *inode, pgoff_t offset, struct folio *folio);
+	int (*accessible)(struct inode *inode, struct folio *folio,
+			  pgoff_t offset, unsigned long nr);
 	int (*release)(struct inode *inode);
 };
 
@@ -48,5 +54,6 @@ struct file *guest_memfd_alloc(const char *name,
 			       const struct guest_memfd_operations *ops,
 			       loff_t size, unsigned long flags);
 bool is_guest_memfd(struct file *file, const struct guest_memfd_operations *ops);
+int guest_memfd_make_inaccessible(struct file *file, struct folio *folio);
 
 #endif
