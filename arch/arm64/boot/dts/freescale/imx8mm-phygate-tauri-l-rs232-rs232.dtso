@@ -15,7 +15,8 @@
 /plugin/;
 
 &{/} {
-	compatible = "phytec,imx8mm-phygate-tauri-l";
+	compatible = "phytec,imx8mm-phygate-tauri-l",
+		     "phytec,imx8mm-phycore-som", "fsl,imx8mm";
 
 };
 
