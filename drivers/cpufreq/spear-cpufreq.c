@@ -173,7 +173,7 @@ static int spear_cpufreq_probe(struct platform_device *pdev)
 	struct device_node *np;
 	struct cpufreq_frequency_table *freq_tbl;
 	u32 val;
-	int cnt, i, ret;
+	int cnt, i = 0, ret;
 
 	np = of_cpu_device_node_get(0);
 	if (!np) {
