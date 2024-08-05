@@ -2332,6 +2332,7 @@ EXPORT_SYMBOL(vma_alloc_folio_noprof);
 struct page *alloc_pages_noprof(gfp_t gfp, unsigned int order)
 {
 	struct mempolicy *pol = &default_policy;
+	struct folio *folio;
 
 	/*
 	 * No reference counting needed for current->mempolicy
@@ -2340,8 +2341,10 @@ struct page *alloc_pages_noprof(gfp_t gfp, unsigned int order)
 	if (!in_interrupt() && !(gfp & __GFP_THISNODE))
 		pol = get_task_policy(current);
 
-	return alloc_pages_mpol_noprof(gfp, order, pol, NO_INTERLEAVE_INDEX,
-				       numa_node_id());
+	folio = folio_alloc_mpol_noprof(gfp, order, pol, NO_INTERLEAVE_INDEX,
+			numa_node_id());
+
+	return &folio->page;
 }
 EXPORT_SYMBOL(alloc_pages_noprof);
 
