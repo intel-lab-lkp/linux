@@ -1598,13 +1598,18 @@ int collapse_pte_mapped_thp(struct mm_struct *mm, unsigned long addr,
 	if (userfaultfd_armed(vma) && !(vma->vm_flags & VM_SHARED))
 		pml = pmd_lock(mm, pmd);
 
-	start_pte = pte_offset_map_nolock(mm, pmd, NULL, haddr, &ptl);
+	start_pte = pte_offset_map_nolock(mm, pmd, &pgt_pmd, haddr, &ptl);
 	if (!start_pte)		/* mmap_lock + page lock should prevent this */
 		goto abort;
 	if (!pml)
 		spin_lock(ptl);
 	else if (ptl != pml)
 		spin_lock_nested(ptl, SINGLE_DEPTH_NESTING);
+
+	/* pmd entry may be changed by others */
+	if (unlikely(IS_ENABLED(CONFIG_PT_RECLAIM) && !pml &&
+		     !pmd_same(pgt_pmd, pmdp_get_lockless(pmd))))
+		goto abort;
 
 	/* step 2: clear page table and adjust rmap */
 	for (i = 0, addr = haddr, pte = start_pte;
@@ -1651,6 +1656,11 @@ int collapse_pte_mapped_thp(struct mm_struct *mm, unsigned long addr,
 	/* step 4: remove empty page table */
 	if (!pml) {
 		pml = pmd_lock(mm, pmd);
+		if (unlikely(IS_ENABLED(CONFIG_PT_RECLAIM) &&
+			     !pmd_same(pgt_pmd, pmdp_get_lockless(pmd)))) {
+			spin_unlock(pml);
+			goto pmd_change;
+		}
 		if (ptl != pml)
 			spin_lock_nested(ptl, SINGLE_DEPTH_NESTING);
 	}
@@ -1682,6 +1692,7 @@ abort:
 		pte_unmap_unlock(start_pte, ptl);
 	if (pml && pml != ptl)
 		spin_unlock(pml);
+pmd_change:
 	if (notified)
 		mmu_notifier_invalidate_range_end(&range);
 drop_folio:
@@ -1703,6 +1714,7 @@ static void retract_page_tables(struct address_space *mapping, pgoff_t pgoff)
 		spinlock_t *pml;
 		spinlock_t *ptl;
 		bool skipped_uffd = false;
+		pte_t *pte;
 
 		/*
 		 * Check vma->anon_vma to exclude MAP_PRIVATE mappings that
@@ -1738,11 +1750,17 @@ static void retract_page_tables(struct address_space *mapping, pgoff_t pgoff)
 					addr, addr + HPAGE_PMD_SIZE);
 		mmu_notifier_invalidate_range_start(&range);
 
+		pte = pte_offset_map_nolock(mm, pmd, &pgt_pmd, addr, &ptl);
+		if (!pte)
+			goto skip;
+
 		pml = pmd_lock(mm, pmd);
-		ptl = pte_lockptr(mm, pmd);
 		if (ptl != pml)
 			spin_lock_nested(ptl, SINGLE_DEPTH_NESTING);
 
+		if (unlikely(IS_ENABLED(CONFIG_PT_RECLAIM) &&
+		    !pmd_same(pgt_pmd, pmdp_get_lockless(pmd))))
+			goto unlock_skip;
 		/*
 		 * Huge page lock is still held, so normally the page table
 		 * must remain empty; and we have already skipped anon_vma
@@ -1758,11 +1776,11 @@ static void retract_page_tables(struct address_space *mapping, pgoff_t pgoff)
 			pgt_pmd = pmdp_collapse_flush(vma, addr, pmd);
 			pmdp_get_lockless_sync();
 		}
-
+unlock_skip:
+		pte_unmap_unlock(pte, ptl);
 		if (ptl != pml)
-			spin_unlock(ptl);
-		spin_unlock(pml);
-
+			spin_unlock(pml);
+skip:
 		mmu_notifier_invalidate_range_end(&range);
 
 		if (!skipped_uffd) {

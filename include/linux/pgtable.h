@@ -447,6 +447,20 @@ static inline void arch_check_zapped_pmd(struct vm_area_struct *vma,
 }
 #endif
 
+#ifndef arch_flush_tlb_before_set_huge_page
+static inline void arch_flush_tlb_before_set_huge_page(struct mm_struct *mm,
+						       unsigned long addr)
+{
+}
+#endif
+
+#ifndef arch_flush_tlb_before_set_pte_page
+static inline void arch_flush_tlb_before_set_pte_page(struct mm_struct *mm,
+						      unsigned long addr)
+{
+}
+#endif
+
 #ifndef __HAVE_ARCH_PTEP_GET_AND_CLEAR
 static inline pte_t ptep_get_and_clear(struct mm_struct *mm,
 				       unsigned long address,

@@ -1441,4 +1441,18 @@ static inline bool try_to_accept_memory(struct zone *zone, unsigned int order)
 }
 #endif /* CONFIG_UNACCEPTED_MEMORY */
 
+#ifdef CONFIG_PT_RECLAIM
+void try_to_reclaim_pgtables(struct mmu_gather *tlb, struct vm_area_struct *vma,
+			     unsigned long start_addr, unsigned long end_addr,
+			     struct zap_details *details);
+#else
+static inline void try_to_reclaim_pgtables(struct mmu_gather *tlb,
+					   struct vm_area_struct *vma,
+					   unsigned long start_addr,
+					   unsigned long end_addr,
+					   struct zap_details *details)
+{
+}
+#endif /* CONFIG_PT_RECLAIM */
+
 #endif	/* __MM_INTERNAL_H */
