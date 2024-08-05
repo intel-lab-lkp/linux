@@ -598,7 +598,7 @@ static void migrate_vma_insert_page(struct migrate_vma *migrate,
 		goto abort;
 	if (pmd_trans_huge(*pmdp) || pmd_devmap(*pmdp))
 		goto abort;
-	if (pte_alloc(mm, pmdp))
+	if (pte_alloc(mm, pmdp, addr))
 		goto abort;
 	if (unlikely(anon_vma_prepare(vma)))
 		goto abort;
