@@ -300,8 +300,6 @@ static inline struct page *alloc_pages_node_noprof(int nid, gfp_t gfp_mask,
 
 #ifdef CONFIG_NUMA
 struct page *alloc_pages_noprof(gfp_t gfp, unsigned int order);
-struct page *alloc_pages_mpol_noprof(gfp_t gfp, unsigned int order,
-		struct mempolicy *mpol, pgoff_t ilx, int nid);
 struct folio *folio_alloc_noprof(gfp_t gfp, unsigned int order);
 struct folio *folio_alloc_mpol_noprof(gfp_t gfp, unsigned int order,
 		struct mempolicy *mpol, pgoff_t ilx, int nid);
@@ -311,11 +309,6 @@ struct folio *vma_alloc_folio_noprof(gfp_t gfp, int order, struct vm_area_struct
 static inline struct page *alloc_pages_noprof(gfp_t gfp_mask, unsigned int order)
 {
 	return alloc_pages_node_noprof(numa_node_id(), gfp_mask, order);
-}
-static inline struct page *alloc_pages_mpol_noprof(gfp_t gfp, unsigned int order,
-		struct mempolicy *mpol, pgoff_t ilx, int nid)
-{
-	return alloc_pages_noprof(gfp, order);
 }
 static inline struct folio *folio_alloc_noprof(gfp_t gfp, unsigned int order)
 {
