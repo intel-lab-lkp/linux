@@ -2311,7 +2311,7 @@ EXPORT_SYMBOL_GPL(schedule_hrtimeout_range_clock);
  *
  * The @delta argument gives the kernel the freedom to schedule the
  * actual wakeup to a time that is both power and performance friendly
- * for regular (non RT/DL) tasks.
+ * for regular (non RT/DL or PI boosted) tasks.
  * The kernel give the normal best effort behavior for "@expires+@delta",
  * but may decide to fire the timer earlier, but no earlier than @expires.
  *
