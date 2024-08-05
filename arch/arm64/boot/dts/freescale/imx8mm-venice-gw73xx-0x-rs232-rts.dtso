@@ -16,7 +16,7 @@
 /plugin/;
 
 &{/} {
-	compatible = "gw,imx8mm-gw73xx-0x";
+	compatible = "gw,imx8mm-gw73xx-0x", "fsl,imx8mm";
 };
 
 &gpio4 {
