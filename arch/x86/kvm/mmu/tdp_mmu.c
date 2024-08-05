@@ -1575,15 +1575,16 @@ void kvm_tdp_mmu_clear_dirty_pt_masked(struct kvm *kvm,
 		clear_dirty_pt_masked(kvm, root, gfn, mask, wrprot);
 }
 
-static void zap_collapsible_spte_range(struct kvm *kvm,
-				       struct kvm_mmu_page *root,
-				       const struct kvm_memory_slot *slot)
+static void recover_huge_pages_range(struct kvm *kvm,
+				     struct kvm_mmu_page *root,
+				     const struct kvm_memory_slot *slot)
 {
 	gfn_t start = slot->base_gfn;
 	gfn_t end = start + slot->npages;
 	struct tdp_iter iter;
 	int max_mapping_level;
 	bool flush = false;
+	u64 huge_spte;
 
 	rcu_read_lock();
 
@@ -1608,18 +1609,19 @@ static void zap_collapsible_spte_range(struct kvm *kvm,
 			continue;
 
 		/*
-		 * The page can be remapped at a higher level, so step
-		 * up to zap the parent SPTE.
+		 * Construct the huge SPTE based on the small SPTE and then step
+		 * back up to install it.
 		 */
+		huge_spte = make_huge_spte(kvm, iter.old_spte, max_mapping_level);
 		while (max_mapping_level > iter.level)
 			tdp_iter_step_up(&iter);
 
-		if (!tdp_mmu_set_spte_atomic(kvm, &iter, SHADOW_NONPRESENT_VALUE))
+		if (!tdp_mmu_set_spte_atomic(kvm, &iter, huge_spte))
 			flush = true;
 
 		/*
-		 * If the atomic zap fails, the iter will recurse back into
-		 * the same subtree to retry.
+		 * If the cmpxchg fails, the iter will recurse back into the
+		 * same subtree to retry.
 		 */
 	}
 
@@ -1630,17 +1632,21 @@ static void zap_collapsible_spte_range(struct kvm *kvm,
 }
 
 /*
- * Zap non-leaf SPTEs (and free their associated page tables) which could be
- * replaced by huge pages, for GFNs within the slot.
+ * Recover huge page mappings within the slot by replacing non-leaf SPTEs with
+ * huge SPTEs where possible.
+ *
+ * Note that all huge page mappings are recovered, including NX huge pages that
+ * were split by guest instruction fetches and huge pages that were split for
+ * dirty tracking.
  */
-void kvm_tdp_mmu_zap_collapsible_sptes(struct kvm *kvm,
-				       const struct kvm_memory_slot *slot)
+void kvm_tdp_mmu_recover_huge_pages(struct kvm *kvm,
+				    const struct kvm_memory_slot *slot)
 {
 	struct kvm_mmu_page *root;
 
 	lockdep_assert_held_read(&kvm->mmu_lock);
 	for_each_valid_tdp_mmu_root_yield_safe(kvm, root, slot->as_id)
-		zap_collapsible_spte_range(kvm, root, slot);
+		recover_huge_pages_range(kvm, root, slot);
 }
 
 /*
