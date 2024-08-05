@@ -934,3 +934,16 @@ void arch_check_zapped_pmd(struct vm_area_struct *vma, pmd_t pmd)
 	VM_WARN_ON_ONCE(!(vma->vm_flags & VM_SHADOW_STACK) &&
 			pmd_shstk(pmd));
 }
+
+#ifdef CONFIG_PT_RECLAIM
+void arch_flush_tlb_before_set_huge_page(struct mm_struct *mm,
+					 unsigned long addr)
+{
+	if (atomic_read(&mm->tlb_flush_pending)) {
+		unsigned long start = ALIGN_DOWN(addr, PMD_SIZE);
+		unsigned long end = start + PMD_SIZE;
+
+		flush_tlb_mm_range(mm, start, end, PAGE_SHIFT, false);
+	}
+}
+#endif /* CONFIG_PT_RECLAIM */
