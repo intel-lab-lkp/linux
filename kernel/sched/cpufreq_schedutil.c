@@ -654,9 +654,9 @@ static int sugov_kthread_create(struct sugov_policy *sg_policy)
 		 * Fake (unused) bandwidth; workaround to "fix"
 		 * priority inheritance.
 		 */
-		.sched_runtime	=  1000000,
-		.sched_deadline = 10000000,
-		.sched_period	= 10000000,
+		.sched_runtime	= USEC_PER_SEC,
+		.sched_deadline = 10 * USEC_PER_SEC,
+		.sched_period	= 10 * USEC_PER_SEC,
 	};
 	struct cpufreq_policy *policy = sg_policy->policy;
 	int ret;
