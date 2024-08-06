@@ -314,6 +314,17 @@ static void pci_epf_test_print_rate(struct pci_epf_test *epf_test,
 		 (u64)ts.tv_sec, (u32)ts.tv_nsec, rate);
 }
 
+static int pci_epf_test_check_dma(struct pci_epf_test *epf_test,
+				   struct pci_epf_test_reg *reg)
+{
+	if ((READ_ONCE(reg->flags) & FLAG_USE_DMA) &&
+	    !epf_test->dma_supported) {
+		dev_err(&epf_test->epf->dev, "Cannot transfer data using DMA\n");
+		return -EIO;
+	}
+	return 0;
+}
+
 static void pci_epf_test_copy(struct pci_epf_test *epf_test,
 			      struct pci_epf_test_reg *reg)
 {
@@ -326,6 +337,10 @@ static void pci_epf_test_copy(struct pci_epf_test *epf_test,
 	struct pci_epf *epf = epf_test->epf;
 	struct device *dev = &epf->dev;
 	struct pci_epc *epc = epf->epc;
+
+	ret = pci_epf_test_check_dma(epf_test, reg);
+	if (ret)
+		goto err;
 
 	src_addr = pci_epc_mem_alloc_addr(epc, &src_phys_addr, reg->size);
 	if (!src_addr) {
@@ -423,6 +438,10 @@ static void pci_epf_test_read(struct pci_epf_test *epf_test,
 	struct pci_epc *epc = epf->epc;
 	struct device *dma_dev = epf->epc->dev.parent;
 
+	ret = pci_epf_test_check_dma(epf_test, reg);
+	if (ret)
+		goto err;
+
 	src_addr = pci_epc_mem_alloc_addr(epc, &phys_addr, reg->size);
 	if (!src_addr) {
 		dev_err(dev, "Failed to allocate address\n");
@@ -506,6 +525,10 @@ static void pci_epf_test_write(struct pci_epf_test *epf_test,
 	struct device *dev = &epf->dev;
 	struct pci_epc *epc = epf->epc;
 	struct device *dma_dev = epf->epc->dev.parent;
+
+	ret = pci_epf_test_check_dma(epf_test, reg);
+	if (ret)
+		goto err;
 
 	dst_addr = pci_epc_mem_alloc_addr(epc, &phys_addr, reg->size);
 	if (!dst_addr) {
@@ -646,12 +669,6 @@ static void pci_epf_test_cmd_handler(struct work_struct *work)
 
 	WRITE_ONCE(reg->command, 0);
 	WRITE_ONCE(reg->status, 0);
-
-	if ((READ_ONCE(reg->flags) & FLAG_USE_DMA) &&
-	    !epf_test->dma_supported) {
-		dev_err(dev, "Cannot transfer data using DMA\n");
-		goto reset_handler;
-	}
 
 	if (reg->irq_type > IRQ_TYPE_MSIX) {
 		dev_err(dev, "Failed to detect IRQ type\n");
