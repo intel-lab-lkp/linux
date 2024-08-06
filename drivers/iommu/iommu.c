@@ -119,8 +119,11 @@ static int __iommu_group_set_domain(struct iommu_group *group,
 static void __iommu_group_set_domain_nofail(struct iommu_group *group,
 					    struct iommu_domain *new_domain)
 {
-	WARN_ON(__iommu_group_set_domain_internal(
-		group, new_domain, IOMMU_SET_DOMAIN_MUST_SUCCEED));
+	int ret = __iommu_group_set_domain_internal(
+		group, new_domain, IOMMU_SET_DOMAIN_MUST_SUCCEED);
+
+	/* Allow attach to fail when the device is gone */
+	WARN_ON(ret && ret != -ENODEV);
 }
 
 static int iommu_setup_default_domain(struct iommu_group *group,
