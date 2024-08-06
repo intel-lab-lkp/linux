@@ -68,16 +68,25 @@ enum ipi_msg_type {
 	IPI_RESCHEDULE,
 	IPI_CALL_FUNC,
 	IPI_CPU_STOP,
+	IPI_CPU_PAUSE,
+#ifdef CONFIG_KEXEC_CORE
 	IPI_CPU_CRASH_STOP,
+#endif
+#ifdef CONFIG_GENERIC_CLOCKEVENTS_BROADCAST
 	IPI_TIMER,
+#endif
+#ifdef CONFIG_IRQ_WORK
 	IPI_IRQ_WORK,
+#endif
 	NR_IPI,
 	/*
 	 * Any enum >= NR_IPI and < MAX_IPI is special and not tracable
 	 * with trace_ipi_*
 	 */
 	IPI_CPU_BACKTRACE = NR_IPI,
+#ifdef CONFIG_KGDB
 	IPI_KGDB_ROUNDUP,
+#endif
 	MAX_IPI
 };
 
@@ -821,11 +830,20 @@ static const char *ipi_types[MAX_IPI] __tracepoint_string = {
 	[IPI_RESCHEDULE]	= "Rescheduling interrupts",
 	[IPI_CALL_FUNC]		= "Function call interrupts",
 	[IPI_CPU_STOP]		= "CPU stop interrupts",
+	[IPI_CPU_PAUSE]		= "CPU pause interrupts",
+#ifdef CONFIG_KEXEC_CORE
 	[IPI_CPU_CRASH_STOP]	= "CPU stop (for crash dump) interrupts",
+#endif
+#ifdef CONFIG_GENERIC_CLOCKEVENTS_BROADCAST
 	[IPI_TIMER]		= "Timer broadcast interrupts",
+#endif
+#ifdef CONFIG_IRQ_WORK
 	[IPI_IRQ_WORK]		= "IRQ work interrupts",
+#endif
 	[IPI_CPU_BACKTRACE]	= "CPU backtrace interrupts",
+#ifdef CONFIG_KGDB
 	[IPI_KGDB_ROUNDUP]	= "KGDB roundup interrupts",
+#endif
 };
 
 static void smp_cross_call(const struct cpumask *target, unsigned int ipinr);
@@ -882,6 +900,85 @@ static void __noreturn local_cpu_stop(void)
 void __noreturn panic_smp_self_stop(void)
 {
 	local_cpu_stop();
+}
+
+static DEFINE_SPINLOCK(cpu_pause_lock);
+static cpumask_t paused_cpus;
+static cpumask_t resumed_cpus;
+
+static void pause_local_cpu(void)
+{
+	int cpu = smp_processor_id();
+
+	cpumask_clear_cpu(cpu, &resumed_cpus);
+	/*
+	 * Paired with pause_remote_cpus() to confirm that this CPU not only
+	 * will be paused but also can be reliably resumed.
+	 */
+	smp_wmb();
+	cpumask_set_cpu(cpu, &paused_cpus);
+	/* A typical example for sleep and wake-up functions. */
+	smp_mb();
+	while (!cpumask_test_cpu(cpu, &resumed_cpus)) {
+		wfe();
+		barrier();
+	}
+	barrier();
+	cpumask_clear_cpu(cpu, &paused_cpus);
+}
+
+void pause_remote_cpus(void)
+{
+	cpumask_t cpus_to_pause;
+
+	lockdep_assert_cpus_held();
+	lockdep_assert_preemption_disabled();
+
+	cpumask_copy(&cpus_to_pause, cpu_online_mask);
+	cpumask_clear_cpu(smp_processor_id(), &cpus_to_pause);
+
+	spin_lock(&cpu_pause_lock);
+
+	WARN_ON_ONCE(!cpumask_empty(&paused_cpus));
+
+	smp_cross_call(&cpus_to_pause, IPI_CPU_PAUSE);
+
+	while (!cpumask_equal(&cpus_to_pause, &paused_cpus)) {
+		cpu_relax();
+		barrier();
+	}
+	/*
+	 * Paired with pause_local_cpu() to confirm that all CPUs not only will
+	 * be paused but also can be reliably resumed.
+	 */
+	smp_rmb();
+	WARN_ON_ONCE(cpumask_intersects(&cpus_to_pause, &resumed_cpus));
+
+	spin_unlock(&cpu_pause_lock);
+}
+
+void resume_remote_cpus(void)
+{
+	cpumask_t cpus_to_resume;
+
+	lockdep_assert_cpus_held();
+	lockdep_assert_preemption_disabled();
+
+	cpumask_copy(&cpus_to_resume, cpu_online_mask);
+	cpumask_clear_cpu(smp_processor_id(), &cpus_to_resume);
+
+	spin_lock(&cpu_pause_lock);
+
+	cpumask_setall(&resumed_cpus);
+	/* A typical example for sleep and wake-up functions. */
+	smp_mb();
+	while (cpumask_intersects(&cpus_to_resume, &paused_cpus)) {
+		sev();
+		cpu_relax();
+		barrier();
+	}
+
+	spin_unlock(&cpu_pause_lock);
 }
 
 #ifdef CONFIG_KEXEC_CORE
@@ -963,6 +1060,11 @@ static void do_handle_IPI(int ipinr)
 		local_cpu_stop();
 		break;
 
+	case IPI_CPU_PAUSE:
+		pause_local_cpu();
+		break;
+
+#ifdef CONFIG_KEXEC_CORE
 	case IPI_CPU_CRASH_STOP:
 		if (IS_ENABLED(CONFIG_KEXEC_CORE)) {
 			ipi_cpu_crash_stop(cpu, get_irq_regs());
@@ -970,6 +1072,7 @@ static void do_handle_IPI(int ipinr)
 			unreachable();
 		}
 		break;
+#endif
 
 #ifdef CONFIG_GENERIC_CLOCKEVENTS_BROADCAST
 	case IPI_TIMER:
@@ -991,9 +1094,11 @@ static void do_handle_IPI(int ipinr)
 		nmi_cpu_backtrace(get_irq_regs());
 		break;
 
+#ifdef CONFIG_KGDB
 	case IPI_KGDB_ROUNDUP:
 		kgdb_nmicallback(cpu, get_irq_regs());
 		break;
+#endif
 
 	default:
 		pr_crit("CPU%u: Unknown IPI message 0x%x\n", cpu, ipinr);
@@ -1023,9 +1128,14 @@ static bool ipi_should_be_nmi(enum ipi_msg_type ipi)
 
 	switch (ipi) {
 	case IPI_CPU_STOP:
+	case IPI_CPU_PAUSE:
+#ifdef CONFIG_KEXEC_CORE
 	case IPI_CPU_CRASH_STOP:
+#endif
 	case IPI_CPU_BACKTRACE:
+#ifdef CONFIG_KGDB
 	case IPI_KGDB_ROUNDUP:
+#endif
 		return true;
 	default:
 		return false;
