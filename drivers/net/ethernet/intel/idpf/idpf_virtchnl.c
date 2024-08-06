@@ -2292,47 +2292,44 @@ int idpf_send_set_sriov_vfs_msg(struct idpf_adapter *adapter, u16 num_vfs)
  */
 int idpf_send_get_stats_msg(struct idpf_vport *vport)
 {
+	struct virtchnl2_vport_stats *stats_msg = &vport->vport_stats;
 	struct idpf_netdev_priv *np = netdev_priv(vport->netdev);
 	struct rtnl_link_stats64 *netstats = &np->netstats;
-	struct virtchnl2_vport_stats stats_msg = {};
 	struct idpf_vc_xn_params xn_params = {};
 	ssize_t reply_sz;
-
 
 	/* Don't send get_stats message if the link is down */
 	if (np->state <= __IDPF_VPORT_DOWN)
 		return 0;
 
-	stats_msg.vport_id = cpu_to_le32(vport->vport_id);
+	stats_msg->vport_id = cpu_to_le32(vport->vport_id);
 
 	xn_params.vc_op = VIRTCHNL2_OP_GET_STATS;
-	xn_params.send_buf.iov_base = &stats_msg;
-	xn_params.send_buf.iov_len = sizeof(stats_msg);
+	xn_params.send_buf.iov_base = stats_msg;
+	xn_params.send_buf.iov_len = sizeof(*stats_msg);
 	xn_params.recv_buf = xn_params.send_buf;
 	xn_params.timeout_ms = IDPF_VC_XN_DEFAULT_TIMEOUT_MSEC;
 
 	reply_sz = idpf_vc_xn_exec(vport->adapter, &xn_params);
 	if (reply_sz < 0)
 		return reply_sz;
-	if (reply_sz < sizeof(stats_msg))
+	if (reply_sz < sizeof(*stats_msg))
 		return -EIO;
 
 	spin_lock_bh(&np->stats_lock);
 
-	netstats->rx_packets = le64_to_cpu(stats_msg.rx_unicast) +
-			       le64_to_cpu(stats_msg.rx_multicast) +
-			       le64_to_cpu(stats_msg.rx_broadcast);
-	netstats->tx_packets = le64_to_cpu(stats_msg.tx_unicast) +
-			       le64_to_cpu(stats_msg.tx_multicast) +
-			       le64_to_cpu(stats_msg.tx_broadcast);
-	netstats->rx_bytes = le64_to_cpu(stats_msg.rx_bytes);
-	netstats->tx_bytes = le64_to_cpu(stats_msg.tx_bytes);
-	netstats->rx_errors = le64_to_cpu(stats_msg.rx_errors);
-	netstats->tx_errors = le64_to_cpu(stats_msg.tx_errors);
-	netstats->rx_dropped = le64_to_cpu(stats_msg.rx_discards);
-	netstats->tx_dropped = le64_to_cpu(stats_msg.tx_discards);
-
-	vport->port_stats.vport_stats = stats_msg;
+	netstats->rx_packets = le64_to_cpu(stats_msg->rx_unicast) +
+			       le64_to_cpu(stats_msg->rx_multicast) +
+			       le64_to_cpu(stats_msg->rx_broadcast);
+	netstats->tx_packets = le64_to_cpu(stats_msg->tx_unicast) +
+			       le64_to_cpu(stats_msg->tx_multicast) +
+			       le64_to_cpu(stats_msg->tx_broadcast);
+	netstats->rx_bytes = le64_to_cpu(stats_msg->rx_bytes);
+	netstats->tx_bytes = le64_to_cpu(stats_msg->tx_bytes);
+	netstats->rx_errors = le64_to_cpu(stats_msg->rx_errors);
+	netstats->tx_errors = le64_to_cpu(stats_msg->tx_errors);
+	netstats->rx_dropped = le64_to_cpu(stats_msg->rx_discards);
+	netstats->tx_dropped = le64_to_cpu(stats_msg->tx_discards);
 
 	spin_unlock_bh(&np->stats_lock);
 

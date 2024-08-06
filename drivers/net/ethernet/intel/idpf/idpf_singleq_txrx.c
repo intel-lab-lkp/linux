@@ -337,10 +337,6 @@ static void idpf_tx_singleq_build_ctx_desc(struct idpf_tx_queue *txq,
 		qw1 |= FIELD_PREP(IDPF_TXD_CTX_QW1_TSO_LEN_M,
 				  offload->tso_len);
 		qw1 |= FIELD_PREP(IDPF_TXD_CTX_QW1_MSS_M, offload->mss);
-
-		u64_stats_update_begin(&txq->stats_sync);
-		u64_stats_inc(&txq->q_stats.lso_pkts);
-		u64_stats_update_end(&txq->stats_sync);
 	}
 
 	desc->qw0.tunneling_params = cpu_to_le32(offload->cd_tunneling);
@@ -361,6 +357,7 @@ netdev_tx_t idpf_tx_singleq_frame(struct sk_buff *skb,
 				  struct idpf_tx_queue *tx_q)
 {
 	struct idpf_tx_offload_params offload = { };
+	struct libeth_sq_xmit_stats ss = { };
 	struct idpf_tx_buf *first;
 	unsigned int count;
 	__be16 protocol;
@@ -374,10 +371,7 @@ netdev_tx_t idpf_tx_singleq_frame(struct sk_buff *skb,
 				      count + IDPF_TX_DESCS_PER_CACHE_LINE +
 				      IDPF_TX_DESCS_FOR_CTX)) {
 		idpf_tx_buf_hw_update(tx_q, tx_q->next_to_use, false);
-
-		u64_stats_update_begin(&tx_q->stats_sync);
-		u64_stats_inc(&tx_q->q_stats.q_busy);
-		u64_stats_update_end(&tx_q->stats_sync);
+		libeth_stats_inc_one(&tx_q->stats, busy);
 
 		return NETDEV_TX_BUSY;
 	}
@@ -388,7 +382,7 @@ netdev_tx_t idpf_tx_singleq_frame(struct sk_buff *skb,
 	else if (protocol == htons(ETH_P_IPV6))
 		offload.tx_flags |= IDPF_TX_FLAGS_IPV6;
 
-	tso = idpf_tso(skb, &offload);
+	tso = idpf_tso(skb, &offload, &ss);
 	if (tso < 0)
 		goto out_drop;
 
@@ -411,6 +405,10 @@ netdev_tx_t idpf_tx_singleq_frame(struct sk_buff *skb,
 		first->packets = 1;
 	}
 	idpf_tx_singleq_map(tx_q, first, &offload);
+
+	libeth_stats_add_frags(&ss, count);
+	libeth_sq_xmit_stats_csum(&ss, skb);
+	libeth_sq_xmit_stats_add(&tx_q->stats, &ss);
 
 	return NETDEV_TX_OK;
 
@@ -508,20 +506,18 @@ fetch_next_txq_desc:
 	tx_q->next_to_clean = ntc;
 
 	*cleaned += ss.packets;
-
-	u64_stats_update_begin(&tx_q->stats_sync);
-	u64_stats_add(&tx_q->q_stats.packets, ss.packets);
-	u64_stats_add(&tx_q->q_stats.bytes, ss.bytes);
-	u64_stats_update_end(&tx_q->stats_sync);
+	libeth_sq_napi_stats_add(&tx_q->stats, &ss);
 
 	np = netdev_priv(tx_q->netdev);
 	nq = netdev_get_tx_queue(tx_q->netdev, tx_q->idx);
 
 	dont_wake = np->state != __IDPF_VPORT_UP ||
 		    !netif_carrier_ok(tx_q->netdev);
-	__netif_txq_completed_wake(nq, ss.packets, ss.bytes,
-				   IDPF_DESC_UNUSED(tx_q), IDPF_TX_WAKE_THRESH,
-				   dont_wake);
+	if (!__netif_txq_completed_wake(nq, ss.packets, ss.bytes,
+					IDPF_DESC_UNUSED(tx_q),
+					IDPF_TX_WAKE_THRESH,
+					dont_wake))
+		libeth_stats_inc_one(&tx_q->stats, wake);
 
 	return !!budget;
 }
@@ -590,23 +586,25 @@ static bool idpf_rx_singleq_is_non_eop(const union virtchnl2_rx_desc *rx_desc)
  * @skb: skb currently being received and modified
  * @csum_bits: checksum bits from descriptor
  * @decoded: the packet type decoded by hardware
+ * @rs: RQ polling onstack stats
  *
  * skb->protocol must be set before this function is called
  */
 static void idpf_rx_singleq_csum(struct idpf_rx_queue *rxq,
 				 struct sk_buff *skb,
 				 struct idpf_rx_csum_decoded csum_bits,
-				 struct libeth_rx_pt decoded)
+				 struct libeth_rx_pt decoded,
+				 struct libeth_rq_napi_stats *rs)
 {
 	bool ipv4, ipv6;
 
 	/* check if Rx checksum is enabled */
 	if (!libeth_rx_pt_has_checksum(rxq->netdev, decoded))
-		return;
+		goto none;
 
 	/* check if HW has decoded the packet and checksum */
 	if (unlikely(!csum_bits.l3l4p))
-		return;
+		goto none;
 
 	ipv4 = libeth_rx_pt_get_ip_ver(decoded) == LIBETH_RX_PT_OUTER_IPV4;
 	ipv6 = libeth_rx_pt_get_ip_ver(decoded) == LIBETH_RX_PT_OUTER_IPV6;
@@ -619,7 +617,7 @@ static void idpf_rx_singleq_csum(struct idpf_rx_queue *rxq,
 	 * headers as indicated by setting IPV6EXADD bit
 	 */
 	if (unlikely(ipv6 && csum_bits.ipv6exadd))
-		return;
+		goto none;
 
 	/* check for L4 errors and handle packets that were not able to be
 	 * checksummed due to arrival speed
@@ -634,7 +632,7 @@ static void idpf_rx_singleq_csum(struct idpf_rx_queue *rxq,
 	 * speed, in this case the stack can compute the csum.
 	 */
 	if (unlikely(csum_bits.pprs))
-		return;
+		goto none;
 
 	/* If there is an outer header present that might contain a checksum
 	 * we need to bump the checksum level by 1 to reflect the fact that
@@ -644,12 +642,16 @@ static void idpf_rx_singleq_csum(struct idpf_rx_queue *rxq,
 		skb->csum_level = 1;
 
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
+	rs->csum_unnecessary++;
+
+	return;
+
+none:
+	libeth_stats_inc_one(&rxq->stats, csum_none);
 	return;
 
 checksum_fail:
-	u64_stats_update_begin(&rxq->stats_sync);
-	u64_stats_inc(&rxq->q_stats.hw_csum_err);
-	u64_stats_update_end(&rxq->stats_sync);
+	libeth_stats_inc_one(&rxq->stats, csum_bad);
 }
 
 /**
@@ -786,6 +788,7 @@ static void idpf_rx_singleq_flex_hash(struct idpf_rx_queue *rx_q,
  * @skb: pointer to current skb being populated
  * @rx_desc: descriptor for skb
  * @ptype: packet type
+ * @rs: RQ polling onstack stats
  *
  * This function checks the ring, descriptor, and packet information in
  * order to populate the hash, checksum, VLAN, protocol, and
@@ -795,7 +798,8 @@ static void
 idpf_rx_singleq_process_skb_fields(struct idpf_rx_queue *rx_q,
 				   struct sk_buff *skb,
 				   const union virtchnl2_rx_desc *rx_desc,
-				   u16 ptype)
+				   u16 ptype,
+				   struct libeth_rq_napi_stats *rs)
 {
 	struct libeth_rx_pt decoded = rx_q->rx_ptype_lkup[ptype];
 	struct idpf_rx_csum_decoded csum_bits;
@@ -812,7 +816,7 @@ idpf_rx_singleq_process_skb_fields(struct idpf_rx_queue *rx_q,
 		csum_bits = idpf_rx_singleq_flex_csum(rx_desc);
 	}
 
-	idpf_rx_singleq_csum(rx_q, skb, csum_bits, decoded);
+	idpf_rx_singleq_csum(rx_q, skb, csum_bits, decoded, rs);
 	skb_record_rx_queue(skb, rx_q->idx);
 }
 
@@ -958,14 +962,14 @@ idpf_rx_singleq_extract_fields(const struct idpf_rx_queue *rx_q,
  */
 static int idpf_rx_singleq_clean(struct idpf_rx_queue *rx_q, int budget)
 {
-	unsigned int total_rx_bytes = 0, total_rx_pkts = 0;
+	struct libeth_rq_napi_stats rs = { };
 	struct sk_buff *skb = rx_q->skb;
 	u16 ntc = rx_q->next_to_clean;
 	u16 cleaned_count = 0;
 	bool failure = false;
 
 	/* Process Rx packets bounded by budget */
-	while (likely(total_rx_pkts < (unsigned int)budget)) {
+	while (likely(rs.packets < budget)) {
 		struct idpf_rx_extracted fields = { };
 		union virtchnl2_rx_desc *rx_desc;
 		struct idpf_rx_buf *rx_buf;
@@ -1030,18 +1034,19 @@ skip_data:
 		}
 
 		/* probably a little skewed due to removing CRC */
-		total_rx_bytes += skb->len;
+		rs.bytes += skb->len;
 
 		/* protocol */
 		idpf_rx_singleq_process_skb_fields(rx_q, skb,
-						   rx_desc, fields.rx_ptype);
+						   rx_desc, fields.rx_ptype,
+						   &rs);
 
 		/* send completed skb up the stack */
 		napi_gro_receive(rx_q->pp->p.napi, skb);
 		skb = NULL;
 
 		/* update budget accounting */
-		total_rx_pkts++;
+		rs.packets++;
 	}
 
 	rx_q->skb = skb;
@@ -1052,13 +1057,10 @@ skip_data:
 	if (cleaned_count)
 		failure = idpf_rx_singleq_buf_hw_alloc_all(rx_q, cleaned_count);
 
-	u64_stats_update_begin(&rx_q->stats_sync);
-	u64_stats_add(&rx_q->q_stats.packets, total_rx_pkts);
-	u64_stats_add(&rx_q->q_stats.bytes, total_rx_bytes);
-	u64_stats_update_end(&rx_q->stats_sync);
+	libeth_rq_napi_stats_add(&rx_q->stats, &rs);
 
 	/* guarantee a trip back through this routine if there was a failure */
-	return failure ? budget : (int)total_rx_pkts;
+	return failure ? budget : rs.packets;
 }
 
 /**

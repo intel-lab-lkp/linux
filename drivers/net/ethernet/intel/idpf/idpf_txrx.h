@@ -7,6 +7,7 @@
 #include <linux/dim.h>
 
 #include <net/libeth/cache.h>
+#include <net/libeth/types.h>
 #include <net/tcp.h>
 #include <net/netdev_queues.h>
 
@@ -142,6 +143,8 @@ do {								\
 #define IDPF_TX_FLAGS_IPV4		BIT(1)
 #define IDPF_TX_FLAGS_IPV6		BIT(2)
 #define IDPF_TX_FLAGS_TUNNEL		BIT(3)
+
+struct libeth_sq_xmit_stats;
 
 union idpf_tx_flex_desc {
 	struct idpf_flex_tx_desc q; /* queue based scheduling */
@@ -441,28 +444,6 @@ libeth_cacheline_set_assert(struct idpf_q_vector, 112,
 			    424 + 2 * sizeof(struct dim),
 			    8 + sizeof(cpumask_var_t));
 
-struct idpf_rx_queue_stats {
-	u64_stats_t packets;
-	u64_stats_t bytes;
-	u64_stats_t rsc_pkts;
-	u64_stats_t hw_csum_err;
-	u64_stats_t hsplit_pkts;
-	u64_stats_t hsplit_buf_ovf;
-	u64_stats_t bad_descs;
-};
-
-struct idpf_tx_queue_stats {
-	u64_stats_t packets;
-	u64_stats_t bytes;
-	u64_stats_t lso_pkts;
-	u64_stats_t linearize;
-	u64_stats_t q_busy;
-	u64_stats_t skb_drops;
-	u64_stats_t dma_map_errs;
-};
-
-#define idpf_cleaned_stats libeth_sq_napi_stats
-
 #define IDPF_ITR_DYNAMIC	1
 #define IDPF_ITR_MAX		0x1FE0
 #define IDPF_ITR_20K		0x0032
@@ -508,10 +489,9 @@ struct idpf_txq_stash {
  * @next_to_use: Next descriptor to use
  * @next_to_clean: Next descriptor to clean
  * @next_to_alloc: RX buffer to allocate at
- * @skb: Pointer to the skb
  * @truesize: data buffer truesize in singleq
- * @stats_sync: See struct u64_stats_sync
- * @q_stats: See union idpf_rx_queue_stats
+ * @skb: Pointer to the skb
+ * @stats: per-queue RQ stats
  * @q_id: Queue id
  * @size: Length of descriptor ring in bytes
  * @dma: Physical address of ring
@@ -551,15 +531,14 @@ struct idpf_rx_queue {
 	__cacheline_group_end_aligned(read_mostly);
 
 	__cacheline_group_begin_aligned(read_write);
-	u16 next_to_use;
-	u16 next_to_clean;
-	u16 next_to_alloc;
+	u32 next_to_use;
+	u32 next_to_clean;
+	u32 next_to_alloc;
 
-	struct sk_buff *skb;
 	u32 truesize;
+	struct sk_buff *skb;
 
-	struct u64_stats_sync stats_sync;
-	struct idpf_rx_queue_stats q_stats;
+	struct libeth_rq_stats stats;
 	__cacheline_group_end_aligned(read_write);
 
 	__cacheline_group_begin_aligned(cold);
@@ -576,7 +555,7 @@ struct idpf_rx_queue {
 	__cacheline_group_end_aligned(cold);
 };
 libeth_cacheline_set_assert(struct idpf_rx_queue, 64,
-			    80 + sizeof(struct u64_stats_sync),
+			    32 + sizeof(struct libeth_rq_stats),
 			    32);
 
 /**
@@ -633,8 +612,7 @@ libeth_cacheline_set_assert(struct idpf_rx_queue, 64,
  * @compl_tag_bufid_m: Completion tag buffer id mask
  * @compl_tag_cur_gen: Used to keep track of current completion tag generation
  * @compl_tag_gen_max: To determine when compl_tag_cur_gen should be reset
- * @stats_sync: See struct u64_stats_sync
- * @q_stats: See union idpf_tx_queue_stats
+ * @stats: per-queue SQ stats
  * @q_id: Queue id
  * @size: Length of descriptor ring in bytes
  * @dma: Physical address of ring
@@ -682,8 +660,7 @@ struct idpf_tx_queue {
 	u16 compl_tag_cur_gen;
 	u16 compl_tag_gen_max;
 
-	struct u64_stats_sync stats_sync;
-	struct idpf_tx_queue_stats q_stats;
+	struct libeth_sq_stats stats;
 	__cacheline_group_end_aligned(read_write);
 
 	__cacheline_group_begin_aligned(cold);
@@ -695,7 +672,7 @@ struct idpf_tx_queue {
 	__cacheline_group_end_aligned(cold);
 };
 libeth_cacheline_set_assert(struct idpf_tx_queue, 64,
-			    88 + sizeof(struct u64_stats_sync),
+			    32 + sizeof(struct libeth_sq_stats),
 			    24);
 
 /**
@@ -1051,7 +1028,8 @@ netdev_tx_t idpf_tx_singleq_frame(struct sk_buff *skb,
 netdev_tx_t idpf_tx_start(struct sk_buff *skb, struct net_device *netdev);
 bool idpf_rx_singleq_buf_hw_alloc_all(struct idpf_rx_queue *rxq,
 				      u16 cleaned_count);
-int idpf_tso(struct sk_buff *skb, struct idpf_tx_offload_params *off);
+int idpf_tso(struct sk_buff *skb, struct idpf_tx_offload_params *off,
+	     struct libeth_sq_xmit_stats *ss);
 
 static inline bool idpf_tx_maybe_stop_common(struct idpf_tx_queue *tx_q,
 					     u32 needed)

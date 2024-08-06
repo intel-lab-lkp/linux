@@ -138,6 +138,7 @@ enum idpf_vport_state {
 
 /**
  * struct idpf_netdev_priv - Struct to store vport back pointer
+ * @priv: libeth private structure
  * @adapter: Adapter back pointer
  * @vport: Vport back pointer
  * @vport_id: Vport identifier
@@ -147,6 +148,8 @@ enum idpf_vport_state {
  * @stats_lock: Lock to protect stats update
  */
 struct idpf_netdev_priv {
+	struct libeth_netdev_priv priv;
+
 	struct idpf_adapter *adapter;
 	struct idpf_vport *vport;
 	u32 vport_id;
@@ -155,6 +158,7 @@ struct idpf_netdev_priv {
 	struct rtnl_link_stats64 netstats;
 	spinlock_t stats_lock;
 };
+libeth_netdev_priv_assert(struct idpf_netdev_priv, priv);
 
 /**
  * struct idpf_reset_reg - Reset register offsets/masks
@@ -232,19 +236,6 @@ enum idpf_vport_flags {
 	IDPF_VPORT_FLAGS_NBITS,
 };
 
-struct idpf_port_stats {
-	struct u64_stats_sync stats_sync;
-	u64_stats_t rx_hw_csum_err;
-	u64_stats_t rx_hsplit;
-	u64_stats_t rx_hsplit_hbo;
-	u64_stats_t rx_bad_descs;
-	u64_stats_t tx_linearize;
-	u64_stats_t tx_busy;
-	u64_stats_t tx_drops;
-	u64_stats_t tx_dma_map_errs;
-	struct virtchnl2_vport_stats vport_stats;
-};
-
 /**
  * struct idpf_vport - Handle for netdevices and queue resources
  * @num_txq: Number of allocated TX queues
@@ -285,7 +276,7 @@ struct idpf_port_stats {
  * @default_mac_addr: device will give a default MAC to use
  * @rx_itr_profile: RX profiles for Dynamic Interrupt Moderation
  * @tx_itr_profile: TX profiles for Dynamic Interrupt Moderation
- * @port_stats: per port csum, header split, and other offload stats
+ * @vport_stats: vport stats reported by HW
  * @link_up: True if link is up
  * @link_speed_mbps: Link speed in mbps
  * @sw_marker_wq: workqueue for marker packets
@@ -328,7 +319,7 @@ struct idpf_vport {
 	u8 default_mac_addr[ETH_ALEN];
 	u16 rx_itr_profile[IDPF_DIM_PROFILE_SLOTS];
 	u16 tx_itr_profile[IDPF_DIM_PROFILE_SLOTS];
-	struct idpf_port_stats port_stats;
+	struct virtchnl2_vport_stats vport_stats;
 
 	bool link_up;
 	u32 link_speed_mbps;

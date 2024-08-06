@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (C) 2023 Intel Corporation */
 
+#include <net/libeth/netdev.h>
+
 #include "idpf.h"
 
 /**
@@ -399,172 +401,37 @@ unlock_mutex:
 	return err;
 }
 
-/**
- * struct idpf_stats - definition for an ethtool statistic
- * @stat_string: statistic name to display in ethtool -S output
- * @sizeof_stat: the sizeof() the stat, must be no greater than sizeof(u64)
- * @stat_offset: offsetof() the stat from a base pointer
- *
- * This structure defines a statistic to be added to the ethtool stats buffer.
- * It defines a statistic as offset from a common base pointer. Stats should
- * be defined in constant arrays using the IDPF_STAT macro, with every element
- * of the array using the same _type for calculating the sizeof_stat and
- * stat_offset.
- *
- * The @sizeof_stat is expected to be sizeof(u8), sizeof(u16), sizeof(u32) or
- * sizeof(u64). Other sizes are not expected and will produce a WARN_ONCE from
- * the idpf_add_ethtool_stat() helper function.
- *
- * The @stat_string is interpreted as a format string, allowing formatted
- * values to be inserted while looping over multiple structures for a given
- * statistics array. Thus, every statistic string in an array should have the
- * same type and number of format specifiers, to be formatted by variadic
- * arguments to the idpf_add_stat_string() helper function.
- */
-struct idpf_stats {
-	char stat_string[ETH_GSTRING_LEN];
-	int sizeof_stat;
-	int stat_offset;
+static const char * const idpf_gstrings_port_stats[] = {
+	"rx_bytes",
+	"rx_unicast",
+	"rx_multicast",
+	"rx_broadcast",
+	"rx_discards",
+	"rx_errors",
+	"rx_unknown_protocol",
+	"tx_bytes",
+	"tx_unicast",
+	"tx_multicast",
+	"tx_broadcast",
+	"tx_discards",
+	"tx_errors",
+	"rx_invalid_frame_length",
+	"rx_overflow_drop",
 };
-
-/* Helper macro to define an idpf_stat structure with proper size and type.
- * Use this when defining constant statistics arrays. Note that @_type expects
- * only a type name and is used multiple times.
- */
-#define IDPF_STAT(_type, _name, _stat) { \
-	.stat_string = _name, \
-	.sizeof_stat = sizeof_field(_type, _stat), \
-	.stat_offset = offsetof(_type, _stat) \
-}
-
-/* Helper macros for defining some statistics related to queues */
-#define IDPF_RX_QUEUE_STAT(_name, _stat) \
-	IDPF_STAT(struct idpf_rx_queue, _name, _stat)
-#define IDPF_TX_QUEUE_STAT(_name, _stat) \
-	IDPF_STAT(struct idpf_tx_queue, _name, _stat)
-
-/* Stats associated with a Tx queue */
-static const struct idpf_stats idpf_gstrings_tx_queue_stats[] = {
-	IDPF_TX_QUEUE_STAT("pkts", q_stats.packets),
-	IDPF_TX_QUEUE_STAT("bytes", q_stats.bytes),
-	IDPF_TX_QUEUE_STAT("lso_pkts", q_stats.lso_pkts),
-};
-
-/* Stats associated with an Rx queue */
-static const struct idpf_stats idpf_gstrings_rx_queue_stats[] = {
-	IDPF_RX_QUEUE_STAT("pkts", q_stats.packets),
-	IDPF_RX_QUEUE_STAT("bytes", q_stats.bytes),
-	IDPF_RX_QUEUE_STAT("rx_gro_hw_pkts", q_stats.rsc_pkts),
-};
-
-#define IDPF_TX_QUEUE_STATS_LEN		ARRAY_SIZE(idpf_gstrings_tx_queue_stats)
-#define IDPF_RX_QUEUE_STATS_LEN		ARRAY_SIZE(idpf_gstrings_rx_queue_stats)
-
-#define IDPF_PORT_STAT(_name, _stat) \
-	IDPF_STAT(struct idpf_vport,  _name, _stat)
-
-static const struct idpf_stats idpf_gstrings_port_stats[] = {
-	IDPF_PORT_STAT("rx-csum_errors", port_stats.rx_hw_csum_err),
-	IDPF_PORT_STAT("rx-hsplit", port_stats.rx_hsplit),
-	IDPF_PORT_STAT("rx-hsplit_hbo", port_stats.rx_hsplit_hbo),
-	IDPF_PORT_STAT("rx-bad_descs", port_stats.rx_bad_descs),
-	IDPF_PORT_STAT("tx-skb_drops", port_stats.tx_drops),
-	IDPF_PORT_STAT("tx-dma_map_errs", port_stats.tx_dma_map_errs),
-	IDPF_PORT_STAT("tx-linearized_pkts", port_stats.tx_linearize),
-	IDPF_PORT_STAT("tx-busy_events", port_stats.tx_busy),
-	IDPF_PORT_STAT("rx-unicast_pkts", port_stats.vport_stats.rx_unicast),
-	IDPF_PORT_STAT("rx-multicast_pkts", port_stats.vport_stats.rx_multicast),
-	IDPF_PORT_STAT("rx-broadcast_pkts", port_stats.vport_stats.rx_broadcast),
-	IDPF_PORT_STAT("rx-unknown_protocol", port_stats.vport_stats.rx_unknown_protocol),
-	IDPF_PORT_STAT("tx-unicast_pkts", port_stats.vport_stats.tx_unicast),
-	IDPF_PORT_STAT("tx-multicast_pkts", port_stats.vport_stats.tx_multicast),
-	IDPF_PORT_STAT("tx-broadcast_pkts", port_stats.vport_stats.tx_broadcast),
-};
+static_assert(ARRAY_SIZE(idpf_gstrings_port_stats) ==
+	      sizeof_field(struct virtchnl2_vport_stats, counters) /
+	      sizeof(__le64));
 
 #define IDPF_PORT_STATS_LEN ARRAY_SIZE(idpf_gstrings_port_stats)
 
 /**
- * __idpf_add_qstat_strings - copy stat strings into ethtool buffer
- * @p: ethtool supplied buffer
- * @stats: stat definitions array
- * @size: size of the stats array
- * @type: stat type
- * @idx: stat index
- *
- * Format and copy the strings described by stats into the buffer pointed at
- * by p.
- */
-static void __idpf_add_qstat_strings(u8 **p, const struct idpf_stats *stats,
-				     const unsigned int size, const char *type,
-				     unsigned int idx)
-{
-	unsigned int i;
-
-	for (i = 0; i < size; i++)
-		ethtool_sprintf(p, "%s_q-%u_%s",
-				type, idx, stats[i].stat_string);
-}
-
-/**
- * idpf_add_qstat_strings - Copy queue stat strings into ethtool buffer
- * @p: ethtool supplied buffer
- * @stats: stat definitions array
- * @type: stat type
- * @idx: stat idx
- *
- * Format and copy the strings described by the const static stats value into
- * the buffer pointed at by p.
- *
- * The parameter @stats is evaluated twice, so parameters with side effects
- * should be avoided. Additionally, stats must be an array such that
- * ARRAY_SIZE can be called on it.
- */
-#define idpf_add_qstat_strings(p, stats, type, idx) \
-	__idpf_add_qstat_strings(p, stats, ARRAY_SIZE(stats), type, idx)
-
-/**
  * idpf_add_stat_strings - Copy port stat strings into ethtool buffer
  * @p: ethtool buffer
- * @stats: struct to copy from
- * @size: size of stats array to copy from
  */
-static void idpf_add_stat_strings(u8 **p, const struct idpf_stats *stats,
-				  const unsigned int size)
+static void idpf_add_stat_strings(u8 **p)
 {
-	unsigned int i;
-
-	for (i = 0; i < size; i++)
-		ethtool_puts(p, stats[i].stat_string);
-}
-
-/**
- * idpf_get_stat_strings - Get stat strings
- * @netdev: network interface device structure
- * @data: buffer for string data
- *
- * Builds the statistics string table
- */
-static void idpf_get_stat_strings(struct net_device *netdev, u8 *data)
-{
-	struct idpf_netdev_priv *np = netdev_priv(netdev);
-	struct idpf_vport_config *vport_config;
-	unsigned int i;
-
-	idpf_add_stat_strings(&data, idpf_gstrings_port_stats,
-			      IDPF_PORT_STATS_LEN);
-
-	vport_config = np->adapter->vport_config[np->vport_idx];
-	/* It's critical that we always report a constant number of strings and
-	 * that the strings are reported in the same order regardless of how
-	 * many queues are actually in use.
-	 */
-	for (i = 0; i < vport_config->max_q.max_txq; i++)
-		idpf_add_qstat_strings(&data, idpf_gstrings_tx_queue_stats,
-				       "tx", i);
-
-	for (i = 0; i < vport_config->max_q.max_rxq; i++)
-		idpf_add_qstat_strings(&data, idpf_gstrings_rx_queue_stats,
-				       "rx", i);
+	for (u32 i = 0; i < IDPF_PORT_STATS_LEN; i++)
+		ethtool_puts(p, idpf_gstrings_port_stats[i]);
 }
 
 /**
@@ -579,7 +446,8 @@ static void idpf_get_strings(struct net_device *netdev, u32 sset, u8 *data)
 {
 	switch (sset) {
 	case ETH_SS_STATS:
-		idpf_get_stat_strings(netdev, data);
+		idpf_add_stat_strings(&data);
+		libeth_ethtool_get_strings(netdev, sset, data);
 		break;
 	default:
 		break;
@@ -595,146 +463,15 @@ static void idpf_get_strings(struct net_device *netdev, u32 sset, u8 *data)
  */
 static int idpf_get_sset_count(struct net_device *netdev, int sset)
 {
-	struct idpf_netdev_priv *np = netdev_priv(netdev);
-	struct idpf_vport_config *vport_config;
-	u16 max_txq, max_rxq;
+	u32 count;
 
 	if (sset != ETH_SS_STATS)
 		return -EINVAL;
 
-	vport_config = np->adapter->vport_config[np->vport_idx];
-	/* This size reported back here *must* be constant throughout the
-	 * lifecycle of the netdevice, i.e. we must report the maximum length
-	 * even for queues that don't technically exist.  This is due to the
-	 * fact that this userspace API uses three separate ioctl calls to get
-	 * stats data but has no way to communicate back to userspace when that
-	 * size has changed, which can typically happen as a result of changing
-	 * number of queues. If the number/order of stats change in the middle
-	 * of this call chain it will lead to userspace crashing/accessing bad
-	 * data through buffer under/overflow.
-	 */
-	max_txq = vport_config->max_q.max_txq;
-	max_rxq = vport_config->max_q.max_rxq;
+	count = IDPF_PORT_STATS_LEN;
+	count += libeth_ethtool_get_sset_count(netdev, sset);
 
-	return IDPF_PORT_STATS_LEN + (IDPF_TX_QUEUE_STATS_LEN * max_txq) +
-	       (IDPF_RX_QUEUE_STATS_LEN * max_rxq);
-}
-
-/**
- * idpf_add_one_ethtool_stat - copy the stat into the supplied buffer
- * @data: location to store the stat value
- * @pstat: old stat pointer to copy from
- * @stat: the stat definition
- *
- * Copies the stat data defined by the pointer and stat structure pair into
- * the memory supplied as data. If the pointer is null, data will be zero'd.
- */
-static void idpf_add_one_ethtool_stat(u64 *data, const void *pstat,
-				      const struct idpf_stats *stat)
-{
-	char *p;
-
-	if (!pstat) {
-		/* Ensure that the ethtool data buffer is zero'd for any stats
-		 * which don't have a valid pointer.
-		 */
-		*data = 0;
-		return;
-	}
-
-	p = (char *)pstat + stat->stat_offset;
-	switch (stat->sizeof_stat) {
-	case sizeof(u64):
-		*data = *((u64 *)p);
-		break;
-	case sizeof(u32):
-		*data = *((u32 *)p);
-		break;
-	case sizeof(u16):
-		*data = *((u16 *)p);
-		break;
-	case sizeof(u8):
-		*data = *((u8 *)p);
-		break;
-	default:
-		WARN_ONCE(1, "unexpected stat size for %s",
-			  stat->stat_string);
-		*data = 0;
-	}
-}
-
-/**
- * idpf_add_queue_stats - copy queue statistics into supplied buffer
- * @data: ethtool stats buffer
- * @q: the queue to copy
- * @type: type of the queue
- *
- * Queue statistics must be copied while protected by u64_stats_fetch_begin,
- * so we can't directly use idpf_add_ethtool_stats. Assumes that queue stats
- * are defined in idpf_gstrings_queue_stats. If the queue pointer is null,
- * zero out the queue stat values and update the data pointer. Otherwise
- * safely copy the stats from the queue into the supplied buffer and update
- * the data pointer when finished.
- *
- * This function expects to be called while under rcu_read_lock().
- */
-static void idpf_add_queue_stats(u64 **data, const void *q,
-				 enum virtchnl2_queue_type type)
-{
-	const struct u64_stats_sync *stats_sync;
-	const struct idpf_stats *stats;
-	unsigned int start;
-	unsigned int size;
-	unsigned int i;
-
-	if (type == VIRTCHNL2_QUEUE_TYPE_RX) {
-		size = IDPF_RX_QUEUE_STATS_LEN;
-		stats = idpf_gstrings_rx_queue_stats;
-		stats_sync = &((const struct idpf_rx_queue *)q)->stats_sync;
-	} else {
-		size = IDPF_TX_QUEUE_STATS_LEN;
-		stats = idpf_gstrings_tx_queue_stats;
-		stats_sync = &((const struct idpf_tx_queue *)q)->stats_sync;
-	}
-
-	/* To avoid invalid statistics values, ensure that we keep retrying
-	 * the copy until we get a consistent value according to
-	 * u64_stats_fetch_retry.
-	 */
-	do {
-		start = u64_stats_fetch_begin(stats_sync);
-		for (i = 0; i < size; i++)
-			idpf_add_one_ethtool_stat(&(*data)[i], q, &stats[i]);
-	} while (u64_stats_fetch_retry(stats_sync, start));
-
-	/* Once we successfully copy the stats in, update the data pointer */
-	*data += size;
-}
-
-/**
- * idpf_add_empty_queue_stats - Add stats for a non-existent queue
- * @data: pointer to data buffer
- * @qtype: type of data queue
- *
- * We must report a constant length of stats back to userspace regardless of
- * how many queues are actually in use because stats collection happens over
- * three separate ioctls and there's no way to notify userspace the size
- * changed between those calls. This adds empty to data to the stats since we
- * don't have a real queue to refer to for this stats slot.
- */
-static void idpf_add_empty_queue_stats(u64 **data, u16 qtype)
-{
-	unsigned int i;
-	int stats_len;
-
-	if (qtype == VIRTCHNL2_QUEUE_TYPE_RX)
-		stats_len = IDPF_RX_QUEUE_STATS_LEN;
-	else
-		stats_len = IDPF_TX_QUEUE_STATS_LEN;
-
-	for (i = 0; i < stats_len; i++)
-		(*data)[i] = 0;
-	*data += stats_len;
+	return count;
 }
 
 /**
@@ -744,116 +481,15 @@ static void idpf_add_empty_queue_stats(u64 **data, u16 qtype)
  */
 static void idpf_add_port_stats(struct idpf_vport *vport, u64 **data)
 {
-	unsigned int size = IDPF_PORT_STATS_LEN;
-	unsigned int start;
-	unsigned int i;
+	u64 *stats = *data;
 
-	do {
-		start = u64_stats_fetch_begin(&vport->port_stats.stats_sync);
-		for (i = 0; i < size; i++)
-			idpf_add_one_ethtool_stat(&(*data)[i], vport,
-						  &idpf_gstrings_port_stats[i]);
-	} while (u64_stats_fetch_retry(&vport->port_stats.stats_sync, start));
+	memcpy(stats, &vport->vport_stats.counters,
+	       sizeof(vport->vport_stats.counters));
 
-	*data += size;
-}
+	for (u32 i = 0; i < IDPF_PORT_STATS_LEN; i++)
+		le64_to_cpus(&stats[i]);
 
-/**
- * idpf_collect_queue_stats - accumulate various per queue stats
- * into port level stats
- * @vport: pointer to vport struct
- **/
-static void idpf_collect_queue_stats(struct idpf_vport *vport)
-{
-	struct idpf_port_stats *pstats = &vport->port_stats;
-	int i, j;
-
-	/* zero out port stats since they're actually tracked in per
-	 * queue stats; this is only for reporting
-	 */
-	u64_stats_update_begin(&pstats->stats_sync);
-	u64_stats_set(&pstats->rx_hw_csum_err, 0);
-	u64_stats_set(&pstats->rx_hsplit, 0);
-	u64_stats_set(&pstats->rx_hsplit_hbo, 0);
-	u64_stats_set(&pstats->rx_bad_descs, 0);
-	u64_stats_set(&pstats->tx_linearize, 0);
-	u64_stats_set(&pstats->tx_busy, 0);
-	u64_stats_set(&pstats->tx_drops, 0);
-	u64_stats_set(&pstats->tx_dma_map_errs, 0);
-	u64_stats_update_end(&pstats->stats_sync);
-
-	for (i = 0; i < vport->num_rxq_grp; i++) {
-		struct idpf_rxq_group *rxq_grp = &vport->rxq_grps[i];
-		u16 num_rxq;
-
-		if (idpf_is_queue_model_split(vport->rxq_model))
-			num_rxq = rxq_grp->splitq.num_rxq_sets;
-		else
-			num_rxq = rxq_grp->singleq.num_rxq;
-
-		for (j = 0; j < num_rxq; j++) {
-			u64 hw_csum_err, hsplit, hsplit_hbo, bad_descs;
-			struct idpf_rx_queue_stats *stats;
-			struct idpf_rx_queue *rxq;
-			unsigned int start;
-
-			if (idpf_is_queue_model_split(vport->rxq_model))
-				rxq = &rxq_grp->splitq.rxq_sets[j]->rxq;
-			else
-				rxq = rxq_grp->singleq.rxqs[j];
-
-			if (!rxq)
-				continue;
-
-			do {
-				start = u64_stats_fetch_begin(&rxq->stats_sync);
-
-				stats = &rxq->q_stats;
-				hw_csum_err = u64_stats_read(&stats->hw_csum_err);
-				hsplit = u64_stats_read(&stats->hsplit_pkts);
-				hsplit_hbo = u64_stats_read(&stats->hsplit_buf_ovf);
-				bad_descs = u64_stats_read(&stats->bad_descs);
-			} while (u64_stats_fetch_retry(&rxq->stats_sync, start));
-
-			u64_stats_update_begin(&pstats->stats_sync);
-			u64_stats_add(&pstats->rx_hw_csum_err, hw_csum_err);
-			u64_stats_add(&pstats->rx_hsplit, hsplit);
-			u64_stats_add(&pstats->rx_hsplit_hbo, hsplit_hbo);
-			u64_stats_add(&pstats->rx_bad_descs, bad_descs);
-			u64_stats_update_end(&pstats->stats_sync);
-		}
-	}
-
-	for (i = 0; i < vport->num_txq_grp; i++) {
-		struct idpf_txq_group *txq_grp = &vport->txq_grps[i];
-
-		for (j = 0; j < txq_grp->num_txq; j++) {
-			u64 linearize, qbusy, skb_drops, dma_map_errs;
-			struct idpf_tx_queue *txq = txq_grp->txqs[j];
-			struct idpf_tx_queue_stats *stats;
-			unsigned int start;
-
-			if (!txq)
-				continue;
-
-			do {
-				start = u64_stats_fetch_begin(&txq->stats_sync);
-
-				stats = &txq->q_stats;
-				linearize = u64_stats_read(&stats->linearize);
-				qbusy = u64_stats_read(&stats->q_busy);
-				skb_drops = u64_stats_read(&stats->skb_drops);
-				dma_map_errs = u64_stats_read(&stats->dma_map_errs);
-			} while (u64_stats_fetch_retry(&txq->stats_sync, start));
-
-			u64_stats_update_begin(&pstats->stats_sync);
-			u64_stats_add(&pstats->tx_linearize, linearize);
-			u64_stats_add(&pstats->tx_busy, qbusy);
-			u64_stats_add(&pstats->tx_drops, skb_drops);
-			u64_stats_add(&pstats->tx_dma_map_errs, dma_map_errs);
-			u64_stats_update_end(&pstats->stats_sync);
-		}
-	}
+	*data += IDPF_PORT_STATS_LEN;
 }
 
 /**
@@ -869,12 +505,7 @@ static void idpf_get_ethtool_stats(struct net_device *netdev,
 				   u64 *data)
 {
 	struct idpf_netdev_priv *np = netdev_priv(netdev);
-	struct idpf_vport_config *vport_config;
 	struct idpf_vport *vport;
-	unsigned int total = 0;
-	unsigned int i, j;
-	bool is_splitq;
-	u16 qtype;
 
 	idpf_vport_ctrl_lock(netdev);
 	vport = idpf_netdev_to_vport(netdev);
@@ -887,63 +518,8 @@ static void idpf_get_ethtool_stats(struct net_device *netdev,
 
 	rcu_read_lock();
 
-	idpf_collect_queue_stats(vport);
 	idpf_add_port_stats(vport, &data);
-
-	for (i = 0; i < vport->num_txq_grp; i++) {
-		struct idpf_txq_group *txq_grp = &vport->txq_grps[i];
-
-		qtype = VIRTCHNL2_QUEUE_TYPE_TX;
-
-		for (j = 0; j < txq_grp->num_txq; j++, total++) {
-			struct idpf_tx_queue *txq = txq_grp->txqs[j];
-
-			if (!txq)
-				idpf_add_empty_queue_stats(&data, qtype);
-			else
-				idpf_add_queue_stats(&data, txq, qtype);
-		}
-	}
-
-	vport_config = vport->adapter->vport_config[vport->idx];
-	/* It is critical we provide a constant number of stats back to
-	 * userspace regardless of how many queues are actually in use because
-	 * there is no way to inform userspace the size has changed between
-	 * ioctl calls. This will fill in any missing stats with zero.
-	 */
-	for (; total < vport_config->max_q.max_txq; total++)
-		idpf_add_empty_queue_stats(&data, VIRTCHNL2_QUEUE_TYPE_TX);
-	total = 0;
-
-	is_splitq = idpf_is_queue_model_split(vport->rxq_model);
-
-	for (i = 0; i < vport->num_rxq_grp; i++) {
-		struct idpf_rxq_group *rxq_grp = &vport->rxq_grps[i];
-		u16 num_rxq;
-
-		qtype = VIRTCHNL2_QUEUE_TYPE_RX;
-
-		if (is_splitq)
-			num_rxq = rxq_grp->splitq.num_rxq_sets;
-		else
-			num_rxq = rxq_grp->singleq.num_rxq;
-
-		for (j = 0; j < num_rxq; j++, total++) {
-			struct idpf_rx_queue *rxq;
-
-			if (is_splitq)
-				rxq = &rxq_grp->splitq.rxq_sets[j]->rxq;
-			else
-				rxq = rxq_grp->singleq.rxqs[j];
-			if (!rxq)
-				idpf_add_empty_queue_stats(&data, qtype);
-			else
-				idpf_add_queue_stats(&data, rxq, qtype);
-		}
-	}
-
-	for (; total < vport_config->max_q.max_rxq; total++)
-		idpf_add_empty_queue_stats(&data, VIRTCHNL2_QUEUE_TYPE_RX);
+	libeth_ethtool_get_stats(netdev, stats, data);
 
 	rcu_read_unlock();
 
