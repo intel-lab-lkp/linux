@@ -43,6 +43,8 @@ struct ms_hyperv_info ms_hyperv;
 bool hyperv_paravisor_present __ro_after_init;
 EXPORT_SYMBOL_GPL(hyperv_paravisor_present);
 
+u64 wakeup_mailbox_addr;
+
 #if IS_ENABLED(CONFIG_HYPERV)
 static inline unsigned int hv_get_nested_msr(unsigned int reg)
 {
