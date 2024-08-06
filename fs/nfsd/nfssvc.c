@@ -106,7 +106,7 @@ static struct svc_program	nfsd_acl_program = {
 
 #endif /* defined(CONFIG_NFSD_V2_ACL) || defined(CONFIG_NFSD_V3_ACL) */
 
-static const struct svc_version *nfsd_version[] = {
+static const struct svc_version *nfsd_version[NFSD_MAXVERS+1] = {
 #if defined(CONFIG_NFSD_V2)
 	[2] = &nfsd_version2,
 #endif
