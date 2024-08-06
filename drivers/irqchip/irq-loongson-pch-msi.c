@@ -256,11 +256,14 @@ struct fwnode_handle *get_pch_msi_handle(int pci_segment)
 {
 	int i;
 
+	if (cpu_has_avecint)
+		return pch_msi_handle[0];
+
 	for (i = 0; i < MAX_IO_PICS; i++) {
 		if (msi_group[i].pci_segment == pci_segment)
 			return pch_msi_handle[i];
 	}
-	return NULL;
+	return pch_msi_handle[0];
 }
 
 int __init pch_msi_acpi_init(struct irq_domain *parent,
@@ -276,5 +279,20 @@ int __init pch_msi_acpi_init(struct irq_domain *parent,
 		irq_domain_free_fwnode(domain_handle);
 
 	return ret;
+}
+
+int __init pch_msi_acpi_init_v2(struct irq_domain *parent,
+					struct acpi_madt_msi_pic *acpi_pchmsi)
+{
+	if (pch_msi_handle[0])
+		return 0;
+
+	pch_msi_handle[0] = parent->fwnode;
+	irq_domain_update_bus_token(parent, DOMAIN_BUS_NEXUS);
+
+	parent->flags |= IRQ_DOMAIN_FLAG_MSI_PARENT;
+	parent->msi_parent_ops = &pch_msi_parent_ops;
+
+	return 0;
 }
 #endif
