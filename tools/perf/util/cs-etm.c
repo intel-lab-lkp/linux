@@ -77,7 +77,6 @@ struct cs_etm_auxtrace {
 	u64 instructions_sample_period;
 	u64 instructions_id;
 	u64 **metadata;
-	unsigned int pmu_type;
 	enum cs_etm_pid_fmt pid_fmt;
 };
 
@@ -1629,7 +1628,7 @@ static int cs_etm__synth_events(struct cs_etm_auxtrace *etm,
 	int err;
 
 	evlist__for_each_entry(evlist, evsel) {
-		if (evsel->core.attr.type == etm->pmu_type) {
+		if (evsel__is_aux_event(evsel)) {
 			found = true;
 			break;
 		}
@@ -3338,7 +3337,6 @@ int cs_etm__process_auxtrace_info_full(union perf_event *event,
 	etm->session = session;
 
 	etm->num_cpu = num_cpu;
-	etm->pmu_type = (unsigned int) ((ptr[CS_PMU_TYPE_CPUS] >> 32) & 0xffffffff);
 	etm->snapshot_mode = (ptr[CS_ETM_SNAPSHOT] != 0);
 	etm->metadata = metadata;
 	etm->auxtrace_type = auxtrace_info->type;
