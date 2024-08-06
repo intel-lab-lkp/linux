@@ -97,7 +97,7 @@ static struct rga_addr_offset *rga_lookup_draw_pos(struct
 	if (!offsets)
 		return NULL;
 
-	switch (rot_mir_point_matrix[rotate_mode][mirr_mode]) {
+	switch (rot_mir_point_matrix[mirr_mode][rotate_mode]) {
 	case LT:
 		return &offsets->left_top;
 	case LB:
