@@ -218,7 +218,7 @@ int ngbe_phy_connect(struct wx *wx)
 	ret = phy_connect_direct(wx->netdev,
 				 wx->phydev,
 				 ngbe_handle_link_change,
-				 PHY_INTERFACE_MODE_RGMII_ID);
+				 PHY_INTERFACE_MODE_RGMII_RXID);
 	if (ret) {
 		wx_err(wx, "PHY connect failed.\n");
 		return ret;
