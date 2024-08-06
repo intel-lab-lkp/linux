@@ -3,4 +3,6 @@
 
 obj-$(CONFIG_LIBETH)		+= libeth.o
 
-libeth-y			:= rx.o
+libeth-y			+= netdev.o
+libeth-y			+= rx.o
+libeth-y			+= stats.o
