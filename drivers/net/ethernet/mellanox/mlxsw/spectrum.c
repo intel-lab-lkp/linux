@@ -3669,7 +3669,8 @@ static int mlxsw_sp1_resources_kvd_register(struct mlxsw_core *mlxsw_core)
 				     linear_size,
 				     MLXSW_SP_RESOURCE_KVD_LINEAR,
 				     MLXSW_SP_RESOURCE_KVD,
-				     &linear_size_params, sizeof(void *));
+				     &linear_size_params,
+				     sizeof(struct mlxsw_sp1_kvdl_occ_ctx));
 	if (err)
 		return err;
 

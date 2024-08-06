@@ -836,6 +836,11 @@ int mlxsw_sp_kvdl_alloc_count_query(struct mlxsw_sp *mlxsw_sp,
 				    unsigned int *p_alloc_count);
 
 /* spectrum1_kvdl.c */
+struct mlxsw_sp1_kvdl_occ_ctx {
+	struct mlxsw_sp1_kvdl *kvdl;
+	int first_part_id;
+	bool count_all_parts;
+};
 extern const struct mlxsw_sp_kvdl_ops mlxsw_sp1_kvdl_ops;
 int mlxsw_sp1_kvdl_resources_register(struct mlxsw_core *mlxsw_core);
 

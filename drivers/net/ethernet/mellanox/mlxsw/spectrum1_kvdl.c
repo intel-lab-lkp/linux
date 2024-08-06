@@ -292,68 +292,53 @@ static u64 mlxsw_sp1_kvdl_part_occ(struct mlxsw_sp1_kvdl_part *part)
 
 static u64 mlxsw_sp1_kvdl_occ_get(void *priv)
 {
-	const struct mlxsw_sp1_kvdl *kvdl = priv;
+	struct mlxsw_sp1_kvdl_occ_ctx *ctx = priv;
+	bool cnt_all = ctx->count_all_parts;
+	int beg, end;
 	u64 occ = 0;
-	int i;
 
-	for (i = 0; i < MLXSW_SP1_KVDL_PARTS_INFO_LEN; i++)
-		occ += mlxsw_sp1_kvdl_part_occ(kvdl->parts[i]);
+	beg = cnt_all ? 0 : ctx->first_part_id,
+	end = cnt_all ? MLXSW_SP1_KVDL_PARTS_INFO_LEN : beg + 1;
+	for (int i = beg; i < end; i++)
+		occ += mlxsw_sp1_kvdl_part_occ(ctx->kvdl->parts[i]);
 
 	return occ;
-}
-
-static u64 mlxsw_sp1_kvdl_single_occ_get(void *priv)
-{
-	const struct mlxsw_sp1_kvdl *kvdl = priv;
-	struct mlxsw_sp1_kvdl_part *part;
-
-	part = kvdl->parts[MLXSW_SP1_KVDL_PART_ID_SINGLE];
-	return mlxsw_sp1_kvdl_part_occ(part);
-}
-
-static u64 mlxsw_sp1_kvdl_chunks_occ_get(void *priv)
-{
-	const struct mlxsw_sp1_kvdl *kvdl = priv;
-	struct mlxsw_sp1_kvdl_part *part;
-
-	part = kvdl->parts[MLXSW_SP1_KVDL_PART_ID_CHUNKS];
-	return mlxsw_sp1_kvdl_part_occ(part);
-}
-
-static u64 mlxsw_sp1_kvdl_large_chunks_occ_get(void *priv)
-{
-	const struct mlxsw_sp1_kvdl *kvdl = priv;
-	struct mlxsw_sp1_kvdl_part *part;
-
-	part = kvdl->parts[MLXSW_SP1_KVDL_PART_ID_LARGE_CHUNKS];
-	return mlxsw_sp1_kvdl_part_occ(part);
 }
 
 static int mlxsw_sp1_kvdl_init(struct mlxsw_sp *mlxsw_sp, void *priv)
 {
 	struct devlink *devlink = priv_to_devlink(mlxsw_sp->core);
-	struct mlxsw_sp1_kvdl *kvdl = priv;
+	struct mlxsw_sp1_kvdl_occ_ctx ctx = { priv };
 	int err;
 
-	err = mlxsw_sp1_kvdl_parts_init(mlxsw_sp, kvdl);
+	err = mlxsw_sp1_kvdl_parts_init(mlxsw_sp, ctx.kvdl);
 	if (err)
 		return err;
+
+	ctx.first_part_id = MLXSW_SP1_KVDL_PART_ID_SINGLE;
+	devl_resource_occ_get_register(devlink,
+				       MLXSW_SP_RESOURCE_KVD_LINEAR_SINGLE,
+				       mlxsw_sp1_kvdl_occ_get,
+				       &ctx, sizeof(ctx));
+
+	ctx.first_part_id = MLXSW_SP1_KVDL_PART_ID_CHUNKS;
+	devl_resource_occ_get_register(devlink,
+				       MLXSW_SP_RESOURCE_KVD_LINEAR_CHUNKS,
+				       mlxsw_sp1_kvdl_occ_get,
+				       &ctx, sizeof(ctx));
+
+	ctx.first_part_id = MLXSW_SP1_KVDL_PART_ID_LARGE_CHUNKS;
+	devl_resource_occ_get_register(devlink,
+				       MLXSW_SP_RESOURCE_KVD_LINEAR_LARGE_CHUNKS,
+				       mlxsw_sp1_kvdl_occ_get,
+				       &ctx, sizeof(ctx));
+
+	ctx.count_all_parts = true;
 	devl_resource_occ_get_register(devlink,
 				       MLXSW_SP_RESOURCE_KVD_LINEAR,
 				       mlxsw_sp1_kvdl_occ_get,
-				       &kvdl, sizeof(kvdl));
-	devl_resource_occ_get_register(devlink,
-				       MLXSW_SP_RESOURCE_KVD_LINEAR_SINGLE,
-				       mlxsw_sp1_kvdl_single_occ_get,
-				       &kvdl, sizeof(kvdl));
-	devl_resource_occ_get_register(devlink,
-				       MLXSW_SP_RESOURCE_KVD_LINEAR_CHUNKS,
-				       mlxsw_sp1_kvdl_chunks_occ_get,
-				       &kvdl, sizeof(kvdl));
-	devl_resource_occ_get_register(devlink,
-				       MLXSW_SP_RESOURCE_KVD_LINEAR_LARGE_CHUNKS,
-				       mlxsw_sp1_kvdl_large_chunks_occ_get,
-				       &kvdl, sizeof(kvdl));
+				       &ctx, sizeof(ctx));
+
 	return 0;
 }
 
@@ -400,7 +385,8 @@ int mlxsw_sp1_kvdl_resources_register(struct mlxsw_core *mlxsw_core)
 				     MLXSW_SP1_KVDL_SINGLE_SIZE,
 				     MLXSW_SP_RESOURCE_KVD_LINEAR_SINGLE,
 				     MLXSW_SP_RESOURCE_KVD_LINEAR,
-				     &size_params, sizeof(void *));
+				     &size_params,
+				     sizeof(struct mlxsw_sp1_kvdl_occ_ctx));
 	if (err)
 		return err;
 
@@ -411,7 +397,8 @@ int mlxsw_sp1_kvdl_resources_register(struct mlxsw_core *mlxsw_core)
 				     MLXSW_SP1_KVDL_CHUNKS_SIZE,
 				     MLXSW_SP_RESOURCE_KVD_LINEAR_CHUNKS,
 				     MLXSW_SP_RESOURCE_KVD_LINEAR,
-				     &size_params, sizeof(void *));
+				     &size_params,
+				     sizeof(struct mlxsw_sp1_kvdl_occ_ctx));
 	if (err)
 		return err;
 
@@ -422,6 +409,7 @@ int mlxsw_sp1_kvdl_resources_register(struct mlxsw_core *mlxsw_core)
 				     MLXSW_SP1_KVDL_LARGE_CHUNKS_SIZE,
 				     MLXSW_SP_RESOURCE_KVD_LINEAR_LARGE_CHUNKS,
 				     MLXSW_SP_RESOURCE_KVD_LINEAR,
-				     &size_params, sizeof(void *));
+				     &size_params,
+				     sizeof(struct mlxsw_sp1_kvdl_occ_ctx));
 	return err;
 }
