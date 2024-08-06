@@ -8431,9 +8431,9 @@ static int ath10k_mac_op_set_bitrate_mask(struct ieee80211_hw *hw,
 			     ar->normal_mode_fw.fw_file.fw_features);
 	if (allow_pfr) {
 		mutex_lock(&ar->conf_mutex);
-		ieee80211_iterate_stations_atomic(ar->hw,
-						  ath10k_mac_clr_bitrate_mask_iter,
-						  arvif);
+		ieee80211_iterate_stations_mtx(ar->hw,
+					       ath10k_mac_clr_bitrate_mask_iter,
+					       arvif);
 		mutex_unlock(&ar->conf_mutex);
 	}
 
