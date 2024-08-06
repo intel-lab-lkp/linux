@@ -73,5 +73,5 @@ void *arch_dma_set_uncached(void *ptr, size_t size)
 
 	addr |= CONFIG_NIOS2_IO_REGION_BASE;
 
-	return (void *)ptr;
+	return (void *)addr;
 }
