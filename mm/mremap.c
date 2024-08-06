@@ -676,6 +676,9 @@ static unsigned long move_vma(struct vm_area_struct *vma,
 	if (unlikely(flags & MREMAP_DONTUNMAP))
 		to_account = new_len;
 
+	if (!can_modify_vma(vma))
+		return -EPERM;
+
 	if (vma->vm_ops && vma->vm_ops->may_split) {
 		if (vma->vm_start != old_addr)
 			err = vma->vm_ops->may_split(vma, old_addr);
@@ -821,6 +824,10 @@ static struct vm_area_struct *vma_to_resize(unsigned long addr,
 	if (!vma)
 		return ERR_PTR(-EFAULT);
 
+	/* Don't allow vma expansion when it has already been sealed */
+	if (!can_modify_vma(vma))
+		return ERR_PTR(-EPERM);
+
 	/*
 	 * !old_len is a special case where an attempt is made to 'duplicate'
 	 * a mapping.  This makes no sense for private mappings as it will
@@ -901,19 +908,6 @@ static unsigned long mremap_to(unsigned long addr, unsigned long old_len,
 	 */
 	if ((mm->map_count + 2) >= sysctl_max_map_count - 3)
 		return -ENOMEM;
-
-	/*
-	 * In mremap_to().
-	 * Move a VMA to another location, check if src addr is sealed.
-	 *
-	 * Place can_modify_mm here because mremap_to()
-	 * does its own checking for address range, and we only
-	 * check the sealing after passing those checks.
-	 *
-	 * can_modify_mm assumes we have acquired the lock on MM.
-	 */
-	if (unlikely(!can_modify_mm(mm, addr, addr + old_len)))
-		return -EPERM;
 
 	if (flags & MREMAP_FIXED) {
 		/*
@@ -1076,19 +1070,6 @@ SYSCALL_DEFINE5(mremap, unsigned long, addr, unsigned long, old_len,
 		ret = mremap_to(addr, old_len, new_addr, new_len,
 				&locked, flags, &uf, &uf_unmap_early,
 				&uf_unmap);
-		goto out;
-	}
-
-	/*
-	 * Below is shrink/expand case (not mremap_to())
-	 * Check if src address is sealed, if so, reject.
-	 * In other words, prevent shrinking or expanding a sealed VMA.
-	 *
-	 * Place can_modify_mm here so we can keep the logic related to
-	 * shrink/expand together.
-	 */
-	if (unlikely(!can_modify_mm(mm, addr, addr + old_len))) {
-		ret = -EPERM;
 		goto out;
 	}
 
