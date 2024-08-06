@@ -12,6 +12,7 @@
 #include <asm/processor.h>
 #include <asm/cacheflush.h>
 #include <asm/tlbflush.h>
+#include <asm/cpu.h>
 
 #define __HAVE_ARCH_PGD_FREE
 #define __HAVE_ARCH_PUD_FREE
@@ -136,5 +137,59 @@ pmd_populate(struct mm_struct *mm, pmd_t *pmdp, pgtable_t ptep)
 	VM_BUG_ON(mm == &init_mm);
 	__pmd_populate(pmdp, page_to_phys(ptep), PMD_TYPE_TABLE | PMD_TABLE_PXN);
 }
+
+#ifdef CONFIG_HUGETLB_PAGE_OPTIMIZE_VMEMMAP
+
+#define vmemmap_update_lock vmemmap_update_lock
+static inline void vmemmap_update_lock(void)
+{
+	cpus_read_lock();
+}
+
+#define vmemmap_update_unlock vmemmap_update_unlock
+static inline void vmemmap_update_unlock(void)
+{
+	cpus_read_unlock();
+}
+
+#define vmemmap_update_pte vmemmap_update_pte
+static inline void vmemmap_update_pte(unsigned long addr, pte_t *ptep, pte_t pte)
+{
+	preempt_disable();
+	pause_remote_cpus();
+
+	pte_clear(&init_mm, addr, ptep);
+	flush_tlb_kernel_range(addr, addr + PAGE_SIZE);
+	set_pte_at(&init_mm, addr, ptep, pte);
+
+	resume_remote_cpus();
+	preempt_enable();
+}
+
+#define vmemmap_update_pmd vmemmap_update_pmd
+static inline void vmemmap_update_pmd(unsigned long addr, pmd_t *pmdp, pte_t *ptep)
+{
+	preempt_disable();
+	pause_remote_cpus();
+
+	pmd_clear(pmdp);
+	flush_tlb_kernel_range(addr, addr + PMD_SIZE);
+	pmd_populate_kernel(&init_mm, pmdp, ptep);
+
+	resume_remote_cpus();
+	preempt_enable();
+}
+
+#define vmemmap_flush_tlb_all vmemmap_flush_tlb_all
+static inline void vmemmap_flush_tlb_all(void)
+{
+}
+
+#define vmemmap_flush_tlb_range vmemmap_flush_tlb_range
+static inline void vmemmap_flush_tlb_range(unsigned long start, unsigned long end)
+{
+}
+
+#endif /* CONFIG_HUGETLB_PAGE_OPTIMIZE_VMEMMAP */
 
 #endif
