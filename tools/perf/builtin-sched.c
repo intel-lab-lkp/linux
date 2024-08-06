@@ -2729,8 +2729,14 @@ static int timehist_sched_change_event(struct perf_tool *tool,
 		}
 	}
 
-	if (!sched->summary_only)
+	/*
+	 * when only show idle events, only runtime stats of idle tasks
+	 * need to update, and can skip non-idle tasks sample.
+	 */
+	if (!sched->summary_only &&
+	    !(sched->idle_hist && thread__tid(thread) != 0)) {
 		timehist_print_sample(sched, evsel, sample, &al, thread, t, state);
+	}
 
 out:
 	if (sched->hist_time.start == 0 && t >= ptime->start)
