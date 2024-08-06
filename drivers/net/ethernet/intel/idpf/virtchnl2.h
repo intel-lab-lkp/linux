@@ -1021,6 +1021,7 @@ VIRTCHNL2_CHECK_STRUCT_LEN(8, virtchnl2_get_ptype_info);
  * struct virtchnl2_vport_stats - Vport statistics.
  * @vport_id: Vport id.
  * @pad: Padding.
+ * @counters: grouped counters for bulk operations
  * @rx_bytes: Received bytes.
  * @rx_unicast: Received unicast packets.
  * @rx_multicast: Received multicast packets.
@@ -1045,21 +1046,23 @@ VIRTCHNL2_CHECK_STRUCT_LEN(8, virtchnl2_get_ptype_info);
 struct virtchnl2_vport_stats {
 	__le32 vport_id;
 	u8 pad[4];
-	__le64 rx_bytes;
-	__le64 rx_unicast;
-	__le64 rx_multicast;
-	__le64 rx_broadcast;
-	__le64 rx_discards;
-	__le64 rx_errors;
-	__le64 rx_unknown_protocol;
-	__le64 tx_bytes;
-	__le64 tx_unicast;
-	__le64 tx_multicast;
-	__le64 tx_broadcast;
-	__le64 tx_discards;
-	__le64 tx_errors;
-	__le64 rx_invalid_frame_length;
-	__le64 rx_overflow_drop;
+	struct_group(counters,
+		__le64 rx_bytes;
+		__le64 rx_unicast;
+		__le64 rx_multicast;
+		__le64 rx_broadcast;
+		__le64 rx_discards;
+		__le64 rx_errors;
+		__le64 rx_unknown_protocol;
+		__le64 tx_bytes;
+		__le64 tx_unicast;
+		__le64 tx_multicast;
+		__le64 tx_broadcast;
+		__le64 tx_discards;
+		__le64 tx_errors;
+		__le64 rx_invalid_frame_length;
+		__le64 rx_overflow_drop;
+	);
 };
 VIRTCHNL2_CHECK_STRUCT_LEN(128, virtchnl2_vport_stats);
 
