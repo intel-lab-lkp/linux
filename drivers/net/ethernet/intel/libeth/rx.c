@@ -252,8 +252,3 @@ void libeth_rx_pt_gen_hash_type(struct libeth_rx_pt *pt)
 	pt->hash_type |= libeth_rx_pt_xdp_pl[pt->payload_layer];
 }
 EXPORT_SYMBOL_NS_GPL(libeth_rx_pt_gen_hash_type, LIBETH);
-
-/* Module */
-
-MODULE_DESCRIPTION("Common Ethernet library");
-MODULE_LICENSE("GPL");
