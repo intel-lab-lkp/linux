@@ -433,7 +433,7 @@ static int evergreen_cs_track_validate_cb(struct radeon_cs_parser *p, unsigned i
 		return r;
 	}
 
-	offset = (unsigned long)track->cb_color_bo_offset[id] << 8;
+	offset = track->cb_color_bo_offset[id] << 8;
 	if (offset & (surf.base_align - 1)) {
 		dev_warn(p->dev, "%s:%d cb[%d] bo base %ld not aligned with %ld\n",
 			 __func__, __LINE__, id, offset, surf.base_align);
@@ -455,7 +455,7 @@ static int evergreen_cs_track_validate_cb(struct radeon_cs_parser *p, unsigned i
 				min = surf.nby - 8;
 			}
 			bsize = radeon_bo_size(track->cb_color_bo[id]);
-			tmp = (unsigned long)track->cb_color_bo_offset[id] << 8;
+			tmp = track->cb_color_bo_offset[id] << 8;
 			for (nby = surf.nby; nby > min; nby--) {
 				size = nby * surf.nbx * surf.bpe * surf.nsamples;
 				if ((tmp + size * mslice) <= bsize) {
@@ -476,10 +476,10 @@ static int evergreen_cs_track_validate_cb(struct radeon_cs_parser *p, unsigned i
 			}
 		}
 		dev_warn(p->dev, "%s:%d cb[%d] bo too small (layer size %d, "
-			 "offset %ld, max layer %d, bo size %ld, slice %d)\n",
+			 "offset %d, max layer %d, bo size %ld, slice %d)\n",
 			 __func__, __LINE__, id, surf.layer_size,
-			(unsigned long)track->cb_color_bo_offset[id] << 8,
-			mslice,	radeon_bo_size(track->cb_color_bo[id]), slice);
+			track->cb_color_bo_offset[id] << 8, mslice,
+			radeon_bo_size(track->cb_color_bo[id]), slice);
 		dev_warn(p->dev, "%s:%d problematic surf: (%d %d) (%d %d %d %d %d %d %d)\n",
 			 __func__, __LINE__, surf.nbx, surf.nby,
 			surf.mode, surf.bpe, surf.nsamples,
@@ -608,7 +608,7 @@ static int evergreen_cs_track_validate_stencil(struct radeon_cs_parser *p)
 		return r;
 	}
 
-	offset = (unsigned long)track->db_s_read_offset << 8;
+	offset = track->db_s_read_offset << 8;
 	if (offset & (surf.base_align - 1)) {
 		dev_warn(p->dev, "%s:%d stencil read bo base %ld not aligned with %ld\n",
 			 __func__, __LINE__, offset, surf.base_align);
@@ -627,7 +627,7 @@ static int evergreen_cs_track_validate_stencil(struct radeon_cs_parser *p)
 		return -EINVAL;
 	}
 
-	offset = (unsigned long)track->db_s_write_offset << 8;
+	offset = track->db_s_write_offset << 8;
 	if (offset & (surf.base_align - 1)) {
 		dev_warn(p->dev, "%s:%d stencil write bo base %ld not aligned with %ld\n",
 			 __func__, __LINE__, offset, surf.base_align);
@@ -706,7 +706,7 @@ static int evergreen_cs_track_validate_depth(struct radeon_cs_parser *p)
 		return r;
 	}
 
-	offset = (unsigned long)track->db_z_read_offset << 8;
+	offset = track->db_z_read_offset << 8;
 	if (offset & (surf.base_align - 1)) {
 		dev_warn(p->dev, "%s:%d stencil read bo base %ld not aligned with %ld\n",
 			 __func__, __LINE__, offset, surf.base_align);
@@ -722,7 +722,7 @@ static int evergreen_cs_track_validate_depth(struct radeon_cs_parser *p)
 		return -EINVAL;
 	}
 
-	offset = (unsigned long)track->db_z_write_offset << 8;
+	offset = track->db_z_write_offset << 8;
 	if (offset & (surf.base_align - 1)) {
 		dev_warn(p->dev, "%s:%d stencil write bo base %ld not aligned with %ld\n",
 			 __func__, __LINE__, offset, surf.base_align);
