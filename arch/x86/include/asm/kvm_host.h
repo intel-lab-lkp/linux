@@ -1215,6 +1215,13 @@ enum kvm_apicv_inhibit {
 	APICV_INHIBIT_REASON_HYPERV,
 
 	/*
+	 * Using VP Assist and APICv simultaneously on Sapphire Rapids
+	 * or Emerald Rapids causes KVM internal error, which is
+	 * considered to be a microcode issue.
+	 */
+	APICV_INHIBIT_REASON_HYPERV_VP_ASSIST,
+
+	/*
 	 * APIC acceleration is inhibited because the userspace didn't yet
 	 * enable the kernel/split irqchip.
 	 */
@@ -1286,6 +1293,7 @@ enum kvm_apicv_inhibit {
 #define APICV_INHIBIT_REASONS				\
 	__APICV_INHIBIT_REASON(DISABLED),		\
 	__APICV_INHIBIT_REASON(HYPERV),			\
+	__APICV_INHIBIT_REASON(HYPERV_VP_ASSIST),	\
 	__APICV_INHIBIT_REASON(ABSENT),			\
 	__APICV_INHIBIT_REASON(BLOCKIRQ),		\
 	__APICV_INHIBIT_REASON(PHYSICAL_ID_ALIASED),	\

@@ -36,6 +36,7 @@
 
 #include <asm/apicdef.h>
 #include <asm/mshyperv.h>
+#include <asm/cpu_device_id.h>
 #include <trace/events/kvm.h>
 
 #include "trace.h"
@@ -1550,6 +1551,8 @@ static int kvm_hv_set_msr(struct kvm_vcpu *vcpu, u32 msr, u64 data, bool host)
 	case HV_X64_MSR_VP_ASSIST_PAGE: {
 		u64 gfn;
 		unsigned long addr;
+		struct kvm *kvm = vcpu->kvm;
+		struct cpuinfo_x86 *c = &boot_cpu_data;
 
 		if (!(data & HV_X64_MSR_VP_ASSIST_PAGE_ENABLE)) {
 			hv_vcpu->hv_vapic = data;
@@ -1571,6 +1574,16 @@ static int kvm_hv_set_msr(struct kvm_vcpu *vcpu, u32 msr, u64 data, bool host)
 			return 1;
 		hv_vcpu->hv_vapic = data;
 		kvm_vcpu_mark_page_dirty(vcpu, gfn);
+
+		/*
+		 * Using VP Assist and APICv simultaneously on Sapphire Rapids
+		 * or Emerald Rapids causes KVM internal error, which is
+		 * considered to be a microcode issue.
+		 */
+		if (c->x86_vfm == INTEL_SAPPHIRERAPIDS_X ||
+		    c->x86_vfm == INTEL_EMERALDRAPIDS_X)
+			kvm_set_apicv_inhibit(kvm, APICV_INHIBIT_REASON_HYPERV_VP_ASSIST);
+
 		if (kvm_lapic_set_pv_eoi(vcpu,
 					    gfn_to_gpa(gfn) | KVM_MSR_ENABLED,
 					    sizeof(struct hv_vp_assist_page)))
