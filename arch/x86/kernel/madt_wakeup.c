@@ -14,6 +14,8 @@
 #include <asm/nmi.h>
 #include <asm/processor.h>
 #include <asm/reboot.h>
+#include <asm/madt_wakeup.h>
+#include <asm/prom.h>
 
 /* Physical address of the Multiprocessor Wakeup Structure mailbox */
 static u64 acpi_mp_wake_mailbox_paddr __ro_after_init;
@@ -122,7 +124,7 @@ static int __init init_transition_pgtable(pgd_t *pgd)
 	return 0;
 }
 
-static int __init acpi_mp_setup_reset(u64 reset_vector)
+static int __init __maybe_unused acpi_mp_setup_reset(u64 reset_vector)
 {
 	struct x86_mapping_info info = {
 		.alloc_pgt_page = alloc_pgt_page,
@@ -226,7 +228,7 @@ static int acpi_wakeup_cpu(u32 apicid, unsigned long start_ip)
 	return 0;
 }
 
-static void acpi_mp_disable_offlining(struct acpi_madt_multiproc_wakeup *mp_wake)
+static void __maybe_unused acpi_mp_disable_offlining(struct acpi_madt_multiproc_wakeup *mp_wake)
 {
 	cpu_hotplug_disable_offlining();
 
@@ -248,6 +250,7 @@ static void acpi_mp_disable_offlining(struct acpi_madt_multiproc_wakeup *mp_wake
 	mp_wake->mailbox_address = 0;
 }
 
+#ifdef CONFIG_ACPI
 int __init acpi_parse_mp_wake(union acpi_subtable_headers *header,
 			      const unsigned long end)
 {
@@ -290,3 +293,43 @@ int __init acpi_parse_mp_wake(union acpi_subtable_headers *header,
 
 	return 0;
 }
+#endif /* CONFIG_ACPI */
+
+#ifdef CONFIG_OF
+int __init dtb_parse_mp_wake(u64 *wake_mailbox_paddr)
+{
+	struct device_node *node;
+	u64 mailaddr;
+	int ret = 0;
+
+	node = of_find_node_by_path("/cpus");
+	if (!node)
+		return -ENODEV;
+
+	if (of_property_match_string(node, "enable-method",
+				     "acpi-wakeup-mailbox") < 0) {
+		pr_err("No acpi wakeup mailbox enable-method\n");
+		ret = -ENODEV;
+		goto done;
+	}
+
+	/*
+	 * No support to the MADT reset vector yet.
+	 */
+	cpu_hotplug_disable_offlining();
+
+	if (of_property_read_u64(node, "wakeup-mailbox-addr", &mailaddr)) {
+		pr_err("Invalid wakeup mailbox addr\n");
+		ret = -EINVAL;
+		goto done;
+	}
+	acpi_mp_wake_mailbox_paddr = mailaddr;
+	if (wake_mailbox_paddr)
+		*wake_mailbox_paddr = mailaddr;
+	pr_info("dt wakeup-mailbox: addr 0x%llx\n", mailaddr);
+	apic_update_callback(wakeup_secondary_cpu_64, acpi_wakeup_cpu);
+done:
+	of_node_put(node);
+	return ret;
+}
+#endif /* CONFIG_OF */

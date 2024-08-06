@@ -288,6 +288,7 @@ T:	git git://git.kernel.org/pub/scm/linux/kernel/git/rafael/linux-pm
 F:	Documentation/ABI/testing/configfs-acpi
 F:	Documentation/ABI/testing/sysfs-bus-acpi
 F:	Documentation/firmware-guide/acpi/
+F:	arch/x86/include/asm/madt_wakeup.h
 F:	arch/x86/kernel/acpi/
 F:	arch/x86/kernel/madt_playdead.S
 F:	arch/x86/kernel/madt_wakeup.c
