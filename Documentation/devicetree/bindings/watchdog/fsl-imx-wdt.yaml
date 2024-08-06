@@ -48,6 +48,8 @@ properties:
   clocks:
     maxItems: 1
 
+  big-endian: true
+
   fsl,ext-reset-output:
     $ref: /schemas/types.yaml#/definitions/flag
     description: |
