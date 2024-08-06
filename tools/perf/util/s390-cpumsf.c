@@ -172,7 +172,6 @@ struct s390_cpumsf {
 	struct perf_session	*session;
 	struct machine		*machine;
 	u32			auxtrace_type;
-	u32			pmu_type;
 	u16			machine_type;
 	bool			data_queued;
 	bool			use_logfile;
@@ -1136,7 +1135,6 @@ int s390_cpumsf_process_auxtrace_info(union perf_event *event,
 	sf->session = session;
 	sf->machine = &session->machines.host; /* No kvm support */
 	sf->auxtrace_type = auxtrace_info->type;
-	sf->pmu_type = PERF_TYPE_RAW;
 	sf->machine_type = s390_cpumsf_get_type(session->evlist->env->cpuid);
 
 	sf->auxtrace.process_event = s390_cpumsf_process_event;
