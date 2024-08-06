@@ -839,7 +839,7 @@ __addr_add_del()
 	array=("${@}")
 
 	for addrstr in "${array[@]}"; do
-		ip address $add_del $addrstr dev $if_name
+		ip address $add_del $addrstr dev $if_name &> /dev/null
 	done
 }
 
