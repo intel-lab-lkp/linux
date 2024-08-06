@@ -741,6 +741,30 @@ static int do_gt_restart(struct xe_gt *gt)
 	return 0;
 }
 
+static void xe_uevent_gt_reset_failure(struct pci_dev *pdev, u8 tile_id, u8 gt_id)
+{
+	char *reset_event[5];
+
+	reset_event[0] = DRM_XE_RESET_REQUIRED_UEVENT;
+	reset_event[1] = DRM_XE_RESET_REQUIRED_UEVENT_REASON_GT;
+	reset_event[2] = kasprintf(GFP_KERNEL, "TILE_ID=%d", tile_id);
+	reset_event[3] = kasprintf(GFP_KERNEL, "GT_ID=%d", gt_id);
+	reset_event[4] = NULL;
+	kobject_uevent_env(&pdev->dev.kobj, KOBJ_CHANGE, reset_event);
+
+	kfree(reset_event[2]);
+	kfree(reset_event[3]);
+}
+
+static void gt_reset_failed(struct xe_gt *gt, int err)
+{
+	xe_gt_err(gt, "reset failed (%pe)\n", ERR_PTR(err));
+
+	/* Notify userspace about gt reset failure */
+	xe_uevent_gt_reset_failure(to_pci_dev(gt_to_xe(gt)->drm.dev),
+				   gt_to_tile(gt)->id, gt->info.id);
+}
+
 static int gt_reset(struct xe_gt *gt)
 {
 	int err;
@@ -796,8 +820,7 @@ err_msg:
 	XE_WARN_ON(xe_uc_start(&gt->uc));
 	xe_pm_runtime_put(gt_to_xe(gt));
 err_fail:
-	xe_gt_err(gt, "reset failed (%pe)\n", ERR_PTR(err));
-
+	gt_reset_failed(gt, err);
 	xe_device_declare_wedged(gt_to_xe(gt));
 
 	return err;
