@@ -234,7 +234,7 @@ int dsa_devlink_resource_register(struct dsa_switch *ds,
 	devl_lock(ds->devlink);
 	ret = devl_resource_register(ds->devlink, resource_name, resource_size,
 				     resource_id, parent_resource_id,
-				     size_params);
+				     size_params, sizeof(void *));
 	devl_unlock(ds->devlink);
 
 	return ret;
@@ -254,7 +254,7 @@ void dsa_devlink_resource_occ_get_register(struct dsa_switch *ds,
 {
 	devl_lock(ds->devlink);
 	devl_resource_occ_get_register(ds->devlink, resource_id, occ_get,
-				       occ_get_priv);
+				       &occ_get_priv, sizeof(occ_get_priv));
 	devl_unlock(ds->devlink);
 }
 EXPORT_SYMBOL_GPL(dsa_devlink_resource_occ_get_register);

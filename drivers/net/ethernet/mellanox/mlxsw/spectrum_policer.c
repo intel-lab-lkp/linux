@@ -97,7 +97,7 @@ mlxsw_sp_policer_single_rate_family_init(struct mlxsw_sp_policer_family *family)
 	devl_resource_occ_get_register(devlink,
 				       MLXSW_SP_RESOURCE_SINGLE_RATE_POLICERS,
 				       mlxsw_sp_policer_single_rate_occ_get,
-				       family);
+				       &family, sizeof(family));
 
 	return 0;
 }
@@ -423,7 +423,7 @@ int mlxsw_sp_policer_resources_register(struct mlxsw_core *mlxsw_core)
 				     global_policers,
 				     MLXSW_SP_RESOURCE_GLOBAL_POLICERS,
 				     DEVLINK_RESOURCE_ID_PARENT_TOP,
-				     &size_params);
+				     &size_params, sizeof(void *));
 	if (err)
 		return err;
 
@@ -434,7 +434,7 @@ int mlxsw_sp_policer_resources_register(struct mlxsw_core *mlxsw_core)
 				     single_rate_policers,
 				     MLXSW_SP_RESOURCE_SINGLE_RATE_POLICERS,
 				     MLXSW_SP_RESOURCE_GLOBAL_POLICERS,
-				     &size_params);
+				     &size_params, sizeof(void *));
 	if (err)
 		return err;
 

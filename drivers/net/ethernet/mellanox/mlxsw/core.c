@@ -134,7 +134,7 @@ static int mlxsw_core_resources_ports_register(struct mlxsw_core *mlxsw_core)
 				      DEVLINK_RESOURCE_GENERIC_NAME_PORTS,
 				      max_ports, MLXSW_CORE_RESOURCE_PORTS,
 				      DEVLINK_RESOURCE_ID_PARENT_TOP,
-				      &ports_num_params);
+				      &ports_num_params, sizeof(void *));
 }
 
 static int mlxsw_ports_init(struct mlxsw_core *mlxsw_core, bool reload)
@@ -161,7 +161,8 @@ static int mlxsw_ports_init(struct mlxsw_core *mlxsw_core, bool reload)
 	}
 	atomic_set(&mlxsw_core->active_ports_count, 0);
 	devl_resource_occ_get_register(devlink, MLXSW_CORE_RESOURCE_PORTS,
-				       mlxsw_ports_occ_get, mlxsw_core);
+				       mlxsw_ports_occ_get, &mlxsw_core,
+				       sizeof(mlxsw_core));
 
 	return 0;
 

@@ -259,7 +259,8 @@ static int mlx5_sf_hw_table_res_register(struct mlx5_core_dev *dev, u16 max_fn,
 	devlink_resource_size_params_init(&size_params, max_fn, max_fn, 1,
 					  DEVLINK_RESOURCE_UNIT_ENTRY);
 	err = devl_resource_register(devlink, "max_local_SFs", max_fn, MLX5_DL_RES_MAX_LOCAL_SFS,
-				     DEVLINK_RESOURCE_ID_PARENT_TOP, &size_params);
+				     DEVLINK_RESOURCE_ID_PARENT_TOP,
+				     &size_params, sizeof(void *));
 	if (err)
 		return err;
 
@@ -267,7 +268,7 @@ static int mlx5_sf_hw_table_res_register(struct mlx5_core_dev *dev, u16 max_fn,
 					  DEVLINK_RESOURCE_UNIT_ENTRY);
 	return devl_resource_register(devlink, "max_external_SFs", max_ext_fn,
 				      MLX5_DL_RES_MAX_EXTERNAL_SFS, DEVLINK_RESOURCE_ID_PARENT_TOP,
-				      &size_params);
+				      &size_params, sizeof(void *));
 }
 
 int mlx5_sf_hw_table_init(struct mlx5_core_dev *dev)

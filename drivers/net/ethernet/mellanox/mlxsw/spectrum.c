@@ -3660,7 +3660,7 @@ static int mlxsw_sp1_resources_kvd_register(struct mlxsw_core *mlxsw_core)
 	err = devl_resource_register(devlink, MLXSW_SP_RESOURCE_NAME_KVD,
 				     kvd_size, MLXSW_SP_RESOURCE_KVD,
 				     DEVLINK_RESOURCE_ID_PARENT_TOP,
-				     &kvd_size_params);
+				     &kvd_size_params, sizeof(void *));
 	if (err)
 		return err;
 
@@ -3669,7 +3669,7 @@ static int mlxsw_sp1_resources_kvd_register(struct mlxsw_core *mlxsw_core)
 				     linear_size,
 				     MLXSW_SP_RESOURCE_KVD_LINEAR,
 				     MLXSW_SP_RESOURCE_KVD,
-				     &linear_size_params);
+				     &linear_size_params, sizeof(void *));
 	if (err)
 		return err;
 
@@ -3686,7 +3686,7 @@ static int mlxsw_sp1_resources_kvd_register(struct mlxsw_core *mlxsw_core)
 				     double_size,
 				     MLXSW_SP_RESOURCE_KVD_HASH_DOUBLE,
 				     MLXSW_SP_RESOURCE_KVD,
-				     &hash_double_size_params);
+				     &hash_double_size_params, sizeof(void *));
 	if (err)
 		return err;
 
@@ -3695,7 +3695,7 @@ static int mlxsw_sp1_resources_kvd_register(struct mlxsw_core *mlxsw_core)
 				     single_size,
 				     MLXSW_SP_RESOURCE_KVD_HASH_SINGLE,
 				     MLXSW_SP_RESOURCE_KVD,
-				     &hash_single_size_params);
+				     &hash_single_size_params, sizeof(void *));
 	if (err)
 		return err;
 
@@ -3719,7 +3719,7 @@ static int mlxsw_sp2_resources_kvd_register(struct mlxsw_core *mlxsw_core)
 	return devl_resource_register(devlink, MLXSW_SP_RESOURCE_NAME_KVD,
 				      kvd_size, MLXSW_SP_RESOURCE_KVD,
 				      DEVLINK_RESOURCE_ID_PARENT_TOP,
-				      &kvd_size_params);
+				      &kvd_size_params, sizeof(void *));
 }
 
 static int mlxsw_sp_resources_span_register(struct mlxsw_core *mlxsw_core)
@@ -3738,7 +3738,7 @@ static int mlxsw_sp_resources_span_register(struct mlxsw_core *mlxsw_core)
 	return devl_resource_register(devlink, MLXSW_SP_RESOURCE_NAME_SPAN,
 				      max_span, MLXSW_SP_RESOURCE_SPAN,
 				      DEVLINK_RESOURCE_ID_PARENT_TOP,
-				      &span_size_params);
+				      &span_size_params, sizeof(void *));
 }
 
 static int
@@ -3762,7 +3762,7 @@ mlxsw_sp_resources_rif_mac_profile_register(struct mlxsw_core *mlxsw_core)
 				      max_rif_mac_profiles,
 				      MLXSW_SP_RESOURCE_RIF_MAC_PROFILES,
 				      DEVLINK_RESOURCE_ID_PARENT_TOP,
-				      &size_params);
+				      &size_params, sizeof(void *));
 }
 
 static int mlxsw_sp_resources_rifs_register(struct mlxsw_core *mlxsw_core)
@@ -3781,7 +3781,7 @@ static int mlxsw_sp_resources_rifs_register(struct mlxsw_core *mlxsw_core)
 	return devl_resource_register(devlink, "rifs", max_rifs,
 				      MLXSW_SP_RESOURCE_RIFS,
 				      DEVLINK_RESOURCE_ID_PARENT_TOP,
-				      &size_params);
+				      &size_params, sizeof(void *));
 }
 
 static int
@@ -3801,7 +3801,7 @@ mlxsw_sp_resources_port_range_register(struct mlxsw_core *mlxsw_core)
 	return devl_resource_register(devlink, "port_range_registers", max,
 				      MLXSW_SP_RESOURCE_PORT_RANGE_REGISTERS,
 				      DEVLINK_RESOURCE_ID_PARENT_TOP,
-				      &size_params);
+				      &size_params, sizeof(void *));
 }
 
 static int mlxsw_sp1_resources_register(struct mlxsw_core *mlxsw_core)

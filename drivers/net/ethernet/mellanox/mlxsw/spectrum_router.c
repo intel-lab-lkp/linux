@@ -11132,11 +11132,11 @@ static int mlxsw_sp_rifs_init(struct mlxsw_sp *mlxsw_sp)
 	devl_resource_occ_get_register(devlink,
 				       MLXSW_SP_RESOURCE_RIF_MAC_PROFILES,
 				       mlxsw_sp_rif_mac_profiles_occ_get,
-				       mlxsw_sp);
+				       &mlxsw_sp, sizeof(mlxsw_sp));
 	devl_resource_occ_get_register(devlink,
 				       MLXSW_SP_RESOURCE_RIFS,
 				       mlxsw_sp_rifs_occ_get,
-				       mlxsw_sp);
+				       &mlxsw_sp, sizeof(mlxsw_sp));
 
 	return 0;
 

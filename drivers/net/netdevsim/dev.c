@@ -439,7 +439,7 @@ static int nsim_dev_resources_register(struct devlink *devlink)
 	err = devl_resource_register(devlink, "IPv4", (u64)-1,
 				     NSIM_RESOURCE_IPV4,
 				     DEVLINK_RESOURCE_ID_PARENT_TOP,
-				     &params);
+				     &params, 0);
 	if (err) {
 		pr_err("Failed to register IPv4 top resource\n");
 		goto err_out;
@@ -447,7 +447,7 @@ static int nsim_dev_resources_register(struct devlink *devlink)
 
 	err = devl_resource_register(devlink, "fib", (u64)-1,
 				     NSIM_RESOURCE_IPV4_FIB,
-				     NSIM_RESOURCE_IPV4, &params);
+				     NSIM_RESOURCE_IPV4, &params, 0);
 	if (err) {
 		pr_err("Failed to register IPv4 FIB resource\n");
 		goto err_out;
@@ -455,7 +455,7 @@ static int nsim_dev_resources_register(struct devlink *devlink)
 
 	err = devl_resource_register(devlink, "fib-rules", (u64)-1,
 				     NSIM_RESOURCE_IPV4_FIB_RULES,
-				     NSIM_RESOURCE_IPV4, &params);
+				     NSIM_RESOURCE_IPV4, &params, 0);
 	if (err) {
 		pr_err("Failed to register IPv4 FIB rules resource\n");
 		goto err_out;
@@ -465,7 +465,7 @@ static int nsim_dev_resources_register(struct devlink *devlink)
 	err = devl_resource_register(devlink, "IPv6", (u64)-1,
 				     NSIM_RESOURCE_IPV6,
 				     DEVLINK_RESOURCE_ID_PARENT_TOP,
-				     &params);
+				     &params, 0);
 	if (err) {
 		pr_err("Failed to register IPv6 top resource\n");
 		goto err_out;
@@ -473,7 +473,7 @@ static int nsim_dev_resources_register(struct devlink *devlink)
 
 	err = devl_resource_register(devlink, "fib", (u64)-1,
 				     NSIM_RESOURCE_IPV6_FIB,
-				     NSIM_RESOURCE_IPV6, &params);
+				     NSIM_RESOURCE_IPV6, &params, 0);
 	if (err) {
 		pr_err("Failed to register IPv6 FIB resource\n");
 		goto err_out;
@@ -481,7 +481,7 @@ static int nsim_dev_resources_register(struct devlink *devlink)
 
 	err = devl_resource_register(devlink, "fib-rules", (u64)-1,
 				     NSIM_RESOURCE_IPV6_FIB_RULES,
-				     NSIM_RESOURCE_IPV6, &params);
+				     NSIM_RESOURCE_IPV6, &params, 0);
 	if (err) {
 		pr_err("Failed to register IPv6 FIB rules resource\n");
 		goto err_out;
@@ -491,7 +491,7 @@ static int nsim_dev_resources_register(struct devlink *devlink)
 	err = devl_resource_register(devlink, "nexthops", (u64)-1,
 				     NSIM_RESOURCE_NEXTHOPS,
 				     DEVLINK_RESOURCE_ID_PARENT_TOP,
-				     &params);
+				     &params, 0);
 	if (err) {
 		pr_err("Failed to register NEXTHOPS resource\n");
 		goto err_out;

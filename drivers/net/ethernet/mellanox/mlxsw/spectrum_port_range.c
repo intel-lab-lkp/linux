@@ -183,7 +183,7 @@ int mlxsw_sp_port_range_init(struct mlxsw_sp *mlxsw_sp)
 	devl_resource_occ_get_register(priv_to_devlink(core),
 				       MLXSW_SP_RESOURCE_PORT_RANGE_REGISTERS,
 				       mlxsw_sp_port_range_reg_occ_get,
-				       pr_core);
+				       &pr_core, sizeof(pr_core));
 
 	return 0;
 }

@@ -76,7 +76,7 @@ static int mlxsw_sp_counter_sub_pools_init(struct mlxsw_sp *mlxsw_sp)
 		devl_resource_occ_get_register(devlink,
 					       sub_pool->resource_id,
 					       mlxsw_sp_counter_sub_pool_occ_get,
-					       sub_pool);
+					       &sub_pool, sizeof(sub_pool));
 
 		sub_pool->base_index = base_index;
 		base_index += sub_pool->size;
@@ -140,7 +140,8 @@ int mlxsw_sp_counter_pool_init(struct mlxsw_sp *mlxsw_sp)
 	if (err)
 		goto err_pool_resource_size_get;
 	devl_resource_occ_get_register(devlink, MLXSW_SP_RESOURCE_COUNTERS,
-				       mlxsw_sp_counter_pool_occ_get, pool);
+				       mlxsw_sp_counter_pool_occ_get, &pool,
+				       sizeof(pool));
 
 	pool->usage = bitmap_zalloc(pool->pool_size, GFP_KERNEL);
 	if (!pool->usage) {
@@ -267,7 +268,7 @@ int mlxsw_sp_counter_resources_register(struct mlxsw_core *mlxsw_core)
 				     pool_size,
 				     MLXSW_SP_RESOURCE_COUNTERS,
 				     DEVLINK_RESOURCE_ID_PARENT_TOP,
-				     &size_params);
+				     &size_params, sizeof(void *));
 	if (err)
 		return err;
 
@@ -292,7 +293,7 @@ int mlxsw_sp_counter_resources_register(struct mlxsw_core *mlxsw_core)
 					     sub_pool_size,
 					     sub_pool->resource_id,
 					     MLXSW_SP_RESOURCE_COUNTERS,
-					     &size_params);
+					     &size_params, sizeof(void *));
 		if (err)
 			return err;
 		total_bank_config += sub_pool->bank_count;

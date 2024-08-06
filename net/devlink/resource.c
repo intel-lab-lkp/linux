@@ -19,7 +19,8 @@
  * @list: parent list
  * @resource_list: list of child resources
  * @occ_get: occupancy getter callback
- * @occ_get_priv: occupancy getter callback priv
+ * @priv_size: @priv data size
+ * @priv: priv data allocated for the driver, passed to occupancy callbacks
  */
 struct devlink_resource {
 	const char *name;
@@ -32,7 +33,8 @@ struct devlink_resource {
 	struct list_head list;
 	struct list_head resource_list;
 	devlink_resource_occ_get_t *occ_get;
-	void *occ_get_priv;
+	size_t priv_size;
+	u8 priv[] __counted_by(priv_size);
 };
 
 static struct devlink_resource *
@@ -158,7 +160,7 @@ static int devlink_resource_occ_put(struct devlink_resource *resource,
 	if (!resource->occ_get)
 		return 0;
 	return nla_put_u64_64bit(skb, DEVLINK_ATTR_RESOURCE_OCC,
-				 resource->occ_get(resource->occ_get_priv),
+				 resource->occ_get(resource->priv),
 				 DEVLINK_ATTR_PAD);
 }
 
@@ -326,6 +328,7 @@ int devlink_resources_validate(struct devlink *devlink,
  * @resource_id: resource's id
  * @parent_resource_id: resource's parent id
  * @size_params: size parameters
+ * @priv_data_size: sizeof of priv data member of the resource
  *
  * Generic resources should reuse the same names across drivers.
  * Please see the generic resources list at:
@@ -336,7 +339,8 @@ int devl_resource_register(struct devlink *devlink,
 			   u64 resource_size,
 			   u64 resource_id,
 			   u64 parent_resource_id,
-			   const struct devlink_resource_size_params *size_params)
+			   const struct devlink_resource_size_params *size_params,
+			   size_t priv_data_size)
 {
 	struct devlink_resource *resource;
 	struct list_head *resource_list;
@@ -350,9 +354,11 @@ int devl_resource_register(struct devlink *devlink,
 	if (resource)
 		return -EINVAL;
 
-	resource = kzalloc(sizeof(*resource), GFP_KERNEL);
+	resource = kzalloc(struct_size(resource, priv, priv_data_size),
+			   GFP_KERNEL);
 	if (!resource)
 		return -ENOMEM;
+	resource->priv_size = priv_data_size;
 
 	if (top_hierarchy) {
 		resource_list = &devlink->resource_list;
@@ -463,23 +469,25 @@ EXPORT_SYMBOL_GPL(devl_resource_size_get);
  * @resource_id: resource id
  * @occ_get: occupancy getter callback
  * @occ_get_priv: occupancy getter callback priv
+ * @occ_priv_size: 
  */
 void devl_resource_occ_get_register(struct devlink *devlink,
 				    u64 resource_id,
 				    devlink_resource_occ_get_t *occ_get,
-				    void *occ_get_priv)
+				    void *occ_get_priv, size_t occ_priv_size)
 {
 	struct devlink_resource *resource;
 
 	lockdep_assert_held(&devlink->lock);
 
 	resource = devlink_resource_find(devlink, NULL, resource_id);
-	if (WARN_ON(!resource))
+	if (WARN_ON(!resource || occ_priv_size > resource->priv_size))
 		return;
 	WARN_ON(resource->occ_get);
 
 	resource->occ_get = occ_get;
-	resource->occ_get_priv = occ_get_priv;
+	/* put driver provided data into resource priv memory */
+	memcpy(resource->priv, occ_get_priv, occ_priv_size);
 }
 EXPORT_SYMBOL_GPL(devl_resource_occ_get_register);
 
@@ -502,6 +510,5 @@ void devl_resource_occ_get_unregister(struct devlink *devlink,
 	WARN_ON(!resource->occ_get);
 
 	resource->occ_get = NULL;
-	resource->occ_get_priv = NULL;
 }
 EXPORT_SYMBOL_GPL(devl_resource_occ_get_unregister);

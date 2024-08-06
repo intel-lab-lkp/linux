@@ -107,7 +107,8 @@ int mlxsw_sp_span_init(struct mlxsw_sp *mlxsw_sp)
 		goto err_init;
 
 	devl_resource_occ_get_register(devlink, MLXSW_SP_RESOURCE_SPAN,
-				       mlxsw_sp_span_occ_get, mlxsw_sp);
+				       mlxsw_sp_span_occ_get, &mlxsw_sp,
+				       sizeof(mlxsw_sp));
 	INIT_WORK(&span->work, mlxsw_sp_span_respin_work);
 
 	return 0;

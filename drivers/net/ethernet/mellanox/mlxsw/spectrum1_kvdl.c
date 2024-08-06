@@ -341,19 +341,19 @@ static int mlxsw_sp1_kvdl_init(struct mlxsw_sp *mlxsw_sp, void *priv)
 	devl_resource_occ_get_register(devlink,
 				       MLXSW_SP_RESOURCE_KVD_LINEAR,
 				       mlxsw_sp1_kvdl_occ_get,
-				       kvdl);
+				       &kvdl, sizeof(kvdl));
 	devl_resource_occ_get_register(devlink,
 				       MLXSW_SP_RESOURCE_KVD_LINEAR_SINGLE,
 				       mlxsw_sp1_kvdl_single_occ_get,
-				       kvdl);
+				       &kvdl, sizeof(kvdl));
 	devl_resource_occ_get_register(devlink,
 				       MLXSW_SP_RESOURCE_KVD_LINEAR_CHUNKS,
 				       mlxsw_sp1_kvdl_chunks_occ_get,
-				       kvdl);
+				       &kvdl, sizeof(kvdl));
 	devl_resource_occ_get_register(devlink,
 				       MLXSW_SP_RESOURCE_KVD_LINEAR_LARGE_CHUNKS,
 				       mlxsw_sp1_kvdl_large_chunks_occ_get,
-				       kvdl);
+				       &kvdl, sizeof(kvdl));
 	return 0;
 }
 
@@ -400,7 +400,7 @@ int mlxsw_sp1_kvdl_resources_register(struct mlxsw_core *mlxsw_core)
 				     MLXSW_SP1_KVDL_SINGLE_SIZE,
 				     MLXSW_SP_RESOURCE_KVD_LINEAR_SINGLE,
 				     MLXSW_SP_RESOURCE_KVD_LINEAR,
-				     &size_params);
+				     &size_params, sizeof(void *));
 	if (err)
 		return err;
 
@@ -411,7 +411,7 @@ int mlxsw_sp1_kvdl_resources_register(struct mlxsw_core *mlxsw_core)
 				     MLXSW_SP1_KVDL_CHUNKS_SIZE,
 				     MLXSW_SP_RESOURCE_KVD_LINEAR_CHUNKS,
 				     MLXSW_SP_RESOURCE_KVD_LINEAR,
-				     &size_params);
+				     &size_params, sizeof(void *));
 	if (err)
 		return err;
 
@@ -422,6 +422,6 @@ int mlxsw_sp1_kvdl_resources_register(struct mlxsw_core *mlxsw_core)
 				     MLXSW_SP1_KVDL_LARGE_CHUNKS_SIZE,
 				     MLXSW_SP_RESOURCE_KVD_LINEAR_LARGE_CHUNKS,
 				     MLXSW_SP_RESOURCE_KVD_LINEAR,
-				     &size_params);
+				     &size_params, sizeof(void *));
 	return err;
 }

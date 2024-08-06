@@ -1602,23 +1602,23 @@ struct nsim_fib_data *nsim_fib_create(struct devlink *devlink,
 	devl_resource_occ_get_register(devlink,
 				       NSIM_RESOURCE_IPV4_FIB,
 				       nsim_fib_ipv4_resource_occ_get,
-				       data);
+				       &data, sizeof(data));
 	devl_resource_occ_get_register(devlink,
 				       NSIM_RESOURCE_IPV4_FIB_RULES,
 				       nsim_fib_ipv4_rules_res_occ_get,
-				       data);
+				       &data, sizeof(data));
 	devl_resource_occ_get_register(devlink,
 				       NSIM_RESOURCE_IPV6_FIB,
 				       nsim_fib_ipv6_resource_occ_get,
-				       data);
+				       &data, sizeof(data));
 	devl_resource_occ_get_register(devlink,
 				       NSIM_RESOURCE_IPV6_FIB_RULES,
 				       nsim_fib_ipv6_rules_res_occ_get,
-				       data);
+				       &data, sizeof(data));
 	devl_resource_occ_get_register(devlink,
 				       NSIM_RESOURCE_NEXTHOPS,
 				       nsim_fib_nexthops_res_occ_get,
-				       data);
+				       &data, sizeof(data));
 	return data;
 
 err_nexthop_nb_unregister:
