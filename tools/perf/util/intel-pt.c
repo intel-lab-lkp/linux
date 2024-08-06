@@ -84,7 +84,6 @@ struct intel_pt {
 	unsigned int br_stack_sz;
 	unsigned int br_stack_sz_plus;
 	int have_sched_switch;
-	u32 pmu_type;
 	u64 kernel_start;
 	u64 switch_ip;
 	u64 ptss_ip;
@@ -1020,10 +1019,11 @@ static bool intel_pt_pgd_ip(uint64_t ip, void *data)
 	return __intel_pt_pgd_ip(ip, data) > 0;
 }
 
-static bool intel_pt_get_config(struct intel_pt *pt,
-				struct perf_event_attr *attr, u64 *config)
+static bool intel_pt_get_config(struct evsel *evsel, u64 *config)
 {
-	if (attr->type == pt->pmu_type) {
+	struct perf_event_attr *attr = &evsel->core.attr;
+
+	if (evsel__is_aux_event(evsel)) {
 		if (config)
 			*config = attr->config;
 		return true;
@@ -1037,7 +1037,7 @@ static bool intel_pt_exclude_kernel(struct intel_pt *pt)
 	struct evsel *evsel;
 
 	evlist__for_each_entry(pt->session->evlist, evsel) {
-		if (intel_pt_get_config(pt, &evsel->core.attr, NULL) &&
+		if (intel_pt_get_config(evsel, NULL) &&
 		    !evsel->core.attr.exclude_kernel)
 			return false;
 	}
@@ -1053,7 +1053,7 @@ static bool intel_pt_return_compression(struct intel_pt *pt)
 		return true;
 
 	evlist__for_each_entry(pt->session->evlist, evsel) {
-		if (intel_pt_get_config(pt, &evsel->core.attr, &config) &&
+		if (intel_pt_get_config(evsel, &config) &&
 		    (config & pt->noretcomp_bit))
 			return false;
 	}
@@ -1066,7 +1066,7 @@ static bool intel_pt_branch_enable(struct intel_pt *pt)
 	u64 config;
 
 	evlist__for_each_entry(pt->session->evlist, evsel) {
-		if (intel_pt_get_config(pt, &evsel->core.attr, &config) &&
+		if (intel_pt_get_config(evsel, &config) &&
 		    (config & INTEL_PT_CFG_PASS_THRU) &&
 		    !(config & INTEL_PT_CFG_BRANCH_EN))
 			return false;
@@ -1080,7 +1080,7 @@ static bool intel_pt_disabled_tnt(struct intel_pt *pt)
 	u64 config;
 
 	evlist__for_each_entry(pt->session->evlist, evsel) {
-		if (intel_pt_get_config(pt, &evsel->core.attr, &config) &&
+		if (intel_pt_get_config(evsel, &config) &&
 		    config & INTEL_PT_CFG_TNT_DIS)
 			return true;
 	}
@@ -1100,7 +1100,7 @@ static unsigned int intel_pt_mtc_period(struct intel_pt *pt)
 		config >>= 1;
 
 	evlist__for_each_entry(pt->session->evlist, evsel) {
-		if (intel_pt_get_config(pt, &evsel->core.attr, &config))
+		if (intel_pt_get_config(evsel, &config))
 			return (config & pt->mtc_freq_bits) >> shift;
 	}
 	return 0;
@@ -1118,7 +1118,7 @@ static bool intel_pt_timeless_decoding(struct intel_pt *pt)
 	evlist__for_each_entry(pt->session->evlist, evsel) {
 		if (!(evsel->core.attr.sample_type & PERF_SAMPLE_TIME))
 			return true;
-		if (intel_pt_get_config(pt, &evsel->core.attr, &config)) {
+		if (intel_pt_get_config(evsel, &config)) {
 			if (config & pt->tsc_bit)
 				timeless_decoding = false;
 			else
@@ -1133,7 +1133,7 @@ static bool intel_pt_tracing_kernel(struct intel_pt *pt)
 	struct evsel *evsel;
 
 	evlist__for_each_entry(pt->session->evlist, evsel) {
-		if (intel_pt_get_config(pt, &evsel->core.attr, NULL) &&
+		if (intel_pt_get_config(evsel, NULL) &&
 		    !evsel->core.attr.exclude_kernel)
 			return true;
 	}
@@ -1150,7 +1150,7 @@ static bool intel_pt_have_tsc(struct intel_pt *pt)
 		return false;
 
 	evlist__for_each_entry(pt->session->evlist, evsel) {
-		if (intel_pt_get_config(pt, &evsel->core.attr, &config)) {
+		if (intel_pt_get_config(evsel, &config)) {
 			if (config & pt->tsc_bit)
 				have_tsc = true;
 			else
@@ -1166,7 +1166,7 @@ static bool intel_pt_have_mtc(struct intel_pt *pt)
 	u64 config;
 
 	evlist__for_each_entry(pt->session->evlist, evsel) {
-		if (intel_pt_get_config(pt, &evsel->core.attr, &config) &&
+		if (intel_pt_get_config(evsel, &config) &&
 		    (config & pt->mtc_bit))
 			return true;
 	}
@@ -1191,7 +1191,7 @@ static u64 intel_pt_ctl(struct intel_pt *pt)
 	u64 config;
 
 	evlist__for_each_entry(pt->session->evlist, evsel) {
-		if (intel_pt_get_config(pt, &evsel->core.attr, &config))
+		if (intel_pt_get_config(evsel, &config))
 			return config;
 	}
 	return 0;
@@ -3703,13 +3703,12 @@ static void intel_pt_set_event_name(struct evlist *evlist, u64 id,
 	}
 }
 
-static struct evsel *intel_pt_evsel(struct intel_pt *pt,
-					 struct evlist *evlist)
+static struct evsel *intel_pt_evsel(struct evlist *evlist)
 {
 	struct evsel *evsel;
 
 	evlist__for_each_entry(evlist, evsel) {
-		if (evsel->core.attr.type == pt->pmu_type && evsel->core.ids)
+		if (evsel__is_aux_event(evsel) && evsel->core.ids)
 			return evsel;
 	}
 
@@ -3720,7 +3719,7 @@ static int intel_pt_synth_events(struct intel_pt *pt,
 				 struct perf_session *session)
 {
 	struct evlist *evlist = session->evlist;
-	struct evsel *evsel = intel_pt_evsel(pt, evlist);
+	struct evsel *evsel = intel_pt_evsel(evlist);
 	struct perf_event_attr attr;
 	u64 id;
 	int err;
@@ -4219,7 +4218,6 @@ int intel_pt_process_auxtrace_info(union perf_event *event,
 	pt->session = session;
 	pt->machine = &session->machines.host; /* No kvm support */
 	pt->auxtrace_type = auxtrace_info->type;
-	pt->pmu_type = auxtrace_info->priv[INTEL_PT_PMU_TYPE];
 	pt->tc.time_shift = auxtrace_info->priv[INTEL_PT_TIME_SHIFT];
 	pt->tc.time_mult = auxtrace_info->priv[INTEL_PT_TIME_MULT];
 	pt->tc.time_zero = auxtrace_info->priv[INTEL_PT_TIME_ZERO];
