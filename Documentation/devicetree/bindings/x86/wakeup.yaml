@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+
+$id: http://devicetree.org/schemas/x86/wakeup.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: x86 acpi wakeup mailbox
+
+description: |
+
+This document describes the "acpi-wakeup-mailbox" method for enabling secondary
+CPUs.
+
+The ACPI spec defines a mechanism to let the bootstrap processor wake up
+application processors with a mailbox. The "acpi-wakeup-mailbox" enable-method
+follows the "Multiprocessor Wakeup Mailbox Structure" defined in the ACPI
+spec[1].
+
+Since the ACPI mailbox structure is shared by all the CPUs, this enable method
+applies to all CPUs and should be defined in the "cpus" node and should not be
+defined on each "cpu" node.
+
+select: false
+
+properties:
+  wakeup-mailbox-addr:
+    $ref: /schemas/types.yaml#/definitions/uint64
+    description: |
+    The physical address of the wakeup mailbox data structure. The address must
+    meet the ACPI spec requirement, like be 4K bytes aligned and it should be in
+    the reserved memory.
+
+  wakeup-mailbox-version:
+    $ref: /schemas/types.yaml#/definitions/uint64
+    description: |
+    The MailBoxVersion defined in the ACPI spec that this binding follows.
+
+required:
+  - wakeup-mailbox-addr
+
+[1] https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/05_ACPI_Software_Programming_Model/ACPI_Software_Programming_Model.html#multiprocessor-wakeup-structure
