@@ -614,6 +614,12 @@ enum mcp251xfd_flags {
 	__MCP251XFD_FLAGS_SIZE__
 };
 
+enum mcp251xfd_xceiver_mode {
+	MCP251XFD_XCVR_NORMAL_MODE,
+	MCP251XFD_XCVR_STBY_MODE,
+	MCP251XFD_XCVR_MODE_NONE
+};
+
 struct mcp251xfd_priv {
 	struct can_priv can;
 	struct can_rx_offload offload;
@@ -670,6 +676,7 @@ struct mcp251xfd_priv {
 
 	struct mcp251xfd_devtype_data devtype_data;
 	struct can_berr_counter bec;
+	u32 transceiver_pin;
 };
 
 #define MCP251XFD_IS(_model) \
