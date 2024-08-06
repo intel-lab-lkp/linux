@@ -22,6 +22,7 @@
 #include "xe_pcode.h"
 #include "xe_trace.h"
 #include "xe_wa.h"
+#include "intel_hotplug.h"
 
 /**
  * DOC: Xe Power Management
@@ -378,6 +379,8 @@ int xe_pm_runtime_suspend(struct xe_device *xe)
 		if (err)
 			goto out;
 	}
+	/* Enable hpd polling on runtime suspend */
+	intel_hpd_poll_enable(xe);
 
 	xe_irq_suspend(xe);
 
@@ -426,6 +429,9 @@ int xe_pm_runtime_resume(struct xe_device *xe)
 	}
 
 	xe_irq_resume(xe);
+
+	/* Disable hpd polling on runtime resume */
+	intel_hpd_poll_disable(xe);
 
 	for_each_gt(gt, xe, id)
 		xe_gt_resume(gt);
