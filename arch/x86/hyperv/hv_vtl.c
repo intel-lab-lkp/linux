@@ -22,12 +22,28 @@ static bool __init hv_vtl_msi_ext_dest_id(void)
 	return true;
 }
 
+/*
+ * The ACPI wakeup mailbox are accessed by the OS and the BIOS, both are in the
+ * guest's context, instead of the hypervisor/VMM context.
+ */
+static bool hv_is_private_mmio_tdx(u64 addr)
+{
+	if (wakeup_mailbox_addr && (addr >= wakeup_mailbox_addr &&
+	    addr < (wakeup_mailbox_addr + PAGE_SIZE)))
+		return true;
+	return false;
+}
+
 void __init hv_vtl_init_platform(void)
 {
 	pr_info("Linux runs in Hyper-V Virtual Trust Level\n");
 
-	x86_platform.realmode_reserve = x86_init_noop;
-	x86_platform.realmode_init = x86_init_noop;
+	if (wakeup_mailbox_addr) {
+		x86_platform.hyper.is_private_mmio = hv_is_private_mmio_tdx;
+	} else {
+		x86_platform.realmode_reserve = x86_init_noop;
+		x86_platform.realmode_init = x86_init_noop;
+	}
 	x86_init.irqs.pre_vector_init = x86_init_noop;
 	x86_init.timers.timer_init = x86_init_noop;
 
