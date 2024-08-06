@@ -1453,8 +1453,13 @@ static noinline_for_stack int ethtool_set_rxfh(struct net_device *dev,
 			u32 ctx_id;
 
 			/* driver uses new API, core allocates ID */
-			ret = xa_alloc(&dev->ethtool->rss_ctx, &ctx_id, ctx,
-				       XA_LIMIT(1, limit), GFP_KERNEL_ACCOUNT);
+			if (limit)
+				ret = xa_alloc(&dev->ethtool->rss_ctx, &ctx_id,
+					       ctx, XA_LIMIT(1, limit - 1),
+					       GFP_KERNEL_ACCOUNT);
+			else
+				/* match xa_alloc's 'no free entries' result */
+				ret = -EBUSY;
 			if (ret < 0) {
 				kfree(ctx);
 				goto out;
