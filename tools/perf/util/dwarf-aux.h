@@ -5,6 +5,7 @@
  * dwarf-aux.h : libdw auxiliary interfaces
  */
 
+#include <errno.h>
 #include <dwarf.h>
 #include <elfutils/libdw.h>
 #include <elfutils/libdwfl.h>
