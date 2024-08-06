@@ -349,22 +349,36 @@ static void page_pool_unreg_netdev_wipe(struct net_device *netdev)
 	struct page_pool *pool;
 	struct hlist_node *n;
 
-	mutex_lock(&page_pools_lock);
 	hlist_for_each_entry_safe(pool, n, &netdev->page_pools, user.list) {
 		hlist_del_init(&pool->user.list);
 		pool->slow.netdev = NET_PTR_POISON;
 	}
-	mutex_unlock(&page_pools_lock);
 }
 
-static void page_pool_unreg_netdev(struct net_device *netdev)
+static void page_pool_unreg_netdev_stall(struct net_device *netdev)
+{
+	if (!netdev->pp_unreg_pending) {
+		netdev_hold(netdev, &netdev->pp_dev_tracker, GFP_KERNEL);
+		netdev->pp_unreg_pending = true;
+	} else {
+		netdev_warn(netdev,
+			    "page pool release stalling device unregister");
+	}
+}
+
+static void page_pool_unreg_netdev_unstall(struct net_device *netdev)
+{
+	netdev_put(netdev, &netdev->pp_dev_tracker);
+	netdev->pp_unreg_pending = false;
+}
+
+static void page_pool_unreg_netdev_reparent(struct net_device *netdev)
 {
 	struct page_pool *pool, *last;
 	struct net_device *lo;
 
 	lo = dev_net(netdev)->loopback_dev;
 
-	mutex_lock(&page_pools_lock);
 	last = NULL;
 	hlist_for_each_entry(pool, &netdev->page_pools, user.list) {
 		pool->slow.netdev = lo;
@@ -375,7 +389,6 @@ static void page_pool_unreg_netdev(struct net_device *netdev)
 	if (last)
 		hlist_splice_init(&netdev->page_pools, &last->user.list,
 				  &lo->page_pools);
-	mutex_unlock(&page_pools_lock);
 }
 
 static int
@@ -383,17 +396,30 @@ page_pool_netdevice_event(struct notifier_block *nb,
 			  unsigned long event, void *ptr)
 {
 	struct net_device *netdev = netdev_notifier_info_to_dev(ptr);
+	struct page_pool *pool;
+	bool has_dma;
 
 	if (event != NETDEV_UNREGISTER)
 		return NOTIFY_DONE;
 
-	if (hlist_empty(&netdev->page_pools))
+	if (hlist_empty(&netdev->page_pools) && !netdev->pp_unreg_pending)
 		return NOTIFY_OK;
 
-	if (netdev->ifindex != LOOPBACK_IFINDEX)
-		page_pool_unreg_netdev(netdev);
-	else
+	mutex_lock(&page_pools_lock);
+	has_dma = false;
+	hlist_for_each_entry(pool, &netdev->page_pools, user.list)
+		has_dma |= pool->slow.flags & PP_FLAG_DMA_MAP;
+
+	if (has_dma)
+		page_pool_unreg_netdev_stall(netdev);
+	else if (netdev->pp_unreg_pending)
+		page_pool_unreg_netdev_unstall(netdev);
+	else if (netdev->ifindex == LOOPBACK_IFINDEX)
 		page_pool_unreg_netdev_wipe(netdev);
+	else /* driver doesn't let page pools manage DMA addrs */
+		page_pool_unreg_netdev_reparent(netdev);
+	mutex_unlock(&page_pools_lock);
+
 	return NOTIFY_OK;
 }
 

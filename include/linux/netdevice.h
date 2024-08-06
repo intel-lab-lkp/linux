@@ -2374,6 +2374,8 @@ struct net_device {
 	struct lock_class_key	*qdisc_tx_busylock;
 	bool			proto_down;
 	bool			threaded;
+	/** @pp_unreg_pending: page pool code is stalling unregister */
+	bool			pp_unreg_pending;
 
 	struct list_head	net_notifier_list;
 
@@ -2403,6 +2405,8 @@ struct net_device {
 #if IS_ENABLED(CONFIG_PAGE_POOL)
 	/** @page_pools: page pools created for this netdevice */
 	struct hlist_head	page_pools;
+	/** @pp_dev_tracker: ref tracker for page pool code stalling unreg */
+	netdevice_tracker	pp_dev_tracker;
 #endif
 
 	/** @irq_moder: dim parameters used if IS_ENABLED(CONFIG_DIMLIB). */
