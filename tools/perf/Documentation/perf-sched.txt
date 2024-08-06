@@ -215,6 +215,9 @@ OPTIONS for 'perf sched timehist'
 --show-prio::
 	Show task priority.
 
+--prio::
+	Only show events for given task priority(ies).
+
 OPTIONS for 'perf sched replay'
 ------------------------------
 
