@@ -179,7 +179,7 @@ ifeq ($(findstring -static,${LDFLAGS}),-static)
   # Elfutils merged libebl.a into libdw.a starting from version 0.177,
   # Link libebl.a only if libdw is older than this version.
   ifeq ($(shell test $(LIBDW_VERSION_2)0 -lt 1770; echo $$?),0)
-    DWARFLIBS += -lebl
+    DWARFLIBS += -lebl -ldl
   endif
 endif
 
