@@ -1809,6 +1809,9 @@ static int spmi_pmic_arb_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "core");
+	if (!res)
+		return -EINVAL;
+
 	core = devm_ioremap(dev, res->start, resource_size(res));
 	if (!core)
 		return -ENOMEM;
