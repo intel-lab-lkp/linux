@@ -13,6 +13,7 @@
 #include <asm/mshyperv.h>
 #include <asm/realmode.h>
 #include <../kernel/smpboot.h>
+#include <linux/memblock.h>
 
 extern struct boot_params boot_params;
 static struct real_mode_header hv_vtl_real_mode_header;
@@ -34,12 +35,28 @@ static bool hv_is_private_mmio_tdx(u64 addr)
 	return false;
 }
 
+static void __init hv_reserve_real_mode(void)
+{
+	phys_addr_t mem;
+	size_t size = real_mode_size_needed();
+
+	/*
+	 * We only need the memory to be <4GB since the 64-bit trampoline goes
+	 * down to 32-bit mode.
+	 */
+	mem = memblock_phys_alloc_range(size, PAGE_SIZE, 0, SZ_4G);
+	if (!mem)
+		panic("No sub-4G memory is available for the trampoline\n");
+	set_real_mode_mem(mem);
+}
+
 void __init hv_vtl_init_platform(void)
 {
 	pr_info("Linux runs in Hyper-V Virtual Trust Level\n");
 
 	if (wakeup_mailbox_addr) {
 		x86_platform.hyper.is_private_mmio = hv_is_private_mmio_tdx;
+		x86_platform.realmode_reserve = hv_reserve_real_mode;
 	} else {
 		x86_platform.realmode_reserve = x86_init_noop;
 		x86_platform.realmode_init = x86_init_noop;
@@ -259,7 +276,8 @@ int __init hv_vtl_early_init(void)
 		panic("XSAVE has to be disabled as it is not supported by this module.\n"
 			  "Please add 'noxsave' to the kernel command line.\n");
 
-	real_mode_header = &hv_vtl_real_mode_header;
+	if (!wakeup_mailbox_addr)
+		real_mode_header = &hv_vtl_real_mode_header;
 	apic_update_callback(wakeup_secondary_cpu_64, hv_vtl_wakeup_secondary_cpu);
 
 	return 0;
