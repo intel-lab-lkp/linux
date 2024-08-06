@@ -221,8 +221,6 @@ struct auxtrace {
 			    struct perf_tool *tool);
 	void (*free_events)(struct perf_session *session);
 	void (*free)(struct perf_session *session);
-	bool (*evsel_is_auxtrace)(struct perf_session *session,
-				  struct evsel *evsel);
 };
 
 /**

@@ -141,14 +141,6 @@ static void hisi_ptt_free(struct perf_session *session)
 	free(ptt);
 }
 
-static bool hisi_ptt_evsel_is_auxtrace(struct perf_session *session,
-				       struct evsel *evsel)
-{
-	struct hisi_ptt *ptt = container_of(session->auxtrace, struct hisi_ptt, auxtrace);
-
-	return evsel->core.attr.type == ptt->pmu_type;
-}
-
 static void hisi_ptt_print_info(__u64 type)
 {
 	if (!dump_trace)
@@ -181,7 +173,6 @@ int hisi_ptt_process_auxtrace_info(union perf_event *event,
 	ptt->auxtrace.flush_events = hisi_ptt_flush;
 	ptt->auxtrace.free_events = hisi_ptt_free_events;
 	ptt->auxtrace.free = hisi_ptt_free;
-	ptt->auxtrace.evsel_is_auxtrace = hisi_ptt_evsel_is_auxtrace;
 	session->auxtrace = &ptt->auxtrace;
 
 	hisi_ptt_print_info(auxtrace_info->priv[0]);

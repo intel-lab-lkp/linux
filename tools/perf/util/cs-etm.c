@@ -899,16 +899,6 @@ static void cs_etm__free(struct perf_session *session)
 	zfree(&aux);
 }
 
-static bool cs_etm__evsel_is_auxtrace(struct perf_session *session,
-				      struct evsel *evsel)
-{
-	struct cs_etm_auxtrace *aux = container_of(session->auxtrace,
-						   struct cs_etm_auxtrace,
-						   auxtrace);
-
-	return evsel->core.attr.type == aux->pmu_type;
-}
-
 static struct machine *cs_etm__get_machine(struct cs_etm_queue *etmq,
 					   ocsd_ex_level el)
 {
@@ -2877,7 +2867,7 @@ static int cs_etm__setup_timeless_decoding(struct cs_etm_auxtrace *etm)
 	 * Find the cs_etm evsel and look at what its timestamp setting was
 	 */
 	evlist__for_each_entry(evlist, evsel)
-		if (cs_etm__evsel_is_auxtrace(etm->session, evsel)) {
+		if (evsel__is_aux_event(evsel)) {
 			etm->timeless_decoding =
 				!(evsel->core.attr.config & BIT(ETM_OPT_TS));
 			return 0;
@@ -3380,7 +3370,6 @@ int cs_etm__process_auxtrace_info_full(union perf_event *event,
 	etm->auxtrace.flush_events = cs_etm__flush_events;
 	etm->auxtrace.free_events = cs_etm__free_events;
 	etm->auxtrace.free = cs_etm__free;
-	etm->auxtrace.evsel_is_auxtrace = cs_etm__evsel_is_auxtrace;
 	session->auxtrace = &etm->auxtrace;
 
 	err = cs_etm__setup_timeless_decoding(etm);
