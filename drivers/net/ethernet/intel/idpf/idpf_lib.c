@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (C) 2023 Intel Corporation */
 
+#include <net/libeth/netdev.h>
+
 #include "idpf.h"
 #include "idpf_virtchnl.h"
 
@@ -726,9 +728,9 @@ static int idpf_cfg_netdev(struct idpf_vport *vport)
 		return idpf_init_mac_addr(vport, netdev);
 	}
 
-	netdev = alloc_etherdev_mqs(sizeof(struct idpf_netdev_priv),
-				    vport_config->max_q.max_txq,
-				    vport_config->max_q.max_rxq);
+	netdev = libeth_netdev_alloc(sizeof(struct idpf_netdev_priv),
+				     vport_config->max_q.max_rxq,
+				     vport_config->max_q.max_txq);
 	if (!netdev)
 		return -ENOMEM;
 
@@ -743,7 +745,7 @@ static int idpf_cfg_netdev(struct idpf_vport *vport)
 
 	err = idpf_init_mac_addr(vport, netdev);
 	if (err) {
-		free_netdev(vport->netdev);
+		libeth_netdev_free(vport->netdev);
 		vport->netdev = NULL;
 
 		return err;
@@ -932,7 +934,7 @@ static void idpf_decfg_netdev(struct idpf_vport *vport)
 	vport->rx_ptype_lkup = NULL;
 
 	unregister_netdev(vport->netdev);
-	free_netdev(vport->netdev);
+	libeth_netdev_free(vport->netdev);
 	vport->netdev = NULL;
 
 	adapter->netdevs[vport->idx] = NULL;
@@ -1251,23 +1253,6 @@ static void idpf_restore_features(struct idpf_vport *vport)
 
 	if (idpf_is_cap_ena(adapter, IDPF_OTHER_CAPS, VIRTCHNL2_CAP_MACFILTER))
 		idpf_restore_mac_filters(vport);
-}
-
-/**
- * idpf_set_real_num_queues - set number of queues for netdev
- * @vport: virtual port structure
- *
- * Returns 0 on success, negative on failure.
- */
-static int idpf_set_real_num_queues(struct idpf_vport *vport)
-{
-	int err;
-
-	err = netif_set_real_num_rx_queues(vport->netdev, vport->num_rxq);
-	if (err)
-		return err;
-
-	return netif_set_real_num_tx_queues(vport->netdev, vport->num_txq);
 }
 
 /**
@@ -1911,7 +1896,8 @@ int idpf_initiate_soft_reset(struct idpf_vport *vport,
 	if (reset_cause == IDPF_SR_Q_CHANGE)
 		idpf_vport_alloc_vec_indexes(vport);
 
-	err = idpf_set_real_num_queues(vport);
+	err = libeth_set_real_num_queues(vport->netdev, vport->num_rxq,
+					 vport->num_txq);
 	if (err)
 		goto err_open;
 
