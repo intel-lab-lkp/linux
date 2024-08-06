@@ -42,7 +42,9 @@ static void mt7921e_unregister_device(struct mt792x_dev *dev)
 {
 	int i;
 	struct mt76_connac_pm *pm = &dev->pm;
+	struct mt792x_phy *phy = dev->mt76.phy->priv;
 
+	cancel_delayed_work_sync(&phy->scan_work);
 	cancel_work_sync(&dev->init_work);
 	mt76_unregister_device(&dev->mt76);
 	mt76_for_each_q_rx(&dev->mt76, i)
