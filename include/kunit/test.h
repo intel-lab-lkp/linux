@@ -489,11 +489,7 @@ static inline void *kunit_kcalloc(struct kunit *test, size_t n, size_t size, gfp
  * Calls kunit_kfree() only if @x is not in .rodata section.
  * See kunit_kstrdup_const() for more information.
  */
-static inline void kunit_kfree_const(struct kunit *test, const void *x)
-{
-	if (!is_kernel_rodata((unsigned long)x))
-		kunit_kfree(test, x);
-}
+void kunit_kfree_const(struct kunit *test, const void *x);
 
 /**
  * kunit_kstrdup() - Duplicates a string into a test managed allocation.
@@ -527,16 +523,10 @@ static inline char *kunit_kstrdup(struct kunit *test, const char *str, gfp_t gfp
  * @gfp: flags passed to underlying kmalloc().
  *
  * Calls kunit_kstrdup() only if @str is not in the rodata section. Must be freed with
- * kunit_free_const() -- not kunit_free().
+ * kunit_kfree_const() -- not kunit_kfree().
  * See kstrdup_const() and kunit_kmalloc_array() for more information.
  */
-static inline const char *kunit_kstrdup_const(struct kunit *test, const char *str, gfp_t gfp)
-{
-	if (is_kernel_rodata((unsigned long)str))
-		return str;
-
-	return kunit_kstrdup(test, str, gfp);
-}
+const char *kunit_kstrdup_const(struct kunit *test, const char *str, gfp_t gfp);
 
 /**
  * kunit_vm_mmap() - Allocate KUnit-tracked vm_mmap() area
