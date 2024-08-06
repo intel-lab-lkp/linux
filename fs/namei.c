@@ -595,9 +595,10 @@ struct nameidata {
 	umode_t		dir_mode;
 } __randomize_layout;
 
-#define ND_ROOT_PRESET 1
-#define ND_ROOT_GRABBED 2
-#define ND_JUMPED 4
+#define ND_ROOT_PRESET		0x00000001
+#define ND_ROOT_GRABBED 	0x00000002
+#define ND_JUMPED 		0x00000004
+#define ND_PATH_CONSUMED 	0x00000008
 
 static void __set_nameidata(struct nameidata *p, int dfd, struct filename *name)
 {
@@ -697,6 +698,7 @@ static void terminate_walk(struct nameidata *nd)
 			nd->state &= ~ND_ROOT_GRABBED;
 		}
 	} else {
+		BUG_ON(nd->state & ND_PATH_CONSUMED);
 		leave_rcu(nd);
 	}
 	nd->depth = 0;
@@ -3683,6 +3685,7 @@ finish_lookup:
 static int do_open(struct nameidata *nd,
 		   struct file *file, const struct open_flags *op)
 {
+	struct vfsmount *mnt;
 	struct mnt_idmap *idmap;
 	int open_flag = op->open_flag;
 	bool do_truncate;
@@ -3720,11 +3723,22 @@ static int do_open(struct nameidata *nd,
 		error = mnt_want_write(nd->path.mnt);
 		if (error)
 			return error;
+		/*
+		 * We grab an additional reference here because vfs_open_consume()
+		 * may error out and free the mount from under us, while we need
+		 * to undo write access below.
+		 */
+		mnt = mntget(nd->path.mnt);
 		do_truncate = true;
 	}
 	error = may_open(idmap, &nd->path, acc_mode, open_flag);
-	if (!error && !(file->f_mode & FMODE_OPENED))
-		error = vfs_open(&nd->path, file);
+	if (!error && !(file->f_mode & FMODE_OPENED)) {
+		BUG_ON(nd->state & ND_PATH_CONSUMED);
+		error = vfs_open_consume(&nd->path, file);
+		nd->state |= ND_PATH_CONSUMED;
+		nd->path.mnt = NULL;
+		nd->path.dentry = NULL;
+	}
 	if (!error)
 		error = security_file_post_open(file, op->acc_mode);
 	if (!error && do_truncate)
@@ -3733,8 +3747,10 @@ static int do_open(struct nameidata *nd,
 		WARN_ON(1);
 		error = -EINVAL;
 	}
-	if (do_truncate)
-		mnt_drop_write(nd->path.mnt);
+	if (do_truncate) {
+		mnt_drop_write(mnt);
+		mntput(mnt);
+	}
 	return error;
 }
 
