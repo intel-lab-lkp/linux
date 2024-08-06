@@ -9,7 +9,7 @@
 
 / {
 	model = "Qualcomm SA8775P Ride";
-	compatible = "qcom,sa8775p-ride", "qcom,sa8775p";
+	compatible = "qcom,sa8775p-ride", "qcom,sa8775p", "qcom,qcs9100";
 };
 
 &ethernet0 {
