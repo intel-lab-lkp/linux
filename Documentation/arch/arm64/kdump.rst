@@ -79,10 +79,6 @@ To reserve memory for crashkernel=size,high, searching is first
 attempted from the high memory region. If the reservation succeeds, the
 low memory reservation will be done subsequently.
 
-If reservation from the high memory failed, the kernel falls back to
-searching the low memory with the specified size in crashkernel=,high.
-If it succeeds, no further reservation for low memory is needed.
-
 Notes:
 
 - If crashkernel=,low is not specified, the default low memory
