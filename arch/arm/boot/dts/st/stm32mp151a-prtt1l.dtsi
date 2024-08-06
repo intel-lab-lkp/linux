@@ -123,7 +123,7 @@
 };
 
 &qspi_bk1_pins_a {
-	pins1 {
+	pins {
 		bias-pull-up;
 		drive-push-pull;
 		slew-rate = <1>;
