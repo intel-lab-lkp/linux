@@ -51,7 +51,6 @@ struct intel_bts {
 	bool				sampling_mode;
 	bool				snapshot_mode;
 	bool				data_queued;
-	u32				pmu_type;
 	struct perf_tsc_conversion	tc;
 	bool				cap_user_time_zero;
 	struct itrace_synth_opts	synth_opts;
@@ -768,7 +767,7 @@ static int intel_bts_synth_events(struct intel_bts *bts,
 	int err;
 
 	evlist__for_each_entry(evlist, evsel) {
-		if (evsel->core.attr.type == bts->pmu_type && evsel->core.ids) {
+		if (evsel__is_aux_event(evsel) && evsel->core.ids) {
 			found = true;
 			break;
 		}
@@ -868,7 +867,6 @@ int intel_bts_process_auxtrace_info(union perf_event *event,
 	bts->session = session;
 	bts->machine = &session->machines.host; /* No kvm support */
 	bts->auxtrace_type = auxtrace_info->type;
-	bts->pmu_type = auxtrace_info->priv[INTEL_BTS_PMU_TYPE];
 	bts->tc.time_shift = auxtrace_info->priv[INTEL_BTS_TIME_SHIFT];
 	bts->tc.time_mult = auxtrace_info->priv[INTEL_BTS_TIME_MULT];
 	bts->tc.time_zero = auxtrace_info->priv[INTEL_BTS_TIME_ZERO];
