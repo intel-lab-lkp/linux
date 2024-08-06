@@ -1449,7 +1449,7 @@ static noinline_for_stack int ethtool_set_rxfh(struct net_device *dev,
 		}
 
 		if (ops->create_rxfh_context) {
-			u32 limit = ops->rxfh_max_context_id ?: U32_MAX;
+			u32 limit = ops->rxfh_max_context_id ?: U32_MAX - 1;
 			u32 ctx_id;
 
 			/* driver uses new API, core allocates ID */

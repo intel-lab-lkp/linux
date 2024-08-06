@@ -736,9 +736,9 @@ struct kernel_ethtool_ts_info {
  * @rxfh_key_space: same as @rxfh_indir_space, but for the key.
  * @rxfh_priv_size: size of the driver private data area the core should
  *	allocate for an RSS context (in &struct ethtool_rxfh_context).
- * @rxfh_max_context_id: maximum (exclusive) supported RSS context ID.  If this
+ * @rxfh_max_context_id: maximum (inclusive) supported RSS context ID.  If this
  *	is zero then the core may choose any (nonzero) ID, otherwise the core
- *	will only use IDs strictly less than this value, as the @rss_context
+ *	will only use IDs less or equal to this value, as the @rss_context
  *	argument to @create_rxfh_context and friends.
  * @supported_coalesce_params: supported types of interrupt coalescing.
  * @supported_ring_params: supported ring params.
