@@ -289,6 +289,8 @@ F:	Documentation/ABI/testing/configfs-acpi
 F:	Documentation/ABI/testing/sysfs-bus-acpi
 F:	Documentation/firmware-guide/acpi/
 F:	arch/x86/kernel/acpi/
+F:	arch/x86/kernel/madt_playdead.S
+F:	arch/x86/kernel/madt_wakeup.c
 F:	arch/x86/pci/acpi.c
 F:	drivers/acpi/
 F:	drivers/pci/*/*acpi*
