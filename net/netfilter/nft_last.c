@@ -38,7 +38,8 @@ static int nft_last_init(const struct nft_ctx *ctx, const struct nft_expr *expr,
 		last->set = ntohl(nla_get_be32(tb[NFTA_LAST_SET]));
 
 	if (last->set && tb[NFTA_LAST_MSECS]) {
-		err = nf_msecs_to_jiffies64(tb[NFTA_LAST_MSECS], &last_jiffies);
+		err = nf_msecs_to_jiffies64(tb[NFTA_LAST_MSECS], &last_jiffies,
+					    false);
 		if (err < 0)
 			goto err;
 

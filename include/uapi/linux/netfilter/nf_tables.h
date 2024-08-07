@@ -430,6 +430,9 @@ enum nft_set_elem_flags {
 	NFT_SET_ELEM_CATCHALL		= 0x2,
 };
 
+/* Marker value for elements that never expire. */
+#define NFT_NEVER_EXPIRES	U64_MAX
+
 /**
  * enum nft_set_elem_attributes - nf_tables set element netlink attributes
  *

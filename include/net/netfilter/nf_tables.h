@@ -828,8 +828,11 @@ static inline struct nft_set_elem_expr *nft_set_ext_expr(const struct nft_set_ex
 static inline bool __nft_set_elem_expired(const struct nft_set_ext *ext,
 					  u64 tstamp)
 {
-	return nft_set_ext_exists(ext, NFT_SET_EXT_TIMEOUT) &&
-	       time_after_eq64(tstamp, READ_ONCE(nft_set_ext_timeout(ext)->expiration));
+	if (!nft_set_ext_exists(ext, NFT_SET_EXT_TIMEOUT) ||
+	    nft_set_ext_timeout(ext)->timeout == NFT_NEVER_EXPIRES)
+		return false;
+
+	return time_after_eq64(tstamp, READ_ONCE(nft_set_ext_timeout(ext)->expiration));
 }
 
 static inline bool nft_set_elem_expired(const struct nft_set_ext *ext)
@@ -1861,7 +1864,7 @@ void nft_chain_route_fini(void);
 
 void nf_tables_trans_destroy_flush_work(void);
 
-int nf_msecs_to_jiffies64(const struct nlattr *nla, u64 *result);
+int nf_msecs_to_jiffies64(const struct nlattr *nla, u64 *result, bool never_expires);
 __be64 nf_jiffies64_to_msecs(u64 input);
 
 #ifdef CONFIG_MODULES

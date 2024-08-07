@@ -94,7 +94,8 @@ void nft_dynset_eval(const struct nft_expr *expr,
 	if (set->ops->update(set, &regs->data[priv->sreg_key], nft_dynset_new,
 			     expr, regs, &ext)) {
 		if (priv->op == NFT_DYNSET_OP_UPDATE &&
-		    nft_set_ext_exists(ext, NFT_SET_EXT_TIMEOUT)) {
+		    nft_set_ext_exists(ext, NFT_SET_EXT_TIMEOUT) &&
+		    nft_set_ext_timeout(ext)->timeout != NFT_NEVER_EXPIRES) {
 			timeout = priv->timeout ? : READ_ONCE(set->timeout);
 			WRITE_ONCE(nft_set_ext_timeout(ext)->expiration, get_jiffies_64() + timeout);
 		}
@@ -210,7 +211,8 @@ static int nft_dynset_init(const struct nft_ctx *ctx,
 		if (!(set->flags & NFT_SET_TIMEOUT))
 			return -EOPNOTSUPP;
 
-		err = nf_msecs_to_jiffies64(tb[NFTA_DYNSET_TIMEOUT], &timeout);
+		err = nf_msecs_to_jiffies64(tb[NFTA_DYNSET_TIMEOUT], &timeout,
+					    false);
 		if (err)
 			return err;
 	}
