@@ -427,6 +427,7 @@ struct mmc_host {
 #define MMC_CAP2_CRYPTO		0
 #endif
 #define MMC_CAP2_ALT_GPT_TEGRA	(1 << 28)	/* Host with eMMC that has GPT entry at a non-standard location */
+#define MMC_CAP2_SD_SDUC	(1 << 29)	/* SD over 2TB */
 
 	int			fixed_drv_type;	/* fixed driver type for non-removable media */
 
@@ -636,6 +637,11 @@ static inline int mmc_card_uhs(struct mmc_card *card)
 {
 	return card->host->ios.timing >= MMC_TIMING_UHS_SDR12 &&
 		card->host->ios.timing <= MMC_TIMING_UHS_DDR50;
+}
+
+static inline int mmc_card_is_sduc(struct mmc_host *host)
+{
+	return host->caps2 & MMC_CAP2_SD_SDUC;
 }
 
 void mmc_retune_timer_stop(struct mmc_host *host);

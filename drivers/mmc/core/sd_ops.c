@@ -168,12 +168,16 @@ int mmc_send_app_op_cond(struct mmc_host *host, u32 ocr, u32 *rocr)
 		.cmd = &cmd
 	};
 	int err;
+	u32 sduc_arg = SD_OCR_CCS | SD_OCR_2T;
 
 	cmd.opcode = SD_APP_OP_COND;
+	cmd.arg = ocr;
+
 	if (mmc_host_is_spi(host))
-		cmd.arg = ocr & (1 << 30); /* SPI only defines one bit */
+		cmd.arg &= (1 << 30); /* SPI only defines one bit */
 	else
-		cmd.arg = ocr;
+		cmd.arg |= sduc_arg;
+
 	cmd.flags = MMC_RSP_SPI_R1 | MMC_RSP_R3 | MMC_CMD_BCR;
 
 	err = __mmc_poll_for_busy(host, SD_APP_OP_COND_PERIOD_US,
@@ -182,8 +186,15 @@ int mmc_send_app_op_cond(struct mmc_host *host, u32 ocr, u32 *rocr)
 	if (err)
 		return err;
 
-	if (rocr && !mmc_host_is_spi(host))
-		*rocr = cmd.resp[0];
+	if (!mmc_host_is_spi(host)) {
+		if (rocr)
+			*rocr = cmd.resp[0];
+
+		if ((cmd.resp[0] & sduc_arg) == sduc_arg)
+			host->caps2 |= MMC_CAP2_SD_SDUC;
+		else
+			host->caps2 &= ~MMC_CAP2_SD_SDUC;
+	}
 
 	return 0;
 }
