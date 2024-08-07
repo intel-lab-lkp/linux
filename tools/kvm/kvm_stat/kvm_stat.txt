@@ -115,6 +115,18 @@ OPTIONS
 --skip-zero-records::
         omit records with all zeros in logging mode
 
+
+SIGNALS
+-------
+when kvm_stat is running in logging mode (either with -l or with -L),
+it handles the following signals:
+
+SIGHUP - closes and reopens the log file (-L only), then continues.
+
+SIGINT - closes the log file and terminates.
+SIGTERM - closes the log file and terminates.
+
+
 SEE ALSO
 --------
 'perf'(1), 'trace-cmd'(1)

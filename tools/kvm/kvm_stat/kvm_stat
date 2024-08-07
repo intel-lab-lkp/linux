@@ -297,8 +297,6 @@ IOCTL_NUMBERS = {
     'RESET':       0x00002403,
 }
 
-signal_received = False
-
 ENCODING = locale.getpreferredencoding(False)
 TRACE_FILTER = re.compile(r'^[^\(]*$')
 
@@ -1598,7 +1596,19 @@ class CSVFormat(object):
 
 def log(stats, opts, frmt, keys):
     """Prints statistics as reiterating key block, multiple value blocks."""
-    global signal_received
+    signal_received = defaultdict(bool)
+
+    def handle_signal(sig, frame):
+        nonlocal signal_received
+        signal_received[sig] = True
+        return
+
+
+    signal.signal(signal.SIGINT, handle_signal)
+    signal.signal(signal.SIGTERM, handle_signal)
+    if opts.log_to_file:
+        signal.signal(signal.SIGHUP, handle_signal)
+
     line = 0
     banner_repeat = 20
     f = None
@@ -1624,37 +1634,29 @@ def log(stats, opts, frmt, keys):
     do_banner(opts)
     banner_printed = True
     while True:
-        try:
-            time.sleep(opts.set_delay)
-            if signal_received:
-                banner_printed = True
-                line = 0
-                f.close()
-                do_banner(opts)
-                signal_received = False
-            if (line % banner_repeat == 0 and not banner_printed and
-                not (opts.log_to_file and isinstance(frmt, CSVFormat))):
-                do_banner(opts)
-                banner_printed = True
-            values = stats.get()
-            if (not opts.skip_zero_records or
-                any(values[k].delta != 0 for k in keys)):
-                do_statline(opts, values)
-                line += 1
-                banner_printed = False
-        except KeyboardInterrupt:
+        time.sleep(opts.set_delay)
+        # Do not use the KeyboardInterrupt exception, because we may be running without a terminal
+        if (signal_received[signal.SIGINT] or signal_received[signal.SIGTERM]):
             break
+        if signal_received[signal.SIGHUP]:
+            banner_printed = True
+            line = 0
+            f.close()
+            do_banner(opts)
+            signal_received[signal.SIGHUP] = False
+        if (line % banner_repeat == 0 and not banner_printed and
+            not (opts.log_to_file and isinstance(frmt, CSVFormat))):
+            do_banner(opts)
+            banner_printed = True
+        values = stats.get()
+        if (not opts.skip_zero_records or
+            any(values[k].delta != 0 for k in keys)):
+            do_statline(opts, values)
+            line += 1
+            banner_printed = False
 
     if opts.log_to_file:
         f.close()
-
-
-def handle_signal(sig, frame):
-    global signal_received
-
-    signal_received = True
-
-    return
 
 
 def is_delay_valid(delay):
@@ -1869,8 +1871,6 @@ def main():
         sys.exit(0)
 
     if options.log or options.log_to_file:
-        if options.log_to_file:
-            signal.signal(signal.SIGHUP, handle_signal)
         keys = sorted(stats.get().keys())
         if options.csv:
             frmt = CSVFormat(keys)
