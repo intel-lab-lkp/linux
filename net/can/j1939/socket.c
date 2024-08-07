@@ -1170,10 +1170,11 @@ static int j1939_sk_send_loop(struct j1939_priv *priv,  struct sock *sk,
 					break;
 				}
 			}
-		} else {
-			skcb->offset = session->total_queued_size;
-			j1939_session_skb_queue(session, skb);
 		}
+		/* Session is ready, add it to skb queue and increase ref count.
+		 */
+		skcb->offset = session->total_queued_size;
+		j1939_session_skb_queue(session, skb);
 
 		todo_size -= segment_size;
 		session->total_queued_size += segment_size;
