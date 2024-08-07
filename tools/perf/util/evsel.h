@@ -184,6 +184,9 @@ struct evsel {
 	};
 	/* Is the tool's fd for /proc/pid/stat or /proc/stat. */
 	bool pid_stat;
+
+	/* for samples embedded in BPF output */
+	__u64 sample_type_embed;
 };
 
 struct perf_missing_features {
@@ -469,6 +472,11 @@ static inline bool evsel__is_bpf_output(struct evsel *evsel)
 	return evsel__match(evsel, SOFTWARE, SW_BPF_OUTPUT);
 }
 
+static inline bool evsel__has_embed(struct evsel *evsel)
+{
+	return evsel->sample_type_embed != 0;
+}
+
 static inline bool evsel__is_clock(const struct evsel *evsel)
 {
 	return evsel__match(evsel, SOFTWARE, SW_CPU_CLOCK) ||
@@ -523,6 +531,11 @@ static inline bool evsel__has_callchain(const struct evsel *evsel)
 	 */
 	return evsel->core.attr.sample_type & PERF_SAMPLE_CALLCHAIN ||
 	       evsel->synth_sample_type & PERF_SAMPLE_CALLCHAIN;
+}
+
+static inline bool evsel__embed_has_callchain(const struct evsel *evsel)
+{
+	return evsel->sample_type_embed & PERF_SAMPLE_CALLCHAIN;
 }
 
 static inline bool evsel__has_br_stack(const struct evsel *evsel)
