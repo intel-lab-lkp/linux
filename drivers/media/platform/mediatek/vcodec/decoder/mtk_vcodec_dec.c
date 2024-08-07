@@ -882,6 +882,29 @@ void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 	mtk_v4l2_vdec_dbg(3, ctx, "[%d] (%d) state=(%x) ctx->decoded_frame_cnt=%d",
 			  ctx->id, q->type, ctx->state, ctx->decoded_frame_cnt);
 
+	if (ctx->state >= MTK_STATE_HEADER && ctx->state != MTK_STATE_FLUSH) {
+		/*
+		 * The resolution hasn't been changed when STREAMOFF is called.
+		 * Update the picinfo here with previous resolution if VIDIOC_G_FMT
+		 * is called.
+		 */
+		ctx->picinfo = ctx->last_decoded_picinfo;
+
+		mtk_v4l2_vdec_dbg(2, ctx,
+				  "[%d]-> new(%d,%d), old(%d,%d), real(%d,%d)",
+				  ctx->id, ctx->last_decoded_picinfo.pic_w,
+				  ctx->last_decoded_picinfo.pic_h,
+				  ctx->picinfo.pic_w, ctx->picinfo.pic_h,
+				  ctx->last_decoded_picinfo.buf_w,
+				  ctx->last_decoded_picinfo.buf_h);
+
+		ret = ctx->dev->vdec_pdata->flush_decoder(ctx);
+		if (ret)
+			mtk_v4l2_vdec_err(ctx, "DecodeFinal failed, ret=%d", ret);
+
+		ctx->state = MTK_STATE_FLUSH;
+	}
+
 	if (q->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
 		while ((src_buf = v4l2_m2m_src_buf_remove(ctx->m2m_ctx))) {
 			if (src_buf != &ctx->empty_flush_buf.vb) {
@@ -894,28 +917,6 @@ void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 			}
 		}
 
-		if (ctx->state >= MTK_STATE_HEADER) {
-			/*
-			 * The resolution hasn't been changed when STREAMOFF is called.
-			 * Update the picinfo here with previous resolution if VIDIOC_G_FMT
-			 * is called.
-			 */
-			ctx->picinfo = ctx->last_decoded_picinfo;
-
-			mtk_v4l2_vdec_dbg(2, ctx,
-					  "[%d]-> new(%d,%d), old(%d,%d), real(%d,%d)",
-					  ctx->id, ctx->last_decoded_picinfo.pic_w,
-					  ctx->last_decoded_picinfo.pic_h,
-					  ctx->picinfo.pic_w, ctx->picinfo.pic_h,
-					  ctx->last_decoded_picinfo.buf_w,
-					  ctx->last_decoded_picinfo.buf_h);
-
-			ret = ctx->dev->vdec_pdata->flush_decoder(ctx);
-			if (ret)
-				mtk_v4l2_vdec_err(ctx, "DecodeFinal failed, ret=%d", ret);
-		}
-
-		ctx->state = MTK_STATE_FLUSH;
 		return;
 	}
 
