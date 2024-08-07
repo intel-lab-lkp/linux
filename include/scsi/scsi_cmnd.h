@@ -236,7 +236,7 @@ static inline unsigned int scsi_logical_block_count(struct scsi_cmnd *scmd)
 {
 	unsigned int shift = ilog2(scmd->device->sector_size) - SECTOR_SHIFT;
 
-	return blk_rq_bytes(scsi_cmd_to_rq(scmd)) >> shift;
+	return blk_rq_sectors(scsi_cmd_to_rq(scmd)) >> shift;
 }
 
 /*
