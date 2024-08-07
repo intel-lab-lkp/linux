@@ -4586,6 +4586,9 @@ int nf_msecs_to_jiffies64(const struct nlattr *nla, u64 *result)
 	if (ms >= max)
 		return -ERANGE;
 
+	if (ms < HZ/10)
+		ms = HZ/10;
+
 	ms *= NSEC_PER_MSEC;
 	*result = nsecs_to_jiffies64(ms);
 	return 0;
