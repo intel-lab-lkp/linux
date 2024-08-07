@@ -1063,7 +1063,7 @@ static const struct meson_pmx_func meson8_aobus_functions[] = {
 	FUNCTION(hdmi_cec_ao),
 };
 
-static struct meson_bank meson8_cbus_banks[] = {
+static const struct meson_bank meson8_cbus_banks[] = {
 	/*   name    first     last         irq       pullen  pull    dir     out     in  */
 	BANK("X",    GPIOX_0,  GPIOX_21,    112, 133, 4,  0,  4,  0,  0,  0,  1,  0,  2,  0),
 	BANK("Y",    GPIOY_0,  GPIOY_16,    95,  111, 3,  0,  3,  0,  3,  0,  4,  0,  5,  0),
@@ -1074,7 +1074,7 @@ static struct meson_bank meson8_cbus_banks[] = {
 	BANK("BOOT", BOOT_0,   BOOT_18,     39,   57, 2,  0,  2,  0,  9,  0, 10,  0, 11,  0),
 };
 
-static struct meson_bank meson8_aobus_banks[] = {
+static const struct meson_bank meson8_aobus_banks[] = {
 	/*   name    first     last         irq    pullen  pull    dir     out     in  */
 	BANK("AO",   GPIOAO_0, GPIO_TEST_N, 0, 13, 0, 16,  0,  0,  0,  0,  0, 16,  1,  0),
 };

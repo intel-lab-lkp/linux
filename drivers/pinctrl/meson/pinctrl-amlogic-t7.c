@@ -1524,7 +1524,7 @@ static const struct meson_pmx_func t7_periphs_functions[] = {
 	FUNCTION(mic_mute),
 };
 
-static struct meson_bank t7_periphs_banks[] = {
+static const struct meson_bank t7_periphs_banks[] = {
 	/* name  first  last  irq pullen  pull  dir  out  in  ds */
 	BANK_DS("D",      GPIOD_0,     GPIOD_12, 57, 69,
 		0x03, 0,  0x04,  0,  0x02,  0, 0x01, 0,  0x00, 0, 0x07, 0),

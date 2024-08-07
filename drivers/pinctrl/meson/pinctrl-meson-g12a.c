@@ -1317,7 +1317,7 @@ static const struct meson_pmx_func meson_g12a_aobus_functions[] = {
 	FUNCTION(mclk0_ao),
 };
 
-static struct meson_bank meson_g12a_periphs_banks[] = {
+static const struct meson_bank meson_g12a_periphs_banks[] = {
 	/* name  first  last  irq  pullen  pull  dir  out  in  ds */
 	BANK_DS("Z",    GPIOZ_0,  GPIOZ_15,  IRQID_GPIOZ_0,  IRQID_GPIOZ_15,
 		4,  0,  4,  0,  12,  0, 13,  0,  14,  0,  5, 0),
@@ -1333,7 +1333,7 @@ static struct meson_bank meson_g12a_periphs_banks[] = {
 		2,  0,  2,  0,   6,  0,  7,  0,   8,  0,  2, 0),
 };
 
-static struct meson_bank meson_g12a_aobus_banks[] = {
+static const struct meson_bank meson_g12a_aobus_banks[] = {
 	/* name  first  last  irq  pullen  pull  dir  out  in  ds */
 	BANK_DS("AO",   GPIOAO_0, GPIOAO_11, IRQID_GPIOAO_0, IRQID_GPIOAO_11,
 		3,  0,  2,  0,   0,  0,  4,  0,   1,  0,  0, 0),

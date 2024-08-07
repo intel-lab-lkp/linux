@@ -1036,7 +1036,7 @@ static const struct meson_pmx_func c3_periphs_functions[] = {
 	FUNCTION(lcd),
 };
 
-static struct meson_bank c3_periphs_banks[] = {
+static const struct meson_bank c3_periphs_banks[] = {
 	/* name  first  last  irq  pullen  pull  dir  out  in ds */
 	BANK_DS("X",      GPIOX_0,      GPIOX_13,   40, 53,
 		0x03, 0,  0x04, 0,  0x02, 0,  0x01, 0, 0x00, 0, 0x07, 0),

@@ -1003,7 +1003,7 @@ static const struct meson_pmx_func meson_axg_aobus_functions[] = {
 	FUNCTION(gen_clk_ee),
 };
 
-static struct meson_bank meson_axg_periphs_banks[] = {
+static const struct meson_bank meson_axg_periphs_banks[] = {
 	/*   name    first      last       irq	     pullen  pull    dir     out     in  */
 	BANK("Z",    GPIOZ_0,	GPIOZ_10, 14,  24, 3,  0,  3,  0,  9,  0,  10, 0,  11, 0),
 	BANK("BOOT", BOOT_0,	BOOT_14,  25,  39, 4,  0,  4,  0,  12, 0,  13, 0,  14, 0),
@@ -1012,7 +1012,7 @@ static struct meson_bank meson_axg_periphs_banks[] = {
 	BANK("Y", 	 GPIOY_0,	GPIOY_15, 84,  99, 1,  0,  1,  0,  3,  0,  4,  0,  5,  0),
 };
 
-static struct meson_bank meson_axg_aobus_banks[] = {
+static const struct meson_bank meson_axg_aobus_banks[] = {
 	/*   name    first      last      irq	pullen  pull    dir     out     in  */
 	BANK("AO",   GPIOAO_0,  GPIOAO_13, 0, 13, 0,  16,  0, 0,  0,  0,  0, 16,  1,  0),
 };

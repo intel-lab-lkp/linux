@@ -875,7 +875,7 @@ static const struct meson_pmx_func meson_a1_periphs_functions[] = {
 	FUNCTION(mute),
 };
 
-static struct meson_bank meson_a1_periphs_banks[] = {
+static const struct meson_bank meson_a1_periphs_banks[] = {
 	/* name  first  last  irq  pullen  pull  dir  out  in  ds*/
 	BANK_DS("P",  GPIOP_0,  GPIOP_12,  0,  12, 0x3,  0,  0x4,  0,
 		0x2,  0,  0x1,  0,  0x0,  0,  0x5,  0),

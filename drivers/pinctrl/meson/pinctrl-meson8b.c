@@ -917,7 +917,7 @@ static const struct meson_pmx_func meson8b_aobus_functions[] = {
 	FUNCTION(hdmi_cec),
 };
 
-static struct meson_bank meson8b_cbus_banks[] = {
+static const struct meson_bank meson8b_cbus_banks[] = {
 	/*   name        first          last        irq       pullen   pull     dir      out      in   */
 	BANK("X0..11",	 GPIOX_0,	GPIOX_11,   97, 108,  4,  0,   4,  0,   0,  0,   1,  0,   2,  0),
 	BANK("X16..21",	 GPIOX_16,	GPIOX_21,  113, 118,  4, 16,   4, 16,   0, 16,   1, 16,   2, 16),
@@ -938,7 +938,7 @@ static struct meson_bank meson8b_cbus_banks[] = {
 	BANK("DIF",	 DIF_0_P,	DIF_4_N,    -1,  -1,  5,  8,   5,  8,  12, 12,  13, 12,  14, 12),
 };
 
-static struct meson_bank meson8b_aobus_banks[] = {
+static const struct meson_bank meson8b_aobus_banks[] = {
 	/*   name    first     lastc        irq    pullen  pull    dir     out     in  */
 	BANK("AO",   GPIOAO_0, GPIO_TEST_N, 0, 13, 0,  16, 0, 0,  0,  0,  0, 16,  1,  0),
 };

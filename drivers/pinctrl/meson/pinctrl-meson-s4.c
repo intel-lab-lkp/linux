@@ -1160,7 +1160,7 @@ static const struct meson_pmx_func meson_s4_periphs_functions[] = {
 	FUNCTION(s2_demod),
 };
 
-static struct meson_bank meson_s4_periphs_banks[] = {
+static const struct meson_bank meson_s4_periphs_banks[] = {
 	/* name  first  last  irq  pullen  pull  dir  out  in */
 	BANK_DS("B", GPIOB_0,    GPIOB_13,  0, 13,
 		0x63,  0,  0x64,  0,  0x62, 0,  0x61, 0,  0x60, 0, 0x67, 0),

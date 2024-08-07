@@ -115,7 +115,7 @@ struct meson_pinctrl_data {
 	unsigned int num_pins;
 	unsigned int num_groups;
 	unsigned int num_funcs;
-	struct meson_bank *banks;
+	const struct meson_bank *banks;
 	unsigned int num_banks;
 	const struct pinmux_ops *pmx_ops;
 	void *pmx_data;
