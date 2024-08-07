@@ -948,12 +948,19 @@ static int mmc_sd_num_wr_blocks(struct mmc_card *card, u32 *written_blocks)
 	int err;
 	u32 result;
 	__be32 *blocks;
-
+	u8 resp_sz;
 	struct mmc_request mrq = {};
 	struct mmc_command cmd = {};
 	struct mmc_data data = {};
-
 	struct scatterlist sg;
+
+	/*
+	 * SD cards, specifically high volume cards, expect to be allowed with the
+	 * full 500msec busy period post write. Otherwise, they may not indicate
+	 * correctly the number of bytes written.
+	 */
+	if (mmc_card_is_sduc(card->host))
+		mmc_delay(500);
 
 	err = mmc_app_cmd(card->host, card);
 	if (err)
@@ -963,7 +970,16 @@ static int mmc_sd_num_wr_blocks(struct mmc_card *card, u32 *written_blocks)
 	cmd.arg = 0;
 	cmd.flags = MMC_RSP_SPI_R1 | MMC_RSP_R1 | MMC_CMD_ADTC;
 
-	data.blksz = 4;
+	/*
+	 * Normally, ACMD22 returns the number of written sectors as u32.
+	 * SDUC, however, returns it as u64.  This is a superfluous
+	 * requirement, as the previously write operation could not be more
+	 * than the block layer limits, just make room for a u64 and ignore
+	 * the 2nd dword.
+	 */
+	resp_sz = mmc_card_is_sduc(card->host) ? 8 : 4;
+
+	data.blksz = resp_sz;
 	data.blocks = 1;
 	data.flags = MMC_DATA_READ;
 	data.sg = &sg;
@@ -973,11 +989,11 @@ static int mmc_sd_num_wr_blocks(struct mmc_card *card, u32 *written_blocks)
 	mrq.cmd = &cmd;
 	mrq.data = &data;
 
-	blocks = kmalloc(4, GFP_KERNEL);
+	blocks = kmalloc(resp_sz, GFP_KERNEL);
 	if (!blocks)
 		return -ENOMEM;
 
-	sg_init_one(&sg, blocks, 4);
+	sg_init_one(&sg, blocks, resp_sz);
 
 	mmc_wait_for_req(card->host, &mrq);
 
