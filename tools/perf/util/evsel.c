@@ -1379,7 +1379,7 @@ void evsel__config(struct evsel *evsel, struct record_opts *opts,
 		evsel__reset_sample_bit(evsel, BRANCH_STACK);
 
 	if (evsel__is_offcpu_event(evsel))
-		evsel->core.attr.sample_type &= OFFCPU_SAMPLE_TYPES;
+		evsel->core.attr.sample_type = OFFCPU_SAMPLE_TYPES;
 
 	arch__post_evsel_config(evsel, attr);
 }
