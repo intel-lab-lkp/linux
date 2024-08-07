@@ -1580,6 +1580,11 @@ static int imx290_probe(struct i2c_client *client)
 	pm_runtime_set_autosuspend_delay(dev, 1000);
 	pm_runtime_use_autosuspend(dev);
 
+	/* Make sure the sensor is available before V4L2 subdev init. */
+	ret = cci_read(imx290->regmap, IMX290_STANDBY, NULL, NULL);
+	if (ret)
+		goto err_pm;
+
 	/* Initialize the V4L2 subdev. */
 	ret = imx290_subdev_init(imx290);
 	if (ret)
