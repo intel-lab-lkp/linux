@@ -108,11 +108,12 @@ void __init serial8250_isa_init_ports(void)
 static int serial8250_platform_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	struct uart_8250_port uart = { 0 };
+	struct uart_8250_port uart;
 	struct resource *regs;
 	unsigned char iotype;
 	int ret, line;
 
+	memset(&uart, 0, sizeof(uart));
 	regs = platform_get_resource(pdev, IORESOURCE_IO, 0);
 	if (regs) {
 		uart.port.iobase = regs->start;
