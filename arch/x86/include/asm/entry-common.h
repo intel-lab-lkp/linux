@@ -51,6 +51,11 @@ static inline void arch_exit_to_user_mode_prepare(struct pt_regs *regs,
 		if (ti_work & _TIF_USER_RETURN_NOTIFY)
 			fire_user_return_notifiers();
 
+		if (cpu_feature_enabled(X86_FEATURE_FRED) &&
+		    (ti_work & _TIF_LOAD_USER_STATES))
+			wrmsrns(MSR_IA32_FRED_RSP0,
+				(unsigned long)task_stack_page(current) + THREAD_SIZE);
+
 		if (unlikely(ti_work & _TIF_IO_BITMAP))
 			tss_update_io_bitmap();
 
