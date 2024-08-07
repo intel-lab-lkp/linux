@@ -212,10 +212,6 @@
 	phy-handle = <&ethernet_phy0>;
 };
 
-&cpsw_port2 {
-	status = "disabled";
-};
-
 &icssg1_mdio {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pru1_mdio0_default_pins>;

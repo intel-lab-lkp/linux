@@ -198,6 +198,14 @@
 	};
 };
 
+&cpsw3g {
+	status = "okay";
+};
+
+&cpsw_port1 {
+	status = "okay";
+};
+
 &main_i2c1 {
 	status = "okay";
 	pinctrl-names = "default";

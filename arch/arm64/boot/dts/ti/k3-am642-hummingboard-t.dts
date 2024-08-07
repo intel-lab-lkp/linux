@@ -89,6 +89,14 @@
 	};
 };
 
+&cpsw3g {
+	status = "okay";
+};
+
+&cpsw_port1 {
+	status ="okay";
+};
+
 &main_gpio0 {
 	m2-reset-hog {
 		gpio-hog;
