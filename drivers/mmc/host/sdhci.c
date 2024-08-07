@@ -1399,13 +1399,13 @@ static inline bool sdhci_auto_cmd12(struct sdhci_host *host,
 static inline bool sdhci_auto_cmd23(struct sdhci_host *host,
 				    struct mmc_request *mrq)
 {
-	return mrq->sbc && (host->flags & SDHCI_AUTO_CMD23);
+	return mrq->sbc && (host->flags & SDHCI_AUTO_CMD23) && !mrq->ext;
 }
 
 static inline bool sdhci_manual_cmd23(struct sdhci_host *host,
 				      struct mmc_request *mrq)
 {
-	return mrq->sbc && !(host->flags & SDHCI_AUTO_CMD23);
+	return mrq->sbc && (mrq->ext || !(host->flags & SDHCI_AUTO_CMD23));
 }
 
 static inline void sdhci_auto_cmd_select(struct sdhci_host *host,
