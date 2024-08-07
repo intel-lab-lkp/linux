@@ -755,7 +755,7 @@ static int cxl_setup_hdm_decoder_from_dvsec(
 
 	cxled = to_cxl_endpoint_decoder(&cxld->dev);
 	len = range_len(&info->dvsec_range[which]);
-	if (!len)
+	if (WARN_ON(len == 0 || len == CXL_RESOURCE_NONE))
 		return -ENOENT;
 
 	cxld->target_type = CXL_DECODER_HOSTONLYMEM;

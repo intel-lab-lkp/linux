@@ -787,6 +787,7 @@ static inline int cxl_root_decoder_autoremove(struct device *host,
 }
 int cxl_endpoint_autoremove(struct cxl_memdev *cxlmd, struct cxl_port *endpoint);
 
+#define CXL_DVSEC_RANGE_MAX		2
 /**
  * struct cxl_endpoint_dvsec_info - Cached DVSEC info
  * @mem_enabled: cached value of mem_enabled in the DVSEC at init time
@@ -798,7 +799,7 @@ struct cxl_endpoint_dvsec_info {
 	bool mem_enabled;
 	int ranges;
 	struct cxl_port *port;
-	struct range dvsec_range[2];
+	struct range dvsec_range[CXL_DVSEC_RANGE_MAX];
 };
 
 struct cxl_hdm;
@@ -807,7 +808,7 @@ struct cxl_hdm *devm_cxl_setup_hdm(struct cxl_port *port,
 int devm_cxl_enumerate_decoders(struct cxl_hdm *cxlhdm,
 				struct cxl_endpoint_dvsec_info *info);
 int devm_cxl_add_passthrough_decoder(struct cxl_port *port);
-int cxl_dvsec_rr_decode(struct device *dev, int dvsec,
+int cxl_dvsec_rr_decode(struct device *dev, struct cxl_port *port,
 			struct cxl_endpoint_dvsec_info *info);
 
 bool is_cxl_region(struct device *dev);
