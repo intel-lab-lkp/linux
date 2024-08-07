@@ -1617,6 +1617,11 @@ again:
 		bio_clear_flag(bio, BIO_TRACE_COMPLETION);
 	}
 
+	if (bio->bi_status && bio->bi_disk)
+		printk(KERN_ERR "bio: %s status is %d, disk[%d:%d]\n",\
+				__func__, bio->bi_status, bio->bi_disk->major,\
+				bio->bi_disk->first_minor);
+
 	/*
 	 * Need to have a real endio function for chained bios, otherwise
 	 * various corner cases will break (like stacking block devices that
