@@ -5610,6 +5610,7 @@ int security_perf_event_open(struct perf_event_attr *attr, int type)
 {
 	return call_int_hook(perf_event_open, attr, type);
 }
+EXPORT_SYMBOL_GPL(security_perf_event_open);
 
 /**
  * security_perf_event_alloc() - Allocate a perf event LSM blob

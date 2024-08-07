@@ -417,6 +417,7 @@ static struct kmem_cache *perf_event_cache;
  *   2 - disallow kernel profiling for unpriv
  */
 int sysctl_perf_event_paranoid __read_mostly = 2;
+EXPORT_SYMBOL_GPL(sysctl_perf_event_paranoid);
 
 /* Minimum for 512 kiB + 1 user control page */
 int sysctl_perf_event_mlock __read_mostly = 512 + (PAGE_SIZE / 1024); /* 'free' kiB per user */
