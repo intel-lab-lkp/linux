@@ -144,6 +144,8 @@ snap-pkg:
 # pacman-pkg
 # ---------------------------------------------------------------------------
 
+PACMAN_EXTRAPACKAGES ?= headers api-headers
+
 PHONY += pacman-pkg
 pacman-pkg:
 	@ln -srf $(srctree)/scripts/package/PKGBUILD $(objtree)/PKGBUILD
