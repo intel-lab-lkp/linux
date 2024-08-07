@@ -1068,9 +1068,16 @@ static int igc_ptp_getcrosststamp(struct ptp_clock_info *ptp,
 {
 	struct igc_adapter *adapter = container_of(ptp, struct igc_adapter,
 						   ptp_caps);
+	int ret;
 
-	return get_device_system_crosststamp(igc_phc_get_syncdevicetime,
-					     adapter, &adapter->snapshot, cts);
+	/* This blocks until any in progress PTM transactions complete */
+	mutex_lock(&adapter->ptm_lock);
+
+	ret = get_device_system_crosststamp(igc_phc_get_syncdevicetime,
+					    adapter, &adapter->snapshot, cts);
+	mutex_unlock(&adapter->ptm_lock);
+
+	return ret;
 }
 
 static int igc_ptp_getcyclesx64(struct ptp_clock_info *ptp,
@@ -1302,6 +1309,7 @@ void igc_ptp_reset(struct igc_adapter *adapter)
 		wr32(IGC_PTM_CTRL, ctrl);
 
 		/* Force the first cycle to run. */
+		mutex_init(&adapter->ptm_lock);
 		igc_ptm_trigger(hw);
 
 		if (readx_poll_timeout_atomic(rd32, IGC_PTM_STAT, stat,
