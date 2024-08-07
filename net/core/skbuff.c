@@ -1515,7 +1515,7 @@ EXPORT_SYMBOL(napi_consume_skb);
 	BUILD_BUG_ON(offsetof(struct sk_buff, field) !=		\
 		     offsetof(struct sk_buff, headers.field));	\
 
-static void __copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
+void ___copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
 {
 	new->tstamp		= old->tstamp;
 	/* We do not copy old->sk */
@@ -1524,6 +1524,11 @@ static void __copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
 	skb_dst_copy(new, old);
 	__skb_ext_copy(new, old);
 	__nf_copy(new, old, false);
+}
+
+static void __copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
+{
+	___copy_skb_header(new, old);
 
 	/* Note : this field could be in the headers group.
 	 * It is not yet because we do not want to have a 16 bit hole
