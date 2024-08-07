@@ -5536,9 +5536,10 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 		goto out_map;
 	}
 
-out:
+count_fault:
 	if (nid != NUMA_NO_NODE)
 		task_numa_fault(last_cpupid, nid, nr_pages, flags);
+out:
 	return 0;
 out_map:
 	/*
@@ -5552,7 +5553,7 @@ out_map:
 		numa_rebuild_single_mapping(vmf, vma, vmf->address, vmf->pte,
 					    writable);
 	pte_unmap_unlock(vmf->pte, vmf->ptl);
-	goto out;
+	goto count_fault;
 }
 
 static inline vm_fault_t create_huge_pmd(struct vm_fault *vmf)
