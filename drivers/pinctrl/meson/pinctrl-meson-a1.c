@@ -339,7 +339,7 @@ static const unsigned int tst_out11_pins[]		= { GPIOA_11 };
 static const unsigned int mute_key_pins[]		= { GPIOA_4 };
 static const unsigned int mute_en_pins[]		= { GPIOA_5 };
 
-static struct meson_pmx_group meson_a1_periphs_groups[] = {
+static const struct meson_pmx_group meson_a1_periphs_groups[] = {
 	GPIO_GROUP(GPIOP_0),
 	GPIO_GROUP(GPIOP_1),
 	GPIO_GROUP(GPIOP_2),
@@ -832,7 +832,7 @@ static const char * const mute_groups[] = {
 	"mute_key", "mute_en",
 };
 
-static struct meson_pmx_func meson_a1_periphs_functions[] = {
+static const struct meson_pmx_func meson_a1_periphs_functions[] = {
 	FUNCTION(gpio_periphs),
 	FUNCTION(psram),
 	FUNCTION(pwm_a),

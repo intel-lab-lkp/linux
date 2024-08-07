@@ -375,7 +375,7 @@ static const unsigned int spi_a_mosi_a_pins[]		= { GPIOA_3 };
 static const unsigned int gen_clk_a4_pins[]		= { GPIOA_4 };
 static const unsigned int clk12_24_a_pins[]		= { GPIOA_5 };
 
-static struct meson_pmx_group c3_periphs_groups[] = {
+static const struct meson_pmx_group c3_periphs_groups[] = {
 	GPIO_GROUP(GPIOE_0),
 	GPIO_GROUP(GPIOE_1),
 	GPIO_GROUP(GPIOE_2),
@@ -987,7 +987,7 @@ static const char * const lcd_groups[] = {
 	"lcd_clk_a", "lcd_clk_x", "lcd_hs", "lcd_vs",
 };
 
-static struct meson_pmx_func c3_periphs_functions[] = {
+static const struct meson_pmx_func c3_periphs_functions[] = {
 	FUNCTION(gpio_periphs),
 	FUNCTION(uart_a),
 	FUNCTION(uart_b),

@@ -307,7 +307,7 @@ static const unsigned int spdif_out_ao_13_pins[] = { GPIOAO_13 };
 static const unsigned int ao_cec_pins[]		= { GPIOAO_12 };
 static const unsigned int ee_cec_pins[]		= { GPIOAO_12 };
 
-static struct meson_pmx_group meson_gxbb_periphs_groups[] = {
+static const struct meson_pmx_group meson_gxbb_periphs_groups[] = {
 	GPIO_GROUP(GPIOZ_0),
 	GPIO_GROUP(GPIOZ_1),
 	GPIO_GROUP(GPIOZ_2),
@@ -541,7 +541,7 @@ static struct meson_pmx_group meson_gxbb_periphs_groups[] = {
 	GROUP(sdcard_clk,	2,	11),
 };
 
-static struct meson_pmx_group meson_gxbb_aobus_groups[] = {
+static const struct meson_pmx_group meson_gxbb_aobus_groups[] = {
 	GPIO_GROUP(GPIOAO_0),
 	GPIO_GROUP(GPIOAO_1),
 	GPIO_GROUP(GPIOAO_2),
@@ -798,7 +798,7 @@ static const char * const cec_ao_groups[] = {
 	"ao_cec", "ee_cec",
 };
 
-static struct meson_pmx_func meson_gxbb_periphs_functions[] = {
+static const struct meson_pmx_func meson_gxbb_periphs_functions[] = {
 	FUNCTION(gpio_periphs),
 	FUNCTION(emmc),
 	FUNCTION(nor),
@@ -829,7 +829,7 @@ static struct meson_pmx_func meson_gxbb_periphs_functions[] = {
 	FUNCTION(tsin_b),
 };
 
-static struct meson_pmx_func meson_gxbb_aobus_functions[] = {
+static const struct meson_pmx_func meson_gxbb_aobus_functions[] = {
 	FUNCTION(gpio_aobus),
 	FUNCTION(uart_ao),
 	FUNCTION(uart_ao_b),

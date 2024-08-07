@@ -349,7 +349,7 @@ static const unsigned int eth_ref_clk_pins[]	= { DIF_3_N };
 static const unsigned int eth_mdc_pins[]	= { DIF_4_P };
 static const unsigned int eth_mdio_en_pins[]	= { DIF_4_N };
 
-static struct meson_pmx_group meson8b_cbus_groups[] = {
+static const struct meson_pmx_group meson8b_cbus_groups[] = {
 	GPIO_GROUP(GPIOX_0),
 	GPIO_GROUP(GPIOX_1),
 	GPIO_GROUP(GPIOX_2),
@@ -603,7 +603,7 @@ static struct meson_pmx_group meson8b_cbus_groups[] = {
 	GROUP(eth_rxd2,		7,	23),
 };
 
-static struct meson_pmx_group meson8b_aobus_groups[] = {
+static const struct meson_pmx_group meson8b_aobus_groups[] = {
 	GPIO_GROUP(GPIOAO_0),
 	GPIO_GROUP(GPIOAO_1),
 	GPIO_GROUP(GPIOAO_2),
@@ -869,7 +869,7 @@ static const char * const tsin_b_groups[] = {
 	"tsin_d0_b", "tsin_clk_b", "tsin_sop_b", "tsin_d_valid_b"
 };
 
-static struct meson_pmx_func meson8b_cbus_functions[] = {
+static const struct meson_pmx_func meson8b_cbus_functions[] = {
 	FUNCTION(gpio_periphs),
 	FUNCTION(sd_a),
 	FUNCTION(sdxc_a),
@@ -903,7 +903,7 @@ static struct meson_pmx_func meson8b_cbus_functions[] = {
 	FUNCTION(clk_24m),
 };
 
-static struct meson_pmx_func meson8b_aobus_functions[] = {
+static const struct meson_pmx_func meson8b_aobus_functions[] = {
 	FUNCTION(gpio_aobus),
 	FUNCTION(uart_ao),
 	FUNCTION(uart_ao_b),

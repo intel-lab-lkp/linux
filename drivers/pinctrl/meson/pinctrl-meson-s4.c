@@ -411,7 +411,7 @@ static const unsigned int s2_demod_gpio0_pins[]		= { GPIOZ_12 };
 static const unsigned int gen_clk_z9_pins[]		= { GPIOZ_9 };
 static const unsigned int gen_clk_z12_pins[]		= { GPIOZ_12 };
 
-static struct meson_pmx_group meson_s4_periphs_groups[] = {
+static const struct meson_pmx_group meson_s4_periphs_groups[] = {
 	GPIO_GROUP(GPIOE_0),
 	GPIO_GROUP(GPIOE_1),
 
@@ -1100,7 +1100,7 @@ static const char * const s2_demod_groups[] = {
 	"s2_demod_gpio3", "s2_demod_gpio2", "s2_demod_gpio1", "s2_demod_gpio0",
 };
 
-static struct meson_pmx_func meson_s4_periphs_functions[] = {
+static const struct meson_pmx_func meson_s4_periphs_functions[] = {
 	FUNCTION(gpio_periphs),
 	FUNCTION(i2c0),
 	FUNCTION(i2c1),

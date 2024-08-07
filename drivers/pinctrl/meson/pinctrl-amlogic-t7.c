@@ -535,7 +535,7 @@ static const unsigned int i2c0_sck_h_pins[]		= { GPIOH_7 };
 /* Bank H func3 */
 static const unsigned int pcieck_reqn_h_pins[]		= { GPIOH_2 };
 
-static struct meson_pmx_group t7_periphs_groups[] = {
+static const struct meson_pmx_group t7_periphs_groups[] = {
 	GPIO_GROUP(GPIOB_0),
 	GPIO_GROUP(GPIOB_1),
 	GPIO_GROUP(GPIOB_2),
@@ -1443,7 +1443,7 @@ static const char * const mic_mute_groups[] = {
 	"mic_mute_key", "mic_mute_led",
 };
 
-static struct meson_pmx_func t7_periphs_functions[] = {
+static const struct meson_pmx_func t7_periphs_functions[] = {
 	FUNCTION(gpio_periphs),
 	FUNCTION(emmc),
 	FUNCTION(nor),

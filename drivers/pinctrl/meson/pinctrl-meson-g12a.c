@@ -436,7 +436,7 @@ static const unsigned int tdm_c_dout1_z_pins[]		= { GPIOZ_3 };
 static const unsigned int tdm_c_dout2_z_pins[]		= { GPIOZ_4 };
 static const unsigned int tdm_c_dout3_z_pins[]		= { GPIOZ_5 };
 
-static struct meson_pmx_group meson_g12a_periphs_groups[] = {
+static const struct meson_pmx_group meson_g12a_periphs_groups[] = {
 	GPIO_GROUP(GPIOZ_0),
 	GPIO_GROUP(GPIOZ_1),
 	GPIO_GROUP(GPIOZ_2),
@@ -860,7 +860,7 @@ static const unsigned int tdm_ao_b_dout2_pins[]		= { GPIOAO_6 };
 /* mclk0_ao */
 static const unsigned int mclk0_ao_pins[]		= { GPIOAO_9 };
 
-static struct meson_pmx_group meson_g12a_aobus_groups[] = {
+static const struct meson_pmx_group meson_g12a_aobus_groups[] = {
 	GPIO_GROUP(GPIOAO_0),
 	GPIO_GROUP(GPIOAO_1),
 	GPIO_GROUP(GPIOAO_2),
@@ -1253,7 +1253,7 @@ static const char * const mclk0_ao_groups[] = {
 	"mclk0_ao",
 };
 
-static struct meson_pmx_func meson_g12a_periphs_functions[] = {
+static const struct meson_pmx_func meson_g12a_periphs_functions[] = {
 	FUNCTION(gpio_periphs),
 	FUNCTION(emmc),
 	FUNCTION(nor),
@@ -1295,7 +1295,7 @@ static struct meson_pmx_func meson_g12a_periphs_functions[] = {
 	FUNCTION(tdm_c),
 };
 
-static struct meson_pmx_func meson_g12a_aobus_functions[] = {
+static const struct meson_pmx_func meson_g12a_aobus_functions[] = {
 	FUNCTION(gpio_aobus),
 	FUNCTION(uart_ao_a),
 	FUNCTION(uart_ao_b),

@@ -528,7 +528,7 @@ static int meson_pinconf_group_set(struct pinctrl_dev *pcdev,
 				   unsigned long *configs, unsigned num_configs)
 {
 	struct meson_pinctrl *pc = pinctrl_dev_get_drvdata(pcdev);
-	struct meson_pmx_group *group = &pc->data->groups[num_group];
+	const struct meson_pmx_group *group = &pc->data->groups[num_group];
 	int i;
 
 	dev_dbg(pc->dev, "set pinconf for group %s\n", group->name);

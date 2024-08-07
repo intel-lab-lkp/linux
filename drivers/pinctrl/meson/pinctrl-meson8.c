@@ -405,7 +405,7 @@ static const unsigned int i2s_out_ch01_ao_pins[] = { GPIOAO_11 };
 
 static const unsigned int hdmi_cec_ao_pins[]	= { GPIOAO_12 };
 
-static struct meson_pmx_group meson8_cbus_groups[] = {
+static const struct meson_pmx_group meson8_cbus_groups[] = {
 	GPIO_GROUP(GPIOX_0),
 	GPIO_GROUP(GPIOX_1),
 	GPIO_GROUP(GPIOX_2),
@@ -745,7 +745,7 @@ static struct meson_pmx_group meson8_cbus_groups[] = {
 	GROUP(sdxc_cmd_b,	2,	4),
 };
 
-static struct meson_pmx_group meson8_aobus_groups[] = {
+static const struct meson_pmx_group meson8_aobus_groups[] = {
 	GPIO_GROUP(GPIOAO_0),
 	GPIO_GROUP(GPIOAO_1),
 	GPIO_GROUP(GPIOAO_2),
@@ -1015,7 +1015,7 @@ static const char * const hdmi_cec_ao_groups[] = {
 	"hdmi_cec_ao"
 };
 
-static struct meson_pmx_func meson8_cbus_functions[] = {
+static const struct meson_pmx_func meson8_cbus_functions[] = {
 	FUNCTION(gpio_periphs),
 	FUNCTION(sd_a),
 	FUNCTION(sdxc_a),
@@ -1051,7 +1051,7 @@ static struct meson_pmx_func meson8_cbus_functions[] = {
 	FUNCTION(spdif),
 };
 
-static struct meson_pmx_func meson8_aobus_functions[] = {
+static const struct meson_pmx_func meson8_aobus_functions[] = {
 	FUNCTION(gpio_aobus),
 	FUNCTION(uart_ao),
 	FUNCTION(remote),

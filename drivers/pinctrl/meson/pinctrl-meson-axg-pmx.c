@@ -82,8 +82,8 @@ static int meson_axg_pmx_set_mux(struct pinctrl_dev *pcdev,
 	int i;
 	int ret;
 	struct meson_pinctrl *pc = pinctrl_dev_get_drvdata(pcdev);
-	struct meson_pmx_func *func = &pc->data->funcs[func_num];
-	struct meson_pmx_group *group = &pc->data->groups[group_num];
+	const struct meson_pmx_func *func = &pc->data->funcs[func_num];
+	const struct meson_pmx_group *group = &pc->data->groups[group_num];
 	struct meson_pmx_axg_data *pmx_data =
 		(struct meson_pmx_axg_data *)group->data;
 
