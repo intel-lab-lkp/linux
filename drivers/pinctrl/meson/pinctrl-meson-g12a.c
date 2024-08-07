@@ -1342,7 +1342,7 @@ static const struct meson_bank meson_g12a_aobus_banks[] = {
 		3, 16,  2, 16,   0, 16,  4, 16,   1, 16,  1, 0),
 };
 
-static struct meson_pmx_bank meson_g12a_periphs_pmx_banks[] = {
+static const struct meson_pmx_bank meson_g12a_periphs_pmx_banks[] = {
 	/*	 name	 first	  last	    reg	 offset  */
 	BANK_PMX("Z",    GPIOZ_0, GPIOZ_15, 0x6, 0),
 	BANK_PMX("H",    GPIOH_0, GPIOH_8,  0xb, 0),
@@ -1357,7 +1357,7 @@ static struct meson_axg_pmx_data meson_g12a_periphs_pmx_banks_data = {
 	.num_pmx_banks	= ARRAY_SIZE(meson_g12a_periphs_pmx_banks),
 };
 
-static struct meson_pmx_bank meson_g12a_aobus_pmx_banks[] = {
+static const struct meson_pmx_bank meson_g12a_aobus_pmx_banks[] = {
 	BANK_PMX("AO",  GPIOAO_0, GPIOAO_11, 0x0, 0),
 	BANK_PMX("E",   GPIOE_0,  GPIOE_2,   0x1, 16),
 };

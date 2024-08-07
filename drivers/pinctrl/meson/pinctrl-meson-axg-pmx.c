@@ -27,10 +27,10 @@
 
 static int meson_axg_pmx_get_bank(struct meson_pinctrl *pc,
 			unsigned int pin,
-			struct meson_pmx_bank **bank)
+			const struct meson_pmx_bank **bank)
 {
 	int i;
-	struct meson_axg_pmx_data *pmx = pc->data->pmx_data;
+	const struct meson_axg_pmx_data *pmx = pc->data->pmx_data;
 
 	for (i = 0; i < pmx->num_pmx_banks; i++)
 		if (pin >= pmx->pmx_banks[i].first &&
@@ -42,7 +42,7 @@ static int meson_axg_pmx_get_bank(struct meson_pinctrl *pc,
 	return -EINVAL;
 }
 
-static int meson_pmx_calc_reg_and_offset(struct meson_pmx_bank *bank,
+static int meson_pmx_calc_reg_and_offset(const struct meson_pmx_bank *bank,
 			unsigned int pin, unsigned int *reg,
 			unsigned int *offset)
 {
@@ -59,10 +59,10 @@ static int meson_pmx_calc_reg_and_offset(struct meson_pmx_bank *bank,
 static int meson_axg_pmx_update_function(struct meson_pinctrl *pc,
 			unsigned int pin, unsigned int func)
 {
+	const struct meson_pmx_bank *bank;
 	int ret;
 	int reg;
 	int offset;
-	struct meson_pmx_bank *bank;
 
 	ret = meson_axg_pmx_get_bank(pc, pin, &bank);
 	if (ret)

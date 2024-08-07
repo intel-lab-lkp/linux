@@ -1180,7 +1180,7 @@ static const struct meson_bank meson_s4_periphs_banks[] = {
 		0x83,  0,  0x84,  0,  0x82, 0,  0x81,  0, 0x80, 0, 0x87, 0),
 };
 
-static struct meson_pmx_bank meson_s4_periphs_pmx_banks[] = {
+static const struct meson_pmx_bank meson_s4_periphs_pmx_banks[] = {
 	/*name	            first	 lask        reg offset*/
 	BANK_PMX("B",      GPIOB_0,     GPIOB_13,    0x00, 0),
 	BANK_PMX("C",      GPIOC_0,     GPIOC_7,     0x9,  0),

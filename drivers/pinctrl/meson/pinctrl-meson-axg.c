@@ -1017,7 +1017,7 @@ static const struct meson_bank meson_axg_aobus_banks[] = {
 	BANK("AO",   GPIOAO_0,  GPIOAO_13, 0, 13, 0,  16,  0, 0,  0,  0,  0, 16,  1,  0),
 };
 
-static struct meson_pmx_bank meson_axg_periphs_pmx_banks[] = {
+static const struct meson_pmx_bank meson_axg_periphs_pmx_banks[] = {
 	/*	 name	 first		lask	   reg	offset  */
 	BANK_PMX("Z",	 GPIOZ_0, GPIOZ_10, 0x2, 0),
 	BANK_PMX("BOOT", BOOT_0,  BOOT_14,  0x0, 0),
@@ -1031,7 +1031,7 @@ static struct meson_axg_pmx_data meson_axg_periphs_pmx_banks_data = {
 	.num_pmx_banks = ARRAY_SIZE(meson_axg_periphs_pmx_banks),
 };
 
-static struct meson_pmx_bank meson_axg_aobus_pmx_banks[] = {
+static const struct meson_pmx_bank meson_axg_aobus_pmx_banks[] = {
 	BANK_PMX("AO", GPIOAO_0, GPIOAO_13, 0x0, 0),
 };
 

@@ -1054,7 +1054,7 @@ static const struct meson_bank c3_periphs_banks[] = {
 		0x73, 0,  0x74, 0,  0x72, 0,  0x71, 0, 0x70, 0, 0x77, 0),
 };
 
-static struct meson_pmx_bank c3_periphs_pmx_banks[] = {
+static const struct meson_pmx_bank c3_periphs_pmx_banks[] = {
 	/* name	            first	 last        reg offset */
 	BANK_PMX("B",      GPIOB_0,     GPIOB_14,    0x00, 0),
 	BANK_PMX("X",      GPIOX_0,     GPIOX_13,    0x03, 0),
