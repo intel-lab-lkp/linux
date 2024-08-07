@@ -1651,7 +1651,6 @@ sof_ipc4_prepare_dai_copier(struct snd_sof_dev *sdev, struct snd_sof_dai *dai,
 			    struct snd_pcm_hw_params *params, int dir)
 {
 	struct sof_ipc4_available_audio_format *available_fmt;
-	struct snd_pcm_hw_params dai_params = *params;
 	struct sof_ipc4_copier_data *copier_data;
 	struct sof_ipc4_pin_format *pin_fmts;
 	struct sof_ipc4_copier *ipc4_copier;
@@ -1676,7 +1675,7 @@ sof_ipc4_prepare_dai_copier(struct snd_sof_dev *sdev, struct snd_sof_dai *dai,
 		num_pin_fmts = available_fmt->num_input_formats;
 	}
 
-	ret = sof_ipc4_adjust_params_to_dai_format(sdev, &dai_params, pin_fmts,
+	ret = sof_ipc4_adjust_params_to_dai_format(sdev, params, pin_fmts,
 						   num_pin_fmts);
 	if (ret)
 		return ret;
@@ -1684,15 +1683,11 @@ sof_ipc4_prepare_dai_copier(struct snd_sof_dev *sdev, struct snd_sof_dai *dai,
 	single_bitdepth = sof_ipc4_copier_is_single_bitdepth(sdev, pin_fmts,
 							     num_pin_fmts);
 	ret = snd_sof_get_nhlt_endpoint_data(sdev, dai, single_bitdepth,
-					     &dai_params,
+					     params,
 					     ipc4_copier->dai_index,
 					     ipc4_copier->dai_type, dir,
 					     &ipc4_copier->copier_config,
 					     &copier_data->gtw_cfg.config_length);
-	/* Update the params to reflect the changes made in this function */
-	if (!ret)
-		*params = dai_params;
-
 	return ret;
 }
 
@@ -1784,9 +1779,9 @@ sof_ipc4_prepare_copier_module(struct snd_sof_widget *swidget,
 		 * for capture.
 		 */
 		if (dir == SNDRV_PCM_STREAM_PLAYBACK)
-			ref_params = *fe_params;
+			memcpy(&ref_params, fe_params, sizeof(ref_params));
 		else
-			ref_params = *pipeline_params;
+			memcpy(&ref_params, pipeline_params, sizeof(ref_params));
 
 		copier_data->gtw_cfg.node_id &= ~SOF_IPC4_NODE_INDEX_MASK;
 		copier_data->gtw_cfg.node_id |=
@@ -1819,7 +1814,7 @@ sof_ipc4_prepare_copier_module(struct snd_sof_widget *swidget,
 		 * In case of capture the ref_params returned will be used to
 		 * find the input configuration of the copier.
 		 */
-		ref_params = *fe_params;
+		memcpy(&ref_params, fe_params, sizeof(ref_params));
 		ret = sof_ipc4_prepare_dai_copier(sdev, dai, &ref_params, dir);
 		if (ret < 0)
 			return ret;
@@ -1829,7 +1824,7 @@ sof_ipc4_prepare_copier_module(struct snd_sof_widget *swidget,
 		 * input configuration of the copier.
 		 */
 		if (dir == SNDRV_PCM_STREAM_PLAYBACK)
-			ref_params = *pipeline_params;
+			memcpy(&ref_params, pipeline_params, sizeof(ref_params));
 
 		break;
 	}
@@ -1838,7 +1833,7 @@ sof_ipc4_prepare_copier_module(struct snd_sof_widget *swidget,
 		ipc4_copier = (struct sof_ipc4_copier *)swidget->private;
 		copier_data = &ipc4_copier->data;
 		available_fmt = &ipc4_copier->available_fmt;
-		ref_params = *pipeline_params;
+		memcpy(&ref_params, pipeline_params, sizeof(ref_params));
 
 		break;
 	}
