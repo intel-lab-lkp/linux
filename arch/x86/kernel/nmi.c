@@ -171,7 +171,17 @@ int __register_nmi_handler(unsigned int type, struct nmiaction *action)
 	if (WARN_ON_ONCE(!action->handler || !list_empty(&action->list)))
 		return -EINVAL;
 
-	raw_spin_lock_irqsave(&desc->lock, flags);
+	if (in_nmi()) {
+		/*
+		 * We cannot take a spinlock from NMI code. This can happen
+		 * from nmi_panic. Only one CPU can panic, so the trylock
+		 * should normally succeed.
+		 */
+		if (!raw_spin_trylock_irqsave(&desc->lock, flags))
+			return 1;
+	} else {
+		raw_spin_lock_irqsave(&desc->lock, flags);
+	}
 
 	/*
 	 * Indicate if there are multiple registrations on the
