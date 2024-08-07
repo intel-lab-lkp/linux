@@ -686,6 +686,44 @@ static __always_inline __alloc_size(1) void *kmalloc_noprof(size_t size, gfp_t f
 }
 #define kmalloc(...)				alloc_hooks(kmalloc_noprof(__VA_ARGS__))
 
+#define __alloc_obj3(ALLOC, P, COUNT, FLAGS)			\
+({								\
+	size_t __obj_size = size_mul(sizeof(*P), COUNT);	\
+	void *__obj_ptr;					\
+	(P) = __obj_ptr = ALLOC(__obj_size, FLAGS);		\
+	if (!__obj_ptr)						\
+		__obj_size = 0;					\
+	__obj_size;						\
+})
+
+#define __alloc_obj2(ALLOC, P, FLAGS)	__alloc_obj3(ALLOC, P, 1, FLAGS)
+
+#define __alloc_obj4(ALLOC, P, FAM, COUNT, FLAGS)		\
+({								\
+	size_t __obj_size = struct_size(P, FAM, COUNT);		\
+	void *__obj_ptr;					\
+	(P) = __obj_ptr = ALLOC(__obj_size, FLAGS);		\
+	if (!__obj_ptr)						\
+		__obj_size = 0;					\
+	__obj_size;						\
+})
+
+#define kmalloc_obj(...)					\
+	CONCATENATE(__alloc_obj,				\
+		    COUNT_ARGS(__VA_ARGS__))(kmalloc, __VA_ARGS__)
+
+#define kzalloc_obj(...)					\
+	CONCATENATE(__alloc_obj,				\
+		    COUNT_ARGS(__VA_ARGS__))(kzalloc, __VA_ARGS__)
+
+#define kvmalloc_obj(...)					\
+	CONCATENATE(__alloc_obj,				\
+		    COUNT_ARGS(__VA_ARGS__))(kvmalloc, __VA_ARGS__)
+
+#define kvzalloc_obj(...)					\
+	CONCATENATE(__alloc_obj,				\
+		    COUNT_ARGS(__VA_ARGS__))(kvzalloc, __VA_ARGS__)
+
 #define kmem_buckets_alloc(_b, _size, _flags)	\
 	alloc_hooks(__kmalloc_node_noprof(PASS_BUCKET_PARAMS(_size, _b), _flags, NUMA_NO_NODE))
 
