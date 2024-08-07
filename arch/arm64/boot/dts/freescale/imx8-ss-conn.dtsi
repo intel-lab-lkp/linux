@@ -121,6 +121,7 @@ conn_subsys: bus@5b000000 {
 		assigned-clock-rates = <250000000>, <125000000>;
 		fsl,num-tx-queues = <3>;
 		fsl,num-rx-queues = <3>;
+		fsl,pps-channel = <1>;
 		power-domains = <&pd IMX_SC_R_ENET_0>;
 		status = "disabled";
 	};
@@ -141,6 +142,7 @@ conn_subsys: bus@5b000000 {
 		assigned-clock-rates = <250000000>, <125000000>;
 		fsl,num-tx-queues = <3>;
 		fsl,num-rx-queues = <3>;
+		fsl,pps-channel = <1>;
 		power-domains = <&pd IMX_SC_R_ENET_1>;
 		status = "disabled";
 	};
