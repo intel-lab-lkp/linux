@@ -528,3 +528,37 @@ void ieee80211_set_active_links_async(struct ieee80211_vif *vif,
 	wiphy_work_queue(sdata->local->hw.wiphy, &sdata->activate_links_work);
 }
 EXPORT_SYMBOL_GPL(ieee80211_set_active_links_async);
+
+int __ieee80211_link_reconfig_remove(struct ieee80211_local *local,
+				     struct ieee80211_sub_if_data *sdata,
+				     const struct cfg80211_link_reconfig_removal_params *params)
+{
+	struct ieee80211_link_data *link;
+
+	if (!ieee80211_sdata_running(sdata))
+		return -ENETDOWN;
+
+	if (sdata->vif.type != NL80211_IFTYPE_AP)
+		return -EINVAL;
+
+	link = sdata_dereference(sdata->link[params->link_id], sdata);
+	if (!link)
+		return -ENOLINK;
+
+	return drv_link_reconfig_remove(local, sdata, params);
+}
+
+int ieee80211_update_link_reconfig_remove_update(struct ieee80211_vif *vif,
+						 unsigned int link_id,
+						 u32 tbtt_count, u64 tsf,
+						 enum nl80211_commands cmd)
+{
+	struct ieee80211_sub_if_data *sdata = vif_to_sdata(vif);
+
+	if (vif->type == NL80211_IFTYPE_AP)
+		return cfg80211_update_link_reconfig_remove_update(sdata->dev, link_id,
+								   tbtt_count, tsf,
+								   cmd);
+	return -EINVAL;
+}
+EXPORT_SYMBOL(ieee80211_update_link_reconfig_remove_update);
