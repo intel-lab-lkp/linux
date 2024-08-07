@@ -1758,6 +1758,7 @@ static void __update_and_free_hugetlb_folio(struct hstate *h,
 		free_gigantic_folio(folio, huge_page_order(h));
 	} else {
 		INIT_LIST_HEAD(&folio->_deferred_list);
+		folio->_partially_mapped = false;
 		folio_put(folio);
 	}
 }
