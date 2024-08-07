@@ -133,6 +133,12 @@ typedef u32 nid_t;
 
 #define COMPRESS_EXT_NUM		16
 
+/*
+ * Avoid entering the FG-GC when the total size
+ * of dirty blocks is below this value
+ */
+#define FOREGROUND_GC_THRESHOLD	2
+
 enum blkzone_allocation_policy {
 	BLKZONE_ALLOC_PRIOR_SEQ,	/* Prioritize writing to sequential zones */
 	BLKZONE_ALLOC_ONLY_SEQ,		/* Only allow writing to sequential zones */

@@ -418,6 +418,8 @@ int f2fs_commit_atomic_write(struct inode *inode)
  */
 void f2fs_balance_fs(struct f2fs_sb_info *sbi, bool need)
 {
+	block_t invalid_user_blocks = sbi->user_block_count - written_block_count(sbi);
+
 	if (f2fs_cp_error(sbi))
 		return;
 
@@ -436,6 +438,12 @@ void f2fs_balance_fs(struct f2fs_sb_info *sbi, bool need)
 	 * dir/node pages without enough free segments.
 	 */
 	if (has_enough_free_secs(sbi, 0, 0))
+		return;
+
+	/*
+	 * If there aren't enough dirty segments, GC is not required.
+	 */
+	if (invalid_user_blocks < FOREGROUND_GC_THRESHOLD * BLKS_PER_SEC(sbi))
 		return;
 
 	if (test_opt(sbi, GC_MERGE) && sbi->gc_thread &&
