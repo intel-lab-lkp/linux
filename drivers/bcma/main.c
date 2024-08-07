@@ -175,7 +175,7 @@ static int bcma_of_irq_parse(struct device *parent,
 	out_irq->args[0] = num;
 
 	laddr[0] = cpu_to_be32(core->addr);
-	return of_irq_parse_raw(laddr, out_irq);
+	return of_irq_parse_raw(laddr, ARRAY_SIZE(laddr), out_irq);
 }
 
 static unsigned int bcma_of_get_irq(struct device *parent,
