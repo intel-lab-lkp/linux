@@ -159,6 +159,9 @@ panfrost_dequeue_job(struct panfrost_device *pfdev, int slot)
 	struct panfrost_job *job = pfdev->jobs[slot][0];
 
 	WARN_ON(!job);
+	if (job->requirements & PANFROST_JD_REQ_CYCLE_COUNT)
+		panfrost_cycle_counter_put(pfdev);
+
 	if (job->is_profiled) {
 		if (job->engine_usage) {
 			job->engine_usage->elapsed_ns[slot] +=
@@ -218,6 +221,9 @@ static void panfrost_job_hw_submit(struct panfrost_job *job, int js)
 	job_write(pfdev, JS_HEAD_NEXT_HI(js), upper_32_bits(jc_head));
 
 	panfrost_job_write_affinity(pfdev, job->requirements, js);
+
+	if (job->requirements & PANFROST_JD_REQ_CYCLE_COUNT)
+		panfrost_cycle_counter_get(pfdev);
 
 	/* start MMU, medium priority, cache clean/flush on end, clean/flush on
 	 * start */
@@ -693,8 +699,12 @@ panfrost_reset(struct panfrost_device *pfdev,
 	spin_lock(&pfdev->js->job_lock);
 	for (i = 0; i < NUM_JOB_SLOTS; i++) {
 		for (j = 0; j < ARRAY_SIZE(pfdev->jobs[0]) && pfdev->jobs[i][j]; j++) {
+			if (pfdev->jobs[i][j]->requirements & PANFROST_JD_REQ_CYCLE_COUNT)
+				panfrost_cycle_counter_put(pfdev);
+
 			if (pfdev->jobs[i][j]->is_profiled)
 				panfrost_cycle_counter_put(pfdev->jobs[i][j]->pfdev);
+
 			pm_runtime_put_noidle(pfdev->dev);
 			panfrost_devfreq_record_idle(&pfdev->pfdevfreq);
 		}
