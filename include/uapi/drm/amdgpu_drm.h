@@ -125,7 +125,14 @@ extern "C" {
 #define AMDGPU_GEM_CREATE_VRAM_CONTIGUOUS	(1 << 5)
 /* Flag that BO is always valid in this VM */
 #define AMDGPU_GEM_CREATE_VM_ALWAYS_VALID	(1 << 6)
-/* Flag that BO sharing will be explicitly synchronized */
+/* Flag that BO sharing will be explicitly synchronized
+ *
+ * This flag should not be used unless the client can guarantee that no
+ * other driver which ever touches this BO will ever want to use implicit
+ * synchronization as it disables implicit sync on this BO system-wide.
+ * Instead, drivers which use an explicit synchronization model should
+ * prefer AMDGPU_CTX_ALLOC_FLAGS_EXPLICIT_SYNC.
+ */
 #define AMDGPU_GEM_CREATE_EXPLICIT_SYNC		(1 << 7)
 /* Flag that indicates allocating MQD gart on GFX9, where the mtype
  * for the second page onward should be set to NC. It should never
@@ -241,6 +248,9 @@ union drm_amdgpu_bo_list {
 #define AMDGPU_CTX_OP_QUERY_STATE2	4
 #define AMDGPU_CTX_OP_GET_STABLE_PSTATE	5
 #define AMDGPU_CTX_OP_SET_STABLE_PSTATE	6
+
+/* indicate that all synchronization will be explicit */
+#define AMDGPU_CTX_ALLOC_FLAGS_EXPLICIT_SYNC (1<<0)
 
 /* GPU reset status */
 #define AMDGPU_CTX_NO_RESET		0

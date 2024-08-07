@@ -45,6 +45,7 @@ struct amdgpu_ctx_entity {
 struct amdgpu_ctx {
 	struct kref			refcount;
 	struct amdgpu_ctx_mgr		*mgr;
+	uint32_t			flags;
 	unsigned			reset_counter;
 	unsigned			reset_counter_query;
 	uint64_t			generation;
@@ -83,6 +84,12 @@ struct dma_fence *amdgpu_ctx_get_fence(struct amdgpu_ctx *ctx,
 				       uint64_t seq);
 bool amdgpu_ctx_priority_is_valid(int32_t ctx_prio);
 void amdgpu_ctx_priority_override(struct amdgpu_ctx *ctx, int32_t ctx_prio);
+
+static inline bool
+amdgpu_ctx_explicit_sync(struct amdgpu_ctx *ctx)
+{
+	return ctx->flags & AMDGPU_CTX_ALLOC_FLAGS_EXPLICIT_SYNC;
+}
 
 int amdgpu_ctx_ioctl(struct drm_device *dev, void *data,
 		     struct drm_file *filp);
