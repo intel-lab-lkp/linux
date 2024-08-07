@@ -147,9 +147,19 @@ Unimplemented features
 ----------------------
 
 - Additional wiring modes
-- Buffered reads
 - Threshold events
 - Oversampling
 - Gain/offset calibration
 - GPIO support
 - CRC support
+
+Device buffers
+==============
+
+This driver supports hardware triggered buffers. This uses the "advanced
+sequencer" feature of the chip to trigger a burst of conversions.
+
+Due to hardware constraints, the temperature channel cannot be read on its own
+for buffered reads. At least one voltage channel must also be enabled.
+
+Also see :doc:`iio_devbuf` for more general information.
