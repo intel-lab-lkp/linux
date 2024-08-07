@@ -1545,7 +1545,7 @@ static int __init pci_sysfs_init(void)
 
 	return 0;
 }
-late_initcall(pci_sysfs_init);
+device_initcall(pci_sysfs_init);
 
 static struct attribute *pci_dev_dev_attrs[] = {
 	&dev_attr_boot_vga.attr,
