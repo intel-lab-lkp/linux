@@ -4312,7 +4312,7 @@ fec_probe(struct platform_device *pdev)
 	fec_enet_get_queue_num(pdev, &num_tx_qs, &num_rx_qs);
 
 	/* Init network device */
-	ndev = alloc_etherdev_mqs(sizeof(struct fec_enet_private) +
+	ndev = devm_alloc_etherdev_mqs(&pdev->dev, sizeof(struct fec_enet_private) +
 				  FEC_STATS_SIZE, num_tx_qs, num_rx_qs);
 	if (!ndev)
 		return -ENOMEM;
@@ -4342,10 +4342,8 @@ fec_probe(struct platform_device *pdev)
 	pinctrl_pm_select_default_state(&pdev->dev);
 
 	fep->hwp = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(fep->hwp)) {
-		ret = PTR_ERR(fep->hwp);
-		goto failed_ioremap;
-	}
+	if (IS_ERR(fep->hwp))
+		return PTR_ERR(fep->hwp);
 
 	fep->pdev = pdev;
 	fep->dev_id = dev_id++;
@@ -4603,7 +4601,6 @@ fec_drv_remove(struct platform_device *pdev)
 	pm_runtime_disable(&pdev->dev);
 
 	fec_enet_deinit(ndev);
-	free_netdev(ndev);
 }
 
 static int __maybe_unused fec_suspend(struct device *dev)
