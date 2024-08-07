@@ -71,6 +71,7 @@ struct kthread {
 	char *full_name;
 	struct task_struct *task;
 	struct list_head hotplug_node;
+	struct cpumask *preferred_affinity;
 };
 
 enum KTHREAD_BITS {
@@ -330,6 +331,11 @@ void __noreturn kthread_exit(long result)
 		/* Make sure the kthread never gets re-affined globally */
 		set_cpus_allowed_ptr(current, housekeeping_cpumask(HK_TYPE_KTHREAD));
 		mutex_unlock(&kthreads_hotplug_lock);
+
+		if (kthread->preferred_affinity) {
+			kfree(kthread->preferred_affinity);
+			kthread->preferred_affinity = NULL;
+		}
 	}
 	do_exit(0);
 }
@@ -358,19 +364,25 @@ EXPORT_SYMBOL(kthread_complete_and_exit);
 
 static void kthread_fetch_affinity(struct kthread *k, struct cpumask *mask)
 {
-	if (k->node == NUMA_NO_NODE) {
-		cpumask_copy(mask, housekeeping_cpumask(HK_TYPE_KTHREAD));
-	} else {
+	const struct cpumask *pref;
+
+	if (k->preferred_affinity) {
+		pref = k->preferred_affinity;
+	} else if (k->node != NUMA_NO_NODE) {
 		/*
 		 * The node cpumask is racy when read from kthread() but:
 		 * - a racing CPU going down won't be present in kthread_online_mask
 		 * - a racing CPU going up will be handled by kthreads_online_cpu()
 		 */
-		cpumask_and(mask, cpumask_of_node(k->node), &kthread_online_mask);
-		cpumask_and(mask, mask, housekeeping_cpumask(HK_TYPE_KTHREAD));
-		if (cpumask_empty(mask))
-			cpumask_copy(mask, housekeeping_cpumask(HK_TYPE_KTHREAD));
+		pref = cpumask_of_node(k->node);
+	} else {
+		pref = housekeeping_cpumask(HK_TYPE_KTHREAD);
 	}
+
+	cpumask_and(mask, pref, &kthread_online_mask);
+	cpumask_and(mask, mask, housekeeping_cpumask(HK_TYPE_KTHREAD));
+	if (cpumask_empty(mask))
+		cpumask_copy(mask, housekeeping_cpumask(HK_TYPE_KTHREAD));
 }
 
 static int kthread_affine_node(void)
@@ -440,7 +452,7 @@ static int kthread(void *_create)
 
 	self->started = 1;
 
-	if (!(current->flags & PF_NO_SETAFFINITY))
+	if (!(current->flags & PF_NO_SETAFFINITY) && !self->preferred_affinity)
 		kthread_affine_node();
 
 	ret = -EINTR;
@@ -833,6 +845,47 @@ int kthreadd(void *unused)
 		}
 		spin_unlock(&kthread_create_lock);
 	}
+
+	return 0;
+}
+
+int kthread_affine_preferred(struct task_struct *p, const struct cpumask *mask)
+{
+	struct kthread *kthread = to_kthread(p);
+	cpumask_var_t affinity;
+	unsigned long flags;
+	int ret;
+
+	if (!wait_task_inactive(p, TASK_UNINTERRUPTIBLE) || kthread->started) {
+		WARN_ON(1);
+		return -EINVAL;
+	}
+
+	WARN_ON_ONCE(kthread->preferred_affinity);
+
+	if (!zalloc_cpumask_var(&affinity, GFP_KERNEL))
+		return -ENOMEM;
+
+	kthread->preferred_affinity = kzalloc(sizeof(struct cpumask), GFP_KERNEL);
+	if (!kthread->preferred_affinity) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	mutex_lock(&kthreads_hotplug_lock);
+	cpumask_copy(kthread->preferred_affinity, mask);
+	WARN_ON_ONCE(!list_empty(&kthread->hotplug_node));
+	list_add_tail(&kthread->hotplug_node, &kthreads_hotplug);
+	kthread_fetch_affinity(kthread, affinity);
+
+	/* It's safe because the task is inactive. */
+	raw_spin_lock_irqsave(&p->pi_lock, flags);
+	do_set_cpus_allowed(p, affinity);
+	raw_spin_unlock_irqrestore(&p->pi_lock, flags);
+
+	mutex_unlock(&kthreads_hotplug_lock);
+out:
+	free_cpumask_var(affinity);
 
 	return 0;
 }
