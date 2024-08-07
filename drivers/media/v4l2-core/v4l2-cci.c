@@ -30,7 +30,8 @@ int cci_read(struct regmap *map, u32 reg, u64 *val, int *err)
 	 * to a valid value whenever this function returns 0 but smatch
 	 * can't figure that out currently.
 	 */
-	*val = 0;
+	if (val)
+		*val = 0;
 
 	if (err && *err)
 		return *err;
@@ -45,6 +46,8 @@ int cci_read(struct regmap *map, u32 reg, u64 *val, int *err)
 			reg, ret);
 		goto out;
 	}
+	if (!val)
+		goto out;
 
 	switch (len) {
 	case 1:

@@ -60,7 +60,7 @@ struct cci_reg_sequence {
  *
  * @map: Register map to read from
  * @reg: Register address to read, use CCI_REG#() macros to encode reg width
- * @val: Pointer to store read value
+ * @val: Optional pointer to store read value
  * @err: Optional pointer to store errors, if a previous error is set
  *       then the read will be skipped
  *
