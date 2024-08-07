@@ -284,7 +284,7 @@ static const struct mii_phy_ops generic_phy_ops = {
 	.read_link	= genmii_read_link
 };
 
-static struct mii_phy_def genmii_phy_def = {
+static const struct mii_phy_def genmii_phy_def = {
 	.phy_id		= 0x00000000,
 	.phy_id_mask	= 0x00000000,
 	.name		= "Generic MII",
@@ -349,14 +349,14 @@ static const struct mii_phy_ops cis8201_phy_ops = {
 	.read_link	= genmii_read_link
 };
 
-static struct mii_phy_def cis8201_phy_def = {
+static const struct mii_phy_def cis8201_phy_def = {
 	.phy_id		= 0x000fc410,
 	.phy_id_mask	= 0x000ffff0,
 	.name		= "CIS8201 Gigabit Ethernet",
 	.ops		= &cis8201_phy_ops
 };
 
-static struct mii_phy_def bcm5248_phy_def = {
+static const struct mii_phy_def bcm5248_phy_def = {
 
 	.phy_id		= 0x0143bc00,
 	.phy_id_mask	= 0x0ffffff0,
@@ -429,7 +429,7 @@ static const struct mii_phy_ops et1011c_phy_ops = {
 	.read_link	= genmii_read_link
 };
 
-static struct mii_phy_def et1011c_phy_def = {
+static const struct mii_phy_def et1011c_phy_def = {
 	.phy_id		= 0x0282f000,
 	.phy_id_mask	= 0x0fffff00,
 	.name		= "ET1011C Gigabit Ethernet",
@@ -448,7 +448,7 @@ static const struct mii_phy_ops m88e1111_phy_ops = {
 	.read_link	= genmii_read_link
 };
 
-static struct mii_phy_def m88e1111_phy_def = {
+static const struct mii_phy_def m88e1111_phy_def = {
 
 	.phy_id		= 0x01410CC0,
 	.phy_id_mask	= 0x0ffffff0,
@@ -464,7 +464,7 @@ static const struct mii_phy_ops m88e1112_phy_ops = {
 	.read_link	= genmii_read_link
 };
 
-static struct mii_phy_def m88e1112_phy_def = {
+static const struct mii_phy_def m88e1112_phy_def = {
 	.phy_id		= 0x01410C90,
 	.phy_id_mask	= 0x0ffffff0,
 	.name		= "Marvell 88E1112 Ethernet",
@@ -489,14 +489,14 @@ static const struct mii_phy_ops ar8035_phy_ops = {
 	.read_link	= genmii_read_link,
 };
 
-static struct mii_phy_def ar8035_phy_def = {
+static const struct mii_phy_def ar8035_phy_def = {
 	.phy_id		= 0x004dd070,
 	.phy_id_mask	= 0xfffffff0,
 	.name		= "Atheros 8035 Gigabit Ethernet",
 	.ops		= &ar8035_phy_ops,
 };
 
-static struct mii_phy_def *mii_phy_table[] = {
+static const struct mii_phy_def *mii_phy_table[] = {
 	&et1011c_phy_def,
 	&cis8201_phy_def,
 	&bcm5248_phy_def,
@@ -509,7 +509,7 @@ static struct mii_phy_def *mii_phy_table[] = {
 
 int emac_mii_phy_probe(struct mii_phy *phy, int address)
 {
-	struct mii_phy_def *def;
+	const struct mii_phy_def *def;
 	int i;
 	u32 id;
 
