@@ -798,6 +798,7 @@ static unsigned LM93_ALARMS_FROM_REG(struct block1_t b1)
 static u8 lm93_read_byte(struct i2c_client *client, u8 reg)
 {
 	int value, i;
+	int ret;
 
 	/* retry in case of read errors */
 	for (i = 1; i <= MAX_RETRIES; i++) {
@@ -808,14 +809,14 @@ static u8 lm93_read_byte(struct i2c_client *client, u8 reg)
 			dev_warn(&client->dev,
 				 "lm93: read byte data failed, address 0x%02x.\n",
 				 reg);
+			ret = value;
 			mdelay(i + 3);
 		}
 
 	}
 
-	/* <TODO> what to return in case of error? */
 	dev_err(&client->dev, "lm93: All read byte retries failed!!\n");
-	return 0;
+	return ret;
 }
 
 static int lm93_write_byte(struct i2c_client *client, u8 reg, u8 value)
@@ -836,6 +837,7 @@ static int lm93_write_byte(struct i2c_client *client, u8 reg, u8 value)
 static u16 lm93_read_word(struct i2c_client *client, u8 reg)
 {
 	int value, i;
+	int ret;
 
 	/* retry in case of read errors */
 	for (i = 1; i <= MAX_RETRIES; i++) {
@@ -846,14 +848,14 @@ static u16 lm93_read_word(struct i2c_client *client, u8 reg)
 			dev_warn(&client->dev,
 				 "lm93: read word data failed, address 0x%02x.\n",
 				 reg);
+			ret = value;
 			mdelay(i + 3);
 		}
 
 	}
 
-	/* <TODO> what to return in case of error? */
 	dev_err(&client->dev, "lm93: All read word retries failed!!\n");
-	return 0;
+	return ret;
 }
 
 static int lm93_write_word(struct i2c_client *client, u8 reg, u16 value)
