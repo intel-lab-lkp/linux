@@ -225,6 +225,8 @@ struct vcpu_sev_es_state {
 	gpa_t snp_vmsa_gpa;
 	bool snp_ap_waiting_for_reset;
 	bool snp_has_guest_vmsa;
+
+	gpa_t hvdb_gpa;
 };
 
 struct vcpu_svm {
