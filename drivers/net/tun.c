@@ -3151,6 +3151,19 @@ static long __tun_chr_ioctl(struct file *file, unsigned int cmd,
 		tfile->ifindex = ifindex;
 		goto unlock;
 	}
+	if (cmd == TUNGETQUEUEINDEX) {
+		ret = -EINVAL;
+		if (tfile->detached)
+			goto unlock;
+
+		ret = -EFAULT;
+		if (put_user(tfile->queue_index, (unsigned int __user *)argp))
+			goto unlock;
+
+		ret = 0;
+		goto unlock;
+	}
+
 
 	ret = -EBADFD;
 	if (!tun)

@@ -1120,6 +1120,16 @@ static long tap_ioctl(struct file *file, unsigned int cmd,
 		rtnl_unlock();
 		return ret;
 
+	case TUNGETQUEUEINDEX:
+		rtnl_lock();
+		if (!q->enabled)
+			ret = -EINVAL;
+		else
+			ret = put_user(q->queue_index, up);
+
+		rtnl_unlock();
+		return ret;
+
 	case SIOCGIFHWADDR:
 		rtnl_lock();
 		tap = tap_get_tap_dev(q);
