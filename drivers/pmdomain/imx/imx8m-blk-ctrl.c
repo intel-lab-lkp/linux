@@ -212,7 +212,7 @@ static int imx8m_blk_ctrl_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	bc->bus_power_dev = dev_pm_domain_attach_by_name(dev, "bus");
-	if (IS_ERR(bc->bus_power_dev)) {
+	if (IS_ERR_OR_NULL(bc->bus_power_dev)) {
 		if (PTR_ERR(bc->bus_power_dev) == -ENODEV)
 			return dev_err_probe(dev, -EPROBE_DEFER,
 					     "failed to attach power domain \"bus\"\n");
