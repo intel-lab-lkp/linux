@@ -162,6 +162,8 @@ struct xfs_getfsmap_info {
 	xfs_daddr_t		next_daddr;	/* next daddr we expect */
 	/* daddr of low fsmap key when we're using the rtbitmap */
 	xfs_daddr_t		low_daddr;
+	xfs_daddr_t		start_daddr;	/* daddr of low fsmap key */
+	xfs_daddr_t		end_daddr;	/* daddr of high fsmap key */
 	u64			missing_owner;	/* owner of holes */
 	u32			dev;		/* device id */
 	/*
@@ -276,12 +278,20 @@ xfs_getfsmap_helper(
 	struct xfs_mount		*mp = tp->t_mountp;
 	bool				shared;
 	int				error;
+	int				trunc_len;
 
 	if (fatal_signal_pending(current))
 		return -EINTR;
 
 	if (len_daddr == 0)
 		len_daddr = XFS_FSB_TO_BB(mp, rec->rm_blockcount);
+
+	/*
+	 * Determine the maximum boundary of the query to prepare for
+	 * subsequent truncation.
+	 */
+	if (info->last && info->end_daddr)
+		rec_daddr = info->end_daddr;
 
 	/*
 	 * Filter out records that start before our startpoint, if the
@@ -348,6 +358,21 @@ xfs_getfsmap_helper(
 		return error;
 	fmr.fmr_offset = XFS_FSB_TO_BB(mp, rec->rm_offset);
 	fmr.fmr_length = len_daddr;
+	/*  If the start address of the record is before the low key, truncate left. */
+	if (info->start_daddr > rec_daddr) {
+		trunc_len = info->start_daddr - rec_daddr;
+		fmr.fmr_physical += trunc_len;
+		fmr.fmr_length -= trunc_len;
+		/* need to update the offset in rmapbt. */
+		if (info->missing_owner == XFS_FMR_OWN_FREE)
+			fmr.fmr_offset += trunc_len;
+	}
+	/* If the end address of the record exceeds the high key, truncate right. */
+	if (info->end_daddr) {
+		fmr.fmr_length = umin(fmr.fmr_length, info->end_daddr - fmr.fmr_physical);
+		if (fmr.fmr_length == 0)
+			goto out;
+	}
 	if (rec->rm_flags & XFS_RMAP_UNWRITTEN)
 		fmr.fmr_flags |= FMR_OF_PREALLOC;
 	if (rec->rm_flags & XFS_RMAP_ATTR_FORK)
@@ -364,7 +389,7 @@ xfs_getfsmap_helper(
 
 	xfs_getfsmap_format(mp, &fmr, info);
 out:
-	rec_daddr += len_daddr;
+	rec_daddr = fmr.fmr_physical + fmr.fmr_length;
 	if (info->next_daddr < rec_daddr)
 		info->next_daddr = rec_daddr;
 	return 0;
@@ -655,6 +680,13 @@ __xfs_getfsmap_datadev(
 			error = xfs_fsmap_owner_to_rmap(&info->high, &keys[1]);
 			if (error)
 				break;
+			/*
+			 * Set the owner of high_key to the maximum again to
+			 * prevent missing intervals during the query.
+			 */
+			if (info->high.rm_owner == 0 &&
+			    info->missing_owner == XFS_FMR_OWN_FREE)
+			    info->high.rm_owner = ULLONG_MAX;
 			xfs_getfsmap_set_irec_flags(&info->high, &keys[1]);
 		}
 
@@ -946,6 +978,9 @@ xfs_getfsmap(
 
 	info.next_daddr = head->fmh_keys[0].fmr_physical +
 			  head->fmh_keys[0].fmr_length;
+	/* Assignment is performed only for the first time. */
+	if (head->fmh_keys[0].fmr_length == 0)
+		info.start_daddr = info.next_daddr;
 	info.fsmap_recs = fsmap_recs;
 	info.head = head;
 
@@ -966,8 +1001,10 @@ xfs_getfsmap(
 		 * low key, zero out the low key so that we get
 		 * everything from the beginning.
 		 */
-		if (handlers[i].dev == head->fmh_keys[1].fmr_device)
+		if (handlers[i].dev == head->fmh_keys[1].fmr_device) {
 			dkeys[1] = head->fmh_keys[1];
+			info.end_daddr = dkeys[1].fmr_physical + dkeys[1].fmr_length;
+		}
 		if (handlers[i].dev > head->fmh_keys[0].fmr_device)
 			memset(&dkeys[0], 0, sizeof(struct xfs_fsmap));
 
@@ -991,6 +1028,7 @@ xfs_getfsmap(
 		xfs_trans_cancel(tp);
 		tp = NULL;
 		info.next_daddr = 0;
+		info.start_daddr = 0;
 	}
 
 	if (tp)
