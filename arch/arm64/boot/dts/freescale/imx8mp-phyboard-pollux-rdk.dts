@@ -16,6 +16,7 @@
 		     "phytec,imx8mp-phycore-som", "fsl,imx8mp";
 
 	chosen {
+		bootargs = "console=ttymxc0,115200";
 		stdout-path = &uart1;
 	};
 
