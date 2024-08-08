@@ -456,30 +456,29 @@ err_node_put:
 
 /**
  * of_get_regulator - get a regulator device node based on supply name
- * @dev: Device pointer for the consumer (of regulator) device
+ * @node: Device node pointer for supply property lookup
  * @supply: regulator supply name
  *
  * Extract the regulator device node corresponding to the supply name.
  * returns the device node corresponding to the regulator if found, else
  * returns NULL.
  */
-static struct device_node *of_get_regulator(struct device *dev, const char *supply)
+static struct device_node *of_get_regulator(struct device_node *node, const char *supply)
 {
 	struct device_node *regnode = NULL;
 	char prop_name[64]; /* 64 is max size of property name */
 
-	dev_dbg(dev, "Looking up %s-supply from device tree\n", supply);
+	pr_debug("%pOF: Looking up %s-supply from device tree\n", node, supply);
 
 	snprintf(prop_name, 64, "%s-supply", supply);
-	regnode = of_parse_phandle(dev->of_node, prop_name, 0);
+	regnode = of_parse_phandle(node, prop_name, 0);
 
 	if (!regnode) {
-		regnode = of_get_child_regulator(dev->of_node, prop_name);
+		regnode = of_get_child_regulator(node, prop_name);
 		if (regnode)
 			return regnode;
 
-		dev_dbg(dev, "Looking up %s property in node %pOF failed\n",
-				prop_name, dev->of_node);
+		pr_debug("%pOF: Looking up %s property failed\n", node, prop_name);
 		return NULL;
 	}
 	return regnode;
@@ -1996,7 +1995,13 @@ static struct regulator_dev *regulator_lookup_by_name(const char *name)
 /**
  * regulator_dev_lookup - lookup a regulator device.
  * @dev: device for regulator "consumer".
+ * @node: device node for regulator supply lookup.
+ *        Falls back to dev->of_node if NULL.
  * @supply: Supply name or regulator ID.
+ *
+ * If dev is NULL and node is not NULL, a pure device tree lookup is assumed.
+ * That is, it will not use supply aliases and end after DT based lookup is
+ * done.
  *
  * If successful, returns a struct regulator_dev that corresponds to the name
  * @supply and with the embedded struct device refcount incremented by one.
@@ -2006,21 +2011,30 @@ static struct regulator_dev *regulator_lookup_by_name(const char *name)
  * in the future.
  */
 static struct regulator_dev *regulator_dev_lookup(struct device *dev,
+						  struct device_node *node,
 						  const char *supply)
 {
 	struct regulator_dev *r = NULL;
-	struct device_node *node;
+	struct device_node *regulator_node;
 	struct regulator_map *map;
 	const char *devname = NULL;
+	bool pure_dt_lookup = false;
 
-	regulator_supply_alias(&dev, &supply);
+	pure_dt_lookup = (node && !dev);
+
+	/* Pure DT lookup should use given supply name directly */
+	if (!pure_dt_lookup)
+		regulator_supply_alias(&dev, &supply);
+
+	if (!node && dev && dev->of_node)
+		node = dev->of_node;
 
 	/* first do a dt based lookup */
-	if (dev && dev->of_node) {
-		node = of_get_regulator(dev, supply);
-		if (node) {
-			r = of_find_regulator_by_node(node);
-			of_node_put(node);
+	if (node) {
+		regulator_node = of_get_regulator(node, supply);
+		if (regulator_node) {
+			r = of_find_regulator_by_node(regulator_node);
+			of_node_put(regulator_node);
 			if (r)
 				return r;
 
@@ -2031,6 +2045,10 @@ static struct regulator_dev *regulator_dev_lookup(struct device *dev,
 			return ERR_PTR(-EPROBE_DEFER);
 		}
 	}
+
+	/* Pure DT lookup stops here. */
+	if (pure_dt_lookup)
+		return ERR_PTR(-ENODEV);
 
 	/* if not found, try doing it non-dt way */
 	if (dev)
@@ -2076,7 +2094,7 @@ static int regulator_resolve_supply(struct regulator_dev *rdev)
 	if (rdev->supply)
 		return 0;
 
-	r = regulator_dev_lookup(dev, rdev->supply_name);
+	r = regulator_dev_lookup(dev, NULL, rdev->supply_name);
 	if (IS_ERR(r)) {
 		ret = PTR_ERR(r);
 
@@ -2169,8 +2187,8 @@ out:
 }
 
 /* Internal regulator request function */
-struct regulator *_regulator_get(struct device *dev, const char *id,
-				 enum regulator_get_type get_type)
+struct regulator *_regulator_get(struct device *dev, struct device_node *node,
+				 const char *id, enum regulator_get_type get_type)
 {
 	struct regulator_dev *rdev;
 	struct regulator *regulator;
@@ -2187,7 +2205,7 @@ struct regulator *_regulator_get(struct device *dev, const char *id,
 		return ERR_PTR(-EINVAL);
 	}
 
-	rdev = regulator_dev_lookup(dev, id);
+	rdev = regulator_dev_lookup(dev, node, id);
 	if (IS_ERR(rdev)) {
 		ret = PTR_ERR(rdev);
 
@@ -2318,7 +2336,7 @@ struct regulator *_regulator_get(struct device *dev, const char *id,
  */
 struct regulator *regulator_get(struct device *dev, const char *id)
 {
-	return _regulator_get(dev, id, NORMAL_GET);
+	return _regulator_get(dev, NULL, id, NORMAL_GET);
 }
 EXPORT_SYMBOL_GPL(regulator_get);
 
@@ -2345,7 +2363,7 @@ EXPORT_SYMBOL_GPL(regulator_get);
  */
 struct regulator *regulator_get_exclusive(struct device *dev, const char *id)
 {
-	return _regulator_get(dev, id, EXCLUSIVE_GET);
+	return _regulator_get(dev, NULL, id, EXCLUSIVE_GET);
 }
 EXPORT_SYMBOL_GPL(regulator_get_exclusive);
 
@@ -2371,9 +2389,28 @@ EXPORT_SYMBOL_GPL(regulator_get_exclusive);
  */
 struct regulator *regulator_get_optional(struct device *dev, const char *id)
 {
-	return _regulator_get(dev, id, OPTIONAL_GET);
+	return _regulator_get(dev, NULL, id, OPTIONAL_GET);
 }
 EXPORT_SYMBOL_GPL(regulator_get_optional);
+
+/**
+ * regulator_of_get_optional - get optional regulator via device tree lookup
+ * @node: device node for regulator "consumer"
+ * @id: Supply name
+ *
+ * Returns a struct regulator corresponding to the regulator producer,
+ * or IS_ERR() condition containing errno.
+ *
+ * This is intended for use by consumers that want to get a regulator
+ * supply directly from a device node, and can and want to deal with
+ * absence of such supplies. This will _not_ consider supply aliases.
+ * See regulator_dev_lookup().
+ */
+struct regulator *regulator_of_get_optional(struct device_node *node, const char *id)
+{
+	return _regulator_get(NULL, node, id, OPTIONAL_GET);
+}
+EXPORT_SYMBOL_GPL(regulator_of_get_optional);
 
 static void destroy_regulator(struct regulator *regulator)
 {
@@ -4928,7 +4965,7 @@ int _regulator_bulk_get(struct device *dev, int num_consumers,
 		consumers[i].consumer = NULL;
 
 	for (i = 0; i < num_consumers; i++) {
-		consumers[i].consumer = _regulator_get(dev,
+		consumers[i].consumer = _regulator_get(dev, NULL,
 						       consumers[i].supply, get_type);
 		if (IS_ERR(consumers[i].consumer)) {
 			ret = dev_err_probe(dev, PTR_ERR(consumers[i].consumer),

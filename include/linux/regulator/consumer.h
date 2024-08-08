@@ -168,6 +168,8 @@ int devm_regulator_get_enable_read_voltage(struct device *dev, const char *id);
 void regulator_put(struct regulator *regulator);
 void devm_regulator_put(struct regulator *regulator);
 
+struct regulator *__must_check regulator_of_get_optional(struct device_node *node, const char *id);
+
 int regulator_register_supply_alias(struct device *dev, const char *id,
 				    struct device *alias_dev,
 				    const char *alias_id);
@@ -356,6 +358,12 @@ static inline void regulator_put(struct regulator *regulator)
 
 static inline void devm_regulator_put(struct regulator *regulator)
 {
+}
+
+static inline struct regulator *__must_check
+regulator_of_get_optional(struct device_node *node, const char *id)
+{
+	return ERR_PTR(-ENODEV);
 }
 
 static inline void devm_regulator_bulk_put(struct regulator_bulk_data *consumers)

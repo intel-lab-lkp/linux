@@ -28,7 +28,7 @@ static struct regulator *_devm_regulator_get(struct device *dev, const char *id,
 	if (!ptr)
 		return ERR_PTR(-ENOMEM);
 
-	regulator = _regulator_get(dev, id, get_type);
+	regulator = _regulator_get(dev, NULL, id, get_type);
 	if (!IS_ERR(regulator)) {
 		*ptr = regulator;
 		devres_add(dev, ptr);
