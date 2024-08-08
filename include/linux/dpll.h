@@ -15,6 +15,7 @@
 
 struct dpll_device;
 struct dpll_pin;
+struct dpll_pin_frequency;
 
 struct dpll_device_ops {
 	int (*mode_get)(const struct dpll_device *dpll, void *dpll_priv,
@@ -83,6 +84,15 @@ struct dpll_pin_ops {
 	int (*ffo_get)(const struct dpll_pin *pin, void *pin_priv,
 		       const struct dpll_device *dpll, void *dpll_priv,
 		       s64 *ffo, struct netlink_ext_ack *extack);
+	int (*e_sync_set)(const struct dpll_pin *pin, void *pin_priv,
+			  const struct dpll_device *dpll, void *dpll_priv,
+			  u64 e_sync_freq, struct netlink_ext_ack *extack);
+	int (*e_sync_get)(const struct dpll_pin *pin, void *pin_priv,
+			  const struct dpll_device *dpll, void *dpll_priv,
+			  u64 *e_sync_freq,
+			  struct dpll_pin_frequency *e_sync_range,
+			  enum dpll_pin_e_sync_pulse *pulse,
+			  struct netlink_ext_ack *extack);
 };
 
 struct dpll_pin_frequency {

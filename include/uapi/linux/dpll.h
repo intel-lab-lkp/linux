@@ -169,6 +169,26 @@ enum dpll_pin_capabilities {
 
 #define DPLL_PHASE_OFFSET_DIVIDER	1000
 
+/**
+ * enum dpll_pin_e_sync_pulse - defines possible pulse length ratio between
+ *   high and low state when embedded sync signal occurs on base clock signal
+ *   frequency
+ * @DPLL_PIN_E_SYNC_PULSE_NONE: embedded sync not enabled
+ * @DPLL_PIN_E_SYNC_PULSE_25_75: when embedded sync signal occurs 25% of
+ *   signal's period is in high state, 75% of signal's period is in low state
+ * @DPLL_PIN_E_SYNC_PULSE_75_25: when embedded sync signal occurs 75% of
+ *   signal's period is in high state, 25% of signal's period is in low state
+ */
+enum dpll_pin_e_sync_pulse {
+	DPLL_PIN_E_SYNC_PULSE_NONE,
+	DPLL_PIN_E_SYNC_PULSE_25_75,
+	DPLL_PIN_E_SYNC_PULSE_75_25,
+
+	/* private: */
+	__DPLL_PIN_E_SYNC_PULSE_MAX,
+	DPLL_PIN_E_SYNC_PULSE_MAX = (__DPLL_PIN_E_SYNC_PULSE_MAX - 1)
+};
+
 enum dpll_a {
 	DPLL_A_ID = 1,
 	DPLL_A_MODULE_NAME,
@@ -210,6 +230,9 @@ enum dpll_a_pin {
 	DPLL_A_PIN_PHASE_ADJUST,
 	DPLL_A_PIN_PHASE_OFFSET,
 	DPLL_A_PIN_FRACTIONAL_FREQUENCY_OFFSET,
+	DPLL_A_PIN_E_SYNC_FREQUENCY,
+	DPLL_A_PIN_E_SYNC_FREQUENCY_SUPPORTED,
+	DPLL_A_PIN_E_SYNC_PULSE,
 
 	__DPLL_A_PIN_MAX,
 	DPLL_A_PIN_MAX = (__DPLL_A_PIN_MAX - 1)

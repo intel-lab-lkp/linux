@@ -342,6 +342,50 @@ dpll_msg_add_pin_freq(struct sk_buff *msg, struct dpll_pin *pin,
 	return 0;
 }
 
+static int
+dpll_msg_add_pin_esync(struct sk_buff *msg, struct dpll_pin *pin,
+		       struct dpll_pin_ref *ref, struct netlink_ext_ack *extack)
+{
+	const struct dpll_pin_ops *ops = dpll_pin_ops(ref);
+	struct dpll_device *dpll = ref->dpll;
+	enum dpll_pin_e_sync_pulse pulse;
+	struct dpll_pin_frequency range;
+	struct nlattr *nest;
+	u64 esync;
+	int ret;
+
+	if (!ops->e_sync_get)
+		return 0;
+	ret = ops->e_sync_get(pin, dpll_pin_on_dpll_priv(dpll, pin), dpll,
+			      dpll_priv(dpll), &esync, &range, &pulse, extack);
+	if (ret == -EOPNOTSUPP)
+		return 0;
+	else if (ret)
+		return ret;
+	if (nla_put_64bit(msg, DPLL_A_PIN_E_SYNC_FREQUENCY, sizeof(esync),
+			  &esync, DPLL_A_PIN_PAD))
+		return -EMSGSIZE;
+	if (nla_put_u32(msg, DPLL_A_PIN_E_SYNC_PULSE, pulse))
+		return -EMSGSIZE;
+
+	nest = nla_nest_start(msg, DPLL_A_PIN_E_SYNC_FREQUENCY_SUPPORTED);
+	if (!nest)
+		return -EMSGSIZE;
+	if (nla_put_64bit(msg, DPLL_A_PIN_FREQUENCY_MIN, sizeof(range.min),
+			  &range.min, DPLL_A_PIN_PAD)) {
+		nla_nest_cancel(msg, nest);
+		return -EMSGSIZE;
+	}
+	if (nla_put_64bit(msg, DPLL_A_PIN_FREQUENCY_MAX, sizeof(range.max),
+			  &range.max, DPLL_A_PIN_PAD)) {
+		nla_nest_cancel(msg, nest);
+		return -EMSGSIZE;
+	}
+	nla_nest_end(msg, nest);
+
+	return 0;
+}
+
 static bool dpll_pin_is_freq_supported(struct dpll_pin *pin, u32 freq)
 {
 	int fs;
@@ -481,6 +525,9 @@ dpll_cmd_pin_get_one(struct sk_buff *msg, struct dpll_pin *pin,
 	if (ret)
 		return ret;
 	ret = dpll_msg_add_ffo(msg, pin, ref, extack);
+	if (ret)
+		return ret;
+	ret = dpll_msg_add_pin_esync(msg, pin, ref, extack);
 	if (ret)
 		return ret;
 	if (xa_empty(&pin->parent_refs))
@@ -734,6 +781,81 @@ rollback:
 		if (ops->frequency_set(pin, dpll_pin_on_dpll_priv(dpll, pin),
 				       dpll, dpll_priv(dpll), old_freq, extack))
 			NL_SET_ERR_MSG(extack, "set frequency rollback failed");
+	}
+	return ret;
+}
+
+static int
+dpll_pin_e_sync_set(struct dpll_pin *pin, struct nlattr *a,
+		    struct netlink_ext_ack *extack)
+{
+	u64 esync = nla_get_u64(a), old_esync;
+	struct dpll_pin_ref *ref, *failed;
+	enum dpll_pin_e_sync_pulse pulse;
+	struct dpll_pin_frequency range;
+	const struct dpll_pin_ops *ops;
+	struct dpll_device *dpll;
+	unsigned long i;
+	int ret;
+
+	xa_for_each(&pin->dpll_refs, i, ref) {
+		ops = dpll_pin_ops(ref);
+		if (!ops->e_sync_set ||
+		    !ops->e_sync_get) {
+			NL_SET_ERR_MSG(extack,
+				       "embedded sync feature is not supported by this device");
+			return -EOPNOTSUPP;
+		}
+	}
+	ref = dpll_xa_ref_dpll_first(&pin->dpll_refs);
+	ops = dpll_pin_ops(ref);
+	dpll = ref->dpll;
+	ret = ops->e_sync_get(pin, dpll_pin_on_dpll_priv(dpll, pin), dpll,
+			      dpll_priv(dpll), &old_esync, &range, &pulse, extack);
+	if (ret) {
+		NL_SET_ERR_MSG(extack, "unable to get current embedded sync frequency value");
+		return ret;
+	}
+	if (esync == old_esync)
+		return 0;
+	if (esync > range.max || esync < range.min) {
+		NL_SET_ERR_MSG_ATTR(extack, a,
+				    "requested embedded sync frequency value is not supported by this device");
+		return -EINVAL;
+	}
+
+	xa_for_each(&pin->dpll_refs, i, ref) {
+		void *pin_dpll_priv;
+
+		ops = dpll_pin_ops(ref);
+		dpll = ref->dpll;
+		pin_dpll_priv = dpll_pin_on_dpll_priv(dpll, pin);
+		ret = ops->e_sync_set(pin, pin_dpll_priv, dpll, dpll_priv(dpll),
+				      esync, extack);
+		if (ret) {
+			failed = ref;
+			NL_SET_ERR_MSG_FMT(extack,
+					   "embedded sync frequency set failed for dpll_id:%u",
+					   dpll->id);
+			goto rollback;
+		}
+	}
+	__dpll_pin_change_ntf(pin);
+
+	return 0;
+
+rollback:
+	xa_for_each(&pin->dpll_refs, i, ref) {
+		void *pin_dpll_priv;
+
+		if (ref == failed)
+			break;
+		ops = dpll_pin_ops(ref);
+		dpll = ref->dpll;
+		pin_dpll_priv = dpll_pin_on_dpll_priv(dpll, pin);
+		if (ops->e_sync_set(pin, pin_dpll_priv, dpll, dpll_priv(dpll),
+				    old_esync, extack))
+			NL_SET_ERR_MSG(extack, "set embedded sync frequency rollback failed");
 	}
 	return ret;
 }
@@ -1036,6 +1158,11 @@ dpll_pin_set_from_nlattr(struct dpll_pin *pin, struct genl_info *info)
 			break;
 		case DPLL_A_PIN_PARENT_PIN:
 			ret = dpll_pin_parent_pin_set(pin, a, info->extack);
+			if (ret)
+				return ret;
+			break;
+		case DPLL_A_PIN_E_SYNC_FREQUENCY:
+			ret = dpll_pin_e_sync_set(pin, a, info->extack);
 			if (ret)
 				return ret;
 			break;

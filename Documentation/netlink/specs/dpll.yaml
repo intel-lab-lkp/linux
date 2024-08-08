@@ -210,6 +210,25 @@ definitions:
       integer part of a measured phase offset value.
       Value of (DPLL_A_PHASE_OFFSET % DPLL_PHASE_OFFSET_DIVIDER) is a
       fractional part of a measured phase offset value.
+  -
+    type: enum
+    name: pin-e-sync-pulse
+    doc: |
+      defines possible pulse length ratio between high and low state when
+      embedded sync signal occurs on base clock signal frequency
+    entries:
+      -
+        name: none
+        doc: embedded sync not enabled
+      -
+        name: 25-75
+        doc: when embedded sync signal occurs 25% of signal's period is in
+          high state, 75% of signal's period is in low state
+      -
+        name: 75-25
+        doc: when embedded sync signal occurs 75% of signal's period is in
+          high state, 25% of signal's period is in low state
+    render-max: true
 
 attribute-sets:
   -
@@ -345,6 +364,24 @@ attribute-sets:
           Value is in PPM (parts per million).
           This may be implemented for example for pin of type
           PIN_TYPE_SYNCE_ETH_PORT.
+      -
+        name: e-sync-frequency
+        type: u64
+        doc: |
+          Embedded Sync frequency. If provided a non-zero value, the pin is
+          configured with an embedded sync signal into its base frequency.
+      -
+        name: e-sync-frequency-supported
+        type: nest
+        nested-attributes: frequency-range
+        doc: |
+          If provided a pin is capable of enabling embedded sync frequency
+          into it's base frequency signal.
+      -
+        name: e-sync-pulse
+        type: u32
+        enum: pin-e-sync-pulse
+        doc: Embedded sync signal ratio.
   -
     name: pin-parent-device
     subset-of: pin
@@ -510,6 +547,9 @@ operations:
             - phase-adjust-max
             - phase-adjust
             - fractional-frequency-offset
+            - e-sync-frequency
+            - e-sync-frequency-supported
+            - e-sync-pulse
 
       dump:
         request:
@@ -536,6 +576,7 @@ operations:
             - parent-device
             - parent-pin
             - phase-adjust
+            - e-sync-frequency
     -
       name: pin-create-ntf
       doc: Notification about pin appearing
