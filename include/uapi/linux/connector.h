@@ -47,9 +47,11 @@
 #define CN_KVP_VAL			0x1	/* queries from the kernel */
 #define CN_VSS_IDX			0xA     /* HyperV VSS */
 #define CN_VSS_VAL			0x1     /* queries from the kernel */
+#define CN_IDX_CGEB			0xB	/* congatec CGEB */
+#define CN_VAL_CGEB			0x1
 
 
-#define CN_NETLINK_USERS		11	/* Highest index + 1 */
+#define CN_NETLINK_USERS		12	/* Highest index + 1 */
 
 /*
  * Maximum connector's message size.
