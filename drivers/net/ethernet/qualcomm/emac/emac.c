@@ -608,7 +608,7 @@ static int emac_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	netdev = alloc_etherdev(sizeof(struct emac_adapter));
+	netdev = devm_alloc_etherdev(&pdev->dev, sizeof(struct emac_adapter));
 	if (!netdev)
 		return -ENOMEM;
 
@@ -630,14 +630,12 @@ static int emac_probe(struct platform_device *pdev)
 
 	ret = emac_probe_resources(pdev, adpt);
 	if (ret)
-		goto err_undo_netdev;
+		return ret;
 
 	/* initialize clocks */
 	ret = emac_clks_phase1_init(pdev, adpt);
-	if (ret) {
-		dev_err(&pdev->dev, "could not initialize clocks\n");
-		goto err_undo_netdev;
-	}
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "could not initialize clocks\n");
 
 	netdev->watchdog_timeo = EMAC_WATCHDOG_TIME;
 	netdev->irq = adpt->irq.irq;
@@ -712,9 +710,6 @@ err_undo_mdiobus:
 	mdiobus_unregister(adpt->mii_bus);
 err_undo_clocks:
 	emac_clks_teardown(adpt);
-err_undo_netdev:
-	free_netdev(netdev);
-
 	return ret;
 }
 
@@ -740,8 +735,6 @@ static void emac_remove(struct platform_device *pdev)
 	if (adpt->phy.digital)
 		iounmap(adpt->phy.digital);
 	iounmap(adpt->phy.base);
-
-	free_netdev(netdev);
 }
 
 static void emac_shutdown(struct platform_device *pdev)
