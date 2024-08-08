@@ -1779,7 +1779,7 @@ static void canbcm_pernet_exit(struct net *net)
 #if IS_ENABLED(CONFIG_PROC_FS)
 	/* remove /proc/net/can-bcm directory */
 	if (net->can.bcmproc_dir)
-		remove_proc_entry("can-bcm", net->proc_net);
+		remove_proc_subtree("can-bcm", net->proc_net);
 #endif /* CONFIG_PROC_FS */
 }
 
