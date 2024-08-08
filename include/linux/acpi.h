@@ -253,8 +253,12 @@ static inline void acpi_arch_dma_setup(struct device *dev) { }
 #endif
 
 #ifdef CONFIG_ARM64
+int acpi_numa_get_nid(unsigned int cpu);
+void acpi_map_cpus_to_nodes(void);
 void acpi_numa_gicc_affinity_init(struct acpi_srat_gicc_affinity *pa);
 #else
+static inline int acpi_numa_get_nid(unsigned int cpu) { return NUMA_NO_NODE; }
+static inline void acpi_map_cpus_to_nodes(void) { }
 static inline void
 acpi_numa_gicc_affinity_init(struct acpi_srat_gicc_affinity *pa) { }
 #endif
