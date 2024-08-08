@@ -94,7 +94,7 @@ static int imx_ocotp_reg_read(void *context, unsigned int offset, void *val, siz
 			continue;
 		}
 
-		if (type | FUSE_ECC)
+		if (type & FUSE_ECC)
 			*buf++ = readl_relaxed(reg + (i << 2)) & GENMASK(15, 0);
 		else
 			*buf++ = readl_relaxed(reg + (i << 2));
