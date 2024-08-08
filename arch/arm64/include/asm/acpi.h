@@ -175,11 +175,9 @@ static inline pgprot_t arch_apei_get_mem_attribute(phys_addr_t addr)
 #endif /* CONFIG_ACPI_APEI */
 
 #ifdef CONFIG_ACPI_NUMA
-int arm64_acpi_numa_init(void);
 int acpi_numa_get_nid(unsigned int cpu);
 void acpi_map_cpus_to_nodes(void);
 #else
-static inline int arm64_acpi_numa_init(void) { return -ENOSYS; }
 static inline int acpi_numa_get_nid(unsigned int cpu) { return NUMA_NO_NODE; }
 static inline void acpi_map_cpus_to_nodes(void) { }
 #endif /* CONFIG_ACPI_NUMA */
