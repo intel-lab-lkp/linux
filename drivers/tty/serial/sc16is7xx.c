@@ -280,10 +280,10 @@
 						  *       XON1, XON2, XOFF1 and
 						  *       XOFF2
 						  */
-#define SC16IS7XX_EFR_SWFLOW1_BIT	(1 << 1) /* SWFLOW bit 2 */
-#define SC16IS7XX_EFR_SWFLOW0_BIT	(1 << 0) /* SWFLOW bit 3
+#define SC16IS7XX_EFR_SWFLOW1_BIT	(1 << 1) /* SWFLOW bit 1 */
+#define SC16IS7XX_EFR_SWFLOW0_BIT	(1 << 0) /* SWFLOW bit 0
 						  *
-						  * SWFLOW bits 3 & 2 table:
+						  * SWFLOW bits 1 & 0 table:
 						  * 00 -> no received flow
 						  *       control
 						  * 01 -> receiver compares
