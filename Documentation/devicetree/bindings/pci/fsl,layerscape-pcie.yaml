@@ -32,7 +32,6 @@ properties:
       - fsl,ls1043a-pcie
       - fsl,ls1012a-pcie
       - fsl,ls1028a-pcie
-      - fsl,lx2160a-pcie
 
   reg:
     maxItems: 2
