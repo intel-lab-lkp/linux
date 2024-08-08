@@ -2158,6 +2158,8 @@ static void ufshcd_init_clk_gating(struct ufs_hba *hba)
 		 hba->host->host_no);
 	hba->clk_gating.clk_gating_workq = alloc_ordered_workqueue(wq_name,
 					WQ_MEM_RECLAIM | WQ_HIGHPRI);
+	if (!hba->clk_gating.clk_gating_workq)
+		return;
 
 	ufshcd_init_clk_gating_sysfs(hba);
 
