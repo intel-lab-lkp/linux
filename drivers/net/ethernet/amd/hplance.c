@@ -49,7 +49,6 @@ struct hplance_private {
  */
 static int hplance_init_one(struct dio_dev *d, const struct dio_device_id *ent);
 static void hplance_init(struct net_device *dev, struct dio_dev *d);
-static void hplance_remove_one(struct dio_dev *d);
 static void hplance_writerap(void *priv, unsigned short value);
 static void hplance_writerdp(void *priv, unsigned short value);
 static unsigned short hplance_readrdp(void *priv);
@@ -65,7 +64,6 @@ static struct dio_driver hplance_driver = {
 	.name      = "hplance",
 	.id_table  = hplance_dio_tbl,
 	.probe     = hplance_init_one,
-	.remove    = hplance_remove_one,
 };
 
 static const struct net_device_ops hplance_netdev_ops = {
@@ -84,21 +82,20 @@ static const struct net_device_ops hplance_netdev_ops = {
 static int hplance_init_one(struct dio_dev *d, const struct dio_device_id *ent)
 {
 	struct net_device *dev;
-	int err = -ENOMEM;
+	int err;
 
-	dev = alloc_etherdev(sizeof(struct hplance_private));
+	dev = devm_alloc_etherdev(sizeof(&d->dev, struct hplance_private));
 	if (!dev)
-		goto out;
+		return -ENOMEM;
 
-	err = -EBUSY;
-	if (!request_mem_region(dio_resource_start(d),
+	if (!devm_request_mem_region(&d->dev, dio_resource_start(d),
 				dio_resource_len(d), d->name))
-		goto out_free_netdev;
+		return -EBUSY;
 
 	hplance_init(dev, d);
-	err = register_netdev(dev);
+	err = devm_register_netdev(&d->dev, dev);
 	if (err)
-		goto out_release_mem_region;
+		return err;
 
 	dio_set_drvdata(d, dev);
 
@@ -106,22 +103,6 @@ static int hplance_init_one(struct dio_dev *d, const struct dio_device_id *ent)
 	       dev->name, d->name, d->scode, dev->dev_addr, d->ipl);
 
 	return 0;
-
- out_release_mem_region:
-	release_mem_region(dio_resource_start(d), dio_resource_len(d));
- out_free_netdev:
-	free_netdev(dev);
- out:
-	return err;
-}
-
-static void hplance_remove_one(struct dio_dev *d)
-{
-	struct net_device *dev = dio_get_drvdata(d);
-
-	unregister_netdev(dev);
-	release_mem_region(dio_resource_start(d), dio_resource_len(d));
-	free_netdev(dev);
 }
 
 /* Initialise a single lance board at the given DIO device */
