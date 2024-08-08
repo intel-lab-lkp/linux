@@ -4,6 +4,8 @@
 #include <linux/debugfs.h>
 #include <linux/ktime.h>
 #include <linux/mutex.h>
+#include <linux/notifier.h>
+#include <asm/mce.h>
 #include <asm/unaligned.h>
 #include <cxlpci.h>
 #include <cxlmem.h>
@@ -925,6 +927,9 @@ void cxl_event_handle_record(struct cxl_memdev *cxlmd,
 		if (cxlr)
 			hpa = cxl_dpa_to_hpa(cxlr, cxlmd, dpa);
 
+		if (hpa != ULLONG_MAX && cxl_mce_recorded(hpa))
+			return;
+
 		if (event_type == CXL_CPER_EVENT_GEN_MEDIA) {
 			trace_cxl_general_media(cxlmd, type, cxlr, hpa,
 						&evt->gen_media);
@@ -1457,6 +1462,112 @@ int cxl_poison_state_init(struct cxl_memdev_state *mds)
 }
 EXPORT_SYMBOL_NS_GPL(cxl_poison_state_init, CXL);
 
+DEFINE_XARRAY(cxl_mce_records);
+
+bool cxl_mce_recorded(u64 hpa)
+{
+	XA_STATE(xas, &cxl_mce_records, hpa);
+	void *entry;
+
+	xas_lock_irq(&xas);
+	entry = xas_load(&xas);
+	if (entry) {
+		xas_unlock_irq(&xas);
+		return true;
+	}
+	entry = xa_mk_value(hpa);
+	xas_store(&xas, entry);
+	xas_unlock_irq(&xas);
+
+	return false;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_mce_recorded, CXL);
+
+void cxl_mce_clear(u64 hpa)
+{
+	XA_STATE(xas, &cxl_mce_records, hpa);
+	void *entry;
+
+	xas_lock_irq(&xas);
+	entry = xas_load(&xas);
+	if (entry) {
+		xas_store(&xas, NULL);
+	}
+	xas_unlock_irq(&xas);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_mce_clear, CXL);
+
+struct cxl_contains_hpa_context {
+	bool contains;
+	u64 hpa;
+};
+
+static int __cxl_contains_hpa(struct device *dev, void *arg)
+{
+	struct cxl_contains_hpa_context *ctx = arg;
+	struct cxl_endpoint_decoder *cxled;
+	struct range *range;
+	u64 hpa = ctx->hpa;
+
+	if (!is_endpoint_decoder(dev))
+		return 0;
+
+	cxled = to_cxl_endpoint_decoder(dev);
+	range = &cxled->cxld.hpa_range;
+
+	if (range->start <= hpa && hpa <= range->end) {
+		ctx->contains = true;
+		return 1;
+	}
+
+	return 0;
+}
+
+static bool cxl_contains_hpa(const struct cxl_memdev *cxlmd, u64 hpa)
+{
+	struct cxl_contains_hpa_context ctx = {
+		.contains = false,
+		.hpa = hpa,
+	};
+	struct cxl_port *port;
+
+	port = cxlmd->endpoint;
+	guard(rwsem_write)(&cxl_region_rwsem);
+	if (port && cxl_num_decoders_committed(port))
+		device_for_each_child(&port->dev, &ctx, __cxl_contains_hpa);
+
+	return ctx.contains;
+}
+
+static int cxl_handle_mce(struct notifier_block *nb, unsigned long val,
+			  void *data)
+{
+	struct mce *mce = (struct mce *)data;
+	struct cxl_memdev_state *mds = container_of(nb, struct cxl_memdev_state,
+						    mce_notifier);
+	u64 hpa;
+
+	if (!mce || !mce_usable_address(mce))
+		return NOTIFY_DONE;
+
+	hpa = mce->addr & MCI_ADDR_PHYSADDR;
+
+	/* Check if the PFN is located on this CXL device */
+	if (!pfn_valid(hpa >> PAGE_SHIFT) &&
+	    !cxl_contains_hpa(mds->cxlds.cxlmd, hpa))
+		return NOTIFY_DONE;
+
+	/*
+	 * Search PFN in the cxl_mce_records, if already exists, don't continue
+	 * to do memory_failure() to avoid a poison address being reported
+	 * more than once.
+	 */
+	if (cxl_mce_recorded(hpa))
+		return NOTIFY_STOP;
+	else
+		return NOTIFY_OK;
+}
+
 struct cxl_memdev_state *cxl_memdev_state_create(struct device *dev)
 {
 	struct cxl_memdev_state *mds;
@@ -1475,6 +1586,10 @@ struct cxl_memdev_state *cxl_memdev_state_create(struct device *dev)
 	mds->cxlds.type = CXL_DEVTYPE_CLASSMEM;
 	mds->ram_perf.qos_class = CXL_QOS_CLASS_INVALID;
 	mds->pmem_perf.qos_class = CXL_QOS_CLASS_INVALID;
+
+	mds->mce_notifier.notifier_call = cxl_handle_mce;
+	mds->mce_notifier.priority = MCE_PRIO_CXL;
+	mce_register_decode_chain(&mds->mce_notifier);
 
 	return mds;
 }
