@@ -532,6 +532,11 @@ anon_num
        These huge pages could be still entirely mapped and have partially
        unmapped and unused subpages.
 
+anon_num_partial_unused
+       the number of anon huge pages which have been partially unmapped
+       we have in the whole system. These unmapped subpages are also
+       unused and temporarily wasting memory.
+
 As the system ages, allocating huge pages may be expensive as the
 system uses memory compaction to copy data around memory to free a
 huge page for use. There are some counters in ``/proc/vmstat`` to help
