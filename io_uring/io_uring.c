@@ -982,7 +982,13 @@ static void io_complete_group_leader(struct io_kiocb *req)
 	req->grp_refs -= 1;
 	WARN_ON_ONCE(req->grp_refs == 0);
 
-	/* TODO: queue members with leader in parallel */
+	/*
+	 * TODO: queue members with leader in parallel
+	 *
+	 * So far, REQ_F_SQE_GROUP_DEP depends that members are queued
+	 * after leader is completed, which may be changed in future,
+	 * then REQ_F_SQE_GROUP_DEP has to be respected in another way.
+	 */
 	if (req->grp_link)
 		io_queue_group_members(req);
 }
