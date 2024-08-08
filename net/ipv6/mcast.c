@@ -22,6 +22,7 @@
  *		- MLDv2 support
  */
 
+#include "linux/compiler_types.h"
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/types.h>
@@ -2861,6 +2862,7 @@ struct igmp6_mc_iter_state {
 #define igmp6_mc_seq_private(seq)	((struct igmp6_mc_iter_state *)(seq)->private)
 
 static inline struct ifmcaddr6 *igmp6_mc_get_first(struct seq_file *seq)
+	__must_hold(RCU)
 {
 	struct ifmcaddr6 *im = NULL;
 	struct igmp6_mc_iter_state *state = igmp6_mc_seq_private(seq);
@@ -2882,7 +2884,9 @@ static inline struct ifmcaddr6 *igmp6_mc_get_first(struct seq_file *seq)
 	return im;
 }
 
-static struct ifmcaddr6 *igmp6_mc_get_next(struct seq_file *seq, struct ifmcaddr6 *im)
+static struct ifmcaddr6 *igmp6_mc_get_next(struct seq_file *seq,
+					   struct ifmcaddr6 *im)
+	__must_hold(RCU)
 {
 	struct igmp6_mc_iter_state *state = igmp6_mc_seq_private(seq);
 
@@ -2902,6 +2906,7 @@ static struct ifmcaddr6 *igmp6_mc_get_next(struct seq_file *seq, struct ifmcaddr
 }
 
 static struct ifmcaddr6 *igmp6_mc_get_idx(struct seq_file *seq, loff_t pos)
+	__must_hold(RCU)
 {
 	struct ifmcaddr6 *im = igmp6_mc_get_first(seq);
 	if (im)
