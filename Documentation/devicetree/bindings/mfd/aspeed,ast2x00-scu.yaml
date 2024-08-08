@@ -21,6 +21,8 @@ properties:
           - aspeed,ast2400-scu
           - aspeed,ast2500-scu
           - aspeed,ast2600-scu
+          - aspeed,ast2700-scu0
+          - aspeed,ast2700-scu1
       - const: syscon
       - const: simple-mfd
 
@@ -30,10 +32,12 @@ properties:
   ranges: true
 
   '#address-cells':
-    const: 1
+    minimum: 1
+    maximum: 2
 
   '#size-cells':
-    const: 1
+    minimum: 1
+    maximum: 2
 
   '#clock-cells':
     const: 1
@@ -56,6 +60,8 @@ patternProperties:
             - aspeed,ast2400-pinctrl
             - aspeed,ast2500-pinctrl
             - aspeed,ast2600-pinctrl
+            - aspeed,ast2700-soc0-pinctrl
+            - aspeed,ast2700-soc1-pinctrl
 
     required:
       - compatible
@@ -76,6 +82,7 @@ patternProperties:
               - aspeed,ast2400-silicon-id
               - aspeed,ast2500-silicon-id
               - aspeed,ast2600-silicon-id
+              - aspeed,ast2700-silicon-id
           - const: aspeed,silicon-id
 
       reg:
@@ -113,6 +120,26 @@ examples:
         silicon-id@7c {
             compatible = "aspeed,ast2500-silicon-id", "aspeed,silicon-id";
             reg = <0x7c 0x4>, <0x150 0x8>;
+        };
+    };
+  - |
+    soc0 {
+        #address-cells = <2>;
+        #size-cells = <2>;
+        syscon@12c02000 {
+            compatible = "aspeed,ast2700-scu0", "syscon", "simple-mfd";
+            reg = <0x0 0x12c02000 0x0 0x1000>;
+            #clock-cells = <1>;
+            #reset-cells = <1>;
+
+            #address-cells = <2>;
+            #size-cells = <2>;
+            ranges = <0x0 0x0 0 0x12c02000 0 0x1000>;
+
+            silicon-id@0 {
+                compatible = "aspeed,ast2700-silicon-id", "aspeed,silicon-id";
+                reg = <0x0 0x0 0x0 0x4>;
+            };
         };
     };
 ...
