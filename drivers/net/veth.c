@@ -317,7 +317,7 @@ static int veth_xdp_rx(struct veth_rq *rq, struct sk_buff *skb)
 static int veth_forward_skb(struct net_device *dev, struct sk_buff *skb,
 			    struct veth_rq *rq, bool xdp)
 {
-	return __dev_forward_skb(dev, skb) ?: xdp ?
+	return __dev_forward_skb_nomtu(dev, skb) ?: xdp ?
 		veth_xdp_rx(rq, skb) :
 		__netif_rx(skb);
 }

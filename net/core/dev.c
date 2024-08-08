@@ -2192,6 +2192,12 @@ static int __dev_forward_skb2(struct net_device *dev, struct sk_buff *skb,
 	return ret;
 }
 
+int __dev_forward_skb_nomtu(struct net_device *dev, struct sk_buff *skb)
+{
+	return __dev_forward_skb2(dev, skb, false);
+}
+EXPORT_SYMBOL_GPL(__dev_forward_skb_nomtu);
+
 int __dev_forward_skb(struct net_device *dev, struct sk_buff *skb)
 {
 	return __dev_forward_skb2(dev, skb, true);
