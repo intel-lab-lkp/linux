@@ -81,9 +81,6 @@ static void moxart_mac_free_memory(struct net_device *ndev)
 		dma_free_coherent(&priv->pdev->dev,
 				  RX_REG_DESC_SIZE * RX_DESC_NUM,
 				  priv->rx_desc_base, priv->rx_base);
-
-	kfree(priv->tx_buf_base);
-	kfree(priv->rx_buf_base);
 }
 
 static void moxart_mac_reset(struct net_device *ndev)
@@ -461,15 +458,14 @@ static int moxart_mac_probe(struct platform_device *pdev)
 	unsigned int irq;
 	int ret;
 
-	ndev = alloc_etherdev(sizeof(struct moxart_mac_priv_t));
+	ndev = devm_alloc_etherdev(p_dev, sizeof(struct moxart_mac_priv_t));
 	if (!ndev)
 		return -ENOMEM;
 
 	irq = irq_of_parse_and_map(node, 0);
 	if (irq <= 0) {
 		netdev_err(ndev, "irq_of_parse_and_map failed\n");
-		ret = -EINVAL;
-		goto irq_map_fail;
+		return -EINVAL;
 	}
 
 	priv = netdev_priv(ndev);
@@ -511,15 +507,15 @@ static int moxart_mac_probe(struct platform_device *pdev)
 		goto init_fail;
 	}
 
-	priv->tx_buf_base = kmalloc_array(priv->tx_buf_size, TX_DESC_NUM,
-					  GFP_KERNEL);
+	priv->tx_buf_base = devm_kmalloc_array(p_dev, priv->tx_buf_size,
+					       TX_DESC_NUM, GFP_KERNEL);
 	if (!priv->tx_buf_base) {
 		ret = -ENOMEM;
 		goto init_fail;
 	}
 
-	priv->rx_buf_base = kmalloc_array(priv->rx_buf_size, RX_DESC_NUM,
-					  GFP_KERNEL);
+	priv->rx_buf_base = devm_kmalloc_array(p_dev, priv->rx_buf_size,
+					       RX_DESC_NUM, GFP_KERNEL);
 	if (!priv->rx_buf_base) {
 		ret = -ENOMEM;
 		goto init_fail;
@@ -553,8 +549,6 @@ static int moxart_mac_probe(struct platform_device *pdev)
 init_fail:
 	netdev_err(ndev, "init failed\n");
 	moxart_mac_free_memory(ndev);
-irq_map_fail:
-	free_netdev(ndev);
 	return ret;
 }
 
@@ -565,7 +559,6 @@ static void moxart_remove(struct platform_device *pdev)
 	unregister_netdev(ndev);
 	devm_free_irq(&pdev->dev, ndev->irq, ndev);
 	moxart_mac_free_memory(ndev);
-	free_netdev(ndev);
 }
 
 static const struct of_device_id moxart_mac_match[] = {
