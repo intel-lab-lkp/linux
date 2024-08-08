@@ -1849,7 +1849,7 @@ static int spi_imx_probe(struct platform_device *pdev)
 	spi_imx->devtype_data->intctrl(spi_imx, 0);
 
 	controller->dev.of_node = pdev->dev.of_node;
-	ret = spi_register_controller(controller);
+	ret = devm_spi_register_controller(&pdev->dev, controller);
 	if (ret) {
 		dev_err_probe(&pdev->dev, ret, "register controller failed\n");
 		goto out_register_controller;
@@ -1882,8 +1882,6 @@ static void spi_imx_remove(struct platform_device *pdev)
 	struct spi_controller *controller = platform_get_drvdata(pdev);
 	struct spi_imx_data *spi_imx = spi_controller_get_devdata(controller);
 	int ret;
-
-	spi_unregister_controller(controller);
 
 	ret = pm_runtime_get_sync(spi_imx->dev);
 	if (ret >= 0)
