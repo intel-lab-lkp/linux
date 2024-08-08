@@ -1029,8 +1029,8 @@ static void cxl_handle_cper_event(enum cxl_event_type ev_type,
 	hdr_flags = get_unaligned_le24(rec->event.generic.hdr.flags);
 	log_type = FIELD_GET(CXL_EVENT_HDR_FLAGS_REC_SEVERITY, hdr_flags);
 
-	cxl_event_trace_record(cxlds->cxlmd, log_type, ev_type,
-			       &uuid_null, &rec->event);
+	cxl_event_handle_record(cxlds->cxlmd, log_type, ev_type,
+				&uuid_null, &rec->event);
 }
 
 static void cxl_cper_work_fn(struct work_struct *work)
