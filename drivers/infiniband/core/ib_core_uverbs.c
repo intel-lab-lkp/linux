@@ -367,6 +367,7 @@ int rdma_user_mmap_entry_insert(struct ib_ucontext *ucontext,
 }
 EXPORT_SYMBOL(rdma_user_mmap_entry_insert);
 
+#ifdef CONFIG_MMU
 void uverbs_user_mmap_disassociate(struct ib_uverbs_file *ufile)
 {
 	struct rdma_umap_priv *priv, *next_priv;
@@ -428,7 +429,6 @@ void uverbs_user_mmap_disassociate(struct ib_uverbs_file *ufile)
 		mmput(mm);
 	}
 }
-EXPORT_SYMBOL(uverbs_user_mmap_disassociate);
 
 /**
  * rdma_user_mmap_disassociate() - disassociate the mmap from the ucontext.
@@ -449,4 +449,14 @@ void rdma_user_mmap_disassociate(struct ib_ucontext *ucontext)
 	uverbs_user_mmap_disassociate(ufile);
 	up_read(&ufile->hw_destroy_rwsem);
 }
+#else
+void uverbs_user_mmap_disassociate(struct ib_uverbs_file *ufile)
+{
+}
+
+void rdma_user_mmap_disassociate(struct ib_ucontext *ucontext)
+{
+}
+#endif
+EXPORT_SYMBOL(uverbs_user_mmap_disassociate);
 EXPORT_SYMBOL(rdma_user_mmap_disassociate);
