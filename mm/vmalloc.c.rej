@@ -1,0 +1,10 @@
+--- mm/vmalloc.c
++++ mm/vmalloc.c
+@@ -3000,6 +3005,7 @@ vm_area_alloc_pages(gfp_t gfp, int nid,
+ 	unsigned int nr_allocated = 0;
+ 	gfp_t alloc_gfp = gfp;
+ 	bool nofail = false;
++	bool fallback = false;
+ 	struct page *page;
+ 	int i;
+
