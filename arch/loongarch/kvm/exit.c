@@ -50,7 +50,7 @@ static int kvm_emu_cpucfg(struct kvm_vcpu *vcpu, larch_inst inst)
 		vcpu->arch.gprs[rd] = *(unsigned int *)KVM_SIGNATURE;
 		break;
 	case CPUCFG_KVM_FEATURE:
-		ret = KVM_FEATURE_IPI;
+		ret = KVM_FEATURE_IPI | KVM_FEATURE_POLL_CONTROL;
 		if (kvm_pvtime_supported())
 			ret |= KVM_FEATURE_STEAL_TIME;
 		vcpu->arch.gprs[rd] = ret;
@@ -710,6 +710,13 @@ static long kvm_save_notify(struct kvm_vcpu *vcpu)
 
 		vcpu->arch.st.last_steal = current->sched_info.run_delay;
 		kvm_make_request(KVM_REQ_STEAL_UPDATE, vcpu);
+		break;
+	case KVM_FEATURE_POLL_CONTROL:
+		/* Only enable bit supported */
+		if (data & (-1ULL << 1))
+			return KVM_HCALL_INVALID_PARAMETER;
+
+		vcpu->arch.kvm_poll_control = data;
 		break;
 	default:
 		break;

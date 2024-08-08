@@ -233,6 +233,11 @@ int kvm_arch_vcpu_should_kick(struct kvm_vcpu *vcpu)
 	return kvm_vcpu_exiting_guest_mode(vcpu) == IN_GUEST_MODE;
 }
 
+bool kvm_arch_no_poll(struct kvm_vcpu *vcpu)
+{
+	return (vcpu->arch.kvm_poll_control & 1) == 0;
+}
+
 bool kvm_arch_vcpu_in_kernel(struct kvm_vcpu *vcpu)
 {
 	return false;
@@ -650,6 +655,7 @@ static int kvm_set_one_reg(struct kvm_vcpu *vcpu,
 			kvm_reset_timer(vcpu);
 			memset(&vcpu->arch.irq_pending, 0, sizeof(vcpu->arch.irq_pending));
 			memset(&vcpu->arch.irq_clear, 0, sizeof(vcpu->arch.irq_clear));
+			vcpu->arch.kvm_poll_control = 1;
 			break;
 		default:
 			ret = -EINVAL;
@@ -737,14 +743,21 @@ static int kvm_loongarch_cpucfg_has_attr(struct kvm_vcpu *vcpu,
 	return -ENXIO;
 }
 
-static int kvm_loongarch_pvtime_has_attr(struct kvm_vcpu *vcpu,
+static int kvm_loongarch_pv_has_attr(struct kvm_vcpu *vcpu,
 					 struct kvm_device_attr *attr)
 {
-	if (!kvm_pvtime_supported() ||
-			attr->attr != KVM_LOONGARCH_VCPU_PVTIME_GPA)
+	switch (attr->attr) {
+	case KVM_LOONGARCH_VCPU_PVTIME_GPA:
+		if (!kvm_pvtime_supported())
+			return -ENXIO;
+		return 0;
+	case KVM_LOONGARCH_VCPU_POLL_CTRL:
+		return 0;
+	default:
 		return -ENXIO;
+	}
 
-	return 0;
+	return -ENXIO;
 }
 
 static int kvm_loongarch_vcpu_has_attr(struct kvm_vcpu *vcpu,
@@ -756,8 +769,8 @@ static int kvm_loongarch_vcpu_has_attr(struct kvm_vcpu *vcpu,
 	case KVM_LOONGARCH_VCPU_CPUCFG:
 		ret = kvm_loongarch_cpucfg_has_attr(vcpu, attr);
 		break;
-	case KVM_LOONGARCH_VCPU_PVTIME_CTRL:
-		ret = kvm_loongarch_pvtime_has_attr(vcpu, attr);
+	case KVM_LOONGARCH_VCPU_PV_CTRL:
+		ret = kvm_loongarch_pv_has_attr(vcpu, attr);
 		break;
 	default:
 		break;
@@ -782,18 +795,26 @@ static int kvm_loongarch_cpucfg_get_attr(struct kvm_vcpu *vcpu,
 	return ret;
 }
 
-static int kvm_loongarch_pvtime_get_attr(struct kvm_vcpu *vcpu,
+static int kvm_loongarch_pv_get_attr(struct kvm_vcpu *vcpu,
 					 struct kvm_device_attr *attr)
 {
-	u64 gpa;
+	u64 val;
 	u64 __user *user = (u64 __user *)attr->addr;
 
-	if (!kvm_pvtime_supported() ||
-			attr->attr != KVM_LOONGARCH_VCPU_PVTIME_GPA)
+	switch (attr->attr) {
+	case KVM_LOONGARCH_VCPU_PVTIME_GPA:
+		if (!kvm_pvtime_supported())
+			return -ENXIO;
+		val = vcpu->arch.st.guest_addr;
+		break;
+	case KVM_LOONGARCH_VCPU_POLL_CTRL:
+		val = vcpu->arch.kvm_poll_control;
+		break;
+	default:
 		return -ENXIO;
+	}
 
-	gpa = vcpu->arch.st.guest_addr;
-	if (put_user(gpa, user))
+	if (put_user(val, user))
 		return -EFAULT;
 
 	return 0;
@@ -808,8 +829,8 @@ static int kvm_loongarch_vcpu_get_attr(struct kvm_vcpu *vcpu,
 	case KVM_LOONGARCH_VCPU_CPUCFG:
 		ret = kvm_loongarch_cpucfg_get_attr(vcpu, attr);
 		break;
-	case KVM_LOONGARCH_VCPU_PVTIME_CTRL:
-		ret = kvm_loongarch_pvtime_get_attr(vcpu, attr);
+	case KVM_LOONGARCH_VCPU_PV_CTRL:
+		ret = kvm_loongarch_pv_get_attr(vcpu, attr);
 		break;
 	default:
 		break;
@@ -831,8 +852,7 @@ static int kvm_loongarch_pvtime_set_attr(struct kvm_vcpu *vcpu,
 	u64 gpa, __user *user = (u64 __user *)attr->addr;
 	struct kvm *kvm = vcpu->kvm;
 
-	if (!kvm_pvtime_supported() ||
-			attr->attr != KVM_LOONGARCH_VCPU_PVTIME_GPA)
+	if (!kvm_pvtime_supported())
 		return -ENXIO;
 
 	if (get_user(gpa, user))
@@ -861,6 +881,33 @@ static int kvm_loongarch_pvtime_set_attr(struct kvm_vcpu *vcpu,
 	return ret;
 }
 
+static int kvm_loongarch_pv_set_attr(struct kvm_vcpu *vcpu,
+					struct kvm_device_attr *attr)
+{
+	u64 val,  __user *user = (u64 __user *)attr->addr;
+
+	switch (attr->attr) {
+	case KVM_LOONGARCH_VCPU_PVTIME_GPA:
+		return kvm_loongarch_pvtime_set_attr(vcpu, attr);
+
+	case KVM_LOONGARCH_VCPU_POLL_CTRL:
+		if (get_user(val, user))
+			return -EFAULT;
+
+		/* Only enable bit supported */
+		if (val & (-1ULL << 1))
+			return -EINVAL;
+
+		vcpu->arch.kvm_poll_control = val;
+		break;
+
+	default:
+		return -ENXIO;
+	}
+
+	return -ENXIO;
+}
+
 static int kvm_loongarch_vcpu_set_attr(struct kvm_vcpu *vcpu,
 				       struct kvm_device_attr *attr)
 {
@@ -870,8 +917,8 @@ static int kvm_loongarch_vcpu_set_attr(struct kvm_vcpu *vcpu,
 	case KVM_LOONGARCH_VCPU_CPUCFG:
 		ret = kvm_loongarch_cpucfg_set_attr(vcpu, attr);
 		break;
-	case KVM_LOONGARCH_VCPU_PVTIME_CTRL:
-		ret = kvm_loongarch_pvtime_set_attr(vcpu, attr);
+	case KVM_LOONGARCH_VCPU_PV_CTRL:
+		ret = kvm_loongarch_pv_set_attr(vcpu, attr);
 		break;
 	default:
 		break;
@@ -1179,6 +1226,8 @@ int kvm_arch_vcpu_create(struct kvm_vcpu *vcpu)
 	/* Start with no pending virtual guest interrupts */
 	csr->csrs[LOONGARCH_CSR_GINTC] = 0;
 
+	/* poll control enabled by default */
+	vcpu->arch.kvm_poll_control = 1;
 	return 0;
 }
 
