@@ -17556,14 +17556,6 @@ S:	Supported
 F:	Documentation/devicetree/bindings/pci/nvidia,tegra20-pcie.txt
 F:	drivers/pci/controller/pci-tegra.c
 
-PCI DRIVER FOR NXP LAYERSCAPE GEN4 CONTROLLER
-M:	Hou Zhiqiang <Zhiqiang.Hou@nxp.com>
-L:	linux-pci@vger.kernel.org
-L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
-S:	Maintained
-F:	Documentation/devicetree/bindings/pci/layerscape-pcie-gen4.txt
-F:	drivers/pci/controller/mobiveil/pcie-layerscape-gen4.c
-
 PCI DRIVER FOR PLDA PCIE IP
 M:	Daire McNamara <daire.mcnamara@microchip.com>
 L:	linux-pci@vger.kernel.org
