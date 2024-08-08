@@ -239,13 +239,9 @@ static int sti_platform_probe(struct platform_device *pdev)
 
 	devm_of_platform_populate(dev);
 
-	child_np = of_get_next_available_child(node, NULL);
-
-	while (child_np) {
+	for_each_available_child_of_node(node, child_np)
 		drm_of_component_match_add(dev, &match, component_compare_of,
 					   child_np);
-		child_np = of_get_next_available_child(node, child_np);
-	}
 
 	return component_master_add_with_match(dev, &sti_ops, match);
 }
