@@ -78,7 +78,7 @@ static void dec_time_namespaces(struct ucounts *ucounts)
 static struct time_namespace *clone_time_ns(struct user_namespace *user_ns,
 					  struct time_namespace *old_ns)
 {
-	struct time_namespace *ns;
+	struct time_namespace *time_ns;
 	struct ucounts *ucounts;
 	int err;
 
@@ -88,31 +88,31 @@ static struct time_namespace *clone_time_ns(struct user_namespace *user_ns,
 		goto fail;
 
 	err = -ENOMEM;
-	ns = kmalloc(sizeof(*ns), GFP_KERNEL_ACCOUNT);
-	if (!ns)
+	time_ns = kmalloc(sizeof(*time_ns), GFP_KERNEL_ACCOUNT);
+	if (!time_ns)
 		goto fail_dec;
 
-	refcount_set(&ns->ns.count, 1);
+	refcount_set(&time_ns->ns.count, 1);
 
-	ns->vvar_page = alloc_page(GFP_KERNEL_ACCOUNT | __GFP_ZERO);
-	if (!ns->vvar_page)
+	time_ns->vvar_page = alloc_page(GFP_KERNEL_ACCOUNT | __GFP_ZERO);
+	if (!time_ns->vvar_page)
 		goto fail_free;
 
-	err = ns_alloc_inum(&ns->ns);
+	err = ns_alloc_inum(&time_ns->ns);
 	if (err)
 		goto fail_free_page;
 
-	ns->ucounts = ucounts;
-	ns->ns.ops = &timens_operations;
-	ns->user_ns = get_user_ns(user_ns);
-	ns->offsets = old_ns->offsets;
-	ns->frozen_offsets = false;
-	return ns;
+	time_ns->ucounts = ucounts;
+	time_ns->ns.ops = &timens_operations;
+	time_ns->user_ns = get_user_ns(user_ns);
+	time_ns->offsets = old_ns->offsets;
+	time_ns->frozen_offsets = false;
+	return time_ns;
 
 fail_free_page:
-	__free_page(ns->vvar_page);
+	__free_page(time_ns->vvar_page);
 fail_free:
-	kfree(ns);
+	kfree(time_ns);
 fail_dec:
 	dec_time_namespaces(ucounts);
 fail:
