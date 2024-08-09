@@ -2393,8 +2393,11 @@ static int arm_cmn_discover(struct arm_cmn *cmn, unsigned int rgn_offset)
 			case CMN_TYPE_CXHA:
 			case CMN_TYPE_CCRA:
 			case CMN_TYPE_CCHA:
-			case CMN_TYPE_CCLA:
 			case CMN_TYPE_HNS:
+				dn++;
+				break;
+			case CMN_TYPE_CCLA:
+				dn->pmu_base += CMN_HNP_PMU_EVENT_SEL;
 				dn++;
 				break;
 			/* Nothing to see here */
