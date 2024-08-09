@@ -591,6 +591,7 @@ int pmc_core_send_ltr_ignore(struct pmc_dev *pmcdev, u32 value, int ignore);
 
 int pmc_core_resume_common(struct pmc_dev *pmcdev);
 int get_primary_reg_base(struct pmc *pmc);
+extern int pmc_core_ssram_get_reg_base(struct pmc_dev *pmcdev);
 extern void pmc_core_get_low_power_modes(struct pmc_dev *pmcdev);
 extern void pmc_core_punit_pmt_init(struct pmc_dev *pmcdev, u32 guid);
 extern void pmc_core_set_device_d3(unsigned int device);

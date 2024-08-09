@@ -28,6 +28,7 @@
 #include <asm/tsc.h>
 
 #include "core.h"
+#include "ssram_telemetry.h"
 #include "../pmt/telemetry.h"
 
 /* Maximum number of modes supported by platfoms that has low power mode capability */
@@ -1143,6 +1144,69 @@ int get_primary_reg_base(struct pmc *pmc)
 	pmc->regbase = ioremap(pmc->base_addr, pmc->map->regmap_length);
 	if (!pmc->regbase)
 		return -ENOMEM;
+	return 0;
+}
+
+static const struct pmc_reg_map *pmc_core_find_regmap(struct pmc_info *list, u16 devid)
+{
+	for (; list->map; ++list)
+		if (devid == list->devid)
+			return list->map;
+
+	return NULL;
+}
+
+static int pmc_core_ssram_pmc_add(struct pmc_dev *pmcdev, int pmc_idx)
+{
+	const struct pmc_reg_map *map;
+	struct pmc_ssram_telemetry pmc_ssram_telemetry;
+	struct pmc *pmc;
+	int ret;
+
+	ret = pmc_ssram_telemetry_get_pmc_info(pmc_idx, &pmc_ssram_telemetry);
+	if (ret)
+		return ret;
+
+	map = pmc_core_find_regmap(pmcdev->regmap_list, pmc_ssram_telemetry.devid);
+	if (!map)
+		return -ENODEV;
+
+	pmc = pmcdev->pmcs[pmc_idx];
+	/* Memory for primary PMC has been allocated in core.c */
+	if (!pmc) {
+		pmc = devm_kzalloc(&pmcdev->pdev->dev, sizeof(*pmc), GFP_KERNEL);
+		if (!pmc)
+			return -ENOMEM;
+	}
+
+	pmc->map = map;
+	pmc->base_addr = pmc_ssram_telemetry.base_addr;
+	pmc->regbase = ioremap(pmc->base_addr, pmc->map->regmap_length);
+
+	if (!pmc->regbase) {
+		devm_kfree(&pmcdev->pdev->dev, pmc);
+		return -ENOMEM;
+	}
+
+	pmcdev->pmcs[pmc_idx] = pmc;
+
+	return 0;
+}
+
+int pmc_core_ssram_get_reg_base(struct pmc_dev *pmcdev)
+{
+	int ret;
+
+	if (!pmcdev->regmap_list)
+		return -ENOENT;
+
+	ret = pmc_core_ssram_pmc_add(pmcdev, PMC_IDX_MAIN);
+	if (ret)
+		return ret;
+
+	pmc_core_ssram_pmc_add(pmcdev, PMC_IDX_IOE);
+	pmc_core_ssram_pmc_add(pmcdev, PMC_IDX_PCH);
+
 	return 0;
 }
 
