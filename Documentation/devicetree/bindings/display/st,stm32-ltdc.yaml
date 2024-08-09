@@ -12,7 +12,9 @@ maintainers:
 
 properties:
   compatible:
-    const: st,stm32-ltdc
+    enum:
+      - st,stm32-ltdc
+      - st,stm32mp25-ltdc
 
   reg:
     maxItems: 1
@@ -22,13 +24,6 @@ properties:
       - description: events interrupt line.
       - description: errors interrupt line.
     minItems: 1
-
-  clocks:
-    maxItems: 1
-
-  clock-names:
-    items:
-      - const: lcd
 
   resets:
     maxItems: 1
@@ -46,10 +41,46 @@ required:
   - compatible
   - reg
   - interrupts
-  - clocks
-  - clock-names
   - resets
   - port
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - st,stm32mp25-ltdc
+    then:
+      properties:
+        clocks:
+          maxItems: 4
+          items:
+            - description: Lcd Clock
+            - description: Bus Clock
+            - description: Reference Clock
+            - description: Lvds Clock
+        clock-names:
+          items:
+            - const: lcd
+            - const: bus
+            - const: ref
+            - const: lvds
+      required:
+        - clocks
+        - clock-names
+    else:
+      properties:
+        clocks:
+          maxItems: 1
+          items:
+            - description: Lcd Clock
+        clock-names:
+          items:
+            - const: lcd
+      required:
+        - clocks
+        - clock-names
 
 additionalProperties: false
 
