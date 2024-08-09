@@ -4,6 +4,7 @@
 
 #include <asm/sn/types.h>
 #include <asm/mmzone.h>
+#include <asm/numa.h>
 
 struct cpuinfo_ip27 {
 	nasid_t		p_nasid;	/* my node ID in numa-as-id-space */
@@ -13,14 +14,11 @@ struct cpuinfo_ip27 {
 
 extern struct cpuinfo_ip27 sn_cpu_info[NR_CPUS];
 
-#define cpu_to_node(cpu)	(cputonasid(cpu))
+#define early_cpu_to_node(cpu)	(cputonasid(cpu))
+#define cpu_to_node(cpu)  early_cpu_to_node(cpu)
 #define cpumask_of_node(node)	((node) == -1 ?				\
 				 cpu_all_mask :				\
 				 &hub_data(node)->h_cpus)
-
-extern unsigned char __node_distances[MAX_NUMNODES][MAX_NUMNODES];
-
-#define node_distance(from, to) (__node_distances[(from)][(to)])
 
 #include <asm-generic/topology.h>
 

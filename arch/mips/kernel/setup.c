@@ -664,6 +664,7 @@ static void __init arch_mem_init(char **cmdline_p)
 
 	mips_parse_crashkernel();
 	device_tree_init();
+	arch_numa_init();
 
 	/*
 	 * In order to reduce the possibility of kernel panic when failed to

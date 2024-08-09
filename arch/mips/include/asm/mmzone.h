@@ -7,10 +7,7 @@
 #define _ASM_MMZONE_H_
 
 #include <asm/page.h>
-
-#ifdef CONFIG_NUMA
-# include <mmzone.h>
-#endif
+#include <mmzone.h>
 
 #ifndef pa_to_nid
 #define pa_to_nid(addr) 0
