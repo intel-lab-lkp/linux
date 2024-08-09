@@ -21,6 +21,7 @@ struct telem_endpoint_info {
 	struct telem_header	header;
 };
 
+#if IS_REACHABLE(CONFIG_INTEL_PMT_TELEMETRY)
 /**
  * pmt_telem_get_next_endpoint() - Get next device id for a telemetry endpoint
  * @start:  starting devid to look from
@@ -123,4 +124,20 @@ int pmt_telem_read(struct telem_endpoint *ep, u32 id, u64 *data, u32 count);
  */
 int pmt_telem_read32(struct telem_endpoint *ep, u32 id, u32 *data, u32 count);
 
-#endif
+#else /* !CONFIG_INTEL_PMT_TELEMETRY */
+static inline unsigned long pmt_telem_get_next_endpoint(unsigned long start) { return 0; }
+static inline struct telem_endpoint *pmt_telem_register_endpoint(int devid)
+{ return ERR_PTR(-ENODEV); }
+static inline void pmt_telem_unregister_endpoint(struct telem_endpoint *ep) {}
+static inline int pmt_telem_get_endpoint_info(int devid, struct telem_endpoint_info *info)
+{ return -ENODEV; }
+static inline struct telem_endpoint *pmt_telem_find_and_register_endpoint(struct pci_dev *pcidev,
+				u32 guid, u16 pos)
+{ return ERR_PTR(-ENODEV); }
+static inline int pmt_telem_read(struct telem_endpoint *ep, u32 id, u64 *data, u32 count)
+{ return -ENODEV; }
+static inline int pmt_telem_read32(struct telem_endpoint *ep, u32 id, u32 *data, u32 count)
+{ return -ENODEV; }
+#endif /* CONFIG_INTEL_PMT_TELEMETRY */
+
+#endif /* _TELEMETRY_H */
