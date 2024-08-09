@@ -640,6 +640,22 @@ const struct pmc_reg_map arl_pchs_reg_map = {
 	.etr3_offset = ETR3_OFFSET,
 };
 
+static struct pmc_info arl_pmc_info_list[] = {
+	{
+		.devid	= PMC_DEVID_MTL_IOEP,
+		.map	= &mtl_ioep_reg_map,
+	},
+	{
+		.devid	= PMC_DEVID_ARL_SOCS,
+		.map	= &arl_socs_reg_map,
+	},
+	{
+		.devid	= PMC_DEVID_ARL_PCHS,
+		.map	= &arl_pchs_reg_map,
+	},
+	{}
+};
+
 #define ARL_NPU_PCI_DEV			0xad1d
 #define ARL_GNA_PCI_DEV			0xae4c
 /*
@@ -669,10 +685,20 @@ int arl_core_init(struct pmc_dev *pmcdev)
 	pmcdev->suspend = cnl_suspend;
 	pmcdev->resume = arl_resume;
 
-	pmc->map = &arl_socs_reg_map;
-	ret = get_primary_reg_base(pmc);
-	if (ret)
-		return ret;
+	pmcdev->regmap_list = arl_pmc_info_list;
+	ret = pmc_core_ssram_get_reg_base(pmcdev);
+
+	/* Try again later after Intel PMC SSRAM Telemetry driver finishes probe */
+	if (ret == -EAGAIN)
+		return -EPROBE_DEFER;
+
+	/* If regbase not assigned, set map and discover using legacy method */
+	if (ret) {
+		pmc->map = &arl_socs_reg_map;
+		ret = get_primary_reg_base(pmc);
+		if (ret)
+			return ret;
+	}
 
 	pmc_core_get_low_power_modes(pmcdev);
 	pmc_core_punit_pmt_init(pmcdev, ARL_PMT_DMU_GUID);

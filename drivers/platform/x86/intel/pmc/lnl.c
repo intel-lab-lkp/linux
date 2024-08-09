@@ -13,6 +13,14 @@
 
 #include "core.h"
 
+static struct pmc_info lnl_pmc_info_list[] = {
+	{
+		.devid	= PMC_DEVID_LNL_SOCM,
+		.map	= &lnl_socm_reg_map,
+	},
+	{}
+};
+
 const struct pmc_bit_map lnl_ltr_show_map[] = {
 	{"SOUTHPORT_A",		CNP_PMC_LTR_SPA},
 	{"SOUTHPORT_B",		CNP_PMC_LTR_SPB},
@@ -561,10 +569,20 @@ int lnl_core_init(struct pmc_dev *pmcdev)
 	pmcdev->suspend = cnl_suspend;
 	pmcdev->resume = lnl_resume;
 
-	pmc->map = &lnl_socm_reg_map;
-	ret = get_primary_reg_base(pmc);
-	if (ret)
-		return ret;
+	pmcdev->regmap_list = lnl_pmc_info_list;
+	ret = pmc_core_ssram_get_reg_base(pmcdev);
+
+	/* Try again later after Intel PMC SSRAM Telemetry driver finishes probe */
+	if (ret == -EAGAIN)
+		return -EPROBE_DEFER;
+
+	/* If regbase not assigned, set map and discover using legacy method */
+	if (ret) {
+		pmc->map = &lnl_socm_reg_map;
+		ret = get_primary_reg_base(pmc);
+		if (ret)
+			return ret;
+	}
 
 	pmc_core_get_low_power_modes(pmcdev);
 
