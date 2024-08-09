@@ -46,9 +46,9 @@ void virtual_early_config(void)
 	node_id_offset = 44;
 }
 
-void __init szmem(unsigned int node)
+static void __init prom_init_memory(void)
 {
-	u32 i, mem_type;
+	u32 i, mem_type, max_node_id = 0;
 	phys_addr_t node_id, mem_start, mem_size;
 
 	/* Otherwise come from DTB */
@@ -58,8 +58,8 @@ void __init szmem(unsigned int node)
 	/* Parse memory information and activate */
 	for (i = 0; i < loongson_memmap->nr_map; i++) {
 		node_id = loongson_memmap->map[i].node_id;
-		if (node_id != node)
-			continue;
+		if (node_id > max_node_id)
+			max_node_id = node_id;
 
 		mem_type = loongson_memmap->map[i].mem_type;
 		mem_size = loongson_memmap->map[i].mem_size;
@@ -78,7 +78,7 @@ void __init szmem(unsigned int node)
 		case UMA_VIDEO_RAM:
 			pr_info("Node %d, mem_type:%d\t[%pa], %pa bytes usable\n",
 				(u32)node_id, mem_type, &mem_start, &mem_size);
-			memblock_add_node(mem_start, mem_size, node,
+			memblock_add_node(mem_start, mem_size, node_id,
 					  MEMBLOCK_NONE);
 			break;
 		case SYSTEM_RAM_RESERVED:
@@ -104,16 +104,11 @@ void __init szmem(unsigned int node)
 		memblock_reserve(virt_to_phys((void *)loongson_sysconf.vgabios_addr),
 				SZ_256K);
 	/* set nid for reserved memory */
-	memblock_set_node((u64)node << 44, (u64)(node + 1) << 44,
-			&memblock.reserved, node);
+	for (i = 0; i <= max_node_id; i++) {
+		memblock_set_node(nid_to_addrbase(i), nid_to_addrbase(i + 1),
+				  &memblock.reserved, i);
+	}
 }
-
-#ifndef CONFIG_NUMA
-static void __init prom_init_memory(void)
-{
-	szmem(0);
-}
-#endif
 
 void __init prom_init(void)
 {
@@ -133,11 +128,7 @@ void __init prom_init(void)
 	if (loongson_sysconf.early_config)
 		loongson_sysconf.early_config();
 
-#ifdef CONFIG_NUMA
-	prom_init_numa_memory();
-#else
 	prom_init_memory();
-#endif
 
 	/* Hardcode to CPU UART 0 */
 	if ((read_c0_prid() & PRID_IMP_MASK) == PRID_IMP_LOONGSON_64R)

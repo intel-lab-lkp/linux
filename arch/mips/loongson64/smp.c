@@ -464,6 +464,7 @@ static void __init loongson3_smp_setup(void)
 			set_cpu_possible(num, true);
 			/* Loongson processors are always grouped by 4 */
 			cpu_set_cluster(&cpu_data[num], i / 4);
+			early_map_cpu_to_node(num, i / loongson_sysconf.cores_per_node);
 			num++;
 		}
 		i++;
@@ -517,6 +518,7 @@ static int loongson3_cpu_disable(void)
 	unsigned int cpu = smp_processor_id();
 
 	set_cpu_online(cpu, false);
+	numa_remove_cpu(cpu);
 	calculate_cpu_foreign_map();
 	local_irq_save(flags);
 	clear_c0_status(ST0_IM);
