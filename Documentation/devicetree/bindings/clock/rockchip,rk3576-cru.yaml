@@ -1,0 +1,84 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/rockchip,rk3576-cru.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Rockchip rk3576 Family Clock and Reset Control Module
+
+maintainers:
+  - Elaine Zhang <zhangqing@rock-chips.com>
+  - Heiko Stuebner <heiko@sntech.de>
+
+description: |
+  The RK3576 clock controller generates the clock and also implements a reset
+  controller for SoC peripherals. For example it provides SCLK_UART2 and
+  PCLK_UART2, as well as SRST_P_UART2 and SRST_S_UART2 for the second UART
+  module.
+
+properties:
+  compatible:
+    enum:
+      - rockchip,rk3576-cru
+
+  reg:
+    maxItems: 1
+
+  "#clock-cells":
+    const: 1
+
+  "#reset-cells":
+    const: 1
+
+  clocks:
+    maxItems: 2
+
+  clock-names:
+    items:
+      - const: xin24m
+      - const: xin32k
+
+  rockchip,grf:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: >
+      phandle to the syscon managing the "general register files". It is used
+      for GRF muxes, if missing any muxes present in the GRF will not be
+      available.
+
+required:
+  - compatible
+  - reg
+  - "#clock-cells"
+  - "#reset-cells"
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/rockchip,rk3576-cru.h>
+    clock-controller@27200000 {
+      compatible = "rockchip,rk3576-cru";
+      reg = <0xfd7c0000 0x5c000>;
+      #clock-cells = <1>;
+      #reset-cells = <1>;
+      assigned-clocks =
+        <&cru CLK_AUDIO_FRAC_1_SRC>,
+        <&cru PLL_GPLL>, <&cru PLL_CPLL>,
+        <&cru PLL_AUPLL>, <&cru CLK_UART_FRAC_0>,
+        <&cru CLK_UART_FRAC_1>, <&cru CLK_UART_FRAC_2>,
+        <&cru CLK_AUDIO_FRAC_0>, <&cru CLK_AUDIO_FRAC_1>,
+        <&cru CLK_CPLL_DIV2>, <&cru CLK_CPLL_DIV4>,
+        <&cru CLK_CPLL_DIV10>, <&cru FCLK_DDR_CM0_CORE>,
+        <&cru ACLK_PHP_ROOT>;
+      assigned-clock-parents = <&cru PLL_AUPLL>;
+      assigned-clock-rates =
+        <0>,
+        <1188000000>, <1000000000>,
+        <786432000>, <18432000>,
+        <96000000>, <128000000>,
+        <45158400>, <49152000>,
+        <500000000>, <250000000>,
+        <100000000>, <500000000>,
+        <250000000>;
+      rockchip,grf = <&pmu0_grf>;
+    };
