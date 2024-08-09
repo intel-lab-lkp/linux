@@ -4350,8 +4350,8 @@ int iwl_mvm_add_pasn_sta(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 		goto out;
 
 	keyconf->cipher = cipher;
-	memcpy(keyconf->key, key, key_len);
 	keyconf->keylen = key_len;
+	memcpy(keyconf->key, key, keyconf->keylen);
 	keyconf->flags = IEEE80211_KEY_FLAG_PAIRWISE;
 
 	if (mld) {
