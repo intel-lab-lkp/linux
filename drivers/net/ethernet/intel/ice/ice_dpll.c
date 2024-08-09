@@ -1641,8 +1641,10 @@ ice_dpll_init_rclk_pins(struct ice_pf *pf, struct ice_dpll_pin *pin,
 		if (ret)
 			goto unregister_pins;
 	}
-	if (WARN_ON((!vsi || !vsi->netdev)))
-		return -EINVAL;
+	if (WARN_ON((!vsi || !vsi->netdev))) {
+		ret = -EINVAL;
+		goto unregister_pins;
+	}
 	dpll_netdev_pin_set(vsi->netdev, pf->dplls.rclk.pin);
 
 	return 0;
