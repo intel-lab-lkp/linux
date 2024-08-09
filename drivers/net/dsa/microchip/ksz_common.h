@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /* Microchip switch driver common header
  *
- * Copyright (C) 2017-2019 Microchip Technology Inc.
+ * Copyright (C) 2017-2024 Microchip Technology Inc.
  */
 
 #ifndef __KSZ_COMMON_H
@@ -99,6 +99,7 @@ struct ksz_irq {
 	int irq_num;
 	char name[16];
 	struct ksz_device *dev;
+	u8 port;
 };
 
 struct ksz_ptp_irq {
@@ -373,6 +374,8 @@ struct ksz_dev_ops {
 	int (*reset)(struct ksz_device *dev);
 	int (*init)(struct ksz_device *dev);
 	void (*exit)(struct ksz_device *dev);
+	void (*enable_irq)(struct ksz_device *dev);
+	irqreturn_t (*handle_irq)(struct ksz_device *dev, u8 port, u8 *data);
 };
 
 struct ksz_device *ksz_switch_alloc(struct device *base, void *priv);

@@ -2,7 +2,7 @@
 /*
  * Microchip switch driver main logic
  *
- * Copyright (C) 2017-2019 Microchip Technology Inc.
+ * Copyright (C) 2017-2024 Microchip Technology Inc.
  */
 
 #include <linux/delay.h>
@@ -2257,6 +2257,12 @@ static irqreturn_t ksz_irq_thread_fn(int irq, void *dev_id)
 	if (ret)
 		goto out;
 
+	if (dev->dev_ops->handle_irq) {
+		ret = dev->dev_ops->handle_irq(dev, kirq->port, &data);
+		if (ret == IRQ_HANDLED)
+			++nhandled;
+	}
+
 	for (n = 0; n < kirq->nirqs; ++n) {
 		if (data & BIT(n)) {
 			sub_irq = irq_find_mapping(kirq->domain, n);
@@ -2300,6 +2306,7 @@ static int ksz_girq_setup(struct ksz_device *dev)
 {
 	struct ksz_irq *girq = &dev->girq;
 
+	girq->port = 0;
 	girq->nirqs = dev->info->port_cnt;
 	girq->reg_mask = REG_SW_PORT_INT_MASK__1;
 	girq->reg_status = REG_SW_PORT_INT_STATUS__1;
@@ -2314,6 +2321,7 @@ static int ksz_pirq_setup(struct ksz_device *dev, u8 p)
 {
 	struct ksz_irq *pirq = &dev->ports[p].pirq;
 
+	pirq->port = p + 1;
 	pirq->nirqs = dev->info->port_nirqs;
 	pirq->reg_mask = dev->dev_ops->get_port_addr(p, REG_PORT_INT_MASK);
 	pirq->reg_status = dev->dev_ops->get_port_addr(p, REG_PORT_INT_STATUS);
@@ -2418,6 +2426,11 @@ static int ksz_setup(struct dsa_switch *ds)
 	ret = ksz_dcb_init(dev);
 	if (ret)
 		goto out_ptp_clock_unregister;
+
+	if (dev->irq > 0) {
+		if (dev->dev_ops->enable_irq)
+			dev->dev_ops->enable_irq(dev);
+	}
 
 	/* start switch */
 	regmap_update_bits(ksz_regmap_8(dev), regs[S_START_CTRL],
