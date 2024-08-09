@@ -35,8 +35,8 @@
  * @inode: inode from which to grab the c/mtime
  *
  * Given @inode, grab the ctime and mtime out if it and store the result
- * in @stat. When fetching the value, flag it as queried so the next write
- * will ensure a distinct timestamp.
+ * in @stat. When fetching the value, flag it as QUERIED (if not already)
+ * so the next write will record a distinct timestamp.
  */
 void fill_mg_cmtime(struct kstat *stat, u32 request_mask, struct inode *inode)
 {
@@ -50,7 +50,10 @@ void fill_mg_cmtime(struct kstat *stat, u32 request_mask, struct inode *inode)
 
 	stat->mtime = inode_get_mtime(inode);
 	stat->ctime.tv_sec = inode->i_ctime_sec;
-	stat->ctime.tv_nsec = ((u32)atomic_fetch_or(I_CTIME_QUERIED, pcn)) & ~I_CTIME_QUERIED;
+	stat->ctime.tv_nsec = (u32)atomic_read(pcn);
+	if (!(stat->ctime.tv_nsec & I_CTIME_QUERIED))
+		stat->ctime.tv_nsec = ((u32)atomic_fetch_or(I_CTIME_QUERIED, pcn));
+	stat->ctime.tv_nsec &= ~I_CTIME_QUERIED;
 	trace_fill_mg_cmtime(inode, &stat->ctime, &stat->mtime);
 }
 EXPORT_SYMBOL(fill_mg_cmtime);
