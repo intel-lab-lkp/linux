@@ -634,6 +634,8 @@ static int rxe_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	rxe_qp_to_init(qp, init);
 	rxe_qp_to_attr(qp, attr, mask);
 
+	attr->cur_qp_state = qp->attr.qp_state;
+
 	return 0;
 }
 
