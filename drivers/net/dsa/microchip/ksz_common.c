@@ -936,8 +936,7 @@ static const struct regmap_range ksz9477_valid_regs[] = {
 	regmap_reg_range(0x701b, 0x701b),
 	regmap_reg_range(0x701f, 0x7020),
 	regmap_reg_range(0x7030, 0x7030),
-	regmap_reg_range(0x7200, 0x7203),
-	regmap_reg_range(0x7206, 0x7207),
+	regmap_reg_range(0x7200, 0x7207),
 	regmap_reg_range(0x7300, 0x7301),
 	regmap_reg_range(0x7400, 0x7401),
 	regmap_reg_range(0x7403, 0x7403),
@@ -1399,6 +1398,8 @@ const struct ksz_chip_data ksz_switch_chips[] = {
 				   false, true, false},
 		.supports_rgmii = {false, false, false, false,
 				   false, true, false},
+		.supports_sgmii = {false, false, false, false,
+				   false, false, true},
 		.internal_phy	= {true, true, true, true,
 				   true, false, false},
 		.gbit_capable	= {true, true, true, true, true, true, true},
@@ -1806,6 +1807,10 @@ static void ksz_phylink_get_caps(struct dsa_switch *ds, int port,
 	if (dev->info->supports_rgmii[port])
 		phy_interface_set_rgmii(config->supported_interfaces);
 
+	if (dev->info->supports_sgmii[port])
+		__set_bit(PHY_INTERFACE_MODE_SGMII,
+			  config->supported_interfaces);
+
 	if (dev->info->internal_phy[port]) {
 		__set_bit(PHY_INTERFACE_MODE_INTERNAL,
 			  config->supported_interfaces);
@@ -2089,14 +2094,19 @@ static int ksz_sw_mdio_write(struct mii_bus *bus, int addr, int regnum,
 static int ksz_irq_phy_setup(struct ksz_device *dev)
 {
 	struct dsa_switch *ds = dev->ds;
+	struct ksz_port *p;
 	int phy;
 	int irq;
 	int ret;
 
 	for (phy = 0; phy < KSZ_MAX_NUM_PORTS; phy++) {
 		if (BIT(phy) & ds->phys_mii_mask) {
+			p = &dev->ports[phy];
+			irq = PORT_SRC_PHY_INT;
+			if (p->sgmii)
+				irq = 3;
 			irq = irq_find_mapping(dev->ports[phy].pirq.domain,
-					       PORT_SRC_PHY_INT);
+					       irq);
 			if (irq < 0) {
 				ret = irq;
 				goto out;
@@ -3221,6 +3231,9 @@ static void ksz_phylink_mac_config(struct phylink_config *config,
 		dev_err(dev->dev, "In-band AN not supported!\n");
 		return;
 	}
+
+	if (state->interface == PHY_INTERFACE_MODE_SGMII)
+		return;
 
 	ksz_set_xmii(dev, port, state->interface);
 
@@ -4456,9 +4469,18 @@ int ksz_switch_register(struct ksz_device *dev)
 	for (port_num = 0; port_num < dev->info->port_cnt; ++port_num)
 		dev->ports[port_num].interface = PHY_INTERFACE_MODE_NA;
 	if (dev->dev->of_node) {
+		u32 mode;
+
 		ret = of_get_phy_mode(dev->dev->of_node, &interface);
 		if (ret == 0)
 			dev->compat_interface = interface;
+
+		dev->sgmii_mode = 1;
+		ret = of_property_read_u32(dev->dev->of_node,
+					   "microchip,sgmii-mode", &mode);
+		if (ret == 0 && mode <= 2)
+			dev->sgmii_mode = (u8)mode;
+
 		ports = of_get_child_by_name(dev->dev->of_node, "ethernet-ports");
 		if (!ports)
 			ports = of_get_child_by_name(dev->dev->of_node, "ports");

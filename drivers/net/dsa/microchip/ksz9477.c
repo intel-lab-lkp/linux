@@ -342,6 +342,257 @@ static int ksz9477_wait_alu_sta_ready(struct ksz_device *dev)
 					10, 1000);
 }
 
+static void port_sgmii_s(struct ksz_device *dev, uint port, u16 devid, u16 reg,
+			 u16 len)
+{
+	u32 data;
+
+	data = devid & PORT_SGMII_DEVICE_ID_M;
+	data <<= PORT_SGMII_DEVICE_ID_S;
+	data |= reg;
+	if (len > 1)
+		data |= PORT_SGMII_AUTO_INCR;
+	ksz_pwrite32(dev, port, REG_PORT_SGMII_ADDR__4, data);
+}
+
+static void port_sgmii_r(struct ksz_device *dev, uint port, u16 devid, u16 reg,
+			 u16 *buf, u16 len)
+{
+	u32 data;
+
+	port_sgmii_s(dev, port, devid, reg, len);
+	while (len) {
+		ksz_pread32(dev, port, REG_PORT_SGMII_DATA__4, &data);
+		*buf++ = (u16)data;
+		len--;
+	}
+}
+
+static void port_sgmii_w(struct ksz_device *dev, uint port, u16 devid, u16 reg,
+			 u16 *buf, u16 len)
+{
+	u32 data;
+
+	port_sgmii_s(dev, port, devid, reg, len);
+	while (len) {
+		data = *buf++;
+		ksz_pwrite32(dev, port, REG_PORT_SGMII_DATA__4, data);
+		len--;
+	}
+}
+
+static int port_sgmii_detect(struct ksz_device *dev, uint p)
+{
+	int ret = 0;
+
+	if (dev->sgmii_mode) {
+		struct ksz_port *port = &dev->ports[p];
+		u16 buf[6];
+
+		port_sgmii_r(dev, p, SR_MII, 0, buf, 6);
+		if (buf[5] & SR_MII_REMOTE_ACK) {
+			if (buf[5] & (SR_MII_REMOTE_HALF_DUPLEX |
+				      SR_MII_REMOTE_FULL_DUPLEX))
+				port->fiber = 1;
+			else if (dev->sgmii_mode == 1)
+				dev->sgmii_mode = 2;
+			ret = 1;
+		} else if (dev->sgmii_mode == 1) {
+			port->fiber = 1;
+			ret = 1;
+		}
+	} else {
+		/* Need to be told to run in direct mode. */
+		ret = 1;
+	}
+	return ret;
+}
+
+static void port_sgmii_reset(struct ksz_device *dev, uint p)
+{
+	u16 ctrl;
+
+	port_sgmii_r(dev, p, SR_MII, MMD_SR_MII_CTRL, &ctrl, 1);
+	ctrl |= SR_MII_RESET;
+	port_sgmii_w(dev, p, SR_MII, MMD_SR_MII_CTRL, &ctrl, 1);
+}
+
+static void port_sgmii_setup(struct ksz_device *dev, uint p, bool pcs,
+			     bool master, bool autoneg, int speed, int duplex)
+{
+	u16 ctrl;
+	u16 cfg;
+	u16 adv;
+
+	/* SGMII registers are not changed by reset. */
+	port_sgmii_r(dev, p, SR_MII, MMD_SR_MII_AUTO_NEG_CTRL, &cfg, 1);
+	if (cfg & SR_MII_AUTO_NEG_COMPLETE_INTR)
+		return;
+	cfg = 0;
+	if (pcs)
+		cfg |= SR_MII_PCS_SGMII << SR_MII_PCS_MODE_S;
+	if (master) {
+		cfg |= SR_MII_TX_CFG_PHY_MASTER;
+		cfg |= SR_MII_SGMII_LINK_UP;
+	}
+	cfg |= SR_MII_AUTO_NEG_COMPLETE_INTR;
+	port_sgmii_w(dev, p, SR_MII, MMD_SR_MII_AUTO_NEG_CTRL, &cfg, 1);
+	port_sgmii_r(dev, p, SR_MII, MMD_SR_MII_CTRL, &ctrl, 1);
+	if (master || !autoneg) {
+		switch (speed) {
+		case 1:
+			ctrl |= SR_MII_SPEED_100MBIT;
+			break;
+		case 2:
+			ctrl |= SR_MII_SPEED_1000MBIT;
+			break;
+		}
+	}
+	if (!autoneg) {
+		ctrl &= ~SR_MII_AUTO_NEG_ENABLE;
+		port_sgmii_w(dev, p, SR_MII, MMD_SR_MII_CTRL, &ctrl, 1);
+		return;
+	} else if (!(ctrl & SR_MII_AUTO_NEG_ENABLE)) {
+		ctrl |= SR_MII_AUTO_NEG_ENABLE;
+		port_sgmii_w(dev, p, SR_MII, MMD_SR_MII_CTRL, &ctrl, 1);
+	}
+
+	/* Need to write to advertise register to send correct signal. */
+	/* Default value is 0x0020. */
+	port_sgmii_r(dev, p, SR_MII, MMD_SR_MII_AUTO_NEGOTIATION, &adv, 1);
+	adv = SR_MII_AUTO_NEG_ASYM_PAUSE_RX << SR_MII_AUTO_NEG_PAUSE_S;
+	if (duplex)
+		adv |= SR_MII_AUTO_NEG_FULL_DUPLEX;
+	else
+		adv |= SR_MII_AUTO_NEG_HALF_DUPLEX;
+	port_sgmii_w(dev, p, SR_MII, MMD_SR_MII_AUTO_NEGOTIATION, &adv, 1);
+	if (master && autoneg) {
+		ctrl |= SR_MII_AUTO_NEG_RESTART;
+		port_sgmii_w(dev, p, SR_MII, MMD_SR_MII_CTRL, &ctrl, 1);
+	}
+}
+
+static int sgmii_port_get_speed(struct ksz_device *dev, uint p)
+{
+	struct ksz_port *info = &dev->ports[p];
+	int ret = 0;
+	u16 status;
+	u16 speed;
+	u16 data;
+	u8 link;
+
+	port_sgmii_r(dev, p, SR_MII, MMD_SR_MII_STATUS, &status, 1);
+	port_sgmii_r(dev, p, SR_MII, MMD_SR_MII_STATUS, &status, 1);
+	port_sgmii_r(dev, p, SR_MII, MMD_SR_MII_AUTO_NEG_STATUS, &data, 1);
+
+	/* Typical register values in different modes.
+	 * 10/100/1000: 1f0001 = 01ad  1f0005 = 4000  1f8002 = 0008
+	 *              1f0001 = 01bd  1f0005 = d000  1f8002 = 001a
+	 * 1000:        1f0001 = 018d  1f0005 = 0000  1f8002 = 0000
+	 *              1f0001 = 01ad  1f0005 = 40a0  1f8002 = 0000
+	 *              1f0001 = 01ad  1f0005 = 41a0  1f8002 = 0000
+	 * fiber:       1f0001 = 0189  1f0005 = 0000  1f8002 = 0000
+	 *              1f0001 = 01ad  1f0005 = 41a0  1f8002 = 0000
+	 */
+
+	/* Running in fiber mode. */
+	if (info->fiber && !data &&
+	    (status & (PORT_AUTO_NEG_ACKNOWLEDGE | PORT_LINK_STATUS)) ==
+	    (PORT_AUTO_NEG_ACKNOWLEDGE | PORT_LINK_STATUS)) {
+		data = SR_MII_STAT_LINK_UP |
+		       (SR_MII_STAT_1000_MBPS << SR_MII_STAT_S) |
+		       SR_MII_STAT_FULL_DUPLEX;
+	}
+	if (data & SR_MII_STAT_LINK_UP)
+		ret = 1;
+
+	link = (data & ~SR_MII_AUTO_NEG_COMPLETE_INTR);
+	if (info->sgmii_link == link)
+		return ret;
+
+	if (data & SR_MII_STAT_LINK_UP) {
+		u16 ctrl;
+
+		/* Need to update control register with same link setting. */
+		ctrl = SR_MII_AUTO_NEG_ENABLE;
+		speed = (data >> SR_MII_STAT_S) & SR_MII_STAT_M;
+		if (speed == SR_MII_STAT_1000_MBPS)
+			ctrl |= SR_MII_SPEED_1000MBIT;
+		else if (speed == SR_MII_STAT_100_MBPS)
+			ctrl |= SR_MII_SPEED_100MBIT;
+		if (data & SR_MII_STAT_FULL_DUPLEX)
+			ctrl |= SR_MII_FULL_DUPLEX;
+		port_sgmii_w(dev, p, SR_MII, MMD_SR_MII_CTRL, &ctrl, 1);
+
+		speed = (data >> SR_MII_STAT_S) & SR_MII_STAT_M;
+		info->phydev.speed = SPEED_10;
+		if (speed == SR_MII_STAT_1000_MBPS)
+			info->phydev.speed = SPEED_1000;
+		else if (speed == SR_MII_STAT_100_MBPS)
+			info->phydev.speed = SPEED_100;
+
+		info->phydev.duplex = 0;
+		if (data & SR_MII_STAT_FULL_DUPLEX)
+			info->phydev.duplex = 1;
+	}
+	ret |= 2;
+	info->sgmii_link = link;
+	info->phydev.link = (ret & 1);
+	return ret;
+}
+
+static void sgmii_check_work(struct work_struct *work)
+{
+	struct ksz_device *dev = container_of(work, struct ksz_device,
+					      sgmii_check.work);
+	struct ksz_port *p = &dev->ports[KSZ9477_SGMII_PORT];
+
+	if (p->sgmii && p->phydev.link) {
+		int ret = sgmii_port_get_speed(dev, KSZ9477_SGMII_PORT);
+		struct dsa_switch *ds = dev->ds;
+		struct phy_device *phydev;
+
+		phydev = mdiobus_get_phy(ds->user_mii_bus, KSZ9477_SGMII_PORT);
+		if ((ret & 2) && phydev)
+			phy_trigger_machine(phydev);
+		if (p->phydev.link)
+			schedule_delayed_work(&dev->sgmii_check,
+					      msecs_to_jiffies(500));
+	}
+}
+
+static void sgmii_initial_setup(struct ksz_device *dev, int port)
+{
+	struct ksz_port *p = &dev->ports[port];
+	/* Assume SGMII mode is 2. */
+	bool master = false;
+	bool autoneg = true;
+	bool pcs = true;
+
+	if (!p->sgmii || p->sgmii_setup)
+		return;
+
+	INIT_DELAYED_WORK(&dev->sgmii_check, sgmii_check_work);
+	if (dev->sgmii_mode == 0) {
+		master = true;
+		autoneg = false;
+	} else if (dev->sgmii_mode == 1) {
+		pcs = false;
+		master = true;
+	}
+	port_sgmii_setup(dev, port, pcs, master, autoneg, 2, 1);
+
+	/* Make invalid so the correct value is set. */
+	p->sgmii_link = 0xff;
+	p->sgmii_setup = 1;
+	sgmii_port_get_speed(dev, port);
+
+	/* Need to check link down if using fiber SFP. */
+	if (dev->sgmii_mode == 1 && p->phydev.link)
+		schedule_delayed_work(&dev->sgmii_check,
+				      msecs_to_jiffies(1000));
+}
+
 int ksz9477_reset_switch(struct ksz_device *dev)
 {
 	u8 data8;
@@ -353,6 +604,14 @@ int ksz9477_reset_switch(struct ksz_device *dev)
 	/* turn off SPI DO Edge select */
 	regmap_update_bits(ksz_regmap_8(dev), REG_SW_GLOBAL_SERIAL_CTRL_0,
 			   SPI_AUTO_EDGE_DETECTION, 0);
+
+	/* Only reset SGMII module when the driver is stopped. */
+	if (dev->chip_id == KSZ9477_CHIP_ID) {
+		struct ksz_port *p = &dev->ports[KSZ9477_SGMII_PORT];
+
+		if (p->sgmii_setup)
+			port_sgmii_reset(dev, KSZ9477_SGMII_PORT);
+	}
 
 	/* default configuration */
 	ksz_write8(dev, REG_SW_LUE_CTRL_1,
@@ -510,7 +769,7 @@ int ksz9477_r_phy(struct ksz_device *dev, u16 addr, u16 reg, u16 *data)
 	 * A fixed PHY can be setup in the device tree, but this function is
 	 * still called for that port during initialization.
 	 * For RGMII PHY there is no way to access it so the fixed PHY should
-	 * be used.  For SGMII PHY the supporting code will be added later.
+	 * be used.  SGMII PHY is simulated as a regular PHY.
 	 */
 	if (!dev->info->internal_phy[addr]) {
 		struct ksz_port *p = &dev->ports[addr];
@@ -520,7 +779,10 @@ int ksz9477_r_phy(struct ksz_device *dev, u16 addr, u16 reg, u16 *data)
 			val = 0x1140;
 			break;
 		case MII_BMSR:
-			val = 0x796d;
+			if (p->phydev.link)
+				val = 0x796d;
+			else
+				val = 0x7949;
 			break;
 		case MII_PHYSID1:
 			val = 0x0022;
@@ -533,6 +795,10 @@ int ksz9477_r_phy(struct ksz_device *dev, u16 addr, u16 reg, u16 *data)
 			break;
 		case MII_LPA:
 			val = 0xc5e1;
+			if (p->phydev.speed == SPEED_10)
+				val &= ~0x0180;
+			if (p->phydev.duplex == 0)
+				val &= ~0x0140;
 			break;
 		case MII_CTRL1000:
 			val = 0x0700;
@@ -542,6 +808,24 @@ int ksz9477_r_phy(struct ksz_device *dev, u16 addr, u16 reg, u16 *data)
 				val = 0x3800;
 			else
 				val = 0;
+			break;
+		case MII_ESTATUS:
+			val = 0x3000;
+			break;
+
+		/* This register holds the PHY interrupt status. */
+		case MII_TPISTATUS:
+			val = (LINK_DOWN_INT | LINK_UP_INT) << 8;
+			if (p->phydev.interrupts == PHY_INTERRUPT_ENABLED) {
+				if (p->phydev.link)
+					val |= LINK_UP_INT;
+				else
+					val |= LINK_DOWN_INT;
+			}
+			p->phydev.interrupts = 0;
+			break;
+		default:
+			val = 0;
 			break;
 		}
 	} else {
@@ -1143,6 +1427,16 @@ void ksz9477_get_caps(struct ksz_device *dev, int port,
 
 	if (dev->info->gbit_capable[port])
 		config->mac_capabilities |= MAC_1000FD;
+	if (dev->info->supports_sgmii[port]) {
+		struct dsa_switch *ds = dev->ds;
+		struct phy_device *phydev;
+
+		phydev = mdiobus_get_phy(ds->user_mii_bus, port);
+
+		/* Change this port interface to SGMII. */
+		if (phydev)
+			phydev->interface = PHY_INTERFACE_MODE_SGMII;
+	}
 }
 
 int ksz9477_set_ageing_time(struct ksz_device *dev, unsigned int msecs)
@@ -1217,6 +1511,8 @@ void ksz9477_port_setup(struct ksz_device *dev, int port, bool cpu_port)
 	ksz_port_cfg(dev, port, REG_PORT_CTRL_0,
 		     PORT_FORCE_TX_FLOW_CTRL | PORT_FORCE_RX_FLOW_CTRL,
 		     !dev->info->internal_phy[port]);
+
+	sgmii_initial_setup(dev, port);
 
 	if (cpu_port)
 		member = dsa_user_ports(ds);
@@ -1296,6 +1592,10 @@ void ksz9477_config_cpu_port(struct dsa_switch *ds)
 			continue;
 		ksz_port_stp_state_set(ds, i, BR_STATE_DISABLED);
 	}
+	if (dev->chip_id == KSZ9477_CHIP_ID) {
+		/* Switch reset does not reset SGMII module. */
+		port_sgmii_reset(dev, KSZ9477_SGMII_PORT);
+	}
 }
 
 int ksz9477_enable_stp_addr(struct ksz_device *dev)
@@ -1369,6 +1669,12 @@ int ksz9477_setup(struct dsa_switch *ds)
 	 * like PME events changes before shutdown.
 	 */
 	ksz_write8(dev, REG_SW_PME_CTRL, 0);
+
+	if (dev->chip_id == KSZ9477_CHIP_ID) {
+		struct ksz_port *p = &dev->ports[KSZ9477_SGMII_PORT];
+
+		p->sgmii = port_sgmii_detect(dev, KSZ9477_SGMII_PORT);
+	}
 
 	return 0;
 }
@@ -1484,6 +1790,8 @@ int ksz9477_switch_init(struct ksz_device *dev)
 
 void ksz9477_switch_exit(struct ksz_device *dev)
 {
+	if (delayed_work_pending(&dev->sgmii_check))
+		cancel_delayed_work_sync(&dev->sgmii_check);
 	ksz9477_reset_switch(dev);
 }
 
@@ -1514,6 +1822,34 @@ static irqreturn_t ksz9477_handle_port_irq(struct ksz_device *dev, u8 port,
 		ksz_pwrite8(dev, port, REG_PORT_INT_STATUS, PORT_ACL_INT);
 		++cnt;
 		*data &= ~PORT_ACL_INT;
+	}
+	if (*data & PORT_SGMII_INT) {
+		u16 data16 = 0;
+		int ret;
+
+		port_sgmii_w(dev, port, SR_MII, MMD_SR_MII_AUTO_NEG_STATUS,
+			     &data16, 1);
+		ret = sgmii_port_get_speed(dev, port);
+		if ((ret & 2)) {
+			struct ksz_port *p = &dev->ports[port];
+
+			p->phydev.interrupts = PHY_INTERRUPT_ENABLED;
+
+			/* No interrupt for link down. */
+			if (dev->sgmii_mode == 1 && p->phydev.link)
+				schedule_delayed_work(&dev->sgmii_check,
+						      msecs_to_jiffies(500));
+		}
+
+		/* Handle the interrupt if there is no PHY device or its
+		 * interrupt is not registered yet.
+		 */
+		if (!phydev || phydev->interrupts != PHY_INTERRUPT_ENABLED) {
+			if (phydev)
+				phy_trigger_machine(phydev);
+			++cnt;
+			*data &= ~PORT_SGMII_INT;
+		}
 	}
 
 	return (cnt > 0) ? IRQ_HANDLED : IRQ_NONE;

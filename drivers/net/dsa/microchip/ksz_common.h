@@ -84,6 +84,7 @@ struct ksz_chip_data {
 	bool supports_mii[KSZ_MAX_NUM_PORTS];
 	bool supports_rmii[KSZ_MAX_NUM_PORTS];
 	bool supports_rgmii[KSZ_MAX_NUM_PORTS];
+	bool supports_sgmii[KSZ_MAX_NUM_PORTS];
 	bool internal_phy[KSZ_MAX_NUM_PORTS];
 	bool gbit_capable[KSZ_MAX_NUM_PORTS];
 	const struct regmap_access_table *wr_table;
@@ -126,6 +127,9 @@ struct ksz_port {
 	u32 force:1;
 	u32 read:1;			/* read MIB counters in background */
 	u32 freeze:1;			/* MIB counter freeze is enabled */
+	u32 sgmii:1;			/* port is SGMII */
+	u32 sgmii_link:8;
+	u32 sgmii_setup:1;
 
 	struct ksz_port_mib mib;
 	phy_interface_t interface;
@@ -181,6 +185,8 @@ struct ksz_device {
 	struct ksz_port *ports;
 	struct delayed_work mib_read;
 	unsigned long mib_read_interval;
+	struct delayed_work sgmii_check;
+	u8 sgmii_mode;
 	u16 mirror_rx;
 	u16 mirror_tx;
 	u16 port_mask;

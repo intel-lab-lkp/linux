@@ -11,6 +11,8 @@
 #include <net/dsa.h>
 #include "ksz_common.h"
 
+#define KSZ9477_SGMII_PORT		6
+
 int ksz9477_setup(struct dsa_switch *ds);
 u32 ksz9477_get_port_addr(int port, int offset);
 void ksz9477_cfg_port_member(struct ksz_device *dev, int port, u8 member);
