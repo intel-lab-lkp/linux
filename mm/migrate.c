@@ -1249,6 +1249,15 @@ static int migrate_folio_unmap(new_folio_t get_new_folio,
 	}
 
 	if (!folio_mapped(src)) {
+		/*
+		 * Someone may have changed the refcount and maybe sleeping
+		 * on the folio lock. In case of refcount mismatch, bail out,
+		 * let the system make progress and retry.
+		 */
+		struct address_space *mapping = folio_mapping(src);
+
+		if (folio_ref_count(src) != folio_expected_refs(mapping, src))
+			goto out;
 		__migrate_folio_record(dst, old_page_state, anon_vma);
 		return MIGRATEPAGE_UNMAP;
 	}
