@@ -392,6 +392,19 @@ kmem_cache_create(const char *name, unsigned int size, unsigned int align,
 }
 EXPORT_SYMBOL(kmem_cache_create);
 
+void kmem_buckets_destroy(kmem_buckets *b)
+{
+	int idx;
+
+	if (!b)
+		return;
+
+	for (idx = 0; idx < ARRAY_SIZE(kmalloc_caches[KMALLOC_NORMAL]); idx++)
+		kmem_cache_destroy((*b)[idx]);
+	kfree(b);
+}
+EXPORT_SYMBOL(kmem_buckets_destroy);
+
 static struct kmem_cache *kmem_buckets_cache __ro_after_init;
 
 /**
@@ -476,9 +489,7 @@ kmem_buckets *kmem_buckets_create(const char *name, slab_flags_t flags,
 	return b;
 
 fail:
-	for (idx = 0; idx < ARRAY_SIZE(kmalloc_caches[KMALLOC_NORMAL]); idx++)
-		kmem_cache_destroy((*b)[idx]);
-	kfree(b);
+	kmem_buckets_destroy(b);
 
 	return NULL;
 }
