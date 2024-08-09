@@ -31,6 +31,12 @@ static const struct flash_info everspin_nor_parts[] = {
 		.size = SZ_512K,
 		.sector_size = SZ_512K,
 		.flags = SPI_NOR_NO_ERASE,
+	}, {
+		.id = SNOR_ID(0x6b, 0xbb, 0x14),
+		.name = "em008lx",
+		.size = SZ_1M,
+		.sector_size = SZ_64K,
+		.flags = SPI_NOR_HAS_TB | SPI_NOR_4BIT_BP | SPI_NOR_BP3_SR_BIT6,
 	}
 };
 
