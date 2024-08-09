@@ -283,7 +283,7 @@ static int __vp_check_common_size_one_feature(struct virtio_device *vdev, u32 fb
 		return 0;
 
 	dev_err(&vdev->dev,
-		"virtio: common cfg size(%zu) does not match the feature %s\n",
+		"common cfg size(%zu) does not match the feature %s\n",
 		vp_dev->mdev.common_len, fname);
 
 	return -EINVAL;
@@ -320,7 +320,7 @@ static int vp_finalize_features(struct virtio_device *vdev)
 	vp_transport_features(vdev, features);
 
 	if (!__virtio_test_bit(vdev, VIRTIO_F_VERSION_1)) {
-		dev_err(&vdev->dev, "virtio: device uses modern interface "
+		dev_err(&vdev->dev, "device uses modern interface "
 			"but does not have VIRTIO_F_VERSION_1\n");
 		return -EINVAL;
 	}

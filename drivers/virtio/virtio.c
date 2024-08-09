@@ -194,8 +194,7 @@ static int virtio_features_ok(struct virtio_device *dev)
 	virtio_add_status(dev, VIRTIO_CONFIG_S_FEATURES_OK);
 	status = dev->config->get_status(dev);
 	if (!(status & VIRTIO_CONFIG_S_FEATURES_OK)) {
-		dev_err(&dev->dev, "virtio: device refuses features: %x\n",
-			status);
+		dev_err(&dev->dev, "device refuses features: %x\n", status);
 		return -ENODEV;
 	}
 	return 0;
