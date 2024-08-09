@@ -8,6 +8,7 @@
 #include <linux/delay.h>
 #include <linux/io.h>
 #include <linux/memblock.h>
+#include <linux/of.h>
 #include <linux/sched/task_stack.h>
 #include <linux/sched/hotplug.h>
 #include <linux/slab.h>
@@ -179,10 +180,14 @@ static void __init cps_smp_setup(void)
 
 	/* Indicate present CPUs (CPU being synonymous with VPE) */
 	for (v = 0; v < min_t(unsigned, nvpes, NR_CPUS); v++) {
+		struct device_node *np = of_get_cpu_node(v, NULL);
+
 		set_cpu_possible(v, cpu_cluster(&cpu_data[v]) == 0);
 		set_cpu_present(v, cpu_cluster(&cpu_data[v]) == 0);
 		__cpu_number_map[v] = v;
 		__cpu_logical_map[v] = v;
+		if (np)
+			early_map_cpu_to_node(v, of_node_to_nid(np));
 	}
 
 	/* Set a coherent default CCA (CWB) */
@@ -553,6 +558,7 @@ static int cps_cpu_disable(void)
 	atomic_sub(1 << cpu_vpe_id(&current_cpu_data), &core_cfg->vpe_mask);
 	smp_mb__after_atomic();
 	set_cpu_online(cpu, false);
+	numa_remove_cpu(cpu);
 	calculate_cpu_foreign_map();
 	irq_migrate_all_off_this_cpu();
 

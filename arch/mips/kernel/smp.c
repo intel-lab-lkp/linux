@@ -153,6 +153,11 @@ void calculate_cpu_foreign_map(void)
 			       &temp_foreign_map, &cpu_sibling_map[i]);
 }
 
+bool arch_match_cpu_phys_id(int cpu, u64 phys_id)
+{
+	return phys_id == cpu_logical_map(cpu);
+}
+
 const struct plat_smp_ops *mp_ops;
 EXPORT_SYMBOL(mp_ops);
 
@@ -162,6 +167,19 @@ void register_smp_ops(const struct plat_smp_ops *ops)
 		printk(KERN_WARNING "Overriding previously set SMP ops\n");
 
 	mp_ops = ops;
+}
+
+void __init plat_smp_setup(void)
+{
+	unsigned int cpu;
+
+	mp_ops->smp_setup();
+
+	for_each_possible_cpu(cpu) {
+		/* Workaround platform SMP code not handling NUMA map */
+		if (early_cpu_to_node(cpu) == NUMA_NO_NODE)
+			early_map_cpu_to_node(cpu, 0);
+	}
 }
 
 #ifdef CONFIG_GENERIC_IRQ_IPI
@@ -372,6 +390,7 @@ asmlinkage void start_secondary(void)
 
 	set_cpu_sibling_map(cpu);
 	set_cpu_core_map(cpu);
+	numa_add_cpu(cpu);
 
 	cpumask_set_cpu(cpu, &cpu_coherent_mask);
 	notify_cpu_starting(cpu);
@@ -426,6 +445,8 @@ void __init smp_cpus_done(unsigned int max_cpus)
 /* called from main before smp_init() */
 void __init smp_prepare_cpus(unsigned int max_cpus)
 {
+	unsigned int cpu;
+
 	init_new_context(current, &init_mm);
 	current_thread_info()->cpu = 0;
 	mp_ops->prepare_cpus(max_cpus);
@@ -436,6 +457,11 @@ void __init smp_prepare_cpus(unsigned int max_cpus)
 	init_cpu_present(cpu_possible_mask);
 #endif
 	cpumask_copy(&cpu_coherent_mask, cpu_possible_mask);
+
+	for_each_possible_cpu(cpu)
+		numa_store_cpu_info(cpu);
+
+	numa_add_cpu(0);
 }
 
 /* preload SMP state for boot cpu */
