@@ -24,3 +24,13 @@ config INTEL_PMC_CORE
 		- SLPS0 Debug registers (Cannonlake/Icelake PCH)
 		- Low Power Mode registers (Tigerlake and beyond)
 		- PMC quirks as needed to enable SLPS0/S0ix
+
+config INTEL_PMC_SSRAM_TELEMETRY
+	tristate "Intel PMC SSRAM Telemetry driver"
+	depends on INTEL_VSEC
+	help
+	  The PMC SSRAM device contains counters structured in Intel Platform
+	  Monitoring Techology (PMT) telemetry regions. This driver looks for
+	  and register these telemetry regions so they would be available for
+	  read through sysfs and Intel PMT API. The driver also provides API to
+	  expose information of PMCs available in the platform.

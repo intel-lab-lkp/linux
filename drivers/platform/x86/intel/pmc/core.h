@@ -285,6 +285,16 @@ enum ppfear_regs {
 #define LNL_PPFEAR_NUM_ENTRIES			12
 #define LNL_S0IX_BLOCKER_OFFSET			0x2004
 
+/* SSRAM PMC Device ID*/
+/* ARL */
+#define PMC_DEVID_ARL_SOCS	0xae7f
+
+/* MTL */
+#define PMC_DEVID_MTL_SOCM	0x7e7f
+
+/* LNL */
+#define PMC_DEVID_LNL_SOCM	0xa87f
+
 extern const char *pmc_lpm_modes[];
 
 struct pmc_bit_map {
