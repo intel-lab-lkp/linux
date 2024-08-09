@@ -2174,9 +2174,18 @@ struct rtrs_srv_ctx *rtrs_srv_open(struct rtrs_srv_ops *ops, u16 port)
 	struct rtrs_srv_ctx *ctx;
 	int err;
 
+	mutex_lock(&ib_ctx.rtrs_srv_ib_mutex);
+	if (ib_ctx.srv_ctx) {
+		pr_err("%s: Already in use.\n", __func__);
+		ctx = ERR_PTR(-EEXIST);
+		goto out;
+	}
+
 	ctx = alloc_srv_ctx(ops);
-	if (!ctx)
-		return ERR_PTR(-ENOMEM);
+	if (!ctx) {
+		ctx = ERR_PTR(-ENOMEM);
+		goto out;
+	}
 
 	mutex_init(&ib_ctx.ib_dev_mutex);
 	ib_ctx.srv_ctx = ctx;
@@ -2185,9 +2194,11 @@ struct rtrs_srv_ctx *rtrs_srv_open(struct rtrs_srv_ops *ops, u16 port)
 	err = ib_register_client(&rtrs_srv_client);
 	if (err) {
 		free_srv_ctx(ctx);
-		return ERR_PTR(err);
+		ctx = ERR_PTR(err);
 	}
 
+out:
+	mutex_unlock(&ib_ctx.rtrs_srv_ib_mutex);
 	return ctx;
 }
 EXPORT_SYMBOL(rtrs_srv_open);
@@ -2221,10 +2232,16 @@ static void close_ctx(struct rtrs_srv_ctx *ctx)
  */
 void rtrs_srv_close(struct rtrs_srv_ctx *ctx)
 {
+	mutex_lock(&ib_ctx.rtrs_srv_ib_mutex);
+	WARN_ON(ib_ctx.srv_ctx != ctx);
+
 	ib_unregister_client(&rtrs_srv_client);
 	mutex_destroy(&ib_ctx.ib_dev_mutex);
 	close_ctx(ctx);
 	free_srv_ctx(ctx);
+
+	ib_ctx.srv_ctx = NULL;
+	mutex_unlock(&ib_ctx.rtrs_srv_ib_mutex);
 }
 EXPORT_SYMBOL(rtrs_srv_close);
 
@@ -2282,6 +2299,9 @@ static int __init rtrs_server_init(void)
 		goto out_dev_class;
 	}
 
+	mutex_init(&ib_ctx.rtrs_srv_ib_mutex);
+	ib_ctx.srv_ctx = NULL;
+
 	return 0;
 
 out_dev_class:
@@ -2292,6 +2312,7 @@ out_err:
 
 static void __exit rtrs_server_exit(void)
 {
+	mutex_destroy(&ib_ctx.rtrs_srv_ib_mutex);
 	destroy_workqueue(rtrs_wq);
 	class_unregister(&rtrs_dev_class);
 	rtrs_rdma_dev_pd_deinit(&dev_pd);

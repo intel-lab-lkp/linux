@@ -127,6 +127,7 @@ struct rtrs_srv_ib_ctx {
 	u16			port;
 	struct mutex            ib_dev_mutex;
 	int			ib_dev_count;
+	struct mutex		rtrs_srv_ib_mutex;
 };
 
 extern const struct class rtrs_dev_class;
