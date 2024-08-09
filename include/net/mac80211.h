@@ -2222,7 +2222,7 @@ struct ieee80211_key_conf {
 	u16 flags;
 	s8 link_id;
 	u8 keylen;
-	u8 key[];
+	u8 key[] __counted_by(keylen);
 };
 
 #define IEEE80211_MAX_PN_LEN	16

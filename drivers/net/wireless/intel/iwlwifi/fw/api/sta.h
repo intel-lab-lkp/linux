@@ -479,7 +479,7 @@ struct iwl_mvm_wep_key_cmd {
 	u8 decryption_type;
 	u8 flags;
 	u8 reserved;
-	struct iwl_mvm_wep_key wep_key[];
+	struct iwl_mvm_wep_key wep_key[] __counted_by(num_keys);
 } __packed; /* SEC_CURR_WEP_KEY_CMD_API_S_VER_2 */
 
 /**
