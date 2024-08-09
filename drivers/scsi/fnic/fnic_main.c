@@ -85,9 +85,6 @@ module_param(fnic_max_qdepth, uint, S_IRUGO|S_IWUSR);
 MODULE_PARM_DESC(fnic_max_qdepth, "Queue depth to report for each LUN");
 
 static struct libfc_function_template fnic_transport_template = {
-	.fcp_abort_io = fnic_empty_scsi_cleanup,
-	.fcp_cleanup = fnic_empty_scsi_cleanup,
-	.exch_mgr_reset = fnic_exch_mgr_reset
 };
 
 struct workqueue_struct *fnic_fip_queue;
@@ -162,7 +159,7 @@ static struct fc_function_template fnic_fc_functions = {
 	.show_starget_port_id = 1,
 	.show_rport_dev_loss_tmo = 1,
 	.set_rport_dev_loss_tmo = fnic_set_rport_dev_loss_tmo,
-	.issue_fc_host_lip = fnic_reset,
+	.issue_fc_host_lip = fnic_issue_fc_host_lip,
 	.get_fc_host_stats = fnic_get_stats,
 	.reset_fc_host_stats = fnic_reset_host_stats,
 	.dd_fcrport_size = sizeof(struct fc_rport_libfc_priv),
