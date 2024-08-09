@@ -24,6 +24,11 @@ struct telem_endpoint;
 #define MAX_NUM_PMC			3
 #define S0IX_BLK_SIZE			4
 
+/* PCH query */
+#define LPM_HEADER_OFFSET	1
+#define LPM_REG_COUNT		28
+#define LPM_MODE_OFFSET		1
+
 /* Sunrise Point Power Management Controller PCI Device ID */
 #define SPT_PMC_PCI_DEVICE_ID			0x9d21
 #define SPT_PMC_BASE_ADDR_OFFSET		0x48
@@ -590,6 +595,7 @@ extern const struct pmc_bit_map *arl_pchs_lpm_maps[];
 extern const struct pmc_reg_map arl_pchs_reg_map;
 
 extern void pmc_core_get_tgl_lpm_reqs(struct platform_device *pdev);
+extern int pmc_core_get_lpm_reqs(struct pmc_dev *pmcdev, int func);
 int pmc_core_send_ltr_ignore(struct pmc_dev *pmcdev, u32 value, int ignore);
 
 int pmc_core_resume_common(struct pmc_dev *pmcdev);

@@ -8,7 +8,7 @@ config INTEL_PMC_CORE
 	depends on PCI
 	depends on ACPI
 	depends on INTEL_PMC_SSRAM_TELEMETRY || !INTEL_PMC_SSRAM_TELEMETRY
-	depends on INTEL_PMT_TELEMETRY
+	depends on INTEL_PMT_TELEMETRY || !INTEL_PMT_TELEMETRY
 	help
 	  The Intel Platform Controller Hub for Intel Core SoCs provides access
 	  to Power Management Controller registers via various interfaces. This
