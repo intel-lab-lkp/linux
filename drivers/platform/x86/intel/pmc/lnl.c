@@ -13,8 +13,13 @@
 
 #include "core.h"
 
+#define SOCM_LPM_REQ_GUID	0x15099748
+
+static const u8 LNL_LPM_REG_INDEX[] = {0, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 20};
+
 static struct pmc_info lnl_pmc_info_list[] = {
 	{
+		.guid	= SOCM_LPM_REQ_GUID,
 		.devid	= PMC_DEVID_LNL_SOCM,
 		.map	= &lnl_socm_reg_map,
 	},
@@ -536,6 +541,7 @@ const struct pmc_reg_map lnl_socm_reg_map = {
 	.lpm_live_status_offset = MTL_LPM_LIVE_STATUS_OFFSET,
 	.s0ix_blocker_maps = lnl_blk_maps,
 	.s0ix_blocker_offset = LNL_S0IX_BLOCKER_OFFSET,
+	.lpm_reg_index = LNL_LPM_REG_INDEX,
 };
 
 #define LNL_NPU_PCI_DEV		0x643e
@@ -561,7 +567,7 @@ static int lnl_resume(struct pmc_dev *pmcdev)
 
 int lnl_core_init(struct pmc_dev *pmcdev)
 {
-	int ret;
+	int ret, func = 2;
 	struct pmc *pmc = pmcdev->pmcs[PMC_IDX_SOC];
 
 	lnl_d3_fixup();
@@ -586,5 +592,5 @@ int lnl_core_init(struct pmc_dev *pmcdev)
 
 	pmc_core_get_low_power_modes(pmcdev);
 
-	return 0;
+	return pmc_core_get_lpm_reqs(pmcdev, func);
 }

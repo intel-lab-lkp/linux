@@ -11,6 +11,13 @@
 #include <linux/pci.h>
 #include "core.h"
 
+/* PMC SSRAM PMT Telemetry GUID */
+#define IOEP_LPM_REQ_GUID	0x5077612
+#define SOCS_LPM_REQ_GUID	0x8478657
+#define PCHS_LPM_REQ_GUID	0x9684572
+
+static const u8 ARL_LPM_REG_INDEX[] = {0, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 20};
+
 const struct pmc_bit_map arl_socs_ltr_show_map[] = {
 	{"SOUTHPORT_A",		CNP_PMC_LTR_SPA},
 	{"SOUTHPORT_B",		CNP_PMC_LTR_SPB},
@@ -269,6 +276,7 @@ const struct pmc_reg_map arl_socs_reg_map = {
 	.lpm_sts_latch_en_offset = MTL_LPM_STATUS_LATCH_EN_OFFSET,
 	.lpm_live_status_offset = MTL_LPM_LIVE_STATUS_OFFSET,
 	.lpm_num_maps = ADL_LPM_NUM_MAPS,
+	.lpm_reg_index = ARL_LPM_REG_INDEX,
 	.etr3_offset = ETR3_OFFSET,
 	.pson_residency_offset = TGL_PSON_RESIDENCY_OFFSET,
 	.pson_residency_counter_step = TGL_PSON_RES_COUNTER_STEP,
@@ -637,19 +645,23 @@ const struct pmc_reg_map arl_pchs_reg_map = {
 	.lpm_sts_latch_en_offset = MTL_LPM_STATUS_LATCH_EN_OFFSET,
 	.lpm_live_status_offset = MTL_LPM_LIVE_STATUS_OFFSET,
 	.lpm_num_maps = ADL_LPM_NUM_MAPS,
+	.lpm_reg_index = ARL_LPM_REG_INDEX,
 	.etr3_offset = ETR3_OFFSET,
 };
 
 static struct pmc_info arl_pmc_info_list[] = {
 	{
+		.guid	= IOEP_LPM_REQ_GUID,
 		.devid	= PMC_DEVID_MTL_IOEP,
 		.map	= &mtl_ioep_reg_map,
 	},
 	{
+		.guid	= SOCS_LPM_REQ_GUID,
 		.devid	= PMC_DEVID_ARL_SOCS,
 		.map	= &arl_socs_reg_map,
 	},
 	{
+		.guid	= PCHS_LPM_REQ_GUID,
 		.devid	= PMC_DEVID_ARL_PCHS,
 		.map	= &arl_pchs_reg_map,
 	},
@@ -679,7 +691,7 @@ static int arl_resume(struct pmc_dev *pmcdev)
 int arl_core_init(struct pmc_dev *pmcdev)
 {
 	struct pmc *pmc = pmcdev->pmcs[PMC_IDX_SOC];
-	int ret;
+	int ret, func = 0;
 
 	arl_d3_fixup();
 	pmcdev->suspend = cnl_suspend;
@@ -703,5 +715,5 @@ int arl_core_init(struct pmc_dev *pmcdev)
 	pmc_core_get_low_power_modes(pmcdev);
 	pmc_core_punit_pmt_init(pmcdev, ARL_PMT_DMU_GUID);
 
-	return 0;
+	return pmc_core_get_lpm_reqs(pmcdev, func);
 }
