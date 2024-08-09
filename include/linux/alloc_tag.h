@@ -24,6 +24,7 @@ struct alloc_tag_counters {
 struct alloc_meta {
 	/* 0 means non-slab, SIZE_MAX means dynamic, and everything else is fixed-size. */
 	size_t sized;
+	void *cache;
 };
 #define ALLOC_META_INIT(_size)	{		\
 		.sized = (__builtin_constant_p(_size) ? (_size) : SIZE_MAX), \
@@ -215,6 +216,13 @@ static inline void alloc_tag_sub(union codetag_ref *ref, size_t bytes) {}
 #define alloc_tag_record(p)	do {} while (0)
 
 #endif /* CONFIG_MEM_ALLOC_PROFILING */
+
+#ifdef CONFIG_SLAB_PER_SITE
+void alloc_tag_early_walk(void);
+void alloc_tag_site_init(struct codetag *ct, bool ondemand);
+#else
+static inline void alloc_tag_early_walk(void) {}
+#endif
 
 #define alloc_hooks_tag(_tag, _do_alloc)				\
 ({									\

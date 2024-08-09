@@ -157,6 +157,89 @@ static void __init procfs_init(void)
 	proc_create_seq("allocinfo", 0400, NULL, &allocinfo_seq_op);
 }
 
+#ifdef CONFIG_SLAB_PER_SITE
+static bool ondemand_ready;
+
+void alloc_tag_site_init(struct codetag *ct, bool ondemand)
+{
+	struct alloc_tag *tag = ct_to_alloc_tag(ct);
+	char *name;
+	void *p, *old;
+
+	/* Only handle kmalloc allocations. */
+	if (!tag->meta.sized)
+		return;
+
+	/* Must be ready for on-demand allocations. */
+	if (ondemand && !ondemand_ready)
+		return;
+
+	old = READ_ONCE(tag->meta.cache);
+	/* Already allocated? */
+	if (old)
+		return;
+
+	if (tag->meta.sized < SIZE_MAX) {
+		/* Fixed-size allocations. */
+		name = kasprintf(GFP_KERNEL, "f:%zu:%s:%d", tag->meta.sized, ct->function, ct->lineno);
+		if (WARN_ON_ONCE(!name))
+			return;
+		/*
+		 * As with KMALLOC_NORMAL, the entire allocation needs to be
+		 * open to usercopy access. :(
+		 */
+		p = kmem_cache_create_usercopy(name, tag->meta.sized, 0,
+					       SLAB_NO_MERGE, 0, tag->meta.sized,
+					       NULL);
+	} else {
+		/* Dynamically-size allocations. */
+		name = kasprintf(GFP_KERNEL, "d:%s:%d", ct->function, ct->lineno);
+		if (WARN_ON_ONCE(!name))
+			return;
+		p = kmem_buckets_create(name, SLAB_NO_MERGE, 0, UINT_MAX, NULL);
+	}
+	if (p) {
+		if (unlikely(!try_cmpxchg(&tag->meta.cache, &old, p))) {
+			/* We lost the allocation race; clean up. */
+			if (tag->meta.sized < SIZE_MAX)
+				kmem_cache_destroy(p);
+			else
+				kmem_buckets_destroy(p);
+		}
+	}
+	kfree(name);
+}
+
+static void alloc_tag_site_init_early(struct codetag *ct)
+{
+	/* Explicitly initialize the caches needed to initialize caches. */
+	if (strcmp(ct->function, "kstrdup") == 0 ||
+	    strcmp(ct->function, "kvasprintf") == 0 ||
+	    strcmp(ct->function, "pcpu_mem_zalloc") == 0)
+		alloc_tag_site_init(ct, false);
+
+	/* TODO: pre-allocate GFP_ATOMIC caches here. */
+}
+#endif
+
+static void alloc_tag_module_load(struct codetag_type *cttype,
+				  struct codetag_module *cmod)
+{
+#ifdef CONFIG_SLAB_PER_SITE
+	struct codetag_iterator iter;
+	struct codetag *ct;
+
+	iter = codetag_get_ct_iter(cttype);
+	for (ct = codetag_next_ct(&iter); ct; ct = codetag_next_ct(&iter)) {
+		if (iter.cmod != cmod)
+			continue;
+
+		/* TODO: pre-allocate GFP_ATOMIC caches here. */
+		//alloc_tag_site_init(ct, false);
+	}
+#endif
+}
+
 static bool alloc_tag_module_unload(struct codetag_type *cttype,
 				    struct codetag_module *cmod)
 {
@@ -175,8 +258,21 @@ static bool alloc_tag_module_unload(struct codetag_type *cttype,
 
 		if (WARN(counter.bytes,
 			 "%s:%u module %s func:%s has %llu allocated at module unload",
-			 ct->filename, ct->lineno, ct->modname, ct->function, counter.bytes))
+			 ct->filename, ct->lineno, ct->modname, ct->function, counter.bytes)) {
 			module_unused = false;
+		}
+#ifdef CONFIG_SLAB_PER_SITE
+		else if (tag->meta.sized) {
+			/* Remove the allocated caches, if possible. */
+			void *p = READ_ONCE(tag->meta.cache);
+
+			WRITE_ONCE(tag->meta.cache, NULL);
+			if (tag->meta.sized < SIZE_MAX)
+				kmem_cache_destroy(p);
+			else
+				kmem_buckets_destroy(p);
+		}
+#endif
 	}
 
 	return module_unused;
@@ -260,15 +356,16 @@ static void __init sysctl_init(void)
 static inline void sysctl_init(void) {}
 #endif /* CONFIG_SYSCTL */
 
+static const struct codetag_type_desc alloc_tag_desc = {
+	.section	= "alloc_tags",
+	.tag_size	= sizeof(struct alloc_tag),
+	.module_load	= alloc_tag_module_load,
+	.module_unload	= alloc_tag_module_unload,
+};
+
 static int __init alloc_tag_init(void)
 {
-	const struct codetag_type_desc desc = {
-		.section	= "alloc_tags",
-		.tag_size	= sizeof(struct alloc_tag),
-		.module_unload	= alloc_tag_module_unload,
-	};
-
-	alloc_tag_cttype = codetag_register_type(&desc);
+	alloc_tag_cttype = codetag_register_type(&alloc_tag_desc);
 	if (IS_ERR(alloc_tag_cttype))
 		return PTR_ERR(alloc_tag_cttype);
 
@@ -278,3 +375,11 @@ static int __init alloc_tag_init(void)
 	return 0;
 }
 module_init(alloc_tag_init);
+
+#ifdef CONFIG_SLAB_PER_SITE
+void alloc_tag_early_walk(void)
+{
+	codetag_early_walk(&alloc_tag_desc, alloc_tag_site_init_early);
+	ondemand_ready = true;
+}
+#endif

@@ -4136,6 +4136,35 @@ void *__kmalloc_large_node_noprof(size_t size, gfp_t flags, int node)
 EXPORT_SYMBOL(__kmalloc_large_node_noprof);
 
 static __always_inline
+struct kmem_cache *choose_slab(size_t size, kmem_buckets *b, gfp_t flags,
+			       unsigned long caller)
+{
+#ifdef CONFIG_SLAB_PER_SITE
+	struct alloc_tag *tag = current->alloc_tag;
+
+	if (!b && tag && tag->meta.sized &&
+	    kmalloc_type(flags, caller) == KMALLOC_NORMAL &&
+	    (flags & GFP_ATOMIC) != GFP_ATOMIC) {
+		void *p = READ_ONCE(tag->meta.cache);
+
+		if (!p && slab_state >= UP) {
+			alloc_tag_site_init(&tag->ct, true);
+			p = READ_ONCE(tag->meta.cache);
+		}
+
+		if (tag->meta.sized < SIZE_MAX) {
+			if (p)
+				return p;
+			/* Otherwise continue with default buckets. */
+		} else {
+			b = p;
+		}
+	}
+#endif
+	return kmalloc_slab(size, b, flags, caller);
+}
+
+static __always_inline
 void *__do_kmalloc_node(size_t size, kmem_buckets *b, gfp_t flags, int node,
 			unsigned long caller)
 {
@@ -4152,7 +4181,7 @@ void *__do_kmalloc_node(size_t size, kmem_buckets *b, gfp_t flags, int node,
 	if (unlikely(!size))
 		return ZERO_SIZE_PTR;
 
-	s = kmalloc_slab(size, b, flags, caller);
+	s = choose_slab(size, b, flags, caller);
 
 	ret = slab_alloc_node(s, NULL, flags, node, caller, size);
 	ret = kasan_kmalloc(s, ret, size, flags);

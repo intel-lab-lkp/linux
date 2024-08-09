@@ -302,7 +302,20 @@ config SLAB_PER_SITE
 	default SLAB_FREELIST_HARDENED
 	select SLAB_BUCKETS
 	help
-	  Track sizes of kmalloc() call sites.
+	  As a defense against shared-cache "type confusion" use-after-free
+	  attacks, every kmalloc()-family call allocates from a separate
+	  kmem_cache (or when dynamically sized, kmem_buckets). Attackers
+	  will no longer be able to groom malicious objects via similarly
+	  sized allocations that share the same cache as the target object.
+
+	  This increases the "at rest" kmalloc slab memory usage by
+	  roughly 5x (around 7MiB), and adds the potential for greater
+	  long-term memory fragmentation. However, some workloads
+	  actually see performance improvements when single allocation
+	  sites are hot.
+
+	  For a similar defense, see CONFIG_RANDOM_KMALLOC_CACHES, which
+	  has less memory usage overhead, but is probabilistic.
 
 config SLUB_STATS
 	default n
@@ -331,6 +344,7 @@ config SLUB_CPU_PARTIAL
 config RANDOM_KMALLOC_CACHES
 	default n
 	depends on !SLUB_TINY
+	depends on !SLAB_PER_SITE
 	bool "Randomize slab caches for normal kmalloc"
 	help
 	  A hardening feature that creates multiple copies of slab caches for
@@ -344,6 +358,9 @@ config RANDOM_KMALLOC_CACHES
 	  subsystems or modules into different caches, at the expense of a
 	  limited degree of memory and CPU overhead that relates to hardware and
 	  system workload.
+
+	  For a similar defense, see CONFIG_SLAB_PER_SITE, which is
+	  deterministic, but has greater memory usage overhead.
 
 endmenu # Slab allocator options
 

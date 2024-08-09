@@ -1040,6 +1040,7 @@ void __init create_kmalloc_caches(void)
 		kmem_buckets_cache = kmem_cache_create("kmalloc_buckets",
 						       sizeof(kmem_buckets),
 						       0, SLAB_NO_MERGE, NULL);
+	alloc_tag_early_walk();
 }
 
 /**
