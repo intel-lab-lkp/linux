@@ -140,6 +140,7 @@ choice
 
 config MIPS_GENERIC_KERNEL
 	bool "Generic board-agnostic MIPS kernel"
+	select ARCH_SPARSEMEM_ENABLE if 64BIT
 	select MIPS_GENERIC
 	select BOOT_RAW
 	select BUILTIN_DTB
@@ -178,6 +179,7 @@ config MIPS_GENERIC_KERNEL
 	select SYS_SUPPORTS_MIPS16
 	select SYS_SUPPORTS_MIPS_CPS
 	select SYS_SUPPORTS_MULTITHREADING
+	select SYS_SUPPORTS_NUMA
 	select SYS_SUPPORTS_RELOCATABLE
 	select SYS_SUPPORTS_SMARTMIPS
 	select SYS_SUPPORTS_ZBOOT
@@ -2599,8 +2601,10 @@ config NUMA
 	bool "NUMA Support"
 	depends on SYS_SUPPORTS_NUMA
 	select SMP
+	select GENERIC_ARCH_NUMA if !SGI_IP27 && !MACH_LOONGSON64
 	select HAVE_SETUP_PER_CPU_AREA
 	select NEED_PER_CPU_EMBED_FIRST_CHUNK
+	select USE_PERCPU_NUMA_NODE_ID if GENERIC_ARCH_NUMA
 	help
 	  Say Y to compile the kernel to support NUMA (Non-Uniform Memory
 	  Access).  This option improves performance on systems with more
