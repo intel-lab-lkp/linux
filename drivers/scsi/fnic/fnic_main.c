@@ -31,6 +31,8 @@
 #include "fnic_io.h"
 #include "fnic_fip.h"
 #include "fnic.h"
+#include "fnic_fdls.h"
+#include "fdls_fc.h"
 
 #define PCI_DEVICE_ID_CISCO_FNIC	0x0045
 
@@ -80,7 +82,6 @@ module_param(fnic_max_qdepth, uint, S_IRUGO|S_IWUSR);
 MODULE_PARM_DESC(fnic_max_qdepth, "Queue depth to report for each LUN");
 
 static struct libfc_function_template fnic_transport_template = {
-	.frame_send = fnic_send,
 	.lport_set_port_id = fnic_set_port_id,
 	.fcp_abort_io = fnic_empty_scsi_cleanup,
 	.fcp_cleanup = fnic_empty_scsi_cleanup,
@@ -413,7 +414,7 @@ static void fnic_fip_notify_timer(struct timer_list *t)
 {
 	struct fnic *fnic = from_timer(fnic, t, fip_timer);
 
-	fnic_handle_fip_timer(fnic);
+	/* Placeholder function */
 }
 
 static void fnic_notify_timer_start(struct fnic *fnic)
@@ -921,7 +922,7 @@ static int fnic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	INIT_WORK(&fnic->link_work, fnic_handle_link);
 	INIT_WORK(&fnic->frame_work, fnic_handle_frame);
 	skb_queue_head_init(&fnic->frame_queue);
-	skb_queue_head_init(&fnic->tx_queue);
+	INIT_LIST_HEAD(&fnic->tx_queue);
 
 	fc_fabric_login(lp);
 
@@ -1004,7 +1005,7 @@ static void fnic_remove(struct pci_dev *pdev)
 	 */
 	flush_workqueue(fnic_event_queue);
 	skb_queue_purge(&fnic->frame_queue);
-	skb_queue_purge(&fnic->tx_queue);
+	fnic_free_txq(&fnic->tx_queue);
 
 	if (fnic->config.flags & VFCF_FIP_CAPABLE) {
 		del_timer_sync(&fnic->fip_timer);
@@ -1036,7 +1037,6 @@ static void fnic_remove(struct pci_dev *pdev)
 	fnic_cleanup(fnic);
 
 	BUG_ON(!skb_queue_empty(&fnic->frame_queue));
-	BUG_ON(!skb_queue_empty(&fnic->tx_queue));
 
 	spin_lock_irqsave(&fnic_list_lock, flags);
 	list_del(&fnic->list);
