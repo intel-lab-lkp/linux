@@ -31,6 +31,7 @@ fn(...) {
      when != spin_unlock_irq(...)
      when != spin_unlock_irqrestore(...)
      when != local_irq_enable(...)
+     when != rcu_read_unlock(...)
      when any
  GFP_KERNEL@p
  ... when any
@@ -59,6 +60,8 @@ spin_lock_irq@p1
 spin_lock_irqsave@p1
 |
 local_irq_disable@p1
+|
+rcu_read_lock@p1
 )
  (...)
 ...  when != read_unlock_irq(...)
@@ -69,6 +72,7 @@ local_irq_disable@p1
      when != spin_unlock_irq(...)
      when != spin_unlock_irqrestore(...)
      when != local_irq_enable(...)
+     when != rcu_read_unlock(...)
 fn@p2(...)
 
 @depends on locked && patch@
