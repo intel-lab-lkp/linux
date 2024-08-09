@@ -401,7 +401,7 @@ void maar_init(void)
 	}
 }
 
-#ifndef CONFIG_NUMA
+#if !defined(CONFIG_NUMA) || defined(CONFIG_GENERIC_ARCH_NUMA)
 void __init paging_init(void)
 {
 	unsigned long max_zone_pfns[MAX_NR_ZONES];
@@ -424,14 +424,14 @@ void __init paging_init(void)
 		       (highend_pfn - max_low_pfn) << (PAGE_SHIFT - 10));
 		max_zone_pfns[ZONE_HIGHMEM] = max_low_pfn;
 
-		max_mapnr = max_low_pfn;
+		set_max_mapnr(max_low_pfn);
 	} else if (highend_pfn) {
-		max_mapnr = highend_pfn;
+		set_max_mapnr(highend_pfn);
 	} else {
-		max_mapnr = max_low_pfn;
+		set_max_mapnr(max_low_pfn);
 	}
 #else
-	max_mapnr = max_low_pfn;
+	set_max_mapnr(max_low_pfn);
 #endif
 	high_memory = (void *) __va(max_low_pfn << PAGE_SHIFT);
 
@@ -482,7 +482,7 @@ void __init mem_init(void)
 				0x80000000 - 4, KCORE_TEXT);
 #endif
 }
-#endif /* !CONFIG_NUMA */
+#endif
 
 void free_init_pages(const char *what, unsigned long begin, unsigned long end)
 {
@@ -519,7 +519,7 @@ void __ref free_initmem(void)
 		free_initmem_default(POISON_FREE_INITMEM);
 }
 
-#ifdef CONFIG_HAVE_SETUP_PER_CPU_AREA
+#if defined(CONFIG_NUMA) && !defined(CONFIG_GENERIC_ARCH_NUMA)
 unsigned long __per_cpu_offset[NR_CPUS] __read_mostly;
 EXPORT_SYMBOL(__per_cpu_offset);
 
