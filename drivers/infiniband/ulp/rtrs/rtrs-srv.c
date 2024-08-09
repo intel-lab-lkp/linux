@@ -1540,6 +1540,7 @@ static void rtrs_srv_close_work(struct work_struct *work)
 		con = to_srv_con(srv_path->s.con[i]);
 		rdma_disconnect(con->c.cm_id);
 		ib_drain_qp(con->c.qp);
+		rdma_destroy_id(con->c.cm_id);
 	}
 
 	/*
@@ -1564,7 +1565,6 @@ static void rtrs_srv_close_work(struct work_struct *work)
 			continue;
 		con = to_srv_con(srv_path->s.con[i]);
 		rtrs_cq_qp_destroy(&con->c);
-		rdma_destroy_id(con->c.cm_id);
 		kfree(con);
 	}
 	rtrs_ib_dev_put(srv_path->s.dev);

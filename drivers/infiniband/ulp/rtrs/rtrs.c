@@ -318,7 +318,7 @@ EXPORT_SYMBOL_GPL(rtrs_cq_qp_create);
 void rtrs_cq_qp_destroy(struct rtrs_con *con)
 {
 	if (con->qp) {
-		rdma_destroy_qp(con->cm_id);
+		ib_destroy_qp(con->qp);
 		con->qp = NULL;
 	}
 	destroy_cq(con);
