@@ -369,6 +369,9 @@ out:
 	return ret;
 }
 
+#pragma GCC diagnostic push
+/* https://gcc.gnu.org/PR114952 */
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 /* Find offset of function name in ELF object specified by path. "name" matches
  * symbol name or name@@LIB for library functions.
  */
@@ -384,6 +387,7 @@ long elf_find_func_offset_from_file(const char *binary_path, const char *name)
 	elf_close(&elf_fd);
 	return ret;
 }
+#pragma GCC diagnostic pop
 
 struct symbol {
 	const char *name;
