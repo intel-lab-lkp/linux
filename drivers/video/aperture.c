@@ -6,6 +6,7 @@
 #include <linux/mutex.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>
+#include <linux/screen_info.h>
 #include <linux/slab.h>
 #include <linux/sysfb.h>
 #include <linux/types.h>
@@ -346,6 +347,7 @@ EXPORT_SYMBOL(__aperture_remove_legacy_vga_devices);
  */
 int aperture_remove_conflicting_pci_devices(struct pci_dev *pdev, const char *name)
 {
+	struct screen_info *si = &screen_info;
 	bool primary = false;
 	resource_size_t base, size;
 	int bar, ret = 0;
@@ -353,7 +355,7 @@ int aperture_remove_conflicting_pci_devices(struct pci_dev *pdev, const char *na
 	if (pdev == vga_default_device())
 		primary = true;
 
-	if (primary)
+	if (pdev == screen_info_pci_dev(si))
 		sysfb_disable();
 
 	for (bar = 0; bar < PCI_STD_NUM_BARS; ++bar) {
