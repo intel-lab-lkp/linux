@@ -322,11 +322,14 @@ static int devm_cxl_enable_hdm(struct device *host, struct cxl_hdm *cxlhdm)
 	return devm_add_action_or_reset(host, disable_hdm, cxlhdm);
 }
 
-int cxl_dvsec_rr_decode(struct device *dev, int d,
+int cxl_dvsec_rr_decode(struct device *dev, struct cxl_port *port,
 			struct cxl_endpoint_dvsec_info *info)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
+	struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
 	int hdm_count, rc, i, ranges = 0;
+	int d = cxlds->cxl_dvsec;
+	struct cxl_port *root;
 	u16 cap, ctrl;
 
 	if (!d) {
@@ -359,6 +362,14 @@ int cxl_dvsec_rr_decode(struct device *dev, int d,
 		return rc;
 	}
 
+	root = to_cxl_port(port->dev.parent);
+	while (!is_cxl_root(root) && is_cxl_port(root->dev.parent))
+		root = to_cxl_port(root->dev.parent);
+	if (!is_cxl_root(root)) {
+		dev_err(dev, "Failed to acquire root port for HDM enable\n");
+		return -ENODEV;
+	}
+
 	/*
 	 * The current DVSEC values are moot if the memory capability is
 	 * disabled, and they will remain moot after the HDM Decoder
@@ -373,6 +384,8 @@ int cxl_dvsec_rr_decode(struct device *dev, int d,
 		return 0;
 
 	for (i = 0; i < hdm_count; i++) {
+		struct device *cxld_dev;
+		struct range dvsec_range;
 		u64 base, size;
 		u32 temp;
 
@@ -389,9 +402,8 @@ int cxl_dvsec_rr_decode(struct device *dev, int d,
 			return rc;
 
 		size |= temp & CXL_DVSEC_MEM_SIZE_LOW_MASK;
-		if (!size) {
+		if (!size)
 			continue;
-		}
 
 		rc = pci_read_config_dword(
 			pdev, d + CXL_DVSEC_RANGE_BASE_HIGH(i), &temp);
@@ -407,10 +419,21 @@ int cxl_dvsec_rr_decode(struct device *dev, int d,
 
 		base |= temp & CXL_DVSEC_MEM_BASE_LOW_MASK;
 
-		info->dvsec_range[ranges++] = (struct range) {
+		dvsec_range = (struct range) {
 			.start = base,
-			.end = base + size - 1
+			.end = base + size - 1,
 		};
+
+		cxld_dev = device_find_child(&root->dev, &dvsec_range,
+							dvsec_range_allowed);
+		if (!cxld_dev) {
+			dev_dbg(dev, "DVSEC Range%d denied by platform\n", i+1);
+			continue;
+		}
+		dev_dbg(dev, "DVSEC Range%d allowed by platform\n", i+1);
+		put_device(cxld_dev);
+
+		info->dvsec_range[ranges++] = dvsec_range;
 	}
 
 	info->ranges = ranges;
@@ -433,9 +456,8 @@ int cxl_hdm_decode_init(struct cxl_dev_state *cxlds, struct cxl_hdm *cxlhdm,
 	void __iomem *hdm = cxlhdm->regs.hdm_decoder;
 	struct cxl_port *port = cxlhdm->port;
 	struct device *dev = cxlds->dev;
-	struct cxl_port *root;
-	int i, rc, allowed;
 	u32 global_ctrl = 0;
+	int rc;
 
 	if (hdm)
 		global_ctrl = readl(hdm + CXL_HDM_DECODER_CTRL_OFFSET);
@@ -449,30 +471,8 @@ int cxl_hdm_decode_init(struct cxl_dev_state *cxlds, struct cxl_hdm *cxlhdm,
 	else if (!hdm)
 		return -ENODEV;
 
-	root = to_cxl_port(port->dev.parent);
-	while (!is_cxl_root(root) && is_cxl_port(root->dev.parent))
-		root = to_cxl_port(root->dev.parent);
-	if (!is_cxl_root(root)) {
-		dev_err(dev, "Failed to acquire root port for HDM enable\n");
-		return -ENODEV;
-	}
-
-	for (i = 0, allowed = 0; info->mem_enabled && i < info->ranges; i++) {
-		struct device *cxld_dev;
-
-		cxld_dev = device_find_child(&root->dev, &info->dvsec_range[i],
-					     dvsec_range_allowed);
-		if (!cxld_dev) {
-			dev_dbg(dev, "DVSEC Range%d denied by platform\n", i);
-			continue;
-		}
-		dev_dbg(dev, "DVSEC Range%d allowed by platform\n", i);
-		put_device(cxld_dev);
-		allowed++;
-	}
-
-	if (!allowed && info->mem_enabled) {
-		dev_err(dev, "Range register decodes outside platform defined CXL ranges.\n");
+	if (!info->ranges && info->mem_enabled) {
+		dev_err(dev, "No available DVSEC register ranges.\n");
 		return -ENXIO;
 	}
 
