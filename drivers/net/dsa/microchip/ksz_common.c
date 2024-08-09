@@ -357,6 +357,8 @@ static const struct ksz_dev_ops ksz9477_dev_ops = {
 	.reset = ksz9477_reset_switch,
 	.init = ksz9477_switch_init,
 	.exit = ksz9477_switch_exit,
+	.enable_irq = ksz9477_enable_irq,
+	.handle_irq = ksz9477_handle_irq,
 };
 
 static const struct phylink_mac_ops lan937x_phylink_mac_ops = {

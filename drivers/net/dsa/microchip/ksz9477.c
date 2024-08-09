@@ -2,7 +2,7 @@
 /*
  * Microchip KSZ9477 switch driver main logic
  *
- * Copyright (C) 2017-2019 Microchip Technology Inc.
+ * Copyright (C) 2017-2024 Microchip Technology Inc.
  */
 
 #include <linux/kernel.h>
@@ -1485,6 +1485,68 @@ int ksz9477_switch_init(struct ksz_device *dev)
 void ksz9477_switch_exit(struct ksz_device *dev)
 {
 	ksz9477_reset_switch(dev);
+}
+
+static irqreturn_t ksz9477_handle_port_irq(struct ksz_device *dev, u8 port,
+					   u8 *data)
+{
+	struct dsa_switch *ds = dev->ds;
+	struct phy_device *phydev;
+	int cnt = 0;
+
+	phydev = mdiobus_get_phy(ds->user_mii_bus, port);
+	if (*data & PORT_PHY_INT) {
+		/* Handle the interrupt if there is no PHY device or its
+		 * interrupt is not registered yet.
+		 */
+		if (!phydev || phydev->interrupts != PHY_INTERRUPT_ENABLED) {
+			u8 phy_status;
+
+			ksz_pread8(dev, port, REG_PORT_PHY_INT_STATUS,
+				   &phy_status);
+			if (phydev)
+				phy_trigger_machine(phydev);
+			++cnt;
+			*data &= ~PORT_PHY_INT;
+		}
+	}
+	if (*data & PORT_ACL_INT) {
+		ksz_pwrite8(dev, port, REG_PORT_INT_STATUS, PORT_ACL_INT);
+		++cnt;
+		*data &= ~PORT_ACL_INT;
+	}
+
+	return (cnt > 0) ? IRQ_HANDLED : IRQ_NONE;
+}
+
+void ksz9477_enable_irq(struct ksz_device *dev)
+{
+	regmap_update_bits(ksz_regmap_32(dev), REG_SW_INT_MASK__4, LUE_INT, 0);
+	ksz_write8(dev, REG_SW_LUE_INT_ENABLE, LEARN_FAIL_INT | WRITE_FAIL_INT);
+}
+
+irqreturn_t ksz9477_handle_irq(struct ksz_device *dev, u8 port, u8 *data)
+{
+	irqreturn_t ret = IRQ_NONE;
+	u32 data32;
+
+	if (port > 0)
+		return ksz9477_handle_port_irq(dev, port - 1, data);
+
+	ksz_read32(dev, REG_SW_INT_STATUS__4, &data32);
+	if (data32 & LUE_INT) {
+		u8 lue;
+
+		ksz_read8(dev, REG_SW_LUE_INT_STATUS, &lue);
+		ksz_write8(dev, REG_SW_LUE_INT_STATUS, lue);
+		if (lue & LEARN_FAIL_INT)
+			dev_info_ratelimited(dev->dev, "lue learn fail\n");
+		if (lue & WRITE_FAIL_INT)
+			dev_info_ratelimited(dev->dev, "lue write fail\n");
+		ret = IRQ_HANDLED;
+	}
+
+	return ret;
 }
 
 MODULE_AUTHOR("Woojung Huh <Woojung.Huh@microchip.com>");

@@ -2,7 +2,7 @@
 /*
  * Microchip KSZ9477 register definitions
  *
- * Copyright (C) 2017-2018 Microchip Technology Inc.
+ * Copyright (C) 2017-2024 Microchip Technology Inc.
  */
 
 #ifndef __KSZ9477_REGS_H
@@ -75,7 +75,8 @@
 #define TRIG_TS_INT			BIT(30)
 #define APB_TIMEOUT_INT			BIT(29)
 
-#define SWITCH_INT_MASK			(TRIG_TS_INT | APB_TIMEOUT_INT)
+#define SWITCH_INT_MASK			\
+	(LUE_INT | TRIG_TS_INT | APB_TIMEOUT_INT)
 
 #define REG_SW_PORT_INT_STATUS__4	0x0018
 #define REG_SW_PORT_INT_MASK__4		0x001C
