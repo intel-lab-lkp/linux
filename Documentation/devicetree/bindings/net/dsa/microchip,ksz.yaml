@@ -71,6 +71,13 @@ properties:
     enum: [2000, 4000, 8000, 12000, 16000, 20000, 24000, 28000]
     default: 8000
 
+  microchip,sgmii-mode:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      SGMII mode to use for the SGMII port
+    enum: [0, 1, 2]
+    default: 1
+
   interrupts:
     maxItems: 1
 
@@ -137,6 +144,7 @@ examples:
             compatible = "microchip,ksz9477";
             reg = <0>;
             reset-gpios = <&gpio5 0 GPIO_ACTIVE_LOW>;
+            sgmii-mode = <1>;
 
             spi-max-frequency = <44000000>;
 
@@ -172,6 +180,10 @@ examples:
                         speed = <1000>;
                         full-duplex;
                     };
+                };
+                port@6 {
+                    reg = <6>;
+                    label = "lan6";
                 };
             };
         };
