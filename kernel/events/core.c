@@ -6221,8 +6221,6 @@ static vm_fault_t perf_mmap_fault(struct vm_fault *vmf)
 		goto unlock;
 
 	get_page(vmf->page);
-	vmf->page->mapping = vmf->vma->vm_file->f_mapping;
-	vmf->page->index   = vmf->pgoff;
 
 	ret = 0;
 unlock:
