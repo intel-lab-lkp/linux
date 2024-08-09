@@ -10,14 +10,6 @@
 
 #include <linux/pci.h>
 #include "core.h"
-#include "../pmt/telemetry.h"
-
-/* PMC SSRAM PMT Telemetry GUID */
-#define IOEP_LPM_REQ_GUID	0x5077612
-#define SOCS_LPM_REQ_GUID	0x8478657
-#define PCHS_LPM_REQ_GUID	0x9684572
-
-static const u8 ARL_LPM_REG_INDEX[] = {0, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 20};
 
 const struct pmc_bit_map arl_socs_ltr_show_map[] = {
 	{"SOUTHPORT_A",		CNP_PMC_LTR_SPA},
@@ -277,7 +269,6 @@ const struct pmc_reg_map arl_socs_reg_map = {
 	.lpm_sts_latch_en_offset = MTL_LPM_STATUS_LATCH_EN_OFFSET,
 	.lpm_live_status_offset = MTL_LPM_LIVE_STATUS_OFFSET,
 	.lpm_num_maps = ADL_LPM_NUM_MAPS,
-	.lpm_reg_index = ARL_LPM_REG_INDEX,
 	.etr3_offset = ETR3_OFFSET,
 	.pson_residency_offset = TGL_PSON_RESIDENCY_OFFSET,
 	.pson_residency_counter_step = TGL_PSON_RES_COUNTER_STEP,
@@ -646,30 +637,7 @@ const struct pmc_reg_map arl_pchs_reg_map = {
 	.lpm_sts_latch_en_offset = MTL_LPM_STATUS_LATCH_EN_OFFSET,
 	.lpm_live_status_offset = MTL_LPM_LIVE_STATUS_OFFSET,
 	.lpm_num_maps = ADL_LPM_NUM_MAPS,
-	.lpm_reg_index = ARL_LPM_REG_INDEX,
 	.etr3_offset = ETR3_OFFSET,
-};
-
-#define PMC_DEVID_SOCS 0xae7f
-#define PMC_DEVID_IOEP 0x7ecf
-#define PMC_DEVID_PCHS 0x7f27
-static struct pmc_info arl_pmc_info_list[] = {
-	{
-		.guid	= IOEP_LPM_REQ_GUID,
-		.devid	= PMC_DEVID_IOEP,
-		.map	= &mtl_ioep_reg_map,
-	},
-	{
-		.guid	= SOCS_LPM_REQ_GUID,
-		.devid	= PMC_DEVID_SOCS,
-		.map	= &arl_socs_reg_map,
-	},
-	{
-		.guid	= PCHS_LPM_REQ_GUID,
-		.devid	= PMC_DEVID_PCHS,
-		.map	= &arl_pchs_reg_map,
-	},
-	{}
 };
 
 #define ARL_NPU_PCI_DEV			0xad1d
@@ -696,36 +664,18 @@ int arl_core_init(struct pmc_dev *pmcdev)
 {
 	struct pmc *pmc = pmcdev->pmcs[PMC_IDX_SOC];
 	int ret;
-	int func = 0;
-	bool ssram_init = true;
 
 	arl_d3_fixup();
 	pmcdev->suspend = cnl_suspend;
 	pmcdev->resume = arl_resume;
-	pmcdev->regmap_list = arl_pmc_info_list;
 
-	/*
-	 * If ssram init fails use legacy method to at least get the
-	 * primary PMC
-	 */
-	ret = pmc_core_ssram_init(pmcdev, func);
-	if (ret) {
-		ssram_init = false;
-		pmc->map = &arl_socs_reg_map;
-
-		ret = get_primary_reg_base(pmc);
-		if (ret)
-			return ret;
-	}
+	pmc->map = &arl_socs_reg_map;
+	ret = get_primary_reg_base(pmc);
+	if (ret)
+		return ret;
 
 	pmc_core_get_low_power_modes(pmcdev);
 	pmc_core_punit_pmt_init(pmcdev, ARL_PMT_DMU_GUID);
-
-	if (ssram_init)	{
-		ret = pmc_core_ssram_get_lpm_reqs(pmcdev);
-		if (ret)
-			return ret;
-	}
 
 	return 0;
 }

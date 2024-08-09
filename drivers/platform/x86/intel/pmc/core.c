@@ -1386,11 +1386,6 @@ static void pmc_core_clean_structure(struct platform_device *pdev)
 			iounmap(pmc->regbase);
 	}
 
-	if (pmcdev->ssram_pcidev) {
-		pci_dev_put(pmcdev->ssram_pcidev);
-		pci_disable_device(pmcdev->ssram_pcidev);
-	}
-
 	if (pmcdev->punit_ep)
 		pmt_telem_unregister_endpoint(pmcdev->punit_ep);
 
@@ -1623,5 +1618,6 @@ static struct platform_driver pmc_core_driver = {
 
 module_platform_driver(pmc_core_driver);
 
+MODULE_IMPORT_NS(INTEL_PMT_TELEMETRY);
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("Intel PMC Core Driver");
