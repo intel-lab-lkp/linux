@@ -296,6 +296,14 @@ config SLAB_BUCKETS
 
 	  If unsure, say Y.
 
+config SLAB_PER_SITE
+	bool "Separate slab allocations by call size"
+	depends on !SLUB_TINY
+	default SLAB_FREELIST_HARDENED
+	select SLAB_BUCKETS
+	help
+	  Track sizes of kmalloc() call sites.
+
 config SLUB_STATS
 	default n
 	bool "Enable performance statistics"

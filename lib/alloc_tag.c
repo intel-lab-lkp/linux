@@ -78,6 +78,14 @@ static void alloc_tag_to_text(struct seq_buf *out, struct codetag *ct)
 
 	seq_buf_printf(out, "%12lli %8llu ", bytes, counter.calls);
 	codetag_to_text(out, ct);
+#ifdef CONFIG_SLAB_PER_SITE
+	seq_buf_putc(out, ' ');
+	seq_buf_printf(out, "size:%s(%zu) slab:%s",
+				tag->meta.sized == 0 ? "non-slab" :
+					tag->meta.sized == SIZE_MAX ? "dynamic" : "fixed",
+				tag->meta.sized == SIZE_MAX ? 0 : tag->meta.sized,
+				tag->meta.cache ? "ready" : "unused");
+#endif
 	seq_buf_putc(out, ' ');
 	seq_buf_putc(out, '\n');
 }

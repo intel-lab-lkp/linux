@@ -541,7 +541,7 @@ static_assert(PAGE_SHIFT <= 20);
  */
 void *kmem_cache_alloc_noprof(struct kmem_cache *cachep,
 			      gfp_t flags) __assume_slab_alignment __malloc;
-#define kmem_cache_alloc(...)			alloc_hooks(kmem_cache_alloc_noprof(__VA_ARGS__))
+#define kmem_cache_alloc(...)		alloc_hooks(kmem_cache_alloc_noprof(__VA_ARGS__))
 
 void *kmem_cache_alloc_lru_noprof(struct kmem_cache *s, struct list_lru *lru,
 			    gfp_t gfpflags) __assume_slab_alignment __malloc;
@@ -685,7 +685,7 @@ static __always_inline __alloc_size(1) void *kmalloc_noprof(size_t size, gfp_t f
 	}
 	return __kmalloc_noprof(size, flags);
 }
-#define kmalloc(...)				alloc_hooks(kmalloc_noprof(__VA_ARGS__))
+#define kmalloc(size, ...)	alloc_sized_hooks(kmalloc_noprof, size, __VA_ARGS__)
 
 #define kmem_buckets_alloc(_b, _size, _flags)	\
 	alloc_hooks(__kmalloc_node_noprof(PASS_BUCKET_PARAMS(_size, _b), _flags, NUMA_NO_NODE))
@@ -708,7 +708,7 @@ static __always_inline __alloc_size(1) void *kmalloc_node_noprof(size_t size, gf
 	}
 	return __kmalloc_node_noprof(PASS_BUCKET_PARAMS(size, NULL), flags, node);
 }
-#define kmalloc_node(...)			alloc_hooks(kmalloc_node_noprof(__VA_ARGS__))
+#define kmalloc_node(size, ...)		alloc_sized_hooks(kmalloc_node_noprof, size, __VA_ARGS__)
 
 /**
  * kmalloc_array - allocate memory for an array.
@@ -726,7 +726,7 @@ static inline __alloc_size(1, 2) void *kmalloc_array_noprof(size_t n, size_t siz
 		return kmalloc_noprof(bytes, flags);
 	return kmalloc_noprof(bytes, flags);
 }
-#define kmalloc_array(...)			alloc_hooks(kmalloc_array_noprof(__VA_ARGS__))
+#define kmalloc_array(...)		alloc_hooks(kmalloc_array_noprof(__VA_ARGS__))
 
 /**
  * krealloc_array - reallocate memory for an array.
@@ -761,8 +761,8 @@ void *__kmalloc_node_track_caller_noprof(DECL_BUCKET_PARAMS(size, b), gfp_t flag
 					 unsigned long caller) __alloc_size(1);
 #define kmalloc_node_track_caller_noprof(size, flags, node, caller) \
 	__kmalloc_node_track_caller_noprof(PASS_BUCKET_PARAMS(size, NULL), flags, node, caller)
-#define kmalloc_node_track_caller(...)		\
-	alloc_hooks(kmalloc_node_track_caller_noprof(__VA_ARGS__, _RET_IP_))
+#define kmalloc_node_track_caller(size, ...)		\
+	alloc_sized_hooks(kmalloc_node_track_caller_noprof, size, __VA_ARGS__, _RET_IP_)
 
 /*
  * kmalloc_track_caller is a special version of kmalloc that records the
@@ -807,13 +807,13 @@ static inline __alloc_size(1) void *kzalloc_noprof(size_t size, gfp_t flags)
 {
 	return kmalloc_noprof(size, flags | __GFP_ZERO);
 }
-#define kzalloc(...)				alloc_hooks(kzalloc_noprof(__VA_ARGS__))
+#define kzalloc(size, ...)			alloc_sized_hooks(kzalloc_noprof, size, __VA_ARGS__)
 #define kzalloc_node(_size, _flags, _node)	kmalloc_node(_size, (_flags)|__GFP_ZERO, _node)
 
 void *__kvmalloc_node_noprof(DECL_BUCKET_PARAMS(size, b), gfp_t flags, int node) __alloc_size(1);
 #define kvmalloc_node_noprof(size, flags, node)	\
 	__kvmalloc_node_noprof(PASS_BUCKET_PARAMS(size, NULL), flags, node)
-#define kvmalloc_node(...)			alloc_hooks(kvmalloc_node_noprof(__VA_ARGS__))
+#define kvmalloc_node(size, ...)		alloc_sized_hooks(kvmalloc_node_noprof, size, __VA_ARGS__)
 
 #define kvmalloc(_size, _flags)			kvmalloc_node(_size, _flags, NUMA_NO_NODE)
 #define kvmalloc_noprof(_size, _flags)		kvmalloc_node_noprof(_size, _flags, NUMA_NO_NODE)

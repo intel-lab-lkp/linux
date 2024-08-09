@@ -20,6 +20,19 @@ struct alloc_tag_counters {
 	u64 calls;
 };
 
+#ifdef CONFIG_SLAB_PER_SITE
+struct alloc_meta {
+	/* 0 means non-slab, SIZE_MAX means dynamic, and everything else is fixed-size. */
+	size_t sized;
+};
+#define ALLOC_META_INIT(_size)	{		\
+		.sized = (__builtin_constant_p(_size) ? (_size) : SIZE_MAX), \
+	}
+#else
+struct alloc_meta { };
+#define ALLOC_META_INIT(_size)	{ }
+#endif
+
 /*
  * An instance of this structure is created in a special ELF section at every
  * allocation callsite. At runtime, the special section is treated as
@@ -27,6 +40,7 @@ struct alloc_tag_counters {
  */
 struct alloc_tag {
 	struct codetag			ct;
+	struct alloc_meta		meta;
 	struct alloc_tag_counters __percpu	*counters;
 } __aligned(8);
 
@@ -74,19 +88,21 @@ static inline struct alloc_tag *ct_to_alloc_tag(struct codetag *ct)
  */
 DECLARE_PER_CPU(struct alloc_tag_counters, _shared_alloc_tag);
 
-#define DEFINE_ALLOC_TAG(_alloc_tag)						\
+#define DEFINE_ALLOC_TAG(_alloc_tag, _meta_init)				\
 	static struct alloc_tag _alloc_tag __used __aligned(8)			\
 	__section("alloc_tags") = {						\
 		.ct = CODE_TAG_INIT,						\
+		.meta = _meta_init,						\
 		.counters = &_shared_alloc_tag };
 
 #else /* ARCH_NEEDS_WEAK_PER_CPU */
 
-#define DEFINE_ALLOC_TAG(_alloc_tag)						\
+#define DEFINE_ALLOC_TAG(_alloc_tag, _meta_init)				\
 	static DEFINE_PER_CPU(struct alloc_tag_counters, _alloc_tag_cntr);	\
 	static struct alloc_tag _alloc_tag __used __aligned(8)			\
 	__section("alloc_tags") = {						\
 		.ct = CODE_TAG_INIT,						\
+		.meta = _meta_init,						\
 		.counters = &_alloc_tag_cntr };
 
 #endif /* ARCH_NEEDS_WEAK_PER_CPU */
@@ -191,7 +207,7 @@ static inline void alloc_tag_sub(union codetag_ref *ref, size_t bytes)
 
 #else /* CONFIG_MEM_ALLOC_PROFILING */
 
-#define DEFINE_ALLOC_TAG(_alloc_tag)
+#define DEFINE_ALLOC_TAG(_alloc_tag, _meta_init)
 static inline bool mem_alloc_profiling_enabled(void) { return false; }
 static inline void alloc_tag_add(union codetag_ref *ref, struct alloc_tag *tag,
 				 size_t bytes) {}
@@ -210,8 +226,14 @@ static inline void alloc_tag_sub(union codetag_ref *ref, size_t bytes) {}
 
 #define alloc_hooks(_do_alloc)						\
 ({									\
-	DEFINE_ALLOC_TAG(_alloc_tag);					\
+	DEFINE_ALLOC_TAG(_alloc_tag, { });				\
 	alloc_hooks_tag(&_alloc_tag, _do_alloc);			\
+})
+
+#define alloc_sized_hooks(_do_alloc, _size, ...)			\
+({									\
+	DEFINE_ALLOC_TAG(_alloc_tag, ALLOC_META_INIT(_size));		\
+	alloc_hooks_tag(&_alloc_tag, _do_alloc(_size, __VA_ARGS__));	\
 })
 
 #endif /* _LINUX_ALLOC_TAG_H */
