@@ -320,8 +320,8 @@ static int vp_finalize_features(struct virtio_device *vdev)
 	vp_transport_features(vdev, features);
 
 	if (!__virtio_test_bit(vdev, VIRTIO_F_VERSION_1)) {
-		dev_err(&vdev->dev, "device uses modern interface "
-			"but does not have VIRTIO_F_VERSION_1\n");
+		dev_err(&vdev->dev,
+			"device uses modern interface but does not have VIRTIO_F_VERSION_1\n");
 		return -EINVAL;
 	}
 
