@@ -154,6 +154,22 @@ static struct codetag_range get_section_range(struct module *mod,
 	};
 }
 
+void codetag_early_walk(const struct codetag_type_desc *desc,
+			void (*callback)(struct codetag *ct))
+{
+	struct codetag_range range;
+	struct codetag *ct;
+
+	range = get_section_range(NULL, desc->section);
+	if (!range.start || !range.stop ||
+	    range.start == range.stop ||
+	    range.start > range.stop)
+		return;
+
+	for (ct = range.start; ct < range.stop; ct = ((void *)ct + desc->tag_size))
+		callback(ct);
+}
+
 static int codetag_module_init(struct codetag_type *cttype, struct module *mod)
 {
 	struct codetag_range range;
