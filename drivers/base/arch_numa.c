@@ -305,6 +305,11 @@ static int __init arch_acpi_numa_init(void)
 }
 #endif
 
+int __init __weak arch_platform_numa_init(void)
+{
+	return -EOPNOTSUPP;
+}
+
 /**
  * arch_numa_init() - Initialize NUMA
  *
@@ -317,6 +322,8 @@ void __init arch_numa_init(void)
 		if (!acpi_disabled && !numa_init(arch_acpi_numa_init))
 			return;
 		if (acpi_disabled && !numa_init(of_numa_init))
+			return;
+		if (!numa_init(arch_platform_numa_init))
 			return;
 	}
 

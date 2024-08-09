@@ -31,6 +31,7 @@ static inline const struct cpumask *cpumask_of_node(int node)
 #endif
 
 void __init arch_numa_init(void);
+int __init arch_platform_numa_init(void);
 int __init numa_add_memblk(int nodeid, u64 start, u64 end);
 void __init early_map_cpu_to_node(unsigned int cpu, int nid);
 int __init early_cpu_to_node(int cpu);
