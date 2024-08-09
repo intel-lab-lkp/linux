@@ -171,13 +171,6 @@ void __init mem_init(void)
 	setup_zero_pages();	/* This comes from node 0 */
 }
 
-/* All PCI device belongs to logical Node-0 */
-int pcibus_to_node(struct pci_bus *bus)
-{
-	return 0;
-}
-EXPORT_SYMBOL(pcibus_to_node);
-
 void __init prom_init_numa_memory(void)
 {
 	pr_info("CP0_Config3: CP0 16.3 (0x%x)\n", read_c0_config3());

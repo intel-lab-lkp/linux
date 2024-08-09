@@ -17,10 +17,6 @@ extern struct cpuinfo_ip27 sn_cpu_info[NR_CPUS];
 #define cpumask_of_node(node)	((node) == -1 ?				\
 				 cpu_all_mask :				\
 				 &hub_data(node)->h_cpus)
-struct pci_bus;
-extern int pcibus_to_node(struct pci_bus *);
-
-#define cpumask_of_pcibus(bus)	(cpumask_of_node(pcibus_to_node(bus)))
 
 extern unsigned char __node_distances[MAX_NUMNODES][MAX_NUMNODES];
 

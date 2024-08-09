@@ -633,6 +633,7 @@ static int bridge_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
+	set_dev_node(dev, bd->nasid);
 	pci_set_flags(PCI_PROBE_ONLY);
 
 	host = devm_pci_alloc_host_bridge(dev, sizeof(*bc));

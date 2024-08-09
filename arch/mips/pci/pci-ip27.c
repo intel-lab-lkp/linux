@@ -17,16 +17,6 @@
 #include <asm/sn/ioc3.h>
 #include <asm/pci/bridge.h>
 
-#ifdef CONFIG_NUMA
-int pcibus_to_node(struct pci_bus *bus)
-{
-	struct bridge_controller *bc = BRIDGE_CONTROLLER(bus);
-
-	return bc->nasid;
-}
-EXPORT_SYMBOL(pcibus_to_node);
-#endif /* CONFIG_NUMA */
-
 static void ip29_fixup_phy(struct pci_dev *dev)
 {
 	int nasid = pcibus_to_node(dev->bus);
