@@ -22,7 +22,6 @@
 #include <scsi/scsi_transport.h>
 #include <scsi/scsi_transport_fc.h>
 #include <scsi/scsi_tcq.h>
-#include <scsi/libfc.h>
 #include <scsi/fc_frame.h>
 
 #include "vnic_dev.h"
@@ -251,7 +250,7 @@ static struct fc_host_statistics *fnic_get_stats(struct Scsi_Host *host)
 	spin_unlock_irqrestore(&fnic->fnic_lock, flags);
 
 	if (ret) {
-		FNIC_MAIN_DBG(KERN_DEBUG, fnic->lport->host, fnic->fnic_num,
+		FNIC_MAIN_DBG(KERN_DEBUG, fnic->host, fnic->fnic_num,
 					  "fnic: Get vnic stats failed: 0x%x", ret);
 		return stats;
 	}
@@ -360,7 +359,7 @@ static void fnic_reset_host_stats(struct Scsi_Host *host)
 	spin_unlock_irqrestore(&fnic->fnic_lock, flags);
 
 	if (ret) {
-		FNIC_MAIN_DBG(KERN_DEBUG, fnic->lport->host, fnic->fnic_num,
+		FNIC_MAIN_DBG(KERN_DEBUG, fnic->host, fnic->fnic_num,
 				"fnic: Reset vnic stats failed"
 				" 0x%x", ret);
 		return;
@@ -572,7 +571,7 @@ static void fnic_scsi_init(struct fnic *fnic)
 
 static int fnic_scsi_drv_init(struct fnic *fnic)
 {
-	struct Scsi_Host *host = fnic->lport->host;
+	struct Scsi_Host *host = fnic->host;
 	int err;
 	struct pci_dev *pdev = fnic->pdev;
 	struct fnic_iport_s *iport = &fnic->iport;
@@ -658,16 +657,16 @@ void fnic_mq_map_queues_cpus(struct Scsi_Host *host)
 	struct blk_mq_queue_map *qmap = &host->tag_set.map[HCTX_TYPE_DEFAULT];
 
 	if (intr_mode == VNIC_DEV_INTR_MODE_MSI || intr_mode == VNIC_DEV_INTR_MODE_INTX) {
-		FNIC_MAIN_DBG(KERN_ERR, fnic->lport->host, fnic->fnic_num,
+		FNIC_MAIN_DBG(KERN_ERR, fnic->host, fnic->fnic_num,
 			"intr_mode is not msix\n");
 		return;
 	}
 
-	FNIC_MAIN_DBG(KERN_INFO, fnic->lport->host, fnic->fnic_num,
+	FNIC_MAIN_DBG(KERN_INFO, fnic->host, fnic->fnic_num,
 			"qmap->nr_queues: %d\n", qmap->nr_queues);
 
 	if (l_pdev == NULL) {
-		FNIC_MAIN_DBG(KERN_ERR, fnic->lport->host, fnic->fnic_num,
+		FNIC_MAIN_DBG(KERN_ERR, fnic->host, fnic->fnic_num,
 						"l_pdev is null\n");
 		return;
 	}
