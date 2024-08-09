@@ -1262,6 +1262,7 @@ static int zonefs_fill_super(struct super_block *sb, struct fs_context *fc)
 	sb->s_maxbytes = 0;
 	sb->s_op = &zonefs_sops;
 	sb->s_time_gran	= 1;
+	super_set_sysfs_name_id(sb);
 
 	/*
 	 * The block size is set to the device zone write granularity to ensure
