@@ -2037,8 +2037,8 @@ static struct bitmap *bitmap_get_from_slot(struct mddev *mddev, int slot)
 /* Loads the bitmap associated with slot and copies the resync information
  * to our bitmap
  */
-int md_bitmap_copy_from_slot(struct mddev *mddev, int slot,
-		sector_t *low, sector_t *high, bool clear_bits)
+static int bitmap_copy_from_slot(struct mddev *mddev, int slot, sector_t *low,
+				 sector_t *high, bool clear_bits)
 {
 	int rv = 0, i, j;
 	sector_t block, lo = 0, hi = 0;
@@ -2080,8 +2080,6 @@ int md_bitmap_copy_from_slot(struct mddev *mddev, int slot,
 
 	return rv;
 }
-EXPORT_SYMBOL_GPL(md_bitmap_copy_from_slot);
-
 
 static void bitmap_status(struct seq_file *seq, struct bitmap *bitmap)
 {
@@ -2716,6 +2714,7 @@ static struct bitmap_operations bitmap_ops = {
 	.resize			= bitmap_resize,
 	.sync_with_cluster	= bitmap_sync_with_cluster,
 	.get_from_slot		= bitmap_get_from_slot,
+	.copy_from_slot		= bitmap_copy_from_slot,
 };
 
 void mddev_set_bitmap_ops(struct mddev *mddev)
