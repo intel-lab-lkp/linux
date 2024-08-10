@@ -1605,7 +1605,9 @@ static int fuse_fill_super_submount(struct super_block *sb,
 	 * that, though, so undo it here.
 	 */
 	fi = get_fuse_inode(root);
+	spin_lock(&fi->lock);
 	fi->nlookup--;
+	spin_unlock(&fi->lock);
 
 	sb->s_d_op = &fuse_dentry_operations;
 	sb->s_root = d_make_root(root);
