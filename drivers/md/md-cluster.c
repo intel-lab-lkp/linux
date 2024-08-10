@@ -1244,7 +1244,8 @@ static int cluster_check_sync_size(struct mddev *mddev)
 		bm_lockres->flags |= DLM_LKF_NOQUEUE;
 		rv = dlm_lock_sync(bm_lockres, DLM_LOCK_PW);
 		if (!rv)
-			md_bitmap_update_sb(bitmap);
+			mddev->bitmap_ops->update_sb(bitmap);
+
 		lockres_free(bm_lockres);
 
 		sb = kmap_atomic(bitmap->storage.sb_page);

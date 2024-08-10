@@ -239,6 +239,8 @@ struct bitmap_operations {
 	int (*load)(struct mddev *mddev);
 	void (*destroy)(struct mddev *mddev);
 	void (*flush)(struct mddev *mddev);
+
+	void (*update_sb)(struct bitmap *bitmap);
 };
 
 /* the bitmap API */
@@ -277,7 +279,14 @@ static inline void md_bitmap_flush(struct mddev *mddev)
 	mddev->bitmap_ops->flush(mddev);
 }
 
-void md_bitmap_update_sb(struct bitmap *bitmap);
+static inline void md_bitmap_update_sb(struct mddev *mddev)
+{
+	if (!mddev->bitmap || !mddev->bitmap_ops->update_sb)
+		return;
+
+	mddev->bitmap_ops->update_sb(mddev->bitmap);
+}
+
 void md_bitmap_status(struct seq_file *seq, struct bitmap *bitmap);
 
 int  md_bitmap_setallbits(struct bitmap *bitmap);
