@@ -296,7 +296,6 @@ static inline void md_bitmap_update_sb(struct mddev *mddev)
 	mddev->bitmap_ops->update_sb(mddev->bitmap);
 }
 
-int  md_bitmap_setallbits(struct bitmap *bitmap);
 void md_bitmap_write_all(struct bitmap *bitmap);
 
 void md_bitmap_dirty_bits(struct bitmap *bitmap, unsigned long s, unsigned long e);
