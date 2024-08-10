@@ -8320,7 +8320,7 @@ static int raid5_resize(struct mddev *mddev, sector_t sectors)
 	    mddev->array_sectors > newsize)
 		return -EINVAL;
 	if (mddev->bitmap) {
-		int ret = md_bitmap_resize(mddev->bitmap, sectors, 0, 0);
+		int ret = md_bitmap_resize(mddev, sectors, 0, 0);
 		if (ret)
 			return ret;
 	}

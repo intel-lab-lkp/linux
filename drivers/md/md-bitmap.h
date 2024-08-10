@@ -255,6 +255,8 @@ struct bitmap_operations {
 	void (*cond_end_sync)(struct bitmap *bitmap, sector_t sector, bool force);
 
 	void (*update_sb)(struct bitmap *bitmap);
+	int (*resize)(struct bitmap *bitmap, sector_t blocks, int chunksize,
+		      int init);
 	void (*sync_with_cluster)(struct bitmap *bitmap,
 				  sector_t old_lo, sector_t old_hi,
 				  sector_t new_lo, sector_t new_hi);
@@ -389,6 +391,15 @@ static inline void md_bitmap_cond_end_sync(struct mddev *mddev, sector_t sector,
 	mddev->bitmap_ops->cond_end_sync(mddev->bitmap, sector, force);
 }
 
+static inline int md_bitmap_resize(struct mddev *mddev, sector_t blocks,
+				   int chunksize, int init)
+{
+	if (!mddev->bitmap || !mddev->bitmap_ops->resize)
+		return -EOPNOTSUPP;
+
+	return mddev->bitmap_ops->resize(mddev->bitmap, blocks, chunksize, init);
+}
+
 static inline void md_bitmap_sync_with_cluster(struct mddev *mddev,
 					       sector_t old_lo, sector_t old_hi,
 					       sector_t new_lo, sector_t new_hi)
@@ -404,8 +415,6 @@ void md_bitmap_unplug(struct bitmap *bitmap);
 void md_bitmap_unplug_async(struct bitmap *bitmap);
 void md_bitmap_daemon_work(struct mddev *mddev);
 
-int md_bitmap_resize(struct bitmap *bitmap, sector_t blocks,
-		     int chunksize, int init);
 struct bitmap *get_bitmap_from_slot(struct mddev *mddev, int slot);
 int md_bitmap_copy_from_slot(struct mddev *mddev, int slot,
 			     sector_t *lo, sector_t *hi, bool clear_bits);

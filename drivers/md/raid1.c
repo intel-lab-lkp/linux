@@ -3311,7 +3311,7 @@ static int raid1_resize(struct mddev *mddev, sector_t sectors)
 	    mddev->array_sectors > newsize)
 		return -EINVAL;
 	if (mddev->bitmap) {
-		int ret = md_bitmap_resize(mddev->bitmap, newsize, 0, 0);
+		int ret = md_bitmap_resize(mddev, newsize, 0, 0);
 		if (ret)
 			return ret;
 	}

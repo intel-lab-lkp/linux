@@ -32,6 +32,9 @@
 #include "md.h"
 #include "md-bitmap.h"
 
+static int bitmap_resize(struct bitmap *bitmap, sector_t blocks,
+			 int chunksize, int init);
+
 static inline char *bmname(struct bitmap *bitmap)
 {
 	return bitmap->mddev ? mdname(bitmap->mddev) : "mdX";
@@ -1936,7 +1939,7 @@ static struct bitmap *bitmap_create(struct mddev *mddev, int slot)
 		goto error;
 
 	bitmap->daemon_lastrun = jiffies;
-	err = md_bitmap_resize(bitmap, blocks, mddev->bitmap_info.chunksize, 1);
+	err = bitmap_resize(bitmap, blocks, mddev->bitmap_info.chunksize, 1);
 	if (err)
 		goto error;
 
@@ -2108,8 +2111,8 @@ static void bitmap_status(struct seq_file *seq, struct bitmap *bitmap)
 	seq_printf(seq, "\n");
 }
 
-int md_bitmap_resize(struct bitmap *bitmap, sector_t blocks,
-		  int chunksize, int init)
+static int bitmap_resize(struct bitmap *bitmap, sector_t blocks,
+			 int chunksize, int init)
 {
 	/* If chunk_size is 0, choose an appropriate chunk size.
 	 * Then possibly allocate new storage space.
@@ -2314,7 +2317,6 @@ int md_bitmap_resize(struct bitmap *bitmap, sector_t blocks,
 err:
 	return ret;
 }
-EXPORT_SYMBOL_GPL(md_bitmap_resize);
 
 static ssize_t
 location_show(struct mddev *mddev, char *page)
@@ -2712,6 +2714,7 @@ static struct bitmap_operations bitmap_ops = {
 	.cond_end_sync		= bitmap_cond_end_sync,
 
 	.update_sb		= bitmap_update_sb,
+	.resize			= bitmap_resize,
 	.sync_with_cluster	= bitmap_sync_with_cluster,
 };
 
