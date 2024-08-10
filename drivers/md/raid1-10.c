@@ -166,9 +166,9 @@ static inline bool raid1_add_bio_to_plug(struct mddev *mddev, struct bio *bio,
  * while current io submission must wait for bitmap io to be done. In order to
  * avoid such deadlock, submit bitmap io asynchronously.
  */
-static inline void raid1_prepare_flush_writes(struct bitmap *bitmap)
+static inline void raid1_prepare_flush_writes(struct mddev *mddev)
 {
-	md_bitmap_unplug(bitmap, current->bio_list == NULL);
+	md_bitmap_unplug(mddev, current->bio_list == NULL);
 }
 
 /*

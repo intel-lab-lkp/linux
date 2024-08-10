@@ -1030,7 +1030,7 @@ static int md_bitmap_file_test_bit(struct bitmap *bitmap, sector_t block)
 /* this gets called when the md device is ready to unplug its underlying
  * (slave) device queues -- before we let any writes go down, we need to
  * sync the dirty pages of the bitmap file to disk */
-static void bitmap_unplug(struct bitmap *bitmap)
+static void __bitmap_unplug(struct bitmap *bitmap)
 {
 	unsigned long i;
 	int dirty, need_write;
@@ -1074,7 +1074,7 @@ static void md_bitmap_unplug_fn(struct work_struct *work)
 	struct bitmap_unplug_work *unplug_work =
 		container_of(work, struct bitmap_unplug_work, work);
 
-	bitmap_unplug(unplug_work->bitmap);
+	__bitmap_unplug(unplug_work->bitmap);
 	complete(unplug_work->done);
 }
 
@@ -1091,14 +1091,13 @@ static void bitmap_unplug_async(struct bitmap *bitmap)
 	wait_for_completion(&done);
 }
 
-void md_bitmap_unplug(struct bitmap *bitmap, bool sync)
+static void bitmap_unplug(struct bitmap *bitmap, bool sync)
 {
 	if (sync)
-		bitmap_unplug(bitmap);
+		__bitmap_unplug(bitmap);
 	else
 		bitmap_unplug_async(bitmap);
 }
-EXPORT_SYMBOL(md_bitmap_unplug);
 
 static void md_bitmap_set_memory_bits(struct bitmap *bitmap, sector_t offset, int needed);
 
@@ -2067,9 +2066,9 @@ static int bitmap_copy_from_slot(struct mddev *mddev, int slot, sector_t *low,
 		for (i = 0; i < bitmap->storage.file_pages; i++)
 			if (test_page_attr(bitmap, i, BITMAP_PAGE_PENDING))
 				set_page_attr(bitmap, i, BITMAP_PAGE_NEEDWRITE);
-		bitmap_unplug(bitmap);
+		__bitmap_unplug(bitmap);
 	}
-	bitmap_unplug(mddev->bitmap);
+	__bitmap_unplug(mddev->bitmap);
 	*low = lo;
 	*high = hi;
 	__bitmap_free(bitmap);
@@ -2303,7 +2302,7 @@ static int bitmap_resize(struct bitmap *bitmap, sector_t blocks,
 	spin_unlock_irq(&bitmap->counts.lock);
 
 	if (!init) {
-		bitmap_unplug(bitmap);
+		__bitmap_unplug(bitmap);
 		bitmap->mddev->pers->quiesce(bitmap->mddev, 0);
 	}
 	ret = 0;
@@ -2706,6 +2705,7 @@ static struct bitmap_operations bitmap_ops = {
 	.close_sync		= bitmap_close_sync,
 	.cond_end_sync		= bitmap_cond_end_sync,
 	.wait_behind_writes	= bitmap_wait_behind_writes,
+	.unplug			= bitmap_unplug,
 
 	.update_sb		= bitmap_update_sb,
 	.resize			= bitmap_resize,
