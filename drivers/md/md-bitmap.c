@@ -1225,7 +1225,7 @@ static int md_bitmap_init_from_disk(struct bitmap *bitmap, sector_t start)
 	return ret;
 }
 
-void md_bitmap_write_all(struct bitmap *bitmap)
+static void bitmap_write_all(struct bitmap *bitmap)
 {
 	/* We don't actually write all bitmap blocks here,
 	 * just flag them as needing to be written
@@ -2712,6 +2712,7 @@ static struct bitmap_operations bitmap_ops = {
 	.destroy		= bitmap_destroy,
 	.flush			= bitmap_flush,
 	.status			= bitmap_status,
+	.write_all		= bitmap_write_all,
 
 	.update_sb		= bitmap_update_sb,
 };
