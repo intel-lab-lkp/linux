@@ -168,10 +168,7 @@ static inline bool raid1_add_bio_to_plug(struct mddev *mddev, struct bio *bio,
  */
 static inline void raid1_prepare_flush_writes(struct bitmap *bitmap)
 {
-	if (current->bio_list)
-		md_bitmap_unplug_async(bitmap);
-	else
-		md_bitmap_unplug(bitmap);
+	md_bitmap_unplug(bitmap, current->bio_list == NULL);
 }
 
 /*

@@ -460,8 +460,7 @@ static inline void md_bitmap_free(struct mddev *mddev, struct bitmap *bitmap)
 	return mddev->bitmap_ops->free(bitmap);
 }
 
-void md_bitmap_unplug(struct bitmap *bitmap);
-void md_bitmap_unplug_async(struct bitmap *bitmap);
+void md_bitmap_unplug(struct bitmap *bitmap, bool sync);
 
 static inline bool md_bitmap_enabled(struct bitmap *bitmap)
 {
