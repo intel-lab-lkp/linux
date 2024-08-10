@@ -277,7 +277,6 @@ static inline void md_bitmap_flush(struct mddev *mddev)
 	mddev->bitmap_ops->flush(mddev);
 }
 
-void md_bitmap_print_sb(struct bitmap *bitmap);
 void md_bitmap_update_sb(struct bitmap *bitmap);
 void md_bitmap_status(struct seq_file *seq, struct bitmap *bitmap);
 
