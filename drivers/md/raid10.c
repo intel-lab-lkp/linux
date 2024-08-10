@@ -3319,7 +3319,7 @@ static sector_t raid10_sync_request(struct mddev *mddev, sector_t sector_nr,
 			 * we only need to recover the block if it is set in
 			 * the bitmap
 			 */
-			must_sync = md_bitmap_start_sync(mddev->bitmap, sect,
+			must_sync = md_bitmap_start_sync(mddev, sect,
 							 &sync_blocks, 1);
 			if (sync_blocks < max_sync)
 				max_sync = sync_blocks;
@@ -3363,7 +3363,7 @@ static sector_t raid10_sync_request(struct mddev *mddev, sector_t sector_nr,
 				}
 			}
 
-			must_sync = md_bitmap_start_sync(mddev->bitmap, sect,
+			must_sync = md_bitmap_start_sync(mddev, sect,
 							 &sync_blocks, still_degraded);
 
 			any_working = 0;
@@ -3541,7 +3541,7 @@ static sector_t raid10_sync_request(struct mddev *mddev, sector_t sector_nr,
 					mddev_is_clustered(mddev) &&
 					(sector_nr + 2 * RESYNC_SECTORS > conf->cluster_sync_high));
 
-		if (!md_bitmap_start_sync(mddev->bitmap, sector_nr,
+		if (!md_bitmap_start_sync(mddev, sector_nr,
 					  &sync_blocks, mddev->degraded) &&
 		    !conf->fullsync && !test_bit(MD_RECOVERY_REQUESTED,
 						 &mddev->recovery)) {
