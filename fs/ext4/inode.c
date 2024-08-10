@@ -1023,27 +1023,13 @@ static int ext4_dirty_journalled_data(handle_t *handle, struct buffer_head *bh)
 int do_journal_get_write_access(handle_t *handle, struct inode *inode,
 				struct buffer_head *bh)
 {
-	int dirty = buffer_dirty(bh);
-	int ret;
+	ASSERT(!buffer_dirty(bh));
 
 	if (!buffer_mapped(bh) || buffer_freed(bh))
 		return 0;
-	/*
-	 * __block_write_begin() could have dirtied some buffers. Clean
-	 * the dirty bit as jbd2_journal_get_write_access() could complain
-	 * otherwise about fs integrity issues. Setting of the dirty bit
-	 * by __block_write_begin() isn't a real problem here as we clear
-	 * the bit before releasing a page lock and thus writeback cannot
-	 * ever write the buffer.
-	 */
-	if (dirty)
-		clear_buffer_dirty(bh);
 	BUFFER_TRACE(bh, "get write access");
-	ret = ext4_journal_get_write_access(handle, inode->i_sb, bh,
+	return ext4_journal_get_write_access(handle, inode->i_sb, bh,
 					    EXT4_JTR_NONE);
-	if (!ret && dirty)
-		ret = ext4_dirty_journalled_data(handle, bh);
-	return ret;
 }
 
 int ext4_block_write_begin(handle_t *handle, struct folio *folio,
@@ -1246,7 +1232,7 @@ retry_journal:
 
 		folio_unlock(folio);
 		/*
-		 * __block_write_begin may have instantiated a few blocks
+		 * ext4_block_write_begin may have instantiated a few blocks
 		 * outside i_size.  Trim these off again. Don't need
 		 * i_size_read because we hold i_rwsem.
 		 *
