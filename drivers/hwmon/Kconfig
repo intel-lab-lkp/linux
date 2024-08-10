@@ -2071,7 +2071,7 @@ config SENSORS_SFCTEMP
 config SENSORS_SURFACE_FAN
 	tristate "Surface Fan Driver"
 	depends on SURFACE_AGGREGATOR
-	depends on SURFACE_AGGREGATOR_BUS
+	select SURFACE_AGGREGATOR_BUS
 	help
 	  Driver that provides monitoring of the fan on Surface Pro devices that
 	  have a fan, like the Surface Pro 9.
