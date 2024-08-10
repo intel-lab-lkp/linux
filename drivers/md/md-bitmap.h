@@ -234,7 +234,11 @@ struct bitmap {
 	int cluster_slot;		/* Slot offset for clustered env */
 };
 
+struct bitmap_operations {
+};
+
 /* the bitmap API */
+void mddev_set_bitmap_ops(struct mddev *mddev);
 
 /* these are used only by md/bitmap */
 struct bitmap *md_bitmap_create(struct mddev *mddev, int slot);
