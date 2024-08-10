@@ -1627,15 +1627,12 @@ static int bitmap_start_sync(struct bitmap *bitmap, sector_t offset,
 	return rv;
 }
 
-void md_bitmap_end_sync(struct bitmap *bitmap, sector_t offset, sector_t *blocks, int aborted)
+static void bitmap_end_sync(struct bitmap *bitmap, sector_t offset,
+			    sector_t *blocks, int aborted)
 {
 	bitmap_counter_t *bmc;
 	unsigned long flags;
 
-	if (bitmap == NULL) {
-		*blocks = 1024;
-		return;
-	}
 	spin_lock_irqsave(&bitmap->counts.lock, flags);
 	bmc = md_bitmap_get_counter(&bitmap->counts, offset, blocks, 0);
 	if (bmc == NULL)
@@ -1656,7 +1653,6 @@ void md_bitmap_end_sync(struct bitmap *bitmap, sector_t offset, sector_t *blocks
  unlock:
 	spin_unlock_irqrestore(&bitmap->counts.lock, flags);
 }
-EXPORT_SYMBOL(md_bitmap_end_sync);
 
 void md_bitmap_close_sync(struct bitmap *bitmap)
 {
@@ -1669,7 +1665,7 @@ void md_bitmap_close_sync(struct bitmap *bitmap)
 	if (!bitmap)
 		return;
 	while (sector < bitmap->mddev->resync_max_sectors) {
-		md_bitmap_end_sync(bitmap, sector, &blocks, 0);
+		bitmap_end_sync(bitmap, sector, &blocks, 0);
 		sector += blocks;
 	}
 }
@@ -1697,7 +1693,7 @@ void md_bitmap_cond_end_sync(struct bitmap *bitmap, sector_t sector, bool force)
 	sector &= ~((1ULL << bitmap->counts.chunkshift) - 1);
 	s = 0;
 	while (s < sector && s < bitmap->mddev->resync_max_sectors) {
-		md_bitmap_end_sync(bitmap, s, &blocks, 0);
+		bitmap_end_sync(bitmap, s, &blocks, 0);
 		s += blocks;
 	}
 	bitmap->last_end_sync = jiffies;
@@ -1713,7 +1709,7 @@ void md_bitmap_sync_with_cluster(struct mddev *mddev,
 	sector_t sector, blocks = 0;
 
 	for (sector = old_lo; sector < new_lo; ) {
-		md_bitmap_end_sync(bitmap, sector, &blocks, 0);
+		bitmap_end_sync(bitmap, sector, &blocks, 0);
 		sector += blocks;
 	}
 	WARN((blocks > new_lo) && old_lo, "alignment is not correct for lo\n");
@@ -2717,6 +2713,7 @@ static struct bitmap_operations bitmap_ops = {
 	.startwrite		= bitmap_startwrite,
 	.endwrite		= bitmap_endwrite,
 	.start_sync		= bitmap_start_sync,
+	.end_sync		= bitmap_end_sync,
 
 	.update_sb		= bitmap_update_sb,
 };
