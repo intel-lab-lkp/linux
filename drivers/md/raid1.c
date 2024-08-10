@@ -2787,7 +2787,7 @@ static sector_t raid1_sync_request(struct mddev *mddev, sector_t sector_nr,
 		else /* completed sync */
 			conf->fullsync = 0;
 
-		md_bitmap_close_sync(mddev->bitmap);
+		md_bitmap_close_sync(mddev);
 		close_sync(conf);
 
 		if (mddev_is_clustered(mddev)) {
