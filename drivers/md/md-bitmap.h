@@ -254,6 +254,7 @@ struct bitmap_operations {
 	void (*close_sync)(struct bitmap *bitmap);
 	void (*cond_end_sync)(struct bitmap *bitmap, sector_t sector, bool force);
 	void (*wait_behind_writes)(struct bitmap *bitmap);
+	void (*daemon_work)(struct bitmap *bitmap);
 
 	void (*update_sb)(struct bitmap *bitmap);
 	int (*resize)(struct bitmap *bitmap, sector_t blocks, int chunksize,
@@ -404,6 +405,14 @@ static inline void md_bitmap_wait_behind_writes(struct mddev *mddev)
 	mddev->bitmap_ops->wait_behind_writes(mddev->bitmap);
 }
 
+static inline void md_bitmap_daemon_work(struct mddev *mddev)
+{
+	if (!mddev->bitmap || !mddev->bitmap_ops->daemon_work)
+		return;
+
+	mddev->bitmap_ops->daemon_work(mddev->bitmap);
+}
+
 static inline int md_bitmap_resize(struct mddev *mddev, sector_t blocks,
 				   int chunksize, int init)
 {
@@ -453,7 +462,6 @@ static inline void md_bitmap_free(struct mddev *mddev, struct bitmap *bitmap)
 
 void md_bitmap_unplug(struct bitmap *bitmap);
 void md_bitmap_unplug_async(struct bitmap *bitmap);
-void md_bitmap_daemon_work(struct mddev *mddev);
 
 static inline bool md_bitmap_enabled(struct bitmap *bitmap)
 {

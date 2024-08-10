@@ -1292,9 +1292,9 @@ out:
  * bitmap daemon -- periodically wakes up to clean bits and flush pages
  *			out to disk
  */
-void md_bitmap_daemon_work(struct mddev *mddev)
+static void bitmap_daemon_work(struct bitmap *bitmap)
 {
-	struct bitmap *bitmap;
+	struct mddev *mddev = bitmap->mddev;
 	unsigned long j;
 	unsigned long nextpage;
 	sector_t blocks;
@@ -1304,13 +1304,8 @@ void md_bitmap_daemon_work(struct mddev *mddev)
 	 * bitmap_destroy.
 	 */
 	mutex_lock(&mddev->bitmap_info.mutex);
-	bitmap = mddev->bitmap;
-	if (bitmap == NULL) {
-		mutex_unlock(&mddev->bitmap_info.mutex);
-		return;
-	}
-	if (time_before(jiffies, bitmap->daemon_lastrun
-			+ mddev->bitmap_info.daemon_sleep))
+	if (time_before(jiffies, bitmap->daemon_lastrun +
+				 mddev->bitmap_info.daemon_sleep))
 		goto done;
 
 	bitmap->daemon_lastrun = jiffies;
@@ -1780,11 +1775,11 @@ static void bitmap_flush(struct mddev *mddev)
 	 */
 	sleep = mddev->bitmap_info.daemon_sleep * 2;
 	bitmap->daemon_lastrun -= sleep;
-	md_bitmap_daemon_work(mddev);
+	bitmap_daemon_work(bitmap);
 	bitmap->daemon_lastrun -= sleep;
-	md_bitmap_daemon_work(mddev);
+	bitmap_daemon_work(bitmap);
 	bitmap->daemon_lastrun -= sleep;
-	md_bitmap_daemon_work(mddev);
+	bitmap_daemon_work(bitmap);
 	if (mddev->bitmap_info.external)
 		md_super_wait(mddev);
 	bitmap_update_sb(bitmap);
