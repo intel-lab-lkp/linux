@@ -252,6 +252,7 @@ struct bitmap_operations {
 	void (*end_sync)(struct bitmap *bitmap, sector_t offset,
 			 sector_t *blocks, int aborted);
 	void (*close_sync)(struct bitmap *bitmap);
+	void (*cond_end_sync)(struct bitmap *bitmap, sector_t sector, bool force);
 
 	void (*update_sb)(struct bitmap *bitmap);
 };
@@ -376,7 +377,15 @@ static inline void md_bitmap_close_sync(struct mddev *mddev)
 	mddev->bitmap_ops->close_sync(mddev->bitmap);
 }
 
-void md_bitmap_cond_end_sync(struct bitmap *bitmap, sector_t sector, bool force);
+static inline void md_bitmap_cond_end_sync(struct mddev *mddev, sector_t sector,
+					   bool force)
+{
+	if (!mddev->bitmap || !mddev->bitmap_ops->cond_end_sync)
+		return;
+
+	mddev->bitmap_ops->cond_end_sync(mddev->bitmap, sector, force);
+}
+
 void md_bitmap_sync_with_cluster(struct mddev *mddev,
 				 sector_t old_lo, sector_t old_hi,
 				 sector_t new_lo, sector_t new_hi);
