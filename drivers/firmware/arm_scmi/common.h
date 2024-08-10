@@ -170,6 +170,7 @@ void scmi_protocol_release(const struct scmi_handle *handle, u8 protocol_id);
  *		       This can be dynamically set by transports at run-time
  *		       inside their provided .chan_setup().
  * @transport_info: Transport layer related information
+ * @shmem_io_width: I/O width in bytes of the shared memory area
  */
 struct scmi_chan_info {
 	int id;
@@ -178,6 +179,7 @@ struct scmi_chan_info {
 	struct scmi_handle *handle;
 	bool no_completion_irq;
 	void *transport_info;
+	u32 shmem_io_width;
 };
 
 /**
@@ -336,13 +338,16 @@ struct scmi_shared_mem;
 struct scmi_shared_mem_operations {
 	void (*tx_prepare)(struct scmi_shared_mem __iomem *shmem,
 			   struct scmi_xfer *xfer,
-			   struct scmi_chan_info *cinfo);
+			   struct scmi_chan_info *cinfo,
+			   u32 shmem_io_width);
 	u32 (*read_header)(struct scmi_shared_mem __iomem *shmem);
 
 	void (*fetch_response)(struct scmi_shared_mem __iomem *shmem,
-			       struct scmi_xfer *xfer);
+			       struct scmi_xfer *xfer,
+			       u32 shmem_io_width);
 	void (*fetch_notification)(struct scmi_shared_mem __iomem *shmem,
-				   size_t max_len, struct scmi_xfer *xfer);
+				   size_t max_len, struct scmi_xfer *xfer,
+				   u32 shmem_io_width);
 	void (*clear_channel)(struct scmi_shared_mem __iomem *shmem);
 	bool (*poll_done)(struct scmi_shared_mem __iomem *shmem,
 			  struct scmi_xfer *xfer);
@@ -350,7 +355,8 @@ struct scmi_shared_mem_operations {
 	bool (*channel_intr_enabled)(struct scmi_shared_mem __iomem *shmem);
 	void __iomem *(*setup_iomap)(struct scmi_chan_info *cinfo,
 				     struct device *dev,
-				     bool tx, struct resource *res);
+				     bool tx, struct resource *res,
+				     u32 *shmem_io_width);
 };
 
 const struct scmi_shared_mem_operations *scmi_shared_mem_operations_get(void);
