@@ -255,6 +255,9 @@ struct bitmap_operations {
 	void (*cond_end_sync)(struct bitmap *bitmap, sector_t sector, bool force);
 
 	void (*update_sb)(struct bitmap *bitmap);
+	void (*sync_with_cluster)(struct bitmap *bitmap,
+				  sector_t old_lo, sector_t old_hi,
+				  sector_t new_lo, sector_t new_hi);
 };
 
 /* the bitmap API */
@@ -386,9 +389,16 @@ static inline void md_bitmap_cond_end_sync(struct mddev *mddev, sector_t sector,
 	mddev->bitmap_ops->cond_end_sync(mddev->bitmap, sector, force);
 }
 
-void md_bitmap_sync_with_cluster(struct mddev *mddev,
-				 sector_t old_lo, sector_t old_hi,
-				 sector_t new_lo, sector_t new_hi);
+static inline void md_bitmap_sync_with_cluster(struct mddev *mddev,
+					       sector_t old_lo, sector_t old_hi,
+					       sector_t new_lo, sector_t new_hi)
+{
+	if (!mddev->bitmap || !mddev->bitmap_ops->sync_with_cluster)
+		return;
+
+	mddev->bitmap_ops->sync_with_cluster(mddev->bitmap, old_lo, old_hi,
+					     new_lo, new_hi);
+}
 
 void md_bitmap_unplug(struct bitmap *bitmap);
 void md_bitmap_unplug_async(struct bitmap *bitmap);
