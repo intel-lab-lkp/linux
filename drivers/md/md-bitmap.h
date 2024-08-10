@@ -235,13 +235,21 @@ struct bitmap {
 };
 
 struct bitmap_operations {
+	struct bitmap* (*create)(struct mddev *mddev, int slot);
 };
 
 /* the bitmap API */
 void mddev_set_bitmap_ops(struct mddev *mddev);
 
 /* these are used only by md/bitmap */
-struct bitmap *md_bitmap_create(struct mddev *mddev, int slot);
+static inline struct bitmap *md_bitmap_create(struct mddev *mddev, int slot)
+{
+	if (!mddev->bitmap_ops->create)
+		return ERR_PTR(-EOPNOTSUPP);
+
+	return mddev->bitmap_ops->create(mddev, slot);
+}
+
 int md_bitmap_load(struct mddev *mddev);
 void md_bitmap_flush(struct mddev *mddev);
 void md_bitmap_destroy(struct mddev *mddev);
