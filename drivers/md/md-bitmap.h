@@ -263,6 +263,7 @@ struct bitmap_operations {
 	struct bitmap* (*get_from_slot)(struct mddev *mddev, int slot);
 	int (*copy_from_slot)(struct mddev *mddev, int slot,
 			      sector_t *lo, sector_t *hi, bool clear_bits);
+	void (*free)(struct bitmap *bitmap);
 };
 
 /* the bitmap API */
@@ -433,11 +434,18 @@ static inline int md_bitmap_copy_from_slot(struct mddev *mddev, int slot,
 	return mddev->bitmap_ops->copy_from_slot(mddev, slot, lo, hi, clear_bits);
 }
 
+static inline void md_bitmap_free(struct mddev *mddev, struct bitmap *bitmap)
+{
+	if (!mddev->bitmap_ops->free)
+		return;
+
+	return mddev->bitmap_ops->free(bitmap);
+}
+
 void md_bitmap_unplug(struct bitmap *bitmap);
 void md_bitmap_unplug_async(struct bitmap *bitmap);
 void md_bitmap_daemon_work(struct mddev *mddev);
 
-void md_bitmap_free(struct bitmap *bitmap);
 void md_bitmap_wait_behind_writes(struct mddev *mddev);
 
 static inline bool md_bitmap_enabled(struct bitmap *bitmap)

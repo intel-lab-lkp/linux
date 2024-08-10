@@ -1192,12 +1192,12 @@ static int resize_bitmaps(struct mddev *mddev, sector_t newsize, sector_t oldsiz
 			 * can't resize bitmap
 			 */
 			goto out;
-		md_bitmap_free(bitmap);
+		md_bitmap_free(mddev, bitmap);
 	}
 
 	return 0;
 out:
-	md_bitmap_free(bitmap);
+	md_bitmap_free(mddev, bitmap);
 	update_bitmap_size(mddev, oldsize);
 	return -1;
 }
@@ -1238,7 +1238,7 @@ static int cluster_check_sync_size(struct mddev *mddev)
 		bm_lockres = lockres_init(mddev, str, NULL, 1);
 		if (!bm_lockres) {
 			pr_err("md-cluster: Cannot initialize %s\n", str);
-			md_bitmap_free(bitmap);
+			md_bitmap_free(mddev, bitmap);
 			return -1;
 		}
 		bm_lockres->flags |= DLM_LKF_NOQUEUE;
@@ -1253,11 +1253,11 @@ static int cluster_check_sync_size(struct mddev *mddev)
 			sync_size = sb->sync_size;
 		else if (sync_size != sb->sync_size) {
 			kunmap_atomic(sb);
-			md_bitmap_free(bitmap);
+			md_bitmap_free(mddev, bitmap);
 			return -1;
 		}
 		kunmap_atomic(sb);
-		md_bitmap_free(bitmap);
+		md_bitmap_free(mddev, bitmap);
 	}
 
 	return (my_sync_size == sync_size) ? 0 : -1;

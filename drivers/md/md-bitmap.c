@@ -1790,10 +1790,7 @@ static void bitmap_flush(struct mddev *mddev)
 	bitmap_update_sb(bitmap);
 }
 
-/*
- * free memory that was allocated
- */
-void md_bitmap_free(struct bitmap *bitmap)
+static void __bitmap_free(struct bitmap *bitmap)
 {
 	unsigned long k, pages;
 	struct bitmap_page *bp;
@@ -1827,7 +1824,6 @@ void md_bitmap_free(struct bitmap *bitmap)
 	kfree(bp);
 	kfree(bitmap);
 }
-EXPORT_SYMBOL(md_bitmap_free);
 
 void md_bitmap_wait_behind_writes(struct mddev *mddev)
 {
@@ -1861,7 +1857,7 @@ static void bitmap_destroy(struct mddev *mddev)
 	mutex_unlock(&mddev->bitmap_info.mutex);
 	mddev_set_timeout(mddev, MAX_SCHEDULE_TIMEOUT, true);
 
-	md_bitmap_free(bitmap);
+	__bitmap_free(bitmap);
 }
 
 /*
@@ -1952,7 +1948,7 @@ static struct bitmap *bitmap_create(struct mddev *mddev, int slot)
 
 	return bitmap;
  error:
-	md_bitmap_free(bitmap);
+	__bitmap_free(bitmap);
 	return ERR_PTR(err);
 }
 
@@ -2013,7 +2009,7 @@ out:
 	return err;
 }
 
-/* caller need to free returned bitmap with md_bitmap_free() */
+/* caller need to free returned bitmap with __bitmap_free() */
 static struct bitmap *bitmap_get_from_slot(struct mddev *mddev, int slot)
 {
 	int rv = 0;
@@ -2027,7 +2023,7 @@ static struct bitmap *bitmap_get_from_slot(struct mddev *mddev, int slot)
 
 	rv = md_bitmap_init_from_disk(bitmap, 0);
 	if (rv) {
-		md_bitmap_free(bitmap);
+		__bitmap_free(bitmap);
 		return ERR_PTR(rv);
 	}
 
@@ -2076,7 +2072,7 @@ static int bitmap_copy_from_slot(struct mddev *mddev, int slot, sector_t *low,
 	md_bitmap_unplug(mddev->bitmap);
 	*low = lo;
 	*high = hi;
-	md_bitmap_free(bitmap);
+	__bitmap_free(bitmap);
 
 	return rv;
 }
@@ -2715,6 +2711,7 @@ static struct bitmap_operations bitmap_ops = {
 	.sync_with_cluster	= bitmap_sync_with_cluster,
 	.get_from_slot		= bitmap_get_from_slot,
 	.copy_from_slot		= bitmap_copy_from_slot,
+	.free			= __bitmap_free,
 };
 
 void mddev_set_bitmap_ops(struct mddev *mddev)
