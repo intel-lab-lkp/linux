@@ -427,8 +427,7 @@ static void raid10_end_read_request(struct bio *bio)
 static void close_write(struct r10bio *r10_bio)
 {
 	/* clear the bitmap if all writes complete successfully */
-	md_bitmap_endwrite(r10_bio->mddev->bitmap, r10_bio->sector,
-			   r10_bio->sectors,
+	md_bitmap_endwrite(r10_bio->mddev, r10_bio->sector, r10_bio->sectors,
 			   !test_bit(R10BIO_Degraded, &r10_bio->state),
 			   0);
 	md_write_end(r10_bio->mddev);

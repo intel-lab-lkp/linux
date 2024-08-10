@@ -3663,7 +3663,7 @@ handle_failed_stripe(struct r5conf *conf, struct stripe_head *sh,
 			bi = nextbi;
 		}
 		if (bitmap_end)
-			md_bitmap_endwrite(conf->mddev->bitmap, sh->sector,
+			md_bitmap_endwrite(conf->mddev, sh->sector,
 					   RAID5_STRIPE_SECTORS(conf), 0, 0);
 		bitmap_end = 0;
 		/* and fail all 'written' */
@@ -3709,7 +3709,7 @@ handle_failed_stripe(struct r5conf *conf, struct stripe_head *sh,
 			}
 		}
 		if (bitmap_end)
-			md_bitmap_endwrite(conf->mddev->bitmap, sh->sector,
+			md_bitmap_endwrite(conf->mddev, sh->sector,
 					   RAID5_STRIPE_SECTORS(conf), 0, 0);
 		/* If we were in the middle of a write the parity block might
 		 * still be locked - so just clear all R5_LOCKED flags
@@ -4059,7 +4059,7 @@ returnbi:
 					bio_endio(wbi);
 					wbi = wbi2;
 				}
-				md_bitmap_endwrite(conf->mddev->bitmap, sh->sector,
+				md_bitmap_endwrite(conf->mddev, sh->sector,
 						   RAID5_STRIPE_SECTORS(conf),
 						   !test_bit(STRIPE_DEGRADED, &sh->state),
 						   0);

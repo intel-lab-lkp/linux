@@ -1524,8 +1524,8 @@ static int bitmap_startwrite(struct bitmap *bitmap, sector_t offset,
 	return 0;
 }
 
-void md_bitmap_endwrite(struct bitmap *bitmap, sector_t offset,
-			unsigned long sectors, int success, int behind)
+static void bitmap_endwrite(struct bitmap *bitmap, sector_t offset,
+			    unsigned long sectors, int success, int behind)
 {
 	if (!bitmap)
 		return;
@@ -1575,7 +1575,6 @@ void md_bitmap_endwrite(struct bitmap *bitmap, sector_t offset,
 			sectors = 0;
 	}
 }
-EXPORT_SYMBOL(md_bitmap_endwrite);
 
 static int __bitmap_start_sync(struct bitmap *bitmap, sector_t offset, sector_t *blocks,
 			       int degraded)
@@ -2717,6 +2716,7 @@ static struct bitmap_operations bitmap_ops = {
 	.dirty_bits		= bitmap_dirty_bits,
 
 	.startwrite		= bitmap_startwrite,
+	.endwrite		= bitmap_endwrite,
 
 	.update_sb		= bitmap_update_sb,
 };
