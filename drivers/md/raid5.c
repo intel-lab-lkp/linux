@@ -3563,7 +3563,7 @@ static void __add_stripe_bio(struct stripe_head *sh, struct bio *bi,
 		 */
 		set_bit(STRIPE_BITMAP_PENDING, &sh->state);
 		spin_unlock_irq(&sh->stripe_lock);
-		md_bitmap_startwrite(conf->mddev->bitmap, sh->sector,
+		md_bitmap_startwrite(conf->mddev, sh->sector,
 				     RAID5_STRIPE_SECTORS(conf), 0);
 		spin_lock_irq(&sh->stripe_lock);
 		clear_bit(STRIPE_BITMAP_PENDING, &sh->state);
@@ -5791,8 +5791,7 @@ static void make_discard_request(struct mddev *mddev, struct bio *bi)
 			for (d = 0;
 			     d < conf->raid_disks - conf->max_degraded;
 			     d++)
-				md_bitmap_startwrite(mddev->bitmap,
-						     sh->sector,
+				md_bitmap_startwrite(mddev, sh->sector,
 						     RAID5_STRIPE_SECTORS(conf),
 						     0);
 			sh->bm_seq = conf->seq_flush + 1;

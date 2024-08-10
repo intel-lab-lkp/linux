@@ -243,6 +243,9 @@ struct bitmap_operations {
 	void (*write_all)(struct bitmap *bitmap);
 	void (*dirty_bits)(struct bitmap *bitmap, unsigned long s, unsigned long e);
 
+	int (*startwrite)(struct bitmap *bitmap, sector_t offset,
+			  unsigned long sectors, int behind);
+
 	void (*update_sb)(struct bitmap *bitmap);
 };
 
@@ -316,8 +319,16 @@ static inline void md_bitmap_dirty_bits(struct mddev *mddev, unsigned long s,
 }
 
 /* these are exported */
-int md_bitmap_startwrite(struct bitmap *bitmap, sector_t offset,
-			 unsigned long sectors, int behind);
+static inline int md_bitmap_startwrite(struct mddev *mddev, sector_t offset,
+				       unsigned long sectors, int behind)
+{
+	if (!mddev->bitmap || !mddev->bitmap_ops->startwrite)
+		return -EOPNOTSUPP;
+
+	return mddev->bitmap_ops->startwrite(mddev->bitmap, offset, sectors,
+					     behind);
+}
+
 void md_bitmap_endwrite(struct bitmap *bitmap, sector_t offset,
 			unsigned long sectors, int success, int behind);
 int md_bitmap_start_sync(struct bitmap *bitmap, sector_t offset, sector_t *blocks, int degraded);

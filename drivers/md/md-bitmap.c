@@ -1460,7 +1460,8 @@ __acquires(bitmap->lock)
 			&(bitmap->bp[page].map[pageoff]);
 }
 
-int md_bitmap_startwrite(struct bitmap *bitmap, sector_t offset, unsigned long sectors, int behind)
+static int bitmap_startwrite(struct bitmap *bitmap, sector_t offset,
+			     unsigned long sectors, int behind)
 {
 	if (!bitmap)
 		return 0;
@@ -1522,7 +1523,6 @@ int md_bitmap_startwrite(struct bitmap *bitmap, sector_t offset, unsigned long s
 	}
 	return 0;
 }
-EXPORT_SYMBOL(md_bitmap_startwrite);
 
 void md_bitmap_endwrite(struct bitmap *bitmap, sector_t offset,
 			unsigned long sectors, int success, int behind)
@@ -2715,6 +2715,8 @@ static struct bitmap_operations bitmap_ops = {
 	.status			= bitmap_status,
 	.write_all		= bitmap_write_all,
 	.dirty_bits		= bitmap_dirty_bits,
+
+	.startwrite		= bitmap_startwrite,
 
 	.update_sb		= bitmap_update_sb,
 };

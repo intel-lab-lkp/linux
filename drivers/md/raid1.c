@@ -1617,7 +1617,8 @@ static void raid1_write_request(struct mddev *mddev, struct bio *bio,
 				alloc_behind_master_bio(r1_bio, bio);
 			}
 
-			md_bitmap_startwrite(bitmap, r1_bio->sector, r1_bio->sectors,
+			md_bitmap_startwrite(mddev, r1_bio->sector,
+					     r1_bio->sectors,
 					     test_bit(R1BIO_BehindIO, &r1_bio->state));
 			first_clone = 0;
 		}
