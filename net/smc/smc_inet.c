@@ -60,16 +60,22 @@ static struct inet_protosw smc_inet_protosw = {
 };
 
 #if IS_ENABLED(CONFIG_IPV6)
+struct smc6_sock {
+	struct smc_sock smc;
+	struct ipv6_pinfo np;
+};
+
 static struct proto smc_inet6_prot = {
-	.name		= "INET6_SMC",
-	.owner		= THIS_MODULE,
-	.init		= smc_inet_init_sock,
-	.hash		= smc_hash_sk,
-	.unhash		= smc_unhash_sk,
-	.release_cb	= smc_release_cb,
-	.obj_size	= sizeof(struct smc_sock),
-	.h.smc_hash	= &smc_v6_hashinfo,
-	.slab_flags	= SLAB_TYPESAFE_BY_RCU,
+	.name		       = "INET6_SMC",
+	.owner		       = THIS_MODULE,
+	.init		       = smc_inet_init_sock,
+	.hash		       = smc_hash_sk,
+	.unhash		       = smc_unhash_sk,
+	.release_cb	       = smc_release_cb,
+	.obj_size	       = sizeof(struct smc6_sock),
+	.h.smc_hash	       = &smc_v6_hashinfo,
+	.slab_flags	       = SLAB_TYPESAFE_BY_RCU,
+	.ipv6_pinfo_offset = offsetof(struct smc6_sock, np),
 };
 
 static const struct proto_ops smc_inet6_stream_ops = {
