@@ -1852,7 +1852,7 @@ void md_bitmap_wait_behind_writes(struct mddev *mddev)
 	}
 }
 
-void md_bitmap_destroy(struct mddev *mddev)
+static void bitmap_destroy(struct mddev *mddev)
 {
 	struct bitmap *bitmap = mddev->bitmap;
 
@@ -2366,7 +2366,7 @@ location_store(struct mddev *mddev, const char *buf, size_t len)
 			goto out;
 		}
 
-		md_bitmap_destroy(mddev);
+		bitmap_destroy(mddev);
 		mddev->bitmap_info.offset = 0;
 		if (mddev->bitmap_info.file) {
 			struct file *f = mddev->bitmap_info.file;
@@ -2413,7 +2413,7 @@ location_store(struct mddev *mddev, const char *buf, size_t len)
 			rv = bitmap_load(mddev);
 			if (rv) {
 				mddev->bitmap_info.offset = 0;
-				md_bitmap_destroy(mddev);
+				bitmap_destroy(mddev);
 				goto out;
 			}
 		}
@@ -2710,6 +2710,7 @@ const struct attribute_group md_bitmap_group = {
 static struct bitmap_operations bitmap_ops = {
 	.create			= bitmap_create,
 	.load			= bitmap_load,
+	.destroy		= bitmap_destroy,
 };
 
 void mddev_set_bitmap_ops(struct mddev *mddev)
