@@ -197,7 +197,7 @@ Memory Constraints
 ==================
 
 The DAX hardware operates only on physical addresses. Therefore, it is
-not aware of virtual memory mappings and the discontiguities that may
+not aware of virtual memory mappings and the discontinuities that may
 exist in the physical memory that a virtual buffer maps to. There is
 no I/O TLB or any scatter/gather mechanism. All buffers, whether input
 or output, must reside in a physically contiguous region of memory.
