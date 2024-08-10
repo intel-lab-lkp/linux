@@ -260,6 +260,7 @@ struct bitmap_operations {
 	void (*sync_with_cluster)(struct bitmap *bitmap,
 				  sector_t old_lo, sector_t old_hi,
 				  sector_t new_lo, sector_t new_hi);
+	struct bitmap* (*get_from_slot)(struct mddev *mddev, int slot);
 };
 
 /* the bitmap API */
@@ -411,11 +412,19 @@ static inline void md_bitmap_sync_with_cluster(struct mddev *mddev,
 					     new_lo, new_hi);
 }
 
+static inline struct bitmap *md_bitmap_get_from_slot(struct mddev *mddev,
+						     int slot)
+{
+	if (!mddev->bitmap_ops->get_from_slot)
+		return ERR_PTR(-EOPNOTSUPP);
+
+	return mddev->bitmap_ops->get_from_slot(mddev, slot);
+}
+
 void md_bitmap_unplug(struct bitmap *bitmap);
 void md_bitmap_unplug_async(struct bitmap *bitmap);
 void md_bitmap_daemon_work(struct mddev *mddev);
 
-struct bitmap *get_bitmap_from_slot(struct mddev *mddev, int slot);
 int md_bitmap_copy_from_slot(struct mddev *mddev, int slot,
 			     sector_t *lo, sector_t *hi, bool clear_bits);
 void md_bitmap_free(struct bitmap *bitmap);
