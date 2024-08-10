@@ -232,7 +232,8 @@ static void __recvpair(struct __test_metadata *_metadata,
 
 	if (ret[0] != expected_len || recv_errno[0] != expected_errno) {
 		TH_LOG("AF_UNIX :%s", ret[0] < 0 ? strerror(recv_errno[0]) : recv_buf[0]);
-		TH_LOG("Expected:%s", expected_errno ? strerror(expected_errno) : expected_buf);
+		TH_LOG("Expected:%s",
+				expected_errno ? strerror(expected_errno) : (char *)expected_buf);
 
 		ASSERT_EQ(ret[0], expected_len);
 		ASSERT_EQ(recv_errno[0], expected_errno);
@@ -256,7 +257,8 @@ static void __recvpair(struct __test_metadata *_metadata,
 		cmp = strncmp(expected_buf, recv_buf[0], expected_len);
 		if (cmp) {
 			TH_LOG("AF_UNIX :%s", ret[0] < 0 ? strerror(recv_errno[0]) : recv_buf[0]);
-			TH_LOG("Expected:%s", expected_errno ? strerror(expected_errno) : expected_buf);
+			TH_LOG("Expected:%s", expected_errno ? strerror(expected_errno)
+					: (char *)expected_buf);
 
 			ASSERT_EQ(cmp, 0);
 		}
