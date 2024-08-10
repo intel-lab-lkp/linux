@@ -2092,7 +2092,7 @@ int md_bitmap_copy_from_slot(struct mddev *mddev, int slot,
 EXPORT_SYMBOL_GPL(md_bitmap_copy_from_slot);
 
 
-void md_bitmap_status(struct seq_file *seq, struct bitmap *bitmap)
+static void bitmap_status(struct seq_file *seq, struct bitmap *bitmap)
 {
 	unsigned long chunk_kb;
 	struct bitmap_counts *counts;
@@ -2711,6 +2711,7 @@ static struct bitmap_operations bitmap_ops = {
 	.load			= bitmap_load,
 	.destroy		= bitmap_destroy,
 	.flush			= bitmap_flush,
+	.status			= bitmap_status,
 
 	.update_sb		= bitmap_update_sb,
 };
