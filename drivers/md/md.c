@@ -4688,7 +4688,7 @@ bitmap_store(struct mddev *mddev, const char *buf, size_t len)
 			if (buf == end) break;
 		}
 		if (*end && !isspace(*end)) break;
-		md_bitmap_dirty_bits(mddev->bitmap, chunk, end_chunk);
+		md_bitmap_dirty_bits(mddev, chunk, end_chunk);
 		buf = skip_spaces(end);
 	}
 	md_bitmap_unplug(mddev->bitmap); /* flush the bits to disk */

@@ -241,6 +241,7 @@ struct bitmap_operations {
 	void (*flush)(struct mddev *mddev);
 	void (*status)(struct seq_file *seq, struct bitmap *bitmap);
 	void (*write_all)(struct bitmap *bitmap);
+	void (*dirty_bits)(struct bitmap *bitmap, unsigned long s, unsigned long e);
 
 	void (*update_sb)(struct bitmap *bitmap);
 };
@@ -305,7 +306,14 @@ static inline void md_bitmap_write_all(struct mddev *mddev)
 	mddev->bitmap_ops->write_all(mddev->bitmap);
 }
 
-void md_bitmap_dirty_bits(struct bitmap *bitmap, unsigned long s, unsigned long e);
+static inline void md_bitmap_dirty_bits(struct mddev *mddev, unsigned long s,
+					unsigned long e)
+{
+	if (!mddev->bitmap || !mddev->bitmap_ops->dirty_bits)
+		return;
+
+	mddev->bitmap_ops->dirty_bits(mddev->bitmap, s, e);
+}
 
 /* these are exported */
 int md_bitmap_startwrite(struct bitmap *bitmap, sector_t offset,

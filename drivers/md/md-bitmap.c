@@ -1755,7 +1755,8 @@ static void md_bitmap_set_memory_bits(struct bitmap *bitmap, sector_t offset, in
 }
 
 /* dirty the memory and file bits for bitmap chunks "s" to "e" */
-void md_bitmap_dirty_bits(struct bitmap *bitmap, unsigned long s, unsigned long e)
+static void bitmap_dirty_bits(struct bitmap *bitmap, unsigned long s,
+			      unsigned long e)
 {
 	unsigned long chunk;
 
@@ -2713,6 +2714,7 @@ static struct bitmap_operations bitmap_ops = {
 	.flush			= bitmap_flush,
 	.status			= bitmap_status,
 	.write_all		= bitmap_write_all,
+	.dirty_bits		= bitmap_dirty_bits,
 
 	.update_sb		= bitmap_update_sb,
 };
