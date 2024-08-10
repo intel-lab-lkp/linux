@@ -1825,14 +1825,12 @@ static void __bitmap_free(struct bitmap *bitmap)
 	kfree(bitmap);
 }
 
-void md_bitmap_wait_behind_writes(struct mddev *mddev)
+static void bitmap_wait_behind_writes(struct bitmap *bitmap)
 {
-	struct bitmap *bitmap = mddev->bitmap;
-
 	/* wait for behind writes to complete */
-	if (bitmap && atomic_read(&bitmap->behind_writes) > 0) {
+	if (atomic_read(&bitmap->behind_writes) > 0) {
 		pr_debug("md:%s: behind writes in progress - waiting to stop.\n",
-			 mdname(mddev));
+			 mdname(bitmap->mddev));
 		/* need to kick something here to make sure I/O goes? */
 		wait_event(bitmap->behind_wait,
 			   atomic_read(&bitmap->behind_writes) == 0);
@@ -1846,7 +1844,7 @@ static void bitmap_destroy(struct mddev *mddev)
 	if (!bitmap) /* there was no bitmap */
 		return;
 
-	md_bitmap_wait_behind_writes(mddev);
+	bitmap_wait_behind_writes(bitmap);
 	if (!mddev->serialize_policy)
 		mddev_destroy_serial_pool(mddev, NULL);
 
@@ -2705,6 +2703,7 @@ static struct bitmap_operations bitmap_ops = {
 	.end_sync		= bitmap_end_sync,
 	.close_sync		= bitmap_close_sync,
 	.cond_end_sync		= bitmap_cond_end_sync,
+	.wait_behind_writes	= bitmap_wait_behind_writes,
 
 	.update_sb		= bitmap_update_sb,
 	.resize			= bitmap_resize,
