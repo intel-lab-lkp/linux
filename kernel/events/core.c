@@ -55,6 +55,7 @@
 #include <linux/pgtable.h>
 #include <linux/buildid.h>
 #include <linux/task_work.h>
+#include <linux/jiffies.h>
 
 #include "internal.h"
 
@@ -4105,7 +4106,7 @@ perf_adjust_freq_unthr_context(struct perf_event_context *ctx, bool unthrottle)
 {
 	struct perf_event *event;
 	struct hw_perf_event *hwc;
-	u64 now, period = TICK_NSEC;
+	u64 now, period, tick_stamp;
 	s64 delta;
 
 	/*
@@ -4144,6 +4145,10 @@ perf_adjust_freq_unthr_context(struct perf_event_context *ctx, bool unthrottle)
 		 */
 		event->pmu->stop(event, PERF_EF_UPDATE);
 
+		tick_stamp = jiffies64_to_nsecs(get_jiffies_64());
+		period = tick_stamp - hwc->freq_tick_stamp;
+		hwc->freq_tick_stamp = tick_stamp;
+
 		now = local64_read(&event->count);
 		delta = now - hwc->freq_count_stamp;
 		hwc->freq_count_stamp = now;
@@ -4155,8 +4160,13 @@ perf_adjust_freq_unthr_context(struct perf_event_context *ctx, bool unthrottle)
 		 * to perf_adjust_period() to avoid stopping it
 		 * twice.
 		 */
-		if (delta > 0)
-			perf_adjust_period(event, period, delta, false);
+		if (delta > 0) {
+			/*
+			 * we skip first tick adjust period
+			 */
+			if (likely(period != tick_stamp))
+				perf_adjust_period(event, period, delta, false);
+		}
 
 		event->pmu->start(event, delta > 0 ? PERF_EF_RELOAD : 0);
 	next:
