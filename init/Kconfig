@@ -1659,6 +1659,24 @@ config EVENTFD
 
 	  If unsure, say Y.
 
+config EVENTFD_RATELIMITED_WAKEUP
+	bool "support ratelimited wakeups for the NON-SEMAPHORE eventfd" if EXPERT
+	default n
+	depends on EVENTFD
+	help
+	  This option enables the ratelimited wakeups for the non-semaphore
+	  eventfd. Frequent writing to an eventfd can lead to frequent wakeup
+	  of processes waiting for reading on this eventfd, resulting in
+	  significant overhead. However, for the NON-SEMAPHORE eventfd, if its
+	  counter has a non-zero value, read (2) returns 8 bytes containing
+	  that value, and the counter value is reset to zero. This means that
+	  a read operation can retrieve the accumulated value caused by
+	  multiple write operations.
+	  By introducing the ratelimited wakeups for the NON-SEMAPHORE eventfd,
+	  these CPU overhead can be reduced.
+
+	  If unsure, say N.
+
 config SHMEM
 	bool "Use full shmem filesystem" if EXPERT
 	default y
