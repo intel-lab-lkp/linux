@@ -174,12 +174,6 @@ static inline pgprot_t arch_apei_get_mem_attribute(phys_addr_t addr)
 }
 #endif /* CONFIG_ACPI_APEI */
 
-#ifdef CONFIG_ACPI_NUMA
-void acpi_map_cpus_to_nodes(void);
-#else
-static inline void acpi_map_cpus_to_nodes(void) { }
-#endif /* CONFIG_ACPI_NUMA */
-
 #define ACPI_TABLE_UPGRADE_MAX_PHYS MEMBLOCK_ALLOC_ACCESSIBLE
 
 #endif /*_ASM_ACPI_H*/
