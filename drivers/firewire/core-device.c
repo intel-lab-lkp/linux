@@ -1087,8 +1087,9 @@ static void fw_device_init(struct work_struct *work)
 		return;
 	}
 
-	revived_dev = device_find_child(card->device,
-					device, lookup_existing_device);
+	revived_dev = constify_device_find_child_helper(card->device,
+							device,
+							lookup_existing_device);
 	if (revived_dev) {
 		put_device(revived_dev);
 		fw_device_release(&device->device);
