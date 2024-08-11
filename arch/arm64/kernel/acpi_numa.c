@@ -29,7 +29,7 @@
 
 static int acpi_early_node_map[NR_CPUS] __initdata = { NUMA_NO_NODE };
 
-int __init acpi_numa_get_nid(unsigned int cpu)
+static int __init acpi_numa_get_nid(unsigned int cpu)
 {
 	return acpi_early_node_map[cpu];
 }
@@ -72,9 +72,15 @@ static int __init acpi_parse_gicc_pxm(union acpi_subtable_headers *header,
 
 void __init acpi_map_cpus_to_nodes(void)
 {
+	int i;
+
 	acpi_table_parse_entries(ACPI_SIG_SRAT, sizeof(struct acpi_table_srat),
 					    ACPI_SRAT_TYPE_GICC_AFFINITY,
 					    acpi_parse_gicc_pxm, 0);
+
+	for (i = 0; i < nr_cpu_ids; i++)
+		early_map_cpu_to_node(i, acpi_numa_get_nid(i));
+
 }
 
 /* Callback for Proximity Domain -> ACPI processor UID mapping */
