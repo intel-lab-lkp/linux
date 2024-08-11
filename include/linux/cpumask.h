@@ -35,7 +35,7 @@ static inline void set_nr_cpu_ids(unsigned int nr)
 #if (NR_CPUS == 1) || defined(CONFIG_FORCE_NR_CPUS)
 	WARN_ON(nr != nr_cpu_ids);
 #else
-	nr_cpu_ids = nr;
+	WRITE_ONCE(nr_cpu_ids, nr);
 #endif
 }
 
