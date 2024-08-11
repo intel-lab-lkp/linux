@@ -189,8 +189,7 @@ static int io_net_vec_assign(struct io_kiocb *req, struct io_async_msghdr *kmsg,
 	if (iov) {
 		req->flags |= REQ_F_NEED_CLEANUP;
 		kmsg->free_iov_nr = kmsg->msg.msg_iter.nr_segs;
-		if (kmsg->free_iov)
-			kfree(kmsg->free_iov);
+		kfree(kmsg->free_iov);
 		kmsg->free_iov = iov;
 	}
 	return 0;
