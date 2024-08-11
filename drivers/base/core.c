@@ -4128,6 +4128,41 @@ struct device *device_find_any_child(struct device *parent)
 }
 EXPORT_SYMBOL_GPL(device_find_any_child);
 
+struct fn_data_struct {
+	int (*match)(struct device *dev, void *data);
+	void *data;
+	struct device *target_device;
+};
+
+static int constify_device_match_fn(struct device *dev, void *data)
+{
+	struct fn_data_struct *fn_data =  data;
+	int res;
+
+	res = fn_data->match(dev, fn_data->data);
+	if (res && get_device(dev)) {
+		fn_data->target_device = dev;
+		return res;
+	}
+
+	return 0;
+}
+
+/*
+ * My mission is to clean up existing match functions which will modify
+ * caller's match data for device_find_child(), so i do not introduce
+ * myself here to prevent that i am used for any other purpose.
+ */
+struct device *constify_device_find_child_helper(struct device *parent, void *data,
+						 int (*match)(struct device *dev, void *data))
+{
+	struct fn_data_struct fn_data = {match, data, NULL};
+
+	device_for_each_child(parent, &fn_data, constify_device_match_fn);
+	return fn_data.target_device;
+}
+EXPORT_SYMBOL_GPL(constify_device_find_child_helper);
+
 int __init devices_init(void)
 {
 	devices_kset = kset_create_and_add("devices", &device_uevent_ops, NULL);

@@ -1078,6 +1078,13 @@ struct device *device_find_child(struct device *dev, void *data,
 struct device *device_find_child_by_name(struct device *parent,
 					 const char *name);
 struct device *device_find_any_child(struct device *parent);
+/*
+ * My mission is to clean up existing match functions which will modify
+ * caller's match data for device_find_child(), so please DO NOT use me
+ * for any other purpose.
+ */
+struct device *constify_device_find_child_helper(struct device *parent, void *data,
+						 int (*match)(struct device *dev, void *data));
 
 int device_rename(struct device *dev, const char *new_name);
 int device_move(struct device *dev, struct device *new_parent,
