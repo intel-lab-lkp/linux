@@ -358,8 +358,9 @@ int emac_sgmii_config(struct platform_device *pdev, struct emac_adapter *adpt)
 	if (has_acpi_companion(&pdev->dev)) {
 		struct device *dev;
 
-		dev = device_find_child(&pdev->dev, &phy->sgmii_ops,
-					emac_sgmii_acpi_match);
+		dev = constify_device_find_child_helper(&pdev->dev,
+							&phy->sgmii_ops,
+							emac_sgmii_acpi_match);
 
 		if (!dev) {
 			dev_warn(&pdev->dev, "cannot find internal phy node\n");
