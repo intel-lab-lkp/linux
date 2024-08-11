@@ -667,17 +667,25 @@ static int mv88e63xx_get_port_serdes_cmode(struct mv88e6xxx_chip *chip, int port
 	return val & MV88E6XXX_PORT_STS_CMODE_MASK;
 }
 
-static void mv88e6352_phylink_get_caps(struct mv88e6xxx_chip *chip, int port,
+static void mv88e6172_phylink_get_caps(struct mv88e6xxx_chip *chip, int port,
 				       struct phylink_config *config)
 {
 	unsigned long *supported = config->supported_interfaces;
-	int err, cmode;
 
 	/* Translate the default cmode */
 	mv88e6xxx_translate_cmode(chip->ports[port].cmode, supported);
 
 	config->mac_capabilities = MAC_SYM_PAUSE | MAC_10 | MAC_100 |
 				   MAC_1000FD;
+}
+
+static void mv88e6352_phylink_get_caps(struct mv88e6xxx_chip *chip, int port,
+				       struct phylink_config *config)
+{
+	unsigned long *supported = config->supported_interfaces;
+	int err, cmode;
+
+	mv88e6172_phylink_get_caps(chip, port, config);
 
 	/* Port 4 supports automedia if the serdes is associated with it. */
 	if (port == 4) {
@@ -4618,11 +4626,8 @@ static const struct mv88e6xxx_ops mv88e6172_ops = {
 	.vtu_loadpurge = mv88e6352_g1_vtu_loadpurge,
 	.stu_getnext = mv88e6352_g1_stu_getnext,
 	.stu_loadpurge = mv88e6352_g1_stu_loadpurge,
-	.serdes_get_regs_len = mv88e6352_serdes_get_regs_len,
-	.serdes_get_regs = mv88e6352_serdes_get_regs,
 	.gpio_ops = &mv88e6352_gpio_ops,
-	.phylink_get_caps = mv88e6352_phylink_get_caps,
-	.pcs_ops = &mv88e6352_pcs_ops,
+	.phylink_get_caps = mv88e6172_phylink_get_caps,
 };
 
 static const struct mv88e6xxx_ops mv88e6175_ops = {
