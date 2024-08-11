@@ -264,6 +264,13 @@ void blk_mq_unquiesce_queue(struct request_queue *q)
 		;
 	} else if (!--q->quiesce_depth) {
 		blk_queue_flag_clear(QUEUE_FLAG_QUIESCED, q);
+		/**
+		 * The need of memory barrier is in blk_mq_run_hw_queues() to
+		 * make sure clearing of QUEUE_FLAG_QUIESCED is before the
+		 * checking of dispatch list or bitmap of any software queue.
+		 *
+		 * smp_mb__after_atomic();
+		 */
 		run_queue = true;
 	}
 	spin_unlock_irqrestore(&q->queue_lock, flags);
@@ -2223,6 +2230,21 @@ void blk_mq_run_hw_queue(struct blk_mq_hw_ctx *hctx, bool async)
 	bool need_run;
 
 	/*
+	 * This barrier is used to order adding of dispatch list or setting
+	 * of bitmap of any software queue outside of this function and the
+	 * test of BLK_MQ_S_STOPPED in the following routine. Pairs with the
+	 * barrier in blk_mq_start_stopped_hw_queue(). So dispatch code could
+	 * either see BLK_MQ_S_STOPPED is cleared or dispatch list or setting
+	 * of bitmap of any software queue to avoid missing dispatching
+	 * requests.
+	 *
+	 * This barrier is also used to order adding of dispatch list or
+	 * setting of bitmap of any software queue outside of this function
+	 * and test of QUEUE_FLAG_QUIESCED below.
+	 */
+	smp_mb();
+
+	/*
 	 * We can't run the queue inline with interrupts disabled.
 	 */
 	WARN_ON_ONCE(!async && in_interrupt());
@@ -2243,17 +2265,6 @@ void blk_mq_run_hw_queue(struct blk_mq_hw_ctx *hctx, bool async)
 
 	if (!need_run)
 		return;
-
-	/*
-	 * This barrier is used to order adding of dispatch list or setting
-	 * of bitmap of any software queue outside of this function and the
-	 * test of BLK_MQ_S_STOPPED in the following routine. Pairs with the
-	 * barrier in blk_mq_start_stopped_hw_queue(). So dispatch code could
-	 * either see BLK_MQ_S_STOPPED is cleared or dispatch list or setting
-	 * of bitmap of any software queue to avoid missing dispatching
-	 * requests.
-	 */
-	smp_mb();
 
 	if (async || !cpumask_test_cpu(raw_smp_processor_id(), hctx->cpumask)) {
 		blk_mq_delay_run_hw_queue(hctx, 0);
@@ -2308,6 +2319,11 @@ void blk_mq_run_hw_queues(struct request_queue *q, bool async)
 	 * either see BLK_MQ_S_STOPPED is cleared or dispatch list or setting
 	 * of bitmap of any software queue to avoid missing dispatching
 	 * requests.
+	 *
+	 * This barrier is also used to order clearing of QUEUE_FLAG_QUIESCED
+	 * outside of this function in blk_mq_unquiesce_queue() and checking
+	 * of dispatch list or bitmap of any software queue in
+	 * blk_mq_run_hw_queue().
 	 */
 	smp_mb();
 
