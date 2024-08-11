@@ -93,6 +93,13 @@ static int bmi323_i2c_probe(struct i2c_client *i2c)
 	return bmi323_core_probe(dev);
 }
 
+static void bmi323_i2c_remove(struct i2c_client *i2c)
+{
+	struct device *const dev = &i2c->dev;
+
+	bmi323_core_remove(dev);
+}
+
 static const struct acpi_device_id bmi323_acpi_match[] = {
 	/*
 	 * The "BOSC0200" identifier used here is not unique to bmi323 devices.
@@ -133,6 +140,7 @@ static struct i2c_driver bmi323_i2c_driver = {
 		.acpi_match_table = bmi323_acpi_match,
 	},
 	.probe = bmi323_i2c_probe,
+	.remove = bmi323_i2c_remove,
 	.id_table = bmi323_i2c_ids,
 };
 module_i2c_driver(bmi323_i2c_driver);

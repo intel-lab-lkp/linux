@@ -64,6 +64,13 @@ static int bmi323_spi_probe(struct spi_device *spi)
 	return bmi323_core_probe(dev);
 }
 
+static void bmi323_spi_remove(struct spi_device *spi)
+{
+	struct device *const dev = &spi->dev;
+
+	bmi323_core_remove(dev);
+}
+
 static const struct spi_device_id bmi323_spi_ids[] = {
 	{ "bmi323" },
 	{ }
@@ -83,6 +90,7 @@ static struct spi_driver bmi323_spi_driver = {
 		.of_match_table = bmi323_of_spi_match,
 	},
 	.probe = bmi323_spi_probe,
+	.remove = bmi323_spi_remove,
 	.id_table = bmi323_spi_ids,
 };
 module_spi_driver(bmi323_spi_driver);
