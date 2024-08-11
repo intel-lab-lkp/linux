@@ -849,7 +849,8 @@ cxl_region_find_decoder(struct cxl_port *port,
 		dev = device_find_child(&port->dev, &cxlr->params,
 					match_auto_decoder);
 	else
-		dev = device_find_child(&port->dev, &id, match_free_decoder);
+		dev = constify_device_find_child_helper(&port->dev, &id,
+							match_free_decoder);
 	if (!dev)
 		return NULL;
 	/*
