@@ -2075,6 +2075,13 @@ out:
 		 * in blk_mq_sched_restart(). Avoid restart code path to
 		 * miss the new added requests to hctx->dispatch, meantime
 		 * SCHED_RESTART is observed here.
+		 *
+		 * This barrier is also used to order adding of dispatch list
+		 * above and the test of BLK_MQ_S_STOPPED in the following
+		 * routine (in blk_mq_delay_run_hw_queue()). Pairs with the
+		 * barrier in blk_mq_start_stopped_hw_queue(). So dispatch code
+		 * could either see BLK_MQ_S_STOPPED is cleared or dispatch list
+		 * to avoid missing dispatching requests.
 		 */
 		smp_mb();
 
@@ -2237,6 +2244,17 @@ void blk_mq_run_hw_queue(struct blk_mq_hw_ctx *hctx, bool async)
 	if (!need_run)
 		return;
 
+	/*
+	 * This barrier is used to order adding of dispatch list or setting
+	 * of bitmap of any software queue outside of this function and the
+	 * test of BLK_MQ_S_STOPPED in the following routine. Pairs with the
+	 * barrier in blk_mq_start_stopped_hw_queue(). So dispatch code could
+	 * either see BLK_MQ_S_STOPPED is cleared or dispatch list or setting
+	 * of bitmap of any software queue to avoid missing dispatching
+	 * requests.
+	 */
+	smp_mb();
+
 	if (async || !cpumask_test_cpu(raw_smp_processor_id(), hctx->cpumask)) {
 		blk_mq_delay_run_hw_queue(hctx, 0);
 		return;
@@ -2392,6 +2410,13 @@ void blk_mq_start_stopped_hw_queue(struct blk_mq_hw_ctx *hctx, bool async)
 		return;
 
 	clear_bit(BLK_MQ_S_STOPPED, &hctx->state);
+	/*
+	 * Pairs with the smp_mb() in blk_mq_run_hw_queue() or
+	 * blk_mq_dispatch_rq_list() to order the clearing of
+	 * BLK_MQ_S_STOPPED and the test of dispatch list or
+	 * bitmap of any software queue.
+	 */
+	smp_mb__after_atomic();
 	blk_mq_run_hw_queue(hctx, async);
 }
 EXPORT_SYMBOL_GPL(blk_mq_start_stopped_hw_queue);
