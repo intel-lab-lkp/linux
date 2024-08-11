@@ -12,12 +12,70 @@
 
 check_vmlinux()
 {
-	# Use readelf to check if it's a valid ELF
-	# TODO: find a better to way to check that it's really vmlinux
-	#       and not just an elf
-	readelf -h $1 > /dev/null 2>&1 || return 1
+	# Use readelf/nm to check if it's a valid ELF
+	# Check for valid ELF, critical sections, symbols, static linking
 
-	cat $1
+	# Check if the file is a valid ELF file
+	if ! readelf -h "$file" > /dev/null 2>&1; then
+		echo "Error: File is not a valid ELF file."
+		return 1
+	fi
+
+	# Check the ELF type (should be ET_EXEC for executable)
+	if ! readelf -h "$file" | grep -q "Type:\s*EXEC (Executable file)"; then
+		echo "Error: ELF file is not an executable type."
+		return 1
+	fi
+
+	# Check for the presence of key kernel sections
+	if ! readelf -S "$file" | grep -q '\.text'; then
+		echo "Error: File does not contain a .text section, not a valid vmlinux file."
+		return 1
+	fi
+
+	if ! readelf -S "$file" | grep -q '\.data'; then
+		echo "Error: File does not contain a .data section, not a valid vmlinux file."
+		return 1
+	fi
+
+	if ! readelf -S "$file" | grep -q '\.bss'; then
+		echo "Error: File does not contain a .bss section, not a valid vmlinux file."
+		return 1
+	fi
+
+	if ! readelf -S "$file" | grep -q '\.rodata'; then
+		echo "Error: File does not contain a .rodata section, not a valid vmlinux file."
+		return 1
+	fi
+
+	# Check for the presence of key kernel symbols
+	if ! nm "$file" | grep -q ' T start_kernel'; then
+		echo "Error: File does not contain the start_kernel symbol, not a valid vmlinux file."
+		return 1
+	fi
+
+	if ! nm "$file" | grep -q ' T _stext'; then
+		echo "Error: File does not contain the _stext symbol, not a valid vmlinux file."
+		return 1
+	fi
+
+	if ! nm "$file" | grep -q ' D _sdata'; then
+		echo "Error: File does not contain the _sdata symbol, not a valid vmlinux file."
+		return 1
+	fi
+
+	if ! nm "$file" | grep -q ' B __bss_start'; then
+		echo "Error: File does not contain the __bss_start symbol, not a valid vmlinux file."
+		return 1
+	fi
+
+	# Check for the absence of dynamic linking sections
+	if readelf -d "$file" 2>/dev/null | grep -q 'Shared library'; then
+		echo "Error: File contains dynamic linking information, not a valid vmlinux file."
+		return 1
+	fi
+
+	echo "File is a valid vmlinux file."
 	exit 0
 }
 
