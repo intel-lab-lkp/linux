@@ -86,7 +86,7 @@ int ceph_crypto_key_encode(struct ceph_crypto_key *key, void **p, void *end)
 	return 0;
 }
 
-int ceph_crypto_key_decode(struct ceph_crypto_key *key, void **p, void *end)
+int ceph_crypto_key_decode(struct ceph_crypto_key *key, const void **p, const void *end)
 {
 	int ret;
 
@@ -300,7 +300,7 @@ static int ceph_key_preparse(struct key_preparsed_payload *prep)
 	struct ceph_crypto_key *ckey;
 	size_t datalen = prep->datalen;
 	int ret;
-	void *p;
+	const void *p;
 
 	ret = -EINVAL;
 	if (datalen <= 0 || datalen > 32767 || !prep->data)
@@ -311,9 +311,8 @@ static int ceph_key_preparse(struct key_preparsed_payload *prep)
 	if (!ckey)
 		goto err;
 
-	/* TODO ceph_crypto_key_decode should really take const input */
-	p = (void *)prep->data;
-	ret = ceph_crypto_key_decode(ckey, &p, (char*)prep->data+datalen);
+	p = prep->data;
+	ret = ceph_crypto_key_decode(ckey, &p, (const char *)prep->data + datalen);
 	if (ret < 0)
 		goto err_ckey;
 
