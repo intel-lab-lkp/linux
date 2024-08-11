@@ -204,7 +204,9 @@ static int process_one_ticket(struct ceph_auth_client *ac,
 	if (tkt_struct_v != 1)
 		goto bad;
 
-	ret = ceph_crypto_key_decode(&new_session_key, &dp, dend);
+	ret = ceph_crypto_key_decode(&new_session_key, \
+		(const void **)&dp, (const void *)dend);
+
 	if (ret)
 		goto out;
 
