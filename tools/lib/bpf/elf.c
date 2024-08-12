@@ -374,7 +374,7 @@ out:
  */
 long elf_find_func_offset_from_file(const char *binary_path, const char *name)
 {
-	struct elf_fd elf_fd;
+	struct elf_fd elf_fd = { .fd = -1 };
 	long ret = -ENOENT;
 
 	ret = elf_open(binary_path, &elf_fd);
@@ -412,7 +412,7 @@ int elf_resolve_syms_offsets(const char *binary_path, int cnt,
 	int err = 0, i, cnt_done = 0;
 	unsigned long *offsets;
 	struct symbol *symbols;
-	struct elf_fd elf_fd;
+	struct elf_fd elf_fd = { .fd = -1 };
 
 	err = elf_open(binary_path, &elf_fd);
 	if (err)
@@ -507,7 +507,7 @@ int elf_resolve_pattern_offsets(const char *binary_path, const char *pattern,
 	int sh_types[2] = { SHT_SYMTAB, SHT_DYNSYM };
 	unsigned long *offsets = NULL;
 	size_t cap = 0, cnt = 0;
-	struct elf_fd elf_fd;
+	struct elf_fd elf_fd = { .fd = -1 };
 	int err = 0, i;
 
 	err = elf_open(binary_path, &elf_fd);
