@@ -3374,6 +3374,8 @@ static int vmw_cmd_destroy_gb_surface(struct vmw_private *dev_priv,
 				      SVGA3dCmdHeader *header)
 {
 	VMW_DECLARE_CMD_VAR(*cmd, SVGA3dCmdDestroyGBSurface);
+	struct vmw_resource *res;
+	struct vmw_cmdbuf_surface *surface;
 	int ret;
 
 	cmd = container_of(header, typeof(*cmd), header);
@@ -3382,9 +3384,12 @@ static int vmw_cmd_destroy_gb_surface(struct vmw_private *dev_priv,
 		return -EINVAL;
 
 	ret = vmw_cmd_res_check(dev_priv, sw_context, vmw_res_surface,
-				VMW_RES_DIRTY_NONE, NULL, &cmd->body.sid, NULL);
+				VMW_RES_DIRTY_NONE, NULL, &cmd->body.sid, &res);
 	if (unlikely(ret))
 		return ret;
+
+	surface = vmw_res_to_cmdbuf_srf(res);
+	surface->cmdbuf_destroy = true;
 
 	ret = vmw_cmdbuf_surface_destroy(dev_priv, sw_context, cmd->body.sid);
 	if (unlikely(ret))

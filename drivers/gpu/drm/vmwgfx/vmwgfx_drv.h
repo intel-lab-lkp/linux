@@ -267,6 +267,7 @@ struct vmw_surface {
 struct vmw_cmdbuf_surface {
 	struct vmw_surface surface;
 	struct ttm_base_object base;
+	bool cmdbuf_destroy;
 };
 
 struct vmw_fifo_state {
