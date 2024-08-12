@@ -692,12 +692,10 @@ static int ag71xx_mdio_probe(struct ag71xx *ag)
 {
 	struct device *dev = &ag->pdev->dev;
 	struct net_device *ndev = ag->ndev;
-	static struct mii_bus *mii_bus;
 	struct device_node *np, *mnp;
 	int err;
 
 	np = dev->of_node;
-	ag->mii_bus = NULL;
 
 	ag->clk_mdio = devm_clk_get_enabled(dev, "mdio");
 	if (IS_ERR(ag->clk_mdio)) {
@@ -711,7 +709,7 @@ static int ag71xx_mdio_probe(struct ag71xx *ag)
 		return err;
 	}
 
-	mii_bus = devm_mdiobus_alloc(dev);
+	ag->mii_bus = devm_mdiobus_alloc(dev);
 	if (!mii_bus)
 		return -ENOMEM;
 
@@ -721,13 +719,13 @@ static int ag71xx_mdio_probe(struct ag71xx *ag)
 		return PTR_ERR(ag->mdio_reset);
 	}
 
-	mii_bus->name = "ag71xx_mdio";
-	mii_bus->read = ag71xx_mdio_mii_read;
-	mii_bus->write = ag71xx_mdio_mii_write;
-	mii_bus->reset = ag71xx_mdio_reset;
-	mii_bus->priv = ag;
-	mii_bus->parent = dev;
-	snprintf(mii_bus->id, MII_BUS_ID_SIZE, "%s.%d", np->name, ag->mac_idx);
+	ag->mii_bus->name = "ag71xx_mdio";
+	ag->mii_bus->read = ag71xx_mdio_mii_read;
+	ag->mii_bus->write = ag71xx_mdio_mii_write;
+	ag->mii_bus->reset = ag71xx_mdio_reset;
+	ag->mii_bus->priv = ag;
+	ag->mii_bus->parent = dev;
+	snprintf(ag->mii_bus->id, MII_BUS_ID_SIZE, "%s.%d", np->name, ag->mac_idx);
 
 	if (!IS_ERR(ag->mdio_reset)) {
 		reset_control_assert(ag->mdio_reset);
@@ -737,20 +735,12 @@ static int ag71xx_mdio_probe(struct ag71xx *ag)
 	}
 
 	mnp = of_get_child_by_name(np, "mdio");
-	err = of_mdiobus_register(mii_bus, mnp);
+	err = devm_of_mdiobus_register(ag->mii_bus, mnp);
 	of_node_put(mnp);
 	if (err)
 		return err;
 
-	ag->mii_bus = mii_bus;
-
 	return 0;
-}
-
-static void ag71xx_mdio_remove(struct ag71xx *ag)
-{
-	if (ag->mii_bus)
-		mdiobus_unregister(ag->mii_bus);
 }
 
 static void ag71xx_hw_stop(struct ag71xx *ag)
@@ -1938,14 +1928,14 @@ static int ag71xx_probe(struct platform_device *pdev)
 	err = ag71xx_phylink_setup(ag);
 	if (err) {
 		netif_err(ag, probe, ndev, "failed to setup phylink (%d)\n", err);
-		goto err_mdio_remove;
+		return err;
 	}
 
 	err = register_netdev(ndev);
 	if (err) {
 		netif_err(ag, probe, ndev, "unable to register net device\n");
 		platform_set_drvdata(pdev, NULL);
-		goto err_mdio_remove;
+		return err;
 	}
 
 	netif_info(ag, probe, ndev, "Atheros AG71xx at 0x%08lx, irq %d, mode:%s\n",
@@ -1953,23 +1943,16 @@ static int ag71xx_probe(struct platform_device *pdev)
 		   phy_modes(ag->phy_if_mode));
 
 	return 0;
-
-err_mdio_remove:
-	ag71xx_mdio_remove(ag);
-	return err;
 }
 
 static void ag71xx_remove(struct platform_device *pdev)
 {
 	struct net_device *ndev = platform_get_drvdata(pdev);
-	struct ag71xx *ag;
 
 	if (!ndev)
 		return;
 
-	ag = netdev_priv(ndev);
 	unregister_netdev(ndev);
-	ag71xx_mdio_remove(ag);
 	platform_set_drvdata(pdev, NULL);
 }
 
