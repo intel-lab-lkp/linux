@@ -72,8 +72,6 @@
 
 #endif
 
-#define NOFAIL(ptr)   do_nofail((ptr), #ptr)
-
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
 void *do_nofail(void *ptr, const char *expr);
