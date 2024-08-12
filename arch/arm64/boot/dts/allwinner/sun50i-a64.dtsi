@@ -212,7 +212,6 @@
 
 	thermal-zones {
 		cpu_thermal: cpu0-thermal {
-			/* milliseconds */
 			polling-delay-passive = <0>;
 			polling-delay = <0>;
 			thermal-sensors = <&ths 0>;
@@ -236,21 +235,18 @@
 
 			trips {
 				cpu_alert0: cpu-alert0 {
-					/* milliCelsius */
 					temperature = <75000>;
 					hysteresis = <2000>;
 					type = "passive";
 				};
 
 				cpu_alert1: cpu-alert1 {
-					/* milliCelsius */
 					temperature = <90000>;
 					hysteresis = <2000>;
 					type = "hot";
 				};
 
 				cpu_crit: cpu-crit {
-					/* milliCelsius */
 					temperature = <110000>;
 					hysteresis = <2000>;
 					type = "critical";
@@ -259,17 +255,31 @@
 		};
 
 		gpu0_thermal: gpu0-thermal {
-			/* milliseconds */
 			polling-delay-passive = <0>;
 			polling-delay = <0>;
 			thermal-sensors = <&ths 1>;
+
+			trips {
+				gpu0_crit: gpu0-crit {
+					temperature = <110000>;
+					hysteresis = <2000>;
+					type = "critical";
+				};
+			};
 		};
 
 		gpu1_thermal: gpu1-thermal {
-			/* milliseconds */
 			polling-delay-passive = <0>;
 			polling-delay = <0>;
 			thermal-sensors = <&ths 2>;
+
+			trips {
+				gpu1_crit: gpu1-crit {
+					temperature = <110000>;
+					hysteresis = <2000>;
+					type = "critical";
+				};
+			};
 		};
 	};
 
