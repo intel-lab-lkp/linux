@@ -590,6 +590,8 @@ ice_prepare_for_reset(struct ice_pf *pf, enum ice_reset_req reset_type)
 			memset(&vsi->mqprio_qopt, 0, sizeof(vsi->mqprio_qopt));
 		}
 	}
+	if (vsi->netdev)
+		netif_device_detach(vsi->netdev);
 skip:
 
 	/* clear SW filtering DB */
@@ -7571,11 +7573,13 @@ static void ice_update_pf_netdev_link(struct ice_pf *pf)
 
 		ice_get_link_status(pf->vsi[i]->port_info, &link_up);
 		if (link_up) {
+			netif_device_attach(pf->vsi[i]->netdev);
 			netif_carrier_on(pf->vsi[i]->netdev);
 			netif_tx_wake_all_queues(pf->vsi[i]->netdev);
 		} else {
 			netif_carrier_off(pf->vsi[i]->netdev);
 			netif_tx_stop_all_queues(pf->vsi[i]->netdev);
+			netif_device_detach(pf->vsi[i]->netdev);
 		}
 	}
 }
