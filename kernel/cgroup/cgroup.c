@@ -4134,8 +4134,10 @@ static ssize_t cgroup_file_write(struct kernfs_open_file *of, char *buf,
 	 * cgroup.procs, cgroup.threads and cgroup.subtree_control.
 	 */
 	if ((cgrp->root->flags & CGRP_ROOT_NS_DELEGATE) &&
-	    !(cft->flags & CFTYPE_NS_DELEGATABLE) &&
-	    ctx->ns != &init_cgroup_ns && ctx->ns->root_cset->dfl_cgrp == cgrp)
+		ctx->ns != &init_cgroup_ns &&
+		(!cgroup_is_descendant(cgrp, ctx->ns->root_cset->dfl_cgrp) ||
+			(!(cft->flags & CFTYPE_NS_DELEGATABLE) &&
+			ctx->ns->root_cset->dfl_cgrp == cgrp)))
 		return -EPERM;
 
 	if (cft->write)
