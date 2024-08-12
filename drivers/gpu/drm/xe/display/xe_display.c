@@ -315,6 +315,9 @@ void xe_display_pm_suspend(struct xe_device *xe, bool runtime)
 
 	intel_hpd_cancel_work(xe);
 
+	if (runtime)
+		intel_hpd_poll_enable(xe);
+
 	intel_suspend_encoders(xe);
 
 	intel_opregion_suspend(xe, s2idle ? PCI_D1 : PCI_D3cold);
