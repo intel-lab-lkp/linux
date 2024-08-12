@@ -217,6 +217,7 @@ struct hns_roce_ucontext {
 	struct mutex		page_mutex;
 	struct hns_user_mmap_entry *db_mmap_entry;
 	u32			config;
+	struct list_head list; /* link all uctx to uctx_list on hr_dev */
 };
 
 struct hns_roce_pd {
@@ -1030,6 +1031,9 @@ struct hns_roce_dev {
 	u64 dwqe_page;
 	struct hns_roce_dev_debugfs dbgfs;
 	atomic64_t *dfx_cnt;
+
+	struct list_head	uctx_list; /* list of all uctx on this dev */
+	struct mutex		uctx_list_mutex; /* protect @uctx_list */
 };
 
 static inline struct hns_roce_dev *to_hr_dev(struct ib_device *ib_dev)
