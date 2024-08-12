@@ -5368,6 +5368,13 @@ void ata_dev_init(struct ata_device *dev)
 	 */
 	spin_lock_irqsave(ap->lock, flags);
 	dev->flags &= ~ATA_DFLAG_INIT_MASK;
+
+	/*
+	 * A lot of user space programs incorrectly assume that the sense data
+	 * is in descriptor format, without checking the RESPONSE CODE field of
+	 * the returned sense data (to see which format the sense data is in).
+	 */
+	dev->flags |= ATA_DFLAG_D_SENSE;
 	dev->horkage = 0;
 	spin_unlock_irqrestore(ap->lock, flags);
 
