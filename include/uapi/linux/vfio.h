@@ -1458,6 +1458,20 @@ struct vfio_device_feature_bus_master {
 };
 #define VFIO_DEVICE_FEATURE_BUS_MASTER 10
 
+/**
+ * Toggle virtualization of PCI MSI address and data fields off.  By default
+ * vfio-pci-core based drivers virtualize the MSI address and data fields of
+ * the MSI capability to emulate direct access to the device, ie. writes are
+ * allowed and buffered where subsequent reads return the buffered data.
+ * VMMs often virtualize these registers anyway and there are cases in user-
+ * space where having access to the host MSI fields can be useful, such as
+ * quirking an embedded interrupt controller on the device to generate physical
+ * MSI interrupts.  Upon VFIO_DEVICE_FEATURE_SET of the PCI_MSI_NOVIRT feature
+ * this virtualization is disabled, reads of the MSI address and data fields
+ * will return the physical values and writes are dropped.
+ */
+#define VFIO_DEVICE_FEATURE_PCI_MSI_NOVIRT 11
+
 /* -------- API for Type1 VFIO IOMMU -------- */
 
 /**

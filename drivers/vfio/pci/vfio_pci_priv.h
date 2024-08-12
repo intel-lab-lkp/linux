@@ -53,6 +53,7 @@ int vfio_pci_ioeventfd(struct vfio_pci_core_device *vdev, loff_t offset,
 
 int vfio_pci_init_perm_bits(void);
 void vfio_pci_uninit_perm_bits(void);
+int vfio_pci_msi_novirt(struct vfio_pci_core_device *vdev);
 
 int vfio_config_init(struct vfio_pci_core_device *vdev);
 void vfio_config_free(struct vfio_pci_core_device *vdev);

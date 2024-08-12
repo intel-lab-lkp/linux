@@ -1259,6 +1259,32 @@ static int vfio_msi_cap_len(struct vfio_pci_core_device *vdev, u8 pos)
 	return len;
 }
 
+/* Disable virtualization of the MSI address and data fields */
+int vfio_pci_msi_novirt(struct vfio_pci_core_device *vdev)
+{
+	struct pci_dev *pdev = vdev->pdev;
+	struct perm_bits *perm = vdev->msi_perm;
+	u16 flags;
+	int ret;
+
+	if (!perm)
+		return -EINVAL;
+
+	ret = pci_read_config_word(pdev, pdev->msi_cap + PCI_MSI_FLAGS, &flags);
+	if (ret)
+		return pcibios_err_to_errno(ret);
+
+	p_setd(perm, PCI_MSI_ADDRESS_LO, NO_VIRT, NO_WRITE);
+	if (flags & PCI_MSI_FLAGS_64BIT) {
+		p_setd(perm, PCI_MSI_ADDRESS_HI, NO_VIRT, NO_WRITE);
+		p_setw(perm, PCI_MSI_DATA_64, (u16)NO_VIRT, (u16)NO_WRITE);
+	} else {
+		p_setw(perm, PCI_MSI_DATA_32, (u16)NO_VIRT, (u16)NO_WRITE);
+	}
+
+	return 0;
+}
+
 /* Determine extended capability length for VC (2 & 9) and MFVC */
 static int vfio_vc_cap_len(struct vfio_pci_core_device *vdev, u16 pos)
 {
