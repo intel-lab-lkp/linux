@@ -436,7 +436,8 @@ static int ramoops_pstore_erase(struct pstore_record *record)
 	}
 
 	persistent_ram_free_old(prz);
-	persistent_ram_zap(prz);
+	if (record->type == PSTORE_TYPE_DMESG)
+		persistent_ram_zap(prz);
 
 	return 0;
 }
