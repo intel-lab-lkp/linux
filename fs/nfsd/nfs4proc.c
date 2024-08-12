@@ -168,7 +168,7 @@ static __be32 nfsd_check_obj_isreg(struct svc_fh *fh)
 		return nfserr_isdir;
 	if (S_ISLNK(mode))
 		return nfserr_symlink;
-	return nfserr_wrong_type;
+	return nfserr_wrong_type_open;
 }
 
 static void nfsd4_set_open_owner_reply_cache(struct nfsd4_compound_state *cstate, struct nfsd4_open *open, struct svc_fh *resfh)
@@ -177,23 +177,6 @@ static void nfsd4_set_open_owner_reply_cache(struct nfsd4_compound_state *cstate
 		return;
 	fh_copy_shallow(&open->op_openowner->oo_owner.so_replay.rp_openfh,
 			&resfh->fh_handle);
-}
-
-static __be32 nfsd4_map_status(__be32 status, u32 minor)
-{
-	switch (status) {
-	case nfs_ok:
-		break;
-	case nfserr_wrong_type:
-		/* RFC 8881 - 15.1.2.9 */
-		if (minor == 0)
-			status = nfserr_inval;
-		break;
-	case nfserr_symlink_not_dir:
-		status = nfserr_symlink;
-		break;
-	}
-	return status;
 }
 
 static inline bool nfsd4_create_is_exclusive(int createmode)
@@ -2815,8 +2798,6 @@ encode_op:
 			nfsd4_encode_replay(resp->xdr, op);
 			status = op->status = op->replay->rp_status;
 		} else {
-			op->status = nfsd4_map_status(op->status,
-						      cstate->minorversion);
 			nfsd4_encode_operation(resp, op);
 			status = op->status;
 		}

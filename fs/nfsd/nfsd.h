@@ -359,6 +359,12 @@ enum {
  */
 	NFSERR_SYMLINK_NOT_DIR,
 #define	nfserr_symlink_not_dir	cpu_to_be32(NFSERR_SYMLINK_NOT_DIR)
+
+/* non-{reg,dir,symlink} found by open - handled differently
+ * in v4.0 than v4.1.
+ */
+	NFSERR_WRONG_TYPE_OPEN,
+#define	nfserr_wrong_type_open	cpu_to_be32(NFSERR_WRONG_TYPE_OPEN)
 };
 
 /* Check for dir entries '.' and '..' */
