@@ -534,9 +534,9 @@ Because the resource control interface files in a given directory
 control the distribution of the parent's resources, the delegatee
 shouldn't be allowed to write to them.  For the first method, this is
 achieved by not granting access to these files.  For the second, the
-kernel rejects writes to all files other than "cgroup.procs" and
-"cgroup.subtree_control" on a namespace root from inside the
-namespace.
+kernel rejects writes to all files other than "cgroup.procs",
+"cgroup.threads" and "cgroup.subtree_control" on a namespace
+root from inside the namespace.
 
 The end results are equivalent for both delegation types.  Once
 delegated, the user can build sub-hierarchy under the directory,
