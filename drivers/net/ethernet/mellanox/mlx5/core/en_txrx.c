@@ -39,13 +39,6 @@
 #include "en/xsk/tx.h"
 #include "en_accel/ktls_txrx.h"
 
-static inline bool mlx5e_channel_no_affinity_change(struct mlx5e_channel *c)
-{
-	int current_cpu = smp_processor_id();
-
-	return cpumask_test_cpu(current_cpu, c->aff_mask);
-}
-
 static void mlx5e_handle_tx_dim(struct mlx5e_txqsq *sq)
 {
 	struct mlx5e_sq_stats *stats = sq->stats;
@@ -201,7 +194,7 @@ int mlx5e_napi_poll(struct napi_struct *napi, int budget)
 	busy |= busy_xsk;
 
 	if (busy) {
-		if (likely(mlx5e_channel_no_affinity_change(c))) {
+		if (likely(napi_affinity_no_change(c->irq))) {
 			work_done = budget;
 			goto out;
 		}

@@ -767,7 +767,7 @@ struct mlx5e_channel {
 	spinlock_t                 async_icosq_lock;
 
 	/* data path - accessed per napi poll */
-	const struct cpumask	  *aff_mask;
+	unsigned int		  irq;
 	struct mlx5e_ch_stats     *stats;
 
 	/* control */
