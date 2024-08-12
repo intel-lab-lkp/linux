@@ -2700,8 +2700,6 @@ static int timehist_sched_change_event(struct perf_tool *tool,
 			struct idle_thread_runtime *itr = (void *)tr;
 			struct thread_runtime *last_tr;
 
-			BUG_ON(thread__tid(thread) != 0);
-
 			if (itr->last_thread == NULL)
 				goto out;
 
