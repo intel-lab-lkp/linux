@@ -955,6 +955,7 @@ static void xe_device_wedged_fini(struct drm_device *drm, void *arg)
 /**
  * xe_device_declare_wedged - Declare device wedged
  * @xe: xe device instance
+ * @event_params: parameters to be sent along with uevent
  *
  * This is a final state that can only be cleared with a mudule
  * re-probe (unbind + bind).
@@ -965,8 +966,10 @@ static void xe_device_wedged_fini(struct drm_device *drm, void *arg)
  * on every single execution timeout (a.k.a. GPU hang) right after devcoredump
  * snapshot capture. In this mode, GT reset won't be attempted so the state of
  * the issue is preserved for further debugging.
+ * Caller is expected to pass respective parameters to be sent along with
+ * uevent. Pass NULL in case of no params.
  */
-void xe_device_declare_wedged(struct xe_device *xe)
+void xe_device_declare_wedged(struct xe_device *xe, char **event_params)
 {
 	struct xe_gt *gt;
 	u8 id;
@@ -984,12 +987,17 @@ void xe_device_declare_wedged(struct xe_device *xe)
 	xe_pm_runtime_get_noresume(xe);
 
 	if (!atomic_xchg(&xe->wedged.flag, 1)) {
+		struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
+
 		xe->needs_flr_on_fini = true;
 		drm_err(&xe->drm,
 			"CRITICAL: Xe has declared device %s as wedged.\n"
 			"IOCTLs and executions are blocked. Only a rebind may clear the failure\n"
 			"Please file a _new_ bug report at https://gitlab.freedesktop.org/drm/xe/kernel/issues/new\n",
 			dev_name(xe->drm.dev));
+
+		/* Notify userspace about reset required */
+		kobject_uevent_env(&pdev->dev.kobj, KOBJ_CHANGE, event_params);
 	}
 
 	for_each_gt(gt, xe, id)

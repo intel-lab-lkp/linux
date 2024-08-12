@@ -891,6 +891,17 @@ void xe_guc_submit_wedge(struct xe_guc *guc)
 	mutex_unlock(&guc->submission_state.lock);
 }
 
+static void xe_exec_queue_timedout(struct xe_device *xe)
+{
+	char *event_params[3];
+
+	event_params[0] = DRM_XE_RESET_REQUIRED_UEVENT;
+	event_params[1] = DRM_XE_RESET_REQUIRED_UEVENT_REASON_TOUT;
+	event_params[2] = NULL;
+
+	xe_device_declare_wedged(xe, event_params);
+}
+
 static bool guc_submit_hint_wedged(struct xe_guc *guc)
 {
 	struct xe_device *xe = guc_to_xe(guc);
@@ -901,7 +912,7 @@ static bool guc_submit_hint_wedged(struct xe_guc *guc)
 	if (xe_device_wedged(xe))
 		return true;
 
-	xe_device_declare_wedged(xe);
+	xe_exec_queue_timedout(xe);
 
 	return true;
 }

@@ -741,6 +741,24 @@ static int do_gt_restart(struct xe_gt *gt)
 	return 0;
 }
 
+static void xe_gt_reset_failed(struct xe_gt *gt, int err)
+{
+	char *event_params[5];
+
+	xe_gt_err(gt, "reset failed (%pe)\n", ERR_PTR(err));
+
+	event_params[0] = DRM_XE_RESET_REQUIRED_UEVENT;
+	event_params[1] = DRM_XE_RESET_REQUIRED_UEVENT_REASON_GT;
+	event_params[2] = kasprintf(GFP_KERNEL, "TILE_ID=%d", gt_to_tile(gt)->id);
+	event_params[3] = kasprintf(GFP_KERNEL, "GT_ID=%d", gt->info.id);
+	event_params[4] = NULL;
+
+	xe_device_declare_wedged(gt_to_xe(gt), event_params);
+
+	kfree(event_params[2]);
+	kfree(event_params[3]);
+}
+
 static int gt_reset(struct xe_gt *gt)
 {
 	int err;
@@ -796,10 +814,7 @@ err_msg:
 	XE_WARN_ON(xe_uc_start(&gt->uc));
 	xe_pm_runtime_put(gt_to_xe(gt));
 err_fail:
-	xe_gt_err(gt, "reset failed (%pe)\n", ERR_PTR(err));
-
-	xe_device_declare_wedged(gt_to_xe(gt));
-
+	xe_gt_reset_failed(gt, err);
 	return err;
 }
 

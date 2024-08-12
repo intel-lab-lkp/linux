@@ -560,6 +560,17 @@ static s32 guc_pc_get_cur_freq(struct xe_guc_pc *guc_pc)
 	return ret ? ret : freq;
 }
 
+static void xe_guc_load_failed(struct xe_gt *gt)
+{
+	char *event_params[3];
+
+	event_params[0] = DRM_XE_RESET_REQUIRED_UEVENT;
+	event_params[1] = DRM_XE_RESET_REQUIRED_UEVENT_REASON_GUC;
+	event_params[2] = NULL;
+
+	xe_device_declare_wedged(gt_to_xe(gt), event_params);
+}
+
 /*
  * Wait for the GuC to start up.
  *
@@ -684,7 +695,7 @@ static void guc_wait_ucode(struct xe_guc *guc)
 			break;
 		}
 
-		xe_device_declare_wedged(gt_to_xe(gt));
+		xe_guc_load_failed(gt);
 	} else if (delta_ms > GUC_LOAD_TIME_WARN_MS) {
 		xe_gt_warn(gt, "excessive init time: %lldms! [status = 0x%08X, timeouts = %d]\n",
 			   delta_ms, status, count);
