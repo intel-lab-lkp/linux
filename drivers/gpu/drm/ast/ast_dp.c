@@ -355,6 +355,17 @@ static int ast_astdp_connector_helper_get_modes(struct drm_connector *connector)
 	count = drm_edid_connector_add_modes(connector);
 	drm_edid_free(drm_edid);
 
+	if (!count) {
+		/*
+		 * There's no EDID data without a connected monitor. Set BMC-
+		 * compatible modes in this case. The XGA default resolution
+		 * should work well for all BMCs.
+		 */
+		count = drm_add_modes_noedid(connector, 4096, 4096);
+		if (count)
+			drm_set_preferred_mode(connector, 1024, 768);
+	}
+
 	return count;
 }
 
@@ -364,9 +375,13 @@ static int ast_astdp_connector_helper_detect_ctx(struct drm_connector *connector
 {
 	struct drm_device *dev = connector->dev;
 	struct ast_device *ast = to_ast_device(connector->dev);
+	enum drm_connector_status old_status = connector_status_disconnected;
 	enum drm_connector_status status = connector_status_disconnected;
 	struct drm_connector_state *connector_state = connector->state;
 	bool is_active = false;
+
+	if (connector->edid_blob_ptr)
+		old_status = connector_status_connected;
 
 	mutex_lock(&ast->modeset_lock);
 
@@ -390,7 +405,9 @@ static int ast_astdp_connector_helper_detect_ctx(struct drm_connector *connector
 
 	mutex_unlock(&ast->modeset_lock);
 
-	return status;
+	if (status != old_status)
+		++connector->epoch_counter;
+	return connector_status_connected;
 }
 
 static const struct drm_connector_helper_funcs ast_astdp_connector_helper_funcs = {
