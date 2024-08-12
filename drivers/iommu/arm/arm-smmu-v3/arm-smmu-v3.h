@@ -745,6 +745,8 @@ struct arm_smmu_domain {
 	spinlock_t			devices_lock;
 
 	struct mmu_notifier		mmu_notifier;
+
+	bool				enable_nesting;
 };
 
 /* The following are exposed for testing purposes. */

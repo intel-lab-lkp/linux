@@ -1733,6 +1733,7 @@ static int arm_smmu_handle_evt(struct arm_smmu_device *smmu, u64 *evt)
 	u32 sid = FIELD_GET(EVTQ_0_SID, evt[0]);
 	struct iopf_fault fault_evt = { };
 	struct iommu_fault *flt = &fault_evt.fault;
+	struct arm_smmu_domain *smmu_domain;
 
 	switch (FIELD_GET(EVTQ_0_ID, evt[0])) {
 	case EVT_ID_TRANSLATION_FAULT:
@@ -1743,10 +1744,6 @@ static int arm_smmu_handle_evt(struct arm_smmu_device *smmu, u64 *evt)
 	default:
 		return -EOPNOTSUPP;
 	}
-
-	/* Stage-2 is always pinned at the moment */
-	if (evt[1] & EVTQ_1_S2)
-		return -EFAULT;
 
 	if (!(evt[1] & EVTQ_1_STALL))
 		return -EOPNOTSUPP;
@@ -1778,6 +1775,15 @@ static int arm_smmu_handle_evt(struct arm_smmu_device *smmu, u64 *evt)
 	mutex_lock(&smmu->streams_mutex);
 	master = arm_smmu_find_master(smmu, sid);
 	if (!master) {
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	/* It is guaranteed that smmu_domain exists as EVTQ_1_STALL is checked. */
+	smmu_domain = to_smmu_domain(iommu_get_domain_for_dev(master->dev));
+
+	/* nesting domain is always pinned at the moment */
+	if (smmu_domain->enable_nesting) {
 		ret = -EINVAL;
 		goto out_unlock;
 	}
@@ -3373,8 +3379,10 @@ static int arm_smmu_enable_nesting(struct iommu_domain *domain)
 	mutex_lock(&smmu_domain->init_mutex);
 	if (smmu_domain->smmu)
 		ret = -EPERM;
-	else
+	else {
 		smmu_domain->stage = ARM_SMMU_DOMAIN_S2;
+		smmu_domain->enable_nesting = true;
+	}
 	mutex_unlock(&smmu_domain->init_mutex);
 
 	return ret;
