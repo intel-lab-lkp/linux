@@ -7321,6 +7321,7 @@ struct kvm_mmu_page *kvm_mmu_possible_nx_huge_page(struct kvm *kvm, bool tdp_mmu
 	struct kvm_mmu_page *sp = NULL;
 	ulong i = 0;
 
+	spin_lock(&kvm->arch.tdp_mmu_pages_lock);
 	/*
 	 * We use a separate list instead of just using active_mmu_pages because
 	 * the number of shadow pages that be replaced with an NX huge page is
@@ -7330,10 +7331,13 @@ struct kvm_mmu_page *kvm_mmu_possible_nx_huge_page(struct kvm *kvm, bool tdp_mmu
 	list_for_each_entry(sp, &kvm->arch.possible_nx_huge_pages, possible_nx_huge_page_link) {
 		if (i++ >= max)
 			break;
-		if (is_tdp_mmu_page(sp) == tdp_mmu)
+		if (is_tdp_mmu_page(sp) == tdp_mmu) {
+			spin_unlock(&kvm->arch.tdp_mmu_pages_lock);
 			return sp;
+		}
 	}
 
+	spin_unlock(&kvm->arch.tdp_mmu_pages_lock);
 	return NULL;
 }
 
@@ -7422,9 +7426,9 @@ static void kvm_recover_nx_huge_pages(struct kvm *kvm)
 	rcu_idx = srcu_read_lock(&kvm->srcu);
 
 	if (to_zap && tdp_mmu_enabled) {
-		write_lock(&kvm->mmu_lock);
+		read_lock(&kvm->mmu_lock);
 		to_zap = kvm_tdp_mmu_recover_nx_huge_pages(kvm, to_zap);
-		write_unlock(&kvm->mmu_lock);
+		read_unlock(&kvm->mmu_lock);
 	}
 
 	if (to_zap && kvm_memslots_have_rmaps(kvm)) {

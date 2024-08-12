@@ -817,9 +817,11 @@ static void tdp_mmu_zap_root(struct kvm *kvm, struct kvm_mmu_page *root,
 	rcu_read_unlock();
 }
 
-bool kvm_tdp_mmu_zap_sp(struct kvm *kvm, struct kvm_mmu_page *sp)
+static bool tdp_mmu_zap_sp(struct kvm *kvm, struct kvm_mmu_page *sp)
 {
-	u64 old_spte;
+	struct tdp_iter iter = {};
+
+	lockdep_assert_held_read(&kvm->mmu_lock);
 
 	/*
 	 * This helper intentionally doesn't allow zapping a root shadow page,
@@ -828,12 +830,25 @@ bool kvm_tdp_mmu_zap_sp(struct kvm *kvm, struct kvm_mmu_page *sp)
 	if (WARN_ON_ONCE(!sp->ptep))
 		return false;
 
-	old_spte = kvm_tdp_mmu_read_spte(sp->ptep);
-	if (WARN_ON_ONCE(!is_shadow_present_pte(old_spte)))
+	iter.old_spte = kvm_tdp_mmu_read_spte(sp->ptep);
+	iter.sptep = sp->ptep;
+	iter.level = sp->role.level + 1;
+	iter.gfn = sp->gfn;
+	iter.as_id = kvm_mmu_page_as_id(sp);
+
+retry:
+	/*
+	 * Since mmu_lock is held in read mode, it's possible to race with
+	 * another CPU which can remove sp from the page table hierarchy.
+	 *
+	 * No need to re-read iter.old_spte as tdp_mmu_set_spte_atomic() will
+	 * update it in the case of failure.
+	 */
+	if (sp->spt != spte_to_child_pt(iter.old_spte, iter.level))
 		return false;
 
-	tdp_mmu_set_spte(kvm, kvm_mmu_page_as_id(sp), sp->ptep, old_spte,
-			 SHADOW_NONPRESENT_VALUE, sp->gfn, sp->role.level + 1);
+	if (tdp_mmu_set_spte_atomic(kvm, &iter, SHADOW_NONPRESENT_VALUE))
+		goto retry;
 
 	return true;
 }
@@ -1807,7 +1822,7 @@ ulong kvm_tdp_mmu_recover_nx_huge_pages(struct kvm *kvm, ulong to_zap)
 	struct kvm_mmu_page *sp;
 	bool flush = false;
 
-	lockdep_assert_held_write(&kvm->mmu_lock);
+	lockdep_assert_held_read(&kvm->mmu_lock);
 	/*
 	 * Zapping TDP MMU shadow pages, including the remote TLB flush, must
 	 * be done under RCU protection, because the pages are freed via RCU
@@ -1821,7 +1836,6 @@ ulong kvm_tdp_mmu_recover_nx_huge_pages(struct kvm *kvm, ulong to_zap)
 		if (!sp)
 			break;
 
-		WARN_ON_ONCE(!sp->nx_huge_page_disallowed);
 		WARN_ON_ONCE(!sp->role.direct);
 
 		/*
@@ -1831,12 +1845,17 @@ ulong kvm_tdp_mmu_recover_nx_huge_pages(struct kvm *kvm, ulong to_zap)
 		 * recovered, along with all the other huge pages in the slot,
 		 * when dirty logging is disabled.
 		 */
-		if (kvm_mmu_sp_dirty_logging_enabled(kvm, sp))
+		if (kvm_mmu_sp_dirty_logging_enabled(kvm, sp)) {
+			spin_lock(&kvm->arch.tdp_mmu_pages_lock);
 			unaccount_nx_huge_page(kvm, sp);
-		else
-			flush |= kvm_tdp_mmu_zap_sp(kvm, sp);
-
-		WARN_ON_ONCE(sp->nx_huge_page_disallowed);
+			spin_unlock(&kvm->arch.tdp_mmu_pages_lock);
+			to_zap--;
+			WARN_ON_ONCE(sp->nx_huge_page_disallowed);
+		} else if (tdp_mmu_zap_sp(kvm, sp)) {
+			flush = true;
+			to_zap--;
+			WARN_ON_ONCE(sp->nx_huge_page_disallowed);
+		}
 
 		if (need_resched() || rwlock_needbreak(&kvm->mmu_lock)) {
 			if (flush) {
@@ -1844,10 +1863,9 @@ ulong kvm_tdp_mmu_recover_nx_huge_pages(struct kvm *kvm, ulong to_zap)
 				flush = false;
 			}
 			rcu_read_unlock();
-			cond_resched_rwlock_write(&kvm->mmu_lock);
+			cond_resched_rwlock_read(&kvm->mmu_lock);
 			rcu_read_lock();
 		}
-		to_zap--;
 	}
 
 	if (flush)
