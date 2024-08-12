@@ -3649,8 +3649,6 @@ static int selinux_file_alloc_security(struct file *file)
 	u32 sid = current_sid();
 
 	fsec->sid = sid;
-	fsec->fown_sid = sid;
-
 	return 0;
 }
 
@@ -3923,33 +3921,20 @@ static int selinux_file_fcntl(struct file *file, unsigned int cmd,
 	return err;
 }
 
-static void selinux_file_set_fowner(struct file *file)
-{
-	struct file_security_struct *fsec;
-
-	fsec = selinux_file(file);
-	fsec->fown_sid = current_sid();
-}
-
 static int selinux_file_send_sigiotask(struct task_struct *tsk,
 				       struct fown_struct *fown, int signum)
 {
-	struct file *file;
 	u32 sid = task_sid_obj(tsk);
 	u32 perm;
-	struct file_security_struct *fsec;
-
-	/* struct fown_struct is never outside the context of a struct file */
-	file = container_of(fown, struct file, f_owner);
-
-	fsec = selinux_file(file);
+	const struct task_security_struct *tsec =
+		selinux_cred(rcu_dereference(fown->cred));
 
 	if (!signum)
 		perm = signal_to_av(SIGIO); /* as per send_sigio_to_task */
 	else
 		perm = signal_to_av(signum);
 
-	return avc_has_perm(fsec->fown_sid, sid,
+	return avc_has_perm(tsec->sid, sid,
 			    SECCLASS_PROCESS, perm, NULL);
 }
 
@@ -7208,7 +7193,6 @@ static struct security_hook_list selinux_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(file_mprotect, selinux_file_mprotect),
 	LSM_HOOK_INIT(file_lock, selinux_file_lock),
 	LSM_HOOK_INIT(file_fcntl, selinux_file_fcntl),
-	LSM_HOOK_INIT(file_set_fowner, selinux_file_set_fowner),
 	LSM_HOOK_INIT(file_send_sigiotask, selinux_file_send_sigiotask),
 	LSM_HOOK_INIT(file_receive, selinux_file_receive),
 

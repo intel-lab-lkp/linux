@@ -328,12 +328,6 @@ static inline struct task_smack *smack_cred(const struct cred *cred)
 	return cred->security + smack_blob_sizes.lbs_cred;
 }
 
-static inline struct smack_known **smack_file(const struct file *file)
-{
-	return (struct smack_known **)(file->f_security +
-				       smack_blob_sizes.lbs_file);
-}
-
 static inline struct inode_smack *smack_inode(const struct inode *inode)
 {
 	return inode->i_security + smack_blob_sizes.lbs_inode;

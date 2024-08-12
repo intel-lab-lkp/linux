@@ -87,8 +87,8 @@ static int setfl(int fd, struct file * filp, unsigned int arg)
 	return error;
 }
 
-static void f_modown(struct file *filp, struct pid *pid, enum pid_type type,
-                     int force)
+void __f_setown(struct file *filp, struct pid *pid, enum pid_type type,
+		int force)
 {
 	write_lock_irq(&filp->f_owner.lock);
 	if (force || !filp->f_owner.pid) {
@@ -96,20 +96,13 @@ static void f_modown(struct file *filp, struct pid *pid, enum pid_type type,
 		filp->f_owner.pid = get_pid(pid);
 		filp->f_owner.pid_type = type;
 
-		if (pid) {
-			const struct cred *cred = current_cred();
-			filp->f_owner.uid = cred->uid;
-			filp->f_owner.euid = cred->euid;
-		}
+		if (pid)
+			put_cred(rcu_replace_pointer(
+				filp->f_owner.cred,
+				get_cred_rcu(current_cred()),
+				lockdep_is_held(&filp->f_owner.lock)));
 	}
 	write_unlock_irq(&filp->f_owner.lock);
-}
-
-void __f_setown(struct file *filp, struct pid *pid, enum pid_type type,
-		int force)
-{
-	security_file_set_fowner(filp);
-	f_modown(filp, pid, type, force);
 }
 EXPORT_SYMBOL(__f_setown);
 
@@ -146,7 +139,7 @@ EXPORT_SYMBOL(f_setown);
 
 void f_delown(struct file *filp)
 {
-	f_modown(filp, NULL, PIDTYPE_TGID, 1);
+	__f_setown(filp, NULL, PIDTYPE_TGID, 1);
 }
 
 pid_t f_getown(struct file *filp)
@@ -249,13 +242,15 @@ static int f_getowner_uids(struct file *filp, unsigned long arg)
 {
 	struct user_namespace *user_ns = current_user_ns();
 	uid_t __user *dst = (void __user *)arg;
+	const struct cred *fown_cred;
 	uid_t src[2];
 	int err;
 
-	read_lock_irq(&filp->f_owner.lock);
-	src[0] = from_kuid(user_ns, filp->f_owner.uid);
-	src[1] = from_kuid(user_ns, filp->f_owner.euid);
-	read_unlock_irq(&filp->f_owner.lock);
+	rcu_read_lock();
+	fown_cred = rcu_dereference(filp->f_owner->cred);
+	src[0] = from_kuid(user_ns, fown_cred->uid);
+	src[1] = from_kuid(user_ns, fown_cred->euid);
+	rcu_read_unlock();
 
 	err  = put_user(src[0], &dst[0]);
 	err |= put_user(src[1], &dst[1]);
@@ -737,14 +732,17 @@ static const __poll_t band_table[NSIGPOLL] = {
 static inline int sigio_perm(struct task_struct *p,
                              struct fown_struct *fown, int sig)
 {
-	const struct cred *cred;
+	const struct cred *cred, *fown_cred;
 	int ret;
 
 	rcu_read_lock();
+	fown_cred = rcu_dereference(fown->cred);
 	cred = __task_cred(p);
-	ret = ((uid_eq(fown->euid, GLOBAL_ROOT_UID) ||
-		uid_eq(fown->euid, cred->suid) || uid_eq(fown->euid, cred->uid) ||
-		uid_eq(fown->uid,  cred->suid) || uid_eq(fown->uid,  cred->uid)) &&
+	ret = ((uid_eq(fown_cred->euid, GLOBAL_ROOT_UID) ||
+		uid_eq(fown_cred->euid, cred->suid) ||
+		uid_eq(fown_cred->euid, cred->uid) ||
+		uid_eq(fown_cred->uid, cred->suid) ||
+		uid_eq(fown_cred->uid, cred->uid)) &&
 	       !security_file_send_sigiotask(p, fown, sig));
 	rcu_read_unlock();
 	return ret;

@@ -197,7 +197,6 @@ LSM_HOOK(int, 0, file_mprotect, struct vm_area_struct *vma,
 LSM_HOOK(int, 0, file_lock, struct file *file, unsigned int cmd)
 LSM_HOOK(int, 0, file_fcntl, struct file *file, unsigned int cmd,
 	 unsigned long arg)
-LSM_HOOK(void, LSM_RET_VOID, file_set_fowner, struct file *file)
 LSM_HOOK(int, 0, file_send_sigiotask, struct task_struct *tsk,
 	 struct fown_struct *fown, int sig)
 LSM_HOOK(int, 0, file_receive, struct file *file)

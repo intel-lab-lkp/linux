@@ -1676,26 +1676,6 @@ static void smack_inode_getsecid(struct inode *inode, u32 *secid)
  */
 
 /**
- * smack_file_alloc_security - assign a file security blob
- * @file: the object
- *
- * The security blob for a file is a pointer to the master
- * label list, so no allocation is done.
- *
- * f_security is the owner security information. It
- * isn't used on file access checks, it's for send_sigio.
- *
- * Returns 0
- */
-static int smack_file_alloc_security(struct file *file)
-{
-	struct smack_known **blob = smack_file(file);
-
-	*blob = smk_of_current();
-	return 0;
-}
-
-/**
  * smack_file_ioctl - Smack check on ioctls
  * @file: the object
  * @cmd: what to do
@@ -1914,18 +1894,6 @@ static int smack_mmap_file(struct file *file,
 }
 
 /**
- * smack_file_set_fowner - set the file security blob value
- * @file: object in question
- *
- */
-static void smack_file_set_fowner(struct file *file)
-{
-	struct smack_known **blob = smack_file(file);
-
-	*blob = smk_of_current();
-}
-
-/**
  * smack_file_send_sigiotask - Smack on sigio
  * @tsk: The target task
  * @fown: the object the signal come from
@@ -1939,7 +1907,6 @@ static void smack_file_set_fowner(struct file *file)
 static int smack_file_send_sigiotask(struct task_struct *tsk,
 				     struct fown_struct *fown, int signum)
 {
-	struct smack_known **blob;
 	struct smack_known *skp;
 	struct smack_known *tkp = smk_of_task(smack_cred(tsk->cred));
 	const struct cred *tcred;
@@ -1953,8 +1920,7 @@ static int smack_file_send_sigiotask(struct task_struct *tsk,
 	file = container_of(fown, struct file, f_owner);
 
 	/* we don't log here as rc can be overriden */
-	blob = smack_file(file);
-	skp = *blob;
+	skp = smk_of_task(smack_cred(rcu_dereference(fown->cred)));
 	rc = smk_access(skp, tkp, MAY_DELIVER, NULL);
 	rc = smk_bu_note("sigiotask", skp, tkp, MAY_DELIVER, rc);
 
@@ -5045,7 +5011,6 @@ static int smack_uring_cmd(struct io_uring_cmd *ioucmd)
 
 struct lsm_blob_sizes smack_blob_sizes __ro_after_init = {
 	.lbs_cred = sizeof(struct task_smack),
-	.lbs_file = sizeof(struct smack_known *),
 	.lbs_inode = sizeof(struct inode_smack),
 	.lbs_ipc = sizeof(struct smack_known *),
 	.lbs_msg_msg = sizeof(struct smack_known *),
@@ -5097,14 +5062,12 @@ static struct security_hook_list smack_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(inode_listsecurity, smack_inode_listsecurity),
 	LSM_HOOK_INIT(inode_getsecid, smack_inode_getsecid),
 
-	LSM_HOOK_INIT(file_alloc_security, smack_file_alloc_security),
 	LSM_HOOK_INIT(file_ioctl, smack_file_ioctl),
 	LSM_HOOK_INIT(file_ioctl_compat, smack_file_ioctl),
 	LSM_HOOK_INIT(file_lock, smack_file_lock),
 	LSM_HOOK_INIT(file_fcntl, smack_file_fcntl),
 	LSM_HOOK_INIT(mmap_file, smack_mmap_file),
 	LSM_HOOK_INIT(mmap_addr, cap_mmap_addr),
-	LSM_HOOK_INIT(file_set_fowner, smack_file_set_fowner),
 	LSM_HOOK_INIT(file_send_sigiotask, smack_file_send_sigiotask),
 	LSM_HOOK_INIT(file_receive, smack_file_receive),
 

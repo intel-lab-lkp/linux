@@ -2925,20 +2925,6 @@ int security_file_fcntl(struct file *file, unsigned int cmd, unsigned long arg)
 }
 
 /**
- * security_file_set_fowner() - Set the file owner info in the LSM blob
- * @file: the file
- *
- * Save owner security information (typically from current->security) in
- * file->f_security for later use by the send_sigiotask hook.
- *
- * Return: Returns 0 on success.
- */
-void security_file_set_fowner(struct file *file)
-{
-	call_void_hook(file_set_fowner, file);
-}
-
-/**
  * security_file_send_sigiotask() - Check if sending SIGIO/SIGURG is allowed
  * @tsk: target task
  * @fown: signal sender
