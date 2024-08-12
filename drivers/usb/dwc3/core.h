@@ -1160,6 +1160,7 @@ struct dwc3_scratchpad_array {
  * @gsbuscfg0_reqinfo: store GSBUSCFG0.DATRDREQINFO, DESRDREQINFO,
  *		       DATWRREQINFO, and DESWRREQINFO value passed from
  *		       glue driver.
+ * @glue: private reference to any glue context
  */
 struct dwc3 {
 	struct work_struct	drd_work;
@@ -1388,6 +1389,8 @@ struct dwc3 {
 	int			num_ep_resized;
 	struct dentry		*debug_root;
 	u32			gsbuscfg0_reqinfo;
+
+	void			*glue;
 };
 
 #define INCRX_BURST_MODE 0
