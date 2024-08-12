@@ -27,6 +27,9 @@ enum sev_state {
 	SEV_STATE_MAX
 };
 
+extern bool snp_cipher_text_hiding_en;
+extern unsigned int max_snp_asid;
+
 /**
  * SEV platform and guest management commands
  */
@@ -746,10 +749,13 @@ struct sev_data_snp_guest_request {
 struct sev_data_snp_init_ex {
 	u32 init_rmp:1;
 	u32 list_paddr_en:1;
-	u32 rsvd:30;
+	u32 rapl_dis:1;
+	u32 ciphertext_hiding_en:1;
+	u32 rsvd:28;
 	u32 rsvd1;
 	u64 list_paddr;
-	u8  rsvd2[48];
+	u16 max_snp_asid;
+	u8  rsvd2[46];
 } __packed;
 
 /**

@@ -173,6 +173,9 @@ static void sev_misc_cg_uncharge(struct kvm_sev_info *sev)
 
 static int sev_asid_new(struct kvm_sev_info *sev)
 {
+	struct kvm_svm *svm = container_of(sev, struct kvm_svm, sev_info);
+	struct kvm *kvm = &svm->kvm;
+
 	/*
 	 * SEV-enabled guests must use asid from min_sev_asid to max_sev_asid.
 	 * SEV-ES-enabled guest can use from 1 to min_sev_asid - 1.
@@ -199,6 +202,18 @@ static int sev_asid_new(struct kvm_sev_info *sev)
 
 	mutex_lock(&sev_bitmap_lock);
 
+	/*
+	 * When CipherTextHiding is enabled, all SNP guests must have an
+	 * ASID less than or equal to MAX_SNP_ASID provided on the
+	 * SNP_INIT_EX command and all the SEV-ES guests must have
+	 * an ASID greater than MAX_SNP_ASID.
+	 */
+	if (snp_cipher_text_hiding_en && sev->es_active) {
+		if (kvm->arch.vm_type == KVM_X86_SNP_VM)
+			max_asid = max_snp_asid;
+		else
+			min_asid = max_snp_asid + 1;
+	}
 again:
 	asid = find_next_zero_bit(sev_asid_bitmap, max_asid + 1, min_asid);
 	if (asid > max_asid) {
@@ -3057,14 +3072,17 @@ out:
 								       "unusable" :
 								       "disabled",
 			min_sev_asid, max_sev_asid);
-	if (boot_cpu_has(X86_FEATURE_SEV_ES))
+	if (boot_cpu_has(X86_FEATURE_SEV_ES)) {
+		if (max_snp_asid >= (min_sev_asid - 1))
+			sev_es_supported = false;
 		pr_info("SEV-ES %s (ASIDs %u - %u)\n",
 			sev_es_supported ? "enabled" : "disabled",
-			min_sev_asid > 1 ? 1 : 0, min_sev_asid - 1);
+			min_sev_asid > 1 ? max_snp_asid ? max_snp_asid + 1 : 1 : 0, min_sev_asid - 1);
+	}
 	if (boot_cpu_has(X86_FEATURE_SEV_SNP))
 		pr_info("SEV-SNP %s (ASIDs %u - %u)\n",
 			sev_snp_supported ? "enabled" : "disabled",
-			min_sev_asid > 1 ? 1 : 0, min_sev_asid - 1);
+			min_sev_asid > 1 ? 1 : 0, max_snp_asid ? : min_sev_asid - 1);
 
 	sev_enabled = sev_supported;
 	sev_es_enabled = sev_es_supported;
