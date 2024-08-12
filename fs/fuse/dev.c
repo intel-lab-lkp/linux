@@ -1009,6 +1009,25 @@ static int fuse_copy_one(struct fuse_copy_state *cs, void *val, unsigned size)
 	return 0;
 }
 
+/* Align to the next page */
+static int fuse_copy_align(struct fuse_copy_state *cs)
+{
+	/*
+	 * This could happen if the userspace buffer is aligned in a way that
+	 * it compensates fuse headers.
+	 */
+	if (cs->len == PAGE_SIZE && cs->offset == 0)
+		return 0;
+
+	if (WARN_ON(cs->len == PAGE_SIZE || cs->offset == 0))
+		return -EIO;
+
+	/* Seek to the next page */
+	cs->offset += cs->len;
+	cs->len = 0;
+	return 0;
+}
+
 /* Copy request arguments to/from userspace buffer */
 static int fuse_copy_args(struct fuse_copy_state *cs, unsigned numargs,
 			  unsigned argpages, struct fuse_arg *args,
@@ -1019,10 +1038,16 @@ static int fuse_copy_args(struct fuse_copy_state *cs, unsigned numargs,
 
 	for (i = 0; !err && i < numargs; i++)  {
 		struct fuse_arg *arg = &args[i];
-		if (i == numargs - 1 && argpages)
+		if (i == numargs - 1 && argpages) {
+			if (arg->align) {
+				err = fuse_copy_align(cs);
+				if (err)
+					break;
+			}
 			err = fuse_copy_pages(cs, arg->size, zeroing);
-		else
+		} else {
 			err = fuse_copy_one(cs, arg->value, arg->size);
+		}
 	}
 	return err;
 }

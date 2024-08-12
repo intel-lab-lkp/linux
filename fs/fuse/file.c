@@ -1062,6 +1062,12 @@ static void fuse_write_args_fill(struct fuse_io_args *ia, struct fuse_file *ff,
 		args->in_args[0].size = FUSE_COMPAT_WRITE_IN_SIZE;
 	else
 		args->in_args[0].size = sizeof(ia->write.in);
+
+	if (ff->open_flags & FOPEN_ALIGNED_WRITES) {
+		args->in_args[1].align = 1;
+		ia->write.in.write_flags |= FUSE_WRITE_ALIGNED;
+	}
+
 	args->in_args[0].value = &ia->write.in;
 	args->in_args[1].size = count;
 	args->out_numargs = 1;
