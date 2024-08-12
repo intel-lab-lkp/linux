@@ -206,10 +206,6 @@ struct ast_device {
 			struct drm_encoder encoder;
 			struct drm_connector connector;
 		} astdp;
-		struct {
-			struct drm_encoder encoder;
-			struct ast_bmc_connector bmc_connector;
-		} bmc;
 	} output;
 
 	bool support_wide_screen;
