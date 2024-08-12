@@ -14,6 +14,7 @@
 #include "fdinfo.h"
 #include "cancel.h"
 #include "rsrc.h"
+#include "timeout.h"
 
 #ifdef CONFIG_PROC_FS
 static __cold int io_uring_show_cred(struct seq_file *m, unsigned int id,
@@ -54,6 +55,7 @@ __cold void io_uring_show_fdinfo(struct seq_file *m, struct file *file)
 {
 	struct io_ring_ctx *ctx = file->private_data;
 	struct io_overflow_cqe *ocqe;
+	struct io_timeout *timeout;
 	struct io_rings *r = ctx->rings;
 	struct rusage sq_usage;
 	unsigned int sq_mask = ctx->sq_entries - 1, cq_mask = ctx->cq_entries - 1;
@@ -219,9 +221,19 @@ __cold void io_uring_show_fdinfo(struct seq_file *m, struct file *file)
 
 		seq_printf(m, "  user_data=%llu, res=%d, flags=%x\n",
 			   cqe->user_data, cqe->res, cqe->flags);
-
 	}
-
 	spin_unlock(&ctx->completion_lock);
+
+	seq_puts(m, "TimeoutList:\n");
+	spin_lock(&ctx->timeout_lock);
+	list_for_each_entry(timeout, &ctx->timeout_list, list) {
+		struct io_kiocb *req = cmd_to_io_kiocb(timeout);
+		struct io_timeout_data *data = req->async_data;
+
+		seq_printf(m, "  off=%d, target_seq=%d, repeats=%x,  ts.tv_sec=%lld, ts.tv_nsec=%ld\n",
+			   timeout->off, timeout->target_seq, timeout->repeats,
+			   data->ts.tv_sec, data->ts.tv_nsec);
+	}
+	spin_unlock(&ctx->timeout_lock);
 }
 #endif
