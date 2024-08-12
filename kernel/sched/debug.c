@@ -188,8 +188,7 @@ static ssize_t sched_scaling_write(struct file *filp, const char __user *ubuf,
 		return -EINVAL;
 
 	sysctl_sched_tunable_scaling = scaling;
-	if (sched_update_scaling())
-		return -EINVAL;
+	sched_update_scaling();
 
 	*ppos += cnt;
 	return cnt;

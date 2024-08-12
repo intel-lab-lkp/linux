@@ -954,7 +954,7 @@ struct sched_entity *__pick_last_entity(struct cfs_rq *cfs_rq)
  * Scheduling class statistics methods:
  */
 #ifdef CONFIG_SMP
-int sched_update_scaling(void)
+void sched_update_scaling(void)
 {
 	unsigned int factor = get_update_sysctl_factor();
 
@@ -962,8 +962,6 @@ int sched_update_scaling(void)
 	(normalized_sysctl_##name = sysctl_##name / (factor))
 	WRT_SYSCTL(sched_base_slice);
 #undef WRT_SYSCTL
-
-	return 0;
 }
 #endif
 #endif

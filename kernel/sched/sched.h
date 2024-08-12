@@ -2054,7 +2054,7 @@ static inline void update_sched_domain_debugfs(void) { }
 static inline void dirty_sched_domain_sysctl(int cpu) { }
 #endif
 
-extern int sched_update_scaling(void);
+extern void sched_update_scaling(void);
 
 static inline const struct cpumask *task_user_cpus(struct task_struct *p)
 {
