@@ -293,7 +293,7 @@
 	#address-cells = <1>;
 	#size-cells = <0>;
 
-	hub@1 {
+	usb-hub@1 {
 		compatible = "usb424,2517";
 		reg = <1>;
 		#address-cells = <1>;
