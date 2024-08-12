@@ -880,6 +880,27 @@ void uverbs_user_mmap_disassociate(struct ib_uverbs_file *ufile)
 	}
 }
 
+/**
+ * rdma_user_mmap_disassociate() - disassociate the mmap from the ucontext.
+ *
+ * @ucontext: associated user context.
+ *
+ * This function should be called by drivers that need to disable mmap for
+ * some ucontexts.
+ */
+void rdma_user_mmap_disassociate(struct ib_ucontext *ucontext)
+{
+	struct ib_uverbs_file *ufile = ucontext->ufile;
+
+	/* Racing with uverbs_destroy_ufile_hw */
+	if (!down_read_trylock(&ufile->hw_destroy_rwsem))
+		return;
+
+	uverbs_user_mmap_disassociate(ufile);
+	up_read(&ufile->hw_destroy_rwsem);
+}
+EXPORT_SYMBOL(rdma_user_mmap_disassociate);
+
 /*
  * ib_uverbs_open() does not need the BKL:
  *

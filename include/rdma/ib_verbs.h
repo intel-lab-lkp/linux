@@ -2947,6 +2947,7 @@ int rdma_user_mmap_entry_insert_range(struct ib_ucontext *ucontext,
 				      struct rdma_user_mmap_entry *entry,
 				      size_t length, u32 min_pgoff,
 				      u32 max_pgoff);
+void rdma_user_mmap_disassociate(struct ib_ucontext *ucontext);
 
 static inline int
 rdma_user_mmap_entry_insert_exact(struct ib_ucontext *ucontext,
