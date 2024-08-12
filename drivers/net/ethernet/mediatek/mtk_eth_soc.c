@@ -1762,8 +1762,10 @@ static void mtk_rx_put_buff(struct mtk_rx_ring *ring, void *data, bool napi)
 	if (ring->page_pool)
 		page_pool_put_full_page(ring->page_pool,
 					virt_to_head_page(data), napi);
-	else
+	else if (ring->frag_size <= PAGE_SIZE)
 		skb_free_frag(data);
+	else
+		free_pages(unsigned long)data, get_order(mtk_max_frag_size(ring->frag_size)));
 }
 
 static int mtk_xdp_frame_map(struct mtk_eth *eth, struct net_device *dev,
@@ -2132,7 +2134,7 @@ static int mtk_poll_rx(struct napi_struct *napi, int budget,
 				ring->buf_size, DMA_FROM_DEVICE);
 			if (unlikely(dma_mapping_error(eth->dma_dev,
 						       dma_addr))) {
-				skb_free_frag(new_data);
+				mtk_rx_put_buff(ring, new_data, true);
 				netdev->stats.rx_dropped++;
 				goto release_desc;
 			}
@@ -2146,7 +2148,7 @@ static int mtk_poll_rx(struct napi_struct *napi, int budget,
 			skb = build_skb(data, ring->frag_size);
 			if (unlikely(!skb)) {
 				netdev->stats.rx_dropped++;
-				skb_free_frag(data);
+				mtk_rx_put_buff(ring, data, true);
 				goto skip_rx;
 			}
 
@@ -2691,7 +2693,7 @@ static int mtk_rx_alloc(struct mtk_eth *eth, int ring_no, int rx_flag)
 				ring->buf_size, DMA_FROM_DEVICE);
 			if (unlikely(dma_mapping_error(eth->dma_dev,
 						       dma_addr))) {
-				skb_free_frag(data);
+				mtk_rx_put_buff(ring, data, false);
 				return -ENOMEM;
 			}
 		}
