@@ -192,6 +192,9 @@ The ``gro_flush_timeout`` sysfs configuration of the netdevice
 is reused to control the delay of the timer, while
 ``napi_defer_hard_irqs`` controls the number of consecutive empty polls
 before NAPI gives up and goes back to using hardware IRQs.
+``irq_suspend_timeout`` is used to determine how long an application can
+completely suspend IRQs. It is used in combination with SO_PREFER_BUSY_POLL,
+which can be set on a per-epoll context basis with EPIOCSPARAMS ioctl.
 
 .. _poll:
 

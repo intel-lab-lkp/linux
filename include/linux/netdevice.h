@@ -1857,6 +1857,7 @@ enum netdev_reg_state {
  *	@gro_flush_timeout:	timeout for GRO layer in NAPI
  *	@napi_defer_hard_irqs:	If not zero, provides a counter that would
  *				allow to avoid NIC hard IRQ, on busy queues.
+ *	@irq_suspend_timeout:	IRQ suspension timeout
  *
  *	@rx_handler:		handler for received packets
  *	@rx_handler_data: 	XXX: need comments on this one
@@ -2060,6 +2061,7 @@ struct net_device {
 	struct netdev_rx_queue	*_rx;
 	unsigned long		gro_flush_timeout;
 	int			napi_defer_hard_irqs;
+	unsigned long		irq_suspend_timeout;
 	unsigned int		gro_max_size;
 	unsigned int		gro_ipv4_max_size;
 	rx_handler_func_t __rcu	*rx_handler;

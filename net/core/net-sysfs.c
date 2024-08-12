@@ -440,6 +440,23 @@ static ssize_t napi_defer_hard_irqs_store(struct device *dev,
 }
 NETDEVICE_SHOW_RW(napi_defer_hard_irqs, fmt_dec);
 
+static int change_irq_suspend_timeout(struct net_device *dev, unsigned long val)
+{
+	WRITE_ONCE(dev->irq_suspend_timeout, val);
+	return 0;
+}
+
+static ssize_t irq_suspend_timeout_store(struct device *dev,
+					 struct device_attribute *attr,
+					 const char *buf, size_t len)
+{
+	if (!capable(CAP_NET_ADMIN))
+		return -EPERM;
+
+	return netdev_store(dev, attr, buf, len, change_irq_suspend_timeout);
+}
+NETDEVICE_SHOW_RW(irq_suspend_timeout, fmt_ulong);
+
 static ssize_t ifalias_store(struct device *dev, struct device_attribute *attr,
 			     const char *buf, size_t len)
 {
@@ -664,6 +681,7 @@ static struct attribute *net_class_attrs[] __ro_after_init = {
 	&dev_attr_tx_queue_len.attr,
 	&dev_attr_gro_flush_timeout.attr,
 	&dev_attr_napi_defer_hard_irqs.attr,
+	&dev_attr_irq_suspend_timeout.attr,
 	&dev_attr_phys_port_id.attr,
 	&dev_attr_phys_port_name.attr,
 	&dev_attr_phys_switch_id.attr,
