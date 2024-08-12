@@ -6214,7 +6214,6 @@ bool napi_complete_done(struct napi_struct *n, int work_done)
 {
 	unsigned long flags, val, new, timeout = 0;
 	bool ret = true;
-
 	/*
 	 * 1) Don't let napi dequeue from the cpu poll list
 	 *    just in case its running on a different cpu.
@@ -6230,7 +6229,12 @@ bool napi_complete_done(struct napi_struct *n, int work_done)
 			timeout = READ_ONCE(n->dev->gro_flush_timeout);
 		n->defer_hard_irqs_count = READ_ONCE(n->dev->napi_defer_hard_irqs);
 	}
-	if (n->defer_hard_irqs_count > 0) {
+	if (napi_prefer_busy_poll(n)) {
+		timeout = READ_ONCE(n->dev->irq_suspend_timeout);
+		if (timeout)
+			ret = false;
+	}
+	if (ret && n->defer_hard_irqs_count > 0) {
 		n->defer_hard_irqs_count--;
 		timeout = READ_ONCE(n->dev->gro_flush_timeout);
 		if (timeout)
@@ -6349,7 +6353,6 @@ static void busy_poll_stop(struct napi_struct *napi, void *have_poll_lock,
 	bool skip_schedule = false;
 	unsigned long timeout;
 	int rc;
-
 	/* Busy polling means there is a high chance device driver hard irq
 	 * could not grab NAPI_STATE_SCHED, and that NAPI_STATE_MISSED was
 	 * set in napi_schedule_prep().
@@ -6366,9 +6369,13 @@ static void busy_poll_stop(struct napi_struct *napi, void *have_poll_lock,
 	bpf_net_ctx = bpf_net_ctx_set(&__bpf_net_ctx);
 
 	if (flags & NAPI_F_PREFER_BUSY_POLL) {
-		napi->defer_hard_irqs_count = READ_ONCE(napi->dev->napi_defer_hard_irqs);
-		timeout = READ_ONCE(napi->dev->gro_flush_timeout);
-		if (napi->defer_hard_irqs_count && timeout) {
+		timeout = READ_ONCE(napi->dev->irq_suspend_timeout);
+		if (!timeout) {
+			napi->defer_hard_irqs_count = READ_ONCE(napi->dev->napi_defer_hard_irqs);
+			if (napi->defer_hard_irqs_count)
+				timeout = READ_ONCE(napi->dev->gro_flush_timeout);
+		}
+		if (timeout) {
 			hrtimer_start(&napi->timer, ns_to_ktime(timeout), HRTIMER_MODE_REL_PINNED);
 			skip_schedule = true;
 		}
