@@ -113,6 +113,7 @@ struct iavf_q_vector {
 	bool arm_wb_state;
 	cpumask_t affinity_mask;
 	struct irq_affinity_notify affinity_notify;
+	unsigned int irq_num;
 };
 
 /* Helper macros to switch between ints/sec and what the register uses.

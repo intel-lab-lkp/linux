@@ -565,7 +565,8 @@ iavf_request_traffic_irqs(struct iavf_adapter *adapter, char *basename)
 {
 	unsigned int vector, q_vectors;
 	unsigned int rx_int_idx = 0, tx_int_idx = 0;
-	int irq_num, err;
+	unsigned int irq_num;
+	int err;
 	int cpu;
 
 	iavf_irq_disable(adapter);
@@ -601,6 +602,7 @@ iavf_request_traffic_irqs(struct iavf_adapter *adapter, char *basename)
 				 "Request_irq failed, error: %d\n", err);
 			goto free_queue_irqs;
 		}
+		q_vector->irq_num = irq_num;
 		/* register for affinity change notifications */
 		q_vector->affinity_notify.notify = iavf_irq_affinity_notify;
 		q_vector->affinity_notify.release =
