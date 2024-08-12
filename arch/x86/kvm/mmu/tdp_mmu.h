@@ -52,6 +52,8 @@ void kvm_tdp_mmu_try_split_huge_pages(struct kvm *kvm,
 				      gfn_t start, gfn_t end,
 				      int target_level, bool shared);
 
+ulong kvm_tdp_mmu_recover_nx_huge_pages(struct kvm *kvm, ulong to_zap);
+
 static inline void kvm_tdp_mmu_walk_lockless_begin(void)
 {
 	rcu_read_lock();

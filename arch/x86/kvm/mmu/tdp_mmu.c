@@ -1796,3 +1796,62 @@ u64 *kvm_tdp_mmu_fast_pf_get_last_sptep(struct kvm_vcpu *vcpu, gfn_t gfn,
 	 */
 	return rcu_dereference(sptep);
 }
+
+static struct kvm_mmu_page *tdp_mmu_nx_huge_page_to_zap(struct kvm *kvm, ulong max)
+{
+	return kvm_mmu_possible_nx_huge_page(kvm, /*tdp_mmu=*/true, max);
+}
+
+ulong kvm_tdp_mmu_recover_nx_huge_pages(struct kvm *kvm, ulong to_zap)
+{
+	struct kvm_mmu_page *sp;
+	bool flush = false;
+
+	lockdep_assert_held_write(&kvm->mmu_lock);
+	/*
+	 * Zapping TDP MMU shadow pages, including the remote TLB flush, must
+	 * be done under RCU protection, because the pages are freed via RCU
+	 * callback.
+	 */
+	rcu_read_lock();
+
+	while (to_zap) {
+		sp = tdp_mmu_nx_huge_page_to_zap(kvm, to_zap);
+
+		if (!sp)
+			break;
+
+		WARN_ON_ONCE(!sp->nx_huge_page_disallowed);
+		WARN_ON_ONCE(!sp->role.direct);
+
+		/*
+		 * Unaccount and do not attempt to recover any NX Huge Pages that
+		 * are being dirty tracked, as they would just be faulted back in
+		 * as 4KiB pages. The NX Huge Pages in this slot will be
+		 * recovered, along with all the other huge pages in the slot,
+		 * when dirty logging is disabled.
+		 */
+		if (kvm_mmu_sp_dirty_logging_enabled(kvm, sp))
+			unaccount_nx_huge_page(kvm, sp);
+		else
+			flush |= kvm_tdp_mmu_zap_sp(kvm, sp);
+
+		WARN_ON_ONCE(sp->nx_huge_page_disallowed);
+
+		if (need_resched() || rwlock_needbreak(&kvm->mmu_lock)) {
+			if (flush) {
+				kvm_flush_remote_tlbs(kvm);
+				flush = false;
+			}
+			rcu_read_unlock();
+			cond_resched_rwlock_write(&kvm->mmu_lock);
+			rcu_read_lock();
+		}
+		to_zap--;
+	}
+
+	if (flush)
+		kvm_flush_remote_tlbs(kvm);
+	rcu_read_unlock();
+	return to_zap;
+}

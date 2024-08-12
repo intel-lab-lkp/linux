@@ -909,7 +909,7 @@ void untrack_possible_nx_huge_page(struct kvm *kvm, struct kvm_mmu_page *sp)
 	list_del_init(&sp->possible_nx_huge_page_link);
 }
 
-static void unaccount_nx_huge_page(struct kvm *kvm, struct kvm_mmu_page *sp)
+void unaccount_nx_huge_page(struct kvm *kvm, struct kvm_mmu_page *sp)
 {
 	sp->nx_huge_page_disallowed = false;
 
@@ -7311,98 +7311,128 @@ static int set_nx_huge_pages_recovery_param(const char *val, const struct kernel
 	return err;
 }
 
-static void kvm_recover_nx_huge_pages(struct kvm *kvm)
+/*
+ * Get the first shadow mmu page of desired type from the NX huge pages list.
+ * Return NULL if list doesn't have the needed page with in the first max pages.
+ */
+struct kvm_mmu_page *kvm_mmu_possible_nx_huge_page(struct kvm *kvm, bool tdp_mmu,
+						   ulong max)
 {
-	unsigned long nx_lpage_splits = kvm->stat.nx_lpage_splits;
-	struct kvm_memory_slot *slot;
-	int rcu_idx;
-	struct kvm_mmu_page *sp;
-	unsigned int ratio;
-	LIST_HEAD(invalid_list);
-	bool flush = false;
-	ulong to_zap;
-
-	rcu_idx = srcu_read_lock(&kvm->srcu);
-	write_lock(&kvm->mmu_lock);
+	struct kvm_mmu_page *sp = NULL;
+	ulong i = 0;
 
 	/*
-	 * Zapping TDP MMU shadow pages, including the remote TLB flush, must
-	 * be done under RCU protection, because the pages are freed via RCU
-	 * callback.
+	 * We use a separate list instead of just using active_mmu_pages because
+	 * the number of shadow pages that be replaced with an NX huge page is
+	 * expected to be relatively small compared to the total number of shadow
+	 * pages. And because the TDP MMU doesn't use active_mmu_pages.
 	 */
-	rcu_read_lock();
+	list_for_each_entry(sp, &kvm->arch.possible_nx_huge_pages, possible_nx_huge_page_link) {
+		if (i++ >= max)
+			break;
+		if (is_tdp_mmu_page(sp) == tdp_mmu)
+			return sp;
+	}
 
-	ratio = READ_ONCE(nx_huge_pages_recovery_ratio);
-	to_zap = ratio ? DIV_ROUND_UP(nx_lpage_splits, ratio) : 0;
-	for ( ; to_zap; --to_zap) {
-		if (list_empty(&kvm->arch.possible_nx_huge_pages))
+	return NULL;
+}
+
+static struct kvm_mmu_page *shadow_mmu_nx_huge_page_to_zap(struct kvm *kvm, ulong max)
+{
+	return kvm_mmu_possible_nx_huge_page(kvm, /*tdp_mmu=*/false, max);
+}
+
+bool kvm_mmu_sp_dirty_logging_enabled(struct kvm *kvm, struct kvm_mmu_page *sp)
+{
+	struct kvm_memory_slot *slot = NULL;
+
+	/*
+	 * Since gfn_to_memslot() is relatively expensive, it helps to skip it if
+	 * it the test cannot possibly return true.  On the other hand, if any
+	 * memslot has logging enabled, chances are good that all of them do, in
+	 * which case unaccount_nx_huge_page() is much cheaper than zapping the
+	 * page.
+	 *
+	 * If a memslot update is in progress, reading an incorrect value of
+	 * kvm->nr_memslots_dirty_logging is not a problem: if it is becoming
+	 * zero, gfn_to_memslot() will be done unnecessarily; if it is becoming
+	 * nonzero, the page will be zapped unnecessarily.  Either way, this only
+	 * affects efficiency in racy situations, and not correctness.
+	 */
+	if (atomic_read(&kvm->nr_memslots_dirty_logging)) {
+		struct kvm_memslots *slots;
+
+		slots = kvm_memslots_for_spte_role(kvm, sp->role);
+		slot = __gfn_to_memslot(slots, sp->gfn);
+		WARN_ON_ONCE(!slot);
+	}
+
+	return slot && kvm_slot_dirty_track_enabled(slot);
+}
+
+static void shadow_mmu_recover_nx_huge_pages(struct kvm *kvm, ulong to_zap)
+{
+	struct kvm_mmu_page *sp;
+	LIST_HEAD(invalid_list);
+
+	lockdep_assert_held_write(&kvm->mmu_lock);
+
+	while (to_zap) {
+		sp = shadow_mmu_nx_huge_page_to_zap(kvm, to_zap);
+		if (!sp)
 			break;
 
-		/*
-		 * We use a separate list instead of just using active_mmu_pages
-		 * because the number of shadow pages that be replaced with an
-		 * NX huge page is expected to be relatively small compared to
-		 * the total number of shadow pages.  And because the TDP MMU
-		 * doesn't use active_mmu_pages.
-		 */
-		sp = list_first_entry(&kvm->arch.possible_nx_huge_pages,
-				      struct kvm_mmu_page,
-				      possible_nx_huge_page_link);
 		WARN_ON_ONCE(!sp->nx_huge_page_disallowed);
 		WARN_ON_ONCE(!sp->role.direct);
 
 		/*
-		 * Unaccount and do not attempt to recover any NX Huge Pages
-		 * that are being dirty tracked, as they would just be faulted
-		 * back in as 4KiB pages. The NX Huge Pages in this slot will be
+		 * Unaccount and do not attempt to recover any NX Huge Pages that
+		 * are being dirty tracked, as they would just be faulted back in
+		 * as 4KiB pages. The NX Huge Pages in this slot will be
 		 * recovered, along with all the other huge pages in the slot,
 		 * when dirty logging is disabled.
-		 *
-		 * Since gfn_to_memslot() is relatively expensive, it helps to
-		 * skip it if it the test cannot possibly return true.  On the
-		 * other hand, if any memslot has logging enabled, chances are
-		 * good that all of them do, in which case unaccount_nx_huge_page()
-		 * is much cheaper than zapping the page.
-		 *
-		 * If a memslot update is in progress, reading an incorrect value
-		 * of kvm->nr_memslots_dirty_logging is not a problem: if it is
-		 * becoming zero, gfn_to_memslot() will be done unnecessarily; if
-		 * it is becoming nonzero, the page will be zapped unnecessarily.
-		 * Either way, this only affects efficiency in racy situations,
-		 * and not correctness.
 		 */
-		slot = NULL;
-		if (atomic_read(&kvm->nr_memslots_dirty_logging)) {
-			struct kvm_memslots *slots;
-
-			slots = kvm_memslots_for_spte_role(kvm, sp->role);
-			slot = __gfn_to_memslot(slots, sp->gfn);
-			WARN_ON_ONCE(!slot);
-		}
-
-		if (slot && kvm_slot_dirty_track_enabled(slot))
+		if (kvm_mmu_sp_dirty_logging_enabled(kvm, sp))
 			unaccount_nx_huge_page(kvm, sp);
-		else if (is_tdp_mmu_page(sp))
-			flush |= kvm_tdp_mmu_zap_sp(kvm, sp);
 		else
 			kvm_mmu_prepare_zap_page(kvm, sp, &invalid_list);
+
 		WARN_ON_ONCE(sp->nx_huge_page_disallowed);
 
 		if (need_resched() || rwlock_needbreak(&kvm->mmu_lock)) {
-			kvm_mmu_remote_flush_or_zap(kvm, &invalid_list, flush);
-			rcu_read_unlock();
-
+			kvm_mmu_commit_zap_page(kvm, &invalid_list);
 			cond_resched_rwlock_write(&kvm->mmu_lock);
-			flush = false;
-
-			rcu_read_lock();
 		}
+		to_zap--;
 	}
-	kvm_mmu_remote_flush_or_zap(kvm, &invalid_list, flush);
 
-	rcu_read_unlock();
+	kvm_mmu_commit_zap_page(kvm, &invalid_list);
+}
 
-	write_unlock(&kvm->mmu_lock);
+static void kvm_recover_nx_huge_pages(struct kvm *kvm)
+{
+	unsigned long nx_lpage_splits = kvm->stat.nx_lpage_splits;
+	unsigned int ratio;
+	ulong to_zap;
+	int rcu_idx;
+
+	ratio = READ_ONCE(nx_huge_pages_recovery_ratio);
+	to_zap = ratio ? DIV_ROUND_UP(nx_lpage_splits, ratio) : 0;
+
+	rcu_idx = srcu_read_lock(&kvm->srcu);
+
+	if (to_zap && tdp_mmu_enabled) {
+		write_lock(&kvm->mmu_lock);
+		to_zap = kvm_tdp_mmu_recover_nx_huge_pages(kvm, to_zap);
+		write_unlock(&kvm->mmu_lock);
+	}
+
+	if (to_zap && kvm_memslots_have_rmaps(kvm)) {
+		write_lock(&kvm->mmu_lock);
+		shadow_mmu_recover_nx_huge_pages(kvm, to_zap);
+		write_unlock(&kvm->mmu_lock);
+	}
+
 	srcu_read_unlock(&kvm->srcu, rcu_idx);
 }
 
