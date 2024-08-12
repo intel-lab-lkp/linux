@@ -6,6 +6,21 @@
 #include <linux/threads.h>
 #include <linux/percpu-defs.h>
 
+/*
+ * per_cpu_qual is the qualifier for the percpu named address space.
+ *
+ * Most arches use generic named address space for percpu variables but
+ * some arches define percpu variables in different named address space
+ * (on the x86 arch, percpu variables may be declared as being relative
+ * to the %fs or %gs segments using __seg_fs or __seg_gs named address
+ * space qualifiers).
+ */
+#ifdef __per_cpu_qual
+#define per_cpu_qual __per_cpu_qual
+#else
+#define per_cpu_qual /* nothing */
+#endif
+
 #ifdef CONFIG_SMP
 
 /*
