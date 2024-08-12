@@ -747,7 +747,7 @@ static int cc2_probe(struct i2c_client *client)
 	ret = cc2_request_ready_irq(data, dev);
 	if (ret) {
 		dev_err_probe(dev, ret, "Failed to request ready irq\n");
-		return ret;
+		goto disable;
 	}
 
 	ret = cc2_request_alarm_irqs(data, dev);
