@@ -107,6 +107,8 @@ struct kvm_arch {
 	unsigned int  root_level;
 	spinlock_t    phyid_map_lock;
 	struct kvm_phyid_map  *phyid_map;
+	/* Enabled PV features */
+	unsigned long pv_features;
 
 	s64 time_offset;
 	struct kvm_context __percpu *vmcs;
@@ -135,6 +137,11 @@ enum emulation_result {
 #define KVM_LARCH_LASX		(0x1 << 2)
 #define KVM_LARCH_SWCSR_LATEST	(0x1 << 3)
 #define KVM_LARCH_HWCSR_USABLE	(0x1 << 4)
+
+#define LOONGARCH_PV_FEAT_UPDATED		BIT_ULL(63)
+#define LOONGARCH_PV_FEAT_MASK						\
+		(BIT(KVM_FEATURE_IPI) | BIT(KVM_FEATURE_STEAL_TIME) |	\
+		 BIT(KVM_FEATURE_VIRT_EXTIOI))
 
 struct kvm_vcpu_arch {
 	/*
