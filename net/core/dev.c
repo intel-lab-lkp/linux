@@ -89,6 +89,7 @@
 #include <linux/errno.h>
 #include <linux/interrupt.h>
 #include <linux/if_ether.h>
+#include <linux/irq.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/ethtool.h>
@@ -6209,6 +6210,19 @@ void __napi_schedule_irqoff(struct napi_struct *n)
 		__napi_schedule(n);
 }
 EXPORT_SYMBOL(__napi_schedule_irqoff);
+
+bool napi_affinity_no_change(unsigned int irq)
+{
+	int cpu_curr = smp_processor_id();
+	const struct cpumask *aff_mask;
+
+	aff_mask = irq_get_effective_affinity_mask(irq);
+	if (unlikely(!aff_mask))
+		return true;
+
+	return cpumask_test_cpu(cpu_curr, aff_mask);
+}
+EXPORT_SYMBOL(napi_affinity_no_change);
 
 bool napi_complete_done(struct napi_struct *n, int work_done)
 {

@@ -464,6 +464,14 @@ enum rx_handler_result {
 typedef enum rx_handler_result rx_handler_result_t;
 typedef rx_handler_result_t rx_handler_func_t(struct sk_buff **pskb);
 
+/**
+ * napi_affinity_no_change - determine if CPU affinity changed
+ * @irq: the IRQ whose affinity may have changed
+ *
+ * Return true if the CPU affinity has NOT changed, false otherwise.
+ */
+bool napi_affinity_no_change(unsigned int irq);
+
 void __napi_schedule(struct napi_struct *n);
 void __napi_schedule_irqoff(struct napi_struct *n);
 
