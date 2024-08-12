@@ -4137,10 +4137,10 @@ static int i40e_vsi_request_irq_msix(struct i40e_vsi *vsi, char *basename)
 	int q_vectors = vsi->num_q_vectors;
 	struct i40e_pf *pf = vsi->back;
 	int base = vsi->base_vector;
+	unsigned int irq_num;
 	int rx_int_idx = 0;
 	int tx_int_idx = 0;
 	int vector, err;
-	int irq_num;
 	int cpu;
 
 	for (vector = 0; vector < q_vectors; vector++) {
