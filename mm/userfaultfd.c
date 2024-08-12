@@ -801,7 +801,8 @@ retry:
 			break;
 		}
 		/* If an huge pmd materialized from under us fail */
-		if (unlikely(pmd_trans_huge(*dst_pmd))) {
+		dst_pmdval = pmdp_get_lockless(dst_pmd);
+		if (unlikely(pmd_none(dst_pmdval) || pmd_trans_huge(dst_pmdval))) {
 			err = -EFAULT;
 			break;
 		}
