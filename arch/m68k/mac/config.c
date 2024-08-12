@@ -677,7 +677,7 @@ static struct mac_model mac_data_table[] = {
 		.floppy_type	= MAC_FLOPPY_OLD, /* SWIM 2 */
 	}, {
 		.ident		= MAC_MODEL_PB520,
-		.name		= "PowerBook 520",
+		.name		= "PowerBook 500 series",
 		.adb_type	= MAC_ADB_PB2,
 		.via_type	= MAC_VIA_QUADRA,
 		.scsi_type	= MAC_SCSI_OLD,
