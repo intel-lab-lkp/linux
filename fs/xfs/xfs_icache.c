@@ -1681,9 +1681,6 @@ restart:
 		for (i = 0; i < nr_found; i++) {
 			struct xfs_inode *ip = batch[i];
 
-			if (done || !xfs_icwalk_igrab(goal, ip, icw))
-				batch[i] = NULL;
-
 			/*
 			 * Update the index for the next lookup. Catch
 			 * overflows into the next AG range which can occur if
@@ -1696,8 +1693,14 @@ restart:
 			 * us to see this inode, so another lookup from the
 			 * same index will not find it again.
 			 */
-			if (XFS_INO_TO_AGNO(mp, ip->i_ino) != pag->pag_agno)
+			if (XFS_INO_TO_AGNO(mp, ip->i_ino) != pag->pag_agno) {
+				batch[i] = NULL;
 				continue;
+			}
+
+			if (done || !xfs_icwalk_igrab(goal, ip, icw))
+				batch[i] = NULL;
+
 			first_index = XFS_INO_TO_AGINO(mp, ip->i_ino + 1);
 			if (first_index < XFS_INO_TO_AGINO(mp, ip->i_ino))
 				done = true;
