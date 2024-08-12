@@ -298,18 +298,6 @@ static irqreturn_t gve_intr_dqo(int irq, void *arg)
 	return IRQ_HANDLED;
 }
 
-static int gve_is_napi_on_home_cpu(struct gve_priv *priv, u32 irq)
-{
-	int cpu_curr = smp_processor_id();
-	const struct cpumask *aff_mask;
-
-	aff_mask = irq_get_effective_affinity_mask(irq);
-	if (unlikely(!aff_mask))
-		return 1;
-
-	return cpumask_test_cpu(cpu_curr, aff_mask);
-}
-
 int gve_napi_poll(struct napi_struct *napi, int budget)
 {
 	struct gve_notify_block *block;
@@ -383,7 +371,7 @@ int gve_napi_poll_dqo(struct napi_struct *napi, int budget)
 		/* Reschedule by returning budget only if already on the correct
 		 * cpu.
 		 */
-		if (likely(gve_is_napi_on_home_cpu(priv, block->irq)))
+		if (likely(napi_affinity_no_change(block->irq)))
 			return budget;
 
 		/* If not on the cpu with which this queue's irq has affinity
