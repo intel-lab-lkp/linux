@@ -66,6 +66,7 @@ static inline void file_free(struct file *f)
 	if (likely(!(f->f_mode & FMODE_NOACCOUNT)))
 		percpu_counter_dec(&nr_files);
 	put_cred(f->f_cred);
+	put_cred(f->f_owner.cred);
 	if (unlikely(f->f_mode & FMODE_BACKING)) {
 		path_put(backing_file_user_path(f));
 		kfree(backing_file(f));
@@ -149,9 +150,11 @@ static int init_file(struct file *f, int flags, const struct cred *cred)
 	int error;
 
 	f->f_cred = get_cred(cred);
+	f->f_owner.cred = get_cred(cred);
 	error = security_file_alloc(f);
 	if (unlikely(error)) {
 		put_cred(f->f_cred);
+		put_cred(f->f_owner.cred);
 		return error;
 	}
 

@@ -2929,7 +2929,10 @@ int security_file_fcntl(struct file *file, unsigned int cmd, unsigned long arg)
  * @file: the file
  *
  * Save owner security information (typically from current->security) in
- * file->f_security for later use by the send_sigiotask hook.
+ * file->f_security for later use by the send_sigiotask hook.  We should use
+ * fown_struct.cred instead though.
+ *
+ * This hook is called while the caller is locking fown_struct.lock .
  *
  * Return: Returns 0 on success.
  */
