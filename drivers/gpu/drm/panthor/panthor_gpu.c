@@ -480,3 +480,35 @@ void panthor_gpu_resume(struct panthor_device *ptdev)
 	panthor_gpu_irq_resume(&ptdev->gpu->irq, GPU_INTERRUPTS_MASK);
 	panthor_gpu_l2_power_on(ptdev);
 }
+
+/**
+ * panthor_gpu_read_timestamp() - Read the timstamp register.
+ * @ptdev: Device.
+ *
+ * Return: The GPU timestamp value.
+ */
+unsigned long long panthor_gpu_read_timestamp(struct panthor_device *ptdev)
+{
+	u32 hi, lo;
+
+	hi = gpu_read(ptdev, GPU_TIMESTAMP_HI);
+	lo = gpu_read(ptdev, GPU_TIMESTAMP_LO);
+
+	return ((u64)hi << 32) | lo;
+}
+
+/**
+ * panthor_gpu_read_timestamp_offset() - Read the timstamp offset register.
+ * @ptdev: Device.
+ *
+ * Return: The GPU timestamp offset value.
+ */
+unsigned long long panthor_gpu_read_timestamp_offset(struct panthor_device *ptdev)
+{
+	u32 hi, lo;
+
+	hi = gpu_read(ptdev, GPU_TIMESTAMP_OFFSET_HI);
+	lo = gpu_read(ptdev, GPU_TIMESTAMP_OFFSET_LO);
+
+	return ((u64)hi << 32) | lo;
+}

@@ -48,5 +48,7 @@ int panthor_gpu_l2_power_on(struct panthor_device *ptdev);
 int panthor_gpu_flush_caches(struct panthor_device *ptdev,
 			     u32 l2, u32 lsc, u32 other);
 int panthor_gpu_soft_reset(struct panthor_device *ptdev);
+unsigned long long panthor_gpu_read_timestamp(struct panthor_device *ptdev);
+unsigned long long panthor_gpu_read_timestamp_offset(struct panthor_device *ptdev);
 
 #endif
