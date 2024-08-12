@@ -65,8 +65,6 @@
 #define TO_NATIVE(x)	\
 	(target_is_big_endian == host_is_big_endian ? x : bswap(x))
 
-#define NOFAIL(ptr)   do_nofail((ptr), #ptr)
-
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
 void *do_nofail(void *ptr, const char *expr);
