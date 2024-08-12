@@ -918,7 +918,7 @@ static int bsd_decompress (void *state, unsigned char *ibuf, int isize,
 	 */
 
 	bitno -= 8;
-	accm  |= *ibuf++ << bitno;
+	accm  |= (unsigned long)(*ibuf++) << bitno;
 	if (tgtbitno < bitno)
 	  {
 	    continue;
