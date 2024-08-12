@@ -72,6 +72,7 @@
 
 #include <linux/cacheflush.h>
 
+#include "binder_genl.h"
 #include "binder_internal.h"
 #include "binder_trace.h"
 
@@ -3679,10 +3680,27 @@ static void binder_transaction(struct binder_proc *proc,
 		return_error_line = __LINE__;
 		goto err_copy_data_failed;
 	}
-	if (t->buffer->oneway_spam_suspect)
+	if (t->buffer->oneway_spam_suspect) {
 		tcomplete->type = BINDER_WORK_TRANSACTION_ONEWAY_SPAM_SUSPECT;
-	else
+		if (binder_genl_report_enabled(proc, BINDER_REPORT_SPAM)) {
+			struct binder_report report;
+
+			strscpy(report.name, context->name,
+				sizeof(report.name));
+			report.err = BR_ONEWAY_SPAM_SUSPECT;
+			report.from_pid = proc->pid;
+			report.from_tid = thread->pid;
+			report.to_pid = target_proc ? target_proc->pid : 0;
+			report.to_tid = target_thread ? target_thread->pid : 0;
+			report.reply = reply;
+			report.flags = tr->flags;
+			report.code = tr->code;
+			report.data_size = tr->data_size;
+			binder_genl_send_report(&report, sizeof(report));
+		}
+	} else {
 		tcomplete->type = BINDER_WORK_TRANSACTION_COMPLETE;
+	}
 	t->work.type = BINDER_WORK_TRANSACTION;
 
 	if (reply) {
@@ -3732,8 +3750,25 @@ static void binder_transaction(struct binder_proc *proc,
 		 * process and is put in a pending queue, waiting for the target
 		 * process to be unfrozen.
 		 */
-		if (return_error == BR_TRANSACTION_PENDING_FROZEN)
+		if (return_error == BR_TRANSACTION_PENDING_FROZEN) {
 			tcomplete->type = BINDER_WORK_TRANSACTION_PENDING;
+			if (binder_genl_report_enabled(proc, BINDER_REPORT_DELAYED)) {
+				struct binder_report report;
+
+				strscpy(report.name, context->name,
+					sizeof(report.name));
+				report.err = return_error;
+				report.from_pid = proc->pid;
+				report.from_tid = thread->pid;
+				report.to_pid = target_proc ? target_proc->pid : 0;
+				report.to_tid = target_thread ? target_thread->pid : 0;
+				report.reply = reply;
+				report.flags = tr->flags;
+				report.code = tr->code;
+				report.data_size = tr->data_size;
+				binder_genl_send_report(&report, sizeof(report));
+			}
+		}
 		binder_enqueue_thread_work(thread, tcomplete);
 		if (return_error &&
 		    return_error != BR_TRANSACTION_PENDING_FROZEN)
@@ -3793,6 +3828,22 @@ err_invalid_target_handle:
 	if (target_node) {
 		binder_dec_node(target_node, 1, 0);
 		binder_dec_node_tmpref(target_node);
+	}
+
+	if (binder_genl_report_enabled(proc, BINDER_REPORT_FAILED)) {
+		struct binder_report report;
+
+		strscpy(report.name, context->name, sizeof(report.name));
+		report.err = return_error;
+		report.from_pid = proc->pid;
+		report.from_tid = thread->pid;
+		report.to_pid = target_proc ? target_proc->pid : 0;
+		report.to_tid = target_thread ? target_thread->pid : 0;
+		report.reply = reply;
+		report.flags = tr->flags;
+		report.code = tr->code;
+		report.data_size = tr->data_size;
+		binder_genl_send_report(&report, sizeof(report));
 	}
 
 	binder_debug(BINDER_DEBUG_FAILED_TRANSACTION,
@@ -5418,6 +5469,59 @@ static int binder_ioctl_get_extended_error(struct binder_thread *thread,
 	return 0;
 }
 
+/**
+ * binder_ioctl_enable_report() - set binder report flags
+ * @proc:	the binder_proc calling the ioctl
+ * @info:	contains the target pid and the flags to set
+ *
+ * If pid is 0, the flags are applied to the whole binder context.
+ * Otherwise, the flags are applied to the specific process only.
+ */
+static int binder_ioctl_enable_report(struct binder_proc *proc,
+				      struct binder_report_info *info)
+{
+	int pid;
+	u32 flags;
+	bool found;
+	struct binder_context *context;
+	struct binder_proc *target_proc;
+
+	pid = info->pid;
+	flags = info->flags;
+	context = proc->context;
+
+	if (flags != (flags & (BINDER_REPORT_ALL | BINDER_REPORT_OVERRIDE))) {
+		pr_err("Invalid binder report flags: %u\n", flags);
+		return -EINVAL;
+	}
+
+	if (!pid) {
+		/* Set the global flags for the whole binder context */
+
+		pr_info("Set global binder report flags %u for %s\n",
+			flags, context->name);
+		context->report_flags = flags;
+	} else {
+		/* Set the per-process flags */
+
+		found = false;
+		mutex_lock(&binder_procs_lock);
+		hlist_for_each_entry(target_proc, &binder_procs, proc_node) {
+			if (target_proc->pid == pid) {
+				found = true;
+				pr_info("Set binder report flags %u for %d\n",
+					flags, pid);
+				target_proc->report_flags = flags;
+			}
+		}
+		mutex_unlock(&binder_procs_lock);
+		if (!found)
+			return -EINVAL;
+	}
+
+	return 0;
+}
+
 static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	int ret;
@@ -5626,6 +5730,18 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		if (ret < 0)
 			goto err;
 		break;
+	case BINDER_ENABLE_REPORT: {
+		struct binder_report_info info;
+
+		if (copy_from_user(&info, ubuf, sizeof(info))) {
+			ret = -EFAULT;
+			goto err;
+		}
+		ret = binder_ioctl_enable_report(proc, &info);
+		if (ret)
+			goto err;
+		break;
+	}
 	default:
 		ret = -EINVAL;
 		goto err;
@@ -6655,6 +6771,9 @@ static int __init binder_init(void)
 	const struct binder_debugfs_entry *db_entry;
 
 	ret = binder_alloc_shrinker_init();
+	if (ret)
+		return ret;
+	ret = binder_genl_init();
 	if (ret)
 		return ret;
 

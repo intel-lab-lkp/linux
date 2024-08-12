@@ -266,6 +266,7 @@ enum {
 	BINDER_GET_FROZEN_INFO		= _IOWR('b', 15, struct binder_frozen_status_info),
 	BINDER_ENABLE_ONEWAY_SPAM_DETECTION	= _IOW('b', 16, __u32),
 	BINDER_GET_EXTENDED_ERROR	= _IOWR('b', 17, struct binder_extended_error),
+	BINDER_ENABLE_REPORT		= _IOW('b', 18, __u32),
 };
 
 /*
@@ -551,6 +552,152 @@ enum binder_driver_command_protocol {
 	 * binder_transaction_data_sg: the sent command.
 	 */
 };
+
+/*
+ * Name of binder generic netlink
+ */
+#define BINDER_GENL_FAMILY_NAME	"binder"
+
+/*
+ * Version of binder generic netlink
+ */
+#define BINDER_GENL_VERSION	1
+
+/*
+ * Used with BINDER_ENABLE_REPORT, defining what kind of binder transactions
+ * should be reported to user space administration process.
+ */
+enum binder_report_flag {
+	/*
+	 * Report failed binder transactions,
+	 * when the sender gets BR_{FAILED|FROZEN|DEAD}_REPLY
+	 */
+	BINDER_REPORT_FAILED = 0x1,
+
+	/*
+	 * Report delayed async binder transactions due to frozen target,
+	 * when the sender gets BR_TRANSACTION_PENDING_FROZEN.
+	 */
+	BINDER_REPORT_DELAYED = 0x2,
+
+	/*
+	 * Report spamming binder transactions,
+	 * when the sender gets BR_ONEWAY_SPAM_SUSPECT.
+	 */
+	BINDER_REPORT_SPAM = 0x4,
+
+	/*
+	 * Report all of the above
+	 */
+	BINDER_REPORT_ALL = BINDER_REPORT_FAILED
+			| BINDER_REPORT_DELAYED
+			| BINDER_REPORT_SPAM,
+
+	/*
+	 * Enable the per-process flag, which overrides the global one.
+	 */
+	BINDER_REPORT_OVERRIDE = 0x8000000,
+};
+
+/* struct binder_report_info - binder report information
+ * @pid:	the process to apply the flags
+ * @flags:	the enabled binder reports (see enum binder_report_flag)
+ *
+ * Used with BINDER_ENABLE_REPORT. If pid is 0, the flags are applied to the
+ * whole binder context. Otherwise, the flags are applied to the specific
+ * process only.
+ */
+struct binder_report_info {
+	__u32 pid;
+	__u32 flags;
+};
+
+/*
+ * struct binder_report - reports an abnormal binder transaction
+ * @name:	copy of binder_context->name where the txn happens
+ * @err:	copy of binder_driver_return_protocol returned to the sender
+ * @from_pid:	sender pid of the corresponding binder transaction
+ * @from_tid:	sender tid of the corresponding binder transaction
+ * @to_pid:	target pid of the corresponding binder transaction
+ * @to_tid:	target tid of the corresponding binder transaction
+ * @reply:	1 means the txn is a reply, 0 otherwise
+ * @flags:	copy of binder_transaction_data->flags
+ * @code:	copy of binder_transaction_data->code
+ * @data_size:	copy of binder_transaction_data->data_size
+ *
+ * When a binder transaction fails to reach the target process or is not
+ * delivered on time, an error command BR_XXX is returned from the kernel
+ * binder driver to the user space sender. This is considered an abnormal
+ * binder transaction. The most important information about this abnormal
+ * binder transaction will be packed into this binder_report struct and sent
+ * to the registered user space administration process via generic netlink.
+ */
+struct binder_report {
+	__u8 name[16];
+	__u32 err;
+	__u32 from_pid;
+	__u32 from_tid;
+	__u32 to_pid;
+	__u32 to_tid;
+	__u32 reply;
+	__u32 flags;
+	__u32 code;
+	binder_size_t data_size;
+};
+
+/*
+ * The supported attributes of binder generic netlink.
+ */
+enum binder_genl_attr {
+	BINDER_GENL_ATTR_UNSPEC = 0,
+
+	/*
+	 * The attribute for BINDER_GENL_CMD_REPLY to reply to
+	 * BINDER_GENL_CMD_REGISTER.
+	 * Contains payload binder_report_pid.
+	 */
+	BINDER_GENL_ATTR_PID  = 1,
+
+	/*
+	 * The attribute for BINDER_GENL_CMD_REPORT.
+	 * Contains payload binder_report.
+	 */
+	BINDER_GENL_ATTR_REPORT = 2,
+
+	__BINDER_GENL_ATTR_MAX  = 3,
+};
+
+#define BINDER_GENL_ATTR_MAX (__BINDER_GENL_ATTR_MAX - 1)
+
+/*
+ * The supported commands of binder generic netlink.
+ */
+enum binder_genl_cmd {
+	BINDER_GENL_CMD_UNSPEC = 0,
+
+	/*
+	 * The user space administrator process uses this command to register
+	 * itself to receive binder reports via generic netlink.
+	 */
+	BINDER_GENL_CMD_REGISTER = 1,
+
+	/*
+	 * After receiving BINDER_GENL_CMD_REGISTER from the user space
+	 * administrator process, the kernel binder driver uses this command
+	 * to acknowledge the request.
+	 */
+	BINDER_GENL_CMD_REPLY  = 2,
+
+	/*
+	 * After enabling binder report, the kernel binder driver uses this
+	 * command to send the requested reports to the user space.
+	 */
+	BINDER_GENL_CMD_REPORT = 3,
+
+	__BINDER_GENL_CMD_MAX  = 4,
+};
+
+#define BINDER_GENL_CMD_MAX (__BINDER_GENL_CMD_MAX - 1)
 
 #endif /* _UAPI_LINUX_BINDER_H */
 
