@@ -36,7 +36,10 @@ option_list = [
 		    help="Set path to objdump executable file"),
 	make_option("-v", "--verbose", dest="verbose",
 		    action="store_true", default=False,
-		    help="Enable debugging log")
+		    help="Enable debugging log"),
+	make_option("-f", "--force", dest="force",
+		    action="store_true", default=False,
+		    help="Force decoder to continue")
 ]
 
 parser = OptionParser(option_list=option_list)
@@ -255,6 +258,13 @@ def process_event(param_dict):
 	if (stop_addr < int(dso_start) or stop_addr > int(dso_end)):
 		print("Stop address 0x%x is out of range [ 0x%x .. 0x%x ] for dso %s" % (stop_addr, int(dso_start), int(dso_end), dso))
 		return
+
+	if (stop_addr < start_addr):
+		if (options.verbose or not options.force):
+			print("Packet Discontinuity detected [stop_add:0x%x start_addr:0x%x ] for dso %s" % (stop_addr, start_addr, dso))
+			print("Use option '-f' following the script for force mode")
+		if (options.force):
+			return
 
 	if (options.objdump_name != None):
 		# It doesn't need to decrease virtual memory offset for disassembly
