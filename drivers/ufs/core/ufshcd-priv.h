@@ -275,6 +275,15 @@ static inline int ufshcd_mcq_vops_config_esi(struct ufs_hba *hba)
 	return -EOPNOTSUPP;
 }
 
+static inline enum utp_ocs ufshcd_vops_override_cqe_ocs(struct ufs_hba *hba,
+							enum utp_ocs ocs)
+{
+	if (hba->vops && hba->vops->override_cqe_ocs)
+		return hba->vops->override_cqe_ocs(hba);
+
+	return ocs;
+}
+
 extern const struct ufs_pm_lvl_states ufs_pm_lvl_states[];
 
 /**

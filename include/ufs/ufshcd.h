@@ -382,6 +382,7 @@ struct ufs_hba_variant_ops {
 	int	(*get_outstanding_cqs)(struct ufs_hba *hba,
 				       unsigned long *ocqs);
 	int	(*config_esi)(struct ufs_hba *hba);
+	enum utp_ocs	(*override_cqe_ocs)(struct ufs_hba *hba, enum utp_ocs);
 };
 
 /* clock gating state  */
