@@ -59,7 +59,7 @@ properties:
     type: boolean
 
 patternProperties:
-  '@[0-9a-f]+$':
+  '^(?!mdio@).*@[0-9a-f]+$':
     type: object
 
     properties:
