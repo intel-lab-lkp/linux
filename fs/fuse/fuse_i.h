@@ -275,13 +275,15 @@ struct fuse_file {
 
 /** One input argument of a request */
 struct fuse_in_arg {
-	unsigned size;
+	unsigned int size;
+	unsigned int align:1;
 	const void *value;
 };
 
 /** One output argument of a request */
 struct fuse_arg {
-	unsigned size;
+	unsigned int size;
+	unsigned int align:1;
 	void *value;
 };
 
