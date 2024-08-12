@@ -191,7 +191,7 @@ xfs_reclaim_work_queue(
 {
 
 	rcu_read_lock();
-	if (radix_tree_tagged(&mp->m_perag_tree, XFS_ICI_RECLAIM_TAG)) {
+	if (xa_marked(&mp->m_perags, XFS_ICI_RECLAIM_TAG)) {
 		queue_delayed_work(mp->m_reclaim_workqueue, &mp->m_reclaim_work,
 			msecs_to_jiffies(xfs_syncd_centisecs / 6 * 10));
 	}
@@ -241,9 +241,7 @@ xfs_perag_set_inode_tag(
 		return;
 
 	/* propagate the tag up into the perag radix tree */
-	spin_lock(&mp->m_perag_lock);
-	radix_tree_tag_set(&mp->m_perag_tree, pag->pag_agno, tag);
-	spin_unlock(&mp->m_perag_lock);
+	xa_set_mark(&mp->m_perags, pag->pag_agno, tag);
 
 	/* start background work */
 	switch (tag) {
@@ -285,9 +283,7 @@ xfs_perag_clear_inode_tag(
 		return;
 
 	/* clear the tag from the perag radix tree */
-	spin_lock(&mp->m_perag_lock);
-	radix_tree_tag_clear(&mp->m_perag_tree, pag->pag_agno, tag);
-	spin_unlock(&mp->m_perag_lock);
+	xa_clear_mark(&mp->m_perags, pag->pag_agno, tag);
 
 	trace_xfs_perag_clear_inode_tag(pag, _RET_IP_);
 }
@@ -977,7 +973,7 @@ xfs_reclaim_inodes(
 	if (xfs_want_reclaim_sick(mp))
 		icw.icw_flags |= XFS_ICWALK_FLAG_RECLAIM_SICK;
 
-	while (radix_tree_tagged(&mp->m_perag_tree, XFS_ICI_RECLAIM_TAG)) {
+	while (xa_marked(&mp->m_perags, XFS_ICI_RECLAIM_TAG)) {
 		xfs_ail_push_all_sync(mp->m_ail);
 		xfs_icwalk(mp, XFS_ICWALK_RECLAIM, &icw);
 	}
@@ -1020,14 +1016,16 @@ xfs_reclaim_inodes_count(
 	struct xfs_mount	*mp)
 {
 	struct xfs_perag	*pag;
-	xfs_agnumber_t		ag = 0;
+	unsigned long		index = 0;
 	long			reclaimable = 0;
 
-	while ((pag = xfs_perag_get_tag(mp, ag, XFS_ICI_RECLAIM_TAG))) {
-		ag = pag->pag_agno + 1;
+	rcu_read_lock();
+	xa_for_each_marked(&mp->m_perags, index, pag, XFS_ICI_RECLAIM_TAG) {
+		trace_xfs_reclaim_inodes_count(pag, _THIS_IP_);
 		reclaimable += pag->pag_ici_reclaimable;
-		xfs_perag_put(pag);
 	}
+	rcu_read_unlock();
+
 	return reclaimable;
 }
 
@@ -1370,14 +1368,20 @@ xfs_blockgc_start(
 	struct xfs_mount	*mp)
 {
 	struct xfs_perag	*pag;
-	xfs_agnumber_t		agno;
+	unsigned long		index = 0;
 
 	if (xfs_set_blockgc_enabled(mp))
 		return;
 
 	trace_xfs_blockgc_start(mp, __return_address);
-	for_each_perag_tag(mp, agno, pag, XFS_ICI_BLOCKGC_TAG)
+
+	rcu_read_lock();
+	xa_for_each_marked(&mp->m_perags, index, pag, XFS_ICI_BLOCKGC_TAG) {
+		if (!atomic_read(&pag->pag_active_ref))
+			continue;
 		xfs_blockgc_queue(pag);
+	}
+	rcu_read_unlock();
 }
 
 /* Don't try to run block gc on an inode that's in any of these states. */
@@ -1493,21 +1497,32 @@ xfs_blockgc_flush_all(
 	struct xfs_mount	*mp)
 {
 	struct xfs_perag	*pag;
-	xfs_agnumber_t		agno;
+	unsigned long		index = 0;
 
 	trace_xfs_blockgc_flush_all(mp, __return_address);
 
 	/*
-	 * For each blockgc worker, move its queue time up to now.  If it
-	 * wasn't queued, it will not be requeued.  Then flush whatever's
-	 * left.
+	 * For each blockgc worker, move its queue time up to now.  If it wasn't
+	 * queued, it will not be requeued.  Then flush whatever is left.
 	 */
-	for_each_perag_tag(mp, agno, pag, XFS_ICI_BLOCKGC_TAG)
-		mod_delayed_work(pag->pag_mount->m_blockgc_wq,
-				&pag->pag_blockgc_work, 0);
+	rcu_read_lock();
+	xa_for_each_marked(&mp->m_perags, index, pag, XFS_ICI_BLOCKGC_TAG)
+		mod_delayed_work(mp->m_blockgc_wq, &pag->pag_blockgc_work, 0);
+	rcu_read_unlock();
 
-	for_each_perag_tag(mp, agno, pag, XFS_ICI_BLOCKGC_TAG)
+	index = 0;
+	rcu_read_lock();
+	xa_for_each_marked(&mp->m_perags, index, pag, XFS_ICI_BLOCKGC_TAG) {
+		if (!atomic_inc_not_zero(&pag->pag_active_ref))
+			continue;
+		rcu_read_unlock();
+
 		flush_delayed_work(&pag->pag_blockgc_work);
+		xfs_perag_rele(pag);
+
+		rcu_read_lock();
+	}
+	rcu_read_unlock();
 
 	return xfs_inodegc_flush(mp);
 }
@@ -1755,18 +1770,26 @@ xfs_icwalk(
 	struct xfs_perag	*pag;
 	int			error = 0;
 	int			last_error = 0;
-	xfs_agnumber_t		agno;
+	unsigned long		index = 0;
 
-	for_each_perag_tag(mp, agno, pag, goal) {
+	rcu_read_lock();
+	xa_for_each_marked(&mp->m_perags, index, pag, goal) {
+		if (!atomic_inc_not_zero(&pag->pag_active_ref))
+			continue;
+		rcu_read_unlock();
+
 		error = xfs_icwalk_ag(pag, goal, icw);
+		xfs_perag_rele(pag);
+
+		rcu_read_lock();
 		if (error) {
 			last_error = error;
-			if (error == -EFSCORRUPTED) {
-				xfs_perag_rele(pag);
+			if (error == -EFSCORRUPTED)
 				break;
-			}
 		}
 	}
+	rcu_read_unlock();
+
 	return last_error;
 	BUILD_BUG_ON(XFS_ICWALK_PRIVATE_FLAGS & XFS_ICWALK_FLAGS_VALID);
 }
