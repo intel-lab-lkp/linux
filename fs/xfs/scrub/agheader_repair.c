@@ -1108,23 +1108,6 @@ xrep_iunlink_walk_ondisk_bucket(
 	return 0;
 }
 
-/* Decide if this is an unlinked inode in this AG. */
-STATIC bool
-xrep_iunlink_igrab(
-	struct xfs_perag	*pag,
-	struct xfs_inode	*ip)
-{
-	struct xfs_mount	*mp = pag->pag_mount;
-
-	if (XFS_INO_TO_AGNO(mp, ip->i_ino) != pag->pag_agno)
-		return false;
-
-	if (!xfs_inode_on_unlinked_list(ip))
-		return false;
-
-	return true;
-}
-
 /*
  * Mark the given inode in the lookup batch in our unlinked inode bitmap, and
  * remember if this inode is the start of the unlinked chain.
@@ -1196,9 +1179,6 @@ xrep_iunlink_mark_incore(
 		for (i = 0; i < nr_found; i++) {
 			struct xfs_inode *ip = ragi->lookup_batch[i];
 
-			if (done || !xrep_iunlink_igrab(pag, ip))
-				ragi->lookup_batch[i] = NULL;
-
 			/*
 			 * Update the index for the next lookup. Catch
 			 * overflows into the next AG range which can occur if
@@ -1211,8 +1191,14 @@ xrep_iunlink_mark_incore(
 			 * us to see this inode, so another lookup from the
 			 * same index will not find it again.
 			 */
-			if (XFS_INO_TO_AGNO(mp, ip->i_ino) != pag->pag_agno)
+			if (XFS_INO_TO_AGNO(mp, ip->i_ino) != pag->pag_agno) {
+				ragi->lookup_batch[i] = NULL;
 				continue;
+			}
+
+			if (done || !xfs_inode_on_unlinked_list(ip))
+				ragi->lookup_batch[i] = NULL;
+
 			first_index = XFS_INO_TO_AGINO(mp, ip->i_ino + 1);
 			if (first_index < XFS_INO_TO_AGINO(mp, ip->i_ino))
 				done = true;
