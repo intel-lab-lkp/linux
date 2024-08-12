@@ -464,7 +464,7 @@ static int meson_mmc_clk_init(struct meson_host *host)
 	init.num_parents = MUX_CLK_NUM_PARENTS;
 
 	mux->reg = host->regs + SD_EMMC_CLOCK;
-	mux->shift = __ffs(CLK_SRC_MASK);
+	mux->shift = __builtin_ffs(CLK_SRC_MASK) - 1;
 	mux->mask = CLK_SRC_MASK >> mux->shift;
 	mux->hw.init = &init;
 
@@ -486,7 +486,7 @@ static int meson_mmc_clk_init(struct meson_host *host)
 	init.num_parents = 1;
 
 	div->reg = host->regs + SD_EMMC_CLOCK;
-	div->shift = __ffs(CLK_DIV_MASK);
+	div->shift = __builtin_ffs(CLK_DIV_MASK) - 1;
 	div->width = __builtin_popcountl(CLK_DIV_MASK);
 	div->hw.init = &init;
 	div->flags = CLK_DIVIDER_ONE_BASED;
