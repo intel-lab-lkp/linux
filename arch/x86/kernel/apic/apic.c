@@ -1768,13 +1768,10 @@ static __init void apic_set_fixmap(bool read_apic);
 
 static __init void x2apic_disable(void)
 {
-	u32 x2apic_id, state = x2apic_state;
+	u32 x2apic_id;
 
-	x2apic_mode = 0;
-	x2apic_state = X2APIC_DISABLED;
-
-	if (state != X2APIC_ON)
-		return;
+	if (x2apic_state < X2APIC_ON)
+		goto out;
 
 	x2apic_id = read_apic_id();
 	if (x2apic_id >= 255)
@@ -1792,6 +1789,10 @@ static __init void x2apic_disable(void)
 	 * which fails to do the read after x2APIC was disabled.
 	 */
 	apic_set_fixmap(false);
+
+out:
+	x2apic_mode = 0;
+	x2apic_state = X2APIC_DISABLED;
 }
 
 static __init void x2apic_enable(void)
