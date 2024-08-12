@@ -221,7 +221,6 @@ static void __of_attach_node(struct device_node *np)
 			np->phandle = 0;
 	}
 
-	np->child = NULL;
 	np->sibling = np->parent->child;
 	np->parent->child = np;
 	of_node_clear_flag(np, OF_DETACHED);
