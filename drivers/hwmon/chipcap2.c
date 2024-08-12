@@ -740,11 +740,9 @@ static int cc2_probe(struct i2c_client *client)
 	data->client = client;
 
 	data->regulator = devm_regulator_get_exclusive(dev, "vdd");
-	if (IS_ERR(data->regulator)) {
-		dev_err_probe(dev, PTR_ERR(data->regulator),
-			      "Failed to get regulator\n");
-		return PTR_ERR(data->regulator);
-	}
+	if (IS_ERR(data->regulator))
+		return dev_err_probe(dev, PTR_ERR(data->regulator),
+				     "Failed to get regulator\n");
 
 	ret = cc2_request_ready_irq(data, dev);
 	if (ret) {
