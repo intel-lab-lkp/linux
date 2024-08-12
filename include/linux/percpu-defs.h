@@ -220,6 +220,21 @@ do {									\
 	(void)__vpp_verify;						\
 } while (0)
 
+/*
+ * Define percpu_typeof() to use __typeof_unqual__() as typeof
+ * operator when available, to return unqualified type of the exp.
+ *
+ * If an arch defines __percpu variables in their own named address
+ * space, then pcpu_typeof() returns unqualified type of the
+ * expression without named address space qualifier when
+ * CONFIG_CC_HAS_TYPEOF_UNQUAL is defined.
+ */
+#ifdef CONFIG_CC_HAS_TYPEOF_UNQUAL
+#define pcpu_typeof(exp) __typeof_unqual__(exp)
+#else
+#define pcpu_typeof(exp) __typeof__(exp)
+#endif
+
 #ifdef CONFIG_SMP
 
 /*
@@ -228,7 +243,10 @@ do {									\
  * pointer value.  The weird cast keeps both GCC and sparse happy.
  */
 #define SHIFT_PERCPU_PTR(__p, __offset)					\
-	RELOC_HIDE((typeof(*(__p)) __kernel __force *)(__p), (__offset))
+	uintptr_t ptr__ = (__force uintptr_t)(__p);			\
+									\
+	RELOC_HIDE((pcpu_typeof(*(__p)) __kernel __force *)(ptr__),	\
+		   (__offset))
 
 #define per_cpu_ptr(ptr, cpu)						\
 ({									\
@@ -254,13 +272,20 @@ do {									\
 
 #else	/* CONFIG_SMP */
 
-#define VERIFY_PERCPU_PTR(__p)						\
+#define PERCPU_PTR(__p)							\
 ({									\
-	__verify_pcpu_ptr(__p);						\
-	(typeof(*(__p)) __kernel __force *)(__p);			\
+	uintptr_t ptr__ = (__force uintptr_t)(__p);			\
+									\
+	(pcpu_typeof(*(__p)) __kernel __force *)(ptr__);		\
 })
 
-#define per_cpu_ptr(ptr, cpu)	({ (void)(cpu); VERIFY_PERCPU_PTR(ptr); })
+#define per_cpu_ptr(ptr, cpu)						\
+({									\
+	__verify_pcpu_ptr(ptr);						\
+	(void)(cpu);							\
+	PERCPU_PTR(ptr);						\
+})
+
 #define raw_cpu_ptr(ptr)	per_cpu_ptr(ptr, 0)
 #define this_cpu_ptr(ptr)	raw_cpu_ptr(ptr)
 
@@ -315,7 +340,7 @@ static __always_inline void __this_cpu_preempt_check(const char *op) { }
 
 #define __pcpu_size_call_return(stem, variable)				\
 ({									\
-	typeof(variable) pscr_ret__;					\
+	pcpu_typeof(variable) pscr_ret__;				\
 	__verify_pcpu_ptr(&(variable));					\
 	switch(sizeof(variable)) {					\
 	case 1: pscr_ret__ = stem##1(variable); break;			\
@@ -330,7 +355,7 @@ static __always_inline void __this_cpu_preempt_check(const char *op) { }
 
 #define __pcpu_size_call_return2(stem, variable, ...)			\
 ({									\
-	typeof(variable) pscr2_ret__;					\
+	pcpu_typeof(variable) pscr2_ret__;				\
 	__verify_pcpu_ptr(&(variable));					\
 	switch(sizeof(variable)) {					\
 	case 1: pscr2_ret__ = stem##1(variable, __VA_ARGS__); break;	\

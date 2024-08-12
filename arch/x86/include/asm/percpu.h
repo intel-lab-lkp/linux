@@ -73,10 +73,14 @@
 	unsigned long tcp_ptr__ = raw_cpu_read_long(this_cpu_off);	\
 									\
 	tcp_ptr__ += (__force unsigned long)(_ptr);			\
-	(typeof(*(_ptr)) __kernel __force *)tcp_ptr__;			\
+	(pcpu_typeof(*(_ptr)) __kernel __force *)tcp_ptr__;		\
 })
 #else
-#define arch_raw_cpu_ptr(_ptr) ({ BUILD_BUG(); (typeof(_ptr))0; })
+#define arch_raw_cpu_ptr(_ptr)						\
+({									\
+	BUILD_BUG();							\
+	(pcpu_typeof(*(_ptr)) __kernel __force *)0;			\
+})
 #endif
 
 #define PER_CPU_VAR(var)	%__percpu_seg:(var)__percpu_rel
@@ -172,7 +176,7 @@ do {									\
 	    : [val] __pcpu_reg_##size("=", pfo_val__)			\
 	    : [var] "m" (__my_cpu_var(_var)));				\
 									\
-	(typeof(_var))(unsigned long) pfo_val__;			\
+	(pcpu_typeof(_var))(unsigned long) pfo_val__;			\
 })
 
 #define __raw_cpu_write(size, qual, _var, _val)				\
@@ -180,7 +184,7 @@ do {									\
 	__pcpu_type_##size pto_val__ = __pcpu_cast_##size(_val);	\
 									\
 	if (0) {		                                        \
-		typeof(_var) pto_tmp__;					\
+		pcpu_typeof(_var) pto_tmp__;				\
 		pto_tmp__ = (_val);					\
 		(void)pto_tmp__;					\
 	}								\
@@ -193,7 +197,11 @@ do {									\
  * The generic per-CPU infrastrucutre is not suitable for
  * reading const-qualified variables.
  */
-#define __raw_cpu_read_const(pcp)	({ BUILD_BUG(); (typeof(pcp))0; })
+#define __raw_cpu_read_const(pcp)					\
+({									\
+	BUILD_BUG();							\
+	(pcpu_typeof(pcp))0;						\
+})
 
 #endif /* CONFIG_USE_X86_SEG_SUPPORT */
 
@@ -205,7 +213,7 @@ do {									\
 	    : [val] __pcpu_reg_##size("=", pfo_val__)			\
 	    : [var] "i" (&(_var)));					\
 									\
-	(typeof(_var))(unsigned long) pfo_val__;			\
+	(pcpu_typeof(_var))(unsigned long) pfo_val__;			\
 })
 
 #define percpu_unary_op(size, qual, op, _var)				\
@@ -219,7 +227,7 @@ do {									\
 	__pcpu_type_##size pto_val__ = __pcpu_cast_##size(_val);	\
 									\
 	if (0) {		                                        \
-		typeof(_var) pto_tmp__;					\
+		pcpu_typeof(_var) pto_tmp__;				\
 		pto_tmp__ = (_val);					\
 		(void)pto_tmp__;					\
 	}								\
@@ -239,7 +247,7 @@ do {									\
 				(int)(val) : 0;				\
 									\
 	if (0) {							\
-		typeof(var) pao_tmp__;					\
+		pcpu_typeof(var) pao_tmp__;				\
 		pao_tmp__ = (val);					\
 		(void)pao_tmp__;					\
 	}								\
@@ -263,7 +271,7 @@ do {									\
 		  : [tmp] __pcpu_reg_##size("+", paro_tmp__),		\
 		    [var] "+m" (__my_cpu_var(_var))			\
 		  : : "memory");					\
-	(typeof(_var))(unsigned long) (paro_tmp__ + _val);		\
+	(pcpu_typeof(_var))(unsigned long) (paro_tmp__ + _val);		\
 })
 
 /*
@@ -272,7 +280,7 @@ do {									\
  */
 #define raw_percpu_xchg_op(_var, _nval)					\
 ({									\
-	typeof(_var) pxo_old__ = raw_cpu_read(_var);			\
+	pcpu_typeof(_var) pxo_old__ = raw_cpu_read(_var);		\
 									\
 	raw_cpu_write(_var, _nval);					\
 									\
@@ -286,7 +294,7 @@ do {									\
  */
 #define this_percpu_xchg_op(_var, _nval)				\
 ({									\
-	typeof(_var) pxo_old__ = this_cpu_read(_var);			\
+	pcpu_typeof(_var) pxo_old__ = this_cpu_read(_var);		\
 									\
 	do { } while (!this_cpu_try_cmpxchg(_var, &pxo_old__, _nval));	\
 									\
@@ -309,7 +317,7 @@ do {									\
 		  : [nval] __pcpu_reg_##size(, pco_new__)		\
 		  : "memory");						\
 									\
-	(typeof(_var))(unsigned long) pco_old__;			\
+	(pcpu_typeof(_var))(unsigned long) pco_old__;			\
 })
 
 #define percpu_try_cmpxchg_op(size, qual, _var, _ovalp, _nval)		\
@@ -568,7 +576,11 @@ do {									\
 #else /* !CONFIG_X86_64: */
 
 /* There is no generic 64-bit read stable operation for 32-bit targets. */
-#define this_cpu_read_stable_8(pcp)			({ BUILD_BUG(); (typeof(pcp))0; })
+#define this_cpu_read_stable_8(pcp)					\
+({									\
+	BUILD_BUG();							\
+	(pcpu_typeof(pcp))0;						\
+})
 
 #define raw_cpu_read_long(pcp)				raw_cpu_read_4(pcp)
 
