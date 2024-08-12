@@ -1601,6 +1601,39 @@ void *xa_store(struct xarray *xa, unsigned long index, void *entry, gfp_t gfp)
 EXPORT_SYMBOL(xa_store);
 
 /**
+ * xa_set() - Store this entry in the XArray.
+ * @xa: XArray.
+ * @index: Index into array.
+ * @entry: New entry.
+ * @gfp: Memory allocation flags.
+ *
+ * After this function returns, loads from this index will return @entry.
+ * Storing into an existing multi-index entry updates the entry of every index.
+ * The marks associated with @index are unaffected unless @entry is %NULL.
+ *
+ * Context: Any context.  Takes and releases the xa_lock.
+ * May sleep if the @gfp flags permit.
+ * Return: 0 on success, -EEXIST if there already is an entry at @index, -EINVAL
+ * if @entry cannot be stored in an XArray, or -ENOMEM if memory allocation
+ * failed.
+ */
+int xa_set(struct xarray *xa, unsigned long index, void *entry, gfp_t gfp)
+{
+	int error = 0;
+	void *curr;
+
+	curr = xa_store(xa, index, entry, gfp);
+	if (curr) {
+		error = xa_err(curr);
+		if (error == 0)
+			error = -ENOENT;
+	}
+
+	return error;
+}
+EXPORT_SYMBOL(xa_set);
+
+/**
  * __xa_cmpxchg() - Store this entry in the XArray.
  * @xa: XArray.
  * @index: Index into array.

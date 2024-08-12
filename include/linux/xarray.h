@@ -354,6 +354,7 @@ struct xarray {
 
 void *xa_load(struct xarray *, unsigned long index);
 void *xa_store(struct xarray *, unsigned long index, void *entry, gfp_t);
+int xa_set(struct xarray *, unsigned long index, void *entry, gfp_t);
 void *xa_erase(struct xarray *, unsigned long index);
 void *xa_store_range(struct xarray *, unsigned long first, unsigned long last,
 			void *entry, gfp_t);
