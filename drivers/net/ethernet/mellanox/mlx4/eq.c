@@ -1539,7 +1539,7 @@ err_unlock:
 }
 EXPORT_SYMBOL(mlx4_assign_eq);
 
-int mlx4_eq_get_irq(struct mlx4_dev *dev, int cq_vec)
+unsigned int mlx4_eq_get_irq(struct mlx4_dev *dev, int cq_vec)
 {
 	struct mlx4_priv *priv = mlx4_priv(dev);
 

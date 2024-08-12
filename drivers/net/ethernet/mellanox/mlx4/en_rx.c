@@ -1022,14 +1022,10 @@ int mlx4_en_poll_rx_cq(struct napi_struct *napi, int budget)
 
 	/* If we used up all the quota - we're probably not done yet... */
 	if (done == budget || !clean_complete) {
-		int cpu_curr;
-
 		/* in case we got here because of !clean_complete */
 		done = budget;
 
-		cpu_curr = smp_processor_id();
-
-		if (likely(cpumask_test_cpu(cpu_curr, cq->aff_mask)))
+		if (likely(napi_affinity_no_change(cq->irq)))
 			return budget;
 
 		/* Current cpu is not according to smp_irq_affinity -

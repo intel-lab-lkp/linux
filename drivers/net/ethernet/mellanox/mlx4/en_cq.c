@@ -90,9 +90,10 @@ int mlx4_en_activate_cq(struct mlx4_en_priv *priv, struct mlx4_en_cq *cq,
 			int cq_idx)
 {
 	struct mlx4_en_dev *mdev = priv->mdev;
-	int irq, err = 0;
-	int timestamp_en = 0;
 	bool assigned_eq = false;
+	int timestamp_en = 0;
+	unsigned int irq;
+	int err = 0;
 
 	cq->dev = mdev->pndev[priv->port];
 	cq->mcq.set_ci_db  = cq->wqres.db.db;
@@ -144,6 +145,7 @@ int mlx4_en_activate_cq(struct mlx4_en_priv *priv, struct mlx4_en_cq *cq,
 		goto free_eq;
 
 	cq->cq_idx = cq_idx;
+	cq->irq = irq;
 	cq->mcq.event = mlx4_en_cq_event;
 
 	switch (cq->type) {

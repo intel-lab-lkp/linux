@@ -1433,7 +1433,7 @@ int mlx4_assign_eq(struct mlx4_dev *dev, u8 port, int *vector);
 void mlx4_release_eq(struct mlx4_dev *dev, int vec);
 
 int mlx4_is_eq_shared(struct mlx4_dev *dev, int vector);
-int mlx4_eq_get_irq(struct mlx4_dev *dev, int vec);
+unsigned int mlx4_eq_get_irq(struct mlx4_dev *dev, int vec);
 
 int mlx4_get_phys_port_id(struct mlx4_dev *dev);
 int mlx4_wol_read(struct mlx4_dev *dev, u64 *config, int port);

@@ -381,6 +381,7 @@ struct mlx4_en_cq {
 
 	const struct cpumask *aff_mask;
 	int cq_idx;
+	unsigned int irq;
 };
 
 struct mlx4_en_port_profile {
