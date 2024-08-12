@@ -551,7 +551,7 @@ struct btrfs_io_context {
 	 * stripes[data_stripes + 1]:	The Q stripe (only for RAID6).
 	 */
 	u64 full_stripe_logical;
-	struct btrfs_io_stripe stripes[];
+	struct btrfs_io_stripe stripes[] __counted_by(num_stripes);
 };
 
 struct btrfs_device_info {
@@ -591,7 +591,7 @@ struct btrfs_chunk_map {
 	int io_width;
 	int num_stripes;
 	int sub_stripes;
-	struct btrfs_io_stripe stripes[];
+	struct btrfs_io_stripe stripes[] __counted_by(num_stripes);
 };
 
 #define btrfs_chunk_map_size(n) (sizeof(struct btrfs_chunk_map) + \
