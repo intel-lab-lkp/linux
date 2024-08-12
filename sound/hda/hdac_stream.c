@@ -660,14 +660,11 @@ static void azx_timecounter_init(struct hdac_stream *azx_dev,
  *
  * Initializes the time counter of streams marked by the bit flags (each
  * bit corresponds to the stream index).
- * The trigger timestamp of PCM substream assigned to the given stream is
- * updated accordingly, too.
  */
 void snd_hdac_stream_timecounter_init(struct hdac_stream *azx_dev,
 				      unsigned int streams)
 {
 	struct hdac_bus *bus = azx_dev->bus;
-	struct snd_pcm_runtime *runtime = azx_dev->substream->runtime;
 	struct hdac_stream *s;
 	bool inited = false;
 	u64 cycle_last = 0;
@@ -681,9 +678,6 @@ void snd_hdac_stream_timecounter_init(struct hdac_stream *azx_dev,
 			}
 		}
 	}
-
-	snd_pcm_gettime(runtime, &runtime->trigger_tstamp);
-	runtime->trigger_tstamp_latched = true;
 }
 EXPORT_SYMBOL_GPL(snd_hdac_stream_timecounter_init);
 
