@@ -82,6 +82,13 @@
 #define GUC_KLV_SELF_CFG_G2H_CTB_SIZE_LEN		1u
 
 /*
+ * Global workaround keys.
+ */
+enum  {
+	GUC_WORKAROUND_KLV_ID_COPY_ENGINE_SECURITY_WA = 0x301,
+};
+
+/*
  * Global scheduling policy update keys.
  */
 enum {

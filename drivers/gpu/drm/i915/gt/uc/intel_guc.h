@@ -532,6 +532,8 @@ int intel_guc_global_policies_update(struct intel_guc *guc);
 
 void intel_guc_context_ban(struct intel_context *ce, struct i915_request *rq);
 
+int intel_guc_assign_wa_guc_id(struct intel_guc *guc, struct intel_context *ce);
+
 void intel_guc_submission_reset_prepare(struct intel_guc *guc);
 void intel_guc_submission_reset(struct intel_guc *guc, intel_engine_mask_t stalled);
 void intel_guc_submission_reset_finish(struct intel_guc *guc);

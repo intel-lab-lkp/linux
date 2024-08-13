@@ -834,10 +834,40 @@ static void guc_waklv_enable_simple(struct intel_guc *guc,
 	*remain -= size;
 }
 
+/* Wa_14015997824: DG2 */
+static void guc_waklv_init_bcs(struct intel_guc *guc, struct intel_context *dummy_ce)
+{
+	u32 offset, addr_ggtt, alloc_size, real_size;
+	u32 klv_entry[] = {
+		/* 16:16 key/length */
+		FIELD_PREP(GUC_KLV_0_KEY, GUC_WORKAROUND_KLV_ID_COPY_ENGINE_SECURITY_WA) |
+		FIELD_PREP(GUC_KLV_0_LEN, 3),
+		/* 3 dwords data */
+		dummy_ce->guc_id.id,
+		lower_32_bits(dummy_ce->lrc.lrca),
+		upper_32_bits(dummy_ce->lrc.lrca),
+	};
+
+	GEM_BUG_ON(iosys_map_is_null(&guc->ads_map));
+
+	real_size = sizeof(klv_entry);
+	alloc_size = guc_ads_waklv_size(guc);
+	GEM_BUG_ON(alloc_size < real_size);
+
+	offset = guc_ads_waklv_offset(guc);
+	addr_ggtt = intel_guc_ggtt_offset(guc, guc->ads_vma) + offset;
+
+	iosys_map_memcpy_to(&guc->ads_map, offset, klv_entry, real_size);
+	ads_blob_write(guc, ads.wa_klv_addr_lo, lower_32_bits(addr_ggtt));
+	ads_blob_write(guc, ads.wa_klv_addr_hi, upper_32_bits(addr_ggtt));
+	ads_blob_write(guc, ads.wa_klv_size, real_size);
+}
+
 static void guc_waklv_init(struct intel_guc *guc)
 {
 	struct intel_gt *gt = guc_to_gt(guc);
 	u32 offset, addr_ggtt, remain, size;
+	struct intel_engine_cs *engine;
 
 	if (!intel_uc_uses_guc_submission(&gt->uc))
 		return;
@@ -848,6 +878,15 @@ static void guc_waklv_init(struct intel_guc *guc)
 	GEM_BUG_ON(iosys_map_is_null(&guc->ads_map));
 	offset = guc_ads_waklv_offset(guc);
 	remain = guc_ads_waklv_size(guc);
+
+	if ((IS_DG2_G10(gt->i915) || IS_DG2_G11(gt->i915))) {
+		if (!HAS_ENGINE(gt, BCS0))
+			return;
+		engine = gt->engine[BCS0];
+		if (!engine->wa_l3flush_context)
+			return;
+		guc_waklv_init_bcs(guc, engine->wa_l3flush_context);
+	}
 
 	/* Wa_14019159160 */
 	if (IS_GFX_GT_IP_RANGE(gt, IP_VER(12, 70), IP_VER(12, 71)))

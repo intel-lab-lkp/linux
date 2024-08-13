@@ -1370,11 +1370,57 @@ gen12_emit_indirect_ctx_rcs(const struct intel_context *ce, u32 *cs)
 	return cs;
 }
 
+static u32 *dg2_emit_l3_flush_bb(const struct intel_context *ce, u32 *cs)
+{
+	u32 reg, inv_reg;
+
+	GEM_BUG_ON(!IS_DG2_G10(ce->engine->i915) && !IS_DG2_G11(ce->engine->i915));
+
+	reg = intel_uncore_read(ce->engine->uncore, GEN7_MISCCPCTL);
+	inv_reg = intel_uncore_read_fw(ce->engine->uncore, GEN11_GLBLINVL);
+
+	/*
+	 * L3 flush depends on clearing render/fix clocks.
+	 * Clearing of render/fix clocks depends on BIT[31]
+	 * unlock bit change from ifwi.
+	 *
+	 */
+	*cs++ = MI_LOAD_REGISTER_IMM(2) | MI_LRI_LRM_CS_MMIO;
+	*cs++ = i915_mmio_reg_offset(GEN7_MISCCPCTL);
+	*cs++ = reg & ~(GEN12_DOP_CLOCK_GATE_RENDER_ENABLE |
+			GEN8_DOP_CLOCK_GATE_CFCLK_ENABLE);
+
+	/* Flush L3 */
+	*cs++ = i915_mmio_reg_offset(GEN11_GLBLINVL);
+	*cs++ = inv_reg | GEN11_L3_GLOBAL_INVALIDATE;
+
+	/* Waiting for hw to clear */
+	*cs++ = MI_SEMAPHORE_WAIT_TOKEN |
+		MI_SEMAPHORE_REGISTER_POLL |
+		MI_SEMAPHORE_POLL |
+		MI_SEMAPHORE_SAD_EQ_SDD;
+	*cs++ = inv_reg & ~GEN11_L3_GLOBAL_INVALIDATE;
+	*cs++ = i915_mmio_reg_offset(GEN11_GLBLINVL);
+	*cs++ = 0;
+	*cs++ = 0;
+
+	/* Restore MISCCPCTL to it's original value */
+	*cs++ = i915_mmio_reg_offset(GEN7_MISCCPCTL);
+	*cs++ = reg;
+
+	return cs;
+}
+
 static u32 *
 gen12_emit_indirect_ctx_xcs(const struct intel_context *ce, u32 *cs)
 {
 	cs = gen12_emit_timestamp_wa(ce, cs);
 	cs = gen12_emit_restore_scratch(ce, cs);
+
+	/* Wa_14015997824: DG2_G10 and DG2_G11 */
+	if ((IS_DG2_G10(ce->engine->i915) || IS_DG2_G11(ce->engine->i915)))
+		if (test_bit(CONTEXT_WA_L3FLUSH, &ce->flags))
+			cs = dg2_emit_l3_flush_bb(ce, cs);
 
 	/* Wa_16013000631:dg2 */
 	if (IS_DG2_G11(ce->engine->i915))

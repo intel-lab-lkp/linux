@@ -134,6 +134,7 @@ struct intel_context {
 #define CONTEXT_EXITING			13
 #define CONTEXT_LOW_LATENCY		14
 #define CONTEXT_OWN_STATE		15
+#define CONTEXT_WA_L3FLUSH		16
 
 	struct {
 		u64 timeout_us;

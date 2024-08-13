@@ -305,6 +305,15 @@ static inline bool intel_context_use_semaphores(const struct intel_context *ce)
 	return test_bit(CONTEXT_USE_SEMAPHORES, &ce->flags);
 }
 
+/*
+ * Some contexts are only used for special workarounds and should
+ * not be included in normal context operations.
+ */
+static inline bool intel_context_is_hidden(const struct intel_context *ce)
+{
+	return test_bit(CONTEXT_WA_L3FLUSH, &ce->flags);
+}
+
 static inline void intel_context_set_use_semaphores(struct intel_context *ce)
 {
 	set_bit(CONTEXT_USE_SEMAPHORES, &ce->flags);

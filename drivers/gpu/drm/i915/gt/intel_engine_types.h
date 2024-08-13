@@ -425,6 +425,7 @@ struct intel_engine_cs {
 
 	struct intel_context *kernel_context; /* pinned */
 	struct intel_context *bind_context; /* pinned, only for BCS0 */
+	struct intel_context *wa_l3flush_context; /* Wa_14015997824: DG2_G10 & DG2_G11 */
 	/* mark the bind context's availability status */
 	bool bind_context_ready;
 

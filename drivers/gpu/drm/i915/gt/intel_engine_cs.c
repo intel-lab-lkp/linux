@@ -30,6 +30,7 @@
 #include "intel_lrc.h"
 #include "intel_lrc_reg.h"
 #include "intel_reset.h"
+#include "intel_gt_regs.h"
 #include "intel_ring.h"
 #include "uc/intel_guc_submission.h"
 
@@ -1426,6 +1427,53 @@ create_kernel_context(struct intel_engine_cs *engine)
 						  &kernel, "kernel_context");
 }
 
+static int
+setup_wa_l3flush_context(struct intel_engine_cs *engine)
+{
+	static struct lock_class_key wa_l3flush;
+	static struct intel_context *ce;
+	struct i915_ppgtt *ppgtt;
+	int ret;
+	u32 misccpctl;
+
+	misccpctl = intel_uncore_read(&engine->i915->uncore, GEN7_MISCCPCTL);
+
+	/* BIT(31) unlockbit manage by IFWI */
+	if (misccpctl & GEN12_DOP_CLOCK_GATE_LOCK) {
+		drm_warn(&engine->i915->drm, "MISCCPCTL lockbit set, update IFWI\n");
+		ret = -EPERM;
+		return ret;
+	}
+
+	ppgtt = i915_ppgtt_create(engine->gt, 0);
+	if (IS_ERR(ppgtt))
+		return PTR_ERR(ppgtt);
+
+	ce = intel_engine_create_pinned_context(engine,
+						&ppgtt->vm, SZ_4K,
+						I915_GEM_HWS_WA_L3FLUSH_ADDR,
+						&wa_l3flush, "wa_l3flush_context");
+	if (IS_ERR(ce)) {
+		/* Keep this vm isolated! */
+		i915_vm_put(&ppgtt->vm);
+		return PTR_ERR(ce);
+	}
+
+	/* Ensure this context does not get registered for use as a real context */
+	__set_bit(CONTEXT_WA_L3FLUSH, &ce->flags);
+
+	ret = intel_guc_assign_wa_guc_id(&engine->gt->uc.guc, ce);
+	if (ret < 0)
+		goto err;
+	engine->wa_l3flush_context = ce;
+	i915_vm_put(ce->vm);
+	return 0;
+
+err:
+	intel_engine_destroy_pinned_context(ce);
+	return ret;
+}
+
 /*
  * engine_init_common - initialize engine state which might require hw access
  * @engine: Engine to initialize.
@@ -1476,6 +1524,16 @@ static int engine_init_common(struct intel_engine_cs *engine)
 	engine->emit_fini_breadcrumb_dw = ret;
 	engine->kernel_context = ce;
 	engine->bind_context = bce;
+
+	/*
+	 * Create a w/a context for flushing the L3 cache
+	 * Wa_14015997824: DG2_G10 & DG2_G11
+	 */
+	if (IS_DG2_G10(engine->gt->i915) || IS_DG2_G11(engine->gt->i915)) {
+		if (setup_wa_l3flush_context(engine))
+			if (ret != -EPERM)
+				goto err_ce_context;
+	}
 
 	return 0;
 
@@ -1555,6 +1613,8 @@ void intel_engine_cleanup_common(struct intel_engine_cs *engine)
 	if (engine->bind_context)
 		intel_engine_destroy_pinned_context(engine->bind_context);
 
+	if (engine->wa_l3flush_context)
+		intel_engine_destroy_pinned_context(engine->wa_l3flush_context);
 
 	GEM_BUG_ON(!llist_empty(&engine->barrier_tasks));
 	cleanup_status_page(engine);
