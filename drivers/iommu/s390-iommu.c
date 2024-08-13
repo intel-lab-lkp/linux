@@ -33,6 +33,8 @@ struct s390_domain {
 	struct rcu_head		rcu;
 };
 
+static struct s390_domain s390_blocking_domain;
+
 static inline unsigned int calc_rtx(dma_addr_t ptr)
 {
 	return ((unsigned long)ptr >> ZPCI_RT_SHIFT) & ZPCI_INDEX_MASK;
@@ -376,12 +378,21 @@ static void s390_iommu_detach_device(struct iommu_domain *domain,
 	struct zpci_dev *zdev = to_zpci_dev(dev);
 	unsigned long flags;
 
+	/*
+	 * The static blocking domain doesn't need to track devices nor
+	 * does it have an IOAT registered. As there is no harm
+	 * in keeping zdev->s390_domain set to blocking until
+	 * it is overwritten detach is a no-op.
+	 */
+	if (s390_domain->domain.type == IOMMU_DOMAIN_BLOCKED)
+		return;
+
 	spin_lock_irqsave(&s390_domain->list_lock, flags);
 	list_del_rcu(&zdev->iommu_list);
 	spin_unlock_irqrestore(&s390_domain->list_lock, flags);
 
 	zpci_unregister_ioat(zdev, 0);
-	zdev->s390_domain = NULL;
+	zdev->s390_domain = &s390_blocking_domain;
 	zdev->dma_table = NULL;
 }
 
@@ -403,16 +414,14 @@ static int s390_iommu_attach_device(struct iommu_domain *domain,
 
 	if (zdev->s390_domain)
 		s390_iommu_detach_device(&zdev->s390_domain->domain, dev);
-
+	/*
+	 * Detach set the blocking domain. If we fail now DMA remains blocked
+	 * and the blocking domain attached.
+	 */
 	cc = zpci_register_ioat(zdev, 0, zdev->start_dma, zdev->end_dma,
 				virt_to_phys(s390_domain->dma_table), &status);
-	/*
-	 * If the device is undergoing error recovery the reset code
-	 * will re-establish the new domain.
-	 */
 	if (cc && status != ZPCI_PCI_ST_FUNC_NOT_AVAIL)
 		return -EIO;
-
 	zdev->dma_table = s390_domain->dma_table;
 	zdev->s390_domain = s390_domain;
 
@@ -466,19 +475,10 @@ static struct iommu_device *s390_iommu_probe_device(struct device *dev)
 	if (zdev->tlb_refresh)
 		dev->iommu->shadow_on_flush = 1;
 
+	/* Start with DMA blocked */
+	zdev->s390_domain = &s390_blocking_domain;
+
 	return &zdev->iommu_dev;
-}
-
-static void s390_iommu_release_device(struct device *dev)
-{
-	struct zpci_dev *zdev = to_zpci_dev(dev);
-
-	/*
-	 * release_device is expected to detach any domain currently attached
-	 * to the device, but keep it attached to other devices in the group.
-	 */
-	if (zdev)
-		s390_iommu_detach_device(&zdev->s390_domain->domain, dev);
 }
 
 static int zpci_refresh_all(struct zpci_dev *zdev)
@@ -702,6 +702,29 @@ struct zpci_iommu_ctrs *zpci_get_iommu_ctrs(struct zpci_dev *zdev)
 	return &zdev->s390_domain->ctrs;
 }
 
+static int blocking_domain_attach_device(struct iommu_domain *domain,
+					 struct device *dev)
+{
+	struct s390_domain *s390_domain = to_s390_domain(domain);
+	struct zpci_dev *zdev = to_zpci_dev(dev);
+	unsigned long flags;
+
+	if (!zdev)
+		return 0;
+
+	/* Detach sets the blocking domain */
+	s390_iommu_detach_device(&zdev->s390_domain->domain, dev);
+	return 0;
+}
+
+static struct s390_domain s390_blocking_domain = {
+	.domain = {
+		.type = IOMMU_DOMAIN_BLOCKED,
+		.ops = &(const struct iommu_domain_ops) {
+			.attach_dev	= blocking_domain_attach_device,
+	}}
+};
+
 int zpci_init_iommu(struct zpci_dev *zdev)
 {
 	u64 aperture_size;
@@ -777,10 +800,11 @@ static int __init s390_iommu_init(void)
 subsys_initcall(s390_iommu_init);
 
 static const struct iommu_ops s390_iommu_ops = {
+	.blocked_domain		= &s390_blocking_domain.domain,
+	.release_domain		= &s390_blocking_domain.domain,
 	.capable = s390_iommu_capable,
 	.domain_alloc_paging = s390_domain_alloc_paging,
 	.probe_device = s390_iommu_probe_device,
-	.release_device = s390_iommu_release_device,
 	.device_group = generic_device_group,
 	.pgsize_bitmap = SZ_4K,
 	.get_resv_regions = s390_iommu_get_resv_regions,
