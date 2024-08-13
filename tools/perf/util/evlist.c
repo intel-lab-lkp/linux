@@ -5,6 +5,7 @@
  * Parts came from builtin-{top,stat,record}.c, see those files for further
  * copyright notes.
  */
+#include "pmus.h"
 #include <api/fs/fs.h>
 #include <errno.h>
 #include <inttypes.h>
@@ -342,24 +343,74 @@ out_delete_partial_list:
 	return -1;
 }
 
-int __evlist__add_default_attrs(struct evlist *evlist, struct perf_event_attr *attrs, size_t nr_attrs)
+
+static int __evlist__add_default_attrs_ext_type(struct evlist *evlist,
+						struct perf_event_attr *attrs,
+						size_t nr_attrs)
+{
+	LIST_HEAD(head);
+	size_t i = 0;
+
+	for (i = 0; i < nr_attrs; i++)
+		event_attr_init(attrs + i);
+
+	for (i = 0; i < nr_attrs; i++) {
+		struct perf_pmu *pmu = NULL;
+
+		if (attrs[i].type == PERF_TYPE_SOFTWARE) {
+			struct evsel *evsel = evsel__new(attrs + i);
+
+			if (evsel == NULL)
+				goto out_delete_partial_list;
+			list_add_tail(&evsel->core.node, &head);
+			continue;
+		}
+
+		while ((pmu = perf_pmus__scan_core(pmu)) != NULL) {
+			struct perf_cpu_map *cpus;
+			struct evsel *evsel;
+
+			evsel = evsel__new(attrs + i);
+			if (evsel == NULL)
+				goto out_delete_partial_list;
+			evsel->core.attr.config |= (__u64)pmu->type << PERF_PMU_TYPE_SHIFT;
+			cpus = perf_cpu_map__get(pmu->cpus);
+			evsel->core.cpus = cpus;
+			evsel->core.own_cpus = perf_cpu_map__get(cpus);
+			evsel->pmu_name = strdup(pmu->name);
+			list_add_tail(&evsel->core.node, &head);
+		}
+	}
+
+	evlist__splice_list_tail(evlist, &head);
+
+	return 0;
+
+out_delete_partial_list:
+	{
+		struct evsel *evsel, *n;
+
+		__evlist__for_each_entry_safe(&head, n, evsel)
+			evsel__delete(evsel);
+	}
+	return -1;
+}
+
+int __evlist__add_default_attrs(struct evlist *evlist, struct perf_event_attr *attrs,
+				size_t nr_attrs)
 {
 	size_t i;
+
+	if (!nr_attrs)
+		return 0;
+
+	if (perf_pmus__supports_extended_type())
+		return __evlist__add_default_attrs_ext_type(evlist, attrs, nr_attrs);
 
 	for (i = 0; i < nr_attrs; i++)
 		event_attr_init(attrs + i);
 
 	return evlist__add_attrs(evlist, attrs, nr_attrs);
-}
-
-__weak int arch_evlist__add_default_attrs(struct evlist *evlist,
-					  struct perf_event_attr *attrs,
-					  size_t nr_attrs)
-{
-	if (!nr_attrs)
-		return 0;
-
-	return __evlist__add_default_attrs(evlist, attrs, nr_attrs);
 }
 
 struct evsel *evlist__find_tracepoint_by_id(struct evlist *evlist, int id)
