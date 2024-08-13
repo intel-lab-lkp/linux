@@ -38,36 +38,29 @@ struct udmabuf_folio {
 	struct list_head list;
 };
 
-static vm_fault_t udmabuf_vm_fault(struct vm_fault *vmf)
-{
-	struct vm_area_struct *vma = vmf->vma;
-	struct udmabuf *ubuf = vma->vm_private_data;
-	pgoff_t pgoff = vmf->pgoff;
-	unsigned long pfn;
-
-	if (pgoff >= ubuf->pagecount)
-		return VM_FAULT_SIGBUS;
-
-	pfn = folio_pfn(ubuf->folios[pgoff]);
-	pfn += ubuf->offsets[pgoff] >> PAGE_SHIFT;
-
-	return vmf_insert_pfn(vma, vmf->address, pfn);
-}
-
-static const struct vm_operations_struct udmabuf_vm_ops = {
-	.fault = udmabuf_vm_fault,
-};
-
 static int mmap_udmabuf(struct dma_buf *buf, struct vm_area_struct *vma)
 {
 	struct udmabuf *ubuf = buf->priv;
+	unsigned long addr;
+	unsigned long end;
+	unsigned long pgoff;
+	int ret;
 
 	if ((vma->vm_flags & (VM_SHARED | VM_MAYSHARE)) == 0)
 		return -EINVAL;
 
-	vma->vm_ops = &udmabuf_vm_ops;
-	vma->vm_private_data = ubuf;
 	vm_flags_set(vma, VM_PFNMAP | VM_DONTEXPAND | VM_DONTDUMP);
+
+	for (pgoff = vma->vm_pgoff, end = vma->vm_end, addr = vma->vm_start;
+	     addr < end; pgoff++, addr += PAGE_SIZE) {
+		unsigned long pfn = folio_pfn(ubuf->folios[pgoff]);
+
+		pfn += ubuf->offsets[pgoff] >> PAGE_SHIFT;
+		ret = vmf_insert_pfn(vma, addr, pfn);
+		if (ret & VM_FAULT_ERROR)
+			return vm_fault_to_errno(ret, 0);
+	}
+
 	return 0;
 }
 
