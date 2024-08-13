@@ -319,13 +319,15 @@ static bool dwc3_qcom_is_host(struct dwc3_qcom *qcom)
 static enum usb_device_speed dwc3_qcom_read_usb2_speed(struct dwc3_qcom *qcom, int port_index)
 {
 	struct dwc3 *dwc = platform_get_drvdata(qcom->dwc3);
-	struct usb_device *udev;
+	struct usb_device __maybe_unused *udev;
 	struct usb_hcd __maybe_unused *hcd;
 
 	/*
 	 * FIXME: Fix this layering violation.
 	 */
 	hcd = platform_get_drvdata(dwc->xhci);
+	if (!hcd)
+		return USB_SPEED_UNKNOWN;
 
 #ifdef CONFIG_USB
 	udev = usb_hub_find_child(hcd->self.root_hub, port_index + 1);
