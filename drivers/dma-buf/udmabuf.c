@@ -26,16 +26,19 @@ MODULE_PARM_DESC(size_limit_mb, "Max size of a dmabuf, in megabytes. Default is 
 
 struct udmabuf {
 	pgoff_t pagecount;
-	struct folio **folios;
 	struct sg_table *sg;
 	struct miscdevice *device;
+	struct folio **folios;
+	/**
+	 * offset in folios array's folio, byte unit.
+	 * udmabuf can use either shmem or hugetlb pages, an array based on
+	 * pages may not be suitable.
+	 * Especially when HVO is enabled, the tail page will be released,
+	 * so our reference to the page will no longer be correct.
+	 * Hence, it's necessary to record the offset in order to reference
+	 * the correct PFN within the folio.
+	 */
 	pgoff_t *offsets;
-	struct list_head unpin_list;
-};
-
-struct udmabuf_folio {
-	struct folio *folio;
-	struct list_head list;
 };
 
 static int mmap_udmabuf(struct dma_buf *buf, struct vm_area_struct *vma)
@@ -160,32 +163,28 @@ static void unmap_udmabuf(struct dma_buf_attachment *at,
 	return put_sg_table(at->dev, sg, direction);
 }
 
-static void unpin_all_folios(struct list_head *unpin_list)
+/**
+ * unpin_all_folios:		unpin each folio we pinned in create
+ * The udmabuf set all folio in folios and pinned it, but for large folio,
+ * We may have only used a small portion of the physical in the folio.
+ * we will repeatedly, sequentially set the folio into the array to ensure
+ * that the offset can index the correct folio at the corresponding index.
+ * Hence, we only need to unpin the first iterred folio.
+ */
+static void unpin_all_folios(struct udmabuf *ubuf)
 {
-	struct udmabuf_folio *ubuf_folio;
+	pgoff_t pg;
+	struct folio *last = NULL;
 
-	while (!list_empty(unpin_list)) {
-		ubuf_folio = list_first_entry(unpin_list,
-					      struct udmabuf_folio, list);
-		unpin_folio(ubuf_folio->folio);
+	for (pg = 0; pg < ubuf->pagecount; pg++) {
+		struct folio *tmp = ubuf->folios[pg];
 
-		list_del(&ubuf_folio->list);
-		kfree(ubuf_folio);
+		if (tmp == last)
+			continue;
+
+		last = tmp;
+		unpin_folio(tmp);
 	}
-}
-
-static int add_to_unpin_list(struct list_head *unpin_list,
-			     struct folio *folio)
-{
-	struct udmabuf_folio *ubuf_folio;
-
-	ubuf_folio = kzalloc(sizeof(*ubuf_folio), GFP_KERNEL);
-	if (!ubuf_folio)
-		return -ENOMEM;
-
-	ubuf_folio->folio = folio;
-	list_add_tail(&ubuf_folio->list, unpin_list);
-	return 0;
 }
 
 static void release_udmabuf(struct dma_buf *buf)
@@ -196,7 +195,7 @@ static void release_udmabuf(struct dma_buf *buf)
 	if (ubuf->sg)
 		put_sg_table(dev, ubuf->sg, DMA_BIDIRECTIONAL);
 
-	unpin_all_folios(&ubuf->unpin_list);
+	unpin_all_folios(ubuf);
 	kvfree(ubuf->offsets);
 	kvfree(ubuf->folios);
 	kfree(ubuf);
@@ -308,7 +307,6 @@ static long udmabuf_create(struct miscdevice *device,
 	if (!ubuf)
 		return -ENOMEM;
 
-	INIT_LIST_HEAD(&ubuf->unpin_list);
 	pglimit = (size_limit_mb * 1024 * 1024) >> PAGE_SHIFT;
 	for (i = 0; i < head->count; i++) {
 		if (!IS_ALIGNED(list[i].offset, PAGE_SIZE))
@@ -366,12 +364,6 @@ static long udmabuf_create(struct miscdevice *device,
 			u32 k;
 			long fsize = folio_size(folios[j]);
 
-			ret = add_to_unpin_list(&ubuf->unpin_list, folios[j]);
-			if (ret < 0) {
-				kfree(folios);
-				goto err;
-			}
-
 			for (k = pgoff; k < fsize; k += PAGE_SIZE) {
 				ubuf->folios[pgbuf] = folios[j];
 				ubuf->offsets[pgbuf] = k;
@@ -399,7 +391,7 @@ end:
 err:
 	if (memfd)
 		fput(memfd);
-	unpin_all_folios(&ubuf->unpin_list);
+	unpin_all_folios(ubuf);
 	kvfree(ubuf->offsets);
 	kvfree(ubuf->folios);
 	kfree(ubuf);
