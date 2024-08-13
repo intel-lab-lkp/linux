@@ -8,6 +8,7 @@ struct drm_exec;
 struct dma_fence;
 struct drm_file;
 struct drm_gem_object;
+struct drm_minor;
 struct drm_sched_job;
 struct drm_panthor_group_create;
 struct drm_panthor_queue_create;
@@ -56,5 +57,11 @@ void panthor_sched_resume(struct panthor_device *ptdev);
 
 void panthor_sched_report_mmu_fault(struct panthor_device *ptdev);
 void panthor_sched_report_fw_events(struct panthor_device *ptdev, u32 events);
+
+#ifdef CONFIG_DEBUG_FS
+void panthor_sched_debugfs_init(struct drm_minor *minor);
+#else
+static inline void panthor_sched_debugfs_init(struct drm_minor *minor) {}
+#endif /* CONFIG_DEBUG_FS */
 
 #endif
