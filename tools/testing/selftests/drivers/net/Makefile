@@ -3,6 +3,7 @@
 TEST_INCLUDES := $(wildcard lib/py/*.py)
 
 TEST_PROGS := \
+	netcons_basic.sh \
 	ping.py \
 	queues.py \
 	stats.py \
