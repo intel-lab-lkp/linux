@@ -11,6 +11,7 @@
 #include <linux/usb/role.h>
 #include <linux/property.h>
 #include <linux/device.h>
+#include <linux/lockdep.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
@@ -33,6 +34,10 @@ struct usb_role_switch {
 	usb_role_switch_set_t set;
 	usb_role_switch_get_t get;
 	bool allow_userspace_control;
+
+#ifdef CONFIG_LOCKDEP
+	struct lock_class_key key;
+#endif
 };
 
 #define to_role_switch(d)	container_of(d, struct usb_role_switch, dev)
@@ -396,6 +401,11 @@ usb_role_switch_register(struct device *parent,
 
 	sw->registered = true;
 
+#ifdef CONFIG_LOCKDEP
+	lockdep_register_key(&sw->key);
+	lockdep_set_class(&sw->lock, &sw->key);
+#endif
+
 	/* TODO: Symlinks for the host port and the device controller. */
 
 	return sw;
@@ -412,6 +422,11 @@ void usb_role_switch_unregister(struct usb_role_switch *sw)
 {
 	if (IS_ERR_OR_NULL(sw))
 		return;
+
+#ifdef CONFIG_LOCKDEP
+	lockdep_unregister_key(&sw->key);
+#endif
+
 	sw->registered = false;
 	if (dev_fwnode(&sw->dev))
 		component_del(&sw->dev, &connector_ops);
