@@ -13,6 +13,9 @@
 
 #include "internal.h"
 
+#define mas_lock_irq(mas, flags)           spin_lock_irqsave(&((mas)->tree->ma_lock), flags)
+#define mas_unlock_irq(mas, flags)         spin_unlock_irqrestore(&((mas)->tree->ma_lock), flags)
+
 static int regcache_maple_read(struct regmap *map,
 			       unsigned int reg, unsigned int *value)
 {
@@ -42,6 +45,7 @@ static int regcache_maple_write(struct regmap *map, unsigned int reg,
 	MA_STATE(mas, mt, reg, reg);
 	unsigned long *entry, *upper, *lower;
 	unsigned long index, last;
+	unsigned long flags;
 	size_t lower_sz, upper_sz;
 	int ret;
 
@@ -89,18 +93,18 @@ static int regcache_maple_write(struct regmap *map, unsigned int reg,
 	 * is redundant, but we need to take it due to lockdep asserts
 	 * in the maple tree code.
 	 */
-	mas_lock(&mas);
+	mas_lock_irq(&mas, flags);
 
 	mas_set_range(&mas, index, last);
 	ret = mas_store_gfp(&mas, entry, map->alloc_flags);
 
-	mas_unlock(&mas);
+	mas_unlock_irq(&mas, flags);
 
 	if (ret == 0) {
 		kfree(lower);
 		kfree(upper);
 	}
-	
+
 	return ret;
 }
 
@@ -113,12 +117,13 @@ static int regcache_maple_drop(struct regmap *map, unsigned int min,
 	/* initialized to work around false-positive -Wuninitialized warning */
 	unsigned long lower_index = 0, lower_last = 0;
 	unsigned long upper_index, upper_last;
+	unsigned long flags;
 	int ret = 0;
 
 	lower = NULL;
 	upper = NULL;
 
-	mas_lock(&mas);
+	mas_lock_irq(&mas, flags);
 
 	mas_for_each(&mas, entry, max) {
 		/*
@@ -126,7 +131,7 @@ static int regcache_maple_drop(struct regmap *map, unsigned int min,
 		 * Maple lock is redundant, but we need to take it due
 		 * to lockdep asserts in the maple tree code.
 		 */
-		mas_unlock(&mas);
+		mas_unlock_irq(&mas, flags);
 
 		/* Do we need to save any of this entry? */
 		if (mas.index < min) {
@@ -156,7 +161,7 @@ static int regcache_maple_drop(struct regmap *map, unsigned int min,
 		}
 
 		kfree(entry);
-		mas_lock(&mas);
+		mas_lock_irq(&mas, flags);
 		mas_erase(&mas);
 
 		/* Insert new nodes with the saved data */
@@ -178,7 +183,7 @@ static int regcache_maple_drop(struct regmap *map, unsigned int min,
 	}
 
 out:
-	mas_unlock(&mas);
+	mas_unlock_irq(&mas, flags);
 out_unlocked:
 	kfree(lower);
 	kfree(upper);
@@ -295,16 +300,17 @@ static int regcache_maple_exit(struct regmap *map)
 	struct maple_tree *mt = map->cache;
 	MA_STATE(mas, mt, 0, UINT_MAX);
 	unsigned int *entry;
+	unsigned long flags;
 
 	/* if we've already been called then just return */
 	if (!mt)
 		return 0;
 
-	mas_lock(&mas);
+	mas_lock_irq(&mas, flags);
 	mas_for_each(&mas, entry, UINT_MAX)
 		kfree(entry);
 	__mt_destroy(mt);
-	mas_unlock(&mas);
+	mas_unlock_irq(&mas, flags);
 
 	kfree(mt);
 	map->cache = NULL;
@@ -318,6 +324,7 @@ static int regcache_maple_insert_block(struct regmap *map, int first,
 	struct maple_tree *mt = map->cache;
 	MA_STATE(mas, mt, first, last);
 	unsigned long *entry;
+	unsigned long flags;
 	int i, ret;
 
 	entry = kcalloc(last - first + 1, sizeof(unsigned long), map->alloc_flags);
@@ -327,13 +334,13 @@ static int regcache_maple_insert_block(struct regmap *map, int first,
 	for (i = 0; i < last - first + 1; i++)
 		entry[i] = map->reg_defaults[first + i].def;
 
-	mas_lock(&mas);
+	mas_lock_irq(&mas, flags);
 
 	mas_set_range(&mas, map->reg_defaults[first].reg,
 		      map->reg_defaults[last].reg);
 	ret = mas_store_gfp(&mas, entry, map->alloc_flags);
 
-	mas_unlock(&mas);
+	mas_unlock_irq(&mas, flags);
 
 	if (ret)
 		kfree(entry);
