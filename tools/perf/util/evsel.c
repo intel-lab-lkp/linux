@@ -585,6 +585,30 @@ int __weak arch_evsel__hw_name(struct evsel *evsel, char *bf, size_t size)
 	return scnprintf(bf, size, "%s", __evsel__hw_name(evsel->core.attr.config));
 }
 
+/*
+ * Version of evsel__hw_name() used on platforms where perf_pmus__supports_extended_type()
+ * may be true and the type needs to be extracted and masked.
+ */
+int evsel__hw_name_ext_type_id(struct evsel *evsel, char *bf, size_t size)
+{
+	u64 event = evsel->core.attr.config & PERF_HW_EVENT_MASK;
+	u64 pmu = evsel->core.attr.config >> PERF_PMU_TYPE_SHIFT;
+	const char *event_name;
+
+	if (event < PERF_COUNT_HW_MAX && evsel__hw_names[event])
+		event_name = evsel__hw_names[event];
+	else
+		event_name = "unknown-hardware";
+
+	/* The PMU type is not required for the non-hybrid platform. */
+	if (!pmu)
+		return  scnprintf(bf, size, "%s", event_name);
+
+	return scnprintf(bf, size, "%s/%s/",
+			 evsel->pmu_name ? evsel->pmu_name : "cpu",
+			 event_name);
+}
+
 static int evsel__hw_name(struct evsel *evsel, char *bf, size_t size)
 {
 	int r = arch_evsel__hw_name(evsel, bf, size);
