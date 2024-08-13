@@ -10,6 +10,7 @@
 
 #include <linux/build_bug.h>
 #include <linux/clk.h>
+#include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
 #include <linux/dma-resv.h>
@@ -317,6 +318,9 @@ struct panthor_scheduler {
 		 */
 		struct list_head stopped_groups;
 	} reset;
+
+	/** @dump_successful_jobs: whether to dump successful jobs through coredumpv */
+	bool dump_successful_jobs;
 };
 
 /**
@@ -2959,6 +2963,16 @@ queue_run_job(struct drm_sched_job *sched_job)
 	queue->iface.input->extract = queue->iface.output->extract;
 	queue->iface.input->insert = job->ringbuf.end;
 
+	if (sched->dump_successful_jobs) {
+		struct panthor_core_dump_args core_dump_args = {
+			.ptdev = ptdev,
+			.group_vm = job->group->vm,
+			.group = job->group,
+		};
+
+		panthor_core_dump(&core_dump_args);
+	}
+
 	if (group->csg_id < 0) {
 		/* If the queue is blocked, we want to keep the timeout running, so we
 		 * can detect unbounded waits and kill the group when that happens.
@@ -3632,5 +3646,8 @@ void panthor_sched_debugfs_init(struct drm_minor *minor)
 	struct panthor_device *ptdev =
 		container_of(minor->dev, struct panthor_device, base);
 	struct panthor_scheduler *sched = ptdev->scheduler;
+
+	debugfs_create_bool("dump_successful_jobs", 0644, minor->debugfs_root,
+			    &sched->dump_successful_jobs);
 }
 #endif /* CONFIG_DEBUG_FS */
