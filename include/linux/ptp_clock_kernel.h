@@ -136,6 +136,14 @@ struct ptp_system_timestamp {
  *                   parameter cts: Contains timestamp (device,system) pair,
  *                   where system time is realtime and monotonic.
  *
+ * @getesterror: Reads the current error estimate of the hardware clock.
+ *               parameter phase: Holds the error estimate in nanoseconds.
+ *               parameter hw_ts: If not NULL, holds the timestamp of the hardware clock.
+ *               parameter sw_ts: If not NULL, holds the timestamp of the CPU clock.
+ *
+ * @setesterror:  Set the error estimate of the hardware clock.
+ *                parameter phase: Desired error estimate in nanoseconds.
+ *
  * @enable:   Request driver to enable or disable an ancillary feature.
  *            parameter request: Desired resource to enable or disable.
  *            parameter on: Caller passes one to enable or zero to disable.
@@ -188,6 +196,9 @@ struct ptp_clock_info {
 			    struct ptp_system_timestamp *sts);
 	int (*getcrosscycles)(struct ptp_clock_info *ptp,
 			      struct system_device_crosststamp *cts);
+	int (*getesterror)(struct ptp_clock_info *ptp, long *phase,
+			   struct timespec64 *hw_ts, struct timespec64 *sys_ts);
+	int (*setesterror)(struct ptp_clock_info *ptp, long phase);
 	int (*enable)(struct ptp_clock_info *ptp,
 		      struct ptp_clock_request *request, int on);
 	int (*verify)(struct ptp_clock_info *ptp, unsigned int pin,

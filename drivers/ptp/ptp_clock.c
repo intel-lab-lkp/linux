@@ -164,9 +164,25 @@ static int ptp_clock_adjtime(struct posix_clock *pc, struct __kernel_timex *tx)
 
 			err = ops->adjphase(ops, offset);
 		}
+	} else if (tx->modes & ADJ_ESTERROR) {
+		if (ops->setesterror)
+			if (tx->modes & ADJ_NANO)
+				err = ops->setesterror(ops, tx->esterror * 1000);
+			else
+				err = ops->setesterror(ops, tx->esterror);
 	} else if (tx->modes == 0) {
+		long esterror;
+
 		tx->freq = ptp->dialed_frequency;
-		err = 0;
+		if (ops->getesterror) {
+			err = ops->getesterror(ops, &esterror, NULL, NULL);
+			if (err)
+				return err;
+			tx->modes &= ADJ_NANO;
+			tx->esterror = esterror;
+		} else {
+			err = 0;
+		}
 	}
 
 	return err;
