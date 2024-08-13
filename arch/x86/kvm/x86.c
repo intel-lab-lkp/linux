@@ -10226,8 +10226,8 @@ int kvm_emulate_hypercall(struct kvm_vcpu *vcpu)
 	cpl = kvm_x86_call(get_cpl)(vcpu);
 
 	ret = __kvm_emulate_hypercall(vcpu, nr, a0, a1, a2, a3, op_64_bit, cpl);
-	if (nr == KVM_HC_MAP_GPA_RANGE && !ret)
-		/* MAP_GPA tosses the request to the user space. */
+	if (!ret && is_kvm_hc_exit_enabled(vcpu->kvm, nr))
+		/* The hypercall is requested to exit to userspace. */
 		return 0;
 
 	if (!op_64_bit)

@@ -547,4 +547,11 @@ int kvm_sev_es_string_io(struct kvm_vcpu *vcpu, unsigned int size,
 			 unsigned int port, void *data,  unsigned int count,
 			 int in);
 
+static inline bool is_kvm_hc_exit_enabled(struct kvm *kvm, unsigned long hc_nr)
+{
+	if(WARN_ON_ONCE(hc_nr >= sizeof(kvm->arch.hypercall_exit_enabled) * 8))
+		return false;
+
+	return kvm->arch.hypercall_exit_enabled & (1 << hc_nr);
+}
 #endif
