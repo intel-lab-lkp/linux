@@ -16,6 +16,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/of_platform.h>
 #include <linux/slab.h>
 #include <linux/platform_device.h>
 #include <linux/pm_domain.h>
@@ -25,6 +26,7 @@
 #include <asm/smp.h>
 #include <asm/suspend.h>
 
+#include "cpuidle.h"
 #include "dt_idle_states.h"
 #include "dt_idle_genpd.h"
 
@@ -336,6 +338,9 @@ static int sbi_cpuidle_init_cpu(struct device *dev, int cpu)
 		return ret;
 	}
 
+	if (cpuidle_disabled())
+		return 0;
+
 	ret = cpuidle_register(drv, NULL);
 	if (ret)
 		goto deinit;
@@ -380,20 +385,26 @@ static int sbi_cpuidle_pd_power_off(struct generic_pm_domain *pd)
 struct sbi_pd_provider {
 	struct list_head link;
 	struct device_node *node;
+	struct platform_device *pdev;
 };
 
 static LIST_HEAD(sbi_pd_providers);
 
 static int sbi_pd_init(struct device_node *np)
 {
+	struct platform_device *pdev;
 	struct generic_pm_domain *pd;
 	struct sbi_pd_provider *pd_provider;
 	struct dev_power_governor *pd_gov;
 	int ret = -ENOMEM;
 
+	pdev = of_platform_device_create(np, np->name, NULL);
+	if (!pdev)
+		goto out;
+
 	pd = dt_idle_pd_alloc(np, sbi_dt_parse_state_node);
 	if (!pd)
-		goto out;
+		goto free_pdev;
 
 	pd_provider = kzalloc(sizeof(*pd_provider), GFP_KERNEL);
 	if (!pd_provider)
@@ -419,6 +430,7 @@ static int sbi_pd_init(struct device_node *np)
 		goto remove_pd;
 
 	pd_provider->node = of_node_get(np);
+	pd_provider->pdev = pdev;
 	list_add(&pd_provider->link, &sbi_pd_providers);
 
 	pr_debug("init PM domain %s\n", pd->name);
@@ -430,6 +442,8 @@ free_pd_prov:
 	kfree(pd_provider);
 free_pd:
 	dt_idle_pd_free(pd);
+free_pdev:
+	of_platform_device_destroy(&pdev->dev, NULL);
 out:
 	pr_err("failed to init PM domain ret=%d %pOF\n", ret, np);
 	return ret;
@@ -447,6 +461,7 @@ static void sbi_pd_remove(void)
 		if (!IS_ERR(genpd))
 			kfree(genpd);
 
+		of_platform_device_destroy(&pd_provider->pdev->dev, NULL);
 		of_node_put(pd_provider->node);
 		list_del(&pd_provider->link);
 		kfree(pd_provider);
@@ -548,7 +563,10 @@ static int sbi_cpuidle_probe(struct platform_device *pdev)
 	/* Setup CPU hotplut notifiers */
 	sbi_idle_init_cpuhp();
 
-	pr_info("idle driver registered for all CPUs\n");
+	if (cpuidle_disabled())
+		pr_info("cpuidle is disabled\n");
+	else
+		pr_info("idle driver registered for all CPUs\n");
 
 	return 0;
 
@@ -592,4 +610,4 @@ static int __init sbi_cpuidle_init(void)
 
 	return 0;
 }
-device_initcall(sbi_cpuidle_init);
+arch_initcall(sbi_cpuidle_init);
