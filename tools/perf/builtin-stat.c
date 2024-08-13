@@ -1934,7 +1934,6 @@ static int add_default_attributes(void)
 	(PERF_COUNT_HW_CACHE_RESULT_MISS	<< 16)				},
 };
 
-	struct perf_event_attr default_null_attrs[] = {};
 	const char *pmu = parse_events_option_args.pmu_filter ?: "all";
 
 	/* Set attrs if no event is selected and !null_run: */
@@ -2076,10 +2075,6 @@ static int add_default_attributes(void)
 			evlist__splice_list_tail(evsel_list, &metric_evlist->core.entries);
 			evlist__delete(metric_evlist);
 		}
-
-		/* Platform specific attrs */
-		if (evlist__add_default_attrs(evsel_list, default_null_attrs) < 0)
-			return -1;
 	}
 
 	/* Detailed events get appended to the event list: */
