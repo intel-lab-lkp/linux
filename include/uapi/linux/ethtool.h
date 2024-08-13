@@ -224,12 +224,27 @@ struct ethtool_value {
 #define PFC_STORM_PREVENTION_AUTO	0xffff
 #define PFC_STORM_PREVENTION_DISABLE	0
 
+/* For power/wakeup (*not* performance) related offloads */
+enum tunable_fw_offload_disable {
+	ETHTOOL_TUNABLE_FW_OFFLOAD_DISABLE_ALL,
+	ETHTOOL_TUNABLE_FW_OFFLOAD_DISABLE_IPV4_ARP,
+	ETHTOOL_TUNABLE_FW_OFFLOAD_DISABLE_IPV6_ND,
+	ETHTOOL_TUNABLE_FW_OFFLOAD_DISABLE_IPV4_PING,
+	ETHTOOL_TUNABLE_FW_OFFLOAD_DISABLE_IPV6_PING,
+	ETHTOOL_TUNABLE_FW_OFFLOAD_DISABLE_IPV4_IGMP,
+	ETHTOOL_TUNABLE_FW_OFFLOAD_DISABLE_IPV6_MLD,
+	ETHTOOL_TUNABLE_FW_OFFLOAD_DISABLE_IPV4_MDNS,
+	ETHTOOL_TUNABLE_FW_OFFLOAD_DISABLE_IPV6_MDNS,
+	/* 55 bits remaining for future use */
+};
+
 enum tunable_id {
 	ETHTOOL_ID_UNSPEC,
 	ETHTOOL_RX_COPYBREAK,
 	ETHTOOL_TX_COPYBREAK,
 	ETHTOOL_PFC_PREVENTION_TOUT, /* timeout in msecs */
 	ETHTOOL_TX_COPYBREAK_BUF_SIZE,
+	ETHTOOL_FW_OFFLOAD_DISABLE, /* u64 bits numbered from LSB per tunable_fw_offload_disable */
 	/*
 	 * Add your fresh new tunable attribute above and remember to update
 	 * tunable_strings[] in net/ethtool/common.c
