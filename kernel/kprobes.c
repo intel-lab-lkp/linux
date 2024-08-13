@@ -92,7 +92,7 @@ struct kprobe_insn_page {
 	struct kprobe_insn_cache *cache;
 	int nused;
 	int ngarbage;
-	char slot_used[];
+	char slot_used[] __counted_by(nused);
 };
 
 #define KPROBE_INSN_PAGE_SIZE(slots)			\
