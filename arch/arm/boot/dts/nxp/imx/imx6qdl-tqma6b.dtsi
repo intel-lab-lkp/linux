@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright 2013 Sascha Hauer, Pengutronix
- * Copyright 2013-2017 Markus Niebel <Markus.Niebel@tq-group.com>
+ *
+ * Copyright (c) 2013-2017 TQ-Systems GmbH <linux@ew.tq-group.com>,
+ * D-82229 Seefeld, Germany.
+ * Author: Markus Niebel
  */
 
 #include <dt-bindings/gpio/gpio.h>
