@@ -6,6 +6,7 @@
 #include <linux/types.h>
 
 #include <asm/errno.h>
+#include <asm/percpu.h>
 
 /*
  * Kernel pointers have redundant information, so we can use a
@@ -42,6 +43,22 @@ static inline void * __must_check ERR_PTR(long error)
 }
 
 /**
+ * ERR_PTR_PCPU - Create an error pointer in the percpu address space.
+ * @error: A negative error code.
+ *
+ * Encodes @error into a pointer value in the percpu address space.
+ * Users should consider the result opaque and not assume anything
+ * about how the error is encoded.
+ *
+ * Return: A pointer in the percpu address space with @error encoded
+ *	   within its value.
+ */
+static inline void __percpu * __must_check ERR_PTR_PCPU(long error)
+{
+	return (void __percpu *) error;
+}
+
+/**
  * PTR_ERR - Extract the error code from an error pointer.
  * @ptr: An error pointer.
  * Return: The error code within @ptr.
@@ -52,6 +69,17 @@ static inline long __must_check PTR_ERR(__force const void *ptr)
 }
 
 /**
+ * PTR_ERR_PCPU - Extract the error code from an error pointer in the
+ *		  percpu address space.
+ * @ptr: An error pointer in the percpu address space.
+ * Return: The error code within @ptr.
+ */
+static inline long __must_check PTR_ERR_PCPU(const void __percpu *ptr)
+{
+	return (__force long) ptr;
+}
+
+/**
  * IS_ERR - Detect an error pointer.
  * @ptr: The pointer to check.
  * Return: true if @ptr is an error pointer, false otherwise.
@@ -59,6 +87,16 @@ static inline long __must_check PTR_ERR(__force const void *ptr)
 static inline bool __must_check IS_ERR(__force const void *ptr)
 {
 	return IS_ERR_VALUE((unsigned long)ptr);
+}
+
+/**
+ * IS_ERR_PCPU - Detect an error pointer in the percpu address space.
+ * @ptr: The pointer in the percpu address space to check.
+ * Return: true if @ptr is an error pointer, false otherwise.
+ */
+static inline bool __must_check IS_ERR_PCPU(const void __percpu *ptr)
+{
+	return IS_ERR_VALUE((__force unsigned long)ptr);
 }
 
 /**
