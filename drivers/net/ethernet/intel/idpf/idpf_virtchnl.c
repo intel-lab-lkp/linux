@@ -218,6 +218,15 @@ static int idpf_mb_clean(struct idpf_adapter *adapter)
 	if (err)
 		goto err_kfree;
 
+	/* Warn if messages may have been dropped */
+	if (num_q_msg == IDPF_DFLT_MBX_Q_LEN) {
+		static atomic_t mbx_full = ATOMIC_INIT(0);
+		int cnt;
+
+		cnt = atomic_inc_return(&mbx_full);
+		net_warn_ratelimited("%s: ctlq full (%d)\n", __func__, cnt);
+	}
+
 	for (i = 0; i < num_q_msg; i++) {
 		if (!q_msg[i])
 			continue;
