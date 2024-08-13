@@ -139,6 +139,4 @@ extern int omap_mux_register(struct omap_mux_cfg *);
 static inline int omap1_mux_init(void) { return 0; }
 #endif
 
-extern int omap2_mux_init(void);
-
 #endif
