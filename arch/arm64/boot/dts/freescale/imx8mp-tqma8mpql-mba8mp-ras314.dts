@@ -2,8 +2,7 @@
 /*
  * Copyright (c) 2023-2024 TQ-Systems GmbH <linux@ew.tq-group.com>,
  * D-82229 Seefeld, Germany.
- * Author: Martin Schmiedel
- * Author: Alexander Stein
+ * Author: Martin Schmiedel, Alexander Stein
  */
 
 /dts-v1/;
