@@ -87,6 +87,7 @@ properties:
   backlight: true
   enable-gpios: true
   power-supply: true
+  panel-timing: true
 
 additionalProperties: false
 
