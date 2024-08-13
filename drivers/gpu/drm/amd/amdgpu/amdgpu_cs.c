@@ -51,7 +51,6 @@ static int amdgpu_cs_parser_init(struct amdgpu_cs_parser *p,
 	if (cs->in.num_chunks == 0)
 		return -EINVAL;
 
-	memset(p, 0, sizeof(*p));
 	p->adev = adev;
 	p->filp = filp;
 
@@ -1411,6 +1410,7 @@ int amdgpu_cs_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 	if (!adev->accel_working)
 		return -EBUSY;
 
+	memset(&parser, 0, sizeof(parser));
 	r = amdgpu_cs_parser_init(&parser, adev, filp, data);
 	if (r) {
 		DRM_ERROR_RATELIMITED("Failed to initialize parser %d!\n", r);
