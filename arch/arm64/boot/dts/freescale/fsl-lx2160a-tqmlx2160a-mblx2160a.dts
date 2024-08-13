@@ -14,7 +14,7 @@
 #include "fsl-lx2160a-tqmlx2160a.dtsi"
 
 / {
-	model = "TQ Systems GmbH MBLX2160A Starterkit";
+	model = "TQ-Systems GmbH MBLX2160A Starterkit";
 	compatible = "tq,lx2160a-tqmlx2160a-mblx2160a", "tq,lx2160a-tqmlx2160a",
 		     "fsl,lx2160a";
 
