@@ -35,10 +35,13 @@
 
 struct mock_phc {
 	struct ptp_clock_info info;
+	struct timespec64 sys_ts;
+	struct timespec64 hw_ts;
 	struct ptp_clock *clock;
 	struct timecounter tc;
 	struct cyclecounter cc;
 	spinlock_t lock;
+	long esterror;
 };
 
 static u64 mock_phc_cc_read(const struct cyclecounter *cc)
@@ -100,6 +103,31 @@ static int mock_phc_gettime64(struct ptp_clock_info *info, struct timespec64 *ts
 	return 0;
 }
 
+static int mock_phc_getesterror(struct ptp_clock_info *info, long *esterror,
+				struct timespec64 *hw_ts, struct timespec64 *sys_ts)
+{
+	struct mock_phc *phc = info_to_phc(info);
+
+	*esterror = phc->esterror;
+	if (hw_ts)
+		*hw_ts = phc->hw_ts;
+	if (sys_ts)
+		*sys_ts = phc->sys_ts;
+
+	return 0;
+}
+
+static int mock_phc_setesterror(struct ptp_clock_info *info, long esterror)
+{
+	struct mock_phc *phc = info_to_phc(info);
+
+	phc->esterror = esterror;
+	phc->hw_ts = ns_to_timespec64(timecounter_read(&phc->tc));
+	phc->sys_ts = ns_to_timespec64(ktime_get_raw_ns());
+
+	return 0;
+}
+
 static long mock_phc_refresh(struct ptp_clock_info *info)
 {
 	struct timespec64 ts;
@@ -134,6 +162,8 @@ struct mock_phc *mock_phc_create(struct device *dev)
 		.adjtime	= mock_phc_adjtime,
 		.gettime64	= mock_phc_gettime64,
 		.settime64	= mock_phc_settime64,
+		.getesterror	= mock_phc_getesterror,
+		.setesterror	= mock_phc_setesterror,
 		.do_aux_work	= mock_phc_refresh,
 	};
 
