@@ -267,9 +267,17 @@ long mapping_evict_folio(struct address_space *mapping, struct folio *folio)
 		return 0;
 	if (folio_test_dirty(folio) || folio_test_writeback(folio))
 		return 0;
-	/* The refcount will be elevated if any page in the folio is mapped */
+	/*
+	 * The refcount will be elevated if any page in the folio is mapped.
+	 *
+	 * The refcounts break down as follows:
+	 * 1 per mapped page
+	 * 1 from folio_attach_private, if private is set
+	 * 1 from allocating the page in the first place
+	 * 1 from the caller
+	 */
 	if (folio_ref_count(folio) >
-			folio_nr_pages(folio) + folio_has_private(folio) + 1)
+			folio_nr_pages(folio) + folio_has_private(folio) + 1 + 1)
 		return 0;
 	if (!filemap_release_folio(folio, 0))
 		return 0;
