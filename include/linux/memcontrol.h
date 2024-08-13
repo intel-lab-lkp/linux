@@ -315,6 +315,11 @@ struct mem_cgroup {
 	spinlock_t event_list_lock;
 #endif /* CONFIG_MEMCG_V1 */
 
+#ifdef CONFIG_WORKINGSET_REPORT
+	/* memory.workingset.page_age file */
+	struct cgroup_file workingset_page_age_file;
+#endif
+
 	struct mem_cgroup_per_node *nodeinfo[];
 };
 
@@ -1063,6 +1068,16 @@ static inline void memcg_memory_event_mm(struct mm_struct *mm,
 
 void split_page_memcg(struct page *head, int old_order, int new_order);
 
+static inline struct cgroup_file *
+mem_cgroup_page_age_file(struct mem_cgroup *memcg)
+{
+#ifdef CONFIG_WORKINGSET_REPORT
+	return &memcg->workingset_page_age_file;
+#else
+	return NULL;
+#endif
+}
+
 #else /* CONFIG_MEMCG */
 
 #define MEM_CGROUP_ID_SHIFT	0
@@ -1469,6 +1484,12 @@ void count_memcg_event_mm(struct mm_struct *mm, enum vm_event_item idx)
 
 static inline void split_page_memcg(struct page *head, int old_order, int new_order)
 {
+}
+
+static inline struct cgroup_file *
+mem_cgroup_page_age_file(struct mem_cgroup *memcg)
+{
+	return NULL;
 }
 #endif /* CONFIG_MEMCG */
 
