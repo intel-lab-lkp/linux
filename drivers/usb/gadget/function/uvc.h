@@ -88,6 +88,9 @@ struct uvc_video {
 	struct uvc_device *uvc;
 	struct usb_ep *ep;
 
+	struct kthread_worker	*kworker;
+	struct kthread_work	pump;
+
 	int enqueued;
 	int dequeued;
 

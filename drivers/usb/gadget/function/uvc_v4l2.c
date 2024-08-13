@@ -429,6 +429,9 @@ uvc_v4l2_qbuf(struct file *file, void *fh, struct v4l2_buffer *b)
 	if (ret < 0)
 		return ret;
 
+	if (uvc->state == UVC_STATE_STREAMING)
+		kthread_queue_work(video->kworker, &video->pump);
+
 	return ret;
 }
 

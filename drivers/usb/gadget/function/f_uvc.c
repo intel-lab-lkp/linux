@@ -986,9 +986,12 @@ static void uvc_function_unbind(struct usb_configuration *c,
 {
 	struct usb_composite_dev *cdev = c->cdev;
 	struct uvc_device *uvc = to_uvc(f);
+	struct uvc_video *video = &uvc->video;
 	long wait_ret = 1;
 
 	uvcg_info(f, "%s()\n", __func__);
+
+	kthread_cancel_work_sync(&video->pump);
 
 	/*
 	 * If we know we're connected via v4l2, then there should be a cleanup
