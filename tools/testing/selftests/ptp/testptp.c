@@ -117,6 +117,7 @@ static void usage(char *progname)
 {
 	fprintf(stderr,
 		"usage: %s [options]\n"
+		" -a val     adjust the estimated error by 'val' ns\n"
 		" -c         query the ptp clock's capabilities\n"
 		" -d name    device to open\n"
 		" -e val     read 'val' external time stamp events\n"
@@ -140,6 +141,7 @@ static void usage(char *progname)
 		" -H val     set output phase to 'val' nanoseconds (requires -p)\n"
 		" -w val     set output pulse width to 'val' nanoseconds (requires -p)\n"
 		" -P val     enable or disable (val=1|0) the system clock PPS\n"
+		" -r         read clock info in the  timex structure using clock_adjtime\n"
 		" -s         set the ptp clock time from the system time\n"
 		" -S         set the system time from the ptp clock time\n"
 		" -t val     shift the ptp clock time by 'val' seconds\n"
@@ -175,12 +177,14 @@ int main(int argc, char *argv[])
 	int adjns = 0;
 	int adjphase = 0;
 	int capabilities = 0;
+	long esterror = 0;
 	int extts = 0;
 	int flagtest = 0;
 	int gettime = 0;
 	int index = 0;
 	int list_pins = 0;
 	int pct_offset = 0;
+	int readclk = 0;
 	int getextended = 0;
 	int getcross = 0;
 	int n_samples = 0;
@@ -198,8 +202,11 @@ int main(int argc, char *argv[])
 
 	progname = strrchr(argv[0], '/');
 	progname = progname ? 1+progname : argv[0];
-	while (EOF != (c = getopt(argc, argv, "cd:e:f:F:ghH:i:k:lL:n:o:p:P:sSt:T:w:x:Xz"))) {
+	while (EOF != (c = getopt(argc, argv, "a:cd:e:f:F:ghH:i:k:lL:n:o:p:P:rsSt:T:w:x:Xz"))) {
 		switch (c) {
+		case 'a':
+			esterror = atoi(optarg);
+			break;
 		case 'c':
 			capabilities = 1;
 			break;
@@ -250,6 +257,9 @@ int main(int argc, char *argv[])
 		case 'P':
 			pps = atoi(optarg);
 			break;
+		case 'r':
+			readclk = 1;
+			break;
 		case 's':
 			settime = 1;
 			break;
@@ -290,7 +300,6 @@ int main(int argc, char *argv[])
 			return -1;
 		}
 	}
-
 	fd = open(device, O_RDWR);
 	if (fd < 0) {
 		fprintf(stderr, "opening %s: %s\n", device, strerror(errno));
@@ -618,6 +627,32 @@ int main(int argc, char *argv[])
 			printf("Channel %d exclusively enabled. Check on debugfs.\n", channel);
 			printf("Press any key to continue\n.");
 			getchar();
+		}
+	}
+
+	if (esterror) {
+		memset(&tx, 0, sizeof(tx));
+		tx.modes = ADJ_ESTERROR;
+		tx.esterror = esterror;
+		if (clock_adjtime(clkid, &tx))
+			perror("clock_adjtime");
+		else
+			puts("esterror adjustment okay");
+	}
+
+	if (readclk) {
+		struct timex clk_info = {0};
+
+		memset(&tx, 0, sizeof(tx));
+		if (clock_adjtime(clkid, &tx)) {
+			perror("clock_adjtime");
+		} else {
+			printf("clock_adjtime:\n"
+			       "\tstatus %d,\n"
+			       "\toffset %ld,\n"
+			       "\tfreq %ld,\n"
+			       "\testerror %ld\n",
+			       tx.status, tx.offset, tx.freq, tx.esterror);
 		}
 	}
 
