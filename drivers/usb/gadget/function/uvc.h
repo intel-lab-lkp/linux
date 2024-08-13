@@ -91,6 +91,9 @@ struct uvc_video {
 	struct work_struct pump;
 	struct workqueue_struct *async_wq;
 
+	int enqueued;
+	int dequeued;
+
 	/* Frame parameters */
 	u8 bpp;
 	u32 fcc;
@@ -106,7 +109,7 @@ struct uvc_video {
 	unsigned int req_size;
 	struct list_head ureqs; /* all uvc_requests allocated by uvc_video */
 
-	/* USB requests that the video pump thread can encode into */
+	/* USB requests that the video qbuf thread can encode into */
 	struct list_head req_free;
 
 	/*
