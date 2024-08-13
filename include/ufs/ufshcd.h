@@ -523,6 +523,18 @@ enum ufshcd_state {
 	UFSHCD_STATE_ERROR,
 };
 
+/**
+ * enum ufshcd_state - UFS host controller state
+ * @UFSHCD_REG_OPERATIONAL: UFS host controller is enabled, the host controller
+ * register can be accessed.
+ * @UFSHCD_REG_RESET: UFS host controller registers will be reset, can't access
+ * any ufs host controller register.
+ */
+enum ufshcd_reg_state {
+	UFSHCD_REG_OPERATIONAL,
+	UFSHCD_REG_RESET,
+};
+
 enum ufshcd_quirks {
 	/* Interrupt aggregation support is broken */
 	UFSHCD_QUIRK_BROKEN_INTR_AGGR			= 1 << 0,
@@ -1020,6 +1032,7 @@ struct ufs_hba {
 	struct completion *uic_async_done;
 
 	enum ufshcd_state ufshcd_state;
+	enum ufshcd_reg_state ufshcd_reg_state;
 	u32 eh_flags;
 	u32 intr_mask;
 	u16 ee_ctrl_mask;

@@ -3310,6 +3310,8 @@ static int ufshcd_exec_dev_cmd(struct ufs_hba *hba,
 	struct ufshcd_lrb *lrbp = &hba->lrb[tag];
 	int err;
 
+	if (hba->ufshcd_reg_state == UFSHCD_REG_RESET)
+		return -EBUSY;
 	/* Protects use of hba->reserved_slot. */
 	lockdep_assert_held(&hba->dev_cmd.lock);
 
@@ -4881,6 +4883,7 @@ start:
 int ufshcd_hba_enable(struct ufs_hba *hba)
 {
 	int ret;
+	unsigned long flags;
 
 	if (hba->quirks & UFSHCI_QUIRK_BROKEN_HCE) {
 		ufshcd_set_link_off(hba);
@@ -4904,6 +4907,13 @@ int ufshcd_hba_enable(struct ufs_hba *hba)
 	} else {
 		ret = ufshcd_hba_execute_hce(hba);
 	}
+
+	spin_lock_irqsave(hba->host->host_lock, flags);
+	if (ret)
+		hba->ufshcd_reg_state = UFSHCD_REG_RESET;
+	else
+		hba->ufshcd_reg_state = UFSHCD_REG_OPERATIONAL;
+	spin_unlock_irqrestore(hba->host->host_lock, flags);
 
 	return ret;
 }
@@ -7717,7 +7727,11 @@ release:
 static int ufshcd_host_reset_and_restore(struct ufs_hba *hba)
 {
 	int err;
+	unsigned long flags;
 
+	spin_lock_irqsave(hba->host->host_lock, flags);
+	hba->ufshcd_reg_state = UFSHCD_REG_RESET;
+	spin_unlock_irqrestore(hba->host->host_lock, flags);
 	/*
 	 * Stop the host controller and complete the requests
 	 * cleared by h/w
