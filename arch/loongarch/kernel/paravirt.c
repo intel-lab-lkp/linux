@@ -13,6 +13,9 @@ static int has_steal_clock;
 struct static_key paravirt_steal_enabled;
 struct static_key paravirt_steal_rq_enabled;
 static DEFINE_PER_CPU(struct kvm_steal_time, steal_time) __aligned(64);
+#ifdef CONFIG_SMP
+static struct smp_ops old_ops;
+#endif
 
 static u64 native_steal_clock(int cpu)
 {
@@ -55,6 +58,11 @@ static void pv_send_ipi_single(int cpu, unsigned int action)
 	int min, old;
 	irq_cpustat_t *info = &per_cpu(irq_stat, cpu);
 
+	if (unlikely(action == ACTION_BOOT_CPU)) {
+		old_ops.send_ipi_single(cpu, action);
+		return;
+	}
+
 	old = atomic_fetch_or(BIT(action), &info->message);
 	if (old)
 		return;
@@ -70,6 +78,12 @@ static void pv_send_ipi_mask(const struct cpumask *mask, unsigned int action)
 	int i, cpu, min = 0, max = 0, old;
 	__uint128_t bitmap = 0;
 	irq_cpustat_t *info;
+
+	if (unlikely(action == ACTION_BOOT_CPU)) {
+		/* Use native IPI to boot AP */
+		old_ops.send_ipi_mask(mask, action);
+		return;
+	}
 
 	if (cpumask_empty(mask))
 		return;
@@ -141,6 +155,8 @@ static void pv_init_ipi(void)
 {
 	int r, swi;
 
+	/* Init native ipi irq since AP booting uses it */
+	old_ops.init_ipi();
 	swi = get_percpu_irq(INT_SWI0);
 	if (swi < 0)
 		panic("SWI0 IRQ mapping failed\n");
@@ -179,6 +195,9 @@ int __init pv_ipi_init(void)
 		return 0;
 
 #ifdef CONFIG_SMP
+	old_ops.init_ipi	= mp_ops.init_ipi;
+	old_ops.send_ipi_single = mp_ops.send_ipi_single;
+	old_ops.send_ipi_mask	= mp_ops.send_ipi_mask;
 	mp_ops.init_ipi		= pv_init_ipi;
 	mp_ops.send_ipi_single	= pv_send_ipi_single;
 	mp_ops.send_ipi_mask	= pv_send_ipi_mask;
