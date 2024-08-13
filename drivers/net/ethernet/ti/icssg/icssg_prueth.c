@@ -1256,12 +1256,8 @@ static int prueth_probe(struct platform_device *pdev)
 		goto put_iep0;
 	}
 
-	if (prueth->pdata.quirk_10m_link_issue) {
-		/* Enable IEP1 for FW in 64bit mode as W/A for 10M FD link detect issue under TX
-		 * traffic.
-		 */
-		icss_iep_init_fw(prueth->iep1);
-	}
+	/* Enable IEP1 for FW as it's needed by FW for FDB Learning and FDB ageing */
+	icss_iep_init_fw(prueth->iep1);
 
 	/* setup netdev interfaces */
 	if (eth0_node) {
@@ -1366,8 +1362,7 @@ netdev_exit:
 	}
 
 exit_iep:
-	if (prueth->pdata.quirk_10m_link_issue)
-		icss_iep_exit_fw(prueth->iep1);
+	icss_iep_exit_fw(prueth->iep1);
 	icss_iep_put(prueth->iep1);
 
 put_iep0:
@@ -1424,8 +1419,7 @@ static void prueth_remove(struct platform_device *pdev)
 		prueth_netdev_exit(prueth, eth_node);
 	}
 
-	if (prueth->pdata.quirk_10m_link_issue)
-		icss_iep_exit_fw(prueth->iep1);
+	icss_iep_exit_fw(prueth->iep1);
 
 	icss_iep_put(prueth->iep1);
 	icss_iep_put(prueth->iep0);
