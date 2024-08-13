@@ -19,6 +19,7 @@
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/poll.h>
+#include <linux/cleanup.h>
 
 #include <linux/skbuff.h>
 #include <linux/miscdevice.h>
@@ -468,9 +469,9 @@ static int vhci_create_device(struct vhci_data *data, __u8 opcode)
 {
 	int err;
 
-	mutex_lock(&data->open_mutex);
-	err = __vhci_create_device(data, opcode);
-	mutex_unlock(&data->open_mutex);
+	scoped_guard(mutex, &data->open_mutex) {
+		err = __vhci_create_device(data, opcode);
+	}
 
 	return err;
 }
