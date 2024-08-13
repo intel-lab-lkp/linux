@@ -1740,7 +1740,8 @@ static int sa_cra_init_aead(struct crypto_aead *tfm, const char *hash,
 	ctx->shash = crypto_alloc_shash(hash, 0, CRYPTO_ALG_NEED_FALLBACK);
 	if (IS_ERR(ctx->shash)) {
 		dev_err(sa_k3_dev, "base driver %s couldn't be loaded\n", hash);
-		return PTR_ERR(ctx->shash);
+		ret = PTR_ERR(ctx->shash);
+		goto err_free_shash;
 	}
 
 	ctx->fallback.aead = crypto_alloc_aead(fallback, 0,
@@ -1749,7 +1750,8 @@ static int sa_cra_init_aead(struct crypto_aead *tfm, const char *hash,
 	if (IS_ERR(ctx->fallback.aead)) {
 		dev_err(sa_k3_dev, "fallback driver %s couldn't be loaded\n",
 			fallback);
-		return PTR_ERR(ctx->fallback.aead);
+		ret = PTR_ERR(ctx->fallback.aead);
+		goto err_free_shash;
 	}
 
 	crypto_aead_set_reqsize(tfm, sizeof(struct aead_request) +
@@ -1757,18 +1759,22 @@ static int sa_cra_init_aead(struct crypto_aead *tfm, const char *hash,
 
 	ret = sa_init_ctx_info(&ctx->enc, data);
 	if (ret)
-		return ret;
+		goto err_free_shash;
 
 	ret = sa_init_ctx_info(&ctx->dec, data);
-	if (ret) {
-		sa_free_ctx_info(&ctx->enc, data);
-		return ret;
-	}
+	if (ret)
+		goto err_free_ctx_info;
 
 	dev_dbg(sa_k3_dev, "%s(0x%p) sc-ids(0x%x(0x%pad), 0x%x(0x%pad))\n",
 		__func__, tfm, ctx->enc.sc_id, &ctx->enc.sc_phys,
 		ctx->dec.sc_id, &ctx->dec.sc_phys);
 
+	return ret;
+
+err_free_ctx_info:
+	sa_free_ctx_info(&ctx->enc, data);
+err_free_shash:
+	crypto_free_shash(ctx->shash);
 	return ret;
 }
 
