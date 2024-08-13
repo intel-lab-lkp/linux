@@ -3518,6 +3518,11 @@ int panthor_sched_init(struct panthor_device *ptdev)
 	ptdev->csif_info.cs_slot_count = sched->cs_slot_count;
 	ptdev->csif_info.scoreboard_slot_count = sched->sb_slot_count;
 
+	ptdev->fw_info.version = glb_iface->control->version;
+	ptdev->fw_info.features = glb_iface->control->features;
+	ptdev->fw_info.group_num = glb_iface->control->group_num;
+	ptdev->fw_info.instr_features = glb_iface->control->instr_features;
+
 	sched->last_tick = 0;
 	sched->resched_target = U64_MAX;
 	sched->tick_period = msecs_to_jiffies(10);

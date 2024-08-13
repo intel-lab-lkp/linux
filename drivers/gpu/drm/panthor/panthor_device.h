@@ -100,6 +100,9 @@ struct panthor_device {
 	/** @csif_info: Command stream interface information. */
 	struct drm_panthor_csif_info csif_info;
 
+	/** @fw_info: Firmware info for the global interface */
+	struct drm_panthor_fw_info fw_info;
+
 	/** @gpu: GPU management data. */
 	struct panthor_gpu *gpu;
 
