@@ -194,7 +194,7 @@ static void iavf_ptp_cache_phc_time(struct iavf_adapter *adapter)
  */
 long iavf_ptp_do_aux_work(struct ptp_clock_info *info)
 {
-	struct iavf_adapter *adapter = clock_to_adapter(info);
+	struct iavf_adapter *adapter = iavf_clock_to_adapter(info);
 
 	iavf_ptp_cache_phc_time(adapter);
 
