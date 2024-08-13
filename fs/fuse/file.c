@@ -264,7 +264,12 @@ static int fuse_open(struct inode *inode, struct file *file)
 	err = fuse_do_open(fm, get_node_id(inode), file, false);
 	if (!err) {
 		ff = file->private_data;
-		err = fuse_finish_open(inode, file);
+		if (ff->open_flags & FOPEN_FETCH_ATTR) {
+			fuse_invalidate_attr(inode);
+			err = fuse_update_attributes(inode, file, STATX_BASIC_STATS);
+		}
+		if (!err)
+			err = fuse_finish_open(inode, file);
 		if (err)
 			fuse_sync_release(fi, ff, file->f_flags);
 		else if (is_truncate)
