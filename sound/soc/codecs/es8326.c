@@ -765,11 +765,11 @@ static void es8326_jack_button_handler(struct work_struct *work)
 	case 0x6f:
 	case 0x4b:
 		/* button volume up */
-		cur_button = SND_JACK_BTN_1;
+		cur_button = SND_JACK_BTN_2;
 		break;
 	case 0x27:
 		/* button volume down */
-		cur_button = SND_JACK_BTN_2;
+		cur_button = SND_JACK_BTN_3;
 		break;
 	case 0x1e:
 	case 0xe2:
@@ -785,7 +785,7 @@ static void es8326_jack_button_handler(struct work_struct *work)
 		if (press_count > 3) {
 			/* report a press every 120ms */
 			snd_soc_jack_report(es8326->jack, cur_button,
-					SND_JACK_BTN_0 | SND_JACK_BTN_1 | SND_JACK_BTN_2);
+				SND_JACK_BTN_0 | SND_JACK_BTN_1 | SND_JACK_BTN_2 | SND_JACK_BTN_3);
 			press_count = 0;
 		}
 		button_to_report = cur_button;
@@ -800,9 +800,9 @@ static void es8326_jack_button_handler(struct work_struct *work)
 		/* released or no pressed */
 		if (button_to_report != 0) {
 			snd_soc_jack_report(es8326->jack, button_to_report,
-				    SND_JACK_BTN_0 | SND_JACK_BTN_1 | SND_JACK_BTN_2);
+				SND_JACK_BTN_0 | SND_JACK_BTN_1 | SND_JACK_BTN_2 | SND_JACK_BTN_3);
 			snd_soc_jack_report(es8326->jack, 0,
-				    SND_JACK_BTN_0 | SND_JACK_BTN_1 | SND_JACK_BTN_2);
+				SND_JACK_BTN_0 | SND_JACK_BTN_1 | SND_JACK_BTN_2 | SND_JACK_BTN_3);
 			button_to_report = 0;
 		}
 		es8326_disable_micbias(es8326->component);
@@ -845,7 +845,7 @@ static void es8326_jack_detect_handler(struct work_struct *work)
 		if (es8326->jack->status & SND_JACK_HEADPHONE) {
 			dev_dbg(comp->dev, "Report hp remove event\n");
 			snd_soc_jack_report(es8326->jack, 0,
-				    SND_JACK_BTN_0 | SND_JACK_BTN_1 | SND_JACK_BTN_2);
+				SND_JACK_BTN_0 | SND_JACK_BTN_1 | SND_JACK_BTN_2 | SND_JACK_BTN_3);
 			snd_soc_jack_report(es8326->jack, 0, SND_JACK_HEADSET);
 			/* mute adc when mic path switch */
 			regmap_write(es8326->regmap, ES8326_ADC1_SRC, 0x44);
