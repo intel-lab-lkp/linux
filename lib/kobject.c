@@ -295,6 +295,7 @@ int kobject_set_name_vargs(struct kobject *kobj, const char *fmt,
 
 	return 0;
 }
+EXPORT_SYMBOL(kobject_set_name_vargs);
 
 /**
  * kobject_set_name() - Set the name of a kobject.
