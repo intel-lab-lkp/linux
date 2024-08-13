@@ -5,6 +5,7 @@
 #include <linux/iosys-map.h>
 #include <linux/devcoredump.h>
 #include <linux/err.h>
+#include <linux/list.h>
 #include <linux/vmalloc.h>
 #include <linux/types.h>
 #include <uapi/drm/panthor_drm.h>
@@ -152,22 +153,25 @@ static void count_queues(struct queue_count *count,
 }
 
 static int compute_dump_size(struct vm_dump_count *va_count,
-			     struct queue_count *group_and_q_cnt)
+			     struct queue_count *group_and_q_cnt,
+			     bool job_list_is_empty)
 {
 	int size = 0;
 	int i;
 
-	size += sizeof(struct drm_panthor_dump_header);
-	size += sizeof(struct drm_panthor_dump_version);
+	if (job_list_is_empty) {
+		size += sizeof(struct drm_panthor_dump_header);
+		size += sizeof(struct drm_panthor_dump_version);
 
-	size += sizeof(struct drm_panthor_dump_header);
-	size += sizeof(struct drm_panthor_gpu_info);
+		size += sizeof(struct drm_panthor_dump_header);
+		size += sizeof(struct drm_panthor_gpu_info);
 
-	size += sizeof(struct drm_panthor_dump_header);
-	size += sizeof(struct drm_panthor_csif_info);
+		size += sizeof(struct drm_panthor_dump_header);
+		size += sizeof(struct drm_panthor_csif_info);
 
-	size += sizeof(struct drm_panthor_dump_header);
-	size += sizeof(struct drm_panthor_fw_info);
+		size += sizeof(struct drm_panthor_dump_header);
+		size += sizeof(struct drm_panthor_fw_info);
+	}
 
 	for (i = 0; i < va_count->vas; i++) {
 		size += sizeof(struct drm_panthor_dump_header);
@@ -250,6 +254,58 @@ static int dump_group_info(struct dump_group_args *dump_group_args,
 	return ret;
 }
 
+static void clean_job_list(struct list_head *joblist)
+{
+	struct panthor_dump_job_entry *job, *tmp;
+
+	list_for_each_entry_safe(job, tmp, joblist, node) {
+		list_del(&job->node);
+		vfree(job->mem);
+		kfree(job);
+	}
+}
+
+static int append_job(struct panthor_core_dump_args *args, void *mem,
+		      size_t size)
+{
+	struct panthor_dump_job_entry *job;
+
+	job = kzalloc(sizeof(*job), GFP_KERNEL);
+	if (!job)
+		return -ENOMEM;
+
+	job->mem = mem;
+	job->size = size;
+	list_add_tail(&job->node, args->job_list);
+	return 0;
+}
+
+static int copy_from_job_list(struct list_head *job_list, void **out_mem,
+			      u32 *out_size)
+{
+	u32 total_size = 0;
+	u32 offset = 0;
+	struct panthor_dump_job_entry *entry;
+	void *mem;
+
+	list_for_each_entry(entry, job_list, node) {
+		total_size += entry->size;
+	}
+
+	mem = vzalloc(total_size);
+	if (!mem)
+		return -ENOMEM;
+
+	list_for_each_entry(entry, job_list, node) {
+		memcpy(mem + offset, entry->mem, entry->size);
+		offset += entry->size;
+	}
+
+	*out_mem = mem;
+	*out_size = total_size;
+	return 0;
+}
+
 int panthor_core_dump(struct panthor_core_dump_args *args)
 {
 	u8 *mem;
@@ -273,7 +329,8 @@ int panthor_core_dump(struct panthor_core_dump_args *args)
 
 	count_queues(&group_and_q_cnt, &group_info);
 
-	dump_size = compute_dump_size(&va_count, &group_and_q_cnt);
+	dump_size = compute_dump_size(&va_count, &group_and_q_cnt,
+				      list_empty(args->job_list));
 
 	mem = vzalloc(dump_size);
 	if (!mem)
@@ -286,68 +343,72 @@ int panthor_core_dump(struct panthor_core_dump_args *args)
 		.capacity = dump_size,
 	};
 
-	hdr = alloc_header(&alloc, DRM_PANTHOR_DUMP_HEADER_TYPE_VERSION,
-			   sizeof(struct drm_panthor_dump_version));
-	if (IS_ERR(hdr)) {
-		ret = PTR_ERR(hdr);
-		goto free_valloc;
+	if (list_empty(args->job_list)) {
+		hdr = alloc_header(&alloc, DRM_PANTHOR_DUMP_HEADER_TYPE_VERSION,
+				   sizeof(struct drm_panthor_dump_version));
+		if (IS_ERR(hdr)) {
+			ret = PTR_ERR(hdr);
+			goto free_valloc;
+		}
+
+		version = alloc_bytes(&alloc, sizeof(*version));
+		if (IS_ERR(version)) {
+			ret = PTR_ERR(version);
+			goto free_valloc;
+		}
+
+		*version = (struct drm_panthor_dump_version){
+			.major = PANT_DUMP_MAJOR,
+			.minor = PANT_DUMP_MINOR,
+		};
+
+		hdr = alloc_header(&alloc,
+				   DRM_PANTHOR_DUMP_HEADER_TYPE_GPU_INFO,
+				   sizeof(args->ptdev->gpu_info));
+		if (IS_ERR(hdr)) {
+			ret = PTR_ERR(hdr);
+			goto free_valloc;
+		}
+
+		gpu_info = alloc_bytes(&alloc, sizeof(*gpu_info));
+		if (IS_ERR(gpu_info)) {
+			ret = PTR_ERR(gpu_info);
+			goto free_valloc;
+		}
+
+		*gpu_info = args->ptdev->gpu_info;
+
+		hdr = alloc_header(&alloc,
+				   DRM_PANTHOR_DUMP_HEADER_TYPE_CSIF_INFO,
+				   sizeof(args->ptdev->csif_info));
+		if (IS_ERR(hdr)) {
+			ret = PTR_ERR(hdr);
+			goto free_valloc;
+		}
+
+		csif_info = alloc_bytes(&alloc, sizeof(*csif_info));
+		if (IS_ERR(csif_info)) {
+			ret = PTR_ERR(csif_info);
+			goto free_valloc;
+		}
+
+		*csif_info = args->ptdev->csif_info;
+
+		hdr = alloc_header(&alloc, DRM_PANTHOR_DUMP_HEADER_TYPE_FW_INFO,
+				   sizeof(args->ptdev->fw_info));
+		if (IS_ERR(hdr)) {
+			ret = PTR_ERR(hdr);
+			goto free_valloc;
+		}
+
+		fw_info = alloc_bytes(&alloc, sizeof(*fw_info));
+		if (IS_ERR(fw_info)) {
+			ret = PTR_ERR(fw_info);
+			goto free_valloc;
+		}
+
+		*fw_info = args->ptdev->fw_info;
 	}
-
-	version = alloc_bytes(&alloc, sizeof(*version));
-	if (IS_ERR(version)) {
-		ret = PTR_ERR(version);
-		goto free_valloc;
-	}
-
-	*version = (struct drm_panthor_dump_version){
-		.major = PANT_DUMP_MAJOR,
-		.minor = PANT_DUMP_MINOR,
-	};
-
-	hdr = alloc_header(&alloc, DRM_PANTHOR_DUMP_HEADER_TYPE_GPU_INFO,
-			   sizeof(args->ptdev->gpu_info));
-	if (IS_ERR(hdr)) {
-		ret = PTR_ERR(hdr);
-		goto free_valloc;
-	}
-
-	gpu_info = alloc_bytes(&alloc, sizeof(*gpu_info));
-	if (IS_ERR(gpu_info)) {
-		ret = PTR_ERR(gpu_info);
-		goto free_valloc;
-	}
-
-	*gpu_info = args->ptdev->gpu_info;
-
-	hdr = alloc_header(&alloc, DRM_PANTHOR_DUMP_HEADER_TYPE_CSIF_INFO,
-			   sizeof(args->ptdev->csif_info));
-	if (IS_ERR(hdr)) {
-		ret = PTR_ERR(hdr);
-		goto free_valloc;
-	}
-
-	csif_info = alloc_bytes(&alloc, sizeof(*csif_info));
-	if (IS_ERR(csif_info)) {
-		ret = PTR_ERR(csif_info);
-		goto free_valloc;
-	}
-
-	*csif_info = args->ptdev->csif_info;
-
-	hdr = alloc_header(&alloc, DRM_PANTHOR_DUMP_HEADER_TYPE_FW_INFO,
-			   sizeof(args->ptdev->fw_info));
-	if (IS_ERR(hdr)) {
-		ret = PTR_ERR(hdr);
-		goto free_valloc;
-	}
-
-	fw_info = alloc_bytes(&alloc, sizeof(*fw_info));
-	if (IS_ERR(fw_info)) {
-		ret = PTR_ERR(fw_info);
-		goto free_valloc;
-	}
-
-	*fw_info = args->ptdev->fw_info;
 
 	dump_va_args.ptdev = args->ptdev;
 	dump_va_args.alloc = &alloc;
@@ -365,12 +426,34 @@ int panthor_core_dump(struct panthor_core_dump_args *args)
 			 "dump size mismatch: expected %d, got %zu\n",
 			 dump_size, alloc.pos);
 
-	dev_coredumpv(args->ptdev->base.dev, alloc.start, alloc.pos,
-		      GFP_KERNEL);
+	if (args->append) {
+		ret = append_job(args, alloc.start, alloc.pos);
+		if (ret)
+			goto free_valloc;
+	} else if (!list_empty(args->job_list)) {
+		void *mem;
+		u32 size;
+
+		/* append ourselves */
+		append_job(args, alloc.start, alloc.pos);
+		if (ret)
+			goto free_valloc;
+
+		ret = copy_from_job_list(args->job_list, &mem, &size);
+		if (ret)
+			goto free_valloc;
+
+		dev_coredumpv(args->ptdev->base.dev, mem, size, GFP_KERNEL);
+		clean_job_list(args->job_list);
+	} else {
+		dev_coredumpv(args->ptdev->base.dev, alloc.start, alloc.pos,
+			      GFP_KERNEL);
+	}
 
 	return ret;
 
 free_valloc:
+	clean_job_list(args->job_list);
 	vfree(mem);
 	return ret;
 }
