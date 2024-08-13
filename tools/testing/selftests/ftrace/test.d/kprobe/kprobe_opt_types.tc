@@ -10,6 +10,11 @@ x86_64)
 arm*)
 ;;
 ppc*)
+  lsprop_output=$(lsprop /proc/device-tree/ibm,secure-boot)
+  if echo "$lsprop_output" | grep -q "00000002"; then
+    echo "Secure Boot is enabled on PowerPC."
+    exit_unsupported
+  fi
 ;;
 *)
   echo "Please implement other architecture here"
