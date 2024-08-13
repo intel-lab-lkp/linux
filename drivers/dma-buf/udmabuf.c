@@ -296,12 +296,12 @@ static long udmabuf_create(struct miscdevice *device,
 			   struct udmabuf_create_list *head,
 			   struct udmabuf_create_item *list)
 {
-	pgoff_t pgoff, pgcnt, pglimit, pgbuf = 0;
-	long nr_folios, ret = -EINVAL;
+	pgoff_t upgcnt = 0, pglimit, pgbuf = 0;
+	long ret = -EINVAL;
 	struct file *memfd = NULL;
 	struct folio **folios;
 	struct udmabuf *ubuf;
-	u32 i, j, k, flags;
+	u32 i, flags;
 	loff_t end;
 
 	ubuf = kzalloc(sizeof(*ubuf), GFP_KERNEL);
@@ -315,22 +315,21 @@ static long udmabuf_create(struct miscdevice *device,
 			goto err;
 		if (!IS_ALIGNED(list[i].size, PAGE_SIZE))
 			goto err;
-		ubuf->pagecount += list[i].size >> PAGE_SHIFT;
+		upgcnt += list[i].size >> PAGE_SHIFT;
 		if (ubuf->pagecount > pglimit)
 			goto err;
 	}
 
-	if (!ubuf->pagecount)
+	if (!upgcnt)
 		goto err;
 
-	ubuf->folios = kvmalloc_array(ubuf->pagecount, sizeof(*ubuf->folios),
+	ubuf->folios = kvmalloc_array(upgcnt, sizeof(*ubuf->folios),
 				      GFP_KERNEL);
 	if (!ubuf->folios) {
 		ret = -ENOMEM;
 		goto err;
 	}
-	ubuf->offsets = kvcalloc(ubuf->pagecount, sizeof(*ubuf->offsets),
-				 GFP_KERNEL);
+	ubuf->offsets = kvcalloc(upgcnt, sizeof(*ubuf->offsets), GFP_KERNEL);
 	if (!ubuf->offsets) {
 		ret = -ENOMEM;
 		goto err;
@@ -338,6 +337,10 @@ static long udmabuf_create(struct miscdevice *device,
 
 	pgbuf = 0;
 	for (i = 0; i < head->count; i++) {
+		pgoff_t pgoff, pgcnt;
+		u32 j, cnt;
+		long nr_folios;
+
 		memfd = fget(list[i].memfd);
 		ret = check_memfd_seals(memfd);
 		if (ret < 0)
@@ -351,38 +354,36 @@ static long udmabuf_create(struct miscdevice *device,
 		}
 
 		end = list[i].offset + (pgcnt << PAGE_SHIFT) - 1;
-		ret = memfd_pin_folios(memfd, list[i].offset, end,
-				       folios, pgcnt, &pgoff);
-		if (ret <= 0) {
+		nr_folios = memfd_pin_folios(memfd, list[i].offset, end, folios,
+					     pgcnt, &pgoff);
+		if (nr_folios <= 0) {
 			kvfree(folios);
-			if (!ret)
-				ret = -EINVAL;
+			ret = nr_folios ? nr_folios : -EINVAL;
 			goto err;
 		}
 
-		nr_folios = ret;
-		pgoff >>= PAGE_SHIFT;
-		for (j = 0, k = 0; j < pgcnt; j++) {
-			ubuf->folios[pgbuf] = folios[k];
-			ubuf->offsets[pgbuf] = pgoff << PAGE_SHIFT;
+		for (j = 0, cnt = 0; j < nr_folios; ++j, pgoff = 0) {
+			u32 k;
+			long fsize = folio_size(folios[j]);
 
-			if (j == 0 || ubuf->folios[pgbuf-1] != folios[k]) {
-				ret = add_to_unpin_list(&ubuf->unpin_list,
-							folios[k]);
-				if (ret < 0) {
-					kfree(folios);
-					goto err;
-				}
+			ret = add_to_unpin_list(&ubuf->unpin_list, folios[j]);
+			if (ret < 0) {
+				kfree(folios);
+				goto err;
 			}
 
-			pgbuf++;
-			if (++pgoff == folio_nr_pages(folios[k])) {
-				pgoff = 0;
-				if (++k == nr_folios)
-					break;
+			for (k = pgoff; k < fsize; k += PAGE_SIZE) {
+				ubuf->folios[pgbuf] = folios[j];
+				ubuf->offsets[pgbuf] = k;
+				++pgbuf;
+
+				if (++cnt >= pgcnt)
+					goto end;
 			}
 		}
-
+end:
+		// update the number of pages that have already been set up.
+		ubuf->pagecount += pgcnt;
 		kvfree(folios);
 		fput(memfd);
 		memfd = NULL;
