@@ -2151,6 +2151,7 @@ static int xillyusb_probe(struct usb_interface *interface,
 	if (!xdev->workq) {
 		dev_err(&interface->dev, "Failed to allocate work queue\n");
 		rc = -ENOMEM;
+		kref_put(&xdev->kref, cleanup_dev);
 		goto fail;
 	}
 
@@ -2174,7 +2175,6 @@ latefail:
 
 fail:
 	usb_set_intfdata(interface, NULL);
-	kref_put(&xdev->kref, cleanup_dev);
 	return rc;
 }
 
