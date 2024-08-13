@@ -3542,7 +3542,7 @@ static int stmmac_hw_setup(struct net_device *dev, bool ptp_register)
 				     &priv->fpe_cfg,
 				     priv->plat->tx_queues_to_use,
 				     priv->plat->rx_queues_to_use,
-				     false);
+				     false, priv->fpe_cfg.pmac_enabled);
 	}
 
 	return 0;
@@ -4109,7 +4109,7 @@ static int stmmac_release(struct net_device *dev)
 			     &priv->fpe_cfg,
 			     priv->plat->tx_queues_to_use,
 			     priv->plat->rx_queues_to_use,
-			     false);
+			     false, false);
 
 	priv->fpe_cfg.pmac_enabled = false;
 	priv->fpe_cfg.verify_enabled = false;
@@ -7413,7 +7413,7 @@ static void stmmac_fpe_verify_task(struct work_struct *work)
 		stmmac_fpe_configure(priv, priv->ioaddr, fpe_cfg,
 				     priv->plat->tx_queues_to_use,
 				     priv->plat->rx_queues_to_use,
-				     true);
+				     true, fpe_cfg->pmac_enabled);
 
 		spin_unlock_irqrestore(&priv->mm_lock, flags);
 	}
@@ -7426,7 +7426,7 @@ static void stmmac_fpe_verify_task(struct work_struct *work)
 		stmmac_fpe_configure(priv, priv->ioaddr, fpe_cfg,
 				     priv->plat->tx_queues_to_use,
 				     priv->plat->rx_queues_to_use,
-				     false);
+				     false, fpe_cfg->pmac_enabled);
 
 		spin_unlock_irqrestore(&priv->mm_lock, flags);
 	}
@@ -7894,7 +7894,7 @@ int stmmac_suspend(struct device *dev)
 		stmmac_fpe_configure(priv, priv->ioaddr,
 				     &priv->fpe_cfg,
 				     priv->plat->tx_queues_to_use,
-				     priv->plat->rx_queues_to_use, false);
+				     priv->plat->rx_queues_to_use, false, false);
 
 		stmmac_fpe_stop_wq(priv);
 	}
