@@ -455,7 +455,7 @@ int icssg_config(struct prueth *prueth, struct prueth_emac *emac, int slice)
 	struct icssg_flow_cfg __iomem *flow_cfg;
 	int ret;
 
-	if (prueth->is_switch_mode)
+	if (prueth->is_switch_mode || prueth->is_hsr_offload_mode)
 		icssg_init_switch_mode(prueth);
 	else
 		icssg_init_emac_mode(prueth);
@@ -472,7 +472,7 @@ int icssg_config(struct prueth *prueth, struct prueth_emac *emac, int slice)
 	regmap_update_bits(prueth->miig_rt, ICSSG_CFG_OFFSET,
 			   ICSSG_CFG_DEFAULT, ICSSG_CFG_DEFAULT);
 	icssg_miig_set_interface_mode(prueth->miig_rt, slice, emac->phy_if);
-	if (prueth->is_switch_mode)
+	if (prueth->is_switch_mode || prueth->is_hsr_offload_mode)
 		icssg_config_mii_init_switch(emac);
 	else
 		icssg_config_mii_init(emac);
@@ -498,7 +498,7 @@ int icssg_config(struct prueth *prueth, struct prueth_emac *emac, int slice)
 	writeb(0, config + SPL_PKT_DEFAULT_PRIORITY);
 	writeb(0, config + QUEUE_NUM_UNTAGGED);
 
-	if (prueth->is_switch_mode)
+	if (prueth->is_switch_mode || prueth->is_hsr_offload_mode)
 		ret = prueth_switch_buffer_setup(emac);
 	else
 		ret = prueth_emac_buffer_setup(emac);
