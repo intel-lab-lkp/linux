@@ -1447,7 +1447,7 @@ mptsas_add_end_device(MPT_ADAPTER *ioc, struct mptsas_phyinfo *phy_info)
 	struct sas_port *port;
 	struct sas_identify identify;
 	char *ds = NULL;
-	u8 fw_id;
+	u8 fw_id __maybe_unused;
 
 	if (!phy_info) {
 		dfailprintk(ioc, printk(MYIOC_s_ERR_FMT
@@ -1525,7 +1525,7 @@ mptsas_del_end_device(MPT_ADAPTER *ioc, struct mptsas_phyinfo *phy_info)
 	struct mptsas_phyinfo *phy_info_parent;
 	int i;
 	char *ds = NULL;
-	u8 fw_id;
+	u8 fw_id __maybe_unused;
 	u64 sas_address;
 
 	if (!phy_info)
@@ -4231,10 +4231,8 @@ mptsas_find_phyinfo_by_phys_disk_num(MPT_ADAPTER *ioc, u8 phys_disk_num,
 static void
 mptsas_reprobe_lun(struct scsi_device *sdev, void *data)
 {
-	int rc;
-
 	sdev->no_uld_attach = data ? 1 : 0;
-	rc = scsi_device_reprobe(sdev);
+	WARN_ON(scsi_device_reprobe(sdev));
 }
 
 static void
@@ -4790,7 +4788,6 @@ mptsas_issue_tm(MPT_ADAPTER *ioc, u8 type, u8 channel, u8 id, u64 lun,
 	MPT_FRAME_HDR	*mf;
 	SCSITaskMgmt_t	*pScsiTm;
 	int		 retval;
-	unsigned long	 timeleft;
 
 	*issue_reset = 0;
 	mf = mpt_get_msg_frame(mptsasDeviceResetCtx, ioc);
@@ -4826,8 +4823,7 @@ mptsas_issue_tm(MPT_ADAPTER *ioc, u8 type, u8 channel, u8 id, u64 lun,
 	mpt_put_msg_frame_hi_pri(mptsasDeviceResetCtx, ioc, mf);
 
 	/* Now wait for the command to complete */
-	timeleft = wait_for_completion_timeout(&ioc->taskmgmt_cmds.done,
-	    timeout*HZ);
+	wait_for_completion_timeout(&ioc->taskmgmt_cmds.done, timeout * HZ);
 	if (!(ioc->taskmgmt_cmds.status & MPT_MGMT_STATUS_COMMAND_GOOD)) {
 		retval = -1; /* return failure */
 		dtmprintk(ioc, printk(MYIOC_s_ERR_FMT
@@ -4870,8 +4866,8 @@ mptsas_broadcast_primitive_work(struct fw_event_work *fw_event)
 	int			task_context;
 	u8			channel, id;
 	int			 lun;
-	u32			 termination_count;
-	u32			 query_count;
+	u32			 termination_count __maybe_unused;
+	u32			 query_count __maybe_unused;
 
 	dtmprintk(ioc, printk(MYIOC_s_DEBUG_FMT
 	    "%s - enter\n", ioc->name, __func__));
