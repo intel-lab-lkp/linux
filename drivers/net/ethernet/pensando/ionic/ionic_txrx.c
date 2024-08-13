@@ -1261,9 +1261,6 @@ unsigned int ionic_tx_cq_service(struct ionic_cq *cq,
 	unsigned int bytes = 0;
 	unsigned int pkts = 0;
 
-	if (work_to_do == 0)
-		return 0;
-
 	while (ionic_tx_service(cq, &pkts, &bytes, in_napi)) {
 		if (cq->tail_idx == cq->num_descs - 1)
 			cq->done_color = !cq->done_color;
