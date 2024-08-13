@@ -17,6 +17,9 @@ struct panthor_device;
 struct panthor_file;
 struct panthor_group_pool;
 struct panthor_job;
+struct panthor_group;
+struct drm_panthor_dump_group_info;
+struct drm_panthor_dump_queue_info;
 
 int panthor_group_create(struct panthor_file *pfile,
 			 const struct drm_panthor_group_create *group_args,
@@ -41,6 +44,13 @@ int panthor_sched_init(struct panthor_device *ptdev);
 void panthor_sched_unplug(struct panthor_device *ptdev);
 void panthor_sched_pre_reset(struct panthor_device *ptdev);
 void panthor_sched_post_reset(struct panthor_device *ptdev, bool reset_failed);
+
+void panthor_sched_get_groupinfo(struct panthor_group *group,
+				 struct drm_panthor_dump_group_info *info);
+
+int panthor_sched_get_queueinfo(struct panthor_group *group, u32 cs_id,
+				struct drm_panthor_dump_queue_info *info);
+
 void panthor_sched_suspend(struct panthor_device *ptdev);
 void panthor_sched_resume(struct panthor_device *ptdev);
 

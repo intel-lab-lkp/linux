@@ -4,6 +4,7 @@ panthor-y := \
 	panthor_devfreq.o \
 	panthor_device.o \
 	panthor_drv.o \
+	panthor_dump.o \
 	panthor_fw.o \
 	panthor_gem.o \
 	panthor_gpu.o \

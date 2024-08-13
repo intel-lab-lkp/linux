@@ -974,6 +974,130 @@ struct drm_panthor_tiler_heap_destroy {
 	__u32 pad;
 };
 
+/**
+ * enum drm_panthor_dump_header_type - Identifies the type of data that follows
+ * in a panthor core dump.
+ */
+enum drm_panthor_dump_header_type {
+	DRM_PANTHOR_DUMP_HEADER_TYPE_VERSION = 0,
+	/**
+	 * @DRM_PANTHOR_DUMP_HEADER_TYPE_GPU_INFO: Gpu information.
+	 */
+	DRM_PANTHOR_DUMP_HEADER_TYPE_GPU_INFO = 1,
+	/**
+	 * @DRM_PANTHOR_DUMP_HEADER_TYPE_CSIF_INFO: Command stream interface information.
+	 */
+	DRM_PANTHOR_DUMP_HEADER_TYPE_CSIF_INFO = 2,
+	/**
+	 * @DRM_PANTHOR_DUMP_HEADER_TYPE_FW_INFO: Information about the firmware.
+	 */
+	DRM_PANTHOR_DUMP_HEADER_TYPE_FW_INFO = 3,
+	/**
+	 * @DRM_PANTHOR_DUMP_HEADER_TYPE_VM: A dump of the VM for the context.
+	 */
+	DRM_PANTHOR_DUMP_HEADER_TYPE_VM = 4,
+	/**
+	 * @DRM_PANTHOR_DUMP_HEADER_TYPE_GROUP_INFO: Describes a group. A dump can
+	 * contain either the faulty group, or all groups for the DRM FD.
+	 */
+	DRM_PANTHOR_DUMP_HEADER_TYPE_GROUP_INFO = 5,
+	/**
+	 * @DRM_PANTHOR_DUMP_HEADER_TYPE_QUEUE_INFO: Describes a faulty queue. This
+	 * will immediately follow a group info.
+	 */
+	DRM_PANTHOR_DUMP_HEADER_TYPE_QUEUE_INFO = 6,
+};
+
+/**
+ * struct drm_panthor_dump_header - A header that describes a section of a panthor core dump.
+ */
+struct drm_panthor_dump_header {
+	/** @magic: Always set to PANT (0x544e4150). */
+	__u32 magic;
+
+	/** @header_type: Identifies the type of data in the following section of the
+	 * core dump file
+	 */
+	enum drm_panthor_dump_header_type header_type;
+
+	/** @header_size: The size of the header.
+	 *
+	 * This is for backward-compatibility purposes in case this structure is
+	 * augmented in the future. It allows userspace to skip over the header and
+	 * access the actual data it describes.
+	 */
+	__u32 header_size;
+
+	/** @data_size: The size of the following section */
+	__u32 data_size;
+};
+
+/**
+ * struct drm_panthor_dump_version - Version information for a Panthor GPU dump.
+ *
+ * This structure is used to hold version information when performing a dump of
+ * the state of a Panthor GPU.
+ */
+struct drm_panthor_dump_version {
+	/** @major: Versioning information for backwards compatibility */
+	__u32 major;
+	/** @minor: Versioning information for backwards compatibility */
+	__u32 minor;
+};
+
+/**
+ * struct drm_panthor_dump_group_info - Group information for a Panthor GPU
+ * dump.
+ *
+ * This structure is used to hold information about a group when performing a
+ * dump of the state of a Panthor GPU.
+ */
+struct drm_panthor_dump_group_info {
+	/** @queue_count: The number of queues in the group. */
+	__u32 queue_count;
+	/** @faulty_queues: A bitmask denoting the faulty queues */
+	__u32 faulty_bitmask;
+};
+
+#define DRM_PANTHOR_DUMP_QUEUE_INFO_FLAGS_FAULTY	(1 << 0)
+
+/**
+ * struct drm_panthor_dump_queue_info - Queue information for a Panthor GPU
+ * dump.
+ *
+ * This structure is used to hold information about a queue when performing a
+ * dump of the state of a Panthor GPU.
+ */
+struct drm_panthor_dump_queue_info {
+	/** See DRM_PANTHOR_DUMP_QUEUE_INFO_FLAGS_XXX */
+	u32 flags;
+	/** @cs_id: The ID of the command stream. */
+	__s32 cs_id;
+	/** @faulty: Whether this queue has faulted */
+	/** @ringbuf_gpuva: The GPU virtual address of the ring buffer. */
+	__u64 ringbuf_gpuva;
+	/** @ringbuf_insert: The insert point (i.e.: offset) in the ring buffer. This
+	 * is where a instruction would be inserted next by the CPU.
+	 */
+	__u64 ringbuf_insert;
+	/** @ringbuf_extract: The extract point (i.e.: offset) in the ring buffer.
+	 * This is where the GPU would read the next instruction.
+	 */
+	__u64 ringbuf_extract;
+	/** @ringbuf_size: The size of the ring buffer */
+	__u64 ringbuf_size;
+};
+
+/**
+ * struct drm_panthor_dump_gpuva - Describes a GPU VA range in the dump.
+ */
+struct drm_panthor_dump_gpuva {
+	/** @addr: The start address for the mapping */
+	__u64 addr;
+	/** @range: The range covered by the VA mapping */
+	__u64 range;
+};
+
 #if defined(__cplusplus)
 }
 #endif
