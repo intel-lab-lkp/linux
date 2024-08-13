@@ -1472,7 +1472,7 @@ static void cxl_detach_ep(void *data)
 	struct cxl_memdev *cxlmd = data;
 
 	for (int i = cxlmd->depth - 1; i >= 1; i--) {
-		struct cxl_port *port, *parent_port;
+		struct cxl_port *parent_port;
 		struct detach_ctx ctx = {
 			.cxlmd = cxlmd,
 			.depth = i,
@@ -1485,7 +1485,7 @@ static void cxl_detach_ep(void *data)
 				      port_has_memdev);
 		if (!dev)
 			continue;
-		port = to_cxl_port(dev);
+		struct cxl_port *port __free(put_cxl_port) = to_cxl_port(dev);
 
 		parent_port = to_cxl_port(port->dev.parent);
 		device_lock(&parent_port->dev);
@@ -1512,7 +1512,6 @@ static void cxl_detach_ep(void *data)
 				dev_name(&port->dev));
 			delete_switch_port(port);
 		}
-		put_device(&port->dev);
 		device_unlock(&parent_port->dev);
 	}
 }
@@ -1539,8 +1538,8 @@ static int add_port_attach_ep(struct cxl_memdev *cxlmd,
 			      struct device *uport_dev,
 			      struct device *dport_dev)
 {
+	struct cxl_port *port __free(put_cxl_port) = NULL;
 	struct device *dparent = grandparent(dport_dev);
-	struct cxl_port *port, *parent_port = NULL;
 	struct cxl_dport *dport, *parent_dport;
 	resource_size_t component_reg_phys;
 	int rc;
@@ -1556,7 +1555,8 @@ static int add_port_attach_ep(struct cxl_memdev *cxlmd,
 		return -ENXIO;
 	}
 
-	parent_port = find_cxl_port(dparent, &parent_dport);
+	struct cxl_port *parent_port __free(put_cxl_port) =
+		find_cxl_port(dparent, &parent_dport);
 	if (!parent_port) {
 		/* iterate to create this parent_port */
 		return -EAGAIN;
@@ -1596,10 +1596,8 @@ out:
 			 */
 			rc = -ENXIO;
 		}
-		put_device(&port->dev);
 	}
 
-	put_device(&parent_port->dev);
 	return rc;
 }
 
@@ -1630,7 +1628,6 @@ retry:
 		struct device *dport_dev = grandparent(iter);
 		struct device *uport_dev;
 		struct cxl_dport *dport;
-		struct cxl_port *port;
 
 		/*
 		 * The terminal "grandparent" in PCI is NULL and @platform_bus
@@ -1649,7 +1646,8 @@ retry:
 		dev_dbg(dev, "scan: iter: %s dport_dev: %s parent: %s\n",
 			dev_name(iter), dev_name(dport_dev),
 			dev_name(uport_dev));
-		port = find_cxl_port(dport_dev, &dport);
+		struct cxl_port *port __free(put_cxl_port) =
+			find_cxl_port(dport_dev, &dport);
 		if (port) {
 			dev_dbg(&cxlmd->dev,
 				"found already registered port %s:%s\n",
@@ -1664,18 +1662,13 @@ retry:
 			 * the parent_port lock as the current port may be being
 			 * reaped.
 			 */
-			if (rc && rc != -EBUSY) {
-				put_device(&port->dev);
+			if (rc && rc != -EBUSY)
 				return rc;
-			}
 
 			/* Any more ports to add between this one and the root? */
-			if (!dev_is_cxl_root_child(&port->dev)) {
-				put_device(&port->dev);
+			if (!dev_is_cxl_root_child(&port->dev))
 				continue;
-			}
 
-			put_device(&port->dev);
 			return 0;
 		}
 
