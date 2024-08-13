@@ -4328,14 +4328,26 @@ int idpf_vport_intr_init(struct idpf_vport *vport)
 {
 	char *int_name;
 	int err;
+	bool hr_reset_in_prog;
 
 	err = idpf_vport_intr_init_vec_idx(vport);
 	if (err)
 		return err;
 
 	idpf_vport_intr_map_vector_to_qs(vport);
+	/**
+	 * If we're in normal up path, the stack already takes the
+	 * rtnl_lock for us, however, if we're doing up as a part of a
+	 * hard reset, we'll need to take the lock ourself before
+	 * touching the netdev.
+	 */
+	hr_reset_in_prog = test_bit(IDPF_HR_RESET_IN_PROG,
+				    vport->adapter->flags);
+	if (hr_reset_in_prog)
+		rtnl_lock();
 	idpf_vport_intr_napi_add_all(vport);
-
+	if (hr_reset_in_prog)
+		rtnl_unlock();
 	err = vport->adapter->dev_ops.reg_ops.intr_reg_init(vport);
 	if (err)
 		goto unroll_vectors_alloc;
