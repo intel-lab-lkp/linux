@@ -434,8 +434,10 @@ static int rockchip_usb2phy_extcon_register(struct rockchip_usb2phy *rphy)
 		edev = devm_extcon_dev_allocate(rphy->dev,
 						rockchip_usb2phy_extcon_cable);
 
-		if (IS_ERR(edev))
-			return -ENOMEM;
+		if (IS_ERR(edev)) {
+			dev_err(rphy->dev, "failed to allocate extcon device\n");
+			return PTR_ERR(edev);
+		}
 
 		ret = devm_extcon_dev_register(rphy->dev, edev);
 		if (ret) {
