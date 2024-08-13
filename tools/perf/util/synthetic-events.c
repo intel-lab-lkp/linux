@@ -2236,14 +2236,14 @@ int perf_event__synthesize_build_id(struct perf_tool *tool, struct dso *pos, u16
 
 	memset(&ev, 0, sizeof(ev));
 
-	len = dso__long_name_len(pos) + 1;
-	len = PERF_ALIGN(len, NAME_ALIGN);
+	len = sizeof(ev.build_id) + dso__long_name_len(pos) + 1;
+	len = PERF_ALIGN(len, sizeof(u64));
 	ev.build_id.size = min(dso__bid(pos)->size, sizeof(dso__bid(pos)->data));
 	memcpy(&ev.build_id.build_id, dso__bid(pos)->data, ev.build_id.size);
 	ev.build_id.header.type = PERF_RECORD_HEADER_BUILD_ID;
 	ev.build_id.header.misc = misc | PERF_RECORD_MISC_BUILD_ID_SIZE;
 	ev.build_id.pid = machine->pid;
-	ev.build_id.header.size = sizeof(ev.build_id) + len;
+	ev.build_id.header.size = len;
 	memcpy(&ev.build_id.filename, dso__long_name(pos), dso__long_name_len(pos));
 
 	return process(tool, &ev, NULL, machine);
