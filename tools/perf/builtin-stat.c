@@ -1821,7 +1821,9 @@ static int add_default_attributes(void)
 {
 	struct perf_event_attr default_attrs0[] = {
 
-  { .type = PERF_TYPE_SOFTWARE, .config = PERF_COUNT_SW_TASK_CLOCK		},
+  { .type = PERF_TYPE_SOFTWARE, .config = target__has_cpu(&target) ?
+						PERF_COUNT_SW_CPU_CLOCK :
+						PERF_COUNT_SW_TASK_CLOCK	},
   { .type = PERF_TYPE_SOFTWARE, .config = PERF_COUNT_SW_CONTEXT_SWITCHES	},
   { .type = PERF_TYPE_SOFTWARE, .config = PERF_COUNT_SW_CPU_MIGRATIONS		},
   { .type = PERF_TYPE_SOFTWARE, .config = PERF_COUNT_SW_PAGE_FAULTS		},
@@ -2034,9 +2036,6 @@ static int add_default_attributes(void)
 
 	if (!evsel_list->core.nr_entries) {
 		/* No events so add defaults. */
-		if (target__has_cpu(&target))
-			default_attrs0[0].config = PERF_COUNT_SW_CPU_CLOCK;
-
 		if (evlist__add_default_attrs(evsel_list, default_attrs0) < 0)
 			return -1;
 		if (perf_pmus__have_event("cpu", "stalled-cycles-frontend")) {
