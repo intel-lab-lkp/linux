@@ -361,7 +361,7 @@ int amdgpu_vm_pt_clear(struct amdgpu_device *adev, struct amdgpu_vm *vm,
 {
 	unsigned int level = adev->vm_manager.root_level;
 	struct ttm_operation_ctx ctx = { true, false };
-	struct amdgpu_vm_update_params params;
+	struct amdgpu_vm_update_params params = { };
 	struct amdgpu_bo *ancestor = &vmbo->bo;
 	unsigned int entries;
 	struct amdgpu_bo *bo = &vmbo->bo;
@@ -398,7 +398,6 @@ int amdgpu_vm_pt_clear(struct amdgpu_device *adev, struct amdgpu_vm *vm,
 	if (r)
 		goto exit;
 
-	memset(&params, 0, sizeof(params));
 	params.adev = adev;
 	params.vm = vm;
 	params.immediate = immediate;
