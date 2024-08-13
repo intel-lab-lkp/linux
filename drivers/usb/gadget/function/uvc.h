@@ -88,9 +88,6 @@ struct uvc_video {
 	struct uvc_device *uvc;
 	struct usb_ep *ep;
 
-	struct work_struct pump;
-	struct workqueue_struct *async_wq;
-
 	int enqueued;
 	int dequeued;
 
@@ -113,7 +110,7 @@ struct uvc_video {
 	struct list_head req_free;
 
 	/*
-	 * USB requests video pump thread has already encoded into. These are
+	 * USB requests video qbuf thread has already encoded into. These are
 	 * ready to be queued to the endpoint.
 	 */
 	struct list_head req_ready;

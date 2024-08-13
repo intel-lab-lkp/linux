@@ -17,6 +17,7 @@ struct uvc_video;
 int uvcg_video_enable(struct uvc_video *video);
 int uvcg_video_disable(struct uvc_video *video);
 
+int uvc_enqueue_buffer(struct uvc_video *video, struct uvc_buffer *buf);
 int uvcg_video_init(struct uvc_video *video, struct uvc_device *uvc);
 
 #endif /* __UVC_VIDEO_H__ */

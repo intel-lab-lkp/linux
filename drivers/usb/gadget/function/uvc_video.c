@@ -445,7 +445,7 @@ uvc_video_complete(struct usb_ep *ep, struct usb_request *req)
 	/*
 	 * Here we check whether any request is available in the ready
 	 * list. If it is, queue it to the ep and add the current
-	 * usb_request to the req_free list - for video_pump to fill in.
+	 * usb_request to the req_free list - for qbuf to fill in.
 	 * Otherwise, just use the current usb_request to queue a 0
 	 * length request to the ep. Since we always add to the req_free
 	 * list if we dequeue from the ready list, there will never
@@ -469,7 +469,6 @@ uvc_video_complete(struct usb_ep *ep, struct usb_request *req)
 		 * dequeue -> queue -> dequeue flow of uvc buffers will not
 		 * happen.
 		 */
-		queue_work(video->async_wq, &video->pump);
 	} else if ((video->enqueued - video->dequeued) > 32) {
 		spin_unlock_irqrestore(&video->req_lock, flags);
 
@@ -566,27 +565,15 @@ error:
  * Video streaming
  */
 
-/*
- * uvcg_video_pump - Pump video data into the USB requests
- *
- * This function fills the available USB requests (listed in req_free) with
- * video data from the queued buffers.
- */
-static void uvcg_video_pump(struct work_struct *work)
+int uvc_enqueue_buffer(struct uvc_video *video, struct uvc_buffer *buf)
 {
-	struct uvc_video *video = container_of(work, struct uvc_video, pump);
 	struct uvc_video_queue *queue = &video->queue;
-	/* video->max_payload_size is only set when using bulk transfer */
-	bool is_bulk = video->max_payload_size;
 	struct usb_request *req = NULL;
-	struct uvc_buffer *buf;
+	bool is_bulk = video->max_payload_size;
 	unsigned long flags;
 	int ret = 0;
 
-	while (true) {
-		if (!video->ep->enabled)
-			return;
-
+	while (buf->state != UVC_BUF_STATE_DONE) {
 		/*
 		 * Check is_enabled and retrieve the first available USB
 		 * request, protected by the request lock.
@@ -594,7 +581,7 @@ static void uvcg_video_pump(struct work_struct *work)
 		spin_lock_irqsave(&video->req_lock, flags);
 		if (!video->is_enabled || list_empty(&video->req_free)) {
 			spin_unlock_irqrestore(&video->req_lock, flags);
-			return;
+			return -ENOENT;
 		}
 		req = list_first_entry(&video->req_free, struct usb_request,
 					list);
@@ -605,21 +592,7 @@ static void uvcg_video_pump(struct work_struct *work)
 		 * Retrieve the first available video buffer and fill the
 		 * request, protected by the video queue irqlock.
 		 */
-		spin_lock_irqsave(&queue->irqlock, flags);
-		buf = uvcg_queue_head(queue);
-		if (!buf) {
-			/*
-			 * Either the queue has been disconnected or no video buffer
-			 * available for bulk transfer. Either way, stop processing
-			 * further.
-			 */
-			spin_unlock_irqrestore(&queue->irqlock, flags);
-			break;
-		}
-
 		video->encode(req, video, buf);
-
-		spin_unlock_irqrestore(&queue->irqlock, flags);
 
 		spin_lock_irqsave(&video->req_lock, flags);
 		/* For bulk end points we queue from the worker thread
@@ -633,15 +606,22 @@ static void uvcg_video_pump(struct work_struct *work)
 
 		if (ret < 0) {
 			uvcg_queue_cancel(queue, 0);
-			break;
+			goto cleanup;
 		}
 	}
+
+	return 0;
+
+cleanup:
+
 	spin_lock_irqsave(&video->req_lock, flags);
 	if (video->is_enabled)
 		list_add_tail(&req->list, &video->req_free);
 	else
 		uvc_video_free_request(req->context, video->ep);
 	spin_unlock_irqrestore(&video->req_lock, flags);
+
+	return 0;
 }
 
 /*
@@ -681,7 +661,6 @@ uvcg_video_disable(struct uvc_video *video)
 	}
 	spin_unlock_irqrestore(&video->req_lock, flags);
 
-	cancel_work_sync(&video->pump);
 	uvcg_queue_cancel(&video->queue, 0);
 
 	spin_lock_irqsave(&video->req_lock, flags);
@@ -775,12 +754,6 @@ int uvcg_video_init(struct uvc_video *video, struct uvc_device *uvc)
 	INIT_LIST_HEAD(&video->req_free);
 	INIT_LIST_HEAD(&video->req_ready);
 	spin_lock_init(&video->req_lock);
-	INIT_WORK(&video->pump, uvcg_video_pump);
-
-	/* Allocate a work queue for asynchronous video pump handler. */
-	video->async_wq = alloc_workqueue("uvcgadget", WQ_UNBOUND | WQ_HIGHPRI, 0);
-	if (!video->async_wq)
-		return -EINVAL;
 
 	video->uvc = uvc;
 	video->fcc = V4L2_PIX_FMT_YUYV;
