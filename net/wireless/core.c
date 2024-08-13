@@ -603,16 +603,19 @@ use_default_name:
 }
 EXPORT_SYMBOL(wiphy_new_nm);
 
-static int wiphy_verify_combinations(struct wiphy *wiphy)
+static
+int wiphy_verify_iface_combinations(struct wiphy *wiphy,
+				    const struct ieee80211_iface_combination *iface_comb,
+				    int n_iface_comb)
 {
 	const struct ieee80211_iface_combination *c;
 	int i, j;
 
-	for (i = 0; i < wiphy->n_iface_combinations; i++) {
+	for (i = 0; i < n_iface_comb; i++) {
 		u32 cnt = 0;
 		u16 all_iftypes = 0;
 
-		c = &wiphy->iface_combinations[i];
+		c = &iface_comb[i];
 
 		/*
 		 * Combinations with just one interface aren't real,
@@ -691,6 +694,29 @@ static int wiphy_verify_combinations(struct wiphy *wiphy)
 	}
 
 	return 0;
+}
+
+static int wiphy_verify_combinations(struct wiphy *wiphy)
+{
+	int i, ret;
+
+	if (wiphy->n_radio) {
+		for (i = 0; i < wiphy->n_radio; i++) {
+			const struct wiphy_radio *radio = &wiphy->radio[i];
+
+			ret = wiphy_verify_iface_combinations(wiphy,
+							      radio->iface_combinations,
+							      radio->n_iface_combinations);
+			if (ret)
+				return ret;
+		}
+	} else {
+		ret = wiphy_verify_iface_combinations(wiphy,
+						      wiphy->iface_combinations,
+						      wiphy->n_iface_combinations);
+	}
+
+	return ret;
 }
 
 int wiphy_register(struct wiphy *wiphy)
