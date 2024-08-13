@@ -1214,19 +1214,19 @@ int cxl_mem_sanitize(struct cxl_memdev *cxlmd, u16 cmd)
 	int rc;
 
 	/* synchronize with cxl_mem_probe() and decoder write operations */
-	device_lock(&cxlmd->dev);
-	endpoint = cxlmd->endpoint;
-	down_read(&cxl_region_rwsem);
-	/*
-	 * Require an endpoint to be safe otherwise the driver can not
-	 * be sure that the device is unmapped.
-	 */
-	if (endpoint && cxl_num_decoders_committed(endpoint) == 0)
-		rc = __cxl_mem_sanitize(mds, cmd);
-	else
-		rc = -EBUSY;
-	up_read(&cxl_region_rwsem);
-	device_unlock(&cxlmd->dev);
+	scoped_guard(device, &cxlmd->dev) {
+		endpoint = cxlmd->endpoint;
+		down_read(&cxl_region_rwsem);
+		/*
+		 * Require an endpoint to be safe otherwise the driver can not
+		 * be sure that the device is unmapped.
+		 */
+		if (endpoint && cxl_num_decoders_committed(endpoint) == 0)
+			rc = __cxl_mem_sanitize(mds, cmd);
+		else
+			rc = -EBUSY;
+		up_read(&cxl_region_rwsem);
+	}
 
 	return rc;
 }
