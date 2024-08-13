@@ -408,6 +408,16 @@ static int isolate_single_pageblock(unsigned long boundary_pfn, int flags,
 				continue;
 			}
 
+			if ((flags & MEMORY_OFFLINE) && PageHuge(page)) {
+				struct hstate *h;
+
+				h = size_to_hstate(nr_pages << PAGE_SHIFT);
+				if (hstate_is_gigantic(h)) {
+					pfn = head_pfn + nr_pages;
+					continue;
+				}
+			}
+
 #if defined CONFIG_COMPACTION || defined CONFIG_CMA
 			if (PageHuge(page)) {
 				int page_mt = get_pageblock_migratetype(page);
