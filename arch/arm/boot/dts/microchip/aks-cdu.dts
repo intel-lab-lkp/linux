@@ -98,23 +98,23 @@
 	leds {
 		compatible = "gpio-leds";
 
-		red {
+		led-red {
 			gpios = <&pioC 10 GPIO_ACTIVE_HIGH>;
 			linux,default-trigger = "none";
 		};
 
-		green {
+		led-green {
 			gpios = <&pioA 5 GPIO_ACTIVE_LOW>;
 			linux,default-trigger = "none";
 			default-state = "on";
 		};
 
-		yellow {
+		led-yellow {
 			gpios = <&pioB 20 GPIO_ACTIVE_LOW>;
 			linux,default-trigger = "none";
 		};
 
-		blue {
+		led-blue {
 			gpios = <&pioB 21 GPIO_ACTIVE_LOW>;
 			linux,default-trigger = "none";
 		};
