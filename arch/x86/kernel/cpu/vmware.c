@@ -306,9 +306,30 @@ static struct notifier_block vmware_pv_reboot_nb = {
 	.notifier_call = vmware_pv_reboot_notify,
 };
 
+static void __init sev_map_percpu_data(void)
+{
+	int cpu;
+
+	if (cc_vendor != CC_VENDOR_AMD ||
+	    !cc_platform_has(CC_ATTR_GUEST_MEM_ENCRYPT))
+		return;
+
+	for_each_possible_cpu(cpu) {
+		early_set_memory_decrypted(
+			(unsigned long)&per_cpu(vmw_steal_time, cpu),
+			sizeof(vmw_steal_time));
+	}
+}
+
 #ifdef CONFIG_SMP
 static void __init vmware_smp_prepare_boot_cpu(void)
 {
+	/*
+	 * Map the per-cpu variables as decrypted before vmware_guest_cpu_init()
+	 * shares the guest physical address with the hypervisor.
+	 */
+	sev_map_percpu_data();
+
 	vmware_guest_cpu_init();
 	native_smp_prepare_boot_cpu();
 }
@@ -371,6 +392,7 @@ static void __init vmware_paravirt_ops_setup(void)
 					      vmware_cpu_down_prepare) < 0)
 			pr_err("vmware_guest: Failed to install cpu hotplug callbacks\n");
 #else
+		sev_map_percpu_data();
 		vmware_guest_cpu_init();
 #endif
 	}
