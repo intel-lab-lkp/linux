@@ -2324,7 +2324,7 @@ super_1_allow_new_offset(struct md_rdev *rdev,
 			 unsigned long long new_offset)
 {
 	/* All necessary checks on new >= old have been done */
-	struct bitmap *bitmap = rdev->mddev->bitmap;
+	void *bitmap = rdev->mddev->bitmap;
 	struct md_bitmap_stats stats;
 	int err;
 

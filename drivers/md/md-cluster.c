@@ -1145,7 +1145,7 @@ static int update_bitmap_size(struct mddev *mddev, sector_t size)
 static int resize_bitmaps(struct mddev *mddev, sector_t newsize, sector_t oldsize)
 {
 	struct dlm_lock_resource *bm_lockres;
-	struct bitmap *bitmap = mddev->bitmap;
+	void *bitmap = mddev->bitmap;
 	struct md_bitmap_stats stats;
 	unsigned long my_pages;
 	char str[64];
@@ -1219,7 +1219,7 @@ static int cluster_check_sync_size(struct mddev *mddev)
 	unsigned long my_sync_size, sync_size = 0;
 	int node_num = mddev->bitmap_info.nodes;
 	int current_slot = md_cluster_ops->slot_number(mddev);
-	struct bitmap *bitmap = mddev->bitmap;
+	void *bitmap = mddev->bitmap;
 	char str[64];
 	struct dlm_lock_resource *bm_lockres;
 	struct md_bitmap_stats stats;
