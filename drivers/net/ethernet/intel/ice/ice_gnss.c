@@ -386,27 +386,22 @@ void ice_gnss_exit(struct ice_pf *pf)
  */
 bool ice_gnss_is_gps_present(struct ice_hw *hw)
 {
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+	int err;
+	u8 data;
+
 	if (!hw->func_caps.ts_func_info.src_tmr_owned)
 		return false;
 
 	if (!ice_is_gps_in_netlist(hw))
 		return false;
 
-#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
-	if (ice_is_e810t(hw)) {
-		int err;
-		u8 data;
-
-		err = ice_read_pca9575_reg(hw, ICE_PCA9575_P0_IN, &data);
-		if (err || !!(data & ICE_P0_GNSS_PRSNT_N))
-			return false;
-	} else {
+	err = ice_read_pca9575_reg(hw, ICE_PCA9575_P0_IN, &data);
+	if (err || !!(data & ICE_P0_GNSS_PRSNT_N))
 		return false;
-	}
-#else
-	if (!ice_is_e810t(hw))
-		return false;
-#endif /* IS_ENABLED(CONFIG_PTP_1588_CLOCK) */
 
 	return true;
+#else
+	return false;
+#endif /* IS_ENABLED(CONFIG_PTP_1588_CLOCK) */
 }
