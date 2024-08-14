@@ -111,14 +111,20 @@ struct landlock_net_port_attr {
 	/**
 	 * @port: Network port in host endianness.
 	 *
-	 * It should be noted that port 0 passed to :manpage:`bind(2)` will bind
-	 * to an available port from the ephemeral port range.  This can be
-	 * configured with the ``/proc/sys/net/ipv4/ip_local_port_range`` sysctl
-	 * (also used for IPv6).
+	 * Some socket operations will fall back to using a port from the ephemeral port
+	 * range, if no specific port is requested by the caller.  Among others, this
+	 * happens in the following cases:
 	 *
-	 * A Landlock rule with port 0 and the ``LANDLOCK_ACCESS_NET_BIND_TCP``
-	 * right means that requesting to bind on port 0 is allowed and it will
-	 * automatically translate to binding on the related port range.
+	 * - :manpage:`bind(2)` is invoked with a socket address that uses port 0.
+	 * - :manpage:`listen(2)` is invoked on a socket without previously calling
+	 *   :manpage:`bind(2)`.
+	 *
+	 * These two actions, which implicitly use an ephemeral port, can be allowed with
+	 * a Landlock rule with port 0 and the ``LANDLOCK_ACCESS_NET_BIND_TCP`` /
+	 * ``LANDLOCK_ACCESS_NET_LISTEN_TCP`` right.
+	 *
+	 * The ephemeral port range is configured in the
+	 * ``/proc/sys/net/ipv4/ip_local_port_range`` sysctl (also used for IPv6).
 	 */
 	__u64 port;
 };
@@ -259,7 +265,7 @@ struct landlock_net_port_attr {
  * DOC: net_access
  *
  * Network flags
- * ~~~~~~~~~~~~~~~~
+ * ~~~~~~~~~~~~~
  *
  * These flags enable to restrict a sandboxed process to a set of network
  * actions. This is supported since the Landlock ABI version 4.
@@ -269,9 +275,13 @@ struct landlock_net_port_attr {
  * - %LANDLOCK_ACCESS_NET_BIND_TCP: Bind a TCP socket to a local port.
  * - %LANDLOCK_ACCESS_NET_CONNECT_TCP: Connect an active TCP socket to
  *   a remote port.
+ * - %LANDLOCK_ACCESS_NET_LISTEN_TCP: Listen for TCP socket connections on
+ *   a local port. This access right is available since the sixth version
+ *   of the Landlock ABI.
  */
 /* clang-format off */
 #define LANDLOCK_ACCESS_NET_BIND_TCP			(1ULL << 0)
 #define LANDLOCK_ACCESS_NET_CONNECT_TCP			(1ULL << 1)
+#define LANDLOCK_ACCESS_NET_LISTEN_TCP			(1ULL << 2)
 /* clang-format on */
 #endif /* _UAPI_LINUX_LANDLOCK_H */

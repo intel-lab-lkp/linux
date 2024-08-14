@@ -6,10 +6,12 @@
  * Copyright © 2022-2023 Microsoft Corporation
  */
 
+#include <net/sock.h>
 #include <linux/in.h>
 #include <linux/net.h>
 #include <linux/socket.h>
 #include <net/ipv6.h>
+#include <net/tcp.h>
 
 #include "common.h"
 #include "cred.h"
@@ -194,9 +196,105 @@ static int hook_socket_connect(struct socket *const sock,
 					   LANDLOCK_ACCESS_NET_CONNECT_TCP);
 }
 
+/*
+ * Checks that socket state and attributes are correct for listen.
+ * Returns 0 on success and -EINVAL otherwise.
+ *
+ * This checker requires sock->sk to be locked.
+ */
+static int check_tcp_socket_can_listen(struct socket *const sock)
+{
+	struct sock *sk = sock->sk;
+	unsigned char cur_sk_state;
+	const struct tcp_ulp_ops *icsk_ulp_ops;
+
+	lockdep_assert_held(&sk->sk_lock.slock);
+
+	/* Allows only unconnected TCP socket to listen (cf. inet_listen). */
+	if (sock->state != SS_UNCONNECTED)
+		return -EINVAL;
+
+	cur_sk_state = sk->sk_state;
+	/*
+	 * Checks sock state. This is needed to ensure consistency with inet stack
+	 * error handling (cf. __inet_listen_sk).
+	 */
+	if (WARN_ON_ONCE(!((1 << cur_sk_state) & (TCPF_CLOSE | TCPF_LISTEN))))
+		return -EINVAL;
+
+	icsk_ulp_ops = inet_csk(sk)->icsk_ulp_ops;
+
+	/*
+	 * ULP (Upper Layer Protocol) stands for protocols which are higher than
+	 * transport protocol in OSI model. Linux has an infrastructure that
+	 * allows TCP sockets to support logic of some ULP (e.g. TLS ULP).
+	 *
+	 * Sockets can listen only if ULP control hook has clone method
+	 * (cf. inet_csk_listen_start)
+	 */
+	if (icsk_ulp_ops && !icsk_ulp_ops->clone)
+		return -EINVAL;
+	return 0;
+}
+
+static int hook_socket_listen(struct socket *const sock, const int backlog)
+{
+	int err = 0;
+	int family;
+	__be16 port;
+	struct sock *sk;
+	const struct landlock_ruleset *const dom = get_current_net_domain();
+
+	if (!dom)
+		return 0;
+	if (WARN_ON_ONCE(dom->num_layers < 1))
+		return -EACCES;
+
+	/* Checks if it's a (potential) TCP socket. */
+	if (sock->type != SOCK_STREAM)
+		return 0;
+
+	sk = sock->sk;
+	family = sk->__sk_common.skc_family;
+	/*
+	 * Socket cannot be assigned AF_UNSPEC because this type is used only
+	 * in the context of addresses.
+	 *
+	 * Doesn't restrict listening for non-TCP sockets.
+	 */
+	if (family != AF_INET && family != AF_INET6)
+		return 0;
+
+	lock_sock(sk);
+	/*
+	 * Calling listen(2) for a listening socket does nothing with its state and
+	 * only changes backlog value (cf. __inet_listen_sk). Checking of listen
+	 * access right is not required.
+	 */
+	if (sk->sk_state == TCP_LISTEN)
+		goto release_nocheck;
+
+	/*
+	 * Checks socket state to not wrongfully return -EACCES instead
+	 * of -EINVAL.
+	 */
+	err = check_tcp_socket_can_listen(sock);
+	if (unlikely(err))
+		goto release_nocheck;
+
+	port = htons(inet_sk(sk)->inet_num);
+	release_sock(sk);
+	return check_access_socket(dom, port, LANDLOCK_ACCESS_NET_LISTEN_TCP);
+
+release_nocheck:
+	release_sock(sk);
+	return err;
+}
+
 static struct security_hook_list landlock_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(socket_bind, hook_socket_bind),
 	LSM_HOOK_INIT(socket_connect, hook_socket_connect),
+	LSM_HOOK_INIT(socket_listen, hook_socket_listen),
 };
 
 __init void landlock_add_net_hooks(void)
