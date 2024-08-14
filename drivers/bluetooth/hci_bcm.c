@@ -508,6 +508,11 @@ out:
 
 		if (err)
 			goto err_unset_hu;
+	} else {
+		/* This is not a serdev or platform device, it should have been started by
+		 * btattach, in this case use the tty speed set by btattach as oper_speed
+		 */
+		hu->oper_speed = hu->tty->termios.c_ospeed;
 	}
 
 	mutex_unlock(&bcm_device_lock);
