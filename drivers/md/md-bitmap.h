@@ -238,6 +238,7 @@ struct md_bitmap_stats {
 	unsigned long pages;
 	unsigned long missing_pages;
 	struct file *file;
+	u64 events_cleared;
 };
 
 /* the bitmap API */
@@ -281,6 +282,17 @@ int md_bitmap_copy_from_slot(struct mddev *mddev, int slot,
 			     sector_t *lo, sector_t *hi, bool clear_bits);
 void md_bitmap_free(struct bitmap *bitmap);
 void md_bitmap_wait_behind_writes(struct mddev *mddev);
+
+static inline u64 md_bitmap_events_cleared(struct mddev *mddev)
+{
+	struct md_bitmap_stats stats;
+	int err = md_bitmap_get_stats(mddev->bitmap, &stats);
+
+	if (err)
+		return 0;
+
+	return stats.events_cleared;
+}
 
 static inline bool md_bitmap_enabled(struct bitmap *bitmap)
 {
