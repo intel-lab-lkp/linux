@@ -2096,10 +2096,15 @@ EXPORT_SYMBOL_GPL(md_bitmap_copy_from_slot);
 
 int md_bitmap_get_stats(struct bitmap *bitmap, struct md_bitmap_stats *stats)
 {
+	bitmap_super_t *sb;
 	struct bitmap_counts *counts;
 
 	if (!bitmap)
 		return -ENOENT;
+
+	sb = kmap_local_page(bitmap->storage.sb_page);
+	stats->sync_size = sb->sync_size;
+	kunmap_local(sb);
 
 	counts = &bitmap->counts;
 	stats->pages = counts->pages;
@@ -2109,6 +2114,7 @@ int md_bitmap_get_stats(struct bitmap *bitmap, struct md_bitmap_stats *stats)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(md_bitmap_get_stats);
 
 int md_bitmap_resize(struct bitmap *bitmap, sector_t blocks,
 		  int chunksize, int init)
