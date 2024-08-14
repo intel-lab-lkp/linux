@@ -1851,6 +1851,89 @@ TEST_F(port_specific, bind_connect_zero)
 	EXPECT_EQ(0, close(bind_fd));
 }
 
+TEST_F(port_specific, listen_without_bind_allowed)
+{
+	if (variant->sandbox == TCP_SANDBOX) {
+		const struct landlock_ruleset_attr ruleset_attr = {
+			.handled_access_net = LANDLOCK_ACCESS_NET_BIND_TCP |
+					      LANDLOCK_ACCESS_NET_LISTEN_TCP
+		};
+		const struct landlock_net_port_attr tcp_listen_zero = {
+			.allowed_access = LANDLOCK_ACCESS_NET_LISTEN_TCP,
+			.port = 0,
+		};
+		int ruleset_fd;
+
+		ruleset_fd = landlock_create_ruleset(&ruleset_attr,
+						     sizeof(ruleset_attr), 0);
+		ASSERT_LE(0, ruleset_fd);
+
+		/*
+		 * Allow listening without explicit bind
+		 * (cf. landlock_net_port_attr).
+		 */
+		EXPECT_EQ(0,
+			  landlock_add_rule(ruleset_fd, LANDLOCK_RULE_NET_PORT,
+					    &tcp_listen_zero, 0));
+
+		enforce_ruleset(_metadata, ruleset_fd);
+		EXPECT_EQ(0, close(ruleset_fd));
+	}
+	int listen_fd, connect_fd;
+	__u64 port;
+
+	listen_fd = socket_variant(&self->srv0);
+	ASSERT_LE(0, listen_fd);
+
+	connect_fd = socket_variant(&self->srv0);
+	ASSERT_LE(0, connect_fd);
+	/*
+	 * Allow listen(2) to select a random port for the socket,
+	 * since bind(2) wasn't called.
+	 */
+	EXPECT_EQ(0, listen_variant(listen_fd, backlog));
+
+	/* Connects on the binded port. */
+	port = get_binded_port(listen_fd, &variant->prot);
+	EXPECT_NE(0, port);
+	set_port(&self->srv0, port);
+	EXPECT_EQ(0, connect_variant(connect_fd, &self->srv0));
+
+	EXPECT_EQ(0, close(connect_fd));
+	EXPECT_EQ(0, close(listen_fd));
+}
+
+TEST_F(port_specific, listen_without_bind_denied)
+{
+	if (variant->sandbox == TCP_SANDBOX) {
+		const struct landlock_ruleset_attr ruleset_attr = {
+			.handled_access_net = LANDLOCK_ACCESS_NET_LISTEN_TCP
+		};
+		int ruleset_fd;
+
+		ruleset_fd = landlock_create_ruleset(&ruleset_attr,
+						     sizeof(ruleset_attr), 0);
+		ASSERT_LE(0, ruleset_fd);
+
+		/* Deny listening. */
+		enforce_ruleset(_metadata, ruleset_fd);
+		EXPECT_EQ(0, close(ruleset_fd));
+	}
+	int listen_fd, ret;
+
+	listen_fd = socket_variant(&self->srv0);
+	ASSERT_LE(0, listen_fd);
+
+	/* Checks that listening without explicit binding is prohibited. */
+	ret = listen_variant(listen_fd, backlog);
+	if (is_restricted(&variant->prot, variant->sandbox)) {
+		/* Denied by Landlock. */
+		EXPECT_EQ(-EACCES, ret);
+	} else {
+		EXPECT_EQ(0, ret);
+	}
+}
+
 TEST_F(port_specific, port_1023)
 {
 	int bind_fd, connect_fd, ret;
