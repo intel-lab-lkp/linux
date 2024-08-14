@@ -380,6 +380,18 @@ unsigned long long panfrost_cycle_counter_read(struct panfrost_device *pfdev)
 	return ((u64)hi << 32) | lo;
 }
 
+unsigned long long panfrost_timestamp_read(struct panfrost_device *pfdev)
+{
+	u32 hi, lo;
+
+	panfrost_cycle_counter_get(pfdev);
+	hi = gpu_read(pfdev, GPU_TIMESTAMP_HI);
+	lo = gpu_read(pfdev, GPU_TIMESTAMP_LO);
+	panfrost_cycle_counter_put(pfdev);
+
+	return ((u64)hi << 32) | lo;
+}
+
 static u64 panfrost_get_core_mask(struct panfrost_device *pfdev)
 {
 	u64 core_mask;
