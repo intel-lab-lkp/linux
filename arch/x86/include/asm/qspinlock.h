@@ -87,7 +87,7 @@ static inline bool virt_spin_lock(struct qspinlock *lock)
 {
 	int val;
 
-	if (!static_branch_likely(&virt_spin_lock_key))
+	if (!static_branch_unlikely(&virt_spin_lock_key))
 		return false;
 
 	/*
