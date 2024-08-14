@@ -12,6 +12,7 @@
 #include <fcntl.h>
 #include <linux/landlock.h>
 #include <linux/in.h>
+#include <linux/tcp.h>
 #include <sched.h>
 #include <stdint.h>
 #include <string.h>
@@ -998,6 +999,55 @@ TEST_F(protocol, listen_on_connected)
 	EXPECT_EQ(EXIT_SUCCESS, WEXITSTATUS(status));
 
 	EXPECT_EQ(0, close(bind_fd));
+}
+
+TEST_F(protocol, espintcp_listen)
+{
+	int listen_fd;
+	int domain, type;
+
+	if (variant->sandbox == TCP_SANDBOX) {
+		const struct landlock_ruleset_attr ruleset_attr = {
+			.handled_access_net = ACCESS_ALL,
+		};
+		const struct landlock_net_port_attr tcp_denied_listen_p0 = {
+			.allowed_access = ACCESS_ALL &
+					  ~LANDLOCK_ACCESS_NET_LISTEN_TCP,
+			.port = self->srv0.port,
+		};
+		int ruleset_fd;
+
+		ruleset_fd = landlock_create_ruleset(&ruleset_attr,
+						     sizeof(ruleset_attr), 0);
+		ASSERT_LE(0, ruleset_fd);
+
+		/* Deny listen. */
+		ASSERT_EQ(0,
+			  landlock_add_rule(ruleset_fd, LANDLOCK_RULE_NET_PORT,
+					    &tcp_denied_listen_p0, 0));
+
+		enforce_ruleset(_metadata, ruleset_fd);
+		EXPECT_EQ(0, close(ruleset_fd));
+	}
+
+	domain = variant->prot.domain;
+	type = variant->prot.type;
+
+	if (!((domain == AF_INET || domain == AF_INET6) && type == SOCK_STREAM))
+		SKIP(return, "espintcp is available only for TCP socket");
+
+	listen_fd = socket_variant(&self->srv0);
+	ASSERT_LE(0, listen_fd);
+
+	/* Set espintcp ULP. */
+	EXPECT_EQ(0, setsockopt(listen_fd, IPPROTO_TCP, TCP_ULP, "espintcp",
+				sizeof("espintcp")));
+
+	EXPECT_EQ(0, bind_variant(listen_fd, &self->srv0));
+
+	/* Espintcp ULP doesn't have clone method, so listen is denied. */
+	EXPECT_EQ(-EINVAL, listen_variant(listen_fd, backlog));
+	EXPECT_EQ(0, close(listen_fd));
 }
 
 FIXTURE(ipv4)
