@@ -6303,7 +6303,8 @@ int do_md_run(struct mddev *mddev)
 	err = md_run(mddev);
 	if (err)
 		goto out;
-	err = md_bitmap_load(mddev);
+
+	err = mddev->bitmap_ops->load(mddev);
 	if (err) {
 		md_bitmap_destroy(mddev);
 		goto out;
@@ -7271,7 +7272,7 @@ static int set_bitmap_file(struct mddev *mddev, int fd)
 		if (fd >= 0) {
 			err = mddev->bitmap_ops->create(mddev, -1);
 			if (!err)
-				err = md_bitmap_load(mddev);
+				err = mddev->bitmap_ops->load(mddev);
 
 			if (err) {
 				md_bitmap_destroy(mddev);
@@ -7565,7 +7566,7 @@ static int update_array_info(struct mddev *mddev, mdu_array_info_t *info)
 				mddev->bitmap_info.default_space;
 			rv = mddev->bitmap_ops->create(mddev, -1);
 			if (!rv)
-				rv = md_bitmap_load(mddev);
+				rv = mddev->bitmap_ops->load(mddev);
 
 			if (rv)
 				md_bitmap_destroy(mddev);
