@@ -541,7 +541,7 @@ static bool fmt_validate(char *template, char *user)
  * If the function fails, then user_messages is untouched.
  * Arguments:
  * - index: a message number, as found in i18n.h.
- * - text:  text of message.  Not NUL-terminated.
+ * - text:  text of message.  Not NULL-terminated.
  * - length: number of bytes in text.
  * Failure conditions:
  * -EINVAL -  Invalid format specifiers in formatted message or illegal index.
