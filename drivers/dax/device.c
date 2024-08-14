@@ -11,6 +11,7 @@
 #include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/mman.h>
+#include <linux/cc_platform.h>
 #include "dax-private.h"
 #include "bus.h"
 
@@ -303,6 +304,8 @@ static int dax_mmap(struct file *filp, struct vm_area_struct *vma)
 
 	vma->vm_ops = &dax_vm_ops;
 	vm_flags_set(vma, VM_HUGEPAGE);
+	if (cc_platform_has(CC_ATTR_MEM_ENCRYPT))
+		vma->vm_page_prot = pgprot_decrypted(vma->vm_page_prot);
 	return 0;
 }
 
