@@ -2323,7 +2323,10 @@ super_1_allow_new_offset(struct md_rdev *rdev,
 			 unsigned long long new_offset)
 {
 	/* All necessary checks on new >= old have been done */
-	struct bitmap *bitmap;
+	struct bitmap *bitmap = rdev->mddev->bitmap;
+	struct md_bitmap_stats stats;
+	int err;
+
 	if (new_offset >= rdev->data_offset)
 		return 1;
 
@@ -2340,10 +2343,11 @@ super_1_allow_new_offset(struct md_rdev *rdev,
 	 */
 	if (rdev->sb_start + (32+4)*2 > new_offset)
 		return 0;
-	bitmap = rdev->mddev->bitmap;
-	if (bitmap && !rdev->mddev->bitmap_info.file &&
+
+	err = md_bitmap_get_stats(bitmap, &stats);
+	if (!err && !rdev->mddev->bitmap_info.file &&
 	    rdev->sb_start + rdev->mddev->bitmap_info.offset +
-	    bitmap->storage.file_pages * (PAGE_SIZE>>9) > new_offset)
+	    stats.file_pages * (PAGE_SIZE>>9) > new_offset)
 		return 0;
 	if (rdev->badblocks.sector + rdev->badblocks.size > new_offset)
 		return 0;

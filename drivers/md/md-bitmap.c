@@ -2109,6 +2109,7 @@ int md_bitmap_get_stats(struct bitmap *bitmap, struct md_bitmap_stats *stats)
 	counts = &bitmap->counts;
 	stats->pages = counts->pages;
 	stats->missing_pages = counts->missing_pages;
+	stats->file_pages = bitmap->storage.file_pages;
 	stats->file = bitmap->storage.file;
 	stats->events_cleared = bitmap->events_cleared;
 
