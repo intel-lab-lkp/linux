@@ -27,6 +27,7 @@
 #include <linux/rtnetlink.h>
 #include <linux/netpoll.h>
 #include <linux/bpf.h>
+#include <linux/cpumask.h>
 
 #include <net/arp.h>
 #include <net/route.h>
@@ -987,7 +988,9 @@ struct netvsc_device_info *netvsc_devinfo_get(struct netvsc_device *nvdev)
 			dev_info->bprog = prog;
 		}
 	} else {
-		dev_info->num_chn = VRSS_CHANNEL_DEFAULT;
+		int count = num_online_cpus();
+
+		dev_info->num_chn = (count < 32) ? VRSS_CHANNEL_DEFAULT : DIV_ROUND_UP(count, 2);
 		dev_info->send_sections = NETVSC_DEFAULT_TX;
 		dev_info->send_section_size = NETVSC_SEND_SECTION_SIZE;
 		dev_info->recv_sections = NETVSC_DEFAULT_RX;
