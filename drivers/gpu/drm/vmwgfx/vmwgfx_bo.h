@@ -97,6 +97,8 @@ struct vmw_bo {
 
 	bool is_dumb;
 	struct vmw_surface *dumb_surface;
+
+	char origin_comm[TASK_COMM_LEN];
 };
 
 void vmw_bo_placement_set(struct vmw_bo *bo, u32 domain, u32 busy_domain);
@@ -145,6 +147,12 @@ struct vmw_surface *vmw_bo_surface(struct vmw_bo *vbo);
 int vmw_user_bo_lookup(struct drm_file *filp,
 		       u32 handle,
 		       struct vmw_bo **out);
+
+void vmw_debugfs_buffer_init(struct vmw_private *vdev);
+
+#if defined(CONFIG_DEBUG_FS)
+void vmw_bo_print_info(int id, struct vmw_bo *bo, struct seq_file *m);
+#endif
 
 /**
  * vmw_bo_adjust_prio - Adjust the buffer object eviction priority

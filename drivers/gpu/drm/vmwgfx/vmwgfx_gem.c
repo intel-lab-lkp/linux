@@ -254,57 +254,6 @@ out_no_bo:
 
 #if defined(CONFIG_DEBUG_FS)
 
-static void vmw_bo_print_info(int id, struct vmw_bo *bo, struct seq_file *m)
-{
-	const char *placement;
-	const char *type;
-
-	switch (bo->tbo.resource->mem_type) {
-	case TTM_PL_SYSTEM:
-		placement = " CPU";
-		break;
-	case VMW_PL_GMR:
-		placement = " GMR";
-		break;
-	case VMW_PL_MOB:
-		placement = " MOB";
-		break;
-	case VMW_PL_SYSTEM:
-		placement = "VCPU";
-		break;
-	case TTM_PL_VRAM:
-		placement = "VRAM";
-		break;
-	default:
-		placement = "None";
-		break;
-	}
-
-	switch (bo->tbo.type) {
-	case ttm_bo_type_device:
-		type = "device";
-		break;
-	case ttm_bo_type_kernel:
-		type = "kernel";
-		break;
-	case ttm_bo_type_sg:
-		type = "sg    ";
-		break;
-	default:
-		type = "none  ";
-		break;
-	}
-
-	seq_printf(m, "\t\t0x%08x: %12zu bytes %s, type = %s",
-		   id, bo->tbo.base.size, placement, type);
-	seq_printf(m, ", priority = %u, pin_count = %u, GEM refs = %d, TTM refs = %d",
-		   bo->tbo.priority,
-		   bo->tbo.pin_count,
-		   kref_read(&bo->tbo.base.refcount),
-		   kref_read(&bo->tbo.kref));
-	seq_puts(m, "\n");
-}
-
 static int vmw_debugfs_gem_info_show(struct seq_file *m, void *unused)
 {
 	struct vmw_private *vdev = (struct vmw_private *)m->private;

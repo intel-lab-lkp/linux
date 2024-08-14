@@ -31,6 +31,7 @@
 #include "vmwgfx_resource_priv.h"
 
 #include <drm/ttm/ttm_placement.h>
+#include <linux/debugfs.h>
 
 static void vmw_bo_release(struct vmw_bo *vbo)
 {
@@ -435,6 +436,8 @@ static int vmw_bo_init(struct vmw_private *dev_priv,
 	if (params->pin)
 		ttm_bo_pin(&vmw_bo->tbo);
 	ttm_bo_unreserve(&vmw_bo->tbo);
+
+	get_task_comm(vmw_bo->origin_comm, current);
 
 	return 0;
 }
@@ -877,4 +880,121 @@ out:
 	if (res)
 		surf = vmw_res_to_srf(res);
 	return surf;
+}
+
+#if defined(CONFIG_DEBUG_FS)
+
+void vmw_bo_print_info(int id, struct vmw_bo *bo, struct seq_file *m)
+{
+	const char *placement;
+	const char *type;
+
+	switch (bo->tbo.resource->mem_type) {
+	case TTM_PL_SYSTEM:
+		placement = " CPU";
+		break;
+	case VMW_PL_GMR:
+		placement = " GMR";
+		break;
+	case VMW_PL_MOB:
+		placement = " MOB";
+		break;
+	case VMW_PL_SYSTEM:
+		placement = "VCPU";
+		break;
+	case TTM_PL_VRAM:
+		placement = "VRAM";
+		break;
+	default:
+		placement = "None";
+		break;
+	}
+
+	switch (bo->tbo.type) {
+	case ttm_bo_type_device:
+		type = "device";
+		break;
+	case ttm_bo_type_kernel:
+		type = "kernel";
+		break;
+	case ttm_bo_type_sg:
+		type = "sg    ";
+		break;
+	default:
+		type = "none  ";
+		break;
+	}
+
+	if (id)
+		seq_printf(m, "\t\t0x%08x: %12zu bytes %s, type = %s", id,
+		bo->tbo.base.size, placement, type);
+	else
+		seq_printf(m, "\t%12zu bytes, placement = %s, type = %s",
+		bo->tbo.base.size, placement, type);
+	seq_printf(m, ", priority = %u, pin_count = %u, GEM refs = %d, TTM refs = %d, Origin proc: %16s",
+		   bo->tbo.priority,
+		   bo->tbo.pin_count,
+		   kref_read(&bo->tbo.base.refcount),
+		   kref_read(&bo->tbo.kref),
+		   bo->origin_comm);
+	seq_puts(m, "\n");
+}
+
+static void vmw_debugfs_print_ttm_list_info(struct seq_file *m,
+					    struct list_head *ttm_list)
+{
+	struct ttm_resource *res;
+	struct ttm_lru_item *lru, *tmp;
+
+	list_for_each_entry_safe(lru, tmp, ttm_list, link) {
+		struct ttm_buffer_object *tbo;
+		struct vmw_bo *bo;
+
+		if (lru->type != TTM_LRU_RESOURCE)
+			continue;
+		res = container_of(lru, struct ttm_resource, lru);
+		tbo = res->bo;
+		bo = container_of(tbo, struct vmw_bo, tbo);
+		vmw_bo_print_info(0, bo, m);
+	}
+}
+
+static int vmw_debugfs_buffer_info_show(struct seq_file *m, void *unused)
+{
+	struct vmw_private *vdev = (struct vmw_private *)m->private;
+	struct ttm_device *bdev = &vdev->bdev;
+	struct ttm_resource_manager *man;
+	int man_itr, pr_itr;
+
+	seq_puts(m, "LRU buffers -\n");
+	for (man_itr = 0; man_itr < TTM_NUM_MEM_TYPES; man_itr++) {
+		man = ttm_manager_type(&vdev->bdev, man_itr);
+		if (!man)
+			continue;
+		for (pr_itr = 0; pr_itr < TTM_MAX_BO_PRIORITY; pr_itr++) {
+			spin_lock(&bdev->lru_lock);
+			vmw_debugfs_print_ttm_list_info(m, &man->lru[pr_itr]);
+			spin_unlock(&bdev->lru_lock);
+		}
+	}
+	seq_puts(m, "Pinned buffers -\n");
+	spin_lock(&bdev->lru_lock);
+	vmw_debugfs_print_ttm_list_info(m, &bdev->pinned);
+	spin_unlock(&bdev->lru_lock);
+	return 0;
+}
+
+DEFINE_SHOW_ATTRIBUTE(vmw_debugfs_buffer_info);
+
+#endif
+
+void vmw_debugfs_buffer_init(struct vmw_private *vdev)
+{
+#if defined(CONFIG_DEBUG_FS)
+	struct drm_minor *minor = vdev->drm.primary;
+	struct dentry *root = minor->debugfs_root;
+
+	debugfs_create_file("vmwgfx_buffer_info", 0444, root, vdev,
+			    &vmw_debugfs_buffer_info_fops);
+#endif
 }
