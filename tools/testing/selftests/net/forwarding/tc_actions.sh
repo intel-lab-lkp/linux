@@ -4,7 +4,7 @@
 ALL_TESTS="gact_drop_and_ok_test mirred_egress_redirect_test \
 	mirred_egress_mirror_test matchall_mirred_egress_mirror_test \
 	gact_trap_test mirred_egress_to_ingress_test \
-	mirred_egress_to_ingress_tcp_test"
+	mirred_egress_to_ingress_tcp_test vlan_flush_test"
 NUM_NETIFS=4
 source tc_common.sh
 source lib.sh
@@ -242,6 +242,26 @@ mirred_egress_to_ingress_tcp_test()
 
 	rm -f $mirred_e2i_tf1 $mirred_e2i_tf2
 	log_test "mirred_egress_to_ingress_tcp ($tcflags)"
+}
+
+vlan_flush_test()
+{
+	ip link add x$h1 type veth peer x$h2
+	ip link set x$h1 up
+	ip link set x$h2 up
+
+	tc qdisc add dev x$h1 clsact
+	tc filter add dev x$h1 ingress pref 20 chain 0 handle 20 flower num_of_vlans 1 \
+		action vlan push id 100 protocol 0x8100 action goto chain 5
+	tc filter add dev x$h1 ingress pref 30 chain 5 handle 30 flower num_of_vlans 2 \
+		cvlan_ethtype 0x800 action pass
+
+	$MZ x$h2 -t udp -Q 10 -q
+	tc_check_packets "dev x$h1 ingress" 30 1
+	check_err $? "No double-vlan packets received"
+
+	ip link del x$h1
+	log_test "vlan_flush_test ($tcflags)"
 }
 
 setup_prepare()
