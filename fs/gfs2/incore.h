@@ -710,6 +710,8 @@ struct gfs2_sbd {
 
 	/* Lock Stuff */
 
+	possible_net_t net;
+	netns_tracker tracker;	/* keep track of net references */
 	struct lm_lockstruct sd_lockstruct;
 	struct gfs2_holder sd_live_gh;
 	struct gfs2_glock *sd_rename_gl;
