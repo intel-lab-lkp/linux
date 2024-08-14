@@ -10,7 +10,7 @@ maintainers:
   - Fabio Estevam <festevam@gmail.com>
 
 allOf:
-  - $ref: usb-hcd.yaml#
+  - $ref: usb-device.yaml#
 
 properties:
   compatible:
@@ -36,6 +36,13 @@ required:
   - compatible
   - reg
 
+patternProperties:
+  "^.*@[0-9a-f]{1,2}$":
+    description: The hard wired USB devices
+    type: object
+    $ref: /schemas/usb/usb-device.yaml
+    additionalProperties: true
+
 unevaluatedProperties: false
 
 examples:
@@ -47,7 +54,7 @@ examples:
         #address-cells = <1>;
         #size-cells = <0>;
 
-        usb-hub@1 {
+        hub@1 {
             compatible = "usb424,2514";
             reg = <1>;
             clocks = <&clks IMX6QDL_CLK_CKO>;
