@@ -492,6 +492,8 @@ static int qcom_ipq806x_usb_phy_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	data = of_device_get_match_data(&pdev->dev);
+	if (!data)
+		return -ENODEV;
 
 	phy_dwc3->dev = &pdev->dev;
 
