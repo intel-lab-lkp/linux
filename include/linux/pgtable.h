@@ -41,12 +41,10 @@
 #define FIRST_USER_ADDRESS	0UL
 #endif
 
-#ifndef mk_pte
 static inline pte_t mk_pte(struct page *page, pgprot_t pgprot)
 {
 	return pfn_pte(page_to_pfn(page), pgprot);
 }
-#endif
 
 /*
  * This defines the generic helper for accessing PMD page
