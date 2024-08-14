@@ -182,6 +182,7 @@
 		fsl,pins = <
 			MX8MM_IOMUXC_NAND_READY_B_GPIO3_IO16			0x19
 			MX8MM_IOMUXC_SAI3_RXC_GPIO4_IO29			0x19
+			MX8MM_IOMUXC_GPIO1_IO15_GPIO1_IO15			0x19    /* canbus_reset */
 		>;
 	};
 
