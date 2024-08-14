@@ -816,6 +816,7 @@
 			      <0x00 0x32800000 0x00 0x100000>;
 			interrupt-names = "rx_011";
 			interrupts = <GIC_SPI 37 IRQ_TYPE_LEVEL_HIGH>;
+			bootph-all;
 		};
 
 		hwspinlock: spinlock@30e00000 {
@@ -1225,6 +1226,7 @@
 			interrupt-names = "host", "peripheral", "otg";
 			maximum-speed = "super-speed";
 			dr_mode = "otg";
+			bootph-all;
 		};
 	};
 
@@ -1944,8 +1946,8 @@
 	main_esm: esm@700000 {
 		compatible = "ti,j721e-esm";
 		reg = <0x00 0x700000 0x00 0x1000>;
-		ti,esm-pins = <688>, <689>;
 		bootph-pre-ram;
+		ti,esm-pins = <688>, <689>;
 	};
 
 	watchdog0: watchdog@2200000 {
