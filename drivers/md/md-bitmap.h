@@ -241,6 +241,8 @@ struct md_bitmap_stats {
 	unsigned long sync_size;
 	struct file *file;
 	u64 events_cleared;
+	int behind_writes;
+	bool behind_wait;
 };
 
 /* the bitmap API */
