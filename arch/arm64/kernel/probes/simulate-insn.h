@@ -16,5 +16,7 @@ void simulate_cbz_cbnz(u32 opcode, long addr, struct pt_regs *regs);
 void simulate_tbz_tbnz(u32 opcode, long addr, struct pt_regs *regs);
 void simulate_ldr_literal(u32 opcode, long addr, struct pt_regs *regs);
 void simulate_ldrsw_literal(u32 opcode, long addr, struct pt_regs *regs);
+void simulate_nop(u32 opcode, long addr, struct pt_regs *regs);
+void simulate_stp_fp_lr_sp_64b(u32 opcode, long addr, struct pt_regs *regs);
 
 #endif /* _ARM_KERNEL_KPROBES_SIMULATE_INSN_H */

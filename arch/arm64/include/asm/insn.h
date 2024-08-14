@@ -549,6 +549,27 @@ static __always_inline bool aarch64_insn_uses_literal(u32 insn)
 	       aarch64_insn_is_prfm_lit(insn);
 }
 
+static __always_inline bool aarch64_insn_is_nop(u32 insn)
+{
+	/* nop */
+	return aarch64_insn_is_hint(insn) &&
+	       ((insn & 0xFE0) == AARCH64_INSN_HINT_NOP);
+}
+
+static __always_inline bool aarch64_insn_is_stp_fp_lr_sp_64b(u32 insn)
+{
+	/*
+	 * The 1st instruction on function entry often follows the
+	 * patten 'stp x29, x30, [sp, #imm]!' that pushing fp and lr
+	 * into stack.
+	 */
+	return aarch64_insn_is_stp_pre(insn) &&
+	       (((insn >> 30) & 0x03) ==  2) && /* opc == 10 */
+	       (((insn >>  5) & 0x1F) == 31) && /* Rn  is sp */
+	       (((insn >> 10) & 0x1F) == 30) && /* Rt2 is x29 */
+	       (((insn >>  0) & 0x1F) == 29);	/* Rt  is x30 */
+}
+
 enum aarch64_insn_encoding_class aarch64_get_insn_class(u32 insn);
 u64 aarch64_insn_decode_immediate(enum aarch64_insn_imm_type type, u32 insn);
 u32 aarch64_insn_encode_immediate(enum aarch64_insn_imm_type type,

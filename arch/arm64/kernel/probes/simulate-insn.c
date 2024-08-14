@@ -200,3 +200,31 @@ simulate_ldrsw_literal(u32 opcode, long addr, struct pt_regs *regs)
 
 	instruction_pointer_set(regs, instruction_pointer(regs) + 4);
 }
+
+void __kprobes
+simulate_nop(u32 opcode, long addr, struct pt_regs *regs)
+{
+	instruction_pointer_set(regs, instruction_pointer(regs) + 4);
+}
+
+void __kprobes
+simulate_stp_fp_lr_sp_64b(u32 opcode, long addr, struct pt_regs *regs)
+{
+	long imm7;
+	u64 buf[2];
+	long new_sp;
+
+	imm7 = sign_extend64((opcode >> 15) & 0x7f, 6);
+	new_sp = regs->sp + (imm7 << 3);
+
+	buf[0] = regs->regs[29];
+	buf[1] = regs->regs[30];
+
+	if (copy_to_user((void __user *)new_sp, buf, sizeof(buf))) {
+		force_sig(SIGSEGV);
+		return;
+	}
+
+	regs->sp = new_sp;
+	instruction_pointer_set(regs, instruction_pointer(regs) + 4);
+}

@@ -73,8 +73,22 @@ static bool __kprobes aarch64_insn_is_steppable(u32 insn)
  *   INSN_GOOD_NO_SLOT If instruction is supported but doesn't use its slot.
  */
 enum probe_insn __kprobes
-arm_probe_decode_insn(probe_opcode_t insn, struct arch_probe_insn *api)
+arm_probe_decode_insn(probe_opcode_t insn, struct arch_probe_insn *api,
+		      bool kernel)
 {
+	/*
+	 * While 'nop' and 'stp x29, x30, [sp, #imm]! instructions can
+	 * execute in the out-of-line slot, simulating them in breakpoint
+	 * handling offers better performance.
+	 */
+	if (aarch64_insn_is_nop(insn)) {
+		api->handler = simulate_nop;
+		return INSN_GOOD_NO_SLOT;
+	} else if (!kernel && aarch64_insn_is_stp_fp_lr_sp_64b(insn)) {
+		api->handler = simulate_stp_fp_lr_sp_64b;
+		return INSN_GOOD_NO_SLOT;
+	}
+
 	/*
 	 * Instructions reading or modifying the PC won't work from the XOL
 	 * slot.
@@ -157,7 +171,7 @@ arm_kprobe_decode_insn(kprobe_opcode_t *addr, struct arch_specific_insn *asi)
 		else
 			scan_end = addr - MAX_ATOMIC_CONTEXT_SIZE;
 	}
-	decoded = arm_probe_decode_insn(insn, &asi->api);
+	decoded = arm_probe_decode_insn(insn, &asi->api, true);
 
 	if (decoded != INSN_REJECTED && scan_end)
 		if (is_probed_address_atomic(addr - 1, scan_end))

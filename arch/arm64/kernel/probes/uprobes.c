@@ -44,7 +44,7 @@ int arch_uprobe_analyze_insn(struct arch_uprobe *auprobe, struct mm_struct *mm,
 
 	insn = *(probe_opcode_t *)(&auprobe->insn[0]);
 
-	switch (arm_probe_decode_insn(insn, &auprobe->api)) {
+	switch (arm_probe_decode_insn(insn, &auprobe->api, false)) {
 	case INSN_REJECTED:
 		return -EINVAL;
 
