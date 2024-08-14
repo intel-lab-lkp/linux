@@ -2160,6 +2160,7 @@ static int f2fs_ioc_start_atomic_write(struct file *filp, bool truncate)
 	ret = filemap_write_and_wait_range(inode->i_mapping, 0, LLONG_MAX);
 	if (ret) {
 		f2fs_up_write(&fi->i_gc_rwsem[WRITE]);
+		f2fs_up_write(&fi->i_gc_rwsem[READ]);
 		goto out;
 	}
 
@@ -2169,6 +2170,7 @@ static int f2fs_ioc_start_atomic_write(struct file *filp, bool truncate)
 		pinode = f2fs_iget(inode->i_sb, fi->i_pino);
 		if (IS_ERR(pinode)) {
 			f2fs_up_write(&fi->i_gc_rwsem[WRITE]);
+			f2fs_up_write(&fi->i_gc_rwsem[READ]);
 			ret = PTR_ERR(pinode);
 			goto out;
 		}
@@ -2177,6 +2179,7 @@ static int f2fs_ioc_start_atomic_write(struct file *filp, bool truncate)
 		iput(pinode);
 		if (ret) {
 			f2fs_up_write(&fi->i_gc_rwsem[WRITE]);
+			f2fs_up_write(&fi->i_gc_rwsem[READ]);
 			goto out;
 		}
 
@@ -2190,6 +2193,7 @@ static int f2fs_ioc_start_atomic_write(struct file *filp, bool truncate)
 		ret = f2fs_do_truncate_blocks(fi->cow_inode, 0, true);
 		if (ret) {
 			f2fs_up_write(&fi->i_gc_rwsem[WRITE]);
+			f2fs_up_write(&fi->i_gc_rwsem[READ]);
 			goto out;
 		}
 	}
