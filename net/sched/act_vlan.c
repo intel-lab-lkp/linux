@@ -49,10 +49,15 @@ TC_INDIRECT_SCOPE int tcf_vlan_act(struct sk_buff *skb,
 			goto drop;
 		break;
 	case TCA_VLAN_ACT_PUSH:
-		err = skb_vlan_push(skb, p->tcfv_push_proto, p->tcfv_push_vid |
+		if (skb_vlan_tag_present(skb)) {
+			err = skb_vlan_flush(skb);
+			if (err)
+				goto drop;
+
+			skb->mac_len += VLAN_HLEN;
+		}
+		__vlan_hwaccel_put_tag(skb, p->tcfv_push_proto, p->tcfv_push_vid |
 				    (p->tcfv_push_prio << VLAN_PRIO_SHIFT));
-		if (err)
-			goto drop;
 		break;
 	case TCA_VLAN_ACT_MODIFY:
 		/* No-op if no vlan tag (either hw-accel or in-payload) */
