@@ -1240,13 +1240,15 @@ static int efx_pm_resume(struct device *dev)
 	pci_set_master(efx->pci_dev);
 	rc = efx->type->reset(efx, RESET_TYPE_ALL);
 	if (rc)
-		return rc;
+		goto fail;
 	down_write(&efx->filter_sem);
 	rc = efx->type->init(efx);
 	up_write(&efx->filter_sem);
 	if (rc)
-		return rc;
+		goto fail;
 	rc = efx_pm_thaw(dev);
+fail:
+	pci_disable_device(pci_dev);
 	return rc;
 }
 
