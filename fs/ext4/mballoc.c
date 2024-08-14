@@ -2928,13 +2928,12 @@ repeat:
 			if (cr == CR_POWER2_ALIGNED)
 				ext4_mb_simple_scan_group(ac, &e4b);
 			else {
-				bool is_stripe_aligned = sbi->s_stripe &&
+				bool is_stripe_aligned = (cr == CR_GOAL_LEN_FAST ||
+					cr == CR_BEST_AVAIL_LEN) && sbi->s_stripe &&
 					!(ac->ac_g_ex.fe_len %
 					  EXT4_B2C(sbi, sbi->s_stripe));
 
-				if ((cr == CR_GOAL_LEN_FAST ||
-				     cr == CR_BEST_AVAIL_LEN) &&
-				    is_stripe_aligned)
+				if (is_stripe_aligned)
 					ext4_mb_scan_aligned(ac, &e4b);
 
 				if (ac->ac_status == AC_STATUS_CONTINUE)
