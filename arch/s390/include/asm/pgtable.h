@@ -1380,17 +1380,6 @@ static inline pte_t mk_pte_phys(unsigned long physpage, pgprot_t pgprot)
 	return pte_mkyoung(__pte);
 }
 
-static inline pte_t mk_pte(struct page *page, pgprot_t pgprot)
-{
-	unsigned long physpage = page_to_phys(page);
-	pte_t __pte = mk_pte_phys(physpage, pgprot);
-
-	if (pte_write(__pte) && PageDirty(page))
-		__pte = pte_mkdirty(__pte);
-	return __pte;
-}
-#define mk_pte mk_pte
-
 #define pgd_index(address) (((address) >> PGDIR_SHIFT) & (PTRS_PER_PGD-1))
 #define p4d_index(address) (((address) >> P4D_SHIFT) & (PTRS_PER_P4D-1))
 #define pud_index(address) (((address) >> PUD_SHIFT) & (PTRS_PER_PUD-1))
