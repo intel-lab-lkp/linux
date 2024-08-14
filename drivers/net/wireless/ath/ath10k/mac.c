@@ -303,6 +303,7 @@ static int ath10k_install_key(struct ath10k_vif *arvif,
 	struct ath10k *ar = arvif->ar;
 	int ret;
 	unsigned long time_left;
+	unsigned long timeout = (cmd == DISABLE_KEY) ? 1 : 3;
 
 	lockdep_assert_held(&ar->conf_mutex);
 
@@ -315,7 +316,8 @@ static int ath10k_install_key(struct ath10k_vif *arvif,
 	if (ret)
 		return ret;
 
-	time_left = wait_for_completion_timeout(&ar->install_key_done, 3 * HZ);
+	time_left = wait_for_completion_timeout(&ar->install_key_done,
+						timeout * HZ);
 	if (time_left == 0)
 		return -ETIMEDOUT;
 
