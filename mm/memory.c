@@ -436,7 +436,7 @@ void pmd_install(struct mm_struct *mm, pmd_t *pmd, pgtable_t *pte)
 		 * seen in-order. See the alpha page table accessors for the
 		 * smp_rmb() barriers in page table walking code.
 		 */
-		smp_wmb(); /* Could be smp_wmb__xxx(before|after)_spin_lock */
+		smp_wmb();
 		pmd_populate(mm, pmd, *pte);
 		*pte = NULL;
 	}
