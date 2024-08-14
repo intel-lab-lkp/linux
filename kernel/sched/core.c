@@ -2902,8 +2902,25 @@ static int affine_move_task(struct rq *rq, struct task_struct *p, struct rq_flag
 		preempt_disable();
 		task_rq_unlock(rq, p, rf);
 		if (!stop_pending) {
-			stop_one_cpu_nowait(cpu_of(rq), migration_cpu_stop,
-					    &pending->arg, &pending->stop_work);
+			stop_pending =
+				stop_one_cpu_nowait(cpu_of(rq), migration_cpu_stop,
+						    &pending->arg, &pending->stop_work);
+			/*
+			 * The state resulting in this failure is not expected
+			 * at this point. At least report a WARNING to be able
+			 * to panic and further debug if reproduced.
+			 */
+			if (WARN_ON(!stop_pending)) {
+				/*
+				 * Then try to handle the failure gracefully
+				 * to prevent the deadlock a few lines later.
+				 */
+				rq = task_rq_lock(p, rf);
+				pending->stop_pending = false;
+				p->migration_pending = NULL;
+				task_rq_unlock(rq, p, rf);
+				complete_all(&pending->done);
+			}
 		}
 		preempt_enable();
 
