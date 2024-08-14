@@ -451,6 +451,8 @@
 					 <&syscon ASPEED_CLK_GATE_ECLK>;
 				clock-names = "vclk", "eclk";
 				interrupts = <GIC_SPI 7 IRQ_TYPE_LEVEL_HIGH>;
+				aspeed,scu = <&syscon>;
+				aspeed,gfx = <&gfx>;
 				status = "disabled";
 			};
 
