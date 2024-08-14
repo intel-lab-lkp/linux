@@ -278,7 +278,7 @@ in the following order:
 
 3. args to modprobe::
 
-	modprobe foo dyndbg==pmf # override previous settings
+	modprobe foo dyndbg=pmf # override previous settings
 
 These ``dyndbg`` queries are applied in order, with last having final say.
 This allows boot args to override or modify those from ``/etc/modprobe.d``
