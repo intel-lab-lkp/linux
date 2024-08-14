@@ -1879,7 +1879,7 @@ void md_bitmap_destroy(struct mddev *mddev)
  * if this returns an error, bitmap_destroy must be called to do clean up
  * once mddev->bitmap is set
  */
-static struct bitmap *bitmap_create(struct mddev *mddev, int slot)
+static struct bitmap *__bitmap_create(struct mddev *mddev, int slot)
 {
 	struct bitmap *bitmap;
 	sector_t blocks = mddev->resync_max_sectors;
@@ -1966,9 +1966,9 @@ static struct bitmap *bitmap_create(struct mddev *mddev, int slot)
 	return ERR_PTR(err);
 }
 
-int md_bitmap_create(struct mddev *mddev, int slot)
+static int bitmap_create(struct mddev *mddev, int slot)
 {
-	struct bitmap *bitmap = bitmap_create(mddev, slot);
+	struct bitmap *bitmap = __bitmap_create(mddev, slot);
 
 	if (IS_ERR(bitmap))
 		return PTR_ERR(bitmap);
@@ -2041,7 +2041,7 @@ struct bitmap *get_bitmap_from_slot(struct mddev *mddev, int slot)
 	int rv = 0;
 	struct bitmap *bitmap;
 
-	bitmap = bitmap_create(mddev, slot);
+	bitmap = __bitmap_create(mddev, slot);
 	if (IS_ERR(bitmap)) {
 		rv = PTR_ERR(bitmap);
 		return ERR_PTR(rv);
@@ -2418,7 +2418,7 @@ location_store(struct mddev *mddev, const char *buf, size_t len)
 			}
 
 			mddev->bitmap_info.offset = offset;
-			rv = md_bitmap_create(mddev, -1);
+			rv = bitmap_create(mddev, -1);
 			if (rv)
 				goto out;
 
@@ -2720,6 +2720,7 @@ const struct attribute_group md_bitmap_group = {
 };
 
 static struct bitmap_operations bitmap_ops = {
+	.create			= bitmap_create,
 };
 
 void mddev_set_bitmap_ops(struct mddev *mddev)
