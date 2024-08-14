@@ -541,7 +541,11 @@ static int evlist__tui_block_hists_browse(struct evlist *evlist, struct report *
 	int i = 0, ret;
 
 	evlist__for_each_entry(evlist, pos) {
-		ret = report__browse_block_hists(&rep->block_reports[i++].hist,
+		i++;
+		if (symbol_conf.event_group && !evsel__is_group_leader(pos))
+			continue;
+
+		ret = report__browse_block_hists(&rep->block_reports[i - 1].hist,
 						 rep->min_percent, pos,
 						 &rep->session->header.env);
 		if (ret != 0)

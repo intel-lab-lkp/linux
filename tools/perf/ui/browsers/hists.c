@@ -3665,10 +3665,18 @@ single_entry: {
 static int block_hists_browser__title(struct hist_browser *browser, char *bf,
 				      size_t size)
 {
-	struct hists *hists = evsel__hists(browser->block_evsel);
-	const char *evname = evsel__name(browser->block_evsel);
+	struct evsel *evsel = browser->block_evsel;
+	struct hists *hists = evsel__hists(evsel);
 	unsigned long nr_samples = hists->stats.nr_samples;
+	const char *evname;
+	char buf[512];
 	int ret;
+
+	if (evsel__is_group_event(evsel)) {
+		evsel__group_desc(evsel, buf, sizeof(buf));
+		evname = buf;
+	} else
+		evname = evsel__name(evsel);
 
 	ret = scnprintf(bf, size, "# Samples: %lu", nr_samples);
 	if (evname)
