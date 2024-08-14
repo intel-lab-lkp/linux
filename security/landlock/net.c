@@ -2,7 +2,7 @@
 /*
  * Landlock LSM - Network management and hooks
  *
- * Copyright © 2022-2023 Huawei Tech. Co., Ltd.
+ * Copyright © 2022-2024 Huawei Tech. Co., Ltd.
  * Copyright © 2022-2023 Microsoft Corporation
  */
 
@@ -61,17 +61,34 @@ static const struct landlock_ruleset *get_current_net_domain(void)
 	return dom;
 }
 
+static int check_access_socket(const struct landlock_ruleset *const dom,
+			       __be16 port, access_mask_t access_request)
+{
+	layer_mask_t layer_masks[LANDLOCK_NUM_ACCESS_NET] = {};
+	const struct landlock_rule *rule;
+	struct landlock_id id = {
+		.type = LANDLOCK_KEY_NET_PORT,
+	};
+
+	id.key.data = (__force uintptr_t)port;
+	BUILD_BUG_ON(sizeof(port) > sizeof(id.key.data));
+
+	rule = landlock_find_rule(dom, id);
+	access_request = landlock_init_layer_masks(
+		dom, access_request, &layer_masks, LANDLOCK_KEY_NET_PORT);
+	if (landlock_unmask_layers(rule, access_request, &layer_masks,
+				   ARRAY_SIZE(layer_masks)))
+		return 0;
+
+	return -EACCES;
+}
+
 static int current_check_access_socket(struct socket *const sock,
 				       struct sockaddr *const address,
 				       const int addrlen,
 				       access_mask_t access_request)
 {
 	__be16 port;
-	layer_mask_t layer_masks[LANDLOCK_NUM_ACCESS_NET] = {};
-	const struct landlock_rule *rule;
-	struct landlock_id id = {
-		.type = LANDLOCK_KEY_NET_PORT,
-	};
 	const struct landlock_ruleset *const dom = get_current_net_domain();
 
 	if (!dom)
@@ -159,17 +176,7 @@ static int current_check_access_socket(struct socket *const sock,
 			return -EINVAL;
 	}
 
-	id.key.data = (__force uintptr_t)port;
-	BUILD_BUG_ON(sizeof(port) > sizeof(id.key.data));
-
-	rule = landlock_find_rule(dom, id);
-	access_request = landlock_init_layer_masks(
-		dom, access_request, &layer_masks, LANDLOCK_KEY_NET_PORT);
-	if (landlock_unmask_layers(rule, access_request, &layer_masks,
-				   ARRAY_SIZE(layer_masks)))
-		return 0;
-
-	return -EACCES;
+	return check_access_socket(dom, port, access_request);
 }
 
 static int hook_socket_bind(struct socket *const sock,
