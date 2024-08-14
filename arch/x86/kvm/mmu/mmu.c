@@ -69,10 +69,16 @@ static uint __read_mostly nx_huge_pages_recovery_ratio = 0;
 #else
 static uint __read_mostly nx_huge_pages_recovery_ratio = 60;
 #endif
+static struct shrinker *mmu_shrinker;
 
 static int get_nx_huge_pages(char *buffer, const struct kernel_param *kp);
 static int set_nx_huge_pages(const char *val, const struct kernel_param *kp);
 static int set_nx_huge_pages_recovery_param(const char *val, const struct kernel_param *kp);
+
+static unsigned long mmu_shrink_count(struct shrinker *shrink,
+				      struct shrink_control *sc);
+static unsigned long mmu_shrink_scan(struct shrinker *shrink,
+				     struct shrink_control *sc);
 
 static const struct kernel_param_ops nx_huge_pages_ops = {
 	.set = set_nx_huge_pages,
@@ -5670,6 +5676,28 @@ static void init_kvm_nested_mmu(struct kvm_vcpu *vcpu,
 	reset_guest_paging_metadata(vcpu, g_context);
 }
 
+static void kvm_mmu_shrinker_init(void)
+{
+	struct shrinker *shrinker = shrinker_alloc(0, "x86-mmu");
+
+	if (!shrinker) {
+		pr_warn_once("could not allocate shrinker\n");
+		return;
+	}
+
+	/* Ensure mmu_shrinker is assigned only once. */
+	if (cmpxchg(&mmu_shrinker, NULL, shrinker)) {
+		shrinker_free(shrinker);
+		return;
+	}
+
+	mmu_shrinker->count_objects = mmu_shrink_count;
+	mmu_shrinker->scan_objects = mmu_shrink_scan;
+	mmu_shrinker->seeks = DEFAULT_SEEKS * 10;
+
+	shrinker_register(mmu_shrinker);
+}
+
 void kvm_init_mmu(struct kvm_vcpu *vcpu)
 {
 	struct kvm_mmu_role_regs regs = vcpu_to_role_regs(vcpu);
@@ -5681,6 +5709,13 @@ void kvm_init_mmu(struct kvm_vcpu *vcpu)
 		init_kvm_tdp_mmu(vcpu, cpu_role);
 	else
 		init_kvm_softmmu(vcpu, cpu_role);
+
+	/*
+	 * Register MMU shrinker only if TDP MMU is disabled or
+	 * in nested VM scenarios.
+	 */
+	if (unlikely(!mmu_shrinker) && (!tdp_mmu_enabled || mmu_is_nested(vcpu)))
+		kvm_mmu_shrinker_init();
 }
 EXPORT_SYMBOL_GPL(kvm_init_mmu);
 
@@ -7195,8 +7230,6 @@ static unsigned long mmu_shrink_count(struct shrinker *shrink,
 	return percpu_counter_read_positive(&kvm_total_used_mmu_pages);
 }
 
-static struct shrinker *mmu_shrinker;
-
 static void mmu_destroy_caches(void)
 {
 	kmem_cache_destroy(pte_list_desc_cache);
@@ -7326,20 +7359,8 @@ int kvm_mmu_vendor_module_init(void)
 	if (percpu_counter_init(&kvm_total_used_mmu_pages, 0, GFP_KERNEL))
 		goto out;
 
-	mmu_shrinker = shrinker_alloc(0, "x86-mmu");
-	if (!mmu_shrinker)
-		goto out_shrinker;
-
-	mmu_shrinker->count_objects = mmu_shrink_count;
-	mmu_shrinker->scan_objects = mmu_shrink_scan;
-	mmu_shrinker->seeks = DEFAULT_SEEKS * 10;
-
-	shrinker_register(mmu_shrinker);
-
 	return 0;
 
-out_shrinker:
-	percpu_counter_destroy(&kvm_total_used_mmu_pages);
 out:
 	mmu_destroy_caches();
 	return ret;
