@@ -246,6 +246,7 @@ struct md_bitmap_stats {
 };
 
 struct bitmap_operations {
+	bool (*enabled)(struct mddev *mddev);
 	int (*create)(struct mddev *mddev, int slot);
 	int (*resize)(struct mddev *mddev, sector_t blocks, int chunksize,
 		      bool init);
@@ -297,12 +298,5 @@ static inline u64 md_bitmap_events_cleared(struct mddev *mddev)
 	return stats.events_cleared;
 }
 
-static inline bool md_bitmap_enabled(struct bitmap *bitmap)
-{
-	return bitmap && bitmap->storage.filemap &&
-	       !test_bit(BITMAP_STALE, &bitmap->flags);
-}
-
 #endif
-
 #endif
