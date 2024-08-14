@@ -224,6 +224,7 @@ enum devlink_port_flavour {
 enum devlink_rate_type {
 	DEVLINK_RATE_TYPE_LEAF,
 	DEVLINK_RATE_TYPE_NODE,
+	DEVLINK_RATE_TYPE_TRAFFIC_CLASS,
 };
 
 enum devlink_param_cmode {
@@ -595,6 +596,7 @@ enum devlink_attr {
 	DEVLINK_ATTR_RATE_TYPE,			/* u16 */
 	DEVLINK_ATTR_RATE_TX_SHARE,		/* u64 */
 	DEVLINK_ATTR_RATE_TX_MAX,		/* u64 */
+	DEVLINK_ATTR_RATE_TRAFFIC_CLASS_INDEX,	/* u16 */
 	DEVLINK_ATTR_RATE_NODE_NAME,		/* string */
 	DEVLINK_ATTR_RATE_PARENT_NODE_NAME,	/* string */
 

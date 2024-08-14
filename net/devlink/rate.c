@@ -18,6 +18,12 @@ devlink_rate_is_node(struct devlink_rate *devlink_rate)
 	return devlink_rate->type == DEVLINK_RATE_TYPE_NODE;
 }
 
+static inline bool
+devlink_rate_is_traffic_class(struct devlink_rate *devlink_rate)
+{
+	return devlink_rate->type == DEVLINK_RATE_TYPE_TRAFFIC_CLASS;
+}
+
 static struct devlink_rate *
 devlink_rate_leaf_get_from_info(struct devlink *devlink, struct genl_info *info)
 {
@@ -29,6 +35,43 @@ devlink_rate_leaf_get_from_info(struct devlink *devlink, struct genl_info *info)
 		return ERR_CAST(devlink_port);
 	devlink_rate = devlink_port->devlink_rate;
 	return devlink_rate ?: ERR_PTR(-ENODEV);
+}
+
+static struct devlink_rate *
+devlink_rate_traffic_class_get_by_id(struct devlink *devlink, u16 tc_id)
+{
+	static struct devlink_rate *devlink_rate;
+
+	list_for_each_entry(devlink_rate, &devlink->rate_list, list) {
+		if (devlink_rate_is_traffic_class(devlink_rate) &&
+		    devlink_rate->tc_id == tc_id)
+			return devlink_rate;
+	}
+
+	return ERR_PTR(-ENODEV);
+}
+
+static struct devlink_rate *
+devlink_rate_traffic_class_get_from_attrs(struct devlink *devlink, struct nlattr **attrs)
+{
+	struct devlink_rate *devlink_rate;
+	u16 tc_id;
+
+	if (!attrs[DEVLINK_ATTR_RATE_TRAFFIC_CLASS_INDEX])
+		return ERR_PTR(-EINVAL);
+
+	tc_id = nla_get_u16(attrs[DEVLINK_ATTR_RATE_TRAFFIC_CLASS_INDEX]);
+	devlink_rate = devlink_rate_traffic_class_get_by_id(devlink, tc_id);
+	if (!devlink_rate)
+		return ERR_PTR(-ENODEV);
+
+	return devlink_rate;
+}
+
+static struct devlink_rate *
+devlink_rate_traffic_class_get_from_info(struct devlink *devlink, struct genl_info *info)
+{
+	return devlink_rate_traffic_class_get_from_attrs(devlink, info->attrs);
 }
 
 static struct devlink_rate *
@@ -76,6 +119,8 @@ devlink_rate_get_from_info(struct devlink *devlink, struct genl_info *info)
 		return devlink_rate_leaf_get_from_info(devlink, info);
 	else if (attrs[DEVLINK_ATTR_RATE_NODE_NAME])
 		return devlink_rate_node_get_from_info(devlink, info);
+	else if (attrs[DEVLINK_ATTR_RATE_TRAFFIC_CLASS_INDEX])
+		return devlink_rate_traffic_class_get_from_info(devlink, info);
 	else
 		return ERR_PTR(-EINVAL);
 }
@@ -105,6 +150,10 @@ static int devlink_nl_rate_fill(struct sk_buff *msg,
 	} else if (devlink_rate_is_node(devlink_rate)) {
 		if (nla_put_string(msg, DEVLINK_ATTR_RATE_NODE_NAME,
 				   devlink_rate->name))
+			goto nla_put_failure;
+	} else if (devlink_rate_is_traffic_class(devlink_rate)) {
+		if (nla_put_u16(msg, DEVLINK_ATTR_RATE_TRAFFIC_CLASS_INDEX, devlink_rate->tc_id) ||
+		    nla_put_u32(msg, DEVLINK_ATTR_PORT_INDEX, devlink_rate->devlink_port->index))
 			goto nla_put_failure;
 	}
 
@@ -273,6 +322,10 @@ devlink_nl_rate_parent_node_set(struct devlink_rate *devlink_rate,
 			err = ops->rate_node_parent_set(devlink_rate, NULL,
 							devlink_rate->priv, NULL,
 							info->extack);
+		else if (devlink_rate_is_traffic_class(devlink_rate))
+			err = ops->rate_traffic_class_parent_set(devlink_rate, NULL,
+								 devlink_rate->priv, NULL,
+								 info->extack);
 		if (err)
 			return err;
 
@@ -302,6 +355,10 @@ devlink_nl_rate_parent_node_set(struct devlink_rate *devlink_rate,
 			err = ops->rate_node_parent_set(devlink_rate, parent,
 							devlink_rate->priv, parent->priv,
 							info->extack);
+		else if (devlink_rate_is_traffic_class(devlink_rate))
+			err = ops->rate_traffic_class_parent_set(devlink_rate, parent,
+								 devlink_rate->priv, parent->priv,
+								 info->extack);
 		if (err)
 			return err;
 
@@ -447,6 +504,32 @@ static bool devlink_rate_set_ops_supported(const struct devlink_ops *ops,
 			NL_SET_ERR_MSG_ATTR(info->extack,
 					    attrs[DEVLINK_ATTR_RATE_TX_WEIGHT],
 					    "TX weight set isn't supported for the nodes");
+			return false;
+		}
+	} else if (type == DEVLINK_RATE_TYPE_TRAFFIC_CLASS) {
+		if (attrs[DEVLINK_ATTR_RATE_TX_SHARE] && !ops->rate_traffic_class_tx_share_set) {
+			NL_SET_ERR_MSG(info->extack, "TX share set isn't supported for the traffic classes");
+			return false;
+		}
+		if (attrs[DEVLINK_ATTR_RATE_TX_MAX] && !ops->rate_traffic_class_tx_max_set) {
+			NL_SET_ERR_MSG(info->extack, "TX max set isn't supported for the traffic classes");
+			return false;
+		}
+		if (attrs[DEVLINK_ATTR_RATE_PARENT_NODE_NAME] &&
+		    !ops->rate_traffic_class_parent_set) {
+			NL_SET_ERR_MSG(info->extack, "Parent set isn't supported for the traffic classes");
+			return false;
+		}
+		if (attrs[DEVLINK_ATTR_RATE_TX_PRIORITY] && !ops->rate_traffic_class_tx_priority_set) {
+			NL_SET_ERR_MSG_ATTR(info->extack,
+					    attrs[DEVLINK_ATTR_RATE_TX_PRIORITY],
+					    "TX priority set isn't supported for the traffic classes");
+			return false;
+		}
+		if (attrs[DEVLINK_ATTR_RATE_TX_WEIGHT] && !ops->rate_traffic_class_tx_weight_set) {
+			NL_SET_ERR_MSG_ATTR(info->extack,
+					    attrs[DEVLINK_ATTR_RATE_TX_WEIGHT],
+					    "TX weight set isn't supported for the traffic classes");
 			return false;
 		}
 	} else {
@@ -660,6 +743,48 @@ int devl_rate_leaf_create(struct devlink_port *devlink_port, void *priv,
 EXPORT_SYMBOL_GPL(devl_rate_leaf_create);
 
 /**
+ * devl_rate_traffic_class_create - create devlink rate queue
+ * @devlink: devlink instance
+ * @priv: driver private data
+ * @tc_id: identifier of the new traffic class
+ *
+ * Create devlink rate object of type node
+ */
+int devl_rate_traffic_class_create(struct devlink_port *devlink_port, void *priv, u16 tc_id,
+				   struct devlink_rate *parent)
+{
+	struct devlink *devlink = devlink_port->devlink;
+	struct devlink_rate *devlink_rate;
+
+	devl_assert_locked(devlink);
+
+	devlink_rate = devlink_rate_traffic_class_get_by_id(devlink, tc_id);
+	if (!IS_ERR(devlink_rate))
+		return -EEXIST;
+
+	devlink_rate = kzalloc(sizeof(*devlink_rate), GFP_KERNEL);
+	if (!devlink_rate)
+		return -ENOMEM;
+
+	if (parent) {
+		devlink_rate->parent = parent;
+		refcount_inc(&devlink_rate->parent->refcnt);
+	}
+
+	devlink_rate->type = DEVLINK_RATE_TYPE_TRAFFIC_CLASS;
+	devlink_rate->devlink = devlink;
+	devlink_rate->devlink_port = devlink_port;
+	devlink_rate->tc_id = tc_id;
+	devlink_rate->priv = priv;
+	list_add_tail(&devlink_rate->list, &devlink->rate_list);
+	devlink_port->devlink_rate = devlink_rate;
+	devlink_rate_notify(devlink_rate, DEVLINK_CMD_RATE_NEW);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(devl_rate_traffic_class_create);
+
+/**
  * devl_rate_leaf_destroy - destroy devlink rate leaf
  *
  * @devlink_port: devlink port linked to the rate object
@@ -708,6 +833,9 @@ void devl_rate_nodes_destroy(struct devlink *devlink)
 		else if (devlink_rate_is_node(devlink_rate))
 			ops->rate_node_parent_set(devlink_rate, NULL, devlink_rate->priv,
 						  NULL, NULL);
+		else if (devlink_rate_is_traffic_class(devlink_rate))
+			ops->rate_traffic_class_parent_set(devlink_rate, NULL, devlink_rate->priv,
+							   NULL, NULL);
 	}
 	list_for_each_entry_safe(devlink_rate, tmp, &devlink->rate_list, list) {
 		if (devlink_rate_is_node(devlink_rate)) {

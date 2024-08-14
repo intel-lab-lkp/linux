@@ -374,13 +374,20 @@ At this point a matching subfunction driver binds to the subfunction's auxiliary
 Rate object management
 ======================
 
-Devlink provides API to manage tx rates of single devlink port or a group.
-This is done through rate objects, which can be one of the two types:
+Devlink provides API to manage tx rates of single devlink port, specific traffic classes or a group.
+This is done through rate objects, which can be one of the three types:
 
 ``leaf``
   Represents a single devlink port; created/destroyed by the driver. Since leaf
   have 1to1 mapping to its devlink port, in user space it is referred as
   ``pci/<bus_addr>/<port_index>``;
+
+``traffic class (tc)``
+  Represents a traffic class on a devlink port; created/destroyed by the
+  driver. The traffic class object is referred to in userspace as
+  ``pci/<bus_addr>/<port_index>/tc<traffic_class_index>``. This object allows
+  for the management of TX rates at the traffic class level on a specific
+  devlink port.
 
 ``node``
   Represents a group of rate objects (leafs and/or nodes); created/deleted by
@@ -437,9 +444,10 @@ Arbitration flow from the high level:
 #. If all the nodes from the highest priority sub-group are satisfied, or
    overused their assigned BW, move to the lower priority nodes.
 
-Driver implementations are allowed to support both or either rate object types
-and setting methods of their parameters. Additionally driver implementation
-may export nodes/leafs and their child-parent relationships.
+Driver implementations are allowed to support any combination of the rate
+object types and setting methods of their parameters. Additionally driver
+implementation may export nodes, leafs, traffic classes, and their
+child-parent relationships.
 
 Terms and Definitions
 =====================

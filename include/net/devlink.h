@@ -117,6 +117,7 @@ struct devlink_rate {
 
 	u32 tx_priority;
 	u32 tx_weight;
+	u16 tc_id;
 };
 
 struct devlink_port {
@@ -1477,6 +1478,14 @@ struct devlink_ops {
 					 u32 tx_priority, struct netlink_ext_ack *extack);
 	int (*rate_node_tx_weight_set)(struct devlink_rate *devlink_rate, void *priv,
 				       u32 tx_weight, struct netlink_ext_ack *extack);
+	int (*rate_traffic_class_tx_share_set)(struct devlink_rate *devlink_rate, void *priv,
+					       u64 tx_share, struct netlink_ext_ack *extack);
+	int (*rate_traffic_class_tx_max_set)(struct devlink_rate *devlink_rate, void *priv,
+					     u64 tx_max, struct netlink_ext_ack *extack);
+	int (*rate_traffic_class_tx_priority_set)(struct devlink_rate *devlink_rate, void *priv,
+						  u32 tx_priority, struct netlink_ext_ack *extack);
+	int (*rate_traffic_class_tx_weight_set)(struct devlink_rate *devlink_rate, void *priv,
+						u32 tx_weight, struct netlink_ext_ack *extack);
 	int (*rate_node_new)(struct devlink_rate *rate_node, void **priv,
 			     struct netlink_ext_ack *extack);
 	int (*rate_node_del)(struct devlink_rate *rate_node, void *priv,
@@ -1489,6 +1498,10 @@ struct devlink_ops {
 				    struct devlink_rate *parent,
 				    void *priv_child, void *priv_parent,
 				    struct netlink_ext_ack *extack);
+	int (*rate_traffic_class_parent_set)(struct devlink_rate *child,
+					     struct devlink_rate *parent,
+					     void *priv_child, void *priv_parent,
+					     struct netlink_ext_ack *extack);
 	/**
 	 * selftests_check() - queries if selftest is supported
 	 * @devlink: devlink instance
@@ -1723,6 +1736,9 @@ devl_rate_node_create(struct devlink *devlink, void *priv, char *node_name,
 int
 devl_rate_leaf_create(struct devlink_port *devlink_port, void *priv,
 		      struct devlink_rate *parent);
+int
+devl_rate_traffic_class_create(struct devlink_port *devlink_port, void *priv, u16 tc_id,
+			       struct devlink_rate *parent);
 void devl_rate_leaf_destroy(struct devlink_port *devlink_port);
 void devl_rate_nodes_destroy(struct devlink *devlink);
 void devlink_port_linecard_set(struct devlink_port *devlink_port,

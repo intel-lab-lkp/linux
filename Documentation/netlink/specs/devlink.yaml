@@ -83,6 +83,8 @@ definitions:
         name: leaf
       -
         name: node
+      -
+        name: traffic-class
   -
     type: enum
     name: sb-threshold-type
@@ -781,6 +783,9 @@ attribute-sets:
       -
         name: rate-tx-max
         type: u64
+      -
+        name: rate-traffic-class-index
+        type: u16
       -
         name: rate-node-name
         type: string
@@ -2121,6 +2126,7 @@ operations:
             - bus-name
             - dev-name
             - port-index
+            - rate-traffic-class-index
             - rate-node-name
         reply: &rate-get-reply
           value: 76
@@ -2143,6 +2149,7 @@ operations:
           attributes:
             - bus-name
             - dev-name
+            - rate-traffic-class-index
             - rate-node-name
             - rate-tx-share
             - rate-tx-max
@@ -2163,6 +2170,7 @@ operations:
           attributes:
             - bus-name
             - dev-name
+            - rate-traffic-class-index
             - rate-node-name
             - rate-tx-share
             - rate-tx-max
