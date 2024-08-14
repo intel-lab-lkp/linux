@@ -22,14 +22,15 @@
 
 int dlm_lockspace_init(void);
 void dlm_lockspace_exit(void);
-struct dlm_ls *dlm_find_lockspace_name(const char *lsname);
-struct dlm_ls *dlm_find_lockspace_global(uint32_t id);
+void dlm_lockspace_net_init(struct dlm_net *dn);
+struct dlm_ls *dlm_find_lockspace_name(struct dlm_net *dn, const char *lsname);
+struct dlm_ls *dlm_find_lockspace_global(struct dlm_net *dn, uint32_t id);
 struct dlm_ls *dlm_find_lockspace_local(void *id);
-struct dlm_ls *dlm_find_lockspace_device(int minor);
+struct dlm_ls *dlm_find_lockspace_device(struct dlm_net *dn, int minor);
 void dlm_put_lockspace(struct dlm_ls *ls);
-void dlm_stop_lockspaces(void);
-int dlm_new_user_lockspace(const char *name, const char *cluster,
-			   uint32_t flags, int lvblen,
+void dlm_stop_lockspaces(struct dlm_net *dn);
+int dlm_new_user_lockspace(struct dlm_net *dn, const char *name,
+			   const char *cluster, uint32_t flags, int lvblen,
 			   const struct dlm_lockspace_ops *ops,
 			   void *ops_arg, int *ops_result,
 			   dlm_lockspace_t **lockspace);

@@ -331,9 +331,10 @@ static void print_format3(struct dlm_rsb *r, struct seq_file *s)
 	unlock_rsb(r);
 }
 
-static void print_format4(struct dlm_rsb *r, struct seq_file *s)
+static void print_format4(struct dlm_ls *ls, struct dlm_rsb *r,
+			  struct seq_file *s)
 {
-	int our_nodeid = dlm_our_nodeid();
+	int our_nodeid = dlm_our_nodeid(ls->ls_dn);
 	int print_name = 1;
 	int i;
 
@@ -381,6 +382,7 @@ static const struct seq_operations format4_seq_ops;
 static int table_seq_show(struct seq_file *seq, void *iter_ptr)
 {
 	struct dlm_rsb *rsb = list_entry(iter_ptr, struct dlm_rsb, res_slow_list);
+	struct dlm_ls *ls = seq->private;
 
 	if (seq->op == &format1_seq_ops)
 		print_format1(rsb, seq);
@@ -389,7 +391,7 @@ static int table_seq_show(struct seq_file *seq, void *iter_ptr)
 	else if (seq->op == &format3_seq_ops)
 		print_format3(rsb, seq);
 	else if (seq->op == &format4_seq_ops)
-		print_format4(rsb, seq);
+		print_format4(ls, rsb, seq);
 
 	return 0;
 }
@@ -736,10 +738,14 @@ static const struct file_operations dlm_rawmsg_fops = {
 	.llseek	= no_llseek,
 };
 
-void *dlm_create_debug_comms_file(int nodeid, void *data)
+void *dlm_create_debug_comms_file(struct dlm_net *dn, int nodeid, void *data)
 {
 	struct dentry *d_node;
 	char name[256];
+
+	/* debugfs only supported for init_net */
+	if (!net_eq(read_pnet(&dn->net), &init_net))
+		return NULL;
 
 	memset(name, 0, sizeof(name));
 	snprintf(name, 256, "%d", nodeid);
@@ -755,8 +761,12 @@ void *dlm_create_debug_comms_file(int nodeid, void *data)
 	return d_node;
 }
 
-void dlm_delete_debug_comms_file(void *ctx)
+void dlm_delete_debug_comms_file(struct dlm_net *dn, void *ctx)
 {
+	/* debugfs only supported for init_net */
+	if (!net_eq(read_pnet(&dn->net), &init_net))
+		return;
+
 	debugfs_remove(ctx);
 }
 
@@ -764,6 +774,10 @@ void dlm_create_debug_file(struct dlm_ls *ls)
 {
 	/* Reserve enough space for the longest file name */
 	char name[DLM_LOCKSPACE_LEN + sizeof("_queued_asts")];
+
+	/* debugfs only supported for init_net */
+	if (!net_eq(read_pnet(&ls->ls_dn->net), &init_net))
+		return;
 
 	/* format 1 */
 

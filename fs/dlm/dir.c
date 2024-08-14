@@ -35,7 +35,7 @@ int dlm_hash2nodeid(struct dlm_ls *ls, uint32_t hash)
 	uint32_t node;
 
 	if (ls->ls_num_nodes == 1)
-		return dlm_our_nodeid();
+		return dlm_our_nodeid(ls->ls_dn);
 	else {
 		node = (hash >> 16) % ls->ls_total_weight;
 		return ls->ls_node_array[node];
@@ -74,7 +74,7 @@ int dlm_recover_directory(struct dlm_ls *ls, uint64_t seq)
 		goto out;
 
 	list_for_each_entry(memb, &ls->ls_nodes, list) {
-		if (memb->nodeid == dlm_our_nodeid())
+		if (memb->nodeid == dlm_our_nodeid(ls->ls_dn))
 			continue;
 
 		memset(last_name, 0, DLM_RESNAME_MAXLEN);

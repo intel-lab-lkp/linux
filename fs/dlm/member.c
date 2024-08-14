@@ -100,7 +100,7 @@ int dlm_slots_copy_in(struct dlm_ls *ls)
 	struct dlm_rcom *rc = ls->ls_recover_buf;
 	struct rcom_config *rf = (struct rcom_config *)rc->rc_buf;
 	struct rcom_slot *ro0, *ro;
-	int our_nodeid = dlm_our_nodeid();
+	int our_nodeid = dlm_our_nodeid(ls->ls_dn);
 	int i, num_slots;
 	uint32_t gen;
 
@@ -162,7 +162,7 @@ int dlm_slots_assign(struct dlm_ls *ls, int *num_slots, int *slots_size,
 {
 	struct dlm_member *memb;
 	struct dlm_slot *array;
-	int our_nodeid = dlm_our_nodeid();
+	int our_nodeid = dlm_our_nodeid(ls->ls_dn);
 	int array_size, max_slots, i;
 	int need = 0;
 	int max = 0;
@@ -307,18 +307,18 @@ static void add_ordered_member(struct dlm_ls *ls, struct dlm_member *new)
 	}
 }
 
-static int add_remote_member(int nodeid)
+static int add_remote_member(struct dlm_net *dn, int nodeid)
 {
 	int error;
 
-	if (nodeid == dlm_our_nodeid())
+	if (nodeid == dlm_our_nodeid(dn))
 		return 0;
 
-	error = dlm_lowcomms_connect_node(nodeid);
+	error = dlm_lowcomms_connect_node(dn, nodeid);
 	if (error < 0)
 		return error;
 
-	dlm_midcomms_add_member(nodeid);
+	dlm_midcomms_add_member(dn, nodeid);
 	return 0;
 }
 
@@ -335,7 +335,7 @@ static int dlm_add_member(struct dlm_ls *ls, struct dlm_config_node *node)
 	memb->weight = node->weight;
 	memb->comm_seq = node->comm_seq;
 
-	error = add_remote_member(node->nodeid);
+	error = add_remote_member(ls->ls_dn, node->nodeid);
 	if (error < 0) {
 		kfree(memb);
 		return error;
@@ -373,8 +373,8 @@ int dlm_is_removed(struct dlm_ls *ls, int nodeid)
 	return 0;
 }
 
-static void clear_memb_list(struct list_head *head,
-			    void (*after_del)(int nodeid))
+static void clear_memb_list(struct dlm_net *dn, struct list_head *head,
+			    void (*after_del)(struct dlm_net *dn, int nodeid))
 {
 	struct dlm_member *memb;
 
@@ -382,28 +382,28 @@ static void clear_memb_list(struct list_head *head,
 		memb = list_entry(head->next, struct dlm_member, list);
 		list_del(&memb->list);
 		if (after_del)
-			after_del(memb->nodeid);
+			after_del(dn, memb->nodeid);
 		kfree(memb);
 	}
 }
 
-static void remove_remote_member(int nodeid)
+static void remove_remote_member(struct dlm_net *dn, int nodeid)
 {
-	if (nodeid == dlm_our_nodeid())
+	if (nodeid == dlm_our_nodeid(dn))
 		return;
 
-	dlm_midcomms_remove_member(nodeid);
+	dlm_midcomms_remove_member(dn, nodeid);
 }
 
 void dlm_clear_members(struct dlm_ls *ls)
 {
-	clear_memb_list(&ls->ls_nodes, remove_remote_member);
+	clear_memb_list(ls->ls_dn, &ls->ls_nodes, remove_remote_member);
 	ls->ls_num_nodes = 0;
 }
 
 void dlm_clear_members_gone(struct dlm_ls *ls)
 {
-	clear_memb_list(&ls->ls_nodes_gone, NULL);
+	clear_memb_list(ls->ls_dn, &ls->ls_nodes_gone, NULL);
 }
 
 static void make_member_array(struct dlm_ls *ls)
@@ -493,7 +493,7 @@ static void dlm_lsop_recover_slot(struct dlm_ls *ls, struct dlm_member *memb)
 	   we consider the node to have failed (versus
 	   being removed due to dlm_release_lockspace) */
 
-	error = dlm_comm_seq(memb->nodeid, &seq);
+	error = dlm_comm_seq(ls->ls_dn, memb->nodeid, &seq);
 
 	if (!error && seq == memb->comm_seq)
 		return;
@@ -582,7 +582,7 @@ int dlm_recover_members(struct dlm_ls *ls, struct dlm_recover *rv, int *neg_out)
 
 		neg++;
 		list_move(&memb->list, &ls->ls_nodes_gone);
-		remove_remote_member(memb->nodeid);
+		remove_remote_member(ls->ls_dn, memb->nodeid);
 		ls->ls_num_nodes--;
 		dlm_lsop_recover_slot(ls, memb);
 	}
@@ -719,7 +719,7 @@ int dlm_ls_start(struct dlm_ls *ls)
 	if (!rv)
 		return -ENOMEM;
 
-	error = dlm_config_nodes(ls->ls_name, &nodes, &count);
+	error = dlm_config_nodes(ls->ls_dn, ls->ls_name, &nodes, &count);
 	if (error < 0)
 		goto fail_rv;
 
