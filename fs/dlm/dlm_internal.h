@@ -813,6 +813,10 @@ extern struct workqueue_struct *dlm_wq;
 int dlm_plock_init(void);
 void dlm_plock_exit(void);
 
+int nldlm_ls_event(const struct dlm_ls *ls, uint32_t event);
+int __init dlm_nldlm_init(void);
+void dlm_nldlm_exit(void);
+
 #ifdef CONFIG_DLM_DEBUG
 void dlm_register_debugfs(void);
 void dlm_unregister_debugfs(void);

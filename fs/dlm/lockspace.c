@@ -23,6 +23,7 @@
 #include "lock.h"
 #include "recover.h"
 #include "requestqueue.h"
+#include "nldlm.h"
 #include "user.h"
 #include "ast.h"
 
@@ -205,10 +206,18 @@ static const struct kobj_type dlm_kset_ktype = {
 
 static int do_uevent(struct dlm_ls *ls, int in)
 {
-	if (in)
+	int rv;
+
+	if (in) {
 		kobject_uevent(&ls->ls_kobj, KOBJ_ONLINE);
-	else
+		rv = nldlm_ls_event(ls, NLDLM_EVENT_LS_NEW);
+	} else {
 		kobject_uevent(&ls->ls_kobj, KOBJ_OFFLINE);
+		rv = nldlm_ls_event(ls, NLDLM_EVENT_LS_RELEASE);
+	}
+
+	/* ignore if nldlm_ls_event() has no subscribes */
+	WARN_ON(rv && rv != -ESRCH);
 
 	log_rinfo(ls, "%s the lockspace group...", in ? "joining" : "leaving");
 
