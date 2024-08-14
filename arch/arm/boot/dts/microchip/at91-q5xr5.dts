@@ -167,12 +167,12 @@
 	status = "okay";
 };
 
-&usb0 {
+&ohci {
 	num-ports = <2>;
 	status = "okay";
 };
 
-&usb1 {
+&gadget {
 	status = "okay";
 };
 

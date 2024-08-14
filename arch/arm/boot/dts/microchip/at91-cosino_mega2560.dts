@@ -56,7 +56,7 @@
 	status = "okay";
 };
 
-&usb0 {
+&ohci {
 	num-ports = <3>;
 	atmel,vbus-gpio = <0 /* &pioD 18 GPIO_ACTIVE_LOW */
 			   &pioD 19 GPIO_ACTIVE_LOW
@@ -65,11 +65,11 @@
 	status = "okay";
 };
 
-&usb1 {
+&ehci {
 	status = "okay";
 };
 
-&usb2 {
+&gadget {
 	atmel,vbus-gpio = <&pioB 16 GPIO_ACTIVE_HIGH>;
 	status = "okay";
 };

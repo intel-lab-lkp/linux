@@ -81,15 +81,15 @@
 	status = "okay";
 };
 
-&usb0 {
+&gadget {
 	status = "okay";
 };
 
-&usb1 {
+&ohci {
 	status = "okay";
 };
 
-&usb2 {
+&ehci {
 	status = "okay";
 };
 

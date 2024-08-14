@@ -766,21 +766,21 @@
 	status = "okay";
 };
 
-&usb0 {
+&gadget {
 	atmel,vbus-gpio = <&pioA PIN_PD23 GPIO_ACTIVE_HIGH>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_usba_vbus>;
 	status = "okay";
 };
 
-&usb1 {
+&ohci {
 	num-ports = <3>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_usb_default>;
 	status = "okay";
 };
 
-&usb2 {
+&ehci {
 	phy_type = "hsic";
 	status = "okay";
 };

@@ -282,7 +282,7 @@
 				atmel,adc-startup-time = <40>;
 			};
 
-			usb0: gadget@fffd4000 {
+			gadget: usb@fffd4000 {
 				compatible = "atmel,at91sam9rl-udc";
 				reg = <0x00600000 0x100000>,
 				      <0xfffd4000 0x4000>;

@@ -13,7 +13,7 @@
 		     "atmel,at91sam9x5", "atmel,at91sam9";
 };
 
-&usb0 {
+&ohci {
 	num-ports = <2>;
 };
 

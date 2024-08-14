@@ -130,12 +130,12 @@
 	status = "okay";
 };
 
-&usb0 {
+&ohci {
 	num-ports = <2>;
 	status = "okay";
 };
 
-&usb1 {
+&gadget {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_usb1_vbus_gpio>;
 	atmel,vbus-gpio = <&pioC 5 GPIO_ACTIVE_HIGH>;

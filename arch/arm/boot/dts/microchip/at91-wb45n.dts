@@ -28,7 +28,7 @@
 	status = "okay";
 };
 
-&usb0 {
+&ohci {
 	status = "okay";
 };
 

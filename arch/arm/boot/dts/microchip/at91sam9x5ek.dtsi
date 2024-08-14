@@ -144,7 +144,7 @@
 	status = "okay";
 };
 
-&usb0 {
+&ohci {
 	num-ports = <3>;
 	atmel,vbus-gpio = <0 /* &pioD 18 GPIO_ACTIVE_LOW *//* Activate to have access to port A */
 			   &pioD 19 GPIO_ACTIVE_LOW
@@ -153,11 +153,11 @@
 	status = "okay";
 };
 
-&usb1 {
+&ehci {
 	status = "okay";
 };
 
-&usb2 {
+&gadget {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_board_usb2>;
 	atmel,vbus-gpio = <&pioB 16 GPIO_ACTIVE_HIGH>;

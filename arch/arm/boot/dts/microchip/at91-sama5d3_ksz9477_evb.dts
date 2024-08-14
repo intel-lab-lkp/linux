@@ -175,7 +175,7 @@
 	};
 };
 
-&usb0 {
+&gadget {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_usba_vbus>;
 	atmel,vbus-gpio = <&pioE 9 GPIO_ACTIVE_HIGH>;

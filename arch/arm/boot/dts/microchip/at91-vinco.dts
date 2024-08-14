@@ -155,14 +155,14 @@
 			};
 		};
 
-		usb0: gadget@400000 {
+		gadget: usb@400000 {
 			atmel,vbus-gpio = <&pioE 31 GPIO_ACTIVE_HIGH>;
 			pinctrl-names = "default";
 			pinctrl-0 = <&pinctrl_usba_vbus>;
 			status = "disabled";
 		};
 
-		usb1: ohci@500000 {
+		ohci: usb@500000 {
 			num-ports = <3>;
 			atmel,vbus-gpio = <0
 					   &pioE 11 GPIO_ACTIVE_LOW
@@ -171,7 +171,7 @@
 			status = "disabled";
 		};
 
-		usb2: ehci@600000 {
+		ehci: usb@600000 {
 			/* 4G Modem */
 			status = "okay";
 		};

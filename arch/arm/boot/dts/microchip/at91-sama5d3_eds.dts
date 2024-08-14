@@ -284,14 +284,14 @@
 	};
 };
 
-&usb0 {	/* USB Device port with VBUS detection. */
+&gadget {/* USB Device port with VBUS detection. */
 	atmel,vbus-gpio = <&pioE 9 GPIO_ACTIVE_HIGH>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_usba_vbus>;
 	status = "okay";
 };
 
-&usb1 {	/* 3-port Host. First port is unused. */
+&ohci {	/* 3-port Host. First port is unused. */
 	atmel,vbus-gpio = <0
 			   &pioE 3 GPIO_ACTIVE_HIGH
 			   &pioE 4 GPIO_ACTIVE_HIGH
@@ -302,6 +302,6 @@
 	status = "okay";
 };
 
-&usb2 {
+&ehci {
 	status = "okay";
 };

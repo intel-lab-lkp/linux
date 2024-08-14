@@ -172,7 +172,7 @@
 				status = "okay";
 			};
 
-			usb0: gadget@fffd4000 {
+			gadget: usb@fffd4000 {
 				atmel,vbus-gpio = <&pioA 8 GPIO_ACTIVE_HIGH>;
 				status = "okay";
 			};

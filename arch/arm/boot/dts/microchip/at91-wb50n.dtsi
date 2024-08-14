@@ -181,13 +181,13 @@
 	};
 };
 
-&usb0 {
+&gadget {
 	atmel,vbus-gpio = <&pioB 13 GPIO_ACTIVE_LOW>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_usba_vbus>;
 };
 
-&usb1 {
+&ohci {
 	num-ports = <3>;
 	atmel,vbus-gpio = <&pioA 2 GPIO_ACTIVE_LOW>;
 	atmel,oc-gpio = <&pioA 4 GPIO_ACTIVE_LOW>;

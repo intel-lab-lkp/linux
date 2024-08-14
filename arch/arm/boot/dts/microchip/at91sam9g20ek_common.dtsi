@@ -90,7 +90,7 @@
 				status = "okay";
 			};
 
-			usb1: gadget@fffa4000 {
+			gadget: usb@fffa4000 {
 				pinctrl-0 = <&pinctrl_usb1_vbus_gpio>;
 				pinctrl-names = "default";
 				atmel,vbus-gpio = <&pioC 5 GPIO_ACTIVE_HIGH>;
@@ -211,7 +211,7 @@
 			};
 		};
 
-		usb0: ohci@500000 {
+		ohci: usb@500000 {
 			num-ports = <2>;
 			status = "okay";
 		};

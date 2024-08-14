@@ -174,7 +174,7 @@
 				};
 			};
 
-			usb2: gadget@fff78000 {
+			gadget: usb@fff78000 {
 				atmel,vbus-gpio = <&pioB 19 GPIO_ACTIVE_HIGH>;
 				status = "okay";
 			};
@@ -303,14 +303,14 @@
 			};
 		};
 
-		usb0: ohci@700000 {
+		ohci: usb@700000 {
 			status = "okay";
 			num-ports = <2>;
 			atmel,vbus-gpio = <&pioD 1 GPIO_ACTIVE_LOW
 					   &pioD 3 GPIO_ACTIVE_LOW>;
 		};
 
-		usb1: ehci@800000 {
+		ehci: usb@800000 {
 			status = "okay";
 		};
 	};

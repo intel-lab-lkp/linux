@@ -297,7 +297,7 @@
 	atmel,use-dma-rx;
 };
 
-&usb0 {
+&gadget {
 	status = "okay";
 
 	atmel,vbus-gpio = <&pioD 28 GPIO_ACTIVE_HIGH>;

@@ -173,11 +173,11 @@
 	status = "okay";
 };
 
-&usb0 {
+&ohci {
 	status = "okay";
 	num-ports = <3>;
 };
 
-&usb1 {
+&ehci {
 	status = "okay";
 };

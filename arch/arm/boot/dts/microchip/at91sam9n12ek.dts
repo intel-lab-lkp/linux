@@ -142,7 +142,7 @@
 				};
 			};
 
-			usb1: gadget@f803c000 {
+			gadget: usb@f803c000 {
 				pinctrl-names = "default";
 				pinctrl-0 = <&pinctrl_usb1_vbus_sense>;
 				atmel,vbus-gpio = <&pioB 16 GPIO_ACTIVE_HIGH>;
@@ -180,7 +180,7 @@
 			};
 		};
 
-		usb0: ohci@500000 {
+		ohci: usb@500000 {
 			num-ports = <1>;
 			atmel,vbus-gpio = <&pioB 7 GPIO_ACTIVE_LOW>;
 			status = "okay";

@@ -50,13 +50,13 @@
 				status = "okay";
 			};
 
-			usb1: gadget@fffa4000 {
+			gadget: usb@fffa4000 {
 				atmel,vbus-gpio = <&pioC 15 GPIO_ACTIVE_HIGH>;
 				status = "okay";
 			};
 		};
 
-		usb0: ohci@500000 {
+		ohci: usb@500000 {
 			num-ports = <2>;
 			status = "okay";
 		};

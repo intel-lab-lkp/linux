@@ -175,7 +175,7 @@
 	status = "okay";
 };
 
-&usb0 {
+&ohci {
 	num-ports = <1>;
 	status = "okay";
 };

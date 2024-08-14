@@ -111,11 +111,11 @@
 	};
 };
 
-&usb1 {
+&ohci {
 	status = "okay";
 	/delete-property/atmel,oc-gpio;
 };
 
-&usb2 {
+&ehci {
 	status = "okay";
 };

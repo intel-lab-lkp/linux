@@ -30,14 +30,14 @@
 	};
 
 	ahb {
-		usb0: gadget@300000 {
+		gadget: usb@300000 {
 			atmel,vbus-gpio = <&pioA PIN_PD20 GPIO_ACTIVE_HIGH>;
 			pinctrl-names = "default";
 			pinctrl-0 = <&pinctrl_usba_vbus>;
 			status = "okay";
 		};
 
-		usb1: ohci@400000 {
+		ohci: usb@400000 {
 			num-ports = <3>;
 			atmel,vbus-gpio = <0 /* &pioA PIN_PD20 GPIO_ACTIVE_HIGH */
 					   &pioA PIN_PA27 GPIO_ACTIVE_HIGH
@@ -48,7 +48,7 @@
 			status = "okay";
 		};
 
-		usb2: ehci@500000 {
+		ehci: usb@500000 {
 			status = "okay";
 		};
 

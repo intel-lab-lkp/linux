@@ -157,12 +157,12 @@
 	};
 };
 
-&usb0 {
+&ohci {
 	num-ports = <1>;
 	status = "okay";
 };
 
-&usb1 {
+&ehci {
 	status = "okay";
 };
 
