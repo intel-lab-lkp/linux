@@ -6223,7 +6223,7 @@ int skb_vlan_pop(struct sk_buff *skb)
 }
 EXPORT_SYMBOL(skb_vlan_pop);
 
-static int skb_vlan_flush(struct sk_buff *skb)
+int skb_vlan_flush(struct sk_buff *skb)
 {
 	int offset = skb->data - skb_mac_header(skb);
 	int err;
@@ -6244,6 +6244,7 @@ static int skb_vlan_flush(struct sk_buff *skb)
 	skb_postpush_rcsum(skb, skb->data + (2 * ETH_ALEN), VLAN_HLEN);
 	return 0;
 }
+EXPORT_SYMBOL(skb_vlan_flush);
 
 /* Push a vlan tag either into hwaccel or into payload (if hwaccel tag present).
  * Expects skb->data at mac header.
