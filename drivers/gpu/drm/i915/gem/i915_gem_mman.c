@@ -323,8 +323,8 @@ static void set_address_limits(struct vm_area_struct *area,
 	end = min_t(long, end, vm_end);
 
 	/* Let's move back into the "<< PAGE_SHIFT" domain */
-	*start_vaddr = (unsigned long)start << PAGE_SHIFT;
-	*end_vaddr = (unsigned long)end << PAGE_SHIFT;
+	*start_vaddr = start << PAGE_SHIFT;
+	*end_vaddr = end << PAGE_SHIFT;
 
 	*pfn = (gmadr_start + i915_ggtt_offset(vma)) >> PAGE_SHIFT;
 	*pfn += (*start_vaddr - area->vm_start) >> PAGE_SHIFT;
