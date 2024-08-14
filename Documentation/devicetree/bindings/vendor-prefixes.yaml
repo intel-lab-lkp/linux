@@ -758,6 +758,8 @@ patternProperties:
     description: Jiandangjing Technology Co., Ltd.
   "^jide,.*":
     description: Jide Tech
+  "^jmo,.*":
+    description: JMO Tech
   "^joz,.*":
     description: JOZ BV
   "^kam,.*":
