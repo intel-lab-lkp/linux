@@ -49,7 +49,7 @@ static int get_shift_value(int state)
 int
 main(int argc, char *argv[])
 {
-	int value, shift_state, i, spk_val = 0, lock_val = 0;
+	int value, shift_state, i, lc, spk_val = 0, lock_val = 0;
 	int max_key_used = 0, num_keys_used = 0;
 	struct st_key *this;
 	struct st_key_init *p_init;
