@@ -1389,6 +1389,7 @@ static inline pte_t mk_pte(struct page *page, pgprot_t pgprot)
 		__pte = pte_mkdirty(__pte);
 	return __pte;
 }
+#define mk_pte mk_pte
 
 #define pgd_index(address) (((address) >> PGDIR_SHIFT) & (PTRS_PER_PGD-1))
 #define p4d_index(address) (((address) >> P4D_SHIFT) & (PTRS_PER_P4D-1))

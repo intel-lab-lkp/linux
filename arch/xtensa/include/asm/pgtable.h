@@ -279,7 +279,6 @@ static inline pte_t pte_mkwrite_novma(pte_t pte)
 #define pte_same(a,b)		(pte_val(a) == pte_val(b))
 #define pte_page(x)		pfn_to_page(pte_pfn(x))
 #define pfn_pte(pfn, prot)	__pte(((pfn) << PAGE_SHIFT) | pgprot_val(prot))
-#define mk_pte(page, prot)	pfn_pte(page_to_pfn(page), prot)
 
 static inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 {
