@@ -1768,6 +1768,32 @@ TEST_F(ipv4_tcp, with_fs)
 	EXPECT_EQ(-EACCES, bind_variant(bind_fd, &self->srv1));
 }
 
+TEST_F(ipv4_tcp, double_listen)
+{
+	const struct landlock_ruleset_attr ruleset_attr = {
+		.handled_access_net = LANDLOCK_ACCESS_NET_LISTEN_TCP,
+	};
+	int ruleset_fd;
+	int listen_fd;
+
+	listen_fd = socket_variant(&self->srv0);
+	ASSERT_LE(0, listen_fd);
+
+	EXPECT_EQ(0, bind_variant(listen_fd, &self->srv0));
+	EXPECT_EQ(0, listen_variant(listen_fd, backlog));
+
+	ruleset_fd =
+		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
+	ASSERT_LE(0, ruleset_fd);
+
+	/* Denies listen. */
+	enforce_ruleset(_metadata, ruleset_fd);
+	EXPECT_EQ(0, close(ruleset_fd));
+
+	/* Tries to change backlog value of listening socket. */
+	EXPECT_EQ(0, listen_variant(listen_fd, backlog + 1));
+}
+
 FIXTURE(port_specific)
 {
 	struct service_fixture srv0;
