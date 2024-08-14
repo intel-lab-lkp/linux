@@ -79,6 +79,7 @@ struct kgdb_bkpt {
 	unsigned char		saved_instr[BREAK_INSTR_SIZE];
 	enum kgdb_bptype	type;
 	enum kgdb_bpstate	state;
+	void			*trampoline;
 };
 
 struct dbg_reg_def_t {
@@ -324,6 +325,7 @@ extern int kgdb_hex2long(char **ptr, unsigned long *long_val);
 extern char *kgdb_mem2hex(char *mem, char *buf, int count);
 extern int kgdb_hex2mem(char *buf, char *mem, int count);
 
+extern struct kgdb_bkpt *kgdb_get_removedbreak(unsigned long addr);
 extern int kgdb_isremovedbreak(unsigned long addr);
 extern int kgdb_has_hit_break(unsigned long addr);
 

@@ -393,6 +393,18 @@ int dbg_remove_sw_break(unsigned long addr)
 	return -ENOENT;
 }
 
+struct kgdb_bkpt *kgdb_get_removedbreak(unsigned long addr)
+{
+	int i;
+
+	for (i = 0; i < KGDB_MAX_BREAKPOINTS; i++) {
+		if ((kgdb_break[i].state == BP_REMOVED) &&
+		    (kgdb_break[i].bpt_addr == addr))
+			return &kgdb_break[i];
+	}
+	return NULL;
+}
+
 int kgdb_isremovedbreak(unsigned long addr)
 {
 	int i;

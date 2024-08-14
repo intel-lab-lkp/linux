@@ -35,6 +35,7 @@
 #include <linux/hw_breakpoint.h>
 #include <linux/uaccess.h>
 #include <linux/memory.h>
+#include <linux/execmem.h>
 
 #include <asm/text-patching.h>
 #include <asm/debugreg.h>
@@ -42,6 +43,11 @@
 #include <asm/apic.h>
 #include <asm/nmi.h>
 #include <asm/switch_to.h>
+#include <asm/insn.h>
+#include <asm/set_memory.h>
+
+static void *kgdb_trampoline_page;
+static void *kgdb_trampoline_page_curr_slot;
 
 struct dbg_reg_def_t dbg_reg_def[DBG_MAX_REG_NUM] =
 {
@@ -402,6 +408,60 @@ static void kgdb_disable_hw_debug(struct pt_regs *regs)
 	}
 }
 
+static int kgdb_init_trampolines(void)
+{
+	/* FIXME: We should reserve enough space for all breakpoints
+	   or make the trampoline table dynamic somehow.. */
+	/* FIXME: Currently borrowing EXECMEM_KPROBES */
+	kgdb_trampoline_page = execmem_alloc(EXECMEM_KPROBES, PAGE_SIZE);
+	if (!kgdb_trampoline_page)
+		return 1;
+	memset(kgdb_trampoline_page, INT3_INSN_OPCODE, PAGE_SIZE);
+	set_memory_rox((unsigned long)kgdb_trampoline_page, 1);
+	kgdb_trampoline_page_curr_slot = kgdb_trampoline_page;
+	return 0;
+}
+
+static int kgdb_make_trampoline(struct kgdb_bkpt *bpt, void *orig_insn)
+{
+	void *kernel_addr, *slot_addr, *jmp_addr, *jmp_code;
+	int slot_size;
+	struct insn insn;
+	u8 insn_buff[MAX_INSN_SIZE + JMP32_INSN_SIZE];
+
+	if (WARN_ON(insn_decode_kernel(&insn, orig_insn)))
+		return -EINVAL;
+
+	slot_size = insn.length + JMP32_INSN_SIZE;
+
+	if (!bpt->trampoline) {
+		/* FIXME: Not enough space for all possible breakpoints */
+		if (kgdb_trampoline_page_curr_slot + slot_size
+		    > kgdb_trampoline_page + PAGE_SIZE)
+			return -ENOSPC;
+
+		bpt->trampoline = kgdb_trampoline_page_curr_slot;
+		kgdb_trampoline_page_curr_slot += slot_size;
+	}
+
+	kernel_addr = (void *)bpt->bpt_addr;
+	slot_addr = bpt->trampoline;
+	jmp_addr = slot_addr + insn.length;
+	jmp_code = text_gen_insn(JMP32_INSN_OPCODE, jmp_addr,
+				 kernel_addr + insn.length);
+
+	memcpy(insn_buff, kernel_addr, insn.length);
+	memcpy(insn_buff + insn.length, jmp_code, JMP32_INSN_SIZE);
+	apply_relocation(insn_buff, slot_addr, insn.length,
+			 kernel_addr, insn.length);
+
+	if (mutex_is_locked(&text_mutex))
+		return -EBUSY;
+	text_poke_kgdb(slot_addr, insn_buff, insn.length + JMP32_INSN_SIZE);
+
+	return 0;
+}
+
 #ifdef CONFIG_SMP
 /**
  *	kgdb_roundup_cpus - Get other CPUs into a holding pattern
@@ -598,6 +658,10 @@ int kgdb_arch_init(void)
 {
 	int retval;
 
+	retval = kgdb_init_trampolines();
+	if (retval)
+		goto out;
+
 	retval = register_die_notifier(&kgdb_notifier);
 	if (retval)
 		goto out;
@@ -708,11 +772,18 @@ void kgdb_arch_exit(void)
  */
 int kgdb_skipexception(int exception, struct pt_regs *regs)
 {
-	if (exception == 3 && kgdb_isremovedbreak(regs->ip - 1)) {
-		regs->ip -= 1;
-		return 1;
+	struct kgdb_bkpt *bp;
+
+	if (exception != 3)
+		return false;
+
+	bp = kgdb_get_removedbreak(regs->ip - 1);
+	if (bp) {
+		regs->ip = (unsigned long)bp->trampoline;
+		return true;
 	}
-	return 0;
+
+	return false;
 }
 
 unsigned long kgdb_arch_pc(int exception, struct pt_regs *regs)
@@ -730,12 +801,33 @@ void kgdb_arch_set_pc(struct pt_regs *regs, unsigned long ip)
 int kgdb_arch_set_breakpoint(struct kgdb_bkpt *bpt)
 {
 	int err;
+	char orig_insn[MAX_INSN_SIZE];
 
 	bpt->type = BP_BREAKPOINT;
-	err = copy_from_kernel_nofault(bpt->saved_instr, (char *)bpt->bpt_addr,
-				BREAK_INSTR_SIZE);
+
+	/*
+	 * FIXME: Currently, debug traps are not removed, so all logically
+	 * removed breakpoints are still there.
+	 * For now, abort if the trampoline is already present.
+	 * Later, we should use a dedicated breakpoint state to signal this.
+	 */
+	if (bpt->trampoline) {
+		bpt->type = BP_POKE_BREAKPOINT;
+		return 0;
+	}
+
+	/* FIXME: What if we cannot read all of MAX_INSN_SIZE */
+	err = copy_from_kernel_nofault(orig_insn, (char *)bpt->bpt_addr,
+				       MAX_INSN_SIZE);
 	if (err)
 		return err;
+
+	memcpy(bpt->saved_instr, orig_insn, BREAK_INSTR_SIZE);
+
+	err = kgdb_make_trampoline(bpt, orig_insn);
+	if (err)
+		return err;
+
 	err = copy_to_kernel_nofault((char *)bpt->bpt_addr,
 				 arch_kgdb_ops.gdb_bpt_instr, BREAK_INSTR_SIZE);
 	if (!err)
@@ -755,21 +847,29 @@ int kgdb_arch_set_breakpoint(struct kgdb_bkpt *bpt)
 
 int kgdb_arch_remove_breakpoint(struct kgdb_bkpt *bpt)
 {
+	/* FIXME: Do not mess with early breakpoints for now */
 	if (bpt->type != BP_POKE_BREAKPOINT)
 		goto knl_write;
-	/*
-	 * It is safe to call text_poke_kgdb() because normal kernel execution
-	 * is stopped on all cores, so long as the text_mutex is not locked.
-	 */
-	if (mutex_is_locked(&text_mutex))
-		goto knl_write;
-	text_poke_kgdb((void *)bpt->bpt_addr, bpt->saved_instr,
-		       BREAK_INSTR_SIZE);
+
+	/* FIXME: Removal is not necessary anymore.. for now */
 	return 0;
 
 knl_write:
 	return copy_to_kernel_nofault((char *)bpt->bpt_addr,
 				  (char *)bpt->saved_instr, BREAK_INSTR_SIZE);
+}
+
+int kgdb_validate_break_address(unsigned long addr)
+{
+	if (kgdb_within_blocklist(addr))
+		return -EINVAL;
+
+	/*
+	 * With breakpoint trampolines, there is no need to further validate
+	 * setting and removal of breakpoints.
+	 */
+
+	return 0;
 }
 
 const struct kgdb_arch arch_kgdb_ops = {
