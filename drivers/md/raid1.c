@@ -1604,7 +1604,7 @@ static void raid1_write_request(struct mddev *mddev, struct bio *bio,
 
 		if (first_clone) {
 			struct md_bitmap_stats stats;
-			int err = md_bitmap_get_stats(bitmap, &stats);
+			int err = mddev->bitmap_ops->get_stats(bitmap, &stats);
 
 			/* do behind I/O ?
 			 * Not if there are too many, or cannot

@@ -1150,7 +1150,7 @@ static int resize_bitmaps(struct mddev *mddev, sector_t newsize, sector_t oldsiz
 	char str[64];
 	int i, rv;
 
-	rv = md_bitmap_get_stats(bitmap, &stats);
+	rv = mddev->bitmap_ops->get_stats(bitmap, &stats);
 	if (rv)
 		return rv;
 
@@ -1174,7 +1174,7 @@ static int resize_bitmaps(struct mddev *mddev, sector_t newsize, sector_t oldsiz
 			goto out;
 		}
 
-		rv = md_bitmap_get_stats(bitmap, &stats);
+		rv = mddev->bitmap_ops->get_stats(bitmap, &stats);
 		if (rv)
 			goto out;
 		/*
@@ -1223,7 +1223,7 @@ static int cluster_check_sync_size(struct mddev *mddev)
 	struct dlm_lock_resource *bm_lockres;
 	struct md_bitmap_stats stats;
 
-	rv = md_bitmap_get_stats(bitmap, &stats);
+	rv = mddev->bitmap_ops->get_stats(bitmap, &stats);
 	if (rv)
 		return rv;
 
@@ -1256,7 +1256,7 @@ static int cluster_check_sync_size(struct mddev *mddev)
 			mddev->bitmap_ops->update_sb(bitmap);
 		lockres_free(bm_lockres);
 
-		rv = md_bitmap_get_stats(bitmap, &stats);
+		rv = mddev->bitmap_ops->get_stats(bitmap, &stats);
 		if (rv) {
 			md_bitmap_free(bitmap);
 			return rv;

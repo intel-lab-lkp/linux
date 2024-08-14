@@ -2105,7 +2105,7 @@ void md_bitmap_set_pages(struct bitmap *bitmap, unsigned long pages)
 }
 EXPORT_SYMBOL_GPL(md_bitmap_set_pages);
 
-int md_bitmap_get_stats(struct bitmap *bitmap, struct md_bitmap_stats *stats)
+static int bitmap_get_stats(struct bitmap *bitmap, struct md_bitmap_stats *stats)
 {
 	bitmap_super_t *sb;
 	struct bitmap_counts *counts;
@@ -2128,7 +2128,6 @@ int md_bitmap_get_stats(struct bitmap *bitmap, struct md_bitmap_stats *stats)
 	stats->behind_wait = wq_has_sleeper(&bitmap->behind_wait);
 	return 0;
 }
-EXPORT_SYMBOL_GPL(md_bitmap_get_stats);
 
 int md_bitmap_resize(struct bitmap *bitmap, sector_t blocks,
 		  int chunksize, int init)
@@ -2720,6 +2719,7 @@ static struct bitmap_operations bitmap_ops = {
 	.flush			= bitmap_flush,
 
 	.update_sb		= bitmap_update_sb,
+	.get_stats		= bitmap_get_stats,
 };
 
 void mddev_set_bitmap_ops(struct mddev *mddev)
