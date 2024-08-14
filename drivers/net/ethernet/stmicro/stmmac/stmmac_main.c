@@ -4847,8 +4847,9 @@ static inline void stmmac_rx_refill(struct stmmac_priv *priv, u32 queue)
 		if (!priv->use_riwt)
 			use_rx_wd = false;
 
+		stmmac_set_rx_ic(priv, p, use_rx_wd);
 		dma_wmb();
-		stmmac_set_rx_owner(priv, p, use_rx_wd);
+		stmmac_set_rx_owner(priv, p);
 
 		entry = STMMAC_GET_ENTRY(entry, priv->dma_conf.dma_rx_size);
 	}
@@ -5204,8 +5205,9 @@ static bool stmmac_rx_refill_zc(struct stmmac_priv *priv, u32 queue, u32 budget)
 		if (!priv->use_riwt)
 			use_rx_wd = false;
 
+		stmmac_set_rx_ic(priv, rx_desc, use_rx_wd);
 		dma_wmb();
-		stmmac_set_rx_owner(priv, rx_desc, use_rx_wd);
+		stmmac_set_rx_owner(priv, rx_desc);
 
 		entry = STMMAC_GET_ENTRY(entry, priv->dma_conf.dma_rx_size);
 	}

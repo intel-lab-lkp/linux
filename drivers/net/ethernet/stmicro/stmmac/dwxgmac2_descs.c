@@ -54,12 +54,15 @@ static void dwxgmac2_set_tx_owner(struct dma_desc *p)
 	p->des3 |= cpu_to_le32(XGMAC_TDES3_OWN);
 }
 
-static void dwxgmac2_set_rx_owner(struct dma_desc *p, int disable_rx_ic)
+static void dwxgmac2_set_rx_ic(struct dma_desc *p, int disable_rx_ic)
 {
-	p->des3 |= cpu_to_le32(XGMAC_RDES3_OWN);
-
 	if (!disable_rx_ic)
 		p->des3 |= cpu_to_le32(XGMAC_RDES3_IOC);
+}
+
+static void dwxgmac2_set_rx_owner(struct dma_desc *p)
+{
+	p->des3 |= cpu_to_le32(XGMAC_RDES3_OWN);
 }
 
 static int dwxgmac2_get_tx_ls(struct dma_desc *p)
@@ -129,7 +132,9 @@ static int dwxgmac2_get_rx_timestamp_status(void *desc, void *next_desc,
 static void dwxgmac2_init_rx_desc(struct dma_desc *p, int disable_rx_ic,
 				  int mode, int end, int bfsize)
 {
-	dwxgmac2_set_rx_owner(p, disable_rx_ic);
+	dwxgmac2_set_rx_ic(p, disable_rx_ic);
+	dma_wmb();
+	dwxgmac2_set_rx_owner(p);
 }
 
 static void dwxgmac2_init_tx_desc(struct dma_desc *p, int mode, int end)
@@ -347,6 +352,7 @@ const struct stmmac_desc_ops dwxgmac210_desc_ops = {
 	.get_tx_len = dwxgmac2_get_tx_len,
 	.get_tx_owner = dwxgmac2_get_tx_owner,
 	.set_tx_owner = dwxgmac2_set_tx_owner,
+	.set_rx_ic = dwxgmac2_set_rx_ic,
 	.set_rx_owner = dwxgmac2_set_rx_owner,
 	.get_tx_ls = dwxgmac2_get_tx_ls,
 	.get_rx_frame_len = dwxgmac2_get_rx_frame_len,
