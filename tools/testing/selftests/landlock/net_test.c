@@ -689,6 +689,50 @@ TEST_F(protocol, connect)
 				    restricted, restricted);
 }
 
+TEST_F(protocol, listen)
+{
+	if (variant->sandbox == TCP_SANDBOX) {
+		const struct landlock_ruleset_attr ruleset_attr = {
+			.handled_access_net = ACCESS_ALL,
+		};
+		const struct landlock_net_port_attr tcp_not_restricted_p0 = {
+			.allowed_access = ACCESS_ALL,
+			.port = self->srv0.port,
+		};
+		const struct landlock_net_port_attr tcp_denied_listen_p1 = {
+			.allowed_access = ACCESS_ALL &
+					  ~LANDLOCK_ACCESS_NET_LISTEN_TCP,
+			.port = self->srv1.port,
+		};
+		int ruleset_fd;
+
+		ruleset_fd = landlock_create_ruleset(&ruleset_attr,
+						     sizeof(ruleset_attr), 0);
+		ASSERT_LE(0, ruleset_fd);
+
+		/* Allows all actions for the first port. */
+		ASSERT_EQ(0,
+			  landlock_add_rule(ruleset_fd, LANDLOCK_RULE_NET_PORT,
+					    &tcp_not_restricted_p0, 0));
+
+		/* Allows all actions despite listen. */
+		ASSERT_EQ(0,
+			  landlock_add_rule(ruleset_fd, LANDLOCK_RULE_NET_PORT,
+					    &tcp_denied_listen_p1, 0));
+
+		enforce_ruleset(_metadata, ruleset_fd);
+		EXPECT_EQ(0, close(ruleset_fd));
+	}
+	bool restricted = is_restricted(&variant->prot, variant->sandbox);
+
+	test_restricted_net_fixture(_metadata, &self->srv0, false, false,
+				    false);
+	test_restricted_net_fixture(_metadata, &self->srv1, false, false,
+				    restricted);
+	test_restricted_net_fixture(_metadata, &self->srv2, restricted,
+				    restricted, restricted);
+}
+
 TEST_F(protocol, bind_unspec)
 {
 	const struct landlock_ruleset_attr ruleset_attr = {
