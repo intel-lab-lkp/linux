@@ -1696,8 +1696,14 @@ static unsigned long isolate_lru_folios(unsigned long nr_to_scan,
 		if (folio_zonenum(folio) > sc->reclaim_idx ||
 				skip_cma(folio, sc)) {
 			nr_skipped[folio_zonenum(folio)] += nr_pages;
-			move_to = &folios_skipped;
-			goto move;
+			list_move(&folio->lru, &folios_skipped);
+			if (!spin_is_contended(&lruvec->lru_lock))
+				continue;
+			if (!list_empty(dst))
+				break;
+			spin_unlock_irq(&lruvec->lru_lock);
+			cond_resched();
+			spin_lock_irq(&lruvec->lru_lock);
 		}
 
 		/*
