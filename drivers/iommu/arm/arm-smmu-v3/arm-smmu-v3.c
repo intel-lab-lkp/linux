@@ -1585,6 +1585,14 @@ void arm_smmu_make_cdtable_ste(struct arm_smmu_ste *target,
 		target->data[2] =
 			cpu_to_le64(FIELD_PREP(STRTAB_STE_2_S2VMID, 0));
 	}
+
+	/*
+	 * S2S is ignored if stage-2 exists but not enabled.
+	 * S2S is not compatible with ATS.
+	 */
+	if (master->stall_enabled && !ats_enabled &&
+	    smmu->features & ARM_SMMU_FEAT_TRANS_S2)
+		target->data[2] |= STRTAB_STE_2_S2S;
 }
 EXPORT_SYMBOL_IF_KUNIT(arm_smmu_make_cdtable_ste);
 
@@ -1721,10 +1729,6 @@ static int arm_smmu_handle_evt(struct arm_smmu_device *smmu, u64 *evt)
 	default:
 		return -EOPNOTSUPP;
 	}
-
-	/* Stage-2 is always pinned at the moment */
-	if (evt[1] & EVTQ_1_S2)
-		return -EFAULT;
 
 	if (!(evt[1] & EVTQ_1_STALL))
 		return -EOPNOTSUPP;
