@@ -92,7 +92,7 @@ define do_install
 	if [ ! -d '$2' ]; then             \
 		$(INSTALL) -d -m 755 '$2'; \
 	fi;                                             \
-	$(INSTALL) $1 $(if $3,-m $3,) '$2'
+	$(INSTALL) $(if $3,-m $3,) $1 '$2'
 endef
 
 install_lib: $(LIBFILE)
