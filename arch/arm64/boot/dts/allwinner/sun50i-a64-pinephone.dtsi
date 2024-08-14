@@ -4,8 +4,6 @@
 // Copyright (C) 2020 Ondrej Jirman <megous@megous.com>
 
 #include "sun50i-a64.dtsi"
-#include "sun50i-a64-cpu-opp.dtsi"
-
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/leds/common.h>
