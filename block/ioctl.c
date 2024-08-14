@@ -92,38 +92,49 @@ static int compat_blkpg_ioctl(struct block_device *bdev,
 }
 #endif
 
-static int blk_ioctl_discard(struct block_device *bdev, blk_mode_t mode,
-		unsigned long arg)
+static int blk_validate_discard(struct block_device *bdev, blk_mode_t mode,
+				uint64_t start, uint64_t len)
 {
-	unsigned int bs_mask = bdev_logical_block_size(bdev) - 1;
-	uint64_t range[2], start, len, end;
-	struct bio *prev = NULL, *bio;
-	sector_t sector, nr_sects;
-	struct blk_plug plug;
-	int err;
+	unsigned int bs_mask;
+	uint64_t end;
 
 	if (!(mode & BLK_OPEN_WRITE))
 		return -EBADF;
-
 	if (!bdev_max_discard_sectors(bdev))
 		return -EOPNOTSUPP;
 	if (bdev_read_only(bdev))
 		return -EPERM;
 
-	if (copy_from_user(range, (void __user *)arg, sizeof(range)))
-		return -EFAULT;
-
-	start = range[0];
-	len = range[1];
-
-	if (!len)
-		return -EINVAL;
+	bs_mask = bdev_logical_block_size(bdev) - 1;
 	if ((start | len) & bs_mask)
+		return -EINVAL;
+	if (!len)
 		return -EINVAL;
 
 	if (check_add_overflow(start, len, &end) ||
 	    end > bdev_nr_bytes(bdev))
 		return -EINVAL;
+
+	return 0;
+}
+
+static int blk_ioctl_discard(struct block_device *bdev, blk_mode_t mode,
+		unsigned long arg)
+{
+	uint64_t range[2], start, len;
+	struct bio *prev = NULL, *bio;
+	sector_t sector, nr_sects;
+	struct blk_plug plug;
+	int err;
+
+	if (copy_from_user(range, (void __user *)arg, sizeof(range)))
+		return -EFAULT;
+	start = range[0];
+	len = range[1];
+
+	err = blk_validate_discard(bdev, mode, start, len);
+	if (err)
+		return err;
 
 	filemap_invalidate_lock(bdev->bd_mapping);
 	err = truncate_bdev_range(bdev, mode, start, start + len - 1);
