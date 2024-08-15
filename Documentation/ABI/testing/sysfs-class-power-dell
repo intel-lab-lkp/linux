@@ -1,0 +1,33 @@
+What:		/sys/class/power_supply/<supply_name>/charge_type
+Date:		August 2024
+KernelVersion:	6.12
+Contact:	linux-pm@vger.kernel.org
+Description:
+		Select the charging algorithm to use for the (primary)
+		battery.
+
+		Standard:
+			Fully charge the battery at a moderate rate.
+		Fast:
+			Quickly charge the battery using fast-charge
+			technology. This is harder on the battery than
+			standard charging and may lower its lifespan.
+			The Dell BIOS calls this ExpressCharge™.
+		Trickle:
+			Users who primarily operate the system while
+			plugged into an external power source can extend
+			battery life with this mode. The Dell BIOS calls
+			this "Primarily AC Use".
+		Adaptive:
+			Automatically optimize battery charge rate based
+			on typical usage pattern.
+		Custom:
+			Use the charge_control_* properties to determine
+			when to start and stop charging. Advanced users
+			can use this to drastically extend battery life.
+
+		Access: Read, Write
+		Valid values:
+			      "Standard", "Fast", "Trickle",
+			      "Adaptive", "Custom"
+
