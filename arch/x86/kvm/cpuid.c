@@ -373,6 +373,8 @@ static void kvm_vcpu_after_set_cpuid(struct kvm_vcpu *vcpu)
 	if (allow_gbpages)
 		kvm_governed_feature_set(vcpu, X86_FEATURE_GBPAGES);
 
+	kvm_governed_feature_check_and_set(vcpu, X86_FEATURE_LA57);
+
 	best = kvm_find_cpuid_entry(vcpu, 1);
 	if (best && apic) {
 		if (cpuid_entry_has(best, X86_FEATURE_TSC_DEADLINE_TIMER))
