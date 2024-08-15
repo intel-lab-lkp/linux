@@ -3115,6 +3115,7 @@ struct clk_unregister_consumer_clk_ctx {
 	unsigned long rate;
 	unsigned long accuracy;
 	int phase;
+	struct clk_duty duty;
 	struct clk *clk;
 };
 
@@ -3278,6 +3279,42 @@ static void clk_unregister_consumer_clk_get_phase_skips(struct kunit *test)
 	KUNIT_EXPECT_GT(test, 0, clk_get_phase(ctx->clk));
 }
 
+/*
+ * Test that clk_set_duty_cycle() doesn't call the clk_op after the clk_hw has been
+ * unregistered and returns failure.
+ */
+static void clk_unregister_consumer_clk_set_duty_cycle_fails(struct kunit *test)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx = test->priv;
+	const int num = 20, den = 30;
+
+	KUNIT_ASSERT_NE(test, ctx->duty.num, num);
+	KUNIT_ASSERT_NE(test, ctx->duty.den, den);
+	KUNIT_ASSERT_EQ(test, ctx->duty.num, clk_get_scaled_duty_cycle(ctx->clk, ctx->duty.den));
+	clk_unregister_consumer_clk_unregister(test);
+
+	KUNIT_EXPECT_GT(test, 0, clk_set_duty_cycle(ctx->clk, num, den));
+	/* Duty cycle is unchanged */
+	KUNIT_EXPECT_EQ(test, ctx->duty.num, clk_get_scaled_duty_cycle(ctx->clk, ctx->duty.den));
+}
+
+/*
+ * Test that clk_get_scaled_duty_cycle() doesn't call the clk_op after the clk_hw has been
+ * unregistered and returns original duty cycle.
+ */
+static void clk_unregister_consumer_clk_get_duty_cycle_skips(struct kunit *test)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx = test->priv;
+	const int num = ctx->duty.num;
+	const int den = ctx->duty.den;
+
+	KUNIT_ASSERT_EQ(test, num, clk_get_scaled_duty_cycle(ctx->clk, den));
+	clk_unregister_consumer_clk_unregister(test);
+
+	/* Duty cycle is unchanged */
+	KUNIT_EXPECT_EQ(test, num, clk_get_scaled_duty_cycle(ctx->clk, den));
+}
+
 static struct kunit_case clk_unregister_consumer_clk_test_cases[] = {
 	KUNIT_CASE(clk_unregister_consumer_clk_prepare_fails),
 	KUNIT_CASE(clk_unregister_consumer_clk_unprepare_skips),
@@ -3289,6 +3326,8 @@ static struct kunit_case clk_unregister_consumer_clk_test_cases[] = {
 	KUNIT_CASE(clk_unregister_consumer_clk_get_accuracy_skips),
 	KUNIT_CASE(clk_unregister_consumer_clk_set_phase_fails),
 	KUNIT_CASE(clk_unregister_consumer_clk_get_phase_skips),
+	KUNIT_CASE(clk_unregister_consumer_clk_set_duty_cycle_fails),
+	KUNIT_CASE(clk_unregister_consumer_clk_get_duty_cycle_skips),
 	KUNIT_CASE(clk_unregister_consumer_clk_put),
 	{}
 };
@@ -3415,6 +3454,33 @@ clk_unregister_consumer_clk_op_set_phase(struct clk_hw *hw, int degrees)
 	return 0;
 }
 
+static int clk_unregister_consumer_clk_op_get_duty_cycle(struct clk_hw *hw,
+							  struct clk_duty *duty)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx;
+
+	ctx = container_of(hw, struct clk_unregister_consumer_clk_ctx, hw);
+	clk_unregister_consumer_clk_clk_op_called(hw, __func__);
+
+	*duty = ctx->duty;
+
+	return 0;
+}
+
+static int clk_unregister_consumer_clk_op_set_duty_cycle(struct clk_hw *hw,
+							  struct clk_duty *duty)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx;
+
+	ctx = container_of(hw, struct clk_unregister_consumer_clk_ctx, hw);
+	clk_unregister_consumer_clk_clk_op_called(hw, __func__);
+
+	ctx->duty.num = duty->num;
+	ctx->duty.den = duty->den;
+
+	return 0;
+}
+
 static const struct clk_ops clk_unregister_consumer_clk_clk_ops = {
 	.prepare = clk_unregister_consumer_clk_op_prepare,
 	.unprepare = clk_unregister_consumer_clk_op_unprepare,
@@ -3427,6 +3493,8 @@ static const struct clk_ops clk_unregister_consumer_clk_clk_ops = {
 	.recalc_accuracy = clk_unregister_consumer_clk_op_recalc_accuracy,
 	.get_phase = clk_unregister_consumer_clk_op_get_phase,
 	.set_phase = clk_unregister_consumer_clk_op_set_phase,
+	.get_duty_cycle = clk_unregister_consumer_clk_op_get_duty_cycle,
+	.set_duty_cycle = clk_unregister_consumer_clk_op_set_duty_cycle,
 };
 
 static int clk_unregister_consumer_clk_init(struct kunit *test)
@@ -3447,6 +3515,8 @@ static int clk_unregister_consumer_clk_init(struct kunit *test)
 	ctx->rate = 42;
 	ctx->accuracy = 34;
 	ctx->phase = 90;
+	ctx->duty.num = 50;
+	ctx->duty.den = 100;
 	KUNIT_ASSERT_EQ(test, 0, clk_hw_register_kunit(test, NULL, &ctx->hw));
 
 	clk = clk_hw_get_clk_kunit(test, &ctx->hw, __func__);
