@@ -935,43 +935,24 @@ static void dell_cleanup_rfkill(void)
 static int dell_send_intensity(struct backlight_device *bd)
 {
 	struct calling_interface_buffer buffer;
-	struct calling_interface_token *token;
-	int ret;
+	u16 pwr;
 
-	token = dell_smbios_find_token(BRIGHTNESS_TOKEN);
-	if (!token)
-		return -ENODEV;
-
-	dell_fill_request(&buffer,
-			   token->location, bd->props.brightness, 0, 0);
-	if (power_supply_is_system_supplied() > 0)
-		ret = dell_send_request(&buffer,
-					CLASS_TOKEN_WRITE, SELECT_TOKEN_AC);
-	else
-		ret = dell_send_request(&buffer,
-					CLASS_TOKEN_WRITE, SELECT_TOKEN_BAT);
-
-	return ret;
+	pwr = power_supply_is_system_supplied() > 0 ?
+			SELECT_TOKEN_AC : SELECT_TOKEN_BAT;
+	return dell_send_request_for_tokenid(&buffer, CLASS_TOKEN_WRITE,
+			pwr, BRIGHTNESS_TOKEN, bd->props.brightness);
 }
 
 static int dell_get_intensity(struct backlight_device *bd)
 {
 	struct calling_interface_buffer buffer;
-	struct calling_interface_token *token;
 	int ret;
+	u16 pwr;
 
-	token = dell_smbios_find_token(BRIGHTNESS_TOKEN);
-	if (!token)
-		return -ENODEV;
-
-	dell_fill_request(&buffer, token->location, 0, 0, 0);
-	if (power_supply_is_system_supplied() > 0)
-		ret = dell_send_request(&buffer,
-					CLASS_TOKEN_READ, SELECT_TOKEN_AC);
-	else
-		ret = dell_send_request(&buffer,
-					CLASS_TOKEN_READ, SELECT_TOKEN_BAT);
-
+	pwr = power_supply_is_system_supplied() > 0 ?
+			SELECT_TOKEN_AC : SELECT_TOKEN_BAT;
+	ret = dell_send_request_for_tokenid(&buffer, CLASS_TOKEN_READ, pwr,
+			BRIGHTNESS_TOKEN, 0);
 	if (ret == 0)
 		ret = buffer.output[1];
 
@@ -1395,20 +1376,11 @@ static int kbd_set_state_safe(struct kbd_state *state, struct kbd_state *old)
 static int kbd_set_token_bit(u8 bit)
 {
 	struct calling_interface_buffer buffer;
-	struct calling_interface_token *token;
-	int ret;
 
 	if (bit >= ARRAY_SIZE(kbd_tokens))
 		return -EINVAL;
 
-	token = dell_smbios_find_token(kbd_tokens[bit]);
-	if (!token)
-		return -EINVAL;
-
-	dell_fill_request(&buffer, token->location, token->value, 0, 0);
-	ret = dell_send_request(&buffer, CLASS_TOKEN_WRITE, SELECT_TOKEN_STD);
-
-	return ret;
+	return dell_set_std_token_value(&buffer, kbd_tokens[bit], USE_TVAL);
 }
 
 static int kbd_get_token_bit(u8 bit)
@@ -1427,11 +1399,10 @@ static int kbd_get_token_bit(u8 bit)
 
 	dell_fill_request(&buffer, token->location, 0, 0, 0);
 	ret = dell_send_request(&buffer, CLASS_TOKEN_READ, SELECT_TOKEN_STD);
-	val = buffer.output[1];
-
 	if (ret)
 		return ret;
 
+	val = buffer.output[1];
 	return (val == token->value);
 }
 
@@ -1537,7 +1508,7 @@ static inline int kbd_init_info(void)
 
 }
 
-static inline void kbd_init_tokens(void)
+static inline void __init kbd_init_tokens(void)
 {
 	int i;
 
@@ -1546,7 +1517,7 @@ static inline void kbd_init_tokens(void)
 			kbd_token_bits |= BIT(i);
 }
 
-static void kbd_init(void)
+static void __init kbd_init(void)
 {
 	int ret;
 
@@ -2171,21 +2142,11 @@ static int micmute_led_set(struct led_classdev *led_cdev,
 			   enum led_brightness brightness)
 {
 	struct calling_interface_buffer buffer;
-	struct calling_interface_token *token;
 	int state = brightness != LED_OFF;
+	u32 val;
 
-	if (state == 0)
-		token = dell_smbios_find_token(GLOBAL_MIC_MUTE_DISABLE);
-	else
-		token = dell_smbios_find_token(GLOBAL_MIC_MUTE_ENABLE);
-
-	if (!token)
-		return -ENODEV;
-
-	dell_fill_request(&buffer, token->location, token->value, 0, 0);
-	dell_send_request(&buffer, CLASS_TOKEN_WRITE, SELECT_TOKEN_STD);
-
-	return 0;
+	val = state == 0 ? GLOBAL_MIC_MUTE_DISABLE : GLOBAL_MIC_MUTE_ENABLE;
+	return dell_set_std_token_value(&buffer, val, USE_TVAL);
 }
 
 static struct led_classdev micmute_led_cdev = {
@@ -2199,21 +2160,11 @@ static int mute_led_set(struct led_classdev *led_cdev,
 			   enum led_brightness brightness)
 {
 	struct calling_interface_buffer buffer;
-	struct calling_interface_token *token;
 	int state = brightness != LED_OFF;
+	u32 val;
 
-	if (state == 0)
-		token = dell_smbios_find_token(GLOBAL_MUTE_DISABLE);
-	else
-		token = dell_smbios_find_token(GLOBAL_MUTE_ENABLE);
-
-	if (!token)
-		return -ENODEV;
-
-	dell_fill_request(&buffer, token->location, token->value, 0, 0);
-	dell_send_request(&buffer, CLASS_TOKEN_WRITE, SELECT_TOKEN_STD);
-
-	return 0;
+	val = state == 0 ? GLOBAL_MUTE_DISABLE : GLOBAL_MUTE_ENABLE;
+	return dell_set_std_token_value(&buffer, val, USE_TVAL);
 }
 
 static struct led_classdev mute_led_cdev = {
@@ -2498,7 +2449,7 @@ static void __exit dell_battery_exit(void)
 
 static int __init dell_init(void)
 {
-	struct calling_interface_token *token;
+	struct calling_interface_buffer buffer;
 	int max_intensity = 0;
 	int ret;
 
@@ -2560,16 +2511,10 @@ static int __init dell_init(void)
 	if (acpi_video_get_backlight_type() != acpi_backlight_vendor)
 		return 0;
 
-	token = dell_smbios_find_token(BRIGHTNESS_TOKEN);
-	if (token) {
-		struct calling_interface_buffer buffer;
-
-		dell_fill_request(&buffer, token->location, 0, 0, 0);
-		ret = dell_send_request(&buffer,
-					CLASS_TOKEN_READ, SELECT_TOKEN_AC);
-		if (ret == 0)
-			max_intensity = buffer.output[3];
-	}
+	ret = dell_send_request_for_tokenid(&buffer, CLASS_TOKEN_READ,
+			SELECT_TOKEN_AC, BRIGHTNESS_TOKEN, 0);
+	if (ret == 0)
+		max_intensity = buffer.output[3];
 
 	if (max_intensity) {
 		struct backlight_properties props;
