@@ -4123,8 +4123,8 @@ static ssize_t cgroup_file_write(struct kernfs_open_file *of, char *buf,
 	/*
 	 * If namespaces are delegation boundaries, disallow writes to
 	 * files in an non-init namespace root from inside the namespace
-	 * except for the files explicitly marked delegatable -
-	 * cgroup.procs and cgroup.subtree_control.
+	 * except for the set delegatable files shown in /sys/kernel/cgroup/delegate,
+	 * including cgroup.procs, cgroup.threads and cgroup.subtree_control, etc.
 	 */
 	if ((cgrp->root->flags & CGRP_ROOT_NS_DELEGATE) &&
 	    !(cft->flags & CFTYPE_NS_DELEGATABLE) &&
