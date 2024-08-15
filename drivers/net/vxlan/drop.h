@@ -12,6 +12,8 @@
 	R(VXLAN_DROP_FLAGS)			\
 	R(VXLAN_DROP_VNI)			\
 	R(VXLAN_DROP_MAC)			\
+	R(VXLAN_DROP_TXINFO)			\
+	R(VXLAN_DROP_REMOTE)			\
 	/* deliberate comment for trailing \ */
 
 enum vxlan_drop_reason {
