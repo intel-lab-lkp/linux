@@ -1213,6 +1213,7 @@ static const struct file_operations bch_file_operations = {
 	.llseek		= bch2_llseek,
 	.read_iter	= bch2_read_iter,
 	.write_iter	= bch2_write_iter,
+	.iopoll		= iocb_bio_iopoll,
 	.mmap		= bch2_mmap,
 	.get_unmapped_area = thp_get_unmapped_area,
 	.fsync		= bch2_fsync,
