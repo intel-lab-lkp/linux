@@ -427,6 +427,7 @@ replay_abort:
 
 	nfnl_unlock(subsys_id);
 
+	memset(&extack, 0, sizeof(extack));
 	if (nlh->nlmsg_flags & NLM_F_ACK)
 		nfnl_err_add(&err_list, nlh, 0, &extack);
 
