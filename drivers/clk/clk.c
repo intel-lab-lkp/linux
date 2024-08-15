@@ -4518,6 +4518,11 @@ static int clk_nodrv_set_phase(struct clk_hw *hw, int degrees)
 	return -ENXIO;
 }
 
+static int clk_nodrv_set_duty_cycle(struct clk_hw *hw, struct clk_duty *duty)
+{
+	return -ENXIO;
+}
+
 static const struct clk_ops clk_nodrv_ops = {
 	.enable		= clk_nodrv_prepare_enable_get_phase,
 	.disable	= clk_nodrv_disable_unprepare,
@@ -4528,6 +4533,7 @@ static const struct clk_ops clk_nodrv_ops = {
 	.set_parent	= clk_nodrv_set_parent,
 	.get_phase	= clk_nodrv_prepare_enable_get_phase,
 	.set_phase	= clk_nodrv_set_phase,
+	.set_duty_cycle	= clk_nodrv_set_duty_cycle,
 };
 
 static void clk_core_evict_parent_cache_subtree(struct clk_core *root,
