@@ -33,6 +33,39 @@
 
 #define ROOT_DIR_OFFSET	5
 
+struct fw_dfc_data {
+	int (*match)(struct device *dev, void *data);
+	void *data;
+	struct device *target_device;
+};
+
+static int fw_dfc_match_modify(struct device *dev, void *data)
+{
+	struct fw_dfc_data *dfc_data =  data;
+	int res;
+
+	res = dfc_data->match(dev, dfc_data->data);
+	if (res && get_device(dev)) {
+		dfc_data->target_device = dev;
+		return res;
+	}
+
+	return 0;
+}
+
+/*
+ * I have the same function as device_find_child() but allow to modify
+ * caller's match data @*data.
+ */
+static struct device *fw_device_find_child(struct device *parent, void *data,
+					   int (*match)(struct device *dev, void *data))
+{
+	struct fw_dfc_data dfc_data = {match, data, NULL};
+
+	device_for_each_child(parent, &dfc_data, fw_dfc_match_modify);
+	return dfc_data.target_device;
+}
+
 void fw_csr_iterator_init(struct fw_csr_iterator *ci, const u32 *p)
 {
 	ci->p = p + 1;
@@ -1087,8 +1120,8 @@ static void fw_device_init(struct work_struct *work)
 		return;
 	}
 
-	revived_dev = device_find_child(card->device,
-					device, lookup_existing_device);
+	revived_dev = fw_device_find_child(card->device, device,
+					   lookup_existing_device);
 	if (revived_dev) {
 		put_device(revived_dev);
 		fw_device_release(&device->device);
