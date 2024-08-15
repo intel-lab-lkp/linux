@@ -246,7 +246,9 @@ xfs_alloc_set_aside(
  *	- the AG superblock, AGF, AGI and AGFL
  *	- the AGF (bno and cnt) and AGI btree root blocks, and optionally
  *	  the AGI free inode and rmap btree root blocks.
- *	- blocks on the AGFL according to xfs_alloc_set_aside() limits
+ *	- blocks on the AGFL when the filesystem is empty
+ *	- blocks on needed to AGFL while performing dependent allocations close
+ *	  to ENOSPC as given by xfs_allocbt_agfl_reserve()
  *	- the rmapbt root block
  *
  * The AG headers are sector sized, so the amount of space they take up is
@@ -259,6 +261,13 @@ xfs_alloc_ag_max_usable(
 	unsigned int		blocks;
 
 	blocks = XFS_BB_TO_FSB(mp, XFS_FSS_TO_BB(mp, 4)); /* ag headers */
+	/*
+	 * Minimal freelist length when filesystem is completely empty.
+	 * xfs_alloc_min_freelist needs m_alloc_maxlevels so this is computed in
+	 * our second invocation of xfs_alloc_ag_max_usable
+	 */
+	if (mp->m_alloc_maxlevels > 0)
+		blocks += xfs_alloc_min_freelist(mp, NULL);
 	blocks += xfs_allocbt_agfl_reserve(mp);
 	blocks += 3;			/* AGF, AGI btree root blocks */
 	if (xfs_has_finobt(mp))
