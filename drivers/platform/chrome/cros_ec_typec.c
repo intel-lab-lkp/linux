@@ -9,6 +9,7 @@
 #include <linux/acpi.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/of_graph.h>
 #include <linux/platform_data/cros_ec_commands.h>
 #include <linux/platform_data/cros_usbpd_notify.h>
 #include <linux/platform_device.h>
@@ -16,10 +17,17 @@
 #include <linux/usb/typec_dp.h>
 #include <linux/usb/typec_tbt.h>
 
+#include <drm/bridge/aux-bridge.h>
+
 #include "cros_ec_typec.h"
 #include "cros_typec_vdm.h"
 
 #define DRV_NAME "cros-ec-typec"
+
+struct cros_typec_dp_bridge {
+	struct cros_typec_data *typec_data;
+	struct drm_dp_typec_bridge_dev *dev;
+};
 
 #define DP_PORT_VDO	(DP_CONF_SET_PIN_ASSIGN(BIT(DP_PIN_ASSIGN_C) | BIT(DP_PIN_ASSIGN_D)) | \
 				DP_CAP_DFP_D | DP_CAP_RECEPTACLE)
@@ -334,6 +342,9 @@ static int cros_typec_init_ports(struct cros_typec_data *typec)
 	u32 port_num = 0;
 
 	nports = device_get_child_node_count(dev);
+	/* Don't count any 'ports' child node */
+	if (of_graph_is_present(dev->of_node))
+		nports--;
 	if (nports == 0) {
 		dev_err(dev, "No port entries found.\n");
 		return -ENODEV;
@@ -347,6 +358,10 @@ static int cros_typec_init_ports(struct cros_typec_data *typec)
 	/* DT uses "reg" to specify port number. */
 	port_prop = dev->of_node ? "reg" : "port-number";
 	device_for_each_child_node(dev, fwnode) {
+		/* An OF graph isn't a connector */
+		if (fwnode_name_eq(fwnode, "ports"))
+			continue;
+
 		if (fwnode_property_read_u32(fwnode, port_prop, &port_num)) {
 			ret = -EINVAL;
 			dev_err(dev, "No port-number for port, aborting.\n");
@@ -411,6 +426,36 @@ static int cros_typec_init_ports(struct cros_typec_data *typec)
 unregister_ports:
 	cros_unregister_ports(typec);
 	return ret;
+}
+
+static int cros_typec_init_dp_bridge(struct cros_typec_data *typec)
+{
+	struct device *dev = typec->dev;
+	struct cros_typec_dp_bridge *dp_bridge;
+	struct fwnode_handle *ep __free(fwnode_handle);
+	struct drm_dp_typec_bridge_dev *dp_dev;
+	struct drm_dp_typec_bridge_desc desc = {
+		.of_node = dev->of_node,
+	};
+
+	ep = fwnode_graph_get_endpoint_by_id(dev_fwnode(dev), 0, 0, 0);
+	if (!ep) {
+		/* There isn't a DP input endpoint. Ignore. */
+		return 0;
+	}
+
+	dp_bridge = devm_kzalloc(dev, sizeof(*dp_bridge), GFP_KERNEL);
+	if (!dp_bridge)
+		return -ENOMEM;
+	typec->dp_bridge = dp_bridge;
+	dp_bridge->typec_data = typec;
+
+	dp_dev = devm_drm_dp_typec_bridge_alloc(dev, &desc);
+	if (IS_ERR(dp_dev))
+		return PTR_ERR(dp_dev);
+	dp_bridge->dev = dp_dev;
+
+	return devm_drm_dp_typec_bridge_add(dev, dp_dev);
 }
 
 static int cros_typec_usb_safe_state(struct cros_typec_port *port)
@@ -612,6 +657,7 @@ static int cros_typec_configure_mux(struct cros_typec_data *typec, int port_num,
 				struct ec_response_usb_pd_control_v2 *pd_ctrl)
 {
 	struct cros_typec_port *port = typec->ports[port_num];
+	struct cros_typec_dp_bridge *dp_bridge = typec->dp_bridge;
 	struct ec_response_usb_pd_mux_info resp;
 	struct ec_params_usb_pd_mux_info req = {
 		.port = port_num,
@@ -619,6 +665,7 @@ static int cros_typec_configure_mux(struct cros_typec_data *typec, int port_num,
 	struct ec_params_usb_pd_mux_ack mux_ack;
 	enum typec_orientation orientation;
 	int ret;
+	bool dp_enabled;
 
 	ret = cros_ec_cmd(typec->ec, 0, EC_CMD_USB_PD_MUX_INFO,
 			  &req, sizeof(req), &resp, sizeof(resp));
@@ -627,6 +674,8 @@ static int cros_typec_configure_mux(struct cros_typec_data *typec, int port_num,
 			 port_num, ret);
 		return ret;
 	}
+
+	dp_enabled = resp.flags & USB_PD_MUX_DP_ENABLED;
 
 	/* No change needs to be made, let's exit early. */
 	if (port->mux_flags == resp.flags && port->role == pd_ctrl->role)
@@ -659,8 +708,14 @@ static int cros_typec_configure_mux(struct cros_typec_data *typec, int port_num,
 		ret = cros_typec_enable_usb4(typec, port_num, pd_ctrl);
 	} else if (port->mux_flags & USB_PD_MUX_TBT_COMPAT_ENABLED) {
 		ret = cros_typec_enable_tbt(typec, port_num, pd_ctrl);
-	} else if (port->mux_flags & USB_PD_MUX_DP_ENABLED) {
+	} else if (dp_enabled) {
 		ret = cros_typec_enable_dp(typec, port_num, pd_ctrl);
+		if (dp_bridge) {
+			drm_dp_typec_bridge_notify(dp_bridge->dev,
+						   port->mux_flags & USB_PD_MUX_HPD_LVL ?
+						   connector_status_connected :
+						   connector_status_disconnected);
+		}
 	} else if (port->mux_flags & USB_PD_MUX_SAFE_MODE) {
 		ret = cros_typec_usb_safe_state(port);
 	} else if (port->mux_flags & USB_PD_MUX_USB_ENABLED) {
@@ -677,6 +732,9 @@ static int cros_typec_configure_mux(struct cros_typec_data *typec, int port_num,
 	}
 
 mux_ack:
+	if (dp_bridge && !dp_enabled)
+		drm_dp_typec_bridge_notify(dp_bridge->dev, connector_status_disconnected);
+
 	if (!typec->needs_mux_ack)
 		return ret;
 
@@ -1258,6 +1316,10 @@ static int cros_typec_probe(struct platform_device *pdev)
 	}
 
 	ret = cros_typec_init_ports(typec);
+	if (ret < 0)
+		return ret;
+
+	ret = cros_typec_init_dp_bridge(typec);
 	if (ret < 0)
 		return ret;
 
