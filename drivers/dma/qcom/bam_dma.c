@@ -389,6 +389,7 @@ struct bam_device {
 	u32 ee;
 	bool controlled_remotely;
 	bool powered_remotely;
+	bool bam_pipe_lock;
 	u32 active_channels;
 
 	const struct reg_offset_data *layout;
@@ -1271,6 +1272,9 @@ static int bam_dma_probe(struct platform_device *pdev)
 						"qcom,controlled-remotely");
 	bdev->powered_remotely = of_property_read_bool(pdev->dev.of_node,
 						"qcom,powered-remotely");
+
+	bdev->bam_pipe_lock = of_property_read_bool(pdev->dev.of_node,
+						    "qcom,bam_pipe_lock");
 
 	if (bdev->controlled_remotely || bdev->powered_remotely)
 		bdev->bamclk = devm_clk_get_optional(bdev->dev, "bam_clk");
