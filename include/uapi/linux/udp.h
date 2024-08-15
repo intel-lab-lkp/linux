@@ -36,6 +36,7 @@ struct udphdr {
 #define UDP_GRO		104	/* This socket can receive UDP GRO packets */
 
 /* UDP encapsulation types */
+#define UDP_ENCAP_NONE		0
 #define UDP_ENCAP_ESPINUDP_NON_IKE	1 /* unused  draft-ietf-ipsec-nat-t-ike-00/01 */
 #define UDP_ENCAP_ESPINUDP	2 /* draft-ietf-ipsec-udp-encaps-06 */
 #define UDP_ENCAP_L2TPINUDP	3 /* rfc2661 */
@@ -43,5 +44,17 @@ struct udphdr {
 #define UDP_ENCAP_GTP1U		5 /* 3GPP TS 29.060 */
 #define UDP_ENCAP_RXRPC		6
 #define TCP_ENCAP_ESPINTCP	7 /* Yikes, this is really xfrm encap types. */
+#define UDP_ENCAP_TIPC		8
+#define UDP_ENCAP_FOU		9
+#define UDP_ENCAP_GUE		10
+#define UDP_ENCAP_SCTP		11
+#define UDP_ENCAP_RXE		12
+#define UDP_ENCAP_PFCP		13
+#define UDP_ENCAP_WIREGUARD	14
+#define UDP_ENCAP_BAREUDP	15
+#define UDP_ENCAP_VXLAN		16
+#define UDP_ENCAP_VXLAN_GPE	17
+#define UDP_ENCAP_GENEVE	18
+#define UDP_ENCAP_AMT		19
 
 #endif /* _UAPI_LINUX_UDP_H */
