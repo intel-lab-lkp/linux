@@ -3133,12 +3133,32 @@ static void clk_unregister_consumer_clk_unregister(struct kunit *test)
 	ctx->unregistered = true;
 }
 
+static void clk_unregister_parent_consumer_clk_unregister(struct kunit *test)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx = test->priv;
+	struct clk_hw *parent_hw = &ctx->parents[0].ctx.hw;
+	struct clk *parent_clk = ctx->parents[0].clk;
+
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, parent_clk);
+	KUNIT_ASSERT_TRUE(test, clk_is_match(clk_get_parent(ctx->clk), parent_clk));
+	KUNIT_ASSERT_EQ(test, 0, clk_hw_unregister_kunit(test, parent_hw));
+}
+
 /* Test that clk_put() can be called after the clk_hw has been unregistered. */
 static void clk_unregister_consumer_clk_put(struct kunit *test)
 {
 	struct clk_unregister_consumer_clk_ctx *ctx = test->priv;
 
 	clk_unregister_consumer_clk_unregister(test);
+
+	KUNIT_EXPECT_EQ(test, 0, clk_put_kunit(test, ctx->clk));
+}
+
+static void clk_unregister_parent_consumer_clk_put(struct kunit *test)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx = test->priv;
+
+	clk_unregister_parent_consumer_clk_unregister(test);
 
 	KUNIT_EXPECT_EQ(test, 0, clk_put_kunit(test, ctx->clk));
 }
@@ -3359,6 +3379,24 @@ static void clk_unregister_consumer_clk_set_parent_fails(struct kunit *test)
 }
 
 /*
+ * Test that clk_set_parent() doesn't re-parent the clk back to the clk that
+ * was unregistered.
+ */
+static void clk_unregister_parent_consumer_clk_set_parent(struct kunit *test)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx = test->priv;
+
+	kunit_skip(test, "Fix in the core. This blows up spectacularly!");
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, ctx->parents[0].clk);
+	KUNIT_ASSERT_TRUE(test, clk_is_match(clk_get_parent(ctx->clk), ctx->parents[0].clk));
+	KUNIT_ASSERT_EQ(test, 0, clk_hw_unregister_kunit(test, &ctx->parents[0].ctx.hw));
+
+	KUNIT_EXPECT_TRUE(test, clk_is_match(clk_get_parent(ctx->clk), NULL));
+	KUNIT_EXPECT_GT(test, 0, clk_set_parent(ctx->clk, ctx->parents[0].clk));
+	KUNIT_EXPECT_TRUE(test, clk_is_match(clk_get_parent(ctx->clk), NULL));
+}
+
+/*
  * Test that clk_get_parent() doesn't call the clk_op after the clk_hw has been
  * unregistered and returns original parent.
  */
@@ -3396,6 +3434,8 @@ static void clk_register_params_to_desc(const char *test_name,
  * @test_name: Test name
  * @_prev: Previous return value from this function
  * @desc: Test description (to be filled in)
+ * @must_have_parents: True if struct clk_register_params::num_parents must be
+ * 1 or greater
  *
  * Use this function in KUNIT_CASE_PARAM to generate struct clk_init_data
  * parameters for a test that registers clks. It will return combinations of
@@ -3404,7 +3444,8 @@ static void clk_register_params_to_desc(const char *test_name,
  * Return: Test parameters in a struct clk_register_params.
  */
 static const void *clk_register_gen_params(const char *test_name,
-					   const void *_prev, char *desc)
+					   const void *_prev, char *desc,
+					   bool must_have_parents)
 {
 	const struct clk_register_params *prev = _prev;
 	struct clk_register_params *next;
@@ -3412,8 +3453,11 @@ static const void *clk_register_gen_params(const char *test_name,
 	next = krealloc(prev, sizeof(*next), GFP_KERNEL);
 	if (!next)
 		return NULL;
-	if (!prev)
+	if (!prev) {
 		memset(next, 0, sizeof(*next));
+		if (must_have_parents)
+			next->num_parents = 1;
+	}
 
 	if (prev) {
 		if (next->clk_flags == 0)
@@ -3433,11 +3477,19 @@ static const void *clk_register_gen_params(const char *test_name,
 	return next;
 }
 
+static const void *
+clk_unregister_parent_consumer_clk_gen_params(const void *prev,
+					      char *desc)
+{
+	return clk_register_gen_params("parent", prev, desc, true);
+}
+
 #define CLK_REGISTER_GEN_PARAMS(name)					\
 	static const void *name##_gen_params(const void *prev,		\
 					    char *desc)			\
 	{								\
-		return clk_register_gen_params(#name, prev, desc);	\
+		return clk_register_gen_params(#name, prev, desc,	\
+					       false);			\
 	}
 
 #define CLK_REGISTER_KUNIT_CASE_PARAM(name)				\
@@ -3475,6 +3527,8 @@ static struct kunit_case clk_unregister_consumer_clk_test_cases[] = {
 	CLK_REGISTER_KUNIT_CASE_PARAM(clk_unregister_consumer_clk_set_parent_fails),
 	CLK_REGISTER_KUNIT_CASE_PARAM(clk_unregister_consumer_clk_get_parent_skips),
 	CLK_REGISTER_KUNIT_CASE_PARAM(clk_unregister_consumer_clk_put),
+	KUNIT_CASE_PARAM(clk_unregister_parent_consumer_clk_put, clk_unregister_parent_consumer_clk_gen_params),
+	KUNIT_CASE_PARAM(clk_unregister_parent_consumer_clk_set_parent, clk_unregister_parent_consumer_clk_gen_params),
 	{}
 };
 
