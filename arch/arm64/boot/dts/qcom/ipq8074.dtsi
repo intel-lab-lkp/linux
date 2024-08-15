@@ -291,6 +291,7 @@
 			#dma-cells = <1>;
 			qcom,ee = <1>;
 			qcom,controlled-remotely;
+			qcom,bam_pipe_lock;
 			status = "disabled";
 		};
 
