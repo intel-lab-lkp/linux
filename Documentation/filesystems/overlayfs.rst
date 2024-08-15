@@ -207,11 +207,23 @@ handle it in two different ways:
    applications are usually prepared to handle this error (mv(1) for example
    recursively copies the directory tree).  This is the default behavior.
 
-2. If the "redirect_dir" feature is enabled, then the directory will be
-   copied up (but not the contents).  Then the "trusted.overlay.redirect"
-   extended attribute is set to the path of the original location from the
-   root of the overlay.  Finally the directory is moved to the new
-   location.
+2. If the "redirect_dir" feature is enabled, then the contents of the
+   directory will not be copied up after any name-modifying operations
+   (e.g. rename(2), or mv(1)). Instead of performing a copy-up operation,
+   an empty entry will be created in the upper layer with the same name
+   as the affected entry in the overlayfs directory. The 'trusted.overlay.redirect'
+   xattr will then be set to mark the upper-layer directory, indicating that
+   its contents weren't copied up due to the 'redirect_dir' feature.
+   This extended attribute holds the previous name of a directory as a value.
+   For directories that were simply renamed the attribute is just the old name
+   of the directory without preceding path. For directories whose locations
+   in the overlayfs directory were changed, the corresponding xattrs are set
+   to the paths to the original locations from the root of the overlay.
+   The value of the xattr in the second case starts with a UNIX path delimiter
+   (e.g. "/$PREVIOUS_PATH"). Finally the directory is moved
+   to the new location. The output of du "$UPPER_LAYTER_DIR/$RENAMED_DIR"
+   should be zero. Renamed directory subentries will be copied-up only
+   after operations that directly affect their contents.
 
 There are several ways to tune the "redirect_dir" feature.
 
@@ -367,8 +379,14 @@ Metadata only copy up
 
 When the "metacopy" feature is enabled, overlayfs will only copy
 up metadata (as opposed to whole file), when a metadata specific operation
-like chown/chmod is performed. Full file will be copied up later when
-file is opened for WRITE operation.
+like chown/chmod is performed. When file metadata are modified the
+corresponding empty file (with the same name as the modified one)
+appears in the upper layer, however such a file contains
+no allocated data (a sparse file); doing du "$UPPER_LAYER/$FILENAME"
+should yield zero. Such an upper-layer file is marked with
+"trusted.overlayfs.metacopy" xattr which indicates that this file contains
+no data and copy-up should be performed before the corresponding file
+in the overlayfs directory is opened for write.
 
 In other words, this is delayed data copy up operation and data is copied
 up when there is a need to actually modify data.
