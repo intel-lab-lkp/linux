@@ -1918,7 +1918,13 @@ syscall_arg_fmt__init_array(struct syscall_arg_fmt *arg, struct tep_format_field
 
 		if (strcmp(field->type, "const char *") == 0 &&
 		    ((len >= 4 && strcmp(field->name + len - 4, "name") == 0) ||
-		     strstr(field->name, "path") != NULL))
+		     strstr(field->name, "path") ||
+		     strstr(field->name, "file") ||
+		     strstr(field->name, "root") ||
+		     strstr(field->name, "key") ||
+		     strstr(field->name, "special") ||
+		     strstr(field->name, "type") ||
+		     strstr(field->name, "description")))
 			arg->scnprintf = SCA_FILENAME;
 		else if ((field->flags & TEP_FIELD_IS_POINTER) || strstr(field->name, "addr"))
 			arg->scnprintf = SCA_PTR;
