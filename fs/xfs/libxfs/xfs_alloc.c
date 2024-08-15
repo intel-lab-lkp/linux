@@ -79,6 +79,46 @@ xfs_prealloc_blocks(
 	return XFS_IBT_BLOCK(mp) + 1;
 }
 
+static inline unsigned int
+xfs_alloc_min_freelist_calc(
+	const unsigned int bno_level,
+	const unsigned int cnt_level,
+	const unsigned int rmap_level)
+{
+	unsigned int		min_free;
+
+	/*
+	 * For a btree shorter than the maximum height, the worst case is that
+	 * every level gets split and a new level is added, then while inserting
+	 * another entry to refill the AGFL, every level under the old root gets
+	 * split again. This is:
+	 *
+	 *   (full height split reservation) + (AGFL refill split height)
+	 * = (current height + 1) + (current height - 1)
+	 * = (new height) + (new height - 2)
+	 * = 2 * new height - 2
+	 *
+	 * For a btree of maximum height, the worst case is that every level
+	 * under the root gets split, then while inserting another entry to
+	 * refill the AGFL, every level under the root gets split again. This is
+	 * also:
+	 *
+	 *   2 * (current height - 1)
+	 * = 2 * (new height - 1)
+	 * = 2 * new height - 2
+	 */
+
+	/* space needed by-bno freespace btree */
+	min_free = bno_level * 2 - 2;
+	/* space needed by-size freespace btree */
+	min_free += cnt_level * 2 - 2;
+	/* space needed reverse mapping used space btree */
+	if (rmap_level)
+		min_free += rmap_level * 2 - 2;
+
+	return min_free;
+}
+
 /*
  * The number of blocks per AG that we withhold from xfs_dec_fdblocks to
  * guarantee that we can refill the AGFL prior to allocating space in a nearly
@@ -151,7 +191,6 @@ xfs_alloc_ag_max_usable(
 
 	return mp->m_sb.sb_agblocks - blocks;
 }
-
 
 static int
 xfs_alloc_lookup(
@@ -2449,39 +2488,13 @@ xfs_alloc_min_freelist(
 	const unsigned int	bno_level = pag ? pag->pagf_bno_level : 1;
 	const unsigned int	cnt_level = pag ? pag->pagf_cnt_level : 1;
 	const unsigned int	rmap_level = pag ? pag->pagf_rmap_level : 1;
-	unsigned int		min_free;
 
 	ASSERT(mp->m_alloc_maxlevels > 0);
 
-	/*
-	 * For a btree shorter than the maximum height, the worst case is that
-	 * every level gets split and a new level is added, then while inserting
-	 * another entry to refill the AGFL, every level under the old root gets
-	 * split again. This is:
-	 *
-	 *   (full height split reservation) + (AGFL refill split height)
-	 * = (current height + 1) + (current height - 1)
-	 * = (new height) + (new height - 2)
-	 * = 2 * new height - 2
-	 *
-	 * For a btree of maximum height, the worst case is that every level
-	 * under the root gets split, then while inserting another entry to
-	 * refill the AGFL, every level under the root gets split again. This is
-	 * also:
-	 *
-	 *   2 * (current height - 1)
-	 * = 2 * (new height - 1)
-	 * = 2 * new height - 2
-	 */
-
-	/* space needed by-bno freespace btree */
-	min_free = min(bno_level + 1, mp->m_alloc_maxlevels) * 2 - 2;
-	/* space needed by-size freespace btree */
-	min_free += min(cnt_level + 1, mp->m_alloc_maxlevels) * 2 - 2;
-	/* space needed reverse mapping used space btree */
-	if (xfs_has_rmapbt(mp))
-		min_free += min(rmap_level + 1, mp->m_rmap_maxlevels) * 2 - 2;
-	return min_free;
+	return xfs_alloc_min_freelist_calc(
+	    min(bno_level + 1, mp->m_alloc_maxlevels),
+	    min(cnt_level + 1, mp->m_alloc_maxlevels),
+	    xfs_has_rmapbt(mp) ? min(rmap_level + 1, mp->m_rmap_maxlevels) : 0);
 }
 
 /*
