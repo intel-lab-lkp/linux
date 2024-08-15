@@ -102,6 +102,7 @@ struct bictcp {
 	u32	end_seq;	/* end_seq of the round */
 	u32	last_ack;	/* last time when the ACK spacing is close */
 	u32	curr_rtt;	/* the minimum rtt of current round */
+	u32	cwnd_prior;	/* cwnd before a loss event */
 };
 
 static inline void bictcp_reset(struct bictcp *ca)
@@ -305,7 +306,10 @@ tcp_friendliness:
 	if (tcp_friendliness) {
 		u32 scale = beta_scale;
 
-		delta = (cwnd * scale) >> 3;
+		if (cwnd < ca->cwnd_prior)
+			delta = (cwnd * scale) >> 3;	/* CUBIC additive increment */
+		else
+			delta = cwnd;			/* Reno additive increment */
 		while (ca->ack_cnt > delta) {		/* update tcp cwnd */
 			ca->ack_cnt -= delta;
 			ca->tcp_cwnd++;
@@ -355,6 +359,7 @@ __bpf_kfunc static u32 cubictcp_recalc_ssthresh(struct sock *sk)
 			/ (2 * BICTCP_BETA_SCALE);
 	else
 		ca->last_max_cwnd = tcp_snd_cwnd(tp);
+	ca->cwnd_prior = tcp_snd_cwnd(tp);
 
 	return max((tcp_snd_cwnd(tp) * beta) / BICTCP_BETA_SCALE, 2U);
 }
