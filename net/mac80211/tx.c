@@ -4408,7 +4408,7 @@ ieee80211_convert_to_unicast(struct sk_buff *skb, struct net_device *dev,
 	struct ieee80211_local *local = sdata->local;
 	const struct ethhdr *eth = (struct ethhdr *)skb->data;
 	struct sta_info *sta, *first = NULL;
-	struct sk_buff *cloned_skb;
+	struct sk_buff *copied_skb;
 
 	rcu_read_lock();
 
@@ -4423,14 +4423,14 @@ ieee80211_convert_to_unicast(struct sk_buff *skb, struct net_device *dev,
 			first = sta;
 			continue;
 		}
-		cloned_skb = skb_clone(skb, GFP_ATOMIC);
-		if (!cloned_skb)
+		copied_skb = skb_copy(skb, GFP_ATOMIC);
+		if (!copied_skb)
 			goto multicast;
-		if (unlikely(ieee80211_change_da(cloned_skb, sta))) {
-			dev_kfree_skb(cloned_skb);
+		if (unlikely(ieee80211_change_da(copied_skb, sta))) {
+			dev_kfree_skb(copied_skb);
 			goto multicast;
 		}
-		__skb_queue_tail(queue, cloned_skb);
+		__skb_queue_tail(queue, copied_skb);
 	}
 
 	if (likely(first)) {
