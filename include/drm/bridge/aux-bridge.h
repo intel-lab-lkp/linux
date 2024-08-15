@@ -7,6 +7,8 @@
 #ifndef DRM_AUX_BRIDGE_H
 #define DRM_AUX_BRIDGE_H
 
+#include <linux/usb/typec.h>
+
 #include <drm/drm_connector.h>
 
 struct auxiliary_device;
@@ -53,7 +55,8 @@ int devm_drm_dp_typec_bridge_add(struct device *dev, struct drm_dp_typec_bridge_
 void drm_dp_typec_bridge_notify(struct drm_dp_typec_bridge_dev *typec_bridge_dev,
 				enum drm_connector_status status);
 int drm_dp_typec_bridge_assign_pins(struct drm_dp_typec_bridge_dev *typec_bridge_dev, u32 conf,
-				     enum usb_ss_lane lane_mapping[NUM_USB_SS]);
+				    enum typec_orientation orientation,
+				    enum usb_ss_lane lane_mapping[NUM_USB_SS]);
 #else
 static inline struct auxiliary_device *devm_drm_dp_hpd_bridge_alloc(struct device *parent,
 								    struct device_node *np)
@@ -94,7 +97,7 @@ static inline void drm_dp_typec_bridge_notify(struct drm_dp_typec_bridge_dev *ty
 }
 
 static inline int drm_dp_typec_bridge_assign_pins(struct drm_dp_typec_bridge_dev *typec_bridge_dev,
-						  u32 conf,
+						  u32 conf, enum typec_orientation orientation,
 						  enum usb_ss_lane lane_mapping[NUM_USB_SS])
 {
 	return 0;

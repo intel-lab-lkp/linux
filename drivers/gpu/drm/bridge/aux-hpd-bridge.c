@@ -7,6 +7,7 @@
 #include <linux/auxiliary_bus.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/usb/typec.h>
 #include <linux/usb/typec_dp.h>
 
 #include <drm/drm_atomic_state_helper.h>
@@ -321,17 +322,35 @@ static int dp_lane_to_typec_lane(enum dp_lane lane)
 	return -EINVAL;
 }
 
-static int typec_to_dp_lane(enum usb_ss_lane lane)
+static int typec_to_dp_lane(enum usb_ss_lane lane,
+			    enum typec_orientation orientation)
 {
-	switch (lane) {
-	case USB_SSRX1:
-		return DP_ML3;
-	case USB_SSTX1:
-		return DP_ML2;
-	case USB_SSTX2:
-		return DP_ML0;
-	case USB_SSRX2:
-		return DP_ML1;
+	switch (orientation) {
+	case TYPEC_ORIENTATION_NONE:
+	case TYPEC_ORIENTATION_NORMAL:
+		switch (lane) {
+		case USB_SSRX1:
+			return DP_ML3;
+		case USB_SSTX1:
+			return DP_ML2;
+		case USB_SSTX2:
+			return DP_ML0;
+		case USB_SSRX2:
+			return DP_ML1;
+		}
+		break;
+	case TYPEC_ORIENTATION_REVERSE:
+		switch (lane) {
+		case USB_SSRX1:
+			return DP_ML0;
+		case USB_SSTX1:
+			return DP_ML1;
+		case USB_SSTX2:
+			return DP_ML3;
+		case USB_SSRX2:
+			return DP_ML2;
+		}
+		break;
 	}
 
 	return -EINVAL;
@@ -341,6 +360,7 @@ static int typec_to_dp_lane(enum usb_ss_lane lane)
  * drm_dp_typec_bridge_assign_pins - Assign DisplayPort (DP) lanes to USB type-C pins
  * @typec_bridge_dev: Device created for the type-c bridge
  * @conf: DisplayPort altmode configure command VDO content
+ * @orientation: Orientation of USB type-c port
  * @lane_mapping: Physical (array index) to logical (array value) USB type-C lane mapping
  *
  * Assign DP lanes to the USB type-C pins for the DP altmode configuration
@@ -351,7 +371,7 @@ static int typec_to_dp_lane(enum usb_ss_lane lane)
  * Return: 0 on success, negative value for failure.
  */
 int drm_dp_typec_bridge_assign_pins(struct drm_dp_typec_bridge_dev *typec_bridge_dev,
-				     u32 conf,
+				     u32 conf, enum typec_orientation orientation,
 				     enum usb_ss_lane lane_mapping[NUM_USB_SS])
 {
 	struct auxiliary_device *adev = &typec_bridge_dev->adev;
@@ -388,7 +408,7 @@ int drm_dp_typec_bridge_assign_pins(struct drm_dp_typec_bridge_dev *typec_bridge
 		typec_lane = lane_mapping[typec_lane];
 
 		/* Map logical type-c lane to logical DP lane */
-		dp_lanes[i] = typec_to_dp_lane(typec_lane);
+		dp_lanes[i] = typec_to_dp_lane(typec_lane, orientation);
 	}
 
 	return 0;
