@@ -3114,6 +3114,7 @@ struct clk_unregister_consumer_clk_ctx {
 	bool unregistered;
 	unsigned long rate;
 	unsigned long accuracy;
+	int phase;
 	struct clk *clk;
 };
 
@@ -3245,6 +3246,38 @@ static void clk_unregister_consumer_clk_get_accuracy_skips(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, ctx->accuracy, clk_get_accuracy(ctx->clk));
 }
 
+/*
+ * Test that clk_set_phase() doesn't call the clk_op after the clk_hw has been
+ * unregistered and returns failure.
+ */
+static void clk_unregister_consumer_clk_set_phase_fails(struct kunit *test)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx = test->priv;
+	const int degrees = 12;
+
+	KUNIT_ASSERT_NE(test, degrees, clk_get_phase(ctx->clk));
+	clk_unregister_consumer_clk_unregister(test);
+
+	KUNIT_EXPECT_GT(test, 0, clk_set_phase(ctx->clk, degrees));
+	/* Phase is unchanged */
+	KUNIT_EXPECT_NE(test, degrees, clk_get_phase(ctx->clk));
+}
+
+/*
+ * Test that clk_get_phase() doesn't call the clk_op after the clk_hw has been
+ * unregistered and returns 0.
+ */
+static void clk_unregister_consumer_clk_get_phase_skips(struct kunit *test)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx = test->priv;
+	const int phase = ctx->phase;
+
+	KUNIT_ASSERT_EQ(test, phase, clk_get_phase(ctx->clk));
+	clk_unregister_consumer_clk_unregister(test);
+
+	KUNIT_EXPECT_GT(test, 0, clk_get_phase(ctx->clk));
+}
+
 static struct kunit_case clk_unregister_consumer_clk_test_cases[] = {
 	KUNIT_CASE(clk_unregister_consumer_clk_prepare_fails),
 	KUNIT_CASE(clk_unregister_consumer_clk_unprepare_skips),
@@ -3254,6 +3287,8 @@ static struct kunit_case clk_unregister_consumer_clk_test_cases[] = {
 	KUNIT_CASE(clk_unregister_consumer_clk_set_rate_fails),
 	KUNIT_CASE(clk_unregister_consumer_clk_get_rate_skips),
 	KUNIT_CASE(clk_unregister_consumer_clk_get_accuracy_skips),
+	KUNIT_CASE(clk_unregister_consumer_clk_set_phase_fails),
+	KUNIT_CASE(clk_unregister_consumer_clk_get_phase_skips),
 	KUNIT_CASE(clk_unregister_consumer_clk_put),
 	{}
 };
@@ -3356,6 +3391,30 @@ clk_unregister_consumer_clk_op_recalc_accuracy(struct clk_hw *hw,
 	return ctx->accuracy;
 }
 
+static int clk_unregister_consumer_clk_op_get_phase(struct clk_hw *hw)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx;
+
+	ctx = container_of(hw, struct clk_unregister_consumer_clk_ctx, hw);
+	clk_unregister_consumer_clk_clk_op_called(hw, __func__);
+
+	return ctx->phase;
+}
+
+static int
+clk_unregister_consumer_clk_op_set_phase(struct clk_hw *hw, int degrees)
+{
+
+	struct clk_unregister_consumer_clk_ctx *ctx;
+
+	ctx = container_of(hw, struct clk_unregister_consumer_clk_ctx, hw);
+	clk_unregister_consumer_clk_clk_op_called(hw, __func__);
+
+	ctx->phase = degrees;
+
+	return 0;
+}
+
 static const struct clk_ops clk_unregister_consumer_clk_clk_ops = {
 	.prepare = clk_unregister_consumer_clk_op_prepare,
 	.unprepare = clk_unregister_consumer_clk_op_unprepare,
@@ -3366,6 +3425,8 @@ static const struct clk_ops clk_unregister_consumer_clk_clk_ops = {
 	.determine_rate = clk_unregister_consumer_clk_op_determine_rate,
 	.set_rate = clk_unregister_consumer_clk_op_set_rate,
 	.recalc_accuracy = clk_unregister_consumer_clk_op_recalc_accuracy,
+	.get_phase = clk_unregister_consumer_clk_op_get_phase,
+	.set_phase = clk_unregister_consumer_clk_op_set_phase,
 };
 
 static int clk_unregister_consumer_clk_init(struct kunit *test)
@@ -3385,6 +3446,7 @@ static int clk_unregister_consumer_clk_init(struct kunit *test)
 
 	ctx->rate = 42;
 	ctx->accuracy = 34;
+	ctx->phase = 90;
 	KUNIT_ASSERT_EQ(test, 0, clk_hw_register_kunit(test, NULL, &ctx->hw));
 
 	clk = clk_hw_get_clk_kunit(test, &ctx->hw, __func__);
