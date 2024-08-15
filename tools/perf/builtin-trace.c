@@ -65,6 +65,7 @@
 #include "syscalltbl.h"
 #include "rb_resort.h"
 #include "../perf.h"
+#include "trace_augment.h"
 
 #include <errno.h>
 #include <inttypes.h>
@@ -851,6 +852,10 @@ static size_t syscall_arg__scnprintf_filename(char *bf, size_t size,
 					      struct syscall_arg *arg);
 
 #define SCA_FILENAME syscall_arg__scnprintf_filename
+
+static size_t syscall_arg__scnprintf_buf(char *bf, size_t size, struct syscall_arg *arg);
+
+#define SCA_BUF syscall_arg__scnprintf_buf
 
 static size_t syscall_arg__scnprintf_pipe_flags(char *bf, size_t size,
 						struct syscall_arg *arg)
@@ -1760,6 +1765,47 @@ static size_t syscall_arg__scnprintf_filename(char *bf, size_t size,
 	return 0;
 }
 
+#define MAX_CONTROL_CHAR 31
+#define MAX_ASCII 127
+
+static size_t syscall_arg__scnprintf_buf(char *bf, size_t size, struct syscall_arg *arg)
+{
+	char result[TRACE_AUG_MAX_BUF * 4], tens[4];
+	struct augmented_arg *augmented_arg = arg->augmented.args;
+	unsigned char *orig;
+	int i = 0, n, consumed, digits;
+
+	if (augmented_arg == NULL)
+		return 0;
+
+	orig = (unsigned char *)augmented_arg->value;
+	n = augmented_arg->size;
+
+	memset(result, 0, sizeof(result));
+
+	for (int j = 0; j < n && i < (int)sizeof(result) - 1; ++j) {
+		/* print control characters (0~31 and 127), and non-ascii characters in \(digits) */
+		if (orig[j] <= MAX_CONTROL_CHAR || orig[j] >= MAX_ASCII) {
+			result[i++] = '\\';
+
+			/* convert to digits */
+			digits = scnprintf(tens, sizeof(result) - i, "%d", (int)orig[j]);
+			if (digits + i <= (int)sizeof(result) - 1) {
+				strncpy(result + i, tens, digits);
+				i += digits;
+			}
+		} else  {
+			result[i++] = orig[j];
+		}
+	}
+
+	consumed = sizeof(*augmented_arg) + augmented_arg->size;
+	arg->augmented.args = ((void *)arg->augmented.args) + consumed;
+	arg->augmented.size -= consumed;
+
+	return scnprintf(bf, size, "\"%s\"", result);
+}
+
 static bool trace__filter_duration(struct trace *trace, double t)
 {
 	return t < (trace->duration_filter * NSEC_PER_MSEC);
@@ -1977,6 +2023,8 @@ syscall_arg_fmt__init_array(struct syscall_arg_fmt *arg, struct tep_format_field
 		     strstr(field->name, "type") ||
 		     strstr(field->name, "description")))
 			arg->scnprintf = SCA_FILENAME;
+		else if (strstr(field->type, "char *") && strstr(field->name, "buf"))
+			arg->scnprintf = SCA_BUF;
 		else if ((field->flags & TEP_FIELD_IS_POINTER) || strstr(field->name, "addr"))
 			arg->scnprintf = SCA_PTR;
 		else if (strcmp(field->type, "pid_t") == 0)
