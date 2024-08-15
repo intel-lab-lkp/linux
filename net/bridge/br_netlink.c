@@ -101,7 +101,6 @@ static size_t br_get_link_af_size_filtered(const struct net_device *dev,
 	size_t vinfo_sz = 0;
 	int num_vlan_infos;
 
-	rcu_read_lock();
 	if (netif_is_bridge_port(dev)) {
 		p = br_port_get_check_rcu(dev);
 		if (p)
@@ -111,7 +110,6 @@ static size_t br_get_link_af_size_filtered(const struct net_device *dev,
 		vg = br_vlan_group_rcu(br);
 	}
 	num_vlan_infos = br_get_num_vlan_infos(vg, filter_mask);
-	rcu_read_unlock();
 
 	if (p && (p->flags & BR_VLAN_TUNNEL))
 		vinfo_sz += br_get_vlan_tunnel_info_size(vg);
