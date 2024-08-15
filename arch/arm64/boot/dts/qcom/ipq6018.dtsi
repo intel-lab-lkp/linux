@@ -354,6 +354,7 @@
 			#dma-cells = <1>;
 			qcom,ee = <1>;
 			qcom,controlled-remotely;
+			qcom,bam_pipe_lock;
 		};
 
 		crypto: crypto@73a000 {
