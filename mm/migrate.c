@@ -192,6 +192,9 @@ static bool try_to_map_unused_to_zeropage(struct page_vma_mapped_walk *pvmw,
 	VM_BUG_ON_PAGE(!PageLocked(page), page);
 	VM_BUG_ON_PAGE(pte_present(*pvmw->pte), page);
 
+	if (mm_forbids_zeropage(pvmw->vma->vm_mm))
+		return false;
+
 	if (PageMlocked(page) || (pvmw->vma->vm_flags & VM_LOCKED))
 		return false;
 
@@ -204,7 +207,7 @@ static bool try_to_map_unused_to_zeropage(struct page_vma_mapped_walk *pvmw,
 	contains_data = memchr_inv(addr, 0, PAGE_SIZE);
 	kunmap_local(addr);
 
-	if (contains_data || mm_forbids_zeropage(pvmw->vma->vm_mm))
+	if (contains_data)
 		return false;
 
 	newpte = pte_mkspecial(pfn_pte(my_zero_pfn(pvmw->address),
