@@ -77,6 +77,12 @@ properties:
       Indicates that the bam is powered up by a remote processor but must be
       initialized by the local processor.
 
+  qcom,bam_pipe_lock:
+    type: boolean
+    description:
+      Indicates that the bam pipe needs locking or not based on client driver
+      sending the LOCK or UNLOK bit set on command descriptor.
+
   reg:
     maxItems: 1
 
@@ -92,6 +98,8 @@ anyOf:
       - qcom,powered-remotely
   - required:
       - qcom,controlled-remotely
+  - required:
+      - qcom,bam_pipe_lock
   - required:
       - clocks
       - clock-names
