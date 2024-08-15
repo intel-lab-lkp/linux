@@ -3108,6 +3108,303 @@ static struct kunit_suite clk_register_clk_parent_data_device_suite = {
 	.test_cases = clk_register_clk_parent_data_device_test_cases,
 };
 
+struct clk_unregister_consumer_clk_ctx {
+	struct kunit *test;
+	struct clk_hw hw;
+	bool unregistered;
+	unsigned long rate;
+	unsigned long accuracy;
+	struct clk *clk;
+};
+
+/* Unregister the clk and mark it as unregistered for the tests. */
+static void clk_unregister_consumer_clk_unregister(struct kunit *test)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx = test->priv;
+
+	KUNIT_ASSERT_EQ(test, 0, clk_hw_unregister_kunit(test, &ctx->hw));
+	ctx->unregistered = true;
+}
+
+/* Test that clk_put() can be called after the clk_hw has been unregistered. */
+static void clk_unregister_consumer_clk_put(struct kunit *test)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx = test->priv;
+
+	clk_unregister_consumer_clk_unregister(test);
+
+	KUNIT_EXPECT_EQ(test, 0, clk_put_kunit(test, ctx->clk));
+}
+
+/* Test that clk_prepare() fails after the clk_hw has been unregistered. */
+static void clk_unregister_consumer_clk_prepare_fails(struct kunit *test)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx = test->priv;
+
+	clk_unregister_consumer_clk_unregister(test);
+
+	KUNIT_EXPECT_GT(test, 0, clk_prepare(ctx->clk));
+}
+
+/*
+ * Test that clk_unprepare() doesn't call the clk_op after the clk_hw has been
+ * unregistered.
+ */
+static void clk_unregister_consumer_clk_unprepare_skips(struct kunit *test)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx = test->priv;
+
+	KUNIT_ASSERT_EQ(test, 0, clk_prepare(ctx->clk));
+	clk_unregister_consumer_clk_unregister(test);
+
+	clk_unprepare(ctx->clk);
+}
+
+/* Test that clk_enable() fails after the clk_hw has been unregistered. */
+static void clk_unregister_consumer_clk_enable_fails(struct kunit *test)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx = test->priv;
+
+	KUNIT_ASSERT_EQ(test, 0, clk_prepare(ctx->clk));
+	clk_unregister_consumer_clk_unregister(test);
+
+	KUNIT_EXPECT_GT(test, 0, clk_enable(ctx->clk));
+	clk_unprepare(ctx->clk);
+}
+
+/*
+ * Test that clk_disable() doesn't call the clk_op after the clk_hw has been
+ * unregistered.
+ */
+static void clk_unregister_consumer_clk_disable_skips(struct kunit *test)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx = test->priv;
+
+	KUNIT_ASSERT_EQ(test, 0, clk_prepare(ctx->clk));
+	KUNIT_ASSERT_EQ(test, 0, clk_enable(ctx->clk));
+	clk_unregister_consumer_clk_unregister(test);
+
+	clk_disable(ctx->clk);
+	clk_unprepare(ctx->clk);
+}
+
+/*
+ * Test that clk_round_rate() doesn't call the clk_op after the clk_hw has been
+ * unregistered.
+ */
+static void clk_unregister_consumer_clk_round_rate_fails(struct kunit *test)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx = test->priv;
+	const unsigned long test_rate = 10200;
+
+	clk_unregister_consumer_clk_unregister(test);
+
+	KUNIT_EXPECT_GT(test, 0, clk_round_rate(ctx->clk, test_rate));
+}
+
+/*
+ * Test that clk_set_rate() doesn't call the clk_op after the clk_hw has been
+ * unregistered.
+ */
+static void clk_unregister_consumer_clk_set_rate_fails(struct kunit *test)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx = test->priv;
+	const unsigned long test_rate = 38000;
+
+	clk_unregister_consumer_clk_unregister(test);
+
+	KUNIT_EXPECT_GT(test, 0, clk_set_rate(ctx->clk, test_rate));
+	KUNIT_EXPECT_NE(test, ctx->rate, test_rate);
+}
+
+/*
+ * Test that clk_get_rate() doesn't call the clk_op after the clk_hw has been
+ * unregistered.
+ */
+static void clk_unregister_consumer_clk_get_rate_skips(struct kunit *test)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx = test->priv;
+
+	KUNIT_ASSERT_EQ(test, ctx->rate, clk_get_rate(ctx->clk));
+	clk_unregister_consumer_clk_unregister(test);
+
+	KUNIT_EXPECT_EQ(test, ctx->rate, clk_get_rate(ctx->clk));
+}
+
+/*
+ * Test that clk_get_accuracy() doesn't call the clk_op after the clk_hw has been
+ * unregistered.
+ */
+static void clk_unregister_consumer_clk_get_accuracy_skips(struct kunit *test)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx = test->priv;
+
+	KUNIT_ASSERT_EQ(test, ctx->accuracy, clk_get_accuracy(ctx->clk));
+	clk_unregister_consumer_clk_unregister(test);
+
+	KUNIT_EXPECT_EQ(test, ctx->accuracy, clk_get_accuracy(ctx->clk));
+}
+
+static struct kunit_case clk_unregister_consumer_clk_test_cases[] = {
+	KUNIT_CASE(clk_unregister_consumer_clk_prepare_fails),
+	KUNIT_CASE(clk_unregister_consumer_clk_unprepare_skips),
+	KUNIT_CASE(clk_unregister_consumer_clk_enable_fails),
+	KUNIT_CASE(clk_unregister_consumer_clk_disable_skips),
+	KUNIT_CASE(clk_unregister_consumer_clk_round_rate_fails),
+	KUNIT_CASE(clk_unregister_consumer_clk_set_rate_fails),
+	KUNIT_CASE(clk_unregister_consumer_clk_get_rate_skips),
+	KUNIT_CASE(clk_unregister_consumer_clk_get_accuracy_skips),
+	KUNIT_CASE(clk_unregister_consumer_clk_put),
+	{}
+};
+
+static void clk_unregister_consumer_clk_clk_op_called(struct clk_hw *hw,
+						       const char *clk_op_name)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx;
+
+	ctx = container_of(hw, struct clk_unregister_consumer_clk_ctx, hw);
+
+	/*
+	 * This code should never be reached because the clk_hw has been
+	 * unregistered.
+	 */
+	KUNIT_EXPECT_FALSE_MSG(ctx->test, ctx->unregistered,
+			       "clk_op %s was called for unregistered clk\n",
+			       clk_op_name);
+}
+
+static int clk_unregister_consumer_clk_op_prepare(struct clk_hw *hw)
+{
+	clk_unregister_consumer_clk_clk_op_called(hw, __func__);
+
+	return 0;
+}
+
+static void clk_unregister_consumer_clk_op_unprepare(struct clk_hw *hw)
+{
+	clk_unregister_consumer_clk_clk_op_called(hw, __func__);
+}
+
+static int clk_unregister_consumer_clk_op_enable(struct clk_hw *hw)
+{
+	clk_unregister_consumer_clk_clk_op_called(hw, __func__);
+
+	return 0;
+}
+
+static void clk_unregister_consumer_clk_op_disable(struct clk_hw *hw)
+{
+	clk_unregister_consumer_clk_clk_op_called(hw, __func__);
+}
+
+static unsigned long
+clk_unregister_consumer_clk_op_recalc_rate(struct clk_hw *hw, unsigned long parent_rate)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx;
+
+	ctx = container_of(hw, struct clk_unregister_consumer_clk_ctx, hw);
+	clk_unregister_consumer_clk_clk_op_called(hw, __func__);
+
+	return ctx->rate;
+}
+
+static int
+clk_unregister_consumer_clk_op_determine_rate(struct clk_hw *hw,
+					       struct clk_rate_request *req)
+{
+	clk_unregister_consumer_clk_clk_op_called(hw, __func__);
+
+	return 0;
+}
+
+static long
+clk_unregister_consumer_clk_op_round_rate(struct clk_hw *hw, unsigned long rate,
+					   unsigned long *parent_rate)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx;
+
+	ctx = container_of(hw, struct clk_unregister_consumer_clk_ctx, hw);
+	clk_unregister_consumer_clk_clk_op_called(hw, __func__);
+
+	return ctx->rate;
+}
+
+static int
+clk_unregister_consumer_clk_op_set_rate(struct clk_hw *hw, unsigned long rate,
+					 unsigned long parent_rate)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx;
+
+	ctx = container_of(hw, struct clk_unregister_consumer_clk_ctx, hw);
+	clk_unregister_consumer_clk_clk_op_called(hw, __func__);
+
+	ctx->rate = rate;
+
+	return 0;
+}
+
+static unsigned long
+clk_unregister_consumer_clk_op_recalc_accuracy(struct clk_hw *hw,
+						unsigned long parent_accuracy)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx;
+
+	ctx = container_of(hw, struct clk_unregister_consumer_clk_ctx, hw);
+	clk_unregister_consumer_clk_clk_op_called(hw, __func__);
+
+	return ctx->accuracy;
+}
+
+static const struct clk_ops clk_unregister_consumer_clk_clk_ops = {
+	.prepare = clk_unregister_consumer_clk_op_prepare,
+	.unprepare = clk_unregister_consumer_clk_op_unprepare,
+	.enable = clk_unregister_consumer_clk_op_enable,
+	.disable = clk_unregister_consumer_clk_op_disable,
+	.recalc_rate = clk_unregister_consumer_clk_op_recalc_rate,
+	.round_rate = clk_unregister_consumer_clk_op_round_rate,
+	.determine_rate = clk_unregister_consumer_clk_op_determine_rate,
+	.set_rate = clk_unregister_consumer_clk_op_set_rate,
+	.recalc_accuracy = clk_unregister_consumer_clk_op_recalc_accuracy,
+};
+
+static int clk_unregister_consumer_clk_init(struct kunit *test)
+{
+	struct clk *clk;
+	struct clk_init_data init = { };
+	struct clk_unregister_consumer_clk_ctx *ctx;
+
+	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, ctx);
+	test->priv = ctx;
+	ctx->test = test;
+
+	init.name = "unregister_consumer_clk_test_clk";
+	init.ops = &clk_unregister_consumer_clk_clk_ops;
+	ctx->hw.init = &init;
+
+	ctx->rate = 42;
+	ctx->accuracy = 34;
+	KUNIT_ASSERT_EQ(test, 0, clk_hw_register_kunit(test, NULL, &ctx->hw));
+
+	clk = clk_hw_get_clk_kunit(test, &ctx->hw, __func__);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, clk);
+	ctx->clk = clk;
+
+	return 0;
+}
+
+/*
+ * Test suite for clk consumer API behavior after the clk_hw has been
+ * unregistered. The clk consumer APIs should return failure and the clk_ops
+ * shouldn't be called.
+ */
+static struct kunit_suite clk_unregister_consumer_clk_suite = {
+	.name = "clk_unregister_consumer_clk",
+	.init = clk_unregister_consumer_clk_init,
+	.test_cases = clk_unregister_consumer_clk_test_cases,
+};
+
 kunit_test_suites(
 	&clk_leaf_mux_set_rate_parent_test_suite,
 	&clk_test_suite,
@@ -3124,6 +3421,7 @@ kunit_test_suites(
 	&clk_register_clk_parent_data_device_suite,
 	&clk_single_parent_mux_test_suite,
 	&clk_uncached_test_suite,
+	&clk_unregister_consumer_clk_suite,
 );
 MODULE_DESCRIPTION("Kunit tests for clk framework");
 MODULE_LICENSE("GPL v2");
