@@ -1007,7 +1007,7 @@ static size_t btf_enum_scnprintf(const struct btf_type *type, struct btf *btf, c
 }
 
 static size_t trace__btf_scnprintf(struct trace *trace, struct syscall_arg_fmt *arg_fmt, char *bf,
-				   size_t size, int val, char *type)
+				   size_t size, int val, struct syscall_arg *arg, char *type)
 {
 	if (trace->btf == NULL)
 		return 0;
@@ -1030,7 +1030,7 @@ static size_t trace__btf_scnprintf(struct trace *trace, struct syscall_arg_fmt *
 #else // HAVE_LIBBPF_SUPPORT
 static size_t trace__btf_scnprintf(struct trace *trace __maybe_unused, struct syscall_arg_fmt *arg_fmt __maybe_unused,
 				   char *bf __maybe_unused, size_t size __maybe_unused, int val __maybe_unused,
-				   char *type __maybe_unused)
+				   struct syscall_arg *arg __maybe_unused, char *type __maybe_unused)
 {
 	return 0;
 }
@@ -2284,7 +2284,7 @@ static size_t syscall__scnprintf_args(struct syscall *sc, char *bf, size_t size,
 				printed += scnprintf(bf + printed, size - printed, "%s: ", field->name);
 
 			btf_printed = trace__btf_scnprintf(trace, &sc->arg_fmt[arg.idx], bf + printed,
-							   size - printed, val, field->type);
+							   size - printed, val, &arg, field->type);
 			if (btf_printed) {
 				printed += btf_printed;
 				continue;
@@ -2986,7 +2986,7 @@ static size_t trace__fprintf_tp_fields(struct trace *trace, struct evsel *evsel,
 		if (trace->show_arg_names)
 			printed += scnprintf(bf + printed, size - printed, "%s: ", field->name);
 
-		btf_printed = trace__btf_scnprintf(trace, arg, bf + printed, size - printed, val, field->type);
+		btf_printed = trace__btf_scnprintf(trace, arg, bf + printed, size - printed, val, NULL, field->type);
 		if (btf_printed) {
 			printed += btf_printed;
 			continue;
