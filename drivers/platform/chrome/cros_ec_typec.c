@@ -7,6 +7,7 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/gpio/consumer.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_graph.h>
@@ -28,6 +29,7 @@ struct cros_typec_dp_bridge {
 	struct cros_typec_data *typec_data;
 	struct drm_dp_typec_bridge_dev *dev;
 	struct cros_typec_port *active_port;
+	struct gpio_desc *mux_gpio;
 	bool orientation;
 };
 
@@ -445,6 +447,43 @@ unregister_ports:
 	return ret;
 }
 
+static void cros_typec_dp_bridge_hpd_notify(struct drm_dp_typec_bridge_dev *typec_bridge_dev,
+					    void *data, enum drm_connector_status status)
+{
+	struct cros_typec_dp_bridge *dp_bridge = data;
+	struct cros_typec_port *typec_port;
+	struct cros_typec_data *typec;
+	struct gpio_desc *mux_gpio;
+	struct device *dev;
+	int val;
+
+	typec = dp_bridge->typec_data;
+	typec_port = typec->ports[0];
+	dev = typec->dev;
+
+	/*
+	 * Some ECs don't notify AP when HPD goes high or low so we have to
+	 * read the EC GPIO that controls the mux to figure out which type-c
+	 * port is connected to DP by the EC.
+	 */
+	mux_gpio = dp_bridge->mux_gpio;
+	if (mux_gpio) {
+		val = gpiod_get_value_cansleep(mux_gpio);
+		if (val < 0) {
+			dev_err(dev, "Failed to read mux gpio for hpd notify\n");
+			return;
+		}
+
+		typec_port = typec->ports[val];
+	}
+
+	/* Proxy the connector status as the HPD state to replay later. */
+	typec_port->hpd_asserted = status == connector_status_connected;
+
+	/* Refresh port state. */
+	schedule_work(&typec->port_work);
+}
+
 static int cros_typec_init_dp_bridge(struct cros_typec_data *typec)
 {
 	struct device *dev = typec->dev;
@@ -471,11 +510,20 @@ static int cros_typec_init_dp_bridge(struct cros_typec_data *typec)
 	dp_bridge->typec_data = typec;
 
 	dp_bridge->orientation = fwnode_property_read_bool(devnode, "orientation");
+	dp_bridge->mux_gpio = devm_gpiod_get_optional(dev, "mux", GPIOD_ASIS);
+	if (IS_ERR(dp_bridge->mux_gpio))
+		return dev_err_probe(dev, PTR_ERR(dp_bridge->mux_gpio), "failed to get mux gpio\n");
 
 	num_lanes = fwnode_property_count_u32(ep, "data-lanes");
 	if (num_lanes < 0)
 		num_lanes = 4;
 	desc.num_dp_lanes = num_lanes;
+
+	desc.no_hpd = fwnode_property_read_bool(devnode, "no-hpd");
+	if (desc.no_hpd) {
+		desc.hpd_notify = cros_typec_dp_bridge_hpd_notify;
+		desc.hpd_data = dp_bridge;
+	}
 
 	dp_dev = devm_drm_dp_typec_bridge_alloc(dev, &desc);
 	if (IS_ERR(dp_dev))
@@ -582,6 +630,7 @@ static int cros_typec_enable_dp(struct cros_typec_data *typec,
 				struct ec_response_usb_pd_control_v2 *pd_ctrl)
 {
 	struct cros_typec_port *port = typec->ports[port_num];
+	struct cros_typec_port *muxed_port;
 	struct cros_typec_dp_bridge *dp_bridge = typec->dp_bridge;
 	struct typec_displayport_data dp_data;
 	u32 cable_tbt_vdo;
@@ -589,6 +638,9 @@ static int cros_typec_enable_dp(struct cros_typec_data *typec,
 	int ret;
 	enum typec_orientation orientation;
 	bool hpd_asserted = port->mux_flags & USB_PD_MUX_HPD_LVL;
+	bool is_active_port = false;
+	struct gpio_desc *mux_gpio;
+	int val;
 
 	if (typec->pd_ctrl_ver < 2) {
 		dev_err(typec->dev,
@@ -596,15 +648,47 @@ static int cros_typec_enable_dp(struct cros_typec_data *typec,
 		return -ENOTSUPP;
 	}
 
-	/*
-	 * Assume the first port to have HPD asserted is the one muxed to DP
-	 * (i.e. active_port). When there's only one port this delays setting
-	 * the active_port until HPD is asserted, but before that the
-	 * drm_connector looks disconnected so active_port doesn't need to be
-	 * set.
-	 */
-	if (dp_bridge && hpd_asserted && !dp_bridge->active_port)
-		dp_bridge->active_port = port;
+	if (dp_bridge) {
+		/*
+		 * Some ECs don't notify AP when HPD goes high or low so we have to
+		 * read the EC GPIO that controls the mux to figure out which type-c
+		 * port is connected to DP by the EC.
+		 */
+		mux_gpio = dp_bridge->mux_gpio;
+		if (mux_gpio) {
+			/*
+			 * Only read the mux GPIO setting if hpd is asserted
+			 * and we need to change the active_port. Otherwise, an
+			 * active_port is already set and HPD going high or low
+			 * doesn't change the muxed port until DP mode is
+			 * exited.
+			 */
+			if (hpd_asserted && !dp_bridge->active_port) {
+				val = gpiod_get_value_cansleep(mux_gpio);
+				if (val < 0) {
+					dev_err(typec->dev, "Failed to read mux gpio\n");
+					return val;
+				}
+
+				muxed_port = typec->ports[val];
+			}
+		} else {
+			muxed_port = port;
+		}
+
+		/*
+		 * Assume the first port to have HPD asserted is the one muxed
+		 * to DP (i.e. active_port). When there's only one port this
+		 * delays setting the active_port until HPD is asserted, but
+		 * before that the drm_connector looks disconnected so
+		 * active_port doesn't need to be set.
+		 */
+		if (hpd_asserted && !dp_bridge->active_port && muxed_port == port)
+			dp_bridge->active_port = port;
+
+		if (dp_bridge->active_port == port)
+			is_active_port = true;
+	}
 
 	if (!pd_ctrl->dp_mode) {
 		dev_err(typec->dev, "No valid DP mode provided.\n");
@@ -627,7 +711,7 @@ static int cros_typec_enable_dp(struct cros_typec_data *typec,
 			return ret;
 	}
 
-	if (dp_bridge && dp_bridge->active_port == port) {
+	if (is_active_port) {
 		orientation = TYPEC_ORIENTATION_NORMAL;
 		if (dp_bridge->orientation &&
 		    port->mux_flags & USB_PD_MUX_POLARITY_INVERTED)
@@ -729,6 +813,9 @@ static int cros_typec_configure_mux(struct cros_typec_data *typec, int port_num,
 	}
 
 	dp_enabled = resp.flags & USB_PD_MUX_DP_ENABLED;
+	/* Replay HPD from the GPIO state if EC firmware is broken */
+	if (dp_enabled && port->hpd_asserted)
+		resp.flags |= USB_PD_MUX_HPD_LVL;
 
 	/* No change needs to be made, let's exit early. */
 	if (port->mux_flags == resp.flags && port->role == pd_ctrl->role)
