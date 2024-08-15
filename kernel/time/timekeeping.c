@@ -1471,7 +1471,7 @@ out:
 	raw_spin_unlock_irqrestore(&timekeeper_lock, flags);
 
 	/* Signal hrtimers about time change */
-	clock_was_set(CLOCK_SET_WALL);
+	clock_was_set(BASEMASK_WALL_CLOCK_SET);
 
 	if (!ret) {
 		audit_tk_injoffset(ts_delta);
@@ -1521,7 +1521,7 @@ error: /* even if we error out, we forwarded the time, so call update */
 	raw_spin_unlock_irqrestore(&timekeeper_lock, flags);
 
 	/* Signal hrtimers about time change */
-	clock_was_set(CLOCK_SET_WALL);
+	clock_was_set(BASEMASK_WALL_CLOCK_SET);
 
 	return ret;
 }
@@ -1896,7 +1896,7 @@ void timekeeping_inject_sleeptime64(const struct timespec64 *delta)
 	raw_spin_unlock_irqrestore(&timekeeper_lock, flags);
 
 	/* Signal hrtimers about time change */
-	clock_was_set(CLOCK_SET_WALL | CLOCK_SET_BOOT);
+	clock_was_set(BASEMASK_WALL_CLOCK_SET | BASEMASK_BOOT_CLOCK_SET);
 }
 #endif
 
@@ -2606,7 +2606,7 @@ int do_adjtimex(struct __kernel_timex *txc)
 		clock_set |= timekeeping_advance(TK_ADV_FREQ);
 
 	if (clock_set)
-		clock_was_set(CLOCK_SET_WALL);
+		clock_was_set(BASEMASK_WALL_CLOCK_SET);
 
 	ntp_notify_cmos_timer();
 

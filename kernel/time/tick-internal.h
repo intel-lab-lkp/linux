@@ -181,11 +181,11 @@ extern u64 get_next_timer_interrupt(unsigned long basej, u64 basem);
 u64 timer_base_try_to_set_idle(unsigned long basej, u64 basem, bool *idle);
 void timer_clear_idle(void);
 
-#define CLOCK_SET_WALL							\
+#define BASEMASK_WALL_CLOCK_SET						\
 	(BIT(HRTIMER_BASE_REALTIME) | BIT(HRTIMER_BASE_REALTIME_SOFT) |	\
 	 BIT(HRTIMER_BASE_TAI) | BIT(HRTIMER_BASE_TAI_SOFT))
 
-#define CLOCK_SET_BOOT							\
+#define BASEMASK_BOOT_CLOCK_SET						\
 	(BIT(HRTIMER_BASE_BOOTTIME) | BIT(HRTIMER_BASE_BOOTTIME_SOFT))
 
 void clock_was_set(unsigned int bases);

@@ -980,7 +980,7 @@ out_timerfd:
 
 static void clock_was_set_work(struct work_struct *work)
 {
-	clock_was_set(CLOCK_SET_WALL);
+	clock_was_set(BASEMASK_WALL_CLOCK_SET);
 }
 
 static DECLARE_WORK(hrtimer_work, clock_was_set_work);
