@@ -134,6 +134,39 @@ static const struct attribute_group *get_cxl_region_access1_group(void)
 	return &cxl_region_access1_coordinate_group;
 }
 
+struct cxl_dfc_data {
+	int (*match)(struct device *dev, void *data);
+	void *data;
+	struct device *target_device;
+};
+
+static int cxl_dfc_match_modify(struct device *dev, void *data)
+{
+	struct cxl_dfc_data *dfc_data = data;
+	int res;
+
+	res = dfc_data->match(dev, dfc_data->data);
+	if (res && get_device(dev)) {
+		dfc_data->target_device = dev;
+		return res;
+	}
+
+	return 0;
+}
+
+/*
+ * I have the same function as device_find_child() but allow to modify
+ * caller's match data @*data.
+ */
+static struct device *cxl_device_find_child(struct device *parent, void *data,
+					    int (*match)(struct device *dev, void *data))
+{
+	struct cxl_dfc_data dfc_data = {match, data, NULL};
+
+	device_for_each_child(parent, &dfc_data, cxl_dfc_match_modify);
+	return dfc_data.target_device;
+}
+
 static ssize_t uuid_show(struct device *dev, struct device_attribute *attr,
 			 char *buf)
 {
@@ -849,7 +882,8 @@ cxl_region_find_decoder(struct cxl_port *port,
 		dev = device_find_child(&port->dev, &cxlr->params,
 					match_auto_decoder);
 	else
-		dev = device_find_child(&port->dev, &id, match_free_decoder);
+		dev = cxl_device_find_child(&port->dev, &id,
+					    match_free_decoder);
 	if (!dev)
 		return NULL;
 	/*
