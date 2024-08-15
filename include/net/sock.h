@@ -1145,7 +1145,6 @@ static inline void sock_rps_reset_rxhash(struct sock *sk)
 
 #define sk_wait_event(__sk, __timeo, __condition, __wait)		\
 	({	int __rc, __dis = __sk->sk_disconnects;			\
-		release_sock(__sk);					\
 		__rc = __condition;					\
 		if (!__rc) {						\
 			*(__timeo) = wait_woken(__wait,			\
@@ -1153,7 +1152,6 @@ static inline void sock_rps_reset_rxhash(struct sock *sk)
 						*(__timeo));		\
 		}							\
 		sched_annotate_sleep();					\
-		lock_sock(__sk);					\
 		__rc = __dis == __sk->sk_disconnects ? __condition : -EPIPE; \
 		__rc;							\
 	})
