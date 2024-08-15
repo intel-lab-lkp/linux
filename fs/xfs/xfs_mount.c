@@ -1002,6 +1002,7 @@ xfs_mountfs(
 	 */
 	mp->m_alloc_set_aside = xfs_alloc_set_aside(mp);
 	mp->m_ag_max_usable = xfs_alloc_ag_max_usable(mp);
+	mp->m_ag_agfl_setaside = xfs_allocbt_agfl_reserve(mp);
 
 	/*
 	 * Now we are mounted, reserve a small amount of unused space for

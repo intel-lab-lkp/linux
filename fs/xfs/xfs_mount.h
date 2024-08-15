@@ -220,6 +220,11 @@ typedef struct xfs_mount {
 	 * one.
 	 */
 	uint			m_ag_resblk_count;
+	/*
+	 * Blocks set aside to refill the agfl at ENOSPC and satisfy any
+	 * dependent allocation resulting from a chain of BMBT splits.
+	 */
+	uint			m_ag_agfl_setaside;
 	struct delayed_work	m_reclaim_work;	/* background inode reclaim */
 	struct dentry		*m_debugfs;	/* debugfs parent */
 	struct xfs_kobj		m_kobj;

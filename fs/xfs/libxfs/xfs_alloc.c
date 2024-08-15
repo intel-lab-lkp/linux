@@ -153,7 +153,7 @@ xfs_alloc_min_freelist_calc(
  * middle of dependent allocations when they are close to hitting the
  * reservation-induced limits.
  */
-static unsigned int
+unsigned int
 xfs_allocbt_agfl_reserve(
 	struct xfs_mount	*mp)
 {
@@ -2593,6 +2593,7 @@ xfs_alloc_space_available(
 	xfs_extlen_t		reservation; /* blocks that are still reserved */
 	int			available;
 	xfs_extlen_t		agflcount;
+	xfs_extlen_t		set_aside = 0;
 
 	if (flags & XFS_ALLOC_FLAG_FREEING)
 		return true;
@@ -2606,13 +2607,23 @@ xfs_alloc_space_available(
 		return false;
 
 	/*
+	 * Withhold from the available space any that has been set-aside as a
+	 * reserve for refilling the AGFL close to ENOSPC.  In the case where a
+	 * dependent allocation is in progress, allow that space to be consumed
+	 * so that the dependent allocation may complete successfully. Without
+	 * this, we may ENOSPC in the middle of the allocation chain and
+	 * shutdown the filesystem.
+	 */
+	if (args->tp->t_highest_agno == NULLAGNUMBER)
+		set_aside = args->mp->m_ag_agfl_setaside;
+	/*
 	 * Do we have enough free space remaining for the allocation? Don't
 	 * account extra agfl blocks because we are about to defer free them,
 	 * making them unavailable until the current transaction commits.
 	 */
 	agflcount = min_t(xfs_extlen_t, pag->pagf_flcount, min_free);
 	available = (int)(pag->pagf_freeblks + agflcount -
-			  reservation - min_free - args->minleft);
+			  reservation - min_free - args->minleft - set_aside);
 	if (available < (int)max(args->total, alloc_len))
 		return false;
 

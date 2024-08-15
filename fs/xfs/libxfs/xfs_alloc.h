@@ -70,6 +70,7 @@ typedef struct xfs_alloc_arg {
 /* freespace limit calculations */
 unsigned int xfs_alloc_set_aside(struct xfs_mount *mp);
 unsigned int xfs_alloc_ag_max_usable(struct xfs_mount *mp);
+unsigned int xfs_allocbt_agfl_reserve(struct xfs_mount	*mp);
 
 xfs_extlen_t xfs_alloc_longest_free_extent(struct xfs_perag *pag,
 		xfs_extlen_t need, xfs_extlen_t reserved);
