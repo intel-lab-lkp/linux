@@ -1176,6 +1176,8 @@ static inline u16 socket_type_to_security_class(int family, int type, int protoc
 				return SECCLASS_TCP_SOCKET;
 			else if (extsockclass && protocol == IPPROTO_SCTP)
 				return SECCLASS_SCTP_SOCKET;
+			else if (extsockclass && protocol == IPPROTO_SMC)
+				return SECCLASS_SMC_SOCKET;
 			else
 				return SECCLASS_RAWIP_SOCKET;
 		case SOCK_DGRAM:
