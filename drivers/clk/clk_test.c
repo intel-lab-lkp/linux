@@ -3117,6 +3117,11 @@ struct clk_unregister_consumer_clk_ctx {
 	int phase;
 	struct clk_duty duty;
 	struct clk *clk;
+	struct {
+		struct clk_dummy_context ctx;
+		struct clk *clk;
+	} parents[2];
+	u8 parent;
 };
 
 /* Unregister the clk and mark it as unregistered for the tests. */
@@ -3315,6 +3320,40 @@ static void clk_unregister_consumer_clk_get_duty_cycle_skips(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, num, clk_get_scaled_duty_cycle(ctx->clk, den));
 }
 
+/*
+ * Test that clk_set_parent() doesn't call the clk_op after the clk_hw has been
+ * unregistered and returns failure.
+ */
+static void clk_unregister_consumer_clk_set_parent_fails(struct kunit *test)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx = test->priv;
+
+	KUNIT_ASSERT_TRUE(test, clk_is_match(clk_get_parent(ctx->clk), ctx->parents[0].clk));
+	clk_unregister_consumer_clk_unregister(test);
+
+	/* Setting current parent is a no-op */
+	KUNIT_EXPECT_EQ(test, 0, clk_set_parent(ctx->clk, ctx->parents[0].clk));
+	/* Setting a new parent should fail */
+	KUNIT_EXPECT_GT(test, 0, clk_set_parent(ctx->clk, ctx->parents[1].clk));
+	/* Parent is unchanged */
+	KUNIT_EXPECT_TRUE(test, clk_is_match(clk_get_parent(ctx->clk), ctx->parents[0].clk));
+}
+
+/*
+ * Test that clk_get_parent() doesn't call the clk_op after the clk_hw has been
+ * unregistered and returns original parent.
+ */
+static void clk_unregister_consumer_clk_get_parent_skips(struct kunit *test)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx = test->priv;
+
+	KUNIT_ASSERT_TRUE(test, clk_is_match(clk_get_parent(ctx->clk), ctx->parents[0].clk));
+	clk_unregister_consumer_clk_unregister(test);
+
+	/* Parent is unchanged */
+	KUNIT_EXPECT_TRUE(test, clk_is_match(clk_get_parent(ctx->clk), ctx->parents[0].clk));
+}
+
 static struct kunit_case clk_unregister_consumer_clk_test_cases[] = {
 	KUNIT_CASE(clk_unregister_consumer_clk_prepare_fails),
 	KUNIT_CASE(clk_unregister_consumer_clk_unprepare_skips),
@@ -3328,6 +3367,8 @@ static struct kunit_case clk_unregister_consumer_clk_test_cases[] = {
 	KUNIT_CASE(clk_unregister_consumer_clk_get_phase_skips),
 	KUNIT_CASE(clk_unregister_consumer_clk_set_duty_cycle_fails),
 	KUNIT_CASE(clk_unregister_consumer_clk_get_duty_cycle_skips),
+	KUNIT_CASE(clk_unregister_consumer_clk_set_parent_fails),
+	KUNIT_CASE(clk_unregister_consumer_clk_get_parent_skips),
 	KUNIT_CASE(clk_unregister_consumer_clk_put),
 	{}
 };
@@ -3418,6 +3459,46 @@ clk_unregister_consumer_clk_op_set_rate(struct clk_hw *hw, unsigned long rate,
 	return 0;
 }
 
+static int
+clk_unregister_consumer_clk_op_set_parent(struct clk_hw *hw, u8 index)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx;
+
+	ctx = container_of(hw, struct clk_unregister_consumer_clk_ctx, hw);
+	clk_unregister_consumer_clk_clk_op_called(hw, __func__);
+
+	ctx->parent = index;
+
+	return 0;
+}
+
+static u8 clk_unregister_consumer_clk_op_get_parent(struct clk_hw *hw)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx;
+
+	ctx = container_of(hw, struct clk_unregister_consumer_clk_ctx, hw);
+	clk_unregister_consumer_clk_clk_op_called(hw, __func__);
+
+	return ctx->parent;
+}
+
+static int
+clk_unregister_consumer_clk_op_set_rate_and_parent(struct clk_hw *hw,
+						   unsigned long rate,
+						   unsigned long parent_rate,
+						   u8 index)
+{
+	struct clk_unregister_consumer_clk_ctx *ctx;
+
+	ctx = container_of(hw, struct clk_unregister_consumer_clk_ctx, hw);
+	clk_unregister_consumer_clk_clk_op_called(hw, __func__);
+
+	ctx->parent = index;
+	ctx->rate = rate;
+
+	return 0;
+}
+
 static unsigned long
 clk_unregister_consumer_clk_op_recalc_accuracy(struct clk_hw *hw,
 						unsigned long parent_accuracy)
@@ -3490,6 +3571,9 @@ static const struct clk_ops clk_unregister_consumer_clk_clk_ops = {
 	.round_rate = clk_unregister_consumer_clk_op_round_rate,
 	.determine_rate = clk_unregister_consumer_clk_op_determine_rate,
 	.set_rate = clk_unregister_consumer_clk_op_set_rate,
+	.set_parent = clk_unregister_consumer_clk_op_set_parent,
+	.get_parent = clk_unregister_consumer_clk_op_get_parent,
+	.set_rate_and_parent = clk_unregister_consumer_clk_op_set_rate_and_parent,
 	.recalc_accuracy = clk_unregister_consumer_clk_op_recalc_accuracy,
 	.get_phase = clk_unregister_consumer_clk_op_get_phase,
 	.set_phase = clk_unregister_consumer_clk_op_set_phase,
@@ -3502,14 +3586,31 @@ static int clk_unregister_consumer_clk_init(struct kunit *test)
 	struct clk *clk;
 	struct clk_init_data init = { };
 	struct clk_unregister_consumer_clk_ctx *ctx;
+	struct clk_hw *parent0_hw, *parent1_hw;
 
 	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, ctx);
 	test->priv = ctx;
 	ctx->test = test;
 
+	parent0_hw = &ctx->parents[0].ctx.hw;
+	parent0_hw->init = CLK_HW_INIT_NO_PARENT("parent-clk0",
+						&clk_dummy_rate_ops, 0);
+	KUNIT_ASSERT_EQ(test, 0, clk_hw_register_kunit(test, NULL, parent0_hw));
+	ctx->parents[0].clk = clk_hw_get_clk_kunit(test, parent0_hw, "p0");
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, ctx->parents[0].clk);
+
+	parent1_hw = &ctx->parents[1].ctx.hw;
+	parent1_hw->init = CLK_HW_INIT_NO_PARENT("parent-clk1",
+						&clk_dummy_rate_ops, 0);
+	KUNIT_ASSERT_EQ(test, 0, clk_hw_register_kunit(test, NULL, parent1_hw));
+	ctx->parents[1].clk = clk_hw_get_clk_kunit(test, parent1_hw, "p1");
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, ctx->parents[1].clk);
+
 	init.name = "unregister_consumer_clk_test_clk";
 	init.ops = &clk_unregister_consumer_clk_clk_ops;
+	init.parent_hws = (const struct clk_hw *[]){ parent0_hw, parent1_hw };
+	init.num_parents = ARRAY_SIZE(ctx->parents);
 	ctx->hw.init = &init;
 
 	ctx->rate = 42;
