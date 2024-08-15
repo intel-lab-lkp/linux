@@ -445,5 +445,6 @@ enum skb_drop_reason {
 		    name == SKB_NOT_DROPPED_YET)		\
 			SKB_DR_SET(name, reason);		\
 	} while (0)
+#define SKB_DR_RESET(name) SKB_DR_OR(name, NOT_SPECIFIED)
 
 #endif
