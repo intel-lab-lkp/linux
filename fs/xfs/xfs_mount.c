@@ -988,6 +988,22 @@ xfs_mountfs(
 	}
 
 	/*
+	 * Prior to enabling the reservations as part of completing a RW mount,
+	 * recompute the alloc_set_aside and ag_max_usable values to account for
+	 * the size of the free space that the reservation occupies.  Since the
+	 * reservation keeps some free space from being utilized, these values
+	 * need to account for the space that must also be set aside to do AGFL
+	 * management during transactions with dependent allocations.  The
+	 * reservation initialization code uses the set_aside value and modifies
+	 * ag_max_usable, which means this needs to get configured before the
+	 * reservation is enabled for real.  The earlier temporary
+	 * enabling of the reservation allows this code to estimate the size of
+	 * the reservation in order to perform its calculations.
+	 */
+	mp->m_alloc_set_aside = xfs_alloc_set_aside(mp);
+	mp->m_ag_max_usable = xfs_alloc_ag_max_usable(mp);
+
+	/*
 	 * Now we are mounted, reserve a small amount of unused space for
 	 * privileged transactions. This is needed so that transaction
 	 * space required for critical operations can dip into this pool

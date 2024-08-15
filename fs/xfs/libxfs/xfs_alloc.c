@@ -26,6 +26,7 @@
 #include "xfs_ag.h"
 #include "xfs_ag_resv.h"
 #include "xfs_bmap.h"
+#include "xfs_bmap_btree.h"
 #include "xfs_health.h"
 #include "xfs_extfree_item.h"
 
@@ -131,8 +132,80 @@ xfs_alloc_min_freelist_calc(
  * fdblocks to ensure user allocation does not overcommit the space the
  * filesystem needs for the AGFLs.  The rmap btree uses a per-AG reservation to
  * withhold space from xfs_dec_fdblocks, so we do not account for that here.
+ *
+ * This value should be used on filesystems that do not have a per-AG
+ * reservation enabled.  If per-AG reservations are on, then this value needs to
+ * be scaled to the size of the metadata used to track the freespace that the
+ * reservation prevents from being consumed.
  */
 #define XFS_ALLOCBT_AGFL_RESERVE	4
+
+/*
+ * Calculate the number of blocks that should be reserved on a per-AG basis when
+ * per-AG reservations are in use.  This is necessary because the per-AG
+ * reservations result in ENOSPC occurring before the filesystem is truly empty.
+ * This means that in cases where the reservations are enabled, additional space
+ * needs to be set aside to manage the freespace data structures that remain
+ * because of space held by the reservation.  This function attempts to
+ * determine how much free space will remain, in a worst-case scenario, and then
+ * how much space is needed to manage the metadata for the space that remains.
+ * Failure to do this correctly results in users getting ENOSPC errors in the
+ * middle of dependent allocations when they are close to hitting the
+ * reservation-induced limits.
+ */
+static unsigned int
+xfs_allocbt_agfl_reserve(
+	struct xfs_mount	*mp)
+{
+	unsigned int	ndependent_allocs, free_height, agfl_resv, dep_alloc_sz;
+	unsigned int	agfl_min_refill;
+
+	if (!mp->m_ag_resblk_count)
+		return XFS_ALLOCBT_AGFL_RESERVE + 4;
+
+	/*
+	 * Worst case, the number of dependent allocations will be a split for
+	 * every level in the BMBT.  Use the max BMBT levels for this filesystem
+	 * to determine how many dependent allocations we'd see at the most.
+	 */
+	ndependent_allocs = XFS_BM_MAXLEVELS(mp, XFS_DATA_FORK);
+
+	/*
+	 * Assume that worst case, the free space trees are managing
+	 * single-block free records when all per-ag reservations are at their
+	 * maximum size.  Use m_ag_resblk_count, which is the maximum per-AG
+	 * reserved space, to calculate the number of b-tree blocks needed to
+	 * index this free space, and use that to determine the maximum height
+	 * of the free space b-tree in this case.
+	 */
+	free_height = xfs_btree_compute_maxlevels(mp->m_alloc_mnr,
+	    mp->m_ag_resblk_count);
+
+	/*
+	 * Assume that data extent can perform a full-height split, but that
+	 * subsequent split from dependent allocations will be (height - 2).
+	 * The these values are multipled by 2, because they count both
+	 * freespace trees (bnobt and cnobt).
+	 */
+	agfl_resv = free_height * 2;
+	dep_alloc_sz = (max(free_height, 2) - 2) * 2;
+
+	/*
+	 * Finally, ensure that we have enough blocks reserved to keep the agfl
+	 * at its minimum fullness for any dependent allocation once our
+	 * freespace tree reaches its maximum height.  In this case we need to
+	 * compute the free_height + 1, and max rmap which would be our worst
+	 * case scenario.  If this function doesn't account for agfl fullness,
+	 * it will underestimate the amount of space that must remain free to
+	 * continue allocating.
+	 */
+	agfl_min_refill = xfs_alloc_min_freelist_calc(
+	    free_height + 1,
+	    free_height + 1,
+	    xfs_has_rmapbt(mp) ? mp->m_rmap_maxlevels : 0);
+
+	return agfl_resv + agfl_min_refill + (ndependent_allocs * dep_alloc_sz);
+}
 
 /*
  * Compute the number of blocks that we set aside to guarantee the ability to
@@ -150,13 +223,19 @@ xfs_alloc_min_freelist_calc(
  * aside a few blocks which will not be reserved in delayed allocation.
  *
  * For each AG, we need to reserve enough blocks to replenish a totally empty
- * AGFL and 4 more to handle a potential split of the file's bmap btree.
+ * AGFL and 4 more to handle a potential split of the file's bmap btree if no AG
+ * reservation is enabled.
+ *
+ * If per-AG reservations are enabled, then the size of the per-AG reservation
+ * needs to be factored into the space that is set aside to replenish a empty
+ * AGFL when the filesystem is at a reservation-induced ENOSPC (instead of
+ * actually empty).
  */
 unsigned int
 xfs_alloc_set_aside(
 	struct xfs_mount	*mp)
 {
-	return mp->m_sb.sb_agcount * (XFS_ALLOCBT_AGFL_RESERVE + 4);
+	return mp->m_sb.sb_agcount * xfs_allocbt_agfl_reserve(mp);
 }
 
 /*
@@ -180,7 +259,7 @@ xfs_alloc_ag_max_usable(
 	unsigned int		blocks;
 
 	blocks = XFS_BB_TO_FSB(mp, XFS_FSS_TO_BB(mp, 4)); /* ag headers */
-	blocks += XFS_ALLOCBT_AGFL_RESERVE;
+	blocks += xfs_allocbt_agfl_reserve(mp);
 	blocks += 3;			/* AGF, AGI btree root blocks */
 	if (xfs_has_finobt(mp))
 		blocks++;		/* finobt root block */
