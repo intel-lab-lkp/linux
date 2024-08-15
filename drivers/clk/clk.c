@@ -4611,6 +4611,11 @@ void clk_unregister(struct clk *clk)
 	clk_core_evict_parent_cache(clk->core);
 
 	hlist_del_init(&clk->core->child_node);
+	/*
+	 * Prevent clk from being reinserted into the clk tree via
+	 * clk_set_parent()
+	 */
+	clk->core->num_parents = 0;
 
 	if (clk->core->prepare_count)
 		pr_warn("%s: unregistering prepared clock: %s\n",
