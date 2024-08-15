@@ -18,6 +18,7 @@ clk_hw_get_clk_kunit(struct kunit *test, struct clk_hw *hw, const char *con_id);
 struct clk *
 clk_hw_get_clk_prepared_enabled_kunit(struct kunit *test, struct clk_hw *hw,
 				      const char *con_id);
+int clk_put_kunit(struct kunit *test, struct clk *clk);
 
 int clk_prepare_enable_kunit(struct kunit *test, struct clk *clk);
 

@@ -153,6 +153,27 @@ clk_hw_get_clk_prepared_enabled_kunit(struct kunit *test, struct clk_hw *hw,
 }
 EXPORT_SYMBOL_GPL(clk_hw_get_clk_prepared_enabled_kunit);
 
+/**
+ * clk_put_kunit() - Force a clk_put() call on a clk managed by the @test
+ * @test: The test context
+ * @clk: Clk consumer to put with clk_put()
+ *
+ * Just like clk_put(), except the clk must be managed by the @test, i.e.
+ * returned from something like clk_get_kunit(). clk_put() will be called
+ * immediately and the deferred action will be removed.
+ *
+ * Return: 0 on success or a negative errno value on failure to find the
+ * deferred action.
+ */
+int clk_put_kunit(struct kunit *test, struct clk *clk)
+{
+	kunit_release_action(test, clk_put_wrapper, clk);
+	/* TODO: Find the action and fail */
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(clk_put_kunit);
+
 KUNIT_DEFINE_ACTION_WRAPPER(clk_hw_unregister_wrapper,
 			    clk_hw_unregister, struct clk_hw *);
 
