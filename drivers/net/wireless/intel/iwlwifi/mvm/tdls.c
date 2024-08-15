@@ -341,6 +341,8 @@ iwl_mvm_tdls_config_channel_switch(struct iwl_mvm *mvm,
 	struct iwl_tdls_channel_switch_cmd cmd = {0};
 	struct iwl_tdls_channel_switch_cmd_tail *tail =
 		iwl_mvm_chan_info_cmd_tail(mvm, &cmd.ci);
+	struct iwl_tx_cmd *tail_frame_tx_cmd =
+		container_of(&tail->frame.tx_cmd, struct iwl_tx_cmd, __hdr);
 	u16 len = sizeof(cmd) - iwl_mvm_chan_info_padding(mvm);
 	int ret;
 
@@ -410,13 +412,13 @@ iwl_mvm_tdls_config_channel_switch(struct iwl_mvm *mvm,
 			ret = -EINVAL;
 			goto out;
 		}
-		iwl_mvm_set_tx_cmd_ccmp(info, &tail->frame.tx_cmd);
+		iwl_mvm_set_tx_cmd_ccmp(info, tail_frame_tx_cmd);
 	}
 
-	iwl_mvm_set_tx_cmd(mvm, skb, &tail->frame.tx_cmd, info,
+	iwl_mvm_set_tx_cmd(mvm, skb, tail_frame_tx_cmd, info,
 			   mvmsta->deflink.sta_id);
 
-	iwl_mvm_set_tx_cmd_rate(mvm, &tail->frame.tx_cmd, info, sta,
+	iwl_mvm_set_tx_cmd_rate(mvm, tail_frame_tx_cmd, info, sta,
 				hdr->frame_control);
 	rcu_read_unlock();
 
