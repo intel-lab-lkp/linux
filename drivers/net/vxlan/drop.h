@@ -9,6 +9,9 @@
 #include <net/dropreason.h>
 
 #define VXLAN_DROP_REASONS(R)			\
+	R(VXLAN_DROP_FLAGS)			\
+	R(VXLAN_DROP_VNI)			\
+	R(VXLAN_DROP_MAC)			\
 	/* deliberate comment for trailing \ */
 
 enum vxlan_drop_reason {
