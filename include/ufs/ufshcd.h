@@ -676,6 +676,13 @@ enum ufshcd_quirks {
 	 * the standard best practice for managing keys).
 	 */
 	UFSHCD_QUIRK_KEYS_IN_PRDT			= 1 << 24,
+
+	/*
+	 * This quirk needs to be enabled if the host controller has the broken
+	 * Legacy Queue & Single Doorbell Support (LSDBS) field in Controller
+	 * Capabilities register.
+	 */
+	UFSHCD_QUIRK_BROKEN_LSDBS_CAP			= 1 << 25,
 };
 
 enum ufshcd_caps {
