@@ -3027,11 +3027,13 @@ static int ef4_pm_resume(struct device *dev)
 	pci_set_master(efx->pci_dev);
 	rc = efx->type->reset(efx, RESET_TYPE_ALL);
 	if (rc)
-		return rc;
+		goto fail;
 	rc = efx->type->init(efx);
 	if (rc)
-		return rc;
+		goto fail;
 	rc = ef4_pm_thaw(dev);
+fail:
+	pci_disable_device(pci_dev);
 	return rc;
 }
 
