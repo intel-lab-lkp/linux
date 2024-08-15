@@ -2969,6 +2969,22 @@ static int nested_vmx_check_address_space_size(struct kvm_vcpu *vcpu,
 	return 0;
 }
 
+static bool is_l1_noncanonical_address_static(u64 la, struct kvm_vcpu *vcpu)
+{
+	u8 max_guest_address_bits = guest_can_use(vcpu, X86_FEATURE_LA57) ? 57 : 48;
+	/*
+	 * Most x86 arch registers which contain linear addresses like
+	 * segment bases, addresses that are used in instructions (e.g SYSENTER),
+	 * have static canonicality checks,
+	 * size of whose depends only on CPU's support for 5-level
+	 * paging, rather than state of CR4.LA57.
+	 *
+	 * In other words the check only depends on the CPU model,
+	 * rather than on runtime state.
+	 */
+	return !__is_canonical_address(la, max_guest_address_bits);
+}
+
 static int nested_vmx_check_host_state(struct kvm_vcpu *vcpu,
 				       struct vmcs12 *vmcs12)
 {
@@ -2979,8 +2995,8 @@ static int nested_vmx_check_host_state(struct kvm_vcpu *vcpu,
 	    CC(!kvm_vcpu_is_legal_cr3(vcpu, vmcs12->host_cr3)))
 		return -EINVAL;
 
-	if (CC(is_noncanonical_address(vmcs12->host_ia32_sysenter_esp, vcpu)) ||
-	    CC(is_noncanonical_address(vmcs12->host_ia32_sysenter_eip, vcpu)))
+	if (CC(is_l1_noncanonical_address_static(vmcs12->host_ia32_sysenter_esp, vcpu)) ||
+	    CC(is_l1_noncanonical_address_static(vmcs12->host_ia32_sysenter_eip, vcpu)))
 		return -EINVAL;
 
 	if ((vmcs12->vm_exit_controls & VM_EXIT_LOAD_IA32_PAT) &&
@@ -3014,11 +3030,11 @@ static int nested_vmx_check_host_state(struct kvm_vcpu *vcpu,
 	    CC(vmcs12->host_ss_selector == 0 && !ia32e))
 		return -EINVAL;
 
-	if (CC(is_noncanonical_address(vmcs12->host_fs_base, vcpu)) ||
-	    CC(is_noncanonical_address(vmcs12->host_gs_base, vcpu)) ||
-	    CC(is_noncanonical_address(vmcs12->host_gdtr_base, vcpu)) ||
-	    CC(is_noncanonical_address(vmcs12->host_idtr_base, vcpu)) ||
-	    CC(is_noncanonical_address(vmcs12->host_tr_base, vcpu)) ||
+	if (CC(is_l1_noncanonical_address_static(vmcs12->host_fs_base, vcpu)) ||
+	    CC(is_l1_noncanonical_address_static(vmcs12->host_gs_base, vcpu)) ||
+	    CC(is_l1_noncanonical_address_static(vmcs12->host_gdtr_base, vcpu)) ||
+	    CC(is_l1_noncanonical_address_static(vmcs12->host_idtr_base, vcpu)) ||
+	    CC(is_l1_noncanonical_address_static(vmcs12->host_tr_base, vcpu)) ||
 	    CC(is_noncanonical_address(vmcs12->host_rip, vcpu)))
 		return -EINVAL;
 
