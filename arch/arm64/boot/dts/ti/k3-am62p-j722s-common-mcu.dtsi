@@ -29,7 +29,6 @@
 		/* Interrupt sources: esm0_cfg, esm0_hi, esm0_low, mrti0, wrti0 */
 		ti,esm-pins = <0>, <1>, <2>, <85>, <86>;
 		bootph-pre-ram;
-		status = "reserved";
 	};
 
 	/*
