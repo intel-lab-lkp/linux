@@ -510,6 +510,14 @@ static inline bool mm_tlb_flush_nested(struct mm_struct *mm)
 	return atomic_read(&mm->tlb_flush_pending) > 1;
 }
 
+static inline void cond_flush_tlb_mm_range(struct mm_struct *mm,
+					   unsigned long start,
+					   unsigned long end)
+{
+	if (atomic_read(&mm->tlb_flush_pending))
+		flush_tlb_mm_range(mm, start, end, PAGE_SHIFT, false);
+}
+
 #ifdef CONFIG_MMU
 /*
  * Computes the pte marker to copy from the given source entry into dst_vma.
