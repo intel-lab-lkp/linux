@@ -203,5 +203,30 @@ int of_clk_hw_register_kunit(struct kunit *test, struct device_node *node, struc
 }
 EXPORT_SYMBOL_GPL(of_clk_hw_register_kunit);
 
+/**
+ * clk_hw_unregister_kunit() - Force a clk_hw to be unregistered that is
+ * managed by {of_}clk_hw_register_kunit()
+ * @test: The test context
+ * @hw: link to hardware-specific clock data passed to {of_}clk_hw_register_kunit()
+ *
+ * Just like clk_hw_unregister(), except that the clk_hw must have been registered by
+ * a KUnit helper like clk_hw_register_kunit(). This removes the deferred KUnit action
+ * made earlier in the test and unregisters the clk immediately.
+ *
+ * Usually a test will use clk_hw_register_kunit() and let the deferred action
+ * unregister the clk automatically after the test case concludes. This
+ * function can be used to unregister the clk_hw immediately.
+ *
+ * Return: 0 on success or a negative errno value on failure to find the deferred action.
+ */
+int clk_hw_unregister_kunit(struct kunit *test, struct clk_hw *hw)
+{
+	kunit_release_action(test, clk_hw_unregister_wrapper, hw);
+	/* TODO: Find the action and fail */
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(clk_hw_unregister_kunit);
+
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("KUnit helpers for clk providers and consumers");

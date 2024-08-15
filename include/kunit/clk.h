@@ -24,5 +24,6 @@ int clk_prepare_enable_kunit(struct kunit *test, struct clk *clk);
 int clk_hw_register_kunit(struct kunit *test, struct device *dev, struct clk_hw *hw);
 int of_clk_hw_register_kunit(struct kunit *test, struct device_node *node,
 			     struct clk_hw *hw);
+int clk_hw_unregister_kunit(struct kunit *test, struct clk_hw *hw);
 
 #endif
