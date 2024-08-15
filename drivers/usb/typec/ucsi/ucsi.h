@@ -375,18 +375,6 @@ struct ucsi_connector_status {
 	((get_unaligned_le32(&(_p_)[5]) & GENMASK(16, 1)) >> 1)
 } __packed;
 
-/*
- * Data structure filled by PPM in response to GET_PD_MESSAGE command with the
- * Response Message Type set to Discover Identity Response.
- */
-struct ucsi_pd_message_disc_id {
-	u32 vdm_header;
-	u32 id_header;
-	u32 cert_stat;
-	u32 product;
-	u32 vdo[3];
-} __packed;
-
 /* -------------------------------------------------------------------------- */
 
 struct ucsi_debugfs_entry {
@@ -434,6 +422,8 @@ struct ucsi {
 #define UCSI_NO_PARTNER_PDOS	BIT(0)	/* Don't read partner's PDOs */
 #define UCSI_DELAY_DEVICE_PDOS	BIT(1)	/* Reading PDOs fails until the parter is in PD mode */
 };
+
+#define UCSI_MAX_DATA_LENGTH(u) (((u)->version < UCSI_VERSION_2_0) ? 0x10 : 0xff)
 
 #define UCSI_MAX_SVID		5
 #define UCSI_MAX_ALTMODES	(UCSI_MAX_SVID * 6)
