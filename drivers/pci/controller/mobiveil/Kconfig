@@ -12,13 +12,14 @@ config PCIE_MOBIVEIL_HOST
 	select PCIE_MOBIVEIL
 
 config PCIE_LAYERSCAPE_GEN4
-	bool "Freescale Layerscape Gen4 PCIe controller"
+	bool "Freescale Layerscape Gen4 PCIe controller (Deprecated)" if COMPILE_TEST
 	depends on ARCH_LAYERSCAPE || COMPILE_TEST
 	depends on PCI_MSI
 	select PCIE_MOBIVEIL_HOST
 	help
 	  Say Y here if you want PCIe Gen4 controller support on
-	  Layerscape SoCs.
+	  Layerscape SoCs. It is only used at lx2160a rev1 chip, which is
+	  not mass production. lx2160a rev2 switch to designware version.
 
 config PCIE_MOBIVEIL_PLAT
 	bool "Mobiveil AXI PCIe controller"
