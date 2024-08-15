@@ -611,10 +611,10 @@ static bool subvp_subvp_schedulable(struct dml2_pmo_instance *pmo, const struct 
 	int max_microschedule_us = 0;
 	int vactive1_us, vactive2_us, vblank1_us, vblank2_us;
 
-	const struct dml2_timing_cfg *svp_timing1 = 0;
-	const struct dml2_implicit_svp_meta *svp_meta1 = 0;
+	const struct dml2_timing_cfg *svp_timing1 = NULL;
+	const struct dml2_implicit_svp_meta *svp_meta1 = NULL;
 
-	const struct dml2_timing_cfg *svp_timing2 = 0;
+	const struct dml2_timing_cfg *svp_timing2 = NULL;
 
 	if (svp_stream_count <= 1)
 		return true;
@@ -724,9 +724,9 @@ static bool validate_svp_drr_cofunctionality(struct dml2_pmo_instance *pmo,
 	int drr_stretched_vblank_us = 0;
 	int max_vblank_mallregion = 0;
 
-	const struct dml2_timing_cfg *svp_timing = 0;
-	const struct dml2_timing_cfg *drr_timing = 0;
-	const struct dml2_implicit_svp_meta *svp_meta = 0;
+	const struct dml2_timing_cfg *svp_timing = NULL;
+	const struct dml2_timing_cfg *drr_timing = NULL;
+	const struct dml2_implicit_svp_meta *svp_meta = NULL;
 
 	bool schedulable = false;
 
@@ -785,9 +785,9 @@ static bool validate_svp_vblank_cofunctionality(struct dml2_pmo_instance *pmo,
 	int vblank_stream_count = 0;
 	int svp_stream_count = 0;
 
-	const struct dml2_timing_cfg *svp_timing = 0;
-	const struct dml2_timing_cfg *vblank_timing = 0;
-	const struct dml2_implicit_svp_meta *svp_meta = 0;
+	const struct dml2_timing_cfg *svp_timing = NULL;
+	const struct dml2_timing_cfg *vblank_timing = NULL;
+	const struct dml2_implicit_svp_meta *svp_meta = NULL;
 
 	int prefetch_us = 0;
 	int mall_region_us = 0;
@@ -955,7 +955,7 @@ bool pmo_dcn4_init_for_pstate_support(struct dml2_pmo_init_for_pstate_support_in
 
 	struct display_configuation_with_meta *display_config;
 	const struct dml2_plane_parameters *plane_descriptor;
-	const enum dml2_pmo_pstate_strategy (*strategy_list)[4] = 0;
+	const enum dml2_pmo_pstate_strategy (*strategy_list)[4] = NULL;
 	unsigned int strategy_list_size = 0;
 	unsigned int plane_index, stream_index, i;
 
