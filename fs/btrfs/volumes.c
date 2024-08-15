@@ -6481,7 +6481,9 @@ int btrfs_map_block(struct btrfs_fs_info *fs_info, enum btrfs_map_op op,
 	*length = min_t(u64, map->chunk_len - map_offset, max_len);
 
 	down_read(&dev_replace->rwsem);
-	dev_replace_is_ongoing = btrfs_dev_replace_is_ongoing(dev_replace);
+	if (btrfs_dev_replace_is_ongoing(dev_replace) && dev_replace->replace_task != current)
+		dev_replace_is_ongoing = 1;
+
 	/*
 	 * Hold the semaphore for read during the whole operation, write is
 	 * requested at commit time but must wait.
