@@ -534,7 +534,7 @@ err:
 static int cec_notifier(struct notifier_block *nb, unsigned long val,
 			void *data)
 {
-	struct mce *m = (struct mce *)data;
+	struct mce *m = &((struct mce_hw_err *)data)->m;
 
 	if (!m)
 		return NOTIFY_DONE;
