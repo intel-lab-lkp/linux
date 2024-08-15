@@ -4486,7 +4486,7 @@ EXPORT_SYMBOL_GPL(of_clk_hw_register);
  * after clk_unregister() was called on a clock and until last clock
  * consumer calls clk_put() and the struct clk object is freed.
  */
-static int clk_nodrv_prepare_enable(struct clk_hw *hw)
+static int clk_nodrv_prepare_enable_get_phase(struct clk_hw *hw)
 {
 	return -ENXIO;
 }
@@ -4513,14 +4513,21 @@ static int clk_nodrv_determine_rate(struct clk_hw *hw,
 	return -ENXIO;
 }
 
+static int clk_nodrv_set_phase(struct clk_hw *hw, int degrees)
+{
+	return -ENXIO;
+}
+
 static const struct clk_ops clk_nodrv_ops = {
-	.enable		= clk_nodrv_prepare_enable,
+	.enable		= clk_nodrv_prepare_enable_get_phase,
 	.disable	= clk_nodrv_disable_unprepare,
-	.prepare	= clk_nodrv_prepare_enable,
+	.prepare	= clk_nodrv_prepare_enable_get_phase,
 	.unprepare	= clk_nodrv_disable_unprepare,
 	.determine_rate	= clk_nodrv_determine_rate,
 	.set_rate	= clk_nodrv_set_rate,
 	.set_parent	= clk_nodrv_set_parent,
+	.get_phase	= clk_nodrv_prepare_enable_get_phase,
+	.set_phase	= clk_nodrv_set_phase,
 };
 
 static void clk_core_evict_parent_cache_subtree(struct clk_core *root,
