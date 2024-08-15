@@ -47,6 +47,38 @@
 
 #define SERDES_START_WAIT_TIMES			100
 
+struct emac_dfc_data {
+	int (*match)(struct device *dev, void *data);
+	void *data;
+	struct device *target_device;
+};
+
+static int emac_dfc_match_modify(struct device *dev, void *data)
+{
+	struct emac_dfc_data *dfc_data =  data;
+	int res;
+
+	res = dfc_data->match(dev, dfc_data->data);
+	if (res && get_device(dev)) {
+		dfc_data->target_device = dev;
+		return res;
+	}
+
+	return 0;
+}
+
+/* I have the same function as device_find_child() but allow to modify
+ * caller's match data @*data.
+ */
+static struct device *emac_device_find_child(struct device *parent, void *data,
+					     int (*match)(struct device *dev, void *data))
+{
+	struct emac_dfc_data dfc_data = {match, data, NULL};
+
+	device_for_each_child(parent, &dfc_data, emac_dfc_match_modify);
+	return dfc_data.target_device;
+}
+
 int emac_sgmii_init(struct emac_adapter *adpt)
 {
 	if (!(adpt->phy.sgmii_ops && adpt->phy.sgmii_ops->init))
@@ -358,8 +390,8 @@ int emac_sgmii_config(struct platform_device *pdev, struct emac_adapter *adpt)
 	if (has_acpi_companion(&pdev->dev)) {
 		struct device *dev;
 
-		dev = device_find_child(&pdev->dev, &phy->sgmii_ops,
-					emac_sgmii_acpi_match);
+		dev = emac_device_find_child(&pdev->dev, &phy->sgmii_ops,
+					     emac_sgmii_acpi_match);
 
 		if (!dev) {
 			dev_warn(&pdev->dev, "cannot find internal phy node\n");
