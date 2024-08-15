@@ -1070,6 +1070,7 @@ static const struct i2c_device_id dummy_id[] = {
 	{ "smbus_host_notify", },
 	{ },
 };
+MODULE_DEVICE_TABLE(i2c, dummy_id);
 
 static int dummy_probe(struct i2c_client *client)
 {
