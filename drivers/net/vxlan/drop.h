@@ -14,6 +14,7 @@
 	R(VXLAN_DROP_MAC)			\
 	R(VXLAN_DROP_TXINFO)			\
 	R(VXLAN_DROP_REMOTE)			\
+	R(VXLAN_DROP_REMOTE_IP)			\
 	/* deliberate comment for trailing \ */
 
 enum vxlan_drop_reason {
