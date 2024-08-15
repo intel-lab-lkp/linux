@@ -22,6 +22,8 @@
 
 #define MAX_CPUS  4096
 
+volatile bool task_specific;
+
 /* bpf-output associated map */
 struct __augmented_syscalls__ {
 	__uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
@@ -72,12 +74,21 @@ struct augmented_arg {
 	char		value[PATH_MAX];
 };
 
-struct pids_filtered {
+/* Do not trace these PIDs to prevent the observer effect */
+struct pids_filtered_out {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__type(key, pid_t);
 	__type(value, bool);
 	__uint(max_entries, 64);
-} pids_filtered SEC(".maps");
+} pids_filtered_out SEC(".maps");
+
+/* Only trace these PIDs, disregard the rest */
+struct pids_allowed {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__type(key, pid_t);
+	__type(value, bool);
+	__uint(max_entries, 512);
+} pids_allowed SEC(".maps");
 
 /*
  * Desired design of maximum size and alignment (see RFC2553)
@@ -367,9 +378,25 @@ static pid_t getpid(void)
 	return bpf_get_current_pid_tgid();
 }
 
-static bool pid_filter__has(struct pids_filtered *pids, pid_t pid)
+static inline bool pid_filtered_out__has(struct pids_filtered_out *pids, pid_t pid)
 {
 	return bpf_map_lookup_elem(pids, &pid) != NULL;
+}
+
+static inline bool pid_allowed__has(struct pids_allowed *pids, pid_t pid)
+{
+	return bpf_map_lookup_elem(pids, &pid) != NULL;
+}
+
+static inline bool task_can_trace(void)
+{
+	if (pid_filtered_out__has(&pids_filtered_out, getpid()))
+		return false;
+
+	if (task_specific && !pid_allowed__has(&pids_allowed, getpid()))
+		return false;
+
+	return true;
 }
 
 SEC("tp/raw_syscalls/sys_enter")
@@ -378,7 +405,7 @@ int sys_enter(struct syscall_enter_args *args)
 	struct augmented_args_payload *augmented_args;
 	/*
 	 * We start len, the amount of data that will be in the perf ring
-	 * buffer, if this is not filtered out by one of pid_filter__has(),
+	 * buffer, if this is not filtered out by one of pid_filtered_out__has(),
 	 * syscall->enabled, etc, with the non-augmented raw syscall payload,
 	 * i.e. sizeof(augmented_args->args).
 	 *
@@ -386,7 +413,7 @@ int sys_enter(struct syscall_enter_args *args)
 	 * initial, non-augmented raw_syscalls:sys_enter payload.
 	 */
 
-	if (pid_filter__has(&pids_filtered, getpid()))
+	if (!task_can_trace())
 		return 0;
 
 	augmented_args = augmented_args_payload();
@@ -411,7 +438,7 @@ int sys_exit(struct syscall_exit_args *args)
 {
 	struct syscall_exit_args exit_args;
 
-	if (pid_filter__has(&pids_filtered, getpid()))
+	if (!task_can_trace())
 		return 0;
 
 	bpf_probe_read_kernel(&exit_args, sizeof(exit_args), args);

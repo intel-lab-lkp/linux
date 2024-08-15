@@ -3922,6 +3922,45 @@ static int trace__init_syscalls_bpf_prog_array_maps(struct trace *trace)
 
 	return err;
 }
+
+static int trace__set_allowed_pids(struct trace *trace)
+{
+	int err, pids_allowed_fd = bpf_map__fd(trace->skel->maps.pids_allowed);
+	bool exists = true;
+	struct str_node *pos;
+	struct strlist *pids_slist = strlist__new(trace->opts.target.pid, NULL);
+
+	trace->skel->bss->task_specific = false;
+
+	if (pids_slist) {
+		strlist__for_each_entry(pos, pids_slist) {
+			char *end_ptr;
+			int pid = strtol(pos->s, &end_ptr, 10);
+
+			if (pid == INT_MIN || pid == INT_MAX ||
+			    (*end_ptr != '\0' && *end_ptr != ','))
+				continue;
+
+			err = bpf_map_update_elem(pids_allowed_fd, &pid, &exists, BPF_ANY);
+			if (err)
+				return err;
+
+			trace->skel->bss->task_specific = true;
+		}
+	}
+
+	if (workload_pid != -1) {
+		err = bpf_map_update_elem(pids_allowed_fd, &workload_pid, &exists, BPF_ANY);
+		if (err)
+			return err;
+
+		trace->skel->bss->task_specific = true;
+	}
+
+	strlist__delete(pids_slist);
+	return 0;
+}
+
 #endif // HAVE_BPF_SKEL
 
 static int trace__set_ev_qualifier_filter(struct trace *trace)
@@ -3980,7 +4019,7 @@ static int trace__set_filter_loop_pids(struct trace *trace)
 	return err;
 }
 
-static int trace__set_filter_pids(struct trace *trace)
+static int trace__set_filtered_out_pids(struct trace *trace)
 {
 	int err = 0;
 	/*
@@ -4309,13 +4348,19 @@ static int trace__run(struct trace *trace, int argc, const char **argv)
 		}
 	}
 #endif
-	err = trace__set_filter_pids(trace);
+	err = trace__set_filtered_out_pids(trace);
 	if (err < 0)
 		goto out_error_mem;
 
 #ifdef HAVE_BPF_SKEL
 	if (trace->skel && trace->skel->progs.sys_enter)
 		trace__init_syscalls_bpf_prog_array_maps(trace);
+
+	if (trace->skel) {
+		err = trace__set_allowed_pids(trace);
+		if (err)
+			goto out_error_mem;
+	}
 #endif
 
 	if (trace->ev_qualifier_ids.nr > 0) {
