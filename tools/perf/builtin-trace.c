@@ -957,17 +957,16 @@ static bool syscall_arg__strtoul_btf_type(char *bf, size_t size, struct syscall_
 	if (btf == NULL)
 		return false;
 
-	if (arg->fmt->type == NULL) {
-		// See if this is an enum
+	/* See if this is an enum */
+	if (arg->fmt->type == NULL)
 		syscall_arg_fmt__cache_btf_enum(arg->fmt, btf, type);
-	}
 
-	// Now let's see if we have a BTF type resolved
+	/* Now let's see if we have a BTF type resolved */
 	bt = arg->fmt->type;
 	if (bt == NULL)
 		return false;
 
-	// If it is an enum:
+	/* If it is an enum: */
 	if (btf_is_enum(arg->fmt->type))
 		return syscall_arg__strtoul_btf_enum(bf, size, arg, val);
 
