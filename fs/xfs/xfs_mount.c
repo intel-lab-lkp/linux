@@ -952,6 +952,13 @@ xfs_mountfs(
 		xfs_warn(mp,
 	"ENOSPC reserving per-AG metadata pool, log recovery may fail.");
 	error = xfs_log_mount_finish(mp);
+	/*
+	 * Before disabling the temporary per-ag reservation, count up the
+	 * reserved blocks in AG 0.  This will be used to determine how to
+	 * re-size the AGFL reserve and alloc_set_aside prior to enabling
+	 * reservations if the mount is RW.
+	 */
+	mp->m_ag_resblk_count = xfs_fs_count_reserved_ag_blocks(mp, 0);
 	xfs_fs_unreserve_ag_blocks(mp);
 	if (error) {
 		xfs_warn(mp, "log mount finish failed");

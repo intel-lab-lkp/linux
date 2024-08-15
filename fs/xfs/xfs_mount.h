@@ -213,6 +213,13 @@ typedef struct xfs_mount {
 	uint64_t		m_resblks;	/* total reserved blocks */
 	uint64_t		m_resblks_avail;/* available reserved blocks */
 	uint64_t		m_resblks_save;	/* reserved blks @ remount,ro */
+
+	/*
+	 * Number of per-ag resv blocks for a single AG. Derived from AG 0
+	 * under the assumption no per-AG reservations will be larger than that
+	 * one.
+	 */
+	uint			m_ag_resblk_count;
 	struct delayed_work	m_reclaim_work;	/* background inode reclaim */
 	struct dentry		*m_debugfs;	/* debugfs parent */
 	struct xfs_kobj		m_kobj;

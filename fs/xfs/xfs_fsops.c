@@ -552,6 +552,27 @@ xfs_fs_reserve_ag_blocks(
 }
 
 /*
+ * Count the number of reserved blocks that an AG has requested.
+ */
+uint
+xfs_fs_count_reserved_ag_blocks(
+	struct xfs_mount	*mp,
+	xfs_agnumber_t		agno)
+{
+
+	struct xfs_perag	*pag;
+	uint			blocks = 0;
+
+	pag = xfs_perag_grab(mp, agno);
+	if (!pag)
+		return blocks;
+
+	blocks = pag->pag_meta_resv.ar_asked + pag->pag_rmapbt_resv.ar_asked;
+	xfs_perag_rele(pag);
+	return blocks;
+}
+
+/*
  * Free space reserved for per-AG metadata.
  */
 void
