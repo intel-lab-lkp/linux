@@ -891,4 +891,15 @@ static inline void arm_smmu_sva_remove_dev_pasid(struct iommu_domain *domain,
 {
 }
 #endif /* CONFIG_ARM_SMMU_V3_SVA */
+
+#ifdef CONFIG_TEGRA241_CMDQV
+struct arm_smmu_device *
+tegra241_cmdqv_acpi_dsdt_probe(struct arm_smmu_device *smmu);
+#else /* CONFIG_TEGRA241_CMDQV */
+static inline struct arm_smmu_device *
+tegra241_cmdqv_acpi_dsdt_probe(struct arm_smmu_device *smmu)
+{
+	return ERR_PTR(-ENODEV);
+}
+#endif /* CONFIG_TEGRA241_CMDQV */
 #endif /* _ARM_SMMU_V3_H */

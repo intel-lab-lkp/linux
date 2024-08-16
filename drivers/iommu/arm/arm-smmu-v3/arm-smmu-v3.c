@@ -4481,7 +4481,7 @@ static struct arm_smmu_device *arm_smmu_impl_probe(struct arm_smmu_device *smmu)
 	struct arm_smmu_device *new_smmu = ERR_PTR(-ENODEV);
 	int ret;
 
-	/* Add impl probe */
+	new_smmu = tegra241_cmdqv_acpi_dsdt_probe(smmu);
 
 	if (new_smmu == ERR_PTR(-ENODEV))
 		return smmu;
