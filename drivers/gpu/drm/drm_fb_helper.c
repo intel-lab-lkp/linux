@@ -1938,6 +1938,12 @@ int drm_fb_helper_hotplug_event(struct drm_fb_helper *fb_helper)
 	if (!drm_fbdev_emulation || !fb_helper)
 		return 0;
 
+	if (fb_helper->funcs->fb_hotplug) {
+		err = fb_helper->funcs->fb_hotplug(fb_helper);
+		if (err)
+			return err;
+	}
+
 	mutex_lock(&fb_helper->lock);
 	if (fb_helper->deferred_setup) {
 		err = __drm_fb_helper_initial_config_and_unlock(fb_helper);

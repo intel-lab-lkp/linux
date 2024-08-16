@@ -112,6 +112,19 @@ struct drm_fb_helper_funcs {
 	 * TODO: Fix i915 to not require this callback.
 	 */
 	void (*fb_restore)(struct drm_fb_helper *helper);
+
+	/**
+	 * @fb_hotplug:
+	 *
+	 * Driver callback to prepare hotplug event. If set, fbdev
+	 * emulation will invoke this callback before sending a hotplug
+	 * event.
+	 *
+	 * Only for i915. Do not use in new code.
+	 *
+	 * TODO: Fix i915 to not require this callback.
+	 */
+	int (*fb_hotplug)(struct drm_fb_helper *helper);
 };
 
 /**

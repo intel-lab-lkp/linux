@@ -305,10 +305,32 @@ static void intelfb_restore(struct drm_fb_helper *fb_helper)
 	intel_fbdev_invalidate(ifbdev);
 }
 
+static int intelfb_hotplug(struct drm_fb_helper *fb_helper)
+{
+	struct drm_device *dev = fb_helper->client.dev;
+	struct drm_i915_private *dev_priv = to_i915(dev);
+	struct intel_fbdev *ifbdev = dev_priv->display.fbdev.fbdev;
+	bool send_hpd;
+
+	if (!ifbdev)
+		return -EINVAL;
+
+	mutex_lock(&ifbdev->hpd_lock);
+	send_hpd = !ifbdev->hpd_suspended;
+	ifbdev->hpd_waiting = true;
+	mutex_unlock(&ifbdev->hpd_lock);
+
+	if (!send_hpd || !(ifbdev->vma || dev->fb_helper->deferred_setup))
+		return -EAGAIN;
+
+	return 0;
+}
+
 static const struct drm_fb_helper_funcs intel_fb_helper_funcs = {
 	.fb_probe = intelfb_create,
 	.fb_dirty = intelfb_dirty,
 	.fb_restore = intelfb_restore,
+	.fb_hotplug = intelfb_hotplug,
 };
 
 /*
@@ -557,25 +579,6 @@ set_suspend:
 	intel_fbdev_hpd_set_suspend(dev_priv, state);
 }
 
-static int intel_fbdev_output_poll_changed(struct drm_device *dev)
-{
-	struct intel_fbdev *ifbdev = to_i915(dev)->display.fbdev.fbdev;
-	bool send_hpd;
-
-	if (!ifbdev)
-		return -EINVAL;
-
-	mutex_lock(&ifbdev->hpd_lock);
-	send_hpd = !ifbdev->hpd_suspended;
-	ifbdev->hpd_waiting = true;
-	mutex_unlock(&ifbdev->hpd_lock);
-
-	if (send_hpd && (ifbdev->vma || dev->fb_helper->deferred_setup))
-		drm_fb_helper_hotplug_event(dev->fb_helper);
-
-	return 0;
-}
-
 static int intel_fbdev_restore_mode(struct drm_i915_private *dev_priv)
 {
 	struct intel_fbdev *ifbdev = dev_priv->display.fbdev.fbdev;
@@ -637,7 +640,7 @@ static int intel_fbdev_client_hotplug(struct drm_client_dev *client)
 	int ret;
 
 	if (dev->fb_helper)
-		return intel_fbdev_output_poll_changed(dev);
+		return drm_fb_helper_hotplug_event(fb_helper);
 
 	ret = drm_fb_helper_init(dev, fb_helper);
 	if (ret)
