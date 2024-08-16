@@ -185,6 +185,20 @@ config DRM_PANIC_SCREEN_QR_VERSION
 	  Smaller QR code are easier to read, but will contain less debugging
 	  data. Default is 40.
 
+config DRM_LOG
+	bool "Print the kernel boot message on the screen"
+	depends on DRM=y
+	depends on !DRM_FBDEV_EMULATION
+	select DRM_DRAW
+	help
+	  This enable a drm logger, that will print the kernel messages to the
+	  screen until the userspace is ready to take over.
+	  It only makes sense to have it built-in, because otherwise it would
+	  be loaded after userspace.
+
+	  If you only need logs, but no terminal, or if you prefer userspace
+	  terminal, say "Y".
+
 config DRM_DEBUG_DP_MST_TOPOLOGY_REFS
         bool "Enable refcount backtrace history in the DP MST helpers"
 	depends on STACKTRACE_SUPPORT
