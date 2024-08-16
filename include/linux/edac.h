@@ -739,6 +739,35 @@ int edac_ecs_get_desc(struct device *ecs_dev,
 		      const struct attribute_group **attr_groups,
 		      u16 num_media_frus);
 
+enum edac_ppr_type {
+	EDAC_TYPE_SPPR, /* soft PPR */
+	EDAC_TYPE_HPPR, /* hard PPR */
+};
+
+/**
+ * struct edac_ppr_ops - PPR(Post Package Repair) device operations
+ * (all elements optional)
+ * @get_persist_mode_avail: get the persist modes supported in the device.
+ * @get_persist_mode: get the persist mode of the PPR instance.
+ * @set_persist_mode: set the persist mode for the PPR instance.
+ * @get_dpa_support: get dpa support flag.
+ * @get_ppr_safe_when_in_use: get whether memory media is accessible and
+ *			       data is retained during PPR operation.
+ * @do_ppr: start PPR operation for the HPA/DPA set.
+ */
+struct edac_ppr_ops {
+	int (*get_persist_mode_avail)(struct device *dev, void *drv_data, char *buf);
+	int (*get_persist_mode)(struct device *dev, void *drv_data, u32 *mode);
+	int (*set_persist_mode)(struct device *dev, void *drv_data, u32 mode);
+	int (*get_dpa_support)(struct device *dev, void *drv_data, u32 *val);
+	int (*get_ppr_safe_when_in_use)(struct device *dev, void *drv_data, u32 *val);
+	int (*do_ppr)(struct device *dev, void *drv_data, bool hpa, u64 pa);
+};
+
+int edac_ppr_get_desc(struct device *ppr_dev,
+		      const struct attribute_group **attr_groups,
+		      u8 instance);
+
 /*
  * EDAC device feature information structure
  */

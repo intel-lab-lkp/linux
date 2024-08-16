@@ -1,0 +1,69 @@
+What:		/sys/bus/edac/devices/<dev-name>/ppr*
+Date:		Oct 2024
+KernelVersion:	6.12
+Contact:	linux-edac@vger.kernel.org
+Description:
+		The sysfs edac bus devices /<dev-name>/ppr* subdirectory
+		belongs to the memory media PPR (Post Package Repair) control
+		feature, where <dev-name> directory corresponds to a device
+		registered with the EDAC PPR driver and thus registered with
+		the generic edac device driver.
+		/ppr* belongs to either sPPR (Soft PPR) or hPPR (Hard PPR)
+		feature for the memory device.
+		The sysfs PPR attr nodes would be only present if PPR is
+		supported.
+
+What:		/sys/bus/edac/devices/<dev-name>/ppr*/persist_mode_avail
+Date:		Oct 2024
+KernelVersion:	6.12For e.g. HBM, DDR.
+Contact:	linux-edac@vger.kernel.org
+Description:
+		(RO) persist PPR modes supported in the device.
+		For e.g. Hard PPR(hPPR) for a permanent row repair,
+		Soft PPR(sPPR) for a temporary row repair.
+
+What:		/sys/bus/edac/devices/<dev-name>/ppr*/persist_mode
+Date:		Oct 2024
+KernelVersion:	6.12
+Contact:	linux-edac@vger.kernel.org
+Description:
+		(RW) Current persist PPR mode.
+
+What:		/sys/bus/edac/devices/<dev-name>/ppr*/dpa_support
+Date:		Oct 2024
+KernelVersion:	6.12
+Contact:	linux-edac@vger.kernel.org
+Description:
+		(RO) True if supports DPA for PPR maintenance operation.
+
+What:		/sys/bus/edac/devices/<dev-name>/ppr*/ppr_safe_when_in_use
+Date:		Oct 2024
+KernelVersion:	6.12
+Contact:	linux-edac@vger.kernel.org
+Description:
+		(RO) True if memory media is accessible and data is retained
+		during the PPR operation.
+
+What:		/sys/bus/edac/devices/<dev-name>/ppr*/repair_hpa
+Date:		Oct 2024
+KernelVersion:	6.12
+Contact:	linux-edac@vger.kernel.org
+Description:
+		(WO) Start the PPR operation for the HPA (host physical
+		address) set. Return failure if resources are not available
+		to perform repair.
+
+What:		/sys/bus/edac/devices/<dev-name>/ppr*/repair_dpa
+Date:		Oct 2024
+KernelVersion:	6.12
+Contact:	linux-edac@vger.kernel.org
+Description:
+		(WO) Starts the PPR operation for the DPA(device physical
+		address) set. Return failure if resources are not available
+                to perform repair.
+		In some states of system configuration (e.g. before address decoders
+		have been configured), memory devices (e.g. CXL) may not have an
+		active mapping in the main host address physical address map.
+		As such, the memory to repair must be identified by a device
+		specific physical addressing scheme using a DPA. The DPA to use
+		will be presented in related error records.
