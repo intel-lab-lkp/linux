@@ -259,8 +259,8 @@ static bool build_id_cache__valid_id(char *sbuild_id)
 static const char *build_id_cache__basename(bool is_kallsyms, bool is_vdso,
 					    bool is_debug)
 {
-	return is_kallsyms ? "kallsyms" : (is_vdso ? "vdso" : (is_debug ?
-	    "debug" : "elf"));
+	return is_kallsyms ? "kallsyms" : (is_debug ? "debug" : (is_vdso ?
+		"vdso" : "elf"));
 }
 
 char *__dso__build_id_filename(const struct dso *dso, char *bf, size_t size,
@@ -701,13 +701,12 @@ build_id_cache__add(const char *sbuild_id, const char *name, const char *realnam
 	 * file itself may not be very useful to users of our tools without a
 	 * symtab.
 	 */
-	if (!is_kallsyms && !is_vdso &&
-	    strncmp(".ko", name + strlen(name) - 3, 3)) {
+	if (!is_kallsyms && strncmp(".ko", name + strlen(name) - 3, 3)) {
 		debugfile = build_id_cache__find_debug(sbuild_id, nsi, root_dir);
 		if (debugfile) {
 			zfree(&filename);
 			if (asprintf(&filename, "%s/%s", dir_name,
-			    build_id_cache__basename(false, false, true)) < 0) {
+			    build_id_cache__basename(false, is_vdso, true)) < 0) {
 				filename = NULL;
 				goto out_free;
 			}
