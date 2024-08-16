@@ -72,3 +72,44 @@ root@localhost:~# cat /sys/bus/edac/devices/cxl_region0/scrub/enable_background
 root@localhost:~# echo 0 > /sys/bus/edac/devices/cxl_region0/scrub/enable_background
 root@localhost:~# cat /sys/bus/edac/devices/cxl_region0/scrub/enable_background
 0
+
+2. RAS2
+2.1 On demand scrubbing for a specific memory region.
+root@localhost:~# echo 0x120000 > /sys/bus/edac/devices/acpi_ras2_mem0/scrub/addr_range_base
+root@localhost:~# echo 0x150000 > /sys/bus/edac/devices/acpi_ras2_mem0/scrub/addr_range_size
+root@localhost:~# cat /sys/bus/edac/devices/acpi_ras2_mem0/scrub/min_cycle_duration
+3600
+root@localhost:~# cat /sys/bus/edac/devices/acpi_ras2_mem0/scrub/max_cycle_duration
+86400
+root@localhost:~# cat /sys/bus/edac/devices/acpi_ras2_mem0/scrub/current_cycle_duration
+36000
+root@localhost:~# echo 54000 > /sys/bus/edac/devices/acpi_ras2_mem0/scrub/current_cycle_duration
+root@localhost:~# echo 1 > /sys/bus/edac/devices/acpi_ras2_mem0/scrub/enable_on_demand
+root@localhost:~# cat /sys/bus/edac/devices/acpi_ras2_mem0/scrub/enable_on_demand
+1
+root@localhost:~# cat /sys/bus/edac/devices/acpi_ras2_mem0/scrub/current_cycle_duration
+54000
+root@localhost:~# cat /sys/bus/edac/devices/acpi_ras2_mem0/scrub/addr_range_base
+0x120000
+root@localhost:~# cat //sys/bus/edac/devices/acpi_ras2_mem0/scrub/addr_range_size
+0x150000
+root@localhost:~# echo 0 > /sys/bus/edac/devices/acpi_ras2_mem0/scrub/enable_on_demand
+root@localhost:~# cat /sys/bus/edac/devices/acpi_ras2_mem0/scrub/enable_on_demand
+0
+
+2.2 Background scrubbing the entire memory
+root@localhost:~# cat /sys/bus/edac/devices/acpi_ras2_mem0/scrub/min_cycle_duration
+3600
+root@localhost:~# cat /sys/bus/edac/devices/acpi_ras2_mem0/scrub/max_cycle_duration
+86400
+root@localhost:~# cat /sys/bus/edac/devices/acpi_ras2_mem0/scrub/current_cycle_duration
+36000
+root@localhost:~# cat /sys/bus/edac/devices/acpi_ras2_mem0/enable_background
+0
+root@localhost:~# echo 10800 > /sys/bus/edac/devices/acpi_ras2_mem0/scrub/current_cycle_duration
+root@localhost:~# echo 1 > /sys/bus/edac/devices/acpi_ras2_mem0/enable_background
+root@localhost:~# cat /sys/bus/edac/devices/acpi_ras2_mem0/enable_background
+1
+root@localhost:~# cat /sys/bus/edac/devices/acpi_ras2_mem0/scrub/current_cycle_duration
+10800
+root@localhost:~# echo 0 > /sys/bus/edac/devices/acpi_ras2_mem0/enable_background
