@@ -489,13 +489,10 @@ static int decode_insn_struct(struct insn *insn, struct pt_regs *regs)
 	char buffer[MAX_INSN_SIZE];
 
 	if (user_mode(regs)) {
-		int nr_copied = insn_fetch_from_user(regs, buffer);
+		int ret = insn_fetch_decode_from_user(insn, regs);
 
-		if (nr_copied <= 0)
-			return -EFAULT;
-
-		if (!insn_decode_from_regs(insn, regs, buffer, nr_copied))
-			return -EINVAL;
+		if (ret)
+			return ret;
 	} else {
 		if (copy_from_kernel_nofault(buffer, (void *)regs->ip, MAX_INSN_SIZE))
 			return -EFAULT;
