@@ -3905,6 +3905,9 @@ static unsigned int ata_scsi_var_len_cdb_xlat(struct ata_queued_cmd *qc)
 	const u8 *cdb = scmd->cmnd;
 	const u16 sa = get_unaligned_be16(&cdb[8]);
 
+	if (scmd->cmd_len != 32)
+		return 1;
+
 	/*
 	 * if service action represents a ata pass-thru(32) command,
 	 * then pass it to ata_scsi_pass_thru handler.
