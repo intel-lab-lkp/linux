@@ -12,26 +12,30 @@
 	};
 
 	pwm-leds {
-		compatible = "pwm-leds-multicolor";
+		compatible = "pwm-leds";
 
-		multi-led {
-			color = <LED_COLOR_ID_RGB>;
+		led-red {
+			color = <LED_COLOR_ID_RED>;
+			default-state = "on";
+			function = LED_FUNCTION_STATUS;
 			max-brightness = <255>;
+			pwms = <&pwm1 0 1000000 0>;
+		};
 
-			led-red {
-				color = <LED_COLOR_ID_RED>;
-				pwms = <&pwm1 0 1000000 0>;
-			};
+		led-green {
+			color = <LED_COLOR_ID_GREEN>;
+			default-state = "on";
+			function = LED_FUNCTION_STATUS;
+			max-brightness = <255>;
+			pwms = <&pwm2 0 1000000 0>;
+		};
 
-			led-green {
-				color = <LED_COLOR_ID_GREEN>;
-				pwms = <&pwm2 0 1000000 0>;
-			};
-
-			led-blue {
-				color = <LED_COLOR_ID_BLUE>;
-				pwms = <&pwm12 0 1000000 0>;
-			};
+		led-blue {
+			color = <LED_COLOR_ID_BLUE>;
+			default-state = "on";
+			function = LED_FUNCTION_STATUS;
+			max-brightness = <255>;
+			pwms = <&pwm12 0 1000000 0>;
 		};
 	};
 
