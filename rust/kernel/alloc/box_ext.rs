@@ -25,7 +25,9 @@ pub trait BoxExt<T>: Sized {
     /// # Examples
     ///
     /// ```
-    /// let value = Box::new([0; 32], flags::GFP_KERNEL)
+    /// use kernel::alloc::flags;
+    ///
+    /// let value = Box::new([0; 32], flags::GFP_KERNEL).unwrap();
     /// let value = value.drop_contents();
     /// // Now we can re-use `value`:
     /// Box::write(value, [1; 32]);
