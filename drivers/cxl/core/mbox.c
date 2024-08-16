@@ -1324,6 +1324,74 @@ int cxl_set_timestamp(struct cxl_memdev_state *mds)
 }
 EXPORT_SYMBOL_NS_GPL(cxl_set_timestamp, CXL);
 
+int cxl_get_supported_features(struct cxl_memdev_state *mds,
+			       u32 count, u16 start_index,
+			       struct cxl_mbox_get_supp_feats_out *feats_out)
+{
+	struct cxl_mbox_get_supp_feats_in pi;
+	struct cxl_mbox_cmd mbox_cmd;
+	int rc;
+
+	pi.count = cpu_to_le32(count);
+	pi.start_index = cpu_to_le16(start_index);
+
+	mbox_cmd = (struct cxl_mbox_cmd) {
+		.opcode = CXL_MBOX_OP_GET_SUPPORTED_FEATURES,
+		.size_in = sizeof(pi),
+		.payload_in = &pi,
+		.size_out = count,
+		.payload_out = feats_out,
+		.min_out = sizeof(*feats_out),
+	};
+	rc = cxl_internal_send_cmd(mds, &mbox_cmd);
+	if (rc < 0)
+		return rc;
+
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_get_supported_features, CXL);
+
+int cxl_get_supported_feature_entry(struct cxl_memdev_state *mds, const uuid_t *feat_uuid,
+				    struct cxl_mbox_supp_feat_entry *feat_entry_out)
+{
+	struct cxl_mbox_supp_feat_entry *feat_entry;
+	int feat_index, feats_out_size;
+	int nentries, count;
+	int ret;
+
+	feat_index = 0;
+	feats_out_size = sizeof(struct cxl_mbox_get_supp_feats_out) +
+				sizeof(struct cxl_mbox_supp_feat_entry);
+	struct cxl_mbox_get_supp_feats_out *feats_out __free(kfree) =
+					kmalloc(feats_out_size, GFP_KERNEL);
+	if (!feats_out)
+		return -ENOMEM;
+
+	while (true) {
+		memset(feats_out, 0, feats_out_size);
+		ret = cxl_get_supported_features(mds, feats_out_size,
+						 feat_index, feats_out);
+		if (ret)
+			return ret;
+
+		nentries = feats_out->nr_entries;
+		if (!nentries)
+			return -EOPNOTSUPP;
+
+		/* Check CXL memdev supports the feature */
+		feat_entry = feats_out->feat_entries;
+		for (count = 0; count < nentries; count++, feat_entry++) {
+			if (uuid_equal(&feat_entry->uuid, feat_uuid)) {
+				memcpy(feat_entry_out, feat_entry,
+				       sizeof(*feat_entry_out));
+				return 0;
+			}
+		}
+		feat_index += nentries;
+	}
+}
+EXPORT_SYMBOL_NS_GPL(cxl_get_supported_feature_entry, CXL);
+
 int cxl_mem_get_poison(struct cxl_memdev *cxlmd, u64 offset, u64 len,
 		       struct cxl_region *cxlr)
 {
