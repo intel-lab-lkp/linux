@@ -338,7 +338,6 @@ bool fixup_umip_exception(struct pt_regs *regs)
 	int nr_copied, reg_offset, dummy_data_size, umip_inst;
 	/* 10 bytes is the maximum size of the result of UMIP instructions */
 	unsigned char dummy_data[10] = { 0 };
-	unsigned char buf[MAX_INSN_SIZE];
 	unsigned long *reg_addr;
 	void __user *uaddr;
 	struct insn insn;
@@ -350,11 +349,7 @@ bool fixup_umip_exception(struct pt_regs *regs)
 	 * Give up on emulation if fetching the instruction failed. Should a
 	 * page fault or a #GP be issued?
 	 */
-	nr_copied = insn_fetch_from_user(regs, buf);
-	if (nr_copied <= 0)
-		return false;
-
-	if (!insn_decode_from_regs(&insn, regs, buf, nr_copied))
+	if (insn_fetch_decode_from_user(&insn, regs))
 		return false;
 
 	umip_inst = identify_insn(&insn);
