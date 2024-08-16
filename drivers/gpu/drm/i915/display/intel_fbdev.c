@@ -296,9 +296,19 @@ static int intelfb_dirty(struct drm_fb_helper *helper, struct drm_clip_rect *cli
 	return 0;
 }
 
+static void intelfb_restore(struct drm_fb_helper *fb_helper)
+{
+	struct drm_device *dev = fb_helper->client.dev;
+	struct drm_i915_private *dev_priv = to_i915(dev);
+	struct intel_fbdev *ifbdev = dev_priv->display.fbdev.fbdev;
+
+	intel_fbdev_invalidate(ifbdev);
+}
+
 static const struct drm_fb_helper_funcs intel_fb_helper_funcs = {
 	.fb_probe = intelfb_create,
 	.fb_dirty = intelfb_dirty,
+	.fb_restore = intelfb_restore,
 };
 
 /*
@@ -581,8 +591,6 @@ static int intel_fbdev_restore_mode(struct drm_i915_private *dev_priv)
 	ret = drm_fb_helper_restore_fbdev_mode_unlocked(dev->fb_helper);
 	if (ret)
 		return ret;
-
-	intel_fbdev_invalidate(ifbdev);
 
 	return 0;
 }
