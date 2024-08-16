@@ -5208,56 +5208,38 @@ place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 		lag = se->vlag;
 
 		/*
-		 * If we want to place a task and preserve lag, we have to
+		 * If we want to place a task i and preserve lag, we have to
 		 * consider the effect of the new entity on the weighted
 		 * average and compensate for this, otherwise lag can quickly
 		 * evaporate.
 		 *
-		 * Lag is defined as:
+		 *		Avg-Load    VRuntime    Avg-VRuntime	Vlag
+		 *	before	  W	    v_i		  V		vl_i
+		 *	after	  W+w_i	    v_i'	  V'		vl_i
 		 *
-		 *   lag_i = S - s_i = w_i * (V - v_i)
+		 * We want to preserve lag, so vl_i wil not change:
 		 *
-		 * To avoid the 'w_i' term all over the place, we only track
-		 * the virtual lag:
+		 *   vl_i = V' - v_i'
+		 *   ==> v_i' = V' - vl_i			(1)
 		 *
-		 *   vl_i = V - v_i <=> v_i = V - vl_i
+		 * We take V' to be the weighted average of all v'
 		 *
-		 * And we take V to be the weighted average of all v:
+		 *   V' = (W*V + w_i*v_i') / (W + w_i)
+		 *   ==> (W + w_i)*V' = W*V + w_i*v_i'		(2)
 		 *
-		 *   V = (\Sum w_j*v_j) / W
+		 * by using (1) & (2) we obtain:
 		 *
-		 * Where W is: \Sum w_j
+		 *   (W + w_i)*V' = W*V + w_i*(V' - vl_i)
+		 *   ==>     W*V' = W*V -w_i*vl_i
+		 *   ==>       V' = V - w_i*vl_i/W		(3)
 		 *
-		 * Then, the weighted average after adding an entity with lag
-		 * vl_i is given by:
+		 * by using (1) & (3) we obtain:
 		 *
-		 *   V' = (\Sum w_j*v_j + w_i*v_i) / (W + w_i)
-		 *      = (W*V + w_i*(V - vl_i)) / (W + w_i)
-		 *      = (W*V + w_i*V - w_i*vl_i) / (W + w_i)
-		 *      = (V*(W + w_i) - w_i*l) / (W + w_i)
-		 *      = V - w_i*vl_i / (W + w_i)
+		 *   v_i' = V - w_i*vl_i/W - vl_i
+		 *        = V - (w_i*vl_i/W + vl_i)
+		 *        = V - (w_i*vl_i + W*vl_i)/W
+		 *        = V - vl_i*(w_i + W)/W
 		 *
-		 * And the actual lag after adding an entity with vl_i is:
-		 *
-		 *   vl'_i = V' - v_i
-		 *         = V - w_i*vl_i / (W + w_i) - (V - vl_i)
-		 *         = vl_i - w_i*vl_i / (W + w_i)
-		 *
-		 * Which is strictly less than vl_i. So in order to preserve lag
-		 * we should inflate the lag before placement such that the
-		 * effective lag after placement comes out right.
-		 *
-		 * As such, invert the above relation for vl'_i to get the vl_i
-		 * we need to use such that the lag after placement is the lag
-		 * we computed before dequeue.
-		 *
-		 *   vl'_i = vl_i - w_i*vl_i / (W + w_i)
-		 *         = ((W + w_i)*vl_i - w_i*vl_i) / (W + w_i)
-		 *
-		 *   (W + w_i)*vl'_i = (W + w_i)*vl_i - w_i*vl_i
-		 *                   = W*vl_i
-		 *
-		 *   vl_i = (W + w_i)*vl'_i / W
 		 */
 		load = cfs_rq->avg_load;
 		if (curr && curr->on_rq)
