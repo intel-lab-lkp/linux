@@ -1315,6 +1315,16 @@ static int read_response(struct i2c_client *client, unsigned char *resp)
 	return ret;
 }
 
+/* Filter SMBus communication errors from incorrect response errors */
+static bool is_smbus_error(struct device *dev, int err)
+{
+	if (!err || err == -EINVAL || err == -E2BIG)
+		return false;
+
+	dev_err(dev, "SMbus error: %d\n", err);
+	return true;
+}
+
 static int do_cmd(struct i2c_client *client, int len, unsigned char *msg,
 		  int *resp_len, unsigned char *resp)
 {
@@ -1709,6 +1719,8 @@ static int ssif_probe(struct i2c_client *client)
 	msg[1] = IPMI_GET_SYSTEM_INTERFACE_CAPABILITIES_CMD;
 	msg[2] = 0; /* SSIF */
 	rv = do_cmd(client, 3, msg, &len, resp);
+	if (is_smbus_error(&client->dev, rv))
+		goto out;
 	if (!rv && (len >= 3) && (resp[2] == 0)) {
 		if (len < 7) {
 			if (ssif_dbg_probe)
@@ -1767,6 +1779,8 @@ static int ssif_probe(struct i2c_client *client)
 	msg[1] = IPMI_CLEAR_MSG_FLAGS_CMD;
 	msg[2] = WDT_PRE_TIMEOUT_INT;
 	rv = do_cmd(client, 3, msg, &len, resp);
+	if (is_smbus_error(&client->dev, rv))
+		goto out;
 	if (rv || (len < 3) || (resp[2] != 0))
 		dev_warn(&ssif_info->client->dev,
 			 "Unable to clear message flags: %d %d %2.2x\n",
@@ -1776,6 +1790,8 @@ static int ssif_probe(struct i2c_client *client)
 	msg[0] = IPMI_NETFN_APP_REQUEST << 2;
 	msg[1] = IPMI_GET_BMC_GLOBAL_ENABLES_CMD;
 	rv = do_cmd(client, 2, msg, &len, resp);
+	if (is_smbus_error(&client->dev, rv))
+		goto out;
 	if (rv || (len < 4) || (resp[2] != 0)) {
 		dev_warn(&ssif_info->client->dev,
 			 "Error getting global enables: %d %d %2.2x\n",
@@ -1796,6 +1812,8 @@ static int ssif_probe(struct i2c_client *client)
 	msg[1] = IPMI_SET_BMC_GLOBAL_ENABLES_CMD;
 	msg[2] = ssif_info->global_enables | IPMI_BMC_EVT_MSG_BUFF;
 	rv = do_cmd(client, 3, msg, &len, resp);
+	if (is_smbus_error(&client->dev, rv))
+		goto out;
 	if (rv || (len < 2)) {
 		dev_warn(&ssif_info->client->dev,
 			 "Error setting global enables: %d %d %2.2x\n",
@@ -1818,6 +1836,8 @@ static int ssif_probe(struct i2c_client *client)
 	msg[1] = IPMI_SET_BMC_GLOBAL_ENABLES_CMD;
 	msg[2] = ssif_info->global_enables | IPMI_BMC_RCV_MSG_INTR;
 	rv = do_cmd(client, 3, msg, &len, resp);
+	if (is_smbus_error(&client->dev, rv))
+		goto out;
 	if (rv || (len < 2)) {
 		dev_warn(&ssif_info->client->dev,
 			 "Error setting global enables: %d %d %2.2x\n",
