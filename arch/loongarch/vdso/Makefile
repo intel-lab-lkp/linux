@@ -8,6 +8,10 @@ obj-vdso-y := elf.o vgetcpu.o vgettimeofday.o sigreturn.o
 
 obj-vdso-$(CONFIG_VDSO_GETRANDOM) += vgetrandom.o vgetrandom-chacha.o memset.o
 
+ifdef CONFIG_CPU_HAS_LSX
+obj-vdso-$(CONFIG_VDSO_GETRANDOM) += vgetrandom-chacha-lsx.o
+endif
+
 # Common compiler flags between ABIs.
 ccflags-vdso := \
 	$(filter -I%,$(KBUILD_CFLAGS)) \

@@ -7,6 +7,11 @@
 #include <asm/regdef.h>
 #include <linux/linkage.h>
 
+#ifdef CONFIG_CPU_HAS_LSX
+# include <asm/alternative-asm.h>
+# include <asm/cpu.h>
+#endif
+
 .text
 
 /* Salsa20 quarter-round */
@@ -78,8 +83,16 @@ SYM_FUNC_START(__arch_chacha20_blocks_nostack)
 	 * The ABI requires s0-s9 saved, and sp aligned to 16-byte.
 	 * This does not violate the stack-less requirement: no sensitive data
 	 * is spilled onto the stack.
+	 *
+	 * Rewrite the very first instruction to jump to the LSX implementation
+	 * if LSX is available.
 	 */
+#ifdef CONFIG_CPU_HAS_LSX
+	ALTERNATIVE __stringify(PTR_ADDI sp, sp, (-SZREG * 10) & STACK_ALIGN), \
+		    "b __arch_chacha20_blocks_nostack_lsx", CPU_FEATURE_LSX
+#else
 	PTR_ADDI	sp, sp, (-SZREG * 10) & STACK_ALIGN
+#endif
 	REG_S		s0, sp, 0
 	REG_S		s1, sp, SZREG
 	REG_S		s2, sp, SZREG * 2
