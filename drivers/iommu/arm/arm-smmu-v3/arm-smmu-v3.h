@@ -14,6 +14,8 @@
 #include <linux/mmzone.h>
 #include <linux/sizes.h>
 
+struct acpi_iort_node;
+
 /* MMIO registers */
 #define ARM_SMMU_IDR0			0x0
 #define IDR0_ST_LVL			GENMASK(28, 27)
@@ -790,6 +792,12 @@ static inline struct arm_smmu_domain *to_smmu_domain(struct iommu_domain *dom)
 
 extern struct xarray arm_smmu_asid_xa;
 extern struct mutex arm_smmu_asid_lock;
+
+static inline struct acpi_iort_node *
+arm_smmu_get_iort_node(struct arm_smmu_device *smmu)
+{
+	return *(struct acpi_iort_node **)dev_get_platdata(smmu->dev);
+}
 
 struct arm_smmu_domain *arm_smmu_domain_alloc(void);
 

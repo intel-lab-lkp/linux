@@ -4350,11 +4350,8 @@ static void acpi_smmu_get_options(u32 model, struct arm_smmu_device *smmu)
 static int arm_smmu_device_acpi_probe(struct platform_device *pdev,
 				      struct arm_smmu_device *smmu)
 {
+	struct acpi_iort_node *node = arm_smmu_get_iort_node(smmu);
 	struct acpi_iort_smmu_v3 *iort_smmu;
-	struct device *dev = smmu->dev;
-	struct acpi_iort_node *node;
-
-	node = *(struct acpi_iort_node **)dev_get_platdata(dev);
 
 	/* Retrieve SMMUv3 specific data */
 	iort_smmu = (struct acpi_iort_smmu_v3 *)node->node_data;
