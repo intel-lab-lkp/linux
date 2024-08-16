@@ -654,27 +654,18 @@ xfs_ioc_trim(
 	struct xfs_mount		*mp,
 	struct fstrim_range __user	*urange)
 {
-	unsigned int		granularity =
-		bdev_discard_granularity(mp->m_ddev_targp->bt_bdev);
+	struct block_device	*bdev = mp->m_ddev_targp->bt_bdev;
 	struct block_device	*rt_bdev = NULL;
+	unsigned int		granularity = bdev_discard_granularity(bdev);
+	xfs_rfsblock_t		max_blocks = mp->m_sb.sb_dblocks;
 	struct fstrim_range	range;
 	xfs_daddr_t		start, end;
 	xfs_extlen_t		minlen;
-	xfs_rfsblock_t		max_blocks;
 	uint64_t		blocks_trimmed = 0;
 	int			error, last_error = 0;
 
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
-	if (mp->m_rtdev_targp &&
-	    bdev_max_discard_sectors(mp->m_rtdev_targp->bt_bdev))
-		rt_bdev = mp->m_rtdev_targp->bt_bdev;
-	if (!bdev_max_discard_sectors(mp->m_ddev_targp->bt_bdev) && !rt_bdev)
-		return -EOPNOTSUPP;
-
-	if (rt_bdev)
-		granularity = max(granularity,
-				  bdev_discard_granularity(rt_bdev));
 
 	/*
 	 * We haven't recovered the log, so we cannot use our bnobt-guided
@@ -683,13 +674,36 @@ xfs_ioc_trim(
 	if (xfs_has_norecovery(mp))
 		return -EROFS;
 
+	/*
+	 * If the main device doesn't support discards, fail the entire ioctl
+	 * as the RT blocks are mapped after the main device blocks, and we'd
+	 * have to fake operation results for the main device for the ABI to
+	 * work.
+	 *
+	 * Note that while a main device that supports discards (SSD) and a RT
+	 * device that does not (HDD) is a fairly common setup, the reverse is
+	 * theoretically possible but rather odd, so this is not much of a loss.
+	 */
+	if (!bdev_max_discard_sectors(bdev))
+		return -EOPNOTSUPP;
+
+	if (mp->m_rtdev_targp) {
+		rt_bdev = mp->m_rtdev_targp->bt_bdev;
+		if (!bdev_max_discard_sectors(rt_bdev))
+			rt_bdev = NULL;
+	}
+	if (rt_bdev) {
+		max_blocks += mp->m_sb.sb_rblocks;
+		granularity =
+			max(granularity, bdev_discard_granularity(rt_bdev));
+	}
+
 	if (copy_from_user(&range, urange, sizeof(range)))
 		return -EFAULT;
 
 	range.minlen = max_t(u64, granularity, range.minlen);
 	minlen = XFS_B_TO_FSB(mp, range.minlen);
 
-	max_blocks = mp->m_sb.sb_dblocks + mp->m_sb.sb_rblocks;
 	if (range.start >= XFS_FSB_TO_B(mp, max_blocks) ||
 	    range.minlen > XFS_FSB_TO_B(mp, mp->m_ag_max_usable) ||
 	    range.len < mp->m_sb.sb_blocksize)
@@ -698,12 +712,10 @@ xfs_ioc_trim(
 	start = BTOBB(range.start);
 	end = start + BTOBBT(range.len) - 1;
 
-	if (bdev_max_discard_sectors(mp->m_ddev_targp->bt_bdev)) {
-		error = xfs_trim_datadev_extents(mp, start, end, minlen,
-				&blocks_trimmed);
-		if (error)
-			last_error = error;
-	}
+	error = xfs_trim_datadev_extents(mp, start, end, minlen,
+			&blocks_trimmed);
+	if (error)
+		last_error = error;
 
 	if (rt_bdev && !xfs_trim_should_stop()) {
 		error = xfs_trim_rtdev_extents(mp, start, end, minlen,
