@@ -171,6 +171,27 @@ void closid_free(int closid)
 	__set_bit(closid, &closid_free_map);
 }
 
+/*
+ * SDCIAE feature uses max CLOSID to route the SDCI traffic.
+ * Get the max CLOSID number
+ */
+static u32 get_sdciae_closid(struct rdt_resource *r)
+{
+	return resctrl_arch_get_num_closid(r) - 1;
+}
+
+static int closid_alloc_sdciae(struct rdt_resource *r)
+{
+	u32 sdciae_closid = get_sdciae_closid(r);
+
+	if (closid_free_map & (1 << sdciae_closid)) {
+		closid_free_map &= ~(1 << sdciae_closid);
+		return sdciae_closid;
+	} else {
+		return -ENOSPC;
+	}
+}
+
 /**
  * closid_allocated - test if provided closid is in use
  * @closid: closid to be tested
@@ -1850,6 +1871,57 @@ int resctrl_arch_set_sdciae_enabled(enum resctrl_res_level l, bool enable)
 	return 0;
 }
 
+static int resctrl_sdciae_show(struct kernfs_open_file *of,
+			       struct seq_file *seq, void *v)
+{
+	seq_printf(seq, "%x\n", resctrl_arch_get_sdciae_enabled(RDT_RESOURCE_L3));
+	return 0;
+}
+
+static ssize_t resctrl_sdciae_write(struct kernfs_open_file *of, char *buf,
+				    size_t nbytes, loff_t off)
+{
+	struct resctrl_schema *s = of->kn->parent->priv;
+	struct rdt_resource *r = s->res;
+	unsigned int enable;
+	u32 sdciae_closid;
+	int ret;
+
+	if (!r->sdciae_capable)
+		return -EINVAL;
+
+	ret = kstrtouint(buf, 0, &enable);
+	if (ret)
+		return ret;
+
+	cpus_read_lock();
+	mutex_lock(&rdtgroup_mutex);
+
+	rdt_last_cmd_clear();
+
+	/* Update the MSR only when there is a change */
+	if (resctrl_arch_get_sdciae_enabled(RDT_RESOURCE_L3) != enable) {
+		if (enable) {
+			ret = closid_alloc_sdciae(r);
+			if (ret < 0) {
+				rdt_last_cmd_puts("SDCIAE CLOSID is not available\n");
+				goto out_sdciae;
+			}
+		} else {
+			sdciae_closid = get_sdciae_closid(r);
+			closid_free(sdciae_closid);
+		}
+
+		ret = resctrl_arch_set_sdciae_enabled(RDT_RESOURCE_L3, enable);
+	}
+
+out_sdciae:
+	mutex_unlock(&rdtgroup_mutex);
+	cpus_read_unlock();
+
+	return ret ?: nbytes;
+}
+
 /* rdtgroup information files for one cache resource. */
 static struct rftype res_common_files[] = {
 	{
@@ -2003,6 +2075,13 @@ static struct rftype res_common_files[] = {
 		.fflags		= RFTYPE_CTRL_BASE,
 	},
 	{
+		.name		= "sdciae",
+		.mode		= 0644,
+		.kf_ops		= &rdtgroup_kf_single_ops,
+		.seq_show	= resctrl_sdciae_show,
+		.write		= resctrl_sdciae_write,
+	},
+	{
 		.name		= "mode",
 		.mode		= 0644,
 		.kf_ops		= &rdtgroup_kf_single_ops,
@@ -2099,6 +2178,15 @@ void __init mbm_config_rftype_init(const char *config)
 	rft = rdtgroup_get_rftype_by_name(config);
 	if (rft)
 		rft->fflags = RFTYPE_MON_INFO | RFTYPE_RES_CACHE;
+}
+
+void __init resctrl_sdciae_rftype_init(void)
+{
+	struct rftype *rft;
+
+	rft = rdtgroup_get_rftype_by_name("sdciae");
+	if (rft)
+		rft->fflags = RFTYPE_CTRL_INFO | RFTYPE_RES_CACHE;
 }
 
 /**

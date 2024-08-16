@@ -135,6 +135,28 @@ related to allocation:
 			"1":
 			      Non-contiguous 1s value in CBM is supported.
 
+"sdciae":
+		Indicates if the system can support SDCIAE (L3 Smart Data Cache
+		Injection Allocation Enforcement) feature.
+
+		Smart Data Cache Injection (SDCI) is a mechanism that enables
+		direct insertion of data from I/O devices into the L3 cache.
+		By directly caching data from I/O devices rather than first
+		storing the I/O data in DRAM, SDCI reduces demands on DRAM
+		bandwidth and reduces latency to the processor consuming the
+		I/O data. The SDCIAE feature allows system software to configure
+		limit the portion of the L3 cache used for SDCI.
+
+			"0":
+			      Feature is not enabled.
+			"1":
+			      Feature is enabled.
+
+		Feature can be enabled/disabled by writing to the interface.
+		Example::
+
+			# echo 1 > /sys/fs/resctrl/info/L3/sdciae
+
 Memory bandwidth(MB) subdirectory contains the following files
 with respect to allocation:
 

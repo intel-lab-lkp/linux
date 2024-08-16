@@ -299,6 +299,7 @@ static void rdt_get_cdp_config(int level)
 static void rdt_get_sdciae_alloc_cfg(struct rdt_resource *r)
 {
 	r->sdciae_capable = true;
+	resctrl_sdciae_rftype_init();
 }
 
 static void rdt_get_cdp_l3_config(void)
