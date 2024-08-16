@@ -22,6 +22,7 @@
 
 #include "drm_draw.h"
 #include "drm_log.h"
+#include "drm_internal.h"
 
 MODULE_AUTHOR("Jocelyn Falempe");
 MODULE_DESCRIPTION("DRM boot logger");
@@ -361,10 +362,15 @@ static bool drm_log_active_output(void)
 	bool active = false;
 
 	mutex_lock(&drm_log_lock);
-	list_for_each_entry(dclient, &drm_log_clients, head)
-		if (dclient->n_scanout || !dclient->probed)
-			active = true;
-
+	list_for_each_entry(dclient, &drm_log_clients, head) {
+		if (dclient->n_scanout || !dclient->probed) {
+			/* Also check that we are still the master */
+			if (drm_master_internal_acquire(dclient->client.dev)) {
+				drm_master_internal_release(dclient->client.dev);
+				active = true;
+			}
+		}
+	}
 	mutex_unlock(&drm_log_lock);
 	return active;
 }
