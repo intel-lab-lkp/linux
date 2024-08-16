@@ -503,6 +503,10 @@ struct thread_struct {
 	struct thread_shstk	shstk;
 #endif
 
+#ifdef CONFIG_INTEL_TDX_GUEST
+	unsigned long		mmio_emul;
+#endif
+
 	/* Floating point and extended processor state */
 	struct fpu		fpu;
 	/*
