@@ -2011,6 +2011,16 @@ static int init_gcr3_table(struct iommu_dev_data *dev_data,
 	if (ret)
 		free_gcr3_table(&dev_data->gcr3_info);
 
+	if (!ret) {
+		/*
+		 * GIOV is required for PD_MODE_V2 because we need
+		 * to support the case where the end-point device
+		 * does not have PASID in the TLP prefix when setting
+		 * up to use the v2 table.
+		 */
+		dev_data->gcr3_info.giov = true;
+	}
+
 	return ret;
 }
 
