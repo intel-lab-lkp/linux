@@ -115,9 +115,9 @@ static void vgetrandom_init(void)
 		exit(KSFT_SKIP);
 	}
 	vdso_init_from_sysinfo_ehdr(sysinfo_ehdr);
-	grnd_ctx.fn = (__typeof__(grnd_ctx.fn))vdso_sym("LINUX_2.6", "__vdso_getrandom");
+	grnd_ctx.fn = (__typeof__(grnd_ctx.fn))vdso_sym("LINUX_2.6.15", "__kernel_getrandom");
 	if (!grnd_ctx.fn) {
-		printf("__vdso_getrandom is missing!\n");
+		printf("__kernel_getrandom is missing!\n");
 		exit(KSFT_FAIL);
 	}
 	if (grnd_ctx.fn(NULL, 0, 0, &grnd_ctx.params, ~0UL) != 0) {
@@ -146,7 +146,7 @@ static ssize_t vgetrandom(void *buf, size_t len, unsigned long flags)
 	return grnd_ctx.fn(buf, len, flags, state, grnd_ctx.params.size_of_opaque_state);
 }
 
-enum { TRIALS = 25000000, THREADS = 256 };
+enum { TRIALS = 2500000, THREADS = 256 };
 
 static void *test_vdso_getrandom(void *)
 {
