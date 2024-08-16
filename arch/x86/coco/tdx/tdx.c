@@ -411,6 +411,11 @@ static inline bool is_private_gpa(u64 gpa)
 	return gpa == cc_mkenc(gpa);
 }
 
+static inline bool is_kernel_addr(unsigned long addr)
+{
+	return (long)addr < 0;
+}
+
 static int get_phys_addr(unsigned long addr, phys_addr_t *phys_addr, bool *writable)
 {
 	unsigned int level;
@@ -592,6 +597,7 @@ static int handle_mmio(struct pt_regs *regs, struct ve_info *ve)
 	unsigned long vaddr;
 	int size, ret;
 
+
 	ret = decode_insn_struct(&insn, regs);
 	if (ret)
 		return ret;
@@ -599,6 +605,11 @@ static int handle_mmio(struct pt_regs *regs, struct ve_info *ve)
 	mmio = insn_decode_mmio(&insn, &size);
 	if (WARN_ON_ONCE(mmio == INSN_MMIO_DECODE_FAILED))
 		return -EINVAL;
+
+	if (!user_mode(regs) && !is_kernel_addr(ve->gla)) {
+		WARN_ONCE(1, "Access to userspace address is not supported");
+		return -EINVAL;
+	}
 
 	vaddr = (unsigned long)insn_get_addr_ref(&insn, regs);
 
