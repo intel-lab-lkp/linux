@@ -14,6 +14,51 @@
 #include <kvm_ptdump.h>
 
 
+#define MARKERS_LEN		(2)
+#define KVM_PGTABLE_MAX_LEVELS	(KVM_PGTABLE_LAST_LEVEL + 1)
+
+struct kvm_ptdump_guest_state {
+	struct kvm		*kvm;
+	struct ptdump_pg_state	parser_state;
+	struct addr_marker	ipa_marker[MARKERS_LEN];
+	struct ptdump_pg_level	level[KVM_PGTABLE_MAX_LEVELS];
+	struct ptdump_range	range[MARKERS_LEN];
+};
+
+static const struct ptdump_prot_bits stage2_pte_bits[] = {
+	{
+		.mask	= PTE_VALID,
+		.val	= PTE_VALID,
+		.set	= " ",
+		.clear	= "F",
+	}, {
+		.mask	= KVM_PTE_LEAF_ATTR_LO_S2_S2AP_R | PTE_VALID,
+		.val	= KVM_PTE_LEAF_ATTR_LO_S2_S2AP_R | PTE_VALID,
+		.set	= "R",
+		.clear	= " ",
+	}, {
+		.mask	= KVM_PTE_LEAF_ATTR_LO_S2_S2AP_W | PTE_VALID,
+		.val	= KVM_PTE_LEAF_ATTR_LO_S2_S2AP_W | PTE_VALID,
+		.set	= "W",
+		.clear	= " ",
+	}, {
+		.mask	= KVM_PTE_LEAF_ATTR_HI_S2_XN | PTE_VALID,
+		.val	= PTE_VALID,
+		.set	= " ",
+		.clear	= "X",
+	}, {
+		.mask	= KVM_PTE_LEAF_ATTR_LO_S2_AF | PTE_VALID,
+		.val	= KVM_PTE_LEAF_ATTR_LO_S2_AF | PTE_VALID,
+		.set	= "AF",
+		.clear	= "  ",
+	}, {
+		.mask	= PTE_TABLE_BIT | PTE_VALID,
+		.val	= PTE_VALID,
+		.set	= "BLK",
+		.clear	= "   ",
+	},
+};
+
 static int kvm_ptdump_visitor(const struct kvm_pgtable_visit_ctx *ctx,
 			      enum kvm_pgtable_walk_flags visit)
 {
@@ -40,15 +85,81 @@ static int kvm_ptdump_show_common(struct seq_file *m,
 	return kvm_pgtable_walk(pgtable, 0, BIT(pgtable->ia_bits), &walker);
 }
 
-static int kvm_ptdump_guest_show(struct seq_file *m, void *unused)
+static int kvm_ptdump_build_levels(struct ptdump_pg_level *level, u32 start_lvl)
 {
-	struct kvm *kvm = m->private;
+	static const char * const level_names[] = {"PGD", "PUD", "PMD", "PTE"};
+	u32 i = 0;
+	u64 mask = 0;
+
+	if (start_lvl > 2) {
+		pr_err("invalid start_lvl %u\n", start_lvl);
+		return -EINVAL;
+	}
+
+	if (WARN_ON_ONCE(start_lvl >= KVM_PGTABLE_LAST_LEVEL))
+		return -EINVAL;
+
+	for (i = 0; i < ARRAY_SIZE(stage2_pte_bits); i++)
+		mask |= stage2_pte_bits[i].mask;
+
+	for (i = start_lvl; i < KVM_PGTABLE_MAX_LEVELS; i++) {
+		strscpy(level[i].name, level_names[i], sizeof(level[i].name));
+
+		level[i].num	= ARRAY_SIZE(stage2_pte_bits);
+		level[i].bits	= stage2_pte_bits;
+		level[i].mask	= mask;
+	}
+
+	if (start_lvl > 0)
+		strscpy(level[start_lvl].name, "PGD", sizeof(level[start_lvl].name));
+
+	return 0;
+}
+
+static struct kvm_ptdump_guest_state
+*kvm_ptdump_parser_init(struct kvm *kvm)
+{
+	struct kvm_ptdump_guest_state *st;
 	struct kvm_s2_mmu *mmu = &kvm->arch.mmu;
-	struct ptdump_pg_state parser_state = {0};
+	struct kvm_pgtable *pgtable = mmu->pgt;
 	int ret;
 
+	st = kzalloc(sizeof(struct kvm_ptdump_guest_state), GFP_KERNEL_ACCOUNT);
+	if (!st)
+		return NULL;
+
+	ret = kvm_ptdump_build_levels(&st->level[0], pgtable->start_level);
+	if (ret) {
+		kfree(st);
+		return ERR_PTR(ret);
+	}
+
+	st->ipa_marker[0].name		= "Guest IPA";
+	st->ipa_marker[1].start_address = BIT(pgtable->ia_bits);
+	st->range[0].end		= BIT(pgtable->ia_bits);
+
+	st->kvm				= kvm;
+	st->parser_state = (struct ptdump_pg_state) {
+		.marker		= &st->ipa_marker[0],
+		.level		= -1,
+		.pg_level	= &st->level[0],
+		.ptdump.range	= &st->range[0],
+	};
+
+	return st;
+}
+
+static int kvm_ptdump_guest_show(struct seq_file *m, void *unused)
+{
+	struct kvm_ptdump_guest_state *st = m->private;
+	struct kvm *kvm = st->kvm;
+	struct kvm_s2_mmu *mmu = &kvm->arch.mmu;
+	int ret;
+
+	st->parser_state.seq = m;
+
 	write_lock(&kvm->mmu_lock);
-	ret = kvm_ptdump_show_common(m, mmu->pgt, &parser_state);
+	ret = kvm_ptdump_show_common(m, mmu->pgt, &st->parser_state);
 	write_unlock(&kvm->mmu_lock);
 
 	return ret;
@@ -57,22 +168,34 @@ static int kvm_ptdump_guest_show(struct seq_file *m, void *unused)
 static int kvm_ptdump_guest_open(struct inode *m, struct file *file)
 {
 	struct kvm *kvm = m->i_private;
+	struct kvm_ptdump_guest_state *st;
 	int ret;
 
 	if (!kvm_get_kvm_safe(kvm))
 		return -ENOENT;
 
-	ret = single_open(file, kvm_ptdump_guest_show, m->i_private);
-	if (ret < 0)
-		kvm_put_kvm(kvm);
+	st = kvm_ptdump_parser_init(kvm);
+	if (IS_ERR(st)) {
+		ret = PTR_ERR(st);
+		goto free_with_kvm_ref;
+	}
 
+	ret = single_open(file, kvm_ptdump_guest_show, st);
+	if (!ret)
+		return 0;
+
+	kfree(st);
+free_with_kvm_ref:
+	kvm_put_kvm(kvm);
 	return ret;
 }
 
 static int kvm_ptdump_guest_close(struct inode *m, struct file *file)
 {
 	struct kvm *kvm = m->i_private;
+	void *st = ((struct seq_file *)file->private_data)->private;
 
+	kfree(st);
 	kvm_put_kvm(kvm);
 	return single_release(m, file);
 }
