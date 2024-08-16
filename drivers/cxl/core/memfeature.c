@@ -18,8 +18,9 @@
 #include <linux/limits.h>
 #include <cxl.h>
 #include <linux/edac.h>
+#include "core.h"
 
-#define CXL_DEV_NUM_RAS_FEATURES	2
+#define CXL_DEV_NUM_RAS_FEATURES	3
 #define CXL_DEV_HOUR_IN_SECS	3600
 
 #define CXL_SCRUB_NAME_LEN	128
@@ -708,6 +709,249 @@ static const struct edac_ecs_ops cxl_ecs_ops = {
 	.set_threshold = cxl_ecs_set_threshold,
 };
 
+/* CXL memory soft PPR & hard PPR control definitions */
+static const uuid_t cxl_sppr_uuid =
+	UUID_INIT(0x892ba475, 0xfad8, 0x474e, 0x9d, 0x3e, 0x69, 0x2c, 0x91,     \
+		  0x75, 0x68, 0xbb);
+
+static const uuid_t cxl_hppr_uuid =
+	UUID_INIT(0x80ea4521, 0x786f, 0x4127, 0xaf, 0xb1, 0xec, 0x74, 0x59,     \
+		  0xfb, 0x0e, 0x24);
+
+struct cxl_ppr_context {
+	uuid_t ppr_uuid;
+	u8 instance;
+	u16 get_feat_size;
+	u16 set_feat_size;
+	u8 get_version;
+	u8 set_version;
+	u16 set_effects;
+	struct cxl_memdev *cxlmd;
+	enum edac_ppr_type ppr_type;
+	u64 dpa;
+	u32 nibble_mask;
+};
+
+/**
+ * struct cxl_memdev_ppr_params - CXL memory PPR parameter data structure.
+ * @op_class[OUT]: PPR operation class.
+ * @op_subclass[OUT]: PPR operation subclass.
+ * @dpa_support[OUT]: device physical address for PPR support.
+ * @media_accessible[OUT]: memory media is accessible or not during PPR operation.
+ * @data_retained[OUT]: data is retained or not during PPR operation.
+ * @dpa:[IN]: device physical address.
+ */
+struct cxl_memdev_ppr_params {
+	u8 op_class;
+	u8 op_subclass;
+	bool dpa_support;
+	bool media_accessible;
+	bool data_retained;
+	u64 dpa;
+};
+
+enum cxl_ppr_param {
+	CXL_PPR_PARAM_DO_PPR,
+};
+
+#define	CXL_MEMDEV_PPR_QUERY_RESOURCE_FLAG BIT(0)
+
+#define CXL_MEMDEV_PPR_DEVICE_INITIATED_MASK BIT(0)
+#define CXL_MEMDEV_PPR_FLAG_DPA_SUPPORT_MASK BIT(0)
+#define CXL_MEMDEV_PPR_FLAG_NIBBLE_SUPPORT_MASK BIT(1)
+#define CXL_MEMDEV_PPR_FLAG_MEM_SPARING_EV_REC_SUPPORT_MASK BIT(2)
+
+#define CXL_MEMDEV_PPR_RESTRICTION_FLAG_MEDIA_ACCESSIBLE_MASK BIT(0)
+#define CXL_MEMDEV_PPR_RESTRICTION_FLAG_DATA_RETAINED_MASK BIT(2)
+
+#define CXL_MEMDEV_PPR_SPARING_EV_REC_EN_MASK BIT(0)
+
+struct cxl_memdev_ppr_rd_attrs {
+	u8 max_op_latency;
+	__le16 op_cap;
+	__le16 op_mode;
+	u8 op_class;
+	u8 op_subclass;
+	u8 rsvd[9];
+	u8 ppr_flags;
+	__le16 restriction_flags;
+	u8 ppr_op_mode;
+}  __packed;
+
+struct cxl_memdev_ppr_wr_attrs {
+	__le16 op_mode;
+	u8 ppr_op_mode;
+}  __packed;
+
+struct cxl_memdev_ppr_maintenance_attrs {
+	u8 flags;
+	__le64 dpa;
+	u8 nibble_mask[3];
+}  __packed;
+
+static int cxl_mem_ppr_get_attrs(struct device *dev, void *drv_data,
+				 struct cxl_memdev_ppr_params *params)
+{
+	struct cxl_ppr_context *cxl_ppr_ctx = drv_data;
+	struct cxl_memdev *cxlmd = cxl_ppr_ctx->cxlmd;
+	struct cxl_dev_state *cxlds = cxlmd->cxlds;
+	struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlds);
+	size_t rd_data_size = sizeof(struct cxl_memdev_ppr_rd_attrs);
+	size_t data_size;
+	struct cxl_memdev_ppr_rd_attrs *rd_attrs __free(kfree) =
+				kmalloc(rd_data_size, GFP_KERNEL);
+	if (!rd_attrs)
+		return -ENOMEM;
+
+	data_size = cxl_get_feature(mds, cxl_ppr_ctx->ppr_uuid,
+				    CXL_GET_FEAT_SEL_CURRENT_VALUE,
+				    rd_attrs, rd_data_size);
+	if (!data_size)
+		return -EIO;
+
+	params->op_class = rd_attrs->op_class;
+	params->op_subclass = rd_attrs->op_subclass;
+	params->dpa_support = FIELD_GET(CXL_MEMDEV_PPR_FLAG_DPA_SUPPORT_MASK,
+					rd_attrs->ppr_flags);
+	params->media_accessible = FIELD_GET(CXL_MEMDEV_PPR_RESTRICTION_FLAG_MEDIA_ACCESSIBLE_MASK,
+					     rd_attrs->restriction_flags) ^ 1;
+	params->data_retained = FIELD_GET(CXL_MEMDEV_PPR_RESTRICTION_FLAG_DATA_RETAINED_MASK,
+					  rd_attrs->restriction_flags) ^ 1;
+
+	return 0;
+}
+
+static int cxl_mem_ppr_set_attrs(struct device *dev, void *drv_data,
+				 struct cxl_memdev_ppr_params *params,
+				 enum cxl_ppr_param param_type)
+{
+	struct cxl_memdev_ppr_maintenance_attrs maintenance_attrs;
+	struct cxl_ppr_context *cxl_ppr_ctx = drv_data;
+	struct cxl_memdev *cxlmd = cxl_ppr_ctx->cxlmd;
+	struct cxl_dev_state *cxlds = cxlmd->cxlds;
+	struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlds);
+	struct cxl_memdev_ppr_params rd_params;
+	struct cxl_region *cxlr;
+	int ret;
+
+	ret = cxl_mem_ppr_get_attrs(dev, drv_data, &rd_params);
+	if (ret) {
+		dev_err(dev, "Get cxlmemdev PPR params failed ret=%d\n",
+			ret);
+		return ret;
+	}
+
+	switch (param_type) {
+	case CXL_PPR_PARAM_DO_PPR:
+		ret = down_read_interruptible(&cxl_region_rwsem);
+		if (ret)
+			return ret;
+		if (!rd_params.media_accessible || !rd_params.data_retained) {
+			/* Check if DPA is mapped */
+			ret = down_read_interruptible(&cxl_dpa_rwsem);
+			if (ret) {
+				up_read(&cxl_region_rwsem);
+				return ret;
+			}
+
+			cxlr = cxl_dpa_to_region(cxlmd, cxl_ppr_ctx->dpa);
+			up_read(&cxl_dpa_rwsem);
+			if (cxlr) {
+				dev_err(dev, "CXL can't do PPR as DPA is mapped\n");
+				up_read(&cxl_region_rwsem);
+				return -EBUSY;
+			}
+		}
+		maintenance_attrs.flags = CXL_MEMDEV_PPR_QUERY_RESOURCE_FLAG;
+		maintenance_attrs.dpa = params->dpa;
+		/* May need to get the nibble mask from the CXL dram error record via
+		 * trace dram event. Presently all nibble masks bits set to 1.
+		 */
+		maintenance_attrs.nibble_mask[0] = 0xFF;
+		maintenance_attrs.nibble_mask[1] = 0xFF;
+		maintenance_attrs.nibble_mask[2] = 0xFF;
+		ret = cxl_do_maintenance(mds, rd_params.op_class, rd_params.op_subclass,
+					 &maintenance_attrs, sizeof(maintenance_attrs));
+		if (ret) {
+			dev_err(dev, "CXL do PPR maintenance failed ret=%d\n", ret);
+			up_read(&cxl_region_rwsem);
+			return ret;
+		}
+		up_read(&cxl_region_rwsem);
+		return 0;
+	default:
+		return -EINVAL;
+	}
+}
+
+static int cxl_ppr_get_persist_mode_avail(struct device *dev, void *drv_data,
+					  char *buf)
+{
+	return sysfs_emit(buf, "Soft PPR Hard PPR\n");
+}
+
+static int cxl_ppr_get_persist_mode(struct device *dev, void *drv_data,
+				    u32 *persist_mode)
+{
+	struct cxl_ppr_context *cxl_ppr_ctx = drv_data;
+
+	*persist_mode = cxl_ppr_ctx->ppr_type;
+
+	return 0;
+}
+
+static int cxl_ppr_get_dpa_support(struct device *dev, void *drv_data,
+				   u32 *dpa_support)
+{
+	struct cxl_memdev_ppr_params params;
+	int ret;
+
+	ret = cxl_mem_ppr_get_attrs(dev, drv_data, &params);
+	if (ret)
+		return ret;
+
+	*dpa_support = params.dpa_support;
+
+	return 0;
+}
+
+static int cxl_get_ppr_safe_when_in_use(struct device *dev, void *drv_data,
+					u32 *safe)
+{
+	struct cxl_memdev_ppr_params params;
+	int ret;
+
+	ret = cxl_mem_ppr_get_attrs(dev, drv_data, &params);
+	if (ret)
+		return ret;
+
+	*safe = params.media_accessible & params.data_retained;
+
+	return 0;
+}
+
+static int cxl_do_ppr(struct device *dev, void *drv_data, bool hpa, u64 pa)
+{
+	struct cxl_memdev_ppr_params params = {
+		.dpa = pa,
+	};
+
+	/* CXL mem perform PPR, need support for HPA? */
+	if (hpa)
+		return -EOPNOTSUPP;
+
+	return cxl_mem_ppr_set_attrs(dev, drv_data, &params,
+				     CXL_PPR_PARAM_DO_PPR);
+}
+
+static const struct edac_ppr_ops cxl_sppr_ops = {
+	.get_persist_mode_avail = cxl_ppr_get_persist_mode_avail,
+	.get_persist_mode = cxl_ppr_get_persist_mode,
+	.get_dpa_support = cxl_ppr_get_dpa_support,
+	.get_ppr_safe_when_in_use = cxl_get_ppr_safe_when_in_use,
+	.do_ppr = cxl_do_ppr,
+};
+
 int cxl_mem_ras_features_init(struct cxl_memdev *cxlmd, struct cxl_region *cxlr)
 {
 	struct edac_dev_feature ras_features[CXL_DEV_NUM_RAS_FEATURES];
@@ -717,8 +961,10 @@ int cxl_mem_ras_features_init(struct cxl_memdev *cxlmd, struct cxl_region *cxlr)
 	struct cxl_mbox_supp_feat_entry feat_entry;
 	char cxl_dev_name[CXL_SCRUB_NAME_LEN];
 	struct cxl_ecs_context *cxl_ecs_ctx;
+	struct cxl_ppr_context *cxl_sppr_ctx;
 	int rc, i, num_ras_features = 0;
 	int num_media_frus;
+	u8 ppr_inst = 0;
 
 	if (cxlr) {
 		struct cxl_region_params *p = &cxlr->params;
@@ -803,6 +1049,37 @@ int cxl_mem_ras_features_init(struct cxl_memdev *cxlmd, struct cxl_region *cxlr)
 		ras_features[num_ras_features].ecs_ctx = cxl_ecs_ctx;
 		ras_features[num_ras_features].ecs_info.num_media_frus =
 								num_media_frus;
+		num_ras_features++;
+
+		/* CXL sPPR */
+		rc = cxl_get_supported_feature_entry(mds, &cxl_sppr_uuid,
+						     &feat_entry);
+		if (rc < 0)
+			goto feat_register;
+
+		if (!(feat_entry.attr_flags & CXL_FEAT_ENTRY_FLAG_CHANGABLE))
+			goto feat_register;
+
+		cxl_sppr_ctx = devm_kzalloc(&cxlmd->dev, sizeof(*cxl_sppr_ctx),
+					    GFP_KERNEL);
+		if (!cxl_sppr_ctx)
+			goto feat_register;
+		*cxl_sppr_ctx = (struct cxl_ppr_context) {
+			.ppr_uuid = cxl_sppr_uuid,
+			.get_feat_size = feat_entry.get_size,
+			.set_feat_size = feat_entry.set_size,
+			.get_version = feat_entry.get_version,
+			.set_version = feat_entry.set_version,
+			.set_effects = feat_entry.set_effects,
+			.cxlmd = cxlmd,
+			.ppr_type = EDAC_TYPE_SPPR,
+			.instance = ppr_inst++,
+		};
+
+		ras_features[num_ras_features].feat = RAS_FEAT_PPR;
+		ras_features[num_ras_features].instance = cxl_sppr_ctx->instance;
+		ras_features[num_ras_features].ppr_ops = &cxl_sppr_ops;
+		ras_features[num_ras_features].ppr_ctx = cxl_sppr_ctx;
 		num_ras_features++;
 	}
 
