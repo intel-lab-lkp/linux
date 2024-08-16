@@ -1922,6 +1922,25 @@ out_sdciae:
 	return ret ?: nbytes;
 }
 
+static int resctrl_sdciae_cbm_show(struct kernfs_open_file *of,
+				   struct seq_file *seq, void *v)
+{
+	struct resctrl_schema *s = of->kn->parent->priv;
+	struct rdt_resource *r = s->res;
+	u32 sdciae_closid;
+
+	if (!resctrl_arch_get_sdciae_enabled(RDT_RESOURCE_L3)) {
+		rdt_last_cmd_puts("SDCIAE is not enabled\n");
+		return -EINVAL;
+	}
+
+	sdciae_closid = get_sdciae_closid(r);
+
+	show_doms(seq, s, sdciae_closid);
+
+	return 0;
+}
+
 /* rdtgroup information files for one cache resource. */
 static struct rftype res_common_files[] = {
 	{
@@ -2082,6 +2101,12 @@ static struct rftype res_common_files[] = {
 		.write		= resctrl_sdciae_write,
 	},
 	{
+		.name		= "sdciae_cbm",
+		.mode		= 0444,
+		.kf_ops		= &rdtgroup_kf_single_ops,
+		.seq_show	= resctrl_sdciae_cbm_show,
+	},
+	{
 		.name		= "mode",
 		.mode		= 0644,
 		.kf_ops		= &rdtgroup_kf_single_ops,
@@ -2185,6 +2210,10 @@ void __init resctrl_sdciae_rftype_init(void)
 	struct rftype *rft;
 
 	rft = rdtgroup_get_rftype_by_name("sdciae");
+	if (rft)
+		rft->fflags = RFTYPE_CTRL_INFO | RFTYPE_RES_CACHE;
+
+	rft = rdtgroup_get_rftype_by_name("sdciae_cbm");
 	if (rft)
 		rft->fflags = RFTYPE_CTRL_INFO | RFTYPE_RES_CACHE;
 }
