@@ -64,6 +64,7 @@
 #define XE_BO_PROPS_INVALID	(-1)
 
 struct sg_table;
+struct xe_ttm_lru_walk;
 
 struct xe_bo *xe_bo_alloc(void);
 void xe_bo_free(struct xe_bo *bo);
@@ -123,6 +124,28 @@ static inline struct xe_bo *xe_bo_get(struct xe_bo *bo)
 {
 	if (bo)
 		drm_gem_object_get(&bo->ttm.base);
+
+	return bo;
+}
+
+/*
+ * xe_bo_get_unless_zero() - Conditionally obtain a GEM object refcount on an
+ * xe bo
+ * @bo: The bo for which we want to obtain a refcount.
+ *
+ * There is a short window between where the bo's GEM object refcount reaches
+ * zero and where we put the final ttm_bo reference. Code in the eviction- and
+ * shrinking path should therefore attempt to grab a gem object reference before
+ * trying to use members outside of the base class ttm object. This function is
+ * intended for that purpose. On successful return, this function must be paired
+ * with an xe_bo_put().
+ *
+ * Return: @bo on success, NULL on failure.
+ */
+static inline __must_check struct xe_bo *xe_bo_get_unless_zero(struct xe_bo *bo)
+{
+	if (!bo || !kref_get_unless_zero(&bo->ttm.base.refcount))
+		return NULL;
 
 	return bo;
 }
@@ -315,6 +338,19 @@ static inline unsigned int xe_sg_segment_size(struct device *dev)
 }
 
 #define i915_gem_object_flush_if_display(obj)		((void)(obj))
+
+/**
+ * struct xe_bo_shrink_flags - flags governing the shrink behaviour.
+ * @purge: Only purging allowed. Don't shrink if bo not purgeable.
+ * @writeback: Attempt to immediately move content to swap.
+ */
+struct xe_bo_shrink_flags {
+	u32 purge : 1;
+	u32 writeback : 1;
+};
+
+long xe_bo_shrink(struct ttm_lru_walk *walk, struct ttm_buffer_object *bo,
+		  const struct xe_bo_shrink_flags flags);
 
 #if IS_ENABLED(CONFIG_DRM_XE_KUNIT_TEST)
 /**
