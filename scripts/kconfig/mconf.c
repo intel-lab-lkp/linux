@@ -750,6 +750,7 @@ static void conf_save(void)
 	}
 }
 
+static bool should_sort;
 static void conf(struct menu *menu, struct menu *active_menu)
 {
 	struct menu *submenu;
@@ -775,9 +776,15 @@ static void conf(struct menu *menu, struct menu *active_menu)
 		dialog_clear();
 		res = dialog_menu(prompt ? prompt : "Main Menu",
 				  menu_instructions,
-				  active_menu, &s_scroll);
+				  active_menu, &s_scroll, should_sort);
 		if (res == 1 || res == KEY_ESC || res == -ERRDISPLAYTOOSMALL)
 			break;
+
+		if (res == KEY_ACTION_SORT) {
+			should_sort = !should_sort;
+			continue;
+		}
+
 		if (item_count() != 0) {
 			if (!item_activate_selected())
 				continue;

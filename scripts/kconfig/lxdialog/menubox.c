@@ -161,7 +161,7 @@ static void do_scroll(WINDOW *win, int *scroll, int n)
  * Display a menu for choosing among a number of options
  */
 int dialog_menu(const char *title, const char *prompt,
-		const void *selected, int *s_scroll)
+		const void *selected, int *s_scroll, bool sort)
 {
 	int i, j, x, y, box_x, box_y;
 	int height, width, menu_height;
@@ -180,6 +180,9 @@ do_resize:
 	menu_height = height - 10;
 
 	max_choice = MIN(menu_height, item_count());
+
+	if (sort)
+		sort_items();
 
 	/* center dialog box on screen */
 	x = (getmaxx(stdscr) - width) / 2;
@@ -408,6 +411,8 @@ do_resize:
 			delwin(menu);
 			delwin(dialog);
 			goto do_resize;
+		case '>':
+			return KEY_ACTION_SORT;
 		}
 	}
 	delwin(menu);

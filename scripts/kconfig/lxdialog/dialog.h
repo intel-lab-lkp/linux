@@ -58,6 +58,8 @@
 #define ACS_DARROW 'v'
 #endif
 
+#define KEY_ACTION_SORT 11
+
 /* error return codes */
 #define ERRDISPLAYTOOSMALL (KEY_MAX + 1)
 
@@ -127,6 +129,7 @@ void item_set_selected(int val);
 int item_activate_selected(void);
 void *item_data(void);
 char item_tag(void);
+void sort_items(void);
 
 /* item list manipulation for lxdialog use */
 #define MAXITEMSTR 200
@@ -196,7 +199,7 @@ int dialog_textbox(const char *title, const char *tbuf, int initial_height,
 		   int initial_width, int *_vscroll, int *_hscroll,
 		   int (*extra_key_cb)(int, size_t, size_t, void *), void *data);
 int dialog_menu(const char *title, const char *prompt,
-		const void *selected, int *s_scroll);
+		const void *selected, int *s_scroll, bool sort);
 int dialog_checklist(const char *title, const char *prompt, int height,
 		     int width, int list_height);
 int dialog_inputbox(const char *title, const char *prompt, int height,

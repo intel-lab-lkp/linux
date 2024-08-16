@@ -563,6 +563,85 @@ void item_reset(void)
 	item_cur = &item_nil;
 }
 
+/*
+ * Function skips a part of the label to get the actual label text
+ * (without the '[ ]'-like prefix).
+ */
+static char *skip_spec_characters(char *s)
+{
+	bool unbalanced = false;
+
+	while (*s) {
+		if (isalnum(*s) && !unbalanced) {
+			break;
+		} else if (*s == '[' || *s == '<' || *s == '(') {
+			/*
+			 * '[', '<' or '(' means that we need to look for
+			 * closure
+			 */
+			unbalanced = true;
+		} else if (*s == '-') {
+			/*
+			 * Labels could start with "-*-", so '-' here either
+			 * opens or closes the "checkbox"
+			 */
+			unbalanced = !unbalanced;
+		} else if (*s == '>' || *s == ']' || *s == ')') {
+			unbalanced = false;
+		}
+		s++;
+	}
+	return s;
+}
+
+static int compare_labels(const void *a, const void *b)
+{
+	struct dialog_list *el1 = *((struct dialog_list **)a);
+	struct dialog_list *el2 = *((struct dialog_list **)b);
+
+	return strcasecmp(skip_spec_characters(el1->node.str),
+			  skip_spec_characters(el2->node.str));
+}
+
+void sort_items(void)
+{
+	struct dialog_list **arr;
+	struct dialog_list *cur;
+	size_t n, i;
+
+	n = item_count();
+	if (n == 0)
+		return;
+
+	/* Copy all items from linked list into array */
+	cur = item_head;
+	arr = malloc(sizeof(*arr) * n);
+
+	if (!arr) {
+		/* Don't have enough memory, so don't do anything */
+		return;
+	}
+
+	for (i = 0; i < n; i++) {
+		arr[i] = cur;
+		cur = cur->next;
+	}
+
+	qsort(arr, n, sizeof(struct dialog_list *), compare_labels);
+
+	/* Restore the linked list structure from the sorted array */
+	for (i = 0; i < n; i++) {
+		if (i < n - 1)
+			arr[i]->next = arr[i + 1];
+		else
+			arr[i]->next = NULL;
+	}
+
+	item_head = arr[0];
+
+	free(arr);
+}
+
 void item_make(const char *fmt, ...)
 {
 	va_list ap;
