@@ -795,7 +795,9 @@ properties:
 
       - description: Radxa ROCK Pi E
         items:
-          - const: radxa,rockpi-e
+          - enum:
+              - radxa,rockpi-e
+              - radxa,rockpi-e-v3
           - const: rockchip,rk3328
 
       - description: Radxa ROCK Pi N8
