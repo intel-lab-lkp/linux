@@ -16,8 +16,10 @@
 #include <linux/types.h>
 
 #include <drm/drm_atomic_helper.h>
+#include <drm/drm_client_setup.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_fbdev_dma.h>
+#include <drm/drm_fourcc.h>
 #include <drm/drm_gem_dma_helper.h>
 #include <drm/drm_print.h>
 
@@ -55,6 +57,7 @@ static struct drm_driver logicvc_drm_driver = {
 	.minor				= 0,
 
 	DRM_GEM_DMA_DRIVER_OPS_VMAP_WITH_DUMB_CREATE(logicvc_drm_gem_dma_dumb_create),
+	DRM_FBDEV_DMA_DRIVER_OPS,
 };
 
 static struct regmap_config logicvc_drm_regmap_config = {
@@ -301,7 +304,6 @@ static int logicvc_drm_probe(struct platform_device *pdev)
 	struct regmap *regmap = NULL;
 	struct resource res;
 	void __iomem *base;
-	unsigned int preferred_bpp;
 	int irq;
 	int ret;
 
@@ -441,15 +443,12 @@ static int logicvc_drm_probe(struct platform_device *pdev)
 
 	switch (drm_dev->mode_config.preferred_depth) {
 	case 16:
-		preferred_bpp = 16;
+		drm_client_setup(drm_dev, drm_format_info(DRM_FORMAT_RGB565));
 		break;
-	case 24:
-	case 32:
 	default:
-		preferred_bpp = 32;
+		drm_client_setup(drm_dev, NULL);
 		break;
 	}
-	drm_fbdev_dma_setup(drm_dev, preferred_bpp);
 
 	return 0;
 
