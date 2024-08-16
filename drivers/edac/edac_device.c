@@ -606,6 +606,7 @@ static int edac_dev_feat_init(struct device *parent,
 			      const struct edac_dev_feature *ras_feat,
 			      const struct attribute_group **attr_groups)
 {
+	int ret;
 	int num;
 
 	switch (ras_feat->feat) {
@@ -618,6 +619,9 @@ static int edac_dev_feat_init(struct device *parent,
 		num = ras_feat->ecs_info.num_media_frus;
 		dev_data->ecs_ops = ras_feat->ecs_ops;
 		dev_data->private = ras_feat->ecs_ctx;
+		ret = edac_ecs_get_desc(parent, attr_groups, num);
+		if (ret)
+			return ret;
 		return num;
 	case RAS_FEAT_PPR:
 		dev_data->ppr_ops = ras_feat->ppr_ops;

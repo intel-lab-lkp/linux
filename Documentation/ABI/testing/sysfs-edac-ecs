@@ -1,0 +1,78 @@
+What:		/sys/bus/edac/devices/<dev-name>/ecs_fru*
+Date:		Oct 2024
+KernelVersion:	6.12
+Contact:	linux-edac@vger.kernel.org
+Description:
+		The sysfs edac bus devices /<dev-name>/ecs_fru* subdirectory
+		belongs to the memory media ECS (Error Check Scrub) control
+		feature, where <dev-name> directory corresponds to a device
+		registered with the EDAC ECS driver and thus registered with
+		the generic edac ras driver too.
+		/ecs_fru* belongs to the media FRUs (Field replaceable unit)
+		under the memory device.
+		The sysfs ECS attr nodes would be present only if the client
+		driver has implemented the corresponding attr callback
+		function and pass in ops to the EDAC RAS feature driver
+		during registration.
+
+What:		/sys/bus/edac/devices/<dev-name>/ecs_fru*/log_entry_type
+Date:		Oct 2024
+KernelVersion:	6.12
+Contact:	linux-edac@vger.kernel.org
+Description:
+		(RW) The log entry type of how the DDR5 ECS log is reported.
+		00b - per DRAM.
+		01b - per memory media FRU.
+
+What:		/sys/bus/edac/devices/<dev-name>/ecs_fru*/log_entry_type_per_dram
+Date:		Oct 2024
+KernelVersion:	6.12
+Contact:	linux-edac@vger.kernel.org
+Description:
+		(RO) True if current log entry type is per DRAM.
+
+What:		/sys/bus/edac/devices/<dev-name>/ecs_fru*/log_entry_type_per_memory_media
+Date:		Oct 2024
+KernelVersion:	6.12
+Contact:	linux-edac@vger.kernel.org
+Description:
+		(RO) True if current log entry type is per memory media FRU.
+
+What:		/sys/bus/edac/devices/<dev-name>/ecs_fru*/mode
+Date:		Oct 2024
+KernelVersion:	6.12
+Contact:	linux-edac@vger.kernel.org
+Description:
+		(RW) The mode of how the DDR5 ECS counts the errors.
+		0 - ECS counts rows with errors.
+		1 - ECS counts codewords with errors.
+
+What:		/sys/bus/edac/devices/<dev-name>/ecs_fru*/mode_counts_rows
+Date:		Oct 2024
+KernelVersion:	6.12
+Contact:	linux-edac@vger.kernel.org
+Description:
+		(RO) True if current mode is ECS counts rows with errors.
+
+What:		/sys/bus/edac/devices/<dev-name>/ecs_fru*/mode_counts_codewords
+Date:		Oct 2024
+KernelVersion:	6.12
+Contact:	linux-edac@vger.kernel.org
+Description:
+		(RO) True if current mode is ECS counts codewords with errors.
+
+What:		/sys/bus/edac/devices/<dev-name>/ecs_fru*/reset
+Date:		Oct 2024
+KernelVersion:	6.12
+Contact:	linux-edac@vger.kernel.org
+Description:
+		(WO) ECS reset ECC counter.
+		0 - normal, ECC counter running actively.
+		1 - reset ECC counter to the default value.
+
+What:		/sys/bus/edac/devices/<dev-name>/ecs_fru*/threshold
+Date:		Oct 2024
+KernelVersion:	6.12
+Contact:	linux-edac@vger.kernel.org
+Description:
+		(RW) ECS threshold count per GB of memory cells.
