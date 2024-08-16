@@ -127,6 +127,34 @@ int ksz8_change_mtu(struct ksz_device *dev, int port, int mtu)
 	return -EOPNOTSUPP;
 }
 
+/**
+ * ksz8_change_tag_protocol - Change tag protocol
+ * @dev: The device structure.
+ * @proto: The requested protocol.
+ *
+ * This function allows changing the tag protocol. In fact the ksz8
+ * devices can only enable or disable the tail tag, so there's really
+ * only 2 supported protocols.
+ *
+ * Return: 0 on success, -EPROTONOSUPPORT in case protocol not supported.
+ */
+int ksz8_change_tag_protocol(struct ksz_device *dev,
+			     enum dsa_tag_protocol proto)
+{
+	const u32 *masks = dev->info->masks;
+	const u16 *regs = dev->info->regs;
+
+	if ( (proto == DSA_TAG_PROTO_KSZ8795 && ksz_is_ksz87xx(dev)) ||
+	     (proto == DSA_TAG_PROTO_KSZ9893 && ksz_is_ksz88x3(dev)) )
+		ksz_cfg(dev, regs[S_TAIL_TAG_CTRL], masks[SW_TAIL_TAG_ENABLE], true);
+	else if (proto == DSA_TAG_PROTO_NONE)
+		ksz_cfg(dev, regs[S_TAIL_TAG_CTRL], masks[SW_TAIL_TAG_ENABLE], false);
+	else
+		return -EPROTONOSUPPORT;
+
+	return 0;
+}
+
 static int ksz8_port_queue_split(struct ksz_device *dev, int port, int queues)
 {
 	u8 mask_4q, mask_2q;
