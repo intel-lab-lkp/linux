@@ -1795,6 +1795,15 @@ static int ag71xx_change_mtu(struct net_device *ndev, int new_mtu)
 	return 0;
 }
 
+static netdev_features_t ag71xx_fix_features(struct net_device *ndev,
+					     netdev_features_t features)
+{
+	/* remove GRO. Hardware checksumming is needed to avoid a massive
+	 * reduction in switching speed */
+	features &= ~NETIF_F_SOFT_FEATURES;
+	return features;
+}
+
 static const struct net_device_ops ag71xx_netdev_ops = {
 	.ndo_open		= ag71xx_open,
 	.ndo_stop		= ag71xx_stop,
@@ -1802,6 +1811,7 @@ static const struct net_device_ops ag71xx_netdev_ops = {
 	.ndo_eth_ioctl		= phy_do_ioctl,
 	.ndo_tx_timeout		= ag71xx_tx_timeout,
 	.ndo_change_mtu		= ag71xx_change_mtu,
+	.ndo_fix_features	= ag71xx_fix_features,
 	.ndo_set_mac_address	= eth_mac_addr,
 	.ndo_validate_addr	= eth_validate_addr,
 };
