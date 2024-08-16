@@ -81,11 +81,11 @@ void set_mode_test(const char *name, int hwcap2, int mask)
 		return;
 	}
 
-	if ((ret & PR_MTE_TCF_MASK) == mask) {
+	if ((ret & (int)PR_MTE_TCF_MASK) == mask) {
 		ksft_test_result_pass("%s\n", name);
 	} else {
 		ksft_print_msg("Got %x, expected %x\n",
-			       (ret & PR_MTE_TCF_MASK), mask);
+			       (ret & (int)PR_MTE_TCF_MASK), mask);
 		ksft_test_result_fail("%s\n", name);
 	}
 }
