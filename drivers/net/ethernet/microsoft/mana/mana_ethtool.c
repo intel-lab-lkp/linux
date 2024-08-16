@@ -369,6 +369,75 @@ static int mana_set_channels(struct net_device *ndev,
 	return err;
 }
 
+static void mana_get_ringparam(struct net_device *ndev,
+			       struct ethtool_ringparam *ring,
+			       struct kernel_ethtool_ringparam *kernel_ring,
+			       struct netlink_ext_ack *extack)
+{
+	struct mana_port_context *apc = netdev_priv(ndev);
+
+	ring->rx_pending = apc->rx_queue_size;
+	ring->tx_pending = apc->tx_queue_size;
+	ring->rx_max_pending = MAX_RX_BUFFERS_PER_QUEUE;
+	ring->tx_max_pending = MAX_TX_BUFFERS_PER_QUEUE;
+}
+
+static int mana_set_ringparam(struct net_device *ndev,
+			      struct ethtool_ringparam *ring,
+			      struct kernel_ethtool_ringparam *kernel_ring,
+			      struct netlink_ext_ack *extack)
+{
+	struct mana_port_context *apc = netdev_priv(ndev);
+	u32 new_tx, new_rx;
+	u32 old_tx, old_rx;
+	int err;
+
+	old_tx = apc->tx_queue_size;
+	old_rx = apc->rx_queue_size;
+	new_tx = clamp_t(u32, ring->tx_pending, MIN_TX_BUFFERS_PER_QUEUE, MAX_TX_BUFFERS_PER_QUEUE);
+	new_rx = clamp_t(u32, ring->rx_pending, MIN_RX_BUFFERS_PER_QUEUE, MAX_RX_BUFFERS_PER_QUEUE);
+
+	if (!is_power_of_2(new_tx)) {
+		netdev_err(ndev, "%s:Tx:%d not supported. Needs to be a power of 2\n",
+			   __func__, new_tx);
+		return -EINVAL;
+	}
+
+	if (!is_power_of_2(new_rx)) {
+		netdev_err(ndev, "%s:Rx:%d not supported. Needs to be a power of 2\n",
+			   __func__, new_rx);
+		return -EINVAL;
+	}
+
+	/* pre-allocating new buffers to prevent failures in mana_attach() later */
+	apc->rx_queue_size = new_rx;
+	err = mana_pre_alloc_rxbufs(apc, ndev->mtu);
+	apc->rx_queue_size = old_rx;
+	if (err) {
+		netdev_err(ndev, "Insufficient memory for new allocations\n");
+		return err;
+	}
+
+	err = mana_detach(ndev, false);
+	if (err) {
+		netdev_err(ndev, "mana_detach failed: %d\n", err);
+		goto out;
+	}
+
+	apc->tx_queue_size = new_tx;
+	apc->rx_queue_size = new_rx;
+
+	err = mana_attach(ndev);
+	if (err) {
+		netdev_err(ndev, "mana_attach failed: %d\n", err);
+		apc->tx_queue_size = old_tx;
+		apc->rx_queue_size = old_rx;
+	}
+out:
+	mana_pre_dealloc_rxbufs(apc);
+	return err;
+}
+
 const struct ethtool_ops mana_ethtool_ops = {
 	.get_ethtool_stats	= mana_get_ethtool_stats,
 	.get_sset_count		= mana_get_sset_count,
@@ -380,4 +449,6 @@ const struct ethtool_ops mana_ethtool_ops = {
 	.set_rxfh		= mana_set_rxfh,
 	.get_channels		= mana_get_channels,
 	.set_channels		= mana_set_channels,
+	.get_ringparam          = mana_get_ringparam,
+	.set_ringparam          = mana_set_ringparam,
 };
