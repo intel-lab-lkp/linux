@@ -17,6 +17,36 @@ int dax_bus_init(void);
 void dax_bus_exit(void);
 
 /**
+ * struct dax_resource - For sparse regions; an active resource
+ * @region: dax_region this resources is in
+ * @res: resource
+ * @use_cnt: count the number of uses of this resource
+ *
+ * Changes to the dax_reigon and the dax_resources within it are protected by
+ * dax_region_rwsem
+ */
+struct dax_resource {
+	struct dax_region *region;
+	struct resource *res;
+	unsigned int use_cnt;
+};
+int dax_region_add_resource(struct dax_region *dax_region, struct device *dev,
+			    resource_size_t start, resource_size_t length);
+int dax_region_rm_resource(struct dax_region *dax_region,
+			   struct device *dev);
+resource_size_t dax_avail_size(struct resource *dax_resource);
+
+typedef int (*match_cb)(struct device *dev, resource_size_t *size_avail);
+
+/**
+ * struct dax_sparse_ops - Operations for sparse regions
+ * @is_extent: return if the device is an extent
+ */
+struct dax_sparse_ops {
+	bool (*is_extent)(struct device *dev);
+};
+
+/**
  * struct dax_region - mapping infrastructure for dax devices
  * @id: kernel-wide unique region for a memory range
  * @target_node: effective numa node if this memory range is onlined
@@ -27,6 +57,7 @@ void dax_bus_exit(void);
  * @res: resource tree to track instance allocations
  * @seed: allow userspace to find the first unbound seed device
  * @youngest: allow userspace to find the most recently created device
+ * @sparse_ops: operations required for sparse regions
  */
 struct dax_region {
 	int id;
@@ -38,6 +69,7 @@ struct dax_region {
 	struct resource res;
 	struct device *seed;
 	struct device *youngest;
+	struct dax_sparse_ops *sparse_ops;
 };
 
 struct dax_mapping {
@@ -62,6 +94,7 @@ struct dax_mapping {
  * @pgoff: page offset
  * @range: resource-span
  * @mapping: device to assist in interrogating the range layout
+ * @dax_resource: if not NULL; dax sparse resource containing this range
  */
 struct dev_dax {
 	struct dax_region *region;
@@ -79,6 +112,7 @@ struct dev_dax {
 		unsigned long pgoff;
 		struct range range;
 		struct dax_mapping *mapping;
+		struct dax_resource *dax_resource;
 	} *ranges;
 };
 
