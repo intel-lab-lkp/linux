@@ -689,13 +689,6 @@ xfs_ioc_trim(
 	range.minlen = max_t(u64, granularity, range.minlen);
 	minlen = XFS_B_TO_FSB(mp, range.minlen);
 
-	/*
-	 * Truncating down the len isn't actually quite correct, but using
-	 * BBTOB would mean we trivially get overflows for values
-	 * of ULLONG_MAX or slightly lower.  And ULLONG_MAX is the default
-	 * used by the fstrim application.  In the end it really doesn't
-	 * matter as trimming blocks is an advisory interface.
-	 */
 	max_blocks = mp->m_sb.sb_dblocks + mp->m_sb.sb_rblocks;
 	if (range.start >= XFS_FSB_TO_B(mp, max_blocks) ||
 	    range.minlen > XFS_FSB_TO_B(mp, mp->m_ag_max_usable) ||
