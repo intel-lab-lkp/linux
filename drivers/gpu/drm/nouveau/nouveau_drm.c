@@ -31,6 +31,7 @@
 #include <linux/dynamic_debug.h>
 
 #include <drm/drm_aperture.h>
+#include <drm/drm_client_setup.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_fbdev_ttm.h>
 #include <drm/drm_gem_ttm_helper.h>
@@ -873,9 +874,9 @@ static int nouveau_drm_probe(struct pci_dev *pdev,
 		goto fail_pci;
 
 	if (drm->client.device.info.ram_size <= 32 * 1024 * 1024)
-		drm_fbdev_ttm_setup(drm->dev, 8);
+		drm_client_setup(drm->dev, drm_format_info(DRM_FORMAT_C8));
 	else
-		drm_fbdev_ttm_setup(drm->dev, 32);
+		drm_client_setup(drm->dev, NULL);
 
 	quirk_broken_nv_runpm(pdev);
 	return 0;
@@ -1316,6 +1317,8 @@ driver_stub = {
 
 	.dumb_create = nouveau_display_dumb_create,
 	.dumb_map_offset = drm_gem_ttm_dumb_map_offset,
+
+	DRM_FBDEV_TTM_DRIVER_OPS,
 
 	.name = DRIVER_NAME,
 	.desc = DRIVER_DESC,
