@@ -17,6 +17,8 @@
 #include <drm/drm_print.h>
 #include <drm/xe_drm.h>
 
+#include "intel_fbdev.h"
+
 #include "display/xe_display.h"
 #include "instructions/xe_gpu_commands.h"
 #include "regs/xe_gt_regs.h"
@@ -267,6 +269,7 @@ static struct drm_driver driver = {
 
 	.dumb_create = xe_bo_dumb_create,
 	.dumb_map_offset = drm_gem_ttm_dumb_map_offset,
+	INTEL_FBDEV_DRIVER_OPS,
 #ifdef CONFIG_PROC_FS
 	.show_fdinfo = xe_drm_client_fdinfo,
 #endif
