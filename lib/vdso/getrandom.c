@@ -78,7 +78,11 @@ __cvdso_getrandom_data(const struct vdso_rng_data *rng_info, void *buffer, size_
 
 		params->size_of_opaque_state = sizeof(*state);
 		params->mmap_prot = PROT_READ | PROT_WRITE;
-		params->mmap_flags = MAP_DROPPABLE | MAP_ANONYMOUS;
+		if (IS_ENABLED(CONFIG_64BIT))
+			params->mmap_flags = MAP_DROPPABLE | MAP_ANONYMOUS;
+		else
+			params->mmap_flags = MAP_PRIVATE | MAP_ANONYMOUS;
+
 		for (i = 0; i < ARRAY_SIZE(params->reserved); i++)
 			params->reserved[i] = 0;
 
