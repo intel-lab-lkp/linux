@@ -87,6 +87,19 @@ they should generally work out of the box, e.g.::
 	zypper install rust rust1.79-src rust-bindgen clang
 
 
+Ubuntu
+******
+
+Ubuntu LTS and non-LTS (interim) releases provide recent Rust releases and thus
+they should generally work out of the box, e.g.::
+
+	apt install rustc-1.80 rust-1.80-src bindgen-0.65 rustfmt-1.80 rust-1.80-clippy
+
+``RUST_LIB_SRC`` needs to be set when using the versioned packages, e.g.::
+
+	RUST_LIB_SRC=/usr/src/rustc-$(rustc-1.80 --version | cut -d' ' -f2)/library
+
+
 Requirements: Building
 ----------------------
 
