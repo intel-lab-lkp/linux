@@ -3884,6 +3884,7 @@ void qla24xx_nvme_ls4_iocb(struct scsi_qla_host *vha,
  * @vha: host adapter pointer
  * @rsp: respond queue
  * @pkt: head iocb describing how many continuation iocb
+ * @rsp_q_in: index of the response queue input pointer
  * Return: 0 all iocbs has arrived, xx- all iocbs have not arrived.
  */
 static int qla_chk_cont_iocb_avail(struct scsi_qla_host *vha,
