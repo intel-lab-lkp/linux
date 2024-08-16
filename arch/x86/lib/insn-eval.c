@@ -1668,3 +1668,58 @@ enum insn_mmio_type insn_decode_mmio(struct insn *insn, int *bytes)
 
 	return type;
 }
+
+/**
+ * insn_fetch_decode_from_user_common() - Copy and decode instruction bytes
+ *                                        from user-space memory
+ * @buf:	Array to store the fetched instruction
+ * @regs:	Structure with register values as seen when entering kernel mode
+ * @inatomic	boolean flag whether function is used in atomic context
+ *
+ * Gets the linear address of the instruction and copies the instruction bytes
+ * and decodes the instruction.
+ *
+ * Returns:
+ *
+ * - 0 on success.
+ * - -EFAULT if the copy from userspace fails.
+ * - -EINVAL if the linear address of the instruction could not be calculated.
+ */
+int insn_fetch_decode_from_user_common(struct insn *insn, struct pt_regs *regs,
+				bool inatomic)
+{
+	char buffer[MAX_INSN_SIZE];
+	int nr_copied, size;
+	unsigned long ip;
+
+	if (insn_get_effective_ip(regs, &ip))
+		return -EINVAL;
+
+	/*
+	 * On the first attempt, read up to MAX_INSN_SIZE, but do not cross a
+	 * page boundary. The second page might be from a different VMA and
+	 * reading can have side effects (i.e. reading from MMIO).
+	 */
+	size = min(MAX_INSN_SIZE, PAGE_SIZE - offset_in_page(ip));
+retry:
+	nr_copied = size;
+
+	if (inatomic)
+		nr_copied -= __copy_from_user_inatomic(buffer, (void __user *)ip, size);
+	else
+		nr_copied -= copy_from_user(buffer, (void __user *)ip, size);
+
+	if (nr_copied <= 0)
+		return -EFAULT;
+
+	if (!insn_decode_from_regs(insn, regs, buffer, nr_copied)) {
+		/* If decode failed, try to copy across page boundary */
+		if (size < MAX_INSN_SIZE) {
+			size = MAX_INSN_SIZE;
+			goto retry;
+		}
+		return -EINVAL;
+	}
+
+	return 0;
+}

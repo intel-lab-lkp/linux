@@ -32,6 +32,21 @@ int insn_fetch_from_user_inatomic(struct pt_regs *regs,
 bool insn_decode_from_regs(struct insn *insn, struct pt_regs *regs,
 			   unsigned char buf[MAX_INSN_SIZE], int buf_size);
 
+int insn_fetch_decode_from_user_common(struct insn *insn, struct pt_regs *regs,
+				       bool inatomic);
+
+static inline int insn_fetch_decode_from_user(struct insn *insn,
+					      struct pt_regs *regs)
+{
+	return insn_fetch_decode_from_user_common(insn, regs, false);
+}
+
+static inline int insn_fetch_decode_from_user_inatomic(struct insn *insn,
+						       struct pt_regs *regs)
+{
+	return insn_fetch_decode_from_user_common(insn, regs, true);
+}
+
 enum insn_mmio_type {
 	INSN_MMIO_DECODE_FAILED,
 	INSN_MMIO_WRITE,
