@@ -6,6 +6,26 @@
 #include <linux/slab.h>
 
 /**
+ * x86_match_hw_cpu_type - helper function to match the hardware defined
+ *                         cpu-type for a single entry in the x86_cpu_id table.
+ * @c: Pointer to the cpuinfo_x86 structure of the CPU to match.
+ * @m: Pointer to the x86_cpu_id entry to match against.
+ *
+ * Return: true if the cpu-type matches, false otherwise.
+ */
+static bool x86_match_hw_cpu_type(struct cpuinfo_x86 *c, const struct x86_cpu_id *m)
+{
+	if (m->cpu_type == X86_CPU_TYPE_ANY)
+		return true;
+
+	/* Hybrid CPUs are special, they are assumed to match all cpu-types */
+	if (boot_cpu_has(X86_FEATURE_HYBRID_CPU))
+		return true;
+
+	return m->cpu_type == topology_hw_cpu_type(c);
+}
+
+/**
  * x86_match_cpu - match current CPU again an array of x86_cpu_ids
  * @match: Pointer to array of x86_cpu_ids. Last entry terminated with
  *         {}.
@@ -49,6 +69,8 @@ const struct x86_cpu_id *x86_match_cpu(const struct x86_cpu_id *match)
 		    !(BIT(c->x86_stepping) & m->steppings))
 			continue;
 		if (m->feature != X86_FEATURE_ANY && !cpu_has(c, m->feature))
+			continue;
+		if (!x86_match_hw_cpu_type(c, m))
 			continue;
 		return m;
 	}
