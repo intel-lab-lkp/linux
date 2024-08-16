@@ -123,7 +123,7 @@ static inline bool check_feature2(u64 mask)
 
 static inline int check_feature_gpt_level(void)
 {
-	return ((amd_iommu_efr >> FEATURE_GATS_SHIFT) & FEATURE_GATS_MASK);
+	return ((amd_iommu_efr & FEATURE_GATS_MASK) >> FEATURE_GATS_SHIFT);
 }
 
 static inline bool amd_iommu_gt_ppr_supported(void)

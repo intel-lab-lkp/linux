@@ -2042,14 +2042,14 @@ static int __init iommu_init_pci(struct amd_iommu *iommu)
 		int glxval;
 		u64 pasmax;
 
-		pasmax = amd_iommu_efr & FEATURE_PASID_MASK;
-		pasmax >>= FEATURE_PASID_SHIFT;
+		pasmax = amd_iommu_efr & FEATURE_PASMAX_MASK;
+		pasmax >>= FEATURE_PASMAX_SHIFT;
 		iommu->iommu.max_pasids = (1 << (pasmax + 1)) - 1;
 
 		BUG_ON(iommu->iommu.max_pasids & ~PASID_MASK);
 
-		glxval   = amd_iommu_efr & FEATURE_GLXVAL_MASK;
-		glxval >>= FEATURE_GLXVAL_SHIFT;
+		glxval   = amd_iommu_efr & FEATURE_GLX_MASK;
+		glxval >>= FEATURE_GLX_SHIFT;
 
 		if (amd_iommu_max_glx_val == -1)
 			amd_iommu_max_glx_val = glxval;
