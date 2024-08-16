@@ -1162,18 +1162,25 @@ static int dso__disassemble_filename(struct dso *dso, char *filename, size_t fil
 	    !dso__is_kcore(dso))
 		return SYMBOL_ANNOTATE_ERRNO__NO_VMLINUX;
 
-	build_id_filename = dso__build_id_filename(dso, NULL, 0, false);
-	if (build_id_filename) {
-		__symbol__join_symfs(filename, filename_size, build_id_filename);
-		free(build_id_filename);
-	} else {
-		if (dso__has_build_id(dso))
-			return ENOMEM;
-		return fallback_filename(dso, filename, filename_size);
-	}
+	/* Prefer debugging file if exists, otherwise non-debugging one is used. */
+	for (int i = 0; i < 2; i++) {
+		build_id_filename = dso__build_id_filename(dso, NULL, 0, !i);
+		if (build_id_filename) {
+			__symbol__join_symfs(filename, filename_size, build_id_filename);
+			free(build_id_filename);
+		} else {
+			if (dso__has_build_id(dso))
+				return ENOMEM;
+			return fallback_filename(dso, filename, filename_size);
+		}
 
-	if (access(filename, R_OK))
-		return fallback_filename(dso, filename, filename_size);
+		if (!access(filename, R_OK))
+			break;
+		else if (i != 0) {
+			/* nor debugging or non-debugging is found */
+			return fallback_filename(dso, filename, filename_size);
+		}
+	}
 
 	if (dso__is_kcore(dso) || dso__is_vdso(dso))
 		goto fallback;
