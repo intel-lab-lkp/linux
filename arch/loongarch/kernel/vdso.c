@@ -22,6 +22,7 @@
 #include <vdso/helpers.h>
 #include <vdso/vsyscall.h>
 #include <vdso/datapage.h>
+#include <generated/asm-offsets.h>
 #include <generated/vdso-offsets.h>
 
 extern char vdso_start[], vdso_end[];
@@ -33,6 +34,11 @@ static union {
 	u8 page[LOONGARCH_VDSO_DATA_SIZE];
 	struct loongarch_vdso_data vdata;
 } loongarch_vdso_data __page_aligned_data;
+
+#ifdef CONFIG_VDSO_GETRANDOM
+asm(".globl _vdso_rng_data\n"
+    ".set _vdso_rng_data, loongarch_vdso_data + " __stringify(VDSO_RNG_DATA));
+#endif
 
 static struct page *vdso_pages[] = { NULL };
 struct vdso_data *vdso_data = generic_vdso_data.data;
