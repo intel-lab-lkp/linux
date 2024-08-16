@@ -435,7 +435,7 @@ xdrgen_encode_open_args_createmode4(struct xdr_stream *xdr, enum open_args_creat
 	return xdr_stream_encode_u32(xdr, value) == XDR_UNIT;
 }
 
-static bool __maybe_unused
+bool
 xdrgen_encode_fattr4_open_arguments(struct xdr_stream *xdr, const fattr4_open_arguments *value)
 {
 	return xdrgen_encode_open_arguments4(xdr, value);

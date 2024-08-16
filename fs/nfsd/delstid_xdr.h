@@ -99,4 +99,7 @@ typedef nfstime4 fattr4_time_deleg_modify;
 
 #define OPEN4_SHARE_ACCESS_WANT_DELEG_TIMESTAMPS (0x100000)
 
+/* delstid.c */
+bool xdrgen_encode_fattr4_open_arguments(struct xdr_stream *xdr,
+					 const fattr4_open_arguments *value);
 #endif /* _DELSTID_H */
