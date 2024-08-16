@@ -1789,6 +1789,67 @@ static ssize_t mbm_local_bytes_config_write(struct kernfs_open_file *of,
 	return ret ?: nbytes;
 }
 
+static void resctrl_sdciae_msrwrite(void *arg)
+{
+	bool *enable = arg;
+
+	if (*enable)
+		msr_set_bit(MSR_IA32_L3_QOS_EXT_CFG, SDCIAE_ENABLE_BIT);
+	else
+		msr_clear_bit(MSR_IA32_L3_QOS_EXT_CFG, SDCIAE_ENABLE_BIT);
+}
+
+static int resctrl_sdciae_setup(enum resctrl_res_level l, bool enable)
+{
+	struct rdt_resource *r = &rdt_resources_all[l].r_resctrl;
+	struct rdt_ctrl_domain *d;
+
+	/* Update  L3_QOS_EXT_CFG MSR on all the CPUs in all domains*/
+	list_for_each_entry(d, &r->ctrl_domains, hdr.list)
+		on_each_cpu_mask(&d->hdr.cpu_mask, resctrl_sdciae_msrwrite, &enable, 1);
+
+	return 0;
+}
+
+static int resctrl_sdciae_enable(enum resctrl_res_level l)
+{
+	struct rdt_hw_resource *hw_res = &rdt_resources_all[l];
+	int ret = 0;
+
+	if (!hw_res->sdciae_enabled) {
+		ret = resctrl_sdciae_setup(l, true);
+		if (!ret)
+			hw_res->sdciae_enabled = true;
+	}
+
+	return ret;
+}
+
+static void resctrl_sdciae_disable(enum resctrl_res_level l)
+{
+	struct rdt_hw_resource *hw_res = &rdt_resources_all[l];
+
+	if (hw_res->sdciae_enabled) {
+		resctrl_sdciae_setup(l, false);
+		hw_res->sdciae_enabled = false;
+	}
+}
+
+int resctrl_arch_set_sdciae_enabled(enum resctrl_res_level l, bool enable)
+{
+	struct rdt_hw_resource *hw_res = &rdt_resources_all[l];
+
+	if (!hw_res->r_resctrl.sdciae_capable)
+		return -EINVAL;
+
+	if (enable)
+		return resctrl_sdciae_enable(l);
+
+	resctrl_sdciae_disable(l);
+
+	return 0;
+}
+
 /* rdtgroup information files for one cache resource. */
 static struct rftype res_common_files[] = {
 	{
