@@ -25,20 +25,6 @@
 #define PPC_LR_STKOFF	16
 #define PPC_MIN_STKFRM	112
 
-#ifdef __BIG_ENDIAN__
-#define LHZX_BE	stringify_in_c(lhzx)
-#define LWZX_BE	stringify_in_c(lwzx)
-#define LDX_BE	stringify_in_c(ldx)
-#define STWX_BE	stringify_in_c(stwx)
-#define STDX_BE	stringify_in_c(stdx)
-#else
-#define LHZX_BE	stringify_in_c(lhbrx)
-#define LWZX_BE	stringify_in_c(lwbrx)
-#define LDX_BE	stringify_in_c(ldbrx)
-#define STWX_BE	stringify_in_c(stwbrx)
-#define STDX_BE	stringify_in_c(stdbrx)
-#endif
-
 #else /* 32-bit */
 
 /* operations for longs and pointers */
@@ -59,6 +45,32 @@
 #define PPC_LR_STKOFF	4
 #define PPC_MIN_STKFRM	16
 
+#endif
+
+#ifdef __BIG_ENDIAN__
+#define LHZX_BE	stringify_in_c(lhzx)
+#define LWZX_BE	stringify_in_c(lwzx)
+#define LDX_BE	stringify_in_c(ldx)
+#define STWX_BE	stringify_in_c(stwx)
+#define STDX_BE	stringify_in_c(stdx)
+
+#define LHZX_LE	stringify_in_c(lhbrx)
+#define LWZX_LE	stringify_in_c(lwbrx)
+#define LDX_LE	stringify_in_c(ldbrx)
+#define STWX_LE	stringify_in_c(stwbrx)
+#define STDX_LE	stringify_in_c(stdbrx)
+#else
+#define LHZX_BE	stringify_in_c(lhbrx)
+#define LWZX_BE	stringify_in_c(lwbrx)
+#define LDX_BE	stringify_in_c(ldbrx)
+#define STWX_BE	stringify_in_c(stwbrx)
+#define STDX_BE	stringify_in_c(stdbrx)
+
+#define LHZX_LE	stringify_in_c(lhzx)
+#define LWZX_LE	stringify_in_c(lwzx)
+#define LDX_LE	stringify_in_c(ldx)
+#define STWX_LE	stringify_in_c(stwx)
+#define STDX_LE	stringify_in_c(stdx)
 #endif
 
 #endif /* _ASM_POWERPC_ASM_COMPAT_H */
