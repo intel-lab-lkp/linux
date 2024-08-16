@@ -231,6 +231,20 @@ width of the CPU data path.
 
 Passed by reference.
 
+Struct Range
+------------
+
+::
+
+	%par	[range 0x60000000-0x6fffffff] or
+		[range 0x0000000060000000-0x000000006fffffff]
+
+For printing struct range.  A variation of printing a physical address is to
+print the value of struct range which are often used to hold a physical address
+range.
+
+Passed by reference.
+
 DMA address types dma_addr_t
 ----------------------------
 

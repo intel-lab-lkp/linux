@@ -1141,6 +1141,39 @@ char *resource_string(char *buf, char *end, struct resource *res,
 }
 
 static noinline_for_stack
+char *range_string(char *buf, char *end, const struct range *range,
+		      struct printf_spec spec, const char *fmt)
+{
+#define RANGE_PRINTK_SIZE		16
+#define RANGE_DECODED_BUF_SIZE		((2 * sizeof(struct range)) + 4)
+#define RANGE_PRINT_BUF_SIZE		sizeof("[range - ]")
+	char sym[RANGE_DECODED_BUF_SIZE + RANGE_PRINT_BUF_SIZE];
+	char *p = sym, *pend = sym + sizeof(sym);
+
+	static const struct printf_spec str_spec = {
+		.field_width = -1,
+		.precision = 10,
+		.flags = LEFT,
+	};
+	static const struct printf_spec range_spec = {
+		.base = 16,
+		.field_width = RANGE_PRINTK_SIZE,
+		.precision = -1,
+		.flags = SPECIAL | SMALL | ZEROPAD,
+	};
+
+	*p++ = '[';
+	p = string_nocheck(p, pend, "range ", str_spec);
+	p = number(p, pend, range->start, range_spec);
+	*p++ = '-';
+	p = number(p, pend, range->end, range_spec);
+	*p++ = ']';
+	*p = '\0';
+
+	return string_nocheck(buf, end, sym, spec);
+}
+
+static noinline_for_stack
 char *hex_string(char *buf, char *end, u8 *addr, struct printf_spec spec,
 		 const char *fmt)
 {
@@ -1802,6 +1835,8 @@ char *address_val(char *buf, char *end, const void *addr,
 		return buf;
 
 	switch (fmt[1]) {
+	case 'r':
+		return range_string(buf, end, addr, spec, fmt);
 	case 'd':
 		num = *(const dma_addr_t *)addr;
 		size = sizeof(dma_addr_t);
@@ -2364,6 +2399,8 @@ char *rust_fmt_argument(char *buf, char *end, void *ptr);
  *            to use print_hex_dump() for the larger input.
  * - 'a[pd]' For address types [p] phys_addr_t, [d] dma_addr_t and derivatives
  *           (default assumed to be phys_addr_t, passed by reference)
+ * - 'ar' For decoded struct ranges (a variation of physical address which are
+ *        most often stored in struct ranges.
  * - 'd[234]' For a dentry name (optionally 2-4 last components)
  * - 'D[234]' Same as 'd' but for a struct file
  * - 'g' For block_device name (gendisk + partition number)
