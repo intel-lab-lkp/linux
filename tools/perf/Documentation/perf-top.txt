@@ -80,6 +80,9 @@ Default is to monitor all CPUS.
 --kallsyms=<file>::
 	kallsyms pathname
 
+--vdso=<vdso1[,vdso2]>::
+	Specify vdso pathnames. You can specify up to two for multiarch-support.
+
 -m <pages>::
 --mmap-pages=<pages>::
 	Number of mmap data pages (must be a power of two) or size
