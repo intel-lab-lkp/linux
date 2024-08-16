@@ -1941,6 +1941,125 @@ static int resctrl_sdciae_cbm_show(struct kernfs_open_file *of,
 	return 0;
 }
 
+/*
+ * Read the CBM and check the validity. Make sure CBM is not shared
+ * with any other exclusive resctrl groups.
+ */
+static int resctrl_parse_cbm(char *buf, struct resctrl_schema *s,
+			     struct rdt_ctrl_domain *d)
+{
+	struct resctrl_staged_config *cfg;
+	struct rdt_resource *r = s->res;
+	u32 sdciae_closid;
+	u32 cbm_val;
+
+	cfg = &d->staged_config[s->conf_type];
+	if (cfg->have_new_ctrl) {
+		rdt_last_cmd_printf("Duplicate domain %d\n", d->hdr.id);
+		return -EINVAL;
+	}
+
+	if (!cbm_validate(buf, &cbm_val, r))
+		return -EINVAL;
+
+	/*
+	 * The CBM may not overlap with other exclusive group.
+	 */
+	sdciae_closid = get_sdciae_closid(r);
+	if (rdtgroup_cbm_overlaps(s, d, cbm_val, sdciae_closid, true)) {
+		rdt_last_cmd_puts("Overlaps with exclusive group\n");
+		return -EINVAL;
+	}
+
+	cfg->new_ctrl = cbm_val;
+	cfg->have_new_ctrl = true;
+
+	return 0;
+}
+
+static int resctrl_parse_line(char *line,  struct rdt_resource *r,
+			      struct resctrl_schema *s)
+{
+	struct rdt_ctrl_domain *d;
+	char *dom = NULL, *id;
+	unsigned long dom_id;
+
+next:
+	if (!line || line[0] == '\0')
+		return 0;
+
+	dom = strsep(&line, ";");
+	id = strsep(&dom, "=");
+	if (!dom || kstrtoul(id, 10, &dom_id)) {
+		rdt_last_cmd_puts("Missing '=' or non-numeric domain\n");
+		return -EINVAL;
+	}
+
+	dom = strim(dom);
+	list_for_each_entry(d, &r->ctrl_domains, hdr.list) {
+		if (d->hdr.id == dom_id) {
+			if (resctrl_parse_cbm(dom, s, d))
+				return -EINVAL;
+			goto next;
+		}
+	}
+	return -EINVAL;
+}
+
+static ssize_t resctrl_sdciae_cbm_write(struct kernfs_open_file *of,
+					char *buf, size_t nbytes, loff_t off)
+{
+	struct resctrl_schema *s = of->kn->parent->priv;
+	struct rdt_resource *r = s->res;
+	u32 sdciae_closid;
+	char *resname;
+	int ret = 0;
+
+	/* Valid input requires a trailing newline */
+	if (nbytes == 0 || buf[nbytes - 1] != '\n')
+		return -EINVAL;
+
+	buf[nbytes - 1] = '\0';
+
+	cpus_read_lock();
+	mutex_lock(&rdtgroup_mutex);
+
+	rdt_last_cmd_clear();
+	rdt_staged_configs_clear();
+
+	resname = strim(strsep(&buf, ":"));
+	if (!buf) {
+		rdt_last_cmd_puts("Missing ':'\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (strcmp(resname, "L3")) {
+		rdt_last_cmd_printf("Unsupported resource name '%s'\n", resname);
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (buf[0] == '\0') {
+		rdt_last_cmd_printf("Missing '%s' value\n", resname);
+		ret = -EINVAL;
+		goto out;
+	}
+
+	ret = resctrl_parse_line(buf, r, s);
+	if (ret)
+		goto out;
+
+	sdciae_closid = get_sdciae_closid(r);
+	ret = resctrl_arch_update_domains(r, sdciae_closid);
+
+out:
+	mutex_unlock(&rdtgroup_mutex);
+	cpus_read_unlock();
+
+	return ret ?: nbytes;
+}
+
 /* rdtgroup information files for one cache resource. */
 static struct rftype res_common_files[] = {
 	{
@@ -2102,9 +2221,10 @@ static struct rftype res_common_files[] = {
 	},
 	{
 		.name		= "sdciae_cbm",
-		.mode		= 0444,
+		.mode		= 0644,
 		.kf_ops		= &rdtgroup_kf_single_ops,
 		.seq_show	= resctrl_sdciae_cbm_show,
+		.write		= resctrl_sdciae_cbm_write,
 	},
 	{
 		.name		= "mode",

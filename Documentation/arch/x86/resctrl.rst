@@ -157,6 +157,13 @@ related to allocation:
 
 			# echo 1 > /sys/fs/resctrl/info/L3/sdciae
 
+"sdciae_cbm":
+		Capacity Bit Mask (CBM) available to SDCIAE supported devices.
+		CBM can be configured by writing to the interface in the
+		following format::
+
+			L3:<cache_id0>=<cbm>;<cache_id1>=<cbm>;...
+
 Memory bandwidth(MB) subdirectory contains the following files
 with respect to allocation:
 
