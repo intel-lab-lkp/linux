@@ -56,6 +56,10 @@ static inline int get_dumpable(struct mm_struct *mm)
 # define MMF_DUMP_MASK_DEFAULT_ELF	0
 #endif
 					/* leave room for more dump flags */
+#define MMF_DISABLE_ANON_MTHP	13
+#define MMF_DISABLE_SHMEM_MTHP	14
+#define MMF_DISABLE_FILE_MTHP	15
+#define MMF_DISABLE_MTHP_MASK	(7 << MMF_DISABLE_ANON_MTHP)
 #define MMF_VM_MERGEABLE	16	/* KSM may merge identical pages */
 #define MMF_VM_HUGEPAGE		17	/* set when mm is available for
 					   khugepaged */
@@ -96,8 +100,9 @@ static inline int get_dumpable(struct mm_struct *mm)
 #define MMF_TOPDOWN_MASK	(1 << MMF_TOPDOWN)
 
 #define MMF_INIT_MASK		(MMF_DUMPABLE_MASK | MMF_DUMP_FILTER_MASK |\
-				 MMF_DISABLE_THP_MASK | MMF_HAS_MDWE_MASK |\
-				 MMF_VM_MERGE_ANY_MASK | MMF_TOPDOWN_MASK)
+				 MMF_DISABLE_THP_MASK | MMF_DISABLE_MTHP_MASK |\
+				 MMF_HAS_MDWE_MASK | MMF_VM_MERGE_ANY_MASK |\
+				 MMF_TOPDOWN_MASK)
 
 static inline unsigned long mmf_init_flags(unsigned long flags)
 {

@@ -556,7 +556,9 @@ static bool __shmem_is_huge(struct inode *inode, pgoff_t index,
 
 	if (!S_ISREG(inode->i_mode))
 		return false;
-	if (mm && ((vm_flags & VM_NOHUGEPAGE) || test_bit(MMF_DISABLE_THP, &mm->flags)))
+	if (mm && ((vm_flags & VM_NOHUGEPAGE) ||
+				test_bit(MMF_DISABLE_THP, &mm->flags) ||
+				test_bit(MMF_DISABLE_SHMEM_MTHP, &mm->flags)))
 		return false;
 	if (shmem_huge == SHMEM_HUGE_DENY)
 		return false;
@@ -1633,7 +1635,8 @@ unsigned long shmem_allowable_huge_orders(struct inode *inode,
 	int order;
 
 	if ((vm_flags & VM_NOHUGEPAGE) ||
-	    test_bit(MMF_DISABLE_THP, &vma->vm_mm->flags))
+	    test_bit(MMF_DISABLE_THP, &vma->vm_mm->flags) ||
+	    test_bit(MMF_DISABLE_SHMEM_MTHP, &vma->vm_mm->flags))
 		return 0;
 
 	/* If the hardware/firmware marked hugepage support disabled. */

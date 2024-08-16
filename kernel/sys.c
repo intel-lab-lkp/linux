@@ -2627,17 +2627,41 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 	case PR_GET_THP_DISABLE:
 		if (arg2 || arg3 || arg4 || arg5)
 			return -EINVAL;
-		error = !!test_bit(MMF_DISABLE_THP, &me->mm->flags);
+		if (test_bit(MMF_DISABLE_THP, &me->mm->flags))
+			error = 1;
+		if (test_bit(MMF_DISABLE_ANON_MTHP, &me->mm->flags))
+			error |= PR_DISABLE_ANON_MTHP;
+		if (test_bit(MMF_DISABLE_SHMEM_MTHP, &me->mm->flags))
+			error |= PR_DISABLE_SHMEM_MTHP;
+		if (test_bit(MMF_DISABLE_FILE_MTHP, &me->mm->flags))
+			error |= PR_DISABLE_FILE_MTHP;
 		break;
 	case PR_SET_THP_DISABLE:
-		if (arg3 || arg4 || arg5)
+		if (arg4 || arg5)
+			return -EINVAL;
+		if (arg3 && (arg3 & ~DISABLE_MTHP_ALL_MASK))
 			return -EINVAL;
 		if (mmap_write_lock_killable(me->mm))
 			return -EINTR;
-		if (arg2)
-			set_bit(MMF_DISABLE_THP, &me->mm->flags);
-		else
-			clear_bit(MMF_DISABLE_THP, &me->mm->flags);
+		if (arg2) {
+			if (!arg3)
+				set_bit(MMF_DISABLE_THP, &me->mm->flags);
+			if (arg3 & PR_DISABLE_ANON_MTHP)
+				set_bit(MMF_DISABLE_ANON_MTHP, &me->mm->flags);
+			if (arg3 & PR_DISABLE_SHMEM_MTHP)
+				set_bit(MMF_DISABLE_SHMEM_MTHP, &me->mm->flags);
+			if (arg3 & PR_DISABLE_FILE_MTHP)
+				set_bit(MMF_DISABLE_FILE_MTHP, &me->mm->flags);
+		} else {
+			if (!arg3)
+				clear_bit(MMF_DISABLE_THP, &me->mm->flags);
+			if (arg3 & PR_DISABLE_ANON_MTHP)
+				clear_bit(MMF_DISABLE_ANON_MTHP, &me->mm->flags);
+			if (arg3 & PR_DISABLE_SHMEM_MTHP)
+				clear_bit(MMF_DISABLE_SHMEM_MTHP, &me->mm->flags);
+			if (arg3 & PR_DISABLE_FILE_MTHP)
+				clear_bit(MMF_DISABLE_FILE_MTHP, &me->mm->flags);
+		}
 		mmap_write_unlock(me->mm);
 		break;
 	case PR_MPX_ENABLE_MANAGEMENT:

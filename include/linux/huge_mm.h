@@ -247,6 +247,9 @@ unsigned long thp_vma_allowable_orders(struct vm_area_struct *vma,
 	if ((tva_flags & TVA_ENFORCE_SYSFS) && vma_is_anonymous(vma)) {
 		unsigned long mask = READ_ONCE(huge_anon_orders_always);
 
+		if (test_bit(MMF_DISABLE_ANON_MTHP, &vma->vm_mm->flags))
+			return 0;
+
 		if (vm_flags & VM_HUGEPAGE)
 			mask |= READ_ONCE(huge_anon_orders_madvise);
 		if (hugepage_global_always() ||
