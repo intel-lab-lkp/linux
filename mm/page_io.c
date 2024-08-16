@@ -172,6 +172,12 @@ bad_bmap:
 	goto out;
 }
 
+static inline void count_mthp_zswpout_vm_event(struct folio *folio)
+{
+	if (IS_ENABLED(CONFIG_THP_SWAP))
+		count_mthp_stat(folio_order(folio), MTHP_STAT_ZSWPOUT);
+}
+
 /*
  * We may have stale swap cache pages in memory: notice
  * them here and get rid of the unnecessary final write.
@@ -196,6 +202,7 @@ int swap_writepage(struct page *page, struct writeback_control *wbc)
 		return ret;
 	}
 	if (zswap_store(folio)) {
+		count_mthp_zswpout_vm_event(folio);
 		folio_unlock(folio);
 		return 0;
 	}
