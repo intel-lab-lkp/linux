@@ -709,3 +709,8 @@
 			<GCC_SEC_CTRL_CLK_SRC>, <GCC_WPSS_AHB_CLK>,
 			<GCC_WPSS_AHB_BDG_MST_CLK>, <GCC_WPSS_RSCP_CLK>;
 };
+
+&lpass_audiocc {
+	compatible = "qcom,qcm6490-lpassaudiocc";
+	/delete-property/ power-domains;
+};
