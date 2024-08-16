@@ -17,6 +17,7 @@
 #include <linux/time_namespace.h>
 #include <linux/timekeeper_internal.h>
 
+#include <asm/alternative.h>
 #include <asm/page.h>
 #include <asm/vdso.h>
 #include <vdso/helpers.h>
@@ -105,7 +106,7 @@ struct loongarch_vdso_info vdso_info = {
 
 static int __init init_vdso(void)
 {
-	unsigned long i, cpu, pfn;
+	unsigned long i, cpu, pfn, vdso;
 
 	BUG_ON(!PAGE_ALIGNED(vdso_info.vdso));
 	BUG_ON(!PAGE_ALIGNED(vdso_info.size));
@@ -116,6 +117,11 @@ static int __init init_vdso(void)
 	pfn = __phys_to_pfn(__pa_symbol(vdso_info.vdso));
 	for (i = 0; i < vdso_info.size / PAGE_SIZE; i++)
 		vdso_info.code_mapping.pages[i] = pfn_to_page(pfn + i);
+
+	vdso = (unsigned long)vdso_info.vdso;
+
+	apply_alternatives((struct alt_instr *)(vdso + vdso_offset_alt),
+			   (struct alt_instr *)(vdso + vdso_offset_alt_end));
 
 	return 0;
 }

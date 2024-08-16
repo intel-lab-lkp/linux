@@ -35,6 +35,12 @@ SECTIONS
 
 	.rodata		: { *(.rodata*) }		:text
 
+	.altinstructions : ALIGN(4) {
+		VDSO_alt = .;
+		*(.altinstructions)
+		VDSO_alt_end = .;
+	} :text
+
 	_end = .;
 	PROVIDE(end = .);
 
