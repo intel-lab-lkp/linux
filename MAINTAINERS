@@ -15896,6 +15896,7 @@ T:	git git://git.kernel.org/pub/scm/linux/kernel/git/wireless/wireless.git
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/wireless/wireless-next.git
 F:	Documentation/devicetree/bindings/net/wireless/
 F:	drivers/net/wireless/
+F:	include/linux/platform_data/net-cw1200.h
 
 NETWORKING [DSA]
 M:	Andrew Lunn <andrew@lunn.ch>
