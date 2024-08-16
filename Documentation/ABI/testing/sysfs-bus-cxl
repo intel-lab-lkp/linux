@@ -599,3 +599,16 @@ Description:
 		See Documentation/ABI/stable/sysfs-devices-node. access0 provides
 		the number to the closest initiator and access1 provides the
 		number to the closest CPU.
+
+What:		/sys/bus/cxl/devices/dax_regionX/extentX.Y/offset
+		/sys/bus/cxl/devices/dax_regionX/extentX.Y/length
+		/sys/bus/cxl/devices/dax_regionX/extentX.Y/tag
+Date:		October, 2024
+KernelVersion:	v6.12
+Contact:	linux-cxl@vger.kernel.org
+Description:
+		(RO) [For Dynamic Capacity regions only]  Extent offset and
+		length within the region.  Users can use the extent information
+		to create DAX devices on specific extents.  This is done by
+		creating and destroying DAX devices in specific sequences and
+		looking at the mappings created.
