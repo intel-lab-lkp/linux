@@ -673,6 +673,34 @@ enum edac_dev_feat {
 	RAS_FEAT_MAX
 };
 
+/**
+ * struct scrub_ops - scrub device operations (all elements optional)
+ * @read_range: read base and offset of scrubbing range.
+ * @write_range: set the base and offset of the scrubbing range.
+ * @get_enabled_bg: check if currently performing background scrub.
+ * @set_enabled_bg: start or stop a bg-scrub.
+ * @get_enabled_od: check if currently performing on-demand scrub.
+ * @set_enabled_od: start or stop an on-demand scrub.
+ * @min_cycle_read: minimum supported scrub cycle duration in seconds.
+ * @max_cycle_read: maximum supported scrub cycle duration in seconds.
+ * @cycle_duration_read: get the scrub cycle duration in seconds.
+ * @cycle_duration_write: set the scrub cycle duration in seconds.
+ */
+struct edac_scrub_ops {
+	int (*read_range)(struct device *dev, void *drv_data, u64 *base, u64 *size);
+	int (*write_range)(struct device *dev, void *drv_data, u64 base, u64 size);
+	int (*get_enabled_bg)(struct device *dev, void *drv_data, bool *enable);
+	int (*set_enabled_bg)(struct device *dev, void *drv_data, bool enable);
+	int (*get_enabled_od)(struct device *dev, void *drv_data, bool *enable);
+	int (*set_enabled_od)(struct device *dev, void *drv_data, bool enable);
+	int (*min_cycle_read)(struct device *dev, void *drv_data,  u32 *min);
+	int (*max_cycle_read)(struct device *dev, void *drv_data,  u32 *max);
+	int (*cycle_duration_read)(struct device *dev, void *drv_data, u32 *cycle);
+	int (*cycle_duration_write)(struct device *dev, void *drv_data, u32 cycle);
+};
+
+const struct attribute_group *edac_scrub_get_desc(void);
+
 struct edac_ecs_ex_info {
 	u16 num_media_frus;
 };

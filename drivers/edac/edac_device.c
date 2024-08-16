@@ -612,6 +612,7 @@ static int edac_dev_feat_init(struct device *parent,
 	case RAS_FEAT_SCRUB:
 		dev_data->scrub_ops = ras_feat->scrub_ops;
 		dev_data->private = ras_feat->scrub_ctx;
+		attr_groups[0] = edac_scrub_get_desc();
 		return 1;
 	case RAS_FEAT_ECS:
 		num = ras_feat->ecs_info.num_media_frus;
