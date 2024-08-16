@@ -2875,7 +2875,6 @@ static int dvb_frontend_open(struct inode *inode, struct file *file)
 	struct dvb_device *dvbdev = file->private_data;
 	struct dvb_frontend *fe = dvbdev->priv;
 	struct dvb_adapter *adapter = fe->dvb;
-	int ret;
 
 	dev_dbg(fe->dvb->device, "%s:\n", __func__);
 	if (fe->exit == DVB_FE_DEVICE_REMOVED)
@@ -2893,36 +2892,32 @@ static int dvb_frontend_open(struct inode *inode, struct file *file)
 				return -EBUSY;
 			adapter->mfe_dvbdev = dvbdev;
 		}
-	} else {
-		if (!adapter->mfe_dvbdev) {
+		return __dvb_frontend_open(inode, file);
+	}
+
+	if (!adapter->mfe_dvbdev) {
+		adapter->mfe_dvbdev = dvbdev;
+	} else if (adapter->mfe_dvbdev != dvbdev) {
+		struct dvb_device *mfedev = adapter->mfe_dvbdev;
+		struct dvb_frontend *mfe = mfedev->priv;
+		struct dvb_frontend_private *mfepriv = mfe->frontend_priv;
+		int ret;
+
+		ret = wait_dvb_frontend(adapter, mfedev);
+		if (ret)
+			return ret;
+
+		if (adapter->mfe_dvbdev != dvbdev) {
+			mfedev = adapter->mfe_dvbdev;
+			mfe = mfedev->priv;
+			mfepriv = mfe->frontend_priv;
+			if (mfedev->users != -1 || mfepriv->thread)
+				return -EBUSY;
 			adapter->mfe_dvbdev = dvbdev;
-		} else if (adapter->mfe_dvbdev != dvbdev) {
-			struct dvb_device
-				*mfedev = adapter->mfe_dvbdev;
-			struct dvb_frontend
-				*mfe = mfedev->priv;
-			struct dvb_frontend_private
-				*mfepriv = mfe->frontend_priv;
-
-			ret = wait_dvb_frontend(adapter, mfedev);
-			if (ret)
-				return ret;
-
-			if (adapter->mfe_dvbdev != dvbdev) {
-				mfedev = adapter->mfe_dvbdev;
-				mfe = mfedev->priv;
-				mfepriv = mfe->frontend_priv;
-				if (mfedev->users != -1 ||
-				    mfepriv->thread)
-					return -EBUSY;
-				adapter->mfe_dvbdev = dvbdev;
-			}
 		}
 	}
 
-	ret = __dvb_frontend_open(inode, file);
-
-	return ret;
+	return __dvb_frontend_open(inode, file);
 }
 
 static int dvb_frontend_release(struct inode *inode, struct file *file)
