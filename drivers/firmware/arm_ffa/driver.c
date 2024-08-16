@@ -480,13 +480,23 @@ static int ffa_msg_send2(u16 src_id, u16 dst_id, void *buf, size_t sz)
 static int ffa_msg_send_direct_req2(u16 src_id, u16 dst_id, const uuid_t *uuid,
 				    struct ffa_send_direct_data2 *data)
 {
+	unsigned long args_data[14];
+	unsigned long args_uuid[2];
+	unsigned long *data_ptr;
+
 	u32 src_dst_ids = PACK_TARGET_INFO(src_id, dst_id);
 	ffa_value_t ret, args = {
 		.a0 = FFA_MSG_SEND_DIRECT_REQ2, .a1 = src_dst_ids,
 	};
 
-	export_uuid((u8 *)&args.a2, uuid);
-	memcpy(&args.a4, data, sizeof(*data));
+	memcpy(args_uuid, uuid, sizeof(uuid_t));
+	args.a2 = args_uuid[0];
+	args.a3 = args_uuid[1];
+
+	memcpy(args_data, data, sizeof(*data));
+	data_ptr = &args.a4;
+	for (int i = 0; i < 14; i++)
+		*data_ptr++ = args_data[i];
 
 	invoke_ffa_fn(args, &ret);
 
