@@ -55,6 +55,9 @@ enum thermal_notify_event {
 	THERMAL_TZ_BIND_CDEV, /* Cooling dev is bind to the thermal zone */
 	THERMAL_TZ_UNBIND_CDEV, /* Cooling dev is unbind from the thermal zone */
 	THERMAL_INSTANCE_WEIGHT_CHANGED, /* Thermal instance weight changed */
+	THERMAL_THRESHOLD_ADDED, /* Threshold added */
+	THERMAL_THRESHOLD_DELETED, /* Threshold deleted */
+	THERMAL_THRESHOLD_FLUSHED, /* All thresholds deleted */
 };
 
 /**
