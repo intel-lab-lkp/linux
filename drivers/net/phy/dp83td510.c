@@ -169,6 +169,10 @@ static const u16 dp83td510_mse_sqi_map[] = {
 #define DP83TD510E_UNKN_030E				0x30e
 #define DP83TD510E_030E_VAL				0x2520
 
+#define DP83TD510E_ALCD_STAT				0xa9f
+#define DP83TD510E_ALCD_COMPLETE			BIT(15)
+#define DP83TD510E_ALCD_CABLE_LENGTH			GENMASK(10, 0)
+
 static int dp83td510_config_intr(struct phy_device *phydev)
 {
 	int ret;
@@ -327,6 +331,16 @@ static int dp83td510_cable_test_start(struct phy_device *phydev)
 {
 	int ret;
 
+	/* If link partner is active, we won't be able to use TDR, since
+	 * we can't force link partner to be silent. The autonegotiation
+	 * pulses will be too frequent and the TDR sequence will be
+	 * too long. So, TDR will always fail. Since the link is established
+	 * we already know that the cable is working, so we can get some
+	 * extra information line the cable length using ALCD.
+	 */
+	if (phydev->link)
+		return 0;
+
 	ret = phy_set_bits_mmd(phydev, MDIO_MMD_VEND2, DP83TD510E_CTRL,
 			       DP83TD510E_CTRL_HW_RESET);
 	if (ret)
@@ -402,8 +416,8 @@ static int dp83td510_cable_test_start(struct phy_device *phydev)
 }
 
 /**
- * dp83td510_cable_test_get_status - Get the status of the cable test for the
- *                                   DP83TD510 PHY.
+ * dp83td510_cable_test_get_tdr_status - Get the status of the TDR test for the
+ *                                       DP83TD510 PHY.
  * @phydev: Pointer to the phy_device structure.
  * @finished: Pointer to a boolean that indicates whether the test is finished.
  *
@@ -411,12 +425,10 @@ static int dp83td510_cable_test_start(struct phy_device *phydev)
  *
  * Returns: 0 on success or a negative error code on failure.
  */
-static int dp83td510_cable_test_get_status(struct phy_device *phydev,
-					   bool *finished)
+static int dp83td510_cable_test_get_tdr_status(struct phy_device *phydev,
+					       bool *finished)
 {
 	int ret, stat;
-
-	*finished = false;
 
 	ret = phy_read_mmd(phydev, MDIO_MMD_VEND2, DP83TD510E_TDR_CFG);
 	if (ret < 0)
@@ -457,6 +469,62 @@ static int dp83td510_cable_test_get_status(struct phy_device *phydev,
 	ethnl_cable_test_result(phydev, ETHTOOL_A_CABLE_PAIR_A, stat);
 
 	return phy_init_hw(phydev);
+}
+
+/**
+ * dp83td510_cable_test_get_alcd_status - Get the status of the ALCD test for the
+ * 				      DP83TD510 PHY.
+ * @phydev: Pointer to the phy_device structure.
+ * @finished: Pointer to a boolean that indicates whether the test is finished.
+ *
+ * The function sets the @finished flag to true if the test is complete.
+ * The function reads the cable length and reports it to the user.
+ *
+ * Returns: 0 on success or a negative error code on failure.
+ */
+static int dp83td510_cable_test_get_alcd_status(struct phy_device *phydev,
+						bool *finished)
+{
+	unsigned int location;
+	int ret;
+
+	ret = phy_read_mmd(phydev, MDIO_MMD_VEND2, DP83TD510E_ALCD_STAT);
+	if (ret < 0)
+		return ret;
+
+	if (!(ret & DP83TD510E_ALCD_COMPLETE))
+		return 0;
+
+	location = FIELD_GET(DP83TD510E_ALCD_CABLE_LENGTH, ret) * 100;
+
+	ethnl_cable_test_fault_length(phydev, ETHTOOL_A_CABLE_PAIR_A, location);
+
+	ethnl_cable_test_result(phydev, ETHTOOL_A_CABLE_PAIR_A,
+				ETHTOOL_A_CABLE_RESULT_CODE_OK);
+	*finished = true;
+
+	return 0;
+}
+
+/**
+ * dp83td510_cable_test_get_status - Get the status of the cable test for the
+ *                                   DP83TD510 PHY.
+ * @phydev: Pointer to the phy_device structure.
+ * @finished: Pointer to a boolean that indicates whether the test is finished.
+ *
+ * The function sets the @finished flag to true if the test is complete.
+ *
+ * Returns: 0 on success or a negative error code on failure.
+ */
+static int dp83td510_cable_test_get_status(struct phy_device *phydev,
+					   bool *finished)
+{
+	*finished = false;
+
+	if (!phydev->link)
+		return dp83td510_cable_test_get_tdr_status(phydev, finished);
+
+	return dp83td510_cable_test_get_alcd_status(phydev, finished);
 }
 
 static int dp83td510_get_features(struct phy_device *phydev)
