@@ -55,6 +55,7 @@
 #include "netns.h"
 #include "pnfs.h"
 #include "filecache.h"
+#include "delstid_xdr.h"
 
 #include "trace.h"
 
