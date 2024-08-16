@@ -3190,6 +3190,15 @@ err_bridge:
 	return rc;
 }
 
+static void cxlr_add_existing_extents(struct cxl_region *cxlr)
+{
+	struct cxl_region_params *p = &cxlr->params;
+	int i;
+
+	for (i = 0; i < p->nr_targets; i++)
+		cxl_read_extent_list(p->targets[i]);
+}
+
 static void cxlr_dax_unregister(void *_cxlr_dax)
 {
 	struct cxl_dax_region *cxlr_dax = _cxlr_dax;
@@ -3226,6 +3235,9 @@ static int devm_cxl_add_dax_region(struct cxl_region *cxlr)
 
 	dev_dbg(&cxlr->dev, "%s: register %s\n", dev_name(dev->parent),
 		dev_name(dev));
+
+	if (cxlr->mode == CXL_REGION_DC)
+		cxlr_add_existing_extents(cxlr);
 
 	return devm_add_action_or_reset(&cxlr->dev, cxlr_dax_unregister,
 					cxlr_dax);
