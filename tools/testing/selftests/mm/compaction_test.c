@@ -21,6 +21,9 @@
 #define MAP_SIZE_MB	100
 #define MAP_SIZE	(MAP_SIZE_MB * 1024 * 1024)
 
+#define COMPACT_UNEVICTABLE_ALLOWED "/proc/sys/vm/compact_unevictable_allowed"
+#define NR_HUGEPAGES "/proc/sys/vm/nr_hugepages"
+
 struct map_list {
 	void *map;
 	struct map_list *next;
@@ -59,17 +62,16 @@ int prereq(void)
 	char allowed;
 	int fd;
 
-	fd = open("/proc/sys/vm/compact_unevictable_allowed",
-		  O_RDONLY | O_NONBLOCK);
+	fd = open(COMPACT_UNEVICTABLE_ALLOWED, O_RDONLY | O_NONBLOCK);
 	if (fd < 0) {
-		ksft_print_msg("Failed to open /proc/sys/vm/compact_unevictable_allowed: %s\n",
-			       strerror(errno));
+		ksft_print_msg("Failed to open %s: %s\n",
+			       COMPACT_UNEVICTABLE_ALLOWED, strerror(errno));
 		return -1;
 	}
 
 	if (read(fd, &allowed, sizeof(char)) != sizeof(char)) {
-		ksft_print_msg("Failed to read from /proc/sys/vm/compact_unevictable_allowed: %s\n",
-			       strerror(errno));
+		ksft_print_msg("Failed to read from %s: %s\n",
+			       COMPACT_UNEVICTABLE_ALLOWED, strerror(errno));
 		close(fd);
 		return -1;
 	}
@@ -98,10 +100,10 @@ int check_compaction(unsigned long mem_free, unsigned long hugepage_size,
 	   in to play */
 	mem_free = mem_free * 0.8;
 
-	fd = open("/proc/sys/vm/nr_hugepages", O_RDWR | O_NONBLOCK);
+	fd = open(NR_HUGEPAGES, O_RDWR | O_NONBLOCK);
 	if (fd < 0) {
-		ksft_print_msg("Failed to open /proc/sys/vm/nr_hugepages: %s\n",
-			       strerror(errno));
+		ksft_print_msg("Failed to open %s: %s\n",
+			       NR_HUGEPAGES, strerror(errno));
 		ret = -1;
 		goto out;
 	}
@@ -109,16 +111,16 @@ int check_compaction(unsigned long mem_free, unsigned long hugepage_size,
 	/* Request a large number of huge pages. The Kernel will allocate
 	   as much as it can */
 	if (write(fd, "100000", (6*sizeof(char))) != (6*sizeof(char))) {
-		ksft_print_msg("Failed to write 100000 to /proc/sys/vm/nr_hugepages: %s\n",
-			       strerror(errno));
+		ksft_print_msg("Failed to write 100000 to %s: %s\n",
+			       NR_HUGEPAGES, strerror(errno));
 		goto close_fd;
 	}
 
 	lseek(fd, 0, SEEK_SET);
 
 	if (read(fd, nr_hugepages, sizeof(nr_hugepages)) <= 0) {
-		ksft_print_msg("Failed to re-read from /proc/sys/vm/nr_hugepages: %s\n",
-			       strerror(errno));
+		ksft_print_msg("Failed to re-read from %s: %s\n",
+			       NR_HUGEPAGES, strerror(errno));
 		goto close_fd;
 	}
 
@@ -135,8 +137,8 @@ int check_compaction(unsigned long mem_free, unsigned long hugepage_size,
 
 	if (write(fd, init_nr_hugepages, strlen(init_nr_hugepages))
 	    != strlen(init_nr_hugepages)) {
-		ksft_print_msg("Failed to write value to /proc/sys/vm/nr_hugepages: %s\n",
-			       strerror(errno));
+		ksft_print_msg("Failed to write value to %s: %s\n",
+			       NR_HUGEPAGES, strerror(errno));
 		goto close_fd;
 	}
 
@@ -163,15 +165,15 @@ int set_zero_hugepages(unsigned long *initial_nr_hugepages)
 	int fd, ret = -1;
 	char nr_hugepages[20] = {0};
 
-	fd = open("/proc/sys/vm/nr_hugepages", O_RDWR | O_NONBLOCK);
+	fd = open(NR_HUGEPAGES, O_RDWR | O_NONBLOCK);
 	if (fd < 0) {
-		ksft_print_msg("Failed to open /proc/sys/vm/nr_hugepages: %s\n",
-			       strerror(errno));
+		ksft_print_msg("Failed to open %s: %s\n",
+			       NR_HUGEPAGES, strerror(errno));
 		goto out;
 	}
 	if (read(fd, nr_hugepages, sizeof(nr_hugepages)) <= 0) {
-		ksft_print_msg("Failed to read from /proc/sys/vm/nr_hugepages: %s\n",
-			       strerror(errno));
+		ksft_print_msg("Failed to read from %s: %s\n",
+			       NR_HUGEPAGES, strerror(errno));
 		goto close_fd;
 	}
 
@@ -179,8 +181,8 @@ int set_zero_hugepages(unsigned long *initial_nr_hugepages)
 
 	/* Start with the initial condition of 0 huge pages */
 	if (write(fd, "0", sizeof(char)) != sizeof(char)) {
-		ksft_print_msg("Failed to write 0 to /proc/sys/vm/nr_hugepages: %s\n",
-			       strerror(errno));
+		ksft_print_msg("Failed to write 0 to %s: %s\n",
+			       NR_HUGEPAGES, strerror(errno));
 		goto close_fd;
 	}
 
