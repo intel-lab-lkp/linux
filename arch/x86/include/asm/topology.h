@@ -114,6 +114,12 @@ enum x86_topology_domains {
 	TOPO_MAX_DOMAIN,
 };
 
+enum x86_topology_hw_cpu_type {
+	TOPO_HW_CPU_TYPE_UNKNOWN	= 0,
+	TOPO_HW_CPU_TYPE_INTEL_ATOM	= 0x20,
+	TOPO_HW_CPU_TYPE_INTEL_CORE	= 0x40,
+};
+
 struct x86_topology_system {
 	unsigned int	dom_shifts[TOPO_MAX_DOMAIN];
 	unsigned int	dom_size[TOPO_MAX_DOMAIN];
@@ -148,6 +154,8 @@ extern unsigned int __max_logical_packages;
 extern unsigned int __max_threads_per_core;
 extern unsigned int __num_threads_per_package;
 extern unsigned int __num_cores_per_package;
+
+enum x86_topology_hw_cpu_type topology_hw_cpu_type(struct cpuinfo_x86 *c);
 
 static inline unsigned int topology_max_packages(void)
 {

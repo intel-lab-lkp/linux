@@ -1297,3 +1297,8 @@ u8 get_this_hybrid_cpu_type(void)
 
 	return cpuid_eax(0x0000001a) >> X86_HYBRID_CPU_TYPE_ID_SHIFT;
 }
+
+u32 intel_hw_native_model_id(struct cpuinfo_x86 *c)
+{
+	return c->topo.intel_core_native_model_id;
+}
