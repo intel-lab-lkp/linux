@@ -661,4 +661,64 @@ static inline struct dimm_info *edac_get_dimm(struct mem_ctl_info *mci,
 
 	return mci->dimms[index];
 }
+
+/* EDAC device features */
+
+#define EDAC_FEAT_NAME_LEN	128
+
+enum edac_dev_feat {
+	RAS_FEAT_SCRUB,
+	RAS_FEAT_ECS,
+	RAS_FEAT_PPR,
+	RAS_FEAT_MAX
+};
+
+struct edac_ecs_ex_info {
+	u16 num_media_frus;
+};
+
+/*
+ * EDAC device feature information structure
+ */
+struct edac_dev_data {
+	union {
+		const struct edac_scrub_ops *scrub_ops;
+		const struct edac_ecs_ops *ecs_ops;
+		const struct edac_ppr_ops *ppr_ops;
+	};
+	u8 instance;
+	void *private;
+};
+
+struct device;
+
+struct edac_dev_feat_ctx {
+	struct device dev;
+	void *private;
+	struct edac_dev_data scrub;
+	struct edac_dev_data ecs;
+	struct edac_dev_data *ppr;
+};
+
+struct edac_dev_feature {
+	enum edac_dev_feat feat;
+	u8 instance;
+	union {
+		const struct edac_scrub_ops *scrub_ops;
+		const struct edac_ecs_ops *ecs_ops;
+		const struct edac_ppr_ops *ppr_ops;
+	};
+	union {
+		void *scrub_ctx;
+		void *ecs_ctx;
+		void *ppr_ctx;
+	};
+	union {
+		struct edac_ecs_ex_info ecs_info;
+	};
+};
+
+int edac_dev_register(struct device *parent, char *dev_name,
+		      void *parent_pvt_data, int num_features,
+		      const struct edac_dev_feature *ras_features);
 #endif /* _LINUX_EDAC_H_ */
