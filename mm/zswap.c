@@ -1358,14 +1358,14 @@ resched:
 /*********************************
 * same-filled functions
 **********************************/
-static bool zswap_is_folio_same_filled(struct folio *folio, unsigned long *value)
+static bool zswap_is_folio_same_filled(struct folio *folio, long index, unsigned long *value)
 {
 	unsigned long *data;
 	unsigned long val;
 	unsigned int pos, last_pos = PAGE_SIZE / sizeof(*data) - 1;
 	bool ret = false;
 
-	data = kmap_local_folio(folio, 0);
+	data = kmap_local_folio(folio, index * PAGE_SIZE);
 	val = data[0];
 
 	if (val != data[last_pos])
@@ -1435,7 +1435,7 @@ bool zswap_store(struct folio *folio)
 		goto reject;
 	}
 
-	if (zswap_is_folio_same_filled(folio, &value)) {
+	if (zswap_is_folio_same_filled(folio, 0, &value)) {
 		entry->length = 0;
 		entry->value = value;
 		atomic_inc(&zswap_same_filled_pages);
