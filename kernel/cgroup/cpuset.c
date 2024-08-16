@@ -80,6 +80,7 @@ enum prs_errcode {
 	PERR_HOTPLUG,
 	PERR_CPUSEMPTY,
 	PERR_HKEEPING,
+	PERR_PMT,
 };
 
 static const char * const perr_strings[] = {
@@ -91,6 +92,7 @@ static const char * const perr_strings[] = {
 	[PERR_HOTPLUG]   = "No cpu available due to hotplug",
 	[PERR_CPUSEMPTY] = "cpuset.cpus and cpuset.cpus.exclusive are empty",
 	[PERR_HKEEPING]  = "partition config conflicts with housekeeping setup",
+	[PERR_PMT]       = "Enable partition not permitted",
 };
 
 struct cpuset {
@@ -1669,7 +1671,7 @@ static int remote_partition_enable(struct cpuset *cs, int new_prs,
 	 * The user must have sysadmin privilege.
 	 */
 	if (!capable(CAP_SYS_ADMIN))
-		return 0;
+		return PERR_PMT;
 
 	/*
 	 * The requested exclusive_cpus must not be allocated to other
@@ -1683,7 +1685,7 @@ static int remote_partition_enable(struct cpuset *cs, int new_prs,
 	if (cpumask_empty(tmp->new_cpus) ||
 	    cpumask_intersects(tmp->new_cpus, subpartitions_cpus) ||
 	    cpumask_subset(top_cpuset.effective_cpus, tmp->new_cpus))
-		return 0;
+		return PERR_INVCPUS;
 
 	spin_lock_irq(&callback_lock);
 	isolcpus_updated = partition_xcpus_add(new_prs, NULL, tmp->new_cpus);
@@ -1698,7 +1700,7 @@ static int remote_partition_enable(struct cpuset *cs, int new_prs,
 	 */
 	update_tasks_cpumask(&top_cpuset, tmp->new_cpus);
 	update_sibling_cpumasks(&top_cpuset, NULL, tmp);
-	return 1;
+	return 0;
 }
 
 /*
@@ -3151,24 +3153,26 @@ static int update_prstate(struct cpuset *cs, int new_prs)
 		goto out;
 
 	if (!old_prs) {
-		enum partition_cmd cmd = (new_prs == PRS_ROOT)
-				       ? partcmd_enable : partcmd_enablei;
-
 		/*
-		 * cpus_allowed and exclusive_cpus cannot be both empty.
-		 */
-		if (xcpus_empty(cs)) {
-			err = PERR_CPUSEMPTY;
-			goto out;
+		* If parent is valid partition, enable local partiion.
+		* Otherwise, enable a remote partition.
+		*/
+		if (is_partition_valid(parent)) {
+			enum partition_cmd cmd = (new_prs == PRS_ROOT)
+					       ? partcmd_enable : partcmd_enablei;
+
+			/*
+			 * cpus_allowed and exclusive_cpus cannot be both empty.
+			 */
+			if (xcpus_empty(cs)) {
+				err = PERR_CPUSEMPTY;
+				goto out;
+			}
+
+			err = update_parent_effective_cpumask(cs, cmd, NULL, &tmpmask);
+		} else {
+			err = remote_partition_enable(cs, new_prs, &tmpmask);
 		}
-
-		err = update_parent_effective_cpumask(cs, cmd, NULL, &tmpmask);
-		/*
-		 * If an attempt to become local partition root fails,
-		 * try to become a remote partition root instead.
-		 */
-		if (err && remote_partition_enable(cs, new_prs, &tmpmask))
-			err = 0;
 	} else if (old_prs && new_prs) {
 		/*
 		 * A change in load balance state only, no change in cpumasks.
