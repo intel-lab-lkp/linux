@@ -9,7 +9,7 @@
 
 void intel_gt_apply_ccs_mode(struct intel_gt *gt, u32 mode)
 {
-	unsigned long cslices_mask = gt->ccs.cslices;
+	unsigned long cslices_mask = CCS_MASK(gt);
 	u32 mode_val = 0;
 	u32 m = mode;
 	int ccs_id;
