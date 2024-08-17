@@ -5,7 +5,7 @@
 pkgbase=${PACMAN_PKGBASE:-linux-upstream}
 pkgname=("${pkgbase}")
 
-_extrapackages=${PACMAN_EXTRAPACKAGES-headers api-headers}
+_extrapackages=${PACMAN_EXTRAPACKAGES-headers api-headers debug}
 for pkg in $_extrapackages; do
 	pkgname+=("${pkgbase}-${pkg}")
 done
@@ -104,6 +104,15 @@ _package-api-headers() {
 	cd "${objtree}"
 
 	${MAKE} headers_install INSTALL_HDR_PATH="${pkgdir}/usr"
+}
+
+_package-debug(){
+	pkgdesc="Non-stripped vmlinux file for the ${pkgdesc} kernel"
+	depends=(${pkgbase}-headers)
+
+	cd "${objtree}"
+	mkdir -p "$pkgdir/usr/src/debug/${pkgbase}"
+	install -Dt "$pkgdir/usr/src/debug/${pkgbase}" -m644 vmlinux
 }
 
 for _p in "${pkgname[@]}"; do
