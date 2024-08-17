@@ -2730,7 +2730,7 @@ static void ccs_engine_wa_mode(struct intel_engine_cs *engine, struct i915_wa_li
 	 * assign all slices to a single CCS. We will call it CCS mode 1
 	 */
 	mutex_lock(&gt->ccs.mutex);
-	intel_gt_apply_ccs_mode(gt);
+	intel_gt_apply_ccs_mode(gt, 0);
 	wa_masked_en(wal, XEHP_CCS_MODE, gt->ccs.mode_reg_val);
 	mutex_unlock(&gt->ccs.mutex);
 }
