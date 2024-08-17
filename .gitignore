@@ -176,4 +176,4 @@ x509.genkey
 sphinx_*/
 
 # Rust analyzer configuration
-/rust-project.json
+/.rust-project.json

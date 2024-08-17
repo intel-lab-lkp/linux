@@ -1483,7 +1483,7 @@ endif # CONFIG_MODULES
 CLEAN_FILES += vmlinux.symvers modules-only.symvers \
 	       modules.builtin modules.builtin.modinfo modules.nsdeps \
 	       compile_commands.json rust/test \
-	       rust-project.json .vmlinux.objs .vmlinux.export.c
+	       .rust-project.json .vmlinux.objs .vmlinux.export.c
 
 # Directories & files removed with 'make mrproper'
 MRPROPER_FILES += include/config include/generated          \
@@ -1621,7 +1621,7 @@ help:
 	@echo  '		    (requires kernel .config)'
 	@echo  '  rusttest        - Runs the Rust tests'
 	@echo  '                    (requires kernel .config; downloads external repos)'
-	@echo  '  rust-analyzer	  - Generate rust-project.json rust-analyzer support file'
+	@echo  '  rust-analyzer	  - Generate .rust-project.json rust-analyzer support file'
 	@echo  '		    (requires kernel .config)'
 	@echo  '  dir/file.[os]   - Build specified target only'
 	@echo  '  dir/file.rsi    - Build macro expanded source, similar to C preprocessing.'
@@ -1809,7 +1809,7 @@ help:
 	@echo  '  modules         - default target, build the module(s)'
 	@echo  '  modules_install - install the module'
 	@echo  '  clean           - remove generated files in module directory only'
-	@echo  '  rust-analyzer	  - generate rust-project.json rust-analyzer support file'
+	@echo  '  rust-analyzer	  - generate .rust-project.json rust-analyzer support file'
 	@echo  ''
 
 ifndef CONFIG_MODULES
@@ -1958,7 +1958,7 @@ quiet_cmd_tags = GEN     $@
 tags TAGS cscope gtags: FORCE
 	$(call cmd,tags)
 
-# Generate rust-project.json (a file that describes the structure of non-Cargo
+# Generate .rust-project.json (a file that describes the structure of non-Cargo
 # Rust projects) for rust-analyzer (an implementation of the Language Server
 # Protocol).
 PHONY += rust-analyzer
