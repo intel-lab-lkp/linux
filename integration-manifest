@@ -1,0 +1,28 @@
+drm drm-fixes fee9d135e2fd5963a7f466cd1ef2060731a1ab29
+	Merge tag 'mediatek-drm-fixes-20240805' of https://git.kernel.org/pub/scm/linux/kernel/git/chunkuang.hu/linux into drm-fixes
+drm-misc drm-misc-fixes 9b340aeb26d50e9a9ec99599e2a39b035fac978e
+	nouveau/firmware: use dma non-coherent allocator
+drm-intel drm-intel-fixes 7c626ce4bae1ac14f60076d00eafe71af30450ba
+	Linux 6.11-rc3
+drm-xe drm-xe-fixes f002702290fccbd473f5bb94e52f25c96917fff2
+	drm/xe: Hold a PM ref when GT TLB invalidations are inflight
+drm drm-next a809b92ee0f84c3f655b16a8b4d04bc3665d954a
+	Merge tag 'drm-intel-next-2024-08-13' of https://gitlab.freedesktop.org/drm/i915/kernel into drm-next
+drm-misc drm-misc-next-fixes 291e4baf70019f17a81b7b47aeb186b27d222159
+	kselftests: dmabuf-heaps: Ensure the driver name is null-terminated
+drm-intel drm-intel-next-fixes 8400291e289ee6b2bf9779ff1c83a291501f017b
+	Linux 6.11-rc1
+drm-xe drm-xe-next-fixes a4172af3040cdc207f1b60efffcdd219156093c9
+	Merge tag 'drm-xe-next-2024-07-30' of https://gitlab.freedesktop.org/drm/xe/kernel into drm-next
+drm-misc drm-misc-next 3e828c670b0ac8a9564c69f5c5ecf637b22a58d6
+	MAINTAINERS: qaic: Drop Pranjal as reviewer
+drm-intel drm-intel-next fbc64aafc99baabe4d4e4d5a58d6113aad7909c7
+	drm/i915: make intel_display_power_domain_str() static
+drm-intel drm-intel-gt-next 0523374e303051c94457df9170f12a752d8b09cf
+	drm/i915/gt: remove stray declaration of intel_gt_release_all()
+drm-xe drm-xe-next 852856e3b6f679c694dd5ec41e5a3c11aa46640b
+	drm/xe: Use reserved copy engine for user binds on faulting devices
+drm-intel topic/core-for-CI 9d38844bfb1250e3616ac488f9b99fa8bd335480
+	usb: typec: ucsi: Fix a potential deadlock in ucsi_send_command_common()
+drm-xe topic/xe-for-CI 1ec484590947f43be963899f7885d9b92bd26f07
+	drm/xe/guc: Pre-release GuC firmware v70.29.2 for PVC
