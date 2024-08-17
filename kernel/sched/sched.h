@@ -3584,6 +3584,7 @@ extern u64 avg_vruntime(struct cfs_rq *cfs_rq);
 extern int entity_eligible(struct cfs_rq *cfs_rq, struct sched_entity *se);
 
 int rq_iowait(struct rq *rq);
+int rq_iowait_acct(struct rq *rq);
 
 #ifdef CONFIG_RT_MUTEXES
 

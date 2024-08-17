@@ -3541,30 +3541,47 @@ static inline bool rq_has_pinned_tasks(struct rq *rq)
 
 #endif /* !CONFIG_SMP */
 
+/*
+ * Store iowait and iowait_acct state in the same variable. The lower bits
+ * hold the iowait state, and the upper bits hold the iowait_acct state.
+ */
 static void task_iowait_inc(struct task_struct *p)
 {
 #ifdef CONFIG_64BIT
-	atomic_long_inc(&task_rq(p)->nr_iowait);
+	long val = 1 + ((long) p->in_iowait_acct << 32);
+	atomic_long_add(val, &task_rq(p)->nr_iowait);
 #else
-	atomic_inc(&task_rq(p)->nr_iowait);
+	int val = 1 + ((int) p->in_iowait_acct << 16);
+	atomic_add(val, &task_rq(p)->nr_iowait);
 #endif
 }
 
 static void task_iowait_dec(struct task_struct *p)
 {
 #ifdef CONFIG_64BIT
-	atomic_long_dec(&task_rq(p)->nr_iowait);
+	long val = 1 + ((long) p->in_iowait_acct << 32);
+	atomic_long_sub(val, &task_rq(p)->nr_iowait);
 #else
-	atomic_dec(&task_rq(p)->nr_iowait);
+	int val = 1 + ((int) p->in_iowait_acct << 16);
+	atomic_sub(val, &task_rq(p)->nr_iowait);
 #endif
 }
 
 int rq_iowait(struct rq *rq)
 {
 #ifdef CONFIG_64BIT
-	return atomic_long_read(&rq->nr_iowait);
+	return atomic_long_read(&rq->nr_iowait) & ((1UL << 32) - 1);
 #else
-	return atomic_read(&rq->nr_iowait);
+	return atomic_read(&rq->nr_iowait) & ((1U << 16) - 1);
+#endif
+}
+
+int rq_iowait_acct(struct rq *rq)
+{
+#ifdef CONFIG_64BIT
+	return atomic_long_read(&rq->nr_iowait) >> 32;
+#else
+	return atomic_read(&rq->nr_iowait) >> 16;
 #endif
 }
 
@@ -5307,7 +5324,12 @@ unsigned long long nr_context_switches(void)
  * it does become runnable.
  */
 
-unsigned int nr_iowait_cpu(int cpu)
+unsigned int nr_iowait_acct_cpu(int cpu)
+{
+	return rq_iowait_acct(cpu_rq(cpu));
+}
+
+unsigned nr_iowait_cpu(int cpu)
 {
 	return rq_iowait(cpu_rq(cpu));
 }
@@ -5342,12 +5364,12 @@ unsigned int nr_iowait_cpu(int cpu)
  * Task CPU affinities can make all that even more 'interesting'.
  */
 
-unsigned int nr_iowait(void)
+unsigned int nr_iowait_acct(void)
 {
 	unsigned int i, sum = 0;
 
 	for_each_possible_cpu(i)
-		sum += nr_iowait_cpu(i);
+		sum += nr_iowait_acct_cpu(i);
 
 	return sum;
 }
@@ -7427,18 +7449,32 @@ static inline void preempt_dynamic_init(void) { }
 
 #endif /* CONFIG_PREEMPT_DYNAMIC */
 
+/*
+ * Returns a token which is comprised of the two bits of iowait wait state -
+ * one is whether we're making ourselves as in iowait for cpufreq reasons,
+ * and the other is if the task should be accounted as such.
+ */
 long io_schedule_prepare(void)
 {
-	long old_iowait = current->in_iowait;
-
+#ifdef CONFIG_64BIT
+	long token = current->in_iowait + ((long) current->in_iowait_acct << 32);
+#else
+	int token = current->in_iowait + (current->in_iowait_acct << 16);
+#endif
 	current->in_iowait = 1;
+	current->in_iowait_acct = 1;
 	blk_flush_plug(current->plug, true);
-	return old_iowait;
+	return token;
 }
 
 void io_schedule_finish(long token)
 {
-	current->in_iowait = token;
+	current->in_iowait = token & 0x01;
+#ifdef CONFIG_64BIT
+	current->in_iowait_acct = token >> 32;
+#else
+	current->in_iowait_acct = token >> 16;
+#endif
 }
 
 /*
