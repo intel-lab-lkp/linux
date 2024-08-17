@@ -97,12 +97,17 @@ static const char * const dw9768_supply_names[] = {
 	"vdd",	/* Digital core power */
 };
 
+struct dw9768_vcm_data {
+	bool pd_mode_ctrl;
+};
+
 /* dw9768 device structure */
 struct dw9768 {
 	struct regulator_bulk_data supplies[ARRAY_SIZE(dw9768_supply_names)];
 	struct v4l2_ctrl_handler ctrls;
 	struct v4l2_ctrl *focus;
 	struct v4l2_subdev sd;
+	const struct dw9768_vcm_data *data;
 
 	u32 aac_mode;
 	u32 aac_timing;
@@ -221,18 +226,20 @@ static int dw9768_init(struct dw9768 *dw9768)
 	struct i2c_client *client = v4l2_get_subdevdata(&dw9768->sd);
 	int ret, val;
 
-	/* Reset DW9768_RING_PD_CONTROL_REG to default status 0x00 */
-	ret = i2c_smbus_write_byte_data(client, DW9768_RING_PD_CONTROL_REG,
-					DW9768_PD_MODE_OFF);
-	if (ret < 0)
-		return ret;
+	if (dw9768->data->pd_mode_ctrl) {
+		/* Reset DW9768_RING_PD_CONTROL_REG to default status 0x00 */
+		ret = i2c_smbus_write_byte_data(client,
+						DW9768_RING_PD_CONTROL_REG,
+						DW9768_PD_MODE_OFF);
+		if (ret < 0)
+			return ret;
 
-	/*
-	 * DW9769 requires waiting delay time of t_OPR
-	 * after PD reset takes place.
-	 */
-	usleep_range(DW9768_T_OPR_US, DW9768_T_OPR_US + 100);
-
+		/*
+		 * DW9769 requires waiting delay time of t_OPR
+		 * after PD reset takes place.
+		 */
+		usleep_range(DW9768_T_OPR_US, DW9768_T_OPR_US + 100);
+	}
 	/* Set DW9768_RING_PD_CONTROL_REG to DW9768_AAC_MODE_EN(0x01) */
 	ret = i2c_smbus_write_byte_data(client, DW9768_RING_PD_CONTROL_REG,
 					DW9768_AAC_MODE_EN);
@@ -294,17 +301,19 @@ static int dw9768_release(struct dw9768 *dw9768)
 			     dw9768->move_delay_us + 1000);
 	}
 
-	ret = i2c_smbus_write_byte_data(client, DW9768_RING_PD_CONTROL_REG,
-					DW9768_PD_MODE_EN);
-	if (ret < 0)
-		return ret;
+	if (dw9768->data->pd_mode_ctrl) {
+		ret = i2c_smbus_write_byte_data(client,
+						DW9768_RING_PD_CONTROL_REG,
+						DW9768_PD_MODE_EN);
+		if (ret < 0)
+			return ret;
 
-	/*
-	 * DW9769 requires waiting delay time of t_OPR
-	 * after PD reset takes place.
-	 */
-	usleep_range(DW9768_T_OPR_US, DW9768_T_OPR_US + 100);
-
+		/*
+		 * DW9769 requires waiting delay time of t_OPR
+		 * after PD reset takes place.
+		 */
+		usleep_range(DW9768_T_OPR_US, DW9768_T_OPR_US + 100);
+	}
 	return 0;
 }
 
@@ -440,6 +449,8 @@ static int dw9768_probe(struct i2c_client *client)
 						      dw9768->clock_presc,
 						      dw9768->aac_timing);
 
+	dw9768->data = device_get_match_data(dev);
+
 	for (i = 0; i < ARRAY_SIZE(dw9768_supply_names); i++)
 		dw9768->supplies[i].supply = dw9768_supply_names[i];
 
@@ -525,9 +536,17 @@ static void dw9768_remove(struct i2c_client *client)
 	pm_runtime_disable(dev);
 }
 
+static const struct dw9768_vcm_data dw9768_data = {
+	.pd_mode_ctrl = true,
+};
+
+static const struct dw9768_vcm_data gt9769_data = {
+	.pd_mode_ctrl = false,
+};
+
 static const struct of_device_id dw9768_of_table[] = {
-	{ .compatible = "dongwoon,dw9768" },
-	{ .compatible = "giantec,gt9769" },
+	{ .compatible = "dongwoon,dw9768", .data = &dw9768_data },
+	{ .compatible = "giantec,gt9769", .data = &gt9769_data },
 	{}
 };
 MODULE_DEVICE_TABLE(of, dw9768_of_table);
