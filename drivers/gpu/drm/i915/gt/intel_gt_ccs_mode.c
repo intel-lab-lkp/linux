@@ -5,6 +5,7 @@
 
 #include "i915_drv.h"
 #include "intel_gt_ccs_mode.h"
+#include "intel_gt_pm.h"
 #include "intel_gt_print.h"
 #include "intel_gt_regs.h"
 #include "intel_gt_sysfs.h"
@@ -206,6 +207,68 @@ static ssize_t num_cslices_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(num_cslices);
 
+static ssize_t ccs_mode_show(struct device *dev,
+			     struct device_attribute *attr, char *buff)
+{
+	struct intel_gt *gt = kobj_to_gt(&dev->kobj);
+	u32 ccs_mode;
+
+	ccs_mode = hweight32(gt->ccs.ccs_mask);
+
+	return sysfs_emit(buff, "%u\n", ccs_mode);
+}
+
+static ssize_t ccs_mode_store(struct device *dev,
+			      struct device_attribute *attr,
+			      const char *buff, size_t count)
+{
+	struct intel_gt *gt = kobj_to_gt(&dev->kobj);
+	int num_cslices = hweight32(CCS_MASK(gt));
+	int ccs_mode = hweight32(gt->ccs.ccs_mask);
+	ssize_t ret;
+	u32 val;
+
+	ret = kstrtou32(buff, 0, &val);
+	if (ret)
+		return ret;
+
+	/*
+	 * As of now possible values to be set are 1, 2, 4,
+	 * up to the maximum number of available slices
+	 */
+	if ((!val) || (val > num_cslices) || (num_cslices % val))
+		return -EINVAL;
+
+	/*
+	 * We don't want to change the CCS
+	 * mode while someone is using the GT
+	 */
+	if (intel_gt_pm_is_awake(gt))
+		return -EBUSY;
+
+	mutex_lock(&gt->wakeref.mutex);
+	mutex_lock(&gt->ccs.mutex);
+
+	/*
+	 * Nothing to do if the requested setting
+	 * is the same as the current one
+	 */
+	if (val == ccs_mode)
+		return count;
+	else if (val > ccs_mode)
+		add_uabi_ccs_engines(gt, val);
+	else
+		remove_uabi_ccs_engines(gt, val);
+
+	intel_gt_apply_ccs_mode(gt, val);
+
+	mutex_unlock(&gt->ccs.mutex);
+	mutex_unlock(&gt->wakeref.mutex);
+
+	return count;
+}
+static DEVICE_ATTR_RW(ccs_mode);
+
 void intel_gt_sysfs_ccs_init(struct intel_gt *gt)
 {
 	int err;
@@ -213,4 +276,15 @@ void intel_gt_sysfs_ccs_init(struct intel_gt *gt)
 	err = sysfs_create_file(&gt->sysfs_gt, &dev_attr_num_cslices.attr);
 	if (err)
 		gt_dbg(gt, "failed to create sysfs num_cslices files\n");
+
+	/*
+	 * Do not create the ccs_mode file for non DG2 platforms
+	 * because they don't need it as they have only one CCS engine
+	 */
+	if (!IS_DG2(gt->i915))
+		return;
+
+	err = sysfs_create_file(&gt->sysfs_gt, &dev_attr_ccs_mode.attr);
+	if (err)
+		gt_dbg(gt, "failed to create sysfs ccs_mode files\n");
 }
