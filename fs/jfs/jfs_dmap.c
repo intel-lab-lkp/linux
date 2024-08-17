@@ -1647,7 +1647,9 @@ s64 dbDiscardAG(struct inode *ip, int agno, s64 minlen)
 		 * call jfs_issue_discard() itself */
 		if (!(JFS_SBI(sb)->flag & JFS_DISCARD))
 			jfs_issue_discard(ip, tt->blkno, tt->nblocks);
+		down_read(&sb->s_umount);
 		dbFree(ip, tt->blkno, tt->nblocks);
+		up_read(&sb->s_umount);
 		trimmed += tt->nblocks;
 	}
 	kfree(totrim);
