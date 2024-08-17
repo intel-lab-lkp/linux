@@ -398,7 +398,7 @@ extern int pmdp_clear_flush_young(struct vm_area_struct *vma,
 #else
 /*
  * Despite relevant to THP only, this API is called from generic rmap code
- * under PageTransHuge(), hence needs a dummy implementation for !THP
+ * under THP, hence needs a dummy implementation for !THP
  */
 static inline int pmdp_clear_flush_young(struct vm_area_struct *vma,
 					 unsigned long address, pmd_t *pmdp)
