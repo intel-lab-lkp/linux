@@ -1038,7 +1038,7 @@ void drm_sched_wakeup(struct drm_gpu_scheduler *sched,
 static struct drm_sched_entity *
 drm_sched_select_entity(struct drm_gpu_scheduler *sched)
 {
-	struct drm_sched_entity *entity;
+	struct drm_sched_entity *entity = NULL;
 	int i;
 
 	/* Start with the highest priority.
