@@ -1454,7 +1454,7 @@ static void collect_mm_slot(struct khugepaged_mm_slot *mm_slot)
 #ifdef CONFIG_SHMEM
 /* hpage must be locked, and mmap_lock must be held */
 static int set_huge_pmd(struct vm_area_struct *vma, unsigned long addr,
-			pmd_t *pmdp, struct page *hpage)
+			pmd_t *pmdp, struct folio *folio)
 {
 	struct vm_fault vmf = {
 		.vma = vma,
@@ -1463,13 +1463,12 @@ static int set_huge_pmd(struct vm_area_struct *vma, unsigned long addr,
 		.pmd = pmdp,
 	};
 
-	VM_BUG_ON(!PageTransHuge(hpage));
 	mmap_assert_locked(vma->vm_mm);
 
-	if (do_set_pmd(&vmf, hpage))
+	if (do_set_pmd(&vmf, &folio->page))
 		return SCAN_FAIL;
 
-	get_page(hpage);
+	folio_get(folio);
 	return SCAN_SUCCEED;
 }
 
@@ -1669,8 +1668,7 @@ int collapse_pte_mapped_thp(struct mm_struct *mm, unsigned long addr,
 maybe_install_pmd:
 	/* step 5: install pmd entry */
 	result = install_pmd
-			? set_huge_pmd(vma, haddr, pmd, &folio->page)
-			: SCAN_SUCCEED;
+			? set_huge_pmd(vma, haddr, pmd, folio) : SCAN_SUCCEED;
 	goto drop_folio;
 abort:
 	if (nr_ptes) {
