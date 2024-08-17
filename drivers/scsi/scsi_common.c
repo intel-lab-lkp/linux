@@ -17,7 +17,7 @@ MODULE_LICENSE("GPL v2");
 
 /* Command group 3 is reserved and should never be used.  */
 const unsigned char scsi_command_size_tbl[8] = {
-	6, 10, 10, 12, 16, 12, 10, 10
+	6, 10, 10, 12, 16, 12, 6, 6
 };
 EXPORT_SYMBOL(scsi_command_size_tbl);
 
