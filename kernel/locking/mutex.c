@@ -830,7 +830,7 @@ EXPORT_SYMBOL_GPL(mutex_lock_interruptible_nested);
 void __sched
 mutex_lock_io_nested(struct mutex *lock, unsigned int subclass)
 {
-	int token;
+	long token;
 
 	might_sleep();
 
@@ -1026,7 +1026,7 @@ EXPORT_SYMBOL(mutex_lock_killable);
  */
 void __sched mutex_lock_io(struct mutex *lock)
 {
-	int token;
+	long token;
 
 	token = io_schedule_prepare();
 	mutex_lock(lock);

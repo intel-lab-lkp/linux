@@ -1884,7 +1884,7 @@ static void blkcg_maybe_throttle_blkg(struct blkcg_gq *blkg, bool use_memdelay)
 	u64 now = blk_time_get_ns();
 	u64 exp;
 	u64 delay_nsec = 0;
-	int tok;
+	long tok;
 
 	while (blkg->parent) {
 		int use_delay = atomic_read(&blkg->use_delay);
