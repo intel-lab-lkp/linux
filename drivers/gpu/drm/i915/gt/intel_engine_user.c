@@ -207,6 +207,7 @@ void intel_engines_driver_register(struct drm_i915_private *i915)
 	struct legacy_ring ring = {};
 	struct list_head *it, *next;
 	struct rb_node **p, *prev;
+	u8 uabi_ccs_instance = 0;
 	LIST_HEAD(engines);
 
 	sort_engines(i915, &engines);
@@ -246,6 +247,22 @@ void intel_engines_driver_register(struct drm_i915_private *i915)
 
 		GEM_BUG_ON(uabi_class >=
 			   ARRAY_SIZE(i915->engine_uabi_class_count));
+
+		/* Fix up the mapping to match default execbuf::user_map[] */
+		add_legacy_ring(&ring, engine);
+
+		/*
+		 * Do not create the command streamer for CCS slices beyond the
+		 * first. All the workload submitted to the first engine will be
+		 * shared among all the slices.
+		 */
+		if (IS_DG2(i915) && uabi_class == I915_ENGINE_CLASS_COMPUTE) {
+			uabi_ccs_instance++;
+
+			if (uabi_ccs_instance > 1)
+				continue;
+		}
+
 		i915->engine_uabi_class_count[uabi_class]++;
 
 		rb_link_node(&engine->uabi_node, prev, p);
@@ -254,9 +271,6 @@ void intel_engines_driver_register(struct drm_i915_private *i915)
 		GEM_BUG_ON(intel_engine_lookup_user(i915,
 						    engine->uabi_class,
 						    engine->uabi_instance) != engine);
-
-		/* Fix up the mapping to match default execbuf::user_map[] */
-		add_legacy_ring(&ring, engine);
 
 		prev = &engine->uabi_node;
 		p = &prev->rb_right;
