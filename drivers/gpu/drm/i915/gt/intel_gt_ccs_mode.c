@@ -9,6 +9,23 @@
 #include "intel_gt_regs.h"
 #include "intel_gt_sysfs.h"
 
+static void update_ccs_mask(struct intel_gt *gt, u32 ccs_mode)
+{
+	unsigned long cslices_mask = CCS_MASK(gt);
+	int i;
+
+	/* Mask off all the CCS engines */
+	gt->ccs.ccs_mask = 0;
+
+	for_each_set_bit(i, &cslices_mask, I915_MAX_CCS) {
+		gt->ccs.ccs_mask |= BIT(i);
+
+		ccs_mode--;
+		if (!ccs_mode)
+			break;
+	}
+}
+
 void intel_gt_apply_ccs_mode(struct intel_gt *gt, u32 mode)
 {
 	unsigned long cslices_mask = CCS_MASK(gt);
@@ -91,6 +108,9 @@ void intel_gt_apply_ccs_mode(struct intel_gt *gt, u32 mode)
 void intel_gt_ccs_mode_init(struct intel_gt *gt)
 {
 	mutex_init(&gt->ccs.mutex);
+
+	/* Set CCS balance mode 1 in the ccs_mask */
+	update_ccs_mask(gt, 1);
 }
 
 static ssize_t num_cslices_show(struct device *dev,

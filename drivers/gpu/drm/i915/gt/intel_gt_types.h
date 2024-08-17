@@ -220,6 +220,7 @@ struct intel_gt {
 	struct {
 		struct mutex mutex;
 		u32 mode_reg_val;
+		intel_engine_mask_t ccs_mask;
 	} ccs;
 
 	/*
