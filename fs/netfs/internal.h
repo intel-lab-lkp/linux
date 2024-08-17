@@ -365,7 +365,7 @@ void fscache_create_volume(struct fscache_volume *volume, bool wait);
 #define _leave(FMT, ...) kleave(FMT, ##__VA_ARGS__)
 #define _debug(FMT, ...) kdebug(FMT, ##__VA_ARGS__)
 
-#elif defined(CONFIG_NETFS_DEBUG)
+#elif defined(CONFIG_FSCACHE_DEBUG)
 #define _enter(FMT, ...)			\
 do {						\
 	if (netfs_debug)			\
