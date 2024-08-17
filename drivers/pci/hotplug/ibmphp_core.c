@@ -663,6 +663,7 @@ static int ibm_configure_device(struct pci_func *func)
 	int num;
 	int flag = 0;	/* this is to make sure we don't double scan the bus,
 					for bridged devices primarily */
+	int ret = 0;
 
 	pci_lock_rescan_remove();
 
@@ -690,7 +691,10 @@ static int ibm_configure_device(struct pci_func *func)
 		}
 	}
 	if (!(flag) && (func->dev->hdr_type == PCI_HEADER_TYPE_BRIDGE)) {
-		pci_hp_add_bridge(func->dev);
+		ret = pci_hp_add_bridge(func->dev);
+		if (ret)
+			goto out;
+
 		child = func->dev->subordinate;
 		if (child)
 			pci_bus_add_devices(child);
@@ -698,7 +702,7 @@ static int ibm_configure_device(struct pci_func *func)
 
  out:
 	pci_unlock_rescan_remove();
-	return 0;
+	return ret;
 }
 
 /*******************************************************

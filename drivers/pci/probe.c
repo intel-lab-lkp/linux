@@ -3363,9 +3363,10 @@ int pci_hp_add_bridge(struct pci_dev *dev)
 		if (!pci_find_bus(pci_domain_nr(parent), busnr))
 			break;
 	}
+
 	if (busnr-- > end) {
 		pci_err(dev, "No bus number available for hot-added bridge\n");
-		return -1;
+		return -ENODEV;
 	}
 
 	/* Scan bridges that are already configured */
@@ -3380,8 +3381,10 @@ int pci_hp_add_bridge(struct pci_dev *dev)
 	/* Scan bridges that need to be reconfigured */
 	pci_scan_bridge_extend(parent, dev, busnr, available_buses, 1);
 
-	if (!dev->subordinate)
-		return -1;
+	if (!dev->subordinate) {
+		pci_err(dev, "No dev subordinate\n");
+		return -ENODEV;
+	}
 
 	return 0;
 }
