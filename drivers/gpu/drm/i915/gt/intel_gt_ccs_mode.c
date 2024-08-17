@@ -8,6 +8,7 @@
 #include "intel_gt_print.h"
 #include "intel_gt_regs.h"
 #include "intel_gt_sysfs.h"
+#include "sysfs_engines.h"
 
 static void update_ccs_mask(struct intel_gt *gt, u32 ccs_mode)
 {
@@ -111,6 +112,85 @@ void intel_gt_ccs_mode_init(struct intel_gt *gt)
 
 	/* Set CCS balance mode 1 in the ccs_mask */
 	update_ccs_mask(gt, 1);
+}
+
+static void add_uabi_ccs_engines(struct intel_gt *gt, u32 ccs_mode)
+{
+	struct drm_i915_private *i915 = gt->i915;
+	intel_engine_mask_t new_ccs_mask, tmp;
+	struct intel_engine_cs *engine;
+	struct rb_node **p, *prev;
+
+	/* Store the current ccs mask */
+	new_ccs_mask = gt->ccs.ccs_mask;
+	update_ccs_mask(gt, ccs_mode);
+
+	/*
+	 * Store only the mask of the CCS engines that need to be added by
+	 * removing from the new mask the engines that are already active
+	 */
+	new_ccs_mask = gt->ccs.ccs_mask & ~new_ccs_mask;
+	new_ccs_mask <<= CCS0;
+
+	/*
+	 * UABI are stored only on the right branch of the rb tree, making it
+	 * de facto a double linked list. Get to the bottom of the list and
+	 * insert there the new engines.
+	 */
+	prev = NULL;
+	p = &i915->uabi_engines.rb_node;
+	for_each_uabi_engine(engine, i915) {
+		prev = &engine->uabi_node;
+		p = &prev->rb_right;
+	}
+
+	for_each_engine_masked(engine, gt, new_ccs_mask, tmp) {
+		int err;
+
+		i915->engine_uabi_class_count[I915_ENGINE_CLASS_COMPUTE]++;
+
+		rb_link_node(&engine->uabi_node, prev, p);
+		rb_insert_color(&engine->uabi_node, &i915->uabi_engines);
+
+		rb_link_node(&engine->uabi_node, prev, p);
+		rb_insert_color(&engine->uabi_node, &i915->uabi_engines);
+
+		prev = &engine->uabi_node;
+		p = &prev->rb_right;
+
+		err = intel_engine_add_single_sysfs(engine);
+		if (err)
+			gt_warn(gt,
+				"Unable to create sysfs entries for %s engine",
+				engine->name);
+	}
+}
+
+static void remove_uabi_ccs_engines(struct intel_gt *gt, u8 ccs_mode)
+{
+	struct drm_i915_private *i915 = gt->i915;
+	intel_engine_mask_t new_ccs_mask, tmp;
+	struct intel_engine_cs *engine;
+
+	/* Store the current ccs mask */
+	new_ccs_mask = gt->ccs.ccs_mask;
+	update_ccs_mask(gt, ccs_mode);
+
+	/*
+	 * Store only the mask of the CCS engines that need to be removed by
+	 * unmasking them from the new mask the engines that are already active
+	 */
+	new_ccs_mask = new_ccs_mask & ~gt->ccs.ccs_mask;
+	new_ccs_mask <<= CCS0;
+
+	for_each_engine_masked(engine, gt, new_ccs_mask, tmp) {
+		i915->engine_uabi_class_count[I915_ENGINE_CLASS_COMPUTE]--;
+
+		rb_erase(&engine->uabi_node, &i915->uabi_engines);
+		/* Remove sysfs entries */
+		kobject_put(engine->kobj_defaults);
+		kobject_put(engine->kobj);
+	}
 }
 
 static ssize_t num_cslices_show(struct device *dev,
