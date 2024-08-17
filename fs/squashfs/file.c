@@ -378,13 +378,13 @@ void squashfs_fill_page(struct page *page, struct squashfs_cache_entry *buffer, 
 }
 
 /* Copy data into page cache  */
-void squashfs_copy_cache(struct page *page, struct squashfs_cache_entry *buffer,
+void squashfs_copy_cache(struct folio *folio, struct squashfs_cache_entry *buffer,
 	int bytes, int offset)
 {
-	struct inode *inode = page->mapping->host;
+	struct inode *inode = folio_inode(folio);
 	struct squashfs_sb_info *msblk = inode->i_sb->s_fs_info;
 	int i, mask = (1 << (msblk->block_log - PAGE_SHIFT)) - 1;
-	int start_index = page->index & ~mask, end_index = start_index | mask;
+	int start_index = folio->index & ~mask, end_index = start_index | mask;
 
 	/*
 	 * Loop copying datablock into pages.  As the datablock likely covers
@@ -394,25 +394,26 @@ void squashfs_copy_cache(struct page *page, struct squashfs_cache_entry *buffer,
 	 */
 	for (i = start_index; i <= end_index && bytes > 0; i++,
 			bytes -= PAGE_SIZE, offset += PAGE_SIZE) {
-		struct page *push_page;
+		struct folio *push_folio;
 		int avail = buffer ? min_t(int, bytes, PAGE_SIZE) : 0;
 
 		TRACE("bytes %d, i %d, available_bytes %d\n", bytes, i, avail);
 
-		push_page = (i == page->index) ? page :
-			grab_cache_page_nowait(page->mapping, i);
-
-		if (!push_page)
+		push_folio = (i == folio->index) ? folio :
+			__filemap_get_folio(folio->mapping, i,
+					    FGP_LOCK|FGP_CREAT|FGP_NOFS|FGP_NOWAIT,
+					    mapping_gfp_mask(folio->mapping));
+		if (IS_ERR(push_folio))
 			continue;
 
-		if (PageUptodate(push_page))
+		if (folio_test_uptodate(push_folio))
 			goto skip_page;
 
-		squashfs_fill_page(push_page, buffer, offset, avail);
+		squashfs_fill_page(folio_file_page(push_folio, i), buffer, offset, avail);
 skip_page:
-		unlock_page(push_page);
-		if (i != page->index)
-			put_page(push_page);
+		folio_unlock(push_folio);
+		if (i != folio->index)
+			folio_put(push_folio);
 	}
 }
 
@@ -430,7 +431,7 @@ static int squashfs_readpage_fragment(struct page *page, int expected)
 			squashfs_i(inode)->fragment_block,
 			squashfs_i(inode)->fragment_size);
 	else
-		squashfs_copy_cache(page, buffer, expected,
+		squashfs_copy_cache(page_folio(page), buffer, expected,
 			squashfs_i(inode)->fragment_offset);
 
 	squashfs_cache_put(buffer);
@@ -439,7 +440,7 @@ static int squashfs_readpage_fragment(struct page *page, int expected)
 
 static int squashfs_readpage_sparse(struct page *page, int expected)
 {
-	squashfs_copy_cache(page, NULL, expected, 0);
+	squashfs_copy_cache(page_folio(page), NULL, expected, 0);
 	return 0;
 }
 

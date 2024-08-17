@@ -68,7 +68,7 @@ extern __le64 *squashfs_read_fragment_index_table(struct super_block *,
 
 /* file.c */
 void squashfs_fill_page(struct page *, struct squashfs_cache_entry *, int, int);
-void squashfs_copy_cache(struct page *, struct squashfs_cache_entry *, int,
+void squashfs_copy_cache(struct folio *, struct squashfs_cache_entry *, int,
 				int);
 
 /* file_xxx.c */
