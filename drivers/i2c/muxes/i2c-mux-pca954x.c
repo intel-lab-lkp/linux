@@ -316,6 +316,22 @@ static u8 pca954x_regval(struct pca954x *data, u8 chan)
 		return 1 << chan;
 }
 
+static void pca954x_reset_deassert(struct pca954x *data)
+{
+	if (data->reset_cont)
+		reset_control_deassert(data->reset_cont);
+	else
+		gpiod_set_value_cansleep(data->reset_gpio, 0);
+}
+
+static void pca954x_reset_assert(struct pca954x *data)
+{
+	if (data->reset_cont)
+		reset_control_assert(data->reset_cont);
+	else
+		gpiod_set_value_cansleep(data->reset_gpio, 1);
+}
+
 static int pca954x_select_chan(struct i2c_mux_core *muxc, u32 chan)
 {
 	struct pca954x *data = i2c_mux_priv(muxc);
@@ -328,6 +344,12 @@ static int pca954x_select_chan(struct i2c_mux_core *muxc, u32 chan)
 	if (data->last_chan != regval) {
 		ret = pca954x_reg_write(muxc->parent, client, regval);
 		data->last_chan = ret < 0 ? 0 : regval;
+	}
+	if (ret == -ETIMEDOUT && (data->reset_cont || data->reset_gpio)) {
+		dev_warn(&client->dev, "channel select failed, resetting...\n");
+		pca954x_reset_assert(data);
+		udelay(1);
+		pca954x_reset_deassert(data);
 	}
 
 	return ret;
@@ -541,14 +563,6 @@ static int pca954x_get_reset(struct device *dev, struct pca954x *data)
 	}
 
 	return 0;
-}
-
-static void pca954x_reset_deassert(struct pca954x *data)
-{
-	if (data->reset_cont)
-		reset_control_deassert(data->reset_cont);
-	else
-		gpiod_set_value_cansleep(data->reset_gpio, 0);
 }
 
 /*
