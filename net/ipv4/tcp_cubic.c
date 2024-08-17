@@ -304,7 +304,7 @@ static inline void bictcp_update(struct bictcp *ca, u32 cwnd, u32 acked)
 tcp_friendliness:
 	/* TCP Friendly */
 	if (tcp_friendliness) {
-		u32 scale = beta_scale;
+		u32 scale = beta_scale, tcp_cwnd_next_rtt;
 
 		if (cwnd < ca->cwnd_prior)
 			delta = (cwnd * scale) >> 3;	/* CUBIC additive increment */
@@ -315,8 +315,11 @@ tcp_friendliness:
 			ca->tcp_cwnd++;
 		}
 
-		if (ca->tcp_cwnd > cwnd) {	/* if bic is slower than tcp */
-			delta = ca->tcp_cwnd - cwnd;
+		/* Reno cwnd one RTT in the future */
+		tcp_cwnd_next_rtt = ca->tcp_cwnd + (ca->ack_cnt + cwnd) / delta;
+
+		if (tcp_cwnd_next_rtt > cwnd) {  /* if bic is slower than Reno */
+			delta = tcp_cwnd_next_rtt - cwnd;
 			max_cnt = cwnd / delta;
 			if (ca->cnt > max_cnt)
 				ca->cnt = max_cnt;
