@@ -218,8 +218,12 @@ static inline void bictcp_update(struct bictcp *ca, u32 cwnd, u32 acked)
 
 	ca->ack_cnt += acked;	/* count the number of ACKed packets */
 
+	/* Update 32 times per second if RTT > 1/32 second,
+	 * or every RTT if RTT < 1/32 second even when last_cwnd == cwnd
+	 */
 	if (ca->last_cwnd == cwnd &&
-	    (s32)(tcp_jiffies32 - ca->last_time) <= HZ / 32)
+	    (s32)(tcp_jiffies32 - ca->last_time) <=
+	    min_t(s32, HZ / 32, usecs_to_jiffies(ca->delay_min)))
 		return;
 
 	/* The CUBIC function can update ca->cnt at most once per jiffy.
