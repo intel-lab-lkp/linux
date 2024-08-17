@@ -1823,6 +1823,11 @@ static int sd_sync_cache(struct scsi_disk *sdkp)
 			    (sshdr.asc == 0x74 && sshdr.ascq == 0x71))	/* drive is password locked */
 				/* this is no error here */
 				return 0;
+
+			/* retry if format in progress */
+			if (sshdr.asc == 0x4 && sshdr.ascq == 0x4)
+				return -EBUSY;
+
 			/*
 			 * This drive doesn't support sync and there's not much
 			 * we can do because this is called during shutdown
