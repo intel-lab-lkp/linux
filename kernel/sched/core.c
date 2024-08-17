@@ -3541,6 +3541,21 @@ static inline bool rq_has_pinned_tasks(struct rq *rq)
 
 #endif /* !CONFIG_SMP */
 
+static void task_iowait_inc(struct task_struct *p)
+{
+	atomic_inc(&task_rq(p)->nr_iowait);
+}
+
+static void task_iowait_dec(struct task_struct *p)
+{
+	atomic_dec(&task_rq(p)->nr_iowait);
+}
+
+int rq_iowait(struct rq *rq)
+{
+	return atomic_read(&rq->nr_iowait);
+}
+
 static void
 ttwu_stat(struct task_struct *p, int cpu, int wake_flags)
 {
@@ -3607,7 +3622,7 @@ ttwu_do_activate(struct rq *rq, struct task_struct *p, int wake_flags,
 #endif
 	if (p->in_iowait) {
 		delayacct_blkio_end(p);
-		atomic_dec(&task_rq(p)->nr_iowait);
+		task_iowait_dec(p);
 	}
 
 	activate_task(rq, p, en_flags);
@@ -4184,7 +4199,7 @@ int try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 		if (task_cpu(p) != cpu) {
 			if (p->in_iowait) {
 				delayacct_blkio_end(p);
-				atomic_dec(&task_rq(p)->nr_iowait);
+				task_iowait_dec(p);
 			}
 
 			wake_flags |= WF_MIGRATED;
@@ -5282,7 +5297,7 @@ unsigned long long nr_context_switches(void)
 
 unsigned int nr_iowait_cpu(int cpu)
 {
-	return atomic_read(&cpu_rq(cpu)->nr_iowait);
+	return rq_iowait(cpu_rq(cpu));
 }
 
 /*
@@ -6512,7 +6527,7 @@ static void __sched notrace __schedule(unsigned int sched_mode)
 			deactivate_task(rq, prev, DEQUEUE_SLEEP | DEQUEUE_NOCLOCK);
 
 			if (prev->in_iowait) {
-				atomic_inc(&rq->nr_iowait);
+				task_iowait_inc(prev);
 				delayacct_blkio_start();
 			}
 		}
