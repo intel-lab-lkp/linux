@@ -7512,4 +7512,12 @@ struct bpf_iter_num {
 	__u64 __opaque[1];
 } __attribute__((aligned(8)));
 
+/*
+ * Flags to control bpf_copy_from_user_str() behaviour.
+ *     - BPF_F_PAD_ZEROS: Memset 0 the entire destination buffer on success
+ */
+enum {
+	BPF_F_PAD_ZEROS = (1ULL << 0)
+};
+
 #endif /* _UAPI__LINUX_BPF_H__ */
