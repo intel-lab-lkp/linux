@@ -68,6 +68,9 @@ struct pmic_glink_ucsi {
 
 	struct work_struct notify_work;
 	struct work_struct register_work;
+	spinlock_t state_lock;
+	unsigned int pdr_state;
+	unsigned int new_pdr_state;
 
 	u8 read_buf[UCSI_BUF_SIZE];
 };
@@ -244,8 +247,22 @@ static void pmic_glink_ucsi_notify(struct work_struct *work)
 static void pmic_glink_ucsi_register(struct work_struct *work)
 {
 	struct pmic_glink_ucsi *ucsi = container_of(work, struct pmic_glink_ucsi, register_work);
+	unsigned long flags;
+	unsigned int new_state;
 
-	ucsi_register(ucsi->ucsi);
+	spin_lock_irqsave(&ucsi->state_lock, flags);
+	new_state = ucsi->new_pdr_state;
+	spin_unlock_irqrestore(&ucsi->state_lock, flags);
+
+	if (ucsi->pdr_state != SERVREG_SERVICE_STATE_UP) {
+		if (new_state == SERVREG_SERVICE_STATE_UP)
+			ucsi_register(ucsi->ucsi);
+	} else {
+		if (new_state == SERVREG_SERVICE_STATE_DOWN)
+			ucsi_unregister(ucsi->ucsi);
+	}
+
+	ucsi->pdr_state = new_state;
 }
 
 static void pmic_glink_ucsi_callback(const void *data, size_t len, void *priv)
@@ -269,11 +286,12 @@ static void pmic_glink_ucsi_callback(const void *data, size_t len, void *priv)
 static void pmic_glink_ucsi_pdr_notify(void *priv, int state)
 {
 	struct pmic_glink_ucsi *ucsi = priv;
+	unsigned long flags;
 
-	if (state == SERVREG_SERVICE_STATE_UP)
-		schedule_work(&ucsi->register_work);
-	else if (state == SERVREG_SERVICE_STATE_DOWN)
-		ucsi_unregister(ucsi->ucsi);
+	spin_lock_irqsave(&ucsi->state_lock, flags);
+	ucsi->new_pdr_state = state;
+	spin_unlock_irqrestore(&ucsi->state_lock, flags);
+	schedule_work(&ucsi->register_work);
 }
 
 static void pmic_glink_ucsi_destroy(void *data)
