@@ -978,6 +978,21 @@ void inet_bhash2_reset_saddr(struct sock *sk)
 }
 EXPORT_SYMBOL_GPL(inet_bhash2_reset_saddr);
 
+/* SYMMETRY means the socket has the same local and remote port/ipaddr */
+#define INET_ADDR_SYMMETRY(sk) (inet_sk(sk)->inet_rcv_saddr == \
+				inet_sk(sk)->inet_daddr)
+#define INET_PORT_SYMMETRY(sk) (inet_sk(sk)->inet_num == \
+				ntohs(inet_sk(sk)->inet_dport))
+#define INET_PORT_SYMMETRY_MATCH(sk, port) (port == \
+					    ntohs(inet_sk(sk)->inet_dport))
+static inline int inet_tuple_symmetry(struct sock *sk)
+{
+	if (INET_ADDR_SYMMETRY(sk) && INET_PORT_SYMMETRY(sk))
+		return -EADDRNOTAVAIL;
+
+	return 0;
+}
+
 /* RFC 6056 3.3.4.  Algorithm 4: Double-Hash Port Selection Algorithm
  * Note that we use 32bit integers (vs RFC 'short integers')
  * because 2^16 is not a multiple of num_ephemeral and this
@@ -997,13 +1012,13 @@ int __inet_hash_connect(struct inet_timewait_death_row *death_row,
 			struct sock *, __u16, struct inet_timewait_sock **))
 {
 	struct inet_hashinfo *hinfo = death_row->hashinfo;
+	bool tb_created = false, symmetry_test = false;
 	struct inet_bind_hashbucket *head, *head2;
 	struct inet_timewait_sock *tw = NULL;
 	int port = inet_sk(sk)->inet_num;
 	struct net *net = sock_net(sk);
 	struct inet_bind2_bucket *tb2;
 	struct inet_bind_bucket *tb;
-	bool tb_created = false;
 	u32 remaining, offset;
 	int ret, i, low, high;
 	bool local_ports;
@@ -1011,11 +1026,17 @@ int __inet_hash_connect(struct inet_timewait_death_row *death_row,
 	u32 index;
 
 	if (port) {
-		local_bh_disable();
-		ret = check_established(death_row, sk, port, NULL);
-		local_bh_enable();
+		ret = inet_tuple_symmetry(sk);
+		if (!ret) {
+			local_bh_disable();
+			ret = check_established(death_row, sk, port, NULL);
+			local_bh_enable();
+		}
 		return ret;
 	}
+
+	if (INET_ADDR_SYMMETRY(sk))
+		symmetry_test = true;
 
 	l3mdev = inet_sk_bound_l3mdev(sk);
 
@@ -1045,6 +1066,8 @@ other_parity_scan:
 		if (unlikely(port >= high))
 			port -= remaining;
 		if (inet_is_local_reserved_port(net, port))
+			continue;
+		if (symmetry_test && INET_PORT_SYMMETRY_MATCH(sk, port))
 			continue;
 		head = &hinfo->bhash[inet_bhashfn(net, port,
 						  hinfo->bhash_size)];
