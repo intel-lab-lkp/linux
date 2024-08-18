@@ -521,15 +521,6 @@ struct ufs_super_block {
 #define	CG_MAGIC	0x090255
 #define ufs_cg_chkmagic(sb, ucg) \
 	(fs32_to_cpu((sb), (ucg)->cg_magic) == CG_MAGIC)
-/*
- * Macros for access to old cylinder group array structures
- */
-#define ufs_ocg_blktot(sb, ucg)      fs32_to_cpu((sb), ((struct ufs_old_cylinder_group *)(ucg))->cg_btot)
-#define ufs_ocg_blks(sb, ucg, cylno) fs32_to_cpu((sb), ((struct ufs_old_cylinder_group *)(ucg))->cg_b[cylno])
-#define ufs_ocg_inosused(sb, ucg)    fs32_to_cpu((sb), ((struct ufs_old_cylinder_group *)(ucg))->cg_iused)
-#define ufs_ocg_blksfree(sb, ucg)    fs32_to_cpu((sb), ((struct ufs_old_cylinder_group *)(ucg))->cg_free)
-#define ufs_ocg_chkmagic(sb, ucg) \
-	(fs32_to_cpu((sb), ((struct ufs_old_cylinder_group *)(ucg))->cg_magic) == CG_MAGIC)
 
 /*
  * size of this structure is 172 B
@@ -572,28 +563,6 @@ struct	ufs_cylinder_group {
 		__fs32	cg_sparecon[16];	/* reserved for future use */
 	} cg_u;
 	__u8	cg_space[1];		/* space for cylinder group maps */
-/* actually longer */
-};
-
-/* Historic Cylinder group info */
-struct ufs_old_cylinder_group {
-	__fs32	cg_link;		/* linked list of cyl groups */
-	__fs32	cg_rlink;		/* for incore cyl groups     */
-	__fs32	cg_time;		/* time last written */
-	__fs32	cg_cgx;			/* we are the cgx'th cylinder group */
-	__fs16	cg_ncyl;		/* number of cyl's this cg */
-	__fs16	cg_niblk;		/* number of inode blocks this cg */
-	__fs32	cg_ndblk;		/* number of data blocks this cg */
-	struct	ufs_csum cg_cs;		/* cylinder summary information */
-	__fs32	cg_rotor;		/* position of last used block */
-	__fs32	cg_frotor;		/* position of last used frag */
-	__fs32	cg_irotor;		/* position of last used inode */
-	__fs32	cg_frsum[8];		/* counts of available frags */
-	__fs32	cg_btot[32];		/* block totals per cylinder */
-	__fs16	cg_b[32][8];		/* positions of free blocks */
-	__u8	cg_iused[256];		/* used inode map */
-	__fs32	cg_magic;		/* magic number */
-	__u8	cg_free[1];		/* free block map */
 /* actually longer */
 };
 
