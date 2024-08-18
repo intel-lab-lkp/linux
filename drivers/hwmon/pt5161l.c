@@ -427,7 +427,7 @@ static int pt5161l_read(struct device *dev, enum hwmon_sensor_types type,
 	struct pt5161l_data *data = dev_get_drvdata(dev);
 	int ret;
 	u8 buf[8];
-	long adc_code;
+	u32 adc_code;
 
 	switch (attr) {
 	case hwmon_temp_input:
