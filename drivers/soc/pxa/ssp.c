@@ -194,6 +194,7 @@ static const struct platform_device_id ssp_id_table[] = {
 	{ "pxa910-ssp",		PXA910_SSP },
 	{ },
 };
+MODULE_DEVICE_TABLE(platform, ssp_id_table);
 
 static struct platform_driver pxa_ssp_driver = {
 	.probe		= pxa_ssp_probe,
