@@ -352,8 +352,7 @@ struct btrfs_block_group *btrfs_inc_nocow_writers(struct btrfs_fs_info *fs_info,
  */
 void btrfs_dec_nocow_writers(struct btrfs_block_group *bg)
 {
-	if (atomic_dec_and_test(&bg->nocow_writers))
-		wake_up_var(&bg->nocow_writers);
+	atomic_dec_and_wake_up_var(&bg->nocow_writers);
 
 	/* For the lookup done by a previous call to btrfs_inc_nocow_writers(). */
 	btrfs_put_block_group(bg);
@@ -371,8 +370,7 @@ void btrfs_dec_block_group_reservations(struct btrfs_fs_info *fs_info,
 
 	bg = btrfs_lookup_block_group(fs_info, start);
 	ASSERT(bg);
-	if (atomic_dec_and_test(&bg->reservations))
-		wake_up_var(&bg->reservations);
+	atomic_dec_and_wake_up_var(&bg->reservations);
 	btrfs_put_block_group(bg);
 }
 

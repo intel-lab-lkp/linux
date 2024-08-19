@@ -145,8 +145,7 @@ static void netfs_free_request(struct work_struct *work)
 		kvfree(rreq->direct_bv);
 	}
 
-	if (atomic_dec_and_test(&ictx->io_count))
-		wake_up_var(&ictx->io_count);
+	atomic_dec_and_wake_up_var(&ictx->io_count);
 	call_rcu(&rreq->rcu, netfs_free_request_rcu);
 }
 

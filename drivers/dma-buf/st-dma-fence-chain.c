@@ -434,8 +434,7 @@ signal:
 		cond_resched();
 	}
 
-	if (atomic_dec_and_test(&data->children))
-		wake_up_var(&data->children);
+	atomic_dec_and_wake_up_var(&data->children);
 	return err;
 }
 

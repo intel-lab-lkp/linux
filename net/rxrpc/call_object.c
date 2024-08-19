@@ -661,8 +661,7 @@ static void rxrpc_rcu_free_call(struct rcu_head *rcu)
 	struct rxrpc_net *rxnet = READ_ONCE(call->rxnet);
 
 	kmem_cache_free(rxrpc_call_jar, call);
-	if (atomic_dec_and_test(&rxnet->nr_calls))
-		wake_up_var(&rxnet->nr_calls);
+	atomic_dec_and_wake_up_var(&rxnet->nr_calls);
 }
 
 /*

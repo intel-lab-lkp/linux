@@ -1484,8 +1484,7 @@ static inline void afs_inc_servers_outstanding(struct afs_net *net)
 
 static inline void afs_dec_servers_outstanding(struct afs_net *net)
 {
-	if (atomic_dec_and_test(&net->servers_outstanding))
-		wake_up_var(&net->servers_outstanding);
+	atomic_dec_and_wake_up_var(&net->servers_outstanding);
 }
 
 static inline bool afs_is_probing_server(struct afs_server *server)

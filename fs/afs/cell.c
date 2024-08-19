@@ -25,8 +25,7 @@ static void afs_manage_cell_work(struct work_struct *);
 
 static void afs_dec_cells_outstanding(struct afs_net *net)
 {
-	if (atomic_dec_and_test(&net->cells_outstanding))
-		wake_up_var(&net->cells_outstanding);
+	atomic_dec_and_wake_up_var(&net->cells_outstanding);
 }
 
 /*

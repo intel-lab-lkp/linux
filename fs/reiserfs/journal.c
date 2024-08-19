@@ -1059,8 +1059,7 @@ static int flush_commit_list(struct super_block *s,
 			put_bh(tbh) ;
 		}
 	}
-	if (atomic_dec_and_test(&journal->j_async_throttle))
-		wake_up_var(&journal->j_async_throttle);
+	atomic_dec_and_wake_up_var(&journal->j_async_throttle);
 
 	for (i = 0; i < (jl->j_len + 1); i++) {
 		bn = SB_ONDISK_JOURNAL_1st_BLOCK(s) +

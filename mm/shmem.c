@@ -1421,8 +1421,7 @@ int shmem_unuse(unsigned int type)
 		next = list_next_entry(info, swaplist);
 		if (!info->swapped)
 			list_del_init(&info->swaplist);
-		if (atomic_dec_and_test(&info->stop_eviction))
-			wake_up_var(&info->stop_eviction);
+		atomic_dec_and_wake_up_var(&info->stop_eviction);
 		if (error)
 			break;
 	}

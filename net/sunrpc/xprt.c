@@ -1113,8 +1113,7 @@ void xprt_unpin_rqst(struct rpc_rqst *req)
 		atomic_dec(&req->rq_pin);
 		return;
 	}
-	if (atomic_dec_and_test(&req->rq_pin))
-		wake_up_var(&req->rq_pin);
+	atomic_dec_and_wake_up_var(&req->rq_pin);
 }
 EXPORT_SYMBOL_GPL(xprt_unpin_rqst);
 

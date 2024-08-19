@@ -195,9 +195,7 @@ void afs_put_call(struct afs_call *call)
 			       __builtin_return_address(0));
 		kfree(call);
 
-		o = atomic_dec_return(&net->nr_outstanding_calls);
-		if (o == 0)
-			wake_up_var(&net->nr_outstanding_calls);
+		atomic_dec_and_wake_up_var(&net->nr_outstanding_calls);
 	}
 }
 

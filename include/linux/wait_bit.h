@@ -335,4 +335,12 @@ static inline void clear_and_wake_up_bit(int bit, void *word)
 	wake_up_bit(word, bit);
 }
 
+static inline bool atomic_dec_and_wake_up_var(atomic_t *var)
+{
+	if (!atomic_dec_and_test(var))
+		return false;
+	wake_up_var(var);
+	return true;
+}
+
 #endif /* _LINUX_WAIT_BIT_H */

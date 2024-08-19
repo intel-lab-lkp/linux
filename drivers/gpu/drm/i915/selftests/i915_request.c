@@ -1530,12 +1530,7 @@ static void __live_parallel_engineN(struct kthread_work *work)
 
 static bool wake_all(struct drm_i915_private *i915)
 {
-	if (atomic_dec_and_test(&i915->selftest.counter)) {
-		wake_up_var(&i915->selftest.counter);
-		return true;
-	}
-
-	return false;
+	return atomic_dec_and_wakeup_var(&i915->selftest.counter);
 }
 
 static int wait_for_all(struct drm_i915_private *i915)

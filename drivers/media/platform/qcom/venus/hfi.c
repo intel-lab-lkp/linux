@@ -255,8 +255,7 @@ void hfi_session_destroy(struct venus_inst *inst)
 
 	mutex_lock(&core->lock);
 	list_del_init(&inst->list);
-	if (atomic_dec_and_test(&core->insts_count))
-		wake_up_var(&core->insts_count);
+	atomic_dec_and_wake_up_var(&core->insts_count);
 	mutex_unlock(&core->lock);
 }
 EXPORT_SYMBOL_GPL(hfi_session_destroy);
