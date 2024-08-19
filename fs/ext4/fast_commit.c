@@ -1290,12 +1290,10 @@ static void ext4_fc_cleanup(journal_t *journal, int full, tid_t tid)
 				       EXT4_STATE_FC_COMMITTING);
 		if (tid_geq(tid, iter->i_sync_tid))
 			ext4_fc_reset_inode(&iter->vfs_inode);
-		/* Make sure EXT4_STATE_FC_COMMITTING bit is clear */
-		smp_mb();
 #if (BITS_PER_LONG < 64)
-		wake_up_bit(&iter->i_state_flags, EXT4_STATE_FC_COMMITTING);
+		wake_up_bit_mb(&iter->i_state_flags, EXT4_STATE_FC_COMMITTING);
 #else
-		wake_up_bit(&iter->i_flags, EXT4_STATE_FC_COMMITTING);
+		wake_up_bit_mb(&iter->i_flags, EXT4_STATE_FC_COMMITTING);
 #endif
 	}
 

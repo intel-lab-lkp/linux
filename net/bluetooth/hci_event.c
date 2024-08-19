@@ -105,7 +105,6 @@ static u8 hci_cc_inquiry_cancel(struct hci_dev *hdev, void *data,
 		return rp->status;
 
 	clear_bit(HCI_INQUIRY, &hdev->flags);
-	smp_mb__after_atomic(); /* wake_up_bit advises about this barrier */
 	wake_up_bit(&hdev->flags, HCI_INQUIRY);
 
 	hci_dev_lock(hdev);
@@ -2972,9 +2971,7 @@ static void hci_inquiry_complete_evt(struct hci_dev *hdev, void *data,
 
 	if (!test_and_clear_bit(HCI_INQUIRY, &hdev->flags))
 		return;
-
-	smp_mb__after_atomic(); /* wake_up_bit advises about this barrier */
-	wake_up_bit(&hdev->flags, HCI_INQUIRY);
+	wake_up_bit_relaxed(&hdev->flags, HCI_INQUIRY);
 
 	if (!hci_dev_test_flag(hdev, HCI_MGMT))
 		return;

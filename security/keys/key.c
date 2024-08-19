@@ -474,7 +474,7 @@ static int __key_instantiate_and_link(struct key *key,
 
 	/* wake up anyone waiting for a key to be constructed */
 	if (awaken)
-		wake_up_bit(&key->flags, KEY_FLAG_USER_CONSTRUCT);
+		wake_up_bit_relaxed(&key->flags, KEY_FLAG_USER_CONSTRUCT);
 
 	return ret;
 }
@@ -629,7 +629,7 @@ int key_reject_and_link(struct key *key,
 
 	/* wake up anyone waiting for a key to be constructed */
 	if (awaken)
-		wake_up_bit(&key->flags, KEY_FLAG_USER_CONSTRUCT);
+		wake_up_bit_relaxed(&key->flags, KEY_FLAG_USER_CONSTRUCT);
 
 	return ret == 0 ? link_ret : ret;
 }

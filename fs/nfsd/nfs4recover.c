@@ -1897,7 +1897,6 @@ nfsd4_cltrack_upcall_unlock(struct nfs4_client *clp)
 {
 	smp_mb__before_atomic();
 	clear_bit(NFSD4_CLIENT_UPCALL_LOCK, &clp->cl_flags);
-	smp_mb__after_atomic();
 	wake_up_bit(&clp->cl_flags, NFSD4_CLIENT_UPCALL_LOCK);
 }
 

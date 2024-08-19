@@ -202,7 +202,7 @@ struct btintel_data {
 #define btintel_wake_up_flag(hdev, nr)					\
 	do {								\
 		struct btintel_data *intel = hci_get_priv((hdev));	\
-		wake_up_bit(intel->flags, (nr));			\
+		wake_up_bit_relaxed(intel->flags, (nr));		\
 	} while (0)
 
 #define btintel_get_flag(hdev)						\

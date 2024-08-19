@@ -921,7 +921,6 @@ static int init_hash_tables(struct dm_snapshot *s)
 static void merge_shutdown(struct dm_snapshot *s)
 {
 	clear_bit_unlock(RUNNING_MERGE, &s->state_bits);
-	smp_mb__after_atomic();
 	wake_up_bit(&s->state_bits, RUNNING_MERGE);
 }
 

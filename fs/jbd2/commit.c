@@ -40,7 +40,6 @@ static void journal_end_buffer_io_sync(struct buffer_head *bh, int uptodate)
 		clear_buffer_uptodate(bh);
 	if (orig_bh) {
 		clear_bit_unlock(BH_Shadow, &orig_bh->b_state);
-		smp_mb__after_atomic();
 		wake_up_bit(&orig_bh->b_state, BH_Shadow);
 	}
 	unlock_buffer(bh);
@@ -230,8 +229,7 @@ static int journal_submit_data_buffers(journal_t *journal,
 		spin_lock(&journal->j_list_lock);
 		J_ASSERT(jinode->i_transaction == commit_transaction);
 		jinode->i_flags &= ~JI_COMMIT_RUNNING;
-		smp_mb();
-		wake_up_bit(&jinode->i_flags, __JI_COMMIT_RUNNING);
+		wake_up_bit_mb(&jinode->i_flags, __JI_COMMIT_RUNNING);
 	}
 	spin_unlock(&journal->j_list_lock);
 	return ret;
@@ -273,8 +271,7 @@ static int journal_finish_inode_data_buffers(journal_t *journal,
 		cond_resched();
 		spin_lock(&journal->j_list_lock);
 		jinode->i_flags &= ~JI_COMMIT_RUNNING;
-		smp_mb();
-		wake_up_bit(&jinode->i_flags, __JI_COMMIT_RUNNING);
+		wake_up_bit_mb(&jinode->i_flags, __JI_COMMIT_RUNNING);
 	}
 
 	/* Now refile inode to proper lists */

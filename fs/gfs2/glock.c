@@ -380,7 +380,6 @@ static inline bool may_grant(struct gfs2_glock *gl,
 static void gfs2_holder_wake(struct gfs2_holder *gh)
 {
 	clear_bit(HIF_WAIT, &gh->gh_iflags);
-	smp_mb__after_atomic();
 	wake_up_bit(&gh->gh_iflags, HIF_WAIT);
 	if (gh->gh_flags & GL_ASYNC) {
 		struct gfs2_sbd *sdp = gh->gh_gl->gl_name.ln_sbd;
@@ -576,7 +575,6 @@ static void gfs2_demote_wake(struct gfs2_glock *gl)
 {
 	gl->gl_demote_state = LM_ST_EXCLUSIVE;
 	clear_bit(GLF_DEMOTE, &gl->gl_flags);
-	smp_mb__after_atomic();
 	wake_up_bit(&gl->gl_flags, GLF_DEMOTE);
 }
 

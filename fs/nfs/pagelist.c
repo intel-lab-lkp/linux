@@ -215,7 +215,6 @@ void
 nfs_page_clear_headlock(struct nfs_page *req)
 {
 	clear_bit_unlock(PG_HEADLOCK, &req->wb_flags);
-	smp_mb__after_atomic();
 	if (!test_bit(PG_CONTENDED1, &req->wb_flags))
 		return;
 	wake_up_bit(&req->wb_flags, PG_HEADLOCK);
@@ -520,7 +519,6 @@ nfs_create_subreq(struct nfs_page *req,
 void nfs_unlock_request(struct nfs_page *req)
 {
 	clear_bit_unlock(PG_BUSY, &req->wb_flags);
-	smp_mb__after_atomic();
 	if (!test_bit(PG_CONTENDED2, &req->wb_flags))
 		return;
 	wake_up_bit(&req->wb_flags, PG_BUSY);

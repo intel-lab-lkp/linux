@@ -482,12 +482,9 @@ static void btmtk_usb_wmt_recv(struct urb *urb)
 		}
 
 		if (test_and_clear_bit(BTMTK_TX_WAIT_VND_EVT,
-				       &data->flags)) {
-			/* Barrier to sync with other CPUs */
-			smp_mb__after_atomic();
-			wake_up_bit(&data->flags,
-				    BTMTK_TX_WAIT_VND_EVT);
-		}
+				       &data->flags))
+			wake_up_bit_relaxed(&data->flags,
+					    BTMTK_TX_WAIT_VND_EVT);
 		kfree(urb->setup_packet);
 		return;
 	} else if (urb->status == -ENOENT) {

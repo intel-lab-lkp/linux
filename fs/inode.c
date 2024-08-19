@@ -687,7 +687,7 @@ static void evict(struct inode *inode)
 	 * used as an indicator whether blocking on it is safe.
 	 */
 	spin_lock(&inode->i_lock);
-	wake_up_bit(&inode->i_state, __I_NEW);
+	wake_up_bit_relaxed(&inode->i_state, __I_NEW);
 	BUG_ON(inode->i_state != (I_FREEING | I_CLEAR));
 	spin_unlock(&inode->i_lock);
 
@@ -1095,8 +1095,7 @@ void unlock_new_inode(struct inode *inode)
 	spin_lock(&inode->i_lock);
 	WARN_ON(!(inode->i_state & I_NEW));
 	inode->i_state &= ~I_NEW & ~I_CREATING;
-	smp_mb();
-	wake_up_bit(&inode->i_state, __I_NEW);
+	wake_up_bit_mb(&inode->i_state, __I_NEW);
 	spin_unlock(&inode->i_lock);
 }
 EXPORT_SYMBOL(unlock_new_inode);
@@ -1107,8 +1106,7 @@ void discard_new_inode(struct inode *inode)
 	spin_lock(&inode->i_lock);
 	WARN_ON(!(inode->i_state & I_NEW));
 	inode->i_state &= ~I_NEW;
-	smp_mb();
-	wake_up_bit(&inode->i_state, __I_NEW);
+	wake_up_bit_mb(&inode->i_state, __I_NEW);
 	spin_unlock(&inode->i_lock);
 	iput(inode);
 }

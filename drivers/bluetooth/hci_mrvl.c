@@ -184,7 +184,6 @@ static int mrvl_recv_fw_req(struct hci_dev *hdev, struct sk_buff *skb)
 	mrvl->tx_len = le16_to_cpu(pkt->lhs);
 
 	clear_bit(STATE_FW_REQ_PENDING, &mrvl->flags);
-	smp_mb__after_atomic();
 	wake_up_bit(&mrvl->flags, STATE_FW_REQ_PENDING);
 
 done:
@@ -219,7 +218,6 @@ static int mrvl_recv_chip_ver(struct hci_dev *hdev, struct sk_buff *skb)
 	bt_dev_info(hdev, "Controller id = %x, rev = %x", mrvl->id, mrvl->rev);
 
 	clear_bit(STATE_CHIP_VER_PENDING, &mrvl->flags);
-	smp_mb__after_atomic();
 	wake_up_bit(&mrvl->flags, STATE_CHIP_VER_PENDING);
 
 done:

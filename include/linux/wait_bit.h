@@ -26,7 +26,7 @@ typedef int wait_bit_action_f(struct wait_bit_key *key, int mode);
 void __wake_up_bit(struct wait_queue_head *wq_head, void *word, int bit);
 int __wait_on_bit(struct wait_queue_head *wq_head, struct wait_bit_queue_entry *wbq_entry, wait_bit_action_f *action, unsigned int mode);
 int __wait_on_bit_lock(struct wait_queue_head *wq_head, struct wait_bit_queue_entry *wbq_entry, wait_bit_action_f *action, unsigned int mode);
-void wake_up_bit(void *word, int bit);
+void wake_up_bit_relaxed(void *word, int bit);
 int out_of_line_wait_on_bit(void *word, int, wait_bit_action_f *action, unsigned int mode);
 int out_of_line_wait_on_bit_timeout(void *word, int, wait_bit_action_f *action, unsigned int mode, unsigned long timeout);
 int out_of_line_wait_on_bit_lock(void *word, int, wait_bit_action_f *action, unsigned int mode);
@@ -319,6 +319,48 @@ do {									\
 })
 
 /**
+ * wake_up_bit - wake up waiters on a bit
+ * @word: the word being waited on, a kernel virtual address
+ * @bit: the bit of the word being waited on
+ *
+ * There is a standard hashed waitqueue table for generic use. This
+ * is the part of the hash-table's accessor API that wakes up waiters
+ * on a bit. For instance, if one were to have waiters on a bitflag,
+ * one would call wake_up_bit() after atomically clearing the bit.
+ *
+ * This interface should only be use when the bit is cleared atomically,
+ * such as with clear_bit(), atomic_andnot(), code inside a locked
+ * region (with this interface called after the unlock).  If this
+ * bit is cleared non-atomically, wake_up_bit_mb() should be used.
+ */
+static inline void wake_up_bit(void *word, int bit)
+{
+	smp_mb__after_atomic();
+	wake_up_bit_relaxed(word, bit);
+}
+
+/**
+ * wake_up_bit_mb - wake up waiters on a bit with full barrier
+ * @word: the word being waited on, a kernel virtual address
+ * @bit: the bit of the word being waited on
+ *
+ * There is a standard hashed waitqueue table for generic use. This
+ * is the part of the hash-table's accessor API that wakes up waiters
+ * on a bit. For instance, if one were to have waiters on a bitflag,
+ * one would call wake_up_bit() after non-atomically clearing the bit.
+ *
+ * This interface has a full barrier and so is safe to use anywhere.
+ * It is particular intended for use after the bit has been cleared
+ * (or set) non-atmomically with simple assignment.  Where the bit
+ * it cleared atomically, the barrier used may be excessively.
+ */
+static inline void wake_up_bit_mb(void *word, int bit)
+{
+	smp_mb();
+	wake_up_bit_relaxed(word, bit);
+}
+
+/**
  * clear_and_wake_up_bit - clear a bit and wake up anyone waiting on that bit
  *
  * @bit: the bit of the word being waited on
@@ -330,8 +372,6 @@ do {									\
 static inline void clear_and_wake_up_bit(int bit, void *word)
 {
 	clear_bit_unlock(bit, word);
-	/* See wake_up_bit() for which memory barrier you need to use. */
-	smp_mb__after_atomic();
 	wake_up_bit(word, bit);
 }
 

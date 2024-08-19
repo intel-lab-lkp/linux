@@ -3154,7 +3154,6 @@ static void __dm_internal_resume(struct mapped_device *md)
 	}
 done:
 	clear_bit(DMF_SUSPENDED_INTERNALLY, &md->flags);
-	smp_mb__after_atomic();
 	wake_up_bit(&md->flags, DMF_SUSPENDED_INTERNALLY);
 }
 

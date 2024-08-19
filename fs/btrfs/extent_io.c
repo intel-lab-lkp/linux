@@ -1762,7 +1762,6 @@ static void end_bbio_meta_write(struct btrfs_bio *bbio)
 	}
 
 	clear_bit(EXTENT_BUFFER_WRITEBACK, &eb->bflags);
-	smp_mb__after_atomic();
 	wake_up_bit(&eb->bflags, EXTENT_BUFFER_WRITEBACK);
 
 	bio_put(&bbio->bio);
@@ -3506,7 +3505,6 @@ void set_extent_buffer_uptodate(struct extent_buffer *eb)
 static void clear_extent_buffer_reading(struct extent_buffer *eb)
 {
 	clear_bit(EXTENT_BUFFER_READING, &eb->bflags);
-	smp_mb__after_atomic();
 	wake_up_bit(&eb->bflags, EXTENT_BUFFER_READING);
 }
 

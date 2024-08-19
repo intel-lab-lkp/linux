@@ -3267,7 +3267,6 @@ static int ksm_memory_callback(struct notifier_block *self,
 		ksm_run &= ~KSM_RUN_OFFLINE;
 		mutex_unlock(&ksm_thread_mutex);
 
-		smp_mb();	/* wake_up_bit advises this */
 		wake_up_bit(&ksm_run, ilog2(KSM_RUN_OFFLINE));
 		break;
 	}

@@ -353,7 +353,6 @@ int gfs2_withdraw(struct gfs2_sbd *sdp)
 		fs_err(sdp, "File system withdrawn\n");
 		dump_stack();
 		clear_bit(SDF_WITHDRAW_IN_PROG, &sdp->sd_flags);
-		smp_mb__after_atomic();
 		wake_up_bit(&sdp->sd_flags, SDF_WITHDRAW_IN_PROG);
 	}
 

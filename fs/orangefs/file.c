@@ -314,7 +314,6 @@ int orangefs_revalidate_mapping(struct inode *inode)
 	    orangefs_cache_timeout_msecs*HZ/1000;
 
 	clear_bit(1, bitlock);
-	smp_mb__after_atomic();
 	wake_up_bit(bitlock, 1);
 
 	return ret;

@@ -401,11 +401,9 @@ static int btmtksdio_recv_event(struct hci_dev *hdev, struct sk_buff *skb)
 
 	if (evt == HCI_EV_WMT) {
 		if (test_and_clear_bit(BTMTKSDIO_TX_WAIT_VND_EVT,
-				       &bdev->tx_state)) {
-			/* Barrier to sync with other CPUs */
-			smp_mb__after_atomic();
-			wake_up_bit(&bdev->tx_state, BTMTKSDIO_TX_WAIT_VND_EVT);
-		}
+				       &bdev->tx_state))
+			wake_up_bit_relaxed(&bdev->tx_state,
+					    BTMTKSDIO_TX_WAIT_VND_EVT);
 	}
 
 	return 0;
