@@ -66,6 +66,7 @@ static const struct drm_prop_enum_list drm_colorop_type_enum_list[] = {
 	{ DRM_COLOROP_1D_LUT, "1D Curve Custom LUT" },
 	{ DRM_COLOROP_CTM_3X4, "3x4 Matrix"},
 	{ DRM_COLOROP_MULTIPLIER, "Multiplier"},
+	{ DRM_COLOROP_3D_LUT, "3D LUT"},
 };
 
 static const char * const colorop_curve_1d_type_names[] = {
@@ -348,6 +349,53 @@ int drm_colorop_mult_init(struct drm_device *dev, struct drm_colorop *colorop,
 }
 EXPORT_SYMBOL(drm_colorop_mult_init);
 
+int drm_colorop_3dlut_init(struct drm_device *dev, struct drm_colorop *colorop,
+			   struct drm_plane *plane, struct drm_mode_3dlut_mode *mode_3dlut,
+			   size_t num, bool allow_bypass)
+{
+	struct drm_property_blob *blob;
+	struct drm_property *prop;
+	int ret;
+
+	ret = drm_colorop_init(dev, colorop, plane, DRM_COLOROP_3D_LUT, allow_bypass);
+	if (ret)
+		return ret;
+
+	/* lut_3d_modes */
+	prop = drm_property_create(dev, DRM_MODE_PROP_BLOB | DRM_MODE_PROP_IMMUTABLE, "3DLUT_MODES", 0);
+	if (!prop)
+		return -ENOMEM;
+
+	colorop->lut_3d_modes_property = prop;
+
+
+	blob = drm_property_create_blob(colorop->dev, num * sizeof(struct drm_mode_3dlut_mode),
+					mode_3dlut);
+	if (IS_ERR(blob))
+		return PTR_ERR(blob);
+
+	drm_object_attach_property(&colorop->base, colorop->lut_3d_modes_property, blob ? blob->base.id : 0);
+	drm_colorop_reset(colorop);
+
+	drm_property_replace_blob(&colorop->state->lut_3d_modes, blob);
+
+	/* lut_3d_modes index */
+	prop = drm_property_create_range(dev, DRM_MODE_PROP_ATOMIC, "3DLUT_MODE_INDEX", 0, num - 1);
+	if (!prop)
+		return -ENOMEM;
+
+	colorop->lut_3d_mode_index_property = prop;
+	drm_object_attach_property(&colorop->base, colorop->lut_3d_mode_index_property, 0);
+
+	/* data */
+	ret = drm_colorop_create_data_prop(dev, colorop);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+EXPORT_SYMBOL(drm_colorop_3dlut_init);
+
 static void __drm_atomic_helper_colorop_duplicate_state(struct drm_colorop *colorop,
 							struct drm_colorop_state *state)
 {
@@ -437,7 +485,13 @@ static const char * const colorop_type_name[] = {
 	[DRM_COLOROP_1D_LUT] = "1D Curve Custom LUT",
 	[DRM_COLOROP_CTM_3X4] = "3x4 Matrix",
 	[DRM_COLOROP_MULTIPLIER] = "Multiplier",
+	[DRM_COLOROP_3D_LUT] = "3D LUT",
 };
+
+static const char * const colorop_lu3d_interpolation_name[] = {
+	[DRM_COLOROP_LUT3D_INTERPOLATION_TETRAHEDRAL] = "Tetrahedral",
+};
+
 static const char * const colorop_lut1d_interpolation_name[] = {
 	[DRM_COLOROP_LUT1D_INTERPOLATION_LINEAR] = "Linear",
 };
@@ -471,6 +525,21 @@ const char *drm_get_colorop_lut1d_interpolation_name(enum drm_colorop_lut1d_inte
 		return "unknown";
 
 	return colorop_lut1d_interpolation_name[type];
+}
+
+/**
+ * drm_get_colorop_lut3d_interpolation_name - return a string for interpolation type
+ * @type: interpolation type to compute name of
+ *
+ * In contrast to the other drm_get_*_name functions this one here returns a
+ * const pointer and hence is threadsafe.
+ */
+const char *drm_get_colorop_lut3d_interpolation_name(enum drm_colorop_lut3d_interpolation_type type)
+{
+	if (WARN_ON(type >= ARRAY_SIZE(colorop_lu3d_interpolation_name)))
+		return "unknown";
+
+	return colorop_lu3d_interpolation_name[type];
 }
 
 /**

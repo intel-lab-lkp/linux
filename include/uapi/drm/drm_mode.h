@@ -914,6 +914,90 @@ enum drm_colorop_type {
 	 * property.
 	 */
 	DRM_COLOROP_MULTIPLIER,
+	/**
+	 * @DRM_COLOROP_3D_LUT:
+	 *
+	 * A 3D LUT of &drm_color_lut entries,
+	 * packed into a blob via the DATA property. The driver's expected
+	 * LUT size is advertised via the SIZE property.
+	 */
+	DRM_COLOROP_3D_LUT,
+};
+
+/**
+ * enum drm_colorop_lut3d_interpolation_type - type of 3DLUT interpolation
+ *
+ */
+enum drm_colorop_lut3d_interpolation_type {
+	/**
+	 * @DRM_COLOROP_LUT3D_INTERPOLATION_TETRAHEDRAL:
+	 *
+	 * Tetrahedral 3DLUT interpolation
+	 */
+	DRM_COLOROP_LUT3D_INTERPOLATION_TETRAHEDRAL,
+};
+
+/**
+ * enum drm_colorop_lut3d_traversal_order - traversal order of the 3D LUT
+ *
+ * This enum describes the order of traversal of 3DLUT elements.
+ */
+enum drm_colorop_lut3d_traversal_order {
+	/**
+	 * @DRM_COLOROP_LUT3D_TRAVERSAL_RGB:
+	 *
+	 * the LUT elements are traversed like so:
+	 *   for R in range 0..n
+	 *     for G in range 0..n
+	 *       for B in range 0..n
+	 *         color = lut3d[R][G][B]
+	 */
+	DRM_COLOROP_LUT3D_TRAVERSAL_RGB,
+	/**
+	 * @DRM_COLOROP_LUT3D_TRAVERSAL_BGR:
+	 *
+	 * the LUT elements are traversed like so:
+	 *   for R in range 0..n
+	 *     for G in range 0..n
+	 *       for B in range 0..n
+	 *         color = lut3d[B][G][R]
+	 */
+	DRM_COLOROP_LUT3D_TRAVERSAL_BGR,
+};
+
+/**
+ * struct drm_mode_3dlut_mode - 3D LUT mode
+ *
+ * The mode describes the supported and selected format of a 3DLUT.
+ */
+struct drm_mode_3dlut_mode {
+	/**
+	 * @lut_size: 3D LUT size - can be 9, 17 or 33
+	 */
+	__u16 lut_size;
+	/**
+	 * @lut_stride: dimensions of 3D LUT. Must be larger than lut_size
+	 */
+	__u16 lut_stride[3];
+	/**
+	 * @interpolation: interpolation algorithm for 3D LUT. See drm_colorop_lut3d_interpolation_type
+	 */
+	__u16 interpolation;
+	/**
+	 * @color_depth: color depth - can be 8, 10 or 12
+	 */
+	__u16 color_depth;
+	/**
+	 * @color_format: color format specified by fourcc values
+	 * ex. DRM_FORMAT_XRGB16161616 - color in order of RGB, each is 16bit.
+	 */
+	__u32 color_format;
+	/**
+	 * @traversal_order:
+	 *
+	 * Traversal order when parsing/writing the 3D LUT. See enum drm_colorop_lut3d_traversal_order
+	 */
+	 __u16 traversal_order;
 };
 
 /**

@@ -140,6 +140,29 @@ struct drm_colorop_state {
 	uint32_t size;
 
 	/**
+	 * @lut_3d_modes:
+	 *
+	 * Mode blob for displaying a list of supported 3dlut modes.
+	 *
+	 * To setup a 3D LUT, lut_3d_modes, lut_3d_modes and data are expected
+	 * to be used in the following sequence:
+	 *
+	 *  1. device driver sets a list of supported drm_mode_3dlut_mode in "lut_3d_modes".
+	 *  2. userspace reads "lut_3d_modes" to determines an appropriate mode.
+	 *  3. userspace sets "lut_3d_mode_index" pointing the selected mode.
+	 *  4. userspace passes a 3D LUT via "data"
+	 *  5. usersapce commits to device driver
+	 */
+	struct drm_property_blob *lut_3d_modes;
+
+	/**
+	 * @lut_3d_mode_index:
+	 *
+	 * A zero-based index pointing to current lut_3d_mode.
+	 */
+	uint16_t lut_3d_mode_index;
+
+	/**
 	 * @data:
 	 *
 	 * Data blob for any TYPE that requires such a blob. The
@@ -275,6 +298,21 @@ struct drm_colorop {
 	struct drm_property *size_property;
 
 	/**
+	 * @lut_3d_modes_property:
+	 *
+	 * 3DLUT mode property used to convert the framebuffer's colors
+	 * to non-linear gamma.
+	 */
+	struct drm_property *lut_3d_modes_property;
+
+	/**
+	 * @lut_3d_mode_index_property:
+	 *
+	 * 3DLUT mode index property for choosing 3D LUT mode.
+	 */
+	struct drm_property *lut_3d_mode_index_property;
+
+	/**
 	 * @data_property:
 	 *
 	 * blob property for any TYPE that requires a blob of data,
@@ -329,6 +367,9 @@ int drm_colorop_ctm_3x4_init(struct drm_device *dev, struct drm_colorop *colorop
 			     struct drm_plane *plane, bool allow_bypass);
 int drm_colorop_mult_init(struct drm_device *dev, struct drm_colorop *colorop,
 			      struct drm_plane *plane, bool allow_bypass);
+int drm_colorop_3dlut_init(struct drm_device *dev, struct drm_colorop *colorop,
+			   struct drm_plane *plane, struct drm_mode_3dlut_mode *mode_3dlut,
+			   size_t num, bool allow_bypass);
 
 struct drm_colorop_state *
 drm_atomic_helper_colorop_duplicate_state(struct drm_colorop *colorop);
@@ -379,6 +420,7 @@ const char *drm_get_colorop_type_name(enum drm_colorop_type type);
  */
 const char *drm_get_colorop_curve_1d_type_name(enum drm_colorop_curve_1d_type type);
 const char *drm_get_colorop_lut1d_interpolation_name(enum drm_colorop_lut1d_interpolation_type type);
+const char *drm_get_colorop_lut3d_interpolation_name(enum drm_colorop_lut3d_interpolation_type type);
 
 void drm_colorop_set_next_property(struct drm_colorop *colorop, struct drm_colorop *next);
 

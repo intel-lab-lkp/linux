@@ -786,6 +786,9 @@ static void drm_atomic_colorop_print_state(struct drm_printer *p,
 		const struct drm_colorop_state *state)
 {
 	struct drm_colorop *colorop = state->colorop;
+	struct drm_property_blob *modes = state->lut_3d_modes;
+	struct drm_mode_3dlut_mode *mode_3dlut;
+	int i;
 
 	drm_printf(p, "colorop[%u]:\n", colorop->base.id);
 	drm_printf(p, "\ttype=%s\n", drm_get_colorop_type_name(colorop->type));
@@ -807,6 +810,24 @@ static void drm_atomic_colorop_print_state(struct drm_printer *p,
 		break;
 	case DRM_COLOROP_MULTIPLIER:
 		drm_printf(p, "\tmultiplier=%llu\n", state->multiplier);
+		break;
+	case DRM_COLOROP_3D_LUT:
+		mode_3dlut = (struct drm_mode_3dlut_mode *) modes->data;
+
+		drm_printf(p, "\tlut_3d_modes blob id=%d\n", modes ? modes->base.id : 0);
+		for (i = 0; i < modes->length / sizeof(struct drm_mode_3dlut_mode); i++) {
+			drm_printf(p, "\t  lut_size=%d\n", mode_3dlut[i].lut_size);
+			drm_printf(p, "\t  lut_strides=%d %d %d\n", mode_3dlut[i].lut_stride[0],
+								    mode_3dlut[i].lut_stride[1],
+								    mode_3dlut[i].lut_stride[2]);
+			drm_printf(p, "\t  interpolation=%s\n",
+				   drm_get_colorop_lut3d_interpolation_name(mode_3dlut[i].interpolation));
+			drm_printf(p, "\t  color_depth=%d\n", mode_3dlut[i].color_depth);
+			drm_printf(p, "\t  color_format=%X\n", mode_3dlut[i].color_format);
+			drm_printf(p, "\t  traversal_order=%X\n", mode_3dlut[i].traversal_order);
+		}
+		drm_printf(p, "\tlut_3d_mode_index=%d\n", state->lut_3d_mode_index);
+		drm_printf(p, "\tdata blob id=%d\n", state->data ? state->data->base.id : 0);
 		break;
 	default:
 		break;
