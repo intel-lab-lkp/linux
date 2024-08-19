@@ -149,8 +149,8 @@ SYSCALL_DEFINE1(brk, unsigned long, brk)
 	 * segment grow beyond its set limit the in case where the limit is
 	 * not page aligned -Ram Gupta
 	 */
-	if (check_data_rlimit(rlimit(RLIMIT_DATA), brk, mm->start_brk,
-			      mm->end_data, mm->start_data))
+	if (check_data_rlimit(min(rlimit(RLIMIT_AS), rlimit(RLIMIT_DATA)),
+			      brk, mm->start_brk, mm->end_data, mm->start_data))
 		goto out;
 
 	newbrk = PAGE_ALIGN(brk);
