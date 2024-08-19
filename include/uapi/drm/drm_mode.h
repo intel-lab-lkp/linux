@@ -859,6 +859,21 @@ struct drm_color_lut {
 };
 
 /**
+ * enum drm_colorop_type - Type of color operation
+ *
+ * @DRM_COLOROP_1D_CURVE: A 1D curve that is being applied to all color channels.
+ *                        The curve is specified via tha CURVE_1D_TYPE colorop
+ *                        property.
+ *
+ * drm_colorops can be of many different types. Each type behaves differently
+ * and defines a different set of properties. This enum defines all types and
+ * gives a high-level description.
+ */
+enum drm_colorop_type {
+	DRM_COLOROP_1D_CURVE
+};
+
+/**
  * struct drm_plane_size_hint - Plane size hints
  *
  * The plane SIZE_HINTS property blob contains an
