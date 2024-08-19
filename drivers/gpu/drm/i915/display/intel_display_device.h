@@ -69,7 +69,29 @@ struct drm_printer;
 	/* Display ver 20 (based on GMD ID) */ \
 	func(LUNARLAKE) \
 	/* Display ver 14.1 (based on GMD ID) */ \
-	func(BATTLEMAGE)
+	func(BATTLEMAGE) \
+	/* Subplatforms */ \
+	func(HASWELL_ULT) \
+	func(HASWELL_ULX) \
+	func(BROADWELL_ULT) \
+	func(BROADWELL_ULX) \
+	func(SKYLAKE_ULT) \
+	func(SKYLAKE_ULX) \
+	func(KABYLAKE_ULT) \
+	func(KABYLAKE_ULX) \
+	func(COFFEELAKE_ULT) \
+	func(COFFEELAKE_ULX) \
+	func(COMETLAKE_ULT) \
+	func(COMETLAKE_ULX) \
+	func(ICELAKE_PORT_F) \
+	func(TIGERLAKE_UY) \
+	func(ALDERLAKE_S_RAPTORLAKE_S) \
+	func(ALDERLAKE_P_ALDERLAKE_N) \
+	func(ALDERLAKE_P_RAPTORLAKE_P) \
+	func(ALDERLAKE_P_RAPTORLAKE_U) \
+	func(DG2_G10) \
+	func(DG2_G11) \
+	func(DG2_G12)
 
 #define __ENUM(x) INTEL_DISPLAY_ ## x,
 
@@ -78,31 +100,6 @@ enum intel_display_platform {
 };
 
 #undef __ENUM
-
-enum intel_display_subplatform {
-	INTEL_DISPLAY_SUBPLATFORM_UNINITIALIZED = 0,
-	INTEL_DISPLAY_HASWELL_ULT,
-	INTEL_DISPLAY_HASWELL_ULX,
-	INTEL_DISPLAY_BROADWELL_ULT,
-	INTEL_DISPLAY_BROADWELL_ULX,
-	INTEL_DISPLAY_SKYLAKE_ULT,
-	INTEL_DISPLAY_SKYLAKE_ULX,
-	INTEL_DISPLAY_KABYLAKE_ULT,
-	INTEL_DISPLAY_KABYLAKE_ULX,
-	INTEL_DISPLAY_COFFEELAKE_ULT,
-	INTEL_DISPLAY_COFFEELAKE_ULX,
-	INTEL_DISPLAY_COMETLAKE_ULT,
-	INTEL_DISPLAY_COMETLAKE_ULX,
-	INTEL_DISPLAY_ICELAKE_PORT_F,
-	INTEL_DISPLAY_TIGERLAKE_UY,
-	INTEL_DISPLAY_ALDERLAKE_S_RAPTORLAKE_S,
-	INTEL_DISPLAY_ALDERLAKE_P_ALDERLAKE_N,
-	INTEL_DISPLAY_ALDERLAKE_P_RAPTORLAKE_P,
-	INTEL_DISPLAY_ALDERLAKE_P_RAPTORLAKE_U,
-	INTEL_DISPLAY_DG2_G10,
-	INTEL_DISPLAY_DG2_G11,
-	INTEL_DISPLAY_DG2_G12,
-};
 
 #define DEV_INFO_DISPLAY_FOR_EACH_FLAG(func) \
 	/* Keep in alphabetical order */ \
@@ -203,7 +200,7 @@ enum intel_display_subplatform {
 
 struct intel_display_runtime_info {
 	enum intel_display_platform platform;
-	enum intel_display_subplatform subplatform;
+	enum intel_display_platform subplatform;
 
 	struct intel_display_ip_ver {
 		u16 ver;
