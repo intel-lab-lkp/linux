@@ -4,10 +4,11 @@
 //!
 //! C header: [`include/uapi/asm-generic/errno-base.h`](srctree/include/uapi/asm-generic/errno-base.h)
 
-use crate::{alloc::AllocError, str::CStr};
+use crate::alloc::AllocError;
 
 use alloc::alloc::LayoutError;
 
+use core::ffi::CStr;
 use core::fmt;
 use core::num::TryFromIntError;
 use core::str::Utf8Error;
@@ -151,7 +152,7 @@ impl Error {
             None
         } else {
             // SAFETY: The string returned by `errname` is static and `NUL`-terminated.
-            Some(unsafe { CStr::from_char_ptr(ptr) })
+            Some(unsafe { CStr::from_ptr(ptr) })
         }
     }
 
@@ -173,7 +174,7 @@ impl fmt::Debug for Error {
             None => f.debug_tuple("Error").field(&-self.0).finish(),
             // SAFETY: These strings are ASCII-only.
             Some(name) => f
-                .debug_tuple(unsafe { core::str::from_utf8_unchecked(name) })
+                .debug_tuple(unsafe { core::str::from_utf8_unchecked(name.to_bytes()) })
                 .finish(),
         }
     }

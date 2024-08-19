@@ -9,12 +9,11 @@ use super::{lock::Backend, lock::Guard, LockClassKey};
 use crate::{
     init::PinInit,
     pin_init,
-    str::CStr,
     task::{MAX_SCHEDULE_TIMEOUT, TASK_INTERRUPTIBLE, TASK_NORMAL, TASK_UNINTERRUPTIBLE},
     time::Jiffies,
     types::Opaque,
 };
-use core::ffi::{c_int, c_long};
+use core::ffi::{c_int, c_long, CStr};
 use core::marker::PhantomPinned;
 use core::ptr;
 use macros::pin_data;
@@ -108,7 +107,7 @@ impl CondVar {
             // SAFETY: `slot` is valid while the closure is called and both `name` and `key` have
             // static lifetimes so they live indefinitely.
             wait_queue_head <- Opaque::ffi_init(|slot| unsafe {
-                bindings::__init_waitqueue_head(slot, name.as_char_ptr(), key.as_ptr())
+                bindings::__init_waitqueue_head(slot, name.as_ptr(), key.as_ptr())
             }),
         })
     }

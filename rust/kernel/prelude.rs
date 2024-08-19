@@ -12,7 +12,7 @@
 //! ```
 
 #[doc(no_inline)]
-pub use core::pin::Pin;
+pub use core::{ffi::CStr, pin::Pin};
 
 pub use crate::alloc::{box_ext::BoxExt, flags::*, vec_ext::VecExt};
 
@@ -35,7 +35,7 @@ pub use super::static_assert;
 
 pub use super::error::{code::*, Error, Result};
 
-pub use super::{str::CStr, ThisModule};
+pub use super::ThisModule;
 
 pub use super::init::{InPlaceInit, Init, PinInit};
 

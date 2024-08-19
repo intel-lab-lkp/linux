@@ -380,7 +380,7 @@ impl<T: ?Sized, const ID: u64> Work<T, ID> {
                         slot,
                         Some(T::Pointer::run),
                         false,
-                        name.as_char_ptr(),
+                        name.as_ptr(),
                         key.as_ptr(),
                     )
                 }
