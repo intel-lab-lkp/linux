@@ -2340,12 +2340,21 @@ long vhost_dev_ioctl(struct vhost_dev *d, unsigned int ioctl, void __user *argp)
 {
 	struct eventfd_ctx *ctx;
 	u64 p;
-	long r;
+	long r = 0;
 	int i, fd;
+	bool kthread;
 
 	/* If you are not the owner, you can become one */
 	if (ioctl == VHOST_SET_OWNER) {
 		r = vhost_dev_set_owner(d);
+		goto done;
+	}
+	if (ioctl == VHOST_SET_USE_KTHREAD) {
+		if (copy_from_user(&kthread, argp, sizeof(kthread))) {
+			r = -EFAULT;
+			goto done;
+		}
+		use_kthread = kthread;
 		goto done;
 	}
 
