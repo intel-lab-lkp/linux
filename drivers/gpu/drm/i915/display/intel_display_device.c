@@ -490,7 +490,8 @@ static const struct platform_desc hsw_desc = {
 	PLATFORM(HASWELL),
 	.subplatforms = (const struct subplatform_desc[]) {
 		{ SUBPLATFORM(HASWELL, ULT), .pciidlist = hsw_ult_ids },
-		{ SUBPLATFORM(HASWELL, ULX), .pciidlist = hsw_ulx_ids },
+		/* Special case: ULX is also ULT. Do not copy this approach. */
+		{ SUBPLATFORM(HASWELL, ULT), SUBPLATFORM(HASWELL, ULX), .pciidlist = hsw_ulx_ids },
 		{},
 	},
 	.info = &(const struct intel_display_device_info) {
@@ -534,7 +535,8 @@ static const struct platform_desc bdw_desc = {
 	PLATFORM(BROADWELL),
 	.subplatforms = (const struct subplatform_desc[]) {
 		{ SUBPLATFORM(BROADWELL, ULT), .pciidlist = bdw_ult_ids },
-		{ SUBPLATFORM(BROADWELL, ULX), .pciidlist = bdw_ulx_ids },
+		/* Special case: ULX is also ULT. Do not copy this approach. */
+		{ SUBPLATFORM(BROADWELL, ULT), SUBPLATFORM(BROADWELL, ULX), .pciidlist = bdw_ulx_ids },
 		{},
 	},
 	.info = &(const struct intel_display_device_info) {
