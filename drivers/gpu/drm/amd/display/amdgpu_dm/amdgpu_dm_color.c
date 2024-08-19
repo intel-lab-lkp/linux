@@ -1283,7 +1283,8 @@ __set_dm_plane_colorop_multiplier(struct drm_plane_state *plane_state,
 static int
 __set_dm_plane_colorop_shaper(struct drm_plane_state *plane_state,
 			      struct dc_plane_state *dc_plane_state,
-			      struct drm_colorop *colorop)
+			      struct drm_colorop *colorop,
+			      bool *enabled)
 {
 	struct drm_colorop *old_colorop;
 	struct drm_colorop_state *colorop_state = NULL, *new_colorop_state;
@@ -1311,6 +1312,7 @@ __set_dm_plane_colorop_shaper(struct drm_plane_state *plane_state,
 		tf->tf = default_tf = amdgpu_colorop_tf_to_dc_tf(colorop_state->curve_1d_type);
 		tf->sdr_ref_white_level = SDR_WHITE_LEVEL_INIT_VALUE;
 		__set_output_tf(tf, shaper_lut, shaper_size, false);
+		*enabled = true;
 	}
 
 	/* 1D LUT - SHAPER LUT */
@@ -1338,8 +1340,101 @@ __set_dm_plane_colorop_shaper(struct drm_plane_state *plane_state,
 		shaper_size = shaper_lut != NULL ? shaper_size : 0;
 
 		/* Custom LUT size must be the same as supported size */
-		if (shaper_size == colorop_state->size)
+		if (shaper_size == colorop_state->size) {
 			__set_output_tf(tf, shaper_lut, shaper_size, false);
+			*enabled = true;
+		}
+	}
+
+	return 0;
+}
+
+/* __set_colorop_3dlut - set DRM 3D LUT to DC stream
+ * @drm_lut3d: user 3D LUT
+ * @drm_lut3d_size: size of 3D LUT
+ * @drm_mode_3dlut: drm_mode selected by userspace
+ * @lut3d: DC 3D LUT
+ *
+ * Map user 3D LUT data to DC 3D LUT and all necessary bits to program it
+ * on DCN accordingly.
+ */
+static void __set_colorop_3dlut(const struct drm_color_lut *drm_lut3d,
+				uint32_t drm_lut3d_size,
+				struct drm_mode_3dlut_mode *drm_mode_3dlut,
+				struct dc_3dlut *lut)
+{
+	if (!drm_lut3d_size)
+		return;
+
+	lut->state.bits.initialized = 0;
+
+	/* Only supports 17x17x17 3D LUT (12-bit) now */
+	if (drm_mode_3dlut->color_depth == 12)
+		lut->lut_3d.use_12bits = true;
+	else
+		return;
+
+	if (drm_mode_3dlut->lut_size == 17)
+		lut->lut_3d.use_tetrahedral_9 = false;
+	else
+		return;
+
+	lut->state.bits.initialized = 1;
+	__drm_3dlut_to_dc_3dlut(drm_lut3d, drm_lut3d_size, &lut->lut_3d,
+				lut->lut_3d.use_tetrahedral_9,
+				drm_mode_3dlut->color_depth);
+
+}
+
+static int
+__set_dm_plane_colorop_3dlut(struct drm_plane_state *plane_state,
+			     struct dc_plane_state *dc_plane_state,
+			     struct drm_colorop *colorop,
+			     bool shaper_enabled)
+{
+	struct drm_colorop *old_colorop;
+	struct drm_colorop_state *colorop_state = NULL, *new_colorop_state;
+	struct dc_transfer_func *tf = &dc_plane_state->in_shaper_func;
+	struct drm_atomic_state *state = plane_state->state;
+	const struct amdgpu_device *adev = drm_to_adev(colorop->dev);
+	const struct drm_device *dev = colorop->dev;
+	struct drm_mode_3dlut_mode *mode;
+	const struct drm_color_lut *lut3d;
+	uint32_t lut3d_size, index;
+	int i = 0;
+
+	/* 3D LUT */
+	old_colorop = colorop;
+	for_each_new_colorop_in_state(state, colorop, new_colorop_state, i) {
+		if (new_colorop_state->colorop == old_colorop &&
+		    new_colorop_state->colorop->type == DRM_COLOROP_3D_LUT) {
+			colorop_state = new_colorop_state;
+			break;
+		}
+	}
+
+	if (colorop_state && !colorop_state->bypass && colorop->type == DRM_COLOROP_3D_LUT) {
+		if (!adev->dm.dc->caps.color.dpp.hw_3d_lut) {
+			drm_dbg(dev, "3D LUT is not supported by hardware\n");
+			return 0;
+		}
+
+		drm_dbg(dev, "3D LUT colorop with ID: %d\n", colorop->base.id);
+		mode = (struct drm_mode_3dlut_mode *) colorop_state->lut_3d_modes->data;
+		index = colorop_state->lut_3d_mode_index;
+		lut3d = __extract_blob_lut(colorop_state->data, &lut3d_size);
+		lut3d_size = lut3d != NULL ? lut3d_size : 0;
+		__set_colorop_3dlut(lut3d, lut3d_size, &mode[index], &dc_plane_state->lut3d_func);
+
+		/* 3D LUT requires shaper. If shaper colorop is bypassed, enable shaper curve
+		 * with TRANSFER_FUNCTION_LINEAR
+		 */
+		if (!shaper_enabled) {
+			tf->type = TF_TYPE_DISTRIBUTED_POINTS;
+			tf->tf = TRANSFER_FUNCTION_LINEAR;
+			tf->sdr_ref_white_level = SDR_WHITE_LEVEL_INIT_VALUE;
+			__set_output_tf(tf, NULL, 0, false);
+		}
 	}
 
 	return 0;
@@ -1468,6 +1563,7 @@ amdgpu_dm_plane_set_colorop_properties(struct drm_plane_state *plane_state,
 {
 	struct drm_colorop *colorop = plane_state->color_pipeline;
 	struct drm_device *dev = plane_state->plane->dev;
+	bool shaper_enabled = false;
 	int ret;
 
 	/* 1D Curve - DEGAM TF */
@@ -1508,7 +1604,7 @@ amdgpu_dm_plane_set_colorop_properties(struct drm_plane_state *plane_state,
 		return -EINVAL;
 	}
 
-	ret = __set_dm_plane_colorop_shaper(plane_state, dc_plane_state, colorop);
+	ret = __set_dm_plane_colorop_shaper(plane_state, dc_plane_state, colorop, &shaper_enabled);
 	if (ret)
 		return ret;
 
@@ -1516,6 +1612,17 @@ amdgpu_dm_plane_set_colorop_properties(struct drm_plane_state *plane_state,
 	colorop = colorop->next;
 	if (!colorop)
 		return -EINVAL;
+
+	/* 3D LUT */
+	colorop = colorop->next;
+	if (!colorop) {
+		drm_dbg(dev, "no 3D LUT colorop found\n");
+		return -EINVAL;
+	}
+
+	ret = __set_dm_plane_colorop_3dlut(plane_state, dc_plane_state, colorop, shaper_enabled);
+	if (ret)
+		return ret;
 
 	/* 1D Curve & LUT - BLND TF & LUT */
 	colorop = colorop->next;
