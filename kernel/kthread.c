@@ -848,6 +848,12 @@ repeat:
 	} else if (!freezing(current))
 		schedule();
 
+	/*
+	 * Explicitly set the running state in case we are being
+	 * frozen and skip the schedule() above. try_to_freeze()
+	 * expects the current task to be in the running state.
+	 */
+	__set_current_state(TASK_RUNNING);
 	try_to_freeze();
 	cond_resched();
 	goto repeat;
