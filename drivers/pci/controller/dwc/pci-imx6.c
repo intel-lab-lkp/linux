@@ -722,6 +722,17 @@ static void imx6_pcie_assert_core_reset(struct imx6_pcie *imx6_pcie)
 	gpiod_set_value_cansleep(imx6_pcie->reset_gpiod, 1);
 }
 
+static void imx6_pcie_deassert_reset_gpio(struct imx6_pcie *imx6_pcie)
+{
+	/* Some boards don't have PCIe reset GPIO. */
+	if (imx6_pcie->reset_gpiod) {
+		msleep(100);
+		gpiod_set_value_cansleep(imx6_pcie->reset_gpiod, 0);
+		/* Wait for 100ms after PERST# deassertion (PCIe r5.0, 6.6.1) */
+		msleep(100);
+	}
+}
+
 static int imx6_pcie_deassert_core_reset(struct imx6_pcie *imx6_pcie)
 {
 	struct dw_pcie *pci = imx6_pcie->pci;
@@ -766,13 +777,7 @@ static int imx6_pcie_deassert_core_reset(struct imx6_pcie *imx6_pcie)
 		break;
 	}
 
-	/* Some boards don't have PCIe reset GPIO. */
-	if (imx6_pcie->reset_gpiod) {
-		msleep(100);
-		gpiod_set_value_cansleep(imx6_pcie->reset_gpiod, 0);
-		/* Wait for 100ms after PERST# deassertion (PCIe r5.0, 6.6.1) */
-		msleep(100);
-	}
+	imx6_pcie_deassert_reset_gpio(imx6_pcie);
 
 	return 0;
 }
