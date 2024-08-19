@@ -864,7 +864,15 @@ _request_firmware(const struct firmware **firmware_p, const char *name,
 	if (!firmware_p)
 		return -EINVAL;
 
-	if (!name || name[0] == '\0') {
+	/*
+	 * Reject firmware file names with "/../" sequences in them.
+	 * There are drivers that construct firmware file names from
+	 * device-supplied strings, and we don't want some device to be able
+	 * to tell us "I would like to be sent my firmware from
+	 * ../../../etc/shadow, please".
+	 */
+	if (!name || name[0] == '\0' ||
+	    strstr(name, "/../") != NULL || strncmp(name, "../", 3) == 0) {
 		ret = -EINVAL;
 		goto out;
 	}
