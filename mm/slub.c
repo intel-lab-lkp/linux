@@ -3634,6 +3634,7 @@ load_freelist:
 	VM_BUG_ON(!c->slab->frozen);
 	c->freelist = get_freepointer(s, freelist);
 	c->tid = next_tid(c->tid);
+	prefetch_freepointer(s, c->freelist);
 	local_unlock_irqrestore(&s->cpu_slab->lock, flags);
 	return freelist;
 
