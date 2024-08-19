@@ -12,6 +12,7 @@
 #include <linux/minmax.h>
 
 #include "vkms_drv.h"
+#include "vkms_luts.h"
 
 static u16 pre_mul_blend_channel(u16 src, u16 dst, u16 alpha)
 {
@@ -163,6 +164,53 @@ static void apply_lut(const struct vkms_crtc_state *crtc_state, struct line_buff
 	}
 }
 
+static void apply_colorop(struct pixel_argb_u16 *pixel, struct drm_colorop *colorop)
+{
+	struct drm_colorop_state *colorop_state = colorop->state;
+
+	if (colorop->type == DRM_COLOROP_1D_CURVE) {
+		switch (colorop_state->curve_1d_type) {
+			case DRM_COLOROP_1D_CURVE_SRGB_INV_EOTF:
+				pixel->r = apply_lut_to_channel_value(&srgb_inv_eotf, pixel->r, LUT_RED);
+				pixel->g = apply_lut_to_channel_value(&srgb_inv_eotf, pixel->g, LUT_GREEN);
+				pixel->b = apply_lut_to_channel_value(&srgb_inv_eotf, pixel->b, LUT_BLUE);
+				break;
+			case DRM_COLOROP_1D_CURVE_SRGB_EOTF:
+				pixel->r = apply_lut_to_channel_value(&srgb_eotf, pixel->r, LUT_RED);
+				pixel->g = apply_lut_to_channel_value(&srgb_eotf, pixel->g, LUT_GREEN);
+				pixel->b = apply_lut_to_channel_value(&srgb_eotf, pixel->b, LUT_BLUE);
+				break;
+			default:
+				DRM_DEBUG_DRIVER("unkown colorop 1D curve type %d\n", colorop_state->curve_1d_type);
+				break;
+		}
+	}
+
+}
+
+static void pre_blend_color_transform(const struct vkms_plane_state *plane_state, struct line_buffer *output_buffer)
+{
+	struct drm_colorop *colorop = plane_state->base.base.color_pipeline;
+
+	while (colorop) {
+		struct drm_colorop_state *colorop_state;
+
+		if (!colorop)
+			return;
+
+		colorop_state = colorop->state;
+
+		if (!colorop_state)
+			return;
+
+		for (size_t x = 0; x < output_buffer->n_pixels; x++)
+			if (!colorop_state->bypass)
+				apply_colorop(&output_buffer->pixels[x], colorop);
+
+		colorop = colorop->next;
+	}
+}
+
 /**
  * blend - blend the pixels from all planes and compute crc
  * @wb: The writeback frame buffer metadata
@@ -200,6 +248,9 @@ static void blend(struct vkms_writeback_job *wb,
 				continue;
 
 			vkms_compose_row(stage_buffer, plane[i], y_pos);
+
+			pre_blend_color_transform(plane[i], stage_buffer);
+
 			pre_mul_alpha_blend(plane[i]->frame_info, stage_buffer,
 					    output_buffer);
 		}
