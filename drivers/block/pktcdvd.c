@@ -1210,6 +1210,7 @@ try_next_bio:
 	if (pd->congested &&
 	    pd->bio_queue_size <= pd->write_congestion_off) {
 		pd->congested = false;
+		smp_mb();
 		wake_up_var(&pd->congested);
 	}
 	spin_unlock(&pd->lock);
@@ -2383,20 +2384,16 @@ static void pkt_make_request_write(struct bio *bio)
 	spin_lock(&pd->lock);
 	if (pd->write_congestion_on > 0
 	    && pd->bio_queue_size >= pd->write_congestion_on) {
-		struct wait_bit_queue_entry wqe;
 
-		init_wait_var_entry(&wqe, &pd->congested, 0);
-		for (;;) {
-			prepare_to_wait_event(__var_waitqueue(&pd->congested),
-					      &wqe.wq_entry,
-					      TASK_UNINTERRUPTIBLE);
-			if (pd->bio_queue_size <= pd->write_congestion_off)
-				break;
-			pd->congested = true;
-			spin_unlock(&pd->lock);
-			schedule();
-			spin_lock(&pd->lock);
-		}
+		___wait_var_event(&pd->congested,
+				  pd->bio_queue_size <= pd->write_congestion_off,
+				  TASK_UNINTERRUPTIBLE, 0, 0,
+				  ({ pd->congested = true;
+				    spin_unlock(&pd->lock);
+				    schedule();
+				    spin_lock(&pd->lock);
+				  })
+		);
 	}
 	spin_unlock(&pd->lock);
 
