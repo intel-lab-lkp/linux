@@ -1831,10 +1831,11 @@ __acquires(fi->lock)
 	fuse_writepage_finish(wpa);
 	spin_unlock(&fi->lock);
 
-	/* After fuse_writepage_finish() aux request list is private */
+	/* After rb_erase() aux request list is private */
 	for (aux = wpa->next; aux; aux = next) {
 		next = aux->next;
 		aux->next = NULL;
+		fuse_writepage_finish(aux);
 		fuse_writepage_free(aux);
 	}
 
