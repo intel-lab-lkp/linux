@@ -2,7 +2,8 @@
 /*
  * Copyright (C) 2022-2024 Texas Instruments Incorporated - https://www.ti.com/
  *
- * EVM Board Schematics: https://www.ti.com/lit/zip/sprr458
+ * EVM Board Schematics(j784s4): https://www.ti.com/lit/zip/sprr458
+ * EVM Board Schematics(j742s2): https://www.ti.com/lit/zip/SPAC001
  */
 / {
 	chosen {
