@@ -69,21 +69,6 @@ int amdgpu_dm_initialize_default_pipeline(struct drm_plane *plane, struct drm_pr
 
 	prev_op = op;
 
-	/* 3x4 matrix */
-	op = kzalloc(sizeof(struct drm_colorop), GFP_KERNEL);
-	if (!op) {
-		DRM_ERROR("KMS: Failed to allocate colorop\n");
-		return -ENOMEM;
-	}
-
-	ret = drm_colorop_ctm_3x4_init(dev, op, plane);
-	if (ret)
-		return ret;
-
-	drm_colorop_set_next_property(prev_op, op);
-
-	prev_op = op;
-
 	/* Multiplier */
 	op = kzalloc(sizeof(struct drm_colorop), GFP_KERNEL);
 	if (!op) {
@@ -92,6 +77,21 @@ int amdgpu_dm_initialize_default_pipeline(struct drm_plane *plane, struct drm_pr
 	}
 
 	ret = drm_colorop_mult_init(dev, op, plane);
+	if (ret)
+		return ret;
+
+	drm_colorop_set_next_property(prev_op, op);
+
+	prev_op = op;
+
+	/* 3x4 matrix */
+	op = kzalloc(sizeof(struct drm_colorop), GFP_KERNEL);
+	if (!op) {
+		DRM_ERROR("KMS: Failed to allocate colorop\n");
+		return -ENOMEM;
+	}
+
+	ret = drm_colorop_ctm_3x4_init(dev, op, plane);
 	if (ret)
 		return ret;
 
