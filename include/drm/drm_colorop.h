@@ -126,6 +126,13 @@ struct drm_colorop_state {
 	enum drm_colorop_curve_1d_type curve_1d_type;
 
 	/**
+	 * @size:
+	 *
+	 * Number of entries of the custom LUT. This should be read-only.
+	 */
+	uint32_t size;
+
+	/**
 	 * @data:
 	 *
 	 * Data blob for any TYPE that requires such a blob. The
@@ -232,6 +239,13 @@ struct drm_colorop {
 	struct drm_property *curve_1d_type_property;
 
 	/**
+	 * @size_property:
+	 *
+	 * Size property for custom LUT from userspace.
+	 */
+	struct drm_property *size_property;
+
+	/**
 	 * @data_property:
 	 *
 	 * blob property for any TYPE that requires a blob of data,
@@ -277,6 +291,8 @@ static inline struct drm_colorop *drm_colorop_find(struct drm_device *dev,
 
 int drm_colorop_curve_1d_init(struct drm_device *dev, struct drm_colorop *colorop,
 			      struct drm_plane *plane, u64 supported_tfs);
+int drm_colorop_curve_1d_lut_init(struct drm_device *dev, struct drm_colorop *colorop,
+				  struct drm_plane *plane, uint32_t lut_size);
 int drm_colorop_ctm_3x4_init(struct drm_device *dev, struct drm_colorop *colorop,
 			     struct drm_plane *plane);
 

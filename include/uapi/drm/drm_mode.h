@@ -890,6 +890,15 @@ enum drm_colorop_type {
 	DRM_COLOROP_1D_CURVE,
 
 	/**
+	 * @DRM_COLOROP_1D_LUT:
+	 *
+	 * A simple 1D LUT of uniformly spaced &drm_color_lut entries,
+	 * packed into a blob via the DATA property. The driver's expected
+	 * LUT size is advertised via the SIZE property.
+	 */
+	DRM_COLOROP_1D_LUT,
+
+	/**
 	 * @DRM_COLOROP_CTM_3X4:
 	 *
 	 * A 3x4 matrix. Its values are specified via the
