@@ -632,6 +632,9 @@ static int imx6_pcie_enable_ref_clk(struct imx6_pcie *imx6_pcie)
 		break;
 	}
 
+	/* allow the clocks to stabilize */
+	usleep_range(200, 500);
+
 	return ret;
 }
 
@@ -672,8 +675,6 @@ static int imx6_pcie_clk_enable(struct imx6_pcie *imx6_pcie)
 		goto err_ref_clk;
 	}
 
-	/* allow the clocks to stabilize */
-	usleep_range(200, 500);
 	return 0;
 
 err_ref_clk:
