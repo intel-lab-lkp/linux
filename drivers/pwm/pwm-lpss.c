@@ -111,16 +111,6 @@ static int pwm_lpss_wait_for_update(struct pwm_device *pwm)
 	return err;
 }
 
-static inline int pwm_lpss_is_updating(struct pwm_device *pwm)
-{
-	if (pwm_lpss_read(pwm) & PWM_SW_UPDATE) {
-		dev_err(pwmchip_parent(pwm->chip), "PWM_SW_UPDATE is still set, skipping update\n");
-		return -EBUSY;
-	}
-
-	return 0;
-}
-
 static void pwm_lpss_prepare(struct pwm_lpss_chip *lpwm, struct pwm_device *pwm,
 			     int duty_ns, int period_ns)
 {
@@ -168,7 +158,7 @@ static int pwm_lpss_prepare_enable(struct pwm_lpss_chip *lpwm,
 {
 	int ret;
 
-	ret = pwm_lpss_is_updating(pwm);
+	ret = pwm_lpss_wait_for_update(pwm);
 	if (ret)
 		return ret;
 
