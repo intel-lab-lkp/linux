@@ -414,8 +414,10 @@ static ssize_t enabled_store(struct config_item *item,
 		netpoll_print_options(&nt->np);
 
 		ret = netpoll_setup(&nt->np);
-		if (ret)
+		if (ret) {
+			pr_err("Not enabling netconsole. Netpoll setup failed\n");
 			goto out_unlock;
+		}
 
 		nt->enabled = true;
 		pr_info("network logging started\n");
