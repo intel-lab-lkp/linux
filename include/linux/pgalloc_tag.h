@@ -9,7 +9,18 @@
 
 #ifdef CONFIG_MEM_ALLOC_PROFILING
 
+#if !defined(CONFIG_PGALLOC_TAG_REF_BITS) || CONFIG_PGALLOC_TAG_REF_BITS > 32
+#define PGALLOC_TAG_DIRECT_REF
 typedef union codetag_ref	pgalloc_tag_ref;
+#else /* !defined(CONFIG_PGALLOC_TAG_REF_BITS) || CONFIG_PGALLOC_TAG_REF_BITS > 32 */
+#if CONFIG_PGALLOC_TAG_REF_BITS > 16
+typedef u32	pgalloc_tag_ref;
+#else
+typedef u16	pgalloc_tag_ref;
+#endif
+#endif /* !defined(CONFIG_PGALLOC_TAG_REF_BITS) || CONFIG_PGALLOC_TAG_REF_BITS > 32 */
+
+#ifdef PGALLOC_TAG_DIRECT_REF
 
 static inline void read_pgref(pgalloc_tag_ref *pgref, union codetag_ref *ref)
 {
@@ -20,6 +31,63 @@ static inline void write_pgref(pgalloc_tag_ref *pgref, union codetag_ref *ref)
 {
 	pgref->ct = ref->ct;
 }
+
+static inline void alloc_tag_sec_init(void) {}
+
+#else /* PGALLOC_TAG_DIRECT_REF */
+
+extern struct alloc_tag_kernel_section kernel_tags;
+extern struct alloc_tag_module_section module_tags;
+
+#define CODETAG_ID_NULL		0
+#define CODETAG_ID_EMPTY	1
+#define CODETAG_ID_FIRST	2
+
+static inline void read_pgref(pgalloc_tag_ref *pgref, union codetag_ref *ref)
+{
+	pgalloc_tag_ref idx = *pgref;
+
+	switch (idx) {
+	case (CODETAG_ID_NULL):
+		ref->ct = NULL;
+		break;
+	case (CODETAG_ID_EMPTY):
+		set_codetag_empty(ref);
+		break;
+	default:
+		idx -= CODETAG_ID_FIRST;
+		ref->ct = idx < kernel_tags.count ?
+			&kernel_tags.first_tag[idx].ct :
+			&module_tags.first_tag[idx - kernel_tags.count].ct;
+	}
+}
+
+static inline void write_pgref(pgalloc_tag_ref *pgref, union codetag_ref *ref)
+{
+	struct alloc_tag *tag;
+
+	if (!ref->ct) {
+		*pgref = CODETAG_ID_NULL;
+		return;
+	}
+
+	if (is_codetag_empty(ref)) {
+		*pgref = CODETAG_ID_EMPTY;
+		return;
+	}
+
+	tag = ct_to_alloc_tag(ref->ct);
+	if (tag >= kernel_tags.first_tag && tag < kernel_tags.first_tag + kernel_tags.count) {
+		*pgref = CODETAG_ID_FIRST + (tag - kernel_tags.first_tag);
+		return;
+	}
+
+	*pgref = CODETAG_ID_FIRST + kernel_tags.count + (tag - module_tags.first_tag);
+}
+
+void __init alloc_tag_sec_init(void);
+
+#endif /* PGALLOC_TAG_DIRECT_REF */
 #include <linux/page_ext.h>
 
 extern struct page_ext_operations page_alloc_tagging_ops;
@@ -197,6 +265,7 @@ static inline void pgalloc_tag_sub(struct page *page, unsigned int nr) {}
 static inline void pgalloc_tag_split(struct page *page, unsigned int nr) {}
 static inline struct alloc_tag *pgalloc_tag_get(struct page *page) { return NULL; }
 static inline void pgalloc_tag_sub_pages(struct alloc_tag *tag, unsigned int nr) {}
+static inline void alloc_tag_sec_init(void) {}
 
 #endif /* CONFIG_MEM_ALLOC_PROFILING */
 
