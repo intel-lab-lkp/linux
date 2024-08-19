@@ -670,3 +670,55 @@ void dwmac5_fpe_set_add_frag_size(void __iomem *ioaddr, u32 add_frag_size)
 
 	writel(value, ioaddr + MTL_FPE_CTRL_STS);
 }
+
+int dwmac5_fpe_set_preemptible_tcs(struct net_device *ndev,
+				   struct netlink_ext_ack *extack,
+				   unsigned long tcs)
+{
+	struct stmmac_priv *priv = netdev_priv(ndev);
+	void __iomem *ioaddr = priv->ioaddr;
+	unsigned long queue_tcs = 0;
+	int num_tc = ndev->num_tc;
+	u32 value, queue_weight;
+	u16 offset, count;
+	int tc, i;
+
+	if (!tcs)
+		goto __update_queue_tcs;
+
+	for (tc = 0; tc < num_tc; tc++) {
+		count = ndev->tc_to_txq[tc].count;
+		offset = ndev->tc_to_txq[tc].offset;
+
+		if (tcs & BIT(tc))
+			queue_tcs |= GENMASK(offset + count - 1, offset);
+
+		/* This is 1:1 mapping, go to next TC */
+		if (count == 1)
+			continue;
+
+		if (priv->plat->tx_sched_algorithm == MTL_TX_ALGORITHM_SP) {
+			NL_SET_ERR_MSG_FMT_MOD(extack, "TX algorithm SP is not suitable for one TC to multiple TXQs mapping");
+			return -EINVAL;
+		}
+
+		queue_weight = priv->plat->tx_queues_cfg[offset].weight;
+		for (i = 1; i < count; i++) {
+			if (queue_weight != priv->plat->tx_queues_cfg[offset + i].weight) {
+				NL_SET_ERR_MSG_FMT_MOD(extack, "TXQ weight [%u] differs across other TXQs in TC: [%u]",
+						       queue_weight, tc);
+				return -EINVAL;
+			}
+		}
+	}
+
+__update_queue_tcs:
+	value = readl(ioaddr + MTL_FPE_CTRL_STS);
+
+	value &= ~PEC;
+	value |= FIELD_PREP(PEC, queue_tcs);
+
+	writel(value, ioaddr + MTL_FPE_CTRL_STS);
+
+	return 0;
+}
