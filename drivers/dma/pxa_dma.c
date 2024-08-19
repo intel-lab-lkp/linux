@@ -1434,6 +1434,7 @@ static const struct platform_device_id pxad_id_table[] = {
 	{ "pxa-dma", },
 	{ },
 };
+MODULE_DEVICE_TABLE(platform, pxad_id_table);
 
 static struct platform_driver pxad_driver = {
 	.driver		= {
