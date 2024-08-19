@@ -487,10 +487,10 @@ long nr_blockdev_pages(void)
  * Test whether @bdev can be claimed by @holder.
  *
  * RETURNS:
- * %true if @bdev can be claimed, %false otherwise.
+ * %0 if @bdev can be claimed, %-EBUSY otherwise.
  */
-static bool bd_may_claim(struct block_device *bdev, void *holder,
-		const struct blk_holder_ops *hops)
+static int bd_may_claim(struct block_device *bdev, void *holder,
+			const struct blk_holder_ops *hops)
 {
 	struct block_device *whole = bdev_whole(bdev);
 
@@ -503,9 +503,9 @@ static bool bd_may_claim(struct block_device *bdev, void *holder,
 		if (bdev->bd_holder == holder) {
 			if (WARN_ON_ONCE(bdev->bd_holder_ops != hops))
 				return false;
-			return true;
+			return 0;
 		}
-		return false;
+		return -EBUSY;
 	}
 
 	/*
@@ -514,8 +514,8 @@ static bool bd_may_claim(struct block_device *bdev, void *holder,
 	 */
 	if (whole != bdev &&
 	    whole->bd_holder && whole->bd_holder != bd_may_claim)
-		return false;
-	return true;
+		return -EBUSY;
+	return 0;
 }
 
 /**
@@ -535,33 +535,23 @@ int bd_prepare_to_claim(struct block_device *bdev, void *holder,
 		const struct blk_holder_ops *hops)
 {
 	struct block_device *whole = bdev_whole(bdev);
+	int err = 0;
 
 	if (WARN_ON_ONCE(!holder))
 		return -EINVAL;
-retry:
+
 	mutex_lock(&bdev_lock);
+	___wait_var_event(&whole->bd_claiming,
+			  (err = bd_may_claim(bdev, holder, hops)) != 0 || !whole->bd_claiming,
+			  TASK_UNINTERRUPTIBLE, 0, 0,
+			  mutex_unlock(&bdev_lock); schedule(); mutex_lock(&bdev_lock));
+
 	/* if someone else claimed, fail */
-	if (!bd_may_claim(bdev, holder, hops)) {
-		mutex_unlock(&bdev_lock);
-		return -EBUSY;
-	}
-
-	/* if claiming is already in progress, wait for it to finish */
-	if (whole->bd_claiming) {
-		wait_queue_head_t *wq = bit_waitqueue(&whole->bd_claiming, 0);
-		DEFINE_WAIT(wait);
-
-		prepare_to_wait(wq, &wait, TASK_UNINTERRUPTIBLE);
-		mutex_unlock(&bdev_lock);
-		schedule();
-		finish_wait(wq, &wait);
-		goto retry;
-	}
-
-	/* yay, all mine */
-	whole->bd_claiming = holder;
+	if (!err)
+		/* yay, all mine */
+		whole->bd_claiming = holder;
 	mutex_unlock(&bdev_lock);
-	return 0;
+	return err;
 }
 EXPORT_SYMBOL_GPL(bd_prepare_to_claim); /* only for the loop driver */
 
@@ -571,7 +561,8 @@ static void bd_clear_claiming(struct block_device *whole, void *holder)
 	/* tell others that we're done */
 	BUG_ON(whole->bd_claiming != holder);
 	whole->bd_claiming = NULL;
-	wake_up_bit(&whole->bd_claiming, 0);
+	smp_mb();
+	wake_up_var(&whole->bd_claiming);
 }
 
 /**
