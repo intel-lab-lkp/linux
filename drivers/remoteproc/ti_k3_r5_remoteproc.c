@@ -644,7 +644,8 @@ static int k3_r5_rproc_stop(struct rproc *rproc)
 		/* do not allow core 0 to stop before core 1 */
 		core1 = list_last_entry(&cluster->cores, struct k3_r5_core,
 					elem);
-		if (core != core1 && core1->rproc->state != RPROC_OFFLINE) {
+		if (core != core1 && core1->rproc &&
+		    core1->rproc->state != RPROC_OFFLINE) {
 			dev_err(dev, "%s: can not stop core 0 before core 1\n",
 				__func__);
 			ret = -EPERM;
