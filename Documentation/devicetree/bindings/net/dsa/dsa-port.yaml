@@ -53,6 +53,7 @@ properties:
     enum:
       - dsa
       - edsa
+      - none
       - ocelot
       - ocelot-8021q
       - rtl8_4
