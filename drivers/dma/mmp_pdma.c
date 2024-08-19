@@ -1129,6 +1129,7 @@ static const struct platform_device_id mmp_pdma_id_table[] = {
 	{ "mmp-pdma", },
 	{ },
 };
+MODULE_DEVICE_TABLE(platform, mmp_pdma_id_table);
 
 static struct platform_driver mmp_pdma_driver = {
 	.driver		= {
