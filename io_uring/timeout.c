@@ -13,18 +13,6 @@
 #include "cancel.h"
 #include "timeout.h"
 
-struct io_timeout {
-	struct file			*file;
-	u32				off;
-	u32				target_seq;
-	u32				repeats;
-	struct list_head		list;
-	/* head of the link, used by linked timeouts only */
-	struct io_kiocb			*head;
-	/* for linked completions */
-	struct io_kiocb			*prev;
-};
-
 struct io_timeout_rem {
 	struct file			*file;
 	u64				addr;
