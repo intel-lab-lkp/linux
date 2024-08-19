@@ -320,6 +320,7 @@ static const struct platform_device_id mpc85xx_pci_err_match[] = {
 	},
 	{}
 };
+MODULE_DEVICE_TABLE(platform, mpc85xx_pci_err_match);
 
 static struct platform_driver mpc85xx_pci_err_driver = {
 	.probe = mpc85xx_pci_err_probe,
