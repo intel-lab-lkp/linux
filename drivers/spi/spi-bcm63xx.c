@@ -613,6 +613,8 @@ static void bcm63xx_spi_remove(struct platform_device *pdev)
 	/* reset spi block */
 	bcm_spi_writeb(bs, 0, SPI_INT_MASK);
 
+	pm_runtime_disable(&pdev->dev);
+
 	/* HW shutdown */
 	clk_disable_unprepare(bs->clk);
 }
