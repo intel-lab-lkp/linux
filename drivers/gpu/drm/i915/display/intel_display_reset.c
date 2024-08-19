@@ -35,8 +35,6 @@ void intel_display_reset_prepare(struct drm_i915_private *dev_priv)
 
 	/* We have a modeset vs reset deadlock, defensively unbreak it. */
 	set_bit(I915_RESET_MODESET, &to_gt(dev_priv)->reset.flags);
-	smp_mb__after_atomic();
-	wake_up_bit(&to_gt(dev_priv)->reset.flags, I915_RESET_MODESET);
 
 	if (atomic_read(&dev_priv->gpu_error.pending_fb_pin)) {
 		drm_dbg_kms(&dev_priv->drm,
