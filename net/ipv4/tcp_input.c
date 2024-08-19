@@ -3778,7 +3778,7 @@ send_ack:
 static void tcp_store_ts_recent(struct tcp_sock *tp)
 {
 	tp->rx_opt.ts_recent = tp->rx_opt.rcv_tsval;
-	tp->rx_opt.ts_recent_stamp = ktime_get_seconds();
+	tp->rx_opt.ts_recent_stamp = tcp_clock_ms();
 }
 
 static void tcp_replace_ts_recent(struct tcp_sock *tp, u32 seq)

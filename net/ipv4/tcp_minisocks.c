@@ -101,7 +101,7 @@ tcp_timewait_state_process(struct inet_timewait_sock *tw, struct sk_buff *skb,
 	struct tcp_options_received tmp_opt;
 	struct tcp_timewait_sock *tcptw = tcp_twsk((struct sock *)tw);
 	bool paws_reject = false;
-	int ts_recent_stamp;
+	u32 ts_recent_stamp;
 
 	tmp_opt.saw_tstamp = 0;
 	ts_recent_stamp = READ_ONCE(tcptw->tw_ts_recent_stamp);
@@ -576,7 +576,7 @@ struct sock *tcp_create_openreq_child(const struct sock *sk,
 	if (newtp->rx_opt.tstamp_ok) {
 		newtp->tcp_usec_ts = treq->req_usec_ts;
 		newtp->rx_opt.ts_recent = READ_ONCE(req->ts_recent);
-		newtp->rx_opt.ts_recent_stamp = ktime_get_seconds();
+		newtp->rx_opt.ts_recent_stamp = tcp_clock_ms();
 		newtp->tcp_header_len = sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED;
 	} else {
 		newtp->tcp_usec_ts = 0;
@@ -659,6 +659,8 @@ struct sock *tcp_check_req(struct sock *sk, struct sk_buff *skb,
 		tcp_parse_options(sock_net(sk), skb, &tmp_opt, 0, NULL);
 
 		if (tmp_opt.saw_tstamp) {
+			unsigned int rsk_timeout;
+
 			tmp_opt.ts_recent = READ_ONCE(req->ts_recent);
 			if (tmp_opt.rcv_tsecr)
 				tmp_opt.rcv_tsecr -= tcp_rsk(req)->ts_off;
@@ -666,7 +668,8 @@ struct sock *tcp_check_req(struct sock *sk, struct sk_buff *skb,
 			 * it can be estimated (approximately)
 			 * from another data.
 			 */
-			tmp_opt.ts_recent_stamp = ktime_get_seconds() - reqsk_timeout(req, TCP_RTO_MAX) / HZ;
+			rsk_timeout = jiffies_to_msecs(reqsk_timeout(req, TCP_RTO_MAX));
+			tmp_opt.ts_recent_stamp = tcp_clock_ms() - rsk_timeout;
 			paws_reject = tcp_paws_reject(&tmp_opt, th->rst);
 		}
 	}
