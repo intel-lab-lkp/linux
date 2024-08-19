@@ -18,6 +18,7 @@
 #include <linux/nls.h>
 #include <linux/buffer_head.h>
 #include <linux/magic.h>
+#include <linux/exportfs.h>
 
 #include "exfat_raw.h"
 #include "exfat_fs.h"
@@ -193,6 +194,69 @@ static const struct super_operations exfat_sops = {
 	.sync_fs	= exfat_sync_fs,
 	.statfs		= exfat_statfs,
 	.show_options	= exfat_show_options,
+};
+
+/**
+ * exfat_export_get_inode - Get inode for export operations
+ * @sb: Superblock pointer
+ * @ino: Inode number
+ * @generation: Generation number
+ *
+ * Returns pointer to inode or error pointer in case of an error.
+ */
+static struct inode *exfat_export_get_inode(struct super_block *sb, u64 ino,
+	u32 generation)
+{
+	struct inode *inode = NULL;
+
+	if (ino == 0)
+		return ERR_PTR(-ESTALE);
+
+	inode = ilookup(sb, ino);
+	if (inode && generation && inode->i_generation != generation) {
+		iput(inode);
+		return ERR_PTR(-ESTALE);
+	}
+
+	return inode;
+}
+
+/**
+ * exfat_fh_to_dentry - Convert file handle to dentry
+ * @sb: Superblock pointer
+ * @fid: File identifier
+ * @fh_len: Length of the file handle
+ * @fh_type: Type of the file handle
+ *
+ * Returns dentry corresponding to the file handle.
+ */
+static struct dentry *exfat_fh_to_dentry(struct super_block *sb,
+	struct fid *fid, int fh_len, int fh_type)
+{
+	return generic_fh_to_dentry(sb, fid, fh_len, fh_type,
+		exfat_export_get_inode);
+}
+
+/**
+ * exfat_fh_to_parent - Convert file handle to parent dentry
+ * @sb: Superblock pointer
+ * @fid: File identifier
+ * @fh_len: Length of the file handle
+ * @fh_type: Type of the file handle
+ *
+ * Returns parent dentry corresponding to the file handle.
+ */
+static struct dentry *exfat_fh_to_parent(struct super_block *sb,
+	struct fid *fid, int fh_len, int fh_type)
+{
+	return generic_fh_to_parent(sb, fid, fh_len, fh_type,
+		exfat_export_get_inode);
+}
+
+static const struct export_operations exfat_export_ops = {
+	.encode_fh = generic_encode_ino32_fh,
+	.fh_to_dentry = exfat_fh_to_dentry,
+	.fh_to_parent = exfat_fh_to_parent,
 };
 
 enum {
@@ -633,6 +697,7 @@ static int exfat_fill_super(struct super_block *sb, struct fs_context *fc)
 	sb->s_flags |= SB_NODIRATIME;
 	sb->s_magic = EXFAT_SUPER_MAGIC;
 	sb->s_op = &exfat_sops;
+	sb->s_export_op = &exfat_export_ops;
 
 	sb->s_time_gran = 10 * NSEC_PER_MSEC;
 	sb->s_time_min = EXFAT_MIN_TIMESTAMP_SECS;
