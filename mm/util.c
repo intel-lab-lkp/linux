@@ -932,11 +932,20 @@ int overcommit_kbytes_handler(const struct ctl_table *table, int write, void *bu
 }
 
 /*
- * Committed memory limit enforced when OVERCOMMIT_NEVER policy is used
+ * Committed virtual memory limit
+ *
+ * return 0 if OVERCOMMIT_ALWAYS policy is used, otherwise return committed
+ * memory limit enforced if OVERCOMMIT_GUESS or OVERCOMMIT_NEVER policy is used.
  */
 unsigned long vm_commit_limit(void)
 {
 	unsigned long allowed;
+
+	if (sysctl_overcommit_memory == OVERCOMMIT_ALWAYS)
+		return 0;
+
+	if (sysctl_overcommit_memory == OVERCOMMIT_GUESS)
+		return totalram_pages() + total_swap_pages;
 
 	if (sysctl_overcommit_kbytes)
 		allowed = sysctl_overcommit_kbytes >> (PAGE_SHIFT - 10);
