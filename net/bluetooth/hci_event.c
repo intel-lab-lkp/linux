@@ -104,8 +104,7 @@ static u8 hci_cc_inquiry_cancel(struct hci_dev *hdev, void *data,
 	if (rp->status)
 		return rp->status;
 
-	clear_bit(HCI_INQUIRY, &hdev->flags);
-	wake_up_bit(&hdev->flags, HCI_INQUIRY);
+	clear_and_wake_up_bit(HCI_INQUIRY, &hdev->flags);
 
 	hci_dev_lock(hdev);
 	/* Set discovery state to stopped if we're not doing LE active

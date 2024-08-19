@@ -688,8 +688,7 @@ update:
 	if (!test_and_set_bit_lock(AFS_SERVER_FL_UPDATING, &server->flags)) {
 		clear_bit(AFS_SERVER_FL_NEEDS_UPDATE, &server->flags);
 		success = afs_update_server_record(op, server, key);
-		clear_bit_unlock(AFS_SERVER_FL_UPDATING, &server->flags);
-		wake_up_bit(&server->flags, AFS_SERVER_FL_UPDATING);
+		clear_and_wake_up_bit(AFS_SERVER_FL_UPDATING, &server->flags);
 		_leave(" = %d", success);
 		return success;
 	}

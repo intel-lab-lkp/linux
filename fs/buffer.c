@@ -74,8 +74,7 @@ EXPORT_SYMBOL(__lock_buffer);
 
 void unlock_buffer(struct buffer_head *bh)
 {
-	clear_bit_unlock(BH_Lock, &bh->b_state);
-	wake_up_bit(&bh->b_state, BH_Lock);
+	clear_and_wake_up_bit(BH_Lock, &bh->b_state);
 }
 EXPORT_SYMBOL(unlock_buffer);
 

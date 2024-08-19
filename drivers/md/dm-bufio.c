@@ -1430,9 +1430,7 @@ static void write_endio(struct dm_buffer *b, blk_status_t status)
 
 	BUG_ON(!test_bit(B_WRITING, &b->state));
 
-	smp_mb__before_atomic();
-	clear_bit(B_WRITING, &b->state);
-	wake_up_bit(&b->state, B_WRITING);
+	clear_and_wake_up_bit(B_WRITING, &b->state);
 }
 
 /*
@@ -1839,9 +1837,7 @@ static void read_endio(struct dm_buffer *b, blk_status_t status)
 
 	BUG_ON(!test_bit(B_READING, &b->state));
 
-	smp_mb__before_atomic();
-	clear_bit(B_READING, &b->state);
-	wake_up_bit(&b->state, B_READING);
+	clear_and_wake_up_bit(B_READING, &b->state);
 }
 
 /*

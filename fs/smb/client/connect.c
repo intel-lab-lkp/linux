@@ -4257,8 +4257,7 @@ wait_for_construction:
 	}
 
 	tlink->tl_tcon = cifs_construct_tcon(cifs_sb, fsuid);
-	clear_bit(TCON_LINK_PENDING, &tlink->tl_flags);
-	wake_up_bit(&tlink->tl_flags, TCON_LINK_PENDING);
+	clear_and_wake_up_bit(TCON_LINK_PENDING, &tlink->tl_flags);
 
 	if (IS_ERR(tlink->tl_tcon)) {
 		cifs_put_tlink(tlink);

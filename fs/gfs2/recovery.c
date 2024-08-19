@@ -557,8 +557,7 @@ fail:
 	jd->jd_recover_error = error;
 	gfs2_recovery_done(sdp, jd->jd_jid, LM_RD_GAVEUP);
 done:
-	clear_bit(JDF_RECOVERY, &jd->jd_flags);
-	wake_up_bit(&jd->jd_flags, JDF_RECOVERY);
+	clear_and_wake_up_bit(JDF_RECOVERY, &jd->jd_flags);
 }
 
 int gfs2_recover_journal(struct gfs2_jdesc *jd, bool wait)

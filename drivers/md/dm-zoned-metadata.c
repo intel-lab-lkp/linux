@@ -524,8 +524,7 @@ static void dmz_mblock_bio_end_io(struct bio *bio)
 	else
 		flag = DMZ_META_READING;
 
-	clear_bit_unlock(flag, &mblk->state);
-	wake_up_bit(&mblk->state, flag);
+	clear_and_wake_up_bit(flag, &mblk->state);
 
 	bio_put(bio);
 }
@@ -1915,8 +1914,7 @@ void dmz_unlock_zone_reclaim(struct dm_zone *zone)
 	WARN_ON(dmz_is_active(zone));
 	WARN_ON(!dmz_in_reclaim(zone));
 
-	clear_bit_unlock(DMZ_RECLAIM, &zone->flags);
-	wake_up_bit(&zone->flags, DMZ_RECLAIM);
+	clear_and_wake_up_bit(DMZ_RECLAIM, &zone->flags);
 }
 
 /*

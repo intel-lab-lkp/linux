@@ -313,8 +313,7 @@ int orangefs_revalidate_mapping(struct inode *inode)
 	orangefs_inode->mapping_time = jiffies +
 	    orangefs_cache_timeout_msecs*HZ/1000;
 
-	clear_bit(1, bitlock);
-	wake_up_bit(bitlock, 1);
+	clear_and_wake_up_bit(1, bitlock);
 
 	return ret;
 }

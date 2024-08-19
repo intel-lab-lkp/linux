@@ -106,8 +106,7 @@ static void dmz_reclaim_kcopy_end(int read_err, unsigned long write_err,
 	else
 		zrc->kc_err = 0;
 
-	clear_bit_unlock(DMZ_RECLAIM_KCOPY, &zrc->flags);
-	wake_up_bit(&zrc->flags, DMZ_RECLAIM_KCOPY);
+	clear_and_wake_up_bit(DMZ_RECLAIM_KCOPY, &zrc->flags);
 }
 
 /*

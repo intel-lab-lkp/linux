@@ -375,8 +375,7 @@ static int dvb_usb_stop_feed(struct dvb_demux_feed *dvbdmxfeed)
 	usb_urb_killv2(&adap->stream);
 
 	/* clear 'streaming' status bit */
-	clear_bit(ADAP_STREAMING, &adap->state_bits);
-	wake_up_bit(&adap->state_bits, ADAP_STREAMING);
+	clear_and_wake_up_bit(ADAP_STREAMING, &adap->state_bits);
 skip_feed_stop:
 
 	if (ret)
@@ -578,10 +577,8 @@ static int dvb_usb_fe_init(struct dvb_frontend *fe)
 			goto err;
 	}
 err:
-	if (!adap->suspend_resume_active) {
-		clear_bit(ADAP_INIT, &adap->state_bits);
-		wake_up_bit(&adap->state_bits, ADAP_INIT);
-	}
+	if (!adap->suspend_resume_active)
+		clear_and_wake_up_bit(ADAP_INIT, &adap->state_bits);
 
 	dev_dbg(&d->udev->dev, "%s: ret=%d\n", __func__, ret);
 	return ret;
@@ -618,8 +615,7 @@ static int dvb_usb_fe_sleep(struct dvb_frontend *fe)
 err:
 	if (!adap->suspend_resume_active) {
 		adap->active_fe = -1;
-		clear_bit(ADAP_SLEEP, &adap->state_bits);
-		wake_up_bit(&adap->state_bits, ADAP_SLEEP);
+		clear_and_wake_up_bit(ADAP_SLEEP, &adap->state_bits);
 	}
 
 	dev_dbg(&d->udev->dev, "%s: ret=%d\n", __func__, ret);

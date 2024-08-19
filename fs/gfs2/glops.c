@@ -276,8 +276,7 @@ static void gfs2_clear_glop_pending(struct gfs2_inode *ip)
 	if (!ip)
 		return;
 
-	clear_bit_unlock(GIF_GLOP_PENDING, &ip->i_flags);
-	wake_up_bit(&ip->i_flags, GIF_GLOP_PENDING);
+	clear_and_wake_up_bit(GIF_GLOP_PENDING, &ip->i_flags);
 }
 
 /**
@@ -644,8 +643,7 @@ static void inode_go_unlocked(struct gfs2_glock *gl)
 	 * to NULL by this point in its lifecycle. */
 	if (!test_bit(GLF_UNLOCKED, &gl->gl_flags))
 		return;
-	clear_bit_unlock(GLF_UNLOCKED, &gl->gl_flags);
-	wake_up_bit(&gl->gl_flags, GLF_UNLOCKED);
+	clear_and_wake_up_bit(GLF_UNLOCKED, &gl->gl_flags);
 }
 
 /**

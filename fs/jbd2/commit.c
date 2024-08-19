@@ -38,10 +38,8 @@ static void journal_end_buffer_io_sync(struct buffer_head *bh, int uptodate)
 		set_buffer_uptodate(bh);
 	else
 		clear_buffer_uptodate(bh);
-	if (orig_bh) {
-		clear_bit_unlock(BH_Shadow, &orig_bh->b_state);
-		wake_up_bit(&orig_bh->b_state, BH_Shadow);
-	}
+	if (orig_bh)
+		clear_and_wake_up_bit(BH_Shadow, &orig_bh->b_state);
 	unlock_buffer(bh);
 }
 

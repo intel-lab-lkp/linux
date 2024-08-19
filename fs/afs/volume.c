@@ -439,9 +439,8 @@ update:
 		ret = afs_update_volume_status(volume, op->key);
 		if (ret < 0)
 			set_bit(AFS_VOLUME_NEEDS_UPDATE, &volume->flags);
-		clear_bit_unlock(AFS_VOLUME_WAIT, &volume->flags);
 		clear_bit_unlock(AFS_VOLUME_UPDATING, &volume->flags);
-		wake_up_bit(&volume->flags, AFS_VOLUME_WAIT);
+		clear_and_wake_up_bit(AFS_VOLUME_WAIT, &volume->flags);
 		_leave(" = %d", ret);
 		return ret;
 	}

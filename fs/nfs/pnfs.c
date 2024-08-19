@@ -2055,8 +2055,7 @@ static void pnfs_clear_first_layoutget(struct pnfs_layout_hdr *lo)
 {
 	unsigned long *bitlock = &lo->plh_flags;
 
-	clear_bit_unlock(NFS_LAYOUT_FIRST_LAYOUTGET, bitlock);
-	wake_up_bit(bitlock, NFS_LAYOUT_FIRST_LAYOUTGET);
+	clear_and_wake_up_bit(NFS_LAYOUT_FIRST_LAYOUTGET, bitlock);
 }
 
 static void _add_to_server_list(struct pnfs_layout_hdr *lo,
@@ -3227,8 +3226,7 @@ static void pnfs_clear_layoutcommitting(struct inode *inode)
 {
 	unsigned long *bitlock = &NFS_I(inode)->flags;
 
-	clear_bit_unlock(NFS_INO_LAYOUTCOMMITTING, bitlock);
-	wake_up_bit(bitlock, NFS_INO_LAYOUTCOMMITTING);
+	clear_and_wake_up_bit(NFS_INO_LAYOUTCOMMITTING, bitlock);
 }
 
 /*

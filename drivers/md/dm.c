@@ -3153,8 +3153,7 @@ static void __dm_internal_resume(struct mapped_device *md)
 		set_bit(DMF_SUSPENDED, &md->flags);
 	}
 done:
-	clear_bit(DMF_SUSPENDED_INTERNALLY, &md->flags);
-	wake_up_bit(&md->flags, DMF_SUSPENDED_INTERNALLY);
+	clear_and_wake_up_bit(DMF_SUSPENDED_INTERNALLY, &md->flags);
 }
 
 void dm_internal_suspend_noflush(struct mapped_device *md)

@@ -586,8 +586,7 @@ static ssize_t jid_store(struct gfs2_sbd *sdp, const char *buf, size_t len)
 	if (sdp->sd_args.ar_spectator && jid > 0)
 		rv = jid = -EINVAL;
 	sdp->sd_lockstruct.ls_jid = jid;
-	clear_bit(SDF_NOJOURNALID, &sdp->sd_flags);
-	wake_up_bit(&sdp->sd_flags, SDF_NOJOURNALID);
+	clear_and_wake_up_bit(SDF_NOJOURNALID, &sdp->sd_flags);
 out:
 	spin_unlock(&sdp->sd_jindex_spin);
 	return rv ? rv : len;

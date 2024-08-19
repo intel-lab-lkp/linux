@@ -594,8 +594,8 @@ start:
 	if (test_bit(CIFS_INODE_PENDING_OPLOCK_BREAK, &cinode->flags)) {
 		cinode->writers--;
 		if (cinode->writers == 0) {
-			clear_bit(CIFS_INODE_PENDING_WRITERS, &cinode->flags);
-			wake_up_bit(&cinode->flags, CIFS_INODE_PENDING_WRITERS);
+			clear_and_wake_up_bit(CIFS_INODE_PENDING_WRITERS,
+					      &cinode->flags);
 		}
 		spin_unlock(&cinode->writers_lock);
 		goto start;
@@ -608,10 +608,9 @@ void cifs_put_writer(struct cifsInodeInfo *cinode)
 {
 	spin_lock(&cinode->writers_lock);
 	cinode->writers--;
-	if (cinode->writers == 0) {
-		clear_bit(CIFS_INODE_PENDING_WRITERS, &cinode->flags);
-		wake_up_bit(&cinode->flags, CIFS_INODE_PENDING_WRITERS);
-	}
+	if (cinode->writers == 0)
+		clear_and_wake_up_bit(CIFS_INODE_PENDING_WRITERS,
+				      &cinode->flags);
 	spin_unlock(&cinode->writers_lock);
 }
 
@@ -640,8 +639,7 @@ void cifs_queue_oplock_break(struct cifsFileInfo *cfile)
 
 void cifs_done_oplock_break(struct cifsInodeInfo *cinode)
 {
-	clear_bit(CIFS_INODE_PENDING_OPLOCK_BREAK, &cinode->flags);
-	wake_up_bit(&cinode->flags, CIFS_INODE_PENDING_OPLOCK_BREAK);
+	clear_and_wake_up_bit(CIFS_INODE_PENDING_OPLOCK_BREAK, &cinode->flags);
 }
 
 bool
