@@ -26,7 +26,8 @@ static __init void timer_of_irq_exit(struct of_timer_irq *of_irq)
 	struct clock_event_device *clkevt = &to->clkevt;
 
 	if (of_irq->percpu)
-		free_percpu_irq(of_irq->irq, clkevt);
+		free_percpu_irq(of_irq->irq,
+				(void __percpu *)(unsigned long)clkevt);
 	else
 		free_irq(of_irq->irq, clkevt);
 }
@@ -70,8 +71,8 @@ static __init int timer_of_irq_init(struct device_node *np,
 	}
 
 	ret = of_irq->percpu ?
-		request_percpu_irq(of_irq->irq, of_irq->handler,
-				   np->full_name, clkevt) :
+		request_percpu_irq(of_irq->irq, of_irq->handler, np->full_name,
+				   (void __percpu *)(unsigned long)clkevt) :
 		request_irq(of_irq->irq, of_irq->handler,
 			    of_irq->flags ? of_irq->flags : IRQF_TIMER,
 			    np->full_name, clkevt);
