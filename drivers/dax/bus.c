@@ -16,13 +16,13 @@ static DEFINE_MUTEX(dax_bus_lock);
  * All changes to the dax region configuration occur with this lock held
  * for write.
  */
-DECLARE_RWSEM(dax_region_rwsem);
+static DECLARE_RWSEM(dax_region_rwsem);
 
 /*
  * All changes to the dax device configuration occur with this lock held
  * for write.
  */
-DECLARE_RWSEM(dax_dev_rwsem);
+static DECLARE_RWSEM(dax_dev_rwsem);
 
 #define DAX_NAME_LEN 30
 struct dax_id {
