@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include <linux/alloc_tag.h>
+#include <linux/execmem.h>
 #include <linux/fs.h>
 #include <linux/gfp.h>
 #include <linux/module.h>
@@ -9,6 +10,12 @@
 #include <linux/seq_file.h>
 
 static struct codetag_type *alloc_tag_cttype;
+static struct alloc_tag_module_section module_tags;
+static struct maple_tree mod_area_mt = MTREE_INIT(mod_area_mt, MT_FLAGS_ALLOC_RANGE);
+/* A dummy object used to indicate an unloaded module */
+static struct module unloaded_mod;
+/* A dummy object used to indicate a module prepended area */
+static struct module prepend_mod;
 
 DEFINE_PER_CPU(struct alloc_tag_counters, _shared_alloc_tag);
 EXPORT_SYMBOL(_shared_alloc_tag);
@@ -149,29 +156,198 @@ static void __init procfs_init(void)
 	proc_create_seq("allocinfo", 0400, NULL, &allocinfo_seq_op);
 }
 
-static bool alloc_tag_module_unload(struct codetag_type *cttype,
-				    struct codetag_module *cmod)
+static bool needs_section_mem(struct module *mod, unsigned long size)
 {
-	struct codetag_iterator iter = codetag_get_ct_iter(cttype);
-	struct alloc_tag_counters counter;
-	bool module_unused = true;
-	struct alloc_tag *tag;
-	struct codetag *ct;
+	return size >= sizeof(struct alloc_tag);
+}
 
-	for (ct = codetag_next_ct(&iter); ct; ct = codetag_next_ct(&iter)) {
-		if (iter.cmod != cmod)
-			continue;
+/* Called under RCU read lock */
+static void clean_unused_module_areas(void)
+{
+	MA_STATE(mas, &mod_area_mt, 0, module_tags.size);
+	struct module *val;
 
-		tag = ct_to_alloc_tag(ct);
-		counter = alloc_tag_read(tag);
+	mas_for_each(&mas, val, module_tags.size) {
+		if (val == &unloaded_mod) {
+			struct alloc_tag *tag;
+			struct alloc_tag *last;
+			bool unused = true;
 
-		if (WARN(counter.bytes,
-			 "%s:%u module %s func:%s has %llu allocated at module unload",
-			 ct->filename, ct->lineno, ct->modname, ct->function, counter.bytes))
-			module_unused = false;
+			tag = (struct alloc_tag *)(module_tags.start_addr + mas.index);
+			last = (struct alloc_tag *)(module_tags.start_addr + mas.last);
+			while (tag <= last) {
+				struct alloc_tag_counters counter;
+
+				counter = alloc_tag_read(tag);
+				if (counter.bytes) {
+					unused = false;
+					break;
+				}
+				tag++;
+			}
+			if (unused) {
+				mtree_store_range(&mod_area_mt, mas.index,
+						  mas.last, NULL, GFP_KERNEL);
+			}
+		}
+	}
+}
+
+static void *reserve_module_tags(struct module *mod, unsigned long size,
+				 unsigned int prepend, unsigned long align)
+{
+	unsigned long section_size = module_tags.end_addr - module_tags.start_addr;
+	MA_STATE(mas, &mod_area_mt, 0, section_size - 1);
+	bool cleanup_done = false;
+	unsigned long offset;
+	void *ret;
+
+	/* If no tags return NULL */
+	if (size < sizeof(struct alloc_tag))
+		return NULL;
+
+	/*
+	 * align is always power of 2, so we can use IS_ALIGNED and ALIGN.
+	 * align 0 or 1 means no alignment, to simplify set to 1.
+	 */
+	if (!align)
+		align = 1;
+
+	rcu_read_lock();
+repeat:
+	/* Try finding exact size and hope the start is aligned */
+	if (mas_empty_area(&mas, 0, section_size - 1, prepend + size))
+		goto cleanup;
+
+	if (IS_ALIGNED(mas.index + prepend, align))
+		goto found;
+
+	/* Try finding larger area to align later */
+	mas_reset(&mas);
+	if (!mas_empty_area(&mas, 0, section_size - 1,
+			    size + prepend + align - 1))
+		goto found;
+
+cleanup:
+	/* No free area, try cleanup stale data and repeat the search once */
+	if (!cleanup_done) {
+		clean_unused_module_areas();
+		cleanup_done = true;
+		mas_reset(&mas);
+		goto repeat;
+	} else {
+		ret = ERR_PTR(-ENOMEM);
+		goto out;
 	}
 
-	return module_unused;
+found:
+	offset = mas.index;
+	offset += prepend;
+	offset = ALIGN(offset, align);
+
+	if (mtree_insert_range(&mod_area_mt, offset, offset + size - 1, mod,
+			       GFP_KERNEL)) {
+		ret = ERR_PTR(-ENOMEM);
+		goto out;
+	}
+
+	if (offset != mas.index) {
+		if (mtree_insert_range(&mod_area_mt, mas.index, offset - 1,
+				       &prepend_mod, GFP_KERNEL)) {
+			mtree_store_range(&mod_area_mt, offset, offset + size - 1,
+					  NULL, GFP_KERNEL);
+			ret = ERR_PTR(-ENOMEM);
+			goto out;
+		}
+	}
+
+	if (module_tags.size < offset + size)
+		module_tags.size = offset + size;
+
+	ret = (struct alloc_tag *)(module_tags.start_addr + offset);
+out:
+	rcu_read_unlock();
+
+	return ret;
+}
+
+static void release_module_tags(struct module *mod, bool unused)
+{
+	MA_STATE(mas, &mod_area_mt, 0, module_tags.size);
+	unsigned long padding_start;
+	bool padding_found = false;
+	struct module *val;
+
+	if (unused)
+		return;
+
+	unused = true;
+	rcu_read_lock();
+	mas_for_each(&mas, val, module_tags.size) {
+		struct alloc_tag *tag;
+		struct alloc_tag *last;
+
+		if (val == &prepend_mod) {
+			padding_start = mas.index;
+			padding_found = true;
+			continue;
+		}
+
+		if (val != mod) {
+			padding_found = false;
+			continue;
+		}
+
+		tag = (struct alloc_tag *)(module_tags.start_addr + mas.index);
+		last = (struct alloc_tag *)(module_tags.start_addr + mas.last);
+		while (tag <= last) {
+			struct alloc_tag_counters counter;
+
+			counter = alloc_tag_read(tag);
+			if (counter.bytes) {
+				struct codetag *ct = &tag->ct;
+
+				pr_info("%s:%u module %s func:%s has %llu allocated at module unload\n",
+					ct->filename, ct->lineno, ct->modname,
+					ct->function, counter.bytes);
+				unused = false;
+				break;
+			}
+			tag++;
+		}
+		if (unused) {
+			mtree_store_range(&mod_area_mt,
+					  padding_found ? padding_start : mas.index,
+					  mas.last, NULL, GFP_KERNEL);
+		} else {
+			/* Release the padding and mark the module unloaded */
+			if (padding_found)
+				mtree_store_range(&mod_area_mt, padding_start,
+						  mas.index - 1, NULL, GFP_KERNEL);
+			mtree_store_range(&mod_area_mt, mas.index, mas.last,
+					  &unloaded_mod, GFP_KERNEL);
+		}
+
+		break;
+	}
+	rcu_read_unlock();
+}
+
+static void replace_module(struct module *mod, struct module *new_mod)
+{
+	MA_STATE(mas, &mod_area_mt, 0, module_tags.size);
+	struct module *val;
+
+	rcu_read_lock();
+	mas_for_each(&mas, val, module_tags.size) {
+		if (val != mod)
+			continue;
+
+		mtree_store_range(&mod_area_mt, mas.index, mas.last,
+				  new_mod, GFP_KERNEL);
+		break;
+	}
+	rcu_read_unlock();
 }
 
 #ifdef CONFIG_MEM_ALLOC_PROFILING_ENABLED_BY_DEFAULT
@@ -252,17 +428,46 @@ static void __init sysctl_init(void)
 static inline void sysctl_init(void) {}
 #endif /* CONFIG_SYSCTL */
 
+static unsigned long max_module_alloc_tags __initdata = 100000;
+
+static int __init set_max_module_alloc_tags(char *arg)
+{
+	if (!arg)
+		return -EINVAL;
+
+	return kstrtoul(arg, 0, &max_module_alloc_tags);
+}
+early_param("max_module_alloc_tags", set_max_module_alloc_tags);
+
 static int __init alloc_tag_init(void)
 {
 	const struct codetag_type_desc desc = {
-		.section	= "alloc_tags",
-		.tag_size	= sizeof(struct alloc_tag),
-		.module_unload	= alloc_tag_module_unload,
+		.section		= ALLOC_TAG_SECTION_NAME,
+		.tag_size		= sizeof(struct alloc_tag),
+		.needs_section_mem	= needs_section_mem,
+		.alloc_section_mem	= reserve_module_tags,
+		.free_section_mem	= release_module_tags,
+		.module_replaced	= replace_module,
 	};
+	unsigned long module_tags_mem_sz;
 
+	module_tags_mem_sz = max_module_alloc_tags * sizeof(struct alloc_tag);
+	pr_info("%lu bytes reserved for module allocation tags\n", module_tags_mem_sz);
+
+	/* Allocate space to copy allocation tags */
+	module_tags.start_addr = (unsigned long)execmem_alloc(EXECMEM_MODULE_DATA,
+							      module_tags_mem_sz);
+	if (!module_tags.start_addr)
+		return -ENOMEM;
+
+	module_tags.end_addr = module_tags.start_addr + module_tags_mem_sz;
+	mt_set_in_rcu(&mod_area_mt);
 	alloc_tag_cttype = codetag_register_type(&desc);
-	if (IS_ERR(alloc_tag_cttype))
+	if (IS_ERR(alloc_tag_cttype)) {
+		execmem_free((void *)module_tags.start_addr);
+		module_tags.start_addr = 0;
 		return PTR_ERR(alloc_tag_cttype);
+	}
 
 	sysctl_init();
 	procfs_init();
