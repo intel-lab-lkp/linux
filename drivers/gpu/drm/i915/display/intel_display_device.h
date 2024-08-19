@@ -15,7 +15,11 @@
 struct drm_i915_private;
 struct drm_printer;
 
-/* Keep in gen based order, and chronological order within a gen */
+/*
+ * Display platforms and subplatforms. Keep platforms in display version based
+ * order, chronological order within a version, and subplatforms next to the
+ * platform.
+ */
 #define INTEL_DISPLAY_PLATFORMS(func) \
 	/* Display ver 2 */ \
 	func(I830) \
@@ -42,56 +46,55 @@ struct drm_printer;
 	func(IVYBRIDGE) \
 	func(VALLEYVIEW) \
 	func(HASWELL) \
+	func(HASWELL_ULT) \
+	func(HASWELL_ULX) \
 	/* Display ver 8 */ \
 	func(BROADWELL) \
+	func(BROADWELL_ULT) \
+	func(BROADWELL_ULX) \
 	func(CHERRYVIEW) \
 	/* Display ver 9 */ \
 	func(SKYLAKE) \
+	func(SKYLAKE_ULT) \
+	func(SKYLAKE_ULX) \
 	func(BROXTON) \
 	func(KABYLAKE) \
+	func(KABYLAKE_ULT) \
+	func(KABYLAKE_ULX) \
 	func(GEMINILAKE) \
 	func(COFFEELAKE) \
+	func(COFFEELAKE_ULT) \
+	func(COFFEELAKE_ULX) \
 	func(COMETLAKE) \
+	func(COMETLAKE_ULT) \
+	func(COMETLAKE_ULX) \
 	/* Display ver 11 */ \
 	func(ICELAKE) \
+	func(ICELAKE_PORT_F) \
 	func(JASPERLAKE) \
 	func(ELKHARTLAKE) \
 	/* Display ver 12 */ \
 	func(TIGERLAKE) \
+	func(TIGERLAKE_UY) \
 	func(ROCKETLAKE) \
 	func(DG1) \
 	func(ALDERLAKE_S) \
+	func(ALDERLAKE_S_RAPTORLAKE_S) \
 	/* Display ver 13 */ \
 	func(ALDERLAKE_P) \
+	func(ALDERLAKE_P_ALDERLAKE_N) \
+	func(ALDERLAKE_P_RAPTORLAKE_P) \
+	func(ALDERLAKE_P_RAPTORLAKE_U) \
 	func(DG2) \
+	func(DG2_G10) \
+	func(DG2_G11) \
+	func(DG2_G12) \
 	/* Display ver 14 (based on GMD ID) */ \
 	func(METEORLAKE) \
 	/* Display ver 20 (based on GMD ID) */ \
 	func(LUNARLAKE) \
 	/* Display ver 14.1 (based on GMD ID) */ \
-	func(BATTLEMAGE) \
-	/* Subplatforms */ \
-	func(HASWELL_ULT) \
-	func(HASWELL_ULX) \
-	func(BROADWELL_ULT) \
-	func(BROADWELL_ULX) \
-	func(SKYLAKE_ULT) \
-	func(SKYLAKE_ULX) \
-	func(KABYLAKE_ULT) \
-	func(KABYLAKE_ULX) \
-	func(COFFEELAKE_ULT) \
-	func(COFFEELAKE_ULX) \
-	func(COMETLAKE_ULT) \
-	func(COMETLAKE_ULX) \
-	func(ICELAKE_PORT_F) \
-	func(TIGERLAKE_UY) \
-	func(ALDERLAKE_S_RAPTORLAKE_S) \
-	func(ALDERLAKE_P_ALDERLAKE_N) \
-	func(ALDERLAKE_P_RAPTORLAKE_P) \
-	func(ALDERLAKE_P_RAPTORLAKE_U) \
-	func(DG2_G10) \
-	func(DG2_G11) \
-	func(DG2_G12)
+	func(BATTLEMAGE)
 
 #define __MEMBER(name) unsigned long name:1;
 #define __COUNT(x) 1 +
