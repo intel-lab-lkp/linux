@@ -110,6 +110,7 @@ static const struct platform_device_id atmel_ssc_devtypes[] = {
 		/* sentinel */
 	}
 };
+MODULE_DEVICE_TABLE(platform, atmel_ssc_devtypes);
 
 #ifdef CONFIG_OF
 static const struct of_device_id atmel_ssc_dt_ids[] = {
