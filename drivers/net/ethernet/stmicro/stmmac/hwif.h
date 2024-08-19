@@ -31,6 +31,8 @@ struct stmmac_safety_stats;
 struct dma_desc;
 struct dma_extended_desc;
 struct dma_edesc;
+struct stmmac_fpe_cfg;
+enum stmmac_mpacket_type;
 
 /* Descriptors helpers */
 struct stmmac_desc_ops {
