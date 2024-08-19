@@ -181,7 +181,7 @@ static bool netfs_rreq_perform_resubmissions(struct netfs_io_request *rreq)
 	if (atomic_dec_and_test(&rreq->nr_outstanding))
 		return true;
 
-	wake_up_var(&rreq->nr_outstanding);
+	wake_up_var_relaxed(&rreq->nr_outstanding);
 	return false;
 }
 
@@ -372,7 +372,7 @@ out:
 	if (u == 0)
 		netfs_rreq_terminated(rreq, was_async);
 	else if (u == 1)
-		wake_up_var(&rreq->nr_outstanding);
+		wake_up_var_relaxed(&rreq->nr_outstanding);
 
 	netfs_put_subrequest(subreq, was_async, netfs_sreq_trace_put_terminated);
 	return;

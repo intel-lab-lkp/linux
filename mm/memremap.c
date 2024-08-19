@@ -523,7 +523,7 @@ bool __put_devmap_managed_folio_refs(struct folio *folio, int refs)
 	 * stable because nobody holds a reference on the page.
 	 */
 	if (folio_ref_sub_return(folio, refs) == 1)
-		wake_up_var(&folio->_refcount);
+		wake_up_var_relaxed(&folio->_refcount);
 	return true;
 }
 EXPORT_SYMBOL(__put_devmap_managed_folio_refs);

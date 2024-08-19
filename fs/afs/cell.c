@@ -478,7 +478,7 @@ static int afs_update_cell(struct afs_cell *cell)
 out_wake:
 	smp_store_release(&cell->dns_lookup_count,
 			  cell->dns_lookup_count + 1); /* vs source/status */
-	wake_up_var(&cell->dns_lookup_count);
+	wake_up_var_mb(&cell->dns_lookup_count);
 	_leave(" = %d", ret);
 	return ret;
 }
@@ -748,12 +748,12 @@ again:
 		if (cell->state == AFS_CELL_FAILED)
 			goto done;
 		smp_store_release(&cell->state, AFS_CELL_UNSET);
-		wake_up_var(&cell->state);
+		wake_up_var_mb(&cell->state);
 		goto again;
 
 	case AFS_CELL_UNSET:
 		smp_store_release(&cell->state, AFS_CELL_ACTIVATING);
-		wake_up_var(&cell->state);
+		wake_up_var_mb(&cell->state);
 		goto again;
 
 	case AFS_CELL_ACTIVATING:
@@ -762,7 +762,7 @@ again:
 			goto activation_failed;
 
 		smp_store_release(&cell->state, AFS_CELL_ACTIVE);
-		wake_up_var(&cell->state);
+		wake_up_var_mb(&cell->state);
 		goto again;
 
 	case AFS_CELL_ACTIVE:
@@ -775,7 +775,7 @@ again:
 			goto done;
 		}
 		smp_store_release(&cell->state, AFS_CELL_DEACTIVATING);
-		wake_up_var(&cell->state);
+		wake_up_var_mb(&cell->state);
 		goto again;
 
 	case AFS_CELL_DEACTIVATING:
@@ -783,7 +783,7 @@ again:
 			goto reverse_deactivation;
 		afs_deactivate_cell(net, cell);
 		smp_store_release(&cell->state, AFS_CELL_INACTIVE);
-		wake_up_var(&cell->state);
+		wake_up_var_mb(&cell->state);
 		goto again;
 
 	case AFS_CELL_REMOVED:
@@ -800,12 +800,12 @@ activation_failed:
 	afs_deactivate_cell(net, cell);
 
 	smp_store_release(&cell->state, AFS_CELL_FAILED); /* vs error */
-	wake_up_var(&cell->state);
+	wake_up_var_mb(&cell->state);
 	goto again;
 
 reverse_deactivation:
 	smp_store_release(&cell->state, AFS_CELL_ACTIVE);
-	wake_up_var(&cell->state);
+	wake_up_var_mb(&cell->state);
 	_leave(" [deact->act]");
 	return;
 

@@ -52,7 +52,7 @@ static inline void mb_cache_entry_put(struct mb_cache *cache,
 
 	if (cnt > 0) {
 		if (cnt <= 2)
-			wake_up_var(&entry->e_refcnt);
+			wake_up_var_relaxed(&entry->e_refcnt);
 		return;
 	}
 	__mb_cache_entry_free(cache, entry);

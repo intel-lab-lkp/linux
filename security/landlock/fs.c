@@ -82,7 +82,7 @@ static void release_inode(struct landlock_object *const object)
 
 	iput(inode);
 	if (atomic_long_dec_and_test(&landlock_superblock(sb)->inode_refs))
-		wake_up_var(&landlock_superblock(sb)->inode_refs);
+		wake_up_var_relaxed(&landlock_superblock(sb)->inode_refs);
 }
 
 static const struct landlock_object_underops landlock_fs_underops = {

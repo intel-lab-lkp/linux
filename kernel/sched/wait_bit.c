@@ -187,11 +187,28 @@ void init_wait_var_entry(struct wait_bit_queue_entry *wbq_entry, void *var, int 
 }
 EXPORT_SYMBOL(init_wait_var_entry);
 
-void wake_up_var(void *var)
+/**
+ * wake_up_var_relaxed - wake up all waiters on an address
+ * @word: the address being waited on, a kernel virtual address
+ *
+ * There is a standard hashed waitqueue table for generic use.  This is
+ * the part of the hash-table's accessor API that wakes up waiters on an
+ * address.  For instance, if one were to have waiters on an address one
+ * would call wake_up_bit() after updating a value at, or near, the
+ * address.
+ *
+ * In order for this to function properly, as it uses waitqueue_active()
+ * internally, some kind of memory barrier must be done prior to calling
+ * this. Typically this will be provided implicitly by an atomic function
+ * that returns value such as atomic_dec_return or test_and_clear_bit().
+ * If the bit is cleared without full ordering, an alternate interface
+ * such as wake_up_bit_sync() or wake_up_bit() should be used.
+ */
+void wake_up_var_relaxed(void *var)
 {
 	__wake_up_bit(__var_waitqueue(var), var, -1);
 }
-EXPORT_SYMBOL(wake_up_var);
+EXPORT_SYMBOL(wake_up_var_relaxed);
 
 __sched int bit_wait(struct wait_bit_key *word, int mode)
 {

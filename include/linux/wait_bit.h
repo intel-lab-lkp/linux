@@ -236,7 +236,7 @@ wait_on_bit_lock_action(unsigned long *word, int bit, wait_bit_action_f *action,
 }
 
 extern void init_wait_var_entry(struct wait_bit_queue_entry *wbq_entry, void *var, int flags);
-extern void wake_up_var(void *var);
+extern void wake_up_var_relaxed(void *var);
 extern wait_queue_head_t *__var_waitqueue(void *p);
 
 #define ___wait_var_event(var, condition, state, exclusive, ret, cmd)	\
@@ -375,12 +375,66 @@ static inline void clear_and_wake_up_bit(int bit, void *word)
 	wake_up_bit(word, bit);
 }
 
+/**
+ * atomic_dec_and_wake_up_var - decrement a counts a wake any waiting on it.
+ *
+ * @var: the atomic_t variable being waited on.
+ *
+ * @var is decremented and if the value reaches zero, any code waiting
+ * in wake_var_event() for the variable will be woken.
+ */
 static inline bool atomic_dec_and_wake_up_var(atomic_t *var)
 {
 	if (!atomic_dec_and_test(var))
 		return false;
-	wake_up_var(var);
+	wake_up_var_relaxed(var);
 	return true;
+}
+
+/**
+ * wake_up_var_mb - wake up all waiters on a var
+ * @var: the address being waited on, a kernel virtual address
+ *
+ * There is a standard hashed waitqueue table for generic use.  This is
+ * the part of the hash-table's accessor API that wakes up waiters on an
+ * address.  For instance, if one were to have waiters on an address one
+ * would call wake_up_var_mb() after non-atomically modifying the
+ * variable
+ *
+ * This interface has a full barrier and so is safe to use anywhere.
+ * It is particular intended for use after the variable has been updated
+ * non-atmomically with simple assignment.  Where the variable is
+ * is updated atomically, the barrier used may be excessively costly.
+ *
+ * Note that it is often appropriate to use smp_store_release() to
+ * update the field in a structure that is being waited on.  This ensures
+ * dependant fields which have previously been set will have the new value
+ * visible by the time the update to the waited-on field is visible.
+ */
+static inline void wake_up_var_mb(void *var)
+{
+	smp_mb();
+	wake_up_var_relaxed(var);
+}
+
+/**
+ * wake_up_var - wake up all waiters on a var
+ * @var: the address being waited on, a kernel virtual address
+ *
+ * There is a standard hashed waitqueue table for generic use. This
+ * is the part of the hash-table's accessor API that wakes up waiters
+ * on a variable. Waiting in wait_var_event() can be worken by this.
+ *
+ * This interface should only be used after the variable has been updated
+ * atomically such as in a locked region which has been unlocked, or by
+ * atomic_set() or xchg() etc.
+ * If the variable has been updated non-atomically then wake_up_var_mb()
+ * should be used.
+ */
+static inline void wake_up_var(void *var)
+{
+	smp_mb__after_atomic();
+	wake_up_var_relaxed(var);
 }
 
 #endif /* _LINUX_WAIT_BIT_H */

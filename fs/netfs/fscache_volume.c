@@ -128,7 +128,7 @@ void fscache_end_volume_access(struct fscache_volume *volume,
 				    refcount_read(&volume->ref),
 				    n_accesses, why);
 	if (n_accesses == 0)
-		wake_up_var(&volume->n_accesses);
+		wake_up_var_relaxed(&volume->n_accesses);
 }
 EXPORT_SYMBOL(fscache_end_volume_access);
 

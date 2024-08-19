@@ -158,13 +158,7 @@ static void super_wake(struct super_block *sb, unsigned int flag)
 	 * seeing SB_BORN sent.
 	 */
 	smp_store_release(&sb->s_flags, sb->s_flags | flag);
-	/*
-	 * Pairs with the barrier in prepare_to_wait_event() to make sure
-	 * ___wait_var_event() either sees SB_BORN set or
-	 * waitqueue_active() check in wake_up_var() sees the waiter.
-	 */
-	smp_mb();
-	wake_up_var(&sb->s_flags);
+	wake_up_var_mb(&sb->s_flags);
 }
 
 /*
@@ -2074,7 +2068,7 @@ retry:
 		/* Nothing to do really... */
 		WARN_ON_ONCE(freeze_inc(sb, who) > 1);
 		sb->s_writers.frozen = SB_FREEZE_COMPLETE;
-		wake_up_var(&sb->s_writers.frozen);
+		wake_up_var_mb(&sb->s_writers.frozen);
 		super_unlock_excl(sb);
 		return 0;
 	}
@@ -2094,7 +2088,7 @@ retry:
 	if (ret) {
 		sb->s_writers.frozen = SB_UNFROZEN;
 		sb_freeze_unlock(sb, SB_FREEZE_PAGEFAULT);
-		wake_up_var(&sb->s_writers.frozen);
+		wake_up_var_mb(&sb->s_writers.frozen);
 		deactivate_locked_super(sb);
 		return ret;
 	}
@@ -2110,7 +2104,7 @@ retry:
 				"VFS:Filesystem freeze failed\n");
 			sb->s_writers.frozen = SB_UNFROZEN;
 			sb_freeze_unlock(sb, SB_FREEZE_FS);
-			wake_up_var(&sb->s_writers.frozen);
+			wake_up_var_mb(&sb->s_writers.frozen);
 			deactivate_locked_super(sb);
 			return ret;
 		}
@@ -2121,7 +2115,7 @@ retry:
 	 */
 	WARN_ON_ONCE(freeze_inc(sb, who) > 1);
 	sb->s_writers.frozen = SB_FREEZE_COMPLETE;
-	wake_up_var(&sb->s_writers.frozen);
+	wake_up_var_mb(&sb->s_writers.frozen);
 	lockdep_sb_freeze_release(sb);
 	super_unlock_excl(sb);
 	return 0;
@@ -2150,7 +2144,7 @@ static int thaw_super_locked(struct super_block *sb, enum freeze_holder who)
 
 	if (sb_rdonly(sb)) {
 		sb->s_writers.frozen = SB_UNFROZEN;
-		wake_up_var(&sb->s_writers.frozen);
+		wake_up_var_mb(&sb->s_writers.frozen);
 		goto out_deactivate;
 	}
 
@@ -2167,7 +2161,7 @@ static int thaw_super_locked(struct super_block *sb, enum freeze_holder who)
 	}
 
 	sb->s_writers.frozen = SB_UNFROZEN;
-	wake_up_var(&sb->s_writers.frozen);
+	wake_up_var_mb(&sb->s_writers.frozen);
 	sb_freeze_unlock(sb, SB_FREEZE_FS);
 out_deactivate:
 	deactivate_locked_super(sb);

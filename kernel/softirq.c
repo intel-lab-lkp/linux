@@ -749,7 +749,7 @@ EXPORT_SYMBOL(__tasklet_hi_schedule);
 static bool tasklet_clear_sched(struct tasklet_struct *t)
 {
 	if (test_and_clear_bit(TASKLET_STATE_SCHED, &t->state)) {
-		wake_up_var(&t->state);
+		wake_up_var_relaxed(&t->state);
 		return true;
 	}
 
@@ -885,7 +885,6 @@ void tasklet_unlock(struct tasklet_struct *t)
 {
 	smp_mb__before_atomic();
 	clear_bit(TASKLET_STATE_RUN, &t->state);
-	smp_mb__after_atomic();
 	wake_up_var(&t->state);
 }
 EXPORT_SYMBOL_GPL(tasklet_unlock);

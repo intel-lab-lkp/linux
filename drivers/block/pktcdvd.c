@@ -1210,8 +1210,7 @@ try_next_bio:
 	if (pd->congested &&
 	    pd->bio_queue_size <= pd->write_congestion_off) {
 		pd->congested = false;
-		smp_mb();
-		wake_up_var(&pd->congested);
+		wake_up_var_mb(&pd->congested);
 	}
 	spin_unlock(&pd->lock);
 

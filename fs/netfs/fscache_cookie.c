@@ -191,12 +191,6 @@ bool fscache_begin_cookie_access(struct fscache_cookie *cookie,
 
 static inline void wake_up_cookie_state(struct fscache_cookie *cookie)
 {
-	/* Use a barrier to ensure that waiters see the state variable
-	 * change, as spin_unlock doesn't guarantee a barrier.
-	 *
-	 * See comments over wake_up_bit() and waitqueue_active().
-	 */
-	smp_mb();
 	wake_up_var(&cookie->state);
 }
 

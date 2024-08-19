@@ -139,7 +139,7 @@ static void fsnotify_get_sb_watched_objects(struct super_block *sb)
 static void fsnotify_put_sb_watched_objects(struct super_block *sb)
 {
 	if (atomic_long_dec_and_test(fsnotify_sb_watched_objects(sb)))
-		wake_up_var(fsnotify_sb_watched_objects(sb));
+		wake_up_var_relaxed(fsnotify_sb_watched_objects(sb));
 }
 
 static void fsnotify_get_inode_ref(struct inode *inode)

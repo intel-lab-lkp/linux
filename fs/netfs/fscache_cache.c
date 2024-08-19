@@ -321,7 +321,7 @@ void fscache_end_cache_access(struct fscache_cache *cache, enum fscache_access_t
 	trace_fscache_access_cache(cache->debug_id, refcount_read(&cache->ref),
 				   n_accesses, why);
 	if (n_accesses == 0)
-		wake_up_var(&cache->n_accesses);
+		wake_up_var_relaxed(&cache->n_accesses);
 }
 
 /**

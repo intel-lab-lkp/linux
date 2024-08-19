@@ -561,8 +561,7 @@ static void bd_clear_claiming(struct block_device *whole, void *holder)
 	/* tell others that we're done */
 	BUG_ON(whole->bd_claiming != holder);
 	whole->bd_claiming = NULL;
-	smp_mb();
-	wake_up_var(&whole->bd_claiming);
+	wake_up_var_mb(&whole->bd_claiming);
 }
 
 /**

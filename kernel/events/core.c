@@ -5451,8 +5451,7 @@ again:
 			 * ctx while the child_mutex got released above, make sure to
 			 * notify about the preceding put_ctx().
 			 */
-			smp_mb(); /* pairs with wait_var_event() */
-			wake_up_var(var);
+			wake_up_var_mb(var);
 		}
 		goto again;
 	}
@@ -5468,8 +5467,7 @@ again:
 		 * Wake any perf_event_free_task() waiting for this event to be
 		 * freed.
 		 */
-		smp_mb(); /* pairs with wait_var_event() */
-		wake_up_var(var);
+		wake_up_var_mb(var);
 	}
 
 no_ctx:

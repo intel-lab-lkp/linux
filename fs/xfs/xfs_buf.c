@@ -2137,7 +2137,7 @@ xfs_buf_list_del(
 	struct xfs_buf		*bp)
 {
 	list_del_init(&bp->b_list);
-	wake_up_var(&bp->b_list);
+	wake_up_var_mb(&bp->b_list);
 }
 
 /*
