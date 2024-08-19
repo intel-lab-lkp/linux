@@ -88,6 +88,52 @@ static inline void write_pgref(pgalloc_tag_ref *pgref, union codetag_ref *ref)
 void __init alloc_tag_sec_init(void);
 
 #endif /* PGALLOC_TAG_DIRECT_REF */
+
+#ifdef CONFIG_PGALLOC_TAG_USE_PAGEFLAGS
+
+typedef struct page	*pgtag_ref_handle;
+
+/* Should be called only if mem_alloc_profiling_enabled() */
+static inline pgtag_ref_handle get_page_tag_ref(struct page *page,
+						union codetag_ref *ref)
+{
+	if (page) {
+		pgalloc_tag_ref pgref;
+
+		pgref = (page->flags >> ALLOC_TAG_REF_PGSHIFT) & ALLOC_TAG_REF_MASK;
+		read_pgref(&pgref, ref);
+		return page;
+	}
+
+	return NULL;
+}
+
+static inline void put_page_tag_ref(pgtag_ref_handle page)
+{
+	WARN_ON(!page);
+}
+
+static inline void update_page_tag_ref(pgtag_ref_handle page, union codetag_ref *ref)
+{
+	unsigned long old_flags, flags, val;
+	pgalloc_tag_ref pgref;
+
+	if (WARN_ON(!page || !ref))
+		return;
+
+	write_pgref(&pgref, ref);
+	val = (unsigned long)pgref;
+	val = (val & ALLOC_TAG_REF_MASK) << ALLOC_TAG_REF_PGSHIFT;
+	do {
+		old_flags = READ_ONCE(page->flags);
+		flags = old_flags;
+		flags &= ~(ALLOC_TAG_REF_MASK << ALLOC_TAG_REF_PGSHIFT);
+		flags |= val;
+	} while (unlikely(!try_cmpxchg(&page->flags, &old_flags, flags)));
+}
+
+#else /* CONFIG_PGALLOC_TAG_USE_PAGEFLAGS */
+
 #include <linux/page_ext.h>
 
 extern struct page_ext_operations page_alloc_tagging_ops;
@@ -135,6 +181,8 @@ static inline void update_page_tag_ref(pgtag_ref_handle pgref, union codetag_ref
 
 	write_pgref(pgref, ref);
 }
+
+#endif /* CONFIG_PGALLOC_TAG_USE_PAGEFLAGS */
 
 static inline void clear_page_tag_ref(struct page *page)
 {

@@ -432,6 +432,8 @@ static int __init setup_early_mem_profiling(char *str)
 }
 early_param("sysctl.vm.mem_profiling", setup_early_mem_profiling);
 
+#ifndef CONFIG_PGALLOC_TAG_USE_PAGEFLAGS
+
 static __init bool need_page_alloc_tagging(void)
 {
 	return mem_profiling_support;
@@ -447,6 +449,8 @@ struct page_ext_operations page_alloc_tagging_ops = {
 	.init = init_page_alloc_tagging,
 };
 EXPORT_SYMBOL(page_alloc_tagging_ops);
+
+#endif /* CONFIG_PGALLOC_TAG_USE_PAGEFLAGS */
 
 #ifdef CONFIG_SYSCTL
 static struct ctl_table memory_allocation_profiling_sysctls[] = {
