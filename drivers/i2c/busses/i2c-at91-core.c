@@ -107,6 +107,7 @@ static const struct platform_device_id at91_twi_devtypes[] = {
 		/* sentinel */
 	}
 };
+MODULE_DEVICE_TABLE(platform, at91_twi_devtypes);
 
 #if defined(CONFIG_OF)
 static struct at91_twi_pdata at91sam9x5_config = {
