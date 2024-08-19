@@ -2982,7 +2982,7 @@ static void mpam_extend_config(struct mpam_class *class, struct mpam_config *cfg
 	}
 
 	if (mpam_has_quirk(T241_FORCE_MBW_MIN_TO_ONE, class) &&
-	    cfg->mbw_min == 0) {
+	    cfg->mbw_min <= min_hw_granule) {
 		cfg->mbw_min = min_hw_granule + 1;
 		mpam_set_feature(mpam_feat_mbw_min, cfg);
 	}
