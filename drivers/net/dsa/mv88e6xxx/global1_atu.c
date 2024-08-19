@@ -457,7 +457,8 @@ static irqreturn_t mv88e6xxx_g1_atu_prob_irq_thread_fn(int irq, void *dev_id)
 		trace_mv88e6xxx_atu_full_violation(chip->dev, spid,
 						   entry.portvec, entry.mac,
 						   fid);
-		chip->ports[spid].atu_full_violation++;
+		if (spid != MV88E6XXX_G1_ATU_DATA_SPID_CPU)
+			chip->ports[spid].atu_full_violation++;
 	}
 
 	return IRQ_HANDLED;
