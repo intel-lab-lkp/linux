@@ -847,6 +847,20 @@ struct drm_color_ctm {
 	__u64 matrix[9];
 };
 
+struct drm_color_ctm_3x4 {
+	/*
+	 * Conversion matrix with 3x4 dimensions in S31.32 sign-magnitude
+	 * (not two's complement!) format.
+	 *
+	 * out   matrix          in
+	 * |R|   |0  1  2  3 |   | R |
+	 * |G| = |4  5  6  7 | x | G |
+	 * |B|   |8  9  10 11|   | B |
+	 *                       |1.0|
+	 */
+	__u64 matrix[12];
+};
+
 struct drm_color_lut {
 	/*
 	 * Values are mapped linearly to 0.0 - 1.0 range, with 0x0 == 0.0 and
@@ -861,16 +875,27 @@ struct drm_color_lut {
 /**
  * enum drm_colorop_type - Type of color operation
  *
- * @DRM_COLOROP_1D_CURVE: A 1D curve that is being applied to all color channels.
- *                        The curve is specified via tha CURVE_1D_TYPE colorop
- *                        property.
  *
  * drm_colorops can be of many different types. Each type behaves differently
  * and defines a different set of properties. This enum defines all types and
  * gives a high-level description.
  */
 enum drm_colorop_type {
-	DRM_COLOROP_1D_CURVE
+	/**
+	 * @DRM_COLOROP_1D_CURVE:
+	 *
+	 * A 1D curve that is being applied to all color channels. The
+	 * curve is specified via tha CURVE_1D_TYPE colorop property.
+	 */
+	DRM_COLOROP_1D_CURVE,
+
+	/**
+	 * @DRM_COLOROP_CTM_3X4:
+	 *
+	 * A 3x4 matrix. Its values are specified via the
+	 * &drm_color_ctm_3x4 struct provided via the DATA property.
+	 */
+	DRM_COLOROP_CTM_3X4,
 };
 
 /**
