@@ -153,6 +153,7 @@
 
 struct midcomms_node {
 	int nodeid;
+	struct dlm_net *dn;
 	uint32_t version;
 	atomic_t seq_send;
 	atomic_t seq_next;
@@ -212,18 +213,6 @@ struct dlm_mhandle {
 	struct rcu_head rcu;
 };
 
-static struct hlist_head node_hash[CONN_HASH_SIZE];
-static DEFINE_SPINLOCK(nodes_lock);
-DEFINE_STATIC_SRCU(nodes_srcu);
-
-/* This mutex prevents that midcomms_close() is running while
- * stop() or remove(). As I experienced invalid memory access
- * behaviours when DLM_DEBUG_FENCE_TERMINATION is enabled and
- * resetting machines. I will end in some double deletion in nodes
- * datastructure.
- */
-static DEFINE_MUTEX(close_lock);
-
 struct kmem_cache *dlm_midcomms_cache_create(void)
 {
 	return KMEM_CACHE(dlm_mhandle, 0);
@@ -271,11 +260,11 @@ uint32_t dlm_midcomms_version(struct midcomms_node *node)
 	return node->version;
 }
 
-static struct midcomms_node *__find_node(int nodeid, int r)
+static struct midcomms_node *__find_node(struct dlm_net *dn, int nodeid, int r)
 {
 	struct midcomms_node *node;
 
-	hlist_for_each_entry_rcu(node, &node_hash[r], hlist) {
+	hlist_for_each_entry_rcu(node, &dn->node_hash[r], hlist) {
 		if (node->nodeid == nodeid)
 			return node;
 	}
@@ -329,32 +318,34 @@ static void midcomms_node_reset(struct midcomms_node *node)
 	wake_up(&node->shutdown_wait);
 }
 
-static struct midcomms_node *nodeid2node(int nodeid)
+static struct midcomms_node *nodeid2node(struct dlm_net *dn, int nodeid)
 {
-	return __find_node(nodeid, nodeid_hash(nodeid));
+	return __find_node(dn, nodeid, nodeid_hash(nodeid));
 }
 
-int dlm_midcomms_addr(int nodeid, struct sockaddr_storage *addr)
+int dlm_midcomms_addr(struct dlm_net *dn, int nodeid,
+		      struct sockaddr_storage *addr)
 {
 	int ret, idx, r = nodeid_hash(nodeid);
 	struct midcomms_node *node;
 
-	ret = dlm_lowcomms_addr(nodeid, addr);
+	ret = dlm_lowcomms_addr(dn, nodeid, addr);
 	if (ret)
 		return ret;
 
-	idx = srcu_read_lock(&nodes_srcu);
-	node = __find_node(nodeid, r);
+	idx = srcu_read_lock(&dn->nodes_srcu);
+	node = __find_node(dn, nodeid, r);
 	if (node) {
-		srcu_read_unlock(&nodes_srcu, idx);
+		srcu_read_unlock(&dn->nodes_srcu, idx);
 		return 0;
 	}
-	srcu_read_unlock(&nodes_srcu, idx);
+	srcu_read_unlock(&dn->nodes_srcu, idx);
 
 	node = kmalloc(sizeof(*node), GFP_NOFS);
 	if (!node)
 		return -ENOMEM;
 
+	node->dn = dn;
 	node->nodeid = nodeid;
 	spin_lock_init(&node->state_lock);
 	spin_lock_init(&node->send_queue_lock);
@@ -364,29 +355,29 @@ int dlm_midcomms_addr(int nodeid, struct sockaddr_storage *addr)
 	node->users = 0;
 	midcomms_node_reset(node);
 
-	spin_lock_bh(&nodes_lock);
-	hlist_add_head_rcu(&node->hlist, &node_hash[r]);
-	spin_unlock_bh(&nodes_lock);
+	spin_lock_bh(&dn->nodes_lock);
+	hlist_add_head_rcu(&node->hlist, &dn->node_hash[r]);
+	spin_unlock_bh(&dn->nodes_lock);
 
-	node->debugfs = dlm_create_debug_comms_file(nodeid, node);
+	node->debugfs = dlm_create_debug_comms_file(dn, nodeid, node);
 	return 0;
 }
 
-static int dlm_send_ack(int nodeid, uint32_t seq)
+static int dlm_send_ack(struct dlm_net *dn, int nodeid, uint32_t seq)
 {
 	int mb_len = sizeof(struct dlm_header);
 	struct dlm_header *m_header;
 	struct dlm_msg *msg;
 	char *ppc;
 
-	msg = dlm_lowcomms_new_msg(nodeid, mb_len, &ppc, NULL, NULL);
+	msg = dlm_lowcomms_new_msg(dn, nodeid, mb_len, &ppc, NULL, NULL);
 	if (!msg)
 		return -ENOMEM;
 
 	m_header = (struct dlm_header *)ppc;
 
 	m_header->h_version = cpu_to_le32(DLM_HEADER_MAJOR | DLM_HEADER_MINOR);
-	m_header->h_nodeid = cpu_to_le32(dlm_our_nodeid());
+	m_header->h_nodeid = cpu_to_le32(dlm_our_nodeid(dn));
 	m_header->h_length = cpu_to_le16(mb_len);
 	m_header->h_cmd = DLM_ACK;
 	m_header->u.h_seq = cpu_to_le32(seq);
@@ -416,7 +407,8 @@ static void dlm_send_ack_threshold(struct midcomms_node *node,
 	} while (atomic_cmpxchg(&node->ulp_delivered, oval, nval) != oval);
 
 	if (send_ack)
-		dlm_send_ack(node->nodeid, atomic_read(&node->seq_next));
+		dlm_send_ack(node->dn, node->nodeid,
+			     atomic_read(&node->seq_next));
 }
 
 static int dlm_send_fin(struct midcomms_node *node,
@@ -427,7 +419,7 @@ static int dlm_send_fin(struct midcomms_node *node,
 	struct dlm_mhandle *mh;
 	char *ppc;
 
-	mh = dlm_midcomms_get_mhandle(node->nodeid, mb_len, &ppc);
+	mh = dlm_midcomms_get_mhandle(node->dn, node->nodeid, mb_len, &ppc);
 	if (!mh)
 		return -ENOMEM;
 
@@ -437,7 +429,7 @@ static int dlm_send_fin(struct midcomms_node *node,
 	m_header = (struct dlm_header *)ppc;
 
 	m_header->h_version = cpu_to_le32(DLM_HEADER_MAJOR | DLM_HEADER_MINOR);
-	m_header->h_nodeid = cpu_to_le32(dlm_our_nodeid());
+	m_header->h_nodeid = cpu_to_le32(dlm_our_nodeid(node->dn));
 	m_header->h_length = cpu_to_le16(mb_len);
 	m_header->h_cmd = DLM_FIN;
 
@@ -500,15 +492,15 @@ static void dlm_pas_fin_ack_rcv(struct midcomms_node *node)
 	spin_unlock_bh(&node->state_lock);
 }
 
-static void dlm_receive_buffer_3_2_trace(uint32_t seq,
+static void dlm_receive_buffer_3_2_trace(struct dlm_net *dn, uint32_t seq,
 					 const union dlm_packet *p)
 {
 	switch (p->header.h_cmd) {
 	case DLM_MSG:
-		trace_dlm_recv_message(dlm_our_nodeid(), seq, &p->message);
+		trace_dlm_recv_message(dlm_our_nodeid(dn), seq, &p->message);
 		break;
 	case DLM_RCOM:
-		trace_dlm_recv_rcom(dlm_our_nodeid(), seq, &p->rcom);
+		trace_dlm_recv_rcom(dlm_our_nodeid(dn), seq, &p->rcom);
 		break;
 	default:
 		break;
@@ -540,7 +532,7 @@ static void dlm_midcomms_receive_buffer(const union dlm_packet *p,
 
 			switch (node->state) {
 			case DLM_ESTABLISHED:
-				dlm_send_ack(node->nodeid, nval);
+				dlm_send_ack(node->dn, node->nodeid, nval);
 
 				/* passive shutdown DLM_LAST_ACK case 1
 				 * additional we check if the node is used by
@@ -559,14 +551,14 @@ static void dlm_midcomms_receive_buffer(const union dlm_packet *p,
 				}
 				break;
 			case DLM_FIN_WAIT1:
-				dlm_send_ack(node->nodeid, nval);
+				dlm_send_ack(node->dn, node->nodeid, nval);
 				node->state = DLM_CLOSING;
 				set_bit(DLM_NODE_FLAG_STOP_RX, &node->flags);
 				pr_debug("switch node %d to state %s\n",
 					 node->nodeid, dlm_state_str(node->state));
 				break;
 			case DLM_FIN_WAIT2:
-				dlm_send_ack(node->nodeid, nval);
+				dlm_send_ack(node->dn, node->nodeid, nval);
 				midcomms_node_reset(node);
 				pr_debug("switch node %d to state %s\n",
 					 node->nodeid, dlm_state_str(node->state));
@@ -585,8 +577,8 @@ static void dlm_midcomms_receive_buffer(const union dlm_packet *p,
 			break;
 		default:
 			WARN_ON_ONCE(test_bit(DLM_NODE_FLAG_STOP_RX, &node->flags));
-			dlm_receive_buffer_3_2_trace(seq, p);
-			dlm_receive_buffer(p, node->nodeid);
+			dlm_receive_buffer_3_2_trace(node->dn, seq, p);
+			dlm_receive_buffer(node->dn, p, node->nodeid);
 			atomic_inc(&node->ulp_delivered);
 			/* unlikely case to send ack back when we don't transmit */
 			dlm_send_ack_threshold(node, DLM_RECV_ACK_BACK_MSG_THRESHOLD);
@@ -597,7 +589,7 @@ static void dlm_midcomms_receive_buffer(const union dlm_packet *p,
 		 * current node->seq_next number as ack.
 		 */
 		if (seq < oval)
-			dlm_send_ack(node->nodeid, oval);
+			dlm_send_ack(node->dn, node->nodeid, oval);
 
 		log_print_ratelimited("ignore dlm msg because seq mismatch, seq: %u, expected: %u, nodeid: %d",
 				      seq, oval, node->nodeid);
@@ -654,15 +646,16 @@ static int dlm_opts_check_msglen(const union dlm_packet *p, uint16_t msglen,
 	return 0;
 }
 
-static void dlm_midcomms_receive_buffer_3_2(const union dlm_packet *p, int nodeid)
+static void dlm_midcomms_receive_buffer_3_2(struct dlm_net *dn,
+					    const union dlm_packet *p, int nodeid)
 {
 	uint16_t msglen = le16_to_cpu(p->header.h_length);
 	struct midcomms_node *node;
 	uint32_t seq;
 	int ret, idx;
 
-	idx = srcu_read_lock(&nodes_srcu);
-	node = nodeid2node(nodeid);
+	idx = srcu_read_lock(&dn->nodes_srcu);
+	node = nodeid2node(dn, nodeid);
 	if (WARN_ON_ONCE(!node))
 		goto out;
 
@@ -718,7 +711,7 @@ static void dlm_midcomms_receive_buffer_3_2(const union dlm_packet *p, int nodei
 		}
 
 		WARN_ON_ONCE(test_bit(DLM_NODE_FLAG_STOP_RX, &node->flags));
-		dlm_receive_buffer(p, nodeid);
+		dlm_receive_buffer(node->dn, p, nodeid);
 		break;
 	case DLM_OPTS:
 		seq = le32_to_cpu(p->header.u.h_seq);
@@ -779,19 +772,20 @@ static void dlm_midcomms_receive_buffer_3_2(const union dlm_packet *p, int nodei
 	}
 
 out:
-	srcu_read_unlock(&nodes_srcu, idx);
+	srcu_read_unlock(&dn->nodes_srcu, idx);
 }
 
-static void dlm_midcomms_receive_buffer_3_1(const union dlm_packet *p, int nodeid)
+static void dlm_midcomms_receive_buffer_3_1(struct dlm_net *dn, const union dlm_packet *p,
+					    int nodeid)
 {
 	uint16_t msglen = le16_to_cpu(p->header.h_length);
 	struct midcomms_node *node;
 	int idx;
 
-	idx = srcu_read_lock(&nodes_srcu);
-	node = nodeid2node(nodeid);
+	idx = srcu_read_lock(&dn->nodes_srcu);
+	node = nodeid2node(dn, nodeid);
 	if (WARN_ON_ONCE(!node)) {
-		srcu_read_unlock(&nodes_srcu, idx);
+		srcu_read_unlock(&dn->nodes_srcu, idx);
 		return;
 	}
 
@@ -807,10 +801,10 @@ static void dlm_midcomms_receive_buffer_3_1(const union dlm_packet *p, int nodei
 	default:
 		log_print_ratelimited("version mismatch detected, assumed 0x%08x but node %d has 0x%08x",
 				      DLM_VERSION_3_1, node->nodeid, node->version);
-		srcu_read_unlock(&nodes_srcu, idx);
+		srcu_read_unlock(&dn->nodes_srcu, idx);
 		return;
 	}
-	srcu_read_unlock(&nodes_srcu, idx);
+	srcu_read_unlock(&dn->nodes_srcu, idx);
 
 	switch (p->header.h_cmd) {
 	case DLM_RCOM:
@@ -830,7 +824,7 @@ static void dlm_midcomms_receive_buffer_3_1(const union dlm_packet *p, int nodei
 		return;
 	}
 
-	dlm_receive_buffer(p, nodeid);
+	dlm_receive_buffer(dn, p, nodeid);
 }
 
 int dlm_validate_incoming_buffer(int nodeid, unsigned char *buf, int len)
@@ -880,7 +874,8 @@ int dlm_validate_incoming_buffer(int nodeid, unsigned char *buf, int len)
  * Called from the low-level comms layer to process a buffer of
  * commands.
  */
-int dlm_process_incoming_buffer(int nodeid, unsigned char *buf, int len)
+int dlm_process_incoming_buffer(struct dlm_net *dn, int nodeid,
+				unsigned char *buf, int len)
 {
 	const unsigned char *ptr = buf;
 	const struct dlm_header *hd;
@@ -896,10 +891,10 @@ int dlm_process_incoming_buffer(int nodeid, unsigned char *buf, int len)
 
 		switch (hd->h_version) {
 		case cpu_to_le32(DLM_VERSION_3_1):
-			dlm_midcomms_receive_buffer_3_1((const union dlm_packet *)ptr, nodeid);
+			dlm_midcomms_receive_buffer_3_1(dn, (const union dlm_packet *)ptr, nodeid);
 			break;
 		case cpu_to_le32(DLM_VERSION_3_2):
-			dlm_midcomms_receive_buffer_3_2((const union dlm_packet *)ptr, nodeid);
+			dlm_midcomms_receive_buffer_3_2(dn, (const union dlm_packet *)ptr, nodeid);
 			break;
 		default:
 			log_print("received invalid version header: %u from node %d, will skip this message",
@@ -915,16 +910,16 @@ int dlm_process_incoming_buffer(int nodeid, unsigned char *buf, int len)
 	return ret;
 }
 
-void dlm_midcomms_unack_msg_resend(int nodeid)
+void dlm_midcomms_unack_msg_resend(struct dlm_net *dn, int nodeid)
 {
 	struct midcomms_node *node;
 	struct dlm_mhandle *mh;
 	int idx, ret;
 
-	idx = srcu_read_lock(&nodes_srcu);
-	node = nodeid2node(nodeid);
+	idx = srcu_read_lock(&dn->nodes_srcu);
+	node = nodeid2node(dn, nodeid);
 	if (WARN_ON_ONCE(!node)) {
-		srcu_read_unlock(&nodes_srcu, idx);
+		srcu_read_unlock(&dn->nodes_srcu, idx);
 		return;
 	}
 
@@ -933,7 +928,7 @@ void dlm_midcomms_unack_msg_resend(int nodeid)
 	case DLM_VERSION_3_2:
 		break;
 	default:
-		srcu_read_unlock(&nodes_srcu, idx);
+		srcu_read_unlock(&dn->nodes_srcu, idx);
 		return;
 	}
 
@@ -948,15 +943,15 @@ void dlm_midcomms_unack_msg_resend(int nodeid)
 					      mh->seq, node->nodeid);
 	}
 	rcu_read_unlock();
-	srcu_read_unlock(&nodes_srcu, idx);
+	srcu_read_unlock(&dn->nodes_srcu, idx);
 }
 
-static void dlm_fill_opts_header(struct dlm_opts *opts, uint16_t inner_len,
-				 uint32_t seq)
+static void dlm_fill_opts_header(struct dlm_net *dn, struct dlm_opts *opts,
+				 uint16_t inner_len, uint32_t seq)
 {
 	opts->o_header.h_cmd = DLM_OPTS;
 	opts->o_header.h_version = cpu_to_le32(DLM_HEADER_MAJOR | DLM_HEADER_MINOR);
-	opts->o_header.h_nodeid = cpu_to_le32(dlm_our_nodeid());
+	opts->o_header.h_nodeid = cpu_to_le32(dlm_our_nodeid(dn));
 	opts->o_header.h_length = cpu_to_le16(DLM_MIDCOMMS_OPT_LEN + inner_len);
 	opts->o_header.u.h_seq = cpu_to_le32(seq);
 }
@@ -980,7 +975,8 @@ static struct dlm_msg *dlm_midcomms_get_msg_3_2(struct dlm_mhandle *mh, int node
 	struct dlm_opts *opts;
 	struct dlm_msg *msg;
 
-	msg = dlm_lowcomms_new_msg(nodeid, len + DLM_MIDCOMMS_OPT_LEN,
+	msg = dlm_lowcomms_new_msg(mh->node->dn, nodeid,
+				   len + DLM_MIDCOMMS_OPT_LEN,
 				   ppc, midcomms_new_msg_cb, mh);
 	if (!msg)
 		return NULL;
@@ -989,7 +985,7 @@ static struct dlm_msg *dlm_midcomms_get_msg_3_2(struct dlm_mhandle *mh, int node
 	mh->opts = opts;
 
 	/* add possible options here */
-	dlm_fill_opts_header(opts, len, mh->seq);
+	dlm_fill_opts_header(mh->node->dn, opts, len, mh->seq);
 
 	*ppc += sizeof(*opts);
 	mh->inner_p = (const union dlm_packet *)*ppc;
@@ -1000,15 +996,16 @@ static struct dlm_msg *dlm_midcomms_get_msg_3_2(struct dlm_mhandle *mh, int node
  * dlm_midcomms_commit_mhandle which is a must call if success
  */
 #ifndef __CHECKER__
-struct dlm_mhandle *dlm_midcomms_get_mhandle(int nodeid, int len, char **ppc)
+struct dlm_mhandle *dlm_midcomms_get_mhandle(struct dlm_net *dn, int nodeid,
+					     int len, char **ppc)
 {
 	struct midcomms_node *node;
 	struct dlm_mhandle *mh;
 	struct dlm_msg *msg;
 	int idx;
 
-	idx = srcu_read_lock(&nodes_srcu);
-	node = nodeid2node(nodeid);
+	idx = srcu_read_lock(&dn->nodes_srcu);
+	node = nodeid2node(dn, nodeid);
 	if (WARN_ON_ONCE(!node))
 		goto err;
 
@@ -1026,7 +1023,7 @@ struct dlm_mhandle *dlm_midcomms_get_mhandle(int nodeid, int len, char **ppc)
 
 	switch (node->version) {
 	case DLM_VERSION_3_1:
-		msg = dlm_lowcomms_new_msg(nodeid, len, ppc, NULL, NULL);
+		msg = dlm_lowcomms_new_msg(dn, nodeid, len, ppc, NULL, NULL);
 		if (!msg) {
 			dlm_free_mhandle(mh);
 			goto err;
@@ -1059,7 +1056,7 @@ struct dlm_mhandle *dlm_midcomms_get_mhandle(int nodeid, int len, char **ppc)
 	return mh;
 
 err:
-	srcu_read_unlock(&nodes_srcu, idx);
+	srcu_read_unlock(&dn->nodes_srcu, idx);
 	return NULL;
 }
 #endif
@@ -1100,10 +1097,11 @@ static void dlm_midcomms_commit_msg_3_2(struct dlm_mhandle *mh,
 void dlm_midcomms_commit_mhandle(struct dlm_mhandle *mh,
 				 const void *name, int namelen)
 {
+	struct dlm_net *dn = mh->node->dn;
 
 	switch (mh->node->version) {
 	case DLM_VERSION_3_1:
-		srcu_read_unlock(&nodes_srcu, mh->idx);
+		srcu_read_unlock(&dn->nodes_srcu, mh->idx);
 
 		dlm_lowcomms_commit_msg(mh->msg);
 		dlm_lowcomms_put_msg(mh->msg);
@@ -1118,35 +1116,25 @@ void dlm_midcomms_commit_mhandle(struct dlm_mhandle *mh,
 		 */
 		rcu_read_lock();
 		dlm_midcomms_commit_msg_3_2(mh, name, namelen);
-		srcu_read_unlock(&nodes_srcu, mh->idx);
+		srcu_read_unlock(&dn->nodes_srcu, mh->idx);
 		rcu_read_unlock();
 		break;
 	default:
-		srcu_read_unlock(&nodes_srcu, mh->idx);
+		srcu_read_unlock(&dn->nodes_srcu, mh->idx);
 		WARN_ON_ONCE(1);
 		break;
 	}
 }
 #endif
 
-int dlm_midcomms_start(void)
+int dlm_midcomms_start(struct dlm_net *dn)
 {
-	return dlm_lowcomms_start();
+	return dlm_lowcomms_start(dn);
 }
 
-void dlm_midcomms_stop(void)
+void dlm_midcomms_stop(struct dlm_net *dn)
 {
-	dlm_lowcomms_stop();
-}
-
-void dlm_midcomms_init(void)
-{
-	int i;
-
-	for (i = 0; i < CONN_HASH_SIZE; i++)
-		INIT_HLIST_HEAD(&node_hash[i]);
-
-	dlm_lowcomms_init();
+	dlm_lowcomms_stop(dn);
 }
 
 static void midcomms_node_release(struct rcu_head *rcu)
@@ -1158,26 +1146,43 @@ static void midcomms_node_release(struct rcu_head *rcu)
 	kfree(node);
 }
 
-void dlm_midcomms_exit(void)
+void __net_init dlm_midcomms_init(struct dlm_net *dn)
+{
+	int i;
+
+	init_srcu_struct(&dn->nodes_srcu);
+	spin_lock_init(&dn->nodes_lock);
+	mutex_init(&dn->close_lock);
+
+	for (i = 0; i < CONN_HASH_SIZE; i++)
+		INIT_HLIST_HEAD(&dn->node_hash[i]);
+
+	dlm_lowcomms_init(dn);
+}
+
+void __net_exit dlm_midcomms_exit(struct dlm_net *dn)
 {
 	struct midcomms_node *node;
 	int i, idx;
 
-	idx = srcu_read_lock(&nodes_srcu);
+	idx = srcu_read_lock(&dn->nodes_srcu);
 	for (i = 0; i < CONN_HASH_SIZE; i++) {
-		hlist_for_each_entry_rcu(node, &node_hash[i], hlist) {
-			dlm_delete_debug_comms_file(node->debugfs);
+		hlist_for_each_entry_rcu(node, &dn->node_hash[i], hlist) {
+			dlm_delete_debug_comms_file(dn, node->debugfs);
 
-			spin_lock(&nodes_lock);
+			spin_lock(&dn->nodes_lock);
 			hlist_del_rcu(&node->hlist);
-			spin_unlock(&nodes_lock);
+			spin_unlock(&dn->nodes_lock);
 
-			call_srcu(&nodes_srcu, &node->rcu, midcomms_node_release);
+			call_srcu(&dn->nodes_srcu, &node->rcu, midcomms_node_release);
 		}
 	}
-	srcu_read_unlock(&nodes_srcu, idx);
+	srcu_read_unlock(&dn->nodes_srcu, idx);
 
-	dlm_lowcomms_exit();
+	srcu_barrier(&dn->nodes_srcu);
+	cleanup_srcu_struct(&dn->nodes_srcu);
+
+	dlm_lowcomms_exit(dn);
 }
 
 static void dlm_act_fin_ack_rcv(struct midcomms_node *node)
@@ -1211,15 +1216,15 @@ static void dlm_act_fin_ack_rcv(struct midcomms_node *node)
 	spin_unlock_bh(&node->state_lock);
 }
 
-void dlm_midcomms_add_member(int nodeid)
+void dlm_midcomms_add_member(struct dlm_net *dn, int nodeid)
 {
 	struct midcomms_node *node;
 	int idx;
 
-	idx = srcu_read_lock(&nodes_srcu);
-	node = nodeid2node(nodeid);
+	idx = srcu_read_lock(&dn->nodes_srcu);
+	node = nodeid2node(dn, nodeid);
 	if (WARN_ON_ONCE(!node)) {
-		srcu_read_unlock(&nodes_srcu, idx);
+		srcu_read_unlock(&dn->nodes_srcu, idx);
 		return;
 	}
 
@@ -1253,19 +1258,19 @@ void dlm_midcomms_add_member(int nodeid)
 	pr_debug("node %d users inc count %d\n", nodeid, node->users);
 	spin_unlock_bh(&node->state_lock);
 
-	srcu_read_unlock(&nodes_srcu, idx);
+	srcu_read_unlock(&dn->nodes_srcu, idx);
 }
 
-void dlm_midcomms_remove_member(int nodeid)
+void dlm_midcomms_remove_member(struct dlm_net *dn, int nodeid)
 {
 	struct midcomms_node *node;
 	int idx;
 
-	idx = srcu_read_lock(&nodes_srcu);
-	node = nodeid2node(nodeid);
+	idx = srcu_read_lock(&dn->nodes_srcu);
+	node = nodeid2node(dn, nodeid);
 	/* in case of dlm_midcomms_close() removes node */
 	if (!node) {
-		srcu_read_unlock(&nodes_srcu, idx);
+		srcu_read_unlock(&dn->nodes_srcu, idx);
 		return;
 	}
 
@@ -1276,7 +1281,7 @@ void dlm_midcomms_remove_member(int nodeid)
 	 */
 	if (!node->users) {
 		spin_unlock_bh(&node->state_lock);
-		srcu_read_unlock(&nodes_srcu, idx);
+		srcu_read_unlock(&dn->nodes_srcu, idx);
 		return;
 	}
 
@@ -1315,17 +1320,17 @@ void dlm_midcomms_remove_member(int nodeid)
 	}
 	spin_unlock_bh(&node->state_lock);
 
-	srcu_read_unlock(&nodes_srcu, idx);
+	srcu_read_unlock(&dn->nodes_srcu, idx);
 }
 
-void dlm_midcomms_version_wait(void)
+void dlm_midcomms_version_wait(struct dlm_net *dn)
 {
 	struct midcomms_node *node;
 	int i, idx, ret;
 
-	idx = srcu_read_lock(&nodes_srcu);
+	idx = srcu_read_lock(&dn->nodes_srcu);
 	for (i = 0; i < CONN_HASH_SIZE; i++) {
-		hlist_for_each_entry_rcu(node, &node_hash[i], hlist) {
+		hlist_for_each_entry_rcu(node, &dn->node_hash[i], hlist) {
 			ret = wait_event_timeout(node->shutdown_wait,
 						 node->version != DLM_VERSION_NOT_SET ||
 						 node->state == DLM_CLOSED ||
@@ -1336,7 +1341,7 @@ void dlm_midcomms_version_wait(void)
 					 node->nodeid, dlm_state_str(node->state));
 		}
 	}
-	srcu_read_unlock(&nodes_srcu, idx);
+	srcu_read_unlock(&dn->nodes_srcu, idx);
 }
 
 static void midcomms_shutdown(struct midcomms_node *node)
@@ -1388,74 +1393,74 @@ static void midcomms_shutdown(struct midcomms_node *node)
 			 node->nodeid, dlm_state_str(node->state));
 }
 
-void dlm_midcomms_shutdown(void)
+void dlm_midcomms_shutdown(struct dlm_net *dn)
 {
 	struct midcomms_node *node;
 	int i, idx;
 
-	mutex_lock(&close_lock);
-	idx = srcu_read_lock(&nodes_srcu);
+	mutex_lock(&dn->close_lock);
+	idx = srcu_read_lock(&dn->nodes_srcu);
 	for (i = 0; i < CONN_HASH_SIZE; i++) {
-		hlist_for_each_entry_rcu(node, &node_hash[i], hlist) {
+		hlist_for_each_entry_rcu(node, &dn->node_hash[i], hlist) {
 			midcomms_shutdown(node);
 		}
 	}
 
-	dlm_lowcomms_shutdown();
+	dlm_lowcomms_shutdown(dn);
 
 	for (i = 0; i < CONN_HASH_SIZE; i++) {
-		hlist_for_each_entry_rcu(node, &node_hash[i], hlist) {
+		hlist_for_each_entry_rcu(node, &dn->node_hash[i], hlist) {
 			midcomms_node_reset(node);
 		}
 	}
-	srcu_read_unlock(&nodes_srcu, idx);
-	mutex_unlock(&close_lock);
+	srcu_read_unlock(&dn->nodes_srcu, idx);
+	mutex_unlock(&dn->close_lock);
 }
 
-int dlm_midcomms_close(int nodeid)
+int dlm_midcomms_close(struct dlm_net *dn, int nodeid)
 {
 	struct midcomms_node *node;
 	int idx, ret;
 
-	idx = srcu_read_lock(&nodes_srcu);
+	idx = srcu_read_lock(&dn->nodes_srcu);
 	/* Abort pending close/remove operation */
-	node = nodeid2node(nodeid);
+	node = nodeid2node(dn, nodeid);
 	if (node) {
 		/* let shutdown waiters leave */
 		set_bit(DLM_NODE_FLAG_CLOSE, &node->flags);
 		wake_up(&node->shutdown_wait);
 	}
-	srcu_read_unlock(&nodes_srcu, idx);
+	srcu_read_unlock(&dn->nodes_srcu, idx);
 
-	synchronize_srcu(&nodes_srcu);
+	synchronize_srcu(&dn->nodes_srcu);
 
-	mutex_lock(&close_lock);
-	idx = srcu_read_lock(&nodes_srcu);
-	node = nodeid2node(nodeid);
+	mutex_lock(&dn->close_lock);
+	idx = srcu_read_lock(&dn->nodes_srcu);
+	node = nodeid2node(dn, nodeid);
 	if (!node) {
-		srcu_read_unlock(&nodes_srcu, idx);
-		mutex_unlock(&close_lock);
-		return dlm_lowcomms_close(nodeid);
+		srcu_read_unlock(&dn->nodes_srcu, idx);
+		mutex_unlock(&dn->close_lock);
+		return dlm_lowcomms_close(dn, nodeid);
 	}
 
-	ret = dlm_lowcomms_close(nodeid);
-	dlm_delete_debug_comms_file(node->debugfs);
+	ret = dlm_lowcomms_close(dn, nodeid);
+	dlm_delete_debug_comms_file(dn, node->debugfs);
 
-	spin_lock_bh(&nodes_lock);
+	spin_lock_bh(&dn->nodes_lock);
 	hlist_del_rcu(&node->hlist);
-	spin_unlock_bh(&nodes_lock);
-	srcu_read_unlock(&nodes_srcu, idx);
+	spin_unlock_bh(&dn->nodes_lock);
+	srcu_read_unlock(&dn->nodes_srcu, idx);
 
 	/* wait that all readers left until flush send queue */
-	synchronize_srcu(&nodes_srcu);
+	synchronize_srcu(&dn->nodes_srcu);
 
 	/* drop all pending dlm messages, this is fine as
 	 * this function get called when the node is fenced
 	 */
 	dlm_send_queue_flush(node);
 
-	call_srcu(&nodes_srcu, &node->rcu, midcomms_node_release);
-	mutex_unlock(&close_lock);
+	call_srcu(&dn->nodes_srcu, &node->rcu, midcomms_node_release);
+	mutex_unlock(&dn->close_lock);
 
 	return ret;
 }
@@ -1497,7 +1502,7 @@ int dlm_midcomms_rawmsg_send(struct midcomms_node *node, void *buf,
 	rd.node = node;
 	rd.buf = buf;
 
-	msg = dlm_lowcomms_new_msg(node->nodeid, buflen, &msgbuf,
+	msg = dlm_lowcomms_new_msg(node->dn, node->nodeid, buflen, &msgbuf,
 				   midcomms_new_rawmsg_cb, &rd);
 	if (!msg)
 		return -ENOMEM;

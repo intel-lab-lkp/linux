@@ -47,7 +47,7 @@ int dlm_wait_function(struct dlm_ls *ls, int (*testfn) (struct dlm_ls *ls))
 	while (1) {
 		rv = wait_event_timeout(ls->ls_wait_general,
 					testfn(ls) || dlm_recovery_stopped(ls),
-					dlm_config.ci_recover_timer * HZ);
+					ls->ls_dn->config.ci_recover_timer * HZ);
 		if (rv)
 			break;
 		if (test_bit(LSFL_RCOM_WAIT, &ls->ls_flags)) {
@@ -156,7 +156,7 @@ static int wait_status(struct dlm_ls *ls, uint32_t status, uint64_t seq)
 	uint32_t status_all = status << 1;
 	int error;
 
-	if (ls->ls_low_nodeid == dlm_our_nodeid()) {
+	if (ls->ls_low_nodeid == dlm_our_nodeid(ls->ls_dn)) {
 		error = wait_status_all(ls, status, 0, seq);
 		if (!error)
 			dlm_set_recover_status(ls, status_all);
@@ -179,7 +179,7 @@ int dlm_recover_members_wait(struct dlm_ls *ls, uint64_t seq)
 		memb->generation = 0;
 	}
 
-	if (ls->ls_low_nodeid == dlm_our_nodeid()) {
+	if (ls->ls_low_nodeid == dlm_our_nodeid(ls->ls_dn)) {
 		error = wait_status_all(ls, DLM_RS_NODES, 1, seq);
 		if (error)
 			goto out;
@@ -461,7 +461,7 @@ static int recover_master(struct dlm_rsb *r, unsigned int *count, uint64_t seq)
 	if (!is_removed && !rsb_flag(r, RSB_NEW_MASTER))
 		return 0;
 
-	our_nodeid = dlm_our_nodeid();
+	our_nodeid = dlm_our_nodeid(ls->ls_dn);
 	dir_nodeid = dlm_dir_nodeid(r);
 
 	if (dir_nodeid == our_nodeid) {
@@ -499,12 +499,13 @@ static int recover_master(struct dlm_rsb *r, unsigned int *count, uint64_t seq)
  * resent.
  */
 
-static int recover_master_static(struct dlm_rsb *r, unsigned int *count)
+static int recover_master_static(struct dlm_ls *ls, struct dlm_rsb *r,
+				 unsigned int *count)
 {
 	int dir_nodeid = dlm_dir_nodeid(r);
 	int new_master = dir_nodeid;
 
-	if (dir_nodeid == dlm_our_nodeid())
+	if (dir_nodeid == dlm_our_nodeid(ls->ls_dn))
 		new_master = 0;
 
 	dlm_purge_mstcpy_locks(r);
@@ -544,7 +545,7 @@ int dlm_recover_masters(struct dlm_ls *ls, uint64_t seq,
 
 		lock_rsb(r);
 		if (nodir)
-			error = recover_master_static(r, &count);
+			error = recover_master_static(ls, r, &count);
 		else
 			error = recover_master(r, &count, seq);
 		unlock_rsb(r);
@@ -578,7 +579,7 @@ int dlm_recover_master_reply(struct dlm_ls *ls, const struct dlm_rcom *rc)
 
 	ret_nodeid = le32_to_cpu(rc->rc_result);
 
-	if (ret_nodeid == dlm_our_nodeid())
+	if (ret_nodeid == dlm_our_nodeid(ls->ls_dn))
 		new_master = 0;
 	else
 		new_master = ret_nodeid;

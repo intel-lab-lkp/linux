@@ -12,6 +12,6 @@ void dlm_user_add_ast(struct dlm_lkb *lkb, uint32_t flags, int mode,
 int dlm_user_init(void);
 void dlm_user_exit(void);
 int dlm_device_deregister(struct dlm_ls *ls);
-int dlm_user_daemon_available(void);
+int dlm_user_daemon_available(struct dlm_net *dn);
 
 #endif

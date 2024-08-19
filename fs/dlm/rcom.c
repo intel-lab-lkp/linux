@@ -37,7 +37,7 @@ static void _create_rcom(struct dlm_ls *ls, int to_nodeid, int type, int len,
 
 	rc->rc_header.h_version = cpu_to_le32(DLM_HEADER_MAJOR | DLM_HEADER_MINOR);
 	rc->rc_header.u.h_lockspace = cpu_to_le32(ls->ls_global_id);
-	rc->rc_header.h_nodeid = cpu_to_le32(dlm_our_nodeid());
+	rc->rc_header.h_nodeid = cpu_to_le32(dlm_our_nodeid(ls->ls_dn));
 	rc->rc_header.h_length = cpu_to_le16(mb_len);
 	rc->rc_header.h_cmd = DLM_RCOM;
 
@@ -55,7 +55,7 @@ static int create_rcom(struct dlm_ls *ls, int to_nodeid, int type, int len,
 	struct dlm_mhandle *mh;
 	char *mb;
 
-	mh = dlm_midcomms_get_mhandle(to_nodeid, mb_len, &mb);
+	mh = dlm_midcomms_get_mhandle(ls->ls_dn, to_nodeid, mb_len, &mb);
 	if (!mh) {
 		log_print("%s to %d type %d len %d ENOBUFS",
 			  __func__, to_nodeid, type, len);
@@ -75,7 +75,8 @@ static int create_rcom_stateless(struct dlm_ls *ls, int to_nodeid, int type,
 	struct dlm_msg *msg;
 	char *mb;
 
-	msg = dlm_lowcomms_new_msg(to_nodeid, mb_len, &mb, NULL, NULL);
+	msg = dlm_lowcomms_new_msg(ls->ls_dn, to_nodeid, mb_len, &mb, NULL,
+				   NULL);
 	if (!msg) {
 		log_print("create_rcom to %d type %d len %d ENOBUFS",
 			  to_nodeid, type, len);
@@ -177,7 +178,7 @@ int dlm_rcom_status(struct dlm_ls *ls, int nodeid, uint32_t status_flags,
 
 	ls->ls_recover_nodeid = nodeid;
 
-	if (nodeid == dlm_our_nodeid()) {
+	if (nodeid == dlm_our_nodeid(ls->ls_dn)) {
 		rc = ls->ls_recover_buf;
 		rc->rc_result = cpu_to_le32(dlm_recover_status(ls));
 		goto out;
@@ -501,7 +502,8 @@ static void receive_rcom_lock(struct dlm_ls *ls, const struct dlm_rcom *rc_in,
 /* If the lockspace doesn't exist then still send a status message
    back; it's possible that it just doesn't have its global_id yet. */
 
-int dlm_send_ls_not_ready(int nodeid, const struct dlm_rcom *rc_in)
+int dlm_send_ls_not_ready(struct dlm_net *dn, int nodeid,
+			  const struct dlm_rcom *rc_in)
 {
 	struct dlm_rcom *rc;
 	struct rcom_config *rf;
@@ -509,7 +511,7 @@ int dlm_send_ls_not_ready(int nodeid, const struct dlm_rcom *rc_in)
 	char *mb;
 	int mb_len = sizeof(struct dlm_rcom) + sizeof(struct rcom_config);
 
-	mh = dlm_midcomms_get_mhandle(nodeid, mb_len, &mb);
+	mh = dlm_midcomms_get_mhandle(dn, nodeid, mb_len, &mb);
 	if (!mh)
 		return -ENOBUFS;
 
@@ -517,7 +519,7 @@ int dlm_send_ls_not_ready(int nodeid, const struct dlm_rcom *rc_in)
 
 	rc->rc_header.h_version = cpu_to_le32(DLM_HEADER_MAJOR | DLM_HEADER_MINOR);
 	rc->rc_header.u.h_lockspace = rc_in->rc_header.u.h_lockspace;
-	rc->rc_header.h_nodeid = cpu_to_le32(dlm_our_nodeid());
+	rc->rc_header.h_nodeid = cpu_to_le32(dlm_our_nodeid(dn));
 	rc->rc_header.h_length = cpu_to_le16(mb_len);
 	rc->rc_header.h_cmd = DLM_RCOM;
 

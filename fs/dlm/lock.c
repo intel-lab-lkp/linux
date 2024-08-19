@@ -320,9 +320,9 @@ static void queue_bast(struct dlm_rsb *r, struct dlm_lkb *lkb, int rqmode)
  * Basic operations on rsb's and lkb's
  */
 
-static inline unsigned long rsb_toss_jiffies(void)
+static inline unsigned long rsb_toss_jiffies(const struct dlm_ls *ls)
 {
-	return jiffies + (READ_ONCE(dlm_config.ci_toss_secs) * HZ);
+	return jiffies + (READ_ONCE(ls->ls_dn->config.ci_toss_secs) * HZ);
 }
 
 /* This is only called to add a reference when the code already holds
@@ -457,7 +457,7 @@ out:
 
 static void add_scan(struct dlm_ls *ls, struct dlm_rsb *r)
 {
-	int our_nodeid = dlm_our_nodeid();
+	int our_nodeid = dlm_our_nodeid(ls->ls_dn);
 	struct dlm_rsb *first;
 
 	/* A dir record for a remote master rsb should never be on the scan list. */
@@ -473,7 +473,7 @@ static void add_scan(struct dlm_ls *ls, struct dlm_rsb *r)
 
 	spin_lock_bh(&ls->ls_scan_lock);
 	/* set the new rsb absolute expire time in the rsb */
-	r->res_toss_time = rsb_toss_jiffies();
+	r->res_toss_time = rsb_toss_jiffies(ls);
 	if (list_empty(&ls->ls_scan_list)) {
 		/* if the queue is empty add the element and it's
 		 * our new expire time
@@ -510,7 +510,7 @@ static void add_scan(struct dlm_ls *ls, struct dlm_rsb *r)
 void dlm_rsb_scan(struct timer_list *timer)
 {
 	struct dlm_ls *ls = from_timer(ls, timer, ls_scan_timer);
-	int our_nodeid = dlm_our_nodeid();
+	int our_nodeid = dlm_our_nodeid(ls->ls_dn);
 	struct dlm_rsb *r;
 	int rv;
 
@@ -696,7 +696,7 @@ static int find_rsb_dir(struct dlm_ls *ls, const void *name, int len,
 			unsigned int flags, struct dlm_rsb **r_ret)
 {
 	struct dlm_rsb *r = NULL;
-	int our_nodeid = dlm_our_nodeid();
+	int our_nodeid = dlm_our_nodeid(ls->ls_dn);
 	int from_local = 0;
 	int from_other = 0;
 	int from_dir = 0;
@@ -915,7 +915,7 @@ static int find_rsb_nodir(struct dlm_ls *ls, const void *name, int len,
 			  unsigned int flags, struct dlm_rsb **r_ret)
 {
 	struct dlm_rsb *r = NULL;
-	int our_nodeid = dlm_our_nodeid();
+	int our_nodeid = dlm_our_nodeid(ls->ls_dn);
 	int recover = (flags & R_RECEIVE_RECOVER);
 	int error;
 
@@ -1135,7 +1135,7 @@ static int validate_master_nodeid(struct dlm_ls *ls, struct dlm_rsb *r,
 				  r->res_first_lkid, r->res_name);
 		}
 
-		r->res_master_nodeid = dlm_our_nodeid();
+		r->res_master_nodeid = dlm_our_nodeid(ls->ls_dn);
 		r->res_nodeid = 0;
 		return 0;
 	}
@@ -1257,7 +1257,7 @@ static int _dlm_master_lookup(struct dlm_ls *ls, int from_nodeid, const char *na
 {
 	struct dlm_rsb *r = NULL;
 	uint32_t hash;
-	int our_nodeid = dlm_our_nodeid();
+	int our_nodeid = dlm_our_nodeid(ls->ls_dn);
 	int dir_nodeid, error;
 
 	if (len > DLM_RESNAME_MAXLEN)
@@ -1423,7 +1423,7 @@ static void deactivate_rsb(struct kref *kref)
 {
 	struct dlm_rsb *r = container_of(kref, struct dlm_rsb, res_ref);
 	struct dlm_ls *ls = r->res_ls;
-	int our_nodeid = dlm_our_nodeid();
+	int our_nodeid = dlm_our_nodeid(ls->ls_dn);
 
 	DLM_ASSERT(list_empty(&r->res_root_list), dlm_print_rsb(r););
 	rsb_set_flag(r, RSB_INACTIVE);
@@ -2647,7 +2647,7 @@ static void send_blocking_asts_all(struct dlm_rsb *r, struct dlm_lkb *lkb)
 
 static int set_master(struct dlm_rsb *r, struct dlm_lkb *lkb)
 {
-	int our_nodeid = dlm_our_nodeid();
+	int our_nodeid = dlm_our_nodeid(r->res_ls->ls_dn);
 
 	if (rsb_flag(r, RSB_MASTER_UNCERTAIN)) {
 		rsb_clear_flag(r, RSB_MASTER_UNCERTAIN);
@@ -3502,7 +3502,7 @@ static int _create_message(struct dlm_ls *ls, int mb_len,
 	   pass into midcomms_commit and a message buffer (mb) that we
 	   write our data into */
 
-	mh = dlm_midcomms_get_mhandle(to_nodeid, mb_len, &mb);
+	mh = dlm_midcomms_get_mhandle(ls->ls_dn, to_nodeid, mb_len, &mb);
 	if (!mh)
 		return -ENOBUFS;
 
@@ -3510,7 +3510,7 @@ static int _create_message(struct dlm_ls *ls, int mb_len,
 
 	ms->m_header.h_version = cpu_to_le32(DLM_HEADER_MAJOR | DLM_HEADER_MINOR);
 	ms->m_header.u.h_lockspace = cpu_to_le32(ls->ls_global_id);
-	ms->m_header.h_nodeid = cpu_to_le32(dlm_our_nodeid());
+	ms->m_header.h_nodeid = cpu_to_le32(dlm_our_nodeid(ls->ls_dn));
 	ms->m_header.h_length = cpu_to_le16(mb_len);
 	ms->m_header.h_cmd = DLM_MSG;
 
@@ -4024,7 +4024,7 @@ static int receive_request(struct dlm_ls *ls, const struct dlm_message *ms)
 
 	lock_rsb(r);
 
-	if (r->res_master_nodeid != dlm_our_nodeid()) {
+	if (r->res_master_nodeid != dlm_our_nodeid(ls->ls_dn)) {
 		error = validate_master_nodeid(ls, r, from_nodeid);
 		if (error) {
 			unlock_rsb(r);
@@ -4273,7 +4273,7 @@ static void receive_lookup(struct dlm_ls *ls, const struct dlm_message *ms)
 	int len, error, ret_nodeid, from_nodeid, our_nodeid;
 
 	from_nodeid = le32_to_cpu(ms->m_header.h_nodeid);
-	our_nodeid = dlm_our_nodeid();
+	our_nodeid = dlm_our_nodeid(ls->ls_dn);
 
 	len = receive_extralen(ms);
 
@@ -4305,7 +4305,7 @@ static void receive_remove(struct dlm_ls *ls, const struct dlm_message *ms)
 	}
 
 	dir_nodeid = dlm_hash2nodeid(ls, le32_to_cpu(ms->m_hash));
-	if (dir_nodeid != dlm_our_nodeid()) {
+	if (dir_nodeid != dlm_our_nodeid(ls->ls_dn)) {
 		log_error(ls, "receive_remove from %d bad nodeid %d",
 			  from_nodeid, dir_nodeid);
 		return;
@@ -4461,8 +4461,8 @@ static int receive_request_reply(struct dlm_ls *ls,
 			  from_nodeid, result, r->res_master_nodeid,
 			  r->res_dir_nodeid, r->res_first_lkid, r->res_name);
 
-		if (r->res_dir_nodeid != dlm_our_nodeid() &&
-		    r->res_master_nodeid != dlm_our_nodeid()) {
+		if (r->res_dir_nodeid != dlm_our_nodeid(ls->ls_dn) &&
+		    r->res_master_nodeid != dlm_our_nodeid(ls->ls_dn)) {
 			/* cause _request_lock->set_master->send_lookup */
 			r->res_master_nodeid = 0;
 			r->res_nodeid = -1;
@@ -4477,7 +4477,7 @@ static int receive_request_reply(struct dlm_ls *ls,
 		} else {
 			_request_lock(r, lkb);
 
-			if (r->res_master_nodeid == dlm_our_nodeid())
+			if (r->res_master_nodeid == dlm_our_nodeid(ls->ls_dn))
 				confirm_master(r, 0);
 		}
 		break;
@@ -4735,10 +4735,11 @@ static void receive_lookup_reply(struct dlm_ls *ls,
 			  "master %d dir %d our %d first %x %s",
 			  lkb->lkb_id, le32_to_cpu(ms->m_header.h_nodeid),
 			  ret_nodeid, r->res_master_nodeid, r->res_dir_nodeid,
-			  dlm_our_nodeid(), r->res_first_lkid, r->res_name);
+			  dlm_our_nodeid(ls->ls_dn), r->res_first_lkid,
+			  r->res_name);
 	}
 
-	if (ret_nodeid == dlm_our_nodeid()) {
+	if (ret_nodeid == dlm_our_nodeid(ls->ls_dn)) {
 		r->res_master_nodeid = ret_nodeid;
 		r->res_nodeid = 0;
 		do_lookup_list = 1;
@@ -4957,7 +4958,8 @@ void dlm_receive_message_saved(struct dlm_ls *ls, const struct dlm_message *ms,
    standard locking activity) or an RCOM (recovery message sent as part of
    lockspace recovery). */
 
-void dlm_receive_buffer(const union dlm_packet *p, int nodeid)
+void dlm_receive_buffer(struct dlm_net *dn, const union dlm_packet *p,
+			int nodeid)
 {
 	const struct dlm_header *hd = &p->header;
 	struct dlm_ls *ls;
@@ -4982,17 +4984,14 @@ void dlm_receive_buffer(const union dlm_packet *p, int nodeid)
 		return;
 	}
 
-	ls = dlm_find_lockspace_global(le32_to_cpu(hd->u.h_lockspace));
+	ls = dlm_find_lockspace_global(dn, le32_to_cpu(hd->u.h_lockspace));
 	if (!ls) {
-		if (dlm_config.ci_log_debug) {
-			printk_ratelimited(KERN_DEBUG "dlm: invalid lockspace "
-				"%u from %d cmd %d type %d\n",
-				le32_to_cpu(hd->u.h_lockspace), nodeid,
-				hd->h_cmd, type);
-		}
+		log_limit(ls, "dlm: invalid lockspace %u from %d cmd %d type %d\n",
+			  le32_to_cpu(hd->u.h_lockspace), nodeid,
+			  hd->h_cmd, type);
 
 		if (hd->h_cmd == DLM_RCOM && type == DLM_RCOM_STATUS)
-			dlm_send_ls_not_ready(nodeid, &p->rcom);
+			dlm_send_ls_not_ready(dn, nodeid, &p->rcom);
 		return;
 	}
 
@@ -5624,7 +5623,8 @@ int dlm_recover_master_copy(struct dlm_ls *ls, const struct dlm_rcom *rc,
 
 	lock_rsb(r);
 
-	if (dlm_no_directory(ls) && (dlm_dir_nodeid(r) != dlm_our_nodeid())) {
+	if (dlm_no_directory(ls) &&
+	    (dlm_dir_nodeid(r) != dlm_our_nodeid(ls->ls_dn))) {
 		log_error(ls, "dlm_recover_master_copy remote %d %x not dir",
 			  from_nodeid, remid);
 		error = -EBADR;
@@ -6275,7 +6275,7 @@ int dlm_user_purge(struct dlm_ls *ls, struct dlm_user_proc *proc,
 {
 	int error = 0;
 
-	if (nodeid && (nodeid != dlm_our_nodeid())) {
+	if (nodeid && (nodeid != dlm_our_nodeid(ls->ls_dn))) {
 		error = send_purge(ls, nodeid, pid);
 	} else {
 		dlm_lock_recovery(ls);

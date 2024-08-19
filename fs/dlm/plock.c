@@ -463,7 +463,7 @@ int dlm_posix_get(dlm_lockspace_t *lockspace, u64 number, struct file *file,
 		fl->c.flc_type = (op->info.ex) ? F_WRLCK : F_RDLCK;
 		fl->c.flc_flags = FL_POSIX;
 		fl->c.flc_pid = op->info.pid;
-		if (op->info.nodeid != dlm_our_nodeid())
+		if (op->info.nodeid != dlm_our_nodeid(ls->ls_dn))
 			fl->c.flc_pid = -fl->c.flc_pid;
 		fl->fl_start = op->info.start;
 		fl->fl_end = op->info.end;
