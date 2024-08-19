@@ -14,7 +14,7 @@
  */
 #if MAX_NR_ZONES < 2
 #define ZONES_SHIFT 0
-#elif MAX_NR_ZONES <= 2
+#elif MAX_NR_ZONES == 2
 #define ZONES_SHIFT 1
 #elif MAX_NR_ZONES <= 4
 #define ZONES_SHIFT 2
