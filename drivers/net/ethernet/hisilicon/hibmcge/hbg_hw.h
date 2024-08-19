@@ -36,5 +36,8 @@ void hbg_hw_set_txrx_intr_enable(struct hbg_priv *priv, enum hbg_dir dir, bool e
 bool hbg_hw_txrx_intr_is_enabled(struct hbg_priv *priv, enum hbg_dir dir);
 void hbg_hw_set_txrx_intr_clear(struct hbg_priv *priv, enum hbg_dir dir);
 u32 hbg_hw_get_txrx_intr_status(struct hbg_priv *priv);
+void hbg_hw_set_mtu(struct hbg_priv *priv, u16 mtu);
+void hbg_hw_mac_enable(struct hbg_priv *priv, u32 enable);
+void hbg_hw_set_uc_addr(struct hbg_priv *priv, u64 mac_addr);
 
 #endif
