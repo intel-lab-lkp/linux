@@ -91,11 +91,21 @@ int __init dlm_config_init(void)
 	if (rv)
 		return rv;
 
+	rv = dlm_nldlm_init();
+	if (rv)
+		goto err;
+
 	rv = dlm_configfs_init();
-	if (rv) {
-		unregister_pernet_subsys(&dlm_net_ops);
-		dlm_net_id = 0;
-	}
+	if (rv)
+		goto err_nldlm;
+
+	return rv;
+
+err_nldlm:
+	dlm_nldlm_exit();
+err:
+	unregister_pernet_subsys(&dlm_net_ops);
+	dlm_net_id = 0;
 
 	return rv;
 }
@@ -103,6 +113,8 @@ int __init dlm_config_init(void)
 void dlm_config_exit(void)
 {
 	dlm_configfs_exit();
+	dlm_nldlm_exit();
+
 	unregister_pernet_subsys(&dlm_net_ops);
 	dlm_net_id = 0;
 }
