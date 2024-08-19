@@ -712,8 +712,7 @@ xfs_inode_item_unpin(
 	trace_xfs_inode_unpin(ip, _RET_IP_);
 	ASSERT(lip->li_buf || xfs_iflags_test(ip, XFS_ISTALE));
 	ASSERT(atomic_read(&ip->i_pincount) > 0);
-	if (atomic_dec_and_test(&ip->i_pincount))
-		wake_up_bit(&ip->i_flags, __XFS_IPINNED_BIT);
+	atomic_dec_and_wake_up_var(&ip->i_pincount);
 }
 
 STATIC uint
