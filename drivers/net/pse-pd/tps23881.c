@@ -8,12 +8,12 @@
 #include <linux/bitfield.h>
 #include <linux/delay.h>
 #include <linux/firmware.h>
+#include <linux/gpio/consumer.h>
 #include <linux/i2c.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/pse-pd/pse.h>
-
 #define TPS23881_MAX_CHANS 8
 
 #define TPS23881_REG_PW_STATUS	0x10
@@ -737,6 +737,7 @@ static int tps23881_i2c_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
 	struct tps23881_priv *priv;
+	struct gpio_desc *reset;
 	int ret;
 	u8 val;
 
@@ -748,6 +749,16 @@ static int tps23881_i2c_probe(struct i2c_client *client)
 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
+
+	reset = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_HIGH);
+	if (IS_ERR(reset))
+		return dev_err_probe(&client->dev, PTR_ERR(reset), "Failed to get reset GPIO\n");
+
+	if (reset) {
+		usleep_range(1000, 10000);
+		gpiod_set_value_cansleep(reset, 0); /* De-assert reset */
+		usleep_range(1000, 10000);
+	}
 
 	ret = i2c_smbus_read_byte_data(client, TPS23881_REG_DEVID);
 	if (ret < 0)
