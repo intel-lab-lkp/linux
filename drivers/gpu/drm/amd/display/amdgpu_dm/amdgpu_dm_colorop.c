@@ -121,7 +121,8 @@ int amdgpu_dm_initialize_default_pipeline(struct drm_plane *plane, struct drm_pr
 		return -ENOMEM;
 	}
 
-	ret = drm_colorop_curve_1d_lut_init(dev, op, plane, MAX_COLOR_LUT_ENTRIES);
+	ret = drm_colorop_curve_1d_lut_init(dev, op, plane, MAX_COLOR_LUT_ENTRIES,
+					    DRM_COLOROP_LUT1D_INTERPOLATION_LINEAR);
 	if (ret)
 		return ret;
 
@@ -151,7 +152,8 @@ int amdgpu_dm_initialize_default_pipeline(struct drm_plane *plane, struct drm_pr
 		return -ENOMEM;
 	}
 
-	ret = drm_colorop_curve_1d_lut_init(dev, op, plane, MAX_COLOR_LUT_ENTRIES);
+	ret = drm_colorop_curve_1d_lut_init(dev, op, plane, MAX_COLOR_LUT_ENTRIES,
+					    DRM_COLOROP_LUT1D_INTERPOLATION_LINEAR);
 	if (ret)
 		return ret;
 
