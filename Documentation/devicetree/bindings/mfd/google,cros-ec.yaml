@@ -98,9 +98,6 @@ properties:
 
   gpio-controller: true
 
-  typec:
-    $ref: /schemas/usb/google,cros-ec-typec.yaml#
-
   ec-pwm:
     $ref: /schemas/pwm/google,cros-ec-pwm.yaml#
     deprecated: true
@@ -165,6 +162,10 @@ patternProperties:
   "^extcon[0-9]*$":
     type: object
     $ref: /schemas/extcon/extcon-usbc-cros-ec.yaml#
+
+  "^typec(-[0-9])*$":
+    type: object
+    $ref: /schemas/usb/google,cros-ec-typec.yaml#
 
 required:
   - compatible
