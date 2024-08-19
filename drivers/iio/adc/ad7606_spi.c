@@ -45,6 +45,8 @@
 #define AD7606_RANGE_CH_ADDR(ch)	(0x03 + ((ch) >> 1))
 #define AD7606_OS_MODE			0x08
 
+#define AD7606C_18_SAMPLE_MASK		GENMASK(17, 0)
+
 static const struct iio_chan_spec ad7616_sw_channels[] = {
 	IIO_CHAN_SOFT_TIMESTAMP(16),
 	AD7616_CHANNEL(0),
@@ -75,6 +77,18 @@ static const struct iio_chan_spec ad7606b_sw_channels[] = {
 	AD7606_SW_CHANNEL(5, 16),
 	AD7606_SW_CHANNEL(6, 16),
 	AD7606_SW_CHANNEL(7, 16),
+};
+
+static const struct iio_chan_spec ad7606c_18_sw_channels[] = {
+	IIO_CHAN_SOFT_TIMESTAMP(8),
+	AD7606_SW_CHANNEL(0, 18),
+	AD7606_SW_CHANNEL(1, 18),
+	AD7606_SW_CHANNEL(2, 18),
+	AD7606_SW_CHANNEL(3, 18),
+	AD7606_SW_CHANNEL(4, 18),
+	AD7606_SW_CHANNEL(5, 18),
+	AD7606_SW_CHANNEL(6, 18),
+	AD7606_SW_CHANNEL(7, 18),
 };
 
 static const unsigned int ad7606B_oversampling_avail[9] = {
@@ -116,6 +130,56 @@ static int ad7606_spi_read_block(struct device *dev,
 
 	for (i = 0; i < count; i++)
 		data[i] = be16_to_cpu(bdata[i]);
+
+	return 0;
+}
+
+static int ad7606_spi_read_block18to32(struct device *dev,
+				       int count, void *buf)
+{
+	struct spi_device *spi = to_spi_device(dev);
+	u32 i, bit_buffer, buf_size, bit_buf_size;
+	u32 *data = buf;
+	u8 *bdata = buf;
+	int j, ret;
+
+	/**
+	 * With the 18 bit ADC variants (here) is that we can't assume that all
+	 * SPI controllers will pad 18-bit sequences into 32-bit arrays,
+	 * so we need to do a bit of buffer magic here.
+	 * Alternatively, we can have a variant of this function that works
+	 * for SPI controllers that can pad 18-bit samples into 32-bit arrays.
+	 */
+
+	/* Write 'count' bytes to the right, to not overwrite samples */
+	bdata += count;
+
+	/* Read 24 bits only, as we'll only get samples of 18 bits each */
+	buf_size = count * 3;
+	ret = spi_read(spi, bdata, buf_size);
+	if (ret < 0) {
+		dev_err(&spi->dev, "SPI read error\n");
+		return ret;
+	}
+
+	bit_buffer = 0;
+	bit_buf_size = 0;
+	for (j = 0, i = 0; i < buf_size; i++) {
+		u32 sample;
+
+		bit_buffer = (bit_buffer << 8) | bdata[i];
+		bit_buf_size += 8;
+
+		if (bit_buf_size < 18)
+			continue;
+
+		bit_buf_size -= 18;
+		sample = (bit_buffer >> bit_buf_size) & AD7606C_18_SAMPLE_MASK;
+		data[j++] = sign_extend32(sample, 17);
+
+		if (j == count)
+			break;
+	}
 
 	return 0;
 }
@@ -283,6 +347,19 @@ static int ad7606B_sw_mode_config(struct iio_dev *indio_dev)
 	return 0;
 }
 
+static int ad7606c_18_sw_mode_config(struct iio_dev *indio_dev)
+{
+	int ret;
+
+	ret = ad7606B_sw_mode_config(indio_dev);
+	if (ret)
+		return ret;
+
+	indio_dev->channels = ad7606c_18_sw_channels;
+
+	return 0;
+}
+
 static const struct ad7606_bus_ops ad7606_spi_bops = {
 	.read_block = ad7606_spi_read_block,
 };
@@ -305,6 +382,15 @@ static const struct ad7606_bus_ops ad7606B_spi_bops = {
 	.sw_mode_config = ad7606B_sw_mode_config,
 };
 
+static const struct ad7606_bus_ops ad7606c_18_spi_bops = {
+	.read_block = ad7606_spi_read_block18to32,
+	.reg_read = ad7606_spi_reg_read,
+	.reg_write = ad7606_spi_reg_write,
+	.write_mask = ad7606_spi_write_mask,
+	.rd_wr_cmd = ad7606B_spi_rd_wr_cmd,
+	.sw_mode_config = ad7606c_18_sw_mode_config,
+};
+
 static int ad7606_spi_probe(struct spi_device *spi)
 {
 	const struct spi_device_id *id = spi_get_device_id(spi);
@@ -315,7 +401,11 @@ static int ad7606_spi_probe(struct spi_device *spi)
 		bops = &ad7616_spi_bops;
 		break;
 	case ID_AD7606B:
+	case ID_AD7606C_16:
 		bops = &ad7606B_spi_bops;
+		break;
+	case ID_AD7606C_18:
+		bops = &ad7606c_18_spi_bops;
 		break;
 	default:
 		bops = &ad7606_spi_bops;
@@ -333,6 +423,8 @@ static const struct spi_device_id ad7606_id_table[] = {
 	{ "ad7606-6", ID_AD7606_6 },
 	{ "ad7606-8", ID_AD7606_8 },
 	{ "ad7606b",  ID_AD7606B },
+	{ "ad7606c-16",  ID_AD7606C_16 },
+	{ "ad7606c-18",  ID_AD7606C_18 },
 	{ "ad7616",   ID_AD7616 },
 	{}
 };
@@ -344,6 +436,8 @@ static const struct of_device_id ad7606_of_match[] = {
 	{ .compatible = "adi,ad7606-6" },
 	{ .compatible = "adi,ad7606-8" },
 	{ .compatible = "adi,ad7606b" },
+	{ .compatible = "adi,ad7606c-16" },
+	{ .compatible = "adi,ad7606c-18" },
 	{ .compatible = "adi,ad7616" },
 	{ },
 };
