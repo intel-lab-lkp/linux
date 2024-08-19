@@ -231,8 +231,18 @@ static void flush_all_zero_pkmaps(void)
 		set_page_address(page, NULL);
 		need_flush = 1;
 	}
-	if (need_flush)
+	if (need_flush) {
+		/*
+		 * In multi-core system one CPU holds the kmap_lock, waiting
+		 * for other CPUs respond to IPI. But other CPUS has disabled
+		 * irqs, waiting for kmap_lock, cannot answer the IPI. Release
+		 * kmap_lock before call flush_tlb_kernel_range, avoid kmap_lock
+		 * deadlock.
+		 */
+		unlock_kmap();
 		flush_tlb_kernel_range(PKMAP_ADDR(0), PKMAP_ADDR(LAST_PKMAP));
+		lock_kmap();
+	}
 }
 
 void __kmap_flush_unused(void)
