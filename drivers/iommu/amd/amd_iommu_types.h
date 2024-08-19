@@ -890,6 +890,23 @@ struct dev_table_entry {
 	u64 data[4];
 };
 
+struct dte256 {
+	union {
+		struct {
+			u64 lo;
+			u64 hi;
+		};
+		u128 data;
+	} qw_lo;
+	union {
+		struct {
+			u64 lo;
+			u64 hi;
+		};
+		u128 data;
+	} qw_hi;
+};
+
 /*
  * One entry for unity mappings parsed out of the ACPI table.
  */
