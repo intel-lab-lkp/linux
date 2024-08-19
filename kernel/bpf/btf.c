@@ -794,21 +794,18 @@ static bool btf_name_valid_identifier(const struct btf *btf, u32 offset)
 {
 	/* offset must be valid */
 	const char *src = btf_str_by_offset(btf, offset);
-	const char *src_limit;
+	int i;
 
-	if (!__btf_name_char_ok(*src, true))
+	if (!__btf_name_char_ok(src[0], true))
 		return false;
 
 	/* set a limit on identifier length */
-	src_limit = src + KSYM_NAME_LEN;
-	src++;
-	while (*src && src < src_limit) {
-		if (!__btf_name_char_ok(*src, false))
+	for (i = 1; i < KSYM_NAME_LEN && src[i]; i++) {
+		if (!__btf_name_char_ok(src[i], false))
 			return false;
-		src++;
 	}
 
-	return !*src;
+	return !src[i];
 }
 
 /* Allow any printable character in DATASEC names */
@@ -816,18 +813,18 @@ static bool btf_name_valid_section(const struct btf *btf, u32 offset)
 {
 	/* offset must be valid */
 	const char *src = btf_str_by_offset(btf, offset);
-	const char *src_limit;
+	int i;
+
+	if (!src[0])
+		return false;
 
 	/* set a limit on identifier length */
-	src_limit = src + KSYM_NAME_LEN;
-	src++;
-	while (*src && src < src_limit) {
-		if (!isprint(*src))
+	for (i = 1; i < KSYM_NAME_LEN && src[i]; i++) {
+		if (!isprint(src[i]))
 			return false;
-		src++;
 	}
 
-	return !*src;
+	return !src[i];
 }
 
 static const char *__btf_name_by_offset(const struct btf *btf, u32 offset)
