@@ -28,5 +28,13 @@
 
 int hbg_hw_init(struct hbg_priv *pri);
 void hbg_hw_adjust_link(struct hbg_priv *priv, u32 speed, u32 duplex);
+u32 hbg_hw_get_err_intr_status(struct hbg_priv *priv);
+u32 hbg_hw_get_err_intr_mask(struct hbg_priv *priv);
+void hbg_hw_set_err_intr_mask(struct hbg_priv *priv, u32 mask);
+void hbg_hw_set_err_intr_clear(struct hbg_priv *priv, u32 status);
+void hbg_hw_set_txrx_intr_enable(struct hbg_priv *priv, enum hbg_dir dir, bool enabld);
+bool hbg_hw_txrx_intr_is_enabled(struct hbg_priv *priv, enum hbg_dir dir);
+void hbg_hw_set_txrx_intr_clear(struct hbg_priv *priv, enum hbg_dir dir);
+u32 hbg_hw_get_txrx_intr_status(struct hbg_priv *priv);
 
 #endif

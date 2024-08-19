@@ -70,6 +70,63 @@ static int hbg_hw_dev_specs_init(struct hbg_priv *priv)
 	return 0;
 }
 
+u32 hbg_hw_get_err_intr_status(struct hbg_priv *priv)
+{
+	return hbg_reg_read(priv, HBG_REG_CF_INTRPT_STAT_ADDR);
+}
+
+void hbg_hw_set_err_intr_clear(struct hbg_priv *priv, u32 status)
+{
+	hbg_reg_write(priv, HBG_REG_CF_INTRPT_CLR_ADDR, status);
+}
+
+void hbg_hw_set_err_intr_mask(struct hbg_priv *priv, u32 mask)
+{
+	hbg_reg_write(priv, HBG_REG_CF_INTRPT_MSK_ADDR, mask);
+}
+
+u32 hbg_hw_get_err_intr_mask(struct hbg_priv *priv)
+{
+	return hbg_reg_read(priv, HBG_REG_CF_INTRPT_MSK_ADDR);
+}
+
+void hbg_hw_set_txrx_intr_enable(struct hbg_priv *priv,
+				 enum hbg_dir dir, bool enabld)
+{
+	u32 addr = hbg_dir_has_tx(dir) ? HBG_REG_CF_IND_TXINT_MSK_ADDR :
+					 HBG_REG_CF_IND_RXINT_MSK_ADDR;
+
+	hbg_reg_write_field(priv, addr, HBG_REG_CF_IND_INT_STAT_CLR_MSK_B, enabld);
+}
+
+bool hbg_hw_txrx_intr_is_enabled(struct hbg_priv *priv, enum hbg_dir dir)
+{
+	u32 addr = hbg_dir_has_tx(dir) ? HBG_REG_CF_IND_TXINT_MSK_ADDR :
+					 HBG_REG_CF_IND_RXINT_MSK_ADDR;
+
+	return hbg_reg_read_field(priv, addr, HBG_REG_CF_IND_INT_STAT_CLR_MSK_B);
+}
+
+void hbg_hw_set_txrx_intr_clear(struct hbg_priv *priv, enum hbg_dir dir)
+{
+	u32 addr = hbg_dir_has_tx(dir) ? HBG_REG_CF_IND_TXINT_CLR_ADDR :
+					 HBG_REG_CF_IND_RXINT_CLR_ADDR;
+
+	hbg_reg_write_field(priv, addr, HBG_REG_CF_IND_INT_STAT_CLR_MSK_B, 0x1);
+}
+
+u32 hbg_hw_get_txrx_intr_status(struct hbg_priv *priv)
+{
+	u32 status = 0;
+
+	status |= FIELD_PREP(HBG_INT_MSK_TX_B,
+			     hbg_reg_read(priv, HBG_REG_CF_IND_TXINT_STAT_ADDR));
+	status |= FIELD_PREP(HBG_INT_MSK_RX_B,
+			     hbg_reg_read(priv, HBG_REG_CF_IND_RXINT_STAT_ADDR));
+
+	return status;
+}
+
 void hbg_hw_adjust_link(struct hbg_priv *priv, u32 speed, u32 duplex)
 {
 	hbg_reg_write_field(priv, HBG_REG_PORT_MODE_ADDR,
