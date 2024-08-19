@@ -21,23 +21,8 @@
  */
 static int inode_dio_wait_interruptible(struct inode *inode)
 {
-	if (!atomic_read(&inode->i_dio_count))
-		return 0;
-
-	wait_queue_head_t *wq = bit_waitqueue(&inode->i_state, __I_DIO_WAKEUP);
-	DEFINE_WAIT_BIT(q, &inode->i_state, __I_DIO_WAKEUP);
-
-	for (;;) {
-		prepare_to_wait(wq, &q.wq_entry, TASK_INTERRUPTIBLE);
-		if (!atomic_read(&inode->i_dio_count))
-			break;
-		if (signal_pending(current))
-			break;
-		schedule();
-	}
-	finish_wait(wq, &q.wq_entry);
-
-	return atomic_read(&inode->i_dio_count) ? -ERESTARTSYS : 0;
+	return wait_var_event_interruptible(&inode->i_dio_count,
+					    !atomic_read(&inode->i_dio_count));
 }
 
 /* Call with exclusively locked inode->i_rwsem */
