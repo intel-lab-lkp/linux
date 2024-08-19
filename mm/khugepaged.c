@@ -549,8 +549,14 @@ static bool is_refcount_suitable(struct folio *folio)
 	int expected_refcount;
 
 	expected_refcount = folio_mapcount(folio);
-	if (folio_test_swapcache(folio))
+	if (folio_test_anon(folio)) {
+		expected_refcount += folio_test_swapcache(folio) ?
+					folio_nr_pages(folio) : 0;
+	} else {
 		expected_refcount += folio_nr_pages(folio);
+		if (folio_test_private(folio))
+			expected_refcount++;
+	}
 
 	return folio_ref_count(folio) == expected_refcount;
 }
@@ -2285,8 +2291,7 @@ static int hpage_collapse_scan_file(struct mm_struct *mm, unsigned long addr,
 			break;
 		}
 
-		if (folio_ref_count(folio) !=
-		    1 + folio_mapcount(folio) + folio_test_private(folio)) {
+		if (!is_refcount_suitable(folio)) {
 			result = SCAN_PAGE_COUNT;
 			break;
 		}
