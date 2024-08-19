@@ -1904,6 +1904,7 @@ static const struct platform_device_id atdma_devtypes[] = {
 		/* sentinel */
 	}
 };
+MODULE_DEVICE_TABLE(platform, atdma_devtypes);
 
 static inline const struct at_dma_platform_data * __init at_dma_get_driver_data(
 						struct platform_device *pdev)
