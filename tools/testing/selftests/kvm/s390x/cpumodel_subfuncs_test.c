@@ -38,6 +38,62 @@ static void get_cpu_machine_subfuntions(struct kvm_vm *vm,
 }
 
 /*
+ * Testing Crypto Cipher Message with Counter (KMCTR) CPU subfunction's ASM
+ * block
+ */
+static void test_kmctr_asm_block(u8 (*query)[16])
+{
+	asm volatile("	la	%%r1,%[query]\n"
+			"	xgr	%%r0,%%r0\n"
+			"	.insn	rrf,0xb92d0000,2,4,6,0\n"
+			: [query] "=R" (*query)
+			:
+			: "cc", "r0", "r1");
+}
+
+/*
+ * Testing Crypto Cipher Message with Cipher Feedback (KMF) CPU subfunction's
+ * ASM block
+ */
+static void test_kmf_asm_block(u8 (*query)[16])
+{
+	asm volatile("	la	%%r1,%[query]\n"
+			"	xgr	%%r0,%%r0\n"
+			"	.insn	rre,0xb92a0000,2,4\n"
+			: [query] "=R" (*query)
+			:
+			: "cc", "r0", "r1");
+}
+
+/*
+ * Testing Crypto Cipher Message with Output Feedback (KMO) CPU subfunction's
+ * ASM block
+ */
+static void test_kmo_asm_block(u8 (*query)[16])
+{
+	asm volatile("	la	%%r1,%[query]\n"
+			"	xgr	%%r0,%%r0\n"
+			"	.insn	rre,0xb92b0000,2,4\n"
+			: [query] "=R" (*query)
+			:
+			: "cc", "r0", "r1");
+}
+
+/*
+ * Testing Crypto Perform Cryptographic Computation (PCC) CPU subfunction's
+ * ASM block
+ */
+static void test_pcc_asm_block(u8 (*query)[16])
+{
+	asm volatile("	la	%%r1,%[query]\n"
+			"	xgr	%%r0,%%r0\n"
+			"	.insn	rre,0xb92c0000,0,0\n"
+			: [query] "=R" (*query)
+			:
+			: "cc", "r0", "r1");
+}
+
+/*
  * Testing Crypto Perform Random Number Operation (PRNO) CPU subfunction's
  * ASM block
  */
@@ -114,6 +170,15 @@ struct testdef {
 	testfunc_t test;
 	bool facility_bit;
 } testlist[] = {
+	/* MSA - Facility bit 77 */
+	{ "KMCTR", cpu_subfunc.kmctr, sizeof(cpu_subfunc.kmctr),
+		test_kmctr_asm_block, 77 },
+	{ "KMF", cpu_subfunc.kmf, sizeof(cpu_subfunc.kmf),
+		test_kmf_asm_block, 77 },
+	{ "KMO", cpu_subfunc.kmo, sizeof(cpu_subfunc.kmo),
+		test_kmo_asm_block, 77 },
+	{ "PCC", cpu_subfunc.pcc, sizeof(cpu_subfunc.pcc),
+		test_pcc_asm_block, 77 },
 	/* MSA5 - Facility bit 57 */
 	{ "PPNO", cpu_subfunc.ppno, sizeof(cpu_subfunc.ppno),
 		test_prno_asm_block, 57 },
