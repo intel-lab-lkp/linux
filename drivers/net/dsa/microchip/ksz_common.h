@@ -363,6 +363,8 @@ struct ksz_dev_ops {
 			  u8 *data);
 	int (*pme_pwrite8)(struct ksz_device *dev, int port, int offset,
 			   u8 data);
+	int (*change_tag_protocol)(struct ksz_device *dev,
+				   enum dsa_tag_protocol proto);
 	void (*freeze_mib)(struct ksz_device *dev, int port, bool freeze);
 	void (*port_init_cnt)(struct ksz_device *dev, int port);
 	void (*phylink_mac_link_up)(struct ksz_device *dev, int port,

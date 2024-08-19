@@ -310,6 +310,7 @@ static const struct ksz_dev_ops ksz88x3_dev_ops = {
 	.pme_write8 = ksz8_pme_write8,
 	.pme_pread8 = ksz8_pme_pread8,
 	.pme_pwrite8 = ksz8_pme_pwrite8,
+	.change_tag_protocol = ksz8_change_tag_protocol,
 };
 
 static const struct ksz_dev_ops ksz87xx_dev_ops = {
@@ -345,6 +346,7 @@ static const struct ksz_dev_ops ksz87xx_dev_ops = {
 	.pme_write8 = ksz8_pme_write8,
 	.pme_pread8 = ksz8_pme_pread8,
 	.pme_pwrite8 = ksz8_pme_pwrite8,
+	.change_tag_protocol = ksz8_change_tag_protocol,
 };
 
 static void ksz9477_phylink_mac_link_up(struct phylink_config *config,
@@ -2937,9 +2939,7 @@ static enum dsa_tag_protocol ksz_get_tag_protocol(struct dsa_switch *ds,
 	struct ksz_device *dev = ds->priv;
 	enum dsa_tag_protocol proto = DSA_TAG_PROTO_NONE;
 
-	if (dev->chip_id == KSZ8795_CHIP_ID ||
-	    dev->chip_id == KSZ8794_CHIP_ID ||
-	    dev->chip_id == KSZ8765_CHIP_ID)
+	if (ksz_is_ksz87xx(dev))
 		proto = DSA_TAG_PROTO_KSZ8795;
 
 	if (dev->chip_id == KSZ8830_CHIP_ID ||
@@ -2961,12 +2961,25 @@ static enum dsa_tag_protocol ksz_get_tag_protocol(struct dsa_switch *ds,
 	return proto;
 }
 
+static int ksz_change_tag_protocol(struct dsa_switch *ds,
+				   enum dsa_tag_protocol proto)
+{
+	struct ksz_device *dev = ds->priv;
+
+	if (dev->dev_ops->change_tag_protocol)
+		return dev->dev_ops->change_tag_protocol(dev, proto);
+	else
+		return -EPROTONOSUPPORT;
+}
+
 static int ksz_connect_tag_protocol(struct dsa_switch *ds,
 				    enum dsa_tag_protocol proto)
 {
 	struct ksz_tagger_data *tagger_data;
 
 	switch (proto) {
+	case DSA_TAG_PROTO_NONE:
+		return 0;
 	case DSA_TAG_PROTO_KSZ8795:
 		return 0;
 	case DSA_TAG_PROTO_KSZ9893:
@@ -4208,6 +4221,7 @@ static int ksz_hsr_leave(struct dsa_switch *ds, int port,
 
 static const struct dsa_switch_ops ksz_switch_ops = {
 	.get_tag_protocol	= ksz_get_tag_protocol,
+	.change_tag_protocol    = ksz_change_tag_protocol,
 	.connect_tag_protocol   = ksz_connect_tag_protocol,
 	.get_phy_flags		= ksz_get_phy_flags,
 	.setup			= ksz_setup,
@@ -4443,9 +4457,7 @@ static int ksz9477_drive_strength_write(struct ksz_device *dev,
 		dev_warn(dev->dev, "%s is not supported by this chip variant\n",
 			 props[KSZ_DRIVER_STRENGTH_IO].name);
 
-	if (dev->chip_id == KSZ8795_CHIP_ID ||
-	    dev->chip_id == KSZ8794_CHIP_ID ||
-	    dev->chip_id == KSZ8765_CHIP_ID)
+	if (ksz_is_ksz87xx(dev))
 		reg = KSZ8795_REG_SW_CTRL_20;
 	else
 		reg = KSZ9477_REG_SW_IO_STRENGTH;
