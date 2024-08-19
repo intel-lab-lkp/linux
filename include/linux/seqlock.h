@@ -176,6 +176,28 @@ __seqprop_##lockname##_sequence(const seqcount_##lockname##_t *s)	\
 	return seq;							\
 }									\
 									\
+static __always_inline unsigned						\
+__seqprop_##lockname##_sequence_acquire(const seqcount_##lockname##_t *s) \
+{									\
+	unsigned seq = smp_load_acquire(&s->seqcount.sequence);		\
+									\
+	if (!IS_ENABLED(CONFIG_PREEMPT_RT))				\
+		return seq;						\
+									\
+	if (preemptible && unlikely(seq & 1)) {				\
+		__SEQ_LOCK(lockbase##_lock(s->lock));			\
+		__SEQ_LOCK(lockbase##_unlock(s->lock));			\
+									\
+		/*							\
+		 * Re-read the sequence counter since the (possibly	\
+		 * preempted) writer made progress.			\
+		 */							\
+		seq = smp_load_acquire(&s->seqcount.sequence);		\
+	}								\
+									\
+	return seq;							\
+}									\
+									\
 static __always_inline bool						\
 __seqprop_##lockname##_preemptible(const seqcount_##lockname##_t *s)	\
 {									\
@@ -209,6 +231,11 @@ static inline const seqcount_t *__seqprop_const_ptr(const seqcount_t *s)
 static inline unsigned __seqprop_sequence(const seqcount_t *s)
 {
 	return READ_ONCE(s->sequence);
+}
+
+static inline unsigned __seqprop_sequence_acquire(const seqcount_t *s)
+{
+	return smp_load_acquire(&s->sequence);
 }
 
 static inline bool __seqprop_preemptible(const seqcount_t *s)
@@ -259,6 +286,7 @@ SEQCOUNT_LOCKNAME(mutex,        struct mutex,    true,     mutex)
 #define seqprop_ptr(s)			__seqprop(s, ptr)(s)
 #define seqprop_const_ptr(s)		__seqprop(s, const_ptr)(s)
 #define seqprop_sequence(s)		__seqprop(s, sequence)(s)
+#define seqprop_sequence_acquire(s)	__seqprop(s, sequence_acquire)(s)
 #define seqprop_preemptible(s)		__seqprop(s, preemptible)(s)
 #define seqprop_assert(s)		__seqprop(s, assert)(s)
 
@@ -293,6 +321,18 @@ SEQCOUNT_LOCKNAME(mutex,        struct mutex,    true,     mutex)
  *
  * Return: count to be passed to read_seqcount_retry()
  */
+#ifdef CONFIG_ARCH_HAS_ACQUIRE_RELEASE
+#define raw_read_seqcount_begin(s)					\
+({									\
+	unsigned _seq;							\
+									\
+	while ((_seq = seqprop_sequence_acquire(s)) & 1)		\
+		cpu_relax();						\
+									\
+	kcsan_atomic_next(KCSAN_SEQLOCK_REGION_MAX);			\
+	_seq;								\
+})
+#else
 #define raw_read_seqcount_begin(s)					\
 ({									\
 	unsigned _seq = __read_seqcount_begin(s);			\
@@ -300,6 +340,7 @@ SEQCOUNT_LOCKNAME(mutex,        struct mutex,    true,     mutex)
 	smp_rmb();							\
 	_seq;								\
 })
+#endif
 
 /**
  * read_seqcount_begin() - begin a seqcount_t read critical section
