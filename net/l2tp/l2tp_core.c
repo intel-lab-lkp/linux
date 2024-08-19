@@ -107,6 +107,7 @@ static struct workqueue_struct *l2tp_wq;
 /* per-net private data for this module */
 static unsigned int l2tp_net_id;
 struct l2tp_net {
+	bool net_closing;
 	/* Lock for write access to l2tp_tunnel_idr */
 	spinlock_t l2tp_tunnel_idr_lock;
 	struct idr l2tp_tunnel_idr;
@@ -1560,12 +1561,18 @@ out:
 	return err;
 }
 
-int l2tp_tunnel_create(int fd, int version, u32 tunnel_id, u32 peer_tunnel_id,
+int l2tp_tunnel_create(struct net *net, int fd, int version,
+		       u32 tunnel_id, u32 peer_tunnel_id,
 		       struct l2tp_tunnel_cfg *cfg, struct l2tp_tunnel **tunnelp)
 {
+	struct l2tp_net *pn = l2tp_pernet(net);
 	struct l2tp_tunnel *tunnel = NULL;
 	int err;
 	enum l2tp_encap_type encap = L2TP_ENCAPTYPE_UDP;
+
+	/* This pairs with WRITE_ONCE() in l2tp_pre_exit_net(). */
+	if (READ_ONCE(pn->net_closing))
+		return -ENETDOWN;
 
 	if (cfg)
 		encap = cfg->encap;
@@ -1832,6 +1839,8 @@ static __net_init int l2tp_init_net(struct net *net)
 {
 	struct l2tp_net *pn = net_generic(net, l2tp_net_id);
 
+	pn->net_closing = false;
+
 	idr_init(&pn->l2tp_tunnel_idr);
 	spin_lock_init(&pn->l2tp_tunnel_idr_lock);
 
@@ -1848,6 +1857,12 @@ static __net_exit void l2tp_pre_exit_net(struct net *net)
 	struct l2tp_tunnel *tunnel = NULL;
 	unsigned long tunnel_id, tmp;
 
+	/* Prevent new tunnel create API requests in the net.
+	 * Pairs with READ_ONCE in l2tp_tunnel_create.
+	 */
+	WRITE_ONCE(pn->net_closing, true);
+
+again:
 	rcu_read_lock_bh();
 	idr_for_each_entry_ul(&pn->l2tp_tunnel_idr, tunnel, tmp, tunnel_id) {
 		if (tunnel)
@@ -1855,16 +1870,21 @@ static __net_exit void l2tp_pre_exit_net(struct net *net)
 	}
 	rcu_read_unlock_bh();
 
-	if (l2tp_wq) {
-		/* ensure that all TUNNEL_DELETE work items are run before
-		 * draining the work queue since TUNNEL_DELETE requests may
-		 * queue SESSION_DELETE work items for each session in the
-		 * tunnel. drain_workqueue may otherwise warn if SESSION_DELETE
-		 * requests are queued while the work queue is being drained.
-		 */
+	if (l2tp_wq)
 		__flush_workqueue(l2tp_wq);
-		drain_workqueue(l2tp_wq);
+
+	/* repeat until all of the net's IDR lists are empty, in case tunnels
+	 * or sessions were being created just before l2tp_pre_exit_net was
+	 * called.
+	 */
+	rcu_read_lock_bh();
+	if (!idr_is_empty(&pn->l2tp_tunnel_idr) ||
+	    !idr_is_empty(&pn->l2tp_v2_session_idr) ||
+	    !idr_is_empty(&pn->l2tp_v3_session_idr)) {
+		rcu_read_unlock_bh();
+		goto again;
 	}
+	rcu_read_unlock_bh();
 }
 
 static __net_exit void l2tp_exit_net(struct net *net)

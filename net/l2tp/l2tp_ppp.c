@@ -660,7 +660,8 @@ static struct l2tp_tunnel *pppol2tp_tunnel_get(struct net *net,
 			if (info->fd < 0)
 				return ERR_PTR(-EBADF);
 
-			error = l2tp_tunnel_create(info->fd,
+			error = l2tp_tunnel_create(net,
+						   info->fd,
 						   info->version,
 						   info->tunnel_id,
 						   info->peer_tunnel_id, &tcfg,
