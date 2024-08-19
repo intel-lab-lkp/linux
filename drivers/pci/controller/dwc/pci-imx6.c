@@ -1213,14 +1213,57 @@ static int imx6_pcie_suspend_noirq(struct device *dev)
 	return 0;
 }
 
+static int imx6_pcie_reset_link(struct imx6_pcie *imx6_pcie)
+{
+	int ret;
+
+	regmap_update_bits(imx6_pcie->iomuxc_gpr, IOMUXC_GPR1,
+			   IMX6Q_GPR1_PCIE_TEST_PD, 1 << 18);
+	regmap_update_bits(imx6_pcie->iomuxc_gpr, IOMUXC_GPR1,
+			   IMX6Q_GPR1_PCIE_REF_CLK_EN, 0 << 16);
+
+	/* Reset the PCIe device */
+	gpiod_set_value_cansleep(imx6_pcie->reset_gpiod, 1);
+
+	ret = imx6_pcie_enable_ref_clk(imx6_pcie);
+	if (ret) {
+		dev_err(imx6_pcie->pci->dev, "unable to enable pcie ref clock\n");
+		return ret;
+	}
+
+	imx6_pcie_deassert_reset_gpio(imx6_pcie);
+
+	/*
+	 * Setup the root complex again and enable msi. Without this PCIe will
+	 * not work in msi mode and drivers will crash if they try to access
+	 * the device memory area
+	 */
+	dw_pcie_setup_rc(&imx6_pcie->pci->pp);
+	if (pci_msi_enabled()) {
+		u32 val;
+		u8 offset = dw_pcie_find_capability(imx6_pcie->pci, PCI_CAP_ID_MSI);
+
+		val = dw_pcie_readw_dbi(imx6_pcie->pci, offset + PCI_MSI_FLAGS);
+		val |= PCI_MSI_FLAGS_ENABLE;
+		dw_pcie_writew_dbi(imx6_pcie->pci, offset + PCI_MSI_FLAGS, val);
+	}
+
+	return 0;
+}
+
 static int imx6_pcie_resume_noirq(struct device *dev)
 {
 	int ret;
 	struct imx6_pcie *imx6_pcie = dev_get_drvdata(dev);
 	struct dw_pcie_rp *pp = &imx6_pcie->pci->pp;
 
+	/*
+	 * Even though the i.MX6Q does not support suspend/resume, we need to
+	 * reset the link after resume or the memory mapped PCIe I/O space will
+	 * be inaccessible. This will cause the system to freeze.
+	 */
 	if (!(imx6_pcie->drvdata->flags & IMX6_PCIE_FLAG_SUPPORTS_SUSPEND))
-		return 0;
+		return imx6_pcie_reset_link(imx6_pcie);
 
 	ret = imx6_pcie_host_init(pp);
 	if (ret)
