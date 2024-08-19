@@ -17,7 +17,6 @@ struct drm_printer;
 
 /* Keep in gen based order, and chronological order within a gen */
 #define INTEL_DISPLAY_PLATFORMS(func) \
-	func(PLATFORM_UNINITIALIZED) \
 	/* Display ver 2 */ \
 	func(I830) \
 	func(I845G) \
@@ -93,14 +92,6 @@ struct drm_printer;
 	func(DG2_G10) \
 	func(DG2_G11) \
 	func(DG2_G12)
-
-#define __ENUM(x) INTEL_DISPLAY_ ## x,
-
-enum intel_display_platform {
-	INTEL_DISPLAY_PLATFORMS(__ENUM)
-};
-
-#undef __ENUM
 
 #define __MEMBER(name) unsigned long name:1;
 #define __COUNT(x) 1 +
@@ -218,9 +209,6 @@ struct intel_display_platforms {
 	(DISPLAY_VER(i915) >= (from) && DISPLAY_VER(i915) <= (until))
 
 struct intel_display_runtime_info {
-	enum intel_display_platform platform;
-	enum intel_display_platform subplatform;
-
 	struct intel_display_ip_ver {
 		u16 ver;
 		u16 rel;
