@@ -191,6 +191,7 @@ static int mlx5_vsc_wait_on_flag(struct mlx5_core_dev *dev, u8 expected_val)
 		if ((retries & 0xf) == 0)
 			usleep_range(1000, 2000);
 
+		cond_resched();
 	} while (flag != expected_val);
 
 	return 0;
@@ -280,6 +281,7 @@ int mlx5_vsc_gw_read_block_fast(struct mlx5_core_dev *dev, u32 *data,
 			return read_addr;
 
 		read_addr = next_read_addr;
+		cond_resched();
 	}
 	return length;
 }
