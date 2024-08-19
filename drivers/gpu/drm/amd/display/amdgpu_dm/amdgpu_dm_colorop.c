@@ -60,7 +60,9 @@ int amdgpu_dm_initialize_default_pipeline(struct drm_plane *plane, struct drm_pr
 		return -ENOMEM;
 	}
 
-	ret = drm_colorop_curve_1d_init(dev, op, plane, amdgpu_dm_supported_degam_tfs);
+	ret = drm_colorop_curve_1d_init(dev, op, plane,
+					amdgpu_dm_supported_degam_tfs,
+					true);
 	if (ret)
 		return ret;
 
@@ -76,7 +78,7 @@ int amdgpu_dm_initialize_default_pipeline(struct drm_plane *plane, struct drm_pr
 		return -ENOMEM;
 	}
 
-	ret = drm_colorop_mult_init(dev, op, plane);
+	ret = drm_colorop_mult_init(dev, op, plane, true);
 	if (ret)
 		return ret;
 
@@ -91,7 +93,7 @@ int amdgpu_dm_initialize_default_pipeline(struct drm_plane *plane, struct drm_pr
 		return -ENOMEM;
 	}
 
-	ret = drm_colorop_ctm_3x4_init(dev, op, plane);
+	ret = drm_colorop_ctm_3x4_init(dev, op, plane, true);
 	if (ret)
 		return ret;
 
@@ -106,7 +108,9 @@ int amdgpu_dm_initialize_default_pipeline(struct drm_plane *plane, struct drm_pr
 		return -ENOMEM;
 	}
 
-	ret = drm_colorop_curve_1d_init(dev, op, plane, amdgpu_dm_supported_shaper_tfs);
+	ret = drm_colorop_curve_1d_init(dev, op, plane,
+					amdgpu_dm_supported_shaper_tfs,
+					true);
 	if (ret)
 		return ret;
 
@@ -122,7 +126,8 @@ int amdgpu_dm_initialize_default_pipeline(struct drm_plane *plane, struct drm_pr
 	}
 
 	ret = drm_colorop_curve_1d_lut_init(dev, op, plane, MAX_COLOR_LUT_ENTRIES,
-					    DRM_COLOROP_LUT1D_INTERPOLATION_LINEAR);
+					    DRM_COLOROP_LUT1D_INTERPOLATION_LINEAR,
+					    true);
 	if (ret)
 		return ret;
 
@@ -137,7 +142,9 @@ int amdgpu_dm_initialize_default_pipeline(struct drm_plane *plane, struct drm_pr
 		return -ENOMEM;
 	}
 
-	ret = drm_colorop_curve_1d_init(dev, op, plane, amdgpu_dm_supported_blnd_tfs);
+	ret = drm_colorop_curve_1d_init(dev, op, plane,
+					amdgpu_dm_supported_blnd_tfs,
+					true);
 	if (ret)
 		return ret;
 
@@ -153,7 +160,8 @@ int amdgpu_dm_initialize_default_pipeline(struct drm_plane *plane, struct drm_pr
 	}
 
 	ret = drm_colorop_curve_1d_lut_init(dev, op, plane, MAX_COLOR_LUT_ENTRIES,
-					    DRM_COLOROP_LUT1D_INTERPOLATION_LINEAR);
+					    DRM_COLOROP_LUT1D_INTERPOLATION_LINEAR,
+					    true);
 	if (ret)
 		return ret;
 

@@ -319,14 +319,16 @@ static inline struct drm_colorop *drm_colorop_find(struct drm_device *dev,
 }
 
 int drm_colorop_curve_1d_init(struct drm_device *dev, struct drm_colorop *colorop,
-			      struct drm_plane *plane, u64 supported_tfs);
+			      struct drm_plane *plane, u64 supported_tfs,
+			      bool allow_bypass);
 int drm_colorop_curve_1d_lut_init(struct drm_device *dev, struct drm_colorop *colorop,
 				  struct drm_plane *plane, uint32_t lut_size,
-				  enum drm_colorop_lut1d_interpolation_type lut1d_interpolation);
+				  enum drm_colorop_lut1d_interpolation_type lut1d_interpolation,
+				  bool allow_bypass);
 int drm_colorop_ctm_3x4_init(struct drm_device *dev, struct drm_colorop *colorop,
-			     struct drm_plane *plane);
+			     struct drm_plane *plane, bool allow_bypass);
 int drm_colorop_mult_init(struct drm_device *dev, struct drm_colorop *colorop,
-			      struct drm_plane *plane);
+			      struct drm_plane *plane, bool allow_bypass);
 
 struct drm_colorop_state *
 drm_atomic_helper_colorop_duplicate_state(struct drm_colorop *colorop);
