@@ -5,6 +5,28 @@
 #include <linux/netdevice.h>
 #include <linux/pci.h>
 #include "hbg_common.h"
+#include "hbg_hw.h"
+
+static const struct regmap_config hbg_regmap_config = {
+	.reg_bits	= 32,
+	.reg_stride	= 4,
+	.val_bits	= 32,
+	.max_register	= 0x20000,
+	.fast_io	= true,
+};
+
+static int hbg_init(struct hbg_priv *priv)
+{
+	struct device *dev = &priv->pdev->dev;
+	struct regmap *regmap;
+
+	regmap = devm_regmap_init_mmio(dev, priv->io_base, &hbg_regmap_config);
+	if (IS_ERR(regmap))
+		return dev_err_probe(dev, PTR_ERR(regmap), "failed to init regmap\n");
+
+	priv->regmap = regmap;
+	return hbg_hw_init(priv);
+}
 
 static int hbg_pci_init(struct pci_dev *pdev)
 {
@@ -56,10 +78,15 @@ static int hbg_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (ret)
 		return ret;
 
+	ret = hbg_init(priv);
+	if (ret)
+		return ret;
+
 	ret = devm_register_netdev(dev, netdev);
 	if (ret)
 		return dev_err_probe(dev, ret, "failed to register netdev\n");
 
+	set_bit(HBG_NIC_STATE_INITED, &priv->state);
 	return 0;
 }
 
