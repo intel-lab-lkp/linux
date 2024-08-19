@@ -557,30 +557,22 @@ out:
 		release_firmware(fmw);
 }
 
-static int tasdevice_dapm_event(struct snd_soc_dapm_widget *w,
-			struct snd_kcontrol *kcontrol, int event)
+static int tasdevice_mute(struct snd_soc_dai *dai, int mute, int stream)
 {
-	struct snd_soc_component *codec = snd_soc_dapm_to_component(w->dapm);
+	struct snd_soc_component *codec = dai->component;
 	struct tasdevice_priv *tas_priv = snd_soc_component_get_drvdata(codec);
-	int state = 0;
 
-	/* Codec Lock Hold */
-	mutex_lock(&tas_priv->codec_lock);
-	if (event == SND_SOC_DAPM_PRE_PMD)
-		state = 1;
-	tasdevice_tuning_switch(tas_priv, state);
-	/* Codec Lock Release*/
-	mutex_unlock(&tas_priv->codec_lock);
+	/* Codec Lock/UnLock */
+	guard(mutex)(&tas_priv->codec_lock);
+	tasdevice_tuning_switch(tas_priv, mute);
 
 	return 0;
 }
 
 static const struct snd_soc_dapm_widget tasdevice_dapm_widgets[] = {
 	SND_SOC_DAPM_AIF_IN("ASI", "ASI Playback", 0, SND_SOC_NOPM, 0, 0),
-	SND_SOC_DAPM_AIF_OUT_E("ASI OUT", "ASI Capture", 0, SND_SOC_NOPM,
-		0, 0, tasdevice_dapm_event,
-		SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_PRE_PMD),
-	SND_SOC_DAPM_SPK("SPK", tasdevice_dapm_event),
+	SND_SOC_DAPM_AIF_OUT("ASI OUT", "ASI Capture", 0, SND_SOC_NOPM, 0, 0),
+	SND_SOC_DAPM_SPK("SPK", NULL),
 	SND_SOC_DAPM_OUTPUT("OUT"),
 	SND_SOC_DAPM_INPUT("DMIC")
 };
@@ -667,6 +659,7 @@ static const struct snd_soc_dai_ops tasdevice_dai_ops = {
 	.startup = tasdevice_startup,
 	.hw_params = tasdevice_hw_params,
 	.set_sysclk = tasdevice_set_dai_sysclk,
+	.mute_stream = tasdevice_mute,
 };
 
 static struct snd_soc_dai_driver tasdevice_dai_driver[] = {
