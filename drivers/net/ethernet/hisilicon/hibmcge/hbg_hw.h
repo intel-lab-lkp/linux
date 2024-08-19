@@ -20,6 +20,13 @@
 #define hbg_reg_write64(priv, reg_addr, value) \
 	lo_hi_writeq(value, (priv)->io_base + (reg_addr))
 
-int hbg_hw_init(struct hbg_priv *priv);
+#define hbg_reg_read_field(priv, reg_addr, mask) \
+	FIELD_GET(mask, hbg_reg_read(priv, reg_addr))
+
+#define hbg_reg_write_field(priv, reg_addr, mask, val) \
+	regmap_write_bits((priv)->regmap, reg_addr, mask, FIELD_PREP(mask, val))
+
+int hbg_hw_init(struct hbg_priv *pri);
+void hbg_hw_adjust_link(struct hbg_priv *priv, u32 speed, u32 duplex);
 
 #endif

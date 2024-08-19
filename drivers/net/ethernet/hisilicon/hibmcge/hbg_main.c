@@ -6,6 +6,7 @@
 #include <linux/pci.h>
 #include "hbg_common.h"
 #include "hbg_hw.h"
+#include "hbg_mdio.h"
 
 static const struct regmap_config hbg_regmap_config = {
 	.reg_bits	= 32,
@@ -19,13 +20,18 @@ static int hbg_init(struct hbg_priv *priv)
 {
 	struct device *dev = &priv->pdev->dev;
 	struct regmap *regmap;
+	int ret;
 
 	regmap = devm_regmap_init_mmio(dev, priv->io_base, &hbg_regmap_config);
 	if (IS_ERR(regmap))
 		return dev_err_probe(dev, PTR_ERR(regmap), "failed to init regmap\n");
 
 	priv->regmap = regmap;
-	return hbg_hw_init(priv);
+	ret = hbg_hw_init(priv);
+	if (ret)
+		return ret;
+
+	return hbg_mdio_init(priv);
 }
 
 static int hbg_pci_init(struct pci_dev *pdev)
