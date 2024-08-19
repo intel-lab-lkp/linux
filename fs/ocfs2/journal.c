@@ -1077,9 +1077,11 @@ void ocfs2_journal_shutdown(struct ocfs2_super *osb)
 	BUG_ON(atomic_read(&(osb->journal->j_num_trans)) != 0);
 
 	if (ocfs2_mount_local(osb)) {
-		jbd2_journal_lock_updates(journal->j_journal);
-		status = jbd2_journal_flush(journal->j_journal, 0);
-		jbd2_journal_unlock_updates(journal->j_journal);
+		if (journal->j_journal->j_sb_buffer) {
+			jbd2_journal_lock_updates(journal->j_journal);
+			status = jbd2_journal_flush(journal->j_journal, 0);
+			jbd2_journal_unlock_updates(journal->j_journal);
+		}
 		if (status < 0)
 			mlog_errno(status);
 	}
