@@ -1308,8 +1308,18 @@ int bch2_dev_journal_init(struct bch_dev *ca, struct bch_sb *sb)
 	if (journal_buckets_v2) {
 		unsigned nr = bch2_sb_field_journal_v2_nr_entries(journal_buckets_v2);
 
-		for (unsigned i = 0; i < nr; i++)
+		for (unsigned i = 0; i < nr; i++) {
 			ja->nr += le64_to_cpu(journal_buckets_v2->d[i].nr);
+			if (le64_to_cpu(journal_buckets_v2->d[i].nr) > UINT_MAX) {
+				struct bch_fs *c = ca->fs;
+				struct printbuf buf = PRINTBUF;
+				prt_printf(&buf, "journal v2 entry d[%u].nr %lu overflow!\n", i,
+					le64_to_cpu(journal_buckets_v2->d[i].nr));
+				bch_info(c, "%s", buf.buf);
+				printbuf_exit(&buf);
+				return -BCH_ERR_ENOMEM_dev_journal_init;
+			}
+		}
 	} else if (journal_buckets) {
 		ja->nr = bch2_nr_journal_buckets(journal_buckets);
 	}
