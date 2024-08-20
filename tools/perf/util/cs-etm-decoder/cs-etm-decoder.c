@@ -238,6 +238,7 @@ cs_etm_decoder__init_def_logger_printing(struct cs_etm_decoder_params *d_params,
 					      cs_etm_decoder__print_str_cb);
 	if (ret != 0)
 		ret = -1;
+		return -1;
 
 	return 0;
 }
