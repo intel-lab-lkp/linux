@@ -836,6 +836,12 @@ static int ufs_qcom_apply_dev_quirks(struct ufs_hba *hba)
 
 static struct ufs_dev_quirk ufs_qcom_dev_fixups[] = {
 	/* add UFS device specific quirks */
+	{ .wmanufacturerid = UFS_VENDOR_MICRON,
+	  .model = UFS_ANY_MODEL,
+	  .quirk = UFS_DEVICE_QUIRK_DELAY_BEFORE_LPM },
+	{ .wmanufacturerid = UFS_VENDOR_SKHYNIX,
+	  .model = UFS_ANY_MODEL,
+	  .quirk = UFS_DEVICE_QUIRK_DELAY_BEFORE_LPM },
 	{}
 };
 
