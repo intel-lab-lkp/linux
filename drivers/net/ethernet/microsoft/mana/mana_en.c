@@ -1862,7 +1862,7 @@ static void mana_deinit_txq(struct mana_port_context *apc, struct mana_txq *txq)
 	mana_gd_destroy_queue(gd->gdma_context, txq->gdma_sq);
 }
 
-static void mana_destroy_txq(struct mana_port_context *apc)
+static void mana_cleanup_napi_txq(struct mana_port_context *apc)
 {
 	struct napi_struct *napi;
 	int i;
@@ -1875,7 +1875,17 @@ static void mana_destroy_txq(struct mana_port_context *apc)
 		napi_synchronize(napi);
 		napi_disable(napi);
 		netif_napi_del(napi);
+	}
+}
 
+static void mana_destroy_txq(struct mana_port_context *apc)
+{
+	int i;
+
+	if (!apc->tx_qp)
+		return;
+
+	for (i = 0; i < apc->num_queues; i++) {
 		mana_destroy_wq_obj(apc, GDMA_SQ, apc->tx_qp[i].tx_object);
 
 		mana_deinit_cq(apc, &apc->tx_qp[i].tx_cq);
@@ -2007,6 +2017,21 @@ out:
 	return err;
 }
 
+static void mana_cleanup_napi_rxq(struct mana_port_context *apc,
+				  struct mana_rxq *rxq, bool validate_state)
+{
+	struct napi_struct *napi;
+
+	if (!rxq)
+		return;
+
+	napi = &rxq->rx_cq.napi;
+	if (validate_state)
+		napi_synchronize(napi);
+	napi_disable(napi);
+	netif_napi_del(napi);
+}
+
 static void mana_destroy_rxq(struct mana_port_context *apc,
 			     struct mana_rxq *rxq, bool validate_state)
 
@@ -2014,23 +2039,13 @@ static void mana_destroy_rxq(struct mana_port_context *apc,
 	struct gdma_context *gc = apc->ac->gdma_dev->gdma_context;
 	struct mana_recv_buf_oob *rx_oob;
 	struct device *dev = gc->dev;
-	struct napi_struct *napi;
 	struct page *page;
 	int i;
 
 	if (!rxq)
 		return;
 
-	napi = &rxq->rx_cq.napi;
-
-	if (validate_state)
-		napi_synchronize(napi);
-
-	napi_disable(napi);
-
 	xdp_rxq_info_unreg(&rxq->xdp_rxq);
-
-	netif_napi_del(napi);
 
 	mana_destroy_wq_obj(apc, GDMA_RQ, rxq->rxobj);
 
@@ -2336,11 +2351,11 @@ static void mana_destroy_vport(struct mana_port_context *apc)
 		rxq = apc->rxqs[rxq_idx];
 		if (!rxq)
 			continue;
-
+		mana_cleanup_napi_rxq(apc, rxq, true);
 		mana_destroy_rxq(apc, rxq, true);
 		apc->rxqs[rxq_idx] = NULL;
 	}
-
+	mana_cleanup_napi_txq(apc);
 	mana_destroy_txq(apc);
 	mana_uncfg_vport(apc);
 
