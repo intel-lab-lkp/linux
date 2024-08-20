@@ -39,9 +39,8 @@ int bch2_run_thread_with_file(struct thread_with_file *thr,
 
 	thr->ret = 0;
 	thr->task = kthread_create(fn, thr, "%s", name);
-	ret = PTR_ERR_OR_ZERO(thr->task);
-	if (ret)
-		return ret;
+	if (IS_ERR(thr->task))
+		return PTR_ERR(thr->task);
 
 	ret = get_unused_fd_flags(fd_flags);
 	if (ret < 0)

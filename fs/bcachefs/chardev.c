@@ -316,9 +316,8 @@ static long bch2_ioctl_disk_add(struct bch_fs *c, struct bch_ioctl_disk arg)
 		return -EINVAL;
 
 	path = strndup_user((const char __user *)(unsigned long) arg.dev, PATH_MAX);
-	ret = PTR_ERR_OR_ZERO(path);
-	if (ret)
-		return ret;
+	if (IS_ERR(path))
+		return PTR_ERR(path);
 
 	ret = bch2_dev_add(c, path);
 	if (!IS_ERR(path))
@@ -360,9 +359,8 @@ static long bch2_ioctl_disk_online(struct bch_fs *c, struct bch_ioctl_disk arg)
 		return -EINVAL;
 
 	path = strndup_user((const char __user *)(unsigned long) arg.dev, PATH_MAX);
-	ret = PTR_ERR_OR_ZERO(path);
-	if (ret)
-		return ret;
+	if (IS_ERR(path))
+		return PTR_ERR(path);
 
 	ret = bch2_dev_online(c, path);
 	kfree(path);
