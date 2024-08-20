@@ -20,6 +20,8 @@
 
 #include "kvm_util.h"
 
+#define U8_MAX  ((u8)~0U)
+
 /**
  * Query available CPU subfunctions
  */
@@ -35,6 +37,33 @@ static void get_cpu_machine_subfuntions(struct kvm_vm *vm,
 				  KVM_S390_VM_CPU_MACHINE_SUBFUNC, cpu_subfunc);
 
 	TEST_ASSERT(!r, "Get cpu subfunctions failed r=%d errno=%d", r, errno);
+}
+
+static inline int plo_test_bit(unsigned char nr)
+{
+	unsigned long function = (unsigned long)nr | 0x100;
+	int cc;
+
+	asm volatile("	lgr	0,%[function]\n"
+			/* Parameter registers are ignored for "test bit" */
+			"	plo	0,0,0,0(0)\n"
+			"	ipm	%0\n"
+			"	srl	%0,28\n"
+			: "=d" (cc)
+			: [function] "d" (function)
+			: "cc", "0");
+	return cc == 0;
+}
+
+/*
+ * Testing Perform Locked Operation (PLO) CPU subfunction's ASM block
+ */
+static void test_plo_asm_block(u8 (*query)[32])
+{
+	for (int i = 0; i <= U8_MAX; ++i) {
+		if (plo_test_bit(i))
+			(*query)[i >> 3] |= 0x80 >> (i & 7);
+	}
 }
 
 /*
@@ -237,6 +266,11 @@ struct testdef {
 	testfunc_t test;
 	int facility_bit;
 } testlist[] = {
+	/*  PLO was introduced in the very first 64-bit machine generation.
+	 *  Hence it is assumed PLO is always installed in Z Arch .
+	 */
+	{ "PLO", cpu_subfunc.plo, sizeof(cpu_subfunc.plo),
+		test_plo_asm_block, 1 },
 	/* MSA - Facility bit 17 */
 	{ "KMAC", cpu_subfunc.kmac, sizeof(cpu_subfunc.kmac),
 		test_kmac_asm_block, 17 },
