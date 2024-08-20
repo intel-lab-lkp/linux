@@ -12,7 +12,9 @@ endif
 
 pahole-flags-$(call test-ge, $(pahole-ver), 121)	+= --btf_gen_floats
 
+ifeq ($(CONFIG_PAHOLE_CLASS),ELF64)
 pahole-flags-$(call test-ge, $(pahole-ver), 122)	+= -j
+endif
 
 pahole-flags-$(call test-ge, $(pahole-ver), 125)	+= --skip_encoding_btf_inconsistent_proto --btf_gen_optimized
 

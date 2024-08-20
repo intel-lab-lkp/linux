@@ -113,6 +113,10 @@ config PAHOLE_VERSION
 	int
 	default $(shell,$(srctree)/scripts/pahole-version.sh $(PAHOLE))
 
+config PAHOLE_CLASS
+	string
+	default $(shell,$(srctree)/scripts/pahole-class.sh $(PAHOLE))
+
 config CONSTRUCTORS
 	bool
 
