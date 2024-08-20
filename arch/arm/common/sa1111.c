@@ -642,8 +642,6 @@ static void sa1111_wake(struct sa1111 *sachip)
 
 	spin_lock_irqsave(&sachip->lock, flags);
 
-	clk_enable(sachip->clk);
-
 	/*
 	 * Turn VCO on, and disable PLL Bypass.
 	 */
@@ -800,14 +798,6 @@ static int __sa1111_probe(struct device *me, struct resource *mem, int irq)
 	if (!sachip)
 		return -ENOMEM;
 
-	sachip->clk = devm_clk_get(me, "SA1111_CLK");
-	if (IS_ERR(sachip->clk))
-		return PTR_ERR(sachip->clk);
-
-	ret = clk_prepare(sachip->clk);
-	if (ret)
-		return ret;
-
 	spin_lock_init(&sachip->lock);
 
 	sachip->dev = me;
@@ -822,10 +812,8 @@ static int __sa1111_probe(struct device *me, struct resource *mem, int irq)
 	 * registers for our children.
 	 */
 	sachip->base = ioremap(mem->start, PAGE_SIZE * 2);
-	if (!sachip->base) {
-		ret = -ENOMEM;
-		goto err_clk_unprep;
-	}
+	if (!sachip->base)
+		return -ENOMEM;
 
 	/*
 	 * Probe for the chip.  Only touch the SBI registers.
@@ -843,6 +831,12 @@ static int __sa1111_probe(struct device *me, struct resource *mem, int irq)
 	/*
 	 * We found it.  Wake the chip up, and initialise.
 	 */
+	sachip->clk = devm_clk_get_enabled(me, "SA1111_CLK");
+	if (IS_ERR(sachip->clk)) {
+		ret = PTR_ERR(sachip->clk);
+		goto err_unmap;
+	}
+
 	sa1111_wake(sachip);
 
 	/*
@@ -851,7 +845,7 @@ static int __sa1111_probe(struct device *me, struct resource *mem, int irq)
 	 */
 	ret = sa1111_setup_irq(sachip, pd->irq_base);
 	if (ret)
-		goto err_clk;
+		goto err_unmap;
 
 	/* Setup the GPIOs - should really be done after the IRQ setup */
 	ret = sa1111_setup_gpios(sachip);
@@ -902,12 +896,8 @@ static int __sa1111_probe(struct device *me, struct resource *mem, int irq)
 
  err_irq:
 	sa1111_remove_irq(sachip);
- err_clk:
-	clk_disable(sachip->clk);
  err_unmap:
 	iounmap(sachip->base);
- err_clk_unprep:
-	clk_unprepare(sachip->clk);
 	return ret;
 }
 
@@ -927,9 +917,6 @@ static void __sa1111_remove(struct sa1111 *sachip)
 	device_for_each_child(sachip->dev, NULL, sa1111_remove_one);
 
 	sa1111_remove_irq(sachip);
-
-	clk_disable(sachip->clk);
-	clk_unprepare(sachip->clk);
 
 	iounmap(sachip->base);
 }
@@ -1048,6 +1035,8 @@ static int sa1111_resume_noirq(struct device *dev)
 	/*
 	 * First of all, wake up the chip.
 	 */
+	clk_enable(sachip->clk);
+
 	sa1111_wake(sachip);
 
 #ifdef CONFIG_ARCH_SA1100
