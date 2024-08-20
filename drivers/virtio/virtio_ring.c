@@ -235,6 +235,7 @@ static void vring_free(struct virtqueue *_vq);
  */
 
 #define to_vvq(_vq) container_of_const(_vq, struct vring_virtqueue, vq)
+#define sg_is_premapped(sg) (!sg_page(sg))
 
 static bool virtqueue_use_indirect(const struct vring_virtqueue *vq,
 				   unsigned int total_sg)
@@ -292,9 +293,10 @@ static bool vring_use_dma_api(const struct virtio_device *vdev)
 	return false;
 }
 
-static bool vring_need_unmap_buffer(const struct vring_virtqueue *vring)
+static bool vring_need_unmap_buffer(const struct vring_virtqueue *vring,
+				    const struct vring_desc_extra *extra)
 {
-	return vring->use_dma_api && !vring->premapped;
+	return vring->use_dma_api && (extra->addr != DMA_MAPPING_ERROR);
 }
 
 size_t virtio_max_dma_size(const struct virtio_device *vdev)
@@ -366,7 +368,7 @@ static struct device *vring_dma_dev(const struct vring_virtqueue *vq)
 static int vring_map_one_sg(const struct vring_virtqueue *vq, struct scatterlist *sg,
 			    enum dma_data_direction direction, dma_addr_t *addr)
 {
-	if (vq->premapped) {
+	if (sg_is_premapped(sg)) {
 		*addr = sg_dma_address(sg);
 		return 0;
 	}
@@ -457,7 +459,7 @@ static unsigned int vring_unmap_one_split(const struct vring_virtqueue *vq,
 				 (flags & VRING_DESC_F_WRITE) ?
 				 DMA_FROM_DEVICE : DMA_TO_DEVICE);
 	} else {
-		if (!vring_need_unmap_buffer(vq))
+		if (!vring_need_unmap_buffer(vq, extra))
 			goto out;
 
 		dma_unmap_page(vring_dma_dev(vq),
@@ -510,7 +512,7 @@ static inline unsigned int virtqueue_add_desc_split(struct virtqueue *vq,
 						    dma_addr_t addr,
 						    unsigned int len,
 						    u16 flags,
-						    bool indirect)
+						    bool indirect, bool premapped)
 {
 	u16 next;
 
@@ -518,7 +520,7 @@ static inline unsigned int virtqueue_add_desc_split(struct virtqueue *vq,
 	desc[i].addr = cpu_to_virtio64(vq->vdev, addr);
 	desc[i].len = cpu_to_virtio32(vq->vdev, len);
 
-	extra[i].addr = addr;
+	extra[i].addr = premapped ? DMA_MAPPING_ERROR : addr;
 	extra[i].len = len;
 	extra[i].flags = flags;
 
@@ -611,7 +613,7 @@ static inline int virtqueue_add_split(struct virtqueue *_vq,
 			 */
 			i = virtqueue_add_desc_split(_vq, desc, extra, i, addr, sg->length,
 						     VRING_DESC_F_NEXT,
-						     indirect);
+						     indirect, sg_is_premapped(sg));
 		}
 	}
 	for (; n < (out_sgs + in_sgs); n++) {
@@ -629,12 +631,12 @@ static inline int virtqueue_add_split(struct virtqueue *_vq,
 						     sg->length,
 						     VRING_DESC_F_NEXT |
 						     VRING_DESC_F_WRITE,
-						     indirect);
+						     indirect, sg_is_premapped(sg));
 		}
 	}
 	/* Last one doesn't continue. */
 	desc[prev].flags &= cpu_to_virtio16(_vq->vdev, ~VRING_DESC_F_NEXT);
-	if (!indirect && vring_need_unmap_buffer(vq))
+	if (!indirect && vring_need_unmap_buffer(vq, &extra[prev]))
 		vq->split.desc_extra[prev & (vq->split.vring.num - 1)].flags &=
 			~VRING_DESC_F_NEXT;
 
@@ -643,19 +645,15 @@ static inline int virtqueue_add_split(struct virtqueue *_vq,
 		dma_addr_t addr = vring_map_single(
 			vq, desc, total_sg * sizeof(struct vring_desc),
 			DMA_TO_DEVICE);
-		if (vring_mapping_error(vq, addr)) {
-			if (vq->premapped)
-				goto free_indirect;
-
+		if (vring_mapping_error(vq, addr))
 			goto unmap_release;
-		}
 
 		virtqueue_add_desc_split(_vq, vq->split.vring.desc,
 					 vq->split.desc_extra,
 					 head, addr,
 					 total_sg * sizeof(struct vring_desc),
 					 VRING_DESC_F_INDIRECT,
-					 false);
+					 false, false);
 	}
 
 	/* We're using some buffers from the free list. */
@@ -712,7 +710,6 @@ unmap_release:
 		i = vring_unmap_one_split(vq, &extra[i]);
 	}
 
-free_indirect:
 	if (indirect)
 		kfree(desc);
 
@@ -794,7 +791,7 @@ static void detach_buf_split(struct vring_virtqueue *vq, unsigned int head,
 				VRING_DESC_F_INDIRECT));
 		BUG_ON(len == 0 || len % sizeof(struct vring_desc));
 
-		if (vring_need_unmap_buffer(vq)) {
+		if (vq->use_dma_api) {
 			for (j = 0; j < len / sizeof(struct vring_desc); j++)
 				vring_unmap_one_split(vq, &extra[j]);
 		}
@@ -1228,7 +1225,7 @@ static void vring_unmap_extra_packed(const struct vring_virtqueue *vq,
 				 (flags & VRING_DESC_F_WRITE) ?
 				 DMA_FROM_DEVICE : DMA_TO_DEVICE);
 	} else {
-		if (!vring_need_unmap_buffer(vq))
+		if (!vring_need_unmap_buffer(vq, extra))
 			return;
 
 		dma_unmap_page(vring_dma_dev(vq),
@@ -1309,7 +1306,7 @@ static int virtqueue_add_indirect_packed(struct vring_virtqueue *vq,
 			i++;
 
 			if (unlikely(vq->use_dma_api)) {
-				extra[i].addr = addr;
+				extra[i].addr = sg_is_premapped(sg) ? DMA_MAPPING_ERROR : addr;
 				extra[i].len = sg->length;
 				extra[i].flags = n < out_sgs ?  0 : VRING_DESC_F_WRITE;
 			}
@@ -1320,12 +1317,8 @@ static int virtqueue_add_indirect_packed(struct vring_virtqueue *vq,
 	addr = vring_map_single(vq, desc,
 			total_sg * sizeof(struct vring_packed_desc),
 			DMA_TO_DEVICE);
-	if (vring_mapping_error(vq, addr)) {
-		if (vq->premapped)
-			goto free_desc;
-
+	if (vring_mapping_error(vq, addr))
 		goto unmap_release;
-	}
 
 	vq->packed.vring.desc[head].addr = cpu_to_le64(addr);
 	vq->packed.vring.desc[head].len = cpu_to_le32(total_sg *
@@ -1383,7 +1376,6 @@ unmap_release:
 	for (i = 0; i < err_idx; i++)
 		vring_unmap_extra_packed(vq, &extra[i]);
 
-free_desc:
 	kfree(desc);
 
 	END_USE(vq);
@@ -1474,7 +1466,8 @@ static inline int virtqueue_add_packed(struct virtqueue *_vq,
 			desc[i].id = cpu_to_le16(id);
 
 			if (unlikely(vq->use_dma_api)) {
-				vq->packed.desc_extra[curr].addr = addr;
+				vq->packed.desc_extra[curr].addr = sg_is_premapped(sg) ?
+					DMA_MAPPING_ERROR : addr;
 				vq->packed.desc_extra[curr].len = sg->length;
 				vq->packed.desc_extra[curr].flags =
 					le16_to_cpu(flags);
@@ -1625,10 +1618,9 @@ static void detach_buf_packed(struct vring_virtqueue *vq,
 		if (!extra)
 			return;
 
-		if (vring_need_unmap_buffer(vq)) {
+		if (vq->use_dma_api) {
 			len = vq->packed.desc_extra[id].len;
-			for (i = 0; i < len / sizeof(struct vring_packed_desc);
-					i++)
+			for (i = 0; i < len / sizeof(struct vring_packed_desc); i++)
 				vring_unmap_extra_packed(vq, &extra[i]);
 		}
 		kfree(desc);
@@ -2212,6 +2204,11 @@ static inline int virtqueue_add(struct virtqueue *_vq,
  * @data: the token identifying the buffer.
  * @gfp: how to do memory allocations (if necessary).
  *
+ * When sg_page(sg) is NULL, this indicates that the driver has performed DMA
+ * mapping in advance, allowing the virtio core to directly utilize
+ * sg_dma_address(sg) without conducting any internal DMA mapping. Additionally,
+ * DMA unmap operations for this buffer will be bypassed.
+ *
  * Caller must ensure we don't call this with other virtqueue operations
  * at the same time (except where noted).
  *
@@ -2246,6 +2243,11 @@ EXPORT_SYMBOL_GPL(virtqueue_add_sgs);
  * @data: the token identifying the buffer.
  * @gfp: how to do memory allocations (if necessary).
  *
+ * When sg_page(sg) is NULL, this indicates that the driver has performed DMA
+ * mapping in advance, allowing the virtio core to directly utilize
+ * sg_dma_address(sg) without conducting any internal DMA mapping. Additionally,
+ * DMA unmap operations for this buffer will be bypassed.
+ *
  * Caller must ensure we don't call this with other virtqueue operations
  * at the same time (except where noted).
  *
@@ -2267,6 +2269,11 @@ EXPORT_SYMBOL_GPL(virtqueue_add_outbuf);
  * @num: the number of entries in @sg writable by other side
  * @data: the token identifying the buffer.
  * @gfp: how to do memory allocations (if necessary).
+ *
+ * When sg_page(sg) is NULL, this indicates that the driver has performed DMA
+ * mapping in advance, allowing the virtio core to directly utilize
+ * sg_dma_address(sg) without conducting any internal DMA mapping. Additionally,
+ * DMA unmap operations for this buffer will be bypassed.
  *
  * Caller must ensure we don't call this with other virtqueue operations
  * at the same time (except where noted).
@@ -2290,6 +2297,11 @@ EXPORT_SYMBOL_GPL(virtqueue_add_inbuf);
  * @data: the token identifying the buffer.
  * @ctx: extra context for the token
  * @gfp: how to do memory allocations (if necessary).
+ *
+ * When sg_page(sg) is NULL, this indicates that the driver has performed DMA
+ * mapping in advance, allowing the virtio core to directly utilize
+ * sg_dma_address(sg) without conducting any internal DMA mapping. Additionally,
+ * DMA unmap operations for this buffer will be bypassed.
  *
  * Caller must ensure we don't call this with other virtqueue operations
  * at the same time (except where noted).
