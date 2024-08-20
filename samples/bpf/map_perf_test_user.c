@@ -159,7 +159,7 @@ static void do_test_lru(enum test_type test, int cpu)
 					  &inner_lru_map_fds[cpu],
 					  BPF_ANY);
 		if (ret) {
-			printf("cannot update ARRAY_OF_LRU_HASHS with key:%u. %s(%d)\n",
+			printf("cannot update ARRAY_OF_LRU_HASHS with key:%d. %s(%d)\n",
 			       cpu, strerror(errno), errno);
 			exit(1);
 		}
