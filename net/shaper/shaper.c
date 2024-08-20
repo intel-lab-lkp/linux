@@ -501,6 +501,17 @@ void net_shaper_nl_post_doit(const struct genl_split_ops *ops,
 	netdev_put(dev, NULL);
 }
 
+int net_shaper_nl_cap_pre_doit(const struct genl_split_ops *ops,
+			       struct sk_buff *skb, struct genl_info *info)
+{
+	return -EOPNOTSUPP;
+}
+
+void net_shaper_nl_cap_post_doit(const struct genl_split_ops *ops,
+				 struct sk_buff *skb, struct genl_info *info)
+{
+}
+
 int net_shaper_nl_get_doit(struct sk_buff *skb, struct genl_info *info)
 {
 	struct net_device *dev = info->user_ptr[0];
@@ -1050,6 +1061,17 @@ int net_shaper_nl_group_doit(struct sk_buff *skb, struct genl_info *info)
 free_shapers:
 	kfree(leaves);
 	return ret;
+}
+
+int net_shaper_nl_cap_get_doit(struct sk_buff *skb, struct genl_info *info)
+{
+	return 0;
+}
+
+int net_shaper_nl_cap_get_dumpit(struct sk_buff *skb,
+				 struct netlink_callback *cb)
+{
+	return 0;
 }
 
 void net_shaper_flush(struct net_device *dev)
