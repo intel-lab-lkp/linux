@@ -30,6 +30,7 @@ static int fb_notifier_callback(struct notifier_block *self,
 	struct lcd_device *ld;
 	struct fb_event *evdata = data;
 	struct fb_info *info = evdata->info;
+	struct lcd_device *fb_lcd = fb_lcd_device(info);
 
 	ld = container_of(self, struct lcd_device, fb_notif);
 	mutex_lock(&ld->ops_lock);
@@ -37,6 +38,8 @@ static int fb_notifier_callback(struct notifier_block *self,
 	if (!ld->ops)
 		goto out;
 	if (ld->ops->check_fb && !ld->ops->check_fb(ld, evdata->info))
+		goto out;
+	if (fb_lcd && fb_lcd != ld)
 		goto out;
 
 	if (event == FB_EVENT_BLANK) {
