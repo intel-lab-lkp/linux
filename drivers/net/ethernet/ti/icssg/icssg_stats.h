@@ -77,11 +77,31 @@ struct miig_stats_regs {
 	u32 tx_bytes;
 };
 
+/**
+ * struct pa_stats_regs - ICSSG Firmware maintained PA Stats register
+ * @fw_rx_cnt: Number of valid packets sent by Rx PRU to Host on PSI
+ * @fw_tx_cnt: Number of valid packets copied by RTU0 to Tx queues
+ * @fw_tx_pre_overflow: Host Egress Q (Pre-emptible) Overflow Counter
+ * @fw_tx_exp_overflow: Host Egress Q (Express) Overflow Counter
+ */
+struct pa_stats_regs {
+	u32 fw_rx_cnt;
+	u32 fw_tx_cnt;
+	u32 fw_tx_pre_overflow;
+	u32 fw_tx_exp_overflow;
+};
+
 #define ICSSG_STATS(field, stats_type)			\
 {							\
 	#field,						\
 	offsetof(struct miig_stats_regs, field),	\
 	stats_type					\
+}
+
+#define ICSSG_PA_STATS(field)			\
+{						\
+	#field,					\
+	offsetof(struct pa_stats_regs, field),	\
 }
 
 struct icssg_stats {
@@ -90,7 +110,12 @@ struct icssg_stats {
 	bool standard_stats;
 };
 
-static const struct icssg_stats icssg_all_stats[] = {
+struct icssg_pa_stats {
+	char name[ETH_GSTRING_LEN];
+	u32 offset;
+};
+
+static const struct icssg_stats icssg_mii_g_rt_stats[] = {
 	/* Rx */
 	ICSSG_STATS(rx_packets, true),
 	ICSSG_STATS(rx_broadcast_frames, false),
@@ -153,6 +178,13 @@ static const struct icssg_stats icssg_all_stats[] = {
 	ICSSG_STATS(tx_bucket4_frames, true),
 	ICSSG_STATS(tx_bucket5_frames, true),
 	ICSSG_STATS(tx_bytes, true),
+};
+
+static const struct icssg_pa_stats icssg_all_pa_stats[] = {
+	ICSSG_PA_STATS(fw_rx_cnt),
+	ICSSG_PA_STATS(fw_tx_cnt),
+	ICSSG_PA_STATS(fw_tx_pre_overflow),
+	ICSSG_PA_STATS(fw_tx_exp_overflow),
 };
 
 #endif /* __NET_TI_ICSSG_STATS_H */
