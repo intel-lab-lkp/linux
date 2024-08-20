@@ -651,20 +651,30 @@ int auxtrace_parse_snapshot_options(struct auxtrace_record *itr,
 	return -EINVAL;
 }
 
-static int evlist__enable_event_idx(struct evlist *evlist, struct evsel *evsel, int idx)
+static int evlist__find_cpu_map_idx(struct evlist *evlist, struct evsel *evsel,
+				    int idx)
 {
 	bool per_cpu_mmaps = !perf_cpu_map__has_any_cpu(evlist->core.user_requested_cpus);
+	struct perf_cpu evlist_cpu;
+	int cpu_map_idx;
 
-	if (per_cpu_mmaps) {
-		struct perf_cpu evlist_cpu = perf_cpu_map__cpu(evlist->core.all_cpus, idx);
-		int cpu_map_idx = perf_cpu_map__idx(evsel->core.cpus, evlist_cpu);
+	if (!per_cpu_mmaps)
+		return -EINVAL;
 
-		if (cpu_map_idx == -1)
-			return -EINVAL;
-		return perf_evsel__enable_cpu(&evsel->core, cpu_map_idx);
-	}
+	evlist_cpu = perf_cpu_map__cpu(evlist->core.all_cpus, idx);
+	cpu_map_idx = perf_cpu_map__idx(evsel->core.cpus, evlist_cpu);
+	if (cpu_map_idx == -1)
+		return -ENOENT;
 
-	return perf_evsel__enable_thread(&evsel->core, idx);
+	return cpu_map_idx;
+}
+
+static int evlist__enable_event_idx(struct evsel *evsel, int cpu_mode, int idx)
+{
+	if (cpu_mode)
+		return perf_evsel__enable_cpu(&evsel->core, idx);
+	else
+		return perf_evsel__enable_thread(&evsel->core, idx);
 }
 
 int auxtrace_record__read_finish(struct auxtrace_record *itr, int idx)
@@ -676,9 +686,21 @@ int auxtrace_record__read_finish(struct auxtrace_record *itr, int idx)
 
 	evlist__for_each_entry(itr->evlist, evsel) {
 		if (evsel__is_aux_event(evsel)) {
+			int cpu_map_idx;
+
 			if (evsel->disabled)
 				return 0;
-			return evlist__enable_event_idx(itr->evlist, evsel, idx);
+
+			cpu_map_idx = evlist__find_cpu_map_idx(itr->evlist,
+							       evsel, idx);
+			/* No map is found in per CPU mmap */
+			if (cpu_map_idx == -ENOENT)
+				return cpu_map_idx;
+
+			if (cpu_map_idx >= 0)
+				return evlist__enable_event_idx(evsel, 1, cpu_map_idx);
+			else
+				return evlist__enable_event_idx(evsel, 0, idx);
 		}
 	}
 	return -EINVAL;
