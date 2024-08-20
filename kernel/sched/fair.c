@@ -4918,6 +4918,14 @@ static inline void util_est_update(struct cfs_rq *cfs_rq,
 	if (!sched_feat(UTIL_EST))
 		return;
 
+	/*
+	 * rampup_multiplier = 0 indicates util_est is disabled.
+	 */
+	if (!p->sched_qos.rampup_multiplier) {
+		ewma = 0;
+		goto done;
+	}
+
 	/* Get current estimate of utilization */
 	ewma = READ_ONCE(p->se.avg.util_est);
 
