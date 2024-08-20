@@ -294,8 +294,10 @@ data:
 
 	steal:
 		the amount of time in which this vCPU did not run, in
-		nanoseconds. Time during which the vcpu is idle, will not be
-		reported as steal time.
+		nanoseconds. This includes the time during which the host is
+		suspended. However, the case where the host suspends during a
+		VM migration might not be correctly accounted. Time during
+		which the vcpu is idle, will not be reported as steal time.
 
 	preempted:
 		indicate the vCPU who owns this struct is running or
