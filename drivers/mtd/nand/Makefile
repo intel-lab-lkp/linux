@@ -6,8 +6,11 @@ obj-$(CONFIG_MTD_NAND_ECC_MEDIATEK) += ecc-mtk.o
 
 ifeq ($(CONFIG_MTD_NAND_QCOM),y)
 obj-y	+= qpic_common.o
+else
+ifeq ($(CONFIG_SPI_QPIC_SNAND),y)
+obj-y   += qpic_common.o
 endif
-
+endif
 obj-y	+= onenand/
 obj-y	+= raw/
 obj-y	+= spi/
