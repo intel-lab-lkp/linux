@@ -86,6 +86,7 @@ struct minidump_global_toc {
 struct qcom_ssr_subsystem {
 	const char *name;
 	struct srcu_notifier_head notifier_list;
+	struct atomic_notifier_head atomic_notifier_list;
 	struct list_head list;
 };
 
@@ -377,6 +378,7 @@ static struct qcom_ssr_subsystem *qcom_ssr_get_subsys(const char *name)
 	}
 	info->name = kstrdup_const(name, GFP_KERNEL);
 	srcu_init_notifier_head(&info->notifier_list);
+	ATOMIC_INIT_NOTIFIER_HEAD(&info->atomic_notifier_list);
 
 	/* Add to global notification list */
 	list_add_tail(&info->list, &qcom_ssr_subsystem_list);
@@ -428,6 +430,51 @@ int qcom_unregister_ssr_notifier(void *notify, struct notifier_block *nb)
 }
 EXPORT_SYMBOL_GPL(qcom_unregister_ssr_notifier);
 
+/**
+ * qcom_register_ssr_atomic_notifier() - register SSR Atomic notification
+ *					 handler
+ * @name:	Subsystem's SSR name
+ * @nb:	notifier_block to be invoked upon subsystem's state change
+ *
+ * This registers the @nb notifier block as part the atomic notifier
+ * chain for a remoteproc associated with @name. The notifier block's callback
+ * will be invoked when the remote processor crashes in atomic context before
+ * the recovery process is queued.
+ *
+ * Return: a subsystem cookie on success, ERR_PTR on failure.
+ */
+void *qcom_register_ssr_atomic_notifier(const char *name,
+					struct notifier_block *nb)
+{
+	struct qcom_ssr_subsystem *info;
+
+	info = qcom_ssr_get_subsys(name);
+	if (IS_ERR(info))
+		return info;
+
+	atomic_notifier_chain_register(&info->atomic_notifier_list, nb);
+
+	return &info->atomic_notifier_list;
+}
+EXPORT_SYMBOL_GPL(qcom_register_ssr_atomic_notifier);
+
+/**
+ * qcom_unregister_ssr_atomic_notifier() - unregister SSR Atomic notification
+ *					   handler
+ * @notify:	subsystem cookie returned from qcom_register_ssr_notifier
+ * @nb:		notifier_block to unregister
+ *
+ * This function will unregister the notifier from the atomic notifier
+ * chain.
+ *
+ * Return: 0 on success, %ENOENT otherwise.
+ */
+int qcom_unregister_ssr_atomic_notifier(void *notify, struct notifier_block *nb)
+{
+	return atomic_notifier_chain_unregister(notify, nb);
+}
+EXPORT_SYMBOL_GPL(qcom_unregister_ssr_atomic_notifier);
+
 static int ssr_notify_prepare(struct rproc_subdev *subdev)
 {
 	struct qcom_rproc_ssr *ssr = to_ssr_subdev(subdev);
@@ -478,6 +525,18 @@ static void ssr_notify_unprepare(struct rproc_subdev *subdev)
 				 QCOM_SSR_AFTER_SHUTDOWN, &data);
 }
 
+static void ssr_notify_crash(struct rproc_subdev *subdev)
+{
+	struct qcom_rproc_ssr *ssr = to_ssr_subdev(subdev);
+	struct qcom_ssr_notify_data data = {
+		.name = ssr->info->name,
+		.crashed = true,
+	};
+
+	atomic_notifier_call_chain(&ssr->info->atomic_notifier_list,
+				   QCOM_SSR_NOTIFY_CRASH, &data);
+}
+
 /**
  * qcom_add_ssr_subdev() - register subdevice as restart notification source
  * @rproc:	rproc handle
@@ -504,6 +563,7 @@ void qcom_add_ssr_subdev(struct rproc *rproc, struct qcom_rproc_ssr *ssr,
 	ssr->subdev.start = ssr_notify_start;
 	ssr->subdev.stop = ssr_notify_stop;
 	ssr->subdev.unprepare = ssr_notify_unprepare;
+	ssr->subdev.notify_crash = ssr_notify_crash;
 
 	rproc_add_subdev(rproc, &ssr->subdev);
 }

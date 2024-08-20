@@ -1140,6 +1140,16 @@ static void rproc_unprepare_subdevices(struct rproc *rproc)
 	}
 }
 
+static void rproc_notify_crash_subdevices(struct rproc *rproc)
+{
+	struct rproc_subdev *subdev;
+
+	list_for_each_entry_reverse(subdev, &rproc->subdevs, node) {
+		if (subdev->notify_crash)
+			subdev->notify_crash(subdev);
+	}
+}
+
 /**
  * rproc_alloc_registered_carveouts() - allocate all carveouts registered
  * in the list
@@ -2711,6 +2721,8 @@ void rproc_report_crash(struct rproc *rproc, enum rproc_crash_type type)
 
 	dev_err(&rproc->dev, "crash detected in %s: type %s\n",
 		rproc->name, rproc_crash_to_string(type));
+
+	rproc_notify_crash_subdevices(rproc);
 
 	queue_work(rproc_recovery_wq, &rproc->crash_handler);
 }

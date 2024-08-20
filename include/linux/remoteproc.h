@@ -596,6 +596,8 @@ struct rproc {
  * @stop: stop function, called before the rproc is stopped; the @crashed
  *	    parameter indicates if this originates from a recovery
  * @unprepare: unprepare function, called after the rproc has been stopped
+ * @notify_crash: notify_crash function, called in atomic context to notify
+ *		  rproc has crashed and recovery is about to start
  */
 struct rproc_subdev {
 	struct list_head node;
@@ -604,6 +606,7 @@ struct rproc_subdev {
 	int (*start)(struct rproc_subdev *subdev);
 	void (*stop)(struct rproc_subdev *subdev, bool crashed);
 	void (*unprepare)(struct rproc_subdev *subdev);
+	void (*notify_crash)(struct rproc_subdev *subdev);
 };
 
 /* we currently support only two vrings per rvdev */

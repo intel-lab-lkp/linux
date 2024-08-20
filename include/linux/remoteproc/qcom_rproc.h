@@ -11,12 +11,14 @@ struct notifier_block;
  * @QCOM_SSR_AFTER_POWERUP:	Remoteproc is running (start stage)
  * @QCOM_SSR_BEFORE_SHUTDOWN:	Remoteproc crashed or shutting down (stop stage)
  * @QCOM_SSR_AFTER_SHUTDOWN:	Remoteproc is down (unprepare stage)
+ * @QCOM_SSR_NOTIFY_CRASH:	Remoteproc crashed
  */
 enum qcom_ssr_notify_type {
 	QCOM_SSR_BEFORE_POWERUP,
 	QCOM_SSR_AFTER_POWERUP,
 	QCOM_SSR_BEFORE_SHUTDOWN,
 	QCOM_SSR_AFTER_SHUTDOWN,
+	QCOM_SSR_NOTIFY_CRASH,
 };
 
 struct qcom_ssr_notify_data {
@@ -29,6 +31,10 @@ struct qcom_ssr_notify_data {
 void *qcom_register_ssr_notifier(const char *name, struct notifier_block *nb);
 int qcom_unregister_ssr_notifier(void *notify, struct notifier_block *nb);
 
+void *qcom_register_ssr_atomic_notifier(const char *name,
+					struct notifier_block *nb);
+int qcom_unregister_ssr_atomic_notifier(void *notify,
+					struct notifier_block *nb);
 #else
 
 static inline void *qcom_register_ssr_notifier(const char *name,
@@ -43,6 +49,17 @@ static inline int qcom_unregister_ssr_notifier(void *notify,
 	return 0;
 }
 
+static inline void *qcom_register_ssr_atomic_notifier(const char *name,
+						      struct notifier_block *nb)
+{
+	return 0;
+}
+
+static inline int qcom_unregister_ssr_atomic_notifier(void *notify,
+						      struct notifier_block *nb)
+{
+	return 0;
+}
 #endif
 
 #endif
