@@ -3,6 +3,20 @@
 #ifndef OPEN_ALLIANCE_HELPERS_H
 #define OPEN_ALLIANCE_HELPERS_H
 
+/* Link quality (LQ) related metrics */
+/* The number of ESD events detected by the Link Failures and Losses (LFL) */
+#define OA_LQ_LFL_ESD_EVENT_COUNT		"oa_lq_lfl_esd_event_count"
+/* Time required to establish a link */
+#define OA_LQ_LINK_TRAINING_TIME		"oa_lq_link_training_time"
+/* Time required until the remote receiver is signaling that it is locked */
+#define OA_LQ_REMOTE_RECEIVER_TIME		"oa_lq_remote_receiver_time"
+/* Time required until the local receiver is locked */
+#define OA_LQ_LOCAL_RECEIVER_TIME		"oa_lq_local_receiver_time"
+/* Number of link losses */
+#define OA_LQ_LFL_LINK_LOSS_COUNT		"oa_lq_lfl_link_loss_count"
+/* Number of link failures causing NOT a link loss */
+#define OA_LQ_LFL_LINK_FAILURE_COUNT		"oa_lq_lfl_link_failure_count"
+
 /*
  * These defines reflect the TDR (Time Delay Reflection) diagnostic feature
  * for 1000BASE-T1 automotive Ethernet PHYs as specified by the OPEN Alliance.
