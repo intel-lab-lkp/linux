@@ -56,7 +56,6 @@ SEC("classifier")
 int bpf_prog1(struct __sk_buff *skb)
 {
 	__u8 proto = load_byte(skb, ETH_HLEN + offsetof(struct iphdr, protocol));
-	long *value;
 
 	if (proto == IPPROTO_TCP) {
 		set_ip_tos(skb, 8);
