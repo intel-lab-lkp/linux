@@ -485,6 +485,7 @@
 };
 
 &wdog3 {
+	fsl,ext-reset-output;
 	status = "okay";
 };
 
