@@ -757,33 +757,34 @@ static int system76_add(struct acpi_device *acpi_dev)
 
 	err = input_register_device(data->input);
 	if (err)
-		goto error;
+		if (data->has_open_ec)
+			goto free_error;
+		else
+			return err;
 
 	if (data->has_open_ec) {
 		err = system76_get_object(data, "NFAN", &data->nfan);
 		if (err)
-			goto error;
+			goto free_error;
 
 		err = system76_get_object(data, "NTMP", &data->ntmp);
 		if (err)
-			goto error;
+			goto free_error;
 
 		data->therm = devm_hwmon_device_register_with_info(&acpi_dev->dev,
 			"system76_acpi", data, &thermal_chip_info, NULL);
 		err = PTR_ERR_OR_ZERO(data->therm);
 		if (err)
-			goto error;
+			goto free_error;
 
 		system76_battery_init();
 	}
 
 	return 0;
 
-error:
-	if (data->has_open_ec) {
-		kfree(data->ntmp);
-		kfree(data->nfan);
-	}
+free_error:
+	kfree(data->ntmp);
+	kfree(data->nfan);
 	return err;
 }
 
