@@ -2050,6 +2050,8 @@ static int dwc3_get_num_ports(struct dwc3 *dwc)
 		if (!offset)
 			break;
 
+		cpu_relax();
+
 		val = readl(base + offset);
 		major_revision = XHCI_EXT_PORT_MAJOR(val);
 
