@@ -5720,6 +5720,15 @@ static void kvm_shutdown(void)
 	on_each_cpu(hardware_disable_nolock, NULL, 1);
 }
 
+static u64 last_suspend;
+static u64 total_suspend_ns;
+
+u64
+kvm_total_suspend_ns(void)
+{
+	return total_suspend_ns;
+}
+
 static int kvm_suspend(void)
 {
 	/*
@@ -5735,6 +5744,8 @@ static int kvm_suspend(void)
 
 	if (kvm_usage_count)
 		hardware_disable_nolock(NULL);
+
+	last_suspend = ktime_get_boottime_ns();
 	return 0;
 }
 
@@ -5745,6 +5756,8 @@ static void kvm_resume(void)
 
 	if (kvm_usage_count)
 		WARN_ON_ONCE(__hardware_enable_nolock());
+
+	total_suspend_ns += ktime_get_boottime_ns() - last_suspend;
 }
 
 static struct syscore_ops kvm_syscore_ops = {
