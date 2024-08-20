@@ -2572,12 +2572,19 @@ static int timerlat_fd_release(struct inode *inode, struct file *file)
 	struct osnoise_variables *osn_var;
 	struct timerlat_variables *tlat_var;
 	long cpu = (long) file->private_data;
+	int ret = 0;
 
 	migrate_disable();
 	mutex_lock(&interface_lock);
 
 	osn_var = per_cpu_ptr(&per_cpu_osnoise_var, cpu);
 	tlat_var = per_cpu_ptr(&per_cpu_timerlat_var, cpu);
+
+	if (!tlat_var->kthread) {
+		/* the fd has been closed already */
+		ret = -EBADF;
+		goto out;
+	}
 
 	hrtimer_cancel(&tlat_var->timer);
 	memset(tlat_var, 0, sizeof(*tlat_var));
@@ -2593,9 +2600,10 @@ static int timerlat_fd_release(struct inode *inode, struct file *file)
 		osn_var->kthread = NULL;
 	}
 
+out:
 	mutex_unlock(&interface_lock);
 	migrate_enable();
-	return 0;
+	return ret;
 }
 #endif
 
