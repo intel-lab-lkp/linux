@@ -22,6 +22,10 @@
 
 struct net_shaper_data {
 	struct xarray shapers;
+
+	/* Serialize write ops and protects node_ids updates. */
+	struct mutex lock;
+	struct idr node_ids;
 };
 
 struct net_shaper_nl_ctx {
@@ -137,12 +141,37 @@ static void net_shaper_index_to_handle(u32 index,
 	handle->id = FIELD_GET(NET_SHAPER_ID_MASK, index);
 }
 
+static void net_shaper_default_parent(const struct net_shaper_handle *handle,
+				      struct net_shaper_handle *parent)
+{
+	switch (handle->scope) {
+	case NET_SHAPER_SCOPE_UNSPEC:
+	case NET_SHAPER_SCOPE_NETDEV:
+	case __NET_SHAPER_SCOPE_MAX:
+		parent->scope = NET_SHAPER_SCOPE_UNSPEC;
+		break;
+
+	case NET_SHAPER_SCOPE_QUEUE:
+	case NET_SHAPER_SCOPE_NODE:
+		parent->scope = NET_SHAPER_SCOPE_NETDEV;
+		break;
+	}
+	parent->id = 0;
+}
+
+#define NET_SHAPER_CACHE_NOT_VALID XA_MARK_0
+
 static struct xarray *net_shaper_cache_container(struct net_device *dev)
 {
 	/* The barrier pairs with cmpxchg on init. */
 	struct net_shaper_data *data = READ_ONCE(dev->net_shaper_data);
 
 	return data ? &data->shapers : NULL;
+}
+
+static struct mutex *net_shaper_cache_lock(struct net_device *dev)
+{
+	return dev->net_shaper_data ? &dev->net_shaper_data->lock : NULL;
 }
 
 /* Lookup the given shaper inside the cache. */
@@ -153,7 +182,128 @@ net_shaper_cache_lookup(struct net_device *dev,
 	struct xarray *xa = net_shaper_cache_container(dev);
 	u32 index = net_shaper_handle_to_index(handle);
 
-	return xa ? xa_load(xa, index) : NULL;
+	if (!xa || xa_get_mark(xa, index, NET_SHAPER_CACHE_NOT_VALID))
+		return NULL;
+
+	return xa_load(xa, index);
+}
+
+/* Allocate on demand the per device shaper's cache. */
+static struct mutex *net_shaper_cache_init(struct net_device *dev,
+					   struct netlink_ext_ack *extack)
+{
+	struct net_shaper_data *new, *data = READ_ONCE(dev->net_shaper_data);
+
+	if (!data) {
+		new = kmalloc(sizeof(*dev->net_shaper_data), GFP_KERNEL);
+		if (!new) {
+			NL_SET_ERR_MSG(extack, "Can't allocate memory for shaper data");
+			return NULL;
+		}
+
+		mutex_init(&new->lock);
+		xa_init(&new->shapers);
+		idr_init(&new->node_ids);
+
+		/* No lock acquired yet, we can race with other operations. */
+		data = cmpxchg(&dev->net_shaper_data, NULL, new);
+		if (!data)
+			data = new;
+		else
+			kfree(new);
+	}
+	return &data->lock;
+}
+
+/* Prepare the cache to actually insert the given shaper, doing
+ * in advance the needed allocations.
+ */
+static int net_shaper_cache_pre_insert(struct net_device *dev,
+				       struct net_shaper_handle *handle,
+				       struct netlink_ext_ack *extack)
+{
+	struct xarray *xa = net_shaper_cache_container(dev);
+	struct net_shaper_info *prev, *cur;
+	bool id_allocated = false;
+	int ret, id, index;
+
+	if (!xa)
+		return -ENOMEM;
+
+	index = net_shaper_handle_to_index(handle);
+	cur = xa_load(xa, index);
+	if (cur)
+		return 0;
+
+	/* Allocated a new id, if needed. */
+	if (handle->scope == NET_SHAPER_SCOPE_NODE &&
+	    handle->id == NET_SHAPER_ID_UNSPEC) {
+		id = idr_alloc(&dev->net_shaper_data->node_ids, NULL,
+			       0, NET_SHAPER_ID_UNSPEC, GFP_ATOMIC);
+
+		if (id < 0) {
+			NL_SET_ERR_MSG(extack, "Can't allocate new id for NODE shaper");
+			return id;
+		}
+
+		handle->id = id;
+		index = net_shaper_handle_to_index(handle);
+		id_allocated = true;
+	}
+
+	cur = kmalloc(sizeof(*cur), GFP_KERNEL | __GFP_ZERO);
+	if (!cur) {
+		NL_SET_ERR_MSG(extack, "Can't allocate memory for cached shaper");
+		ret = -ENOMEM;
+		goto free_id;
+	}
+
+	/* Mark 'tentative' shaper inside the cache. */
+	xa_lock(xa);
+	prev = __xa_store(xa, index, cur, GFP_KERNEL);
+	__xa_set_mark(xa, index, NET_SHAPER_CACHE_NOT_VALID);
+	xa_unlock(xa);
+	if (xa_err(prev)) {
+		NL_SET_ERR_MSG(extack, "Can't insert shaper into cache");
+		kfree(cur);
+		ret = xa_err(prev);
+		goto free_id;
+	}
+	return 0;
+
+free_id:
+	if (id_allocated)
+		idr_remove(&dev->net_shaper_data->node_ids, handle->id);
+	return ret;
+}
+
+/* Commit the tentative insert with the actual values.
+ * Must be called only after a successful net_shaper_pre_insert().
+ */
+static void net_shaper_cache_commit(struct net_device *dev, int nr_shapers,
+				    const struct net_shaper_handle *handle,
+				    const struct net_shaper_info *shapers)
+{
+	struct xarray *xa = net_shaper_cache_container(dev);
+	struct net_shaper_info *cur;
+	int index;
+	int i;
+
+	xa_lock(xa);
+	for (i = 0; i < nr_shapers; ++i) {
+		index = net_shaper_handle_to_index(&handle[i]);
+
+		cur = xa_load(xa, index);
+		if (WARN_ON_ONCE(!cur))
+			continue;
+
+		/* Successful update: drop the tentative mark
+		 * and update the cache.
+		 */
+		__xa_clear_mark(xa, index, NET_SHAPER_CACHE_NOT_VALID);
+		*cur = shapers[i];
+	}
+	xa_unlock(xa);
 }
 
 static int net_shaper_parse_handle(const struct nlattr *attr,
@@ -191,6 +341,71 @@ static int net_shaper_parse_handle(const struct nlattr *attr,
 
 	handle->id = id;
 	return 0;
+}
+
+static int net_shaper_parse_info(struct net_device *dev, struct nlattr **tb,
+				 const struct genl_info *info,
+				 struct net_shaper_handle *handle,
+				 struct net_shaper_info *shaper)
+{
+	struct net_shaper_info *old;
+	int ret;
+
+	/* The shaper handle is the only mandatory attribute. */
+	if (NL_REQ_ATTR_CHECK(info->extack, NULL, tb, NET_SHAPER_A_HANDLE))
+		return -EINVAL;
+
+	ret = net_shaper_parse_handle(tb[NET_SHAPER_A_HANDLE], info, handle);
+	if (ret)
+		return ret;
+
+	/* Fetch existing data, if any, so that user provide info will
+	 * incrementally update the existing shaper configuration.
+	 */
+	old = net_shaper_cache_lookup(dev, handle);
+	if (old)
+		*shaper = *old;
+	else
+		net_shaper_default_parent(handle, &shaper->parent);
+
+	if (tb[NET_SHAPER_A_METRIC])
+		shaper->metric = nla_get_u32(tb[NET_SHAPER_A_METRIC]);
+
+	if (tb[NET_SHAPER_A_BW_MIN])
+		shaper->bw_min = nla_get_uint(tb[NET_SHAPER_A_BW_MIN]);
+
+	if (tb[NET_SHAPER_A_BW_MAX])
+		shaper->bw_max = nla_get_uint(tb[NET_SHAPER_A_BW_MAX]);
+
+	if (tb[NET_SHAPER_A_BURST])
+		shaper->burst = nla_get_uint(tb[NET_SHAPER_A_BURST]);
+
+	if (tb[NET_SHAPER_A_PRIORITY])
+		shaper->priority = nla_get_u32(tb[NET_SHAPER_A_PRIORITY]);
+
+	if (tb[NET_SHAPER_A_WEIGHT])
+		shaper->weight = nla_get_u32(tb[NET_SHAPER_A_WEIGHT]);
+	return 0;
+}
+
+/* Fetch the cached shaper info and update them with the user-provided
+ * attributes.
+ */
+static int net_shaper_parse_info_nest(struct net_device *dev,
+				      const struct nlattr *attr,
+				      const struct genl_info *info,
+				      struct net_shaper_handle *handle,
+				      struct net_shaper_info *shaper)
+{
+	struct nlattr *tb[NET_SHAPER_A_WEIGHT + 1];
+	int ret;
+
+	ret = nla_parse_nested(tb, NET_SHAPER_A_WEIGHT, attr,
+			       net_shaper_info_nl_policy, info->extack);
+	if (ret < 0)
+		return ret;
+
+	return net_shaper_parse_info(dev, tb, info, handle, shaper);
 }
 
 int net_shaper_nl_pre_doit(const struct genl_split_ops *ops,
@@ -295,14 +510,149 @@ put:
 	return ret;
 }
 
+/* Update the H/W and on success update the local cache, too. */
+static int net_shaper_set(struct net_device *dev,
+			  const struct net_shaper_handle *h,
+			  const struct net_shaper_info *shaper,
+			  struct netlink_ext_ack *extack)
+{
+	struct mutex *lock = net_shaper_cache_init(dev, extack);
+	struct net_shaper_handle handle = *h;
+	int ret;
+
+	if (!lock)
+		return -ENOMEM;
+
+	if (handle.scope == NET_SHAPER_SCOPE_UNSPEC) {
+		NL_SET_ERR_MSG_FMT(extack, "Can't set shaper with unspec scope");
+		return -EINVAL;
+	}
+
+	mutex_lock(lock);
+	if (handle.scope == NET_SHAPER_SCOPE_NODE &&
+	    net_shaper_cache_lookup(dev, &handle)) {
+		ret = -ENOENT;
+		goto unlock;
+	}
+
+	ret = net_shaper_cache_pre_insert(dev, &handle, extack);
+	if (ret)
+		goto unlock;
+
+	ret = dev->netdev_ops->net_shaper_ops->set(dev, &handle, shaper, extack);
+	net_shaper_cache_commit(dev, 1, &handle, shaper);
+
+unlock:
+	mutex_unlock(lock);
+	return ret;
+}
+
 int net_shaper_nl_set_doit(struct sk_buff *skb, struct genl_info *info)
 {
-	return -EOPNOTSUPP;
+	struct net_device *dev = info->user_ptr[0];
+	struct net_shaper_handle handle;
+	struct net_shaper_info shaper;
+	struct nlattr *attr;
+	int ret;
+
+	if (GENL_REQ_ATTR_CHECK(info, NET_SHAPER_A_SHAPER))
+		return -EINVAL;
+
+	attr = info->attrs[NET_SHAPER_A_SHAPER];
+	ret = net_shaper_parse_info_nest(dev, attr, info, &handle, &shaper);
+	if (ret)
+		return ret;
+
+	return net_shaper_set(dev, &handle, &shaper, info->extack);
+}
+
+static int __net_shaper_delete(struct net_device *dev,
+			       const struct net_shaper_handle *h,
+			       struct net_shaper_info *shaper,
+			       struct netlink_ext_ack *extack)
+{
+	struct net_shaper_handle parent_handle, handle = *h;
+	struct xarray *xa = net_shaper_cache_container(dev);
+	int ret;
+
+	/* Should never happen: we are under the cache lock, the cache
+	 * is already initialized.
+	 */
+	if (WARN_ON_ONCE(!xa))
+		return -EINVAL;
+
+again:
+	parent_handle = shaper->parent;
+
+	ret = dev->netdev_ops->net_shaper_ops->delete(dev, &handle, extack);
+	if (ret < 0)
+		return ret;
+
+	xa_erase(xa, net_shaper_handle_to_index(&handle));
+	if (handle.scope == NET_SHAPER_SCOPE_NODE)
+		idr_remove(&dev->net_shaper_data->node_ids, handle.id);
+	kfree(shaper);
+
+	/* Eventually delete the parent, if it is left over with no leaves. */
+	if (parent_handle.scope == NET_SHAPER_SCOPE_NODE) {
+		shaper = net_shaper_cache_lookup(dev, &parent_handle);
+		if (shaper && !--shaper->leaves) {
+			handle = parent_handle;
+			goto again;
+		}
+	}
+	return 0;
+}
+
+static int net_shaper_delete(struct net_device *dev,
+			     const struct net_shaper_handle *handle,
+			     struct netlink_ext_ack *extack)
+{
+	struct mutex *lock = net_shaper_cache_lock(dev);
+	struct net_shaper_info *shaper;
+	int ret;
+
+	/* The lock is null when the cache is not initialized, and thus
+	 * no shaper has been created yet.
+	 */
+	if (!lock)
+		return -ENOENT;
+
+	mutex_lock(lock);
+	shaper = net_shaper_cache_lookup(dev, handle);
+	if (!shaper) {
+		ret = -ENOENT;
+		goto unlock;
+	}
+
+	if (handle->scope == NET_SHAPER_SCOPE_NODE) {
+		/* TODO: implement support for scope NODE delete. */
+		ret = -EINVAL;
+		goto unlock;
+	}
+
+	ret = __net_shaper_delete(dev, handle, shaper, extack);
+
+unlock:
+	mutex_unlock(lock);
+	return ret;
 }
 
 int net_shaper_nl_delete_doit(struct sk_buff *skb, struct genl_info *info)
 {
-	return -EOPNOTSUPP;
+	struct net_device *dev = info->user_ptr[0];
+	struct net_shaper_handle handle;
+	int ret;
+
+	if (GENL_REQ_ATTR_CHECK(info, NET_SHAPER_A_HANDLE))
+		return -EINVAL;
+
+	ret = net_shaper_parse_handle(info->attrs[NET_SHAPER_A_HANDLE], info,
+				      &handle);
+	if (ret)
+		return ret;
+
+	return net_shaper_delete(dev, &handle, info->extack);
 }
 
 int net_shaper_nl_group_doit(struct sk_buff *skb, struct genl_info *info)
@@ -313,18 +663,23 @@ int net_shaper_nl_group_doit(struct sk_buff *skb, struct genl_info *info)
 void net_shaper_flush(struct net_device *dev)
 {
 	struct xarray *xa = net_shaper_cache_container(dev);
+	struct mutex *lock = net_shaper_cache_lock(dev);
 	struct net_shaper_info *cur;
 	unsigned long index;
 
-	if (!xa)
+	if (!xa || !lock)
 		return;
 
+	mutex_lock(lock);
 	xa_lock(xa);
 	xa_for_each(xa, index, cur) {
 		__xa_erase(xa, index);
 		kfree(cur);
 	}
 	xa_unlock(xa);
+	idr_destroy(&dev->net_shaper_data->node_ids);
+	mutex_unlock(lock);
+
 	kfree(dev->net_shaper_data);
 }
 
