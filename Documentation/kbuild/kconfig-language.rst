@@ -71,6 +71,9 @@ applicable everywhere (see syntax).
   Every menu entry can have at most one prompt, which is used to display
   to the user. Optionally dependencies only for this prompt can be added
   with "if".
+  If a prompt is not set, then the config option cannot be changed by the user.
+  It will not appear in any menu, and even edits to ``.config`` cannot alter it.
+  It can still be set via "default" and "select" (see below).
 
 - default value: "default" <expr> ["if" <expr>]
 
