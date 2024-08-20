@@ -32,6 +32,24 @@ struct net_shaper_nl_ctx {
 	u32 start_index;
 };
 
+/* Count the number of [multi] attributes of the given type. */
+static int net_shaper_list_len(struct genl_info *info, int type)
+{
+	struct nlattr *attr;
+	int rem, cnt = 0;
+
+	nla_for_each_attr_type(attr, type, genlmsg_data(info->genlhdr),
+			       genlmsg_len(info->genlhdr), rem)
+		cnt++;
+	return cnt;
+}
+
+static int net_shaper_handle_size(void)
+{
+	return nla_total_size(nla_total_size(sizeof(u32)) +
+			      nla_total_size(sizeof(u32)));
+}
+
 static int net_shaper_fill_handle(struct sk_buff *msg,
 				  const struct net_shaper_handle *handle,
 				  u32 type, const struct genl_info *info)
@@ -306,6 +324,28 @@ static void net_shaper_cache_commit(struct net_device *dev, int nr_shapers,
 	xa_unlock(xa);
 }
 
+/* Rollback all the tentative inserts from the shaper cache. */
+static void net_shaper_cache_rollback(struct net_device *dev)
+{
+	struct xarray *xa = net_shaper_cache_container(dev);
+	struct net_shaper_handle handle;
+	struct net_shaper_info *cur;
+	unsigned long index;
+
+	if (!xa)
+		return;
+
+	xa_lock(xa);
+	xa_for_each_marked(xa, index, cur, NET_SHAPER_CACHE_NOT_VALID) {
+		net_shaper_index_to_handle(index, &handle);
+		if (handle.scope == NET_SHAPER_SCOPE_NODE)
+			idr_remove(&dev->net_shaper_data->node_ids, handle.id);
+		__xa_erase(xa, index);
+		kfree(cur);
+	}
+	xa_unlock(xa);
+}
+
 static int net_shaper_parse_handle(const struct nlattr *attr,
 				   const struct genl_info *info,
 				   struct net_shaper_handle *handle)
@@ -406,6 +446,37 @@ static int net_shaper_parse_info_nest(struct net_device *dev,
 		return ret;
 
 	return net_shaper_parse_info(dev, tb, info, handle, shaper);
+}
+
+/* Alike net_parse_shaper_info(), but additionally allow the user specifying
+ * the shaper's parent handle.
+ */
+static int net_shaper_parse_root(struct net_device *dev,
+				 const struct nlattr *attr,
+				 const struct genl_info *info,
+				 struct net_shaper_handle *handle,
+				 struct net_shaper_info *shaper)
+{
+	struct nlattr *tb[NET_SHAPER_A_PARENT + 1];
+	int ret;
+
+	ret = nla_parse_nested(tb, NET_SHAPER_A_PARENT, attr,
+			       net_shaper_root_info_nl_policy,
+			       info->extack);
+	if (ret < 0)
+		return ret;
+
+	ret = net_shaper_parse_info(dev, tb, info, handle, shaper);
+	if (ret)
+		return ret;
+
+	if (tb[NET_SHAPER_A_PARENT]) {
+		ret = net_shaper_parse_handle(tb[NET_SHAPER_A_PARENT], info,
+					      &shaper->parent);
+		if (ret)
+			return ret;
+	}
+	return 0;
 }
 
 int net_shaper_nl_pre_doit(const struct genl_split_ops *ops,
@@ -604,6 +675,89 @@ again:
 	return 0;
 }
 
+static int __net_shaper_group(struct net_device *dev, int leaves_count,
+			      const struct net_shaper_handle *leaves_handles,
+			      struct net_shaper_info *leaves,
+			      struct net_shaper_handle *root_handle,
+			      struct net_shaper_info *root,
+			      struct netlink_ext_ack *extack)
+{
+	struct net_shaper_info *parent = NULL;
+	struct net_shaper_handle leaf_handle;
+	int i, ret;
+
+	if (root_handle->scope == NET_SHAPER_SCOPE_NODE) {
+		if (root_handle->id != NET_SHAPER_ID_UNSPEC &&
+		    !net_shaper_cache_lookup(dev, root_handle)) {
+			NL_SET_ERR_MSG_FMT(extack, "Root shaper %d:%d does not exists",
+					   root_handle->scope, root_handle->id);
+			return -ENOENT;
+		}
+		if (root->parent.scope != NET_SHAPER_SCOPE_NODE &&
+		    root->parent.scope != NET_SHAPER_SCOPE_NETDEV) {
+			NL_SET_ERR_MSG_FMT(extack, "Invalid scope %d for root parent shaper",
+					   root->parent.scope);
+			return -EINVAL;
+		}
+	}
+
+	if (root->parent.scope == NET_SHAPER_SCOPE_NODE) {
+		parent = net_shaper_cache_lookup(dev, &root->parent);
+		if (!parent) {
+			NL_SET_ERR_MSG_FMT(extack, "Root parent shaper %d:%d does not exists",
+					   root->parent.scope, root->parent.id);
+			return -ENOENT;
+		}
+	}
+
+	/* For newly created node scope shaper, the following will update
+	 * the handle, due to id allocation.
+	 */
+	ret = net_shaper_cache_pre_insert(dev, root_handle, extack);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < leaves_count; ++i) {
+		leaf_handle = leaves_handles[i];
+		if (leaf_handle.scope != NET_SHAPER_SCOPE_QUEUE) {
+			ret = -EINVAL;
+			NL_SET_ERR_MSG_FMT(extack, "Invalid scope %d for leaf shaper %d",
+					   leaf_handle.scope, i);
+			goto rollback;
+		}
+
+		ret = net_shaper_cache_pre_insert(dev, &leaf_handle, extack);
+		if (ret)
+			goto rollback;
+
+		if (leaves[i].parent.scope == root_handle->scope &&
+		    leaves[i].parent.id == root_handle->id)
+			continue;
+
+		/* The leaves shapers will be nested to the root, update the
+		 * linking accordingly.
+		 */
+		leaves[i].parent = *root_handle;
+		root->leaves++;
+	}
+
+	ret = dev->netdev_ops->net_shaper_ops->group(dev, leaves_count,
+						     leaves_handles, leaves,
+						     root_handle, root,
+						     extack);
+	if (ret < 0)
+		goto rollback;
+
+	if (parent)
+		parent->leaves++;
+	net_shaper_cache_commit(dev, 1, root_handle, root);
+	net_shaper_cache_commit(dev, leaves_count, leaves_handles, leaves);
+	return 0;
+
+rollback:
+	net_shaper_cache_rollback(dev);
+	return ret;
+}
 static int net_shaper_delete(struct net_device *dev,
 			     const struct net_shaper_handle *handle,
 			     struct netlink_ext_ack *extack)
@@ -655,9 +809,173 @@ int net_shaper_nl_delete_doit(struct sk_buff *skb, struct genl_info *info)
 	return net_shaper_delete(dev, &handle, info->extack);
 }
 
+/* Update the H/W and on success update the local cache, too */
+static int net_shaper_group(struct net_device *dev, int leaves_count,
+			    const struct net_shaper_handle *leaves_handles,
+			    struct net_shaper_info *leaves,
+			    struct net_shaper_handle *root_handle,
+			    struct net_shaper_info *root,
+			    struct netlink_ext_ack *extack)
+{
+	struct mutex *lock = net_shaper_cache_init(dev, extack);
+	struct net_shaper_handle *old_roots;
+	int i, ret, old_roots_count = 0;
+
+	if (!lock)
+		return -ENOMEM;
+
+	if (root_handle->scope != NET_SHAPER_SCOPE_NODE &&
+	    root_handle->scope != NET_SHAPER_SCOPE_NETDEV) {
+		NL_SET_ERR_MSG_FMT(extack, "Invalid scope %d for root shaper",
+				   root_handle->scope);
+		return -EINVAL;
+	}
+
+	old_roots = kcalloc(leaves_count, sizeof(struct net_shaper_handle),
+			    GFP_KERNEL);
+	if (!old_roots)
+		return -ENOMEM;
+
+	for (i = 0; i < leaves_count; i++)
+		if (leaves[i].parent.scope == NET_SHAPER_SCOPE_NODE &&
+		    (leaves[i].parent.scope != root_handle->scope ||
+		     leaves[i].parent.id != root_handle->id))
+			old_roots[old_roots_count++] = leaves[i].parent;
+
+	mutex_lock(lock);
+	ret = __net_shaper_group(dev, leaves_count, leaves_handles,
+				 leaves, root_handle, root, extack);
+
+	/* Check if we need to delete any NODE left alone by the new leaves
+	 * linkage.
+	 */
+	for (i = 0; i < old_roots_count; ++i) {
+		root = net_shaper_cache_lookup(dev, &old_roots[i]);
+		if (!root)
+			continue;
+
+		if (--root->leaves > 0)
+			continue;
+
+		/* Errors here are not fatal: the grouping operation is
+		 * completed, and user-space can still explicitly clean-up
+		 * left-over nodes.
+		 */
+		__net_shaper_delete(dev, &old_roots[i], root, extack);
+	}
+
+	mutex_unlock(lock);
+
+	kfree(old_roots);
+	return ret;
+}
+
+static int net_shaper_group_send_reply(struct genl_info *info,
+				       struct net_shaper_handle *handle)
+{
+	struct net_device *dev = info->user_ptr[0];
+	struct nlattr *handle_attr;
+	struct sk_buff *msg;
+	int ret = -EMSGSIZE;
+	void *hdr;
+
+	/* Prepare the msg reply in advance, to avoid device operation
+	 * rollback.
+	 */
+	msg = genlmsg_new(net_shaper_handle_size(), GFP_KERNEL);
+	if (!msg)
+		return ret;
+
+	hdr = genlmsg_iput(msg, info);
+	if (!hdr)
+		goto free_msg;
+
+	if (nla_put_u32(msg, NET_SHAPER_A_IFINDEX, dev->ifindex))
+		goto free_msg;
+
+	handle_attr = nla_nest_start(msg, NET_SHAPER_A_HANDLE);
+	if (!handle_attr)
+		goto free_msg;
+
+	if (nla_put_u32(msg, NET_SHAPER_A_SCOPE, handle->scope))
+		goto free_msg;
+
+	if (nla_put_u32(msg, NET_SHAPER_A_ID, handle->id))
+		goto free_msg;
+
+	nla_nest_end(msg, handle_attr);
+	genlmsg_end(msg, hdr);
+
+	ret = genlmsg_reply(msg, info);
+	if (ret)
+		goto free_msg;
+
+	return ret;
+
+free_msg:
+	nlmsg_free(msg);
+	return ret;
+}
+
 int net_shaper_nl_group_doit(struct sk_buff *skb, struct genl_info *info)
 {
-	return -EOPNOTSUPP;
+	struct net_shaper_handle *leaves_handles, root_handle;
+	struct net_device *dev = info->user_ptr[0];
+	struct net_shaper_info *leaves, root;
+	int i, ret, rem, leaves_count;
+	struct nlattr *attr;
+
+	if (GENL_REQ_ATTR_CHECK(info, NET_SHAPER_A_LEAVES) ||
+	    GENL_REQ_ATTR_CHECK(info, NET_SHAPER_A_ROOT))
+		return -EINVAL;
+
+	leaves_count = net_shaper_list_len(info, NET_SHAPER_A_LEAVES);
+	leaves = kcalloc(leaves_count, sizeof(struct net_shaper_info) +
+			 sizeof(struct net_shaper_handle), GFP_KERNEL);
+	if (!leaves) {
+		GENL_SET_ERR_MSG_FMT(info, "Can't allocate memory for %d leaves shapers",
+				     leaves_count);
+		return -ENOMEM;
+	}
+	leaves_handles = (struct net_shaper_handle *)&leaves[leaves_count];
+
+	ret = net_shaper_parse_root(dev, info->attrs[NET_SHAPER_A_ROOT],
+				    info, &root_handle, &root);
+	if (ret)
+		goto free_shapers;
+
+	i = 0;
+	nla_for_each_attr_type(attr, NET_SHAPER_A_LEAVES,
+			       genlmsg_data(info->genlhdr),
+			       genlmsg_len(info->genlhdr), rem) {
+		if (WARN_ON_ONCE(i >= leaves_count))
+			goto free_shapers;
+
+		ret = net_shaper_parse_info_nest(dev, attr, info,
+						 &leaves_handles[i],
+						 &leaves[i]);
+		if (ret)
+			goto free_shapers;
+		i++;
+	}
+
+	ret = net_shaper_group(dev, leaves_count, leaves_handles, leaves,
+			       &root_handle, &root, info->extack);
+	if (ret < 0)
+		goto free_shapers;
+
+	ret = net_shaper_group_send_reply(info, &root_handle);
+	if (ret) {
+		/* Error on reply is not fatal to avoid rollback a successful
+		 * configuration.
+		 */
+		GENL_SET_ERR_MSG_FMT(info, "Can't send reply %d", ret);
+		ret = 0;
+	}
+
+free_shapers:
+	kfree(leaves);
+	return ret;
 }
 
 void net_shaper_flush(struct net_device *dev)
