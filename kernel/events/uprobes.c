@@ -1201,8 +1201,8 @@ int uprobe_register_refctr(struct inode *inode, loff_t offset,
 EXPORT_SYMBOL_GPL(uprobe_register_refctr);
 
 /*
- * uprobe_apply - unregister an already registered probe.
- * @inode: the file in which the probe has to be removed.
+ * uprobe_apply - register a probe or unregister an already registered probe.
+ * @inode: the file in which the probe has to be placed or removed.
  * @offset: offset from the start of the file.
  * @uc: consumer which wants to add more or remove some breakpoints
  * @add: add or remove the breakpoints
