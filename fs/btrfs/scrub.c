@@ -67,6 +67,7 @@ struct scrub_ctx;
 /* Represent one sector and its needed info to verify the content. */
 struct scrub_sector_verification {
 	bool is_metadata;
+	bool is_inline;
 
 	union {
 		/*
@@ -1413,6 +1414,34 @@ static int sync_write_pointer_for_zoned(struct scrub_ctx *sctx, u64 logical,
 	return ret;
 }
 
+static bool extent_is_inline(struct btrfs_fs_info *fs_info,
+			     u64 extent_start, u64 extent_len)
+{
+	struct btrfs_file_extent_item *ei;
+	struct extent_buffer *leaf;
+	struct btrfs_path *path;
+	struct btrfs_root *extent_root = btrfs_extent_root(fs_info, extent_start);
+	int ret;
+	bool is_inline = false;
+
+	path = btrfs_alloc_path();
+	if (!path)
+		return false;
+
+	ret = btrfs_lookup_file_extent(NULL, extent_root, path, extent_start, extent_len, 0);
+	if (ret < 0)
+		goto out;
+
+	leaf = path->nodes[0];
+	ei = btrfs_item_ptr(leaf, path->slots[0], struct btrfs_file_extent_item);
+	if (btrfs_file_extent_type(leaf, ei) == BTRFS_FILE_EXTENT_INLINE)
+		is_inline = true;
+
+ out:
+	btrfs_free_path(path);
+	return is_inline;
+}
+
 static void fill_one_extent_info(struct btrfs_fs_info *fs_info,
 				 struct scrub_stripe *stripe,
 				 u64 extent_start, u64 extent_len,
@@ -1431,6 +1460,9 @@ static void fill_one_extent_info(struct btrfs_fs_info *fs_info,
 		if (extent_flags & BTRFS_EXTENT_FLAG_TREE_BLOCK) {
 			sector->is_metadata = true;
 			sector->generation = extent_gen;
+		} else {
+			sector->is_inline = extent_is_inline(
+				fs_info, extent_start, extent_len);
 		}
 	}
 }
@@ -1638,8 +1670,13 @@ static void scrub_submit_extent_sector_read(struct scrub_ctx *sctx,
 					      &stripe_len, &bioc, &io_stripe, &mirror);
 			btrfs_put_bioc(bioc);
 			if (err < 0) {
-				set_bit(i, &stripe->io_error_bitmap);
-				set_bit(i, &stripe->error_bitmap);
+				struct scrub_sector_verification *sector =
+					&stripe->sectors[i];
+
+				if (!sector->is_inline) {
+					set_bit(i, &stripe->io_error_bitmap);
+					set_bit(i, &stripe->error_bitmap);
+				}
 				continue;
 			}
 
