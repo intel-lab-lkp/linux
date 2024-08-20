@@ -153,8 +153,8 @@ void driver_remove_file(const struct device_driver *driver,
 
 int driver_set_override(struct device *dev, const char **override,
 			const char *s, size_t len);
-int __must_check driver_for_each_device(struct device_driver *drv, struct device *start,
-					void *data, int (*fn)(struct device *dev, void *));
+int driver_for_each_device(struct device_driver *drv, struct device *start,
+			   void *data, int (*fn)(struct device *dev, void *));
 struct device *driver_find_device(const struct device_driver *drv,
 				  struct device *start, const void *data,
 				  int (*match)(struct device *dev, const void *data));
