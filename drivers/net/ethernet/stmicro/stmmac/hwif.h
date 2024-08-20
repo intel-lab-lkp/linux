@@ -26,6 +26,8 @@
 })
 
 struct stmmac_extra_stats;
+struct stmmac_fpe_cfg;
+enum   stmmac_mpacket_type;
 struct stmmac_priv;
 struct stmmac_safety_stats;
 struct dma_desc;
