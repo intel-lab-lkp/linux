@@ -171,8 +171,11 @@ struct map *map__new(struct machine *machine, u64 start, u64 len,
 		assert(!dso__kernel(dso));
 		map__init(result, start, start + len, pgoff, dso);
 
+		if (map->pgoff && !no_dso)
+			no_dso = dso__is_pie(dso);	// PIE check
+
 		if (anon || no_dso) {
-			map->mapping_type = MAPPING_TYPE__IDENTITY;
+			map__set_mapping_type(map, MAPPING_TYPE__IDENTITY);
 
 			/*
 			 * Set memory without DSO as loaded. All map__find_*
