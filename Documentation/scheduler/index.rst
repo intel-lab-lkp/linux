@@ -21,6 +21,7 @@ Scheduler
     sched-rt-group
     sched-stats
     sched-debug
+    sched-qos
 
     text_files
 
