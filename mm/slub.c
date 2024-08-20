@@ -218,6 +218,10 @@ DEFINE_STATIC_KEY_FALSE(slub_debug_enabled);
 #endif
 #endif		/* CONFIG_SLUB_DEBUG */
 
+#ifdef CONFIG_NUMA
+DEFINE_STATIC_KEY_FALSE(strict_numa);
+#endif
+
 /* Structure holding parameters for get_partial() call chain */
 struct partial_context {
 	gfp_t flags;
@@ -3825,6 +3829,14 @@ static __always_inline void *__slab_alloc_node(struct kmem_cache *s,
 	unsigned long tid;
 	void *object;
 
+#ifdef CONFIG_NUMA
+
+	if (static_branch_unlikely(&strict_numa) && node == NUMA_NO_NODE)
+
+		node = mempolicy_slab_node();
+
+#endif
+
 redo:
 	/*
 	 * Must read kmem_cache cpu data via this cpu ptr. Preemption is
@@ -5522,6 +5534,21 @@ static int __init setup_slub_min_objects(char *str)
 
 __setup("slab_min_objects=", setup_slub_min_objects);
 __setup_param("slub_min_objects=", slub_min_objects, setup_slub_min_objects, 0);
+
+#ifdef CONFIG_NUMA
+static int __init setup_slab_strict_numa(char *str)
+{
+	if (nr_node_ids > 1)
+		static_branch_enable(&strict_numa);
+	else
+		pr_warn("slab_strict_numa parameter set on non NUMA system.\n");
+
+	return 1;
+}
+
+__setup("slab_strict_numa", setup_slab_strict_numa);
+#endif
+
 
 #ifdef CONFIG_HARDENED_USERCOPY
 /*
