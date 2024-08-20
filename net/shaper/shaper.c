@@ -117,17 +117,17 @@ nla_put_failure:
 /* On success sets pdev to the relevant device and acquires a reference
  * to it.
  */
-static int net_shaper_fetch_dev(const struct genl_info *info,
+static int net_shaper_fetch_dev(const struct genl_info *info, int type,
 				struct net_device **pdev)
 {
 	struct net *ns = genl_info_net(info);
 	struct net_device *dev;
 	int ifindex;
 
-	if (GENL_REQ_ATTR_CHECK(info, NET_SHAPER_A_IFINDEX))
+	if (GENL_REQ_ATTR_CHECK(info, type))
 		return -EINVAL;
 
-	ifindex = nla_get_u32(info->attrs[NET_SHAPER_A_IFINDEX]);
+	ifindex = nla_get_u32(info->attrs[type]);
 	dev = dev_get_by_index(ns, ifindex);
 	if (!dev) {
 		GENL_SET_ERR_MSG_FMT(info, "device %d not found", ifindex);
@@ -485,7 +485,7 @@ int net_shaper_nl_pre_doit(const struct genl_split_ops *ops,
 	struct net_device *dev;
 	int ret;
 
-	ret = net_shaper_fetch_dev(info, &dev);
+	ret = net_shaper_fetch_dev(info, NET_SHAPER_A_IFINDEX, &dev);
 	if (ret)
 		return ret;
 
@@ -504,12 +504,23 @@ void net_shaper_nl_post_doit(const struct genl_split_ops *ops,
 int net_shaper_nl_cap_pre_doit(const struct genl_split_ops *ops,
 			       struct sk_buff *skb, struct genl_info *info)
 {
-	return -EOPNOTSUPP;
+	struct net_device *dev;
+	int ret;
+
+	ret = net_shaper_fetch_dev(info, NET_SHAPER_A_CAPABILITIES_IFINDEX, &dev);
+	if (ret)
+		return ret;
+
+	info->user_ptr[0] = dev;
+	return 0;
 }
 
 void net_shaper_nl_cap_post_doit(const struct genl_split_ops *ops,
 				 struct sk_buff *skb, struct genl_info *info)
 {
+	struct net_device *dev = info->user_ptr[0];
+
+	netdev_put(dev, NULL);
 }
 
 int net_shaper_nl_get_doit(struct sk_buff *skb, struct genl_info *info)
@@ -565,7 +576,7 @@ int net_shaper_nl_get_dumpit(struct sk_buff *skb,
 	unsigned long index;
 	int ret;
 
-	ret = net_shaper_fetch_dev(info, &dev);
+	ret = net_shaper_fetch_dev(info, NET_SHAPER_A_IFINDEX, &dev);
 	if (ret)
 		return ret;
 
@@ -1063,15 +1074,101 @@ free_shapers:
 	return ret;
 }
 
+static int
+net_shaper_cap_fill_one(struct sk_buff *msg, int ifindex,
+			enum net_shaper_scope scope, unsigned long flags,
+			const struct genl_info *info)
+{
+	unsigned long cur;
+	void *hdr;
+
+	hdr = genlmsg_iput(msg, info);
+	if (!hdr)
+		return -EMSGSIZE;
+
+	if (nla_put_u32(msg, NET_SHAPER_A_CAPABILITIES_IFINDEX, ifindex) ||
+	    nla_put_u32(msg, NET_SHAPER_A_CAPABILITIES_SCOPE, scope))
+		goto nla_put_failure;
+
+	for (cur = NET_SHAPER_A_CAPABILITIES_SUPPORT_METRIC_BPS;
+	     cur <= NET_SHAPER_A_CAPABILITIES_MAX; ++cur) {
+		if (flags & BIT(cur) && nla_put_flag(msg, cur))
+			goto nla_put_failure;
+	}
+
+	genlmsg_end(msg, hdr);
+
+	return 0;
+
+nla_put_failure:
+	genlmsg_cancel(msg, hdr);
+	return -EMSGSIZE;
+}
+
 int net_shaper_nl_cap_get_doit(struct sk_buff *skb, struct genl_info *info)
 {
+	struct net_device *dev = info->user_ptr[0];
+	const struct net_shaper_ops *ops;
+	enum net_shaper_scope scope;
+	struct sk_buff *msg;
+	unsigned long flags;
+	int ret;
+
+	if (GENL_REQ_ATTR_CHECK(info, NET_SHAPER_A_CAPABILITIES_SCOPE))
+		return -EINVAL;
+
+	scope = nla_get_u32(info->attrs[NET_SHAPER_A_CAPABILITIES_SCOPE]);
+	ops = dev->netdev_ops->net_shaper_ops;
+	ret = ops->capabilities(dev, scope, &flags);
+	if (ret)
+		return ret;
+
+	msg = genlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
+	if (!msg)
+		return -ENOMEM;
+
+	ret = net_shaper_cap_fill_one(msg, dev->ifindex, scope, flags, info);
+	if (ret)
+		goto free_msg;
+
+	ret =  genlmsg_reply(msg, info);
+	if (ret)
+		goto free_msg;
 	return 0;
+
+free_msg:
+	nlmsg_free(msg);
+	return ret;
 }
 
 int net_shaper_nl_cap_get_dumpit(struct sk_buff *skb,
 				 struct netlink_callback *cb)
 {
-	return 0;
+	const struct genl_info *info = genl_info_dump(cb);
+	const struct net_shaper_ops *ops;
+	enum net_shaper_scope scope;
+	struct net_device *dev;
+	unsigned long flags;
+	int ret;
+
+	ret = net_shaper_fetch_dev(info, NET_SHAPER_A_CAPABILITIES_IFINDEX, &dev);
+	if (ret)
+		return ret;
+
+	ops = dev->netdev_ops->net_shaper_ops;
+	for (scope = 0; scope <= NET_SHAPER_SCOPE_MAX; ++scope) {
+		if (ops->capabilities(dev, scope, &flags))
+			continue;
+
+		ret = net_shaper_cap_fill_one(skb, dev->ifindex, scope, flags,
+					      info);
+		if (ret)
+			goto put;
+	}
+
+put:
+	netdev_put(dev, NULL);
+	return ret;
 }
 
 void net_shaper_flush(struct net_device *dev)

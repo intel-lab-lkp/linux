@@ -99,6 +99,17 @@ struct net_shaper_ops {
 	int (*delete)(struct net_device *dev,
 		      const struct net_shaper_handle *handle,
 		      struct netlink_ext_ack *extack);
+
+	/**
+	 * @capabilities: get the shaper features supported by the NIC
+	 *
+	 * Fills the bitmask @cap with the supported cababilites for the
+	 * specified @scope and device @dev.
+	 *
+	 * Returns 0 on success or a negative error value otherwise.
+	 */
+	int (*capabilities)(struct net_device *dev,
+			    enum net_shaper_scope scope, unsigned long *cap);
 };
 
 #endif
