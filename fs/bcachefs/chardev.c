@@ -320,8 +320,7 @@ static long bch2_ioctl_disk_add(struct bch_fs *c, struct bch_ioctl_disk arg)
 		return PTR_ERR(path);
 
 	ret = bch2_dev_add(c, path);
-	if (!IS_ERR(path))
-		kfree(path);
+	kfree(path);
 
 	return ret;
 }
