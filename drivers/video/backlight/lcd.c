@@ -66,8 +66,10 @@ static int fb_notifier_callback(struct notifier_block *self,
 		if (ld->ops->set_power)
 			ld->ops->set_power(ld, power);
 	} else {
+		const struct fb_videomode *videomode = evdata->data;
+
 		if (ld->ops->set_mode)
-			ld->ops->set_mode(ld, evdata->data);
+			ld->ops->set_mode(ld, videomode->xres, videomode->yres);
 	}
 
 out:
