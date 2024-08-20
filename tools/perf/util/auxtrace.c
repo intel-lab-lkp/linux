@@ -688,14 +688,14 @@ int auxtrace_record__read_finish(struct auxtrace_record *itr, int idx)
 		if (evsel__is_aux_event(evsel)) {
 			int cpu_map_idx;
 
-			if (evsel->disabled)
-				return 0;
-
 			cpu_map_idx = evlist__find_cpu_map_idx(itr->evlist,
 							       evsel, idx);
 			/* No map is found in per CPU mmap */
 			if (cpu_map_idx == -ENOENT)
 				return cpu_map_idx;
+
+			if (evsel->disabled)
+				return 0;
 
 			if (cpu_map_idx >= 0)
 				return evlist__enable_event_idx(evsel, 1, cpu_map_idx);
