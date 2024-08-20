@@ -5830,31 +5830,6 @@ static void tcp_check_urg(struct sock *sk, const struct tcphdr *th)
 	/* Tell the world about our new urgent pointer. */
 	sk_send_sigurg(sk);
 
-	/* We may be adding urgent data when the last byte read was
-	 * urgent. To do this requires some care. We cannot just ignore
-	 * tp->copied_seq since we would read the last urgent byte again
-	 * as data, nor can we alter copied_seq until this data arrives
-	 * or we break the semantics of SIOCATMARK (and thus sockatmark())
-	 *
-	 * NOTE. Double Dutch. Rendering to plain English: author of comment
-	 * above did something sort of 	send("A", MSG_OOB); send("B", MSG_OOB);
-	 * and expect that both A and B disappear from stream. This is _wrong_.
-	 * Though this happens in BSD with high probability, this is occasional.
-	 * Any application relying on this is buggy. Note also, that fix "works"
-	 * only in this artificial test. Insert some normal data between A and B and we will
-	 * decline of BSD again. Verdict: it is better to remove to trap
-	 * buggy users.
-	 */
-	if (tp->urg_seq == tp->copied_seq && tp->urg_data &&
-	    !sock_flag(sk, SOCK_URGINLINE) && tp->copied_seq != tp->rcv_nxt) {
-		struct sk_buff *skb = skb_peek(&sk->sk_receive_queue);
-		tp->copied_seq++;
-		if (skb && !before(tp->copied_seq, TCP_SKB_CB(skb)->end_seq)) {
-			__skb_unlink(skb, &sk->sk_receive_queue);
-			__kfree_skb(skb);
-		}
-	}
-
 	WRITE_ONCE(tp->urg_data, TCP_URG_NOTYET);
 	WRITE_ONCE(tp->urg_seq, ptr);
 

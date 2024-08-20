@@ -484,20 +484,17 @@ TEST_F(msg_oob, ex_oob_drop)
 	epollpair(true);
 	siocatmarkpair(true);
 
-	sendpair("y", 1, MSG_OOB);		/* TCP drops "x" at this moment. */
+	sendpair("y", 1, MSG_OOB);
 	epollpair(true);
+	siocatmarkpair(false);
 
-	tcp_incompliant {
-		siocatmarkpair(false);
+	recvpair("x", 1, 1, 0);
+	epollpair(true);
+	siocatmarkpair(true);
 
-		recvpair("x", 1, 1, 0);		/* TCP drops "y" by passing through it. */
-		epollpair(true);
-		siocatmarkpair(true);
-
-		recvpair("y", 1, 1, MSG_OOB);	/* TCP returns -EINVAL. */
-		epollpair(false);
-		siocatmarkpair(true);
-	}
+	recvpair("y", 1, 1, MSG_OOB);
+	epollpair(false);
+	siocatmarkpair(true);
 }
 
 TEST_F(msg_oob, ex_oob_drop_2)
@@ -506,23 +503,17 @@ TEST_F(msg_oob, ex_oob_drop_2)
 	epollpair(true);
 	siocatmarkpair(true);
 
-	sendpair("y", 1, MSG_OOB);		/* TCP drops "x" at this moment. */
+	sendpair("y", 1, MSG_OOB);
 	epollpair(true);
-
-	tcp_incompliant {
-		siocatmarkpair(false);
-	}
+	siocatmarkpair(false);
 
 	recvpair("y", 1, 1, MSG_OOB);
 	epollpair(false);
+	siocatmarkpair(false);
 
-	tcp_incompliant {
-		siocatmarkpair(false);
-
-		recvpair("x", 1, 1, 0);		/* TCP returns -EAGAIN. */
-		epollpair(false);
-		siocatmarkpair(true);
-	}
+	recvpair("x", 1, 1, 0);
+	epollpair(false);
+	siocatmarkpair(true);
 }
 
 TEST_F(msg_oob, ex_oob_ahead_break)
@@ -692,22 +683,20 @@ TEST_F(msg_oob, inline_ex_oob_drop)
 	epollpair(true);
 	siocatmarkpair(true);
 
-	sendpair("y", 1, MSG_OOB);		/* TCP drops "x" at this moment. */
+	sendpair("y", 1, MSG_OOB);
 	epollpair(true);
 
 	setinlinepair();
 
-	tcp_incompliant {
-		siocatmarkpair(false);
+	siocatmarkpair(false);
 
-		recvpair("x", 1, 1, 0);		/* TCP recv()s "y". */
-		epollpair(true);
-		siocatmarkpair(true);
+	recvpair("x", 1, 1, 0);
+	epollpair(true);
+	siocatmarkpair(true);
 
-		recvpair("y", 1, 1, 0);		/* TCP returns -EAGAIN. */
-		epollpair(false);
-		siocatmarkpair(false);
-	}
+	recvpair("y", 1, 1, 0);
+	epollpair(false);
+	siocatmarkpair(false);
 }
 
 TEST_F(msg_oob, inline_ex_oob_siocatmark)
