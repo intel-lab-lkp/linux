@@ -9,12 +9,12 @@
 #include <linux/pci.h>
 #include <linux/dmi.h>
 #include <linux/range.h>
+#include <linux/acpi.h>
 
 #include <asm/pci-direct.h>
 #include <linux/sort.h>
 #include <asm/io.h>
 #include <asm/msr.h>
-#include <asm/acpi.h>
 #include <asm/mmconfig.h>
 #include <asm/pci_x86.h>
 
