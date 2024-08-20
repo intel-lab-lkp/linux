@@ -12345,9 +12345,16 @@ perf_event_set_output(struct perf_event *event, struct perf_event *output_event)
 
 	/*
 	 * If both events generate aux data, they must be on the same PMU
+	 * module but can be with different PMU instances.
+	 *
+	 * For a built-in PMU module, the 'pmu->module' pointer is NULL,
+	 * thus it is not feasible to compare the module pointers when
+	 * AUX PMU drivers are built into the kernel image. Instead,
+	 * comparing the .setup_aux() callback pointer can determine if
+	 * the two PMU events come from the same PMU driver.
 	 */
 	if (has_aux(event) && has_aux(output_event) &&
-	    event->pmu != output_event->pmu)
+	    event->pmu->setup_aux != output_event->pmu->setup_aux)
 		goto out;
 
 	/*
