@@ -30,6 +30,7 @@ static int hbg_net_open(struct net_device *dev)
 		return 0;
 
 	netif_carrier_off(dev);
+	napi_enable(&priv->rx_ring.napi);
 	napi_enable(&priv->tx_ring.napi);
 	hbg_all_irq_enable(priv, true);
 	hbg_hw_mac_enable(priv, HBG_STATUS_ENABLE);
@@ -53,6 +54,7 @@ static int hbg_net_stop(struct net_device *dev)
 	hbg_hw_mac_enable(priv, HBG_STATUS_DISABLE);
 	hbg_all_irq_enable(priv, false);
 	napi_disable(&priv->tx_ring.napi);
+	napi_disable(&priv->rx_ring.napi);
 
 	return 0;
 }
