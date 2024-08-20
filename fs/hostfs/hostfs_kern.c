@@ -411,18 +411,19 @@ static const struct file_operations hostfs_dir_fops = {
 
 static int hostfs_writepage(struct page *page, struct writeback_control *wbc)
 {
-	struct address_space *mapping = page->mapping;
-	struct inode *inode = mapping->host;
+	struct folio *folio = page_folio(page);
+	struct address_space *mapping = folio->mapping;
+	struct inode *inode = folio_inode(folio);
 	char *buffer;
-	loff_t base = page_offset(page);
+	loff_t base = folio_pos(folio);
 	int count = PAGE_SIZE;
 	int end_index = inode->i_size >> PAGE_SHIFT;
 	int err;
 
-	if (page->index >= end_index)
+	if (folio->index >= end_index)
 		count = inode->i_size & (PAGE_SIZE-1);
 
-	buffer = kmap_local_page(page);
+	buffer = kmap_local_folio(folio, 0);
 
 	err = write_file(HOSTFS_I(inode)->fd, &base, buffer, count);
 	if (err != count) {
@@ -439,7 +440,7 @@ static int hostfs_writepage(struct page *page, struct writeback_control *wbc)
 
  out:
 	kunmap_local(buffer);
-	unlock_page(page);
+	folio_unlock(folio);
 
 	return err;
 }
