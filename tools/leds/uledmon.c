@@ -11,6 +11,8 @@
  * CTRL+C will exit.
  */
 
+#define	ULEDMON_USAGE	"Usage: ./uledmon <device-name>\n"
+
 #include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
@@ -18,6 +20,7 @@
 #include <unistd.h>
 
 #include <linux/uleds.h>
+
 
 int main(int argc, char const *argv[])
 {
@@ -28,6 +31,10 @@ int main(int argc, char const *argv[])
 
 	if (argc != 2) {
 		fprintf(stderr, "Requires <device-name> argument\n");
+		return 1;
+	}
+	if (!(strcmp(argv[1], "-h")) || !(strcmp(argv[1], "--help"))) {
+		fprintf(stderr, ULEDMON_USAGE);
 		return 1;
 	}
 
