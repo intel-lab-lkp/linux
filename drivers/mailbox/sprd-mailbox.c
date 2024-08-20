@@ -291,13 +291,6 @@ static const struct mbox_chan_ops sprd_mbox_ops = {
 	.shutdown	= sprd_mbox_shutdown,
 };
 
-static void sprd_mbox_disable(void *data)
-{
-	struct sprd_mbox_priv *priv = data;
-
-	clk_disable_unprepare(priv->clk);
-}
-
 static int sprd_mbox_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -331,20 +324,10 @@ static int sprd_mbox_probe(struct platform_device *pdev)
 	if (IS_ERR(priv->outbox_base))
 		return PTR_ERR(priv->outbox_base);
 
-	priv->clk = devm_clk_get(dev, "enable");
+	priv->clk = devm_clk_get_enabled(dev, "enable");
 	if (IS_ERR(priv->clk)) {
 		dev_err(dev, "failed to get mailbox clock\n");
 		return PTR_ERR(priv->clk);
-	}
-
-	ret = clk_prepare_enable(priv->clk);
-	if (ret)
-		return ret;
-
-	ret = devm_add_action_or_reset(dev, sprd_mbox_disable, priv);
-	if (ret) {
-		dev_err(dev, "failed to add mailbox disable action\n");
-		return ret;
 	}
 
 	inbox_irq = platform_get_irq_byname(pdev, "inbox");
