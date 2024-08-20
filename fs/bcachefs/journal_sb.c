@@ -119,6 +119,11 @@ static int bch2_sb_journal_v2_validate(struct bch_sb *sb, struct bch_sb_field *f
 	for (i = 0; i < nr; i++) {
 		b[i].start = le64_to_cpu(journal->d[i].start);
 		b[i].end = b[i].start + le64_to_cpu(journal->d[i].nr);
+		if (le64_to_cpu(journal->d[i].nr) > UINT_MAX) {
+			prt_printf(err, "journal v2 entry d[%u].nr %llu overflow\n",
+				i, le64_to_cpu(journal->d[i].nr));
+			goto err;
+		}
 	}
 
 	sort(b, nr, sizeof(*b), u64_range_cmp, NULL);
