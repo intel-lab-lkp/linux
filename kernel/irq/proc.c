@@ -363,7 +363,11 @@ void register_irq_proc(unsigned int irq, struct irq_desc *desc)
 
 #ifdef CONFIG_SMP
 	/* create /proc/irq/<irq>/smp_affinity */
-	proc_create_data("smp_affinity", 0644, desc->dir,
+	if (unlikely(irqd_affinity_is_managed(&desc->irq_data)))
+		proc_create_data("smp_affinity", 0444, desc->dir,
+			 &irq_affinity_proc_ops, irqp);
+	else
+		proc_create_data("smp_affinity", 0644, desc->dir,
 			 &irq_affinity_proc_ops, irqp);
 
 	/* create /proc/irq/<irq>/affinity_hint */
@@ -371,7 +375,11 @@ void register_irq_proc(unsigned int irq, struct irq_desc *desc)
 			irq_affinity_hint_proc_show, irqp);
 
 	/* create /proc/irq/<irq>/smp_affinity_list */
-	proc_create_data("smp_affinity_list", 0644, desc->dir,
+	if (unlikely(irqd_affinity_is_managed(&desc->irq_data)))
+		proc_create_data("smp_affinity_list", 0444, desc->dir,
+			 &irq_affinity_list_proc_ops, irqp);
+	else
+		proc_create_data("smp_affinity_list", 0644, desc->dir,
 			 &irq_affinity_list_proc_ops, irqp);
 
 	proc_create_single_data("node", 0444, desc->dir, irq_node_proc_show,
