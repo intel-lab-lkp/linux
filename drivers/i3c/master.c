@@ -2042,6 +2042,7 @@ int i3c_master_add_i3c_dev_locked(struct i3c_master_controller *master,
 			if (olddev->ibi->enabled) {
 				enable_ibi = true;
 				i3c_dev_disable_ibi_locked(olddev);
+				olddev->ibi->enabled = false;
 			}
 
 			i3c_dev_free_ibi_locked(olddev);
