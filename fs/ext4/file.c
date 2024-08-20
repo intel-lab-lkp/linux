@@ -628,11 +628,12 @@ out:
 static ssize_t
 ext4_dax_write_iter(struct kiocb *iocb, struct iov_iter *from)
 {
-	ssize_t ret;
+	ssize_t ret, written;
 	size_t count;
 	loff_t offset;
 	handle_t *handle;
 	bool extend = false;
+	bool need_trunc = true;
 	struct inode *inode = file_inode(iocb->ki_filp);
 
 	if (iocb->ki_flags & IOCB_NOWAIT) {
@@ -668,10 +669,36 @@ ext4_dax_write_iter(struct kiocb *iocb, struct iov_iter *from)
 
 	ret = dax_iomap_rw(iocb, from, &ext4_iomap_ops);
 
-	if (extend) {
-		ret = ext4_handle_inode_extension(inode, offset, ret);
-		ext4_inode_extension_cleanup(inode, ret < (ssize_t)count);
+	if (!extend)
+		goto out;
+
+	if (ret <= 0)
+		goto err_trunc;
+
+	written = ret;
+	handle = ext4_journal_start(inode, EXT4_HT_INODE, 2);
+	if (IS_ERR(handle)) {
+		ret = PTR_ERR(handle);
+		goto err_trunc;
 	}
+
+	if (ext4_update_inode_size(inode, offset + written)) {
+		ret = ext4_mark_inode_dirty(handle, inode);
+		if (unlikely(ret)) {
+			ext4_journal_stop(handle);
+			goto err_trunc;
+		}
+	}
+
+	if (written == count)
+		need_trunc = false;
+
+	if (inode->i_nlink)
+		ext4_orphan_del(handle, inode);
+	ext4_journal_stop(handle);
+	ret = written;
+err_trunc:
+	ext4_inode_extension_cleanup(inode, need_trunc);
 out:
 	inode_unlock(inode);
 	if (ret > 0)
