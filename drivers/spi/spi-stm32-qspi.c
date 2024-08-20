@@ -780,15 +780,13 @@ static int stm32_qspi_probe(struct platform_device *pdev)
 	qspi = spi_controller_get_devdata(ctrl);
 	qspi->ctrl = ctrl;
 
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "qspi");
-	qspi->io_base = devm_ioremap_resource(dev, res);
+	qspi->io_base = devm_platform_ioremap_resource_byname(pdev, "qspi");
 	if (IS_ERR(qspi->io_base))
 		return PTR_ERR(qspi->io_base);
 
 	qspi->phys_base = res->start;
 
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "qspi_mm");
-	qspi->mm_base = devm_ioremap_resource(dev, res);
+	qspi->mm_base = devm_platform_ioremap_resource_byname(pdev, "qspi_mm");
 	if (IS_ERR(qspi->mm_base))
 		return PTR_ERR(qspi->mm_base);
 
