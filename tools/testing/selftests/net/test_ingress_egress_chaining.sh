@@ -13,8 +13,14 @@ if [ "$(id -u)" -ne 0 ];then
 fi
 
 needed_mods="act_mirred cls_flower sch_ingress"
+mods_missing=""
+
+for mod in $needed_mods; do 
+	modinfo $mod &>/dev/null || mods_missing="$mods_missing$mod "
+done
+
 for mod in $needed_mods; do
-	modinfo $mod &>/dev/null || { echo "SKIP: Need act_mirred module"; exit $ksft_skip; }
+	modinfo $mod &>/dev/null || { echo "SKIP: modules needed: $mods_missing"; exit $ksft_skip; }
 done
 
 ns="ns$((RANDOM%899+100))"
