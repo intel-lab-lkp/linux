@@ -3352,6 +3352,8 @@ static int ocfs2_find_dir_space_id(struct inode *dir, struct buffer_head *di_bh,
 	unsigned long offset = 0;
 	unsigned int rec_len, new_rec_len, free_space;
 
+	if (i_size_read(dir) > OCFS2_MAX_BLOCKSIZE)
+		return -EINVAL;
 	/*
 	 * This calculates how many free bytes we'd have in block zero, should
 	 * this function force expansion to an extent tree.
