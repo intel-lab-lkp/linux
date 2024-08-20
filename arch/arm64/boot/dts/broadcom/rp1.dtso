@@ -1,0 +1,152 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+#include <dt-bindings/clock/rp1.h>
+#include <dt-bindings/misc/rp1.h>
+
+/dts-v1/;
+/plugin/;
+
+/ {
+	fragment@0 {
+		target-path="";
+		__overlay__ {
+			#address-cells = <3>;
+			#size-cells = <2>;
+
+			rp1: rp1@0 {
+				compatible = "simple-bus";
+				#address-cells = <2>;
+				#size-cells = <2>;
+				interrupt-controller;
+				interrupt-parent = <&rp1>;
+				#interrupt-cells = <2>;
+
+				// ranges and dma-ranges must be provided by the includer
+				ranges = <0xc0 0x40000000
+					  0x01/*0x02000000*/ 0x00 0x00000000
+					  0x00 0x00400000>;
+
+				dma-ranges =
+				// inbound RP1 1x_xxxxxxxx -> PCIe 1x_xxxxxxxx
+					     <0x10 0x00000000
+					      0x43000000 0x10 0x00000000
+					      0x10 0x00000000>;
+
+				clk_xosc: clk_xosc {
+					compatible = "fixed-clock";
+					#clock-cells = <0>;
+					clock-output-names = "xosc";
+					clock-frequency = <50000000>;
+				};
+
+				macb_pclk: macb_pclk {
+					compatible = "fixed-clock";
+					#clock-cells = <0>;
+					clock-output-names = "pclk";
+					clock-frequency = <200000000>;
+				};
+
+				macb_hclk: macb_hclk {
+					compatible = "fixed-clock";
+					#clock-cells = <0>;
+					clock-output-names = "hclk";
+					clock-frequency = <200000000>;
+				};
+
+				rp1_clocks: clocks@c040018000 {
+					compatible = "raspberrypi,rp1-clocks";
+					#clock-cells = <1>;
+					reg = <0xc0 0x40018000 0x0 0x10038>;
+					clocks = <&clk_xosc>;
+					clock-names = "xosc";
+
+					assigned-clocks = <&rp1_clocks RP1_PLL_SYS_CORE>,
+							  <&rp1_clocks RP1_PLL_AUDIO_CORE>,
+							  // RP1_PLL_VIDEO_CORE and dividers are now managed by VEC,DPI drivers
+							  <&rp1_clocks RP1_PLL_SYS>,
+							  <&rp1_clocks RP1_PLL_SYS_SEC>,
+							  <&rp1_clocks RP1_PLL_SYS_PRI_PH>,
+							  <&rp1_clocks RP1_CLK_ETH_TSU>;
+
+					assigned-clock-rates = <1000000000>, // RP1_PLL_SYS_CORE
+							       <1536000000>, // RP1_PLL_AUDIO_CORE
+							       <200000000>,  // RP1_PLL_SYS
+							       <125000000>,  // RP1_PLL_SYS_SEC
+							       <100000000>,  // RP1_PLL_SYS_PRI_PH
+							       <50000000>;   // RP1_CLK_ETH_TSU
+				};
+
+				rp1_gpio: pinctrl@c0400d0000 {
+					reg = <0xc0 0x400d0000  0x0 0xc000>,
+					      <0xc0 0x400e0000  0x0 0xc000>,
+					      <0xc0 0x400f0000  0x0 0xc000>;
+					compatible = "raspberrypi,rp1-gpio";
+					gpio-controller;
+					#gpio-cells = <2>;
+					interrupt-controller;
+					#interrupt-cells = <2>;
+					interrupts = <RP1_INT_IO_BANK0 IRQ_TYPE_LEVEL_HIGH>,
+						     <RP1_INT_IO_BANK1 IRQ_TYPE_LEVEL_HIGH>,
+						     <RP1_INT_IO_BANK2 IRQ_TYPE_LEVEL_HIGH>;
+					gpio-line-names =
+						"ID_SDA", // GPIO0
+						"ID_SCL", // GPIO1
+						"GPIO2", // GPIO2
+						"GPIO3", // GPIO3
+						"GPIO4", // GPIO4
+						"GPIO5", // GPIO5
+						"GPIO6", // GPIO6
+						"GPIO7", // GPIO7
+						"GPIO8", // GPIO8
+						"GPIO9", // GPIO9
+						"GPIO10", // GPIO10
+						"GPIO11", // GPIO11
+						"GPIO12", // GPIO12
+						"GPIO13", // GPIO13
+						"GPIO14", // GPIO14
+						"GPIO15", // GPIO15
+						"GPIO16", // GPIO16
+						"GPIO17", // GPIO17
+						"GPIO18", // GPIO18
+						"GPIO19", // GPIO19
+						"GPIO20", // GPIO20
+						"GPIO21", // GPIO21
+						"GPIO22", // GPIO22
+						"GPIO23", // GPIO23
+						"GPIO24", // GPIO24
+						"GPIO25", // GPIO25
+						"GPIO26", // GPIO26
+						"GPIO27", // GPIO27
+						"PCIE_RP1_WAKE", // GPIO28
+						"FAN_TACH", // GPIO29
+						"HOST_SDA", // GPIO30
+						"HOST_SCL", // GPIO31
+						"ETH_RST_N", // GPIO32
+						"", // GPIO33
+						"CD0_IO0_MICCLK", // GPIO34
+						"CD0_IO0_MICDAT0", // GPIO35
+						"RP1_PCIE_CLKREQ_N", // GPIO36
+						"", // GPIO37
+						"CD0_SDA", // GPIO38
+						"CD0_SCL", // GPIO39
+						"CD1_SDA", // GPIO40
+						"CD1_SCL", // GPIO41
+						"USB_VBUS_EN", // GPIO42
+						"USB_OC_N", // GPIO43
+						"RP1_STAT_LED", // GPIO44
+						"FAN_PWM", // GPIO45
+						"CD1_IO0_MICCLK", // GPIO46
+						"2712_WAKE", // GPIO47
+						"CD1_IO1_MICDAT1", // GPIO48
+						"EN_MAX_USB_CUR", // GPIO49
+						"", // GPIO50
+						"", // GPIO51
+						"", // GPIO52
+						""; // GPIO53
+				};
+			};
+		};
+	};
+};
