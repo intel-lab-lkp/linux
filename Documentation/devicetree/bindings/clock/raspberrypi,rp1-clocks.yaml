@@ -1,0 +1,87 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/raspberrypi,rp1-clocks.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: RaspberryPi RP1 clock generator
+
+maintainers:
+  - Andrea della Porta <andrea.porta@suse.com>
+
+description: |
+  The RP1 contains a clock generator designed as three PLLs (CORE, AUDIO,
+  VIDEO), and each PLL output can be programmed though dividers to generate
+  the clocks to drive the sub-peripherals embedded inside the chipset.
+
+  Link to datasheet:
+  https://datasheets.raspberrypi.com/rp1/rp1-peripherals.pdf
+
+properties:
+  compatible:
+    const: raspberrypi,rp1-clocks
+
+  reg:
+    maxItems: 1
+
+  '#clock-cells':
+    description:
+      The index in the assigned-clocks is mapped to the output clock as per
+      definitions in dt-bindings/clock/rp1.h.
+    const: 1
+
+  clocks:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+  - '#clock-cells'
+  - clocks
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/rp1.h>
+
+    rp1 {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        rp1_clocks: clocks@18000 {
+            compatible = "raspberrypi,rp1-clocks";
+            reg = <0xc0 0x40018000 0x0 0x10038>;
+            #clock-cells = <1>;
+            clocks = <&clk_xosc>;
+
+            assigned-clocks = <&rp1_clocks RP1_PLL_SYS_CORE>,
+                              <&rp1_clocks RP1_PLL_AUDIO_CORE>,
+                              /* RP1_PLL_VIDEO_CORE and dividers are now managed by VEC,DPI drivers */
+                              <&rp1_clocks RP1_PLL_SYS>,
+                              <&rp1_clocks RP1_PLL_SYS_SEC>,
+                              <&rp1_clocks RP1_PLL_AUDIO>,
+                              <&rp1_clocks RP1_PLL_AUDIO_SEC>,
+                              <&rp1_clocks RP1_CLK_SYS>,
+                              <&rp1_clocks RP1_PLL_SYS_PRI_PH>,
+                              /* RP1_CLK_SLOW_SYS is used for the frequency counter (FC0) */
+                              <&rp1_clocks RP1_CLK_SLOW_SYS>,
+                              <&rp1_clocks RP1_CLK_SDIO_TIMER>,
+                              <&rp1_clocks RP1_CLK_SDIO_ALT_SRC>,
+                              <&rp1_clocks RP1_CLK_ETH_TSU>;
+
+            assigned-clock-rates = <1000000000>, // RP1_PLL_SYS_CORE
+                                   <1536000000>, // RP1_PLL_AUDIO_CORE
+                                   <200000000>,  // RP1_PLL_SYS
+                                   <125000000>,  // RP1_PLL_SYS_SEC
+                                   <61440000>,   // RP1_PLL_AUDIO
+                                   <192000000>,  // RP1_PLL_AUDIO_SEC
+                                   <200000000>,  // RP1_CLK_SYS
+                                   <100000000>,  // RP1_PLL_SYS_PRI_PH
+                                   /* Must match the XOSC frequency */
+                                   <50000000>, // RP1_CLK_SLOW_SYS
+                                   <1000000>, // RP1_CLK_SDIO_TIMER
+                                   <200000000>, // RP1_CLK_SDIO_ALT_SRC
+                                   <50000000>; // RP1_CLK_ETH_TSU
+        };
+    };
