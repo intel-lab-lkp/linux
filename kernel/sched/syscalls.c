@@ -543,6 +543,35 @@ static void __setscheduler_uclamp(struct task_struct *p,
 				  const struct sched_attr *attr) { }
 #endif
 
+static inline int sched_qos_validate(struct task_struct *p,
+				     const struct sched_attr *attr)
+{
+	switch (attr->sched_qos_type) {
+	case SCHED_QOS_RAMPUP_MULTIPLIER:
+		if (attr->sched_qos_cookie)
+			return -EINVAL;
+		if (attr->sched_qos_value < 0)
+			return -EINVAL;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static void __setscheduler_sched_qos(struct task_struct *p,
+				     const struct sched_attr *attr)
+{
+	switch (attr->sched_qos_type) {
+	case SCHED_QOS_RAMPUP_MULTIPLIER:
+		set_bit(SCHED_QOS_RAMPUP_MULTIPLIER, p->sched_qos.user_defined);
+		p->sched_qos.rampup_multiplier = attr->sched_qos_value;
+	default:
+		break;
+	}
+}
+
 /*
  * Allow unprivileged RT tasks to decrease priority.
  * Only issue a capable test if needed and only once to avoid an audit
@@ -668,8 +697,11 @@ recheck:
 			return retval;
 	}
 
-	if (attr->sched_flags & SCHED_FLAG_QOS)
-		return -EOPNOTSUPP;
+	if (attr->sched_flags & SCHED_FLAG_QOS) {
+		retval = sched_qos_validate(p, attr);
+		if (retval)
+			return retval;
+	}
 
 	/*
 	 * SCHED_DEADLINE bandwidth accounting relies on stable cpusets
@@ -799,7 +831,9 @@ change:
 		__setscheduler_params(p, attr);
 		__setscheduler_prio(p, newprio);
 	}
+
 	__setscheduler_uclamp(p, attr);
+	__setscheduler_sched_qos(p, attr);
 
 	if (queued) {
 		/*

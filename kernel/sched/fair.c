@@ -4906,7 +4906,7 @@ static inline void util_est_update(struct cfs_rq *cfs_rq,
 	if (!task_sleep) {
 		if (task_util(p) > task_util_dequeued(p)) {
 			ewma &= ~UTIL_AVG_UNCHANGED;
-			ewma = approximate_util_avg(ewma, p->se.delta_exec / 1000);
+			ewma = approximate_util_avg(ewma, (p->se.delta_exec/1000) * p->sched_qos.rampup_multiplier);
 			goto done;
 		}
 		return;
@@ -4974,6 +4974,8 @@ static inline void util_est_update(struct cfs_rq *cfs_rq,
 	 * 0.25, thus making w=1/4 ( >>= UTIL_EST_WEIGHT_SHIFT)
 	 */
 	ewma <<= UTIL_EST_WEIGHT_SHIFT;
+	if (p->sched_qos.rampup_multiplier)
+		last_ewma_diff /= p->sched_qos.rampup_multiplier;
 	ewma  -= last_ewma_diff;
 	ewma >>= UTIL_EST_WEIGHT_SHIFT;
 done:
@@ -9643,7 +9645,7 @@ static void update_cpu_capacity(struct sched_domain *sd, int cpu)
 	 * on TICK doesn't end up hurting it as it can happen after we would
 	 * have crossed this threshold.
 	 *
-	 * To ensure that invaraince is taken into account, we don't scale time
+	 * To ensure that invariance is taken into account, we don't scale time
 	 * and use it as-is, approximate_util_avg() will then let us know the
 	 * our threshold.
 	 */

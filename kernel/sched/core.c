@@ -152,6 +152,8 @@ __read_mostly int sysctl_resched_latency_warn_once = 1;
  */
 const_debug unsigned int sysctl_sched_nr_migrate = SCHED_NR_MIGRATE_BREAK;
 
+unsigned int sysctl_sched_qos_default_rampup_multiplier	= 1;
+
 __read_mostly int scheduler_running;
 
 #ifdef CONFIG_SCHED_CORE
@@ -4488,6 +4490,47 @@ static int sysctl_schedstats(const struct ctl_table *table, int write, void *buf
 #endif /* CONFIG_SCHEDSTATS */
 
 #ifdef CONFIG_SYSCTL
+static void sched_qos_sync_sysctl(void)
+{
+	struct task_struct *g, *p;
+
+	guard(rcu)();
+	for_each_process_thread(g, p) {
+		struct rq_flags rf;
+		struct rq *rq;
+
+		rq = task_rq_lock(p, &rf);
+		if (!test_bit(SCHED_QOS_RAMPUP_MULTIPLIER, p->sched_qos.user_defined))
+			p->sched_qos.rampup_multiplier = sysctl_sched_qos_default_rampup_multiplier;
+		task_rq_unlock(rq, p, &rf);
+	}
+}
+
+static int sysctl_sched_qos_handler(struct ctl_table *table, int write,
+				    void *buffer, size_t *lenp, loff_t *ppos)
+{
+	unsigned int old_rampup_mult;
+	int result;
+
+	old_rampup_mult = sysctl_sched_qos_default_rampup_multiplier;
+
+	result = proc_dointvec(table, write, buffer, lenp, ppos);
+	if (result)
+		goto undo;
+	if (!write)
+		return 0;
+
+	if (old_rampup_mult != sysctl_sched_qos_default_rampup_multiplier) {
+		sched_qos_sync_sysctl();
+	}
+
+	return 0;
+
+undo:
+	sysctl_sched_qos_default_rampup_multiplier = old_rampup_mult;
+	return result;
+}
+
 static struct ctl_table sched_core_sysctls[] = {
 #ifdef CONFIG_SCHEDSTATS
 	{
@@ -4534,6 +4577,13 @@ static struct ctl_table sched_core_sysctls[] = {
 		.extra2		= SYSCTL_FOUR,
 	},
 #endif /* CONFIG_NUMA_BALANCING */
+	{
+		.procname	= "sched_qos_default_rampup_multiplier",
+		.data           = &sysctl_sched_qos_default_rampup_multiplier,
+		.maxlen         = sizeof(unsigned int),
+		.mode           = 0644,
+		.proc_handler   = sysctl_sched_qos_handler,
+	},
 };
 static int __init sched_core_sysctl_init(void)
 {
@@ -4542,6 +4592,21 @@ static int __init sched_core_sysctl_init(void)
 }
 late_initcall(sched_core_sysctl_init);
 #endif /* CONFIG_SYSCTL */
+
+static void sched_qos_fork(struct task_struct *p)
+{
+	/*
+	 * We always force reset sched_qos on fork. These sched_qos are treated
+	 * as finite resources to help improve quality of life. Inheriting them
+	 * by default can easily lead to a situation where the QoS hint become
+	 * meaningless because all tasks in the system have it.
+	 *
+	 * Every task must request the QoS explicitly if it needs it. No
+	 * accidental inheritance is allowed to keep the default behavior sane.
+	 */
+	bitmap_zero(p->sched_qos.user_defined, SCHED_QOS_MAX);
+	p->sched_qos.rampup_multiplier = sysctl_sched_qos_default_rampup_multiplier;
+}
 
 /*
  * fork()/clone()-time setup:
@@ -4562,6 +4627,7 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 	p->prio = current->normal_prio;
 
 	uclamp_fork(p);
+	sched_qos_fork(p);
 
 	/*
 	 * Revert to default priority/policy on fork if requested.
