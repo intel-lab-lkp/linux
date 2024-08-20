@@ -51,6 +51,78 @@ static int fuse_send_open(struct fuse_mount *fm, u64 nodeid,
 	return fuse_simple_request(fm, &args);
 }
 
+/*
+ * Open the file and update inode attributes
+ */
+static int fuse_file_open_getattr(struct fuse_mount *fm, u64 nodeid,
+				  struct inode *inode, unsigned int open_flags,
+				  int opcode,
+				  struct fuse_open_out *open_outargp)
+{
+	struct fuse_conn *fc = fm->fc;
+	u64 attr_version = fuse_get_attr_version(fc);
+	struct fuse_open_in inarg;
+	struct fuse_attr_out attr_outarg;
+	FUSE_ARGS(args);
+	int err;
+
+	/* convert the opcode from plain open to open-with-getattr */
+	if (opcode == FUSE_OPEN) {
+		if (fc->no_open_getattr)
+			return -ENOSYS;
+		opcode = FUSE_OPEN_GETATTR;
+	} else {
+		if (fc->no_opendir_getattr)
+			return -ENOSYS;
+		opcode = FUSE_OPENDIR_GETATTR;
+	}
+
+	memset(&inarg, 0, sizeof(inarg));
+	inarg.flags = open_flags & ~(O_CREAT | O_EXCL | O_NOCTTY);
+	if (!fm->fc->atomic_o_trunc)
+		inarg.flags &= ~O_TRUNC;
+
+	if (fm->fc->handle_killpriv_v2 &&
+	    (inarg.flags & O_TRUNC) && !capable(CAP_FSETID)) {
+		inarg.open_flags |= FUSE_OPEN_KILL_SUIDGID;
+	}
+
+	args.opcode = opcode;
+	args.nodeid = nodeid;
+	args.in_numargs = 1;
+	args.in_args[0].size = sizeof(inarg);
+	args.in_args[0].value = &inarg;
+	args.out_numargs = 2;
+	args.out_args[0].size = sizeof(*open_outargp);
+	args.out_args[0].value = open_outargp;
+	args.out_args[1].size = sizeof(attr_outarg);
+	args.out_args[1].value = &attr_outarg;
+
+	err = fuse_simple_request(fm, &args);
+	if (err) {
+		if (err == -ENOSYS) {
+			if (opcode == FUSE_OPEN)
+				fc->no_open_getattr = 1;
+			else
+				fc->no_opendir_getattr = 1;
+		}
+		return err;
+	}
+
+	err = -EIO;
+	if (fuse_invalid_attr(&attr_outarg.attr) ||
+	    inode_wrong_type(inode, attr_outarg.attr.mode)) {
+		fuse_make_bad(inode);
+		return err;
+	}
+
+	fuse_change_attributes(inode, &attr_outarg.attr, NULL,
+			       ATTR_TIMEOUT(&attr_outarg), attr_version);
+
+	return 0;
+}
+
+
 struct fuse_file *fuse_file_alloc(struct fuse_mount *fm, bool release)
 {
 	struct fuse_file *ff;
@@ -123,7 +195,12 @@ static void fuse_file_put(struct fuse_file *ff, bool sync)
 	}
 }
 
+/*
+ * @inode might be NULL, the caller indicates the attr updates are not
+ *        needed on open
+ */
 struct fuse_file *fuse_file_open(struct fuse_mount *fm, u64 nodeid,
+				 struct inode *inode,
 				 unsigned int open_flags, bool isdir)
 {
 	struct fuse_conn *fc = fm->fc;
@@ -143,7 +220,19 @@ struct fuse_file *fuse_file_open(struct fuse_mount *fm, u64 nodeid,
 		struct fuse_open_out *outargp = &ff->args->open_outarg;
 		int err;
 
-		err = fuse_send_open(fm, nodeid, open_flags, opcode, outargp);
+		err = -ENOSYS;
+		if (inode) {
+			/*
+			 * open-with-getattr preferred for
+			 * close-to-open coherency
+			 */
+			err = fuse_file_open_getattr(fm, nodeid, inode,
+						     open_flags, opcode,
+						     outargp);
+		}
+		if (err == -ENOSYS)
+			err = fuse_send_open(fm, nodeid, open_flags, opcode,
+					     outargp);
 		if (!err) {
 			ff->fh = outargp->fh;
 			ff->open_flags = outargp->open_flags;
@@ -172,7 +261,8 @@ struct fuse_file *fuse_file_open(struct fuse_mount *fm, u64 nodeid,
 int fuse_do_open(struct fuse_mount *fm, u64 nodeid, struct file *file,
 		 bool isdir)
 {
-	struct fuse_file *ff = fuse_file_open(fm, nodeid, file->f_flags, isdir);
+	struct fuse_file *ff = fuse_file_open(fm, nodeid, file_inode(file),
+					      file->f_flags, isdir);
 
 	if (!IS_ERR(ff))
 		file->private_data = ff;
