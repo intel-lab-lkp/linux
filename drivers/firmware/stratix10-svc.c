@@ -1122,6 +1122,7 @@ static const struct of_device_id stratix10_svc_drv_match[] = {
 	{.compatible = "intel,agilex-svc"},
 	{},
 };
+MODULE_DEVICE_TABLE(of, stratix10_svc_drv_match);
 
 static int stratix10_svc_drv_probe(struct platform_device *pdev)
 {
