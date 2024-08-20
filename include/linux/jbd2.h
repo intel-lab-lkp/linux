@@ -105,6 +105,8 @@ typedef struct jbd2_journal_handle handle_t;	/* Atomic operation type */
 typedef struct journal_s	journal_t;	/* Journal control structure */
 #endif
 
+void drain_cma_bh(journal_t *journal);
+
 /*
  * Internal structures used by the logging mechanism:
  */

@@ -21,6 +21,7 @@
 #include <linux/slab.h>
 #include <linux/blkdev.h>
 #include <trace/events/jbd2.h>
+#include <linux/mm.h>
 
 /*
  * Unlink a buffer from a transaction checkpoint list.
@@ -137,6 +138,32 @@ __flush_batch(journal_t *journal, int *batch_count)
 	*batch_count = 0;
 }
 
+#ifdef CONFIG_CMA
+void drain_cma_bh(journal_t *journal)
+{
+	struct journal_head	*jh;
+	struct buffer_head	*bh;
+
+	if (!journal->j_checkpoint_transactions)
+		return;
+
+	jh = journal->j_checkpoint_transactions->t_checkpoint_list;
+	while (jh) {
+		bh = jh2bh(jh);
+
+		if (bh && get_pageblock_migratetype(bh->b_page) == MIGRATE_CMA) {
+			mutex_lock_io(&journal->j_checkpoint_mutex);
+			jbd2_log_do_checkpoint(journal);
+			mutex_unlock(&journal->j_checkpoint_mutex);
+			return;
+		}
+
+		jh = jh->b_cpnext;
+	}
+}
+#else
+void drain_cma_bh(journal_t *journal) {}
+#endif
 /*
  * Perform an actual checkpoint. We take the first transaction on the
  * list of transactions to be checkpointed and send all its buffers

@@ -41,6 +41,7 @@
 #include <linux/bitops.h>
 #include <linux/ratelimit.h>
 #include <linux/sched/mm.h>
+#include <linux/swap.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/jbd2.h>
@@ -1272,6 +1273,9 @@ static unsigned long jbd2_journal_shrink_scan(struct shrinker *shrink,
 
 	count = percpu_counter_read_positive(&journal->j_checkpoint_jh_count);
 	trace_jbd2_shrink_scan_enter(journal, sc->nr_to_scan, count);
+
+	if (current_is_kswapd())
+		drain_cma_bh(journal);
 
 	nr_shrunk = jbd2_journal_shrink_checkpoint_list(journal, &nr_to_scan);
 
