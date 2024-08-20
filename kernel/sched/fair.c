@@ -1118,6 +1118,7 @@ static s64 update_curr_se(struct rq *rq, struct sched_entity *curr)
 
 	curr->exec_start = now;
 	curr->sum_exec_runtime += delta_exec;
+	curr->delta_exec = delta_exec;
 
 	if (schedstat_enabled()) {
 		struct sched_statistics *stats;
@@ -1126,7 +1127,6 @@ static s64 update_curr_se(struct rq *rq, struct sched_entity *curr)
 		__schedstat_set(stats->exec_max,
 				max(delta_exec, stats->exec_max));
 	}
-
 	return delta_exec;
 }
 
@@ -4890,15 +4890,19 @@ static inline void util_est_update(struct cfs_rq *cfs_rq,
 	if (!sched_feat(UTIL_EST))
 		return;
 
-	/*
-	 * Skip update of task's estimated utilization when the task has not
-	 * yet completed an activation, e.g. being migrated.
-	 */
-	if (!task_sleep)
-		return;
-
 	/* Get current estimate of utilization */
 	ewma = READ_ONCE(p->se.avg.util_est);
+
+	/*
+	 * If a task is running, update util_est ignoring utilization
+	 * invariance so that if the task suddenly becomes busy we will rampup
+	 * quickly to settle down to our new util_avg.
+	 */
+	if (!task_sleep) {
+		ewma &= ~UTIL_AVG_UNCHANGED;
+		ewma = approximate_util_avg(ewma, p->se.delta_exec / 1000);
+		goto done;
+	}
 
 	/*
 	 * If the PELT values haven't changed since enqueue time,
@@ -4966,6 +4970,14 @@ done:
 	WRITE_ONCE(p->se.avg.util_est, ewma);
 
 	trace_sched_util_est_se_tp(&p->se);
+}
+
+static inline void util_est_update_running(struct cfs_rq *cfs_rq,
+					   struct task_struct *p)
+{
+	util_est_dequeue(cfs_rq, p);
+	util_est_update(cfs_rq, p, false);
+	util_est_enqueue(cfs_rq, p);
 }
 
 static inline unsigned long get_actual_cpu_capacity(int cpu)
@@ -5164,13 +5176,13 @@ static inline int sched_balance_newidle(struct rq *rq, struct rq_flags *rf)
 
 static inline void
 util_est_enqueue(struct cfs_rq *cfs_rq, struct task_struct *p) {}
-
 static inline void
 util_est_dequeue(struct cfs_rq *cfs_rq, struct task_struct *p) {}
-
 static inline void
-util_est_update(struct cfs_rq *cfs_rq, struct task_struct *p,
-		bool task_sleep) {}
+util_est_update(struct cfs_rq *cfs_rq, struct task_struct *p, bool task_sleep) {}
+static inline void
+util_est_update_running(struct cfs_rq *cfs_rq, struct task_struct *p) {}
+
 static inline void update_misfit_status(struct task_struct *p, struct rq *rq) {}
 
 #endif /* CONFIG_SMP */
@@ -6906,6 +6918,8 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		rq->next_balance = jiffies;
 
 dequeue_throttle:
+	if (task_sleep)
+		p->se.delta_exec = 0;
 	util_est_update(&rq->cfs, p, task_sleep);
 	hrtick_update(rq);
 }
@@ -8545,6 +8559,9 @@ again:
 		put_prev_entity(cfs_rq, pse);
 		set_next_entity(cfs_rq, se);
 	}
+
+	if (prev->on_rq)
+		util_est_update_running(&rq->cfs, prev);
 
 	goto done;
 simple:
@@ -12709,6 +12726,8 @@ static void task_tick_fair(struct rq *rq, struct task_struct *curr, int queued)
 		cfs_rq = cfs_rq_of(se);
 		entity_tick(cfs_rq, se, queued);
 	}
+
+	util_est_update_running(&rq->cfs, curr);
 
 	if (static_branch_unlikely(&sched_numa_balancing))
 		task_tick_numa(rq, curr);
