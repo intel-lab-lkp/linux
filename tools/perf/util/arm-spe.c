@@ -11,6 +11,7 @@
 #include <linux/bitops.h>
 #include <linux/kernel.h>
 #include <linux/log2.h>
+#include <linux/string.h>
 #include <linux/types.h>
 #include <linux/zalloc.h>
 #include <stdlib.h>
@@ -45,7 +46,6 @@ struct arm_spe {
 	u32				auxtrace_type;
 	struct perf_session		*session;
 	struct machine			*machine;
-	u32				pmu_type;
 	u64				midr;
 
 	struct perf_tsc_conversion	tc;
@@ -1053,12 +1053,10 @@ static void arm_spe_free(struct perf_session *session)
 	free(spe);
 }
 
-static bool arm_spe_evsel_is_auxtrace(struct perf_session *session,
+static bool arm_spe_evsel_is_auxtrace(struct perf_session *session __maybe_unused,
 				      struct evsel *evsel)
 {
-	struct arm_spe *spe = container_of(session->auxtrace, struct arm_spe, auxtrace);
-
-	return evsel->core.attr.type == spe->pmu_type;
+	return strstarts(evsel->name, ARM_SPE_PMU_NAME);
 }
 
 static const char * const arm_spe_info_fmts[] = {
@@ -1099,7 +1097,7 @@ arm_spe_synth_events(struct arm_spe *spe, struct perf_session *session)
 	int err;
 
 	evlist__for_each_entry(evlist, evsel) {
-		if (evsel->core.attr.type == spe->pmu_type) {
+		if (arm_spe_evsel_is_auxtrace(session, evsel)) {
 			found = true;
 			break;
 		}
@@ -1284,7 +1282,6 @@ int arm_spe_process_auxtrace_info(union perf_event *event,
 	spe->session = session;
 	spe->machine = &session->machines.host; /* No kvm support */
 	spe->auxtrace_type = auxtrace_info->type;
-	spe->pmu_type = auxtrace_info->priv[ARM_SPE_PMU_TYPE];
 	spe->midr = midr;
 
 	spe->timeless_decoding = arm_spe__is_timeless_decoding(spe);
