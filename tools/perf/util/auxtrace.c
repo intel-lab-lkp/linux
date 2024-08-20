@@ -690,9 +690,13 @@ int auxtrace_record__read_finish(struct auxtrace_record *itr, int idx)
 
 			cpu_map_idx = evlist__find_cpu_map_idx(itr->evlist,
 							       evsel, idx);
-			/* No map is found in per CPU mmap */
+			/*
+			 * No map is found in per CPU mmap. Multiple AUX events
+			 * might be opened in a session, continue to check if
+			 * the next AUX event can cover the mmaped buffer 'idx'.
+			 */
 			if (cpu_map_idx == -ENOENT)
-				return cpu_map_idx;
+				continue;
 
 			if (evsel->disabled)
 				return 0;
