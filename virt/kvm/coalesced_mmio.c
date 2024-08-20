@@ -16,6 +16,7 @@
 #include <linux/slab.h>
 #include <linux/kvm.h>
 #include <linux/anon_inodes.h>
+#include <linux/poll.h>
 
 #include "coalesced_mmio.h"
 
@@ -97,6 +98,10 @@ static int coalesced_mmio_write(struct kvm_vcpu *vcpu,
 	smp_wmb();
 	ring->last = (insert + 1) % KVM_COALESCED_MMIO_MAX;
 	spin_unlock(lock);
+
+	if (dev->buffer_dev)
+		wake_up_interruptible(&dev->buffer_dev->wait_queue);
+
 	return 0;
 }
 
@@ -223,9 +228,25 @@ static int coalesced_mmio_buffer_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
+static __poll_t coalesced_mmio_buffer_poll(struct file *file, struct poll_table_struct *wait)
+{
+	struct kvm_coalesced_mmio_buffer_dev *dev = file->private_data;
+	__poll_t mask = 0;
+
+	poll_wait(file, &dev->wait_queue, wait);
+
+	spin_lock(&dev->ring_lock);
+	if (dev->ring && (READ_ONCE(dev->ring->first) != READ_ONCE(dev->ring->last)))
+		mask = EPOLLIN | EPOLLRDNORM;
+	spin_unlock(&dev->ring_lock);
+
+	return mask;
+}
+
 static const struct file_operations coalesced_mmio_buffer_ops = {
 	.mmap = coalesced_mmio_buffer_mmap,
 	.release = coalesced_mmio_buffer_release,
+	.poll = coalesced_mmio_buffer_poll,
 };
 
 int kvm_vm_ioctl_create_coalesced_mmio_buffer(struct kvm *kvm)
@@ -239,6 +260,7 @@ int kvm_vm_ioctl_create_coalesced_mmio_buffer(struct kvm *kvm)
 		return -ENOMEM;
 
 	dev->kvm = kvm;
+	init_waitqueue_head(&dev->wait_queue);
 	spin_lock_init(&dev->ring_lock);
 
 	ret = anon_inode_getfd("coalesced_mmio_buf", &coalesced_mmio_buffer_ops,

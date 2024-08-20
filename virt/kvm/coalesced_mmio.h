@@ -26,6 +26,7 @@ struct kvm_coalesced_mmio_dev {
 struct kvm_coalesced_mmio_buffer_dev {
 	struct list_head list;
 	struct kvm *kvm;
+	wait_queue_head_t wait_queue;
 	spinlock_t ring_lock;
 	struct kvm_coalesced_mmio_ring *ring;
 };
