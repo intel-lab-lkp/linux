@@ -239,7 +239,7 @@ struct x86_emulate_ops {
 
 /* Type, address-of, and value of an instruction's operand. */
 struct operand {
-	enum { OP_REG, OP_MEM, OP_MEM_STR, OP_IMM, OP_XMM, OP_MM, OP_NONE } type;
+	enum { OP_REG, OP_MEM, OP_MEM_STR, OP_IMM, OP_XMM, OP_YMM, OP_MM, OP_NONE } type;
 	unsigned int bytes;
 	unsigned int count;
 	union {
@@ -253,13 +253,16 @@ struct operand {
 			unsigned seg;
 		} mem;
 		unsigned xmm;
+		unsigned ymm;
 		unsigned mm;
 	} addr;
 	union {
 		unsigned long val;
 		u64 val64;
 		char valptr[sizeof(sse128_t)];
+		char valptr2[sizeof(avx256_t)];
 		sse128_t vec_val;
+		avx256_t vec_val2;
 		u64 mm_val;
 		void *data;
 	};
@@ -347,6 +350,7 @@ struct x86_emulate_ctxt {
 
 	bool rip_relative;
 	u8 rex_prefix;
+	u8 vex_prefix[3];
 	u8 lock_prefix;
 	u8 rep_prefix;
 	/* bitmaps of registers in _regs[] that can be read */

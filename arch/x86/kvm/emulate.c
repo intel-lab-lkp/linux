@@ -1144,6 +1144,19 @@ static void decode_register_operand(struct x86_emulate_ctxt *ctxt,
 	else
 		reg = (ctxt->b & 7) | ((ctxt->rex_prefix & 1) << 3);
 
+	if (ctxt->d & Avx) {
+		op->bytes = ctxt->op_bytes;
+		if (op->bytes == 16) {
+			op->type = OP_XMM;
+			op->addr.xmm = reg;
+			kvm_read_sse_reg(reg, &op->vec_val);
+		} else {
+			op->type = OP_YMM;
+			op->addr.ymm = reg;
+			kvm_read_avx_reg(reg, &op->vec_val2);
+		}
+		return;
+	}
 	if (ctxt->d & Sse) {
 		op->type = OP_XMM;
 		op->bytes = 16;
@@ -1177,13 +1190,24 @@ static int decode_modrm(struct x86_emulate_ctxt *ctxt,
 			struct operand *op)
 {
 	u8 sib;
-	int index_reg, base_reg, scale;
+	int index_reg = 0, base_reg = 0, scale = 0;
 	int rc = X86EMUL_CONTINUE;
 	ulong modrm_ea = 0;
 
-	ctxt->modrm_reg = ((ctxt->rex_prefix << 1) & 8); /* REX.R */
-	index_reg = (ctxt->rex_prefix << 2) & 8; /* REX.X */
-	base_reg = (ctxt->rex_prefix << 3) & 8; /* REX.B */
+	if (ctxt->vex_prefix[0]) {
+		if ((ctxt->vex_prefix[1] & 0x80) == 0)  /* VEX._R */
+			ctxt->modrm_reg = 8;
+		if (ctxt->vex_prefix[0] == 0xc4) {
+			if ((ctxt->vex_prefix[1] & 0x40) == 0) /* VEX._X */
+				index_reg = 8;
+			if ((ctxt->vex_prefix[1] & 0x20) == 0) /* VEX._B */
+				base_reg = 8;
+		}
+	} else {
+		ctxt->modrm_reg = ((ctxt->rex_prefix << 1) & 8); /* REX.R */
+		index_reg = (ctxt->rex_prefix << 2) & 8; /* REX.X */
+		base_reg = (ctxt->rex_prefix << 3) & 8; /* REX.B */
+	}
 
 	ctxt->modrm_mod = (ctxt->modrm & 0xc0) >> 6;
 	ctxt->modrm_reg |= (ctxt->modrm & 0x38) >> 3;
@@ -1195,6 +1219,19 @@ static int decode_modrm(struct x86_emulate_ctxt *ctxt,
 		op->bytes = (ctxt->d & ByteOp) ? 1 : ctxt->op_bytes;
 		op->addr.reg = decode_register(ctxt, ctxt->modrm_rm,
 				ctxt->d & ByteOp);
+		if (ctxt->d & Avx) {
+			op->bytes = ctxt->op_bytes;
+			if (op->bytes == 16) {
+				op->type = OP_XMM;
+				op->addr.xmm = ctxt->modrm_rm;
+				kvm_read_sse_reg(ctxt->modrm_rm, &op->vec_val);
+			} else {
+				op->type = OP_YMM;
+				op->addr.ymm = ctxt->modrm_rm;
+				kvm_read_avx_reg(ctxt->modrm_rm, &op->vec_val2);
+			}
+			return rc;
+		}
 		if (ctxt->d & Sse) {
 			op->type = OP_XMM;
 			op->bytes = 16;
@@ -1807,6 +1844,9 @@ static int writeback(struct x86_emulate_ctxt *ctxt, struct operand *op)
 				       op->bytes * op->count);
 	case OP_XMM:
 		kvm_write_sse_reg(op->addr.xmm, &op->vec_val);
+		break;
+	case OP_YMM:
+		kvm_write_avx_reg(op->addr.ymm, &op->vec_val2);
 		break;
 	case OP_MM:
 		kvm_write_mmx_reg(op->addr.mm, &op->mm_val);
@@ -3232,7 +3272,7 @@ static int em_rdpmc(struct x86_emulate_ctxt *ctxt)
 
 static int em_mov(struct x86_emulate_ctxt *ctxt)
 {
-	memcpy(ctxt->dst.valptr, ctxt->src.valptr, sizeof(ctxt->src.valptr));
+	memcpy(ctxt->dst.valptr, ctxt->src.valptr, ctxt->op_bytes);
 	return X86EMUL_CONTINUE;
 }
 
@@ -4460,6 +4500,23 @@ static const struct opcode twobyte_table[256] = {
 	N, N, N, N, N, N, N, N, N, N, N, N, N, N, N, N
 };
 
+static const struct gprefix pfx_avx_0f_6f_0f_7f = {
+	N, I(Avx | Aligned, em_mov), N, I(Avx | Unaligned, em_mov),
+};
+
+static const struct opcode avx_0f_table[256] = {
+	/* 0x00 - 0x5f */
+	X16(N), X16(N), X16(N), X16(N), X16(N), X16(N),
+	/* 0x60 - 0x6F */
+	X8(N), X4(N), X2(N), N,
+	GP(SrcMem | DstReg | ModRM | Mov, &pfx_avx_0f_6f_0f_7f),
+	/* 0x70 - 0x7F */
+	X8(N), X4(N), X2(N), N,
+	GP(SrcReg | DstMem | ModRM | Mov, &pfx_avx_0f_6f_0f_7f),
+	/* 0x80 - 0xFF */
+	X16(N), X16(N), X16(N), X16(N), X16(N), X16(N), X16(N), X16(N),
+};
+
 static const struct instr_dual instr_dual_0f_38_f0 = {
 	I(DstReg | SrcMem | Mov, em_movbe), N
 };
@@ -4724,6 +4781,41 @@ done:
 	return rc;
 }
 
+static struct opcode x86_decode_avx(struct x86_emulate_ctxt *ctxt)
+{
+	u8 map, pp, l, v;
+
+	if (ctxt->vex_prefix[0] == 0xc5) {
+		pp = ctxt->vex_prefix[1] & 0x3;	/* VEX.p1p0 */
+		l = ctxt->vex_prefix[1] & 0x4;	/* VEX.L */
+		v = ~((ctxt->vex_prefix[1] >> 3) & 0xf) & 0xf; /* VEX.v3v2v1v0 */
+		map = 1; /* for 0f map */
+		ctxt->opcode_len = 2;
+	} else {
+		map = ctxt->vex_prefix[1] & 0x1f;
+		pp = ctxt->vex_prefix[2] & 0x3;
+		l = ctxt->vex_prefix[2] & 0x4;
+		v = ~((ctxt->vex_prefix[2] >> 3) & 0xf) & 0xf;
+		ctxt->opcode_len = 3;
+	}
+
+	if (l)
+		ctxt->op_bytes = 32;
+	else
+		ctxt->op_bytes = 16;
+
+	switch (pp) {
+	case 0: ctxt->rep_prefix = 0x00; break;
+	case 1: ctxt->rep_prefix = 0x66; break;
+	case 2: ctxt->rep_prefix = 0xf3; break;
+	case 3: ctxt->rep_prefix = 0xf2; break;
+	}
+
+	if (map == 1 && !v)
+		return avx_0f_table[ctxt->b];
+	return (struct opcode){.flags = NotImpl};
+}
+
 int x86_decode_insn(struct x86_emulate_ctxt *ctxt, void *insn, int insn_len, int emulation_type)
 {
 	int rc = X86EMUL_CONTINUE;
@@ -4777,7 +4869,7 @@ int x86_decode_insn(struct x86_emulate_ctxt *ctxt, void *insn, int insn_len, int
 	ctxt->op_bytes = def_op_bytes;
 	ctxt->ad_bytes = def_ad_bytes;
 
-	/* Legacy prefixes. */
+	/* prefixes. */
 	for (;;) {
 		switch (ctxt->b = insn_fetch(u8, ctxt)) {
 		case 0x66:	/* operand-size override */
@@ -4822,6 +4914,19 @@ int x86_decode_insn(struct x86_emulate_ctxt *ctxt, void *insn, int insn_len, int
 				goto done_prefixes;
 			ctxt->rex_prefix = ctxt->b;
 			continue;
+		case 0xc4: /* VEX */
+			if (mode != X86EMUL_MODE_PROT64)
+				goto done_prefixes;
+			ctxt->vex_prefix[0] = ctxt->b;
+			ctxt->vex_prefix[1] = insn_fetch(u8, ctxt);
+			ctxt->vex_prefix[2] = insn_fetch(u8, ctxt);
+			break;
+		case 0xc5: /* VEX */
+			if (mode != X86EMUL_MODE_PROT64)
+				goto done_prefixes;
+			ctxt->vex_prefix[0] = ctxt->b;
+			ctxt->vex_prefix[1] = insn_fetch(u8, ctxt);
+			break;
 		case 0xf0:	/* LOCK */
 			ctxt->lock_prefix = 1;
 			break;
@@ -4844,10 +4949,10 @@ done_prefixes:
 	if (ctxt->rex_prefix & 8)
 		ctxt->op_bytes = 8;	/* REX.W */
 
-	/* Opcode byte(s). */
-	opcode = opcode_table[ctxt->b];
-	/* Two-byte opcode? */
-	if (ctxt->b == 0x0f) {
+	if (ctxt->vex_prefix[0]) {
+		opcode = x86_decode_avx(ctxt);
+	} else if (ctxt->b == 0x0f) {
+		/* Two-byte opcode? */
 		ctxt->opcode_len = 2;
 		ctxt->b = insn_fetch(u8, ctxt);
 		opcode = twobyte_table[ctxt->b];
@@ -4858,17 +4963,15 @@ done_prefixes:
 			ctxt->b = insn_fetch(u8, ctxt);
 			opcode = opcode_map_0f_38[ctxt->b];
 		}
+	} else {
+		/* Opcode byte(s). */
+		opcode = opcode_table[ctxt->b];
 	}
+
 	ctxt->d = opcode.flags;
 
 	if (ctxt->d & ModRM)
 		ctxt->modrm = insn_fetch(u8, ctxt);
-
-	/* vex-prefix instructions are not implemented */
-	if (ctxt->opcode_len == 1 && (ctxt->b == 0xc5 || ctxt->b == 0xc4) &&
-	    (mode == X86EMUL_MODE_PROT64 || (ctxt->modrm & 0xc0) == 0xc0)) {
-		ctxt->d = NotImpl;
-	}
 
 	while (ctxt->d & GroupMask) {
 		switch (ctxt->d & GroupMask) {
@@ -5091,6 +5194,7 @@ void init_decode_cache(struct x86_emulate_ctxt *ctxt)
 	/* Clear fields that are set conditionally but read without a guard. */
 	ctxt->rip_relative = false;
 	ctxt->rex_prefix = 0;
+	memset(ctxt->vex_prefix, 0, sizeof(ctxt->vex_prefix));;
 	ctxt->lock_prefix = 0;
 	ctxt->rep_prefix = 0;
 	ctxt->regs_valid = 0;
