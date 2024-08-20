@@ -507,19 +507,18 @@ static int sun8i_mixer_bind(struct device *dev, struct device *master,
 		return ret;
 	}
 
-	mixer->bus_clk = devm_clk_get(dev, "bus");
+	mixer->bus_clk = devm_clk_get_enabled(dev, "bus");
 	if (IS_ERR(mixer->bus_clk)) {
 		dev_err(dev, "Couldn't get the mixer bus clock\n");
 		ret = PTR_ERR(mixer->bus_clk);
 		goto err_assert_reset;
 	}
-	clk_prepare_enable(mixer->bus_clk);
 
-	mixer->mod_clk = devm_clk_get(dev, "mod");
+	mixer->mod_clk = devm_clk_get_enabled(dev, "mod");
 	if (IS_ERR(mixer->mod_clk)) {
 		dev_err(dev, "Couldn't get the mixer module clock\n");
 		ret = PTR_ERR(mixer->mod_clk);
-		goto err_disable_bus_clk;
+		goto err_assert_reset;
 	}
 
 	/*
@@ -529,8 +528,6 @@ static int sun8i_mixer_bind(struct device *dev, struct device *master,
 	 */
 	if (mixer->cfg->mod_rate)
 		clk_set_rate(mixer->mod_clk, mixer->cfg->mod_rate);
-
-	clk_prepare_enable(mixer->mod_clk);
 
 	list_add_tail(&mixer->engine.list, &drv->engine_list);
 
@@ -592,8 +589,6 @@ static int sun8i_mixer_bind(struct device *dev, struct device *master,
 
 	return 0;
 
-err_disable_bus_clk:
-	clk_disable_unprepare(mixer->bus_clk);
 err_assert_reset:
 	reset_control_assert(mixer->reset);
 	return ret;
@@ -606,8 +601,6 @@ static void sun8i_mixer_unbind(struct device *dev, struct device *master,
 
 	list_del(&mixer->engine.list);
 
-	clk_disable_unprepare(mixer->mod_clk);
-	clk_disable_unprepare(mixer->bus_clk);
 	reset_control_assert(mixer->reset);
 }
 

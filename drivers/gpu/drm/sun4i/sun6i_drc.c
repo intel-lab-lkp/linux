@@ -42,33 +42,28 @@ static int sun6i_drc_bind(struct device *dev, struct device *master,
 		return ret;
 	}
 
-	drc->bus_clk = devm_clk_get(dev, "ahb");
+	drc->bus_clk = devm_clk_get_enabled(dev, "ahb");
 	if (IS_ERR(drc->bus_clk)) {
 		dev_err(dev, "Couldn't get our bus clock\n");
 		ret = PTR_ERR(drc->bus_clk);
 		goto err_assert_reset;
 	}
-	clk_prepare_enable(drc->bus_clk);
 
-	drc->mod_clk = devm_clk_get(dev, "mod");
+	drc->mod_clk = devm_clk_get_enabled(dev, "mod");
 	if (IS_ERR(drc->mod_clk)) {
 		dev_err(dev, "Couldn't get our mod clock\n");
 		ret = PTR_ERR(drc->mod_clk);
-		goto err_disable_bus_clk;
+		goto err_assert_reset;
 	}
 
 	ret = clk_set_rate_exclusive(drc->mod_clk, 300000000);
 	if (ret) {
 		dev_err(dev, "Couldn't set the module clock frequency\n");
-		goto err_disable_bus_clk;
+		goto err_assert_reset;
 	}
-
-	clk_prepare_enable(drc->mod_clk);
 
 	return 0;
 
-err_disable_bus_clk:
-	clk_disable_unprepare(drc->bus_clk);
 err_assert_reset:
 	reset_control_assert(drc->reset);
 	return ret;
@@ -80,8 +75,6 @@ static void sun6i_drc_unbind(struct device *dev, struct device *master,
 	struct sun6i_drc *drc = dev_get_drvdata(dev);
 
 	clk_rate_exclusive_put(drc->mod_clk);
-	clk_disable_unprepare(drc->mod_clk);
-	clk_disable_unprepare(drc->bus_clk);
 	reset_control_assert(drc->reset);
 }
 
