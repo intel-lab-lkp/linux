@@ -309,6 +309,11 @@ void *kmap_high(struct page *page)
 	unsigned long vaddr;
 
 	/*
+	 * Use might_sleep to check if kmap_high is called
+	 * from atomic context.
+	 */
+	might_sleep();
+	/*
 	 * For highmem pages, we can't trust "virtual" until
 	 * after we have the lock.
 	 */
