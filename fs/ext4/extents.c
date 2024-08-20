@@ -6112,7 +6112,7 @@ int ext4_ext_clear_bb(struct inode *inode)
 			break;
 		if (ret > 0) {
 			path = ext4_find_extent(inode, map.m_lblk, NULL, 0);
-			if (!IS_ERR_OR_NULL(path)) {
+			if (!IS_ERR(path)) {
 				for (j = 0; j < path->p_depth; j++) {
 
 					ext4_mb_mark_bb(inode->i_sb,
