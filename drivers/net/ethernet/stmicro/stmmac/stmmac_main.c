@@ -3378,7 +3378,7 @@ static int stmmac_fpe_start_wq(struct stmmac_priv *priv)
 
 		return -ENOMEM;
 	}
-	netdev_info(priv->dev, "FPE workqueue start");
+	netdev_dbg(priv->dev, "FPE workqueue start");
 
 	return 0;
 }
@@ -4058,7 +4058,7 @@ static void stmmac_fpe_stop_wq(struct stmmac_priv *priv)
 		priv->fpe_wq = NULL;
 	}
 
-	netdev_info(priv->dev, "FPE workqueue stop");
+	netdev_dbg(priv->dev, "FPE workqueue stop");
 }
 
 /**
