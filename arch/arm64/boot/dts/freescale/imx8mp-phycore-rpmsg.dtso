@@ -1,0 +1,55 @@
+// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
+/*
+ * Copyright (C) 2024 PHYTEC Messtechnik GmbH
+ * Author: Dominik Haller <d.haller@phytec.de>
+ * 	   Cem Tenruh <c.tenruh@phytec.de>
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/clock/imx8mp-clock.h>
+
+&{/} {
+	core-m7 {
+		compatible = "fsl,imx8mn-cm7";
+		clocks = <&clk IMX8MP_CLK_M7_DIV>;
+		mboxes = <&mu 0 1>,
+			<&mu 1 1>,
+			<&mu 3 1>;
+		mbox-names = "tx", "rx", "rxdb";
+		memory-region = <&vdevbuffer>, <&vdev0vring0>, <&vdev0vring1>, <&rsc_table>;
+	};
+
+	reserved-memory {
+		ranges;
+		#address-cells = <2>;
+		#size-cells = <2>;
+
+		vdev0vring0: vdev0vring0@55000000 {
+			no-map;
+			reg = <0 0x55000000 0 0x8000>;
+		};
+
+		vdev0vring1: vdev0vring1@55008000 {
+			no-map;
+			reg = <0 0x55008000 0 0x8000>;
+		};
+
+		rsc_table: rsc-table@550ff000 {
+			no-map;
+			reg = <0 0x550ff000 0 0x1000>;
+		};
+
+		vdevbuffer: vdevbuffer@55400000 {
+			compatible = "shared-dma-pool";
+			no-map;
+			reg = <0 0x55400000 0 0x100000>;
+		};
+
+		m7_reserved: m7@80000000 {
+			no-map;
+			reg = <0 0x80000000 0 0x1000000>;
+		};
+	};
+};
