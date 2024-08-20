@@ -356,6 +356,9 @@ struct dualsense_output_report {
 #define DS4_TOUCHPAD_WIDTH	1920
 #define DS4_TOUCHPAD_HEIGHT	942
 
+/* Quirks for third-party controllers */
+#define DS4_QUIRK_OUTPUT_LIGHTBAR_RUMBLE_TOGETHER	BIT(0)
+
 enum dualshock4_dongle_state {
 	DONGLE_DISCONNECTED,
 	DONGLE_CALIBRATING,
@@ -405,6 +408,8 @@ struct dualshock4 {
 	struct work_struct output_worker;
 	bool output_worker_initialized;
 	void *output_report_dmabuf;
+
+	unsigned long quirks;
 };
 
 struct dualshock4_touch_point {
@@ -2143,6 +2148,20 @@ static void dualshock4_output_worker(struct work_struct *work)
 
 	spin_lock_irqsave(&ds4->base.lock, flags);
 
+	/*
+	 * Some 3rd party gamepads expect updates to rumble and lightbar
+	 * together, and sending only one at a time may cancel the other.
+	 *
+	 * If this is such a quirky controller, force sending both
+	 * updates, even if only one has been scheduled.
+	 */
+	if (DS4_QUIRK_OUTPUT_LIGHTBAR_RUMBLE_TOGETHER) {
+		if (ds4->update_rumble || ds4->update_lightbar) {
+			ds4->update_rumble = true; /* 0x01 */
+			ds4->update_lightbar = true; /* 0x02 */
+		}
+	}
+
 	if (ds4->update_rumble) {
 		/* Select classic rumble style haptics and enable it. */
 		common->valid_flag0 |= DS4_OUTPUT_VALID_FLAG0_MOTOR;
@@ -2557,6 +2576,30 @@ static struct ps_device *dualshock4_create(struct hid_device *hdev)
 	 * hid-generic vs hid-playstation axis and button mapping.
 	 */
 	hdev->version |= HID_PLAYSTATION_VERSION_PATCH;
+
+	/*
+	 * Some 3rd party gamepads expect updates to rumble and lightbar
+	 * together, and sending only one at a time may cancel the other.
+	 *
+	 * Set a quirk bit if this is a controller known to behave this way.
+	 */
+	if (hdev->vendor == USB_VENDOR_ID_SONY &&
+	    hdev->product == USB_DEVICE_ID_SONY_PS4_CONTROLLER_2) {
+		/* Match quirky controllers by their HID report descriptor. */
+		if (hdev->bus == BUS_USB && hdev->rsize >= 507 &&
+		    crc32_le(0xffffffff, hdev->rdesc, 507) == 0xabc63a20)
+			ds4->quirks |= DS4_QUIRK_OUTPUT_LIGHTBAR_RUMBLE_TOGETHER;
+
+		/*
+		 * The descriptor via Bluetooth differs from the USB one.
+		 * Allow for 1 byte extra, because there may be a trailing
+		 * 0x00 byte.
+		 */
+		if (hdev->bus == BUS_BLUETOOTH &&
+		    (hdev->rsize == 430 || hdev->rsize == 431) &&
+		    crc32_le(0xffffffff, hdev->rdesc, 430) == 0x4194b762)
+			ds4->quirks |= DS4_QUIRK_OUTPUT_LIGHTBAR_RUMBLE_TOGETHER;
+	}
 
 	ps_dev = &ds4->base;
 	ps_dev->hdev = hdev;
