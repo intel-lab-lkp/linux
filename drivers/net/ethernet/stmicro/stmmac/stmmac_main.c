@@ -3537,8 +3537,21 @@ static int stmmac_hw_setup(struct net_device *dev, bool ptp_register)
 
 	stmmac_set_hw_vlan_mode(priv, priv->hw);
 
-	if (priv->dma_cap.fpesel)
+	if (priv->dma_cap.fpesel) {
+		/* A SW reset just happened in stmmac_init_dma_engine(),
+		 * we should restore fpe_cfg to HW, or FPE will stop working
+		 * from suspend/resume.
+		 */
+		spin_lock(&priv->fpe_cfg.lock);
+		stmmac_fpe_configure(priv, priv->ioaddr,
+				     &priv->fpe_cfg,
+				     priv->plat->tx_queues_to_use,
+				     priv->plat->rx_queues_to_use,
+				     false, priv->fpe_cfg.pmac_enabled);
+		spin_unlock(&priv->fpe_cfg.lock);
+
 		stmmac_fpe_start_wq(priv);
+	}
 
 	return 0;
 }
@@ -7417,7 +7430,7 @@ static void stmmac_fpe_verify_task(struct work_struct *work)
 			stmmac_fpe_configure(priv, priv->ioaddr, fpe_cfg,
 					     priv->plat->tx_queues_to_use,
 					     priv->plat->rx_queues_to_use,
-					     false);
+					     false, fpe_cfg->pmac_enabled);
 			spin_unlock_irqrestore(&priv->fpe_cfg.lock, flags);
 			break;
 		}
