@@ -84,6 +84,7 @@
 #include "intel_pch_display.h"
 #include "intel_pps.h"
 #include "intel_psr.h"
+#include "intel_quirks.h"
 #include "intel_tc.h"
 #include "intel_vdsc.h"
 #include "intel_vrr.h"
@@ -4053,6 +4054,7 @@ intel_edp_init_dpcd(struct intel_dp *intel_dp, struct intel_connector *connector
 
 	drm_dp_read_desc(&intel_dp->aux, &intel_dp->desc,
 			 drm_dp_is_branch(intel_dp->dpcd));
+	intel_init_dpcd_quirks(&dev_priv->display, &intel_dp->desc.ident);
 
 	/*
 	 * Read the eDP display control registers.
@@ -4152,6 +4154,7 @@ void intel_dp_update_sink_caps(struct intel_dp *intel_dp)
 static bool
 intel_dp_get_dpcd(struct intel_dp *intel_dp)
 {
+	struct drm_i915_private *i915 = dp_to_i915(intel_dp);
 	int ret;
 
 	if (intel_dp_init_lttpr_and_dprx_caps(intel_dp) < 0)
@@ -4164,6 +4167,8 @@ intel_dp_get_dpcd(struct intel_dp *intel_dp)
 	if (!intel_dp_is_edp(intel_dp)) {
 		drm_dp_read_desc(&intel_dp->aux, &intel_dp->desc,
 				 drm_dp_is_branch(intel_dp->dpcd));
+
+		intel_init_dpcd_quirks(&i915->display, &intel_dp->desc.ident);
 
 		intel_dp_update_sink_caps(intel_dp);
 	}

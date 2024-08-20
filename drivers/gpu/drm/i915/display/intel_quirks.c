@@ -69,8 +69,17 @@ struct intel_quirk {
 	int device;
 	int subsystem_vendor;
 	int subsystem_device;
+	u8 sink_oui[3];
+	u8 sink_device_id[6];
 	void (*hook)(struct intel_display *display);
 };
+
+#define SINK_OUI(first, second, third) { (first), (second), (third) }
+#define SINK_DEVICE_ID(first, second, third, fourth, fifth, sixth) \
+	{ (first), (second), (third), (fourth), (fifth), (sixth) }
+
+#define SINK_OUI_ANY		SINK_OUI(0, 0, 0)
+#define SINK_DEVICE_ID_ANY	SINK_DEVICE_ID(0, 0, 0, 0, 0, 0)
 
 /* For systems that don't have a meaningful PCI subdevice/subvendor ID */
 struct intel_dmi_quirk {
@@ -140,76 +149,81 @@ static const struct intel_dmi_quirk intel_dmi_quirks[] = {
 
 static struct intel_quirk intel_quirks[] = {
 	/* Lenovo U160 cannot use SSC on LVDS */
-	{ 0x0046, 0x17aa, 0x3920, quirk_ssc_force_disable },
+	{ 0x0046, 0x17aa, 0x3920, SINK_OUI_ANY, SINK_DEVICE_ID_ANY, quirk_ssc_force_disable },
 
 	/* Sony Vaio Y cannot use SSC on LVDS */
-	{ 0x0046, 0x104d, 0x9076, quirk_ssc_force_disable },
+	{ 0x0046, 0x104d, 0x9076, SINK_OUI_ANY, SINK_DEVICE_ID_ANY, quirk_ssc_force_disable },
 
 	/* Acer Aspire 5734Z must invert backlight brightness */
-	{ 0x2a42, 0x1025, 0x0459, quirk_invert_brightness },
+	{ 0x2a42, 0x1025, 0x0459, SINK_OUI_ANY, SINK_DEVICE_ID_ANY, quirk_invert_brightness },
 
 	/* Acer/eMachines G725 */
-	{ 0x2a42, 0x1025, 0x0210, quirk_invert_brightness },
+	{ 0x2a42, 0x1025, 0x0210, SINK_OUI_ANY, SINK_DEVICE_ID_ANY, quirk_invert_brightness },
 
 	/* Acer/eMachines e725 */
-	{ 0x2a42, 0x1025, 0x0212, quirk_invert_brightness },
+	{ 0x2a42, 0x1025, 0x0212, SINK_OUI_ANY, SINK_DEVICE_ID_ANY, quirk_invert_brightness },
 
 	/* Acer/Packard Bell NCL20 */
-	{ 0x2a42, 0x1025, 0x034b, quirk_invert_brightness },
+	{ 0x2a42, 0x1025, 0x034b, SINK_OUI_ANY, SINK_DEVICE_ID_ANY, quirk_invert_brightness },
 
 	/* Acer Aspire 4736Z */
-	{ 0x2a42, 0x1025, 0x0260, quirk_invert_brightness },
+	{ 0x2a42, 0x1025, 0x0260, SINK_OUI_ANY, SINK_DEVICE_ID_ANY, quirk_invert_brightness },
 
 	/* Acer Aspire 5336 */
-	{ 0x2a42, 0x1025, 0x048a, quirk_invert_brightness },
+	{ 0x2a42, 0x1025, 0x048a, SINK_OUI_ANY, SINK_DEVICE_ID_ANY, quirk_invert_brightness },
 
 	/* Acer C720 and C720P Chromebooks (Celeron 2955U) have backlights */
-	{ 0x0a06, 0x1025, 0x0a11, quirk_backlight_present },
+	{ 0x0a06, 0x1025, 0x0a11, SINK_OUI_ANY, SINK_DEVICE_ID_ANY, quirk_backlight_present },
 
 	/* Acer C720 Chromebook (Core i3 4005U) */
-	{ 0x0a16, 0x1025, 0x0a11, quirk_backlight_present },
+	{ 0x0a16, 0x1025, 0x0a11, SINK_OUI_ANY, SINK_DEVICE_ID_ANY, quirk_backlight_present },
 
 	/* Apple Macbook 2,1 (Core 2 T7400) */
-	{ 0x27a2, 0x8086, 0x7270, quirk_backlight_present },
+	{ 0x27a2, 0x8086, 0x7270, SINK_OUI_ANY, SINK_DEVICE_ID_ANY, quirk_backlight_present },
 
 	/* Apple Macbook 4,1 */
-	{ 0x2a02, 0x106b, 0x00a1, quirk_backlight_present },
+	{ 0x2a02, 0x106b, 0x00a1, SINK_OUI_ANY, SINK_DEVICE_ID_ANY, quirk_backlight_present },
 
 	/* Toshiba CB35 Chromebook (Celeron 2955U) */
-	{ 0x0a06, 0x1179, 0x0a88, quirk_backlight_present },
+	{ 0x0a06, 0x1179, 0x0a88, SINK_OUI_ANY, SINK_DEVICE_ID_ANY, quirk_backlight_present },
 
 	/* HP Chromebook 14 (Celeron 2955U) */
-	{ 0x0a06, 0x103c, 0x21ed, quirk_backlight_present },
+	{ 0x0a06, 0x103c, 0x21ed, SINK_OUI_ANY, SINK_DEVICE_ID_ANY, quirk_backlight_present },
 
 	/* Dell Chromebook 11 */
-	{ 0x0a06, 0x1028, 0x0a35, quirk_backlight_present },
+	{ 0x0a06, 0x1028, 0x0a35, SINK_OUI_ANY, SINK_DEVICE_ID_ANY, quirk_backlight_present },
 
 	/* Dell Chromebook 11 (2015 version) */
-	{ 0x0a16, 0x1028, 0x0a35, quirk_backlight_present },
+	{ 0x0a16, 0x1028, 0x0a35, SINK_OUI_ANY, SINK_DEVICE_ID_ANY, quirk_backlight_present },
 
 	/* Toshiba Satellite P50-C-18C */
-	{ 0x191B, 0x1179, 0xF840, quirk_increase_t12_delay },
+	{ 0x191B, 0x1179, 0xF840, SINK_OUI_ANY, SINK_DEVICE_ID_ANY, quirk_increase_t12_delay },
 
 	/* GeminiLake NUC */
-	{ 0x3185, 0x8086, 0x2072, quirk_increase_ddi_disabled_time },
-	{ 0x3184, 0x8086, 0x2072, quirk_increase_ddi_disabled_time },
+	{ 0x3185, 0x8086, 0x2072, SINK_OUI_ANY, SINK_DEVICE_ID_ANY, quirk_increase_ddi_disabled_time },
+	{ 0x3184, 0x8086, 0x2072, SINK_OUI_ANY, SINK_DEVICE_ID_ANY, quirk_increase_ddi_disabled_time },
 	/* ASRock ITX*/
-	{ 0x3185, 0x1849, 0x2212, quirk_increase_ddi_disabled_time },
-	{ 0x3184, 0x1849, 0x2212, quirk_increase_ddi_disabled_time },
+	{ 0x3185, 0x1849, 0x2212, SINK_OUI_ANY, SINK_DEVICE_ID_ANY, quirk_increase_ddi_disabled_time },
+	{ 0x3184, 0x1849, 0x2212, SINK_OUI_ANY, SINK_DEVICE_ID_ANY, quirk_increase_ddi_disabled_time },
 	/* ECS Liva Q2 */
-	{ 0x3185, 0x1019, 0xa94d, quirk_increase_ddi_disabled_time },
-	{ 0x3184, 0x1019, 0xa94d, quirk_increase_ddi_disabled_time },
+	{ 0x3185, 0x1019, 0xa94d, SINK_OUI_ANY, SINK_DEVICE_ID_ANY, quirk_increase_ddi_disabled_time },
+	{ 0x3184, 0x1019, 0xa94d, SINK_OUI_ANY, SINK_DEVICE_ID_ANY, quirk_increase_ddi_disabled_time },
 	/* HP Notebook - 14-r206nv */
-	{ 0x0f31, 0x103c, 0x220f, quirk_invert_brightness },
+	{ 0x0f31, 0x103c, 0x220f, SINK_OUI_ANY, SINK_DEVICE_ID_ANY, quirk_invert_brightness },
 };
 
 void intel_init_quirks(struct intel_display *display)
 {
 	struct pci_dev *d = to_pci_dev(display->drm->dev);
+	u8 any_sink_oui[] = SINK_OUI_ANY;
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(intel_quirks); i++) {
 		struct intel_quirk *q = &intel_quirks[i];
+
+		if (memcmp(q->sink_oui, any_sink_oui,
+			   sizeof(any_sink_oui)) != 0)
+			continue;
 
 		if (d->device == q->device &&
 		    (d->subsystem_vendor == q->subsystem_vendor ||
@@ -221,6 +235,34 @@ void intel_init_quirks(struct intel_display *display)
 	for (i = 0; i < ARRAY_SIZE(intel_dmi_quirks); i++) {
 		if (dmi_check_system(*intel_dmi_quirks[i].dmi_id_list) != 0)
 			intel_dmi_quirks[i].hook(display);
+	}
+}
+
+void intel_init_dpcd_quirks(struct intel_display *display,
+			    struct drm_dp_dpcd_ident *ident)
+{
+	struct pci_dev *d = to_pci_dev(display->drm->dev);
+	u8 any_sink_oui[] = SINK_OUI_ANY;
+	u8 any_sink_device_id[] = SINK_DEVICE_ID_ANY;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(intel_quirks); i++) {
+		struct intel_quirk *q = &intel_quirks[i];
+
+		if (!memcmp(q->sink_oui, any_sink_oui, sizeof(any_sink_oui)))
+			continue;
+
+		if (d->device == q->device &&
+		    (d->subsystem_vendor == q->subsystem_vendor ||
+		     q->subsystem_vendor == PCI_ANY_ID) &&
+		    (d->subsystem_device == q->subsystem_device ||
+		     q->subsystem_device == PCI_ANY_ID) &&
+		    !memcmp(q->sink_oui, ident->oui, sizeof(ident->oui)) &&
+		    (!memcmp(q->sink_device_id, ident->device_id,
+			    sizeof(ident->device_id)) ||
+		     !memcmp(q->sink_device_id, any_sink_device_id,
+			    sizeof(any_sink_device_id))))
+			q->hook(display);
 	}
 }
 
