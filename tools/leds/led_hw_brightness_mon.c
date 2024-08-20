@@ -12,6 +12,7 @@
  * CTRL+C will exit.
  */
 
+#define	USAGE_LED_HW_BRIGHTNESS_MON	"Usage: ./led_hw_brightness_mon <device-name>\n"
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
@@ -33,6 +34,11 @@ int main(int argc, char const *argv[])
 
 	if (argc != 2) {
 		fprintf(stderr, "Requires <device-name> argument\n");
+		return 1;
+	}
+
+	if (!(strcmp(argv[1], "-h")) || !(strcmp(argv[1], "--help"))) {
+		fprintf(stderr, USAGE_LED_HW_BRIGHTNESS_MON);
 		return 1;
 	}
 
