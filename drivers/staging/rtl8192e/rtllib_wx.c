@@ -61,7 +61,7 @@ static inline char *rtl819x_translate_scan(struct rtllib_device *ieee,
 	iwe.cmd = SIOCGIWNAME;
 	for (i = 0; i < ARRAY_SIZE(rtllib_modes); i++) {
 		if (network->mode & BIT(i)) {
-			strcpy(pname, rtllib_modes[i]);
+			strscpy(pname, rtllib_modes[i], sizeof(pname));
 			pname += strlen(rtllib_modes[i]);
 		}
 	}
