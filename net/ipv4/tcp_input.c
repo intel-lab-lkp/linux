@@ -4851,6 +4851,10 @@ static bool tcp_try_coalesce(struct sock *sk,
 
 	*fragstolen = false;
 
+	/* avoid coalescing to urgent skb since last byte is OOB data*/
+	if (tcp_sk(sk)->urg_skb)
+		return false;
+
 	/* Its possible this segment overlaps with prior segment in queue */
 	if (TCP_SKB_CB(from)->seq != TCP_SKB_CB(to)->end_seq)
 		return false;
@@ -5857,6 +5861,7 @@ static void tcp_urg(struct sock *sk, struct sk_buff *skb, const struct tcphdr *t
 			if (skb_copy_bits(skb, ptr, &tmp, 1))
 				BUG();
 			WRITE_ONCE(tp->urg_data, TCP_URG_VALID | tmp);
+			tp->urg_skb = skb;
 			if (!sock_flag(sk, SOCK_DEAD))
 				sk->sk_data_ready(sk);
 		}

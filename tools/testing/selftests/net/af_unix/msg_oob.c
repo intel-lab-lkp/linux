@@ -534,10 +534,7 @@ TEST_F(msg_oob, ex_oob_ahead_break)
 	epollpair(true);
 	siocatmarkpair(false);
 
-	tcp_incompliant {
-		recvpair("hellowol", 8, 10, 0);	/* TCP recv()s "helloworl", why "r" ?? */
-	}
-
+	recvpair("hellowol", 8, 10, 0);
 	epollpair(true);
 	siocatmarkpair(true);
 
@@ -623,10 +620,7 @@ TEST_F(msg_oob, inline_oob_ahead_break)
 	epollpair(false);
 	siocatmarkpair(true);
 
-	tcp_incompliant {
-		recvpair("world", 5, 6, 0);	/* TCP recv()s "oworld", ... "o" ??? */
-	}
-
+	recvpair("world", 5, 6, 0);
 	epollpair(false);
 	siocatmarkpair(false);
 }

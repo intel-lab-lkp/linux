@@ -1402,8 +1402,10 @@ static int tcp_recv_urg(struct sock *sk, struct msghdr *msg, int len, int flags)
 		msg->msg_flags |= MSG_OOB;
 
 		if (len > 0) {
-			if (!(flags & MSG_TRUNC))
+			if (!(flags & MSG_TRUNC)) {
 				err = memcpy_to_msg(msg, &c, 1);
+				TCP_SKB_CB(tp->urg_skb)->consumed_urg = true;
+			}
 			len = 1;
 		} else
 			msg->msg_flags |= MSG_TRUNC;
@@ -2491,11 +2493,13 @@ found_ok_skb:
 			used = len;
 
 		/* Do we have urgent data here? */
-		if (unlikely(tp->urg_data)) {
-			u32 urg_offset = tp->urg_seq - *seq;
+		if (unlikely(tp->urg_skb == skb || TCP_SKB_CB(skb)->consumed_urg)) {
+			u32 urg_offset = TCP_SKB_CB(skb)->end_seq - *seq - 1;
+
 			if (urg_offset < used) {
 				if (!urg_offset) {
-					if (!sock_flag(sk, SOCK_URGINLINE)) {
+					if (!sock_flag(sk, SOCK_URGINLINE) ||
+					    TCP_SKB_CB(skb)->consumed_urg) {
 						WRITE_ONCE(*seq, *seq + 1);
 						urg_hole++;
 						offset++;
@@ -2530,6 +2534,7 @@ found_ok_skb:
 skip_copy:
 		if (unlikely(tp->urg_data) && after(tp->copied_seq, tp->urg_seq)) {
 			WRITE_ONCE(tp->urg_data, 0);
+			tp->urg_skb = NULL;
 			tcp_fast_path_check(sk);
 		}
 
@@ -4726,7 +4731,7 @@ static void __init tcp_struct_check(void)
 	CACHELINE_ASSERT_GROUP_MEMBER(struct tcp_sock, tcp_sock_read_rx, rtt_min);
 	CACHELINE_ASSERT_GROUP_MEMBER(struct tcp_sock, tcp_sock_read_rx, out_of_order_queue);
 	CACHELINE_ASSERT_GROUP_MEMBER(struct tcp_sock, tcp_sock_read_rx, snd_ssthresh);
-	CACHELINE_ASSERT_GROUP_SIZE(struct tcp_sock, tcp_sock_read_rx, 69);
+	CACHELINE_ASSERT_GROUP_SIZE(struct tcp_sock, tcp_sock_read_rx, 77);
 
 	/* TX read-write hotpath cache lines */
 	CACHELINE_ASSERT_GROUP_MEMBER(struct tcp_sock, tcp_sock_write_tx, segs_out);
