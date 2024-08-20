@@ -663,6 +663,61 @@ out:
 }
 
 /*
+ * Check dynamic section DT_FLAGS_1 for a Position Independent
+ * Executable (PIE).
+ */
+bool dso__is_pie(struct dso *dso)
+{
+	Elf *elf = NULL;
+	Elf_Scn *scn = NULL;
+	GElf_Ehdr ehdr;
+	GElf_Shdr shdr;
+	bool is_pie = false;
+	char dso_path[PATH_MAX];
+	int fd = -1;
+
+	if (!dso || (elf_version(EV_CURRENT) == EV_NONE))
+		return is_pie;	// false
+
+	dso__build_id_filename(dso, dso_path, sizeof(dso_path), false);
+
+	fd = open(dso_path, O_RDONLY);
+
+	if (fd < 0) {
+		pr_debug("%s: cannot read cached %s.\n", __func__, dso_path);
+		return is_pie;	// false
+	}
+
+	elf = elf_begin(fd, ELF_C_READ, NULL);
+	gelf_getehdr(elf, &ehdr);
+
+	if (ehdr.e_type == ET_DYN) {
+		scn = elf_section_by_name(elf, &ehdr, &shdr, ".dynamic", NULL);
+		if (scn) {	// check DT_FLAGS_1
+			Elf_Data *data;
+			GElf_Dyn *entry;
+			int n_entries = shdr.sh_size / sizeof(GElf_Dyn);
+
+			data = (Elf_Data *) elf_getdata(scn, NULL);
+			for (int i = 0; i < n_entries; i++) {
+				entry = ((GElf_Dyn *) data->d_buf) + i;
+				if (entry->d_tag == DT_FLAGS_1) {
+					if ((entry->d_un.d_val & DF_1_PIE) != 0) {
+						is_pie = true;
+						break;
+					}
+				}
+			} // end for
+		}
+	}
+
+	elf_end(elf);
+	close(fd);
+
+	return is_pie;
+}
+
+/*
  * We need to check if we have a .dynsym, so that we can handle the
  * .plt, synthesizing its symbols, that aren't on the symtabs (be it
  * .dynsym or .symtab).
