@@ -144,6 +144,8 @@ static inline int xhci_find_next_ext_cap(void __iomem *base, u32 start, int id)
 		if (offset != start && (id == 0 || XHCI_EXT_CAPS_ID(val) == id))
 			return offset;
 
+		cpu_relax();
+
 		next = XHCI_EXT_CAPS_NEXT(val);
 		offset += next << 2;
 	} while (next);
