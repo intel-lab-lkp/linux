@@ -675,7 +675,8 @@ again:
 	return 0;
 }
 
-static int __net_shaper_group(struct net_device *dev, int leaves_count,
+static int __net_shaper_group(struct net_device *dev,
+			      bool cache_root, int leaves_count,
 			      const struct net_shaper_handle *leaves_handles,
 			      struct net_shaper_info *leaves,
 			      struct net_shaper_handle *root_handle,
@@ -710,12 +711,14 @@ static int __net_shaper_group(struct net_device *dev, int leaves_count,
 		}
 	}
 
-	/* For newly created node scope shaper, the following will update
-	 * the handle, due to id allocation.
-	 */
-	ret = net_shaper_cache_pre_insert(dev, root_handle, extack);
-	if (ret)
-		return ret;
+	if (cache_root) {
+		/* For newly created node scope shaper, the following will
+		 * update the handle, due to id allocation.
+		 */
+		ret = net_shaper_cache_pre_insert(dev, root_handle, extack);
+		if (ret)
+			return ret;
+	}
 
 	for (i = 0; i < leaves_count; ++i) {
 		leaf_handle = leaves_handles[i];
@@ -750,7 +753,8 @@ static int __net_shaper_group(struct net_device *dev, int leaves_count,
 
 	if (parent)
 		parent->leaves++;
-	net_shaper_cache_commit(dev, 1, root_handle, root);
+	if (cache_root)
+		net_shaper_cache_commit(dev, 1, root_handle, root);
 	net_shaper_cache_commit(dev, leaves_count, leaves_handles, leaves);
 	return 0;
 
@@ -758,6 +762,76 @@ rollback:
 	net_shaper_cache_rollback(dev);
 	return ret;
 }
+
+static int __net_shaper_pre_del_node(struct net_device *dev,
+				     const struct net_shaper_handle *handle,
+				     const struct net_shaper_info *shaper,
+				     struct netlink_ext_ack *extack)
+{
+	struct net_shaper_handle *leaves_handles, root_handle;
+	struct xarray *xa = net_shaper_cache_container(dev);
+	struct net_shaper_info *cur, *leaves, root = {};
+	int ret, leaves_count = 0;
+	unsigned long index;
+	bool cache_root;
+
+	if (!shaper->leaves)
+		return 0;
+
+	if (WARN_ON_ONCE(!xa))
+		return -EINVAL;
+
+	/* Fetch the new root information. */
+	root_handle = shaper->parent;
+	cur = net_shaper_cache_lookup(dev, &root_handle);
+	if (cur) {
+		root = *cur;
+	} else {
+		/* A scope NODE shaper can be nested only to the NETDEV scope
+		 * shaper without creating the latter, this check may fail only
+		 * if the cache is in inconsistent status.
+		 */
+		if (WARN_ON_ONCE(root_handle.scope != NET_SHAPER_SCOPE_NETDEV))
+			return -EINVAL;
+	}
+
+	leaves = kcalloc(shaper->leaves,
+			 sizeof(struct net_shaper_info) +
+			 sizeof(struct net_shaper_handle), GFP_KERNEL);
+	if (!leaves)
+		return -ENOMEM;
+
+	leaves_handles = (struct net_shaper_handle *)&leaves[shaper->leaves];
+
+	/* Build the leaves arrays. */
+	xa_for_each(xa, index, cur) {
+		if (cur->parent.scope != handle->scope ||
+		    cur->parent.id != handle->id)
+			continue;
+
+		if (WARN_ON_ONCE(leaves_count == shaper->leaves)) {
+			ret = -EINVAL;
+			goto free;
+		}
+
+		net_shaper_index_to_handle(index,
+					   &leaves_handles[leaves_count]);
+		leaves[leaves_count++] = *cur;
+	}
+
+	/* When re-linking to the netdev shaper, avoid the eventual, implicit,
+	 * creation of the new root, would be surprising since the user is
+	 * doing a delete operation.
+	 */
+	cache_root = root_handle.scope != NET_SHAPER_SCOPE_NETDEV;
+	ret = __net_shaper_group(dev, cache_root, leaves_count, leaves_handles,
+				 leaves, &root_handle, &root, extack);
+
+free:
+	kfree(leaves);
+	return ret;
+}
+
 static int net_shaper_delete(struct net_device *dev,
 			     const struct net_shaper_handle *handle,
 			     struct netlink_ext_ack *extack)
@@ -780,9 +854,9 @@ static int net_shaper_delete(struct net_device *dev,
 	}
 
 	if (handle->scope == NET_SHAPER_SCOPE_NODE) {
-		/* TODO: implement support for scope NODE delete. */
-		ret = -EINVAL;
-		goto unlock;
+		ret = __net_shaper_pre_del_node(dev, handle, shaper, extack);
+		if (ret)
+			goto unlock;
 	}
 
 	ret = __net_shaper_delete(dev, handle, shaper, extack);
@@ -843,7 +917,7 @@ static int net_shaper_group(struct net_device *dev, int leaves_count,
 			old_roots[old_roots_count++] = leaves[i].parent;
 
 	mutex_lock(lock);
-	ret = __net_shaper_group(dev, leaves_count, leaves_handles,
+	ret = __net_shaper_group(dev, true, leaves_count, leaves_handles,
 				 leaves, root_handle, root, extack);
 
 	/* Check if we need to delete any NODE left alone by the new leaves
