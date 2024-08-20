@@ -775,19 +775,25 @@ static int kvm_mmu_notifier_invalidate_range_start(struct mmu_notifier *mn,
 	 */
 	spin_lock(&kvm->mn_invalidate_lock);
 	kvm->mn_active_invalidate_count++;
+	if (likely(kvm->mn_active_invalidate_count == 1)) {
+		kvm->mmu_gpc_invalidate_range_start = range->start;
+		kvm->mmu_gpc_invalidate_range_end = range->end;
+	} else {
+		/*
+		 * Fully tracking multiple concurrent ranges has diminishing
+		 * returns. Keep things simple and just find the minimal range
+		 * which includes the current and new ranges. As there won't be
+		 * enough information to subtract a range after its invalidate
+		 * completes, any ranges invalidated concurrently will
+		 * accumulate and persist until all outstanding invalidates
+		 * complete.
+		 */
+		kvm->mmu_gpc_invalidate_range_start =
+			min(kvm->mmu_gpc_invalidate_range_start, range->start);
+		kvm->mmu_gpc_invalidate_range_end =
+			max(kvm->mmu_gpc_invalidate_range_end, range->end);
+	}
 	spin_unlock(&kvm->mn_invalidate_lock);
-
-	/*
-	 * Invalidate pfn caches _before_ invalidating the secondary MMUs, i.e.
-	 * before acquiring mmu_lock, to avoid holding mmu_lock while acquiring
-	 * each cache's lock.  There are relatively few caches in existence at
-	 * any given time, and the caches themselves can check for hva overlap,
-	 * i.e. don't need to rely on memslot overlap checks for performance.
-	 * Because this runs without holding mmu_lock, the pfn caches must use
-	 * mn_active_invalidate_count (see above) instead of
-	 * mmu_invalidate_in_progress.
-	 */
-	gfn_to_pfn_cache_invalidate_start(kvm, range->start, range->end);
 
 	/*
 	 * If one or more memslots were found and thus zapped, notify arch code
@@ -842,19 +848,33 @@ static void kvm_mmu_notifier_invalidate_range_end(struct mmu_notifier *mn,
 
 	__kvm_handle_hva_range(kvm, &hva_range);
 
+	/*
+	 * It's safe to invalidate the gfn_to_pfn_caches from this 'end'
+	 * hook, because hva_to_pfn_retry() will wait until no active
+	 * invalidations could be affecting the corresponding uHVA
+	 * before before allowing a newly mapped GPC to become valid.
+	 */
+	gfn_to_pfn_cache_invalidate(kvm, range->start, range->end);
+
 	/* Pairs with the increment in range_start(). */
 	spin_lock(&kvm->mn_invalidate_lock);
 	if (!WARN_ON_ONCE(!kvm->mn_active_invalidate_count))
 		--kvm->mn_active_invalidate_count;
 	wake = !kvm->mn_active_invalidate_count;
+	if (wake) {
+		kvm->mmu_gpc_invalidate_range_start = KVM_HVA_ERR_BAD;
+		kvm->mmu_gpc_invalidate_range_end = KVM_HVA_ERR_BAD;
+	}
 	spin_unlock(&kvm->mn_invalidate_lock);
 
 	/*
 	 * There can only be one waiter, since the wait happens under
 	 * slots_lock.
 	 */
-	if (wake)
+	if (wake) {
+		wake_up(&kvm->gpc_invalidate_wq);
 		rcuwait_wake_up(&kvm->mn_memslots_update_rcuwait);
+	}
 }
 
 static int kvm_mmu_notifier_clear_flush_young(struct mmu_notifier *mn,
@@ -1164,7 +1184,9 @@ static struct kvm *kvm_create_vm(unsigned long type, const char *fdname)
 
 	INIT_LIST_HEAD(&kvm->gpc_list);
 	spin_lock_init(&kvm->gpc_lock);
-
+	init_waitqueue_head(&kvm->gpc_invalidate_wq);
+	kvm->mmu_gpc_invalidate_range_start = KVM_HVA_ERR_BAD;
+	kvm->mmu_gpc_invalidate_range_end = KVM_HVA_ERR_BAD;
 	INIT_LIST_HEAD(&kvm->devices);
 	kvm->max_vcpus = KVM_MAX_VCPUS;
 
@@ -1340,8 +1362,10 @@ static void kvm_destroy_vm(struct kvm *kvm)
 	 * in-progress invalidations.
 	 */
 	WARN_ON(rcuwait_active(&kvm->mn_memslots_update_rcuwait));
-	if (kvm->mn_active_invalidate_count)
+	if (kvm->mn_active_invalidate_count) {
 		kvm->mn_active_invalidate_count = 0;
+		wake_up(&kvm->gpc_invalidate_wq);
+	}
 	else
 		WARN_ON(kvm->mmu_invalidate_in_progress);
 #else

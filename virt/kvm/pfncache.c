@@ -20,10 +20,15 @@
 #include "kvm_mm.h"
 
 /*
- * MMU notifier 'invalidate_range_start' hook.
+ * MMU notifier 'invalidate_range_end' hook. The hva_to_pfn_retry() function
+ * below may look up a PFN just before it is zapped, and may be mapping it
+ * concurrently with the actual invalidation (with the GPC lock dropped). By
+ * using a separate 'needs_invalidation' flag, the concurrent invalidation
+ * can handle this case, causing hva_to_pfn_retry() to drop its result and
+ * retry correctly.
  */
-void gfn_to_pfn_cache_invalidate_start(struct kvm *kvm, unsigned long start,
-				       unsigned long end)
+void gfn_to_pfn_cache_invalidate(struct kvm *kvm, unsigned long start,
+				 unsigned long end)
 {
 	struct gfn_to_pfn_cache *gpc;
 
@@ -32,7 +37,7 @@ void gfn_to_pfn_cache_invalidate_start(struct kvm *kvm, unsigned long start,
 		read_lock_irq(&gpc->lock);
 
 		/* Only a single page so no need to care about length */
-		if (gpc->valid && !is_error_noslot_pfn(gpc->pfn) &&
+		if (gpc->needs_invalidation && !is_error_noslot_pfn(gpc->pfn) &&
 		    gpc->uhva >= start && gpc->uhva < end) {
 			read_unlock_irq(&gpc->lock);
 
@@ -45,9 +50,11 @@ void gfn_to_pfn_cache_invalidate_start(struct kvm *kvm, unsigned long start,
 			 */
 
 			write_lock_irq(&gpc->lock);
-			if (gpc->valid && !is_error_noslot_pfn(gpc->pfn) &&
-			    gpc->uhva >= start && gpc->uhva < end)
+			if (gpc->needs_invalidation && !is_error_noslot_pfn(gpc->pfn) &&
+			    gpc->uhva >= start && gpc->uhva < end) {
+				gpc->needs_invalidation = false;
 				gpc->valid = false;
+			}
 			write_unlock_irq(&gpc->lock);
 			continue;
 		}
@@ -93,6 +100,9 @@ bool kvm_gpc_check(struct gfn_to_pfn_cache *gpc, unsigned long len)
 	if (!gpc->valid)
 		return false;
 
+	/* If it's valid, it needs invalidation! */
+	WARN_ON_ONCE(!gpc->needs_invalidation);
+
 	return true;
 }
 
@@ -124,32 +134,37 @@ static void gpc_unmap(kvm_pfn_t pfn, void *khva)
 #endif
 }
 
-static inline bool mmu_notifier_retry_cache(struct kvm *kvm, unsigned long mmu_seq)
+static bool gpc_invalidations_pending(struct gfn_to_pfn_cache *gpc)
 {
 	/*
-	 * mn_active_invalidate_count acts for all intents and purposes
-	 * like mmu_invalidate_in_progress here; but the latter cannot
-	 * be used here because the invalidation of caches in the
-	 * mmu_notifier event occurs _before_ mmu_invalidate_in_progress
-	 * is elevated.
-	 *
-	 * Note, it does not matter that mn_active_invalidate_count
-	 * is not protected by gpc->lock.  It is guaranteed to
-	 * be elevated before the mmu_notifier acquires gpc->lock, and
-	 * isn't dropped until after mmu_invalidate_seq is updated.
+	 * No need for locking on GPC here because these fields are protected
+	 * by gpc->refresh_lock.
 	 */
-	if (kvm->mn_active_invalidate_count)
-		return true;
+	return unlikely(gpc->kvm->mn_active_invalidate_count) &&
+		(gpc->kvm->mmu_gpc_invalidate_range_start <= gpc->uhva) &&
+		(gpc->kvm->mmu_gpc_invalidate_range_end > gpc->uhva);
+}
 
-	/*
-	 * Ensure mn_active_invalidate_count is read before
-	 * mmu_invalidate_seq.  This pairs with the smp_wmb() in
-	 * mmu_notifier_invalidate_range_end() to guarantee either the
-	 * old (non-zero) value of mn_active_invalidate_count or the
-	 * new (incremented) value of mmu_invalidate_seq is observed.
-	 */
-	smp_rmb();
-	return kvm->mmu_invalidate_seq != mmu_seq;
+static void gpc_wait_for_invalidations(struct gfn_to_pfn_cache *gpc)
+{
+	spin_lock(&gpc->kvm->mn_invalidate_lock);
+	if (gpc_invalidations_pending(gpc)) {
+		DEFINE_WAIT(wait);
+
+		for (;;) {
+			prepare_to_wait(&gpc->kvm->gpc_invalidate_wq, &wait,
+					TASK_UNINTERRUPTIBLE);
+
+			if (!gpc_invalidations_pending(gpc))
+				break;
+
+			spin_unlock(&gpc->kvm->mn_invalidate_lock);
+			schedule();
+			spin_lock(&gpc->kvm->mn_invalidate_lock);
+		}
+		finish_wait(&gpc->kvm->gpc_invalidate_wq, &wait);
+	}
+	spin_unlock(&gpc->kvm->mn_invalidate_lock);
 }
 
 static kvm_pfn_t hva_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
@@ -158,7 +173,6 @@ static kvm_pfn_t hva_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
 	void *old_khva = (void *)PAGE_ALIGN_DOWN((uintptr_t)gpc->khva);
 	kvm_pfn_t new_pfn = KVM_PFN_ERR_FAULT;
 	void *new_khva = NULL;
-	unsigned long mmu_seq;
 
 	lockdep_assert_held(&gpc->refresh_lock);
 
@@ -172,8 +186,16 @@ static kvm_pfn_t hva_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
 	gpc->valid = false;
 
 	do {
-		mmu_seq = gpc->kvm->mmu_invalidate_seq;
-		smp_rmb();
+		/*
+		 * The translation made by hva_to_pfn() below could be made
+		 * invalid as soon as it's mapped. But the uhva is already
+		 * known and that's all that gfn_to_pfn_cache_invalidate()
+		 * looks at. So set the 'needs_invalidation' flag to allow
+		 * the GPC to be marked invalid from the moment the lock is
+		 * dropped, before the corresponding PFN is even found (and,
+		 * more to the point, immediately afterwards).
+		 */
+		gpc->needs_invalidation = true;
 
 		write_unlock_irq(&gpc->lock);
 
@@ -217,6 +239,15 @@ static kvm_pfn_t hva_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
 			goto out_error;
 		}
 
+		/*
+		 * Avoid populating a GPC with a user address which is already
+		 * being invalidated, if the invalidate_range_start() notifier
+		 * has already been called. The actual invalidation happens in
+		 * the invalidate_range_end() callback, so wait until there are
+		 * no active invalidations (for the relevant HVA).
+		 */
+		gpc_wait_for_invalidations(gpc);
+
 		write_lock_irq(&gpc->lock);
 
 		/*
@@ -224,7 +255,14 @@ static kvm_pfn_t hva_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
 		 * attempting to refresh.
 		 */
 		WARN_ON_ONCE(gpc->valid);
-	} while (mmu_notifier_retry_cache(gpc->kvm, mmu_seq));
+
+		/*
+		 * Since gfn_to_pfn_cache_invalidate() is called from the
+		 * kvm_mmu_notifier_invalidate_range_end() callback, it can
+		 * invalidate the GPC the moment after hva_to_pfn() returned
+		 * a valid PFN. If that happens, retry.
+		 */
+	} while (!gpc->needs_invalidation);
 
 	gpc->valid = true;
 	gpc->pfn = new_pfn;
@@ -339,6 +377,7 @@ static int __kvm_gpc_refresh(struct gfn_to_pfn_cache *gpc, gpa_t gpa, unsigned l
 	 */
 	if (ret) {
 		gpc->valid = false;
+		gpc->needs_invalidation = false;
 		gpc->pfn = KVM_PFN_ERR_FAULT;
 		gpc->khva = NULL;
 	}
@@ -383,7 +422,7 @@ void kvm_gpc_init(struct gfn_to_pfn_cache *gpc, struct kvm *kvm)
 	gpc->pfn = KVM_PFN_ERR_FAULT;
 	gpc->gpa = INVALID_GPA;
 	gpc->uhva = KVM_HVA_ERR_BAD;
-	gpc->active = gpc->valid = false;
+	gpc->active = gpc->valid = gpc->needs_invalidation = false;
 }
 
 static int __kvm_gpc_activate(struct gfn_to_pfn_cache *gpc, gpa_t gpa, unsigned long uhva,
@@ -453,6 +492,7 @@ void kvm_gpc_deactivate(struct gfn_to_pfn_cache *gpc)
 		write_lock_irq(&gpc->lock);
 		gpc->active = false;
 		gpc->valid = false;
+		gpc->needs_invalidation = false;
 
 		/*
 		 * Leave the GPA => uHVA cache intact, it's protected by the
