@@ -100,11 +100,6 @@ static int ncsi_write_package_info(struct sk_buff *skb,
 	bool found;
 	int rc;
 
-	if (id > ndp->package_num - 1) {
-		netdev_info(ndp->ndev.dev, "NCSI: No package with id %u\n", id);
-		return -ENODEV;
-	}
-
 	found = false;
 	NCSI_FOR_EACH_PACKAGE(ndp, np) {
 		if (np->id != id)
