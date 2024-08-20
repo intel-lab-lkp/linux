@@ -767,6 +767,18 @@ static int vmd_pm_enable_quirk(struct pci_dev *pdev, void *userdata)
 	return 0;
 }
 
+/*
+ * Some applications like SPDK reads PCI_INTERRUPT_LINE to decide
+ * whether INTx is enabled or not. Since VMD doesn't support INTx,
+ * write 0 to all NVMe devices under VMD.
+ */
+static int vmd_clr_int_line_reg(struct pci_dev *dev, void *userdata)
+{
+	if(dev->class == PCI_CLASS_STORAGE_EXPRESS)
+		pci_write_config_byte(dev, PCI_INTERRUPT_LINE, 0);
+	return 0;
+}
+
 static int vmd_enable_domain(struct vmd_dev *vmd, unsigned long features)
 {
 	struct pci_sysdata *sd = &vmd->sysdata;
@@ -921,6 +933,7 @@ static int vmd_enable_domain(struct vmd_dev *vmd, unsigned long features)
 
 	pci_scan_child_bus(vmd->bus);
 	vmd_domain_reset(vmd);
+	pci_walk_bus(vmd->bus, vmd_clr_int_line_reg, &features);
 
 	/* When Intel VMD is enabled, the OS does not discover the Root Ports
 	 * owned by Intel VMD within the MMCFG space. pci_reset_bus() applies
