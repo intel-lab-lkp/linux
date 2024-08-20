@@ -636,6 +636,7 @@ void addr_filters__exit(struct addr_filters *filts);
 int addr_filters__parse_bare_filter(struct addr_filters *filts,
 				    const char *filter);
 int auxtrace_parse_filters(struct evlist *evlist);
+int auxtrace_validate_events(struct evlist *evlist);
 
 int auxtrace__process_event(struct perf_session *session, union perf_event *event,
 			    struct perf_sample *sample, const struct perf_tool *tool);
@@ -871,6 +872,12 @@ bool auxtrace__evsel_is_auxtrace(struct perf_session *session __maybe_unused,
 
 static inline
 int auxtrace_parse_filters(struct evlist *evlist __maybe_unused)
+{
+	return 0;
+}
+
+static inline
+int auxtrace_validate_events(struct evlist *evlist __maybe_unused)
 {
 	return 0;
 }

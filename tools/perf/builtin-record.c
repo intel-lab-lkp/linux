@@ -862,6 +862,10 @@ static int record__auxtrace_init(struct record *rec)
 
 	auxtrace_regroup_aux_output(rec->evlist);
 
+	err = auxtrace_validate_events(rec->evlist);
+	if (err)
+		return err;
+
 	return auxtrace_parse_filters(rec->evlist);
 }
 
