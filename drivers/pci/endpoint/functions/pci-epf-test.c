@@ -649,7 +649,8 @@ static void pci_epf_test_cmd_handler(struct work_struct *work)
 
 	if ((READ_ONCE(reg->flags) & FLAG_USE_DMA) &&
 	    !epf_test->dma_supported) {
-		dev_err(dev, "Cannot transfer data using DMA\n");
+		dev_err(dev, "DMA transfer not supported\n");
+		pci_epf_test_raise_irq(epf_test, reg);
 		goto reset_handler;
 	}
 
