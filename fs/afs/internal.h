@@ -331,9 +331,6 @@ struct afs_net {
 	struct timer_list	fs_probe_timer;
 	atomic_t		servers_outstanding;
 
-	/* File locking renewal management */
-	struct mutex		lock_manager_mutex;
-
 	/* Misc */
 	struct super_block	*dynroot_sb;	/* Dynamic root mount superblock */
 	struct proc_dir_entry	*proc_afs;	/* /proc/net/afs directory */
