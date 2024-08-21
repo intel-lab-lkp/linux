@@ -4950,7 +4950,7 @@ static inline void util_est_dequeue(struct cfs_rq *cfs_rq,
 
 	/* Update root cfs_rq's estimated utilization */
 	enqueued  = cfs_rq->avg.util_est;
-	enqueued -= min_t(unsigned int, enqueued, _task_util_est(p));
+	enqueued -= _task_util_est(p);
 	WRITE_ONCE(cfs_rq->avg.util_est, enqueued);
 
 	trace_sched_util_est_cfs_tp(cfs_rq);
@@ -7176,10 +7176,14 @@ static bool dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	util_est_dequeue(&rq->cfs, p);
 
 	if (dequeue_entities(rq, &p->se, flags) < 0) {
+		if (!rq->cfs.h_nr_running)
+			SCHED_WARN_ON(rq->cfs.avg.util_est);
 		util_est_update(&rq->cfs, p, DEQUEUE_SLEEP);
 		return false;
 	}
 
+	if (!rq->cfs.h_nr_running)
+		SCHED_WARN_ON(rq->cfs.avg.util_est);
 	util_est_update(&rq->cfs, p, flags & DEQUEUE_SLEEP);
 	hrtick_update(rq);
 	return true;
