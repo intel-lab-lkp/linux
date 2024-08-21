@@ -1025,8 +1025,8 @@ int drm_display_info_set_bus_formats(struct drm_display_info *info,
 		return -EINVAL;
 
 	if (formats && num_formats) {
-		fmts = kmemdup(formats, sizeof(*formats) * num_formats,
-			       GFP_KERNEL);
+		fmts = kmemdup_array(formats, num_formats, sizeof(*formats),
+				     GFP_KERNEL);
 		if (!fmts)
 			return -ENOMEM;
 	}
