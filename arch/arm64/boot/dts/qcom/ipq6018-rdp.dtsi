@@ -1,0 +1,32 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * IPQ6018 RDP board common device tree source
+ */
+
+&rpm_requests {
+	regulators {
+		compatible = "qcom,rpm-mp5496-regulators";
+
+		ipq6018_s2: s2 {
+			regulator-min-microvolt = <725000>;
+			regulator-max-microvolt = <1062500>;
+			regulator-always-on;
+		};
+	};
+};
+
+&CPU0 {
+	cpu-supply = <&ipq6018_s2>;
+};
+
+&CPU1 {
+	cpu-supply = <&ipq6018_s2>;
+};
+
+&CPU2 {
+	cpu-supply = <&ipq6018_s2>;
+};
+
+&CPU3 {
+	cpu-supply = <&ipq6018_s2>;
+};

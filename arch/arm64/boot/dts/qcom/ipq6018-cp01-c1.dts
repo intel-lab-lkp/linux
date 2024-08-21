@@ -8,6 +8,7 @@
 /dts-v1/;
 
 #include "ipq6018.dtsi"
+#include "ipq6018-rdp.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. IPQ6018/AP-CP01-C1";
