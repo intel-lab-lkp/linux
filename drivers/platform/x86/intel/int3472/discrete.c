@@ -89,6 +89,16 @@ static int skl_int3472_map_gpio_to_sensor(struct int3472_discrete_device *int347
 		return -EINVAL;
 	}
 
+	/*
+	 * The driver of OV7251 expects "enable" pin instead of "reset".
+	 * Remap "reset" to "enable" and update polarity.
+	 */
+	if (!strcmp(int3472->sensor_name, "i2c-INT347E:00") &&
+	    !strcmp(func, "reset")) {
+		func = "enable";
+		polarity ^= GPIO_ACTIVE_LOW;
+	}
+
 	ret = skl_int3472_fill_gpiod_lookup(&int3472->gpios.table[int3472->n_sensor_gpios],
 					    agpio, func, polarity);
 	if (ret)
