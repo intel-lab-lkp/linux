@@ -1423,7 +1423,7 @@ static int init_struct_ops_maps(struct bpf_object *obj, const char *sec_name,
 		memcpy(st_ops->data,
 		       data->d_buf + vsi->offset,
 		       type->size);
-		st_ops->tname = tname;
+		st_ops->tname = strdup(tname);
 		st_ops->type = type;
 		st_ops->type_id = type_id;
 
