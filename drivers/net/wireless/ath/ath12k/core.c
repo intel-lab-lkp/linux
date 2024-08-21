@@ -1004,7 +1004,7 @@ void ath12k_core_halt(struct ath12k *ar)
 {
 	struct ath12k_base *ab = ar->ab;
 
-	lockdep_assert_held(&ar->conf_mutex);
+	lockdep_assert_wiphy(ath12k_ar_to_hw(ar)->wiphy);
 
 	ar->num_created_vdevs = 0;
 	ar->allocated_vdev_map = 0;
@@ -1087,9 +1087,9 @@ static void ath12k_core_post_reconfigure_recovery(struct ath12k_base *ab)
 			for (j = 0; j < ah->num_radio; j++) {
 				ar = &ah->radio[j];
 
-				mutex_lock(&ar->conf_mutex);
+				wiphy_lock(ath12k_ar_to_hw(ar)->wiphy);
 				ath12k_core_halt(ar);
-				mutex_unlock(&ar->conf_mutex);
+				wiphy_unlock(ath12k_ar_to_hw(ar)->wiphy);
 			}
 
 			break;
