@@ -4,8 +4,36 @@
 #include<linux/slab.h>
 #include "epc_cgroup.h"
 
+/*
+ * The minimal free pages, or the minimal margin between limit and usage
+ * maintained by per-cgroup reclaimer.
+ *
+ * Set this to the low threshold used by the global reclaimer, ksgxd.
+ */
+#define SGX_CG_MIN_FREE_PAGE	(SGX_NR_LOW_PAGES)
+
+/*
+ * If the cgroup limit is close to SGX_CG_MIN_FREE_PAGE, maintaining the minimal
+ * free pages would barely leave any page for use, causing excessive reclamation
+ * and thrashing.
+ *
+ * Define the following limit, below which cgroup does not maintain the minimal
+ * free page threshold. Set this to quadruple of the minimal so at least 75%
+ * pages used without being reclaimed.
+ */
+#define SGX_CG_LOW_LIMIT	(SGX_CG_MIN_FREE_PAGE * 4)
+
 /* The root SGX EPC cgroup */
 static struct sgx_cgroup sgx_cg_root;
+
+/*
+ * The work queue that reclaims EPC pages in the background for cgroups.
+ *
+ * A cgroup schedules a work item into this queue to reclaim pages within the
+ * same cgroup when its usage limit is reached and synchronous reclamation is not
+ * an option, i.e., in a page fault handler.
+ */
+static struct workqueue_struct *sgx_cg_wq;
 
 /*
  * Return the next descendant in a preorder walk, given a root, @root and a
@@ -100,6 +128,34 @@ static inline struct sgx_cgroup *sgx_cgroup_next_get(struct sgx_cgroup *root)
 	return p;
 }
 
+static inline u64 sgx_cgroup_page_counter_read(struct sgx_cgroup *sgx_cg)
+{
+	return atomic64_read(&sgx_cg->cg->res[MISC_CG_RES_SGX_EPC].usage) / PAGE_SIZE;
+}
+
+static inline u64 sgx_cgroup_max_pages(struct sgx_cgroup *sgx_cg)
+{
+	return READ_ONCE(sgx_cg->cg->res[MISC_CG_RES_SGX_EPC].max) / PAGE_SIZE;
+}
+
+/*
+ * Get the lower bound of limits of a cgroup and its ancestors. Used in
+ * sgx_cgroup_should_reclaim() to determine if EPC usage of a cgroup is
+ * close to its limit or its ancestors' hence reclamation is needed.
+ */
+static inline u64 sgx_cgroup_max_pages_to_root(struct sgx_cgroup *sgx_cg)
+{
+	struct misc_cg *i = sgx_cg->cg;
+	u64 m = U64_MAX;
+
+	while (i) {
+		m = min(m, READ_ONCE(i->res[MISC_CG_RES_SGX_EPC].max));
+		i = misc_cg_parent(i);
+	}
+
+	return m / PAGE_SIZE;
+}
+
 /**
  * sgx_cgroup_lru_empty() - check if a cgroup tree has no pages on its LRUs
  * @root:	Root of the tree to check
@@ -159,6 +215,43 @@ static inline void sgx_cgroup_reclaim_pages(struct sgx_cgroup *root,
 	}
 }
 
+/* Check whether EPC reclaim should be performed for a given EPC cgroup.*/
+static bool sgx_cgroup_should_reclaim(struct sgx_cgroup *sgx_cg)
+{
+	u64 cur, max;
+
+	if (sgx_cgroup_lru_empty(sgx_cg->cg))
+		return false;
+
+	max = sgx_cgroup_max_pages_to_root(sgx_cg);
+
+	/*
+	 * Unless the limit is very low, maintain a minimal "credit" available
+	 * for charge to avoid per-cgroup reclamation and to serve new
+	 * allocation requests more quickly.
+	 */
+	if (max > SGX_CG_LOW_LIMIT)
+		max -= SGX_CG_MIN_FREE_PAGE;
+
+	cur = sgx_cgroup_page_counter_read(sgx_cg);
+
+	return (cur >= max);
+}
+
+/*
+ * Asynchronous work flow to reclaim pages from the cgroup when the cgroup is
+ * at/near its maximum capacity.
+ */
+static void sgx_cgroup_reclaim_work_func(struct work_struct *work)
+{
+	struct sgx_cgroup *root = container_of(work, struct sgx_cgroup, reclaim_work);
+
+	while (sgx_cgroup_should_reclaim(root)) {
+		sgx_cgroup_reclaim_pages(root, SGX_NR_TO_SCAN);
+		cond_resched();
+	}
+}
+
 static int __sgx_cgroup_try_charge(struct sgx_cgroup *epc_cg)
 {
 	if (!misc_cg_try_charge(MISC_CG_RES_SGX_EPC, epc_cg->cg, PAGE_SIZE))
@@ -193,7 +286,8 @@ int sgx_cgroup_try_charge(struct sgx_cgroup *sgx_cg, enum sgx_reclaim reclaim)
 			goto out;
 
 		if (reclaim == SGX_NO_RECLAIM) {
-			ret = -ENOMEM;
+			queue_work(sgx_cg_wq, &sgx_cg->reclaim_work);
+			ret = -EBUSY;
 			goto out;
 		}
 
@@ -201,6 +295,9 @@ int sgx_cgroup_try_charge(struct sgx_cgroup *sgx_cg, enum sgx_reclaim reclaim)
 
 		cond_resched();
 	}
+
+	if (sgx_cgroup_should_reclaim(sgx_cg))
+		queue_work(sgx_cg_wq, &sgx_cg->reclaim_work);
 
 out:
 	return ret;
@@ -224,6 +321,7 @@ static void sgx_cgroup_free(struct misc_cg *cg)
 	if (!sgx_cg)
 		return;
 
+	cancel_work_sync(&sgx_cg->reclaim_work);
 	/*
 	 * Notify ancestors to not reclaim from this dying cgroup.
 	 * Not start from this cgroup itself because at this point no reference
@@ -242,6 +340,7 @@ static void sgx_cgroup_free(struct misc_cg *cg)
 static void sgx_cgroup_misc_init(struct misc_cg *cg, struct sgx_cgroup *sgx_cg)
 {
 	sgx_lru_init(&sgx_cg->lru);
+	INIT_WORK(&sgx_cg->reclaim_work, sgx_cgroup_reclaim_work_func);
 	cg->res[MISC_CG_RES_SGX_EPC].priv = sgx_cg;
 	sgx_cg->cg = cg;
 	sgx_cg->next_cg = sgx_cg;
@@ -268,9 +367,23 @@ const struct misc_res_ops sgx_cgroup_ops = {
 
 int __init sgx_cgroup_init(void)
 {
+	sgx_cg_wq = alloc_workqueue("sgx_cg_wq", WQ_UNBOUND | WQ_FREEZABLE,
+				    WQ_UNBOUND_MAX_ACTIVE);
+	if (!sgx_cg_wq) {
+		pr_err("alloc_workqueue() failed for SGX cgroup.\n");
+		return -ENOMEM;
+	}
 	sgx_cgroup_misc_init(misc_cg_root(), &sgx_cg_root);
 
 	return 0;
+}
+
+/**
+ * Only called during init to unwind what's done in sgx_cgroup_init()
+ */
+void __init sgx_cgroup_deinit(void)
+{
+	destroy_workqueue(sgx_cg_wq);
 }
 
 /**

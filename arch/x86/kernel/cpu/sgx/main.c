@@ -1014,11 +1014,14 @@ static int __init sgx_init(void)
 	ret = sgx_drv_init();
 
 	if (sgx_vepc_init() && ret)
-		goto err_provision;
+		goto err_cgroup;
 
 	sgx_cgroup_register();
 
 	return 0;
+
+err_cgroup:
+	sgx_cgroup_deinit();
 
 err_provision:
 	misc_deregister(&sgx_dev_provision);
