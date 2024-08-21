@@ -1,0 +1,60 @@
+[
+        {
+                "suite": "dirty_log_perf_tests",
+                "timeout_s": 300,
+                "tests": [
+                        {
+                                "name": "dirty_log_perf_test_max_vcpu_no_manual_protect",
+                                "command": "./dirty_log_perf_test -v $(grep -c ^processor /proc/cpuinfo) -g"
+                        },
+                        {
+                                "name": "dirty_log_perf_test_max_vcpu_manual_protect",
+                                "command": "./dirty_log_perf_test -v $(grep -c ^processor /proc/cpuinfo)"
+                        },
+                        {
+                                "name": "dirty_log_perf_test_max_vcpu_manual_protect_random_access",
+                                "command": "./dirty_log_perf_test -v $(grep -c ^processor /proc/cpuinfo) -a"
+                        },
+                        {
+                                "name": "dirty_log_perf_test_max_10_vcpu_hugetlb",
+                                "setup": "echo 5120 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages",
+                                "command": "./dirty_log_perf_test -v 10 -s anonymous_hugetlb_2mb",
+                                "teardown": "echo 0 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages"
+                        }
+                ]
+        },
+        {
+                "suite": "x86_sanity_tests",
+                "arch" : "x86_64",
+                "tests": [
+                        {
+                                "name": "vmx_msrs_test",
+                                "command": "./x86_64/vmx_msrs_test"
+                        },
+                        {
+                                "name": "private_mem_conversions_test",
+                                "command": "./x86_64/private_mem_conversions_test"
+                        },
+                        {
+                                "name": "apic_bus_clock_test",
+                                "command": "./x86_64/apic_bus_clock_test"
+                        },
+                        {
+                                "name": "dirty_log_page_splitting_test",
+                                "command": "./x86_64/dirty_log_page_splitting_test -b 2G -s anonymous_hugetlb_2mb",
+                                "setup": "echo 2560 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages",
+                                "teardown": "echo 0 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages"
+                        }
+                ]
+        },
+        {
+                "suite": "arm_sanity_test",
+                "arch" : "aarch64",
+                "tests": [
+                        {
+                                "name": "page_fault_test",
+                                "command": "./aarch64/page_fault_test"
+                        }
+                ]
+        }
+]
