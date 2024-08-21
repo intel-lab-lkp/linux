@@ -14,7 +14,7 @@ struct cs_dsp;
 
 struct cirrus_amp_cal_data {
 	u32 calTarget[2];
-	u32 calTime[2];
+	u64 calTime;
 	s8  calAmbient;
 	u8  calStatus;
 	u16 calR;
