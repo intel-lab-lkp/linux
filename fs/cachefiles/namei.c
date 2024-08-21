@@ -542,7 +542,7 @@ static bool cachefiles_create_file(struct cachefiles_object *object)
  * stale.
  */
 static bool cachefiles_open_file(struct cachefiles_object *object,
-				 struct dentry *dentry)
+				 struct dentry *dir, struct dentry *dentry)
 {
 	struct cachefiles_cache *cache = object->volume->cache;
 	struct file *file;
@@ -601,10 +601,18 @@ static bool cachefiles_open_file(struct cachefiles_object *object,
 check_failed:
 	fscache_cookie_lookup_negative(object->cookie);
 	cachefiles_unmark_inode_in_use(object, file);
-	fput(file);
-	dput(dentry);
-	if (ret == -ESTALE)
+	__fput_sync(file);
+	if (ret == -ESTALE) {
+		/* When the auxdata check fails, the remaining old cache data
+		 * is no longer needed, and we will clear it here first.
+		 */
+		inode_lock_nested(d_inode(dir), I_MUTEX_PARENT);
+		cachefiles_unlink(cache, object, dir, dentry, FSCACHE_OBJECT_IS_STALE);
+		inode_unlock(d_inode(dir));
+		dput(dentry);
 		return cachefiles_create_file(object);
+	}
+	dput(dentry);
 	return false;
 
 error_fput:
@@ -654,7 +662,7 @@ bool cachefiles_look_up_object(struct cachefiles_object *object)
 		goto new_file;
 	}
 
-	if (!cachefiles_open_file(object, dentry))
+	if (!cachefiles_open_file(object, fan, dentry))
 		return false;
 
 	_leave(" = t [%lu]", file_inode(object->file)->i_ino);
