@@ -22,8 +22,14 @@
 /* 'desc' bits holding the offset in the VA (version array) page. */
 #define SGX_ENCL_PAGE_VA_OFFSET_MASK	GENMASK_ULL(11, 3)
 
-/* 'desc' bit marking that the page is being reclaimed. */
-#define SGX_ENCL_PAGE_BEING_RECLAIMED	BIT(3)
+/* 'desc' bit indicating that the page is busy (being reclaimed). */
+#define SGX_ENCL_PAGE_BUSY	BIT(2)
+
+/*
+ * 'desc' bit indicating that PCMD page associated with the enclave page is
+ * busy (because the enclave page is being reclaimed).
+ */
+#define SGX_ENCL_PAGE_PCMD_BUSY	BIT(3)
 
 struct sgx_encl_page {
 	unsigned long desc;
