@@ -9,6 +9,28 @@
 #include "iavf_trace.h"
 #include "iavf_prototype.h"
 
+/**
+ * iavf_is_descriptor_done - tests DD bit in Rx descriptor
+ * @rx_ring: the ring parameter to distinguish descriptor type (flex/legacy)
+ * @rx_desc: pointer to receive descriptor
+ *
+ * This function tests the descriptor done bit in specified descriptor. Because
+ * there are two types of descriptors (legacy and flex) the parameter rx_ring
+ * is used to distinguish.
+ *
+ * Return: true or false based on the state of DD bit in Rx descriptor.
+ */
+static bool iavf_is_descriptor_done(struct iavf_ring *rx_ring,
+				    struct iavf_rx_desc *rx_desc)
+{
+	__le64 qw1 = rx_desc->qw1;
+
+	if (rx_ring->rxdid == VIRTCHNL_RXDID_1_32B_BASE)
+		return !!le64_get_bits(qw1, IAVF_RXD_LEGACY_DD_M);
+
+	return !!le64_get_bits(qw1, IAVF_RXD_FLEX_DD_M);
+}
+
 static __le64 build_ctob(u32 td_cmd, u32 td_offset, unsigned int size,
 			 u32 td_tag)
 {
@@ -1223,24 +1245,31 @@ iavf_extract_legacy_rx_fields(const struct iavf_ring *rx_ring,
 			      const struct iavf_rx_desc *rx_desc, u32 *ptype)
 {
 	struct libeth_rqe_info fields = {};
-	u64 qw0 = le64_to_cpu(rx_desc->qw0);
 	u64 qw1 = le64_to_cpu(rx_desc->qw1);
-	u64 qw2 = le64_to_cpu(rx_desc->qw2);
-	bool l2tag1p;
-	bool l2tag2p;
 
-	fields.eop = FIELD_GET(IAVF_RXD_LEGACY_EOP_M, qw1);
 	fields.len = FIELD_GET(IAVF_RXD_LEGACY_LENGTH_M, qw1);
-	fields.rxe = FIELD_GET(IAVF_RXD_LEGACY_RXE_M, qw1);
-	*ptype = FIELD_GET(IAVF_RXD_LEGACY_PTYPE_M, qw1);
+	fields.eop = FIELD_GET(IAVF_RXD_LEGACY_EOP_M, qw1);
 
-	l2tag1p = FIELD_GET(IAVF_RXD_LEGACY_L2TAG1P_M, qw1);
-	if (l2tag1p && (rx_ring->flags & IAVF_TXRX_FLAGS_VLAN_TAG_LOC_L2TAG1))
-		fields.vlan_tag = FIELD_GET(IAVF_RXD_LEGACY_L2TAG1_M, qw0);
+	if (fields.eop) {
+		bool l2tag1p, l2tag2p;
+		u64 qw0 = le64_to_cpu(rx_desc->qw0);
+		u64 qw2 = le64_to_cpu(rx_desc->qw2);
 
-	l2tag2p = FIELD_GET(IAVF_RXD_LEGACY_L2TAG2P_M, qw2);
-	if (l2tag2p && (rx_ring->flags & IAVF_RXR_FLAGS_VLAN_TAG_LOC_L2TAG2_2))
-		fields.vlan_tag = FIELD_GET(IAVF_RXD_LEGACY_L2TAG2_M, qw2);
+		fields.rxe = FIELD_GET(IAVF_RXD_LEGACY_RXE_M, qw1);
+		*ptype = FIELD_GET(IAVF_RXD_LEGACY_PTYPE_M, qw1);
+
+		l2tag1p = FIELD_GET(IAVF_RXD_LEGACY_L2TAG1P_M, qw1);
+		if (l2tag1p &&
+		    (rx_ring->flags & IAVF_TXRX_FLAGS_VLAN_TAG_LOC_L2TAG1))
+			fields.vlan_tag = FIELD_GET(IAVF_RXD_LEGACY_L2TAG1_M,
+						    qw0);
+
+		l2tag2p = FIELD_GET(IAVF_RXD_LEGACY_L2TAG2P_M, qw2);
+		if (l2tag2p &&
+		    (rx_ring->flags & IAVF_RXR_FLAGS_VLAN_TAG_LOC_L2TAG2_2))
+			fields.vlan_tag = FIELD_GET(IAVF_RXD_LEGACY_L2TAG2_M,
+						    qw2);
+	}
 
 	return fields;
 }
@@ -1266,21 +1295,29 @@ iavf_extract_flex_rx_fields(const struct iavf_ring *rx_ring,
 	struct libeth_rqe_info fields = {};
 	u64 qw0 = le64_to_cpu(rx_desc->qw0);
 	u64 qw1 = le64_to_cpu(rx_desc->qw1);
-	u64 qw2 = le64_to_cpu(rx_desc->qw2);
-	bool l2tag1p, l2tag2p;
 
 	fields.len = FIELD_GET(IAVF_RXD_FLEX_PKT_LEN_M, qw0);
-	fields.rxe = FIELD_GET(IAVF_RXD_FLEX_RXE_M, qw1);
 	fields.eop = FIELD_GET(IAVF_RXD_FLEX_EOP_M, qw1);
-	*ptype = FIELD_GET(IAVF_RXD_FLEX_PTYPE_M, qw0);
 
-	l2tag1p = FIELD_GET(IAVF_RXD_FLEX_L2TAG1P_M, qw1);
-	if (l2tag1p && (rx_ring->flags & IAVF_TXRX_FLAGS_VLAN_TAG_LOC_L2TAG1))
-		fields.vlan_tag = FIELD_GET(IAVF_RXD_FLEX_L2TAG1_M, qw1);
+	if (fields.len) {
+		bool l2tag1p, l2tag2p;
+		u64 qw2 = le64_to_cpu(rx_desc->qw2);
 
-	l2tag2p = FIELD_GET(IAVF_RXD_FLEX_L2TAG2P_M, qw2);
-	if (l2tag2p && (rx_ring->flags & IAVF_RXR_FLAGS_VLAN_TAG_LOC_L2TAG2_2))
-		fields.vlan_tag = FIELD_GET(IAVF_RXD_FLEX_L2TAG2_2_M, qw2);
+		fields.rxe = FIELD_GET(IAVF_RXD_FLEX_RXE_M, qw1);
+		*ptype = FIELD_GET(IAVF_RXD_FLEX_PTYPE_M, qw0);
+
+		l2tag1p = FIELD_GET(IAVF_RXD_FLEX_L2TAG1P_M, qw1);
+		if (l2tag1p &&
+		    (rx_ring->flags & IAVF_TXRX_FLAGS_VLAN_TAG_LOC_L2TAG1))
+			fields.vlan_tag = FIELD_GET(IAVF_RXD_FLEX_L2TAG1_M,
+						    qw1);
+
+		l2tag2p = FIELD_GET(IAVF_RXD_FLEX_L2TAG2P_M, qw2);
+		if (l2tag2p &&
+		    (rx_ring->flags & IAVF_RXR_FLAGS_VLAN_TAG_LOC_L2TAG2_2))
+			fields.vlan_tag = FIELD_GET(IAVF_RXD_FLEX_L2TAG2_2_M,
+						    qw2);
+	}
 
 	return fields;
 }
@@ -1335,7 +1372,10 @@ static int iavf_clean_rx_irq(struct iavf_ring *rx_ring, int budget)
 		 */
 		dma_rmb();
 
-		if (!iavf_test_staterr(rx_desc, IAVF_RXD_FLEX_DD_M))
+		/* If DD field (descriptor done) is unset then other fields are
+		 * not valid
+		 */
+		if (!iavf_is_descriptor_done(rx_ring, rx_desc))
 			break;
 
 		fields = iavf_extract_rx_fields(rx_ring, rx_desc, &ptype);
