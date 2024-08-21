@@ -26,6 +26,13 @@ extern struct kunit_hooks_table {
 } kunit_hooks;
 
 /**
+ * kunit_is_running() - True, if KUnit test is currently running.
+ *
+ * If CONFIG_KUNIT is not enabled, it will compile down to a false.
+ */
+#define kunit_is_running() static_branch_unlikely(&kunit_running)
+
+/**
  * kunit_get_current_test() - Return a pointer to the currently running
  *			      KUnit test.
  *
@@ -40,7 +47,7 @@ extern struct kunit_hooks_table {
  */
 static inline struct kunit *kunit_get_current_test(void)
 {
-	if (!static_branch_unlikely(&kunit_running))
+	if (!kunit_is_running())
 		return NULL;
 
 	return current->kunit_test;
@@ -53,7 +60,7 @@ static inline struct kunit *kunit_get_current_test(void)
  * If a KUnit test is running in the current task, mark that test as failed.
  */
 #define kunit_fail_current_test(fmt, ...) do {					\
-		if (static_branch_unlikely(&kunit_running)) {			\
+		if (kunit_is_running()) {					\
 			/* Guaranteed to be non-NULL when kunit_running true*/	\
 			kunit_hooks.fail_current_test(__FILE__, __LINE__,	\
 						  fmt, ##__VA_ARGS__);		\
@@ -64,6 +71,7 @@ static inline struct kunit *kunit_get_current_test(void)
 
 static inline struct kunit *kunit_get_current_test(void) { return NULL; }
 
+#define kunit_is_running() false
 #define kunit_fail_current_test(fmt, ...) do {} while (0)
 
 #endif
