@@ -2443,12 +2443,23 @@ amd_iommu_domain_alloc_user(struct device *dev, u32 flags,
 			    const struct iommu_user_data *user_data)
 
 {
+	struct iommu_dev_data *dev_data = dev_iommu_priv_get(dev);
 	unsigned int type = IOMMU_DOMAIN_UNMANAGED;
+	int pgtable = AMD_IOMMU_V1;
 
 	if ((flags & ~IOMMU_HWPT_ALLOC_DIRTY_TRACKING) || parent || user_data)
 		return ERR_PTR(-EOPNOTSUPP);
 
-	return do_iommu_domain_alloc(type, dev, flags, AMD_IOMMU_V1);
+	/* Allocate v2 page table if IOMMU and device supports PASID. */
+	if (flags & IOMMUFD_HWPT_ALLOC_PASID) {
+		if (amd_iommu_pasid_supported() &&
+		    pdev_pasid_supported(dev_data))
+			pgtable = AMD_IOMMU_V2;
+		else
+			return ERR_PTR(-EINVAL);
+	}
+
+	return do_iommu_domain_alloc(type, dev, flags, pgtable);
 }
 
 void amd_iommu_domain_free(struct iommu_domain *dom)
