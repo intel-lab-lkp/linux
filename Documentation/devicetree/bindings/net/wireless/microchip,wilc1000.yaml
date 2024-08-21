@@ -16,7 +16,9 @@ description:
 
 properties:
   compatible:
-    const: microchip,wilc1000
+    enum:
+      - microchip,wilc1000
+      - microchip,wilc3000
 
   reg: true
 
