@@ -629,29 +629,6 @@ static void blkg_iostat_set(struct blkg_iostat *dst, struct blkg_iostat *src)
 	}
 }
 
-static void __blkg_clear_stat(struct blkg_iostat_set *bis)
-{
-	struct blkg_iostat cur = {0};
-	unsigned long flags;
-
-	flags = u64_stats_update_begin_irqsave(&bis->sync);
-	blkg_iostat_set(&bis->cur, &cur);
-	blkg_iostat_set(&bis->last, &cur);
-	u64_stats_update_end_irqrestore(&bis->sync, flags);
-}
-
-static void blkg_clear_stat(struct blkcg_gq *blkg)
-{
-	int cpu;
-
-	for_each_possible_cpu(cpu) {
-		struct blkg_iostat_set *s = per_cpu_ptr(blkg->iostat_cpu, cpu);
-
-		__blkg_clear_stat(s);
-	}
-	__blkg_clear_stat(&blkg->iostat);
-}
-
 static int blkcg_reset_stats(struct cgroup_subsys_state *css,
 			     struct cftype *cftype, u64 val)
 {
@@ -668,7 +645,6 @@ static int blkcg_reset_stats(struct cgroup_subsys_state *css,
 	 * anyway.  If you get hit by a race, retry.
 	 */
 	hlist_for_each_entry(blkg, &blkcg->blkg_list, blkcg_node) {
-		blkg_clear_stat(blkg);
 		for (i = 0; i < BLKCG_MAX_POLS; i++) {
 			struct blkcg_policy *pol = blkcg_policy[i];
 
