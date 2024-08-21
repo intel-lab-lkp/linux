@@ -649,7 +649,6 @@ static bool unpack_perm(struct aa_ext *e, u32 version, struct aa_perms *perm)
 		return false;
 
 	return	aa_unpack_u32(e, &perm->allow, NULL) &&
-		aa_unpack_u32(e, &perm->allow, NULL) &&
 		aa_unpack_u32(e, &perm->deny, NULL) &&
 		aa_unpack_u32(e, &perm->subtree, NULL) &&
 		aa_unpack_u32(e, &perm->cond, NULL) &&
