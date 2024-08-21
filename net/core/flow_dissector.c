@@ -654,7 +654,7 @@ __skb_flow_dissect_gre(const struct sk_buff *skb,
 		       struct flow_dissector_key_control *key_control,
 		       struct flow_dissector *flow_dissector,
 		       void *target_container, const void *data,
-		       __be16 *p_proto, int *p_nhoff, int *p_hlen,
+		       __be16 *p_proto, int *p_nhoff, int hlen,
 		       unsigned int flags)
 {
 	struct flow_dissector_key_keyid *key_keyid;
@@ -663,7 +663,7 @@ __skb_flow_dissect_gre(const struct sk_buff *skb,
 	u16 gre_ver;
 
 	hdr = __skb_header_pointer(skb, *p_nhoff, sizeof(_hdr),
-				   data, *p_hlen, &_hdr);
+				   data, hlen, &_hdr);
 	if (!hdr)
 		return FLOW_DISSECT_RET_OUT_BAD;
 
@@ -695,7 +695,7 @@ __skb_flow_dissect_gre(const struct sk_buff *skb,
 
 		keyid = __skb_header_pointer(skb, *p_nhoff + offset,
 					     sizeof(_keyid),
-					     data, *p_hlen, &_keyid);
+					     data, hlen, &_keyid);
 		if (!keyid)
 			return FLOW_DISSECT_RET_OUT_BAD;
 
@@ -715,27 +715,11 @@ __skb_flow_dissect_gre(const struct sk_buff *skb,
 	if (hdr->flags & GRE_SEQ)
 		offset += sizeof_field(struct pptp_gre_header, seq);
 
-	if (gre_ver == 0) {
-		if (*p_proto == htons(ETH_P_TEB)) {
-			const struct ethhdr *eth;
-			struct ethhdr _eth;
+	/* For GRE version 0 p_proto is already correctly set (including if
+	 * it is ETH_P_TEB)
+	 */
 
-			eth = __skb_header_pointer(skb, *p_nhoff + offset,
-						   sizeof(_eth),
-						   data, *p_hlen, &_eth);
-			if (!eth)
-				return FLOW_DISSECT_RET_OUT_BAD;
-			*p_proto = eth->h_proto;
-			offset += sizeof(*eth);
-
-			/* Cap headers that we access via pointers at the
-			 * end of the Ethernet header as our maximum alignment
-			 * at that point is only 2 bytes.
-			 */
-			if (NET_IP_ALIGN)
-				*p_hlen = *p_nhoff + offset;
-		}
-	} else { /* version 1, must be PPTP */
+	if (gre_ver == 1) { /* Version 1 is PPP */
 		u8 _ppp_hdr[PPP_HDRLEN];
 		u8 *ppp_hdr;
 
@@ -744,7 +728,7 @@ __skb_flow_dissect_gre(const struct sk_buff *skb,
 
 		ppp_hdr = __skb_header_pointer(skb, *p_nhoff + offset,
 					       sizeof(_ppp_hdr),
-					       data, *p_hlen, _ppp_hdr);
+					       data, hlen, _ppp_hdr);
 		if (!ppp_hdr)
 			return FLOW_DISSECT_RET_OUT_BAD;
 
@@ -1284,6 +1268,41 @@ proto_again:
 
 		break;
 	}
+	case htons(ETH_P_TEB): {
+		const struct ethhdr *eth;
+		struct ethhdr _eth;
+
+		eth = __skb_header_pointer(skb, nhoff, sizeof(_eth),
+					   data, hlen, &_eth);
+		if (!eth)
+			goto out_bad;
+
+		proto = eth->h_proto;
+		nhoff += sizeof(*eth);
+
+		/* Cap headers that we access via pointers at the end of the
+		 * Ethernet header as our maximum alignment at that point is
+		 * only 2 bytes.
+		 *
+		 * For the real Ethernet header the receive skbuf is offset by
+		 * two so that device places the packet such that the Ethernet
+		 * payload, i.e. IP header, is aligned to four bytes (14+2=16
+		 * which will be offset of IP header). When a packet contains
+		 * an encapsulated Ethernet header, the offset of the header is
+		 * aligned to four bytes which means the payload of that
+		 * Ethernet header, i.e. an encapsulated IP header, is not four
+		 * byte aligned and neither are any subsequent headers (TCP,
+		 * UDP, etc.). On some architectures, performing unaligned
+		 * loads is expensive compared to aligned loads, so hlen is
+		 * being capped here to avoid having flow dissector do unaligned
+		 * loads on unaligned headers after the Ethernet header.
+		 */
+		if (NET_IP_ALIGN)
+			hlen = nhoff;
+
+		fdret = FLOW_DISSECT_RET_PROTO_AGAIN;
+		break;
+	}
 	case htons(ETH_P_8021AD):
 	case htons(ETH_P_8021Q): {
 		const struct vlan_hdr *vlan = NULL;
@@ -1531,7 +1550,7 @@ ip_proto_again:
 
 		fdret = __skb_flow_dissect_gre(skb, key_control, flow_dissector,
 					       target_container, data,
-					       &proto, &nhoff, &hlen, flags);
+					       &proto, &nhoff, hlen, flags);
 		break;
 
 	case NEXTHDR_HOP:
