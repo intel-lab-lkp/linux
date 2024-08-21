@@ -524,10 +524,10 @@ int __cachefiles_prepare_write(struct cachefiles_object *object,
 	struct cachefiles_cache *cache = object->volume->cache;
 	loff_t start = *_start, pos;
 	size_t len = *_len;
-	int ret;
+	int ret, block_size = cache->bsize;
 
 	/* Round to DIO size */
-	start = round_down(*_start, PAGE_SIZE);
+	start = round_down(*_start, block_size);
 	if (start != *_start || *_len > upper_len) {
 		/* Probably asked to cache a streaming write written into the
 		 * pagecache when the cookie was temporarily out of service to
@@ -537,7 +537,7 @@ int __cachefiles_prepare_write(struct cachefiles_object *object,
 		return -ENOBUFS;
 	}
 
-	*_len = round_up(len, PAGE_SIZE);
+	*_len = round_up(len, block_size);
 
 	/* We need to work out whether there's sufficient disk space to perform
 	 * the write - but we can skip that check if we have space already
@@ -563,7 +563,7 @@ int __cachefiles_prepare_write(struct cachefiles_object *object,
 	 * space, we need to see if it's fully allocated.  If it's not, we may
 	 * want to cull it.
 	 */
-	if (cachefiles_has_space(cache, 0, *_len / PAGE_SIZE,
+	if (cachefiles_has_space(cache, 0, *_len / block_size,
 				 cachefiles_has_space_check) == 0)
 		return 0; /* Enough space to simply overwrite the whole block */
 
@@ -595,7 +595,7 @@ int __cachefiles_prepare_write(struct cachefiles_object *object,
 	return ret;
 
 check_space:
-	return cachefiles_has_space(cache, 0, *_len / PAGE_SIZE,
+	return cachefiles_has_space(cache, 0, *_len / block_size,
 				    cachefiles_has_space_for_write);
 }
 
