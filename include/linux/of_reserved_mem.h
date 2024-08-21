@@ -8,8 +8,10 @@
 struct of_phandle_args;
 struct reserved_mem_ops;
 
+#define RESERVED_MEM_NAME_LEN	128
+
 struct reserved_mem {
-	const char			*name;
+	char				name[RESERVED_MEM_NAME_LEN];
 	unsigned long			fdt_node;
 	const struct reserved_mem_ops	*ops;
 	phys_addr_t			base;
