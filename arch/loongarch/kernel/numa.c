@@ -392,9 +392,3 @@ void __init mem_init(void)
 	high_memory = (void *) __va(max_low_pfn << PAGE_SHIFT);
 	memblock_free_all();
 }
-
-int pcibus_to_node(struct pci_bus *bus)
-{
-	return dev_to_node(&bus->dev);
-}
-EXPORT_SYMBOL(pcibus_to_node);
