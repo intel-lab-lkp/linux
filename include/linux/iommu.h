@@ -511,8 +511,8 @@ static inline int __iommu_copy_struct_from_user_array(
  *                the caller iommu_domain_alloc() returns.
  * @domain_alloc_user: Allocate an iommu domain corresponding to the input
  *                     parameters as defined in include/uapi/linux/iommufd.h.
- *                     Unlike @domain_alloc, it is called only by IOMMUFD and
- *                     must fully initialize the new domain before return.
+ *                     Unlike @domain_alloc, it must fully initialize the new
+ *                     domain before return.
  *                     Upon success, if the @user_data is valid and the @parent
  *                     points to a kernel-managed domain, the new domain must be
  *                     IOMMU_DOMAIN_NESTED type; otherwise, the @parent must be
@@ -789,7 +789,11 @@ extern bool iommu_present(const struct bus_type *bus);
 extern bool device_iommu_capable(struct device *dev, enum iommu_cap cap);
 extern bool iommu_group_has_isolated_msi(struct iommu_group *group);
 extern struct iommu_domain *iommu_domain_alloc(const struct bus_type *bus);
-struct iommu_domain *iommu_paging_domain_alloc(struct device *dev);
+struct iommu_domain *iommu_paging_domain_alloc_flags(struct device *dev, unsigned int flags);
+static inline struct iommu_domain *iommu_paging_domain_alloc(struct device *dev)
+{
+	return iommu_paging_domain_alloc_flags(dev, 0);
+}
 extern void iommu_domain_free(struct iommu_domain *domain);
 extern int iommu_attach_device(struct iommu_domain *domain,
 			       struct device *dev);
@@ -1094,6 +1098,12 @@ static inline bool device_iommu_capable(struct device *dev, enum iommu_cap cap)
 static inline struct iommu_domain *iommu_domain_alloc(const struct bus_type *bus)
 {
 	return NULL;
+}
+
+struct inline iommu_domain *iommu_paging_domain_alloc_flags(struct device *dev,
+							    unsigned int flags)
+{
+	return ERR_PTR(-ENODEV);
 }
 
 static inline struct iommu_domain *iommu_paging_domain_alloc(struct device *dev)

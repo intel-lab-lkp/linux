@@ -359,11 +359,17 @@ struct iommu_vfio_ioas {
  *                                   enforced on device attachment
  * @IOMMU_HWPT_FAULT_ID_VALID: The fault_id field of hwpt allocation data is
  *                             valid.
+ * @IOMMUFD_HWPT_ALLOC_PASID: When the domain is used on a device, with no
+ *                            PASID, the device will support later attaching
+ *                            a PASID as well. Some HW requires a specific
+ *                            domain format on the device to allow PASID to
+ *                            work.
  */
 enum iommufd_hwpt_alloc_flags {
 	IOMMU_HWPT_ALLOC_NEST_PARENT = 1 << 0,
 	IOMMU_HWPT_ALLOC_DIRTY_TRACKING = 1 << 1,
 	IOMMU_HWPT_FAULT_ID_VALID = 1 << 2,
+	IOMMUFD_HWPT_ALLOC_PASID = 1 << 3,
 };
 
 /**
