@@ -2948,8 +2948,6 @@ static inline pte_t *pte_offset_map_lock(struct mm_struct *mm, pmd_t *pmd,
 	return pte;
 }
 
-pte_t *pte_offset_map_nolock(struct mm_struct *mm, pmd_t *pmd,
-			unsigned long addr, spinlock_t **ptlp);
 pte_t *pte_offset_map_readonly_nolock(struct mm_struct *mm, pmd_t *pmd,
 				      unsigned long addr, spinlock_t **ptlp);
 pte_t *pte_offset_map_maywrite_nolock(struct mm_struct *mm, pmd_t *pmd,
