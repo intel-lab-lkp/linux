@@ -283,6 +283,7 @@ struct xe_ttm_tt {
 	struct device *dev;
 	struct sg_table sgt;
 	struct sg_table *sg;
+	bool clear_system_pages;
 };
 
 static int xe_tt_map_sg(struct ttm_tt *tt)
@@ -397,12 +398,17 @@ static struct ttm_tt *xe_ttm_tt_create(struct ttm_buffer_object *ttm_bo,
 	}
 
 	/*
-	 * If the device can support gpu clear system pages then set proper ttm
+	 * If the device can support gpu clear system pages then set proper
 	 * flag. Zeroed pages are only required for ttm_bo_type_device so
 	 * unwanted data is not leaked to userspace.
+	 *
+	 * XE currently does clear-on-alloc so gpu clear will only work on
+	 * non-pooled BO, DRM_XE_GEM_CPU_CACHING_WB otherwise global pool will
+	 * get poisoned ono-zeroed pages.
 	 */
-	if (ttm_bo->type == ttm_bo_type_device && xe->mem.gpu_page_clear_sys)
-		page_flags |= TTM_TT_FLAG_CLEARED_ON_FREE;
+	if (ttm_bo->type == ttm_bo_type_device && xe->mem.gpu_page_clear_sys &&
+	    bo->cpu_caching == DRM_XE_GEM_CPU_CACHING_WB)
+		tt->clear_system_pages = true;
 
 	err = ttm_tt_init(&tt->ttm, &bo->ttm, page_flags, caching, extra_pages);
 	if (err) {
@@ -416,7 +422,10 @@ static struct ttm_tt *xe_ttm_tt_create(struct ttm_buffer_object *ttm_bo,
 static int xe_ttm_tt_populate(struct ttm_device *ttm_dev, struct ttm_tt *tt,
 			      struct ttm_operation_ctx *ctx)
 {
+	struct xe_ttm_tt *xe_tt;
 	int err;
+
+	xe_tt = container_of(tt, struct xe_ttm_tt, ttm);
 
 	/*
 	 * dma-bufs are not populated with pages, and the dma-
@@ -426,7 +435,7 @@ static int xe_ttm_tt_populate(struct ttm_device *ttm_dev, struct ttm_tt *tt,
 		return 0;
 
 	/* Clear TTM_TT_FLAG_ZERO_ALLOC when GPU is set to clear system pages */
-	if (tt->page_flags & TTM_TT_FLAG_CLEARED_ON_FREE)
+	if (xe_tt->clear_system_pages)
 		tt->page_flags &= ~TTM_TT_FLAG_ZERO_ALLOC;
 
 	err = ttm_pool_alloc(&ttm_dev->pool, tt, ctx);
@@ -664,6 +673,7 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
 	struct ttm_resource *old_mem = ttm_bo->resource;
 	u32 old_mem_type = old_mem ? old_mem->mem_type : XE_PL_SYSTEM;
 	struct ttm_tt *ttm = ttm_bo->ttm;
+	struct xe_ttm_tt *xe_tt = container_of(ttm, struct xe_ttm_tt, ttm);
 	struct xe_migrate *migrate = NULL;
 	struct dma_fence *fence;
 	bool move_lacks_source;
@@ -671,15 +681,16 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
 	bool needs_clear;
 	bool handle_system_ccs = (!IS_DGFX(xe) && xe_bo_needs_ccs_pages(bo) &&
 				  ttm && ttm_tt_is_populated(ttm)) ? true : false;
-	bool clear_system_pages;
+	bool clear_system_pages = false;
 	int ret = 0;
 
 	/*
 	 * Clear TTM_TT_FLAG_CLEARED_ON_FREE on bo creation path when
 	 * moving to system as the bo doesn't have dma_mapping.
 	 */
-	if (!old_mem && ttm && !ttm_tt_is_populated(ttm))
-		ttm->page_flags &= ~TTM_TT_FLAG_CLEARED_ON_FREE;
+	if (!old_mem && ttm && !ttm_tt_is_populated(ttm) &&
+	    xe_tt->clear_system_pages)
+		xe_tt->clear_system_pages = false;
 
 	/* Bo creation path, moving to system or TT. */
 	if ((!old_mem && ttm) && !handle_system_ccs) {
@@ -703,7 +714,7 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
 	move_lacks_source = handle_system_ccs ? (!bo->ccs_cleared)  :
 						(!mem_type_is_vram(old_mem_type) && !tt_has_data);
 
-	clear_system_pages = ttm && (ttm->page_flags & TTM_TT_FLAG_CLEARED_ON_FREE);
+	clear_system_pages = ttm && xe_tt->clear_system_pages;
 	needs_clear = (ttm && ttm->page_flags & TTM_TT_FLAG_ZERO_ALLOC) ||
 		(!ttm && ttm_bo->type == ttm_bo_type_device) ||
 		clear_system_pages;
