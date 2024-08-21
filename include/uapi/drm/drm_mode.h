@@ -147,7 +147,8 @@ extern "C" {
 
 /* Scaling mode options */
 #define DRM_MODE_SCALE_NONE		0 /* Unmodified timing (display or
-					     software can still scale) */
+					   * software can still scale)
+					   */
 #define DRM_MODE_SCALE_FULLSCREEN	1 /* Full screen, ignore aspect */
 #define DRM_MODE_SCALE_CENTER		2 /* Centered, no scaling */
 #define DRM_MODE_SCALE_ASPECT		3 /* Full screen, preserve aspect */
@@ -866,7 +867,9 @@ struct drm_color_lut {
  * array of struct drm_plane_size_hint.
  */
 struct drm_plane_size_hint {
+	/** @width: Width of the plane in pixels. */
 	__u16 width;
+	/** @height: Height of the plane in pixels. */
 	__u16 height;
 };
 
