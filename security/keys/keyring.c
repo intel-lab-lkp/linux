@@ -920,7 +920,7 @@ key_ref_t keyring_search_rcu(key_ref_t keyring_ref,
 
 	ctx->now = ktime_get_real_seconds();
 	if (search_nested_keyrings(keyring, ctx))
-		__key_get(key_ref_to_ptr(ctx->result));
+		key_ref_get(ctx->result);
 	return ctx->result;
 }
 

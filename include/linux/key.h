@@ -315,6 +315,11 @@ static inline void key_ref_put(key_ref_t key_ref)
 	key_put(key_ref_to_ptr(key_ref));
 }
 
+static inline void key_ref_get(key_ref_t key_ref)
+{
+	key_get(key_ref_to_ptr(key_ref));
+}
+
 extern struct key *request_key_tag(struct key_type *type,
 				   const char *description,
 				   struct key_tag *domain_tag,
