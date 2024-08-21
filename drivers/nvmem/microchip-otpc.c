@@ -8,6 +8,7 @@
  */
 
 #include <linux/bitfield.h>
+#include <linux/dev_printk.h>
 #include <linux/iopoll.h>
 #include <linux/module.h>
 #include <linux/nvmem-provider.h>
@@ -260,6 +261,7 @@ static int mchp_otpc_probe(struct platform_device *pdev)
 	struct nvmem_device *nvmem;
 	struct mchp_otpc *otpc;
 	u32 size;
+	u32 reg;
 	int ret;
 
 	otpc = devm_kzalloc(&pdev->dev, sizeof(*otpc), GFP_KERNEL);
@@ -269,6 +271,16 @@ static int mchp_otpc_probe(struct platform_device *pdev)
 	otpc->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(otpc->base))
 		return PTR_ERR(otpc->base);
+
+	reg = readl_relaxed(otpc->base + MCHP_OTPC_WPSR);
+	if (reg)
+		dev_warn(&pdev->dev,
+			 "Write Protection Status Register Bit set: 0x%08x\n", reg);
+
+	reg = readl_relaxed(otpc->base + MCHP_OTPC_ISR);
+	if (reg & MCHP_OTPC_ISR_COERR)
+		dev_warn(&pdev->dev,
+			 "A corruption occurred since the last read of OTPC_ISR.\n");
 
 	otpc->dev = &pdev->dev;
 	ret = mchp_otpc_init_packets_list(otpc, &size);
