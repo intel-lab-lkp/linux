@@ -9,6 +9,8 @@
 #include <linux/types.h>
 
 struct intel_crtc;
+struct drm_i915_private;
+enum pipe;
 
 /* GLOBAL_HIST related registers */
 #define _DPST_CTL_A					0x490C0
@@ -70,6 +72,7 @@ enum intel_global_hist_lut {
 };
 
 int intel_histogram_atomic_check(struct intel_crtc *intel_crtc);
+void intel_histogram_irq_handler(struct drm_i915_private *i915, enum pipe pipe);
 int intel_histogram_update(struct intel_crtc *intel_crtc, bool enable);
 int intel_histogram_set_iet_lut(struct intel_crtc *intel_crtc, u32 *data);
 int intel_histogram_init(struct intel_crtc *intel_crtc);
