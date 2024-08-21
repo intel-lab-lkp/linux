@@ -825,7 +825,9 @@ static enum utp_ocs ufshcd_get_tr_ocs(struct ufshcd_lrb *lrbp,
 				      struct cq_entry *cqe)
 {
 	if (cqe)
-		return le32_to_cpu(cqe->status) & MASK_OCS;
+		return ufshcd_vops_override_cqe_ocs(hba,
+						    le32_to_cpu(cqe->status) &
+						    MASK_OCS);
 
 	return lrbp->utr_descriptor_ptr->header.ocs & MASK_OCS;
 }
