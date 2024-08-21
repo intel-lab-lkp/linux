@@ -38,6 +38,8 @@ struct hlist_bl_head {
 struct hlist_bl_node {
 	struct hlist_bl_node *next, **pprev;
 };
+#define HLIST_BL_HEAD_INIT { .first = NULL }
+#define HLIST_BL_HEAD(name) struct hlist_bl_head name = {  .first = NULL }
 #define INIT_HLIST_BL_HEAD(ptr) \
 	((ptr)->first = NULL)
 
@@ -140,6 +142,17 @@ static inline void hlist_bl_del_init(struct hlist_bl_node *n)
 		__hlist_bl_del(n);
 		INIT_HLIST_BL_NODE(n);
 	}
+}
+
+static inline void hlist_bl_move_list(struct hlist_bl_head *old,
+				   struct hlist_bl_head *new)
+{
+	struct hlist_bl_node *n = hlist_bl_first(old);
+
+	hlist_bl_set_first(new, n);
+	if (n)
+		n->pprev = &new->first;
+	hlist_bl_set_first(old, NULL);
 }
 
 static inline void hlist_bl_lock(struct hlist_bl_head *b)
