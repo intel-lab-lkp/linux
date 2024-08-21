@@ -4,4 +4,10 @@ config VT6656
 	depends on MAC80211 && USB && WLAN && m
 	select FW_LOADER
 	help
-	  This is a vendor-written driver for VIA VT6656.
+	  This is a vendor-written driver for VIA VT6656. VIA Technology VT6656
+	  is a wireless network controller that operates on the 2.4GHz band.
+
+	  If you have this hardware and wish to use it, set 'Y' or 'M' here to
+	  compile the driver either directly in the kernel or as a module
+	  respectively. If you are unsure, it is safe to set it to 'M'.
+	  If enabled it loads the firmware for the mentioned device.
