@@ -191,44 +191,139 @@ struct iavf_rx_desc {
 #define IAVF_RXD_LEGACY_RSS_M			GENMASK_ULL(63, 32)
 /* Stripped L2 Tag from the receive packet. */
 #define IAVF_RXD_LEGACY_L2TAG1_M		GENMASK_ULL(33, 16)
+/* Packet type. */
+#define IAVF_RXD_FLEX_PTYPE_M			GENMASK_ULL(25, 16)
+/* Packet length. */
+#define IAVF_RXD_FLEX_PKT_LEN_M			GENMASK_ULL(45, 32)
 
 	aligned_le64 qw1;
+/* Status field stores information about end of packet, descriptor done etc. */
+#define IAVF_RXD_LEGACY_STATUS_M		GENMASK(18, 0)
+/* Descriptor done indication flag. */
+#define IAVF_RXD_LEGACY_DD_M			BIT(0)
+/* End of packet. Set to 1 if this descriptor is the last one of the packet. */
+#define IAVF_RXD_LEGACY_EOP_M			BIT(1)
+/* L2 TAG 1 presence indication. */
+#define IAVF_RXD_LEGACY_L2TAG1P_M		BIT(2)
+/* Detectable L3 and L4 integrity check is processed by the HW. */
+#define IAVF_RXD_LEGACY_L3L4P_M			BIT(3)
+/* The Ethernet CRC is posted with data to the host buffer. */
+#define IAVF_RXD_LEGACY_CRCP_M			BIT(4)
+/* Note: Bit 8 is reserved in X710 and XL710. */
+#define IAVF_RXD_LEGACY_EXT_UDP_0_M		BIT(8)
+/* Flow director filter match indication. */
+#define IAVF_RXD_LEGACY_FLM_M			BIT(11)
+/* Loop back indication means that the packet is originated from this system. */
+#define IAVF_RXD_LEGACY_LPBK_M			BIT(14)
+/* Set when an IPv6 packet contains a Destination Options Header or a Routing
+ * Header
+ */
+#define IAVF_RXD_LEGACY_IPV6EXADD_M		BIT(15)
+/* Note: For non-tunnel packets INT_UDP_0 is the right status for
+ * UDP header.
+ */
+#define IAVF_RXD_LEGACY_INT_UDP_0_M		BIT(18)
+/* Receive MAC Errors: CRC; Alignment; Oversize; Undersizes; Length error. */
+#define IAVF_RXD_LEGACY_RXE_M			BIT(19)
+/* Set by the Rx data processing unit if it could not complete properly
+ * the packet processing.
+ */
+#define IAVF_RXD_LEGACY_RECIPE_M		BIT(20)
+/* Header Buffer overflow. */
+#define IAVF_RXD_LEGACY_HBO_M			BIT(21)
+/* Checksum reports:
+ * - IPE: IP checksum error
+ * - L4E: L4 integrity error
+ * - EIPE: External IP header (tunneled packets)
+ */
+#define IAVF_RXD_LEGACY_IPE_M			BIT(22)
+#define IAVF_RXD_LEGACY_L4E_M			BIT(23)
+#define IAVF_RXD_LEGACY_EIPE_M			BIT(24)
+/* Oversize packet error. */
+#define IAVF_RXD_LEGACY_OVERSIZE_M		BIT(25)
+/* Set for packets that skip checksum calculation in pre-parser. */
+#define IAVF_RXD_LEGACY_PPRS_M			BIT(26)
+/* Destination Address type (unicast/multicast/broadcast/mirrored packet). */
+#define IAVF_RXD_LEGACY_UMBCAST_M		GENMASK_ULL(10, 9)
+/* Indicates the content in the Filter Status field . */
+#define IAVF_RXD_LEGACY_FLTSTAT_M		GENMASK_ULL(13, 12)
+/* Reserved. */
+#define IAVF_RXD_LEGACY_RESERVED_M		GENMASK_ULL(17, 16)
+/* Encoded errors of IP packets */
+#define IAVF_RXD_LEGACY_L3L4E_M			GENMASK_ULL(24, 22)
+/* Packet type. */
+#define IAVF_RXD_LEGACY_PTYPE_M			GENMASK_ULL(37, 30)
+/* Packet length. */
+#define IAVF_RXD_LEGACY_LENGTH_M		GENMASK_ULL(51, 38)
+/* Descriptor done indication flag. */
+#define IAVF_RXD_FLEX_DD_M			BIT(0)
+/* End of packet. Set to 1 if this descriptor is the last one of the packet. */
+#define IAVF_RXD_FLEX_EOP_M			BIT(1)
+/* Header Buffer overflow. */
+#define IAVF_RXD_FLEX_HBO_M			BIT(2)
+/* Detectable L3 and L4 integrity check is processed by the HW. */
+#define IAVF_RXD_FLEX_L3L4P_M			BIT(3)
+/* Checksum reports:
+ * - IPE: IP checksum error
+ * - L4E: L4 integrity error
+ * - EIPE: External IP header (tunneled packets)
+ * - EUDPE: External UDP checksum error (tunneled packets)
+ */
+#define IAVF_RXD_FLEX_XSUM_IPE_M		BIT(4)
+#define IAVF_RXD_FLEX_XSUM_L4E_M		BIT(5)
+#define IAVF_RXD_FLEX_XSUM_EIPE_M		BIT(6)
+#define IAVF_RXD_FLEX_XSUM_EUDPE_M		BIT(7)
+/* Loop back indication means that the packet is originated from this system. */
+#define IAVF_RXD_FLEX_LPBK_M			BIT(8)
+/* Set when an IPv6 packet contains a Destination Options Header or a Routing
+ * Header
+ */
+#define IAVF_RXD_FLEX_IPV6EXADD_M		BIT(9)
+/* Receive MAC Errors: CRC; Alignment; Oversize; Undersizes; Length error. */
+#define IAVF_RXD_FLEX_RXE_M			BIT(10)
+/* The Ethernet CRC is posted with data to the host buffer. */
+#define IAVF_RXD_FLEX_CRCP_M			BIT(11)
+/* Indicates that the RSS/HASH result is valid. */
+#define IAVF_RXD_FLEX_RSS_VALID_M		BIT(12)
+/* L2 TAG 1 presence indication. */
+#define IAVF_RXD_FLEX_L2TAG1P_M			BIT(13)
+/* Indicates that extracted data from the packet is valid in specific Metadata
+ * Container
+ */
+#define IAVF_RXD_FLEX_XTRMD0_VALID_M		BIT(14)
+#define IAVF_RXD_FLEX_XTRMD1_VALID_M		BIT(15)
+/* Stripped L2 Tag from the receive packet. */
+#define IAVF_RXD_FLEX_L2TAG1_M			GENMASK_ULL(31, 16)
+/* The hash signature (RSS). */
+#define IAVF_RXD_FLEX_RSS_HASH_M		GENMASK_ULL(63, 32)
+
 	aligned_le64 qw2;
 /* Extracted second word of the L2 Tag 2. */
 #define IAVF_RXD_LEGACY_L2TAG2_2_M		GENMASK_ULL(63, 48)
 /* Extended status bits. */
 #define IAVF_RXD_LEGACY_EXT_STATUS_M		GENMASK_ULL(11, 0)
+/* L2 Tag 2 Presence. */
+#define IAVF_RXD_LEGACY_L2TAG2P_M		BIT(0)
+/* Stripped L2 Tag from the receive packet. */
+#define IAVF_RXD_LEGACY_L2TAG2_M		GENMASK_ULL(63, 32)
+/* Stripped L2 Tag from the receive packet. */
+#define IAVF_RXD_LEGACY_L2TAG2_1_M		GENMASK_ULL(47, 32)
+/* Stripped L2 Tag from the receive packet. */
+#define IAVF_RXD_FLEX_L2TAG2_2_M		GENMASK_ULL(63, 48)
+/* The packet is a UDP tunneled packet. */
+#define IAVF_RXD_FLEX_NAT_M			BIT(4)
+/* L2 Tag 2 Presence. */
+#define IAVF_RXD_FLEX_L2TAG2P_M			BIT(11)
+/* Indicates that extracted data from the packet is valid in specific Metadata
+ * Container
+ */
+#define IAVF_RXD_FLEX_XTRMD2_VALID_M		BIT(12)
+#define IAVF_RXD_FLEX_XTRMD3_VALID_M		BIT(13)
+#define IAVF_RXD_FLEX_XTRMD4_VALID_M		BIT(14)
+#define IAVF_RXD_FLEX_XTRMD5_VALID_M		BIT(15)
 
 	aligned_le64 qw3;
 } __aligned(4 * sizeof(__le64));
-
-enum iavf_rx_desc_status_bits {
-	/* Note: These are predefined bit offsets */
-	IAVF_RX_DESC_STATUS_DD_SHIFT		= 0,
-	IAVF_RX_DESC_STATUS_EOF_SHIFT		= 1,
-	IAVF_RX_DESC_STATUS_L2TAG1P_SHIFT	= 2,
-	IAVF_RX_DESC_STATUS_L3L4P_SHIFT		= 3,
-	IAVF_RX_DESC_STATUS_CRCP_SHIFT		= 4,
-	IAVF_RX_DESC_STATUS_TSYNINDX_SHIFT	= 5, /* 2 BITS */
-	IAVF_RX_DESC_STATUS_TSYNVALID_SHIFT	= 7,
-	/* Note: Bit 8 is reserved in X710 and XL710 */
-	IAVF_RX_DESC_STATUS_EXT_UDP_0_SHIFT	= 8,
-	IAVF_RX_DESC_STATUS_UMBCAST_SHIFT	= 9, /* 2 BITS */
-	IAVF_RX_DESC_STATUS_FLM_SHIFT		= 11,
-	IAVF_RX_DESC_STATUS_FLTSTAT_SHIFT	= 12, /* 2 BITS */
-	IAVF_RX_DESC_STATUS_LPBK_SHIFT		= 14,
-	IAVF_RX_DESC_STATUS_IPV6EXADD_SHIFT	= 15,
-	IAVF_RX_DESC_STATUS_RESERVED_SHIFT	= 16, /* 2 BITS */
-	/* Note: For non-tunnel packets INT_UDP_0 is the right status for
-	 * UDP header
-	 */
-	IAVF_RX_DESC_STATUS_INT_UDP_0_SHIFT	= 18,
-	IAVF_RX_DESC_STATUS_LAST /* this entry must be last!!! */
-};
-
-#define IAVF_RXD_QW1_STATUS_SHIFT	0
-#define IAVF_RXD_QW1_STATUS_MASK	((BIT(IAVF_RX_DESC_STATUS_LAST) - 1) \
-					 << IAVF_RXD_QW1_STATUS_SHIFT)
 
 #define IAVF_RXD_QW1_STATUS_TSYNINDX_SHIFT IAVF_RX_DESC_STATUS_TSYNINDX_SHIFT
 #define IAVF_RXD_QW1_STATUS_TSYNINDX_MASK  (0x3UL << \
@@ -245,22 +340,6 @@ enum iavf_rx_desc_fltstat_values {
 	IAVF_RX_DESC_FLTSTAT_RSS_HASH	= 3,
 };
 
-#define IAVF_RXD_QW1_ERROR_SHIFT	19
-#define IAVF_RXD_QW1_ERROR_MASK		(0xFFUL << IAVF_RXD_QW1_ERROR_SHIFT)
-
-enum iavf_rx_desc_error_bits {
-	/* Note: These are predefined bit offsets */
-	IAVF_RX_DESC_ERROR_RXE_SHIFT		= 0,
-	IAVF_RX_DESC_ERROR_RECIPE_SHIFT		= 1,
-	IAVF_RX_DESC_ERROR_HBO_SHIFT		= 2,
-	IAVF_RX_DESC_ERROR_L3L4E_SHIFT		= 3, /* 3 BITS */
-	IAVF_RX_DESC_ERROR_IPE_SHIFT		= 3,
-	IAVF_RX_DESC_ERROR_L4E_SHIFT		= 4,
-	IAVF_RX_DESC_ERROR_EIPE_SHIFT		= 5,
-	IAVF_RX_DESC_ERROR_OVERSIZE_SHIFT	= 6,
-	IAVF_RX_DESC_ERROR_PPRS_SHIFT		= 7
-};
-
 enum iavf_rx_desc_error_l3l4e_fcoe_masks {
 	IAVF_RX_DESC_ERROR_L3L4E_NONE		= 0,
 	IAVF_RX_DESC_ERROR_L3L4E_PROT		= 1,
@@ -268,13 +347,6 @@ enum iavf_rx_desc_error_l3l4e_fcoe_masks {
 	IAVF_RX_DESC_ERROR_L3L4E_DMAC_ERR	= 3,
 	IAVF_RX_DESC_ERROR_L3L4E_DMAC_WARN	= 4
 };
-
-#define IAVF_RXD_QW1_PTYPE_SHIFT	30
-#define IAVF_RXD_QW1_PTYPE_MASK		(0xFFULL << IAVF_RXD_QW1_PTYPE_SHIFT)
-
-#define IAVF_RXD_QW1_LENGTH_PBUF_SHIFT	38
-#define IAVF_RXD_QW1_LENGTH_PBUF_MASK	(0x3FFFULL << \
-					 IAVF_RXD_QW1_LENGTH_PBUF_SHIFT)
 
 #define IAVF_RXD_QW1_LENGTH_HBUF_SHIFT	52
 #define IAVF_RXD_QW1_LENGTH_HBUF_MASK	(0x7FFULL << \
