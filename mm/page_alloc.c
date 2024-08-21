@@ -4338,6 +4338,9 @@ retry:
 		ac->nodemask = NULL;
 		ac->preferred_zoneref = first_zones_zonelist(ac->zonelist,
 					ac->highest_zoneidx, ac->nodemask);
+	} else if (in_task() && !ac->nodemask) {
+		/* Set the nodemask if the request comes from user space. */
+		ac->nodemask = &cpuset_current_mems_allowed;
 	}
 
 	/* Attempt with potentially adjusted zonelist and alloc_flags */
