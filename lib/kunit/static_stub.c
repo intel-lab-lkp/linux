@@ -121,3 +121,24 @@ void __kunit_activate_static_stub(struct kunit *test,
 	}
 }
 EXPORT_SYMBOL_GPL(__kunit_activate_static_stub);
+
+static void nullify_stub_ptr(void *data)
+{
+	void **ptr = data;
+
+	*ptr = NULL;
+}
+
+/*
+ * Helper function for kunit_activate_static_stub(). The macro does
+ * typechecking, so use it instead.
+ */
+void __kunit_activate_fixed_stub(struct kunit *test, void *stub_ptr, void *replacement_func)
+{
+	void **stub = stub_ptr;
+
+	KUNIT_ASSERT_NOT_NULL(test, stub_ptr);
+	*stub = replacement_func;
+	KUNIT_ASSERT_EQ(test, 0, kunit_add_action_or_reset(test, nullify_stub_ptr, stub_ptr));
+}
+EXPORT_SYMBOL_GPL(__kunit_activate_fixed_stub);
