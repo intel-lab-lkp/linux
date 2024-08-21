@@ -19,6 +19,7 @@
 #include <linux/compat.h>
 #include <linux/mm.h>
 #include <linux/vmalloc.h>
+#include <keys/key_user.h>
 
 struct iovec;
 
@@ -43,25 +44,6 @@ extern struct key_type key_type_user;
 extern struct key_type key_type_logon;
 
 /*****************************************************************************/
-/*
- * Keep track of keys for a user.
- *
- * This needs to be separate to user_struct to avoid a refcount-loop
- * (user_struct pins some keyrings which pin this struct).
- *
- * We also keep track of keys under request from userspace for this UID here.
- */
-struct key_user {
-	struct rb_node		node;
-	struct mutex		cons_lock;	/* construction initiation lock */
-	spinlock_t		lock;
-	refcount_t		usage;		/* for accessing qnkeys & qnbytes */
-	atomic_t		nkeys;		/* number of keys */
-	atomic_t		nikeys;		/* number of instantiated keys */
-	kuid_t			uid;
-	int			qnkeys;		/* number of keys allocated to this user */
-	int			qnbytes;	/* number of bytes allocated to this user */
-};
 
 extern struct rb_root	key_user_tree;
 extern spinlock_t	key_user_lock;
