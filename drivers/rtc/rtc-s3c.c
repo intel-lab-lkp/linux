@@ -425,24 +425,18 @@ static int s3c_rtc_probe(struct platform_device *pdev)
 	if (IS_ERR(info->base))
 		return PTR_ERR(info->base);
 
-	info->rtc_clk = devm_clk_get(&pdev->dev, "rtc");
+	info->rtc_clk = devm_clk_get_enabled(&pdev->dev, "rtc");
 	if (IS_ERR(info->rtc_clk))
 		return dev_err_probe(&pdev->dev, PTR_ERR(info->rtc_clk),
 				     "failed to find rtc clock\n");
-	ret = clk_prepare_enable(info->rtc_clk);
-	if (ret)
-		return ret;
 
 	if (info->data->needs_src_clk) {
-		info->rtc_src_clk = devm_clk_get(&pdev->dev, "rtc_src");
+		info->rtc_src_clk = devm_clk_get_enabled(&pdev->dev, "rtc_src");
 		if (IS_ERR(info->rtc_src_clk)) {
 			ret = dev_err_probe(&pdev->dev, PTR_ERR(info->rtc_src_clk),
 					    "failed to find rtc source clock\n");
-			goto err_src_clk;
+			return ret;
 		}
-		ret = clk_prepare_enable(info->rtc_src_clk);
-		if (ret)
-			goto err_src_clk;
 	}
 
 	/* disable RTC enable bits potentially set by the bootloader */
@@ -486,13 +480,6 @@ static int s3c_rtc_probe(struct platform_device *pdev)
 err_nortc:
 	if (info->data->disable)
 		info->data->disable(info);
-
-	if (info->data->needs_src_clk)
-		clk_disable_unprepare(info->rtc_src_clk);
-err_src_clk:
-	clk_disable_unprepare(info->rtc_clk);
-
-	return ret;
 }
 
 #ifdef CONFIG_PM_SLEEP
