@@ -170,7 +170,7 @@ static struct socket *pfcp_create_sock(struct pfcp_dev *pfcp)
 
 	tuncfg.sk_user_data = pfcp;
 	tuncfg.encap_rcv = pfcp_encap_recv;
-	tuncfg.encap_type = 1;
+	tuncfg.encap_type = UDP_ENCAP_PFCP;
 
 	setup_udp_tunnel_sock(net, sock, &tuncfg);
 
