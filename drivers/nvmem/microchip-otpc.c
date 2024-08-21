@@ -82,7 +82,7 @@ static int mchp_otpc_prepare_read(struct mchp_otpc *otpc,
 	writel_relaxed(tmp, otpc->base + MCHP_OTPC_MR);
 
 	/* Set read. */
-	tmp = readl_relaxed(otpc->base + MCHP_OTPC_CR);
+	tmp = 0;
 	tmp |= MCHP_OTPC_CR_READ;
 	writel_relaxed(tmp, otpc->base + MCHP_OTPC_CR);
 
