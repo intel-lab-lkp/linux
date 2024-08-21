@@ -299,6 +299,7 @@ extern struct key *key_alloc(struct key_type *type,
 
 extern void key_revoke(struct key *key);
 extern void key_invalidate(struct key *key);
+struct key *key_get(struct key *key);
 extern void key_put(struct key *key);
 extern bool key_put_tag(struct key_tag *tag);
 extern void key_remove_domain(struct key_tag *domain_tag);
@@ -307,11 +308,6 @@ static inline struct key *__key_get(struct key *key)
 {
 	refcount_inc(&key->usage);
 	return key;
-}
-
-static inline struct key *key_get(struct key *key)
-{
-	return key ? __key_get(key) : key;
 }
 
 static inline void key_ref_put(key_ref_t key_ref)

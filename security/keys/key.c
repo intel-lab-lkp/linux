@@ -636,6 +636,20 @@ int key_reject_and_link(struct key *key,
 EXPORT_SYMBOL(key_reject_and_link);
 
 /**
+ * key_get - Get a reference on a key
+ * @key: The key to get a reference on.
+ *
+ * Get a reference on a key, if not NULL, and return the parameter.
+ */
+struct key *key_get(struct key *key)
+{
+	if (key)
+		refcount_inc(&key->usage);
+	return key;
+}
+EXPORT_SYMBOL(key_get);
+
+/**
  * key_put - Discard a reference to a key.
  * @key: The key to discard a reference from.
  *
