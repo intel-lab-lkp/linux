@@ -55,14 +55,15 @@ static void check_poison_mem(struct page *page, unsigned char *mem, size_t bytes
 	if (!start)
 		return;
 
+	if (!__ratelimit(&ratelimit))
+		return;
+
 	for (end = mem + bytes - 1; end > start; end--) {
 		if (*end != PAGE_POISON)
 			break;
 	}
 
-	if (!__ratelimit(&ratelimit))
-		return;
-	else if (start == end && single_bit_flip(*start, PAGE_POISON))
+	if (start == end && single_bit_flip(*start, PAGE_POISON))
 		pr_err("pagealloc: single bit error\n");
 	else
 		pr_err("pagealloc: memory corruption\n");
