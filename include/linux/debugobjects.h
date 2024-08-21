@@ -2,7 +2,7 @@
 #ifndef _LINUX_DEBUGOBJECTS_H
 #define _LINUX_DEBUGOBJECTS_H
 
-#include <linux/list.h>
+#include <linux/list_bl.h>
 #include <linux/spinlock.h>
 
 enum debug_obj_state {
@@ -26,7 +26,7 @@ struct debug_obj_descr;
  * @descr:	pointer to an object type specific debug description structure
  */
 struct debug_obj {
-	struct hlist_node	node;
+	struct hlist_bl_node	node;
 	enum debug_obj_state	state;
 	unsigned int		astate;
 	void			*object;
