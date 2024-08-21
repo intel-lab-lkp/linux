@@ -658,6 +658,9 @@ static int recv_verify_packet_ipv4(void *nh, int len)
 	if (len < sizeof(*iph) || iph->protocol != proto)
 		return -1;
 
+	/* For short packets recvmsg returns length with padding, fix that */
+	len = ntohs(iph->tot_len);
+
 	iph_addr_p = &iph->saddr;
 	if (proto == IPPROTO_TCP)
 		return recv_verify_packet_tcp(iph + 1, len - sizeof(*iph));
@@ -672,6 +675,9 @@ static int recv_verify_packet_ipv6(void *nh, int len)
 
 	if (len < sizeof(*ip6h) || ip6h->nexthdr != proto)
 		return -1;
+
+	/* For short packets recvmsg returns length with padding, fix that */
+	len = sizeof(*ip6h) + ntohs(ip6h->payload_len);
 
 	iph_addr_p = &ip6h->saddr;
 
