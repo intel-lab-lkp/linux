@@ -809,10 +809,6 @@ static int azx_rirb_get_response(struct hdac_bus *bus, unsigned int addr,
 		return -EIO;
 	}
 
-	/* no fallback mechanism? */
-	if (!chip->fallback_to_single_cmd)
-		return -EIO;
-
 	/* a fatal communication error; need either to reset or to fallback
 	 * to the single_cmd mode
 	 */
@@ -823,6 +819,10 @@ static int azx_rirb_get_response(struct hdac_bus *bus, unsigned int addr,
 			bus->last_cmd[addr]);
 		return -EAGAIN; /* give a chance to retry */
 	}
+
+	/* no fallback mechanism? */
+	if (!chip->fallback_to_single_cmd)
+		return -EIO;
 
 	dev_err(chip->card->dev,
 		"azx_get_response timeout, switching to single_cmd mode: last cmd=0x%08x\n",
