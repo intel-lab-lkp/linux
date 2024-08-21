@@ -69,6 +69,16 @@ properties:
     description: the hardware id of this larb. It's only required when this
       hardware id is not consecutive from its M4U point of view.
 
+  mediatek,smi-sub-comm:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: a phandle of smi_sub_common that the larb is linked to.
+
+  mediatek,smi-sub-comm-in-portid:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    minimum: 0
+    maximum: 7
+    description: which port of smi_sub_common that the larb is linked to.
+
 required:
   - compatible
   - reg
@@ -124,6 +134,18 @@ allOf:
     then:
       required:
         - mediatek,larb-id
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - mediatek,mt8188-smi-larb
+
+    then:
+      required:
+        - mediatek,smi-sub-comm
+        - mediatek,smi-sub-comm-in-portid
 
 additionalProperties: false
 
