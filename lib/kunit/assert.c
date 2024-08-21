@@ -82,9 +82,9 @@ void kunit_ptr_not_err_assert_format(const struct kunit_assert *assert,
 				  ptr_assert->text);
 	} else if (IS_ERR(ptr_assert->value)) {
 		string_stream_add(stream,
-				  KUNIT_SUBTEST_INDENT "Expected %s is not error, but is: %ld\n",
+				  KUNIT_SUBTEST_INDENT "Expected %s is not error, but is %pe\n",
 				  ptr_assert->text,
-				  PTR_ERR(ptr_assert->value));
+				  ptr_assert->value);
 	}
 	kunit_assert_print_msg(message, stream);
 }
