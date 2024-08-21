@@ -5046,6 +5046,10 @@ int dev_err_probe(const struct device *dev, int err, const char *fmt, ...)
 		 */
 		break;
 
+	case 0:
+		/* Success, no need to issue an error message */
+		break;
+
 	default:
 		dev_err(dev, "error %pe: %pV", ERR_PTR(err), &vaf);
 		break;
