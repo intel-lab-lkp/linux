@@ -8,6 +8,7 @@
 #include "intel_gt_print.h"
 #include "intel_gt_regs.h"
 #include "intel_gt_sysfs.h"
+#include "sysfs_engines.h"
 
 static void intel_gt_apply_ccs_mode(struct intel_gt *gt)
 {
@@ -115,6 +116,29 @@ static void __update_ccs_mask(struct intel_gt *gt, u32 ccs_mode)
 	intel_gt_apply_ccs_mode(gt);
 }
 
+static void update_ccs_mask(struct intel_gt *gt, u32 ccs_mode)
+{
+	struct intel_engine_cs *engine;
+	intel_engine_mask_t tmp;
+
+	__update_ccs_mask(gt, ccs_mode);
+
+	/* Update workaround values */
+	for_each_engine_masked(engine, gt, gt->ccs.id_mask, tmp) {
+		struct i915_wa_list *wal = &engine->wa_list;
+		struct i915_wa *wa;
+		int i;
+
+		for (i = 0, wa = wal->list; i < wal->count; i++, wa++) {
+			if (!i915_mmio_reg_equal(wa->reg, XEHP_CCS_MODE))
+				continue;
+
+			wa->set = gt->ccs.mode_reg_val;
+			wa->read = gt->ccs.mode_reg_val;
+		}
+	}
+}
+
 void intel_gt_ccs_mode_init(struct intel_gt *gt)
 {
 	if (!IS_DG2(gt->i915))
@@ -126,6 +150,81 @@ void intel_gt_ccs_mode_init(struct intel_gt *gt)
 	 * During init the workaround are not set up yet.
 	 */
 	__update_ccs_mask(gt, 1);
+}
+
+static int rb_engine_cmp(struct rb_node *rb_new, const struct rb_node *rb_old)
+{
+	struct intel_engine_cs *new = rb_to_uabi_engine(rb_new);
+	struct intel_engine_cs *old = rb_to_uabi_engine(rb_old);
+
+	return new->uabi_instance - old->uabi_instance;
+}
+
+static void __maybe_unused add_uabi_ccs_engines(struct intel_gt *gt, u32 ccs_mode)
+{
+	struct drm_i915_private *i915 = gt->i915;
+	intel_engine_mask_t new_ccs_mask, tmp;
+	struct intel_engine_cs *e;
+
+	/* Store the current ccs mask */
+	new_ccs_mask = gt->ccs.id_mask;
+	update_ccs_mask(gt, ccs_mode);
+
+	/*
+	 * Store only the mask of the CCS engines that need to be added by
+	 * removing from the new mask the engines that are already active
+	 */
+	new_ccs_mask = gt->ccs.id_mask & ~new_ccs_mask;
+	new_ccs_mask <<= CCS0;
+
+	for_each_engine_masked(e, gt, new_ccs_mask, tmp) {
+		mutex_lock(&e->uabi_mutex);
+
+		i915->engine_uabi_class_count[I915_ENGINE_CLASS_COMPUTE]++;
+
+		/* The engine is now inserted and marked as valid */
+		rb_find_add(&e->uabi_node, &i915->uabi_engines, rb_engine_cmp);
+
+		if (intel_engine_add_single_sysfs(e))
+			gt_warn(gt,
+				"Unable to create sysfs entries for %s engine",
+				e->name);
+
+		mutex_unlock(&e->uabi_mutex);
+	}
+}
+
+static void __maybe_unused remove_uabi_ccs_engines(struct intel_gt *gt, u8 ccs_mode)
+{
+	struct drm_i915_private *i915 = gt->i915;
+	intel_engine_mask_t new_ccs_mask, tmp;
+	struct intel_engine_cs *e;
+
+	/* Store the current ccs mask */
+	new_ccs_mask = gt->ccs.id_mask;
+	update_ccs_mask(gt, ccs_mode);
+
+	/*
+	 * Store only the mask of the CCS engines that need to be removed by
+	 * unmasking them from the new mask the engines that are already active
+	 */
+	new_ccs_mask = new_ccs_mask & ~gt->ccs.id_mask;
+	new_ccs_mask <<= CCS0;
+
+	for_each_engine_masked(e, gt, new_ccs_mask, tmp) {
+		mutex_lock(&e->uabi_mutex);
+
+		i915->engine_uabi_class_count[I915_ENGINE_CLASS_COMPUTE]--;
+
+		rb_erase(&e->uabi_node, &i915->uabi_engines);
+		RB_CLEAR_NODE(&e->uabi_node);
+
+		/* Remove sysfs entries */
+		kobject_del(e->kobj);
+		e->kobj = NULL;
+
+		mutex_unlock(&e->uabi_mutex);
+	}
 }
 
 static ssize_t num_cslices_show(struct device *dev,

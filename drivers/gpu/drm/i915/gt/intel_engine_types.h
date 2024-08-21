@@ -413,6 +413,11 @@ struct intel_engine_cs {
 		struct list_head uabi_list;
 		struct rb_node uabi_node;
 	};
+	/*
+	 * Serialize changes if the engine status, validity (through
+	 * RB_CLEAR_NODE) and insertion and removal from uabi list
+	 */
+	struct mutex uabi_mutex;
 
 	struct intel_sseu sseu;
 

@@ -219,6 +219,8 @@ void intel_engines_driver_register(struct drm_i915_private *i915)
 		struct intel_engine_cs *engine =
 			container_of(it, typeof(*engine), uabi_list);
 
+		mutex_init(&engine->uabi_mutex);
+
 		if (intel_gt_has_unrecoverable_error(engine->gt))
 			goto clear_node_continue; /* ignore incomplete engines */
 
