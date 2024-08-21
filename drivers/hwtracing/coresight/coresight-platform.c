@@ -243,6 +243,24 @@ static int of_coresight_parse_endpoint(struct device *dev,
 		conn.dest_fwnode = fwnode_handle_get(rdev_fwnode);
 		conn.dest_port = rendpoint.port;
 
+		/*
+		 * Get the firmware node of the filter source through the
+		 * reference. This could be used to filter the source in
+		 * building path.
+		 */
+		conn.filter_src_fwnode =
+			fwnode_find_reference(&ep->fwnode, "filter-src", 0);
+		if (IS_ERR(conn.filter_src_fwnode))
+			conn.filter_src_fwnode = NULL;
+		else {
+			conn.filter_src_dev =
+			 coresight_find_csdev_by_fwnode(conn.filter_src_fwnode);
+			if (conn.filter_src_dev && (conn.filter_src_dev->type
+			    != CORESIGHT_DEV_TYPE_SOURCE))
+				dev_warn(&conn.filter_src_dev->dev,
+				  "Filter source is not a source device\n");
+		}
+
 		new_conn = coresight_add_out_conn(dev, pdata, &conn);
 		if (IS_ERR_VALUE(new_conn)) {
 			fwnode_handle_put(conn.dest_fwnode);
