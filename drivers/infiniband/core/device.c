@@ -1351,6 +1351,30 @@ static void prevent_dealloc_device(struct ib_device *ib_dev)
 {
 }
 
+static void ib_device_notify_register(struct ib_device *device)
+{
+	struct net_device *netdev;
+	u32 port;
+	int ret;
+
+	ret = rdma_nl_notify_event(device, 0, RDMA_REGISTER_EVENT);
+	if (ret)
+		return;
+
+	rdma_for_each_port(device, port) {
+		netdev = ib_device_get_netdev(device, port);
+		if (!netdev)
+			continue;
+
+		ret = rdma_nl_notify_event(device, port,
+					   RDMA_NETDEV_ATTACH_EVENT);
+		dev_put(netdev);
+		if (ret)
+			return;
+	}
+	return;
+}
+
 /**
  * ib_register_device - Register an IB device with IB core
  * @device: Device to register
@@ -1449,6 +1473,8 @@ int ib_register_device(struct ib_device *device, const char *name,
 	dev_set_uevent_suppress(&device->dev, false);
 	/* Mark for userspace that device is ready */
 	kobject_uevent(&device->dev.kobj, KOBJ_ADD);
+
+	ib_device_notify_register(device);
 	ib_device_put(device);
 
 	return 0;
@@ -1491,6 +1517,7 @@ static void __ib_unregister_device(struct ib_device *ib_dev)
 		goto out;
 
 	disable_device(ib_dev);
+	rdma_nl_notify_event(ib_dev, 0, RDMA_UNREGISTER_EVENT);
 
 	/* Expedite removing unregistered pointers from the hash table */
 	free_netdevs(ib_dev);
@@ -2159,6 +2186,7 @@ static void add_ndev_hash(struct ib_port_data *pdata)
 int ib_device_set_netdev(struct ib_device *ib_dev, struct net_device *ndev,
 			 u32 port)
 {
+	enum rdma_nl_notify_event_type etype;
 	struct net_device *old_ndev;
 	struct ib_port_data *pdata;
 	unsigned long flags;
@@ -2190,6 +2218,16 @@ int ib_device_set_netdev(struct ib_device *ib_dev, struct net_device *ndev,
 	spin_unlock_irqrestore(&pdata->netdev_lock, flags);
 
 	add_ndev_hash(pdata);
+
+	down_read(&devices_rwsem);
+	if (xa_get_mark(&devices, ib_dev->index, DEVICE_REGISTERED) &&
+	    xa_load(&devices, ib_dev->index) == ib_dev) {
+		etype = ndev ?
+			RDMA_NETDEV_ATTACH_EVENT : RDMA_NETDEV_DETACH_EVENT;
+		rdma_nl_notify_event(ib_dev, port, etype);
+	}
+	up_read(&devices_rwsem);
+
 	return 0;
 }
 EXPORT_SYMBOL(ib_device_set_netdev);
