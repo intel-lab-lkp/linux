@@ -113,3 +113,54 @@ to apply at each uncore* level.
 
 Support for "current_freq_khz" is available only at each fabric cluster
 level (i.e., in uncore* directory).
+
+Efficiency vs. Latency Tradeoff
+-------------------------------
+
+In the realm of high-performance computing, particularly with Xeon
+processors, managing uncore frequency is an important aspect of system
+optimization. Traditionally, the uncore frequency is ramped up rapidly
+in high load scenarios. While this strategy achieves low latency, which
+is crucial for time-sensitive computations, it does not necessarily yield
+the best performance per watt, —a key metric for energy efficiency and
+operational cost savings.
+
+The Efficiency vs. Latency Control (ELC) feature allows user to influence
+the uncore frequency scaling algorithm. Hardware monitors the average CPU
+utilization across all cores at regular intervals. If the average CPU
+utilization is below a user defined threshold (elc_low_threshold_percent),
+the user defined uncore frequency floor frequency will be used
+(elc_floor_freq_khz), minimizing latency. Similarly in high load scenario
+where the CPU utilization goes above the high threshold value
+(elc_high_threshold_percent) instead of jumping to maximum uncore
+frequency, uncore frequency is increased in 100MHz steps until the power
+limit is reached.
+
+Attributes for efficiency latency control:
+
+``elc_floor_freq_khz``
+	This attribute is used to get/set the efficiency latency floor frequency.
+	If this variable is lower than the 'min_freq_khz', it is ignored by
+	the firmware.
+
+``elc_low_threshold_percent``
+	This attribute is used to get/set the efficiency latency control low
+	threshold. This attribute is in percentages of CPU utilization.
+
+``elc_high_threshold_percent``
+	This attribute is used to get/set the efficiency latency control high
+	threshold. This attribute is in percentages of CPU utilization.
+
+``elc_high_threshold_enable``
+	This attribute is used to enable/disable the efficiency latency control
+	high threshold. Write '1' to enable, '0' to disable.
+
+Example system configuration below, which does following:
+  * when CPU utilization is less than 10%: sets uncore frequency to 800MHz
+  * when CPU utilization is higher than 95%: increases uncore frequency in
+    100MHz steps, until power limit is reached
+
+  elc_floor_freq_khz:800000
+  elc_high_threshold_percent:95
+  elc_high_threshold_enable:1
+  elc_low_threshold_percent:10
