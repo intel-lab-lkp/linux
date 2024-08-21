@@ -228,9 +228,9 @@ static int copy_mnt_idmap(struct uid_gid_map *map_from,
 		return 0;
 	}
 
-	forward = kmemdup(map_from->forward,
-			  nr_extents * sizeof(struct uid_gid_extent),
-			  GFP_KERNEL_ACCOUNT);
+	forward = kmemdup_array(map_from->forward, nr_extents,
+				sizeof(struct uid_gid_extent),
+				GFP_KERNEL_ACCOUNT);
 	if (!forward)
 		return -ENOMEM;
 
