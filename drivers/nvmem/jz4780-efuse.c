@@ -62,7 +62,6 @@
 struct jz4780_efuse {
 	struct device *dev;
 	struct regmap *map;
-	struct clk *clk;
 };
 
 /* main entry point */
@@ -131,11 +130,6 @@ static const struct regmap_config jz4780_efuse_regmap_config = {
 	.max_register = JZ_EFUDATA(7),
 };
 
-static void clk_disable_unprepare_helper(void *clock)
-{
-	clk_disable_unprepare(clock);
-}
-
 static int jz4780_efuse_probe(struct platform_device *pdev)
 {
 	struct nvmem_device *nvmem;
@@ -146,7 +140,7 @@ static int jz4780_efuse_probe(struct platform_device *pdev)
 	unsigned long rd_strobe;
 	struct device *dev = &pdev->dev;
 	void __iomem *regs;
-	int ret;
+	struct clk *clk;
 
 	efuse = devm_kzalloc(dev, sizeof(*efuse), GFP_KERNEL);
 	if (!efuse)
@@ -161,21 +155,11 @@ static int jz4780_efuse_probe(struct platform_device *pdev)
 	if (IS_ERR(efuse->map))
 		return PTR_ERR(efuse->map);
 
-	efuse->clk = devm_clk_get(&pdev->dev, NULL);
-	if (IS_ERR(efuse->clk))
-		return PTR_ERR(efuse->clk);
+	clk = devm_clk_get_enabled(&pdev->dev, NULL);
+	if (IS_ERR(clk))
+		return PTR_ERR(clk);
 
-	ret = clk_prepare_enable(efuse->clk);
-	if (ret < 0)
-		return ret;
-
-	ret = devm_add_action_or_reset(&pdev->dev,
-				       clk_disable_unprepare_helper,
-				       efuse->clk);
-	if (ret < 0)
-		return ret;
-
-	clk_rate = clk_get_rate(efuse->clk);
+	clk_rate = clk_get_rate(clk);
 
 	efuse->dev = dev;
 
