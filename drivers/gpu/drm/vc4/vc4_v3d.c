@@ -508,6 +508,8 @@ static void vc4_v3d_unbind(struct device *dev, struct device *master,
 
 static const struct dev_pm_ops vc4_v3d_pm_ops = {
 	SET_RUNTIME_PM_OPS(vc4_v3d_runtime_suspend, vc4_v3d_runtime_resume, NULL)
+	SET_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend,
+				pm_runtime_force_resume)
 };
 
 static const struct component_ops vc4_v3d_ops = {
