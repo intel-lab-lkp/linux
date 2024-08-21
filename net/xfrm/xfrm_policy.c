@@ -2156,7 +2156,7 @@ xfrm_policy_eval_candidates(struct xfrm_pol_inexact_candidates *cand,
 		tmp = __xfrm_policy_eval_candidates(cand->res[i],
 						    prefer,
 						    fl, type, family, if_id);
-		if (!tmp)
+		if (IS_ERR(tmp))
 			continue;
 
 		if (IS_ERR(tmp))
