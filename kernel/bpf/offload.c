@@ -130,7 +130,7 @@ static int bpf_map_offload_ndo(struct bpf_offloaded_map *offmap,
 	/* Caller must make sure netdev is valid */
 	netdev = offmap->netdev;
 
-	return netdev->netdev_ops->ndo_bpf(netdev, &data);
+	return dev_xdp_propagate(netdev, &data);
 }
 
 static void __bpf_map_offload_destroy(struct bpf_offloaded_map *offmap)

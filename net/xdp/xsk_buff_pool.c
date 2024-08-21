@@ -149,7 +149,7 @@ static void xp_disable_drv_zc(struct xsk_buff_pool *pool)
 		bpf.xsk.pool = NULL;
 		bpf.xsk.queue_id = pool->queue_id;
 
-		err = pool->netdev->netdev_ops->ndo_bpf(pool->netdev, &bpf);
+		err = dev_xdp_propagate(pool->netdev, &bpf);
 
 		if (err)
 			WARN(1, "Failed to disable zero-copy!\n");
@@ -215,7 +215,7 @@ int xp_assign_dev(struct xsk_buff_pool *pool,
 	bpf.xsk.pool = pool;
 	bpf.xsk.queue_id = queue_id;
 
-	err = netdev->netdev_ops->ndo_bpf(netdev, &bpf);
+	err = dev_xdp_propagate(netdev, &bpf);
 	if (err)
 		goto err_unreg_pool;
 
