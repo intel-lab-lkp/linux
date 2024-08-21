@@ -1068,7 +1068,7 @@ static struct clk_mgr_funcs dcn35_funcs = {
 	.is_ips_supported = dcn35_is_ips_supported,
 };
 
-struct clk_mgr_funcs dcn35_fpga_funcs = {
+static struct clk_mgr_funcs dcn35_fpga_funcs = {
 	.get_dp_ref_clk_frequency = dce12_get_dp_ref_freq_khz,
 	.update_clocks = dcn35_update_clocks_fpga,
 	.init_clocks = dcn35_init_clocks_fpga,
