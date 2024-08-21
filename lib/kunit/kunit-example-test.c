@@ -6,8 +6,10 @@
  * Author: Brendan Higgins <brendanhiggins@google.com>
  */
 
+#include <linux/workqueue.h>
 #include <kunit/test.h>
 #include <kunit/static_stub.h>
+#include <kunit/visibility.h>
 
 /*
  * This is the most fundamental element of KUnit, the test case. A test case
@@ -221,6 +223,66 @@ static void example_static_stub_using_fn_ptr_test(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, add_one(1), 2);
 }
 
+/* This could be a location of various fixed stub functions. */
+static struct {
+	DECLARE_IF_KUNIT(int (*add_two)(int i));
+} stubs;
+
+/* This is a function we'll replace with stubs. */
+static int add_two(int i)
+{
+	/* This will trigger the stub if active. */
+	KUNIT_STATIC_STUB_REDIRECT(add_two, i);
+	KUNIT_FIXED_STUB_REDIRECT(stubs.add_two, i);
+
+	return i + 2;
+}
+
+struct add_two_async_work {
+	struct work_struct work;
+	int param;
+	int result;
+};
+
+static void add_two_async_func(struct work_struct *work)
+{
+	struct add_two_async_work *w = container_of(work, typeof(*w), work);
+
+	w->result = add_two(w->param);
+}
+
+static int add_two_async(int i)
+{
+	struct add_two_async_work w = { .param = i };
+
+	INIT_WORK_ONSTACK(&w.work, add_two_async_func);
+	schedule_work(&w.work);
+	flush_work(&w.work);
+	destroy_work_on_stack(&w.work);
+
+	return w.result;
+}
+
+/*
+ */
+static void example_fixed_stub_test(struct kunit *test)
+{
+	/* static stub redirection works only for KUnit thread */
+	kunit_activate_static_stub(test, add_two, subtract_one);
+	KUNIT_EXPECT_EQ(test, add_two(1), subtract_one(1));
+	KUNIT_EXPECT_NE_MSG(test, add_two_async(1), subtract_one(1),
+			    "stub shouldn't be active outside KUnit thread!");
+	kunit_deactivate_static_stub(test, add_two);
+	KUNIT_EXPECT_EQ(test, add_two(1), add_two(1));
+
+	/* fixed stub redirection works for KUnit and other threads */
+	kunit_activate_fixed_stub(test, stubs.add_two, subtract_one);
+	KUNIT_EXPECT_EQ(test, add_two(1), subtract_one(1));
+	KUNIT_EXPECT_EQ(test, add_two_async(1), subtract_one(1));
+	kunit_deactivate_fixed_stub(test, stubs.add_two);
+	KUNIT_EXPECT_EQ(test, add_two(1), add_two(1));
+}
+
 static const struct example_param {
 	int value;
 } example_params_array[] = {
@@ -294,6 +356,7 @@ static struct kunit_case example_test_cases[] = {
 	KUNIT_CASE(example_all_expect_macros_test),
 	KUNIT_CASE(example_static_stub_test),
 	KUNIT_CASE(example_static_stub_using_fn_ptr_test),
+	KUNIT_CASE(example_fixed_stub_test),
 	KUNIT_CASE(example_priv_test),
 	KUNIT_CASE_PARAM(example_params_test, example_gen_params),
 	KUNIT_CASE_SLOW(example_slow_test),
