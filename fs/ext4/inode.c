@@ -869,7 +869,11 @@ struct buffer_head *ext4_getblk(handle_t *handle, struct inode *inode,
 	if (nowait)
 		return sb_find_get_block(inode->i_sb, map.m_pblk);
 
+#ifndef CONFIG_CMA
 	bh = sb_getblk(inode->i_sb, map.m_pblk);
+#else
+	bh = sb_getblk_gfp(inode->i_sb, map.m_pblk, 0);
+#endif
 	if (unlikely(!bh))
 		return ERR_PTR(-ENOMEM);
 	if (map.m_flags & EXT4_MAP_NEW) {
