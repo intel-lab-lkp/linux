@@ -252,6 +252,21 @@ void sgx_cgroup_reclaim_pages_global(struct mm_struct *charge_mm)
 	sgx_cgroup_reclaim_pages(&sgx_cg_root, charge_mm, SGX_NR_TO_SCAN);
 }
 
+/**
+ * sgx_cgroup_reclaim_direct() - Preemptive reclamation.
+ *
+ * Scan and attempt to reclaim %SGX_NR_TO_SCAN as best effort to allow caller
+ * make quick progress.
+ */
+void sgx_cgroup_reclaim_direct(void)
+{
+	struct sgx_cgroup *sgx_cg = sgx_get_current_cg();
+
+	if (sgx_cgroup_should_reclaim(sgx_cg))
+		sgx_cgroup_reclaim_pages(sgx_cg, current->mm, SGX_NR_TO_SCAN);
+	sgx_put_cg(sgx_cg);
+}
+
 /*
  * Asynchronous work flow to reclaim pages from the cgroup when the cgroup is
  * at/near its maximum capacity.

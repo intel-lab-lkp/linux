@@ -428,6 +428,10 @@ static void sgx_reclaim_pages_global(struct mm_struct *charge_mm)
  */
 void sgx_reclaim_direct(void)
 {
+	/* Reduce chance of per-cgroup reclamation for later allocation */
+	sgx_cgroup_reclaim_direct();
+
+	/* Reduce chance of the global reclamation for later allocation */
 	if (sgx_should_reclaim_global(SGX_NR_LOW_PAGES))
 		sgx_reclaim_pages_global(current->mm);
 }
