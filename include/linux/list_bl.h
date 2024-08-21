@@ -63,10 +63,9 @@ static inline struct hlist_bl_node *hlist_bl_first(struct hlist_bl_head *h)
 static inline void hlist_bl_set_first(struct hlist_bl_head *h,
 					struct hlist_bl_node *n)
 {
-	LIST_BL_BUG_ON((unsigned long)n & LIST_BL_LOCKMASK);
-	LIST_BL_BUG_ON(((unsigned long)h->first & LIST_BL_LOCKMASK) !=
-							LIST_BL_LOCKMASK);
-	h->first = (struct hlist_bl_node *)((unsigned long)n | LIST_BL_LOCKMASK);
+	LIST_BL_BUG_ON((uintptr_t)n & LIST_BL_LOCKMASK);
+	h->first = (struct hlist_bl_node *)
+		((uintptr_t)n | ((uintptr_t)h->first & LIST_BL_LOCKMASK));
 }
 
 static inline bool hlist_bl_empty(const struct hlist_bl_head *h)
