@@ -2098,16 +2098,19 @@ static int fuse_writepage_locked(struct folio *folio)
 	struct fuse_args_pages *ap;
 	struct folio *tmp_folio;
 	struct fuse_file *ff;
-	int error = -ENOMEM;
+	int error;
 
 	tmp_folio = folio_alloc(GFP_NOFS | __GFP_HIGHMEM, 0);
-	if (!tmp_folio)
+	if (!tmp_folio) {
+		error = -ENOMEM;
 		goto err;
+	}
 
-	error = -EIO;
 	ff = fuse_write_file_get(fi);
-	if (!ff)
+	if (!ff) {
+		error = -EIO;
 		goto err_nofile;
+	}
 
 	wpa = fuse_writepage_args_setup(folio, ff);
 	if (!wpa) {
@@ -2287,17 +2290,18 @@ static int fuse_writepages_fill(struct folio *folio,
 	struct fuse_inode *fi = get_fuse_inode(inode);
 	struct fuse_conn *fc = get_fuse_conn(inode);
 	struct folio *tmp_folio;
-	int err;
+	int err = 0;
 
 	if (wpa && fuse_writepage_need_send(fc, &folio->page, ap, data)) {
 		fuse_writepages_send(data);
 		data->wpa = NULL;
 	}
 
-	err = -ENOMEM;
 	tmp_folio = folio_alloc(GFP_NOFS | __GFP_HIGHMEM, 0);
-	if (!tmp_folio)
+	if (!tmp_folio) {
+		err = -ENOMEM;
 		goto out_unlock;
+	}
 
 	/*
 	 * The page must not be redirtied until the writeout is completed
@@ -2313,10 +2317,10 @@ static int fuse_writepages_fill(struct folio *folio,
 	 * under writeback, so we can release the page lock.
 	 */
 	if (data->wpa == NULL) {
-		err = -ENOMEM;
 		wpa = fuse_writepage_args_setup(folio, data->ff);
 		if (!wpa) {
 			folio_put(tmp_folio);
+			err = -ENOMEM;
 			goto out_unlock;
 		}
 		fuse_file_get(wpa->ia.ff);
@@ -2329,7 +2333,6 @@ static int fuse_writepages_fill(struct folio *folio,
 
 	data->orig_pages[ap->num_pages] = &folio->page;
 
-	err = 0;
 	if (data->wpa) {
 		/*
 		 * Protected by fi->lock against concurrent access by
