@@ -3625,3 +3625,12 @@ int panthor_sched_init(struct panthor_device *ptdev)
 	ptdev->scheduler = sched;
 	return 0;
 }
+
+#ifdef CONFIG_DEBUG_FS
+void panthor_sched_debugfs_init(struct drm_minor *minor)
+{
+	struct panthor_device *ptdev =
+		container_of(minor->dev, struct panthor_device, base);
+	struct panthor_scheduler *sched = ptdev->scheduler;
+}
+#endif /* CONFIG_DEBUG_FS */
