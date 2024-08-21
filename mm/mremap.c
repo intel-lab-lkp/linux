@@ -175,7 +175,12 @@ static int move_ptes(struct vm_area_struct *vma, pmd_t *old_pmd,
 		err = -EAGAIN;
 		goto out;
 	}
-	new_pte = pte_offset_map_nolock(mm, new_pmd, new_addr, &new_ptl);
+	/*
+	 * Use the maywrite version to indicate that new_pte will be modified,
+	 * but since we hold the exclusive mmap_lock, there is no need to
+	 * recheck pmd_same() after acquiring the new_ptl.
+	 */
+	new_pte = pte_offset_map_maywrite_nolock(mm, new_pmd, new_addr, NULL, &new_ptl);
 	if (!new_pte) {
 		pte_unmap_unlock(old_pte, old_ptl);
 		err = -EAGAIN;
