@@ -94,6 +94,7 @@
 #include "intel_fifo_underrun.h"
 #include "intel_frontbuffer.h"
 #include "intel_hdmi.h"
+#include "intel_histogram.h"
 #include "intel_hotplug.h"
 #include "intel_link_bw.h"
 #include "intel_lvds.h"
@@ -4335,6 +4336,10 @@ static int intel_crtc_atomic_check(struct intel_atomic_state *state,
 	if (ret)
 		return ret;
 
+	/* HISTOGRAM changed */
+	if (crtc_state->histogram_en_changed)
+		return intel_histogram_atomic_check(crtc);
+
 	return 0;
 }
 
@@ -7512,6 +7517,14 @@ static void intel_atomic_commit_tail(struct intel_atomic_state *state)
 		 * FIXME get rid of this funny new->old swapping
 		 */
 		old_crtc_state->dsb = fetch_and_zero(&new_crtc_state->dsb);
+
+		/* Re-Visit: HISTOGRAM related stuff */
+		if (new_crtc_state->histogram_en_changed)
+			intel_histogram_update(crtc,
+					       new_crtc_state->histogram_en);
+		if (new_crtc_state->global_iet_changed)
+			intel_histogram_set_iet_lut(crtc,
+						    (u32 *)new_crtc_state->global_iet->data);
 	}
 
 	/* Underruns don't always raise interrupts, so check manually */

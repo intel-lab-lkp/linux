@@ -99,6 +99,12 @@ enum intel_broadcast_rgb {
 	INTEL_BROADCAST_RGB_LIMITED,
 };
 
+/* HISTOGRAM property */
+enum intel_histogram_en_prop {
+	INTEL_HISTOGRAM_PROP_DISABLE,
+	INTEL_HISTOGRAM_PROP_ENABLE,
+};
+
 struct intel_fb_view {
 	/*
 	 * The remap information used in the remapped and rotated views to
@@ -1431,6 +1437,13 @@ struct intel_crtc_state {
 
 	/* LOBF flag */
 	bool has_lobf;
+
+	/* HISTOGRAM data */
+	int histogram_en;
+	struct drm_property_blob *global_iet;
+	struct drm_property_blob *histogram;
+	bool global_iet_changed;
+	bool histogram_en_changed;
 };
 
 enum intel_pipe_crc_source {
@@ -1538,6 +1551,10 @@ struct intel_crtc {
 	struct pm_qos_request vblank_pm_qos;
 
 	struct intel_histogram *histogram;
+	/* HISTOGRAM properties */
+	struct drm_property *histogram_en_property;
+	struct drm_property *global_iet_property;
+	struct drm_property *histogram_property;
 
 #ifdef CONFIG_DEBUG_FS
 	struct intel_pipe_crc pipe_crc;
