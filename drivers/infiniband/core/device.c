@@ -2257,6 +2257,7 @@ struct net_device *ib_device_get_netdev(struct ib_device *ib_dev,
 	 * propagation of an unregistering netdev.
 	 */
 	if (res && res->reg_state != NETREG_REGISTERED) {
+		ib_device_set_netdev(ib_dev, NULL, port);
 		dev_put(res);
 		return NULL;
 	}
