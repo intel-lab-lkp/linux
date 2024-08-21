@@ -11,6 +11,7 @@
 #define __ASM_HUGETLB_H
 
 #include <asm/cacheflush.h>
+#include <asm/mte.h>
 #include <asm/page.h>
 
 #ifdef CONFIG_ARCH_ENABLE_HUGEPAGE_MIGRATION
@@ -20,7 +21,15 @@ extern bool arch_hugetlb_migration_supported(struct hstate *h);
 
 static inline void arch_clear_hugetlb_flags(struct folio *folio)
 {
-	clear_bit(PG_dcache_clean, &folio->flags);
+	const unsigned long clear_flags = BIT(PG_dcache_clean) |
+		BIT(PG_mte_tagged) | BIT(PG_mte_lock);
+
+	if (!system_supports_mte()) {
+		clear_bit(PG_dcache_clean, &folio->flags);
+		return;
+	}
+
+	folio->flags &= ~clear_flags;
 }
 #define arch_clear_hugetlb_flags arch_clear_hugetlb_flags
 

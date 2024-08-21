@@ -18,6 +18,9 @@ void copy_highpage(struct page *to, struct page *from)
 {
 	void *kto = page_address(to);
 	void *kfrom = page_address(from);
+	struct folio *src = page_folio(from);
+	struct folio *dst = page_folio(to);
+	unsigned int i, nr_pages;
 
 	copy_page(kto, kfrom);
 
@@ -27,8 +30,26 @@ void copy_highpage(struct page *to, struct page *from)
 	if (system_supports_mte() && page_mte_tagged(from)) {
 		/* It's a new page, shouldn't have been tagged yet */
 		WARN_ON_ONCE(!try_page_mte_tagging(to));
-		mte_copy_page_tags(kto, kfrom);
-		set_page_mte_tagged(to);
+
+		/* Populate tags for all subpages if hugetlb */
+		if (folio_test_hugetlb(src)) {
+			/*
+			 * MTE page flag is just set on the head page of
+			 * hugetlb. If from has MTE flag set, it must be the
+			 * head page.
+			 */
+			VM_BUG_ON(!PageHead(from));
+			nr_pages = folio_nr_pages(src);
+			for (i = 0; i < nr_pages; i++, to++, from++) {
+				kto = page_address(to);
+				kfrom = page_address(from);
+				mte_copy_page_tags(kto, kfrom);
+			}
+			set_page_mte_tagged(&dst->page);
+		} else {
+			mte_copy_page_tags(kto, kfrom);
+			set_page_mte_tagged(to);
+		}
 	}
 }
 EXPORT_SYMBOL(copy_highpage);
