@@ -26,38 +26,41 @@ struct intel_histogram {
 	u32 bindata[HISTOGRAM_BIN_COUNT];
 };
 
-static void intel_histogram_handle_int_work(struct work_struct *work)
+static void intel_histogram_read_data(struct intel_histogram *histogram)
 {
-	struct intel_histogram *histogram = container_of(work,
-		struct intel_histogram, handle_histogram_int_work.work);
 	struct drm_i915_private *i915 = histogram->i915;
 	struct intel_crtc *intel_crtc = histogram->crtc;
-	char *histogram_event[] = {"HISTOGRAM=1", NULL};
 	u32 dpstbin;
 	int i, try = 0;
 
-	/* Wa: 14014889975 */
-	if (IS_DISPLAY_VER(i915, 12, 13))
-		intel_de_rmw(i915, DPST_CTL(intel_crtc->pipe),
-			     DPST_CTL_RESTORE, 0);
-
-	/*
-	 * TODO: PSR to be exited while reading the Histogram data
-	 * Set DPST_CTL Bin Reg function select to TC
-	 * Set DPST_CTL Bin Register Index to 0
-	 */
 retry:
-	intel_de_rmw(i915, DPST_CTL(intel_crtc->pipe),
-		     DPST_CTL_BIN_REG_FUNC_SEL | DPST_CTL_BIN_REG_MASK, 0);
+	if (DISPLAY_VER(i915) >= 20) {
+		/* Set index to zero */
+		intel_de_rmw(i915, DPST_HIST_INDEX(intel_crtc->pipe),
+			     DPST_HIST_BIN_INDEX_MASK, DPST_HIST_BIN_INDEX(0));
+	} else {
+		intel_de_rmw(i915, DPST_CTL(intel_crtc->pipe),
+			     DPST_CTL_BIN_REG_FUNC_SEL | DPST_CTL_BIN_REG_MASK, 0);
+	}
+
 	for (i = 0; i < HISTOGRAM_BIN_COUNT; i++) {
-		dpstbin = intel_de_read(i915, DPST_BIN(intel_crtc->pipe));
+		dpstbin = intel_de_read(i915, DPST_HIST_BIN(intel_crtc->pipe));
 		if (dpstbin & DPST_BIN_BUSY) {
 			/*
 			 * If DPST_BIN busy bit is set, then set the
 			 * DPST_CTL bin reg index to 0 and proceed
 			 * from beginning.
 			 */
-			if (try++ >= 5) {
+			if (DISPLAY_VER(i915) >= 20) {
+				intel_de_rmw(i915, DPST_HIST_INDEX(intel_crtc->pipe),
+					     DPST_HIST_BIN_INDEX_MASK,
+					     DPST_HIST_BIN_INDEX(0));
+			} else {
+				intel_de_rmw(i915, DPST_CTL(intel_crtc->pipe),
+					     DPST_CTL_BIN_REG_MASK, 0);
+			}
+
+			if (try++ == 5) {
 				drm_err(&i915->drm,
 					"Histogram block is busy, failed to read\n");
 				intel_de_rmw(i915, DPST_GUARD(intel_crtc->pipe),
@@ -66,10 +69,37 @@ retry:
 			}
 			goto retry;
 		}
-		histogram->bindata[i] = dpstbin & DPST_BIN_DATA_MASK;
+		histogram->bindata[i] = dpstbin & DPST_HIST_BIN_DATA_MASK;
 		drm_dbg_atomic(&i915->drm, "Histogram[%d]=%x\n",
 			       i, histogram->bindata[i]);
 	}
+}
+
+static void intel_histogram_get_data(struct intel_histogram *histogram)
+{
+
+	/*
+	 * TODO: PSR to be exited while reading the Histogram data
+	 * Set DPST_CTL Bin Reg function select to TC
+	 * Set DPST_CTL Bin Register Index to 0
+	 */
+	intel_histogram_read_data(histogram);
+}
+
+static void intel_histogram_handle_int_work(struct work_struct *work)
+{
+	struct intel_histogram *histogram = container_of(work,
+		struct intel_histogram, handle_histogram_int_work.work);
+	struct drm_i915_private *i915 = histogram->i915;
+	struct intel_crtc *intel_crtc = histogram->crtc;
+	char *histogram_event[] = {"HISTOGRAM=1", NULL};
+
+	/* Wa: 14014889975 */
+	if (IS_DISPLAY_VER(i915, 12, 13))
+		intel_de_rmw(i915, DPST_CTL(intel_crtc->pipe),
+			     DPST_CTL_RESTORE, 0);
+
+	intel_histogram_get_data(histogram);
 
 	drm_property_replace_global_blob(&i915->drm,
 			&intel_crtc->config->histogram,
@@ -161,12 +191,19 @@ static int intel_histogram_enable(struct intel_crtc *intel_crtc)
 	 * enable DPST_CTL Histogram mode
 	 * Clear DPST_CTL Bin Reg function select to TC
 	 */
-	intel_de_rmw(i915, DPST_CTL(pipe),
-		     DPST_CTL_BIN_REG_FUNC_SEL | DPST_CTL_IE_HIST_EN |
-		     DPST_CTL_HIST_MODE | DPST_CTL_IE_TABLE_VALUE_FORMAT,
-		     DPST_CTL_BIN_REG_FUNC_TC | DPST_CTL_IE_HIST_EN |
-		     DPST_CTL_HIST_MODE_HSV |
-		     DPST_CTL_IE_TABLE_VALUE_FORMAT_1INT_9FRAC);
+	if (DISPLAY_VER(i915) >= 20)
+		intel_de_rmw(i915, DPST_CTL(pipe),
+			     DPST_CTL_IE_HIST_EN |
+			     DPST_CTL_HIST_MODE,
+			     DPST_CTL_IE_HIST_EN |
+			     DPST_CTL_HIST_MODE_HSV);
+	else
+		intel_de_rmw(i915, DPST_CTL(pipe),
+			     DPST_CTL_BIN_REG_FUNC_SEL | DPST_CTL_IE_HIST_EN |
+			     DPST_CTL_HIST_MODE | DPST_CTL_IE_TABLE_VALUE_FORMAT,
+			     DPST_CTL_BIN_REG_FUNC_TC | DPST_CTL_IE_HIST_EN |
+			     DPST_CTL_HIST_MODE_HSV |
+			     DPST_CTL_IE_TABLE_VALUE_FORMAT_1INT_9FRAC);
 
 	/* Re-Visit: check if wait for one vblank is required */
 	drm_crtc_wait_one_vblank(&intel_crtc->base);
@@ -252,24 +289,43 @@ int intel_histogram_set_iet_lut(struct intel_crtc *intel_crtc, u32 *data)
 	 * Set DPST_CTL Bin Reg function select to IE
 	 * Set DPST_CTL Bin Register Index to 0
 	 */
-	intel_de_rmw(i915, DPST_CTL(pipe),
-		     DPST_CTL_BIN_REG_FUNC_SEL | DPST_CTL_BIN_REG_MASK,
-		     DPST_CTL_BIN_REG_FUNC_IE | DPST_CTL_BIN_REG_CLEAR);
+	if (DISPLAY_VER(i915) >= 20) {
+		/* Set index to zero */
+		intel_de_rmw(i915, DPST_IE_INDEX(pipe),
+			     DPST_IE_BIN_INDEX_MASK, DPST_IE_BIN_INDEX(0));
+		for (i = 0; i < HISTOGRAM_IET_LENGTH; i++) {
+			intel_de_rmw(i915, DPST_IE_BIN(pipe),
+				     DPST_IE_BIN_DATA_MASK,
+				     DPST_IE_BIN_DATA(data[i]));
+			drm_dbg_atomic(&i915->drm, "iet_lut[%d]=%x\n",
+				       i, data[i]);
+		}
+		intel_de_rmw(i915, DPST_CTL(pipe),
+			     DPST_CTL_ENHANCEMENT_MODE_MASK |
+			     DPST_CTL_IE_MODI_TABLE_EN,
+			     DPST_CTL_EN_MULTIPLICATIVE |
+			     DPST_CTL_IE_MODI_TABLE_EN);
+	} else {
+		intel_de_rmw(i915, DPST_CTL(pipe),
+			     DPST_CTL_BIN_REG_FUNC_SEL | DPST_CTL_BIN_REG_MASK,
+			     DPST_CTL_BIN_REG_FUNC_IE | DPST_CTL_BIN_REG_CLEAR);
+		for (i = 0; i < HISTOGRAM_IET_LENGTH; i++) {
+			intel_de_rmw(i915, DPST_BIN(pipe),
+				     DPST_BIN_DATA_MASK, data[i]);
+			drm_dbg_atomic(&i915->drm, "iet_lut[%d]=%x\n",
+				       i, data[i]);
+		}
+		intel_de_rmw(i915, DPST_CTL(pipe),
+			     DPST_CTL_ENHANCEMENT_MODE_MASK |
+			     DPST_CTL_IE_MODI_TABLE_EN,
+			     DPST_CTL_EN_MULTIPLICATIVE |
+			     DPST_CTL_IE_MODI_TABLE_EN);
 
-	for (i = 0; i < HISTOGRAM_IET_LENGTH; i++) {
-		intel_de_rmw(i915, DPST_BIN(pipe),
-			     DPST_BIN_DATA_MASK, data[i]);
-		drm_dbg_atomic(&i915->drm, "iet_lut[%d]=%x\n", i, data[i]);
+		/* Once IE is applied, change DPST CTL to TC */
+		intel_de_rmw(i915, DPST_CTL(pipe),
+			     DPST_CTL_BIN_REG_FUNC_SEL,
+			     DPST_CTL_BIN_REG_FUNC_TC);
 	}
-
-	intel_de_rmw(i915, DPST_CTL(pipe),
-		     DPST_CTL_ENHANCEMENT_MODE_MASK | DPST_CTL_IE_MODI_TABLE_EN,
-		     DPST_CTL_EN_MULTIPLICATIVE | DPST_CTL_IE_MODI_TABLE_EN);
-
-	/* Once IE is applied, change DPST CTL to TC */
-	intel_de_rmw(i915, DPST_CTL(pipe),
-		     DPST_CTL_BIN_REG_FUNC_SEL, DPST_CTL_BIN_REG_FUNC_TC);
-
 	return 0;
 }
 
