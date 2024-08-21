@@ -5309,6 +5309,49 @@ void dwc2_gadget_program_ref_clk(struct dwc2_hsotg *hsotg)
 	dev_dbg(hsotg->dev, "GREFCLK=0x%08x\n", dwc2_readl(hsotg, GREFCLK));
 }
 
+int dwc2_gadget_backup_critical_registers(struct dwc2_hsotg *hsotg)
+{
+	int ret;
+
+	/* Backup all registers */
+	ret = dwc2_backup_global_registers(hsotg);
+	if (ret) {
+		dev_err(hsotg->dev, "%s: failed to backup global registers\n",
+			__func__);
+		return ret;
+	}
+
+	ret = dwc2_backup_device_registers(hsotg);
+	if (ret) {
+		dev_err(hsotg->dev, "%s: failed to backup device registers\n",
+			__func__);
+		return ret;
+	}
+
+	return 0;
+}
+
+int dwc2_gadget_restore_critical_registers(struct dwc2_hsotg *hsotg)
+{
+	int ret;
+
+	ret = dwc2_restore_global_registers(hsotg);
+	if (ret) {
+		dev_err(hsotg->dev, "%s: failed to restore registers\n",
+			__func__);
+		return ret;
+	}
+
+	ret = dwc2_restore_device_registers(hsotg, 0);
+	if (ret) {
+		dev_err(hsotg->dev, "%s: failed to restore device registers\n",
+			__func__);
+		return ret;
+	}
+
+	return 0;
+}
+
 /**
  * dwc2_gadget_enter_hibernation() - Put controller in Hibernation.
  *
@@ -5326,18 +5369,9 @@ int dwc2_gadget_enter_hibernation(struct dwc2_hsotg *hsotg)
 	/* Change to L2(suspend) state */
 	hsotg->lx_state = DWC2_L2;
 	dev_dbg(hsotg->dev, "Start of hibernation completed\n");
-	ret = dwc2_backup_global_registers(hsotg);
-	if (ret) {
-		dev_err(hsotg->dev, "%s: failed to backup global registers\n",
-			__func__);
+	ret = dwc2_gadget_backup_critical_registers(hsotg);
+	if (ret)
 		return ret;
-	}
-	ret = dwc2_backup_device_registers(hsotg);
-	if (ret) {
-		dev_err(hsotg->dev, "%s: failed to backup device registers\n",
-			__func__);
-		return ret;
-	}
 
 	gpwrdn = GPWRDN_PWRDNRSTN;
 	udelay(10);
@@ -5483,20 +5517,9 @@ int dwc2_gadget_exit_hibernation(struct dwc2_hsotg *hsotg,
 	dwc2_writel(hsotg, 0xffffffff, GINTSTS);
 
 	/* Restore global registers */
-	ret = dwc2_restore_global_registers(hsotg);
-	if (ret) {
-		dev_err(hsotg->dev, "%s: failed to restore registers\n",
-			__func__);
+	ret = dwc2_gadget_restore_critical_registers(hsotg);
+	if (ret)
 		return ret;
-	}
-
-	/* Restore device registers */
-	ret = dwc2_restore_device_registers(hsotg, rem_wakeup);
-	if (ret) {
-		dev_err(hsotg->dev, "%s: failed to restore device registers\n",
-			__func__);
-		return ret;
-	}
 
 	if (rem_wakeup) {
 		mdelay(10);
@@ -5530,19 +5553,9 @@ int dwc2_gadget_enter_partial_power_down(struct dwc2_hsotg *hsotg)
 	dev_dbg(hsotg->dev, "Entering device partial power down started.\n");
 
 	/* Backup all registers */
-	ret = dwc2_backup_global_registers(hsotg);
-	if (ret) {
-		dev_err(hsotg->dev, "%s: failed to backup global registers\n",
-			__func__);
+	ret = dwc2_gadget_backup_critical_registers(hsotg);
+	if (ret)
 		return ret;
-	}
-
-	ret = dwc2_backup_device_registers(hsotg);
-	if (ret) {
-		dev_err(hsotg->dev, "%s: failed to backup device registers\n",
-			__func__);
-		return ret;
-	}
 
 	/*
 	 * Clear any pending interrupts since dwc2 will not be able to
@@ -5610,21 +5623,9 @@ int dwc2_gadget_exit_partial_power_down(struct dwc2_hsotg *hsotg,
 
 	udelay(100);
 	if (restore) {
-		ret = dwc2_restore_global_registers(hsotg);
-		if (ret) {
-			dev_err(hsotg->dev, "%s: failed to restore registers\n",
-				__func__);
+		ret = dwc2_gadget_restore_critical_registers(hsotg);
+		if (ret)
 			return ret;
-		}
-		/* Restore DCFG */
-		dwc2_writel(hsotg, dr->dcfg, DCFG);
-
-		ret = dwc2_restore_device_registers(hsotg, 0);
-		if (ret) {
-			dev_err(hsotg->dev, "%s: failed to restore device registers\n",
-				__func__);
-			return ret;
-		}
 	}
 
 	/* Set the Power-On Programming done bit */
