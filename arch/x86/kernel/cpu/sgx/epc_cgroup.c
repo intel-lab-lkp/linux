@@ -200,8 +200,10 @@ static bool sgx_cgroup_lru_empty(struct misc_cg *root)
 
 /*
  * Scan at least @nr_to_scan pages and attempt to reclaim them from the subtree of @root.
+ * Charge backing store allocation to the given mm, @charge_mm.
  */
 static inline void sgx_cgroup_reclaim_pages(struct sgx_cgroup *root,
+					    struct mm_struct *charge_mm,
 					    unsigned int nr_to_scan)
 {
 	struct sgx_cgroup *next_cg = NULL;
@@ -209,7 +211,7 @@ static inline void sgx_cgroup_reclaim_pages(struct sgx_cgroup *root,
 
 	while (!sgx_cgroup_lru_empty(root->cg) && cnt < nr_to_scan) {
 		next_cg = sgx_cgroup_next_get(root);
-		cnt += sgx_reclaim_pages(&next_cg->lru);
+		cnt += sgx_reclaim_pages(&next_cg->lru, charge_mm);
 		if (next_cg != root)
 			sgx_put_cg(next_cg);
 	}
@@ -247,7 +249,8 @@ static void sgx_cgroup_reclaim_work_func(struct work_struct *work)
 	struct sgx_cgroup *root = container_of(work, struct sgx_cgroup, reclaim_work);
 
 	while (sgx_cgroup_should_reclaim(root)) {
-		sgx_cgroup_reclaim_pages(root, SGX_NR_TO_SCAN);
+		/* Indirect reclaim, no mm to charge, so NULL: */
+		sgx_cgroup_reclaim_pages(root, NULL, SGX_NR_TO_SCAN);
 		cond_resched();
 	}
 }
@@ -291,7 +294,7 @@ int sgx_cgroup_try_charge(struct sgx_cgroup *sgx_cg, enum sgx_reclaim reclaim)
 			goto out;
 		}
 
-		sgx_cgroup_reclaim_pages(sgx_cg, 1);
+		sgx_cgroup_reclaim_pages(sgx_cg, current->mm, 1);
 
 		cond_resched();
 	}
