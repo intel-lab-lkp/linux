@@ -2709,12 +2709,12 @@ err:
 static int ice_vc_query_rxdid(struct ice_vf *vf)
 {
 	enum virtchnl_status_code v_ret = VIRTCHNL_STATUS_SUCCESS;
-	struct virtchnl_supported_rxdids *rxdid = NULL;
 	struct ice_hw *hw = &vf->pf->hw;
 	struct ice_pf *pf = vf->pf;
-	int len = 0;
-	int ret, i;
+	u32 len = sizeof(u64);
 	u32 regval;
+	u64 rxdid;
+	int ret, i;
 
 	if (!test_bit(ICE_VF_STATE_ACTIVE, vf->vf_states)) {
 		v_ret = VIRTCHNL_STATUS_ERR_PARAM;
@@ -2726,34 +2726,25 @@ static int ice_vc_query_rxdid(struct ice_vf *vf)
 		goto err;
 	}
 
-	len = sizeof(struct virtchnl_supported_rxdids);
-	rxdid = kzalloc(len, GFP_KERNEL);
-	if (!rxdid) {
-		v_ret = VIRTCHNL_STATUS_ERR_NO_MEMORY;
-		len = 0;
-		goto err;
-	}
-
 	/* RXDIDs supported by DDP package can be read from the register
 	 * to get the supported RXDID bitmap. But the legacy 32byte RXDID
 	 * is not listed in DDP package, add it in the bitmap manually.
 	 * Legacy 16byte descriptor is not supported.
 	 */
-	rxdid->supported_rxdids |= BIT(ICE_RXDID_LEGACY_1);
+	rxdid |= BIT(ICE_RXDID_LEGACY_1);
 
 	for (i = ICE_RXDID_FLEX_NIC; i < ICE_FLEX_DESC_RXDID_MAX_NUM; i++) {
 		regval = rd32(hw, GLFLXP_RXDID_FLAGS(i, 0));
 		if ((regval >> GLFLXP_RXDID_FLAGS_FLEXIFLAG_4N_S)
 			& GLFLXP_RXDID_FLAGS_FLEXIFLAG_4N_M)
-			rxdid->supported_rxdids |= BIT(i);
+			rxdid |= BIT(i);
 	}
 
-	pf->supported_rxdids = rxdid->supported_rxdids;
+	pf->supported_rxdids = rxdid;
 
 err:
 	ret = ice_vc_send_msg_to_vf(vf, VIRTCHNL_OP_GET_SUPPORTED_RXDIDS,
-				    v_ret, (u8 *)rxdid, len);
-	kfree(rxdid);
+				    v_ret, (u8 *)&rxdid, len);
 	return ret;
 }
 
