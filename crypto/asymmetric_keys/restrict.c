@@ -267,20 +267,20 @@ static int key_or_keyring_common(struct key *dest_keyring,
 			if (!sig->auth_ids[0] && !sig->auth_ids[1]) {
 				if (asymmetric_key_id_same(signer_ids[2],
 							   sig->auth_ids[2]))
-					key = __key_get(trusted);
+					key = key_get(trusted);
 
 			} else if (!sig->auth_ids[0] || !sig->auth_ids[1]) {
 				const struct asymmetric_key_id *auth_id;
 
 				auth_id = sig->auth_ids[0] ?: sig->auth_ids[1];
 				if (match_either_id(signer_ids, auth_id))
-					key = __key_get(trusted);
+					key = key_get(trusted);
 
 			} else if (asymmetric_key_id_same(signer_ids[1],
 							  sig->auth_ids[1]) &&
 				   match_either_id(signer_ids,
 						   sig->auth_ids[0])) {
-				key = __key_get(trusted);
+				key = key_get(trusted);
 			}
 		} else {
 			return -EOPNOTSUPP;

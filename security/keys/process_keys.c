@@ -333,7 +333,7 @@ int install_session_keyring_to_cred(struct cred *cred, struct key *keyring)
 		if (IS_ERR(keyring))
 			return PTR_ERR(keyring);
 	} else {
-		__key_get(keyring);
+		key_get(keyring);
 	}
 
 	/* install the keyring */
@@ -641,7 +641,7 @@ try_again:
 		}
 
 		key = ctx.cred->thread_keyring;
-		__key_get(key);
+		key_get(key);
 		key_ref = make_key_ref(key, 1);
 		break;
 
@@ -658,8 +658,7 @@ try_again:
 			goto reget_creds;
 		}
 
-		key = ctx.cred->process_keyring;
-		__key_get(key);
+		key = key_get(ctx.cred->process_keyring);
 		key_ref = make_key_ref(key, 1);
 		break;
 
@@ -688,8 +687,7 @@ try_again:
 			goto reget_creds;
 		}
 
-		key = ctx.cred->session_keyring;
-		__key_get(key);
+		key = key_get(ctx.cred->session_keyring);
 		key_ref = make_key_ref(key, 1);
 		break;
 
@@ -717,7 +715,7 @@ try_again:
 		if (!key)
 			goto error;
 
-		__key_get(key);
+		key_get(key);
 		key_ref = make_key_ref(key, 1);
 		break;
 
@@ -732,8 +730,7 @@ try_again:
 			key = NULL;
 		} else {
 			rka = ctx.cred->request_key_auth->payload.data[0];
-			key = rka->dest_keyring;
-			__key_get(key);
+			key = key_get(rka->dest_keyring);
 		}
 		up_read(&ctx.cred->request_key_auth->sem);
 		if (!key)

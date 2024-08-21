@@ -1122,7 +1122,7 @@ found:
 		kleave(" = NULL [x]");
 		return NULL;
 	}
-	__key_get(key);
+	key_get(key);
 	kleave(" = {%d}", key->serial);
 	return make_key_ref(key, is_key_possessed(keyring_ref));
 }
@@ -1367,7 +1367,7 @@ int __key_link_check_live_key(struct key *keyring, struct key *key)
 void __key_link(struct key *keyring, struct key *key,
 		struct assoc_array_edit **_edit)
 {
-	__key_get(key);
+	key_get(key);
 	assoc_array_insert_set_object(*_edit, keyring_key_to_ptr(key));
 	assoc_array_apply_edit(*_edit);
 	*_edit = NULL;

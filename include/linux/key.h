@@ -304,12 +304,6 @@ extern void key_put(struct key *key);
 extern bool key_put_tag(struct key_tag *tag);
 extern void key_remove_domain(struct key_tag *domain_tag);
 
-static inline struct key *__key_get(struct key *key)
-{
-	refcount_inc(&key->usage);
-	return key;
-}
-
 static inline void key_ref_put(key_ref_t key_ref)
 {
 	key_put(key_ref_to_ptr(key_ref));

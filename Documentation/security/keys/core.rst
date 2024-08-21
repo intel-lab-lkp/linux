@@ -1217,7 +1217,6 @@ payload contents" for more information.
  *  Extra references can be made to a key by calling one of the following
     functions::
 
-	struct key *__key_get(struct key *key);
 	struct key *key_get(struct key *key);
 
     Keys so references will need to be disposed of by calling key_put() when
