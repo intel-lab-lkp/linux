@@ -22,7 +22,8 @@
 /* 'desc' bits holding the offset in the VA (version array) page. */
 #define SGX_ENCL_PAGE_VA_OFFSET_MASK	GENMASK_ULL(11, 3)
 
-/* 'desc' bit indicating that the page is busy (being reclaimed). */
+/* 'desc' bit indicating that the page is busy (being reclaimed, removed or
+ * converted to a TCS page). */
 #define SGX_ENCL_PAGE_BUSY	BIT(2)
 
 /*
