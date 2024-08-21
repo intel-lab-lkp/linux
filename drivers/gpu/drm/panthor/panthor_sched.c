@@ -319,8 +319,10 @@ struct panthor_scheduler {
 		struct list_head stopped_groups;
 	} reset;
 
-	/** @dump_successful_jobs: whether to dump successful jobs through coredumpv */
-	bool dump_successful_jobs;
+	/** @dump_successful_jobs: Whether to dump successful jobs through coredumpv */
+	u32 dump_next_n_successful_jobs;
+	/** @dump_job_list: List containing dump entries if multiple jobs are being dumped */
+	struct list_head dump_job_list;
 };
 
 /**
@@ -2963,11 +2965,15 @@ queue_run_job(struct drm_sched_job *sched_job)
 	queue->iface.input->extract = queue->iface.output->extract;
 	queue->iface.input->insert = job->ringbuf.end;
 
-	if (sched->dump_successful_jobs) {
+	if (sched->dump_next_n_successful_jobs > 0) {
+		sched->dump_next_n_successful_jobs--;
+
 		struct panthor_core_dump_args core_dump_args = {
 			.ptdev = ptdev,
 			.group_vm = job->group->vm,
 			.group = job->group,
+			.job_list = &sched->dump_job_list,
+			.append = !!sched->dump_next_n_successful_jobs,
 		};
 
 		panthor_core_dump(&core_dump_args);
@@ -3032,6 +3038,7 @@ queue_timedout_job(struct drm_sched_job *sched_job)
 		.ptdev = ptdev,
 		.group_vm = job->group->vm,
 		.group = job->group,
+		.job_list = &sched->dump_job_list,
 	};
 
 	panthor_core_dump(&core_dump_args);
@@ -3532,6 +3539,7 @@ static void panthor_sched_fini(struct drm_device *ddev, void *res)
 	}
 
 	drm_WARN_ON(ddev, !list_empty(&sched->groups.waiting));
+	drm_WARN_ON(ddev, !list_empty(&sched->dump_job_list));
 }
 
 int panthor_sched_init(struct panthor_device *ptdev)
@@ -3608,6 +3616,7 @@ int panthor_sched_init(struct panthor_device *ptdev)
 		return ret;
 
 	INIT_LIST_HEAD(&sched->reset.stopped_groups);
+	INIT_LIST_HEAD(&sched->dump_job_list);
 
 	/* sched->heap_alloc_wq will be used for heap chunk allocation on
 	 * tiler OOM events, which means we can't use the same workqueue for
@@ -3647,7 +3656,8 @@ void panthor_sched_debugfs_init(struct drm_minor *minor)
 		container_of(minor->dev, struct panthor_device, base);
 	struct panthor_scheduler *sched = ptdev->scheduler;
 
-	debugfs_create_bool("dump_successful_jobs", 0644, minor->debugfs_root,
-			    &sched->dump_successful_jobs);
+	debugfs_create_u32("dump_next_n_successful_jobs", 0644,
+			   minor->debugfs_root,
+			   &sched->dump_next_n_successful_jobs);
 }
 #endif /* CONFIG_DEBUG_FS */
