@@ -342,10 +342,13 @@ static void cachefiles_clean_up_object(struct cachefiles_object *object,
 	}
 
 	cachefiles_unmark_inode_in_use(object, object->file);
+
+	spin_lock(&object->lock);
 	if (object->file) {
 		fput(object->file);
 		object->file = NULL;
 	}
+	spin_unlock(&object->lock);
 }
 
 /*
