@@ -154,6 +154,15 @@ config RESET_MESON_AUDIO_ARB
 	  This enables the reset driver for Audio Memory Arbiter of
 	  Amlogic's A113 based SoCs
 
+config RESET_MTK_SMI
+	bool "MediaTek SMI Reset Driver"
+	depends on MTK_SMI
+	help
+	  This option enables the reset controller driver for MediaTek SMI.
+	  This reset driver is responsible for managing the reset signals
+	  for SMI larbs. Say Y if you want to control reset signals for
+	  MediaTek SMI larbs. Otherwise, say N.
+
 config RESET_NPCM
 	bool "NPCM BMC Reset Driver" if COMPILE_TEST
 	default ARCH_NPCM
