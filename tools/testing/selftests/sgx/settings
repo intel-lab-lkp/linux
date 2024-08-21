@@ -1,0 +1,2 @@
+# This timeout may need be increased for platforms with EPC larger than 4G
+timeout=140

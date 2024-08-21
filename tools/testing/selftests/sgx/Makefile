@@ -20,7 +20,8 @@ ENCL_LDFLAGS := -Wl,-T,test_encl.lds,--build-id=none
 
 ifeq ($(CAN_BUILD_X86_64), 1)
 TEST_CUSTOM_PROGS := $(OUTPUT)/test_sgx
-TEST_FILES := $(OUTPUT)/test_encl.elf
+TEST_FILES := $(OUTPUT)/test_encl.elf ash_cgexec.sh
+TEST_PROGS := run_epc_cg_selftests.sh
 
 all: $(TEST_CUSTOM_PROGS) $(OUTPUT)/test_encl.elf
 endif
