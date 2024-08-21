@@ -240,6 +240,18 @@ static bool sgx_cgroup_should_reclaim(struct sgx_cgroup *sgx_cg)
 	return (cur >= max);
 }
 
+/**
+ * sgx_cgroup_reclaim_pages_global() - Perform one round of global reclamation.
+ *
+ * @charge_mm:	The mm to be charged for the backing store of reclaimed pages.
+ *
+ * Try to scan and attempt reclamation from root cgroup for %SGX_NR_TO_SCAN pages.
+ */
+void sgx_cgroup_reclaim_pages_global(struct mm_struct *charge_mm)
+{
+	sgx_cgroup_reclaim_pages(&sgx_cg_root, charge_mm, SGX_NR_TO_SCAN);
+}
+
 /*
  * Asynchronous work flow to reclaim pages from the cgroup when the cgroup is
  * at/near its maximum capacity.

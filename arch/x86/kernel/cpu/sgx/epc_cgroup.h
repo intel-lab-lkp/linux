@@ -36,6 +36,8 @@ static inline void __init sgx_cgroup_deinit(void) { }
 
 static inline void __init sgx_cgroup_register(void) { }
 
+static inline void sgx_cgroup_reclaim_pages_global(struct mm_struct *charge_mm) { }
+
 #else /* CONFIG_CGROUP_MISC */
 
 struct sgx_cgroup {
@@ -87,6 +89,7 @@ static inline void sgx_put_cg(struct sgx_cgroup *sgx_cg)
 
 int sgx_cgroup_try_charge(struct sgx_cgroup *sgx_cg, enum sgx_reclaim reclaim);
 void sgx_cgroup_uncharge(struct sgx_cgroup *sgx_cg);
+void sgx_cgroup_reclaim_pages_global(struct mm_struct *charge_mm);
 int __init sgx_cgroup_init(void);
 void __init sgx_cgroup_register(void);
 void __init sgx_cgroup_deinit(void);

@@ -411,6 +411,13 @@ static bool sgx_should_reclaim_global(unsigned long watermark)
 
 static void sgx_reclaim_pages_global(struct mm_struct *charge_mm)
 {
+	/*
+	 * Now all EPC pages are still tracked in the @sgx_global_lru.
+	 * Still reclaim from it.
+	 *
+	 * When EPC pages are tracked in the actual per-cgroup LRUs,
+	 * sgx_cgroup_reclaim_pages_global() will be called.
+	 */
 	sgx_reclaim_pages(&sgx_global_lru, charge_mm);
 }
 
