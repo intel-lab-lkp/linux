@@ -153,6 +153,27 @@ static inline void hlist_bl_unlock(struct hlist_bl_head *b)
 	__bit_spin_unlock(0, (unsigned long *)b);
 }
 
+#define hlist_bl_lock_irqsave(b, flags)				\
+do {								\
+	typecheck(struct hlist_bl_head*, b);			\
+	typecheck(unsigned long, flags);			\
+	bit_spin_lock_irqsave(0, (unsigned long *)b, flags);	\
+} while (0)
+
+#define hlist_bl_trylock_irqsave(b, flags)			\
+({								\
+	typecheck(struct hlist_bl_head*, b);			\
+	typecheck(unsigned long, flags);			\
+	bit_spin_trylock_irqsave(0, (unsigned long *)b, flags);	\
+})
+
+static inline void hlist_bl_unlock_irqrestore(struct hlist_bl_head *b,
+					unsigned long flags)
+{
+	__bit_spin_unlock_irqrestore(0, (unsigned long *)b, flags);
+}
+
+
 static inline bool hlist_bl_is_locked(struct hlist_bl_head *b)
 {
 	return bit_spin_is_locked(0, (unsigned long *)b);
