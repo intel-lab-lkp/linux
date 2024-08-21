@@ -3790,10 +3790,9 @@ static int btrfs_init_file_extent_tree(struct btrfs_inode *inode)
  * read an inode from the btree into the in-memory inode
  */
 static int btrfs_read_locked_inode(struct inode *inode,
-				   struct btrfs_path *in_path)
+				   struct btrfs_path *path)
 {
 	struct btrfs_fs_info *fs_info = inode_to_fs_info(inode);
-	struct btrfs_path *path = in_path;
 	struct extent_buffer *leaf;
 	struct btrfs_inode_item *inode_item;
 	struct btrfs_root *root = BTRFS_I(inode)->root;
@@ -3813,20 +3812,11 @@ static int btrfs_read_locked_inode(struct inode *inode,
 	if (!ret)
 		filled = true;
 
-	if (!path) {
-		path = btrfs_alloc_path();
-		if (!path)
-			return -ENOMEM;
-	}
-
 	btrfs_get_inode_key(BTRFS_I(inode), &location);
 
 	ret = btrfs_lookup_inode(NULL, root, path, &location, 0);
-	if (ret) {
-		if (path != in_path)
-			btrfs_free_path(path);
+	if (ret)
 		return ret;
-	}
 
 	leaf = path->nodes[0];
 
@@ -3960,8 +3950,6 @@ cache_acl:
 				  btrfs_ino(BTRFS_I(inode)),
 				  btrfs_root_id(root), ret);
 	}
-	if (path != in_path)
-		btrfs_free_path(path);
 
 	if (!maybe_acls)
 		cache_no_acl(inode);
@@ -5596,8 +5584,9 @@ static struct inode *btrfs_iget_locked(u64 ino, struct btrfs_root *root)
  * later.
  */
 struct inode *btrfs_iget_path(u64 ino, struct btrfs_root *root,
-			      struct btrfs_path *path)
+			      struct btrfs_path *in_path)
 {
+	struct btrfs_path *path = in_path;
 	struct inode *inode;
 	int ret;
 
@@ -5608,7 +5597,20 @@ struct inode *btrfs_iget_path(u64 ino, struct btrfs_root *root,
 	if (!(inode->i_state & I_NEW))
 		return inode;
 
+	if (!path) {
+		path = btrfs_alloc_path();
+		if (!path) {
+			ret = -ENOMEM;
+			goto error;
+		}
+
+	}
+
 	ret = btrfs_read_locked_inode(inode, path);
+
+	if (path != in_path)
+		btrfs_free_path(path);
+
 	/*
 	 * ret > 0 can come from btrfs_search_slot called by
 	 * btrfs_read_locked_inode(), this means the inode item was not found.
