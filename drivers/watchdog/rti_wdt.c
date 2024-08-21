@@ -332,7 +332,8 @@ static int rti_wdt_probe(struct platform_device *pdev)
 		memunmap(vaddr);
 	}
 
-	watchdog_init_timeout(wdd, heartbeat, dev);
+	wdd->timeout = heartbeat;
+	watchdog_init_timeout(wdd, 0, dev);
 
 	ret = watchdog_register_device(wdd);
 	if (ret) {
