@@ -162,6 +162,8 @@
 			reg = <0xeff00000 0xec>;
 			#address-cells = <1>;
 			#size-cells = <1>;
+			clocks = <&pmc PMC_TYPE_CORE 11>;
+			clock-names = "main_rc_osc";
 		};
 
 		apb {
