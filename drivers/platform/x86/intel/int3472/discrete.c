@@ -289,10 +289,7 @@ static int skl_int3472_handle_gpio_resources(struct acpi_resource *ares,
 	int3472->ngpios++;
 	ACPI_FREE(obj);
 
-	if (ret < 0)
-		return dev_err_probe(int3472->dev, ret, err_msg);
-
-	return ret;
+	return dev_err_probe(int3472->dev, ret, err_msg);
 }
 
 static int skl_int3472_parse_crs(struct int3472_discrete_device *int3472)
