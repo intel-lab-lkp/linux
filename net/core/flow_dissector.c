@@ -1991,6 +1991,9 @@ ip_proto_again:
 		fdret = FLOW_DISSECT_RET_OUT_GOOD;
 		break;
 	}
+	case NEXTHDR_NONE:
+		fdret = FLOW_DISSECT_RET_OUT_GOOD;
+		break;
 	case IPPROTO_IPIP:
 		if (flags & FLOW_DISSECTOR_F_STOP_BEFORE_ENCAP) {
 			fdret = FLOW_DISSECT_RET_OUT_GOOD;
