@@ -260,6 +260,9 @@ enum drm_panthor_dev_query_type {
 
 	/** @DRM_PANTHOR_DEV_QUERY_CSIF_INFO: Query command-stream interface information. */
 	DRM_PANTHOR_DEV_QUERY_CSIF_INFO,
+
+	/** @DRM_PANTHOR_DEV_QUERY_FW_INFO: Query firmware information */
+	DRM_PANTHOR_DEV_QUERY_FW_INFO,
 };
 
 /**
@@ -375,6 +378,22 @@ struct drm_panthor_csif_info {
 	 * @pad: Padding field, set to zero.
 	 */
 	__u32 pad;
+};
+
+/** struct drm_panthor_fw_info - FW information
+ *
+ * Structure grouping all queryable information relating to the global FW interface.
+ */
+
+struct drm_panthor_fw_info {
+	/** @version: Global interface version */
+	__u32 version;
+	/** @features: Global interface features */
+	__u32 features;
+	/** @group_num: Number of CSG interfaces */
+	__u32 group_num;
+	/** @instr_features: Instrumentation features */
+	__u32 instr_features;
 };
 
 /**
