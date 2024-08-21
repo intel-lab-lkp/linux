@@ -337,6 +337,16 @@ static vm_fault_t sgx_encl_eaug_page(struct vm_area_struct *vma,
 	if (!test_bit(SGX_ENCL_INITIALIZED, &encl->flags))
 		return VM_FAULT_SIGBUS;
 
+	mutex_lock(&encl->lock);
+
+	/*
+	 * Multiple threads may try to fault on the same page concurrently.
+	 * Re-check if another thread has already done that.
+	 */
+	encl_page = xa_load(&encl->page_array, PFN_DOWN(addr));
+	if (encl_page)
+		goto done;
+
 	/*
 	 * Ignore internal permission checking for dynamically added pages.
 	 * They matter only for data added during the pre-initialization
@@ -345,23 +355,23 @@ static vm_fault_t sgx_encl_eaug_page(struct vm_area_struct *vma,
 	 */
 	secinfo_flags = SGX_SECINFO_R | SGX_SECINFO_W | SGX_SECINFO_X;
 	encl_page = sgx_encl_page_alloc(encl, addr - encl->base, secinfo_flags);
-	if (IS_ERR(encl_page))
-		return VM_FAULT_OOM;
-
-	mutex_lock(&encl->lock);
+	if (IS_ERR(encl_page)) {
+		vmret = VM_FAULT_OOM;
+		goto err_out_unlock;
+	}
 
 	epc_page = sgx_encl_load_secs(encl);
 	if (IS_ERR(epc_page)) {
 		if (PTR_ERR(epc_page) == -EBUSY)
 			vmret = VM_FAULT_NOPAGE;
-		goto err_out_unlock;
+		goto err_out_encl;
 	}
 
 	epc_page = sgx_alloc_epc_page(encl_page, false);
 	if (IS_ERR(epc_page)) {
 		if (PTR_ERR(epc_page) == -EBUSY)
 			vmret =  VM_FAULT_NOPAGE;
-		goto err_out_unlock;
+		goto err_out_encl;
 	}
 
 	va_page = sgx_encl_grow(encl, false);
@@ -376,10 +386,6 @@ static vm_fault_t sgx_encl_eaug_page(struct vm_area_struct *vma,
 
 	ret = xa_insert(&encl->page_array, PFN_DOWN(encl_page->desc),
 			encl_page, GFP_KERNEL);
-	/*
-	 * If ret == -EBUSY then page was created in another flow while
-	 * running without encl->lock
-	 */
 	if (ret)
 		goto err_out_shrink;
 
@@ -389,7 +395,7 @@ static vm_fault_t sgx_encl_eaug_page(struct vm_area_struct *vma,
 
 	ret = __eaug(&pginfo, sgx_get_epc_virt_addr(epc_page));
 	if (ret)
-		goto err_out;
+		goto err_out_eaug;
 
 	encl_page->encl = encl;
 	encl_page->epc_page = epc_page;
@@ -408,20 +414,20 @@ static vm_fault_t sgx_encl_eaug_page(struct vm_area_struct *vma,
 		mutex_unlock(&encl->lock);
 		return VM_FAULT_SIGBUS;
 	}
+done:
 	mutex_unlock(&encl->lock);
 	return VM_FAULT_NOPAGE;
 
-err_out:
+err_out_eaug:
 	xa_erase(&encl->page_array, PFN_DOWN(encl_page->desc));
-
 err_out_shrink:
 	sgx_encl_shrink(encl, va_page);
 err_out_epc:
 	sgx_encl_free_epc_page(epc_page);
+err_out_encl:
+	kfree(encl_page);
 err_out_unlock:
 	mutex_unlock(&encl->lock);
-	kfree(encl_page);
-
 	return vmret;
 }
 
