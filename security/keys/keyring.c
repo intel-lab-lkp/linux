@@ -1174,7 +1174,7 @@ struct key *find_keyring_by_name(const char *name, bool uid_keyring)
 		/* we've got a match but we might end up racing with
 		 * key_cleanup() if the keyring is currently 'dead'
 		 * (ie. it has a zero usage count) */
-		if (!refcount_inc_not_zero(&keyring->usage))
+		if (!key_try_get(keyring))
 			continue;
 		keyring->last_used_at = ktime_get_real_seconds();
 		goto out;

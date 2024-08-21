@@ -650,6 +650,20 @@ struct key *key_get(struct key *key)
 EXPORT_SYMBOL(key_get);
 
 /**
+ * key_try_get - Get a ref on a key if its refcount is not non-zero.
+ * @key: The key to get a reference on.
+ *
+ * Get a reference on a key unless it has no references and return true if
+ * successful.  @key must not be NULL.
+ */
+struct key *key_try_get(struct key *key)
+{
+	if (!refcount_inc_not_zero(&key->usage))
+		return NULL;
+	return key;
+}
+
+/**
  * key_put - Discard a reference to a key.
  * @key: The key to discard a reference from.
  *
@@ -709,7 +723,7 @@ found:
 	/* A key is allowed to be looked up only if someone still owns a
 	 * reference to it - otherwise it's awaiting the gc.
 	 */
-	if (!refcount_inc_not_zero(&key->usage))
+	if (!key_try_get(key))
 		goto not_found;
 
 error:
