@@ -162,32 +162,25 @@ static int xgene_rtc_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	pdata->clk = devm_clk_get(&pdev->dev, NULL);
+	pdata->clk = devm_clk_get_enabled(&pdev->dev, NULL);
 	if (IS_ERR(pdata->clk)) {
 		dev_err(&pdev->dev, "Couldn't get the clock for RTC\n");
 		return -ENODEV;
 	}
-	ret = clk_prepare_enable(pdata->clk);
-	if (ret)
-		return ret;
 
 	/* Turn on the clock and the crystal */
 	writel(RTC_CCR_EN, pdata->csr_base + RTC_CCR);
 
 	ret = device_init_wakeup(&pdev->dev, 1);
-	if (ret) {
-		clk_disable_unprepare(pdata->clk);
+	if (ret)
 		return ret;
-	}
 
 	pdata->rtc->ops = &xgene_rtc_ops;
 	pdata->rtc->range_max = U32_MAX;
 
 	ret = devm_rtc_register_device(pdata->rtc);
-	if (ret) {
-		clk_disable_unprepare(pdata->clk);
+	if (ret)
 		return ret;
-	}
 
 	return 0;
 }
@@ -198,7 +191,6 @@ static void xgene_rtc_remove(struct platform_device *pdev)
 
 	xgene_rtc_alarm_irq_enable(&pdev->dev, 0);
 	device_init_wakeup(&pdev->dev, 0);
-	clk_disable_unprepare(pdata->clk);
 }
 
 static int __maybe_unused xgene_rtc_suspend(struct device *dev)
@@ -220,7 +212,6 @@ static int __maybe_unused xgene_rtc_suspend(struct device *dev)
 	} else {
 		pdata->irq_enabled = xgene_rtc_alarm_irq_enabled(dev);
 		xgene_rtc_alarm_irq_enable(dev, 0);
-		clk_disable_unprepare(pdata->clk);
 	}
 	return 0;
 }
@@ -239,14 +230,8 @@ static int __maybe_unused xgene_rtc_resume(struct device *dev)
 			disable_irq_wake(irq);
 			pdata->irq_wake = 0;
 		}
-	} else {
-		rc = clk_prepare_enable(pdata->clk);
-		if (rc) {
-			dev_err(dev, "Unable to enable clock error %d\n", rc);
-			return rc;
-		}
+	} else
 		xgene_rtc_alarm_irq_enable(dev, pdata->irq_enabled);
-	}
 
 	return 0;
 }
