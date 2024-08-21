@@ -221,39 +221,11 @@ fdt_earlycon:
 
 #ifdef CONFIG_ACPI_NUMA
 
-static __init int setup_node(int pxm)
-{
-	return acpi_map_pxm_to_node(pxm);
-}
-
-/*
- * Callback for SLIT parsing.  pxm_to_node() returns NUMA_NO_NODE for
- * I/O localities since SRAT does not list them.  I/O localities are
- * not supported at this point.
- */
-unsigned int numa_distance_cnt;
-
-static inline unsigned int get_numa_distances_cnt(struct acpi_table_slit *slit)
-{
-	return slit->locality_count;
-}
-
-void __init numa_set_distance(int from, int to, int distance)
-{
-	if ((u8)distance != distance || (from == to && distance != LOCAL_DISTANCE)) {
-		pr_warn_once("Warning: invalid distance parameter, from=%d to=%d distance=%d\n",
-				from, to, distance);
-		return;
-	}
-
-	node_distances[from][to] = distance;
-}
-
 /* Callback for Proximity Domain -> CPUID mapping */
 void __init
 acpi_numa_processor_affinity_init(struct acpi_srat_cpu_affinity *pa)
 {
-	int pxm, node;
+	int pxm, node, cpu;
 
 	if (srat_disabled())
 		return;
@@ -263,30 +235,32 @@ acpi_numa_processor_affinity_init(struct acpi_srat_cpu_affinity *pa)
 	}
 	if ((pa->flags & ACPI_SRAT_CPU_ENABLED) == 0)
 		return;
+
 	pxm = pa->proximity_domain_lo;
 	if (acpi_srat_revision >= 2) {
 		pxm |= (pa->proximity_domain_hi[0] << 8);
 		pxm |= (pa->proximity_domain_hi[1] << 16);
 		pxm |= (pa->proximity_domain_hi[2] << 24);
 	}
-	node = setup_node(pxm);
+	node = acpi_map_pxm_to_node(pxm);
 	if (node < 0) {
 		pr_err("SRAT: Too many proximity domains %x\n", pxm);
 		bad_srat();
 		return;
 	}
 
-	if (pa->apic_id >= CONFIG_NR_CPUS) {
-		pr_info("SRAT: PXM %u -> CPU 0x%02x -> Node %u skipped apicid that is too big\n",
-				pxm, pa->apic_id, node);
+	cpu = get_cpu_for_acpi_id(pa->apic_id);
+	if (cpu < 0) {
+		pr_err("SRAT: CPU apic_id %x not present in MADT\n", pa->apic_id);
+		bad_srat();
 		return;
 	}
 
-	early_numa_add_cpu(pa->apic_id, node);
+	early_map_cpu_to_node(cpu, node);
 
-	set_cpuid_to_node(pa->apic_id, node);
 	node_set(node, numa_nodes_parsed);
-	pr_info("SRAT: PXM %u -> CPU 0x%02x -> Node %u\n", pxm, pa->apic_id, node);
+	pr_info("SRAT: PXM %u -> APIC 0x%02x -> CPU %d -> Node %u\n",
+		 pxm, pa->apic_id, cpu, node);
 }
 
 #endif
@@ -297,38 +271,14 @@ void __init arch_reserve_mem_area(acpi_physical_address addr, size_t size)
 }
 
 #ifdef CONFIG_ACPI_HOTPLUG_CPU
-
-#include <acpi/processor.h>
-
-static int __ref acpi_map_cpu2node(acpi_handle handle, int cpu, int physid)
+int acpi_map_cpu(acpi_handle handle, phys_cpuid_t physid, u32 apci_id,
+		 int *pcpu)
 {
-#ifdef CONFIG_ACPI_NUMA
-	int nid;
-
-	nid = acpi_get_node(handle);
-	if (nid != NUMA_NO_NODE) {
-		set_cpuid_to_node(physid, nid);
-		node_set(nid, numa_nodes_parsed);
-		set_cpu_numa_node(cpu, nid);
-		cpumask_set_cpu(cpu, cpumask_of_node(nid));
+	/* If an error code is passed in this stub can't fix it */
+	if (*pcpu < 0) {
+		pr_warn_once("Unable to map CPU to valid ID\n");
+		return *pcpu;
 	}
-#endif
-	return 0;
-}
-
-int acpi_map_cpu(acpi_handle handle, phys_cpuid_t physid, u32 acpi_id, int *pcpu)
-{
-	int cpu;
-
-	cpu = set_processor_mask(physid, ACPI_MADT_ENABLED);
-	if (cpu < 0) {
-		pr_info(PREFIX "Unable to map lapic to logical cpu number\n");
-		return cpu;
-	}
-
-	acpi_map_cpu2node(handle, cpu, physid);
-
-	*pcpu = cpu;
 
 	return 0;
 }
@@ -336,16 +286,7 @@ EXPORT_SYMBOL(acpi_map_cpu);
 
 int acpi_unmap_cpu(int cpu)
 {
-#ifdef CONFIG_ACPI_NUMA
-	set_cpuid_to_node(cpu_logical_map(cpu), NUMA_NO_NODE);
-#endif
-	set_cpu_present(cpu, false);
-	num_processors--;
-
-	pr_info("cpu%d hot remove!\n", cpu);
-
 	return 0;
 }
 EXPORT_SYMBOL(acpi_unmap_cpu);
-
 #endif /* CONFIG_ACPI_HOTPLUG_CPU */

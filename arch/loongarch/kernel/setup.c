@@ -346,6 +346,24 @@ out:
 	*cmdline_p = boot_command_line;
 }
 
+#ifdef CONFIG_NUMA
+static void __init init_numa_memory(void)
+{
+	int cpu;
+
+	arch_numa_init();
+	loongson_sysconf.nr_nodes = nr_node_ids;
+	loongson_sysconf.cores_per_node = 0;
+
+	for_each_possible_cpu(cpu) {
+		int nid = cpu_to_node(cpu);
+
+		if (nid == 0)
+			loongson_sysconf.cores_per_node++;
+	}
+}
+#endif
+
 void __init platform_init(void)
 {
 	arch_reserve_vmcore();
@@ -359,7 +377,6 @@ void __init platform_init(void)
 
 	early_init_fdt_scan_reserved_mem();
 	unflatten_and_copy_device_tree();
-
 #ifdef CONFIG_NUMA
 	init_numa_memory();
 #endif
