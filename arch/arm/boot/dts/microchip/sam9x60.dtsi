@@ -14,6 +14,7 @@
 #include <dt-bindings/clock/at91.h>
 #include <dt-bindings/mfd/at91-usart.h>
 #include <dt-bindings/mfd/atmel-flexcom.h>
+#include <dt-bindings/nvmem/microchip,sama7g5-otpc.h>
 
 / {
 	#address-cells = <1>;
@@ -154,6 +155,13 @@
 			assigned-clocks = <&pmc PMC_TYPE_GCK 26>;
 			assigned-clock-rates = <100000000>;
 			status = "disabled";
+		};
+
+		otpc: efuse@eff00000 {
+			compatible = "microchip,sam9x60-otpc", "syscon";
+			reg = <0xeff00000 0xec>;
+			#address-cells = <1>;
+			#size-cells = <1>;
 		};
 
 		apb {
