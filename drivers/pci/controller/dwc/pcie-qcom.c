@@ -31,9 +31,9 @@
 #include <linux/reset.h>
 #include <linux/slab.h>
 #include <linux/types.h>
-#include <linux/units.h>
 
 #include "../../pci.h"
+#include "pcie-qcom-common.h"
 #include "pcie-designware.h"
 
 /* PARF registers */
@@ -157,9 +157,6 @@
 #define PERST_DELAY_US				1000
 
 #define QCOM_PCIE_CRC8_POLYNOMIAL		(BIT(2) | BIT(1) | BIT(0))
-
-#define QCOM_PCIE_LINK_SPEED_TO_BW(speed) \
-		Mbps_to_icc(PCIE_SPEED2MBS_ENC(pcie_link_speed[speed]))
 
 struct qcom_pcie_resources_1_0_0 {
 	struct clk_bulk_data *clks;
@@ -1365,92 +1362,6 @@ static const struct dw_pcie_ops dw_pcie_ops = {
 	.start_link = qcom_pcie_start_link,
 };
 
-static int qcom_pcie_icc_init(struct qcom_pcie *pcie)
-{
-	struct dw_pcie *pci = pcie->pci;
-	int ret;
-
-	pcie->icc_mem = devm_of_icc_get(pci->dev, "pcie-mem");
-	if (IS_ERR(pcie->icc_mem))
-		return PTR_ERR(pcie->icc_mem);
-
-	pcie->icc_cpu = devm_of_icc_get(pci->dev, "cpu-pcie");
-	if (IS_ERR(pcie->icc_cpu))
-		return PTR_ERR(pcie->icc_cpu);
-	/*
-	 * Some Qualcomm platforms require interconnect bandwidth constraints
-	 * to be set before enabling interconnect clocks.
-	 *
-	 * Set an initial peak bandwidth corresponding to single-lane Gen 1
-	 * for the pcie-mem path.
-	 */
-	ret = icc_set_bw(pcie->icc_mem, 0, QCOM_PCIE_LINK_SPEED_TO_BW(1));
-	if (ret) {
-		dev_err(pci->dev, "Failed to set bandwidth for PCIe-MEM interconnect path: %d\n",
-			ret);
-		return ret;
-	}
-
-	/*
-	 * Since the CPU-PCIe path is only used for activities like register
-	 * access of the host controller and endpoint Config/BAR space access,
-	 * HW team has recommended to use a minimal bandwidth of 1KBps just to
-	 * keep the path active.
-	 */
-	ret = icc_set_bw(pcie->icc_cpu, 0, kBps_to_icc(1));
-	if (ret) {
-		dev_err(pci->dev, "Failed to set bandwidth for CPU-PCIe interconnect path: %d\n",
-			ret);
-		icc_set_bw(pcie->icc_mem, 0, 0);
-		return ret;
-	}
-
-	return 0;
-}
-
-static void qcom_pcie_icc_opp_update(struct qcom_pcie *pcie)
-{
-	u32 offset, status, width, speed;
-	struct dw_pcie *pci = pcie->pci;
-	unsigned long freq_kbps;
-	struct dev_pm_opp *opp;
-	int ret, freq_mbps;
-
-	offset = dw_pcie_find_capability(pci, PCI_CAP_ID_EXP);
-	status = readw(pci->dbi_base + offset + PCI_EXP_LNKSTA);
-
-	/* Only update constraints if link is up. */
-	if (!(status & PCI_EXP_LNKSTA_DLLLA))
-		return;
-
-	speed = FIELD_GET(PCI_EXP_LNKSTA_CLS, status);
-	width = FIELD_GET(PCI_EXP_LNKSTA_NLW, status);
-
-	if (pcie->icc_mem) {
-		ret = icc_set_bw(pcie->icc_mem, 0,
-				 width * QCOM_PCIE_LINK_SPEED_TO_BW(speed));
-		if (ret) {
-			dev_err(pci->dev, "Failed to set bandwidth for PCIe-MEM interconnect path: %d\n",
-				ret);
-		}
-	} else {
-		freq_mbps = pcie_dev_speed_mbps(pcie_link_speed[speed]);
-		if (freq_mbps < 0)
-			return;
-
-		freq_kbps = freq_mbps * KILO;
-		opp = dev_pm_opp_find_freq_exact(pci->dev, freq_kbps * width,
-						 true);
-		if (!IS_ERR(opp)) {
-			ret = dev_pm_opp_set_opp(pci->dev, opp);
-			if (ret)
-				dev_err(pci->dev, "Failed to set OPP for freq (%lu): %d\n",
-					freq_kbps * width, ret);
-			dev_pm_opp_put(opp);
-		}
-	}
-}
-
 static int qcom_pcie_link_transition_count(struct seq_file *s, void *data)
 {
 	struct qcom_pcie *pcie = (struct qcom_pcie *)dev_get_drvdata(s->private);
@@ -1561,6 +1472,18 @@ static int qcom_pcie_probe(struct platform_device *pdev)
 		goto err_pm_runtime_put;
 	}
 
+	pcie->icc_mem = qcom_pcie_common_icc_get_resource(pcie->pci, "pcie-mem");
+	if (IS_ERR_OR_NULL(pcie->icc_mem)) {
+		ret = PTR_ERR(pcie->icc_mem);
+		goto err_pm_runtime_put;
+	}
+
+	pcie->icc_cpu = qcom_pcie_common_icc_get_resource(pcie->pci, "cpu-pcie");
+	if (IS_ERR_OR_NULL(pcie->icc_cpu)) {
+		ret = PTR_ERR(pcie->icc_cpu);
+		goto err_pm_runtime_put;
+	}
+
 	/* OPP table is optional */
 	ret = devm_pm_opp_of_add_table(dev);
 	if (ret && ret != -ENODEV) {
@@ -1593,10 +1516,35 @@ static int qcom_pcie_probe(struct platform_device *pdev)
 			goto err_pm_runtime_put;
 		}
 	} else {
-		/* Skip ICC init if OPP is supported as it is handled by OPP */
-		ret = qcom_pcie_icc_init(pcie);
-		if (ret)
+		/*
+		 * Some Qualcomm platforms require interconnect bandwidth
+		 * constraints to be set before enabling interconnect clocks
+		 * Set an initial peak bandwidth corresponding to single-lane
+		 * Gen 1 for the pcie-mem path.
+		 */
+		ret = qcom_pcie_common_icc_init(pcie->pci, pcie->icc_mem,
+					QCOM_PCIE_LINK_SPEED_TO_BW(1));
+		if (ret) {
+			dev_err(pci->dev,
+			"Failed to set bandwidth for PCIe-MEM interconnect path: %d\n",
+			ret);
 			goto err_pm_runtime_put;
+		}
+
+		/*
+		 * Since the CPU-PCIe path is only used for activities
+		 * like register access of the host controller and
+		 * endpoint Config/BAR space access, HW team has
+		 * recommended to use a minimal bandwidth of 1KBps just to
+		 * keep the path active.
+		 */
+		ret = qcom_pcie_common_icc_init(pcie->pci, pcie->icc_cpu, kBps_to_icc(1));
+		if (ret) {
+			dev_err(pci->dev,
+			"Failed to set bandwidth for CPU-PCIe interconnect path: %d\n",
+			ret);
+			goto err_pm_runtime_put;
+		}
 	}
 
 	ret = pcie->cfg->ops->get_resources(pcie);
@@ -1617,7 +1565,7 @@ static int qcom_pcie_probe(struct platform_device *pdev)
 		goto err_phy_exit;
 	}
 
-	qcom_pcie_icc_opp_update(pcie);
+	qcom_pcie_common_icc_update(pcie->pci, pcie->icc_mem);
 
 	if (pcie->mhi)
 		qcom_pcie_init_debugfs(pcie);
@@ -1681,7 +1629,8 @@ static int qcom_pcie_suspend_noirq(struct device *dev)
 	if (pm_suspend_target_state != PM_SUSPEND_MEM) {
 		ret = icc_disable(pcie->icc_cpu);
 		if (ret)
-			dev_err(dev, "Failed to disable CPU-PCIe interconnect path: %d\n", ret);
+			dev_err(dev,
+			"Failed to disable CPU-PCIe interconnect path: %d\n", ret);
 
 		if (!pcie->icc_mem)
 			dev_pm_opp_set_opp(pcie->pci->dev, NULL);
@@ -1710,7 +1659,7 @@ static int qcom_pcie_resume_noirq(struct device *dev)
 		pcie->suspended = false;
 	}
 
-	qcom_pcie_icc_opp_update(pcie);
+	qcom_pcie_common_icc_update(pcie->pci, pcie->icc_mem);
 
 	return 0;
 }
