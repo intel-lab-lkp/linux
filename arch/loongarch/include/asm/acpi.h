@@ -45,6 +45,18 @@ static inline u32 get_acpi_id_for_cpu(unsigned int cpu)
 	return acpi_core_pic[cpu_logical_map(cpu)].processor_id;
 }
 
+static inline int get_cpu_for_acpi_id(u32 acpi_id)
+{
+	int cpu;
+
+	for_each_possible_cpu(cpu) {
+		if (acpi_core_pic[cpu_logical_map(cpu)].processor_id == acpi_id)
+			return cpu;
+	}
+
+	return -1;
+}
+
 #endif /* !CONFIG_ACPI */
 
 #define ACPI_TABLE_UPGRADE_MAX_PHYS ARCH_LOW_ADDRESS_LIMIT
