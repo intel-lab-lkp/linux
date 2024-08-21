@@ -2758,9 +2758,33 @@ static int mce_cpu_online(unsigned int cpu)
 	return 0;
 }
 
+static bool mce_cpu_is_hotpluggable(void)
+{
+	if (!mce_flags.smca)
+		return true;
+
+	/*
+	 * SMCA systems use banks 0-6 for core units. Banks 7 and later are
+	 * used for non-core units.
+	 *
+	 * Logical CPUs with 7 or fewer banks can be offlined, since they are not
+	 * managing any non-core units.
+	 *
+	 * Check if non-core banks are enabled using MCG_CTL. The hardware may
+	 * report MCG_CAP[Count] greater than is actually present, so it is not a
+	 * good indicator that a CPU has non-core banks.
+	 */
+	return fls_long(mce_rdmsrl(MSR_IA32_MCG_CTL)) <= 7;
+}
+
 static int mce_cpu_pre_down(unsigned int cpu)
 {
 	struct timer_list *t = this_cpu_ptr(&mce_timer);
+
+	if (!mce_cpu_is_hotpluggable()) {
+		pr_info("CPU%d is not hotpluggable\n", cpu);
+		return -EOPNOTSUPP;
+	}
 
 	mce_disable_cpu();
 	del_timer_sync(t);
