@@ -573,5 +573,15 @@ config EDAC_VERSAL
 	  Support injecting both correctable and uncorrectable errors
 	  for debugging purposes.
 
+config EDAC_LOONGSON
+	tristate "Loongson EDAC"
+	depends on LOONGARCH
+	default m
+	help
+	  Support for error detection and correction on the loongson memory
+	  controller.
+
+	  Report single bit errors (CE) only.
+
 
 endif # EDAC
