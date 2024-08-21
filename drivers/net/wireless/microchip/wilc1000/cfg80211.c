@@ -313,6 +313,13 @@ static int connect(struct wiphy *wiphy, struct net_device *dev,
 
 	vif->connecting = true;
 
+	if (sme->auth_type == NL80211_AUTHTYPE_SAE &&
+	    vif->wilc->chip == WILC_3000) {
+		netdev_err(dev, "WILC3000: WPA3 not supported\n");
+		ret = -EOPNOTSUPP;
+		goto out_error;
+	}
+
 	cipher_group = sme->crypto.cipher_group;
 	if (cipher_group != 0) {
 		if (sme->crypto.wpa_versions & NL80211_WPA_VERSION_2) {

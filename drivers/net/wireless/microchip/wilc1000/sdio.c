@@ -764,9 +764,13 @@ static int wilc_sdio_init(struct wilc *wilc, bool resume)
 	 *      make sure can read back chip id correctly
 	 **/
 	if (!resume) {
-		ret = wilc_sdio_read_reg(wilc, WILC_CHIPID, &chipid);
-		if (ret) {
-			dev_err(&func->dev, "Fail cmd read chip id...\n");
+		chipid = wilc_get_chipid(wilc, true);
+		if (is_wilc3000(chipid)) {
+			wilc->chip = WILC_3000;
+		} else if (is_wilc1000(chipid)) {
+			wilc->chip = WILC_1000;
+		} else {
+			dev_err(&func->dev, "Unsupported chipid: %x\n", chipid);
 			return ret;
 		}
 		dev_err(&func->dev, "chipid (%08x)\n", chipid);
@@ -819,13 +823,22 @@ static int wilc_sdio_read_int(struct wilc *wilc, u32 *int_status)
 		cmd.address = WILC_SDIO_EXT_IRQ_FLAG_REG;
 	} else {
 		cmd.function = 0;
-		cmd.address = WILC_SDIO_IRQ_FLAG_REG;
+		if (wilc->chip == WILC_1000)
+			cmd.address = WILC1000_SDIO_IRQ_FLAG_REG;
+		else
+			cmd.address = WILC3000_SDIO_IRQ_FLAG_REG;
 	}
 	cmd.raw = 0;
 	cmd.read_write = 0;
 	cmd.data = 0;
 	wilc_sdio_cmd52(wilc, &cmd);
 	irq_flags = cmd.data;
+	if (sdio_priv->irq_gpio) {
+		if (wilc->chip == WILC_1000)
+			irq_flags = cmd.data & 0x1f;
+		else
+			irq_flags = cmd.data & 0x0f;
+	}
 	tmp |= FIELD_PREP(IRG_FLAGS_MASK, cmd.data);
 
 	if (FIELD_GET(UNHANDLED_IRQ_MASK, irq_flags))
@@ -847,22 +860,56 @@ static int wilc_sdio_clear_int_ext(struct wilc *wilc, u32 val)
 	if (sdio_priv->irq_gpio)
 		reg = val & (BIT(MAX_NUM_INT) - 1);
 
-	/* select VMM table 0 */
-	if (val & SEL_VMM_TBL0)
-		reg |= BIT(5);
-	/* select VMM table 1 */
-	if (val & SEL_VMM_TBL1)
-		reg |= BIT(6);
-	/* enable VMM */
-	if (val & EN_VMM)
-		reg |= BIT(7);
+	if (wilc->chip == WILC_1000) {
+		/* select VMM table 0 */
+		if (val & SEL_VMM_TBL0)
+			reg |= BIT(5);
+		/* select VMM table 1 */
+		if (val & SEL_VMM_TBL1)
+			reg |= BIT(6);
+		/* enable VMM */
+		if (val & EN_VMM)
+			reg |= BIT(7);
+	} else {
+		if (sdio_priv->irq_gpio && reg) {
+			struct sdio_cmd52 cmd;
+
+			cmd.read_write = 1;
+			cmd.function = 0;
+			cmd.raw = 0;
+			cmd.address = WILC3000_SDIO_IRQ_FLAG_REG;
+			cmd.data = reg;
+
+			ret = wilc_sdio_cmd52(wilc, &cmd);
+			if (ret) {
+				dev_err(&func->dev,
+					"Failed cmd52, set 0xfe data (%d) ...\n",
+					__LINE__);
+				return ret;
+			}
+		}
+
+		reg = 0;
+		/* select VMM table 0 */
+		if (val & SEL_VMM_TBL0)
+			reg |= BIT(0);
+		/* select VMM table 1 */
+		if (val & SEL_VMM_TBL1)
+			reg |= BIT(1);
+		/* enable VMM */
+		if (val & EN_VMM)
+			reg |= BIT(2);
+	}
+
 	if (reg) {
 		struct sdio_cmd52 cmd;
 
 		cmd.read_write = 1;
 		cmd.function = 0;
 		cmd.raw = 0;
-		cmd.address = WILC_SDIO_IRQ_CLEAR_FLAG_REG;
+		cmd.address = (wilc->chip == WILC_1000) ?
+			      WILC1000_SDIO_IRQ_CLEAR_FLAG_REG :
+			      WILC3000_SDIO_VMM_TBL_CTRL_REG;
 		cmd.data = reg;
 
 		ret = wilc_sdio_cmd52(wilc, &cmd);
@@ -1009,6 +1056,7 @@ static int wilc_sdio_resume(struct device *dev)
 
 static const struct of_device_id wilc_of_match[] = {
 	{ .compatible = "microchip,wilc1000", },
+	{ .compatible = "microchip,wilc3000", },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, wilc_of_match);

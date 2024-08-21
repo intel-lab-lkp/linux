@@ -273,6 +273,7 @@ struct wilc {
 
 	struct device *dev;
 
+	enum wilc_chip_type chip;
 	struct workqueue_struct *hif_workqueue;
 	struct wilc_cfg cfg;
 	void *bus_data;

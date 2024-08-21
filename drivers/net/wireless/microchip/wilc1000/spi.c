@@ -287,12 +287,14 @@ static void wilc_bus_remove(struct spi_device *spi)
 
 static const struct of_device_id wilc_of_match[] = {
 	{ .compatible = "microchip,wilc1000", },
+	{ .compatible = "microchip,wilc3000", },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, wilc_of_match);
 
 static const struct spi_device_id wilc_spi_id[] = {
 	{ "wilc1000", 0 },
+	{ "wilc3000", 0 },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(spi, wilc_spi_id);
@@ -1232,10 +1234,7 @@ static int wilc_validate_chipid(struct wilc *wilc)
 		dev_err(&spi->dev, "Fail cmd read chip id...\n");
 		return ret;
 	}
-	if (!is_wilc1000(chipid)) {
-		dev_err(&spi->dev, "Unknown chip id 0x%x\n", chipid);
-		return -ENODEV;
-	}
+
 	return 0;
 }
 
