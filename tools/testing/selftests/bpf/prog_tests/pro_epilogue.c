@@ -34,8 +34,8 @@ static void test_tailcall(void)
 	prog_fd = bpf_program__fd(skel->progs.syscall_epilogue_tailcall);
 	err = bpf_prog_test_run_opts(prog_fd, &topts);
 	ASSERT_OK(err, "bpf_prog_test_run_opts");
-	ASSERT_EQ(args.a, 10001, "args.a");
-	ASSERT_EQ(topts.retval, 10001 * 2, "topts.retval");
+	ASSERT_EQ(args.a, 10111, "args.a");
+	ASSERT_EQ(topts.retval, 10111 * 2, "topts.retval");
 
 done:
 	epilogue_tailcall__destroy(skel);
