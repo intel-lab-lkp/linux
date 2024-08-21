@@ -8,6 +8,8 @@
 #include <linux/init.h>
 #include <linux/module.h>
 
+#include <drm/drm_module.h>
+
 #include "xe_drv.h"
 #include "xe_hw_fence.h"
 #include "xe_pci.h"
@@ -88,6 +90,9 @@ static const struct init_funcs init_funcs[] = {
 static int __init xe_init(void)
 {
 	int err, i;
+
+	if (drm_firmware_drivers_only())
+		return -ENODEV;
 
 	for (i = 0; i < ARRAY_SIZE(init_funcs); i++) {
 		err = init_funcs[i].init();
