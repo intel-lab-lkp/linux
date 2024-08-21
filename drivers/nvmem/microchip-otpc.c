@@ -8,6 +8,7 @@
  */
 
 #include <linux/bitfield.h>
+#include <linux/clk.h>
 #include <linux/dev_printk.h>
 #include <linux/iopoll.h>
 #include <linux/module.h>
@@ -54,6 +55,7 @@
 struct mchp_otpc {
 	void __iomem *base;
 	struct device *dev;
+	struct clk *clk;
 	struct list_head packets;
 	u32 npackets;
 };
@@ -271,6 +273,15 @@ static int mchp_otpc_probe(struct platform_device *pdev)
 	otpc->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(otpc->base))
 		return PTR_ERR(otpc->base);
+
+	// NOTE: Maybe make this optional, especially if sama7g5 testing
+	// shows the clock is not required there?
+	otpc->clk = devm_clk_get_enabled(&pdev->dev, "main_rc_osc");
+	if (IS_ERR(otpc->clk)) {
+		dev_err(&pdev->dev, "Error (%ld) getting clock!\n",
+			PTR_ERR(otpc->clk));
+		return PTR_ERR(otpc->clk);
+	}
 
 	reg = readl_relaxed(otpc->base + MCHP_OTPC_WPSR);
 	if (reg)
