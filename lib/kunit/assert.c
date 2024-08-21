@@ -155,12 +155,28 @@ void kunit_binary_ptr_assert_format(const struct kunit_assert *assert,
 			  binary_assert->text->left_text,
 			  binary_assert->text->operation,
 			  binary_assert->text->right_text);
-	string_stream_add(stream, KUNIT_SUBSUBTEST_INDENT "%s == %px\n",
-			  binary_assert->text->left_text,
-			  binary_assert->left_value);
-	string_stream_add(stream, KUNIT_SUBSUBTEST_INDENT "%s == %px",
-			  binary_assert->text->right_text,
-			  binary_assert->right_value);
+	if (!binary_assert->left_value)
+		string_stream_add(stream, KUNIT_SUBSUBTEST_INDENT "%s is NULL\n",
+				  binary_assert->text->left_text);
+	else if (IS_ERR(binary_assert->left_value))
+		string_stream_add(stream, KUNIT_SUBSUBTEST_INDENT "%s is %pe\n",
+				  binary_assert->text->left_text,
+				  binary_assert->left_value);
+	else
+		string_stream_add(stream, KUNIT_SUBSUBTEST_INDENT "%s == %px\n",
+				  binary_assert->text->left_text,
+				  binary_assert->left_value);
+	if (!binary_assert->right_value)
+		string_stream_add(stream, KUNIT_SUBSUBTEST_INDENT "%s is NULL\n",
+				  binary_assert->text->right_text);
+	else if (IS_ERR(binary_assert->right_value))
+		string_stream_add(stream, KUNIT_SUBSUBTEST_INDENT "%s is %pe\n",
+				  binary_assert->text->right_text,
+				  binary_assert->right_value);
+	else
+		string_stream_add(stream, KUNIT_SUBSUBTEST_INDENT "%s == %px\n",
+				  binary_assert->text->right_text,
+				  binary_assert->right_value);
 	kunit_assert_print_msg(message, stream);
 }
 EXPORT_SYMBOL_GPL(kunit_binary_ptr_assert_format);
