@@ -2118,6 +2118,7 @@ static int btrfs_get_tree(struct fs_context *fc)
 static void btrfs_kill_super(struct super_block *sb)
 {
 	struct btrfs_fs_info *fs_info = btrfs_sb(sb);
+	set_bit(BTRFS_FS_CLOSING_START, &fs_info->flags);
 	kill_anon_super(sb);
 	btrfs_free_fs_info(fs_info);
 }
