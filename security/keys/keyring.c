@@ -1687,6 +1687,26 @@ static void keyring_revoke(struct key *keyring)
 	}
 }
 
+/*
+ * Determine whether a key is dead.
+ */
+static bool key_is_dead(const struct key *key, time64_t limit)
+{
+	time64_t expiry = key->expiry;
+
+	if (expiry != TIME64_MAX) {
+		if (!(key->type->flags & KEY_TYPE_INSTANT_REAP))
+			expiry += key_gc_delay;
+		if (expiry <= limit)
+			return true;
+	}
+
+	return
+		key->flags & ((1 << KEY_FLAG_DEAD) |
+			      (1 << KEY_FLAG_INVALIDATED)) ||
+		key->domain_tag->removed;
+}
+
 static bool keyring_gc_select_iterator(void *object, void *iterator_data)
 {
 	struct key *key = keyring_ptr_to_key(object);

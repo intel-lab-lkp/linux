@@ -212,26 +212,6 @@ extern struct key *request_key_auth_new(struct key *target,
 extern struct key *key_get_instantiation_authkey(key_serial_t target_id);
 
 /*
- * Determine whether a key is dead.
- */
-static inline bool key_is_dead(const struct key *key, time64_t limit)
-{
-	time64_t expiry = key->expiry;
-
-	if (expiry != TIME64_MAX) {
-		if (!(key->type->flags & KEY_TYPE_INSTANT_REAP))
-			expiry += key_gc_delay;
-		if (expiry <= limit)
-			return true;
-	}
-
-	return
-		key->flags & ((1 << KEY_FLAG_DEAD) |
-			      (1 << KEY_FLAG_INVALIDATED)) ||
-		key->domain_tag->removed;
-}
-
-/*
  * keyctl() functions
  */
 extern long keyctl_get_keyring_ID(key_serial_t, int);
