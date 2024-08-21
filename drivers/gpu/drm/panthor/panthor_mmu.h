@@ -8,6 +8,7 @@
 #include <linux/dma-resv.h>
 
 struct drm_exec;
+struct drm_gpuva;
 struct drm_sched_job;
 struct panthor_gem_object;
 struct panthor_heap_pool;
@@ -51,6 +52,11 @@ void panthor_vm_add_job_fence_to_bos_resvs(struct panthor_vm *vm,
 					   struct drm_sched_job *job);
 
 struct dma_resv *panthor_vm_resv(struct panthor_vm *vm);
+
+int panthor_vm_foreach_va(struct panthor_vm *vm,
+			  int (*cb)(void *priv, const struct drm_gpuva *va),
+			  void *priv);
+
 struct drm_gem_object *panthor_vm_root_gem(struct panthor_vm *vm);
 
 void panthor_vm_pool_destroy(struct panthor_file *pfile);

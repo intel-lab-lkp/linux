@@ -24,6 +24,7 @@
 
 #include "panthor_devfreq.h"
 #include "panthor_device.h"
+#include "panthor_dump.h"
 #include "panthor_fw.h"
 #include "panthor_gem.h"
 #include "panthor_gpu.h"
@@ -2815,6 +2816,45 @@ static void group_sync_upd_work(struct work_struct *work)
 	group_put(group);
 }
 
+/**
+ * panthor_sched_get_groupinfo() - Build a group info structure for the group
+ *
+ * @group: the group to build a group info structure for
+ * @info: the group info structure to fill
+ */
+void panthor_sched_get_groupinfo(struct panthor_group *group,
+				 struct drm_panthor_dump_group_info *info)
+{
+	info->queue_count = group->queue_count;
+	info->faulty_bitmask = group->fatal_queues;
+}
+
+/** panthor_sched_get_queueinfo() - Build a queue info structure for a queue
+ * given its group and its cs_id
+ *
+ * @group: the group the queue belongs to
+ * @cs_id: the command stream ID of the queue
+ * @info: the queue info structure to fill
+ */
+int panthor_sched_get_queueinfo(struct panthor_group *group, u32 cs_id,
+				struct drm_panthor_dump_queue_info *info)
+{
+	struct panthor_queue *queue;
+
+	if (cs_id >= group->queue_count)
+		return -EINVAL;
+
+	queue = group->queues[cs_id];
+
+	info->cs_id = cs_id;
+	info->ringbuf_insert = queue->iface.input->insert;
+	info->ringbuf_extract = queue->iface.output->extract;
+	info->ringbuf_gpuva = panthor_kernel_bo_gpuva(queue->ringbuf);
+	info->ringbuf_size = panthor_kernel_bo_size(queue->ringbuf);
+
+	return 0;
+}
+
 static struct dma_fence *
 queue_run_job(struct drm_sched_job *sched_job)
 {
@@ -2964,7 +3004,7 @@ queue_timedout_job(struct drm_sched_job *sched_job)
 	struct panthor_device *ptdev = group->ptdev;
 	struct panthor_scheduler *sched = ptdev->scheduler;
 	struct panthor_queue *queue = group->queues[job->queue_idx];
-
+	struct panthor_core_dump_args core_dump_args;
 	drm_warn(&ptdev->base, "job timeout\n");
 
 	drm_WARN_ON(&ptdev->base, atomic_read(&sched->reset.in_progress));
@@ -2973,6 +3013,15 @@ queue_timedout_job(struct drm_sched_job *sched_job)
 
 	mutex_lock(&sched->lock);
 	group->timedout = true;
+
+	core_dump_args = (struct panthor_core_dump_args) {
+		.ptdev = ptdev,
+		.group_vm = job->group->vm,
+		.group = job->group,
+	};
+
+	panthor_core_dump(&core_dump_args);
+
 	if (group->csg_id >= 0) {
 		sched_queue_delayed_work(ptdev->scheduler, tick, 0);
 	} else {

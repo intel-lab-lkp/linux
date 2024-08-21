@@ -2620,6 +2620,28 @@ int panthor_vm_prepare_mapped_bos_resvs(struct drm_exec *exec, struct panthor_vm
 }
 
 /**
+ * panthor_vm_foreachva() - Execute a callback for each VA in a VM
+ *
+ */
+int panthor_vm_foreach_va(struct panthor_vm *vm,
+			  int (*cb)(void *priv, const struct drm_gpuva *va),
+			  void *priv)
+{
+	struct drm_gpuva *va;
+	int ret = 0;
+
+	mutex_lock(&vm->op_lock);
+	drm_gpuvm_for_each_va(va, &vm->base) {
+		ret = cb(priv, va);
+		if (ret)
+			break;
+	}
+	mutex_unlock(&vm->op_lock);
+
+	return ret;
+}
+
+/**
  * panthor_mmu_unplug() - Unplug the MMU logic
  * @ptdev: Device.
  *
