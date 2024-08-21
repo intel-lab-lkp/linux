@@ -144,6 +144,9 @@ int tcp_twsk_unique(struct sock *sk, struct sock *sktw, void *twp)
 			reuse = 0;
 	}
 
+	if (tw->tw_substate == TCP_FIN_WAIT2)
+		reuse = 0;
+
 	/* With PAWS, it is safe from the viewpoint
 	   of data integrity. Even without PAWS it is safe provided sequence
 	   spaces do not overlap i.e. at data rates <= 80Mbit/sec.
