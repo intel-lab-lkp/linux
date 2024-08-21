@@ -6,6 +6,9 @@
 #include <linux/preempt.h>
 #include <linux/atomic.h>
 #include <linux/bug.h>
+#include <linux/typecheck.h>
+#include <linux/irqflags.h>
+#include <linux/processor.h>
 
 /*
  *  bit-based spin_lock()
@@ -95,6 +98,40 @@ static inline int bit_spin_is_locked(int bitnum, unsigned long *addr)
 #else
 	return 1;
 #endif
+}
+
+#define bit_spin_lock_irqsave(bitnum, addr, flags)		\
+do {								\
+	typecheck(int, bitnum);					\
+	typecheck(unsigned long *, addr);			\
+	typecheck(unsigned long, flags);			\
+	local_irq_save(flags);					\
+	bit_spin_lock(bitnum, addr);				\
+} while (0)
+
+
+#define bit_spin_trylock_irqsave(bitnum, addr, flags)		\
+({								\
+	typecheck(int, bitnum);					\
+	typecheck(unsigned long *, addr);			\
+	typecheck(unsigned long, flags);			\
+	local_irq_save(flags);					\
+	bit_spin_trylock(bitnum, addr) ?			\
+	1 : ({ local_irq_restore(flags); 0; });			\
+})
+
+static inline void bit_spin_unlock_irqrestore(int bitnum,
+				unsigned long *addr, unsigned long flags)
+{
+	bit_spin_unlock(bitnum, addr);
+	local_irq_restore(flags);
+}
+
+static inline void __bit_spin_unlock_irqrestore(int bitnum,
+				unsigned long *addr, unsigned long flags)
+{
+	__bit_spin_unlock(bitnum, addr);
+	local_irq_restore(flags);
 }
 
 #endif /* __LINUX_BIT_SPINLOCK_H */
