@@ -359,7 +359,7 @@ struct efs_context {
 	unsigned long s_mount_opts;
 };
 
-static const struct fs_context_operations efs_context_opts = {
+static const struct fs_context_operations efs_context_ops = {
 	.parse_param	= efs_parse_param,
 	.get_tree	= efs_get_tree,
 	.reconfigure	= efs_reconfigure,
@@ -377,7 +377,7 @@ static int efs_init_fs_context(struct fs_context *fc)
 	if (!ctx)
 		return -ENOMEM;
 	fc->fs_private = ctx;
-	fc->ops = &efs_context_opts;
+	fc->ops = &efs_context_ops;
 
 	return 0;
 }
