@@ -7,11 +7,124 @@
  *     Wei Huang <wei.huang2@amd.com>
  */
 #include <linux/pci.h>
+#include <linux/pci-acpi.h>
 #include <linux/bitfield.h>
 #include <linux/msi.h>
 #include <linux/pci-tph.h>
 
 #include "../pci.h"
+
+/*
+ * The st_info struct defines the Steering Tag (ST) info returned by the
+ * firmware _DSM method defined in the approved ECN for PCI Firmware Spec,
+ * available at https://members.pcisig.com/wg/PCI-SIG/document/15470.
+ *
+ * @vm_st_valid:  8-bit ST for volatile memory is valid
+ * @vm_xst_valid: 16-bit extended ST for volatile memory is valid
+ * @vm_ph_ignore: 1 => PH was and will be ignored, 0 => PH should be supplied
+ * @vm_st:        8-bit ST for volatile mem
+ * @vm_xst:       16-bit extended ST for volatile mem
+ * @pm_st_valid:  8-bit ST for persistent memory is valid
+ * @pm_xst_valid: 16-bit extended ST for persistent memory is valid
+ * @pm_ph_ignore: 1 => PH was and will be ignored, 0 => PH should be supplied
+ * @pm_st:        8-bit ST for persistent mem
+ * @pm_xst:       16-bit extended ST for persistent mem
+ */
+union st_info {
+	struct {
+		u64 vm_st_valid : 1;
+		u64 vm_xst_valid : 1;
+		u64 vm_ph_ignore : 1;
+		u64 rsvd1 : 5;
+		u64 vm_st : 8;
+		u64 vm_xst : 16;
+		u64 pm_st_valid : 1;
+		u64 pm_xst_valid : 1;
+		u64 pm_ph_ignore : 1;
+		u64 rsvd2 : 5;
+		u64 pm_st : 8;
+		u64 pm_xst : 16;
+	};
+	u64 value;
+};
+
+static u16 tph_extract_tag(enum tph_mem_type mem_type, u8 req_type,
+			   union st_info *info)
+{
+	switch (req_type) {
+	case PCI_TPH_REQ_TPH_ONLY: /* 8-bit tag */
+		switch (mem_type) {
+		case TPH_MEM_TYPE_VM:
+			if (info->vm_st_valid)
+				return info->vm_st;
+			break;
+		case TPH_MEM_TYPE_PM:
+			if (info->pm_st_valid)
+				return info->pm_st;
+			break;
+		}
+		break;
+	case PCI_TPH_REQ_EXT_TPH: /* 16-bit tag */
+		switch (mem_type) {
+		case TPH_MEM_TYPE_VM:
+			if (info->vm_xst_valid)
+				return info->vm_xst;
+			break;
+		case TPH_MEM_TYPE_PM:
+			if (info->pm_xst_valid)
+				return info->pm_xst;
+			break;
+		}
+		break;
+	default:
+		return 0;
+	}
+
+	return 0;
+}
+
+#define TPH_ST_DSM_FUNC_INDEX	0xF
+static acpi_status tph_invoke_dsm(acpi_handle handle, u32 cpu_uid,
+				  union st_info *st_out)
+{
+	union acpi_object arg3[3], in_obj, *out_obj;
+
+	if (!acpi_check_dsm(handle, &pci_acpi_dsm_guid, 7,
+			    BIT(TPH_ST_DSM_FUNC_INDEX)))
+		return AE_ERROR;
+
+	/* DWORD: feature ID (0 for processor cache ST query) */
+	arg3[0].integer.type = ACPI_TYPE_INTEGER;
+	arg3[0].integer.value = 0;
+
+	/* DWORD: target UID */
+	arg3[1].integer.type = ACPI_TYPE_INTEGER;
+	arg3[1].integer.value = cpu_uid;
+
+	/* QWORD: properties, all 0's */
+	arg3[2].integer.type = ACPI_TYPE_INTEGER;
+	arg3[2].integer.value = 0;
+
+	in_obj.type = ACPI_TYPE_PACKAGE;
+	in_obj.package.count = ARRAY_SIZE(arg3);
+	in_obj.package.elements = arg3;
+
+	out_obj = acpi_evaluate_dsm(handle, &pci_acpi_dsm_guid, 7,
+				    TPH_ST_DSM_FUNC_INDEX, &in_obj);
+	if (!out_obj)
+		return AE_ERROR;
+
+	if (out_obj->type != ACPI_TYPE_BUFFER) {
+		ACPI_FREE(out_obj);
+		return AE_ERROR;
+	}
+
+	st_out->value = *((u64 *)(out_obj->buffer.pointer));
+
+	ACPI_FREE(out_obj);
+
+	return AE_OK;
+}
 
 /* Update the TPH Requester Enable field of TPH Control Register */
 static void set_ctrl_reg_req_en(struct pci_dev *pdev, u8 req_type)
@@ -139,6 +252,47 @@ static int write_tag_to_st_table(struct pci_dev *pdev, int index, u16 tag)
 
 	return pci_write_config_word(pdev, offset, tag);
 }
+
+/**
+ * pcie_tph_get_cpu_st() - Retrieve Steering Tag for a target memory associated
+ * with a specific CPU
+ * @pdev: PCI device
+ * @mem_type: target memory type (volatile or persistent RAM)
+ * @cpu_uid: associated CPU id
+ * @tag: Steering Tag to be returned
+ *
+ * This function returns the Steering Tag for a target memory that is
+ * associated with a specific CPU as indicated by cpu_uid.
+ *
+ * Returns 0 if success, otherwise negative value (-errno)
+ */
+int pcie_tph_get_cpu_st(struct pci_dev *pdev, enum tph_mem_type mem_type,
+			unsigned int cpu_uid, u16 *tag)
+{
+	struct pci_dev *rp;
+	acpi_handle rp_acpi_handle;
+	union st_info info;
+
+	rp = pcie_find_root_port(pdev);
+	if (!rp || !rp->bus || !rp->bus->bridge)
+		return -ENODEV;
+
+	rp_acpi_handle = ACPI_HANDLE(rp->bus->bridge);
+
+	if (tph_invoke_dsm(rp_acpi_handle, cpu_uid, &info) != AE_OK) {
+		*tag = 0;
+		return -EINVAL;
+	}
+
+	*tag = tph_extract_tag(mem_type, pdev->tph_req_type, &info);
+
+	pci_dbg(pdev, "get steering tag: mem_type=%s, cpu_uid=%d, tag=%#04x\n",
+		(mem_type == TPH_MEM_TYPE_VM) ? "volatile" : "persistent",
+		cpu_uid, *tag);
+
+	return 0;
+}
+EXPORT_SYMBOL(pcie_tph_get_cpu_st);
 
 /**
  * pcie_tph_set_st_entry() - Set Steering Tag in the ST table entry
