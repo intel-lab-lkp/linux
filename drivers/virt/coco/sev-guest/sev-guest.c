@@ -24,6 +24,7 @@
 #include <linux/cleanup.h>
 #include <linux/uuid.h>
 #include <linux/configfs.h>
+#include <linux/jiffies.h>
 #include <uapi/linux/sev-guest.h>
 #include <uapi/linux/psp-sev.h>
 
@@ -400,7 +401,7 @@ retry_request:
 	 * message sequence number on a different message.
 	 */
 	case -EAGAIN:
-		if (jiffies - req_start > SNP_REQ_MAX_RETRY_DURATION) {
+		if (time_after(jiffies, req_start + SNP_REQ_MAX_RETRY_DURATION)) {
 			rc = -ETIMEDOUT;
 			break;
 		}
