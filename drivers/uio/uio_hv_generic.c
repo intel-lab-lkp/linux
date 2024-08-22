@@ -109,7 +109,8 @@ static void hv_uio_channel_cb(void *context)
  */
 static void hv_uio_rescind(struct vmbus_channel *channel)
 {
-	struct hv_device *hv_dev = channel->primary_channel->device_obj;
+	struct hv_device *hv_dev = channel->primary_channel ?
+				   channel->primary_channel->device_obj : channel->device_obj;
 	struct hv_uio_private_data *pdata = hv_get_drvdata(hv_dev);
 
 	/*
