@@ -290,6 +290,11 @@ static int perf_ibs_init(struct perf_event *event)
 	if (has_branch_stack(event))
 		return -EOPNOTSUPP;
 
+	/* handle exclude_{user,kernel} in the IRQ handler */
+	if (event->attr.exclude_hv || event->attr.exclude_idle ||
+	    event->attr.exclude_host || event->attr.exclude_guest)
+		return -EINVAL;
+
 	ret = validate_group(event);
 	if (ret)
 		return ret;
@@ -667,7 +672,6 @@ static struct perf_ibs perf_ibs_fetch = {
 		.start		= perf_ibs_start,
 		.stop		= perf_ibs_stop,
 		.read		= perf_ibs_read,
-		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE,
 	},
 	.msr			= MSR_AMD64_IBSFETCHCTL,
 	.config_mask		= IBS_FETCH_CONFIG_MASK,
@@ -691,7 +695,6 @@ static struct perf_ibs perf_ibs_op = {
 		.start		= perf_ibs_start,
 		.stop		= perf_ibs_stop,
 		.read		= perf_ibs_read,
-		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE,
 	},
 	.msr			= MSR_AMD64_IBSOPCTL,
 	.config_mask		= IBS_OP_CONFIG_MASK,
@@ -1061,6 +1064,13 @@ fail:
 	perf_sample_data_init(&data, 0, hwc->last_period);
 	if (!perf_ibs_set_period(perf_ibs, hwc, &period))
 		goto out;	/* no sw counter overflow */
+
+	if ((event->attr.exclude_kernel && !user_mode(iregs)) ||
+	    (event->attr.exclude_user && user_mode(iregs))) {
+		throttle = perf_event_account_interrupt(event);
+		atomic64_inc(&event->lost_samples);
+		goto out;
+	}
 
 	ibs_data.caps = ibs_caps;
 	size = 1;
