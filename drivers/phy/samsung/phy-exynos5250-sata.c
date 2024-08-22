@@ -47,7 +47,6 @@
 
 struct exynos_sata_phy {
 	struct phy *phy;
-	struct clk *phyclk;
 	void __iomem *regs;
 	struct regmap *pmureg;
 	struct i2c_client *client;
@@ -164,6 +163,7 @@ static int exynos_sata_phy_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct phy_provider *phy_provider;
 	struct device_node *node;
+	struct clk *phyclk;
 	int ret = 0;
 
 	sata_phy = devm_kzalloc(dev, sizeof(*sata_phy), GFP_KERNEL);
@@ -193,16 +193,10 @@ static int exynos_sata_phy_probe(struct platform_device *pdev)
 
 	dev_set_drvdata(dev, sata_phy);
 
-	sata_phy->phyclk = devm_clk_get(dev, "sata_phyctrl");
-	if (IS_ERR(sata_phy->phyclk)) {
+	phyclk = devm_clk_get_enabled(dev, "sata_phyctrl");
+	if (IS_ERR(phyclk)) {
 		dev_err(dev, "failed to get clk for PHY\n");
-		ret = PTR_ERR(sata_phy->phyclk);
-		goto put_dev;
-	}
-
-	ret = clk_prepare_enable(sata_phy->phyclk);
-	if (ret < 0) {
-		dev_err(dev, "failed to enable source clk\n");
+		ret = PTR_ERR(phyclk);
 		goto put_dev;
 	}
 
@@ -210,7 +204,7 @@ static int exynos_sata_phy_probe(struct platform_device *pdev)
 	if (IS_ERR(sata_phy->phy)) {
 		dev_err(dev, "failed to create PHY\n");
 		ret = PTR_ERR(sata_phy->phy);
-		goto clk_disable;
+		goto put_dev;
 	}
 
 	phy_set_drvdata(sata_phy->phy, sata_phy);
@@ -219,13 +213,11 @@ static int exynos_sata_phy_probe(struct platform_device *pdev)
 					of_phy_simple_xlate);
 	if (IS_ERR(phy_provider)) {
 		ret = PTR_ERR(phy_provider);
-		goto clk_disable;
+		goto put_dev;
 	}
 
 	return 0;
 
-clk_disable:
-	clk_disable_unprepare(sata_phy->phyclk);
 put_dev:
 	put_device(&sata_phy->client->dev);
 
