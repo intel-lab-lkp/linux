@@ -20863,6 +20863,11 @@ S:	Maintained
 F:	drivers/input/touchscreen/silead.c
 F:	drivers/platform/x86/touchscreen_dmi.c
 
+SILERGY HARDWARE MONITOR DRIVER
+M:	Wenliang Yan <wenliang202407@163.com>
+S:	Maintained
+F:	drivers/hwmon/sq52205.c
+
 SILICON LABS WIRELESS DRIVERS (for WFxxx series)
 M:	Jérôme Pouiller <jerome.pouiller@silabs.com>
 S:	Supported
