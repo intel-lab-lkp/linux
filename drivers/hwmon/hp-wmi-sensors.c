@@ -1628,6 +1628,9 @@ static void hp_wmi_notify(union acpi_object *wobj, void *context)
 	 * HPBIOS_BIOSEvent instance.
 	 */
 
+	if (!wobj)
+		return;
+
 	mutex_lock(&state->lock);
 
 	err = populate_event_from_wobj(dev, &event, wobj);
