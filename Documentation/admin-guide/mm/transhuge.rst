@@ -556,6 +556,11 @@ nr_anon
        These huge pages could be entirely mapped or have partially
        unmapped/unused subpages.
 
+nr_anon_partially_mapped
+       the number of transparent anon huge pages which have been partially
+       unmapped and put onto split queue. Those unmapped subpages are
+       also unused and temporarily wasting memory.
+
 As the system ages, allocating huge pages may be expensive as the
 system uses memory compaction to copy data around memory to free a
 huge page for use. There are some counters in ``/proc/vmstat`` to help
