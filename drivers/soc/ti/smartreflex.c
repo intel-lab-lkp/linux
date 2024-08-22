@@ -844,10 +844,9 @@ static int omap_sr_probe(struct platform_device *pdev)
 	if (ret > 0)
 		sr_info->irq = ret;
 
-	sr_info->fck = devm_clk_get(pdev->dev.parent, "fck");
+	sr_info->fck = devm_clk_get_prepared(pdev->dev.parent, "fck");
 	if (IS_ERR(sr_info->fck))
 		return PTR_ERR(sr_info->fck);
-	clk_prepare(sr_info->fck);
 
 	pm_runtime_enable(&pdev->dev);
 
@@ -928,7 +927,6 @@ err_debugfs:
 err_list_del:
 	pm_runtime_disable(&pdev->dev);
 	list_del(&sr_info->node);
-	clk_unprepare(sr_info->fck);
 
 	return ret;
 }
@@ -943,7 +941,6 @@ static void omap_sr_remove(struct platform_device *pdev)
 	debugfs_remove_recursive(sr_info->dbg_dir);
 
 	pm_runtime_disable(dev);
-	clk_unprepare(sr_info->fck);
 	list_del(&sr_info->node);
 }
 
