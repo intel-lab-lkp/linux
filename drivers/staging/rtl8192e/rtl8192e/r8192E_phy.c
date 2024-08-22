@@ -956,7 +956,7 @@ void rtl92e_init_gain(struct net_device *dev, u8 Operation)
 					 (u32)priv->initgain_backup.cca);
 
 			rtl92e_set_tx_power(dev,
-					 priv->rtllib->current_network.channel);
+					    priv->rtllib->current_network.channel);
 			break;
 		}
 	}
