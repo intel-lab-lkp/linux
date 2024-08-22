@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/arm/arm,sse710-host-base-sysctrl.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: SSE-710 Host Base System Control
+
+maintainers:
+  - Abdellatif El Khlifi <abdellatif.elkhlifi@arm.com>
+  - Hugues Kamba Mpiana <hugues.kambampiana@arm.com>
+
+description: |+
+  The Host Base System Control has registers to control the clocks, power, and
+  reset for SSE-710 subsystem. It resides within AONTOP power domain.
+  The registers are mapped under the SSE-710 Host System memory map.
+
+properties:
+  compatible:
+    items:
+      - enum:
+          - arm,sse710-host-base-sysctrl
+      - const: simple-mfd
+      - const: syscon
+
+  reg:
+    maxItems: 1
+
+patternProperties:
+  "^extsys[0-1]$":
+    description:
+      SSE-710 subsystem supports up to two External Systems.
+    $ref: /schemas/remoteproc/arm,sse710-extsys.yaml#
+    unevaluatedProperties: false
+
+additionalProperties: false
+
+required:
+  - compatible
+  - reg
+
+examples:
+  - |
+    syscon@1a010000 {
+        compatible = "arm,sse710-host-base-sysctrl", "simple-mfd", "syscon";
+        reg = <0x1a010000 0x1000>;
+
+        extsys0 {
+            compatible = "arm,sse710-extsys";
+            firmware-name = "es_flashfw.elf";
+            #extsys-id = <0>;
+            mbox-names = "txes0", "rxes0";
+            mboxes = <&mhu0_hes0 0 1>, <&mhu0_es0h 0 1>;
+            memory-region = <&extsys0_vring0>, <&extsys0_vring1>;
+        };
+    };
