@@ -147,3 +147,13 @@ void setup_clear_cpu_cap(unsigned int feature)
 {
 	do_clear_cpu_cap(NULL, feature);
 }
+
+void filter_feature_dependencies(struct cpuinfo_x86 *c)
+{
+	const struct cpuid_dep *d;
+
+	for (d = cpuid_deps; d->feature; d++) {
+		if (boot_cpu_has(d->feature) && !boot_cpu_has(d->depends))
+			do_clear_cpu_cap(c, d->feature);
+	}
+}
