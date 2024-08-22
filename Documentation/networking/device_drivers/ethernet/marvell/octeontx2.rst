@@ -14,6 +14,7 @@ Contents
 - `Basic packet flow`_
 - `Devlink health reporters`_
 - `Quality of service`_
+- `RVU representors`_
 
 Overview
 ========
@@ -340,3 +341,55 @@ Setup HTB offload
         # tc class add dev <interface> parent 1: classid 1:2 htb rate 10Gbit prio 2 quantum 188416
 
         # tc class add dev <interface> parent 1: classid 1:3 htb rate 10Gbit prio 2 quantum 32768
+
+
+RVU Representors
+================
+
+RVU representor driver adds support for creation of representor devices for
+RVU PFs' VFs in the system. Representor devices are created when user enables
+the switchdev mode.
+Switchdev mode can be enabled either before or after setting up SRIOV numVFs.
+All representor devices share a single NIXLF but each has a dedicated queue
+(ie RQ/SQ. RVU PF representor driver registers a separate netdev for each
+RQ/SQ queue pair.
+
+HW doesn't have a in-built switch which can do L2 learning and forward pkts
+between representee and representor. Hence packet path between representee
+and it's representor is achieved by setting up appropriate NPC MCAM filters.
+Transmit packets matching these filters will be loopbacked through hardware
+loopback channel/interface (i.e, instead of sending them out of MAC interface).
+Which will again match the installed filters and will be forwarded.
+This way representee => representor and representor => representee packet
+path is achieved. These rules get installed when representors are created
+and gets active/deactivate based on the representor/representee interface state.
+
+Usage example:
+
+ - List of devices on the system before vfs are created::
+
+	# devlink dev
+	pci/0002:1c:00.0
+
+ - Change device to switchdev mode::
+
+	# devlink dev eswitch set pci/0002:1c:00.0 mode switchdev
+
+ - List of representor devices on the system::
+
+	# ip link show
+
+Sample output::
+
+	# ip link show
+	pf1vf0rep: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN mode DEFAULT group default qlen 1000 link/ether 7e:5a:66:ea:fe:d6 brd ff:ff:ff:ff:ff:ff
+	pf1vf1rep: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN mode DEFAULT group default qlen 1000 link/ether de:29:be:10:9e:bf brd ff:ff:ff:ff:ff:ff
+	pf1vf2rep: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN mode DEFAULT group default qlen 1000 link/ether 4a:12:c7:a2:66:ad brd ff:ff:ff:ff:ff:ff
+	pf1vf3rep: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN mode DEFAULT group default qlen 1000 link/ether c2:b8:a8:0e:73:fd brd ff:ff:ff:ff:ff:ff
+
+
+To remove the representors devices from the system. Change the device to legacy mode.
+
+ - Change device to legacy mode::
+
+	# devlink dev eswitch set pci/0002:1c:00.0 mode legacy
