@@ -995,8 +995,18 @@ static int proc_watchdog_common(int which, const struct ctl_table *table, int wr
 		 * On read synchronize the userspace interface. This is a
 		 * racy snapshot.
 		 */
+		old = READ_ONCE(*param);
 		*param = (watchdog_enabled & which) != 0;
 		err = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+		/*
+		 * When "old" is 1 and watchdog_enabled is 0,
+		 * it should not be change to 0 for printing
+		 * nmi_watchdog_user_enabled or soft_watchdog_user_enabled.
+		 * So after we print it as 0,
+		 * we should recover it to 1.
+		 */
+		if (old && !watchdog_enabled)
+			*param = old;
 	} else {
 		old = READ_ONCE(*param);
 		err = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
