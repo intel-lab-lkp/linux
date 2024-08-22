@@ -167,7 +167,7 @@ static void tt_add_tz_work_fn(struct work_struct *work)
 
 	snprintf(f_name, TT_MAX_FILE_NAME_LENGTH, "tz%d", tt_zone->id);
 	tt_zone->d_tt_zone = debugfs_create_dir(f_name, d_testing);
-	if (!tt_zone->d_tt_zone) {
+	if (IS_ERR(tt_zone->d_tt_zone)) {
 		tt_zone_free(tt_zone);
 		return;
 	}
