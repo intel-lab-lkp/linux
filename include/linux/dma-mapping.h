@@ -145,6 +145,7 @@ int dma_set_mask(struct device *dev, u64 mask);
 int dma_set_coherent_mask(struct device *dev, u64 mask);
 u64 dma_get_required_mask(struct device *dev);
 bool dma_addressing_limited(struct device *dev);
+bool dma_recommend_may_block(struct device *dev);
 size_t dma_max_mapping_size(struct device *dev);
 size_t dma_opt_mapping_size(struct device *dev);
 unsigned long dma_get_merge_boundary(struct device *dev);
@@ -249,6 +250,10 @@ static inline u64 dma_get_required_mask(struct device *dev)
 	return 0;
 }
 static inline bool dma_addressing_limited(struct device *dev)
+{
+	return false;
+}
+static inline bool dma_recommend_may_block(struct device *dev)
 {
 	return false;
 }
