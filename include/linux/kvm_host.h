@@ -35,6 +35,7 @@
 #include <linux/interval_tree.h>
 #include <linux/rbtree.h>
 #include <linux/xarray.h>
+#include <linux/maple_tree.h>
 #include <asm/signal.h>
 
 #include <linux/kvm.h>
@@ -846,7 +847,7 @@ struct kvm {
 #endif
 #ifdef CONFIG_KVM_GENERIC_MEMORY_ATTRIBUTES
 	/* Protected by slots_locks (for writes) and RCU (for reads) */
-	struct xarray mem_attr_array;
+	struct maple_tree mem_attr_mtree;
 #endif
 	char stats_id[KVM_STATS_NAME_SIZE];
 };
@@ -2431,7 +2432,7 @@ static inline void kvm_prepare_memory_fault_exit(struct kvm_vcpu *vcpu,
 #ifdef CONFIG_KVM_GENERIC_MEMORY_ATTRIBUTES
 static inline unsigned long kvm_get_memory_attributes(struct kvm *kvm, gfn_t gfn)
 {
-	return xa_to_value(xa_load(&kvm->mem_attr_array, gfn));
+	return xa_to_value(mtree_load(&kvm->mem_attr_mtree, gfn));
 }
 
 bool kvm_range_has_memory_attributes(struct kvm *kvm, gfn_t start, gfn_t end,

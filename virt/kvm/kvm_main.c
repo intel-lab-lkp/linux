@@ -10,6 +10,7 @@
  *   Yaniv Kamay  <yaniv@qumranet.com>
  */
 
+#include "linux/maple_tree.h"
 #include <kvm/iodev.h>
 
 #include <linux/kvm_host.h>
@@ -1159,7 +1160,8 @@ static struct kvm *kvm_create_vm(unsigned long type, const char *fdname)
 	rcuwait_init(&kvm->mn_memslots_update_rcuwait);
 	xa_init(&kvm->vcpu_array);
 #ifdef CONFIG_KVM_GENERIC_MEMORY_ATTRIBUTES
-	xa_init(&kvm->mem_attr_array);
+	mt_init_flags(&kvm->mem_attr_mtree, MT_FLAGS_LOCK_EXTERN);
+	mt_set_external_lock(&kvm->mem_attr_mtree, &kvm->slots_lock);
 #endif
 
 	INIT_LIST_HEAD(&kvm->gpc_list);
@@ -1356,7 +1358,9 @@ static void kvm_destroy_vm(struct kvm *kvm)
 	cleanup_srcu_struct(&kvm->irq_srcu);
 	cleanup_srcu_struct(&kvm->srcu);
 #ifdef CONFIG_KVM_GENERIC_MEMORY_ATTRIBUTES
-	xa_destroy(&kvm->mem_attr_array);
+	mutex_lock(&kvm->slots_lock);
+	__mt_destroy(&kvm->mem_attr_mtree);
+	mutex_unlock(&kvm->slots_lock);
 #endif
 	kvm_arch_free_vm(kvm);
 	preempt_notifier_dec();
@@ -2412,30 +2416,20 @@ static u64 kvm_supported_mem_attributes(struct kvm *kvm)
 bool kvm_range_has_memory_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 				     unsigned long mask, unsigned long attrs)
 {
-	XA_STATE(xas, &kvm->mem_attr_array, start);
-	unsigned long index;
+	MA_STATE(mas, &kvm->mem_attr_mtree, start, start);
 	void *entry;
 
 	mask &= kvm_supported_mem_attributes(kvm);
 	if (attrs & ~mask)
 		return false;
 
-	if (end == start + 1)
-		return (kvm_get_memory_attributes(kvm, start) & mask) == attrs;
-
 	guard(rcu)();
-	if (!attrs)
-		return !xas_find(&xas, end - 1);
 
-	for (index = start; index < end; index++) {
-		do {
-			entry = xas_next(&xas);
-		} while (xas_retry(&xas, entry));
-
-		if (xas.xa_index != index ||
-		    (xa_to_value(entry) & mask) != attrs)
+	do {
+		entry = mas_find_range(&mas, end - 1);
+		if ((xa_to_value(entry) & mask) != attrs)
 			return false;
-	}
+	} while (mas.last < end - 1);
 
 	return true;
 }
@@ -2523,9 +2517,9 @@ static int kvm_vm_set_mem_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 		.on_lock = kvm_mmu_invalidate_end,
 		.may_block = true,
 	};
-	unsigned long i;
 	void *entry;
 	int r = 0;
+	MA_STATE(mas, &kvm->mem_attr_mtree, start, end - 1);
 
 	entry = attributes ? xa_mk_value(attributes) : NULL;
 
@@ -2539,20 +2533,11 @@ static int kvm_vm_set_mem_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 	 * Reserve memory ahead of time to avoid having to deal with failures
 	 * partway through setting the new attributes.
 	 */
-	for (i = start; i < end; i++) {
-		r = xa_reserve(&kvm->mem_attr_array, i, GFP_KERNEL_ACCOUNT);
-		if (r)
-			goto out_unlock;
-	}
-
+	r = mas_preallocate(&mas, entry, GFP_KERNEL_ACCOUNT);
+	if (r)
+		goto out_unlock;
 	kvm_handle_gfn_range(kvm, &pre_set_range);
-
-	for (i = start; i < end; i++) {
-		r = xa_err(xa_store(&kvm->mem_attr_array, i, entry,
-				    GFP_KERNEL_ACCOUNT));
-		KVM_BUG_ON(r, kvm);
-	}
-
+	mas_store_prealloc(&mas, entry);
 	kvm_handle_gfn_range(kvm, &post_set_range);
 
 out_unlock:
