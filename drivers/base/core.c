@@ -4987,13 +4987,14 @@ define_dev_printk_level(_dev_info, KERN_INFO);
  * This helper implements common pattern present in probe functions for error
  * checking: print debug or error message depending if the error value is
  * -EPROBE_DEFER and propagate error upwards.
+ *
  * In case of -EPROBE_DEFER it sets also defer probe reason, which can be
  * checked later by reading devices_deferred debugfs attribute.
  * It replaces code sequence::
  *
  * 	if (err != -EPROBE_DEFER)
  * 		dev_err(dev, ...);
- * 	else
+ * 	else if (err)
  * 		dev_dbg(dev, ...);
  * 	return err;
  *
@@ -5003,12 +5004,16 @@ define_dev_printk_level(_dev_info, KERN_INFO);
  *
  * Using this helper in your probe function is totally fine even if @err is
  * known to never be -EPROBE_DEFER.
+ *
+ * NOTE: The message is not going to be printed or saved in cases when @err
+ * is equal to -ENOMEM or 0.
+ *
  * The benefit compared to a normal dev_err() is the standardized format
  * of the error code, it being emitted symbolically (i.e. you get "EAGAIN"
  * instead of "-35") and the fact that the error code is returned which allows
  * more compact error paths.
  *
- * Returns @err.
+ * Return: the value of @err.
  */
 int dev_err_probe(const struct device *dev, int err, const char *fmt, ...)
 {
@@ -5030,6 +5035,10 @@ int dev_err_probe(const struct device *dev, int err, const char *fmt, ...)
 		 * We don't print anything on -ENOMEM, there is already enough
 		 * output.
 		 */
+		break;
+
+	case 0:
+		/* Success, no need to issue an error message */
 		break;
 
 	default:
