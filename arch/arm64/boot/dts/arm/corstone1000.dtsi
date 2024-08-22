@@ -103,6 +103,18 @@
 		interrupt-parent = <&gic>;
 		ranges;
 
+		syscon@1a010000 {
+			compatible = "arm,sse710-host-base-sysctrl",
+				     "simple-mfd", "syscon";
+			reg = <0x1a010000 0x1000>;
+
+			extsys0 {
+				compatible = "arm,sse710-extsys";
+				#extsys-id = <0>;
+				firmware-name = "es_flashfw.elf";
+			};
+		};
+
 		timer@1a220000 {
 			compatible = "arm,armv7-timer-mem";
 			reg = <0x1a220000 0x1000>;
