@@ -103,6 +103,19 @@ config SWIOTLB_DYNAMIC
 
 	  If unsure, say N.
 
+config SWIOTLB_THROTTLE
+	bool "Throttle DMA map requests from enabled drivers"
+	default n
+	depends on SWIOTLB
+	help
+	  Enable throttling of DMA map requests to help avoid exhausting
+	  bounce buffer space, causing request failures. Throttling
+	  applies only where the calling driver has enabled blocking in
+	  DMA map requests. This option is most useful in CoCo VMs where
+	  all DMA operations must go through bounce buffers.
+
+	  If unsure, say N.
+
 config DMA_BOUNCE_UNALIGNED_KMALLOC
 	bool
 	depends on SWIOTLB

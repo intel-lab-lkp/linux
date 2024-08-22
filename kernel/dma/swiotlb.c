@@ -34,6 +34,7 @@
 #include <linux/init.h>
 #include <linux/memblock.h>
 #include <linux/mm.h>
+#include <linux/semaphore.h>
 #include <linux/pfn.h>
 #include <linux/rculist.h>
 #include <linux/scatterlist.h>
@@ -71,12 +72,15 @@
  *		from each index.
  * @pad_slots:	Number of preceding padding slots. Valid only in the first
  *		allocated non-padding slot.
+ * @throttled:  Boolean indicating the slot is used by a request that was
+ *		throttled. Valid only in the first allocated non-padding slot.
  */
 struct io_tlb_slot {
 	phys_addr_t orig_addr;
 	size_t alloc_size;
 	unsigned short list;
-	unsigned short pad_slots;
+	u8 pad_slots;
+	u8 throttled;
 };
 
 static bool swiotlb_force_bounce;
@@ -249,6 +253,31 @@ static inline unsigned long nr_slots(u64 val)
 	return DIV_ROUND_UP(val, IO_TLB_SIZE);
 }
 
+#ifdef CONFIG_SWIOTLB_THROTTLE
+static void init_throttling(struct io_tlb_mem *mem)
+{
+	sema_init(&mem->throttle_sem, 1);
+
+	/*
+	 * The default thresholds are somewhat arbitrary. They are
+	 * conservative to allow space for devices that can't throttle and
+	 * because the determination of whether to throttle is done without
+	 * any atomicity. The low throttle exists to provide a modest amount
+	 * of hysteresis so that the system doesn't flip rapidly between
+	 * throttling and not throttling when usage fluctuates near the high
+	 * throttle level.
+	 */
+	mem->high_throttle = (mem->nslabs * 70) / 100;
+	mem->low_throttle = (mem->nslabs * 65) / 100;
+}
+#else
+static void init_throttling(struct io_tlb_mem *mem)
+{
+	mem->high_throttle = 0;
+	mem->low_throttle = 0;
+}
+#endif
+
 /*
  * Early SWIOTLB allocation may be too early to allow an architecture to
  * perform the desired operations.  This function allows the architecture to
@@ -415,6 +444,8 @@ void __init swiotlb_init_remap(bool addressing_limit, unsigned int flags,
 
 	if (flags & SWIOTLB_VERBOSE)
 		swiotlb_print_info();
+
+	init_throttling(&io_tlb_default_mem);
 }
 
 void __init swiotlb_init(bool addressing_limit, unsigned int flags)
@@ -511,6 +542,7 @@ retry:
 	swiotlb_init_io_tlb_pool(mem, virt_to_phys(vstart), nslabs, true,
 				 nareas);
 	add_mem_pool(&io_tlb_default_mem, mem);
+	init_throttling(&io_tlb_default_mem);
 
 	swiotlb_print_info();
 	return 0;
@@ -947,7 +979,7 @@ static unsigned int wrap_area_index(struct io_tlb_pool *mem, unsigned int index)
  * function gives imprecise results because there's no locking across
  * multiple areas.
  */
-#ifdef CONFIG_DEBUG_FS
+#if defined(CONFIG_DEBUG_FS) || defined(CONFIG_SWIOTLB_THROTTLE)
 static void inc_used_and_hiwater(struct io_tlb_mem *mem, unsigned int nslots)
 {
 	unsigned long old_hiwater, new_used;
@@ -966,14 +998,14 @@ static void dec_used(struct io_tlb_mem *mem, unsigned int nslots)
 	atomic_long_sub(nslots, &mem->total_used);
 }
 
-#else /* !CONFIG_DEBUG_FS */
+#else /* !CONFIG_DEBUG_FS && !CONFIG_SWIOTLB_THROTTLE*/
 static void inc_used_and_hiwater(struct io_tlb_mem *mem, unsigned int nslots)
 {
 }
 static void dec_used(struct io_tlb_mem *mem, unsigned int nslots)
 {
 }
-#endif /* CONFIG_DEBUG_FS */
+#endif /* CONFIG_DEBUG_FS || CONFIG_SWIOTLB_THROTTLE */
 
 #ifdef CONFIG_SWIOTLB_DYNAMIC
 #ifdef CONFIG_DEBUG_FS
@@ -1277,7 +1309,7 @@ static int swiotlb_find_slots(struct device *dev, phys_addr_t orig_addr,
 
 #endif /* CONFIG_SWIOTLB_DYNAMIC */
 
-#ifdef CONFIG_DEBUG_FS
+#if defined(CONFIG_DEBUG_FS) || defined(CONFIG_SWIOTLB_THROTTLE)
 
 /**
  * mem_used() - get number of used slots in an allocator
@@ -1293,7 +1325,7 @@ static unsigned long mem_used(struct io_tlb_mem *mem)
 	return atomic_long_read(&mem->total_used);
 }
 
-#else /* !CONFIG_DEBUG_FS */
+#else /* !CONFIG_DEBUG_FS && !CONFIG_SWIOTLB_THROTTLE */
 
 /**
  * mem_pool_used() - get number of used slots in a memory pool
@@ -1373,6 +1405,7 @@ phys_addr_t swiotlb_tbl_map_single(struct device *dev, phys_addr_t orig_addr,
 	struct io_tlb_mem *mem = dev->dma_io_tlb_mem;
 	unsigned int offset;
 	struct io_tlb_pool *pool;
+	bool throttle = false;
 	unsigned int i;
 	size_t size;
 	int index;
@@ -1398,6 +1431,32 @@ phys_addr_t swiotlb_tbl_map_single(struct device *dev, phys_addr_t orig_addr,
 	dev_WARN_ONCE(dev, alloc_align_mask > ~PAGE_MASK,
 		"Alloc alignment may prevent fulfilling requests with max mapping_size\n");
 
+	if (IS_ENABLED(CONFIG_SWIOTLB_THROTTLE) && attrs & DMA_ATTR_MAY_BLOCK) {
+		unsigned long used = atomic_long_read(&mem->total_used);
+
+		/*
+		 * Determining whether to throttle is intentionally done without
+		 * atomicity. For example, multiple requests could proceed in
+		 * parallel when usage is just under the threshold, putting
+		 * usage above the threshold by the aggregate size of the
+		 * parallel requests. The thresholds must already be set
+		 * conservatively because of drivers that can't enable
+		 * throttling, so this slop in the accounting shouldn't be
+		 * problem. It's better than the potential bottleneck of a
+		 * globally synchronzied reservation mechanism.
+		 */
+		if (used > mem->high_throttle) {
+			throttle = true;
+			mem->high_throttle_count++;
+		} else if ((used > mem->low_throttle) &&
+					(mem->throttle_sem.count <= 0)) {
+			throttle = true;
+			mem->low_throttle_count++;
+		}
+		if (throttle)
+			down(&mem->throttle_sem);
+	}
+
 	offset = swiotlb_align_offset(dev, alloc_align_mask, orig_addr);
 	size = ALIGN(mapping_size + offset, alloc_align_mask + 1);
 	index = swiotlb_find_slots(dev, orig_addr, size, alloc_align_mask, &pool);
@@ -1406,6 +1465,8 @@ phys_addr_t swiotlb_tbl_map_single(struct device *dev, phys_addr_t orig_addr,
 			dev_warn_ratelimited(dev,
 	"swiotlb buffer is full (sz: %zd bytes), total %lu (slots), used %lu (slots)\n",
 				 size, mem->nslabs, mem_used(mem));
+		if (throttle)
+			up(&mem->throttle_sem);
 		return (phys_addr_t)DMA_MAPPING_ERROR;
 	}
 
@@ -1424,6 +1485,7 @@ phys_addr_t swiotlb_tbl_map_single(struct device *dev, phys_addr_t orig_addr,
 	offset &= (IO_TLB_SIZE - 1);
 	index += pad_slots;
 	pool->slots[index].pad_slots = pad_slots;
+	pool->slots[index].throttled = throttle;
 	for (i = 0; i < (nr_slots(size) - pad_slots); i++)
 		pool->slots[index + i].orig_addr = slot_addr(orig_addr, i);
 	tlb_addr = slot_addr(pool->start, index) + offset;
@@ -1440,7 +1502,7 @@ phys_addr_t swiotlb_tbl_map_single(struct device *dev, phys_addr_t orig_addr,
 	return tlb_addr;
 }
 
-static void swiotlb_release_slots(struct device *dev, phys_addr_t tlb_addr,
+static bool swiotlb_release_slots(struct device *dev, phys_addr_t tlb_addr,
 				  struct io_tlb_pool *mem)
 {
 	unsigned long flags;
@@ -1448,8 +1510,10 @@ static void swiotlb_release_slots(struct device *dev, phys_addr_t tlb_addr,
 	int index, nslots, aindex;
 	struct io_tlb_area *area;
 	int count, i;
+	bool throttled;
 
 	index = (tlb_addr - offset - mem->start) >> IO_TLB_SHIFT;
+	throttled = mem->slots[index].throttled;
 	index -= mem->slots[index].pad_slots;
 	nslots = nr_slots(mem->slots[index].alloc_size + offset);
 	aindex = index / mem->area_nslabs;
@@ -1478,6 +1542,7 @@ static void swiotlb_release_slots(struct device *dev, phys_addr_t tlb_addr,
 		mem->slots[i].orig_addr = INVALID_PHYS_ADDR;
 		mem->slots[i].alloc_size = 0;
 		mem->slots[i].pad_slots = 0;
+		mem->slots[i].throttled = 0;
 	}
 
 	/*
@@ -1492,6 +1557,8 @@ static void swiotlb_release_slots(struct device *dev, phys_addr_t tlb_addr,
 	spin_unlock_irqrestore(&area->lock, flags);
 
 	dec_used(dev->dma_io_tlb_mem, nslots);
+
+	return throttled;
 }
 
 #ifdef CONFIG_SWIOTLB_DYNAMIC
@@ -1501,6 +1568,9 @@ static void swiotlb_release_slots(struct device *dev, phys_addr_t tlb_addr,
  * @dev:	Device which mapped the buffer.
  * @tlb_addr:	Physical address within a bounce buffer.
  * @pool:       Pointer to the transient memory pool to be checked and deleted.
+ * @throttled:	If the function returns %true, return boolean indicating
+ *		if the transient allocation was throttled. Not set if the
+ *		function returns %false.
  *
  * Check whether the address belongs to a transient SWIOTLB memory pool.
  * If yes, then delete the pool.
@@ -1508,10 +1578,17 @@ static void swiotlb_release_slots(struct device *dev, phys_addr_t tlb_addr,
  * Return: %true if @tlb_addr belonged to a transient pool that was released.
  */
 static bool swiotlb_del_transient(struct device *dev, phys_addr_t tlb_addr,
-		struct io_tlb_pool *pool)
+		struct io_tlb_pool *pool, bool *throttled)
 {
+	unsigned int offset;
+	int index;
+
 	if (!pool->transient)
 		return false;
+
+	offset = swiotlb_align_offset(dev, 0, tlb_addr);
+	index = (tlb_addr - offset - pool->start) >> IO_TLB_SHIFT;
+	*throttled = pool->slots[index].throttled;
 
 	dec_used(dev->dma_io_tlb_mem, pool->nslabs);
 	swiotlb_del_pool(dev, pool);
@@ -1522,7 +1599,7 @@ static bool swiotlb_del_transient(struct device *dev, phys_addr_t tlb_addr,
 #else  /* !CONFIG_SWIOTLB_DYNAMIC */
 
 static inline bool swiotlb_del_transient(struct device *dev,
-		phys_addr_t tlb_addr, struct io_tlb_pool *pool)
+		phys_addr_t tlb_addr, struct io_tlb_pool *pool, bool *throttled)
 {
 	return false;
 }
@@ -1536,6 +1613,8 @@ void __swiotlb_tbl_unmap_single(struct device *dev, phys_addr_t tlb_addr,
 		size_t mapping_size, enum dma_data_direction dir,
 		unsigned long attrs, struct io_tlb_pool *pool)
 {
+	bool throttled;
+
 	/*
 	 * First, sync the memory before unmapping the entry
 	 */
@@ -1544,9 +1623,11 @@ void __swiotlb_tbl_unmap_single(struct device *dev, phys_addr_t tlb_addr,
 		swiotlb_bounce(dev, tlb_addr, mapping_size,
 						DMA_FROM_DEVICE, pool);
 
-	if (swiotlb_del_transient(dev, tlb_addr, pool))
-		return;
-	swiotlb_release_slots(dev, tlb_addr, pool);
+	if (!swiotlb_del_transient(dev, tlb_addr, pool, &throttled))
+		throttled = swiotlb_release_slots(dev, tlb_addr, pool);
+
+	if (throttled)
+		up(&dev->dma_io_tlb_mem->throttle_sem);
 }
 
 void __swiotlb_sync_single_for_device(struct device *dev, phys_addr_t tlb_addr,
@@ -1719,6 +1800,14 @@ static void swiotlb_create_debugfs_files(struct io_tlb_mem *mem,
 		return;
 
 	debugfs_create_ulong("io_tlb_nslabs", 0400, mem->debugfs, &mem->nslabs);
+	debugfs_create_ulong("high_throttle", 0600, mem->debugfs,
+			&mem->high_throttle);
+	debugfs_create_ulong("low_throttle", 0600, mem->debugfs,
+			&mem->low_throttle);
+	debugfs_create_ulong("high_throttle_count", 0600, mem->debugfs,
+			&mem->high_throttle_count);
+	debugfs_create_ulong("low_throttle_count", 0600, mem->debugfs,
+			&mem->low_throttle_count);
 	debugfs_create_file("io_tlb_used", 0400, mem->debugfs, mem,
 			&fops_io_tlb_used);
 	debugfs_create_file("io_tlb_used_hiwater", 0600, mem->debugfs, mem,
@@ -1841,6 +1930,7 @@ static int rmem_swiotlb_device_init(struct reserved_mem *rmem,
 		INIT_LIST_HEAD_RCU(&mem->pools);
 #endif
 		add_mem_pool(mem, pool);
+		init_throttling(mem);
 
 		rmem->priv = mem;
 

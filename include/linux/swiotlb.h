@@ -89,6 +89,10 @@ struct io_tlb_pool {
  * @defpool:	Default (initial) IO TLB memory pool descriptor.
  * @pool:	IO TLB memory pool descriptor (if not dynamic).
  * @nslabs:	Total number of IO TLB slabs in all pools.
+ * @high_throttle: Slab count above which requests are throttled.
+ * @low_throttle: Slab count abouve which requests are throttled when
+ *		throttle_sem is already held.
+ * @throttle_sem: Semaphore that throttled requests must obtain.
  * @debugfs:	The dentry to debugfs.
  * @force_bounce: %true if swiotlb bouncing is forced
  * @for_alloc:  %true if the pool is used for memory allocation
@@ -104,10 +108,17 @@ struct io_tlb_pool {
  *		in debugfs.
  * @transient_nslabs: The total number of slots in all transient pools that
  *		are currently used across all areas.
+ * @high_throttle_count: Count of requests throttled because high_throttle
+ *		was exceeded.
+ * @low_throttle_count: Count of requests throttled because low_throttle was
+ *		exceeded and throttle_sem was already held.
  */
 struct io_tlb_mem {
 	struct io_tlb_pool defpool;
 	unsigned long nslabs;
+	unsigned long high_throttle;
+	unsigned long low_throttle;
+	struct semaphore throttle_sem;
 	struct dentry *debugfs;
 	bool force_bounce;
 	bool for_alloc;
@@ -118,11 +129,11 @@ struct io_tlb_mem {
 	struct list_head pools;
 	struct work_struct dyn_alloc;
 #endif
-#ifdef CONFIG_DEBUG_FS
 	atomic_long_t total_used;
 	atomic_long_t used_hiwater;
 	atomic_long_t transient_nslabs;
-#endif
+	unsigned long high_throttle_count;
+	unsigned long low_throttle_count;
 };
 
 struct io_tlb_pool *__swiotlb_find_pool(struct device *dev, phys_addr_t paddr);

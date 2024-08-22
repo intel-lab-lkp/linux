@@ -63,6 +63,14 @@
 #define DMA_ATTR_PRIVILEGED		(1UL << 9)
 
 /*
+ * DMA_ATTR_MAY_BLOCK: Indication by a driver that the DMA map request is
+ * allowed to block. This flag must only be used on DMA map requests made in
+ * contexts that allow blocking. The corresponding unmap request will not
+ * block.
+ */
+#define DMA_ATTR_MAY_BLOCK		(1UL << 10)
+
+/*
  * A dma_addr_t can hold any valid DMA or bus address for the platform.  It can
  * be given to a device to use as a DMA source or target.  It is specific to a
  * given device and there may be a translation between the CPU physical address
