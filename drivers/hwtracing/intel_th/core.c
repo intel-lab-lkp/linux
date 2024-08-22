@@ -408,7 +408,7 @@ static int intel_th_device_add_resources(struct intel_th_device *thdev,
 {
 	struct resource *r;
 
-	r = kmemdup(res, sizeof(*res) * nres, GFP_KERNEL);
+	r = kmemdup_array(res, nres, sizeof(*res), GFP_KERNEL);
 	if (!r)
 		return -ENOMEM;
 
