@@ -1602,7 +1602,7 @@ unsigned int xdr_read_pages(struct xdr_stream *xdr, unsigned int len)
 	end = xdr_stream_remaining(xdr) - pglen;
 
 	xdr_set_tail_base(xdr, base, end);
-	return len <= pglen ? len : pglen;
+	return min(len, pglen);
 }
 EXPORT_SYMBOL_GPL(xdr_read_pages);
 
