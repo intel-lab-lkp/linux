@@ -78,8 +78,7 @@
 #define MII_COMMCFG			27
 #define MII_COMMCFG_AUTO_OP		BIT(15)
 
-/* Configure REF_CLK as input in RMII mode */
-#define TJA110X_RMII_MODE_REFCLK_IN       BIT(0)
+#define TJA11XX_REVERSE_MODE		BIT(0)
 
 struct tja11xx_priv {
 	char		*hwmon_name;
@@ -274,10 +273,10 @@ static int tja11xx_get_interface_mode(struct phy_device *phydev)
 		mii_mode = MII_CFG1_REVMII_MODE;
 		break;
 	case PHY_INTERFACE_MODE_RMII:
-		if (priv->flags & TJA110X_RMII_MODE_REFCLK_IN)
-			mii_mode = MII_CFG1_RMII_MODE_REFCLK_IN;
-		else
+		if (priv->flags & TJA11XX_REVERSE_MODE)
 			mii_mode = MII_CFG1_RMII_MODE_REFCLK_OUT;
+		else
+			mii_mode = MII_CFG1_RMII_MODE_REFCLK_IN;
 		break;
 	default:
 		return -EINVAL;
@@ -517,8 +516,8 @@ static int tja11xx_parse_dt(struct phy_device *phydev)
 	if (!IS_ENABLED(CONFIG_OF_MDIO))
 		return 0;
 
-	if (of_property_read_bool(node, "nxp,rmii-refclk-in"))
-		priv->flags |= TJA110X_RMII_MODE_REFCLK_IN;
+	if (of_property_read_bool(node, "nxp,phy-output-refclk"))
+		priv->flags |= TJA11XX_REVERSE_MODE;
 
 	return 0;
 }
