@@ -379,6 +379,20 @@ config XLNX_R5_REMOTEPROC
 
 	  It's safe to say N if not interested in using RPU r5f cores.
 
+config CORSTONE1000_REMOTEPROC
+	tristate "Arm Corstone-1000 remoteproc support"
+	depends on ARM64 || (HAS_IOMEM && COMPILE_TEST)
+	help
+	  Say y here to support Arm Corstone-1000 remote processors via the
+	  remote processor framework.
+
+	  Corstone-1000 remote processors are controlled with a reset status
+	  and control registers. The driver also supports control of multiple
+	  remote cores at the same time.
+
+	  It's safe to say N here if not interested in utilizing remote
+	  processors.
+
 endif # REMOTEPROC
 
 endmenu
