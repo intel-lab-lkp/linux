@@ -821,11 +821,14 @@ static inline bool ufshcd_is_device_present(struct ufs_hba *hba)
  *
  * Return: the OCS field in the UTRD.
  */
-static enum utp_ocs ufshcd_get_tr_ocs(struct ufshcd_lrb *lrbp,
+static enum utp_ocs ufshcd_get_tr_ocs(struct ufs_hba *hba,
+				      struct ufshcd_lrb *lrbp,
 				      struct cq_entry *cqe)
 {
 	if (cqe)
-		return le32_to_cpu(cqe->status) & MASK_OCS;
+		return ufshcd_vops_override_cqe_ocs(hba,
+						    le32_to_cpu(cqe->status) &
+						    MASK_OCS);
 
 	return lrbp->utr_descriptor_ptr->header.ocs & MASK_OCS;
 }
@@ -3194,7 +3197,7 @@ retry:
 		 * not trigger any race conditions.
 		 */
 		hba->dev_cmd.complete = NULL;
-		err = ufshcd_get_tr_ocs(lrbp, NULL);
+		err = ufshcd_get_tr_ocs(hba, lrbp, NULL);
 		if (!err)
 			err = ufshcd_dev_cmd_completion(hba, lrbp);
 	} else {
@@ -5370,7 +5373,7 @@ ufshcd_transfer_rsp_status(struct ufs_hba *hba, struct ufshcd_lrb *lrbp,
 		scsi_set_resid(lrbp->cmd, resid);
 
 	/* overall command status of utrd */
-	ocs = ufshcd_get_tr_ocs(lrbp, cqe);
+	ocs = ufshcd_get_tr_ocs(hba, lrbp, cqe);
 
 	if (hba->quirks & UFSHCD_QUIRK_BROKEN_OCS_FATAL_ERROR) {
 		if (lrbp->ucd_rsp_ptr->header.response ||
