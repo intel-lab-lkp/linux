@@ -68,6 +68,13 @@ const struct cred *ovl_override_creds(struct super_block *sb)
 	return override_creds(ofs->creator_cred);
 }
 
+const struct cred *ovl_override_creds_light(struct super_block *sb)
+{
+	struct ovl_fs *ofs = OVL_FS(sb);
+
+	return override_creds_light(ofs->creator_cred);
+}
+
 /*
  * Check if underlying fs supports file handles and try to determine encoding
  * type, in order to deduce maximum inode number used by fs.
