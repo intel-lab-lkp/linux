@@ -9,6 +9,7 @@
 
 #include <drm/drm_managed.h>
 #include <drm/xe_drm.h>
+
 #include <generated/xe_wa_oob.h>
 
 #include <generated/xe_wa_oob.h>
