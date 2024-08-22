@@ -438,6 +438,18 @@ void dma_direct_sync_sg_for_cpu(struct device *dev,
 		arch_sync_dma_for_cpu_all();
 }
 
+static void dma_direct_unmap_sgl_entry(struct device *dev,
+		struct scatterlist *sgl, enum dma_data_direction dir,
+		unsigned long attrs)
+
+{
+	if (sg_dma_is_bus_address(sgl))
+		sg_dma_unmark_bus_address(sgl);
+	else
+		dma_direct_unmap_page(dev, sgl->dma_address,
+				      sg_dma_len(sgl), dir, attrs);
+}
+
 /*
  * Unmaps segments, except for ones marked as pci_p2pdma which do not
  * require any further action as they contain a bus address.
@@ -449,12 +461,20 @@ void dma_direct_unmap_sg(struct device *dev, struct scatterlist *sgl,
 	int i;
 
 	for_each_sg(sgl,  sg, nents, i) {
-		if (sg_dma_is_bus_address(sg))
-			sg_dma_unmark_bus_address(sg);
-		else
-			dma_direct_unmap_page(dev, sg->dma_address,
-					      sg_dma_len(sg), dir, attrs);
+		/*
+		 * Skip the 0th SGL entry in case this SGL consists of
+		 * throttled swiotlb mappings. In such a case, any other
+		 * entries should be unmapped first since unmapping the
+		 * 0th entry will release the throttle semaphore.
+		 */
+		if (!i)
+			continue;
+		dma_direct_unmap_sgl_entry(dev, sg, dir, attrs);
 	}
+
+	/* Now do the 0th SGL entry */
+	if (nents)
+		dma_direct_unmap_sgl_entry(dev, sgl, dir, attrs);
 }
 #endif
 
@@ -492,6 +512,11 @@ int dma_direct_map_sg(struct device *dev, struct scatterlist *sgl, int nents,
 			ret = -EIO;
 			goto out_unmap;
 		}
+
+		/* Allow only the 0th SGL entry to block */
+		if (!i)
+			attrs &= ~DMA_ATTR_MAY_BLOCK;
+
 		sg_dma_len(sg) = sg->length;
 	}
 
