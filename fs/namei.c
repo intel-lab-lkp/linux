@@ -3457,10 +3457,8 @@ static struct dentry *atomic_open(struct nameidata *nd, struct dentry *dentry,
 	d_lookup_done(dentry);
 	if (!error) {
 		if (file->f_mode & FMODE_OPENED) {
-			if (unlikely(dentry != file->f_path.dentry)) {
-				dput(dentry);
-				dentry = dget(file->f_path.dentry);
-			}
+			dput(dentry);
+			dentry = file->f_path.dentry;
 		} else if (WARN_ON(file->f_path.dentry == DENTRY_NOT_SET)) {
 			error = -EIO;
 		} else {
@@ -3771,7 +3769,7 @@ static int do_open(struct nameidata *nd,
 	}
 	error = may_open(idmap, &nd->path, acc_mode, open_flag);
 	if (!error && !(file->f_mode & FMODE_OPENED))
-		error = vfs_open(&nd->path, file);
+		error = vfs_open_borrow(&nd->path, file);
 	if (!error)
 		error = security_file_post_open(file, op->acc_mode);
 	if (!error && do_truncate)
@@ -3824,8 +3822,10 @@ int vfs_tmpfile(struct mnt_idmap *idmap,
 	mode = vfs_prepare_mode(idmap, dir, mode, mode, mode);
 	error = dir->i_op->tmpfile(idmap, dir, file, mode);
 	dput(child);
-	if (file->f_mode & FMODE_OPENED)
+	if (file->f_mode & FMODE_OPENED) {
+		mntget(file->f_path.mnt);
 		fsnotify_open(file);
+	}
 	if (error)
 		return error;
 	/* Don't check for other permissions, the inode was just created */
@@ -3904,8 +3904,9 @@ static int do_o_path(struct nameidata *nd, unsigned flags, struct file *file)
 	int error = path_lookupat(nd, flags, &path);
 	if (!error) {
 		audit_inode(nd->name, path.dentry, 0);
-		error = vfs_open(&path, file);
-		path_put(&path);
+		error = vfs_open_borrow(&path, file);
+		if (!(file->f_mode & FMODE_OPENED))
+			path_put(&path);
 	}
 	return error;
 }
@@ -3931,6 +3932,11 @@ static struct file *path_openat(struct nameidata *nd,
 			;
 		if (!error)
 			error = do_open(nd, file, op);
+		if (file->f_mode & FMODE_OPENED) {
+			// borrowed into file->f_path, transfer it there
+			nd->path.mnt = NULL;
+			nd->path.dentry = NULL;
+		}
 		terminate_walk(nd);
 	}
 	if (likely(!error)) {

@@ -1046,7 +1046,7 @@ int finish_open(struct file *file, struct dentry *dentry,
 	file->f_path.dentry = dentry;
 	err = do_dentry_open(file, open);
 	if (file->f_mode & FMODE_OPENED)
-		path_get(&file->f_path);
+		dget(&file->f_path.dentry);
 	return err;
 }
 EXPORT_SYMBOL(finish_open);
@@ -1099,6 +1099,23 @@ int vfs_open(const struct path *path, struct file *file)
 	}
 	if (file->f_mode & FMODE_OPENED)
 		path_get(&file->f_path);
+	return ret;
+}
+
+int vfs_open_borrow(const struct path *path, struct file *file)
+{
+	int ret;
+
+	file->f_path = *path;
+	ret = do_dentry_open(file, NULL);
+	if (!ret) {
+		/*
+		 * Once we return a file with FMODE_OPENED, __fput() will call
+		 * fsnotify_close(), so we need fsnotify_open() here for
+		 * symmetry.
+		 */
+		fsnotify_open(file);
+	}
 	return ret;
 }
 
