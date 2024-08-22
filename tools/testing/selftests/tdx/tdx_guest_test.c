@@ -118,7 +118,7 @@ static void print_array_hex(const char *title, const char *prefix_str,
 	printf("\t\t%s", title);
 
 	for (j = 0; j < len; j += rowsize) {
-		line_len = rowsize < (len - j) ? rowsize : (len - j);
+		line_len = min((len - j), rowsize);
 		printf("%s%.8x:", prefix_str, j);
 		for (i = 0; i < line_len; i++)
 			printf(" %.2x", ptr[j + i]);
