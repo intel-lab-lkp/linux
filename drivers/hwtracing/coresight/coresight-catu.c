@@ -152,8 +152,7 @@ static void catu_dump_table(struct tmc_sg_table *catu_table)
 		catu_table, catu_table->table_daddr);
 
 	while (offset < buf_size) {
-		table_end = offset + SZ_1M < buf_size ?
-			    offset + SZ_1M : buf_size;
+		table_end = min(offset + SZ_1M, buf_size);
 		table = catu_get_table(catu_table, offset, NULL);
 		for (i = 0; offset < table_end; i++, offset += CATU_PAGE_SIZE)
 			dev_dbg(catu_table->dev, "%d: %llx\n", i, table[i]);
