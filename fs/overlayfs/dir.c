@@ -584,6 +584,7 @@ static int ovl_create_or_link(struct dentry *dentry, struct inode *inode,
 	const struct cred *old_cred;
 	struct dentry *parent = dentry->d_parent;
 
+	/* Do not use the _light version, cred->usage might be modified */
 	old_cred = ovl_override_creds(dentry->d_sb);
 
 	/*
@@ -1159,6 +1160,7 @@ static int ovl_rename(struct mnt_idmap *idmap, struct inode *olddir,
 			goto out;
 	}
 
+	/* Do not use the _light version, cred->usage might be modified */
 	old_cred = ovl_override_creds(old->d_sb);
 
 	if (!list_empty(&list)) {
@@ -1314,6 +1316,7 @@ static int ovl_create_tmpfile(struct file *file, struct dentry *dentry,
 	int flags = file->f_flags | OVL_OPEN_FLAGS;
 	int err;
 
+	/* Do not use the _light version, cred->usage might be modified */
 	old_cred = ovl_override_creds(dentry->d_sb);
 	err = ovl_setup_cred_for_create(dentry, inode, mode, old_cred);
 	if (err)

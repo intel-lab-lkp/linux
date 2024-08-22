@@ -718,8 +718,12 @@ static int ovl_prep_cu_creds(struct dentry *dentry, struct ovl_cu_creds *cc)
 	if (err < 0)
 		return err;
 
-	if (cc->new)
+	if (cc->new) {
+		/* Do not use the _light version, the credentials
+		 * ->usage might be modified.
+		 */
 		cc->old = override_creds(cc->new);
+	}
 
 	return 0;
 }
