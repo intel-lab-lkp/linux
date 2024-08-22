@@ -274,44 +274,26 @@ static int ingenic_uart_probe(struct platform_device *pdev)
 	if (!uart.port.membase)
 		return -ENOMEM;
 
-	data->clk_module = devm_clk_get(&pdev->dev, "module");
+	data->clk_module = devm_clk_get_enabled(&pdev->dev, "module");
 	if (IS_ERR(data->clk_module))
 		return dev_err_probe(&pdev->dev, PTR_ERR(data->clk_module),
 				     "unable to get module clock\n");
 
-	data->clk_baud = devm_clk_get(&pdev->dev, "baud");
+	data->clk_baud = devm_clk_get_enabled(&pdev->dev, "baud");
 	if (IS_ERR(data->clk_baud))
 		return dev_err_probe(&pdev->dev, PTR_ERR(data->clk_baud),
 				     "unable to get baud clock\n");
 
-	err = clk_prepare_enable(data->clk_module);
-	if (err) {
-		dev_err(&pdev->dev, "could not enable module clock: %d\n", err);
-		goto out;
-	}
-
-	err = clk_prepare_enable(data->clk_baud);
-	if (err) {
-		dev_err(&pdev->dev, "could not enable baud clock: %d\n", err);
-		goto out_disable_moduleclk;
-	}
 	uart.port.uartclk = clk_get_rate(data->clk_baud);
 
 	data->line = serial8250_register_8250_port(&uart);
 	if (data->line < 0) {
 		err = data->line;
-		goto out_disable_baudclk;
+		return err;
 	}
 
 	platform_set_drvdata(pdev, data);
 	return 0;
-
-out_disable_baudclk:
-	clk_disable_unprepare(data->clk_baud);
-out_disable_moduleclk:
-	clk_disable_unprepare(data->clk_module);
-out:
-	return err;
 }
 
 static void ingenic_uart_remove(struct platform_device *pdev)
@@ -319,8 +301,6 @@ static void ingenic_uart_remove(struct platform_device *pdev)
 	struct ingenic_uart_data *data = platform_get_drvdata(pdev);
 
 	serial8250_unregister_port(data->line);
-	clk_disable_unprepare(data->clk_module);
-	clk_disable_unprepare(data->clk_baud);
 }
 
 static const struct ingenic_uart_config jz4740_uart_config = {
