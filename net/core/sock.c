@@ -3800,7 +3800,7 @@ int sock_prot_inuse_get(struct net *net, struct proto *prot)
 	for_each_possible_cpu(cpu)
 		res += per_cpu_ptr(net->core.prot_inuse, cpu)->val[idx];
 
-	return res >= 0 ? res : 0;
+	return res;
 }
 EXPORT_SYMBOL_GPL(sock_prot_inuse_get);
 
