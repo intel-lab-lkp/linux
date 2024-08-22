@@ -86,15 +86,11 @@ static int tegra_uart_probe(struct platform_device *pdev)
 		return PTR_ERR(uart->rst);
 
 	if (!port->uartclk) {
-		uart->clk = devm_clk_get(&pdev->dev, NULL);
+		uart->clk = devm_clk_get_enabled(&pdev->dev, NULL);
 		if (IS_ERR(uart->clk)) {
 			dev_err(&pdev->dev, "failed to get clock!\n");
 			return -ENODEV;
 		}
-
-		ret = clk_prepare_enable(uart->clk);
-		if (ret < 0)
-			return ret;
 
 		port->uartclk = clk_get_rate(uart->clk);
 	}
@@ -115,7 +111,6 @@ static int tegra_uart_probe(struct platform_device *pdev)
 err_ctrl_assert:
 	reset_control_assert(uart->rst);
 err_clkdisable:
-	clk_disable_unprepare(uart->clk);
 
 	return ret;
 }
@@ -126,7 +121,6 @@ static void tegra_uart_remove(struct platform_device *pdev)
 
 	serial8250_unregister_port(uart->line);
 	reset_control_assert(uart->rst);
-	clk_disable_unprepare(uart->clk);
 }
 
 #ifdef CONFIG_PM_SLEEP
