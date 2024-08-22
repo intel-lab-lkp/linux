@@ -284,16 +284,10 @@ static int fsl_dcu_drm_probe(struct platform_device *pdev)
 		return PTR_ERR(fsl_dev->regmap);
 	}
 
-	fsl_dev->clk = devm_clk_get(dev, "dcu");
-	if (IS_ERR(fsl_dev->clk)) {
-		dev_err(dev, "failed to get dcu clock\n");
-		return PTR_ERR(fsl_dev->clk);
-	}
-	ret = clk_prepare_enable(fsl_dev->clk);
-	if (ret < 0) {
-		dev_err(dev, "failed to enable dcu clk\n");
-		return ret;
-	}
+	fsl_dev->clk = devm_clk_get_enabled(dev, "dcu");
+	if (IS_ERR(fsl_dev->clk))
+		return dev_err_probe(dev, PTR_ERR(fsl_dev->clk),
+						     "failed to get dcu clock\n");
 
 	pix_clk_in = devm_clk_get(dev, "pix");
 	if (IS_ERR(pix_clk_in)) {
@@ -309,11 +303,9 @@ static int fsl_dcu_drm_probe(struct platform_device *pdev)
 	fsl_dev->pix_clk = clk_register_divider(dev, pix_clk_name,
 			pix_clk_in_name, 0, base + DCU_DIV_RATIO,
 			div_ratio_shift, 8, CLK_DIVIDER_ROUND_CLOSEST, NULL);
-	if (IS_ERR(fsl_dev->pix_clk)) {
-		dev_err(dev, "failed to register pix clk\n");
-		ret = PTR_ERR(fsl_dev->pix_clk);
-		goto disable_clk;
-	}
+	if (IS_ERR(fsl_dev->pix_clk))
+		return dev_err_probe(dev, PTR_ERR(fsl_dev->pix_clk),
+				      "failed to register pix clk\n");
 
 	fsl_dev->tcon = fsl_tcon_init(dev);
 
@@ -341,8 +333,7 @@ put:
 	drm_dev_put(drm);
 unregister_pix_clk:
 	clk_unregister(fsl_dev->pix_clk);
-disable_clk:
-	clk_disable_unprepare(fsl_dev->clk);
+
 	return ret;
 }
 
@@ -352,7 +343,6 @@ static void fsl_dcu_drm_remove(struct platform_device *pdev)
 
 	drm_dev_unregister(fsl_dev->drm);
 	drm_dev_put(fsl_dev->drm);
-	clk_disable_unprepare(fsl_dev->clk);
 	clk_unregister(fsl_dev->pix_clk);
 }
 
