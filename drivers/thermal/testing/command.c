@@ -151,6 +151,7 @@ static ssize_t tt_command_process(struct dentry *dentry, const char __user *user
 		return -ENOMEM;
 
 	if (copy_from_user(buf, user_buf, count))
+		kfree(buf);
 		return -EFAULT;
 
 	buf[count] = '\0';
