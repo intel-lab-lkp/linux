@@ -38,7 +38,7 @@ struct vgetrandom_state {
 		};
 		u8		batch_key[CHACHA_BLOCK_SIZE * 2];
 	};
-	u64			generation;
+	unsigned long		generation;
 	u8			pos;
 	bool 			in_use;
 };

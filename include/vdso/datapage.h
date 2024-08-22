@@ -123,7 +123,7 @@ struct vdso_data {
  * @is_ready:	boolean signaling whether the RNG is initialized
  */
 struct vdso_rng_data {
-	u64	generation;
+	unsigned long	generation;
 	u8	is_ready;
 };
 
