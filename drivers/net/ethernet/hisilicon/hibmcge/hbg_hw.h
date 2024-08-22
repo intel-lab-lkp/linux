@@ -43,5 +43,9 @@ static inline void hbg_reg_write64(struct hbg_priv *priv, u32 addr, u64 value)
 
 int hbg_hw_init(struct hbg_priv *pri);
 void hbg_hw_adjust_link(struct hbg_priv *priv, u32 speed, u32 duplex);
+u32 hbg_hw_get_irq_status(struct hbg_priv *priv);
+void hbg_hw_irq_clear(struct hbg_priv *priv, u32 mask);
+bool hbg_hw_irq_is_enabled(struct hbg_priv *priv, u32 mask);
+void hbg_hw_irq_enable(struct hbg_priv *priv, u32 mask, bool enable);
 
 #endif
