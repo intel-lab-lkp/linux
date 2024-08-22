@@ -10,6 +10,7 @@
 #include <linux/device.h>
 #include <linux/dev_printk.h>
 #include <linux/err.h>
+#include <linux/gpio/consumer.h>
 #include <linux/i2c.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -29,11 +30,11 @@
  * address responds.
  *
  * TODO:
- * - Support handling common GPIOs.
  * - Support I2C muxes
  */
 
 struct i2c_of_probe_data {
+	struct gpio_descs *gpiods;
 	struct regulator_bulk_data *regulators;
 	unsigned int regulators_num;
 };
@@ -71,8 +72,88 @@ static int i2c_of_probe_get_regulator(struct device *dev, struct device_node *no
 	return ret;
 }
 
+/*
+ * Returns 1 if property is GPIO and GPIO successfully requested,
+ * 0 if not a GPIO property, or error if request for GPIO failed.
+ */
+static int i2c_of_probe_get_gpiod(struct device_node *node, struct property *prop,
+				  struct i2c_of_probe_data *data)
+{
+	struct fwnode_handle *fwnode = of_fwnode_handle(node);
+	struct gpio_descs *gpiods;
+	struct gpio_desc *gpiod;
+	char con[32]; /* 32 is max size of property name */
+	char *con_id = NULL;
+	size_t new_size;
+	int len;
+
+	len = gpio_property_name_length(prop->name);
+	if (len < 0)
+		return 0;
+
+	if (len >= sizeof(con) - 1) {
+		pr_err("%pOF: length of GPIO name \"%s\" exceeds current limit\n",
+		       node, prop->name);
+		return -EINVAL;
+	}
+
+	if (len > 0) {
+		strscpy(con, prop->name, len + 1);
+		con_id = con;
+	}
+
+	/*
+	 * GPIO descriptors are not reference counted. GPIOD_FLAGS_BIT_NONEXCLUSIVE
+	 * can't differentiate between GPIOs shared between devices to be probed and
+	 * other devices (which is incorrect). If the initial request fails with
+	 * -EBUSY, retry with GPIOD_FLAGS_BIT_NONEXCLUSIVE and see if it matches
+	 * any existing ones.
+	 */
+	gpiod = fwnode_gpiod_get_index(fwnode, con_id, 0, GPIOD_ASIS, "i2c-of-prober");
+	if (IS_ERR(gpiod)) {
+		int i;
+
+		if (PTR_ERR(gpiod) != -EBUSY || !data->gpiods)
+			return PTR_ERR(gpiod);
+
+		gpiod = fwnode_gpiod_get_index(fwnode, con_id, 0,
+					       GPIOD_ASIS | GPIOD_FLAGS_BIT_NONEXCLUSIVE,
+					       "i2c-of-prober");
+		for (i = 0; i < data->gpiods->ndescs; i++)
+			if (gpiod == data->gpiods->desc[i])
+				return 1;
+
+		return -EBUSY;
+	}
+
+	new_size = struct_size(gpiods, desc, data->gpiods ? data->gpiods->ndescs + 1 : 1);
+	gpiods = krealloc(data->gpiods, new_size, GFP_KERNEL);
+	if (!gpiods) {
+		gpiod_put(gpiod);
+		return -ENOMEM;
+	}
+
+	data->gpiods = gpiods;
+	data->gpiods->desc[data->gpiods->ndescs++] = gpiod;
+
+	return 1;
+}
+
+/*
+ * This is split into two functions because in the normal flow the GPIOs
+ * have to be released before the actual driver probes so that the latter
+ * can acquire them.
+ */
+static void i2c_of_probe_free_gpios(struct i2c_of_probe_data *data)
+{
+	if (data->gpiods)
+		gpiod_put_array(data->gpiods);
+	data->gpiods = NULL;
+}
+
 static void i2c_of_probe_free_res(struct i2c_of_probe_data *data)
 {
+	i2c_of_probe_free_gpios(data);
 	regulator_bulk_free(data->regulators_num, data->regulators);
 }
 
@@ -88,6 +169,18 @@ static int i2c_of_probe_get_res(struct device *dev, struct device_node *node,
 		goto err_cleanup;
 	}
 
+	for_each_property_of_node(node, prop) {
+		dev_dbg(dev, "Trying property %pOF/%s\n", node, prop->name);
+
+		/* GPIOs */
+		ret = i2c_of_probe_get_gpiod(node, prop, data);
+		if (ret < 0) {
+			dev_err_probe(dev, ret, "Failed to get GPIO from %pOF/%s\n",
+				      node, prop->name);
+			goto err_cleanup;
+		}
+	}
+
 	return 0;
 
 err_cleanup:
@@ -98,6 +191,7 @@ err_cleanup:
 static int i2c_of_probe_enable_res(struct device *dev, struct i2c_of_probe_data *data)
 {
 	int ret = 0;
+	int gpio_i;
 
 	dev_dbg(dev, "Enabling regulator supplies\n");
 
@@ -108,7 +202,32 @@ static int i2c_of_probe_enable_res(struct device *dev, struct i2c_of_probe_data 
 	/* largest post-power-on pre-reset-deassert delay seen among drivers */
 	msleep(500);
 
+	if (!data->gpiods)
+		return 0;
+
+	for (gpio_i = 0; gpio_i < data->gpiods->ndescs; gpio_i++) {
+		/*
+		 * reset GPIOs normally have opposite polarity compared to
+		 * enable GPIOs. Instead of parsing the flags again, simply
+		 * set the raw value to high.
+		 */
+		dev_dbg(dev, "Setting GPIO %d\n", gpio_i);
+		ret = gpiod_direction_output_raw(data->gpiods->desc[gpio_i], 1);
+		if (ret)
+			goto disable_gpios;
+	}
+
+	/* largest post-reset-deassert delay seen in tree for Elan I2C HID */
+	msleep(300);
+
 	return 0;
+
+disable_gpios:
+	for (gpio_i--; gpio_i >= 0; gpio_i--)
+		gpiod_set_raw_value_cansleep(data->gpiods->desc[gpio_i], 0);
+	regulator_bulk_disable(data->regulators_num, data->regulators);
+
+	return ret;
 }
 
 static void i2c_of_probe_disable_regulators(struct i2c_of_probe_data *data)
@@ -234,7 +353,9 @@ int i2c_of_probe_component(struct device *dev, const char *type)
 			return ret;
 	}
 
-	dev_dbg(dev, "Resources: # of regulator supplies = %d\n", probe_data.regulators_num);
+	dev_dbg(dev, "Resources: # of GPIOs = %d, # of regulator supplies = %d\n",
+		probe_data.gpiods ? probe_data.gpiods->ndescs : 0,
+		probe_data.regulators_num);
 
 	/* Enable resources */
 	ret = i2c_of_probe_enable_res(dev, &probe_data);
@@ -256,6 +377,7 @@ int i2c_of_probe_component(struct device *dev, const char *type)
 			continue;
 
 		/* Found a device that is responding */
+		i2c_of_probe_free_gpios(&probe_data);
 		ret = i2c_of_probe_enable_node(dev, node);
 		break;
 	}
