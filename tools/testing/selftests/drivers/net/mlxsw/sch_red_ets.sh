@@ -80,36 +80,37 @@ uninstall_qdisc()
 ecn_test()
 {
 	install_qdisc ecn
+	defer uninstall_qdisc
 
 	do_ecn_test 10 $BACKLOG1
 	do_ecn_test 11 $BACKLOG2
-
-	uninstall_qdisc
 }
+defer_scoped_fn ecn_test
 
 ecn_test_perband()
 {
 	install_qdisc ecn
+	defer uninstall_qdisc
 
 	do_ecn_test_perband 10 $BACKLOG1
 	do_ecn_test_perband 11 $BACKLOG2
-
-	uninstall_qdisc
 }
+defer_scoped_fn ecn_test_perband
 
 ecn_nodrop_test()
 {
 	install_qdisc ecn nodrop
+	defer uninstall_qdisc
 
 	do_ecn_nodrop_test 10 $BACKLOG1
 	do_ecn_nodrop_test 11 $BACKLOG2
-
-	uninstall_qdisc
 }
+defer_scoped_fn ecn_nodrop_test
 
 red_test()
 {
 	install_qdisc
+	defer uninstall_qdisc
 
 	# Make sure that we get the non-zero value if there is any.
 	local cur=$(busywait 1100 until_counter_is "> 0" \
@@ -120,51 +121,50 @@ red_test()
 
 	do_red_test 10 $BACKLOG1
 	do_red_test 11 $BACKLOG2
-
-	uninstall_qdisc
 }
+defer_scoped_fn red_test
 
 mc_backlog_test()
 {
 	install_qdisc
+	defer uninstall_qdisc
 
 	# Note that the backlog numbers here do not correspond to RED
 	# configuration, but are arbitrary.
 	do_mc_backlog_test 10 $BACKLOG1
 	do_mc_backlog_test 11 $BACKLOG2
-
-	uninstall_qdisc
 }
+defer_scoped_fn mc_backlog_test
 
 red_mirror_test()
 {
 	install_qdisc qevent early_drop block 10
+	defer uninstall_qdisc
 
 	do_drop_mirror_test 10 $BACKLOG1 early_drop
 	do_drop_mirror_test 11 $BACKLOG2 early_drop
-
-	uninstall_qdisc
 }
+defer_scoped_fn red_mirror_test
 
 red_trap_test()
 {
 	install_qdisc qevent early_drop block 10
+	defer uninstall_qdisc
 
 	do_drop_trap_test 10 $BACKLOG1 early_drop
 	do_drop_trap_test 11 $BACKLOG2 early_drop
-
-	uninstall_qdisc
 }
+defer_scoped_fn red_trap_test
 
 ecn_mirror_test()
 {
 	install_qdisc ecn qevent mark block 10
+	defer uninstall_qdisc
 
 	do_mark_mirror_test 10 $BACKLOG1
 	do_mark_mirror_test 11 $BACKLOG2
-
-	uninstall_qdisc
 }
+defer_scoped_fn ecn_mirror_test
 
 bail_on_lldpad "configure DCB" "configure Qdiscs"
 

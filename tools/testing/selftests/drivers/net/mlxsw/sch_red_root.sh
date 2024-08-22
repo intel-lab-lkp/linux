@@ -32,46 +32,58 @@ uninstall_qdisc()
 ecn_test()
 {
 	install_qdisc ecn
+	defer uninstall_qdisc
+
 	do_ecn_test 10 $BACKLOG
-	uninstall_qdisc
 }
+defer_scoped_fn ecn_test
 
 ecn_test_perband()
 {
 	install_qdisc ecn
+	defer uninstall_qdisc
+
 	do_ecn_test_perband 10 $BACKLOG
-	uninstall_qdisc
 }
+defer_scoped_fn ecn_test_perband
 
 ecn_nodrop_test()
 {
 	install_qdisc ecn nodrop
+	defer uninstall_qdisc
+
 	do_ecn_nodrop_test 10 $BACKLOG
-	uninstall_qdisc
 }
+defer_scoped_fn ecn_nodrop_test
 
 red_test()
 {
 	install_qdisc
+	defer uninstall_qdisc
+
 	do_red_test 10 $BACKLOG
-	uninstall_qdisc
 }
+defer_scoped_fn red_test
 
 mc_backlog_test()
 {
 	install_qdisc
+	defer uninstall_qdisc
+
 	# Note that the backlog value here does not correspond to RED
 	# configuration, but is arbitrary.
 	do_mc_backlog_test 10 $BACKLOG
-	uninstall_qdisc
 }
+defer_scoped_fn mc_backlog_test
 
 red_mirror_test()
 {
 	install_qdisc qevent early_drop block 10
+	defer uninstall_qdisc
+
 	do_drop_mirror_test 10 $BACKLOG
-	uninstall_qdisc
 }
+defer_scoped_fn red_mirror_test
 
 bail_on_lldpad "configure DCB" "configure Qdiscs"
 
