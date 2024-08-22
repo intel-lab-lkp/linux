@@ -520,11 +520,15 @@ int pcim_enable_device(struct pci_dev *pdev)
 EXPORT_SYMBOL(pcim_enable_device);
 
 /**
- * pcim_pin_device - Pin managed PCI device
+ * pcim_pin_device - Pin managed PCI device (DEPRECATED)
  * @pdev: PCI device to pin
  *
  * Pin managed PCI device @pdev. Pinned device won't be disabled on driver
  * detach. @pdev must have been enabled with pcim_enable_device().
+ *
+ * This function is DEPRECATED. Do not use it in new code. If you want the
+ * device to remain enabled after driver detach, just use pci_enable_device()
+ * instead of pcim_enable_device().
  */
 void pcim_pin_device(struct pci_dev *pdev)
 {
