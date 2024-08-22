@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/clk.h>
 #include <linux/device.h>
+#include <linux/err.h>
 #include <linux/export.h>
 #include <linux/gfp.h>
+#include <linux/types.h>
 
 struct devm_clk_state {
 	struct clk *clk;
 	void (*exit)(struct clk *clk);
 };
 
-static void devm_clk_release(struct device *dev, void *res)
+static void devm_clk_release(void *res)
 {
 	struct devm_clk_state *state = res;
 
@@ -28,15 +30,13 @@ static struct clk *__devm_clk_get(struct device *dev, const char *id,
 	struct clk *clk;
 	int ret;
 
-	state = devres_alloc(devm_clk_release, sizeof(*state), GFP_KERNEL);
+	state = devm_kmalloc(dev, sizeof(*state), GFP_KERNEL);
 	if (!state)
 		return ERR_PTR(-ENOMEM);
 
 	clk = get(dev, id);
-	if (IS_ERR(clk)) {
-		ret = PTR_ERR(clk);
-		goto err_clk_get;
-	}
+	if (IS_ERR(clk))
+		return clk;
 
 	if (init) {
 		ret = init(clk);
@@ -47,16 +47,14 @@ static struct clk *__devm_clk_get(struct device *dev, const char *id,
 	state->clk = clk;
 	state->exit = exit;
 
-	devres_add(dev, state);
+	ret = devm_add_action_or_reset(dev, devm_clk_release, state);
+	if (ret)
+		goto err_clk_init;
 
 	return clk;
 
 err_clk_init:
-
 	clk_put(clk);
-err_clk_get:
-
-	devres_free(state);
 	return ERR_PTR(ret);
 }
 
@@ -104,7 +102,7 @@ struct clk_bulk_devres {
 	int num_clks;
 };
 
-static void devm_clk_bulk_release(struct device *dev, void *res)
+static void devm_clk_bulk_release(void *res)
 {
 	struct clk_bulk_devres *devres = res;
 
@@ -117,8 +115,7 @@ static int __devm_clk_bulk_get(struct device *dev, int num_clks,
 	struct clk_bulk_devres *devres;
 	int ret;
 
-	devres = devres_alloc(devm_clk_bulk_release,
-			      sizeof(*devres), GFP_KERNEL);
+	devres = devm_kmalloc(dev, sizeof(*devres), GFP_KERNEL);
 	if (!devres)
 		return -ENOMEM;
 
@@ -126,15 +123,13 @@ static int __devm_clk_bulk_get(struct device *dev, int num_clks,
 		ret = clk_bulk_get_optional(dev, num_clks, clks);
 	else
 		ret = clk_bulk_get(dev, num_clks, clks);
-	if (!ret) {
-		devres->clks = clks;
-		devres->num_clks = num_clks;
-		devres_add(dev, devres);
-	} else {
-		devres_free(devres);
-	}
+	if (ret)
+		return ret;
 
-	return ret;
+	devres->clks = clks;
+	devres->num_clks = num_clks;
+
+	return devm_add_action_or_reset(dev, devm_clk_bulk_release, devres);
 }
 
 int __must_check devm_clk_bulk_get(struct device *dev, int num_clks,
@@ -151,7 +146,7 @@ int __must_check devm_clk_bulk_get_optional(struct device *dev, int num_clks,
 }
 EXPORT_SYMBOL_GPL(devm_clk_bulk_get_optional);
 
-static void devm_clk_bulk_release_all(struct device *dev, void *res)
+static void devm_clk_bulk_release_all(void *res)
 {
 	struct clk_bulk_devres *devres = res;
 
@@ -164,25 +159,24 @@ int __must_check devm_clk_bulk_get_all(struct device *dev,
 	struct clk_bulk_devres *devres;
 	int ret;
 
-	devres = devres_alloc(devm_clk_bulk_release_all,
-			      sizeof(*devres), GFP_KERNEL);
+	devres = devm_kmalloc(dev, sizeof(*devres), GFP_KERNEL);
 	if (!devres)
 		return -ENOMEM;
 
-	ret = clk_bulk_get_all(dev, &devres->clks);
-	if (ret > 0) {
-		*clks = devres->clks;
-		devres->num_clks = ret;
-		devres_add(dev, devres);
-	} else {
-		devres_free(devres);
-	}
+	devres->num_clks = clk_bulk_get_all(dev, &devres->clks);
+	if (devres->num_clks <= 0)
+		return devres->num_clks;
 
-	return ret;
+	ret = devm_add_action_or_reset(dev, devm_clk_bulk_release_all, devres);
+	if (ret)
+		return ret;
+
+	*clks = devres->clks;
+	return 0;
 }
 EXPORT_SYMBOL_GPL(devm_clk_bulk_get_all);
 
-static void devm_clk_bulk_release_all_enable(struct device *dev, void *res)
+static void devm_clk_bulk_release_all_enable(void *res)
 {
 	struct clk_bulk_devres *devres = res;
 
@@ -196,49 +190,33 @@ int __must_check devm_clk_bulk_get_all_enable(struct device *dev,
 	struct clk_bulk_devres *devres;
 	int ret;
 
-	devres = devres_alloc(devm_clk_bulk_release_all_enable,
-			      sizeof(*devres), GFP_KERNEL);
+	devres = devm_kmalloc(dev, sizeof(*devres), GFP_KERNEL);
 	if (!devres)
 		return -ENOMEM;
 
-	ret = clk_bulk_get_all(dev, &devres->clks);
-	if (ret > 0) {
-		*clks = devres->clks;
-		devres->num_clks = ret;
-	} else {
-		devres_free(devres);
+	devres->num_clks = clk_bulk_get_all(dev, &devres->clks);
+	if (devres->num_clks <= 0)
+		return devres->num_clks;
+
+	ret = clk_bulk_prepare_enable(devres->num_clks, devres->clks);
+	if (ret) {
+		clk_bulk_put_all(devres->num_clks, devres->clks);
 		return ret;
 	}
 
-	ret = clk_bulk_prepare_enable(devres->num_clks, *clks);
-	if (!ret) {
-		devres_add(dev, devres);
-	} else {
-		clk_bulk_put_all(devres->num_clks, devres->clks);
-		devres_free(devres);
-	}
+	ret = devm_add_action_or_reset(dev, devm_clk_bulk_release_all_enable, devres);
+	if (ret)
+		return ret;
 
-	return ret;
+	*clks = devres->clks;
+	return 0;
+
 }
 EXPORT_SYMBOL_GPL(devm_clk_bulk_get_all_enable);
 
-static int devm_clk_match(struct device *dev, void *res, void *data)
-{
-	struct clk **c = res;
-	if (!c || !*c) {
-		WARN_ON(!c || !*c);
-		return 0;
-	}
-	return *c == data;
-}
-
 void devm_clk_put(struct device *dev, struct clk *clk)
 {
-	int ret;
-
-	ret = devres_release(dev, devm_clk_release, devm_clk_match, clk);
-
-	WARN_ON(ret);
+	devm_release_action(dev, devm_clk_release, clk);
 }
 EXPORT_SYMBOL(devm_clk_put);
 
@@ -246,20 +224,20 @@ struct clk *devm_get_clk_from_child(struct device *dev,
 				    struct device_node *np, const char *con_id)
 {
 	struct devm_clk_state *state;
-	struct clk *clk;
+	int ret;
 
-	state = devres_alloc(devm_clk_release, sizeof(*state), GFP_KERNEL);
+	state = devm_kmalloc(dev, sizeof(*state), GFP_KERNEL);
 	if (!state)
 		return ERR_PTR(-ENOMEM);
 
-	clk = of_clk_get_by_name(np, con_id);
-	if (!IS_ERR(clk)) {
-		state->clk = clk;
-		devres_add(dev, state);
-	} else {
-		devres_free(state);
-	}
+	state->clk = of_clk_get_by_name(np, con_id);
+	if (IS_ERR(state->clk))
+		return state->clk;
 
-	return clk;
+	ret = devm_add_action_or_reset(dev, devm_clk_release, state);
+	if (ret)
+		return ERR_PTR(ret);
+
+	return state->clk;
 }
 EXPORT_SYMBOL(devm_get_clk_from_child);
