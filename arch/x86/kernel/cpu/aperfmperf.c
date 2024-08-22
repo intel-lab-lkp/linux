@@ -16,6 +16,7 @@
 #include <linux/sched/topology.h>
 #include <linux/smp.h>
 #include <linux/syscore_ops.h>
++#include <linux/jiffies.h>
 
 #include <asm/cpu.h>
 #include <asm/cpu_device_id.h>
@@ -432,7 +433,7 @@ unsigned int arch_freq_get_on_cpu(int cpu)
 	 * Bail on invalid count and when the last update was too long ago,
 	 * which covers idle and NOHZ full CPUs.
 	 */
-	if (!mcnt || (jiffies - last) > MAX_SAMPLE_AGE)
+	if (!mcnt || time_after(jiffies, last + MAX_SAMPLE_AGE))
 		goto fallback;
 
 	return div64_u64((cpu_khz * acnt), mcnt);
