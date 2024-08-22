@@ -2300,8 +2300,8 @@ static enum bp_result get_integrated_info_v8(
 		le32_to_cpu(info_v8->ulNbpStateNClkFreq[0]);
 	for (i = 1; i < 4; ++i)
 		info->minimum_n_clk =
-			info->minimum_n_clk < le32_to_cpu(info_v8->ulNbpStateNClkFreq[i]) ?
-			info->minimum_n_clk : le32_to_cpu(info_v8->ulNbpStateNClkFreq[i]);
+			min(info->minimum_n_clk,
+			    le32_to_cpu(info_v8->ulNbpStateNClkFreq[i]));
 
 	info->idle_n_clk = le32_to_cpu(info_v8->ulIdleNClk);
 	info->ddr_dll_power_up_time =
