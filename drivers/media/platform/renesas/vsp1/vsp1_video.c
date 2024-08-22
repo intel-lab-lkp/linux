@@ -520,22 +520,6 @@ static int vsp1_video_pipeline_build(struct vsp1_pipeline *pipe,
 			return ret;
 	}
 
-	return 0;
-}
-
-static int vsp1_video_pipeline_init(struct vsp1_pipeline *pipe,
-				    struct vsp1_video *video)
-{
-	int ret;
-
-	vsp1_pipeline_init(pipe);
-
-	pipe->frame_end = vsp1_video_pipeline_frame_end;
-
-	ret = vsp1_video_pipeline_build(pipe, video);
-	if (ret)
-		return ret;
-
 	vsp1_pipeline_dump(pipe, "video");
 
 	return 0;
@@ -544,7 +528,6 @@ static int vsp1_video_pipeline_init(struct vsp1_pipeline *pipe,
 static struct vsp1_pipeline *vsp1_video_pipeline_get(struct vsp1_video *video)
 {
 	struct vsp1_pipeline *pipe;
-	int ret;
 
 	/*
 	 * Get a pipeline object for the video node. If a pipeline has already
@@ -557,12 +540,9 @@ static struct vsp1_pipeline *vsp1_video_pipeline_get(struct vsp1_video *video)
 		if (!pipe)
 			return ERR_PTR(-ENOMEM);
 
-		ret = vsp1_video_pipeline_init(pipe, video);
-		if (ret < 0) {
-			vsp1_pipeline_reset(pipe);
-			kfree(pipe);
-			return ERR_PTR(ret);
-		}
+		vsp1_pipeline_init(pipe);
+
+		pipe->frame_end = vsp1_video_pipeline_frame_end;
 	} else {
 		pipe = video->rwpf->entity.pipe;
 		kref_get(&pipe->kref);
@@ -579,12 +559,17 @@ static void vsp1_video_pipeline_release(struct kref *kref)
 	kfree(pipe);
 }
 
+static void __vsp1_video_pipeline_put(struct vsp1_pipeline *pipe)
+{
+	kref_put(&pipe->kref, vsp1_video_pipeline_release);
+}
+
 static void vsp1_video_pipeline_put(struct vsp1_pipeline *pipe)
 {
 	struct media_device *mdev = &pipe->output->entity.vsp1->media_dev;
 
 	mutex_lock(&mdev->graph_mutex);
-	kref_put(&pipe->kref, vsp1_video_pipeline_release);
+	__vsp1_video_pipeline_put(pipe);
 	mutex_unlock(&mdev->graph_mutex);
 }
 
@@ -985,8 +970,23 @@ vsp1_video_streamon(struct file *file, void *fh, enum v4l2_buf_type type)
 
 	ret = __video_device_pipeline_start(&video->video, &pipe->pipe);
 	if (ret < 0) {
+		__vsp1_video_pipeline_put(pipe);
 		mutex_unlock(&mdev->graph_mutex);
-		goto err_pipe;
+		return ret;
+	}
+
+	/*
+	 * If the pipeline hasn't been built, do so now. This needs to happen
+	 * after __media_pipeline_start() to use the pipeline iterators.
+	 */
+	if (!pipe->output) {
+		ret = vsp1_video_pipeline_build(pipe, video);
+		if (ret < 0) {
+			__media_pipeline_stop(video->video.entity.pads);
+			__vsp1_video_pipeline_put(pipe);
+			mutex_unlock(&mdev->graph_mutex);
+			return ret;
+		}
 	}
 
 	mutex_unlock(&mdev->graph_mutex);
@@ -997,18 +997,17 @@ vsp1_video_streamon(struct file *file, void *fh, enum v4l2_buf_type type)
 	 */
 	ret = vsp1_video_verify_format(video);
 	if (ret < 0)
-		goto err_stop;
+		goto error;
 
 	/* Start the queue. */
 	ret = vb2_streamon(&video->queue, type);
 	if (ret < 0)
-		goto err_stop;
+		goto error;
 
 	return 0;
 
-err_stop:
+error:
 	video_device_pipeline_stop(&video->video);
-err_pipe:
 	vsp1_video_pipeline_put(pipe);
 	return ret;
 }
