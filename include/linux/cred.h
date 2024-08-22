@@ -190,6 +190,13 @@ static inline void revert_creds_light(const struct cred *revert_cred)
 	rcu_assign_pointer(current->cred, revert_cred);
 }
 
+DEFINE_LOCK_GUARD_1(__cred, struct cred,
+		    _T->lock = (struct cred *)override_creds_light(_T->lock),
+		    revert_creds_light(_T->lock));
+
+#define cred_guard(_cred) guard(__cred)(((struct cred *)_cred))
+#define cred_scoped_guard(_cred) scoped_guard(__cred, ((struct cred *)_cred))
+
 /**
  * get_new_cred_many - Get references on a new set of credentials
  * @cred: The new credentials to reference
