@@ -294,7 +294,7 @@ static int hidp_get_raw_report(struct hid_device *hid,
 
 	skb = session->report_return;
 	if (skb) {
-		len = skb->len < count ? skb->len : count;
+		len = min(skb->len, count);
 		memcpy(data, skb->data, len);
 
 		kfree_skb(skb);
