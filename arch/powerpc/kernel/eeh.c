@@ -1537,10 +1537,6 @@ int eeh_pe_inject_err(struct eeh_pe *pe, int type, int func,
 	if (!eeh_ops || !eeh_ops->err_inject)
 		return -ENOENT;
 
-	/* Check on PCI error type */
-	if (type != EEH_ERR_TYPE_32 && type != EEH_ERR_TYPE_64)
-		return -EINVAL;
-
 	/* Check on PCI error function */
 	if (func < EEH_ERR_FUNC_MIN || func > EEH_ERR_FUNC_MAX)
 		return -EINVAL;
@@ -1731,7 +1727,7 @@ static const struct file_operations eeh_dev_check_fops = {
 	.read   = eeh_debugfs_dev_usage,
 };
 
-static int eeh_debugfs_break_device(struct pci_dev *pdev)
+int eeh_debugfs_break_device(struct pci_dev *pdev)
 {
 	struct resource *bar = NULL;
 	void __iomem *mapped;
