@@ -3146,8 +3146,8 @@ void idpf_vport_init(struct idpf_vport *vport, struct idpf_vport_max_q *max_q)
 	struct idpf_adapter *adapter = vport->adapter;
 	struct virtchnl2_create_vport *vport_msg;
 	struct idpf_vport_config *vport_config;
-	u16 tx_itr[] = {2, 8, 64, 128, 256};
-	u16 rx_itr[] = {2, 8, 32, 96, 128};
+	static const u16 tx_itr[] = {2, 8, 64, 128, 256};
+	static const u16 rx_itr[] = {2, 8, 32, 96, 128};
 	struct idpf_rss_data *rss_data;
 	u16 idx = vport->idx;
 
