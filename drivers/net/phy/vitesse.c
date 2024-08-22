@@ -71,6 +71,19 @@
 #define MII_VSC73XX_DOWNSHIFT_MAX		5
 #define MII_VSC73XX_DOWNSHIFT_INVAL		1
 
+/* VSC73XX PHY_BYPASS_CTRL register*/
+#define MII_VSC73XX_PHY_BYPASS_CTRL		MII_DCOUNTER
+#define MII_VSC73XX_PBC_TX_DIS			BIT(15)
+#define MII_VSC73XX_PBC_FOR_SPD_AUTO_MDIX_DIS	BIT(7)
+#define MII_VSC73XX_PBC_PAIR_SWAP_DIS		BIT(5)
+#define MII_VSC73XX_PBC_POL_INV_DIS		BIT(4)
+#define MII_VSC73XX_PBC_PARALLEL_DET_DIS	BIT(3)
+#define MII_VSC73XX_PBC_AUTO_NP_EXCHANGE_DIS	BIT(1)
+
+/* VSC73XX PHY_AUX_CTRL_STAT register */
+#define MII_VSC73XX_PHY_AUX_CTRL_STAT	MII_NCONFIG
+#define MII_VSC73XX_PACS_NO_MDI_X_IND	BIT(13)
+
 /* Vitesse VSC8601 Extended PHY Control Register 1 */
 #define MII_VSC8601_EPHY_CTL		0x17
 #define MII_VSC8601_EPHY_CTL_RGMII_SKEW	(1 << 8)
@@ -319,6 +332,73 @@ static int vsc739x_config_init(struct phy_device *phydev)
 	return 0;
 }
 
+static int vsc73xx_mdix_set(struct phy_device *phydev, u8 mdix)
+{
+	int ret;
+	u16 val;
+
+	val = phy_read(phydev, MII_VSC73XX_PHY_BYPASS_CTRL);
+
+	switch (mdix) {
+	case ETH_TP_MDI:
+		val |= MII_VSC73XX_PBC_FOR_SPD_AUTO_MDIX_DIS |
+		       MII_VSC73XX_PBC_PAIR_SWAP_DIS |
+		       MII_VSC73XX_PBC_POL_INV_DIS;
+		break;
+	case ETH_TP_MDI_X:
+		/* When MDI-X auto configuration is disabled, is possible
+		 * to force only MDI mode. Let's use autoconfig for forced
+		 * MDIX mode.
+		 */
+	default:
+		val &= ~(MII_VSC73XX_PBC_FOR_SPD_AUTO_MDIX_DIS |
+			 MII_VSC73XX_PBC_PAIR_SWAP_DIS |
+			 MII_VSC73XX_PBC_POL_INV_DIS);
+		break;
+	}
+
+	ret = phy_write(phydev, MII_VSC73XX_PHY_BYPASS_CTRL, val);
+	if (ret)
+		return ret;
+
+	return genphy_restart_aneg(phydev);
+}
+
+static int vsc73xx_config_aneg(struct phy_device *phydev)
+{
+	int ret;
+
+	ret = vsc73xx_mdix_set(phydev, phydev->mdix_ctrl);
+	if (ret)
+		return ret;
+
+	return genphy_config_aneg(phydev);
+}
+
+static int vsc73xx_mdix_get(struct phy_device *phydev, u8 *mdix)
+{
+	u16 reg_val;
+
+	reg_val = phy_read(phydev, MII_VSC73XX_PHY_AUX_CTRL_STAT);
+	if (reg_val & MII_VSC73XX_PACS_NO_MDI_X_IND)
+		*mdix = ETH_TP_MDI;
+	else
+		*mdix = ETH_TP_MDI_X;
+
+	return 0;
+}
+
+static int vsc73xx_read_status(struct phy_device *phydev)
+{
+	int ret;
+
+	ret = vsc73xx_mdix_get(phydev, &phydev->mdix);
+	if (ret < 0)
+		return ret;
+
+	return genphy_read_status(phydev);
+}
+
 /* This adds a skew for both TX and RX clocks, so the skew should only be
  * applied to "rgmii-id" interfaces. It may not work as expected
  * on "rgmii-txid", "rgmii-rxid" or "rgmii" interfaces.
@@ -516,6 +596,8 @@ static struct phy_driver vsc82xx_driver[] = {
 	.phy_id_mask    = 0x000ffff0,
 	/* PHY_GBIT_FEATURES */
 	.config_init    = vsc738x_config_init,
+	.config_aneg    = vsc73xx_config_aneg,
+	.read_status	= vsc73xx_read_status,
 	.read_page      = vsc73xx_read_page,
 	.write_page     = vsc73xx_write_page,
 	.get_tunable    = vsc73xx_get_tunable,
@@ -526,6 +608,8 @@ static struct phy_driver vsc82xx_driver[] = {
 	.phy_id_mask    = 0x000ffff0,
 	/* PHY_GBIT_FEATURES */
 	.config_init    = vsc738x_config_init,
+	.config_aneg    = vsc73xx_config_aneg,
+	.read_status	= vsc73xx_read_status,
 	.read_page      = vsc73xx_read_page,
 	.write_page     = vsc73xx_write_page,
 	.get_tunable    = vsc73xx_get_tunable,
@@ -536,6 +620,8 @@ static struct phy_driver vsc82xx_driver[] = {
 	.phy_id_mask    = 0x000ffff0,
 	/* PHY_GBIT_FEATURES */
 	.config_init    = vsc739x_config_init,
+	.config_aneg    = vsc73xx_config_aneg,
+	.read_status	= vsc73xx_read_status,
 	.read_page      = vsc73xx_read_page,
 	.write_page     = vsc73xx_write_page,
 	.get_tunable    = vsc73xx_get_tunable,
@@ -546,6 +632,8 @@ static struct phy_driver vsc82xx_driver[] = {
 	.phy_id_mask    = 0x000ffff0,
 	/* PHY_GBIT_FEATURES */
 	.config_init    = vsc739x_config_init,
+	.config_aneg    = vsc73xx_config_aneg,
+	.read_status	= vsc73xx_read_status,
 	.read_page      = vsc73xx_read_page,
 	.write_page     = vsc73xx_write_page,
 	.get_tunable    = vsc73xx_get_tunable,
