@@ -17,7 +17,6 @@
 
 struct qcom_ipq806x_sata_phy {
 	void __iomem *mmio;
-	struct clk *cfg_clk;
 	struct device *dev;
 };
 
@@ -130,7 +129,7 @@ static int qcom_ipq806x_sata_phy_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct phy_provider *phy_provider;
 	struct phy *generic_phy;
-	int ret;
+	struct clk *cfg_clk;
 
 	phy = devm_kzalloc(dev, sizeof(*phy), GFP_KERNEL);
 	if (!phy)
@@ -150,31 +149,19 @@ static int qcom_ipq806x_sata_phy_probe(struct platform_device *pdev)
 	phy_set_drvdata(generic_phy, phy);
 	platform_set_drvdata(pdev, phy);
 
-	phy->cfg_clk = devm_clk_get(dev, "cfg");
-	if (IS_ERR(phy->cfg_clk)) {
+	cfg_clk = devm_clk_get_enabled(dev, "cfg");
+	if (IS_ERR(cfg_clk)) {
 		dev_err(dev, "Failed to get sata cfg clock\n");
-		return PTR_ERR(phy->cfg_clk);
+		return PTR_ERR(cfg_clk);
 	}
-
-	ret = clk_prepare_enable(phy->cfg_clk);
-	if (ret)
-		return ret;
 
 	phy_provider = devm_of_phy_provider_register(dev, of_phy_simple_xlate);
 	if (IS_ERR(phy_provider)) {
-		clk_disable_unprepare(phy->cfg_clk);
 		dev_err(dev, "%s: failed to register phy\n", __func__);
 		return PTR_ERR(phy_provider);
 	}
 
 	return 0;
-}
-
-static void qcom_ipq806x_sata_phy_remove(struct platform_device *pdev)
-{
-	struct qcom_ipq806x_sata_phy *phy = platform_get_drvdata(pdev);
-
-	clk_disable_unprepare(phy->cfg_clk);
 }
 
 static const struct of_device_id qcom_ipq806x_sata_phy_of_match[] = {
@@ -185,7 +172,6 @@ MODULE_DEVICE_TABLE(of, qcom_ipq806x_sata_phy_of_match);
 
 static struct platform_driver qcom_ipq806x_sata_phy_driver = {
 	.probe	= qcom_ipq806x_sata_phy_probe,
-	.remove_new = qcom_ipq806x_sata_phy_remove,
 	.driver = {
 		.name	= "qcom-ipq806x-sata-phy",
 		.of_match_table	= qcom_ipq806x_sata_phy_of_match,
