@@ -1,0 +1,90 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/remoteproc/arm,sse710-extsys.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: SSE-710 External System Remote Processor
+
+maintainers:
+  - Abdellatif El Khlifi <abdellatif.elkhlifi@arm.com>
+  - Hugues Kamba Mpiana <hugues.kambampiana@arm.com>
+
+description: |
+  SSE-710 is an heterogeneous subsystem supporting up to two remote
+  processors aka the External Systems.
+
+properties:
+  compatible:
+    enum:
+      - arm,sse710-extsys
+
+  firmware-name:
+    description:
+      The default name of the firmware to load to the remote processor.
+
+  '#extsys-id':
+    description:
+      The External System ID.
+    enum: [0, 1]
+
+  mbox-names:
+    items:
+      - const: txes0
+      - const: rxes0
+
+  mboxes:
+    description:
+      The list of Message Handling Unit (MHU) channels used for bidirectional
+      communication. This property is only required if the virtio-based Rpmsg
+      messaging bus is used. For more details see the Arm MHUv2 Mailbox
+      Controller at devicetree/bindings/mailbox/arm,mhuv2.yaml
+
+    minItems: 2
+    maxItems: 2
+
+  memory-region:
+    description:
+      If present, a phandle for a reserved memory area that used for vdev
+      buffer, resource table, vring region and others used by the remote
+      processor.
+    minItems: 2
+    maxItems: 32
+
+required:
+  - compatible
+  - firmware-name
+  - '#extsys-id'
+
+additionalProperties: false
+
+examples:
+  - |
+    reserved-memory {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        extsys0_vring0: vdev0vring0@82001000 {
+            reg = <0 0x82001000 0 0x8000>;
+            no-map;
+        };
+
+        extsys0_vring1: vdev0vring1@82009000 {
+            reg = <0 0x82009000 0 0x8000>;
+            no-map;
+        };
+    };
+
+    syscon@1a010000 {
+        compatible = "arm,sse710-host-base-sysctrl", "simple-mfd", "syscon";
+        reg = <0x1a010000 0x1000>;
+
+        extsys0 {
+            compatible = "arm,sse710-extsys";
+            #extsys-id = <0>;
+            firmware-name = "es_flashfw.elf";
+            mbox-names = "txes0", "rxes0";
+            mboxes = <&mhu0_hes0 0 1>, <&mhu0_es0h 0 1>;
+            memory-region = <&extsys0_vring0>, <&extsys0_vring1>;
+        };
+    };
