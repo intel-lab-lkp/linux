@@ -393,3 +393,42 @@ To remove the representors devices from the system. Change the device to legacy 
  - Change device to legacy mode::
 
 	# devlink dev eswitch set pci/0002:1c:00.0 mode legacy
+
+
+RVU representors can be managed using devlink ports
+(see :ref:`Documentation/networking/devlink/devlink-port.rst <devlink_port>`) interface.
+
+ - Show devlink ports of representors::
+
+	# devlink port
+
+Sample output::
+
+	# devlink port
+	pci/0002:1c:00.0/0: type eth netdev pf1vf0rep flavour physical port 1 splittable false
+	pci/0002:1c:00.0/1: type eth netdev pf1vf1rep flavour pcivf controller 0 pfnum 1 vfnum 1 external false splittable false
+	pci/0002:1c:00.0/2: type eth netdev pf1vf2rep flavour pcivf controller 0 pfnum 1 vfnum 2 external false splittable false
+	pci/0002:1c:00.0/3: type eth netdev pf1vf3rep flavour pcivf controller 0 pfnum 1 vfnum 3 external false splittable false
+
+Function attributes
+===================
+
+The RVU representor support function attributes for representors.
+Port function configuration of the representors are supported through devlink eswitch port.
+
+MAC address setup
+-----------------
+
+RVU representor driver support devlink port function attr mechanism to setup MAC
+address. (refer to Documentation/networking/devlink/devlink-port.rst)
+
+ - To setup MAC address for port 2::
+
+	# devlink port function set pci/0002:1c:00.0/2 hw_addr 5c:a1:1b:5e:43:11
+
+Sample output::
+
+	# devlink port show pci/0002:1c:00.0/2
+	pci/0002:1c:00.0/2: type eth netdev pf1vf2rep flavour pcivf controller 0 pfnum 1 vfnum 2 external false splittable false
+	function:
+		hw_addr 5c:a1:1b:5e:43:11
