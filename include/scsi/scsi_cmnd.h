@@ -170,11 +170,14 @@ extern void scsi_kunmap_atomic_sg(void *virt);
 blk_status_t scsi_alloc_sgtables(struct scsi_cmnd *cmd);
 void scsi_free_sgtables(struct scsi_cmnd *cmd);
 
+#define scsi_dma_map(cmd) scsi_dma_map_attrs(cmd, 0)
+
 #ifdef CONFIG_SCSI_DMA
-extern int scsi_dma_map(struct scsi_cmnd *cmd);
+extern int scsi_dma_map_attrs(struct scsi_cmnd *cmd, unsigned long attrs);
 extern void scsi_dma_unmap(struct scsi_cmnd *cmd);
 #else /* !CONFIG_SCSI_DMA */
-static inline int scsi_dma_map(struct scsi_cmnd *cmd) { return -ENOSYS; }
+static inline int scsi_dma_map_attrs(struct scsi_cmnd *cmd, unsigned long attrs)
+						{ return -ENOSYS; }
 static inline void scsi_dma_unmap(struct scsi_cmnd *cmd) { }
 #endif /* !CONFIG_SCSI_DMA */
 
