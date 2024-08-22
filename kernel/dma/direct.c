@@ -649,6 +649,12 @@ bool dma_direct_all_ram_mapped(struct device *dev)
 				      check_ram_in_range_map);
 }
 
+bool dma_direct_recommend_may_block(struct device *dev)
+{
+	return IS_ENABLED(CONFIG_SWIOTLB_THROTTLE) &&
+			is_swiotlb_force_bounce(dev);
+}
+
 size_t dma_direct_max_mapping_size(struct device *dev)
 {
 	/* If SWIOTLB is active, use its maximum mapping size */
