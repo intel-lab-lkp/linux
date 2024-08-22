@@ -2639,6 +2639,12 @@ int unpoison_memory(unsigned long pfn)
 
 		folio_put(folio);
 		if (TestClearPageHWPoison(p)) {
+			/* the PG_hwpoison page will be caught and isolated
+			 * on the entrance to the free buddy page pool.
+			 * so,when we clear this flag and return it to the buddy system,
+			 * clear it's codetag
+			 */
+			clear_page_tag_ref(p);
 			folio_put(folio);
 			ret = 0;
 		}
