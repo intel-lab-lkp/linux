@@ -706,17 +706,13 @@ static int asc_init_port(struct asc_port *ascport,
 
 	spin_lock_init(&port->lock);
 
-	ascport->clk = devm_clk_get(&pdev->dev, NULL);
+	ascport->clk = devm_clk_get_enabled(&pdev->dev, NULL);
 
 	if (WARN_ON(IS_ERR(ascport->clk)))
 		return -EINVAL;
-	/* ensure that clk rate is correct by enabling the clk */
-	ret = clk_prepare_enable(ascport->clk);
-	if (ret)
-		return ret;
+
 	ascport->port.uartclk = clk_get_rate(ascport->clk);
 	WARN_ON(ascport->port.uartclk == 0);
-	clk_disable_unprepare(ascport->clk);
 
 	ascport->pinctrl = devm_pinctrl_get(&pdev->dev);
 	if (IS_ERR(ascport->pinctrl)) {
