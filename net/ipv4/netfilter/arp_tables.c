@@ -1009,7 +1009,6 @@ static int do_add_counters(struct net *net, sockptr_t arg, unsigned int len)
 	const struct xt_table_info *private;
 	int ret = 0;
 	struct arpt_entry *iter;
-	unsigned int addend;
 
 	paddc = xt_copy_counters(arg, len, &tmp);
 	if (IS_ERR(paddc))
@@ -1029,8 +1028,6 @@ static int do_add_counters(struct net *net, sockptr_t arg, unsigned int len)
 	}
 
 	i = 0;
-
-	addend = xt_write_recseq_begin();
 	xt_entry_foreach(iter,  private->entries, private->size) {
 		struct xt_counters *tmp;
 
@@ -1038,7 +1035,6 @@ static int do_add_counters(struct net *net, sockptr_t arg, unsigned int len)
 		ADD_COUNTER(*tmp, paddc[i].bcnt, paddc[i].pcnt);
 		++i;
 	}
-	xt_write_recseq_end(addend);
  unlock_up_free:
 	local_bh_enable();
 	xt_table_unlock(t);
