@@ -11,6 +11,8 @@
 #include <linux/blktrace_api.h>
 #include <linux/pr.h>
 #include <linux/uaccess.h>
+#include <linux/pagemap.h>
+#include <linux/io_uring/cmd.h>
 #include "blk.h"
 
 static int blkpg_do_ioctl(struct block_device *bdev,
@@ -745,3 +747,102 @@ long compat_blkdev_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 	return ret;
 }
 #endif
+
+struct blk_cmd {
+	blk_status_t status;
+	bool nowait;
+};
+
+static void blk_cmd_complete(struct io_uring_cmd *cmd, unsigned int issue_flags)
+{
+	struct blk_cmd *bc = io_uring_cmd_to_pdu(cmd, struct blk_cmd);
+	int res = blk_status_to_errno(bc->status);
+
+	if (res == -EAGAIN && bc->nowait)
+		io_uring_cmd_issue_blocking(cmd);
+	else
+		io_uring_cmd_done(cmd, res, 0, issue_flags);
+}
+
+static void bio_cmd_end(struct bio *bio)
+{
+	struct io_uring_cmd *cmd = bio->bi_private;
+	struct blk_cmd *bc = io_uring_cmd_to_pdu(cmd, struct blk_cmd);
+
+	if (unlikely(bio->bi_status) && !bc->status)
+		bc->status = bio->bi_status;
+
+	io_uring_cmd_do_in_task_lazy(cmd, blk_cmd_complete);
+	bio_put(bio);
+}
+
+static int blkdev_cmd_discard(struct io_uring_cmd *cmd,
+			      struct block_device *bdev,
+			      uint64_t start, uint64_t len, bool nowait)
+{
+	sector_t sector = start >> SECTOR_SHIFT;
+	sector_t nr_sects = len >> SECTOR_SHIFT;
+	struct bio *prev = NULL, *bio;
+	int err;
+
+	if (!bdev_max_discard_sectors(bdev))
+		return -EOPNOTSUPP;
+
+	err = blk_validate_write(bdev, file_to_blk_mode(cmd->file), start, len);
+	if (err)
+		return err;
+	err = filemap_invalidate_pages(bdev->bd_mapping, start,
+					start + len - 1, nowait);
+	if (err)
+		return err;
+
+	while ((bio = blk_alloc_discard_bio(bdev, &sector, &nr_sects,
+					    GFP_KERNEL))) {
+		if (nowait) {
+			/*
+			 * Don't allow multi-bio non-blocking submissions as
+			 * subsequent bios may fail but we won't get direct
+			 * feedback about that. Normally, the caller should
+			 * retry from a blocking context.
+			 */
+			if (unlikely(nr_sects)) {
+				bio_put(bio);
+				return -EAGAIN;
+			}
+			bio->bi_opf |= REQ_NOWAIT;
+		}
+		prev = bio_chain_and_submit(prev, bio);
+	}
+	if (!prev)
+		return -EFAULT;
+
+	prev->bi_private = cmd;
+	prev->bi_end_io = bio_cmd_end;
+	submit_bio(prev);
+	return -EIOCBQUEUED;
+}
+
+int blkdev_uring_cmd(struct io_uring_cmd *cmd, unsigned int issue_flags)
+{
+	struct block_device *bdev = I_BDEV(cmd->file->f_mapping->host);
+	struct blk_cmd *bc = io_uring_cmd_to_pdu(cmd, struct blk_cmd);
+	const struct io_uring_sqe *sqe = cmd->sqe;
+	u32 cmd_op = cmd->cmd_op;
+	uint64_t start, len;
+
+	if (unlikely(sqe->ioprio || sqe->__pad1 || sqe->len ||
+		     sqe->rw_flags || sqe->file_index))
+		return -EINVAL;
+
+	bc->status = BLK_STS_OK;
+	bc->nowait = issue_flags & IO_URING_F_NONBLOCK;
+
+	start = READ_ONCE(sqe->addr);
+	len = READ_ONCE(sqe->addr3);
+
+	switch (cmd_op) {
+	case BLOCK_URING_CMD_DISCARD:
+		return blkdev_cmd_discard(cmd, bdev, start, len, bc->nowait);
+	}
+	return -EINVAL;
+}
