@@ -17,6 +17,7 @@
 #include "crypto.h"
 #include <linux/ceph/decode.h>
 #include <linux/ceph/messenger.h>
++#include <linux/jiffies.h
 
 /*
  * Capability management
@@ -4687,7 +4688,7 @@ unsigned long ceph_check_delayed_caps(struct ceph_mds_client *mdsc)
 		 * slowness doesn't block mdsc delayed work,
 		 * preventing send_renew_caps() from running.
 		 */
-		if (jiffies - loop_start >= 5 * HZ)
+		if (time_after_eq(jiffies, loop_start + 5 * HZ))
 			break;
 	}
 	spin_unlock(&mdsc->cap_delay_lock);
