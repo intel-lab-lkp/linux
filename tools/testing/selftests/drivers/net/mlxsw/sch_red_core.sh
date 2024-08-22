@@ -414,6 +414,7 @@ __do_ecn_test()
 
 	start_tcp_traffic $h1.$vlan $(ipaddr 1 $vlan) $(ipaddr 3 $vlan) \
 			  $h3_mac tos=0x01
+	defer stop_traffic
 	sleep 1
 
 	ecn_test_common "$name" "$get_nmarked" $vlan $limit
@@ -426,9 +427,9 @@ __do_ecn_test()
 	check_fail $? "UDP traffic went into backlog instead of being early-dropped"
 	log_test "TC $((vlan - 10)): $name backlog > limit: UDP early-dropped"
 
-	stop_traffic
 	sleep 1
 }
+defer_scoped_fn __do_ecn_test
 
 do_ecn_test()
 {
@@ -455,6 +456,7 @@ do_ecn_nodrop_test()
 
 	start_tcp_traffic $h1.$vlan $(ipaddr 1 $vlan) $(ipaddr 3 $vlan) \
 			  $h3_mac tos=0x01
+	defer stop_traffic
 	sleep 1
 
 	ecn_test_common "$name" get_nmarked $vlan $limit
@@ -467,9 +469,9 @@ do_ecn_nodrop_test()
 	check_err $? "UDP traffic was early-dropped instead of getting into backlog"
 	log_test "TC $((vlan - 10)): $name backlog > limit: UDP not dropped"
 
-	stop_traffic
 	sleep 1
 }
+defer_scoped_fn do_ecn_nodrop_test
 
 do_red_test()
 {
@@ -482,6 +484,7 @@ do_red_test()
 	# is above limit.
 	start_tcp_traffic $h1.$vlan $(ipaddr 1 $vlan) $(ipaddr 3 $vlan) \
 			  $h3_mac tos=0x01
+	defer stop_traffic
 
 	# Pushing below the queue limit should work.
 	RET=0
@@ -503,9 +506,9 @@ do_red_test()
 	check_err $? "backlog $backlog / $limit expected <= 10% distance"
 	log_test "TC $((vlan - 10)): RED backlog > limit"
 
-	stop_traffic
 	sleep 1
 }
+defer_scoped_fn do_red_test
 
 do_mc_backlog_test()
 {
@@ -517,7 +520,10 @@ do_mc_backlog_test()
 	RET=0
 
 	start_tcp_traffic $h1.$vlan $(ipaddr 1 $vlan) $(ipaddr 3 $vlan) bc
+	defer stop_traffic
+
 	start_tcp_traffic $h2.$vlan $(ipaddr 2 $vlan) $(ipaddr 3 $vlan) bc
+	defer stop_traffic
 
 	qbl=$(busywait 5000 until_counter_is ">= 500000" \
 		       get_qdisc_backlog $vlan)
@@ -530,11 +536,9 @@ do_mc_backlog_test()
 		       get_mc_transmit_queue $vlan)
 	check_err $? "MC backlog reported by qdisc not visible in ethtool"
 
-	stop_traffic
-	stop_traffic
-
 	log_test "TC $((vlan - 10)): Qdisc reports MC backlog"
 }
+defer_scoped_fn do_mc_backlog_test
 
 do_mark_test()
 {
@@ -551,6 +555,7 @@ do_mark_test()
 
 	start_tcp_traffic $h1.$vlan $(ipaddr 1 $vlan) $(ipaddr 3 $vlan) \
 			  $h3_mac tos=0x01
+	defer stop_traffic
 
 	# Create a bit of a backlog and observe no mirroring due to marks.
 	qevent_rule_install_$subtest
@@ -581,9 +586,9 @@ do_mark_test()
 		log_test "TC $((vlan - 10)): marked packets $subtest'd"
 	fi
 
-	stop_traffic
 	sleep 1
 }
+defer_scoped_fn do_mark_test
 
 do_drop_test()
 {
@@ -600,6 +605,7 @@ do_drop_test()
 	RET=0
 
 	start_traffic $h1.$vlan $(ipaddr 1 $vlan) $(ipaddr 3 $vlan) $h3_mac
+	defer stop_traffic
 
 	# Create a bit of a backlog and observe no mirroring due to drops.
 	qevent_rule_install_$subtest
@@ -633,9 +639,9 @@ do_drop_test()
 
 	log_test "TC $((vlan - 10)): ${trigger}ped packets $subtest'd"
 
-	stop_traffic
 	sleep 1
 }
+defer_scoped_fn do_drop_test
 
 qevent_rule_install_mirror()
 {
