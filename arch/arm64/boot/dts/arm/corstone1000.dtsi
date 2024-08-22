@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR MIT
 /*
- * Copyright (c) 2022, Arm Limited. All rights reserved.
+ * Copyright (c) 2022, 2024 Arm Limited. All rights reserved.
  * Copyright (c) 2022, Linaro Limited. All rights reserved.
  *
  */
@@ -132,6 +132,26 @@
 			interrupts = <GIC_SPI 20 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&uartclk>, <&refclk100mhz>;
 			clock-names = "uartclk", "apb_pclk";
+		};
+
+		mhu0_hes0: mhu@1b000000 {
+			compatible = "arm,mhuv2-tx","arm,primecell";
+			reg = <0x1b000000 0x1000>;
+			clocks = <&refclk100mhz>;
+			clock-names = "apb_pclk";
+			interrupts = <GIC_SPI 11 IRQ_TYPE_LEVEL_HIGH>;
+			#mbox-cells = <2>;
+			arm,mhuv2-protocols = <0 1>;
+		};
+
+		mhu0_es0h: mhu@1b010000 {
+			compatible = "arm,mhuv2-rx","arm,primecell";
+			reg = <0x1b010000 0x1000>;
+			clocks = <&refclk100mhz>;
+			clock-names = "apb_pclk";
+			interrupts = <GIC_SPI 12 IRQ_TYPE_LEVEL_HIGH>;
+			#mbox-cells = <2>;
+			arm,mhuv2-protocols = <0 1>;
 		};
 
 		mhu_hse1: mailbox@1b820000 {
