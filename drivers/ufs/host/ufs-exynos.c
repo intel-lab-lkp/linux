@@ -1379,6 +1379,13 @@ static void exynos_ufs_fmp_resume(struct ufs_hba *hba)
 
 #endif /* !CONFIG_SCSI_UFS_CRYPTO */
 
+static enum utp_ocs exynos_ufs_override_cqe_ocs(enum utp_ocs ocs)
+{
+	if (ocs == OCS_ABORTED)
+		ocs = OCS_INVALID_COMMAND_STATUS;
+	return ocs;
+}
+
 static int exynos_ufs_init(struct ufs_hba *hba)
 {
 	struct device *dev = hba->dev;
@@ -1929,6 +1936,7 @@ static const struct ufs_hba_variant_ops ufs_hba_exynos_ops = {
 	.suspend			= exynos_ufs_suspend,
 	.resume				= exynos_ufs_resume,
 	.fill_crypto_prdt		= exynos_ufs_fmp_fill_prdt,
+	.override_cqe_ocs		= exynos_ufs_override_cqe_ocs,
 };
 
 static struct ufs_hba_variant_ops ufs_hba_exynosauto_vh_ops = {
