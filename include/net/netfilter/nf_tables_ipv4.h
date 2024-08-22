@@ -33,7 +33,7 @@ static inline int __nft_set_pktinfo_ipv4_validate(struct nft_pktinfo *pkt)
 	thoff = skb_network_offset(pkt->skb) + (iph->ihl * 4);
 	if (pkt->skb->len < len)
 		return -1;
-	else if (len < thoff)
+	else if (len + skb_network_offset(pkt->skb) < thoff)
 		return -1;
 	else if (thoff < sizeof(*iph))
 		return -1;
