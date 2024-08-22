@@ -912,7 +912,6 @@ static int do_dentry_open(struct file *f,
 	struct inode *inode = f->f_path.dentry->d_inode;
 	int error;
 
-	path_get(&f->f_path);
 	f->f_inode = inode;
 	f->f_mapping = inode->i_mapping;
 	f->f_wb_err = filemap_sample_wb_err(f->f_mapping);
@@ -1015,7 +1014,6 @@ cleanup_all:
 	fops_put(f->f_op);
 	put_file_access(f);
 cleanup_file:
-	path_put(&f->f_path);
 	f->f_path.mnt = NULL;
 	f->f_path.dentry = NULL;
 	f->f_inode = NULL;
@@ -1042,10 +1040,14 @@ cleanup_file:
 int finish_open(struct file *file, struct dentry *dentry,
 		int (*open)(struct inode *, struct file *))
 {
+	int err;
 	BUG_ON(file->f_mode & FMODE_OPENED); /* once it's opened, it's opened */
 
 	file->f_path.dentry = dentry;
-	return do_dentry_open(file, open);
+	err = do_dentry_open(file, open);
+	if (file->f_mode & FMODE_OPENED)
+		path_get(&file->f_path);
+	return err;
 }
 EXPORT_SYMBOL(finish_open);
 
@@ -1095,6 +1097,8 @@ int vfs_open(const struct path *path, struct file *file)
 		 */
 		fsnotify_open(file);
 	}
+	if (file->f_mode & FMODE_OPENED)
+		path_get(&file->f_path);
 	return ret;
 }
 

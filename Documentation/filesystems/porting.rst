@@ -1141,3 +1141,12 @@ pointer are gone.
 
 set_blocksize() takes opened struct file instead of struct block_device now
 and it *must* be opened exclusive.
+
+
+---
+
+**mandatory**
+
+do not even think of modifying ->f_path in ->open() instance; it never had
+been expected to work and nobody had been insane enough to try it.  Now
+it is explicitly forbidden.
