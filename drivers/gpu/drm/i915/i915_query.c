@@ -140,6 +140,7 @@ query_engine_info(struct drm_i915_private *i915,
 	if (query_item->flags)
 		return -EINVAL;
 
+	mutex_lock(&i915->uabi_engines_mutex);
 	for_each_uabi_engine(engine, i915)
 		num_uabi_engines++;
 
@@ -168,6 +169,7 @@ query_engine_info(struct drm_i915_private *i915,
 		query.num_engines++;
 		info_ptr++;
 	}
+	mutex_unlock(&i915->uabi_engines_mutex);
 
 	if (copy_to_user(query_ptr, &query, sizeof(query)))
 		return -EFAULT;

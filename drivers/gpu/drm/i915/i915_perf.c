@@ -2732,6 +2732,7 @@ oa_configure_all_contexts(struct i915_perf_stream *stream,
 	 * If we don't modify the kernel_context, we do not get events while
 	 * idle.
 	 */
+	mutex_lock(&i915->uabi_engines_mutex);
 	for_each_uabi_engine(engine, i915) {
 		struct intel_context *ce = engine->kernel_context;
 
@@ -2744,6 +2745,7 @@ oa_configure_all_contexts(struct i915_perf_stream *stream,
 		if (err)
 			return err;
 	}
+	mutex_unlock(&i915->uabi_engines_mutex);
 
 	return 0;
 }
