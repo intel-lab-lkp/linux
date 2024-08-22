@@ -2215,4 +2215,10 @@ module_exit(phy_module_exit)
 bool phy_driver_is_genphy(struct phy_device *phydev);
 bool phy_driver_is_genphy_10g(struct phy_device *phydev);
 
+/* Defines for PHY specific counters */
+#define PHY_TX_PKT_COUNT	"tx_pkt_cnt"
+#define PHY_RX_PKT_COUNT	"rx_pkt_cnt"
+#define PHY_TX_ERR_COUNT	"tx_err_cnt"
+#define PHY_RX_ERR_COUNT	"rx_err_cnt"
+
 #endif /* __PHY_H */
