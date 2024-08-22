@@ -210,6 +210,7 @@ struct fsxattr {
 
 #define BLOCK_URING_CMD_DISCARD			0
 #define BLOCK_URING_CMD_WRITE_ZEROES		1
+#define BLOCK_URING_CMD_SECURE_ERASE		2
 
 #define BMAP_IOCTL 1		/* obsolete - kept for compatibility */
 #define FIBMAP	   _IO(0x00,1)	/* bmap access */

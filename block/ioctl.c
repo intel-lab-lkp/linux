@@ -841,6 +841,18 @@ static int blkdev_cmd_write_zeroes(struct io_uring_cmd *cmd,
 				bdev_write_zeroes_sectors(bdev), opf);
 }
 
+static int blkdev_cmd_secure_erase(struct io_uring_cmd *cmd,
+				   struct block_device *bdev,
+				   uint64_t start, uint64_t len, bool nowait)
+{
+	blk_opf_t opf = REQ_OP_SECURE_ERASE;
+
+	if (nowait)
+		opf |= REQ_NOWAIT;
+	return blkdev_queue_cmd(cmd, bdev, start, len,
+				bdev_max_secure_erase_sectors(bdev), opf);
+}
+
 static int blkdev_cmd_discard(struct io_uring_cmd *cmd,
 			      struct block_device *bdev,
 			      uint64_t start, uint64_t len, bool nowait)
@@ -910,6 +922,9 @@ int blkdev_uring_cmd(struct io_uring_cmd *cmd, unsigned int issue_flags)
 		return blkdev_cmd_discard(cmd, bdev, start, len, bc->nowait);
 	case BLOCK_URING_CMD_WRITE_ZEROES:
 		return blkdev_cmd_write_zeroes(cmd, bdev, start, len,
+					       bc->nowait);
+	case BLOCK_URING_CMD_SECURE_ERASE:
+		return blkdev_cmd_secure_erase(cmd, bdev, start, len,
 					       bc->nowait);
 	}
 	return -EINVAL;
