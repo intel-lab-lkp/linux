@@ -48,6 +48,8 @@ union st_info {
 	u64 value;
 };
 
+static bool pci_tph_nostmode;
+
 static u16 tph_extract_tag(enum tph_mem_type mem_type, u8 req_type,
 			   union st_info *info)
 {
@@ -433,6 +435,10 @@ int pcie_enable_tph(struct pci_dev *pdev, int mode)
 		return -EINVAL;
 	}
 
+	/* Honor "nostmode" kernel parameter */
+	if (pci_tph_nostmode)
+		pdev->tph_mode = PCI_TPH_NO_ST_MODE;
+
 	/* Get req_type supported by device and its Root Port */
 	reg = pci_read_config_dword(pdev, pdev->tph_cap + PCI_TPH_CAP, &reg);
 	if (FIELD_GET(PCI_TPH_CAP_EXT_TPH, reg))
@@ -543,6 +549,12 @@ void pci_save_tph_state(struct pci_dev *pdev)
 				     st_entry++);
 		offset += sizeof(u16);
 	}
+}
+
+void pci_tph_set_nostmode(void)
+{
+	pci_tph_nostmode = true;
+	pr_info("PCIe TPH No ST Mode is enabled\n");
 }
 
 void pci_tph_init(struct pci_dev *pdev)

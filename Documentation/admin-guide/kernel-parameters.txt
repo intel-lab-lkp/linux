@@ -4617,6 +4617,9 @@
 		nomio		[S390] Do not use MIO instructions.
 		norid		[S390] ignore the RID field and force use of
 				one PCI domain per PCI function
+		nostmode	[PCIE] If PCIe TPH Processing Hints (TPH) is
+				enabled, this kernel option forces all Steering
+				Tags to be treated as zero (aka "No ST Mode").
 
 	pcie_aspm=	[PCIE] Forcibly enable or ignore PCIe Active State Power
 			Management.
