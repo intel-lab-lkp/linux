@@ -483,6 +483,68 @@ int pcie_tph_modes(struct pci_dev *pdev)
 }
 EXPORT_SYMBOL(pcie_tph_modes);
 
+void pci_restore_tph_state(struct pci_dev *pdev)
+{
+	struct pci_cap_saved_state *save_state;
+	int num_entries, i, offset;
+	u16 *st_entry;
+	u32 *cap;
+
+	if (!pdev->tph_cap)
+		return;
+
+	if (!pdev->tph_enabled)
+		return;
+
+	save_state = pci_find_saved_ext_cap(pdev, PCI_EXT_CAP_ID_TPH);
+	if (!save_state)
+		return;
+
+	/* Restore control register and all ST entries */
+	cap = &save_state->cap.data[0];
+	pci_write_config_dword(pdev, pdev->tph_cap + PCI_TPH_CTRL, *cap++);
+	st_entry = (u16 *)cap;
+	offset = PCI_TPH_BASE_SIZEOF;
+	num_entries = get_st_table_size(pdev);
+	for (i = 0; i < num_entries; i++) {
+		pci_write_config_word(pdev, pdev->tph_cap + offset,
+				      *st_entry++);
+		offset += sizeof(u16);
+	}
+}
+
+void pci_save_tph_state(struct pci_dev *pdev)
+{
+	struct pci_cap_saved_state *save_state;
+	int num_entries, i, offset;
+	u16 *st_entry;
+	u32 *cap;
+
+	if (!pdev->tph_cap)
+		return;
+
+	if (!pdev->tph_enabled)
+		return;
+
+	save_state = pci_find_saved_ext_cap(pdev, PCI_EXT_CAP_ID_TPH);
+	if (!save_state)
+		return;
+
+	/* Save control register */
+	cap = &save_state->cap.data[0];
+	pci_read_config_dword(pdev, pdev->tph_cap + PCI_TPH_CTRL, cap++);
+
+	/* Save all ST entries in extended capability structure */
+	st_entry = (u16 *)cap;
+	offset = PCI_TPH_BASE_SIZEOF;
+	num_entries = get_st_table_size(pdev);
+	for (i = 0; i < num_entries; i++) {
+		pci_read_config_word(pdev, pdev->tph_cap + offset,
+				     st_entry++);
+		offset += sizeof(u16);
+	}
+}
+
 void pci_tph_init(struct pci_dev *pdev)
 {
 	pdev->tph_cap = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_TPH);
