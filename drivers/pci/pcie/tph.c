@@ -41,6 +41,28 @@ static u8 get_rp_completer_type(struct pci_dev *pdev)
 }
 
 /**
+ * pcie_disable_tph - Turn off TPH support for device
+ * @pdev: PCI device
+ *
+ * Return: none
+ */
+void pcie_disable_tph(struct pci_dev *pdev)
+{
+	if (!pdev->tph_cap)
+		return;
+
+	if (!pdev->tph_enabled)
+		return;
+
+	pci_write_config_dword(pdev, pdev->tph_cap + PCI_TPH_CTRL, 0);
+
+	pdev->tph_mode = 0;
+	pdev->tph_req_type = 0;
+	pdev->tph_enabled = 0;
+}
+EXPORT_SYMBOL(pcie_disable_tph);
+
+/**
  * pcie_enable_tph - Enable TPH support for device using a specific ST mode
  * @pdev: PCI device
  * @mode: ST mode to enable, as returned by pcie_tph_modes()
