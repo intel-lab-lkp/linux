@@ -1407,6 +1407,12 @@ tests_run()
 	done
 }
 
+cleanup()
+{
+	pre_cleanup
+	defer_scopes_cleanup
+}
+
 multipath_eval()
 {
 	local desc="$1"
@@ -1459,6 +1465,83 @@ in_ns()
 		source lib.sh
 		$(for a in "$@"; do printf "%q${IFS:0:1}" "$a"; done)
 	EOF
+}
+
+# map[(defer_scope,cleanup_id) -> cleanup_command]
+declare -A DEFERS
+# map[defer_scope -> # cleanup_commands]
+declare -a NDEFERS=(0)
+DEFER_SCOPE=0
+
+defer_scope_push()
+{
+	((DEFER_SCOPE++))
+	NDEFERS[${DEFER_SCOPE}]=0
+}
+
+defer_scope_pop()
+{
+	local defer_key
+	local defer_ix
+
+	for ((defer_ix=${NDEFERS[${DEFER_SCOPE}]}; defer_ix-->0; )); do
+		defer_key=${DEFER_SCOPE},$defer_ix
+		${DEFERS[$defer_key]}
+		unset DEFERS[$defer_key]
+	done
+
+	NDEFERS[${DEFER_SCOPE}]=0
+	((DEFER_SCOPE--))
+}
+
+defer()
+{
+	local defer_key=${DEFER_SCOPE},${NDEFERS[${DEFER_SCOPE}]}
+	local defer="$@"
+
+	DEFERS[$defer_key]="$defer"
+	NDEFERS[${DEFER_SCOPE}]=$((${NDEFERS[${DEFER_SCOPE}]} + 1))
+}
+
+defer_scopes_cleanup()
+{
+	while ((DEFER_SCOPE >= 0)); do
+		defer_scope_pop
+	done
+}
+
+defer_scoped_fn()
+{
+	local name=$1; shift;
+	local mangle=__defer_scoped__
+
+	declare -f $name >/dev/null
+	if (($?)); then
+		echo "Cannot make non-existent function '$name' defer-scoped" \
+			> /dev/stderr
+		exit 1
+	fi
+
+	declare -f $mangle$name
+	if ((! $?)); then
+		echo "The function '$name' appears to already be defer-scoped" \
+			> /dev/stderr
+		exit 1
+	fi
+
+	eval "$mangle$(declare -f $name)"
+	local body="
+		$name() {
+			local ret;
+			defer_scope_push;
+			$mangle$name \"\$@\";
+			ret=\$?;
+			defer_scope_pop;
+			return \$ret;
+		}
+	"
+	unset $name
+	eval "$body"
 }
 
 ##############################################################################
