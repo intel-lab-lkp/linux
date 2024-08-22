@@ -41,6 +41,18 @@ static u8 get_rp_completer_type(struct pci_dev *pdev)
 }
 
 /**
+ * pcie_tph_enabled - Check whether TPH is enabled in device
+ * @pdev: PCI device
+ *
+ * Return: true if TPH is enabled, otherwise false
+ */
+bool pcie_tph_enabled(struct pci_dev *pdev)
+{
+	return pdev->tph_enabled;
+}
+EXPORT_SYMBOL(pcie_tph_enabled);
+
+/**
  * pcie_disable_tph - Turn off TPH support for device
  * @pdev: PCI device
  *
