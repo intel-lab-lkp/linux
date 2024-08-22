@@ -700,7 +700,7 @@ static int tonga_populate_all_graphic_levels(struct pp_hwmgr *hwmgr)
 	SMU72_Discrete_GraphicsLevel *levels = smu_data->smc_state_table.GraphicsLevel;
 
 	uint32_t i, max_entry;
-	uint8_t highest_pcie_level_enabled = 0;
+	uint8_t hightest_pcie_level_enabled = 0;
 	uint8_t lowest_pcie_level_enabled = 0, mid_pcie_level_enabled = 0;
 	uint8_t count = 0;
 	int result = 0;
@@ -747,8 +747,8 @@ static int tonga_populate_all_graphic_levels(struct pp_hwmgr *hwmgr)
 
 		while (data->dpm_level_enable_mask.pcie_dpm_enable_mask &&
 				((data->dpm_level_enable_mask.pcie_dpm_enable_mask &
-					(1<<(highest_pcie_level_enabled+1))) != 0)) {
-			highest_pcie_level_enabled++;
+					(1<<(hightest_pcie_level_enabled+1))) != 0)) {
+			hightest_pcie_level_enabled++;
 		}
 
 		while (data->dpm_level_enable_mask.pcie_dpm_enable_mask &&
@@ -757,18 +757,19 @@ static int tonga_populate_all_graphic_levels(struct pp_hwmgr *hwmgr)
 			lowest_pcie_level_enabled++;
 		}
 
-		while ((count < highest_pcie_level_enabled) &&
+		while ((count < hightest_pcie_level_enabled) &&
 				((data->dpm_level_enable_mask.pcie_dpm_enable_mask &
 					(1<<(lowest_pcie_level_enabled+1+count))) == 0)) {
 			count++;
 		}
-		mid_pcie_level_enabled = (lowest_pcie_level_enabled+1+count) < highest_pcie_level_enabled ?
-			(lowest_pcie_level_enabled+1+count) : highest_pcie_level_enabled;
 
+		mid_pcie_level_enabled = min(lowest_pcie_level_enabled+1+count,
+					hightest_pcie_level_enabled);
 
-		/* set pcieDpmLevel to highest_pcie_level_enabled*/
+		/* set pcieDpmLevel to hightest_pcie_level_enabled*/
 		for (i = 2; i < dpm_table->sclk_table.count; i++)
-			smu_data->smc_state_table.GraphicsLevel[i].pcieDpmLevel = highest_pcie_level_enabled;
+			smu_data->smc_state_table.GraphicsLevel[i].pcieDpmLevel =
+					hightest_pcie_level_enabled;
 
 		/* set pcieDpmLevel to lowest_pcie_level_enabled*/
 		smu_data->smc_state_table.GraphicsLevel[0].pcieDpmLevel = lowest_pcie_level_enabled;
