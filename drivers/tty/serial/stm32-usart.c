@@ -1550,11 +1550,6 @@ static int stm32_usart_get_ftcfg(struct platform_device *pdev, struct stm32_port
 	return fifo_size;
 }
 
-static void stm32_usart_deinit_port(struct stm32_port *stm32port)
-{
-	clk_disable_unprepare(stm32port->clk);
-}
-
 static const struct serial_rs485 stm32_rs485_supported = {
 	.flags = SER_RS485_ENABLED | SER_RS485_RTS_ON_SEND | SER_RS485_RTS_AFTER_SEND |
 		 SER_RS485_RX_DURING_TX,
@@ -1599,14 +1594,9 @@ static int stm32_usart_init_port(struct stm32_port *stm32port,
 
 	spin_lock_init(&port->lock);
 
-	stm32port->clk = devm_clk_get(&pdev->dev, NULL);
+	stm32port->clk = devm_clk_get_enabled(&pdev->dev, NULL);
 	if (IS_ERR(stm32port->clk))
 		return PTR_ERR(stm32port->clk);
-
-	/* Ensure that clk rate is correct by enabling the clk */
-	ret = clk_prepare_enable(stm32port->clk);
-	if (ret)
-		return ret;
 
 	stm32port->port.uartclk = clk_get_rate(stm32port->clk);
 	if (!stm32port->port.uartclk) {
@@ -1645,7 +1635,6 @@ static int stm32_usart_init_port(struct stm32_port *stm32port,
 	return ret;
 
 err_clk:
-	clk_disable_unprepare(stm32port->clk);
 
 	return ret;
 }
@@ -1853,8 +1842,6 @@ err_deinit_port:
 	if (stm32port->wakeup_src)
 		device_set_wakeup_capable(&pdev->dev, false);
 
-	stm32_usart_deinit_port(stm32port);
-
 err_dma_tx:
 	if (stm32port->tx_ch)
 		dma_release_channel(stm32port->tx_ch);
@@ -1904,7 +1891,6 @@ static void stm32_usart_serial_remove(struct platform_device *pdev)
 		device_init_wakeup(&pdev->dev, false);
 	}
 
-	stm32_usart_deinit_port(stm32_port);
 }
 
 static void __maybe_unused stm32_usart_console_putchar(struct uart_port *port, unsigned char ch)
