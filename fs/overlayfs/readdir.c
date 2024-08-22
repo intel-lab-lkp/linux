@@ -275,7 +275,7 @@ static int ovl_check_whiteouts(const struct path *path, struct ovl_readdir_data 
 	struct dentry *dentry, *dir = path->dentry;
 	const struct cred *old_cred;
 
-	old_cred = ovl_override_creds(rdd->dentry->d_sb);
+	old_cred = ovl_override_creds_light(rdd->dentry->d_sb);
 
 	err = down_write_killable(&dir->d_inode->i_rwsem);
 	if (!err) {
@@ -290,7 +290,7 @@ static int ovl_check_whiteouts(const struct path *path, struct ovl_readdir_data 
 		}
 		inode_unlock(dir->d_inode);
 	}
-	revert_creds(old_cred);
+	revert_creds_light(old_cred);
 
 	return err;
 }
@@ -756,7 +756,7 @@ static int ovl_iterate(struct file *file, struct dir_context *ctx)
 	const struct cred *old_cred;
 	int err;
 
-	old_cred = ovl_override_creds(dentry->d_sb);
+	old_cred = ovl_override_creds_light(dentry->d_sb);
 	if (!ctx->pos)
 		ovl_dir_reset(file);
 
@@ -808,7 +808,7 @@ static int ovl_iterate(struct file *file, struct dir_context *ctx)
 	}
 	err = 0;
 out:
-	revert_creds(old_cred);
+	revert_creds_light(old_cred);
 	return err;
 }
 
@@ -858,9 +858,9 @@ static struct file *ovl_dir_open_realfile(const struct file *file,
 	struct file *res;
 	const struct cred *old_cred;
 
-	old_cred = ovl_override_creds(file_inode(file)->i_sb);
+	old_cred = ovl_override_creds_light(file_inode(file)->i_sb);
 	res = ovl_path_open(realpath, O_RDONLY | (file->f_flags & O_LARGEFILE));
-	revert_creds(old_cred);
+	revert_creds_light(old_cred);
 
 	return res;
 }
@@ -985,9 +985,9 @@ int ovl_check_empty_dir(struct dentry *dentry, struct list_head *list)
 	struct rb_root root = RB_ROOT;
 	const struct cred *old_cred;
 
-	old_cred = ovl_override_creds(dentry->d_sb);
+	old_cred = ovl_override_creds_light(dentry->d_sb);
 	err = ovl_dir_read_merged(dentry, list, &root);
-	revert_creds(old_cred);
+	revert_creds_light(old_cred);
 	if (err)
 		return err;
 
