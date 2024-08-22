@@ -321,8 +321,10 @@ virtio_gpu_user_framebuffer_create(struct drm_device *dev,
 	struct virtio_gpu_object *bo;
 	int ret;
 
-	if (mode_cmd->pixel_format != DRM_FORMAT_HOST_XRGB8888 &&
-	    mode_cmd->pixel_format != DRM_FORMAT_HOST_ARGB8888)
+	if (mode_cmd->pixel_format != DRM_FORMAT_XRGB8888 &&
+	    mode_cmd->pixel_format != DRM_FORMAT_ARGB8888 &&
+	    mode_cmd->pixel_format != DRM_FORMAT_BGRX8888 &&
+	    mode_cmd->pixel_format != DRM_FORMAT_BGRA8888)
 		return ERR_PTR(-ENOENT);
 
 	/* lookup object associated with res handle */
