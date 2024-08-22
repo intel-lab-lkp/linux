@@ -455,7 +455,7 @@ static const struct cred *access_override_creds(void)
 	 * cred accesses will keep things non-racy to avoid RCU
 	 * freeing.
 	 */
-	override_cred->non_rcu = 1;
+	override_cred->non_rcu = true;
 
 	old_cred = override_creds(override_cred);
 

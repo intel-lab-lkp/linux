@@ -104,7 +104,7 @@ void __put_cred(struct cred *cred)
 	BUG_ON(cred == current->cred);
 	BUG_ON(cred == current->real_cred);
 
-	if (cred->non_rcu)
+	if (unlikely(cred->non_rcu))
 		put_cred_rcu(&cred->rcu);
 	else
 		call_rcu(&cred->rcu, put_cred_rcu);
@@ -218,7 +218,7 @@ struct cred *prepare_creds(void)
 	old = task->cred;
 	memcpy(new, old, sizeof(struct cred));
 
-	new->non_rcu = 0;
+	new->non_rcu = false;
 	atomic_long_set(&new->usage, 1);
 	get_group_info(new->group_info);
 	get_uid(new->user);
@@ -643,7 +643,7 @@ struct cred *prepare_kernel_cred(struct task_struct *daemon)
 	old = get_task_cred(daemon);
 
 	*new = *old;
-	new->non_rcu = 0;
+	new->non_rcu = false;
 	atomic_long_set(&new->usage, 1);
 	get_uid(new->user);
 	get_user_ns(new->user_ns);

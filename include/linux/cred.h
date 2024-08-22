@@ -110,20 +110,7 @@ static inline int groups_search(const struct group_info *group_info, kgid_t grp)
  */
 struct cred {
 	atomic_long_t	usage;
-	kuid_t		uid;		/* real UID of the task */
-	kgid_t		gid;		/* real GID of the task */
-	kuid_t		suid;		/* saved UID of the task */
-	kgid_t		sgid;		/* saved GID of the task */
-	kuid_t		euid;		/* effective UID of the task */
-	kgid_t		egid;		/* effective GID of the task */
-	kuid_t		fsuid;		/* UID for VFS ops */
-	kgid_t		fsgid;		/* GID for VFS ops */
-	unsigned	securebits;	/* SUID-less security management */
-	kernel_cap_t	cap_inheritable; /* caps our children can inherit */
-	kernel_cap_t	cap_permitted;	/* caps we're permitted */
-	kernel_cap_t	cap_effective;	/* caps we can actually use */
-	kernel_cap_t	cap_bset;	/* capability bounding set */
-	kernel_cap_t	cap_ambient;	/* Ambient capability set */
+	struct rcu_head	rcu;		/* RCU deletion hook */
 #ifdef CONFIG_KEYS
 	unsigned char	jit_keyring;	/* default keyring to attach requested
 					 * keys to */
@@ -132,6 +119,21 @@ struct cred {
 	struct key	*thread_keyring; /* keyring private to this thread */
 	struct key	*request_key_auth; /* assumed request_key authority */
 #endif
+	kuid_t		uid ____cacheline_aligned_in_smp;/* real UID of the task */
+	kgid_t		gid;		/* real GID of the task */
+	kuid_t		suid;		/* saved UID of the task */
+	kgid_t		sgid;		/* saved GID of the task */
+	kuid_t		euid;		/* effective UID of the task */
+	kgid_t		egid;		/* effective GID of the task */
+	kuid_t		fsuid;		/* UID for VFS ops */
+	kgid_t		fsgid;		/* GID for VFS ops */
+	unsigned	securebits;	/* SUID-less security management */
+	bool		non_rcu;	/* Can we skip RCU deletion? */
+	kernel_cap_t	cap_inheritable; /* caps our children can inherit */
+	kernel_cap_t	cap_permitted;	/* caps we're permitted */
+	kernel_cap_t	cap_effective;	/* caps we can actually use */
+	kernel_cap_t	cap_bset;	/* capability bounding set */
+	kernel_cap_t	cap_ambient;	/* Ambient capability set */
 #ifdef CONFIG_SECURITY
 	void		*security;	/* LSM security */
 #endif
@@ -139,11 +141,6 @@ struct cred {
 	struct user_namespace *user_ns; /* user_ns the caps and keyrings are relative to. */
 	struct ucounts *ucounts;
 	struct group_info *group_info;	/* supplementary groups for euid/fsgid */
-	/* RCU deletion */
-	union {
-		int non_rcu;			/* Can we skip RCU deletion? */
-		struct rcu_head	rcu;		/* RCU deletion hook */
-	};
 } __randomize_layout;
 
 extern void __put_cred(struct cred *);
@@ -217,7 +214,8 @@ static inline const struct cred *get_cred_many(const struct cred *cred, int nr)
 	struct cred *nonconst_cred = (struct cred *) cred;
 	if (!cred)
 		return cred;
-	nonconst_cred->non_rcu = 0;
+	if (unlikely(nonconst_cred->non_rcu))
+		WRITE_ONCE(nonconst_cred->non_rcu, false);
 	return get_new_cred_many(nonconst_cred, nr);
 }
 
@@ -242,7 +240,8 @@ static inline const struct cred *get_cred_rcu(const struct cred *cred)
 		return NULL;
 	if (!atomic_long_inc_not_zero(&nonconst_cred->usage))
 		return NULL;
-	nonconst_cred->non_rcu = 0;
+	if (unlikely(nonconst_cred->non_rcu))
+		WRITE_ONCE(nonconst_cred->non_rcu, false);
 	return cred;
 }
 
