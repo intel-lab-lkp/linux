@@ -230,7 +230,7 @@ static int klp_check_stack_func(struct klp_func *func, unsigned long *entries,
 		 * Check for the to-be-patched function
 		 * (the previous func).
 		 */
-		ops = klp_find_ops(func->old_func);
+		ops = func->ops;
 
 		if (list_is_singular(&ops->func_stack)) {
 			/* original function */

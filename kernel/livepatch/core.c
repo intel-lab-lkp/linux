@@ -771,6 +771,8 @@ static int klp_init_func(struct klp_object *obj, struct klp_func *func)
 	if (!func->old_name)
 		return -EINVAL;
 
+	func->ops = NULL;
+
 	/*
 	 * NOPs get the address later. The patched module must be loaded,
 	 * see klp_init_object_loaded().
