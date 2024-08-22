@@ -372,3 +372,44 @@ The helper must be used::
 			DECLARE_FLEX_ARRAY(struct type2, two);
 		};
 	};
+
+Open-coded kmalloc assignments
+------------------------------
+Performing open-coded kmalloc()-family allocation assignments prevents
+the kernel (and compiler) from being able to examine the type of the
+variable being assigned, which limits any related introspection that
+may help with alignment, wrap-around, or additional hardening. The
+kmalloc_obj()-family of macros provide this introspection, which can be
+used for the common code patterns for single, array, and flexible object
+allocations. For example, these open coded assignments::
+
+	ptr = kmalloc(sizeof(*ptr), gfp);
+	ptr = kzalloc(sizeof(*ptr), gfp);
+	ptr = kmalloc_array(count, sizeof(*ptr), gfp);
+	ptr = kcalloc(count, sizeof(*ptr), gfp);
+	ptr = kmalloc(struct_size(ptr, flex_member, count), gfp);
+
+become, respectively::
+
+	kmalloc_obj(ptr, gfp);
+	kzalloc_obj(ptr, gfp);
+	kmalloc_objs(ptr, count, gfp);
+	kzalloc_objs(ptr, count, gfp);
+	kmalloc_flex(ptr, flex_member, count, gfp);
+
+For the cases where the total size of the allocation is also needed,
+the kmalloc_obj_size(), kmalloc_objs_sz(), and kmalloc_flex_sz() family of
+macros can be used. For example, converting these assignments::
+
+	total_size = struct_size(ptr, flex_member, count);
+	ptr = kmalloc(total_size, gfp);
+
+becomes::
+
+	kmalloc_flex_sz(ptr, flex_member, count, gfp, &total_size);
+
+If `ptr->flex_member` is annotated with __counted_by(), the allocation
+will automatically fail if `count` is larger than the maximum
+representable value that can be stored in the counter member associated
+with `flex_member`. Similarly, the allocation will fail if the total
+size of the allocation exceeds the maximum value `*total_size` can hold.

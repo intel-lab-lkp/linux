@@ -421,6 +421,28 @@ struct ftrace_likely_data {
 #define __member_size(p)	__builtin_object_size(p, 1)
 #endif
 
+#if __has_builtin(__builtin_get_counted_by)
+/**
+ * __flex_counter - Get pointer to counter member for the given
+ *		    flexible array, if it was annotated with __counted_by()
+ * @flex: Pointer to flexible array member of an addressable struct instance
+ *
+ * For example, with:
+ *
+ *	struct foo {
+ *		int counter;
+ *		short array[] __counted_by(counter);
+ *	} *p;
+ *
+ * __flex_counter(p->array) will resolve to &p->counter.
+ *
+ * If p->array is unannotated, this returns (void *)NULL.
+ */
+#define __flex_counter(flex)	__builtin_get_counted_by(flex)
+#else
+#define __flex_counter(flex)	((void *)NULL)
+#endif
+
 /*
  * Some versions of gcc do not mark 'asm goto' volatile:
  *

@@ -686,6 +686,180 @@ static __always_inline __alloc_size(1) void *kmalloc_noprof(size_t size, gfp_t f
 }
 #define kmalloc(...)				alloc_hooks(kmalloc_noprof(__VA_ARGS__))
 
+#define __alloc_objs(ALLOC, P, COUNT, FLAGS, SIZE)		\
+({								\
+	size_t __obj_size = size_mul(sizeof(*P), COUNT);	\
+	const typeof(_Generic(SIZE,				\
+			void *: (size_t *)NULL,			\
+			default: SIZE)) __size_ptr = (SIZE);	\
+	typeof(P) __obj_ptr = NULL;				\
+	/* Does the total size fit in the *SIZE variable? */	\
+	if (!__size_ptr || __obj_size <= type_max(*__size_ptr))	\
+		__obj_ptr = ALLOC(__obj_size, FLAGS);		\
+	if (!__obj_ptr)						\
+		__obj_size = 0;					\
+	if (__size_ptr)						\
+		*__size_ptr = __obj_size;			\
+	(P) = __obj_ptr;					\
+})
+
+#define __alloc_flex(ALLOC, P, FAM, COUNT, FLAGS, SIZE)			\
+({									\
+	size_t __count = (COUNT);					\
+	size_t __obj_size = struct_size(P, FAM, __count);		\
+	const typeof(_Generic(SIZE,					\
+			void *: (size_t *)NULL,				\
+			default: SIZE)) __size_ptr = (SIZE);		\
+	typeof(P) __obj_ptr = NULL;					\
+	/* Just query the counter type for type_max checking. */	\
+	typeof(_Generic(__flex_counter(__obj_ptr->FAM),			\
+			void *: (size_t *)NULL,				\
+			default: __flex_counter(__obj_ptr->FAM)))	\
+		__counter_type_ptr = NULL;				\
+	/* Does the count fit in the __counted_by counter member? */	\
+	if ((__count <= type_max(*__counter_type_ptr)) &&		\
+	    /* Does the total size fit in the *SIZE variable? */	\
+	    (!__size_ptr || __obj_size <= type_max(*__size_ptr)))	\
+		__obj_ptr = ALLOC(__obj_size, FLAGS);			\
+	if (__obj_ptr) {						\
+		/* __obj_ptr now allocated so get real counter ptr. */	\
+		typeof(_Generic(__flex_counter(__obj_ptr->FAM),		\
+				void *: (size_t *)NULL,			\
+				default: __flex_counter(__obj_ptr->FAM))) \
+			__counter_ptr = __flex_counter(__obj_ptr->FAM);	\
+		if (__counter_ptr)					\
+			*__counter_ptr = __count;			\
+	} else {							\
+		__obj_size = 0;						\
+	}								\
+	if (__size_ptr)							\
+		*__size_ptr = __obj_size;				\
+	(P) = __obj_ptr;						\
+})
+
+/**
+ * kmalloc_obj - Allocate a single instance of the given structure
+ * @P: Pointer to hold allocation of the structure
+ * @FLAGS: GFP flags for the allocation
+ *
+ * Returns the newly allocated value of @P on success, NULL on failure.
+ * @P is assigned the result, either way.
+ */
+#define kmalloc_obj(P, FLAGS)				\
+	__alloc_objs(kmalloc, P, 1, FLAGS, NULL)
+/**
+ * kmalloc_obj_sz - Allocate a single instance of the given structure and
+ *		 store total size
+ * @P: Pointer to hold allocation of the structure
+ * @FLAGS: GFP flags for the allocation
+ * @SIZE: Pointer to variable to hold the total allocation size
+ *
+ * Returns the newly allocated value of @P on success, NULL on failure.
+ * @P is assigned the result, either way. If @SIZE is non-NULL, the
+ * allocation will immediately fail if the total allocation size is larger
+ * than what the type of *@SIZE can represent.
+ */
+#define kmalloc_obj_sz(P, FLAGS, SIZE)			\
+	__alloc_objs(kmalloc, P, 1, FLAGS, SIZE)
+/**
+ * kmalloc_objs - Allocate an array of the given structure
+ * @P: Pointer to hold allocation of the structure array
+ * @COUNT: How many elements in the array
+ * @FLAGS: GFP flags for the allocation
+ *
+ * Returns the newly allocated value of @P on success, NULL on failure.
+ * @P is assigned the result, either way.
+ */
+#define kmalloc_objs(P, COUNT, FLAGS)			\
+	__alloc_objs(kmalloc, P, COUNT, FLAGS, NULL)
+/**
+ * kmalloc_objs_sz - Allocate an array of the given structure and store
+ *		     total size
+ * @P: Pointer to hold allocation of the structure array
+ * @COUNT: How many elements in the array
+ * @FLAGS: GFP flags for the allocation
+ * @SIZE: Pointer to variable to hold the total allocation size
+ *
+ * Returns the newly allocated value of @P on success, NULL on failure.
+ * @P is assigned the result, either way. If @SIZE is non-NULL, the
+ * allocation will immediately fail if the total allocation size is larger
+ * than what the type of *@SIZE can represent.
+ */
+#define kmalloc_objs_sz(P, COUNT, FLAGS, SIZE)		\
+	__alloc_objs(kmalloc, P, COUNT, FLAGS, SIZE)
+/**
+ * kmalloc_flex - Allocate a single instance of the given flexible structure
+ * @P: Pointer to hold allocation of the structure
+ * @FAM: The name of the flexible array member of the structure
+ * @COUNT: How many flexible array member elements are desired
+ * @FLAGS: GFP flags for the allocation
+ *
+ * Returns the newly allocated value of @P on success, NULL on failure.
+ * @P is assigned the result, either way. If @FAM has been annotated with
+ * __counted_by(), the allocation will immediately fail if @COUNT is larger
+ * than what the type of the struct's counter variable can represent.
+ */
+#define kmalloc_flex(P, FAM, COUNT, FLAGS)		\
+	__alloc_flex(kmalloc, P, FAM, COUNT, FLAGS, NULL)
+
+/**
+ * kmalloc_flex_sz - Allocate a single instance of the given flexible
+ *		     structure and store total size
+ * @P: Pointer to hold allocation of the structure
+ * @FAM: The name of the flexible array member of the structure
+ * @COUNT: How many flexible array member elements are desired
+ * @FLAGS: GFP flags for the allocation
+ * @SIZE: Pointer to variable to hold the total allocation size
+ *
+ * Returns the newly allocated value of @P on success, NULL on failure.
+ * @P is assigned the result, either way. If @FAM has been annotated with
+ * __counted_by(), the allocation will immediately fail if @COUNT is larger
+ * than what the type of the struct's counter variable can represent. If
+ * @SIZE is non-NULL, the allocation will immediately fail if the total
+ * allocation size is larger than what the type of *@SIZE can represent.
+ */
+#define kmalloc_flex_sz(P, FAM, COUNT, FLAGS, SIZE)	\
+	__alloc_flex(kmalloc, P, FAM, COUNT, FLAGS, SIZE)
+
+#define kzalloc_obj(P, FLAGS)				\
+	__alloc_objs(kzalloc, P, 1, FLAGS, NULL)
+#define kzalloc_obj_sz(P, FLAGS, SIZE)			\
+	__alloc_objs(kzalloc, P, 1, FLAGS, SIZE)
+#define kzalloc_objs(P, COUNT, FLAGS)			\
+	__alloc_objs(kzalloc, P, COUNT, FLAGS, NULL)
+#define kzalloc_objs_sz(P, COUNT, FLAGS, SIZE)		\
+	__alloc_objs(kzalloc, P, COUNT, FLAGS, SIZE)
+#define kzalloc_flex(P, FAM, COUNT, FLAGS)		\
+	__alloc_flex(kzalloc, P, FAM, COUNT, FLAGS, NULL)
+#define kzalloc_flex_sz(P, FAM, COUNT, FLAGS, SIZE)	\
+	__alloc_flex(kzalloc, P, FAM, COUNT, FLAGS, SIZE)
+
+#define kvmalloc_obj(P, FLAGS)				\
+	__alloc_objs(kvmalloc, P, 1, FLAGS, NULL)
+#define kvmalloc_obj_sz(P, FLAGS, SIZE)			\
+	__alloc_objs(kvmalloc, P, 1, FLAGS, SIZE)
+#define kvmalloc_objs(P, COUNT, FLAGS)			\
+	__alloc_objs(kvmalloc, P, COUNT, FLAGS, NULL)
+#define kvmalloc_objs_sz(P, COUNT, FLAGS, SIZE)		\
+	__alloc_objs(kvmalloc, P, COUNT, FLAGS, SIZE)
+#define kvmalloc_flex(P, FAM, COUNT, FLAGS)		\
+	__alloc_flex(kvmalloc, P, FAM, COUNT, FLAGS, NULL)
+#define kvmalloc_flex_sz(P, FAM, COUNT, FLAGS, SIZE)	\
+	__alloc_flex(kvmalloc, P, FAM, COUNT, FLAGS, SIZE)
+
+#define kvzalloc_obj(P, FLAGS)				\
+	__alloc_objs(kvzalloc, P, 1, FLAGS, NULL)
+#define kvzalloc_obj_sz(P, FLAGS, SIZE)			\
+	__alloc_objs(kvzalloc, P, 1, FLAGS, SIZE)
+#define kvzalloc_objs(P, COUNT, FLAGS)			\
+	__alloc_objs(kvzalloc, P, COUNT, FLAGS, NULL)
+#define kvzalloc_objs_sz(P, COUNT, FLAGS, SIZE)		\
+	__alloc_objs(kvzalloc, P, COUNT, FLAGS, SIZE)
+#define kvzalloc_flex(P, FAM, COUNT, FLAGS)		\
+	__alloc_flex(kvzalloc, P, FAM, COUNT, FLAGS, NULL)
+#define kvzalloc_flex_sz(P, FAM, COUNT, FLAGS, SIZE)	\
+	__alloc_flex(kvzalloc, P, FAM, COUNT, FLAGS, SIZE)
+
 #define kmem_buckets_alloc(_b, _size, _flags)	\
 	alloc_hooks(__kmalloc_node_noprof(PASS_BUCKET_PARAMS(_size, _b), _flags, NUMA_NO_NODE))
 
