@@ -1200,9 +1200,9 @@ ssize_t __ceph_sync_read(struct inode *inode, loff_t *ki_pos,
 		}
 
 		idx = 0;
-		if (ret <= 0)
+		if ((ret <= 0) || (i_size == 0))
 			left = 0;
-		else if (off + ret > i_size)
+		else if ((i_size >= off) && (off + ret > i_size))
 			left = i_size - off;
 		else
 			left = ret;
@@ -1210,6 +1210,7 @@ ssize_t __ceph_sync_read(struct inode *inode, loff_t *ki_pos,
 			size_t plen, copied;
 
 			plen = min_t(size_t, left, PAGE_SIZE - page_off);
+			WARN_ON_ONCE(idx >= num_pages);
 			SetPageUptodate(pages[idx]);
 			copied = copy_page_to_iter(pages[idx++],
 						   page_off, plen, to);
@@ -1234,7 +1235,7 @@ ssize_t __ceph_sync_read(struct inode *inode, loff_t *ki_pos,
 	}
 
 	if (ret > 0) {
-		if (off >= i_size) {
+		if ((i_size >= *ki_pos) && (off >= i_size)) {
 			*retry_op = CHECK_EOF;
 			ret = i_size - *ki_pos;
 			*ki_pos = i_size;
