@@ -1,0 +1,44 @@
+SPDX-License-Identifier: GPL-2.0-only
+
+Kernel driver sq52205
+====================
+
+Supported chips:
+
+  * Silergy SQ52205
+
+
+    Prefix: 'sq52205'
+    Addresses: I2C 0x40 - 0x4f
+
+    Datasheet: Publicly available at the Silergy website
+
+	       https://us1.silergy.com/zh
+
+
+Author: Wenliang Yan <wenliang202407@163.com>
+
+Description
+-----------
+
+The SQ52205 is a high- and low-side current shunt and power monitor with an I2C
+interface. The SQ52205 both shunt drop and supply voltage, with programmable
+calibration value and conversion times. The SQ52205 can also calculate average
+power for use in energy conversion.
+
+
+
+Sysfs entries
+---------------------
+
+======================= ===============================
+in0_input		Shunt voltage(mV) channel
+in1_input		Bus voltage(mV) channel
+curr1_input		Current(mA) measurement channel
+power1_input		Power(uW) measurement channel
+shunt_resistor		Shunt resistance(uOhm) channel
+update_interval		data conversion time; affects number of samples used
+			to average results for shunt and bus voltages.
+calculate_avg_power	calculate average power from last reading to the present
+======================= ===============================
+
