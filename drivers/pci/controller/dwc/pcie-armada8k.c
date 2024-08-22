@@ -284,36 +284,25 @@ static int armada8k_pcie_probe(struct platform_device *pdev)
 
 	pcie->pci = pci;
 
-	pcie->clk = devm_clk_get(dev, NULL);
+	pcie->clk = devm_clk_get_enabled(dev, NULL);
 	if (IS_ERR(pcie->clk))
 		return PTR_ERR(pcie->clk);
 
-	ret = clk_prepare_enable(pcie->clk);
-	if (ret)
-		return ret;
-
-	pcie->clk_reg = devm_clk_get(dev, "reg");
-	if (pcie->clk_reg == ERR_PTR(-EPROBE_DEFER)) {
-		ret = -EPROBE_DEFER;
-		goto fail;
-	}
-	if (!IS_ERR(pcie->clk_reg)) {
-		ret = clk_prepare_enable(pcie->clk_reg);
-		if (ret)
-			goto fail_clkreg;
-	}
+	pcie->clk_reg = devm_clk_get_enabled(dev, "reg");
+	if (pcie->clk_reg == ERR_PTR(-EPROBE_DEFER))
+		return -EPROBE_DEFER;
 
 	/* Get the dw-pcie unit configuration/control registers base. */
 	base = platform_get_resource_byname(pdev, IORESOURCE_MEM, "ctrl");
 	pci->dbi_base = devm_pci_remap_cfg_resource(dev, base);
 	if (IS_ERR(pci->dbi_base)) {
 		ret = PTR_ERR(pci->dbi_base);
-		goto fail_clkreg;
+		goto out;
 	}
 
 	ret = armada8k_pcie_setup_phys(pcie);
 	if (ret)
-		goto fail_clkreg;
+		goto out;
 
 	platform_set_drvdata(pdev, pcie);
 
@@ -325,11 +314,7 @@ static int armada8k_pcie_probe(struct platform_device *pdev)
 
 disable_phy:
 	armada8k_pcie_disable_phys(pcie);
-fail_clkreg:
-	clk_disable_unprepare(pcie->clk_reg);
-fail:
-	clk_disable_unprepare(pcie->clk);
-
+out:
 	return ret;
 }
 
