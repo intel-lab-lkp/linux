@@ -9738,9 +9738,6 @@ void mgmt_device_disconnected(struct hci_dev *hdev, bdaddr_t *bdaddr,
 	struct mgmt_ev_device_disconnected ev;
 	struct sock *sk = NULL;
 
-	if (!mgmt_connected)
-		return;
-
 	if (link_type != ACL_LINK && link_type != LE_LINK)
 		return;
 
@@ -9754,7 +9751,12 @@ void mgmt_device_disconnected(struct hci_dev *hdev, bdaddr_t *bdaddr,
 	if (hdev->suspended)
 		ev.reason = MGMT_DEV_DISCONN_LOCAL_HOST_SUSPEND;
 
-	mgmt_event(MGMT_EV_DEVICE_DISCONNECTED, hdev, &ev, sizeof(ev), sk);
+	/* Only report MGMT_EV_DEVICE_DISCONNECTED if device is considered
+	 * connected.
+	 */
+	if (mgmt_connected)
+		mgmt_event(MGMT_EV_DEVICE_DISCONNECTED, hdev, &ev, sizeof(ev),
+			   sk);
 
 	if (sk)
 		sock_put(sk);
