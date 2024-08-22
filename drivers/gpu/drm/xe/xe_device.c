@@ -64,6 +64,7 @@ static int xe_file_open(struct drm_device *dev, struct drm_file *file)
 	struct xe_drm_client *client;
 	struct xe_file *xef;
 	int ret = -ENOMEM;
+	struct task_struct *task = NULL;
 
 	xef = kzalloc(sizeof(*xef), GFP_KERNEL);
 	if (!xef)
@@ -92,6 +93,13 @@ static int xe_file_open(struct drm_device *dev, struct drm_file *file)
 	file->driver_priv = xef;
 	kref_init(&xef->refcount);
 
+	task = get_pid_task(rcu_access_pointer(file->pid), PIDTYPE_PID);
+	if (task) {
+		xef->process_name = kstrdup(task->comm, GFP_KERNEL);
+		xef->pid = task->pid;
+		put_task_struct(task);
+	}
+
 	return 0;
 }
 
@@ -110,6 +118,7 @@ static void xe_file_destroy(struct kref *ref)
 	spin_unlock(&xe->clients.lock);
 
 	xe_drm_client_put(xef->client);
+	kfree(xef->process_name);
 	kfree(xef);
 }
 
@@ -788,13 +797,22 @@ void xe_device_shutdown(struct xe_device *xe)
 {
 }
 
+/**
+ * xe_device_wmb() - Device specific write memory barrier
+ * @xe: the &xe_device
+ *
+ * While wmb() is sufficient for a barrier if we use system memory, on discrete
+ * platforms with device memory we additionally need to issue a register write.
+ * Since it doesn't matter which register we write to, use the read-only VF_CAP
+ * register that is also marked as accessible by the VFs.
+ */
 void xe_device_wmb(struct xe_device *xe)
 {
 	struct xe_gt *gt = xe_root_mmio_gt(xe);
 
 	wmb();
 	if (IS_DGFX(xe))
-		xe_mmio_write32(gt, SOFTWARE_FLAGS_SPR33, 0);
+		xe_mmio_write32(gt, VF_CAP_REG, 0);
 }
 
 /**

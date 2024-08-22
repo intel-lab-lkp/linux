@@ -557,6 +557,16 @@ static const struct xe_rtp_entry_sr engine_was[] = {
 			     XE_RTP_ACTION_FLAG(ENGINE_BASE)))
 	},
 
+	/* Xe2_LPM */
+
+	{ XE_RTP_NAME("16021639441"),
+	  XE_RTP_RULES(MEDIA_VERSION(2000)),
+	  XE_RTP_ACTIONS(SET(CSFE_CHICKEN1(0),
+			     GHWSP_CSB_REPORT_DIS |
+			     PPHWSP_CSB_AND_TIMESTAMP_REPORT_DIS,
+			     XE_RTP_ACTION_FLAG(ENGINE_BASE)))
+	},
+
 	/* Xe2_HPM */
 
 	{ XE_RTP_NAME("16021639441"),
@@ -759,6 +769,7 @@ void xe_wa_process_oob(struct xe_gt *gt)
 
 	xe_rtp_process_ctx_enable_active_tracking(&ctx, gt->wa_active.oob,
 						  ARRAY_SIZE(oob_was));
+	gt->wa_active.oob_initialized = true;
 	xe_rtp_process(&ctx, oob_was);
 }
 
