@@ -215,12 +215,9 @@ static int dm816x_usb_phy_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, phy);
 
-	phy->refclk = devm_clk_get(phy->dev, "refclk");
+	phy->refclk = devm_clk_get_prepared(phy->dev, "refclk");
 	if (IS_ERR(phy->refclk))
 		return PTR_ERR(phy->refclk);
-	error = clk_prepare(phy->refclk);
-	if (error)
-		return error;
 
 	pm_runtime_enable(phy->dev);
 	generic_phy = devm_phy_create(phy->dev, NULL, &ops);
@@ -244,7 +241,6 @@ static int dm816x_usb_phy_probe(struct platform_device *pdev)
 
 clk_unprepare:
 	pm_runtime_disable(phy->dev);
-	clk_unprepare(phy->refclk);
 	return error;
 }
 
@@ -254,7 +250,6 @@ static void dm816x_usb_phy_remove(struct platform_device *pdev)
 
 	usb_remove_phy(&phy->phy);
 	pm_runtime_disable(phy->dev);
-	clk_unprepare(phy->refclk);
 }
 
 static struct platform_driver dm816x_usb_phy_driver = {
