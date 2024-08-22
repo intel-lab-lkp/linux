@@ -1,0 +1,28 @@
+drm drm-fixes 47ac09b91befbb6a235ab620c32af719f8208399
+	Linux 6.11-rc4
+drm-misc drm-misc-fixes 9b340aeb26d50e9a9ec99599e2a39b035fac978e
+	nouveau/firmware: use dma non-coherent allocator
+drm-intel drm-intel-fixes 5d41eeb6725e3e24853629e5d7635e4bc45d736e
+	drm/i915/hdcp: Use correct cp_irq_count
+drm-xe drm-xe-fixes 9e7f30563677fbeff62d368d5d2a5ac7aaa9746a
+	drm/xe: Free job before xe_exec_queue_put
+drm drm-next 11df68c265460d4dff5d19a1313f0fff69470f98
+	Merge tag 'drm-misc-next-2024-08-16' of https://gitlab.freedesktop.org/drm/misc/kernel into drm-next
+drm-misc drm-misc-next-fixes 291e4baf70019f17a81b7b47aeb186b27d222159
+	kselftests: dmabuf-heaps: Ensure the driver name is null-terminated
+drm-intel drm-intel-next-fixes 8400291e289ee6b2bf9779ff1c83a291501f017b
+	Linux 6.11-rc1
+drm-xe drm-xe-next-fixes a4172af3040cdc207f1b60efffcdd219156093c9
+	Merge tag 'drm-xe-next-2024-07-30' of https://gitlab.freedesktop.org/drm/xe/kernel into drm-next
+drm-misc drm-misc-next 5e9c0d1c5ea355679f5b2a57b0c1b5932d78719d
+	drm/ast: Remove BMC output
+drm-intel drm-intel-next fca0abb23447c37a6bdbc76798c24623a9b69a11
+	drm/i915/display: allow creation of Xe2 ccs framebuffers
+drm-intel drm-intel-gt-next 255fc1703e42321b5afdedc8259ad03c7cc533ec
+	drm/i915/gem: Calculate object page offset for partial memory mapping
+drm-xe drm-xe-next 321d6b4b9cbe3dd0bc99937d5e5b4d730b5b5798
+	drm/xe: fixup xe_alloc_pf_queue
+drm-intel topic/core-for-CI 9d38844bfb1250e3616ac488f9b99fa8bd335480
+	usb: typec: ucsi: Fix a potential deadlock in ucsi_send_command_common()
+drm-xe topic/xe-for-CI 1ec484590947f43be963899f7885d9b92bd26f07
+	drm/xe/guc: Pre-release GuC firmware v70.29.2 for PVC
