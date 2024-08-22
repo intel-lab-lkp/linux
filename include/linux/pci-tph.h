@@ -10,11 +10,16 @@
 #define LINUX_PCI_TPH_H
 
 #ifdef CONFIG_PCIE_TPH
+int pcie_tph_set_st_entry(struct pci_dev *pdev,
+			  unsigned int index, u16 tag);
 bool pcie_tph_enabled(struct pci_dev *pdev);
 void pcie_disable_tph(struct pci_dev *pdev);
 int pcie_enable_tph(struct pci_dev *pdev, int mode);
 int pcie_tph_modes(struct pci_dev *pdev);
 #else
+static inline int pcie_tph_set_st_entry(struct pci_dev *pdev,
+					unsigned int index, u16 tag)
+{ return -EINVAL; }
 static inline bool pcie_tph_enabled(struct pci_dev *pdev) { return false; }
 static inline void pcie_disable_tph(struct pci_dev *pdev) { }
 static inline int pcie_enable_tph(struct pci_dev *pdev, int mode)
