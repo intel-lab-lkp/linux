@@ -2910,14 +2910,11 @@ static int atmel_serial_probe(struct platform_device *pdev)
 	atomic_set(&atmel_port->tasklet_shutdown, 0);
 	spin_lock_init(&atmel_port->lock_suspended);
 
-	atmel_port->clk = devm_clk_get(&pdev->dev, "usart");
+	atmel_port->clk = devm_clk_get_enabled(&pdev->dev, "usart");
 	if (IS_ERR(atmel_port->clk)) {
 		ret = PTR_ERR(atmel_port->clk);
 		goto err;
 	}
-	ret = clk_prepare_enable(atmel_port->clk);
-	if (ret)
-		goto err;
 
 	atmel_port->gclk = devm_clk_get_optional(&pdev->dev, "gclk");
 	if (IS_ERR(atmel_port->gclk)) {
@@ -2968,15 +2965,12 @@ static int atmel_serial_probe(struct platform_device *pdev)
 	 * The peripheral clock can now safely be disabled till the port
 	 * is used
 	 */
-	clk_disable_unprepare(atmel_port->clk);
-
 	return 0;
 
 err_add_port:
 	kfree(atmel_port->rx_ring.buf);
 	atmel_port->rx_ring.buf = NULL;
 err_clk_disable_unprepare:
-	clk_disable_unprepare(atmel_port->clk);
 	clear_bit(atmel_port->uart.line, atmel_ports_in_use);
 err:
 	return ret;
