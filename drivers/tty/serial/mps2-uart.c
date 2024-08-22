@@ -550,18 +550,11 @@ static int mps2_init_port(struct platform_device *pdev,
 	mps_port->port.ops = &mps2_uart_pops;
 	mps_port->port.dev = &pdev->dev;
 
-	mps_port->clk = devm_clk_get(&pdev->dev, NULL);
+	mps_port->clk = devm_clk_get_enabled(&pdev->dev, NULL);
 	if (IS_ERR(mps_port->clk))
 		return PTR_ERR(mps_port->clk);
 
-	ret = clk_prepare_enable(mps_port->clk);
-	if (ret)
-		return ret;
-
 	mps_port->port.uartclk = clk_get_rate(mps_port->clk);
-
-	clk_disable_unprepare(mps_port->clk);
-
 
 	if (mps_port->flags & UART_PORT_COMBINED_IRQ) {
 		mps_port->port.irq = platform_get_irq(pdev, 0);
