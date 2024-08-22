@@ -731,8 +731,10 @@ static int ag71xx_mdio_probe(struct ag71xx *ag)
 	mnp = of_get_child_by_name(np, "mdio");
 	err = devm_of_mdiobus_register(dev, mii_bus, mnp);
 	of_node_put(mnp);
-	if (err)
+	if (err) {
+		reset_control_put(ag->mdio_reset);
 		return err;
+	}
 
 	return 0;
 }
@@ -1914,20 +1916,24 @@ static int ag71xx_probe(struct platform_device *pdev)
 	ag71xx_hw_init(ag);
 
 	err = ag71xx_mdio_probe(ag);
-	if (err)
+	if (err) {
+		reset_control_put(ag->mdio_reset);
 		return err;
+	}
 
 	platform_set_drvdata(pdev, ndev);
 
 	err = ag71xx_phylink_setup(ag);
 	if (err) {
 		netif_err(ag, probe, ndev, "failed to setup phylink (%d)\n", err);
+		reset_control_put(ag->mdio_reset);
 		return err;
 	}
 
 	err = devm_register_netdev(&pdev->dev, ndev);
 	if (err) {
 		netif_err(ag, probe, ndev, "unable to register net device\n");
+		reset_control_put(ag->mdio_reset);
 		platform_set_drvdata(pdev, NULL);
 		return err;
 	}
@@ -1937,6 +1943,14 @@ static int ag71xx_probe(struct platform_device *pdev)
 		   phy_modes(ag->phy_if_mode));
 
 	return 0;
+}
+
+static void ag71xx_remove(struct platform_device *pdev)
+{
+	struct net_device *ndev = platform_get_drvdata(pdev);
+	struct ag71xx *ag = ag = netdev_priv(ndev);
+
+	reset_control_put(ag->mdio_reset);
 }
 
 static const u32 ar71xx_fifo_ar7100[] = {
@@ -2023,6 +2037,7 @@ static const struct of_device_id ag71xx_match[] = {
 
 static struct platform_driver ag71xx_driver = {
 	.probe		= ag71xx_probe,
+	.remove_new	= ag71xx_remove,
 	.driver = {
 		.name	= "ag71xx",
 		.of_match_table = ag71xx_match,
