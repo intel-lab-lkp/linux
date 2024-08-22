@@ -500,7 +500,6 @@ struct media_pad *vsp1_entity_remote_pad(struct media_pad *pad)
 	}
 
 	return NULL;
-
 }
 
 /* -----------------------------------------------------------------------------

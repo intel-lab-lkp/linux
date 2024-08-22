@@ -442,6 +442,7 @@ static int vsp1_video_pipeline_build(struct vsp1_pipeline *pipe,
 	struct media_graph graph;
 	struct media_entity *entity = &video->video.entity;
 	struct media_device *mdev = entity->graph_obj.mdev;
+	struct list_head *cursor;
 	unsigned int i;
 	int ret;
 
@@ -518,6 +519,71 @@ static int vsp1_video_pipeline_build(struct vsp1_pipeline *pipe,
 						       pipe->output);
 		if (ret < 0)
 			return ret;
+	}
+
+	/*
+	 * Sort the pipe->entities list from RPF to WPF, as the partition code
+	 * relies on that order. Iterate over the list in reverse order and
+	 * place each entry before any entry that follows it in pipeline order.
+	 *
+	 * The cursor points to the list entry immediately after the entry
+	 * being processed. When the cursor reaches the entry after the list
+	 * head we are thus done.
+	 */
+	for (cursor = &pipe->entities; cursor->prev != &pipe->entities; ) {
+		struct vsp1_entity *to_sort;
+		struct vsp1_entity *e;
+
+		/*
+		 * Sort the entity just before the cursor. Place it before the
+		 * first entry in the list that is connected to the sort
+		 * entry's source pad.
+		 */
+		to_sort = list_entry(cursor->prev, struct vsp1_entity, list_pipe);
+
+		list_for_each_entry(e, &pipe->entities, list_pipe) {
+			struct media_link *link;
+			struct media_pad *pad;
+			bool connected = false;
+
+			if (e == to_sort)
+				break;
+
+			/*
+			 * Check if to_sort's source pad is connected through
+			 * an active link to entity e.
+			 */
+			pad = &to_sort->pads[to_sort->source_pad];
+
+			list_for_each_entry(link, &pad->entity->links, list) {
+				if (!(link->flags & MEDIA_LNK_FL_ENABLED) ||
+				    link->source != pad)
+					continue;
+
+				if (link->sink->entity == &e->subdev.entity) {
+					connected = true;
+					break;
+				}
+			}
+
+			/* If connected, move to_sort right before e. */
+			if (connected) {
+				dev_dbg(video->vsp1->dev,
+					"sorting pipeline: moving %s before %s\n",
+					to_sort->subdev.name, e->subdev.name);
+				list_move_tail(&to_sort->list_pipe, &e->list_pipe);
+				break;
+			}
+		}
+
+		/*
+		 * If the entry before the cursor hasn't changed it means it's
+		 * correctly positioned, and the cursor can then be updated.
+		 * Otherwise the next iteration will process the cursor's new
+		 * previous entry.
+		 */
+		if (cursor->prev == &to_sort->list_pipe)
+			cursor = cursor->prev;
 	}
 
 	vsp1_pipeline_dump(pipe, "video");
