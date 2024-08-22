@@ -13,7 +13,9 @@ static __init int eisa_bus_probe(void)
 {
 	void __iomem *p;
 
-	if ((xen_pv_domain() && !xen_initial_domain()) || cc_platform_has(CC_ATTR_GUEST_SEV_SNP))
+	if ((xen_pv_domain() && !xen_initial_domain()) ||
+	    cc_platform_has(CC_ATTR_GUEST_SEV_SNP) ||
+	    cpu_feature_enabled(X86_FEATURE_TDX_GUEST))
 		return 0;
 
 	p = ioremap(0x0FFFD9, 4);
