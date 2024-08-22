@@ -10,8 +10,11 @@
 #define LINUX_PCI_TPH_H
 
 #ifdef CONFIG_PCIE_TPH
+int pcie_enable_tph(struct pci_dev *pdev, int mode);
 int pcie_tph_modes(struct pci_dev *pdev);
 #else
+static inline int pcie_enable_tph(struct pci_dev *pdev, int mode)
+{ return -EINVAL; }
 static inline int pcie_tph_modes(struct pci_dev *pdev) { return 0; }
 #endif
 
