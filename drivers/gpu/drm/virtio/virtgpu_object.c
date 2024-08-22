@@ -67,6 +67,8 @@ void virtio_gpu_cleanup_object(struct virtio_gpu_object *bo)
 
 	virtio_gpu_resource_id_put(vgdev, bo->hw_res_handle);
 	if (virtio_gpu_is_shmem(bo)) {
+		if (bo->deferred)
+			kvfree(bo->ents);
 		drm_gem_shmem_free(&bo->base);
 	} else if (virtio_gpu_is_vram(bo)) {
 		struct virtio_gpu_object_vram *vram = to_virtio_gpu_vram(bo);
@@ -229,9 +231,14 @@ int virtio_gpu_object_create(struct virtio_gpu_device *vgdev,
 						  objs, fence);
 		virtio_gpu_object_attach(vgdev, bo, ents, nents);
 	} else {
-		virtio_gpu_cmd_create_resource(vgdev, bo, params,
-					       objs, fence);
-		virtio_gpu_object_attach(vgdev, bo, ents, nents);
+		/* Fence is used only with blob or virgl */
+		WARN_ONCE(fence != NULL, "deferred doesn't support fence\n");
+		/* Create the host resource in virtio_gpu_user_framebuffer_create()
+		 * because the pixel format is not specified yet
+		 */
+		bo->ents = ents;
+		bo->nents = nents;
+		bo->deferred = true;
 	}
 
 	*bo_ptr = bo;

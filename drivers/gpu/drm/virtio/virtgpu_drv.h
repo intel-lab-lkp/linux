@@ -93,6 +93,9 @@ struct virtio_gpu_object {
 	bool dumb;
 	bool created;
 	bool host3d_blob, guest_blob;
+	bool deferred;
+	struct virtio_gpu_mem_entry *ents;
+	unsigned int nents;
 	uint32_t blob_mem, blob_flags;
 
 	int uuid_state;

@@ -290,6 +290,26 @@ static int vgdev_output_init(struct virtio_gpu_device *vgdev, int index)
 	return 0;
 }
 
+static void virtio_gpu_deferred_create(struct virtio_gpu_object *bo,
+				       struct virtio_gpu_device *vgdev,
+				       const struct drm_mode_fb_cmd2 *mode_cmd)
+{
+	struct virtio_gpu_object_params params = { 0 };
+
+	params.format = virtio_gpu_translate_format(mode_cmd->pixel_format);
+	params.width = mode_cmd->width;
+	params.height = mode_cmd->height;
+	params.size = params.height * params.width * 4;
+	params.size = ALIGN(params.size, PAGE_SIZE);
+	params.dumb = true;
+
+	virtio_gpu_cmd_create_resource(vgdev, bo, &params, NULL, NULL);
+	virtio_gpu_object_attach(vgdev, bo, bo->ents, bo->nents);
+
+	bo->deferred = false;
+	bo->ents = NULL;
+}
+
 static struct drm_framebuffer *
 virtio_gpu_user_framebuffer_create(struct drm_device *dev,
 				   struct drm_file *file_priv,
@@ -297,6 +317,8 @@ virtio_gpu_user_framebuffer_create(struct drm_device *dev,
 {
 	struct drm_gem_object *obj = NULL;
 	struct virtio_gpu_framebuffer *virtio_gpu_fb;
+	struct virtio_gpu_device *vgdev = dev->dev_private;
+	struct virtio_gpu_object *bo;
 	int ret;
 
 	if (mode_cmd->pixel_format != DRM_FORMAT_HOST_XRGB8888 &&
@@ -307,6 +329,10 @@ virtio_gpu_user_framebuffer_create(struct drm_device *dev,
 	obj = drm_gem_object_lookup(file_priv, mode_cmd->handles[0]);
 	if (!obj)
 		return ERR_PTR(-EINVAL);
+
+	bo = gem_to_virtio_gpu_obj(obj);
+	if (bo->deferred)
+		virtio_gpu_deferred_create(bo, vgdev, mode_cmd);
 
 	virtio_gpu_fb = kzalloc(sizeof(*virtio_gpu_fb), GFP_KERNEL);
 	if (virtio_gpu_fb == NULL) {
