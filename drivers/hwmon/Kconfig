@@ -2521,6 +2521,19 @@ config SENSORS_INTEL_M10_BMC_HWMON
 	  sensors monitor various telemetry data of different components on the
 	  card, e.g. board temperature, FPGA core temperature/voltage/current.
 
+config SENSORS_SQ52205
+	tristate "Silergy SQ52205 and compatibles"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  If you say yes here you get support for SQ52205 power monitor chips.
+
+	  The SQ52205 driver is configured for the default configuration of
+	  the part as described in the datasheet.
+	  Default value for Rshunt is 10 mOhms.
+	  This driver can also be built as a module. If so, the module
+	  will be called sq52205.
+
 if ACPI
 
 comment "ACPI drivers"
