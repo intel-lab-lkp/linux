@@ -2971,10 +2971,7 @@ static void atl2_check_options(struct atl2_adapter *adapter)
 #endif
 	/* init RXD Flow control value */
 	adapter->hw.fc_rxd_hi = (adapter->rxd_ring_size / 8) * 7;
-	adapter->hw.fc_rxd_lo = (ATL2_MIN_RXD_COUNT / 8) >
-		(adapter->rxd_ring_size / 12) ? (ATL2_MIN_RXD_COUNT / 8) :
-		(adapter->rxd_ring_size / 12);
-
+	adapter->hw.fc_rxd_lo = max(ATL2_MIN_RXD_COUNT / 8, adapter->rxd_ring_size / 12);
 	/* Interrupt Moderate Timer */
 	opt.type = range_option;
 	opt.name = "Interrupt Moderate Timer";
