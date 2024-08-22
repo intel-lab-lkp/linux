@@ -457,6 +457,7 @@ struct hv_host_device {
 	struct workqueue_struct *handle_error_wq;
 	struct work_struct host_scan_work;
 	struct Scsi_Host *host;
+	unsigned long dma_attrs;
 };
 
 struct storvsc_scan_work {
@@ -1810,7 +1811,7 @@ static int storvsc_queuecommand(struct Scsi_Host *host, struct scsi_cmnd *scmnd)
 		payload->range.len = length;
 		payload->range.offset = offset_in_hvpg;
 
-		sg_count = scsi_dma_map(scmnd);
+		sg_count = scsi_dma_map_attrs(scmnd, host_dev->dma_attrs);
 		if (sg_count < 0) {
 			ret = SCSI_MLQUEUE_DEVICE_BUSY;
 			goto err_free_payload;
@@ -2030,6 +2031,12 @@ static int storvsc_probe(struct hv_device *device,
 	 *    have an offset that is a multiple of HV_HYP_PAGE_SIZE.
 	 */
 	host->sg_tablesize = (max_xfer_bytes >> HV_HYP_PAGE_SHIFT) + 1;
+
+	if (dma_recommend_may_block(&device->device)) {
+		host->queuecommand_may_block = true;
+		host_dev->dma_attrs = DMA_ATTR_MAY_BLOCK;
+	}
+
 	/*
 	 * For non-IDE disks, the host supports multiple channels.
 	 * Set the number of HW queues we are supporting.
