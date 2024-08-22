@@ -17,6 +17,12 @@ ifneq ($(SODIUM),)
 TEST_GEN_PROGS += vdso_test_chacha
 endif
 endif
+ifeq ($(ARCH),powerpc)
+TEST_GEN_PROGS += vdso_test_getrandom
+ifneq ($(SODIUM),)
+TEST_GEN_PROGS += vdso_test_chacha
+endif
+endif
 
 CFLAGS := -std=gnu99
 
