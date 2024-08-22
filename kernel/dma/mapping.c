@@ -18,6 +18,9 @@
 #include "debug.h"
 #include "direct.h"
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/dma.h>
+
 #if defined(CONFIG_ARCH_HAS_SYNC_DMA_FOR_DEVICE) || \
 	defined(CONFIG_ARCH_HAS_SYNC_DMA_FOR_CPU) || \
 	defined(CONFIG_ARCH_HAS_SYNC_DMA_FOR_CPU_ALL)
@@ -181,6 +184,8 @@ dma_addr_t dma_map_page_attrs(struct device *dev, struct page *page,
 	else
 		addr = ops->map_page(dev, page, offset, size, dir, attrs);
 	kmsan_handle_dma(page, offset, size, dir);
+	trace_dma_map_page(dev, page_to_phys(page) + offset, addr, size, dir,
+			   attrs);
 	debug_dma_map_page(dev, page, offset, size, dir, addr, attrs);
 
 	return addr;
@@ -200,6 +205,7 @@ void dma_unmap_page_attrs(struct device *dev, dma_addr_t addr, size_t size,
 		iommu_dma_unmap_page(dev, addr, size, dir, attrs);
 	else
 		ops->unmap_page(dev, addr, size, dir, attrs);
+	trace_dma_unmap_page(dev, addr, size, dir, attrs);
 	debug_dma_unmap_page(dev, addr, size, dir);
 }
 EXPORT_SYMBOL(dma_unmap_page_attrs);
@@ -225,6 +231,7 @@ static int __dma_map_sg_attrs(struct device *dev, struct scatterlist *sg,
 
 	if (ents > 0) {
 		kmsan_handle_dma_sg(sg, nents, dir);
+		trace_dma_map_sg(dev, sg, nents, ents, dir, attrs);
 		debug_dma_map_sg(dev, sg, nents, ents, dir, attrs);
 	} else if (WARN_ON_ONCE(ents != -EINVAL && ents != -ENOMEM &&
 				ents != -EIO && ents != -EREMOTEIO)) {
@@ -310,6 +317,7 @@ void dma_unmap_sg_attrs(struct device *dev, struct scatterlist *sg,
 	const struct dma_map_ops *ops = get_dma_ops(dev);
 
 	BUG_ON(!valid_dma_direction(dir));
+	trace_dma_unmap_sg(dev, sg, nents, dir, attrs);
 	debug_dma_unmap_sg(dev, sg, nents, dir);
 	if (dma_map_direct(dev, ops) ||
 	    arch_dma_unmap_sg_direct(dev, sg, nents))
@@ -339,6 +347,7 @@ dma_addr_t dma_map_resource(struct device *dev, phys_addr_t phys_addr,
 	else if (ops->map_resource)
 		addr = ops->map_resource(dev, phys_addr, size, dir, attrs);
 
+	trace_dma_map_resource(dev, phys_addr, addr, size, dir, attrs);
 	debug_dma_map_resource(dev, phys_addr, size, dir, addr, attrs);
 	return addr;
 }
@@ -356,6 +365,7 @@ void dma_unmap_resource(struct device *dev, dma_addr_t addr, size_t size,
 		iommu_dma_unmap_resource(dev, addr, size, dir, attrs);
 	else if (ops->unmap_resource)
 		ops->unmap_resource(dev, addr, size, dir, attrs);
+	trace_dma_unmap_resource(dev, addr, size, dir, attrs);
 	debug_dma_unmap_resource(dev, addr, size, dir);
 }
 EXPORT_SYMBOL(dma_unmap_resource);
