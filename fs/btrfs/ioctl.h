@@ -22,5 +22,8 @@ void btrfs_sync_inode_flags_to_i_flags(struct inode *inode);
 int __pure btrfs_is_empty_uuid(const u8 *uuid);
 void btrfs_update_ioctl_balance_args(struct btrfs_fs_info *fs_info,
 				     struct btrfs_ioctl_balance_args *bargs);
+int btrfs_uring_cmd(struct io_uring_cmd *cmd, unsigned int issue_flags);
+ssize_t btrfs_encoded_read_finish(struct btrfs_encoded_read_private *priv,
+				  ssize_t ret);
 
 #endif
