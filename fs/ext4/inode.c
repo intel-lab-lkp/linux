@@ -4919,7 +4919,7 @@ struct inode *__ext4_iget(struct super_block *sb, unsigned long ino,
 		transaction_t *transaction;
 		tid_t tid;
 
-		read_lock(&journal->j_state_lock);
+		guard(read_lock)(&journal->j_state_lock);
 		if (journal->j_running_transaction)
 			transaction = journal->j_running_transaction;
 		else
@@ -4928,7 +4928,6 @@ struct inode *__ext4_iget(struct super_block *sb, unsigned long ino,
 			tid = transaction->t_tid;
 		else
 			tid = journal->j_commit_sequence;
-		read_unlock(&journal->j_state_lock);
 		ei->i_sync_tid = tid;
 		ei->i_datasync_tid = tid;
 	}
@@ -5303,10 +5302,10 @@ static void ext4_wait_for_tail_page_commit(struct inode *inode)
 		if (ret != -EBUSY)
 			return;
 		commit_tid = 0;
-		read_lock(&journal->j_state_lock);
-		if (journal->j_committing_transaction)
-			commit_tid = journal->j_committing_transaction->t_tid;
-		read_unlock(&journal->j_state_lock);
+		scoped_guard(read_lock, &journal->j_state_lock)
+			if (journal->j_committing_transaction)
+				commit_tid = journal->j_committing_transaction->t_tid;
+
 		if (commit_tid)
 			jbd2_log_wait_commit(journal, commit_tid);
 	}

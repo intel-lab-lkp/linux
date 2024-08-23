@@ -347,10 +347,9 @@ void ext4_fc_mark_ineligible(struct super_block *sb, int reason, handle_t *handl
 	if (handle && !IS_ERR(handle))
 		tid = handle->h_transaction->t_tid;
 	else {
-		read_lock(&sbi->s_journal->j_state_lock);
+		guard(read_lock)(&sbi->s_journal->j_state_lock);
 		tid = sbi->s_journal->j_running_transaction ?
 				sbi->s_journal->j_running_transaction->t_tid : 0;
-		read_unlock(&sbi->s_journal->j_state_lock);
 	}
 	spin_lock(&sbi->s_fc_lock);
 	if (tid_gt(tid, sbi->s_fc_ineligible_tid))

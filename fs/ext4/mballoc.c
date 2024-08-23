@@ -887,23 +887,22 @@ static void ext4_mb_choose_next_group_p2_aligned(struct ext4_allocation_context 
 	for (i = ac->ac_2order; i < MB_NUM_ORDERS(ac->ac_sb); i++) {
 		if (list_empty(&sbi->s_mb_largest_free_orders[i]))
 			continue;
-		read_lock(&sbi->s_mb_largest_free_orders_locks[i]);
-		if (list_empty(&sbi->s_mb_largest_free_orders[i])) {
-			read_unlock(&sbi->s_mb_largest_free_orders_locks[i]);
-			continue;
-		}
-		list_for_each_entry(iter, &sbi->s_mb_largest_free_orders[i],
-				    bb_largest_free_order_node) {
-			if (sbi->s_mb_stats)
-				atomic64_inc(&sbi->s_bal_cX_groups_considered[CR_POWER2_ALIGNED]);
-			if (likely(ext4_mb_good_group(ac, iter->bb_group, CR_POWER2_ALIGNED))) {
-				*group = iter->bb_group;
-				ac->ac_flags |= EXT4_MB_CR_POWER2_ALIGNED_OPTIMIZED;
-				read_unlock(&sbi->s_mb_largest_free_orders_locks[i]);
-				return;
+		scoped_guard(read_lock, &sbi->s_mb_largest_free_orders_locks[i]) {
+			if (list_empty(&sbi->s_mb_largest_free_orders[i]))
+				continue;
+			list_for_each_entry(iter, &sbi->s_mb_largest_free_orders[i],
+						bb_largest_free_order_node) {
+				if (sbi->s_mb_stats)
+					atomic64_inc(
+                                         &sbi->s_bal_cX_groups_considered[CR_POWER2_ALIGNED]);
+				if (likely(ext4_mb_good_group(ac, iter->bb_group,
+                                        CR_POWER2_ALIGNED))) {
+					*group = iter->bb_group;
+					ac->ac_flags |= EXT4_MB_CR_POWER2_ALIGNED_OPTIMIZED;
+					return;
+				}
 			}
 		}
-		read_unlock(&sbi->s_mb_largest_free_orders_locks[i]);
 	}
 
 	/* Increment cr and search again if no group is found */
@@ -924,11 +923,10 @@ ext4_mb_find_good_group_avg_frag_lists(struct ext4_allocation_context *ac, int o
 
 	if (list_empty(frag_list))
 		return NULL;
-	read_lock(frag_list_lock);
-	if (list_empty(frag_list)) {
-		read_unlock(frag_list_lock);
+	guard(read_lock)(frag_list_lock);
+	if (list_empty(frag_list))
 		return NULL;
-	}
+
 	list_for_each_entry(iter, frag_list, bb_avg_fragment_size_node) {
 		if (sbi->s_mb_stats)
 			atomic64_inc(&sbi->s_bal_cX_groups_considered[cr]);
@@ -937,7 +935,6 @@ ext4_mb_find_good_group_avg_frag_lists(struct ext4_allocation_context *ac, int o
 			break;
 		}
 	}
-	read_unlock(frag_list_lock);
 	return grp;
 }
 
@@ -3236,11 +3233,10 @@ static int ext4_mb_seq_structs_summary_show(struct seq_file *seq, void *v)
 			seq_puts(seq, "avg_fragment_size_lists:\n");
 
 		count = 0;
-		read_lock(&sbi->s_mb_avg_fragment_size_locks[position]);
-		list_for_each_entry(grp, &sbi->s_mb_avg_fragment_size[position],
-				    bb_avg_fragment_size_node)
-			count++;
-		read_unlock(&sbi->s_mb_avg_fragment_size_locks[position]);
+		scoped_guard(read_lock, &sbi->s_mb_avg_fragment_size_locks[position])
+			list_for_each_entry(grp, &sbi->s_mb_avg_fragment_size[position],
+						bb_avg_fragment_size_node)
+				count++;
 		seq_printf(seq, "\tlist_order_%u_groups: %u\n",
 					(unsigned int)position, count);
 		return 0;
@@ -3252,11 +3248,10 @@ static int ext4_mb_seq_structs_summary_show(struct seq_file *seq, void *v)
 		seq_puts(seq, "max_free_order_lists:\n");
 	}
 	count = 0;
-	read_lock(&sbi->s_mb_largest_free_orders_locks[position]);
-	list_for_each_entry(grp, &sbi->s_mb_largest_free_orders[position],
-			    bb_largest_free_order_node)
-		count++;
-	read_unlock(&sbi->s_mb_largest_free_orders_locks[position]);
+	scoped_guard(read_lock, &sbi->s_mb_largest_free_orders_locks[position])
+		list_for_each_entry(grp, &sbi->s_mb_largest_free_orders[position],
+					bb_largest_free_order_node)
+			count++;
 	seq_printf(seq, "\tlist_order_%u_groups: %u\n",
 		   (unsigned int)position, count);
 
@@ -4251,7 +4246,7 @@ ext4_mb_pa_assert_overlap(struct ext4_allocation_context *ac,
 	loff_t tmp_pa_end;
 	struct rb_node *iter;
 
-	read_lock(&ei->i_prealloc_lock);
+	guard(read_lock)(&ei->i_prealloc_lock);
 	for (iter = ei->i_prealloc_node.rb_node; iter;
 	     iter = ext4_mb_pa_rb_next_iter(start, tmp_pa_start, iter)) {
 		tmp_pa = rb_entry(iter, struct ext4_prealloc_space,
@@ -4264,7 +4259,6 @@ ext4_mb_pa_assert_overlap(struct ext4_allocation_context *ac,
 			BUG_ON(!(start >= tmp_pa_end || end <= tmp_pa_start));
 		spin_unlock(&tmp_pa->pa_lock);
 	}
-	read_unlock(&ei->i_prealloc_lock);
 }
 
 /*

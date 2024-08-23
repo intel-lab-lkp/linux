@@ -317,9 +317,8 @@ void ext4_es_find_extent_range(struct inode *inode,
 
 	trace_ext4_es_find_extent_range_enter(inode, lblk);
 
-	read_lock(&EXT4_I(inode)->i_es_lock);
-	__es_find_extent_range(inode, matching_fn, lblk, end, es);
-	read_unlock(&EXT4_I(inode)->i_es_lock);
+	scoped_guard(read_lock, &EXT4_I(inode)->i_es_lock)
+		__es_find_extent_range(inode, matching_fn, lblk, end, es);
 
 	trace_ext4_es_find_extent_range_exit(inode, es);
 }
@@ -363,16 +362,11 @@ bool ext4_es_scan_range(struct inode *inode,
 			int (*matching_fn)(struct extent_status *es),
 			ext4_lblk_t lblk, ext4_lblk_t end)
 {
-	bool ret;
-
 	if (EXT4_SB(inode->i_sb)->s_mount_state & EXT4_FC_REPLAY)
 		return false;
 
-	read_lock(&EXT4_I(inode)->i_es_lock);
-	ret = __es_scan_range(inode, matching_fn, lblk, end);
-	read_unlock(&EXT4_I(inode)->i_es_lock);
-
-	return ret;
+	guard(read_lock)(&EXT4_I(inode)->i_es_lock);
+	return __es_scan_range(inode, matching_fn, lblk, end);
 }
 
 /*
@@ -409,16 +403,11 @@ bool ext4_es_scan_clu(struct inode *inode,
 		      int (*matching_fn)(struct extent_status *es),
 		      ext4_lblk_t lblk)
 {
-	bool ret;
-
 	if (EXT4_SB(inode->i_sb)->s_mount_state & EXT4_FC_REPLAY)
 		return false;
 
-	read_lock(&EXT4_I(inode)->i_es_lock);
-	ret = __es_scan_clu(inode, matching_fn, lblk);
-	read_unlock(&EXT4_I(inode)->i_es_lock);
-
-	return ret;
+	guard(read_lock)(&EXT4_I(inode)->i_es_lock);
+	return __es_scan_clu(inode, matching_fn, lblk);
 }
 
 static void ext4_es_list_add(struct inode *inode)
@@ -2044,13 +2033,9 @@ bool ext4_is_pending(struct inode *inode, ext4_lblk_t lblk)
 {
 	struct ext4_sb_info *sbi = EXT4_SB(inode->i_sb);
 	struct ext4_inode_info *ei = EXT4_I(inode);
-	bool ret;
 
-	read_lock(&ei->i_es_lock);
-	ret = (bool)(__get_pending(inode, EXT4_B2C(sbi, lblk)) != NULL);
-	read_unlock(&ei->i_es_lock);
-
-	return ret;
+	guard(read_lock)(&ei->i_es_lock);
+	return __get_pending(inode, EXT4_B2C(sbi, lblk)) != NULL;
 }
 
 /*
@@ -2232,7 +2217,6 @@ unsigned int ext4_es_delayed_clu(struct inode *inode, ext4_lblk_t lblk,
 {
 	struct ext4_inode_info *ei = EXT4_I(inode);
 	ext4_lblk_t end;
-	unsigned int n;
 
 	if (len == 0)
 		return 0;
@@ -2240,13 +2224,8 @@ unsigned int ext4_es_delayed_clu(struct inode *inode, ext4_lblk_t lblk,
 	end = lblk + len - 1;
 	WARN_ON(end < lblk);
 
-	read_lock(&ei->i_es_lock);
-
-	n = __es_delayed_clu(inode, lblk, end);
-
-	read_unlock(&ei->i_es_lock);
-
-	return n;
+	guard(read_lock)(&ei->i_es_lock);
+	return __es_delayed_clu(inode, lblk, end);
 }
 
 /*
