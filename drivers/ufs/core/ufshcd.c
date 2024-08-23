@@ -6542,6 +6542,8 @@ out:
 	/* Complete the requests that are cleared by s/w */
 	ufshcd_complete_requests(hba, false);
 
+	if (is_mcq_enabled(hba))
+		return true;
 	return ret != 0;
 }
 
