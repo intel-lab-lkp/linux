@@ -66,7 +66,6 @@ struct uniphier_mdmac_chan {
 
 struct uniphier_mdmac_device {
 	struct dma_device ddev;
-	struct clk *clk;
 	void __iomem *reg_base;
 	struct uniphier_mdmac_chan channels[];
 };
@@ -383,6 +382,7 @@ static int uniphier_mdmac_probe(struct platform_device *pdev)
 	struct uniphier_mdmac_device *mdev;
 	struct dma_device *ddev;
 	int nr_chans, ret, i;
+	struct clk *clk;
 
 	nr_chans = platform_irq_count(pdev);
 	if (nr_chans < 0)
@@ -401,15 +401,11 @@ static int uniphier_mdmac_probe(struct platform_device *pdev)
 	if (IS_ERR(mdev->reg_base))
 		return PTR_ERR(mdev->reg_base);
 
-	mdev->clk = devm_clk_get(dev, NULL);
-	if (IS_ERR(mdev->clk)) {
+	clk = devm_clk_get_enabled(dev, NULL);
+	if (IS_ERR(clk)) {
 		dev_err(dev, "failed to get clock\n");
-		return PTR_ERR(mdev->clk);
+		return PTR_ERR(clk);
 	}
-
-	ret = clk_prepare_enable(mdev->clk);
-	if (ret)
-		return ret;
 
 	ddev = &mdev->ddev;
 	ddev->dev = dev;
@@ -429,12 +425,12 @@ static int uniphier_mdmac_probe(struct platform_device *pdev)
 	for (i = 0; i < nr_chans; i++) {
 		ret = uniphier_mdmac_chan_init(pdev, mdev, i);
 		if (ret)
-			goto disable_clk;
+			return ret;
 	}
 
 	ret = dma_async_device_register(ddev);
 	if (ret)
-		goto disable_clk;
+		return ret;
 
 	ret = of_dma_controller_register(dev->of_node, of_dma_xlate_by_chan_id,
 					 ddev);
@@ -447,9 +443,6 @@ static int uniphier_mdmac_probe(struct platform_device *pdev)
 
 unregister_dmac:
 	dma_async_device_unregister(ddev);
-disable_clk:
-	clk_disable_unprepare(mdev->clk);
-
 	return ret;
 }
 
@@ -482,7 +475,6 @@ static void uniphier_mdmac_remove(struct platform_device *pdev)
 
 	of_dma_controller_free(pdev->dev.of_node);
 	dma_async_device_unregister(&mdev->ddev);
-	clk_disable_unprepare(mdev->clk);
 }
 
 static const struct of_device_id uniphier_mdmac_match[] = {
