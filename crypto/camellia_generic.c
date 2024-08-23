@@ -316,7 +316,7 @@ static const u32 camellia_sp4404[256] = {
 /*
  *  macros
  */
-#define ROLDQ(ll, lr, rl, rr, w0, w1, bits) ({		\
+#define ROLDQ(ll, lr, rl, rr, w0, bits) ({		\
 	w0 = ll;					\
 	ll = (ll << bits) + (lr >> (32 - bits));	\
 	lr = (lr << bits) + (rl >> (32 - bits));	\
@@ -555,35 +555,35 @@ static void camellia_setup128(const unsigned char *key, u32 *subkey)
 	/* kw2 */
 	subL[1] = krl; subR[1] = krr;
 	/* rotation left shift 15bit */
-	ROLDQ(kll, klr, krl, krr, w0, w1, 15);
+	ROLDQ(kll, klr, krl, krr, w0, 15);
 	/* k3 */
 	subL[4] = kll; subR[4] = klr;
 	/* k4 */
 	subL[5] = krl; subR[5] = krr;
 	/* rotation left shift 15+30bit */
-	ROLDQ(kll, klr, krl, krr, w0, w1, 30);
+	ROLDQ(kll, klr, krl, krr, w0, 30);
 	/* k7 */
 	subL[10] = kll; subR[10] = klr;
 	/* k8 */
 	subL[11] = krl; subR[11] = krr;
 	/* rotation left shift 15+30+15bit */
-	ROLDQ(kll, klr, krl, krr, w0, w1, 15);
+	ROLDQ(kll, klr, krl, krr, w0, 15);
 	/* k10 */
 	subL[13] = krl; subR[13] = krr;
 	/* rotation left shift 15+30+15+17 bit */
-	ROLDQ(kll, klr, krl, krr, w0, w1, 17);
+	ROLDQ(kll, klr, krl, krr, w0, 17);
 	/* kl3 */
 	subL[16] = kll; subR[16] = klr;
 	/* kl4 */
 	subL[17] = krl; subR[17] = krr;
 	/* rotation left shift 15+30+15+17+17 bit */
-	ROLDQ(kll, klr, krl, krr, w0, w1, 17);
+	ROLDQ(kll, klr, krl, krr, w0, 17);
 	/* k13 */
 	subL[18] = kll; subR[18] = klr;
 	/* k14 */
 	subL[19] = krl; subR[19] = krr;
 	/* rotation left shift 15+30+15+17+17+17 bit */
-	ROLDQ(kll, klr, krl, krr, w0, w1, 17);
+	ROLDQ(kll, klr, krl, krr, w0, 17);
 	/* k17 */
 	subL[22] = kll; subR[22] = klr;
 	/* k18 */
@@ -613,18 +613,18 @@ static void camellia_setup128(const unsigned char *key, u32 *subkey)
 	/* k1, k2 */
 	subL[2] = kll; subR[2] = klr;
 	subL[3] = krl; subR[3] = krr;
-	ROLDQ(kll, klr, krl, krr, w0, w1, 15);
+	ROLDQ(kll, klr, krl, krr, w0, 15);
 	/* k5,k6 */
 	subL[6] = kll; subR[6] = klr;
 	subL[7] = krl; subR[7] = krr;
-	ROLDQ(kll, klr, krl, krr, w0, w1, 15);
+	ROLDQ(kll, klr, krl, krr, w0, 15);
 	/* kl1, kl2 */
 	subL[8] = kll; subR[8] = klr;
 	subL[9] = krl; subR[9] = krr;
-	ROLDQ(kll, klr, krl, krr, w0, w1, 15);
+	ROLDQ(kll, klr, krl, krr, w0, 15);
 	/* k9 */
 	subL[12] = kll; subR[12] = klr;
-	ROLDQ(kll, klr, krl, krr, w0, w1, 15);
+	ROLDQ(kll, klr, krl, krr, w0, 15);
 	/* k11, k12 */
 	subL[14] = kll; subR[14] = klr;
 	subL[15] = krl; subR[15] = krr;
@@ -632,7 +632,7 @@ static void camellia_setup128(const unsigned char *key, u32 *subkey)
 	/* k15, k16 */
 	subL[20] = kll; subR[20] = klr;
 	subL[21] = krl; subR[21] = krr;
-	ROLDQ(kll, klr, krl, krr, w0, w1, 17);
+	ROLDQ(kll, klr, krl, krr, w0, 17);
 	/* kw3, kw4 */
 	subL[24] = kll; subR[24] = klr;
 	subL[25] = krl; subR[25] = krr;
@@ -671,12 +671,12 @@ static void camellia_setup256(const unsigned char *key, u32 *subkey)
 	subL[12] = kll; subR[12] = klr;
 	/* k10 */
 	subL[13] = krl; subR[13] = krr;
-	ROLDQ(kll, klr, krl, krr, w0, w1, 15);
+	ROLDQ(kll, klr, krl, krr, w0, 15);
 	/* kl3 */
 	subL[16] = kll; subR[16] = klr;
 	/* kl4 */
 	subL[17] = krl; subR[17] = krr;
-	ROLDQ(kll, klr, krl, krr, w0, w1, 17);
+	ROLDQ(kll, klr, krl, krr, w0, 17);
 	/* k17 */
 	subL[22] = kll; subR[22] = klr;
 	/* k18 */
@@ -688,17 +688,17 @@ static void camellia_setup256(const unsigned char *key, u32 *subkey)
 	subL[31] = krl; subR[31] = krr;
 
 	/* generate KR dependent subkeys */
-	ROLDQ(krll, krlr, krrl, krrr, w0, w1, 15);
+	ROLDQ(krll, krlr, krrl, krrr, w0, 15);
 	/* k3 */
 	subL[4] = krll; subR[4] = krlr;
 	/* k4 */
 	subL[5] = krrl; subR[5] = krrr;
-	ROLDQ(krll, krlr, krrl, krrr, w0, w1, 15);
+	ROLDQ(krll, krlr, krrl, krrr, w0, 15);
 	/* kl1 */
 	subL[8] = krll; subR[8] = krlr;
 	/* kl2 */
 	subL[9] = krrl; subR[9] = krrr;
-	ROLDQ(krll, krlr, krrl, krrr, w0, w1, 30);
+	ROLDQ(krll, krlr, krrl, krrr, w0, 30);
 	/* k13 */
 	subL[18] = krll; subR[18] = krlr;
 	/* k14 */
@@ -743,12 +743,12 @@ static void camellia_setup256(const unsigned char *key, u32 *subkey)
 	krll ^= w0; krlr ^= w1;
 
 	/* generate KA dependent subkeys */
-	ROLDQ(kll, klr, krl, krr, w0, w1, 15);
+	ROLDQ(kll, klr, krl, krr, w0, 15);
 	/* k5 */
 	subL[6] = kll; subR[6] = klr;
 	/* k6 */
 	subL[7] = krl; subR[7] = krr;
-	ROLDQ(kll, klr, krl, krr, w0, w1, 30);
+	ROLDQ(kll, klr, krl, krr, w0, 30);
 	/* k11 */
 	subL[14] = kll; subR[14] = klr;
 	/* k12 */
@@ -770,12 +770,12 @@ static void camellia_setup256(const unsigned char *key, u32 *subkey)
 	subL[2] = krll; subR[2] = krlr;
 	/* k2 */
 	subL[3] = krrl; subR[3] = krrr;
-	ROLDQ(krll, krlr, krrl, krrr, w0, w1, 30);
+	ROLDQ(krll, krlr, krrl, krrr, w0, 30);
 	/* k7 */
 	subL[10] = krll; subR[10] = krlr;
 	/* k8 */
 	subL[11] = krrl; subR[11] = krrr;
-	ROLDQ(krll, krlr, krrl, krrr, w0, w1, 30);
+	ROLDQ(krll, krlr, krrl, krrr, w0, 30);
 	/* k15 */
 	subL[20] = krll; subR[20] = krlr;
 	/* k16 */
