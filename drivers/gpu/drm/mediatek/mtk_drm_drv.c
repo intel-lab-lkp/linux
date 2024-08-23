@@ -371,12 +371,11 @@ static bool mtk_drm_get_all_drm_priv(struct device *dev)
 	struct mtk_drm_private *temp_drm_priv;
 	struct device_node *phandle = dev->parent->of_node;
 	const struct of_device_id *of_id;
-	struct device_node *node;
 	struct device *drm_dev;
 	unsigned int cnt = 0;
 	int i, j;
 
-	for_each_child_of_node(phandle->parent, node) {
+	for_each_child_of_node_scoped(phandle->parent, node) {
 		struct platform_device *pdev;
 
 		of_id = of_match_node(mtk_drm_of_ids, node);
@@ -828,7 +827,6 @@ static int mtk_drm_probe(struct platform_device *pdev)
 	struct device_node *phandle = dev->parent->of_node;
 	const struct of_device_id *of_id;
 	struct mtk_drm_private *private;
-	struct device_node *node;
 	struct component_match *match = NULL;
 	struct platform_device *ovl_adaptor;
 	int ret;
@@ -869,7 +867,7 @@ static int mtk_drm_probe(struct platform_device *pdev)
 	}
 
 	/* Iterate over sibling DISP function blocks */
-	for_each_child_of_node(phandle->parent, node) {
+	for_each_child_of_node_scoped(phandle->parent, node) {
 		const struct of_device_id *of_id;
 		enum mtk_ddp_comp_type comp_type;
 		int comp_id;
@@ -933,10 +931,8 @@ static int mtk_drm_probe(struct platform_device *pdev)
 		}
 
 		ret = mtk_ddp_comp_init(node, &private->ddp_comp[comp_id], comp_id);
-		if (ret) {
-			of_node_put(node);
+		if (ret)
 			goto err_node;
-		}
 	}
 
 	if (!private->mutex_node) {
