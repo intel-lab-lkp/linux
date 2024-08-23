@@ -303,40 +303,28 @@ static int qcom_ebi2_probe(struct platform_device *pdev)
 	u32 val;
 	int ret;
 
-	ebi2xclk = devm_clk_get(dev, "ebi2x");
+	ebi2xclk = devm_clk_get_enabled(dev, "ebi2x");
 	if (IS_ERR(ebi2xclk))
-		return PTR_ERR(ebi2xclk);
-
-	ret = clk_prepare_enable(ebi2xclk);
-	if (ret) {
-		dev_err(dev, "could not enable EBI2X clk (%d)\n", ret);
-		return ret;
-	}
+		return dev_err_probe(dev, PTR_ERR(ebi2xclk),
+				"could not enable EBI2X clk\n");
 
 	ebi2clk = devm_clk_get(dev, "ebi2");
-	if (IS_ERR(ebi2clk)) {
-		ret = PTR_ERR(ebi2clk);
-		goto err_disable_2x_clk;
-	}
-
-	ret = clk_prepare_enable(ebi2clk);
-	if (ret) {
-		dev_err(dev, "could not enable EBI2 clk\n");
-		goto err_disable_2x_clk;
-	}
+	if (IS_ERR(ebi2clk))
+		return dev_err_probe(dev, PTR_ERR(ebi2clk),
+				"could not enable EBI2 clk\n");
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	ebi2_base = devm_ioremap_resource(dev, res);
 	if (IS_ERR(ebi2_base)) {
 		ret = PTR_ERR(ebi2_base);
-		goto err_disable_clk;
+		goto out;
 	}
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
 	ebi2_xmem = devm_ioremap_resource(dev, res);
 	if (IS_ERR(ebi2_xmem)) {
 		ret = PTR_ERR(ebi2_xmem);
-		goto err_disable_clk;
+		goto out;
 	}
 
 	/* Allegedly this turns the power save mode off */
@@ -379,11 +367,7 @@ static int qcom_ebi2_probe(struct platform_device *pdev)
 		return of_platform_default_populate(np, NULL, dev);
 	return 0;
 
-err_disable_clk:
-	clk_disable_unprepare(ebi2clk);
-err_disable_2x_clk:
-	clk_disable_unprepare(ebi2xclk);
-
+out:
 	return ret;
 }
 
