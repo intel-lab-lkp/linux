@@ -23,14 +23,14 @@ static const char * const rtllib_modes[] = {
 };
 
 #define MAX_CUSTOM_LEN 64
+#define MAX_PROTO_NAME_LEN 10
 static inline char *rtl819x_translate_scan(struct rtllib_device *ieee,
 					   char *start, char *stop,
 					   struct rtllib_network *network,
 					   struct iw_request_info *info)
 {
 	char custom[MAX_CUSTOM_LEN];
-	char proto_name[6];
-	char *pname = proto_name;
+	char proto_name[MAX_PROTO_NAME_LEN];
 	char *p;
 	struct iw_event iwe;
 	int i, j;
@@ -59,13 +59,12 @@ static inline char *rtl819x_translate_scan(struct rtllib_device *ieee,
 	}
 	/* Add the protocol name */
 	iwe.cmd = SIOCGIWNAME;
+	/* Initialise proto_name as an empty string*/
+	memset(proto_name, '\0', sizeof(proto_name));
 	for (i = 0; i < ARRAY_SIZE(rtllib_modes); i++) {
-		if (network->mode & BIT(i)) {
-			strcpy(pname, rtllib_modes[i]);
-			pname += strlen(rtllib_modes[i]);
+		if (network->mode & BIT(i))
+			strcat(proto_name, rtllib_modes[i]);
 		}
-	}
-	*pname = '\0';
 	snprintf(iwe.u.name, IFNAMSIZ, "IEEE802.11%s", proto_name);
 	start = iwe_stream_add_event(info, start, stop, &iwe, IW_EV_CHAR_LEN);
 	/* Add mode */
