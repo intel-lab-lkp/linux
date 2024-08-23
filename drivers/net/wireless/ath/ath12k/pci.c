@@ -1446,16 +1446,10 @@ static int ath12k_pci_probe(struct pci_dev *pdev,
 	if (ret)
 		goto err_pci_msi_free;
 
-	ret = ath12k_pci_set_irq_affinity_hint(ab_pci, cpumask_of(0));
-	if (ret) {
-		ath12k_err(ab, "failed to set irq affinity %d\n", ret);
-		goto err_pci_msi_free;
-	}
-
 	ret = ath12k_mhi_register(ab_pci);
 	if (ret) {
 		ath12k_err(ab, "failed to register mhi: %d\n", ret);
-		goto err_irq_affinity_cleanup;
+		goto err_pci_msi_free;
 	}
 
 	ret = ath12k_hal_srng_init(ab);
@@ -1476,6 +1470,12 @@ static int ath12k_pci_probe(struct pci_dev *pdev,
 		goto err_ce_free;
 	}
 
+	ret = ath12k_pci_set_irq_affinity_hint(ab_pci, cpumask_of(0));
+	if (ret) {
+		ath12k_err(ab, "failed to set irq affinity %d\n", ret);
+		goto err_free_irq;
+	}
+
 	/* kernel may allocate a dummy vector before request_irq and
 	 * then allocate a real vector when request_irq is called.
 	 * So get msi_data here again to avoid spurious interrupt
@@ -1484,15 +1484,18 @@ static int ath12k_pci_probe(struct pci_dev *pdev,
 	ret = ath12k_pci_config_msi_data(ab_pci);
 	if (ret) {
 		ath12k_err(ab, "failed to config msi_data: %d\n", ret);
-		goto err_free_irq;
+		goto err_irq_affinity_cleanup;
 	}
 
 	ret = ath12k_core_init(ab);
 	if (ret) {
 		ath12k_err(ab, "failed to init core: %d\n", ret);
-		goto err_free_irq;
+		goto err_irq_affinity_cleanup;
 	}
 	return 0;
+
+err_irq_affinity_cleanup:
+	ath12k_pci_set_irq_affinity_hint(ab_pci, NULL);
 
 err_free_irq:
 	ath12k_pci_free_irq(ab);
@@ -1508,9 +1511,6 @@ err_mhi_unregister:
 
 err_pci_msi_free:
 	ath12k_pci_msi_free(ab_pci);
-
-err_irq_affinity_cleanup:
-	ath12k_pci_set_irq_affinity_hint(ab_pci, NULL);
 
 err_pci_free_region:
 	ath12k_pci_free_region(ab_pci);
