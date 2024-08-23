@@ -160,8 +160,16 @@ xfs_qm_dquot_logitem_push(
 		if (!xfs_buf_delwri_queue(bp, buffer_list))
 			rval = XFS_ITEM_FLUSHING;
 		xfs_buf_relse(bp);
-	} else if (error == -EAGAIN)
+	} else if (error == -EAGAIN) {
 		rval = XFS_ITEM_LOCKED;
+	} else {
+		/*
+		 * The dirty flag has been cleared; the dquot may be reclaimed
+		 * after unlock. It's unsafe to access the item after it has
+		 * been pushed.
+		 */
+		rval = XFS_ITEM_UNSAFE;
+	}
 
 	spin_lock(&lip->li_ailp->ail_lock);
 out_unlock:
