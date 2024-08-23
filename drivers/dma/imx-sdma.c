@@ -1493,24 +1493,11 @@ static int sdma_alloc_chan_resources(struct dma_chan *chan)
 	sdmac->event_id0 = data->dma_request;
 	sdmac->event_id1 = data->dma_request2;
 
-	ret = clk_enable(sdmac->sdma->clk_ipg);
-	if (ret)
-		return ret;
-	ret = clk_enable(sdmac->sdma->clk_ahb);
-	if (ret)
-		goto disable_clk_ipg;
-
 	ret = sdma_set_channel_priority(sdmac, prio);
 	if (ret)
-		goto disable_clk_ahb;
+		return ret;
 
 	return 0;
-
-disable_clk_ahb:
-	clk_disable(sdmac->sdma->clk_ahb);
-disable_clk_ipg:
-	clk_disable(sdmac->sdma->clk_ipg);
-	return ret;
 }
 
 static void sdma_free_chan_resources(struct dma_chan *chan)
@@ -1530,9 +1517,6 @@ static void sdma_free_chan_resources(struct dma_chan *chan)
 	sdmac->event_id1 = 0;
 
 	sdma_set_channel_priority(sdmac, 0);
-
-	clk_disable(sdma->clk_ipg);
-	clk_disable(sdma->clk_ahb);
 }
 
 static struct sdma_desc *sdma_transfer_init(struct sdma_channel *sdmac,
@@ -2015,14 +1999,10 @@ static void sdma_load_firmware(const struct firmware *fw, void *context)
 	addr = (void *)header + header->script_addrs_start;
 	ram_code = (void *)header + header->ram_code_start;
 
-	clk_enable(sdma->clk_ipg);
-	clk_enable(sdma->clk_ahb);
 	/* download the RAM image for SDMA */
 	sdma_load_script(sdma, ram_code,
 			 header->ram_code_size,
 			 addr->ram_code_start_addr);
-	clk_disable(sdma->clk_ipg);
-	clk_disable(sdma->clk_ahb);
 
 	sdma_add_scripts(sdma, addr);
 
@@ -2119,13 +2099,6 @@ static int sdma_init(struct sdma_engine *sdma)
 	dma_addr_t ccb_phys;
 	int ccbsize;
 
-	ret = clk_enable(sdma->clk_ipg);
-	if (ret)
-		return ret;
-	ret = clk_enable(sdma->clk_ahb);
-	if (ret)
-		goto disable_clk_ipg;
-
 	if (sdma->drvdata->check_ratio &&
 	    (clk_get_rate(sdma->clk_ahb) == clk_get_rate(sdma->clk_ipg)))
 		sdma->clk_ratio = 1;
@@ -2180,15 +2153,9 @@ static int sdma_init(struct sdma_engine *sdma)
 	/* Initializes channel's priorities */
 	sdma_set_channel_priority(&sdma->channel[0], 7);
 
-	clk_disable(sdma->clk_ipg);
-	clk_disable(sdma->clk_ahb);
-
 	return 0;
 
 err_dma_alloc:
-	clk_disable(sdma->clk_ahb);
-disable_clk_ipg:
-	clk_disable(sdma->clk_ipg);
 	dev_err(sdma->dev, "initialisation failed with %d\n", ret);
 	return ret;
 }
@@ -2266,33 +2233,25 @@ static int sdma_probe(struct platform_device *pdev)
 	if (IS_ERR(sdma->regs))
 		return PTR_ERR(sdma->regs);
 
-	sdma->clk_ipg = devm_clk_get(&pdev->dev, "ipg");
+	sdma->clk_ipg = devm_clk_get_enabled(&pdev->dev, "ipg");
 	if (IS_ERR(sdma->clk_ipg))
 		return PTR_ERR(sdma->clk_ipg);
 
-	sdma->clk_ahb = devm_clk_get(&pdev->dev, "ahb");
+	sdma->clk_ahb = devm_clk_get_enabled(&pdev->dev, "ahb");
 	if (IS_ERR(sdma->clk_ahb))
 		return PTR_ERR(sdma->clk_ahb);
-
-	ret = clk_prepare(sdma->clk_ipg);
-	if (ret)
-		return ret;
-
-	ret = clk_prepare(sdma->clk_ahb);
-	if (ret)
-		goto err_clk;
 
 	ret = devm_request_irq(&pdev->dev, irq, sdma_int_handler, 0,
 				dev_name(&pdev->dev), sdma);
 	if (ret)
-		goto err_irq;
+		return ret;
 
 	sdma->irq = irq;
 
 	sdma->script_addrs = kzalloc(sizeof(*sdma->script_addrs), GFP_KERNEL);
 	if (!sdma->script_addrs) {
 		ret = -ENOMEM;
-		goto err_irq;
+		return ret;
 	}
 
 	/* initially no scripts available */
@@ -2407,10 +2366,6 @@ err_register:
 	dma_async_device_unregister(&sdma->dma_device);
 err_init:
 	kfree(sdma->script_addrs);
-err_irq:
-	clk_unprepare(sdma->clk_ahb);
-err_clk:
-	clk_unprepare(sdma->clk_ipg);
 	return ret;
 }
 
@@ -2422,8 +2377,6 @@ static void sdma_remove(struct platform_device *pdev)
 	devm_free_irq(&pdev->dev, sdma->irq, sdma);
 	dma_async_device_unregister(&sdma->dma_device);
 	kfree(sdma->script_addrs);
-	clk_unprepare(sdma->clk_ahb);
-	clk_unprepare(sdma->clk_ipg);
 	/* Kill the tasklet */
 	for (i = 0; i < MAX_DMA_CHANNELS; i++) {
 		struct sdma_channel *sdmac = &sdma->channel[i];
