@@ -1872,10 +1872,11 @@ static void mana_destroy_txq(struct mana_port_context *apc)
 
 	for (i = 0; i < apc->num_queues; i++) {
 		napi = &apc->tx_qp[i].tx_cq.napi;
-		napi_synchronize(napi);
-		napi_disable(napi);
-		netif_napi_del(napi);
-
+		if (napi->dev == apc->ndev) {
+			napi_synchronize(napi);
+			napi_disable(napi);
+			netif_napi_del(napi);
+		}
 		mana_destroy_wq_obj(apc, GDMA_SQ, apc->tx_qp[i].tx_object);
 
 		mana_deinit_cq(apc, &apc->tx_qp[i].tx_cq);
@@ -2023,14 +2024,17 @@ static void mana_destroy_rxq(struct mana_port_context *apc,
 
 	napi = &rxq->rx_cq.napi;
 
-	if (validate_state)
-		napi_synchronize(napi);
+	if (napi->dev == apc->ndev) {
 
-	napi_disable(napi);
+		if (validate_state)
+			napi_synchronize(napi);
+
+		napi_disable(napi);
+
+		netif_napi_del(napi);
+	}
 
 	xdp_rxq_info_unreg(&rxq->xdp_rxq);
-
-	netif_napi_del(napi);
 
 	mana_destroy_wq_obj(apc, GDMA_RQ, rxq->rxobj);
 
