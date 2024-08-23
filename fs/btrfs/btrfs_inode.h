@@ -619,6 +619,7 @@ struct btrfs_encoded_read_private {
 	struct iov_iter iter;
 	struct btrfs_ioctl_encoded_io_args args;
 	struct file *file;
+	void __user *copy_out;
 };
 
 ssize_t btrfs_encoded_read(struct btrfs_encoded_read_private *priv);

@@ -9169,13 +9169,13 @@ static ssize_t btrfs_encoded_read_regular(struct btrfs_encoded_read_private *pri
 
 	priv->nr_pages = DIV_ROUND_UP(disk_io_size, PAGE_SIZE);
 	priv->pages = kcalloc(priv->nr_pages, sizeof(struct page *), GFP_NOFS);
-	if (!priv->pages)
+	if (!priv->pages) {
+		priv->nr_pages = 0;
 		return -ENOMEM;
+	}
 	ret = btrfs_alloc_page_array(priv->nr_pages, priv->pages, false);
-	if (ret) {
-		ret = -ENOMEM;
-		goto out;
-		}
+	if (ret)
+		return -ENOMEM;
 
 	_btrfs_encoded_read_regular_fill_pages(inode, start, disk_bytenr,
 					       disk_io_size, priv);
@@ -9185,7 +9185,7 @@ static ssize_t btrfs_encoded_read_regular(struct btrfs_encoded_read_private *pri
 
 	ret = blk_status_to_errno(READ_ONCE(priv->status));
 	if (ret)
-		goto out;
+		return ret;
 
 	unlock_extent(io_tree, start, lockend, &priv->cached_state);
 	btrfs_inode_unlock(inode, BTRFS_ILOCK_SHARED);
@@ -9204,22 +9204,15 @@ static ssize_t btrfs_encoded_read_regular(struct btrfs_encoded_read_private *pri
 				     PAGE_SIZE - page_offset);
 
 		if (copy_page_to_iter(priv->pages[i], page_offset, bytes,
-				      &priv->iter) != bytes) {
-			ret = -EFAULT;
-			goto out;
-		}
+				      &priv->iter) != bytes)
+			return -EFAULT;
+
 		i++;
 		cur += bytes;
 		page_offset = 0;
 	}
-	ret = priv->count;
-out:
-	for (i = 0; i < priv->nr_pages; i++) {
-		if (priv->pages[i])
-			__free_page(priv->pages[i]);
-	}
-	kfree(priv->pages);
-	return ret;
+
+	return priv->count;
 }
 
 ssize_t btrfs_encoded_read(struct btrfs_encoded_read_private *priv)
