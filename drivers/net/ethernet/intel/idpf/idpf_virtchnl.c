@@ -3669,12 +3669,15 @@ int idpf_add_del_mac_filters(struct idpf_vport *vport,
 		entries_size = sizeof(struct virtchnl2_mac_addr) * num_entries;
 		buf_size = struct_size(ma_list, mac_addr_list, num_entries);
 
-		if (!ma_list || num_entries != IDPF_NUM_FILTERS_PER_MSG) {
-			kfree(ma_list);
+		if (!ma_list) {
 			ma_list = kzalloc(buf_size, GFP_ATOMIC);
 			if (!ma_list)
 				return -ENOMEM;
 		} else {
+			/* ma_list was allocated in the first iteration
+			 * so IDPF_NUM_FILTERS_PER_MSG entries are
+			 * available
+			 */
 			memset(ma_list, 0, buf_size);
 		}
 
