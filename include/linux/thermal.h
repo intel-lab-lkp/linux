@@ -174,11 +174,45 @@ struct thermal_zone_params {
 	 * 		Used by thermal zone drivers.
 	 */
 	int slope;
+
 	/*
 	 * @offset:	offset of a linear temperature adjustment curve.
 	 * 		Used by thermal zone drivers (default 0).
 	 */
 	int offset;
+
+	/*
+	 * @trips:	a pointer to an array of thermal trips
+	 */
+	const struct thermal_trip *trips;
+
+	/*
+	 * @num_trips:	the number of trip points the thermal zone support
+	 */
+	int num_trips;
+
+	/*
+	 * @devdata:	private device data
+	 */
+	void *devdata;
+
+	/*
+	 * @ops:	standard thermal zone device callbacks
+	 */
+	const struct thermal_zone_device_ops *ops;
+
+	/*
+	 * @passive_delay:	number of milliseconds to wait between polls when
+	 *			performing passive cooling
+	 */
+	unsigned int passive_delay;
+
+	/*
+	 * @polling_delay:	number of milliseconds to wait between polls when checking
+	 *			whether trip points have been crossed (0 for interrupt
+	 *			driven systems)
+	 */
+	unsigned int polling_delay;
 };
 
 /* Function declarations */
@@ -218,6 +252,10 @@ void thermal_zone_set_trip_temp(struct thermal_zone_device *tz,
 int thermal_zone_get_crit_temp(struct thermal_zone_device *tz, int *temp);
 
 #ifdef CONFIG_THERMAL
+
+struct thermal_zone_device *thermal_zone_device_register(const char *type,
+							 const struct thermal_zone_params *tzp);
+
 struct thermal_zone_device *thermal_zone_device_register_with_trips(
 					const char *type,
 					const struct thermal_trip *trips,
@@ -281,6 +319,11 @@ int thermal_zone_device_enable(struct thermal_zone_device *tz);
 int thermal_zone_device_disable(struct thermal_zone_device *tz);
 void thermal_zone_device_critical(struct thermal_zone_device *tz);
 #else
+static inline struct thermal_zone_device *thermal_zone_device_register(
+	const char *type,
+	const struct thermal_zone_params *tzp)
+{ return ERR_PTR(-ENODEV); }
+
 static inline struct thermal_zone_device *thermal_zone_device_register_with_trips(
 					const char *type,
 					const struct thermal_trip *trips,

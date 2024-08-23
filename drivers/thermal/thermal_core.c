@@ -1390,6 +1390,15 @@ int thermal_zone_get_crit_temp(struct thermal_zone_device *tz, int *temp)
 }
 EXPORT_SYMBOL_GPL(thermal_zone_get_crit_temp);
 
+struct thermal_zone_device *thermal_zone_device_register(const char *type,
+							 const struct thermal_zone_params *tzp)
+{
+	return thermal_zone_device_register_with_trips(type, tzp->trips, tzp->num_trips,
+						       tzp->devdata, tzp->ops,
+						       tzp, tzp->passive_delay,
+						       tzp->polling_delay);
+}
+
 /**
  * thermal_zone_device_register_with_trips() - register a new thermal zone device
  * @type:	the thermal zone device type
