@@ -7561,56 +7561,32 @@ static int mvpp2_probe(struct platform_device *pdev)
 		priv->max_port_rxqs = 32;
 
 	if (dev_of_node(&pdev->dev)) {
-		priv->pp_clk = devm_clk_get(&pdev->dev, "pp_clk");
-		if (IS_ERR(priv->pp_clk))
-			return PTR_ERR(priv->pp_clk);
-		err = clk_prepare_enable(priv->pp_clk);
-		if (err < 0)
-			return err;
+		struct clk *clk;
 
-		priv->gop_clk = devm_clk_get(&pdev->dev, "gop_clk");
-		if (IS_ERR(priv->gop_clk)) {
-			err = PTR_ERR(priv->gop_clk);
-			goto err_pp_clk;
-		}
-		err = clk_prepare_enable(priv->gop_clk);
-		if (err < 0)
-			goto err_pp_clk;
-
-		if (priv->hw_version >= MVPP22) {
-			priv->mg_clk = devm_clk_get(&pdev->dev, "mg_clk");
-			if (IS_ERR(priv->mg_clk)) {
-				err = PTR_ERR(priv->mg_clk);
-				goto err_gop_clk;
-			}
-
-			err = clk_prepare_enable(priv->mg_clk);
-			if (err < 0)
-				goto err_gop_clk;
-
-			priv->mg_core_clk = devm_clk_get_optional(&pdev->dev, "mg_core_clk");
-			if (IS_ERR(priv->mg_core_clk)) {
-				err = PTR_ERR(priv->mg_core_clk);
-				goto err_mg_clk;
-			}
-
-			err = clk_prepare_enable(priv->mg_core_clk);
-			if (err < 0)
-				goto err_mg_clk;
-		}
-
-		priv->axi_clk = devm_clk_get_optional(&pdev->dev, "axi_clk");
-		if (IS_ERR(priv->axi_clk)) {
-			err = PTR_ERR(priv->axi_clk);
-			goto err_mg_core_clk;
-		}
-
-		err = clk_prepare_enable(priv->axi_clk);
-		if (err < 0)
-			goto err_mg_core_clk;
+		clk = devm_clk_get_enabled(&pdev->dev, "pp_clk");
+		if (IS_ERR(clk))
+			return PTR_ERR(clk);
 
 		/* Get system's tclk rate */
-		priv->tclk = clk_get_rate(priv->pp_clk);
+		priv->tclk = clk_get_rate(clk);
+
+		clk = devm_clk_get_enabled(&pdev->dev, "gop_clk");
+		if (IS_ERR(clk))
+			return PTR_ERR(clk);
+
+		if (priv->hw_version >= MVPP22) {
+			clk = devm_clk_get_enabled(&pdev->dev, "mg_clk");
+			if (IS_ERR(clk))
+				return PTR_ERR(clk);
+
+			clk = devm_clk_get_optional_enabled(&pdev->dev, "mg_core_clk");
+			if (IS_ERR(clk))
+				return PTR_ERR(clk);
+		}
+
+		clk = devm_clk_get_optional_enabled(&pdev->dev, "axi_clk");
+		if (IS_ERR(clk))
+			return PTR_ERR(clk);
 	} else {
 		err = device_property_read_u32(&pdev->dev, "clock-frequency", &priv->tclk);
 		if (err) {
@@ -7622,7 +7598,7 @@ static int mvpp2_probe(struct platform_device *pdev)
 	if (priv->hw_version >= MVPP22) {
 		err = dma_set_mask(&pdev->dev, MVPP2_DESC_DMA_MASK);
 		if (err)
-			goto err_axi_clk;
+			return err;
 		/* Sadly, the BM pools all share the same register to
 		 * store the high 32 bits of their address. So they
 		 * must all have the same high 32 bits, which forces
@@ -7630,7 +7606,7 @@ static int mvpp2_probe(struct platform_device *pdev)
 		 */
 		err = dma_set_coherent_mask(&pdev->dev, DMA_BIT_MASK(32));
 		if (err)
-			goto err_axi_clk;
+			return err;
 	}
 
 	/* Map DTS-active ports. Should be done before FIFO mvpp2_init */
@@ -7649,12 +7625,12 @@ static int mvpp2_probe(struct platform_device *pdev)
 	err = mvpp2_init(pdev, priv);
 	if (err < 0) {
 		dev_err(&pdev->dev, "failed to initialize controller\n");
-		goto err_axi_clk;
+		return err;
 	}
 
 	err = mvpp22_tai_probe(&pdev->dev, priv);
 	if (err < 0)
-		goto err_axi_clk;
+		return err;
 
 	/* Initialize ports */
 	device_for_each_child_node_scoped(&pdev->dev, port_fwnode) {
@@ -7665,8 +7641,7 @@ static int mvpp2_probe(struct platform_device *pdev)
 
 	if (priv->port_count == 0) {
 		dev_err(&pdev->dev, "no ports enabled\n");
-		err = -ENODEV;
-		goto err_axi_clk;
+		return -ENODEV;
 	}
 
 	/* Statistics must be gathered regularly because some of them (like
@@ -7698,16 +7673,6 @@ static int mvpp2_probe(struct platform_device *pdev)
 err_port_probe:
 	for (i = 0; i < priv->port_count; i++)
 		mvpp2_port_remove(priv->port_list[i]);
-err_axi_clk:
-	clk_disable_unprepare(priv->axi_clk);
-err_mg_core_clk:
-	clk_disable_unprepare(priv->mg_core_clk);
-err_mg_clk:
-	clk_disable_unprepare(priv->mg_clk);
-err_gop_clk:
-	clk_disable_unprepare(priv->gop_clk);
-err_pp_clk:
-	clk_disable_unprepare(priv->pp_clk);
 	return err;
 }
 
@@ -7745,12 +7710,6 @@ static void mvpp2_remove(struct platform_device *pdev)
 
 	if (!dev_of_node(&pdev->dev))
 		return;
-
-	clk_disable_unprepare(priv->axi_clk);
-	clk_disable_unprepare(priv->mg_core_clk);
-	clk_disable_unprepare(priv->mg_clk);
-	clk_disable_unprepare(priv->pp_clk);
-	clk_disable_unprepare(priv->gop_clk);
 }
 
 static const struct of_device_id mvpp2_match[] = {
