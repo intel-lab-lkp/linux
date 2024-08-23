@@ -5717,7 +5717,7 @@ static void ext4_init_journal_params(struct super_block *sb, journal_t *journal)
 	journal->j_max_batch_time = sbi->s_max_batch_time;
 	ext4_fc_init(sb, journal);
 
-	write_lock(&journal->j_state_lock);
+	guard(write_lock)(&journal->j_state_lock);
 	if (test_opt(sb, BARRIER))
 		journal->j_flags |= JBD2_BARRIER;
 	else
@@ -5731,7 +5731,6 @@ static void ext4_init_journal_params(struct super_block *sb, journal_t *journal)
 	 * records log transactions continuously between each mount.
 	 */
 	journal->j_flags |= JBD2_CYCLE_RECORD;
-	write_unlock(&journal->j_state_lock);
 }
 
 static struct inode *ext4_get_journal_inode(struct super_block *sb,

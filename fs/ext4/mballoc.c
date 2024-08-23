@@ -852,19 +852,15 @@ mb_update_avg_fragment_size(struct super_block *sb, struct ext4_group_info *grp)
 		return;
 
 	if (grp->bb_avg_fragment_size_order != -1) {
-		write_lock(&sbi->s_mb_avg_fragment_size_locks[
+		guard(write_lock)(&sbi->s_mb_avg_fragment_size_locks[
 					grp->bb_avg_fragment_size_order]);
 		list_del(&grp->bb_avg_fragment_size_node);
-		write_unlock(&sbi->s_mb_avg_fragment_size_locks[
-					grp->bb_avg_fragment_size_order]);
 	}
 	grp->bb_avg_fragment_size_order = new_order;
-	write_lock(&sbi->s_mb_avg_fragment_size_locks[
+	guard(write_lock)(&sbi->s_mb_avg_fragment_size_locks[
 					grp->bb_avg_fragment_size_order]);
 	list_add_tail(&grp->bb_avg_fragment_size_node,
 		&sbi->s_mb_avg_fragment_size[grp->bb_avg_fragment_size_order]);
-	write_unlock(&sbi->s_mb_avg_fragment_size_locks[
-					grp->bb_avg_fragment_size_order]);
 }
 
 /*
@@ -1160,20 +1156,16 @@ mb_set_largest_free_order(struct super_block *sb, struct ext4_group_info *grp)
 	}
 
 	if (grp->bb_largest_free_order >= 0) {
-		write_lock(&sbi->s_mb_largest_free_orders_locks[
+		guard(write_lock)(&sbi->s_mb_largest_free_orders_locks[
 					      grp->bb_largest_free_order]);
 		list_del_init(&grp->bb_largest_free_order_node);
-		write_unlock(&sbi->s_mb_largest_free_orders_locks[
-					      grp->bb_largest_free_order]);
 	}
 	grp->bb_largest_free_order = i;
 	if (grp->bb_largest_free_order >= 0 && grp->bb_free) {
-		write_lock(&sbi->s_mb_largest_free_orders_locks[
+		guard(write_lock)(&sbi->s_mb_largest_free_orders_locks[
 					      grp->bb_largest_free_order]);
 		list_add_tail(&grp->bb_largest_free_order_node,
 		      &sbi->s_mb_largest_free_orders[grp->bb_largest_free_order]);
-		write_unlock(&sbi->s_mb_largest_free_orders_locks[
-					      grp->bb_largest_free_order]);
 	}
 }
 
@@ -5110,9 +5102,9 @@ static void ext4_mb_put_pa(struct ext4_allocation_context *ac,
 	ext4_unlock_group(sb, grp);
 
 	if (pa->pa_type == MB_INODE_PA) {
-		write_lock(pa->pa_node_lock.inode_lock);
-		rb_erase(&pa->pa_node.inode_node, &ei->i_prealloc_node);
-		write_unlock(pa->pa_node_lock.inode_lock);
+		scoped_guard(write_lock, pa->pa_node_lock.inode_lock)
+			rb_erase(&pa->pa_node.inode_node, &ei->i_prealloc_node);
+
 		ext4_mb_pa_free(pa);
 	} else {
 		spin_lock(pa->pa_node_lock.lg_lock);
@@ -5241,9 +5233,9 @@ adjust_bex:
 
 	list_add(&pa->pa_group_list, &grp->bb_prealloc_list);
 
-	write_lock(pa->pa_node_lock.inode_lock);
-	ext4_mb_pa_rb_insert(&ei->i_prealloc_node, &pa->pa_node.inode_node);
-	write_unlock(pa->pa_node_lock.inode_lock);
+	scoped_guard(write_lock, pa->pa_node_lock.inode_lock)
+		ext4_mb_pa_rb_insert(&ei->i_prealloc_node, &pa->pa_node.inode_node);
+
 	atomic_inc(&ei->i_prealloc_active);
 }
 
@@ -5472,10 +5464,9 @@ ext4_mb_discard_group_preallocations(struct super_block *sb,
 			list_del_rcu(&pa->pa_node.lg_list);
 			spin_unlock(pa->pa_node_lock.lg_lock);
 		} else {
-			write_lock(pa->pa_node_lock.inode_lock);
+			guard(write_lock)(pa->pa_node_lock.inode_lock);
 			ei = EXT4_I(pa->pa_inode);
 			rb_erase(&pa->pa_node.inode_node, &ei->i_prealloc_node);
-			write_unlock(pa->pa_node_lock.inode_lock);
 		}
 
 		list_del(&pa->u.pa_tmp_list);
@@ -5532,54 +5523,52 @@ void ext4_discard_preallocations(struct inode *inode)
 
 repeat:
 	/* first, collect all pa's in the inode */
-	write_lock(&ei->i_prealloc_lock);
-	for (iter = rb_first(&ei->i_prealloc_node); iter;
-	     iter = rb_next(iter)) {
-		pa = rb_entry(iter, struct ext4_prealloc_space,
-			      pa_node.inode_node);
-		BUG_ON(pa->pa_node_lock.inode_lock != &ei->i_prealloc_lock);
+	scoped_guard(write_lock, &ei->i_prealloc_lock) {
+		for (iter = rb_first(&ei->i_prealloc_node); iter;
+			iter = rb_next(iter)) {
+			pa = rb_entry(iter, struct ext4_prealloc_space,
+					pa_node.inode_node);
+			BUG_ON(pa->pa_node_lock.inode_lock != &ei->i_prealloc_lock);
 
-		spin_lock(&pa->pa_lock);
-		if (atomic_read(&pa->pa_count)) {
-			/* this shouldn't happen often - nobody should
-			 * use preallocation while we're discarding it */
+			spin_lock(&pa->pa_lock);
+			if (atomic_read(&pa->pa_count)) {
+				/* this shouldn't happen often - nobody should
+				* use preallocation while we're discarding it */
+				spin_unlock(&pa->pa_lock);
+				ext4_msg(sb, KERN_ERR,
+					"uh-oh! used pa while discarding");
+				WARN_ON(1);
+				schedule_timeout_uninterruptible(HZ);
+				goto repeat;
+
+			}
+			if (pa->pa_deleted == 0) {
+				ext4_mb_mark_pa_deleted(sb, pa);
+				spin_unlock(&pa->pa_lock);
+				rb_erase(&pa->pa_node.inode_node, &ei->i_prealloc_node);
+				list_add(&pa->u.pa_tmp_list, &list);
+				continue;
+			}
+
+			/* someone is deleting pa right now */
 			spin_unlock(&pa->pa_lock);
-			write_unlock(&ei->i_prealloc_lock);
-			ext4_msg(sb, KERN_ERR,
-				 "uh-oh! used pa while discarding");
-			WARN_ON(1);
+
+			/* we have to wait here because pa_deleted
+			* doesn't mean pa is already unlinked from
+			* the list. as we might be called from
+			* ->clear_inode() the inode will get freed
+			* and concurrent thread which is unlinking
+			* pa from inode's list may access already
+			* freed memory, bad-bad-bad */
+
+			/* XXX: if this happens too often, we can
+			* add a flag to force wait only in case
+			* of ->clear_inode(), but not in case of
+			* regular truncate */
 			schedule_timeout_uninterruptible(HZ);
 			goto repeat;
-
 		}
-		if (pa->pa_deleted == 0) {
-			ext4_mb_mark_pa_deleted(sb, pa);
-			spin_unlock(&pa->pa_lock);
-			rb_erase(&pa->pa_node.inode_node, &ei->i_prealloc_node);
-			list_add(&pa->u.pa_tmp_list, &list);
-			continue;
-		}
-
-		/* someone is deleting pa right now */
-		spin_unlock(&pa->pa_lock);
-		write_unlock(&ei->i_prealloc_lock);
-
-		/* we have to wait here because pa_deleted
-		 * doesn't mean pa is already unlinked from
-		 * the list. as we might be called from
-		 * ->clear_inode() the inode will get freed
-		 * and concurrent thread which is unlinking
-		 * pa from inode's list may access already
-		 * freed memory, bad-bad-bad */
-
-		/* XXX: if this happens too often, we can
-		 * add a flag to force wait only in case
-		 * of ->clear_inode(), but not in case of
-		 * regular truncate */
-		schedule_timeout_uninterruptible(HZ);
-		goto repeat;
 	}
-	write_unlock(&ei->i_prealloc_lock);
 
 	list_for_each_entry_safe(pa, tmp, &list, u.pa_tmp_list) {
 		BUG_ON(pa->pa_type != MB_INODE_PA);

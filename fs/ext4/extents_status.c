@@ -953,12 +953,11 @@ void ext4_es_cache_extent(struct inode *inode, ext4_lblk_t lblk,
 
 	BUG_ON(end < lblk);
 
-	write_lock(&EXT4_I(inode)->i_es_lock);
+	guard(write_lock)(&EXT4_I(inode)->i_es_lock);
 
 	es = __es_tree_search(&EXT4_I(inode)->i_es_tree.root, lblk);
 	if (!es || es->es_lblk > end)
 		__es_insert_extent(inode, &newes, NULL);
-	write_unlock(&EXT4_I(inode)->i_es_lock);
 }
 
 /*
@@ -1512,15 +1511,16 @@ retry:
 	 * so that we are sure __es_shrink() is done with the inode before it
 	 * is reclaimed.
 	 */
-	write_lock(&EXT4_I(inode)->i_es_lock);
-	err = __es_remove_extent(inode, lblk, end, &reserved, es);
-	/* Free preallocated extent if it didn't get used. */
-	if (es) {
-		if (!es->es_len)
-			__es_free_extent(es);
-		es = NULL;
+	scoped_guard(write_lock, &EXT4_I(inode)->i_es_lock) {
+		err = __es_remove_extent(inode, lblk, end, &reserved, es);
+		/* Free preallocated extent if it didn't get used. */
+		if (es) {
+			if (!es->es_len)
+				__es_free_extent(es);
+			es = NULL;
+		}
 	}
-	write_unlock(&EXT4_I(inode)->i_es_lock);
+
 	if (err)
 		goto retry;
 
@@ -1835,7 +1835,7 @@ void ext4_clear_inode_es(struct inode *inode)
 	struct ext4_es_tree *tree;
 	struct rb_node *node;
 
-	write_lock(&ei->i_es_lock);
+	guard(write_lock)(&ei->i_es_lock);
 	tree = &EXT4_I(inode)->i_es_tree;
 	tree->cache_es = NULL;
 	node = rb_first(&tree->root);
@@ -1848,7 +1848,6 @@ void ext4_clear_inode_es(struct inode *inode)
 		}
 	}
 	ext4_clear_inode_state(inode, EXT4_STATE_EXT_PRECACHED);
-	write_unlock(&ei->i_es_lock);
 }
 
 #ifdef ES_DEBUG__
@@ -2014,9 +2013,8 @@ void ext4_remove_pending(struct inode *inode, ext4_lblk_t lblk)
 {
 	struct ext4_inode_info *ei = EXT4_I(inode);
 
-	write_lock(&ei->i_es_lock);
+	guard(write_lock)(&ei->i_es_lock);
 	__remove_pending(inode, lblk);
-	write_unlock(&ei->i_es_lock);
 }
 
 /*
