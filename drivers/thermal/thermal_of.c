@@ -474,12 +474,9 @@ static struct thermal_zone_device *thermal_of_zone_register(struct device_node *
 {
 	struct thermal_zone_device_ops of_ops = *ops;
 	struct thermal_zone_device *tz;
-	struct thermal_trip *trips;
-	struct thermal_zone_params tzp = {};
+	struct thermal_zone_params tzp = { .devdata = data, .ops = &of_ops };
 	struct device_node *np;
 	const char *action;
-	int delay, pdelay;
-	int ntrips;
 	int ret;
 
 	np = of_thermal_zone_find(sensor, id);
@@ -489,14 +486,14 @@ static struct thermal_zone_device *thermal_of_zone_register(struct device_node *
 		return ERR_CAST(np);
 	}
 
-	trips = thermal_of_trips_init(np, &ntrips);
-	if (IS_ERR(trips)) {
+	tzp.trips = thermal_of_trips_init(np, &tzp.num_trips);
+	if (IS_ERR(tzp.trips)) {
 		pr_err("Failed to find trip points for %pOFn id=%d\n", sensor, id);
 		ret = PTR_ERR(trips);
 		goto out_of_node_put;
 	}
 
-	ret = thermal_of_monitor_init(np, &delay, &pdelay);
+	ret = thermal_of_monitor_init(np, &tzp.polling_delay, &tzp.passive_delay);
 	if (ret) {
 		pr_err("Failed to initialize monitoring delays from %pOFn\n", np);
 		goto out_kfree_trips;
@@ -512,9 +509,7 @@ static struct thermal_zone_device *thermal_of_zone_register(struct device_node *
 		if (!of_ops.critical && !strcasecmp(action, "reboot"))
 			of_ops.critical = thermal_zone_device_critical_reboot;
 
-	tz = thermal_zone_device_register_with_trips(np->name, trips, ntrips,
-						     data, &of_ops, &tzp,
-						     pdelay, delay);
+	tz = thermal_zone_device_register(np->name, &tzp);
 	if (IS_ERR(tz)) {
 		ret = PTR_ERR(tz);
 		pr_err("Failed to register thermal zone %pOFn: %d\n", np, ret);
@@ -522,7 +517,7 @@ static struct thermal_zone_device *thermal_of_zone_register(struct device_node *
 	}
 
 	of_node_put(np);
-	kfree(trips);
+	kfree(tzp.trips);
 
 	ret = thermal_zone_device_enable(tz);
 	if (ret) {
@@ -535,7 +530,7 @@ static struct thermal_zone_device *thermal_of_zone_register(struct device_node *
 	return tz;
 
 out_kfree_trips:
-	kfree(trips);
+	kfree(tzp.trips);
 out_of_node_put:
 	of_node_put(np);
 
