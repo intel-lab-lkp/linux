@@ -4537,23 +4537,23 @@ static ssize_t btrfs_encoded_read_finish(struct btrfs_encoded_read_private *priv
 	return ret;
 }
 
-static int btrfs_ioctl_encoded_read(struct file *file, void __user *argp,
-				    bool compat)
+static ssize_t btrfs_prepare_encoded_read(struct btrfs_encoded_read_private *priv,
+					  struct file *file, bool compat,
+					  void __user *argp)
 {
 	size_t copy_end_kernel = offsetofend(struct btrfs_ioctl_encoded_io_args,
 					     flags);
 	size_t copy_end;
 	loff_t pos;
 	ssize_t ret;
-	struct btrfs_encoded_read_private priv = {
-		.pending = ATOMIC_INIT(1),
-		.file = file,
-	};
 
-	if (!capable(CAP_SYS_ADMIN)) {
-		ret = -EPERM;
-		goto out;
-	}
+	memset(priv, 0, sizeof(*priv));
+
+	atomic_set(&priv->pending, 1);
+	priv->file = file;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
 
 	if (compat) {
 #if defined(CONFIG_64BIT) && defined(CONFIG_COMPAT)
@@ -4561,47 +4561,55 @@ static int btrfs_ioctl_encoded_read(struct file *file, void __user *argp,
 
 		copy_end = offsetofend(struct btrfs_ioctl_encoded_io_args_32,
 				       flags);
-		if (copy_from_user(&args32, argp, copy_end)) {
-			ret = -EFAULT;
-			goto out;
-		}
-		priv.args.iov = compat_ptr(args32.iov);
-		priv.args.iovcnt = args32.iovcnt;
-		priv.args.offset = args32.offset;
-		priv.args.flags = args32.flags;
+		if (copy_from_user(&args32, argp, copy_end))
+			return -EFAULT;
+
+		priv->args.iov = compat_ptr(args32.iov);
+		priv->args.iovcnt = args32.iovcnt;
+		priv->args.offset = args32.offset;
+		priv->args.flags = args32.flags;
 #else
 		return -ENOTTY;
 #endif
 	} else {
 		copy_end = copy_end_kernel;
-		if (copy_from_user(&priv.args, argp, copy_end)) {
-			ret = -EFAULT;
-			goto out;
-		}
-	}
-	if (priv.args.flags != 0) {
-		ret = -EINVAL;
-		goto out;
+		if (copy_from_user(&priv->args, argp, copy_end))
+			return -EFAULT;
 	}
 
-	priv.iov = priv.iovstack;
-	ret = import_iovec(ITER_DEST, priv.args.iov, priv.args.iovcnt,
-			   ARRAY_SIZE(priv.iovstack), &priv.iov, &priv.iter);
+	if (priv->args.flags != 0)
+		return -EINVAL;
+
+	priv->iov = priv->iovstack;
+	ret = import_iovec(ITER_DEST, priv->args.iov, priv->args.iovcnt,
+			   ARRAY_SIZE(priv->iovstack), &priv->iov, &priv->iter);
 	if (ret < 0) {
-		priv.iov = NULL;
-		goto out;
+		priv->iov = NULL;
+		return ret;
 	}
 
-	if (iov_iter_count(&priv.iter) == 0) {
-		ret = 0;
-		goto out;
-	}
-	pos = priv.args.offset;
-	ret = rw_verify_area(READ, file, &pos, priv.args.len);
+	pos = priv->args.offset;
+	ret = rw_verify_area(READ, priv->file, &pos, priv->args.len);
 	if (ret < 0)
+		return ret;
+
+	priv->copy_out = argp + copy_end;
+
+	return 0;
+}
+
+static int btrfs_ioctl_encoded_read(struct file *file, void __user *argp,
+				    bool compat)
+{
+	ssize_t ret;
+	struct btrfs_encoded_read_private priv;
+
+	ret = btrfs_prepare_encoded_read(&priv, file, compat, argp);
+	if (ret)
 		goto out;
 
-	priv.copy_out = argp + copy_end;
+	if (iov_iter_count(&priv.iter) == 0)
+		goto out;
 
 	ret = btrfs_encoded_read(&priv);
 
