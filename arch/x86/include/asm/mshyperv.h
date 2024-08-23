@@ -10,6 +10,7 @@
 #include <asm/nospec-branch.h>
 #include <asm/paravirt.h>
 #include <asm/mshyperv.h>
+#include <asm/madt_wakeup.h>
 
 /*
  * Hyper-V always provides a single IO-APIC at this MMIO address.
@@ -48,6 +49,8 @@ extern void *hv_hypercall_pg;
 extern u64 hv_current_partition_id;
 
 extern union hv_ghcb * __percpu *hv_ghcb_pg;
+
+extern u64 wakeup_mailbox_addr;
 
 bool hv_isolation_type_snp(void);
 bool hv_isolation_type_tdx(void);

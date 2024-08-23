@@ -366,6 +366,14 @@ void __init ms_hyperv_late_init(void)
 	u32 length, i;
 
 	/*
+	 * Parse the ACPI wakeup structure information from device tree.
+	 * Currently VTL2 TDX guest only.
+	 */
+#ifdef CONFIG_X86_64
+	wakeup_mailbox_addr = dtb_parse_mp_wake();
+#endif
+
+	/*
 	 * Seed the Linux random number generator with entropy provided by
 	 * the Hyper-V host in ACPI table OEM0.
 	 */
