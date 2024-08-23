@@ -411,7 +411,10 @@ struct bmp280_data {
 	 * Data to push to userspace triggered buffer. Up to 3 channels and
 	 * s64 timestamp, aligned.
 	 */
-	s32 sensor_data[6] __aligned(8);
+	struct {
+		u8 buf[12];
+		s64 ts __aligned(8);
+	} buffer;
 
 	/*
 	 * DMA (thus cache coherency maintenance) may require the
