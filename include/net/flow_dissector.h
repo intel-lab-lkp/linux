@@ -384,6 +384,7 @@ enum flow_dissector_key_id {
 #define FLOW_DISSECTOR_F_STOP_AT_FLOW_LABEL	BIT(1)
 #define FLOW_DISSECTOR_F_STOP_AT_ENCAP		BIT(2)
 #define FLOW_DISSECTOR_F_STOP_BEFORE_ENCAP	BIT(3)
+#define FLOW_DISSECTOR_F_PARSE_UDP_ENCAPS	BIT(4)
 
 struct flow_dissector_key {
 	enum flow_dissector_key_id key_id;
