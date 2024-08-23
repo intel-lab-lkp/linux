@@ -4509,6 +4509,34 @@ static int _btrfs_ioctl_send(struct btrfs_inode *inode, void __user *argp, bool 
 	return ret;
 }
 
+static ssize_t btrfs_encoded_read_finish(struct btrfs_encoded_read_private *priv,
+					 ssize_t ret)
+{
+	size_t copy_end_kernel = offsetofend(struct btrfs_ioctl_encoded_io_args,
+					     flags);
+	unsigned long i;
+
+	if (ret >= 0) {
+		fsnotify_access(priv->file);
+		if (copy_to_user(priv->copy_out,
+				 (char *)&priv->args + copy_end_kernel,
+				 sizeof(priv->args) - copy_end_kernel))
+			ret = -EFAULT;
+	}
+
+	for (i = 0; i < priv->nr_pages; i++) {
+		if (priv->pages[i])
+			__free_page(priv->pages[i]);
+	}
+	kfree(priv->pages);
+	kfree(priv->iov);
+
+	if (ret > 0)
+		add_rchar(current, ret);
+	inc_syscr(current);
+	return ret;
+}
+
 static int btrfs_ioctl_encoded_read(struct file *file, void __user *argp,
 				    bool compat)
 {
@@ -4573,21 +4601,12 @@ static int btrfs_ioctl_encoded_read(struct file *file, void __user *argp,
 	if (ret < 0)
 		goto out;
 
+	priv.copy_out = argp + copy_end;
+
 	ret = btrfs_encoded_read(&priv);
-	if (ret >= 0) {
-		fsnotify_access(file);
-		if (copy_to_user(argp + copy_end,
-				 (char *)&priv.args + copy_end_kernel,
-				 sizeof(priv.args) - copy_end_kernel))
-			ret = -EFAULT;
-	}
 
 out:
-	kfree(priv.iov);
-	if (ret > 0)
-		add_rchar(current, ret);
-	inc_syscr(current);
-	return ret;
+	return btrfs_encoded_read_finish(&priv, ret);
 }
 
 static int btrfs_ioctl_encoded_write(struct file *file, void __user *argp, bool compat)
