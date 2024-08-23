@@ -45,7 +45,7 @@ void load_trampoline_pgtable(void)
 
 void __init reserve_real_mode(void)
 {
-	phys_addr_t mem;
+	phys_addr_t mem, limit = x86_init.resources.realmode_limit;
 	size_t size = real_mode_size_needed();
 
 	if (!size)
@@ -54,17 +54,15 @@ void __init reserve_real_mode(void)
 	WARN_ON(slab_is_available());
 
 	/* Has to be under 1M so we can execute real-mode AP code. */
-	mem = memblock_phys_alloc_range(size, PAGE_SIZE, 0, 1<<20);
+	mem = memblock_phys_alloc_range(size, PAGE_SIZE, 0, limit);
 	if (!mem)
-		pr_info("No sub-1M memory is available for the trampoline\n");
+		pr_info("No memory below %lluM for the real-mode trampoline\n", limit >> 20);
 	else
 		set_real_mode_mem(mem);
 
-	/*
-	 * Unconditionally reserve the entire first 1M, see comment in
-	 * setup_arch().
-	 */
-	memblock_reserve(0, SZ_1M);
+	/* Reserve the entire first 1M, if enabled. See comment in setup_arch(). */
+	if (x86_init.resources.reserve_bios)
+		memblock_reserve(0, x86_init.resources.reserve_bios);
 }
 
 static void __init sme_sev_setup_real_mode(struct trampoline_header *th)
