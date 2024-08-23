@@ -2138,9 +2138,7 @@ static int run_tracer_selftest(struct tracer *type)
 	/* the test is responsible for resetting too */
 	tr->current_trace = saved_tracer;
 	if (ret) {
-		printk(KERN_CONT "FAILED!\n");
-		/* Add the warning after printing 'FAILED' */
-		WARN_ON(1);
+		WARN(1, "FAILED!\n");
 		return -1;
 	}
 	/* Only reset on passing, to avoid touching corrupted buffers */
