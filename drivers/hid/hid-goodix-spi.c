@@ -435,7 +435,8 @@ static int goodix_hid_get_raw_report(struct hid_device *hid,
 
 	/* Step2: check response data status */
 	response_data_len = goodix_hid_check_ack_status(ts);
-	if (response_data_len <= GOODIX_HID_PKG_LEN_SIZE)
+	if (response_data_len < 0 ||
+	    response_data_len <= GOODIX_HID_PKG_LEN_SIZE)
 		return -EINVAL;
 
 	len = min(len, response_data_len - GOODIX_HID_PKG_LEN_SIZE);
