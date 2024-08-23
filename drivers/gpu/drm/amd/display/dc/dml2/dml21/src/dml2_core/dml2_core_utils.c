@@ -310,7 +310,7 @@ unsigned int dml2_core_utils_get_tile_block_size_bytes(enum dml2_swizzle_mode sw
 	default:
 		DML2_ASSERT(0);
 		return 256;
-	};
+	}
 }
 
 
