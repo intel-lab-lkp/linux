@@ -1058,6 +1058,14 @@ __always_inline bool free_pages_prepare(struct page *page,
 		reset_page_owner(page, order);
 		page_table_check_free(page, order);
 		pgalloc_tag_sub(page, 1 << order);
+
+		/*
+		 * For poisoned pages which software injected errors,
+		 * we can reclaim it through unpoison_memory.
+		 * so mark codetags for it as empty,
+		 * just like when a page is first added to the buddy system.
+		 */
+		clear_page_tag_ref(page);
 		return false;
 	}
 
