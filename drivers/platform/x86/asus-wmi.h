@@ -50,6 +50,7 @@ struct quirk_entry {
 	 */
 	int no_display_toggle;
 	u32 xusb2pr;
+	bool ignore_key_wlan;
 };
 
 struct asus_wmi_driver {
