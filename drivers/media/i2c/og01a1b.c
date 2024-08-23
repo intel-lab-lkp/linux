@@ -5,6 +5,7 @@
 #include <linux/acpi.h>
 #include <linux/clk.h>
 #include <linux/delay.h>
+#include <linux/gpio/consumer.h>
 #include <linux/i2c.h>
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
@@ -420,6 +421,7 @@ static const struct og01a1b_mode supported_modes[] = {
 
 struct og01a1b {
 	struct clk *xvclk;
+	struct gpio_desc *reset_gpio;
 
 	struct v4l2_subdev sd;
 	struct media_pad pad;
@@ -981,6 +983,9 @@ static int og01a1b_power_on(struct device *dev)
 	struct v4l2_subdev *sd = dev_get_drvdata(dev);
 	struct og01a1b *og01a1b = to_og01a1b(sd);
 
+	gpiod_set_value_cansleep(og01a1b->reset_gpio, 0);
+	usleep_range(USEC_PER_MSEC, 2 * USEC_PER_MSEC);
+
 	return clk_prepare_enable(og01a1b->xvclk);
 }
 
@@ -990,6 +995,8 @@ static int og01a1b_power_off(struct device *dev)
 	struct og01a1b *og01a1b = to_og01a1b(sd);
 
 	clk_disable_unprepare(og01a1b->xvclk);
+
+	gpiod_set_value_cansleep(og01a1b->reset_gpio, 1);
 
 	return 0;
 }
@@ -1029,6 +1036,13 @@ static int og01a1b_probe(struct i2c_client *client)
 		dev_err(&client->dev, "failed to check HW configuration: %d",
 			ret);
 		return ret;
+	}
+
+	og01a1b->reset_gpio = devm_gpiod_get_optional(&client->dev, "reset",
+						      GPIOD_OUT_LOW);
+	if (IS_ERR(og01a1b->reset_gpio)) {
+		dev_err(&client->dev, "cannot get reset GPIO\n");
+		return PTR_ERR(og01a1b->reset_gpio);
 	}
 
 	/* The sensor must be powered on to read the CHIP_ID register */
