@@ -605,7 +605,8 @@ int btrfs_encoded_read_regular_fill_pages(struct btrfs_inode *inode,
 					  u64 file_offset, u64 disk_bytenr,
 					  u64 disk_io_size,
 					  struct page **pages);
-ssize_t btrfs_encoded_read(struct kiocb *iocb, struct iov_iter *iter,
+ssize_t btrfs_encoded_read(struct file *file, loff_t offset,
+			   struct iov_iter *iter,
 			   struct btrfs_ioctl_encoded_io_args *encoded);
 ssize_t btrfs_do_encoded_write(struct kiocb *iocb, struct iov_iter *from,
 			       const struct btrfs_ioctl_encoded_io_args *encoded);
