@@ -720,10 +720,11 @@ STATIC uint
 xfs_inode_item_push(
 	struct xfs_log_item	*lip,
 	struct list_head	*buffer_list)
-		__releases(&lip->li_ailp->ail_lock)
-		__acquires(&lip->li_ailp->ail_lock)
+		__releases(&ailp->ail_lock)
+		__acquires(&ailp->ail_lock)
 {
 	struct xfs_inode_log_item *iip = INODE_ITEM(lip);
+	struct xfs_ail		*ailp = lip->li_ailp;
 	struct xfs_inode	*ip = iip->ili_inode;
 	struct xfs_buf		*bp = lip->li_buf;
 	uint			rval = XFS_ITEM_SUCCESS;
@@ -748,7 +749,7 @@ xfs_inode_item_push(
 	if (!xfs_buf_trylock(bp))
 		return XFS_ITEM_LOCKED;
 
-	spin_unlock(&lip->li_ailp->ail_lock);
+	spin_unlock(&ailp->ail_lock);
 
 	/*
 	 * We need to hold a reference for flushing the cluster buffer as it may
@@ -762,17 +763,23 @@ xfs_inode_item_push(
 		if (!xfs_buf_delwri_queue(bp, buffer_list))
 			rval = XFS_ITEM_FLUSHING;
 		xfs_buf_relse(bp);
-	} else {
+	} else if (error == -EAGAIN) {
 		/*
 		 * Release the buffer if we were unable to flush anything. On
 		 * any other error, the buffer has already been released.
 		 */
-		if (error == -EAGAIN)
-			xfs_buf_relse(bp);
+		xfs_buf_relse(bp);
 		rval = XFS_ITEM_LOCKED;
+	} else {
+		/*
+		 * The filesystem has already been shut down. If there's a race
+		 * between inode flush and inode reclaim, the inode might be
+		 * freed. Accessing the item after this point would be unsafe.
+		 */
+		rval = XFS_ITEM_UNSAFE;
 	}
 
-	spin_lock(&lip->li_ailp->ail_lock);
+	spin_lock(&ailp->ail_lock);
 	return rval;
 }
 
