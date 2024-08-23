@@ -1039,6 +1039,8 @@ static int __init imxdma_probe(struct platform_device *pdev)
 	struct imxdma_engine *imxdma;
 	int ret, i;
 	int irq, irq_err;
+	struct clk *dma_ahb;
+	struct clk *dma_ipg;
 
 	imxdma = devm_kzalloc(&pdev->dev, sizeof(*imxdma), GFP_KERNEL);
 	if (!imxdma)
@@ -1055,20 +1057,13 @@ static int __init imxdma_probe(struct platform_device *pdev)
 	if (irq < 0)
 		return irq;
 
-	imxdma->dma_ipg = devm_clk_get(&pdev->dev, "ipg");
-	if (IS_ERR(imxdma->dma_ipg))
-		return PTR_ERR(imxdma->dma_ipg);
+	dma_ipg = devm_clk_get_enabled(&pdev->dev, "ipg");
+	if (IS_ERR(dma_ipg))
+		return PTR_ERR(dma_ipg);
 
-	imxdma->dma_ahb = devm_clk_get(&pdev->dev, "ahb");
-	if (IS_ERR(imxdma->dma_ahb))
-		return PTR_ERR(imxdma->dma_ahb);
-
-	ret = clk_prepare_enable(imxdma->dma_ipg);
-	if (ret)
-		return ret;
-	ret = clk_prepare_enable(imxdma->dma_ahb);
-	if (ret)
-		goto disable_dma_ipg_clk;
+	dma_ahb = devm_clk_get_enabled(&pdev->dev, "ahb");
+	if (IS_ERR(dma_ahb))
+		return PTR_ERR(dma_ahb);
 
 	/* reset DMA module */
 	imx_dmav1_writel(imxdma, DCR_DRST, DMA_DCR);
@@ -1078,21 +1073,21 @@ static int __init imxdma_probe(struct platform_device *pdev)
 				       dma_irq_handler, 0, "DMA", imxdma);
 		if (ret) {
 			dev_warn(imxdma->dev, "Can't register IRQ for DMA\n");
-			goto disable_dma_ahb_clk;
+			return ret;
 		}
 		imxdma->irq = irq;
 
 		irq_err = platform_get_irq(pdev, 1);
 		if (irq_err < 0) {
 			ret = irq_err;
-			goto disable_dma_ahb_clk;
+			return ret;
 		}
 
 		ret = devm_request_irq(&pdev->dev, irq_err,
 				       imxdma_err_handler, 0, "DMA", imxdma);
 		if (ret) {
 			dev_warn(imxdma->dev, "Can't register ERRIRQ for DMA\n");
-			goto disable_dma_ahb_clk;
+			return ret;
 		}
 		imxdma->irq_err = irq_err;
 	}
@@ -1130,7 +1125,7 @@ static int __init imxdma_probe(struct platform_device *pdev)
 				dev_warn(imxdma->dev, "Can't register IRQ %d "
 					 "for DMA channel %d\n",
 					 irq + i, i);
-				goto disable_dma_ahb_clk;
+				return ret;
 			}
 
 			imxdmac->irq = irq + i;
@@ -1174,7 +1169,7 @@ static int __init imxdma_probe(struct platform_device *pdev)
 	ret = dma_async_device_register(&imxdma->dma_device);
 	if (ret) {
 		dev_err(&pdev->dev, "unable to register\n");
-		goto disable_dma_ahb_clk;
+		return ret;
 	}
 
 	if (pdev->dev.of_node) {
@@ -1190,10 +1185,6 @@ static int __init imxdma_probe(struct platform_device *pdev)
 
 err_of_dma_controller:
 	dma_async_device_unregister(&imxdma->dma_device);
-disable_dma_ahb_clk:
-	clk_disable_unprepare(imxdma->dma_ahb);
-disable_dma_ipg_clk:
-	clk_disable_unprepare(imxdma->dma_ipg);
 	return ret;
 }
 
@@ -1226,9 +1217,6 @@ static void imxdma_remove(struct platform_device *pdev)
 
 	if (pdev->dev.of_node)
 		of_dma_controller_free(pdev->dev.of_node);
-
-	clk_disable_unprepare(imxdma->dma_ipg);
-	clk_disable_unprepare(imxdma->dma_ahb);
 }
 
 static struct platform_driver imxdma_driver = {
