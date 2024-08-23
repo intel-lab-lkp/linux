@@ -921,7 +921,7 @@ class YnlFamily(SpecFamily):
                     print("Netlink done while checking for ntf!?")
                     continue
 
-                op = self.rsp_by_value[nl_msg.cmd()]
+                op = self.rsp_by_value[nl_msg.raw[0]]
                 decoded = self.nlproto.decode(self, nl_msg, op)
                 if decoded.cmd() not in self.async_msg_ids:
                     print("Unexpected msg id done while checking for ntf", decoded)
