@@ -304,10 +304,9 @@ static int drm_of_lvds_get_port_pixels_type(struct device_node *port_node)
 static int drm_of_lvds_get_remote_pixels_type(
 			const struct device_node *port_node)
 {
-	struct device_node *endpoint = NULL;
 	int pixels_type = -EPIPE;
 
-	for_each_child_of_node(port_node, endpoint) {
+	for_each_child_of_node_scoped(port_node, endpoint) {
 		struct device_node *remote_port;
 		int current_pt;
 
@@ -315,10 +314,8 @@ static int drm_of_lvds_get_remote_pixels_type(
 			continue;
 
 		remote_port = of_graph_get_remote_port(endpoint);
-		if (!remote_port) {
-			of_node_put(endpoint);
+		if (!remote_port)
 			return -EPIPE;
-		}
 
 		current_pt = drm_of_lvds_get_port_pixels_type(remote_port);
 		of_node_put(remote_port);
@@ -332,10 +329,8 @@ static int drm_of_lvds_get_remote_pixels_type(
 		 * configurations by passing the endpoints explicitly to
 		 * drm_of_lvds_get_dual_link_pixel_order().
 		 */
-		if (!current_pt || pixels_type != current_pt) {
-			of_node_put(endpoint);
+		if (!current_pt || pixels_type != current_pt)
 			return -EINVAL;
-		}
 	}
 
 	return pixels_type;
