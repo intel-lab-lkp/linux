@@ -1061,6 +1061,7 @@ static const struct ipv6_stub ipv6_stub_impl = {
 	.ipv6_fragment = ip6_fragment,
 	.ipv6_dev_find = ipv6_dev_find,
 	.ip6_xmit = ip6_xmit,
+	.udp6_lib_lookup = __udp6_lib_lookup,
 };
 
 static const struct ipv6_bpf_stub ipv6_bpf_stub_impl = {
