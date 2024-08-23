@@ -181,6 +181,16 @@ static int __init pcie_port_pm_setup(char *str)
 }
 __setup("pcie_port_pm=", pcie_port_pm_setup);
 
+static const char * const pci_reset_types[] = {
+	[PCI_DEV_WAIT_FLR] = "FLR",
+	[PCI_DEV_WAIT_AF_FLR] = "AF_FLR",
+	[PCI_DEV_WAIT_D3HOT_D0] = "PM D3HOT->D0",
+	[PCI_DEV_WAIT_BUS_RESET] = "bus reset",
+	[PCI_DEV_WAIT_RESUME] = "resume",
+	[PCI_DEV_WAIT_DPC] = "DPC",
+};
+static_assert(ARRAY_SIZE(pci_reset_types) == PCI_DEV_WAIT_MAX);
+
 /**
  * pci_bus_max_busnr - returns maximum PCI bus number of given bus' children
  * @bus: pointer to PCI bus structure to search
@@ -1279,7 +1289,7 @@ void pci_resume_bus(struct pci_bus *bus)
 		pci_walk_bus(bus, pci_resume_one, NULL);
 }
 
-static int pci_dev_wait(struct pci_dev *dev, char *reset_type, int timeout)
+static int pci_dev_wait(struct pci_dev *dev, enum pci_reset_type reset_type, int timeout)
 {
 	int delay = 1;
 	bool retrain = false;
@@ -1317,7 +1327,7 @@ static int pci_dev_wait(struct pci_dev *dev, char *reset_type, int timeout)
 
 		if (delay > timeout) {
 			pci_warn(dev, "not ready %dms after %s; giving up\n",
-				 delay - 1, reset_type);
+				 delay - 1, pci_reset_types[reset_type]);
 			return -ENOTTY;
 		}
 
@@ -1330,7 +1340,7 @@ static int pci_dev_wait(struct pci_dev *dev, char *reset_type, int timeout)
 				}
 			}
 			pci_info(dev, "not ready %dms after %s; waiting\n",
-				 delay - 1, reset_type);
+				 delay - 1, pci_reset_types[reset_type]);
 		}
 
 		msleep(delay);
@@ -1339,10 +1349,10 @@ static int pci_dev_wait(struct pci_dev *dev, char *reset_type, int timeout)
 
 	if (delay > PCI_RESET_WAIT)
 		pci_info(dev, "ready %dms after %s\n", delay - 1,
-			 reset_type);
+			 pci_reset_types[reset_type]);
 	else
 		pci_dbg(dev, "ready %dms after %s\n", delay - 1,
-			reset_type);
+			pci_reset_types[reset_type]);
 
 	return 0;
 }
@@ -4535,7 +4545,7 @@ int pcie_flr(struct pci_dev *dev)
 	 */
 	msleep(100);
 
-	return pci_dev_wait(dev, "FLR", PCIE_RESET_READY_POLL_MS);
+	return pci_dev_wait(dev, PCI_DEV_WAIT_FLR, PCIE_RESET_READY_POLL_MS);
 }
 EXPORT_SYMBOL_GPL(pcie_flr);
 
@@ -4602,7 +4612,7 @@ static int pci_af_flr(struct pci_dev *dev, bool probe)
 	 */
 	msleep(100);
 
-	return pci_dev_wait(dev, "AF_FLR", PCIE_RESET_READY_POLL_MS);
+	return pci_dev_wait(dev, PCI_DEV_WAIT_AF_FLR, PCIE_RESET_READY_POLL_MS);
 }
 
 /**
@@ -4647,7 +4657,7 @@ static int pci_pm_reset(struct pci_dev *dev, bool probe)
 	pci_write_config_word(dev, dev->pm_cap + PCI_PM_CTRL, csr);
 	pci_dev_d3_sleep(dev);
 
-	return pci_dev_wait(dev, "PM D3hot->D0", PCIE_RESET_READY_POLL_MS);
+	return pci_dev_wait(dev, PCI_DEV_WAIT_D3HOT_D0, PCIE_RESET_READY_POLL_MS);
 }
 
 /**
@@ -4829,7 +4839,7 @@ static int pci_bus_max_d3cold_delay(const struct pci_bus *bus)
  * Return 0 on success or -ENOTTY if the first device on the secondary bus
  * failed to become accessible.
  */
-int pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, char *reset_type)
+int pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, enum pci_reset_type reset_type)
 {
 	struct pci_dev *child __free(pci_dev_put) = NULL;
 	int delay;
@@ -4966,7 +4976,7 @@ int pci_bridge_secondary_bus_reset(struct pci_dev *dev)
 			      __builtin_return_address(0));
 	pcibios_reset_secondary_bus(dev);
 
-	return pci_bridge_wait_for_secondary_bus(dev, "bus reset");
+	return pci_bridge_wait_for_secondary_bus(dev, PCI_DEV_WAIT_BUS_RESET);
 }
 EXPORT_SYMBOL_GPL(pci_bridge_secondary_bus_reset);
 
