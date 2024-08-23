@@ -1507,6 +1507,59 @@ void folio_add_file_rmap_pmd(struct folio *folio, struct page *page,
 #endif
 }
 
+/**
+ * folio_remove_anon_avc - remove the avc binding relationship between
+ * folio and vma with different anon_vmas.
+ * @folio:	The folio with anon_vma to remove the binded avc from
+ * @vma:	The vm area to remove the binded avc with folio's anon_vma
+ *
+ * The caller is currently used for CoWed scene.
+ */
+void folio_remove_anon_avc(struct folio *folio,
+		struct vm_area_struct *vma)
+{
+	struct anon_vma *anon_vma = folio_anon_vma(folio);
+	pgoff_t pgoff_start, pgoff_end;
+	struct anon_vma_chain *avc;
+
+	/*
+	 * Ensure that the vma's anon_vma and the folio's
+	 * anon_vma exist and are not same.
+	 */
+	if (!folio_test_anon(folio) || unlikely(!anon_vma) ||
+	    anon_vma == vma->anon_vma)
+		return;
+
+	pgoff_start = folio_pgoff(folio);
+	pgoff_end = pgoff_start + folio_nr_pages(folio) - 1;
+
+	if (!anon_vma_trylock_write(anon_vma))
+		return;
+
+	anon_vma_interval_tree_foreach(avc, &anon_vma->rb_root,
+			pgoff_start, pgoff_end) {
+		/*
+		 * Find the avc associated with vma from the folio's
+		 * anon_vma and remove it.
+		 */
+		if (avc->vma == vma) {
+			anon_vma_interval_tree_remove(avc, &anon_vma->rb_root);
+			/*
+			 * When removing the avc with anon_vma that is
+			 * different from the parent anon_vma from parent
+			 * anon_vma->rb_root, the parent->num_children
+			 * count value is needed to reduce one.
+			 */
+			anon_vma->parent->num_children--;
+
+			list_del(&avc->same_vma);
+			anon_vma_chain_free(avc);
+			break;
+		}
+	}
+	anon_vma_unlock_write(anon_vma);
+}
+
 static __always_inline void __folio_remove_rmap(struct folio *folio,
 		struct page *page, int nr_pages, struct vm_area_struct *vma,
 		enum rmap_level level)
