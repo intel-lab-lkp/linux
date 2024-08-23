@@ -4512,19 +4512,19 @@ static int _btrfs_ioctl_send(struct btrfs_inode *inode, void __user *argp, bool 
 static int btrfs_ioctl_encoded_read(struct file *file, void __user *argp,
 				    bool compat)
 {
-	struct btrfs_ioctl_encoded_io_args args = { 0 };
 	size_t copy_end_kernel = offsetofend(struct btrfs_ioctl_encoded_io_args,
 					     flags);
 	size_t copy_end;
-	struct iovec iovstack[UIO_FASTIOV];
-	struct iovec *iov = iovstack;
-	struct iov_iter iter;
 	loff_t pos;
 	ssize_t ret;
+	struct btrfs_encoded_read_private priv = {
+		.pending = ATOMIC_INIT(1),
+		.file = file,
+	};
 
 	if (!capable(CAP_SYS_ADMIN)) {
 		ret = -EPERM;
-		goto out_acct;
+		goto out;
 	}
 
 	if (compat) {
@@ -4535,53 +4535,55 @@ static int btrfs_ioctl_encoded_read(struct file *file, void __user *argp,
 				       flags);
 		if (copy_from_user(&args32, argp, copy_end)) {
 			ret = -EFAULT;
-			goto out_acct;
+			goto out;
 		}
-		args.iov = compat_ptr(args32.iov);
-		args.iovcnt = args32.iovcnt;
-		args.offset = args32.offset;
-		args.flags = args32.flags;
+		priv.args.iov = compat_ptr(args32.iov);
+		priv.args.iovcnt = args32.iovcnt;
+		priv.args.offset = args32.offset;
+		priv.args.flags = args32.flags;
 #else
 		return -ENOTTY;
 #endif
 	} else {
 		copy_end = copy_end_kernel;
-		if (copy_from_user(&args, argp, copy_end)) {
+		if (copy_from_user(&priv.args, argp, copy_end)) {
 			ret = -EFAULT;
-			goto out_acct;
+			goto out;
 		}
 	}
-	if (args.flags != 0) {
+	if (priv.args.flags != 0) {
 		ret = -EINVAL;
-		goto out_acct;
+		goto out;
 	}
 
-	ret = import_iovec(ITER_DEST, args.iov, args.iovcnt, ARRAY_SIZE(iovstack),
-			   &iov, &iter);
-	if (ret < 0)
-		goto out_acct;
+	priv.iov = priv.iovstack;
+	ret = import_iovec(ITER_DEST, priv.args.iov, priv.args.iovcnt,
+			   ARRAY_SIZE(priv.iovstack), &priv.iov, &priv.iter);
+	if (ret < 0) {
+		priv.iov = NULL;
+		goto out;
+	}
 
-	if (iov_iter_count(&iter) == 0) {
+	if (iov_iter_count(&priv.iter) == 0) {
 		ret = 0;
-		goto out_iov;
+		goto out;
 	}
-	pos = args.offset;
-	ret = rw_verify_area(READ, file, &pos, args.len);
+	pos = priv.args.offset;
+	ret = rw_verify_area(READ, file, &pos, priv.args.len);
 	if (ret < 0)
-		goto out_iov;
+		goto out;
 
-	ret = btrfs_encoded_read(file, pos, &iter, &args);
+	ret = btrfs_encoded_read(&priv);
 	if (ret >= 0) {
 		fsnotify_access(file);
 		if (copy_to_user(argp + copy_end,
-				 (char *)&args + copy_end_kernel,
-				 sizeof(args) - copy_end_kernel))
+				 (char *)&priv.args + copy_end_kernel,
+				 sizeof(priv.args) - copy_end_kernel))
 			ret = -EFAULT;
 	}
 
-out_iov:
-	kfree(iov);
-out_acct:
+out:
+	kfree(priv.iov);
 	if (ret > 0)
 		add_rchar(current, ret);
 	inc_syscr(current);

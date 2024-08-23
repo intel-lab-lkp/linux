@@ -9078,12 +9078,6 @@ out:
 	return ret;
 }
 
-struct btrfs_encoded_read_private {
-	wait_queue_head_t wait;
-	atomic_t pending;
-	blk_status_t status;
-};
-
 static void btrfs_encoded_read_endio(struct btrfs_bio *bbio)
 {
 	struct btrfs_encoded_read_private *priv = bbio->private;
@@ -9104,33 +9098,31 @@ static void btrfs_encoded_read_endio(struct btrfs_bio *bbio)
 	bio_put(&bbio->bio);
 }
 
-int btrfs_encoded_read_regular_fill_pages(struct btrfs_inode *inode,
-					  u64 file_offset, u64 disk_bytenr,
-					  u64 disk_io_size, struct page **pages)
+static void _btrfs_encoded_read_regular_fill_pages(struct btrfs_inode *inode,
+					u64 file_offset, u64 disk_bytenr,
+					u64 disk_io_size,
+					struct btrfs_encoded_read_private *priv)
 {
 	struct btrfs_fs_info *fs_info = inode->root->fs_info;
-	struct btrfs_encoded_read_private priv = {
-		.pending = ATOMIC_INIT(1),
-	};
 	unsigned long i = 0;
 	struct btrfs_bio *bbio;
 
-	init_waitqueue_head(&priv.wait);
+	init_waitqueue_head(&priv->wait);
 
 	bbio = btrfs_bio_alloc(BIO_MAX_VECS, REQ_OP_READ, fs_info,
-			       btrfs_encoded_read_endio, &priv);
+			       btrfs_encoded_read_endio, priv);
 	bbio->bio.bi_iter.bi_sector = disk_bytenr >> SECTOR_SHIFT;
 	bbio->inode = inode;
 
 	do {
 		size_t bytes = min_t(u64, disk_io_size, PAGE_SIZE);
 
-		if (bio_add_page(&bbio->bio, pages[i], bytes, 0) < bytes) {
-			atomic_inc(&priv.pending);
+		if (bio_add_page(&bbio->bio, priv->pages[i], bytes, 0) < bytes) {
+			atomic_inc(&priv->pending);
 			btrfs_submit_bio(bbio, 0);
 
 			bbio = btrfs_bio_alloc(BIO_MAX_VECS, REQ_OP_READ, fs_info,
-					       btrfs_encoded_read_endio, &priv);
+					       btrfs_encoded_read_endio, priv);
 			bbio->bio.bi_iter.bi_sector = disk_bytenr >> SECTOR_SHIFT;
 			bbio->inode = inode;
 			continue;
@@ -9141,8 +9133,21 @@ int btrfs_encoded_read_regular_fill_pages(struct btrfs_inode *inode,
 		disk_io_size -= bytes;
 	} while (disk_io_size);
 
-	atomic_inc(&priv.pending);
+	atomic_inc(&priv->pending);
 	btrfs_submit_bio(bbio, 0);
+}
+
+int btrfs_encoded_read_regular_fill_pages(struct btrfs_inode *inode,
+					  u64 file_offset, u64 disk_bytenr,
+					  u64 disk_io_size, struct page **pages)
+{
+	struct btrfs_encoded_read_private priv = {
+		.pending = ATOMIC_INIT(1),
+		.pages = pages,
+	};
+
+	_btrfs_encoded_read_regular_fill_pages(inode, file_offset, disk_bytenr,
+					       disk_io_size, &priv);
 
 	if (atomic_dec_return(&priv.pending))
 		io_wait_event(priv.wait, !atomic_read(&priv.pending));
@@ -9150,54 +9155,56 @@ int btrfs_encoded_read_regular_fill_pages(struct btrfs_inode *inode,
 	return blk_status_to_errno(READ_ONCE(priv.status));
 }
 
-static ssize_t btrfs_encoded_read_regular(struct btrfs_inode *inode,
-					  loff_t offset, struct iov_iter *iter,
+static ssize_t btrfs_encoded_read_regular(struct btrfs_encoded_read_private *priv,
 					  u64 start, u64 lockend,
-					  struct extent_state **cached_state,
 					  u64 disk_bytenr, u64 disk_io_size,
-					  size_t count, bool compressed,
 					  bool *unlocked)
 {
+	struct btrfs_inode *inode = BTRFS_I(file_inode(priv->file));
 	struct extent_io_tree *io_tree = &inode->io_tree;
-	struct page **pages;
-	unsigned long nr_pages, i;
+	unsigned long i;
 	u64 cur;
 	size_t page_offset;
 	ssize_t ret;
 
-	nr_pages = DIV_ROUND_UP(disk_io_size, PAGE_SIZE);
-	pages = kcalloc(nr_pages, sizeof(struct page *), GFP_NOFS);
-	if (!pages)
+	priv->nr_pages = DIV_ROUND_UP(disk_io_size, PAGE_SIZE);
+	priv->pages = kcalloc(priv->nr_pages, sizeof(struct page *), GFP_NOFS);
+	if (!priv->pages)
 		return -ENOMEM;
-	ret = btrfs_alloc_page_array(nr_pages, pages, false);
+	ret = btrfs_alloc_page_array(priv->nr_pages, priv->pages, false);
 	if (ret) {
 		ret = -ENOMEM;
 		goto out;
 		}
 
-	ret = btrfs_encoded_read_regular_fill_pages(inode, start, disk_bytenr,
-						    disk_io_size, pages);
+	_btrfs_encoded_read_regular_fill_pages(inode, start, disk_bytenr,
+					       disk_io_size, priv);
+
+	if (atomic_dec_return(&priv->pending))
+		io_wait_event(priv->wait, !atomic_read(&priv->pending));
+
+	ret = blk_status_to_errno(READ_ONCE(priv->status));
 	if (ret)
 		goto out;
 
-	unlock_extent(io_tree, start, lockend, cached_state);
+	unlock_extent(io_tree, start, lockend, &priv->cached_state);
 	btrfs_inode_unlock(inode, BTRFS_ILOCK_SHARED);
 	*unlocked = true;
 
-	if (compressed) {
+	if (priv->args.compression) {
 		i = 0;
 		page_offset = 0;
 	} else {
-		i = (offset - start) >> PAGE_SHIFT;
-		page_offset = (offset - start) & (PAGE_SIZE - 1);
+		i = (priv->args.offset - start) >> PAGE_SHIFT;
+		page_offset = (priv->args.offset - start) & (PAGE_SIZE - 1);
 	}
 	cur = 0;
-	while (cur < count) {
-		size_t bytes = min_t(size_t, count - cur,
+	while (cur < priv->count) {
+		size_t bytes = min_t(size_t, priv->count - cur,
 				     PAGE_SIZE - page_offset);
 
-		if (copy_page_to_iter(pages[i], page_offset, bytes,
-				      iter) != bytes) {
+		if (copy_page_to_iter(priv->pages[i], page_offset, bytes,
+				      &priv->iter) != bytes) {
 			ret = -EFAULT;
 			goto out;
 		}
@@ -9205,42 +9212,40 @@ static ssize_t btrfs_encoded_read_regular(struct btrfs_inode *inode,
 		cur += bytes;
 		page_offset = 0;
 	}
-	ret = count;
+	ret = priv->count;
 out:
-	for (i = 0; i < nr_pages; i++) {
-		if (pages[i])
-			__free_page(pages[i]);
+	for (i = 0; i < priv->nr_pages; i++) {
+		if (priv->pages[i])
+			__free_page(priv->pages[i]);
 	}
-	kfree(pages);
+	kfree(priv->pages);
 	return ret;
 }
 
-ssize_t btrfs_encoded_read(struct file *file, loff_t offset,
-			   struct iov_iter *iter,
-			   struct btrfs_ioctl_encoded_io_args *encoded)
+ssize_t btrfs_encoded_read(struct btrfs_encoded_read_private *priv)
 {
-	struct btrfs_inode *inode = BTRFS_I(file_inode(file));
+	struct btrfs_inode *inode = BTRFS_I(file_inode(priv->file));
 	struct btrfs_fs_info *fs_info = inode->root->fs_info;
 	struct extent_io_tree *io_tree = &inode->io_tree;
 	ssize_t ret;
-	size_t count = iov_iter_count(iter);
 	u64 start, lockend, disk_bytenr, disk_io_size;
-	struct extent_state *cached_state = NULL;
 	struct extent_map *em;
 	bool unlocked = false;
 
-	file_accessed(file);
+	priv->count = iov_iter_count(&priv->iter);
+
+	file_accessed(priv->file);
 
 	btrfs_inode_lock(inode, BTRFS_ILOCK_SHARED);
 
-	if (offset >= inode->vfs_inode.i_size) {
+	if (priv->args.offset >= inode->vfs_inode.i_size) {
 		btrfs_inode_unlock(inode, BTRFS_ILOCK_SHARED);
 		return 0;
 	}
-	start = ALIGN_DOWN(offset, fs_info->sectorsize);
+	start = ALIGN_DOWN(priv->args.offset, fs_info->sectorsize);
 	/*
-	 * We don't know how long the extent containing offset is, but if
-	 * it's compressed we know that it won't be longer than this.
+	 * We don't know how long the extent containing priv->args.offset is,
+	 * but if it's compressed we know that it won't be longer than this.
 	 */
 	lockend = start + BTRFS_MAX_UNCOMPRESSED - 1;
 
@@ -9251,13 +9256,13 @@ ssize_t btrfs_encoded_read(struct file *file, loff_t offset,
 					       lockend - start + 1);
 		if (ret)
 			goto out_unlock_inode;
-		lock_extent(io_tree, start, lockend, &cached_state);
+		lock_extent(io_tree, start, lockend, &priv->cached_state);
 		ordered = btrfs_lookup_ordered_range(inode, start,
 						     lockend - start + 1);
 		if (!ordered)
 			break;
 		btrfs_put_ordered_extent(ordered);
-		unlock_extent(io_tree, start, lockend, &cached_state);
+		unlock_extent(io_tree, start, lockend, &priv->cached_state);
 		cond_resched();
 	}
 
@@ -9276,10 +9281,11 @@ ssize_t btrfs_encoded_read(struct file *file, loff_t offset,
 		 */
 		free_extent_map(em);
 		em = NULL;
-		ret = btrfs_encoded_read_inline(inode, offset, iter, start,
-						lockend, &cached_state,
-						extent_start, count, encoded,
-						&unlocked);
+		ret = btrfs_encoded_read_inline(inode, priv->args.offset,
+						&priv->iter, start,
+						lockend, &priv->cached_state,
+						extent_start, priv->count,
+						&priv->args, &unlocked);
 		goto out_em;
 	}
 
@@ -9287,62 +9293,60 @@ ssize_t btrfs_encoded_read(struct file *file, loff_t offset,
 	 * We only want to return up to EOF even if the extent extends beyond
 	 * that.
 	 */
-	encoded->len = min_t(u64, extent_map_end(em),
-			     inode->vfs_inode.i_size) - offset;
+	priv->args.len = min_t(u64, extent_map_end(em),
+			     inode->vfs_inode.i_size) - priv->args.offset;
 	if (em->disk_bytenr == EXTENT_MAP_HOLE ||
 	    (em->flags & EXTENT_FLAG_PREALLOC)) {
 		disk_bytenr = EXTENT_MAP_HOLE;
-		count = min_t(u64, count, encoded->len);
-		encoded->len = count;
-		encoded->unencoded_len = count;
+		priv->count = min_t(u64, priv->count, priv->args.len);
+		priv->args.len = priv->count;
+		priv->args.unencoded_len = priv->count;
 	} else if (extent_map_is_compressed(em)) {
 		disk_bytenr = em->disk_bytenr;
 		/*
 		 * Bail if the buffer isn't large enough to return the whole
 		 * compressed extent.
 		 */
-		if (em->disk_num_bytes > count) {
+		if (em->disk_num_bytes > priv->count) {
 			ret = -ENOBUFS;
 			goto out_em;
 		}
 		disk_io_size = em->disk_num_bytes;
-		count = em->disk_num_bytes;
-		encoded->unencoded_len = em->ram_bytes;
-		encoded->unencoded_offset = offset - (em->start - em->offset);
+		priv->count = em->disk_num_bytes;
+		priv->args.unencoded_len = em->ram_bytes;
+		priv->args.unencoded_offset = priv->args.offset - (em->start - em->offset);
 		ret = btrfs_encoded_io_compression_from_extent(fs_info,
 							       extent_map_compression(em));
 		if (ret < 0)
 			goto out_em;
-		encoded->compression = ret;
+		priv->args.compression = ret;
 	} else {
 		disk_bytenr = extent_map_block_start(em) + (start - em->start);
-		if (encoded->len > count)
-			encoded->len = count;
+		if (priv->args.len > priv->count)
+			priv->args.len = priv->count;
 		/*
 		 * Don't read beyond what we locked. This also limits the page
 		 * allocations that we'll do.
 		 */
-		disk_io_size = min(lockend + 1, offset + encoded->len) - start;
-		count = start + disk_io_size - offset;
-		encoded->len = count;
-		encoded->unencoded_len = count;
+		disk_io_size = min(lockend + 1, priv->args.offset + priv->args.len) - start;
+		priv->count = start + disk_io_size - priv->args.offset;
+		priv->args.len = priv->count;
+		priv->args.unencoded_len = priv->count;
 		disk_io_size = ALIGN(disk_io_size, fs_info->sectorsize);
 	}
 	free_extent_map(em);
 	em = NULL;
 
 	if (disk_bytenr == EXTENT_MAP_HOLE) {
-		unlock_extent(io_tree, start, lockend, &cached_state);
+		unlock_extent(io_tree, start, lockend, &priv->cached_state);
 		btrfs_inode_unlock(inode, BTRFS_ILOCK_SHARED);
 		unlocked = true;
-		ret = iov_iter_zero(count, iter);
-		if (ret != count)
+		ret = iov_iter_zero(priv->count, &priv->iter);
+		if (ret != priv->count)
 			ret = -EFAULT;
 	} else {
-		ret = btrfs_encoded_read_regular(inode, offset, iter, start,
-						 lockend, &cached_state,
+		ret = btrfs_encoded_read_regular(priv, start, lockend,
 						 disk_bytenr, disk_io_size,
-						 count, encoded->compression,
 						 &unlocked);
 	}
 
@@ -9350,7 +9354,7 @@ out_em:
 	free_extent_map(em);
 out_unlock_extent:
 	if (!unlocked)
-		unlock_extent(io_tree, start, lockend, &cached_state);
+		unlock_extent(io_tree, start, lockend, &priv->cached_state);
 out_unlock_inode:
 	if (!unlocked)
 		btrfs_inode_unlock(inode, BTRFS_ILOCK_SHARED);
