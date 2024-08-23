@@ -67,7 +67,6 @@ struct em_i2c_device {
 	void __iomem *base;
 	struct i2c_adapter adap;
 	struct completion msg_done;
-	struct clk *sclk;
 	struct i2c_client *slave;
 	int irq;
 };
@@ -361,6 +360,7 @@ static const struct i2c_algorithm em_i2c_algo = {
 static int em_i2c_probe(struct platform_device *pdev)
 {
 	struct em_i2c_device *priv;
+	struct clk *sclk;
 	int ret;
 
 	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
@@ -373,9 +373,9 @@ static int em_i2c_probe(struct platform_device *pdev)
 
 	strscpy(priv->adap.name, "EMEV2 I2C", sizeof(priv->adap.name));
 
-	priv->sclk = devm_clk_get_enabled(&pdev->dev, "sclk");
-	if (IS_ERR(priv->sclk))
-		return PTR_ERR(priv->sclk);
+	sclk = devm_clk_get_enabled(&pdev->dev, "sclk");
+	if (IS_ERR(sclk))
+		return PTR_ERR(sclk);
 
 	priv->adap.timeout = msecs_to_jiffies(100);
 	priv->adap.retries = 5;
