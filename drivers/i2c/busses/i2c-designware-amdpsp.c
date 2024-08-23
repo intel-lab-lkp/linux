@@ -167,7 +167,7 @@ cleanup:
 }
 static DECLARE_DELAYED_WORK(release_queue, psp_release_i2c_bus_deferred);
 
-static int psp_acquire_i2c_bus(void)
+static int psp_acquire_i2c_bus(struct dw_i2c_dev *dev)
 {
 	int status;
 
@@ -206,7 +206,7 @@ cleanup:
 	return 0;
 }
 
-static void psp_release_i2c_bus(void)
+static void psp_release_i2c_bus(struct dw_i2c_dev *dev)
 {
 	mutex_lock(&psp_i2c_access_mutex);
 

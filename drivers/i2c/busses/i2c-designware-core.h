@@ -291,8 +291,8 @@ struct dw_i2c_dev {
 	u16			fp_lcnt;
 	u16			hs_hcnt;
 	u16			hs_lcnt;
-	int			(*acquire_lock)(void);
-	void			(*release_lock)(void);
+	int			(*acquire_lock)(struct dw_i2c_dev *dev);
+	void			(*release_lock)(struct dw_i2c_dev *dev);
 	int			semaphore_idx;
 	bool			shared_with_punit;
 	void			(*disable)(struct dw_i2c_dev *dev);
