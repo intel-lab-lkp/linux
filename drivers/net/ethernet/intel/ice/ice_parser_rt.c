@@ -119,13 +119,13 @@ static void ice_bst_key_init(struct ice_parser_rt *rt,
 	u8 *key = rt->bst_key;
 	int idd, i;
 
-	idd = ICE_BST_TCAM_KEY_SIZE - 1;
+	idd = ICE_BST_KEY_SIZE - 1;
 	if (imem->b_kb.tsr_ctrl)
 		key[idd] = tsr;
 	else
 		key[idd] = imem->b_kb.prio;
 
-	idd = ICE_BST_KEY_TCAM_SIZE - 1;
+	idd = ICE_BST_KEY_SIZE - 1;
 	for (i = idd; i >= 0; i--) {
 		int j;
 
