@@ -1021,6 +1021,7 @@ static int __device_attach(struct device *dev, bool allow_async)
 			.dev = dev,
 			.check_async = allow_async,
 			.want_async = false,
+			.have_async = false,
 		};
 
 		if (dev->parent)
