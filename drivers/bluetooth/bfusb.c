@@ -84,7 +84,7 @@ static struct urb *bfusb_get_completed(struct bfusb_data *data)
 
 	skb = skb_dequeue(&data->completed_q);
 	if (skb) {
-		urb = ((struct bfusb_data_scb *) skb->cb)->urb;
+		urb = ((struct bfusb_data_scb *)skb->cb)->urb;
 		kfree_skb(skb);
 	}
 
@@ -99,7 +99,7 @@ static void bfusb_unlink_urbs(struct bfusb_data *data)
 	BT_DBG("bfusb %p", data);
 
 	while ((skb = skb_dequeue(&data->pending_q))) {
-		urb = ((struct bfusb_data_scb *) skb->cb)->urb;
+		urb = ((struct bfusb_data_scb *)skb->cb)->urb;
 		usb_kill_urb(urb);
 		skb_queue_tail(&data->completed_q, skb);
 	}
@@ -110,7 +110,7 @@ static void bfusb_unlink_urbs(struct bfusb_data *data)
 
 static int bfusb_send_bulk(struct bfusb_data *data, struct sk_buff *skb)
 {
-	struct bfusb_data_scb *scb = (void *) skb->cb;
+	struct bfusb_data_scb *scb = (void *)skb->cb;
 	struct urb *urb = bfusb_get_completed(data);
 	int err, pipe;
 
@@ -125,7 +125,7 @@ static int bfusb_send_bulk(struct bfusb_data *data, struct sk_buff *skb)
 	pipe = usb_sndbulkpipe(data->udev, data->bulk_out_ep);
 
 	usb_fill_bulk_urb(urb, data->udev, pipe, skb->data, skb->len,
-			bfusb_tx_complete, skb);
+			  bfusb_tx_complete, skb);
 
 	scb->urb = urb;
 
@@ -137,8 +137,9 @@ static int bfusb_send_bulk(struct bfusb_data *data, struct sk_buff *skb)
 			   urb, err);
 		skb_unlink(skb, &data->pending_q);
 		usb_free_urb(urb);
-	} else
+	} else {
 		atomic_inc(&data->pending_tx);
+	}
 
 	return err;
 }
@@ -158,7 +159,7 @@ static void bfusb_tx_wakeup(struct bfusb_data *data)
 		clear_bit(BFUSB_TX_WAKEUP, &data->state);
 
 		while ((atomic_read(&data->pending_tx) < BFUSB_MAX_BULK_TX) &&
-				(skb = skb_dequeue(&data->transmit_q))) {
+		       (skb = skb_dequeue(&data->transmit_q))) {
 			if (bfusb_send_bulk(data, skb) < 0) {
 				skb_queue_head(&data->transmit_q, skb);
 				break;
@@ -172,8 +173,8 @@ static void bfusb_tx_wakeup(struct bfusb_data *data)
 
 static void bfusb_tx_complete(struct urb *urb)
 {
-	struct sk_buff *skb = (struct sk_buff *) urb->context;
-	struct bfusb_data *data = (struct bfusb_data *) skb->dev;
+	struct sk_buff *skb = (struct sk_buff *)urb->context;
+	struct bfusb_data *data = (struct bfusb_data *)skb->dev;
 
 	BT_DBG("bfusb %p urb %p skb %p len %d", data, urb, skb, skb->len);
 
@@ -197,7 +198,6 @@ static void bfusb_tx_complete(struct urb *urb)
 	read_unlock(&data->lock);
 }
 
-
 static int bfusb_rx_submit(struct bfusb_data *data, struct urb *urb)
 {
 	struct bfusb_data_scb *scb;
@@ -218,15 +218,15 @@ static int bfusb_rx_submit(struct bfusb_data *data, struct urb *urb)
 		return -ENOMEM;
 	}
 
-	skb->dev = (void *) data;
+	skb->dev = (void *)data;
 
-	scb = (struct bfusb_data_scb *) skb->cb;
+	scb = (struct bfusb_data_scb *)skb->cb;
 	scb->urb = urb;
 
 	pipe = usb_rcvbulkpipe(data->udev, data->bulk_in_ep);
 
 	usb_fill_bulk_urb(urb, data->udev, pipe, skb->data, size,
-			bfusb_rx_complete, skb);
+			  bfusb_rx_complete, skb);
 
 	skb_queue_tail(&data->pending_q, skb);
 
@@ -274,7 +274,7 @@ static inline int bfusb_recv_block(struct bfusb_data *data, int hdr, unsigned ch
 		switch (pkt_type) {
 		case HCI_EVENT_PKT:
 			if (len >= HCI_EVENT_HDR_SIZE) {
-				struct hci_event_hdr *hdr = (struct hci_event_hdr *) buf;
+				struct hci_event_hdr *hdr = (struct hci_event_hdr *)buf;
 				pkt_len = HCI_EVENT_HDR_SIZE + hdr->plen;
 			} else {
 				bt_dev_err(data->hdev, "event block is too short");
@@ -284,7 +284,7 @@ static inline int bfusb_recv_block(struct bfusb_data *data, int hdr, unsigned ch
 
 		case HCI_ACLDATA_PKT:
 			if (len >= HCI_ACL_HDR_SIZE) {
-				struct hci_acl_hdr *hdr = (struct hci_acl_hdr *) buf;
+				struct hci_acl_hdr *hdr = (struct hci_acl_hdr *)buf;
 				pkt_len = HCI_ACL_HDR_SIZE + __le16_to_cpu(hdr->dlen);
 			} else {
 				bt_dev_err(data->hdev, "data block is too short");
@@ -294,7 +294,7 @@ static inline int bfusb_recv_block(struct bfusb_data *data, int hdr, unsigned ch
 
 		case HCI_SCODATA_PKT:
 			if (len >= HCI_SCO_HDR_SIZE) {
-				struct hci_sco_hdr *hdr = (struct hci_sco_hdr *) buf;
+				struct hci_sco_hdr *hdr = (struct hci_sco_hdr *)buf;
 				pkt_len = HCI_SCO_HDR_SIZE + hdr->dlen;
 			} else {
 				bt_dev_err(data->hdev, "audio block is too short");
@@ -332,8 +332,8 @@ static inline int bfusb_recv_block(struct bfusb_data *data, int hdr, unsigned ch
 
 static void bfusb_rx_complete(struct urb *urb)
 {
-	struct sk_buff *skb = (struct sk_buff *) urb->context;
-	struct bfusb_data *data = (struct bfusb_data *) skb->dev;
+	struct sk_buff *skb = (struct sk_buff *)urb->context;
+	struct bfusb_data *data = (struct bfusb_data *)skb->dev;
 	unsigned char *buf = urb->transfer_buffer;
 	int count = urb->actual_length;
 	int err, hdr, len;
@@ -365,9 +365,8 @@ static void bfusb_rx_complete(struct urb *urb)
 			buf   += 3;
 		}
 
-		if (count < len) {
+		if (count < len)
 			bt_dev_err(data->hdev, "block extends over URB buffer ranges");
-		}
 
 		if ((hdr & 0xe1) == 0xc1)
 			bfusb_recv_block(data, hdr, buf, len);
@@ -480,7 +479,7 @@ static int bfusb_send_frame(struct hci_dev *hdev, struct sk_buff *skb)
 		return -ENOMEM;
 	}
 
-	nskb->dev = (void *) data;
+	nskb->dev = (void *)data;
 
 	while (count) {
 		size = min_t(uint, count, BFUSB_MAX_BLOCK_SIZE);
@@ -534,13 +533,14 @@ static int bfusb_load_firmware(struct bfusb_data *data,
 	pipe = usb_sndctrlpipe(data->udev, 0);
 
 	if (usb_control_msg(data->udev, pipe, USB_REQ_SET_CONFIGURATION,
-				0, 1, 0, NULL, 0, USB_CTRL_SET_TIMEOUT) < 0) {
+			    0, 1, 0, NULL, 0, USB_CTRL_SET_TIMEOUT) < 0) {
 		BT_ERR("Can't change to loading configuration");
 		kfree(buf);
 		return -EBUSY;
 	}
 
-	data->udev->toggle[0] = data->udev->toggle[1] = 0;
+	data->udev->toggle[0] = 0;
+	data->udev->toggle[1] = 0;
 
 	pipe = usb_sndbulkpipe(data->udev, data->bulk_out_ep);
 
@@ -550,9 +550,9 @@ static int bfusb_load_firmware(struct bfusb_data *data,
 		memcpy(buf, firmware + sent, size);
 
 		err = usb_bulk_msg(data->udev, pipe, buf, size,
-					&len, BFUSB_BLOCK_TIMEOUT);
+				   &len, BFUSB_BLOCK_TIMEOUT);
 
-		if (err || (len != size)) {
+		if (err || len != size) {
 			BT_ERR("Error in firmware loading");
 			goto error;
 		}
@@ -562,7 +562,7 @@ static int bfusb_load_firmware(struct bfusb_data *data,
 	}
 
 	err = usb_bulk_msg(data->udev, pipe, NULL, 0,
-					&len, BFUSB_BLOCK_TIMEOUT);
+			   &len, BFUSB_BLOCK_TIMEOUT);
 	if (err < 0) {
 		BT_ERR("Error in null packet request");
 		goto error;
@@ -571,13 +571,14 @@ static int bfusb_load_firmware(struct bfusb_data *data,
 	pipe = usb_sndctrlpipe(data->udev, 0);
 
 	err = usb_control_msg(data->udev, pipe, USB_REQ_SET_CONFIGURATION,
-				0, 2, 0, NULL, 0, USB_CTRL_SET_TIMEOUT);
+			      0, 2, 0, NULL, 0, USB_CTRL_SET_TIMEOUT);
 	if (err < 0) {
 		BT_ERR("Can't change to running configuration");
 		goto error;
 	}
 
-	data->udev->toggle[0] = data->udev->toggle[1] = 0;
+	data->udev->toggle[0] = 0;
+	data->udev->toggle[1] = 0;
 
 	BT_INFO("BlueFRITZ! USB device ready");
 
@@ -590,7 +591,7 @@ error:
 	pipe = usb_sndctrlpipe(data->udev, 0);
 
 	usb_control_msg(data->udev, pipe, USB_REQ_SET_CONFIGURATION,
-				0, 0, 0, NULL, 0, USB_CTRL_SET_TIMEOUT);
+			0, 0, 0, NULL, 0, USB_CTRL_SET_TIMEOUT);
 
 	return err;
 }
