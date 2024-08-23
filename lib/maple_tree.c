@@ -2213,16 +2213,14 @@ static inline void mas_wr_node_walk(struct ma_wr_state *wr_mas)
 
 	wr_mas->node = mas_mn(wr_mas->mas);
 	wr_mas->pivots = ma_pivots(wr_mas->node, wr_mas->type);
-	count = mas->end = ma_data_end(wr_mas->node, wr_mas->type,
+	mas->end = ma_data_end(wr_mas->node, wr_mas->type,
 				       wr_mas->pivots, mas->max);
-	offset = mas->offset;
-
-	while (offset < count && mas->index > wr_mas->pivots[offset])
-		offset++;
-
-	wr_mas->r_max = offset < count ? wr_mas->pivots[offset] : mas->max;
-	wr_mas->r_min = mas_safe_min(mas, wr_mas->pivots, offset);
-	wr_mas->offset_end = mas->offset = offset;
+	wr_mas->r_max = mas->max;
+	idx = mas->end - 1;
+	while (idx >= mas->offset && wr_mas->pivots[idx] >= mas->index)
+		wr_mas->r_max = wr_mas->pivots[idx--];
+	wr_mas->offset_end = mas->offset = idx + 1;
+	wr_mas->r_min = mas_safe_min(mas, wr_mas->pivots, mas->offset);
 }
 
 /*
