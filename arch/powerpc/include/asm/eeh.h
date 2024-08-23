@@ -308,7 +308,7 @@ int eeh_pe_reset(struct eeh_pe *pe, int option, bool include_passed);
 int eeh_pe_configure(struct eeh_pe *pe);
 int eeh_pe_inject_err(struct eeh_pe *pe, int type, int func,
 		      unsigned long addr, unsigned long mask);
-
+int eeh_pe_inject_mmio_error(struct pci_dev *pdev);
 /**
  * EEH_POSSIBLE_ERROR() -- test for possible MMIO failure.
  *
@@ -338,6 +338,10 @@ static inline int eeh_check_failure(const volatile void __iomem *token)
 	return 0;
 }
 
+static inline int eeh_pe_inject_mmio_error(struct pci_dev *pdev)
+{
+	return -ENXIO;
+}
 #define eeh_dev_check_failure(x) (0)
 
 static inline void eeh_addr_cache_init(void) { }
