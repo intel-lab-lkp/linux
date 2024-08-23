@@ -654,23 +654,12 @@ static int rockchip_get_bank_data(struct rockchip_pin_bank *bank)
 	if (!bank->irq)
 		return -EINVAL;
 
-	bank->clk = of_clk_get(bank->of_node, 0);
-	if (IS_ERR(bank->clk))
-		return PTR_ERR(bank->clk);
-
-	clk_prepare_enable(bank->clk);
 	id = readl(bank->reg_base + gpio_regs_v2.version_id);
 
 	/* If not gpio v2, that is default to v1. */
 	if (id == GPIO_TYPE_V2 || id == GPIO_TYPE_V2_1) {
 		bank->gpio_regs = &gpio_regs_v2;
 		bank->gpio_type = GPIO_TYPE_V2;
-		bank->db_clk = of_clk_get(bank->of_node, 1);
-		if (IS_ERR(bank->db_clk)) {
-			dev_err(bank->dev, "cannot find debounce clk\n");
-			clk_disable_unprepare(bank->clk);
-			return -EINVAL;
-		}
 	} else {
 		bank->gpio_regs = &gpio_regs_v1;
 		bank->gpio_type = GPIO_TYPE_V1;
@@ -729,9 +718,28 @@ static int rockchip_gpio_probe(struct platform_device *pdev)
 
 	raw_spin_lock_init(&bank->slock);
 
+	bank->clk = devm_clk_get(dev, "bus");
+	if (IS_ERR(bank->clk)) {
+		bank->clk = of_clk_get(dev->of_node, 0);
+		if (IS_ERR(bank->clk)) {
+			dev_err(dev, "fail to get apb clock\n");
+			return PTR_ERR(bank->clk);
+		}
+	}
+
 	ret = rockchip_get_bank_data(bank);
 	if (ret)
 		return ret;
+
+	bank->db_clk = devm_clk_get(dev, "db");
+	if (IS_ERR(bank->db_clk)) {
+		bank->db_clk = of_clk_get(dev->of_node, 1);
+		if (IS_ERR(bank->db_clk))
+			bank->db_clk = NULL;
+	}
+
+	clk_prepare_enable(bank->clk);
+	clk_prepare_enable(bank->db_clk);
 
 	/*
 	 * Prevent clashes with a deferred output setting
@@ -741,9 +749,8 @@ static int rockchip_gpio_probe(struct platform_device *pdev)
 
 	ret = rockchip_gpiolib_register(bank);
 	if (ret) {
-		clk_disable_unprepare(bank->clk);
-		mutex_unlock(&bank->deferred_lock);
-		return ret;
+		dev_err(bank->dev, "Failed to register gpio %d\n", ret);
+		goto err_unlock;
 	}
 
 	while (!list_empty(&bank->deferred_pins)) {
@@ -776,6 +783,12 @@ static int rockchip_gpio_probe(struct platform_device *pdev)
 	dev_info(dev, "probed %pOF\n", np);
 
 	return 0;
+err_unlock:
+	mutex_unlock(&bank->deferred_lock);
+	clk_disable_unprepare(bank->clk);
+	clk_disable_unprepare(bank->db_clk);
+
+	return ret;
 }
 
 static void rockchip_gpio_remove(struct platform_device *pdev)
@@ -783,6 +796,7 @@ static void rockchip_gpio_remove(struct platform_device *pdev)
 	struct rockchip_pin_bank *bank = platform_get_drvdata(pdev);
 
 	clk_disable_unprepare(bank->clk);
+	clk_disable_unprepare(bank->db_clk);
 	gpiochip_remove(&bank->gpio_chip);
 }
 
