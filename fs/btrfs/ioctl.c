@@ -4516,6 +4516,9 @@ static ssize_t btrfs_encoded_read_finish(struct btrfs_encoded_read_private *priv
 					     flags);
 	unsigned long i;
 
+	if (ret == -EIOCBQUEUED)
+		ret = btrfs_encoded_read_regular_end(priv);
+
 	if (ret >= 0) {
 		fsnotify_access(priv->file);
 		if (copy_to_user(priv->copy_out,
@@ -4612,6 +4615,11 @@ static int btrfs_ioctl_encoded_read(struct file *file, void __user *argp,
 		goto out;
 
 	ret = btrfs_encoded_read(&priv);
+
+	if (ret == -EIOCBQUEUED) {
+		if (atomic_dec_return(&priv.pending))
+			io_wait_event(priv.wait, !atomic_read(&priv.pending));
+	}
 
 out:
 	return btrfs_encoded_read_finish(&priv, ret);
