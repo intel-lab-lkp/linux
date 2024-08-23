@@ -4227,6 +4227,8 @@ enum shmem_param {
 	Opt_usrquota_inode_hardlimit,
 	Opt_grpquota_block_hardlimit,
 	Opt_grpquota_inode_hardlimit,
+	Opt_casefold,
+	Opt_strict_encoding,
 };
 
 static const struct constant_table shmem_param_enums_huge[] = {
@@ -4258,8 +4260,66 @@ const struct fs_parameter_spec shmem_fs_parameters[] = {
 	fsparam_string("grpquota_block_hardlimit", Opt_grpquota_block_hardlimit),
 	fsparam_string("grpquota_inode_hardlimit", Opt_grpquota_inode_hardlimit),
 #endif
+	fsparam_string("casefold",	Opt_casefold),
+	fsparam_flag  ("strict_encoding", Opt_strict_encoding),
 	{}
 };
+
+#if IS_ENABLED(CONFIG_UNICODE)
+static int utf8_parse_version(const char *version, unsigned int *maj,
+			      unsigned int *min, unsigned int *rev)
+{
+	substring_t args[3];
+	char version_string[12];
+	static const struct match_token token[] = {
+		{1, "%d.%d.%d"},
+		{0, NULL}
+	};
+
+	strscpy(version_string, version, sizeof(version_string));
+
+	if (match_token(version_string, token, args) != 1)
+		return -EINVAL;
+
+	if (match_int(&args[0], maj) || match_int(&args[1], min) ||
+	    match_int(&args[2], rev))
+		return -EINVAL;
+
+	return 0;
+}
+
+static int shmem_parse_opt_casefold(struct fs_context *fc, struct fs_parameter *param)
+{
+	struct shmem_options *ctx = fc->fs_private;
+	unsigned int maj, min, rev, version_number;
+	char version[10];
+	int ret;
+	struct unicode_map *encoding;
+
+	if (strncmp(param->string, "utf8-", 5))
+		return invalfc(fc, "Only utf8 encondings are supported");
+	ret = strscpy(version, param->string + 5, sizeof(version));
+	if (ret < 0)
+		return invalfc(fc, "Invalid enconding argument: %s",
+			       param->string);
+
+	utf8_parse_version(version, &maj, &min, &rev);
+	version_number = UNICODE_AGE(maj, min, rev);
+	encoding = utf8_load(version_number);
+	if (IS_ERR(encoding))
+		return invalfc(fc, "Invalid utf8 version: %s", version);
+	pr_info("tmpfs: Using encoding provided by mount options: %s\n",
+		param->string);
+	ctx->encoding = encoding;
+
+	return 0;
+}
+#else
+static int shmem_parse_opt_casefold(struct fs_context *fc, struct fs_parameter *param)
+{
+	return invalfc(fc, "tmpfs: No kernel support for casefold filesystems\n");
+}
+#endif
 
 static int shmem_parse_one(struct fs_context *fc, struct fs_parameter *param)
 {
@@ -4418,6 +4478,11 @@ static int shmem_parse_one(struct fs_context *fc, struct fs_parameter *param)
 			return invalfc(fc,
 				       "Group quota inode hardlimit too large.");
 		ctx->qlimits.grpquota_ihardlimit = size;
+		break;
+	case Opt_casefold:
+		return shmem_parse_opt_casefold(fc, param);
+	case Opt_strict_encoding:
+		ctx->strict_encoding = true;
 		break;
 	}
 	return 0;
