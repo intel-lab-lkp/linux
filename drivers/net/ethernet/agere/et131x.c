@@ -2244,11 +2244,6 @@ static struct rfd *nic_rx_pkts(struct et131x_adapter *adapter)
 	element = rx_local->recv_list.next;
 	rfd = list_entry(element, struct rfd, list_node);
 
-	if (!rfd) {
-		spin_unlock_irqrestore(&adapter->rcv_lock, flags);
-		return NULL;
-	}
-
 	list_del(&rfd->list_node);
 	rx_local->num_ready_recv--;
 
