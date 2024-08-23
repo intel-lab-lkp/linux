@@ -40,6 +40,8 @@
 #include <linux/fs_parser.h>
 #include <linux/swapfile.h>
 #include <linux/iversion.h>
+#include <linux/unicode.h>
+#include <linux/parser.h>
 #include "swap.h"
 
 static struct vfsmount *shm_mnt __ro_after_init;
@@ -123,6 +125,8 @@ struct shmem_options {
 	bool noswap;
 	unsigned short quota_types;
 	struct shmem_quota_limits qlimits;
+	struct unicode_map *encoding;
+	bool strict_encoding;
 #define SHMEM_SEEN_BLOCKS 1
 #define SHMEM_SEEN_INODES 2
 #define SHMEM_SEEN_HUGE 4
@@ -3552,6 +3556,12 @@ shmem_mknod(struct mnt_idmap *idmap, struct inode *dir,
 	if (IS_ERR(inode))
 		return PTR_ERR(inode);
 
+#if IS_ENABLED(CONFIG_UNICODE)
+	if (sb_has_strict_encoding(dir->i_sb) && IS_CASEFOLDED(dir) &&
+	    dir->i_sb->s_encoding && utf8_validate(dir->i_sb->s_encoding, &dentry->d_name))
+		return -EINVAL;
+#endif
+
 	error = simple_acl_create(dir, inode);
 	if (error)
 		goto out_iput;
@@ -3559,6 +3569,9 @@ shmem_mknod(struct mnt_idmap *idmap, struct inode *dir,
 					     shmem_initxattrs, NULL);
 	if (error && error != -EOPNOTSUPP)
 		goto out_iput;
+
+	if (IS_CASEFOLDED(dir))
+		d_add(dentry, NULL);
 
 	error = simple_offset_add(shmem_get_offset_ctx(dir), dentry);
 	if (error)
@@ -3651,6 +3664,9 @@ static int shmem_link(struct dentry *old_dentry, struct inode *dir,
 		goto out;
 	}
 
+	if (IS_CASEFOLDED(dir))
+		d_add(dentry, NULL);
+
 	dir->i_size += BOGO_DIRENT_SIZE;
 	inode_set_mtime_to_ts(dir,
 			      inode_set_ctime_to_ts(dir, inode_set_ctime_current(inode)));
@@ -3678,6 +3694,14 @@ static int shmem_unlink(struct inode *dir, struct dentry *dentry)
 	inode_inc_iversion(dir);
 	drop_nlink(inode);
 	dput(dentry);	/* Undo the count from "create" - does all the work */
+
+	/*
+	 * For now, VFS can't deal with case-insensitive negative dentries, so
+	 * we destroy them
+	 */
+	if (IS_CASEFOLDED(dir))
+		d_invalidate(dentry);
+
 	return 0;
 }
 
@@ -3822,6 +3846,8 @@ static int shmem_symlink(struct mnt_idmap *idmap, struct inode *dir,
 	dir->i_size += BOGO_DIRENT_SIZE;
 	inode_set_mtime_to_ts(dir, inode_set_ctime_current(dir));
 	inode_inc_iversion(dir);
+	if (IS_CASEFOLDED(dir))
+		d_add(dentry, NULL);
 	d_instantiate(dentry, inode);
 	dget(dentry);
 	return 0;
@@ -4596,6 +4622,11 @@ static void shmem_put_super(struct super_block *sb)
 {
 	struct shmem_sb_info *sbinfo = SHMEM_SB(sb);
 
+#if IS_ENABLED(CONFIG_UNICODE)
+	if (sbinfo->casefold)
+		utf8_unload(sb->s_encoding);
+#endif
+
 #ifdef CONFIG_TMPFS_QUOTA
 	shmem_disable_quotas(sb);
 #endif
@@ -4640,6 +4671,17 @@ static int shmem_fill_super(struct super_block *sb, struct fs_context *fc)
 	}
 	sb->s_export_op = &shmem_export_ops;
 	sb->s_flags |= SB_NOSEC | SB_I_VERSION;
+
+#if IS_ENABLED(CONFIG_UNICODE)
+	if (ctx->encoding) {
+		sb->s_encoding = ctx->encoding;
+		generic_set_sb_d_ops(sb);
+		if (ctx->strict_encoding)
+			sb->s_encoding_flags = SB_ENC_STRICT_MODE_FL;
+		sbinfo->casefold = true;
+	}
+#endif
+
 #else
 	sb->s_flags |= SB_NOUSER;
 #endif
@@ -4829,11 +4871,28 @@ static const struct inode_operations shmem_inode_operations = {
 #endif
 };
 
+static struct dentry *shmem_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags)
+{
+	if (dentry->d_name.len > NAME_MAX)
+		return ERR_PTR(-ENAMETOOLONG);
+
+	/*
+	 * For now, VFS can't deal with case-insensitive negative dentries, so
+	 * we prevent them from being created
+	 */
+	if (IS_CASEFOLDED(dir))
+		return NULL;
+
+	d_add(dentry, NULL);
+
+	return NULL;
+}
+
 static const struct inode_operations shmem_dir_inode_operations = {
 #ifdef CONFIG_TMPFS
 	.getattr	= shmem_getattr,
 	.create		= shmem_create,
-	.lookup		= simple_lookup,
+	.lookup		= shmem_lookup,
 	.link		= shmem_link,
 	.unlink		= shmem_unlink,
 	.symlink	= shmem_symlink,
@@ -4915,6 +4974,8 @@ int shmem_init_fs_context(struct fs_context *fc)
 	ctx->mode = 0777 | S_ISVTX;
 	ctx->uid = current_fsuid();
 	ctx->gid = current_fsgid();
+
+	ctx->encoding = NULL;
 
 	fc->fs_private = ctx;
 	fc->ops = &shmem_fs_context_ops;
