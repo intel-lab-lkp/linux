@@ -228,6 +228,7 @@ static int alloc_4k(struct mlx5_core_dev *dev, u64 *addr, u32 function)
 		if (iter->function != function)
 			continue;
 		fp = iter;
+		break;
 	}
 
 	if (list_empty(&dev->priv.free_list) || !fp)
