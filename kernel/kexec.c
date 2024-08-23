@@ -116,6 +116,9 @@ static int do_kexec_load(unsigned long entry, unsigned long nr_segments,
 		/* Uninstall image */
 		kimage_free(xchg(dest_image, NULL));
 		ret = 0;
+#ifdef CONFIG_CRASH_HOTPLUG
+		crash_hotplug_support = 0;
+#endif
 		goto out_unlock;
 	}
 	if (flags & KEXEC_ON_CRASH) {
@@ -136,7 +139,7 @@ static int do_kexec_load(unsigned long entry, unsigned long nr_segments,
 
 #ifdef CONFIG_CRASH_HOTPLUG
 	if ((flags & KEXEC_ON_CRASH) && arch_crash_hotplug_support(image, flags))
-		image->hotplug_support = 1;
+		crash_hotplug_support = 1;
 #endif
 
 	ret = machine_kexec_prepare(image);

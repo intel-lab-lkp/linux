@@ -30,6 +30,13 @@
 #include "kallsyms_internal.h"
 #include "kexec_internal.h"
 
+#ifdef CONFIG_CRASH_HOTPLUG
+/* if set, it is safe to update kexec segments that are
+ * excluded from sha calculation.
+ */
+unsigned int crash_hotplug_support;
+#endif
+
 /* Per cpu memory for storing cpu states in case of system crash. */
 note_buf_t __percpu *crash_notes;
 
@@ -500,23 +507,7 @@ static DEFINE_MUTEX(__crash_hotplug_lock);
  */
 int crash_check_hotplug_support(void)
 {
-	int rc = 0;
-
-	crash_hotplug_lock();
-	/* Obtain lock while reading crash information */
-	if (!kexec_trylock()) {
-		pr_info("kexec_trylock() failed, elfcorehdr may be inaccurate\n");
-		crash_hotplug_unlock();
-		return 0;
-	}
-	if (kexec_crash_image) {
-		rc = kexec_crash_image->hotplug_support;
-	}
-	/* Release lock now that update complete */
-	kexec_unlock();
-	crash_hotplug_unlock();
-
-	return rc;
+	return crash_hotplug_support;
 }
 
 /*
@@ -552,7 +543,7 @@ static void crash_handle_hotplug_event(unsigned int hp_action, unsigned int cpu,
 	image = kexec_crash_image;
 
 	/* Check that kexec segments update is permitted */
-	if (!image->hotplug_support)
+	if (!crash_hotplug_support)
 		goto out;
 
 	if (hp_action == KEXEC_CRASH_HP_ADD_CPU ||

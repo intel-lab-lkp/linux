@@ -318,13 +318,6 @@ struct kimage {
 	unsigned int preserve_context : 1;
 	/* If set, we are using file mode kexec syscall */
 	unsigned int file_mode:1;
-#ifdef CONFIG_CRASH_HOTPLUG
-	/* If set, it is safe to update kexec segments that are
-	 * excluded from SHA calculation.
-	 */
-	unsigned int hotplug_support:1;
-#endif
-
 #ifdef ARCH_HAS_KIMAGE_ARCH
 	struct kimage_arch arch;
 #endif
@@ -369,6 +362,10 @@ struct kimage {
 	unsigned long elf_headers_sz;
 	unsigned long elf_load_addr;
 };
+
+#ifdef CONFIG_CRASH_HOTPLUG
+extern unsigned int crash_hotplug_support;
+#endif
 
 /* kexec interface functions */
 extern void machine_kexec(struct kimage *image);
