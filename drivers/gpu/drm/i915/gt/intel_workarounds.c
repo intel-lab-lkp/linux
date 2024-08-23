@@ -1536,6 +1536,13 @@ dg2_gt_workarounds_init(struct intel_gt *gt, struct i915_wa_list *wal)
 
 	/* Wa_14010648519:dg2 */
 	wa_mcr_write_or(wal, XEHP_L3NODEARBCFG, XEHP_LNESPARE);
+
+	/*
+	 * DisableHIZPlaneOptimizationForRedundantZPlaneUnit
+	 * This is not WA,THis is required by recommended tuning setting.
+	 */
+	wa_masked_dis(wal,
+		      GEN7_COMMON_SLICE_CHICKEN1, HIZ_PLANE_OPTIMIZATION_DISABLE);
 }
 
 static void
@@ -1556,6 +1563,12 @@ xelpg_gt_workarounds_init(struct intel_gt *gt, struct i915_wa_list *wal)
 		/* Wa_14015795083 */
 		wa_write_clr(wal, GEN7_MISCCPCTL, GEN12_DOP_CLOCK_GATE_RENDER_ENABLE);
 	}
+	/*
+	 * DisableHIZPlaneOptimizationForRedundantZPlaneUnit
+	 * This is not WA, This is required by recommended tuning setting.
+	 */
+	wa_masked_dis(wal,
+		      GEN7_COMMON_SLICE_CHICKEN1, HIZ_PLANE_OPTIMIZATION_DISABLE);
 
 	/*
 	 * Unlike older platforms, we no longer setup implicit steering here;
@@ -2058,7 +2071,7 @@ static void dg2_whitelist_build(struct intel_engine_cs *engine)
 	case RENDER_CLASS:
 		/* Required by recommended tuning setting (not a workaround) */
 		whitelist_mcr_reg(w, XEHP_COMMON_SLICE_CHICKEN3);
-
+		whitelist_reg(w, GEN7_COMMON_SLICE_CHICKEN1);
 		break;
 	default:
 		break;
@@ -2073,7 +2086,7 @@ static void xelpg_whitelist_build(struct intel_engine_cs *engine)
 	case RENDER_CLASS:
 		/* Required by recommended tuning setting (not a workaround) */
 		whitelist_mcr_reg(w, XEHP_COMMON_SLICE_CHICKEN3);
-
+		whitelist_reg(w, GEN7_COMMON_SLICE_CHICKEN1);
 		break;
 	default:
 		break;
