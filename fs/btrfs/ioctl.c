@@ -4520,7 +4520,6 @@ static int btrfs_ioctl_encoded_read(struct file *file, void __user *argp,
 	struct iovec *iov = iovstack;
 	struct iov_iter iter;
 	loff_t pos;
-	struct kiocb kiocb;
 	ssize_t ret;
 
 	if (!capable(CAP_SYS_ADMIN)) {
@@ -4571,10 +4570,7 @@ static int btrfs_ioctl_encoded_read(struct file *file, void __user *argp,
 	if (ret < 0)
 		goto out_iov;
 
-	init_sync_kiocb(&kiocb, file);
-	kiocb.ki_pos = pos;
-
-	ret = btrfs_encoded_read(&kiocb, &iter, &args);
+	ret = btrfs_encoded_read(file, pos, &iter, &args);
 	if (ret >= 0) {
 		fsnotify_access(file);
 		if (copy_to_user(argp + copy_end,
