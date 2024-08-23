@@ -320,10 +320,8 @@ static bool thermal_of_should_bind(struct thermal_zone_device *tz,
 		int count, i;
 
 		tr_np = of_parse_phandle(child, "trip", 0);
-		if (tr_np != trip->priv) {
-			of_node_put(child);
+		if (tr_np != trip->priv)
 			continue;
-		}
 
 		/* The trip has been found, look up the cdev. */
 		count = of_count_phandle_with_args(child, "cooling-device", "#cooling-cells");
