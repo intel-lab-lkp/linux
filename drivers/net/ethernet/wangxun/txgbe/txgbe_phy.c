@@ -9,6 +9,7 @@
 #include <linux/i2c.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>
+#include <linux/platform_data/i2c-wx.h>
 #include <linux/regmap.h>
 #include <linux/pcs/pcs-xpcs.h>
 #include <linux/phylink.h>
@@ -618,6 +619,7 @@ static const struct regmap_config i2c_regmap_config = {
 
 static int txgbe_i2c_register(struct txgbe *txgbe)
 {
+	struct txgbe_i2c_platform_data pdata = {};
 	struct platform_device_info info = {};
 	struct platform_device *i2c_dev;
 	struct regmap *i2c_regmap;
@@ -636,6 +638,9 @@ static int txgbe_i2c_register(struct txgbe *txgbe)
 	info.fwnode = software_node_fwnode(txgbe->nodes.group[SWNODE_I2C]);
 	info.name = "i2c_designware";
 	info.id = pci_dev_id(pdev);
+	pdata.hw_addr = wx->hw_addr;
+	info.data = &pdata;
+	info.size_data = sizeof(pdata);
 
 	info.res = &DEFINE_RES_IRQ(pdev->irq);
 	info.num_res = 1;
