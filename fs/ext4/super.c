@@ -1249,12 +1249,11 @@ static void ext4_group_desc_free(struct ext4_sb_info *sbi)
 	struct buffer_head **group_desc;
 	int i;
 
-	rcu_read_lock();
+	guard(rcu)();
 	group_desc = rcu_dereference(sbi->s_group_desc);
 	for (i = 0; i < sbi->s_gdb_count; i++)
 		brelse(group_desc[i]);
 	kvfree(group_desc);
-	rcu_read_unlock();
 }
 
 static void ext4_flex_groups_free(struct ext4_sb_info *sbi)
@@ -1262,14 +1261,13 @@ static void ext4_flex_groups_free(struct ext4_sb_info *sbi)
 	struct flex_groups **flex_groups;
 	int i;
 
-	rcu_read_lock();
+	guard(rcu)();
 	flex_groups = rcu_dereference(sbi->s_flex_groups);
 	if (flex_groups) {
 		for (i = 0; i < sbi->s_flex_groups_allocated; i++)
 			kvfree(flex_groups[i]);
 		kvfree(flex_groups);
 	}
-	rcu_read_unlock();
 }
 
 static void ext4_put_super(struct super_block *sb)
@@ -2892,14 +2890,13 @@ static inline void ext4_show_quota_options(struct seq_file *seq,
 		seq_printf(seq, ",jqfmt=%s", fmtname);
 	}
 
-	rcu_read_lock();
+	guard(rcu)();
 	usr_qf_name = rcu_dereference(sbi->s_qf_names[USRQUOTA]);
 	grp_qf_name = rcu_dereference(sbi->s_qf_names[GRPQUOTA]);
 	if (usr_qf_name)
 		seq_show_option(seq, "usrjquota", usr_qf_name);
 	if (grp_qf_name)
 		seq_show_option(seq, "grpjquota", grp_qf_name);
-	rcu_read_unlock();
 #endif
 }
 
@@ -3140,13 +3137,13 @@ int ext4_alloc_flex_bg_array(struct super_block *sb, ext4_group_t ngroup)
 			return -ENOMEM;
 		}
 	}
-	rcu_read_lock();
-	old_groups = rcu_dereference(sbi->s_flex_groups);
-	if (old_groups)
-		memcpy(new_groups, old_groups,
-		       (sbi->s_flex_groups_allocated *
-			sizeof(struct flex_groups *)));
-	rcu_read_unlock();
+	scoped_guard(rcu) {
+		old_groups = rcu_dereference(sbi->s_flex_groups);
+		if (old_groups)
+			memcpy(new_groups, old_groups,
+				(sbi->s_flex_groups_allocated *
+				sizeof(struct flex_groups *)));
+	}
 	rcu_assign_pointer(sbi->s_flex_groups, new_groups);
 	sbi->s_flex_groups_allocated = size;
 	if (old_groups)
@@ -4851,9 +4848,8 @@ static int ext4_group_desc_init(struct super_block *sb,
 			sbi->s_gdb_count = i;
 			return PTR_ERR(bh);
 		}
-		rcu_read_lock();
+		guard(rcu)();
 		rcu_dereference(sbi->s_group_desc)[i] = bh;
-		rcu_read_unlock();
 	}
 	sbi->s_gdb_count = db_count;
 	if (!ext4_check_descriptors(sb, logical_sb_block, first_not_zeroed)) {

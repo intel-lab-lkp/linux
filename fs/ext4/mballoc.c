@@ -3291,12 +3291,12 @@ int ext4_mb_alloc_groupinfo(struct super_block *sb, ext4_group_t ngroups)
 		ext4_msg(sb, KERN_ERR, "can't allocate buddy meta group");
 		return -ENOMEM;
 	}
-	rcu_read_lock();
-	old_groupinfo = rcu_dereference(sbi->s_group_info);
-	if (old_groupinfo)
-		memcpy(new_groupinfo, old_groupinfo,
-		       sbi->s_group_info_size * sizeof(*sbi->s_group_info));
-	rcu_read_unlock();
+	scoped_guard(rcu) {
+		old_groupinfo = rcu_dereference(sbi->s_group_info);
+		if (old_groupinfo)
+			memcpy(new_groupinfo, old_groupinfo,
+				sbi->s_group_info_size * sizeof(*sbi->s_group_info));
+	}
 	rcu_assign_pointer(sbi->s_group_info, new_groupinfo);
 	sbi->s_group_info_size = size / sizeof(*sbi->s_group_info);
 	if (old_groupinfo)
@@ -3331,9 +3331,8 @@ int ext4_mb_add_groupinfo(struct super_block *sb, ext4_group_t group,
 				 "for a buddy group");
 			return -ENOMEM;
 		}
-		rcu_read_lock();
+		guard(rcu)();
 		rcu_dereference(sbi->s_group_info)[idx] = meta_group_info;
-		rcu_read_unlock();
 	}
 
 	meta_group_info = sbi_array_rcu_deref(sbi, s_group_info, idx);
@@ -3377,11 +3376,10 @@ exit_group_info:
 	if (group % EXT4_DESC_PER_BLOCK(sb) == 0) {
 		struct ext4_group_info ***group_info;
 
-		rcu_read_lock();
+		guard(rcu)();
 		group_info = rcu_dereference(sbi->s_group_info);
 		kfree(group_info[idx]);
 		group_info[idx] = NULL;
-		rcu_read_unlock();
 	}
 	return -ENOMEM;
 } /* ext4_mb_add_groupinfo */
@@ -3462,16 +3460,15 @@ err_freebuddy:
 			kmem_cache_free(cachep, grp);
 	}
 	i = sbi->s_group_info_size;
-	rcu_read_lock();
-	group_info = rcu_dereference(sbi->s_group_info);
-	while (i-- > 0)
-		kfree(group_info[i]);
-	rcu_read_unlock();
+	scoped_guard(rcu) {
+		group_info = rcu_dereference(sbi->s_group_info);
+		while (i-- > 0)
+			kfree(group_info[i]);
+	}
 	iput(sbi->s_buddy_cache);
 err_freesgi:
-	rcu_read_lock();
+	guard(rcu)();
 	kvfree(rcu_dereference(sbi->s_group_info));
-	rcu_read_unlock();
 	return -ENOMEM;
 }
 
@@ -3789,12 +3786,11 @@ void ext4_mb_release(struct super_block *sb)
 		num_meta_group_infos = (ngroups +
 				EXT4_DESC_PER_BLOCK(sb) - 1) >>
 			EXT4_DESC_PER_BLOCK_BITS(sb);
-		rcu_read_lock();
+		guard(rcu)();
 		group_info = rcu_dereference(sbi->s_group_info);
 		for (i = 0; i < num_meta_group_infos; i++)
 			kfree(group_info[i]);
 		kvfree(group_info);
-		rcu_read_unlock();
 	}
 	kfree(sbi->s_mb_avg_fragment_size);
 	kfree(sbi->s_mb_avg_fragment_size_locks);
@@ -4946,7 +4942,7 @@ try_group_pa:
 	 * minimal distance from the goal block.
 	 */
 	for (i = order; i < PREALLOC_TB_SIZE; i++) {
-		rcu_read_lock();
+		guard(rcu)();
 		list_for_each_entry_rcu(tmp_pa, &lg->lg_prealloc_list[i],
 					pa_node.lg_list) {
 			spin_lock(&tmp_pa->pa_lock);
@@ -4958,7 +4954,6 @@ try_group_pa:
 			}
 			spin_unlock(&tmp_pa->pa_lock);
 		}
-		rcu_read_unlock();
 	}
 	if (cpa) {
 		ext4_mb_use_group_pa(ac, cpa);

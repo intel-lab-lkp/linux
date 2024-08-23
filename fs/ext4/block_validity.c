@@ -130,17 +130,17 @@ static void debug_print_tree(struct ext4_sb_info *sbi)
 	int first = 1;
 
 	printk(KERN_INFO "System zones: ");
-	rcu_read_lock();
-	system_blks = rcu_dereference(sbi->s_system_blks);
-	node = rb_first(&system_blks->root);
-	while (node) {
-		entry = rb_entry(node, struct ext4_system_zone, node);
-		printk(KERN_CONT "%s%llu-%llu", first ? "" : ", ",
-		       entry->start_blk, entry->start_blk + entry->count - 1);
-		first = 0;
-		node = rb_next(node);
+	scoped_guard(rcu) {
+		system_blks = rcu_dereference(sbi->s_system_blks);
+		node = rb_first(&system_blks->root);
+		while (node) {
+			entry = rb_entry(node, struct ext4_system_zone, node);
+			printk(KERN_CONT "%s%llu-%llu", first ? "" : ", ",
+				entry->start_blk, entry->start_blk + entry->count - 1);
+			first = 0;
+			node = rb_next(node);
+		}
 	}
-	rcu_read_unlock();
 	printk(KERN_CONT "\n");
 }
 
@@ -311,10 +311,10 @@ int ext4_sb_block_valid(struct super_block *sb, struct inode *inode,
 	 * when doing a remount which inverse current "[no]block_validity"
 	 * mount option.
 	 */
-	rcu_read_lock();
+	guard(rcu)();
 	system_blks = rcu_dereference(sbi->s_system_blks);
 	if (system_blks == NULL)
-		goto out_rcu;
+		return ret;
 
 	n = system_blks->root.rb_node;
 	while (n) {
@@ -330,8 +330,7 @@ int ext4_sb_block_valid(struct super_block *sb, struct inode *inode,
 			break;
 		}
 	}
-out_rcu:
-	rcu_read_unlock();
+
 	return ret;
 }
 

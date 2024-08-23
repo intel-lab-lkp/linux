@@ -5099,14 +5099,13 @@ static void ext4_update_other_inodes_time(struct super_block *sb,
 	 * (assuming 4k blocks and 256 byte inodes) is (n*16 + 1).
 	 */
 	ino = ((orig_ino - 1) & ~(inodes_per_block - 1)) + 1;
-	rcu_read_lock();
+	guard(rcu)();
 	for (i = 0; i < inodes_per_block; i++, ino++, buf += inode_size) {
 		if (ino == orig_ino)
 			continue;
 		__ext4_update_other_inode_time(sb, orig_ino, ino,
 					       (struct ext4_inode *)buf);
 	}
-	rcu_read_unlock();
 }
 
 /*

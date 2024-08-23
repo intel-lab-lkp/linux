@@ -1809,9 +1809,8 @@ static inline int ext4_valid_inum(struct super_block *sb, unsigned long ino)
 #define sbi_array_rcu_deref(sbi, field, index)				   \
 ({									   \
 	typeof(*((sbi)->field)) _v;					   \
-	rcu_read_lock();						   \
+	guard(rcu)();						   \
 	_v = ((typeof(_v)*)rcu_dereference((sbi)->field))[index];	   \
-	rcu_read_unlock();						   \
 	_v;								   \
 })
 

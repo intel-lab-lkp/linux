@@ -920,11 +920,11 @@ static int add_new_gdb(handle_t *handle, struct inode *inode,
 	}
 	brelse(dind);
 
-	rcu_read_lock();
-	o_group_desc = rcu_dereference(EXT4_SB(sb)->s_group_desc);
-	memcpy(n_group_desc, o_group_desc,
-	       EXT4_SB(sb)->s_gdb_count * sizeof(struct buffer_head *));
-	rcu_read_unlock();
+	scoped_guard(rcu) {
+		o_group_desc = rcu_dereference(EXT4_SB(sb)->s_group_desc);
+		memcpy(n_group_desc, o_group_desc,
+			EXT4_SB(sb)->s_gdb_count * sizeof(struct buffer_head *));
+	}
 	n_group_desc[gdb_num] = gdb_bh;
 	rcu_assign_pointer(EXT4_SB(sb)->s_group_desc, n_group_desc);
 	EXT4_SB(sb)->s_gdb_count++;
@@ -980,11 +980,11 @@ static int add_new_gdb_meta_bg(struct super_block *sb,
 		return err;
 	}
 
-	rcu_read_lock();
-	o_group_desc = rcu_dereference(EXT4_SB(sb)->s_group_desc);
-	memcpy(n_group_desc, o_group_desc,
-	       EXT4_SB(sb)->s_gdb_count * sizeof(struct buffer_head *));
-	rcu_read_unlock();
+	scoped_guard(rcu) {
+		o_group_desc = rcu_dereference(EXT4_SB(sb)->s_group_desc);
+		memcpy(n_group_desc, o_group_desc,
+			EXT4_SB(sb)->s_gdb_count * sizeof(struct buffer_head *));
+	}
 	n_group_desc[gdb_num] = gdb_bh;
 
 	BUFFER_TRACE(gdb_bh, "get_write_access");
