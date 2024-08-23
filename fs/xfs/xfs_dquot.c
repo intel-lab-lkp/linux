@@ -1332,9 +1332,15 @@ xfs_qm_dqflush(
 	return 0;
 
 out_abort:
+	/*
+	 * Shutdown first to stop the log before deleting items from the AIL.
+	 * Deleting items from the AIL before the log is shut down can result
+	 * in the log tail moving forward in the journal on disk because log
+	 * writes can still be taking place.
+	 */
+	xfs_force_shutdown(mp, SHUTDOWN_CORRUPT_INCORE);
 	dqp->q_flags &= ~XFS_DQFLAG_DIRTY;
 	xfs_trans_ail_delete(lip, 0);
-	xfs_force_shutdown(mp, SHUTDOWN_CORRUPT_INCORE);
 out_unlock:
 	xfs_dqfunlock(dqp);
 	return error;
