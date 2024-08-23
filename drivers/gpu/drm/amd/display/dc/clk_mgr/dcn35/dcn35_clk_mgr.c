@@ -982,82 +982,6 @@ static bool dcn35_is_ips_supported(struct clk_mgr *clk_mgr_base)
 	return ips_supported;
 }
 
-static void dcn35_init_clocks_fpga(struct clk_mgr *clk_mgr)
-{
-	init_clk_states(clk_mgr);
-
-/* TODO: Implement the functions and remove the ifndef guard */
-}
-
-static void dcn35_update_clocks_fpga(struct clk_mgr *clk_mgr,
-		struct dc_state *context,
-		bool safe_to_lower)
-{
-	struct clk_mgr_internal *clk_mgr_int = TO_CLK_MGR_INTERNAL(clk_mgr);
-	struct dc_clocks *new_clocks = &context->bw_ctx.bw.dcn.clk;
-	int fclk_adj = new_clocks->fclk_khz;
-
-	/* TODO: remove this after correctly set by DML */
-	new_clocks->dcfclk_khz = 400000;
-	new_clocks->socclk_khz = 400000;
-
-	/* Min fclk = 1.2GHz since all the extra scemi logic seems to run off of it */
-	//int fclk_adj = new_clocks->fclk_khz > 1200000 ? new_clocks->fclk_khz : 1200000;
-	new_clocks->fclk_khz = 4320000;
-
-	if (should_set_clock(safe_to_lower, new_clocks->phyclk_khz, clk_mgr->clks.phyclk_khz)) {
-		clk_mgr->clks.phyclk_khz = new_clocks->phyclk_khz;
-	}
-
-	if (should_set_clock(safe_to_lower, new_clocks->dcfclk_khz, clk_mgr->clks.dcfclk_khz)) {
-		clk_mgr->clks.dcfclk_khz = new_clocks->dcfclk_khz;
-	}
-
-	if (should_set_clock(safe_to_lower,
-			new_clocks->dcfclk_deep_sleep_khz, clk_mgr->clks.dcfclk_deep_sleep_khz)) {
-		clk_mgr->clks.dcfclk_deep_sleep_khz = new_clocks->dcfclk_deep_sleep_khz;
-	}
-
-	if (should_set_clock(safe_to_lower, new_clocks->socclk_khz, clk_mgr->clks.socclk_khz)) {
-		clk_mgr->clks.socclk_khz = new_clocks->socclk_khz;
-	}
-
-	if (should_set_clock(safe_to_lower, new_clocks->dramclk_khz, clk_mgr->clks.dramclk_khz)) {
-		clk_mgr->clks.dramclk_khz = new_clocks->dramclk_khz;
-	}
-
-	if (should_set_clock(safe_to_lower, new_clocks->dppclk_khz, clk_mgr->clks.dppclk_khz)) {
-		clk_mgr->clks.dppclk_khz = new_clocks->dppclk_khz;
-	}
-
-	if (should_set_clock(safe_to_lower, fclk_adj, clk_mgr->clks.fclk_khz)) {
-		clk_mgr->clks.fclk_khz = fclk_adj;
-	}
-
-	if (should_set_clock(safe_to_lower, new_clocks->dispclk_khz, clk_mgr->clks.dispclk_khz)) {
-		clk_mgr->clks.dispclk_khz = new_clocks->dispclk_khz;
-	}
-
-	/* Both fclk and ref_dppclk run on the same scemi clock.
-	 * So take the higher value since the DPP DTO is typically programmed
-	 * such that max dppclk is 1:1 with ref_dppclk.
-	 */
-	if (clk_mgr->clks.fclk_khz > clk_mgr->clks.dppclk_khz)
-		clk_mgr->clks.dppclk_khz = clk_mgr->clks.fclk_khz;
-	if (clk_mgr->clks.dppclk_khz > clk_mgr->clks.fclk_khz)
-		clk_mgr->clks.fclk_khz = clk_mgr->clks.dppclk_khz;
-
-	// Both fclk and ref_dppclk run on the same scemi clock.
-	clk_mgr_int->dccg->ref_dppclk = clk_mgr->clks.fclk_khz;
-
-	/* TODO: set dtbclk in correct place */
-	clk_mgr->clks.dtbclk_en = true;
-	dm_set_dcn_clocks(clk_mgr->ctx, &clk_mgr->clks);
-	dcn35_update_clocks_update_dpp_dto(clk_mgr_int, context, safe_to_lower);
-
-	dcn35_update_clocks_update_dtb_dto(clk_mgr_int, context, clk_mgr->clks.ref_dtbclk_khz);
-}
-
 static struct clk_mgr_funcs dcn35_funcs = {
 	.get_dp_ref_clk_frequency = dce12_get_dp_ref_freq_khz,
 	.get_dtb_ref_clk_frequency = dcn31_get_dtb_ref_freq_khz,
@@ -1069,13 +993,6 @@ static struct clk_mgr_funcs dcn35_funcs = {
 	.set_low_power_state = dcn35_set_low_power_state,
 	.exit_low_power_state = dcn35_exit_low_power_state,
 	.is_ips_supported = dcn35_is_ips_supported,
-};
-
-struct clk_mgr_funcs dcn35_fpga_funcs = {
-	.get_dp_ref_clk_frequency = dce12_get_dp_ref_freq_khz,
-	.update_clocks = dcn35_update_clocks_fpga,
-	.init_clocks = dcn35_init_clocks_fpga,
-	.get_dtb_ref_clk_frequency = dcn31_get_dtb_ref_freq_khz,
 };
 
 void dcn35_clk_mgr_construct(
