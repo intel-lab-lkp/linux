@@ -552,8 +552,7 @@ static inline struct bkey_s_c __bch2_bkey_get_iter(struct btree_trans *trans,
 
 	if (!bkey_err(k) && type && k.k->type != type)
 		k = bkey_s_c_err(-BCH_ERR_ENOENT_bkey_type_mismatch);
-	if (unlikely(bkey_err(k)))
-		bch2_trans_iter_exit(trans, iter);
+
 	return k;
 }
 
@@ -595,9 +594,9 @@ static inline int __bch2_bkey_get_val_typed(struct btree_trans *trans,
 		memcpy(val, k.v, b);
 		if (unlikely(b < sizeof(*val)))
 			memset((void *) val + b, 0, sizeof(*val) - b);
-		bch2_trans_iter_exit(trans, &iter);
 	}
 
+	bch2_trans_iter_exit(trans, &iter);
 	return ret;
 }
 

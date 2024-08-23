@@ -343,7 +343,7 @@ int bch2_inode_peek_nowarn(struct btree_trans *trans,
 			       flags|BTREE_ITER_cached);
 	ret = bkey_err(k);
 	if (ret)
-		return ret;
+		goto err;
 
 	ret = bkey_is_inode(k.k) ? 0 : -BCH_ERR_ENOENT_inode;
 	if (ret)
@@ -1081,7 +1081,7 @@ static int may_delete_deleted_inode(struct btree_trans *trans,
 	k = bch2_bkey_get_iter(trans, &inode_iter, BTREE_ID_inodes, pos, BTREE_ITER_cached);
 	ret = bkey_err(k);
 	if (ret)
-		return ret;
+		goto out;
 
 	ret = bkey_is_inode(k.k) ? 0 : -BCH_ERR_ENOENT_inode;
 	if (fsck_err_on(!bkey_is_inode(k.k),

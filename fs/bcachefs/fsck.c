@@ -930,7 +930,7 @@ static int check_inode_dirent_inode(struct btree_trans *trans, struct bkey_s_c i
 	struct bkey_s_c_dirent d = inode_get_dirent(trans, &dirent_iter, inode, &inode_snapshot);
 	int ret = bkey_err(d);
 	if (ret && !bch2_err_matches(ret, ENOENT))
-		return ret;
+		goto err;
 
 	if (fsck_err_on(ret,
 			trans, inode_points_to_missing_dirent,
@@ -955,6 +955,7 @@ static int check_inode_dirent_inode(struct btree_trans *trans, struct bkey_s_c i
 	}
 
 	ret = 0;
+err:
 fsck_err:
 	bch2_trans_iter_exit(trans, &dirent_iter);
 	printbuf_exit(&buf);
@@ -1971,7 +1972,7 @@ static int check_dirent_to_subvol(struct btree_trans *trans, struct btree_iter *
 					 0, subvolume);
 	ret = bkey_err(s.s_c);
 	if (ret && !bch2_err_matches(ret, ENOENT))
-		return ret;
+		goto out;
 
 	if (ret) {
 		if (fsck_err(trans, dirent_to_missing_subvol,

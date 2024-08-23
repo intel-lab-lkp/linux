@@ -828,7 +828,7 @@ static int bch2_set_quota_trans(struct btree_trans *trans,
 			       BTREE_ITER_slots|BTREE_ITER_intent);
 	ret = bkey_err(k);
 	if (unlikely(ret))
-		return ret;
+		goto err;
 
 	if (k.k->type == KEY_TYPE_quota)
 		new_quota->v = *bkey_s_c_to_quota(k).v;
@@ -844,6 +844,7 @@ static int bch2_set_quota_trans(struct btree_trans *trans,
 		new_quota->v.c[Q_INO].hardlimit = cpu_to_le64(qdq->d_ino_hardlimit);
 
 	ret = bch2_trans_update(trans, &iter, &new_quota->k_i, 0);
+err:
 	bch2_trans_iter_exit(trans, &iter);
 	return ret;
 }

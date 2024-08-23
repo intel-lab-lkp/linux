@@ -439,8 +439,10 @@ int bch2_move_get_io_opts_one(struct btree_trans *trans,
 			       SPOS(0, extent_k.k->p.inode, extent_k.k->p.snapshot),
 			       BTREE_ITER_cached);
 	ret = bkey_err(k);
-	if (bch2_err_matches(ret, BCH_ERR_transaction_restart))
+	if (bch2_err_matches(ret, BCH_ERR_transaction_restart)) {
+		bch2_trans_iter_exit(trans, &iter);
 		return ret;
+	}
 
 	if (!ret && bkey_is_inode(k.k)) {
 		struct bch_inode_unpacked inode;

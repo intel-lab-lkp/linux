@@ -462,7 +462,7 @@ bch2_trans_start_alloc_update_noupdate(struct btree_trans *trans, struct btree_i
 					       BTREE_ITER_intent);
 	int ret = bkey_err(k);
 	if (unlikely(ret))
-		return ERR_PTR(ret);
+		goto err;
 
 	struct bkey_i_alloc_v4 *a = bch2_alloc_to_v4_mut_inlined(trans, k);
 	ret = PTR_ERR_OR_ZERO(a);
@@ -695,7 +695,7 @@ static int bch2_bucket_do_index(struct btree_trans *trans,
 			     BTREE_ITER_intent);
 	ret = bkey_err(old);
 	if (ret)
-		return ret;
+		goto err;
 
 	if (ca->mi.freespace_initialized &&
 	    c->curr_recovery_pass > BCH_RECOVERY_PASS_check_alloc_info &&
@@ -740,7 +740,7 @@ static noinline int bch2_bucket_gen_update(struct btree_trans *trans,
 			       BTREE_ITER_with_updates);
 	ret = bkey_err(k);
 	if (ret)
-		return ret;
+		goto out;
 
 	if (k.k->type != KEY_TYPE_bucket_gens) {
 		bkey_bucket_gens_init(&g->k_i);
@@ -752,6 +752,7 @@ static noinline int bch2_bucket_gen_update(struct btree_trans *trans,
 	g->v.gens[offset] = gen;
 
 	ret = bch2_trans_update(trans, &iter, &g->k_i, 0);
+out:
 	bch2_trans_iter_exit(trans, &iter);
 	return ret;
 }
@@ -1375,7 +1376,7 @@ static noinline_for_stack int bch2_check_discard_freespace_key(struct btree_tran
 	alloc_k = bch2_bkey_get_iter(trans, &alloc_iter, BTREE_ID_alloc, pos, 0);
 	ret = bkey_err(alloc_k);
 	if (ret)
-		return ret;
+		goto out;
 
 	if (fsck_err_on(!bch2_dev_bucket_exists(c, pos),
 			trans, need_discard_freespace_key_to_invalid_dev_bucket,

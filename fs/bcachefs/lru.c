@@ -91,7 +91,7 @@ int bch2_lru_check_set(struct btree_trans *trans,
 					   time), 0);
 	int ret = bkey_err(lru_k);
 	if (ret)
-		return ret;
+		goto err;
 
 	if (lru_k.k->type != KEY_TYPE_set) {
 		ret = bch2_btree_write_buffer_maybe_flush(trans, referring_k, last_flushed);

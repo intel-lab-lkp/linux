@@ -219,7 +219,7 @@ static inline int bch2_extent_update_i_size_sectors(struct btree_trans *trans,
 			      BTREE_ITER_cached);
 	int ret = bkey_err(k);
 	if (unlikely(ret))
-		return ret;
+		goto err;
 
 	/*
 	 * varint_decode_fast(), in the inode .invalid method, reads up to 7

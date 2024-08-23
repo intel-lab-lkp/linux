@@ -419,12 +419,13 @@ static int __bch2_subvolume_delete(struct btree_trans *trans, u32 subvolid)
 	bch2_fs_inconsistent_on(bch2_err_matches(ret, ENOENT), trans->c,
 				"missing subvolume %u", subvolid);
 	if (ret)
-		return ret;
+		goto err;
 
 	snapid = le32_to_cpu(subvol.v->snapshot);
 
 	ret =   bch2_btree_delete_at(trans, &iter, 0) ?:
 		bch2_snapshot_node_set_deleted(trans, snapid);
+err:
 	bch2_trans_iter_exit(trans, &iter);
 	return ret;
 }
@@ -648,7 +649,7 @@ static int __bch2_fs_upgrade_for_subvolumes(struct btree_trans *trans)
 			       SPOS(0, BCACHEFS_ROOT_INO, U32_MAX), 0);
 	ret = bkey_err(k);
 	if (ret)
-		return ret;
+		goto err;
 
 	if (!bkey_is_inode(k.k)) {
 		bch_err(trans->c, "root inode not found");

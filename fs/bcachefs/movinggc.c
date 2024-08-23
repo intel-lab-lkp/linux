@@ -88,7 +88,7 @@ static int bch2_bucket_is_movable(struct btree_trans *trans,
 			       b->k.bucket, BTREE_ITER_cached);
 	ret = bkey_err(k);
 	if (ret)
-		return ret;
+		goto out;
 
 	a = bch2_alloc_to_v4(k, &_a);
 	b->k.gen	= a->gen;
@@ -98,6 +98,7 @@ static int bch2_bucket_is_movable(struct btree_trans *trans,
 		a->fragmentation_lru &&
 		a->fragmentation_lru <= time;
 
+out:
 	bch2_trans_iter_exit(trans, &iter);
 	return ret;
 }
