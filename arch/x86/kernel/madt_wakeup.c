@@ -14,6 +14,8 @@
 #include <asm/nmi.h>
 #include <asm/processor.h>
 #include <asm/reboot.h>
+#include <asm/madt_wakeup.h>
+#include <asm/prom.h>
 
 /* Physical address of the Multiprocessor Wakeup Structure mailbox */
 static u64 acpi_mp_wake_mailbox_paddr __ro_after_init;
@@ -122,6 +124,7 @@ static int __init init_transition_pgtable(pgd_t *pgd)
 	return 0;
 }
 
+#ifdef CONFIG_ACPI
 static int __init acpi_mp_setup_reset(u64 reset_vector)
 {
 	struct x86_mapping_info info = {
@@ -168,6 +171,7 @@ static int __init acpi_mp_setup_reset(u64 reset_vector)
 
 	return 0;
 }
+#endif
 
 static int acpi_wakeup_cpu(u32 apicid, unsigned long start_ip)
 {
@@ -226,6 +230,7 @@ static int acpi_wakeup_cpu(u32 apicid, unsigned long start_ip)
 	return 0;
 }
 
+#ifdef CONFIG_ACPI
 static void acpi_mp_disable_offlining(struct acpi_madt_multiproc_wakeup *mp_wake)
 {
 	cpu_hotplug_disable_offlining();
@@ -290,3 +295,36 @@ int __init acpi_parse_mp_wake(union acpi_subtable_headers *header,
 
 	return 0;
 }
+#endif /* CONFIG_ACPI */
+
+#ifdef CONFIG_OF
+u64 __init dtb_parse_mp_wake(void)
+{
+	struct device_node *node;
+	u64 mailaddr = 0;
+
+	node = of_find_node_by_path("/cpus");
+	if (!node)
+		return 0;
+
+	if (of_property_match_string(node, "enable-method", "acpi-wakeup-mailbox") < 0) {
+		pr_err("No acpi wakeup mailbox enable-method\n");
+		goto done;
+	}
+
+	if (of_property_read_u64(node, "wakeup-mailbox-addr", &mailaddr)) {
+		pr_err("Invalid wakeup mailbox addr\n");
+		goto done;
+	}
+	acpi_mp_wake_mailbox_paddr = mailaddr;
+	pr_info("dt wakeup-mailbox: addr 0x%llx\n", mailaddr);
+
+	/* No support for the MADT reset vector yet */
+	cpu_hotplug_disable_offlining();
+	apic_update_callback(wakeup_secondary_cpu_64, acpi_wakeup_cpu);
+
+done:
+	of_node_put(node);
+	return mailaddr;
+}
+#endif /* CONFIG_OF */
