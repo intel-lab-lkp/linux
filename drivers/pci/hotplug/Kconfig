@@ -173,4 +173,14 @@ config HOTPLUG_PCI_S390
 
 	  When in doubt, say Y.
 
+config HOTPLUG_PCI_OCTEONEP
+	bool "OCTEON PCI device Hotplug controller driver"
+	depends on HOTPLUG_PCI
+	help
+	  Say Y here if you have an OCTEON PCIe device with a hotplug
+	  controller. This driver enables the non-controller functions of the
+	  device to be registered as hotplug slots.
+
+	  When in doubt, say N.
+
 endif # HOTPLUG_PCI
