@@ -94,6 +94,7 @@ enum {
 
 #define ERDMA_CMDQ_TIMEOUT_MS 15000
 #define ERDMA_REG_ACCESS_WAIT_MS 20
+#define ERDMA_WAIT_DEV_REST_CNT 50
 #define ERDMA_WAIT_DEV_DONE_CNT 500
 
 struct erdma_cmdq {

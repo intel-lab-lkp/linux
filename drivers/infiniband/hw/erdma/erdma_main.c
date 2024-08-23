@@ -209,11 +209,30 @@ static void erdma_device_uninit(struct erdma_dev *dev)
 	dma_pool_destroy(dev->resp_pool);
 }
 
-static void erdma_hw_reset(struct erdma_dev *dev)
+static int erdma_hw_reset(struct erdma_dev *dev, bool wait)
 {
 	u32 ctrl = FIELD_PREP(ERDMA_REG_DEV_CTRL_RESET_MASK, 1);
+	int i;
 
 	erdma_reg_write32(dev, ERDMA_REGS_DEV_CTRL_REG, ctrl);
+
+	if (!wait)
+		return 0;
+
+	for (i = 0; i < ERDMA_WAIT_DEV_REST_CNT; i++) {
+		if (erdma_reg_read32_filed(dev, ERDMA_REGS_DEV_ST_REG,
+					   ERDMA_REG_DEV_ST_RESET_DONE_MASK))
+			break;
+
+		msleep(ERDMA_REG_ACCESS_WAIT_MS);
+	}
+
+	if (i == ERDMA_WAIT_DEV_REST_CNT) {
+		dev_err(&dev->pdev->dev, "wait reset done timeout.\n");
+		return -ETIME;
+	}
+
+	return 0;
 }
 
 static int erdma_wait_hw_init_done(struct erdma_dev *dev)
@@ -239,6 +258,17 @@ static int erdma_wait_hw_init_done(struct erdma_dev *dev)
 	return 0;
 }
 
+static int erdma_preinit_check(struct erdma_dev *dev)
+{
+	u32 version = erdma_reg_read32(dev, ERDMA_REGS_VERSION_REG);
+
+	/* we knows that it is a non-functional function. */
+	if (version == 0)
+		return -ENODEV;
+
+	return erdma_hw_reset(dev, true);
+}
+
 static const struct pci_device_id erdma_pci_tbl[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_ALIBABA, 0x107f) },
 	{}
@@ -248,7 +278,6 @@ static int erdma_probe_dev(struct pci_dev *pdev)
 {
 	struct erdma_dev *dev;
 	int bars, err;
-	u32 version;
 
 	err = pci_enable_device(pdev);
 	if (err) {
@@ -287,12 +316,9 @@ static int erdma_probe_dev(struct pci_dev *pdev)
 		goto err_release_bars;
 	}
 
-	version = erdma_reg_read32(dev, ERDMA_REGS_VERSION_REG);
-	if (version == 0) {
-		/* we knows that it is a non-functional function. */
-		err = -ENODEV;
+	err = erdma_preinit_check(dev);
+	if (err)
 		goto err_iounmap_func_bar;
-	}
 
 	err = erdma_device_init(dev, pdev);
 	if (err)
@@ -327,7 +353,7 @@ static int erdma_probe_dev(struct pci_dev *pdev)
 	return 0;
 
 err_reset_hw:
-	erdma_hw_reset(dev);
+	erdma_hw_reset(dev, false);
 
 err_uninit_cmdq:
 	erdma_cmdq_destroy(dev);
@@ -364,7 +390,7 @@ static void erdma_remove_dev(struct pci_dev *pdev)
 	struct erdma_dev *dev = pci_get_drvdata(pdev);
 
 	erdma_ceqs_uninit(dev);
-	erdma_hw_reset(dev);
+	erdma_hw_reset(dev, false);
 	erdma_cmdq_destroy(dev);
 	erdma_aeq_destroy(dev);
 	erdma_comm_irq_uninit(dev);
