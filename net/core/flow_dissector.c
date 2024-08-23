@@ -8,6 +8,7 @@
 #include <linux/filter.h>
 #include <net/dsa.h>
 #include <net/dst_metadata.h>
+#include <net/fou.h>
 #include <net/ip.h>
 #include <net/ipv6.h>
 #include <net/gre.h>
@@ -855,6 +856,7 @@ __skb_flow_dissect_udp(const struct sk_buff *skb, const struct net *net,
 		       u8 *p_ip_proto, int base_nhoff, unsigned int flags,
 		       unsigned int num_hdrs)
 {
+	__u8 encap_type, fou_protocol;
 	enum flow_dissect_ret ret;
 	struct udphdr _udph;
 	int nhoff;
@@ -905,6 +907,9 @@ __skb_flow_dissect_udp(const struct sk_buff *skb, const struct net *net,
 		}
 
 		encap_type = udp_sk(sk)->encap_type;
+		if (encap_type == UDP_ENCAP_FOU)
+			fou_protocol = fou_from_sock(sk)->protocol;
+
 		rcu_read_unlock();
 
 		break;
@@ -943,6 +948,9 @@ __skb_flow_dissect_udp(const struct sk_buff *skb, const struct net *net,
 		}
 
 		encap_type = udp_sk(sk)->encap_type;
+		if (encap_type == UDP_ENCAP_FOU)
+			fou_protocol = fou_from_sock(sk)->protocol;
+
 		rcu_read_unlock();
 
 		break;
@@ -957,6 +965,10 @@ __skb_flow_dissect_udp(const struct sk_buff *skb, const struct net *net,
 	ret = FLOW_DISSECT_RET_OUT_GOOD;
 
 	switch (encap_type) {
+	case UDP_ENCAP_FOU:
+		*p_ip_proto = fou_protocol;
+		ret = FLOW_DISSECT_RET_IPPROTO_AGAIN;
+		break;
 	case UDP_ENCAP_VXLAN:
 	case UDP_ENCAP_VXLAN_GPE:
 		ret = __skb_flow_dissect_vxlan(skb, flow_dissector,
