@@ -2910,6 +2910,9 @@ static int states_show(struct seq_file *s, void *v)
 {
 	struct nfs4_stid *st = v;
 
+	if (!st->sc_file)
+		return 0;
+
 	switch (st->sc_type) {
 	case SC_TYPE_OPEN:
 		return nfs4_show_open(s, st);
