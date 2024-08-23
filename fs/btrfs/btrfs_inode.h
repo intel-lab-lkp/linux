@@ -623,6 +623,7 @@ struct btrfs_encoded_read_private {
 };
 
 ssize_t btrfs_encoded_read(struct btrfs_encoded_read_private *priv);
+ssize_t btrfs_encoded_read_regular_end(struct btrfs_encoded_read_private *priv);
 ssize_t btrfs_do_encoded_write(struct kiocb *iocb, struct iov_iter *from,
 			       const struct btrfs_ioctl_encoded_io_args *encoded);
 
