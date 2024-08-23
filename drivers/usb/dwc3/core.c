@@ -222,6 +222,16 @@ static void __dwc3_set_mode(struct work_struct *work)
 
 	switch (desired_dr_role) {
 	case DWC3_GCTL_PRTCAP_HOST:
+
+		/*
+		 * Setting GUCTL1 bit 29 so that controller
+		 * will ignore single SE0 glitch on the linestate
+		 * during transmit.
+		 */
+		reg = dwc3_readl(dwc->regs, DWC3_GUCTL1);
+		reg |= DWC3_GUCTL1_FILTER_SE0_FSLS_EOP;
+		dwc3_writel(dwc->regs, DWC3_GUCTL1, reg);
+
 		ret = dwc3_host_init(dwc);
 		if (ret) {
 			dev_err(dwc->dev, "failed to initialize host\n");
