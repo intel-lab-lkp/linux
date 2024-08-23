@@ -117,6 +117,7 @@ void	xfs_log_item_init(struct xfs_mount *mp, struct xfs_log_item *item,
 #define XFS_ITEM_PINNED		1
 #define XFS_ITEM_LOCKED		2
 #define XFS_ITEM_FLUSHING	3
+#define XFS_ITEM_UNSAFE		4
 
 /*
  * This is the structure maintained for every active transaction.

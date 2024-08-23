@@ -561,6 +561,13 @@ xfsaild_push(
 
 			stuck++;
 			break;
+		case XFS_ITEM_UNSAFE:
+			/*
+			 * The item may have been freed, so we can't access the
+			 * log item here.
+			 */
+			XFS_STATS_INC(mp, xs_push_ail_unsafe);
+			break;
 		default:
 			ASSERT(0);
 			break;

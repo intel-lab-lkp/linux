@@ -86,6 +86,7 @@ struct __xfsstats {
 	uint32_t		xs_push_ail_pushbuf;
 	uint32_t		xs_push_ail_pinned;
 	uint32_t		xs_push_ail_locked;
+	uint32_t		xs_push_ail_unsafe;
 	uint32_t		xs_push_ail_flushing;
 	uint32_t		xs_push_ail_restarts;
 	uint32_t		xs_push_ail_flush;
