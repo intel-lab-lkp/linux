@@ -1281,7 +1281,7 @@ static int ncsi_choose_active_channel(struct ncsi_dev_priv *ndp)
 				netdev_dbg(ndp->ndev.dev,
 					   "NCSI: Channel %u added to queue (link %s)\n",
 					   nc->id,
-					   ncm->data[2] & 0x1 ? "up" : "down");
+					   str_up_down(ncm->data[2] & 0x1));
 			}
 
 			spin_unlock_irqrestore(&nc->lock, cflags);
