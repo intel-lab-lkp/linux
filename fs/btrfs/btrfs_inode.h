@@ -605,9 +605,23 @@ int btrfs_encoded_read_regular_fill_pages(struct btrfs_inode *inode,
 					  u64 file_offset, u64 disk_bytenr,
 					  u64 disk_io_size,
 					  struct page **pages);
-ssize_t btrfs_encoded_read(struct file *file, loff_t offset,
-			   struct iov_iter *iter,
-			   struct btrfs_ioctl_encoded_io_args *encoded);
+
+struct btrfs_encoded_read_private {
+	wait_queue_head_t wait;
+	atomic_t pending;
+	blk_status_t status;
+	unsigned long nr_pages;
+	struct page **pages;
+	struct extent_state *cached_state;
+	size_t count;
+	struct iovec iovstack[UIO_FASTIOV];
+	struct iovec *iov;
+	struct iov_iter iter;
+	struct btrfs_ioctl_encoded_io_args args;
+	struct file *file;
+};
+
+ssize_t btrfs_encoded_read(struct btrfs_encoded_read_private *priv);
 ssize_t btrfs_do_encoded_write(struct kiocb *iocb, struct iov_iter *from,
 			       const struct btrfs_ioctl_encoded_io_args *encoded);
 
