@@ -34,6 +34,7 @@
 #include <linux/iomap.h>
 #include <asm/unaligned.h>
 #include <linux/fsverity.h>
+#include <linux/io_uring/cmd.h>
 #include "misc.h"
 #include "ctree.h"
 #include "disk-io.h"
@@ -9078,7 +9079,7 @@ out:
 	return ret;
 }
 
-static void btrfs_encoded_read_endio(struct btrfs_bio *bbio)
+static void btrfs_encoded_read_ioctl_endio(struct btrfs_bio *bbio)
 {
 	struct btrfs_encoded_read_private *priv = bbio->private;
 
@@ -9098,6 +9099,47 @@ static void btrfs_encoded_read_endio(struct btrfs_bio *bbio)
 	bio_put(&bbio->bio);
 }
 
+static inline struct btrfs_encoded_read_private *btrfs_uring_encoded_read_pdu(
+		struct io_uring_cmd *cmd)
+{
+	return *(struct btrfs_encoded_read_private **)cmd->pdu;
+}
+static void btrfs_finish_uring_encoded_read(struct io_uring_cmd *cmd,
+					    unsigned int issue_flags)
+{
+	struct btrfs_encoded_read_private *priv;
+	ssize_t ret;
+
+	priv = btrfs_uring_encoded_read_pdu(cmd);
+	ret = btrfs_encoded_read_finish(priv, -EIOCBQUEUED);
+
+	io_uring_cmd_done(priv->cmd, ret, 0, priv->issue_flags);
+
+	kfree(priv);
+}
+
+static void btrfs_encoded_read_uring_endio(struct btrfs_bio *bbio)
+{
+	struct btrfs_encoded_read_private *priv = bbio->private;
+
+	if (bbio->bio.bi_status) {
+		/*
+		 * The memory barrier implied by the atomic_dec_return() here
+		 * pairs with the memory barrier implied by the
+		 * atomic_dec_return() or io_wait_event() in
+		 * btrfs_encoded_read_regular_fill_pages() to ensure that this
+		 * write is observed before the load of status in
+		 * btrfs_encoded_read_regular_fill_pages().
+		 */
+		WRITE_ONCE(priv->status, bbio->bio.bi_status);
+	}
+	if (!atomic_dec_return(&priv->pending)) {
+		io_uring_cmd_complete_in_task(priv->cmd,
+					      btrfs_finish_uring_encoded_read);
+	}
+	bio_put(&bbio->bio);
+}
+
 static void _btrfs_encoded_read_regular_fill_pages(struct btrfs_inode *inode,
 					u64 file_offset, u64 disk_bytenr,
 					u64 disk_io_size,
@@ -9106,11 +9148,16 @@ static void _btrfs_encoded_read_regular_fill_pages(struct btrfs_inode *inode,
 	struct btrfs_fs_info *fs_info = inode->root->fs_info;
 	unsigned long i = 0;
 	struct btrfs_bio *bbio;
+	btrfs_bio_end_io_t cb;
 
-	init_waitqueue_head(&priv->wait);
+	if (priv->cmd) {
+		cb = btrfs_encoded_read_uring_endio;
+	} else {
+		init_waitqueue_head(&priv->wait);
+		cb = btrfs_encoded_read_ioctl_endio;
+	}
 
-	bbio = btrfs_bio_alloc(BIO_MAX_VECS, REQ_OP_READ, fs_info,
-			       btrfs_encoded_read_endio, priv);
+	bbio = btrfs_bio_alloc(BIO_MAX_VECS, REQ_OP_READ, fs_info, cb, priv);
 	bbio->bio.bi_iter.bi_sector = disk_bytenr >> SECTOR_SHIFT;
 	bbio->inode = inode;
 
@@ -9122,7 +9169,7 @@ static void _btrfs_encoded_read_regular_fill_pages(struct btrfs_inode *inode,
 			btrfs_submit_bio(bbio, 0);
 
 			bbio = btrfs_bio_alloc(BIO_MAX_VECS, REQ_OP_READ, fs_info,
-					       btrfs_encoded_read_endio, priv);
+					       cb, priv);
 			bbio->bio.bi_iter.bi_sector = disk_bytenr >> SECTOR_SHIFT;
 			bbio->inode = inode;
 			continue;

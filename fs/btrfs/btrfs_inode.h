@@ -620,6 +620,8 @@ struct btrfs_encoded_read_private {
 	struct btrfs_ioctl_encoded_io_args args;
 	struct file *file;
 	void __user *copy_out;
+	struct io_uring_cmd *cmd;
+	unsigned int issue_flags;
 };
 
 ssize_t btrfs_encoded_read(struct btrfs_encoded_read_private *priv);

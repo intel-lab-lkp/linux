@@ -29,6 +29,7 @@
 #include <linux/fileattr.h>
 #include <linux/fsverity.h>
 #include <linux/sched/xacct.h>
+#include <linux/io_uring/cmd.h>
 #include "ctree.h"
 #include "disk-io.h"
 #include "export.h"
@@ -4509,8 +4510,8 @@ static int _btrfs_ioctl_send(struct btrfs_inode *inode, void __user *argp, bool 
 	return ret;
 }
 
-static ssize_t btrfs_encoded_read_finish(struct btrfs_encoded_read_private *priv,
-					 ssize_t ret)
+ssize_t btrfs_encoded_read_finish(struct btrfs_encoded_read_private *priv,
+				  ssize_t ret)
 {
 	size_t copy_end_kernel = offsetofend(struct btrfs_ioctl_encoded_io_args,
 					     flags);
@@ -4723,6 +4724,60 @@ out_acct:
 		add_wchar(current, ret);
 	inc_syscw(current);
 	return ret;
+}
+
+static void btrfs_uring_encoded_read(struct io_uring_cmd *cmd,
+				     unsigned int issue_flags)
+{
+	ssize_t ret;
+	void __user *argp = (void __user *)(uintptr_t)cmd->sqe->addr;
+	struct btrfs_encoded_read_private *priv;
+	bool compat = issue_flags & IO_URING_F_COMPAT;
+
+	priv = kmalloc(sizeof(*priv), GFP_KERNEL);
+	if (!priv) {
+		ret = -ENOMEM;
+		goto out_uring;
+	}
+
+	ret = btrfs_prepare_encoded_read(priv, cmd->file, compat, argp);
+	if (ret)
+		goto out_finish;
+
+	if (iov_iter_count(&priv->iter) == 0) {
+		ret = 0;
+		goto out_finish;
+	}
+
+	*(struct btrfs_encoded_read_private **)cmd->pdu = priv;
+	priv->cmd = cmd;
+	priv->issue_flags = issue_flags;
+	ret = btrfs_encoded_read(priv);
+
+	if (ret == -EIOCBQUEUED && atomic_dec_return(&priv->pending))
+		return;
+
+out_finish:
+	ret = btrfs_encoded_read_finish(priv, ret);
+	kfree(priv);
+
+out_uring:
+	io_uring_cmd_done(cmd, ret, 0, issue_flags);
+}
+
+int btrfs_uring_cmd(struct io_uring_cmd *cmd, unsigned int issue_flags)
+{
+	switch (cmd->cmd_op) {
+	case BTRFS_IOC_ENCODED_READ:
+#if defined(CONFIG_64BIT) && defined(CONFIG_COMPAT)
+	case BTRFS_IOC_ENCODED_READ_32:
+#endif
+		btrfs_uring_encoded_read(cmd, issue_flags);
+		return -EIOCBQUEUED;
+	}
+
+	io_uring_cmd_done(cmd, -EINVAL, 0, issue_flags);
+	return -EIOCBQUEUED;
 }
 
 long btrfs_ioctl(struct file *file, unsigned int
