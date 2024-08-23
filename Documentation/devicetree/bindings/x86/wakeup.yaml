@@ -1,0 +1,64 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+# Copyright (C) 2024 Intel Corporation
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/x86/wakeup.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: x86 mailbox wakeup
+maintainers:
+  - Yunhong Jiang <yunhong.jiang@linux.intel.com>
+
+description: |
+  The x86 mailbox wakeup mechanism defines a mechanism to let the bootstrap
+  processor (BSP) to wake up application processors (APs) through a wakeup
+  mailbox.
+
+  The "wakeup-mailbox-addr" property specifies the wakeup mailbox address. The
+  wakeup mailbox is a 4K-aligned 4K-size memory block allocated in the reserved
+  memory.
+
+  The wakeup mailbox structure is defined as follows.
+
+    uint16_t command;
+    uint16_t reserved;
+    uint32_t apic_id;
+    uint64_t wakeup_vector;
+    uint8_t  reservedForOs[2032];
+
+  The memory after reservedForOs field is reserved and OS should not touch it.
+
+  To wakes up a AP, the BSP prepares the wakeup routine, fills the wakeup
+  routine's address into the wakeup_vector field, fill the apic_id field with
+  the target AP's APIC_ID, and write 1 to the command field. After receiving the
+  wakeup command, the target AP will jump to the wakeup routine.
+
+  For each AP, the mailbox can be used only once for the wakeup command. After
+  the AP jumps to the wakeup routine, the mailbox will no longer be checked by
+  this AP.
+
+  The wakeup mailbox structure and the wakeup process is the same as
+  the Multiprocessor Wakeup Mailbox Structure defined in ACPI spec version 6.5,
+  section 5.2.12.19 [1].
+
+  References:
+
+  [1] https://uefi.org/specs/ACPI/6.5/05_ACPI_Software_Programming_Model.html
+
+select: false
+
+properties:
+  wakeup-mailbox-addr:
+    $ref: /schemas/types.yaml#/definitions/uint64
+    description: |
+      The physical address of the wakeup mailbox data structure. The address
+      must be 4K bytes aligned 4k-size memory and it should be in the reserved
+      memory.
+
+      This requires the "enable-method" property in the cpus node is set to
+      "acpi-wakeup-mailbox".
+
+required:
+  - wakeup-mailbox-addr
+
+additionalProperties: false
