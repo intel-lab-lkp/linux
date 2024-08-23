@@ -2106,7 +2106,9 @@ static int osnoise_cpu_init(unsigned int cpu)
  */
 static int osnoise_cpu_die(unsigned int cpu)
 {
+	mutex_lock(&interface_lock);
 	stop_kthread(cpu);
+	mutex_unlock(&interface_lock);
 	return 0;
 }
 
@@ -2239,8 +2241,11 @@ static ssize_t osnoise_options_write(struct file *filp, const char __user *ubuf,
 	 */
 	mutex_lock(&trace_types_lock);
 	running = osnoise_has_registered_instances();
-	if (running)
+	if (running) {
+		mutex_lock(&interface_lock);
 		stop_per_cpu_kthreads();
+		mutex_unlock(&interface_lock);
+	}
 
 	mutex_lock(&interface_lock);
 	/*
@@ -2355,8 +2360,11 @@ osnoise_cpus_write(struct file *filp, const char __user *ubuf, size_t count,
 	 */
 	mutex_lock(&trace_types_lock);
 	running = osnoise_has_registered_instances();
-	if (running)
+	if (running) {
+		mutex_lock(&interface_lock);
 		stop_per_cpu_kthreads();
+		mutex_unlock(&interface_lock);
+	}
 
 	mutex_lock(&interface_lock);
 	/*
@@ -2951,7 +2959,9 @@ static void osnoise_workload_stop(void)
 	 */
 	barrier();
 
+	mutex_lock(&interface_lock);
 	stop_per_cpu_kthreads();
+	mutex_unlock(&interface_lock);
 
 	osnoise_unhook_events();
 }
