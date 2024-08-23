@@ -229,6 +229,9 @@ static const struct i2c_dw_semaphore_callbacks i2c_dw_semaphore_cb_table[] = {
 		.probe = i2c_dw_amdpsp_probe_lock_support,
 	},
 #endif
+	{
+		.probe = i2c_dw_txgbe_probe_lock_support,
+	},
 	{}
 };
 
