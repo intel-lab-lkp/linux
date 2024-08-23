@@ -2352,9 +2352,8 @@ static int fuse_writepages(struct address_space *mapping,
 	struct fuse_fill_wb_data data;
 	int err;
 
-	err = -EIO;
 	if (fuse_is_bad(inode))
-		goto out;
+		return -EIO;
 
 	if (wbc->sync_mode == WB_SYNC_NONE &&
 	    fc->num_background >= fc->congestion_threshold)
@@ -2364,12 +2363,11 @@ static int fuse_writepages(struct address_space *mapping,
 	data.wpa = NULL;
 	data.ff = NULL;
 
-	err = -ENOMEM;
 	data.orig_pages = kcalloc(fc->max_pages,
 				  sizeof(struct page *),
 				  GFP_NOFS);
 	if (!data.orig_pages)
-		goto out;
+		return -ENOMEM;
 
 	err = write_cache_pages(mapping, wbc, fuse_writepages_fill, &data);
 	if (data.wpa) {
@@ -2380,7 +2378,6 @@ static int fuse_writepages(struct address_space *mapping,
 		fuse_file_put(data.ff, false);
 
 	kfree(data.orig_pages);
-out:
 	return err;
 }
 
