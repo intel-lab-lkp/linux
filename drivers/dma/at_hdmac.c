@@ -337,7 +337,6 @@ static inline u8 convert_buswidth(enum dma_slave_buswidth addr_width)
  * struct at_dma - internal representation of an Atmel HDMA Controller
  * @dma_device: dmaengine dma_device object members
  * @regs: memory mapped register base
- * @clk: dma controller clock
  * @save_imr: interrupt mask register that is saved on suspend/resume cycle
  * @all_chan_mask: all channels availlable in a mask
  * @lli_pool: hw lli table
@@ -347,7 +346,6 @@ static inline u8 convert_buswidth(enum dma_slave_buswidth addr_width)
 struct at_dma {
 	struct dma_device	dma_device;
 	void __iomem		*regs;
-	struct clk		*clk;
 	u32			save_imr;
 
 	u8			all_chan_mask;
@@ -1942,6 +1940,7 @@ static int __init at_dma_probe(struct platform_device *pdev)
 	int			err;
 	int			i;
 	const struct at_dma_platform_data *plat_dat;
+	struct clk	*clk;
 
 	/* setup platform data for each SoC */
 	dma_cap_set(DMA_MEMCPY, at91sam9rl_config.cap_mask);
@@ -1975,20 +1974,16 @@ static int __init at_dma_probe(struct platform_device *pdev)
 	atdma->dma_device.cap_mask = plat_dat->cap_mask;
 	atdma->all_chan_mask = (1 << plat_dat->nr_channels) - 1;
 
-	atdma->clk = devm_clk_get(&pdev->dev, "dma_clk");
-	if (IS_ERR(atdma->clk))
-		return PTR_ERR(atdma->clk);
-
-	err = clk_prepare_enable(atdma->clk);
-	if (err)
-		return err;
+	clk = devm_clk_get_enabled(&pdev->dev, "dma_clk");
+	if (IS_ERR(clk))
+		return PTR_ERR(clk);
 
 	/* force dma off, just in case */
 	at_dma_off(atdma);
 
 	err = request_irq(irq, at_dma_interrupt, 0, "at_hdmac", atdma);
 	if (err)
-		goto err_irq;
+		return err;
 
 	platform_set_drvdata(pdev, atdma);
 
@@ -2105,8 +2100,6 @@ err_memset_pool_create:
 	dma_pool_destroy(atdma->lli_pool);
 err_desc_pool_create:
 	free_irq(platform_get_irq(pdev, 0), atdma);
-err_irq:
-	clk_disable_unprepare(atdma->clk);
 	return err;
 }
 
@@ -2130,8 +2123,6 @@ static void at_dma_remove(struct platform_device *pdev)
 		atc_disable_chan_irq(atdma, chan->chan_id);
 		list_del(&chan->device_node);
 	}
-
-	clk_disable_unprepare(atdma->clk);
 }
 
 static void at_dma_shutdown(struct platform_device *pdev)
@@ -2139,7 +2130,6 @@ static void at_dma_shutdown(struct platform_device *pdev)
 	struct at_dma	*atdma = platform_get_drvdata(pdev);
 
 	at_dma_off(platform_get_drvdata(pdev));
-	clk_disable_unprepare(atdma->clk);
 }
 
 static int at_dma_prepare(struct device *dev)
@@ -2194,7 +2184,6 @@ static int at_dma_suspend_noirq(struct device *dev)
 
 	/* disable DMA controller */
 	at_dma_off(atdma);
-	clk_disable_unprepare(atdma->clk);
 	return 0;
 }
 
@@ -2223,7 +2212,6 @@ static int at_dma_resume_noirq(struct device *dev)
 	struct dma_chan *chan, *_chan;
 
 	/* bring back DMA controller */
-	clk_prepare_enable(atdma->clk);
 	dma_writel(atdma, EN, AT_DMA_ENABLE);
 
 	/* clear any pending interrupt */
