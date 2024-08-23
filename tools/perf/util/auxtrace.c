@@ -2828,6 +2828,70 @@ int auxtrace_parse_filters(struct evlist *evlist)
 	return 0;
 }
 
+int auxtrace_validate_events(struct evlist *evlist)
+{
+	struct evsel *evsel;
+	struct perf_cpu_map *cpu_map = NULL;
+	struct perf_cpu_map *cpu_map_intersect = NULL;
+	struct perf_cpu_map *cpu_map_merged = NULL;
+	int ret = 0;
+
+	if (!evlist)
+		return 0;
+
+	/*
+	 * Currently the tool only supports multiple AUX events without
+	 * overlapping CPU maps and every CPU has its unique AUX buffer
+	 * for CPU or system mode tracing.
+	 *
+	 * Returns failure if detects CPU maps overlapping.
+	 */
+	evlist__for_each_entry(evlist, evsel) {
+		if (!evsel__is_aux_event(evsel))
+			continue;
+
+		if (perf_cpu_map__is_empty(evsel->pmu->cpus))
+			continue;
+
+		cpu_map_intersect = perf_cpu_map__intersect(cpu_map, evsel->pmu->cpus);
+		if (cpu_map_intersect) {
+			perf_cpu_map__put(cpu_map_intersect);
+			pr_err("Doesn't support AUX events with overlapping CPU masks\n");
+			ret = -EINVAL;
+			break;
+		}
+		perf_cpu_map__put(cpu_map_intersect);
+
+		cpu_map_merged = perf_cpu_map__merge(cpu_map, evsel->pmu->cpus);
+		if (!cpu_map_merged) {
+			ret = -ENOMEM;
+			break;
+		}
+
+		/* Update the CPU maps after merging */
+		perf_cpu_map__put(cpu_map);
+		cpu_map = cpu_map_merged;
+	}
+
+	if (!ret)
+		goto out;
+
+	/* If fails, dump CPU maps for debugging */
+	evlist__for_each_entry(evlist, evsel) {
+		char buf[200];
+
+		if (!evsel__is_aux_event(evsel))
+			continue;
+
+		cpu_map__snprint(evsel->pmu->cpus, buf, sizeof(buf));
+		pr_debug("AUX event [%s]'s cpu map is: %s\n", evsel->pmu->name, buf);
+	}
+
+out:
+	perf_cpu_map__put(cpu_map);
+	return ret;
+}
+
 int auxtrace__process_event(struct perf_session *session, union perf_event *event,
 			    struct perf_sample *sample, const struct perf_tool *tool)
 {
