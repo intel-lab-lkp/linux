@@ -3058,7 +3058,7 @@ static void linger_reg_commit_complete(struct ceph_osd_linger_request *lreq,
 				       int result)
 {
 	if (!completion_done(&lreq->reg_commit_wait)) {
-		lreq->reg_commit_error = (result <= 0 ? result : 0);
+		lreq->reg_commit_error = min(result, 0);
 		complete_all(&lreq->reg_commit_wait);
 	}
 }
