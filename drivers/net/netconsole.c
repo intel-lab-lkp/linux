@@ -82,6 +82,13 @@ static DEFINE_SPINLOCK(target_list_lock);
  */
 static struct console netconsole_ext;
 
+#ifdef CONFIG_NETCONSOLE_DYNAMIC
+struct netconsole_target_stats  {
+	size_t xmit_drop_count;
+	size_t enomem_count;
+};
+#endif
+
 /**
  * struct netconsole_target - Represents a configured netconsole target.
  * @list:	Links this target into the target_list.
@@ -89,6 +96,7 @@ static struct console netconsole_ext;
  * @userdata_group:	Links to the userdata configfs hierarchy
  * @userdata_complete:	Cached, formatted string of append
  * @userdata_length:	String length of userdata_complete
+ * @stats:	UDP send stats for the target. Used for debugging.
  * @enabled:	On / off knob to enable / disable target.
  *		Visible from userspace (read-write).
  *		We maintain a strict 1:1 correspondence between this and
@@ -115,6 +123,7 @@ struct netconsole_target {
 	struct config_group	userdata_group;
 	char userdata_complete[MAX_USERDATA_ENTRY_LENGTH * MAX_USERDATA_ITEMS];
 	size_t			userdata_length;
+	struct netconsole_target_stats stats;
 #endif
 	bool			enabled;
 	bool			extended;
@@ -227,6 +236,7 @@ static struct netconsole_target *alloc_and_init(void)
  *				|	remote_ip
  *				|	local_mac
  *				|	remote_mac
+ *				|	stats
  *				|	userdata/
  *				|		<key>/
  *				|			value
@@ -321,6 +331,14 @@ static ssize_t local_mac_show(struct config_item *item, char *buf)
 static ssize_t remote_mac_show(struct config_item *item, char *buf)
 {
 	return sysfs_emit(buf, "%pM\n", to_target(item)->np.remote_mac);
+}
+
+static ssize_t stats_show(struct config_item *item, char *buf)
+{
+	struct netconsole_target *nt = to_target(item);
+
+	return sysfs_emit(buf, "xmit_drop: %lu enomem: %lu\n",
+		nt->stats.xmit_drop_count, nt->stats.enomem_count);
 }
 
 /*
@@ -795,6 +813,7 @@ CONFIGFS_ATTR(, remote_ip);
 CONFIGFS_ATTR_RO(, local_mac);
 CONFIGFS_ATTR(, remote_mac);
 CONFIGFS_ATTR(, release);
+CONFIGFS_ATTR_RO(, stats);
 
 static struct configfs_attribute *netconsole_target_attrs[] = {
 	&attr_enabled,
@@ -807,6 +826,7 @@ static struct configfs_attribute *netconsole_target_attrs[] = {
 	&attr_remote_ip,
 	&attr_local_mac,
 	&attr_remote_mac,
+	&attr_stats,
 	NULL,
 };
 
@@ -1016,6 +1036,25 @@ static struct notifier_block netconsole_netdev_notifier = {
 };
 
 /**
+ * count_udp_send_stats - Classify netpoll_send_udp result and count errors.
+ * @nt: target that was sent to
+ * @result: result of netpoll_send_udp
+ *
+ * Takes the result of netpoll_send_udp and classifies the type of error that
+ * occurred. Increments statistics in nt->stats accordingly.
+ */
+static void count_udp_send_stats(struct netconsole_target *nt, int result)
+{
+#ifdef CONFIG_NETCONSOLE_DYNAMIC
+	if (result == NET_XMIT_DROP) {
+		nt->stats.xmit_drop_count++;
+	} else if (result == -ENOMEM) {
+		nt->stats.enomem_count++;
+	};
+#endif
+}
+
+/**
  * send_ext_msg_udp - send extended log message to target
  * @nt: target to send message to
  * @msg: extended log message to send
@@ -1063,7 +1102,9 @@ static void send_ext_msg_udp(struct netconsole_target *nt, const char *msg,
 					     "%s", userdata);
 
 		msg_ready = buf;
-		netpoll_send_udp(&nt->np, msg_ready, msg_len);
+		count_udp_send_stats(nt, netpoll_send_udp(&nt->np,
+							  msg_ready,
+							  msg_len));
 		return;
 	}
 
@@ -1126,7 +1167,11 @@ static void send_ext_msg_udp(struct netconsole_target *nt, const char *msg,
 			this_offset += this_chunk;
 		}
 
-		netpoll_send_udp(&nt->np, buf, this_header + this_offset);
+		count_udp_send_stats(nt,
+				     netpoll_send_udp(&nt->np,
+						      buf,
+						      this_header + this_offset)
+		);
 		offset += this_offset;
 	}
 }
@@ -1172,7 +1217,10 @@ static void write_msg(struct console *con, const char *msg, unsigned int len)
 			tmp = msg;
 			for (left = len; left;) {
 				frag = min(left, MAX_PRINT_CHUNK);
-				netpoll_send_udp(&nt->np, tmp, frag);
+				int send_result = netpoll_send_udp(&nt->np,
+								   tmp,
+								   frag);
+				count_udp_send_stats(nt, send_result);
 				tmp += frag;
 				left -= frag;
 			}
