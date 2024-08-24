@@ -282,7 +282,7 @@ int ip_cmsg_send(struct sock *sk, struct msghdr *msg, struct ipcm_cookie *ipc,
 			/* Our caller is responsible for freeing ipc->opt */
 			err = ip_options_get(net, &ipc->opt,
 					     KERNEL_SOCKPTR(CMSG_DATA(cmsg)),
-					     err < 40 ? err : 40);
+					     min(40, err));
 			if (err)
 				return err;
 			break;
