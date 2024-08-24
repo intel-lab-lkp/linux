@@ -37,6 +37,7 @@ mkdir -p "${destdir}"
 	echo include/config/auto.conf
 	echo include/config/kernel.release
 	echo include/generated
+	echo scripts/mod/modinfo.o
 	find_in_scripts
 
 	if is_enabled CONFIG_GCC_PLUGINS; then
@@ -78,4 +79,4 @@ if [ "${CC}" != "${HOSTCC}" ] && is_enabled CONFIG_CC_CAN_LINK; then
 	rm -f "${destdir}/Kbuild" "${destdir}/scripts/Kbuild"
 fi
 
-find "${destdir}" \( -name '.*.cmd' -o -name '*.o' \) -delete
+find "${destdir}" \( -name '.*.cmd' -o \( -name '*.o' -a -! -path '*/scripts/mod/modinfo.o' \) \) -delete
