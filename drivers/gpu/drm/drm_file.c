@@ -355,7 +355,6 @@ int drm_open_helper(struct file *filp, struct drm_minor *minor)
  * resources for it. It also calls the &drm_driver.open driver callback.
  *
  * RETURNS:
- *
  * 0 on success or negative errno value on failure.
  */
 int drm_open(struct inode *inode, struct file *filp)
@@ -417,7 +416,6 @@ void drm_lastclose(struct drm_device * dev)
  * DRM device also proceeds to call the &drm_driver.lastclose driver callback.
  *
  * RETURNS:
- *
  * Always succeeds and returns 0.
  */
 int drm_release(struct inode *inode, struct file *filp)
@@ -489,7 +487,6 @@ void drm_file_update_pid(struct drm_file *filp)
  * call the &drm_driver.lastclose driver callback.
  *
  * RETURNS:
- *
  * Always succeeds and returns 0.
  */
 int drm_release_noglobal(struct inode *inode, struct file *filp)
@@ -532,7 +529,6 @@ EXPORT_SYMBOL(drm_release_noglobal);
  * safety.
  *
  * RETURNS:
- *
  * Number of bytes read (always aligned to full events, and can be 0) or a
  * negative error code on failure.
  */
@@ -618,7 +614,6 @@ EXPORT_SYMBOL(drm_read);
  * See also drm_read().
  *
  * RETURNS:
- *
  * Mask of POLL flags indicating the current status of the file.
  */
 __poll_t drm_poll(struct file *filp, struct poll_table_struct *wait)
@@ -656,7 +651,6 @@ EXPORT_SYMBOL(drm_poll);
  * already hold &drm_device.event_lock.
  *
  * RETURNS:
- *
  * 0 on success or a negative error code on failure.
  */
 int drm_event_reserve_init_locked(struct drm_device *dev,
@@ -698,7 +692,6 @@ EXPORT_SYMBOL(drm_event_reserve_init_locked);
  * drm_event_reserve_init_locked() instead.
  *
  * RETURNS:
- *
  * 0 on success or a negative error code on failure.
  */
 int drm_event_reserve_init(struct drm_device *dev,
