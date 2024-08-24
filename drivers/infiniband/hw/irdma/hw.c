@@ -282,6 +282,13 @@ static void irdma_process_aeq(struct irdma_pci_f *rf)
 		if (ret)
 			break;
 
+		if (info->aeqe_overflow) {
+			ibdev_err(&iwdev->ibdev, "AEQ has overflowed\n");
+			rf->reset = true;
+			rf->gen_ops.request_reset(rf);
+			return;
+		}
+
 		aeqcnt++;
 		ibdev_dbg(&iwdev->ibdev,
 			  "AEQ: ae_id = 0x%x bool qp=%d qp_id = %d tcp_state=%d iwarp_state=%d ae_src=%d\n",
@@ -442,6 +449,9 @@ static void irdma_process_aeq(struct irdma_pci_f *rf)
 		case IRDMA_AE_LCE_FUNCTION_CATASTROPHIC:
 		case IRDMA_AE_LLP_TOO_MANY_RNRS:
 		case IRDMA_AE_LCE_CQ_CATASTROPHIC:
+		case IRDMA_AE_REMOTE_QP_CATASTROPHIC:
+		case IRDMA_AE_LOCAL_QP_CATASTROPHIC:
+		case IRDMA_AE_RCE_QP_CATASTROPHIC:
 		case IRDMA_AE_UDA_XMIT_DGRAM_TOO_LONG:
 		default:
 			ibdev_err(&iwdev->ibdev, "abnormal ae_id = 0x%x bool qp=%d qp_id = %d, ae_src=%d\n",
@@ -688,7 +698,9 @@ static void irdma_destroy_aeq(struct irdma_pci_f *rf)
 	int status = -EBUSY;
 
 	if (!rf->msix_shared) {
-		rf->sc_dev.irq_ops->irdma_cfg_aeq(&rf->sc_dev, rf->iw_msixtbl->idx, false);
+		if (rf->sc_dev.privileged)
+			rf->sc_dev.irq_ops->irdma_cfg_aeq(&rf->sc_dev,
+							  rf->iw_msixtbl->idx, false);
 		irdma_destroy_irq(rf, rf->iw_msixtbl, rf);
 	}
 	if (rf->reset)
@@ -754,9 +766,10 @@ static void irdma_del_ceq_0(struct irdma_pci_f *rf)
 
 	if (rf->msix_shared) {
 		msix_vec = &rf->iw_msixtbl[0];
-		rf->sc_dev.irq_ops->irdma_cfg_ceq(&rf->sc_dev,
-						  msix_vec->ceq_id,
-						  msix_vec->idx, false);
+		if (rf->sc_dev.privileged)
+			rf->sc_dev.irq_ops->irdma_cfg_ceq(&rf->sc_dev,
+							  msix_vec->ceq_id,
+							  msix_vec->idx, false);
 		irdma_destroy_irq(rf, msix_vec, rf);
 	} else {
 		msix_vec = &rf->iw_msixtbl[1];
@@ -787,8 +800,10 @@ static void irdma_del_ceqs(struct irdma_pci_f *rf)
 		msix_vec = &rf->iw_msixtbl[2];
 
 	for (i = 1; i < rf->ceqs_count; i++, msix_vec++, iwceq++) {
-		rf->sc_dev.irq_ops->irdma_cfg_ceq(&rf->sc_dev, msix_vec->ceq_id,
-						  msix_vec->idx, false);
+		if (rf->sc_dev.privileged)
+			rf->sc_dev.irq_ops->irdma_cfg_ceq(&rf->sc_dev,
+							  msix_vec->ceq_id,
+							  msix_vec->idx, false);
 		irdma_destroy_irq(rf, msix_vec, iwceq);
 		irdma_cqp_ceq_cmd(&rf->sc_dev, &iwceq->sc_ceq,
 				  IRDMA_OP_CEQ_DESTROY);
@@ -1211,9 +1226,13 @@ static int irdma_cfg_ceq_vector(struct irdma_pci_f *rf, struct irdma_ceq *iwceq,
 	}
 
 	msix_vec->ceq_id = ceq_id;
-	rf->sc_dev.irq_ops->irdma_cfg_ceq(&rf->sc_dev, ceq_id, msix_vec->idx, true);
-
-	return 0;
+	if (rf->sc_dev.privileged)
+		rf->sc_dev.irq_ops->irdma_cfg_ceq(&rf->sc_dev, ceq_id,
+						  msix_vec->idx, true);
+	else
+		status = irdma_vchnl_req_ceq_vec_map(&rf->sc_dev, ceq_id,
+						     msix_vec->idx);
+	return status;
 }
 
 /**
@@ -1226,7 +1245,7 @@ static int irdma_cfg_ceq_vector(struct irdma_pci_f *rf, struct irdma_ceq *iwceq,
 static int irdma_cfg_aeq_vector(struct irdma_pci_f *rf)
 {
 	struct irdma_msix_vector *msix_vec = rf->iw_msixtbl;
-	u32 ret = 0;
+	int ret = 0;
 
 	if (!rf->msix_shared) {
 		snprintf(msix_vec->name, sizeof(msix_vec->name) - 1,
@@ -1237,12 +1256,16 @@ static int irdma_cfg_aeq_vector(struct irdma_pci_f *rf)
 	}
 	if (ret) {
 		ibdev_dbg(&rf->iwdev->ibdev, "ERR: aeq irq config fail\n");
-		return -EINVAL;
+		return ret;
 	}
 
-	rf->sc_dev.irq_ops->irdma_cfg_aeq(&rf->sc_dev, msix_vec->idx, true);
+	if (rf->sc_dev.privileged)
+		rf->sc_dev.irq_ops->irdma_cfg_aeq(&rf->sc_dev, msix_vec->idx,
+						  true);
+	else
+		ret = irdma_vchnl_req_aeq_vec_map(&rf->sc_dev, msix_vec->idx);
 
-	return 0;
+	return ret;
 }
 
 /**
@@ -1250,13 +1273,13 @@ static int irdma_cfg_aeq_vector(struct irdma_pci_f *rf)
  * @rf: RDMA PCI function
  * @iwceq: pointer to the ceq resources to be created
  * @ceq_id: the id number of the iwceq
- * @vsi: SC vsi struct
+ * @vsi_idx: vsi idx
  *
  * Return 0, if the ceq and the resources associated with it
  * are successfully created, otherwise return error
  */
 static int irdma_create_ceq(struct irdma_pci_f *rf, struct irdma_ceq *iwceq,
-			    u32 ceq_id, struct irdma_sc_vsi *vsi)
+			    u32 ceq_id, u16 vsi_idx)
 {
 	int status;
 	struct irdma_ceq_init_info info = {};
@@ -1280,7 +1303,7 @@ static int irdma_create_ceq(struct irdma_pci_f *rf, struct irdma_ceq *iwceq,
 	info.elem_cnt = ceq_size;
 	iwceq->sc_ceq.ceq_id = ceq_id;
 	info.dev = dev;
-	info.vsi = vsi;
+	info.vsi_idx = vsi_idx;
 	status = irdma_sc_ceq_init(&iwceq->sc_ceq, &info);
 	if (!status) {
 		if (dev->ceq_valid)
@@ -1323,7 +1346,7 @@ static int irdma_setup_ceq_0(struct irdma_pci_f *rf)
 	}
 
 	iwceq = &rf->ceqlist[0];
-	status = irdma_create_ceq(rf, iwceq, 0, &rf->default_vsi);
+	status = irdma_create_ceq(rf, iwceq, 0, rf->default_vsi.vsi_idx);
 	if (status) {
 		ibdev_dbg(&rf->iwdev->ibdev, "ERR: create ceq status = %d\n",
 			  status);
@@ -1358,13 +1381,13 @@ exit:
 /**
  * irdma_setup_ceqs - manage the device ceq's and their interrupt resources
  * @rf: RDMA PCI function
- * @vsi: VSI structure for this CEQ
+ * @vsi_idx: vsi_idx for this CEQ
  *
  * Allocate a list for all device completion event queues
  * Create the ceq's and configure their msix interrupt vectors
  * Return 0, if ceqs are successfully set up, otherwise return error
  */
-static int irdma_setup_ceqs(struct irdma_pci_f *rf, struct irdma_sc_vsi *vsi)
+static int irdma_setup_ceqs(struct irdma_pci_f *rf, u16 vsi_idx)
 {
 	u32 i;
 	u32 ceq_id;
@@ -1377,7 +1400,7 @@ static int irdma_setup_ceqs(struct irdma_pci_f *rf, struct irdma_sc_vsi *vsi)
 	i = (rf->msix_shared) ? 1 : 2;
 	for (ceq_id = 1; i < num_ceqs; i++, ceq_id++) {
 		iwceq = &rf->ceqlist[ceq_id];
-		status = irdma_create_ceq(rf, iwceq, ceq_id, vsi);
+		status = irdma_create_ceq(rf, iwceq, ceq_id, vsi_idx);
 		if (status) {
 			ibdev_dbg(&rf->iwdev->ibdev,
 				  "ERR: create ceq status = %d\n", status);
@@ -1458,7 +1481,10 @@ static int irdma_create_aeq(struct irdma_pci_f *rf)
 	aeq_size = multiplier * hmc_info->hmc_obj[IRDMA_HMC_IW_QP].cnt +
 		   hmc_info->hmc_obj[IRDMA_HMC_IW_CQ].cnt;
 	aeq_size = min(aeq_size, dev->hw_attrs.max_hw_aeq_size);
-
+	/* GEN_3 does not support virtual AEQ. Cap at max Kernel alloc size */
+	if (rf->rdma_ver == IRDMA_GEN_3)
+		aeq_size = min(aeq_size, (u32)((PAGE_SIZE << MAX_PAGE_ORDER) /
+			       sizeof(struct irdma_sc_aeqe)));
 	aeq->mem.size = ALIGN(sizeof(struct irdma_sc_aeqe) * aeq_size,
 			      IRDMA_AEQ_ALIGNMENT);
 	aeq->mem.va = dma_alloc_coherent(dev->hw->device, aeq->mem.size,
@@ -1466,6 +1492,8 @@ static int irdma_create_aeq(struct irdma_pci_f *rf)
 					 GFP_KERNEL | __GFP_NOWARN);
 	if (aeq->mem.va)
 		goto skip_virt_aeq;
+	else if (rf->rdma_ver == IRDMA_GEN_3)
+		return -ENOMEM;
 
 	/* physically mapped aeq failed. setup virtual aeq */
 	status = irdma_create_virt_aeq(rf, aeq_size);
@@ -1739,9 +1767,6 @@ void irdma_rt_deinit_hw(struct irdma_device *iwdev)
 			irdma_del_local_mac_entry(iwdev->rf,
 						  (u8)iwdev->mac_ip_table_idx);
 		fallthrough;
-	case AEQ_CREATED:
-	case PBLE_CHUNK_MEM:
-	case CEQS_CREATED:
 	case IEQ_CREATED:
 		if (!iwdev->roce_mode)
 			irdma_puda_dele_rsrc(&iwdev->vsi, IRDMA_PUDA_RSRC_TYPE_IEQ,
@@ -1824,13 +1849,17 @@ void irdma_ctrl_deinit_hw(struct irdma_pci_f *rf)
 	enum init_completion_state state = rf->init_state;
 
 	rf->init_state = INVALID_STATE;
-	if (rf->rsrc_created) {
-		irdma_destroy_aeq(rf);
-		irdma_destroy_pble_prm(rf->pble_rsrc);
-		irdma_del_ceqs(rf);
-		rf->rsrc_created = false;
-	}
+
 	switch (state) {
+	case AEQ_CREATED:
+		irdma_destroy_aeq(rf);
+		fallthrough;
+	case PBLE_CHUNK_MEM:
+		irdma_destroy_pble_prm(rf->pble_rsrc);
+		fallthrough;
+	case CEQS_CREATED:
+		irdma_del_ceqs(rf);
+		fallthrough;
 	case CEQ0_CREATED:
 		irdma_del_ceq_0(rf);
 		fallthrough;
@@ -1909,32 +1938,6 @@ int irdma_rt_init_hw(struct irdma_device *iwdev,
 				break;
 			iwdev->init_state = IEQ_CREATED;
 		}
-		if (!rf->rsrc_created) {
-			status = irdma_setup_ceqs(rf, &iwdev->vsi);
-			if (status)
-				break;
-
-			iwdev->init_state = CEQS_CREATED;
-
-			status = irdma_hmc_init_pble(&rf->sc_dev,
-						     rf->pble_rsrc);
-			if (status) {
-				irdma_del_ceqs(rf);
-				break;
-			}
-
-			iwdev->init_state = PBLE_CHUNK_MEM;
-
-			status = irdma_setup_aeq(rf);
-			if (status) {
-				irdma_destroy_pble_prm(rf->pble_rsrc);
-				irdma_del_ceqs(rf);
-				break;
-			}
-			iwdev->init_state = AEQ_CREATED;
-			rf->rsrc_created = true;
-		}
-
 		if (iwdev->rf->sc_dev.hw_attrs.uk_attrs.hw_rev == IRDMA_GEN_1)
 			irdma_alloc_set_mac(iwdev);
 		irdma_add_ip(iwdev);
@@ -2016,6 +2019,25 @@ int irdma_ctrl_init_hw(struct irdma_pci_f *rf)
 		}
 		INIT_WORK(&rf->cqp_cmpl_work, cqp_compl_worker);
 		irdma_sc_ccq_arm(dev->ccq);
+
+		status = irdma_setup_ceqs(rf, rf->iwdev ? rf->iwdev->vsi_num : 0);
+		if (status)
+			break;
+
+		rf->init_state = CEQS_CREATED;
+
+		status = irdma_hmc_init_pble(&rf->sc_dev,
+					     rf->pble_rsrc);
+		if (status)
+			break;
+
+		rf->init_state = PBLE_CHUNK_MEM;
+
+		status = irdma_setup_aeq(rf);
+		if (status)
+			break;
+		rf->init_state = AEQ_CREATED;
+
 		return 0;
 	} while (0);
 
