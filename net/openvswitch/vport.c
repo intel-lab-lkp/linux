@@ -534,7 +534,7 @@ static int packet_length(const struct sk_buff *skb,
 	 * account for 802.1ad. e.g. is_skb_forwardable().
 	 */
 
-	return length > 0 ? length : 0;
+	return max(length, 0);
 }
 
 void ovs_vport_send(struct vport *vport, struct sk_buff *skb, u8 mac_proto)
