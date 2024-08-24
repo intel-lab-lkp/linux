@@ -135,6 +135,7 @@ The interface exposes these parameters of a netconsole target to userspace:
 	remote_ip	Remote agent's IP address		(read-write)
 	local_mac	Local interface's MAC address		(read-only)
 	remote_mac	Remote agent's MAC address		(read-write)
+	stats		Send error stats			(read-only)
 	==============  =================================       ============
 
 The "enabled" attribute is also used to control whether the parameters of
