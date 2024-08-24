@@ -245,11 +245,46 @@ static void irdma_alloc_push_page(struct irdma_qp *iwqp)
 	struct cqp_cmds_info *cqp_info;
 	struct irdma_device *iwdev = iwqp->iwdev;
 	struct irdma_sc_qp *qp = &iwqp->sc_qp;
+	struct irdma_pd *pd = iwqp->iwpd;
+	u32 push_pos = 0;
 	int status;
+
+	mutex_lock(&pd->push_alloc_mutex);
+	if (pd->push_idx == IRDMA_INVALID_PUSH_PAGE_INDEX) {
+		bitmap_zero(pd->push_offset_bmap, IRDMA_QPS_PER_PUSH_PAGE);
+	} else {
+		if (pd->qs_handle == qp->qs_handle) {
+			push_pos = find_first_zero_bit(pd->push_offset_bmap,
+						       IRDMA_QPS_PER_PUSH_PAGE);
+			if (push_pos < IRDMA_QPS_PER_PUSH_PAGE) {
+				qp->push_idx = pd->push_idx;
+				qp->push_offset =
+					push_pos * IRDMA_PUSH_WIN_SIZE;
+				__set_bit(push_pos, pd->push_offset_bmap);
+			}
+		}
+		goto exit;
+	}
+
+	if (!iwdev->rf->sc_dev.privileged) {
+		u32 pg_idx;
+
+		status = irdma_vchnl_req_manage_push_pg(&iwdev->rf->sc_dev,
+							true, qp->qs_handle,
+							&pg_idx);
+		if (!status && pg_idx != IRDMA_INVALID_PUSH_PAGE_INDEX) {
+			qp->push_idx = pg_idx;
+			qp->push_offset = push_pos * IRDMA_PUSH_WIN_SIZE;
+			__set_bit(push_pos, pd->push_offset_bmap);
+			pd->push_idx = pg_idx;
+			pd->qs_handle = qp->qs_handle;
+		}
+		goto exit;
+	}
 
 	cqp_request = irdma_alloc_and_get_cqp_request(&iwdev->rf->cqp, true);
 	if (!cqp_request)
-		return;
+		goto exit;
 
 	cqp_info = &cqp_request->info;
 	cqp_info->cqp_cmd = IRDMA_OP_MANAGE_PUSH_PAGE;
@@ -266,10 +301,15 @@ static void irdma_alloc_push_page(struct irdma_qp *iwqp)
 	if (!status && cqp_request->compl_info.op_ret_val <
 	    iwdev->rf->sc_dev.hw_attrs.max_hw_device_pages) {
 		qp->push_idx = cqp_request->compl_info.op_ret_val;
-		qp->push_offset = 0;
+		qp->push_offset = push_pos * IRDMA_PUSH_WIN_SIZE;
+		__set_bit(push_pos, pd->push_offset_bmap);
+		pd->push_idx = cqp_request->compl_info.op_ret_val;
+		pd->qs_handle = qp->qs_handle;
 	}
 
 	irdma_put_cqp_request(&iwdev->rf->cqp, cqp_request);
+exit:
+	mutex_unlock(&pd->push_alloc_mutex);
 }
 
 /**
@@ -351,6 +391,9 @@ static int irdma_alloc_ucontext(struct ib_ucontext *uctx,
 		uresp.comp_mask |= IRDMA_ALLOC_UCTX_MIN_HW_WQ_SIZE;
 		uresp.max_hw_srq_quanta = uk_attrs->max_hw_srq_quanta;
 		uresp.comp_mask |= IRDMA_ALLOC_UCTX_MAX_HW_SRQ_QUANTA;
+		uresp.max_hw_push_len = uk_attrs->max_hw_push_len;
+		uresp.comp_mask |= IRDMA_SUPPORT_MAX_HW_PUSH_LEN;
+
 		if (ib_copy_to_udata(udata, &uresp,
 				     min(sizeof(uresp), udata->outlen))) {
 			rdma_user_mmap_entry_remove(ucontext->db_mmap_entry);
@@ -409,6 +452,9 @@ static int irdma_alloc_pd(struct ib_pd *pd, struct ib_udata *udata)
 			       &rf->next_pd);
 	if (err)
 		return err;
+
+	iwpd->push_idx = IRDMA_INVALID_PUSH_PAGE_INDEX;
+	mutex_init(&iwpd->push_alloc_mutex);
 
 	sc_pd = &iwpd->sc_pd;
 	if (udata) {
@@ -485,6 +531,23 @@ static void irdma_clean_cqes(struct irdma_qp *iwqp, struct irdma_cq *iwcq)
 	spin_unlock_irqrestore(&iwcq->lock, flags);
 }
 
+static u64 irdma_compute_push_wqe_offset(struct irdma_device *iwdev, u32 page_idx)
+{
+	u64 bar_off = (uintptr_t)iwdev->rf->sc_dev.hw_regs[IRDMA_DB_ADDR_OFFSET];
+
+	if (iwdev->rf->sc_dev.hw_attrs.uk_attrs.hw_rev == IRDMA_GEN_2) {
+		/* skip over db page */
+		bar_off += IRDMA_HW_PAGE_SIZE;
+		/* skip over reserved space */
+		bar_off += IRDMA_PF_BAR_RSVD;
+	}
+
+	/* push wqe page */
+	bar_off += (u64)page_idx * IRDMA_HW_PAGE_SIZE;
+
+	return bar_off;
+}
+
 static void irdma_remove_push_mmap_entries(struct irdma_qp *iwqp)
 {
 	if (iwqp->push_db_mmap_entry) {
@@ -503,14 +566,12 @@ static int irdma_setup_push_mmap_entries(struct irdma_ucontext *ucontext,
 					 u64 *push_db_mmap_key)
 {
 	struct irdma_device *iwdev = ucontext->iwdev;
-	u64 rsvd, bar_off;
+	u64 bar_off;
 
-	rsvd = IRDMA_PF_BAR_RSVD;
-	bar_off = (uintptr_t)iwdev->rf->sc_dev.hw_regs[IRDMA_DB_ADDR_OFFSET];
-	/* skip over db page */
-	bar_off += IRDMA_HW_PAGE_SIZE;
-	/* push wqe page */
-	bar_off += rsvd + iwqp->sc_qp.push_idx * IRDMA_HW_PAGE_SIZE;
+	WARN_ON_ONCE(iwdev->rf->sc_dev.hw_attrs.uk_attrs.hw_rev < IRDMA_GEN_2);
+
+	bar_off = irdma_compute_push_wqe_offset(iwdev, iwqp->sc_qp.push_idx);
+
 	iwqp->push_wqe_mmap_entry = irdma_user_mmap_entry_insert(ucontext,
 					bar_off, IRDMA_MMAP_IO_WC,
 					push_wqe_mmap_key);
