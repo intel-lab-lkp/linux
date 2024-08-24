@@ -194,10 +194,7 @@ int rds_info_getsockopt(struct socket *sock, int optname, char __user *optval,
 	}
 	ret = pin_user_pages_fast(start, nr_pages, FOLL_WRITE, pages);
 	if (ret != nr_pages) {
-		if (ret > 0)
-			nr_pages = ret;
-		else
-			nr_pages = 0;
+		nr_pages = max(ret, 0);
 		ret = -EAGAIN; /* XXX ? */
 		goto out;
 	}
