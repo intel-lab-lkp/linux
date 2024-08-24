@@ -71,9 +71,6 @@ struct fuse_submount_lookup {
 	/** Unique ID, which identifies the inode between userspace
 	 * and kernel */
 	u64 nodeid;
-
-	/** The request used for sending the FORGET message */
-	struct fuse_forget_link *forget;
 };
 
 /** Container for data related to mapping to backing file */
@@ -97,9 +94,6 @@ struct fuse_inode {
 
 	/** Number of lookups on this inode */
 	u64 nlookup;
-
-	/** The request used for sending the FORGET message */
-	struct fuse_forget_link *forget;
 
 	/** Time in jiffies until the file attributes are valid */
 	u64 i_time;
@@ -1048,10 +1042,7 @@ int fuse_lookup_name(struct super_block *sb, u64 nodeid, const struct qstr *name
 /**
  * Send FORGET command
  */
-void fuse_queue_forget(struct fuse_conn *fc, struct fuse_forget_link *forget,
-		       u64 nodeid, u64 nlookup);
-
-struct fuse_forget_link *fuse_alloc_forget(void);
+void fuse_queue_forget(struct fuse_conn *fc, u64 nodeid, u64 nlookup);
 
 struct fuse_forget_link *fuse_dequeue_forget(struct fuse_iqueue *fiq,
 					     unsigned int max,

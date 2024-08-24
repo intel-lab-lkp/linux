@@ -75,6 +75,12 @@ static void __fuse_put_request(struct fuse_req *req)
 	refcount_dec(&req->count);
 }
 
+/* Use __GFP_NOFAIL to force the allocation success */
+static struct fuse_forget_link *fuse_alloc_forget(void)
+{
+	return kzalloc(sizeof(struct fuse_forget_link), GFP_KERNEL_ACCOUNT | __GFP_NOFAIL);
+}
+
 void fuse_set_initialized(struct fuse_conn *fc)
 {
 	/* Make sure stores before this are seen on another CPU */
@@ -233,10 +239,10 @@ __releases(fiq->lock)
 	fiq->ops->wake_pending_and_unlock(fiq);
 }
 
-void fuse_queue_forget(struct fuse_conn *fc, struct fuse_forget_link *forget,
-		       u64 nodeid, u64 nlookup)
+void fuse_queue_forget(struct fuse_conn *fc, u64 nodeid, u64 nlookup)
 {
 	struct fuse_iqueue *fiq = &fc->iq;
+	struct fuse_forget_link *forget = fuse_alloc_forget();
 
 	forget->forget_one.nodeid = nodeid;
 	forget->forget_one.nlookup = nlookup;

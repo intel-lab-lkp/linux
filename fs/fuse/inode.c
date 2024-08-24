@@ -63,27 +63,13 @@ MODULE_PARM_DESC(max_user_congthresh,
 static struct file_system_type fuseblk_fs_type;
 #endif
 
-struct fuse_forget_link *fuse_alloc_forget(void)
-{
-	return kzalloc(sizeof(struct fuse_forget_link), GFP_KERNEL_ACCOUNT);
-}
-
 static struct fuse_submount_lookup *fuse_alloc_submount_lookup(void)
 {
 	struct fuse_submount_lookup *sl;
 
 	sl = kzalloc(sizeof(struct fuse_submount_lookup), GFP_KERNEL_ACCOUNT);
-	if (!sl)
-		return NULL;
-	sl->forget = fuse_alloc_forget();
-	if (!sl->forget)
-		goto out_free;
 
 	return sl;
-
-out_free:
-	kfree(sl);
-	return NULL;
 }
 
 static struct inode *fuse_alloc_inode(struct super_block *sb)
@@ -104,20 +90,15 @@ static struct inode *fuse_alloc_inode(struct super_block *sb)
 	fi->submount_lookup = NULL;
 	mutex_init(&fi->mutex);
 	spin_lock_init(&fi->lock);
-	fi->forget = fuse_alloc_forget();
-	if (!fi->forget)
-		goto out_free;
 
 	if (IS_ENABLED(CONFIG_FUSE_DAX) && !fuse_dax_inode_alloc(sb, fi))
-		goto out_free_forget;
+		goto out_free;
 
 	if (IS_ENABLED(CONFIG_FUSE_PASSTHROUGH))
 		fuse_inode_backing_set(fi, NULL);
 
 	return &fi->inode;
 
-out_free_forget:
-	kfree(fi->forget);
 out_free:
 	kmem_cache_free(fuse_inode_cachep, fi);
 	return NULL;
@@ -128,7 +109,6 @@ static void fuse_free_inode(struct inode *inode)
 	struct fuse_inode *fi = get_fuse_inode(inode);
 
 	mutex_destroy(&fi->mutex);
-	kfree(fi->forget);
 #ifdef CONFIG_FUSE_DAX
 	kfree(fi->dax);
 #endif
@@ -144,8 +124,7 @@ static void fuse_cleanup_submount_lookup(struct fuse_conn *fc,
 	if (!refcount_dec_and_test(&sl->count))
 		return;
 
-	fuse_queue_forget(fc, sl->forget, sl->nodeid, 1);
-	sl->forget = NULL;
+	fuse_queue_forget(fc, sl->nodeid, 1);
 	kfree(sl);
 }
 
@@ -163,12 +142,8 @@ static void fuse_evict_inode(struct inode *inode)
 
 		if (FUSE_IS_DAX(inode))
 			fuse_dax_inode_cleanup(inode);
-		if (fi->nlookup) {
-			fuse_queue_forget(fc, fi->forget, fi->nodeid,
-					  fi->nlookup);
-			fi->forget = NULL;
-		}
-
+		if (fi->nlookup)
+			fuse_queue_forget(fc, fi->nodeid, fi->nlookup);
 		if (fi->submount_lookup) {
 			fuse_cleanup_submount_lookup(fc, fi->submount_lookup);
 			fi->submount_lookup = NULL;
