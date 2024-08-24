@@ -868,8 +868,7 @@ static void rxrpc_input_ack(struct rxrpc_call *call, struct sk_buff *skb)
 	prev_pkt	= sp->ack.prev_ack;
 	nr_acks		= sp->ack.nr_acks;
 	hard_ack	= first_soft_ack - 1;
-	summary.ack_reason = (sp->ack.reason < RXRPC_ACK__INVALID ?
-			      sp->ack.reason : RXRPC_ACK__INVALID);
+	summary.ack_reason = min(sp->ack.reason, RXRPC_ACK__INVALID);
 
 	trace_rxrpc_rx_ack(call, ack_serial, acked_serial,
 			   first_soft_ack, prev_pkt,
