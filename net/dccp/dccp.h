@@ -149,7 +149,7 @@ static inline u64 dccp_loss_count(const u64 s1, const u64 s2, const u64 ndp)
 	WARN_ON(delta < 0);
 	delta -= ndp + 1;
 
-	return delta > 0 ? delta : 0;
+	return max(delta, 0);
 }
 
 /**

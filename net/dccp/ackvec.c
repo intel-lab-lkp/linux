@@ -305,7 +305,7 @@ void dccp_ackvec_clear_state(struct dccp_ackvec *av, const u64 ackno)
 	 * Deal with overlapping Ack Vectors: don't subtract more than the
 	 * number of packets between tail_ackno and ack_ackno.
 	 */
-	eff_runlen = delta < avr->avr_ack_runlen ? delta : avr->avr_ack_runlen;
+	eff_runlen = min(delta, avr->avr_ack_runlen);
 
 	runlen_now = dccp_ackvec_runlen(av->av_buf + avr->avr_ack_ptr);
 	/*
