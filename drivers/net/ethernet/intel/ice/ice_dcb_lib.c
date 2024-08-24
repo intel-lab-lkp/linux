@@ -352,7 +352,7 @@ int ice_pf_dcb_cfg(struct ice_pf *pf, struct ice_dcbx_cfg *new_cfg, bool locked)
 	struct ice_dcbx_cfg *old_cfg, *curr_cfg;
 	struct device *dev = ice_pf_to_dev(pf);
 	int ret = ICE_DCB_NO_HW_CHG;
-	struct iidc_event *event;
+	struct idc_rdma_event *event;
 	struct ice_vsi *pf_vsi;
 
 	curr_cfg = &pf->hw.port_info->qos_cfg.local_dcbx_cfg;
@@ -404,7 +404,7 @@ int ice_pf_dcb_cfg(struct ice_pf *pf, struct ice_dcbx_cfg *new_cfg, bool locked)
 		goto free_cfg;
 	}
 
-	set_bit(IIDC_EVENT_BEFORE_TC_CHANGE, event->type);
+	set_bit(IDC_RDMA_EVENT_BEFORE_TC_CHANGE, event->type);
 	ice_send_event_to_aux(pf, event);
 	kfree(event);
 
@@ -739,7 +739,9 @@ static int ice_dcb_noncontig_cfg(struct ice_pf *pf)
 void ice_pf_dcb_recfg(struct ice_pf *pf, bool locked)
 {
 	struct ice_dcbx_cfg *dcbcfg = &pf->hw.port_info->qos_cfg.local_dcbx_cfg;
-	struct iidc_event *event;
+	struct iidc_rdma_priv_dev_info *privd;
+	struct idc_rdma_core_dev_info *cdev;
+	struct idc_rdma_event *event;
 	u8 tc_map = 0;
 	int v, ret;
 
@@ -782,13 +784,17 @@ void ice_pf_dcb_recfg(struct ice_pf *pf, bool locked)
 		if (vsi->type == ICE_VSI_PF)
 			ice_dcbnl_set_all(vsi);
 	}
-	if (!locked) {
+
+	cdev = pf->cdev_info;
+	if (cdev && !locked) {
+		privd = cdev->idc_priv;
+		ice_setup_dcb_qos_info(pf, &privd->qos_info);
 		/* Notify the AUX drivers that TC change is finished */
 		event = kzalloc(sizeof(*event), GFP_KERNEL);
 		if (!event)
 			return;
 
-		set_bit(IIDC_EVENT_AFTER_TC_CHANGE, event->type);
+		set_bit(IDC_RDMA_EVENT_AFTER_TC_CHANGE, event->type);
 		ice_send_event_to_aux(pf, event);
 		kfree(event);
 	}
@@ -941,6 +947,36 @@ ice_tx_prepare_vlan_flags_dcb(struct ice_tx_ring *tx_ring,
 		else
 			first->tx_flags |= ICE_TX_FLAGS_HW_VLAN;
 	}
+}
+
+/**
+ * ice_setup_dcb_qos_info - Setup DCB QoS information
+ * @pf: ptr to ice_pf
+ * @qos_info: QoS param instance
+ */
+void ice_setup_dcb_qos_info(struct ice_pf *pf, struct iidc_rdma_qos_params *qos_info)
+{
+	struct ice_dcbx_cfg *dcbx_cfg;
+	unsigned int i;
+	u32 up2tc;
+
+	if (!pf || !qos_info)
+		return;
+
+	dcbx_cfg = &pf->hw.port_info->qos_cfg.local_dcbx_cfg;
+	up2tc = rd32(&pf->hw, PRTDCB_TUP2TC);
+
+	qos_info->num_tc = ice_dcb_get_num_tc(dcbx_cfg);
+
+	for (i = 0; i < IIDC_MAX_USER_PRIORITY; i++)
+		qos_info->up2tc[i] = (up2tc >> (i * 3)) & 0x7;
+
+	for (i = 0; i < IEEE_8021QAZ_MAX_TCS; i++)
+		qos_info->tc_info[i].rel_bw = dcbx_cfg->etscfg.tcbwtable[i];
+
+	qos_info->pfc_mode = dcbx_cfg->pfc_mode;
+	for (i = 0; i < ICE_DSCP_NUM_VAL; i++)
+		qos_info->dscp_map[i] = dcbx_cfg->dscp_map[i];
 }
 
 /**
