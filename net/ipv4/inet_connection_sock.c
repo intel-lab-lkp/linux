@@ -733,6 +733,7 @@ out:
 		if (amt)
 			mem_cgroup_charge_skmem(newsk->sk_memcg, amt,
 						GFP_KERNEL | __GFP_NOFAIL);
+		kmem_cache_post_charge(newsk, GFP_KERNEL | __GFP_NOFAIL);
 
 		release_sock(newsk);
 	}

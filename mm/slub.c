@@ -2189,6 +2189,16 @@ void memcg_slab_free_hook(struct kmem_cache *s, struct slab *slab, void **p,
 
 	__memcg_slab_free_hook(s, slab, p, objects, obj_exts);
 }
+
+static __fastpath_inline
+bool memcg_slab_post_charge(struct kmem_cache *s, void *p, gfp_t flags)
+{
+	if (likely(!memcg_kmem_online()))
+		return true;
+
+	return __memcg_slab_post_alloc_hook(s, NULL, flags, 1, &p);
+}
+
 #else /* CONFIG_MEMCG */
 static inline bool memcg_slab_post_alloc_hook(struct kmem_cache *s,
 					      struct list_lru *lru,
@@ -2201,6 +2211,13 @@ static inline bool memcg_slab_post_alloc_hook(struct kmem_cache *s,
 static inline void memcg_slab_free_hook(struct kmem_cache *s, struct slab *slab,
 					void **p, int objects)
 {
+}
+
+static inline bool memcg_slab_post_charge(struct kmem_cache *s,
+					  void *p,
+					  gfp_t flags)
+{
+	return true;
 }
 #endif /* CONFIG_MEMCG */
 
@@ -4109,6 +4126,28 @@ void *kmem_cache_alloc_lru_noprof(struct kmem_cache *s, struct list_lru *lru,
 	return ret;
 }
 EXPORT_SYMBOL(kmem_cache_alloc_lru_noprof);
+
+bool kmem_cache_post_charge(void *objp, gfp_t gfpflags)
+{
+	struct folio *folio;
+	struct slab *slab;
+	struct kmem_cache *s;
+
+	folio = virt_to_folio(objp);
+	if (unlikely(!folio_test_slab(folio)))
+		return false;
+
+	slab = folio_slab(folio);
+	s = slab->slab_cache;
+
+	/* Ignore KMALLOC_NORMAL cache */
+	if (s->flags & SLAB_KMALLOC &&
+	    !(s->flags & (SLAB_CACHE_DMA|SLAB_ACCOUNT|SLAB_RECLAIM_ACCOUNT)))
+		return true;
+
+	return memcg_slab_post_charge(s, objp, gfpflags);
+}
+EXPORT_SYMBOL(kmem_cache_post_charge);
 
 /**
  * kmem_cache_alloc_node - Allocate an object on the specified node
