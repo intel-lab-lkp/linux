@@ -242,8 +242,12 @@ __releases(fiq->lock)
 void fuse_queue_forget(struct fuse_conn *fc, u64 nodeid, u64 nlookup)
 {
 	struct fuse_iqueue *fiq = &fc->iq;
-	struct fuse_forget_link *forget = fuse_alloc_forget();
+	struct fuse_forget_link *forget;
 
+	if (fc->no_forget)
+		return;
+
+	forget = fuse_alloc_forget();
 	forget->forget_one.nodeid = nodeid;
 	forget->forget_one.nlookup = nlookup;
 
