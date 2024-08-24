@@ -4706,6 +4706,15 @@ __tracing_open(struct inode *inode, struct file *file, bool snapshot)
 		for_each_tracing_cpu(cpu) {
 			ring_buffer_read_start(iter->buffer_iter[cpu]);
 			tracing_iter_reset(iter, cpu);
+			/*
+			 * When max latency tracers took place on the cpu, the time start
+			 * of its buffer would be updated, then event entries with timestamps
+			 * being earlier than start of the buffer would be skipped
+			 * (see tracing_iter_reset()). Softlockup will occur if the kernel
+			 * is non-preemptible and too many entries were skipped in the loop,
+			 * so add cond_resched() to mitigate it.
+			 */
+			cond_resched();
 		}
 	} else {
 		cpu = iter->cpu_file;
