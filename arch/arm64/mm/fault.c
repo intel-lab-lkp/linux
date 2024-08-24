@@ -43,6 +43,9 @@
 #include <asm/tlbflush.h>
 #include <asm/traps.h>
 
+#define CREATE_TRACE_POINTS
+#include <asm/trace/exceptions.h>
+
 struct fault_info {
 	int	(*fn)(unsigned long far, unsigned long esr,
 		      struct pt_regs *regs);
@@ -818,10 +821,25 @@ static const struct fault_info fault_info[] = {
 	{ do_bad,		SIGKILL, SI_KERNEL,	"unknown 63"			},
 };
 
+static __always_inline void
+trace_mem_abort_entries(struct pt_regs *regs, unsigned long error_code,
+			 unsigned long address)
+{
+	if (!trace_memabort_enabled())
+		return;
+
+	if (user_mode(regs))
+		trace_mem_abort_user(address, regs, error_code);
+	else
+		trace_mem_abort_kernel(address, regs, error_code);
+}
+
 void do_mem_abort(unsigned long far, unsigned long esr, struct pt_regs *regs)
 {
 	const struct fault_info *inf = esr_to_fault_info(esr);
 	unsigned long addr = untagged_addr(far);
+
+	trace_mem_abort_entries(regs, esr, addr);
 
 	if (!inf->fn(far, esr, regs))
 		return;
