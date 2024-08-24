@@ -5375,7 +5375,7 @@ ieee80211_determine_our_sta_mode_auth(struct ieee80211_sub_if_data *sdata,
 				      struct ieee80211_conn_settings *conn)
 {
 	ieee80211_determine_our_sta_mode(sdata, sband, NULL, wmm_used,
-					 req->link_id > 0 ? req->link_id : 0,
+					 max(req->link_id, 0),
 					 conn);
 }
 

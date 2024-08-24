@@ -971,7 +971,7 @@ drv_mgd_protect_tdls_discover(struct ieee80211_local *local,
 		return;
 	WARN_ON_ONCE(sdata->vif.type != NL80211_IFTYPE_STATION);
 
-	link_id = link_id > 0 ? link_id : 0;
+	link_id = max(link_id, 0);
 
 	trace_drv_mgd_protect_tdls_discover(local, sdata);
 	if (local->ops->mgd_protect_tdls_discover)

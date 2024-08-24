@@ -919,7 +919,7 @@ ieee80211_tdls_build_mgmt_packet_data(struct ieee80211_sub_if_data *sdata,
 	int ret;
 	struct ieee80211_link_data *link;
 
-	link_id = link_id >= 0 ? link_id : 0;
+	link_id = max(link_id, 0);
 	rcu_read_lock();
 	link = rcu_dereference(sdata->link[link_id]);
 	if (WARN_ON(!link))
