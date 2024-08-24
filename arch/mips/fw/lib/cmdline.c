@@ -22,7 +22,7 @@ void __init fw_init_cmdline(void)
 	int i;
 
 	/* Validate command line parameters. */
-	if ((fw_arg0 >= CKSEG0) || (fw_arg1 < CKSEG0)) {
+	if (fw_arg0 >= CKSEG0 || fw_arg1 < CKSEG0 || fw_arg1 >= CKSEG2) {
 		fw_argc = 0;
 		_fw_argv = NULL;
 	} else {
@@ -31,7 +31,7 @@ void __init fw_init_cmdline(void)
 	}
 
 	/* Validate environment pointer. */
-	if (fw_arg2 < CKSEG0)
+	if (fw_arg2 < CKSEG0 || fw_arg2 >= CKSEG2)
 		_fw_envp = NULL;
 	else
 		_fw_envp = (int *)fw_arg2;
