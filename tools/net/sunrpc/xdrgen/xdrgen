@@ -1,0 +1,94 @@
+#!/usr/bin/env python3
+# ex: set filetype=python:
+
+"""Translate an XDR specification into executable C code that
+can be compiled for the Linux kernel."""
+
+__author__ = "Chuck Lever"
+__copyright__ = "Copyright (c) 2024 Oracle and/or its affiliates."
+__license__ = "GPL-2.0 only"
+__version__ = "0.2"
+
+import sys
+import argparse
+
+from subcmds import source
+from subcmds import header
+from subcmds import lint
+
+from xdr_parse import set_xdr_annotate
+
+
+sys.path.insert(1, "@pythondir@")
+
+
+def main() -> int:
+    """Parse command-line options"""
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="Convert an XDR specification to Linux kernel source code",
+        epilog="""\
+Copyright (c) 2024 Oracle and/or its affiliates.
+
+License GPLv2: <http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt>
+This is free software.  You are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.""",
+    )
+    parser.add_argument(
+        "--version",
+        help="Display the version of this tool",
+        action="version",
+        version=__version__,
+    )
+
+    subcommands = parser.add_subparsers(title="Subcommands", required=True)
+
+    linter = subcommands.add_parser("lint", help="Check an XDR specification")
+    linter.add_argument("filename", help="File containing an XDR specification")
+    linter.set_defaults(func=lint.subcmd)
+
+    source_output = subcommands.add_parser(
+        "source", help="Generate XDR encoder and decoder source code"
+    )
+    source_output.add_argument(
+        "--annotate",
+        action="store_true",
+        default=False,
+        help="Add annotation comments",
+    )
+    source_output.add_argument(
+        "--language",
+        action="store_true",
+        default="C",
+        help="Output language",
+    )
+    source_output.add_argument("filename", help="File containing an XDR specification")
+    source_output.set_defaults(func=source.subcmd)
+
+    header_output = subcommands.add_parser(
+        "header", help="Generate XDR definitions and declarations"
+    )
+    header_output.add_argument(
+        "--annotate",
+        action="store_true",
+        default=False,
+        help="Add annotation comments",
+    )
+    header_output.add_argument(
+        "--language",
+        action="store_true",
+        default="C",
+        help="Output language",
+    )
+    header_output.add_argument("filename", help="File containing an XDR specification")
+    header_output.set_defaults(func=header.subcmd)
+
+    args = parser.parse_args()
+    return args.func(args)
+
+
+try:
+    if __name__ == "__main__":
+        sys.exit(main())
+except (SystemExit, KeyboardInterrupt, RuntimeError, BrokenPipeError):
+    sys.exit(1)
