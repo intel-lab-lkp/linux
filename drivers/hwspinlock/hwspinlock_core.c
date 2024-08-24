@@ -111,17 +111,17 @@ int __hwspin_trylock(struct hwspinlock *hwlock, int mode, unsigned long *flags)
 	 */
 	switch (mode) {
 	case HWLOCK_IRQSTATE:
-		ret = spin_trylock_irqsave(&hwlock->lock, *flags);
+		ret = raw_spin_trylock_irqsave(&hwlock->lock, *flags);
 		break;
 	case HWLOCK_IRQ:
-		ret = spin_trylock_irq(&hwlock->lock);
+		ret = raw_spin_trylock_irq(&hwlock->lock);
 		break;
 	case HWLOCK_RAW:
 	case HWLOCK_IN_ATOMIC:
 		ret = 1;
 		break;
 	default:
-		ret = spin_trylock(&hwlock->lock);
+		ret = raw_spin_trylock(&hwlock->lock);
 		break;
 	}
 
@@ -136,17 +136,17 @@ int __hwspin_trylock(struct hwspinlock *hwlock, int mode, unsigned long *flags)
 	if (!ret) {
 		switch (mode) {
 		case HWLOCK_IRQSTATE:
-			spin_unlock_irqrestore(&hwlock->lock, *flags);
+			raw_spin_unlock_irqrestore(&hwlock->lock, *flags);
 			break;
 		case HWLOCK_IRQ:
-			spin_unlock_irq(&hwlock->lock);
+			raw_spin_unlock_irq(&hwlock->lock);
 			break;
 		case HWLOCK_RAW:
 		case HWLOCK_IN_ATOMIC:
 			/* Nothing to do */
 			break;
 		default:
-			spin_unlock(&hwlock->lock);
+			raw_spin_unlock(&hwlock->lock);
 			break;
 		}
 
@@ -289,17 +289,17 @@ void __hwspin_unlock(struct hwspinlock *hwlock, int mode, unsigned long *flags)
 	/* Undo the spin_trylock{_irq, _irqsave} called while locking */
 	switch (mode) {
 	case HWLOCK_IRQSTATE:
-		spin_unlock_irqrestore(&hwlock->lock, *flags);
+		raw_spin_unlock_irqrestore(&hwlock->lock, *flags);
 		break;
 	case HWLOCK_IRQ:
-		spin_unlock_irq(&hwlock->lock);
+		raw_spin_unlock_irq(&hwlock->lock);
 		break;
 	case HWLOCK_RAW:
 	case HWLOCK_IN_ATOMIC:
 		/* Nothing to do */
 		break;
 	default:
-		spin_unlock(&hwlock->lock);
+		raw_spin_unlock(&hwlock->lock);
 		break;
 	}
 }
@@ -535,7 +535,7 @@ int hwspin_lock_register(struct hwspinlock_device *bank, struct device *dev,
 	for (i = 0; i < num_locks; i++) {
 		hwlock = &bank->lock[i];
 
-		spin_lock_init(&hwlock->lock);
+		raw_spin_lock_init(&hwlock->lock);
 		hwlock->bank = bank;
 
 		ret = hwspin_lock_register_single(hwlock, base_id + i);

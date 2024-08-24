@@ -42,7 +42,7 @@ struct hwspinlock_ops {
  */
 struct hwspinlock {
 	struct hwspinlock_device *bank;
-	spinlock_t lock;
+	raw_spinlock_t lock;
 	void *priv;
 };
 
