@@ -5,6 +5,7 @@
 #include <linux/firmware.h>
 #include <linux/crc-itu-t.h>
 #include <linux/nvmem-consumer.h>
+#include <linux/ctype.h>	/* for tolower() */
 
 #include <asm/unaligned.h>
 
@@ -321,6 +322,81 @@ exit:
 	return ret;
 }
 
+/* derive the filename of the firmware file from the PHY and the MDIO names
+ * Parts of filename:
+ *   mdio/phy-mdio_suffix
+ *    1    2   3    4
+ * allow name components 1 (= 3) and 2 to have same maximum length
+ */
+static int aqr_firmware_name(struct phy_device *phydev, const char **name)
+{
+#define AQUANTIA_FW_SUFFIX "_fw.cld"
+#define AQUANTIA_NAME "Aquantia "
+/* including the trailing zero */
+#define FIRMWARE_NAME_SIZE 64
+/* length of the name components 1, 2, 3 without the trailing zero */
+#define NAME_PART_SIZE ((FIRMWARE_NAME_SIZE - sizeof(AQUANTIA_FW_SUFFIX) - 2) / 3)
+	ssize_t len, mac_len;
+	char *fw_name;
+	int i, j;
+
+	/* sanity check: the phydev drv name needs to start with AQUANTIA_NAME */
+	if (strncmp(AQUANTIA_NAME, phydev->drv->name, strlen(AQUANTIA_NAME)))
+		return -EINVAL;
+
+	/* sanity check: the phydev drv name may not be longer than NAME_PART_SIZE */
+	if (strlen(phydev->drv->name) - strlen(AQUANTIA_NAME) > NAME_PART_SIZE)
+		return -E2BIG;
+
+	/* sanity check: the MDIO name must not be empty */
+	if (!phydev->mdio.bus->id[0])
+		return -EINVAL;
+
+	fw_name = devm_kzalloc(&phydev->mdio.dev, FIRMWARE_NAME_SIZE, GFP_KERNEL);
+	if (!fw_name)
+		return -ENOMEM;
+
+	/* first the directory name = MDIO bus name
+	 * (only name component, firmware name part 1; remove busids and the likes)
+	 * ignore the return value of strscpy: if the MAC/MDIO name is too long,
+	 * it will just be truncated
+	 */
+	strscpy(fw_name, phydev->mdio.bus->id, NAME_PART_SIZE + 1);
+	for (i = 0; fw_name[i]; i++) {
+		if (fw_name[i] == '-' || fw_name[i] == '_' || fw_name[i] == ':')
+			break;
+	}
+	mac_len = i;	/* without trailing zero */
+
+	fw_name[i++] = '/';
+
+	/* copy name part beyond AQUANTIA_NAME into our name buffer - name part 2 */
+	len = strscpy(&fw_name[i], phydev->drv->name + strlen(AQUANTIA_NAME),
+		      FIRMWARE_NAME_SIZE - i);
+	if (len < 0)
+		return len;	/* should never happen */
+
+	/* convert the name to lower case */
+	for (j = i; j < i + len; j++)
+		fw_name[j] = tolower(fw_name[j]);
+	i += len;
+
+	/* split the phy and mdio components with a dash */
+	fw_name[i++] = '-';
+
+	/* copy again the mac_name into fw_name - name part 3 */
+	memcpy(&fw_name[i], fw_name, mac_len);
+
+	/* copy file suffix (name part 4 - don't forget the trailing '\0') */
+	len = strscpy(&fw_name[i + mac_len], AQUANTIA_FW_SUFFIX, FIRMWARE_NAME_SIZE - i - mac_len);
+	if (len < 0)
+		return len;	/* should never happen */
+
+	if (name)
+		*name = fw_name;
+	return 0;
+}
+
 static int aqr_firmware_load_fs(struct phy_device *phydev)
 {
 	struct device *dev = &phydev->mdio.dev;
@@ -330,6 +406,8 @@ static int aqr_firmware_load_fs(struct phy_device *phydev)
 
 	ret = of_property_read_string(dev->of_node, "firmware-name",
 				      &fw_name);
+	if (ret)
+		ret = aqr_firmware_name(phydev, &fw_name);
 	if (ret)
 		return ret;
 
