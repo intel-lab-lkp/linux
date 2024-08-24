@@ -1549,6 +1549,9 @@ config ARCH_SELECTS_KEXEC_FILE
 config ARCH_SUPPORTS_KEXEC_SIG
 	def_bool y
 
+config ARCH_SUPPORTS_KEXEC_SIG_FORCE
+	def_bool y
+
 config ARCH_SUPPORTS_KEXEC_IMAGE_VERIFY_SIG
 	def_bool y
 
