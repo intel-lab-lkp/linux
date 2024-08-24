@@ -542,10 +542,10 @@ static int irdma_destroy_qp(struct ib_qp *ibqp, struct ib_udata *udata)
 
 	iwqp->sc_qp.qp_uk.destroy_pending = true;
 
-	if (iwqp->iwarp_state == IRDMA_QP_STATE_RTS)
+	if (iwqp->iwarp_state >= IRDMA_QP_STATE_IDLE)
 		irdma_modify_qp_to_err(&iwqp->sc_qp);
 
-	if (!iwqp->user_mode)
+	if (iwdev->rf->rdma_ver <= IRDMA_GEN_2 && !iwqp->user_mode)
 		cancel_delayed_work_sync(&iwqp->dwork_flush);
 
 	if (!iwqp->user_mode) {
@@ -1043,7 +1043,9 @@ static int irdma_create_qp(struct ib_qp *ibqp,
 		err_code = irdma_setup_umode_qp(udata, iwdev, iwqp, &init_info,
 						init_attr);
 	} else {
-		INIT_DELAYED_WORK(&iwqp->dwork_flush, irdma_flush_worker);
+		if (uk_attrs->hw_rev <= IRDMA_GEN_2)
+			INIT_DELAYED_WORK(&iwqp->dwork_flush,
+					  irdma_flush_worker);
 		init_info.qp_uk_init_info.abi_ver = IRDMA_ABI_VER;
 		err_code = irdma_setup_kmode_qp(iwdev, iwqp, &init_info, init_attr);
 	}
@@ -4095,15 +4097,22 @@ static int irdma_post_send(struct ib_qp *ibqp,
 		ib_wr = ib_wr->next;
 	}
 
-	if (!iwqp->flush_issued) {
-		if (iwqp->hw_iwarp_state <= IRDMA_QP_STATE_RTS)
-			irdma_uk_qp_post_wr(ukqp);
-		spin_unlock_irqrestore(&iwqp->lock, flags);
+	if (ukqp->uk_attrs->hw_rev <= IRDMA_GEN_2) {
+		if (!iwqp->flush_issued) {
+			if (iwqp->hw_iwarp_state <= IRDMA_QP_STATE_RTS)
+				irdma_uk_qp_post_wr(ukqp);
+			spin_unlock_irqrestore(&iwqp->lock, flags);
+		} else {
+			spin_unlock_irqrestore(&iwqp->lock, flags);
+			mod_delayed_work(iwqp->iwdev->cleanup_wq,
+					 &iwqp->dwork_flush,
+					 msecs_to_jiffies(IRDMA_FLUSH_DELAY_MS));
+		}
 	} else {
+		irdma_uk_qp_post_wr(ukqp);
 		spin_unlock_irqrestore(&iwqp->lock, flags);
-		mod_delayed_work(iwqp->iwdev->cleanup_wq, &iwqp->dwork_flush,
-				 msecs_to_jiffies(IRDMA_FLUSH_DELAY_MS));
 	}
+
 	if (err)
 		*bad_wr = ib_wr;
 
@@ -4192,7 +4201,7 @@ static int irdma_post_recv(struct ib_qp *ibqp,
 
 out:
 	spin_unlock_irqrestore(&iwqp->lock, flags);
-	if (iwqp->flush_issued)
+	if (ukqp->uk_attrs->hw_rev <= IRDMA_GEN_2 && iwqp->flush_issued)
 		mod_delayed_work(iwqp->iwdev->cleanup_wq, &iwqp->dwork_flush,
 				 msecs_to_jiffies(IRDMA_FLUSH_DELAY_MS));
 
@@ -4227,6 +4236,8 @@ static enum ib_wc_status irdma_flush_err_to_ib_wc_status(enum irdma_flush_opcode
 		return IB_WC_MW_BIND_ERR;
 	case FLUSH_REM_INV_REQ_ERR:
 		return IB_WC_REM_INV_REQ_ERR;
+	case FLUSH_RNR_RETRY_EXC_ERR:
+		return IB_WC_RNR_RETRY_EXC_ERR;
 	case FLUSH_FATAL_ERR:
 	default:
 		return IB_WC_FATAL_ERR;
