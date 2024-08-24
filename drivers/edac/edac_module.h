@@ -102,8 +102,6 @@ static inline void edac_debugfs_create_x32(const char *name, umode_t mode,
 #ifdef	CONFIG_PCI
 extern void edac_pci_do_parity_check(void);
 extern void edac_pci_clear_parity_errors(void);
-extern int edac_sysfs_pci_setup(void);
-extern void edac_sysfs_pci_teardown(void);
 extern int edac_pci_get_check_errors(void);
 extern int edac_pci_get_poll_msec(void);
 extern void edac_pci_remove_sysfs(struct edac_pci_ctl_info *pci);
@@ -114,8 +112,6 @@ extern void edac_pci_handle_npe(struct edac_pci_ctl_info *pci,
 /* pre-process these away */
 #define edac_pci_do_parity_check()
 #define edac_pci_clear_parity_errors()
-#define edac_sysfs_pci_setup()  (0)
-#define edac_sysfs_pci_teardown()
 #define edac_pci_get_check_errors()
 #define edac_pci_get_poll_msec()
 #define edac_pci_handle_pe()
