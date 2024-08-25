@@ -230,7 +230,7 @@ void etnaviv_gem_mapping_unreference(struct etnaviv_vram_mapping *mapping)
 	struct etnaviv_gem_object *etnaviv_obj = mapping->object;
 
 	mutex_lock(&etnaviv_obj->lock);
-	WARN_ON(mapping->use == 0);
+	drm_WARN_ON(etnaviv_obj->base.dev, mapping->use == 0);
 	mapping->use -= 1;
 	mutex_unlock(&etnaviv_obj->lock);
 
@@ -412,7 +412,7 @@ int etnaviv_gem_cpu_fini(struct drm_gem_object *obj)
 
 	if (etnaviv_obj->flags & ETNA_BO_CACHED) {
 		/* fini without a prep is almost certainly a userspace error */
-		WARN_ON(etnaviv_obj->last_cpu_prep_op == 0);
+		drm_WARN_ON(dev, etnaviv_obj->last_cpu_prep_op == 0);
 		dma_sync_sgtable_for_device(dev->dev, etnaviv_obj->sgt,
 			etnaviv_op_to_dma_dir(etnaviv_obj->last_cpu_prep_op));
 		etnaviv_obj->last_cpu_prep_op = 0;
@@ -487,12 +487,13 @@ static const struct etnaviv_gem_ops etnaviv_gem_shmem_ops = {
 
 void etnaviv_gem_free_object(struct drm_gem_object *obj)
 {
+	struct drm_device *drm = obj->dev;
 	struct etnaviv_gem_object *etnaviv_obj = to_etnaviv_bo(obj);
 	struct etnaviv_drm_private *priv = obj->dev->dev_private;
 	struct etnaviv_vram_mapping *mapping, *tmp;
 
 	/* object should not be active */
-	WARN_ON(is_active(etnaviv_obj));
+	drm_WARN_ON(drm, is_active(etnaviv_obj));
 
 	mutex_lock(&priv->gem_lock);
 	list_del(&etnaviv_obj->gem_node);
@@ -502,7 +503,7 @@ void etnaviv_gem_free_object(struct drm_gem_object *obj)
 				 obj_node) {
 		struct etnaviv_iommu_context *context = mapping->context;
 
-		WARN_ON(mapping->use);
+		drm_WARN_ON(drm, mapping->use);
 
 		if (context)
 			etnaviv_iommu_unmap_gem(context, mapping);

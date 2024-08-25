@@ -686,7 +686,7 @@ static void etnaviv_gpu_start_fe_idleloop(struct etnaviv_gpu *gpu,
 	u16 prefetch;
 	u32 address;
 
-	WARN_ON(gpu->state != ETNA_GPU_STATE_INITIALIZED);
+	drm_WARN_ON(gpu->drm, gpu->state != ETNA_GPU_STATE_INITIALIZED);
 
 	/* setup the MMU */
 	etnaviv_iommu_restore(gpu, context);
@@ -734,8 +734,8 @@ static void etnaviv_gpu_setup_pulse_eater(struct etnaviv_gpu *gpu)
 
 static void etnaviv_gpu_hw_init(struct etnaviv_gpu *gpu)
 {
-	WARN_ON(!(gpu->state == ETNA_GPU_STATE_IDENTIFIED ||
-		  gpu->state == ETNA_GPU_STATE_RESET));
+	drm_WARN_ON(gpu->drm, !(gpu->state == ETNA_GPU_STATE_IDENTIFIED ||
+				gpu->state == ETNA_GPU_STATE_RESET));
 
 	if ((etnaviv_is_model_rev(gpu, 0x320, 0x5007) ||
 	     etnaviv_is_model_rev(gpu, 0x320, 0x5220)) &&

@@ -138,9 +138,10 @@ static void etnaviv_iommu_remove_mapping(struct etnaviv_iommu_context *context,
 void etnaviv_iommu_reap_mapping(struct etnaviv_vram_mapping *mapping)
 {
 	struct etnaviv_iommu_context *context = mapping->context;
+	struct drm_device *drm = dev_get_drvdata(context->global->dev);
 
 	lockdep_assert_held(&context->lock);
-	WARN_ON(mapping->use);
+	drm_WARN_ON(drm, mapping->use);
 
 	etnaviv_iommu_remove_mapping(context, mapping);
 	etnaviv_iommu_context_put(mapping->context);
@@ -333,7 +334,9 @@ unlock:
 void etnaviv_iommu_unmap_gem(struct etnaviv_iommu_context *context,
 	struct etnaviv_vram_mapping *mapping)
 {
-	WARN_ON(mapping->use);
+	struct drm_device *drm = dev_get_drvdata(context->global->dev);
+
+	drm_WARN_ON(drm, mapping->use);
 
 	mutex_lock(&context->lock);
 
