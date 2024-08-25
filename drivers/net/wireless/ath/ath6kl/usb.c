@@ -1034,6 +1034,9 @@ static int ath6kl_usb_bmi_read(struct ath6kl *ar, u8 *buf, u32 len)
 		ath6kl_err("Unable to read the bmi data from the device: %d\n",
 			   ret);
 		return ret;
+	} else {
+		ath6kl_err("Actual read the bmi data length is 0 from the device\n");
+		return -EIO;
 	}
 
 	return 0;
