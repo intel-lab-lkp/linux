@@ -93,6 +93,10 @@ __cvdso_getrandom_data(const struct vdso_rng_data *rng_info, void *buffer, size_
 	if (unlikely(opaque_len != sizeof(*state)))
 		goto fallback_syscall;
 
+	/* Unexpected flags are to be handled by the kernel */
+	if (unlikely(flags & ~(GRND_NONBLOCK | GRND_RANDOM | GRND_INSECURE)))
+		goto fallback_syscall;
+
 	/*
 	 * If the kernel's RNG is not yet ready, then it's not possible to provide random bytes from
 	 * userspace, because A) the various @flags require this to block, or not, depending on
