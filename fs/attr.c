@@ -527,9 +527,12 @@ int notify_change(struct mnt_idmap *idmap, struct dentry *dentry,
 	error = security_inode_setattr(idmap, dentry, attr);
 	if (error)
 		return error;
-	error = try_break_deleg(inode, delegated_inode);
-	if (error)
-		return error;
+
+	if (!(ia_valid & ATTR_DELEG)) {
+		error = try_break_deleg(inode, delegated_inode);
+		if (error)
+			return error;
+	}
 
 	if (inode->i_op->setattr)
 		error = inode->i_op->setattr(idmap, dentry, attr);
