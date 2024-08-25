@@ -712,7 +712,7 @@ static int l2tp_ip6_recvmsg(struct sock *sk, struct msghdr *msg, size_t len,
 	if (err)
 		goto done;
 
-	sock_recv_timestamp(msg, sk, skb);
+	sock_recv_timestamp(msg, sk, skb, false);
 
 	/* Copy the address. */
 	if (lsa) {

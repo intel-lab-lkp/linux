@@ -869,7 +869,7 @@ static int llcp_sock_recvmsg(struct socket *sock, struct msghdr *msg,
 		return -EFAULT;
 	}
 
-	sock_recv_timestamp(msg, sk, skb);
+	sock_recv_timestamp(msg, sk, skb, false);
 
 	if (sk->sk_type == SOCK_DGRAM && msg->msg_name) {
 		struct nfc_llcp_ui_cb *ui_cb = nfc_llcp_ui_skb_cb(skb);

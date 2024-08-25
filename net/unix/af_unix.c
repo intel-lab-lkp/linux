@@ -2481,7 +2481,7 @@ int __unix_dgram_recvmsg(struct sock *sk, struct msghdr *msg, size_t size,
 		goto out_free;
 
 	if (sock_flag(sk, SOCK_RCVTSTAMP))
-		__sock_recv_timestamp(msg, sk, skb);
+		__sock_recv_timestamp(msg, sk, skb, false);
 
 	memset(&scm, 0, sizeof(scm));
 

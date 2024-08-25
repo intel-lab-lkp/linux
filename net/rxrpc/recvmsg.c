@@ -200,7 +200,7 @@ static int rxrpc_recvmsg_data(struct socket *sock, struct rxrpc_call *call,
 					    sp->hdr.serial, seq);
 
 		if (msg)
-			sock_recv_timestamp(msg, sock->sk, skb);
+			sock_recv_timestamp(msg, sock->sk, skb, false);
 
 		if (rx_pkt_offset == 0) {
 			ret2 = rxrpc_verify_data(call, skb);

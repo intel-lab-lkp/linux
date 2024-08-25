@@ -1586,11 +1586,11 @@ static int hci_sock_recvmsg(struct socket *sock, struct msghdr *msg,
 		break;
 	case HCI_CHANNEL_USER:
 	case HCI_CHANNEL_MONITOR:
-		sock_recv_timestamp(msg, sk, skb);
+		sock_recv_timestamp(msg, sk, skb, false);
 		break;
 	default:
 		if (hci_mgmt_chan_find(hci_pi(sk)->channel))
-			sock_recv_timestamp(msg, sk, skb);
+			sock_recv_timestamp(msg, sk, skb, false);
 		break;
 	}
 

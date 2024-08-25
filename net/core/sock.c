@@ -3677,7 +3677,7 @@ int sock_recv_errqueue(struct sock *sk, struct msghdr *msg, int len,
 	if (err)
 		goto out_free_skb;
 
-	sock_recv_timestamp(msg, sk, skb);
+	sock_recv_timestamp(msg, sk, skb, true);
 
 	serr = SKB_EXT_ERR(skb);
 	put_cmsg(msg, level, type, sizeof(serr->ee), &serr->ee);
