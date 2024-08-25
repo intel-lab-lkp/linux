@@ -2689,7 +2689,7 @@ int cpuhp_smt_disable(enum cpuhp_smt_control ctrlval)
 	return ret;
 }
 
-/**
+/*
  * Check if the core a CPU belongs to is online
  */
 #if !defined(topology_is_core_online)
