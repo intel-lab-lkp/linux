@@ -88,7 +88,7 @@ static unsigned int bus_num;
 /*
  * Structure to handle image related parameters.
  */
-struct image_desc {
+static struct image_desc {
 	void *kern_buf;	/* Buffer address in kernel space */
 	dma_addr_t pci_buf;	/* Buffer address in PCI address space */
 	unsigned long long size_buf;	/* Buffer size */
@@ -114,7 +114,7 @@ static const int type[VME_DEVS] = {	MASTER_MINOR,	MASTER_MINOR,
 					CONTROL_MINOR
 				};
 
-struct vme_user_vma_priv {
+static struct vme_user_vma_priv {
 	unsigned int minor;
 	refcount_t refcnt;
 };
