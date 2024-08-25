@@ -184,6 +184,14 @@ void mmc_request_done(struct mmc_host *host, struct mmc_request *mrq)
 				mrq->sbc->resp[2], mrq->sbc->resp[3]);
 		}
 
+		if (mrq->ext) {
+			pr_debug("%s: req done <CMD%u>: %d: %08x %08x %08x %08x\n",
+				 mmc_hostname(host), mrq->ext->opcode,
+				 mrq->ext->error,
+				 mrq->ext->resp[0], mrq->ext->resp[1],
+				 mrq->ext->resp[2], mrq->ext->resp[3]);
+		}
+
 		pr_debug("%s: req done (CMD%u): %d: %08x %08x %08x %08x\n",
 			mmc_hostname(host), cmd->opcode, err,
 			cmd->resp[0], cmd->resp[1],
@@ -270,6 +278,12 @@ static void mmc_mrq_pr_debug(struct mmc_host *host, struct mmc_request *mrq,
 			 mrq->sbc->arg, mrq->sbc->flags);
 	}
 
+	if (mrq->ext) {
+		pr_debug("<%s: starting CMD%u arg %08x flags %08x>\n",
+			 mmc_hostname(host), mrq->ext->opcode,
+			 mrq->ext->arg, mrq->ext->flags);
+	}
+
 	if (mrq->cmd) {
 		pr_debug("%s: starting %sCMD%u arg %08x flags %08x\n",
 			 mmc_hostname(host), cqe ? "CQE direct " : "",
@@ -308,6 +322,10 @@ static int mmc_mrq_prep(struct mmc_host *host, struct mmc_request *mrq)
 	if (mrq->sbc) {
 		mrq->sbc->error = 0;
 		mrq->sbc->mrq = mrq;
+	}
+	if (mrq->ext) {
+		mrq->ext->error = 0;
+		mrq->ext->mrq = mrq;
 	}
 	if (mrq->data) {
 		if (mrq->data->blksz > host->max_blk_size ||

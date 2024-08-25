@@ -1713,6 +1713,13 @@ static void mmc_blk_rw_rq_prep(struct mmc_queue_req *mqrq,
 			(do_data_tag ? (1 << 29) : 0);
 		brq->sbc.flags = MMC_RSP_R1 | MMC_CMD_AC;
 		brq->mrq.sbc = &brq->sbc;
+
+		if (mmc_card_ult_capacity(card)) {
+			brq->ext.opcode = SD_ADDR_EXT;
+			brq->ext.arg = (u32)((blk_rq_pos(req) >> 32) & 0x3F);
+			brq->ext.flags = MMC_RSP_R1 | MMC_CMD_AC;
+			brq->mrq.ext = &brq->ext;
+		}
 	} else if (mmc_card_ult_capacity(card)) {
 		mmc_blk_wait_for_idle(mq, card->host);
 		mmc_send_ext_addr(card->host, blk_rq_pos(req));
