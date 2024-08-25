@@ -393,8 +393,7 @@ bad:
  * to the allocated "av" object in case of success and a negative error code in
  * case of failure.
  */
-static struct ubi_ainf_volume *add_volume(struct ubi_attach_info *ai,
-					  int vol_id, int pnum,
+static struct ubi_ainf_volume *add_volume(struct ubi_attach_info *ai, int vol_id,
 					  const struct ubi_vid_hdr *vid_hdr)
 {
 	struct ubi_ainf_volume *av;
@@ -576,7 +575,7 @@ int ubi_add_to_av(struct ubi_device *ubi, struct ubi_attach_info *ai, int pnum,
 	dbg_bld("PEB %d, LEB %d:%d, EC %d, sqnum %llu, bitflips %d",
 		pnum, vol_id, lnum, ec, sqnum, bitflips);
 
-	av = add_volume(ai, vol_id, pnum, vid_hdr);
+	av = add_volume(ai, vol_id, vid_hdr);
 	if (IS_ERR(av))
 		return PTR_ERR(av);
 
