@@ -1,0 +1,11 @@
+{# SPDX-License-Identifier: GPL-2.0 #}
+
+{% if annotate %}
+/* typedef {{ name }} (fixed-length array) */
+{% endif %}
+typedef {{ type }}{{ name }}[{{ size }}];
+{%- if name in public_apis %}
+
+bool xdrgen_decode_{{ name }}(struct xdr_stream *xdr, {{ ctype }}{{ name }} *ptr);
+bool xdrgen_encode_{{ name }}(struct xdr_stream *xdr, const {{ ctype }}{{ name }} value);
+{%- endif -%}
