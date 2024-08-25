@@ -1791,9 +1791,38 @@ static void sdhci_read_rsp_136(struct sdhci_host *host, struct mmc_command *cmd)
 	}
 }
 
+static struct mmc_command *sdhci_get_sbc_ext(struct sdhci_host *host,
+					     struct mmc_command *cmd)
+{
+	bool is_sduc = mmc_card_ult_capacity(host->mmc->card);
+
+	if (is_sduc) {
+		/*  Finished CMD22, now send actual command */
+		if (cmd == cmd->mrq->ext)
+			return cmd->mrq->cmd;
+	}
+
+	/* Finished CMD23 */
+	if (cmd == cmd->mrq->sbc) {
+		if (is_sduc) {
+			/* send CMD22 after CMD23 */
+			if (WARN_ON(!cmd->mrq->ext))
+				return NULL;
+			else
+				return cmd->mrq->ext;
+		} else {
+			/* Finished CMD23, now send actual command */
+			return cmd->mrq->cmd;
+		}
+	}
+
+	return NULL;
+}
+
 static void sdhci_finish_command(struct sdhci_host *host)
 {
 	struct mmc_command *cmd = host->cmd;
+	struct mmc_command *sbc_ext = NULL;
 
 	host->cmd = NULL;
 
@@ -1828,14 +1857,13 @@ static void sdhci_finish_command(struct sdhci_host *host)
 		}
 	}
 
-	/* Finished CMD23, now send actual command. */
-	if (cmd == cmd->mrq->sbc) {
-		if (!sdhci_send_command(host, cmd->mrq->cmd)) {
+	sbc_ext = sdhci_get_sbc_ext(host, cmd);
+	if (sbc_ext) {
+		if (!sdhci_send_command(host, sbc_ext)) {
 			WARN_ON(host->deferred_cmd);
 			host->deferred_cmd = cmd->mrq->cmd;
 		}
 	} else {
-
 		/* Processed actual command. */
 		if (host->data && host->data_early)
 			sdhci_finish_data(host);
