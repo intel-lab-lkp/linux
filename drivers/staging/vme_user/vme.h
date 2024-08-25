@@ -102,7 +102,7 @@ extern const struct bus_type vme_bus_type;
  * @bridge_list: List of devices (per bridge)
  */
 struct vme_dev {
-	int num;
+	u32 num;
 	struct vme_bridge *bridge;
 	struct device dev;
 	struct list_head drv_list;
@@ -179,7 +179,7 @@ int vme_lm_attach(struct vme_resource *, int, void (*callback)(void *), void *);
 int vme_lm_detach(struct vme_resource *, int);
 void vme_lm_free(struct vme_resource *);
 
-int vme_slot_num(struct vme_dev *);
+u32 vme_slot_num(struct vme_dev *);
 int vme_bus_num(struct vme_dev *);
 
 int vme_register_driver(struct vme_driver *, unsigned int);

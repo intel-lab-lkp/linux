@@ -2109,7 +2109,7 @@ static int tsi148_lm_detach(struct vme_lm_resource *lm, int monitor)
 /*
  * Determine Geographical Addressing
  */
-static int tsi148_slot_get(struct vme_bridge *tsi148_bridge)
+static u32 tsi148_slot_get(struct vme_bridge *tsi148_bridge)
 {
 	u32 slot = 0;
 	struct tsi148_driver *bridge;
@@ -2123,7 +2123,7 @@ static int tsi148_slot_get(struct vme_bridge *tsi148_bridge)
 		slot = geoid;
 	}
 
-	return (int)slot;
+	return slot;
 }
 
 static void *tsi148_alloc_consistent(struct device *parent, size_t size,

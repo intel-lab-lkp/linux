@@ -987,7 +987,7 @@ static int fake_lm_detach(struct vme_lm_resource *lm, int monitor)
 /*
  * Determine Geographical Addressing
  */
-static int fake_slot_get(struct vme_bridge *fake_bridge)
+static u32 fake_slot_get(struct vme_bridge *fake_bridge)
 {
 	return geoid;
 }

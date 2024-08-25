@@ -1696,7 +1696,7 @@ EXPORT_SYMBOL(vme_lm_free);
  *         or the function is not supported. Hardware specific errors may also
  *         be returned.
  */
-int vme_slot_num(struct vme_dev *vdev)
+u32 vme_slot_num(struct vme_dev *vdev)
 {
 	struct vme_bridge *bridge;
 

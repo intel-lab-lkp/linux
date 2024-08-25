@@ -160,7 +160,7 @@ struct vme_bridge {
 	int (*lm_detach)(struct vme_lm_resource *, int);
 
 	/* CR/CSR space functions */
-	int (*slot_get)(struct vme_bridge *);
+	u32 (*slot_get)(struct vme_bridge *);
 
 	/* Bridge parent interface */
 	void *(*alloc_consistent)(struct device *dev, size_t size, dma_addr_t *dma);
