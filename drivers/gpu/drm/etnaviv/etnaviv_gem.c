@@ -533,8 +533,40 @@ static const struct vm_operations_struct vm_ops = {
 	.close = drm_gem_vm_close,
 };
 
+static const char *etnaviv_gem_obj_caching_info(u32 flags)
+{
+	switch (flags & ETNA_BO_CACHE_MASK) {
+	case ETNA_BO_CACHED:
+		return "cached";
+	case ETNA_BO_UNCACHED:
+		return "uncached";
+	case ETNA_BO_WC:
+		return "write-combine";
+	default:
+		break;
+	}
+
+	return "unknown";
+}
+
+static void etnaviv_gem_object_info(struct drm_printer *p,
+				    unsigned int indent,
+				    const struct drm_gem_object *obj)
+{
+	const struct etnaviv_gem_object *etnaviv_obj;
+
+	etnaviv_obj = container_of(obj, struct etnaviv_gem_object, base);
+
+	drm_printf_indent(p, indent, "caching mode=%s\n",
+			  etnaviv_gem_obj_caching_info(etnaviv_obj->flags));
+	drm_printf_indent(p, indent, "active=%s\n",
+			  str_yes_no(is_active(etnaviv_obj)));
+	drm_printf_indent(p, indent, "vaddr=%p\n", etnaviv_obj->vaddr);
+}
+
 static const struct drm_gem_object_funcs etnaviv_gem_object_funcs = {
 	.free = etnaviv_gem_free_object,
+	.print_info = etnaviv_gem_object_info,
 	.pin = etnaviv_gem_prime_pin,
 	.unpin = etnaviv_gem_prime_unpin,
 	.get_sg_table = etnaviv_gem_prime_get_sg_table,
