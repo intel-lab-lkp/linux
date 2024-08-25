@@ -1160,6 +1160,7 @@ void drm_gem_print_info(struct drm_printer *p, unsigned int indent,
 	if (obj->funcs->print_info)
 		obj->funcs->print_info(p, indent, obj);
 }
+EXPORT_SYMBOL(drm_gem_print_info);
 
 int drm_gem_pin_locked(struct drm_gem_object *obj)
 {

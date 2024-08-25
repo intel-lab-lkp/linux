@@ -3,6 +3,7 @@
  * Copyright (C) 2015-2018 Etnaviv Project
  */
 
+#include <drm/drm_gem.h>
 #include <drm/drm_prime.h>
 #include <linux/dma-mapping.h>
 #include <linux/shmem_fs.h>
@@ -432,15 +433,11 @@ int etnaviv_gem_wait_bo(struct etnaviv_gpu *gpu, struct drm_gem_object *obj,
 #ifdef CONFIG_DEBUG_FS
 static void etnaviv_gem_describe(struct drm_gem_object *obj, struct seq_file *m)
 {
-	struct etnaviv_gem_object *etnaviv_obj = to_etnaviv_bo(obj);
+	struct drm_printer p = drm_seq_file_printer(m);
 	struct dma_resv *robj = obj->resv;
-	unsigned long off = drm_vma_node_start(&obj->vma_node);
 	int r;
 
-	seq_printf(m, "%08x: %c %2d (%2d) %08lx %p %zd\n",
-			etnaviv_obj->flags, is_active(etnaviv_obj) ? 'A' : 'I',
-			obj->name, kref_read(&obj->refcount),
-			off, etnaviv_obj->vaddr, obj->size);
+	drm_gem_print_info(&p, 1, obj);
 
 	r = dma_resv_lock(robj, NULL);
 	if (r)
@@ -461,7 +458,7 @@ void etnaviv_gem_describe_objects(struct etnaviv_drm_private *priv,
 	list_for_each_entry(etnaviv_obj, &priv->gem_list, gem_node) {
 		struct drm_gem_object *obj = &etnaviv_obj->base;
 
-		seq_puts(m, "   ");
+		seq_printf(m, "obj[%d]:\n", count);
 		etnaviv_gem_describe(obj, m);
 		count++;
 		size += obj->size;
