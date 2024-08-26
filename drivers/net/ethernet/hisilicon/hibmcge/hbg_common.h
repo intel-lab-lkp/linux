@@ -17,7 +17,10 @@
 
 enum hbg_nic_state {
 	HBG_NIC_STATE_EVENT_HANDLING = 0,
+	HBG_NIC_STATE_OPEN,
 };
+
+#define hbg_nic_is_open(priv) test_bit(HBG_NIC_STATE_OPEN, &(priv)->state)
 
 enum hbg_hw_event_type {
 	HBG_HW_EVENT_NONE = 0,
