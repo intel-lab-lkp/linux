@@ -178,6 +178,25 @@ static int __fault_domain_replace_dev(struct iommufd_device *idev,
 	return ret;
 }
 
+static int iommufd_init_pasid_array(struct iommu_domain *domain,
+				  struct iommufd_device *idev)
+{
+	int ret;
+	struct iommufd_attach_handle *handle;
+	struct iommu_group *group = idev->igroup->group;
+
+	handle = kzalloc(sizeof(*handle), GFP_KERNEL);
+	if (!handle)
+		return -ENOMEM;
+	handle->idev = idev;
+
+	ret = iommu_init_pasid_array(domain, group, &handle->handle);
+	if (ret)
+		kfree(handle);
+
+	return ret;
+}
+
 int iommufd_fault_domain_replace_dev(struct iommufd_device *idev,
 				     struct iommufd_hw_pagetable *hwpt,
 				     struct iommufd_hw_pagetable *old)
@@ -190,6 +209,9 @@ int iommufd_fault_domain_replace_dev(struct iommufd_device *idev,
 		ret = iommufd_fault_iopf_enable(idev);
 		if (ret)
 			return ret;
+
+		if (iommufd_init_pasid_array(hwpt->domain, idev))
+			return -EINVAL;
 	}
 
 	ret = __fault_domain_replace_dev(idev, hwpt, old);
