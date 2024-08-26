@@ -916,6 +916,4 @@
 #define MV64340_SERIAL_INIT_CONTROL                                 0xf328
 #define MV64340_SERIAL_INIT_STATUS                                  0xf32c
 
-extern void mv64340_irq_init(unsigned int base);
-
 #endif /* __ASM_MV643XX_H */
