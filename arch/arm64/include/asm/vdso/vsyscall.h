@@ -2,6 +2,8 @@
 #ifndef __ASM_VDSO_VSYSCALL_H
 #define __ASM_VDSO_VSYSCALL_H
 
+#define __VDSO_RND_DATA_OFFSET  480
+
 #ifndef __ASSEMBLY__
 
 #include <linux/timekeeper_internal.h>
@@ -20,6 +22,13 @@ struct vdso_data *__arm64_get_k_vdso_data(void)
 	return vdso_data;
 }
 #define __arch_get_k_vdso_data __arm64_get_k_vdso_data
+
+static __always_inline
+struct vdso_rng_data *__arm64_get_k_vdso_rnd_data(void)
+{
+	return (void *)__arm64_get_k_vdso_data() + __VDSO_RND_DATA_OFFSET;
+}
+#define __arch_get_k_vdso_rng_data __arm64_get_k_vdso_rnd_data
 
 static __always_inline
 void __arm64_update_vsyscall(struct vdso_data *vdata, struct timekeeper *tk)
