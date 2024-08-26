@@ -130,7 +130,7 @@ static ssize_t resource_to_user(int minor, char __user *buf, size_t count,
 	copied = vme_master_read(image[minor].resource, image[minor].kern_buf,
 				 count, *ppos);
 	if (copied < 0)
-		return (int)copied;
+		return copied;
 
 	if (copy_to_user(buf, image[minor].kern_buf, (unsigned long)copied))
 		return -EFAULT;
