@@ -1537,4 +1537,8 @@ unsigned int i_blocks_per_folio(struct inode *inode, struct folio *folio)
 {
 	return folio_size(folio) >> inode->i_blkbits;
 }
+
+DEFINE_LOCK_GUARD_1(folio, struct folio, folio_lock(_T->lock), folio_unlock(_T->lock))
+DEFINE_LOCK_GUARD_1_COND(folio, _try, folio_trylock(_T->lock))
+
 #endif /* _LINUX_PAGEMAP_H */
