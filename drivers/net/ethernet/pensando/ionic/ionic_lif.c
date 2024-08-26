@@ -46,8 +46,9 @@ static int ionic_start_queues(struct ionic_lif *lif);
 static void ionic_stop_queues(struct ionic_lif *lif);
 static void ionic_lif_queue_identify(struct ionic_lif *lif);
 
-static int ionic_xdp_queues_config(struct ionic_lif *lif);
-static void ionic_xdp_unregister_rxq_info(struct ionic_queue *q);
+static void ionic_xdp_queues_config(struct ionic_lif *lif);
+static int ionic_register_rxq_info(struct ionic_queue *q, unsigned int napi_id);
+static void ionic_unregister_rxq_info(struct ionic_queue *q);
 
 static void ionic_dim_work(struct work_struct *work)
 {
@@ -380,6 +381,7 @@ static void ionic_lif_qcq_deinit(struct ionic_lif *lif, struct ionic_qcq *qcq)
 	if (!(qcq->flags & IONIC_QCQ_F_INITED))
 		return;
 
+	ionic_unregister_rxq_info(&qcq->q);
 	if (qcq->flags & IONIC_QCQ_F_INTR) {
 		ionic_intr_mask(idev->intr_ctrl, qcq->intr.index,
 				IONIC_INTR_MASK_SET);
@@ -437,9 +439,7 @@ static void ionic_qcq_free(struct ionic_lif *lif, struct ionic_qcq *qcq)
 		qcq->sg_base_pa = 0;
 	}
 
-	ionic_xdp_unregister_rxq_info(&qcq->q);
 	ionic_qcq_intr_free(lif, qcq);
-
 	vfree(qcq->q.info);
 	qcq->q.info = NULL;
 }
@@ -925,6 +925,11 @@ static int ionic_lif_rxq_init(struct ionic_lif *lif, struct ionic_qcq *qcq)
 		netif_napi_add(lif->netdev, &qcq->napi, ionic_rx_napi);
 	else
 		netif_napi_add(lif->netdev, &qcq->napi, ionic_txrx_napi);
+	err = ionic_register_rxq_info(q, qcq->napi.napi_id);
+	if (err) {
+		netif_napi_del(&qcq->napi);
+		return err;
+	}
 
 	qcq->flags |= IONIC_QCQ_F_INITED;
 
@@ -2143,9 +2148,7 @@ static int ionic_txrx_enable(struct ionic_lif *lif)
 	int derr = 0;
 	int i, err;
 
-	err = ionic_xdp_queues_config(lif);
-	if (err)
-		return err;
+	ionic_xdp_queues_config(lif);
 
 	for (i = 0; i < lif->nxqs; i++) {
 		if (!(lif->rxqcqs[i] && lif->txqcqs[i])) {
@@ -2191,8 +2194,6 @@ err_out:
 		derr = ionic_qcq_disable(lif, lif->txqcqs[i], derr);
 		derr = ionic_qcq_disable(lif, lif->rxqcqs[i], derr);
 	}
-
-	ionic_xdp_queues_config(lif);
 
 	return err;
 }
@@ -2651,7 +2652,7 @@ static void ionic_vf_attr_replay(struct ionic_lif *lif)
 	ionic_vf_start(ionic);
 }
 
-static void ionic_xdp_unregister_rxq_info(struct ionic_queue *q)
+static void ionic_unregister_rxq_info(struct ionic_queue *q)
 {
 	struct xdp_rxq_info *xi;
 
@@ -2665,7 +2666,7 @@ static void ionic_xdp_unregister_rxq_info(struct ionic_queue *q)
 	kfree(xi);
 }
 
-static int ionic_xdp_register_rxq_info(struct ionic_queue *q, unsigned int napi_id)
+static int ionic_register_rxq_info(struct ionic_queue *q, unsigned int napi_id)
 {
 	struct xdp_rxq_info *rxq_info;
 	int err;
@@ -2698,45 +2699,27 @@ err_out:
 	return err;
 }
 
-static int ionic_xdp_queues_config(struct ionic_lif *lif)
+static void ionic_xdp_queues_config(struct ionic_lif *lif)
 {
 	struct bpf_prog *xdp_prog;
 	unsigned int i;
-	int err;
 
 	if (!lif->rxqcqs)
-		return 0;
+		return;
 
-	/* There's no need to rework memory if not going to/from NULL program.  */
+	/* Nothing to do if not going to/from NULL program.  */
 	xdp_prog = READ_ONCE(lif->xdp_prog);
 	if (!xdp_prog == !lif->rxqcqs[0]->q.xdp_prog)
-		return 0;
+		return;
 
 	for (i = 0; i < lif->ionic->nrxqs_per_lif && lif->rxqcqs[i]; i++) {
 		struct ionic_queue *q = &lif->rxqcqs[i]->q;
 
-		if (q->xdp_prog) {
-			ionic_xdp_unregister_rxq_info(q);
+		if (q->xdp_prog)
 			q->xdp_prog = NULL;
-			continue;
-		}
-
-		err = ionic_xdp_register_rxq_info(q, lif->rxqcqs[i]->napi.napi_id);
-		if (err) {
-			dev_err(lif->ionic->dev, "failed to register RX queue %d info for XDP, err %d\n",
-				i, err);
-			goto err_out;
-		}
-		q->xdp_prog = xdp_prog;
+		else
+			q->xdp_prog = xdp_prog;
 	}
-
-	return 0;
-
-err_out:
-	for (i = 0; i < lif->ionic->nrxqs_per_lif && lif->rxqcqs[i]; i++)
-		ionic_xdp_unregister_rxq_info(&lif->rxqcqs[i]->q);
-
-	return err;
 }
 
 static int ionic_xdp_config(struct net_device *netdev, struct netdev_bpf *bpf)
