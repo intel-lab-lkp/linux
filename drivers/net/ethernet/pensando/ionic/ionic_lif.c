@@ -2700,24 +2700,24 @@ err_out:
 
 static int ionic_xdp_queues_config(struct ionic_lif *lif)
 {
+	struct bpf_prog *xdp_prog;
 	unsigned int i;
 	int err;
 
 	if (!lif->rxqcqs)
 		return 0;
 
-	/* There's no need to rework memory if not going to/from NULL program.
-	 * If there is no lif->xdp_prog, there should also be no q.xdp_rxq_info
-	 * This way we don't need to keep an *xdp_prog in every queue struct.
-	 */
-	if (!lif->xdp_prog == !lif->rxqcqs[0]->q.xdp_rxq_info)
+	/* There's no need to rework memory if not going to/from NULL program.  */
+	xdp_prog = READ_ONCE(lif->xdp_prog);
+	if (!xdp_prog == !lif->rxqcqs[0]->q.xdp_prog)
 		return 0;
 
 	for (i = 0; i < lif->ionic->nrxqs_per_lif && lif->rxqcqs[i]; i++) {
 		struct ionic_queue *q = &lif->rxqcqs[i]->q;
 
-		if (q->xdp_rxq_info) {
+		if (q->xdp_prog) {
 			ionic_xdp_unregister_rxq_info(q);
+			q->xdp_prog = NULL;
 			continue;
 		}
 
@@ -2727,6 +2727,7 @@ static int ionic_xdp_queues_config(struct ionic_lif *lif)
 				i, err);
 			goto err_out;
 		}
+		q->xdp_prog = xdp_prog;
 	}
 
 	return 0;
@@ -2878,6 +2879,7 @@ static void ionic_swap_queues(struct ionic_qcq *a, struct ionic_qcq *b)
 	swap(a->q.base,       b->q.base);
 	swap(a->q.base_pa,    b->q.base_pa);
 	swap(a->q.info,       b->q.info);
+	swap(a->q.xdp_prog,   b->q.xdp_prog);
 	swap(a->q.xdp_rxq_info, b->q.xdp_rxq_info);
 	swap(a->q.partner,    b->q.partner);
 	swap(a->q_base,       b->q_base);
