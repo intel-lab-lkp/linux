@@ -392,7 +392,7 @@ static struct sk_buff *btbcm_read_usb_product(struct hci_dev *hdev)
 	return skb;
 }
 
-static const struct dmi_system_id disable_broken_read_transmit_power[] = {
+static const struct dmi_system_id broken_read_tx_power_dmi[] = {
 	{
 		 .matches = {
 			DMI_MATCH(DMI_BOARD_VENDOR, "Apple Inc."),
@@ -438,16 +438,53 @@ static const struct dmi_system_id disable_broken_read_transmit_power[] = {
 	{ }
 };
 
+struct bcm_chip_version_table {
+	u8 chip_id;			/* Chip ID */
+	u16 baseline;		/* Baseline version of patch FW */
+};
+#define BCM_ROMFW_BASELINE_NUM	0xFFFF
+static const struct bcm_chip_version_table broken_read_tx_power_chip_ver[] = {
+	{ 0x87, BCM_ROMFW_BASELINE_NUM }		/* CYW4373/4373E */
+};
+static bool btbcm_is_disable_broken_read_tx_power_by_chip_ver(u8 chip_id, u16 baseline)
+{
+	int i;
+	size_t table_size = ARRAY_SIZE(broken_read_tx_power_chip_ver);
+	const struct bcm_chip_version_table *entry =
+						&broken_read_tx_power_chip_ver[0];
+
+	for (i = 0 ; i < table_size ; i++, entry++)	{
+		if ((chip_id == entry->chip_id) && (baseline == entry->baseline))
+			return true;
+	}
+
+	return false;
+}
+
 static int btbcm_read_info(struct hci_dev *hdev)
 {
 	struct sk_buff *skb;
+	u8 *chip_id;
+	u16 *baseline;
 
 	/* Read Verbose Config Version Info */
 	skb = btbcm_read_verbose_config(hdev);
 	if (IS_ERR(skb))
 		return PTR_ERR(skb);
+	skb_pull_data(skb, 1);
+	chip_id = skb_pull_data(skb, sizeof(*chip_id));
+	skb_pull_data(skb, 1);
+	baseline = skb_pull_data(skb, sizeof(*baseline));
 
-	bt_dev_info(hdev, "BCM: chip id %u", skb->data[1]);
+	if (chip_id) {
+		bt_dev_info(hdev, "BCM: chip id %u", *chip_id);
+
+		if (baseline) {
+			/* Check Chip ID and disable broken Read LE Min/Max Tx Power */
+			if (btbcm_is_disable_broken_read_tx_power_by_chip_ver(*chip_id, *baseline))
+				set_bit(HCI_QUIRK_BROKEN_READ_TRANSMIT_POWER, &hdev->quirks);
+		}
+	}
 	kfree_skb(skb);
 
 	return 0;
@@ -466,7 +503,7 @@ static int btbcm_print_controller_features(struct hci_dev *hdev)
 	kfree_skb(skb);
 
 	/* Read DMI and disable broken Read LE Min/Max Tx Power */
-	if (dmi_first_match(disable_broken_read_transmit_power))
+	if (dmi_first_match(broken_read_tx_power_dmi))
 		set_bit(HCI_QUIRK_BROKEN_READ_TRANSMIT_POWER, &hdev->quirks);
 
 	return 0;
