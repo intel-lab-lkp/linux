@@ -13,6 +13,7 @@
 #include <linux/cpumask.h>
 #include <linux/crash_dump.h>
 #include <linux/vmalloc.h>
+#include <net/page_pool/helpers.h>
 
 #include "ionic.h"
 #include "ionic_bus.h"
@@ -439,6 +440,9 @@ static void ionic_qcq_free(struct ionic_lif *lif, struct ionic_qcq *qcq)
 		qcq->sg_base_pa = 0;
 	}
 
+	page_pool_destroy(qcq->q.page_pool);
+	qcq->q.page_pool = NULL;
+
 	ionic_qcq_intr_free(lif, qcq);
 	vfree(qcq->q.info);
 	qcq->q.info = NULL;
@@ -579,6 +583,33 @@ static int ionic_qcq_alloc(struct ionic_lif *lif, unsigned int type,
 		goto err_out_free_qcq;
 	}
 
+	if (type == IONIC_QTYPE_RXQ) {
+		struct page_pool_params pp_params = {
+			.flags = PP_FLAG_DMA_MAP | PP_FLAG_DMA_SYNC_DEV,
+			.order = 0,
+			.pool_size = num_descs,
+			.nid = NUMA_NO_NODE,
+			.dev = lif->ionic->dev,
+			.napi = &new->napi,
+			.dma_dir = DMA_FROM_DEVICE,
+			.max_len = PAGE_SIZE,
+			.netdev = lif->netdev,
+		};
+		struct bpf_prog *xdp_prog;
+
+		xdp_prog = READ_ONCE(lif->xdp_prog);
+		if (xdp_prog)
+			pp_params.dma_dir = DMA_BIDIRECTIONAL;
+
+		new->q.page_pool = page_pool_create(&pp_params);
+		if (IS_ERR(new->q.page_pool)) {
+			netdev_err(lif->netdev, "Cannot create page_pool\n");
+			err = PTR_ERR(new->q.page_pool);
+			new->q.page_pool = NULL;
+			goto err_out_free_q_info;
+		}
+	}
+
 	new->q.type = type;
 	new->q.max_sg_elems = lif->qtype_info[type].max_sg_elems;
 
@@ -586,12 +617,12 @@ static int ionic_qcq_alloc(struct ionic_lif *lif, unsigned int type,
 			   desc_size, sg_desc_size, pid);
 	if (err) {
 		netdev_err(lif->netdev, "Cannot initialize queue\n");
-		goto err_out_free_q_info;
+		goto err_out_free_page_pool;
 	}
 
 	err = ionic_alloc_qcq_interrupt(lif, new);
 	if (err)
-		goto err_out_free_q_info;
+		goto err_out_free_page_pool;
 
 	err = ionic_cq_init(lif, &new->cq, &new->intr, num_descs, cq_desc_size);
 	if (err) {
@@ -712,6 +743,8 @@ err_out_free_irq:
 		devm_free_irq(dev, new->intr.vector, &new->napi);
 		ionic_intr_free(lif->ionic, new->intr.index);
 	}
+err_out_free_page_pool:
+	page_pool_destroy(new->q.page_pool);
 err_out_free_q_info:
 	vfree(new->q.info);
 err_out_free_qcq:
@@ -2677,15 +2710,15 @@ static int ionic_register_rxq_info(struct ionic_queue *q, unsigned int napi_id)
 
 	err = xdp_rxq_info_reg(rxq_info, q->lif->netdev, q->index, napi_id);
 	if (err) {
-		dev_err(q->dev, "Queue %d xdp_rxq_info_reg failed, err %d\n",
-			q->index, err);
+		netdev_err(q->lif->netdev, "q%d xdp_rxq_info_reg failed, err %d\n",
+			   q->index, err);
 		goto err_out;
 	}
 
-	err = xdp_rxq_info_reg_mem_model(rxq_info, MEM_TYPE_PAGE_ORDER0, NULL);
+	err = xdp_rxq_info_reg_mem_model(rxq_info, MEM_TYPE_PAGE_POOL, q->page_pool);
 	if (err) {
-		dev_err(q->dev, "Queue %d xdp_rxq_info_reg_mem_model failed, err %d\n",
-			q->index, err);
+		netdev_err(q->lif->netdev, "q%d xdp_rxq_info_reg_mem_model failed, err %d\n",
+			   q->index, err);
 		xdp_rxq_info_unreg(rxq_info);
 		goto err_out;
 	}
@@ -2855,7 +2888,16 @@ err_out:
 
 static void ionic_swap_queues(struct ionic_qcq *a, struct ionic_qcq *b)
 {
-	/* only swapping the queues, not the napi, flags, or other stuff */
+	/* only swapping the queues and napi, not flags or other stuff */
+	swap(a->napi,         b->napi);
+
+	if (a->q.type == IONIC_QTYPE_RXQ) {
+		swap(a->q.page_pool, b->q.page_pool);
+		a->q.page_pool->p.napi = &a->napi;
+		if (b->q.page_pool)  /* is NULL when increasing queue count */
+			b->q.page_pool->p.napi = &b->napi;
+	}
+
 	swap(a->q.features,   b->q.features);
 	swap(a->q.num_descs,  b->q.num_descs);
 	swap(a->q.desc_size,  b->q.desc_size);
