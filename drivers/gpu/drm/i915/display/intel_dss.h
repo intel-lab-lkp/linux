@@ -39,6 +39,7 @@ u8 intel_dss_get_joined_pipe_mask(const struct intel_crtc_state *crtc_state);
 enum pipe intel_dss_get_primary_joiner_pipe(const struct intel_crtc_state *crtc_state);
 bool intel_dss_is_primary_joiner_pipe(const struct intel_crtc_state *crtc_state);
 bool intel_dss_is_secondary_joiner_pipe(const struct intel_crtc_state *crtc_state);
+u8 intel_dss_get_secondary_joiner_pipes(const struct intel_crtc_state *crtc_state);
 
 #endif /* __INTEL_DSS_H__ */
 

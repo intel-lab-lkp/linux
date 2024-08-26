@@ -290,3 +290,11 @@ bool intel_dss_is_secondary_joiner_pipe(const struct intel_crtc_state *crtc_stat
 	return crtc_state->joiner_pipes &&
 		crtc->pipe != intel_dss_get_primary_joiner_pipe(crtc_state);
 }
+
+u8 intel_dss_get_secondary_joiner_pipes(const struct intel_crtc_state *crtc_state)
+{
+	if (crtc_state->joiner_pipes)
+		return crtc_state->joiner_pipes & ~BIT(intel_dss_get_primary_joiner_pipe(crtc_state));
+	else
+		return 0;
+}

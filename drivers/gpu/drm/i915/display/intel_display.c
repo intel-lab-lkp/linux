@@ -249,14 +249,6 @@ is_trans_port_sync_mode(const struct intel_crtc_state *crtc_state)
 		is_trans_port_sync_slave(crtc_state);
 }
 
-u8 intel_crtc_joiner_secondary_pipes(const struct intel_crtc_state *crtc_state)
-{
-	if (crtc_state->joiner_pipes)
-		return crtc_state->joiner_pipes & ~BIT(intel_dss_get_primary_joiner_pipe(crtc_state));
-	else
-		return 0;
-}
-
 static int intel_joiner_num_pipes(const struct intel_crtc_state *crtc_state)
 {
 	return hweight8(crtc_state->joiner_pipes);
@@ -5974,7 +5966,7 @@ static int intel_atomic_check_joiner(struct intel_atomic_state *state,
 	}
 
 	for_each_intel_crtc_in_pipe_mask(&i915->drm, secondary_crtc,
-					 intel_crtc_joiner_secondary_pipes(primary_crtc_state)) {
+					 intel_dss_get_secondary_joiner_pipes(primary_crtc_state)) {
 		struct intel_crtc_state *secondary_crtc_state;
 		int ret;
 
@@ -6028,7 +6020,7 @@ static void kill_joiner_secondaries(struct intel_atomic_state *state,
 	struct intel_crtc *secondary_crtc;
 
 	for_each_intel_crtc_in_pipe_mask(&i915->drm, secondary_crtc,
-					 intel_crtc_joiner_secondary_pipes(primary_crtc_state)) {
+					 intel_dss_get_secondary_joiner_pipes(primary_crtc_state)) {
 		struct intel_crtc_state *secondary_crtc_state =
 			intel_atomic_get_new_crtc_state(state, secondary_crtc);
 
