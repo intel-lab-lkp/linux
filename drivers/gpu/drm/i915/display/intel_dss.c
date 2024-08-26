@@ -262,3 +262,10 @@ void intel_dss_get_uncompressed_joiner_pipes(struct intel_display *display,
 			*secondary_pipes |= BIT(pipe);
 	}
 }
+
+u8 intel_dss_get_joined_pipe_mask(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+
+	return BIT(crtc->pipe) | crtc_state->joiner_pipes;
+}

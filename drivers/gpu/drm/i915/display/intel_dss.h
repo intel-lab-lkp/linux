@@ -33,6 +33,7 @@ void intel_dss_get_uncompressed_joiner_pipes(struct intel_display *display,
 					     struct intel_crtc *crtc,
 					     u8 *primary_pipes,
 					     u8 *secondary_pipes);
+u8 intel_dss_get_joined_pipe_mask(const struct intel_crtc_state *crtc_state);
 
 #endif /* __INTEL_DSS_H__ */
 
