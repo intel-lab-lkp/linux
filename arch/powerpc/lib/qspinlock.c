@@ -697,6 +697,12 @@ again:
 	}
 
 release:
+	/*
+	 * Clear the lock, as another CPU might see stale values if an
+	 * interrupt occurs after we increment qnodesp->count but before
+	 * node->lock is initialized
+	 */
+	node->lock = NULL;
 	qnodesp->count--; /* release the node */
 }
 
