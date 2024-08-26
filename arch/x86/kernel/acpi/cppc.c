@@ -79,11 +79,13 @@ static void amd_set_max_freq_ratio(void)
 		return;
 	}
 
-	highest_perf = amd_get_highest_perf();
+	rc = amd_get_boost_ratio_numerator(0, &highest_perf);
+	if (rc)
+		pr_debug("Could not retrieve highest performance\n");
 	nominal_perf = perf_caps.nominal_perf;
 
-	if (!highest_perf || !nominal_perf) {
-		pr_debug("Could not retrieve highest or nominal performance\n");
+	if (!nominal_perf) {
+		pr_debug("Could not retrieve nominal performance\n");
 		return;
 	}
 
@@ -117,18 +119,34 @@ void init_freq_invariance_cppc(void)
 	mutex_unlock(&freq_invariance_lock);
 }
 
-u32 amd_get_highest_perf(void)
+/**
+ * amd_get_boost_ratio_numerator: Get the numerator to use for boost ratio calculation
+ * @cpu: CPU to get numerator for.
+ * @numerator: Output variable for numerator.
+ *
+ * Determine the numerator to use for calculating the boost ratio on
+ * a CPU. On systems that support preferred cores, this will be a hardcoded
+ * value. On other systems this will the highest performance register value.
+ *
+ * Return: 0 for success, negative error code otherwise.
+ */
+int amd_get_boost_ratio_numerator(unsigned int cpu, u64 *numerator)
 {
 	struct cpuinfo_x86 *c = &boot_cpu_data;
 
 	if (c->x86 == 0x17 && ((c->x86_model >= 0x30 && c->x86_model < 0x40) ||
-			       (c->x86_model >= 0x70 && c->x86_model < 0x80)))
-		return 166;
+			       (c->x86_model >= 0x70 && c->x86_model < 0x80))) {
+		*numerator = 166;
+		return 0;
+	}
 
 	if (c->x86 == 0x19 && ((c->x86_model >= 0x20 && c->x86_model < 0x30) ||
-			       (c->x86_model >= 0x40 && c->x86_model < 0x70)))
-		return 166;
+			       (c->x86_model >= 0x40 && c->x86_model < 0x70))) {
+		*numerator = 166;
+		return 0;
+	}
+	*numerator = 255;
 
-	return 255;
+	return 0;
 }
-EXPORT_SYMBOL_GPL(amd_get_highest_perf);
+EXPORT_SYMBOL_GPL(amd_get_boost_ratio_numerator);
