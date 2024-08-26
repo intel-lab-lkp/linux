@@ -2581,9 +2581,9 @@ static void ata_dev_config_cdl(struct ata_device *dev)
 	 * policy set to 0xD (successful completion with sense data available
 	 * bit set).
 	 */
-	if (!ap->ncq_sense_buf) {
-		ap->ncq_sense_buf = kmalloc(ATA_LOG_SENSE_NCQ_SIZE, GFP_KERNEL);
-		if (!ap->ncq_sense_buf)
+	if (!dev->ncq_sense_buf) {
+		dev->ncq_sense_buf = kmalloc(ATA_LOG_SENSE_NCQ_SIZE, GFP_KERNEL);
+		if (!dev->ncq_sense_buf)
 			goto not_supported;
 	}
 
@@ -2604,8 +2604,8 @@ static void ata_dev_config_cdl(struct ata_device *dev)
 
 not_supported:
 	dev->flags &= ~(ATA_DFLAG_CDL | ATA_DFLAG_CDL_ENABLED);
-	kfree(ap->ncq_sense_buf);
-	ap->ncq_sense_buf = NULL;
+	kfree(dev->ncq_sense_buf);
+	dev->ncq_sense_buf = NULL;
 }
 
 static int ata_dev_config_lba(struct ata_device *dev)
@@ -5392,7 +5392,6 @@ void ata_port_free(struct ata_port *ap)
 
 	kfree(ap->pmp_link);
 	kfree(ap->slave_link);
-	kfree(ap->ncq_sense_buf);
 	ida_free(&ata_ida, ap->print_id);
 	kfree(ap);
 }

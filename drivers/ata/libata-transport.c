@@ -671,6 +671,9 @@ static int ata_tdev_match(struct attribute_container *cont,
  */
 static void ata_tdev_free(struct ata_device *dev)
 {
+	kfree(dev->ncq_sense_buf);
+	dev->ncq_sense_buf = NULL;
+
 	transport_destroy_device(&dev->tdev);
 	put_device(&dev->tdev);
 }

@@ -722,7 +722,8 @@ struct ata_device {
 	/* Concurrent positioning ranges */
 	struct ata_cpr_log	*cpr_log;
 
-	/* Command Duration Limits log support */
+	/* Command Duration Limits support */
+	u8			*ncq_sense_buf;
 	u8			cdl[ATA_LOG_CDL_SIZE];
 
 	/* error history */
@@ -875,7 +876,6 @@ struct ata_port {
 	struct ata_acpi_gtm	__acpi_init_gtm; /* use ata_acpi_init_gtm() */
 #endif
 	/* owned by EH */
-	u8			*ncq_sense_buf;
 	u8			sector_buf[ATA_SECT_SIZE] ____cacheline_aligned;
 };
 
