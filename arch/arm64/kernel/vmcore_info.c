@@ -7,6 +7,7 @@
 #include <linux/vmcore_info.h>
 #include <asm/cpufeature.h>
 #include <asm/memory.h>
+#include <asm/pgtable.h>
 #include <asm/pgtable-hwdef.h>
 #include <asm/pointer_auth.h>
 
@@ -36,4 +37,6 @@ void arch_crash_save_vmcoreinfo(void)
 	vmcoreinfo_append_str("NUMBER(KERNELPACMASK)=0x%llx\n",
 						system_supports_address_auth() ?
 						ptrauth_kernel_pac_mask() : 0);
+	vmcoreinfo_append_str("NUMBER(pgtable_l5_enabled)=%d\n",
+						pgtable_l5_enabled());
 }

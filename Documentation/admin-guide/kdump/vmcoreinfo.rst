@@ -466,6 +466,12 @@ Used to get the correct ranges:
 	VMALLOC_START ~ VMALLOC_END-1 : vmalloc() / ioremap() space.
 	VMEMMAP_START ~ VMEMMAP_END-1 : vmemmap region, used for struct page array.
 
+pgtable_l5_enabled
+------------------
+
+User-space tools need to know whether the crash kernel was in 5-level
+paging mode.
+
 arm
 ===
 
