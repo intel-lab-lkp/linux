@@ -596,12 +596,27 @@ __xfs_getfsmap_datadev(
 	xfs_agnumber_t			end_ag;
 	uint64_t			eofs;
 	int				error = 0;
+	int				sentinel = 0;
 
 	eofs = XFS_FSB_TO_BB(mp, mp->m_sb.sb_dblocks);
 	if (keys[0].fmr_physical >= eofs)
 		return 0;
 	start_fsb = XFS_DADDR_TO_FSB(mp, keys[0].fmr_physical);
-	end_fsb = XFS_DADDR_TO_FSB(mp, min(eofs - 1, keys[1].fmr_physical));
+	/*
+	 * For the case of eofs, we need to add a sentinel node;
+	 * otherwise, one block will be missed when calculating the length
+	 * in the last query.
+	 * For the case of key[1], there is no need to add a sentinel node
+	 * because it already represents a value that cannot be reached.
+	 * For the case where key[1] after shifting is within the same
+	 * block as the starting address, it is resolved using end_daddr.
+	 */
+	if (keys[1].fmr_physical > eofs - 1) {
+		sentinel = 1;
+		end_fsb = XFS_DADDR_TO_FSB(mp, eofs - 1);
+	} else {
+		end_fsb = XFS_DADDR_TO_FSB(mp, keys[1].fmr_physical);
+	}
 
 	/*
 	 * Convert the fsmap low/high keys to AG based keys.  Initialize
@@ -649,7 +664,7 @@ __xfs_getfsmap_datadev(
 		info->pag = pag;
 		if (pag->pag_agno == end_ag) {
 			info->high.rm_startblock = XFS_FSB_TO_AGBNO(mp,
-					end_fsb);
+					end_fsb) + sentinel;
 			info->high.rm_offset = XFS_BB_TO_FSBT(mp,
 					keys[1].fmr_offset);
 			error = xfs_fsmap_owner_to_rmap(&info->high, &keys[1]);
