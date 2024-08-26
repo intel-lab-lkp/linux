@@ -660,6 +660,21 @@ struct ata_cpr_log {
 	struct ata_cpr		cpr[] __counted_by(nr_cpr);
 };
 
+struct ata_cdl {
+	/*
+	 * Buffer to cache the CDL log page 18h (command duration descriptors)
+	 * for SCSI-ATA translation.
+	 */
+	u8			desc_log_buf[ATA_LOG_CDL_SIZE];
+
+	/*
+	 * Buffer to handle reading the sense data for successful NCQ Commands
+	 * log page for commands using a CDL with one of the limits policy set
+	 * to 0xD (successful completion with sense data available bit set).
+	 */
+	u8			ncq_sense_log_buf[ATA_LOG_SENSE_NCQ_SIZE];
+};
+
 struct ata_device {
 	struct ata_link		*link;
 	unsigned int		devno;		/* 0 or 1 */
@@ -723,8 +738,7 @@ struct ata_device {
 	struct ata_cpr_log	*cpr_log;
 
 	/* Command Duration Limits support */
-	u8			*ncq_sense_buf;
-	u8			cdl[ATA_LOG_CDL_SIZE];
+	struct ata_cdl		*cdl;
 
 	/* error history */
 	int			spdn_cnt;
