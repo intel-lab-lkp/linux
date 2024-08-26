@@ -660,14 +660,14 @@ static int ata_tdev_match(struct attribute_container *cont,
 }
 
 /**
- * ata_tdev_free  --  free a ATA LINK
- * @dev:	ATA PHY to free
+ * ata_tdev_free  --  free a ATA device
+ * @dev:	ATA device to free
  *
- * Frees the specified ATA PHY.
+ * Free the specified ATA device.
  *
  * Note:
- *   This function must only be called on a PHY that has not
- *   successfully been added using ata_tdev_add().
+ *   This function must only be called on a device that has not successfully
+ *   been added using ata_tdev_add().
  */
 static void ata_tdev_free(struct ata_device *dev)
 {
