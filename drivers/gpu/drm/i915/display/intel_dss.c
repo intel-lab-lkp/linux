@@ -298,3 +298,8 @@ u8 intel_dss_get_secondary_joiner_pipes(const struct intel_crtc_state *crtc_stat
 	else
 		return 0;
 }
+
+int intel_dss_get_num_joiner_pipes(const struct intel_crtc_state *crtc_state)
+{
+	return hweight8(crtc_state->joiner_pipes);
+}
