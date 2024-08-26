@@ -149,6 +149,15 @@ static int mtk_rng_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static void mtk_rng_remove(struct platform_device *pdev)
+{
+        struct mtk_rng *priv = platform_get_drvdata(pdev);
+
+	pm_runtime_disable(&pdev->dev);
+	pm_runtime_set_suspended(&pdev->dev);
+	devm_hwrng_unregister(&pdev->dev, &priv->rng);
+}
+
 #ifdef CONFIG_PM
 static int mtk_rng_runtime_suspend(struct device *dev)
 {
@@ -187,6 +196,7 @@ MODULE_DEVICE_TABLE(of, mtk_rng_match);
 
 static struct platform_driver mtk_rng_driver = {
 	.probe          = mtk_rng_probe,
+	.remove_new	= mtk_rng_remove,
 	.driver = {
 		.name = MTK_RNG_DEV,
 		.pm = MTK_RNG_PM_OPS,
