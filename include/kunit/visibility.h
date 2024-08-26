@@ -12,6 +12,13 @@
 
 #if IS_ENABLED(CONFIG_KUNIT)
     /**
+     * DECLARE_IF_KUNIT - A macro that introduces identifiers only if
+     * CONFIG_KUNIT is enabled. Otherwise if CONFIG_KUNIT is not enabled
+     * no identifiers will be defined.
+     * @body: identifiers to be introduced conditionally
+     */
+    #define DECLARE_IF_KUNIT(body...)	body
+    /**
      * VISIBLE_IF_KUNIT - A macro that sets symbols to be static if
      * CONFIG_KUNIT is not enabled. Otherwise if CONFIG_KUNIT is enabled
      * there is no change to the symbol definition.
@@ -26,6 +33,7 @@
     #define EXPORT_SYMBOL_IF_KUNIT(symbol) EXPORT_SYMBOL_NS(symbol, \
 	    EXPORTED_FOR_KUNIT_TESTING)
 #else
+    #define DECLARE_IF_KUNIT(body...)
     #define VISIBLE_IF_KUNIT static
     #define EXPORT_SYMBOL_IF_KUNIT(symbol)
 #endif
