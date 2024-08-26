@@ -221,15 +221,10 @@ static int spear13xx_pcie_probe(struct platform_device *pdev)
 
 	phy_init(spear13xx_pcie->phy);
 
-	spear13xx_pcie->clk = devm_clk_get(dev, NULL);
+	spear13xx_pcie->clk = devm_clk_get_enabled(dev, NULL);
 	if (IS_ERR(spear13xx_pcie->clk)) {
 		dev_err(dev, "couldn't get clk for pcie\n");
 		return PTR_ERR(spear13xx_pcie->clk);
-	}
-	ret = clk_prepare_enable(spear13xx_pcie->clk);
-	if (ret) {
-		dev_err(dev, "couldn't enable clk for pcie\n");
-		return ret;
 	}
 
 	if (of_property_read_bool(np, "st,pcie-is-gen1"))
@@ -237,16 +232,7 @@ static int spear13xx_pcie_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, spear13xx_pcie);
 
-	ret = spear13xx_add_pcie_port(spear13xx_pcie, pdev);
-	if (ret < 0)
-		goto fail_clk;
-
-	return 0;
-
-fail_clk:
-	clk_disable_unprepare(spear13xx_pcie->clk);
-
-	return ret;
+	return spear13xx_add_pcie_port(spear13xx_pcie, pdev);
 }
 
 static const struct of_device_id spear13xx_pcie_of_match[] = {
