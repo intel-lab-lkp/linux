@@ -822,6 +822,12 @@ EXPORT_SYMBOL(drm_sched_job_init);
  * Refer to drm_sched_entity_push_job() documentation for locking
  * considerations.
  *
+ * drm_sched_job_cleanup() can be used to disarm the job again - but only
+ * _before_ the job's fences have been published. Once a drm_sched_fence was
+ * published, the associated job needs to be submitted to and processed by the
+ * scheduler to avoid potential deadlocks on the DMA fences encapsulated by
+ * drm_sched_fence.
+ *
  * This can only be called if drm_sched_job_init() succeeded.
  */
 void drm_sched_job_arm(struct drm_sched_job *job)
