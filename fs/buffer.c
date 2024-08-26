@@ -1740,11 +1740,11 @@ void clean_bdev_aliases(struct block_device *bdev, sector_t block, sector_t len)
 			 * to pin buffers here since we can afford to sleep and
 			 * it scales better than a global spinlock lock.
 			 */
-			folio_lock(folio);
+			guard(folio)(folio);
 			/* Recheck when the folio is locked which pins bhs */
 			head = folio_buffers(folio);
 			if (!head)
-				goto unlock_page;
+				continue;
 			bh = head;
 			do {
 				if (!buffer_mapped(bh) || (bh->b_blocknr < block))
@@ -1757,8 +1757,6 @@ void clean_bdev_aliases(struct block_device *bdev, sector_t block, sector_t len)
 next:
 				bh = bh->b_this_page;
 			} while (bh != head);
-unlock_page:
-			folio_unlock(folio);
 		}
 		folio_batch_release(&fbatch);
 		cond_resched();
