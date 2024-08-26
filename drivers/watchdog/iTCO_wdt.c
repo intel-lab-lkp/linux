@@ -224,7 +224,7 @@ static int update_no_reboot_bit_cnt(void *priv, bool set)
 		val |= BIT(0);
 	else
 		val &= ~BIT(0);
-	outw(val, TCO1_CNT(p));
+	outw(val & ~BIT(8), TCO1_CNT(p));
 	newval = inw(TCO1_CNT(p));
 
 	/* make sure the update is successful */
