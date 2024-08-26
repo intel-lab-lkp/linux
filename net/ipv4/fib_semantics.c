@@ -1828,12 +1828,10 @@ int fib_dump_info(struct sk_buff *skb, u32 portid, u32 seq, int event,
 
 	if (nhs == 1) {
 		const struct fib_nh_common *nhc = fib_info_nhc(fi, 0);
-		unsigned char flags = 0;
 
-		if (fib_nexthop_info(skb, nhc, AF_INET, &flags, false) < 0)
+		if (fib_nexthop_info(skb, nhc, AF_INET, &rtm->rtm_flags, false) < 0)
 			goto nla_put_failure;
 
-		rtm->rtm_flags = flags;
 #ifdef CONFIG_IP_ROUTE_CLASSID
 		if (nhc->nhc_family == AF_INET) {
 			struct fib_nh *nh;
