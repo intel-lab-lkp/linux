@@ -225,7 +225,7 @@ void intel_crtc_state_dump(const struct intel_crtc_state *pipe_config,
 		   pipe_config->sync_mode_slaves_mask);
 
 	drm_printf(&p, "joiner: %s, pipes: 0x%x\n",
-		   intel_crtc_is_joiner_secondary(pipe_config) ? "secondary" :
+		   intel_dss_is_secondary_joiner_pipe(pipe_config) ? "secondary" :
 		   intel_dss_is_primary_joiner_pipe(pipe_config) ? "primary" : "no",
 		   pipe_config->joiner_pipes);
 
