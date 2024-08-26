@@ -128,14 +128,6 @@ out:
 	return false;
 }
 
-bool isolate_movable_page(struct page *page, isolate_mode_t mode)
-{
-	if (PageTail(page))
-		return false;
-
-	return folio_isolate_movable((struct folio *)page, mode);
-}
-
 static void putback_movable_folio(struct folio *folio)
 {
 	const struct movable_operations *mops = folio_movable_ops(folio);
