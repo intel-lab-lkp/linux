@@ -754,9 +754,9 @@ struct thermal_zone_device *thermal_zone_get_by_id(int id)
 /**
  * thermal_bind_cdev_to_trip - bind a cooling device to a thermal zone
  * @tz:		pointer to struct thermal_zone_device
- * @trip:	trip point the cooling devices is associated with in this zone.
+ * @td:		descriptor of the trip point to bind @cdev to
  * @cdev:	pointer to struct thermal_cooling_device
- * @cool_spec:	cooling specification for @trip and @cdev
+ * @cool_spec:	cooling specification for the trip point and @cdev
  *
  * This interface function bind a thermal cooling device to the certain trip
  * point of a thermal zone device.
@@ -765,11 +765,10 @@ struct thermal_zone_device *thermal_zone_get_by_id(int id)
  * Return: 0 on success, the proper error value otherwise.
  */
 static int thermal_bind_cdev_to_trip(struct thermal_zone_device *tz,
-				     struct thermal_trip *trip,
+				     struct thermal_trip_desc *td,
 				     struct thermal_cooling_device *cdev,
 				     struct cooling_spec *cool_spec)
 {
-	struct thermal_trip_desc *td = trip_to_trip_desc(trip);
 	struct thermal_instance *dev, *instance;
 	bool upper_no_limit;
 	int result;
@@ -793,7 +792,7 @@ static int thermal_bind_cdev_to_trip(struct thermal_zone_device *tz,
 		return -ENOMEM;
 
 	dev->cdev = cdev;
-	dev->trip = trip;
+	dev->trip = &td->trip;
 	dev->upper = cool_spec->upper;
 	dev->upper_no_limit = upper_no_limit;
 	dev->lower = cool_spec->lower;
@@ -865,7 +864,7 @@ free_mem:
 /**
  * thermal_unbind_cdev_from_trip - unbind a cooling device from a thermal zone.
  * @tz:		pointer to a struct thermal_zone_device.
- * @trip:	trip point the cooling devices is associated with in this zone.
+ * @td:		descriptor of the trip point to unbind @cdev from
  * @cdev:	pointer to a struct thermal_cooling_device.
  *
  * This interface function unbind a thermal cooling device from the certain
@@ -873,10 +872,9 @@ free_mem:
  * This function is usually called in the thermal zone device .unbind callback.
  */
 static void thermal_unbind_cdev_from_trip(struct thermal_zone_device *tz,
-					  struct thermal_trip *trip,
+					  struct thermal_trip_desc *td,
 					  struct thermal_cooling_device *cdev)
 {
-	struct thermal_trip_desc *td = trip_to_trip_desc(trip);
 	struct thermal_instance *pos, *next;
 
 	mutex_lock(&cdev->lock);
@@ -928,11 +926,11 @@ static struct class *thermal_class;
 
 static inline
 void print_bind_err_msg(struct thermal_zone_device *tz,
-			const struct thermal_trip *trip,
+			const struct thermal_trip_desc *td,
 			struct thermal_cooling_device *cdev, int ret)
 {
 	dev_err(&tz->device, "binding cdev %s to trip %d failed: %d\n",
-		cdev->type, thermal_zone_trip_id(tz, trip), ret);
+		cdev->type, thermal_zone_trip_id(tz, &td->trip), ret);
 }
 
 static void thermal_zone_cdev_bind(struct thermal_zone_device *tz,
@@ -946,7 +944,6 @@ static void thermal_zone_cdev_bind(struct thermal_zone_device *tz,
 	mutex_lock(&tz->lock);
 
 	for_each_trip_desc(tz, td) {
-		struct thermal_trip *trip = &td->trip;
 		struct cooling_spec c = {
 			.upper = THERMAL_NO_LIMIT,
 			.lower = THERMAL_NO_LIMIT,
@@ -954,12 +951,12 @@ static void thermal_zone_cdev_bind(struct thermal_zone_device *tz,
 		};
 		int ret;
 
-		if (!tz->ops.should_bind(tz, trip, cdev, &c))
+		if (!tz->ops.should_bind(tz, &td->trip, cdev, &c))
 			continue;
 
-		ret = thermal_bind_cdev_to_trip(tz, trip, cdev, &c);
+		ret = thermal_bind_cdev_to_trip(tz, td, cdev, &c);
 		if (ret)
-			print_bind_err_msg(tz, trip, cdev, ret);
+			print_bind_err_msg(tz, td, cdev, ret);
 	}
 
 	mutex_unlock(&tz->lock);
@@ -1270,7 +1267,7 @@ static void thermal_zone_cdev_unbind(struct thermal_zone_device *tz,
 	mutex_lock(&tz->lock);
 
 	for_each_trip_desc(tz, td)
-		thermal_unbind_cdev_from_trip(tz, &td->trip, cdev);
+		thermal_unbind_cdev_from_trip(tz, td, cdev);
 
 	mutex_unlock(&tz->lock);
 }
