@@ -75,17 +75,17 @@ static void amd_set_max_freq_ratio(void)
 
 	rc = cppc_get_perf_caps(0, &perf_caps);
 	if (rc) {
-		pr_debug("Could not retrieve perf counters (%d)\n", rc);
+		pr_warn("Could not retrieve perf counters (%d)\n", rc);
 		return;
 	}
 
 	rc = amd_get_boost_ratio_numerator(0, &highest_perf);
 	if (rc)
-		pr_debug("Could not retrieve highest performance\n");
+		pr_warn("Could not retrieve highest performance\n");
 	nominal_perf = perf_caps.nominal_perf;
 
 	if (!nominal_perf) {
-		pr_debug("Could not retrieve nominal performance\n");
+		pr_warn("Could not retrieve nominal performance\n");
 		return;
 	}
 
@@ -93,7 +93,7 @@ static void amd_set_max_freq_ratio(void)
 	/* midpoint between max_boost and max_P */
 	perf_ratio = (perf_ratio + SCHED_CAPACITY_SCALE) >> 1;
 	if (!perf_ratio) {
-		pr_debug("Non-zero highest/nominal perf values led to a 0 ratio\n");
+		pr_warn("Non-zero highest/nominal perf values led to a 0 ratio\n");
 		return;
 	}
 
