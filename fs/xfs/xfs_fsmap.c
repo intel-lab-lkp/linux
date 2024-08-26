@@ -515,11 +515,20 @@ xfs_getfsmap_rtdev_rtbitmap(
 	int				error;
 
 	eofs = XFS_FSB_TO_BB(mp, xfs_rtx_to_rtb(mp, mp->m_sb.sb_rextents));
-	if (keys[0].fmr_physical >= eofs)
+	if (keys[0].fmr_physical >= eofs ||
+		keys[0].fmr_physical == keys[1].fmr_physical)
 		return 0;
 	start_rtb = XFS_BB_TO_FSBT(mp,
 				keys[0].fmr_physical + keys[0].fmr_length);
-	end_rtb = XFS_BB_TO_FSB(mp, min(eofs - 1, keys[1].fmr_physical));
+	/*
+	 * The passed keys[1] is an unreachable value, while "end_rtb" is used
+	 * to calculate "ahigh.ar_startext", serving as an input parameter for
+	 * xfs_rtalloc_query_range(), which is a value that can be reached.
+	 * Therefore, it is necessary to use "keys[1].fmr_physical - 1" here.
+	 * And because of the semantics of "end_rtb", it needs to be
+	 * supplemented by 1 in the last calculation.
+	 */
+	end_rtb = XFS_BB_TO_FSBT(mp, min(eofs - 1, keys[1].fmr_physical - 1));
 
 	info->missing_owner = XFS_FMR_OWN_UNKNOWN;
 
@@ -549,9 +558,14 @@ xfs_getfsmap_rtdev_rtbitmap(
 	/*
 	 * Report any gaps at the end of the rtbitmap by simulating a null
 	 * rmap starting at the block after the end of the query range.
+	 * For the boundary case of eofs, we need to increment the count
+	 * by 1 to prevent omission in block statistics.
+	 * For the boundary case of non-eofs, even if incrementing by 1
+	 * may lead to over-counting, it doesn't matter because it is
+	 * handled by "info->end_daddr" in this situation, not "ahigh".
 	 */
 	info->last = true;
-	ahigh.ar_startext = min(mp->m_sb.sb_rextents, ahigh.ar_startext);
+	ahigh.ar_startext = min(mp->m_sb.sb_rextents, ahigh.ar_startext + 1);
 
 	error = xfs_getfsmap_rtdev_rtbitmap_helper(mp, tp, &ahigh, info);
 	if (error)

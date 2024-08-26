@@ -1034,8 +1034,7 @@ xfs_rtalloc_query_range(
 
 	if (low_rec->ar_startext > high_rec->ar_startext)
 		return -EINVAL;
-	if (low_rec->ar_startext >= mp->m_sb.sb_rextents ||
-	    low_rec->ar_startext == high_rec->ar_startext)
+	if (low_rec->ar_startext >= mp->m_sb.sb_rextents)
 		return 0;
 
 	high_key = min(high_rec->ar_startext, mp->m_sb.sb_rextents - 1);
@@ -1057,7 +1056,6 @@ xfs_rtalloc_query_range(
 		if (is_free) {
 			rec.ar_startext = rtstart;
 			rec.ar_extcount = rtend - rtstart + 1;
-
 			error = fn(mp, tp, &rec, priv);
 			if (error)
 				break;
