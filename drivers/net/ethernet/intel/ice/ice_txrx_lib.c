@@ -81,6 +81,24 @@ ice_rx_hash_to_skb(const struct ice_rx_ring *rx_ring,
 }
 
 /**
+ * ice_rx_gcs - Set generic checksum in skd
+ * @skb: skb currently being received and modified
+ * @rx_desc: Receive descriptor
+ * Returns hash, if present, 0 otherwise.
+ */
+static void ice_rx_gcs(struct sk_buff *skb, union ice_32b_rx_flex_desc *rx_desc)
+{
+	struct ice_32b_rx_flex_desc_nic *nic_csum;
+
+	if (rx_desc->wb.rxdid != ICE_RXDID_FLEX_NIC)
+		return;
+
+	nic_csum = (struct ice_32b_rx_flex_desc_nic *)rx_desc;
+	skb->ip_summed = CHECKSUM_COMPLETE;
+	skb->csum = (__force __wsum)htons(le16_to_cpu(nic_csum->raw_csum));
+}
+
+/**
  * ice_rx_csum - Indicate in skb if checksum is good
  * @ring: the ring we care about
  * @skb: skb currently being received and modified
@@ -106,6 +124,21 @@ ice_rx_csum(struct ice_rx_ring *ring, struct sk_buff *skb,
 
 	rx_status0 = le16_to_cpu(rx_desc->wb.status_error0);
 	rx_status1 = le16_to_cpu(rx_desc->wb.status_error1);
+
+	if (rx_desc->wb.rxdid == ICE_RXDID_FLEX_NIC &&
+	    ring->flags & ICE_TXRX_FLAGS_GCS_ENA &&
+	    (decoded.inner_prot == LIBETH_RX_PT_INNER_TCP ||
+	     decoded.inner_prot == LIBETH_RX_PT_INNER_UDP ||
+	     decoded.inner_prot == LIBETH_RX_PT_INNER_ICMP)) {
+		/* ICE_RX_FLEX_DESC_STATUS1_L2TAG2P_S is overloaded in the
+		 * rx_status1 layout to indicate that the extracted data from
+		 * the packet is valid.
+		 */
+		if (rx_status1 & BIT(ICE_RX_FLEX_DESC_STATUS1_L2TAG2P_S))
+			return ice_rx_gcs(skb, rx_desc);
+
+		goto checksum_fail;
+	}
 
 	/* check if HW has decoded the packet and checksum */
 	if (!(rx_status0 & BIT(ICE_RX_FLEX_DESC_STATUS0_L3L4P_S)))

@@ -3663,6 +3663,12 @@ static void ice_set_netdev_features(struct net_device *netdev)
 	 */
 	netdev->hw_features |= NETIF_F_RXFCS;
 
+	/* Mutual exclusivity for TSO and GCS is enforced by the
+	 * ice_fix_features() ndo callback.
+	 */
+	if (ice_is_feature_supported(pf, ICE_F_GCS))
+		netdev->hw_features |= NETIF_F_HW_CSUM;
+
 	netif_set_tso_max_size(netdev, ICE_MAX_TSO_SIZE);
 }
 
@@ -6222,6 +6228,7 @@ ice_fix_features(struct net_device *netdev, netdev_features_t features)
 	struct ice_netdev_priv *np = netdev_priv(netdev);
 	netdev_features_t req_vlan_fltr, cur_vlan_fltr;
 	bool cur_ctag, cur_stag, req_ctag, req_stag;
+	netdev_features_t changed;
 
 	cur_vlan_fltr = netdev->features & NETIF_VLAN_FILTERING_FEATURES;
 	cur_ctag = cur_vlan_fltr & NETIF_F_HW_VLAN_CTAG_FILTER;
@@ -6268,6 +6275,29 @@ ice_fix_features(struct net_device *netdev, netdev_features_t features)
 	    !ice_vsi_has_non_zero_vlans(np->vsi)) {
 		netdev_warn(netdev, "Disabling VLAN stripping as FCS/CRC stripping is also disabled and there is no VLAN configured\n");
 		features &= ~NETIF_VLAN_STRIPPING_FEATURES;
+	}
+
+	if (!ice_is_feature_supported(np->vsi->back, ICE_F_GCS) ||
+	    !(features & NETIF_F_HW_CSUM))
+		return features;
+
+	changed = netdev->features ^ features;
+
+	/* HW checksum feature is supported and set, so enforce mutual
+	 * exclusivity of TSO and GCS.
+	 */
+	if (features & NETIF_F_ALL_TSO) {
+		if (changed & NETIF_F_HW_CSUM && changed & NETIF_F_ALL_TSO) {
+			netdev_warn(netdev, "Dropping TSO and HW checksum. TSO and HW checksum are mutually exclusive.\n");
+			features &= ~NETIF_F_HW_CSUM;
+			features &= ~((features & changed) & NETIF_F_ALL_TSO);
+		} else if (changed & NETIF_F_HW_CSUM) {
+			netdev_warn(netdev, "Dropping HW checksum. TSO and HW checksum are mutually exclusive.\n");
+			features &= ~NETIF_F_HW_CSUM;
+		} else {
+			netdev_warn(netdev, "Dropping TSO. TSO and HW checksum are mutually exclusive.\n");
+			features &= ~NETIF_F_ALL_TSO;
+		}
 	}
 
 	return features;
