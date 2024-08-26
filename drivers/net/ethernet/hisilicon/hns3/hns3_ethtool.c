@@ -200,7 +200,7 @@ static void hns3_lb_check_skb_data(struct hns3_enet_ring *ring,
 		tqp_vector->rx_group.total_packets++;
 	else
 		print_hex_dump(KERN_ERR, "selftest:", DUMP_PREFIX_OFFSET, 16, 1,
-			       skb->data, len, true);
+			       skb->data, len, DUMP_FLAG_ASCII);
 
 	dev_kfree_skb_any(skb);
 }

@@ -56,7 +56,7 @@ intel_dump_buffer(const char *prefix, const u8 *buf, size_t len)
 		return;
 
 	print_hex_dump(KERN_DEBUG, prefix, DUMP_PREFIX_NONE,
-		       16, 0, buf, len, false);
+		       16, 0, buf, len, 0);
 }
 
 #define OUTPUT_TYPE(x) [INTEL_OUTPUT_ ## x] = #x

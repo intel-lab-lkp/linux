@@ -904,7 +904,7 @@ again:
 		print_hex_dump(KERN_ERR, "RxS ", DUMP_PREFIX_OFFSET, 16, 1,
 			       msg, wil->use_compressed_rx_status ?
 			       sizeof(struct wil_rx_status_compressed) :
-			       sizeof(struct wil_rx_status_extended), false);
+			       sizeof(struct wil_rx_status_extended), 0);
 
 		wil_rx_status_reset_buff_id(sring);
 		wil_sring_advance_swhead(sring);
@@ -969,7 +969,7 @@ again:
 		print_hex_dump(KERN_ERR, "RxS ", DUMP_PREFIX_OFFSET, 16, 1,
 			       msg, wil->use_compressed_rx_status ?
 			       sizeof(struct wil_rx_status_compressed) :
-			       sizeof(struct wil_rx_status_extended), false);
+			       sizeof(struct wil_rx_status_extended), 0);
 
 		stats->rx_large_frame++;
 		rxdata->skipping = true;

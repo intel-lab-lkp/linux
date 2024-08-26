@@ -97,7 +97,7 @@ static void gr_dbgprint_request(const char *str, struct gr_ep *ep,
 	dev_dbg(ep->dev->dev, "%s: 0x%p, %d bytes data%s:\n", str, req, buflen,
 		(buflen > plen ? " (truncated)" : ""));
 	print_hex_dump_debug("   ", DUMP_PREFIX_NONE,
-			     rowlen, 4, req->req.buf, plen, false);
+			     rowlen, 4, req->req.buf, plen, 0);
 }
 
 static void gr_dbgprint_devreq(struct gr_udc *dev, u8 type, u8 request,

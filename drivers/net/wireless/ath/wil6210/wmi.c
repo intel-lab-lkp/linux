@@ -3376,7 +3376,7 @@ static void wmi_event_handle(struct wil6210_priv *wil,
 	} else {
 		wil_err(wil, "Unknown event type\n");
 		print_hex_dump(KERN_ERR, "evt?? ", DUMP_PREFIX_OFFSET, 16, 1,
-			       hdr, sizeof(*hdr) + len, true);
+			       hdr, sizeof(*hdr) + len, DUMP_FLAG_ASCII);
 	}
 }
 

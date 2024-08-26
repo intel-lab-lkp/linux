@@ -293,7 +293,7 @@ static void process_fw_async_msg(struct intel_sst_drv *sst_drv_ctx,
 		dev_err(sst_drv_ctx->dev, "FW sent async error msg:\n");
 		for (i = 0; i < (data_size/4); i++)
 			print_hex_dump(KERN_DEBUG, NULL, DUMP_PREFIX_NONE,
-					16, 4, data_offset, data_size, false);
+					16, 4, data_offset, data_size, 0);
 		break;
 
 	case IPC_IA_FW_INIT_CMPLT_MRFLD:

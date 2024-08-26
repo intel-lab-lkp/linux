@@ -53,7 +53,7 @@ static u32 *caam_init_reseed_desc(u32 *desc)
 			OP_ALG_AS_FINALIZE);
 
 	print_hex_dump_debug("prng reseed desc@: ", DUMP_PREFIX_ADDRESS,
-			     16, 4, desc, desc_bytes(desc), 1);
+			     16, 4, desc, desc_bytes(desc), DUMP_FLAG_ASCII);
 
 	return desc;
 }
@@ -68,7 +68,7 @@ static u32 *caam_init_prng_desc(u32 *desc, dma_addr_t dst_dma, u32 len)
 			  len, FIFOST_TYPE_RNGSTORE);
 
 	print_hex_dump_debug("prng job desc@: ", DUMP_PREFIX_ADDRESS,
-			     16, 4, desc, desc_bytes(desc), 1);
+			     16, 4, desc, desc_bytes(desc), DUMP_FLAG_ASCII);
 
 	return desc;
 }

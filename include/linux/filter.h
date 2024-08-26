@@ -1257,7 +1257,7 @@ static inline void bpf_jit_dump(unsigned int flen, unsigned int proglen,
 
 	if (image)
 		print_hex_dump(KERN_ERR, "JIT code: ", DUMP_PREFIX_OFFSET,
-			       16, 1, image, proglen, false);
+			       16, 1, image, proglen, 0);
 }
 
 static inline bool bpf_jit_is_ebpf(void)

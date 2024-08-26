@@ -524,7 +524,7 @@ static void snoop_urb(struct usb_device *udev,
 	data_len = min(data_len, usbfs_snoop_max);
 	if (data && data_len > 0) {
 		print_hex_dump(KERN_DEBUG, "data: ", DUMP_PREFIX_NONE, 32, 1,
-			data, data_len, 1);
+			data, data_len, DUMP_FLAG_ASCII);
 	}
 }
 
@@ -538,14 +538,14 @@ static void snoop_urb_data(struct urb *urb, unsigned len)
 
 	if (urb->num_sgs == 0) {
 		print_hex_dump(KERN_DEBUG, "data: ", DUMP_PREFIX_NONE, 32, 1,
-			urb->transfer_buffer, len, 1);
+			urb->transfer_buffer, len, DUMP_FLAG_ASCII);
 		return;
 	}
 
 	for (i = 0; i < urb->num_sgs && len; i++) {
 		size = (len > USB_SG_SIZE) ? USB_SG_SIZE : len;
 		print_hex_dump(KERN_DEBUG, "data: ", DUMP_PREFIX_NONE, 32, 1,
-			sg_virt(&urb->sg[i]), size, 1);
+			sg_virt(&urb->sg[i]), size, DUMP_FLAG_ASCII);
 		len -= size;
 	}
 }

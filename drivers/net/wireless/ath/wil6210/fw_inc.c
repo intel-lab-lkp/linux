@@ -14,7 +14,8 @@
 			groupsize, buf, len, ascii)			\
 			print_hex_dump_debug("DBG[ FW ]" prefix_str,	\
 					     prefix_type, rowsize,	\
-					     groupsize, buf, len, ascii)
+					     groupsize, buf, len,	\
+					     ascii ? DUMP_FLAG_ASCII : 0)
 
 static bool wil_fw_addr_check(struct wil6210_priv *wil,
 			      void __iomem **ioaddr, __le32 val,

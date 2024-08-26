@@ -1324,7 +1324,7 @@ static void hdac_hdmi_present_sense(struct hdac_hdmi_pin *pin,
 		}
 
 		print_hex_dump_debug("ELD: ", DUMP_PREFIX_OFFSET, 16, 1,
-			  port->eld.eld_buffer, port->eld.eld_size, false);
+			  port->eld.eld_buffer, port->eld.eld_size, 0);
 
 	}
 	mutex_unlock(&hdmi->pin_mutex);

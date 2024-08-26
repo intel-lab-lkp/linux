@@ -213,7 +213,7 @@ static int __pdsc_adminq_post(struct pdsc *pdsc,
 		q->head_idx, q->tail_idx);
 	dev_dbg(pdsc->dev, "post admin queue command:\n");
 	dynamic_hex_dump("cmd ", DUMP_PREFIX_OFFSET, 16, 1,
-			 cmd, sizeof(*cmd), true);
+			 cmd, sizeof(*cmd), DUMP_FLAG_ASCII);
 
 	q->head_idx = (q->head_idx + 1) & (q->num_descs - 1);
 
@@ -298,7 +298,7 @@ int pdsc_adminq_post(struct pdsc *pdsc,
 
 	dev_dbg(pdsc->dev, "read admin queue completion idx %d:\n", index);
 	dynamic_hex_dump("comp ", DUMP_PREFIX_OFFSET, 16, 1,
-			 comp, sizeof(*comp), true);
+			 comp, sizeof(*comp), DUMP_FLAG_ASCII);
 
 	if (remaining && comp->status)
 		err = pdsc_err_to_errno(comp->status);

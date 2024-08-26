@@ -561,7 +561,7 @@ static int ea_get(struct inode *inode, struct ea_buffer *ea_buf, int min_size)
 
 		printk(KERN_ERR "ea_get: invalid extended attribute\n");
 		print_hex_dump(KERN_ERR, "", DUMP_PREFIX_ADDRESS, 16, 1,
-				     ea_buf->xattr, size, 1);
+				     ea_buf->xattr, size, DUMP_FLAG_ASCII);
 		ea_release(inode, ea_buf);
 		rc = -EIO;
 		goto clean_up;

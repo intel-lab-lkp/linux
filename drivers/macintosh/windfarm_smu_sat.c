@@ -100,7 +100,7 @@ struct smu_sdbp_header *smu_sat_get_sdb_partition(unsigned int sat_id, int id,
 
 	printk(KERN_DEBUG "sat %d partition %x:", sat_id, id);
 	print_hex_dump(KERN_DEBUG, "  ", DUMP_PREFIX_OFFSET,
-		       16, 1, buf, len, false);
+		       16, 1, buf, len, 0);
 	if (size)
 		*size = len;
 	return (struct smu_sdbp_header *) buf;
@@ -126,7 +126,7 @@ static int wf_sat_read_cache(struct wf_sat *sat)
 		int i;
 		printk(KERN_DEBUG "wf_sat_get: data is");
 		print_hex_dump(KERN_DEBUG, "  ", DUMP_PREFIX_OFFSET,
-			       16, 1, sat->cache, 16, false);
+			       16, 1, sat->cache, 16, 0);
 	}
 #endif
 	return 0;

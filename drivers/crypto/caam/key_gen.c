@@ -59,7 +59,8 @@ int gen_split_key(struct device *jrdev, u8 *key_out,
 	dev_dbg(jrdev, "split keylen %d split keylen padded %d\n",
 		adata->keylen, adata->keylen_pad);
 	print_hex_dump_debug("ctx.key@" __stringify(__LINE__)": ",
-			     DUMP_PREFIX_ADDRESS, 16, 4, key_in, keylen, 1);
+			     DUMP_PREFIX_ADDRESS, 16, 4, key_in, keylen,
+			     DUMP_FLAG_ASCII);
 
 	if (local_max > max_keylen)
 		return -EINVAL;
@@ -102,7 +103,7 @@ int gen_split_key(struct device *jrdev, u8 *key_out,
 
 	print_hex_dump_debug("jobdesc@"__stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, desc, desc_bytes(desc),
-			     1);
+			     DUMP_FLAG_ASCII);
 
 	result.err = 0;
 	init_completion(&result.completion);
@@ -115,7 +116,7 @@ int gen_split_key(struct device *jrdev, u8 *key_out,
 
 		print_hex_dump_debug("ctx.key@"__stringify(__LINE__)": ",
 				     DUMP_PREFIX_ADDRESS, 16, 4, key_out,
-				     adata->keylen_pad, 1);
+				     adata->keylen_pad, DUMP_FLAG_ASCII);
 	}
 
 	dma_unmap_single(jrdev, dma_addr, local_max, DMA_BIDIRECTIONAL);

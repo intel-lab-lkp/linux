@@ -1529,7 +1529,8 @@ void mac_drv_tx_complete(struct s_smc *smc, volatile struct s_smt_fp_txd *txd)
 void dump_data(unsigned char *Data, int length)
 {
 	printk(KERN_INFO "---Packet start---\n");
-	print_hex_dump(KERN_INFO, "", DUMP_PREFIX_NONE, 16, 1, Data, min_t(size_t, length, 64), false);
+	print_hex_dump(KERN_INFO, "", DUMP_PREFIX_NONE, 16, 1, Data, min_t(size_t, length, 64),
+		       0);
 	printk(KERN_INFO "------------------\n");
 }				// dump_data
 #else

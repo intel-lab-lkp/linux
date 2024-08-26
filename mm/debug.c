@@ -96,11 +96,11 @@ static void __dump_folio(struct folio *folio, struct page *page,
 
 	print_hex_dump(KERN_WARNING, "raw: ", DUMP_PREFIX_NONE, 32,
 			sizeof(unsigned long), page,
-			sizeof(struct page), false);
+			sizeof(struct page), 0);
 	if (folio_test_large(folio))
 		print_hex_dump(KERN_WARNING, "head: ", DUMP_PREFIX_NONE, 32,
 			sizeof(unsigned long), folio,
-			2 * sizeof(struct page), false);
+			2 * sizeof(struct page), 0);
 }
 
 static void __dump_page(const struct page *page)

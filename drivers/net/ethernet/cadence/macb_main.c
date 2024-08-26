@@ -1463,9 +1463,9 @@ static int gem_rx(struct macb_queue *queue, struct napi_struct *napi,
 		netdev_vdbg(bp->dev, "received skb of length %u, csum: %08x\n",
 			    skb->len, skb->csum);
 		print_hex_dump(KERN_DEBUG, " mac: ", DUMP_PREFIX_ADDRESS, 16, 1,
-			       skb_mac_header(skb), 16, true);
+			       skb_mac_header(skb), 16, DUMP_FLAG_ASCII);
 		print_hex_dump(KERN_DEBUG, "data: ", DUMP_PREFIX_ADDRESS, 16, 1,
-			       skb->data, 32, true);
+			       skb->data, 32, DUMP_FLAG_ASCII);
 #endif
 
 		napi_gro_receive(napi, skb);
@@ -2353,7 +2353,7 @@ static netdev_tx_t macb_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		    queue_index, skb->len, skb->head, skb->data,
 		    skb_tail_pointer(skb), skb_end_pointer(skb));
 	print_hex_dump(KERN_DEBUG, "data: ", DUMP_PREFIX_OFFSET, 16, 1,
-		       skb->data, 16, true);
+		       skb->data, 16, DUMP_FLAG_ASCII);
 #endif
 
 	/* Count how many TX buffer descriptors are needed to send this

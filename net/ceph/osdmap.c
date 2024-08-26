@@ -1807,7 +1807,7 @@ bad:
 	       err, epoch, (int)(*p - start), *p, start, end);
 	print_hex_dump(KERN_DEBUG, "osdmap: ",
 		       DUMP_PREFIX_OFFSET, 16, 1,
-		       start, end - start, true);
+		       start, end - start, DUMP_FLAG_ASCII);
 	return err;
 }
 
@@ -2111,7 +2111,7 @@ bad:
 	       err, epoch, (int)(*p - start), *p, start, end);
 	print_hex_dump(KERN_DEBUG, "osdmap: ",
 		       DUMP_PREFIX_OFFSET, 16, 1,
-		       start, end - start, true);
+		       start, end - start, DUMP_FLAG_ASCII);
 	return ERR_PTR(err);
 }
 

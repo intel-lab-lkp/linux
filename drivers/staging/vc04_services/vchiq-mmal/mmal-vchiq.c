@@ -96,11 +96,11 @@ static const char *const port_action_type_names[] = {
 			 (MSG)->h.type, (MSG_LEN));			\
 		print_hex_dump(KERN_DEBUG, "<<h: ", DUMP_PREFIX_OFFSET,	\
 			       16, 4, (MSG),				\
-			       sizeof(struct mmal_msg_header), 1);	\
+			       sizeof(struct mmal_msg_header), DUMP_FLAG_ASCII);	\
 		print_hex_dump(KERN_DEBUG, "<<p: ", DUMP_PREFIX_OFFSET,	\
 			       16, 4,					\
 			       ((u8 *)(MSG)) + sizeof(struct mmal_msg_header),\
-			       (MSG_LEN) - sizeof(struct mmal_msg_header), 1); \
+			       (MSG_LEN) - sizeof(struct mmal_msg_header), DUMP_FLAG_ASCII); \
 	} while (0)
 #else
 #define DBG_DUMP_MSG(MSG, MSG_LEN, TITLE)				\

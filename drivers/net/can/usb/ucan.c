@@ -758,7 +758,7 @@ static void ucan_read_bulk_callback(struct urb *urb)
 				       1,
 				       urb->transfer_buffer,
 				       urb->actual_length,
-				       true);
+				       DUMP_FLAG_ASCII);
 
 			goto resubmit;
 		}

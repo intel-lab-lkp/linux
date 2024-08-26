@@ -122,9 +122,9 @@ static void adf_mstate_dump_sect(struct adf_mstate_sect_h *sect,
 {
 	pr_debug("QAT: LM - %s QAT state section %s\n", prefix, sect->id);
 	print_hex_dump_debug("h-", DUMP_PREFIX_OFFSET, 16, 2, sect,
-			     sizeof(*sect), true);
+			     sizeof(*sect), DUMP_FLAG_ASCII);
 	print_hex_dump_debug("s-", DUMP_PREFIX_OFFSET, 16, 2, sect->state,
-			     sect->size, true);
+			     sect->size, DUMP_FLAG_ASCII);
 }
 
 static inline void __adf_mstate_sect_update(struct adf_mstate_mgr *mgr,

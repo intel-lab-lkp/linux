@@ -35,7 +35,8 @@ static void skb_debug(const struct sk_buff *skb)
 #ifdef SKB_DEBUG
 #define NUM2PRINT 50
 	print_hex_dump(KERN_DEBUG, "br2684: skb: ", DUMP_OFFSET,
-		       16, 1, skb->data, min(NUM2PRINT, skb->len), true);
+		       16, 1, skb->data, min(NUM2PRINT, skb->len),
+		       DUMP_FLAG_ASCII);
 #endif
 }
 

@@ -711,7 +711,7 @@ static int em28xx_i2c_eeprom(struct em28xx *dev, unsigned int bus,
 	if (i2c_debug) {
 		/* Display eeprom content */
 		print_hex_dump(KERN_DEBUG, "em28xx eeprom ", DUMP_PREFIX_OFFSET,
-			       16, 1, data, len, true);
+			       16, 1, data, len, DUMP_FLAG_ASCII);
 
 		if (dev->eeprom_addrwidth_16bit)
 			dev_info(&dev->intf->dev,

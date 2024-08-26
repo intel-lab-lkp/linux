@@ -39,7 +39,7 @@ static int rpmsg_ns_cb(struct rpmsg_device *rpdev, void *data, int len,
 
 #if defined(CONFIG_DYNAMIC_DEBUG)
 	dynamic_hex_dump("NS announcement: ", DUMP_PREFIX_NONE, 16, 1,
-			 data, len, true);
+			 data, len, DUMP_FLAG_ASCII);
 #endif
 
 	if (len != sizeof(*msg)) {

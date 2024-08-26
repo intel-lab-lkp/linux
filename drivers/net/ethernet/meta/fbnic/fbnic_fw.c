@@ -704,7 +704,7 @@ static void fbnic_mbx_process_rx_msgs(struct fbnic_dev *fbd)
 				 err);
 			print_hex_dump(KERN_WARNING, "fbnic:",
 				       DUMP_PREFIX_OFFSET, 16, 2,
-				       msg, length, true);
+				       msg, length, DUMP_FLAG_ASCII);
 		}
 
 		dev_dbg(fbd->dev, "Parsed msg type %d\n", msg->hdr.type);

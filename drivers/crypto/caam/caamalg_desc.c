@@ -116,7 +116,7 @@ void cnstr_shdsc_aead_null_encap(u32 * const desc, struct alginfo *adata,
 
 	print_hex_dump_debug("aead null enc shdesc@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, desc, desc_bytes(desc),
-			     1);
+			     DUMP_FLAG_ASCII);
 }
 EXPORT_SYMBOL(cnstr_shdsc_aead_null_encap);
 
@@ -203,7 +203,7 @@ void cnstr_shdsc_aead_null_decap(u32 * const desc, struct alginfo *adata,
 
 	print_hex_dump_debug("aead null dec shdesc@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, desc, desc_bytes(desc),
-			     1);
+			     DUMP_FLAG_ASCII);
 }
 EXPORT_SYMBOL(cnstr_shdsc_aead_null_decap);
 
@@ -355,7 +355,7 @@ void cnstr_shdsc_aead_encap(u32 * const desc, struct alginfo *cdata,
 
 	print_hex_dump_debug("aead enc shdesc@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, desc, desc_bytes(desc),
-			     1);
+			     DUMP_FLAG_ASCII);
 }
 EXPORT_SYMBOL(cnstr_shdsc_aead_encap);
 
@@ -472,7 +472,7 @@ void cnstr_shdsc_aead_decap(u32 * const desc, struct alginfo *cdata,
 
 	print_hex_dump_debug("aead dec shdesc@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, desc, desc_bytes(desc),
-			     1);
+			     DUMP_FLAG_ASCII);
 }
 EXPORT_SYMBOL(cnstr_shdsc_aead_decap);
 
@@ -618,7 +618,7 @@ copy_iv:
 
 	print_hex_dump_debug("aead givenc shdesc@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, desc, desc_bytes(desc),
-			     1);
+			     DUMP_FLAG_ASCII);
 }
 EXPORT_SYMBOL(cnstr_shdsc_aead_givencap);
 
@@ -745,7 +745,7 @@ void cnstr_shdsc_gcm_encap(u32 * const desc, struct alginfo *cdata,
 
 	print_hex_dump_debug("gcm enc shdesc@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, desc, desc_bytes(desc),
-			     1);
+			     DUMP_FLAG_ASCII);
 }
 EXPORT_SYMBOL(cnstr_shdsc_gcm_encap);
 
@@ -840,7 +840,7 @@ void cnstr_shdsc_gcm_decap(u32 * const desc, struct alginfo *cdata,
 
 	print_hex_dump_debug("gcm dec shdesc@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, desc, desc_bytes(desc),
-			     1);
+			     DUMP_FLAG_ASCII);
 }
 EXPORT_SYMBOL(cnstr_shdsc_gcm_decap);
 
@@ -951,7 +951,7 @@ void cnstr_shdsc_rfc4106_encap(u32 * const desc, struct alginfo *cdata,
 
 	print_hex_dump_debug("rfc4106 enc shdesc@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, desc, desc_bytes(desc),
-			     1);
+			     DUMP_FLAG_ASCII);
 }
 EXPORT_SYMBOL(cnstr_shdsc_rfc4106_encap);
 
@@ -1046,7 +1046,7 @@ void cnstr_shdsc_rfc4106_decap(u32 * const desc, struct alginfo *cdata,
 
 	print_hex_dump_debug("rfc4106 dec shdesc@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, desc, desc_bytes(desc),
-			     1);
+			     DUMP_FLAG_ASCII);
 }
 EXPORT_SYMBOL(cnstr_shdsc_rfc4106_decap);
 
@@ -1129,7 +1129,7 @@ void cnstr_shdsc_rfc4543_encap(u32 * const desc, struct alginfo *cdata,
 
 	print_hex_dump_debug("rfc4543 enc shdesc@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, desc, desc_bytes(desc),
-			     1);
+			     DUMP_FLAG_ASCII);
 }
 EXPORT_SYMBOL(cnstr_shdsc_rfc4543_encap);
 
@@ -1217,7 +1217,7 @@ void cnstr_shdsc_rfc4543_decap(u32 * const desc, struct alginfo *cdata,
 
 	print_hex_dump_debug("rfc4543 dec shdesc@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, desc, desc_bytes(desc),
-			     1);
+			     DUMP_FLAG_ASCII);
 }
 EXPORT_SYMBOL(cnstr_shdsc_rfc4543_decap);
 
@@ -1350,7 +1350,7 @@ void cnstr_shdsc_chachapoly(u32 * const desc, struct alginfo *cdata,
 
 	print_hex_dump_debug("chachapoly shdesc@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, desc, desc_bytes(desc),
-			     1);
+			     DUMP_FLAG_ASCII);
 }
 EXPORT_SYMBOL(cnstr_shdsc_chachapoly);
 
@@ -1436,7 +1436,7 @@ void cnstr_shdsc_skcipher_encap(u32 * const desc, struct alginfo *cdata,
 
 	print_hex_dump_debug("skcipher enc shdesc@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, desc, desc_bytes(desc),
-			     1);
+			     DUMP_FLAG_ASCII);
 }
 EXPORT_SYMBOL(cnstr_shdsc_skcipher_encap);
 
@@ -1513,7 +1513,7 @@ void cnstr_shdsc_skcipher_decap(u32 * const desc, struct alginfo *cdata,
 
 	print_hex_dump_debug("skcipher dec shdesc@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, desc, desc_bytes(desc),
-			     1);
+			     DUMP_FLAG_ASCII);
 }
 EXPORT_SYMBOL(cnstr_shdsc_skcipher_decap);
 
@@ -1575,7 +1575,7 @@ void cnstr_shdsc_xts_skcipher_encap(u32 * const desc, struct alginfo *cdata)
 
 	print_hex_dump_debug("xts skcipher enc shdesc@" __stringify(__LINE__)
 			     ": ", DUMP_PREFIX_ADDRESS, 16, 4,
-			     desc, desc_bytes(desc), 1);
+			     desc, desc_bytes(desc), DUMP_FLAG_ASCII);
 }
 EXPORT_SYMBOL(cnstr_shdsc_xts_skcipher_encap);
 
@@ -1635,7 +1635,7 @@ void cnstr_shdsc_xts_skcipher_decap(u32 * const desc, struct alginfo *cdata)
 
 	print_hex_dump_debug("xts skcipher dec shdesc@" __stringify(__LINE__)
 			     ": ", DUMP_PREFIX_ADDRESS, 16, 4, desc,
-			     desc_bytes(desc), 1);
+			     desc_bytes(desc), DUMP_FLAG_ASCII);
 }
 EXPORT_SYMBOL(cnstr_shdsc_xts_skcipher_decap);
 

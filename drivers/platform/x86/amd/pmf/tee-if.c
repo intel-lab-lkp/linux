@@ -293,7 +293,7 @@ static int amd_pmf_start_policy_engine(struct amd_pmf_dev *dev)
 static void amd_pmf_hex_dump_pb(struct amd_pmf_dev *dev)
 {
 	print_hex_dump_debug("(pb):  ", DUMP_PREFIX_OFFSET, 16, 1, dev->policy_buf,
-			     dev->policy_sz, false);
+			     dev->policy_sz, 0);
 }
 
 static ssize_t amd_pmf_get_pb_data(struct file *filp, const char __user *buf,

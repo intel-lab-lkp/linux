@@ -329,7 +329,7 @@ usbtmc_abort_bulk_in_status:
 			  &actual, 300);
 
 	print_hex_dump_debug("usbtmc ", DUMP_PREFIX_NONE, 16, 1,
-			     buffer, actual, true);
+			     buffer, actual, DUMP_FLAG_ASCII);
 
 	n++;
 
@@ -985,7 +985,8 @@ static ssize_t usbtmc_generic_read(struct usbtmc_file_data *file_data,
 			this_part = remaining;
 
 		print_hex_dump_debug("usbtmc ", DUMP_PREFIX_NONE, 16, 1,
-			urb->transfer_buffer, urb->actual_length, true);
+			urb->transfer_buffer, urb->actual_length,
+			DUMP_FLAG_ASCII);
 
 		if (copy_to_user(user_buffer + done,
 				 urb->transfer_buffer, this_part)) {
@@ -1193,7 +1194,7 @@ static ssize_t usbtmc_generic_write(struct usbtmc_file_data *file_data,
 		}
 
 		print_hex_dump_debug("usbtmc ", DUMP_PREFIX_NONE,
-			16, 1, buffer, this_part, true);
+			16, 1, buffer, this_part, DUMP_FLAG_ASCII);
 
 		/* fill bulk with 32 bit alignment to meet USBTMC specification
 		 * (size + 3 & ~3) rounds up and simplifies user code
@@ -1467,7 +1468,7 @@ static ssize_t usbtmc_read(struct file *filp, char __user *buf,
 	}
 
 	print_hex_dump_debug("usbtmc ", DUMP_PREFIX_NONE,
-			     16, 1, buffer, actual, true);
+			     16, 1, buffer, actual, DUMP_FLAG_ASCII);
 
 	remaining = n_characters;
 
@@ -1595,7 +1596,7 @@ static ssize_t usbtmc_write(struct file *filp, const char __user *buf,
 		(unsigned int)transfersize, (unsigned int)aligned);
 
 	print_hex_dump_debug("usbtmc ", DUMP_PREFIX_NONE,
-			     16, 1, buffer, aligned, true);
+			     16, 1, buffer, aligned, DUMP_FLAG_ASCII);
 
 	usb_fill_bulk_urb(urb, data->usb_dev,
 		usb_sndbulkpipe(data->usb_dev, data->bulk_out),
@@ -1718,7 +1719,8 @@ usbtmc_clear_check_status:
 					  &actual, USB_CTRL_GET_TIMEOUT);
 
 			print_hex_dump_debug("usbtmc ", DUMP_PREFIX_NONE,
-					     16, 1, buffer, actual, true);
+					     16, 1, buffer, actual,
+					     DUMP_FLAG_ASCII);
 
 			n++;
 

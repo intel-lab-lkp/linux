@@ -185,7 +185,7 @@ static void qed_ll2b_complete_rx_packet(void *cxt,
 	if ((cdev->dp_module & NETIF_MSG_PKTDATA) && buffer->data) {
 		print_hex_dump(KERN_INFO, "",
 			       DUMP_PREFIX_OFFSET, 16, 1,
-			       buffer->data, data->length.packet_length, false);
+			       buffer->data, data->length.packet_length, 0);
 	}
 
 	/* Determine if data is valid */

@@ -300,7 +300,8 @@ static int aead_setkey(struct crypto_aead *aead, const u8 *key,
 		keys.authkeylen + keys.enckeylen, keys.enckeylen,
 		keys.authkeylen);
 	print_hex_dump_debug("key in @" __stringify(__LINE__)": ",
-			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen, 1);
+			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen,
+			     DUMP_FLAG_ASCII);
 
 	ctx->adata.keylen = keys.authkeylen;
 	ctx->adata.keylen_pad = split_key_len(ctx->adata.algtype &
@@ -315,7 +316,8 @@ static int aead_setkey(struct crypto_aead *aead, const u8 *key,
 				   keys.enckeylen, ctx->dir);
 	print_hex_dump_debug("ctx.key@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, ctx->key,
-			     ctx->adata.keylen_pad + keys.enckeylen, 1);
+			     ctx->adata.keylen_pad + keys.enckeylen,
+			     DUMP_FLAG_ASCII);
 
 	ctx->cdata.keylen = keys.enckeylen;
 
@@ -731,7 +733,8 @@ static int gcm_setkey(struct crypto_aead *aead,
 	if (ret)
 		return ret;
 	print_hex_dump_debug("key in @" __stringify(__LINE__)": ",
-			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen, 1);
+			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen,
+			     DUMP_FLAG_ASCII);
 
 	memcpy(ctx->key, key, keylen);
 	dma_sync_single_for_device(dev, ctx->key_dma, keylen, ctx->dir);
@@ -827,7 +830,8 @@ static int rfc4106_setkey(struct crypto_aead *aead,
 		return ret;
 
 	print_hex_dump_debug("key in @" __stringify(__LINE__)": ",
-			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen, 1);
+			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen,
+			     DUMP_FLAG_ASCII);
 
 	memcpy(ctx->key, key, keylen);
 	/*
@@ -926,7 +930,8 @@ static int rfc4543_setkey(struct crypto_aead *aead,
 		return ret;
 
 	print_hex_dump_debug("key in @" __stringify(__LINE__)": ",
-			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen, 1);
+			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen,
+			     DUMP_FLAG_ASCII);
 
 	memcpy(ctx->key, key, keylen);
 	/*
@@ -954,7 +959,8 @@ static int skcipher_setkey(struct crypto_skcipher *skcipher, const u8 *key,
 	const bool is_rfc3686 = alg->caam.rfc3686;
 
 	print_hex_dump_debug("key in @" __stringify(__LINE__)": ",
-			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen, 1);
+			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen,
+			     DUMP_FLAG_ASCII);
 
 	ctx->cdata.keylen = keylen;
 	ctx->cdata.key_virt = key;
@@ -1407,7 +1413,8 @@ static void skcipher_encrypt_done(void *cbk_ctx, u32 status)
 
 	print_hex_dump_debug("dstiv  @" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, req->iv,
-			     edesc->src_nents > 1 ? 100 : ivsize, 1);
+			     edesc->src_nents > 1 ? 100 : ivsize,
+			     DUMP_FLAG_ASCII);
 	caam_dump_sg("dst    @" __stringify(__LINE__)": ",
 		     DUMP_PREFIX_ADDRESS, 16, 4, req->dst,
 		     edesc->dst_nents > 1 ? 100 : req->cryptlen, 1);
@@ -1445,7 +1452,8 @@ static void skcipher_decrypt_done(void *cbk_ctx, u32 status)
 
 	print_hex_dump_debug("dstiv  @" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, req->iv,
-			     edesc->src_nents > 1 ? 100 : ivsize, 1);
+			     edesc->src_nents > 1 ? 100 : ivsize,
+			     DUMP_FLAG_ASCII);
 	caam_dump_sg("dst    @" __stringify(__LINE__)": ",
 		     DUMP_PREFIX_ADDRESS, 16, 4, req->dst,
 		     edesc->dst_nents > 1 ? 100 : req->cryptlen, 1);
@@ -3153,7 +3161,7 @@ static int ahash_set_sh_desc(struct crypto_ahash *ahash)
 				   desc_bytes(desc), DMA_BIDIRECTIONAL);
 	print_hex_dump_debug("ahash update shdesc@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, desc, desc_bytes(desc),
-			     1);
+			     DUMP_FLAG_ASCII);
 
 	/* ahash_update_first shared descriptor */
 	flc = &ctx->flc[UPDATE_FIRST];
@@ -3165,7 +3173,7 @@ static int ahash_set_sh_desc(struct crypto_ahash *ahash)
 				   desc_bytes(desc), DMA_BIDIRECTIONAL);
 	print_hex_dump_debug("ahash update first shdesc@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, desc, desc_bytes(desc),
-			     1);
+			     DUMP_FLAG_ASCII);
 
 	/* ahash_final shared descriptor */
 	flc = &ctx->flc[FINALIZE];
@@ -3177,7 +3185,7 @@ static int ahash_set_sh_desc(struct crypto_ahash *ahash)
 				   desc_bytes(desc), DMA_BIDIRECTIONAL);
 	print_hex_dump_debug("ahash final shdesc@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, desc, desc_bytes(desc),
-			     1);
+			     DUMP_FLAG_ASCII);
 
 	/* ahash_digest shared descriptor */
 	flc = &ctx->flc[DIGEST];
@@ -3189,7 +3197,7 @@ static int ahash_set_sh_desc(struct crypto_ahash *ahash)
 				   desc_bytes(desc), DMA_BIDIRECTIONAL);
 	print_hex_dump_debug("ahash digest shdesc@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, desc, desc_bytes(desc),
-			     1);
+			     DUMP_FLAG_ASCII);
 
 	return 0;
 }
@@ -3269,10 +3277,11 @@ static int hash_digest_key(struct caam_hash_ctx *ctx, u32 *keylen, u8 *key,
 	dpaa2_fl_set_len(out_fle, digestsize);
 
 	print_hex_dump_debug("key_in@" __stringify(__LINE__)": ",
-			     DUMP_PREFIX_ADDRESS, 16, 4, key, *keylen, 1);
+			     DUMP_PREFIX_ADDRESS, 16, 4, key, *keylen,
+			     DUMP_FLAG_ASCII);
 	print_hex_dump_debug("shdesc@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, desc, desc_bytes(desc),
-			     1);
+			     DUMP_FLAG_ASCII);
 
 	result.err = 0;
 	init_completion(&result.completion);
@@ -3290,7 +3299,7 @@ static int hash_digest_key(struct caam_hash_ctx *ctx, u32 *keylen, u8 *key,
 		ret = result.err;
 		print_hex_dump_debug("digested key@" __stringify(__LINE__)": ",
 				     DUMP_PREFIX_ADDRESS, 16, 4, key,
-				     digestsize, 1);
+				     digestsize, DUMP_FLAG_ASCII);
 	}
 
 	dma_unmap_single(ctx->dev, flc_dma, sizeof(flc->flc) + desc_bytes(desc),
@@ -3418,7 +3427,7 @@ static void ahash_done(void *cbk_ctx, u32 status)
 
 	print_hex_dump_debug("ctx@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, state->caam_ctx,
-			     ctx->ctx_len, 1);
+			     ctx->ctx_len, DUMP_FLAG_ASCII);
 
 	ahash_request_complete(req, ecode);
 }
@@ -3448,15 +3457,16 @@ static void ahash_done_bi(void *cbk_ctx, u32 status)
 
 	print_hex_dump_debug("buf@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, state->buf,
-			     state->buflen, 1);
+			     state->buflen, DUMP_FLAG_ASCII);
 
 	print_hex_dump_debug("ctx@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, state->caam_ctx,
-			     ctx->ctx_len, 1);
+			     ctx->ctx_len, DUMP_FLAG_ASCII);
 	if (req->result)
 		print_hex_dump_debug("result@" __stringify(__LINE__)": ",
 				     DUMP_PREFIX_ADDRESS, 16, 4, req->result,
-				     crypto_ahash_digestsize(ahash), 1);
+				     crypto_ahash_digestsize(ahash),
+				     DUMP_FLAG_ASCII);
 
 	ahash_request_complete(req, ecode);
 }
@@ -3483,7 +3493,7 @@ static void ahash_done_ctx_src(void *cbk_ctx, u32 status)
 
 	print_hex_dump_debug("ctx@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, state->caam_ctx,
-			     ctx->ctx_len, 1);
+			     ctx->ctx_len, DUMP_FLAG_ASCII);
 
 	ahash_request_complete(req, ecode);
 }
@@ -3513,15 +3523,16 @@ static void ahash_done_ctx_dst(void *cbk_ctx, u32 status)
 
 	print_hex_dump_debug("buf@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, state->buf,
-			     state->buflen, 1);
+			     state->buflen, DUMP_FLAG_ASCII);
 
 	print_hex_dump_debug("ctx@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, state->caam_ctx,
-			     ctx->ctx_len, 1);
+			     ctx->ctx_len, DUMP_FLAG_ASCII);
 	if (req->result)
 		print_hex_dump_debug("result@" __stringify(__LINE__)": ",
 				     DUMP_PREFIX_ADDRESS, 16, 4, req->result,
-				     crypto_ahash_digestsize(ahash), 1);
+				     crypto_ahash_digestsize(ahash),
+				     DUMP_FLAG_ASCII);
 
 	ahash_request_complete(req, ecode);
 }
@@ -3635,7 +3646,7 @@ static int ahash_update_ctx(struct ahash_request *req)
 
 		print_hex_dump_debug("buf@" __stringify(__LINE__)": ",
 				     DUMP_PREFIX_ADDRESS, 16, 4, buf,
-				     *buflen, 1);
+				     *buflen, DUMP_FLAG_ASCII);
 	}
 
 	return ret;
@@ -4089,7 +4100,7 @@ static int ahash_update_no_ctx(struct ahash_request *req)
 
 		print_hex_dump_debug("buf@" __stringify(__LINE__)": ",
 				     DUMP_PREFIX_ADDRESS, 16, 4, buf,
-				     *buflen, 1);
+				     *buflen, DUMP_FLAG_ASCII);
 	}
 
 	return ret;
@@ -4314,7 +4325,7 @@ static int ahash_update_first(struct ahash_request *req)
 
 		print_hex_dump_debug("buf@" __stringify(__LINE__)": ",
 				     DUMP_PREFIX_ADDRESS, 16, 4, buf,
-				     *buflen, 1);
+				     *buflen, DUMP_FLAG_ASCII);
 	}
 
 	return ret;

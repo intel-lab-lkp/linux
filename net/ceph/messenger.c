@@ -2202,17 +2202,18 @@ void ceph_msg_dump(struct ceph_msg *msg)
 		 msg->front_alloc_len, msg->data_length);
 	print_hex_dump(KERN_DEBUG, "header: ",
 		       DUMP_PREFIX_OFFSET, 16, 1,
-		       &msg->hdr, sizeof(msg->hdr), true);
+		       &msg->hdr, sizeof(msg->hdr), DUMP_FLAG_ASCII);
 	print_hex_dump(KERN_DEBUG, " front: ",
 		       DUMP_PREFIX_OFFSET, 16, 1,
-		       msg->front.iov_base, msg->front.iov_len, true);
+		       msg->front.iov_base, msg->front.iov_len,
+		       DUMP_FLAG_ASCII);
 	if (msg->middle)
 		print_hex_dump(KERN_DEBUG, "middle: ",
 			       DUMP_PREFIX_OFFSET, 16, 1,
 			       msg->middle->vec.iov_base,
-			       msg->middle->vec.iov_len, true);
+			       msg->middle->vec.iov_len, DUMP_FLAG_ASCII);
 	print_hex_dump(KERN_DEBUG, "footer: ",
 		       DUMP_PREFIX_OFFSET, 16, 1,
-		       &msg->footer, sizeof(msg->footer), true);
+		       &msg->footer, sizeof(msg->footer), DUMP_FLAG_ASCII);
 }
 EXPORT_SYMBOL(ceph_msg_dump);

@@ -261,8 +261,10 @@ static void cdx_mcdi_send_request(struct cdx_mcdi *cdx,
 	hdr[0].cdx_u32 |= (__force __le32)(cdx_mcdi_payload_csum(hdr, hdr_len, inbuf, inlen) <<
 			 MCDI_HEADER_XFLAGS_LBN);
 
-	print_hex_dump_debug("MCDI REQ HEADER: ", DUMP_PREFIX_NONE, 32, 4, hdr, hdr_len, false);
-	print_hex_dump_debug("MCDI REQ PAYLOAD: ", DUMP_PREFIX_NONE, 32, 4, inbuf, inlen, false);
+	print_hex_dump_debug("MCDI REQ HEADER: ", DUMP_PREFIX_NONE, 32, 4, hdr, hdr_len,
+			     0);
+	print_hex_dump_debug("MCDI REQ PAYLOAD: ", DUMP_PREFIX_NONE, 32, 4, inbuf, inlen,
+			     0);
 
 	cdx->mcdi_ops->mcdi_request(cdx, hdr, hdr_len, inbuf, inlen);
 
@@ -651,9 +653,9 @@ static bool cdx_mcdi_complete_cmd(struct cdx_mcdi_iface *mcdi,
 	}
 
 	print_hex_dump_debug("MCDI RESP HEADER: ", DUMP_PREFIX_NONE, 32, 4,
-			     outbuf, resp_hdr_len, false);
+			     outbuf, resp_hdr_len, 0);
 	print_hex_dump_debug("MCDI RESP PAYLOAD: ", DUMP_PREFIX_NONE, 32, 4,
-			     outbuf + (resp_hdr_len / 4), resp_data_len, false);
+			     outbuf + (resp_hdr_len / 4), resp_data_len, 0);
 
 	if (error && resp_data_len == 0) {
 		/* MC rebooted during command */

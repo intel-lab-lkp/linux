@@ -235,15 +235,15 @@ static void dump_data_ecc(void *error_data, void *error_ecc, void *correct_data,
 {
 	pr_info("hexdump of error data:\n");
 	print_hex_dump(KERN_INFO, "", DUMP_PREFIX_OFFSET, 16, 4,
-			error_data, size, false);
+			error_data, size, 0);
 	print_hex_dump(KERN_INFO, "hexdump of error ecc: ",
-			DUMP_PREFIX_NONE, 16, 1, error_ecc, 3, false);
+			DUMP_PREFIX_NONE, 16, 1, error_ecc, 3, 0);
 
 	pr_info("hexdump of correct data:\n");
 	print_hex_dump(KERN_INFO, "", DUMP_PREFIX_OFFSET, 16, 4,
-			correct_data, size, false);
+			correct_data, size, 0);
 	print_hex_dump(KERN_INFO, "hexdump of correct ecc: ",
-			DUMP_PREFIX_NONE, 16, 1, correct_ecc, 3, false);
+			DUMP_PREFIX_NONE, 16, 1, correct_ecc, 3, 0);
 }
 
 static int nand_ecc_test_run(const size_t size)

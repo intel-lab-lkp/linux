@@ -69,7 +69,7 @@ static void bcd2000_dump_buffer(const char *prefix, const char *buf, int len)
 {
 	print_hex_dump(KERN_DEBUG, prefix,
 			DUMP_PREFIX_NONE, 16, 1,
-			buf, len, false);
+			buf, len, 0);
 }
 #else
 static void bcd2000_dump_buffer(const char *prefix, const char *buf, int len) {}

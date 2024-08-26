@@ -279,7 +279,7 @@ static void warn_or_seq_hex_dump(struct seq_file *seq, int prefix_type,
 			     buf, len, ascii);
 	else
 		print_hex_dump(KERN_WARNING, pr_fmt(HEX_PREFIX), prefix_type,
-			       rowsize, groupsize, buf, len, ascii);
+			       rowsize, groupsize, buf, len, DUMP_FLAG_ASCII);
 }
 
 /*

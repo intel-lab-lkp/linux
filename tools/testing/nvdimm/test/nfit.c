@@ -1342,7 +1342,7 @@ static void nfit_ctl_dbg(struct acpi_nfit_desc *acpi_desc,
 			nvdimm ? nvdimm_name(nvdimm) : "bus", family, cmd, func,
 			len);
 	print_hex_dump_debug("nvdimm in  ", DUMP_PREFIX_OFFSET, 16, 4,
-			buf, min(len, 256u), true);
+			buf, min(len, 256u), DUMP_FLAG_ASCII);
 }
 
 static int nfit_test_ctl(struct nvdimm_bus_descriptor *nd_desc,

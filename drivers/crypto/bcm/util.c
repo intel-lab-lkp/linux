@@ -283,7 +283,7 @@ void __dump_sg(struct scatterlist *sg, unsigned int skip, unsigned int len)
 			sg_copy_part_to_buf(sg, dbuf, count, idx);
 			num_out += count;
 			print_hex_dump(KERN_ALERT, "  sg: ", DUMP_PREFIX_NONE,
-				       4, 1, dbuf, count, false);
+				       4, 1, dbuf, count, 0);
 			idx += 16;
 		}
 	}

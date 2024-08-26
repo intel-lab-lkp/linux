@@ -2526,7 +2526,7 @@ void qedf_process_unsol_compl(struct qedf_ctx *qedf, uint16_t que_idx,
 		QEDF_INFO(&(qedf->dbg_ctx), QEDF_LOG_UNSOL,
 		    "BDQ frame is at addr=%p.\n", bdq_addr);
 		print_hex_dump(KERN_WARNING, "bdq ", DUMP_PREFIX_OFFSET, 16, 1,
-		    (void *)bdq_addr, pktlen, false);
+		    (void *)bdq_addr, pktlen, 0);
 	}
 
 	/* Allocate frame */

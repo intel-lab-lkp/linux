@@ -1058,11 +1058,11 @@ static int mip4_bl_verify_page(struct mip4_ts *ts, int offset,
 				       MIP4_DEVICE_NAME " F/W File: ",
 				       DUMP_PREFIX_OFFSET, 16, 1,
 				       data + offset, MIP4_BL_PACKET_SIZE,
-				       false);
+				       0);
 			print_hex_dump(KERN_DEBUG,
 				       MIP4_DEVICE_NAME " F/W Chip: ",
 				       DUMP_PREFIX_OFFSET, 16, 1,
-				       read_buf, MIP4_BL_PAGE_SIZE, false);
+				       read_buf, MIP4_BL_PAGE_SIZE, 0);
 #endif
 			error = -EINVAL;
 			break;
@@ -1171,7 +1171,7 @@ static int mip4_parse_firmware(struct mip4_ts *ts, const struct firmware *fw,
 
 #if MIP4_FW_UPDATE_DEBUG
 	print_hex_dump(KERN_ERR, MIP4_DEVICE_NAME " Bin Info: ",
-		       DUMP_PREFIX_OFFSET, 16, 1, *fw_info, tail_size, false);
+		       DUMP_PREFIX_OFFSET, 16, 1, *fw_info, tail_size, 0);
 #endif
 
 	tail_size = get_unaligned_le16(&fw_info->tail_size);

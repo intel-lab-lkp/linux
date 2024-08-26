@@ -1963,7 +1963,7 @@ static void edid_block_dump(const char *level, const void *block, int block_num)
 		sprintf(prefix, "\t[%02x] GOOD ", block_num);
 
 	print_hex_dump(level, prefix, DUMP_PREFIX_NONE, 16, 1,
-		       block, EDID_LENGTH, false);
+		       block, EDID_LENGTH, 0);
 }
 
 /**

@@ -74,7 +74,7 @@ int irdma_sc_access_ah(struct irdma_sc_cqp *cqp, struct irdma_ah_info *info,
 		FIELD_PREP(IRDMA_UDA_CQPSQ_MAV_INSERTVLANTAG, info->insert_vlan_tag));
 
 	print_hex_dump_debug("WQE: MANAGE_AH WQE", DUMP_PREFIX_OFFSET, 16, 8,
-			     wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	irdma_sc_cqp_post_sq(cqp);
 
 	return 0;
@@ -161,10 +161,10 @@ int irdma_access_mcast_grp(struct irdma_sc_cqp *cqp,
 		      FIELD_PREP(IRDMA_UDA_CQPSQ_MG_IPV4VALID, info->ipv4_valid));
 
 	print_hex_dump_debug("WQE: MANAGE_MCG WQE", DUMP_PREFIX_OFFSET, 16, 8,
-			     wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	print_hex_dump_debug("WQE: MCG_HOST CTX WQE", DUMP_PREFIX_OFFSET, 16,
 			     8, info->dma_mem_mc.va,
-			     IRDMA_MAX_MGS_PER_CTX * 8, false);
+			     IRDMA_MAX_MGS_PER_CTX * 8, 0);
 	irdma_sc_cqp_post_sq(cqp);
 
 	return 0;

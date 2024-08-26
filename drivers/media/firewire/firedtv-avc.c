@@ -216,7 +216,7 @@ static void debug_fcp(const u8 *data, int length)
 		       debug_fcp_ctype(data[0]), op);
 		if (avc_debug & AVC_DEBUG_FCP_PAYLOADS)
 			print_hex_dump(KERN_INFO, prefix, DUMP_PREFIX_NONE,
-				       16, 1, data, length, false);
+				       16, 1, data, length, 0);
 	}
 }
 
@@ -224,7 +224,7 @@ static void debug_pmt(char *msg, int length)
 {
 	printk(KERN_INFO "APP PMT -> l=%d\n", length);
 	print_hex_dump(KERN_INFO, "APP PMT -> ", DUMP_PREFIX_NONE,
-		       16, 1, msg, length, false);
+		       16, 1, msg, length, 0);
 }
 
 static int avc_write(struct firedtv *fdtv)

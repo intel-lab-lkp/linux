@@ -26,7 +26,7 @@
 #ifdef NVEC_PS2_DEBUG
 #define NVEC_PHD(str, buf, len) \
 	print_hex_dump(KERN_DEBUG, str, DUMP_PREFIX_NONE, \
-			16, 1, buf, len, false)
+			16, 1, buf, len, 0)
 #else
 #define NVEC_PHD(str, buf, len) do { } while (0)
 #endif

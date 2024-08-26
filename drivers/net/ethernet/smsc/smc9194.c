@@ -1033,7 +1033,7 @@ static void print_packet( byte * buf, int length )
 {
 #if 0
 	print_hex_dump_debug(DRV_NAME, DUMP_PREFIX_OFFSET, 16, 1,
-			     buf, length, true);
+			     buf, length, DUMP_FLAG_ASCII);
 #endif
 }
 #endif

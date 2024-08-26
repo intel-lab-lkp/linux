@@ -76,7 +76,7 @@ static u32 *caam_init_desc(u32 *desc, dma_addr_t dst_dma)
 			  CAAM_RNG_MAX_FIFO_STORE_SIZE, FIFOST_TYPE_RNGSTORE);
 
 	print_hex_dump_debug("rng job desc@: ", DUMP_PREFIX_ADDRESS,
-			     16, 4, desc, desc_bytes(desc), 1);
+			     16, 4, desc, desc_bytes(desc), DUMP_FLAG_ASCII);
 
 	return desc;
 }
@@ -194,7 +194,7 @@ static inline void test_len(struct hwrng *rng, size_t len, bool wait)
 
 		print_hex_dump_debug("random bytes@: ",
 			DUMP_PREFIX_ADDRESS, 16, 4,
-			buf, read_len, 1);
+			buf, read_len, DUMP_FLAG_ASCII);
 
 		len = len - read_len;
 	}

@@ -499,7 +499,8 @@ static void cper_print_fw_err(const char *pfx,
 	buf += offset;
 	length -= offset;
 
-	print_hex_dump(pfx, "", DUMP_PREFIX_OFFSET, 16, 4, buf, length, true);
+	print_hex_dump(pfx, "", DUMP_PREFIX_OFFSET, 16, 4, buf, length,
+		       DUMP_FLAG_ASCII);
 }
 
 static void cper_print_tstamp(const char *pfx,
@@ -633,7 +634,7 @@ cper_estatus_print_section(const char *pfx, struct acpi_hest_generic_data *gdata
 		printk("%ssection length: %#x\n", newpfx,
 		       gdata->error_data_length);
 		print_hex_dump(newpfx, "", DUMP_PREFIX_OFFSET, 16, 4, err,
-			       gdata->error_data_length, true);
+			       gdata->error_data_length, DUMP_FLAG_ASCII);
 	}
 
 	return;

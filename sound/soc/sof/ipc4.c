@@ -260,7 +260,7 @@ static void sof_ipc4_dump_payload(struct snd_sof_dev *sdev,
 				  void *ipc_data, size_t size)
 {
 	print_hex_dump_debug("Message payload: ", DUMP_PREFIX_OFFSET,
-			     16, 4, ipc_data, size, false);
+			     16, 4, ipc_data, size, 0);
 }
 
 static int sof_ipc4_get_reply(struct snd_sof_dev *sdev)

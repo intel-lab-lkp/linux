@@ -281,7 +281,7 @@ static uint32_t smu_v11_0_i2c_transmit(struct i2c_adapter *control,
 
 	if (drm_debug_enabled(DRM_UT_DRIVER)) {
 		print_hex_dump(KERN_INFO, "data: ", DUMP_PREFIX_NONE,
-			       16, 1, data, numbytes, false);
+			       16, 1, data, numbytes, 0);
 	}
 
 	/* Set the I2C slave address */
@@ -432,7 +432,7 @@ static uint32_t smu_v11_0_i2c_receive(struct i2c_adapter *control,
 
 	if (drm_debug_enabled(DRM_UT_DRIVER)) {
 		print_hex_dump(KERN_INFO, "data: ", DUMP_PREFIX_NONE,
-			       16, 1, data, bytes_received, false);
+			       16, 1, data, bytes_received, 0);
 	}
 
 	return ret;

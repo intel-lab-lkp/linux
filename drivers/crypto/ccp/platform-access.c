@@ -100,7 +100,7 @@ int psp_send_platform_access_msg(enum psp_platform_access_msg msg,
 	iowrite32(upper_32_bits(req_addr), hi);
 
 	print_hex_dump_debug("->psp ", DUMP_PREFIX_OFFSET, 16, 2, req,
-			     req->header.payload_size, false);
+			     req->header.payload_size, 0);
 
 	/* Write command register to trigger processing */
 	cmd_reg = FIELD_PREP(PSP_CMDRESP_CMD, msg);
@@ -134,7 +134,7 @@ int psp_send_platform_access_msg(enum psp_platform_access_msg msg,
 	}
 
 	print_hex_dump_debug("<-psp ", DUMP_PREFIX_OFFSET, 16, 2, req,
-			     req->header.payload_size, false);
+			     req->header.payload_size, 0);
 
 	ret = 0;
 

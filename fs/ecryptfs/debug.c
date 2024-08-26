@@ -87,5 +87,5 @@ void ecryptfs_dump_hex(char *data, int bytes)
 		return;
 
 	print_hex_dump(KERN_DEBUG, "ecryptfs: ", DUMP_PREFIX_OFFSET, 16, 1,
-		       data, bytes, false);
+		       data, bytes, 0);
 }

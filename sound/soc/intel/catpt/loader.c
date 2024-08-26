@@ -243,7 +243,7 @@ static int catpt_restore_fwimage(struct catpt_dev *cdev,
 	int i;
 
 	print_hex_dump_debug(__func__, DUMP_PREFIX_OFFSET, 8, 4,
-			     blk, sizeof(*blk), false);
+			     blk, sizeof(*blk), 0);
 
 	r1.start = cdev->dram.start + blk->ram_offset;
 	r1.end = r1.start + blk->size - 1;
@@ -295,7 +295,7 @@ static int catpt_load_block(struct catpt_dev *cdev,
 	int ret;
 
 	print_hex_dump_debug(__func__, DUMP_PREFIX_OFFSET, 8, 4,
-			     blk, sizeof(*blk), false);
+			     blk, sizeof(*blk), 0);
 
 	switch (blk->ram_type) {
 	case CATPT_RAM_TYPE_IRAM:
@@ -333,7 +333,7 @@ static int catpt_restore_basefw(struct catpt_dev *cdev,
 	int ret, i;
 
 	print_hex_dump_debug(__func__, DUMP_PREFIX_OFFSET, 8, 4,
-			     basefw, sizeof(*basefw), false);
+			     basefw, sizeof(*basefw), 0);
 
 	/* restore basefw image */
 	for (i = 0; i < basefw->blocks; i++) {
@@ -376,7 +376,7 @@ static int catpt_restore_module(struct catpt_dev *cdev,
 	int i;
 
 	print_hex_dump_debug(__func__, DUMP_PREFIX_OFFSET, 8, 4,
-			     mod, sizeof(*mod), false);
+			     mod, sizeof(*mod), 0);
 
 	for (i = 0; i < mod->blocks; i++) {
 		struct catpt_fw_block_hdr *blk;
@@ -418,7 +418,7 @@ static int catpt_load_module(struct catpt_dev *cdev,
 	int i;
 
 	print_hex_dump_debug(__func__, DUMP_PREFIX_OFFSET, 8, 4,
-			     mod, sizeof(*mod), false);
+			     mod, sizeof(*mod), 0);
 
 	type = &cdev->modules[mod->module_id];
 
@@ -464,7 +464,7 @@ static int catpt_restore_firmware(struct catpt_dev *cdev,
 	int i;
 
 	print_hex_dump_debug(__func__, DUMP_PREFIX_OFFSET, 8, 4,
-			     fw, sizeof(*fw), false);
+			     fw, sizeof(*fw), 0);
 
 	for (i = 0; i < fw->modules; i++) {
 		struct catpt_fw_mod_hdr *mod;
@@ -510,7 +510,7 @@ static int catpt_load_firmware(struct catpt_dev *cdev,
 	int i;
 
 	print_hex_dump_debug(__func__, DUMP_PREFIX_OFFSET, 8, 4,
-			     fw, sizeof(*fw), false);
+			     fw, sizeof(*fw), 0);
 
 	for (i = 0; i < fw->modules; i++) {
 		struct catpt_fw_mod_hdr *mod;

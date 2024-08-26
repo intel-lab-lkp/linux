@@ -183,7 +183,7 @@ static void __init smp_dump_mptable(struct mpc_table *mpc, unsigned char *mpt)
 	pr_err("Your mptable is wrong, contact your HW vendor!\n");
 	pr_cont("type %x\n", *mpt);
 	print_hex_dump(KERN_ERR, "  ", DUMP_PREFIX_ADDRESS, 16,
-			1, mpc, mpc->length, 1);
+			1, mpc, mpc->length, DUMP_FLAG_ASCII);
 }
 
 static int __init smp_read_mpc(struct mpc_table *mpc, unsigned early)

@@ -1125,7 +1125,7 @@ static int qeth_get_problem(struct qeth_card *card, struct ccw_device *cdev,
 		QETH_DBF_MESSAGE(2, "check on channel %x with dstat=%#x, cstat=%#x\n",
 				 CCW_DEVID(cdev), dstat, cstat);
 		print_hex_dump(KERN_WARNING, "qeth: irb ", DUMP_PREFIX_OFFSET,
-				16, 1, irb, 64, 1);
+				16, 1, irb, 64, DUMP_FLAG_ASCII);
 		return -EIO;
 	}
 
@@ -1276,9 +1276,11 @@ static void qeth_irq(struct ccw_device *cdev, unsigned long intparm,
 					 CCW_DEVID(channel->ccwdev), cstat,
 					 dstat);
 			print_hex_dump(KERN_WARNING, "qeth: irb ",
-				DUMP_PREFIX_OFFSET, 16, 1, irb, 32, 1);
+				DUMP_PREFIX_OFFSET, 16, 1, irb, 32,
+				DUMP_FLAG_ASCII);
 			print_hex_dump(KERN_WARNING, "qeth: sense data ",
-				DUMP_PREFIX_OFFSET, 16, 1, irb->ecw, 32, 1);
+				DUMP_PREFIX_OFFSET, 16, 1, irb->ecw, 32,
+				DUMP_FLAG_ASCII);
 		}
 
 		rc = qeth_get_problem(card, cdev, irb);

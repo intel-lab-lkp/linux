@@ -1339,7 +1339,7 @@ int saa7164_api_enum_subdevs(struct saa7164_dev *dev)
 
 	if (saa_debug & DBGLVL_API)
 		print_hex_dump(KERN_INFO, "", DUMP_PREFIX_OFFSET, 16, 1, buf,
-			       buflen & ~15, false);
+			       buflen & ~15, 0);
 
 	saa7164_api_dump_subdevs(dev, buf, buflen);
 
@@ -1392,7 +1392,7 @@ int saa7164_api_i2c_read(struct saa7164_i2c *bus, u8 addr, u32 reglen, u8 *reg,
 
 	if (saa_debug & DBGLVL_I2C)
 		print_hex_dump(KERN_INFO, "", DUMP_PREFIX_OFFSET, 16, 1, buf,
-			       32, false);
+			       32, 0);
 
 	ret = saa7164_cmd_send(bus->dev, unitid, GET_CUR,
 		EXU_REGISTER_ACCESS_CONTROL, len, &buf);
@@ -1401,7 +1401,7 @@ int saa7164_api_i2c_read(struct saa7164_i2c *bus, u8 addr, u32 reglen, u8 *reg,
 	else {
 		if (saa_debug & DBGLVL_I2C)
 			print_hex_dump(KERN_INFO, "", DUMP_PREFIX_OFFSET, 16, 1,
-				       buf, sizeof(buf), false);
+				       buf, sizeof(buf), 0);
 		memcpy(data, (buf + 2 * sizeof(u32) + reglen), datalen);
 	}
 
@@ -1464,7 +1464,7 @@ int saa7164_api_i2c_write(struct saa7164_i2c *bus, u8 addr, u32 datalen,
 
 	if (saa_debug & DBGLVL_I2C)
 		print_hex_dump(KERN_INFO, "", DUMP_PREFIX_OFFSET, 16, 1,
-			       buf, sizeof(buf), false);
+			       buf, sizeof(buf), 0);
 
 	ret = saa7164_cmd_send(bus->dev, unitid, SET_CUR,
 		EXU_REGISTER_ACCESS_CONTROL, len, &buf);

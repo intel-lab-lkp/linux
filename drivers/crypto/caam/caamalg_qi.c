@@ -213,7 +213,8 @@ static int aead_setkey(struct crypto_aead *aead, const u8 *key,
 		keys.authkeylen + keys.enckeylen, keys.enckeylen,
 		keys.authkeylen);
 	print_hex_dump_debug("key in @" __stringify(__LINE__)": ",
-			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen, 1);
+			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen,
+			     DUMP_FLAG_ASCII);
 
 	/*
 	 * If DKP is supported, use it in the shared descriptor to generate
@@ -250,7 +251,8 @@ static int aead_setkey(struct crypto_aead *aead, const u8 *key,
 
 	print_hex_dump_debug("ctx.key@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, ctx->key,
-			     ctx->adata.keylen_pad + keys.enckeylen, 1);
+			     ctx->adata.keylen_pad + keys.enckeylen,
+			     DUMP_FLAG_ASCII);
 
 skip_split_key:
 	ctx->cdata.keylen = keys.enckeylen;
@@ -372,7 +374,8 @@ static int gcm_setkey(struct crypto_aead *aead,
 		return ret;
 
 	print_hex_dump_debug("key in @" __stringify(__LINE__)": ",
-			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen, 1);
+			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen,
+			     DUMP_FLAG_ASCII);
 
 	memcpy(ctx->key, key, keylen);
 	dma_sync_single_for_device(jrdev->parent, ctx->key_dma, keylen,
@@ -476,7 +479,8 @@ static int rfc4106_setkey(struct crypto_aead *aead,
 		return ret;
 
 	print_hex_dump_debug("key in @" __stringify(__LINE__)": ",
-			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen, 1);
+			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen,
+			     DUMP_FLAG_ASCII);
 
 	memcpy(ctx->key, key, keylen);
 	/*
@@ -582,7 +586,8 @@ static int rfc4543_setkey(struct crypto_aead *aead,
 		return ret;
 
 	print_hex_dump_debug("key in @" __stringify(__LINE__)": ",
-			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen, 1);
+			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen,
+			     DUMP_FLAG_ASCII);
 
 	memcpy(ctx->key, key, keylen);
 	/*
@@ -632,7 +637,8 @@ static int skcipher_setkey(struct crypto_skcipher *skcipher, const u8 *key,
 	int ret = 0;
 
 	print_hex_dump_debug("key in @" __stringify(__LINE__)": ",
-			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen, 1);
+			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen,
+			     DUMP_FLAG_ASCII);
 
 	ctx->cdata.keylen = keylen;
 	ctx->cdata.key_virt = key;
@@ -1232,7 +1238,8 @@ static void skcipher_done(struct caam_drv_req *drv_req, u32 status)
 
 	print_hex_dump_debug("dstiv  @" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, req->iv,
-			     edesc->src_nents > 1 ? 100 : ivsize, 1);
+			     edesc->src_nents > 1 ? 100 : ivsize,
+			     DUMP_FLAG_ASCII);
 	caam_dump_sg("dst    @" __stringify(__LINE__)": ",
 		     DUMP_PREFIX_ADDRESS, 16, 4, req->dst,
 		     edesc->dst_nents > 1 ? 100 : req->cryptlen, 1);

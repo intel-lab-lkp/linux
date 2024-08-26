@@ -144,7 +144,7 @@ static int nvec_status_notifier(struct notifier_block *nb,
 
 	dev_warn(nvec->dev, "unhandled msg type %ld\n", event_type);
 	print_hex_dump(KERN_WARNING, "payload: ", DUMP_PREFIX_NONE, 16, 1,
-		       msg, msg[1] + 2, true);
+		       msg, msg[1] + 2, DUMP_FLAG_ASCII);
 
 	return NOTIFY_OK;
 }
@@ -425,7 +425,7 @@ static int parse_msg(struct nvec_chip *nvec, struct nvec_msg *msg)
 	if ((msg->data[0] >> 7) == 1 && (msg->data[0] & 0x0f) == 5)
 		print_hex_dump(KERN_WARNING, "ec system event ",
 			       DUMP_PREFIX_NONE, 16, 1, msg->data,
-			       msg->data[1] + 2, true);
+			       msg->data[1] + 2, DUMP_FLAG_ASCII);
 
 	atomic_notifier_call_chain(&nvec->notifier_list, msg->data[0] & 0x8f,
 				   msg->data);

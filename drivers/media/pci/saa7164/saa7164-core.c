@@ -93,7 +93,7 @@ static void saa7164_pack_verifier(struct saa7164_buffer *buf)
 			printk(KERN_ERR "No pack at 0x%x\n", i);
 #if 0
 			print_hex_dump(KERN_INFO, "", DUMP_PREFIX_OFFSET, 16, 1,
-				       p + 1, 32, false);
+				       p + 1, 32, 0);
 #endif
 		}
 	}
@@ -285,7 +285,7 @@ static void saa7164_work_enchandler_helper(struct saa7164_port *port, int bufnr)
 							__func__, buf);
 #if 0
 			print_hex_dump(KERN_INFO, "", DUMP_PREFIX_OFFSET, 16, 1,
-				       p + buf->actual_size - 32, 64, false);
+				       p + buf->actual_size - 32, 64, 0);
 #endif
 				}
 			}

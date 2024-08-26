@@ -202,7 +202,7 @@ void igc_rings_dump(struct igc_adapter *adapter)
 					       DUMP_PREFIX_ADDRESS,
 					       16, 1, buffer_info->skb->data,
 					       dma_unmap_len(buffer_info, len),
-					       true);
+					       DUMP_FLAG_ASCII);
 		}
 	}
 
@@ -292,7 +292,7 @@ rx_ring_summary:
 						       (buffer_info->page) +
 						       buffer_info->page_offset,
 						       igc_rx_bufsz(rx_ring),
-						       true);
+						       DUMP_FLAG_ASCII);
 				}
 			}
 		}

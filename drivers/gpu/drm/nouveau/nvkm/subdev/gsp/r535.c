@@ -264,7 +264,8 @@ r535_gsp_msg_dump(struct nvkm_gsp *gsp, struct nvfw_gsp_rpc *msg, int lvl)
 			      msg->function, msg->length, msg->length - sizeof(*msg),
 			      msg->rpc_result, msg->rpc_result_private);
 		print_hex_dump(KERN_INFO, "msg: ", DUMP_PREFIX_OFFSET, 16, 1,
-			       msg->data, msg->length - sizeof(*msg), true);
+			       msg->data, msg->length - sizeof(*msg),
+			       DUMP_FLAG_ASCII);
 	}
 }
 
@@ -378,7 +379,8 @@ r535_gsp_rpc_send(struct nvkm_gsp *gsp, void *argv, bool wait, u32 repc)
 		nvkm_trace(&gsp->subdev, "rpc fn:%d len:0x%x/0x%zx\n", rpc->function,
 			   rpc->length, rpc->length - sizeof(*rpc));
 		print_hex_dump(KERN_INFO, "rpc: ", DUMP_PREFIX_OFFSET, 16, 1,
-			       rpc->data, rpc->length - sizeof(*rpc), true);
+			       rpc->data, rpc->length - sizeof(*rpc),
+			       DUMP_FLAG_ASCII);
 	}
 
 	ret = r535_gsp_cmdq_push(gsp, rpc);

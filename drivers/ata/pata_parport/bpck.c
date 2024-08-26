@@ -368,7 +368,7 @@ static int bpck_test_proto(struct pi_adapter *pi)
 	dev_dbg(&pi->dev, "bpck: 0x%x unit %d mode %d: ",
 		pi->port, pi->unit, pi->mode);
 	print_hex_dump_debug("bpck: ", DUMP_PREFIX_NONE, TEST_LEN, 1, buf,
-			     TEST_LEN, false);
+			     TEST_LEN, 0);
 
 	e = 0;
 	for (i = 0; i < TEST_LEN; i++) {

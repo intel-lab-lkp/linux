@@ -703,7 +703,7 @@ static void ixgbe_dump(struct ixgbe_adapter *adapter)
 						DUMP_PREFIX_ADDRESS, 16, 1,
 						tx_buffer->skb->data,
 						dma_unmap_len(tx_buffer, len),
-						true);
+						DUMP_FLAG_ASCII);
 			}
 		}
 	}
@@ -819,7 +819,8 @@ rx_ring_summary:
 					   DUMP_PREFIX_ADDRESS, 16, 1,
 					   page_address(rx_buffer_info->page) +
 						    rx_buffer_info->page_offset,
-					   ixgbe_rx_bufsz(rx_ring), true);
+					   ixgbe_rx_bufsz(rx_ring),
+					   DUMP_FLAG_ASCII);
 				}
 			}
 		}

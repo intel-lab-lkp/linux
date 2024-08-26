@@ -315,7 +315,7 @@ static int pn544_hci_ready(struct nfc_hci_dev *hdev)
 
 	print_hex_dump(KERN_DEBUG, "FULL VERSION SOFTWARE INFO: ",
 		       DUMP_PREFIX_NONE, 16, 1,
-		       skb->data, FULL_VERSION_LEN, false);
+		       skb->data, FULL_VERSION_LEN, 0);
 
 	kfree_skb(skb);
 
@@ -457,7 +457,7 @@ static int pn544_hci_dep_link_up(struct nfc_hci_dev *hdev,
 		goto exit;
 	}
 	print_hex_dump(KERN_DEBUG, "remote gb: ", DUMP_PREFIX_OFFSET,
-			16, 1, rgb_skb->data, rgb_skb->len, true);
+			16, 1, rgb_skb->data, rgb_skb->len, DUMP_FLAG_ASCII);
 
 	r = nfc_set_remote_general_bytes(hdev->ndev, rgb_skb->data,
 						rgb_skb->len);

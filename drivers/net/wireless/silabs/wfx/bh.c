@@ -93,7 +93,7 @@ static int rx_helper(struct wfx_dev *wdev, size_t read_len, int *is_cnf)
 		dev_err(wdev->dev, "inconsistent message length: %zu != %zu\n",
 			computed_len, read_len);
 		print_hex_dump(KERN_INFO, "hif: ", DUMP_PREFIX_OFFSET, 16, 1,
-			       hif, read_len, true);
+			       hif, read_len, DUMP_FLAG_ASCII);
 		goto err;
 	}
 

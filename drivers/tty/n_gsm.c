@@ -569,7 +569,7 @@ static void gsm_hex_dump_bytes(const char *fname, const u8 *data,
 
 	if (!fname) {
 		print_hex_dump(KERN_INFO, "", DUMP_PREFIX_NONE, 16, 1, data, len,
-			       true);
+			       DUMP_FLAG_ASCII);
 		return;
 	}
 
@@ -577,7 +577,7 @@ static void gsm_hex_dump_bytes(const char *fname, const u8 *data,
 	if (!prefix)
 		return;
 	print_hex_dump(KERN_INFO, prefix, DUMP_PREFIX_OFFSET, 16, 1, data, len,
-		       true);
+		       DUMP_FLAG_ASCII);
 	kfree(prefix);
 }
 

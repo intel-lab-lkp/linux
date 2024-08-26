@@ -228,7 +228,7 @@ static void sof_ipc3_dump_payload(struct snd_sof_dev *sdev,
 {
 	printk(KERN_DEBUG "Size of payload following the header: %zu\n", size);
 	print_hex_dump_debug("Message payload: ", DUMP_PREFIX_OFFSET,
-			     16, 4, ipc_data, size, false);
+			     16, 4, ipc_data, size, 0);
 }
 
 static int sof_ipc3_get_reply(struct snd_sof_dev *sdev)

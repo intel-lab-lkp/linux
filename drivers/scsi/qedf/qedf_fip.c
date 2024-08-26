@@ -152,7 +152,7 @@ void qedf_fip_send(struct fcoe_ctlr *fip, struct sk_buff *skb)
 	    vlan_tci);
 	if (qedf_dump_frames)
 		print_hex_dump(KERN_WARNING, "fip ", DUMP_PREFIX_OFFSET, 16, 1,
-		    skb->data, skb->len, false);
+		    skb->data, skb->len, 0);
 
 	rc = qed_ops->ll2->start_xmit(qedf->cdev, skb, 0);
 	if (rc) {
@@ -194,7 +194,7 @@ void qedf_fip_recv(struct qedf_ctx *qedf, struct sk_buff *skb)
 		  sub, vlan);
 	if (qedf_dump_frames)
 		print_hex_dump(KERN_WARNING, "fip ", DUMP_PREFIX_OFFSET, 16, 1,
-		    skb->data, skb->len, false);
+		    skb->data, skb->len, 0);
 
 	if (!ether_addr_equal(eth_hdr->h_dest, qedf->mac) &&
 	    !ether_addr_equal(eth_hdr->h_dest, fcoe_all_enode) &&

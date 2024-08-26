@@ -338,7 +338,7 @@ static int check_crc(u8 *buf, int buflen)
 		       crc, buf[len - 1], buf[len - 2]);
 		pr_info("%s: BAD CRC\n", __func__);
 		print_hex_dump(KERN_DEBUG, "crc: ", DUMP_PREFIX_NONE,
-			       16, 2, buf, buflen, false);
+			       16, 2, buf, buflen, 0);
 		return -EPERM;
 	}
 	return 0;

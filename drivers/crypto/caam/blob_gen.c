@@ -126,10 +126,10 @@ int caam_process_blob(struct caam_blob_priv *priv,
 
 	print_hex_dump_debug("data@"__stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 1, info->input,
-			     info->input_len, false);
+			     info->input_len, 0);
 	print_hex_dump_debug("jobdesc@"__stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 1, desc,
-			     desc_bytes(desc), false);
+			     desc_bytes(desc), 0);
 
 	testres.err = 0;
 	init_completion(&testres.completion);
@@ -140,7 +140,7 @@ int caam_process_blob(struct caam_blob_priv *priv,
 		ret = testres.err;
 		print_hex_dump_debug("output@"__stringify(__LINE__)": ",
 				     DUMP_PREFIX_ADDRESS, 16, 1, info->output,
-				     output_len, false);
+				     output_len, 0);
 	}
 
 	if (ret == 0)

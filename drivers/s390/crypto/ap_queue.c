@@ -137,7 +137,7 @@ static struct ap_queue_status ap_sm_recv(struct ap_queue *aq)
 	switch (status.response_code) {
 	case AP_RESPONSE_NORMAL:
 		print_hex_dump_debug("aprpl: ", DUMP_PREFIX_ADDRESS, 16, 1,
-				     aq->reply->msg, aq->reply->len, false);
+				     aq->reply->msg, aq->reply->len, 0);
 		aq->queue_count = max_t(int, 0, aq->queue_count - 1);
 		if (!status.queue_empty && !aq->queue_count)
 			aq->queue_count++;
@@ -249,7 +249,7 @@ static enum ap_sm_wait ap_sm_write(struct ap_queue *aq)
 	/* Start the next request on the queue. */
 	ap_msg = list_entry(aq->requestq.next, struct ap_message, list);
 	print_hex_dump_debug("apreq: ", DUMP_PREFIX_ADDRESS, 16, 1,
-			     ap_msg->msg, ap_msg->len, false);
+			     ap_msg->msg, ap_msg->len, 0);
 	status = __ap_send(qid, ap_msg->psmid,
 			   ap_msg->msg, ap_msg->len,
 			   ap_msg->flags & AP_MSG_FLAG_SPECIAL);

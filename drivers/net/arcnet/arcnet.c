@@ -153,7 +153,7 @@ void arcnet_dump_skb(struct net_device *dev,
 	/* dump the packet */
 	snprintf(hdr, sizeof(hdr), "%6s:%s skb->data:", dev->name, desc);
 	print_hex_dump(KERN_DEBUG, hdr, DUMP_PREFIX_OFFSET,
-		       16, 1, skb->data, skb->len, true);
+		       16, 1, skb->data, skb->len, DUMP_FLAG_ASCII);
 }
 EXPORT_SYMBOL(arcnet_dump_skb);
 #endif
@@ -185,7 +185,7 @@ static void arcnet_dump_packet(struct net_device *dev, int bufnum,
 	/* dump the packet */
 	snprintf(hdr, sizeof(hdr), "%6s:%s packet dump:", dev->name, desc);
 	print_hex_dump(KERN_DEBUG, hdr, DUMP_PREFIX_OFFSET,
-		       16, 1, buf, length, true);
+		       16, 1, buf, length, DUMP_FLAG_ASCII);
 }
 
 #else

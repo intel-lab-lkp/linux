@@ -611,7 +611,7 @@ static void trf7970a_send_upstream(struct trf7970a *trf)
 	if (trf->rx_skb && !IS_ERR(trf->rx_skb) && !trf->aborting)
 		print_hex_dump_debug("trf7970a rx data: ", DUMP_PREFIX_NONE,
 				     16, 1, trf->rx_skb->data, trf->rx_skb->len,
-				     false);
+				     0);
 
 	trf->state = TRF7970A_ST_IDLE;
 
@@ -653,7 +653,7 @@ static int trf7970a_transmit(struct trf7970a *trf, struct sk_buff *skb,
 	int ret;
 
 	print_hex_dump_debug("trf7970a tx data: ", DUMP_PREFIX_NONE,
-			     16, 1, skb->data, len, false);
+			     16, 1, skb->data, len, 0);
 
 	spi_message_init(&m);
 

@@ -32,7 +32,7 @@ cifs_dump_mem(char *label, void *data, int length)
 {
 	pr_debug("%s: dump of %d bytes of data at 0x%p\n", label, length, data);
 	print_hex_dump(KERN_DEBUG, "", DUMP_PREFIX_OFFSET, 16, 4,
-		       data, length, true);
+		       data, length, DUMP_FLAG_ASCII);
 }
 
 void cifs_dump_detail(void *buf, struct TCP_Server_Info *server)

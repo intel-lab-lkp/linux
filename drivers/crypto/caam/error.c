@@ -36,7 +36,8 @@ void caam_dump_sg(const char *prefix_str, int prefix_type,
 		buf = it_page + it->offset;
 		len = min_t(size_t, tlen, it->length);
 		print_hex_dump_debug(prefix_str, prefix_type, rowsize,
-				     groupsize, buf, len, ascii);
+				     groupsize, buf, len,
+				     ascii ? DUMP_FLAG_ASCII : 0);
 		tlen -= len;
 
 		kunmap_atomic(it_page);

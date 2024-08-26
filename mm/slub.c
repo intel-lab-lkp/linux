@@ -883,7 +883,8 @@ static void print_section(char *level, char *text, u8 *addr,
 {
 	metadata_access_enable();
 	print_hex_dump(level, text, DUMP_PREFIX_ADDRESS,
-			16, 1, kasan_reset_tag((void *)addr), length, 1);
+			16, 1, kasan_reset_tag((void *)addr), length,
+			DUMP_FLAG_ASCII);
 	metadata_access_disable();
 }
 

@@ -708,7 +708,7 @@ static void sa_dump_sc(u8 *buf, dma_addr_t dma_addr)
 #ifdef DEBUG
 	dev_info(sa_k3_dev, "Security context dump:: 0x%pad\n", &dma_addr);
 	print_hex_dump(KERN_CONT, "", DUMP_PREFIX_OFFSET,
-		       16, 1, buf, SA_CTX_MAX_SZ, false);
+		       16, 1, buf, SA_CTX_MAX_SZ, 0);
 #endif
 }
 

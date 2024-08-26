@@ -40,7 +40,7 @@ void otx_cpt_dump_sg_list(struct pci_dev *pdev, struct otx_cpt_req_info *req)
 		pr_debug("Buffer hexdump (%d bytes)\n",
 			 req->in[i].size);
 		print_hex_dump_debug("", DUMP_PREFIX_NONE, 16, 1,
-				     req->in[i].vptr, req->in[i].size, false);
+				     req->in[i].vptr, req->in[i].size, 0);
 	}
 
 	pr_debug("Scatter list size %d\n", req->outcnt);
@@ -50,7 +50,7 @@ void otx_cpt_dump_sg_list(struct pci_dev *pdev, struct otx_cpt_req_info *req)
 			 (void *) req->out[i].dma_addr);
 		pr_debug("Buffer hexdump (%d bytes)\n", req->out[i].size);
 		print_hex_dump_debug("", DUMP_PREFIX_NONE, 16, 1,
-				     req->out[i].vptr, req->out[i].size, false);
+				     req->out[i].vptr, req->out[i].size, 0);
 	}
 }
 
@@ -377,10 +377,10 @@ static int process_request(struct pci_dev *pdev, struct otx_cpt_req_info *req,
 	/* Print debug info if enabled */
 	otx_cpt_dump_sg_list(pdev, req);
 	pr_debug("Cpt_inst_s hexdump (%d bytes)\n", OTX_CPT_INST_SIZE);
-	print_hex_dump_debug("", 0, 16, 1, &cptinst, OTX_CPT_INST_SIZE, false);
+	print_hex_dump_debug("", 0, 16, 1, &cptinst, OTX_CPT_INST_SIZE, 0);
 	pr_debug("Dptr hexdump (%d bytes)\n", cpt_req->dlen);
 	print_hex_dump_debug("", 0, 16, 1, info->in_buffer,
-			     cpt_req->dlen, false);
+			     cpt_req->dlen, 0);
 
 	/* Send CPT command */
 	cpt_send_cmd(&cptinst, cptvf);

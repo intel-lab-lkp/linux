@@ -1193,7 +1193,7 @@ parse_ntb:
 		INFO(port->func.config->cdev, "Wrong NTH SIGN, skblen %d\n",
 			skb->len);
 		print_hex_dump(KERN_INFO, "HEAD:", DUMP_PREFIX_ADDRESS, 32, 1,
-			       skb->data, 32, false);
+			       skb->data, 32, 0);
 
 		goto err;
 	}

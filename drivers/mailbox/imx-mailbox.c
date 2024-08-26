@@ -400,7 +400,7 @@ static int imx_mu_seco_tx(struct imx_mu_priv *priv, struct imx_mu_con_priv *cp,
 		}
 
 		print_hex_dump_debug("from client ", DUMP_PREFIX_OFFSET, 4, 4,
-				     data, byte_size, false);
+				     data, byte_size, 0);
 
 		/* Send first word */
 		dev_dbg(priv->dev, "Sending header\n");
@@ -478,7 +478,7 @@ static int imx_mu_seco_rxdb(struct imx_mu_priv *priv, struct imx_mu_con_priv *cp
 		     priv->dcfg->xSR[IMX_MU_GSR]);
 
 	print_hex_dump_debug("to client ", DUMP_PREFIX_OFFSET, 4, 4,
-			     &msg, byte_size, false);
+			     &msg, byte_size, 0);
 
 	/* send data to client */
 	dev_dbg(priv->dev, "Sending message to client\n");

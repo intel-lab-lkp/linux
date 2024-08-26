@@ -32,7 +32,7 @@ static int rpmsg_sample_cb(struct rpmsg_device *rpdev, void *data, int len,
 		 ++idata->rx_count, src);
 
 	print_hex_dump_debug(__func__, DUMP_PREFIX_NONE, 16, 1, data, len,
-			     true);
+			     DUMP_FLAG_ASCII);
 
 	/* samples should not live forever */
 	if (idata->rx_count >= count) {

@@ -221,7 +221,7 @@ static inline void raw_dump_inline(const char *caller, char *msg,
 	if (msg)
 		pr_debug("%s():%s: ", caller, msg);
 
-	print_hex_dump_debug("", DUMP_PREFIX_NONE, 16, 1, buf, len, false);
+	print_hex_dump_debug("", DUMP_PREFIX_NONE, 16, 1, buf, len, 0);
 }
 
 /* print data in a table format:
@@ -236,7 +236,7 @@ static inline void raw_dump_table(const char *caller, char *msg,
 	if (msg)
 		pr_debug("%s():%s:\n", caller, msg);
 
-	print_hex_dump_debug("\t", DUMP_PREFIX_OFFSET, 16, 1, buf, len, false);
+	print_hex_dump_debug("\t", DUMP_PREFIX_OFFSET, 16, 1, buf, len, 0);
 }
 #else
 static inline void raw_dump_table(const char *caller, char *msg,

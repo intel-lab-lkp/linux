@@ -1351,17 +1351,17 @@ void skb_dump(const char *level, const struct sk_buff *skb, bool full_pkt)
 
 	if (full_pkt && headroom)
 		print_hex_dump(level, "skb headroom: ", DUMP_PREFIX_OFFSET,
-			       16, 1, skb->head, headroom, false);
+			       16, 1, skb->head, headroom, 0);
 
 	seg_len = min_t(int, skb_headlen(skb), len);
 	if (seg_len)
 		print_hex_dump(level, "skb linear:   ", DUMP_PREFIX_OFFSET,
-			       16, 1, skb->data, seg_len, false);
+			       16, 1, skb->data, seg_len, 0);
 	len -= seg_len;
 
 	if (full_pkt && tailroom)
 		print_hex_dump(level, "skb tailroom: ", DUMP_PREFIX_OFFSET,
-			       16, 1, skb_tail_pointer(skb), tailroom, false);
+			       16, 1, skb_tail_pointer(skb), tailroom, 0);
 
 	for (i = 0; len && i < skb_shinfo(skb)->nr_frags; i++) {
 		skb_frag_t *frag = &skb_shinfo(skb)->frags[i];
@@ -1376,7 +1376,7 @@ void skb_dump(const char *level, const struct sk_buff *skb, bool full_pkt)
 			vaddr = kmap_atomic(p);
 			print_hex_dump(level, "skb frag:     ",
 				       DUMP_PREFIX_OFFSET,
-				       16, 1, vaddr + p_off, seg_len, false);
+				       16, 1, vaddr + p_off, seg_len, 0);
 			kunmap_atomic(vaddr);
 			len -= seg_len;
 			if (!len)

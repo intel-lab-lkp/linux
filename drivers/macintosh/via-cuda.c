@@ -762,7 +762,7 @@ cuda_input(unsigned char *buf, int nb)
 
     default:
 	print_hex_dump(KERN_INFO, "cuda_input: ", DUMP_PREFIX_NONE, 32, 1,
-	               buf, nb, false);
+		       buf, nb, 0);
     }
 }
 

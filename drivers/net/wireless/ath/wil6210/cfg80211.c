@@ -1112,7 +1112,8 @@ static void wil_print_connect_params(struct wil6210_priv *wil,
 		wil_info(wil, "  BSSID: %pM\n", sme->bssid);
 	if (sme->ssid)
 		print_hex_dump(KERN_INFO, "  SSID: ", DUMP_PREFIX_OFFSET,
-			       16, 1, sme->ssid, sme->ssid_len, true);
+			       16, 1, sme->ssid, sme->ssid_len,
+			       DUMP_FLAG_ASCII);
 	if (sme->prev_bssid)
 		wil_info(wil, "  Previous BSSID=%pM\n", sme->prev_bssid);
 	wil_info(wil, "  Auth Type: %s\n",

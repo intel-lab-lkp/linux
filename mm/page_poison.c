@@ -68,7 +68,7 @@ static void check_poison_mem(struct page *page, unsigned char *mem, size_t bytes
 		pr_err("pagealloc: memory corruption\n");
 
 	print_hex_dump(KERN_ERR, "", DUMP_PREFIX_ADDRESS, 16, 1, start,
-			end - start + 1, 1);
+			end - start + 1, DUMP_FLAG_ASCII);
 	dump_stack();
 	dump_page(page, "pagealloc: corrupted page details");
 }

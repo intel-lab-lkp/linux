@@ -1166,7 +1166,7 @@ static ssize_t i40e_dbg_command_write(struct file *filp,
 				 rlen, next_table, next_index);
 			print_hex_dump(KERN_INFO, "AQ buffer WB: ",
 				       DUMP_PREFIX_OFFSET, 16, 1,
-				       buff, rlen, true);
+				       buff, rlen, DUMP_FLAG_ASCII);
 			kfree(buff);
 			buff = NULL;
 		} else {
@@ -1373,7 +1373,7 @@ static ssize_t i40e_dbg_command_write(struct file *filp,
 			 desc->params.internal.param3);
 		print_hex_dump(KERN_INFO, "AQ buffer WB: ",
 			       DUMP_PREFIX_OFFSET, 16, 1,
-			       buff, buffer_len, true);
+			       buff, buffer_len, DUMP_FLAG_ASCII);
 		kfree(buff);
 		buff = NULL;
 		kfree(desc);
@@ -1459,7 +1459,8 @@ static ssize_t i40e_dbg_command_write(struct file *filp,
 			dev_info(&pf->pdev->dev, "LLDP MIB (local)\n");
 			print_hex_dump(KERN_INFO, "LLDP MIB (local): ",
 				       DUMP_PREFIX_OFFSET, 16, 1,
-				       buff, I40E_LLDPDU_SIZE, true);
+				       buff, I40E_LLDPDU_SIZE,
+				       DUMP_FLAG_ASCII);
 			kfree(buff);
 			buff = NULL;
 		} else if (strncmp(&cmd_buf[5], "get remote", 10) == 0) {
@@ -1487,7 +1488,8 @@ static ssize_t i40e_dbg_command_write(struct file *filp,
 			dev_info(&pf->pdev->dev, "LLDP MIB (remote)\n");
 			print_hex_dump(KERN_INFO, "LLDP MIB (remote): ",
 				       DUMP_PREFIX_OFFSET, 16, 1,
-				       buff, I40E_LLDPDU_SIZE, true);
+				       buff, I40E_LLDPDU_SIZE,
+				       DUMP_FLAG_ASCII);
 			kfree(buff);
 			buff = NULL;
 		} else if (strncmp(&cmd_buf[5], "event on", 8) == 0) {
@@ -1571,7 +1573,7 @@ static ssize_t i40e_dbg_command_write(struct file *filp,
 			if (bytes)
 				print_hex_dump(KERN_INFO, "NVM Dump: ",
 					DUMP_PREFIX_OFFSET, 16, 2,
-					buff, bytes, true);
+					buff, bytes, DUMP_FLAG_ASCII);
 		}
 		kfree(buff);
 		buff = NULL;

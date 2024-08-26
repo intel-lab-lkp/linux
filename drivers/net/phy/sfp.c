@@ -2270,7 +2270,8 @@ static int sfp_sm_mod_probe(struct sfp *sfp, bool report)
 				"EEPROM base structure checksum failure: 0x%02x != 0x%02x\n",
 				check, id.base.cc_base);
 			print_hex_dump(KERN_ERR, "sfp EE: ", DUMP_PREFIX_OFFSET,
-				       16, 1, &id, sizeof(id), true);
+				       16, 1, &id, sizeof(id),
+				       DUMP_FLAG_ASCII);
 			return -EINVAL;
 		}
 	}
@@ -2299,7 +2300,8 @@ static int sfp_sm_mod_probe(struct sfp *sfp, bool report)
 				"EEPROM extended structure checksum failure: 0x%02x != 0x%02x\n",
 				check, id.ext.cc_ext);
 			print_hex_dump(KERN_ERR, "sfp EE: ", DUMP_PREFIX_OFFSET,
-				       16, 1, &id, sizeof(id), true);
+				       16, 1, &id, sizeof(id),
+				       DUMP_FLAG_ASCII);
 			memset(&id.ext, 0, sizeof(id.ext));
 		}
 	}

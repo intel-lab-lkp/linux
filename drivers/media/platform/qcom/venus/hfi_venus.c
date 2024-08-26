@@ -156,7 +156,7 @@ static void venus_dump_packet(struct venus_hfi_device *hdev, const void *packet)
 		return;
 
 	print_hex_dump(KERN_DEBUG, "", DUMP_PREFIX_OFFSET, 16, 1, packet,
-		       pkt_size, true);
+		       pkt_size, DUMP_FLAG_ASCII);
 }
 
 static int venus_write_queue(struct venus_hfi_device *hdev,

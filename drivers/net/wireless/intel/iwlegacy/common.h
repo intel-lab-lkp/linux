@@ -2919,7 +2919,8 @@ il_get_debug_level(struct il_priv *il)
 #define il_print_hex_error(il, p, len)					\
 do {									\
 	print_hex_dump(KERN_ERR, "iwl data: ",				\
-		       DUMP_PREFIX_OFFSET, 16, 1, p, len, 1);		\
+		       DUMP_PREFIX_OFFSET, 16, 1, p, len,		\
+		       DUMP_FLAG_ASCII);				\
 } while (0)
 
 #ifdef CONFIG_IWLEGACY_DEBUG
@@ -2934,7 +2935,8 @@ do {									\
 do {									\
 	if (il_get_debug_level(il) & level)				\
 		print_hex_dump(KERN_DEBUG, "iwl data: ",		\
-			       DUMP_PREFIX_OFFSET, 16, 1, p, len, 1);	\
+			       DUMP_PREFIX_OFFSET, 16, 1, p, len,	\
+			       DUMP_FLAG_ASCII);					\
 } while (0)
 
 #else

@@ -71,14 +71,14 @@ struct mei_nfc_connect_resp {
 do {								\
 	pr_debug("%s:\n", info);				\
 	print_hex_dump_debug("mei in : ", DUMP_PREFIX_OFFSET,	\
-			16, 1, (skb)->data, (skb)->len, false);	\
+			16, 1, (skb)->data, (skb)->len, 0);	\
 } while (0)
 
 #define MEI_DUMP_SKB_OUT(info, skb)				\
 do {								\
 	pr_debug("%s:\n", info);				\
 	print_hex_dump_debug("mei out: ", DUMP_PREFIX_OFFSET,	\
-			16, 1, (skb)->data, (skb)->len, false);	\
+			16, 1, (skb)->data, (skb)->len, 0);	\
 } while (0)
 
 #define MEI_DUMP_NFC_HDR(info, _hdr)                                \

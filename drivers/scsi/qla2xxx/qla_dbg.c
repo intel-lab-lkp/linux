@@ -2701,7 +2701,7 @@ ql_dump_buffer(uint level, scsi_qla_host_t *vha, uint id, const void *buf,
 	for (cnt = 0; cnt < size; cnt += 16) {
 		ql_dbg(level, vha, id, "%04x: ", cnt);
 		print_hex_dump(KERN_CONT, "", DUMP_PREFIX_NONE, 16, 1,
-			       buf + cnt, min(16U, size - cnt), false);
+			       buf + cnt, min(16U, size - cnt), 0);
 	}
 }
 

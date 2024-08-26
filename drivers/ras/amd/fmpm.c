@@ -616,7 +616,8 @@ static bool fmp_is_valid(struct fru_rec *rec)
 	checksum = do_fmp_checksum(fmp, len) + fmp->checksum;
 	if (checksum) {
 		pr_debug("fmp checksum failed: sum = 0x%x\n", checksum);
-		print_hex_dump_debug("fmp record: ", DUMP_PREFIX_NONE, 16, 1, fmp, len, false);
+		print_hex_dump_debug("fmp record: ", DUMP_PREFIX_NONE, 16, 1, fmp, len,
+				     0);
 		return false;
 	}
 

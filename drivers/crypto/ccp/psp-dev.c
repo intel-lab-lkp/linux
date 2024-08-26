@@ -86,7 +86,7 @@ int psp_extended_mailbox_cmd(struct psp_device *psp, unsigned int timeout_msecs,
 	int ret;
 
 	print_hex_dump_debug("->psp ", DUMP_PREFIX_OFFSET, 16, 2, req,
-			     req->header.payload_size, false);
+			     req->header.payload_size, 0);
 
 	ret = psp_mailbox_command(psp, PSP_CMD_TEE_EXTENDED_CMD, (void *)req,
 				  timeout_msecs, &reg);
@@ -98,7 +98,7 @@ int psp_extended_mailbox_cmd(struct psp_device *psp, unsigned int timeout_msecs,
 	}
 
 	print_hex_dump_debug("<-psp ", DUMP_PREFIX_OFFSET, 16, 2, req,
-			     req->header.payload_size, false);
+			     req->header.payload_size, 0);
 
 	return 0;
 }

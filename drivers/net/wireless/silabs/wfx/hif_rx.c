@@ -313,7 +313,7 @@ static int wfx_hif_error_indication(struct wfx_dev *wdev,
 	else
 		dev_err(wdev->dev, "asynchronous error: unknown: %08x\n", type);
 	print_hex_dump(KERN_INFO, "hif: ", DUMP_PREFIX_OFFSET,
-		       16, 1, hif, le16_to_cpu(hif->len), false);
+		       16, 1, hif, le16_to_cpu(hif->len), 0);
 	wdev->chip_frozen = true;
 
 	return 0;
@@ -330,7 +330,7 @@ static int wfx_hif_exception_indication(struct wfx_dev *wdev,
 	else
 		dev_err(wdev->dev, "firmware exception\n");
 	print_hex_dump(KERN_INFO, "hif: ", DUMP_PREFIX_OFFSET,
-		       16, 1, hif, le16_to_cpu(hif->len), false);
+		       16, 1, hif, le16_to_cpu(hif->len), 0);
 	wdev->chip_frozen = true;
 
 	return -1;

@@ -1843,7 +1843,7 @@ static void early_dump_pci_device(struct pci_dev *pdev)
 		pci_read_config_dword(pdev, i, &value[i / 4]);
 
 	print_hex_dump(KERN_INFO, "", DUMP_PREFIX_OFFSET, 16, 1,
-		       value, 256, false);
+		       value, 256, 0);
 }
 
 static const char *pci_type_str(struct pci_dev *dev)

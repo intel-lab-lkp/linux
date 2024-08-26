@@ -622,7 +622,7 @@ static int rpmsg_send_offchannel_raw(struct rpmsg_device *rpdev,
 		src, dst, len, msg->flags, msg->reserved);
 #if defined(CONFIG_DYNAMIC_DEBUG)
 	dynamic_hex_dump("rpmsg_virtio TX: ", DUMP_PREFIX_NONE, 16, 1,
-			 msg, sizeof(*msg) + len, true);
+			 msg, sizeof(*msg) + len, DUMP_FLAG_ASCII);
 #endif
 
 	rpmsg_sg_init(&sg, msg, sizeof(*msg) + len);
@@ -722,7 +722,7 @@ static int rpmsg_recv_single(struct virtproc_info *vrp, struct device *dev,
 		__rpmsg32_to_cpu(little_endian, msg->reserved));
 #if defined(CONFIG_DYNAMIC_DEBUG)
 	dynamic_hex_dump("rpmsg_virtio RX: ", DUMP_PREFIX_NONE, 16, 1,
-			 msg, sizeof(*msg) + msg_len, true);
+			 msg, sizeof(*msg) + msg_len, DUMP_FLAG_ASCII);
 #endif
 
 	/*

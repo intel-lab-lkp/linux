@@ -403,7 +403,8 @@ static int tse_rx(struct altera_tse_private *priv, int limit)
 			netdev_info(priv->dev, "frame received %d bytes\n",
 				    pktlength);
 			print_hex_dump(KERN_ERR, "data: ", DUMP_PREFIX_OFFSET,
-				       16, 1, skb->data, pktlength, true);
+				       16, 1, skb->data, pktlength,
+				       DUMP_FLAG_ASCII);
 		}
 
 		tse_rx_vlan(priv->dev, skb);

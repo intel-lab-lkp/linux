@@ -267,7 +267,7 @@ void iavf_debug_aq(struct iavf_hw *hw, enum iavf_debug_mask mask, void *desc,
 				 hw->bus.func);
 
 			print_hex_dump(KERN_INFO, prefix, DUMP_PREFIX_OFFSET,
-				       16, 1, buf, len, false);
+				       16, 1, buf, len, 0);
 		}
 	}
 }

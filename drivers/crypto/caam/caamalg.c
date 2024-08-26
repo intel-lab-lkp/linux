@@ -598,7 +598,8 @@ static int aead_setkey(struct crypto_aead *aead,
 	       keys.authkeylen + keys.enckeylen, keys.enckeylen,
 	       keys.authkeylen);
 	print_hex_dump_debug("key in @"__stringify(__LINE__)": ",
-			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen, 1);
+			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen,
+			     DUMP_FLAG_ASCII);
 
 	/*
 	 * If DKP is supported, use it in the shared descriptor to generate
@@ -635,7 +636,8 @@ static int aead_setkey(struct crypto_aead *aead,
 
 	print_hex_dump_debug("ctx.key@"__stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, ctx->key,
-			     ctx->adata.keylen_pad + keys.enckeylen, 1);
+			     ctx->adata.keylen_pad + keys.enckeylen,
+			     DUMP_FLAG_ASCII);
 
 skip_split_key:
 	ctx->cdata.keylen = keys.enckeylen;
@@ -675,7 +677,8 @@ static int gcm_setkey(struct crypto_aead *aead,
 		return err;
 
 	print_hex_dump_debug("key in @"__stringify(__LINE__)": ",
-			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen, 1);
+			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen,
+			     DUMP_FLAG_ASCII);
 
 	memcpy(ctx->key, key, keylen);
 	dma_sync_single_for_device(jrdev, ctx->key_dma, keylen, ctx->dir);
@@ -696,7 +699,8 @@ static int rfc4106_setkey(struct crypto_aead *aead,
 		return err;
 
 	print_hex_dump_debug("key in @"__stringify(__LINE__)": ",
-			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen, 1);
+			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen,
+			     DUMP_FLAG_ASCII);
 
 	memcpy(ctx->key, key, keylen);
 
@@ -722,7 +726,8 @@ static int rfc4543_setkey(struct crypto_aead *aead,
 		return err;
 
 	print_hex_dump_debug("key in @"__stringify(__LINE__)": ",
-			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen, 1);
+			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen,
+			     DUMP_FLAG_ASCII);
 
 	memcpy(ctx->key, key, keylen);
 
@@ -749,7 +754,8 @@ static int skcipher_setkey(struct crypto_skcipher *skcipher, const u8 *key,
 	const bool is_rfc3686 = alg->caam.rfc3686;
 
 	print_hex_dump_debug("key in @"__stringify(__LINE__)": ",
-			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen, 1);
+			     DUMP_PREFIX_ADDRESS, 16, 4, key, keylen,
+			     DUMP_FLAG_ASCII);
 
 	ctx->cdata.keylen = keylen;
 	ctx->cdata.key_virt = key;
@@ -1046,7 +1052,7 @@ static void skcipher_crypt_done(struct device *jrdev, u32 *desc, u32 err,
 
 		print_hex_dump_debug("dstiv  @" __stringify(__LINE__)": ",
 				     DUMP_PREFIX_ADDRESS, 16, 4, req->iv,
-				     ivsize, 1);
+				     ivsize, DUMP_FLAG_ASCII);
 	}
 
 	caam_dump_sg("dst    @" __stringify(__LINE__)": ",
@@ -1261,7 +1267,8 @@ static void init_skcipher_job(struct skcipher_request *req,
 	int len, sec4_sg_index = 0;
 
 	print_hex_dump_debug("presciv@"__stringify(__LINE__)": ",
-			     DUMP_PREFIX_ADDRESS, 16, 4, req->iv, ivsize, 1);
+			     DUMP_PREFIX_ADDRESS, 16, 4, req->iv, ivsize,
+			     DUMP_FLAG_ASCII);
 	dev_dbg(jrdev, "asked=%d, cryptlen%d\n",
 	       (int)edesc->src_nents > 1 ? 100 : req->cryptlen, req->cryptlen);
 
@@ -1488,7 +1495,7 @@ static inline int chachapoly_crypt(struct aead_request *req, bool encrypt)
 	init_chachapoly_job(req, edesc, all_contig, encrypt);
 	print_hex_dump_debug("chachapoly jobdesc@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, desc, desc_bytes(desc),
-			     1);
+			     DUMP_FLAG_ASCII);
 
 	return aead_enqueue_req(jrdev, req);
 }
@@ -1522,7 +1529,7 @@ static inline int aead_crypt(struct aead_request *req, bool encrypt)
 
 	print_hex_dump_debug("aead jobdesc@"__stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, edesc->hw_desc,
-			     desc_bytes(edesc->hw_desc), 1);
+			     desc_bytes(edesc->hw_desc), DUMP_FLAG_ASCII);
 
 	return aead_enqueue_req(jrdev, req);
 }
@@ -1581,7 +1588,7 @@ static inline int gcm_crypt(struct aead_request *req, bool encrypt)
 
 	print_hex_dump_debug("aead jobdesc@"__stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, edesc->hw_desc,
-			     desc_bytes(edesc->hw_desc), 1);
+			     desc_bytes(edesc->hw_desc), DUMP_FLAG_ASCII);
 
 	return aead_enqueue_req(jrdev, req);
 }
@@ -1769,7 +1776,7 @@ static struct skcipher_edesc *skcipher_edesc_alloc(struct skcipher_request *req,
 
 	print_hex_dump_debug("skcipher sec4_sg@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, edesc->sec4_sg,
-			     sec4_sg_bytes, 1);
+			     sec4_sg_bytes, DUMP_FLAG_ASCII);
 
 	return edesc;
 }
@@ -1852,7 +1859,7 @@ static inline int skcipher_crypt(struct skcipher_request *req, bool encrypt)
 
 	print_hex_dump_debug("skcipher jobdesc@" __stringify(__LINE__)": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, edesc->hw_desc,
-			     desc_bytes(edesc->hw_desc), 1);
+			     desc_bytes(edesc->hw_desc), DUMP_FLAG_ASCII);
 
 	desc = edesc->hw_desc;
 	/*

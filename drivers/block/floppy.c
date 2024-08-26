@@ -1073,7 +1073,7 @@ static void setup_DMA(void)
 	if (raw_cmd->length == 0) {
 		print_hex_dump(KERN_INFO, "zero dma transfer size: ",
 			       DUMP_PREFIX_NONE, 16, 1,
-			       raw_cmd->fullcmd, raw_cmd->cmd_count, false);
+			       raw_cmd->fullcmd, raw_cmd->cmd_count, 0);
 		cont->done(0);
 		fdc_state[current_fdc].reset = 1;
 		return;
@@ -1847,7 +1847,7 @@ static void show_floppy(int fdc)
 	pr_info("last result at %lu\n", resultjiffies);
 	pr_info("last redo_fd_request at %lu\n", lastredo);
 	print_hex_dump(KERN_INFO, "", DUMP_PREFIX_NONE, 16, 1,
-		       reply_buffer, resultsize, true);
+		       reply_buffer, resultsize, DUMP_FLAG_ASCII);
 
 	pr_info("status=%x\n", fdc_inb(fdc, FD_STATUS));
 	pr_info("fdc_busy=%lu\n", fdc_busy);

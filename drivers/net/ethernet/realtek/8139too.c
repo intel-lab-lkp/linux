@@ -1979,7 +1979,7 @@ static int rtl8139_rx(struct net_device *dev, struct rtl8139_private *tp,
 #if RTL8139_DEBUG > 2
 		print_hex_dump(KERN_DEBUG, "Frame contents: ",
 			       DUMP_PREFIX_OFFSET, 16, 1,
-			       &rx_ring[ring_offset], 70, true);
+			       &rx_ring[ring_offset], 70, DUMP_FLAG_ASCII);
 #endif
 
 		/* Packet copy from FIFO still in progress.

@@ -202,7 +202,7 @@ static int irdma_sc_add_arp_cache_entry(struct irdma_sc_cqp *cqp,
 	set_64bit_val(wqe, 24, hdr);
 
 	print_hex_dump_debug("WQE: ARP_CACHE_ENTRY WQE", DUMP_PREFIX_OFFSET,
-			     16, 8, wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     16, 8, wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	if (post_sq)
 		irdma_sc_cqp_post_sq(cqp);
 
@@ -235,7 +235,7 @@ static int irdma_sc_del_arp_cache_entry(struct irdma_sc_cqp *cqp, u64 scratch,
 
 	print_hex_dump_debug("WQE: ARP_CACHE_DEL_ENTRY WQE",
 			     DUMP_PREFIX_OFFSET, 16, 8, wqe,
-			     IRDMA_CQP_WQE_SIZE * 8, false);
+			     IRDMA_CQP_WQE_SIZE * 8, 0);
 	if (post_sq)
 		irdma_sc_cqp_post_sq(cqp);
 
@@ -270,7 +270,7 @@ static int irdma_sc_manage_apbvt_entry(struct irdma_sc_cqp *cqp,
 	set_64bit_val(wqe, 24, hdr);
 
 	print_hex_dump_debug("WQE: MANAGE_APBVT WQE", DUMP_PREFIX_OFFSET, 16,
-			     8, wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     8, wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	if (post_sq)
 		irdma_sc_cqp_post_sq(cqp);
 
@@ -360,7 +360,7 @@ irdma_sc_manage_qhash_table_entry(struct irdma_sc_cqp *cqp,
 	set_64bit_val(wqe, 24, temp);
 
 	print_hex_dump_debug("WQE: MANAGE_QHASH WQE", DUMP_PREFIX_OFFSET, 16,
-			     8, wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     8, wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	if (post_sq)
 		irdma_sc_cqp_post_sq(cqp);
 
@@ -482,7 +482,7 @@ int irdma_sc_qp_create(struct irdma_sc_qp *qp, struct irdma_create_qp_info *info
 	set_64bit_val(wqe, 24, hdr);
 
 	print_hex_dump_debug("WQE: QP_CREATE WQE", DUMP_PREFIX_OFFSET, 16, 8,
-			     wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	if (post_sq)
 		irdma_sc_cqp_post_sq(cqp);
 
@@ -551,7 +551,7 @@ int irdma_sc_qp_modify(struct irdma_sc_qp *qp, struct irdma_modify_qp_info *info
 	set_64bit_val(wqe, 24, hdr);
 
 	print_hex_dump_debug("WQE: QP_MODIFY WQE", DUMP_PREFIX_OFFSET, 16, 8,
-			     wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	if (post_sq)
 		irdma_sc_cqp_post_sq(cqp);
 
@@ -592,7 +592,7 @@ int irdma_sc_qp_destroy(struct irdma_sc_qp *qp, u64 scratch,
 	set_64bit_val(wqe, 24, hdr);
 
 	print_hex_dump_debug("WQE: QP_DESTROY WQE", DUMP_PREFIX_OFFSET, 16, 8,
-			     wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	if (post_sq)
 		irdma_sc_cqp_post_sq(cqp);
 
@@ -750,7 +750,7 @@ void irdma_sc_qp_setctx_roce(struct irdma_sc_qp *qp, __le64 *qp_ctx,
 		      FIELD_PREP(IRDMAQPC_REMENDPOINTIDX, info->rem_endpoint_idx));
 
 	print_hex_dump_debug("WQE: QP_HOST CTX WQE", DUMP_PREFIX_OFFSET, 16,
-			     8, qp_ctx, IRDMA_QP_CTX_SIZE, false);
+			     8, qp_ctx, IRDMA_QP_CTX_SIZE, 0);
 }
 
 /* irdma_sc_alloc_local_mac_entry - allocate a mac entry
@@ -778,7 +778,7 @@ static int irdma_sc_alloc_local_mac_entry(struct irdma_sc_cqp *cqp, u64 scratch,
 
 	print_hex_dump_debug("WQE: ALLOCATE_LOCAL_MAC WQE",
 			     DUMP_PREFIX_OFFSET, 16, 8, wqe,
-			     IRDMA_CQP_WQE_SIZE * 8, false);
+			     IRDMA_CQP_WQE_SIZE * 8, 0);
 
 	if (post_sq)
 		irdma_sc_cqp_post_sq(cqp);
@@ -815,7 +815,7 @@ static int irdma_sc_add_local_mac_entry(struct irdma_sc_cqp *cqp,
 	set_64bit_val(wqe, 24, header);
 
 	print_hex_dump_debug("WQE: ADD_LOCAL_MAC WQE", DUMP_PREFIX_OFFSET, 16,
-			     8, wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     8, wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 
 	if (post_sq)
 		irdma_sc_cqp_post_sq(cqp);
@@ -853,7 +853,7 @@ static int irdma_sc_del_local_mac_entry(struct irdma_sc_cqp *cqp, u64 scratch,
 
 	print_hex_dump_debug("WQE: DEL_LOCAL_MAC_IPADDR WQE",
 			     DUMP_PREFIX_OFFSET, 16, 8, wqe,
-			     IRDMA_CQP_WQE_SIZE * 8, false);
+			     IRDMA_CQP_WQE_SIZE * 8, 0);
 
 	if (post_sq)
 		irdma_sc_cqp_post_sq(cqp);
@@ -1042,7 +1042,7 @@ void irdma_sc_qp_setctx(struct irdma_sc_qp *qp, __le64 *qp_ctx,
 	set_64bit_val(qp_ctx, 128, qw16);
 
 	print_hex_dump_debug("WQE: QP_HOST CTX", DUMP_PREFIX_OFFSET, 16, 8,
-			     qp_ctx, IRDMA_QP_CTX_SIZE, false);
+			     qp_ctx, IRDMA_QP_CTX_SIZE, 0);
 }
 
 /**
@@ -1102,7 +1102,7 @@ static int irdma_sc_alloc_stag(struct irdma_sc_dev *dev,
 	set_64bit_val(wqe, 24, hdr);
 
 	print_hex_dump_debug("WQE: ALLOC_STAG WQE", DUMP_PREFIX_OFFSET, 16, 8,
-			     wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	if (post_sq)
 		irdma_sc_cqp_post_sq(cqp);
 
@@ -1193,7 +1193,7 @@ static int irdma_sc_mr_reg_non_shared(struct irdma_sc_dev *dev,
 	set_64bit_val(wqe, 24, hdr);
 
 	print_hex_dump_debug("WQE: MR_REG_NS WQE", DUMP_PREFIX_OFFSET, 16, 8,
-			     wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	if (post_sq)
 		irdma_sc_cqp_post_sq(cqp);
 
@@ -1233,7 +1233,7 @@ static int irdma_sc_dealloc_stag(struct irdma_sc_dev *dev,
 	set_64bit_val(wqe, 24, hdr);
 
 	print_hex_dump_debug("WQE: DEALLOC_STAG WQE", DUMP_PREFIX_OFFSET, 16,
-			     8, wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     8, wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	if (post_sq)
 		irdma_sc_cqp_post_sq(cqp);
 
@@ -1275,7 +1275,7 @@ static int irdma_sc_mw_alloc(struct irdma_sc_dev *dev,
 	set_64bit_val(wqe, 24, hdr);
 
 	print_hex_dump_debug("WQE: MW_ALLOC WQE", DUMP_PREFIX_OFFSET, 16, 8,
-			     wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	if (post_sq)
 		irdma_sc_cqp_post_sq(cqp);
 
@@ -1349,7 +1349,7 @@ int irdma_sc_mr_fast_register(struct irdma_sc_qp *qp,
 	set_64bit_val(wqe, 24, hdr);
 
 	print_hex_dump_debug("WQE: FAST_REG WQE", DUMP_PREFIX_OFFSET, 16, 8,
-			     wqe, IRDMA_QP_WQE_MIN_SIZE, false);
+			     wqe, IRDMA_QP_WQE_MIN_SIZE, 0);
 
 	if (post_sq)
 		irdma_uk_qp_post_wr(&qp->qp_uk);
@@ -1378,7 +1378,7 @@ static void irdma_sc_gen_rts_ae(struct irdma_sc_qp *qp)
 
 	set_64bit_val(wqe, 24, hdr);
 	print_hex_dump_debug("QP: NOP W/LOCAL FENCE WQE", DUMP_PREFIX_OFFSET,
-			     16, 8, wqe, IRDMA_QP_WQE_MIN_SIZE, false);
+			     16, 8, wqe, IRDMA_QP_WQE_MIN_SIZE, 0);
 
 	wqe = qp_uk->sq_base[2].elem;
 	hdr = FIELD_PREP(IRDMAQPSQ_OPCODE, IRDMAQP_OP_GEN_RTS_AE) |
@@ -1387,7 +1387,7 @@ static void irdma_sc_gen_rts_ae(struct irdma_sc_qp *qp)
 
 	set_64bit_val(wqe, 24, hdr);
 	print_hex_dump_debug("QP: CONN EST WQE", DUMP_PREFIX_OFFSET, 16, 8,
-			     wqe, IRDMA_QP_WQE_MIN_SIZE, false);
+			     wqe, IRDMA_QP_WQE_MIN_SIZE, 0);
 }
 
 /**
@@ -1429,7 +1429,7 @@ void irdma_sc_send_lsmm(struct irdma_sc_qp *qp, void *lsmm_buf, u32 size,
 	set_64bit_val(wqe, 24, hdr);
 
 	print_hex_dump_debug("WQE: SEND_LSMM WQE", DUMP_PREFIX_OFFSET, 16, 8,
-			     wqe, IRDMA_QP_WQE_MIN_SIZE, false);
+			     wqe, IRDMA_QP_WQE_MIN_SIZE, 0);
 
 	if (qp->dev->hw_attrs.uk_attrs.feature_flags & IRDMA_FEATURE_RTS_AE)
 		irdma_sc_gen_rts_ae(qp);
@@ -1479,7 +1479,7 @@ void irdma_sc_send_rtt(struct irdma_sc_qp *qp, bool read)
 	set_64bit_val(wqe, 24, hdr);
 
 	print_hex_dump_debug("WQE: RTR WQE", DUMP_PREFIX_OFFSET, 16, 8, wqe,
-			     IRDMA_QP_WQE_MIN_SIZE, false);
+			     IRDMA_QP_WQE_MIN_SIZE, 0);
 
 	if (qp->dev->hw_attrs.uk_attrs.feature_flags & IRDMA_FEATURE_RTS_AE)
 		irdma_sc_gen_rts_ae(qp);
@@ -2074,7 +2074,7 @@ static int irdma_sc_gather_stats(struct irdma_sc_cqp *cqp,
 	set_64bit_val(wqe, 24, temp);
 
 	print_hex_dump_debug("STATS: GATHER_STATS WQE", DUMP_PREFIX_OFFSET,
-			     16, 8, wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     16, 8, wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 
 	irdma_sc_cqp_post_sq(cqp);
 	ibdev_dbg(to_ibdev(cqp->dev),
@@ -2116,7 +2116,7 @@ static int irdma_sc_manage_stats_inst(struct irdma_sc_cqp *cqp,
 	set_64bit_val(wqe, 24, temp);
 
 	print_hex_dump_debug("WQE: MANAGE_STATS WQE", DUMP_PREFIX_OFFSET, 16,
-			     8, wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     8, wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 
 	irdma_sc_cqp_post_sq(cqp);
 	return 0;
@@ -2157,7 +2157,7 @@ static int irdma_sc_set_up_map(struct irdma_sc_cqp *cqp,
 	set_64bit_val(wqe, 24, temp);
 
 	print_hex_dump_debug("WQE: UPMAP WQE", DUMP_PREFIX_OFFSET, 16, 8, wqe,
-			     IRDMA_CQP_WQE_SIZE * 8, false);
+			     IRDMA_CQP_WQE_SIZE * 8, 0);
 	irdma_sc_cqp_post_sq(cqp);
 
 	return 0;
@@ -2199,7 +2199,7 @@ static int irdma_sc_manage_ws_node(struct irdma_sc_cqp *cqp,
 	set_64bit_val(wqe, 24, temp);
 
 	print_hex_dump_debug("WQE: MANAGE_WS WQE", DUMP_PREFIX_OFFSET, 16, 8,
-			     wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	irdma_sc_cqp_post_sq(cqp);
 
 	return 0;
@@ -2272,7 +2272,7 @@ int irdma_sc_qp_flush_wqes(struct irdma_sc_qp *qp,
 	set_64bit_val(wqe, 24, hdr);
 
 	print_hex_dump_debug("WQE: QP_FLUSH WQE", DUMP_PREFIX_OFFSET, 16, 8,
-			     wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	if (post_sq)
 		irdma_sc_cqp_post_sq(cqp);
 
@@ -2313,7 +2313,7 @@ static int irdma_sc_gen_ae(struct irdma_sc_qp *qp,
 	set_64bit_val(wqe, 24, hdr);
 
 	print_hex_dump_debug("WQE: GEN_AE WQE", DUMP_PREFIX_OFFSET, 16, 8,
-			     wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	if (post_sq)
 		irdma_sc_cqp_post_sq(cqp);
 
@@ -2352,7 +2352,7 @@ static int irdma_sc_qp_upload_context(struct irdma_sc_dev *dev,
 	set_64bit_val(wqe, 24, hdr);
 
 	print_hex_dump_debug("WQE: QP_UPLOAD_CTX WQE", DUMP_PREFIX_OFFSET, 16,
-			     8, wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     8, wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	if (post_sq)
 		irdma_sc_cqp_post_sq(cqp);
 
@@ -2392,7 +2392,7 @@ static int irdma_sc_manage_push_page(struct irdma_sc_cqp *cqp,
 	set_64bit_val(wqe, 24, hdr);
 
 	print_hex_dump_debug("WQE: MANAGE_PUSH_PAGES WQE", DUMP_PREFIX_OFFSET,
-			     16, 8, wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     16, 8, wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	if (post_sq)
 		irdma_sc_cqp_post_sq(cqp);
 
@@ -2423,7 +2423,7 @@ static int irdma_sc_suspend_qp(struct irdma_sc_cqp *cqp, struct irdma_sc_qp *qp,
 	set_64bit_val(wqe, 24, hdr);
 
 	print_hex_dump_debug("WQE: SUSPEND_QP WQE", DUMP_PREFIX_OFFSET, 16, 8,
-			     wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	irdma_sc_cqp_post_sq(cqp);
 
 	return 0;
@@ -2456,7 +2456,7 @@ static int irdma_sc_resume_qp(struct irdma_sc_cqp *cqp, struct irdma_sc_qp *qp,
 	set_64bit_val(wqe, 24, hdr);
 
 	print_hex_dump_debug("WQE: RESUME_QP WQE", DUMP_PREFIX_OFFSET, 16, 8,
-			     wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	irdma_sc_cqp_post_sq(cqp);
 
 	return 0;
@@ -2573,7 +2573,7 @@ static int irdma_sc_cq_create(struct irdma_sc_cq *cq, u64 scratch,
 	set_64bit_val(wqe, 24, hdr);
 
 	print_hex_dump_debug("WQE: CQ_CREATE WQE", DUMP_PREFIX_OFFSET, 16, 8,
-			     wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	if (post_sq)
 		irdma_sc_cqp_post_sq(cqp);
 
@@ -2624,7 +2624,7 @@ int irdma_sc_cq_destroy(struct irdma_sc_cq *cq, u64 scratch, bool post_sq)
 	set_64bit_val(wqe, 24, hdr);
 
 	print_hex_dump_debug("WQE: CQ_DESTROY WQE", DUMP_PREFIX_OFFSET, 16, 8,
-			     wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	if (post_sq)
 		irdma_sc_cqp_post_sq(cqp);
 
@@ -2698,7 +2698,7 @@ static int irdma_sc_cq_modify(struct irdma_sc_cq *cq,
 	set_64bit_val(wqe, 24, hdr);
 
 	print_hex_dump_debug("WQE: CQ_MODIFY WQE", DUMP_PREFIX_OFFSET, 16, 8,
-			     wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	if (post_sq)
 		irdma_sc_cqp_post_sq(cqp);
 
@@ -3203,7 +3203,7 @@ int irdma_sc_cqp_create(struct irdma_sc_cqp *cqp, u16 *maj_err, u16 *min_err)
 	}
 	set_64bit_val(cqp->host_ctx, 56, temp);
 	print_hex_dump_debug("WQE: CQP_HOST_CTX WQE", DUMP_PREFIX_OFFSET, 16,
-			     8, cqp->host_ctx, IRDMA_CQP_CTX_SIZE * 8, false);
+			     8, cqp->host_ctx, IRDMA_CQP_CTX_SIZE * 8, 0);
 	p1 = cqp->host_ctx_pa >> 32;
 	p2 = (u32)cqp->host_ctx_pa;
 
@@ -3483,7 +3483,7 @@ static int irdma_sc_manage_hmc_pm_func_table(struct irdma_sc_cqp *cqp,
 
 	print_hex_dump_debug("WQE: MANAGE_HMC_PM_FUNC_TABLE WQE",
 			     DUMP_PREFIX_OFFSET, 16, 8, wqe,
-			     IRDMA_CQP_WQE_SIZE * 8, false);
+			     IRDMA_CQP_WQE_SIZE * 8, 0);
 	if (post_sq)
 		irdma_sc_cqp_post_sq(cqp);
 
@@ -3536,7 +3536,7 @@ static int irdma_sc_commit_fpm_val(struct irdma_sc_cqp *cqp, u64 scratch,
 	set_64bit_val(wqe, 24, hdr);
 
 	print_hex_dump_debug("WQE: COMMIT_FPM_VAL WQE", DUMP_PREFIX_OFFSET,
-			     16, 8, wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     16, 8, wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	irdma_get_cqp_reg_info(cqp, &val, &tail, &error);
 
 	if (post_sq) {
@@ -3595,7 +3595,7 @@ static int irdma_sc_query_fpm_val(struct irdma_sc_cqp *cqp, u64 scratch,
 	set_64bit_val(wqe, 24, hdr);
 
 	print_hex_dump_debug("WQE: QUERY_FPM WQE", DUMP_PREFIX_OFFSET, 16, 8,
-			     wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	irdma_get_cqp_reg_info(cqp, &val, &tail, &error);
 
 	if (post_sq) {
@@ -3693,7 +3693,7 @@ static int irdma_sc_ceq_create(struct irdma_sc_ceq *ceq, u64 scratch,
 	set_64bit_val(wqe, 24, hdr);
 
 	print_hex_dump_debug("WQE: CEQ_CREATE WQE", DUMP_PREFIX_OFFSET, 16, 8,
-			     wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	if (post_sq)
 		irdma_sc_cqp_post_sq(cqp);
 
@@ -3785,7 +3785,7 @@ int irdma_sc_ceq_destroy(struct irdma_sc_ceq *ceq, u64 scratch, bool post_sq)
 	set_64bit_val(wqe, 24, hdr);
 
 	print_hex_dump_debug("WQE: CEQ_DESTROY WQE", DUMP_PREFIX_OFFSET, 16,
-			     8, wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     8, wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	if (post_sq)
 		irdma_sc_cqp_post_sq(cqp);
 
@@ -3952,7 +3952,7 @@ static int irdma_sc_aeq_create(struct irdma_sc_aeq *aeq, u64 scratch,
 	set_64bit_val(wqe, 24, hdr);
 
 	print_hex_dump_debug("WQE: AEQ_CREATE WQE", DUMP_PREFIX_OFFSET, 16, 8,
-			     wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	if (post_sq)
 		irdma_sc_cqp_post_sq(cqp);
 
@@ -3991,7 +3991,7 @@ static int irdma_sc_aeq_destroy(struct irdma_sc_aeq *aeq, u64 scratch,
 	set_64bit_val(wqe, 24, hdr);
 
 	print_hex_dump_debug("WQE: AEQ_DESTROY WQE", DUMP_PREFIX_OFFSET, 16,
-			     8, wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     8, wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	if (post_sq)
 		irdma_sc_cqp_post_sq(cqp);
 	return 0;
@@ -4023,7 +4023,7 @@ int irdma_sc_get_next_aeqe(struct irdma_sc_aeq *aeq,
 	get_64bit_val(aeqe, 0, &compl_ctx);
 
 	print_hex_dump_debug("WQE: AEQ_ENTRY WQE", DUMP_PREFIX_OFFSET, 16, 8,
-			     aeqe, 16, false);
+			     aeqe, 16, 0);
 
 	ae_src = (u8)FIELD_GET(IRDMA_AEQE_AESRC, temp);
 	info->wqe_idx = (u16)FIELD_GET(IRDMA_AEQE_WQDESCIDX, temp);
@@ -4286,7 +4286,7 @@ int irdma_sc_ccq_destroy(struct irdma_sc_cq *ccq, u64 scratch, bool post_sq)
 	set_64bit_val(wqe, 24, hdr);
 
 	print_hex_dump_debug("WQE: CCQ_DESTROY WQE", DUMP_PREFIX_OFFSET, 16,
-			     8, wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     8, wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	irdma_get_cqp_reg_info(cqp, &val, &tail, &error);
 
 	if (post_sq) {
@@ -4331,7 +4331,7 @@ int irdma_sc_init_iw_hmc(struct irdma_sc_dev *dev, u8 hmc_fn_id)
 
 	print_hex_dump_debug("HMC: QUERY FPM BUFFER", DUMP_PREFIX_OFFSET, 16,
 			     8, query_fpm_mem.va, IRDMA_QUERY_FPM_BUF_SIZE,
-			     false);
+			     0);
 	return ret_code;
 }
 
@@ -4390,7 +4390,7 @@ static int irdma_sc_cfg_iw_fpm(struct irdma_sc_dev *dev, u8 hmc_fn_id)
 	wait_type = (u8)IRDMA_CQP_WAIT_POLL_REGS;
 	print_hex_dump_debug("HMC: COMMIT FPM BUFFER", DUMP_PREFIX_OFFSET, 16,
 			     8, commit_fpm_mem.va, IRDMA_COMMIT_FPM_BUF_SIZE,
-			     false);
+			     0);
 	ret_code = irdma_sc_commit_fpm_val(dev->cqp, 0, hmc_info->hmc_fn_id,
 					   &commit_fpm_mem, true, wait_type);
 	if (!ret_code)
@@ -4399,7 +4399,7 @@ static int irdma_sc_cfg_iw_fpm(struct irdma_sc_dev *dev, u8 hmc_fn_id)
 					      &hmc_info->sd_table.sd_cnt);
 	print_hex_dump_debug("HMC: COMMIT FPM BUFFER", DUMP_PREFIX_OFFSET, 16,
 			     8, commit_fpm_mem.va, IRDMA_COMMIT_FPM_BUF_SIZE,
-			     false);
+			     0);
 
 	return ret_code;
 }
@@ -4475,10 +4475,10 @@ static int cqp_sds_wqe_fill(struct irdma_sc_cqp *cqp,
 		print_hex_dump_debug("WQE: UPDATE_PE_SDS WQE Buffer",
 				     DUMP_PREFIX_OFFSET, 16, 8,
 				     (char *)sdbuf->va + offset,
-				     mem_entries << 4, false);
+				     mem_entries << 4, 0);
 
 	print_hex_dump_debug("WQE: UPDATE_PE_SDS WQE", DUMP_PREFIX_OFFSET, 16,
-			     8, wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     8, wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 
 	return 0;
 }
@@ -4557,7 +4557,7 @@ int irdma_sc_static_hmc_pages_allocated(struct irdma_sc_cqp *cqp, u64 scratch,
 
 	print_hex_dump_debug("WQE: SHMC_PAGES_ALLOCATED WQE",
 			     DUMP_PREFIX_OFFSET, 16, 8, wqe,
-			     IRDMA_CQP_WQE_SIZE * 8, false);
+			     IRDMA_CQP_WQE_SIZE * 8, 0);
 	irdma_get_cqp_reg_info(cqp, &val, &tail, &error);
 
 	if (post_sq) {
@@ -4653,7 +4653,7 @@ static int irdma_sc_query_rdma_features(struct irdma_sc_cqp *cqp,
 	set_64bit_val(wqe, 24, temp);
 
 	print_hex_dump_debug("WQE: QUERY RDMA FEATURES", DUMP_PREFIX_OFFSET,
-			     16, 8, wqe, IRDMA_CQP_WQE_SIZE * 8, false);
+			     16, 8, wqe, IRDMA_CQP_WQE_SIZE * 8, 0);
 	irdma_sc_cqp_post_sq(cqp);
 
 	return 0;
@@ -4717,7 +4717,7 @@ int irdma_get_rdma_features(struct irdma_sc_dev *dev)
 	}
 
 	print_hex_dump_debug("WQE: QUERY RDMA FEATURES", DUMP_PREFIX_OFFSET,
-			     16, 8, feat_buf.va, feat_cnt * 8, false);
+			     16, 8, feat_buf.va, feat_cnt * 8, 0);
 
 	for (byte_idx = 0, feat_idx = 0; feat_idx < min(feat_cnt, (u16)IRDMA_MAX_FEATURES);
 	     feat_idx++, byte_idx += 8) {

@@ -423,7 +423,7 @@ static void igb_dump(struct igb_adapter *adapter)
 					DUMP_PREFIX_ADDRESS,
 					16, 1, buffer_info->skb->data,
 					dma_unmap_len(buffer_info, len),
-					true);
+					DUMP_FLAG_ASCII);
 		}
 	}
 
@@ -509,7 +509,8 @@ rx_ring_summary:
 					  16, 1,
 					  page_address(buffer_info->page) +
 						      buffer_info->page_offset,
-					  igb_rx_bufsz(rx_ring), true);
+					  igb_rx_bufsz(rx_ring),
+					  DUMP_FLAG_ASCII);
 				}
 			}
 		}

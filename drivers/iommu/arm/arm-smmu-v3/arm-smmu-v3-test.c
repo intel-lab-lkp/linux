@@ -61,7 +61,7 @@ arm_smmu_test_writer_record_syncs(struct arm_smmu_entry_writer *writer)
 	print_hex_dump_debug("    ", DUMP_PREFIX_NONE, 16, 8,
 			     test_writer->entry,
 			     NUM_ENTRY_QWORDS * sizeof(*test_writer->entry),
-			     false);
+			     0);
 
 	test_writer->num_syncs += 1;
 	if (!test_writer->entry[0]) {
@@ -95,7 +95,7 @@ arm_smmu_v3_test_debug_print_used_bits(struct arm_smmu_entry_writer *writer,
 	arm_smmu_get_ste_used(ste, used_bits);
 	pr_debug("STE used bits: ");
 	print_hex_dump_debug("    ", DUMP_PREFIX_NONE, 16, 8, used_bits,
-			     sizeof(used_bits), false);
+			     sizeof(used_bits), 0);
 }
 
 static const struct arm_smmu_entry_writer_ops test_ste_ops = {
@@ -129,11 +129,11 @@ static void arm_smmu_v3_test_ste_expect_transition(
 
 	pr_debug("STE initial value: ");
 	print_hex_dump_debug("    ", DUMP_PREFIX_NONE, 16, 8, cur_copy.data,
-			     sizeof(cur_copy), false);
+			     sizeof(cur_copy), 0);
 	arm_smmu_v3_test_debug_print_used_bits(&test_writer.writer, cur->data);
 	pr_debug("STE target value: ");
 	print_hex_dump_debug("    ", DUMP_PREFIX_NONE, 16, 8, target->data,
-			     sizeof(cur_copy), false);
+			     sizeof(cur_copy), 0);
 	arm_smmu_v3_test_debug_print_used_bits(&test_writer.writer,
 					       target->data);
 
@@ -403,11 +403,11 @@ static void arm_smmu_v3_test_cd_expect_transition(
 
 	pr_debug("CD initial value: ");
 	print_hex_dump_debug("    ", DUMP_PREFIX_NONE, 16, 8, cur_copy.data,
-			     sizeof(cur_copy), false);
+			     sizeof(cur_copy), 0);
 	arm_smmu_v3_test_debug_print_used_bits(&test_writer.writer, cur->data);
 	pr_debug("CD target value: ");
 	print_hex_dump_debug("    ", DUMP_PREFIX_NONE, 16, 8, target->data,
-			     sizeof(cur_copy), false);
+			     sizeof(cur_copy), 0);
 	arm_smmu_v3_test_debug_print_used_bits(&test_writer.writer,
 					       target->data);
 

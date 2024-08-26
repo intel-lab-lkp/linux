@@ -2186,7 +2186,7 @@ void pn533_recv_frame(struct pn533 *dev, struct sk_buff *skb, int status)
 	}
 
 	print_hex_dump_debug("PN533 RX: ", DUMP_PREFIX_NONE, 16, 1, skb->data,
-			     dev->ops->rx_frame_size(skb->data), false);
+			     dev->ops->rx_frame_size(skb->data), 0);
 
 	if (!dev->ops->rx_is_frame_valid(skb->data, dev)) {
 		nfc_err(dev->dev, "Received an invalid frame\n");

@@ -790,7 +790,8 @@ static int lt9611uxc_firmware_update(struct lt9611uxc *lt9611uxc)
 
 	if (!memcmp(readbuf, fw->data, fw->size)) {
 		dev_err(lt9611uxc->dev, "Firmware update failed\n");
-		print_hex_dump(KERN_ERR, "fw: ", DUMP_PREFIX_OFFSET, 16, 1, readbuf, fw->size, false);
+		print_hex_dump(KERN_ERR, "fw: ", DUMP_PREFIX_OFFSET, 16, 1, readbuf, fw->size,
+			       0);
 		ret = -EINVAL;
 	} else {
 		dev_info(lt9611uxc->dev, "Firmware updates successfully\n");

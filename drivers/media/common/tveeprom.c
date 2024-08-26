@@ -753,7 +753,7 @@ int tveeprom_read(struct i2c_client *c, unsigned char *eedata, int len)
 	}
 
 	print_hex_dump_debug("full 256-byte eeprom dump:", DUMP_PREFIX_NONE,
-			     16, 1, eedata, len, true);
+			     16, 1, eedata, len, DUMP_FLAG_ASCII);
 	return 0;
 }
 EXPORT_SYMBOL(tveeprom_read);

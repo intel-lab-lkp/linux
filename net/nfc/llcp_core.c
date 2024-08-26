@@ -780,7 +780,8 @@ static void nfc_llcp_tx_work(struct work_struct *work)
 
 			pr_debug("Sending pending skb\n");
 			print_hex_dump_debug("LLCP Tx: ", DUMP_PREFIX_OFFSET,
-					     16, 1, skb->data, skb->len, true);
+					     16, 1, skb->data, skb->len,
+					     DUMP_FLAG_ASCII);
 
 			if (ptype == LLCP_PDU_I)
 				copy_skb = skb_copy(skb, GFP_ATOMIC);
@@ -1459,7 +1460,7 @@ static void nfc_llcp_rx_skb(struct nfc_llcp_local *local, struct sk_buff *skb)
 
 	if (ptype != LLCP_PDU_SYMM)
 		print_hex_dump_debug("LLCP Rx: ", DUMP_PREFIX_OFFSET, 16, 1,
-				     skb->data, skb->len, true);
+				     skb->data, skb->len, DUMP_FLAG_ASCII);
 
 	switch (ptype) {
 	case LLCP_PDU_SYMM:

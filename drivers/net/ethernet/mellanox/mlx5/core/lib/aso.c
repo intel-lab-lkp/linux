@@ -415,7 +415,7 @@ int mlx5_aso_poll_cq(struct mlx5_aso *aso, bool with_data)
 			      err_cqe->syndrome);
 		print_hex_dump(KERN_WARNING, "", DUMP_PREFIX_OFFSET,
 			       16, 1, err_cqe,
-			       sizeof(*err_cqe), false);
+			       sizeof(*err_cqe), 0);
 	}
 
 	mlx5_cqwq_update_db_record(&cq->wq);

@@ -1840,7 +1840,8 @@ retry:
 			    "class=%d may_fallback=%d tried_spinup=%d\n",
 			    class, may_fallback, tried_spinup);
 		print_hex_dump(KERN_INFO, "", DUMP_PREFIX_OFFSET,
-			       16, 2, id, ATA_ID_WORDS * sizeof(*id), true);
+			       16, 2, id, ATA_ID_WORDS * sizeof(*id),
+			       DUMP_FLAG_ASCII);
 	}
 
 	/* Falling back doesn't make sense if ID data was read

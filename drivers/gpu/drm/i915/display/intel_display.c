@@ -4995,9 +4995,9 @@ pipe_config_buffer_mismatch(struct drm_printer *p, bool fastset,
 	len = memcmp_diff_len(a, b, len);
 
 	print_hex_dump(loglevel, "expected: ", DUMP_PREFIX_NONE,
-		       16, 0, a, len, false);
+		       16, 0, a, len, 0);
 	print_hex_dump(loglevel, "found: ", DUMP_PREFIX_NONE,
-		       16, 0, b, len, false);
+		       16, 0, b, len, 0);
 }
 
 static void

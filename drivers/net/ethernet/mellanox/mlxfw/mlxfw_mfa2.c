@@ -147,7 +147,8 @@ mlxfw_mfa2_file_dev_validate(const struct mlxfw_mfa2_file *mfa2_file,
 	}
 
 	print_hex_dump_debug("  -- Device PSID ", DUMP_PREFIX_NONE, 16, 16,
-			     psid->psid, be16_to_cpu(tlv->len), true);
+			     psid->psid, be16_to_cpu(tlv->len),
+			     DUMP_FLAG_ASCII);
 
 	/* Validate the device has COMPONENT_PTR */
 	err = mlxfw_mfa2_tlv_multi_child_count(mfa2_file, multi,

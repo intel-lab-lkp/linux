@@ -82,7 +82,8 @@ __iwl_dbg(struct device *dev,
 #define iwl_print_hex_error(m, p, len)					\
 do {									\
 	print_hex_dump(KERN_ERR, "iwl data: ",				\
-		       DUMP_PREFIX_OFFSET, 16, 1, p, len, 1);		\
+		       DUMP_PREFIX_OFFSET, 16, 1, p, len,		\
+		       DUMP_FLAG_ASCII);				\
 } while (0)
 
 #define __IWL_DEBUG_DEV(dev, level, limit, fmt, args...)		\
@@ -102,7 +103,8 @@ do {									\
 do {                                            			\
 	if (iwl_have_debug_level(level))				\
 		print_hex_dump(KERN_DEBUG, "iwl data: ",		\
-			       DUMP_PREFIX_OFFSET, 16, 1, p, len, 1);	\
+			       DUMP_PREFIX_OFFSET, 16, 1, p, len,	\
+			       DUMP_FLAG_ASCII);			\
 } while (0)
 #else
 #define iwl_print_hex_dump(m, level, p, len)

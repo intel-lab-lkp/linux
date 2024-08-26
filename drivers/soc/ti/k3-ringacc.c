@@ -326,7 +326,7 @@ static void k3_ringacc_ring_dump(struct k3_ring *ring)
 
 	if (ring->ring_mem_virt)
 		print_hex_dump_debug("dump ring_mem_virt ", DUMP_PREFIX_NONE,
-				     16, 1, ring->ring_mem_virt, 16 * 8, false);
+				     16, 1, ring->ring_mem_virt, 16 * 8, 0);
 }
 
 struct k3_ring *k3_ringacc_request_ring(struct k3_ringacc *ringacc,

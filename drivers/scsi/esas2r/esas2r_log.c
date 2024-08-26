@@ -245,7 +245,7 @@ int esas2r_log_hexdump(const long level,
 	if (level <= event_log_level) {
 		print_hex_dump(translate_esas2r_event_level_to_kernel(level),
 			       "", DUMP_PREFIX_OFFSET, 16, 1, buf,
-			       len, true);
+			       len, DUMP_FLAG_ASCII);
 	}
 
 	return 1;

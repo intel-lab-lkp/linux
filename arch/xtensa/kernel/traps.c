@@ -184,7 +184,7 @@ static inline void dump_user_code(struct pt_regs *regs)
 
 	if (copy_from_user(buf, (void __user *)(regs->pc & -16), sizeof(buf)) == 0) {
 		print_hex_dump(KERN_INFO, " ", DUMP_PREFIX_NONE,
-			       32, 1, buf, sizeof(buf), false);
+			       32, 1, buf, sizeof(buf), 0);
 
 	}
 }
@@ -596,7 +596,7 @@ static int show_stack_fragment_cb(struct stackframe *frame, void *data)
 		__memcpy(line, sf->sp + sf->off, line_len);
 		print_hex_dump(sf->loglvl, arrow ? "> " : "  ", DUMP_PREFIX_NONE,
 			       STACK_DUMP_LINE_SIZE, STACK_DUMP_ENTRY_SIZE,
-			       line, line_len, false);
+			       line, line_len, 0);
 		sf->off += STACK_DUMP_LINE_SIZE;
 		if (arrow)
 			return 0;

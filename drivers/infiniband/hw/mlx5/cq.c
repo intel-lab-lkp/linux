@@ -276,7 +276,7 @@ static void dump_cqe(struct mlx5_ib_dev *dev, struct mlx5_err_cqe *cqe,
 	mlx5_ib_log(level, dev, "WC error: %d, Message: %s\n", wc->status,
 		    ib_wc_status_msg(wc->status));
 	print_hex_dump(level, "cqe_dump: ", DUMP_PREFIX_OFFSET, 16, 1,
-		       cqe, sizeof(*cqe), false);
+		       cqe, sizeof(*cqe), 0);
 }
 
 static void mlx5_handle_error_cqe(struct mlx5_ib_dev *dev,

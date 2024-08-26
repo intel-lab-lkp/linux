@@ -130,7 +130,7 @@ MODULE_PARM_DESC(use_mcq_mode, "Control MCQ mode for controllers starting from U
 	size_t __len = (len);                                            \
 	print_hex_dump(KERN_ERR, prefix_str,                             \
 		       __len > 4 ? DUMP_PREFIX_OFFSET : DUMP_PREFIX_NONE,\
-		       16, 4, buf, __len, false);                        \
+		       16, 4, buf, __len, 0);                        \
 } while (0)
 
 int ufshcd_dump_regs(struct ufs_hba *hba, size_t offset, size_t len,

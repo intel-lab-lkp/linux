@@ -721,7 +721,7 @@ static void dma_callback(void *data)
 				       1,
 				       sg_virt(sg),
 				       sg_dma_len(sg),
-				       1);
+				       DUMP_FLAG_ASCII);
 		}
 		for_each_sg(pl022->sgt_tx.sgl, sg, pl022->sgt_tx.nents, i) {
 			dev_dbg(&pl022->adev->dev, "SPI TX SG ENTRY: %d", i);
@@ -731,7 +731,7 @@ static void dma_callback(void *data)
 				       1,
 				       sg_virt(sg),
 				       sg_dma_len(sg),
-				       1);
+				       DUMP_FLAG_ASCII);
 		}
 	}
 #endif

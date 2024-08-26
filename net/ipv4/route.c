@@ -1757,7 +1757,7 @@ static void ip_handle_martian_source(struct net_device *dev,
 			print_hex_dump(KERN_WARNING, "ll header: ",
 				       DUMP_PREFIX_OFFSET, 16, 1,
 				       skb_mac_header(skb),
-				       dev->hard_header_len, false);
+				       dev->hard_header_len, 0);
 		}
 	}
 #endif

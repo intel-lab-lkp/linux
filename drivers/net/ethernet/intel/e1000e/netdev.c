@@ -183,7 +183,7 @@ static void e1000e_dump_ps_pages(struct e1000_adapter *adapter,
 			pr_info("packet dump for ps_page %d:\n", i);
 			print_hex_dump(KERN_INFO, "", DUMP_PREFIX_ADDRESS,
 				       16, 1, page_address(ps_page->page),
-				       PAGE_SIZE, true);
+				       PAGE_SIZE, DUMP_FLAG_ASCII);
 		}
 	}
 }
@@ -312,7 +312,7 @@ static void e1000e_dump(struct e1000_adapter *adapter)
 		if (netif_msg_pktdata(adapter) && buffer_info->skb)
 			print_hex_dump(KERN_INFO, "", DUMP_PREFIX_ADDRESS,
 				       16, 1, buffer_info->skb->data,
-				       buffer_info->skb->len, true);
+				       buffer_info->skb->len, DUMP_FLAG_ASCII);
 	}
 
 	/* Print Rx Ring Summary */
@@ -459,7 +459,7 @@ rx_ring_summary:
 						       1,
 						       buffer_info->skb->data,
 						       adapter->rx_buffer_len,
-						       true);
+						       DUMP_FLAG_ASCII);
 			}
 		}
 	}

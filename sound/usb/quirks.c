@@ -1295,7 +1295,7 @@ static int snd_usb_motu_microbookii_communicate(struct usb_device *dev, u8 *buf,
 		return err;
 
 	print_hex_dump(KERN_DEBUG, "MicroBookII snd: ", DUMP_PREFIX_NONE, 16, 1,
-		       buf, actual_length, false);
+		       buf, actual_length, 0);
 
 	memset(buf, 0, buf_size);
 
@@ -1307,7 +1307,7 @@ static int snd_usb_motu_microbookii_communicate(struct usb_device *dev, u8 *buf,
 		return err;
 
 	print_hex_dump(KERN_DEBUG, "MicroBookII rcv: ", DUMP_PREFIX_NONE, 16, 1,
-		       buf, actual_length, false);
+		       buf, actual_length, 0);
 
 	*length = actual_length;
 	return 0;

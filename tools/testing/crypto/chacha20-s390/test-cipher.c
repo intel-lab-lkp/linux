@@ -59,10 +59,10 @@ static int test_lib_chacha(u8 *revert, u8 *cipher, u8 *plain)
 
 	if (debug) {
 		print_hex_dump(KERN_INFO, "key: ", DUMP_PREFIX_OFFSET,
-			       16, 1, key, 32, 1);
+			       16, 1, key, 32, DUMP_FLAG_ASCII);
 
 		print_hex_dump(KERN_INFO, "iv:  ", DUMP_PREFIX_OFFSET,
-			       16, 1, iv, 16, 1);
+			       16, 1, iv, 16, DUMP_FLAG_ASCII);
 	}
 
 	/* Encrypt */
@@ -76,7 +76,8 @@ static int test_lib_chacha(u8 *revert, u8 *cipher, u8 *plain)
 	if (debug)
 		print_hex_dump(KERN_INFO, "encr:", DUMP_PREFIX_OFFSET,
 			       16, 1, cipher,
-			       (data_size > 64 ? 64 : data_size), 1);
+			       (data_size > 64 ? 64 : data_size),
+			       DUMP_FLAG_ASCII);
 
 	pr_info("lib encryption took: %lld nsec", end - start);
 
@@ -90,7 +91,8 @@ static int test_lib_chacha(u8 *revert, u8 *cipher, u8 *plain)
 	if (debug)
 		print_hex_dump(KERN_INFO, "decr:", DUMP_PREFIX_OFFSET,
 			       16, 1, revert,
-			       (data_size > 64 ? 64 : data_size), 1);
+			       (data_size > 64 ? 64 : data_size),
+			       DUMP_FLAG_ASCII);
 
 	pr_info("lib decryption took: %lld nsec", end - start);
 
@@ -160,10 +162,10 @@ static int test_skcipher(char *name, u8 *revert, u8 *cipher, u8 *plain)
 
 	if (debug) {
 		print_hex_dump(KERN_INFO, "key: ", DUMP_PREFIX_OFFSET,
-			       16, 1, key, 32, 1);
+			       16, 1, key, 32, DUMP_FLAG_ASCII);
 
 		print_hex_dump(KERN_INFO, "iv:  ", DUMP_PREFIX_OFFSET,
-			       16, 1, iv, 16, 1);
+			       16, 1, iv, 16, DUMP_FLAG_ASCII);
 	}
 
 	sk.tfm = skcipher;
@@ -189,7 +191,8 @@ static int test_skcipher(char *name, u8 *revert, u8 *cipher, u8 *plain)
 	if (debug)
 		print_hex_dump(KERN_INFO, "encr:", DUMP_PREFIX_OFFSET,
 			       16, 1, cipher,
-			       (data_size > 64 ? 64 : data_size), 1);
+			       (data_size > 64 ? 64 : data_size),
+			       DUMP_FLAG_ASCII);
 
 	/* Prepare for decryption */
 	memset(iv, 'I', sizeof(iv));
@@ -213,7 +216,8 @@ static int test_skcipher(char *name, u8 *revert, u8 *cipher, u8 *plain)
 	if (debug)
 		print_hex_dump(KERN_INFO, "decr:", DUMP_PREFIX_OFFSET,
 			       16, 1, revert,
-			       (data_size > 64 ? 64 : data_size), 1);
+			       (data_size > 64 ? 64 : data_size),
+			       DUMP_FLAG_ASCII);
 
 	/* Dump some internal skcipher data */
 	if (debug)
@@ -276,7 +280,8 @@ static int __init chacha_s390_test_init(void)
 	if (debug)
 		print_hex_dump(KERN_INFO, "src: ", DUMP_PREFIX_OFFSET,
 			       16, 1, plain,
-			       (data_size > 64 ? 64 : data_size), 1);
+			       (data_size > 64 ? 64 : data_size),
+			       DUMP_FLAG_ASCII);
 
 	/* Use chacha20 generic */
 	ret = test_skcipher("chacha20-generic", revert, cipher_generic, plain);

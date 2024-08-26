@@ -282,11 +282,11 @@ void __dynamic_ibdev_dbg(struct _ddebug *descriptor,
 			   dev, fmt, ##__VA_ARGS__)
 
 #define dynamic_hex_dump(prefix_str, prefix_type, rowsize,		\
-			 groupsize, buf, len, ascii)			\
+			 groupsize, buf, len, flags)			\
 	_dynamic_func_call_no_desc(__builtin_constant_p(prefix_str) ? prefix_str : "hexdump", \
 				   print_hex_dump,			\
 				   KERN_DEBUG, prefix_str, prefix_type,	\
-				   rowsize, groupsize, buf, len, ascii)
+				   rowsize, groupsize, buf, len, flags)
 
 /* for test only, generally expect drm.debug style macro wrappers */
 #define __pr_debug_cls(cls, fmt, ...) do {			\
@@ -309,10 +309,10 @@ void __dynamic_ibdev_dbg(struct _ddebug *descriptor,
 #define dynamic_dev_dbg(dev, fmt, ...)					\
 	dev_no_printk(KERN_DEBUG, dev, fmt, ##__VA_ARGS__)
 #define dynamic_hex_dump(prefix_str, prefix_type, rowsize,		\
-			 groupsize, buf, len, ascii)			\
+			 groupsize, buf, len, flags)			\
 	do { if (0)							\
 		print_hex_dump(KERN_DEBUG, prefix_str, prefix_type,	\
-				rowsize, groupsize, buf, len, ascii);	\
+				rowsize, groupsize, buf, len, flags);	\
 	} while (0)
 
 #endif /* CONFIG_DYNAMIC_DEBUG || (CONFIG_DYNAMIC_DEBUG_CORE && DYNAMIC_DEBUG_MODULE) */

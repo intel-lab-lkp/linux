@@ -59,11 +59,11 @@ MODULE_DEVICE_TABLE(usb, es58x_id_table);
 #define es58x_print_hex_dump(buf, len)					\
 	print_hex_dump(KERN_DEBUG,					\
 		       KBUILD_MODNAME " " __stringify(buf) ": ",	\
-		       DUMP_PREFIX_NONE, 16, 1, buf, len, false)
+		       DUMP_PREFIX_NONE, 16, 1, buf, len, 0)
 
 #define es58x_print_hex_dump_debug(buf, len)				 \
 	print_hex_dump_debug(KBUILD_MODNAME " " __stringify(buf) ": ",\
-			     DUMP_PREFIX_NONE, 16, 1, buf, len, false)
+			     DUMP_PREFIX_NONE, 16, 1, buf, len, 0)
 
 /* The last two bytes of an ES58X command is a CRC16. The first two
  * bytes (the start of frame) are skipped and the CRC calculation

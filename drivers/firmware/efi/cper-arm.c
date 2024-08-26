@@ -336,6 +336,6 @@ void cper_print_proc_arm(const char *pfx,
 		printk("%sVendor specific error info has %u bytes:\n", pfx,
 		       len);
 		print_hex_dump(newpfx, "", DUMP_PREFIX_OFFSET, 16, 4, ctx_info,
-				len, true);
+				len, DUMP_FLAG_ASCII);
 	}
 }

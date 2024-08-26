@@ -298,7 +298,7 @@ static void mse102x_dump_packet(const char *msg, int len, const char *data)
 {
 	printk(KERN_DEBUG ": %s - packet len:%d\n", msg, len);
 	print_hex_dump(KERN_DEBUG, "pk data: ", DUMP_PREFIX_OFFSET, 16, 1,
-		       data, len, true);
+		       data, len, DUMP_FLAG_ASCII);
 }
 
 static void mse102x_rx_pkt_spi(struct mse102x_net *mse)

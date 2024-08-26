@@ -885,7 +885,7 @@ void seq_hex_dump(struct seq_file *m, const char *prefix_str, int prefix_type,
 
 		size = seq_get_buf(m, &buffer);
 		ret = hex_dump_to_buffer(ptr + i, linelen, rowsize, groupsize,
-					 buffer, size, ascii);
+					 buffer, size, ascii ? DUMP_FLAG_ASCII : 0);
 		seq_commit(m, ret < size ? ret : -1);
 
 		seq_putc(m, '\n');

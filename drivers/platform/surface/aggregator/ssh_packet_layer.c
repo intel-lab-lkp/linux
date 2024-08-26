@@ -1066,7 +1066,7 @@ static int ssh_ptl_tx_packet(struct ssh_ptl *ptl, struct ssh_packet *packet)
 
 	ptl_dbg(ptl, "tx: sending data (length: %zu)\n", packet->data.len);
 	print_hex_dump_debug("tx: ", DUMP_PREFIX_OFFSET, 16, 1,
-			     packet->data.ptr, packet->data.len, false);
+			     packet->data.ptr, packet->data.len, 0);
 
 	do {
 		ssize_t status, len;
@@ -1812,7 +1812,7 @@ static int ssh_ptl_rx_threadfn(void *data)
 		ptl_dbg(ptl, "rx: received data (size: %zu)\n", n);
 		print_hex_dump_debug("rx: ", DUMP_PREFIX_OFFSET, 16, 1,
 				     ptl->rx.buf.ptr + ptl->rx.buf.len - n,
-				     n, false);
+				     n, 0);
 
 		/* Parse until we need more bytes or buffer is empty. */
 		while (offs < ptl->rx.buf.len) {

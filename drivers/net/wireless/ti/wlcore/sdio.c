@@ -81,7 +81,7 @@ static int __must_check wl12xx_sdio_raw_read(struct device *child, int addr,
 		printk(KERN_DEBUG "wlcore_sdio: READ from 0x%04x\n", addr);
 		print_hex_dump(KERN_DEBUG, "wlcore_sdio: READ ",
 			       DUMP_PREFIX_OFFSET, 16, 1,
-			       buf, len, false);
+			       buf, len, 0);
 	}
 
 	return ret;
@@ -100,7 +100,7 @@ static int __must_check wl12xx_sdio_raw_write(struct device *child, int addr,
 		printk(KERN_DEBUG "wlcore_sdio: WRITE to 0x%04x\n", addr);
 		print_hex_dump(KERN_DEBUG, "wlcore_sdio: WRITE ",
 				DUMP_PREFIX_OFFSET, 16, 1,
-				buf, len, false);
+				buf, len, 0);
 	}
 
 	if (unlikely(addr == HW_ACCESS_ELP_CTRL_REG)) {

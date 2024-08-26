@@ -534,7 +534,7 @@ dump_smb(void *buf, int smb_buf_length)
 		return;
 
 	print_hex_dump(KERN_DEBUG, "", DUMP_PREFIX_NONE, 8, 2, buf,
-		       smb_buf_length, true);
+		       smb_buf_length, DUMP_FLAG_ASCII);
 }
 
 void

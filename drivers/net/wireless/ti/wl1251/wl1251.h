@@ -75,7 +75,7 @@ enum {
 				       DUMP_PREFIX_OFFSET, 16, 1,	\
 				       buf,				\
 				       min_t(size_t, len, DEBUG_DUMP_LIMIT), \
-				       true);				\
+				       DUMP_FLAG_ASCII);		\
 	} while (0)
 
 #define WL1251_DEFAULT_RX_CONFIG (CFG_UNI_FILTER_EN |	\

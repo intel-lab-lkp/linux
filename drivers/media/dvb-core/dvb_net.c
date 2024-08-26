@@ -78,7 +78,8 @@ static unsigned char *ule_where = ule_hist, ule_dump;
 
 static void hexdump(const unsigned char *buf, unsigned short len)
 {
-	print_hex_dump_debug("", DUMP_PREFIX_OFFSET, 16, 1, buf, len, true);
+	print_hex_dump_debug("", DUMP_PREFIX_OFFSET, 16, 1, buf, len,
+			     DUMP_FLAG_ASCII);
 }
 #endif
 

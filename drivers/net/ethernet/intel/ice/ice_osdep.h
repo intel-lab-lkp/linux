@@ -42,7 +42,7 @@ struct device *ice_hw_to_dev(struct ice_hw *hw);
 #define ice_debug_array(hw, type, rowsize, groupsize, buf, len) \
 	print_hex_dump_debug(KBUILD_MODNAME " ",		\
 			     DUMP_PREFIX_OFFSET, rowsize,	\
-			     groupsize, buf, len, false)
+			     groupsize, buf, len, 0)
 #else
 #define ice_debug(hw, type, fmt, args...)			\
 do {								\
@@ -57,7 +57,7 @@ do {								\
 		print_hex_dump_debug(KBUILD_MODNAME,		\
 				     DUMP_PREFIX_OFFSET,	\
 				     rowsize, groupsize, buf,	\
-				     len, false);		\
+				     len, 0);			\
 } while (0)
 #else
 #define ice_debug_array(hw, type, rowsize, groupsize, buf, len) \

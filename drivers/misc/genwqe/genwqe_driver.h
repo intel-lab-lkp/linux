@@ -63,7 +63,7 @@ static inline void genwqe_hexdump(struct pci_dev *pci_dev,
 		  GENWQE_DEVNAME, pci_name(pci_dev));
 
 	print_hex_dump_debug(prefix, DUMP_PREFIX_OFFSET, 16, 1, buff,
-			     size, true);
+			     size, DUMP_FLAG_ASCII);
 }
 
 #endif	/* __GENWQE_DRIVER_H__ */

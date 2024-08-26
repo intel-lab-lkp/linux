@@ -643,7 +643,7 @@ static void port100_recv_response(struct urb *urb)
 	}
 
 	print_hex_dump_debug("PORT100 RX: ", DUMP_PREFIX_NONE, 16, 1, in_frame,
-			     port100_rx_frame_size(in_frame), false);
+			     port100_rx_frame_size(in_frame), 0);
 
 	if (!port100_rx_frame_is_cmd_response(dev, in_frame)) {
 		nfc_err(&dev->interface->dev,
@@ -778,7 +778,7 @@ static int port100_send_frame_async(struct port100 *dev,
 	dev->in_urb->transfer_buffer_length = in_len;
 
 	print_hex_dump_debug("PORT100 TX: ", DUMP_PREFIX_NONE, 16, 1,
-			     out->data, out->len, false);
+			     out->data, out->len, 0);
 
 	rc = usb_submit_urb(dev->out_urb, GFP_KERNEL);
 	if (rc)

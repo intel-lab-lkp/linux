@@ -90,7 +90,7 @@ static void greth_set_multicast_list(struct net_device *dev);
 static void greth_print_rx_packet(void *addr, int len)
 {
 	print_hex_dump(KERN_DEBUG, "RX: ", DUMP_PREFIX_OFFSET, 16, 1,
-			addr, len, true);
+			addr, len, DUMP_FLAG_ASCII);
 }
 
 static void greth_print_tx_packet(struct sk_buff *skb)
@@ -104,13 +104,14 @@ static void greth_print_tx_packet(struct sk_buff *skb)
 		length = skb_headlen(skb);
 
 	print_hex_dump(KERN_DEBUG, "TX: ", DUMP_PREFIX_OFFSET, 16, 1,
-			skb->data, length, true);
+			skb->data, length, DUMP_FLAG_ASCII);
 
 	for (i = 0; i < skb_shinfo(skb)->nr_frags; i++) {
 
 		print_hex_dump(KERN_DEBUG, "TX: ", DUMP_PREFIX_OFFSET, 16, 1,
 			       skb_frag_address(&skb_shinfo(skb)->frags[i]),
-			       skb_frag_size(&skb_shinfo(skb)->frags[i]), true);
+			       skb_frag_size(&skb_shinfo(skb)->frags[i]),
+			       DUMP_FLAG_ASCII);
 	}
 }
 

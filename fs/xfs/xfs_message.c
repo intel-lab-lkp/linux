@@ -107,7 +107,8 @@ assfail(
 void
 xfs_hex_dump(const void *p, int length)
 {
-	print_hex_dump(KERN_ALERT, "", DUMP_PREFIX_OFFSET, 16, 1, p, length, 1);
+	print_hex_dump(KERN_ALERT, "", DUMP_PREFIX_OFFSET, 16, 1, p, length,
+		       DUMP_FLAG_ASCII);
 }
 
 void

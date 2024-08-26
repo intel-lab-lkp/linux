@@ -809,7 +809,7 @@ static void nicvf_rcv_pkt_handler(struct net_device *netdev,
 	if (netif_msg_pktdata(nic)) {
 		netdev_info(nic->netdev, "skb 0x%p, len=%d\n", skb, skb->len);
 		print_hex_dump(KERN_INFO, "", DUMP_PREFIX_OFFSET, 16, 1,
-			       skb->data, skb->len, true);
+			       skb->data, skb->len, DUMP_FLAG_ASCII);
 	}
 
 	/* If error packet, drop it here */

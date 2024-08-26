@@ -1240,7 +1240,7 @@ static int qedf_xmit(struct fc_lport *lport, struct fc_frame *fp)
 	    vlan_tci);
 	if (qedf_dump_frames)
 		print_hex_dump(KERN_WARNING, "fcoe: ", DUMP_PREFIX_OFFSET, 16,
-		    1, skb->data, skb->len, false);
+		    1, skb->data, skb->len, 0);
 	rc = qed_ops->ll2->start_xmit(qedf->cdev, skb, 0);
 	if (rc) {
 		QEDF_ERR(&qedf->dbg_ctx, "start_xmit failed rc = %d.\n", rc);
@@ -2612,7 +2612,7 @@ static void qedf_recv_frame(struct qedf_ctx *qedf,
 	    fh->fh_type);
 	if (qedf_dump_frames)
 		print_hex_dump(KERN_WARNING, "fcoe: ", DUMP_PREFIX_OFFSET, 16,
-		    1, skb->data, skb->len, false);
+		    1, skb->data, skb->len, 0);
 	fc_exch_recv(lport, fp);
 }
 

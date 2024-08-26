@@ -92,7 +92,7 @@ extern u32 wl12xx_debug_level;
 					DUMP_PREFIX_OFFSET, 16, 1,	      \
 					buf,				      \
 					min_t(size_t, len, DEBUG_DUMP_LIMIT), \
-					true);				      \
+					DUMP_FLAG_ASCII);		      \
 	} while (0)
 
 #endif /* __DEBUG_H__ */

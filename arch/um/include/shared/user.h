@@ -44,7 +44,8 @@ extern int _printk(const char *fmt, ...)
 	__attribute__ ((format (printf, 1, 2)));
 extern void print_hex_dump(const char *level, const char *prefix_str,
 			   int prefix_type, int rowsize, int groupsize,
-			   const void *buf, size_t len, _Bool ascii);
+			   const void *buf, size_t len,
+			   unsigned int flags);
 #else
 static inline int printk(const char *fmt, ...)
 {
@@ -52,7 +53,8 @@ static inline int printk(const char *fmt, ...)
 }
 static inline void print_hex_dump(const char *level, const char *prefix_str,
 				  int prefix_type, int rowsize, int groupsize,
-				  const void *buf, size_t len, _Bool ascii)
+				  const void *buf, size_t len,
+				  unsigned int flags)
 {
 }
 #endif

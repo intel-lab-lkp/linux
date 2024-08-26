@@ -181,7 +181,7 @@ static void efuse_debug_dump(struct rtw_dev *rtwdev,
 
 	rtw_dbg(rtwdev, RTW_DBG_EFUSE, "EFUSE raw logical map:\n");
 	print_hex_dump(KERN_DEBUG, "", DUMP_PREFIX_OFFSET, 16, 1,
-		       (u8 *)map, sizeof(struct rtw8723x_efuse), false);
+		       (u8 *)map, sizeof(struct rtw8723x_efuse), 0);
 	rtw_dbg(rtwdev, RTW_DBG_EFUSE, "Parsed rtw8723x EFUSE data:\n");
 	DBG_EFUSE_VAL(rtwdev, map, rtl_id);
 	DBG_EFUSE_VAL(rtwdev, map, afe);

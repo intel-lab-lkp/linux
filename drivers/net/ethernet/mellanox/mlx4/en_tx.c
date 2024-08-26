@@ -409,7 +409,7 @@ static void mlx4_en_handle_err_cqe(struct mlx4_en_priv *priv, struct mlx4_err_cq
 	en_err(priv, "CQE error - cqn 0x%x, ci 0x%x, vendor syndrome: 0x%x syndrome: 0x%x\n",
 	       ring->sp_cqn, cqe_index, err_cqe->vendor_err_syndrome, err_cqe->syndrome);
 	print_hex_dump(KERN_WARNING, "", DUMP_PREFIX_OFFSET, 16, 1, err_cqe, sizeof(*err_cqe),
-		       false);
+		       0);
 
 	wqe_index = be16_to_cpu(err_cqe->wqe_index) & ring->size_mask;
 	tx_info = &ring->tx_info[wqe_index];
@@ -417,7 +417,8 @@ static void mlx4_en_handle_err_cqe(struct mlx4_en_priv *priv, struct mlx4_err_cq
 	en_err(priv, "Related WQE - qpn 0x%x, wqe index 0x%x, wqe size 0x%x\n", ring->qpn,
 	       wqe_index, desc_size);
 	tx_desc = ring->buf + (wqe_index << LOG_TXBB_SIZE);
-	print_hex_dump(KERN_WARNING, "", DUMP_PREFIX_OFFSET, 16, 1, tx_desc, desc_size, false);
+	print_hex_dump(KERN_WARNING, "", DUMP_PREFIX_OFFSET, 16, 1, tx_desc, desc_size,
+		       0);
 
 	if (test_and_set_bit(MLX4_EN_STATE_FLAG_RESTARTING, &priv->state))
 		return;

@@ -271,7 +271,7 @@ bool ionic_notifyq_service(struct ionic_cq *cq)
 
 	dev_dbg(lif->ionic->dev, "notifyq event:\n");
 	dynamic_hex_dump("event ", DUMP_PREFIX_OFFSET, 16, 1,
-			 comp, sizeof(*comp), true);
+			 comp, sizeof(*comp), DUMP_FLAG_ASCII);
 
 	switch (le16_to_cpu(comp->event.ecode)) {
 	case IONIC_EVENT_LINK_CHANGE:
@@ -327,7 +327,8 @@ bool ionic_adminq_service(struct ionic_cq *cq)
 
 			dev_dbg(q->dev, "comp admin queue command:\n");
 			dynamic_hex_dump("comp ", DUMP_PREFIX_OFFSET, 16, 1,
-					 &ctx->comp, sizeof(ctx->comp), true);
+					 &ctx->comp, sizeof(ctx->comp),
+					 DUMP_FLAG_ASCII);
 			complete_all(&ctx->work);
 			desc_info->ctx = NULL;
 		}
@@ -398,7 +399,7 @@ int ionic_adminq_post(struct ionic_lif *lif, struct ionic_admin_ctx *ctx)
 
 	dev_dbg(&lif->netdev->dev, "post admin queue command:\n");
 	dynamic_hex_dump("cmd ", DUMP_PREFIX_OFFSET, 16, 1,
-			 &ctx->cmd, sizeof(ctx->cmd), true);
+			 &ctx->cmd, sizeof(ctx->cmd), DUMP_FLAG_ASCII);
 
 	ionic_q_post(q, true);
 

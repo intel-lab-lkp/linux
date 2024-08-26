@@ -2945,7 +2945,7 @@ static inline void dump_tx_ring_desc(struct qlcnic_host_tx_ring *tx_ring)
 		pr_info("TX Desc: %d\n", i);
 		print_hex_dump(KERN_INFO, "TX: ", DUMP_PREFIX_OFFSET, 16, 1,
 			       &tx_ring->desc_head[i],
-			       sizeof(struct cmd_desc_type0), true);
+			       sizeof(struct cmd_desc_type0), DUMP_FLAG_ASCII);
 	}
 }
 

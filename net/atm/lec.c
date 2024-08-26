@@ -256,7 +256,8 @@ static netdev_tx_t lec_start_xmit(struct sk_buff *skb,
 	printk(KERN_DEBUG "%s: send datalen:%ld lecid:%4.4x\n",
 	       dev->name, skb->len, priv->lecid);
 	print_hex_dump(KERN_DEBUG, "", DUMP_OFFSET, 16, 1,
-		       skb->data, min(skb->len, MAX_DUMP_SKB), true);
+		       skb->data, min(skb->len, MAX_DUMP_SKB),
+		       DUMP_FLAG_ASCII);
 #endif /* DUMP_PACKETS >= 1 */
 
 	/* Minimum ethernet-frame size */
@@ -601,7 +602,8 @@ static void lec_push(struct atm_vcc *vcc, struct sk_buff *skb)
 	printk(KERN_DEBUG "%s: rcv datalen:%ld lecid:%4.4x\n",
 	       dev->name, skb->len, priv->lecid);
 	print_hex_dump(KERN_DEBUG, "", DUMP_OFFSET, 16, 1,
-		       skb->data, min(MAX_SKB_DUMP, skb->len), true);
+		       skb->data, min(MAX_SKB_DUMP, skb->len),
+		       DUMP_FLAG_ASCII);
 #endif /* DUMP_PACKETS > 0 */
 	if (memcmp(skb->data, lec_ctrl_magic, 4) == 0) {
 				/* Control frame, to daemon */

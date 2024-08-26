@@ -2206,10 +2206,11 @@ static void artpec6_crypto_complete_aead(struct crypto_async_request *req)
 				  authsize)) {
 			pr_debug("***EBADMSG:\n");
 			print_hex_dump_debug("ref:", DUMP_PREFIX_ADDRESS, 32, 1,
-					     input_tag, authsize, true);
+					     input_tag, authsize,
+					     DUMP_FLAG_ASCII);
 			print_hex_dump_debug("out:", DUMP_PREFIX_ADDRESS, 32, 1,
 					     req_ctx->decryption_tag,
-					     authsize, true);
+					     authsize, DUMP_FLAG_ASCII);
 
 			result = -EBADMSG;
 		}

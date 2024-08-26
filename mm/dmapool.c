@@ -109,7 +109,7 @@ static void pool_check_block(struct dma_pool *pool, struct dma_block *block,
 		 * POOL_POISON_FREED
 		 */
 		print_hex_dump(KERN_ERR, "", DUMP_PREFIX_OFFSET, 16, 1,
-				data, pool->size, 1);
+				data, pool->size, DUMP_FLAG_ASCII);
 		break;
 	}
 

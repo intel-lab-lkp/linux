@@ -98,7 +98,7 @@ static void __init unmarshal_key_value_pairs(struct dev_header *dev_header,
 		if (dump_properties) {
 			dev_info(dev, "property: %s\n", key);
 			print_hex_dump(KERN_INFO, pr_fmt(), DUMP_PREFIX_OFFSET,
-				16, 1, entry_data, entry_len, true);
+				16, 1, entry_data, entry_len, DUMP_FLAG_ASCII);
 		}
 
 		ptr += key_len + val_len;
@@ -108,7 +108,7 @@ static void __init unmarshal_key_value_pairs(struct dev_header *dev_header,
 		dev_err(dev, "got %d device properties, expected %u\n", i,
 			dev_header->prop_count);
 		print_hex_dump(KERN_ERR, pr_fmt(), DUMP_PREFIX_OFFSET,
-			16, 1, dev_header, dev_header->len, true);
+			16, 1, dev_header, dev_header->len, DUMP_FLAG_ASCII);
 		return;
 	}
 
@@ -141,7 +141,8 @@ static int __init unmarshal_devices(struct properties_header *properties)
 			pr_err("device path parse error %ld at %#zx:\n",
 			       PTR_ERR(dev), (void *)ptr - (void *)dev_header);
 			print_hex_dump(KERN_ERR, pr_fmt(), DUMP_PREFIX_OFFSET,
-			       16, 1, dev_header, dev_header->len, true);
+			       16, 1, dev_header, dev_header->len,
+			       DUMP_FLAG_ASCII);
 			dev = NULL;
 			goto skip_device;
 		}
@@ -211,12 +212,12 @@ static int __init map_properties(void)
 		if (properties->version != 1) {
 			pr_err("unsupported version:\n");
 			print_hex_dump(KERN_ERR, pr_fmt(), DUMP_PREFIX_OFFSET,
-			       16, 1, properties, data_len, true);
+			       16, 1, properties, data_len, DUMP_FLAG_ASCII);
 			ret = -ENOTSUPP;
 		} else if (properties->len != data_len) {
 			pr_err("length mismatch, expected %u\n", data_len);
 			print_hex_dump(KERN_ERR, pr_fmt(), DUMP_PREFIX_OFFSET,
-			       16, 1, properties, data_len, true);
+			       16, 1, properties, data_len, DUMP_FLAG_ASCII);
 			ret = -EINVAL;
 		} else
 			ret = unmarshal_devices(properties);

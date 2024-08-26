@@ -119,9 +119,9 @@ __check_eq_u32_array(const char *srcfile, unsigned int line,
 	if (memcmp(exp_arr, arr, len*sizeof(*arr))) {
 		pr_warn("[%s:%u] array contents differ\n", srcfile, line);
 		print_hex_dump(KERN_WARNING, "  exp:  ", DUMP_PREFIX_OFFSET,
-			       32, 4, exp_arr, exp_len*sizeof(*exp_arr), false);
+			       32, 4, exp_arr, exp_len*sizeof(*exp_arr), 0);
 		print_hex_dump(KERN_WARNING, "  got:  ", DUMP_PREFIX_OFFSET,
-			       32, 4, arr, len*sizeof(*arr), false);
+			       32, 4, arr, len*sizeof(*arr), 0);
 		return false;
 	}
 

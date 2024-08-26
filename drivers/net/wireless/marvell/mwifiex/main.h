@@ -202,7 +202,7 @@ do {								\
 	if ((adapter)->debug_mask & MWIFIEX_DBG_##dbg_mask)	\
 		print_hex_dump(KERN_DEBUG, str,			\
 			       DUMP_PREFIX_OFFSET, 16, 1,	\
-			       buf, len, false);		\
+			       buf, len, 0);			\
 } while (0)
 
 /** Min BGSCAN interval 15 second */

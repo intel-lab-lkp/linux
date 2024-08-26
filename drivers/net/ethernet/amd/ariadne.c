@@ -585,7 +585,7 @@ static netdev_tx_t ariadne_start_xmit(struct sk_buff *skb,
 #ifdef DEBUG
 	print_hex_dump(KERN_DEBUG, "tx_buff: ", DUMP_PREFIX_OFFSET, 16, 1,
 		       (void *)priv->tx_buff[entry],
-		       skb->len > 64 ? 64 : skb->len, true);
+		       skb->len > 64 ? 64 : skb->len, DUMP_FLAG_ASCII);
 #endif
 
 	priv->tx_ring[entry]->TMD1 = (priv->tx_ring[entry]->TMD1 & 0xff00)

@@ -358,7 +358,7 @@ static struct rsa_edesc *rsa_edesc_alloc(struct akcipher_request *req,
 
 	print_hex_dump_debug("caampkc sec4_sg@" __stringify(__LINE__) ": ",
 			     DUMP_PREFIX_ADDRESS, 16, 4, edesc->sec4_sg,
-			     edesc->sec4_sg_bytes, 1);
+			     edesc->sec4_sg_bytes, DUMP_FLAG_ASCII);
 
 	return edesc;
 

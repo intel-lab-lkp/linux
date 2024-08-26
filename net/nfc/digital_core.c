@@ -129,7 +129,7 @@ static void digital_wq_cmd_complete(struct work_struct *work)
 
 	if (!IS_ERR(cmd->resp))
 		print_hex_dump_debug("DIGITAL RX: ", DUMP_PREFIX_NONE, 16, 1,
-				     cmd->resp->data, cmd->resp->len, false);
+				     cmd->resp->data, cmd->resp->len, 0);
 
 	cmd->cmd_cb(ddev, cmd->cb_context, cmd->resp);
 
@@ -173,7 +173,7 @@ static void digital_wq_cmd(struct work_struct *work)
 
 	if (cmd->req)
 		print_hex_dump_debug("DIGITAL TX: ", DUMP_PREFIX_NONE, 16, 1,
-				     cmd->req->data, cmd->req->len, false);
+				     cmd->req->data, cmd->req->len, 0);
 
 	switch (cmd->type) {
 	case DIGITAL_CMD_IN_SEND:

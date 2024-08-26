@@ -3326,7 +3326,8 @@ static int verify_offload_pedit_fields(struct mlx5e_priv *priv,
 			NL_SET_ERR_MSG_MOD(extack, "attempt to offload an unsupported field");
 			netdev_warn(priv->netdev, "attempt to offload an unsupported field (cmd %d)\n", cmd);
 			print_hex_dump(KERN_WARNING, "mask: ", DUMP_PREFIX_ADDRESS,
-				       16, 1, cmd_masks, sizeof(zero_masks), true);
+				       16, 1, cmd_masks, sizeof(zero_masks),
+				       DUMP_FLAG_ASCII);
 			return -EOPNOTSUPP;
 		}
 	}

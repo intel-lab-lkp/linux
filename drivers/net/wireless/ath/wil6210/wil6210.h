@@ -1162,19 +1162,22 @@ void wil_get_board_file(struct wil6210_priv *wil, char *buf, size_t len);
 			  groupsize, buf, len, ascii)		\
 			  print_hex_dump_debug("DBG[TXRX]" prefix_str,\
 					 prefix_type, rowsize,	\
-					 groupsize, buf, len, ascii)
+					 groupsize, buf, len,	\
+					 ascii ? DUMP_FLAG_ASCII : 0)
 
 #define wil_hex_dump_wmi(prefix_str, prefix_type, rowsize,	\
 			 groupsize, buf, len, ascii)		\
 			 print_hex_dump_debug("DBG[ WMI]" prefix_str,\
 					prefix_type, rowsize,	\
-					groupsize, buf, len, ascii)
+					groupsize, buf, len,	\
+					ascii ? DUMP_FLAG_ASCII : 0)
 
 #define wil_hex_dump_misc(prefix_str, prefix_type, rowsize,	\
 			  groupsize, buf, len, ascii)		\
 			  print_hex_dump_debug("DBG[MISC]" prefix_str,\
 					prefix_type, rowsize,	\
-					groupsize, buf, len, ascii)
+					groupsize, buf, len,	\
+					ascii ? DUMP_FLAG_ASCII : 0)
 #else /* defined(CONFIG_DYNAMIC_DEBUG) */
 static inline
 void wil_hex_dump_txrx(const char *prefix_str, int prefix_type, int rowsize,

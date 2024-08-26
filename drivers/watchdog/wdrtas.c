@@ -167,7 +167,7 @@ static void wdrtas_timer_keepalive(void)
 		if (result == 0)
 			print_hex_dump(KERN_INFO, "dumping event, data: ",
 				DUMP_PREFIX_OFFSET, 16, 1,
-				wdrtas_logbuffer, WDRTAS_LOGBUFFER_LEN, false);
+				wdrtas_logbuffer, WDRTAS_LOGBUFFER_LEN, 0);
 	} while (result == 0);
 }
 

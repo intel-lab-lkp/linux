@@ -532,7 +532,8 @@ int acpi_nfit_ctl(struct nvdimm_bus_descriptor *nd_desc, struct nvdimm *nvdimm,
 	if (payload_dumpable(nvdimm, func))
 		print_hex_dump_debug("nvdimm in  ", DUMP_PREFIX_OFFSET, 4, 4,
 				in_buf.buffer.pointer,
-				min_t(u32, 256, in_buf.buffer.length), true);
+				min_t(u32, 256, in_buf.buffer.length),
+				DUMP_FLAG_ASCII);
 
 	/* call the BIOS, prefer the named methods over _DSM if available */
 	if (nvdimm && cmd == ND_CMD_GET_CONFIG_SIZE
@@ -575,7 +576,8 @@ int acpi_nfit_ctl(struct nvdimm_bus_descriptor *nd_desc, struct nvdimm *nvdimm,
 			cmd_name, out_obj->buffer.length);
 	print_hex_dump_debug(cmd_name, DUMP_PREFIX_OFFSET, 4, 4,
 			out_obj->buffer.pointer,
-			min_t(u32, 128, out_obj->buffer.length), true);
+			min_t(u32, 128, out_obj->buffer.length),
+			DUMP_FLAG_ASCII);
 
 	if (call_pkg) {
 		call_pkg->nd_fw_size = out_obj->buffer.length;

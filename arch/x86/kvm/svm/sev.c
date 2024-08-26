@@ -891,7 +891,8 @@ static int sev_es_sync_vmsa(struct vcpu_svm *svm)
 	}
 
 	pr_debug("Virtual Machine Save Area (VMSA):\n");
-	print_hex_dump_debug("", DUMP_PREFIX_NONE, 16, 1, save, sizeof(*save), false);
+	print_hex_dump_debug("", DUMP_PREFIX_NONE, 16, 1, save, sizeof(*save),
+			     0);
 
 	return 0;
 }

@@ -1400,11 +1400,11 @@ static int self_check_write(struct ubi_device *ubi, const void *buf, int pnum,
 		ubi_msg(ubi, "hex dump of the original buffer from %d to %d",
 			i, i + dump_len);
 		print_hex_dump(KERN_DEBUG, "", DUMP_PREFIX_OFFSET, 32, 1,
-			       buf + i, dump_len, 1);
+			       buf + i, dump_len, DUMP_FLAG_ASCII);
 		ubi_msg(ubi, "hex dump of the read buffer from %d to %d",
 			i, i + dump_len);
 		print_hex_dump(KERN_DEBUG, "", DUMP_PREFIX_OFFSET, 32, 1,
-			       buf1 + i, dump_len, 1);
+			       buf1 + i, dump_len, DUMP_FLAG_ASCII);
 		dump_stack();
 		err = -EINVAL;
 		goto out_free;
@@ -1465,7 +1465,8 @@ int ubi_self_check_all_ff(struct ubi_device *ubi, int pnum, int offset, int len)
 fail:
 	ubi_err(ubi, "self-check failed for PEB %d", pnum);
 	ubi_msg(ubi, "hex dump of the %d-%d region", offset, offset + len);
-	print_hex_dump(KERN_DEBUG, "", DUMP_PREFIX_OFFSET, 32, 1, buf, len, 1);
+	print_hex_dump(KERN_DEBUG, "", DUMP_PREFIX_OFFSET, 32, 1, buf, len,
+		       DUMP_FLAG_ASCII);
 	err = -EINVAL;
 error:
 	dump_stack();

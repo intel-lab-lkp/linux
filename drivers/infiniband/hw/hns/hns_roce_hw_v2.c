@@ -3745,7 +3745,7 @@ static void get_cqe_status(struct hns_roce_dev *hr_dev, struct hns_roce_qp *qp,
 	ibdev_err_ratelimited(&hr_dev->ib_dev, "error cqe status 0x%x:\n",
 			      cqe_status);
 	print_hex_dump(KERN_DEBUG, "", DUMP_PREFIX_NONE, 16, 4, cqe,
-		       cq->cqe_size, false);
+		       cq->cqe_size, 0);
 	wc->vendor_err = hr_reg_read(cqe, CQE_SUB_STATUS);
 
 	/*

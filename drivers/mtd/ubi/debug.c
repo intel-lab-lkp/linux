@@ -68,7 +68,8 @@ void ubi_dump_flash(struct ubi_device *ubi, int pnum, int offset, int len)
 
 	ubi_msg(ubi, "dumping %d bytes of data from PEB %d, offset %d",
 		len, pnum, offset);
-	print_hex_dump(KERN_DEBUG, "", DUMP_PREFIX_OFFSET, 32, 1, buf, len, 1);
+	print_hex_dump(KERN_DEBUG, "", DUMP_PREFIX_OFFSET, 32, 1, buf, len,
+		       DUMP_FLAG_ASCII);
 out:
 	vfree(buf);
 	return;
@@ -90,7 +91,7 @@ void ubi_dump_ec_hdr(const struct ubi_ec_hdr *ec_hdr)
 	pr_err("\thdr_crc        %#08x\n", be32_to_cpu(ec_hdr->hdr_crc));
 	pr_err("erase counter header hexdump:\n");
 	print_hex_dump(KERN_DEBUG, "", DUMP_PREFIX_OFFSET, 32, 1,
-		       ec_hdr, UBI_EC_HDR_SIZE, 1);
+		       ec_hdr, UBI_EC_HDR_SIZE, DUMP_FLAG_ASCII);
 }
 
 /**
@@ -115,7 +116,7 @@ void ubi_dump_vid_hdr(const struct ubi_vid_hdr *vid_hdr)
 	pr_err("\thdr_crc   %08x\n", be32_to_cpu(vid_hdr->hdr_crc));
 	pr_err("Volume identifier header hexdump:\n");
 	print_hex_dump(KERN_DEBUG, "", DUMP_PREFIX_OFFSET, 32, 1,
-		       vid_hdr, UBI_VID_HDR_SIZE, 1);
+		       vid_hdr, UBI_VID_HDR_SIZE, DUMP_FLAG_ASCII);
 }
 
 /**

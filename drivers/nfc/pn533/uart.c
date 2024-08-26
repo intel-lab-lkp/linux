@@ -53,7 +53,7 @@ static int pn532_uart_send_frame(struct pn533 *dev,
 	int err;
 
 	print_hex_dump_debug("PN532_uart TX: ", DUMP_PREFIX_NONE, 16, 1,
-			     out->data, out->len, false);
+			     out->data, out->len, 0);
 
 	pn532->cur_out_buf = out;
 	if (pn532->send_wakeup) {

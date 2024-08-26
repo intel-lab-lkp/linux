@@ -241,9 +241,9 @@ static int ceph_aes_crypt(const struct ceph_crypto_key *key, bool encrypt,
 
 	/*
 	print_hex_dump(KERN_ERR, "key: ", DUMP_PREFIX_NONE, 16, 1,
-		       key->key, key->len, 1);
+		       key->key, key->len, DUMP_FLAG_ASCII);
 	print_hex_dump(KERN_ERR, " in: ", DUMP_PREFIX_NONE, 16, 1,
-		       buf, crypt_len, 1);
+		       buf, crypt_len, DUMP_FLAG_ASCII);
 	*/
 	if (encrypt)
 		ret = crypto_skcipher_encrypt(req);
@@ -257,7 +257,7 @@ static int ceph_aes_crypt(const struct ceph_crypto_key *key, bool encrypt,
 	}
 	/*
 	print_hex_dump(KERN_ERR, "out: ", DUMP_PREFIX_NONE, 16, 1,
-		       buf, crypt_len, 1);
+		       buf, crypt_len, DUMP_FLAG_ASCII);
 	*/
 
 	if (encrypt) {

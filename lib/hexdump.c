@@ -238,7 +238,8 @@ EXPORT_SYMBOL(hex_dump_to_buffer);
  * @groupsize: number of bytes to print at a time (1, 2, 4, 8; default = 1)
  * @buf: data blob to dump
  * @len: number of bytes in the @buf
- * @ascii: include ASCII after the hex output
+ * @flags: controls the output, typically %DUMP_FLAG_ASCII will print the ascii
+ * equivalent after the hex output.
  *
  * Given a buffer of u8 data, print_hex_dump() prints a hex + ASCII dump
  * to the kernel log at the specified kernel log level, with an optional
@@ -251,7 +252,7 @@ EXPORT_SYMBOL(hex_dump_to_buffer);
  *
  * E.g.:
  *   print_hex_dump(KERN_DEBUG, "raw data: ", DUMP_PREFIX_ADDRESS,
- *		    16, 1, frame->data, frame->len, true);
+ *		    16, 1, frame->data, frame->len, DUMP_FLAG_ASCII);
  *
  * Example output using %DUMP_PREFIX_OFFSET and 1-byte mode:
  * 0009ab42: 40 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f  @ABCDEFGHIJKLMNO
@@ -260,7 +261,7 @@ EXPORT_SYMBOL(hex_dump_to_buffer);
  */
 void print_hex_dump(const char *level, const char *prefix_str, int prefix_type,
 		    int rowsize, int groupsize,
-		    const void *buf, size_t len, bool ascii)
+		    const void *buf, size_t len, unsigned int flags)
 {
 	const u8 *ptr = buf;
 	int i, linelen, remaining = len;
@@ -274,7 +275,8 @@ void print_hex_dump(const char *level, const char *prefix_str, int prefix_type,
 		remaining -= rowsize;
 
 		hex_dump_to_buffer(ptr + i, linelen, rowsize, groupsize,
-				   linebuf, sizeof(linebuf), ascii);
+				   linebuf, sizeof(linebuf),
+				   flags & DUMP_FLAG_ASCII);
 
 		switch (prefix_type) {
 		case DUMP_PREFIX_ADDRESS:

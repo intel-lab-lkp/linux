@@ -328,7 +328,8 @@ bool snd_usb_validate_audio_desc(void *p, int protocol)
 	valid = validate_desc(p, protocol, audio_validators);
 	if (!valid && snd_usb_skip_validation) {
 		print_hex_dump(KERN_ERR, "USB-audio: buggy audio desc: ",
-			       DUMP_PREFIX_NONE, 16, 1, c, c[0], true);
+			       DUMP_PREFIX_NONE, 16, 1, c, c[0],
+			       DUMP_FLAG_ASCII);
 		valid = true;
 	}
 	return valid;
@@ -342,7 +343,8 @@ bool snd_usb_validate_midi_desc(void *p)
 	valid = validate_desc(p, UAC_VERSION_1, midi_validators);
 	if (!valid && snd_usb_skip_validation) {
 		print_hex_dump(KERN_ERR, "USB-audio: buggy midi desc: ",
-			       DUMP_PREFIX_NONE, 16, 1, c, c[0], true);
+			       DUMP_PREFIX_NONE, 16, 1, c, c[0],
+			       DUMP_FLAG_ASCII);
 		valid = true;
 	}
 	return valid;

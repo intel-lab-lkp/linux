@@ -74,7 +74,7 @@ enum wcn36xx_debug_mask {
 	if (wcn36xx_dbg_mask & mask)					\
 		print_hex_dump(KERN_DEBUG, pr_fmt(prefix_str),	\
 			       DUMP_PREFIX_OFFSET, 32, 1,	\
-			       buf, len, false);		\
+			       buf, len, 0);			\
 } while (0)
 
 enum wcn36xx_ampdu_state {

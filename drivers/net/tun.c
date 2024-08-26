@@ -2137,7 +2137,8 @@ static ssize_t tun_put_user(struct tun_struct *tun,
 				print_hex_dump(KERN_ERR, "tun: ",
 					       DUMP_PREFIX_NONE,
 					       16, 1, skb->head,
-					       min((int)tun16_to_cpu(tun, gso.hdr_len), 64), true);
+					       min((int)tun16_to_cpu(tun, gso.hdr_len), 64),
+					       DUMP_FLAG_ASCII);
 			}
 			WARN_ON_ONCE(1);
 			return -EINVAL;

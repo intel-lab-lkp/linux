@@ -175,7 +175,7 @@ void __dump_byte_array(const char *name, const u8 *buf, size_t len)
 	snprintf(prefix, sizeof(prefix), "%s[%zu]: ", name, len);
 
 	print_hex_dump(KERN_DEBUG, prefix, DUMP_PREFIX_ADDRESS, 16, 1, buf,
-		       len, false);
+		       len, 0);
 }
 
 static irqreturn_t cc_isr(int irq, void *dev_id)

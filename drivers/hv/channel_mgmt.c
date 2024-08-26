@@ -1098,10 +1098,10 @@ static void vmbus_onoffer(struct vmbus_channel_message_header *hdr)
 			print_hex_dump_debug("Old vmbus offer: ",
 					     DUMP_PREFIX_OFFSET, 16, 4,
 					     &oldchannel->offermsg, offer_sz,
-					     false);
+					     0);
 			print_hex_dump_debug("New vmbus offer: ",
 					     DUMP_PREFIX_OFFSET, 16, 4,
-					     offer, offer_sz, false);
+					     offer, offer_sz, 0);
 
 			/* Fix up the old channel. */
 			vmbus_setup_channel_state(oldchannel, offer);

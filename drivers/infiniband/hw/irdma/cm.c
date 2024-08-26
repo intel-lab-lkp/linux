@@ -394,7 +394,7 @@ static struct irdma_puda_buf *irdma_form_ah_cm_frame(struct irdma_cm_node *cm_no
 	refcount_set(&sqbuf->refcount, 1);
 
 	print_hex_dump_debug("ILQ: TRANSMIT ILQ BUFFER", DUMP_PREFIX_OFFSET,
-			     16, 8, sqbuf->mem.va, sqbuf->totallen, false);
+			     16, 8, sqbuf->mem.va, sqbuf->totallen, 0);
 
 	return sqbuf;
 }
@@ -582,7 +582,7 @@ static struct irdma_puda_buf *irdma_form_uda_cm_frame(struct irdma_cm_node *cm_n
 	refcount_set(&sqbuf->refcount, 1);
 
 	print_hex_dump_debug("ILQ: TRANSMIT ILQ BUFFER", DUMP_PREFIX_OFFSET,
-			     16, 8, sqbuf->mem.va, sqbuf->totallen, false);
+			     16, 8, sqbuf->mem.va, sqbuf->totallen, 0);
 	return sqbuf;
 }
 
@@ -3150,7 +3150,7 @@ void irdma_receive_ilq(struct irdma_sc_vsi *vsi, struct irdma_puda_buf *rbuf)
 	/* if vlan, then maclen = 18 else 14 */
 	iph = (struct iphdr *)rbuf->iph;
 	print_hex_dump_debug("ILQ: RECEIVE ILQ BUFFER", DUMP_PREFIX_OFFSET,
-			     16, 8, rbuf->mem.va, rbuf->totallen, false);
+			     16, 8, rbuf->mem.va, rbuf->totallen, 0);
 	if (iwdev->rf->sc_dev.hw_attrs.uk_attrs.hw_rev >= IRDMA_GEN_2) {
 		if (rbuf->vlan_valid) {
 			vtag = rbuf->vlan_id;

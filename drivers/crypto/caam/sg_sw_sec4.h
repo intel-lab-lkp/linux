@@ -37,7 +37,8 @@ static inline void dma_to_sec4_sg_one(struct sec4_sg_entry *sec4_sg_ptr,
 	}
 
 	print_hex_dump_debug("sec4_sg_ptr@: ", DUMP_PREFIX_ADDRESS, 16, 4,
-			     sec4_sg_ptr, sizeof(struct sec4_sg_entry), 1);
+			     sec4_sg_ptr, sizeof(struct sec4_sg_entry),
+			     DUMP_FLAG_ASCII);
 }
 
 /*

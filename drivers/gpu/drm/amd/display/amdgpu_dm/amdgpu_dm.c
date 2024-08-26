@@ -7339,7 +7339,7 @@ static int fill_hdr_info_packet(const struct drm_connector_state *state,
 	out->valid = true;
 
 	print_hex_dump(KERN_DEBUG, "HDR SB:", DUMP_PREFIX_NONE, 16, 1, out->sb,
-		       sizeof(out->sb), false);
+		       sizeof(out->sb), 0);
 
 	return 0;
 }

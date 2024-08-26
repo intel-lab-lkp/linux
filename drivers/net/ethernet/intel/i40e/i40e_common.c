@@ -184,7 +184,7 @@ void i40e_debug_aq(struct i40e_hw *hw, enum i40e_debug_mask mask, void *desc,
 			 hw->bus.func);
 
 		print_hex_dump(KERN_INFO, prefix, DUMP_PREFIX_OFFSET,
-			       16, 1, buf, len, false);
+			       16, 1, buf, len, 0);
 	}
 }
 

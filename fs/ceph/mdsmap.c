@@ -399,7 +399,7 @@ corrupt:
 	pr_err_client(cl, "corrupt mdsmap\n");
 	print_hex_dump(KERN_DEBUG, "mdsmap: ",
 		       DUMP_PREFIX_OFFSET, 16, 1,
-		       start, end - start, true);
+		       start, end - start, DUMP_FLAG_ASCII);
 out_err:
 	ceph_mdsmap_destroy(m);
 	return ERR_PTR(err);

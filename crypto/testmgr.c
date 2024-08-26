@@ -159,7 +159,7 @@ static void hexdump(unsigned char *buf, unsigned int len)
 {
 	print_hex_dump(KERN_CONT, "", DUMP_PREFIX_OFFSET,
 			16, 1,
-			buf, len, false);
+			buf, len, 0);
 }
 
 static int __testmgr_alloc_buf(char *buf[XBUFSIZE], int order)

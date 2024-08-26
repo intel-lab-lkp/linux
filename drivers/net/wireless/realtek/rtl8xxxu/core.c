@@ -1897,7 +1897,7 @@ static void rtl8xxxu_dump_efuse(struct rtl8xxxu_priv *priv)
 		 priv->chip_name, EFUSE_MAP_LEN);
 
 	print_hex_dump(KERN_INFO, "", DUMP_PREFIX_OFFSET, 16, 1,
-		       priv->efuse_wifi.raw, EFUSE_MAP_LEN, true);
+		       priv->efuse_wifi.raw, EFUSE_MAP_LEN, DUMP_FLAG_ASCII);
 }
 
 void rtl8xxxu_reset_8051(struct rtl8xxxu_priv *priv)
@@ -6228,7 +6228,7 @@ static void rtl8723bu_handle_c2h(struct rtl8xxxu_priv *priv,
 		dev_info(dev, "Unhandled C2H event %02x seq %02x\n",
 			 c2h->id, c2h->seq);
 		print_hex_dump(KERN_INFO, "C2H content: ", DUMP_PREFIX_NONE,
-			       16, 1, c2h->raw.payload, len, false);
+			       16, 1, c2h->raw.payload, len, 0);
 		break;
 	}
 

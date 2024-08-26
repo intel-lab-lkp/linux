@@ -302,7 +302,7 @@ void ubifs_dump_node(const struct ubifs_info *c, const void *node, int node_len)
 	if (le32_to_cpu(ch->magic) != UBIFS_NODE_MAGIC) {
 		pr_err("Not a node, first %zu bytes:", UBIFS_CH_SZ);
 		print_hex_dump(KERN_ERR, "", DUMP_PREFIX_OFFSET, 32, 1,
-			       (void *)node, UBIFS_CH_SZ, 1);
+			       (void *)node, UBIFS_CH_SZ, DUMP_FLAG_ASCII);
 		return;
 	}
 

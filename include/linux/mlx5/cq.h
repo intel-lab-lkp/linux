@@ -200,7 +200,7 @@ static inline void mlx5_dump_err_cqe(struct mlx5_core_dev *dev,
 				     struct mlx5_err_cqe *err_cqe)
 {
 	print_hex_dump(KERN_WARNING, "", DUMP_PREFIX_OFFSET, 16, 1, err_cqe,
-		       sizeof(*err_cqe), false);
+		       sizeof(*err_cqe), 0);
 }
 int mlx5_debug_cq_add(struct mlx5_core_dev *dev, struct mlx5_core_cq *cq);
 void mlx5_debug_cq_remove(struct mlx5_core_dev *dev, struct mlx5_core_cq *cq);

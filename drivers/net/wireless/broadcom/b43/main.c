@@ -1918,7 +1918,7 @@ static void handle_irq_ucode_debug(struct b43_wldev *dev)
 		}
 		b43info(dev->wl, "Shared memory dump:\n");
 		print_hex_dump(KERN_INFO, "", DUMP_PREFIX_OFFSET,
-			       16, 2, buf, 4096, 1);
+			       16, 2, buf, 4096, DUMP_FLAG_ASCII);
 		kfree(buf);
 		break;
 	case B43_DEBUGIRQ_DUMP_REGS:

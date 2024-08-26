@@ -95,7 +95,7 @@ out:
 out_bad:
 	wil_dbg_misc(wil, "Unsupported coalescing params. Raw command:\n");
 	print_hex_dump_debug("DBG[MISC] coal ", DUMP_PREFIX_OFFSET, 16, 4,
-			     cp, sizeof(*cp), false);
+			     cp, sizeof(*cp), 0);
 	mutex_unlock(&wil->mutex);
 	return -EINVAL;
 }

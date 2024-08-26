@@ -247,7 +247,7 @@ void cal_quickdump_regs(struct cal_dev *cal)
 	cal_info(cal, "CAL Registers @ 0x%pa:\n", &cal->res->start);
 	print_hex_dump(KERN_INFO, "", DUMP_PREFIX_OFFSET, 16, 4,
 		       (__force const void *)cal->base,
-		       resource_size(cal->res), false);
+		       resource_size(cal->res), 0);
 
 	for (i = 0; i < cal->data->num_csi2_phy; ++i) {
 		struct cal_camerarx *phy = cal->phy[i];
@@ -257,7 +257,7 @@ void cal_quickdump_regs(struct cal_dev *cal)
 		print_hex_dump(KERN_INFO, "", DUMP_PREFIX_OFFSET, 16, 4,
 			       (__force const void *)phy->base,
 			       resource_size(phy->res),
-			       false);
+			       0);
 	}
 }
 

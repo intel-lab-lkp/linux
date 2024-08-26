@@ -796,7 +796,7 @@ int skl_ipc_init_instance(struct sst_generic_ipc *ipc,
 	u16 param_block_size = msg->param_data_size / sizeof(u32);
 
 	print_hex_dump_debug("Param data:", DUMP_PREFIX_NONE,
-		16, 4, buffer, param_block_size, false);
+		16, 4, buffer, param_block_size, 0);
 
 	header.primary = IPC_MSG_TARGET(IPC_MOD_MSG);
 	header.primary |= IPC_MSG_DIR(IPC_MSG_REQUEST);
