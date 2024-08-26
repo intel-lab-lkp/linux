@@ -429,8 +429,11 @@ static int risp_probe_resources(struct rcar_isp *isp,
 }
 
 static const struct of_device_id risp_of_id_table[] = {
+	/* Keep to be compatible with old DTS files. */
 	{ .compatible = "renesas,r8a779a0-isp" },
+	/* Keep to be compatible with old DTS files. */
 	{ .compatible = "renesas,r8a779g0-isp" },
+	{ .compatible = "renesas,rcar-gen4-isp" },
 	{ /* sentinel */ },
 };
 MODULE_DEVICE_TABLE(of, risp_of_id_table);
