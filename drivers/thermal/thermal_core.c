@@ -420,64 +420,6 @@ static void handle_critical_trips(struct thermal_zone_device *tz,
 		tz->ops.hot(tz);
 }
 
-static void handle_thermal_trip(struct thermal_zone_device *tz,
-				struct thermal_trip_desc *td,
-				struct list_head *way_up_list,
-				struct list_head *way_down_list)
-{
-	const struct thermal_trip *trip = &td->trip;
-	int old_threshold;
-
-	if (trip->temperature == THERMAL_TEMP_INVALID)
-		return;
-
-	/*
-	 * If the trip temperature or hysteresis has been updated recently,
-	 * the threshold needs to be computed again using the new values.
-	 * However, its initial value still reflects the old ones and that
-	 * is what needs to be compared with the previous zone temperature
-	 * to decide which action to take.
-	 */
-	old_threshold = td->threshold;
-	td->threshold = trip->temperature;
-
-	if (tz->last_temperature >= old_threshold &&
-	    tz->last_temperature != THERMAL_TEMP_INIT) {
-		/*
-		 * Mitigation is under way, so it needs to stop if the zone
-		 * temperature falls below the low temperature of the trip.
-		 * In that case, the trip temperature becomes the new threshold.
-		 */
-		if (tz->temperature < trip->temperature - trip->hysteresis) {
-			td->notify_temp = trip->temperature - trip->hysteresis;
-			thermal_trip_move_to_sorted_list(td, way_down_list);
-
-			if (trip->type == THERMAL_TRIP_PASSIVE) {
-				tz->passive--;
-				WARN_ON(tz->passive < 0);
-			}
-		} else {
-			td->threshold -= trip->hysteresis;
-		}
-	} else if (tz->temperature >= trip->temperature) {
-		/*
-		 * There is no mitigation under way, so it needs to be started
-		 * if the zone temperature exceeds the trip one.  The new
-		 * threshold is then set to the low temperature of the trip.
-		 */
-		td->notify_temp = trip->temperature;
-		thermal_trip_move_to_sorted_list(td, way_up_list);
-
-		td->threshold -= trip->hysteresis;
-
-		if (trip->type == THERMAL_TRIP_PASSIVE)
-			tz->passive++;
-		else if (trip->type == THERMAL_TRIP_CRITICAL ||
-			 trip->type == THERMAL_TRIP_HOT)
-			handle_critical_trips(tz, trip);
-	}
-}
-
 static void thermal_zone_device_check(struct work_struct *work)
 {
 	struct thermal_zone_device *tz = container_of(work, struct
@@ -486,9 +428,16 @@ static void thermal_zone_device_check(struct work_struct *work)
 	thermal_zone_device_update(tz, THERMAL_EVENT_UNSPECIFIED);
 }
 
+static void move_trip_to_trips_above(struct thermal_trip_desc *td,
+				     struct thermal_zone_device *tz)
+{
+	td->threshold = td->trip.temperature;
+	thermal_trip_move_to_sorted_list(td, &tz->trips_above);
+}
+
 static void thermal_zone_device_init(struct thermal_zone_device *tz)
 {
-	struct thermal_trip_desc *td;
+	struct thermal_trip_desc *td, *next;
 
 	INIT_DELAYED_WORK(&tz->poll_queue, thermal_zone_device_check);
 
@@ -501,6 +450,16 @@ static void thermal_zone_device_init(struct thermal_zone_device *tz)
 
 		list_for_each_entry(instance, &td->thermal_instances, trip_node)
 			instance->initialized = false;
+	}
+	list_for_each_entry_safe(td, next, &tz->trips_invalid, list_node) {
+		if (td->trip.temperature != THERMAL_TEMP_INVALID)
+			move_trip_to_trips_above(td, tz);
+	}
+	list_for_each_entry_safe(td, next, &tz->trips_below, list_node) {
+		if (td->trip.temperature == THERMAL_TEMP_INVALID)
+			list_move(&td->list_node, &tz->trips_invalid);
+		else
+			move_trip_to_trips_above(td, tz);
 	}
 }
 
@@ -569,27 +528,71 @@ void __thermal_zone_device_update(struct thermal_zone_device *tz,
 
 	tz->notify_event = event;
 
-	for_each_trip_desc(tz, td) {
-		handle_thermal_trip(tz, td, &way_up_list, &way_down_list);
+	/* Check trips that were previously above the zone temperature. */
+	list_for_each_entry_safe(td, next, &tz->trips_above, list_node) {
+		struct thermal_trip *trip = &td->trip;
 
-		if (td->threshold <= tz->temperature && td->threshold > low)
-			low = td->threshold;
+		if (td->threshold > tz->temperature)
+			break;
 
-		if (td->threshold >= tz->temperature && td->threshold < high)
-			high = td->threshold;
+		/*
+		 * There is no mitigation under way, so it needs to be started.
+		 * Move the trip to the "crossed on the way up" list (sorted by
+		 * the old threshold) and set the new threshold to the low
+		 * temperature of the trip.
+		 */
+		thermal_trip_move_to_sorted_list(td, &way_up_list);
+		td->threshold = trip->temperature - trip->hysteresis;
+
+		if (trip->type == THERMAL_TRIP_PASSIVE)
+			tz->passive++;
+		else if (trip->type == THERMAL_TRIP_CRITICAL ||
+			 trip->type == THERMAL_TRIP_HOT)
+			handle_critical_trips(tz, trip);
 	}
+	/* Check trips that were previously below or at the zone temperature. */
+	list_for_each_entry_safe_reverse(td, next, &tz->trips_below, list_node) {
+		struct thermal_trip *trip = &td->trip;
 
-	thermal_zone_set_trips(tz, low, high);
+		if (td->threshold <= tz->temperature)
+			break;
+
+		/*
+		 * Mitigation is under way, so it needs to stop.  Move the trip
+		 * to the "crossed on the way down" list (sorted by the old
+		 * threshold) and set the new threshold to the trip temperature.
+		 */
+		thermal_trip_move_to_sorted_list(td, &way_down_list);
+		td->threshold = trip->temperature;
+
+		if (trip->type == THERMAL_TRIP_PASSIVE) {
+			tz->passive--;
+			WARN_ON(tz->passive < 0);
+		}
+	}
 
 	list_for_each_entry_safe(td, next, &way_up_list, list_node) {
 		thermal_trip_crossed(tz, &td->trip, governor, true);
-		list_del_init(&td->list_node);
+		thermal_trip_move_to_sorted_list(td, &tz->trips_below);
 	}
 
 	list_for_each_entry_safe_reverse(td, next, &way_down_list, list_node) {
 		thermal_trip_crossed(tz, &td->trip, governor, false);
-		list_del_init(&td->list_node);
+		thermal_trip_move_to_sorted_list(td, &tz->trips_above);
 	}
+
+	if (!list_empty(&tz->trips_below)) {
+		td = list_last_entry(&tz->trips_below, struct thermal_trip_desc,
+				      list_node);
+		/* Avoid checks that don't correspond to trip crossing. */
+		low = td->threshold - 1;
+	}
+	if (!list_empty(&tz->trips_above)) {
+		td = list_first_entry(&tz->trips_above, struct thermal_trip_desc,
+				      list_node);
+		high = td->threshold;
+	}
+	thermal_zone_set_trips(tz, low, high);
 
 	if (governor->manage)
 		governor->manage(tz);
@@ -1409,6 +1412,9 @@ thermal_zone_device_register_with_trips(const char *type,
 	}
 
 	INIT_LIST_HEAD(&tz->node);
+	INIT_LIST_HEAD(&tz->trips_above);
+	INIT_LIST_HEAD(&tz->trips_below);
+	INIT_LIST_HEAD(&tz->trips_invalid);
 	ida_init(&tz->ida);
 	mutex_init(&tz->lock);
 	init_completion(&tz->removal);
@@ -1432,13 +1438,7 @@ thermal_zone_device_register_with_trips(const char *type,
 	for_each_trip_desc(tz, td) {
 		td->trip = *trip++;
 		INIT_LIST_HEAD(&td->thermal_instances);
-		INIT_LIST_HEAD(&td->list_node);
-		/*
-		 * Mark all thresholds as invalid to start with even though
-		 * this only matters for the trips that start as invalid and
-		 * become valid later.
-		 */
-		td->threshold = INT_MAX;
+		list_add(&td->list_node, &tz->trips_invalid);
 	}
 
 	tz->polling_delay_jiffies = msecs_to_jiffies(polling_delay);
