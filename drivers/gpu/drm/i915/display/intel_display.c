@@ -4385,21 +4385,34 @@ compute_baseline_pipe_bpp(struct intel_atomic_state *state,
 			  struct intel_crtc *crtc)
 {
 	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
-	struct intel_crtc_state *crtc_state =
+	struct intel_crtc_state *new_crtc_state =
 		intel_atomic_get_new_crtc_state(state, crtc);
+	struct intel_crtc_state *old_crtc_state =
+		intel_atomic_get_old_crtc_state(state, crtc);
 	struct drm_connector *connector;
 	struct drm_connector_state *connector_state;
 	int bpp, i;
 
-	if ((IS_G4X(dev_priv) || IS_VALLEYVIEW(dev_priv) ||
-	    IS_CHERRYVIEW(dev_priv)))
-		bpp = 10*3;
-	else if (DISPLAY_VER(dev_priv) >= 5)
-		bpp = 12*3;
-	else
-		bpp = 8*3;
+	/*
+	 * TODO: We don't have mechanism to communicate current bpp to
+	 * userspace -> Userspace can't request to use current bpp. Changing bpp
+	 * means full modeset. This becomes a problem when userspace wants to
+	 * avoid full modeset. Tackle this on our driver by using existing bpp
+	 * if full modeset is not allowed.
+	 */
+	if (!state->base.allow_modeset) {
+		bpp = old_crtc_state->pipe_bpp;
+	} else {
+		if ((IS_G4X(dev_priv) || IS_VALLEYVIEW(dev_priv) ||
+		     IS_CHERRYVIEW(dev_priv)))
+			bpp = 10 * 3;
+		else if (DISPLAY_VER(dev_priv) >= 5)
+			bpp = 12 * 3;
+		else
+			bpp = 8 * 3;
+	}
 
-	crtc_state->pipe_bpp = bpp;
+	new_crtc_state->pipe_bpp = bpp;
 
 	/* Clamp display bpp to connector max bpp */
 	for_each_new_connector_in_state(&state->base, connector, connector_state, i) {
@@ -4408,7 +4421,7 @@ compute_baseline_pipe_bpp(struct intel_atomic_state *state,
 		if (connector_state->crtc != &crtc->base)
 			continue;
 
-		ret = compute_sink_pipe_bpp(connector_state, crtc_state);
+		ret = compute_sink_pipe_bpp(connector_state, new_crtc_state);
 		if (ret)
 			return ret;
 	}
