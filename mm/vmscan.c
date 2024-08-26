@@ -1686,6 +1686,8 @@ static unsigned long isolate_lru_folios(unsigned long nr_to_scan,
 		 */
 		scan += nr_pages;
 
+		if (folio_test_private(folio) && !folio_test_dirty(folio))
+			goto move;
 		if (!folio_test_lru(folio))
 			goto move;
 		if (!sc->may_unmap && folio_mapped(folio))
