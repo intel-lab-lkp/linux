@@ -1861,7 +1861,7 @@ static int __init unittest_data_add(void)
 	struct device_node *unittest_data_node = NULL, *np;
 	/*
 	 * __dtbo_testcases_begin[] and __dtbo_testcases_end[] are magically
-	 * created by cmd_dt_S_dtbo in scripts/Makefile.lib
+	 * created by cmd_wrap_S_dtbo in drivers/of/unittest-data/Makefile
 	 */
 	extern uint8_t __dtbo_testcases_begin[];
 	extern uint8_t __dtbo_testcases_end[];
@@ -3525,7 +3525,7 @@ out_skip_tests:
 
 /*
  * __dtbo_##overlay_name##_begin[] and __dtbo_##overlay_name##_end[] are
- * created by cmd_dt_S_dtbo in scripts/Makefile.lib
+ * created by cmd_wrap_S_dtbo in drivers/of/unittest-data/Makefile
  */
 
 #define OVERLAY_INFO_EXTERN(overlay_name) \
@@ -3585,7 +3585,7 @@ OVERLAY_INFO_EXTERN(overlay_bad_symbol);
 OVERLAY_INFO_EXTERN(overlay_bad_unresolved);
 
 /* entries found by name */
-static struct overlay_info overlays[] = {
+static __initdata struct overlay_info overlays[] = {
 	OVERLAY_INFO(overlay_base, -9999, 0),
 	OVERLAY_INFO(overlay, 0, 0),
 	OVERLAY_INFO(overlay_0, 0, 0),

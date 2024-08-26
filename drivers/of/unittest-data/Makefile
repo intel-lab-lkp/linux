@@ -104,3 +104,23 @@ static_test_1-dtbs := static_base_1.dtb $(apply_static_overlay_1)
 static_test_2-dtbs := static_base_2.dtb $(apply_static_overlay_2)
 
 dtb-$(CONFIG_OF_OVERLAY) += static_test_1.dtb static_test_2.dtb
+
+# Generate an assembly file to wrap the output of the device tree compiler
+quiet_cmd_wrap_S_dtbo = WRAP    $@
+      cmd_wrap_S_dtbo = {					\
+		echo '\#include <asm-generic/vmlinux.lds.h>';	\
+		echo '.section .init.rodata,"a"';		\
+		echo '.balign STRUCT_ALIGNMENT';		\
+		echo '.global __dtbo_$*_begin';			\
+		echo '__dtbo_$*_begin:';			\
+		echo '.incbin "$<"';				\
+		echo '.global __dtbo_$*_end';			\
+		echo '__dtbo_$*_end:';				\
+		echo '.balign STRUCT_ALIGNMENT';		\
+	} > $@
+
+$(obj)/%.dtbo.S: $(obj)/%.dtbo FORCE
+	$(call if_changed,wrap_S_dtbo)
+
+targets += $(foreach x, dtbo.S dtbo, \
+              $(patsubst %.dtbo.o,%.$(x), $(filter %.dtbo.o, $(obj-y))))
