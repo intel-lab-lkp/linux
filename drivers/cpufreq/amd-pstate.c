@@ -1112,12 +1112,7 @@ static ssize_t show_amd_pstate_prefcore_ranking(struct cpufreq_policy *policy,
 static ssize_t show_amd_pstate_hw_prefcore(struct cpufreq_policy *policy,
 					   char *buf)
 {
-	bool hw_prefcore;
-	struct amd_cpudata *cpudata = policy->driver_data;
-
-	hw_prefcore = READ_ONCE(cpudata->hw_prefcore);
-
-	return sysfs_emit(buf, "%s\n", str_enabled_disabled(hw_prefcore));
+	return sysfs_emit(buf, "%s\n", str_enabled_disabled(amd_pstate_prefcore));
 }
 
 static ssize_t show_energy_performance_available_preferences(
