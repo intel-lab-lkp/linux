@@ -2295,11 +2295,6 @@ static struct clk_core *clk_calc_new_rates(struct clk_core *core,
 	if (IS_ERR_OR_NULL(core))
 		return NULL;
 
-	/* save parent rate, if it exists */
-	parent = old_parent = core->parent;
-	if (parent)
-		best_parent_rate = parent->rate;
-
 	clk_core_get_boundaries(core, &min_rate, &max_rate);
 
 	/* find the closest rate and parent clk/rate */
