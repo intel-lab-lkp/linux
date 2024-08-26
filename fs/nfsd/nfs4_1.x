@@ -150,6 +150,8 @@ const OPEN4_RESULT_NO_OPEN_STATEID = 0x00000010;
  */
 typedef nfstime4        fattr4_time_deleg_access;
 typedef nfstime4        fattr4_time_deleg_modify;
+pragma public 		fattr4_time_deleg_access;
+pragma public		fattr4_time_deleg_modify;
 
 
 %/*
