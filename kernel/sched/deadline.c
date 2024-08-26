@@ -60,7 +60,6 @@ static bool dl_server(struct sched_dl_entity *dl_se)
 
 static inline struct task_struct *dl_task_of(struct sched_dl_entity *dl_se)
 {
-	BUG_ON(dl_server(dl_se));
 	return container_of(dl_se, struct task_struct, dl);
 }
 
