@@ -269,3 +269,16 @@ u8 intel_dss_get_joined_pipe_mask(const struct intel_crtc_state *crtc_state)
 
 	return BIT(crtc->pipe) | crtc_state->joiner_pipes;
 }
+
+enum pipe intel_dss_get_primary_joiner_pipe(const struct intel_crtc_state *crtc_state)
+{
+	return ffs(crtc_state->joiner_pipes) - 1;
+}
+
+bool intel_dss_is_primary_joiner_pipe(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+
+	return crtc_state->joiner_pipes &&
+		crtc->pipe == intel_dss_get_primary_joiner_pipe(crtc_state);
+}

@@ -249,15 +249,10 @@ is_trans_port_sync_mode(const struct intel_crtc_state *crtc_state)
 		is_trans_port_sync_slave(crtc_state);
 }
 
-static enum pipe joiner_primary_pipe(const struct intel_crtc_state *crtc_state)
-{
-	return ffs(crtc_state->joiner_pipes) - 1;
-}
-
 u8 intel_crtc_joiner_secondary_pipes(const struct intel_crtc_state *crtc_state)
 {
 	if (crtc_state->joiner_pipes)
-		return crtc_state->joiner_pipes & ~BIT(joiner_primary_pipe(crtc_state));
+		return crtc_state->joiner_pipes & ~BIT(intel_dss_get_primary_joiner_pipe(crtc_state));
 	else
 		return 0;
 }
@@ -267,15 +262,7 @@ bool intel_crtc_is_joiner_secondary(const struct intel_crtc_state *crtc_state)
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 
 	return crtc_state->joiner_pipes &&
-		crtc->pipe != joiner_primary_pipe(crtc_state);
-}
-
-bool intel_crtc_is_joiner_primary(const struct intel_crtc_state *crtc_state)
-{
-	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
-
-	return crtc_state->joiner_pipes &&
-		crtc->pipe == joiner_primary_pipe(crtc_state);
+		crtc->pipe != intel_dss_get_primary_joiner_pipe(crtc_state);
 }
 
 static int intel_joiner_num_pipes(const struct intel_crtc_state *crtc_state)
@@ -288,7 +275,7 @@ struct intel_crtc *intel_primary_crtc(const struct intel_crtc_state *crtc_state)
 	struct drm_i915_private *i915 = to_i915(crtc_state->uapi.crtc->dev);
 
 	if (intel_crtc_is_joiner_secondary(crtc_state))
-		return intel_crtc_for_pipe(i915, joiner_primary_pipe(crtc_state));
+		return intel_crtc_for_pipe(i915, intel_dss_get_primary_joiner_pipe(crtc_state));
 	else
 		return to_intel_crtc(crtc_state->uapi.crtc);
 }
@@ -2888,7 +2875,7 @@ static void intel_joiner_adjust_pipe_src(struct intel_crtc_state *crtc_state)
 	if (num_pipes < 2)
 		return;
 
-	primary_pipe = joiner_primary_pipe(crtc_state);
+	primary_pipe = intel_dss_get_primary_joiner_pipe(crtc_state);
 	width = drm_rect_width(&crtc_state->pipe_src);
 
 	drm_rect_translate_to(&crtc_state->pipe_src,
@@ -3555,7 +3542,7 @@ static void enabled_joiner_pipes(struct drm_i915_private *dev_priv,
 		 *primary_pipes, *secondary_pipes);
 }
 
-static enum pipe get_joiner_primary_pipe(enum pipe pipe, u8 primary_pipes, u8 secondary_pipes)
+static enum pipe get_intel_dss_get_primary_joiner_pipe(enum pipe pipe, u8 primary_pipes, u8 secondary_pipes)
 {
 	if ((secondary_pipes & BIT(pipe)) == 0)
 		return pipe;
@@ -3571,7 +3558,7 @@ static u8 get_joiner_secondary_pipes(enum pipe pipe, u8 primary_pipes, u8 second
 {
 	enum pipe primary_pipe, next_primary_pipe;
 
-	primary_pipe = get_joiner_primary_pipe(pipe, primary_pipes, secondary_pipes);
+	primary_pipe = get_intel_dss_get_primary_joiner_pipe(pipe, primary_pipes, secondary_pipes);
 
 	if ((primary_pipes & BIT(primary_pipe)) == 0)
 		return 0;
@@ -3658,7 +3645,7 @@ static u8 hsw_enabled_transcoders(struct intel_crtc *crtc)
 	enabled_joiner_pipes(dev_priv, &primary_pipes, &secondary_pipes);
 	if (secondary_pipes & BIT(crtc->pipe)) {
 		cpu_transcoder = (enum transcoder)
-			get_joiner_primary_pipe(crtc->pipe, primary_pipes, secondary_pipes);
+			get_intel_dss_get_primary_joiner_pipe(crtc->pipe, primary_pipes, secondary_pipes);
 		if (transcoder_ddi_func_is_enabled(dev_priv, cpu_transcoder))
 			enabled_transcoders |= BIT(cpu_transcoder);
 	}
@@ -3798,7 +3785,7 @@ static void intel_joiner_get_config(struct intel_crtc_state *crtc_state)
 		return;
 
 	crtc_state->joiner_pipes =
-		BIT(get_joiner_primary_pipe(pipe, primary_pipes, secondary_pipes)) |
+		BIT(get_intel_dss_get_primary_joiner_pipe(pipe, primary_pipes, secondary_pipes)) |
 		get_joiner_secondary_pipes(pipe, primary_pipes, secondary_pipes);
 }
 
@@ -5982,7 +5969,7 @@ static int intel_atomic_check_joiner(struct intel_atomic_state *state,
 
 	/* sanity check */
 	if (drm_WARN_ON(&i915->drm,
-			primary_crtc->pipe != joiner_primary_pipe(primary_crtc_state)))
+			primary_crtc->pipe != intel_dss_get_primary_joiner_pipe(primary_crtc_state)))
 		return -EINVAL;
 
 	if (primary_crtc_state->joiner_pipes & ~joiner_pipes(i915)) {
@@ -6380,7 +6367,7 @@ static int intel_joiner_add_affected_crtcs(struct intel_atomic_state *state)
 	for_each_new_intel_crtc_in_state(state, crtc, crtc_state, i) {
 		/* Kill old joiner link, we may re-establish afterwards */
 		if (intel_crtc_needs_modeset(crtc_state) &&
-		    intel_crtc_is_joiner_primary(crtc_state))
+		    intel_dss_is_primary_joiner_pipe(crtc_state))
 			kill_joiner_secondaries(state, crtc);
 	}
 

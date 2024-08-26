@@ -8,6 +8,8 @@
 
 #include "linux/types.h"
 
+enum pipe;
+
 struct intel_crtc_state;
 struct intel_display;
 struct intel_encoder;
@@ -34,6 +36,8 @@ void intel_dss_get_uncompressed_joiner_pipes(struct intel_display *display,
 					     u8 *primary_pipes,
 					     u8 *secondary_pipes);
 u8 intel_dss_get_joined_pipe_mask(const struct intel_crtc_state *crtc_state);
+enum pipe intel_dss_get_primary_joiner_pipe(const struct intel_crtc_state *crtc_state);
+bool intel_dss_is_primary_joiner_pipe(const struct intel_crtc_state *crtc_state);
 
 #endif /* __INTEL_DSS_H__ */
 
