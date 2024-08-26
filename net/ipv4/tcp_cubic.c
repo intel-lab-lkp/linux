@@ -87,7 +87,7 @@ struct bictcp {
 	u32	cnt;		/* increase cwnd by 1 after ACKs */
 	u32	last_max_cwnd;	/* last maximum snd_cwnd */
 	u32	last_cwnd;	/* the last snd_cwnd */
-	u32	last_time;	/* time when updated last_cwnd */
+	u32	last_time;	/* time when updated last_cwnd (usec) */
 	u32	bic_origin_point;/* origin point of bic function */
 	u32	bic_K;		/* time to origin point
 				   from the beginning of the current epoch */
@@ -211,26 +211,28 @@ static u32 cubic_root(u64 a)
 /*
  * Compute congestion window to use.
  */
-static inline void bictcp_update(struct bictcp *ca, u32 cwnd, u32 acked)
+static void bictcp_update(struct sock *sk, u32 cwnd, u32 acked)
 {
+	const struct tcp_sock *tp = tcp_sk(sk);
+	struct bictcp *ca = inet_csk_ca(sk);
 	u32 delta, bic_target, max_cnt;
 	u64 offs, t;
 
 	ca->ack_cnt += acked;	/* count the number of ACKed packets */
 
-	if (ca->last_cwnd == cwnd &&
-	    (s32)(tcp_jiffies32 - ca->last_time) <= HZ / 32)
+	delta = tp->tcp_mstamp - ca->last_time;
+	if (ca->last_cwnd == cwnd && delta <= USEC_PER_SEC / 32)
 		return;
 
-	/* The CUBIC function can update ca->cnt at most once per jiffy.
+	/* The CUBIC function can update ca->cnt at most once per ms.
 	 * On all cwnd reduction events, ca->epoch_start is set to 0,
 	 * which will force a recalculation of ca->cnt.
 	 */
-	if (ca->epoch_start && tcp_jiffies32 == ca->last_time)
+	if (ca->epoch_start && delta < USEC_PER_MSEC)
 		goto tcp_friendliness;
 
 	ca->last_cwnd = cwnd;
-	ca->last_time = tcp_jiffies32;
+	ca->last_time = tp->tcp_mstamp;
 
 	if (ca->epoch_start == 0) {
 		ca->epoch_start = tcp_jiffies32;	/* record beginning */
@@ -334,7 +336,7 @@ __bpf_kfunc static void cubictcp_cong_avoid(struct sock *sk, u32 ack, u32 acked)
 		if (!acked)
 			return;
 	}
-	bictcp_update(ca, tcp_snd_cwnd(tp), acked);
+	bictcp_update(sk, tcp_snd_cwnd(tp), acked);
 	tcp_cong_avoid_ai(tp, ca->cnt, acked);
 }
 
