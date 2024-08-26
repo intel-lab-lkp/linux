@@ -93,6 +93,21 @@ int thermal_zone_trip_id(const struct thermal_zone_device *tz,
 	return trip_to_trip_desc(trip) - tz->trips;
 }
 
+void thermal_trip_move_to_sorted_list(struct thermal_trip_desc *td,
+				      struct list_head *list)
+{
+	struct thermal_trip_desc *entry;
+
+	/* Assume that the new entry is likely to be the last one. */
+	list_for_each_entry_reverse(entry, list, list_node) {
+		if (entry->notify_temp <= td->notify_temp) {
+			list_move(&td->list_node, &entry->list_node);
+			return;
+		}
+	}
+	list_move(&td->list_node, list);
+}
+
 void thermal_zone_set_trip_hyst(struct thermal_zone_device *tz,
 				struct thermal_trip *trip, int hyst)
 {
