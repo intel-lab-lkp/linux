@@ -554,6 +554,7 @@ static bool cachefiles_open_file(struct cachefiles_object *object,
 	if (!cachefiles_mark_inode_in_use(object, d_inode(dentry))) {
 		pr_notice("cachefiles: Inode already in use: %pd (B=%lx)\n",
 			  dentry, d_inode(dentry)->i_ino);
+		dput(dentry);
 		return false;
 	}
 
