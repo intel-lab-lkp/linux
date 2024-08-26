@@ -120,36 +120,25 @@ static int page_cache_pipe_buf_confirm(struct pipe_inode_info *pipe,
 				       struct pipe_buffer *buf)
 {
 	struct folio *folio = page_folio(buf->page);
-	int err;
 
 	if (!folio_test_uptodate(folio)) {
-		folio_lock(folio);
+		guard(folio)(folio);
 
 		/*
 		 * Folio got truncated/unhashed. This will cause a 0-byte
 		 * splice, if this is the first page.
 		 */
-		if (!folio->mapping) {
-			err = -ENODATA;
-			goto error;
-		}
+		if (!folio->mapping)
+			return -ENODATA;
 
 		/*
 		 * Uh oh, read-error from disk.
 		 */
-		if (!folio_test_uptodate(folio)) {
-			err = -EIO;
-			goto error;
-		}
-
-		/* Folio is ok after all, we are done */
-		folio_unlock(folio);
+		if (!folio_test_uptodate(folio))
+			return -EIO;
 	}
 
 	return 0;
-error:
-	folio_unlock(folio);
-	return err;
 }
 
 const struct pipe_buf_operations page_cache_pipe_buf_ops = {
