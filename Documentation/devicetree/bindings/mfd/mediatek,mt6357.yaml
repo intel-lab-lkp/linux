@@ -22,69 +22,75 @@ description: |
 
   It is interfaced to host controller using SPI interface by a proprietary hardware
   called PMIC wrapper or pwrap. This MFD is a child device of pwrap.
-  See the following for pwrap node definitions:
-  Documentation/devicetree/bindings/soc/mediatek/mediatek,pwrap.yaml
 
 properties:
-  compatible:
-    const: mediatek,mt6357
-
-  interrupts:
-    maxItems: 1
-
-  interrupt-controller: true
-
-  "#interrupt-cells":
-    const: 2
-
-  mediatek,hp-pull-down:
-    description:
-      Earphone driver positive output stage short to
-      the audio reference ground.
-    type: boolean
-
-  mediatek,micbias0-microvolt:
-    description: Selects MIC Bias 0 output voltage.
-    enum: [1700000, 1800000, 1900000, 2000000,
-           2100000, 2500000, 2600000, 2700000]
-    default: 1700000
-
-  mediatek,micbias1-microvolt:
-    description: Selects MIC Bias 1 output voltage.
-    enum: [1700000, 1800000, 1900000, 2000000,
-           2100000, 2500000, 2600000, 2700000]
-    default: 1700000
-
-  regulators:
+  pwrap:
     type: object
-    $ref: /schemas/regulator/mediatek,mt6357-regulator.yaml
-    unevaluatedProperties: false
-    description:
-      List of MT6357 BUCKs and LDOs regulators.
-
-  rtc:
-    type: object
-    $ref: /schemas/rtc/rtc.yaml#
-    unevaluatedProperties: false
-    description:
-      MT6357 Real Time Clock.
+    $ref: /schemas/soc/mediatek/mediatek,pwrap.yaml
     properties:
-      compatible:
-        const: mediatek,mt6357-rtc
-      start-year: true
-    required:
-      - compatible
+      pmic:
+        type: object
+        additionalProperties: false
+        properties:
+          compatible:
+            const: mediatek,mt6357
 
-  keys:
-    type: object
-    $ref: /schemas/input/mediatek,pmic-keys.yaml
-    unevaluatedProperties: false
-    description:
-      MT6357 power and home keys.
+          interrupts:
+            maxItems: 1
 
-required:
-  - compatible
-  - regulators
+          interrupt-controller: true
+
+          "#interrupt-cells":
+            const: 2
+
+          mediatek,hp-pull-down:
+            description:
+              Earphone driver positive output stage short to
+              the audio reference ground.
+            type: boolean
+
+          mediatek,micbias0-microvolt:
+            description: Selects MIC Bias 0 output voltage.
+            enum: [1700000, 1800000, 1900000, 2000000,
+                   2100000, 2500000, 2600000, 2700000]
+            default: 1700000
+
+          mediatek,micbias1-microvolt:
+            description: Selects MIC Bias 1 output voltage.
+            enum: [1700000, 1800000, 1900000, 2000000,
+                   2100000, 2500000, 2600000, 2700000]
+            default: 1700000
+
+          regulators:
+            type: object
+            $ref: /schemas/regulator/mediatek,mt6357-regulator.yaml
+            unevaluatedProperties: false
+            description:
+              List of MT6357 BUCKs and LDOs regulators.
+
+          rtc:
+            type: object
+            $ref: /schemas/rtc/rtc.yaml#
+            unevaluatedProperties: false
+            description:
+              MT6357 Real Time Clock.
+            properties:
+              compatible:
+                const: mediatek,mt6357-rtc
+              start-year: true
+            required:
+              - compatible
+
+          keys:
+            type: object
+            $ref: /schemas/input/mediatek,pmic-keys.yaml
+            unevaluatedProperties: false
+            description:
+              MT6357 power and home keys.
+
+        required:
+          - compatible
+          - regulators
 
 additionalProperties: false
 
