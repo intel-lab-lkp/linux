@@ -457,11 +457,13 @@ static int sdhci_am654_calculate_itap(struct sdhci_host *host, struct window
 
 	if (!num_fails) {
 		/* Retry tuning */
+		dev_dbg(dev, "No failing region found, retry tuning\n");
 		return -1;
 	}
 
 	if (fail_window->length == ITAPDLY_LENGTH) {
 		/* Retry tuning */
+		dev_dbg(dev, "No passing itapdly, retry tuning\n");
 		return -1;
 	}
 
@@ -505,6 +507,7 @@ static int sdhci_am654_do_tuning(struct sdhci_host *host,
 	struct sdhci_am654_data *sdhci_am654 = sdhci_pltfm_priv(pltfm_host);
 	unsigned char timing = host->mmc->ios.timing;
 	struct window fail_window[ITAPDLY_LENGTH];
+	struct device *dev = mmc_dev(host->mmc);
 	u8 curr_pass, itap;
 	u8 fail_index = 0;
 	u8 prev_pass = 1;
@@ -525,6 +528,7 @@ static int sdhci_am654_do_tuning(struct sdhci_host *host,
 		if (!curr_pass) {
 			fail_window[fail_index].end = itap;
 			fail_window[fail_index].length++;
+			dev_dbg(dev, "Failed itapdly=%d\n", itap);
 		}
 
 		if (curr_pass && !prev_pass)
@@ -546,6 +550,7 @@ static int sdhci_am654_platform_execute_tuning(struct sdhci_host *host,
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
 	struct sdhci_am654_data *sdhci_am654 = sdhci_pltfm_priv(pltfm_host);
 	unsigned char timing = host->mmc->ios.timing;
+	struct device *dev = mmc_dev(host->mmc);
 	int itapdly;
 
 	do {
@@ -554,9 +559,12 @@ static int sdhci_am654_platform_execute_tuning(struct sdhci_host *host,
 			break;
 	} while (++sdhci_am654->tuning_loop < RETRY_TUNING_MAX);
 
-	if (itapdly < 0)
+	if (itapdly < 0) {
+		dev_err(dev, "Failed to find itapdly, fail tuning\n");
 		return -1;
+	}
 
+	dev_dbg(dev, "Passed tuning, final itapdly=%d\n", itapdly);
 	sdhci_am654_write_itapdly(sdhci_am654, itapdly, sdhci_am654->itap_del_ena[timing]);
 	/* Save ITAPDLY */
 	sdhci_am654->itap_del_sel[timing] = itapdly;
