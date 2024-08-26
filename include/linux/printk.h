@@ -719,6 +719,7 @@ enum {
 
 enum {
 	DUMP_FLAG_ASCII,
+	DUMP_FLAG_SKIP_IDENTICAL_LINES,
 };
 
 extern int hex_dump_to_buffer(const void *buf, size_t len, int rowsize,

@@ -4,6 +4,7 @@
  */
 
 #include <linux/types.h>
+#include <linux/string.h>
 #include <linux/ctype.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
@@ -239,7 +240,8 @@ EXPORT_SYMBOL(hex_dump_to_buffer);
  * @buf: data blob to dump
  * @len: number of bytes in the @buf
  * @flags: controls the output, typically %DUMP_FLAG_ASCII will print the ascii
- * equivalent after the hex output.
+ * equivalent after the hex output, %DUMP_FLAG_SKIP_IDENTICAL_LINES will display
+ * a single '*' instead of duplicated lines.
  *
  * Given a buffer of u8 data, print_hex_dump() prints a hex + ASCII dump
  * to the kernel log at the specified kernel log level, with an optional
@@ -264,8 +266,9 @@ void print_hex_dump(const char *level, const char *prefix_str, int prefix_type,
 		    const void *buf, size_t len, unsigned int flags)
 {
 	const u8 *ptr = buf;
-	int i, linelen, remaining = len;
+	int i, prev_i, linelen, remaining = len;
 	unsigned char linebuf[32 * 3 + 2 + 32 + 1];
+	bool same_line = false;
 
 	if (rowsize != 16 && rowsize != 32)
 		rowsize = 16;
@@ -273,6 +276,20 @@ void print_hex_dump(const char *level, const char *prefix_str, int prefix_type,
 	for (i = 0; i < len; i += rowsize) {
 		linelen = min(remaining, rowsize);
 		remaining -= rowsize;
+
+		if (flags & DUMP_FLAG_SKIP_IDENTICAL_LINES) {
+			if (i && !memcmp(ptr + i, ptr + prev_i, linelen)) {
+				prev_i = i;
+				if (same_line)
+					continue;
+				same_line = true;
+				printk("%s*\n", level);
+				continue;
+			} else {
+				prev_i = i;
+				same_line = false;
+			}
+		}
 
 		hex_dump_to_buffer(ptr + i, linelen, rowsize, groupsize,
 				   linebuf, sizeof(linebuf),

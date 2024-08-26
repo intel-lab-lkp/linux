@@ -292,7 +292,9 @@ Raw buffer as a hex string
 
 For printing small buffers (up to 64 bytes long) as a hex string with a
 certain separator. For larger buffers consider using
-:c:func:`print_hex_dump`.
+:c:func:`print_hex_dump`, especially since dupplicated lines can be
+skipped automatically to reduce the overhead with the
+``DUMP_FLAG_SKIP_IDENTICAL_LINES`` flag.
 
 MAC/FDDI addresses
 ------------------
