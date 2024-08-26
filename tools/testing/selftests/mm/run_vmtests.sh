@@ -75,6 +75,8 @@ separated by spaces:
 	read-only VMAs
 - mdwe
 	test prctl(PR_SET_MDWE, ...)
+- page_frag
+	test handling of page fragment allocation and freeing
 
 example: ./run_vmtests.sh -t "hmm mmap ksm"
 EOF
@@ -231,7 +233,8 @@ run_test() {
 		("$@" 2>&1) | tap_prefix
 		local ret=${PIPESTATUS[0]}
 		count_total=$(( count_total + 1 ))
-		if [ $ret -eq 0 ]; then
+		# page_frag_test.ko returns 11(EAGAIN) when insmod'ing to avoid rmmod
+		if [ $ret -eq 0 ] | [ $ret -eq 11 -a ${CATEGORY} == "page_frag" ]; then
 			count_pass=$(( count_pass + 1 ))
 			echo "[PASS]" | tap_prefix
 			echo "ok ${count_total} ${test}" | tap_output
@@ -455,6 +458,10 @@ CATEGORY="migration" run_test ./migration
 CATEGORY="mkdirty" run_test ./mkdirty
 
 CATEGORY="mdwe" run_test ./mdwe_test
+
+CATEGORY="page_frag" run_test insmod ./page_frag/page_frag_test.ko
+
+CATEGORY="page_frag" run_test insmod ./page_frag/page_frag_test.ko test_alloc_len=12 test_align=1
 
 echo "SUMMARY: PASS=${count_pass} SKIP=${count_skip} FAIL=${count_fail}" | tap_prefix
 echo "1..${count_total}" | tap_output
