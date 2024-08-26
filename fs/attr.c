@@ -295,7 +295,15 @@ static void setattr_copy_mgtime(struct inode *inode, const struct iattr *attr)
 		return;
 	}
 
-	now = inode_set_ctime_current(inode);
+	/*
+	 * In the case of an update for a write delegation, we must respect
+	 * the value in ia_ctime and not use the current time.
+	 */
+	if (ia_valid & ATTR_CTIME_DLG)
+		inode_set_ctime_to_ts(inode, attr->ia_ctime);
+	else
+		now = inode_set_ctime_current(inode);
+
 	if (ia_valid & ATTR_ATIME_SET)
 		inode_set_atime_to_ts(inode, attr->ia_atime);
 	else if (ia_valid & ATTR_ATIME)

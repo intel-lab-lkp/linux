@@ -211,6 +211,7 @@ typedef int (dio_iodone_t)(struct kiocb *iocb, loff_t offset,
 #define ATTR_TIMES_SET	(1 << 16)
 #define ATTR_TOUCH	(1 << 17)
 #define ATTR_DELEG	(1 << 18) /* Delegated attrs (don't break) */
+#define ATTR_CTIME_DLG	(1 << 19) /* Delegation in effect */
 
 /*
  * Whiteout is represented by a char device.  The following constants define the
