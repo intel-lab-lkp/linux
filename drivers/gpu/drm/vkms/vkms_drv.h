@@ -73,29 +73,56 @@ struct vkms_color_lut {
 };
 
 /**
- * vkms_crtc_state - Driver specific CRTC state
+ * struct vkms_crtc_state - Driver specific CRTC state
+ *
  * @base: base CRTC state
  * @composer_work: work struct to compose and add CRC entries
- * @n_frame_start: start frame number for computed CRC
- * @n_frame_end: end frame number for computed CRC
+ *
+ * @num_active_planes: Number of active planes
+ * @active_planes: List containing all the active planes (counted by
+ *  @num_active_planes). They should be stored in z-order.
+ * @active_writeback: Current active writeback job
+ * @gamma_lut: Look up table for gamma used in this CRTC
+ * @crc_pending: Protected by @vkms_output.composer_lock, true when the frame CRC is not computed
+ *		 yet. Used by vblank to detect if the composer is too slow.
+ * @wb_pending: Protected by @vkms_output.composer_lock, true when a writeback frame is requested.
+ * @frame_start: Protected by @vkms_output.composer_lock, saves the frame number before the start
+ *		 of the composition process.
+ * @frame_end: Protected by @vkms_output.composer_lock, saves the last requested frame number.
+ *	       This is used to generate enough CRC entries when the composition worker is too slow.
  */
 struct vkms_crtc_state {
 	struct drm_crtc_state base;
 	struct work_struct composer_work;
 
 	int num_active_planes;
-	/* stack of active planes for crc computation, should be in z order */
 	struct vkms_plane_state **active_planes;
 	struct vkms_writeback_job *active_writeback;
 	struct vkms_color_lut gamma_lut;
 
-	/* below four are protected by vkms_output.composer_lock */
 	bool crc_pending;
 	bool wb_pending;
 	u64 frame_start;
 	u64 frame_end;
 };
 
+/**
+ * struct vkms_output - Internal representation of all output components in vkms
+ *
+ * @crtc: Base CRTC in DRM
+ * @encoder: DRM encoder used for this output
+ * @connector: DRM connector used for this output
+ * @wb_connecter: DRM writeback connector used for this output
+ * @vblank_hrtimer: Timer used to trigger the vblank
+ * @period_ns: Period of the vblank timer, used to configure @vblank_hrtimer and to compute
+ *	       vblank timestamps
+ * @composer_workq: Ordered workqueue for @composer_state.composer_work.
+ * @lock: Lock used to protect concurrent access to the composer
+ * @composer_enabled: Protected by @lock, true when the vkms composer is active (crc needed or
+ *		      writeback)
+ * @composer_state: Current state of this vkms output
+ * @composer_lock: Lock used internally to protect @composer_state members
+ */
 struct vkms_output {
 	struct drm_crtc crtc;
 	struct drm_encoder encoder;
@@ -103,34 +130,48 @@ struct vkms_output {
 	struct drm_writeback_connector wb_connector;
 	struct hrtimer vblank_hrtimer;
 	ktime_t period_ns;
-	/* ordered wq for composer_work */
 	struct workqueue_struct *composer_workq;
-	/* protects concurrent access to composer */
 	spinlock_t lock;
 
-	/* protected by @lock */
 	bool composer_enabled;
 	struct vkms_crtc_state *composer_state;
 
 	spinlock_t composer_lock;
 };
 
-struct vkms_device;
-
+/**
+ * struct vkms_config - General configuration for VKMS driver
+ *
+ * @writeback: If true, a writeback buffer can be attached to the CRTC
+ * @cursor: If true, a cursor plane is created in the VKMS device
+ * @overlay: If true, NUM_OVERLAY_PLANES will be created for the VKMS device
+ * @dev: Used to store the current vkms device. Only set when the device is instantiated.
+ */
 struct vkms_config {
 	bool writeback;
 	bool cursor;
 	bool overlay;
-	/* only set when instantiated */
 	struct vkms_device *dev;
 };
 
+/**
+ * struct vkms_device - Description of a vkms device
+ *
+ * @drm - Base device in DRM
+ * @platform - Associated platform device
+ * @output - Configuration and sub-components of the vkms device
+ * @config: Configuration used in this vkms device
+ */
 struct vkms_device {
 	struct drm_device drm;
 	struct platform_device *platform;
 	struct vkms_output output;
 	const struct vkms_config *config;
 };
+
+/*
+ * The following helpers are used to convert a member of a struct into its parent.
+ */
 
 #define drm_crtc_to_vkms_output(target) \
 	container_of(target, struct vkms_output, crtc)
@@ -144,12 +185,33 @@ struct vkms_device {
 #define to_vkms_plane_state(target)\
 	container_of(target, struct vkms_plane_state, base.base)
 
-/* CRTC */
+/**
+ * vkms_crtc_init() - Initialize a CRTC for vkms
+ * @dev: DRM device associated with the vkms buffer
+ * @crtc: uninitialized CRTC device
+ * @primary: primary plane to attach to the CRTC
+ * @cursor plane to attach to the CRTC
+ */
 int vkms_crtc_init(struct drm_device *dev, struct drm_crtc *crtc,
 		   struct drm_plane *primary, struct drm_plane *cursor);
 
+/**
+ * vkms_output_init() - Initialize all sub-components needed for a vkms device.
+ *
+ * @vkmsdev: vkms device to initialize
+ * @possible_crtc_index: CRTC which can be attached to the planes. The caller must ensure that
+ * possible_crtc_index is positive and less or equals to 31.
+ */
 int vkms_output_init(struct vkms_device *vkmsdev, int index);
 
+/**
+ * vkms_plane_init() - Initialize a plane
+ *
+ * @vkmsdev: vkms device containing the plane
+ * @type: type of plane to initialize
+ * @possible_crtc_index: CRTC which can be attached to the plane. The caller must ensure that
+ * possible_crtc_index is positive and less or equals to 31.
+ */
 struct vkms_plane *vkms_plane_init(struct vkms_device *vkmsdev,
 				   enum drm_plane_type type, int index);
 
