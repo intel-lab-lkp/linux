@@ -48,6 +48,12 @@ patternProperties:
           reference clock output when RMII mode enabled.
           Only supported on TJA1100 and TJA1101.
 
+      nxp,phy-output-refclk:
+        type: boolean
+        description: |
+          Enable 50MHz RMII reference clock output on REF_CLK pin. This
+          property is only applicable to nxp-c45-tja11xx driver.
+
     required:
       - reg
 
