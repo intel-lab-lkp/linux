@@ -28,6 +28,7 @@
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/string_choices.h>
 #include <linux/types.h>
 
 /* Since we request GPIOs from ourself */
@@ -1105,17 +1106,16 @@ static int nmk_pin_config_set(struct pinctrl_dev *pctldev, unsigned int pin,
 				"pin %d: sleep pull %s, dir %s, val %s\n",
 				pin,
 				slpm_pull ? pullnames[pull] : "same",
-				slpm_output ? (output ? "output" : "input")
-				: "same",
-				slpm_val ? (val ? "high" : "low") : "same");
+				slpm_output ? (output ? "output" : "input") : "same",
+				slpm_val ? str_high_low(val) : "same");
 		}
 
 		dev_dbg(nmk_chip->chip.parent,
 			"pin %d [%#lx]: pull %s, slpm %s (%s%s), lowemi %s\n",
 			pin, cfg, pullnames[pull], slpmnames[slpm],
 			output ? "output " : "input",
-			output ? (val ? "high" : "low") : "",
-			lowemi ? "on" : "off");
+			output ? str_high_low(val) : "",
+			str_on_off(lowemi));
 
 		clk_enable(nmk_chip->clk);
 		if (gpiomode)
