@@ -215,16 +215,20 @@ struct kmem_cache *find_mergeable(unsigned int size, unsigned int align,
 }
 
 static struct kmem_cache *create_cache(const char *name,
-		unsigned int object_size, unsigned int align,
-		slab_flags_t flags, unsigned int useroffset,
-		unsigned int usersize, void (*ctor)(void *),
-		struct kmem_cache *root_cache)
+		unsigned int object_size, unsigned int offset,
+		unsigned int align, slab_flags_t flags,
+		unsigned int useroffset, unsigned int usersize,
+		void (*ctor)(void *), struct kmem_cache *root_cache)
 {
 	struct kmem_cache *s;
 	int err;
 
 	if (WARN_ON(useroffset + usersize > object_size))
 		useroffset = usersize = 0;
+
+	if (WARN_ON(offset >= object_size ||
+		    (offset && !(flags & SLAB_TYPESAFE_BY_RCU))))
+		offset = 0;
 
 	err = -ENOMEM;
 	s = kmem_cache_zalloc(kmem_cache, GFP_KERNEL);
@@ -239,6 +243,10 @@ static struct kmem_cache *create_cache(const char *name,
 	s->useroffset = useroffset;
 	s->usersize = usersize;
 #endif
+	if (offset > 0) {
+		s->offset = offset;
+		s->dedicated_offset = true;
+	}
 
 	err = __kmem_cache_create(s, flags);
 	if (err)
@@ -282,10 +290,10 @@ out:
  *
  * Return: a pointer to the cache on success, NULL on failure.
  */
-struct kmem_cache *
-kmem_cache_create_usercopy(const char *name,
-		  unsigned int size, unsigned int align,
-		  slab_flags_t flags,
+static struct kmem_cache *
+do_kmem_cache_create_usercopy(const char *name,
+		  unsigned int size, unsigned int offset,
+		  unsigned int align, slab_flags_t flags,
 		  unsigned int useroffset, unsigned int usersize,
 		  void (*ctor)(void *))
 {
@@ -345,7 +353,7 @@ kmem_cache_create_usercopy(const char *name,
 		goto out_unlock;
 	}
 
-	s = create_cache(cache_name, size,
+	s = create_cache(cache_name, size, offset,
 			 calculate_alignment(flags, align, size),
 			 flags, useroffset, usersize, ctor, NULL);
 	if (IS_ERR(s)) {
@@ -368,6 +376,16 @@ out_unlock:
 		return NULL;
 	}
 	return s;
+}
+
+struct kmem_cache *
+kmem_cache_create_usercopy(const char *name, unsigned int size,
+			   unsigned int align, slab_flags_t flags,
+			   unsigned int useroffset, unsigned int usersize,
+			   void (*ctor)(void *))
+{
+	return do_kmem_cache_create_usercopy(name, size, 0, align, flags,
+					     useroffset, usersize, ctor);
 }
 EXPORT_SYMBOL(kmem_cache_create_usercopy);
 
@@ -400,10 +418,46 @@ struct kmem_cache *
 kmem_cache_create(const char *name, unsigned int size, unsigned int align,
 		slab_flags_t flags, void (*ctor)(void *))
 {
-	return kmem_cache_create_usercopy(name, size, align, flags, 0, 0,
-					  ctor);
+	return do_kmem_cache_create_usercopy(name, size, 0, align, flags, 0, 0,
+					     ctor);
 }
 EXPORT_SYMBOL(kmem_cache_create);
+
+/**
+ * kmem_cache_create_rcu - Create a SLAB_TYPESAFE_BY_RCU cache.
+ * @name: A string which is used in /proc/slabinfo to identify this cache.
+ * @size: The size of objects to be created in this cache.
+ * @offset: The offset into the memory to the free pointer
+ * @flags: SLAB flags
+ * @ctor: A constructor for the objects.
+ *
+ * Cannot be called within a interrupt, but can be interrupted.
+ * The @ctor is run when new pages are allocated by the cache.
+ *
+ * The flags are
+ *
+ * %SLAB_POISON - Poison the slab with a known test pattern (a5a5a5a5)
+ * to catch references to uninitialised memory.
+ *
+ * %SLAB_RED_ZONE - Insert `Red` zones around the allocated memory to check
+ * for buffer overruns.
+ *
+ * %SLAB_HWCACHE_ALIGN - Align the objects in this cache to a hardware
+ * cacheline.  This can be beneficial if you're counting cycles as closely
+ * as davem.
+ *
+ * Return: a pointer to the cache on success, NULL on failure.
+ */
+struct kmem_cache *kmem_cache_create_rcu(const char *name, unsigned int size,
+					 unsigned int offset,
+					 slab_flags_t flags,
+					 void (*ctor)(void *))
+{
+	return do_kmem_cache_create_usercopy(name, size, offset, 0,
+					     flags | SLAB_TYPESAFE_BY_RCU, 0, 0,
+					     ctor);
+}
+EXPORT_SYMBOL(kmem_cache_create_rcu);
 
 static struct kmem_cache *kmem_buckets_cache __ro_after_init;
 

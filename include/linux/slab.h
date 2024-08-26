@@ -242,6 +242,10 @@ struct kmem_cache *kmem_cache_create_usercopy(const char *name,
 			slab_flags_t flags,
 			unsigned int useroffset, unsigned int usersize,
 			void (*ctor)(void *));
+struct kmem_cache *kmem_cache_create_rcu(const char *name, unsigned int size,
+					 unsigned int offset,
+					 slab_flags_t flags,
+					 void (*ctor)(void *));
 void kmem_cache_destroy(struct kmem_cache *s);
 int kmem_cache_shrink(struct kmem_cache *s);
 

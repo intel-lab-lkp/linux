@@ -3974,7 +3974,7 @@ static __always_inline void maybe_wipe_obj_freeptr(struct kmem_cache *s,
 						   void *obj)
 {
 	if (unlikely(slab_want_init_on_free(s)) && obj &&
-	    !freeptr_outside_object(s))
+	    !freeptr_outside_object(s) && !s->dedicated_offset)
 		memset((void *)((char *)kasan_reset_tag(obj) + s->offset),
 			0, sizeof(void *));
 }
@@ -5228,6 +5228,7 @@ static int calculate_sizes(struct kmem_cache *s)
 	slab_flags_t flags = s->flags;
 	unsigned int size = s->object_size;
 	unsigned int order;
+	bool must_use_freeptr_offset;
 
 	/*
 	 * Round up object size to the next word boundary. We can only
@@ -5264,9 +5265,12 @@ static int calculate_sizes(struct kmem_cache *s)
 	 */
 	s->inuse = size;
 
-	if ((flags & (SLAB_TYPESAFE_BY_RCU | SLAB_POISON)) || s->ctor ||
-	    ((flags & SLAB_RED_ZONE) &&
-	     (s->object_size < sizeof(void *) || slub_debug_orig_size(s)))) {
+	must_use_freeptr_offset =
+		(flags & SLAB_POISON) || s->ctor ||
+		((flags & SLAB_RED_ZONE) &&
+		 (s->object_size < sizeof(void *) || slub_debug_orig_size(s)));
+
+	if ((flags & SLAB_TYPESAFE_BY_RCU) || must_use_freeptr_offset) {
 		/*
 		 * Relocate free pointer after the object if it is not
 		 * permitted to overwrite the first word of the object on
@@ -5283,8 +5287,13 @@ static int calculate_sizes(struct kmem_cache *s)
 		 * freeptr_outside_object() function. If that is no
 		 * longer true, the function needs to be modified.
 		 */
-		s->offset = size;
-		size += sizeof(void *);
+		if (!(flags & SLAB_TYPESAFE_BY_RCU) || must_use_freeptr_offset) {
+			s->offset = size;
+			size += sizeof(void *);
+			s->dedicated_offset = false;
+		} else {
+			s->dedicated_offset = true;
+		}
 	} else {
 		/*
 		 * Store freelist pointer near middle of object to keep
@@ -5376,6 +5385,7 @@ static int kmem_cache_open(struct kmem_cache *s, slab_flags_t flags)
 		if (get_order(s->size) > get_order(s->object_size)) {
 			s->flags &= ~DEBUG_METADATA_FLAGS;
 			s->offset = 0;
+			s->dedicated_offset = false;
 			if (!calculate_sizes(s))
 				goto error;
 		}

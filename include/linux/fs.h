@@ -1042,6 +1042,7 @@ struct file {
 		struct callback_head	f_task_work;
 		struct llist_node	f_llist;
 		struct file_ra_state	f_ra;
+		void			*__f_slab_free_ptr;
 	};
 	/* --- cacheline 3 boundary (192 bytes) --- */
 } __randomize_layout
