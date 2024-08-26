@@ -164,7 +164,7 @@ config IOMMU_SVA
 	bool
 
 config IOMMU_IOPF
-	bool
+	bool "Enable IO page fault in IOMMU"
 
 config FSL_PAMU
 	bool "Freescale IOMMU support"
