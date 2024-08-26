@@ -31,6 +31,12 @@
  */
 #define IOMMU_PRIV	(1 << 5)
 
+/*
+ * Flag to indicate whether the associated page should be cached in the
+ * system's cache hierarchy.
+ */
+#define IOMMU_SYS_CACHE (1 << 6)
+
 struct iommu_ops;
 struct iommu_group;
 struct bus_type;
