@@ -273,7 +273,7 @@ static int qcom_cc_icc_register(struct device *dev,
 		icd[i].slave_id = desc->icc_hws[i].slave_id;
 		hws = &desc->clks[desc->icc_hws[i].clk_id]->hw;
 		icd[i].clk = devm_clk_hw_get_clk(dev, hws, "icc");
-		if (!icd[i].clk)
+		if (IS_ERR(icd[i].clk))
 			return dev_err_probe(dev, -ENOENT,
 					     "(%d) clock entry is null\n", i);
 		icd[i].name = clk_hw_get_name(hws);
