@@ -136,7 +136,7 @@ struct vkms_device {
 #define drm_device_to_vkms_device(target) \
 	container_of(target, struct vkms_device, drm)
 
-#define to_vkms_crtc_state(target)\
+#define drm_crtc_state_to_vkms_crtc_state(target)\
 	container_of(target, struct vkms_crtc_state, base)
 
 #define to_vkms_plane_state(target)\

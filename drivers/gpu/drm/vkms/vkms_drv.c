@@ -82,7 +82,7 @@ static void vkms_atomic_commit_tail(struct drm_atomic_state *old_state)
 
 	for_each_old_crtc_in_state(old_state, crtc, old_crtc_state, i) {
 		struct vkms_crtc_state *vkms_state =
-			to_vkms_crtc_state(old_crtc_state);
+					       drm_crtc_state_to_vkms_crtc_state(old_crtc_state);
 
 		flush_work(&vkms_state->composer_work);
 	}

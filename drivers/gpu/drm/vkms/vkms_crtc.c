@@ -132,7 +132,7 @@ vkms_atomic_crtc_duplicate_state(struct drm_crtc *crtc)
 static void vkms_atomic_crtc_destroy_state(struct drm_crtc *crtc,
 					   struct drm_crtc_state *state)
 {
-	struct vkms_crtc_state *vkms_state = to_vkms_crtc_state(state);
+	struct vkms_crtc_state *vkms_state = drm_crtc_state_to_vkms_crtc_state(state);
 
 	__drm_atomic_helper_crtc_destroy_state(state);
 
@@ -173,7 +173,7 @@ static int vkms_crtc_atomic_check(struct drm_crtc *crtc,
 {
 	struct drm_crtc_state *crtc_state = drm_atomic_get_new_crtc_state(state,
 									  crtc);
-	struct vkms_crtc_state *vkms_state = to_vkms_crtc_state(crtc_state);
+	struct vkms_crtc_state *vkms_state = drm_crtc_state_to_vkms_crtc_state(crtc_state);
 	struct drm_plane *plane;
 	struct drm_plane_state *plane_state;
 	int i = 0, ret;
@@ -257,7 +257,7 @@ static void vkms_crtc_atomic_flush(struct drm_crtc *crtc,
 		crtc->state->event = NULL;
 	}
 
-	vkms_crtc->composer_state = to_vkms_crtc_state(crtc->state);
+	vkms_crtc->composer_state = drm_crtc_state_to_vkms_crtc_state(crtc->state);
 
 	spin_unlock_irq(&vkms_crtc->lock);
 }
