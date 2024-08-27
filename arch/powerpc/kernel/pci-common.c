@@ -390,22 +390,32 @@ static void ppc_pci_intx_release(struct kref *kref)
 	kfree(vi);
 }
 
+static int pci_read_irq_line(struct pci_dev *pci_dev);
+
 static int ppc_pci_unmap_irq_line(struct notifier_block *nb,
 			       unsigned long action, void *data)
 {
 	struct pci_dev *pdev = to_pci_dev(data);
 
-	if (action == BUS_NOTIFY_DEL_DEVICE) {
-		struct pci_intx_virq *vi;
+	switch (action) {
+		case BUS_NOTIFY_DEL_DEVICE:
+			{
+				struct pci_intx_virq *vi;
 
-		mutex_lock(&intx_mutex);
-		list_for_each_entry(vi, &intx_list, list_node) {
-			if (vi->virq == pdev->irq) {
-				kref_put(&vi->kref, ppc_pci_intx_release);
-				break;
+				mutex_lock(&intx_mutex);
+				list_for_each_entry(vi, &intx_list, list_node) {
+					if (vi->virq == pdev->irq) {
+						kref_put(&vi->kref, ppc_pci_intx_release);
+						break;
+					}
+				}
+				mutex_unlock(&intx_mutex);
 			}
-		}
-		mutex_unlock(&intx_mutex);
+			break;
+
+		case BUS_NOTIFY_ADD_DEVICE:
+			pci_read_irq_line(pdev);
+			break;
 	}
 
 	return NOTIFY_DONE;
