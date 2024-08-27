@@ -2639,8 +2639,8 @@ repeat:
 			if (PTR_ERR(page) == -ENOMEM) {
 				memalloc_retry_wait(GFP_NOFS);
 				goto repeat;
-			}
-			set_sbi_flag(F2FS_SB(sb), SBI_QUOTA_NEED_REPAIR);
+			} else if (PTR_ERR(page) != -EINTR)
+				set_sbi_flag(F2FS_SB(sb), SBI_QUOTA_NEED_REPAIR);
 			return PTR_ERR(page);
 		}
 
@@ -3059,7 +3059,7 @@ static int f2fs_dquot_acquire(struct dquot *dquot)
 
 	f2fs_down_read(&sbi->quota_sem);
 	ret = dquot_acquire(dquot);
-	if (ret < 0)
+	if (ret < 0 && ret != -EINTR)
 		set_sbi_flag(sbi, SBI_QUOTA_NEED_REPAIR);
 	f2fs_up_read(&sbi->quota_sem);
 	return ret;

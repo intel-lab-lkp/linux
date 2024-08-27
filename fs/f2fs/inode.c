@@ -824,8 +824,9 @@ void f2fs_evict_inode(struct inode *inode)
 
 	err = f2fs_dquot_initialize(inode);
 	if (err) {
+		if (err != -EINTR)
+			set_sbi_flag(sbi, SBI_QUOTA_NEED_REPAIR);
 		err = 0;
-		set_sbi_flag(sbi, SBI_QUOTA_NEED_REPAIR);
 	}
 
 	f2fs_remove_ino_entry(sbi, inode->i_ino, APPEND_INO);
