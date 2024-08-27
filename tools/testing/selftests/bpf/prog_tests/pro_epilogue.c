@@ -5,6 +5,7 @@
 #include "pro_epilogue_subprog.skel.h"
 #include "pro_epilogue_kfunc.skel.h"
 #include "epilogue_tailcall.skel.h"
+#include "pro_epilogue_goto_start.skel.h"
 
 struct st_ops_args {
 	int a;
@@ -45,6 +46,7 @@ void test_pro_epilogue(void)
 {
 	RUN_TESTS(pro_epilogue_subprog);
 	RUN_TESTS(pro_epilogue_kfunc);
+	RUN_TESTS(pro_epilogue_goto_start);
 	if (test__start_subtest("tailcall"))
 		test_tailcall();
 }
