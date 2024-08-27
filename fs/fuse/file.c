@@ -977,7 +977,7 @@ static void fuse_send_readpages(struct fuse_io_args *ia, struct file *file)
 			return;
 	} else {
 		res = fuse_simple_request(fm, &ap->args);
-		err = res < 0 ? res : 0;
+		err = min(res, 0);
 	}
 	fuse_readpages_end(fm, &ap->args, err);
 }
