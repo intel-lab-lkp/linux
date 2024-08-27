@@ -411,6 +411,7 @@ static int mvneta_bm_probe(struct platform_device *pdev)
 {
 	struct device_node *dn = pdev->dev.of_node;
 	struct mvneta_bm *priv;
+	struct clk *clk;
 	int err;
 
 	priv = devm_kzalloc(&pdev->dev, sizeof(struct mvneta_bm), GFP_KERNEL);
@@ -421,17 +422,14 @@ static int mvneta_bm_probe(struct platform_device *pdev)
 	if (IS_ERR(priv->reg_base))
 		return PTR_ERR(priv->reg_base);
 
-	priv->clk = devm_clk_get(&pdev->dev, NULL);
-	if (IS_ERR(priv->clk))
-		return PTR_ERR(priv->clk);
-	err = clk_prepare_enable(priv->clk);
-	if (err < 0)
-		return err;
+	clk = devm_clk_get_enabled(&pdev->dev, NULL);
+	if (IS_ERR(clk))
+		return PTR_ERR(clk);
 
 	err = mvneta_bm_get_sram(dn, priv);
 	if (err < 0) {
 		dev_err(&pdev->dev, "failed to allocate internal memory\n");
-		goto err_clk;
+		return err;
 	}
 
 	priv->pdev = pdev;
@@ -452,8 +450,6 @@ static int mvneta_bm_probe(struct platform_device *pdev)
 
 err_sram:
 	mvneta_bm_put_sram(priv);
-err_clk:
-	clk_disable_unprepare(priv->clk);
 	return err;
 }
 
@@ -473,8 +469,6 @@ static void mvneta_bm_remove(struct platform_device *pdev)
 
 	/* Dectivate BM unit */
 	mvneta_bm_write(priv, MVNETA_BM_COMMAND_REG, MVNETA_BM_STOP_MASK);
-
-	clk_disable_unprepare(priv->clk);
 }
 
 static const struct of_device_id mvneta_bm_match[] = {

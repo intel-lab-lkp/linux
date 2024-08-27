@@ -94,7 +94,6 @@ enum mvneta_bm_type {
 
 struct mvneta_bm {
 	void __iomem *reg_base;
-	struct clk *clk;
 	struct platform_device *pdev;
 
 	struct gen_pool *bppi_pool;
