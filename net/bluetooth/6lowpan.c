@@ -988,9 +988,7 @@ static void disconnect_all_peers(void)
 {
 	struct lowpan_btle_dev *entry;
 	struct lowpan_peer *peer, *tmp_peer, *new_peer;
-	struct list_head peers;
-
-	INIT_LIST_HEAD(&peers);
+	LIST_HEAD(peers);
 
 	/* We make a separate list of peers as the close_cb() will
 	 * modify the device peers list so it is better not to mess
@@ -1182,9 +1180,7 @@ static const struct file_operations lowpan_control_fops = {
 static void disconnect_devices(void)
 {
 	struct lowpan_btle_dev *entry, *tmp, *new_dev;
-	struct list_head devices;
-
-	INIT_LIST_HEAD(&devices);
+	LIST_HEAD(devices);
 
 	/* We make a separate list of devices because the unregister_netdev()
 	 * will call device_event() which will also want to modify the same

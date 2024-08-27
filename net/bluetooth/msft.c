@@ -305,10 +305,8 @@ static void msft_remove_addr_filters_sync(struct hci_dev *hdev, u8 handle)
 	struct msft_monitor_addr_filter_data *address_filter, *n;
 	struct msft_cp_le_cancel_monitor_advertisement cp;
 	struct msft_data *msft = hdev->msft_data;
-	struct list_head head;
 	struct sk_buff *skb;
-
-	INIT_LIST_HEAD(&head);
+	LIST_HEAD(head);
 
 	/* Cancel all corresponding address monitors */
 	mutex_lock(&msft->filter_lock);
