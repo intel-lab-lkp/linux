@@ -125,6 +125,7 @@ static void mchp_lvds_enable(struct drm_bridge *bridge)
 
 	ret = pm_runtime_get_sync(lvds->dev);
 	if (ret < 0) {
+		clk_disable_unprepare(lvds->pclk);
 		dev_err(lvds->dev, "failed to get pm runtime: %d\n", ret);
 		return;
 	}
