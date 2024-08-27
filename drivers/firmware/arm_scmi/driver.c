@@ -1110,6 +1110,7 @@ static void scmi_handle_response(struct scmi_chan_info *cinfo,
 {
 	struct scmi_xfer *xfer;
 	struct scmi_info *info = handle_to_scmi_info(cinfo->handle);
+	unsigned long flags;
 
 	xfer = scmi_xfer_command_acquire(cinfo, msg_hdr);
 	if (IS_ERR(xfer)) {
@@ -1144,7 +1145,10 @@ static void scmi_handle_response(struct scmi_chan_info *cinfo,
 
 	if (xfer->hdr.type == MSG_TYPE_DELAYED_RESP) {
 		scmi_clear_channel(info, cinfo);
-		complete(xfer->async_done);
+		spin_lock_irqsave(&xfer->lock, flags);
+		if (xfer->async_done)
+			complete(xfer->async_done);
+		spin_unlock_irqrestore(&xfer->lock, flags);
 		scmi_inc_count(info->dbg->counters, DELAYED_RESPONSE_OK);
 	} else {
 		complete(&xfer->done);
@@ -1479,9 +1483,13 @@ static int do_xfer_with_response(const struct scmi_protocol_handle *ph,
 				 struct scmi_xfer *xfer)
 {
 	int ret, timeout = msecs_to_jiffies(SCMI_MAX_RESPONSE_TIMEOUT);
+	unsigned long flags;
+
 	DECLARE_COMPLETION_ONSTACK(async_response);
 
+	spin_lock_irqsave(&xfer->lock, flags);
 	xfer->async_done = &async_response;
+	spin_unlock_irqrestore(&xfer->lock, flags);
 
 	/*
 	 * Delayed responses should not be polled, so an async command should
@@ -1503,7 +1511,10 @@ static int do_xfer_with_response(const struct scmi_protocol_handle *ph,
 		}
 	}
 
+	spin_lock_irqsave(&xfer->lock, flags);
 	xfer->async_done = NULL;
+	spin_unlock_irqrestore(&xfer->lock, flags);
+
 	return ret;
 }
 
