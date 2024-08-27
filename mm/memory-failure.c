@@ -2711,7 +2711,7 @@ static int soft_offline_in_use_page(struct page *page)
 		return 0;
 	}
 
-       isolated = isolate_folio_to_list(folio, &pagelist);
+	isolated = isolate_folio_to_list(folio, &pagelist);
 
 	/*
 	 * If we succeed to isolate the folio, we grabbed another refcount on
