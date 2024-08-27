@@ -1182,14 +1182,10 @@ static int qmc_of_parse_chans(struct qmc *qmc, struct device_node *np)
 
 	for_each_available_child_of_node_scoped(np, chan_np) {
 		ret = of_property_read_u32(chan_np, "reg", &chan_id);
-		if (ret) {
-			dev_err(qmc->dev, "%pOF: failed to read reg\n", chan_np);
-			return ret;
-		}
-		if (chan_id > 63) {
-			dev_err(qmc->dev, "%pOF: Invalid chan_id\n", chan_np);
-			return -EINVAL;
-		}
+		if (ret)
+			return dev_err_probe(qmc->dev, ret, "%pOF: failed to read reg\n", chan_np);
+		if (chan_id > 63)
+			return dev_err_probe(qmc->dev, -EINVAL, "%pOF: Invalid chan_id\n", chan_np);
 
 		chan = devm_kzalloc(qmc->dev, sizeof(*chan), GFP_KERNEL);
 		if (!chan)
@@ -1201,39 +1197,34 @@ static int qmc_of_parse_chans(struct qmc *qmc, struct device_node *np)
 		spin_lock_init(&chan->tx_lock);
 
 		ret = of_property_read_u64(chan_np, "fsl,tx-ts-mask", &ts_mask);
-		if (ret) {
-			dev_err(qmc->dev, "%pOF: failed to read fsl,tx-ts-mask\n",
-				chan_np);
-			return ret;
-		}
+		if (ret)
+			return dev_err_probe(qmc->dev, ret,
+					     "%pOF: failed to read fsl,tx-ts-mask\n",
+					     chan_np);
 		chan->tx_ts_mask_avail = ts_mask;
 		chan->tx_ts_mask = chan->tx_ts_mask_avail;
 
 		ret = of_property_read_u64(chan_np, "fsl,rx-ts-mask", &ts_mask);
-		if (ret) {
-			dev_err(qmc->dev, "%pOF: failed to read fsl,rx-ts-mask\n",
-				chan_np);
-			return ret;
-		}
+		if (ret)
+			dev_err_probe(qmc->dev, ret, "%pOF: failed to read fsl,rx-ts-mask\n",
+				      chan_np);
 		chan->rx_ts_mask_avail = ts_mask;
 		chan->rx_ts_mask = chan->rx_ts_mask_avail;
 
 		mode = "transparent";
 		ret = of_property_read_string(chan_np, "fsl,operational-mode", &mode);
-		if (ret && ret != -EINVAL) {
-			dev_err(qmc->dev, "%pOF: failed to read fsl,operational-mode\n",
-				chan_np);
-			return ret;
-		}
+		if (ret && ret != -EINVAL)
+			return dev_err_probe(qmc->dev, ret,
+					     "%pOF: failed to read fsl,operational-mode\n",
+					     chan_np);
 		if (!strcmp(mode, "transparent")) {
 			chan->mode = QMC_TRANSPARENT;
 		} else if (!strcmp(mode, "hdlc")) {
 			chan->mode = QMC_HDLC;
-		} else {
-			dev_err(qmc->dev, "%pOF: Invalid fsl,operational-mode (%s)\n",
-				chan_np, mode);
-			return -EINVAL;
-		}
+		} else
+			return dev_err_probe(qmc->dev, -EINVAL,
+					     "%pOF: Invalid fsl,operational-mode (%s)\n",
+					     chan_np, mode);
 
 		chan->is_reverse_data = of_property_read_bool(chan_np,
 							      "fsl,reverse-data");
@@ -1590,10 +1581,8 @@ static int qmc_probe(struct platform_device *pdev)
 
 	/* Connect the serial (SCC) to TSA */
 	ret = tsa_serial_connect(qmc->tsa_serial);
-	if (ret) {
-		dev_err(qmc->dev, "Failed to connect TSA serial\n");
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(qmc->dev, ret, "Failed to connect TSA serial\n");
 
 	/* Parse channels informationss */
 	ret = qmc_of_parse_chans(qmc, np);
