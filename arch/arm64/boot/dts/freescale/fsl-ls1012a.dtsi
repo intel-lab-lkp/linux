@@ -175,6 +175,44 @@
 			big-endian;
 		};
 
+		pinctrl: pinctrl@1570430 {
+			compatible = "fsl,ls1012a-pinctrl";
+			reg = <0x0 0x1570430 0x0 0x4>; /* SCFG PMUXCR0 */
+			big-endian;
+
+			dcfg-regmap = <&dcfg>;
+
+			pinctrl_qspi_1: pinctrl-qspi-1 {
+				groups = "qspi_1_grp";
+				function = "spi";
+			};
+			pinctrl_qspi_2: pinctrl-qspi-2 {
+				groups = "qspi_1_grp", "qspi_2_grp";
+				function = "spi";
+			};
+			pinctrl_qspi_4: pinctrl-qspi-4 {
+				groups = "qspi_1_grp", "qspi_2_grp", "qspi_3_grp";
+				function = "spi";
+			};
+
+			pinctrl_gpio4_5_11: pinctrl-gpio4_5_11 {
+				groups = "qspi_1_grp";
+				function = "gpio";
+			};
+			pinctrl_gpio12: pinctrl-gpio12 {
+				groups = "qspi_2_grp";
+				function = "gpio";
+			};
+			pinctrl_gpio1314: pinctrl-gpio1314 {
+				groups = "qspi_3_grp";
+				function = "gpio";
+			};
+			pinctrl_i2c1: pinctrl-i2c1 {
+				groups = "qspi_3_grp";
+				function = "i2c";
+			};
+		};
+
 		esdhc1: mmc@1580000 {
 			compatible = "fsl,ls1012a-esdhc", "fsl,esdhc";
 			reg = <0x0 0x1580000 0x0 0x10000>;
@@ -371,6 +409,10 @@
 			clocks = <&clockgen QORIQ_CLK_PLATFORM_PLL
 					    QORIQ_CLK_PLL_DIV(4)>;
 			scl-gpios = <&gpio0 13 0>;
+			sda-gpios = <&gpio0 14 0>;
+			pinctrl-names = "default", "gpio";
+			pinctrl-0 = <&pinctrl_i2c1>;
+			pinctrl-1 = <&pinctrl_gpio1314>;
 			status = "disabled";
 		};
 
@@ -414,6 +456,12 @@
 			#gpio-cells = <2>;
 			interrupt-controller;
 			#interrupt-cells = <2>;
+			gpio-ranges = <&pinctrl 4 62 1>,
+					<&pinctrl 5 124 1>,
+					<&pinctrl 11 123 1>,
+					<&pinctrl 12 61 1>,
+					<&pinctrl 13 122 1>,
+					<&pinctrl 14 60 1>;
 		};
 
 		gpio1: gpio@2310000 {
