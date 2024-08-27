@@ -2567,8 +2567,12 @@ finish_td:
 	return finish_td(xhci, ep, ep_ring, td, trb_comp_code);
 }
 
-/* Transfer events which don't point to a transfer TRB, see xhci 4.17.4 */
-static int handle_transferless_tx_event(struct xhci_hcd *xhci, struct xhci_virt_ep *ep,
+/*
+ * Transfer events which don't point to a transfer TRB, see xhci 4.17.4
+ * Specifically, this deals with cases where the EP has streams and the event
+ * TRB pointer is NULL or otherwise doesn't point into any known stream ring.
+ */
+static int handle_bad_stream_event(struct xhci_hcd *xhci, struct xhci_virt_ep *ep,
 					u32 trb_comp_code)
 {
 	switch (trb_comp_code) {
@@ -2582,8 +2586,6 @@ static int handle_transferless_tx_event(struct xhci_hcd *xhci, struct xhci_virt_
 		else
 			xhci_handle_halted_endpoint(xhci, ep, NULL, EP_SOFT_RESET);
 		break;
-	case COMP_RING_UNDERRUN:
-	case COMP_RING_OVERRUN:
 	case COMP_STOPPED_LENGTH_INVALID:
 		break;
 	default:
@@ -2638,7 +2640,7 @@ static int handle_tx_event(struct xhci_hcd *xhci,
 	}
 
 	if (!ep_ring)
-		return handle_transferless_tx_event(xhci, ep, trb_comp_code);
+		return handle_bad_stream_event(xhci, ep, trb_comp_code);
 
 	/* Look for common error cases */
 	switch (trb_comp_code) {
