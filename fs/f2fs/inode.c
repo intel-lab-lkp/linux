@@ -891,8 +891,12 @@ no_delete:
 			atomic_read(&fi->i_compr_blocks));
 
 	if (likely(!f2fs_cp_error(sbi) &&
-				!is_sbi_flag_set(sbi, SBI_CP_DISABLED)))
-		f2fs_bug_on(sbi, is_inode_flag_set(inode, FI_DIRTY_INODE));
+				!is_sbi_flag_set(sbi, SBI_CP_DISABLED))) {
+		if (!f2fs_readonly(sbi->sb))
+			f2fs_bug_on(sbi, is_inode_flag_set(inode, FI_DIRTY_INODE));
+		else
+			f2fs_inode_synced(inode);
+	}
 	else
 		f2fs_inode_synced(inode);
 
