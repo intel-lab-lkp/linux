@@ -6,6 +6,7 @@
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_vblank.h>
+#include <drm/drm_managed.h>
 
 #include "vkms_drv.h"
 
@@ -270,30 +271,41 @@ static const struct drm_crtc_helper_funcs vkms_crtc_helper_funcs = {
 	.atomic_disable	= vkms_crtc_atomic_disable,
 };
 
-int vkms_crtc_init(struct drm_device *dev, struct drm_crtc *crtc,
-		   struct drm_plane *primary, struct drm_plane *cursor)
+static void vkms_crtc_destroy_workqueue(struct drm_device *dev, void *raw_vkms_crtc)
 {
-	struct vkms_crtc *vkms_crtc = drm_crtc_to_vkms_crtc(crtc);
+	struct vkms_crtc *vkms_crtc = raw_vkms_crtc;
+
+	destroy_workqueue(vkms_crtc->composer_workq);
+}
+
+struct vkms_crtc *vkms_crtc_init(struct vkms_device *vkmsdev, struct drm_plane *primary,
+				 struct drm_plane *cursor)
+{
+	struct drm_device *dev = &vkmsdev->drm;
+	struct vkms_crtc *vkms_crtc;
 	int ret;
 
-	ret = drmm_crtc_init_with_planes(dev, crtc, primary, cursor,
-					 &vkms_crtc_funcs, NULL);
-	if (ret) {
-		DRM_ERROR("Failed to init CRTC\n");
-		return ret;
+	vkms_crtc = drmm_crtc_alloc_with_planes(dev, struct vkms_crtc, base, primary, cursor,
+						&vkms_crtc_funcs, NULL);
+	if (IS_ERR(vkms_crtc)) {
+		DRM_DEV_ERROR(vkmsdev->drm.dev, "Failed to init CRTC\n");
+		return vkms_crtc;
 	}
+	drm_crtc_helper_add(&vkms_crtc->base, &vkms_crtc_helper_funcs);
 
-	drm_crtc_helper_add(crtc, &vkms_crtc_helper_funcs);
-
-	drm_mode_crtc_set_gamma_size(crtc, VKMS_LUT_SIZE);
-	drm_crtc_enable_color_mgmt(crtc, 0, false, VKMS_LUT_SIZE);
+	drm_mode_crtc_set_gamma_size(&vkms_crtc->base, VKMS_LUT_SIZE);
+	drm_crtc_enable_color_mgmt(&vkms_crtc->base, 0, false, VKMS_LUT_SIZE);
 
 	spin_lock_init(&vkms_crtc->lock);
 	spin_lock_init(&vkms_crtc->composer_lock);
 
 	vkms_crtc->composer_workq = alloc_ordered_workqueue("vkms_composer", 0);
 	if (!vkms_crtc->composer_workq)
-		return -ENOMEM;
+		return ERR_PTR(-ENOMEM);
 
-	return ret;
+	ret = drmm_add_action_or_reset(dev, vkms_crtc_destroy_workqueue, vkms_crtc);
+	if (ret)
+		return ERR_PTR(ret);
+
+	return vkms_crtc;
 }

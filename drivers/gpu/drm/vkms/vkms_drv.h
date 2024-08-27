@@ -126,7 +126,6 @@ struct vkms_config {
 struct vkms_device {
 	struct drm_device drm;
 	struct platform_device *platform;
-	struct vkms_crtc crtc;
 	const struct vkms_config *config;
 };
 
@@ -143,8 +142,8 @@ struct vkms_device {
 	container_of(target, struct vkms_plane_state, base.base)
 
 /* CRTC */
-int vkms_crtc_init(struct drm_device *dev, struct drm_crtc *crtc,
-		   struct drm_plane *primary, struct drm_plane *cursor);
+struct vkms_crtc *vkms_crtc_init(struct vkms_device *vkmsdev, struct drm_plane *primary,
+				 struct drm_plane *cursor);
 
 int vkms_output_init(struct vkms_device *vkmsdev, int index);
 
@@ -165,6 +164,6 @@ void vkms_compose_row(struct line_buffer *stage_buffer, struct vkms_plane_state 
 void vkms_writeback_row(struct vkms_writeback_job *wb, const struct line_buffer *src_buffer, int y);
 
 /* Writeback */
-int vkms_enable_writeback_connector(struct vkms_device *vkmsdev);
+int vkms_enable_writeback_connector(struct vkms_device *vkmsdev, struct vkms_crtc *vkms_crtc);
 
 #endif /* _VKMS_DRV_H_ */

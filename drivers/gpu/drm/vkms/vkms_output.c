@@ -27,42 +27,31 @@ static const struct drm_connector_helper_funcs vkms_conn_helper_funcs = {
 	.get_modes    = vkms_conn_get_modes,
 };
 
-static int vkms_add_overlay_plane(struct vkms_device *vkmsdev, int index,
-				  struct drm_crtc *crtc)
-{
-	struct vkms_plane *overlay;
-
-	overlay = vkms_plane_init(vkmsdev, DRM_PLANE_TYPE_OVERLAY, index);
-	if (IS_ERR(overlay))
-		return PTR_ERR(overlay);
-
-	if (!overlay->base.possible_crtcs)
-		overlay->base.possible_crtcs = drm_crtc_mask(crtc);
-
-	return 0;
-}
-
 int vkms_output_init(struct vkms_device *vkmsdev, int index)
 {
-	struct vkms_crtc *vkms_crtc = &vkmsdev->crtc;
+	struct vkms_plane *primary, *cursor, *overlay = NULL;
 	struct drm_device *dev = &vkmsdev->drm;
 	struct drm_connector *connector;
 	struct drm_encoder *encoder;
-	struct drm_crtc *crtc = &vkms_crtc->base;
-	struct vkms_plane *primary, *cursor = NULL;
-	int ret;
-	int writeback;
+	struct vkms_crtc *crtc;
 	unsigned int n;
+	int ret;
 
+	/*
+	 * Initialize used plane. One primary plane is required to perform the composition.
+	 *
+	 * The overlay and cursor planes are not mandatory, but can be used to perform complex
+	 * composition.
+	 */
 	primary = vkms_plane_init(vkmsdev, DRM_PLANE_TYPE_PRIMARY, index);
 	if (IS_ERR(primary))
 		return PTR_ERR(primary);
 
 	if (vkmsdev->config->overlay) {
 		for (n = 0; n < NUM_OVERLAY_PLANES; n++) {
-			ret = vkms_add_overlay_plane(vkmsdev, index, crtc);
-			if (ret)
-				return ret;
+			overlay = vkms_plane_init(vkmsdev, DRM_PLANE_TYPE_OVERLAY, index);
+			if (IS_ERR(overlay))
+				return PTR_ERR(overlay);
 		}
 	}
 
@@ -72,22 +61,24 @@ int vkms_output_init(struct vkms_device *vkmsdev, int index)
 			return PTR_ERR(cursor);
 	}
 
-	ret = vkms_crtc_init(dev, crtc, &primary->base, &cursor->base);
-	if (ret)
-		return ret;
+	crtc = vkms_crtc_init(vkmsdev, &primary->base,
+			      cursor ? &cursor->base : NULL);
+	if (IS_ERR(crtc)) {
+		DRM_ERROR("Failed to allocate CRTC\n");
+		return PTR_ERR(crtc);
+	}
 
 	connector = drmm_kzalloc(dev, sizeof(*connector), GFP_KERNEL);
 	if (!connector) {
 		DRM_ERROR("Failed to allocate connector\n");
-		ret = -ENOMEM;
-		goto err_connector;
+		return -ENOMEM;
 	}
 
 	ret = drmm_connector_init(dev, connector, &vkms_connector_funcs,
 				  DRM_MODE_CONNECTOR_VIRTUAL, NULL);
 	if (ret) {
 		DRM_ERROR("Failed to init connector\n");
-		goto err_connector;
+		return ret;
 	}
 
 	drm_connector_helper_add(connector, &vkms_conn_helper_funcs);
@@ -95,34 +86,34 @@ int vkms_output_init(struct vkms_device *vkmsdev, int index)
 	encoder = drmm_kzalloc(dev, sizeof(*encoder), GFP_KERNEL);
 	if (!encoder) {
 		DRM_ERROR("Failed to allocate encoder\n");
-		ret = -ENOMEM;
-		goto err_connector;
+		return -ENOMEM;
 	}
 
 	ret = drmm_encoder_init(dev, encoder, NULL, DRM_MODE_ENCODER_VIRTUAL, NULL);
 	if (ret) {
 		DRM_ERROR("Failed to init encoder\n");
-		goto err_connector;
+		return ret;
 	}
-	encoder->possible_crtcs = 1;
 
+	encoder->possible_crtcs = drm_crtc_mask(&crtc->base);
+
+	/* Attach the encoder and the connector */
 	ret = drm_connector_attach_encoder(connector, encoder);
 	if (ret) {
 		DRM_ERROR("Failed to attach connector to encoder\n");
 		return ret;
 	}
 
+	/* Initialize the writeback component */
 	if (vkmsdev->config->writeback) {
-		writeback = vkms_enable_writeback_connector(vkmsdev);
-		if (writeback)
+		ret = vkms_enable_writeback_connector(vkmsdev, crtc);
+		if (ret) {
 			DRM_ERROR("Failed to init writeback connector\n");
+			return ret;
+		}
 	}
 
 	drm_mode_config_reset(dev);
 
 	return 0;
-
-err_connector:
-	drm_crtc_cleanup(crtc);
-	return ret;
 }
