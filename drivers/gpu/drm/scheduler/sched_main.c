@@ -788,7 +788,7 @@ int drm_sched_job_init(struct drm_sched_job *job,
 		 * or worse--a blank screen--leave a trail in the
 		 * logs, so this can be debugged easier.
 		 */
-		drm_err(job->sched, "%s: entity has no rq!\n", __func__);
+		pr_err("*ERROR* %s: entity has no rq!\n", __func__);
 		return -ENOENT;
 	}
 
