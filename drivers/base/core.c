@@ -4828,11 +4828,11 @@ void device_shutdown(void)
 		}
 		if (dev->bus && dev->bus->shutdown) {
 			if (initcall_debug)
-				dev_info(dev, "shutdown\n");
+				dev_info(dev, "call bus shutdown\n");
 			dev->bus->shutdown(dev);
 		} else if (dev->driver && dev->driver->shutdown) {
 			if (initcall_debug)
-				dev_info(dev, "shutdown\n");
+				dev_info(dev, "call driver shutdown\n");
 			dev->driver->shutdown(dev);
 		}
 
