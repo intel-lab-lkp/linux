@@ -7106,6 +7106,9 @@ static bool ltk_is_valid(struct mgmt_ltk_info *key)
 		return false;
 
 	switch (key->addr.type) {
+	case BDADDR_BREDR:
+		/* ltk over bredr */
+		return true;
 	case BDADDR_LE_PUBLIC:
 		return true;
 
