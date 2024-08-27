@@ -217,6 +217,14 @@ config PINCTRL_LS1012A
 	help
 	  Say Y here to enable the ls1012a pinctrl driver
 
+config PINCTRL_LS1046A
+	tristate "LS1046A pinctrl driver"
+	depends on ARCH_LAYERSCAPE && OF || COMPILE_TEST
+	select PINMUX
+	select GENERIC_PINCONF
+	help
+	  Say Y here to enable the ls1046a pinctrl driver
+
 config PINCTRL_VF610
 	bool "Freescale Vybrid VF610 pinctrl driver"
 	depends on SOC_VF610
