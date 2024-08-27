@@ -48,7 +48,6 @@ struct mvsd_host {
 	struct timer_list timer;
 	struct mmc_host *mmc;
 	struct device *dev;
-	struct clk *clk;
 };
 
 #define mvsd_write(offs, val)	writel(val, iobase + (offs))
@@ -731,6 +730,7 @@ static int mvsd_probe(struct platform_device *pdev)
 	struct mmc_host *mmc = NULL;
 	struct mvsd_host *host = NULL;
 	const struct mbus_dram_target_info *dram;
+	struct clk *clk;
 	int ret, irq;
 
 	if (!np) {
@@ -758,13 +758,12 @@ static int mvsd_probe(struct platform_device *pdev)
 	 * clock associated to the SDIO interface (it can simply be a
 	 * fixed rate clock).
 	 */
-	host->clk = devm_clk_get(&pdev->dev, NULL);
-	if (IS_ERR(host->clk)) {
+	clk = devm_clk_get_enabled(&pdev->dev, NULL);
+	if (IS_ERR(clk)) {
 		dev_err(&pdev->dev, "no clock associated\n");
 		ret = -EINVAL;
 		goto out;
 	}
-	clk_prepare_enable(host->clk);
 
 	mmc->ops = &mvsd_ops;
 
@@ -780,7 +779,7 @@ static int mvsd_probe(struct platform_device *pdev)
 	mmc->max_seg_size = mmc->max_blk_size * mmc->max_blk_count;
 	mmc->max_req_size = mmc->max_blk_size * mmc->max_blk_count;
 
-	host->base_clock = clk_get_rate(host->clk) / 2;
+	host->base_clock = clk_get_rate(clk) / 2;
 	ret = mmc_of_parse(mmc);
 	if (ret < 0)
 		goto out;
@@ -823,8 +822,6 @@ static int mvsd_probe(struct platform_device *pdev)
 
 out:
 	if (mmc) {
-		if (!IS_ERR(host->clk))
-			clk_disable_unprepare(host->clk);
 		mmc_free_host(mmc);
 	}
 
@@ -841,8 +838,6 @@ static void mvsd_remove(struct platform_device *pdev)
 	del_timer_sync(&host->timer);
 	mvsd_power_down(host);
 
-	if (!IS_ERR(host->clk))
-		clk_disable_unprepare(host->clk);
 	mmc_free_host(mmc);
 }
 
