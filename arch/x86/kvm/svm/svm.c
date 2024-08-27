@@ -17,6 +17,7 @@
 #include <linux/highmem.h>
 #include <linux/amd-iommu.h>
 #include <linux/sched.h>
+#include <linux/delay.h>
 #include <linux/trace_events.h>
 #include <linux/slab.h>
 #include <linux/hashtable.h>
@@ -247,6 +248,8 @@ static u8 rsm_ins_bytes[] = "\x0f\xaa";
 static unsigned long iopm_base;
 
 DEFINE_PER_CPU(struct svm_cpu_data, svm_data);
+
+static DEFINE_SPINLOCK(snp_decommision_lock);
 
 /*
  * Only MSR_TSC_AUX is switched via the user return hook.  EFER is switched via
@@ -594,9 +597,97 @@ static inline void kvm_cpu_svm_disable(void)
 
 static void svm_emergency_disable(void)
 {
+	static atomic_t waiting_for_cpus_synchronized;
+	static bool synchronize_cpus_initiated;
+	static bool snp_decommision_handled;
+	static atomic_t cpus_synchronized;
+
 	kvm_rebooting = true;
 
 	kvm_cpu_svm_disable();
+
+	if (!cc_platform_has(CC_ATTR_HOST_SEV_SNP))
+		return;
+
+	/*
+	 * SNP_SHUTDOWN_EX fails when SNP VMs are active as the firmware checks
+	 * every encryption-capable ASID to verify that it is not in use by a
+	 * guest and a DF_FLUSH is not required. If a DF_FLUSH is required,
+	 * the firmware returns DFFLUSH_REQUIRED. To address this, SNP_DECOMMISION
+	 * is required to shutdown all active SNP VMs, but SNP_DECOMMISION tags all
+	 * CPUs that guest was activated on to do a WBINVD. When panic notifier
+	 * is invoked all other CPUs have already been shutdown, so it is not
+	 * possible to do a wbinvd_on_all_cpus() after SNP_DECOMMISION has been
+	 * executed. This eventually causes SNP_SHUTDOWN_EX to fail after
+	 * SNP_DECOMMISION. To fix this, do SNP_DECOMMISION and subsequent WBINVD
+	 * on all CPUs during NMI shutdown of CPUs as part of disabling
+	 * virtualization on all CPUs via cpu_emergency_disable_virtualization().
+	 */
+
+	spin_lock(&snp_decommision_lock);
+
+	/*
+	 * exit early for call from native_machine_crash_shutdown()
+	 * as SNP_DECOMMISSION has already been done as part of
+	 * NMI shutdown of the CPUs.
+	 */
+	if (snp_decommision_handled) {
+		spin_unlock(&snp_decommision_lock);
+		return;
+	}
+
+	/*
+	 * Synchronize all CPUs handling NMI before issuing
+	 * SNP_DECOMMISSION.
+	 */
+	if (!synchronize_cpus_initiated) {
+		/*
+		 * one CPU handling panic, the other CPU is initiator for
+		 * CPU synchronization.
+		 */
+		atomic_set(&waiting_for_cpus_synchronized, num_online_cpus() - 2);
+		synchronize_cpus_initiated = true;
+		/*
+		 * Ensure CPU synchronization parameters are setup before dropping
+		 * the lock to let other CPUs continue to reach synchronization.
+		 */
+		wmb();
+
+		spin_unlock(&snp_decommision_lock);
+
+		/*
+		 * This will not cause system to hang forever as the CPU
+		 * handling panic waits for maximum one second for
+		 * other CPUs to stop in nmi_shootdown_cpus().
+		 */
+		while (atomic_read(&waiting_for_cpus_synchronized) > 0)
+		       mdelay(1);
+
+		/* Reacquire the lock once CPUs are synchronized */
+		spin_lock(&snp_decommision_lock);
+
+		atomic_set(&cpus_synchronized, 1);
+	} else {
+		atomic_dec(&waiting_for_cpus_synchronized);
+		/*
+		 * drop the lock to let other CPUs contiune to reach
+		 * synchronization.
+		 */
+		spin_unlock(&snp_decommision_lock);
+
+		while (atomic_read(&cpus_synchronized) == 0)
+		       mdelay(1);
+
+		/* Try to re-acquire lock after CPUs are synchronized */
+		spin_lock(&snp_decommision_lock);
+	}
+
+	if (!snp_decommision_handled) {
+		snp_decommision_all();
+		snp_decommision_handled = true;
+	}
+	spin_unlock(&snp_decommision_lock);
+	wbinvd();
 }
 
 static void svm_hardware_disable(void)

@@ -89,6 +89,7 @@ static unsigned int nr_asids;
 static unsigned long *sev_asid_bitmap;
 static unsigned long *sev_reclaim_asid_bitmap;
 
+static void **snp_asid_to_gctx_pages_map;
 static int snp_decommission_context(struct kvm *kvm);
 
 struct enc_region {
@@ -2248,6 +2249,9 @@ static int snp_launch_start(struct kvm *kvm, struct kvm_sev_cmd *argp)
 		goto e_free_context;
 	}
 
+	if (snp_asid_to_gctx_pages_map)
+		snp_asid_to_gctx_pages_map[sev_get_asid(kvm)] = sev->snp_context;
+
 	return 0;
 
 e_free_context:
@@ -2884,7 +2888,33 @@ static int snp_decommission_context(struct kvm *kvm)
 	snp_free_firmware_page(sev->snp_context);
 	sev->snp_context = NULL;
 
+	if (snp_asid_to_gctx_pages_map)
+		snp_asid_to_gctx_pages_map[sev_get_asid(kvm)] = NULL;
+
 	return 0;
+}
+
+/*
+ * NOTE: called in NMI context from sev_emergency_disable().
+ */
+void snp_decommision_all(void)
+{
+	struct sev_data_snp_addr data = {};
+	int ret, asid;
+
+	if (!snp_asid_to_gctx_pages_map)
+		return;
+
+	for (asid = 1; asid < min_sev_asid; asid++) {
+		if (snp_asid_to_gctx_pages_map[asid]) {
+			data.address = __sme_pa(snp_asid_to_gctx_pages_map[asid]);
+			ret = sev_do_cmd(SEV_CMD_SNP_DECOMMISSION, &data, NULL);
+			if (!ret) {
+				snp_free_firmware_page(snp_asid_to_gctx_pages_map[asid]);
+				snp_asid_to_gctx_pages_map[asid] = NULL;
+			}
+		}
+	}
 }
 
 void sev_vm_destroy(struct kvm *kvm)
@@ -3052,6 +3082,13 @@ void __init sev_hardware_setup(void)
 	sev_es_supported = true;
 	sev_snp_supported = sev_snp_enabled && cc_platform_has(CC_ATTR_HOST_SEV_SNP);
 
+	if (sev_snp_supported) {
+		snp_asid_to_gctx_pages_map = kmalloc_array(min_sev_asid,
+							   sizeof(void *),
+							   GFP_KERNEL | __GFP_ZERO);
+		if (!snp_asid_to_gctx_pages_map)
+			pr_warn("Could not allocate SNP asid to guest context map\n");
+	}
 out:
 	if (boot_cpu_has(X86_FEATURE_SEV))
 		pr_info("SEV %s (ASIDs %u - %u)\n",
@@ -3094,6 +3131,8 @@ void sev_hardware_unsetup(void)
 
 	misc_cg_set_capacity(MISC_CG_RES_SEV, 0);
 	misc_cg_set_capacity(MISC_CG_RES_SEV_ES, 0);
+
+	kfree(snp_asid_to_gctx_pages_map);
 }
 
 int sev_cpu_init(struct svm_cpu_data *sd)
