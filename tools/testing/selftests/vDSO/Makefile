@@ -38,7 +38,7 @@ $(OUTPUT)/vdso_test_correctness: LDFLAGS += -ldl
 
 $(OUTPUT)/vdso_test_getrandom: parse_vdso.c
 $(OUTPUT)/vdso_test_getrandom: CFLAGS += -isystem $(top_srcdir)/tools/include \
-                                         -isystem $(top_srcdir)/include/uapi
+                                         $(KHDR_INCLUDES)
 
 $(OUTPUT)/vdso_test_chacha: $(top_srcdir)/tools/arch/$(ARCH)/vdso/vgetrandom-chacha.S
 $(OUTPUT)/vdso_test_chacha: CFLAGS += -idirafter $(top_srcdir)/tools/include \
