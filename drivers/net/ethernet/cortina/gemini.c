@@ -109,7 +109,6 @@ struct gemini_ethernet_port {
 	struct device *dev;
 	void __iomem *dma_base;
 	void __iomem *gmac_base;
-	struct clk *pclk;
 	struct reset_control *reset;
 	int irq;
 	__le32 mac_addr[3];
@@ -2326,7 +2325,6 @@ static void gemini_port_remove(struct gemini_ethernet_port *port)
 		phy_disconnect(port->netdev->phydev);
 		unregister_netdev(port->netdev);
 	}
-	clk_disable_unprepare(port->pclk);
 	geth_cleanup_freeq(port->geth);
 }
 
@@ -2401,6 +2399,7 @@ static int gemini_ethernet_port_probe(struct platform_device *pdev)
 	struct gemini_ethernet *geth;
 	struct net_device *netdev;
 	struct device *parent;
+	struct clk *pclk;
 	u8 mac[ETH_ALEN];
 	unsigned int id;
 	int irq;
@@ -2453,14 +2452,11 @@ static int gemini_ethernet_port_probe(struct platform_device *pdev)
 	port->irq = irq;
 
 	/* Clock the port */
-	port->pclk = devm_clk_get(dev, "PCLK");
-	if (IS_ERR(port->pclk)) {
+	pclk = devm_clk_get_enabled(dev, "PCLK");
+	if (IS_ERR(pclk)) {
 		dev_err(dev, "no PCLK\n");
-		return PTR_ERR(port->pclk);
+		return PTR_ERR(pclk);
 	}
-	ret = clk_prepare_enable(port->pclk);
-	if (ret)
-		return ret;
 
 	/* Maybe there is a nice ethernet address we should use */
 	gemini_port_save_mac_addr(port);
@@ -2469,8 +2465,7 @@ static int gemini_ethernet_port_probe(struct platform_device *pdev)
 	port->reset = devm_reset_control_get_exclusive(dev, NULL);
 	if (IS_ERR(port->reset)) {
 		dev_err(dev, "no reset\n");
-		ret = PTR_ERR(port->reset);
-		goto unprepare;
+		return PTR_ERR(port->reset);
 	}
 	reset_control_reset(port->reset);
 	usleep_range(100, 500);
@@ -2532,24 +2527,20 @@ static int gemini_ethernet_port_probe(struct platform_device *pdev)
 					port_names[port->id],
 					port);
 	if (ret)
-		goto unprepare;
+		return ret;
 
 	ret = gmac_setup_phy(netdev);
 	if (ret) {
 		netdev_err(netdev,
 			   "PHY init failed\n");
-		goto unprepare;
+		return ret;
 	}
 
 	ret = register_netdev(netdev);
 	if (ret)
-		goto unprepare;
+		return ret;
 
 	return 0;
-
-unprepare:
-	clk_disable_unprepare(port->pclk);
-	return ret;
 }
 
 static void gemini_ethernet_port_remove(struct platform_device *pdev)
