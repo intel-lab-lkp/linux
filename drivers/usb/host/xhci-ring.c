@@ -2790,8 +2790,8 @@ static int handle_tx_event(struct xhci_hcd *xhci,
 			      trb_comp_code == COMP_STOPPED_LENGTH_INVALID ||
 			      (trb_comp_code == COMP_SUCCESS && ep_ring->last_td_was_short) ||
 			      (trb_comp_code == COMP_SHORT_PACKET && ep_ring->last_td_was_short))) {
-				xhci_warn(xhci, "WARN Event TRB for slot %u ep %d with no TDs queued?\n",
-					  slot_id, ep_index);
+				xhci_warn(xhci, "WARN Event TRB for slot %u ep %d comp_code %d with no TDs queued?\n",
+					  slot_id, ep_index, trb_comp_code);
 			}
 			if (ep->skip) {
 				ep->skip = false;
