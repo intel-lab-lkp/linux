@@ -94,8 +94,11 @@ int change_memory_attr(unsigned long addr, int numpages, long action)
 	if (!radix_enabled()) {
 		int region = get_region_id(addr);
 
-		if (WARN_ON_ONCE(region != VMALLOC_REGION_ID && region != IO_REGION_ID))
+		if (region != VMALLOC_REGION_ID && region != IO_REGION_ID) {
+			pr_warn_once("%s: possible use of set_memory_* on linear map on Hash from (%ps)\n",
+					__func__, __builtin_return_address(0));
 			return -EINVAL;
+		}
 	}
 #endif
 
