@@ -287,6 +287,20 @@ static int __dwc3_gadget_wakeup(struct dwc3 *dwc, bool async);
  *
  * Caller should handle locking. This function will issue @cmd with given
  * @params to @dep and wait for its completion.
+ *
+ * According to databook, while issuing StartXfer command if the link is in L1/L2/U3,
+ * then the command may not complete and timeout, hence software must bring the link
+ * back to ON state by performing remote wakeup. However, since issuing a command in
+ * USB2 speeds requires the clearing of GUSB2PHYCFG.SUSPENDUSB2, which turns on the
+ * signal required to complete the given command (usually within 50us). This should
+ * happen within the command timeout set by driver. Hence we don't expect to trigger
+ * a remote wakeup from here; instead it should be done by wakeup ops.
+ *
+ * Special note: If wakeup ops is triggered for remote wakeup, care should be taken
+ * if StartXfer command needs to be sent soon after. The wakeup ops is asynchronous
+ * and the link state may not transition to ON state yet. And after receiving wakeup
+ * event, device would no longer be in U3, and any link transition afterwards needs
+ * to be adressed with wakeup ops.
  */
 int dwc3_send_gadget_ep_cmd(struct dwc3_ep *dep, unsigned int cmd,
 		struct dwc3_gadget_ep_cmd_params *params)
@@ -325,30 +339,6 @@ int dwc3_send_gadget_ep_cmd(struct dwc3_ep *dep, unsigned int cmd,
 
 		if (saved_config)
 			dwc3_writel(dwc->regs, DWC3_GUSB2PHYCFG(0), reg);
-	}
-
-	if (DWC3_DEPCMD_CMD(cmd) == DWC3_DEPCMD_STARTTRANSFER) {
-		int link_state;
-
-		/*
-		 * Initiate remote wakeup if the link state is in U3 when
-		 * operating in SS/SSP or L1/L2 when operating in HS/FS. If the
-		 * link state is in U1/U2, no remote wakeup is needed. The Start
-		 * Transfer command will initiate the link recovery.
-		 */
-		link_state = dwc3_gadget_get_link_state(dwc);
-		switch (link_state) {
-		case DWC3_LINK_STATE_U2:
-			if (dwc->gadget->speed >= USB_SPEED_SUPER)
-				break;
-
-			fallthrough;
-		case DWC3_LINK_STATE_U3:
-			ret = __dwc3_gadget_wakeup(dwc, false);
-			dev_WARN_ONCE(dwc->dev, ret, "wakeup failed --> %d\n",
-					ret);
-			break;
-		}
 	}
 
 	/*
