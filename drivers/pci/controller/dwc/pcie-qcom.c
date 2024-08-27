@@ -248,6 +248,8 @@ struct qcom_pcie_cfg {
 	bool no_l0s;
 };
 
+#define QCOM_PCIE_SLOT_MAX_SUPPLIES			3
+
 struct qcom_pcie {
 	struct dw_pcie *pci;
 	void __iomem *parf;			/* DT parf */
@@ -260,6 +262,7 @@ struct qcom_pcie {
 	struct icc_path *icc_cpu;
 	const struct qcom_pcie_cfg *cfg;
 	struct dentry *debugfs;
+	struct regulator_bulk_data slot_supplies[QCOM_PCIE_SLOT_MAX_SUPPLIES];
 	bool suspended;
 	bool use_pm_opp;
 };
@@ -1174,6 +1177,41 @@ static int qcom_pcie_link_up(struct dw_pcie *pci)
 	return !!(val & PCI_EXP_LNKSTA_DLLLA);
 }
 
+static int qcom_pcie_enable_slot_supplies(struct qcom_pcie *pcie)
+{
+	struct dw_pcie *pci = pcie->pci;
+	int ret;
+
+	ret = regulator_bulk_enable(ARRAY_SIZE(pcie->slot_supplies),
+				    pcie->slot_supplies);
+	if (ret < 0)
+		dev_err(pci->dev, "Failed to enable slot regulators\n");
+
+	return ret;
+}
+
+static void qcom_pcie_disable_slot_supplies(struct qcom_pcie *pcie)
+{
+	regulator_bulk_disable(ARRAY_SIZE(pcie->slot_supplies),
+			       pcie->slot_supplies);
+}
+
+static int qcom_pcie_get_slot_supplies(struct qcom_pcie *pcie)
+{
+	struct dw_pcie *pci = pcie->pci;
+	int ret;
+
+	pcie->slot_supplies[0].supply = "vpcie12v";
+	pcie->slot_supplies[1].supply = "vpcie3v3";
+	pcie->slot_supplies[2].supply = "vpcie3v3aux";
+	ret = devm_regulator_bulk_get(pci->dev, ARRAY_SIZE(pcie->slot_supplies),
+				      pcie->slot_supplies);
+	if (ret < 0)
+		dev_err(pci->dev, "Failed to get slot regulators\n");
+
+	return ret;
+}
+
 static int qcom_pcie_host_init(struct dw_pcie_rp *pp)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
@@ -1182,9 +1220,13 @@ static int qcom_pcie_host_init(struct dw_pcie_rp *pp)
 
 	qcom_ep_reset_assert(pcie);
 
-	ret = pcie->cfg->ops->init(pcie);
+	ret = qcom_pcie_enable_slot_supplies(pcie);
 	if (ret)
 		return ret;
+
+	ret = pcie->cfg->ops->init(pcie);
+	if (ret)
+		goto err_disable_slot;
 
 	ret = phy_set_mode_ext(pcie->phy, PHY_MODE_PCIE, PHY_MODE_PCIE_RC);
 	if (ret)
@@ -1216,7 +1258,8 @@ err_disable_phy:
 	phy_power_off(pcie->phy);
 err_deinit:
 	pcie->cfg->ops->deinit(pcie);
-
+err_disable_slot:
+	qcom_pcie_disable_slot_supplies(pcie);
 	return ret;
 }
 
@@ -1228,6 +1271,7 @@ static void qcom_pcie_host_deinit(struct dw_pcie_rp *pp)
 	qcom_ep_reset_assert(pcie);
 	phy_power_off(pcie->phy);
 	pcie->cfg->ops->deinit(pcie);
+	qcom_pcie_disable_slot_supplies(pcie);
 }
 
 static void qcom_pcie_host_post_init(struct dw_pcie_rp *pp)
@@ -1601,6 +1645,10 @@ static int qcom_pcie_probe(struct platform_device *pdev)
 		if (ret)
 			goto err_pm_runtime_put;
 	}
+
+	ret = qcom_pcie_get_slot_supplies(pcie);
+	if (ret)
+		goto err_pm_runtime_put;
 
 	ret = pcie->cfg->ops->get_resources(pcie);
 	if (ret)
