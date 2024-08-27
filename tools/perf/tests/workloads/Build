@@ -8,7 +8,7 @@ perf-test-y += brstack.o
 perf-test-y += datasym.o
 perf-test-y += landlock.o
 
-CFLAGS_sqrtloop.o         = -g -O0 -fno-inline -U_FORTIFY_SOURCE
-CFLAGS_leafloop.o         = -g -O0 -fno-inline -fno-omit-frame-pointer -U_FORTIFY_SOURCE
-CFLAGS_brstack.o          = -g -O0 -fno-inline -U_FORTIFY_SOURCE
-CFLAGS_datasym.o          = -g -O0 -fno-inline -U_FORTIFY_SOURCE
+CFLAGS_sqrtloop.o         = -g -O0 -fno-inline -Wp,-U_FORTIFY_SOURCE
+CFLAGS_leafloop.o         = -g -O0 -fno-inline -fno-omit-frame-pointer -Wp,-U_FORTIFY_SOURCE
+CFLAGS_brstack.o          = -g -O0 -fno-inline -Wp,-U_FORTIFY_SOURCE
+CFLAGS_datasym.o          = -g -O0 -fno-inline -Wp,-U_FORTIFY_SOURCE
