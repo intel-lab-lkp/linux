@@ -19277,14 +19277,14 @@ static struct bpf_prog *bpf_patch_insn_data(struct bpf_verifier_env *env, u32 of
  * For all jmp insns in a given 'prog' that point to 'tgt_idx' insn adjust the
  * jump offset by 'delta'.
  */
-static int adjust_jmp_off(struct bpf_prog *prog, u32 tgt_idx, u32 delta)
+static int adjust_jmp_off(struct bpf_prog *prog, u32 tgt_idx, u32 delta, u32 skip_cnt)
 {
-	struct bpf_insn *insn = prog->insnsi;
+	struct bpf_insn *insn = prog->insnsi + skip_cnt;
 	u32 insn_cnt = prog->len, i;
 	s32 imm;
 	s16 off;
 
-	for (i = 0; i < insn_cnt; i++, insn++) {
+	for (i = skip_cnt; i < insn_cnt; i++, insn++) {
 		u8 code = insn->code;
 
 		if ((BPF_CLASS(code) != BPF_JMP && BPF_CLASS(code) != BPF_JMP32) ||
@@ -19704,6 +19704,9 @@ static int convert_ctx_accesses(struct bpf_verifier_env *env)
 			delta += cnt - 1;
 		}
 	}
+
+	if (delta)
+		WARN_ON(adjust_jmp_off(env->prog, 0, delta, delta));
 
 	if (bpf_prog_is_offloaded(env->prog->aux))
 		return 0;
@@ -21136,7 +21139,7 @@ next_insn:
 		 * to insn after BPF_ST that inits may_goto count.
 		 * Adjustment will succeed because bpf_patch_insn_data() didn't fail.
 		 */
-		WARN_ON(adjust_jmp_off(env->prog, subprog_start, 1));
+		WARN_ON(adjust_jmp_off(env->prog, subprog_start, 1, 0));
 	}
 
 	/* Since poke tab is now finalized, publish aux to tracker. */
