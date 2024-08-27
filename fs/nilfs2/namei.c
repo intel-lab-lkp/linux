@@ -546,6 +546,7 @@ const struct inode_operations nilfs_dir_inode_operations = {
 	.mknod		= nilfs_mknod,
 	.rename		= nilfs_rename,
 	.setattr	= nilfs_setattr,
+	.getattr	= nilfs_getattr,
 	.permission	= nilfs_permission,
 	.fiemap		= nilfs_fiemap,
 	.fileattr_get	= nilfs_fileattr_get,
@@ -554,6 +555,7 @@ const struct inode_operations nilfs_dir_inode_operations = {
 
 const struct inode_operations nilfs_special_inode_operations = {
 	.setattr	= nilfs_setattr,
+	.getattr	= nilfs_getattr,
 	.permission	= nilfs_permission,
 };
 

@@ -292,6 +292,8 @@ extern void nilfs_truncate(struct inode *);
 extern void nilfs_evict_inode(struct inode *);
 extern int nilfs_setattr(struct mnt_idmap *, struct dentry *,
 			 struct iattr *);
+extern int nilfs_getattr(struct mnt_idmap *idmap, const struct path *path,
+			struct kstat *stat, u32 request_mask, unsigned int query_flags);
 extern void nilfs_write_failed(struct address_space *mapping, loff_t to);
 int nilfs_permission(struct mnt_idmap *idmap, struct inode *inode,
 		     int mask);
