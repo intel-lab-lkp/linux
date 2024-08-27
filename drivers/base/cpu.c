@@ -156,6 +156,9 @@ static ssize_t crash_notes_show(struct device *dev,
 	unsigned long long addr;
 	int cpunum;
 
+	if (!has_capability_noaudit(current, CAP_SYSLOG))
+		return sysfs_emit(buf, "%llx\n", 0ull);
+
 	cpunum = cpu->dev.id;
 
 	/*
