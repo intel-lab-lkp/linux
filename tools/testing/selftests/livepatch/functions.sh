@@ -7,6 +7,7 @@
 MAX_RETRIES=600
 RETRY_INTERVAL=".1"	# seconds
 KLP_SYSFS_DIR="/sys/kernel/livepatch"
+MODULE_SYSFS_DIR="/sys/module"
 
 # Kselftest framework requirement - SKIP code is 4
 ksft_skip=4
@@ -343,4 +344,17 @@ function check_sysfs_value() {
 	if test "$value" != "$expected_value" ; then
 		die "Unexpected value in $path: $expected_value vs. $value"
 	fi
+}
+
+# read_module_param_value(modname, param) - read module parameter value
+#  modname - livepatch module creating the sysfs interface
+#  param - parameter name
+function read_module_param() {
+   local mod="$1"; shift
+   local param="$1"; shift
+
+   local path="$MODULE_SYSFS_DIR/$mod/parameters/$param"
+
+   log "% echo \"$mod/parameters/$param: \$(cat $path)\""
+   log "$mod/parameters/$param: $(cat $path)"
 }
