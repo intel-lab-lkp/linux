@@ -414,6 +414,10 @@ EXPORT_SYMBOL_GPL(regulator_irq_helper_cancel);
  * notification helperk. Exactly one rdev and exactly one error (in
  * "common_errs"-field) can be given at IRQ helper registration for
  * regulator_irq_map_event_simple() to be viable.
+ *
+ * Return: 0
+ *
+ * Actual regulator error and notification are passed back through @rid.
  */
 int regulator_irq_map_event_simple(int irq, struct regulator_irq_data *rid,
 			    unsigned long *dev_mask)
