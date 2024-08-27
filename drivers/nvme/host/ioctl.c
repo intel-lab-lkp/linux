@@ -4,6 +4,7 @@
  * Copyright (c) 2017-2021 Christoph Hellwig.
  */
 #include <linux/bio-integrity.h>
+#include <linux/blk-integrity.h>
 #include <linux/ptrace.h>	/* for force_successful_syscall_return */
 #include <linux/nvme_ioctl.h>
 #include <linux/io_uring/cmd.h>
@@ -121,6 +122,9 @@ static int nvme_map_user_request(struct request *req, u64 ubuffer,
 	struct block_device *bdev = ns ? ns->disk->part0 : NULL;
 	struct bio *bio = NULL;
 	int ret;
+
+	if (meta_buffer && meta_len && bdev && !blk_get_integrity(bdev->bd_disk))
+		return -EINVAL;
 
 	if (ioucmd && (ioucmd->flags & IORING_URING_CMD_FIXED)) {
 		struct iov_iter iter;
