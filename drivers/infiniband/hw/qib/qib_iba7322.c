@@ -6633,7 +6633,7 @@ static int qib_init_7322_variables(struct qib_devdata *dd)
 	 */
 	if (dd->flags & QIB_HAS_SEND_DMA) {
 		dd->cspec->sdmabufcnt = dd->piobcnt4k;
-		sbufs = updthresh > 3 ? updthresh : 3;
+		sbufs = max(updthresh, 3);
 	} else {
 		dd->cspec->sdmabufcnt = 0;
 		sbufs = dd->piobcnt4k;
