@@ -48,6 +48,10 @@ CFLAGS += -g $(OPT_FLAGS) -rdynamic					\
 LDFLAGS += $(SAN_LDFLAGS)
 LDLIBS += $(LIBELF_LIBS) -lz -lrt -lpthread
 
+ifneq (,$(findstring -static,$(LDLIBS)))
+LDLIBS += -lzstd
+endif
+
 LDLIBS += $(shell $(PKG_CONFIG) --libs libpcap 2>/dev/null)
 CFLAGS += $(shell $(PKG_CONFIG) --cflags libpcap 2>/dev/null)
 CFLAGS += $(shell $(PKG_CONFIG) --exists libpcap 2>/dev/null && echo "-DTRAFFIC_MONITOR=1")
@@ -443,13 +447,19 @@ CLANG_TARGET_ARCH = --target=$(notdir $(CROSS_COMPILE:%-=%))
 endif
 
 CLANG_SYS_INCLUDES = $(call get_sys_includes,$(CLANG),$(CLANG_TARGET_ARCH))
+CLANG_CFLAGS = $(CLANG_SYS_INCLUDES)
+
 BPF_CFLAGS = -g -Wall -Werror -D__TARGET_ARCH_$(SRCARCH) $(MENDIAN)	\
 	     -I$(INCLUDE_DIR) -I$(CURDIR) -I$(APIDIR)			\
 	     -I$(abspath $(OUTPUT)/../usr/include)			\
 	     -Wno-compare-distinct-pointer-types
 # TODO: enable me -Wsign-compare
 
-CLANG_CFLAGS = $(CLANG_SYS_INCLUDES)
+#"make headers_install" at first
+ifneq ($(CROSS_COMPILE),)
+src_uapi_dir := $(srctree)/usr/include
+BPF_CFLAGS += -I$(src_uapi_dir)
+endif
 
 $(OUTPUT)/test_l4lb_noinline.o: BPF_CFLAGS += -fno-inline
 $(OUTPUT)/test_xdp_noinline.o: BPF_CFLAGS += -fno-inline
