@@ -30,6 +30,8 @@ static const size_t acpi_dsm_size[DSM_FUNC_NUM_FUNCS] = {
 	[DSM_FUNC_ENABLE_11BE] =		sizeof(u32),
 };
 
+static int acpi_dsm_func_retcode[DSM_FUNC_NUM_FUNCS] = {0};
+
 static int iwl_acpi_get_handle(struct device *dev, acpi_string method,
 			       acpi_handle *ret_handle)
 {
@@ -169,6 +171,10 @@ int iwl_acpi_get_dsm(struct iwl_fw_runtime *fwrt,
 	if (WARN_ON(func >= ARRAY_SIZE(acpi_dsm_size)))
 		return -EINVAL;
 
+	/* If HW return an error once, do not bother try again. */
+	if (acpi_dsm_func_retcode[func])
+		return acpi_dsm_func_retcode[func];
+
 	expected_size = acpi_dsm_size[func];
 
 	/* Currently all ACPI DSMs are either 8-bit or 32-bit */
@@ -177,6 +183,7 @@ int iwl_acpi_get_dsm(struct iwl_fw_runtime *fwrt,
 
 	ret = iwl_acpi_get_dsm_integer(fwrt->dev, ACPI_DSM_REV, func,
 				       &iwl_guid, &tmp, expected_size);
+	acpi_dsm_func_retcode[func] = ret;
 	if (ret)
 		return ret;
 
