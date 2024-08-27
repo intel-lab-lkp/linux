@@ -146,7 +146,7 @@ static int copy_inline_to_page(struct btrfs_inode *inode,
 	btrfs_folio_clear_checked(fs_info, folio, file_offset, block_size);
 	btrfs_folio_set_dirty(fs_info, folio, file_offset, block_size);
 out_unlock:
-	if (IS_ERR(folio)) {
+	if (!IS_ERR(folio)) {
 		folio_unlock(folio);
 		folio_put(folio);
 	}
