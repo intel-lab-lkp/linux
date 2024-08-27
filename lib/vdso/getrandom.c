@@ -14,6 +14,11 @@
 #include <asm/unaligned.h>
 #include <uapi/linux/mman.h>
 
+#undef PAGE_SIZE
+#undef PAGE_MASK
+#define PAGE_SIZE	(1UL << CONFIG_PAGE_SHIFT)
+#define PAGE_MASK	(~(PAGE_SIZE - 1))
+
 #define MEMCPY_AND_ZERO_SRC(type, dst, src, len) do {				\
 	while (len >= sizeof(type)) {						\
 		__put_unaligned_t(type, __get_unaligned_t(type, src), dst);	\
