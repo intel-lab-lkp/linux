@@ -28,6 +28,15 @@
 	status = "okay";
 };
 
+&pcie1 {
+	perst-gpios = <&tlmm 15 GPIO_ACTIVE_LOW>;
+	status = "okay";
+};
+
+&pcie_x2phy {
+	status = "okay";
+};
+
 &sdhc_1 {
 	pinctrl-0 = <&sdc_default_state>;
 	pinctrl-names = "default";
