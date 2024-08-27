@@ -316,12 +316,6 @@ struct bcm_enet_priv {
 	/* lock mib update between userspace request and workqueue */
 	struct mutex mib_update_lock;
 
-	/* mac clock */
-	struct clk *mac_clk;
-
-	/* phy clock if internal phy is used */
-	struct clk *phy_clk;
-
 	/* network device reference */
 	struct net_device *net_dev;
 
