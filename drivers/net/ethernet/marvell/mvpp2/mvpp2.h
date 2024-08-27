@@ -1044,13 +1044,6 @@ struct mvpp2 {
 	 */
 	struct regmap *sysctrl_base;
 
-	/* Common clocks */
-	struct clk *pp_clk;
-	struct clk *gop_clk;
-	struct clk *mg_clk;
-	struct clk *mg_core_clk;
-	struct clk *axi_clk;
-
 	/* List of pointers to port structures */
 	int port_count;
 	struct mvpp2_port *port_list[MVPP2_MAX_PORTS];
