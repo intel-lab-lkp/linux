@@ -250,7 +250,9 @@ static int c6xdigio_attach(struct comedi_device *dev,
 		return ret;
 
 	/*  Make sure that PnP ports get activated */
-	pnp_register_driver(&c6xdigio_pnp_driver);
+	ret = pnp_register_driver(&c6xdigio_pnp_driver);
+	if (ret)
+		return ret;
 
 	s = &dev->subdevices[0];
 	/* pwm output subdevice */
