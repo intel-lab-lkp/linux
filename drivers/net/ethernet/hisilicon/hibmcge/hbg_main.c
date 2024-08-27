@@ -6,10 +6,17 @@
 #include <linux/pci.h>
 #include "hbg_common.h"
 #include "hbg_hw.h"
+#include "hbg_mdio.h"
 
 static int hbg_init(struct hbg_priv *priv)
 {
-	return hbg_hw_init(priv);
+	int ret;
+
+	ret = hbg_hw_init(priv);
+	if (ret)
+		return ret;
+
+	return hbg_mdio_init(priv);
 }
 
 static int hbg_pci_init(struct pci_dev *pdev)
