@@ -548,16 +548,14 @@ static int rockchip_lvds_bind(struct device *dev, struct device *master,
 	struct drm_encoder *encoder;
 	struct drm_connector *connector;
 	struct device_node *remote = NULL;
-	struct device_node  *port;
 	int ret = 0, child_count = 0;
 	const char *name;
 	u32 endpoint_id = 0;
 
 	lvds->drm_dev = drm_dev;
-	port = of_graph_get_port_by_id(dev->of_node, 1);
+	struct device_node *port __free(device_node) = of_graph_get_port_by_id(dev->of_node, 1);
 	if (!port) {
-		DRM_DEV_ERROR(dev,
-			      "can't found port point, please init lvds panel port!\n");
+		dev_err(dev, "can't found port point, please init lvds panel port!\n");
 		return -EINVAL;
 	}
 	for_each_child_of_node_scoped(port, endpoint) {
@@ -569,13 +567,10 @@ static int rockchip_lvds_bind(struct device *dev, struct device *master,
 			break;
 	}
 	if (!child_count) {
-		DRM_DEV_ERROR(dev, "lvds port does not have any children\n");
-		ret = -EINVAL;
-		goto err_put_port;
-	} else if (ret) {
-		dev_err_probe(dev, ret, "failed to find panel and bridge node\n");
-		goto err_put_port;
-	}
+		dev_err(dev, "lvds port does not have any children\n");
+		return -EINVAL;
+	} else if (ret)
+		return dev_err_probe(dev, ret, "failed to find panel and bridge node\n");
 	if (lvds->panel)
 		remote = lvds->panel->dev->of_node;
 	else
@@ -587,7 +582,7 @@ static int rockchip_lvds_bind(struct device *dev, struct device *master,
 		lvds->output = rockchip_lvds_name_to_output(name);
 
 	if (lvds->output < 0) {
-		DRM_DEV_ERROR(dev, "invalid output type [%s]\n", name);
+		dev_err(dev, "invalid output type [%s]\n", name);
 		ret = lvds->output;
 		goto err_put_remote;
 	}
@@ -599,7 +594,7 @@ static int rockchip_lvds_bind(struct device *dev, struct device *master,
 		lvds->format = rockchip_lvds_name_to_format(name);
 
 	if (lvds->format < 0) {
-		DRM_DEV_ERROR(dev, "invalid data-mapping format [%s]\n", name);
+		dev_err(dev, "invalid data-mapping format [%s]\n", name);
 		ret = lvds->format;
 		goto err_put_remote;
 	}
@@ -610,8 +605,7 @@ static int rockchip_lvds_bind(struct device *dev, struct device *master,
 
 	ret = drm_simple_encoder_init(drm_dev, encoder, DRM_MODE_ENCODER_LVDS);
 	if (ret < 0) {
-		DRM_DEV_ERROR(drm_dev->dev,
-			      "failed to initialize encoder: %d\n", ret);
+		dev_err(drm_dev->dev, "failed to initialize encoder: %d\n", ret);
 		goto err_put_remote;
 	}
 
@@ -624,8 +618,7 @@ static int rockchip_lvds_bind(struct device *dev, struct device *master,
 					 &rockchip_lvds_connector_funcs,
 					 DRM_MODE_CONNECTOR_LVDS);
 		if (ret < 0) {
-			DRM_DEV_ERROR(drm_dev->dev,
-				      "failed to initialize connector: %d\n", ret);
+			dev_err(drm_dev->dev, "failed to initialize connector: %d\n", ret);
 			goto err_free_encoder;
 		}
 
@@ -639,9 +632,8 @@ static int rockchip_lvds_bind(struct device *dev, struct device *master,
 
 		connector = drm_bridge_connector_init(lvds->drm_dev, encoder);
 		if (IS_ERR(connector)) {
-			DRM_DEV_ERROR(drm_dev->dev,
-				      "failed to initialize bridge connector: %pe\n",
-				      connector);
+			dev_err(drm_dev->dev, "failed to initialize bridge connector: %pe\n",
+				connector);
 			ret = PTR_ERR(connector);
 			goto err_free_encoder;
 		}
@@ -649,14 +641,12 @@ static int rockchip_lvds_bind(struct device *dev, struct device *master,
 
 	ret = drm_connector_attach_encoder(connector, encoder);
 	if (ret < 0) {
-		DRM_DEV_ERROR(drm_dev->dev,
-			      "failed to attach encoder: %d\n", ret);
+		dev_err(drm_dev->dev, "failed to attach encoder: %d\n", ret);
 		goto err_free_connector;
 	}
 
 	pm_runtime_enable(dev);
 	of_node_put(remote);
-	of_node_put(port);
 
 	return 0;
 
@@ -666,8 +656,6 @@ err_free_encoder:
 	drm_encoder_cleanup(encoder);
 err_put_remote:
 	of_node_put(remote);
-err_put_port:
-	of_node_put(port);
 
 	return ret;
 }
