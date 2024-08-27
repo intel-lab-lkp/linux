@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0
-obj-y				:= dma-mapping.o extable.o fault.o init.o \
+obj-y				:= dma-mapping.o extable.o fault.o fault_neon.o init.o \
 				   cache.o copypage.o flush.o \
 				   ioremap.o mmap.o pgd.o mmu.o \
 				   context.o proc.o pageattr.o fixmap.o
@@ -13,5 +13,6 @@ obj-$(CONFIG_DEBUG_VIRTUAL)	+= physaddr.o
 obj-$(CONFIG_ARM64_MTE)		+= mteswap.o
 KASAN_SANITIZE_physaddr.o	+= n
 
++CFLAGS_REMOVE_fault_neon.o += -mgeneral-regs-only
 obj-$(CONFIG_KASAN)		+= kasan_init.o
 KASAN_SANITIZE_kasan_init.o	:= n
