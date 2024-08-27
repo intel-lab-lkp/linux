@@ -236,11 +236,6 @@ static inline pte_t pte_mkyoung(pte_t pte)
 	return set_pte_bit(pte, __pgprot(PTE_AF));
 }
 
-static inline pte_t pte_mkspecial(pte_t pte)
-{
-	return set_pte_bit(pte, __pgprot(PTE_SPECIAL));
-}
-
 static inline pte_t pte_mkcont(pte_t pte)
 {
 	pte = set_pte_bit(pte, __pgprot(PTE_CONT));
@@ -681,6 +676,28 @@ static inline bool pud_table(pud_t pud) { return true; }
 #define pud_table(pud)		((pud_val(pud) & PUD_TYPE_MASK) == \
 				 PUD_TYPE_TABLE)
 #endif
+
+#ifdef CONFIG_ALTRA_ERRATUM_82288
+extern bool __read_mostly have_altra_erratum_82288;
+#endif
+
+static inline pte_t pte_mkspecial(pte_t pte)
+{
+#ifdef CONFIG_ALTRA_ERRATUM_82288
+	phys_addr_t phys = __pte_to_phys(pte);
+	pgprot_t prot = __pgprot(pte_val(pte) & ~PTE_ADDR_LOW);
+
+	if (unlikely(have_altra_erratum_82288) &&
+	    (phys < 0x80000000 ||
+	     (phys >= 0x200000000000 && phys < 0x400000000000) ||
+	     (phys >= 0x600000000000 && phys < 0x800000000000))) {
+		pte = __pte(__phys_to_pte_val(phys) | pgprot_val(pgprot_device(prot)));
+	}
+#endif
+
+	return set_pte_bit(pte, __pgprot(PTE_SPECIAL));
+}
+
 
 extern pgd_t init_pg_dir[];
 extern pgd_t init_pg_end[];

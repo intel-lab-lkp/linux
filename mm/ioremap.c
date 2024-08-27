@@ -52,7 +52,7 @@ void __iomem *generic_ioremap_prot(phys_addr_t phys_addr, size_t size,
 void __iomem *ioremap_prot(phys_addr_t phys_addr, size_t size,
 			   unsigned long prot)
 {
-	return generic_ioremap_prot(phys_addr, size, __pgprot(prot));
+	return generic_ioremap_prot(phys_addr, size, ioremap_map_prot(phys_addr, size, prot));
 }
 EXPORT_SYMBOL(ioremap_prot);
 #endif

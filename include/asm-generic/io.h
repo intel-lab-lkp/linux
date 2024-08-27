@@ -1047,6 +1047,10 @@ static inline void iounmap(volatile void __iomem *addr)
 #elif defined(CONFIG_GENERIC_IOREMAP)
 #include <linux/pgtable.h>
 
+#ifndef ioremap_map_prot
+#define ioremap_map_prot(phys_addr, size, prot) __pgprot(prot)
+#endif
+
 void __iomem *generic_ioremap_prot(phys_addr_t phys_addr, size_t size,
 				   pgprot_t prot);
 

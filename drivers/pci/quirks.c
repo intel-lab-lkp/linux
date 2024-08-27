@@ -6234,6 +6234,15 @@ DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, 0xa73f, dpc_log_size);
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, 0xa76e, dpc_log_size);
 #endif
 
+#ifdef CONFIG_ALTRA_ERRATUM_82288
+static void quirk_altra_erratum_82288(struct pci_dev *dev)
+{
+	pr_info_once("Write combining PCI maps disabled due to hardware erratum\n");
+	have_altra_erratum_82288 = true;
+}
+DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_AMPERE, 0xe100, quirk_altra_erratum_82288);
+#endif
+
 /*
  * For a PCI device with multiple downstream devices, its driver may use
  * a flattened device tree to describe the downstream devices.
