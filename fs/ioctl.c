@@ -878,6 +878,9 @@ static int do_vfs_ioctl(struct file *filp, unsigned int fd,
 	case FS_IOC_GETFSUUID:
 		return ioctl_getfsuuid(filp, argp);
 
+	case FS_IOC_GETVERSION:
+		return put_user(inode->i_generation, (int __user *)argp);
+
 	case FS_IOC_GETFSSYSFSPATH:
 		return ioctl_get_fs_sysfs_path(filp, argp);
 
@@ -991,6 +994,9 @@ COMPAT_SYSCALL_DEFINE3(ioctl, unsigned int, fd, unsigned int, cmd,
 	case FS_IOC32_SETFLAGS:
 		cmd = (cmd == FS_IOC32_GETFLAGS) ?
 			FS_IOC_GETFLAGS : FS_IOC_SETFLAGS;
+		fallthrough;
+	case FS_IOC32_GETVERSION:
+		cmd = FS_IOC_GETVERSION;
 		fallthrough;
 	/*
 	 * everything else in do_vfs_ioctl() takes either a compatible
