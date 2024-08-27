@@ -2786,7 +2786,8 @@ static int handle_tx_event(struct xhci_hcd *xhci,
 
 			if (!(trb_comp_code == COMP_STOPPED ||
 			      trb_comp_code == COMP_STOPPED_LENGTH_INVALID ||
-			      ep_ring->last_td_was_short)) {
+			      (trb_comp_code == COMP_SUCCESS && ep_ring->last_td_was_short) ||
+			      (trb_comp_code == COMP_SHORT_PACKET && ep_ring->last_td_was_short))) {
 				xhci_warn(xhci, "WARN Event TRB for slot %u ep %d with no TDs queued?\n",
 					  slot_id, ep_index);
 			}
@@ -2879,7 +2880,9 @@ static int handle_tx_event(struct xhci_hcd *xhci,
 		 * FIXME xHCI 4.10.1.1: this should be freed now, not mid-TD
 		 */
 		if ((xhci->quirks & XHCI_SPURIOUS_SUCCESS) &&
-		    ep_ring->last_td_was_short) {
+		    ep_ring->last_td_was_short &&
+		    (trb_comp_code == COMP_SUCCESS ||
+		    trb_comp_code == COMP_SHORT_PACKET)) {
 			ep_ring->last_td_was_short = false;
 			return 0;
 		}
