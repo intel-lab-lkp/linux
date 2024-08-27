@@ -3321,6 +3321,20 @@ static int macb_set_link_ksettings(struct net_device *netdev,
 	return phylink_ethtool_ksettings_set(bp->phylink, kset);
 }
 
+static int macb_get_eee(struct net_device *netdev, struct ethtool_keee *edata)
+{
+	struct macb *bp = netdev_priv(netdev);
+
+	return phylink_ethtool_get_eee(bp->phylink, edata);
+}
+
+static int macb_set_eee(struct net_device *netdev, struct ethtool_keee *edata)
+{
+	struct macb *bp = netdev_priv(netdev);
+
+	return phylink_ethtool_set_eee(bp->phylink, edata);
+}
+
 static void macb_get_ringparam(struct net_device *netdev,
 			       struct ethtool_ringparam *ring,
 			       struct kernel_ethtool_ringparam *kernel_ring,
@@ -3767,6 +3781,8 @@ static const struct ethtool_ops macb_ethtool_ops = {
 	.set_wol		= macb_set_wol,
 	.get_link_ksettings     = macb_get_link_ksettings,
 	.set_link_ksettings     = macb_set_link_ksettings,
+	.get_eee		= macb_get_eee,
+	.set_eee		= macb_set_eee,
 	.get_ringparam		= macb_get_ringparam,
 	.set_ringparam		= macb_set_ringparam,
 };
@@ -3783,6 +3799,8 @@ static const struct ethtool_ops gem_ethtool_ops = {
 	.get_sset_count		= gem_get_sset_count,
 	.get_link_ksettings     = macb_get_link_ksettings,
 	.set_link_ksettings     = macb_set_link_ksettings,
+	.get_eee		= macb_get_eee,
+	.set_eee		= macb_set_eee,
 	.get_ringparam		= macb_get_ringparam,
 	.set_ringparam		= macb_set_ringparam,
 	.get_rxnfc			= gem_get_rxnfc,
