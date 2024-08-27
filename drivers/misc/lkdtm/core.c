@@ -223,6 +223,7 @@ static int lkdtm_kprobe_handler(struct kprobe *kp, struct pt_regs *regs)
 
 	return 0;
 }
+NOKPROBE_SYMBOL(lkdtm_kprobe_handler);
 
 static ssize_t lkdtm_debugfs_entry(struct file *f,
 				   const char __user *user_buf,
