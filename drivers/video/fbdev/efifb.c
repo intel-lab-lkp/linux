@@ -52,24 +52,6 @@ struct efifb_par {
 	resource_size_t size;
 };
 
-static struct fb_var_screeninfo efifb_defined = {
-	.activate		= FB_ACTIVATE_NOW,
-	.height			= -1,
-	.width			= -1,
-	.right_margin		= 32,
-	.upper_margin		= 16,
-	.lower_margin		= 4,
-	.vsync_len		= 4,
-	.vmode			= FB_VMODE_NONINTERLACED,
-};
-
-static struct fb_fix_screeninfo efifb_fix = {
-	.id			= "EFI VGA",
-	.type			= FB_TYPE_PACKED_PIXELS,
-	.accel			= FB_ACCEL_NONE,
-	.visual			= FB_VISUAL_TRUECOLOR,
-};
-
 static int efifb_setcolreg(unsigned regno, unsigned red, unsigned green,
 			   unsigned blue, unsigned transp,
 			   struct fb_info *info)
@@ -356,6 +338,24 @@ static int efifb_probe(struct platform_device *dev)
 	unsigned int size_total;
 	char *option = NULL;
 	efi_memory_desc_t md;
+
+	struct fb_var_screeninfo efifb_defined = {
+		.activate		= FB_ACTIVATE_NOW,
+		.height			= -1,
+		.width			= -1,
+		.right_margin		= 32,
+		.upper_margin		= 16,
+		.lower_margin		= 4,
+		.vsync_len		= 4,
+		.vmode			= FB_VMODE_NONINTERLACED,
+	};
+
+	struct fb_fix_screeninfo efifb_fix = {
+		.id			= "EFI VGA",
+		.type			= FB_TYPE_PACKED_PIXELS,
+		.accel			= FB_ACCEL_NONE,
+		.visual			= FB_VISUAL_TRUECOLOR,
+	};
 
 	/*
 	 * If we fail probing the device, the kernel might try a different
