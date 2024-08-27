@@ -2614,6 +2614,7 @@ static int handle_tx_event(struct xhci_hcd *xhci,
 	int status = -EINPROGRESS;
 	struct xhci_ep_ctx *ep_ctx;
 	u32 trb_comp_code;
+	bool short_packet = false;
 
 	slot_id = TRB_TO_SLOT_ID(le32_to_cpu(event->flags));
 	ep_index = TRB_TO_EP_ID(le32_to_cpu(event->flags)) - 1;
@@ -2646,12 +2647,13 @@ static int handle_tx_event(struct xhci_hcd *xhci,
 	 */
 	case COMP_SUCCESS:
 		if (EVENT_TRB_LEN(le32_to_cpu(event->transfer_len)) != 0) {
-			trb_comp_code = COMP_SHORT_PACKET;
+			short_packet = true;
 			xhci_dbg(xhci, "Successful completion on short TX for slot %u ep %u with last td short %d\n",
 				 slot_id, ep_index, ep_ring->last_td_was_short);
 		}
 		break;
 	case COMP_SHORT_PACKET:
+		short_packet = true;
 		break;
 	/* Completion codes for endpoint stopped state */
 	case COMP_STOPPED:
@@ -2897,10 +2899,7 @@ static int handle_tx_event(struct xhci_hcd *xhci,
 		return -ESHUTDOWN;
 	}
 
-	if (trb_comp_code == COMP_SHORT_PACKET)
-		ep_ring->last_td_was_short = true;
-	else
-		ep_ring->last_td_was_short = false;
+	ep_ring->last_td_was_short = short_packet;
 
 	ep_trb = &ep_seg->trbs[(ep_trb_dma - ep_seg->dma) / sizeof(*ep_trb)];
 	trace_xhci_handle_transfer(ep_ring, (struct xhci_generic_trb *) ep_trb);
