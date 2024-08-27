@@ -166,7 +166,7 @@ static int cxl_mem_probe(struct device *dev)
 	else
 		endpoint_parent = &parent_port->dev;
 
-	cxl_setup_parent_dport(dev, dport);
+	cxl_dport_init_aer(dport, dev);
 
 	device_lock(endpoint_parent);
 	if (!endpoint_parent->driver) {
