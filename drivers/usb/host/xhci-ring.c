@@ -2411,14 +2411,12 @@ static int process_isoc_td(struct xhci_hcd *xhci, struct xhci_virt_ep *ep,
 		fallthrough;
 	case COMP_ISOCH_BUFFER_OVERRUN:
 		frame->status = -EOVERFLOW;
-		if (ep_trb != td->last_trb)
-			td->error_mid_td = true;
+		td->error_mid_td = true;
 		break;
 	case COMP_MISSED_SERVICE_ERROR:
 		frame->status = -EXDEV;
 		sum_trbs_for_length = true;
-		if (ep_trb != td->last_trb)
-			td->error_mid_td = true;
+		td->error_mid_td = true;
 		break;
 	case COMP_INCOMPATIBLE_DEVICE_ERROR:
 	case COMP_STALL_ERROR:
@@ -2427,8 +2425,7 @@ static int process_isoc_td(struct xhci_hcd *xhci, struct xhci_virt_ep *ep,
 	case COMP_USB_TRANSACTION_ERROR:
 		frame->status = -EPROTO;
 		sum_trbs_for_length = true;
-		if (ep_trb != td->last_trb)
-			td->error_mid_td = true;
+		td->error_mid_td = true;
 		break;
 	case COMP_STOPPED:
 		sum_trbs_for_length = true;
