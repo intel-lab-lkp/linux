@@ -412,7 +412,7 @@ int nfp_eth_config_commit_end(struct nfp_nsp *nsp)
 
 	if (nfp_nsp_config_modified(nsp)) {
 		ret = nfp_nsp_write_eth_table(nsp, entries, NSP_ETH_TABLE_SIZE);
-		ret = ret < 0 ? ret : 0;
+		ret = min(ret, 0);
 	}
 
 	nfp_eth_config_cleanup_end(nsp);
