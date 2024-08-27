@@ -17,8 +17,10 @@
 #include <media/v4l2-subdev.h>
 
 #define MAX96712_ID 0x20
+#define MAX96724_ID 0xA7
 
 #define MAX96712_DPLL_FREQ 1000
+#define MAX96724_DPLL_FREQ 1200
 
 enum max96712_pattern {
 	MAX96712_PATTERN_CHECKERBOARD = 0,
@@ -31,6 +33,7 @@ struct max96712_priv {
 	struct gpio_desc *gpiod_pwdn;
 
 	bool cphy;
+	bool max96724;
 	struct v4l2_mbus_config_mipi_csi2 mipi;
 
 	struct v4l2_subdev sd;
@@ -120,6 +123,7 @@ static void max96712_mipi_enable(struct max96712_priv *priv, bool enable)
 
 static void max96712_mipi_configure(struct max96712_priv *priv)
 {
+	unsigned int dpll_freq;
 	unsigned int i;
 	u8 phy5 = 0;
 
@@ -152,10 +156,11 @@ static void max96712_mipi_configure(struct max96712_priv *priv)
 	max96712_write(priv, 0x8a5, phy5);
 
 	/* Set link frequency for PHY0 and PHY1. */
+	dpll_freq = priv->max96724 ? MAX96724_DPLL_FREQ : MAX96712_DPLL_FREQ;
 	max96712_update_bits(priv, 0x415, 0x3f,
-			     ((MAX96712_DPLL_FREQ / 100) & 0x1f) | BIT(5));
+			     ((dpll_freq / 100) & 0x1f) | BIT(5));
 	max96712_update_bits(priv, 0x418, 0x3f,
-			     ((MAX96712_DPLL_FREQ / 100) & 0x1f) | BIT(5));
+			     ((dpll_freq / 100) & 0x1f) | BIT(5));
 
 	/* Enable PHY0 and PHY1 */
 	max96712_update_bits(priv, 0x8a2, 0xf0, 0x30);
@@ -181,7 +186,8 @@ static void max96712_pattern_enable(struct max96712_priv *priv, bool enable)
 	}
 
 	/* PCLK 75MHz. */
-	max96712_write(priv, 0x0009, 0x01);
+	if (!priv->max96724)
+		max96712_write(priv, 0x0009, 0x01);
 
 	/* Configure Video Timing Generator for 1920x1080 @ 30 fps. */
 	max96712_write_bulk_value(priv, 0x1052, 0, 3);
@@ -303,6 +309,7 @@ static const struct v4l2_ctrl_ops max96712_ctrl_ops = {
 
 static int max96712_v4l2_register(struct max96712_priv *priv)
 {
+	unsigned int dpll_freq;
 	long pixel_rate;
 	int ret;
 
@@ -317,7 +324,8 @@ static int max96712_v4l2_register(struct max96712_priv *priv)
 	 * TODO: Once V4L2_CID_LINK_FREQ is changed from a menu control to an
 	 * INT64 control it should be used here instead of V4L2_CID_PIXEL_RATE.
 	 */
-	pixel_rate = MAX96712_DPLL_FREQ / priv->mipi.num_data_lanes * 1000000;
+	dpll_freq = priv->max96724 ? MAX96724_DPLL_FREQ : MAX96712_DPLL_FREQ;
+	pixel_rate = dpll_freq / priv->mipi.num_data_lanes * 1000000;
 	v4l2_ctrl_new_std(&priv->ctrl_handler, NULL, V4L2_CID_PIXEL_RATE,
 			  pixel_rate, pixel_rate, 1, pixel_rate);
 
@@ -438,8 +446,15 @@ static int max96712_probe(struct i2c_client *client)
 	if (priv->gpiod_pwdn)
 		usleep_range(4000, 5000);
 
-	if (max96712_read(priv, 0x4a) != MAX96712_ID)
+	switch (max96712_read(priv, 0x4a)) {
+	case MAX96712_ID:
+		break;
+	case MAX96724_ID:
+		priv->max96724 = true;
+		break;
+	default:
 		return -ENODEV;
+	}
 
 	max96712_reset(priv);
 
@@ -463,6 +478,7 @@ static void max96712_remove(struct i2c_client *client)
 
 static const struct of_device_id max96712_of_table[] = {
 	{ .compatible = "maxim,max96712" },
+	{ .compatible = "maxim,max96724" },
 	{ /* sentinel */ },
 };
 MODULE_DEVICE_TABLE(of, max96712_of_table);
