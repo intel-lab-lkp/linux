@@ -34,6 +34,9 @@ properties:
     description: input clock frequency to the SPI block in Hz.
     default: 160000000
 
+  clocks:
+    maxItems: 1
+
 required:
   - compatible
   - reg
@@ -51,6 +54,7 @@ examples:
         compatible = "fsl,imx28-spi";
         reg = <0x80010000 0x2000>;
         interrupts = <96>;
+        clocks = <&clks 46>;
         dmas = <&dma_apbh 0>;
         dma-names = "rx-tx";
     };
