@@ -23,6 +23,7 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/time.h>
+#include <linux/units.h>
 
 #define JZ4780_I2C_CTRL		0x00
 #define JZ4780_I2C_TAR		0x04
@@ -764,14 +765,15 @@ static int jz4780_i2c_probe(struct platform_device *pdev)
 	unsigned int clk_freq = 0;
 	unsigned short tmp;
 	struct jz4780_i2c *i2c;
+	struct device *dev = &pdev->dev;
 
-	i2c = devm_kzalloc(&pdev->dev, sizeof(struct jz4780_i2c), GFP_KERNEL);
+	i2c = devm_kzalloc(dev, sizeof(struct jz4780_i2c), GFP_KERNEL);
 	if (!i2c)
 		return -ENOMEM;
 
-	i2c->cdata = device_get_match_data(&pdev->dev);
+	i2c->cdata = device_get_match_data(dev);
 	if (!i2c->cdata) {
-		dev_err(&pdev->dev, "Error: No device match found\n");
+		dev_err(dev, "Error: No device match found\n");
 		return -ENODEV;
 	}
 
@@ -779,8 +781,8 @@ static int jz4780_i2c_probe(struct platform_device *pdev)
 	i2c->adap.algo		= &jz4780_i2c_algorithm;
 	i2c->adap.algo_data	= i2c;
 	i2c->adap.retries	= 5;
-	i2c->adap.dev.parent	= &pdev->dev;
-	i2c->adap.dev.of_node	= pdev->dev.of_node;
+	i2c->adap.dev.parent	= dev;
+	i2c->adap.dev.of_node	= dev->of_node;
 	sprintf(i2c->adap.name, "%s", pdev->name);
 
 	init_completion(&i2c->trans_waitq);
@@ -792,26 +794,24 @@ static int jz4780_i2c_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, i2c);
 
-	i2c->clk = devm_clk_get_enabled(&pdev->dev, NULL);
+	i2c->clk = devm_clk_get_enabled(dev, NULL);
 	if (IS_ERR(i2c->clk))
 		return PTR_ERR(i2c->clk);
 
-	ret = of_property_read_u32(pdev->dev.of_node, "clock-frequency",
+	ret = of_property_read_u32(dev->of_node, "clock-frequency",
 				   &clk_freq);
-	if (ret) {
-		dev_err(&pdev->dev, "clock-frequency not specified in DT\n");
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(dev, ret,
+					"clock-frequency not specified in DT\n");
 
-	i2c->speed = clk_freq / 1000;
-	if (i2c->speed == 0) {
-		ret = -EINVAL;
-		dev_err(&pdev->dev, "clock-frequency minimum is 1000\n");
-		return ret;
-	}
+	i2c->speed = clk_freq / HZ_PER_KHZ;
+	if (i2c->speed == 0)
+		return dev_err_probe(dev, -EINVAL,
+					"clock-frequency minimum is HZ_PER_KHZ\n");
+
 	jz4780_i2c_set_speed(i2c);
 
-	dev_info(&pdev->dev, "Bus frequency is %d KHz\n", i2c->speed);
+	dev_info(dev, "Bus frequency is %d KHz\n", i2c->speed);
 
 	if (i2c->cdata->version < ID_X1000) {
 		tmp = jz4780_i2c_readw(i2c, JZ4780_I2C_CTRL);
@@ -826,8 +826,8 @@ static int jz4780_i2c_probe(struct platform_device *pdev)
 		return ret;
 	i2c->irq = ret;
 
-	ret = devm_request_irq(&pdev->dev, i2c->irq, jz4780_i2c_irq, 0,
-			       dev_name(&pdev->dev), i2c);
+	ret = devm_request_irq(dev, i2c->irq, jz4780_i2c_irq, 0,
+			       dev_name(dev), i2c);
 	if (ret)
 		return ret;
 
