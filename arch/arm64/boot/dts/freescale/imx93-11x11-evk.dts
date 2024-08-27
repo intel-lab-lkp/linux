@@ -302,6 +302,16 @@
 			};
 		};
 	};
+
+	adp5585gpio: io-expander@34 {
+		compatible = "adi,adp5585-00", "adi,adp5585";
+		reg = <0x34>;
+		gpio-controller;
+		#gpio-cells = <2>;
+		gpio-reserved-ranges = <5 1>;
+		#pwm-cells = <3>;
+	};
+
 };
 
 &lpi2c3 {
@@ -309,6 +319,14 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_lpi2c3>;
 	status = "okay";
+
+	adp5585_isp: io-expander@34 {
+		compatible = "adi,adp5585-01", "adi,adp5585";
+		reg = <0x34>;
+		gpio-controller;
+		#gpio-cells = <2>;
+		#pwm-cells = <3>;
+	};
 
 	ptn5110: tcpc@50 {
 		compatible = "nxp,ptn5110", "tcpci";
