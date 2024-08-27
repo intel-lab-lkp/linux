@@ -275,39 +275,26 @@ static int sdhci_milbeaut_probe(struct platform_device *pdev)
 	if (dev_of_node(dev)) {
 		sdhci_get_of_property(pdev);
 
-		priv->clk_iface = devm_clk_get(&pdev->dev, "iface");
+		priv->clk_iface = devm_clk_get_enabled(&pdev->dev, "iface");
 		if (IS_ERR(priv->clk_iface)) {
 			ret = PTR_ERR(priv->clk_iface);
 			goto err;
 		}
 
-		ret = clk_prepare_enable(priv->clk_iface);
-		if (ret)
-			goto err;
-
-		priv->clk = devm_clk_get(&pdev->dev, "core");
+		priv->clk = devm_clk_get_enabled(&pdev->dev, "core");
 		if (IS_ERR(priv->clk)) {
 			ret = PTR_ERR(priv->clk);
-			goto err_clk;
+			goto err;
 		}
-
-		ret = clk_prepare_enable(priv->clk);
-		if (ret)
-			goto err_clk;
 	}
 
 	sdhci_milbeaut_init(host);
 
 	ret = sdhci_add_host(host);
 	if (ret)
-		goto err_add_host;
+		goto err;
 
 	return 0;
-
-err_add_host:
-	clk_disable_unprepare(priv->clk);
-err_clk:
-	clk_disable_unprepare(priv->clk_iface);
 err:
 	sdhci_free_host(host);
 	return ret;
@@ -316,13 +303,9 @@ err:
 static void sdhci_milbeaut_remove(struct platform_device *pdev)
 {
 	struct sdhci_host *host = platform_get_drvdata(pdev);
-	struct f_sdhost_priv *priv = sdhci_priv(host);
 
 	sdhci_remove_host(host, readl(host->ioaddr + SDHCI_INT_STATUS) ==
 			  0xffffffff);
-
-	clk_disable_unprepare(priv->clk_iface);
-	clk_disable_unprepare(priv->clk);
 
 	sdhci_free_host(host);
 	platform_set_drvdata(pdev, NULL);
