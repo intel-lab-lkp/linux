@@ -1638,7 +1638,7 @@ static int pispbe_runtime_suspend(struct device *dev)
 	return 0;
 }
 
-static int pispbe_runtime_resume(struct device *dev)
+static int __maybe_unused pispbe_runtime_resume(struct device *dev)
 {
 	struct pispbe_dev *pispbe = dev_get_drvdata(dev);
 	int ret;
@@ -1741,7 +1741,7 @@ static int pispbe_probe(struct platform_device *pdev)
 	pm_runtime_use_autosuspend(pispbe->dev);
 	pm_runtime_enable(pispbe->dev);
 
-	ret = pispbe_runtime_resume(pispbe->dev);
+	ret = pm_runtime_resume_and_get(pispbe->dev);
 	if (ret)
 		goto pm_runtime_disable_err;
 
