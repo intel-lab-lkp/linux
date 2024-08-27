@@ -1746,17 +1746,14 @@ arm_smmu_find_master(struct arm_smmu_device *smmu, u32 sid)
 }
 
 /* IRQ and event handlers */
-static int arm_smmu_handle_evt(struct arm_smmu_device *smmu, u64 *evt)
+static int arm_smmu_handle_evt(struct arm_smmu_device *smmu, struct arm_smmu_event *event)
 {
 	int ret = 0;
 	u32 perm = 0;
-	struct arm_smmu_master *master;
-	bool ssid_valid = evt[0] & EVTQ_0_SSV;
-	u32 sid = FIELD_GET(EVTQ_0_SID, evt[0]);
 	struct iopf_fault fault_evt = { };
 	struct iommu_fault *flt = &fault_evt.fault;
 
-	switch (FIELD_GET(EVTQ_0_ID, evt[0])) {
+	switch (event->id) {
 	case EVT_ID_TRANSLATION_FAULT:
 	case EVT_ID_ADDR_SIZE_FAULT:
 	case EVT_ID_ACCESS_FAULT:
@@ -1767,46 +1764,40 @@ static int arm_smmu_handle_evt(struct arm_smmu_device *smmu, u64 *evt)
 	}
 
 	/* Stage-2 is always pinned at the moment */
-	if (evt[1] & EVTQ_1_S2)
+	if (event->stage)
 		return -EFAULT;
 
-	if (!(evt[1] & EVTQ_1_STALL))
+	if (!(event->raw[1] & EVTQ_1_STALL))
 		return -EOPNOTSUPP;
 
-	if (evt[1] & EVTQ_1_RnW)
+	if (event->read)
 		perm |= IOMMU_FAULT_PERM_READ;
 	else
 		perm |= IOMMU_FAULT_PERM_WRITE;
 
-	if (evt[1] & EVTQ_1_InD)
+	if (event->instruction)
 		perm |= IOMMU_FAULT_PERM_EXEC;
 
-	if (evt[1] & EVTQ_1_PnU)
+	if (event->privileged)
 		perm |= IOMMU_FAULT_PERM_PRIV;
 
 	flt->type = IOMMU_FAULT_PAGE_REQ;
 	flt->prm = (struct iommu_fault_page_request) {
 		.flags = IOMMU_FAULT_PAGE_REQUEST_LAST_PAGE,
-		.grpid = FIELD_GET(EVTQ_1_STAG, evt[1]),
+		.grpid = FIELD_GET(EVTQ_1_STAG, event->raw[1]),
 		.perm = perm,
-		.addr = FIELD_GET(EVTQ_2_ADDR, evt[2]),
+		.addr = event->iova,
 	};
 
-	if (ssid_valid) {
+	if (event->ssid_valid) {
 		flt->prm.flags |= IOMMU_FAULT_PAGE_REQUEST_PASID_VALID;
-		flt->prm.pasid = FIELD_GET(EVTQ_0_SSID, evt[0]);
+		flt->prm.pasid = event->ssid;
 	}
 
-	mutex_lock(&smmu->streams_mutex);
-	master = arm_smmu_find_master(smmu, sid);
-	if (!master) {
-		ret = -EINVAL;
-		goto out_unlock;
-	}
+	if (!event->master)
+		return -EINVAL;
 
-	ret = iommu_report_device_fault(master->dev, &fault_evt);
-out_unlock:
-	mutex_unlock(&smmu->streams_mutex);
+	ret = iommu_report_device_fault(event->master->dev, &fault_evt);
 	return ret;
 }
 
@@ -1915,7 +1906,7 @@ static irqreturn_t arm_smmu_evtq_thread(int irq, void *dev)
 		while (!queue_remove_raw(q, evt)) {
 
 			arm_smmu_get_evt_info(smmu, evt, &event);
-			ret = arm_smmu_handle_evt(smmu, evt);
+			ret = arm_smmu_handle_evt(smmu, &event);
 			if (!ret || !__ratelimit(&rs))
 				continue;
 
