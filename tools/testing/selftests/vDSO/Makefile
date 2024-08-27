@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
 uname_M := $(shell uname -m 2>/dev/null || echo not)
-ARCH ?= $(shell echo $(uname_M) | sed -e s/i.86/x86/ -e s/x86_64/x86/)
+ARCH ?= $(shell echo $(uname_M) | sed -e s/i.86/x86/ -e s/x86_64/x86/ -e /loongarch/s/[0-9]//g)
 SODIUM := $(shell pkg-config --libs --cflags libsodium 2>/dev/null)
 
 TEST_GEN_PROGS := vdso_test_gettimeofday
@@ -11,7 +11,7 @@ ifeq ($(ARCH),$(filter $(ARCH),x86 x86_64))
 TEST_GEN_PROGS += vdso_standalone_test_x86
 endif
 TEST_GEN_PROGS += vdso_test_correctness
-ifeq ($(uname_M),x86_64)
+ifeq ($(uname_M),$(filter $(uname_M),x86_64 loongarch64))
 TEST_GEN_PROGS += vdso_test_getrandom
 ifneq ($(SODIUM),)
 TEST_GEN_PROGS += vdso_test_chacha
