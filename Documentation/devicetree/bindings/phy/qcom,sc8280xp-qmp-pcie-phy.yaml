@@ -40,6 +40,7 @@ properties:
       - qcom,sm8650-qmp-gen4x2-pcie-phy
       - qcom,x1e80100-qmp-gen3x2-pcie-phy
       - qcom,x1e80100-qmp-gen4x2-pcie-phy
+      - qcom,x1e80100-qmp-gen4x8-pcie-phy
 
   reg:
     minItems: 1
@@ -47,7 +48,7 @@ properties:
 
   clocks:
     minItems: 5
-    maxItems: 7
+    maxItems: 8
 
   clock-names:
     minItems: 5
@@ -59,6 +60,7 @@ properties:
       - const: pipe
       - const: pipediv2
       - const: phy_aux
+      - const: clkref_en
 
   power-domains:
     maxItems: 1
@@ -195,9 +197,23 @@ allOf:
         compatible:
           contains:
             enum:
+              - qcom,x1e80100-qmp-gen4x8-pcie-phy
+    then:
+      properties:
+        clocks:
+          minItems: 8
+        clock-names:
+          minItems: 8
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
               - qcom,sm8550-qmp-gen4x2-pcie-phy
               - qcom,sm8650-qmp-gen4x2-pcie-phy
               - qcom,x1e80100-qmp-gen4x2-pcie-phy
+              - qcom,x1e80100-qmp-gen4x8-pcie-phy
     then:
       properties:
         resets:
