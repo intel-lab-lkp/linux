@@ -210,6 +210,17 @@ unsigned int ddk750_get_vm_size(void)
 	return data;
 }
 
+static void sm750le_set_graphic_mode(void)
+{
+#ifdef CONFIG_X86
+	outb_p(0x88, 0x3d4);
+	outb_p(0x06, 0x3d5);
+#else
+	/* Implement an alternative method for non-x86 architectures */
+	/* This might involve memory-mapped I/O or other chip-specific methods */
+#endif
+}
+
 int ddk750_init_hw(struct initchip_param *p_init_param)
 {
 	unsigned int reg;
@@ -229,11 +240,7 @@ int ddk750_init_hw(struct initchip_param *p_init_param)
 		reg |= (VGA_CONFIGURATION_PLL | VGA_CONFIGURATION_MODE);
 		poke32(VGA_CONFIGURATION, reg);
 	} else {
-#if defined(__i386__) || defined(__x86_64__)
-		/* set graphic mode via IO method */
-		outb_p(0x88, 0x3d4);
-		outb_p(0x06, 0x3d5);
-#endif
+		sm750le_set_graphic_mode();
 	}
 
 	/* Set the Main Chip Clock */
