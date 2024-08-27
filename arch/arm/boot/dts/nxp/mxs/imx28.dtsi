@@ -160,7 +160,7 @@
 			pinctrl: pinctrl@80018000 {
 				#address-cells = <1>;
 				#size-cells = <0>;
-				compatible = "fsl,imx28-pinctrl", "simple-bus";
+				compatible = "fsl,imx28-pinctrl";
 				reg = <0x80018000 0x2000>;
 
 				gpio0: gpio@0 {
