@@ -607,7 +607,13 @@ acpi_status acpi_os_remove_interrupt_handler(u32 gsi, acpi_osd_handler handler)
 
 void acpi_os_sleep(u64 ms)
 {
-	msleep(ms);
+	u64 us = ms * 1000;
+
+	if (us <= 20000)
+		usleep_range(us, us);
+	else
+		usleep_range(us, us + 1000);
+
 }
 
 void acpi_os_stall(u32 us)
