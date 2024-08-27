@@ -619,7 +619,7 @@ int of_platform_device_destroy(struct device *dev, void *data)
 	of_node_clear_flag(dev->of_node, OF_POPULATED);
 	of_node_clear_flag(dev->of_node, OF_POPULATED_BUS);
 
-	if (dev->bus == &platform_bus_type)
+	if (dev_is_platform(dev))
 		platform_device_unregister(to_platform_device(dev));
 #ifdef CONFIG_ARM_AMBA
 	else if (dev->bus == &amba_bustype)
