@@ -3824,6 +3824,9 @@ static int mlx5_vdpa_dev_add(struct vdpa_mgmt_dev *v_mdev, const char *name,
 		err = mlx5_query_nic_vport_mac_address(mdev, 0, 0, config->mac);
 		if (err)
 			goto err_alloc;
+
+		if (is_zero_ether_addr(config->mac))
+			eth_random_addr(config->mac);
 	}
 
 	if (!is_zero_ether_addr(config->mac)) {
