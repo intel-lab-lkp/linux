@@ -2800,6 +2800,37 @@ static int handle_tx_event(struct xhci_hcd *xhci,
 		ep_seg = trb_in_td(xhci, td, ep_trb_dma, false);
 
 		if (!ep_seg) {
+			/*
+			 * xhci 4.10.2 states isoc endpoints should continue
+			 * processing the next TD if there was an error mid TD.
+			 * So host like NEC don't generate an event for the last
+			 * isoc TRB even if the IOC flag is set.
+			 * xhci 4.9.1 states that if there are errors in mult-TRB
+			 * TDs xHC should generate an error for that TRB, and if xHC
+			 * proceeds to the next TD it should genete an event for
+			 * any TRB with IOC flag on the way. Other host follow this.
+			 * So this event might be for the next TD.
+			 */
+			if (td->error_mid_td &&
+			    !list_is_last(&td->td_list, &ep_ring->td_list)) {
+				struct xhci_td *td_next = list_next_entry(td, td_list);
+
+				/* Is this a TRB in the next queued TD? */
+				/* *OR* did we miss some TDs meanwhile? */
+				ep_seg = trb_in_td(xhci, td_next, ep_trb_dma, false);
+				if (ep_seg || ep->skip) {
+					/* give back previous TD, start handling new */
+					xhci_dbg(xhci, "Missing TD completion event after mid TD error\n");
+					ep_ring->dequeue = td->last_trb;
+					ep_ring->deq_seg = td->last_trb_seg;
+					inc_deq(xhci, ep_ring);
+					xhci_td_cleanup(xhci, td, ep_ring, td->status);
+					td = td_next;
+				}
+			}
+		}
+
+		if (!ep_seg) {
 
 			if (ep->skip && usb_endpoint_xfer_isoc(&td->urb->ep->desc)) {
 				skip_isoc_td(xhci, td, ep, status);
@@ -2821,6 +2852,7 @@ static int handle_tx_event(struct xhci_hcd *xhci,
 			/*
 			 * Some hosts give a spurious success event after a short
 			 * transfer. Ignore it.
+			 * FIXME xHCI 4.10.1.1: this should be freed now, not mid-TD
 			 */
 			if ((xhci->quirks & XHCI_SPURIOUS_SUCCESS) &&
 			    ep_ring->last_td_was_short) {
@@ -2828,44 +2860,14 @@ static int handle_tx_event(struct xhci_hcd *xhci,
 				return 0;
 			}
 
-			/*
-			 * xhci 4.10.2 states isoc endpoints should continue
-			 * processing the next TD if there was an error mid TD.
-			 * So host like NEC don't generate an event for the last
-			 * isoc TRB even if the IOC flag is set.
-			 * xhci 4.9.1 states that if there are errors in mult-TRB
-			 * TDs xHC should generate an error for that TRB, and if xHC
-			 * proceeds to the next TD it should genete an event for
-			 * any TRB with IOC flag on the way. Other host follow this.
-			 * So this event might be for the next TD.
-			 */
-			if (td->error_mid_td &&
-			    !list_is_last(&td->td_list, &ep_ring->td_list)) {
-				struct xhci_td *td_next = list_next_entry(td, td_list);
-
-				ep_seg = trb_in_td(xhci, td_next, ep_trb_dma, false);
-				if (ep_seg) {
-					/* give back previous TD, start handling new */
-					xhci_dbg(xhci, "Missing TD completion event after mid TD error\n");
-					ep_ring->dequeue = td->last_trb;
-					ep_ring->deq_seg = td->last_trb_seg;
-					inc_deq(xhci, ep_ring);
-					xhci_td_cleanup(xhci, td, ep_ring, td->status);
-					td = td_next;
-				}
-			}
-
-			if (!ep_seg) {
-				/* HC is busted, give up! */
-				xhci_err(xhci,
-					"ERROR Transfer event TRB DMA ptr not "
-					"part of current TD ep_index %d "
-					"comp_code %u\n", ep_index,
-					trb_comp_code);
-				trb_in_td(xhci, td, ep_trb_dma, true);
-
-				return -ESHUTDOWN;
-			}
+			/* HC is busted, give up! */
+			xhci_err(xhci,
+				"ERROR Transfer event TRB DMA ptr not "
+				"part of current TD ep_index %d "
+				"comp_code %u\n", ep_index,
+				trb_comp_code);
+			trb_in_td(xhci, td, ep_trb_dma, true);
+			return -ESHUTDOWN;
 		}
 
 		if (ep->skip) {
