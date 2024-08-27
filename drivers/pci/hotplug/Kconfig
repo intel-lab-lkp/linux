@@ -173,4 +173,16 @@ config HOTPLUG_PCI_S390
 
 	  When in doubt, say Y.
 
+config HOTPLUG_PCI_PCIE_CRAY_E1000
+	tristate "PCIE Hotplug extensions for Cray ClusterStor E1000"
+	depends on ACPI_PCI_SLOT && HOTPLUG_PCI_PCIE && IPMI_HANDLER
+	help
+	  Say Y here if you have a Cray ClusterStor E1000 and want to control
+	  your NVMe slot LEDs.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called pciehp_craye1k.
+
+	  When in doubt, say N.
+
 endif # HOTPLUG_PCI
