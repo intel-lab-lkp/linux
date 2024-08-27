@@ -3496,7 +3496,7 @@ sub process {
 # Check for various typo / spelling mistakes
 		if (defined($misspellings) &&
 		    ($in_commit_log || $line =~ /^(?:\+|Subject:)/i)) {
-			while ($rawline =~ /(?:^|[^\w\-'`])($misspellings)(?:[^\w\-'`]|$)/gi) {
+			while ($rawline =~ /\b{wb}($misspellings)\b{wb}/gi) {
 				my $typo = $1;
 				my $blank = copy_spacing($rawline);
 				my $ptr = substr($blank, 0, $-[1]) . "^" x length($typo);
