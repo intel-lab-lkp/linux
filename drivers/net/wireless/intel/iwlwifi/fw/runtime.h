@@ -182,6 +182,8 @@ struct iwl_fw_runtime {
 	bool sgom_enabled;
 	struct iwl_mcc_allowed_ap_type_cmd uats_table;
 	u8 uefi_tables_lock_status;
+	int acpi_dsm_func_retcode[DSM_FUNC_NUM_FUNCS];
+
 };
 
 void iwl_fw_runtime_init(struct iwl_fw_runtime *fwrt, struct iwl_trans *trans,

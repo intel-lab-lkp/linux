@@ -169,6 +169,10 @@ int iwl_acpi_get_dsm(struct iwl_fw_runtime *fwrt,
 	if (WARN_ON(func >= ARRAY_SIZE(acpi_dsm_size)))
 		return -EINVAL;
 
+	/* If HW return an error once, do not bother try again. */
+	if (fwrt && fwrt->acpi_dsm_func_retcode[func])
+		return fwrt->acpi_dsm_func_retcode[func];
+
 	expected_size = acpi_dsm_size[func];
 
 	/* Currently all ACPI DSMs are either 8-bit or 32-bit */
@@ -177,6 +181,8 @@ int iwl_acpi_get_dsm(struct iwl_fw_runtime *fwrt,
 
 	ret = iwl_acpi_get_dsm_integer(fwrt->dev, ACPI_DSM_REV, func,
 				       &iwl_guid, &tmp, expected_size);
+	if (fwrt)
+		fwrt->acpi_dsm_func_retcode[func] = ret;
 	if (ret)
 		return ret;
 
