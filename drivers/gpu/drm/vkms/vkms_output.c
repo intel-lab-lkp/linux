@@ -44,11 +44,11 @@ static int vkms_add_overlay_plane(struct vkms_device *vkmsdev, int index,
 
 int vkms_output_init(struct vkms_device *vkmsdev, int index)
 {
-	struct vkms_output *output = &vkmsdev->output;
+	struct vkms_crtc *vkms_crtc = &vkmsdev->crtc;
 	struct drm_device *dev = &vkmsdev->drm;
 	struct drm_connector *connector;
 	struct drm_encoder *encoder;
-	struct drm_crtc *crtc = &output->crtc;
+	struct drm_crtc *crtc = &vkms_crtc->base;
 	struct vkms_plane *primary, *cursor = NULL;
 	int ret;
 	int writeback;
