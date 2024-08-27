@@ -293,7 +293,12 @@ struct vkms_crtc *vkms_crtc_init(struct vkms_device *vkmsdev, struct drm_plane *
 	}
 	drm_crtc_helper_add(&vkms_crtc->base, &vkms_crtc_helper_funcs);
 
-	drm_mode_crtc_set_gamma_size(&vkms_crtc->base, VKMS_LUT_SIZE);
+	ret = drm_mode_crtc_set_gamma_size(&vkms_crtc->base, VKMS_LUT_SIZE);
+	if (ret) {
+		DRM_DEV_ERROR(vkmsdev->drm.dev, "Failed to set gamma size\n");
+		return ERR_PTR(ret);
+	}
+
 	drm_crtc_enable_color_mgmt(&vkms_crtc->base, 0, false, VKMS_LUT_SIZE);
 
 	spin_lock_init(&vkms_crtc->lock);
