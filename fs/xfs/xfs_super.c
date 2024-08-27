@@ -1651,7 +1651,7 @@ xfs_fs_fill_super(
 
 		if (mp->m_sb.sb_blocksize > max_folio_size) {
 			xfs_warn(mp,
-"block size (%u bytes) not supported; Only block size (%ld) or less is supported",
+"block size (%u bytes) not supported; Only block size (%zu) or less is supported",
 				mp->m_sb.sb_blocksize, max_folio_size);
 			error = -ENOSYS;
 			goto out_free_sb;
