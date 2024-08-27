@@ -2414,6 +2414,12 @@ static int process_isoc_td(struct xhci_hcd *xhci, struct xhci_virt_ep *ep,
 		if (ep_trb != td->last_trb)
 			td->error_mid_td = true;
 		break;
+	case COMP_MISSED_SERVICE_ERROR:
+		frame->status = -EXDEV;
+		sum_trbs_for_length = true;
+		if (ep_trb != td->last_trb)
+			td->error_mid_td = true;
+		break;
 	case COMP_INCOMPATIBLE_DEVICE_ERROR:
 	case COMP_STALL_ERROR:
 		frame->status = -EPROTO;
@@ -2731,11 +2737,15 @@ static int handle_tx_event(struct xhci_hcd *xhci,
 		 * may be missed by xHC.
 		 * Set skip flag of the ep_ring; Complete the missed tds as
 		 * short transfer when process the ep_ring next time.
+		 * If the xHC tells us the last missed TRB (ep_trb_dma != NULL)
+		 * perform the skipping right away.
 		 */
 		ep->skip = true;
 		xhci_dbg(xhci,
-			 "Miss service interval error for slot %u ep %u, set skip flag\n",
-			 slot_id, ep_index);
+			 "Miss service interval error for slot %u ep %u, set skip flag, go ahead %d\n",
+			 slot_id, ep_index, !!ep_trb_dma);
+		if (ep_trb_dma)
+			break;
 		return 0;
 	case COMP_NO_PING_RESPONSE_ERROR:
 		ep->skip = true;
