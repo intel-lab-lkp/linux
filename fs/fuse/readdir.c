@@ -262,27 +262,6 @@ retry:
 	return 0;
 }
 
-static void fuse_force_forget(struct file *file, u64 nodeid)
-{
-	struct inode *inode = file_inode(file);
-	struct fuse_mount *fm = get_fuse_mount(inode);
-	struct fuse_forget_in inarg;
-	FUSE_ARGS(args);
-
-	memset(&inarg, 0, sizeof(inarg));
-	inarg.nlookup = 1;
-	args.opcode = FUSE_FORGET;
-	args.nodeid = nodeid;
-	args.in_numargs = 1;
-	args.in_args[0].size = sizeof(inarg);
-	args.in_args[0].value = &inarg;
-	args.force = true;
-	args.noreply = true;
-
-	fuse_simple_request(fm, &args);
-	/* ignore errors */
-}
-
 static int parse_dirplusfile(char *buf, size_t nbytes, struct file *file,
 			     struct dir_context *ctx, u64 attr_version)
 {
@@ -320,8 +299,13 @@ static int parse_dirplusfile(char *buf, size_t nbytes, struct file *file,
 		nbytes -= reclen;
 
 		ret = fuse_direntplus_link(file, direntplus, attr_version);
-		if (ret)
-			fuse_force_forget(file, direntplus->entry_out.nodeid);
+		if (ret) {
+			struct inode *inode = file_inode(file);
+			struct fuse_mount *fm = get_fuse_mount(inode);
+
+			fuse_queue_forget(fm->fc, NULL,
+					direntplus->entry_out.nodeid, 1);
+		}
 	}
 
 	return 0;

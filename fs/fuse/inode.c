@@ -63,11 +63,6 @@ MODULE_PARM_DESC(max_user_congthresh,
 static struct file_system_type fuseblk_fs_type;
 #endif
 
-struct fuse_forget_link *fuse_alloc_forget(void)
-{
-	return kzalloc(sizeof(struct fuse_forget_link), GFP_KERNEL_ACCOUNT);
-}
-
 static struct fuse_submount_lookup *fuse_alloc_submount_lookup(void)
 {
 	struct fuse_submount_lookup *sl;
@@ -75,7 +70,7 @@ static struct fuse_submount_lookup *fuse_alloc_submount_lookup(void)
 	sl = kzalloc(sizeof(struct fuse_submount_lookup), GFP_KERNEL_ACCOUNT);
 	if (!sl)
 		return NULL;
-	sl->forget = fuse_alloc_forget();
+	sl->forget = fuse_alloc_forget(GFP_KERNEL_ACCOUNT);
 	if (!sl->forget)
 		goto out_free;
 
@@ -104,7 +99,7 @@ static struct inode *fuse_alloc_inode(struct super_block *sb)
 	fi->submount_lookup = NULL;
 	mutex_init(&fi->mutex);
 	spin_lock_init(&fi->lock);
-	fi->forget = fuse_alloc_forget();
+	fi->forget = fuse_alloc_forget(GFP_KERNEL_ACCOUNT);
 	if (!fi->forget)
 		goto out_free;
 

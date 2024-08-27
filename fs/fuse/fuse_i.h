@@ -298,7 +298,6 @@ struct fuse_args {
 	uint8_t out_numargs;
 	uint8_t ext_idx;
 	bool force:1;
-	bool noreply:1;
 	bool nocreds:1;
 	bool in_pages:1;
 	bool out_pages:1;
@@ -1048,10 +1047,13 @@ int fuse_lookup_name(struct super_block *sb, u64 nodeid, const struct qstr *name
 /**
  * Send FORGET command
  */
-void fuse_queue_forget(struct fuse_conn *fc, struct fuse_forget_link *forget,
-		       u64 nodeid, u64 nlookup);
+static inline struct fuse_forget_link *fuse_alloc_forget(gfp_t flags)
+{
+	return kzalloc(sizeof(struct fuse_forget_link), flags);
+}
 
-struct fuse_forget_link *fuse_alloc_forget(void);
+void fuse_queue_forget(struct fuse_conn *fc, struct fuse_forget_link* forget,
+			u64 nodeid, u64 nlookup);
 
 struct fuse_forget_link *fuse_dequeue_forget(struct fuse_iqueue *fiq,
 					     unsigned int max,

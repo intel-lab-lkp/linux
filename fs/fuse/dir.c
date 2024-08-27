@@ -207,7 +207,6 @@ static int fuse_dentry_revalidate(struct dentry *entry, unsigned int flags)
 		 (flags & (LOOKUP_EXCL | LOOKUP_REVAL | LOOKUP_RENAME_TARGET))) {
 		struct fuse_entry_out outarg;
 		FUSE_ARGS(args);
-		struct fuse_forget_link *forget;
 		u64 attr_version;
 
 		/* For negative dentries, always do a fresh lookup */
@@ -219,11 +218,6 @@ static int fuse_dentry_revalidate(struct dentry *entry, unsigned int flags)
 			goto out;
 
 		fm = get_fuse_mount(inode);
-
-		forget = fuse_alloc_forget();
-		ret = -ENOMEM;
-		if (!forget)
-			goto out;
 
 		attr_version = fuse_get_attr_version(fm->fc);
 
@@ -239,15 +233,13 @@ static int fuse_dentry_revalidate(struct dentry *entry, unsigned int flags)
 			fi = get_fuse_inode(inode);
 			if (outarg.nodeid != get_node_id(inode) ||
 			    (bool) IS_AUTOMOUNT(inode) != (bool) (outarg.attr.flags & FUSE_ATTR_SUBMOUNT)) {
-				fuse_queue_forget(fm->fc, forget,
-						  outarg.nodeid, 1);
+				fuse_queue_forget(fm->fc, NULL, outarg.nodeid, 1);
 				goto invalid;
 			}
 			spin_lock(&fi->lock);
 			fi->nlookup++;
 			spin_unlock(&fi->lock);
 		}
-		kfree(forget);
 		if (ret == -ENOMEM || ret == -EINTR)
 			goto out;
 		if (ret || fuse_invalid_attr(&outarg.attr) ||
@@ -365,7 +357,6 @@ int fuse_lookup_name(struct super_block *sb, u64 nodeid, const struct qstr *name
 {
 	struct fuse_mount *fm = get_fuse_mount_super(sb);
 	FUSE_ARGS(args);
-	struct fuse_forget_link *forget;
 	u64 attr_version;
 	int err;
 
@@ -374,23 +365,17 @@ int fuse_lookup_name(struct super_block *sb, u64 nodeid, const struct qstr *name
 	if (name->len > FUSE_NAME_MAX)
 		goto out;
 
-
-	forget = fuse_alloc_forget();
-	err = -ENOMEM;
-	if (!forget)
-		goto out;
-
 	attr_version = fuse_get_attr_version(fm->fc);
 
 	fuse_lookup_init(fm->fc, &args, nodeid, name, outarg);
 	err = fuse_simple_request(fm, &args);
 	/* Zero nodeid is same as -ENOENT, but with valid timeout */
 	if (err || !outarg->nodeid)
-		goto out_put_forget;
+		goto out;
 
 	err = -EIO;
 	if (fuse_invalid_attr(&outarg->attr))
-		goto out_put_forget;
+		goto out;
 	if (outarg->nodeid == FUSE_ROOT_ID && outarg->generation != 0) {
 		pr_warn_once("root generation should be zero\n");
 		outarg->generation = 0;
@@ -401,13 +386,11 @@ int fuse_lookup_name(struct super_block *sb, u64 nodeid, const struct qstr *name
 			   attr_version);
 	err = -ENOMEM;
 	if (!*inode) {
-		fuse_queue_forget(fm->fc, forget, outarg->nodeid, 1);
+		fuse_queue_forget(fm->fc, NULL, outarg->nodeid, 1);
 		goto out;
 	}
 	err = 0;
 
- out_put_forget:
-	kfree(forget);
  out:
 	return err;
 }
@@ -617,7 +600,6 @@ static int fuse_create_open(struct inode *dir, struct dentry *entry,
 	struct inode *inode;
 	struct fuse_mount *fm = get_fuse_mount(dir);
 	FUSE_ARGS(args);
-	struct fuse_forget_link *forget;
 	struct fuse_create_in inarg;
 	struct fuse_open_out *outopenp;
 	struct fuse_entry_out outentry;
@@ -628,15 +610,10 @@ static int fuse_create_open(struct inode *dir, struct dentry *entry,
 	/* Userspace expects S_IFREG in create mode */
 	BUG_ON((mode & S_IFMT) != S_IFREG);
 
-	forget = fuse_alloc_forget();
-	err = -ENOMEM;
-	if (!forget)
-		goto out_err;
-
 	err = -ENOMEM;
 	ff = fuse_file_alloc(fm, true);
 	if (!ff)
-		goto out_put_forget_req;
+		goto out_err;
 
 	if (!fm->fc->dont_mask)
 		mode &= ~current_umask();
@@ -670,7 +647,7 @@ static int fuse_create_open(struct inode *dir, struct dentry *entry,
 
 	err = get_create_ext(&args, dir, entry, mode);
 	if (err)
-		goto out_put_forget_req;
+		goto out_err;
 
 	err = fuse_simple_request(fm, &args);
 	free_ext_value(&args);
@@ -690,11 +667,10 @@ static int fuse_create_open(struct inode *dir, struct dentry *entry,
 	if (!inode) {
 		flags &= ~(O_CREAT | O_EXCL | O_TRUNC);
 		fuse_sync_release(NULL, ff, flags);
-		fuse_queue_forget(fm->fc, forget, outentry.nodeid, 1);
+		fuse_queue_forget(fm->fc, NULL, outentry.nodeid, 1);
 		err = -ENOMEM;
 		goto out_err;
 	}
-	kfree(forget);
 	d_instantiate(entry, inode);
 	fuse_change_entry_timeout(entry, &outentry);
 	fuse_dir_changed(dir);
@@ -716,8 +692,6 @@ static int fuse_create_open(struct inode *dir, struct dentry *entry,
 
 out_free_ff:
 	fuse_file_free(ff);
-out_put_forget_req:
-	kfree(forget);
 out_err:
 	return err;
 }
@@ -782,14 +756,9 @@ static int create_new_entry(struct fuse_mount *fm, struct fuse_args *args,
 	struct inode *inode;
 	struct dentry *d;
 	int err;
-	struct fuse_forget_link *forget;
 
 	if (fuse_is_bad(dir))
 		return -EIO;
-
-	forget = fuse_alloc_forget();
-	if (!forget)
-		return -ENOMEM;
 
 	memset(&outarg, 0, sizeof(outarg));
 	args->nodeid = get_node_id(dir);
@@ -800,28 +769,27 @@ static int create_new_entry(struct fuse_mount *fm, struct fuse_args *args,
 	if (args->opcode != FUSE_LINK) {
 		err = get_create_ext(args, dir, entry, mode);
 		if (err)
-			goto out_put_forget_req;
+			goto out_err;
 	}
 
 	err = fuse_simple_request(fm, args);
 	free_ext_value(args);
 	if (err)
-		goto out_put_forget_req;
+		goto out_err;
 
 	err = -EIO;
 	if (invalid_nodeid(outarg.nodeid) || fuse_invalid_attr(&outarg.attr))
-		goto out_put_forget_req;
+		goto out_err;
 
 	if ((outarg.attr.mode ^ mode) & S_IFMT)
-		goto out_put_forget_req;
+		goto out_err;
 
 	inode = fuse_iget(dir->i_sb, outarg.nodeid, outarg.generation,
 			  &outarg.attr, ATTR_TIMEOUT(&outarg), 0);
 	if (!inode) {
-		fuse_queue_forget(fm->fc, forget, outarg.nodeid, 1);
+		fuse_queue_forget(fm->fc, NULL, outarg.nodeid, 1);
 		return -ENOMEM;
 	}
-	kfree(forget);
 
 	d_drop(entry);
 	d = d_splice_alias(inode, entry);
@@ -837,10 +805,9 @@ static int create_new_entry(struct fuse_mount *fm, struct fuse_args *args,
 	fuse_dir_changed(dir);
 	return 0;
 
- out_put_forget_req:
+ out_err:
 	if (err == -EEXIST)
 		fuse_invalidate_entry(entry);
-	kfree(forget);
 	return err;
 }
 

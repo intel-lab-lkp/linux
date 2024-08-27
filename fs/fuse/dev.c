@@ -234,9 +234,17 @@ __releases(fiq->lock)
 }
 
 void fuse_queue_forget(struct fuse_conn *fc, struct fuse_forget_link *forget,
-		       u64 nodeid, u64 nlookup)
+			u64 nodeid, u64 nlookup)
 {
 	struct fuse_iqueue *fiq = &fc->iq;
+
+	/*
+	 * The nullptr means that fuse_queue_forget() is used in error cases.
+	 * Avoid preallocating this structure because it is unlikely used.
+	 * Use __GFP_NOFAIL to make memory allocation always succeed.
+	 */
+	if (forget == NULL)
+		forget = fuse_alloc_forget(GFP_KERNEL_ACCOUNT | __GFP_NOFAIL);
 
 	forget->forget_one.nodeid = nodeid;
 	forget->forget_one.nlookup = nlookup;
@@ -508,8 +516,7 @@ ssize_t fuse_simple_request(struct fuse_mount *fm, struct fuse_args *args)
 	fuse_adjust_compat(fc, args);
 	fuse_args_to_req(req, args);
 
-	if (!args->noreply)
-		__set_bit(FR_ISREPLY, &req->flags);
+	__set_bit(FR_ISREPLY, &req->flags);
 	__fuse_request_send(req);
 	ret = req->out.h.error;
 	if (!ret && args->out_argvar) {
