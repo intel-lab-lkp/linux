@@ -88,15 +88,12 @@ static int thunder_mmc_probe(struct pci_dev *pdev,
 	host->reg_off = 0x2000;
 	host->reg_off_dma = 0x160;
 
-	host->clk = devm_clk_get(dev, NULL);
+	host->clk = devm_clk_get_enabled(dev, NULL);
 	if (IS_ERR(host->clk)) {
 		ret = PTR_ERR(host->clk);
 		goto error;
 	}
 
-	ret = clk_prepare_enable(host->clk);
-	if (ret)
-		goto error;
 	host->sys_freq = clk_get_rate(host->clk);
 
 	spin_lock_init(&host->irq_handler_lock);
@@ -163,7 +160,6 @@ error:
 			put_device(&host->slot_pdev[i]->dev);
 		}
 	}
-	clk_disable_unprepare(host->clk);
 	pci_release_regions(pdev);
 	return ret;
 }
@@ -182,7 +178,6 @@ static void thunder_mmc_remove(struct pci_dev *pdev)
 	dma_cfg &= ~MIO_EMM_DMA_CFG_EN;
 	writeq(dma_cfg, host->dma_base + MIO_EMM_DMA_CFG(host));
 
-	clk_disable_unprepare(host->clk);
 	pci_release_regions(pdev);
 }
 
