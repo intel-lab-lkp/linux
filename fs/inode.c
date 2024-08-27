@@ -1962,7 +1962,7 @@ int inode_update_timestamps(struct inode *inode, int flags)
 			inode_set_mtime_to_ts(inode, now);
 			updated |= S_MTIME;
 		}
-		if (IS_I_VERSION(inode) && inode_maybe_inc_iversion(inode, updated))
+		if (IS_I_VERSION(inode) && inode_maybe_inc_iversion(inode, false))
 			updated |= S_VERSION;
 	} else {
 		now = current_time(inode);
