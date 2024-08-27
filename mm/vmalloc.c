@@ -2141,12 +2141,10 @@ decay_va_pool_node(struct vmap_node *vn, bool full_decay)
 	INIT_LIST_HEAD(&decay_list);
 
 	for (i = 0; i < MAX_VA_SIZE_PAGES; i++) {
-		struct list_head tmp_list;
+		LIST_HEAD(tmp_list);
 
 		if (list_empty(&vn->pool[i].head))
 			continue;
-
-		INIT_LIST_HEAD(&tmp_list);
 
 		/* Detach the pool, so no-one can access it. */
 		spin_lock(&vn->pool_lock);
