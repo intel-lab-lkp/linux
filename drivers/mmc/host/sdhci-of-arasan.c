@@ -1875,22 +1875,16 @@ static int sdhci_arasan_probe(struct platform_device *pdev)
 
 	sdhci_get_of_property(pdev);
 
-	sdhci_arasan->clk_ahb = devm_clk_get(dev, "clk_ahb");
+	sdhci_arasan->clk_ahb = devm_clk_get_enabled(dev, "clk_ahb");
 	if (IS_ERR(sdhci_arasan->clk_ahb)) {
 		ret = dev_err_probe(dev, PTR_ERR(sdhci_arasan->clk_ahb),
 				    "clk_ahb clock not found.\n");
 		goto err_pltfm_free;
 	}
 
-	clk_xin = devm_clk_get(dev, "clk_xin");
+	clk_xin = devm_clk_get_enabled(dev, "clk_xin");
 	if (IS_ERR(clk_xin)) {
 		ret = dev_err_probe(dev, PTR_ERR(clk_xin), "clk_xin clock not found.\n");
-		goto err_pltfm_free;
-	}
-
-	ret = clk_prepare_enable(sdhci_arasan->clk_ahb);
-	if (ret) {
-		dev_err(dev, "Unable to enable AHB clock.\n");
 		goto err_pltfm_free;
 	}
 
@@ -1900,20 +1894,14 @@ static int sdhci_arasan_probe(struct platform_device *pdev)
 		ret = clk_set_rate(clk_xin, pltfm_host->clock);
 		if (ret) {
 			dev_err(&pdev->dev, "Failed to set SD clock rate\n");
-			goto clk_dis_ahb;
+			goto err_pltfm_free;
 		}
-	}
-
-	ret = clk_prepare_enable(clk_xin);
-	if (ret) {
-		dev_err(dev, "Unable to enable SD clock.\n");
-		goto clk_dis_ahb;
 	}
 
 	clk_dll = devm_clk_get_optional_enabled(dev, "gate");
 	if (IS_ERR(clk_dll)) {
 		ret = dev_err_probe(dev, PTR_ERR(clk_dll), "failed to get dll clk\n");
-		goto clk_disable_all;
+		goto err_pltfm_free;
 	}
 
 	if (of_property_read_bool(np, "xlnx,fails-without-test-cd"))
@@ -1940,7 +1928,7 @@ static int sdhci_arasan_probe(struct platform_device *pdev)
 
 	ret = sdhci_arasan_register_sdclk(sdhci_arasan, clk_xin, dev);
 	if (ret)
-		goto clk_disable_all;
+		goto err_pltfm_free;
 
 	if (of_device_is_compatible(np, "xlnx,zynqmp-8.9a")) {
 		host->mmc_host_ops.execute_tuning =
@@ -2007,10 +1995,6 @@ err_add_host:
 		phy_exit(sdhci_arasan->phy);
 unreg_clk:
 	sdhci_arasan_unregister_sdclk(dev);
-clk_disable_all:
-	clk_disable_unprepare(clk_xin);
-clk_dis_ahb:
-	clk_disable_unprepare(sdhci_arasan->clk_ahb);
 err_pltfm_free:
 	sdhci_pltfm_free(pdev);
 	return ret;
@@ -2021,8 +2005,6 @@ static void sdhci_arasan_remove(struct platform_device *pdev)
 	struct sdhci_host *host = platform_get_drvdata(pdev);
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
 	struct sdhci_arasan_data *sdhci_arasan = sdhci_pltfm_priv(pltfm_host);
-	struct clk *clk_ahb = sdhci_arasan->clk_ahb;
-	struct clk *clk_xin = pltfm_host->clk;
 
 	if (!IS_ERR(sdhci_arasan->phy)) {
 		if (sdhci_arasan->is_phy_on)
@@ -2033,9 +2015,6 @@ static void sdhci_arasan_remove(struct platform_device *pdev)
 	sdhci_arasan_unregister_sdclk(&pdev->dev);
 
 	sdhci_pltfm_remove(pdev);
-
-	clk_disable_unprepare(clk_xin);
-	clk_disable_unprepare(clk_ahb);
 }
 
 static struct platform_driver sdhci_arasan_driver = {
