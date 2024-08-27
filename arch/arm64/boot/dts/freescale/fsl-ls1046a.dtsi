@@ -350,6 +350,29 @@
 			};
 		};
 
+		pinmux: pinmux@157040c {
+			compatible = "fsl,ls1046a-pinctrl";
+			reg = <0 0x157040c 0 4>;
+			big-endian;
+
+			pinctrl_i2c2: pinctrl-i2c2 {
+				groups = "L4", "M4";
+				function = "i2c";
+			};
+			pinctrl_i2c2_gpio: pinctrl-i2c2-gpio {
+				groups = "L4", "M4";
+				function = "gpio";
+			};
+			pinctrl_i2c3: pinctrl-i2c3 {
+				groups = "M3", "N3";
+				function = "i2c";
+			};
+			pinctrl_i2c3_gpio: pinctrl-i2c3-gpio {
+				groups = "M3", "N3";
+				function = "gpio";
+			};
+		};
+
 		crypto: crypto@1700000 {
 			compatible = "fsl,sec-v5.4", "fsl,sec-v5.0",
 				     "fsl,sec-v4.0";
@@ -537,6 +560,10 @@
 			clocks = <&clockgen QORIQ_CLK_PLATFORM_PLL
 					    QORIQ_CLK_PLL_DIV(2)>;
 			scl-gpios = <&gpio3 10 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+			sda-gpios = <&gpio3 11 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+			pinctrl-names = "default", "gpio";
+			pinctrl-0 = <&pinctrl_i2c2>;
+			pinctrl-1 = <&pinctrl_i2c2_gpio>;
 			status = "disabled";
 		};
 
@@ -549,6 +576,10 @@
 			clocks = <&clockgen QORIQ_CLK_PLATFORM_PLL
 					    QORIQ_CLK_PLL_DIV(2)>;
 			scl-gpios = <&gpio3 12 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+			sda-gpios = <&gpio3 13 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+			pinctrl-names = "default", "gpio";
+			pinctrl-0 = <&pinctrl_i2c3>;
+			pinctrl-1 = <&pinctrl_i2c3_gpio>;
 			status = "disabled";
 		};
 
@@ -626,6 +657,11 @@
 			#gpio-cells = <2>;
 			interrupt-controller;
 			#interrupt-cells = <2>;
+			gpio-ranges = <&pinmux 10 0 0>,
+				      <&pinmux 11 0 0>,
+				      <&pinmux 12 0 0>,
+				      <&pinmux 13 0 0>;
+			gpio-ranges-group-names = "L4", "M4", "M3", "N3";
 		};
 
 		lpuart0: serial@2950000 {
