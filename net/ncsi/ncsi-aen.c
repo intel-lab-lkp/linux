@@ -75,7 +75,7 @@ static int ncsi_aen_handler_lsc(struct ncsi_dev_priv *ndp,
 	has_link = !!(data & 0x1);
 
 	netdev_dbg(ndp->ndev.dev, "NCSI: LSC AEN - channel %u state %s\n",
-		   nc->id, data & 0x1 ? "up" : "down");
+		   nc->id, str_up_down(data & 0x1));
 
 	chained = !list_empty(&nc->link);
 	state = nc->state;
