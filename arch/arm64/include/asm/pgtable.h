@@ -679,6 +679,7 @@ static inline bool pud_table(pud_t pud) { return true; }
 
 #ifdef CONFIG_ALTRA_ERRATUM_82288
 extern bool __read_mostly have_altra_erratum_82288;
+void do_trace_altra_mkspecial(pte_t pte);
 #endif
 
 static inline pte_t pte_mkspecial(pte_t pte)
@@ -692,6 +693,7 @@ static inline pte_t pte_mkspecial(pte_t pte)
 	     (phys >= 0x200000000000 && phys < 0x400000000000) ||
 	     (phys >= 0x600000000000 && phys < 0x800000000000))) {
 		pte = __pte(__phys_to_pte_val(phys) | pgprot_val(pgprot_device(prot)));
+		do_trace_altra_mkspecial(pte);
 	}
 #endif
 

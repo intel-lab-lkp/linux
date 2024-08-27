@@ -45,6 +45,8 @@
 #include <asm/traps.h>
 #include <asm/patching.h>
 
+#include <trace/events/altra_fixup.h>
+
 struct fault_info {
 	/* fault handler, return 0 on successful handling */
 	int	(*fn)(unsigned long far, unsigned long esr,
@@ -1376,6 +1378,8 @@ static int fixup_alignment(unsigned long addr, unsigned int esr,
 	u32 insn;
 	int res;
 
+	trace_altra_fixup_alignment(addr, esr);
+
 	if (user_mode(regs)) {
 		__le32 insn_le;
 
@@ -1414,8 +1418,9 @@ static int do_alignment_fault(unsigned long far, unsigned long esr,
 			      struct pt_regs *regs)
 {
 #ifdef CONFIG_ALTRA_ERRATUM_82288
-	 if (!fixup_alignment(far, esr, regs))
-	 return 0;
+	if (!fixup_alignment(far, esr, regs)) {
+		return 0;
+	}
 #endif
 	if (IS_ENABLED(CONFIG_COMPAT_ALIGNMENT_FIXUPS) &&
 	    compat_user_mode(regs))

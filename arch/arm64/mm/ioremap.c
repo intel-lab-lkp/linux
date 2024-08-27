@@ -5,8 +5,18 @@
 
 #ifdef CONFIG_ALTRA_ERRATUM_82288
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/altra_fixup.h>
+
 bool have_altra_erratum_82288 __read_mostly;
 EXPORT_SYMBOL(have_altra_erratum_82288);
+
+void do_trace_altra_mkspecial(pte_t pte)
+{
+	trace_altra_mkspecial(pte);
+}
+EXPORT_SYMBOL(do_trace_altra_mkspecial);
+EXPORT_TRACEPOINT_SYMBOL(altra_mkspecial);
 
 static bool is_altra_pci(phys_addr_t phys_addr, size_t size)
 {
@@ -25,6 +35,7 @@ pgprot_t ioremap_map_prot(phys_addr_t phys_addr, size_t size,
 #ifdef CONFIG_ALTRA_ERRATUM_82288
 	if (unlikely(have_altra_erratum_82288 && is_altra_pci(phys_addr, size))) {
 		prot = pgprot_device(prot);
+		trace_altra_ioremap_prot(prot);
 	}
 #endif
 	return prot;
