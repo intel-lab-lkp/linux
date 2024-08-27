@@ -238,6 +238,9 @@ void fuse_queue_forget(struct fuse_conn *fc, struct fuse_forget_link *forget,
 {
 	struct fuse_iqueue *fiq = &fc->iq;
 
+	if (fc->no_forget)
+		return;
+
 	/*
 	 * The nullptr means that fuse_queue_forget() is used in error cases.
 	 * Avoid preallocating this structure because it is unlikely used.

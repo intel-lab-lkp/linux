@@ -84,6 +84,7 @@ out_free:
 static struct inode *fuse_alloc_inode(struct super_block *sb)
 {
 	struct fuse_inode *fi;
+	struct fuse_conn *fc = get_fuse_conn_super(sb);
 
 	fi = alloc_inode_sb(sb, fuse_inode_cachep, GFP_KERNEL);
 	if (!fi)
@@ -97,11 +98,14 @@ static struct inode *fuse_alloc_inode(struct super_block *sb)
 	fi->orig_ino = 0;
 	fi->state = 0;
 	fi->submount_lookup = NULL;
+	fi->forget = NULL;
 	mutex_init(&fi->mutex);
 	spin_lock_init(&fi->lock);
-	fi->forget = fuse_alloc_forget(GFP_KERNEL_ACCOUNT);
-	if (!fi->forget)
-		goto out_free;
+	if (!fc->no_forget) {
+		fi->forget = fuse_alloc_forget(GFP_KERNEL_ACCOUNT);
+		if (!fi->forget)
+			goto out_free;
+	}
 
 	if (IS_ENABLED(CONFIG_FUSE_DAX) && !fuse_dax_inode_alloc(sb, fi))
 		goto out_free_forget;
@@ -445,13 +449,15 @@ struct inode *fuse_iget(struct super_block *sb, u64 nodeid,
 		fuse_init_inode(inode, attr, fc);
 		fi = get_fuse_inode(inode);
 		fi->nodeid = nodeid;
-		fi->submount_lookup = fuse_alloc_submount_lookup();
-		if (!fi->submount_lookup) {
-			iput(inode);
-			return NULL;
+		if (!fc->no_forget) {
+			fi->submount_lookup = fuse_alloc_submount_lookup();
+			if (!fi->submount_lookup) {
+				iput(inode);
+				return NULL;
+			}
+			/* Sets nlookup = 1 on fi->submount_lookup->nlookup */
+			fuse_init_submount_lookup(fi->submount_lookup, nodeid);
 		}
-		/* Sets nlookup = 1 on fi->submount_lookup->nlookup */
-		fuse_init_submount_lookup(fi->submount_lookup, nodeid);
 		inode->i_flags |= S_AUTOMOUNT;
 		goto done;
 	}
@@ -478,9 +484,7 @@ retry:
 		}
 	}
 	fi = get_fuse_inode(inode);
-	spin_lock(&fi->lock);
-	fi->nlookup++;
-	spin_unlock(&fi->lock);
+	fuse_inc_nlookup(fc, fi);
 done:
 	fuse_change_attributes(inode, attr, NULL, attr_valid, attr_version);
 
@@ -1326,6 +1330,8 @@ static void process_init_reply(struct fuse_mount *fm, struct fuse_args *args,
 			}
 			if (flags & FUSE_NO_EXPORT_SUPPORT)
 				fm->sb->s_export_op = &fuse_export_fid_operations;
+			if (flags & FUSE_NO_FORGET_SUPPORT)
+				fc->no_forget = 1;
 		} else {
 			ra_pages = fc->max_read / PAGE_SIZE;
 			fc->no_lock = 1;
@@ -1373,7 +1379,7 @@ void fuse_send_init(struct fuse_mount *fm)
 		FUSE_HANDLE_KILLPRIV_V2 | FUSE_SETXATTR_EXT | FUSE_INIT_EXT |
 		FUSE_SECURITY_CTX | FUSE_CREATE_SUPP_GROUP |
 		FUSE_HAS_EXPIRE_ONLY | FUSE_DIRECT_IO_ALLOW_MMAP |
-		FUSE_NO_EXPORT_SUPPORT | FUSE_HAS_RESEND;
+		FUSE_NO_EXPORT_SUPPORT | FUSE_HAS_RESEND | FUSE_NO_FORGET_SUPPORT;
 #ifdef CONFIG_FUSE_DAX
 	if (fm->fc->dax)
 		flags |= FUSE_MAP_ALIGNMENT;
@@ -1588,7 +1594,7 @@ static int fuse_fill_super_submount(struct super_block *sb,
 	 * that, though, so undo it here.
 	 */
 	fi = get_fuse_inode(root);
-	fi->nlookup--;
+	fuse_dec_nlookup(fm->fc, fi);
 
 	sb->s_d_op = &fuse_dentry_operations;
 	sb->s_root = d_make_root(root);
@@ -1601,11 +1607,13 @@ static int fuse_fill_super_submount(struct super_block *sb,
 	 * prevent the last forget for this nodeid from getting
 	 * triggered until all users have finished with it.
 	 */
-	sl = parent_fi->submount_lookup;
-	WARN_ON(!sl);
-	if (sl) {
-		refcount_inc(&sl->count);
-		fi->submount_lookup = sl;
+	if (!fm->fc->no_forget) {
+		sl = parent_fi->submount_lookup;
+		WARN_ON(!sl);
+		if (sl) {
+			refcount_inc(&sl->count);
+			fi->submount_lookup = sl;
+		}
 	}
 
 	return 0;

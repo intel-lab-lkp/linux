@@ -218,9 +218,7 @@ retry:
 		}
 
 		fi = get_fuse_inode(inode);
-		spin_lock(&fi->lock);
-		fi->nlookup++;
-		spin_unlock(&fi->lock);
+		fuse_inc_nlookup(fc, fi);
 
 		forget_all_cached_acls(inode);
 		fuse_change_attributes(inode, &o->attr, NULL,
@@ -247,9 +245,7 @@ retry:
 			if (!IS_ERR(inode)) {
 				struct fuse_inode *fi = get_fuse_inode(inode);
 
-				spin_lock(&fi->lock);
-				fi->nlookup--;
-				spin_unlock(&fi->lock);
+				fuse_dec_nlookup(fc, fi);
 			}
 			return PTR_ERR(dentry);
 		}

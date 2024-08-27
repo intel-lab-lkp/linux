@@ -236,9 +236,7 @@ static int fuse_dentry_revalidate(struct dentry *entry, unsigned int flags)
 				fuse_queue_forget(fm->fc, NULL, outarg.nodeid, 1);
 				goto invalid;
 			}
-			spin_lock(&fi->lock);
-			fi->nlookup++;
-			spin_unlock(&fi->lock);
+			fuse_inc_nlookup(fm->fc, fi);
 		}
 		if (ret == -ENOMEM || ret == -EINTR)
 			goto out;
