@@ -21,8 +21,6 @@
 #include "sdhci_f_sdh30.h"
 
 struct f_sdhost_priv {
-	struct clk *clk_iface;
-	struct clk *clk;
 	struct reset_control *rst;
 	u32 vendor_hs200;
 	struct device *dev;
@@ -118,6 +116,8 @@ static int sdhci_f_sdh30_probe(struct platform_device *pdev)
 	struct f_sdhost_priv *priv;
 	struct sdhci_pltfm_host *pltfm_host;
 	u32 reg = 0;
+	struct clk *clk_iface;
+	struct clk *clk;
 
 	host = sdhci_pltfm_init(pdev, &sdhci_f_sdh30_pltfm_data,
 				sizeof(struct f_sdhost_priv));
@@ -138,35 +138,27 @@ static int sdhci_f_sdh30_probe(struct platform_device *pdev)
 	if (dev_of_node(dev)) {
 		sdhci_get_of_property(pdev);
 
-		priv->clk_iface = devm_clk_get(&pdev->dev, "iface");
-		if (IS_ERR(priv->clk_iface)) {
-			ret = PTR_ERR(priv->clk_iface);
+		clk_iface = devm_clk_get_enabled(&pdev->dev, "iface");
+		if (IS_ERR(clk_iface)) {
+			ret = PTR_ERR(clk_iface);
 			goto err;
 		}
 
-		ret = clk_prepare_enable(priv->clk_iface);
-		if (ret)
+		clk = devm_clk_get_enabled(&pdev->dev, "core");
+		if (IS_ERR(clk)) {
+			ret = PTR_ERR(clk);
 			goto err;
-
-		priv->clk = devm_clk_get(&pdev->dev, "core");
-		if (IS_ERR(priv->clk)) {
-			ret = PTR_ERR(priv->clk);
-			goto err_clk;
 		}
-
-		ret = clk_prepare_enable(priv->clk);
-		if (ret)
-			goto err_clk;
 
 		priv->rst = devm_reset_control_get_optional_shared(dev, NULL);
 		if (IS_ERR(priv->rst)) {
 			ret = PTR_ERR(priv->rst);
-			goto err_rst;
+			goto err;
 		}
 
 		ret = reset_control_deassert(priv->rst);
 		if (ret)
-			goto err_rst;
+			goto err;
 	}
 
 	/* init vendor specific regs */
@@ -196,10 +188,6 @@ static int sdhci_f_sdh30_probe(struct platform_device *pdev)
 
 err_add_host:
 	reset_control_assert(priv->rst);
-err_rst:
-	clk_disable_unprepare(priv->clk);
-err_clk:
-	clk_disable_unprepare(priv->clk_iface);
 err:
 	sdhci_pltfm_free(pdev);
 
@@ -210,15 +198,11 @@ static void sdhci_f_sdh30_remove(struct platform_device *pdev)
 {
 	struct sdhci_host *host = platform_get_drvdata(pdev);
 	struct f_sdhost_priv *priv = sdhci_f_sdhost_priv(host);
-	struct clk *clk_iface = priv->clk_iface;
 	struct reset_control *rst = priv->rst;
-	struct clk *clk = priv->clk;
 
 	sdhci_pltfm_remove(pdev);
 
 	reset_control_assert(rst);
-	clk_disable_unprepare(clk);
-	clk_disable_unprepare(clk_iface);
 }
 
 #ifdef CONFIG_OF
