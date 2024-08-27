@@ -102,6 +102,7 @@ struct dpaa2_switch_fq {
 struct dpaa2_switch_fdb {
 	struct net_device	*bridge_dev;
 	u16			fdb_id;
+	u16			vid;
 	bool			in_use;
 };
 
@@ -249,7 +250,7 @@ int dpaa2_switch_port_vlans_del(struct net_device *netdev,
 				const struct switchdev_obj_port_vlan *vlan);
 
 typedef int dpaa2_switch_fdb_cb_t(struct ethsw_port_priv *port_priv,
-				  struct fdb_dump_entry *fdb_entry,
+				  struct fdb_dump_entry *fdb_entry, u16 vid,
 				  void *data);
 
 /* TC offload */
