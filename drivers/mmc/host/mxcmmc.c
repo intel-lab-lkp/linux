@@ -1069,25 +1069,17 @@ static int mxcmci_probe(struct platform_device *pdev)
 	else
 		host->default_irq_mask = 0;
 
-	host->clk_ipg = devm_clk_get(&pdev->dev, "ipg");
+	host->clk_ipg = devm_clk_get_enabled(&pdev->dev, "ipg");
 	if (IS_ERR(host->clk_ipg)) {
 		ret = PTR_ERR(host->clk_ipg);
 		goto out_free;
 	}
 
-	host->clk_per = devm_clk_get(&pdev->dev, "per");
+	host->clk_per = devm_clk_get_enabled(&pdev->dev, "per");
 	if (IS_ERR(host->clk_per)) {
 		ret = PTR_ERR(host->clk_per);
 		goto out_free;
 	}
-
-	ret = clk_prepare_enable(host->clk_per);
-	if (ret)
-		goto out_free;
-
-	ret = clk_prepare_enable(host->clk_ipg);
-	if (ret)
-		goto out_clk_per_put;
 
 	mxcmci_softreset(host);
 
@@ -1096,7 +1088,7 @@ static int mxcmci_probe(struct platform_device *pdev)
 		ret = -ENODEV;
 		dev_err(mmc_dev(host->mmc), "wrong rev.no. 0x%08x. aborting.\n",
 			host->rev_no);
-		goto out_clk_put;
+		goto out_free;
 	}
 
 	mmc->f_min = clk_get_rate(host->clk_per) >> 16;
@@ -1112,7 +1104,7 @@ static int mxcmci_probe(struct platform_device *pdev)
 		if (IS_ERR(host->dma)) {
 			if (PTR_ERR(host->dma) == -EPROBE_DEFER) {
 				ret = -EPROBE_DEFER;
-				goto out_clk_put;
+				goto out_free;
 			}
 
 			/* Ignore errors to fall back to PIO mode */
@@ -1163,12 +1155,6 @@ static int mxcmci_probe(struct platform_device *pdev)
 out_free_dma:
 	if (host->dma)
 		dma_release_channel(host->dma);
-
-out_clk_put:
-	clk_disable_unprepare(host->clk_ipg);
-out_clk_per_put:
-	clk_disable_unprepare(host->clk_per);
-
 out_free:
 	mmc_free_host(mmc);
 
@@ -1187,9 +1173,6 @@ static void mxcmci_remove(struct platform_device *pdev)
 
 	if (host->dma)
 		dma_release_channel(host->dma);
-
-	clk_disable_unprepare(host->clk_per);
-	clk_disable_unprepare(host->clk_ipg);
 
 	mmc_free_host(mmc);
 }
