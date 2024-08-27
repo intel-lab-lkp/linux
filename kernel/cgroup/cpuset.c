@@ -233,12 +233,12 @@ void cpuset_unlock(void)
 
 static DEFINE_SPINLOCK(callback_lock);
 
-void callback_lock_irq(void)
+void cpuset_callback_lock_irq(void)
 {
 	spin_lock_irq(&callback_lock);
 }
 
-void callback_unlock_irq(void)
+void cpuset_callback_unlock_irq(void)
 {
 	spin_unlock_irq(&callback_lock);
 }
@@ -534,7 +534,7 @@ static int validate_change(struct cpuset *cur, struct cpuset *trial)
 	rcu_read_lock();
 
 	if (!is_in_v2_mode())
-		ret = validate_change_legacy(cur, trial);
+		ret = cpuset1_validate_change(cur, trial);
 	if (ret)
 		goto out;
 
@@ -975,7 +975,7 @@ partition_and_rebuild_sched_domains(int ndoms_new, cpumask_var_t doms_new[],
  *
  * Call with cpuset_mutex held.  Takes cpus_read_lock().
  */
-void rebuild_sched_domains_locked(void)
+void cpuset_rebuild_sched_domains_locked(void)
 {
 	struct cgroup_subsys_state *pos_css;
 	struct sched_domain_attr *attr;
@@ -1027,7 +1027,7 @@ void rebuild_sched_domains_locked(void)
 	partition_and_rebuild_sched_domains(ndoms, doms, attr);
 }
 #else /* !CONFIG_SMP */
-void rebuild_sched_domains_locked(void)
+void cpuset_rebuild_sched_domains_locked(void)
 {
 }
 #endif /* CONFIG_SMP */
@@ -1035,7 +1035,7 @@ void rebuild_sched_domains_locked(void)
 static void rebuild_sched_domains_cpuslocked(void)
 {
 	mutex_lock(&cpuset_mutex);
-	rebuild_sched_domains_locked();
+	cpuset_rebuild_sched_domains_locked();
 	mutex_unlock(&cpuset_mutex);
 }
 
@@ -1047,7 +1047,7 @@ void rebuild_sched_domains(void)
 }
 
 /**
- * update_tasks_cpumask - Update the cpumasks of tasks in the cpuset.
+ * cpuset_update_tasks_cpumask - Update the cpumasks of tasks in the cpuset.
  * @cs: the cpuset in which each task's cpus_allowed mask needs to be changed
  * @new_cpus: the temp variable for the new effective_cpus mask
  *
@@ -1057,7 +1057,7 @@ void rebuild_sched_domains(void)
  * is used instead of effective_cpus to make sure all offline CPUs are also
  * included as hotplug code won't update cpumasks for tasks in top_cpuset.
  */
-void update_tasks_cpumask(struct cpuset *cs, struct cpumask *new_cpus)
+void cpuset_update_tasks_cpumask(struct cpuset *cs, struct cpumask *new_cpus)
 {
 	struct css_task_iter it;
 	struct task_struct *task;
@@ -1120,11 +1120,11 @@ static int update_partition_exclusive(struct cpuset *cs, int new_prs)
 	bool exclusive = (new_prs > PRS_MEMBER);
 
 	if (exclusive && !is_cpu_exclusive(cs)) {
-		if (update_flag(CS_CPU_EXCLUSIVE, cs, 1))
+		if (cpuset_update_flag(CS_CPU_EXCLUSIVE, cs, 1))
 			return PERR_NOTEXCL;
 	} else if (!exclusive && is_cpu_exclusive(cs)) {
 		/* Turning off CS_CPU_EXCLUSIVE will not return error */
-		update_flag(CS_CPU_EXCLUSIVE, cs, 0);
+		cpuset_update_flag(CS_CPU_EXCLUSIVE, cs, 0);
 	}
 	return 0;
 }
@@ -1133,7 +1133,7 @@ static int update_partition_exclusive(struct cpuset *cs, int new_prs)
  * Update partition load balance flag and/or rebuild sched domain
  *
  * Changing load balance flag will automatically call
- * rebuild_sched_domains_locked().
+ * cpuset_rebuild_sched_domains_locked().
  * This function is for cgroup v2 only.
  */
 static void update_partition_sd_lb(struct cpuset *cs, int old_prs)
@@ -1160,7 +1160,7 @@ static void update_partition_sd_lb(struct cpuset *cs, int old_prs)
 	}
 
 	if (rebuild_domains && !force_sd_rebuild)
-		rebuild_sched_domains_locked();
+		cpuset_rebuild_sched_domains_locked();
 }
 
 /*
@@ -1374,7 +1374,7 @@ static int remote_partition_enable(struct cpuset *cs, int new_prs,
 	/*
 	 * Proprogate changes in top_cpuset's effective_cpus down the hierarchy.
 	 */
-	update_tasks_cpumask(&top_cpuset, tmp->new_cpus);
+	cpuset_update_tasks_cpumask(&top_cpuset, tmp->new_cpus);
 	update_sibling_cpumasks(&top_cpuset, NULL, tmp);
 	return 0;
 }
@@ -1410,7 +1410,7 @@ static void remote_partition_disable(struct cpuset *cs, struct tmpmasks *tmp)
 	/*
 	 * Proprogate changes in top_cpuset's effective_cpus down the hierarchy.
 	 */
-	update_tasks_cpumask(&top_cpuset, tmp->new_cpus);
+	cpuset_update_tasks_cpumask(&top_cpuset, tmp->new_cpus);
 	update_sibling_cpumasks(&top_cpuset, NULL, tmp);
 }
 
@@ -1462,7 +1462,7 @@ static void remote_cpus_update(struct cpuset *cs, struct cpumask *newmask,
 	/*
 	 * Proprogate changes in top_cpuset's effective_cpus down the hierarchy.
 	 */
-	update_tasks_cpumask(&top_cpuset, tmp->new_cpus);
+	cpuset_update_tasks_cpumask(&top_cpuset, tmp->new_cpus);
 	update_sibling_cpumasks(&top_cpuset, NULL, tmp);
 	return;
 
@@ -1508,7 +1508,7 @@ static void remote_partition_check(struct cpuset *cs, struct cpumask *newmask,
 			disable_cnt++;
 		}
 	if (disable_cnt && !force_sd_rebuild)
-		rebuild_sched_domains_locked();
+		cpuset_rebuild_sched_domains_locked();
 }
 
 /*
@@ -1834,7 +1834,7 @@ write_error:
 		update_partition_exclusive(cs, new_prs);
 
 	if (adding || deleting) {
-		update_tasks_cpumask(parent, tmp->addmask);
+		cpuset_update_tasks_cpumask(parent, tmp->addmask);
 		update_sibling_cpumasks(parent, cs, tmp);
 	}
 
@@ -2017,7 +2017,7 @@ update_parent_effective:
 		/*
 		 * update_parent_effective_cpumask() should have been called
 		 * for cs already in update_cpumask(). We should also call
-		 * update_tasks_cpumask() again for tasks in the parent
+		 * cpuset_update_tasks_cpumask() again for tasks in the parent
 		 * cpuset if the parent's effective_cpus changes.
 		 */
 		if ((cp != cs) && old_prs) {
@@ -2074,7 +2074,7 @@ get_css:
 		WARN_ON(!is_in_v2_mode() &&
 			!cpumask_equal(cp->cpus_allowed, cp->effective_cpus));
 
-		update_tasks_cpumask(cp, cp->effective_cpus);
+		cpuset_update_tasks_cpumask(cp, cp->effective_cpus);
 
 		/*
 		 * On default hierarchy, inherit the CS_SCHED_LOAD_BALANCE
@@ -2109,7 +2109,7 @@ get_css:
 
 	if (need_rebuild_sched_domains && !(flags & HIER_NO_SD_REBUILD) &&
 	    !force_sd_rebuild)
-		rebuild_sched_domains_locked();
+		cpuset_rebuild_sched_domains_locked();
 }
 
 /**
@@ -2501,14 +2501,14 @@ static void cpuset_change_task_nodemask(struct task_struct *tsk,
 static void *cpuset_being_rebound;
 
 /**
- * update_tasks_nodemask - Update the nodemasks of tasks in the cpuset.
+ * cpuset_update_tasks_nodemask - Update the nodemasks of tasks in the cpuset.
  * @cs: the cpuset in which each task's mems_allowed mask needs to be changed
  *
  * Iterate through each task of @cs updating its mems_allowed to the
  * effective cpuset's.  As this function is called with cpuset_mutex held,
  * cpuset membership stays stable.
  */
-void update_tasks_nodemask(struct cpuset *cs)
+void cpuset_update_tasks_nodemask(struct cpuset *cs)
 {
 	static nodemask_t newmems;	/* protected by cpuset_mutex */
 	struct css_task_iter it;
@@ -2606,7 +2606,7 @@ static void update_nodemasks_hier(struct cpuset *cs, nodemask_t *new_mems)
 		WARN_ON(!is_in_v2_mode() &&
 			!nodes_equal(cp->mems_allowed, cp->effective_mems));
 
-		update_tasks_nodemask(cp);
+		cpuset_update_tasks_nodemask(cp);
 
 		rcu_read_lock();
 		css_put(&cp->css);
@@ -2693,7 +2693,7 @@ bool current_cpuset_is_being_rebound(void)
 }
 
 /*
- * update_flag - read a 0 or a 1 in a file and update associated flag
+ * cpuset_update_flag - read a 0 or a 1 in a file and update associated flag
  * bit:		the bit to update (see cpuset_flagbits_t)
  * cs:		the cpuset to update
  * turning_on: 	whether the flag is being set or cleared
@@ -2701,7 +2701,7 @@ bool current_cpuset_is_being_rebound(void)
  * Call with cpuset_mutex held.
  */
 
-int update_flag(cpuset_flagbits_t bit, struct cpuset *cs,
+int cpuset_update_flag(cpuset_flagbits_t bit, struct cpuset *cs,
 		       int turning_on)
 {
 	struct cpuset *trialcs;
@@ -2734,10 +2734,10 @@ int update_flag(cpuset_flagbits_t bit, struct cpuset *cs,
 
 	if (!cpumask_empty(trialcs->cpus_allowed) && balance_flag_changed &&
 	    !force_sd_rebuild)
-		rebuild_sched_domains_locked();
+		cpuset_rebuild_sched_domains_locked();
 
 	if (spread_flag_changed)
-		update_tasks_flags(cs);
+		cpuset1_update_tasks_flags(cs);
 out:
 	free_cpuset(trialcs);
 	return err;
@@ -3002,7 +3002,7 @@ static void cpuset_attach_task(struct cpuset *cs, struct task_struct *task)
 	WARN_ON_ONCE(set_cpus_allowed_ptr(task, cpus_attach));
 
 	cpuset_change_task_nodemask(task, &cpuset_attach_nodemask_to);
-	cpuset_update_task_spread_flags(cs, task);
+	cpuset1_update_task_spread_flags(cs, task);
 }
 
 static void cpuset_attach(struct cgroup_taskset *tset)
@@ -3373,7 +3373,7 @@ cpuset_css_alloc(struct cgroup_subsys_state *parent_css)
 	}
 
 	__set_bit(CS_SCHED_LOAD_BALANCE, &cs->flags);
-	fmeter_init(&cs->fmeter);
+	cpuset1_fmeter_init(&cs->fmeter);
 	cs->relax_domain_level = -1;
 	INIT_LIST_HEAD(&cs->remote_sibling);
 
@@ -3458,7 +3458,7 @@ out_unlock:
 /*
  * If the cpuset being removed has its flag 'sched_load_balance'
  * enabled, then simulate turning sched_load_balance off, which
- * will call rebuild_sched_domains_locked(). That is not needed
+ * will call cpuset_rebuild_sched_domains_locked(). That is not needed
  * in the default hierarchy where only changes in partition
  * will cause repartitioning.
  *
@@ -3478,7 +3478,7 @@ static void cpuset_css_offline(struct cgroup_subsys_state *css)
 
 	if (!cgroup_subsys_on_dfl(cpuset_cgrp_subsys) &&
 	    is_sched_load_balance(cs))
-		update_flag(CS_SCHED_LOAD_BALANCE, cs, 0);
+		cpuset_update_flag(CS_SCHED_LOAD_BALANCE, cs, 0);
 
 	cpuset_dec();
 	clear_bit(CS_ONLINE, &cs->flags);
@@ -3645,7 +3645,7 @@ int __init cpuset_init(void)
 	cpumask_setall(top_cpuset.exclusive_cpus);
 	nodes_setall(top_cpuset.effective_mems);
 
-	fmeter_init(&top_cpuset.fmeter);
+	cpuset1_fmeter_init(&top_cpuset.fmeter);
 	INIT_LIST_HEAD(&remote_children);
 
 	BUG_ON(!alloc_cpumask_var(&cpus_attach, GFP_KERNEL));
@@ -3670,9 +3670,9 @@ hotplug_update_tasks(struct cpuset *cs,
 	spin_unlock_irq(&callback_lock);
 
 	if (cpus_updated)
-		update_tasks_cpumask(cs, new_cpus);
+		cpuset_update_tasks_cpumask(cs, new_cpus);
 	if (mems_updated)
-		update_tasks_nodemask(cs);
+		cpuset_update_tasks_nodemask(cs);
 }
 
 void cpuset_force_rebuild(void)
@@ -3773,7 +3773,7 @@ update_tasks:
 		hotplug_update_tasks(cs, &new_cpus, &new_mems,
 				     cpus_updated, mems_updated);
 	else
-		hotplug_update_tasks_legacy(cs, &new_cpus, &new_mems,
+		cpuset1_hotplug_update_tasks(cs, &new_cpus, &new_mems,
 					    cpus_updated, mems_updated);
 
 unlock:
@@ -3858,7 +3858,7 @@ static void cpuset_handle_hotplug(void)
 			top_cpuset.mems_allowed = new_mems;
 		top_cpuset.effective_mems = new_mems;
 		spin_unlock_irq(&callback_lock);
-		update_tasks_nodemask(&top_cpuset);
+		cpuset_update_tasks_nodemask(&top_cpuset);
 	}
 
 	mutex_unlock(&cpuset_mutex);
