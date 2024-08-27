@@ -1001,6 +1001,26 @@ out_err:
 	return err;
 }
 
+int nilfs_getattr(struct mnt_idmap *idmap, const struct path *path,
+			struct kstat *stat, u3 request_mask, unsigned int query_flags)
+{
+	struct inode *const inode = d_inode(path->dentry);
+	struct block_device *bdev = inode->i_sb->s_bdev;
+	unsigned int blksize = (1 << inode->i_blkbits);
+
+	if ((request_mask & STATX_DIOALIGN) && S_ISREG(inode->i_mode)) {
+		stat->result_mask |= STATX_DIOALIGN;
+
+		if (bdev)
+			blksize = bdev_logical_block_size(bdev);
+		stat->dio_mem_align = blksize;
+		stat->dio_offset_align = blksize;
+	}
+
+	generic_fillattr(idmap, request_mask, inode, stat);
+	return 0;
+}
+
 int nilfs_permission(struct mnt_idmap *idmap, struct inode *inode,
 		     int mask)
 {

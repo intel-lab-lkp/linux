@@ -154,6 +154,7 @@ const struct file_operations nilfs_file_operations = {
 
 const struct inode_operations nilfs_file_inode_operations = {
 	.setattr	= nilfs_setattr,
+	.getattr	= nilfs_getattr,
 	.permission     = nilfs_permission,
 	.fiemap		= nilfs_fiemap,
 	.fileattr_get	= nilfs_fileattr_get,
