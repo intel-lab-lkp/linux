@@ -120,42 +120,26 @@ tuning_out:
 static int dw_mci_hi3798cv200_init(struct dw_mci *host)
 {
 	struct hi3798cv200_priv *priv;
-	int ret;
 
 	priv = devm_kzalloc(host->dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 
-	priv->sample_clk = devm_clk_get(host->dev, "ciu-sample");
+	priv->sample_clk = devm_clk_get_enabled(host->dev, "ciu-sample");
 	if (IS_ERR(priv->sample_clk)) {
 		dev_err(host->dev, "failed to get ciu-sample clock\n");
 		return PTR_ERR(priv->sample_clk);
 	}
 
-	priv->drive_clk = devm_clk_get(host->dev, "ciu-drive");
+	priv->drive_clk = devm_clk_get_enabled(host->dev, "ciu-drive");
 	if (IS_ERR(priv->drive_clk)) {
 		dev_err(host->dev, "failed to get ciu-drive clock\n");
 		return PTR_ERR(priv->drive_clk);
 	}
 
-	ret = clk_prepare_enable(priv->sample_clk);
-	if (ret) {
-		dev_err(host->dev, "failed to enable ciu-sample clock\n");
-		return ret;
-	}
-
-	ret = clk_prepare_enable(priv->drive_clk);
-	if (ret) {
-		dev_err(host->dev, "failed to enable ciu-drive clock\n");
-		goto disable_sample_clk;
-	}
-
 	host->priv = priv;
-	return 0;
 
-disable_sample_clk:
-	clk_disable_unprepare(priv->sample_clk);
-	return ret;
+	return 0;
 }
 
 static const struct dw_mci_drv_data hi3798cv200_data = {
@@ -172,12 +156,6 @@ static int dw_mci_hi3798cv200_probe(struct platform_device *pdev)
 
 static void dw_mci_hi3798cv200_remove(struct platform_device *pdev)
 {
-	struct dw_mci *host = platform_get_drvdata(pdev);
-	struct hi3798cv200_priv *priv = host->priv;
-
-	clk_disable_unprepare(priv->drive_clk);
-	clk_disable_unprepare(priv->sample_clk);
-
 	dw_mci_pltfm_remove(pdev);
 }
 
