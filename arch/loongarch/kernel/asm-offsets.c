@@ -14,6 +14,7 @@
 #include <asm/ptrace.h>
 #include <asm/processor.h>
 #include <asm/ftrace.h>
+#include <asm/vdso/vdso.h>
 
 static void __used output_ptreg_defines(void)
 {
@@ -321,3 +322,12 @@ static void __used output_kvm_defines(void)
 	OFFSET(KVM_GPGD, kvm, arch.pgd);
 	BLANK();
 }
+
+#ifdef CONFIG_VDSO_GETRANDOM
+static void __used output_vdso_rng_defines(void)
+{
+	COMMENT("LoongArch VDSO getrandom offsets.");
+	OFFSET(VDSO_RNG_DATA, loongarch_vdso_data, rng_data);
+	BLANK();
+}
+#endif
