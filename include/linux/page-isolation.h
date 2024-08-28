@@ -32,13 +32,14 @@ static inline bool is_migrate_isolate(int migratetype)
 
 #define MEMORY_OFFLINE	0x1
 #define REPORT_FAILURE	0x2
+#define CMA_ALLOCATION	0x4
 
 void set_pageblock_migratetype(struct page *page, int migratetype);
 
 bool move_freepages_block_isolate(struct zone *zone, struct page *page);
 
 int start_isolate_page_range(unsigned long start_pfn, unsigned long end_pfn,
-			     int migratetype, int flags, gfp_t gfp_flags);
+			     int flags, gfp_t gfp_flags);
 
 void undo_isolate_page_range(unsigned long start_pfn, unsigned long end_pfn);
 
