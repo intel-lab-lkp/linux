@@ -76,6 +76,7 @@ static dev_t dynamic_uverbs_dev;
 static DEFINE_IDA(uverbs_ida);
 static int ib_uverbs_add_one(struct ib_device *device);
 static void ib_uverbs_remove_one(struct ib_device *device, void *client_data);
+static struct ib_client uverbs_client;
 
 static char *uverbs_devnode(const struct device *dev, umode_t *mode)
 {
@@ -217,6 +218,7 @@ void ib_uverbs_release_file(struct kref *ref)
 
 	if (file->disassociate_page)
 		__free_pages(file->disassociate_page, 0);
+	mutex_destroy(&file->disassociation_lock);
 	mutex_destroy(&file->umap_lock);
 	mutex_destroy(&file->ucontext_lock);
 	kfree(file);
@@ -700,6 +702,12 @@ static int ib_uverbs_mmap(struct file *filp, struct vm_area_struct *vma)
 		ret = PTR_ERR(ucontext);
 		goto out;
 	}
+
+	if (atomic_read(&file->disassociated)) {
+		ret = -EPERM;
+		goto out;
+	}
+
 	vma->vm_ops = &rdma_umap_ops;
 	ret = ucontext->device->ops.mmap(ucontext, vma);
 out:
@@ -726,7 +734,7 @@ static void rdma_umap_open(struct vm_area_struct *vma)
 	/*
 	 * Disassociation already completed, the VMA should already be zapped.
 	 */
-	if (!ufile->ucontext)
+	if (!ufile->ucontext || atomic_read(&ufile->disassociated))
 		goto out_unlock;
 
 	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
@@ -822,6 +830,8 @@ void uverbs_user_mmap_disassociate(struct ib_uverbs_file *ufile)
 	struct rdma_umap_priv *priv, *next_priv;
 
 	lockdep_assert_held(&ufile->hw_destroy_rwsem);
+	mutex_lock(&ufile->disassociation_lock);
+	atomic_set(&ufile->disassociated, 1);
 
 	while (1) {
 		struct mm_struct *mm = NULL;
@@ -847,8 +857,10 @@ void uverbs_user_mmap_disassociate(struct ib_uverbs_file *ufile)
 			break;
 		}
 		mutex_unlock(&ufile->umap_lock);
-		if (!mm)
+		if (!mm) {
+			mutex_unlock(&ufile->disassociation_lock);
 			return;
+		}
 
 		/*
 		 * The umap_lock is nested under mmap_lock since it used within
@@ -878,7 +890,33 @@ void uverbs_user_mmap_disassociate(struct ib_uverbs_file *ufile)
 		mmap_read_unlock(mm);
 		mmput(mm);
 	}
+
+	mutex_unlock(&ufile->disassociation_lock);
 }
+
+/**
+ * rdma_user_mmap_disassociate() - Revoke mmaps for a device
+ * @device: device to revoke
+ *
+ * This function should be called by drivers that need to disable mmaps for the
+ * device, for instance because it is going to be reset.
+ */
+void rdma_user_mmap_disassociate(struct ib_device *device)
+{
+	struct ib_uverbs_device *uverbs_dev =
+		ib_get_client_data(device, &uverbs_client);
+	struct ib_uverbs_file *ufile;
+
+	mutex_lock(&uverbs_dev->lists_mutex);
+	list_for_each_entry(ufile, &uverbs_dev->uverbs_file_list, list) {
+		down_read(&ufile->hw_destroy_rwsem);
+		if (ufile->ucontext && !atomic_read(&ufile->disassociated))
+			uverbs_user_mmap_disassociate(ufile);
+		up_read(&ufile->hw_destroy_rwsem);
+	}
+	mutex_unlock(&uverbs_dev->lists_mutex);
+}
+EXPORT_SYMBOL(rdma_user_mmap_disassociate);
 
 /*
  * ib_uverbs_open() does not need the BKL:
@@ -948,6 +986,9 @@ static int ib_uverbs_open(struct inode *inode, struct file *filp)
 	init_rwsem(&file->hw_destroy_rwsem);
 	mutex_init(&file->umap_lock);
 	INIT_LIST_HEAD(&file->umaps);
+
+	mutex_init(&file->disassociation_lock);
+	atomic_set(&file->disassociated, 0);
 
 	filp->private_data = file;
 	list_add_tail(&file->list, &dev->uverbs_file_list);
