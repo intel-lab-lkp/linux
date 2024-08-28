@@ -54,13 +54,7 @@ void __iomem *msm_ioremap_mdss(struct platform_device *mdss_pdev,
 			       struct platform_device *pdev,
 			       const char *name)
 {
-	struct resource *res;
-
-	res = platform_get_resource_byname(mdss_pdev, IORESOURCE_MEM, name);
-	if (!res)
-		return ERR_PTR(-EINVAL);
-
-	return devm_ioremap_resource(&pdev->dev, res);
+	return devm_platform_ioremap_resource_byname(mdss_pdev, name);
 }
 
 static void __iomem *_msm_ioremap(struct platform_device *pdev, const char *name,
