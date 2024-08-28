@@ -1386,7 +1386,10 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 		mt_on_stack(mt_detach);
 		mas_init(&mas_detach, &mt_detach, /* addr = */ 0);
 		/* Prepare to unmap any existing mapping in the area */
-		if (vms_gather_munmap_vmas(&vms, &mas_detach))
+		error = vms_gather_munmap_vmas(&vms, &mas_detach);
+		if (error == -EPERM)
+			return -EPERM;
+		if (error)
 			return -ENOMEM;
 
 		vmg.next = vms.next;
