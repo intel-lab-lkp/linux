@@ -40,7 +40,7 @@ DEFINE_EVENT(ucsi_log_command, ucsi_reset_ppm,
 );
 
 DECLARE_EVENT_CLASS(ucsi_log_connector_status,
-	TP_PROTO(int port, struct ucsi_connector_status *status),
+	TP_PROTO(int port, u8 *status),
 	TP_ARGS(port, status),
 	TP_STRUCT__entry(
 		__field(int, port)
@@ -55,14 +55,14 @@ DECLARE_EVENT_CLASS(ucsi_log_connector_status,
 	),
 	TP_fast_assign(
 		__entry->port = port - 1;
-		__entry->change = status->change;
-		__entry->opmode = UCSI_CONSTAT_PWR_OPMODE(status->flags);
-		__entry->connected = !!(status->flags & UCSI_CONSTAT_CONNECTED);
-		__entry->pwr_dir = !!(status->flags & UCSI_CONSTAT_PWR_DIR);
-		__entry->partner_flags = UCSI_CONSTAT_PARTNER_FLAGS(status->flags);
-		__entry->partner_type = UCSI_CONSTAT_PARTNER_TYPE(status->flags);
-		__entry->request_data_obj = status->request_data_obj;
-		__entry->bc_status = UCSI_CONSTAT_BC_STATUS(status->pwr_status);
+		__entry->change = UCSI_CONSTAT_CHANGE(status);
+		__entry->opmode = UCSI_CONSTAT_PWR_OPMODE(status);
+		__entry->connected = UCSI_CONSTAT_CONNECTED(status);
+		__entry->pwr_dir = UCSI_CONSTAT_PWR_DIR(status);
+		__entry->partner_flags = UCSI_CONSTAT_PARTNER_FLAGS(status);
+		__entry->partner_type = UCSI_CONSTAT_PARTNER_TYPE(status);
+		__entry->request_data_obj = UCSI_CONSTAT_RDO(status);
+		__entry->bc_status = UCSI_CONSTAT_BC_STATUS(status);
 	),
 	TP_printk("port%d status: change=%04x, opmode=%x, connected=%d, "
 		"sourcing=%d, partner_flags=%x, partner_type=%x, "
@@ -73,12 +73,12 @@ DECLARE_EVENT_CLASS(ucsi_log_connector_status,
 );
 
 DEFINE_EVENT(ucsi_log_connector_status, ucsi_connector_change,
-	TP_PROTO(int port, struct ucsi_connector_status *status),
+	TP_PROTO(int port, u8 *status),
 	TP_ARGS(port, status)
 );
 
 DEFINE_EVENT(ucsi_log_connector_status, ucsi_register_port,
-	TP_PROTO(int port, struct ucsi_connector_status *status),
+	TP_PROTO(int port, u8 *status),
 	TP_ARGS(port, status)
 );
 

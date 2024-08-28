@@ -4,6 +4,7 @@
 #define __DRIVER_USB_TYPEC_UCSI_H
 
 #include <linux/bitops.h>
+#include <linux/bitfield.h>
 #include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/power_supply.h>
@@ -312,48 +313,55 @@ struct ucsi_cable_property {
 } __packed;
 
 /* Data structure filled by PPM in response to GET_CONNECTOR_STATUS command. */
-struct ucsi_connector_status {
-	u16 change;
-#define UCSI_CONSTAT_EXT_SUPPLY_CHANGE		BIT(1)
-#define UCSI_CONSTAT_POWER_OPMODE_CHANGE	BIT(2)
-#define UCSI_CONSTAT_PDOS_CHANGE		BIT(5)
-#define UCSI_CONSTAT_POWER_LEVEL_CHANGE		BIT(6)
-#define UCSI_CONSTAT_PD_RESET_COMPLETE		BIT(7)
-#define UCSI_CONSTAT_CAM_CHANGE			BIT(8)
-#define UCSI_CONSTAT_BC_CHANGE			BIT(9)
-#define UCSI_CONSTAT_PARTNER_CHANGE		BIT(11)
-#define UCSI_CONSTAT_POWER_DIR_CHANGE		BIT(12)
-#define UCSI_CONSTAT_CONNECT_CHANGE		BIT(14)
-#define UCSI_CONSTAT_ERROR			BIT(15)
-	u16 flags;
-#define UCSI_CONSTAT_PWR_OPMODE(_f_)		((_f_) & GENMASK(2, 0))
+#define UCSI_CONSTAT_CHANGE(status)		UCSI_FIELD(status, 0, 16)
+#define   UCSI_CONSTAT_EXT_SUPPLY_CHANGE	BIT(1)
+#define   UCSI_CONSTAT_POWER_OPMODE_CHANGE	BIT(2)
+#define   UCSI_CONSTAT_PDOS_CHANGE		BIT(5)
+#define   UCSI_CONSTAT_POWER_LEVEL_CHANGE	BIT(6)
+#define   UCSI_CONSTAT_PD_RESET_COMPLETE	BIT(7)
+#define   UCSI_CONSTAT_CAM_CHANGE		BIT(8)
+#define   UCSI_CONSTAT_BC_CHANGE		BIT(9)
+#define   UCSI_CONSTAT_PARTNER_CHANGE		BIT(11)
+#define   UCSI_CONSTAT_POWER_DIR_CHANGE		BIT(12)
+#define   UCSI_CONSTAT_CONNECT_CHANGE		BIT(14)
+#define   UCSI_CONSTAT_ERROR			BIT(15)
+#define UCSI_CONSTAT_PWR_OPMODE(status)		UCSI_FIELD(status, 16, 3)
 #define   UCSI_CONSTAT_PWR_OPMODE_NONE		0
 #define   UCSI_CONSTAT_PWR_OPMODE_DEFAULT	1
 #define   UCSI_CONSTAT_PWR_OPMODE_BC		2
 #define   UCSI_CONSTAT_PWR_OPMODE_PD		3
 #define   UCSI_CONSTAT_PWR_OPMODE_TYPEC1_5	4
 #define   UCSI_CONSTAT_PWR_OPMODE_TYPEC3_0	5
-#define UCSI_CONSTAT_CONNECTED			BIT(3)
-#define UCSI_CONSTAT_PWR_DIR			BIT(4)
-#define UCSI_CONSTAT_PARTNER_FLAGS(_f_)		(((_f_) & GENMASK(12, 5)) >> 5)
+#define UCSI_CONSTAT_CONNECTED(status)		UCSI_FIELD(status, 19, 1)
+#define UCSI_CONSTAT_PWR_DIR(status)		UCSI_FIELD(status, 20, 1)
+#define UCSI_CONSTAT_PARTNER_FLAGS(status)	UCSI_FIELD(status, 21, 8)
 #define   UCSI_CONSTAT_PARTNER_FLAG_USB		1
 #define   UCSI_CONSTAT_PARTNER_FLAG_ALT_MODE	2
-#define UCSI_CONSTAT_PARTNER_TYPE(_f_)		(((_f_) & GENMASK(15, 13)) >> 13)
+#define UCSI_CONSTAT_PARTNER_TYPE(status)	UCSI_FIELD(status, 29, 3)
 #define   UCSI_CONSTAT_PARTNER_TYPE_DFP		1
 #define   UCSI_CONSTAT_PARTNER_TYPE_UFP		2
-#define   UCSI_CONSTAT_PARTNER_TYPE_CABLE	3 /* Powered Cable */
-#define   UCSI_CONSTAT_PARTNER_TYPE_CABLE_AND_UFP	4 /* Powered Cable */
+#define   UCSI_CONSTAT_PARTNER_TYPE_CABLE	3   /* Powered Cable */
+#define   UCSI_CONSTAT_PARTNER_TYPE_CABLE_AND_UFP 4 /* Powered Cable */
 #define   UCSI_CONSTAT_PARTNER_TYPE_DEBUG	5
 #define   UCSI_CONSTAT_PARTNER_TYPE_AUDIO	6
-	u32 request_data_obj;
-
-	u8 pwr_status;
-#define UCSI_CONSTAT_BC_STATUS(_p_)		((_p_) & GENMASK(1, 0))
+#define UCSI_CONSTAT_RDO(status)		UCSI_FIELD(status, 32, 32)
+#define UCSI_CONSTAT_BC_STATUS(status)		UCSI_FIELD(status, 64, 2)
 #define   UCSI_CONSTAT_BC_NOT_CHARGING		0
 #define   UCSI_CONSTAT_BC_NOMINAL_CHARGING	1
 #define   UCSI_CONSTAT_BC_SLOW_CHARGING		2
 #define   UCSI_CONSTAT_BC_TRICKLE_CHARGING	3
-} __packed;
+#define UCSI_CONSTAT_PD_VERSION(status)		UCSI_FIELD(status, 70, 16)
+
+/*
+ * UCSI specific wrapper for FIELD_GET() that allows access to fields beyond
+ * 64-bits.
+ */
+#define UCSI_FIELD(data, offset, size)					\
+	({								\
+		u8 m = ((offset) % 8);					\
+		FIELD_GET((GENMASK((m + ((size) - 1)), m)),		\
+			  (*((u32 *)(&((u8 *)data)[((offset) / 8)]))));	\
+	})
 
 /* -------------------------------------------------------------------------- */
 
@@ -433,7 +441,7 @@ struct ucsi_connector {
 
 	struct typec_capability typec_cap;
 
-	struct ucsi_connector_status status;
+	u8 status[19];
 	struct ucsi_connector_capability cap;
 	struct ucsi_cable_property cable_prop;
 	struct power_supply *psy;
