@@ -22,6 +22,12 @@ description: |
 
 allOf:
   - $ref: ethernet-phy.yaml#
+  - if:
+      required:
+        - marvell,force-mdi-order-normal
+    then:
+      properties:
+        marvell,force-mdi-order-reverse: false
 
 select:
   properties:
@@ -47,6 +53,16 @@ properties:
 
   firmware-name:
     description: specify the name of PHY firmware to load
+
+  marvell,force-mdi-order-normal:
+    type: boolean
+    description:
+      force normal order of MDI pairs, overriding MDI_CFG bootstrap pin.
+
+  marvell,force-mdi-order-reverse:
+    type: boolean
+    description:
+      force reverse order of MDI pairs, overriding MDI_CFG bootstrap pin.
 
   nvmem-cells:
     description: phandle to the firmware nvmem cell
