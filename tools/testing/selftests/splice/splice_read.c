@@ -49,6 +49,7 @@ int main(int argc, char *argv[])
 		      size, SPLICE_F_MOVE);
 	if (spliced < 0) {
 		perror("splice");
+		fprintf(stderr, "May try: %s /etc/os-release | cat\n", argv[0]);
 		return EXIT_FAILURE;
 	}
 
