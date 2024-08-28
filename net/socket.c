@@ -893,7 +893,7 @@ static void put_ts_pktinfo(struct msghdr *msg, struct sk_buff *skb,
  * called from sock_recv_timestamp() if sock_flag(sk, SOCK_RCVTSTAMP)
  */
 void __sock_recv_timestamp(struct msghdr *msg, struct sock *sk,
-	struct sk_buff *skb)
+			   struct sk_buff *skb, bool errqueue)
 {
 	int need_software_tstamp = sock_flag(sk, SOCK_RCVTSTAMP);
 	int new_tstamp = sock_flag(sk, SOCK_TSTAMP_NEW);
@@ -946,7 +946,12 @@ void __sock_recv_timestamp(struct msghdr *msg, struct sock *sk,
 
 	memset(&tss, 0, sizeof(tss));
 	tsflags = READ_ONCE(sk->sk_tsflags);
-	if ((tsflags & SOF_TIMESTAMPING_SOFTWARE) &&
+	/* We have to use the generation flag here to test if we allow the
+	 * corresponding application to receive the rx timestamp. Only
+	 * using report flag does not hold for receive timestamping case.
+	 */
+	if ((tsflags & SOF_TIMESTAMPING_SOFTWARE &&
+	     (tsflags & SOF_TIMESTAMPING_RX_SOFTWARE || errqueue)) &&
 	    ktime_to_timespec64_cond(skb->tstamp, tss.ts + 0))
 		empty = 0;
 	if (shhwtstamps &&
@@ -1024,7 +1029,7 @@ static void sock_recv_mark(struct msghdr *msg, struct sock *sk,
 void __sock_recv_cmsgs(struct msghdr *msg, struct sock *sk,
 		       struct sk_buff *skb)
 {
-	sock_recv_timestamp(msg, sk, skb);
+	sock_recv_timestamp(msg, sk, skb, false);
 	sock_recv_drops(msg, sk, skb);
 	sock_recv_mark(msg, sk, skb);
 }

@@ -547,7 +547,7 @@ int ip_recv_error(struct sock *sk, struct msghdr *msg, int len, int *addr_len)
 		kfree_skb(skb);
 		return err;
 	}
-	sock_recv_timestamp(msg, sk, skb);
+	sock_recv_timestamp(msg, sk, skb, true);
 
 	serr = SKB_EXT_ERR(skb);
 

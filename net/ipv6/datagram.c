@@ -479,7 +479,7 @@ int ipv6_recv_error(struct sock *sk, struct msghdr *msg, int len, int *addr_len)
 		kfree_skb(skb);
 		return err;
 	}
-	sock_recv_timestamp(msg, sk, skb);
+	sock_recv_timestamp(msg, sk, skb, true);
 
 	serr = SKB_EXT_ERR(skb);
 
@@ -568,7 +568,7 @@ int ipv6_recv_rxpmtu(struct sock *sk, struct msghdr *msg, int len,
 	if (err)
 		goto out_free_skb;
 
-	sock_recv_timestamp(msg, sk, skb);
+	sock_recv_timestamp(msg, sk, skb, false);
 
 	memcpy(&mtu_info, IP6CBMTU(skb), sizeof(mtu_info));
 

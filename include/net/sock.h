@@ -2600,12 +2600,13 @@ static inline void sock_write_timestamp(struct sock *sk, ktime_t kt)
 }
 
 void __sock_recv_timestamp(struct msghdr *msg, struct sock *sk,
-			   struct sk_buff *skb);
+			   struct sk_buff *skb, bool errqueue);
 void __sock_recv_wifi_status(struct msghdr *msg, struct sock *sk,
 			     struct sk_buff *skb);
 
 static inline void
-sock_recv_timestamp(struct msghdr *msg, struct sock *sk, struct sk_buff *skb)
+sock_recv_timestamp(struct msghdr *msg, struct sock *sk, struct sk_buff *skb,
+		    bool errqueue)
 {
 	struct skb_shared_hwtstamps *hwtstamps = skb_hwtstamps(skb);
 	u32 tsflags = READ_ONCE(sk->sk_tsflags);
@@ -2621,7 +2622,7 @@ sock_recv_timestamp(struct msghdr *msg, struct sock *sk, struct sk_buff *skb)
 	    (kt && tsflags & SOF_TIMESTAMPING_SOFTWARE) ||
 	    (hwtstamps->hwtstamp &&
 	     (tsflags & SOF_TIMESTAMPING_RAW_HARDWARE)))
-		__sock_recv_timestamp(msg, sk, skb);
+		__sock_recv_timestamp(msg, sk, skb, errqueue);
 	else
 		sock_write_timestamp(sk, kt);
 
