@@ -1715,7 +1715,6 @@ int zynqmp_dp_probe(struct zynqmp_dpsub *dpsub)
 	struct platform_device *pdev = to_platform_device(dpsub->dev);
 	struct drm_bridge *bridge;
 	struct zynqmp_dp *dp;
-	struct resource *res;
 	int ret;
 
 	dp = kzalloc(sizeof(*dp), GFP_KERNEL);
@@ -1729,8 +1728,7 @@ int zynqmp_dp_probe(struct zynqmp_dpsub *dpsub)
 	INIT_WORK(&dp->hpd_work, zynqmp_dp_hpd_work_func);
 
 	/* Acquire all resources (IOMEM, IRQ and PHYs). */
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "dp");
-	dp->iomem = devm_ioremap_resource(dp->dev, res);
+	dp->iomem = devm_platform_ioremap_resource_byname(pdev, "dp");
 	if (IS_ERR(dp->iomem)) {
 		ret = PTR_ERR(dp->iomem);
 		goto err_free;
