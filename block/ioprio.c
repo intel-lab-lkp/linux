@@ -30,6 +30,15 @@
 #include <linux/security.h>
 #include <linux/pid_namespace.h>
 
+static inline int ioprio_check_level(int ioprio, int max_level)
+{
+	int data = IOPRIO_PRIO_DATA(ioprio);
+
+	if (IOPRIO_BAD_VALUE(data, max_level))
+		return -EINVAL;
+	return 0;
+}
+
 int ioprio_check_cap(int ioprio)
 {
 	int class = IOPRIO_PRIO_CLASS(ioprio);
@@ -49,7 +58,7 @@ int ioprio_check_cap(int ioprio)
 			fallthrough;
 			/* rt has prio field too */
 		case IOPRIO_CLASS_BE:
-			if (level >= IOPRIO_NR_LEVELS)
+			if (ioprio_check_level(ioprio, IOPRIO_NR_LEVELS))
 				return -EINVAL;
 			break;
 		case IOPRIO_CLASS_IDLE:
