@@ -57,6 +57,7 @@ struct klp_ops {
  * @nop:        temporary patch to use the original code again; dyn. allocated
  * @patched:	the func has been added to the klp_ops list
  * @transition:	the func is currently being applied or reverted
+ * @using:      the func is on top of the function stack that is using
  *
  * The patched and transition variables define the func's patching state.  When
  * patching, a func is always in one of the following states:
@@ -72,6 +73,12 @@ struct klp_ops {
  *   patched=1 transition=1: patched, may be visible to some tasks
  *   patched=0 transition=1: unpatched, temporary ending state
  *   patched=0 transition=0: unpatched
+ *
+ * 'using' flag is used to show if this function is now using
+ *
+ *   using=-1 (unknown): the function is now under transition
+ *   using=1  (using):   the function is now running
+ *   using=0  (not used): the function is not used
  */
 struct klp_func {
 	/* external */
@@ -96,6 +103,7 @@ struct klp_func {
 	bool nop;
 	bool patched;
 	bool transition;
+	int using;
 };
 
 struct klp_object;

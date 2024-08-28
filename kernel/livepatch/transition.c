@@ -90,8 +90,9 @@ static void klp_synchronize_transition(void)
 static void klp_complete_transition(void)
 {
 	struct klp_object *obj;
-	struct klp_func *func;
+	struct klp_func *func, *next_func, *stack_top_func;
 	struct task_struct *g, *task;
+	struct klp_ops *ops;
 	unsigned int cpu;
 
 	pr_debug("'%s': completing %s transition\n",
@@ -119,9 +120,39 @@ static void klp_complete_transition(void)
 		klp_synchronize_transition();
 	}
 
-	klp_for_each_object(klp_transition_patch, obj)
-		klp_for_each_func(obj, func)
-			func->transition = false;
+	/*
+	 * The transition patch is finished. The stack top function is now truly
+	 * running. The previous function should be set as 0 as none task is
+	 * using this function anymore.
+	 *
+	 * If this is a patching patch, all function is using.
+	 * if this patch is unpatching, all function of the func stack top is using
+	 */
+	if (klp_target_state == KLP_TRANSITION_PATCHED) {
+		klp_for_each_object(klp_transition_patch, obj) {
+			klp_for_each_func(obj, func) {
+				func->using = 1;
+				func->transition = false;
+				next_func = list_entry_rcu(func->stack_node.next,
+								struct klp_func, stack_node);
+				if (&func->stack_node != &func->ops->func_stack)
+					next_func->using = 0;
+			}
+		}
+	} else {
+		// for the unpatch func, if ops exist, the top of this func is using
+		klp_for_each_object(klp_transition_patch, obj) {
+			klp_for_each_func(obj, func) {
+				func->transition = false;
+				ops = func->ops;
+				if (ops) {
+					stack_top_func = list_first_entry(&ops->func_stack,
+							struct klp_func, stack_node);
+					stack_top_func->using = 1;
+				}
+			}
+		}
+	}
 
 	/* Prevent klp_ftrace_handler() from seeing KLP_TRANSITION_IDLE state */
 	if (klp_target_state == KLP_TRANSITION_PATCHED)

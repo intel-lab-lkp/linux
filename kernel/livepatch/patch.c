@@ -134,6 +134,7 @@ unlock:
 static void klp_unpatch_func(struct klp_func *func)
 {
 	struct klp_ops *ops;
+	struct klp_func *stack_top_func;
 
 	if (WARN_ON(!func->patched))
 		return;
@@ -160,6 +161,10 @@ static void klp_unpatch_func(struct klp_func *func)
 		kfree(ops);
 	} else {
 		list_del_rcu(&func->stack_node);
+		// the previous function is deleted, the stack top is under transition
+		stack_top_func = list_first_entry(&ops->func_stack, struct klp_func,
+							stack_node);
+		stack_top_func->using = -1;
 	}
 
 	func->patched = false;
@@ -168,6 +173,7 @@ static void klp_unpatch_func(struct klp_func *func)
 static int klp_patch_func(struct klp_func *func)
 {
 	struct klp_ops *ops;
+	struct klp_func *stack_top_func;
 	int ret;
 
 	if (WARN_ON(!func->old_func))
@@ -219,10 +225,16 @@ static int klp_patch_func(struct klp_func *func)
 
 		func->ops = ops;
 	} else {
+		// stack_top_func is going to be in transition
+		stack_top_func = list_first_entry(&ops->func_stack, struct klp_func,
+							stack_node);
+		stack_top_func->using = -1;
+		// The new patched function is the one enabling
 		list_add_rcu(&func->stack_node, &ops->func_stack);
 	}
 
 	func->patched = true;
+	func->using = -1;
 
 	return 0;
 
