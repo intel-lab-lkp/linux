@@ -1018,7 +1018,7 @@ void flush_tlb_mm_range(struct mm_struct *mm, unsigned long start,
 	/*
 	 * flush_tlb_multi() is not optimized for the common case in which only
 	 * a local TLB flush is needed. Optimize this use-case by calling
-	 * flush_tlb_func_local() directly in this case.
+	 * flush_tlb_func() directly in this case.
 	 */
 	if (cpumask_any_but(mm_cpumask(mm), cpu) < nr_cpu_ids) {
 		flush_tlb_multi(mm_cpumask(mm), info);
@@ -1251,7 +1251,7 @@ void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
 	/*
 	 * flush_tlb_multi() is not optimized for the common case in which only
 	 * a local TLB flush is needed. Optimize this use-case by calling
-	 * flush_tlb_func_local() directly in this case.
+	 * flush_tlb_func() directly in this case.
 	 */
 	if (cpumask_any_but(&batch->cpumask, cpu) < nr_cpu_ids) {
 		flush_tlb_multi(&batch->cpumask, info);
