@@ -16,6 +16,8 @@
 
 #define PHY_REG(reg)		(reg * 4)
 
+#define REG01_PMS_P_MASK	GENMASK(3, 0)
+#define REG03_PMS_S_MASK	GENMASK(7, 4)
 #define REG12_CK_DIV_MASK	GENMASK(5, 4)
 #define REG13_TG_CODE_LOW_MASK	GENMASK(7, 0)
 #define REG14_TOL_MASK		GENMASK(7, 4)
@@ -30,6 +32,10 @@
 #define REG34_PHY_CLK_READY	BIT(5)
 
 #define PHY_PLL_DIV_REGS_NUM 6
+
+#ifndef MHZ
+#define MHZ	(1000UL * 1000UL)
+#endif
 
 struct phy_config {
 	u32	pixclk;
@@ -440,10 +446,83 @@ fsl_samsung_hdmi_phy_configure_pll_lock_det(struct fsl_samsung_hdmi_phy *phy,
 	       phy->regs + PHY_REG(14));
 }
 
+static unsigned long fsl_samsung_hdmi_phy_find_pms(unsigned long fout, u8 *p, u16 *m, u8 *s)
+{
+	unsigned long best_freq = 0;
+	u32 min_delta = 0xffffffff;
+	u8 _p, best_p;
+	u16 _m, best_m;
+	u8 _s, best_s;
+
+	for (_p = 1; _p <= 11; ++_p) {
+		for (_s = 1; _s <= 16; ++_s) {
+			u64 tmp;
+			u32 delta;
+
+			/* s must be even */
+			if (_s > 1 && (_s & 0x01) == 1)
+				_s++;
+
+			/* _s cannot be 14 per the TRM */
+			if (_s == 14)
+				continue;
+
+			/*
+			 * TODO: Ref Manual doesn't state the range of _m
+			 * so this should be further refined if possible.
+			 * This range was set based on the original values
+			 * in the look-up table
+			 */
+			tmp = (u64)fout * (_p * _s);
+			do_div(tmp, 24 * MHZ);
+			_m = tmp;
+			if (_m < 0x30 || _m > 0x7b)
+				continue;
+
+			/*
+			 * Rev 2 of the Ref Manual states the
+			 * VCO can range between 750MHz and
+			 * 3GHz.  The VCO is assumed to be _m x
+			 * the reference frequency of 24MHz divided
+			 * by the prescaler, _p
+			 */
+			tmp = (u64)_m * 24 * MHZ;
+			do_div(tmp, _p);
+			if (tmp < 750 * MHZ ||
+			    tmp > 3000 * MHZ)
+				continue;
+
+			tmp = (u64)_m * 24 * MHZ;
+			do_div(tmp, _p * _s);
+
+			delta = abs(fout - tmp);
+			if (delta < min_delta) {
+				best_p = _p;
+				best_s = _s;
+				best_m = _m;
+				min_delta = delta;
+				best_freq = tmp;
+			}
+		}
+	}
+
+	if (best_freq) {
+		*p = best_p;
+		*m = best_m;
+		*s = best_s;
+	}
+
+	return best_freq;
+}
+
 static int fsl_samsung_hdmi_phy_configure(struct fsl_samsung_hdmi_phy *phy,
 					  const struct phy_config *cfg)
 {
+	u32 desired_clock = cfg->pixclk * 5;
+	u32 close_freq;
 	int i, ret;
+	u16 m;
+	u8 p, s;
 	u8 val;
 
 	/* HDMI PHY init */
@@ -453,11 +532,38 @@ static int fsl_samsung_hdmi_phy_configure(struct fsl_samsung_hdmi_phy *phy,
 	for (i = 0; i < ARRAY_SIZE(common_phy_cfg); i++)
 		writeb(common_phy_cfg[i].val, phy->regs + common_phy_cfg[i].reg);
 
-	/* set individual PLL registers PHY_REG2 ... PHY_REG7 */
-	for (i = 0; i < PHY_PLL_DIV_REGS_NUM; i++)
-		writeb(cfg->pll_div_regs[i], phy->regs + PHY_REG(2) + i * 4);
+	/* Using the PMS calculator alone, determine if can use integer divider */
+	close_freq = fsl_samsung_hdmi_phy_find_pms(desired_clock, &p, &m, &s);
 
-	fsl_samsung_hdmi_phy_configure_pixclk(phy, cfg);
+	/* If the clock cannot be configured with integer divder, use the fractional divider */
+	if (close_freq != desired_clock) {
+		dev_dbg(phy->dev, "fsl_samsung_hdmi_phy: use fractional divider\n");
+		/* set individual PLL registers PHY_REG2 ... PHY_REG7 */
+		for (i = 0; i < PHY_PLL_DIV_REGS_NUM; i++)
+			writeb(cfg->pll_div_regs[i], phy->regs + PHY_REG(2) + i * 4);
+		fsl_samsung_hdmi_phy_configure_pixclk(phy, cfg);
+	} else {
+		dev_dbg(phy->dev, "fsl_samsung_hdmi_phy: use integer divider\n");
+		dev_dbg(phy->dev, "fsl_samsung_hdmi_phy: P = %d\n", p);
+		dev_dbg(phy->dev, "fsl_samsung_hdmi_phy: M = %d\n", m);
+		dev_dbg(phy->dev, "fsl_samsung_hdmi_phy: S = %d\n", s);
+		dev_dbg(phy->dev, "fsl_samsung_hdmi_phy: frequency = %u\n", close_freq);
+
+		/* Write integer divder values for PMS */
+		writeb(FIELD_PREP(REG01_PMS_P_MASK, p), phy->regs + PHY_REG(1));
+		writeb(m, phy->regs + PHY_REG(2));
+		writeb(FIELD_PREP(REG03_PMS_S_MASK, s-1), phy->regs + PHY_REG(3));
+
+		/* Configure PHY to disable fractional divider */
+		writeb(0x00, phy->regs + PHY_REG(4));
+		writeb(0x00, phy->regs + PHY_REG(5));
+		writeb(0x80, phy->regs + PHY_REG(6));
+		writeb(0x00, phy->regs + PHY_REG(7));
+
+		writeb(REG21_SEL_TX_CK_INV | FIELD_PREP(REG21_PMS_S_MASK, s-1),
+		       phy->regs + PHY_REG(21));
+	}
+
 	fsl_samsung_hdmi_phy_configure_pll_lock_det(phy, cfg);
 
 	writeb(REG33_FIX_DA | REG33_MODE_SET_DONE, phy->regs + PHY_REG(33));
