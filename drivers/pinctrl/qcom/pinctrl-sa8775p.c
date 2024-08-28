@@ -1519,6 +1519,7 @@ static int sa8775p_pinctrl_probe(struct platform_device *pdev)
 }
 
 static const struct of_device_id sa8775p_pinctrl_of_match[] = {
+	{ .compatible = "qcom,sa8255p-tlmm", },
 	{ .compatible = "qcom,sa8775p-tlmm", },
 	{ },
 };
