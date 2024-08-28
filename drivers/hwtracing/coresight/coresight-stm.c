@@ -281,9 +281,31 @@ static void stm_disable(struct coresight_device *csdev,
 	}
 }
 
+static int stm_trace_id(struct coresight_device *csdev,
+			enum cs_mode mode,
+			struct coresight_trace_id_map *id_map)
+{
+	int trace_id;
+	struct stm_drvdata *drvdata;
+
+	if (csdev == NULL)
+		return -EINVAL;
+
+	drvdata = dev_get_drvdata(csdev->dev.parent);
+	trace_id = drvdata->traceid;
+	if (!IS_VALID_CS_TRACE_ID(trace_id)) {
+		trace_id = coresight_trace_id_get_system_id();
+		if (IS_VALID_CS_TRACE_ID(trace_id))
+			drvdata->traceid = (u8)trace_id;
+	}
+
+	return trace_id;
+}
+
 static const struct coresight_ops_source stm_source_ops = {
 	.enable		= stm_enable,
 	.disable	= stm_disable,
+	.trace_id	= stm_trace_id,
 };
 
 static const struct coresight_ops stm_cs_ops = {
