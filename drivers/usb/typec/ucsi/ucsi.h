@@ -524,4 +524,70 @@ static inline void ucsi_debugfs_unregister(struct ucsi *ucsi) { }
 #define USB_TYPEC_NVIDIA_VLINK_DP_VDO	0x1
 #define USB_TYPEC_NVIDIA_VLINK_DBG_VDO	0x3
 
+/* -------------------------------------------------------------------------- */
+
+static inline enum typec_orientation ucsi_orientation(struct ucsi_connector *con)
+{
+	if (WARN_ON(con->ucsi->version < UCSI_VERSION_2_0))
+		return TYPEC_ORIENTATION_NONE;
+	return UCSI_FIELD(con->status, 86, 1) ? TYPEC_ORIENTATION_REVERSE :
+						TYPEC_ORIENTATION_NORMAL;
+}
+
+static inline int ucsi_sink_path_status(struct ucsi_connector *con)
+{
+	if (WARN_ON(con->ucsi->version < UCSI_VERSION_2_0))
+		return -EINVAL;
+	return UCSI_FIELD(con->status, 87, 1);
+}
+
+static inline int ucsi_reverse_current_protection_status(struct ucsi_connector *con)
+{
+	if (WARN_ON(con->ucsi->version < UCSI_VERSION_2_0))
+		return -EINVAL;
+	return UCSI_FIELD(con->status, 88, 1);
+}
+
+static inline int ucsi_power_reading_ready(struct ucsi_connector *con)
+{
+	if (WARN_ON(con->ucsi->version < UCSI_VERSION_2_0))
+		return -EINVAL;
+	return UCSI_FIELD(con->status, 89, 1);
+}
+
+static inline int ucsi_current_scale(struct ucsi_connector *con)
+{
+	if (WARN_ON(con->ucsi->version < UCSI_VERSION_2_0))
+		return -EINVAL;
+	return UCSI_FIELD(con->status, 90, 3) * 5; /* mA */
+}
+
+static inline int ucsi_peak_current(struct ucsi_connector *con)
+{
+	if (WARN_ON(con->ucsi->version < UCSI_VERSION_2_0))
+		return -EINVAL;
+	return UCSI_FIELD(con->status, 93, 16);
+}
+
+static inline int ucsi_average_current(struct ucsi_connector *con)
+{
+	if (WARN_ON(con->ucsi->version < UCSI_VERSION_2_0))
+		return -EINVAL;
+	return UCSI_FIELD(con->status, 109, 16);
+}
+
+static inline int ucsi_voltage_scale(struct ucsi_connector *con)
+{
+	if (WARN_ON(con->ucsi->version < UCSI_VERSION_2_0))
+		return -EINVAL;
+	return UCSI_FIELD(con->status, 125, 4) * 5; /* mV */
+}
+
+static inline int ucsi_voltage_reading(struct ucsi_connector *con)
+{
+	if (WARN_ON(con->ucsi->version < UCSI_VERSION_2_0))
+		return -EINVAL;
+	return UCSI_FIELD(con->status, 129, 16);
+}
+
 #endif /* __DRIVER_USB_TYPEC_UCSI_H */
