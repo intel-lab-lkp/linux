@@ -931,6 +931,15 @@ static const struct pinctrl_desc intel_pinctrl_desc = {
 	.owner = THIS_MODULE,
 };
 
+#define for_each_intel_gpio_group(pctrl, community, grp)				\
+	for (unsigned int __i = 0;							\
+	     __i < pctrl->ncommunities && (community = &pctrl->communities[__i]);	\
+	     __i++)									\
+		for (unsigned int __j = 0;						\
+		     __j < community->ngpps && (grp = &community->gpps[__j]);		\
+		     __j++)								\
+			if (grp->gpio_base == INTEL_GPIO_BASE_NOMAP) {} else
+
 /**
  * intel_gpio_to_pin() - Translate from GPIO offset to pin number
  * @pctrl: Pinctrl structure
@@ -949,30 +958,17 @@ static int intel_gpio_to_pin(struct intel_pinctrl *pctrl, unsigned int offset,
 			     const struct intel_community **community,
 			     const struct intel_padgroup **padgrp)
 {
-	int i;
+	const struct intel_community *c;
+	const struct intel_padgroup *gpp;
 
-	for (i = 0; i < pctrl->ncommunities; i++) {
-		const struct intel_community *comm = &pctrl->communities[i];
-		int j;
+	for_each_intel_gpio_group(pctrl, c, gpp) {
+		if (offset >= gpp->gpio_base && offset < gpp->gpio_base + gpp->size) {
+			if (community)
+				*community = c;
+			if (padgrp)
+				*padgrp = gpp;
 
-		for (j = 0; j < comm->ngpps; j++) {
-			const struct intel_padgroup *pgrp = &comm->gpps[j];
-
-			if (pgrp->gpio_base == INTEL_GPIO_BASE_NOMAP)
-				continue;
-
-			if (offset >= pgrp->gpio_base &&
-			    offset < pgrp->gpio_base + pgrp->size) {
-				int pin;
-
-				pin = pgrp->base + offset - pgrp->gpio_base;
-				if (community)
-					*community = comm;
-				if (padgrp)
-					*padgrp = pgrp;
-
-				return pin;
-			}
+			return gpp->base + offset - gpp->gpio_base;
 		}
 	}
 
@@ -1348,36 +1344,17 @@ static int intel_gpio_irq_init_hw(struct gpio_chip *gc)
 	return 0;
 }
 
-static int intel_gpio_add_community_ranges(struct intel_pinctrl *pctrl,
-				const struct intel_community *community)
-{
-	int ret = 0, i;
-
-	for (i = 0; i < community->ngpps; i++) {
-		const struct intel_padgroup *gpp = &community->gpps[i];
-
-		if (gpp->gpio_base == INTEL_GPIO_BASE_NOMAP)
-			continue;
-
-		ret = gpiochip_add_pin_range(&pctrl->chip, dev_name(pctrl->dev),
-					     gpp->gpio_base, gpp->base,
-					     gpp->size);
-		if (ret)
-			return ret;
-	}
-
-	return ret;
-}
-
 static int intel_gpio_add_pin_ranges(struct gpio_chip *gc)
 {
 	struct intel_pinctrl *pctrl = gpiochip_get_data(gc);
-	int ret, i;
+	struct intel_community *community;
+	const struct intel_padgroup *gpp;
+	int ret;
 
-	for (i = 0; i < pctrl->ncommunities; i++) {
-		struct intel_community *community = &pctrl->communities[i];
-
-		ret = intel_gpio_add_community_ranges(pctrl, community);
+	for_each_intel_gpio_group(pctrl, community, gpp) {
+		ret = gpiochip_add_pin_range(&pctrl->chip, dev_name(pctrl->dev),
+					     gpp->gpio_base, gpp->base,
+					     gpp->size);
 		if (ret) {
 			dev_err(pctrl->dev, "failed to add GPIO pin range\n");
 			return ret;
@@ -1390,20 +1367,12 @@ static int intel_gpio_add_pin_ranges(struct gpio_chip *gc)
 static unsigned int intel_gpio_ngpio(const struct intel_pinctrl *pctrl)
 {
 	const struct intel_community *community;
+	const struct intel_padgroup *gpp;
 	unsigned int ngpio = 0;
-	int i, j;
 
-	for (i = 0; i < pctrl->ncommunities; i++) {
-		community = &pctrl->communities[i];
-		for (j = 0; j < community->ngpps; j++) {
-			const struct intel_padgroup *gpp = &community->gpps[j];
-
-			if (gpp->gpio_base == INTEL_GPIO_BASE_NOMAP)
-				continue;
-
-			if (gpp->gpio_base + gpp->size > ngpio)
-				ngpio = gpp->gpio_base + gpp->size;
-		}
+	for_each_intel_gpio_group(pctrl, community, gpp) {
+		if (gpp->gpio_base + gpp->size > ngpio)
+			ngpio = gpp->gpio_base + gpp->size;
 	}
 
 	return ngpio;
