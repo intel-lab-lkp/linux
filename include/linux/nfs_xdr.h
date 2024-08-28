@@ -1374,6 +1374,7 @@ struct nfs41_impl_id {
 	char				domain[NFS4_OPAQUE_LIMIT + 1];
 	char				name[NFS4_OPAQUE_LIMIT + 1];
 	struct nfstime4			date;
+	struct rcu_head			__rcu_head;
 };
 
 #define MAX_BIND_CONN_TO_SESSION_RETRIES 3
