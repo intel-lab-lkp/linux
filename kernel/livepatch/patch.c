@@ -20,18 +20,25 @@
 #include "patch.h"
 #include "transition.h"
 
-static LIST_HEAD(klp_ops);
 
 struct klp_ops *klp_find_ops(void *old_func)
 {
-	struct klp_ops *ops;
+	struct klp_patch *patch;
+	struct klp_object *obj;
 	struct klp_func *func;
 
-	list_for_each_entry(ops, &klp_ops, node) {
-		func = list_first_entry(&ops->func_stack, struct klp_func,
-					stack_node);
-		if (func->old_func == old_func)
-			return ops;
+	klp_for_each_patch(patch) {
+		klp_for_each_object(patch, obj) {
+			klp_for_each_func(obj, func) {
+				/*
+				 * Ignore entry where func->ops has not been
+				 * assigned yet. It is most likely the one
+				 * which is about to be created/added.
+				 */
+				if (func->old_func == old_func && func->ops)
+					return func->ops;
+			}
+		}
 	}
 
 	return NULL;
@@ -133,7 +140,7 @@ static void klp_unpatch_func(struct klp_func *func)
 	if (WARN_ON(!func->old_func))
 		return;
 
-	ops = klp_find_ops(func->old_func);
+	ops = func->ops;
 	if (WARN_ON(!ops))
 		return;
 
@@ -149,6 +156,7 @@ static void klp_unpatch_func(struct klp_func *func)
 
 		list_del_rcu(&func->stack_node);
 		list_del(&ops->node);
+		func->ops = NULL;
 		kfree(ops);
 	} else {
 		list_del_rcu(&func->stack_node);
@@ -168,7 +176,7 @@ static int klp_patch_func(struct klp_func *func)
 	if (WARN_ON(func->patched))
 		return -EINVAL;
 
-	ops = klp_find_ops(func->old_func);
+	ops = func->ops;
 	if (!ops) {
 		unsigned long ftrace_loc;
 
@@ -191,8 +199,6 @@ static int klp_patch_func(struct klp_func *func)
 				  FTRACE_OPS_FL_IPMODIFY |
 				  FTRACE_OPS_FL_PERMANENT;
 
-		list_add(&ops->node, &klp_ops);
-
 		INIT_LIST_HEAD(&ops->func_stack);
 		list_add_rcu(&func->stack_node, &ops->func_stack);
 
@@ -211,7 +217,7 @@ static int klp_patch_func(struct klp_func *func)
 			goto err;
 		}
 
-
+		func->ops = ops;
 	} else {
 		list_add_rcu(&func->stack_node, &ops->func_stack);
 	}
@@ -224,6 +230,7 @@ err:
 	list_del_rcu(&func->stack_node);
 	list_del(&ops->node);
 	kfree(ops);
+	func->ops = NULL;
 	return ret;
 }
 

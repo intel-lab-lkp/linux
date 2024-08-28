@@ -23,6 +23,25 @@
 #define KLP_TRANSITION_PATCHED		 1
 
 /**
+ * struct klp_ops - structure for tracking registered ftrace ops structs
+ *
+ * A single ftrace_ops is shared between all enabled replacement functions
+ * (klp_func structs) which have the same old_func.  This allows the switch
+ * between function versions to happen instantaneously by updating the klp_ops
+ * struct's func_stack list.  The winner is the klp_func at the top of the
+ * func_stack (front of the list).
+ *
+ * @node:	node for the global klp_ops list
+ * @func_stack:	list head for the stack of klp_func's (active func is on top)
+ * @fops:	registered ftrace ops struct
+ */
+struct klp_ops {
+	struct list_head node;
+	struct list_head func_stack;
+	struct ftrace_ops fops;
+};
+
+/**
  * struct klp_func - function structure for live patching
  * @old_name:	name of the function to be patched
  * @new_func:	pointer to the patched function code
@@ -32,6 +51,7 @@
  * @kobj:	kobject for sysfs resources
  * @node:	list node for klp_object func_list
  * @stack_node:	list node for klp_ops func_stack list
+ * @ops:	pointer to klp_ops struct for this function
  * @old_size:	size of the old function
  * @new_size:	size of the new function
  * @nop:        temporary patch to use the original code again; dyn. allocated
@@ -71,6 +91,7 @@ struct klp_func {
 	struct kobject kobj;
 	struct list_head node;
 	struct list_head stack_node;
+	struct klp_ops *ops;
 	unsigned long old_size, new_size;
 	bool nop;
 	bool patched;
