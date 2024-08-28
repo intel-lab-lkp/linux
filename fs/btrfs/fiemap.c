@@ -794,7 +794,7 @@ restart:
 
 		prev_extent_end = extent_end;
 next_item:
-		if (fatal_signal_pending(current)) {
+		if (btrfs_interrupted()) {
 			ret = -EINTR;
 			goto out_unlock;
 		}

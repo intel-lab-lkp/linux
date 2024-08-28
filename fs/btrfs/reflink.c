@@ -564,7 +564,7 @@ process_slot:
 		btrfs_release_path(path);
 		key.offset = prev_extent_end;
 
-		if (fatal_signal_pending(current)) {
+		if (btrfs_interrupted()) {
 			ret = -EINTR;
 			goto out;
 		}

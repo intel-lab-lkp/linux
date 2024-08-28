@@ -3676,7 +3676,7 @@ static loff_t find_desired_extent(struct file *file, loff_t offset, int whence)
 		start = extent_end;
 		last_extent_end = extent_end;
 		path->slots[0]++;
-		if (fatal_signal_pending(current)) {
+		if (btrfs_interrupted()) {
 			ret = -EINTR;
 			goto out;
 		}
