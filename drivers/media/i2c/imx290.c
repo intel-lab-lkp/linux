@@ -29,6 +29,8 @@
 #include <media/v4l2-subdev.h>
 
 #define IMX290_STANDBY					CCI_REG8(0x3000)
+#define IMX290_STANDBY_OPERATING			(0 << 0)
+#define IMX290_STANDBY_STANDBY				(1 << 0)
 #define IMX290_REGHOLD					CCI_REG8(0x3001)
 #define IMX290_XMSTA					CCI_REG8(0x3002)
 #define IMX290_ADBIT					CCI_REG8(0x3005)
@@ -1016,7 +1018,7 @@ static int imx290_start_streaming(struct imx290 *imx290,
 		return ret;
 	}
 
-	cci_write(imx290->regmap, IMX290_STANDBY, 0x00, &ret);
+	cci_write(imx290->regmap, IMX290_STANDBY, IMX290_STANDBY_OPERATING, &ret);
 
 	msleep(30);
 
@@ -1029,7 +1031,7 @@ static int imx290_stop_streaming(struct imx290 *imx290)
 {
 	int ret = 0;
 
-	cci_write(imx290->regmap, IMX290_STANDBY, 0x01, &ret);
+	cci_write(imx290->regmap, IMX290_STANDBY, IMX290_STANDBY_STANDBY, &ret);
 
 	msleep(30);
 
@@ -1520,6 +1522,7 @@ static int imx290_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
 	struct imx290 *imx290;
+	u64 val;
 	int ret;
 
 	imx290 = devm_kzalloc(dev, sizeof(*imx290), GFP_KERNEL);
@@ -1579,6 +1582,16 @@ static int imx290_probe(struct i2c_client *client)
 	pm_runtime_enable(dev);
 	pm_runtime_set_autosuspend_delay(dev, 1000);
 	pm_runtime_use_autosuspend(dev);
+
+	/* Make sure the sensor is available before V4L2 subdev init. */
+	ret = cci_read(imx290->regmap, IMX290_STANDBY, &val, NULL);
+	if (ret)
+		goto err_pm;
+	if (val != IMX290_STANDBY_STANDBY) {
+		dev_err(dev, "Sensor is not in standby mode\n");
+		ret = -ENODEV;
+		goto err_pm;
+	}
 
 	/* Initialize the V4L2 subdev. */
 	ret = imx290_subdev_init(imx290);
