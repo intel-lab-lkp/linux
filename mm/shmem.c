@@ -1473,19 +1473,18 @@ static int shmem_writepage(struct page *page, struct writeback_control *wbc)
 		goto redirty;
 
 	/*
-	 * If /sys/kernel/mm/transparent_hugepage/shmem_enabled is "always" or
-	 * "force", drivers/gpu/drm/i915/gem/i915_gem_shmem.c gets huge pages,
-	 * and its shmem_writeback() needs them to be split when swapping.
+	 * If CONFIG_THP_SWAP is not enabled, the large folio should be
+	 * split when swapping.
 	 *
 	 * And shrinkage of pages beyond i_size does not split swap, so
 	 * swapout of a large folio crossing i_size needs to split too
 	 * (unless fallocate has been used to preallocate beyond EOF).
 	 */
 	if (folio_test_large(folio)) {
-		split = wbc->split_large_folio;
 		index = shmem_fallocend(inode,
 			DIV_ROUND_UP(i_size_read(inode), PAGE_SIZE));
-		if (index > folio->index && index < folio_next_index(folio))
+		if ((index > folio->index && index < folio_next_index(folio)) ||
+		    !IS_ENABLED(CONFIG_THP_SWAP))
 			split = true;
 	}
 

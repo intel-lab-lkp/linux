@@ -681,10 +681,8 @@ static pageout_t pageout(struct folio *folio, struct address_space *mapping,
 		 * not enabled or contiguous swap entries are failed to
 		 * allocate.
 		 */
-		if (shmem_mapping(mapping) && folio_test_large(folio)) {
+		if (shmem_mapping(mapping) && folio_test_large(folio))
 			wbc.list = folio_list;
-			wbc.split_large_folio = !IS_ENABLED(CONFIG_THP_SWAP);
-		}
 
 		folio_set_reclaim(folio);
 		res = mapping->a_ops->writepage(&folio->page, &wbc);
