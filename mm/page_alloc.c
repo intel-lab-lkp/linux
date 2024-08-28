@@ -1764,10 +1764,12 @@ static unsigned long find_large_buddy(unsigned long start_pfn)
  *
  * Returns %true if pages could be moved, %false otherwise.
  */
-bool move_freepages_block_isolate(struct zone *zone, struct page *page,
-				  int migratetype)
+bool move_freepages_block_isolate(struct zone *zone, struct page *page)
 {
 	unsigned long start_pfn, pfn;
+	bool is_block_isolated = get_pageblock_isolate(page);
+	int from_mt;
+	int to_mt;
 
 	if (!prep_move_freepages_block(zone, page, &start_pfn, NULL, NULL))
 		return false;
@@ -1784,7 +1786,10 @@ bool move_freepages_block_isolate(struct zone *zone, struct page *page,
 
 		del_page_from_free_list(buddy, zone, order,
 					get_pfnblock_migratetype(buddy, pfn));
-		set_pageblock_migratetype(page, migratetype);
+		if (is_block_isolated)
+			clear_pageblock_isolate(page);
+		else
+			set_pageblock_isolate(page);
 		split_large_buddy(zone, buddy, pfn, order, FPI_NONE);
 		return true;
 	}
@@ -1795,14 +1800,24 @@ bool move_freepages_block_isolate(struct zone *zone, struct page *page,
 
 		del_page_from_free_list(page, zone, order,
 					get_pfnblock_migratetype(page, pfn));
-		set_pageblock_migratetype(page, migratetype);
+		if (is_block_isolated)
+			clear_pageblock_isolate(page);
+		else
+			set_pageblock_isolate(page);
 		split_large_buddy(zone, page, pfn, order, FPI_NONE);
 		return true;
 	}
 move:
+	if (is_block_isolated)
+		clear_pageblock_isolate(page);
+
+	from_mt = is_block_isolated ? MIGRATE_ISOLATE : get_pageblock_migratetype(page);
+	to_mt = is_block_isolated ? get_pageblock_migratetype(page) : MIGRATE_ISOLATE;
+
+	if (!is_block_isolated)
+		set_pageblock_isolate(page);
 	__move_freepages_block(zone, start_pfn,
-			       get_pfnblock_migratetype(page, start_pfn),
-			       migratetype);
+			       from_mt, to_mt);
 	return true;
 }
 #endif /* CONFIG_MEMORY_ISOLATION */
