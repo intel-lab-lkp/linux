@@ -790,9 +790,8 @@ int nfc_targets_found(struct nfc_dev *dev,
 	dev->targets = NULL;
 
 	if (targets) {
-		dev->targets = kmemdup(targets,
-				       n_targets * sizeof(struct nfc_target),
-				       GFP_ATOMIC);
+		dev->targets = kmemdup_array(targets, n_targets,
+					     sizeof(struct nfc_target), GFP_ATOMIC);
 
 		if (!dev->targets) {
 			dev->n_targets = 0;
