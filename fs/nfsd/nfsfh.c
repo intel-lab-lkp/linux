@@ -142,7 +142,11 @@ static inline __be32 check_pseudo_root(struct dentry *dentry,
  * dentry.  On success, the results are used to set fh_export and
  * fh_dentry.
  */
-static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct svc_fh *fhp)
+static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct net *net,
+				 struct svc_cred *cred,
+				 struct auth_domain *client,
+				 struct auth_domain *gssclient,
+				 struct svc_fh *fhp)
 {
 	struct knfsd_fh	*fh = &fhp->fh_handle;
 	struct fid *fid = NULL;
@@ -184,8 +188,8 @@ static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct svc_fh *fhp)
 	data_left -= len;
 	if (data_left < 0)
 		return error;
-	exp = rqst_exp_find(&rqstp->rq_chandle, SVC_NET(rqstp),
-			    rqstp->rq_client, rqstp->rq_gssclient,
+	exp = rqst_exp_find(rqstp ? &rqstp->rq_chandle : NULL,
+			    net, client, gssclient,
 			    fh->fh_fsid_type, fh->fh_fsid);
 	fid = (struct fid *)(fh->fh_fsid + len);
 
@@ -220,7 +224,7 @@ static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct svc_fh *fhp)
 		put_cred(override_creds(new));
 		put_cred(new);
 	} else {
-		error = nfsd_setuser_and_check_port(rqstp, &rqstp->rq_cred, exp);
+		error = nfsd_setuser_and_check_port(rqstp, cred, exp);
 		if (error)
 			goto out;
 	}
@@ -297,6 +301,87 @@ out:
 	return error;
 }
 
+static __be32
+__fh_verify(struct svc_rqst *rqstp,
+	    struct net *net, struct svc_cred *cred,
+	    struct auth_domain *client,
+	    struct auth_domain *gssclient,
+	    struct svc_fh *fhp, umode_t type, int access)
+{
+	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
+	struct svc_export *exp = NULL;
+	struct dentry	*dentry;
+	__be32		error;
+
+	if (!fhp->fh_dentry) {
+		error = nfsd_set_fh_dentry(rqstp, net, cred, client,
+					   gssclient, fhp);
+		if (error)
+			goto out;
+	}
+	dentry = fhp->fh_dentry;
+	exp = fhp->fh_export;
+
+	trace_nfsd_fh_verify(rqstp, fhp, type, access);
+
+	/*
+	 * We still have to do all these permission checks, even when
+	 * fh_dentry is already set:
+	 * 	- fh_verify may be called multiple times with different
+	 * 	  "access" arguments (e.g. nfsd_proc_create calls
+	 * 	  fh_verify(...,NFSD_MAY_EXEC) first, then later (in
+	 * 	  nfsd_create) calls fh_verify(...,NFSD_MAY_CREATE).
+	 *	- in the NFSv4 case, the filehandle may have been filled
+	 *	  in by fh_compose, and given a dentry, but further
+	 *	  compound operations performed with that filehandle
+	 *	  still need permissions checks.  In the worst case, a
+	 *	  mountpoint crossing may have changed the export
+	 *	  options, and we may now need to use a different uid
+	 *	  (for example, if different id-squashing options are in
+	 *	  effect on the new filesystem).
+	 */
+	error = check_pseudo_root(dentry, exp);
+	if (error)
+		goto out;
+
+	error = nfsd_setuser_and_check_port(rqstp, cred, exp);
+	if (error)
+		goto out;
+
+	error = nfsd_mode_check(dentry, type);
+	if (error)
+		goto out;
+
+	/*
+	 * pseudoflavor restrictions are not enforced on NLM,
+	 * which clients virtually always use auth_sys for,
+	 * even while using RPCSEC_GSS for NFS.
+	 */
+	if (access & NFSD_MAY_LOCK || access & NFSD_MAY_BYPASS_GSS)
+		goto skip_pseudoflavor_check;
+	/*
+	 * Clients may expect to be able to use auth_sys during mount,
+	 * even if they use gss for everything else; see section 2.3.2
+	 * of rfc 2623.
+	 */
+	if (access & NFSD_MAY_BYPASS_GSS_ON_ROOT
+			&& exp->ex_path.dentry == dentry)
+		goto skip_pseudoflavor_check;
+
+	error = check_nfsd_access(exp, rqstp);
+	if (error)
+		goto out;
+
+skip_pseudoflavor_check:
+	/* Finally, check access permissions. */
+	error = nfsd_permission(cred, exp, dentry, access);
+out:
+	trace_nfsd_fh_verify_err(rqstp, fhp, type, access, error);
+	if (error == nfserr_stale)
+		nfsd_stats_fh_stale_inc(nn, exp);
+	return error;
+}
+
 /**
  * fh_verify - filehandle lookup and access checking
  * @rqstp: pointer to current rpc request
@@ -327,79 +412,10 @@ out:
 __be32
 fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, umode_t type, int access)
 {
-	struct nfsd_net *nn = net_generic(SVC_NET(rqstp), nfsd_net_id);
-	struct svc_export *exp = NULL;
-	struct dentry	*dentry;
-	__be32		error;
-
-	if (!fhp->fh_dentry) {
-		error = nfsd_set_fh_dentry(rqstp, fhp);
-		if (error)
-			goto out;
-	}
-	dentry = fhp->fh_dentry;
-	exp = fhp->fh_export;
-
-	trace_nfsd_fh_verify(rqstp, fhp, type, access);
-
-	/*
-	 * We still have to do all these permission checks, even when
-	 * fh_dentry is already set:
-	 * 	- fh_verify may be called multiple times with different
-	 * 	  "access" arguments (e.g. nfsd_proc_create calls
-	 * 	  fh_verify(...,NFSD_MAY_EXEC) first, then later (in
-	 * 	  nfsd_create) calls fh_verify(...,NFSD_MAY_CREATE).
-	 *	- in the NFSv4 case, the filehandle may have been filled
-	 *	  in by fh_compose, and given a dentry, but further
-	 *	  compound operations performed with that filehandle
-	 *	  still need permissions checks.  In the worst case, a
-	 *	  mountpoint crossing may have changed the export
-	 *	  options, and we may now need to use a different uid
-	 *	  (for example, if different id-squashing options are in
-	 *	  effect on the new filesystem).
-	 */
-	error = check_pseudo_root(dentry, exp);
-	if (error)
-		goto out;
-
-	error = nfsd_setuser_and_check_port(rqstp, &rqstp->rq_cred, exp);
-	if (error)
-		goto out;
-
-	error = nfsd_mode_check(dentry, type);
-	if (error)
-		goto out;
-
-	/*
-	 * pseudoflavor restrictions are not enforced on NLM,
-	 * which clients virtually always use auth_sys for,
-	 * even while using RPCSEC_GSS for NFS.
-	 */
-	if (access & NFSD_MAY_LOCK || access & NFSD_MAY_BYPASS_GSS)
-		goto skip_pseudoflavor_check;
-	/*
-	 * Clients may expect to be able to use auth_sys during mount,
-	 * even if they use gss for everything else; see section 2.3.2
-	 * of rfc 2623.
-	 */
-	if (access & NFSD_MAY_BYPASS_GSS_ON_ROOT
-			&& exp->ex_path.dentry == dentry)
-		goto skip_pseudoflavor_check;
-
-	error = check_nfsd_access(exp, rqstp);
-	if (error)
-		goto out;
-
-skip_pseudoflavor_check:
-	/* Finally, check access permissions. */
-	error = nfsd_permission(&rqstp->rq_cred, exp, dentry, access);
-out:
-	trace_nfsd_fh_verify_err(rqstp, fhp, type, access, error);
-	if (error == nfserr_stale)
-		nfsd_stats_fh_stale_inc(nn, exp);
-	return error;
+	return __fh_verify(rqstp, SVC_NET(rqstp), &rqstp->rq_cred,
+			   rqstp->rq_client, rqstp->rq_gssclient,
+			   fhp, type, access);
 }
-
 
 /*
  * Compose a file handle for an NFS reply.
