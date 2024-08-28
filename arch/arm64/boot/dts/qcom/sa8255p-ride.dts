@@ -1,0 +1,149 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+
+/dts-v1/;
+
+#include <dt-bindings/gpio/gpio.h>
+
+#include "sa8255p.dtsi"
+#include "sa8255p-pmics.dtsi"
+#include "sa8255p-scmi.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. SA8255P Ride";
+	compatible = "qcom,sa8255p-ride", "qcom,sa8255p";
+
+	aliases {
+		i2c11 = &i2c11;
+		i2c18 = &i2c18;
+		serial0 = &uart10;
+		serial1 = &uart4;
+		spi16 = &spi16;
+		scmichannels = &scmichannels;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+};
+
+&adreno_smmu {
+	power-domains = <&scmi15_pd 0>;
+
+	status = "okay";
+};
+
+&gpll0_board_clk {
+	clock-frequency = <300000000>;
+};
+
+&i2c11 {
+	clock-frequency = <400000>;
+	power-domains = <&scmi9_pd 11>;
+
+	status = "okay";
+};
+
+&i2c18 {
+	clock-frequency = <400000>;
+	power-domains = <&scmi9_pd 18>;
+
+	status = "okay";
+};
+
+&pmm8654au_0_thermal {
+	thermal-sensors = <&scmi23_sensor 0>;
+};
+
+&pmm8654au_1_thermal {
+	thermal-sensors = <&scmi23_sensor 1>;
+};
+
+&pmm8654au_2_thermal {
+	thermal-sensors = <&scmi23_sensor 2>;
+};
+
+&pmm8654au_3_thermal {
+	thermal-sensors = <&scmi23_sensor 3>;
+};
+
+&qupv3_id_0 {
+	status = "okay";
+};
+
+&qupv3_id_1 {
+	status = "okay";
+};
+
+&qupv3_id_2 {
+	status = "okay";
+};
+
+&scmi9 {
+	status = "okay";
+};
+
+&scmi10 {
+	status = "okay";
+};
+
+&scmi11 {
+	status = "okay";
+};
+
+&scmi15 {
+	status = "okay";
+};
+
+&scmi23 {
+	status = "okay";
+};
+
+&sleep_clk {
+	clock-frequency = <32000>;
+};
+
+&spi16 {
+	power-domains = <&scmi10_pd 16>, <&scmi10_dvfs 16>;
+	power-domain-names = "power", "perf";
+
+	status = "okay";
+};
+
+&tlmm {
+	ethernet0_default: ethernet0-default-state {
+		ethernet0_mdc: ethernet0-mdc-pins {
+			pins = "gpio8";
+			function = "emac0_mdc";
+			drive-strength = <16>;
+			bias-pull-up;
+		};
+
+		ethernet0_mdio: ethernet0-mdio-pins {
+			pins = "gpio9";
+			function = "emac0_mdio";
+			drive-strength = <16>;
+			bias-pull-up;
+		};
+	};
+};
+
+&uart4 {
+	power-domains = <&scmi11_pd 4>, <&scmi11_dvfs 4>;
+	power-domain-names = "power", "perf";
+
+	status = "okay";
+};
+
+&uart10 {
+	power-domains = <&scmi11_pd 10>, <&scmi11_dvfs 10>;
+	power-domain-names = "power", "perf";
+
+	status = "okay";
+};
+
+&xo_board_clk {
+	clock-frequency = <38400000>;
+};
