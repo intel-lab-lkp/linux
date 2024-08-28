@@ -6324,6 +6324,29 @@ static void nfsd4_ssc_expire_umount(struct nfsd_net *nn)
 }
 #endif
 
+/*
+ * RFC 7862 Section 4.8 says that, if the client hasn't replied to a
+ * CB_OFFLOAD, that COPY callback stateid will live until the client or
+ * server restarts. To prevent a DoS resulting from a pile of these
+ * stateids accruing over time, NFSD purges them after one lease period.
+ */
+static void nfs4_launder_cpntf_statelist(struct nfsd_net *nn,
+					 struct laundry_time *lt)
+{
+	struct nfs4_cpntf_state *cps;
+	copy_stateid_t *cps_t;
+	int i;
+
+	spin_lock(&nn->s2s_cp_lock);
+	idr_for_each_entry(&nn->s2s_cp_stateids, cps_t, i) {
+		cps = container_of(cps_t, struct nfs4_cpntf_state, cp_stateid);
+		if (cps->cp_stateid.cs_type == NFS4_COPYNOTIFY_STID &&
+				state_expired(lt, cps->cpntf_time))
+			_free_cpntf_state_locked(nn, cps);
+	}
+	spin_unlock(&nn->s2s_cp_lock);
+}
+
 /* Check if any lock belonging to this lockowner has any blockers */
 static bool
 nfs4_lockowner_has_blockers(struct nfs4_lockowner *lo)
@@ -6495,9 +6518,6 @@ nfs4_laundromat(struct nfsd_net *nn)
 		.cutoff = ktime_get_boottime_seconds() - nn->nfsd4_lease,
 		.new_timeo = nn->nfsd4_lease
 	};
-	struct nfs4_cpntf_state *cps;
-	copy_stateid_t *cps_t;
-	int i;
 
 	if (clients_still_reclaiming(nn)) {
 		lt.new_timeo = 0;
@@ -6505,14 +6525,8 @@ nfs4_laundromat(struct nfsd_net *nn)
 	}
 	nfsd4_end_grace(nn);
 
-	spin_lock(&nn->s2s_cp_lock);
-	idr_for_each_entry(&nn->s2s_cp_stateids, cps_t, i) {
-		cps = container_of(cps_t, struct nfs4_cpntf_state, cp_stateid);
-		if (cps->cp_stateid.cs_type == NFS4_COPYNOTIFY_STID &&
-				state_expired(&lt, cps->cpntf_time))
-			_free_cpntf_state_locked(nn, cps);
-	}
-	spin_unlock(&nn->s2s_cp_lock);
+	nfs4_launder_cpntf_statelist(nn, &lt);
+
 	nfs4_get_client_reaplist(nn, &reaplist, &lt);
 	nfs4_process_client_reaplist(&reaplist);
 
