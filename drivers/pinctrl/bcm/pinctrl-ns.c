@@ -211,7 +211,6 @@ static int ns_pinctrl_probe(struct platform_device *pdev)
 	struct ns_pinctrl *ns_pinctrl;
 	struct pinctrl_desc *pctldesc;
 	struct pinctrl_pin_desc *pin;
-	struct resource *res;
 	int i;
 
 	ns_pinctrl = devm_kzalloc(dev, sizeof(*ns_pinctrl), GFP_KERNEL);
@@ -226,9 +225,8 @@ static int ns_pinctrl_probe(struct platform_device *pdev)
 
 	ns_pinctrl->chipset_flag = (uintptr_t)device_get_match_data(dev);
 
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
-					   "cru_gpio_control");
-	ns_pinctrl->base = devm_ioremap_resource(dev, res);
+	ns_pinctrl->base = devm_platform_ioremap_resource_byname(pdev,
+								 "cru_gpio_control");
 	if (IS_ERR(ns_pinctrl->base))
 		return PTR_ERR(ns_pinctrl->base);
 
