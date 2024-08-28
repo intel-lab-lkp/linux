@@ -570,6 +570,33 @@ xfs_stat_blksize(
 	return PAGE_SIZE;
 }
 
+static void
+xfs_report_dioalign(
+	struct xfs_inode	*ip,
+	struct kstat		*stat)
+{
+	struct xfs_buftarg	*target = xfs_inode_buftarg(ip);
+	struct block_device	*bdev = target->bt_bdev;
+
+	stat->result_mask |= STATX_DIOALIGN | STATX_DIO_READ_ALIGN;
+	stat->dio_mem_align = bdev_dma_alignment(bdev) + 1;
+	stat->dio_read_offset_align = bdev_logical_block_size(bdev);
+
+	/*
+	 * On COW inodes we are forced to always rewrite an entire file system
+	 * block.
+	 *
+	 * Because applications assume they can do sector sized direct writes
+	 * on XFS we provide an emulation by doing a read-modify-write cycle
+	 * through the cache, but that is highly inefficient.  Thus report the
+	 * natively supported size here.
+	 */
+	if (xfs_is_cow_inode(ip))
+		stat->dio_offset_align = ip->i_mount->m_sb.sb_blocksize;
+	else
+		stat->dio_offset_align = stat->dio_read_offset_align;
+}
+
 STATIC int
 xfs_vn_getattr(
 	struct mnt_idmap	*idmap,
@@ -635,14 +662,8 @@ xfs_vn_getattr(
 		stat->rdev = inode->i_rdev;
 		break;
 	case S_IFREG:
-		if (request_mask & STATX_DIOALIGN) {
-			struct xfs_buftarg	*target = xfs_inode_buftarg(ip);
-			struct block_device	*bdev = target->bt_bdev;
-
-			stat->result_mask |= STATX_DIOALIGN;
-			stat->dio_mem_align = bdev_dma_alignment(bdev) + 1;
-			stat->dio_offset_align = bdev_logical_block_size(bdev);
-		}
+		if (request_mask & (STATX_DIOALIGN | STATX_DIO_READ_ALIGN))
+			xfs_report_dioalign(ip, stat);
 		fallthrough;
 	default:
 		stat->blksize = xfs_stat_blksize(ip);
