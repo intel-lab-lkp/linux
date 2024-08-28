@@ -232,7 +232,10 @@ struct eventpoll {
 	u32 busy_poll_usecs;
 	/* busy poll packet budget */
 	u16 busy_poll_budget;
-	bool prefer_busy_poll;
+	/* prefer to busypoll in napi poll */
+	bool napi_prefer_busy_poll;
+	/* avoid napi poll when busy looping and poll only for events */
+	bool event_poll_only;
 #endif
 
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
@@ -430,6 +433,24 @@ static bool ep_busy_loop_end(void *p, unsigned long start_time)
 	return ep_events_available(ep) || busy_loop_ep_timeout(start_time, ep);
 }
 
+/**
+ * ep_event_busy_loop - loop until events available or busy poll
+ * times out.
+ *
+ * @ep: Pointer to the eventpoll context.
+ *
+ * Return: true if events available, false otherwise.
+ */
+static bool ep_event_busy_loop(struct eventpoll *ep)
+{
+	unsigned long start_time = busy_loop_current_time();
+
+	while (!ep_busy_loop_end(ep, start_time))
+		cond_resched();
+
+	return ep_events_available(ep);
+}
+
 /*
  * Busy poll if globally on and supporting sockets found && no events,
  * busy loop will return if need_resched or ep_events_available.
@@ -440,23 +461,29 @@ static bool ep_busy_loop(struct eventpoll *ep, int nonblock)
 {
 	unsigned int napi_id = READ_ONCE(ep->napi_id);
 	u16 budget = READ_ONCE(ep->busy_poll_budget);
-	bool prefer_busy_poll = READ_ONCE(ep->prefer_busy_poll);
+	bool event_poll_only = READ_ONCE(ep->event_poll_only);
 
 	if (!budget)
 		budget = BUSY_POLL_BUDGET;
 
-	if (napi_id >= MIN_NAPI_ID && ep_busy_loop_on(ep)) {
+	if (!ep_busy_loop_on(ep))
+		return false;
+
+	if (event_poll_only) {
+		return ep_event_busy_loop(ep);
+	} else if (napi_id >= MIN_NAPI_ID) {
+		bool napi_prefer_busy_poll = READ_ONCE(ep->napi_prefer_busy_poll);
+
 		napi_busy_loop(napi_id, nonblock ? NULL : ep_busy_loop_end,
-			       ep, prefer_busy_poll, budget);
+				ep, napi_prefer_busy_poll, budget);
 		if (ep_events_available(ep))
 			return true;
 		/*
-		 * Busy poll timed out.  Drop NAPI ID for now, we can add
-		 * it back in when we have moved a socket with a valid NAPI
-		 * ID onto the ready list.
-		 */
+		* Busy poll timed out.  Drop NAPI ID for now, we can add
+		* it back in when we have moved a socket with a valid NAPI
+		* ID onto the ready list.
+		*/
 		ep->napi_id = 0;
-		return false;
 	}
 	return false;
 }
@@ -523,13 +550,15 @@ static long ep_eventpoll_bp_ioctl(struct file *file, unsigned int cmd,
 
 		WRITE_ONCE(ep->busy_poll_usecs, epoll_params.busy_poll_usecs);
 		WRITE_ONCE(ep->busy_poll_budget, epoll_params.busy_poll_budget);
-		WRITE_ONCE(ep->prefer_busy_poll, epoll_params.prefer_busy_poll);
+		WRITE_ONCE(ep->napi_prefer_busy_poll, epoll_params.prefer_busy_poll);
+		WRITE_ONCE(ep->event_poll_only, epoll_params.event_poll_only);
 		return 0;
 	case EPIOCGPARAMS:
 		memset(&epoll_params, 0, sizeof(epoll_params));
 		epoll_params.busy_poll_usecs = READ_ONCE(ep->busy_poll_usecs);
 		epoll_params.busy_poll_budget = READ_ONCE(ep->busy_poll_budget);
-		epoll_params.prefer_busy_poll = READ_ONCE(ep->prefer_busy_poll);
+		epoll_params.prefer_busy_poll = READ_ONCE(ep->napi_prefer_busy_poll);
+		epoll_params.event_poll_only = READ_ONCE(ep->event_poll_only);
 		if (copy_to_user(uarg, &epoll_params, sizeof(epoll_params)))
 			return -EFAULT;
 		return 0;
@@ -2203,7 +2232,7 @@ static int do_epoll_create(int flags)
 #ifdef CONFIG_NET_RX_BUSY_POLL
 	ep->busy_poll_usecs = 0;
 	ep->busy_poll_budget = 0;
-	ep->prefer_busy_poll = false;
+	ep->napi_prefer_busy_poll = false;
 #endif
 	ep->file = file;
 	fd_install(fd, file);

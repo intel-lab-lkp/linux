@@ -89,9 +89,10 @@ struct epoll_params {
 	__u32 busy_poll_usecs;
 	__u16 busy_poll_budget;
 	__u8 prefer_busy_poll;
+	__u8 event_poll_only:1;
 
 	/* pad the struct to a multiple of 64bits */
-	__u8 __pad;
+	__u8 __pad:7;
 };
 
 #define EPOLL_IOC_TYPE 0x8A
