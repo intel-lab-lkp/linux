@@ -38,7 +38,7 @@
 			};
 		};
 
-		apbx@80040000 {
+		apbx-bus@80040000 {
 			usbphy1: usbphy@8007e000 {
 				status = "okay";
 			};
