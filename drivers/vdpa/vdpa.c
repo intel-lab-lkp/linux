@@ -15,6 +15,7 @@
 #include <net/genetlink.h>
 #include <linux/mod_devicetable.h>
 #include <linux/virtio_ids.h>
+#include <uapi/linux/ethtool.h>
 
 static LIST_HEAD(mdev_head);
 /* A global mutex that protects vdpa management device and device level operations. */
@@ -919,6 +920,22 @@ static int vdpa_dev_net_status_config_fill(struct sk_buff *msg, u64 features,
 	return nla_put_u16(msg, VDPA_ATTR_DEV_NET_STATUS, val_u16);
 }
 
+static int vdpa_dev_net_speed_config_fill(struct sk_buff *msg, u64 features,
+					struct virtio_net_config *config)
+{
+	__le32 speed = cpu_to_le32(SPEED_UNKNOWN);
+
+	return nla_put(msg, VDPA_ATTR_DEV_NET_CFG_SPEED, sizeof(speed), &speed);
+}
+
+static int vdpa_dev_net_duplex_config_fill(struct sk_buff *msg, u64 features,
+					struct virtio_net_config *config)
+{
+	u8 duplex = DUPLEX_UNKNOWN;
+
+	return nla_put(msg, VDPA_ATTR_DEV_NET_CFG_DUPLEX, sizeof(duplex), &duplex);
+}
+
 static int vdpa_dev_net_config_fill(struct vdpa_device *vdev, struct sk_buff *msg)
 {
 	struct virtio_net_config config = {};
@@ -939,6 +956,12 @@ static int vdpa_dev_net_config_fill(struct vdpa_device *vdev, struct sk_buff *ms
 		return -EMSGSIZE;
 
 	if (vdpa_dev_net_status_config_fill(msg, features_device, &config))
+		return -EMSGSIZE;
+
+	if (vdpa_dev_net_speed_config_fill(msg, features_device, &config))
+		return -EMSGSIZE;
+
+	if (vdpa_dev_net_duplex_config_fill(msg, features_device, &config))
 		return -EMSGSIZE;
 
 	return vdpa_dev_net_mq_config_fill(msg, features_device, &config);
