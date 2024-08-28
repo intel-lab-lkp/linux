@@ -2818,6 +2818,17 @@ static void submit_bh_wbc(blk_opf_t opf, struct buffer_head *bh,
 	if (wbc) {
 		wbc_init_bio(wbc, bio);
 		wbc_account_cgroup_owner(wbc, bh->b_page, bh->b_size);
+	} else if (buffer_meta(bh)) {
+		struct folio *folio;
+		struct cgroup_subsys_state *memcg_css, *blkcg_css;
+
+		folio = page_folio(bh->b_page);
+		memcg_css = mem_cgroup_css_from_folio(folio);
+		if (cgroup_subsys_on_dfl(memory_cgrp_subsys) &&
+		    cgroup_subsys_on_dfl(io_cgrp_subsys)) {
+			blkcg_css = cgroup_e_css(memcg_css->cgroup, &io_cgrp_subsys);
+			bio_associate_blkg_from_css(bio, blkcg_css);
+		}
 	}
 
 	submit_bio(bio);
