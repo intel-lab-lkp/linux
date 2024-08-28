@@ -5,6 +5,7 @@
 
 #include <linux/types.h>
 #include <linux/compiler_types.h>
+#include "misc.h"
 
 struct inode;
 struct file_ra_state;
@@ -26,7 +27,7 @@ int btrfs_defrag_root(struct btrfs_root *root);
 
 static inline int btrfs_defrag_cancelled(struct btrfs_fs_info *fs_info)
 {
-	return signal_pending(current);
+	return signal_pending(current) || btrfs_task_interrupted();
 }
 
 #endif

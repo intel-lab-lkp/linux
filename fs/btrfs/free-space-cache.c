@@ -5,7 +5,6 @@
 
 #include <linux/pagemap.h>
 #include <linux/sched.h>
-#include <linux/sched/signal.h>
 #include <linux/slab.h>
 #include <linux/math64.h>
 #include <linux/ratelimit.h>
@@ -3809,7 +3808,7 @@ next:
 		if (async && *total_trimmed)
 			break;
 
-		if (fatal_signal_pending(current)) {
+		if (btrfs_task_interrupted()) {
 			ret = -ERESTARTSYS;
 			break;
 		}
@@ -4000,7 +3999,7 @@ next:
 		}
 		block_group->discard_cursor = start;
 
-		if (fatal_signal_pending(current)) {
+		if (btrfs_task_interrupted()) {
 			if (start != offset)
 				reset_trimming_bitmap(ctl, offset);
 			ret = -ERESTARTSYS;

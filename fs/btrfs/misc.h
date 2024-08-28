@@ -9,6 +9,8 @@
 #include <linux/wait.h>
 #include <linux/math64.h>
 #include <linux/rbtree.h>
+#include <linux/sched/signal.h>
+#include <linux/freezer.h>
 
 /*
  * Enumerate bits using enum autoincrement. Define the @name as the n-th bit.
@@ -161,6 +163,11 @@ static inline bool bitmap_test_range_all_zero(const unsigned long *addr,
 
 	found_set = find_next_bit(addr, start + nbits, start);
 	return (found_set == start + nbits);
+}
+
+static inline bool btrfs_task_interrupted(void)
+{
+	return fatal_signal_pending(current) || freezing(current);
 }
 
 #endif

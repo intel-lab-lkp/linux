@@ -4,7 +4,6 @@
  */
 
 #include <linux/sched.h>
-#include <linux/sched/signal.h>
 #include <linux/pagemap.h>
 #include <linux/writeback.h>
 #include <linux/blkdev.h>
@@ -6467,7 +6466,7 @@ static int btrfs_trim_free_extents(struct btrfs_device *device, u64 *trimmed)
 		start += len;
 		*trimmed += bytes;
 
-		if (fatal_signal_pending(current)) {
+		if (btrfs_task_interrupted()) {
 			ret = -ERESTARTSYS;
 			break;
 		}
