@@ -20,7 +20,10 @@ enum pageblock_bits {
 	PB_migrate_end = PB_migrate + PB_migratetype_bits - 1,
 			/* 3 bits required for migrate types */
 	PB_migrate_skip,/* If set the block is skipped by compaction */
-
+#ifdef CONFIG_MEMORY_ISOLATION
+	PB_migrate_isolate = 7, /* If set the block is isolated */
+			/* set it to 7 to make pageblock bit word aligned */
+#endif
 	/*
 	 * Assume the bits will always align on a word. If this assumption
 	 * changes then get/set pageblock needs updating.
@@ -98,5 +101,29 @@ static inline void set_pageblock_skip(struct page *page)
 {
 }
 #endif /* CONFIG_COMPACTION */
+
+#ifdef CONFIG_MEMORY_ISOLATION
+#define get_pageblock_isolate(page) \
+	get_pfnblock_flags_mask(page, page_to_pfn(page),	\
+			(1 << (PB_migrate_isolate)))
+#define clear_pageblock_isolate(page) \
+	set_pfnblock_flags_mask(page, 0, page_to_pfn(page),	\
+			(1 << PB_migrate_isolate))
+#define set_pageblock_isolate(page) \
+	set_pfnblock_flags_mask(page, (1 << PB_migrate_isolate),	\
+			page_to_pfn(page),			\
+			(1 << PB_migrate_isolate))
+#else
+static inline bool get_pageblock_isolate(struct page *page)
+{
+	return false;
+}
+static inline void clear_pageblock_isolate(struct page *page)
+{
+}
+static inline void set_pageblock_isolate(struct page *page)
+{
+}
+#endif /* CONFIG_MEMORY_ISOLATION */
 
 #endif	/* PAGEBLOCK_FLAGS_H */

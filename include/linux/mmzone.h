@@ -108,12 +108,28 @@ extern int page_group_by_mobility_disabled;
 
 #define MIGRATETYPE_MASK ((1UL << PB_migratetype_bits) - 1)
 
-#define get_pageblock_migratetype(page)					\
-	get_pfnblock_flags_mask(page, page_to_pfn(page), MIGRATETYPE_MASK)
+#ifdef CONFIG_MEMORY_ISOLATION
+#define get_pageblock_migratetype(page) \
+		(get_pageblock_isolate(page) ? \
+			MIGRATE_ISOLATE : \
+			get_pfnblock_flags_mask(page, page_to_pfn(page), \
+				MIGRATETYPE_MASK))
 
-#define folio_migratetype(folio)				\
-	get_pfnblock_flags_mask(&folio->page, folio_pfn(folio),		\
+#define folio_migratetype(folio) \
+		(get_pageblock_isolate(&folio->page) ? \
+			MIGRATE_ISOLATE : \
+			get_pfnblock_flags_mask(&folio->page, folio_pfn(folio), \
+				MIGRATETYPE_MASK))
+#else
+#define get_pageblock_migratetype(page) \
+		get_pfnblock_flags_mask(page, page_to_pfn(page), \
 			MIGRATETYPE_MASK)
+
+#define folio_migratetype(folio) \
+		get_pfnblock_flags_mask(&folio->page, folio_pfn(folio), \
+			MIGRATETYPE_MASK)
+#endif
+
 struct free_area {
 	struct list_head	free_list[MIGRATE_TYPES];
 	unsigned long		nr_free;
