@@ -1338,6 +1338,7 @@ static void usb_udc_release(struct device *dev)
 	udc = container_of(dev, struct usb_udc, dev);
 	dev_dbg(dev, "releasing '%s'\n", dev_name(dev));
 	kfree(udc);
+	udc = NULL;
 }
 
 static const struct attribute_group *usb_udc_attr_groups[];
@@ -1574,7 +1575,7 @@ static int gadget_match_driver(struct device *dev, const struct device_driver *d
 			struct usb_gadget_driver, driver);
 
 	/* If the driver specifies a udc_name, it must match the UDC's name */
-	if (driver->udc_name &&
+	if (driver->udc_name && udc &&
 			strcmp(driver->udc_name, dev_name(&udc->dev)) != 0)
 		return 0;
 
