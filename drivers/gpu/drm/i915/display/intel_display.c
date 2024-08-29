@@ -87,6 +87,7 @@
 #include "intel_drrs.h"
 #include "intel_dsb.h"
 #include "intel_dsi.h"
+#include "intel_dss.h"
 #include "intel_dss_regs.h"
 #include "intel_dvo.h"
 #include "intel_fb.h"
@@ -1711,7 +1712,7 @@ static void hsw_crtc_enable(struct intel_atomic_state *state,
 		intel_dsc_enable(pipe_crtc_state);
 
 		if (DISPLAY_VER(dev_priv) >= 13)
-			intel_uncompressed_joiner_enable(pipe_crtc_state);
+			intel_dss_enable_uncompressed_joiner(pipe_crtc_state);
 
 		intel_set_pipe_src_size(pipe_crtc_state);
 

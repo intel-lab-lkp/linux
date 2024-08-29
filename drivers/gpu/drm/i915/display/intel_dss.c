@@ -6,10 +6,12 @@
 #include "i915_drv.h"
 #include "i915_reg_defs.h"
 #include "intel_de.h"
+#include "intel_display_limits.h"
 #include "intel_display_types.h"
 #include "intel_dsi.h"
 #include "intel_dss.h"
 #include "intel_dss_regs.h"
+#include "intel_vdsc.h"
 
 /*
  * Splitter enable for eDP MSO is limited to certain pipes, on certain
@@ -136,4 +138,82 @@ void intel_dss_dsi_dual_link_mode_configure(struct intel_encoder *encoder,
 	}
 
 	intel_de_write(display, dss_ctl1_reg, dss_ctl1);
+}
+
+static i915_reg_t dss_ctl1_reg(struct intel_crtc *crtc, enum transcoder cpu_transcoder)
+{
+	return intel_dsc_is_dsc_pipe(crtc, cpu_transcoder) ?
+		ICL_PIPE_DSS_CTL1(crtc->pipe) : DSS_CTL1;
+}
+
+static i915_reg_t dss_ctl2_reg(struct intel_crtc *crtc, enum transcoder cpu_transcoder)
+{
+	return intel_dsc_is_dsc_pipe(crtc, cpu_transcoder) ?
+		ICL_PIPE_DSS_CTL2(crtc->pipe) : DSS_CTL2;
+}
+
+void intel_dss_reset(const struct intel_crtc_state *old_crtc_state)
+{
+	struct intel_crtc *crtc = to_intel_crtc(old_crtc_state->uapi.crtc);
+	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
+
+	intel_de_write(dev_priv, dss_ctl1_reg(crtc, old_crtc_state->cpu_transcoder), 0);
+	intel_de_write(dev_priv, dss_ctl2_reg(crtc, old_crtc_state->cpu_transcoder), 0);
+}
+
+void intel_dss_enable_uncompressed_joiner(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
+	u32 dss_ctl1_val = 0;
+
+	if (crtc_state->joiner_pipes && !crtc_state->dsc.compression_enable) {
+		if (intel_crtc_is_joiner_secondary(crtc_state))
+			dss_ctl1_val |= UNCOMPRESSED_JOINER_SECONDARY;
+		else
+			dss_ctl1_val |= UNCOMPRESSED_JOINER_PRIMARY;
+
+		intel_de_write(dev_priv,
+			       dss_ctl1_reg(crtc, crtc_state->cpu_transcoder),
+			       dss_ctl1_val);
+	}
+}
+
+void intel_dss_enable_compressed_joiner(const struct intel_crtc_state *crtc_state,
+					int vdsc_instances_per_pipe)
+{
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
+	u32 dss_ctl1_val = 0;
+	u32 dss_ctl2_val = 0;
+
+	dss_ctl2_val |= LEFT_BRANCH_VDSC_ENABLE;
+	if (vdsc_instances_per_pipe > 1) {
+		dss_ctl2_val |= RIGHT_BRANCH_VDSC_ENABLE;
+		dss_ctl1_val |= JOINER_ENABLE;
+	}
+	if (crtc_state->joiner_pipes) {
+		dss_ctl1_val |= BIG_JOINER_ENABLE;
+		if (!intel_crtc_is_joiner_secondary(crtc_state))
+			dss_ctl1_val |= PRIMARY_BIG_JOINER_ENABLE;
+	}
+	intel_de_write(dev_priv, dss_ctl1_reg(crtc, crtc_state->cpu_transcoder), dss_ctl1_val);
+	intel_de_write(dev_priv, dss_ctl2_reg(crtc, crtc_state->cpu_transcoder), dss_ctl2_val);
+}
+
+void intel_dss_dsc_get_config(struct intel_crtc_state *crtc_state)
+{
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
+	u32 dss_ctl1, dss_ctl2;
+
+	dss_ctl1 = intel_de_read(dev_priv, dss_ctl1_reg(crtc, crtc_state->cpu_transcoder));
+	dss_ctl2 = intel_de_read(dev_priv, dss_ctl2_reg(crtc, crtc_state->cpu_transcoder));
+
+	crtc_state->dsc.compression_enable = dss_ctl2 & LEFT_BRANCH_VDSC_ENABLE;
+	if (!crtc_state->dsc.compression_enable)
+		return;
+
+	crtc_state->dsc.dsc_split = (dss_ctl2 & RIGHT_BRANCH_VDSC_ENABLE) &&
+				    (dss_ctl1 & JOINER_ENABLE);
 }
