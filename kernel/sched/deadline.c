@@ -1910,6 +1910,9 @@ update_stats_wait_start_dl(struct dl_rq *dl_rq, struct sched_dl_entity *dl_se)
 	if (!schedstat_enabled())
 		return;
 
+	if (dl_server(dl_se))
+		return;
+
 	stats = __schedstats_from_dl_se(dl_se);
 	__update_stats_wait_start(rq_of_dl_rq(dl_rq), dl_task_of(dl_se), stats);
 }
@@ -1920,6 +1923,9 @@ update_stats_wait_end_dl(struct dl_rq *dl_rq, struct sched_dl_entity *dl_se)
 	struct sched_statistics *stats;
 
 	if (!schedstat_enabled())
+		return;
+
+	if (dl_server(dl_se))
 		return;
 
 	stats = __schedstats_from_dl_se(dl_se);
@@ -1945,6 +1951,9 @@ update_stats_enqueue_dl(struct dl_rq *dl_rq, struct sched_dl_entity *dl_se,
 	if (!schedstat_enabled())
 		return;
 
+	if (dl_server(dl_se))
+		return;
+
 	if (flags & ENQUEUE_WAKEUP)
 		update_stats_enqueue_sleeper_dl(dl_rq, dl_se);
 }
@@ -1956,6 +1965,9 @@ update_stats_dequeue_dl(struct dl_rq *dl_rq, struct sched_dl_entity *dl_se,
 	struct task_struct *p = dl_task_of(dl_se);
 
 	if (!schedstat_enabled())
+		return;
+
+	if (dl_server(dl_se))
 		return;
 
 	if ((flags & DEQUEUE_SLEEP)) {
