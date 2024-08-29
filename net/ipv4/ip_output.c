@@ -1050,8 +1050,14 @@ static int __ip_append_data(struct sock *sk,
 
 	hold_tskey = cork->tx_flags & SKBTX_ANY_TSTAMP &&
 		     READ_ONCE(sk->sk_tsflags) & SOF_TIMESTAMPING_OPT_ID;
-	if (hold_tskey)
-		tskey = atomic_inc_return(&sk->sk_tskey) - 1;
+	if (hold_tskey) {
+                if (cork->ts_opt_id) {
+                        hold_tskey = false;
+                        tskey = cork->ts_opt_id;
+                } else {
+                        tskey = atomic_inc_return(&sk->sk_tskey) - 1;
+                }
+	}
 
 	/* So, what's going on in the loop below?
 	 *
@@ -1324,6 +1330,7 @@ static int ip_setup_cork(struct sock *sk, struct inet_cork *cork,
 	cork->mark = ipc->sockc.mark;
 	cork->priority = ipc->priority;
 	cork->transmit_time = ipc->sockc.transmit_time;
+	cork->ts_opt_id = ipc->sockc.ts_opt_id;
 	cork->tx_flags = 0;
 	sock_tx_timestamp(sk, ipc->sockc.tsflags, &cork->tx_flags);
 

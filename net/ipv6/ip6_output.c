@@ -1393,6 +1393,7 @@ static int ip6_setup_cork(struct sock *sk, struct inet_cork_full *cork,
 	cork->base.gso_size = ipc6->gso_size;
 	cork->base.tx_flags = 0;
 	cork->base.mark = ipc6->sockc.mark;
+	cork->base.ts_opt_id = ipc6->sockc.ts_opt_id;
 	sock_tx_timestamp(sk, ipc6->sockc.tsflags, &cork->base.tx_flags);
 
 	cork->base.length = 0;
@@ -1537,8 +1538,14 @@ emsgsize:
 
 	hold_tskey = cork->tx_flags & SKBTX_ANY_TSTAMP &&
 		     READ_ONCE(sk->sk_tsflags) & SOF_TIMESTAMPING_OPT_ID;
-	if (hold_tskey)
-		tskey = atomic_inc_return(&sk->sk_tskey) - 1;
+	if (hold_tskey) {
+		if (cork->ts_opt_id) {
+			hold_tskey = false;
+			tskey = cork->ts_opt_id;
+		} else {
+			tskey = atomic_inc_return(&sk->sk_tskey) - 1;
+		}
+	}
 
 	/*
 	 * Let's try using as much space as possible.
