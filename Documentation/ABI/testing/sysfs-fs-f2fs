@@ -783,3 +783,9 @@ Description:	The zone UFS we are currently using consists of two parts:
 		blkzone_alloc_policy = 1  Only allow writing to sequential zones
 		blkzone_alloc_policy = 2  Prioritize writing to conventional zones
 		========================  =========================================
+
+What:		/sys/fs/f2fs/<disk>/reserved_segments
+Date:		August 2024
+Contact:	"Daeho Jeong" <daehojeong@google.com>
+Description:	In order to fine tune GC behavior, we can control the number of
+		reserved segments.
