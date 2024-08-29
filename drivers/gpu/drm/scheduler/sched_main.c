@@ -1279,10 +1279,21 @@ int drm_sched_init(struct drm_gpu_scheduler *sched,
 		sched->own_submit_wq = true;
 	}
 
+	sched->fence_timeline = kzalloc(sizeof(*sched->fence_timeline), GFP_KERNEL);
+	if (!sched->fence_timeline)
+		goto Out_check_own;
+
+	sched->fence_timeline->name = kasprintf(GFP_KERNEL, "%s", sched->name);
+	if (!sched->fence_timeline->name)
+		goto Out_free_fence_timeline;
+
+	kref_init(&sched->fence_timeline->kref);
+
 	sched->sched_rq = kmalloc_array(num_rqs, sizeof(*sched->sched_rq),
 					GFP_KERNEL | __GFP_ZERO);
 	if (!sched->sched_rq)
-		goto Out_check_own;
+		goto Out_free_fence_timeline;
+
 	sched->num_rqs = num_rqs;
 	for (i = DRM_SCHED_PRIORITY_KERNEL; i < sched->num_rqs; i++) {
 		sched->sched_rq[i] = kzalloc(sizeof(*sched->sched_rq[i]), GFP_KERNEL);
@@ -1310,6 +1321,10 @@ Out_unroll:
 
 	kfree(sched->sched_rq);
 	sched->sched_rq = NULL;
+Out_free_fence_timeline:
+	if (sched->fence_timeline)
+		kfree(sched->fence_timeline->name);
+	kfree(sched->fence_timeline);
 Out_check_own:
 	if (sched->own_submit_wq)
 		destroy_workqueue(sched->submit_wq);
@@ -1358,6 +1373,7 @@ void drm_sched_fini(struct drm_gpu_scheduler *sched)
 	sched->ready = false;
 	kfree(sched->sched_rq);
 	sched->sched_rq = NULL;
+	drm_sched_fence_timeline_put(sched->fence_timeline);
 }
 EXPORT_SYMBOL(drm_sched_fini);
 

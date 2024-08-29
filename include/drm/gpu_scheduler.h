@@ -262,6 +262,52 @@ struct drm_sched_rq {
 };
 
 /**
+ * struct drm_sched_fence_timeline - Wrapped around the timeline name
+ *
+ * This is needed to cope with the fact dma_fence objects created by
+ * an entity might outlive the drm_gpu_scheduler this entity was bound
+ * to, making drm_sched_fence::sched invalid and leading to a UAF when
+ * dma_fence_ops::get_timeline_name() is called.
+ */
+struct drm_sched_fence_timeline {
+	/** @kref: Reference count of this timeline object. */
+	struct kref			kref;
+
+	/**
+	 * @name: Name of the timeline.
+	 *
+	 * This is currently a copy of drm_gpu_scheduler::name.
+	 */
+	const char			*name;
+};
+
+static inline void
+drm_sched_fence_timeline_release(struct kref *kref)
+{
+	struct drm_sched_fence_timeline *tl =
+		container_of(kref, struct drm_sched_fence_timeline, kref);
+
+	kfree(tl->name);
+	kfree(tl);
+}
+
+static inline void
+drm_sched_fence_timeline_put(struct drm_sched_fence_timeline *tl)
+{
+	if (tl)
+		kref_put(&tl->kref, drm_sched_fence_timeline_release);
+}
+
+static inline struct drm_sched_fence_timeline *
+drm_sched_fence_timeline_get(struct drm_sched_fence_timeline *tl)
+{
+	if (tl)
+		kref_get(&tl->kref);
+
+	return tl;
+}
+
+/**
  * struct drm_sched_fence - fences corresponding to the scheduling of a job.
  */
 struct drm_sched_fence {
@@ -288,6 +334,9 @@ struct drm_sched_fence {
 	 * potentially needs to be propagated to &drm_sched_fence.parent
 	 */
 	ktime_t				deadline;
+
+        /** @timeline: the timeline this fence belongs to. */
+	struct drm_sched_fence_timeline	*timeline;
 
         /**
          * @parent: the fence returned by &drm_sched_backend_ops.run_job
@@ -488,6 +537,8 @@ struct drm_sched_backend_ops {
  * @credit_count: the current credit count of this scheduler
  * @timeout: the time after which a job is removed from the scheduler.
  * @name: name of the ring for which this scheduler is being used.
+ * @fence_timeline: fence timeline that will be passed to fences created by
+ *                  and entity that's bound to this scheduler.
  * @num_rqs: Number of run-queues. This is at most DRM_SCHED_PRIORITY_COUNT,
  *           as there's usually one run-queue per priority, but could be less.
  * @sched_rq: An allocated array of run-queues of size @num_rqs;
@@ -521,6 +572,7 @@ struct drm_gpu_scheduler {
 	atomic_t			credit_count;
 	long				timeout;
 	const char			*name;
+	struct drm_sched_fence_timeline	*fence_timeline;
 	u32                             num_rqs;
 	struct drm_sched_rq             **sched_rq;
 	wait_queue_head_t		job_scheduled;
