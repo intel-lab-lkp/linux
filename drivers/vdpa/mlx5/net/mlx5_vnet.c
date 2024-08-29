@@ -3221,12 +3221,44 @@ static void mlx5_vdpa_get_config(struct vdpa_device *vdev, unsigned int offset, 
 
 	if (offset + len <= sizeof(struct virtio_net_config))
 		memcpy(buf, (u8 *)&ndev->config + offset, len);
+	else
+		mlx5_vdpa_warn(mvdev, "Offset and length out of bounds\n");
 }
 
 static void mlx5_vdpa_set_config(struct vdpa_device *vdev, unsigned int offset, const void *buf,
 				 unsigned int len)
 {
-	/* not supported */
+	struct mlx5_vdpa_dev *mvdev = to_mvdev(vdev);
+	struct mlx5_vdpa_net *ndev = to_mlx5_vdpa_ndev(mvdev);
+
+	if (offset + len > sizeof(struct virtio_net_config)) {
+		mlx5_vdpa_warn(mvdev, "Offset and length out of bounds\n");
+		return;
+	}
+
+	/*
+	 * Note that this will update the speed/duplex configuration fields
+	 * but the hardware support to actually perform this change does
+	 * not exist yet.
+	 */
+	switch (offset) {
+	case offsetof(struct virtio_net_config, speed):
+		if (len == sizeof(((struct virtio_net_config *) 0)->speed))
+			memcpy(&ndev->config.speed, buf, len);
+		else
+			mlx5_vdpa_warn(mvdev, "Invalid length for speed.\n");
+		break;
+
+	case offsetof(struct virtio_net_config, duplex):
+		if (len == sizeof(((struct virtio_net_config *)0)->duplex))
+			memcpy(&ndev->config.duplex, buf, len);
+		else
+			mlx5_vdpa_warn(mvdev, "Invalid length for duplex.\n");
+		break;
+
+	default:
+		mlx5_vdpa_warn(mvdev, "Configuration field not supported.\n");
+	}
 }
 
 static u32 mlx5_vdpa_get_generation(struct vdpa_device *vdev)
