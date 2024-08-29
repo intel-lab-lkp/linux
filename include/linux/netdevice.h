@@ -371,6 +371,7 @@ struct napi_struct {
 	struct list_head	rx_list; /* Pending GRO_NORMAL skbs */
 	int			rx_count; /* length of rx_list */
 	unsigned int		napi_id;
+	int			defer_hard_irqs;
 	struct hrtimer		timer;
 	struct task_struct	*thread;
 	/* control-path-only fields follow */
@@ -533,6 +534,28 @@ static inline void napi_schedule_irqoff(struct napi_struct *n)
 	if (napi_schedule_prep(n))
 		__napi_schedule_irqoff(n);
 }
+
+/**
+ * napi_get_defer_hard_irqs - get the NAPI's defer_hard_irqs
+ * @n: napi struct to get the defer_hard_irqs field from
+ *
+ * Returns the per-NAPI value of the defar_hard_irqs field.
+ */
+int napi_get_defer_hard_irqs(const struct napi_struct *n);
+
+/**
+ * napi_set_defer_hard_irqs - set the defer_hard_irqs for a napi
+ * @n: napi_struct to set the defer_hard_irqs field
+ * @defer: the value the field should be set to
+ */
+void napi_set_defer_hard_irqs(struct napi_struct *n, int defer);
+
+/**
+ * netdev_set_defer_hard_irqs - set defer_hard_irqs for all NAPIs of a netdev
+ * @netdev: the net_device for which all NAPIs will have their defer_hard_irqs set
+ * @defer: the defer_hard_irqs value to set
+ */
+void netdev_set_defer_hard_irqs(struct net_device *netdev, int defer);
 
 /**
  * napi_complete_done - NAPI processing complete

@@ -425,7 +425,10 @@ NETDEVICE_SHOW_RW(gro_flush_timeout, fmt_ulong);
 
 static int change_napi_defer_hard_irqs(struct net_device *dev, unsigned long val)
 {
-	WRITE_ONCE(dev->napi_defer_hard_irqs, val);
+	if (val > S32_MAX)
+		return -EINVAL;
+
+	netdev_set_defer_hard_irqs(dev, (int)val);
 	return 0;
 }
 
