@@ -107,8 +107,11 @@ struct scan_control {
 	/* Writepage batching in laptop mode; RECLAIM_WRITE */
 	unsigned int may_writepage:1;
 
+	#define UNMAP_ANON 1
+	#define UNMAP_FILE 2
+	#define UNMAP_ANON_AND_FILE UNMAP_ANON + UNMAP_FILE
 	/* Can mapped folios be reclaimed? */
-	unsigned int may_unmap:1;
+	unsigned int may_unmap:2;
 
 	/* Can folios be swapped as part of reclaim? */
 	unsigned int may_swap:1;
@@ -1081,8 +1084,23 @@ retry:
 		if (unlikely(!folio_evictable(folio)))
 			goto activate_locked;
 
-		if (!sc->may_unmap && folio_mapped(folio))
-			goto keep_locked;
+		if (folio_mapped(folio)) {
+			switch (sc->may_unmap) {
+			/* The most likely case. */
+			case UNMAP_ANON_AND_FILE:
+				break;
+			case UNMAP_ANON:
+				if (!folio_test_anon(folio))
+					goto keep_locked;
+				break;
+			case UNMAP_FILE:
+				if (folio_test_anon(folio))
+					goto keep_locked;
+				break;
+			default:
+				goto keep_locked;
+			}
+		}
 
 		/* folio_update_gen() tried to promote this page? */
 		if (lru_gen_enabled() && !ignore_references &&
@@ -1561,7 +1579,7 @@ unsigned int reclaim_clean_pages_from_list(struct zone *zone,
 {
 	struct scan_control sc = {
 		.gfp_mask = GFP_KERNEL,
-		.may_unmap = 1,
+		.may_unmap = UNMAP_ANON_AND_FILE,
 	};
 	struct reclaim_stat stat;
 	unsigned int nr_reclaimed;
@@ -1686,8 +1704,23 @@ static unsigned long isolate_lru_folios(unsigned long nr_to_scan,
 
 		if (!folio_test_lru(folio))
 			goto move;
-		if (!sc->may_unmap && folio_mapped(folio))
-			goto move;
+
+		if (folio_mapped(folio)) {
+			switch (sc->may_unmap) {
+			case UNMAP_ANON_AND_FILE:
+				break;
+			case UNMAP_ANON:
+				if (!folio_test_anon(folio))
+					goto move;
+				break;
+			case UNMAP_FILE:
+				if (folio_test_anon(folio))
+					goto move;
+				break;
+			default:
+				goto move;
+			}
+		}
 
 		/*
 		 * Be careful not to clear the lru flag until after we're
@@ -2133,7 +2166,7 @@ static unsigned int reclaim_folio_list(struct list_head *folio_list,
 	struct scan_control sc = {
 		.gfp_mask = GFP_KERNEL,
 		.may_writepage = 1,
-		.may_unmap = 1,
+		.may_unmap = UNMAP_ANON_AND_FILE,
 		.may_swap = 1,
 		.no_demotion = 1,
 	};
@@ -5465,7 +5498,7 @@ static ssize_t lru_gen_seq_write(struct file *file, const char __user *src,
 	int err = -EINVAL;
 	struct scan_control sc = {
 		.may_writepage = true,
-		.may_unmap = true,
+		.may_unmap = UNMAP_ANON_AND_FILE,
 		.may_swap = true,
 		.reclaim_idx = MAX_NR_ZONES - 1,
 		.gfp_mask = GFP_KERNEL,
@@ -6480,7 +6513,7 @@ unsigned long try_to_free_pages(struct zonelist *zonelist, int order,
 		.nodemask = nodemask,
 		.priority = DEF_PRIORITY,
 		.may_writepage = !laptop_mode,
-		.may_unmap = 1,
+		.may_unmap = UNMAP_ANON_AND_FILE,
 		.may_swap = 1,
 	};
 
@@ -6524,7 +6557,7 @@ unsigned long mem_cgroup_shrink_node(struct mem_cgroup *memcg,
 		.nr_to_reclaim = SWAP_CLUSTER_MAX,
 		.target_mem_cgroup = memcg,
 		.may_writepage = !laptop_mode,
-		.may_unmap = 1,
+		.may_unmap = UNMAP_ANON_AND_FILE,
 		.reclaim_idx = MAX_NR_ZONES - 1,
 		.may_swap = !noswap,
 	};
@@ -6570,7 +6603,7 @@ unsigned long try_to_free_mem_cgroup_pages(struct mem_cgroup *memcg,
 		.target_mem_cgroup = memcg,
 		.priority = DEF_PRIORITY,
 		.may_writepage = !laptop_mode,
-		.may_unmap = 1,
+		.may_unmap = UNMAP_ANON_AND_FILE,
 		.may_swap = !!(reclaim_options & MEMCG_RECLAIM_MAY_SWAP),
 		.proactive = !!(reclaim_options & MEMCG_RECLAIM_PROACTIVE),
 	};
@@ -6835,7 +6868,7 @@ static int balance_pgdat(pg_data_t *pgdat, int order, int highest_zoneidx)
 	struct scan_control sc = {
 		.gfp_mask = GFP_KERNEL,
 		.order = order,
-		.may_unmap = 1,
+		.may_unmap = UNMAP_ANON_AND_FILE,
 	};
 
 	set_task_reclaim_state(current, &sc.reclaim_state);
@@ -7302,7 +7335,7 @@ unsigned long shrink_all_memory(unsigned long nr_to_reclaim)
 		.reclaim_idx = MAX_NR_ZONES - 1,
 		.priority = DEF_PRIORITY,
 		.may_writepage = 1,
-		.may_unmap = 1,
+		.may_unmap = UNMAP_ANON_AND_FILE,
 		.may_swap = 1,
 		.hibernation_mode = 1,
 	};
@@ -7460,7 +7493,7 @@ static int __node_reclaim(struct pglist_data *pgdat, gfp_t gfp_mask, unsigned in
 		.order = order,
 		.priority = NODE_RECLAIM_PRIORITY,
 		.may_writepage = !!(node_reclaim_mode & RECLAIM_WRITE),
-		.may_unmap = !!(node_reclaim_mode & RECLAIM_UNMAP),
+		.may_unmap = !!(node_reclaim_mode & RECLAIM_UNMAP) ? UNMAP_ANON_AND_FILE : 0,
 		.may_swap = 1,
 		.reclaim_idx = gfp_zone(gfp_mask),
 	};
