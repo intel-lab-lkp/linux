@@ -30,7 +30,7 @@ TRACE_EVENT(intel_pipe_enable,
 			     __string(dev, __dev_name_kms(crtc))
 			     __array(u32, frame, I915_MAX_PIPES)
 			     __array(u32, scanline, I915_MAX_PIPES)
-			     __field(enum pipe, pipe)
+			     __field(char, pipe_name)
 			     ),
 	    TP_fast_assign(
 			   struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
@@ -40,11 +40,11 @@ TRACE_EVENT(intel_pipe_enable,
 				   __entry->frame[it__->pipe] = intel_crtc_get_vblank_counter(it__);
 				   __entry->scanline[it__->pipe] = intel_get_crtc_scanline(it__);
 			   }
-			   __entry->pipe = crtc->pipe;
+			   __entry->pipe_name = pipe_name(crtc->pipe);
 			   ),
 
 	    TP_printk("dev %s, pipe %c enable, pipe A: frame=%u, scanline=%u, pipe B: frame=%u, scanline=%u, pipe C: frame=%u, scanline=%u",
-		      __get_str(dev), pipe_name(__entry->pipe),
+		      __get_str(dev), __entry->pipe_name,
 		      __entry->frame[PIPE_A], __entry->scanline[PIPE_A],
 		      __entry->frame[PIPE_B], __entry->scanline[PIPE_B],
 		      __entry->frame[PIPE_C], __entry->scanline[PIPE_C])
@@ -58,7 +58,7 @@ TRACE_EVENT(intel_pipe_disable,
 			     __string(dev, __dev_name_kms(crtc))
 			     __array(u32, frame, I915_MAX_PIPES)
 			     __array(u32, scanline, I915_MAX_PIPES)
-			     __field(enum pipe, pipe)
+			     __field(char, pipe_name)
 			     ),
 
 	    TP_fast_assign(
@@ -69,11 +69,11 @@ TRACE_EVENT(intel_pipe_disable,
 				   __entry->frame[it__->pipe] = intel_crtc_get_vblank_counter(it__);
 				   __entry->scanline[it__->pipe] = intel_get_crtc_scanline(it__);
 			   }
-			   __entry->pipe = crtc->pipe;
+			   __entry->pipe_name = pipe_name(crtc->pipe);
 			   ),
 
 	    TP_printk("dev %s, pipe %c disable, pipe A: frame=%u, scanline=%u, pipe B: frame=%u, scanline=%u, pipe C: frame=%u, scanline=%u",
-		      __get_str(dev), pipe_name(__entry->pipe),
+		      __get_str(dev), __entry->pipe_name,
 		      __entry->frame[PIPE_A], __entry->scanline[PIPE_A],
 		      __entry->frame[PIPE_B], __entry->scanline[PIPE_B],
 		      __entry->frame[PIPE_C], __entry->scanline[PIPE_C])
@@ -85,20 +85,20 @@ TRACE_EVENT(intel_crtc_flip_done,
 
 	    TP_STRUCT__entry(
 			     __string(dev, __dev_name_kms(crtc))
-			     __field(enum pipe, pipe)
+			     __field(char, pipe_name)
 			     __field(u32, frame)
 			     __field(u32, scanline)
 			     ),
 
 	    TP_fast_assign(
 			   __assign_str(dev);
-			   __entry->pipe = crtc->pipe;
+			   __entry->pipe_name = pipe_name(crtc->pipe);
 			   __entry->frame = intel_crtc_get_vblank_counter(crtc);
 			   __entry->scanline = intel_get_crtc_scanline(crtc);
 			   ),
 
 	    TP_printk("dev %s, pipe %c, frame=%u, scanline=%u",
-		      __get_str(dev), pipe_name(__entry->pipe),
+		      __get_str(dev), __entry->pipe_name,
 		      __entry->frame, __entry->scanline)
 );
 
@@ -108,7 +108,7 @@ TRACE_EVENT(intel_pipe_crc,
 
 	    TP_STRUCT__entry(
 			     __string(dev, __dev_name_kms(crtc))
-			     __field(enum pipe, pipe)
+			     __field(char, pipe_name)
 			     __field(u32, frame)
 			     __field(u32, scanline)
 			     __array(u32, crcs, 5)
@@ -116,14 +116,14 @@ TRACE_EVENT(intel_pipe_crc,
 
 	    TP_fast_assign(
 			   __assign_str(dev);
-			   __entry->pipe = crtc->pipe;
+			   __entry->pipe_name = pipe_name(crtc->pipe);
 			   __entry->frame = intel_crtc_get_vblank_counter(crtc);
 			   __entry->scanline = intel_get_crtc_scanline(crtc);
 			   memcpy(__entry->crcs, crcs, sizeof(__entry->crcs));
 			   ),
 
 	    TP_printk("dev %s, pipe %c, frame=%u, scanline=%u crc=%08x %08x %08x %08x %08x",
-		      __get_str(dev), pipe_name(__entry->pipe),
+		      __get_str(dev), __entry->pipe_name,
 		      __entry->frame, __entry->scanline,
 		      __entry->crcs[0], __entry->crcs[1],
 		      __entry->crcs[2], __entry->crcs[3],
@@ -136,7 +136,7 @@ TRACE_EVENT(intel_cpu_fifo_underrun,
 
 	    TP_STRUCT__entry(
 			     __string(dev, __dev_name_i915(dev_priv))
-			     __field(enum pipe, pipe)
+			     __field(char, pipe_name)
 			     __field(u32, frame)
 			     __field(u32, scanline)
 			     ),
@@ -144,13 +144,13 @@ TRACE_EVENT(intel_cpu_fifo_underrun,
 	    TP_fast_assign(
 			    struct intel_crtc *crtc = intel_crtc_for_pipe(dev_priv, pipe);
 			   __assign_str(dev);
-			   __entry->pipe = pipe;
+			   __entry->pipe_name = pipe_name(pipe);
 			   __entry->frame = intel_crtc_get_vblank_counter(crtc);
 			   __entry->scanline = intel_get_crtc_scanline(crtc);
 			   ),
 
 	    TP_printk("dev %s, pipe %c, frame=%u, scanline=%u",
-		      __get_str(dev), pipe_name(__entry->pipe),
+		      __get_str(dev), __entry->pipe_name,
 		      __entry->frame, __entry->scanline)
 );
 
@@ -160,7 +160,7 @@ TRACE_EVENT(intel_pch_fifo_underrun,
 
 	    TP_STRUCT__entry(
 			     __string(dev, __dev_name_i915(dev_priv))
-			     __field(enum pipe, pipe)
+			     __field(char, pipe_name)
 			     __field(u32, frame)
 			     __field(u32, scanline)
 			     ),
@@ -169,13 +169,13 @@ TRACE_EVENT(intel_pch_fifo_underrun,
 			   enum pipe pipe = pch_transcoder;
 			   struct intel_crtc *crtc = intel_crtc_for_pipe(dev_priv, pipe);
 			   __assign_str(dev);
-			   __entry->pipe = pipe;
+			   __entry->pipe_name = pipe_name(pipe);
 			   __entry->frame = intel_crtc_get_vblank_counter(crtc);
 			   __entry->scanline = intel_get_crtc_scanline(crtc);
 			   ),
 
 	    TP_printk("dev %s, pch transcoder %c, frame=%u, scanline=%u",
-		      __get_str(dev), pipe_name(__entry->pipe),
+		      __get_str(dev), __entry->pipe_name,
 		      __entry->frame, __entry->scanline)
 );
 
@@ -215,7 +215,7 @@ TRACE_EVENT(g4x_wm,
 
 	    TP_STRUCT__entry(
 			     __string(dev, __dev_name_kms(crtc))
-			     __field(enum pipe, pipe)
+			     __field(char, pipe_name)
 			     __field(u32, frame)
 			     __field(u32, scanline)
 			     __field(u16, primary)
@@ -234,7 +234,7 @@ TRACE_EVENT(g4x_wm,
 
 	    TP_fast_assign(
 			   __assign_str(dev);
-			   __entry->pipe = crtc->pipe;
+			   __entry->pipe_name = pipe_name(crtc->pipe);
 			   __entry->frame = intel_crtc_get_vblank_counter(crtc);
 			   __entry->scanline = intel_get_crtc_scanline(crtc);
 			   __entry->primary = wm->pipe[crtc->pipe].plane[PLANE_PRIMARY];
@@ -252,7 +252,7 @@ TRACE_EVENT(g4x_wm,
 			   ),
 
 	    TP_printk("dev %s, pipe %c, frame=%u, scanline=%u, wm %d/%d/%d, sr %s/%d/%d/%d, hpll %s/%d/%d/%d, fbc %s",
-		      __get_str(dev), pipe_name(__entry->pipe),
+		      __get_str(dev), __entry->pipe_name,
 		      __entry->frame, __entry->scanline,
 		      __entry->primary, __entry->sprite, __entry->cursor,
 		      str_yes_no(__entry->cxsr), __entry->sr_plane, __entry->sr_cursor, __entry->sr_fbc,
@@ -266,7 +266,7 @@ TRACE_EVENT(vlv_wm,
 
 	    TP_STRUCT__entry(
 			     __string(dev, __dev_name_kms(crtc))
-			     __field(enum pipe, pipe)
+			     __field(char, pipe_name)
 			     __field(u32, frame)
 			     __field(u32, scanline)
 			     __field(u32, level)
@@ -281,7 +281,7 @@ TRACE_EVENT(vlv_wm,
 
 	    TP_fast_assign(
 			   __assign_str(dev);
-			   __entry->pipe = crtc->pipe;
+			   __entry->pipe_name = pipe_name(crtc->pipe);
 			   __entry->frame = intel_crtc_get_vblank_counter(crtc);
 			   __entry->scanline = intel_get_crtc_scanline(crtc);
 			   __entry->level = wm->level;
@@ -295,7 +295,7 @@ TRACE_EVENT(vlv_wm,
 			   ),
 
 	    TP_printk("dev %s, pipe %c, frame=%u, scanline=%u, level=%d, cxsr=%d, wm %d/%d/%d/%d, sr %d/%d",
-		      __get_str(dev), pipe_name(__entry->pipe),
+		      __get_str(dev), __entry->pipe_name,
 		      __entry->frame, __entry->scanline,
 		      __entry->level, __entry->cxsr,
 		      __entry->primary, __entry->sprite0, __entry->sprite1, __entry->cursor,
@@ -308,7 +308,7 @@ TRACE_EVENT(vlv_fifo_size,
 
 	    TP_STRUCT__entry(
 			     __string(dev, __dev_name_kms(crtc))
-			     __field(enum pipe, pipe)
+			     __field(char, pipe_name)
 			     __field(u32, frame)
 			     __field(u32, scanline)
 			     __field(u32, sprite0_start)
@@ -318,7 +318,7 @@ TRACE_EVENT(vlv_fifo_size,
 
 	    TP_fast_assign(
 			   __assign_str(dev);
-			   __entry->pipe = crtc->pipe;
+			   __entry->pipe_name = pipe_name(crtc->pipe);
 			   __entry->frame = intel_crtc_get_vblank_counter(crtc);
 			   __entry->scanline = intel_get_crtc_scanline(crtc);
 			   __entry->sprite0_start = sprite0_start;
@@ -327,7 +327,7 @@ TRACE_EVENT(vlv_fifo_size,
 			   ),
 
 	    TP_printk("dev %s, pipe %c, frame=%u, scanline=%u, %d/%d/%d",
-		      __get_str(dev), pipe_name(__entry->pipe),
+		      __get_str(dev), __entry->pipe_name,
 		      __entry->frame, __entry->scanline,
 		      __entry->sprite0_start, __entry->sprite1_start, __entry->fifo_size)
 );
@@ -338,7 +338,7 @@ TRACE_EVENT(intel_plane_async_flip,
 
 	    TP_STRUCT__entry(
 			     __string(dev, __dev_name_kms(plane))
-			     __field(enum pipe, pipe)
+			     __field(char, pipe_name)
 			     __field(u32, frame)
 			     __field(u32, scanline)
 			     __field(bool, async_flip)
@@ -348,14 +348,14 @@ TRACE_EVENT(intel_plane_async_flip,
 	    TP_fast_assign(
 			   __assign_str(dev);
 			   __assign_str(name);
-			   __entry->pipe = crtc->pipe;
+			   __entry->pipe_name = pipe_name(crtc->pipe);
 			   __entry->frame = intel_crtc_get_vblank_counter(crtc);
 			   __entry->scanline = intel_get_crtc_scanline(crtc);
 			   __entry->async_flip = async_flip;
 			   ),
 
 	    TP_printk("dev %s, pipe %c, plane %s, frame=%u, scanline=%u, async_flip=%s",
-		      __get_str(dev), pipe_name(__entry->pipe), __get_str(name),
+		      __get_str(dev), __entry->pipe_name, __get_str(name),
 		      __entry->frame, __entry->scanline, str_yes_no(__entry->async_flip))
 );
 
@@ -365,7 +365,7 @@ TRACE_EVENT(intel_plane_update_noarm,
 
 	    TP_STRUCT__entry(
 			     __string(dev, __dev_name_kms(plane))
-			     __field(enum pipe, pipe)
+			     __field(char, pipe_name)
 			     __field(u32, frame)
 			     __field(u32, scanline)
 			     __array(int, src, 4)
@@ -376,7 +376,7 @@ TRACE_EVENT(intel_plane_update_noarm,
 	    TP_fast_assign(
 			   __assign_str(dev);
 			   __assign_str(name);
-			   __entry->pipe = crtc->pipe;
+			   __entry->pipe_name = pipe_name(crtc->pipe);
 			   __entry->frame = intel_crtc_get_vblank_counter(crtc);
 			   __entry->scanline = intel_get_crtc_scanline(crtc);
 			   memcpy(__entry->src, &plane->base.state->src, sizeof(__entry->src));
@@ -384,7 +384,7 @@ TRACE_EVENT(intel_plane_update_noarm,
 			   ),
 
 	    TP_printk("dev %s, pipe %c, plane %s, frame=%u, scanline=%u, " DRM_RECT_FP_FMT " -> " DRM_RECT_FMT,
-		      __get_str(dev), pipe_name(__entry->pipe), __get_str(name),
+		      __get_str(dev), __entry->pipe_name, __get_str(name),
 		      __entry->frame, __entry->scanline,
 		      DRM_RECT_FP_ARG((const struct drm_rect *)__entry->src),
 		      DRM_RECT_ARG((const struct drm_rect *)__entry->dst))
@@ -396,7 +396,7 @@ TRACE_EVENT(intel_plane_update_arm,
 
 	    TP_STRUCT__entry(
 			     __string(dev, __dev_name_kms(plane))
-			     __field(enum pipe, pipe)
+			     __field(char, pipe_name)
 			     __field(u32, frame)
 			     __field(u32, scanline)
 			     __array(int, src, 4)
@@ -407,7 +407,7 @@ TRACE_EVENT(intel_plane_update_arm,
 	    TP_fast_assign(
 			   __assign_str(dev);
 			   __assign_str(name);
-			   __entry->pipe = crtc->pipe;
+			   __entry->pipe_name = pipe_name(crtc->pipe);
 			   __entry->frame = intel_crtc_get_vblank_counter(crtc);
 			   __entry->scanline = intel_get_crtc_scanline(crtc);
 			   memcpy(__entry->src, &plane->base.state->src, sizeof(__entry->src));
@@ -415,7 +415,7 @@ TRACE_EVENT(intel_plane_update_arm,
 			   ),
 
 	    TP_printk("dev %s, pipe %c, plane %s, frame=%u, scanline=%u, " DRM_RECT_FP_FMT " -> " DRM_RECT_FMT,
-		      __get_str(dev), pipe_name(__entry->pipe), __get_str(name),
+		      __get_str(dev), __entry->pipe_name, __get_str(name),
 		      __entry->frame, __entry->scanline,
 		      DRM_RECT_FP_ARG((const struct drm_rect *)__entry->src),
 		      DRM_RECT_ARG((const struct drm_rect *)__entry->dst))
@@ -427,7 +427,7 @@ TRACE_EVENT(intel_plane_disable_arm,
 
 	    TP_STRUCT__entry(
 			     __string(dev, __dev_name_kms(plane))
-			     __field(enum pipe, pipe)
+			     __field(char, pipe_name)
 			     __field(u32, frame)
 			     __field(u32, scanline)
 			     __string(name, plane->base.name)
@@ -436,13 +436,13 @@ TRACE_EVENT(intel_plane_disable_arm,
 	    TP_fast_assign(
 			   __assign_str(dev);
 			   __assign_str(name);
-			   __entry->pipe = crtc->pipe;
+			   __entry->pipe_name = pipe_name(crtc->pipe);
 			   __entry->frame = intel_crtc_get_vblank_counter(crtc);
 			   __entry->scanline = intel_get_crtc_scanline(crtc);
 			   ),
 
 	    TP_printk("dev %s, pipe %c, plane %s, frame=%u, scanline=%u",
-		      __get_str(dev), pipe_name(__entry->pipe), __get_str(name),
+		      __get_str(dev), __entry->pipe_name, __get_str(name),
 		      __entry->frame, __entry->scanline)
 );
 
@@ -453,7 +453,7 @@ TRACE_EVENT(intel_fbc_activate,
 	    TP_STRUCT__entry(
 			     __string(dev, __dev_name_kms(plane))
 			     __string(name, plane->base.name)
-			     __field(enum pipe, pipe)
+			     __field(char, pipe_name)
 			     __field(u32, frame)
 			     __field(u32, scanline)
 			     ),
@@ -463,13 +463,13 @@ TRACE_EVENT(intel_fbc_activate,
 									 plane->pipe);
 			   __assign_str(dev);
 			   __assign_str(name);
-			   __entry->pipe = crtc->pipe;
+			   __entry->pipe_name = pipe_name(crtc->pipe);
 			   __entry->frame = intel_crtc_get_vblank_counter(crtc);
 			   __entry->scanline = intel_get_crtc_scanline(crtc);
 			   ),
 
 	    TP_printk("dev %s, pipe %c, plane %s, frame=%u, scanline=%u",
-		      __get_str(dev), pipe_name(__entry->pipe), __get_str(name),
+		      __get_str(dev), __entry->pipe_name, __get_str(name),
 		      __entry->frame, __entry->scanline)
 );
 
@@ -480,7 +480,7 @@ TRACE_EVENT(intel_fbc_deactivate,
 	    TP_STRUCT__entry(
 			     __string(dev, __dev_name_kms(plane))
 			     __string(name, plane->base.name)
-			     __field(enum pipe, pipe)
+			     __field(char, pipe_name)
 			     __field(u32, frame)
 			     __field(u32, scanline)
 			     ),
@@ -490,13 +490,13 @@ TRACE_EVENT(intel_fbc_deactivate,
 									 plane->pipe);
 			   __assign_str(dev);
 			   __assign_str(name);
-			   __entry->pipe = crtc->pipe;
+			   __entry->pipe_name = pipe_name(crtc->pipe);
 			   __entry->frame = intel_crtc_get_vblank_counter(crtc);
 			   __entry->scanline = intel_get_crtc_scanline(crtc);
 			   ),
 
 	    TP_printk("dev %s, pipe %c, plane %s, frame=%u, scanline=%u",
-		      __get_str(dev), pipe_name(__entry->pipe), __get_str(name),
+		      __get_str(dev), __entry->pipe_name, __get_str(name),
 		      __entry->frame, __entry->scanline)
 );
 
@@ -507,7 +507,7 @@ TRACE_EVENT(intel_fbc_nuke,
 	    TP_STRUCT__entry(
 			     __string(dev, __dev_name_kms(plane))
 			     __string(name, plane->base.name)
-			     __field(enum pipe, pipe)
+			     __field(char, pipe_name)
 			     __field(u32, frame)
 			     __field(u32, scanline)
 			     ),
@@ -517,13 +517,13 @@ TRACE_EVENT(intel_fbc_nuke,
 									 plane->pipe);
 			   __assign_str(dev);
 			   __assign_str(name);
-			   __entry->pipe = crtc->pipe;
+			   __entry->pipe_name = pipe_name(crtc->pipe);
 			   __entry->frame = intel_crtc_get_vblank_counter(crtc);
 			   __entry->scanline = intel_get_crtc_scanline(crtc);
 			   ),
 
 	    TP_printk("dev %s, pipe %c, plane %s, frame=%u, scanline=%u",
-		      __get_str(dev), pipe_name(__entry->pipe), __get_str(name),
+		      __get_str(dev), __entry->pipe_name, __get_str(name),
 		      __entry->frame, __entry->scanline)
 );
 
@@ -533,20 +533,20 @@ TRACE_EVENT(intel_crtc_vblank_work_start,
 
 	    TP_STRUCT__entry(
 			     __string(dev, __dev_name_kms(crtc))
-			     __field(enum pipe, pipe)
+			     __field(char, pipe_name)
 			     __field(u32, frame)
 			     __field(u32, scanline)
 			     ),
 
 	    TP_fast_assign(
 			   __assign_str(dev);
-			   __entry->pipe = crtc->pipe;
+			   __entry->pipe_name = pipe_name(crtc->pipe);
 			   __entry->frame = intel_crtc_get_vblank_counter(crtc);
 			   __entry->scanline = intel_get_crtc_scanline(crtc);
 			   ),
 
 	    TP_printk("dev %s, pipe %c, frame=%u, scanline=%u",
-		      __get_str(dev), pipe_name(__entry->pipe),
+		      __get_str(dev), __entry->pipe_name,
 		      __entry->frame, __entry->scanline)
 );
 
@@ -556,20 +556,20 @@ TRACE_EVENT(intel_crtc_vblank_work_end,
 
 	    TP_STRUCT__entry(
 			     __string(dev, __dev_name_kms(crtc))
-			     __field(enum pipe, pipe)
+			     __field(char, pipe_name)
 			     __field(u32, frame)
 			     __field(u32, scanline)
 			     ),
 
 	    TP_fast_assign(
 			   __assign_str(dev);
-			   __entry->pipe = crtc->pipe;
+			   __entry->pipe_name = pipe_name(crtc->pipe);
 			   __entry->frame = intel_crtc_get_vblank_counter(crtc);
 			   __entry->scanline = intel_get_crtc_scanline(crtc);
 			   ),
 
 	    TP_printk("dev %s, pipe %c, frame=%u, scanline=%u",
-		      __get_str(dev), pipe_name(__entry->pipe),
+		      __get_str(dev), __entry->pipe_name,
 		      __entry->frame, __entry->scanline)
 );
 
@@ -579,7 +579,7 @@ TRACE_EVENT(intel_pipe_update_start,
 
 	    TP_STRUCT__entry(
 			     __string(dev, __dev_name_kms(crtc))
-			     __field(enum pipe, pipe)
+			     __field(char, pipe_name)
 			     __field(u32, frame)
 			     __field(u32, scanline)
 			     __field(u32, min)
@@ -588,7 +588,7 @@ TRACE_EVENT(intel_pipe_update_start,
 
 	    TP_fast_assign(
 			   __assign_str(dev);
-			   __entry->pipe = crtc->pipe;
+			   __entry->pipe_name = pipe_name(crtc->pipe);
 			   __entry->frame = intel_crtc_get_vblank_counter(crtc);
 			   __entry->scanline = intel_get_crtc_scanline(crtc);
 			   __entry->min = crtc->debug.min_vbl;
@@ -596,7 +596,7 @@ TRACE_EVENT(intel_pipe_update_start,
 			   ),
 
 	    TP_printk("dev %s, pipe %c, frame=%u, scanline=%u, min=%u, max=%u",
-		      __get_str(dev), pipe_name(__entry->pipe),
+		      __get_str(dev), __entry->pipe_name,
 		      __entry->frame, __entry->scanline,
 		      __entry->min, __entry->max)
 );
@@ -607,7 +607,7 @@ TRACE_EVENT(intel_pipe_update_vblank_evaded,
 
 	    TP_STRUCT__entry(
 			     __string(dev, __dev_name_kms(crtc))
-			     __field(enum pipe, pipe)
+			     __field(char, pipe_name)
 			     __field(u32, frame)
 			     __field(u32, scanline)
 			     __field(u32, min)
@@ -616,7 +616,7 @@ TRACE_EVENT(intel_pipe_update_vblank_evaded,
 
 	    TP_fast_assign(
 			   __assign_str(dev);
-			   __entry->pipe = crtc->pipe;
+			   __entry->pipe_name = pipe_name(crtc->pipe);
 			   __entry->frame = crtc->debug.start_vbl_count;
 			   __entry->scanline = crtc->debug.scanline_start;
 			   __entry->min = crtc->debug.min_vbl;
@@ -624,7 +624,7 @@ TRACE_EVENT(intel_pipe_update_vblank_evaded,
 			   ),
 
 	    TP_printk("dev %s, pipe %c, frame=%u, scanline=%u, min=%u, max=%u",
-		      __get_str(dev), pipe_name(__entry->pipe),
+		      __get_str(dev), __entry->pipe_name,
 		      __entry->frame, __entry->scanline,
 		      __entry->min, __entry->max)
 );
@@ -635,20 +635,20 @@ TRACE_EVENT(intel_pipe_update_end,
 
 	    TP_STRUCT__entry(
 			     __string(dev, __dev_name_kms(crtc))
-			     __field(enum pipe, pipe)
+			     __field(char, pipe_name)
 			     __field(u32, frame)
 			     __field(u32, scanline)
 			     ),
 
 	    TP_fast_assign(
 			   __assign_str(dev);
-			   __entry->pipe = crtc->pipe;
+			   __entry->pipe_name = pipe_name(crtc->pipe);
 			   __entry->frame = frame;
 			   __entry->scanline = scanline_end;
 			   ),
 
 	    TP_printk("dev %s, pipe %c, frame=%u, scanline=%u",
-		      __get_str(dev), pipe_name(__entry->pipe),
+		      __get_str(dev), __entry->pipe_name,
 		      __entry->frame, __entry->scanline)
 );
 
