@@ -279,6 +279,51 @@ err:
 }
 EXPORT_SYMBOL_GPL(guest_memfd_make_inaccessible);
 
+static vm_fault_t gmem_fault(struct vm_fault *vmf)
+{
+	struct file *file = vmf->vma->vm_file;
+	struct guest_memfd_private *private;
+	struct folio *folio;
+
+	folio = guest_memfd_grab_folio(file, vmf->pgoff, GUEST_MEMFD_GRAB_ACCESSIBLE);
+	if (IS_ERR(folio))
+		return VM_FAULT_SIGBUS;
+
+	vmf->page = folio_page(folio, vmf->pgoff - folio_index(folio));
+
+	/**
+	 * Drop the safe and accessible references, the folio refcount will
+	 * be preserved and unmap_mapping_folio() will decrement the
+	 * refcount when converting to inaccessible.
+	 */
+	private = folio_get_private(folio);
+	atomic_dec(&private->accessible);
+	atomic_dec(&private->safe);
+
+	return VM_FAULT_LOCKED;
+}
+
+static const struct vm_operations_struct gmem_vm_ops = {
+	.fault = gmem_fault,
+};
+
+static int gmem_mmap(struct file *file, struct vm_area_struct *vma)
+{
+	const struct guest_memfd_operations *ops = file_inode(file)->i_private;
+
+	if (!ops->prepare_accessible)
+		return -EPERM;
+
+	/* No support for private mappings to avoid COW.  */
+	if ((vma->vm_flags & (VM_SHARED | VM_MAYSHARE)) !=
+	    (VM_SHARED | VM_MAYSHARE))
+		return -EINVAL;
+
+	file_accessed(file);
+	vma->vm_ops = &gmem_vm_ops;
+	return 0;
+}
+
 static long gmem_punch_hole(struct file *file, loff_t offset, loff_t len)
 {
 	struct inode *inode = file_inode(file);
@@ -390,6 +435,7 @@ static int gmem_release(struct inode *inode, struct file *file)
 static const struct file_operations gmem_fops = {
 	.open = generic_file_open,
 	.llseek = generic_file_llseek,
+	.mmap = gmem_mmap,
 	.release = gmem_release,
 	.fallocate = gmem_fallocate,
 	.owner = THIS_MODULE,
