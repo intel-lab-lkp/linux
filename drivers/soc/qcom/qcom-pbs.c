@@ -205,10 +205,9 @@ static int qcom_pbs_probe(struct platform_device *pdev)
 	}
 
 	ret = device_property_read_u32(pbs->dev, "reg", &val);
-	if (ret < 0) {
-		dev_err(pbs->dev, "Couldn't find reg, ret = %d\n", ret);
-		return ret;
-	}
+	if (ret < 0)
+		return dev_err_probe(pbs->dev, ret, "Couldn't find reg\n");
+
 	pbs->base = val;
 	mutex_init(&pbs->lock);
 
