@@ -249,6 +249,11 @@ attribute-sets:
         doc: The number of consecutive empty polls before IRQ deferral ends
              and hardware IRQs are re-enabled.
         type: s32
+      -
+        name: gro-flush-timeout
+        doc: The timeout, in nanoseconds, of when to trigger the NAPI
+             watchdog timer and schedule NAPI processing.
+        type: u64
   -
     name: queue
     attributes:
@@ -599,6 +604,7 @@ operations:
             - irq
             - pid
             - defer-hard-irqs
+            - gro-flush-timeout
       dump:
         request:
           attributes:
