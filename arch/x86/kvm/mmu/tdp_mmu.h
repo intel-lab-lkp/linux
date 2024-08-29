@@ -68,6 +68,9 @@ u64 *kvm_tdp_mmu_fast_pf_get_last_sptep(struct kvm_vcpu *vcpu, gfn_t gfn,
 					u64 *spte);
 
 unsigned long kvm_tdp_mmu_nx_huge_pages_to_zap(struct kvm *kvm);
+void kvm_tdp_mmu_recover_nx_huge_pages(struct kvm *kvm,
+				   struct list_head *nx_huge_pages,
+				   unsigned long to_zap);
 
 #ifdef CONFIG_X86_64
 static inline bool is_tdp_mmu_page(struct kvm_mmu_page *sp) { return sp->tdp_mmu_page; }

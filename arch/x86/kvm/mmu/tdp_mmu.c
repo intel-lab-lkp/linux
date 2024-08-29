@@ -1805,3 +1805,71 @@ unsigned long kvm_tdp_mmu_nx_huge_pages_to_zap(struct kvm *kvm)
 
 	return ratio ? DIV_ROUND_UP(pages, ratio) : 0;
 }
+
+void kvm_tdp_mmu_recover_nx_huge_pages(struct kvm *kvm,
+				   struct list_head *nx_huge_pages,
+				   unsigned long to_zap)
+{
+	int rcu_idx;
+	struct kvm_mmu_page *sp;
+	bool flush = false;
+
+	rcu_idx = srcu_read_lock(&kvm->srcu);
+	write_lock(&kvm->mmu_lock);
+
+	/*
+	 * Zapping TDP MMU shadow pages, including the remote TLB flush, must
+	 * be done under RCU protection, because the pages are freed via RCU
+	 * callback.
+	 */
+	rcu_read_lock();
+
+	for ( ; to_zap; --to_zap) {
+		if (list_empty(nx_huge_pages))
+			break;
+
+		/*
+		 * We use a separate list instead of just using active_mmu_pages
+		 * because the number of shadow pages that be replaced with an
+		 * NX huge page is expected to be relatively small compared to
+		 * the total number of shadow pages.  And because the TDP MMU
+		 * doesn't use active_mmu_pages.
+		 */
+		sp = list_first_entry(nx_huge_pages,
+				      struct kvm_mmu_page,
+				      possible_nx_huge_page_link);
+		WARN_ON_ONCE(!sp->nx_huge_page_disallowed);
+		WARN_ON_ONCE(!sp->role.direct);
+
+		/*
+		 * Unaccount and do not attempt to recover any NX Huge Pages
+		 * that are being dirty tracked, as they would just be faulted
+		 * back in as 4KiB pages. The NX Huge Pages in this slot will be
+		 * recovered, along with all the other huge pages in the slot,
+		 * when dirty logging is disabled.
+		 */
+		if (kvm_mmu_sp_dirty_logging_enabled(kvm, sp))
+			unaccount_nx_huge_page(kvm, sp);
+		else
+			flush |= kvm_tdp_mmu_zap_sp(kvm, sp);
+		WARN_ON_ONCE(sp->nx_huge_page_disallowed);
+
+		if (need_resched() || rwlock_needbreak(&kvm->mmu_lock)) {
+			if (flush)
+				kvm_flush_remote_tlbs(kvm);
+			rcu_read_unlock();
+
+			cond_resched_rwlock_write(&kvm->mmu_lock);
+			flush = false;
+
+			rcu_read_lock();
+		}
+	}
+
+	if (flush)
+		kvm_flush_remote_tlbs(kvm);
+	rcu_read_unlock();
+
+	write_unlock(&kvm->mmu_lock);
+	srcu_read_unlock(&kvm->srcu, rcu_idx);
+}
