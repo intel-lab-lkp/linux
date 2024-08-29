@@ -3151,6 +3151,17 @@ static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 
 		svm->tsc_aux = data;
 		break;
+	case MSR_IA32_TSC:
+		/*
+		 * If Secure TSC is enabled, KVM doesn't expect to receive
+		 * a VMEXIT for a TSC write, record the error and return a
+		 * #GP
+		 */
+		if (vcpu->arch.guest_state_protected && snp_secure_tsc_enabled(vcpu->kvm)) {
+			vcpu_unimpl(vcpu, "unimplemented IA32_TSC for secure tsc\n");
+			return 1;
+		}
+		break;
 	case MSR_IA32_DEBUGCTLMSR:
 		if (!lbrv) {
 			kvm_pr_unimpl_wrmsr(vcpu, ecx, data);
