@@ -246,3 +246,11 @@ bool intel_joiner_crtc_is_joiner_primary(const struct intel_crtc_state *crtc_sta
 	return crtc_state->joiner_pipes &&
 		crtc->pipe == intel_joiner_get_primary_pipe(crtc_state);
 }
+
+bool intel_joiner_crtc_is_joiner_secondary(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+
+	return crtc_state->joiner_pipes &&
+		crtc->pipe != intel_joiner_get_primary_pipe(crtc_state);
+}

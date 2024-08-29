@@ -25,6 +25,7 @@
 #include "intel_dmc.h"
 #include "intel_fifo_underrun.h"
 #include "intel_modeset_setup.h"
+#include "intel_joiner.h"
 #include "intel_pch_display.h"
 #include "intel_pmdemand.h"
 #include "intel_tc.h"
@@ -204,7 +205,7 @@ static u8 get_transcoder_pipes(struct drm_i915_private *i915,
 		if (temp_crtc_state->cpu_transcoder == INVALID_TRANSCODER)
 			continue;
 
-		if (intel_crtc_is_joiner_secondary(temp_crtc_state))
+		if (intel_joiner_crtc_is_joiner_secondary(temp_crtc_state))
 			continue;
 
 		if (transcoder_mask & BIT(temp_crtc_state->cpu_transcoder))
@@ -326,7 +327,7 @@ static void intel_modeset_update_connector_atomic_state(struct drm_i915_private 
 
 static void intel_crtc_copy_hw_to_uapi_state(struct intel_crtc_state *crtc_state)
 {
-	if (intel_crtc_is_joiner_secondary(crtc_state))
+	if (intel_joiner_crtc_is_joiner_secondary(crtc_state))
 		return;
 
 	crtc_state->uapi.enable = crtc_state->hw.enable;
@@ -474,7 +475,7 @@ static bool intel_sanitize_crtc(struct intel_crtc *crtc,
 	}
 
 	if (!crtc_state->hw.active ||
-	    intel_crtc_is_joiner_secondary(crtc_state))
+	    intel_joiner_crtc_is_joiner_secondary(crtc_state))
 		return false;
 
 	needs_link_reset = intel_crtc_needs_link_reset(crtc);
@@ -733,7 +734,7 @@ static void intel_modeset_readout_hw_state(struct drm_i915_private *i915)
 				struct intel_crtc *secondary_crtc;
 
 				/* encoder should read be linked to joiner primary */
-				WARN_ON(intel_crtc_is_joiner_secondary(crtc_state));
+				WARN_ON(intel_joiner_crtc_is_joiner_secondary(crtc_state));
 
 				for_each_intel_crtc_in_pipe_mask(&i915->drm, secondary_crtc,
 								 intel_crtc_joiner_secondary_pipes(crtc_state)) {

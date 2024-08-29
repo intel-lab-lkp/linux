@@ -49,6 +49,7 @@
 #include "intel_display_types.h"
 #include "intel_fb.h"
 #include "intel_fb_pin.h"
+#include "intel_joiner.h"
 #include "skl_scaler.h"
 #include "skl_watermark.h"
 
@@ -722,7 +723,7 @@ int intel_plane_atomic_check(struct intel_atomic_state *state,
 	struct intel_crtc_state *new_crtc_state =
 		intel_atomic_get_new_crtc_state(state, crtc);
 
-	if (new_crtc_state && intel_crtc_is_joiner_secondary(new_crtc_state)) {
+	if (new_crtc_state && intel_joiner_crtc_is_joiner_secondary(new_crtc_state)) {
 		struct intel_crtc *primary_crtc =
 			intel_primary_crtc(new_crtc_state);
 		struct intel_plane *primary_crtc_plane =

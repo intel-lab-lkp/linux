@@ -10,6 +10,7 @@
 #include "intel_display_types.h"
 #include "intel_drrs.h"
 #include "intel_frontbuffer.h"
+#include "intel_joiner.h"
 #include "intel_panel.h"
 
 /**
@@ -157,7 +158,7 @@ void intel_drrs_activate(const struct intel_crtc_state *crtc_state)
 	if (!crtc_state->hw.active)
 		return;
 
-	if (intel_crtc_is_joiner_secondary(crtc_state))
+	if (intel_joiner_crtc_is_joiner_secondary(crtc_state))
 		return;
 
 	mutex_lock(&crtc->drrs.mutex);
@@ -189,7 +190,7 @@ void intel_drrs_deactivate(const struct intel_crtc_state *old_crtc_state)
 	if (!old_crtc_state->hw.active)
 		return;
 
-	if (intel_crtc_is_joiner_secondary(old_crtc_state))
+	if (intel_joiner_crtc_is_joiner_secondary(old_crtc_state))
 		return;
 
 	mutex_lock(&crtc->drrs.mutex);
