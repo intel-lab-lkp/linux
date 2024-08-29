@@ -378,6 +378,18 @@ static __always_inline bool sev_snp_guest(struct kvm *kvm)
 #endif
 }
 
+static inline bool snp_secure_tsc_enabled(struct kvm *kvm)
+{
+#ifdef CONFIG_KVM_AMD_SEV
+	struct kvm_sev_info *sev = &to_kvm_svm(kvm)->sev_info;
+
+	return (sev->vmsa_features & SVM_SEV_FEAT_SECURE_TSC) &&
+	       !WARN_ON_ONCE(!sev_snp_guest(kvm));
+#else
+	return false;
+#endif
+}
+
 static inline bool ghcb_gpa_is_registered(struct vcpu_svm *svm, u64 val)
 {
 	return svm->sev_es.ghcb_registered_gpa == val;
