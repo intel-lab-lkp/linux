@@ -333,6 +333,7 @@ i915-y += \
 	display/intel_encoder.o \
 	display/intel_gmbus.o \
 	display/intel_hdmi.o \
+	display/intel_joiner.o \
 	display/intel_lspcon.o \
 	display/intel_lvds.o \
 	display/intel_panel.o \
