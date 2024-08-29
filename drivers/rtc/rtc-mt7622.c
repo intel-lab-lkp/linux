@@ -102,7 +102,6 @@ struct mtk_rtc {
 	struct rtc_device *rtc;
 	void __iomem *base;
 	int irq;
-	struct clk *clk;
 };
 
 static void mtk_w32(struct mtk_rtc *rtc, u32 reg, u32 val)
@@ -304,6 +303,7 @@ static int mtk_rtc_probe(struct platform_device *pdev)
 {
 	struct mtk_rtc *hw;
 	int ret;
+	struct clk *clk;
 
 	hw = devm_kzalloc(&pdev->dev, sizeof(*hw), GFP_KERNEL);
 	if (!hw)
@@ -315,27 +315,23 @@ static int mtk_rtc_probe(struct platform_device *pdev)
 	if (IS_ERR(hw->base))
 		return PTR_ERR(hw->base);
 
-	hw->clk = devm_clk_get(&pdev->dev, "rtc");
-	if (IS_ERR(hw->clk)) {
+	clk = devm_clk_get_enabled(&pdev->dev, "rtc");
+	if (IS_ERR(clk)) {
 		dev_err(&pdev->dev, "No clock\n");
-		return PTR_ERR(hw->clk);
+		return PTR_ERR(clk);
 	}
-
-	ret = clk_prepare_enable(hw->clk);
-	if (ret)
-		return ret;
 
 	hw->irq = platform_get_irq(pdev, 0);
 	if (hw->irq < 0) {
 		ret = hw->irq;
-		goto err;
+		return ret;
 	}
 
 	ret = devm_request_irq(&pdev->dev, hw->irq, mtk_rtc_alarmirq,
 			       0, dev_name(&pdev->dev), hw);
 	if (ret) {
 		dev_err(&pdev->dev, "Can't request IRQ\n");
-		goto err;
+		return ret;
 	}
 
 	mtk_rtc_hw_init(hw);
@@ -347,21 +343,10 @@ static int mtk_rtc_probe(struct platform_device *pdev)
 	if (IS_ERR(hw->rtc)) {
 		ret = PTR_ERR(hw->rtc);
 		dev_err(&pdev->dev, "Unable to register device\n");
-		goto err;
+		return ret;
 	}
 
 	return 0;
-err:
-	clk_disable_unprepare(hw->clk);
-
-	return ret;
-}
-
-static void mtk_rtc_remove(struct platform_device *pdev)
-{
-	struct mtk_rtc *hw = platform_get_drvdata(pdev);
-
-	clk_disable_unprepare(hw->clk);
 }
 
 #ifdef CONFIG_PM_SLEEP
@@ -394,7 +379,6 @@ static SIMPLE_DEV_PM_OPS(mtk_rtc_pm_ops, mtk_rtc_suspend, mtk_rtc_resume);
 
 static struct platform_driver mtk_rtc_driver = {
 	.probe	= mtk_rtc_probe,
-	.remove_new = mtk_rtc_remove,
 	.driver = {
 		.name = MTK_RTC_DEV,
 		.of_match_table = mtk_rtc_match,
