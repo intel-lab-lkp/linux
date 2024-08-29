@@ -98,6 +98,8 @@ struct mana_txq {
 
 	atomic_t pending_sends;
 
+	atomic_t napi_initialized;
+
 	struct mana_stats_tx stats;
 };
 
@@ -334,6 +336,8 @@ struct mana_rxq {
 	void *xdp_save_va; /* for reusing */
 	bool xdp_flush;
 	int xdp_rc; /* XDP redirect return code */
+
+	atomic_t napi_initialized;
 
 	struct page_pool *page_pool;
 

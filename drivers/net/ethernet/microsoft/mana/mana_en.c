@@ -1872,10 +1872,12 @@ static void mana_destroy_txq(struct mana_port_context *apc)
 
 	for (i = 0; i < apc->num_queues; i++) {
 		napi = &apc->tx_qp[i].tx_cq.napi;
-		napi_synchronize(napi);
-		napi_disable(napi);
-		netif_napi_del(napi);
-
+		if (atomic_read(&apc->tx_qp[i].txq.napi_initialized)) {
+			napi_synchronize(napi);
+			napi_disable(napi);
+			netif_napi_del(napi);
+			atomic_set(&apc->tx_qp[i].txq.napi_initialized, 0);
+		}
 		mana_destroy_wq_obj(apc, GDMA_SQ, apc->tx_qp[i].tx_object);
 
 		mana_deinit_cq(apc, &apc->tx_qp[i].tx_cq);
@@ -1931,6 +1933,7 @@ static int mana_create_txq(struct mana_port_context *apc,
 		txq->ndev = net;
 		txq->net_txq = netdev_get_tx_queue(net, i);
 		txq->vp_offset = apc->tx_vp_offset;
+		atomic_set(&txq->napi_initialized, 0);
 		skb_queue_head_init(&txq->pending_skbs);
 
 		memset(&spec, 0, sizeof(spec));
@@ -1997,6 +2000,7 @@ static int mana_create_txq(struct mana_port_context *apc,
 
 		netif_napi_add_tx(net, &cq->napi, mana_poll);
 		napi_enable(&cq->napi);
+		atomic_set(&txq->napi_initialized, 1);
 
 		mana_gd_ring_cq(cq->gdma_cq, SET_ARM_BIT);
 	}
@@ -2023,14 +2027,18 @@ static void mana_destroy_rxq(struct mana_port_context *apc,
 
 	napi = &rxq->rx_cq.napi;
 
-	if (validate_state)
-		napi_synchronize(napi);
+	if (atomic_read(&rxq->napi_initialized)) {
 
-	napi_disable(napi);
+		if (validate_state)
+			napi_synchronize(napi);
+
+		napi_disable(napi);
+
+		netif_napi_del(napi);
+		atomic_set(&rxq->napi_initialized, 0);
+	}
 
 	xdp_rxq_info_unreg(&rxq->xdp_rxq);
-
-	netif_napi_del(napi);
 
 	mana_destroy_wq_obj(apc, GDMA_RQ, rxq->rxobj);
 
@@ -2199,6 +2207,7 @@ static struct mana_rxq *mana_create_rxq(struct mana_port_context *apc,
 	rxq->num_rx_buf = RX_BUFFERS_PER_QUEUE;
 	rxq->rxq_idx = rxq_idx;
 	rxq->rxobj = INVALID_MANA_HANDLE;
+	atomic_set(&rxq->napi_initialized, 0);
 
 	mana_get_rxbuf_cfg(ndev->mtu, &rxq->datasize, &rxq->alloc_size,
 			   &rxq->headroom);
@@ -2286,6 +2295,8 @@ static struct mana_rxq *mana_create_rxq(struct mana_port_context *apc,
 
 	napi_enable(&cq->napi);
 
+	atomic_set(&rxq->napi_initialized, 1);
+
 	mana_gd_ring_cq(cq->gdma_cq, SET_ARM_BIT);
 out:
 	if (!err)
@@ -2336,7 +2347,6 @@ static void mana_destroy_vport(struct mana_port_context *apc)
 		rxq = apc->rxqs[rxq_idx];
 		if (!rxq)
 			continue;
-
 		mana_destroy_rxq(apc, rxq, true);
 		apc->rxqs[rxq_idx] = NULL;
 	}
