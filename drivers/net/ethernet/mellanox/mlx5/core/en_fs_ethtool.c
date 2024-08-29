@@ -130,7 +130,7 @@ static struct mlx5e_ethtool_table *get_flow_table(struct mlx5e_priv *priv,
 	ft_attr.autogroup.max_num_groups = MLX5E_ETHTOOL_NUM_GROUPS;
 	ft = mlx5_create_auto_grouped_flow_table(ns, &ft_attr);
 	if (IS_ERR(ft))
-		return (void *)ft;
+		return ERR_CAST(ft);
 
 	eth_ft->ft = ft;
 	return eth_ft;
