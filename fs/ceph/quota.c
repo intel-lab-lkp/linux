@@ -429,6 +429,9 @@ bool ceph_quota_is_max_files_exceeded(struct inode *inode)
 
 	WARN_ON(!S_ISDIR(inode->i_mode));
 
+	if (capable(CAP_SYS_RESOURCE))
+		return false;
+
 	return check_quota_exceeded(inode, QUOTA_CHECK_MAX_FILES_OP, 1);
 }
 
@@ -451,6 +454,9 @@ bool ceph_quota_is_max_bytes_exceeded(struct inode *inode, loff_t newsize)
 	if (newsize <= size)
 		return false;
 
+	if (capable(CAP_SYS_RESOURCE))
+		return false;
+
 	return check_quota_exceeded(inode, QUOTA_CHECK_MAX_BYTES_OP, (newsize - size));
 }
 
@@ -471,6 +477,9 @@ bool ceph_quota_is_max_bytes_approaching(struct inode *inode, loff_t newsize)
 
 	/* return immediately if we're decreasing file size */
 	if (newsize <= size)
+		return false;
+
+	if (capable(CAP_SYS_RESOURCE))
 		return false;
 
 	return check_quota_exceeded(inode, QUOTA_CHECK_MAX_BYTES_APPROACHING_OP,
