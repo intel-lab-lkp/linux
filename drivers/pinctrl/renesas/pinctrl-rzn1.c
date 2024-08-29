@@ -869,12 +869,9 @@ static int rzn1_pinctrl_probe(struct platform_device *pdev)
 		return PTR_ERR(ipctl->lev2);
 	ipctl->lev2_protect_phys = (u32)res->start + 0x400;
 
-	ipctl->clk = devm_clk_get(&pdev->dev, NULL);
+	ipctl->clk = devm_clk_get_enabled(&pdev->dev, NULL);
 	if (IS_ERR(ipctl->clk))
 		return PTR_ERR(ipctl->clk);
-	ret = clk_prepare_enable(ipctl->clk);
-	if (ret)
-		return ret;
 
 	ipctl->dev = &pdev->dev;
 	rzn1_pinctrl_desc.name = dev_name(&pdev->dev);
@@ -884,7 +881,7 @@ static int rzn1_pinctrl_probe(struct platform_device *pdev)
 	ret = rzn1_pinctrl_probe_dt(pdev, ipctl);
 	if (ret) {
 		dev_err(&pdev->dev, "fail to probe dt properties\n");
-		goto err_clk;
+		return ret;
 	}
 
 	platform_set_drvdata(pdev, ipctl);
@@ -893,28 +890,16 @@ static int rzn1_pinctrl_probe(struct platform_device *pdev)
 					     ipctl, &ipctl->pctl);
 	if (ret) {
 		dev_err(&pdev->dev, "could not register rzn1 pinctrl driver\n");
-		goto err_clk;
+		return ret;
 	}
 
 	ret = pinctrl_enable(ipctl->pctl);
 	if (ret)
-		goto err_clk;
+		return ret;
 
 	dev_info(&pdev->dev, "probed\n");
 
 	return 0;
-
-err_clk:
-	clk_disable_unprepare(ipctl->clk);
-
-	return ret;
-}
-
-static void rzn1_pinctrl_remove(struct platform_device *pdev)
-{
-	struct rzn1_pinctrl *ipctl = platform_get_drvdata(pdev);
-
-	clk_disable_unprepare(ipctl->clk);
 }
 
 static const struct of_device_id rzn1_pinctrl_match[] = {
@@ -925,7 +910,6 @@ MODULE_DEVICE_TABLE(of, rzn1_pinctrl_match);
 
 static struct platform_driver rzn1_pinctrl_driver = {
 	.probe	= rzn1_pinctrl_probe,
-	.remove_new = rzn1_pinctrl_remove,
 	.driver	= {
 		.name		= "rzn1-pinctrl",
 		.of_match_table	= rzn1_pinctrl_match,
