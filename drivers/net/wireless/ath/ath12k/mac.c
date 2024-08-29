@@ -9346,6 +9346,8 @@ int ath12k_mac_register(struct ath12k_base *ab)
 	if (test_bit(ATH12K_FLAG_REGISTERED, &ab->dev_flags))
 		return 0;
 
+	ath12k_debugfs_pdev_create(ab);
+
 	/* Initialize channel counters frequency value in hertz */
 	ab->cc_freq_hz = 320000;
 	ab->free_vdev_map = (1LL << (ab->num_radios * TARGET_NUM_VDEVS)) - 1;
