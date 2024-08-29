@@ -58,31 +58,30 @@
 
 #include "internal.h"
 
-bool isolate_movable_page(struct page *page, isolate_mode_t mode)
+/**
+ * folio_isolate_movable() - Try to isolate a non-lru movable folio.
+ * @folio: Folio to isolate.
+ *
+ * Must be called with an elevated refcount on the folio.
+ *
+ * Return: true if the folio was isolated, false otherwise
+ */
+bool folio_isolate_movable(struct folio *folio, isolate_mode_t mode)
 {
-	struct folio *folio = folio_get_nontail_page(page);
 	const struct movable_operations *mops;
 
-	/*
-	 * Avoid burning cycles with pages that are yet under __free_pages(),
-	 * or just got freed under us.
-	 *
-	 * In case we 'win' a race for a movable page being freed under us and
-	 * raise its refcount preventing __free_pages() from doing its job
-	 * the put_page() at the end of this block will take care of
-	 * release this page, thus avoiding a nasty leakage.
-	 */
-	if (!folio)
-		goto out;
+	VM_BUG_ON_FOLIO(!folio_ref_count(folio), folio);
+
+	folio_get(folio);
 
 	if (unlikely(folio_test_slab(folio)))
 		goto out_putfolio;
 	/* Pairs with smp_wmb() in slab freeing, e.g. SLUB's __free_slab() */
 	smp_rmb();
 	/*
-	 * Check movable flag before taking the page lock because
-	 * we use non-atomic bitops on newly allocated page flags so
-	 * unconditionally grabbing the lock ruins page's owner side.
+	 * Check movable flag before taking the folio lock because
+	 * we use non-atomic bitops on newly allocated folio flags so
+	 * unconditionally grabbing the lock ruins folio's owner side.
 	 */
 	if (unlikely(!__folio_test_movable(folio)))
 		goto out_putfolio;
@@ -92,15 +91,15 @@ bool isolate_movable_page(struct page *page, isolate_mode_t mode)
 		goto out_putfolio;
 
 	/*
-	 * As movable pages are not isolated from LRU lists, concurrent
-	 * compaction threads can race against page migration functions
-	 * as well as race against the releasing a page.
+	 * As movable folios are not isolated from LRU lists, concurrent
+	 * compaction threads can race against folio migration functions
+	 * as well as race against the releasing a folio.
 	 *
-	 * In order to avoid having an already isolated movable page
+	 * In order to avoid having an already isolated movable folio
 	 * being (wrongly) re-isolated while it is under migration,
-	 * or to avoid attempting to isolate pages being released,
-	 * lets be sure we have the page lock
-	 * before proceeding with the movable page isolation steps.
+	 * or to avoid attempting to isolate folios being released,
+	 * lets be sure we have the folio lock
+	 * before proceeding with the movable folio isolation steps.
 	 */
 	if (unlikely(!folio_trylock(folio)))
 		goto out_putfolio;
@@ -125,8 +124,15 @@ out_no_isolated:
 	folio_unlock(folio);
 out_putfolio:
 	folio_put(folio);
-out:
 	return false;
+}
+
+bool isolate_movable_page(struct page *page, isolate_mode_t mode)
+{
+	if (PageTail(page))
+		return false;
+
+	return folio_isolate_movable((struct folio *)page, mode);
 }
 
 static void putback_movable_folio(struct folio *folio)
