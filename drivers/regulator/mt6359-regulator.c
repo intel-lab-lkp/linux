@@ -88,6 +88,7 @@ struct mt6359_regulator_info {
 		.enable_reg = _enable_reg,			\
 		.enable_mask = BIT(0),				\
 	},							\
+	.modeset_reg = 0,					\
 	.status_reg = _status_reg,				\
 	.qi = BIT(0),						\
 }
@@ -270,6 +271,9 @@ static unsigned int mt6359_regulator_get_mode(struct regulator_dev *rdev)
 	struct mt6359_regulator_info *info = rdev_get_drvdata(rdev);
 	int ret, regval;
 
+	if (!info->modeset_reg)
+		return REGULATOR_MODE_NORMAL;
+
 	ret = regmap_read(rdev->regmap, info->modeset_reg, &regval);
 	if (ret != 0) {
 		dev_err(&rdev->dev,
@@ -302,6 +306,9 @@ static int mt6359_regulator_set_mode(struct regulator_dev *rdev,
 	struct mt6359_regulator_info *info = rdev_get_drvdata(rdev);
 	int ret = 0, val;
 	int curr_mode;
+
+	if (!info->modeset_reg)
+		return -EINVAL;
 
 	curr_mode = mt6359_regulator_get_mode(rdev);
 	switch (mode) {
