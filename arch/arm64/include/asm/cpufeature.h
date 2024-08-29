@@ -595,6 +595,24 @@ static inline bool id_aa64pfr0_32bit_el0(u64 pfr0)
 {
 	u32 val = cpuid_feature_extract_unsigned_field(pfr0, ID_AA64PFR0_EL1_EL0_SHIFT);
 
+#if CONFIG_ARCH_APPLE
+	/*
+	 * The Apple A10(X) consist of logical cores that can switch between
+	 * P-mode and E-mode based on the frequency. Only the P-mode supports
+	 * 32-bit EL0. Pretend that the CPU does not support 32-bit EL0.
+	 */
+
+	static const struct midr_range hurricane_zephyr_list[] = {
+		MIDR_ALL_VERSIONS(MIDR_APPLE_A10_T2_HURRICANE_ZEPHYR),
+		MIDR_ALL_VERSIONS(MIDR_APPLE_A10X_HURRICANE_ZEPHYR),
+		{}
+	};
+
+	if (is_midr_in_range_list(read_cpuid_id(), hurricane_zephyr_list))
+		return false;
+
+#endif
+
 	return val == ID_AA64PFR0_EL1_EL0_AARCH32;
 }
 
