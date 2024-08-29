@@ -35,10 +35,8 @@ static int cdns2_pci_probe(struct pci_dev *pdev,
 		return -EINVAL;
 
 	ret = pcim_enable_device(pdev);
-	if (ret) {
-		dev_err(&pdev->dev, "Enabling PCI device has failed %d\n", ret);
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "Enabling PCI device has failed\n");
 
 	pci_set_master(pdev);
 
