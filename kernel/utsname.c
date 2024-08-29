@@ -168,10 +168,5 @@ const struct proc_ns_operations utsns_operations = {
 
 void __init uts_ns_init(void)
 {
-	uts_ns_cache = kmem_cache_create_usercopy(
-			"uts_namespace", sizeof(struct uts_namespace), 0,
-			SLAB_PANIC|SLAB_ACCOUNT,
-			offsetof(struct uts_namespace, name),
-			sizeof_field(struct uts_namespace, name),
-			NULL);
+	uts_ns_cache = KMEM_CACHE_USERCOPY(uts_namespace, SLAB_PANIC | SLAB_ACCOUNT, name);
 }
