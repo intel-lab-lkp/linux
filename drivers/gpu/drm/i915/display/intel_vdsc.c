@@ -35,7 +35,7 @@ bool intel_dsc_source_support(const struct intel_crtc_state *crtc_state)
 	return true;
 }
 
-static bool is_pipe_dsc(struct intel_crtc *crtc, enum transcoder cpu_transcoder)
+static bool intel_dsc_is_dsc_pipe(struct intel_crtc *crtc, enum transcoder cpu_transcoder)
 {
 	struct drm_i915_private *i915 = to_i915(crtc->base.dev);
 
@@ -366,7 +366,7 @@ intel_dsc_power_domain(struct intel_crtc *crtc, enum transcoder cpu_transcoder)
 	 */
 	if (DISPLAY_VER(i915) == 12 && !IS_ROCKETLAKE(i915) && pipe == PIPE_A)
 		return POWER_DOMAIN_TRANSCODER_VDSC_PW2;
-	else if (is_pipe_dsc(crtc, cpu_transcoder))
+	else if (intel_dsc_is_dsc_pipe(crtc, cpu_transcoder))
 		return POWER_DOMAIN_PIPE(pipe);
 	else
 		return POWER_DOMAIN_TRANSCODER_VDSC_PW2;
@@ -395,7 +395,7 @@ static void intel_dsc_get_pps_reg(const struct intel_crtc_state *crtc_state, int
 	enum pipe pipe = crtc->pipe;
 	bool pipe_dsc;
 
-	pipe_dsc = is_pipe_dsc(crtc, cpu_transcoder);
+	pipe_dsc = intel_dsc_is_dsc_pipe(crtc, cpu_transcoder);
 
 	if (dsc_reg_num >= 3)
 		MISSING_CASE(dsc_reg_num);
@@ -538,7 +538,7 @@ static void intel_dsc_pps_configure(const struct intel_crtc_state *crtc_state)
 		rc_buf_thresh_dword[i / 4] |=
 			(u32)(vdsc_cfg->rc_buf_thresh[i] <<
 			      BITS_PER_BYTE * (i % 4));
-	if (!is_pipe_dsc(crtc, cpu_transcoder)) {
+	if (!intel_dsc_is_dsc_pipe(crtc, cpu_transcoder)) {
 		intel_de_write(dev_priv, DSCA_RC_BUF_THRESH_0,
 			       rc_buf_thresh_dword[0]);
 		intel_de_write(dev_priv, DSCA_RC_BUF_THRESH_0_UDW,
@@ -592,7 +592,7 @@ static void intel_dsc_pps_configure(const struct intel_crtc_state *crtc_state)
 				RC_MAX_QP_SHIFT) |
 			       (vdsc_cfg->rc_range_params[i].range_min_qp <<
 				RC_MIN_QP_SHIFT)) << 16 * (i % 2));
-	if (!is_pipe_dsc(crtc, cpu_transcoder)) {
+	if (!intel_dsc_is_dsc_pipe(crtc, cpu_transcoder)) {
 		intel_de_write(dev_priv, DSCA_RC_RANGE_PARAMETERS_0,
 			       rc_range_params_dword[0]);
 		intel_de_write(dev_priv, DSCA_RC_RANGE_PARAMETERS_0_UDW,
@@ -726,13 +726,13 @@ void intel_dsc_dp_pps_write(struct intel_encoder *encoder,
 
 static i915_reg_t dss_ctl1_reg(struct intel_crtc *crtc, enum transcoder cpu_transcoder)
 {
-	return is_pipe_dsc(crtc, cpu_transcoder) ?
+	return intel_dsc_is_dsc_pipe(crtc, cpu_transcoder) ?
 		ICL_PIPE_DSS_CTL1(crtc->pipe) : DSS_CTL1;
 }
 
 static i915_reg_t dss_ctl2_reg(struct intel_crtc *crtc, enum transcoder cpu_transcoder)
 {
-	return is_pipe_dsc(crtc, cpu_transcoder) ?
+	return intel_dsc_is_dsc_pipe(crtc, cpu_transcoder) ?
 		ICL_PIPE_DSS_CTL2(crtc->pipe) : DSS_CTL2;
 }
 
