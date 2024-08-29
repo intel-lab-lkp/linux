@@ -2775,6 +2775,21 @@ static int mce_cpu_online(unsigned int cpu)
 	return 0;
 }
 
+bool mce_cpu_is_hotpluggable(unsigned int cpu)
+{
+	if (!mce_flags.smca)
+		return true;
+
+	/*
+	 * SMCA systems use banks 0-6 for core units. Banks 7 and later are
+	 * used for non-core units.
+	 *
+	 * Logical CPUs with 7 or fewer banks can be offlined, since they are not
+	 * managing any non-core units.
+	 */
+	return per_cpu(mce_num_banks, cpu) <= 7;
+}
+
 static int mce_cpu_pre_down(unsigned int cpu)
 {
 	struct timer_list *t = this_cpu_ptr(&mce_timer);
