@@ -372,6 +372,7 @@ struct napi_struct {
 	int			rx_count; /* length of rx_list */
 	unsigned int		napi_id;
 	int			defer_hard_irqs;
+	unsigned long		gro_flush_timeout;
 	struct hrtimer		timer;
 	struct task_struct	*thread;
 	/* control-path-only fields follow */
@@ -556,6 +557,31 @@ void napi_set_defer_hard_irqs(struct napi_struct *n, int defer);
  * @defer: the defer_hard_irqs value to set
  */
 void netdev_set_defer_hard_irqs(struct net_device *netdev, int defer);
+
+/**
+ * napi_get_gro_flush_timeout - get the gro_flush_timeout
+ * @n: napi struct to get the gro_flush_timeout from
+ *
+ * Returns the per-NAPI value of the gro_flush_timeout field.
+ */
+unsigned long napi_get_gro_flush_timeout(const struct napi_struct *n);
+
+/**
+ * napi_set_gro_flush_timeout - set the gro_flush_timeout for a napi
+ * @n: napi struct to set the gro_flush_timeout
+ * @timeout: timeout value to set
+ *
+ * napi_set_gro_flush_timeout sets the per-NAPI gro_flush_timeout
+ */
+void napi_set_gro_flush_timeout(struct napi_struct *n, unsigned long timeout);
+
+/**
+ * netdev_set_gro_flush_timeout - set gro_flush_timeout for all NAPIs of a netdev
+ * @netdev: the net_device for which all NAPIs will have their gro_flush_timeout set
+ * @timeout: the timeout value to set
+ */
+void netdev_set_gro_flush_timeout(struct net_device *netdev,
+				  unsigned long timeout);
 
 /**
  * napi_complete_done - NAPI processing complete
