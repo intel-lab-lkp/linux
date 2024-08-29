@@ -196,8 +196,7 @@ bool isolate_folio_to_list(struct folio *folio, struct list_head *list)
 	if (lru)
 		isolated = folio_isolate_lru(folio);
 	else
-		isolated = isolate_movable_page(&folio->page,
-						ISOLATE_UNEVICTABLE);
+		isolated = folio_isolate_movable(folio, ISOLATE_UNEVICTABLE);
 
 	if (!isolated)
 		return false;
