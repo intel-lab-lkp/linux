@@ -6,8 +6,10 @@
  * Author: Brendan Higgins <brendanhiggins@google.com>
  */
 #include "linux/gfp_types.h"
+#include <kunit/static_stub.h>
 #include <kunit/test.h>
 #include <kunit/test-bug.h>
+#include <kunit/visibility.h>
 
 #include <linux/device.h>
 #include <kunit/device.h>
@@ -866,10 +868,260 @@ static struct kunit_suite kunit_current_test_suite = {
 	.test_cases = kunit_current_test_cases,
 };
 
+static struct {
+	/* this stub matches the real function */
+	KUNIT_DECLARE_GLOBAL_STUB(first_stub, int (*)(int i));
+	/* this stub matches only return type of the real function */
+	KUNIT_DECLARE_GLOBAL_STUB(second_stub, int (*)(int bit, int data));
+	/* this is an example stub that returns void */
+	KUNIT_DECLARE_GLOBAL_STUB(void_stub, void (*)(void));
+	/* this is an example how to store additional data for use by stubs */
+	DECLARE_IF_KUNIT(int data);
+	DECLARE_IF_KUNIT(int counter);
+} stubs = {
+	DECLARE_IF_KUNIT(.data = 3),
+};
+
+static int real_func(int i)
+{
+	KUNIT_GLOBAL_STUB_REDIRECT(stubs.first_stub, i);
+	KUNIT_GLOBAL_STUB_REDIRECT(stubs.second_stub, BIT(i), stubs.data);
+
+	return i;
+}
+
+struct real_work {
+	struct work_struct work;
+	int param;
+	int result;
+};
+
+static void real_work_func(struct work_struct *work)
+{
+	struct real_work *w = container_of(work, typeof(*w), work);
+
+	w->result = real_func(w->param);
+}
+
+static int real_func_async(int i)
+{
+	struct real_work w = { .param = i, .result = -EINPROGRESS };
+
+	INIT_WORK_ONSTACK(&w.work, real_work_func);
+	schedule_work(&w.work);
+	flush_work(&w.work);
+	destroy_work_on_stack(&w.work);
+
+	return w.result;
+}
+
+static int replacement_func(int i)
+{
+	return i + 1;
+}
+
+static int other_replacement_func(int i)
+{
+	return i + 10;
+}
+
+static int super_replacement_func(int bit, int data)
+{
+	return bit * data;
+}
+
+static int slow_replacement_func(int i)
+{
+	schedule_timeout_interruptible(HZ / 20);
+	return replacement_func(i);
+}
+
+static void real_void_func(void)
+{
+	KUNIT_GLOBAL_STUB_REDIRECT(stubs.void_stub);
+	DECLARE_IF_KUNIT(stubs.counter++);
+}
+
+static void replacement_void_func(void)
+{
+	stubs.counter--;
+}
+
+static void expect_deactivated(void *data)
+{
+	struct kunit *test = kunit_get_current_test();
+
+	KUNIT_EXPECT_NULL(test, stubs.first_stub.base.owner);
+	KUNIT_EXPECT_NULL(test, stubs.first_stub.base.replacement);
+	KUNIT_EXPECT_NULL(test, stubs.second_stub.base.owner);
+	KUNIT_EXPECT_NULL(test, stubs.second_stub.base.replacement);
+	KUNIT_EXPECT_NULL(test, stubs.void_stub.base.owner);
+	KUNIT_EXPECT_NULL(test, stubs.void_stub.base.replacement);
+}
+
+static void kunit_global_stub_test_deactivate(struct kunit *test)
+{
+	/* make sure everything will be deactivated */
+	KUNIT_ASSERT_EQ(test, 0, kunit_add_action_or_reset(test, expect_deactivated, test));
+
+	/* deactivate without activate */
+	kunit_deactivate_global_stub(test, stubs.first_stub);
+
+	/* deactivate twice */
+	kunit_deactivate_global_stub(test, stubs.first_stub);
+
+	/* allow to skip deactivation (will be tested by expect_deactivated action) */
+	kunit_activate_global_stub(test, stubs.first_stub, replacement_func);
+}
+
+static void kunit_global_stub_test_activate(struct kunit *test)
+{
+	int real, replacement, other, super, i = 2;
+
+	/* prerequisites */
+	real_void_func();
+	KUNIT_ASSERT_EQ(test, stubs.counter, 1);
+	replacement_void_func();
+	KUNIT_ASSERT_EQ(test, stubs.counter, 0);
+
+	/* prerequisites cont'd */
+	KUNIT_ASSERT_EQ(test, real_func(i), real = real_func_async(i));
+	KUNIT_ASSERT_NE(test, real_func(i), replacement = replacement_func(i));
+	KUNIT_ASSERT_NE(test, real_func(i), other = other_replacement_func(i));
+	KUNIT_ASSERT_NE(test, real_func(i), super = super_replacement_func(BIT(i), stubs.data));
+
+	/* make sure everything will be deactivated */
+	KUNIT_ASSERT_EQ(test, 0, kunit_add_action_or_reset(test, expect_deactivated, test));
+
+	/* allow to activate replacement */
+	kunit_activate_global_stub(test, stubs.void_stub, replacement_void_func);
+	real_void_func();
+	KUNIT_ASSERT_EQ(test, stubs.counter, -1);
+
+	/* allow to activate replacement */
+	kunit_activate_global_stub(test, stubs.first_stub, replacement_func);
+	KUNIT_EXPECT_EQ(test, real_func(i), replacement);
+	KUNIT_EXPECT_EQ(test, real_func_async(i), replacement);
+
+	/* allow to change replacement */
+	kunit_activate_global_stub(test, stubs.first_stub, other_replacement_func);
+	KUNIT_EXPECT_EQ(test, real_func(i), other);
+	KUNIT_EXPECT_EQ(test, real_func_async(i), other);
+
+	/* allow to deactivate replacement */
+	kunit_deactivate_global_stub(test, stubs.first_stub);
+	KUNIT_EXPECT_EQ(test, real_func(i), real);
+	KUNIT_EXPECT_EQ(test, real_func_async(i), real);
+
+	/* allow to activate replacement with different arguments */
+	kunit_activate_global_stub(test, stubs.second_stub, super_replacement_func);
+	KUNIT_EXPECT_EQ(test, real_func(i), super);
+	KUNIT_EXPECT_EQ(test, real_func_async(i), super);
+
+	/* allow to deactivate twice */
+	kunit_deactivate_global_stub(test, stubs.second_stub);
+	kunit_deactivate_global_stub(test, stubs.second_stub);
+	KUNIT_EXPECT_EQ(test, real_func_async(i), real);
+	KUNIT_EXPECT_EQ(test, real_func(i), real);
+}
+
+static void flush_real_work(void *data)
+{
+	struct real_work *w = data;
+
+	flush_work(&w->work);
+}
+
+static void __kunit_global_stub_test_slow(struct kunit *test, bool replace)
+{
+	int real, replacement, other, i = replace ? 3 : 5;
+	struct real_work *w;
+
+	/* prerequisites */
+	KUNIT_ASSERT_EQ(test, real_func(i), real = real_func_async(i));
+	KUNIT_ASSERT_NE(test, real_func(i), replacement = slow_replacement_func(i));
+	KUNIT_ASSERT_NE(test, real_func(i), other = other_replacement_func(i));
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, w = kunit_kzalloc(test, sizeof(*w), GFP_KERNEL));
+	INIT_WORK(&w->work, real_work_func);
+	KUNIT_ASSERT_EQ(test, 0, kunit_add_action_or_reset(test, flush_real_work, w));
+	KUNIT_ASSERT_EQ(test, 0, kunit_add_action_or_reset(test, expect_deactivated, test));
+
+	/* allow to activate replacement */
+	kunit_activate_global_stub(test, stubs.first_stub, slow_replacement_func);
+	KUNIT_EXPECT_EQ(test, real_func_async(i), replacement);
+
+	w->param = i;
+	w->result = 0;
+	queue_work(system_long_wq, &w->work);
+
+	/* wait until work starts */
+	while (work_pending(&w->work))
+		schedule_timeout_interruptible(HZ / 100);
+	KUNIT_EXPECT_NE(test, work_busy(&w->work), 0);
+
+	/* wait until work enters the stub */
+	while (atomic_read(&stubs.first_stub.base.busy) < 2)
+		schedule_timeout_interruptible(HZ / 100);
+
+	/* stub should be still busy(2) at this point */
+	KUNIT_EXPECT_EQ(test, 2, atomic_read(&stubs.first_stub.base.busy));
+	KUNIT_EXPECT_EQ(test, w->result, 0);
+
+	if (replace) {
+		/* try replace the stub, it should be just activated(1) */
+		kunit_activate_global_stub(test, stubs.first_stub, other_replacement_func);
+		KUNIT_EXPECT_EQ(test, 1, atomic_read(&stubs.first_stub.base.busy));
+	} else {
+		/* try to deactivate the stub, it should be disabled(0) */
+		kunit_deactivate_global_stub(test, stubs.first_stub);
+		KUNIT_EXPECT_EQ(test, 0, atomic_read(&stubs.first_stub.base.busy));
+	}
+
+	/* and results from the worker should be available */
+	KUNIT_EXPECT_EQ(test, w->result, replacement);
+	KUNIT_EXPECT_NE(test, w->result, real);
+	KUNIT_EXPECT_NE(test, w->result, other);
+
+	if (replace)
+		KUNIT_EXPECT_EQ(test, real_func_async(i), other);
+	else
+		KUNIT_EXPECT_EQ(test, real_func_async(i), real);
+}
+
+static void kunit_global_stub_test_slow_deactivate(struct kunit *test)
+{
+	__kunit_global_stub_test_slow(test, false);
+}
+
+static void kunit_global_stub_test_slow_replace(struct kunit *test)
+{
+	__kunit_global_stub_test_slow(test, true);
+}
+
+static int kunit_global_stub_test_init(struct kunit *test)
+{
+	stubs.counter = 0;
+	return 0;
+}
+
+static struct kunit_case kunit_global_stub_test_cases[] = {
+	KUNIT_CASE(kunit_global_stub_test_activate),
+	KUNIT_CASE(kunit_global_stub_test_deactivate),
+	KUNIT_CASE_SLOW(kunit_global_stub_test_slow_deactivate),
+	KUNIT_CASE_SLOW(kunit_global_stub_test_slow_replace),
+	{}
+};
+
+static struct kunit_suite kunit_global_stub_suite = {
+	.name = "kunit_global_stub",
+	.init = kunit_global_stub_test_init,
+	.test_cases = kunit_global_stub_test_cases,
+};
+
 kunit_test_suites(&kunit_try_catch_test_suite, &kunit_resource_test_suite,
 		  &kunit_log_test_suite, &kunit_status_test_suite,
 		  &kunit_current_test_suite, &kunit_device_test_suite,
-		  &kunit_fault_test_suite);
+		  &kunit_fault_test_suite, &kunit_global_stub_suite);
 
 MODULE_DESCRIPTION("KUnit test for core test infrastructure");
 MODULE_LICENSE("GPL v2");
