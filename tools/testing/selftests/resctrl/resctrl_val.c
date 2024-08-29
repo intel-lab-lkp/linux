@@ -448,7 +448,7 @@ static int get_mem_bw_resctrl(FILE *fp, unsigned long *mbm_total)
 	return 0;
 }
 
-static pid_t bm_pid, ppid;
+static pid_t bm_pid;
 
 void ctrlc_handler(int signum, siginfo_t *info, void *ptr)
 {
@@ -504,13 +504,6 @@ void signal_handler_unregister(void)
 	    sigaction(SIGHUP, &sigact, NULL)) {
 		ksft_perror("sigaction");
 	}
-}
-
-static void parent_exit(pid_t ppid)
-{
-	kill(ppid, SIGKILL);
-	umount_resctrlfs();
-	exit(EXIT_FAILURE);
 }
 
 /*
@@ -615,61 +608,6 @@ close_fp:
 }
 
 /*
- * run_benchmark - Run a specified benchmark or fill_buf (default benchmark)
- *		   in specified signal. Direct benchmark stdio to /dev/null.
- * @signum:	signal number
- * @info:	signal info
- * @ucontext:	user context in signal handling
- */
-static void run_benchmark(int signum, siginfo_t *info, void *ucontext)
-{
-	int operation, ret, memflush;
-	char **benchmark_cmd;
-	size_t span;
-	bool once;
-	FILE *fp;
-
-	benchmark_cmd = info->si_ptr;
-
-	/*
-	 * Direct stdio of child to /dev/null, so that only parent writes to
-	 * stdio (console)
-	 */
-	fp = freopen("/dev/null", "w", stdout);
-	if (!fp) {
-		ksft_perror("Unable to direct benchmark status to /dev/null");
-		parent_exit(ppid);
-	}
-
-	if (strcmp(benchmark_cmd[0], "fill_buf") == 0) {
-		/* Execute default fill_buf benchmark */
-		span = strtoul(benchmark_cmd[1], NULL, 10);
-		memflush =  atoi(benchmark_cmd[2]);
-		operation = atoi(benchmark_cmd[3]);
-		if (!strcmp(benchmark_cmd[4], "true")) {
-			once = true;
-		} else if (!strcmp(benchmark_cmd[4], "false")) {
-			once = false;
-		} else {
-			ksft_print_msg("Invalid once parameter\n");
-			parent_exit(ppid);
-		}
-
-		if (run_fill_buf(span, memflush, operation, once))
-			fprintf(stderr, "Error in running fill buffer\n");
-	} else {
-		/* Execute specified benchmark */
-		ret = execvp(benchmark_cmd[0], benchmark_cmd);
-		if (ret)
-			ksft_perror("execvp");
-	}
-
-	fclose(stdout);
-	ksft_print_msg("Unable to run specified benchmark\n");
-	parent_exit(ppid);
-}
-
-/*
  * resctrl_val:	execute benchmark and measure memory bandwidth on
  *			the benchmark
  * @test:		test information structure
@@ -684,11 +622,13 @@ int resctrl_val(const struct resctrl_test *test,
 		const char * const *benchmark_cmd,
 		struct resctrl_val_param *param)
 {
-	struct sigaction sigact;
-	int ret = 0, pipefd[2];
-	char pipe_message = 0;
-	union sigval value;
-	int domain_id;
+	int domain_id, operation = 0, memflush = 1;
+	size_t span = DEFAULT_SPAN;
+	unsigned char *buf = NULL;
+	cpu_set_t old_affinity;
+	bool once = false;
+	int ret = 0;
+	pid_t ppid;
 
 	if (strcmp(param->filename, "") == 0)
 		sprintf(param->filename, "stdio");
@@ -699,111 +639,80 @@ int resctrl_val(const struct resctrl_test *test,
 		return ret;
 	}
 
-	/*
-	 * If benchmark wasn't successfully started by child, then child should
-	 * kill parent, so save parent's pid
-	 */
 	ppid = getpid();
 
-	if (pipe(pipefd)) {
-		ksft_perror("Unable to create pipe");
-
-		return -1;
-	}
-
-	/*
-	 * Fork to start benchmark, save child's pid so that it can be killed
-	 * when needed
-	 */
-	fflush(stdout);
-	bm_pid = fork();
-	if (bm_pid == -1) {
-		ksft_perror("Unable to fork");
-
-		return -1;
-	}
-
-	if (bm_pid == 0) {
-		/*
-		 * Mask all signals except SIGUSR1, parent uses SIGUSR1 to
-		 * start benchmark
-		 */
-		sigfillset(&sigact.sa_mask);
-		sigdelset(&sigact.sa_mask, SIGUSR1);
-
-		sigact.sa_sigaction = run_benchmark;
-		sigact.sa_flags = SA_SIGINFO;
-
-		/* Register for "SIGUSR1" signal from parent */
-		if (sigaction(SIGUSR1, &sigact, NULL)) {
-			ksft_perror("Can't register child for signal");
-			parent_exit(ppid);
-		}
-
-		/* Tell parent that child is ready */
-		close(pipefd[0]);
-		pipe_message = 1;
-		if (write(pipefd[1], &pipe_message, sizeof(pipe_message)) <
-		    sizeof(pipe_message)) {
-			ksft_perror("Failed signaling parent process");
-			close(pipefd[1]);
-			return -1;
-		}
-		close(pipefd[1]);
-
-		/* Suspend child until delivery of "SIGUSR1" from parent */
-		sigsuspend(&sigact.sa_mask);
-
-		ksft_perror("Child is done");
-		parent_exit(ppid);
-	}
-
-	ksft_print_msg("Benchmark PID: %d\n", (int)bm_pid);
-
-	/*
-	 * The cast removes constness but nothing mutates benchmark_cmd within
-	 * the context of this process. At the receiving process, it becomes
-	 * argv, which is mutable, on exec() but that's after fork() so it
-	 * doesn't matter for the process running the tests.
-	 */
-	value.sival_ptr = (void *)benchmark_cmd;
-
-	/* Taskset benchmark to specified cpu */
-	ret = taskset_benchmark(bm_pid, uparams->cpu, NULL);
+	/* Taskset test to specified CPU. */
+	ret = taskset_benchmark(ppid, uparams->cpu, &old_affinity);
 	if (ret)
-		goto out;
+		return ret;
 
-	/* Write benchmark to specified control&monitoring grp in resctrl FS */
-	ret = write_bm_pid_to_resctrl(bm_pid, param->ctrlgrp, param->mongrp);
+	/* Write test to specified control & monitoring group in resctrl FS. */
+	ret = write_bm_pid_to_resctrl(ppid, param->ctrlgrp, param->mongrp);
 	if (ret)
-		goto out;
+		goto reset_affinity;
 
 	if (param->init) {
 		ret = param->init(param, domain_id);
 		if (ret)
-			goto out;
+			goto reset_affinity;
 	}
 
-	/* Parent waits for child to be ready. */
-	close(pipefd[1]);
-	while (pipe_message != 1) {
-		if (read(pipefd[0], &pipe_message, sizeof(pipe_message)) <
-		    sizeof(pipe_message)) {
-			ksft_perror("Failed reading message from child process");
-			close(pipefd[0]);
-			goto out;
+	/*
+	 * If not running user provided benchmark, run the default
+	 * "fill_buf". First phase of "fill_buf" is to prepare the
+	 * buffer that the benchmark will operate on. No measurements
+	 * are needed during this phase and prepared memory will be
+	 * passed to next part of benchmark via copy-on-write. TBD
+	 * how this impacts "write" benchmark, but no test currently
+	 * uses this.
+	 */
+	if (strcmp(benchmark_cmd[0], "fill_buf") == 0) {
+		span = strtoul(benchmark_cmd[1], NULL, 10);
+		memflush =  atoi(benchmark_cmd[2]);
+		operation = atoi(benchmark_cmd[3]);
+		if (!strcmp(benchmark_cmd[4], "true")) {
+			once = true;
+		} else if (!strcmp(benchmark_cmd[4], "false")) {
+			once = false;
+		} else {
+			ksft_print_msg("Invalid once parameter\n");
+			ret = -EINVAL;
+			goto reset_affinity;
+		}
+
+		buf = alloc_buffer(span, memflush);
+		if (!buf) {
+			ret = -ENOMEM;
+			goto reset_affinity;
 		}
 	}
-	close(pipefd[0]);
 
-	/* Signal child to start benchmark */
-	if (sigqueue(bm_pid, SIGUSR1, value) == -1) {
-		ksft_perror("sigqueue SIGUSR1 to child");
-		ret = -1;
-		goto out;
+	bm_pid = fork();
+	if (bm_pid == -1) {
+		ret = -errno;
+		ksft_perror("Unable to fork");
+		goto free_buf;
 	}
 
-	/* Give benchmark enough time to fully run */
+	/*
+	 * What needs to be measured runs in separate process until
+	 * terminated.
+	 */
+	if (bm_pid == 0) {
+		if (strcmp(benchmark_cmd[0], "fill_buf") == 0) {
+			if (operation == 0)
+				fill_cache_read(buf, span, once);
+			else
+				fill_cache_write(buf, span, once);
+		} else {
+			execvp(benchmark_cmd[0], (char **)benchmark_cmd);
+		}
+		exit(EXIT_SUCCESS);
+	}
+
+	ksft_print_msg("Benchmark PID: %d\n", (int)bm_pid);
+
+	/* Give benchmark enough time to fully run. */
 	sleep(1);
 
 	/* Test runs until the callback setup() tells the test to stop. */
@@ -821,8 +730,10 @@ int resctrl_val(const struct resctrl_test *test,
 			break;
 	}
 
-out:
 	kill(bm_pid, SIGKILL);
-
+free_buf:
+	free(buf);
+reset_affinity:
+	taskset_restore(ppid, &old_affinity);
 	return ret;
 }

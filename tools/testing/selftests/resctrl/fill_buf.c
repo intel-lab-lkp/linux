@@ -114,7 +114,7 @@ void fill_cache_read(unsigned char *buf, size_t buf_size, bool once)
 	*value_sink = ret;
 }
 
-static void fill_cache_write(unsigned char *buf, size_t buf_size, bool once)
+void fill_cache_write(unsigned char *buf, size_t buf_size, bool once)
 {
 	while (1) {
 		fill_one_span_write(buf, buf_size);
@@ -149,21 +149,4 @@ unsigned char *alloc_buffer(size_t buf_size, int memflush)
 		mem_flush(buf, buf_size);
 
 	return buf;
-}
-
-int run_fill_buf(size_t buf_size, int memflush, int op, bool once)
-{
-	unsigned char *buf;
-
-	buf = alloc_buffer(buf_size, memflush);
-	if (!buf)
-		return -1;
-
-	if (op == 0)
-		fill_cache_read(buf, buf_size, once);
-	else
-		fill_cache_write(buf, buf_size, once);
-	free(buf);
-
-	return 0;
 }
