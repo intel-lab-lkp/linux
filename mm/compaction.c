@@ -1100,7 +1100,7 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 					locked = NULL;
 				}
 
-				if (isolate_movable_page(&folio->page, mode)) {
+				if (folio_isolate_movable(folio, mode)) {
 					folio_put(folio);
 					goto isolate_success;
 				}
