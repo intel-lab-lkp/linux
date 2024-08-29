@@ -92,7 +92,6 @@ static const char * const iommu_group_resv_type_string[] = {
 
 static int iommu_bus_notifier(struct notifier_block *nb,
 			      unsigned long action, void *data);
-static void iommu_release_device(struct device *dev);
 static struct iommu_domain *
 __iommu_group_domain_alloc(struct iommu_group *group, unsigned int type);
 static int __iommu_attach_device(struct iommu_domain *domain,
@@ -663,7 +662,7 @@ static void __iommu_group_remove_device(struct device *dev)
 	iommu_group_put(group);
 }
 
-static void iommu_release_device(struct device *dev)
+void iommu_release_device(struct device *dev)
 {
 	struct iommu_group *group = dev->iommu_group;
 

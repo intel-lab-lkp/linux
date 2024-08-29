@@ -1467,6 +1467,9 @@ static void platform_dma_cleanup(struct device *dev)
 
 	if (!drv->driver_managed_dma)
 		iommu_device_unuse_default_domain(dev);
+
+	if (dev_of_node(dev))
+		iommu_release_device(dev);
 }
 
 static const struct dev_pm_ops platform_dev_pm_ops = {
