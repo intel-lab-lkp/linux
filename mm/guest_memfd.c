@@ -8,6 +8,7 @@
 #include <linux/falloc.h>
 #include <linux/guest_memfd.h>
 #include <linux/pagemap.h>
+#include <linux/set_memory.h>
 #include <linux/wait.h>
 
 #include "internal.h"
@@ -25,6 +26,45 @@ struct guest_memfd_private {
 	atomic_t accessible;
 	atomic_t safe;
 };
+
+static inline int folio_set_direct_map_invalid_noflush(struct folio *folio)
+{
+	unsigned long i, nr = folio_nr_pages(folio);
+	int r;
+
+	for (i = 0; i < nr; i++) {
+		struct page *page = folio_page(folio, i);
+
+		r = set_direct_map_invalid_noflush(page);
+		if (r)
+			goto out_remap;
+	}
+	/**
+	 * Currently no need to flush as hypervisor will also be flushing
+	 * tlb when giving the folio to guest.
+	 */
+
+	return 0;
+out_remap:
+	for (; i > 0; i--) {
+		struct page *page = folio_page(folio, i - 1);
+
+		BUG_ON(set_direct_map_default_noflush(page));
+	}
+
+	return r;
+}
+
+static inline void folio_set_direct_map_default_noflush(struct folio *folio)
+{
+	unsigned long i, nr = folio_nr_pages(folio);
+
+	for (i = 0; i < nr; i++) {
+		struct page *page = folio_page(folio, i);
+
+		BUG_ON(set_direct_map_default_noflush(page));
+	}
+}
 
 static inline int base_safe_refs(struct folio *folio)
 {
@@ -131,6 +171,12 @@ struct folio *guest_memfd_grab_folio(struct file *file, pgoff_t index, u32 flags
 				goto out_free;
 		}
 	} else {
+		if (gmem_flags & GUEST_MEMFD_FLAG_REMOVE_DIRECT_MAP) {
+			r = folio_set_direct_map_invalid_noflush(folio);
+			if (r < 0)
+				goto out_free;
+		}
+
 		if (ops->prepare_inaccessible) {
 			r = ops->prepare_inaccessible(inode, folio);
 			if (r < 0)
@@ -203,6 +249,7 @@ int guest_memfd_make_accessible(struct folio *folio)
 	struct guest_memfd_private *private = folio_get_private(folio);
 	struct inode *inode = folio_inode(folio);
 	struct guest_memfd_operations *ops = inode->i_private;
+	unsigned long gmem_flags;
 	int r;
 
 	/*
@@ -217,6 +264,10 @@ int guest_memfd_make_accessible(struct folio *folio)
 			       msecs_to_jiffies(10));
 	if (!r)
 		return -EBUSY;
+
+	gmem_flags = (unsigned long)inode->i_mapping->i_private_data;
+	if (gmem_flags & GUEST_MEMFD_FLAG_REMOVE_DIRECT_MAP)
+		folio_set_direct_map_default_noflush(folio);
 
 	if (ops->prepare_accessible) {
 		r = ops->prepare_accessible(inode, folio);
@@ -248,6 +299,7 @@ int guest_memfd_make_inaccessible(struct folio *folio)
 	struct guest_memfd_private *private = folio_get_private(folio);
 	struct inode *inode = folio_inode(folio);
 	struct guest_memfd_operations *ops = inode->i_private;
+	unsigned long gmem_flags;
 	int r;
 
 	r = atomic_dec_if_positive(&private->accessible);
@@ -264,6 +316,13 @@ int guest_memfd_make_inaccessible(struct folio *folio)
 	if (!r) {
 		r = -EBUSY;
 		goto err;
+	}
+
+	gmem_flags = (unsigned long)inode->i_mapping->i_private_data;
+	if (gmem_flags & GUEST_MEMFD_FLAG_REMOVE_DIRECT_MAP) {
+		r = folio_set_direct_map_invalid_noflush(folio);
+		if (r)
+			goto err;
 	}
 
 	if (ops->prepare_inaccessible) {
@@ -454,6 +513,7 @@ static int gmem_error_folio(struct address_space *mapping, struct folio *folio)
 	struct guest_memfd_operations *ops = inode->i_private;
 	off_t offset = folio->index;
 	size_t nr = folio_nr_pages(folio);
+	unsigned long gmem_flags;
 	int ret;
 
 	filemap_invalidate_lock_shared(mapping);
@@ -463,6 +523,10 @@ static int gmem_error_folio(struct address_space *mapping, struct folio *folio)
 		ops->invalidate_end(inode, offset, nr);
 
 	filemap_invalidate_unlock_shared(mapping);
+
+	gmem_flags = (unsigned long)inode->i_mapping->i_private_data;
+	if (gmem_flags & GUEST_MEMFD_FLAG_REMOVE_DIRECT_MAP)
+		folio_set_direct_map_default_noflush(folio);
 
 	return ret;
 }
@@ -474,7 +538,7 @@ static bool gmem_release_folio(struct folio *folio, gfp_t gfp)
 	struct guest_memfd_operations *ops = inode->i_private;
 	off_t offset = folio->index;
 	size_t nr = folio_nr_pages(folio);
-	unsigned long val, expected;
+	unsigned long val, expected, gmem_flags;
 	int ret;
 
 	ret = ops->invalidate_begin(inode, offset, nr);
@@ -482,6 +546,10 @@ static bool gmem_release_folio(struct folio *folio, gfp_t gfp)
 		return false;
 	if (ops->invalidate_end)
 		ops->invalidate_end(inode, offset, nr);
+
+	gmem_flags = (unsigned long)inode->i_mapping->i_private_data;
+	if (gmem_flags & GUEST_MEMFD_FLAG_REMOVE_DIRECT_MAP)
+		folio_set_direct_map_default_noflush(folio);
 
 	expected = base_safe_refs(folio);
 	val = atomic_read(&private->safe);
@@ -518,7 +586,14 @@ static inline bool guest_memfd_check_ops(const struct guest_memfd_operations *op
 
 static inline unsigned long guest_memfd_valid_flags(void)
 {
-	return GUEST_MEMFD_FLAG_CLEAR_INACCESSIBLE;
+	unsigned long flags = GUEST_MEMFD_FLAG_CLEAR_INACCESSIBLE;
+
+#ifdef CONFIG_ARCH_HAS_SET_DIRECT_MAP
+	if (can_set_direct_map())
+		flags |= GUEST_MEMFD_FLAG_REMOVE_DIRECT_MAP;
+#endif
+
+	return flags;
 }
 
 /**

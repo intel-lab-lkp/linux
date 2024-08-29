@@ -33,6 +33,7 @@ enum guest_memfd_grab_flags {
 
 enum guest_memfd_create_flags {
 	GUEST_MEMFD_FLAG_CLEAR_INACCESSIBLE = (1UL << 0),
+	GUEST_MEMFD_FLAG_REMOVE_DIRECT_MAP = (1UL << 1),
 };
 
 struct folio *guest_memfd_grab_folio(struct file *file, pgoff_t index, u32 flags);
