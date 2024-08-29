@@ -1046,6 +1046,48 @@ static ssize_t partscan_show(struct device *dev,
 	return sprintf(buf, "%u\n", disk_has_partscan(dev_to_disk(dev)));
 }
 
+static ssize_t cpu_lat_limit_us_show(struct device *dev,
+				     struct device_attribute *attr, char *buf)
+{
+	struct block_device *bdev = dev_to_bdev(dev);
+
+	return sprintf(buf, "%d\n", bdev->cpu_lat_limit);
+}
+
+static ssize_t cpu_lat_limit_us_store(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf, size_t count)
+{
+	struct block_device *bdev = dev_to_bdev(dev);
+	int i;
+
+	if (count > 0 && !kstrtoint(buf, 10, &i))
+		bdev->cpu_lat_limit = i;
+
+	return count;
+}
+
+static ssize_t cpu_lat_timeout_ms_show(struct device *dev,
+				       struct device_attribute *attr, char *buf)
+{
+	struct block_device *bdev = dev_to_bdev(dev);
+
+	return sprintf(buf, "%d\n", bdev->cpu_lat_timeout);
+}
+
+static ssize_t cpu_lat_timeout_ms_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct block_device *bdev = dev_to_bdev(dev);
+	int i;
+
+	if (count > 0 && !kstrtoint(buf, 10, &i))
+		bdev->cpu_lat_timeout = i;
+
+	return count;
+}
+
 static DEVICE_ATTR(range, 0444, disk_range_show, NULL);
 static DEVICE_ATTR(ext_range, 0444, disk_ext_range_show, NULL);
 static DEVICE_ATTR(removable, 0444, disk_removable_show, NULL);
@@ -1060,6 +1102,8 @@ static DEVICE_ATTR(inflight, 0444, part_inflight_show, NULL);
 static DEVICE_ATTR(badblocks, 0644, disk_badblocks_show, disk_badblocks_store);
 static DEVICE_ATTR(diskseq, 0444, diskseq_show, NULL);
 static DEVICE_ATTR(partscan, 0444, partscan_show, NULL);
+static DEVICE_ATTR_RW(cpu_lat_limit_us);
+static DEVICE_ATTR_RW(cpu_lat_timeout_ms);
 
 #ifdef CONFIG_FAIL_MAKE_REQUEST
 ssize_t part_fail_show(struct device *dev,
@@ -1111,6 +1155,8 @@ static struct attribute *disk_attrs[] = {
 	&dev_attr_events_poll_msecs.attr,
 	&dev_attr_diskseq.attr,
 	&dev_attr_partscan.attr,
+	&dev_attr_cpu_lat_limit_us.attr,
+	&dev_attr_cpu_lat_timeout_ms.attr,
 #ifdef CONFIG_FAIL_MAKE_REQUEST
 	&dev_attr_fail.attr,
 #endif
