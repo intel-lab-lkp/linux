@@ -10,7 +10,6 @@
 
 enum pipe;
 struct drm_display_mode;
-struct drm_i915_private;
 struct intel_atomic_state;
 struct intel_crtc_state;
 struct intel_display;
@@ -21,7 +20,7 @@ void intel_joiner_adjust_timings(const struct intel_crtc_state *crtc_state,
 				 struct drm_display_mode *mode);
 void intel_joiner_compute_pipe_src(struct intel_crtc_state *crtc_state);
 void intel_joiner_adjust_pipe_src(struct intel_crtc_state *crtc_state);
-u8 intel_joiner_supported_pipes(struct drm_i915_private *i915);
+u8 intel_joiner_supported_pipes(struct intel_display *display);
 void intel_joiner_enabled_pipes(struct intel_display *display,
 				u8 *primary_pipes, u8 *secondary_pipes);
 enum pipe intel_joiner_find_primary_pipe(enum pipe pipe, u8 primary_pipes, u8 secondary_pipes);

@@ -72,18 +72,18 @@ void intel_joiner_adjust_pipe_src(struct intel_crtc_state *crtc_state)
 			      (pipe - primary_pipe) * width, 0);
 }
 
-u8 intel_joiner_supported_pipes(struct drm_i915_private *i915)
+u8 intel_joiner_supported_pipes(struct intel_display *display)
 {
 	u8 pipes;
 
-	if (DISPLAY_VER(i915) >= 12)
+	if (DISPLAY_VER(display) >= 12)
 		pipes = BIT(PIPE_A) | BIT(PIPE_B) | BIT(PIPE_C) | BIT(PIPE_D);
-	else if (DISPLAY_VER(i915) >= 11)
+	else if (DISPLAY_VER(display) >= 11)
 		pipes = BIT(PIPE_B) | BIT(PIPE_C);
 	else
 		pipes = 0;
 
-	return pipes & DISPLAY_RUNTIME_INFO(i915)->pipe_mask;
+	return pipes & DISPLAY_RUNTIME_INFO(display)->pipe_mask;
 }
 
 void intel_joiner_enabled_pipes(struct intel_display *display,
@@ -96,7 +96,7 @@ void intel_joiner_enabled_pipes(struct intel_display *display,
 	*secondary_pipes = 0;
 
 	for_each_intel_crtc_in_pipe_mask(&i915->drm, crtc,
-					 intel_joiner_supported_pipes(i915)) {
+					 intel_joiner_supported_pipes(display)) {
 		intel_dss_get_compressed_joiner_pipes(crtc,
 						      primary_pipes,
 						      secondary_pipes);
