@@ -692,10 +692,9 @@ static int ma35d1serial_probe(struct platform_device *pdev)
 		return -ENODEV;
 
 	ret = of_alias_get_id(pdev->dev.of_node, "serial");
-	if (ret < 0) {
-		dev_err(&pdev->dev, "failed to get alias/pdev id, errno %d\n", ret);
-		return ret;
-	}
+	if (ret < 0)
+		return dev_err_probe(&pdev->dev, ret, "failed to get alias/pdev id\n");
+
 	up = &ma35d1serial_ports[ret];
 	up->port.line = ret;
 	res_mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
