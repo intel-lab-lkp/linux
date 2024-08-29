@@ -11,6 +11,7 @@
 struct intel_crtc_state;
 struct intel_display;
 struct intel_encoder;
+struct intel_crtc;
 
 u8 intel_dss_mso_pipe_mask(struct intel_display *display);
 void intel_dss_mso_get_config(struct intel_encoder *encoder,
@@ -24,6 +25,12 @@ void intel_dss_enable_uncompressed_joiner(const struct intel_crtc_state *crtc_st
 void intel_dss_enable_compressed_joiner(const struct intel_crtc_state *crtc_state,
 					int vdsc_instances_per_pipe);
 void intel_dss_dsc_get_config(struct intel_crtc_state *crtc_state);
+void intel_dss_get_compressed_joiner_pipes(struct intel_crtc *crtc,
+					   u8 *primary_pipes,
+					   u8 *secondary_pipes);
+void intel_dss_get_uncompressed_joiner_pipes(struct intel_crtc *crtc,
+					     u8 *primary_pipes,
+					     u8 *secondary_pipes);
 
 #endif /* __INTEL_DSS_H__ */
 
