@@ -121,3 +121,53 @@ void __kunit_activate_static_stub(struct kunit *test,
 	}
 }
 EXPORT_SYMBOL_GPL(__kunit_activate_static_stub);
+
+static void sanitize_global_stub(void *data)
+{
+	struct kunit *test = kunit_get_current_test();
+	struct kunit_global_stub *stub =  data;
+
+	KUNIT_EXPECT_NE(test, 0, atomic_read(&stub->busy));
+	KUNIT_EXPECT_PTR_EQ(test, test, READ_ONCE(stub->owner));
+
+	reinit_completion(&stub->idle);
+	if (!atomic_dec_and_test(&stub->busy)) {
+		kunit_info(test, "waiting for %ps\n", stub->replacement);
+		KUNIT_EXPECT_EQ(test, 0, wait_for_completion_interruptible(&stub->idle));
+	}
+
+	WRITE_ONCE(stub->owner, NULL);
+	WRITE_ONCE(stub->replacement, NULL);
+}
+
+/*
+ * Helper function for kunit_activate_global_stub(). The macro does
+ * typechecking, so use it instead.
+ */
+void __kunit_activate_global_stub(struct kunit *test,
+				  struct kunit_global_stub *stub,
+				  void *replacement_addr)
+{
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, stub);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, replacement_addr);
+
+	kunit_release_action(test, sanitize_global_stub, stub);
+	KUNIT_EXPECT_EQ(test, 0, atomic_read(&stub->busy));
+
+	init_completion(&stub->idle);
+	WRITE_ONCE(stub->owner, test);
+	WRITE_ONCE(stub->replacement, replacement_addr);
+
+	KUNIT_ASSERT_EQ(test, 1, atomic_inc_return(&stub->busy));
+	KUNIT_ASSERT_EQ(test, 0, kunit_add_action_or_reset(test, sanitize_global_stub, stub));
+}
+EXPORT_SYMBOL_GPL(__kunit_activate_global_stub);
+
+/*
+ * Helper function for kunit_deactivate_global_stub(). Use it instead.
+ */
+void __kunit_deactivate_global_stub(struct kunit *test, struct kunit_global_stub *stub)
+{
+	kunit_release_action(test, sanitize_global_stub, stub);
+}
+EXPORT_SYMBOL_GPL(__kunit_deactivate_global_stub);
