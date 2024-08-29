@@ -45,6 +45,8 @@ struct drm_mode_create_dumb;
 struct drm_printer;
 struct sg_table;
 
+#define DRM_CHRDEV_MAX                1024
+
 /**
  * enum drm_driver_feature - feature flags
  *
