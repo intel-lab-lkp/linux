@@ -836,7 +836,7 @@ struct wireless_dev *brcmf_apsta_add_vif(struct wiphy *wiphy, const char *name,
 
 	vif = brcmf_alloc_vif(cfg, type);
 	if (IS_ERR(vif))
-		return (struct wireless_dev *)vif;
+		return ERR_CAST(vif);
 
 	brcmf_cfg80211_arm_vif_event(cfg, vif);
 
