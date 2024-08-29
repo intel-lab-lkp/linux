@@ -412,6 +412,21 @@ struct ethtool_eth_phy_stats {
 	);
 };
 
+/* Additional PHY statistics, not defined by IEEE */
+struct ethtool_phy_stats {
+	/* Basic packet / byte counters are meant for PHY drivers */
+	u64 rx_packets;
+	u64 rx_bytes;
+	u64 rx_error; /* TODO: we need to define here whether packet
+		       * counted here is also counted as rx_packets,
+		       * and whether it's passed to the MAC with some
+		       * error indication or MAC never sees it.
+		       */
+	u64 tx_packets;
+	u64 tx_bytes;
+	u64 tx_error; /* TODO: same as for rx */
+};
+
 /* Basic IEEE 802.3 MAC Ctrl statistics (30.3.3.*), not otherwise exposed
  * via a more targeted API.
  */
