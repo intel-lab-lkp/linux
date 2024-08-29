@@ -642,6 +642,12 @@ static int eventfs_iterate(struct file *file, struct dir_context *ctx)
 	/* Subtract the skipped entries above */
 	c -= min((unsigned int)c, (unsigned int)ei->nr_entries);
 
+	mutex_lock(&eventfs_mutex);
+	if (ei->is_freed) {
+		mutex_unlock(&eventfs_mutex);
+		goto out;
+	}
+
 	list_for_each_entry_srcu(ei_child, &ei->children, list,
 				 srcu_read_lock_held(&eventfs_srcu)) {
 
@@ -659,9 +665,12 @@ static int eventfs_iterate(struct file *file, struct dir_context *ctx)
 
 		ino = eventfs_dir_ino(ei_child);
 
-		if (!dir_emit(ctx, name, strlen(name), ino, DT_DIR))
+		if (!dir_emit(ctx, name, strlen(name), ino, DT_DIR)) {
+			mutex_unlock(&eventfs_mutex);
 			goto out_dec;
+		}
 	}
+	mutex_unlock(&eventfs_mutex);
 	ret = 1;
  out:
 	srcu_read_unlock(&eventfs_srcu, idx);
