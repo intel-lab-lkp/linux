@@ -48,7 +48,7 @@ static int __init apmt_init_resources(struct resource *res,
 		trigger = (trigger == ACPI_APMT_OVFLW_IRQ_FLAGS_MODE_LEVEL) ?
 			ACPI_LEVEL_SENSITIVE : ACPI_EDGE_SENSITIVE;
 		irq = acpi_register_gsi(NULL, node->ovflw_irq, trigger,
-						ACPI_ACTIVE_HIGH);
+					ACPI_ACTIVE_HIGH);
 
 		if (irq <= 0) {
 			pr_warn("APMT could not register gsi hwirq %d\n", irq);
@@ -132,7 +132,7 @@ static int __init apmt_init_platform_devices(void)
 
 	while (offset < end) {
 		apmt_node = ACPI_ADD_PTR(struct acpi_apmt_node, apmt,
-				 offset);
+					 offset);
 
 		fwnode = acpi_alloc_fwnode_static();
 		if (!fwnode)

@@ -33,8 +33,7 @@ static void amba_register_dummy_clk(void)
 	clk_register_clkdev(amba_dummy_clk, "apb_pclk", NULL);
 }
 
-static int amba_handler_attach(struct acpi_device *adev,
-				const struct acpi_device_id *id)
+static int amba_handler_attach(struct acpi_device *adev, const struct acpi_device_id *id)
 {
 	struct acpi_device *parent = acpi_dev_parent(adev);
 	struct amba_device *dev;
@@ -94,7 +93,7 @@ static int amba_handler_attach(struct acpi_device *adev,
 	ret = amba_device_add(dev, &iomem_resource);
 	if (ret) {
 		dev_err(&adev->dev, "%s(): amba_device_add() failed (%d)\n",
-		       __func__, ret);
+			__func__, ret);
 		goto err_free;
 	}
 

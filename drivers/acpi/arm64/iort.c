@@ -374,7 +374,7 @@ static struct acpi_iort_node *iort_node_get_id(struct acpi_iort_node *node,
 	struct acpi_iort_id_mapping *map;
 
 	if (!node->mapping_offset || !node->mapping_count ||
-				     index >= node->mapping_count)
+	    index >= node->mapping_count)
 		return NULL;
 
 	map = ACPI_ADD_PTR(struct acpi_iort_id_mapping, node,
@@ -388,7 +388,7 @@ static struct acpi_iort_node *iort_node_get_id(struct acpi_iort_node *node,
 	}
 
 	parent = ACPI_ADD_PTR(struct acpi_iort_node, iort_table,
-			       map->output_reference);
+			      map->output_reference);
 
 	if (map->flags & ACPI_IORT_ID_SINGLE_MAPPING) {
 		if (node->type == ACPI_IORT_NODE_NAMED_COMPONENT ||
@@ -1128,8 +1128,8 @@ static void iort_iommu_msi_get_resv_regions(struct device *dev,
 
 	for (i = 0; i < fwspec->num_ids; i++) {
 		its_node = iort_node_map_id(iommu_node,
-					fwspec->ids[i],
-					NULL, IORT_MSI_TYPE);
+					    fwspec->ids[i],
+					    NULL, IORT_MSI_TYPE);
 		if (its_node)
 			break;
 	}
@@ -1429,7 +1429,7 @@ static void __init acpi_iort_register_irq(int hwirq, const char *name,
 
 	if (irq <= 0) {
 		pr_err("could not register gsi hwirq %d name [%s]\n", hwirq,
-								      name);
+		       name);
 		return;
 	}
 
@@ -1561,7 +1561,7 @@ static void __init arm_smmu_v3_dma_configure(struct device *dev,
  * set numa proximity domain for smmuv3 device
  */
 static int  __init arm_smmu_v3_set_proximity(struct device *dev,
-					      struct acpi_iort_node *node)
+					     struct acpi_iort_node *node)
 {
 	struct acpi_iort_smmu_v3 *smmu;
 
@@ -1622,7 +1622,7 @@ static void __init arm_smmu_init_resources(struct resource *res,
 	trigger = IORT_IRQ_TRIGGER_MASK(glb_irq[0]);
 
 	acpi_iort_register_irq(hw_irq, "arm-smmu-global", trigger,
-				     &res[num_res++]);
+			       &res[num_res++]);
 
 	/* Context IRQs */
 	ctx_irq = ACPI_ADD_PTR(u64, node, smmu->context_interrupt_offset);
@@ -1727,9 +1727,9 @@ struct iort_dev_config {
 				  struct acpi_iort_node *node);
 	int (*dev_count_resources)(struct acpi_iort_node *node);
 	void (*dev_init_resources)(struct resource *res,
-				     struct acpi_iort_node *node);
+				   struct acpi_iort_node *node);
 	int (*dev_set_proximity)(struct device *dev,
-				    struct acpi_iort_node *node);
+				 struct acpi_iort_node *node);
 	int (*dev_add_platdata)(struct platform_device *pdev);
 };
 
@@ -1878,13 +1878,13 @@ static void __init iort_enable_acs(struct acpi_iort_node *iort_node)
 				continue;
 
 			parent = ACPI_ADD_PTR(struct acpi_iort_node,
-					iort_table,  map->output_reference);
+					      iort_table,  map->output_reference);
 			/*
 			 * If we detect a RC->SMMU mapping, make sure
 			 * we enable ACS on the system.
 			 */
 			if ((parent->type == ACPI_IORT_NODE_SMMU) ||
-				(parent->type == ACPI_IORT_NODE_SMMU_V3)) {
+			    (parent->type == ACPI_IORT_NODE_SMMU_V3)) {
 				pci_request_acs();
 				acs_enabled = true;
 				return;
