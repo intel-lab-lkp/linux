@@ -90,7 +90,7 @@ TRACE_EVENT(drm_sched_job_wait_dep,
 			     __field(uint64_t, id)
 			     __field(struct dma_fence *, fence)
 			     __field(uint64_t, ctx)
-			     __field(unsigned, seqno)
+			     __field(unsigned int, seqno)
 			     ),
 
 	    TP_fast_assign(

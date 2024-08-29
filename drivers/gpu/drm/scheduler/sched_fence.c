@@ -90,6 +90,7 @@ static const char *drm_sched_fence_get_driver_name(struct dma_fence *fence)
 static const char *drm_sched_fence_get_timeline_name(struct dma_fence *f)
 {
 	struct drm_sched_fence *fence = to_drm_sched_fence(f);
+
 	return (const char *)fence->sched->name;
 }
 
@@ -221,7 +222,7 @@ struct drm_sched_fence *drm_sched_fence_alloc(struct drm_sched_entity *entity,
 void drm_sched_fence_init(struct drm_sched_fence *fence,
 			  struct drm_sched_entity *entity)
 {
-	unsigned seq;
+	unsigned int seq;
 
 	fence->sched = entity->rq->sched;
 	seq = atomic_inc_return(&entity->fence_seq);
