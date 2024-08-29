@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
  * Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _LINUX_QCOM_GENI_SE
@@ -493,6 +494,8 @@ void geni_se_config_packing(struct geni_se *se, int bpw, int pack_words,
 int geni_se_resources_off(struct geni_se *se);
 
 int geni_se_resources_on(struct geni_se *se);
+
+void geni_se_clks_off(struct geni_se *se);
 
 int geni_se_clk_tbl_get(struct geni_se *se, unsigned long **tbl);
 
