@@ -818,23 +818,49 @@ static void tdp_mmu_zap_root(struct kvm *kvm, struct kvm_mmu_page *root,
 	rcu_read_unlock();
 }
 
-bool kvm_tdp_mmu_zap_sp(struct kvm *kvm, struct kvm_mmu_page *sp)
+static bool tdp_mmu_zap_possible_nx_huge_page(struct kvm *kvm,
+					      struct kvm_mmu_page *sp)
 {
-	u64 old_spte;
+	struct tdp_iter iter = {
+		.old_spte = sp->ptep ? kvm_tdp_mmu_read_spte(sp->ptep) : 0,
+		.sptep = sp->ptep,
+		.level = sp->role.level + 1,
+		.gfn = sp->gfn,
+		.as_id = kvm_mmu_page_as_id(sp),
+	};
+
+	lockdep_assert_held_read(&kvm->mmu_lock);
 
 	/*
-	 * This helper intentionally doesn't allow zapping a root shadow page,
-	 * which doesn't have a parent page table and thus no associated entry.
+	 * Root shadow pages don't a parent page table and thus no associated
+	 * entry, but they can never be possible NX huge pages.
 	 */
 	if (WARN_ON_ONCE(!sp->ptep))
 		return false;
 
-	old_spte = kvm_tdp_mmu_read_spte(sp->ptep);
-	if (WARN_ON_ONCE(!is_shadow_present_pte(old_spte)))
+	/*
+	 * Since mmu_lock is held in read mode, it's possible another task has
+	 * already modified the SPTE. Zap the SPTE if and only if the SPTE
+	 * points at the SP's page table, as checking  shadow-present isn't
+	 * sufficient, e.g. the SPTE could be replaced by a leaf SPTE, or even
+	 * another SP. Note, spte_to_child_pt() also checks that the SPTE is
+	 * shadow-present, i.e. guards against zapping a frozen SPTE.
+	 */
+	if ((tdp_ptep_t)sp->spt != spte_to_child_pt(iter.old_spte, iter.level))
 		return false;
 
-	tdp_mmu_set_spte(kvm, kvm_mmu_page_as_id(sp), sp->ptep, old_spte,
-			 SHADOW_NONPRESENT_VALUE, sp->gfn, sp->role.level + 1);
+	/*
+	 * If a different task modified the SPTE, then it should be impossible
+	 * for the SPTE to still be used for the to-be-zapped SP. Non-leaf
+	 * SPTEs don't have Dirty bits, KVM always sets the Accessed bit when
+	 * creating non-leaf SPTEs, and all other bits are immutable for non-
+	 * leaf SPTEs, i.e. the only legal operations for non-leaf SPTEs are
+	 * zapping and replacement.
+	 */
+	if (tdp_mmu_set_spte_atomic(kvm, &iter, SHADOW_NONPRESENT_VALUE)) {
+		WARN_ON_ONCE((tdp_ptep_t)sp->spt == spte_to_child_pt(iter.old_spte, iter.level));
+		return false;
+	}
 
 	return true;
 }
@@ -1806,7 +1832,7 @@ void kvm_tdp_mmu_recover_nx_huge_pages(struct kvm *kvm)
 	struct kvm_mmu_page *sp;
 	bool flush = false;
 
-	lockdep_assert_held_write(&kvm->mmu_lock);
+	lockdep_assert_held_read(&kvm->mmu_lock);
 	/*
 	 * Zapping TDP MMU shadow pages, including the remote TLB flush, must
 	 * be done under RCU protection, because the pages are freed via RCU
@@ -1815,8 +1841,11 @@ void kvm_tdp_mmu_recover_nx_huge_pages(struct kvm *kvm)
 	rcu_read_lock();
 
 	for ( ; to_zap; --to_zap) {
-		if (list_empty(&kvm->arch.tdp_mmu_possible_nx_huge_pages))
+		spin_lock(&kvm->arch.tdp_mmu_pages_lock);
+		if (list_empty(&kvm->arch.tdp_mmu_possible_nx_huge_pages)) {
+			spin_unlock(&kvm->arch.tdp_mmu_pages_lock);
 			break;
+		}
 
 		/*
 		 * We use a separate list instead of just using active_mmu_pages
@@ -1832,16 +1861,29 @@ void kvm_tdp_mmu_recover_nx_huge_pages(struct kvm *kvm)
 		WARN_ON_ONCE(!sp->role.direct);
 
 		/*
-		 * Unaccount and do not attempt to recover any NX Huge Pages
-		 * that are being dirty tracked, as they would just be faulted
-		 * back in as 4KiB pages. The NX Huge Pages in this slot will be
+		 * Unaccount the shadow page before zapping its SPTE so as to
+		 * avoid bouncing tdp_mmu_pages_lock more than is necessary.
+		 * Clearing nx_huge_page_disallowed before zapping is safe, as
+		 * the flag doesn't protect against iTLB multi-hit, it's there
+		 * purely to prevent bouncing the gfn between an NX huge page
+		 * and an X small spage. A vCPU could get stuck tearing down
+		 * the shadow page, e.g. if it happens to fault on the region
+		 * before the SPTE is zapped and replaces the shadow page with
+		 * an NX huge page and get stuck tearing down the child SPTEs,
+		 * but that is a rare race, i.e. shouldn't impact performance.
+		 */
+		unaccount_nx_huge_page(kvm, sp);
+		spin_unlock(&kvm->arch.tdp_mmu_pages_lock);
+
+		/*
+		 * Don't bother zapping shadow pages if the memslot is being
+		 * dirty logged, as the relevant pages would just be faulted back
+		 * in as 4KiB pages. Potential NX Huge Pages in this slot will be
 		 * recovered, along with all the other huge pages in the slot,
 		 * when dirty logging is disabled.
 		 */
-		if (kvm_mmu_sp_dirty_logging_enabled(kvm, sp))
-			unaccount_nx_huge_page(kvm, sp);
-		else
-			flush |= kvm_tdp_mmu_zap_sp(kvm, sp);
+		if (!kvm_mmu_sp_dirty_logging_enabled(kvm, sp))
+			flush |= tdp_mmu_zap_possible_nx_huge_page(kvm, sp);
 		WARN_ON_ONCE(sp->nx_huge_page_disallowed);
 
 		if (need_resched() || rwlock_needbreak(&kvm->mmu_lock)) {

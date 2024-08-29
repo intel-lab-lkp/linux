@@ -7436,14 +7436,19 @@ static int kvm_nx_huge_page_recovery_worker(struct kvm *kvm, uintptr_t data)
 			return 0;
 
 		rcu_idx = srcu_read_lock(&kvm->srcu);
-		write_lock(&kvm->mmu_lock);
 
-		kvm_mmu_recover_nx_huge_pages(kvm);
-		if (tdp_mmu_enabled) {
-			kvm_tdp_mmu_recover_nx_huge_pages(kvm);
+		if (kvm_memslots_have_rmaps(kvm)) {
+			write_lock(&kvm->mmu_lock);
+			kvm_mmu_recover_nx_huge_pages(kvm);
+			write_unlock(&kvm->mmu_lock);
 		}
 
-		write_unlock(&kvm->mmu_lock);
+		if (tdp_mmu_enabled) {
+			read_lock(&kvm->mmu_lock);
+			kvm_tdp_mmu_recover_nx_huge_pages(kvm);
+			read_unlock(&kvm->mmu_lock);
+		}
+
 		srcu_read_unlock(&kvm->srcu, rcu_idx);
 	}
 }
