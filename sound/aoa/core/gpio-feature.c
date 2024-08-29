@@ -72,7 +72,7 @@ static struct device_node *get_gpio(char *name,
 		gpio = of_find_node_by_name(NULL, "gpio");
 		if (!gpio)
 			return NULL;
-		while ((np = of_get_next_child(gpio, np))) {
+		for_each_child_of_node(gpio, np) {
 			audio_gpio = of_get_property(np, "audio-gpio", NULL);
 			if (!audio_gpio)
 				continue;
