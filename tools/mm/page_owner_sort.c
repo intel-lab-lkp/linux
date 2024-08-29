@@ -368,9 +368,10 @@ static __u64 get_ts_nsec(char *buf)
 
 static char *get_comm(char *buf)
 {
-	char *comm_str = malloc(TASK_COMM_LEN);
+	char *comm_str = calloc(TASK_COMM_LEN, sizeof(char));
 
-	memset(comm_str, 0, TASK_COMM_LEN);
+	if (!comm_str)
+		return NULL;
 
 	search_pattern(&comm_pattern, comm_str, buf);
 	errno = 0;
