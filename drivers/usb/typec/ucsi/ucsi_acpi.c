@@ -199,6 +199,13 @@ static const struct dmi_system_id ucsi_acpi_quirks[] = {
 	},
 	{
 		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "VivoBook_ASUSLaptop"),
+		},
+		.driver_data = (void *)&ucsi_zenbook_ops,
+	},
+	{
+		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "LG Electronics"),
 			DMI_MATCH(DMI_PRODUCT_FAMILY, "LG gram PC"),
 			DMI_MATCH(DMI_PRODUCT_NAME, "90Q"),
