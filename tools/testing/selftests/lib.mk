@@ -23,6 +23,8 @@ CLANG_TARGET_FLAGS_x86_64       := x86_64-linux-gnu
 
 # Default to host architecture if ARCH is not explicitly given.
 ifeq ($(ARCH),)
+ARCH := $(shell uname -m 2>/dev/null || echo not)
+ARCH := $(shell echo $(ARCH) | sed -e s/i.86/x86/)
 CLANG_TARGET_FLAGS := $(shell $(CLANG) -print-target-triple)
 else
 CLANG_TARGET_FLAGS := $(CLANG_TARGET_FLAGS_$(ARCH))
@@ -198,6 +200,10 @@ clean: $(if $(TEST_GEN_MODS_DIR),clean_mods_dir)
 
 # Build with _GNU_SOURCE by default
 CFLAGS += -D_GNU_SOURCE=
+
+ifeq ($(ARCH),$(filter $(ARCH),x86 x86_64))
+CFLAGS += -DHAVE_CPUID=
+endif
 
 # Enables to extend CFLAGS and LDFLAGS from command line, e.g.
 # make USERCFLAGS=-Werror USERLDFLAGS=-static

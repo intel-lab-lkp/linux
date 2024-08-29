@@ -70,10 +70,16 @@
  * have __cpuid_count().
  */
 #ifndef __cpuid_count
+#ifdef HAVE_CPUID
 #define __cpuid_count(level, count, a, b, c, d)				\
 	__asm__ __volatile__ ("cpuid\n\t"				\
 			      : "=a" (a), "=b" (b), "=c" (c), "=d" (d)	\
 			      : "0" (level), "2" (count))
+#else
+#define __cpuid_count(level, count, a, b, c, d)	do {			\
+	(void)level; (void)count; (void)a; (void)b; (void)c; (void)d;	\
+} while (0)
+#endif
 #endif
 
 /* define kselftest exit codes */
