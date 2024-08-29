@@ -249,7 +249,7 @@ is_trans_port_sync_mode(const struct intel_crtc_state *crtc_state)
 		is_trans_port_sync_slave(crtc_state);
 }
 
-static enum pipe joiner_primary_pipe(const struct intel_crtc_state *crtc_state)
+static enum pipe intel_joiner_get_primary_pipe(const struct intel_crtc_state *crtc_state)
 {
 	return ffs(crtc_state->joiner_pipes) - 1;
 }
@@ -257,7 +257,7 @@ static enum pipe joiner_primary_pipe(const struct intel_crtc_state *crtc_state)
 u8 intel_crtc_joiner_secondary_pipes(const struct intel_crtc_state *crtc_state)
 {
 	if (crtc_state->joiner_pipes)
-		return crtc_state->joiner_pipes & ~BIT(joiner_primary_pipe(crtc_state));
+		return crtc_state->joiner_pipes & ~BIT(intel_joiner_get_primary_pipe(crtc_state));
 	else
 		return 0;
 }
@@ -267,7 +267,7 @@ bool intel_crtc_is_joiner_secondary(const struct intel_crtc_state *crtc_state)
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 
 	return crtc_state->joiner_pipes &&
-		crtc->pipe != joiner_primary_pipe(crtc_state);
+		crtc->pipe != intel_joiner_get_primary_pipe(crtc_state);
 }
 
 bool intel_crtc_is_joiner_primary(const struct intel_crtc_state *crtc_state)
@@ -275,10 +275,10 @@ bool intel_crtc_is_joiner_primary(const struct intel_crtc_state *crtc_state)
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 
 	return crtc_state->joiner_pipes &&
-		crtc->pipe == joiner_primary_pipe(crtc_state);
+		crtc->pipe == intel_joiner_get_primary_pipe(crtc_state);
 }
 
-static int intel_joiner_num_pipes(const struct intel_crtc_state *crtc_state)
+static int intel_joiner_get_num_pipes(const struct intel_crtc_state *crtc_state)
 {
 	return hweight8(crtc_state->joiner_pipes);
 }
@@ -295,7 +295,7 @@ struct intel_crtc *intel_primary_crtc(const struct intel_crtc_state *crtc_state)
 	struct drm_i915_private *i915 = to_i915(crtc_state->uapi.crtc->dev);
 
 	if (intel_crtc_is_joiner_secondary(crtc_state))
-		return intel_crtc_for_pipe(i915, joiner_primary_pipe(crtc_state));
+		return intel_crtc_for_pipe(i915, intel_joiner_get_primary_pipe(crtc_state));
 	else
 		return to_intel_crtc(crtc_state->uapi.crtc);
 }
@@ -2344,7 +2344,7 @@ static void intel_crtc_compute_pixel_rate(struct intel_crtc_state *crtc_state)
 static void intel_joiner_adjust_timings(const struct intel_crtc_state *crtc_state,
 					struct drm_display_mode *mode)
 {
-	int num_pipes = intel_joiner_num_pipes(crtc_state);
+	int num_pipes = intel_joiner_get_num_pipes(crtc_state);
 
 	if (num_pipes < 2)
 		return;
@@ -2408,7 +2408,7 @@ static void intel_crtc_readout_derived_state(struct intel_crtc_state *crtc_state
 	drm_mode_copy(mode, pipe_mode);
 	intel_mode_from_crtc_timings(mode, mode);
 	mode->hdisplay = drm_rect_width(&crtc_state->pipe_src) *
-		(intel_joiner_num_pipes(crtc_state) ?: 1);
+		(intel_joiner_get_num_pipes(crtc_state) ?: 1);
 	mode->vdisplay = drm_rect_height(&crtc_state->pipe_src);
 
 	/* Derive per-pipe timings in case joiner is used */
@@ -2428,7 +2428,7 @@ void intel_encoder_get_config(struct intel_encoder *encoder,
 
 static void intel_joiner_compute_pipe_src(struct intel_crtc_state *crtc_state)
 {
-	int num_pipes = intel_joiner_num_pipes(crtc_state);
+	int num_pipes = intel_joiner_get_num_pipes(crtc_state);
 	int width, height;
 
 	if (num_pipes < 2)
@@ -2888,14 +2888,14 @@ static void intel_get_transcoder_timings(struct intel_crtc *crtc,
 static void intel_joiner_adjust_pipe_src(struct intel_crtc_state *crtc_state)
 {
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
-	int num_pipes = intel_joiner_num_pipes(crtc_state);
+	int num_pipes = intel_joiner_get_num_pipes(crtc_state);
 	enum pipe primary_pipe, pipe = crtc->pipe;
 	int width;
 
 	if (num_pipes < 2)
 		return;
 
-	primary_pipe = joiner_primary_pipe(crtc_state);
+	primary_pipe = intel_joiner_get_primary_pipe(crtc_state);
 	width = drm_rect_width(&crtc_state->pipe_src);
 
 	drm_rect_translate_to(&crtc_state->pipe_src,
@@ -3505,7 +3505,7 @@ out:
 	return ret;
 }
 
-static u8 joiner_pipes(struct drm_i915_private *i915)
+static u8 intel_joiner_supported_pipes(struct drm_i915_private *i915)
 {
 	u8 pipes;
 
@@ -3535,8 +3535,8 @@ static bool transcoder_ddi_func_is_enabled(struct drm_i915_private *dev_priv,
 	return tmp & TRANS_DDI_FUNC_ENABLE;
 }
 
-static void enabled_joiner_pipes(struct drm_i915_private *dev_priv,
-				 u8 *primary_pipes, u8 *secondary_pipes)
+static void intel_joiner_enabled_pipes(struct drm_i915_private *dev_priv,
+				       u8 *primary_pipes, u8 *secondary_pipes)
 {
 	struct intel_crtc *crtc;
 
@@ -3544,7 +3544,7 @@ static void enabled_joiner_pipes(struct drm_i915_private *dev_priv,
 	*secondary_pipes = 0;
 
 	for_each_intel_crtc_in_pipe_mask(&dev_priv->drm, crtc,
-					 joiner_pipes(dev_priv)) {
+					 intel_joiner_supported_pipes(dev_priv)) {
 		intel_dss_get_compressed_joiner_pipes(crtc,
 						      primary_pipes,
 						      secondary_pipes);
@@ -3560,7 +3560,9 @@ static void enabled_joiner_pipes(struct drm_i915_private *dev_priv,
 		 *primary_pipes, *secondary_pipes);
 }
 
-static enum pipe get_joiner_primary_pipe(enum pipe pipe, u8 primary_pipes, u8 secondary_pipes)
+static enum pipe intel_joiner_find_primary_pipe(enum pipe pipe,
+						u8 primary_pipes,
+						u8 secondary_pipes)
 {
 	if ((secondary_pipes & BIT(pipe)) == 0)
 		return pipe;
@@ -3572,11 +3574,13 @@ static enum pipe get_joiner_primary_pipe(enum pipe pipe, u8 primary_pipes, u8 se
 	return fls(primary_pipes) - 1;
 }
 
-static u8 get_joiner_secondary_pipes(enum pipe pipe, u8 primary_pipes, u8 secondary_pipes)
+static u8 intel_joiner_find_secondary_pipes(enum pipe pipe,
+					    u8 primary_pipes,
+					    u8 secondary_pipes)
 {
 	enum pipe primary_pipe, next_primary_pipe;
 
-	primary_pipe = get_joiner_primary_pipe(pipe, primary_pipes, secondary_pipes);
+	primary_pipe = intel_joiner_find_primary_pipe(pipe, primary_pipes, secondary_pipes);
 
 	if ((primary_pipes & BIT(primary_pipe)) == 0)
 		return 0;
@@ -3660,10 +3664,10 @@ static u8 hsw_enabled_transcoders(struct intel_crtc *crtc)
 		enabled_transcoders |= BIT(cpu_transcoder);
 
 	/* joiner secondary -> consider the primary pipe's transcoder as well */
-	enabled_joiner_pipes(dev_priv, &primary_pipes, &secondary_pipes);
+	intel_joiner_enabled_pipes(dev_priv, &primary_pipes, &secondary_pipes);
 	if (secondary_pipes & BIT(crtc->pipe)) {
 		cpu_transcoder = (enum transcoder)
-			get_joiner_primary_pipe(crtc->pipe, primary_pipes, secondary_pipes);
+			intel_joiner_find_primary_pipe(crtc->pipe, primary_pipes, secondary_pipes);
 		if (transcoder_ddi_func_is_enabled(dev_priv, cpu_transcoder))
 			enabled_transcoders |= BIT(cpu_transcoder);
 	}
@@ -3797,14 +3801,14 @@ static void intel_joiner_get_config(struct intel_crtc_state *crtc_state)
 	u8 primary_pipes, secondary_pipes;
 	enum pipe pipe = crtc->pipe;
 
-	enabled_joiner_pipes(i915, &primary_pipes, &secondary_pipes);
+	intel_joiner_enabled_pipes(i915, &primary_pipes, &secondary_pipes);
 
 	if (((primary_pipes | secondary_pipes) & BIT(pipe)) == 0)
 		return;
 
 	crtc_state->joiner_pipes =
-		BIT(get_joiner_primary_pipe(pipe, primary_pipes, secondary_pipes)) |
-		get_joiner_secondary_pipes(pipe, primary_pipes, secondary_pipes);
+		BIT(intel_joiner_find_primary_pipe(pipe, primary_pipes, secondary_pipes)) |
+		intel_joiner_find_secondary_pipes(pipe, primary_pipes, secondary_pipes);
 }
 
 static bool hsw_get_pipe_config(struct intel_crtc *crtc,
@@ -5987,15 +5991,15 @@ static int intel_atomic_check_joiner(struct intel_atomic_state *state,
 
 	/* sanity check */
 	if (drm_WARN_ON(&i915->drm,
-			primary_crtc->pipe != joiner_primary_pipe(primary_crtc_state)))
+			primary_crtc->pipe != intel_joiner_get_primary_pipe(primary_crtc_state)))
 		return -EINVAL;
 
-	if (primary_crtc_state->joiner_pipes & ~joiner_pipes(i915)) {
+	if (primary_crtc_state->joiner_pipes & ~intel_joiner_supported_pipes(i915)) {
 		drm_dbg_kms(&i915->drm,
 			    "[CRTC:%d:%s] Cannot act as joiner primary "
 			    "(need 0x%x as pipes, only 0x%x possible)\n",
 			    primary_crtc->base.base.id, primary_crtc->base.name,
-			    primary_crtc_state->joiner_pipes, joiner_pipes(i915));
+			    primary_crtc_state->joiner_pipes, intel_joiner_supported_pipes(i915));
 		return -EINVAL;
 	}
 
