@@ -533,6 +533,8 @@ void drop_partition(struct block_device *part);
 
 void bdev_set_nr_sectors(struct block_device *bdev, sector_t sectors);
 
+void bdev_update_cpu_latency_pm_qos(struct block_device *bdev);
+
 struct gendisk *__alloc_disk_node(struct request_queue *q, int node_id,
 		struct lock_class_key *lkclass);
 

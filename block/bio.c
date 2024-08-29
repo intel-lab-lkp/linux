@@ -282,6 +282,8 @@ void bio_init(struct bio *bio, struct block_device *bdev, struct bio_vec *table,
 	bio->bi_max_vecs = max_vecs;
 	bio->bi_io_vec = table;
 	bio->bi_pool = NULL;
+
+	bdev_update_cpu_latency_pm_qos(bio->bi_bdev);
 }
 EXPORT_SYMBOL(bio_init);
 

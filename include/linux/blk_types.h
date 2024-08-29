@@ -11,6 +11,7 @@
 #include <linux/device.h>
 #include <linux/ktime.h>
 #include <linux/rw_hint.h>
+#include <linux/pm_qos.h>
 
 struct bio_set;
 struct bio;
@@ -37,6 +38,11 @@ struct bio_crypt_ctx;
 #define PAGE_SECTORS_SHIFT	(PAGE_SHIFT - SECTOR_SHIFT)
 #define PAGE_SECTORS		(1 << PAGE_SECTORS_SHIFT)
 #define SECTOR_MASK		(PAGE_SECTORS - 1)
+
+struct bdev_cpu_latency_qos {
+	struct dev_pm_qos_request	req;
+	struct delayed_work		work;
+};
 
 struct block_device {
 	sector_t		bd_start_sect;
@@ -71,6 +77,12 @@ struct block_device {
 
 	struct partition_meta_info *bd_meta_info;
 	int			bd_writers;
+
+	/* For preventing deep idle during block I/O */
+	struct bdev_cpu_latency_qos __percpu	*bd_pm_qos;
+	int cpu_lat_timeout;
+	int cpu_lat_limit;
+
 	/*
 	 * keep this out-of-line as it's both big and not needed in the fast
 	 * path

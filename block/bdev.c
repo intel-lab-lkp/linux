@@ -405,10 +405,18 @@ void __init bdev_cache_init(void)
 	blockdev_superblock = blockdev_mnt->mnt_sb;   /* For writeback */
 }
 
+static void bdev_pm_qos_work(struct work_struct *work)
+{
+	struct bdev_cpu_latency_qos *qos =
+		container_of(work, struct bdev_cpu_latency_qos, work.work);
+	dev_pm_qos_remove_request(&qos->req);
+}
+
 struct block_device *bdev_alloc(struct gendisk *disk, u8 partno)
 {
 	struct block_device *bdev;
 	struct inode *inode;
+	int cpu;
 
 	inode = new_inode(blockdev_superblock);
 	if (!inode)
@@ -433,6 +441,16 @@ struct block_device *bdev_alloc(struct gendisk *disk, u8 partno)
 		return NULL;
 	}
 	bdev->bd_disk = disk;
+	bdev->bd_pm_qos = alloc_percpu(struct bdev_cpu_latency_qos);
+	if (!bdev->bd_pm_qos) {
+		free_percpu(bdev->bd_stats);
+		iput(inode);
+		return NULL;
+	}
+	for_each_possible_cpu(cpu)
+		INIT_DELAYED_WORK(per_cpu_ptr(&bdev->bd_pm_qos->work, cpu),
+				  bdev_pm_qos_work);
+	bdev->cpu_lat_limit = -1;
 	return bdev;
 }
 
@@ -462,6 +480,19 @@ void bdev_unhash(struct block_device *bdev)
 
 void bdev_drop(struct block_device *bdev)
 {
+	int cpu;
+	struct bdev_cpu_latency_qos *qos;
+
+	for_each_possible_cpu(cpu) {
+		qos = per_cpu_ptr(bdev->bd_pm_qos, cpu);
+		if (dev_pm_qos_request_active(&qos->req)) {
+			cancel_delayed_work(&qos->work);
+			dev_pm_qos_remove_request(&qos->req);
+		}
+	}
+
+	free_percpu(bdev->bd_pm_qos);
+
 	iput(BD_INODE(bdev));
 }
 
@@ -1298,6 +1329,26 @@ void bdev_statx(struct path *path, struct kstat *stat,
 	}
 
 	blkdev_put_no_open(bdev);
+}
+
+void bdev_update_cpu_latency_pm_qos(struct block_device *bdev)
+{
+	int cpu;
+	struct bdev_cpu_latency_qos *qos;
+
+	if (!bdev || bdev->cpu_lat_limit < 0)
+		return;
+
+	cpu = raw_smp_processor_id();
+	qos = per_cpu_ptr(bdev->bd_pm_qos, cpu);
+
+	if (!dev_pm_qos_request_active(&qos->req))
+		dev_pm_qos_add_request(get_cpu_device(cpu), &qos->req,
+				       DEV_PM_QOS_RESUME_LATENCY,
+				       bdev->cpu_lat_limit);
+
+	mod_delayed_work(system_wq, &qos->work,
+			 msecs_to_jiffies(bdev->cpu_lat_timeout));
 }
 
 bool disk_live(struct gendisk *disk)
