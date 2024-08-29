@@ -66,6 +66,7 @@
 #include "intel_hdmi.h"
 #include "intel_hotplug.h"
 #include "intel_hti.h"
+#include "intel_joiner.h"
 #include "intel_lspcon.h"
 #include "intel_mg_phy_regs.h"
 #include "intel_modeset_lock.h"
@@ -3043,7 +3044,7 @@ static void intel_ddi_post_disable_hdmi_or_sst(struct intel_atomic_state *state,
 	struct intel_crtc *pipe_crtc;
 
 	for_each_intel_crtc_in_pipe_mask(&dev_priv->drm, pipe_crtc,
-					 intel_crtc_joined_pipe_mask(old_crtc_state)) {
+					 intel_joiner_crtc_joined_pipe_mask(old_crtc_state)) {
 		const struct intel_crtc_state *old_pipe_crtc_state =
 			intel_atomic_get_old_crtc_state(state, pipe_crtc);
 
@@ -3055,7 +3056,7 @@ static void intel_ddi_post_disable_hdmi_or_sst(struct intel_atomic_state *state,
 	intel_ddi_disable_transcoder_func(old_crtc_state);
 
 	for_each_intel_crtc_in_pipe_mask(&dev_priv->drm, pipe_crtc,
-					 intel_crtc_joined_pipe_mask(old_crtc_state)) {
+					 intel_joiner_crtc_joined_pipe_mask(old_crtc_state)) {
 		const struct intel_crtc_state *old_pipe_crtc_state =
 			intel_atomic_get_old_crtc_state(state, pipe_crtc);
 
@@ -3319,7 +3320,7 @@ static void intel_enable_ddi(struct intel_atomic_state *state,
 	intel_ddi_wait_for_fec_status(encoder, crtc_state, true);
 
 	for_each_intel_crtc_in_pipe_mask_reverse(&i915->drm, pipe_crtc,
-						 intel_crtc_joined_pipe_mask(crtc_state)) {
+						 intel_joiner_crtc_joined_pipe_mask(crtc_state)) {
 		const struct intel_crtc_state *pipe_crtc_state =
 			intel_atomic_get_new_crtc_state(state, pipe_crtc);
 
@@ -3429,7 +3430,7 @@ void intel_ddi_update_active_dpll(struct intel_atomic_state *state,
 		return;
 
 	for_each_intel_crtc_in_pipe_mask(&i915->drm, pipe_crtc,
-					 intel_crtc_joined_pipe_mask(crtc_state))
+					 intel_joiner_crtc_joined_pipe_mask(crtc_state))
 		intel_update_active_dpll(state, pipe_crtc, encoder);
 }
 

@@ -231,3 +231,10 @@ int intel_joiner_add_affected_crtcs(struct intel_atomic_state *state)
 
 	return 0;
 }
+
+u8 intel_joiner_crtc_joined_pipe_mask(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+
+	return BIT(crtc->pipe) | crtc_state->joiner_pipes;
+}
