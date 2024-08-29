@@ -67,7 +67,7 @@ __le64 *squashfs_read_xattr_id_table(struct super_block *sb, u64 table_start,
 
 	id_table = squashfs_read_table(sb, table_start, sizeof(*id_table));
 	if (IS_ERR(id_table))
-		return (__le64 *) id_table;
+		return ERR_CAST(id_table);
 
 	*xattr_table_start = le64_to_cpu(id_table->xattr_table_start);
 	*xattr_ids = le32_to_cpu(id_table->xattr_ids);
