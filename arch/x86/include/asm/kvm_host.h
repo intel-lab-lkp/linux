@@ -1318,8 +1318,12 @@ struct kvm_arch {
 	 * guarantee an NX huge page will be created in its stead, e.g. if the
 	 * guest attempts to execute from the region then KVM obviously can't
 	 * create an NX huge page (without hanging the guest).
+	 *
+	 * This list only contains shadow and legacy MMU pages. TDP MMU pages
+	 * are stored separately in tdp_mmu_possible_nx_huge_pages.
 	 */
 	struct list_head possible_nx_huge_pages;
+	u64 possible_nx_huge_pages_count;
 #ifdef CONFIG_KVM_EXTERNAL_WRITE_TRACKING
 	struct kvm_page_track_notifier_head track_notifier_head;
 #endif
@@ -1474,7 +1478,7 @@ struct kvm_arch {
 	 * is held in read mode:
 	 *  - tdp_mmu_roots (above)
 	 *  - the link field of kvm_mmu_page structs used by the TDP MMU
-	 *  - possible_nx_huge_pages;
+	 *  - tdp_mmu_possible_nx_huge_pages;
 	 *  - the possible_nx_huge_page_link field of kvm_mmu_page structs used
 	 *    by the TDP MMU
 	 * Because the lock is only taken within the MMU lock, strictly
@@ -1483,6 +1487,13 @@ struct kvm_arch {
 	 * the code to do so.
 	 */
 	spinlock_t tdp_mmu_pages_lock;
+
+	/*
+	 * Similar to possible_nx_huge_pages list but this one stores only TDP
+	 * MMU pages.
+	 */
+	struct list_head tdp_mmu_possible_nx_huge_pages;
+	u64 tdp_mmu_possible_nx_huge_pages_count;
 #endif /* CONFIG_X86_64 */
 
 	/*

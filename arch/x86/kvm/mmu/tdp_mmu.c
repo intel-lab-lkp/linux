@@ -15,6 +15,7 @@
 void kvm_mmu_init_tdp_mmu(struct kvm *kvm)
 {
 	INIT_LIST_HEAD(&kvm->arch.tdp_mmu_roots);
+	INIT_LIST_HEAD(&kvm->arch.tdp_mmu_possible_nx_huge_pages);
 	spin_lock_init(&kvm->arch.tdp_mmu_pages_lock);
 }
 
@@ -1795,4 +1796,12 @@ u64 *kvm_tdp_mmu_fast_pf_get_last_sptep(struct kvm_vcpu *vcpu, gfn_t gfn,
 	 * outside of mmu_lock.
 	 */
 	return rcu_dereference(sptep);
+}
+
+unsigned long kvm_tdp_mmu_nx_huge_pages_to_zap(struct kvm *kvm)
+{
+	unsigned long pages = READ_ONCE(kvm->arch.tdp_mmu_possible_nx_huge_pages_count);
+	unsigned int ratio = READ_ONCE(nx_huge_pages_recovery_ratio);
+
+	return ratio ? DIV_ROUND_UP(pages, ratio) : 0;
 }

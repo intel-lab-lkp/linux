@@ -65,9 +65,9 @@ int __read_mostly nx_huge_pages = -1;
 static uint __read_mostly nx_huge_pages_recovery_period_ms;
 #ifdef CONFIG_PREEMPT_RT
 /* Recovery can cause latency spikes, disable it for PREEMPT_RT.  */
-static uint __read_mostly nx_huge_pages_recovery_ratio = 0;
+unsigned int __read_mostly nx_huge_pages_recovery_ratio;
 #else
-static uint __read_mostly nx_huge_pages_recovery_ratio = 60;
+unsigned int __read_mostly nx_huge_pages_recovery_ratio = 60;
 #endif
 
 static int get_nx_huge_pages(char *buffer, const struct kernel_param *kp);
@@ -871,8 +871,17 @@ void track_possible_nx_huge_page(struct kvm *kvm, struct kvm_mmu_page *sp)
 		return;
 
 	++kvm->stat.nx_lpage_splits;
-	list_add_tail(&sp->possible_nx_huge_page_link,
-		      &kvm->arch.possible_nx_huge_pages);
+	if (is_tdp_mmu_page(sp)) {
+#ifdef CONFIG_X86_64
+		++kvm->arch.tdp_mmu_possible_nx_huge_pages_count;
+		list_add_tail(&sp->possible_nx_huge_page_link,
+			      &kvm->arch.tdp_mmu_possible_nx_huge_pages);
+#endif
+	} else {
+		++kvm->arch.possible_nx_huge_pages_count;
+		list_add_tail(&sp->possible_nx_huge_page_link,
+			      &kvm->arch.possible_nx_huge_pages);
+	}
 }
 
 static void account_nx_huge_page(struct kvm *kvm, struct kvm_mmu_page *sp,
@@ -906,6 +915,13 @@ void untrack_possible_nx_huge_page(struct kvm *kvm, struct kvm_mmu_page *sp)
 		return;
 
 	--kvm->stat.nx_lpage_splits;
+	if (is_tdp_mmu_page(sp)) {
+#ifdef CONFIG_X86_64
+		--kvm->arch.tdp_mmu_possible_nx_huge_pages_count;
+#endif
+	} else {
+		--kvm->arch.possible_nx_huge_pages_count;
+	}
 	list_del_init(&sp->possible_nx_huge_page_link);
 }
 
@@ -7311,16 +7327,15 @@ static int set_nx_huge_pages_recovery_param(const char *val, const struct kernel
 	return err;
 }
 
-static void kvm_recover_nx_huge_pages(struct kvm *kvm)
+static void kvm_recover_nx_huge_pages(struct kvm *kvm,
+				      struct list_head *nx_huge_pages,
+				      unsigned long to_zap)
 {
-	unsigned long nx_lpage_splits = kvm->stat.nx_lpage_splits;
 	struct kvm_memory_slot *slot;
 	int rcu_idx;
 	struct kvm_mmu_page *sp;
-	unsigned int ratio;
 	LIST_HEAD(invalid_list);
 	bool flush = false;
-	ulong to_zap;
 
 	rcu_idx = srcu_read_lock(&kvm->srcu);
 	write_lock(&kvm->mmu_lock);
@@ -7332,10 +7347,8 @@ static void kvm_recover_nx_huge_pages(struct kvm *kvm)
 	 */
 	rcu_read_lock();
 
-	ratio = READ_ONCE(nx_huge_pages_recovery_ratio);
-	to_zap = ratio ? DIV_ROUND_UP(nx_lpage_splits, ratio) : 0;
 	for ( ; to_zap; --to_zap) {
-		if (list_empty(&kvm->arch.possible_nx_huge_pages))
+		if (list_empty(nx_huge_pages))
 			break;
 
 		/*
@@ -7345,7 +7358,7 @@ static void kvm_recover_nx_huge_pages(struct kvm *kvm)
 		 * the total number of shadow pages.  And because the TDP MMU
 		 * doesn't use active_mmu_pages.
 		 */
-		sp = list_first_entry(&kvm->arch.possible_nx_huge_pages,
+		sp = list_first_entry(nx_huge_pages,
 				      struct kvm_mmu_page,
 				      possible_nx_huge_page_link);
 		WARN_ON_ONCE(!sp->nx_huge_page_disallowed);
@@ -7417,10 +7430,19 @@ static long get_nx_huge_page_recovery_timeout(u64 start_time)
 		       : MAX_SCHEDULE_TIMEOUT;
 }
 
+static unsigned long nx_huge_pages_to_zap(struct kvm *kvm)
+{
+	unsigned long pages = READ_ONCE(kvm->arch.possible_nx_huge_pages_count);
+	unsigned int ratio = READ_ONCE(nx_huge_pages_recovery_ratio);
+
+	return ratio ? DIV_ROUND_UP(pages, ratio) : 0;
+}
+
 static int kvm_nx_huge_page_recovery_worker(struct kvm *kvm, uintptr_t data)
 {
-	u64 start_time;
+	unsigned long to_zap;
 	long remaining_time;
+	u64 start_time;
 
 	while (true) {
 		start_time = get_jiffies_64();
@@ -7438,7 +7460,19 @@ static int kvm_nx_huge_page_recovery_worker(struct kvm *kvm, uintptr_t data)
 		if (kthread_should_stop())
 			return 0;
 
-		kvm_recover_nx_huge_pages(kvm);
+		to_zap = nx_huge_pages_to_zap(kvm);
+		kvm_recover_nx_huge_pages(kvm,
+					  &kvm->arch.possible_nx_huge_pages,
+					  to_zap);
+
+		if (tdp_mmu_enabled) {
+#ifdef CONFIG_X86_64
+			to_zap = kvm_tdp_mmu_nx_huge_pages_to_zap(kvm);
+			kvm_recover_nx_huge_pages(kvm,
+						  &kvm->arch.tdp_mmu_possible_nx_huge_pages,
+						  to_zap);
+#endif
+		}
 	}
 }
 
