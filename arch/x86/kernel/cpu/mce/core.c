@@ -1866,8 +1866,8 @@ static void __mcheck_cpu_init_clear_banks(void)
 static void __mcheck_cpu_check_banks(void)
 {
 	struct mce_bank *mce_banks = this_cpu_ptr(mce_banks_array);
+	int i, last_bank;
 	u64 msrval;
-	int i;
 
 	for (i = 0; i < this_cpu_read(mce_num_banks); i++) {
 		struct mce_bank *b = &mce_banks[i];
@@ -1877,7 +1877,12 @@ static void __mcheck_cpu_check_banks(void)
 
 		rdmsrl(mca_msr_reg(i, MCA_CTL), msrval);
 		b->init = !!msrval;
+
+		if (b->init)
+			last_bank = i;
 	}
+
+	this_cpu_write(mce_num_banks, last_bank + 1);
 }
 
 /* Add per CPU specific workarounds here */
