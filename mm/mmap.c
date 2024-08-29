@@ -1796,6 +1796,9 @@ generic_get_unmapped_area(struct file *filp, unsigned long addr,
 	struct vm_unmapped_area_info info = {};
 	const unsigned long mmap_end = arch_get_mmap_end(addr, len, flags);
 
+	info.hint = addr;
+	info.mmap_flags = flags;
+
 	if (len > mmap_end - mmap_min_addr)
 		return -ENOMEM;
 
@@ -1840,6 +1843,9 @@ generic_get_unmapped_area_topdown(struct file *filp, unsigned long addr,
 	struct mm_struct *mm = current->mm;
 	struct vm_unmapped_area_info info = {};
 	const unsigned long mmap_end = arch_get_mmap_end(addr, len, flags);
+
+	info.hint = addr;
+	info.mmap_flags = flags;
 
 	/* requested length too big for entire address space */
 	if (len > mmap_end - mmap_min_addr)

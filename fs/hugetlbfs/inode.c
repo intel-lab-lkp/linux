@@ -182,6 +182,8 @@ hugetlb_get_unmapped_area_bottomup(struct file *file, unsigned long addr,
 	info.low_limit = current->mm->mmap_base;
 	info.high_limit = arch_get_mmap_end(addr, len, flags);
 	info.align_mask = PAGE_MASK & ~huge_page_mask(h);
+	info.hint = addr;
+	info.mmap_flags = flags;
 	return vm_unmapped_area(&info);
 }
 
@@ -197,6 +199,8 @@ hugetlb_get_unmapped_area_topdown(struct file *file, unsigned long addr,
 	info.low_limit = PAGE_SIZE;
 	info.high_limit = arch_get_mmap_base(addr, current->mm->mmap_base);
 	info.align_mask = PAGE_MASK & ~huge_page_mask(h);
+	info.hint = addr;
+	info.mmap_flags = flags;
 	addr = vm_unmapped_area(&info);
 
 	/*

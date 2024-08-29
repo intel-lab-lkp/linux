@@ -286,6 +286,10 @@ static unsigned long slice_find_area_bottomup(struct mm_struct *mm,
 		.length = len,
 		.align_mask = PAGE_MASK & ((1ul << pshift) - 1),
 	};
+
+	info.hint = addr;
+	info.mmap_flags = flags;
+
 	/*
 	 * Check till the allow max value for this mmap request
 	 */
@@ -330,6 +334,9 @@ static unsigned long slice_find_area_topdown(struct mm_struct *mm,
 		.align_mask = PAGE_MASK & ((1ul << pshift) - 1),
 	};
 	unsigned long min_addr = max(PAGE_SIZE, mmap_min_addr);
+
+	info.hint = addr;
+	info.mmap_flags = flags;
 
 	/*
 	 * If we are trying to allocate above DEFAULT_MAP_WINDOW

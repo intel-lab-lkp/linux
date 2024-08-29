@@ -88,6 +88,9 @@ unsigned long arch_get_unmapped_area(struct file *filp, unsigned long addr,
 	struct vm_area_struct *vma;
 	struct vm_unmapped_area_info info = {};
 
+	info.hint = addr;
+	info.mmap_flags = flags;
+
 	if (len > TASK_SIZE - mmap_min_addr)
 		return -ENOMEM;
 
@@ -122,6 +125,9 @@ unsigned long arch_get_unmapped_area_topdown(struct file *filp, unsigned long ad
 	struct vm_area_struct *vma;
 	struct mm_struct *mm = current->mm;
 	struct vm_unmapped_area_info info = {};
+
+	info.hint = addr;
+	info.mmap_flags = flags;
 
 	/* requested length too big for entire address space */
 	if (len > TASK_SIZE - mmap_min_addr)

@@ -29,6 +29,9 @@ arch_get_unmapped_area(struct file *filp, unsigned long addr,
 	struct vm_area_struct *vma;
 	struct vm_unmapped_area_info info = {};
 
+	info.hint = addr;
+	info.mmap_flags = flags;
+
 	/*
 	 * We enforce the MAP_FIXED case.
 	 */

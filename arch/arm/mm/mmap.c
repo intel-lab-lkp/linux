@@ -36,6 +36,9 @@ arch_get_unmapped_area(struct file *filp, unsigned long addr,
 	int aliasing = cache_is_vipt_aliasing();
 	struct vm_unmapped_area_info info = {};
 
+	info.hint = addr;
+	info.mmap_flags = flags;
+
 	/*
 	 * We only need to do colour alignment if either the I or D
 	 * caches alias.
@@ -55,6 +58,7 @@ arch_get_unmapped_area(struct file *filp, unsigned long addr,
 
 	if (len > TASK_SIZE)
 		return -ENOMEM;
+
 
 	if (addr) {
 		if (do_align)
@@ -87,6 +91,9 @@ arch_get_unmapped_area_topdown(struct file *filp, const unsigned long addr0,
 	int do_align = 0;
 	int aliasing = cache_is_vipt_aliasing();
 	struct vm_unmapped_area_info info = {};
+
+	info.hint = addr;
+	info.mmap_flags = flags;
 
 	/*
 	 * We only need to do colour alignment if either the I or D

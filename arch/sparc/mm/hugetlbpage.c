@@ -40,6 +40,8 @@ static unsigned long hugetlb_get_unmapped_area_bottomup(struct file *filp,
 	info.low_limit = TASK_UNMAPPED_BASE;
 	info.high_limit = min(task_size, VA_EXCLUDE_START);
 	info.align_mask = PAGE_MASK & ~huge_page_mask(h);
+	info.hint = addr;
+	info.mmap_flags = flags;
 	addr = vm_unmapped_area(&info);
 
 	if ((addr & ~PAGE_MASK) && task_size > VA_EXCLUDE_END) {
@@ -71,6 +73,8 @@ hugetlb_get_unmapped_area_topdown(struct file *filp, const unsigned long addr0,
 	info.low_limit = PAGE_SIZE;
 	info.high_limit = mm->mmap_base;
 	info.align_mask = PAGE_MASK & ~huge_page_mask(h);
+	info.hint = addr;
+	info.mmap_flags = flags;
 	addr = vm_unmapped_area(&info);
 
 	/*

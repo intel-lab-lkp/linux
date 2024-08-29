@@ -43,6 +43,9 @@ unsigned long arch_get_unmapped_area(struct file *filp, unsigned long addr, unsi
 {
 	struct vm_unmapped_area_info info = {};
 
+	info.hint = addr;
+	info.mmap_flags = flags;
+
 	if (flags & MAP_FIXED) {
 		/* We do not accept a shared mapping if it would violate
 		 * cache aliasing constraints.

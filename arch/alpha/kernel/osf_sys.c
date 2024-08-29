@@ -1223,6 +1223,8 @@ arch_get_unmapped_area_1(unsigned long addr, unsigned long len,
 	info.length = len;
 	info.low_limit = addr;
 	info.high_limit = limit;
+	info.hint = addr;
+	info.mmap_flags = flags;
 	return vm_unmapped_area(&info);
 }
 

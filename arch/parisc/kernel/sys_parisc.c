@@ -108,6 +108,9 @@ static unsigned long arch_get_unmapped_area_common(struct file *filp,
 		.length = len
 	};
 
+	info.hint = addr;
+	info.mmap_flags = flags;
+
 	if (unlikely(len > TASK_SIZE))
 		return -ENOMEM;
 

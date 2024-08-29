@@ -129,6 +129,9 @@ arch_get_unmapped_area_vmflags(struct file *filp, unsigned long addr, unsigned l
 	struct vm_unmapped_area_info info = {};
 	unsigned long begin, end;
 
+	info.hint = addr;
+	info.mmap_flags = flags;
+
 	if (flags & MAP_FIXED)
 		return addr;
 
@@ -166,6 +169,9 @@ arch_get_unmapped_area_topdown_vmflags(struct file *filp, unsigned long addr0,
 	struct mm_struct *mm = current->mm;
 	unsigned long addr = addr0;
 	struct vm_unmapped_area_info info = {};
+
+	info.hint = addr;
+	info.mmap_flags = flags;
 
 	/* requested length too big for entire address space */
 	if (len > TASK_SIZE)

@@ -35,6 +35,9 @@ arch_get_unmapped_area(struct file *filp, unsigned long addr,
 		.align_offset = pgoff << PAGE_SHIFT
 	};
 
+	info.hint = addr;
+	info.mmap_flags = flags;
+
 	/*
 	 * We only need to do colour alignment if either the I or D
 	 * caches alias.
