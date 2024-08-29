@@ -4266,11 +4266,13 @@ static ssize_t memory_oom_group_write(struct kernfs_open_file *of,
 
 enum {
 	MEMORY_RECLAIM_SWAPPINESS = 0,
+	MEMORY_RECLAIM_DISABLE_UNMAP_FILE,
 	MEMORY_RECLAIM_NULL,
 };
 
 static const match_table_t tokens = {
 	{ MEMORY_RECLAIM_SWAPPINESS, "swappiness=%d"},
+	{ MEMORY_RECLAIM_DISABLE_UNMAP_FILE, "disable_unmap_file"},
 	{ MEMORY_RECLAIM_NULL, NULL },
 };
 
@@ -4281,7 +4283,7 @@ static ssize_t memory_reclaim(struct kernfs_open_file *of, char *buf,
 	unsigned int nr_retries = MAX_RECLAIM_RETRIES;
 	unsigned long nr_to_reclaim, nr_reclaimed = 0;
 	int swappiness = -1;
-	unsigned int reclaim_options;
+	unsigned int reclaim_options = 0;
 	char *old_buf, *start;
 	substring_t args[MAX_OPT_ARGS];
 
@@ -4304,12 +4306,15 @@ static ssize_t memory_reclaim(struct kernfs_open_file *of, char *buf,
 			if (swappiness < MIN_SWAPPINESS || swappiness > MAX_SWAPPINESS)
 				return -EINVAL;
 			break;
+		case MEMORY_RECLAIM_DISABLE_UNMAP_FILE:
+			reclaim_options = MEMCG_RECLAIM_DIS_UNMAP_FILE;
+			break;
 		default:
 			return -EINVAL;
 		}
 	}
 
-	reclaim_options	= MEMCG_RECLAIM_MAY_SWAP | MEMCG_RECLAIM_PROACTIVE;
+	reclaim_options	|= MEMCG_RECLAIM_MAY_SWAP | MEMCG_RECLAIM_PROACTIVE;
 	while (nr_reclaimed < nr_to_reclaim) {
 		/* Will converge on zero, but reclaim enforces a minimum */
 		unsigned long batch_size = (nr_to_reclaim - nr_reclaimed) / 4;

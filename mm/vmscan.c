@@ -6607,6 +6607,10 @@ unsigned long try_to_free_mem_cgroup_pages(struct mem_cgroup *memcg,
 		.may_swap = !!(reclaim_options & MEMCG_RECLAIM_MAY_SWAP),
 		.proactive = !!(reclaim_options & MEMCG_RECLAIM_PROACTIVE),
 	};
+
+	if (reclaim_options & MEMCG_RECLAIM_DIS_UNMAP_FILE)
+		sc.may_unmap &= ~UNMAP_FILE;
+
 	/*
 	 * Traverse the ZONELIST_FALLBACK zonelist of the current node to put
 	 * equal pressure on all the nodes. This is based on the assumption that
