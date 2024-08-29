@@ -4,9 +4,33 @@
  */
 
 #include <linux/anon_inodes.h>
+#include <linux/atomic.h>
 #include <linux/falloc.h>
 #include <linux/guest_memfd.h>
 #include <linux/pagemap.h>
+#include <linux/wait.h>
+
+#include "internal.h"
+
+static DECLARE_WAIT_QUEUE_HEAD(safe_wait);
+
+/**
+ * struct guest_memfd_private - private per-folio data
+ * @accessible: number of kernel users expecting folio to be accessible.
+ *              When zero, the folio converts to being inaccessible.
+ * @safe: number of "safe" references to the folio. Each reference is
+ *        aware that the folio can be made (in)accessible at any time.
+ */
+struct guest_memfd_private {
+	atomic_t accessible;
+	atomic_t safe;
+};
+
+static inline int base_safe_refs(struct folio *folio)
+{
+	/* 1 for filemap */
+	return 1 + folio_nr_pages(folio);
+}
 
 /**
  * guest_memfd_grab_folio() -- grabs a folio from the guest memfd
@@ -35,21 +59,56 @@
  */
 struct folio *guest_memfd_grab_folio(struct file *file, pgoff_t index, u32 flags)
 {
-	unsigned long gmem_flags = (unsigned long)file->private_data;
+	const bool accessible = flags & GUEST_MEMFD_GRAB_ACCESSIBLE;
 	struct inode *inode = file_inode(file);
 	struct guest_memfd_operations *ops = inode->i_private;
+	struct guest_memfd_private *private;
+	unsigned long gmem_flags;
 	struct folio *folio;
 	int r;
 
 	/* TODO: Support huge pages. */
-	folio = filemap_grab_folio(inode->i_mapping, index);
+	folio = __filemap_get_folio(inode->i_mapping, index,
+			FGP_LOCK | FGP_ACCESSED | FGP_CREAT | FGP_STABLE,
+			mapping_gfp_mask(inode->i_mapping));
 	if (IS_ERR(folio))
 		return folio;
 
-	if (folio_test_uptodate(folio))
-		return folio;
+	if (folio_test_uptodate(folio)) {
+		private = folio_get_private(folio);
+		atomic_inc(&private->safe);
+		if (accessible)
+			r = guest_memfd_make_accessible(folio);
+		else
+			r = guest_memfd_make_inaccessible(folio);
 
-	folio_wait_stable(folio);
+		if (r) {
+			atomic_dec(&private->safe);
+			goto out_err;
+		}
+
+		wake_up_all(&safe_wait);
+		return folio;
+	}
+
+	private = kmalloc(sizeof(*private), GFP_KERNEL);
+	if (!private) {
+		r = -ENOMEM;
+		goto out_err;
+	}
+
+	folio_attach_private(folio, private);
+	/*
+	 * 1 for us
+	 * 1 for unmapping from userspace
+	 */
+	atomic_set(&private->accessible, accessible ? 2 : 0);
+	/*
+	 * +1 for us
+	 */
+	atomic_set(&private->safe, 1 + base_safe_refs(folio));
+
+	gmem_flags = (unsigned long)inode->i_mapping->i_private_data;
 
 	/*
 	 * Use the up-to-date flag to track whether or not the memory has been
@@ -57,19 +116,26 @@ struct folio *guest_memfd_grab_folio(struct file *file, pgoff_t index, u32 flags
 	 * storage for the memory, so the folio will remain up-to-date until
 	 * it's removed.
 	 */
-	if (gmem_flags & GUEST_MEMFD_FLAG_CLEAR_INACCESSIBLE) {
+	if (accessible || (gmem_flags & GUEST_MEMFD_FLAG_CLEAR_INACCESSIBLE)) {
 		unsigned long nr_pages = folio_nr_pages(folio);
 		unsigned long i;
 
 		for (i = 0; i < nr_pages; i++)
 			clear_highpage(folio_page(folio, i));
-
 	}
 
-	if (ops->prepare_inaccessible) {
-		r = ops->prepare_inaccessible(inode, folio);
-		if (r < 0)
-			goto out_err;
+	if (accessible) {
+		if (ops->prepare_accessible) {
+			r = ops->prepare_accessible(inode, folio);
+			if (r < 0)
+				goto out_free;
+		}
+	} else {
+		if (ops->prepare_inaccessible) {
+			r = ops->prepare_inaccessible(inode, folio);
+			if (r < 0)
+				goto out_free;
+		}
 	}
 
 	folio_mark_uptodate(folio);
@@ -78,12 +144,140 @@ struct folio *guest_memfd_grab_folio(struct file *file, pgoff_t index, u32 flags
 	 * unevictable and there is no storage to write back to.
 	 */
 	return folio;
+out_free:
+	kfree(private);
 out_err:
 	folio_unlock(folio);
 	folio_put(folio);
 	return ERR_PTR(r);
 }
 EXPORT_SYMBOL_GPL(guest_memfd_grab_folio);
+
+/**
+ * guest_memfd_put_folio() - Drop safe and accessible references to a folio
+ * @folio: the folio to drop references to
+ * @accessible_refs: number of accessible refs to drop, 0 if holding a
+ *                   reference to an inaccessible folio.
+ */
+void guest_memfd_put_folio(struct folio *folio, unsigned int accessible_refs)
+{
+	struct guest_memfd_private *private = folio_get_private(folio);
+
+	WARN_ON_ONCE(atomic_sub_return(accessible_refs, &private->accessible) < 0);
+	atomic_dec(&private->safe);
+	folio_put(folio);
+	wake_up_all(&safe_wait);
+}
+EXPORT_SYMBOL_GPL(guest_memfd_put_folio);
+
+/**
+ * guest_memfd_unsafe_folio() - Demotes the current folio reference to "unsafe"
+ * @folio: the folio to demote
+ *
+ * Decrements the number of safe references to this folio. The folio will not
+ * transition to inaccessible until the folio_ref_count is also decremented.
+ *
+ * This function does not release the folio reference count.
+ */
+void guest_memfd_unsafe_folio(struct folio *folio)
+{
+	struct guest_memfd_private *private = folio_get_private(folio);
+
+	atomic_dec(&private->safe);
+	wake_up_all(&safe_wait);
+}
+EXPORT_SYMBOL_GPL(guest_memfd_unsafe_folio);
+
+/**
+ * guest_memfd_make_accessible() - Attempt to make the folio accessible to host
+ * @folio: the folio to make accessible
+ *
+ * Makes the given folio accessible to the host. If the folio is currently
+ * inaccessible, attempts to convert it to accessible. Otherwise, returns with
+ * EBUSY.
+ *
+ * This function may sleep.
+ */
+int guest_memfd_make_accessible(struct folio *folio)
+{
+	struct guest_memfd_private *private = folio_get_private(folio);
+	struct inode *inode = folio_inode(folio);
+	struct guest_memfd_operations *ops = inode->i_private;
+	int r;
+
+	/*
+	 * If we already know the folio is accessible, then no need to do
+	 * anything else.
+	 */
+	if (atomic_inc_not_zero(&private->accessible))
+		return 0;
+
+	r = wait_event_timeout(safe_wait,
+			       folio_ref_count(folio) == atomic_read(&private->safe),
+			       msecs_to_jiffies(10));
+	if (!r)
+		return -EBUSY;
+
+	if (ops->prepare_accessible) {
+		r = ops->prepare_accessible(inode, folio);
+		if (r)
+			return r;
+	}
+
+	atomic_inc(&private->accessible);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(guest_memfd_make_accessible);
+
+/**
+ * guest_memfd_make_inaccessible() - Attempt to make the folio inaccessible
+ * @folio: the folio to make inaccessible
+ *
+ * Makes the given folio inaccessible to the host. IF the folio is currently
+ * accessible, attempt so convert it to inaccessible. Otherwise, returns with
+ * EBUSY.
+ *
+ * Conversion to inaccessible is allowed when ->accessible decrements to zero,
+ * the folio safe counter == folio reference counter, the folio is unmapped
+ * from host, and ->prepare_inaccessible returns it's ready to do so.
+ *
+ * This function may sleep.
+ */
+int guest_memfd_make_inaccessible(struct folio *folio)
+{
+	struct guest_memfd_private *private = folio_get_private(folio);
+	struct inode *inode = folio_inode(folio);
+	struct guest_memfd_operations *ops = inode->i_private;
+	int r;
+
+	r = atomic_dec_if_positive(&private->accessible);
+	if (r < 0)
+		return 0;
+	else if (r > 0)
+		return -EBUSY;
+
+	unmap_mapping_folio(folio);
+
+	r = wait_event_timeout(safe_wait,
+			       folio_ref_count(folio) == atomic_read(&private->safe),
+			       msecs_to_jiffies(10));
+	if (!r) {
+		r = -EBUSY;
+		goto err;
+	}
+
+	if (ops->prepare_inaccessible) {
+		r = ops->prepare_inaccessible(inode, folio);
+		if (r)
+			goto err;
+	}
+
+	return 0;
+err:
+	atomic_inc(&private->accessible);
+	return r;
+}
+EXPORT_SYMBOL_GPL(guest_memfd_make_inaccessible);
 
 static long gmem_punch_hole(struct file *file, loff_t offset, loff_t len)
 {
@@ -229,10 +423,12 @@ static int gmem_error_folio(struct address_space *mapping, struct folio *folio)
 
 static bool gmem_release_folio(struct folio *folio, gfp_t gfp)
 {
+	struct guest_memfd_private *private = folio_get_private(folio);
 	struct inode *inode = folio_inode(folio);
 	struct guest_memfd_operations *ops = inode->i_private;
 	off_t offset = folio->index;
 	size_t nr = folio_nr_pages(folio);
+	unsigned long val, expected;
 	int ret;
 
 	ret = ops->invalidate_begin(inode, offset, nr);
@@ -241,7 +437,24 @@ static bool gmem_release_folio(struct folio *folio, gfp_t gfp)
 	if (ops->invalidate_end)
 		ops->invalidate_end(inode, offset, nr);
 
+	expected = base_safe_refs(folio);
+	val = atomic_read(&private->safe);
+	WARN_ONCE(val != expected, "folio[%x] safe ref: %d != expected %d\n",
+		  folio_index(folio), val, expected);
+
+	folio_detach_private(folio);
+	kfree(private);
+
 	return true;
+}
+
+static void gmem_invalidate_folio(struct folio *folio, size_t offset, size_t len)
+{
+	WARN_ON_ONCE(offset != 0);
+	WARN_ON_ONCE(len != folio_size(folio));
+
+	if (offset == 0 && len == folio_size(folio))
+		filemap_release_folio(folio, 0);
 }
 
 static const struct address_space_operations gmem_aops = {
@@ -249,6 +462,7 @@ static const struct address_space_operations gmem_aops = {
 	.migrate_folio = gmem_migrate_folio,
 	.error_remove_folio = gmem_error_folio,
 	.release_folio = gmem_release_folio,
+	.invalidate_folio = gmem_invalidate_folio,
 };
 
 static inline bool guest_memfd_check_ops(const struct guest_memfd_operations *ops)
@@ -291,8 +505,7 @@ struct file *guest_memfd_alloc(const char *name,
 	 * instead of reusing a single inode.  Each guest_memfd instance needs
 	 * its own inode to track the size, flags, etc.
 	 */
-	file = anon_inode_create_getfile(name, &gmem_fops, (void *)flags,
-					 O_RDWR, NULL);
+	file = anon_inode_create_getfile(name, &gmem_fops, NULL, O_RDWR, NULL);
 	if (IS_ERR(file))
 		return file;
 
@@ -303,6 +516,7 @@ struct file *guest_memfd_alloc(const char *name,
 
 	inode->i_private = (void *)ops; /* discards const qualifier */
 	inode->i_mapping->a_ops = &gmem_aops;
+	inode->i_mapping->i_private_data = (void *)flags;
 	inode->i_mode |= S_IFREG;
 	inode->i_size = size;
 	mapping_set_gfp_mask(inode->i_mapping, GFP_HIGHUSER);
