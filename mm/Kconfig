@@ -59,6 +59,14 @@ config ZSWAP_SHRINKER_DEFAULT_ON
 	  reducing the chance that cold pages will reside in the zswap pool
 	  and consume memory indefinitely.
 
+config ZSWAP_STORE_THP_DEFAULT_ON
+	bool "Store mTHP and THP folios in zswap"
+	depends on ZSWAP
+	default n
+	help
+	  If selected, zswap will process mTHP and THP folios by
+	  compressing and storing each 4K page in the large folio.
+
 choice
 	prompt "Default compressor"
 	depends on ZSWAP
