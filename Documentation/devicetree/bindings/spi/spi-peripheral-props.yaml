@@ -29,6 +29,16 @@ properties:
     description:
       Chip select used by the device.
 
+  spi-cpha:
+    $ref: /schemas/types.yaml#/definitions/flag
+    description:
+      The device data is sampled on trailing (last) edge of the SPI clock.
+
+  spi-cpol:
+    $ref: /schemas/types.yaml#/definitions/flag
+    description:
+      The device clock has a falling lead (first) edge.
+
   spi-cs-high:
     $ref: /schemas/types.yaml#/definitions/flag
     description:
