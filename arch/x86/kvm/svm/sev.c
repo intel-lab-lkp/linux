@@ -2297,8 +2297,7 @@ static int sev_gmem_post_populate(struct kvm *kvm, gfn_t gfn_start, kvm_pfn_t pf
 			kunmap_local(vaddr);
 		}
 
-		ret = rmp_make_private(pfn + i, gfn << PAGE_SHIFT, PG_LEVEL_4K,
-				       sev_get_asid(kvm), true);
+		ret = guest_memfd_make_inaccessible(pfn_folio(pfn));
 		if (ret)
 			goto err;
 
