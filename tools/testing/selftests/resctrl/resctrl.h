@@ -44,6 +44,12 @@
 #define DEFAULT_SPAN		(250 * MB)
 
 /*
+ * Memory bandwidth (in MiB) below which the bandwidth comparisons
+ * between iMC and resctrl are considered unreliable.
+ */
+#define THROTTLE_THRESHOLD	750
+
+/*
  * user_params:		User supplied parameters
  * @cpu:		CPU number to which the benchmark will be bound to
  * @bits:		Number of bits used for cache allocation size
