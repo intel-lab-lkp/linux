@@ -8865,13 +8865,21 @@ struct nfs41_exchange_id_data {
 	struct nfs41_exchange_id_args args;
 };
 
+static void nfs4_free_impl_id_rcu(struct rcu_head *head)
+{
+	struct nfs41_impl_id *impl_id = container_of(head, struct nfs41_impl_id, __rcu_head);
+
+	kfree(impl_id);
+}
+
 static void nfs4_exchange_id_release(void *data)
 {
 	struct nfs41_exchange_id_data *cdata =
 					(struct nfs41_exchange_id_data *)data;
 
 	nfs_put_client(cdata->args.client);
-	kfree(cdata->res.impl_id);
+	if (cdata->res.impl_id)
+		call_rcu(&cdata->res.impl_id->__rcu_head, nfs4_free_impl_id_rcu);
 	kfree(cdata->res.server_scope);
 	kfree(cdata->res.server_owner);
 	kfree(cdata);
@@ -9033,7 +9041,7 @@ static int _nfs4_proc_exchange_id(struct nfs_client *clp, const struct cred *cre
 
 	swap(clp->cl_serverowner, resp->server_owner);
 	swap(clp->cl_serverscope, resp->server_scope);
-	swap(clp->cl_implid, resp->impl_id);
+	resp->impl_id = rcu_replace_pointer(clp->cl_implid, resp->impl_id, 1);
 
 	/* Save the EXCHANGE_ID verifier session trunk tests */
 	memcpy(clp->cl_confirm.data, argp->verifier.data,

@@ -281,6 +281,13 @@ static void nfs4_destroy_callback(struct nfs_client *clp)
 		nfs_callback_down(clp->cl_mvops->minor_version, clp->cl_net);
 }
 
+static void nfs4_free_impl_id_rcu(struct rcu_head *head)
+{
+	struct nfs41_impl_id *impl_id = container_of(head, struct nfs41_impl_id, __rcu_head);
+
+	kfree(impl_id);
+}
+
 static void nfs4_shutdown_client(struct nfs_client *clp)
 {
 	if (__test_and_clear_bit(NFS_CS_RENEWD, &clp->cl_res_state))
@@ -293,7 +300,8 @@ static void nfs4_shutdown_client(struct nfs_client *clp)
 	rpc_destroy_wait_queue(&clp->cl_rpcwaitq);
 	kfree(clp->cl_serverowner);
 	kfree(clp->cl_serverscope);
-	kfree(clp->cl_implid);
+	if (clp->cl_implid)
+		call_rcu(&clp->cl_implid->__rcu_head, nfs4_free_impl_id_rcu);
 	kfree(clp->cl_owner_id);
 }
 
