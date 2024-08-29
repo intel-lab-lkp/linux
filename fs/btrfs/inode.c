@@ -898,7 +898,7 @@ static int extent_range_clear_dirty_for_io(struct inode *inode, u64 start, u64 e
 	for (unsigned long index = start >> PAGE_SHIFT;
 	     index <= end_index; index++) {
 		folio = __filemap_get_folio(inode->i_mapping, index, 0, 0);
-		if (unlikely(IS_ERR(folio))) {
+		if (IS_ERR(folio)) {
 			if (!ret)
 				ret = PTR_ERR(folio);
 			continue;
