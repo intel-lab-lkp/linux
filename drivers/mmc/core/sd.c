@@ -345,7 +345,7 @@ static int mmc_read_switch(struct mmc_card *card)
 	 * The argument does not matter, as the support bits do not
 	 * change with the arguments.
 	 */
-	err = mmc_sd_switch(card, 0, 0, 0, status);
+	err = mmc_sd_switch(card, SD_SWITCH_CHECK, 0, 0, status);
 	if (err) {
 		/*
 		 * If the host or the card can't do the switch,
@@ -401,7 +401,8 @@ int mmc_sd_switch_hs(struct mmc_card *card)
 	if (!status)
 		return -ENOMEM;
 
-	err = mmc_sd_switch(card, 1, 0, HIGH_SPEED_BUS_SPEED, status);
+	err = mmc_sd_switch(card, SD_SWITCH_SET, 0,
+			HIGH_SPEED_BUS_SPEED, status);
 	if (err)
 		goto out;
 
@@ -433,7 +434,8 @@ static int sd_select_driver_type(struct mmc_card *card, u8 *status)
 						   card_drv_type, &drv_type);
 
 	if (drive_strength) {
-		err = mmc_sd_switch(card, 1, 2, drive_strength, status);
+		err = mmc_sd_switch(card, SD_SWITCH_SET, 2,
+				drive_strength, status);
 		if (err)
 			return err;
 		if ((status[15] & 0xF) != drive_strength) {
@@ -513,7 +515,7 @@ static int sd_set_bus_speed_mode(struct mmc_card *card, u8 *status)
 		return 0;
 	}
 
-	err = mmc_sd_switch(card, 1, 0, card->sd_bus_speed, status);
+	err = mmc_sd_switch(card, SD_SWITCH_SET, 0, card->sd_bus_speed, status);
 	if (err)
 		return err;
 
@@ -604,7 +606,8 @@ static int sd_set_current_limit(struct mmc_card *card, u8 *status)
 		current_limit = SD_SET_CURRENT_LIMIT_200;
 
 	if (current_limit != SD_SET_CURRENT_NO_CHANGE) {
-		err = mmc_sd_switch(card, 1, 3, current_limit, status);
+		err = mmc_sd_switch(card, SD_SWITCH_SET, 3,
+				current_limit, status);
 		if (err)
 			return err;
 
