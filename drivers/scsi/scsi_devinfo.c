@@ -423,7 +423,7 @@ static struct scsi_dev_info_list *scsi_dev_info_list_find(const char *vendor,
 	const char *vskip, *mskip;
 
 	if (IS_ERR(devinfo_table))
-		return (struct scsi_dev_info_list *) devinfo_table;
+		return ERR_CAST(devinfo_table);
 
 	/* Prepare for "compatible" matches */
 

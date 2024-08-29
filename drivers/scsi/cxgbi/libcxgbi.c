@@ -2890,7 +2890,7 @@ check_route:
 	}
 
 	if (IS_ERR(csk))
-		return (struct iscsi_endpoint *)csk;
+		return ERR_CAST(csk);
 	cxgbi_sock_get(csk);
 
 	if (!hba)
