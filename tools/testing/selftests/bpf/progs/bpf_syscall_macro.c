@@ -43,7 +43,7 @@ int BPF_KPROBE(handle_sys_prctl)
 
 	/* test for PT_REGS_PARM */
 
-#if !defined(bpf_target_arm64) && !defined(bpf_target_s390)
+#if !defined(bpf_target_arm64) && !defined(bpf_target_s390) && !defined(bpf_target_riscv)
 	bpf_probe_read_kernel(&tmp, sizeof(tmp), &PT_REGS_PARM1_SYSCALL(real_regs));
 #endif
 	arg1 = tmp;
