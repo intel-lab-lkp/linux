@@ -1798,25 +1798,15 @@ u64 *kvm_tdp_mmu_fast_pf_get_last_sptep(struct kvm_vcpu *vcpu, gfn_t gfn,
 	return rcu_dereference(sptep);
 }
 
-unsigned long kvm_tdp_mmu_nx_huge_pages_to_zap(struct kvm *kvm)
+void kvm_tdp_mmu_recover_nx_huge_pages(struct kvm *kvm)
 {
 	unsigned long pages = READ_ONCE(kvm->arch.tdp_mmu_possible_nx_huge_pages_count);
 	unsigned int ratio = READ_ONCE(nx_huge_pages_recovery_ratio);
-
-	return ratio ? DIV_ROUND_UP(pages, ratio) : 0;
-}
-
-void kvm_tdp_mmu_recover_nx_huge_pages(struct kvm *kvm,
-				   struct list_head *nx_huge_pages,
-				   unsigned long to_zap)
-{
-	int rcu_idx;
+	unsigned long to_zap = ratio ? DIV_ROUND_UP(pages, ratio) : 0;
 	struct kvm_mmu_page *sp;
 	bool flush = false;
 
-	rcu_idx = srcu_read_lock(&kvm->srcu);
-	write_lock(&kvm->mmu_lock);
-
+	lockdep_assert_held_write(&kvm->mmu_lock);
 	/*
 	 * Zapping TDP MMU shadow pages, including the remote TLB flush, must
 	 * be done under RCU protection, because the pages are freed via RCU
@@ -1825,7 +1815,7 @@ void kvm_tdp_mmu_recover_nx_huge_pages(struct kvm *kvm,
 	rcu_read_lock();
 
 	for ( ; to_zap; --to_zap) {
-		if (list_empty(nx_huge_pages))
+		if (list_empty(&kvm->arch.tdp_mmu_possible_nx_huge_pages))
 			break;
 
 		/*
@@ -1835,7 +1825,7 @@ void kvm_tdp_mmu_recover_nx_huge_pages(struct kvm *kvm,
 		 * the total number of shadow pages.  And because the TDP MMU
 		 * doesn't use active_mmu_pages.
 		 */
-		sp = list_first_entry(nx_huge_pages,
+		sp = list_first_entry(&kvm->arch.tdp_mmu_possible_nx_huge_pages,
 				      struct kvm_mmu_page,
 				      possible_nx_huge_page_link);
 		WARN_ON_ONCE(!sp->nx_huge_page_disallowed);
@@ -1869,7 +1859,4 @@ void kvm_tdp_mmu_recover_nx_huge_pages(struct kvm *kvm,
 	if (flush)
 		kvm_flush_remote_tlbs(kvm);
 	rcu_read_unlock();
-
-	write_unlock(&kvm->mmu_lock);
-	srcu_read_unlock(&kvm->srcu, rcu_idx);
 }

@@ -7354,19 +7354,18 @@ bool kvm_mmu_sp_dirty_logging_enabled(struct kvm *kvm, struct kvm_mmu_page *sp)
 	return slot && kvm_slot_dirty_track_enabled(slot);
 }
 
-static void kvm_mmu_recover_nx_huge_pages(struct kvm *kvm,
-					  struct list_head *nx_huge_pages,
-					  unsigned long to_zap)
+static void kvm_mmu_recover_nx_huge_pages(struct kvm *kvm)
 {
-	int rcu_idx;
+	unsigned long pages = READ_ONCE(kvm->arch.possible_nx_huge_pages_count);
+	unsigned int ratio = READ_ONCE(nx_huge_pages_recovery_ratio);
+	unsigned long to_zap = ratio ? DIV_ROUND_UP(pages, ratio) : 0;
 	struct kvm_mmu_page *sp;
 	LIST_HEAD(invalid_list);
 
-	rcu_idx = srcu_read_lock(&kvm->srcu);
-	write_lock(&kvm->mmu_lock);
+	lockdep_assert_held_write(&kvm->mmu_lock);
 
 	for ( ; to_zap; --to_zap) {
-		if (list_empty(nx_huge_pages))
+		if (list_empty(&kvm->arch.possible_nx_huge_pages))
 			break;
 
 		/*
@@ -7376,7 +7375,7 @@ static void kvm_mmu_recover_nx_huge_pages(struct kvm *kvm,
 		 * the total number of shadow pages.  And because the TDP MMU
 		 * doesn't use active_mmu_pages.
 		 */
-		sp = list_first_entry(nx_huge_pages,
+		sp = list_first_entry(&kvm->arch.possible_nx_huge_pages,
 				      struct kvm_mmu_page,
 				      possible_nx_huge_page_link);
 		WARN_ON_ONCE(!sp->nx_huge_page_disallowed);
@@ -7401,9 +7400,6 @@ static void kvm_mmu_recover_nx_huge_pages(struct kvm *kvm,
 		}
 	}
 	kvm_mmu_commit_zap_page(kvm, &invalid_list);
-
-	write_unlock(&kvm->mmu_lock);
-	srcu_read_unlock(&kvm->srcu, rcu_idx);
 }
 
 static long get_nx_huge_page_recovery_timeout(u64 start_time)
@@ -7417,19 +7413,11 @@ static long get_nx_huge_page_recovery_timeout(u64 start_time)
 		       : MAX_SCHEDULE_TIMEOUT;
 }
 
-static unsigned long nx_huge_pages_to_zap(struct kvm *kvm)
-{
-	unsigned long pages = READ_ONCE(kvm->arch.possible_nx_huge_pages_count);
-	unsigned int ratio = READ_ONCE(nx_huge_pages_recovery_ratio);
-
-	return ratio ? DIV_ROUND_UP(pages, ratio) : 0;
-}
-
 static int kvm_nx_huge_page_recovery_worker(struct kvm *kvm, uintptr_t data)
 {
-	unsigned long to_zap;
 	long remaining_time;
 	u64 start_time;
+	int rcu_idx;
 
 	while (true) {
 		start_time = get_jiffies_64();
@@ -7447,19 +7435,16 @@ static int kvm_nx_huge_page_recovery_worker(struct kvm *kvm, uintptr_t data)
 		if (kthread_should_stop())
 			return 0;
 
-		to_zap = nx_huge_pages_to_zap(kvm);
-		kvm_mmu_recover_nx_huge_pages(kvm,
-					      &kvm->arch.possible_nx_huge_pages,
-					      to_zap);
+		rcu_idx = srcu_read_lock(&kvm->srcu);
+		write_lock(&kvm->mmu_lock);
 
+		kvm_mmu_recover_nx_huge_pages(kvm);
 		if (tdp_mmu_enabled) {
-#ifdef CONFIG_X86_64
-			to_zap = kvm_tdp_mmu_nx_huge_pages_to_zap(kvm);
-			kvm_tdp_mmu_recover_nx_huge_pages(kvm,
-						      &kvm->arch.tdp_mmu_possible_nx_huge_pages,
-						      to_zap);
-#endif
+			kvm_tdp_mmu_recover_nx_huge_pages(kvm);
 		}
+
+		write_unlock(&kvm->mmu_lock);
+		srcu_read_unlock(&kvm->srcu, rcu_idx);
 	}
 }
 
