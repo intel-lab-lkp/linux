@@ -116,15 +116,12 @@ static void cmt_test_cleanup(void)
 
 static int cmt_run_test(const struct resctrl_test *test, const struct user_params *uparams)
 {
-	const char * const *cmd = uparams->benchmark_cmd;
-	const char *new_cmd[BENCHMARK_ARGS];
 	unsigned long cache_total_size = 0;
 	int n = uparams->bits ? : 5;
 	unsigned long long_mask;
-	char *span_str = NULL;
 	int count_of_bits;
 	size_t span;
-	int ret, i;
+	int ret;
 
 	ret = get_full_cbm("L3", &long_mask);
 	if (ret)
@@ -155,31 +152,20 @@ static int cmt_run_test(const struct resctrl_test *test, const struct user_param
 
 	span = cache_portion_size(cache_total_size, param.mask, long_mask);
 
-	if (strcmp(cmd[0], "fill_buf") == 0) {
-		/* Duplicate the command to be able to replace span in it */
-		for (i = 0; uparams->benchmark_cmd[i]; i++)
-			new_cmd[i] = uparams->benchmark_cmd[i];
-		new_cmd[i] = NULL;
-
-		ret = asprintf(&span_str, "%zu", span);
-		if (ret < 0)
-			return -1;
-		new_cmd[1] = span_str;
-		cmd = new_cmd;
-	}
+	param.fill_buf.buf_size = span;
+	param.fill_buf.memflush = 1;
+	param.fill_buf.operation = 0;
+	param.fill_buf.once = false;
 
 	remove(RESULT_FILE_NAME);
 
-	ret = resctrl_val(test, uparams, cmd, &param);
+	ret = resctrl_val(test, uparams, &param);
 	if (ret)
-		goto out;
+		return ret;
 
 	ret = check_results(&param, span, n);
 	if (ret && (get_vendor() == ARCH_INTEL))
 		ksft_print_msg("Intel CMT may be inaccurate when Sub-NUMA Clustering is enabled. Check BIOS configuration.\n");
-
-out:
-	free(span_str);
 
 	return ret;
 }

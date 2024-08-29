@@ -162,7 +162,7 @@ int main(int argc, char **argv)
 	bool test_param_seen = false;
 	struct user_params uparams;
 	char *span_str = NULL;
-	int ret, c, i;
+	int c, i;
 
 	init_user_params(&uparams);
 
@@ -256,19 +256,6 @@ last_arg:
 		ksft_exit_skip("resctrl FS unmount failed.\n");
 
 	filter_dmesg();
-
-	if (!uparams.benchmark_cmd[0]) {
-		/* If no benchmark is given by "-b" argument, use fill_buf. */
-		uparams.benchmark_cmd[0] = "fill_buf";
-		ret = asprintf(&span_str, "%u", DEFAULT_SPAN);
-		if (ret < 0)
-			ksft_exit_fail_msg("Out of memory!\n");
-		uparams.benchmark_cmd[1] = span_str;
-		uparams.benchmark_cmd[2] = "1";
-		uparams.benchmark_cmd[3] = "0";
-		uparams.benchmark_cmd[4] = "false";
-		uparams.benchmark_cmd[5] = NULL;
-	}
 
 	ksft_set_plan(tests);
 

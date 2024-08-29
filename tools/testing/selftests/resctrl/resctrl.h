@@ -80,6 +80,26 @@ struct resctrl_test {
 };
 
 /*
+ * fill_buf_param:	"fill_buf" benchmark parameters
+ * @buf_size:		Size (in bytes) of buffer used in benchmark.
+ *			"fill_buf" allocates and initializes buffer of
+ *			@buf_size.
+ * @operation:		If 0, then only read operations are performed on
+ *			the buffer, if 1 then only write operations are
+ *			performed on the buffer.
+ * @memflush:		1 if buffer should be flushed after
+ *			allocation and initialization.
+ * @once:		Benchmark will perform @operation once if true,
+ *			infinitely (until terminated) if false.
+ */
+struct fill_buf_param {
+	size_t		buf_size;
+	int		operation;
+	int		memflush;
+	int		once;
+};
+
+/*
  * resctrl_val_param:	resctrl test parameters
  * @ctrlgrp:		Name of the control monitor group (con_mon grp)
  * @mongrp:		Name of the monitor group (mon grp)
@@ -87,21 +107,23 @@ struct resctrl_test {
  * @init:		Callback function to initialize test environment
  * @setup:		Callback function to setup per test run environment
  * @measure:		Callback that performs the measurement (a single test)
+ * @fill_buf:		Parameters for default "fill_buf" benchmark
  */
 struct resctrl_val_param {
-	const char	*ctrlgrp;
-	const char	*mongrp;
-	char		filename[64];
-	unsigned long	mask;
-	int		num_of_runs;
-	int		(*init)(const struct resctrl_val_param *param,
-				int domain_id);
-	int		(*setup)(const struct resctrl_test *test,
-				 const struct user_params *uparams,
-				 struct resctrl_val_param *param);
-	int		(*measure)(const struct user_params *uparams,
-				   struct resctrl_val_param *param,
-				   pid_t bm_pid);
+	const char		*ctrlgrp;
+	const char		*mongrp;
+	char			filename[64];
+	unsigned long		mask;
+	int			num_of_runs;
+	int			(*init)(const struct resctrl_val_param *param,
+					int domain_id);
+	int			(*setup)(const struct resctrl_test *test,
+					 const struct user_params *uparams,
+					 struct resctrl_val_param *param);
+	int			(*measure)(const struct user_params *uparams,
+					   struct resctrl_val_param *param,
+					   pid_t bm_pid);
+	struct fill_buf_param	fill_buf;
 };
 
 struct perf_event_read {
@@ -151,7 +173,6 @@ void initialize_mem_bw_resctrl(const struct resctrl_val_param *param,
 			       int domain_id);
 int resctrl_val(const struct resctrl_test *test,
 		const struct user_params *uparams,
-		const char * const *benchmark_cmd,
 		struct resctrl_val_param *param);
 unsigned long create_bit_mask(unsigned int start, unsigned int len);
 unsigned int count_contiguous_bits(unsigned long val, unsigned int *start);

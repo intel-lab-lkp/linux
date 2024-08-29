@@ -142,11 +142,16 @@ static int mbm_run_test(const struct resctrl_test *test, const struct user_param
 
 	remove(RESULT_FILE_NAME);
 
-	ret = resctrl_val(test, uparams, uparams->benchmark_cmd, &param);
+	param.fill_buf.buf_size = DEFAULT_SPAN;
+	param.fill_buf.memflush = 1;
+	param.fill_buf.operation = 0;
+	param.fill_buf.once = false;
+
+	ret = resctrl_val(test, uparams, &param);
 	if (ret)
 		return ret;
 
-	ret = check_results(DEFAULT_SPAN);
+	ret = check_results(param.fill_buf.buf_size);
 	if (ret && (get_vendor() == ARCH_INTEL))
 		ksft_print_msg("Intel MBM may be inaccurate when Sub-NUMA Clustering is enabled. Check BIOS configuration.\n");
 

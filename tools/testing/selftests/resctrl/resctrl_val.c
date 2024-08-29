@@ -612,21 +612,17 @@ close_fp:
  *			the benchmark
  * @test:		test information structure
  * @uparams:		user supplied parameters
- * @benchmark_cmd:	benchmark command and its arguments
  * @param:		parameters passed to resctrl_val()
  *
  * Return:		0 when the test was run, < 0 on error.
  */
 int resctrl_val(const struct resctrl_test *test,
 		const struct user_params *uparams,
-		const char * const *benchmark_cmd,
 		struct resctrl_val_param *param)
 {
-	int domain_id, operation = 0, memflush = 1;
-	size_t span = DEFAULT_SPAN;
 	unsigned char *buf = NULL;
 	cpu_set_t old_affinity;
-	bool once = false;
+	int domain_id;
 	int ret = 0;
 	pid_t ppid;
 
@@ -666,21 +662,9 @@ int resctrl_val(const struct resctrl_test *test,
 	 * how this impacts "write" benchmark, but no test currently
 	 * uses this.
 	 */
-	if (strcmp(benchmark_cmd[0], "fill_buf") == 0) {
-		span = strtoul(benchmark_cmd[1], NULL, 10);
-		memflush =  atoi(benchmark_cmd[2]);
-		operation = atoi(benchmark_cmd[3]);
-		if (!strcmp(benchmark_cmd[4], "true")) {
-			once = true;
-		} else if (!strcmp(benchmark_cmd[4], "false")) {
-			once = false;
-		} else {
-			ksft_print_msg("Invalid once parameter\n");
-			ret = -EINVAL;
-			goto reset_affinity;
-		}
-
-		buf = alloc_buffer(span, memflush);
+	if (!uparams->benchmark_cmd[0]) {
+		buf = alloc_buffer(param->fill_buf.buf_size,
+				   param->fill_buf.memflush);
 		if (!buf) {
 			ret = -ENOMEM;
 			goto reset_affinity;
@@ -699,13 +683,17 @@ int resctrl_val(const struct resctrl_test *test,
 	 * terminated.
 	 */
 	if (bm_pid == 0) {
-		if (strcmp(benchmark_cmd[0], "fill_buf") == 0) {
-			if (operation == 0)
-				fill_cache_read(buf, span, once);
+		if (!uparams->benchmark_cmd[0]) {
+			if (param->fill_buf.operation == 0)
+				fill_cache_read(buf,
+						param->fill_buf.buf_size,
+						param->fill_buf.once);
 			else
-				fill_cache_write(buf, span, once);
+				fill_cache_write(buf,
+						 param->fill_buf.buf_size,
+						 param->fill_buf.once);
 		} else {
-			execvp(benchmark_cmd[0], (char **)benchmark_cmd);
+			execvp(uparams->benchmark_cmd[0], (char **)uparams->benchmark_cmd);
 		}
 		exit(EXIT_SUCCESS);
 	}
