@@ -308,10 +308,8 @@ static int qcom_ebi2_probe(struct platform_device *pdev)
 		return PTR_ERR(ebi2xclk);
 
 	ret = clk_prepare_enable(ebi2xclk);
-	if (ret) {
-		dev_err(dev, "could not enable EBI2X clk (%d)\n", ret);
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(dev, ret, "could not enable EBI2X clk\n");
 
 	ebi2clk = devm_clk_get(dev, "ebi2");
 	if (IS_ERR(ebi2clk)) {
