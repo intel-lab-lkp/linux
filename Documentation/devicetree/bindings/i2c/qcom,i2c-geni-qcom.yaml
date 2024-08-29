@@ -60,6 +60,10 @@ properties:
   power-domains:
     maxItems: 1
 
+  qcom,shared-se:
+    description: True if I2C needs to be shared between two or more subsystems.
+    type: boolean
+
   reg:
     maxItems: 1
 
