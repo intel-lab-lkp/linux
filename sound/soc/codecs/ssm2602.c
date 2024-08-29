@@ -606,8 +606,8 @@ static int ssm260x_component_probe(struct snd_soc_component *component)
 
 	ret = regmap_write(ssm2602->regmap, SSM2602_RESET, 0);
 	if (ret < 0) {
-		dev_err(component->dev, "Failed to issue reset: %d\n", ret);
-		return ret;
+		return dev_err_probe(component->dev, ret,
+			"Failed to issue reset: %d\n", ret);
 	}
 
 	regmap_register_patch(ssm2602->regmap, ssm2602_patch,

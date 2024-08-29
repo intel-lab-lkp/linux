@@ -678,8 +678,8 @@ static int adau1701_probe(struct snd_soc_component *component)
 	ret = regulator_bulk_enable(ARRAY_SIZE(adau1701->supplies),
 				    adau1701->supplies);
 	if (ret < 0) {
-		dev_err(component->dev, "Failed to enable regulators: %d\n", ret);
-		return ret;
+		return dev_err_probe(component->dev, ret,
+			"Failed to enable regulators: %d\n", ret);
 	}
 
 	/*
@@ -799,15 +799,15 @@ static int adau1701_i2c_probe(struct i2c_client *client)
 	ret = devm_regulator_bulk_get(dev, ARRAY_SIZE(adau1701->supplies),
 			adau1701->supplies);
 	if (ret < 0) {
-		dev_err(dev, "Failed to get regulators: %d\n", ret);
-		return ret;
+		return dev_err_probe(dev, ret,
+			"Failed to get regulators: %d\n", ret);
 	}
 
 	ret = regulator_bulk_enable(ARRAY_SIZE(adau1701->supplies),
 			adau1701->supplies);
 	if (ret < 0) {
-		dev_err(dev, "Failed to enable regulators: %d\n", ret);
-		return ret;
+		return dev_err_probe(dev, ret,
+			"Failed to enable regulators: %d\n", ret);
 	}
 
 	adau1701->client = client;
