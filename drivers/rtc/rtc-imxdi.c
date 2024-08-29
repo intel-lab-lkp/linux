@@ -778,12 +778,9 @@ static int __init dryice_rtc_probe(struct platform_device *pdev)
 	if (IS_ERR(imxdi->rtc))
 		return PTR_ERR(imxdi->rtc);
 
-	imxdi->clk = devm_clk_get(&pdev->dev, NULL);
+	imxdi->clk = devm_clk_get_enabled(&pdev->dev, NULL);
 	if (IS_ERR(imxdi->clk))
 		return PTR_ERR(imxdi->clk);
-	rc = clk_prepare_enable(imxdi->clk);
-	if (rc)
-		return rc;
 
 	/*
 	 * Initialize dryice hardware
@@ -794,13 +791,13 @@ static int __init dryice_rtc_probe(struct platform_device *pdev)
 
 	rc = di_handle_state(imxdi);
 	if (rc != 0)
-		goto err;
+		return rc;
 
 	rc = devm_request_irq(&pdev->dev, norm_irq, dryice_irq,
 			      IRQF_SHARED, pdev->name, imxdi);
 	if (rc) {
 		dev_warn(&pdev->dev, "interrupt not available.\n");
-		goto err;
+		return rc;
 	}
 
 	rc = devm_request_irq(&pdev->dev, sec_irq, dryice_irq,
@@ -820,14 +817,9 @@ static int __init dryice_rtc_probe(struct platform_device *pdev)
 
 	rc = devm_rtc_register_device(imxdi->rtc);
 	if (rc)
-		goto err;
+		return rc;
 
 	return 0;
-
-err:
-	clk_disable_unprepare(imxdi->clk);
-
-	return rc;
 }
 
 static void __exit dryice_rtc_remove(struct platform_device *pdev)
@@ -838,8 +830,6 @@ static void __exit dryice_rtc_remove(struct platform_device *pdev)
 
 	/* mask all interrupts */
 	writel(0, imxdi->ioaddr + DIER);
-
-	clk_disable_unprepare(imxdi->clk);
 }
 
 static const struct of_device_id dryice_dt_ids[] = {
