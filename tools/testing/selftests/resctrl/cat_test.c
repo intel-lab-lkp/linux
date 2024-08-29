@@ -292,19 +292,25 @@ static bool arch_supports_noncont_cat(const struct resctrl_test *test)
 {
 	unsigned int eax, ebx, ecx, edx;
 
-	/* AMD always supports non-contiguous CBM. */
-	if (get_vendor() == ARCH_AMD)
+	switch (get_vendor()) {
+	case ARCH_AMD:
+		/* AMD always supports non-contiguous CBM. */
 		return true;
 
-	/* Intel support for non-contiguous CBM needs to be discovered. */
-	if (!strcmp(test->resource, "L3"))
-		__cpuid_count(0x10, 1, eax, ebx, ecx, edx);
-	else if (!strcmp(test->resource, "L2"))
-		__cpuid_count(0x10, 2, eax, ebx, ecx, edx);
-	else
-		return false;
+	case ARCH_INTEL:
+		/* Intel support for non-contiguous CBM needs to be discovered. */
+		if (!strcmp(test->resource, "L3"))
+			__cpuid_count(0x10, 1, eax, ebx, ecx, edx);
+		else if (!strcmp(test->resource, "L2"))
+			__cpuid_count(0x10, 2, eax, ebx, ecx, edx);
+		else
+			return false;
 
-	return ((ecx >> 3) & 1);
+		return ((ecx >> 3) & 1);
+
+	default:
+		return false;
+	}
 }
 
 static int noncont_cat_run_test(const struct resctrl_test *test,
