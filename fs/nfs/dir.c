@@ -310,7 +310,7 @@ static int nfs_readdir_array_can_expand(struct nfs_cache_array *array)
 
 static int nfs_readdir_folio_array_append(struct folio *folio,
 					  const struct nfs_entry *entry,
-					  u64 *cookie)
+					  u64 *cookie, u64 *prev_cookie)
 {
 	struct nfs_cache_array *array;
 	struct nfs_cache_array_entry *cache_entry;
@@ -342,6 +342,7 @@ static int nfs_readdir_folio_array_append(struct folio *folio,
 		nfs_readdir_array_set_eof(array);
 out:
 	*cookie = array->last_cookie;
+	*prev_cookie = cache_entry->cookie;
 	kunmap_local(array);
 	return ret;
 }
@@ -826,10 +827,11 @@ static int nfs_readdir_folio_filler(struct nfs_readdir_descriptor *desc,
 {
 	struct address_space *mapping = desc->file->f_mapping;
 	struct folio *new, *folio = *arrays;
+	struct nfs_cache_array *array;
 	struct xdr_stream stream;
+	u64 cookie, prev_cookie;
 	struct page *scratch;
 	struct xdr_buf buf;
-	u64 cookie;
 	int status;
 
 	scratch = alloc_page(GFP_KERNEL);
@@ -841,10 +843,20 @@ static int nfs_readdir_folio_filler(struct nfs_readdir_descriptor *desc,
 
 	do {
 		status = nfs_readdir_entry_decode(desc, entry, &stream);
-		if (status != 0)
+		if (status != 0) {
+			if (status == -EAGAIN && entry->cookie == cookie) {
+				/* Revert the bad entry */
+				array = kmap_local_folio(folio, 0);
+				array->last_cookie = prev_cookie;
+				desc->last_cookie = 0;
+				desc->dir_cookie = 0;
+				array->size--;
+				kunmap_local(array);
+			}
 			break;
+		}
 
-		status = nfs_readdir_folio_array_append(folio, entry, &cookie);
+		status = nfs_readdir_folio_array_append(folio, entry, &cookie, &prev_cookie);
 		if (status != -ENOSPC)
 			continue;
 
@@ -866,7 +878,7 @@ static int nfs_readdir_folio_filler(struct nfs_readdir_descriptor *desc,
 			folio = new;
 		}
 		desc->folio_index_max++;
-		status = nfs_readdir_folio_array_append(folio, entry, &cookie);
+		status = nfs_readdir_folio_array_append(folio, entry, &cookie, &prev_cookie);
 	} while (!status && !entry->eof);
 
 	switch (status) {
