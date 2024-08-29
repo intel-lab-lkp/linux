@@ -170,11 +170,17 @@ static int mba_run_test(const struct resctrl_test *test, const struct user_param
 		.setup		= mba_setup,
 		.measure	= mba_measure,
 	};
+	unsigned long cache_total_size = 0;
 	int ret;
 
 	remove(RESULT_FILE_NAME);
 
-	param.fill_buf.buf_size = DEFAULT_SPAN;
+	ret = get_cache_size(uparams->cpu, "L3", &cache_total_size);
+	if (ret)
+		return ret;
+
+	param.fill_buf.buf_size = cache_total_size > DEFAULT_SPAN ?
+				  cache_total_size * 2 : DEFAULT_SPAN;
 	param.fill_buf.memflush = 1;
 	param.fill_buf.operation = 0;
 	param.fill_buf.once = false;
