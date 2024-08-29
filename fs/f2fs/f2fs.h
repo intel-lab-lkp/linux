@@ -1301,6 +1301,7 @@ struct f2fs_gc_control {
 	bool should_migrate_blocks;	/* should migrate blocks */
 	bool err_gc_skipped;		/* return EAGAIN if GC skipped */
 	unsigned int nr_free_secs;	/* # of free sections to do GC */
+	bool one_time;			/* require one time GC in one migration unit */
 };
 
 /*
