@@ -205,6 +205,7 @@ static struct iommu_dev_data *alloc_dev_data(struct amd_iommu *iommu, u16 devid)
 		return NULL;
 
 	spin_lock_init(&dev_data->lock);
+	init_rwsem(&dev_data->dte_sem);
 	dev_data->devid = devid;
 	ratelimit_default_init(&dev_data->rs);
 
@@ -1946,9 +1947,12 @@ static void set_dte_entry(struct amd_iommu *iommu,
 	}
 }
 
-static void clear_dte_entry(struct amd_iommu *iommu, u16 devid)
+static void clear_dte_entry(struct amd_iommu *iommu, struct iommu_dev_data *dev_data)
 {
+	u16 devid = dev_data->devid;
 	struct dev_table_entry *dev_table = get_dev_table(iommu);
+
+	down_write(&dev_data->dte_sem);
 
 	/* remove entry from the device table seen by the hardware */
 	dev_table[devid].data[0]  = DTE_FLAG_V;
@@ -1959,6 +1963,8 @@ static void clear_dte_entry(struct amd_iommu *iommu, u16 devid)
 	dev_table[devid].data[1] &= DTE_FLAG_MASK;
 
 	amd_iommu_apply_erratum_63(iommu, devid);
+
+	up_write(&dev_data->dte_sem);
 }
 
 /* Update and flush DTE for the given device */
@@ -1969,7 +1975,7 @@ void amd_iommu_dev_update_dte(struct iommu_dev_data *dev_data, bool set)
 	if (set)
 		set_dte_entry(iommu, dev_data);
 	else
-		clear_dte_entry(iommu, dev_data->devid);
+		clear_dte_entry(iommu, dev_data);
 
 	clone_aliases(iommu, dev_data->dev);
 	device_flush_dte(dev_data);
