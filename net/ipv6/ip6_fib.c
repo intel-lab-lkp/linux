@@ -518,7 +518,7 @@ out:
 static int fib6_dump_node(struct fib6_walker *w)
 {
 	int res;
-	struct fib6_info *rt;
+	struct fib6_info *rt, *sibling, *last_sibling;
 
 	for_each_fib6_walker_rt(w) {
 		res = rt6_dump_route(rt, w->args, w->skip_in_node);
@@ -540,10 +540,14 @@ static int fib6_dump_node(struct fib6_walker *w)
 		 * last sibling of this route (no need to dump the
 		 * sibling routes again)
 		 */
-		if (rt->fib6_nsiblings)
-			rt = list_last_entry(&rt->fib6_siblings,
-					     struct fib6_info,
-					     fib6_siblings);
+		if (rt->fib6_nsiblings) {
+			last_sibling = rt;
+			list_for_each_entry_rcu(sibling, &rt->fib6_siblings,
+						fib6_siblings)
+				last_sibling = sibling;
+
+			rt = last_sibling;
+		}
 	}
 	w->leaf = NULL;
 	return 0;
@@ -1190,8 +1194,8 @@ next_iter:
 		while (sibling) {
 			if (sibling->fib6_metric == rt->fib6_metric &&
 			    rt6_qualify_for_ecmp(sibling)) {
-				list_add_tail(&rt->fib6_siblings,
-					      &sibling->fib6_siblings);
+				list_add_tail_rcu(&rt->fib6_siblings,
+						  &sibling->fib6_siblings);
 				break;
 			}
 			sibling = rcu_dereference_protected(sibling->fib6_next,
@@ -1252,7 +1256,7 @@ add:
 							 fib6_siblings)
 					sibling->fib6_nsiblings--;
 				rt->fib6_nsiblings = 0;
-				list_del_init(&rt->fib6_siblings);
+				list_del_rcu(&rt->fib6_siblings);
 				rt6_multipath_rebalance(next_sibling);
 				return err;
 			}
@@ -1970,7 +1974,7 @@ static void fib6_del_route(struct fib6_table *table, struct fib6_node *fn,
 					 &rt->fib6_siblings, fib6_siblings)
 			sibling->fib6_nsiblings--;
 		rt->fib6_nsiblings = 0;
-		list_del_init(&rt->fib6_siblings);
+		list_del_rcu(&rt->fib6_siblings);
 		rt6_multipath_rebalance(next_sibling);
 	}
 
