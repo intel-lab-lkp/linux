@@ -781,11 +781,9 @@ mwifiex_cfg80211_set_wiphy_params(struct wiphy *wiphy, u32 changed)
 		break;
 
 	case MWIFIEX_BSS_ROLE_STA:
-		if (priv->media_connected) {
-			mwifiex_dbg(adapter, ERROR,
-				    "cannot change wiphy params when connected");
-			return -EINVAL;
-		}
+		if (priv->media_connected)
+			break;
+
 		if (changed & WIPHY_PARAM_RTS_THRESHOLD) {
 			ret = mwifiex_set_rts(priv,
 					      wiphy->rts_threshold);
@@ -2065,9 +2063,36 @@ static int mwifiex_cfg80211_start_ap(struct wiphy *wiphy,
 {
 	struct mwifiex_uap_bss_param *bss_cfg;
 	struct mwifiex_private *priv = mwifiex_netdev_get_priv(dev);
+	struct mwifiex_adapter *adapter = priv->adapter;
+	struct mwifiex_private *tmp_priv;
+	int i;
+	struct mwifiex_current_bss_params *bss_params;
+	enum nl80211_band band;
+	int freq;
 
 	if (GET_BSS_ROLE(priv) != MWIFIEX_BSS_ROLE_UAP)
 		return -1;
+
+	for (i = 0; i < MWIFIEX_MAX_BSS_NUM; i++) {
+		tmp_priv = adapter->priv[i];
+		if (tmp_priv == priv)
+			continue;
+		if (GET_BSS_ROLE(tmp_priv) == MWIFIEX_BSS_ROLE_STA &&
+		    tmp_priv->media_connected) {
+			bss_params = &tmp_priv->curr_bss_params;
+			band = mwifiex_band_to_radio_type(bss_params->band);
+			freq = ieee80211_channel_to_frequency
+			       (bss_params->bss_descriptor.channel, band);
+			if (!ieee80211_channel_equal
+			     (params->chandef.chan,
+			      ieee80211_get_channel(wiphy, freq))) {
+				mwifiex_dbg
+				(priv->adapter, MSG,
+				 "AP and STA must operate on same channel\n");
+				return -EOPNOTSUPP;
+			}
+		}
+	}
 
 	bss_cfg = kzalloc(sizeof(struct mwifiex_uap_bss_param), GFP_KERNEL);
 	if (!bss_cfg)
@@ -2437,6 +2462,8 @@ mwifiex_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 	struct mwifiex_adapter *adapter = priv->adapter;
 	struct cfg80211_bss *bss = NULL;
 	int ret;
+	struct mwifiex_private *tmp_priv;
+	int i;
 
 	if (GET_BSS_ROLE(priv) != MWIFIEX_BSS_ROLE_STA) {
 		mwifiex_dbg(adapter, ERROR,
@@ -2449,6 +2476,22 @@ mwifiex_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 		mwifiex_dbg(adapter, ERROR,
 			    "%s: already connected\n", dev->name);
 		return -EALREADY;
+	}
+
+	for (i = 0; i < MWIFIEX_MAX_BSS_NUM; i++) {
+		tmp_priv = adapter->priv[i];
+		if (tmp_priv == priv)
+			continue;
+		if (GET_BSS_ROLE(tmp_priv) == MWIFIEX_BSS_ROLE_UAP &&
+		    netif_carrier_ok(tmp_priv->netdev) &&
+		    cfg80211_chandef_valid(&tmp_priv->bss_chandef)) {
+			if (!ieee80211_channel_equal
+			     (sme->channel, tmp_priv->bss_chandef.chan)) {
+				mwifiex_dbg(adapter, ERROR,
+					    "STA/AP must on the same channel\n");
+				return -EOPNOTSUPP;
+			}
+		}
 	}
 
 	if (priv->scan_block)
@@ -4285,6 +4328,8 @@ mwifiex_cfg80211_authenticate(struct wiphy *wiphy,
 	u32 tx_control = 0, pkt_type = PKT_TYPE_MGMT;
 	u8 trans = 1, status_code = 0;
 	u8 *varptr;
+	struct mwifiex_private *tmp_priv;
+	int i;
 
 	if (GET_BSS_ROLE(priv) == MWIFIEX_BSS_ROLE_UAP) {
 		mwifiex_dbg(priv->adapter, ERROR, "Interface role is AP\n");
@@ -4296,6 +4341,22 @@ mwifiex_cfg80211_authenticate(struct wiphy *wiphy,
 			    "Interface type is not correct (type %d)\n",
 			    priv->wdev.iftype);
 		return -EINVAL;
+	}
+
+	for (i = 0; i < MWIFIEX_MAX_BSS_NUM; i++) {
+		tmp_priv = adapter->priv[i];
+		if (tmp_priv == priv)
+			continue;
+		if (GET_BSS_ROLE(tmp_priv) == MWIFIEX_BSS_ROLE_UAP &&
+		    netif_carrier_ok(tmp_priv->netdev) &&
+		    cfg80211_chandef_valid(&tmp_priv->bss_chandef)) {
+			if (!ieee80211_channel_equal
+			    (req->bss->channel, tmp_priv->bss_chandef.chan)) {
+				mwifiex_dbg(adapter, ERROR,
+					    "STA/AP must on the same channel\n");
+				return -EOPNOTSUPP;
+			}
+		}
 	}
 
 	if (priv->auth_alg != WLAN_AUTH_SAE &&
