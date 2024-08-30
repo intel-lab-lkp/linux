@@ -225,7 +225,7 @@ int intel_joiner_add_affected_crtcs(struct intel_atomic_state *state)
 	for_each_new_intel_crtc_in_state(state, crtc, crtc_state, i) {
 		/* Kill old joiner link, we may re-establish afterwards */
 		if (intel_crtc_needs_modeset(crtc_state) &&
-		    intel_crtc_is_joiner_primary(crtc_state))
+		    intel_joiner_crtc_is_joiner_primary(crtc_state))
 			intel_crtc_kill_joiner_secondaries(state, crtc);
 	}
 
@@ -237,4 +237,12 @@ u8 intel_joiner_crtc_joined_pipe_mask(const struct intel_crtc_state *crtc_state)
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 
 	return BIT(crtc->pipe) | crtc_state->joiner_pipes;
+}
+
+bool intel_joiner_crtc_is_joiner_primary(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+
+	return crtc_state->joiner_pipes &&
+		crtc->pipe == intel_joiner_get_primary_pipe(crtc_state);
 }
