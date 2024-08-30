@@ -19,5 +19,10 @@ void intel_dss_mso_configure(const struct intel_crtc_state *crtc_state);
 void intel_dss_dsi_dual_link_mode_configure(struct intel_encoder *encoder,
 					    const struct intel_crtc_state *pipe_config,
 					    u8 dual_link, u8 pixel_overlap);
+void intel_dss_reset(const struct intel_crtc_state *old_crtc_state);
+void intel_dss_enable_uncompressed_joiner(const struct intel_crtc_state *crtc_state);
+void intel_dss_enable_compressed_joiner(const struct intel_crtc_state *crtc_state,
+					int vdsc_instances_per_pipe);
+void intel_dss_dsc_get_config(struct intel_crtc_state *crtc_state);
 
 #endif /* __INTEL_DSS_H__ */
