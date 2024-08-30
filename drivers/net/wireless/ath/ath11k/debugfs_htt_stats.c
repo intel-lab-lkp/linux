@@ -4572,15 +4572,14 @@ void ath11k_debugfs_htt_ext_stats_handler(struct ath11k_base *ab,
 	pdev_id = FIELD_GET(HTT_STATS_COOKIE_LSB, cookie);
 	rcu_read_lock();
 	ar = ath11k_mac_get_ar_by_pdev_id(ab, pdev_id);
-	rcu_read_unlock();
 	if (!ar) {
 		ath11k_warn(ab, "failed to get ar for pdev_id %d\n", pdev_id);
-		return;
+		goto exit;
 	}
 
 	stats_req = ar->debug.htt_stats.stats_req;
 	if (!stats_req)
-		return;
+		goto exit;
 
 	spin_lock_bh(&ar->debug.htt_stats.lock);
 
@@ -4599,6 +4598,8 @@ void ath11k_debugfs_htt_ext_stats_handler(struct ath11k_base *ab,
 
 	if (send_completion)
 		complete(&stats_req->cmpln);
+exit:
+	rcu_read_unlock();
 }
 
 static ssize_t ath11k_read_htt_stats_type(struct file *file,
