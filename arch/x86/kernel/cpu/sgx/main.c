@@ -993,6 +993,10 @@ static int __init sgx_init(void)
 	if (ret)
 		goto err_kthread;
 
+	ret = sgx_cgroup_wq_init();
+	if (ret)
+		goto err_provision;
+
 	/*
 	 * Always try to initialize the native *and* KVM drivers.
 	 * The KVM driver is less picky than the native one and
@@ -1004,11 +1008,14 @@ static int __init sgx_init(void)
 	ret = sgx_drv_init();
 
 	if (sgx_vepc_init() && ret)
-		goto err_provision;
+		goto err_cgroup;
 
 	sgx_cgroup_init();
 
 	return 0;
+
+err_cgroup:
+	sgx_cgroup_wq_deinit();
 
 err_provision:
 	misc_deregister(&sgx_dev_provision);

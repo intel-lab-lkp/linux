@@ -28,12 +28,19 @@ static inline int sgx_cgroup_try_charge(struct sgx_cgroup *sgx_cg, enum sgx_recl
 static inline void sgx_cgroup_uncharge(struct sgx_cgroup *sgx_cg) { }
 
 static inline void __init sgx_cgroup_init(void) { }
+static inline int __init sgx_cgroup_wq_init(void)
+{
+	return 0;
+}
+
+static inline void __init sgx_cgroup_wq_deinit(void) { }
 
 #else /* CONFIG_CGROUP_MISC */
 
 struct sgx_cgroup {
 	struct misc_cg *cg;
 	struct sgx_epc_lru_list lru;
+	struct work_struct reclaim_work;
 	/*
 	 * Pointer to the next cgroup to scan when the per-cgroup reclamation
 	 * is triggered next time. It does not hold a reference to prevent it
@@ -80,6 +87,8 @@ static inline void sgx_put_cg(struct sgx_cgroup *sgx_cg)
 int sgx_cgroup_try_charge(struct sgx_cgroup *sgx_cg, enum sgx_reclaim reclaim);
 void sgx_cgroup_uncharge(struct sgx_cgroup *sgx_cg);
 void __init sgx_cgroup_init(void);
+int __init sgx_cgroup_wq_init(void);
+void __init sgx_cgroup_wq_deinit(void);
 
 #endif /* CONFIG_CGROUP_MISC */
 
