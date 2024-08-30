@@ -56,7 +56,7 @@ static inline int iort_set_fwnode(struct acpi_iort_node *iort_node,
 {
 	struct iort_fwnode *np;
 
-	np = kzalloc(sizeof(struct iort_fwnode), GFP_ATOMIC);
+	np = kzalloc(sizeof(*np), GFP_ATOMIC);
 
 	if (WARN_ON(!np))
 		return -ENOMEM;
