@@ -275,10 +275,10 @@ static void dsi_program_swing_and_deemphasis(struct intel_encoder *encoder)
 }
 
 static void configure_dual_link_mode(struct intel_encoder *encoder,
-				     const struct intel_crtc_state *pipe_config)
+				     const struct intel_crtc_state *pipe_config,
+				     u8 dual_link, u8 pixel_overlap)
 {
 	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
-	struct intel_dsi *intel_dsi = enc_to_intel_dsi(encoder);
 	i915_reg_t dss_ctl1_reg, dss_ctl2_reg;
 	u32 dss_ctl1;
 
@@ -296,16 +296,16 @@ static void configure_dual_link_mode(struct intel_encoder *encoder,
 	dss_ctl1 = intel_de_read(dev_priv, dss_ctl1_reg);
 	dss_ctl1 |= SPLITTER_ENABLE;
 	dss_ctl1 &= ~OVERLAP_PIXELS_MASK;
-	dss_ctl1 |= OVERLAP_PIXELS(intel_dsi->pixel_overlap);
+	dss_ctl1 |= OVERLAP_PIXELS(pixel_overlap);
 
-	if (intel_dsi->dual_link == DSI_DUAL_LINK_FRONT_BACK) {
+	if (dual_link == DSI_DUAL_LINK_FRONT_BACK) {
 		const struct drm_display_mode *adjusted_mode =
 					&pipe_config->hw.adjusted_mode;
 		u16 hactive = adjusted_mode->crtc_hdisplay;
 		u16 dl_buffer_depth;
 
 		dss_ctl1 &= ~DUAL_LINK_MODE_INTERLEAVE;
-		dl_buffer_depth = hactive / 2 + intel_dsi->pixel_overlap;
+		dl_buffer_depth = hactive / 2 + pixel_overlap;
 
 		if (dl_buffer_depth > MAX_DL_BUFFER_TARGET_DEPTH)
 			drm_err(&dev_priv->drm,
@@ -791,7 +791,9 @@ gen11_dsi_configure_transcoder(struct intel_encoder *encoder,
 		}
 
 		/* configure stream splitting */
-		configure_dual_link_mode(encoder, pipe_config);
+		configure_dual_link_mode(encoder, pipe_config,
+					 intel_dsi->dual_link,
+					 intel_dsi->pixel_overlap);
 	}
 
 	for_each_dsi_port(port, intel_dsi->ports) {
