@@ -1435,8 +1435,8 @@ static int btt_do_bvec(struct btt *btt, struct bio_integrity_payload *bip,
 
 static void btt_submit_bio(struct bio *bio)
 {
-	struct bio_integrity_payload *bip = bio_integrity(bio);
 	struct btt *btt = bio->bi_bdev->bd_disk->private_data;
+	struct bio_integrity_payload *bip;
 	struct bvec_iter iter;
 	unsigned long start;
 	struct bio_vec bvec;
@@ -1445,6 +1445,7 @@ static void btt_submit_bio(struct bio *bio)
 
 	if (!bio_integrity_prep(bio))
 		return;
+	bip = bio_integrity(bio);
 
 	do_acct = blk_queue_io_stat(bio->bi_bdev->bd_disk->queue);
 	if (do_acct)
