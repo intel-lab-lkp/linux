@@ -5606,9 +5606,10 @@ static inline vm_fault_t wp_huge_pmd(struct vm_fault *vmf)
 	if (vma_is_anonymous(vma)) {
 		if (likely(!unshare) &&
 		    userfaultfd_huge_pmd_wp(vma, vmf->orig_pmd)) {
-			if (userfaultfd_wp_async(vmf->vma))
+			if (!userfaultfd_wp_async(vmf->vma))
+				return handle_userfault(vmf, VM_UFFD_WP);
+			if (!is_huge_zero_pmd(vmf->orig_pmd))
 				goto split;
-			return handle_userfault(vmf, VM_UFFD_WP);
 		}
 		return do_huge_pmd_wp_page(vmf);
 	}
