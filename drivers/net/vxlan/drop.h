@@ -11,6 +11,8 @@
 #define VXLAN_DROP_REASONS(R)			\
 	R(VXLAN_DROP_INVALID_SMAC)		\
 	R(VXLAN_DROP_ENTRY_EXISTS)		\
+	R(VXLAN_DROP_INVALID_HDR)		\
+	R(VXLAN_DROP_VNI_NOT_FOUND)		\
 	/* deliberate comment for trailing \ */
 
 enum vxlan_drop_reason {
@@ -23,6 +25,14 @@ enum vxlan_drop_reason {
 	 * one pointing to a nexthop
 	 */
 	VXLAN_DROP_ENTRY_EXISTS,
+	/**
+	 * @VXLAN_DROP_INVALID_HDR: the vxlan header is invalid, such as:
+	 * 1) the reserved fields are not zero
+	 * 2) the "I" flag is not set
+	 */
+	VXLAN_DROP_INVALID_HDR,
+	/** @VXLAN_DROP_VNI_NOT_FOUND: no vxlan device found for the vni */
+	VXLAN_DROP_VNI_NOT_FOUND,
 };
 
 static inline void
