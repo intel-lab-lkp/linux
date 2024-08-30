@@ -13,6 +13,7 @@
 	R(VXLAN_DROP_ENTRY_EXISTS)		\
 	R(VXLAN_DROP_INVALID_HDR)		\
 	R(VXLAN_DROP_VNI_NOT_FOUND)		\
+	R(VXLAN_DROP_NO_REMOTE)			\
 	/* deliberate comment for trailing \ */
 
 enum vxlan_drop_reason {
@@ -33,6 +34,8 @@ enum vxlan_drop_reason {
 	VXLAN_DROP_INVALID_HDR,
 	/** @VXLAN_DROP_VNI_NOT_FOUND: no vxlan device found for the vni */
 	VXLAN_DROP_VNI_NOT_FOUND,
+	/** @VXLAN_DROP_NO_REMOTE: no remote found to transmit the packet */
+	VXLAN_DROP_NO_REMOTE,
 };
 
 static inline void
