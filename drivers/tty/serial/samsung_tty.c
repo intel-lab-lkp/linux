@@ -1230,10 +1230,8 @@ static int s3c64xx_serial_startup(struct uart_port *port)
 
 	ret = request_irq(port->irq, s3c64xx_serial_handle_irq, IRQF_SHARED,
 			  s3c24xx_serial_portname(port), ourport);
-	if (ret) {
-		dev_err(port->dev, "cannot get irq %d\n", port->irq);
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(port->dev, port->irq, "cannot get irq\n");
 
 	/* For compatibility with s3c24xx Soc's */
 	ourport->rx_enabled = 1;
