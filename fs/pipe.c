@@ -686,7 +686,7 @@ pipe_poll(struct file *filp, poll_table *wait)
 	if (filp->f_mode & FMODE_READ) {
 		if (!pipe_empty(head, tail))
 			mask |= EPOLLIN | EPOLLRDNORM;
-		if (!pipe->writers && filp->f_version != pipe->w_counter)
+		if (!pipe->writers && filp->f_pipe != pipe->w_counter)
 			mask |= EPOLLHUP;
 	}
 
@@ -1108,7 +1108,7 @@ static int fifo_open(struct inode *inode, struct file *filp)
 	bool is_pipe = inode->i_sb->s_magic == PIPEFS_MAGIC;
 	int ret;
 
-	filp->f_version = 0;
+	filp->f_pipe = 0;
 
 	spin_lock(&inode->i_lock);
 	if (inode->i_pipe) {
@@ -1155,7 +1155,7 @@ static int fifo_open(struct inode *inode, struct file *filp)
 			if ((filp->f_flags & O_NONBLOCK)) {
 				/* suppress EPOLLHUP until we have
 				 * seen a writer */
-				filp->f_version = pipe->w_counter;
+				filp->f_pipe = pipe->w_counter;
 			} else {
 				if (wait_for_partner(pipe, &pipe->w_counter))
 					goto err_rd;
