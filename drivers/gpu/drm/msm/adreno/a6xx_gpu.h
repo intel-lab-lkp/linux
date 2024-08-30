@@ -66,6 +66,7 @@ struct a6xx_gpu {
 	atomic_t preempt_state;
 	spinlock_t eval_lock;
 	struct timer_list preempt_timer;
+	uint64_t preempt_postamble_len;
 
 	unsigned int preempt_level;
 	bool uses_gmem;
@@ -98,6 +99,11 @@ struct a6xx_gpu {
 
 #define SCRATCH_USER_CTX_IOVA(ring_id, a6xx_gpu) \
 	(a6xx_gpu->scratch_iova + (ring_id * sizeof(uint64_t)))
+
+#define SCRATCH_PREEMPT_POSTAMBLE_OFFSET (100 * sizeof(u64))
+
+#define SCRATCH_PREEMPT_POSTAMBLE_IOVA(a6xx_gpu) \
+	(a6xx_gpu->scratch_iova + SCRATCH_PREEMPT_POSTAMBLE_OFFSET)
 
 /*
  * In order to do lockless preemption we use a simple state machine to progress
