@@ -5115,7 +5115,7 @@ void intel_ddi_init(struct intel_display *display,
 		dig_port->hpd_pulse = intel_dp_hpd_pulse;
 
 		if (dig_port->dp.mso_link_count)
-			encoder->pipe_mask = intel_dss_mso_pipe_mask(dev_priv);
+			encoder->pipe_mask = intel_dss_mso_pipe_mask(display);
 	}
 
 	/*
