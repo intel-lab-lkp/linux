@@ -7,6 +7,7 @@
 #include "i915_reg_defs.h"
 #include "intel_de.h"
 #include "intel_display_types.h"
+#include "intel_dsi.h"
 #include "intel_dss.h"
 #include "intel_dss_regs.h"
 
@@ -86,4 +87,53 @@ void intel_dss_mso_configure(const struct intel_crtc_state *crtc_state)
 	intel_de_rmw(display, ICL_PIPE_DSS_CTL1(pipe),
 		     SPLITTER_ENABLE | SPLITTER_CONFIGURATION_MASK |
 		     OVERLAP_PIXELS_MASK, dss1);
+}
+
+void intel_dss_dsi_dual_link_mode_configure(struct intel_encoder *encoder,
+					    const struct intel_crtc_state *pipe_config,
+					    u8 dual_link,
+					    u8 pixel_overlap)
+{
+	struct intel_display *display = to_intel_display(encoder);
+	i915_reg_t dss_ctl1_reg, dss_ctl2_reg;
+	u32 dss_ctl1;
+
+	if (DISPLAY_VER(display) >= 12) {
+		struct intel_crtc *crtc = to_intel_crtc(pipe_config->uapi.crtc);
+
+		dss_ctl1_reg = ICL_PIPE_DSS_CTL1(crtc->pipe);
+		dss_ctl2_reg = ICL_PIPE_DSS_CTL2(crtc->pipe);
+	} else {
+		dss_ctl1_reg = DSS_CTL1;
+		dss_ctl2_reg = DSS_CTL2;
+	}
+
+	dss_ctl1 = intel_de_read(display, dss_ctl1_reg);
+	dss_ctl1 |= SPLITTER_ENABLE;
+	dss_ctl1 &= ~OVERLAP_PIXELS_MASK;
+	dss_ctl1 |= OVERLAP_PIXELS(pixel_overlap);
+
+	if (dual_link == DSI_DUAL_LINK_FRONT_BACK) {
+		const struct drm_display_mode *adjusted_mode =
+					&pipe_config->hw.adjusted_mode;
+		u16 hactive = adjusted_mode->crtc_hdisplay;
+		u16 dl_buffer_depth;
+
+		dss_ctl1 &= ~DUAL_LINK_MODE_INTERLEAVE;
+		dl_buffer_depth = hactive / 2 + pixel_overlap;
+
+		if (dl_buffer_depth > MAX_DL_BUFFER_TARGET_DEPTH)
+			drm_err(display->drm,
+				"DL buffer depth exceed max value\n");
+
+		dss_ctl1 &= ~LEFT_DL_BUF_TARGET_DEPTH_MASK;
+		dss_ctl1 |= LEFT_DL_BUF_TARGET_DEPTH(dl_buffer_depth);
+		intel_de_rmw(display, dss_ctl2_reg, RIGHT_DL_BUF_TARGET_DEPTH_MASK,
+			     RIGHT_DL_BUF_TARGET_DEPTH(dl_buffer_depth));
+	} else {
+		/* Interleave */
+		dss_ctl1 |= DUAL_LINK_MODE_INTERLEAVE;
+	}
+
+	intel_de_write(display, dss_ctl1_reg, dss_ctl1);
 }

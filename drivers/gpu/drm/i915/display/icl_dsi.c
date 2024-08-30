@@ -44,7 +44,7 @@
 #include "intel_de.h"
 #include "intel_dsi.h"
 #include "intel_dsi_vbt.h"
-#include "intel_dss_regs.h"
+#include "intel_dss.h"
 #include "intel_panel.h"
 #include "intel_vdsc.h"
 #include "skl_scaler.h"
@@ -272,55 +272,6 @@ static void dsi_program_swing_and_deemphasis(struct intel_encoder *encoder)
 			intel_de_rmw(dev_priv, ICL_PORT_TX_DW4_LN(lane, phy),
 				     mask, val);
 	}
-}
-
-static void configure_dual_link_mode(struct intel_encoder *encoder,
-				     const struct intel_crtc_state *pipe_config,
-				     u8 dual_link, u8 pixel_overlap)
-{
-	struct intel_display *display = to_intel_display(encoder);
-	i915_reg_t dss_ctl1_reg, dss_ctl2_reg;
-	u32 dss_ctl1;
-
-	/* FIXME: Move all DSS handling to intel_vdsc.c */
-	if (DISPLAY_VER(display) >= 12) {
-		struct intel_crtc *crtc = to_intel_crtc(pipe_config->uapi.crtc);
-
-		dss_ctl1_reg = ICL_PIPE_DSS_CTL1(crtc->pipe);
-		dss_ctl2_reg = ICL_PIPE_DSS_CTL2(crtc->pipe);
-	} else {
-		dss_ctl1_reg = DSS_CTL1;
-		dss_ctl2_reg = DSS_CTL2;
-	}
-
-	dss_ctl1 = intel_de_read(display, dss_ctl1_reg);
-	dss_ctl1 |= SPLITTER_ENABLE;
-	dss_ctl1 &= ~OVERLAP_PIXELS_MASK;
-	dss_ctl1 |= OVERLAP_PIXELS(pixel_overlap);
-
-	if (dual_link == DSI_DUAL_LINK_FRONT_BACK) {
-		const struct drm_display_mode *adjusted_mode =
-					&pipe_config->hw.adjusted_mode;
-		u16 hactive = adjusted_mode->crtc_hdisplay;
-		u16 dl_buffer_depth;
-
-		dss_ctl1 &= ~DUAL_LINK_MODE_INTERLEAVE;
-		dl_buffer_depth = hactive / 2 + pixel_overlap;
-
-		if (dl_buffer_depth > MAX_DL_BUFFER_TARGET_DEPTH)
-			drm_err(display->drm,
-				"DL buffer depth exceed max value\n");
-
-		dss_ctl1 &= ~LEFT_DL_BUF_TARGET_DEPTH_MASK;
-		dss_ctl1 |= LEFT_DL_BUF_TARGET_DEPTH(dl_buffer_depth);
-		intel_de_rmw(display, dss_ctl2_reg, RIGHT_DL_BUF_TARGET_DEPTH_MASK,
-			     RIGHT_DL_BUF_TARGET_DEPTH(dl_buffer_depth));
-	} else {
-		/* Interleave */
-		dss_ctl1 |= DUAL_LINK_MODE_INTERLEAVE;
-	}
-
-	intel_de_write(display, dss_ctl1_reg, dss_ctl1);
 }
 
 /* aka DSI 8X clock */
@@ -791,9 +742,9 @@ gen11_dsi_configure_transcoder(struct intel_encoder *encoder,
 		}
 
 		/* configure stream splitting */
-		configure_dual_link_mode(encoder, pipe_config,
-					 intel_dsi->dual_link,
-					 intel_dsi->pixel_overlap);
+		intel_dss_dsi_dual_link_mode_configure(encoder, pipe_config,
+						       intel_dsi->dual_link,
+						       intel_dsi->pixel_overlap);
 	}
 
 	for_each_dsi_port(port, intel_dsi->ports) {
