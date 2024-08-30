@@ -35,7 +35,7 @@ EXPORT_SYMBOL(of_match_device);
 static void
 of_dma_set_restricted_buffer(struct device *dev, struct device_node *np)
 {
-	struct device_node *node, *of_node = dev->of_node;
+	struct device_node *of_node = dev->of_node;
 	int count, i;
 
 	if (!IS_ENABLED(CONFIG_DMA_RESTRICTED_POOL))
@@ -54,17 +54,16 @@ of_dma_set_restricted_buffer(struct device *dev, struct device_node *np)
 	}
 
 	for (i = 0; i < count; i++) {
-		node = of_parse_phandle(of_node, "memory-region", i);
+		struct device_node *node __free(device_node) =
+			of_parse_phandle(of_node, "memory-region", i);
 		/*
 		 * There might be multiple memory regions, but only one
 		 * restricted-dma-pool region is allowed.
 		 */
 		if (of_device_is_compatible(node, "restricted-dma-pool") &&
 		    of_device_is_available(node)) {
-			of_node_put(node);
 			break;
 		}
-		of_node_put(node);
 	}
 
 	/*
