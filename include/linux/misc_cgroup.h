@@ -48,6 +48,7 @@ struct misc_res_ops {
  * @watermark: Historical maximum usage of the resource.
  * @usage: Current usage of the resource.
  * @events: Number of times, the resource limit exceeded.
+ * @priv: resource specific data.
  */
 struct misc_res {
 	u64 max;
@@ -55,6 +56,7 @@ struct misc_res {
 	atomic64_t usage;
 	atomic64_t events;
 	atomic64_t events_local;
+	void *priv;
 };
 
 /**

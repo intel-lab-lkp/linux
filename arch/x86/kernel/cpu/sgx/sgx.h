@@ -39,13 +39,34 @@ enum sgx_reclaim {
 	SGX_DO_RECLAIM
 };
 
+struct sgx_cgroup;
+
 struct sgx_epc_page {
 	unsigned int section;
 	u16 flags;
 	u16 poison;
 	struct sgx_encl_page *owner;
 	struct list_head list;
+#ifdef CONFIG_CGROUP_MISC
+	struct sgx_cgroup *sgx_cg;
+#endif
 };
+
+static inline void sgx_epc_page_set_cgroup(struct sgx_epc_page *page, struct sgx_cgroup *cg)
+{
+#ifdef CONFIG_CGROUP_MISC
+	page->sgx_cg = cg;
+#endif
+}
+
+static inline struct sgx_cgroup *sgx_epc_page_get_cgroup(struct sgx_epc_page *page)
+{
+#ifdef CONFIG_CGROUP_MISC
+	return page->sgx_cg;
+#else
+	return NULL;
+#endif
+}
 
 /*
  * Contains the tracking data for NUMA nodes having EPC pages. Most importantly,
@@ -57,6 +78,9 @@ struct sgx_numa_node {
 	unsigned long size;
 	spinlock_t lock;
 };
+
+extern nodemask_t sgx_numa_mask;
+extern struct sgx_numa_node *sgx_numa_nodes;
 
 /*
  * The firmware can define multiple chunks of EPC to the different areas of the
