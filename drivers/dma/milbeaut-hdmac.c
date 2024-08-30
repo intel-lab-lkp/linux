@@ -75,7 +75,6 @@ struct milbeaut_hdmac_chan {
 
 struct milbeaut_hdmac_device {
 	struct dma_device ddev;
-	struct clk *clk;
 	void __iomem *reg_base;
 	struct milbeaut_hdmac_chan channels[];
 };
@@ -458,6 +457,7 @@ static int milbeaut_hdmac_probe(struct platform_device *pdev)
 	struct milbeaut_hdmac_device *mdev;
 	struct dma_device *ddev;
 	int nr_chans, ret, i;
+	struct clk *clk;
 
 	nr_chans = platform_irq_count(pdev);
 	if (nr_chans < 0)
@@ -476,15 +476,11 @@ static int milbeaut_hdmac_probe(struct platform_device *pdev)
 	if (IS_ERR(mdev->reg_base))
 		return PTR_ERR(mdev->reg_base);
 
-	mdev->clk = devm_clk_get(dev, NULL);
-	if (IS_ERR(mdev->clk)) {
+	clk = devm_clk_get_enabled(dev, NULL);
+	if (IS_ERR(clk)) {
 		dev_err(dev, "failed to get clock\n");
-		return PTR_ERR(mdev->clk);
+		return PTR_ERR(clk);
 	}
-
-	ret = clk_prepare_enable(mdev->clk);
-	if (ret)
-		return ret;
 
 	ddev = &mdev->ddev;
 	ddev->dev = dev;
@@ -507,12 +503,12 @@ static int milbeaut_hdmac_probe(struct platform_device *pdev)
 	for (i = 0; i < nr_chans; i++) {
 		ret = milbeaut_hdmac_chan_init(pdev, mdev, i);
 		if (ret)
-			goto disable_clk;
+			return ret;
 	}
 
 	ret = dma_async_device_register(ddev);
 	if (ret)
-		goto disable_clk;
+		return ret;
 
 	ret = of_dma_controller_register(dev->of_node,
 					 milbeaut_hdmac_xlate, mdev);
@@ -525,9 +521,6 @@ static int milbeaut_hdmac_probe(struct platform_device *pdev)
 
 unregister_dmac:
 	dma_async_device_unregister(ddev);
-disable_clk:
-	clk_disable_unprepare(mdev->clk);
-
 	return ret;
 }
 
@@ -560,7 +553,6 @@ static void milbeaut_hdmac_remove(struct platform_device *pdev)
 
 	of_dma_controller_free(pdev->dev.of_node);
 	dma_async_device_unregister(&mdev->ddev);
-	clk_disable_unprepare(mdev->clk);
 }
 
 static const struct of_device_id milbeaut_hdmac_match[] = {
