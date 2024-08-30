@@ -80,9 +80,9 @@ static inline struct drm_i915_private *kdev_to_i915(struct device *kdev)
 
 #define IS_MOBILE(xe) (xe && 0)
 
-#define IS_LP(xe) (0)
-#define IS_GEN9_LP(xe) (0)
-#define IS_GEN9_BC(xe) (0)
+#define IS_LP(xe) ((xe) && 0)
+#define IS_GEN9_LP(xe) ((xe) && 0)
+#define IS_GEN9_BC(xe) ((xe) && 0)
 
 #define IS_TIGERLAKE_UY(xe) (xe && 0)
 #define IS_COMETLAKE_ULX(xe) (xe && 0)
