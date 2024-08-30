@@ -28,5 +28,6 @@ u8 intel_joiner_find_secondary_pipes(enum pipe pipe, u8 primary_pipes, u8 second
 void intel_joiner_get_config(struct intel_crtc_state *crtc_state);
 int intel_joiner_add_affected_planes(struct intel_atomic_state *state);
 int intel_joiner_add_affected_crtcs(struct intel_atomic_state *state);
+u8 intel_joiner_crtc_joined_pipe_mask(const struct intel_crtc_state *crtc_state);
 
 #endif/* __INTEL_JOINER_H__ */
