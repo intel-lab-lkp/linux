@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+
+$id: http://devicetree.org/schemas/hwmon/ti,ads71x8.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Texas Instruments ADS7128/ADS7138 Analog to Digital Converter (ADC)
+
+maintainers:
+  - None
+
+description: |
+  The ADS7128 is 12-Bit, 8-Channel Sampling Analog to Digital Converter (ADC)
+  with an I2C interface.
+
+  Datasheets:
+    https://www.ti.com/product/ADS7128
+    https://www.ti.com/product/ADS7138
+
+properties:
+  compatible:
+    enum:
+      - ti,ads7128
+      - ti,ads7138
+
+  reg:
+    maxItems: 1
+
+  avdd-supply:
+    description:
+      The regulator used as analog supply voltage as well as reference voltage.
+
+  ti,mode:
+    $ref: /schemas/types.yaml#/definitions/uint8
+    description: |
+      Operation mode
+      Mode 0 - Manual mode. A channel is only sampled when the according input
+        in the sysfs is read.
+      Mode 1 - Auto mode. All channels are automatically sampled sequentially.
+        Reading an input returns the last valid sample. In this mode further
+        features like statistics and interrupts are available.
+    default: 0
+
+  ti,interval:
+    $ref: /schemas/types.yaml#/definitions/uint16
+    description: |
+      Only considered in mode 1!
+      Interval in microseconds a new sample is triggered. Is set to closest
+      possible interval, see datasheet.
+    default: 1
+
+  interrupts:
+    description: |
+      Only considered in mode 1!
+      Interrupt specifier the device's ALERT pin is connected to. Level must be
+      IRQ_TYPE_LEVEL_LOW. If not configured the digital window comparator (DWC)
+      is not available.
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+  - avdd-supply
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        ads7138@10 {
+            compatible = "ti,ads7138";
+            reg = <0x10>;
+            avdd-supply = <&reg_stb_3v3>;
+            ti,mode = /bits/ 8 <1>;
+            ti,interval = /bits/ 16 <1000>;
+            interrupt-parent = <&gpio2>;
+            interrupts = <12 IRQ_TYPE_LEVEL_LOW>;
+            status = "okay";
+        };
+    };
