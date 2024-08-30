@@ -160,7 +160,7 @@ unsigned long __thp_vma_allowable_orders(struct vm_area_struct *vma,
 	 * own flags.
 	 */
 	if (!in_pf && shmem_file(vma->vm_file)) {
-		bool global_huge = shmem_is_huge(file_inode(vma->vm_file), vma->vm_pgoff,
+		bool global_huge = shmem_is_huge(file_inode(vma->vm_file), vma->vm_pgoff, 0,
 							!enforce_sysfs, vma->vm_mm, vm_flags);
 
 		if (!vma_is_anon_shmem(vma))

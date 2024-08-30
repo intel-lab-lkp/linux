@@ -548,7 +548,7 @@ static bool shmem_confirm_swap(struct address_space *mapping,
 
 static int shmem_huge __read_mostly = SHMEM_HUGE_NEVER;
 
-static bool __shmem_is_huge(struct inode *inode, pgoff_t index,
+static bool __shmem_is_huge(struct inode *inode, pgoff_t index, loff_t write_end,
 			    bool shmem_huge_force, struct mm_struct *mm,
 			    unsigned long vm_flags)
 {
@@ -568,7 +568,8 @@ static bool __shmem_is_huge(struct inode *inode, pgoff_t index,
 		return true;
 	case SHMEM_HUGE_WITHIN_SIZE:
 		index = round_up(index + 1, HPAGE_PMD_NR);
-		i_size = round_up(i_size_read(inode), PAGE_SIZE);
+		i_size = max(write_end, i_size_read(inode));
+		i_size = round_up(i_size, PAGE_SIZE);
 		if (i_size >> PAGE_SHIFT >= index)
 			return true;
 		fallthrough;
@@ -581,14 +582,14 @@ static bool __shmem_is_huge(struct inode *inode, pgoff_t index,
 	}
 }
 
-bool shmem_is_huge(struct inode *inode, pgoff_t index,
+bool shmem_is_huge(struct inode *inode, pgoff_t index, loff_t write_end,
 		   bool shmem_huge_force, struct mm_struct *mm,
 		   unsigned long vm_flags)
 {
 	if (HPAGE_PMD_ORDER > MAX_PAGECACHE_ORDER)
 		return false;
 
-	return __shmem_is_huge(inode, index, shmem_huge_force, mm, vm_flags);
+	return __shmem_is_huge(inode, index, write_end, shmem_huge_force, mm, vm_flags);
 }
 
 #if defined(CONFIG_SYSFS)
@@ -971,7 +972,7 @@ static struct folio *shmem_get_partial_folio(struct inode *inode, pgoff_t index)
 	 * (although in some cases this is just a waste of time).
 	 */
 	folio = NULL;
-	shmem_get_folio(inode, index, &folio, SGP_READ);
+	shmem_get_folio(inode, index, 0, &folio, SGP_READ);
 	return folio;
 }
 
@@ -1156,7 +1157,7 @@ static int shmem_getattr(struct mnt_idmap *idmap,
 			STATX_ATTR_NODUMP);
 	generic_fillattr(idmap, request_mask, inode, stat);
 
-	if (shmem_is_huge(inode, 0, false, NULL, 0))
+	if (shmem_is_huge(inode, 0, 0, false, NULL, 0))
 		stat->blksize = HPAGE_PMD_SIZE;
 
 	if (request_mask & STATX_BTIME) {
@@ -2078,8 +2079,8 @@ unlock:
  * vmf and fault_type are only supplied by shmem_fault: otherwise they are NULL.
  */
 static int shmem_get_folio_gfp(struct inode *inode, pgoff_t index,
-		struct folio **foliop, enum sgp_type sgp, gfp_t gfp,
-		struct vm_fault *vmf, vm_fault_t *fault_type)
+	       	loff_t write_end, struct folio **foliop, enum sgp_type sgp,
+		gfp_t gfp, struct vm_fault *vmf, vm_fault_t *fault_type)
 {
 	struct vm_area_struct *vma = vmf ? vmf->vma : NULL;
 	struct mm_struct *fault_mm;
@@ -2158,7 +2159,7 @@ repeat:
 		return 0;
 	}
 
-	huge = shmem_is_huge(inode, index, false, fault_mm,
+	huge = shmem_is_huge(inode, index, write_end, false, fault_mm,
 			     vma ? vma->vm_flags : 0);
 	/* Find hugepage orders that are allowed for anonymous shmem. */
 	if (vma && vma_is_anon_shmem(vma))
@@ -2268,6 +2269,7 @@ unlock:
  * shmem_get_folio - find, and lock a shmem folio.
  * @inode:	inode to search
  * @index:	the page index.
+ * @write_end:	end of a write, could extend inode size.
  * @foliop:	pointer to the folio if found
  * @sgp:	SGP_* flags to control behavior
  *
@@ -2287,10 +2289,10 @@ unlock:
  * Context: May sleep.
  * Return: 0 if successful, else a negative error code.
  */
-int shmem_get_folio(struct inode *inode, pgoff_t index, struct folio **foliop,
-		enum sgp_type sgp)
+int shmem_get_folio(struct inode *inode, pgoff_t index, loff_t write_end,
+		struct folio **foliop, enum sgp_type sgp)
 {
-	return shmem_get_folio_gfp(inode, index, foliop, sgp,
+	return shmem_get_folio_gfp(inode, index, write_end, foliop, sgp,
 			mapping_gfp_mask(inode->i_mapping), NULL, NULL);
 }
 EXPORT_SYMBOL_GPL(shmem_get_folio);
@@ -2385,7 +2387,7 @@ static vm_fault_t shmem_fault(struct vm_fault *vmf)
 	}
 
 	WARN_ON_ONCE(vmf->page != NULL);
-	err = shmem_get_folio_gfp(inode, vmf->pgoff, &folio, SGP_CACHE,
+	err = shmem_get_folio_gfp(inode, vmf->pgoff, 0, &folio, SGP_CACHE,
 				  gfp, vmf, &ret);
 	if (err)
 		return vmf_error(err);
@@ -2895,7 +2897,7 @@ shmem_write_begin(struct file *file, struct address_space *mapping,
 			return -EPERM;
 	}
 
-	ret = shmem_get_folio(inode, index, &folio, SGP_WRITE);
+	ret = shmem_get_folio(inode, index, pos + len, &folio, SGP_WRITE);
 	if (ret)
 		return ret;
 
@@ -2966,7 +2968,7 @@ static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 				break;
 		}
 
-		error = shmem_get_folio(inode, index, &folio, SGP_READ);
+		error = shmem_get_folio(inode, index, 0, &folio, SGP_READ);
 		if (error) {
 			if (error == -EINVAL)
 				error = 0;
@@ -3142,7 +3144,7 @@ static ssize_t shmem_file_splice_read(struct file *in, loff_t *ppos,
 		if (*ppos >= i_size_read(inode))
 			break;
 
-		error = shmem_get_folio(inode, *ppos / PAGE_SIZE, &folio,
+		error = shmem_get_folio(inode, *ppos / PAGE_SIZE, 0, &folio,
 					SGP_READ);
 		if (error) {
 			if (error == -EINVAL)
@@ -3332,8 +3334,8 @@ static long shmem_fallocate(struct file *file, int mode, loff_t offset,
 		else if (shmem_falloc.nr_unswapped > shmem_falloc.nr_falloced)
 			error = -ENOMEM;
 		else
-			error = shmem_get_folio(inode, index, &folio,
-						SGP_FALLOC);
+			error = shmem_get_folio(inode, index, offset + len,
+						&folio, SGP_FALLOC);
 		if (error) {
 			info->fallocend = undo_fallocend;
 			/* Remove the !uptodate folios we added */
@@ -3684,7 +3686,7 @@ static int shmem_symlink(struct mnt_idmap *idmap, struct inode *dir,
 	} else {
 		inode_nohighmem(inode);
 		inode->i_mapping->a_ops = &shmem_aops;
-		error = shmem_get_folio(inode, 0, &folio, SGP_WRITE);
+		error = shmem_get_folio(inode, 0, 0, &folio, SGP_WRITE);
 		if (error)
 			goto out_remove_offset;
 		inode->i_op = &shmem_symlink_inode_operations;
@@ -3730,7 +3732,7 @@ static const char *shmem_get_link(struct dentry *dentry, struct inode *inode,
 			return ERR_PTR(-ECHILD);
 		}
 	} else {
-		error = shmem_get_folio(inode, 0, &folio, SGP_READ);
+		error = shmem_get_folio(inode, 0, 0, &folio, SGP_READ);
 		if (error)
 			return ERR_PTR(error);
 		if (!folio)
@@ -5198,7 +5200,7 @@ struct folio *shmem_read_folio_gfp(struct address_space *mapping,
 	struct folio *folio;
 	int error;
 
-	error = shmem_get_folio_gfp(inode, index, &folio, SGP_CACHE,
+	error = shmem_get_folio_gfp(inode, index, 0, &folio, SGP_CACHE,
 				    gfp, NULL, NULL);
 	if (error)
 		return ERR_PTR(error);
