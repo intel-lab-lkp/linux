@@ -159,7 +159,6 @@ static int init_file(struct file *f, int flags, const struct cred *cred)
 	mutex_init(&f->f_pos_lock);
 	f->f_flags = flags;
 	f->f_mode = OPEN_FMODE(flags);
-	/* f->f_version: 0 */
 
 	/*
 	 * We're SLAB_TYPESAFE_BY_RCU so initialize f_count last. While
