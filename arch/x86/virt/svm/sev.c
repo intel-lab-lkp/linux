@@ -257,6 +257,7 @@ skip_enable:
 	 * notifier is invoked to do SNP IOMMU shutdown before kdump.
 	 */
 	crash_kexec_post_notifiers = true;
+	pr_info("AMD/SEV: enabling crash_kexec_post_notifiers\n");
 
 	return 0;
 

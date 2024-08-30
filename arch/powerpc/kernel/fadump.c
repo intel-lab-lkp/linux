@@ -1819,6 +1819,7 @@ int __init setup_fadump(void)
 	 * notifiers are invoked.
 	 */
 	crash_kexec_post_notifiers = true;
+	pr_info("PPC/fadump: enabling crash_kexec_post_notifiers\n");
 
 	return 1;
 }
