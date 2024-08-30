@@ -29,6 +29,26 @@ static inline void show_node(struct zone *zone)
 		printk("Node %d ", zone_to_nid(zone));
 }
 
+static unsigned long nr_free_zone_pcplist_pages(struct zone *zone)
+{
+	unsigned long sum = 0;
+	int cpu;
+
+	for_each_online_cpu(cpu)
+		sum += per_cpu_ptr(zone->per_cpu_pageset, cpu)->count;
+	return sum;
+}
+
+static unsigned long nr_free_pcplist_pages(void)
+{
+	unsigned long sum = 0;
+	struct zone *zone;
+
+	for_each_populated_zone(zone)
+		sum += nr_free_zone_pcplist_pages(zone);
+	return sum;
+}
+
 long si_mem_available(void)
 {
 	long available;
@@ -44,7 +64,8 @@ long si_mem_available(void)
 	 * Estimate the amount of memory available for userspace allocations,
 	 * without causing swapping or OOM.
 	 */
-	available = global_zone_page_state(NR_FREE_PAGES) - totalreserve_pages;
+	available = global_zone_page_state(NR_FREE_PAGES) +
+		    nr_free_pcplist_pages() - totalreserve_pages;
 
 	/*
 	 * Not all the page cache can be freed, otherwise the system will
@@ -76,7 +97,8 @@ void si_meminfo(struct sysinfo *val)
 {
 	val->totalram = totalram_pages();
 	val->sharedram = global_node_page_state(NR_SHMEM);
-	val->freeram = global_zone_page_state(NR_FREE_PAGES);
+	val->freeram =
+		global_zone_page_state(NR_FREE_PAGES) + nr_free_pcplist_pages();
 	val->bufferram = nr_blockdev_pages();
 	val->totalhigh = totalhigh_pages();
 	val->freehigh = nr_free_highpages();
@@ -90,30 +112,27 @@ void si_meminfo_node(struct sysinfo *val, int nid)
 {
 	int zone_type;		/* needs to be signed */
 	unsigned long managed_pages = 0;
+	unsigned long free_pages = sum_zone_node_page_state(nid, NR_FREE_PAGES);
 	unsigned long managed_highpages = 0;
 	unsigned long free_highpages = 0;
 	pg_data_t *pgdat = NODE_DATA(nid);
 
-	for (zone_type = 0; zone_type < MAX_NR_ZONES; zone_type++)
-		managed_pages += zone_managed_pages(&pgdat->node_zones[zone_type]);
-	val->totalram = managed_pages;
-	val->sharedram = node_page_state(pgdat, NR_SHMEM);
-	val->freeram = sum_zone_node_page_state(nid, NR_FREE_PAGES);
-#ifdef CONFIG_HIGHMEM
 	for (zone_type = 0; zone_type < MAX_NR_ZONES; zone_type++) {
 		struct zone *zone = &pgdat->node_zones[zone_type];
 
+		managed_pages += zone_managed_pages(zone);
+		free_pages += nr_free_zone_pcplist_pages(zone);
 		if (is_highmem(zone)) {
 			managed_highpages += zone_managed_pages(zone);
 			free_highpages += zone_page_state(zone, NR_FREE_PAGES);
 		}
 	}
+
+	val->totalram = managed_pages;
+	val->sharedram = node_page_state(pgdat, NR_SHMEM);
+	val->freeram = free_pages;
 	val->totalhigh = managed_highpages;
 	val->freehigh = free_highpages;
-#else
-	val->totalhigh = managed_highpages;
-	val->freehigh = free_highpages;
-#endif
 	val->mem_unit = PAGE_SIZE;
 }
 #endif
@@ -196,8 +215,7 @@ static void show_free_areas(unsigned int filter, nodemask_t *nodemask, int max_z
 		if (show_mem_node_skip(filter, zone_to_nid(zone), nodemask))
 			continue;
 
-		for_each_online_cpu(cpu)
-			free_pcp += per_cpu_ptr(zone->per_cpu_pageset, cpu)->count;
+		free_pcp += nr_free_zone_pcplist_pages(zone);
 	}
 
 	printk("active_anon:%lu inactive_anon:%lu isolated_anon:%lu\n"
