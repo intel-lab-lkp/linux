@@ -28,6 +28,7 @@ exec 3>&1
 export LANG=C
 export WG_HIDE_KEYS=never
 NPROC=( /sys/devices/system/cpu/cpu+([0-9]) ); NPROC=${#NPROC[@]}
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 netns0="wg-test-$$-0"
 netns1="wg-test-$$-1"
 netns2="wg-test-$$-2"
@@ -607,6 +608,43 @@ n0 wg set wg0 peer "$pub2" allowed-ips "$allowedips"
 		((++i))
 	done
 	((i == 197))
+} < <(n0 wg show wg0 allowed-ips)
+ip0 link del wg0
+
+# Test IP removal
+allowedips=( )
+for i in {1..197}; do
+        allowedips+=( 192.168.0.$i )
+        allowedips+=( abcd::$i )
+done
+saved_ifs="$IFS"
+IFS=,
+allowedips="${allowedips[*]}"
+IFS="$saved_ifs"
+ip0 link add wg0 type wireguard
+n0 wg set wg0 peer "$pub1" allowed-ips "$allowedips"
+pub1_hex=$(echo "$pub1" | base64 -d | xxd -p -c 50)
+n0 $SCRIPT_DIR/remove-ip wg0 "$pub1_hex" 4 192.168.0.1
+n0 $SCRIPT_DIR/remove-ip wg0 "$pub1_hex" 4 192.168.0.20
+n0 $SCRIPT_DIR/remove-ip wg0 "$pub1_hex" 4 192.168.0.100
+n0 $SCRIPT_DIR/remove-ip wg0 "$pub1_hex" 6 abcd::1
+n0 $SCRIPT_DIR/remove-ip wg0 "$pub1_hex" 6 abcd::20
+n0 $SCRIPT_DIR/remove-ip wg0 "$pub1_hex" 6 abcd::100
+n0 wg show wg0 allowed-ips
+{
+	read -r pub allowedips
+	[[ $pub == "$pub1" ]]
+	i=0
+	for ip in $allowedips; do
+		[[ "$ip" != "192.168.0.1" ]]
+		[[ "$ip" != "192.168.0.20" ]]
+		[[ "$ip" != "192.168.0.100" ]]
+		[[ "$ip" != "abcd::1" ]]
+		[[ "$ip" != "abcd::20" ]]
+		[[ "$ip" != "abcd::100" ]]
+		((++i))
+	done
+	((i == 388))
 } < <(n0 wg show wg0 allowed-ips)
 ip0 link del wg0
 
