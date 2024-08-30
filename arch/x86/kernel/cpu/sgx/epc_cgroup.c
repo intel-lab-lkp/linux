@@ -240,6 +240,21 @@ static bool sgx_cgroup_should_reclaim(struct sgx_cgroup *sgx_cg)
 	return (cur >= max);
 }
 
+/**
+ * sgx_cgroup_reclaim_direct() - Preemptive reclamation.
+ *
+ * Scan and attempt to reclaim %SGX_NR_TO_SCAN as best effort to make later
+ * EPC allocation quicker.
+ */
+void sgx_cgroup_reclaim_direct(void)
+{
+	struct sgx_cgroup *sgx_cg = sgx_get_current_cg();
+
+	if (sgx_cgroup_should_reclaim(sgx_cg))
+		sgx_cgroup_reclaim_pages(sgx_cg, current->mm, SGX_NR_TO_SCAN);
+	sgx_put_cg(sgx_cg);
+}
+
 /*
  * Asynchronous work flow to reclaim pages from the cgroup when the cgroup is
  * at/near its maximum capacity.
