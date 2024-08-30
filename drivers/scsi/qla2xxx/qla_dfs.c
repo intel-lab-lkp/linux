@@ -598,7 +598,12 @@ qla_dfs_naqp_write(struct file *file, const char __user *buffer,
 		return PTR_ERR(buf);
 	}
 
-	num_act_qp = simple_strtoul(buf, NULL, 0);
+	if (kstrtoul(buf, 0, &num_act_qp)) {
+		pr_err("host:%ld: fail to parse user buffer into number.",
+		    vha->host_no);
+		rc = -EINVAL;
+		goto out_free;
+	}
 
 	if (num_act_qp >= vha->hw->max_qpairs) {
 		pr_err("User set invalid number of qpairs %lu. Max = %d",
