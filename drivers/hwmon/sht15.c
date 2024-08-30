@@ -942,11 +942,9 @@ static int sht15_probe(struct platform_device *pdev)
 			data->supply_uv = voltage;
 
 		ret = regulator_enable(data->reg);
-		if (ret != 0) {
-			dev_err(&pdev->dev,
-				"failed to enable regulator: %d\n", ret);
-			return ret;
-		}
+		if (ret != 0)
+			return dev_err_probe(&pdev->dev, ret,
+					     "failed to enable regulator\n");
 
 		/*
 		 * Setup a notifier block to update this if another device
