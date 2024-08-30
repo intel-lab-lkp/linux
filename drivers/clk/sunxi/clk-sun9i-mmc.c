@@ -122,22 +122,17 @@ static int sun9i_a80_mmc_config_clk_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	data->clk = devm_clk_get(&pdev->dev, NULL);
-	if (IS_ERR(data->clk)) {
-		dev_err(&pdev->dev, "Could not get clock\n");
-		return PTR_ERR(data->clk);
-	}
+	if (IS_ERR(data->clk))
+		return dev_err_probe(&pdev->dev, PTR_ERR(data->clk), "Could not get clock\n");
 
 	data->reset = devm_reset_control_get_exclusive(&pdev->dev, NULL);
-	if (IS_ERR(data->reset)) {
-		dev_err(&pdev->dev, "Could not get reset control\n");
-		return PTR_ERR(data->reset);
-	}
+	if (IS_ERR(data->reset))
+		return dev_err_probe(&pdev->dev, PTR_ERR(data->reset),
+							 "Could not get reset control\n");
 
 	ret = reset_control_deassert(data->reset);
-	if (ret) {
-		dev_err(&pdev->dev, "Reset deassert err %d\n", ret);
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "Reset deassert err\n");
 
 	clk_parent = __clk_get_name(data->clk);
 	for (i = 0; i < count; i++) {
