@@ -1532,11 +1532,9 @@ static int at86rf230_probe(struct spi_device *spi)
 
 	rc = device_property_read_u8(&spi->dev, "xtal-trim", &xtal_trim);
 	if (rc < 0) {
-		if (rc != -EINVAL) {
-			dev_err(&spi->dev,
-				"failed to parse xtal-trim: %d\n", rc);
-			return rc;
-		}
+		if (rc != -EINVAL)
+			return dev_err_probe(&spi->dev, rc,
+					     "failed to parse xtal-trim\n");
 		xtal_trim = 0;
 	}
 
@@ -1576,9 +1574,8 @@ static int at86rf230_probe(struct spi_device *spi)
 
 	lp->regmap = devm_regmap_init_spi(spi, &at86rf230_regmap_spi_config);
 	if (IS_ERR(lp->regmap)) {
-		rc = PTR_ERR(lp->regmap);
-		dev_err(&spi->dev, "Failed to allocate register map: %d\n",
-			rc);
+		dev_err_probe(&spi->dev, PTR_ERR(lp->regmap),
+			      "Failed to allocate register map\n");
 		goto free_dev;
 	}
 
