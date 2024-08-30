@@ -1,0 +1,201 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+/*
+ * Copyright (C) 2024 Christophe Leroy <christophe.leroy@csgroup.eu>, CS GROUP France
+ */
+
+#include <linux/linkage.h>
+
+#include <asm/ppc_asm.h>
+
+.macro quarterround4 a1 b1 c1 d1 a2 b2 c2 d2 a3 b3 c3 d3 a4 b4 c4 d4
+	add	\a1, \a1, \b1
+	add	\a2, \a2, \b2
+	add	\a3, \a3, \b3
+	add	\a4, \a4, \b4
+	xor	\d1, \d1, \a1
+	xor	\d2, \d2, \a2
+	xor	\d3, \d3, \a3
+	xor	\d4, \d4, \a4
+	rotlwi	\d1, \d1, 16
+	rotlwi	\d2, \d2, 16
+	rotlwi	\d3, \d3, 16
+	rotlwi	\d4, \d4, 16
+	add	\c1, \c1, \d1
+	add	\c2, \c2, \d2
+	add	\c3, \c3, \d3
+	add	\c4, \c4, \d4
+	xor	\b1, \b1, \c1
+	xor	\b2, \b2, \c2
+	xor	\b3, \b3, \c3
+	xor	\b4, \b4, \c4
+	rotlwi	\b1, \b1, 12
+	rotlwi	\b2, \b2, 12
+	rotlwi	\b3, \b3, 12
+	rotlwi	\b4, \b4, 12
+	add	\a1, \a1, \b1
+	add	\a2, \a2, \b2
+	add	\a3, \a3, \b3
+	add	\a4, \a4, \b4
+	xor	\d1, \d1, \a1
+	xor	\d2, \d2, \a2
+	xor	\d3, \d3, \a3
+	xor	\d4, \d4, \a4
+	rotlwi	\d1, \d1, 8
+	rotlwi	\d2, \d2, 8
+	rotlwi	\d3, \d3, 8
+	rotlwi	\d4, \d4, 8
+	add	\c1, \c1, \d1
+	add	\c2, \c2, \d2
+	add	\c3, \c3, \d3
+	add	\c4, \c4, \d4
+	xor	\b1, \b1, \c1
+	xor	\b2, \b2, \c2
+	xor	\b3, \b3, \c3
+	xor	\b4, \b4, \c4
+	rotlwi	\b1, \b1, 7
+	rotlwi	\b2, \b2, 7
+	rotlwi	\b3, \b3, 7
+	rotlwi	\b4, \b4, 7
+.endm
+
+#define QUARTERROUND4(a1,b1,c1,d1,a2,b2,c2,d2,a3,b3,c3,d3,a4,b4,c4,d4) \
+	quarterround4 16+a1 16+b1 16+c1 16+d1 16+a2 16+b2 16+c2 16+d2 \
+		      16+a3 16+b3 16+c3 16+d3 16+a4 16+b4 16+c4 16+d4
+
+/*
+ * Very basic 32 bits implementation of ChaCha20. Produces a given positive number
+ * of blocks of output with a nonce of 0, taking an input key and 8-byte
+ * counter. Importantly does not spill to the stack. Its arguments are:
+ *
+ *	r3: output bytes
+ *	r4: 32-byte key input
+ *	r5: 8-byte counter input/output (saved on stack)
+ *	r6: number of 64-byte blocks to write to output
+ *
+ *	r0: counter of blocks (initialised with r6)
+ *	r4: Value '4' after key has been read.
+ *	r5-r12: key
+ *	r14-r15: counter
+ *	r16-r31: state
+ */
+SYM_FUNC_START(__arch_chacha20_blocks_nostack)
+	stwu	r1, -96(r1)
+	stw	r5, 20(r1)
+	stmw	r14, 24(r1)
+	li	r31, 4
+	LWZX_LE	r14, 0, r5
+	LWZX_LE	r15, r31, r5
+	mr	r0, r6
+
+	lwz	r5, 0(r4)
+	lwz	r6, 4(r4)
+	lwz	r7, 8(r4)
+	lwz	r8, 12(r4)
+	lwz	r9, 16(r4)
+	lwz	r10, 20(r4)
+	lwz	r11, 24(r4)
+	lwz	r12, 28(r4)
+
+	li	r4, 4
+.Lblock:
+	li	r31, 10
+
+	lis	r16, 0x6170
+	lis	r17, 0x3320
+	lis	r18, 0x7962
+	lis	r19, 0x6b20
+	addi	r16, r16, 0x7865
+	addi	r17, r17, 0x646e
+	addi	r18, r18, 0x2d32
+	addi	r19, r19, 0x6574
+
+	mtctr	r31
+
+	mr	r20, r5
+	mr	r21, r6
+	mr	r22, r7
+	mr	r23, r8
+	mr	r24, r9
+	mr	r25, r10
+	mr	r26, r11
+	mr	r27, r12
+
+	mr	r28, r14
+	mr	r29, r15
+	li	r30, 0
+	li	r31, 0
+
+.Lpermute:
+	QUARTERROUND4( 0, 4, 8,12, 1, 5, 9,13, 2, 6,10,14, 3, 7,11,15)
+	QUARTERROUND4( 0, 5,10,15, 1, 6,11,12, 2, 7, 8,13, 3, 4, 9,14)
+
+	bdnz	.Lpermute
+
+	addis	r16, r16, 0x6170
+	addis	r17, r17, 0x3320
+	addis	r18, r18, 0x7962
+	addis	r19, r19, 0x6b20
+	addi	r16, r16, 0x7865
+	addi	r17, r17, 0x646e
+	addi	r18, r18, 0x2d32
+	addi	r19, r19, 0x6574
+
+	add	r20, r20, r5
+	add	r21, r21, r6
+	add	r22, r22, r7
+	add	r23, r23, r8
+	add	r24, r24, r9
+	add	r25, r25, r10
+	add	r26, r26, r11
+	add	r27, r27, r12
+
+	add	r28, r28, r14
+	add	r29, r29, r15
+
+	STWX_LE	r16, 0, r3
+	STWX_LE	r17, r4, r3
+	addi	r3, r3, 8
+	STWX_LE	r18, 0, r3
+	STWX_LE	r19, r4, r3
+	addi	r3, r3, 8
+	STWX_LE	r20, 0, r3
+	STWX_LE	r21, r4, r3
+	addi	r3, r3, 8
+	STWX_LE	r22, 0, r3
+	STWX_LE	r23, r4, r3
+	addi	r3, r3, 8
+	STWX_LE	r24, 0, r3
+	STWX_LE	r25, r4, r3
+	addi	r3, r3, 8
+	STWX_LE	r26, 0, r3
+	STWX_LE	r27, r4, r3
+	addi	r3, r3, 8
+	STWX_LE	r28, 0, r3
+	STWX_LE	r29, r4, r3
+	addi	r3, r3, 8
+	STWX_LE	r30, 0, r3
+	STWX_LE	r31, r4, r3
+	addi	r3, r3, 8
+
+	addic	r14, r14, 1
+	addze	r15, r15
+
+	subic.	r0, r0, 1	/* subi. can't use r0 as source */
+	bne	.Lblock
+
+	lwz	r5, 20(r1)
+	STWX_LE	r14, 0, r5
+	STWX_LE	r15, r4, r5
+
+	li	r6, 0
+	li	r7, 0
+	li	r8, 0
+	li	r9, 0
+	li	r10, 0
+	li	r11, 0
+	li	r12, 0
+
+	lmw	r14, 24(r1)
+	addi	r1, r1, 96
+	blr
+SYM_FUNC_END(__arch_chacha20_blocks_nostack)

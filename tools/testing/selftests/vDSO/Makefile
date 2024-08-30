@@ -14,6 +14,10 @@ ifeq ($(uname_M),x86_64)
 TEST_GEN_PROGS += vdso_test_getrandom
 TEST_GEN_PROGS += vdso_test_chacha
 endif
+ifeq ($(ARCH),powerpc)
+TEST_GEN_PROGS += vdso_test_getrandom
+TEST_GEN_PROGS += vdso_test_chacha
+endif
 
 CFLAGS := -std=gnu99
 

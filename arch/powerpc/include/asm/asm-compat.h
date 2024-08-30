@@ -59,4 +59,12 @@
 
 #endif
 
+#ifdef __BIG_ENDIAN__
+#define LWZX_LE	stringify_in_c(lwbrx)
+#define STWX_LE	stringify_in_c(stwbrx)
+#else
+#define LWZX_LE	stringify_in_c(lwzx)
+#define STWX_LE	stringify_in_c(stwx)
+#endif
+
 #endif /* _ASM_POWERPC_ASM_COMPAT_H */
