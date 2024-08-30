@@ -21,6 +21,7 @@
 
 #include "../kselftest.h"
 #include "parse_vdso.h"
+#include "vdso_call.h"
 
 #ifndef timespecsub
 #define	timespecsub(tsp, usp, vsp)					\
@@ -120,7 +121,7 @@ static void vgetrandom_init(void)
 		printf("__vdso_getrandom is missing!\n");
 		exit(KSFT_FAIL);
 	}
-	if (grnd_ctx.fn(NULL, 0, 0, &grnd_ctx.params, ~0UL) != 0) {
+	if (VDSO_CALL(grnd_ctx.fn, 5, NULL, 0, 0, &grnd_ctx.params, ~0UL) != 0) {
 		printf("failed to fetch vgetrandom params!\n");
 		exit(KSFT_FAIL);
 	}
@@ -143,7 +144,7 @@ static ssize_t vgetrandom(void *buf, size_t len, unsigned long flags)
 			exit(KSFT_FAIL);
 		}
 	}
-	return grnd_ctx.fn(buf, len, flags, state, grnd_ctx.params.size_of_opaque_state);
+	return VDSO_CALL(grnd_ctx.fn, 5, buf, len, flags, state, grnd_ctx.params.size_of_opaque_state);
 }
 
 enum { TRIALS = 25000000, THREADS = 256 };
