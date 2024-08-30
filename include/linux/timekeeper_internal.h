@@ -125,7 +125,7 @@ struct timekeeper {
 	/* Flag used to avoid updating NTP twice with same second */
 	u32			skip_second_overflow;
 #ifdef CONFIG_DEBUG_TIMEKEEPING
-	long			last_warning;
+	unsigned long			last_warning;
 	/*
 	 * These simple flag variables are managed
 	 * without locks, which is racy, but they are
