@@ -901,12 +901,16 @@
 			the parameter has no effect.
 
 	crash_kexec_post_notifiers
-			Run kdump after running panic-notifiers and dumping
-			kmsg. This only for the users who doubt kdump always
-			succeeds in any situation.
-			Note that this also increases risks of kdump failure,
-			because some panic notifiers can make the crashed
-			kernel more unstable.
+			Only jump to kdump kernel after running the panic
+			notifiers and dumping kmsg. This option increases the
+			risks of a kdump failure, since some panic notifiers
+			can make the crashed kernel more unstable. As a bright
+			side, it might allow to collect more data on dmesg like
+			stack traces from other CPUs or extra data dumped by
+			panic_print. This is usually only for users who doubt
+			kdump will succeed every time. Notice that some code
+			enables this option unconditionally, like Hyper-V,
+			PowerPC (fadump) and AMD SEV.
 
 	crashkernel=size[KMG][@offset[KMG]]
 			[KNL,EARLY] Using kexec, Linux can switch to a 'crash kernel'
