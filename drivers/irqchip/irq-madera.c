@@ -199,9 +199,8 @@ static int madera_irq_probe(struct platform_device *pdev)
 		ret = regmap_update_bits(madera->regmap, MADERA_IRQ1_CTRL,
 					 MADERA_IRQ_POL_MASK, 0);
 		if (ret) {
-			dev_err(&pdev->dev,
-				"Failed to set IRQ polarity: %d\n", ret);
-			return ret;
+			return dev_err_probe(&pdev->dev, ret,
+						"Failed to set IRQ polarity");
 		}
 	}
 
