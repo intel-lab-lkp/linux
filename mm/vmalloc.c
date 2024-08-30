@@ -3125,6 +3125,12 @@ static struct vm_struct *__get_vm_area_node(unsigned long size,
 		size += PAGE_SIZE;
 
 	area->flags = flags;
+	/*
+	 * Set memcg accounting flag in vm_struct, used for
+	 * vfree() align vmalloc here.
+	 */
+	if (gfp_mask & __GFP_ACCOUNT)
+		area->flags |= VM_MEMCG_ACCOUNT;
 	area->caller = caller;
 
 	va = alloc_vmap_area(size, align, start, end, node, gfp_mask, 0, area);
@@ -3367,7 +3373,9 @@ void vfree(const void *addr)
 		struct page *page = vm->pages[i];
 
 		BUG_ON(!page);
-		mod_memcg_page_state(page, MEMCG_VMALLOC, -1);
+
+		if (vm->flags & VM_MEMCG_ACCOUNT)
+			mod_memcg_page_state(page, MEMCG_VMALLOC, -1);
 		/*
 		 * High-order allocs for huge vmallocs are split, so
 		 * can be freed as an array of order-0 allocations
@@ -3662,7 +3670,7 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 		node, page_order, nr_small_pages, area->pages);
 
 	atomic_long_add(area->nr_pages, &nr_vmalloc_pages);
-	if (gfp_mask & __GFP_ACCOUNT) {
+	if (area->flags & VM_MEMCG_ACCOUNT) {
 		int i;
 
 		for (i = 0; i < area->nr_pages; i++)
@@ -3813,7 +3821,6 @@ again:
 		}
 		goto fail;
 	}
-
 	/*
 	 * Prepare arguments for __vmalloc_area_node() and
 	 * kasan_unpoison_vmalloc().

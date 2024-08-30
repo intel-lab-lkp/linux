@@ -38,6 +38,7 @@ struct iov_iter;		/* in uio.h */
 #define VM_DEFER_KMEMLEAK	0
 #endif
 #define VM_SPARSE		0x00001000	/* sparse vm_area. not all pages are present. */
+#define VM_MEMCG_ACCOUNT	0x00002000	/* mark vm pages alloced with __GFP_ACCOUNT for memcg accounting. */
 
 /* bits [20..32] reserved for arch specific ioremap internals */
 
