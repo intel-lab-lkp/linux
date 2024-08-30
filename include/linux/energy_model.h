@@ -207,6 +207,24 @@ em_pd_get_efficient_state(struct em_perf_state *table, int nr_perf_states,
 	return nr_perf_states - 1;
 }
 
+static inline int
+em_pd_get_previous_state(struct em_perf_state *table, int nr_perf_states,
+			  int idx, unsigned long pd_flags)
+{
+	struct em_perf_state *ps;
+	int i;
+
+	for (i = idx - 1; i >= 0; i--) {
+		ps = &table[i];
+		if (pd_flags & EM_PERF_DOMAIN_SKIP_INEFFICIENCIES &&
+		    ps->flags & EM_PERF_STATE_INEFFICIENT)
+			continue;
+		return i;
+	}
+
+	return -1;
+}
+
 /**
  * em_cpu_energy() - Estimates the energy consumed by the CPUs of a
  *		performance domain
