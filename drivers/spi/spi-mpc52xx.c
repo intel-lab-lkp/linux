@@ -472,7 +472,7 @@ static int mpc52xx_spi_probe(struct platform_device *op)
 	INIT_WORK(&ms->work, mpc52xx_spi_wq);
 
 	/* Decide if interrupts can be used */
-	if (ms->irq0 && ms->irq1) {
+	if (ms->irq0 > 0 && ms->irq1 > 0) {
 		rc = request_irq(ms->irq0, mpc52xx_spi_irq, 0,
 				  "mpc5200-spi-modf", ms);
 		rc |= request_irq(ms->irq1, mpc52xx_spi_irq, 0,
