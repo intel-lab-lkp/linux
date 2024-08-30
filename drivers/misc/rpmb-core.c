@@ -187,8 +187,10 @@ struct rpmb_dev *rpmb_dev_register(struct device *dev,
 	rdev->dev.parent = dev;
 
 	ret = device_register(&rdev->dev);
-	if (ret)
-		goto err_id_remove;
+	if (ret) {
+		put_device(&rdev->dev);
+		return ERR_PTR(ret);
+	}
 
 	dev_dbg(&rdev->dev, "registered device\n");
 
