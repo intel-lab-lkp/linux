@@ -603,7 +603,7 @@ struct rpc_clnt *rpc_create(struct rpc_create_args *args)
 
 	xprt = xprt_create_transport(&xprtargs);
 	if (IS_ERR(xprt))
-		return (struct rpc_clnt *)xprt;
+		return ERR_CAST(xprt);
 
 	/*
 	 * By default, kernel RPC client connects from a reserved port.
