@@ -428,8 +428,11 @@ static inline bool irq_move_pending(struct irq_data *data)
 	return irqd_is_setaffinity_pending(data);
 }
 static inline void
-irq_copy_pending(struct irq_desc *desc, const struct cpumask *mask)
+irq_set_copy_pending(struct irq_data *data, const struct cpumask *mask)
 {
+	struct irq_desc *desc = irq_data_to_desc(data);
+
+	irqd_set_move_pending(data);
 	cpumask_copy(desc->pending_mask, mask);
 }
 static inline void
@@ -456,7 +459,7 @@ static inline bool irq_move_pending(struct irq_data *data)
 	return false;
 }
 static inline void
-irq_copy_pending(struct irq_desc *desc, const struct cpumask *mask)
+irq_set_copy_pending(struct irq_data *data, const struct cpumask *mask)
 {
 }
 static inline void
