@@ -870,9 +870,14 @@ void btrfs_folio_end_all_writers(const struct btrfs_fs_info *fs_info, struct fol
 }
 
 #define GET_SUBPAGE_BITMAP(subpage, fs_info, name, dst)			\
-	bitmap_cut(dst, subpage->bitmaps, 0,				\
-		   fs_info->sectors_per_page * btrfs_bitmap_nr_##name,	\
-		   fs_info->sectors_per_page)
+{									\
+	const int sectors_per_page = fs_info->sectors_per_page;		\
+									\
+	ASSERT(sectors_per_page < BITS_PER_LONG);			\
+	*dst = bitmap_read(subpage->bitmaps,				\
+			   sectors_per_page * btrfs_bitmap_nr_##name,	\
+			   sectors_per_page);				\
+}
 
 void __cold btrfs_subpage_dump_bitmap(const struct btrfs_fs_info *fs_info,
 				      struct folio *folio, u64 start, u32 len)
