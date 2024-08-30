@@ -2339,7 +2339,7 @@ static int encap_bypass_if_local(struct sk_buff *skb, struct net_device *dev,
 			DEV_STATS_INC(dev, tx_errors);
 			vxlan_vnifilter_count(vxlan, vni, NULL,
 					      VXLAN_VNI_STATS_TX_ERRORS, 0);
-			kfree_skb(skb);
+			vxlan_kfree_skb(skb, VXLAN_DROP_INVALID_HDR);
 
 			return -ENOENT;
 		}
