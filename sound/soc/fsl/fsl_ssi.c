@@ -1354,19 +1354,16 @@ static int fsl_ssi_imx_probe(struct platform_device *pdev,
 		ssi->clk = devm_clk_get(dev, "ipg");
 	else
 		ssi->clk = devm_clk_get(dev, NULL);
-	if (IS_ERR(ssi->clk)) {
-		ret = PTR_ERR(ssi->clk);
-		dev_err(dev, "failed to get clock: %d\n", ret);
-		return ret;
-	}
+	if (IS_ERR(ssi->clk))
+		return dev_err_probe(dev, PTR_ERR(ssi->clk),
+				     "failed to get clock\n");
 
 	/* Enable the clock since regmap will not handle it in this case */
 	if (!ssi->has_ipg_clk_name) {
 		ret = clk_prepare_enable(ssi->clk);
-		if (ret) {
-			dev_err(dev, "clk_prepare_enable failed: %d\n", ret);
-			return ret;
-		}
+		if (ret)
+			return dev_err_probe(dev, ret,
+					     "clk_prepare_enable failed\n");
 	}
 
 	/* Do not error out for consumer cases that live without a baud clock */
@@ -1552,10 +1549,9 @@ static int fsl_ssi_probe(struct platform_device *pdev)
 						      &regconfig);
 	else
 		ssi->regs = devm_regmap_init_mmio(dev, iomem, &regconfig);
-	if (IS_ERR(ssi->regs)) {
-		dev_err(dev, "failed to init register map\n");
-		return PTR_ERR(ssi->regs);
-	}
+	if (IS_ERR(ssi->regs))
+		return dev_err_probe(dev, PTR_ERR(ssi->regs),
+				     "failed to init register map\n");
 
 	ssi->irq = platform_get_irq(pdev, 0);
 	if (ssi->irq < 0)
@@ -1607,7 +1603,7 @@ static int fsl_ssi_probe(struct platform_device *pdev)
 		mutex_init(&ssi->ac97_reg_lock);
 		ret = snd_soc_set_ac97_ops_of_reset(&fsl_ssi_ac97_ops, pdev);
 		if (ret) {
-			dev_err(dev, "failed to set AC'97 ops\n");
+			dev_err_probe(dev, ret, "failed to set AC'97 ops\n");
 			goto error_ac97_ops;
 		}
 	}
@@ -1615,7 +1611,7 @@ static int fsl_ssi_probe(struct platform_device *pdev)
 	ret = devm_snd_soc_register_component(dev, &fsl_ssi_component,
 					      &ssi->cpu_dai_drv, 1);
 	if (ret) {
-		dev_err(dev, "failed to register DAI: %d\n", ret);
+		dev_err_probe(dev, ret, "failed to register DAI\n");
 		goto error_asoc_register;
 	}
 
@@ -1623,7 +1619,8 @@ static int fsl_ssi_probe(struct platform_device *pdev)
 		ret = devm_request_irq(dev, ssi->irq, fsl_ssi_isr, 0,
 				       dev_name(dev), ssi);
 		if (ret < 0) {
-			dev_err(dev, "failed to claim irq %u\n", ssi->irq);
+			dev_err_probe(dev, ret, "failed to claim irq %u\n",
+				      ssi->irq);
 			goto error_asoc_register;
 		}
 	}
@@ -1649,8 +1646,8 @@ static int fsl_ssi_probe(struct platform_device *pdev)
 				ssi->card_name, ssi->card_idx, NULL, 0);
 		if (IS_ERR(ssi->card_pdev)) {
 			ret = PTR_ERR(ssi->card_pdev);
-			dev_err(dev, "failed to register %s: %d\n",
-				ssi->card_name, ret);
+			dev_err_probe(dev, ret, "failed to register %s\n",
+				      ssi->card_name);
 			goto error_sound_card;
 		}
 	}
