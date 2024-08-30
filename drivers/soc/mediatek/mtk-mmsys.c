@@ -399,8 +399,7 @@ static int mtk_mmsys_probe(struct platform_device *pdev)
 	mmsys->regs = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(mmsys->regs)) {
 		ret = PTR_ERR(mmsys->regs);
-		dev_err(dev, "Failed to ioremap mmsys registers: %d\n", ret);
-		return ret;
+		return dev_err_probe(dev, ret, "Failed to ioremap mmsys registers");
 	}
 
 	mmsys->data = of_device_get_match_data(&pdev->dev);
@@ -413,10 +412,9 @@ static int mtk_mmsys_probe(struct platform_device *pdev)
 		mmsys->rcdev.ops = &mtk_mmsys_reset_ops;
 		mmsys->rcdev.of_node = pdev->dev.of_node;
 		ret = devm_reset_controller_register(&pdev->dev, &mmsys->rcdev);
-		if (ret) {
-			dev_err(&pdev->dev, "Couldn't register mmsys reset controller: %d\n", ret);
-			return ret;
-		}
+		if (ret)
+			return dev_err_probe(&pdev->dev, ret,
+						"Couldn't register mmsys reset controller");
 	}
 
 	/* CMDQ is optional */
