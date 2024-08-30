@@ -15,6 +15,7 @@ properties:
       - aspeed,ast2400-gpio
       - aspeed,ast2500-gpio
       - aspeed,ast2600-gpio
+      - aspeed,ast2700-gpio
 
   reg:
     maxItems: 1
@@ -42,7 +43,7 @@ properties:
     const: 2
 
   ngpios:
-    minimum: 36
+    minimum: 12
     maximum: 232
 
 required:
@@ -91,6 +92,20 @@ allOf:
           maxItems: 208
         ngpios:
           enum: [ 36, 208 ]
+      required:
+        - ngpios
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: aspeed,ast2700-gpio
+    then:
+      properties:
+        gpio-line-names:
+          minItems: 12
+          maxItems: 216
+        ngpios:
+          enum: [ 12, 216 ]
       required:
         - ngpios
 
@@ -145,4 +160,33 @@ examples:
         #gpio-cells = <2>;
         gpio-ranges = <&pinctrl 0 208 36>;
         ngpios = <36>;
+    };
+  - |
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
+        #include <dt-bindings/interrupt-controller/arm-gic.h>
+        gpio2: gpio@14c0b000 {
+            compatible = "aspeed,ast2700-gpio";
+            reg = <0x0 0x14c0b000 0x0 0x1000>;
+            interrupts-extended = <&soc1_intc2 18>;
+            interrupt-controller;
+            #interrupt-cells = <2>;
+            #gpio-cells = <2>;
+            gpio-controller;
+            gpio-ranges = <&pinctrl1 0 0 216>;
+            ngpios = <216>;
+        };
+
+        gpio3: gpio@12c11000 {
+            compatible = "aspeed,ast2700-gpio";
+            reg = <0x0 0x12c11000 0x0 0x1000>;
+            interrupts = <GIC_SPI 11 IRQ_TYPE_LEVEL_HIGH>;
+            interrupt-controller;
+            #interrupt-cells = <2>;
+            #gpio-cells = <2>;
+            gpio-controller;
+            gpio-ranges = <&pinctrl0 0 0 12>;
+            ngpios = <12>;
+        };
     };
