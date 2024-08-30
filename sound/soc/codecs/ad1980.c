@@ -237,11 +237,9 @@ static int ad1980_soc_probe(struct snd_soc_component *component)
 	u16 ext_status;
 
 	ac97 = snd_soc_new_ac97_component(component, 0, 0);
-	if (IS_ERR(ac97)) {
-		ret = PTR_ERR(ac97);
-		dev_err(component->dev, "Failed to register AC97 component: %d\n", ret);
-		return ret;
-	}
+	if (IS_ERR(ac97))
+		return dev_err_probe(component->dev, PTR_ERR(ac97),
+			"Failed to register AC97 component\n");
 
 	regmap = regmap_init_ac97(ac97, &ad1980_regmap_config);
 	if (IS_ERR(regmap)) {
