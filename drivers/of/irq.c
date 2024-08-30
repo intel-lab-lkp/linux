@@ -341,7 +341,7 @@ EXPORT_SYMBOL_GPL(of_irq_parse_raw);
  */
 int of_irq_parse_one(struct device_node *device, int index, struct of_phandle_args *out_irq)
 {
-	struct device_node *p;
+	struct device_node *p __free(device_node) = NULL;
 	const __be32 *addr;
 	u32 intsize;
 	int i, res, addr_len;
@@ -374,10 +374,8 @@ int of_irq_parse_one(struct device_node *device, int index, struct of_phandle_ar
 		return -EINVAL;
 
 	/* Get size of interrupt specifier */
-	if (of_property_read_u32(p, "#interrupt-cells", &intsize)) {
-		res = -EINVAL;
-		goto out;
-	}
+	if (of_property_read_u32(p, "#interrupt-cells", &intsize))
+		return -EINVAL;
 
 	pr_debug(" parent=%pOF, intsize=%d\n", p, intsize);
 
@@ -389,17 +387,14 @@ int of_irq_parse_one(struct device_node *device, int index, struct of_phandle_ar
 						 (index * intsize) + i,
 						 out_irq->args + i);
 		if (res)
-			goto out;
+			return res;
 	}
 
 	pr_debug(" intspec=%d\n", *out_irq->args);
 
 
 	/* Check if there are any interrupt-map translations to process */
-	res = of_irq_parse_raw(addr_buf, out_irq);
- out:
-	of_node_put(p);
-	return res;
+	return of_irq_parse_raw(addr_buf, out_irq);
 }
 EXPORT_SYMBOL_GPL(of_irq_parse_one);
 
