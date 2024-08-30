@@ -178,22 +178,19 @@ static inline void __mm_zero_struct_page(struct page *page)
 
 /*
  * Default maximum number of active map areas, this limits the number of vmas
- * per mm struct. Users can overwrite this number by sysctl but there is a
- * problem.
+ * per mm struct. Users can overwrite this number by sysctl. Historically
+ * this limit was a compatibility measure for ELF format predating year 2000.
  *
  * When a program's coredump is generated as ELF format, a section is created
- * per a vma. In ELF, the number of sections is represented in unsigned short.
- * This means the number of sections should be smaller than 65535 at coredump.
- * Because the kernel adds some informative sections to a image of program at
- * generating coredump, we need some margin. The number of extra sections is
- * 1-3 now and depends on arch. We use "5" as safe margin, here.
+ * per a vma. In ELF before year 2000, the number of sections was represented
+ * as unsigned short e_shnum. This means the number of sections should be
+ * smaller than 65535 at coredump.
  *
- * ELF extended numbering allows more than 65535 sections, so 16-bit bound is
- * not a hard limit any more. Although some userspace tools can be surprised by
- * that.
+ * ELF extended numbering was added into System V gABI spec around 2000.
+ * It allows more than 65535 sections, so 16-bit bound is not a hard limit any
+ * more.
  */
-#define MAPCOUNT_ELF_CORE_MARGIN	(5)
-#define DEFAULT_MAX_MAP_COUNT	(USHRT_MAX - MAPCOUNT_ELF_CORE_MARGIN)
+#define DEFAULT_MAX_MAP_COUNT	INT_MAX
 
 extern int sysctl_max_map_count;
 
