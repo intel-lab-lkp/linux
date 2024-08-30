@@ -24,6 +24,10 @@ properties:
   interrupts:
     maxItems: 1
 
+  spi-cpha: true
+
+  spi-cpol: true
+
   spi-max-frequency: true
 
   compatible:
