@@ -330,6 +330,7 @@ int ice_plug_aux_dev(struct ice_pf *pf)
 		return ret;
 	}
 
+	iadev = NULL;
 	ret = auxiliary_device_add(adev);
 	if (ret) {
 		auxiliary_device_uninit(adev);
