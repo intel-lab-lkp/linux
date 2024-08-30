@@ -643,18 +643,16 @@ static int bcm2835_power_probe(struct platform_device *pdev)
 	power->rpivid_asb = pm->rpivid_asb;
 
 	id = readl(power->asb + ASB_AXI_BRDG_ID);
-	if (id != BCM2835_BRDG_ID /* "BRDG" */) {
-		dev_err(dev, "ASB register ID returned 0x%08x\n", id);
-		return -ENODEV;
-	}
+	if (id != BCM2835_BRDG_ID /* "BRDG" */)
+		return dev_err_probe(dev, -ENODEV,
+				     "ASB register ID returned 0x%08x\n", id);
 
 	if (power->rpivid_asb) {
 		id = readl(power->rpivid_asb + ASB_AXI_BRDG_ID);
-		if (id != BCM2835_BRDG_ID /* "BRDG" */) {
-			dev_err(dev, "RPiVid ASB register ID returned 0x%08x\n",
-				     id);
-			return -ENODEV;
-		}
+		if (id != BCM2835_BRDG_ID /* "BRDG" */)
+			return dev_err_probe(dev, -ENODEV,
+					     "RPiVid ASB register ID returned 0x%08x\n",
+					     id);
 	}
 
 	power->pd_xlate.domains = devm_kcalloc(dev,
