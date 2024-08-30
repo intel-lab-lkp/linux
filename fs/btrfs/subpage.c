@@ -869,10 +869,10 @@ void btrfs_folio_end_all_writers(const struct btrfs_fs_info *fs_info, struct fol
 	}
 }
 
-#define GET_SUBPAGE_BITMAP(subpage, fs_info, name, dst)			\
-	bitmap_cut(dst, subpage->bitmaps, 0,				\
-		   fs_info->sectors_per_page * btrfs_bitmap_nr_##name,	\
-		   fs_info->sectors_per_page)
+#define GET_SUBPAGE_BITMAP(subpage, fs_info, name)			\
+	bitmap_read(subpage->bitmaps,					\
+		    fs_info->sectors_per_page * btrfs_bitmap_nr_##name,	\
+		    fs_info->sectors_per_page)
 
 void __cold btrfs_subpage_dump_bitmap(const struct btrfs_fs_info *fs_info,
 				      struct folio *folio, u64 start, u32 len)
@@ -891,12 +891,11 @@ void __cold btrfs_subpage_dump_bitmap(const struct btrfs_fs_info *fs_info,
 	subpage = folio_get_private(folio);
 
 	spin_lock_irqsave(&subpage->lock, flags);
-	GET_SUBPAGE_BITMAP(subpage, fs_info, uptodate, &uptodate_bitmap);
-	GET_SUBPAGE_BITMAP(subpage, fs_info, dirty, &dirty_bitmap);
-	GET_SUBPAGE_BITMAP(subpage, fs_info, writeback, &writeback_bitmap);
-	GET_SUBPAGE_BITMAP(subpage, fs_info, ordered, &ordered_bitmap);
-	GET_SUBPAGE_BITMAP(subpage, fs_info, checked, &checked_bitmap);
-	GET_SUBPAGE_BITMAP(subpage, fs_info, locked, &checked_bitmap);
+	uptodate_bitmap = GET_SUBPAGE_BITMAP(subpage, fs_info, uptodate);
+	dirty_bitmap = GET_SUBPAGE_BITMAP(subpage, fs_info, dirty);
+	writeback_bitmap = GET_SUBPAGE_BITMAP(subpage, fs_info, writeback);
+	ordered_bitmap = GET_SUBPAGE_BITMAP(subpage, fs_info, ordered);
+	checked_bitmap = GET_SUBPAGE_BITMAP(subpage, fs_info, checked);
 	spin_unlock_irqrestore(&subpage->lock, flags);
 
 	dump_page(folio_page(folio, 0), "btrfs subpage dump");
@@ -922,6 +921,6 @@ void btrfs_get_subpage_dirty_bitmap(struct btrfs_fs_info *fs_info,
 	subpage = folio_get_private(folio);
 
 	spin_lock_irqsave(&subpage->lock, flags);
-	GET_SUBPAGE_BITMAP(subpage, fs_info, dirty, ret_bitmap);
+	*ret_bitmap = GET_SUBPAGE_BITMAP(subpage, fs_info, dirty);
 	spin_unlock_irqrestore(&subpage->lock, flags);
 }
