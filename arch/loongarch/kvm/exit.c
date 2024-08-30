@@ -50,9 +50,7 @@ static int kvm_emu_cpucfg(struct kvm_vcpu *vcpu, larch_inst inst)
 		vcpu->arch.gprs[rd] = *(unsigned int *)KVM_SIGNATURE;
 		break;
 	case CPUCFG_KVM_FEATURE:
-		ret = KVM_FEATURE_IPI;
-		if (kvm_pvtime_supported())
-			ret |= KVM_FEATURE_STEAL_TIME;
+		ret = vcpu->kvm->arch.pv_features & LOONGARCH_PV_FEAT_MASK;
 		vcpu->arch.gprs[rd] = ret;
 		break;
 	default:
@@ -697,8 +695,8 @@ static long kvm_save_notify(struct kvm_vcpu *vcpu)
 	id   = kvm_read_reg(vcpu, LOONGARCH_GPR_A1);
 	data = kvm_read_reg(vcpu, LOONGARCH_GPR_A2);
 	switch (id) {
-	case KVM_FEATURE_STEAL_TIME:
-		if (!kvm_pvtime_supported())
+	case BIT(KVM_FEATURE_STEAL_TIME):
+		if (!kvm_guest_has_pv_feature(vcpu, KVM_FEATURE_STEAL_TIME))
 			return KVM_HCALL_INVALID_CODE;
 
 		if (data & ~(KVM_STEAL_PHYS_MASK | KVM_STEAL_PHYS_VALID))
@@ -712,10 +710,10 @@ static long kvm_save_notify(struct kvm_vcpu *vcpu)
 		kvm_make_request(KVM_REQ_STEAL_UPDATE, vcpu);
 		break;
 	default:
-		break;
+		return KVM_HCALL_INVALID_CODE;
 	};
 
-	return 0;
+	return KVM_HCALL_INVALID_CODE;
 };
 
 /*
@@ -786,8 +784,11 @@ static void kvm_handle_service(struct kvm_vcpu *vcpu)
 
 	switch (func) {
 	case KVM_HCALL_FUNC_IPI:
-		kvm_send_pv_ipi(vcpu);
-		ret = KVM_HCALL_SUCCESS;
+		if (kvm_guest_has_pv_feature(vcpu, KVM_FEATURE_IPI)) {
+			kvm_send_pv_ipi(vcpu);
+			ret = KVM_HCALL_SUCCESS;
+		} else
+			ret = KVM_HCALL_INVALID_CODE;
 		break;
 	case KVM_HCALL_FUNC_NOTIFY:
 		ret = kvm_save_notify(vcpu);
