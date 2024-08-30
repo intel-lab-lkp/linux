@@ -1082,7 +1082,6 @@ static int knav_queue_setup_regions(struct knav_device *kdev,
 	struct device_node *regions __free(device_node) =
 			of_get_child_by_name(node, "descriptor-regions");
 	struct knav_region *region;
-	struct device_node *child;
 	u32 temp[2];
 	int ret;
 
@@ -1090,10 +1089,9 @@ static int knav_queue_setup_regions(struct knav_device *kdev,
 		return dev_err_probe(dev, -ENODEV,
 				     "descriptor-regions not specified\n");
 
-	for_each_child_of_node(regions, child) {
+	for_each_child_of_node_scoped(regions, child) {
 		region = devm_kzalloc(dev, sizeof(*region), GFP_KERNEL);
 		if (!region) {
-			of_node_put(child);
 			dev_err(dev, "out of memory allocating region\n");
 			return -ENOMEM;
 		}
@@ -1400,7 +1398,6 @@ static int knav_queue_init_qmgrs(struct knav_device *kdev,
 	struct device_node *qmgrs __free(device_node) =
 			of_get_child_by_name(node, "qmgrs");
 	struct knav_qmgr_info *qmgr;
-	struct device_node *child;
 	u32 temp[2];
 	int ret;
 
@@ -1408,10 +1405,9 @@ static int knav_queue_init_qmgrs(struct knav_device *kdev,
 		return dev_err_probe(dev, -ENODEV,
 				     "queue manager info not specified\n");
 
-	for_each_child_of_node(qmgrs, child) {
+	for_each_child_of_node_scoped(qmgrs, child) {
 		qmgr = devm_kzalloc(dev, sizeof(*qmgr), GFP_KERNEL);
 		if (!qmgr) {
-			of_node_put(child);
 			dev_err(dev, "out of memory allocating qmgr\n");
 			return -ENOMEM;
 		}
@@ -1506,12 +1502,10 @@ static int knav_queue_init_pdsps(struct knav_device *kdev,
 {
 	struct device *dev = kdev->dev;
 	struct knav_pdsp_info *pdsp;
-	struct device_node *child;
 
-	for_each_child_of_node(pdsps, child) {
+	for_each_child_of_node_scoped(pdsps, child) {
 		pdsp = devm_kzalloc(dev, sizeof(*pdsp), GFP_KERNEL);
 		if (!pdsp) {
-			of_node_put(child);
 			dev_err(dev, "out of memory allocating pdsp\n");
 			return -ENOMEM;
 		}
