@@ -325,10 +325,8 @@ static int bcm_pmb_probe(struct platform_device *pdev)
 	}
 
 	err = of_genpd_add_provider_onecell(dev->of_node, &pmb->genpd_onecell_data);
-	if (err) {
-		dev_err(dev, "failed to add genpd provider: %d\n", err);
-		return err;
-	}
+	if (err)
+		return dev_err_probe(dev, err, "failed to add genpd provider\n");
 
 	return 0;
 }
