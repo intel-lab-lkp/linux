@@ -930,11 +930,9 @@ bool dcn30_apply_idle_power_optimizations(struct dc *dc, bool enable)
 			if (!stream || !plane)
 				return false;
 
-			if (stream && plane) {
-				cursor_cache_enable = stream->cursor_position.enable &&
-						plane->address.grph.cursor_cache_addr.quad_part;
-				cursor_attr = stream->cursor_attributes;
-			}
+			cursor_cache_enable = stream->cursor_position.enable &&
+					plane->address.grph.cursor_cache_addr.quad_part;
+			cursor_attr = stream->cursor_attributes;
 
 			/*
 			 * Second, check MALL eligibility
