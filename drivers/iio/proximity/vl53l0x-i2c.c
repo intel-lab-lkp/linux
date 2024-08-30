@@ -22,6 +22,10 @@
 #include <linux/module.h>
 
 #include <linux/iio/iio.h>
+#include <linux/iio/buffer.h>
+#include <linux/iio/trigger.h>
+#include <linux/iio/trigger_consumer.h>
+#include <linux/iio/triggered_buffer.h>
 
 #define VL_REG_SYSRANGE_START				0x00
 
@@ -49,43 +53,12 @@ struct vl53l0x_data {
 	struct completion completion;
 	struct regulator *vdd_supply;
 	struct gpio_desc *reset_gpio;
+
+	struct {
+		u16 chan;
+		s64 timestamp __aligned(8);
+	} scan;
 };
-
-static irqreturn_t vl53l0x_handle_irq(int irq, void *priv)
-{
-	struct iio_dev *indio_dev = priv;
-	struct vl53l0x_data *data = iio_priv(indio_dev);
-
-	complete(&data->completion);
-
-	return IRQ_HANDLED;
-}
-
-static int vl53l0x_configure_irq(struct i2c_client *client,
-				 struct iio_dev *indio_dev)
-{
-	int irq_flags = irq_get_trigger_type(client->irq);
-	struct vl53l0x_data *data = iio_priv(indio_dev);
-	int ret;
-
-	if (!irq_flags)
-		irq_flags = IRQF_TRIGGER_FALLING;
-
-	ret = devm_request_irq(&client->dev, client->irq, vl53l0x_handle_irq,
-			irq_flags, indio_dev->name, indio_dev);
-	if (ret) {
-		dev_err(&client->dev, "devm_request_irq error: %d\n", ret);
-		return ret;
-	}
-
-	ret = i2c_smbus_write_byte_data(data->client,
-			VL_REG_SYSTEM_INTERRUPT_CONFIG_GPIO,
-			VL_REG_SYSTEM_INTERRUPT_GPIO_NEW_SAMPLE_READY);
-	if (ret < 0)
-		dev_err(&client->dev, "failed to configure IRQ: %d\n", ret);
-
-	return ret;
-}
 
 static void vl53l0x_clear_irq(struct vl53l0x_data *data)
 {
@@ -105,6 +78,62 @@ static void vl53l0x_clear_irq(struct vl53l0x_data *data)
 	ret = i2c_smbus_read_byte_data(data->client, VL_REG_RESULT_INT_STATUS);
 	if (ret < 0 || ret & 0x07)
 		dev_err(dev, "failed to clear irq: %d\n", ret);
+}
+
+static irqreturn_t vl53l0x_threaded_irq(int irq, void *priv)
+{
+	struct iio_dev *indio_dev = priv;
+	struct vl53l0x_data *data = iio_priv(indio_dev);
+	u8 buffer[12];
+	int ret;
+
+	if (iio_buffer_enabled(indio_dev)) {
+		ret = i2c_smbus_read_i2c_block_data(data->client,
+						VL_REG_RESULT_RANGE_STATUS,
+						sizeof(buffer), buffer);
+		if (ret < 0)
+			return ret;
+		else if (ret != 12)
+			return -EREMOTEIO;
+
+		data->scan.chan = (buffer[10] << 8) + buffer[11];
+		iio_push_to_buffers_with_timestamp(indio_dev,
+						&data->scan,
+						iio_get_time_ns(indio_dev));
+
+		iio_trigger_notify_done(indio_dev->trig);
+		vl53l0x_clear_irq(data);
+	} else
+		complete(&data->completion);
+
+	return IRQ_HANDLED;
+}
+
+static int vl53l0x_configure_irq(struct i2c_client *client,
+				 struct iio_dev *indio_dev)
+{
+	int irq_flags = irq_get_trigger_type(client->irq);
+	struct vl53l0x_data *data = iio_priv(indio_dev);
+	int ret;
+
+	if (!irq_flags)
+		irq_flags = IRQF_TRIGGER_FALLING;
+
+	ret = devm_request_threaded_irq(&client->dev, client->irq,
+			NULL, vl53l0x_threaded_irq,
+			irq_flags | IRQF_ONESHOT, indio_dev->name, indio_dev);
+	if (ret) {
+		dev_err(&client->dev, "devm_request_irq error: %d\n", ret);
+		return ret;
+	}
+
+	ret = i2c_smbus_write_byte_data(data->client,
+			VL_REG_SYSTEM_INTERRUPT_CONFIG_GPIO,
+			VL_REG_SYSTEM_INTERRUPT_GPIO_NEW_SAMPLE_READY);
+	if (ret < 0)
+		dev_err(&client->dev, "failed to configure IRQ: %d\n", ret);
+
+	return ret;
 }
 
 static int vl53l0x_read_proximity(struct vl53l0x_data *data,
@@ -163,7 +192,14 @@ static const struct iio_chan_spec vl53l0x_channels[] = {
 		.type = IIO_DISTANCE,
 		.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |
 				      BIT(IIO_CHAN_INFO_SCALE),
+		.scan_index = 0,
+		.scan_type = {
+			.sign = 'u',
+			.realbits = 12,
+			.storagebits = 16,
+		},
 	},
+	IIO_CHAN_SOFT_TIMESTAMP(32),
 };
 
 static int vl53l0x_read_raw(struct iio_dev *indio_dev,
@@ -221,6 +257,40 @@ static int vl53l0x_power_on(struct vl53l0x_data *data)
 	return 0;
 }
 
+static int vl53l0x_buffer_postenable(struct iio_dev *indio_dev)
+{
+	struct vl53l0x_data *data = iio_priv(indio_dev);
+	int ret;
+
+	ret = i2c_smbus_write_byte_data(data->client, VL_REG_SYSRANGE_START, 0x02);
+	if (ret < 0)
+		return ret;
+
+	return 0;
+}
+
+static int vl53l0x_buffer_postdisable(struct iio_dev *indio_dev)
+{
+	struct vl53l0x_data *data = iio_priv(indio_dev);
+	int ret;
+
+	ret = i2c_smbus_write_byte_data(data->client, VL_REG_SYSRANGE_START, 0x01);
+	if (ret < 0)
+		return ret;
+
+	/* Let the ongoing reading finish */
+	reinit_completion(&data->completion);
+	wait_for_completion_timeout(&data->completion, HZ/10);
+	vl53l0x_clear_irq(data);
+
+	return 0;
+}
+
+static const struct iio_buffer_setup_ops iio_triggered_buffer_setup_ops = {
+	.postenable = &vl53l0x_buffer_postenable,
+	.postdisable = &vl53l0x_buffer_postdisable,
+};
+
 static int vl53l0x_probe(struct i2c_client *client)
 {
 	struct vl53l0x_data *data;
@@ -277,6 +347,13 @@ static int vl53l0x_probe(struct i2c_client *client)
 		init_completion(&data->completion);
 
 		ret = vl53l0x_configure_irq(client, indio_dev);
+		if (ret)
+			return ret;
+
+		ret = devm_iio_triggered_buffer_setup(&client->dev,
+					indio_dev,
+					&iio_pollfunc_store_time,
+					NULL, &iio_triggered_buffer_setup_ops);
 		if (ret)
 			return ret;
 	}
