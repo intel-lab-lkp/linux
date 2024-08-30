@@ -445,6 +445,9 @@ bool blk_insert_flush(struct request *rq)
 		fq->flush_data_in_flight++;
 		spin_unlock_irq(&fq->mq_flush_lock);
 		return false;
+	case REQ_FSEQ_PREFLUSH | REQ_FSEQ_POSTFLUSH:
+		policy &= ~REQ_FSEQ_POSTFLUSH;
+		fallthrough;
 	default:
 		/*
 		 * Mark the request as part of a flush sequence and submit it
