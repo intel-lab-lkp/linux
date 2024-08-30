@@ -1712,7 +1712,7 @@ netdev_tx_t vxlan_mdb_xmit(struct vxlan_dev *vxlan,
 		vxlan_xmit_one(skb, vxlan->dev, src_vni,
 			       rcu_dereference(fremote->rd), false);
 	else
-		kfree_skb(skb);
+		vxlan_kfree_skb(skb, VXLAN_DROP_NO_REMOTE);
 
 	return NETDEV_TX_OK;
 }
