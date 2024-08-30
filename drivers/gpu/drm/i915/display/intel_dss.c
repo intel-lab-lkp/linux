@@ -217,3 +217,51 @@ void intel_dss_dsc_get_config(struct intel_crtc_state *crtc_state)
 	crtc_state->dsc.dsc_split = (dss_ctl2 & RIGHT_BRANCH_VDSC_ENABLE) &&
 				    (dss_ctl1 & JOINER_ENABLE);
 }
+
+void intel_dss_get_compressed_joiner_pipes(struct intel_crtc *crtc,
+					   u8 *primary_pipes,
+					   u8 *secondary_pipes)
+{
+	struct intel_display *display = to_intel_display(crtc);
+	struct drm_i915_private *i915 = to_i915(display->drm);
+	enum intel_display_power_domain power_domain;
+	enum pipe pipe = crtc->pipe;
+	intel_wakeref_t wakeref;
+
+	power_domain = intel_dsc_power_domain(crtc, (enum transcoder) pipe);
+	with_intel_display_power_if_enabled(i915, power_domain, wakeref) {
+		u32 tmp = intel_de_read(display, ICL_PIPE_DSS_CTL1(pipe));
+
+		if (!(tmp & BIG_JOINER_ENABLE))
+			continue;
+
+		if (tmp & PRIMARY_BIG_JOINER_ENABLE)
+			*primary_pipes |= BIT(pipe);
+		else
+			*secondary_pipes |= BIT(pipe);
+	}
+}
+
+void intel_dss_get_uncompressed_joiner_pipes(struct intel_crtc *crtc,
+					     u8 *primary_pipes,
+					     u8 *secondary_pipes)
+{
+	struct intel_display *display = to_intel_display(crtc);
+	struct drm_i915_private *i915 = to_i915(display->drm);
+	enum intel_display_power_domain power_domain;
+	enum pipe pipe = crtc->pipe;
+	intel_wakeref_t wakeref;
+
+	if (DISPLAY_VER(display) < 13)
+		return;
+
+	power_domain = POWER_DOMAIN_PIPE(pipe);
+	with_intel_display_power_if_enabled(i915, power_domain, wakeref) {
+		u32 tmp = intel_de_read(display, ICL_PIPE_DSS_CTL1(pipe));
+
+		if (tmp & UNCOMPRESSED_JOINER_PRIMARY)
+			*primary_pipes |= BIT(pipe);
+		if (tmp & UNCOMPRESSED_JOINER_SECONDARY)
+			*secondary_pipes |= BIT(pipe);
+	}
+}
