@@ -4833,6 +4833,17 @@ static int vxlan_nexthop_event(struct notifier_block *nb,
 	return NOTIFY_DONE;
 }
 
+static const char * const vxlan_drop_reasons[] = {
+#define S(x)	[(x) & ~SKB_DROP_REASON_SUBSYS_MASK] = (#x),
+	VXLAN_DROP_REASONS(S)
+#undef S
+};
+
+static struct drop_reason_list drop_reason_list_vxlan = {
+	.reasons = vxlan_drop_reasons,
+	.n_reasons = ARRAY_SIZE(vxlan_drop_reasons),
+};
+
 static __net_init int vxlan_init_net(struct net *net)
 {
 	struct vxlan_net *vn = net_generic(net, vxlan_net_id);
@@ -4914,6 +4925,9 @@ static int __init vxlan_init_module(void)
 
 	vxlan_vnifilter_init();
 
+	drop_reasons_register_subsys(SKB_DROP_REASON_SUBSYS_VXLAN,
+				     &drop_reason_list_vxlan);
+
 	return 0;
 out4:
 	unregister_switchdev_notifier(&vxlan_switchdev_notifier_block);
@@ -4928,6 +4942,7 @@ late_initcall(vxlan_init_module);
 
 static void __exit vxlan_cleanup_module(void)
 {
+	drop_reasons_unregister_subsys(SKB_DROP_REASON_SUBSYS_VXLAN);
 	vxlan_vnifilter_uninit();
 	rtnl_link_unregister(&vxlan_link_ops);
 	unregister_switchdev_notifier(&vxlan_switchdev_notifier_block);

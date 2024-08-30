@@ -29,6 +29,12 @@ enum skb_drop_reason_subsys {
 	 */
 	SKB_DROP_REASON_SUBSYS_OPENVSWITCH,
 
+	/**
+	 * @SKB_DROP_REASON_SUBSYS_VXLAN: vxlan drop reason, see
+	 * drivers/net/vxlan/drop.h
+	 */
+	SKB_DROP_REASON_SUBSYS_VXLAN,
+
 	/** @SKB_DROP_REASON_SUBSYS_NUM: number of subsystems defined */
 	SKB_DROP_REASON_SUBSYS_NUM
 };
