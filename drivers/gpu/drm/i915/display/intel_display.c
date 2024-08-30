@@ -5776,6 +5776,7 @@ static bool intel_pipes_need_modeset(struct intel_atomic_state *state,
 static int intel_atomic_check_joiner(struct intel_atomic_state *state,
 				     struct intel_crtc *primary_crtc)
 {
+	struct intel_display *display = to_intel_display(primary_crtc);
 	struct drm_i915_private *i915 = to_i915(state->base.dev);
 	struct intel_crtc_state *primary_crtc_state =
 		intel_atomic_get_new_crtc_state(state, primary_crtc);
@@ -5789,12 +5790,13 @@ static int intel_atomic_check_joiner(struct intel_atomic_state *state,
 			primary_crtc->pipe != intel_joiner_get_primary_pipe(primary_crtc_state)))
 		return -EINVAL;
 
-	if (primary_crtc_state->joiner_pipes & ~intel_joiner_supported_pipes(i915)) {
+	if (primary_crtc_state->joiner_pipes & ~intel_joiner_supported_pipes(display)) {
 		drm_dbg_kms(&i915->drm,
 			    "[CRTC:%d:%s] Cannot act as joiner primary "
 			    "(need 0x%x as pipes, only 0x%x possible)\n",
 			    primary_crtc->base.base.id, primary_crtc->base.name,
-			    primary_crtc_state->joiner_pipes, intel_joiner_supported_pipes(i915));
+			    primary_crtc_state->joiner_pipes,
+			    intel_joiner_supported_pipes(display));
 		return -EINVAL;
 	}
 
