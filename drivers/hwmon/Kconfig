@@ -2114,6 +2114,16 @@ config SENSORS_ADC128D818
 	  This driver can also be built as a module. If so, the module
 	  will be called adc128d818.
 
+config SENSORS_ADS71X8
+	tristate "Texas Instruments ADS7128 and ADS7138"
+	depends on I2C
+	help
+	  If you say yes here you get support for Texas Instruments ADS7128 and
+	  ADS7138 8-channel A/D converters with 12-bit resolution.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called ads71x8.
+
 config SENSORS_ADS7828
 	tristate "Texas Instruments ADS7828 and compatibles"
 	depends on I2C
