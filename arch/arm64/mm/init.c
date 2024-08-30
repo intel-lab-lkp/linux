@@ -414,6 +414,13 @@ void __init mem_init(void)
 
 void free_initmem(void)
 {
+	if (IS_ENABLED(CONFIG_ARCH_KEEP_MEMBLOCK)) {
+		unsigned long aligned_begin = ALIGN_DOWN((u64)__init_begin, PAGE_SIZE);
+		unsigned long aligned_end = ALIGN((u64)__init_end, PAGE_SIZE);
+
+		memblock_free((void *)aligned_begin, aligned_end - aligned_begin);
+	}
+
 	free_reserved_area(lm_alias(__init_begin),
 			   lm_alias(__init_end),
 			   POISON_FREE_INITMEM, "unused kernel");
