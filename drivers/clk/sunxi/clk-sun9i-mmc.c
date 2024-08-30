@@ -134,10 +134,8 @@ static int sun9i_a80_mmc_config_clk_probe(struct platform_device *pdev)
 	}
 
 	ret = reset_control_deassert(data->reset);
-	if (ret) {
-		dev_err(&pdev->dev, "Reset deassert err %d\n", ret);
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "Reset deassert err %d\n");
 
 	clk_parent = __clk_get_name(data->clk);
 	for (i = 0; i < count; i++) {
