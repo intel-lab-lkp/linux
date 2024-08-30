@@ -148,7 +148,7 @@ static ssize_t vgetrandom(void *buf, size_t len, unsigned long flags)
 
 enum { TRIALS = 25000000, THREADS = 256 };
 
-static void *test_vdso_getrandom(void *)
+static void *test_vdso_getrandom(void *ctx)
 {
 	for (size_t i = 0; i < TRIALS; ++i) {
 		unsigned int val;
@@ -158,7 +158,7 @@ static void *test_vdso_getrandom(void *)
 	return NULL;
 }
 
-static void *test_libc_getrandom(void *)
+static void *test_libc_getrandom(void *ctx)
 {
 	for (size_t i = 0; i < TRIALS; ++i) {
 		unsigned int val;
@@ -168,7 +168,7 @@ static void *test_libc_getrandom(void *)
 	return NULL;
 }
 
-static void *test_syscall_getrandom(void *)
+static void *test_syscall_getrandom(void *ctx)
 {
 	for (size_t i = 0; i < TRIALS; ++i) {
 		unsigned int val;
