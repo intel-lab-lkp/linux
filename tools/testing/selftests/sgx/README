@@ -1,0 +1,109 @@
+SGX selftests
+
+The SGX selftests includes a c program (test_sgx) that covers basic user space
+facing APIs and a shell scripts (run_sgx_cg_selftests.sh) testing SGX misc
+cgroup. The SGX cgroup test script requires root privileges and runs a
+specific test case of  the test_sgx in different cgroups configured by the
+script. More details about the cgroup test can be found below.
+
+All SGX selftests can run with or without kselftest framework.
+
+WITH KSELFTEST FRAMEWORK
+=======================
+
+BUILD
+-----
+
+Build executable file "test_sgx" from top level directory of the kernel source:
+ $ make -C tools/testing/selftests TARGETS=sgx
+
+RUN
+---
+
+Run all sgx tests as sudo or root since the cgroup tests need to configure cgroup
+limits in files under /sys/fs/cgroup.
+
+ $ sudo make -C tools/testing/selftests/sgx run_tests
+
+Without sudo, SGX cgroup tests will be skipped.
+
+On platforms with large Enclave Page Cache (EPC) and/or less cpu cores, you may
+need adjust the timeout in 'settings' to avoid timeouts.
+
+More details about kselftest framework can be found in
+Documentation/dev-tools/kselftest.rst.
+
+WITHOUT KSELFTEST FRAMEWORK
+===========================
+
+BUILD
+-----
+
+Build executable file "test_sgx" from this
+directory(tools/testing/selftests/sgx/):
+
+  $ make
+
+RUN
+---
+
+Run all non-cgroup tests:
+
+ $ ./test_sgx
+
+To test SGX cgroup:
+
+ $ sudo ./run_sgx_cg_selftests.sh
+
+THE SGX CGROUP TEST SCRIPTS
+===========================
+
+Overview of the main cgroup test script
+---------------------------------------
+
+With different cgroups, the script (run_sgx_cg_selftests.sh) starts one or
+multiple concurrent SGX selftests (test_sgx), each to run the
+unclobbered_vdso_oversubscribed test case, which loads an enclave of EPC size
+equal to the EPC capacity available on the platform. The script checks results
+against the expectation set for each cgroup and reports success or failure.
+
+The script creates 3 different cgroups at the beginning with following
+expectations:
+
+  1) small - intentionally small enough to fail the test loading an enclave of
+             size equal to the capacity.
+
+  2) large - large enough to run up to 4 concurrent tests but fail some if more
+	     than 4 concurrent tests are run. The script starts 4 expecting at
+	     least one test to pass, and then starts 5 expecting at least one
+             test to fail.
+
+  3) larger - limit is the same as the capacity, large enough to run lots of
+	      concurrent tests. The script starts 8 of them and expects all
+	      pass.  Then it reruns the same test with one process randomly
+	      killed and usage checked to be zero after all processes exit.
+
+The script also includes a test with low mem_cg limit (memory.max) and the
+'large' sgx_epc limit to verify that the RAM used for per-cgroup reclamation is
+charged to a proper mem_cg. To validate mem_cg OOM-kills processes when its
+memory.max limit is reached due to SGX EPC reclamation, the script turns off
+swapping before start, and turns swapping back on afterwards for this particular
+test.
+
+The helper script
+------------------------------------------------------
+
+To monitor the SGX cgroup settings and behaviors or trouble-shoot during
+testing, the helper script, watch_misc_for_tests.sh, can be used to watch
+relevant entries in cgroupfs files. For example, to watch the SGX cgroup
+'current' counter changes during testing, run this in a separate terminal from
+this directory:
+
+  $ ./watch_misc_for_tests.sh current
+
+For more details about SGX cgroups, see "Cgroup Support" in
+Documentation/arch/x86/sgx.rst.
+
+The scripts require cgroup v2 support. More details about cgroup v2 can be found
+in Documentation/admin-guide/cgroup-v2.rst.
+
