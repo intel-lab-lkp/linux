@@ -1,0 +1,34 @@
+Devicetree compatible string versioning for Microchip FPGA IP blocks and reference designs
+
+This document describes the versioning guidelines for compatible strings
+used on Microchip FPGA IP blocks and reference designs.
+
+IP block-specific compatible strings are in the form:
+"microchip,<ip-block-name>-rtl-v<major version number>"
+or optionally:
+"microchip,<ip-block-name>-rtl-v<major version number>.<minor version number>"
+
+<ip-block-name> should be the name of the IP in Libero's IP catalog.
+In most cases a major version should be sufficient, as breaking changes are
+intended to be accompanied by a version update, but if not, the optional minor
+version should be used,
+
+An example is:
+  compatible = "microchip,corei2c-rtl-v7";
+
+If the IP is integrated as a "hard" peripheral in an SoC, the expectation is
+that there will be a fallback to the IP block it was derived from, if
+appropriate, such as:
+  compatible = "microchip,mpfs-i2c", "microchip,corei2c-rtl-v7";
+
+The versioning scheme for reference designs that Microchip provides for its
+development kits is similar:
+"microchip,<soc>-<board>-reference-rtl-v<yymm>".
+
+This should be followed by a fallback compatible belonging to the board itself:
+"microchip,<soc>-<board>"
+and then one for the soc:
+"microchip,<soc>"
+
+For example:
+  compatible = "microchip,mpfs-icicle-reference-rtl-v2210", "microchip,mpfs-icicle-kit", "microchip,mpfs";
