@@ -1264,9 +1264,8 @@ static int dsa_port_parse_of(struct dsa_port *dp, struct device_node *dn)
 static int dsa_switch_parse_ports_of(struct dsa_switch *ds,
 				     struct device_node *dn)
 {
-	struct device_node *ports, *port;
+	struct device_node *ports;
 	struct dsa_port *dp;
-	int err = 0;
 	u32 reg;
 
 	ports = of_get_child_by_name(dn, "ports");
@@ -1279,33 +1278,30 @@ static int dsa_switch_parse_ports_of(struct dsa_switch *ds,
 		}
 	}
 
-	for_each_available_child_of_node(ports, port) {
-		err = of_property_read_u32(port, "reg", &reg);
+	for_each_available_child_of_node_scoped(ports, port) {
+		int err = of_property_read_u32(port, "reg", &reg);
 		if (err) {
-			of_node_put(port);
-			goto out_put_node;
+			of_node_put(ports);
+			return err;
 		}
 
 		if (reg >= ds->num_ports) {
 			dev_err(ds->dev, "port %pOF index %u exceeds num_ports (%u)\n",
 				port, reg, ds->num_ports);
-			of_node_put(port);
-			err = -EINVAL;
-			goto out_put_node;
+			of_node_put(ports);
+			return -EINVAL;
 		}
 
 		dp = dsa_to_port(ds, reg);
 
 		err = dsa_port_parse_of(dp, port);
 		if (err) {
-			of_node_put(port);
-			goto out_put_node;
+			of_node_put(ports);
+			return err;
 		}
 	}
 
-out_put_node:
-	of_node_put(ports);
-	return err;
+	return 0;
 }
 
 static int dsa_switch_parse_member_of(struct dsa_switch *ds,
