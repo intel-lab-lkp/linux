@@ -977,7 +977,7 @@ static int enetc_refill_rx_ring(struct enetc_bdr *rx_ring, const int buff_cnt)
 	return j;
 }
 
-#ifdef CONFIG_FSL_ENETC_PTP_CLOCK
+#if IS_ENABLED(CONFIG_FSL_ENETC_PTP_CLOCK)
 static void enetc_get_rx_tstamp(struct net_device *ndev,
 				union enetc_rx_bd *rxbd,
 				struct sk_buff *skb)
@@ -1041,7 +1041,7 @@ static void enetc_get_offloads(struct enetc_bdr *rx_ring,
 		__vlan_hwaccel_put_tag(skb, tpid, le16_to_cpu(rxbd->r.vlan_opt));
 	}
 
-#ifdef CONFIG_FSL_ENETC_PTP_CLOCK
+#if IS_ENABLED(CONFIG_FSL_ENETC_PTP_CLOCK)
 	if (priv->active_offloads & ENETC_F_RX_TSTAMP)
 		enetc_get_rx_tstamp(rx_ring->ndev, rxbd, skb);
 #endif
@@ -2882,7 +2882,7 @@ void enetc_set_features(struct net_device *ndev, netdev_features_t features)
 }
 EXPORT_SYMBOL_GPL(enetc_set_features);
 
-#ifdef CONFIG_FSL_ENETC_PTP_CLOCK
+#if IS_ENABLED(CONFIG_FSL_ENETC_PTP_CLOCK)
 static int enetc_hwtstamp_set(struct net_device *ndev, struct ifreq *ifr)
 {
 	struct enetc_ndev_priv *priv = netdev_priv(ndev);
@@ -2956,7 +2956,7 @@ static int enetc_hwtstamp_get(struct net_device *ndev, struct ifreq *ifr)
 int enetc_ioctl(struct net_device *ndev, struct ifreq *rq, int cmd)
 {
 	struct enetc_ndev_priv *priv = netdev_priv(ndev);
-#ifdef CONFIG_FSL_ENETC_PTP_CLOCK
+#if IS_ENABLED(CONFIG_FSL_ENETC_PTP_CLOCK)
 	if (cmd == SIOCSHWTSTAMP)
 		return enetc_hwtstamp_set(ndev, rq);
 	if (cmd == SIOCGHWTSTAMP)

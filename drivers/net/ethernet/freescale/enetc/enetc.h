@@ -184,7 +184,7 @@ static inline union enetc_rx_bd *enetc_rxbd(struct enetc_bdr *rx_ring, int i)
 {
 	int hw_idx = i;
 
-#ifdef CONFIG_FSL_ENETC_PTP_CLOCK
+#if IS_ENABLED(CONFIG_FSL_ENETC_PTP_CLOCK)
 	if (rx_ring->ext_en)
 		hw_idx = 2 * i;
 #endif
@@ -199,7 +199,7 @@ static inline void enetc_rxbd_next(struct enetc_bdr *rx_ring,
 
 	new_rxbd++;
 
-#ifdef CONFIG_FSL_ENETC_PTP_CLOCK
+#if IS_ENABLED(CONFIG_FSL_ENETC_PTP_CLOCK)
 	if (rx_ring->ext_en)
 		new_rxbd++;
 #endif
