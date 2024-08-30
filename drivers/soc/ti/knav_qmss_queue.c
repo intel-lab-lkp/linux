@@ -1091,10 +1091,8 @@ static int knav_queue_setup_regions(struct knav_device *kdev,
 
 	for_each_child_of_node_scoped(regions, child) {
 		region = devm_kzalloc(dev, sizeof(*region), GFP_KERNEL);
-		if (!region) {
-			dev_err(dev, "out of memory allocating region\n");
-			return -ENOMEM;
-		}
+		if (!region)
+			return dev_err_probe(dev, -ENOMEM, "out of memory allocating region\n");
 
 		region->name = knav_queue_find_name(child);
 		of_property_read_u32(child, "id", &region->id);
@@ -1407,10 +1405,8 @@ static int knav_queue_init_qmgrs(struct knav_device *kdev,
 
 	for_each_child_of_node_scoped(qmgrs, child) {
 		qmgr = devm_kzalloc(dev, sizeof(*qmgr), GFP_KERNEL);
-		if (!qmgr) {
-			dev_err(dev, "out of memory allocating qmgr\n");
-			return -ENOMEM;
-		}
+		if (!qmgr)
+			return dev_err_probe(dev, -ENOMEM, "out of memory allocating qmgr\n");
 
 		ret = of_property_read_u32_array(child, "managed-queues",
 						 temp, 2);
@@ -1505,10 +1501,8 @@ static int knav_queue_init_pdsps(struct knav_device *kdev,
 
 	for_each_child_of_node_scoped(pdsps, child) {
 		pdsp = devm_kzalloc(dev, sizeof(*pdsp), GFP_KERNEL);
-		if (!pdsp) {
-			dev_err(dev, "out of memory allocating pdsp\n");
-			return -ENOMEM;
-		}
+		if (!pdsp)
+			return dev_err_probe(dev, -ENOMEM, "out of memory allocating pdsp\n");
 		pdsp->name = knav_queue_find_name(child);
 		pdsp->iram =
 			knav_queue_map_reg(kdev, child,
@@ -1784,16 +1778,12 @@ static int knav_queue_probe(struct platform_device *pdev)
 	u32 temp[2];
 	int ret;
 
-	if (!node) {
-		dev_err(dev, "device tree info unavailable\n");
-		return -ENODEV;
-	}
+	if (!node)
+		return dev_err_probe(dev, -ENODEV, "device tree info unavailable\n");
 
 	kdev = devm_kzalloc(dev, sizeof(struct knav_device), GFP_KERNEL);
-	if (!kdev) {
-		dev_err(dev, "memory allocation failed\n");
-		return -ENOMEM;
-	}
+	if (!kdev)
+		return dev_err_probe(dev, -ENOMEM, "memory allocation failed\n");
 
 	if (device_get_match_data(dev))
 		kdev->version = QMSS_66AK2G;
@@ -1810,8 +1800,7 @@ static int knav_queue_probe(struct platform_device *pdev)
 	ret = pm_runtime_resume_and_get(&pdev->dev);
 	if (ret < 0) {
 		pm_runtime_disable(&pdev->dev);
-		dev_err(dev, "Failed to enable QMSS\n");
-		return ret;
+		return dev_err_probe(dev, ret, "Failed to enable QMSS\n");
 	}
 
 	if (of_property_read_u32_array(node, "queue-range", temp, 2)) {
