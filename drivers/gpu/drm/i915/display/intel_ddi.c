@@ -57,6 +57,7 @@
 #include "intel_dp_tunnel.h"
 #include "intel_dpio_phy.h"
 #include "intel_dsi.h"
+#include "intel_dss_regs.h"
 #include "intel_encoder.h"
 #include "intel_fdi.h"
 #include "intel_fifo_underrun.h"
@@ -74,7 +75,6 @@
 #include "intel_snps_phy.h"
 #include "intel_tc.h"
 #include "intel_vdsc.h"
-#include "intel_vdsc_regs.h"
 #include "skl_scaler.h"
 #include "skl_universal_plane.h"
 
