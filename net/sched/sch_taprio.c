@@ -2374,9 +2374,6 @@ static int taprio_dump(struct Qdisc *sch, struct sk_buff *skb)
 	struct tc_mqprio_qopt opt = { 0 };
 	struct nlattr *nest, *sched_nest;
 
-	oper = rtnl_dereference(q->oper_sched);
-	admin = rtnl_dereference(q->admin_sched);
-
 	mqprio_qopt_reconstruct(dev, &opt);
 
 	nest = nla_nest_start_noflag(skb, TCA_OPTIONS);
@@ -2397,29 +2394,37 @@ static int taprio_dump(struct Qdisc *sch, struct sk_buff *skb)
 	    nla_put_u32(skb, TCA_TAPRIO_ATTR_TXTIME_DELAY, q->txtime_delay))
 		goto options_error;
 
+	rcu_read_lock();
+
+	oper = rtnl_dereference(q->oper_sched);
+	admin = rtnl_dereference(q->admin_sched);
+
 	if (oper && taprio_dump_tc_entries(skb, q, oper))
-		goto options_error;
+		goto unlock;
 
 	if (oper && dump_schedule(skb, oper))
-		goto options_error;
+		goto unlock;
 
-	if (!admin)
-		goto done;
+	if (admin) {
+		sched_nest =
+			nla_nest_start_noflag(skb, TCA_TAPRIO_ATTR_ADMIN_SCHED);
+		if (!sched_nest)
+			goto unlock;
 
-	sched_nest = nla_nest_start_noflag(skb, TCA_TAPRIO_ATTR_ADMIN_SCHED);
-	if (!sched_nest)
-		goto options_error;
+		if (dump_schedule(skb, admin)) {
+			nla_nest_cancel(skb, sched_nest);
+			goto unlock;
+		}
 
-	if (dump_schedule(skb, admin))
-		goto admin_error;
+		nla_nest_end(skb, sched_nest);
+	}
 
-	nla_nest_end(skb, sched_nest);
+	rcu_read_unlock();
 
-done:
 	return nla_nest_end(skb, nest);
 
-admin_error:
-	nla_nest_cancel(skb, sched_nest);
+unlock:
+	rcu_read_unlock();
 
 options_error:
 	nla_nest_cancel(skb, nest);
