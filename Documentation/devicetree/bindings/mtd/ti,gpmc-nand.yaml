@@ -61,6 +61,11 @@ properties:
       GPIO connection to R/B signal from NAND chip
     maxItems: 1
 
+  partitions:
+    type: object
+    description:
+      Node containing description of fixed partitions.
+
 patternProperties:
   "@[0-9a-f]+$":
     $ref: /schemas/mtd/partitions/partition.yaml
