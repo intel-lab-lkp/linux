@@ -47,6 +47,14 @@
 /** Number of dentries for each connection in the control filesystem */
 #define FUSE_CTL_NUM_DENTRIES 5
 
+/*
+ * Default timeout (in seconds) for the server to reply to a request
+ * if no timeout was specified on mount
+ */
+extern u32 fuse_default_req_timeout;
+/** Max timeout (in seconds) for the server to reply to a request */
+extern u32 fuse_max_req_timeout;
+
 /** List of active connections */
 extern struct list_head fuse_conn_list;
 
@@ -1479,5 +1487,13 @@ ssize_t fuse_passthrough_splice_write(struct pipe_inode_info *pipe,
 				      struct file *out, loff_t *ppos,
 				      size_t len, unsigned int flags);
 ssize_t fuse_passthrough_mmap(struct file *file, struct vm_area_struct *vma);
+
+#ifdef CONFIG_SYSCTL
+int fuse_sysctl_register(void);
+void fuse_sysctl_unregister(void);
+#else
+static inline int fuse_sysctl_register(void) { return 0; }
+static inline void fuse_sysctl_unregister(void) { return; }
+#endif /* CONFIG_SYSCTL */
 
 #endif /* _FS_FUSE_I_H */
