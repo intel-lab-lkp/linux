@@ -909,6 +909,46 @@ mwifiex_reset_write(struct file *file,
 	return count;
 }
 
+static ssize_t
+mwifiex_fake_radar_detect_write(struct file *file,
+				const char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	struct mwifiex_private *priv = file->private_data;
+	struct mwifiex_adapter *adapter = priv->adapter;
+	bool result;
+	int rc;
+
+	rc = kstrtobool_from_user(ubuf, count, &result);
+	if (rc)
+		return rc;
+
+	if (!result)
+		return -EINVAL;
+
+	if (priv->wdev.cac_started) {
+		mwifiex_dbg(adapter, MSG,
+			    "Generate fake radar detected during CAC\n");
+		if (mwifiex_stop_radar_detection(priv, &priv->dfs_chandef))
+			mwifiex_dbg(adapter, ERROR,
+				    "Failed to stop CAC in FW\n");
+		cancel_delayed_work_sync(&priv->dfs_cac_work);
+		cfg80211_cac_event(priv->netdev, &priv->dfs_chandef,
+				   NL80211_RADAR_CAC_ABORTED, GFP_KERNEL);
+		cfg80211_radar_event(adapter->wiphy, &priv->dfs_chandef,
+				     GFP_KERNEL);
+	} else {
+		if (priv->bss_chandef.chan->dfs_cac_ms) {
+			mwifiex_dbg(adapter, MSG,
+				    "Generate fake radar detected\n");
+			cfg80211_radar_event(adapter->wiphy,
+					     &priv->dfs_chandef,
+					     GFP_KERNEL);
+		}
+	}
+
+	return count;
+}
 #define MWIFIEX_DFS_ADD_FILE(name) do {                                 \
 	debugfs_create_file(#name, 0644, priv->dfs_dev_dir, priv,       \
 			    &mwifiex_dfs_##name##_fops);                \
@@ -945,6 +985,7 @@ MWIFIEX_DFS_FILE_OPS(histogram);
 MWIFIEX_DFS_FILE_OPS(debug_mask);
 MWIFIEX_DFS_FILE_OPS(timeshare_coex);
 MWIFIEX_DFS_FILE_WRITE_OPS(reset);
+MWIFIEX_DFS_FILE_WRITE_OPS(fake_radar_detect);
 MWIFIEX_DFS_FILE_OPS(verext);
 
 /*
@@ -971,6 +1012,7 @@ mwifiex_dev_debugfs_init(struct mwifiex_private *priv)
 	MWIFIEX_DFS_ADD_FILE(debug_mask);
 	MWIFIEX_DFS_ADD_FILE(timeshare_coex);
 	MWIFIEX_DFS_ADD_FILE(reset);
+	MWIFIEX_DFS_ADD_FILE(fake_radar_detect);
 	MWIFIEX_DFS_ADD_FILE(verext);
 }
 
