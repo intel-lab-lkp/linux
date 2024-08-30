@@ -386,8 +386,10 @@ class NetlinkProtocol:
     def _decode(self, nl_msg):
         return nl_msg
 
-    def decode(self, ynl, nl_msg, op):
+    def decode(self, ynl, nl_msg, op, ops_by_value):
         msg = self._decode(nl_msg)
+        if op is None:
+            op = ops_by_value[msg.cmd()]
         fixed_header_size = ynl._struct_size(op.fixed_header)
         msg.raw_attrs = NlAttrs(msg.raw, fixed_header_size)
         return msg
@@ -796,7 +798,7 @@ class YnlFamily(SpecFamily):
         if 'bad-attr-offs' not in extack:
             return
 
-        msg = self.nlproto.decode(self, NlMsg(request, 0, op.attr_set), op)
+        msg = self.nlproto.decode(self, NlMsg(request, 0, op.attr_set), op, self.rsp_by_value)
         offset = self.nlproto.msghdr_size() + self._struct_size(op.fixed_header)
         path = self._decode_extack_path(msg.raw_attrs, op.attr_set, offset,
                                         extack['bad-attr-offs'])
@@ -921,8 +923,7 @@ class YnlFamily(SpecFamily):
                     print("Netlink done while checking for ntf!?")
                     continue
 
-                op = self.rsp_by_value[nl_msg.cmd()]
-                decoded = self.nlproto.decode(self, nl_msg, op)
+                decoded = self.nlproto.decode(self, nl_msg, None, self.rsp_by_value)
                 if decoded.cmd() not in self.async_msg_ids:
                     print("Unexpected msg id done while checking for ntf", decoded)
                     continue
@@ -980,7 +981,7 @@ class YnlFamily(SpecFamily):
                     if nl_msg.extack:
                         self._decode_extack(req_msg, op, nl_msg.extack)
                 else:
-                    op = self.rsp_by_value[nl_msg.cmd()]
+                    op = None
                     req_flags = []
 
                 if nl_msg.error:
@@ -1004,7 +1005,7 @@ class YnlFamily(SpecFamily):
                     done = len(reqs_by_seq) == 0
                     break
 
-                decoded = self.nlproto.decode(self, nl_msg, op)
+                decoded = self.nlproto.decode(self, nl_msg, op, self.rsp_by_value)
 
                 # Check if this is a reply to our request
                 if nl_msg.nl_seq not in reqs_by_seq or decoded.cmd() != op.rsp_value:
