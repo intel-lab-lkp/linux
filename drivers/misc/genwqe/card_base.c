@@ -1185,35 +1185,32 @@ static int genwqe_probe(struct pci_dev *pci_dev,
 	genwqe_init_crc32();
 
 	cd = genwqe_dev_alloc();
-	if (IS_ERR(cd)) {
-		dev_err(&pci_dev->dev, "err: could not alloc mem (err=%d)!\n",
-			(int)PTR_ERR(cd));
-		return PTR_ERR(cd);
-	}
+	if (IS_ERR(cd))
+		return dev_err_probe(&pci_dev->dev, PTR_ERR(cd),
+				     "could not alloc mem\n");
 
 	dev_set_drvdata(&pci_dev->dev, cd);
 	cd->pci_dev = pci_dev;
 
 	err = genwqe_pci_setup(cd);
 	if (err < 0) {
-		dev_err(&pci_dev->dev,
-			"err: problems with PCI setup (err=%d)\n", err);
+		dev_err_probe(&pci_dev->dev, err,
+			      "problems with PCI setup\n");
 		goto out_free_dev;
 	}
 
 	err = genwqe_start(cd);
 	if (err < 0) {
-		dev_err(&pci_dev->dev,
-			"err: cannot start card services! (err=%d)\n", err);
+		dev_err_probe(&pci_dev->dev, err,
+			      "cannot start card services!\n");
 		goto out_pci_remove;
 	}
 
 	if (genwqe_is_privileged(cd)) {
 		err = genwqe_health_check_start(cd);
 		if (err < 0) {
-			dev_err(&pci_dev->dev,
-				"err: cannot start health checking! (err=%d)\n",
-				err);
+			dev_err_probe(&pci_dev->dev, err,
+				      "cannot start health checking!\n");
 			goto out_stop_services;
 		}
 	}
