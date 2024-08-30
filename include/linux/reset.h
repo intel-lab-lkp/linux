@@ -806,6 +806,35 @@ devm_reset_control_get_shared_by_index(struct device *dev, int index)
 	return __devm_reset_control_get(dev, NULL, index, true, false, false);
 }
 
+/**
+ * devm_reset_control_get_deassert - resource managed
+ * @dev: device to be reset by the controller
+ * @index: index of the reset controller
+ *
+ * A helper function to automatically handle return value of
+ * devm_reset_control_get_exclusive() and reset_control_deassert().
+ */
+static struct reset_control *devm_reset_control_get_deassert(
+			  struct device *dev, const char *id)
+{
+	int ret;
+	struct reset_control *reset;
+
+	reset = devm_reset_control_get_exclusive(dev, id);
+	if (IS_ERR(reset))
+		return reset;
+
+	ret = reset_control_deassert(reset);
+	if (ret)
+		return ERR_PTR(ret);
+
+	ret = devm_add_action_or_reset(dev, (void *)reset_control_assert, (void *)reset);
+	if (ret)
+		return ERR_PTR(ret);
+
+	return reset;
+}
+
 /*
  * TEMPORARY calls to use during transition:
  *
