@@ -3953,32 +3953,9 @@ int ext4_punch_hole(struct file *file, loff_t offset, loff_t length)
 			return ret;
 	}
 
-	/* Wait all existing dio workers, newcomers will block on i_rwsem */
-	inode_dio_wait(inode);
-
-	ret = file_modified(file);
+	ret = ext4_prepare_falloc(file, offset, end - 1, FALLOC_FL_PUNCH_HOLE);
 	if (ret)
 		return ret;
-
-	/*
-	 * Prevent page faults from reinstantiating pages we have released from
-	 * page cache.
-	 */
-	filemap_invalidate_lock(mapping);
-
-	ret = ext4_break_layouts(inode);
-	if (ret)
-		goto out_invalidate_lock;
-
-	/* Write out all dirty pages to avoid race conditions */
-	if (mapping_tagged(mapping, PAGECACHE_TAG_DIRTY)) {
-		ret = filemap_write_and_wait_range(mapping, offset, end - 1);
-		if (ret)
-			goto out_invalidate_lock;
-	}
-
-	/* Now release the pages and zero block aligned part of pages*/
-	truncate_pagecache_range(inode, offset, end - 1);
 
 	if (ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS))
 		credits = ext4_writepage_trans_blocks(inode);
