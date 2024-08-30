@@ -86,16 +86,17 @@ u8 intel_joiner_supported_pipes(struct drm_i915_private *i915)
 	return pipes & DISPLAY_RUNTIME_INFO(i915)->pipe_mask;
 }
 
-void intel_joiner_enabled_pipes(struct drm_i915_private *dev_priv,
+void intel_joiner_enabled_pipes(struct intel_display *display,
 				u8 *primary_pipes, u8 *secondary_pipes)
 {
+	struct drm_i915_private *i915 = to_i915(display->drm);
 	struct intel_crtc *crtc;
 
 	*primary_pipes = 0;
 	*secondary_pipes = 0;
 
-	for_each_intel_crtc_in_pipe_mask(&dev_priv->drm, crtc,
-					 intel_joiner_supported_pipes(dev_priv)) {
+	for_each_intel_crtc_in_pipe_mask(&i915->drm, crtc,
+					 intel_joiner_supported_pipes(i915)) {
 		intel_dss_get_compressed_joiner_pipes(crtc,
 						      primary_pipes,
 						      secondary_pipes);
@@ -106,7 +107,7 @@ void intel_joiner_enabled_pipes(struct drm_i915_private *dev_priv,
 	}
 
 	/* Joiner pipes should always be consecutive primary and secondary */
-	drm_WARN(&dev_priv->drm, *secondary_pipes != *primary_pipes << 1,
+	drm_WARN(display->drm, *secondary_pipes != *primary_pipes << 1,
 		 "Joiner misconfigured (primary pipes 0x%x, secondary pipes 0x%x)\n",
 		 *primary_pipes, *secondary_pipes);
 }
@@ -144,12 +145,12 @@ u8 intel_joiner_find_secondary_pipes(enum pipe pipe, u8 primary_pipes, u8 second
 
 void intel_joiner_get_config(struct intel_crtc_state *crtc_state)
 {
+	struct intel_display *display = to_intel_display(crtc_state);
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
-	struct drm_i915_private *i915 = to_i915(crtc->base.dev);
 	u8 primary_pipes, secondary_pipes;
 	enum pipe pipe = crtc->pipe;
 
-	intel_joiner_enabled_pipes(i915, &primary_pipes, &secondary_pipes);
+	intel_joiner_enabled_pipes(display, &primary_pipes, &secondary_pipes);
 
 	if (((primary_pipes | secondary_pipes) & BIT(pipe)) == 0)
 		return;
