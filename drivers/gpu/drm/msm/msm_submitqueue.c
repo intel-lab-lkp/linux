@@ -71,6 +71,11 @@ void msm_submitqueue_destroy(struct kref *kref)
 	struct msm_gpu_submitqueue *queue = container_of(kref,
 		struct msm_gpu_submitqueue, ref);
 
+	struct msm_gpu *gpu = queue->gpu;
+
+	if (gpu && gpu->funcs->submitqueue_close)
+		gpu->funcs->submitqueue_close(gpu, queue);
+
 	idr_destroy(&queue->fence_idr);
 
 	msm_file_private_put(queue->ctx);
@@ -160,6 +165,7 @@ int msm_submitqueue_create(struct drm_device *drm, struct msm_file_private *ctx,
 {
 	struct msm_drm_private *priv = drm->dev_private;
 	struct msm_gpu_submitqueue *queue;
+	struct msm_gpu *gpu = priv->gpu;
 	enum drm_sched_priority sched_prio;
 	unsigned ring_nr;
 	int ret;
@@ -195,6 +201,7 @@ int msm_submitqueue_create(struct drm_device *drm, struct msm_file_private *ctx,
 
 	queue->ctx = msm_file_private_get(ctx);
 	queue->id = ctx->queueid++;
+	queue->gpu = gpu;
 
 	if (id)
 		*id = queue->id;
@@ -206,6 +213,9 @@ int msm_submitqueue_create(struct drm_device *drm, struct msm_file_private *ctx,
 	list_add_tail(&queue->node, &ctx->submitqueues);
 
 	write_unlock(&ctx->queuelock);
+
+	if (gpu && gpu->funcs->submitqueue_setup)
+		gpu->funcs->submitqueue_setup(gpu, queue);
 
 	return 0;
 }

@@ -92,6 +92,10 @@ struct msm_gpu_funcs {
 	 * for cmdstream that is buffered in this FIFO upstream of the CP fw.
 	 */
 	bool (*progress)(struct msm_gpu *gpu, struct msm_ringbuffer *ring);
+	int (*submitqueue_setup)(struct msm_gpu *gpu,
+			struct msm_gpu_submitqueue *queue);
+	void (*submitqueue_close)(struct msm_gpu *gpu,
+			struct msm_gpu_submitqueue *queue);
 };
 
 /* Additional state for iommu faults: */
@@ -522,6 +526,9 @@ struct msm_gpu_submitqueue {
 	struct mutex lock;
 	struct kref ref;
 	struct drm_sched_entity *entity;
+	struct msm_gpu *gpu;
+	struct drm_gem_object *bo;
+	uint64_t bo_iova;
 };
 
 struct msm_gpu_state_bo {
