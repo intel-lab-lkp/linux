@@ -5679,6 +5679,8 @@ static int __perf_read_group_add(struct perf_event *leader,
 		values[n++] = primary_event_id(leader);
 	if (read_format & PERF_FORMAT_LOST)
 		values[n++] = atomic64_read(&leader->lost_samples);
+	if (read_format & PERF_FORMAT_DROPPED)
+		values[n++] = atomic64_read(&leader->dropped_samples);
 
 	for_each_sibling_event(sub, leader) {
 		values[n++] += perf_event_count(sub, false);
@@ -5686,6 +5688,8 @@ static int __perf_read_group_add(struct perf_event *leader,
 			values[n++] = primary_event_id(sub);
 		if (read_format & PERF_FORMAT_LOST)
 			values[n++] = atomic64_read(&sub->lost_samples);
+		if (read_format & PERF_FORMAT_DROPPED)
+			values[n++] = atomic64_read(&sub->dropped_samples);
 	}
 
 unlock:
@@ -5751,6 +5755,8 @@ static int perf_read_one(struct perf_event *event,
 		values[n++] = primary_event_id(event);
 	if (read_format & PERF_FORMAT_LOST)
 		values[n++] = atomic64_read(&event->lost_samples);
+	if (read_format & PERF_FORMAT_DROPPED)
+		values[n++] = atomic64_read(&event->dropped_samples);
 
 	if (copy_to_user(buf, values, n * sizeof(u64)))
 		return -EFAULT;
@@ -7348,6 +7354,8 @@ static void perf_output_read_one(struct perf_output_handle *handle,
 		values[n++] = primary_event_id(event);
 	if (read_format & PERF_FORMAT_LOST)
 		values[n++] = atomic64_read(&event->lost_samples);
+	if (read_format & PERF_FORMAT_DROPPED)
+		values[n++] = atomic64_read(&event->dropped_samples);
 
 	__output_copy(handle, values, n * sizeof(u64));
 }
@@ -7386,6 +7394,8 @@ static void perf_output_read_group(struct perf_output_handle *handle,
 		values[n++] = primary_event_id(leader);
 	if (read_format & PERF_FORMAT_LOST)
 		values[n++] = atomic64_read(&leader->lost_samples);
+	if (read_format & PERF_FORMAT_DROPPED)
+		values[n++] = atomic64_read(&leader->dropped_samples);
 
 	__output_copy(handle, values, n * sizeof(u64));
 
@@ -7401,6 +7411,8 @@ static void perf_output_read_group(struct perf_output_handle *handle,
 			values[n++] = primary_event_id(sub);
 		if (read_format & PERF_FORMAT_LOST)
 			values[n++] = atomic64_read(&sub->lost_samples);
+		if (read_format & PERF_FORMAT_DROPPED)
+			values[n++] = atomic64_read(&sub->dropped_samples);
 
 		__output_copy(handle, values, n * sizeof(u64));
 	}
