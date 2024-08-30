@@ -27,6 +27,11 @@ static inline int sgx_cgroup_try_charge(struct sgx_cgroup *sgx_cg, enum sgx_recl
 
 static inline void sgx_cgroup_uncharge(struct sgx_cgroup *sgx_cg) { }
 
+static inline bool sgx_cgroup_lru_empty(struct misc_cg *root)
+{
+	return true;
+}
+
 static inline void __init sgx_cgroup_init(void) { }
 static inline int __init sgx_cgroup_wq_init(void)
 {
@@ -89,6 +94,7 @@ static inline void sgx_put_cg(struct sgx_cgroup *sgx_cg)
 
 int sgx_cgroup_try_charge(struct sgx_cgroup *sgx_cg, enum sgx_reclaim reclaim);
 void sgx_cgroup_uncharge(struct sgx_cgroup *sgx_cg);
+bool sgx_cgroup_lru_empty(struct misc_cg *root);
 void sgx_cgroup_reclaim_direct(void);
 void sgx_cgroup_reclaim_pages_global(struct mm_struct *charge_mm);
 void __init sgx_cgroup_init(void);
