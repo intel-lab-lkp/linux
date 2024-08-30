@@ -29,6 +29,7 @@
 #include <linux/debugfs.h>
 #include <linux/rculist.h>
 #include <linux/remoteproc.h>
+#include <linux/remoteproc_tee.h>
 #include <linux/iommu.h>
 #include <linux/idr.h>
 #include <linux/elf.h>
@@ -1258,6 +1259,9 @@ static int rproc_alloc_registered_carveouts(struct rproc *rproc)
 
 static void rproc_release_fw(struct rproc *rproc)
 {
+	if (rproc->state == RPROC_OFFLINE && rproc->tee_interface)
+		tee_rproc_release_fw(rproc);
+
 	/* Free the copy of the resource table */
 	kfree(rproc->cached_table);
 	rproc->cached_table = NULL;
@@ -1348,7 +1352,7 @@ static int rproc_start(struct rproc *rproc, const struct firmware *fw)
 	if (ret) {
 		dev_err(dev, "failed to prepare subdevices for %s: %d\n",
 			rproc->name, ret);
-		goto reset_table_ptr;
+		goto release_fw;
 	}
 
 	/* power up the remote processor */
@@ -1376,7 +1380,9 @@ stop_rproc:
 	rproc->ops->stop(rproc);
 unprepare_subdevices:
 	rproc_unprepare_subdevices(rproc);
-reset_table_ptr:
+release_fw:
+	if (rproc->tee_interface)
+		tee_rproc_release_fw(rproc);
 	rproc->table_ptr = rproc->cached_table;
 
 	return ret;
