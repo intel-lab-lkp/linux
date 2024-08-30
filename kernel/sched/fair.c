@@ -5455,6 +5455,7 @@ static void clear_buddies(struct cfs_rq *cfs_rq, struct sched_entity *se)
 }
 
 static __always_inline void return_cfs_rq_runtime(struct cfs_rq *cfs_rq);
+static void dequeue_pushable_task(struct cfs_rq *cfs_rq, struct sched_entity *se, bool queue);
 
 static bool
 dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
@@ -5462,6 +5463,8 @@ dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	bool sleep = flags & DEQUEUE_SLEEP;
 
 	update_curr(cfs_rq);
+
+	dequeue_pushable_task(cfs_rq, se, false);
 
 	if (flags & DEQUEUE_DELAYED) {
 		SCHED_WARN_ON(!se->sched_delayed);
@@ -5585,6 +5588,8 @@ set_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
 	}
 
 	se->prev_sum_exec_runtime = se->sum_exec_runtime;
+
+	dequeue_pushable_task(cfs_rq, se, true);
 }
 
 static int dequeue_entities(struct rq *rq, struct sched_entity *se, int flags);
@@ -5620,6 +5625,7 @@ pick_next_entity(struct rq *rq, struct cfs_rq *cfs_rq)
 }
 
 static bool check_cfs_rq_runtime(struct cfs_rq *cfs_rq);
+static void enqueue_pushable_task(struct cfs_rq *cfs_rq, struct sched_entity *se);
 
 static void put_prev_entity(struct cfs_rq *cfs_rq, struct sched_entity *prev)
 {
@@ -5639,9 +5645,16 @@ static void put_prev_entity(struct cfs_rq *cfs_rq, struct sched_entity *prev)
 		__enqueue_entity(cfs_rq, prev);
 		/* in !on_rq case, update occurred at dequeue */
 		update_load_avg(cfs_rq, prev, 0);
+
+		/*
+		 * The previous task might be eligible for pushing it on
+		 * another cpu if it is still active.
+		 */
+		enqueue_pushable_task(cfs_rq, prev);
 	}
 	SCHED_WARN_ON(cfs_rq->curr != prev);
 	cfs_rq->curr = NULL;
+
 }
 
 static void
@@ -8393,6 +8406,8 @@ static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu)
 			target_stat.runnable = cpu_runnable(cpu_rq(cpu));
 			target_stat.capa = capacity_of(cpu);
 			target_stat.nr_running = cpu_rq(cpu)->cfs.h_nr_running;
+			if ((p->on_rq) && (cpu == prev_cpu))
+				target_stat.nr_running--;
 
 			/* If the target needs a lower OPP, then look up for
 			 * the corresponding OPP and its associated cost.
@@ -8471,6 +8486,197 @@ unlock:
 		target = best_cpu;
 
 	return target;
+}
+
+static inline bool task_misfit_cpu(struct task_struct *p, int cpu)
+{
+	unsigned long max_capa = get_actual_cpu_capacity(cpu);
+	unsigned long util = task_util_est(p);
+
+	max_capa = min(max_capa, uclamp_eff_value(p, UCLAMP_MAX));
+	util = max(util, task_runnable(p));
+
+	/*
+	 * Return true only if the task might not sleep/wakeup because of a low
+	 * compute capacity. Tasks, which wake up regularly, will be handled by
+	 * feec().
+	 */
+	return (util > max_capa);
+}
+
+static int active_load_balance_cpu_stop(void *data);
+
+static inline void check_misfit_cpu(struct task_struct *p, struct rq *rq)
+{
+	int new_cpu, cpu = cpu_of(rq);
+
+	if (!sched_energy_enabled())
+		return;
+
+	if (WARN_ON(!p))
+		return;
+
+	if (WARN_ON(p != rq->curr))
+		return;
+
+	if (is_migration_disabled(p))
+		return;
+
+	if ((rq->nr_running > 1) || (p->nr_cpus_allowed == 1))
+		return;
+
+	if (!task_misfit_cpu(p, cpu))
+		return;
+
+	new_cpu = find_energy_efficient_cpu(p, cpu);
+
+	if (new_cpu == cpu)
+		return;
+
+	/*
+	 * ->active_balance synchronizes accesses to
+	 * ->active_balance_work.  Once set, it's cleared
+	 * only after active load balance is finished.
+	 */
+	if (!rq->active_balance) {
+		rq->active_balance = 1;
+		rq->push_cpu = new_cpu;
+	} else
+		return;
+
+	raw_spin_rq_unlock(rq);
+	stop_one_cpu_nowait(cpu,
+		active_load_balance_cpu_stop, rq,
+		&rq->active_balance_work);
+	raw_spin_rq_lock(rq);
+}
+
+static inline int has_pushable_tasks(struct rq *rq)
+{
+	return !plist_head_empty(&rq->cfs.pushable_tasks);
+}
+
+static struct task_struct *pick_next_pushable_fair_task(struct rq *rq)
+{
+	struct task_struct *p;
+
+	if (!has_pushable_tasks(rq))
+		return NULL;
+
+	p = plist_first_entry(&rq->cfs.pushable_tasks,
+			      struct task_struct, pushable_tasks);
+
+	WARN_ON_ONCE(rq->cpu != task_cpu(p));
+	WARN_ON_ONCE(task_current(rq, p));
+	WARN_ON_ONCE(p->nr_cpus_allowed <= 1);
+
+	WARN_ON_ONCE(!task_on_rq_queued(p));
+
+	/*
+	 * Remove task from the pushable list as we try only once after
+	 * task has been put back in enqueued list.
+	 */
+	plist_del(&p->pushable_tasks, &rq->cfs.pushable_tasks);
+
+	return p;
+}
+
+/*
+ * See if the non running fair tasks on this rq
+ * can be sent to some other CPU that fits better with
+ * their profile.
+ */
+static int push_fair_task(struct rq *rq)
+{
+	struct task_struct *next_task;
+	struct rq *new_rq;
+	int prev_cpu, new_cpu;
+	int ret = 0;
+
+	next_task = pick_next_pushable_fair_task(rq);
+	if (!next_task)
+		return 0;
+
+	if (is_migration_disabled(next_task))
+		return 0;
+
+	if (WARN_ON(next_task == rq->curr))
+		return 0;
+
+	/* We might release rq lock */
+	get_task_struct(next_task);
+
+	prev_cpu = rq->cpu;
+
+	new_cpu = find_energy_efficient_cpu(next_task, prev_cpu);
+
+	if (new_cpu == prev_cpu)
+		goto out;
+
+	new_rq = cpu_rq(new_cpu);
+
+	if (double_lock_balance(rq, new_rq)) {
+
+		deactivate_task(rq, next_task, 0);
+		set_task_cpu(next_task, new_cpu);
+		activate_task(new_rq, next_task, 0);
+		ret = 1;
+
+		resched_curr(new_rq);
+
+		double_unlock_balance(rq, new_rq);
+	}
+
+out:
+	put_task_struct(next_task);
+
+	return ret;
+}
+
+static void push_fair_tasks(struct rq *rq)
+{
+	/* push_dl_task() will return true if it moved a -deadline task */
+	while (push_fair_task(rq))
+		;
+}
+
+static DEFINE_PER_CPU(struct balance_callback, fair_push_head);
+
+static inline void fair_queue_push_tasks(struct rq *rq)
+{
+	if (!sched_energy_enabled() || !has_pushable_tasks(rq))
+		return;
+
+	queue_balance_callback(rq, &per_cpu(fair_push_head, rq->cpu), push_fair_tasks);
+}
+static void dequeue_pushable_task(struct cfs_rq *cfs_rq, struct sched_entity *se, bool queue)
+{
+	struct task_struct *p;
+	struct rq *rq;
+
+	if (sched_energy_enabled() && entity_is_task(se)) {
+		rq = rq_of(cfs_rq);
+		p = container_of(se, struct task_struct, se);
+
+		plist_del(&p->pushable_tasks, &rq->cfs.pushable_tasks);
+
+		if (queue)
+			fair_queue_push_tasks(rq);
+	}
+}
+
+static void enqueue_pushable_task(struct cfs_rq *cfs_rq, struct sched_entity *se)
+{
+	if (sched_energy_enabled() && entity_is_task(se)) {
+		struct task_struct *p = container_of(se, struct task_struct, se);
+		struct rq *rq = rq_of(cfs_rq);
+
+		if ((p->nr_cpus_allowed > 1) && task_misfit_cpu(p, rq->cpu)) {
+			plist_del(&p->pushable_tasks, &rq->cfs.pushable_tasks);
+			plist_node_init(&p->pushable_tasks, p->prio);
+			plist_add(&p->pushable_tasks, &rq->cfs.pushable_tasks);
+		}
+	}
 }
 
 /*
@@ -8642,6 +8848,8 @@ balance_fair(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 	return sched_balance_newidle(rq, rf) != 0;
 }
 #else
+static inline void dequeue_pushable_task(struct cfs_rq *cfs_rq, struct sched_entity *se, bool queue) {}
+static inline void enqueue_pushable_task(struct cfs_rq *cfs_rq, struct sched_entity *se) {}
 static inline void set_task_max_allowed_capacity(struct task_struct *p) {}
 #endif /* CONFIG_SMP */
 
@@ -13013,6 +13221,8 @@ static void task_tick_fair(struct rq *rq, struct task_struct *curr, int queued)
 	check_update_overutilized_status(task_rq(curr));
 
 	task_tick_core(rq, curr);
+
+	check_misfit_cpu(curr, rq);
 }
 
 /*
@@ -13204,6 +13414,7 @@ static void set_next_task_fair(struct rq *rq, struct task_struct *p, bool first)
 void init_cfs_rq(struct cfs_rq *cfs_rq)
 {
 	cfs_rq->tasks_timeline = RB_ROOT_CACHED;
+	plist_head_init(&cfs_rq->pushable_tasks);
 	cfs_rq->min_vruntime = (u64)(-(1LL << 20));
 #ifdef CONFIG_SMP
 	raw_spin_lock_init(&cfs_rq->removed.lock);
