@@ -20,7 +20,7 @@ static inline struct sgx_cgroup *sgx_get_current_cg(void)
 
 static inline void sgx_put_cg(struct sgx_cgroup *sgx_cg) { }
 
-static inline int sgx_cgroup_try_charge(struct sgx_cgroup *sgx_cg)
+static inline int sgx_cgroup_try_charge(struct sgx_cgroup *sgx_cg, enum sgx_reclaim reclaim)
 {
 	return 0;
 }
@@ -33,6 +33,20 @@ static inline void __init sgx_cgroup_init(void) { }
 
 struct sgx_cgroup {
 	struct misc_cg *cg;
+	struct sgx_epc_lru_list lru;
+	/*
+	 * Pointer to the next cgroup to scan when the per-cgroup reclamation
+	 * is triggered next time. It does not hold a reference to prevent it
+	 * from being freed in order to allow the misc cgroup subsystem to
+	 * release and free the cgroup as needed, e.g., when admin wants to
+	 * delete the cgroup. When the cgroup pointed to is being freed,
+	 * sgx_cgroup_next_cg_skip(), will be invoked to update the pointer to
+	 * next accessible cgroup in a preorder walk of the subtree of the same
+	 * root.
+	 */
+	struct sgx_cgroup *next_cg;
+	/* Lock to protect concurrent access to @next_cg */
+	spinlock_t next_cg_lock;
 };
 
 static inline struct sgx_cgroup *sgx_cgroup_from_misc_cg(struct misc_cg *cg)
@@ -63,7 +77,7 @@ static inline void sgx_put_cg(struct sgx_cgroup *sgx_cg)
 	put_misc_cg(sgx_cg->cg);
 }
 
-int sgx_cgroup_try_charge(struct sgx_cgroup *sgx_cg);
+int sgx_cgroup_try_charge(struct sgx_cgroup *sgx_cg, enum sgx_reclaim reclaim);
 void sgx_cgroup_uncharge(struct sgx_cgroup *sgx_cg);
 void __init sgx_cgroup_init(void);
 
