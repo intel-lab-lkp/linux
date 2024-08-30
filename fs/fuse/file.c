@@ -1774,15 +1774,20 @@ static void fuse_writepage_finish(struct fuse_mount *fm,
 {
 	struct fuse_args_pages *ap = &wpa->ia.ap;
 	struct inode *inode = wpa->inode;
+	struct address_space *mapping = inode->i_mapping;
 	struct fuse_inode *fi = get_fuse_inode(inode);
-	struct backing_dev_info *bdi = inode_to_bdi(inode);
+	struct bdi_writeback *wb;
+	unsigned long flags;
 	int i;
 
+	xa_lock_irqsave(&mapping->i_pages, flags);
+	wb = inode_to_wb(inode);
 	for (i = 0; i < ap->num_pages; i++) {
-		dec_wb_stat(&bdi->wb, WB_WRITEBACK);
+		dec_wb_stat(wb, WB_WRITEBACK);
 		dec_node_page_state(ap->pages[i], NR_WRITEBACK_TEMP);
-		wb_writeout_inc(&bdi->wb);
+		wb_writeout_inc(wb);
 	}
+	xa_unlock_irqrestore(&mapping->i_pages, flags);
 	wake_up(&fi->page_waitq);
 }
 
@@ -2084,8 +2089,10 @@ static int fuse_writepage_locked(struct folio *folio)
 	ap->args.end = fuse_writepage_end;
 	wpa->inode = inode;
 
-	inc_wb_stat(&inode_to_bdi(inode)->wb, WB_WRITEBACK);
+	xa_lock(&mapping->i_pages);
+	inc_wb_stat(inode_to_wb(inode), WB_WRITEBACK);
 	node_stat_add_folio(tmp_folio, NR_WRITEBACK_TEMP);
+	xa_unlock(&mapping->i_pages);
 
 	spin_lock(&fi->lock);
 	tree_insert(&fi->writepages, wpa);
@@ -2169,7 +2176,8 @@ static void fuse_writepages_send(struct fuse_fill_wb_data *data)
 static bool fuse_writepage_add(struct fuse_writepage_args *new_wpa,
 			       struct page *page)
 {
-	struct fuse_inode *fi = get_fuse_inode(new_wpa->inode);
+	struct inode *inode = new_wpa->inode;
+	struct fuse_inode *fi = get_fuse_inode(inode);
 	struct fuse_writepage_args *tmp;
 	struct fuse_writepage_args *old_wpa;
 	struct fuse_args_pages *new_ap = &new_wpa->ia.ap;
@@ -2204,11 +2212,15 @@ static bool fuse_writepage_add(struct fuse_writepage_args *new_wpa,
 	spin_unlock(&fi->lock);
 
 	if (tmp) {
-		struct backing_dev_info *bdi = inode_to_bdi(new_wpa->inode);
+		struct address_space *mapping = inode->i_mapping;
+		struct bdi_writeback *wb;
 
-		dec_wb_stat(&bdi->wb, WB_WRITEBACK);
+		xa_lock(&mapping->i_pages);
+		wb = inode_to_wb(new_wpa->inode);
+		dec_wb_stat(wb, WB_WRITEBACK);
 		dec_node_page_state(new_ap->pages[0], NR_WRITEBACK_TEMP);
-		wb_writeout_inc(&bdi->wb);
+		wb_writeout_inc(wb);
+		xa_unlock(&mapping->i_pages);
 		fuse_writepage_free(new_wpa);
 	}
 
@@ -2256,6 +2268,7 @@ static int fuse_writepages_fill(struct folio *folio,
 	struct fuse_writepage_args *wpa = data->wpa;
 	struct fuse_args_pages *ap = &wpa->ia.ap;
 	struct inode *inode = data->inode;
+	struct address_space *mapping = inode->i_mapping;
 	struct fuse_inode *fi = get_fuse_inode(inode);
 	struct fuse_conn *fc = get_fuse_conn(inode);
 	struct page *tmp_page;
@@ -2319,8 +2332,10 @@ static int fuse_writepages_fill(struct folio *folio,
 	ap->descs[ap->num_pages].length = PAGE_SIZE;
 	data->orig_pages[ap->num_pages] = &folio->page;
 
-	inc_wb_stat(&inode_to_bdi(inode)->wb, WB_WRITEBACK);
+	xa_lock(&mapping->i_pages);
+	inc_wb_stat(inode_to_wb(inode), WB_WRITEBACK);
 	inc_node_page_state(tmp_page, NR_WRITEBACK_TEMP);
+	xa_unlock(&mapping->i_pages);
 
 	err = 0;
 	if (data->wpa) {
