@@ -31,5 +31,6 @@ int intel_joiner_add_affected_crtcs(struct intel_atomic_state *state);
 u8 intel_joiner_crtc_joined_pipe_mask(const struct intel_crtc_state *crtc_state);
 bool intel_joiner_crtc_is_joiner_primary(const struct intel_crtc_state *crtc_state);
 bool intel_joiner_crtc_is_joiner_secondary(const struct intel_crtc_state *crtc_state);
+u8 intel_joiner_crtc_joiner_secondary_pipes(const struct intel_crtc_state *crtc_state);
 
 #endif/* __INTEL_JOINER_H__ */
