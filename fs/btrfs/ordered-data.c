@@ -1015,7 +1015,8 @@ void btrfs_get_ordered_extents_for_logging(struct btrfs_inode *inode,
 {
 	struct rb_node *n;
 
-	ASSERT(inode_is_locked(&inode->vfs_inode));
+	ASSERT(inode_is_locked(&inode->vfs_inode) ||
+	       rwsem_is_locked(&inode->i_mmap_lock));
 
 	spin_lock_irq(&inode->ordered_tree_lock);
 	for (n = rb_first(&inode->ordered_tree); n; n = rb_next(n)) {
