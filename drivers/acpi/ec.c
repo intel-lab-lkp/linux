@@ -2297,6 +2297,13 @@ static const struct dmi_system_id acpi_ec_no_wakeup[] = {
 	},
 	{
 		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			/* ThinkPad X13 Gen 4 (AMD) */
+			DMI_MATCH(DMI_PRODUCT_SKU, "LENOVO_MT_21J3_BU_Think_FM_ThinkPad X13 Gen 4"),
+		},
+	},
+	{
+		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "HP"),
 			DMI_MATCH(DMI_PRODUCT_FAMILY, "103C_5336AN HP ZHAN 66 Pro"),
 		},
