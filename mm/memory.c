@@ -3205,18 +3205,26 @@ static vm_fault_t fault_dirty_shared_page(struct vm_fault *vmf)
 	return 0;
 }
 
-/*
+ /*
  * Handle write page faults for pages that can be reused in the current vma
  *
  * This can happen either due to the mapping being with the VM_SHARED flag,
  * or due to us being the last reference standing to the page. In either
  * case, all we need to do here is to mark the page as writable and update
  * any related book-keeping.
+ * If entirely_reuse is true, we are reusing the whole large folio; otherwise,
+ * we are reusing a subpage even though folio might be large one.
  */
-static inline void wp_page_reuse(struct vm_fault *vmf, struct folio *folio)
+static inline void wp_folio_reuse(struct vm_fault *vmf, struct folio *folio,
+				  bool entirely_reuse)
 	__releases(vmf->ptl)
 {
+	unsigned long idx = entirely_reuse ? folio_page_idx(folio, vmf->page) : 0;
+	int nr = entirely_reuse ? folio_nr_pages(folio) : 1;
+	unsigned long start = vmf->address - idx * PAGE_SIZE;
+	unsigned long end = start + nr * PAGE_SIZE;
 	struct vm_area_struct *vma = vmf->vma;
+	pte_t *ptep = vmf->pte - idx;
 	pte_t entry;
 
 	VM_BUG_ON(!(vmf->flags & FAULT_FLAG_WRITE));
@@ -3233,11 +3241,15 @@ static inline void wp_page_reuse(struct vm_fault *vmf, struct folio *folio)
 		folio_xchg_last_cpupid(folio, (1 << LAST_CPUPID_SHIFT) - 1);
 	}
 
-	flush_cache_page(vma, vmf->address, pte_pfn(vmf->orig_pte));
-	entry = pte_mkyoung(vmf->orig_pte);
-	entry = maybe_mkwrite(pte_mkdirty(entry), vma);
-	if (ptep_set_access_flags(vma, vmf->address, vmf->pte, entry, 1))
-		update_mmu_cache_range(vmf, vma, vmf->address, vmf->pte, 1);
+	flush_cache_range(vma, start, end);
+	for (int i = 0; i < nr; i++) {
+		entry = ptep_get(ptep + i);
+		entry = pte_mkyoung(entry);
+		entry = maybe_mkwrite(pte_mkdirty(entry), vma);
+		if (ptep_set_access_flags(vma, start + i * PAGE_SIZE,
+				ptep + i, entry, 1))
+			update_mmu_cache_range(vmf, vma, start, ptep + i, 1);
+	}
 	pte_unmap_unlock(vmf->pte, vmf->ptl);
 	count_vm_event(PGREUSE);
 }
@@ -3493,7 +3505,7 @@ static vm_fault_t finish_mkwrite_fault(struct vm_fault *vmf, struct folio *folio
 		pte_unmap_unlock(vmf->pte, vmf->ptl);
 		return VM_FAULT_NOPAGE;
 	}
-	wp_page_reuse(vmf, folio);
+	wp_folio_reuse(vmf, folio, false);
 	return 0;
 }
 
@@ -3519,7 +3531,7 @@ static vm_fault_t wp_pfn_shared(struct vm_fault *vmf)
 			return ret;
 		return finish_mkwrite_fault(vmf, NULL);
 	}
-	wp_page_reuse(vmf, NULL);
+	wp_folio_reuse(vmf, NULL, false);
 	return 0;
 }
 
@@ -3554,7 +3566,7 @@ static vm_fault_t wp_page_shared(struct vm_fault *vmf, struct folio *folio)
 			return tmp;
 		}
 	} else {
-		wp_page_reuse(vmf, folio);
+		wp_folio_reuse(vmf, folio, false);
 		folio_lock(folio);
 	}
 	ret |= fault_dirty_shared_page(vmf);
@@ -3564,17 +3576,41 @@ static vm_fault_t wp_page_shared(struct vm_fault *vmf, struct folio *folio)
 }
 
 static bool wp_can_reuse_anon_folio(struct folio *folio,
-				    struct vm_area_struct *vma)
+				    struct vm_fault *vmf)
 {
+	struct vm_area_struct *vma = vmf->vma;
+	int nr = folio_nr_pages(folio);
+
 	/*
-	 * We could currently only reuse a subpage of a large folio if no
-	 * other subpages of the large folios are still mapped. However,
-	 * let's just consistently not reuse subpages even if we could
-	 * reuse in that scenario, and give back a large folio a bit
-	 * sooner.
+	 * reuse a large folio while it is entirely mapped and
+	 * exclusive (mapcount == folio_nr_pages)
 	 */
-	if (folio_test_large(folio))
-		return false;
+	if (folio_test_large(folio)) {
+		unsigned long folio_start, folio_end, idx;
+		unsigned long address = vmf->address;
+		pte_t *folio_ptep;
+		pte_t folio_pte;
+		if (folio_likely_mapped_shared(folio))
+			return false;
+
+		idx = folio_page_idx(folio, vmf->page);
+		folio_start = address - idx * PAGE_SIZE;
+		folio_end = folio_start + nr * PAGE_SIZE;
+
+		if (unlikely(folio_start < max(address & PMD_MASK, vma->vm_start)))
+			return false;
+		if (unlikely(folio_end > pmd_addr_end(address, vma->vm_end)))
+			return false;
+		folio_ptep = vmf->pte - idx;
+		folio_pte = ptep_get(folio_ptep);
+		if (!pte_present(folio_pte) || pte_pfn(folio_pte) != folio_pfn(folio))
+			return false;
+		if (folio_pte_batch(folio, folio_start, folio_ptep, folio_pte, nr, 0,
+				NULL, NULL, NULL) != nr)
+			return false;
+		if (folio_mapcount(folio) != nr)
+			return false;
+	}
 
 	/*
 	 * We have to verify under folio lock: these early checks are
@@ -3583,7 +3619,7 @@ static bool wp_can_reuse_anon_folio(struct folio *folio,
 	 *
 	 * KSM doesn't necessarily raise the folio refcount.
 	 */
-	if (folio_test_ksm(folio) || folio_ref_count(folio) > 3)
+	if (folio_test_ksm(folio) || folio_ref_count(folio) > 2 + nr)
 		return false;
 	if (!folio_test_lru(folio))
 		/*
@@ -3591,13 +3627,13 @@ static bool wp_can_reuse_anon_folio(struct folio *folio,
 		 * remote LRU caches or references to LRU folios.
 		 */
 		lru_add_drain();
-	if (folio_ref_count(folio) > 1 + folio_test_swapcache(folio))
+	if (folio_ref_count(folio) > nr + folio_test_swapcache(folio))
 		return false;
 	if (!folio_trylock(folio))
 		return false;
 	if (folio_test_swapcache(folio))
 		folio_free_swap(folio);
-	if (folio_test_ksm(folio) || folio_ref_count(folio) != 1) {
+	if (folio_test_ksm(folio) || folio_ref_count(folio) != nr) {
 		folio_unlock(folio);
 		return false;
 	}
@@ -3639,6 +3675,7 @@ static vm_fault_t do_wp_page(struct vm_fault *vmf)
 	const bool unshare = vmf->flags & FAULT_FLAG_UNSHARE;
 	struct vm_area_struct *vma = vmf->vma;
 	struct folio *folio = NULL;
+	int nr = 1;
 	pte_t pte;
 
 	if (likely(!unshare)) {
@@ -3702,14 +3739,18 @@ static vm_fault_t do_wp_page(struct vm_fault *vmf)
 	 * the page without further checks.
 	 */
 	if (folio && folio_test_anon(folio) &&
-	    (PageAnonExclusive(vmf->page) || wp_can_reuse_anon_folio(folio, vma))) {
-		if (!PageAnonExclusive(vmf->page))
-			SetPageAnonExclusive(vmf->page);
+	    (PageAnonExclusive(vmf->page) || wp_can_reuse_anon_folio(folio, vmf))) {
+		/* this is the case we are going to reuse the entire folio */
+		if (!PageAnonExclusive(vmf->page)) {
+			nr = folio_nr_pages(folio);
+			for (int i = 0; i < nr; i++)
+				SetPageAnonExclusive(folio_page(folio, i));
+		}
 		if (unlikely(unshare)) {
 			pte_unmap_unlock(vmf->pte, vmf->ptl);
 			return 0;
 		}
-		wp_page_reuse(vmf, folio);
+		wp_folio_reuse(vmf, folio, nr > 1);
 		return 0;
 	}
 	/*
