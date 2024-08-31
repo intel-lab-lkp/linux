@@ -47,6 +47,7 @@
 #elif defined(__x86_64__)
 #define VDSO_VERSION		0
 #define VDSO_NAMES		1
+#define VDSO_GETRANDOM		"../../../../arch/x86/entry/vdso/vgetrandom-chacha.S"
 #elif defined(__riscv__) || defined(__riscv)
 #define VDSO_VERSION		5
 #define VDSO_NAMES		1
@@ -58,6 +59,7 @@
 #define VDSO_NAMES		1
 #endif
 
+#ifndef __ASSEMBLY__
 static const char *versions[7] = {
 	"LINUX_2.6",
 	"LINUX_2.6.15",
@@ -88,5 +90,6 @@ static const char *names[2][7] = {
 		"__vdso_getrandom",
 	},
 };
+#endif
 
 #endif /* __VDSO_CONFIG_H__ */

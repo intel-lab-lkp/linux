@@ -8,6 +8,8 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <linux/kconfig.h>
+#include "vdso_config.h"
 #include "../kselftest.h"
 
 static uint32_t rol32(uint32_t word, unsigned int shift)
@@ -57,6 +59,10 @@ typedef uint32_t u32;
 typedef uint64_t u64;
 #include <vdso/getrandom.h>
 
+#ifdef VDSO_GETRANDOM
+#define HAVE_VDSO_GETRANDOM	1
+#endif
+
 int main(int argc, char *argv[])
 {
 	enum { TRIALS = 1000, BLOCKS = 128, BLOCK_SIZE = 64 };
@@ -67,6 +73,11 @@ int main(int argc, char *argv[])
 
 	ksft_print_header();
 	ksft_set_plan(1);
+
+	if (!__is_defined(HAVE_VDSO_GETRANDOM)) {
+		printf("__arch_chacha20_blocks_nostack() not implemented\n");
+		return KSFT_SKIP;
+	}
 
 	for (unsigned int trial = 0; trial < TRIALS; ++trial) {
 		if (getrandom(key, sizeof(key), 0) != sizeof(key)) {
