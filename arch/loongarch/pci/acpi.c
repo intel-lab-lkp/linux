@@ -217,16 +217,17 @@ struct pci_bus *pci_acpi_scan_root(struct acpi_pci_root *root)
 		return NULL;
 	}
 
-	root_ops->release_info = acpi_release_root_info;
-	root_ops->prepare_resources = acpi_prepare_root_resources;
-	root_ops->pci_ops = (struct pci_ops *)&info->cfg->ops->pci_ops;
-
 	bus = pci_find_bus(domain, busnum);
 	if (bus) {
 		memcpy(bus->sysdata, info->cfg, sizeof(struct pci_config_window));
 		kfree(info);
+		kfree(root_ops);
 	} else {
 		struct pci_bus *child;
+
+		root_ops->release_info = acpi_release_root_info;
+		root_ops->prepare_resources = acpi_prepare_root_resources;
+		root_ops->pci_ops = (struct pci_ops *)&info->cfg->ops->pci_ops;
 
 		bus = acpi_pci_root_create(root, root_ops,
 					   &info->common, info->cfg);
