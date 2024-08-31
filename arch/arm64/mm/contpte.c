@@ -421,8 +421,10 @@ int contpte_ptep_set_access_flags(struct vm_area_struct *vma,
 		ptep = contpte_align_down(ptep);
 		start_addr = addr = ALIGN_DOWN(addr, CONT_PTE_SIZE);
 
-		for (i = 0; i < CONT_PTES; i++, ptep++, addr += PAGE_SIZE)
+		for (i = 0; i < CONT_PTES; i++, ptep++, addr += PAGE_SIZE) {
 			__ptep_set_access_flags(vma, addr, ptep, entry, 0);
+			entry = pte_advance_pfn(entry, 1);
+		}
 
 		if (dirty)
 			__flush_tlb_range(vma, start_addr, addr,
