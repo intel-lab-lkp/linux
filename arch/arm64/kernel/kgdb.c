@@ -304,6 +304,8 @@ static struct notifier_block kgdb_notifier = {
 	.priority	= -INT_MAX,
 };
 
+static DEFINE_SPINLOCK(kgdb_hook_lock);
+
 /*
  * kgdb_arch_init - Perform any architecture specific initialization.
  * This function will handle the initialization of any architecture
@@ -316,9 +318,11 @@ int kgdb_arch_init(void)
 	if (ret != 0)
 		return ret;
 
+	spin_lock(&kgdb_hook_lock);
 	register_kernel_break_hook(&kgdb_brkpt_hook);
 	register_kernel_break_hook(&kgdb_compiled_brkpt_hook);
 	register_kernel_step_hook(&kgdb_step_hook);
+	spin_unlock(&kgdb_hook_lock);
 	return 0;
 }
 
@@ -329,9 +333,11 @@ int kgdb_arch_init(void)
  */
 void kgdb_arch_exit(void)
 {
+	spin_lock(&kgdb_hook_lock);
 	unregister_kernel_break_hook(&kgdb_brkpt_hook);
 	unregister_kernel_break_hook(&kgdb_compiled_brkpt_hook);
 	unregister_kernel_step_hook(&kgdb_step_hook);
+	spin_lock(&kgdb_hook_lock);
 	unregister_die_notifier(&kgdb_notifier);
 }
 

@@ -41,7 +41,7 @@
 
 /* kprobes BRK opcodes with ESR encoding  */
 #define BRK64_OPCODE_KPROBES	(AARCH64_BREAK_MON | (KPROBES_BRK_IMM << 5))
-#define BRK64_OPCODE_KPROBES_SS	(AARCH64_BREAK_MON | (KPROBES_BRK_SS_IMM << 5))
+#define BRK64_OPCODE_KPROBES_SS	(AARCH64_BREAK_MON | (KPROBES_SS_BRK_IMM << 5))
 /* uprobes BRK opcodes with ESR encoding  */
 #define BRK64_OPCODE_UPROBES	(AARCH64_BREAK_MON | (UPROBES_BRK_IMM << 5))
 
@@ -74,14 +74,11 @@ void register_kernel_step_hook(struct step_hook *hook);
 void unregister_kernel_step_hook(struct step_hook *hook);
 
 struct break_hook {
-	struct list_head node;
 	int (*fn)(struct pt_regs *regs, unsigned long esr);
 	u16 imm;
 	u16 mask; /* These bits are ignored when comparing with imm */
+	int user; /* Breakpoint exception from userspace */
 };
-
-void register_user_break_hook(struct break_hook *hook);
-void unregister_user_break_hook(struct break_hook *hook);
 
 void register_kernel_break_hook(struct break_hook *hook);
 void unregister_kernel_break_hook(struct break_hook *hook);

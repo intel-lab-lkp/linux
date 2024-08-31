@@ -276,47 +276,103 @@ static int single_step_handler(unsigned long unused, unsigned long esr,
 }
 NOKPROBE_SYMBOL(single_step_handler);
 
-static LIST_HEAD(user_break_hook);
-static LIST_HEAD(kernel_break_hook);
+enum break_hook_type {
+	KPROBES = 0,
+	UPROBES,
+	KPROBES_SS,
+	KRETPROBES,
+	FAULT,
+	KGDB_DYN_DBG,
+	KGDB_COMPILED_DBG,
+	BUG,
+	KASAN,
+	UBSAN,
+	CFI,
+	NR_BRK,
+};
 
-void register_user_break_hook(struct break_hook *hook)
+static struct break_hook *break_hooks[NR_BRK];
+
+#define iterate_break_hook(imm) ({	\
+	switch (imm) {			\
+	__HOOK(KPROBES)			\
+	__HOOK(UPROBES)			\
+	__HOOK(KPROBES_SS)		\
+	__HOOK(KRETPROBES)		\
+	__HOOK(FAULT)			\
+	__HOOK(KGDB_DYN_DBG)		\
+	__HOOK(KGDB_COMPILED_DBG)	\
+	__HOOK(BUG)			\
+	__HOOK(KASAN)			\
+	__HOOK(UBSAN)			\
+	__HOOK(CFI)			\
+	default :			\
+		break;			\
+	}				\
+})
+
+#undef __HOOK
+#define __HOOK(nr)		\
+	case nr ## _BRK_IMM:	\
+	{ return break_hooks[nr]; }
+
+static struct break_hook *find_break_hook(unsigned long imm)
 {
-	register_debug_hook(&hook->node, &user_break_hook);
+	iterate_break_hook(imm);
+	return NULL;
 }
 
-void unregister_user_break_hook(struct break_hook *hook)
-{
-	unregister_debug_hook(&hook->node);
-}
+#undef __HOOK
+#define __HOOK(nr)		\
+	case nr ## _BRK_IMM:	\
+	{ break_hooks[nr] = hook; break; }
 
 void register_kernel_break_hook(struct break_hook *hook)
 {
-	register_debug_hook(&hook->node, &kernel_break_hook);
+	iterate_break_hook(hook->imm);
 }
+
+#undef __HOOK
+#define __HOOK(nr)		\
+	case nr ## _BRK_IMM:	\
+	{ break_hooks[nr] = NULL; break; }
 
 void unregister_kernel_break_hook(struct break_hook *hook)
 {
-	unregister_debug_hook(&hook->node);
+	iterate_break_hook(hook->imm);
 }
+
+#undef __HOOK
+#define __HOOK(nr)		\
+	do {			\
+		if (!hook) 	\
+			hook = find_break_hook(imm & ~(nr ## _BRK_MASK)); \
+	} while (0)
 
 static int call_break_hook(struct pt_regs *regs, unsigned long esr)
 {
-	struct break_hook *hook;
-	struct list_head *list;
-	int (*fn)(struct pt_regs *regs, unsigned long esr) = NULL;
+	unsigned long imm = esr_brk_comment(esr);
+	struct break_hook *hook = NULL;
 
-	list = user_mode(regs) ? &user_break_hook : &kernel_break_hook;
+	hook = find_break_hook(imm);
+	if (likely(hook))
+		goto call_hook;
 
-	/*
-	 * Since brk exception disables interrupt, this function is
-	 * entirely not preemptible, and we can use rcu list safely here.
-	 */
-	list_for_each_entry_rcu(hook, list, node) {
-		if ((esr_brk_comment(esr) & ~hook->mask) == hook->imm)
-			fn = hook->fn;
-	}
+#ifdef CONFIG_KASAN_SW_TAGS
+	__HOOK(KASAN);
+#endif
+#ifdef CONFIG_UBSAN_TRAP
+	__HOOK(UBSAN);
+#endif
+#ifdef CONFIG_CFI_CLANG
+	__HOOK(CFI);
+#endif
 
-	return fn ? fn(regs, esr) : DBG_HOOK_ERROR;
+call_hook:
+	if (hook && (user_mode(regs) == hook->user))
+		return hook->fn(regs, esr);
+
+	return DBG_HOOK_ERROR;
 }
 NOKPROBE_SYMBOL(call_break_hook);
 

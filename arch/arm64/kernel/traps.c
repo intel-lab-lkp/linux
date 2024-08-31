@@ -1033,8 +1033,8 @@ static int cfi_handler(struct pt_regs *regs, unsigned long esr)
 
 static struct break_hook cfi_break_hook = {
 	.fn = cfi_handler,
-	.imm = CFI_BRK_IMM_BASE,
-	.mask = CFI_BRK_IMM_MASK,
+	.imm = CFI_BRK_IMM,
+	.mask = CFI_BRK_MASK,
 };
 #endif /* CONFIG_CFI_CLANG */
 

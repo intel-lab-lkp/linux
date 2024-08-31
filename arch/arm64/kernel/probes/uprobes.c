@@ -190,6 +190,7 @@ static int uprobe_single_step_handler(struct pt_regs *regs,
 static struct break_hook uprobes_break_hook = {
 	.imm = UPROBES_BRK_IMM,
 	.fn = uprobe_breakpoint_handler,
+	.user = 1,
 };
 
 /* uprobe single step handler hook */
@@ -199,7 +200,7 @@ static struct step_hook uprobes_step_hook = {
 
 static int __init arch_init_uprobes(void)
 {
-	register_user_break_hook(&uprobes_break_hook);
+	register_kernel_break_hook(&uprobes_break_hook);
 	register_user_step_hook(&uprobes_step_hook);
 
 	return 0;
