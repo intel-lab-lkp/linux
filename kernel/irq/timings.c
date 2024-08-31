@@ -406,8 +406,7 @@ static u64 __irq_timings_next_event(struct irqt_stat *irqs, int irq, u64 now)
 	/*
 	 * 'count' will depends if the circular buffer wrapped or not
 	 */
-	count = irqs->count < IRQ_TIMINGS_SIZE ?
-		irqs->count : IRQ_TIMINGS_SIZE;
+	count = min_t(int, irqs->count, IRQ_TIMINGS_SIZE);
 
 	start = irqs->count < IRQ_TIMINGS_SIZE ?
 		0 : (irqs->count & IRQ_TIMINGS_MASK);
