@@ -1436,28 +1436,14 @@ static __always_inline unsigned char ma_data_end(struct maple_node *node,
  */
 static inline unsigned char mas_data_end(struct ma_state *mas)
 {
-	enum maple_type type;
-	struct maple_node *node;
-	unsigned char offset;
-	unsigned long *pivots;
+	enum maple_type type = mte_node_type(mas->node);
+	struct maple_node *node = mas_mn(mas);
+	unsigned long *pivots = ma_pivots(node, type);
 
-	type = mte_node_type(mas->node);
-	node = mas_mn(mas);
-	if (type == maple_arange_64)
-		return ma_meta_end(node, type);
-
-	pivots = ma_pivots(node, type);
 	if (unlikely(ma_dead_node(node)))
 		return 0;
 
-	offset = mt_pivots[type] - 1;
-	if (likely(!pivots[offset]))
-		return ma_meta_end(node, type);
-
-	if (likely(pivots[offset] == mas->max))
-		return offset;
-
-	return mt_pivots[type];
+	return ma_data_end(node, type, pivots, mas->max);
 }
 
 /*
