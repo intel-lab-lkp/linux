@@ -1559,7 +1559,7 @@ static void ns_close(struct atm_vcc *vcc)
 		     card->rsq.base, card->rsq.next,
 		     card->rsq.last, readl(card->membase + RSQT));
 		printk("Empty free buffer queue interrupt %s \n",
-		       card->efbie ? "enabled" : "disabled");
+		       str_enabled_disabled(card->efbie));
 		printk("SBCNT = %d  count = %d   LBCNT = %d count = %d \n",
 		       ns_stat_sfbqc_get(stat), card->sbpool.count,
 		       ns_stat_lfbqc_get(stat), card->lbpool.count);
