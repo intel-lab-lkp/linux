@@ -9,6 +9,12 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+void usage(const char *prog)
+{
+	fprintf(stderr, "Usage: %s INPUT [BYTES]\n", prog);
+	fprintf(stderr, "       %s /etc/os-release | cat\n", prog);
+}
+
 int main(int argc, char *argv[])
 {
 	int fd;
@@ -16,7 +22,7 @@ int main(int argc, char *argv[])
 	ssize_t spliced;
 
 	if (argc < 2) {
-		fprintf(stderr, "Usage: %s INPUT [BYTES]\n", argv[0]);
+		usage(argv[0]);
 		return EXIT_FAILURE;
 	}
 
@@ -49,6 +55,7 @@ int main(int argc, char *argv[])
 		      size, SPLICE_F_MOVE);
 	if (spliced < 0) {
 		perror("splice");
+		usage(argv[0]);
 		return EXIT_FAILURE;
 	}
 
