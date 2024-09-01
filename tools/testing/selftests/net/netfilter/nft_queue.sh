@@ -14,6 +14,7 @@ cleanup()
 {
 	ip netns pids "$ns1" | xargs kill 2>/dev/null
 	ip netns pids "$ns2" | xargs kill 2>/dev/null
+	ip netns pids "$ns3" | xargs kill 2>/dev/null
 	ip netns pids "$nsrouter" | xargs kill 2>/dev/null
 
 	cleanup_all_ns
@@ -31,7 +32,7 @@ modprobe -q sctp
 
 trap cleanup EXIT
 
-setup_ns ns1 ns2 nsrouter
+setup_ns ns1 ns2 ns3 nsrouter
 
 TMPFILE0=$(mktemp)
 TMPFILE1=$(mktemp)
@@ -48,6 +49,7 @@ if ! ip link add veth0 netns "$nsrouter" type veth peer name eth0 netns "$ns1" >
     exit $ksft_skip
 fi
 ip link add veth1 netns "$nsrouter" type veth peer name eth0 netns "$ns2"
+ip link add veth2 netns "$nsrouter" type veth peer name eth0 netns "$ns3"
 
 ip -net "$nsrouter" link set veth0 up
 ip -net "$nsrouter" addr add 10.0.1.1/24 dev veth0
@@ -57,8 +59,13 @@ ip -net "$nsrouter" link set veth1 up
 ip -net "$nsrouter" addr add 10.0.2.1/24 dev veth1
 ip -net "$nsrouter" addr add dead:2::1/64 dev veth1 nodad
 
+ip -net "$nsrouter" link set veth2 up
+ip -net "$nsrouter" addr add 10.0.3.1/24 dev veth2
+ip -net "$nsrouter" addr add dead:3::1/64 dev veth2 nodad
+
 ip -net "$ns1" link set eth0 up
 ip -net "$ns2" link set eth0 up
+ip -net "$ns3" link set eth0 up
 
 ip -net "$ns1" addr add 10.0.1.99/24 dev eth0
 ip -net "$ns1" addr add dead:1::99/64 dev eth0 nodad
@@ -69,6 +76,11 @@ ip -net "$ns2" addr add 10.0.2.99/24 dev eth0
 ip -net "$ns2" addr add dead:2::99/64 dev eth0 nodad
 ip -net "$ns2" route add default via 10.0.2.1
 ip -net "$ns2" route add default via dead:2::1
+
+ip -net "$ns3" addr add 10.0.3.99/24 dev eth0
+ip -net "$ns3" addr add dead:3::99/64 dev eth0 nodad
+ip -net "$ns3" route add default via 10.0.3.1
+ip -net "$ns3" route add default via dead:3::1
 
 load_ruleset() {
 	local name=$1
@@ -142,6 +154,14 @@ test_ping() {
   fi
 
   if ! ip netns exec "$ns1" ping -c 1 -q dead:2::99 > /dev/null; then
+	return 2
+  fi
+
+    if ! ip netns exec "$ns1" ping -c 1 -q 10.0.3.99 > /dev/null; then
+	return 1
+  fi
+
+  if ! ip netns exec "$ns1" ping -c 1 -q dead:3::99 > /dev/null; then
 	return 2
   fi
 
@@ -455,6 +475,67 @@ EOF
 	fi
 }
 
+udp_listener_ready()
+{
+	ss -S -N "$1" -uln -o "sport = :12345" | grep -q 12345
+}
+
+test_udp_race()
+{
+        ip netns exec "$nsrouter" nft -f /dev/stdin <<EOF
+flush ruleset
+table inet udpq {
+	chain prerouting {
+	type nat hook prerouting priority dstnat - 5; policy accept;
+		 ip daddr 10.6.6.6 udp dport 12345 counter dnat to numgen inc mod 2 map { 0 : 10.0.2.99, 1 : 10.0.3.99 }
+	}
+        chain postrouting {
+        type filter hook postrouting priority srcnat - 5; policy accept;
+                udp dport 12345 counter queue num 12
+        }
+}
+EOF
+
+	timeout 10 ip netns exec "$ns2" socat UDP-LISTEN:12345,fork EXEC:cat &
+	local rpid1=$!
+
+	busywait "$BUSYWAIT_TIMEOUT" udp_listener_ready "$ns2"
+
+	timeout 10 ip netns exec "$ns3" socat UDP-LISTEN:12345,fork EXEC:cat &
+	local rpid2=$!
+
+	busywait "$BUSYWAIT_TIMEOUT" udp_listener_ready "$ns3"
+
+	ip netns exec "$nsrouter" ./nf_queue -q 12 &
+	local nfqpid=$!
+
+	echo > "$TMPFILE1"
+	echo > "$TMPFILE2"
+	# send UDP packets with the same tuple multiple times to hit the race
+	for i in $(seq 1 10); do
+		echo "dns-packet1dns-packet2" | ip netns exec "$ns1" socat -b10 STDIO UDP:10.6.6.6:12345 >>"$TMPFILE1"
+		# expected to receive two
+		echo "dns-packet1dns-packet2" >> "$TMPFILE2"
+	done
+
+	# must wait before checking completeness of output file.
+	wait "$rpid1"
+	wait "$rpid2"
+	kill "$nfqpid"
+
+	if ! ip netns exec "$nsrouter" nft delete table inet udpq; then
+		echo "FAIL:  Could not delete udpq table"
+		exit 1
+	fi
+
+	if ! diff -u "$TMPFILE1" "$TMPFILE2" ; then
+		echo "FAIL: lost packets?!" 1>&2
+		exit 1
+	fi
+
+	echo "PASS: udp race"
+}
+
 test_queue_removal()
 {
 	read tainted_then < /proc/sys/kernel/tainted
@@ -531,6 +612,7 @@ test_tcp_localhost_connectclose
 test_tcp_localhost_requeue
 test_sctp_forward
 test_sctp_output
+test_udp_race
 
 # should be last, adds vrf device in ns1 and changes routes
 test_icmp_vrf
