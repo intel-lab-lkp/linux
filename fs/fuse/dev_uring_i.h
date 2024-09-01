@@ -260,6 +260,11 @@ static inline void fuse_uring_wait_stopped_queues(struct fuse_conn *fc)
 			   atomic_read(&ring->queue_refs) == 0);
 }
 
+static inline bool fuse_uring_ready(struct fuse_conn *fc)
+{
+	return fc->ring && fc->ring->ready;
+}
+
 #else /* CONFIG_FUSE_IO_URING */
 
 struct fuse_ring;
@@ -293,6 +298,11 @@ static inline void fuse_uring_abort(struct fuse_conn *fc)
 
 static inline void fuse_uring_wait_stopped_queues(struct fuse_conn *fc)
 {
+}
+
+static inline bool fuse_uring_ready(struct fuse_conn *fc)
+{
+	return false;
 }
 
 static inline int
