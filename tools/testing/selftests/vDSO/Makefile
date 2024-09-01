@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0
-ARCH ?= $(shell uname -m | sed -e s/i.86/x86/)
+ARCH ?= $(shell uname -m | sed -e s/i.86/x86/ -e /loongarch/s/[0-9]//g)
 SRCARCH := $(subst x86_64,x86,$(ARCH))
 
 TEST_GEN_PROGS := vdso_test_gettimeofday
@@ -10,7 +10,7 @@ ifeq ($(ARCH),$(filter $(ARCH),x86 x86_64))
 TEST_GEN_PROGS += vdso_standalone_test_x86
 endif
 TEST_GEN_PROGS += vdso_test_correctness
-ifeq ($(ARCH),$(filter $(ARCH),x86_64))
+ifeq ($(ARCH),$(filter $(ARCH),x86_64 loongarch))
 TEST_GEN_PROGS += vdso_test_getrandom
 TEST_GEN_PROGS += vdso_test_chacha
 endif
