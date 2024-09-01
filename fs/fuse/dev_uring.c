@@ -29,6 +29,9 @@
 #include <linux/topology.h>
 #include <linux/io_uring/cmd.h>
 
+#define FUSE_RING_HEADER_PG 0
+#define FUSE_RING_PAYLOAD_PG 1
+
 struct fuse_uring_cmd_pdu {
 	struct fuse_ring_ent *ring_ent;
 };
@@ -251,6 +254,21 @@ static void fuse_uring_stop_fuse_req_end(struct fuse_ring_ent *ent)
 }
 
 /*
+ * Copy from memmap.c, should be exported
+ */
+static void io_pages_free(struct page ***pages, int npages)
+{
+	struct page **page_array = *pages;
+
+	if (!page_array)
+		return;
+
+	unpin_user_pages(page_array, npages);
+	kvfree(page_array);
+	*pages = NULL;
+}
+
+/*
  * Release a request/entry on connection tear down
  */
 static void fuse_uring_entry_teardown(struct fuse_ring_ent *ent,
@@ -274,6 +292,8 @@ static void fuse_uring_entry_teardown(struct fuse_ring_ent *ent,
 
 	if (ent->fuse_req)
 		fuse_uring_stop_fuse_req_end(ent);
+
+	io_pages_free(&ent->user_pages, ent->nr_user_pages);
 
 	ent->state = FRRS_FREED;
 }
@@ -417,6 +437,7 @@ static int fuse_uring_out_header_has_err(struct fuse_out_header *oh,
 		goto seterr;
 	}
 
+	/* FIXME copied from dev.c, check what 512 means  */
 	if (oh->error <= -512 || oh->error > 0) {
 		err = -EINVAL;
 		goto seterr;
@@ -465,53 +486,41 @@ err:
 
 static int fuse_uring_copy_from_ring(struct fuse_ring *ring,
 				     struct fuse_req *req,
-				     struct fuse_ring_ent *ent)
+				     struct fuse_ring_ent *ent,
+				     struct fuse_ring_req *rreq)
 {
-	struct fuse_ring_req __user *rreq = ent->rreq;
 	struct fuse_copy_state cs;
 	struct fuse_args *args = req->args;
 	struct iov_iter iter;
-	int err;
-	int res_arg_len;
+	int res_arg_len, err;
 
-	err = copy_from_user(&res_arg_len, &rreq->in_out_arg_len,
-			     sizeof(res_arg_len));
-	if (err)
-		return err;
-
-	err = import_ubuf(ITER_SOURCE, (void __user *)&rreq->in_out_arg,
-			  ent->max_arg_len, &iter);
-	if (err)
-		return err;
+	res_arg_len = rreq->in_out_arg_len;
 
 	fuse_copy_init(&cs, 0, &iter);
 	cs.is_uring = 1;
+	cs.ring.pages = &ent->user_pages[FUSE_RING_PAYLOAD_PG];
 	cs.req = req;
 
-	return fuse_copy_out_args(&cs, args, res_arg_len);
+	err = fuse_copy_out_args(&cs, args, res_arg_len);
+
+	return err;
 }
 
- /*
-  * Copy data from the req to the ring buffer
-  */
+/*
+ * Copy data from the req to the ring buffer
+ */
 static int fuse_uring_copy_to_ring(struct fuse_ring *ring, struct fuse_req *req,
-				   struct fuse_ring_ent *ent)
+				   struct fuse_ring_ent *ent,
+				   struct fuse_ring_req *rreq)
 {
-	struct fuse_ring_req __user *rreq = ent->rreq;
 	struct fuse_copy_state cs;
 	struct fuse_args *args = req->args;
-	int err, res;
+	int err;
 	struct iov_iter iter;
-
-	err = import_ubuf(ITER_DEST, (void __user *)&rreq->in_out_arg,
-			  ent->max_arg_len, &iter);
-	if (err) {
-		pr_info("Import user buffer failed\n");
-		return err;
-	}
 
 	fuse_copy_init(&cs, 1, &iter);
 	cs.is_uring = 1;
+	cs.ring.pages = &ent->user_pages[FUSE_RING_PAYLOAD_PG];
 	cs.req = req;
 	err = fuse_copy_args(&cs, args->in_numargs, args->in_pages,
 			     (struct fuse_arg *)args->in_args, 0);
@@ -520,10 +529,7 @@ static int fuse_uring_copy_to_ring(struct fuse_ring *ring, struct fuse_req *req,
 		return err;
 	}
 
-	BUILD_BUG_ON((sizeof(rreq->in_out_arg_len) != sizeof(cs.ring.offset)));
-	res = copy_to_user(&rreq->in_out_arg_len, &cs.ring.offset,
-			   sizeof(rreq->in_out_arg_len));
-	err = res > 0 ? -EFAULT : res;
+	rreq->in_out_arg_len = cs.ring.offset;
 
 	return err;
 }
@@ -531,11 +537,11 @@ static int fuse_uring_copy_to_ring(struct fuse_ring *ring, struct fuse_req *req,
 static int
 fuse_uring_prepare_send(struct fuse_ring_ent *ring_ent)
 {
-	struct fuse_ring_req *rreq = ring_ent->rreq;
+	struct fuse_ring_req *rreq = NULL;
 	struct fuse_ring_queue *queue = ring_ent->queue;
 	struct fuse_ring *ring = queue->ring;
 	struct fuse_req *req = ring_ent->fuse_req;
-	int err = 0, res;
+	int err = 0;
 
 	if (WARN_ON(ring_ent->state != FRRS_FUSE_REQ)) {
 		pr_err("qid=%d tag=%d ring-req=%p buf_req=%p invalid state %d on send\n",
@@ -551,25 +557,27 @@ fuse_uring_prepare_send(struct fuse_ring_ent *ring_ent)
 		 __func__, queue->qid, ring_ent->tag, ring_ent->state,
 		 req->in.h.opcode, req->in.h.unique);
 
+	rreq = kmap_local_page(ring_ent->user_pages[FUSE_RING_HEADER_PG]);
+
 	/* copy the request */
-	err = fuse_uring_copy_to_ring(ring, req, ring_ent);
+	err = fuse_uring_copy_to_ring(ring, req, ring_ent, rreq);
 	if (unlikely(err)) {
 		pr_info("Copy to ring failed: %d\n", err);
 		goto err;
 	}
 
 	/* copy fuse_in_header */
-	res = copy_to_user(&rreq->in, &req->in.h, sizeof(rreq->in));
-	err = res > 0 ? -EFAULT : res;
-	if (err)
-		goto err;
+	rreq->in = req->in.h;
 
+	err = 0;
 	set_bit(FR_SENT, &req->flags);
-	return 0;
-
+out:
+	if (rreq)
+		kunmap_local(rreq);
+	return err;
 err:
 	fuse_uring_req_end(ring_ent, true, err);
-	return err;
+	goto out;
 }
 
 /*
@@ -682,16 +690,13 @@ static void fuse_uring_commit(struct fuse_ring_ent *ring_ent,
 {
 	struct fuse_ring *ring = ring_ent->queue->ring;
 	struct fuse_conn *fc = ring->fc;
-	struct fuse_ring_req *rreq = ring_ent->rreq;
+	struct fuse_ring_req *rreq;
 	struct fuse_req *req = ring_ent->fuse_req;
 	ssize_t err = 0;
 	bool set_err = false;
 
-	err = copy_from_user(&req->out.h, &rreq->out, sizeof(req->out.h));
-	if (err) {
-		req->out.h.error = err;
-		goto out;
-	}
+	rreq = kmap_local_page(ring_ent->user_pages[FUSE_RING_HEADER_PG]);
+	req->out.h = rreq->out;
 
 	err = fuse_uring_out_header_has_err(&req->out.h, req, fc);
 	if (err) {
@@ -701,7 +706,8 @@ static void fuse_uring_commit(struct fuse_ring_ent *ring_ent,
 		goto out;
 	}
 
-	err = fuse_uring_copy_from_ring(ring, req, ring_ent);
+	err = fuse_uring_copy_from_ring(ring, req, ring_ent, rreq);
+	kunmap_local(rreq);
 	if (err)
 		set_err = true;
 
@@ -830,6 +836,46 @@ __must_hold(ring_ent->queue->lock)
 	return 0;
 }
 
+/*
+ * Copy from memmap.c, should be exported there
+ */
+static struct page **io_pin_pages(unsigned long uaddr, unsigned long len,
+				  int *npages)
+{
+	unsigned long start, end, nr_pages;
+	struct page **pages;
+	int ret;
+
+	end = (uaddr + len + PAGE_SIZE - 1) >> PAGE_SHIFT;
+	start = uaddr >> PAGE_SHIFT;
+	nr_pages = end - start;
+	if (WARN_ON_ONCE(!nr_pages))
+		return ERR_PTR(-EINVAL);
+
+	pages = kvmalloc_array(nr_pages, sizeof(struct page *), GFP_KERNEL);
+	if (!pages)
+		return ERR_PTR(-ENOMEM);
+
+	ret = pin_user_pages_fast(uaddr, nr_pages, FOLL_WRITE | FOLL_LONGTERM,
+					pages);
+	/* success, mapped all pages */
+	if (ret == nr_pages) {
+		*npages = nr_pages;
+		return pages;
+	}
+
+	/* partial map, or didn't map anything */
+	if (ret >= 0) {
+		/* if we did partial map, release any pages we did get */
+		if (ret)
+			unpin_user_pages(pages, ret);
+		ret = -EFAULT;
+	}
+	kvfree(pages);
+	return ERR_PTR(ret);
+}
+
+
 /* FUSE_URING_REQ_FETCH handler */
 static int fuse_uring_fetch(struct fuse_ring_ent *ring_ent,
 			    struct io_uring_cmd *cmd, unsigned int issue_flags)
@@ -837,39 +883,48 @@ static int fuse_uring_fetch(struct fuse_ring_ent *ring_ent,
 {
 	struct fuse_ring *ring = ring_ent->queue->ring;
 	struct fuse_ring_queue *queue = ring_ent->queue;
-	int ret;
+	int err;
 
 	/* No other bit must be set here */
-	ret = -EINVAL;
+	err = -EINVAL;
 	if (ring_ent->state != FRRS_INIT)
-		goto err;
+		goto err_unlock;
 
 	/*
 	 * FUSE_URING_REQ_FETCH is an initialization exception, needs
 	 * state override
 	 */
 	ring_ent->state = FRRS_USERSPACE;
-	ret = fuse_ring_ring_ent_unset_userspace(ring_ent);
-	if (ret != 0) {
-		pr_info_ratelimited(
-			"qid=%d tag=%d register req state %d expected %d",
-			queue->qid, ring_ent->tag, ring_ent->state,
-			FRRS_INIT);
+	fuse_ring_ring_ent_unset_userspace(ring_ent);
+
+	err = _fuse_uring_fetch(ring_ent, cmd, issue_flags);
+	if (err)
+		goto err_unlock;
+
+	spin_unlock(&queue->lock);
+
+	/* must not hold the queue->lock */
+	ring_ent->user_pages = io_pin_pages(ring_ent->user_buf,
+					    ring_ent->user_buf_len,
+					    &ring_ent->nr_user_pages);
+	if (IS_ERR(ring_ent->user_pages)) {
+		err = PTR_ERR(ring_ent->user_pages);
+		pr_info("qid=%d ent=%d pin-res=%d\n",
+			queue->qid, ring_ent->tag, err);
 		goto err;
 	}
-
-	ret = _fuse_uring_fetch(ring_ent, cmd, issue_flags);
-	if (ret)
-		goto err;
 
 	/*
 	 * The ring entry is registered now and needs to be handled
 	 * for shutdown.
 	 */
 	atomic_inc(&ring->queue_refs);
-err:
+	return 0;
+
+err_unlock:
 	spin_unlock(&queue->lock);
-	return ret;
+err:
+	return err;
 }
 
 /**
@@ -920,7 +975,9 @@ int fuse_uring_cmd(struct io_uring_cmd *cmd, unsigned int issue_flags)
 	if (unlikely(fc->aborted || queue->stopped))
 		goto err_unlock;
 
-	ring_ent->rreq = (void __user *)cmd_req->buf_ptr;
+	ring_ent->user_buf = cmd_req->buf_ptr;
+	ring_ent->user_buf_len = cmd_req->buf_len;
+
 	ring_ent->max_arg_len = cmd_req->buf_len -
 				offsetof(struct fuse_ring_req, in_out_arg);
 	ret = -EINVAL;
@@ -930,7 +987,6 @@ int fuse_uring_cmd(struct io_uring_cmd *cmd, unsigned int issue_flags)
 		goto err_unlock;
 	}
 
-	ring_ent->rreq = (void __user *)cmd_req->buf_ptr;
 	ring_ent->max_arg_len = cmd_req->buf_len -
 				offsetof(struct fuse_ring_req, in_out_arg);
 	if (cmd_req->buf_len < ring->req_buf_sz) {

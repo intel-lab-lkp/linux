@@ -60,10 +60,17 @@ struct fuse_ring_ent {
 	/* fuse_req assigned to the ring entry */
 	struct fuse_req *fuse_req;
 
-	/*
-	 * buffer provided by fuse server
-	 */
-	struct fuse_ring_req __user *rreq;
+	/* buffer provided by fuse server */
+	unsigned long __user user_buf;
+
+	/* length of user_buf */
+	size_t user_buf_len;
+
+	/* mapped user_buf pages */
+	struct page **user_pages;
+
+	/* number of user pages */
+	int nr_user_pages;
 
 	/* struct fuse_ring_req::in_out_arg size*/
 	size_t max_arg_len;

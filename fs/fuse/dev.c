@@ -769,6 +769,15 @@ static int fuse_copy_fill(struct fuse_copy_state *cs)
 			cs->pipebufs++;
 			cs->nr_segs++;
 		}
+	} else if (cs->is_uring) {
+		cs->pg = cs->ring.pages[cs->ring.page_idx++];
+		/*
+		 * non stricly needed, just to avoid a uring exception in
+		 * fuse_copy_finish
+		 */
+		get_page(cs->pg);
+		cs->len = PAGE_SIZE;
+		cs->offset = 0;
 	} else {
 		size_t off;
 		err = iov_iter_get_pages2(cs->iter, &page, PAGE_SIZE, 1, &off);

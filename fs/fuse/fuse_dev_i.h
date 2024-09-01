@@ -32,6 +32,8 @@ struct fuse_copy_state {
 	struct {
 		/* overall offset with the user buffer */
 		unsigned int offset;
+		struct page **pages;
+		int page_idx;
 	} ring;
 };
 
