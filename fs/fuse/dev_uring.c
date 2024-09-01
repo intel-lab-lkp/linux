@@ -993,6 +993,9 @@ fuse_uring_send_req_in_task(struct io_uring_cmd *cmd,
 
 	BUILD_BUG_ON(sizeof(pdu) > sizeof(cmd->pdu));
 
+	if (unlikely(issue_flags & IO_URING_F_TASK_DEAD))
+		goto terminating;
+
 	err = fuse_uring_prepare_send(ring_ent);
 	if (err)
 		goto err;
@@ -1007,6 +1010,10 @@ fuse_uring_send_req_in_task(struct io_uring_cmd *cmd,
 	return;
 err:
 	fuse_uring_next_fuse_req(ring_ent, queue);
+
+terminating:
+	/* Avoid all actions as the task that issues the ring is terminating */
+	io_uring_cmd_done(cmd, -ECANCELED, 0, issue_flags);
 }
 
 /* queue a fuse request and send it if a ring entry is available */
