@@ -731,12 +731,13 @@ static int pl2303_get_line_request(struct usb_serial_port *port,
 				GET_LINE_REQUEST, GET_LINE_REQUEST_TYPE,
 				0, 0, buf, 7, 100);
 	if (ret != 7) {
-		dev_err(&port->dev, "%s - failed: %d\n", __func__, ret);
+		struct pl2303_private *priv = usb_get_serial_port_data(port);
 
-		if (ret >= 0)
-			ret = -EIO;
+		dev_dbg(&port->dev, "%s - failed, falling back on cache: %d\n",
+			__func__, ret);
+		memcpy(buf, priv->line_settings, 7);
 
-		return ret;
+		return 0;
 	}
 
 	dev_dbg(&port->dev, "%s - %7ph\n", __func__, buf);
@@ -1078,8 +1079,8 @@ static int pl2303_set_break(struct usb_serial_port *port, bool enable)
 				 BREAK_REQUEST, BREAK_REQUEST_TYPE, state,
 				 0, NULL, 0, 100);
 	if (result) {
-		dev_err(&port->dev, "error sending break = %d\n", result);
-		return result;
+		dev_dbg(&port->dev, "error sending break = %d\n", result);
+		return -ENOTTY;
 	}
 
 	return 0;
