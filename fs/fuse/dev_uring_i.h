@@ -15,10 +15,10 @@
 #define FUSE_URING_MAX_QUEUE_DEPTH 32768
 
 enum fuse_ring_req_state {
+	FRRS_INVALID = 0,
 
 	/* request is basially initialized */
-	FRRS_INIT = 1,
-
+	FRRS_INIT,
 };
 
 /* A fuse ring entry, part of the ring queue */
@@ -29,11 +29,8 @@ struct fuse_ring_ent {
 	/* array index in the ring-queue */
 	unsigned int tag;
 
-	/*
-	 * state the request is currently in
-	 * (enum fuse_ring_req_state)
-	 */
-	unsigned long state;
+	/* state the request is currently in */
+	enum fuse_ring_req_state state;
 };
 
 struct fuse_ring_queue {
@@ -108,6 +105,14 @@ fuse_uring_get_queue(struct fuse_ring *ring, int qid)
 	return (struct fuse_ring_queue *)(ptr + qid * ring->queue_size);
 }
 
+static inline bool fuse_uring_configured(struct fuse_conn *fc)
+{
+	if (fc->ring != NULL)
+		return true;
+
+	return false;
+}
+
 #else /* CONFIG_FUSE_IO_URING */
 
 struct fuse_ring;
@@ -119,6 +124,11 @@ static inline void fuse_uring_conn_init(struct fuse_ring *ring,
 
 static inline void fuse_uring_conn_destruct(struct fuse_conn *fc)
 {
+}
+
+static inline bool fuse_uring_configured(struct fuse_conn *fc)
+{
+	return false;
 }
 
 #endif /* CONFIG_FUSE_IO_URING */
