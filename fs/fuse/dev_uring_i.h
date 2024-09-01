@@ -176,6 +176,7 @@ void fuse_uring_abort_end_requests(struct fuse_ring *ring);
 int fuse_uring_conn_cfg(struct file *file, void __user *argp);
 void fuse_uring_stop_queues(struct fuse_ring *ring);
 int fuse_uring_cmd(struct io_uring_cmd *cmd, unsigned int issue_flags);
+int fuse_uring_queue_fuse_req(struct fuse_conn *fc, struct fuse_req *req);
 
 static inline void fuse_uring_conn_destruct(struct fuse_conn *fc)
 {
@@ -292,6 +293,12 @@ static inline void fuse_uring_abort(struct fuse_conn *fc)
 
 static inline void fuse_uring_wait_stopped_queues(struct fuse_conn *fc)
 {
+}
+
+static inline int
+fuse_uring_queue_fuse_req(struct fuse_conn *fc, struct fuse_req *req)
+{
+	return -EPFNOSUPPORT;
 }
 #endif /* CONFIG_FUSE_IO_URING */
 

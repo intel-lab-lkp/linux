@@ -975,3 +975,107 @@ err_unlock:
 	spin_unlock(&queue->lock);
 	goto out;
 }
+
+/*
+ * This prepares and sends the ring request in fuse-uring task context.
+ * User buffers are not mapped yet - the application does not have permission
+ * to write to it - this has to be executed in ring task context.
+ * XXX: Map and pin user paged and avoid this function.
+ */
+static void
+fuse_uring_send_req_in_task(struct io_uring_cmd *cmd,
+			    unsigned int issue_flags)
+{
+	struct fuse_uring_cmd_pdu *pdu = (struct fuse_uring_cmd_pdu *)cmd->pdu;
+	struct fuse_ring_ent *ring_ent = pdu->ring_ent;
+	struct fuse_ring_queue *queue = ring_ent->queue;
+	int err;
+
+	BUILD_BUG_ON(sizeof(pdu) > sizeof(cmd->pdu));
+
+	err = fuse_uring_prepare_send(ring_ent);
+	if (err)
+		goto err;
+
+	io_uring_cmd_done(cmd, 0, 0, issue_flags);
+
+	spin_lock(&queue->lock);
+	ring_ent->state = FRRS_USERSPACE;
+	list_add(&ring_ent->list, &queue->ent_in_userspace);
+	spin_unlock(&queue->lock);
+
+	return;
+err:
+	fuse_uring_next_fuse_req(ring_ent, queue);
+}
+
+/* queue a fuse request and send it if a ring entry is available */
+int fuse_uring_queue_fuse_req(struct fuse_conn *fc, struct fuse_req *req)
+{
+	struct fuse_ring *ring = fc->ring;
+	struct fuse_ring_queue *queue;
+	int qid = 0;
+	struct fuse_ring_ent *ring_ent = NULL;
+	int res;
+	bool async = test_bit(FR_BACKGROUND, &req->flags);
+	struct list_head *req_queue, *ent_queue;
+
+	if (ring->per_core_queue) {
+		/*
+		 * async requests are best handled on another core, the current
+		 * core can do application/page handling, while the async request
+		 * is handled on another core in userspace.
+		 * For sync request the application has to wait - no processing, so
+		 * the request should continue on the current core and avoid context
+		 * switches.
+		 * XXX This should be on the same numa node and not busy - is there
+		 * a scheduler function available  that could make this decision?
+		 * It should also not persistently switch between cores - makes
+		 * it hard for the scheduler.
+		 */
+		qid = task_cpu(current);
+
+		if (WARN_ONCE(qid >= ring->nr_queues,
+			      "Core number (%u) exceeds nr ueues (%zu)\n",
+			      qid, ring->nr_queues))
+			qid = 0;
+	}
+
+	queue = fuse_uring_get_queue(ring, qid);
+	req_queue = async ? &queue->async_fuse_req_queue :
+			    &queue->sync_fuse_req_queue;
+	ent_queue = async ? &queue->async_ent_avail_queue :
+			    &queue->sync_ent_avail_queue;
+
+	spin_lock(&queue->lock);
+
+	if (unlikely(queue->stopped)) {
+		res = -ENOTCONN;
+		goto err_unlock;
+	}
+
+	list_add_tail(&req->list, req_queue);
+
+	if (!list_empty(ent_queue)) {
+		ring_ent =
+			list_first_entry(ent_queue, struct fuse_ring_ent, list);
+		list_del_init(&ring_ent->list);
+		fuse_uring_add_req_to_ring_ent(ring_ent, req);
+	}
+	spin_unlock(&queue->lock);
+
+	if (ring_ent != NULL) {
+		struct io_uring_cmd *cmd = ring_ent->cmd;
+		struct fuse_uring_cmd_pdu *pdu =
+			(struct fuse_uring_cmd_pdu *)cmd->pdu;
+
+		pdu->ring_ent = ring_ent;
+		io_uring_cmd_complete_in_task(cmd, fuse_uring_send_req_in_task);
+	}
+
+	return 0;
+
+err_unlock:
+	spin_unlock(&queue->lock);
+	return res;
+}
