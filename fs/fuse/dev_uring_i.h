@@ -26,6 +26,9 @@ enum fuse_ring_req_state {
 	/* The ring request waits for a new fuse request */
 	FRRS_WAIT,
 
+	/* The ring req got assigned a fuse req */
+	FRRS_FUSE_REQ,
+
 	/* request is in or on the way to user space */
 	FRRS_USERSPACE,
 };
@@ -47,6 +50,17 @@ struct fuse_ring_ent {
 	struct list_head list;
 
 	struct io_uring_cmd *cmd;
+
+	/* fuse_req assigned to the ring entry */
+	struct fuse_req *fuse_req;
+
+	/*
+	 * buffer provided by fuse server
+	 */
+	struct fuse_ring_req __user *rreq;
+
+	/* struct fuse_ring_req::in_out_arg size*/
+	size_t max_arg_len;
 };
 
 struct fuse_ring_queue {
@@ -68,6 +82,13 @@ struct fuse_ring_queue {
 	/* available ring entries (struct fuse_ring_ent) */
 	struct list_head async_ent_avail_queue;
 	struct list_head sync_ent_avail_queue;
+
+	/* fuse fg/bg request types */
+	struct list_head async_fuse_req_queue;
+	struct list_head sync_fuse_req_queue;
+
+	/* entries sent to userspace */
+	struct list_head ent_in_userspace;
 
 	/*
 	 * available number of sync requests,
