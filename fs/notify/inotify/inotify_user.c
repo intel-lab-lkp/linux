@@ -279,9 +279,11 @@ static ssize_t inotify_read(struct file *file, char __user *buf,
 			continue;
 		}
 
-		ret = -EAGAIN;
-		if (file->f_flags & O_NONBLOCK)
+		if (file->f_flags & O_NONBLOCK) {
+			ret = -EAGAIN;
 			break;
+		}
+
 		ret = -ERESTARTSYS;
 		if (signal_pending(current))
 			break;
