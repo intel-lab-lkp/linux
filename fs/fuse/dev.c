@@ -8,6 +8,7 @@
 
 #include "fuse_i.h"
 #include "fuse_dev_i.h"
+#include "dev_uring_i.h"
 
 #include <linux/init.h>
 #include <linux/module.h>
@@ -25,6 +26,13 @@
 
 MODULE_ALIAS_MISCDEV(FUSE_MINOR);
 MODULE_ALIAS("devname:fuse");
+
+#ifdef CONFIG_FUSE_IO_URING
+static bool __read_mostly enable_uring;
+module_param(enable_uring, bool, 0644);
+MODULE_PARM_DESC(enable_uring,
+		 "Enable uring userspace communication through uring.");
+#endif
 
 static struct kmem_cache *fuse_req_cachep;
 
@@ -2298,15 +2306,11 @@ static int fuse_device_clone(struct fuse_conn *fc, struct file *new)
 	return 0;
 }
 
-static long fuse_dev_ioctl_clone(struct file *file, __u32 __user *argp)
+static long _fuse_dev_ioctl_clone(struct file *file, int oldfd)
 {
 	int res;
-	int oldfd;
 	struct fuse_dev *fud = NULL;
 	struct fd f;
-
-	if (get_user(oldfd, argp))
-		return -EFAULT;
 
 	f = fdget(oldfd);
 	if (!f.file)
@@ -2328,6 +2332,16 @@ static long fuse_dev_ioctl_clone(struct file *file, __u32 __user *argp)
 
 	fdput(f);
 	return res;
+}
+
+static long fuse_dev_ioctl_clone(struct file *file, __u32 __user *argp)
+{
+	int oldfd;
+
+	if (get_user(oldfd, argp))
+		return -EFAULT;
+
+	return _fuse_dev_ioctl_clone(file, oldfd);
 }
 
 static long fuse_dev_ioctl_backing_open(struct file *file,
@@ -2365,8 +2379,9 @@ static long fuse_dev_ioctl_backing_close(struct file *file, __u32 __user *argp)
 	return fuse_backing_close(fud->fc, backing_id);
 }
 
-static long fuse_dev_ioctl(struct file *file, unsigned int cmd,
-			   unsigned long arg)
+static long
+fuse_dev_ioctl(struct file *file, unsigned int cmd,
+	       unsigned long arg)
 {
 	void __user *argp = (void __user *)arg;
 
@@ -2380,6 +2395,10 @@ static long fuse_dev_ioctl(struct file *file, unsigned int cmd,
 	case FUSE_DEV_IOC_BACKING_CLOSE:
 		return fuse_dev_ioctl_backing_close(file, argp);
 
+#ifdef CONFIG_FUSE_IO_URING
+	case FUSE_DEV_IOC_URING_CFG:
+		return fuse_uring_conn_cfg(file, argp);
+#endif
 	default:
 		return -ENOTTY;
 	}
