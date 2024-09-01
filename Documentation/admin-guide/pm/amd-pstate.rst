@@ -411,6 +411,11 @@ For systems that support ``amd-pstate`` preferred core, the core rankings will
 always be advertised by the platform. But OS can choose to ignore that via the
 kernel parameter ``amd_prefcore=disable``.
 
+``amd_pstate_msr=disable``
+
+For systems that support a dedicated CPPC MSR, ignore it's use and run
+with shared memory instead.
+
 User Space Interface in ``sysfs`` - General
 ===========================================
 

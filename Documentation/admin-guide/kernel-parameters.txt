@@ -383,6 +383,11 @@
 			disable
 			  Disable amd-pstate preferred core.
 
+	amd_pstate_msr=
+			[X86]
+			disable
+			  Disable amd-pstate CPPC MSR (force shared memory).
+
 	amijoy.map=	[HW,JOY] Amiga joystick support
 			Map of devices attached to JOY0DAT and JOY1DAT
 			Format: <a>,<b>
