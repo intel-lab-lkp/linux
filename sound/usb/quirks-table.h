@@ -4566,6 +4566,10 @@ YAMAHA_DEVICE(0x7010, "UB99"),
 			 */
 			{
 				.ifnum = 0,
+				.type = QUIRK_AUDIO_STANDARD_MIXER,
+			},
+			{
+				.ifnum = 0,
 				.type = QUIRK_AUDIO_FIXED_ENDPOINT,
 				.data = &(const struct audioformat) {
 					.formats = SNDRV_PCM_FMTBIT_S32_LE,
