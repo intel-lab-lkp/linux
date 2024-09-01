@@ -1032,13 +1032,15 @@ int xhci_resume(struct xhci_hcd *xhci, pm_message_t msg)
 	if (hibernated || xhci->quirks & XHCI_RESET_ON_RESUME || xhci->broken_suspend)
 		reinit_xhc = true;
 
+	/*
+	 * Some controllers might lose power during suspend, so wait
+	 * for controller not ready bit to clear, just as in xHC init.
+	 * Ignore retval if reinit_xhc is true, since the device would
+	 * be reinited.
+	 */
+	retval = xhci_handshake(&xhci->op_regs->status,
+				STS_CNR, 0, 10 * 1000 * 1000);
 	if (!reinit_xhc) {
-		/*
-		 * Some controllers might lose power during suspend, so wait
-		 * for controller not ready bit to clear, just as in xHC init.
-		 */
-		retval = xhci_handshake(&xhci->op_regs->status,
-					STS_CNR, 0, 10 * 1000 * 1000);
 		if (retval) {
 			xhci_warn(xhci, "Controller not ready at resume %d\n",
 				  retval);
