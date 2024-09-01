@@ -1138,7 +1138,7 @@ static int cpc_write(int cpu, struct cpc_register_resource *reg_res, u64 val)
 		default:
 			spin_unlock(&cpc_desc->rmw_lock);
 			return -EFAULT;
-		};
+		}
 		val = MASK_VAL_WRITE(reg, prev_val, val);
 		val |= prev_val;
 	}
