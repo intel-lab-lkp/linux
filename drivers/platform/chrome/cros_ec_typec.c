@@ -9,12 +9,15 @@
 #include <linux/acpi.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/of_graph.h>
 #include <linux/platform_data/cros_ec_commands.h>
 #include <linux/platform_data/cros_usbpd_notify.h>
 #include <linux/platform_device.h>
 #include <linux/usb/pd_vdo.h>
 #include <linux/usb/typec_dp.h>
 #include <linux/usb/typec_tbt.h>
+
+#include <drm/bridge/aux-bridge.h>
 
 #include "cros_ec_typec.h"
 #include "cros_typec_vdm.h"
@@ -334,6 +337,9 @@ static int cros_typec_init_ports(struct cros_typec_data *typec)
 	u32 port_num = 0;
 
 	nports = device_get_child_node_count(dev);
+	/* Don't count any 'ports' child node */
+	if (of_graph_is_present(dev->of_node))
+		nports--;
 	if (nports == 0) {
 		dev_err(dev, "No port entries found.\n");
 		return -ENODEV;
@@ -347,6 +353,10 @@ static int cros_typec_init_ports(struct cros_typec_data *typec)
 	/* DT uses "reg" to specify port number. */
 	port_prop = dev->of_node ? "reg" : "port-number";
 	device_for_each_child_node(dev, fwnode) {
+		/* An OF graph isn't a connector */
+		if (fwnode_name_eq(fwnode, "ports"))
+			continue;
+
 		if (fwnode_property_read_u32(fwnode, port_prop, &port_num)) {
 			ret = -EINVAL;
 			dev_err(dev, "No port-number for port, aborting.\n");
@@ -411,6 +421,23 @@ static int cros_typec_init_ports(struct cros_typec_data *typec)
 unregister_ports:
 	cros_unregister_ports(typec);
 	return ret;
+}
+
+static int cros_typec_init_dp_bridge(struct cros_typec_data *typec)
+{
+	struct device *dev = typec->dev;
+	struct drm_dp_typec_bridge_dev *dp_dev;
+
+	/* Not capable of DP altmode switching. Ignore. */
+	if (!fwnode_property_read_bool(dev_fwnode(dev), "mode-switch"))
+		return 0;
+
+	dp_dev = devm_drm_dp_typec_bridge_alloc(dev, dev->of_node);
+	if (IS_ERR(dp_dev))
+		return PTR_ERR(dp_dev);
+	typec->dp_bridge = dp_dev;
+
+	return devm_drm_dp_typec_bridge_add(dev, dp_dev);
 }
 
 static int cros_typec_usb_safe_state(struct cros_typec_port *port)
@@ -1256,6 +1283,10 @@ static int cros_typec_probe(struct platform_device *pdev)
 			 typec->num_ports, EC_USB_PD_MAX_PORTS);
 		typec->num_ports = EC_USB_PD_MAX_PORTS;
 	}
+
+	ret = cros_typec_init_dp_bridge(typec);
+	if (ret < 0)
+		return ret;
 
 	ret = cros_typec_init_ports(typec);
 	if (ret < 0)
