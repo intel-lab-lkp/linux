@@ -36,6 +36,7 @@ struct cros_typec_data {
 	/* Array of ports, indexed by port number. */
 	struct cros_typec_port *ports[EC_USB_PD_MAX_PORTS];
 	struct drm_dp_typec_bridge_dev *dp_bridge;
+	struct cros_typec_port *active_dp_port;
 	struct notifier_block nb;
 	struct work_struct port_work;
 	bool typec_cmd_supported;
