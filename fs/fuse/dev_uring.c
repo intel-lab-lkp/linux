@@ -42,6 +42,8 @@ static void fuse_uring_queue_cfg(struct fuse_ring_queue *queue, int qid,
 
 		ent->queue = queue;
 		ent->tag = tag;
+
+		ent->state = FRRS_INIT;
 	}
 }
 

@@ -2379,6 +2379,33 @@ static long fuse_dev_ioctl_backing_close(struct file *file, __u32 __user *argp)
 	return fuse_backing_close(fud->fc, backing_id);
 }
 
+#ifdef CONFIG_FUSE_IO_URING
+static long fuse_uring_queue_ioc(struct file *file, __u32 __user *argp)
+{
+	int res = 0;
+	struct fuse_dev *fud;
+	struct fuse_conn *fc;
+	struct fuse_ring_queue_config qcfg;
+
+	res = copy_from_user(&qcfg, (void *)argp, sizeof(qcfg));
+	if (res != 0)
+		return -EFAULT;
+
+	res = _fuse_dev_ioctl_clone(file, qcfg.control_fd);
+	if (res != 0)
+		return res;
+
+	fud = fuse_get_dev(file);
+	if (fud == NULL)
+		return -ENODEV;
+	fc = fud->fc;
+
+	fud->ring_q = fuse_uring_get_queue(fc->ring, qcfg.qid);
+
+	return 0;
+}
+#endif
+
 static long
 fuse_dev_ioctl(struct file *file, unsigned int cmd,
 	       unsigned long arg)
@@ -2398,6 +2425,9 @@ fuse_dev_ioctl(struct file *file, unsigned int cmd,
 #ifdef CONFIG_FUSE_IO_URING
 	case FUSE_DEV_IOC_URING_CFG:
 		return fuse_uring_conn_cfg(file, argp);
+
+	case FUSE_DEV_IOC_URING_QUEUE_CFG:
+		return fuse_uring_queue_ioc(file, argp);
 #endif
 	default:
 		return -ENOTTY;

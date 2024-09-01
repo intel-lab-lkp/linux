@@ -540,6 +540,10 @@ struct fuse_dev {
 
 	/** list entry on fc->devices */
 	struct list_head entry;
+
+#ifdef CONFIG_FUSE_IO_URING
+	struct fuse_ring_queue *ring_q;
+#endif
 };
 
 enum fuse_dax_mode {

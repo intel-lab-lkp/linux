@@ -1118,6 +1118,18 @@ struct fuse_ring_config {
 	uint8_t padding[64];
 };
 
+struct fuse_ring_queue_config {
+	/* qid the command is for */
+	uint32_t qid;
+
+	/* /dev/fuse fd that initiated the mount. */
+	uint32_t control_fd;
+
+	/* for future extensions */
+	uint8_t padding[64];
+};
+
+
 /* Device ioctls: */
 #define FUSE_DEV_IOC_MAGIC		229
 #define FUSE_DEV_IOC_CLONE		_IOR(FUSE_DEV_IOC_MAGIC, 0, uint32_t)
@@ -1126,6 +1138,8 @@ struct fuse_ring_config {
 #define FUSE_DEV_IOC_BACKING_CLOSE	_IOW(FUSE_DEV_IOC_MAGIC, 2, uint32_t)
 #define FUSE_DEV_IOC_URING_CFG		_IOR(FUSE_DEV_IOC_MAGIC, 3, \
 					     struct fuse_ring_config)
+#define FUSE_DEV_IOC_URING_QUEUE_CFG	_IOR(FUSE_DEV_IOC_MAGIC, 3, \
+					     struct fuse_ring_queue_config)
 
 struct fuse_lseek_in {
 	uint64_t	fh;
@@ -1232,5 +1246,30 @@ struct fuse_supp_groups {
  */
 #define FUSE_RING_HEADER_BUF_SIZE 4096
 #define FUSE_RING_MIN_IN_OUT_ARG_SIZE 4096
+
+/**
+ * This structure mapped onto the
+ */
+struct fuse_ring_req {
+	union {
+		/* The first 4K are command data */
+		char ring_header[FUSE_RING_HEADER_BUF_SIZE];
+
+		struct {
+			uint64_t flags;
+
+			uint32_t in_out_arg_len;
+			uint32_t padding;
+
+			/* kernel fills in, reads out */
+			union {
+				struct fuse_in_header in;
+				struct fuse_out_header out;
+			};
+		};
+	};
+
+	char in_out_arg[];
+};
 
 #endif /* _LINUX_FUSE_H */

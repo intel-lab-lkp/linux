@@ -14,6 +14,13 @@
 /* IORING_MAX_ENTRIES */
 #define FUSE_URING_MAX_QUEUE_DEPTH 32768
 
+enum fuse_ring_req_state {
+
+	/* request is basially initialized */
+	FRRS_INIT = 1,
+
+};
+
 /* A fuse ring entry, part of the ring queue */
 struct fuse_ring_ent {
 	/* back pointer */
@@ -21,6 +28,12 @@ struct fuse_ring_ent {
 
 	/* array index in the ring-queue */
 	unsigned int tag;
+
+	/*
+	 * state the request is currently in
+	 * (enum fuse_ring_req_state)
+	 */
+	unsigned long state;
 };
 
 struct fuse_ring_queue {
