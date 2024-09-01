@@ -19,6 +19,15 @@ enum fuse_ring_req_state {
 
 	/* request is basially initialized */
 	FRRS_INIT,
+
+	/* ring entry received from userspace and it being processed */
+	FRRS_COMMIT,
+
+	/* The ring request waits for a new fuse request */
+	FRRS_WAIT,
+
+	/* request is in or on the way to user space */
+	FRRS_USERSPACE,
 };
 
 /* A fuse ring entry, part of the ring queue */
@@ -31,6 +40,13 @@ struct fuse_ring_ent {
 
 	/* state the request is currently in */
 	enum fuse_ring_req_state state;
+
+	/* is this an async or sync entry */
+	unsigned int async : 1;
+
+	struct list_head list;
+
+	struct io_uring_cmd *cmd;
 };
 
 struct fuse_ring_queue {
@@ -42,6 +58,30 @@ struct fuse_ring_queue {
 
 	/* queue id, typically also corresponds to the cpu core */
 	unsigned int qid;
+
+	/*
+	 * queue lock, taken when any value in the queue changes _and_ also
+	 * a ring entry state changes.
+	 */
+	spinlock_t lock;
+
+	/* available ring entries (struct fuse_ring_ent) */
+	struct list_head async_ent_avail_queue;
+	struct list_head sync_ent_avail_queue;
+
+	/*
+	 * available number of sync requests,
+	 * loosely bound to fuse foreground requests
+	 */
+	int nr_req_sync;
+
+	/*
+	 * available number of async requests
+	 * loosely bound to fuse background requests
+	 */
+	int nr_req_async;
+
+	unsigned int stopped : 1;
 
 	/* size depends on queue depth */
 	struct fuse_ring_ent ring_ent[] ____cacheline_aligned_in_smp;
@@ -79,11 +119,21 @@ struct fuse_ring {
 	/* numa aware memory allocation */
 	unsigned int numa_aware : 1;
 
+	/* Is the ring read to take requests */
+	unsigned int ready : 1;
+
+	/* number of SQEs initialized */
+	atomic_t nr_sqe_init;
+
+	/* Used to release the ring on stop */
+	atomic_t queue_refs;
+
 	struct fuse_ring_queue queues[] ____cacheline_aligned_in_smp;
 };
 
 void fuse_uring_abort_end_requests(struct fuse_ring *ring);
 int fuse_uring_conn_cfg(struct file *file, void __user *argp);
+int fuse_uring_cmd(struct io_uring_cmd *cmd, unsigned int issue_flags);
 
 static inline void fuse_uring_conn_destruct(struct fuse_conn *fc)
 {
@@ -113,6 +163,11 @@ static inline bool fuse_uring_configured(struct fuse_conn *fc)
 	return false;
 }
 
+static inline bool fuse_per_core_queue(struct fuse_conn *fc)
+{
+	return fc->ring && fc->ring->per_core_queue;
+}
+
 #else /* CONFIG_FUSE_IO_URING */
 
 struct fuse_ring;
@@ -127,6 +182,11 @@ static inline void fuse_uring_conn_destruct(struct fuse_conn *fc)
 }
 
 static inline bool fuse_uring_configured(struct fuse_conn *fc)
+{
+	return false;
+}
+
+static inline bool fuse_per_core_queue(struct fuse_conn *fc)
 {
 	return false;
 }
