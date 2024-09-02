@@ -979,7 +979,7 @@ config MEM_ALLOC_PROFILING
 	depends on PROC_FS
 	depends on !DEBUG_FORCE_WEAK_PER_CPU
 	select CODE_TAGGING
-	select PAGE_EXTENSION
+	select PAGE_EXTENSION if !PGALLOC_TAG_USE_PAGEFLAGS
 	select SLAB_OBJ_EXT
 	help
 	  Track allocation source code and record total allocation size
@@ -1000,16 +1000,39 @@ config MEM_ALLOC_PROFILING_DEBUG
 	  Adds warnings with helpful error messages for memory allocation
 	  profiling.
 
+config PGALLOC_TAG_USE_PAGEFLAGS
+	bool "Use pageflags to encode page allocation tag reference"
+	default n
+	depends on MEM_ALLOC_PROFILING
+	help
+	  When set, page allocation tag references are encoded inside page
+	  flags, otherwise they are encoded in page extensions.
+
+	  Setting this flag reduces memory and performance overhead of memory
+	  allocation profiling but also limits how many allocations can be
+	  tagged. The number of bits is set by PGALLOC_TAG_USE_PAGEFLAGS and
+	  they must fit in the page flags field.
+
+	  Say N if unsure.
+
 config PGALLOC_TAG_REF_BITS
 	int "Number of bits for page allocation tag reference (10-64)"
 	range 10 64
-	default "64"
+	default "16" if PGALLOC_TAG_USE_PAGEFLAGS
+	default "64" if !PGALLOC_TAG_USE_PAGEFLAGS
 	depends on MEM_ALLOC_PROFILING
 	help
 	  Number of bits used to encode a page allocation tag reference.
 
 	  Smaller number results in less memory overhead but limits the number of
 	  allocations which can be tagged (including allocations from modules).
+
+	  If PGALLOC_TAG_USE_PAGEFLAGS is set, the number of requested bits should
+	  fit inside the page flags.
+
+	  If PGALLOC_TAG_USE_PAGEFLAGS is not set, the number of bits used to store
+	  a reference is rounded up to the closest basic type. If set higher than 32,
+	  a direct pointer to the allocation tag is stored for performance reasons.
 
 source "lib/Kconfig.kasan"
 source "lib/Kconfig.kfence"
