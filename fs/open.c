@@ -1458,6 +1458,21 @@ SYSCALL_DEFINE4(openat2, int, dfd, const char __user *, filename,
 
 	if (unlikely(usize < OPEN_HOW_SIZE_VER0))
 		return -EINVAL;
+
+	if (unlikely(usize & CHECK_FIELDS)) {
+		usize &= ~CHECK_FIELDS;
+
+		memset(&tmp, 0, sizeof(tmp));
+		tmp = (struct open_how) {
+			.flags = VALID_OPEN_FLAGS,
+			.mode = S_IALLUGO,
+			.resolve = VALID_RESOLVE_FLAGS,
+		};
+
+		err = copy_struct_to_user(how, usize, &tmp, sizeof(tmp), NULL);
+		return err ?: -EEXTSYS_NOOP;
+	}
+
 	if (unlikely(usize > PAGE_SIZE))
 		return -E2BIG;
 
