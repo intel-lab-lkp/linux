@@ -3,6 +3,7 @@
 #include <linux/execmem.h>
 #include <linux/fs.h>
 #include <linux/gfp.h>
+#include <linux/kallsyms.h>
 #include <linux/module.h>
 #include <linux/page_ext.h>
 #include <linux/pgalloc_tag.h>
@@ -151,6 +152,26 @@ static void __init procfs_init(void)
 	proc_create_seq("allocinfo", 0400, NULL, &allocinfo_seq_op);
 }
 
+#ifndef PGALLOC_TAG_DIRECT_REF
+
+#define SECTION_START(NAME)	(CODETAG_SECTION_START_PREFIX NAME)
+#define SECTION_STOP(NAME)	(CODETAG_SECTION_STOP_PREFIX NAME)
+
+struct alloc_tag_kernel_section kernel_tags = { NULL, 0 };
+
+void __init alloc_tag_sec_init(void)
+{
+	struct alloc_tag *last_codetag;
+
+	kernel_tags.first_tag = (struct alloc_tag *)kallsyms_lookup_name(
+					SECTION_START(ALLOC_TAG_SECTION_NAME));
+	last_codetag = (struct alloc_tag *)kallsyms_lookup_name(
+					SECTION_STOP(ALLOC_TAG_SECTION_NAME));
+	kernel_tags.count = last_codetag - kernel_tags.first_tag;
+}
+
+#endif /* PGALLOC_TAG_DIRECT_REF */
+
 #ifdef CONFIG_MODULES
 
 static struct maple_tree mod_area_mt = MTREE_INIT(mod_area_mt, MT_FLAGS_ALLOC_RANGE);
@@ -159,7 +180,16 @@ static struct module unloaded_mod;
 /* A dummy object used to indicate a module prepended area */
 static struct module prepend_mod;
 
-static struct alloc_tag_module_section module_tags;
+struct alloc_tag_module_section module_tags;
+
+#ifndef PGALLOC_TAG_DIRECT_REF
+static inline unsigned long alloc_tag_align(unsigned long val)
+{
+	if (val % sizeof(struct alloc_tag) == 0)
+		return val;
+	return ((val / sizeof(struct alloc_tag)) + 1) * sizeof(struct alloc_tag);
+}
+#endif /* PGALLOC_TAG_DIRECT_REF */
 
 static bool needs_section_mem(struct module *mod, unsigned long size)
 {
@@ -216,6 +246,21 @@ static void *reserve_module_tags(struct module *mod, unsigned long size,
 	if (!align)
 		align = 1;
 
+#ifndef PGALLOC_TAG_DIRECT_REF
+	/*
+	 * If alloc_tag size is not a multiple of required alignment tag
+	 * indexing does not work.
+	 */
+	if (!IS_ALIGNED(sizeof(struct alloc_tag), align)) {
+		pr_err("%s: alignment %lu is incompatible with allocation tag indexing (CONFIG_PGALLOC_TAG_REF_BITS)",
+			mod->name, align);
+		return ERR_PTR(-EINVAL);
+	}
+
+	/* Ensure prepend consumes multiple of alloc_tag-sized blocks */
+	if (prepend)
+		prepend = alloc_tag_align(prepend);
+#endif /* PGALLOC_TAG_DIRECT_REF */
 	mas_lock(&mas);
 repeat:
 	/* Try finding exact size and hope the start is aligned */
@@ -373,6 +418,10 @@ static int __init alloc_mod_tags_mem(void)
 		return -ENOMEM;
 
 	module_tags.end_addr = module_tags.start_addr + module_tags_mem_sz;
+#ifndef PGALLOC_TAG_DIRECT_REF
+	/* Ensure the base is alloc_tag aligned */
+	module_tags.start_addr = alloc_tag_align(module_tags.start_addr);
+#endif
 
 	return 0;
 }

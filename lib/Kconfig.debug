@@ -1000,6 +1000,17 @@ config MEM_ALLOC_PROFILING_DEBUG
 	  Adds warnings with helpful error messages for memory allocation
 	  profiling.
 
+config PGALLOC_TAG_REF_BITS
+	int "Number of bits for page allocation tag reference (10-64)"
+	range 10 64
+	default "64"
+	depends on MEM_ALLOC_PROFILING
+	help
+	  Number of bits used to encode a page allocation tag reference.
+
+	  Smaller number results in less memory overhead but limits the number of
+	  allocations which can be tagged (including allocations from modules).
+
 source "lib/Kconfig.kasan"
 source "lib/Kconfig.kfence"
 source "lib/Kconfig.kmsan"

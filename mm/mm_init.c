@@ -2650,6 +2650,7 @@ void __init mm_core_init(void)
 	report_meminit();
 	kmsan_init_shadow();
 	stack_depot_early_init();
+	alloc_tag_sec_init();
 	mem_init();
 	kmem_cache_init();
 	/*
