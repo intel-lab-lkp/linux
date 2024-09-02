@@ -4582,6 +4582,10 @@ int nf_msecs_to_jiffies64(const struct nlattr *nla, u64 *result)
 	u64 ms = be64_to_cpu(nla_get_be64(nla));
 	u64 max = (u64)(~((u64)0));
 
+	/* Zero timeout no allowed here. */
+	if (ms == 0)
+		return -ERANGE;
+
 	max = div_u64(max, NSEC_PER_MSEC);
 	if (ms >= max)
 		return -ERANGE;
@@ -5809,24 +5813,33 @@ static int nf_tables_fill_setelem(struct sk_buff *skb,
 		goto nla_put_failure;
 
 	if (nft_set_ext_exists(ext, NFT_SET_EXT_TIMEOUT)) {
-		u64 expires, now = get_jiffies_64();
+		u64 timeout = nft_set_ext_timeout(ext)->timeout;
+		u64 set_timeout = READ_ONCE(set->timeout);
+		__be64 msecs = 0;
 
-		if (nft_set_ext_timeout(ext)->timeout != READ_ONCE(set->timeout) &&
-		    nla_put_be64(skb, NFTA_SET_ELEM_TIMEOUT,
-				 nf_jiffies64_to_msecs(nft_set_ext_timeout(ext)->timeout),
-				 NFTA_SET_ELEM_PAD))
-			goto nla_put_failure;
+		if (set_timeout != timeout) {
+			if (timeout)
+				msecs = nf_jiffies64_to_msecs(timeout);
 
-		expires = READ_ONCE(nft_set_ext_timeout(ext)->expiration);
-		if (time_before64(now, expires))
-			expires -= now;
-		else
-			expires = 0;
+			if (nla_put_be64(skb, NFTA_SET_ELEM_TIMEOUT, msecs,
+					 NFTA_SET_ELEM_PAD))
+				goto nla_put_failure;
+		}
 
-		if (nla_put_be64(skb, NFTA_SET_ELEM_EXPIRATION,
-				 nf_jiffies64_to_msecs(expires),
-				 NFTA_SET_ELEM_PAD))
-			goto nla_put_failure;
+		if (timeout > 0) {
+			u64 expires, now = get_jiffies_64();
+
+			expires = READ_ONCE(nft_set_ext_timeout(ext)->expiration);
+			if (time_before64(now, expires))
+				expires -= now;
+			else
+				expires = 0;
+
+			if (nla_put_be64(skb, NFTA_SET_ELEM_EXPIRATION,
+					 nf_jiffies64_to_msecs(expires),
+					 NFTA_SET_ELEM_PAD))
+				goto nla_put_failure;
+		}
 	}
 
 	if (nft_set_ext_exists(ext, NFT_SET_EXT_USERDATA)) {
@@ -6901,10 +6914,14 @@ static int nft_add_set_elem(struct nft_ctx *ctx, struct nft_set *set,
 	if (nla[NFTA_SET_ELEM_TIMEOUT] != NULL) {
 		if (!(set->flags & NFT_SET_TIMEOUT))
 			return -EINVAL;
-		err = nf_msecs_to_jiffies64(nla[NFTA_SET_ELEM_TIMEOUT],
-					    &timeout);
-		if (err)
-			return err;
+
+		timeout = be64_to_cpu(nla_get_be64(nla[NFTA_SET_ELEM_TIMEOUT]));
+		if (timeout != 0) {
+			err = nf_msecs_to_jiffies64(nla[NFTA_SET_ELEM_TIMEOUT],
+						    &timeout);
+			if (err)
+				return err;
+		}
 	} else if (set->flags & NFT_SET_TIMEOUT &&
 		   !(flags & NFT_SET_ELEM_INTERVAL_END)) {
 		timeout = set->timeout;
@@ -7009,7 +7026,7 @@ static int nft_add_set_elem(struct nft_ctx *ctx, struct nft_set *set,
 			goto err_parse_key_end;
 	}
 
-	if (timeout > 0) {
+	if (set->flags & NFT_SET_TIMEOUT) {
 		err = nft_set_ext_add(&tmpl, NFT_SET_EXT_TIMEOUT);
 		if (err < 0)
 			goto err_parse_key_end;
