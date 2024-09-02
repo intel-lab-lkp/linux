@@ -718,8 +718,14 @@ void intel_dp_link_training_set_mode(struct intel_dp *intel_dp, int link_rate, b
 static void intel_dp_update_downspread_ctrl(struct intel_dp *intel_dp,
 					    const struct intel_crtc_state *crtc_state)
 {
+	bool enable_msa_timing_par_ignore;
+
+	/* Enable MSA TIMING PAR IGNORE only in non fixed_rr mode */
+	if (crtc_state->vrr.enable && !crtc_state->vrr.fixed_rr)
+		enable_msa_timing_par_ignore = true;
+
 	intel_dp_link_training_set_mode(intel_dp,
-					crtc_state->port_clock, crtc_state->vrr.flipline);
+					crtc_state->port_clock, enable_msa_timing_par_ignore);
 }
 
 void intel_dp_link_training_set_bw(struct intel_dp *intel_dp,
