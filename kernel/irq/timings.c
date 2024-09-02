@@ -383,7 +383,7 @@ static u64 __irq_timings_next_event(struct irqt_stat *irqs, int irq, u64 now)
 {
 	int index, i, period_max, count, start, min = INT_MAX;
 
-	if ((now - irqs->last_ts) >= NSEC_PER_SEC) {
+	if (time_after_eq(now, irqs->last_ts + NSEC_PER_SEC)) {
 		irqs->count = irqs->last_ts = 0;
 		return U64_MAX;
 	}
