@@ -768,6 +768,13 @@ void __meminit reserve_bootmem_region(phys_addr_t start,
 			__SetPageReserved(page);
 		}
 	}
+
+	/*
+	 * Set PB_migrate_skip for reserved region. for cma memory
+	 * and the memory released by free_reserved_area(), we will
+	 * clear PB_migrate_skip when they are initialized.
+	 */
+	set_pageblock_skip_range(start_pfn, end_pfn);
 }
 
 /* If zone is ZONE_MOVABLE but memory is mirrored, it is an overlapped init */
@@ -2235,6 +2242,13 @@ void __init init_cma_reserved_pageblock(struct page *page)
 		__ClearPageReserved(p);
 		set_page_count(p, 0);
 	} while (++p, --i);
+
+	/*
+	 * We set the PB_migrate_skip in
+	 * reserve_bootmem_region() for cma
+	 * memory, clear it now.
+	 */
+	clear_pageblock_skip(page);
 
 	set_pageblock_migratetype(page, MIGRATE_CMA);
 	set_page_refcounted(page);

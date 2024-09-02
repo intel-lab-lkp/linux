@@ -287,6 +287,46 @@ static unsigned long skip_offline_sections_reverse(unsigned long start_pfn)
 #endif
 
 /*
+ * This function is currently used to set PB_migrate_skip for the reserved
+ * bootmem which can't be used as migration sources and targets(except CMA).
+ */
+void set_pageblock_skip_range(unsigned long start_pfn,
+			      unsigned long end_pfn)
+{
+	unsigned long pfn;
+
+	start_pfn = ALIGN(start_pfn, pageblock_nr_pages);
+	end_pfn = ALIGN_DOWN(end_pfn, pageblock_nr_pages);
+
+	for (pfn = start_pfn; pfn < end_pfn;
+				pfn += pageblock_nr_pages) {
+		if (pfn_valid(pfn)) {
+			struct page *page = pfn_to_page(pfn);
+
+			set_pageblock_skip(page);
+		}
+	}
+}
+
+void clear_pageblock_skip_range(unsigned long start_pfn,
+				unsigned long end_pfn)
+{
+	unsigned long pfn;
+
+	start_pfn = ALIGN_DOWN(start_pfn, pageblock_nr_pages);
+	end_pfn = ALIGN(end_pfn, pageblock_nr_pages);
+
+	for (pfn = start_pfn; pfn < end_pfn;
+				pfn += pageblock_nr_pages) {
+		if (pfn_valid(pfn)) {
+			struct page *page = pfn_to_page(pfn);
+
+			clear_pageblock_skip(page);
+		}
+	}
+}
+
+/*
  * Compound pages of >= pageblock_order should consistently be skipped until
  * released. It is always pointless to compact pages of such order (if they are
  * migratable), and the pageblocks they occupy cannot contain any free pages.

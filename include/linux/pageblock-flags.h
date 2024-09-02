@@ -86,6 +86,11 @@ void set_pfnblock_flags_mask(struct page *page,
 	set_pfnblock_flags_mask(page, (1 << PB_migrate_skip),	\
 			page_to_pfn(page),			\
 			(1 << PB_migrate_skip))
+
+extern void set_pageblock_skip_range(unsigned long start_pfn,
+				     unsigned long end_pfn);
+extern void clear_pageblock_skip_range(unsigned long start_pfn,
+				       unsigned long end_pfn);
 #else
 static inline bool get_pageblock_skip(struct page *page)
 {
@@ -95,6 +100,14 @@ static inline void clear_pageblock_skip(struct page *page)
 {
 }
 static inline void set_pageblock_skip(struct page *page)
+{
+}
+static inline void set_pageblock_skip_range(unsigned long start_pfn,
+					    unsigned long end_pfn)
+{
+}
+static inline void clear_pageblock_skip_range(unsigned long start_pfn,
+					      unsigned long end_pfn)
 {
 }
 #endif /* CONFIG_COMPACTION */

@@ -5887,6 +5887,13 @@ unsigned long free_reserved_area(void *start, void *end, int poison, const char 
 	if (pages && s)
 		pr_info("Freeing %s memory: %ldK\n", s, K(pages));
 
+	/*
+	 * Clear PB_migrate_skip if the memory have released
+	 * to the buddy system.
+	 */
+	clear_pageblock_skip_range(page_to_pfn(virt_to_page(start)),
+				   page_to_pfn(virt_to_page(end)));
+
 	return pages;
 }
 
