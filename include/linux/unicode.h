@@ -78,4 +78,7 @@ void utf8_unload(struct unicode_map *um);
 
 bool utf8_check_strict_name(struct inode *dir, struct qstr *d_name);
 
+int utf8_parse_version(char *version, unsigned int *maj, unsigned int *min,
+		       unsigned int *rev);
+
 #endif /* _LINUX_UNICODE_H */
