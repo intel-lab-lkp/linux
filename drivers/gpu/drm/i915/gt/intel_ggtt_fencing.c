@@ -827,10 +827,7 @@ i915_gem_object_save_bit_17_swizzle(struct drm_i915_gem_object *obj,
 	i = 0;
 
 	for_each_sgt_page(page, sgt_iter, pages) {
-		if (page_to_phys(page) & (1 << 17))
-			__set_bit(i, obj->bit_17);
-		else
-			__clear_bit(i, obj->bit_17);
+		__assign_bit(i, obj->bit_17, page_to_phys(page) & (1 << 17));
 		i++;
 	}
 }
