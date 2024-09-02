@@ -2355,6 +2355,22 @@ static struct sched_domain *build_sched_domain(struct sched_domain_topology_leve
 }
 
 /*
+ * Some topology levels (e.g. PKG in default_topology[]) have a
+ * sched_domain_mask_f implementation that reuses the same mask for
+ * several CPUs (in PKG's case, one mask * for all CPUs in the same
+ * NUMA node).
+ *
+ * For such topology levels, repeating cpumask_equal() checks is
+ * wasteful. Instead, we first check that the tl->mask(i) pointers
+ * aren't the same.
+ */
+static inline bool topology_cpumask_equal(const struct cpumask *m1,
+					  const struct cpumask *m2)
+{
+	return m1 == m2 || cpumask_equal(m1, m2);
+}
+
+/*
  * Ensure topology masks are sane, i.e. there are no conflicts (overlaps) for
  * any two given CPUs at this (non-NUMA) topology level.
  */
@@ -2377,18 +2393,7 @@ static bool topology_span_sane(struct sched_domain_topology_level *tl,
 	 */
 	for_each_cpu_from(cpu, cpu_map) {
 		mi = tl->mask(cpu);
-
-		/*
-		 * Some topology levels (e.g. PKG in default_topology[])
-		 * have a sched_domain_mask_f implementation that reuses
-		 * the same mask for several CPUs (in PKG's case, one mask
-		 * for all CPUs in the same NUMA node).
-		 *
-		 * For such topology levels, repeating cpumask_equal()
-		 * checks is wasteful. Instead, we first check that the
-		 * tl->mask(i) pointers aren't the same.
-		 */
-		if (mi == mc)
+		if (topology_cpumask_equal(mc, mi))
 			continue;
 
 		/*
@@ -2397,7 +2402,7 @@ static bool topology_span_sane(struct sched_domain_topology_level *tl,
 		 * remove CPUs, which only lessens our ability to detect
 		 * overlaps
 		 */
-		if (!cpumask_equal(mc, mi) && cpumask_intersects(mc, mi))
+		if (cpumask_intersects(mc, mi))
 			return false;
 	}
 
