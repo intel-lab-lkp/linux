@@ -12,6 +12,7 @@ enum i9xx_plane_id;
 enum pipe;
 struct drm_display_mode;
 struct drm_i915_private;
+struct drm_pending_vblank_event;
 struct intel_atomic_state;
 struct intel_crtc;
 struct intel_crtc_state;
@@ -31,6 +32,8 @@ int intel_usecs_to_scanlines(const struct drm_display_mode *adjusted_mode,
 int intel_scanlines_to_usecs(const struct drm_display_mode *adjusted_mode,
 			     int scanlines);
 void intel_crtc_arm_vblank_event(struct intel_crtc_state *crtc_state);
+void intel_crtc_prepare_vblank_event(struct intel_crtc_state *crtc_state,
+				     struct drm_pending_vblank_event **event);
 u32 intel_crtc_max_vblank_count(const struct intel_crtc_state *crtc_state);
 int intel_crtc_init(struct drm_i915_private *dev_priv, enum pipe pipe);
 struct intel_crtc_state *intel_crtc_state_alloc(struct intel_crtc *crtc);
