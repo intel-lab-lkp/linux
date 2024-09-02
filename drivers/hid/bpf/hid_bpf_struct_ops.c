@@ -46,6 +46,7 @@ static int hid_bpf_ops_check_member(const struct btf_type *t,
 	case offsetof(struct hid_bpf_ops, hid_rdesc_fixup):
 	case offsetof(struct hid_bpf_ops, hid_hw_request):
 	case offsetof(struct hid_bpf_ops, hid_hw_output_report):
+	case offsetof(struct hid_bpf_ops, hid_driver_probe):
 		break;
 	default:
 		if (prog->sleepable)
@@ -79,6 +80,8 @@ static int hid_bpf_ops_btf_struct_access(struct bpf_verifier_log *log,
 		WRITE_RANGE(hid_device, name, true),
 		WRITE_RANGE(hid_device, uniq, true),
 		WRITE_RANGE(hid_device, phys, true),
+		WRITE_RANGE(hid_bpf_driver, force_driver, false),
+		WRITE_RANGE(hid_bpf_driver, ignore_driver, false),
 	};
 #undef WRITE_RANGE
 	const struct btf_type *state = NULL;

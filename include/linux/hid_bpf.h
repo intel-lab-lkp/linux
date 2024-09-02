@@ -9,6 +9,7 @@
 #include <uapi/linux/hid.h>
 
 struct hid_device;
+struct hid_driver;
 
 /*
  * The following is the user facing HID BPF API.
@@ -79,6 +80,22 @@ struct hid_ops {
 };
 
 extern struct hid_ops *hid_ops;
+
+/**
+ * struct hid_bpf_driver - User accessible data for the ``hid_bpf_probe``
+ * struct_ops
+ *
+ * @name: the name of the driver currently being treated
+ * @force_driver: set this to ``true`` to force hid-core to use this driver,
+ *		  bypassing any further decision made by this driver
+ * @ignore_driver: set this to ``true`` to force hid-core to ignore this driver,
+ *                bypassing any further decision made by this driver
+ */
+struct hid_bpf_driver {
+	__u8 name[64];
+	bool force_driver;
+	bool ignore_driver;
+};
 
 /**
  * struct hid_bpf_ops - A BPF struct_ops of callbacks allowing to attach HID-BPF
@@ -178,6 +195,25 @@ struct hid_bpf_ops {
 	 */
 	int (*hid_hw_output_report)(struct hid_bpf_ctx *ctx, u64 source);
 
+	/**
+	 * @hid_driver_probe: called before the kernel ``.probe()`` function
+	 *
+	 * It has the following arguments:
+	 *
+	 * ``hdev``: The HID device kernel representation
+	 *
+	 * ``hdrv``: A BPF partially writeable representation of a HID driver
+	 *
+	 * ``id``: The device match structure found in the driver
+	 *
+	 * Note that the device has not been started yet, and thus kfuncs like
+	 * ``hid_hw_output_report`` will likely fail.
+	 *
+	 * This function is useful to force/ignore a given supported HID driver,
+	 * by writing ``true`` in ``hdrv->force_driver`` or ``hdrv->ignore_driver``
+	 */
+	void (*hid_driver_probe)(struct hid_device *hdev, struct hid_bpf_driver *hdrv,
+				 const struct hid_device_id *id);
 
 	/* private: do not show up in the docs */
 	struct hid_device *hdev;
@@ -213,6 +249,8 @@ void hid_bpf_disconnect_device(struct hid_device *hdev);
 void hid_bpf_destroy_device(struct hid_device *hid);
 int hid_bpf_device_init(struct hid_device *hid);
 u8 *call_hid_bpf_rdesc_fixup(struct hid_device *hdev, u8 *rdesc, unsigned int *size);
+int call_hid_bpf_driver_probe(struct hid_device *hdev, struct hid_driver *hdrv,
+			      const struct hid_device_id *id);
 #else /* CONFIG_HID_BPF */
 static inline u8 *dispatch_hid_bpf_device_event(struct hid_device *hid, enum hid_report_type type,
 						u8 *data, u32 *size, int interrupt,
@@ -228,6 +266,8 @@ static inline int hid_bpf_connect_device(struct hid_device *hdev) { return 0; }
 static inline void hid_bpf_disconnect_device(struct hid_device *hdev) {}
 static inline void hid_bpf_destroy_device(struct hid_device *hid) {}
 static inline int hid_bpf_device_init(struct hid_device *hid) { return 0; }
+static inline int call_hid_bpf_driver_probe(struct hid_device *hdev, struct hid_driver *hdrv,
+					    const struct hid_device_id *id) { return 0; }
 /*
  * This specialized allocator has to be a macro for its allocations to be
  * accounted separately (to have a separate alloc_tag). The typecast is

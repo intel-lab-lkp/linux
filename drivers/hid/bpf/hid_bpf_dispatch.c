@@ -189,6 +189,37 @@ u8 *call_hid_bpf_rdesc_fixup(struct hid_device *hdev, u8 *rdesc, unsigned int *s
 }
 EXPORT_SYMBOL_GPL(call_hid_bpf_rdesc_fixup);
 
+int call_hid_bpf_driver_probe(struct hid_device *hdev, struct hid_driver *hdrv,
+			      const struct hid_device_id *id)
+{
+	struct hid_bpf_driver drv = { 0 };
+	struct hid_bpf_ops *e;
+	int idx;
+
+	if (strscpy(drv.name, hdrv->name, sizeof(drv.name)) < 0)
+		return 0;
+
+	idx = srcu_read_lock(&hdev->bpf.srcu);
+	list_for_each_entry_srcu(e, &hdev->bpf.prog_list, list,
+				 srcu_read_lock_held(&hdev->bpf.srcu)) {
+		if (!e->hid_driver_probe)
+			continue;
+
+		e->hid_driver_probe(hdev, &drv, id);
+	}
+
+	srcu_read_unlock(&hdev->bpf.srcu, idx);
+
+	if (drv.force_driver)
+		return 1;
+
+	if (drv.ignore_driver)
+		return -1;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(call_hid_bpf_driver_probe);
+
 static int device_match_id(struct device *dev, const void *id)
 {
 	struct hid_device *hdev = to_hid_device(dev);

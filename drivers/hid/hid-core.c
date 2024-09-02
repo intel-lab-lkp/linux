@@ -2639,9 +2639,15 @@ static bool hid_check_device_match(struct hid_device *hdev,
 				   struct hid_driver *hdrv,
 				   const struct hid_device_id **id)
 {
+	int ret;
+
 	*id = hid_match_device(hdev, hdrv);
 	if (!*id)
 		return false;
+
+	ret = call_hid_bpf_driver_probe(hdev, hdrv, *id);
+	if (ret)
+		return ret > 0;
 
 	if (hdrv->match)
 		return hdrv->match(hdev, hid_ignore_special_drivers);

@@ -190,7 +190,7 @@ User API data structures available in programs:
 -----------------------------------------------
 
 .. kernel-doc:: include/linux/hid_bpf.h
-   :identifiers: hid_bpf_ctx
+   :identifiers: hid_bpf_ctx hid_bpf_driver
 
 Available API that can be used in all HID-BPF struct_ops programs:
 ------------------------------------------------------------------
