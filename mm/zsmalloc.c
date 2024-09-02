@@ -253,6 +253,11 @@ static inline void zpdesc_set_first(struct zpdesc *zpdesc)
 	SetPagePrivate(zpdesc_page(zpdesc));
 }
 
+static inline void zpdesc_clear_first(struct zpdesc *zpdesc)
+{
+	ClearPagePrivate(zpdesc_page(zpdesc));
+}
+
 static inline void zpdesc_inc_zone_page_state(struct zpdesc *zpdesc)
 {
 	inc_zone_page_state(zpdesc_page(zpdesc), NR_ZSPAGES);
@@ -832,10 +837,8 @@ static inline bool obj_allocated(struct zpdesc *zpdesc, void *obj,
 
 static void reset_zpdesc(struct zpdesc *zpdesc)
 {
-	struct page *page = zpdesc_page(zpdesc);
-
 	__zpdesc_clear_movable(zpdesc);
-	ClearPagePrivate(page);
+	zpdesc_clear_first(zpdesc);
 	zpdesc->zspage = NULL;
 	zpdesc->next = NULL;
 	__zpdesc_clear_zsmalloc(zpdesc);
