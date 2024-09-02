@@ -1396,6 +1396,7 @@ static const struct of_device_id host1x_drm_subdevs[] = {
 	{ .compatible = "nvidia,tegra234-nvdec", },
 	{ /* sentinel */ }
 };
+MODULE_DEVICE_TABLE(of, host1x_drm_subdevs);
 
 static struct host1x_driver host1x_drm_driver = {
 	.driver = {
