@@ -382,6 +382,13 @@ color the metric's computed value.
 Don't print output, warnings or messages. This is useful with perf stat
 record below to only write data to the perf.data file.
 
+--exclude-guest::
+Don't count event in the guest mode.  It was the old behavior but the
+default is changed to count guest events also.  Use this option if you
+want the old behavior (host only).  Note that this option needs to be
+before other events in case you added -e/--event option in the command
+line.
+
 STAT RECORD
 -----------
 Stores stat data into perf data file.

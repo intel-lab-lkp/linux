@@ -2492,6 +2492,8 @@ int cmd_stat(int argc, const char **argv)
 		OPT_BOOLEAN_FLAG(0, "all-user", &stat_config.all_user,
 				"Configure all used events to run in user space.",
 				PARSE_OPT_EXCLUSIVE),
+		OPT_BOOLEAN(0, "exclude-guest", &exclude_HG_default,
+			"Don't count events in the guest mode"),
 		OPT_BOOLEAN(0, "percore-show-thread", &stat_config.percore_show_thread,
 			"Use with 'percore' event qualifier to show the event "
 			"counts of one hardware thread by sum up total hardware "
