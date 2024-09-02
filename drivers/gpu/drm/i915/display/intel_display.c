@@ -1577,8 +1577,8 @@ static void ilk_crtc_enable(struct intel_atomic_state *state,
 	 * clocks enabled
 	 */
 	intel_color_load_luts(new_crtc_state);
-	intel_color_commit_noarm(new_crtc_state);
-	intel_color_commit_arm(new_crtc_state);
+	intel_color_commit_noarm(NULL, new_crtc_state);
+	intel_color_commit_arm(NULL, new_crtc_state);
 	/* update DSPCNTR to configure gamma for pipe bottom color */
 	intel_disable_primary_plane(new_crtc_state);
 
@@ -1743,8 +1743,8 @@ static void hsw_crtc_enable(struct intel_atomic_state *state,
 		 * clocks enabled
 		 */
 		intel_color_load_luts(pipe_crtc_state);
-		intel_color_commit_noarm(pipe_crtc_state);
-		intel_color_commit_arm(pipe_crtc_state);
+		intel_color_commit_noarm(NULL, pipe_crtc_state);
+		intel_color_commit_arm(NULL, pipe_crtc_state);
 		/* update DSPCNTR to configure gamma/csc for pipe bottom color */
 		if (DISPLAY_VER(dev_priv) < 9)
 			intel_disable_primary_plane(pipe_crtc_state);
@@ -2149,8 +2149,8 @@ static void valleyview_crtc_enable(struct intel_atomic_state *state,
 	i9xx_pfit_enable(new_crtc_state);
 
 	intel_color_load_luts(new_crtc_state);
-	intel_color_commit_noarm(new_crtc_state);
-	intel_color_commit_arm(new_crtc_state);
+	intel_color_commit_noarm(NULL, new_crtc_state);
+	intel_color_commit_arm(NULL, new_crtc_state);
 	/* update DSPCNTR to configure gamma for pipe bottom color */
 	intel_disable_primary_plane(new_crtc_state);
 
@@ -2189,8 +2189,8 @@ static void i9xx_crtc_enable(struct intel_atomic_state *state,
 	i9xx_pfit_enable(new_crtc_state);
 
 	intel_color_load_luts(new_crtc_state);
-	intel_color_commit_noarm(new_crtc_state);
-	intel_color_commit_arm(new_crtc_state);
+	intel_color_commit_noarm(NULL, new_crtc_state);
+	intel_color_commit_arm(NULL, new_crtc_state);
 	/* update DSPCNTR to configure gamma for pipe bottom color */
 	intel_disable_primary_plane(new_crtc_state);
 
@@ -6823,7 +6823,7 @@ static void commit_pipe_pre_planes(struct intel_atomic_state *state,
 	 */
 	if (!modeset) {
 		if (intel_crtc_needs_color_update(new_crtc_state))
-			intel_color_commit_arm(new_crtc_state);
+			intel_color_commit_arm(NULL, new_crtc_state);
 
 		if (DISPLAY_VER(dev_priv) >= 9 || IS_BROADWELL(dev_priv))
 			bdw_set_pipe_misc(NULL, new_crtc_state);
@@ -6924,7 +6924,7 @@ static void intel_pre_update_crtc(struct intel_atomic_state *state,
 
 	if (!modeset &&
 	    intel_crtc_needs_color_update(new_crtc_state))
-		intel_color_commit_noarm(new_crtc_state);
+		intel_color_commit_noarm(NULL, new_crtc_state);
 
 	intel_crtc_planes_update_noarm(NULL, state, crtc);
 }
