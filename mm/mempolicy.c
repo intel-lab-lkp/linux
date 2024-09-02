@@ -1161,7 +1161,7 @@ int do_migrate_pages(struct mm_struct *mm, const nodemask_t *from,
 			 * do_migrate_pages() tries to maintain the relative
 			 * node relationship of the pages established between
 			 * threads and memory areas.
-                         *
+			 *
 			 * However if the number of source nodes is not equal to
 			 * the number of destination nodes we can not preserve
 			 * this node relative relationship.  In that case, skip
@@ -3148,8 +3148,7 @@ void numa_default_policy(void)
 /*
  * Parse and format mempolicy from/to strings
  */
-static const char * const policy_modes[] =
-{
+static const char * const policy_modes[] = {
 	[MPOL_DEFAULT]    = "default",
 	[MPOL_PREFERRED]  = "prefer",
 	[MPOL_BIND]       = "bind",
