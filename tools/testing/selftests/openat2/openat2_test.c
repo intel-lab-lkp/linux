@@ -112,9 +112,9 @@ void test_openat2_struct(void)
 				 *
 				 * This is effectively to check that is_zeroed_user() works.
 				 */
-				copy = malloc(misalign + sizeof(how_ext));
+				copy = malloc(misalign*2 + sizeof(how_ext));
 				how_copy = copy + misalign;
-				memset(copy, 0xff, misalign);
+				memset(copy, 0xff, misalign*2 + sizeof(how_ext));
 				memcpy(how_copy, &how_ext, sizeof(how_ext));
 			}
 
