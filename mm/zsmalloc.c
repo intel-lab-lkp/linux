@@ -13,20 +13,19 @@
 
 /*
  * Following is how we use various fields and flags of underlying
- * struct page(s) to form a zspage.
+ * struct zpdesc(page) to form a zspage.
  *
- * Usage of struct page fields:
- *	page->private: points to zspage
- *	page->index: links together all component pages of a zspage
+ * Usage of struct zpdesc fields:
+ *	zpdesc->zspage: points to zspage
+ *	zpdesc->next: links together all component zpdescs of a zspage
  *		For the huge page, this is always 0, so we use this field
  *		to store handle.
- *	page->page_type: PGTY_zsmalloc, lower 24 bits locate the first object
- *		offset in a subpage of a zspage
+ *	zpdesc->first_obj_offset: PGTY_zsmalloc, lower 24 bits locate the first
+ *		object offset in a subpage of a zspage
  *
- * Usage of struct page flags:
- *	PG_private: identifies the first component page
- *	PG_owner_priv_1: identifies the huge component page
- *
+ * Usage of struct zpdesc(page) flags:
+ *	PG_private: identifies the first component zpdesc
+ *	PG_lock: lock all component zpdescs for a zspage free, serialize with
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
@@ -191,7 +190,10 @@ struct size_class {
 	 */
 	int size;
 	int objs_per_zspage;
-	/* Number of PAGE_SIZE sized pages to combine to form a 'zspage' */
+	/*
+	 * Number of PAGE_SIZE sized zpdescs/pages to combine to
+	 * form a 'zspage'
+	 */
 	int pages_per_zspage;
 
 	unsigned int index;
@@ -900,7 +902,7 @@ static void free_zspage(struct zs_pool *pool, struct size_class *class,
 
 	/*
 	 * Since zs_free couldn't be sleepable, this function cannot call
-	 * lock_page. The page locks trylock_zspage got will be released
+	 * lock_page. The zpdesc locks trylock_zspage got will be released
 	 * by __free_zspage.
 	 */
 	if (!trylock_zspage(zspage)) {
@@ -957,7 +959,7 @@ static void init_zspage(struct size_class *class, struct zspage *zspage)
 	set_freeobj(zspage, 0);
 }
 
-static void create_page_chain(struct size_class *class, struct zspage *zspage,
+static void create_zpdesc_chain(struct size_class *class, struct zspage *zspage,
 				struct zpdesc *zpdescs[])
 {
 	int i;
@@ -966,9 +968,9 @@ static void create_page_chain(struct size_class *class, struct zspage *zspage,
 	int nr_zpdescs = class->pages_per_zspage;
 
 	/*
-	 * Allocate individual pages and link them together as:
-	 * 1. all pages are linked together using zpdesc->next
-	 * 2. each sub-page point to zspage using zpdesc->zspage
+	 * Allocate individual zpdescs and link them together as:
+	 * 1. all zpdescs are linked together using zpdesc->next
+	 * 2. each sub-zpdesc point to zspage using zpdesc->zspage
 	 *
 	 * we set PG_private to identify the first zpdesc (i.e. no other zpdesc
 	 * has this flag set).
@@ -1026,7 +1028,7 @@ static struct zspage *alloc_zspage(struct zs_pool *pool,
 		zpdescs[i] = zpdesc;
 	}
 
-	create_page_chain(class, zspage, zpdescs);
+	create_zpdesc_chain(class, zspage, zpdescs);
 	init_zspage(class, zspage);
 	zspage->pool = pool;
 	zspage->class = class->index;
@@ -1353,7 +1355,7 @@ static unsigned long obj_malloc(struct zs_pool *pool,
 		/* record handle in the header of allocated chunk */
 		link->handle = handle | OBJ_ALLOCATED_TAG;
 	else
-		/* record handle to page->index */
+		/* record handle to zpdesc->handle */
 		zspage->first_zpdesc->handle = handle | OBJ_ALLOCATED_TAG;
 
 	kunmap_atomic(vaddr);
@@ -1442,7 +1444,6 @@ static void obj_free(int class_size, unsigned long obj)
 	unsigned long f_offset;
 	unsigned int f_objidx;
 	void *vaddr;
-
 
 	obj_to_location(obj, &f_zpdesc, &f_objidx);
 	f_offset = offset_in_page(class_size * f_objidx);
@@ -1686,19 +1687,19 @@ static int putback_zspage(struct size_class *class, struct zspage *zspage)
 #ifdef CONFIG_COMPACTION
 /*
  * To prevent zspage destroy during migration, zspage freeing should
- * hold locks of all pages in the zspage.
+ * hold locks of all component zpdesc in the zspage.
  */
 static void lock_zspage(struct zspage *zspage)
 {
 	struct zpdesc *curr_zpdesc, *zpdesc;
 
 	/*
-	 * Pages we haven't locked yet can be migrated off the list while we're
+	 * Zpdesc we haven't locked yet can be migrated off the list while we're
 	 * trying to lock them, so we need to be careful and only attempt to
-	 * lock each page under migrate_read_lock(). Otherwise, the page we lock
-	 * may no longer belong to the zspage. This means that we may wait for
-	 * the wrong page to unlock, so we must take a reference to the page
-	 * prior to waiting for it to unlock outside migrate_read_lock().
+	 * lock each zpdesc under migrate_read_lock(). Otherwise, the zpdesc we
+	 * lock may no longer belong to the zspage. This means that we may wait
+	 * for the wrong zpdesc to unlock, so we must take a reference to the
+	 * zpdesc prior to waiting for it to unlock outside migrate_read_lock().
 	 */
 	while (1) {
 		migrate_read_lock(zspage);
@@ -1773,7 +1774,7 @@ static void replace_sub_page(struct size_class *class, struct zspage *zspage,
 		idx++;
 	} while ((zpdesc = get_next_zpdesc(zpdesc)) != NULL);
 
-	create_page_chain(class, zspage, zpdescs);
+	create_zpdesc_chain(class, zspage, zpdescs);
 	first_obj_offset = get_first_obj_offset(oldzpdesc);
 	set_first_obj_offset(newzpdesc, first_obj_offset);
 	if (unlikely(ZsHugePage(zspage)))
@@ -1784,8 +1785,8 @@ static void replace_sub_page(struct size_class *class, struct zspage *zspage,
 static bool zs_page_isolate(struct page *page, isolate_mode_t mode)
 {
 	/*
-	 * Page is locked so zspage couldn't be destroyed. For detail, look at
-	 * lock_zspage in free_zspage.
+	 * Page/zpdesc is locked so zspage couldn't be destroyed. For detail,
+	 * look at lock_zspage in free_zspage.
 	 */
 	VM_BUG_ON_PAGE(PageIsolated(page), page);
 
@@ -1812,7 +1813,7 @@ static int zs_page_migrate(struct page *newpage, struct page *page,
 	/* We're committed, tell the world that this is a Zsmalloc page. */
 	__zpdesc_set_zsmalloc(newzpdesc);
 
-	/* The page is locked, so this pointer must remain valid */
+	/* The zpdesc/page is locked, so this pointer must remain valid */
 	zspage = get_zspage(zpdesc);
 	pool = zspage->pool;
 
@@ -1885,7 +1886,7 @@ static const struct movable_operations zsmalloc_mops = {
 };
 
 /*
- * Caller should hold page_lock of all pages in the zspage
+ * Caller should hold zpdesc locks of all in the zspage
  * In here, we cannot use zspage meta data.
  */
 static void async_free_zspage(struct work_struct *work)
