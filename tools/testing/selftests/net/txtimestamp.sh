@@ -37,11 +37,13 @@ run_test_v4v6() {
 run_test_tcpudpraw() {
 	local -r args=$@
 
-	run_test_v4v6 ${args}		# tcp
-	run_test_v4v6 ${args} -u	# udp
-	run_test_v4v6 ${args} -r	# raw
-	run_test_v4v6 ${args} -R	# raw (IPPROTO_RAW)
-	run_test_v4v6 ${args} -P	# pf_packet
+	run_test_v4v6 ${args}		 # tcp
+	run_test_v4v6 ${args} -u	 # udp
+	run_test_v4v6 ${args} -u -o 5	 # udp with fixed tskey
+	run_test_v4v6 ${args} -u -o 5 -C # udp with fixed tskey and cmsg control
+	run_test_v4v6 ${args} -r	 # raw
+	run_test_v4v6 ${args} -R	 # raw (IPPROTO_RAW)
+	run_test_v4v6 ${args} -P	 # pf_packet
 }
 
 run_test_all() {
