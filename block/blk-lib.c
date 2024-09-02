@@ -10,7 +10,7 @@
 
 #include "blk.h"
 
-static sector_t bio_discard_limit(struct block_device *bdev, sector_t sector)
+sector_t bio_discard_limit(struct block_device *bdev, sector_t sector)
 {
 	unsigned int discard_granularity = bdev_discard_granularity(bdev);
 	sector_t granularity_aligned_sector;
@@ -34,6 +34,7 @@ static sector_t bio_discard_limit(struct block_device *bdev, sector_t sector)
 	 */
 	return round_down(UINT_MAX, discard_granularity) >> SECTOR_SHIFT;
 }
+EXPORT_SYMBOL(bio_discard_limit);
 
 struct bio *blk_alloc_discard_bio(struct block_device *bdev,
 		sector_t *sector, sector_t *nr_sects, gfp_t gfp_mask)
