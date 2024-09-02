@@ -3205,6 +3205,10 @@
 			devices can be requested on-demand with the
 			/dev/loop-control interface.
 
+
+	max_module_alloc_tags=	[KNL] Max supported number of allocation tags
+			in modules.
+
 	mce		[X86-32] Machine Check Exception
 
 	mce=option	[X86-64] See Documentation/arch/x86/x86_64/boot-options.rst
