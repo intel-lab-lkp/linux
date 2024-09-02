@@ -556,6 +556,9 @@ struct class_compat *class_compat_register(const char *name)
 {
 	struct class_compat *cls;
 
+	pr_warn("Compatibility class %s will go away soon, please migrate userspace tools to use bus devices\n",
+		name);
+
 	cls = kmalloc(sizeof(struct class_compat), GFP_KERNEL);
 	if (!cls)
 		return NULL;
