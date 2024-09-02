@@ -933,25 +933,25 @@ unsigned int irq_create_fwspec_mapping(struct irq_fwspec *fwspec)
 	 */
 	virq = irq_find_mapping(domain, hwirq);
 	if (virq) {
+		irq_data = irq_get_irq_data(virq);
+		if (!irq_data) {
+			virq = 0;
+			goto out;
+		}
+
 		/*
 		 * If the trigger type is not specified or matches the
-		 * current trigger type then we are done so return the
-		 * interrupt number.
+		 * current trigger type or has been set previously then we are done so
+		 * return the interrupt number.
 		 */
-		if (type == IRQ_TYPE_NONE || type == irq_get_trigger_type(virq))
+		if (type == IRQ_TYPE_NONE || type == irq_get_trigger_type(virq) ||
+		    irqd_trigger_type_was_set(irq_data))
 			goto out;
-
 		/*
 		 * If the trigger type has not been set yet, then set
 		 * it now and return the interrupt number.
 		 */
 		if (irq_get_trigger_type(virq) == IRQ_TYPE_NONE) {
-			irq_data = irq_get_irq_data(virq);
-			if (!irq_data) {
-				virq = 0;
-				goto out;
-			}
-
 			irqd_set_trigger_type(irq_data, type);
 			goto out;
 		}
