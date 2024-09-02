@@ -1354,6 +1354,17 @@ static void imx290_subdev_cleanup(struct imx290 *imx290)
  * Power management
  */
 
+static bool is_imx290_power_on(struct imx290 *imx)
+{
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(imx->supplies); i++)
+		if (!regulator_is_enabled(imx->supplies[i].consumer))
+			return false;
+
+	return true;
+}
+
 static int imx290_power_on(struct imx290 *imx290)
 {
 	int ret;
@@ -1571,6 +1582,7 @@ static int imx290_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
 	struct imx290 *imx290;
+	bool power_on;
 	u64 val;
 	int ret;
 
@@ -1611,36 +1623,54 @@ static int imx290_probe(struct i2c_client *client)
 		return ret;
 
 	/*
-	 * Enable power management. The driver supports runtime PM, but needs to
-	 * work when runtime PM is disabled in the kernel. To that end, power
-	 * the sensor on manually here.
+	 * Privacy mode: if the regulators are not enabled, avoid enabling them.
+	 * In case the regulators are enabled, we still want to make sure that
+	 * the regulators know that they have another consumer, therefore run
+	 * the powering sequence.
 	 */
-	ret = imx290_power_on(imx290);
-	if (ret < 0) {
-		dev_err(dev, "Could not power on the device\n");
-		return ret;
+	power_on = is_imx290_power_on(imx290);
+	dev_dbg(dev, "%s: power on: %d\n", __func__, power_on);
+	if (power_on) {
+		/*
+		 * Enable power management. The driver supports runtime PM, but
+		 * needs to work when runtime PM is disabled in the kernel. To
+		 * that end, power the sensor on manually here.
+		 */
+		ret = imx290_power_on(imx290);
+		if (ret < 0) {
+			dev_err(dev, "Could not power on the device\n");
+			return ret;
+		}
+
+		/*
+		 * Enable runtime PM with autosuspend. As the device has been
+		 * powered manually, mark it as active, and increase the usage
+		 * count without resuming the device.
+		 */
+		pm_runtime_set_active(dev);
+		pm_runtime_get_noresume(dev);
 	}
 
-	/*
-	 * Enable runtime PM with autosuspend. As the device has been powered
-	 * manually, mark it as active, and increase the usage count without
-	 * resuming the device.
-	 */
-	pm_runtime_set_active(dev);
-	pm_runtime_get_noresume(dev);
 	pm_runtime_enable(dev);
 	pm_runtime_set_autosuspend_delay(dev, 1000);
 	pm_runtime_use_autosuspend(dev);
 
-	/* Make sure the sensor is available before V4L2 subdev init. */
-	ret = cci_read(imx290->regmap, IMX290_STANDBY, &val, NULL);
-	if (ret) {
-		ret = dev_err_probe(dev, -ENODEV, "Failed to detect sensor\n");
-		goto err_pm;
-	}
-	if (val != IMX290_STANDBY_STANDBY) {
-		ret = dev_err_probe(dev, -ENODEV, "Sensor is not in standby\n");
-		goto err_pm;
+	/*
+	 * Make sure the sensor is available before V4L2 subdev init.
+	 * This only works when the sensor is powered.
+	 */
+	if (power_on) {
+		ret = cci_read(imx290->regmap, IMX290_STANDBY, &val, NULL);
+		if (ret) {
+			ret = dev_err_probe(dev, -ENODEV,
+					    "Failed to detect sensor\n");
+			goto err_pm;
+		}
+		if (val != IMX290_STANDBY_STANDBY) {
+			ret = dev_err_probe(dev, -ENODEV,
+					    "Sensor is not in standby\n");
+			goto err_pm;
+		}
 	}
 
 	/* Initialize the V4L2 subdev. */
@@ -1666,8 +1696,10 @@ static int imx290_probe(struct i2c_client *client)
 	 * Decrease the PM usage count. The device will get suspended after the
 	 * autosuspend delay, turning the power off.
 	 */
-	pm_runtime_mark_last_busy(dev);
-	pm_runtime_put_autosuspend(dev);
+	if (power_on) {
+		pm_runtime_mark_last_busy(dev);
+		pm_runtime_put_autosuspend(dev);
+	}
 
 	return 0;
 
