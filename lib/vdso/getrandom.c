@@ -5,6 +5,7 @@
 
 #include <linux/array_size.h>
 #include <linux/minmax.h>
+#include <linux/mm.h>
 #include <vdso/datapage.h>
 #include <vdso/getrandom.h>
 #include <vdso/unaligned.h>

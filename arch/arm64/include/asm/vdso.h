@@ -16,6 +16,12 @@
 
 #ifndef __ASSEMBLY__
 
+enum vvar_pages {
+	VVAR_DATA_PAGE_OFFSET,
+	VVAR_TIMENS_PAGE_OFFSET,
+	VVAR_NR_PAGES,
+};
+
 #include <generated/vdso-offsets.h>
 
 #define VDSO_SYMBOL(base, name)						   \
