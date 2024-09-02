@@ -80,6 +80,7 @@ static int hid_bpf_ops_btf_struct_access(struct bpf_verifier_log *log,
 		WRITE_RANGE(hid_device, name, true),
 		WRITE_RANGE(hid_device, uniq, true),
 		WRITE_RANGE(hid_device, phys, true),
+		WRITE_RANGE(hid_device_id, driver_data, false),
 		WRITE_RANGE(hid_bpf_driver, force_driver, false),
 		WRITE_RANGE(hid_bpf_driver, ignore_driver, false),
 	};

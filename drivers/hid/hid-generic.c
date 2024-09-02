@@ -64,11 +64,12 @@ static int hid_generic_probe(struct hid_device *hdev,
 	if (ret)
 		return ret;
 
-	return hid_hw_start(hdev, HID_CONNECT_DEFAULT);
+	return hid_hw_start(hdev, id->driver_data);
 }
 
 static const struct hid_device_id hid_table[] = {
-	{ HID_DEVICE(HID_BUS_ANY, HID_GROUP_ANY, HID_ANY_ID, HID_ANY_ID) },
+	{ HID_DEVICE(HID_BUS_ANY, HID_GROUP_ANY, HID_ANY_ID, HID_ANY_ID),
+		.driver_data = HID_CONNECT_DEFAULT },
 	{ }
 };
 MODULE_DEVICE_TABLE(hid, hid_table);

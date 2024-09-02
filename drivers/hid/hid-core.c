@@ -2637,15 +2637,17 @@ EXPORT_SYMBOL_GPL(hid_compare_device_paths);
 
 static bool hid_check_device_match(struct hid_device *hdev,
 				   struct hid_driver *hdrv,
-				   const struct hid_device_id **id)
+				   struct hid_device_id *id)
 {
+	const struct hid_device_id *_id = hid_match_device(hdev, hdrv);
 	int ret;
 
-	*id = hid_match_device(hdev, hdrv);
-	if (!*id)
+	if (!_id)
 		return false;
 
-	ret = call_hid_bpf_driver_probe(hdev, hdrv, *id);
+	memcpy(id, _id, sizeof(*id));
+
+	ret = call_hid_bpf_driver_probe(hdev, hdrv, id);
 	if (ret)
 		return ret > 0;
 
@@ -2662,7 +2664,7 @@ static bool hid_check_device_match(struct hid_device *hdev,
 
 static int __hid_device_probe(struct hid_device *hdev, struct hid_driver *hdrv)
 {
-	const struct hid_device_id *id;
+	struct hid_device_id id;
 	int ret;
 
 	if (!hid_check_device_match(hdev, hdrv, &id))
@@ -2677,7 +2679,7 @@ static int __hid_device_probe(struct hid_device *hdev, struct hid_driver *hdrv)
 	hdev->driver = hdrv;
 
 	if (hdrv->probe) {
-		ret = hdrv->probe(hdev, id);
+		ret = hdrv->probe(hdev, &id);
 	} else { /* default probe */
 		ret = hid_open_report(hdev);
 		if (!ret)
