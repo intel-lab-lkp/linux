@@ -241,6 +241,41 @@ So 'mount -t tmpfs -o size=10G,nr_inodes=10k,mode=700 tmpfs /mytmpfs'
 will give you tmpfs instance on /mytmpfs which can allocate 10GB
 RAM/SWAP in 10240 inodes and it is only accessible by root.
 
+tmpfs has the following mounting options for case-insesitive lookups support:
+
+================= ==============================================================
+casefold          Enable casefold support at this mount point using the given
+                  argument as the encoding standard. Currently only utf8
+                  encodings are supported.
+strict_encoding   Enable strict encoding at this mount point (disabled by
+                  default). This means that invalid sequences will be rejected
+                  by the file system.
+================= ==============================================================
+
+Note that this option doesn't enable casefold by default; one needs to set
+casefold flag per directory, setting the +F attribute in an empty directory. New
+directories within a casefolded one will inherit the flag.
+
+Example::
+
+    $ mount -t tmpfs -o casefold=utf8-12.1.0,cf_strict fs_name /mytmpfs
+    $ cd /mytmpfs # case-sensitive by default
+    $ touch a; touch A
+    $ ls
+    A  a
+    $ mkdir B
+    $ cd b
+    cd: The directory 'b' does not exist
+    $ mkdir casefold_dir
+    $ chattr +F casefold_dir/ # marking it as case-insensitive
+    $ cd
+    $ touch dir/a; touch dir/A
+    $ ls dir
+    a
+    $ mkdir B
+    $ cd b
+    $ pwd
+    /home/user/mytmpfs/casefold_dir/B
 
 :Author:
    Christoph Rohland <cr@sap.com>, 1.12.01
@@ -250,3 +285,5 @@ RAM/SWAP in 10240 inodes and it is only accessible by root.
    KOSAKI Motohiro, 16 Mar 2010
 :Updated:
    Chris Down, 13 July 2020
+:Updated:
+   André Almeida, 23 Aug 2024
