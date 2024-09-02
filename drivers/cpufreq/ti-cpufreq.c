@@ -299,7 +299,7 @@ static struct ti_cpufreq_soc_data am3517_soc_data = {
 
 static struct ti_cpufreq_soc_data am625_soc_data = {
 	.efuse_xlate = am625_efuse_xlate,
-	.efuse_offset = 0x0018,
+	.efuse_offset = 0x0,
 	.efuse_mask = 0x07c0,
 	.efuse_shift = 0x6,
 	.rev_offset = 0x0014,
