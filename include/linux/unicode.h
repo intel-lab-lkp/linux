@@ -76,4 +76,6 @@ int utf8_casefold_hash(const struct unicode_map *um, const void *salt,
 struct unicode_map *utf8_load(unsigned int version);
 void utf8_unload(struct unicode_map *um);
 
+bool utf8_check_strict_name(struct inode *dir, struct qstr *d_name);
+
 #endif /* _LINUX_UNICODE_H */

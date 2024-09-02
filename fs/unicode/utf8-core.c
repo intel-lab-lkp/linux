@@ -214,3 +214,29 @@ void utf8_unload(struct unicode_map *um)
 }
 EXPORT_SYMBOL(utf8_unload);
 
+/**
+ * utf8_check_strict_name - Check if a given name is suitable for a directory
+ *
+ * This functions checks if the proposed filename is suitable for the parent
+ * directory. That means that only valid UTF-8 filenames will be accepted for
+ * casefold directories from filesystems created with the strict enconding flags.
+ * That also means that any name will be accepted for directories that doesn't
+ * have casefold enabled, or aren't being strict with the enconding.
+ *
+ * @inode: inode of the directory where the new file will be created
+ * @d_name: name of the new file
+ *
+ * Returns:
+ *  * True if the filename is suitable for this directory. It can be true if a
+ *  given name is not suitable for a strict enconding directory, but the
+ *  directory being used isn't strict
+ *  * False if the filename isn't suitable for this directory. This only happens
+ *  when a directory is casefolded and is strict about its encoding.
+ */
+bool utf8_check_strict_name(struct inode *dir, struct qstr *d_name)
+{
+	return !(IS_CASEFOLDED(dir) && dir->i_sb->s_encoding &&
+	       sb_has_strict_encoding(dir->i_sb) &&
+	       utf8_validate(dir->i_sb->s_encoding, d_name));
+}
+EXPORT_SYMBOL(utf8_check_strict_name);
