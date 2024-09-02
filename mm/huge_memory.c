@@ -3294,12 +3294,10 @@ out:
 	return ret;
 }
 
-int split_folio_to_list(struct folio *folio, struct list_head *list)
+int min_order_for_split(struct folio *folio)
 {
-	unsigned int min_order = 0;
-
 	if (folio_test_anon(folio))
-		goto out;
+		return 0;
 
 	if (!folio->mapping) {
 		if (folio_test_pmd_mappable(folio))
@@ -3307,10 +3305,17 @@ int split_folio_to_list(struct folio *folio, struct list_head *list)
 		return -EBUSY;
 	}
 
-	min_order = mapping_min_folio_order(folio->mapping);
-out:
-	return split_huge_page_to_list_to_order(&folio->page, list,
-							min_order);
+	return mapping_min_folio_order(folio->mapping);
+}
+
+int split_folio_to_list(struct folio *folio, struct list_head *list)
+{
+	int ret = min_order_for_split(folio);
+
+	if (ret < 0)
+		return ret;
+
+	return split_huge_page_to_list_to_order(&folio->page, list, ret);
 }
 
 void __folio_undo_large_rmappable(struct folio *folio)
