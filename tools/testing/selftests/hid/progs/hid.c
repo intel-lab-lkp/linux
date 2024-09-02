@@ -606,10 +606,12 @@ void BPF_PROG(hid_test_driver_probe, struct hid_device *hdev, struct hid_bpf_dri
 	static const char hid_generic[] = "hid-generic";
 
 	bpf_printk("test_driver_probe, %s", hdrv->name);
-	if (!__builtin_memcmp(hdrv->name, hid_generic, sizeof(hid_generic)))
+	if (!__builtin_memcmp(hdrv->name, hid_generic, sizeof(hid_generic))) {
 		hdrv->force_driver = 1;
-	else
+		id->driver_data &= ~HID_CONNECT_INPUT;
+	} else {
 		hdrv->ignore_driver = 1;
+	}
 }
 
 SEC("?struct_ops.s/hid_rdesc_fixup")

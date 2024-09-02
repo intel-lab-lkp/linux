@@ -4,6 +4,38 @@
 #include "hid_common.h"
 #include <bpf/bpf.h>
 
+static const __u8 mouse_rdesc[] = {
+	0x05, 0x01,  /* .Usage Page (Generic Desktop)        0  */
+	0x09, 0x02,  /* .Usage (Mouse)                       2  */
+	0xa1, 0x01,  /* .Collection (Application)            4  */
+	0x09, 0x02,  /* ..Usage (Mouse)                      6  */
+	0xa1, 0x02,  /* ..Collection (Logical)               8  */
+	0x09, 0x01,  /* ...Usage (Pointer)                   10 */
+	0xa1, 0x00,  /* ...Collection (Physical)             12 */
+	0x05, 0x09,  /* ....Usage Page (Button)              14 */
+	0x19, 0x01,  /* ....Usage Minimum (1)                16 */
+	0x29, 0x03,  /* ....Usage Maximum (3)                18 */
+	0x15, 0x00,  /* ....Logical Minimum (0)              20 */
+	0x25, 0x01,  /* ....Logical Maximum (1)              22 */
+	0x75, 0x01,  /* ....Report Size (1)                  24 */
+	0x95, 0x03,  /* ....Report Count (3)                 26 */
+	0x81, 0x02,  /* ....Input (Data,Var,Abs)             28 */
+	0x75, 0x05,  /* ....Report Size (5)                  30 */
+	0x95, 0x01,  /* ....Report Count (1)                 32 */
+	0x81, 0x03,  /* ....Input (Cnst,Var,Abs)             34 */
+	0x05, 0x01,  /* ....Usage Page (Generic Desktop)     36 */
+	0x09, 0x30,  /* ....Usage (X)                        38 */
+	0x09, 0x31,  /* ....Usage (Y)                        40 */
+	0x15, 0x81,  /* ....Logical Minimum (-127)           42 */
+	0x25, 0x7f,  /* ....Logical Maximum (127)            44 */
+	0x75, 0x08,  /* ....Report Size (8)                  46 */
+	0x95, 0x02,  /* ....Report Count (2)                 48 */
+	0x81, 0x06,  /* ....Input (Data,Var,Rel)             50 */
+	0xc0,        /* ...End Collection                    52 */
+	0xc0,        /* ..End Collection                     53 */
+	0xc0,        /* .End Collection                      54 */
+};
+
 struct hid_hw_request_syscall_args {
 	__u8 data[10];
 	unsigned int hid;
@@ -59,6 +91,8 @@ struct specific_device {
 	__u16 bus;
 	__u32 vid;
 	__u32 pid;
+	const __u8 *rdesc;
+	const size_t rdesc_size;
 };
 
 FIXTURE_SETUP(hid_bpf)
@@ -72,11 +106,15 @@ FIXTURE_SETUP(hid_bpf)
 		.bus = BUS_BLUETOOTH,
 		.vid = 0x05ac,  /* USB_VENDOR_ID_APPLE */
 		.pid = 0x022c,  /* USB_DEVICE_ID_APPLE_ALU_WIRELESS_ANSI */
+		.rdesc = mouse_rdesc,
+		.rdesc_size = sizeof(mouse_rdesc),
 	}, {
 		.test_name = "*",
 		.bus = BUS_USB,
 		.vid = 0x0001,
 		.pid = 0x0a36,
+		.rdesc = rdesc,
+		.rdesc_size = sizeof(rdesc),
 	}};
 
 	for (int i = 0; i < ARRAY_SIZE(devices); i++) {
@@ -88,7 +126,7 @@ FIXTURE_SETUP(hid_bpf)
 	ASSERT_OK_PTR(match);
 
 	err = setup_uhid(_metadata, &self->hid, match->bus, match->vid, match->pid,
-			 rdesc, sizeof(rdesc));
+			 match->rdesc, match->rdesc_size);
 	ASSERT_OK(err);
 }
 
@@ -914,6 +952,24 @@ static bool is_using_driver(struct __test_metadata *_metadata, struct uhid_devic
 	return found;
 }
 
+static bool has_hid_input(struct uhid_device *hid)
+{
+	char input[1024];
+	DIR *d;
+
+	sprintf(input, "/sys/bus/hid/devices/%04X:%04X:%04X.%04X/input",
+		hid->bus, hid->vid, hid->pid, hid->hid_id);
+
+	d = opendir(input);
+	if (d) {
+		closedir(d);
+
+		return true;
+	}
+
+	return false;
+}
+
 /*
  * Attach hid_driver_probe to the given uhid device,
  * check that the device is now using hid-generic.
@@ -927,10 +983,12 @@ TEST_F(hid_bpf, test_hid_driver_probe)
 	};
 
 	ASSERT_TRUE(is_using_driver(_metadata, &self->hid, "apple"));
+	ASSERT_TRUE(has_hid_input(&self->hid)) TH_LOG("input node not found");
 
 	LOAD_PROGRAMS(progs);
 
 	ASSERT_TRUE(is_using_driver(_metadata, &self->hid, "hid-generic"));
+	ASSERT_FALSE(has_hid_input(&self->hid)) TH_LOG("input node unexpectly found");
 }
 
 /*

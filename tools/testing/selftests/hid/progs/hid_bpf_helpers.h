@@ -90,6 +90,8 @@ struct hid_bpf_ops {
 #define BPF_F_BEFORE (1U << 3)
 #endif
 
+#define HID_CONNECT_INPUT (1U << 0)
+
 /* following are kfuncs exported by HID for HID-BPF */
 extern __u8 *hid_bpf_get_data(struct hid_bpf_ctx *ctx,
 			      unsigned int offset,
