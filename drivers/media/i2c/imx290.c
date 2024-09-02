@@ -425,14 +425,17 @@ static const struct imx290_csi_cfg imx290_csi_297mhz = {
 /* supported link frequencies */
 #define FREQ_INDEX_1080P	0
 #define FREQ_INDEX_720P		1
+#define FREQ_INDEX_OFF		2
 static const s64 imx290_link_freq_2lanes[] = {
 	[FREQ_INDEX_1080P] = 445500000,
 	[FREQ_INDEX_720P] = 297000000,
+	[FREQ_INDEX_OFF] = 0,
 };
 
 static const s64 imx290_link_freq_4lanes[] = {
 	[FREQ_INDEX_1080P] = 222750000,
 	[FREQ_INDEX_720P] = 148500000,
+	[FREQ_INDEX_OFF] = 0,
 };
 
 /*
@@ -550,6 +553,10 @@ static const struct imx290_mode imx290_modes_4lanes[] = {
 		.data_size = ARRAY_SIZE(imx290_720p_settings),
 		.clk_cfg = imx290_720p_clock_config,
 	},
+};
+
+static const struct imx290_mode imx290_mode_off = {
+	.link_freq_index = FREQ_INDEX_OFF,
 };
 
 static inline const struct imx290_mode *imx290_modes_ptr(const struct imx290 *imx290)
@@ -876,10 +883,19 @@ static unsigned int imx290_get_blank_min(const struct imx290 *imx290, bool v)
 static void imx290_ctrl_update(struct imx290 *imx290,
 			       const struct imx290_mode *mode)
 {
-	unsigned int hblank_min = mode->hmax_min - mode->width;
-	unsigned int hblank_max = IMX290_HMAX_MAX - mode->width;
-	unsigned int vblank_min = mode->vmax_min - mode->height;
-	unsigned int vblank_max = IMX290_VMAX_MAX - mode->height;
+	unsigned int hblank_min, hblank_max, vblank_min, vblank_max;
+
+	if (mode == &imx290_mode_off) {
+		hblank_min = imx290_get_blank_min(imx290, false);
+		hblank_max = HBLANK_MAX;
+		vblank_min = imx290_get_blank_min(imx290, true);
+		vblank_max = VBLANK_MAX;
+	} else {
+		hblank_min = mode->hmax_min - mode->width;
+		hblank_max = IMX290_HMAX_MAX - mode->width;
+		vblank_min = mode->vmax_min - mode->height;
+		vblank_max = IMX290_VMAX_MAX - mode->height;
+	}
 
 	__v4l2_ctrl_s_ctrl(imx290->link_freq, mode->link_freq_index);
 
@@ -932,7 +948,8 @@ static int imx290_ctrl_init(struct imx290 *imx290)
 	imx290->link_freq =
 		v4l2_ctrl_new_int_menu(&imx290->ctrls, &imx290_ctrl_ops,
 				       V4L2_CID_LINK_FREQ,
-				       imx290_link_freqs_num(imx290) - 1, 0,
+				       imx290_link_freqs_num(imx290) - 1,
+				       FREQ_INDEX_OFF,
 				       imx290_link_freqs_ptr(imx290));
 	if (imx290->link_freq)
 		imx290->link_freq->flags |= V4L2_CTRL_FLAG_READ_ONLY;
@@ -1278,7 +1295,7 @@ static int imx290_subdev_init(struct imx290 *imx290)
 	struct v4l2_subdev_state *state;
 	int ret;
 
-	imx290->current_mode = &imx290_modes_ptr(imx290)[0];
+	imx290->current_mode = &imx290_mode_off;
 
 	v4l2_i2c_subdev_init(&imx290->sd, client, &imx290_subdev_ops);
 	imx290->sd.internal_ops = &imx290_internal_ops;
