@@ -30,6 +30,7 @@
 #include <drm/ttm/ttm_bo.h>
 #include <drm/ttm/ttm_placement.h>
 #include <drm/ttm/ttm_resource.h>
+#include <drm/ttm/ttm_tt.h>
 
 #include <drm/drm_util.h>
 
@@ -259,8 +260,8 @@ void ttm_resource_move_to_lru_tail(struct ttm_resource *res)
 
 	lockdep_assert_held(&bo->bdev->lru_lock);
 
-	if (bo->pin_count) {
-		list_move_tail(&res->lru.link, &bdev->pinned);
+	if (bo->pin_count || (bo->ttm && ttm_tt_is_swapped(bo->ttm))) {
+		list_move_tail(&res->lru.link, &bdev->unevictable);
 
 	} else	if (bo->bulk_move) {
 		struct ttm_lru_bulk_move_pos *pos =
@@ -301,8 +302,8 @@ void ttm_resource_init(struct ttm_buffer_object *bo,
 
 	man = ttm_manager_type(bo->bdev, place->mem_type);
 	spin_lock(&bo->bdev->lru_lock);
-	if (bo->pin_count)
-		list_add_tail(&res->lru.link, &bo->bdev->pinned);
+	if (bo->pin_count || (bo->ttm && ttm_tt_is_swapped(bo->ttm)))
+		list_add_tail(&res->lru.link, &bo->bdev->unevictable);
 	else
 		list_add_tail(&res->lru.link, &man->lru[bo->priority]);
 	man->usage += res->size;
