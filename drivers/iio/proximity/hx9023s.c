@@ -1074,6 +1074,10 @@ static int hx9023s_probe(struct i2c_client *client)
 					     "iio trigger register failed\n");
 	}
 
+	ret = iio_device_set_clock(indio_dev, CLOCK_BOOTTIME);
+	if (ret)
+		return dev_err_probe(dev, ret, "clock boottime set failed\n");
+
 	ret = devm_iio_triggered_buffer_setup(dev, indio_dev,
 					      iio_pollfunc_store_time,
 					      hx9023s_trigger_handler,
