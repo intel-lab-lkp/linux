@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/arm/marvell/armada-375.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Marvell Armada 375 Platforms
+
+maintainers:
+  - Aryabhatta Dey <aryabhattadey35@gmail.com>
+
+properties:
+  $nodename:
+    const: '/'
+  compatible:
+    oneOf:
+
+      - description:
+          Marvell Armada 375
+        items:
+          - const: marvell,armada375
+
+additionalProperties: true
