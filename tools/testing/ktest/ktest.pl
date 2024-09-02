@@ -2160,7 +2160,6 @@ sub monitor {
     my $bug = 0;
     my $bug_ignored = 0;
     my $skip_call_trace = 0;
-    my $loops;
 
     my $start_time = time;
 
