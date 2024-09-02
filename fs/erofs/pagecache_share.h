@@ -14,7 +14,8 @@
 int erofs_pcs_init_mnt(void);
 void erofs_pcs_free_mnt(void);
 void erofs_pcs_fill_inode(struct inode *inode);
+struct interval_tree_node *erofs_pcs_alloc_seg(void);
+void erofs_pcs_free_seg(struct interval_tree_node *seg);
 
 extern const struct vm_operations_struct generic_file_vm_ops;
-
 #endif

@@ -7,6 +7,7 @@
 #include "internal.h"
 #include <linux/sched/mm.h>
 #include <trace/events/erofs.h>
+#include "pagecache_share.h"
 
 void erofs_unmap_metabuf(struct erofs_buf *buf)
 {
@@ -349,6 +350,7 @@ static int erofs_read_folio(struct file *file, struct folio *folio)
 {
 #ifdef CONFIG_EROFS_FS_PAGE_CACHE_SHARE
 	struct erofs_inode *vi = NULL;
+	struct interval_tree_node *seg;
 	int ret;
 
 	if (file && file->private_data) {
@@ -359,8 +361,22 @@ static int erofs_read_folio(struct file *file, struct folio *folio)
 			vi = NULL;
 	}
 	ret = iomap_read_folio(folio, &erofs_iomap_ops);
-	if (vi)
+	if (vi) {
 		folio->mapping->host = file_inode(file);
+		seg = erofs_pcs_alloc_seg();
+		if (!seg)
+			return -ENOMEM;
+		seg->start = folio_index(folio);
+		seg->last = seg->start + (folio_size(folio) >> PAGE_SHIFT);
+		if (seg->last > (vi->vfs_inode.i_size >> PAGE_SHIFT))
+			seg->last = vi->vfs_inode.i_size >> PAGE_SHIFT;
+		if (seg->last >= seg->start) {
+			mutex_lock(&vi->segs_mutex);
+			interval_tree_insert(seg, &vi->segs);
+			mutex_unlock(&vi->segs_mutex);
+		} else
+			erofs_pcs_free_seg(seg);
+	}
 	return ret;
 #else
 	return iomap_read_folio(folio, &erofs_iomap_ops);
@@ -371,6 +387,8 @@ static void erofs_readahead(struct readahead_control *rac)
 #ifdef CONFIG_EROFS_FS_PAGE_CACHE_SHARE
 	struct erofs_inode *vi = NULL;
 	struct file *file = rac->file;
+	struct interval_tree_node *seg;
+	erofs_off_t start, end;
 
 	if (file && file->private_data) {
 		vi = file->private_data;
@@ -378,10 +396,26 @@ static void erofs_readahead(struct readahead_control *rac)
 			rac->mapping->host = &vi->vfs_inode;
 		else
 			vi = NULL;
+		start = readahead_pos(rac);
+		end = start + readahead_length(rac);
+		if (end > vi->vfs_inode.i_size)
+			end = vi->vfs_inode.i_size;
 	}
 	iomap_readahead(rac, &erofs_iomap_ops);
-	if (vi)
+	if (vi) {
 		rac->mapping->host = file_inode(file);
+		seg = erofs_pcs_alloc_seg();
+		if (!seg)
+			return;
+		seg->start = start >> PAGE_SHIFT;
+		seg->last = end >> PAGE_SHIFT;
+		if (seg->last >= seg->start) {
+			mutex_lock(&vi->segs_mutex);
+			interval_tree_insert(seg, &vi->segs);
+			mutex_unlock(&vi->segs_mutex);
+		} else
+			erofs_pcs_free_seg(seg);
+	}
 #else
 	return iomap_readahead(rac, &erofs_iomap_ops);
 #endif

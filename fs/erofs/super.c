@@ -105,9 +105,18 @@ static void erofs_free_inode(struct inode *inode)
 	struct erofs_inode *vi = EROFS_I(inode);
 
 #ifdef CONFIG_EROFS_FS_PAGE_CACHE_SHARE
+	struct interval_tree_node *seg, *next_seg;
+
 	if (S_ISREG(inode->i_mode) &&  vi->ano_inode) {
 		iput(vi->ano_inode);
 		vi->ano_inode = NULL;
+	}
+	seg = interval_tree_iter_first(&vi->segs, 0, LLONG_MAX);
+	while (seg) {
+		next_seg = interval_tree_iter_next(seg, 0, LLONG_MAX);
+		interval_tree_remove(seg, &vi->segs);
+		erofs_pcs_free_seg(seg);
+		seg = next_seg;
 	}
 #endif
 	if (inode->i_op == &erofs_fast_symlink_iops)

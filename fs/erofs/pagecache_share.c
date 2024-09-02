@@ -4,6 +4,9 @@
  */
 #include <linux/xxhash.h>
 #include <linux/refcount.h>
+#include <uapi/linux/fadvise.h>
+#include <linux/slab.h>
+#include <linux/pagemap.h>
 #include "pagecache_share.h"
 #include "internal.h"
 #include "xattr.h"
@@ -15,6 +18,7 @@
 static DEFINE_MUTEX(pseudo_mnt_lock);
 static refcount_t pseudo_mnt_count;
 static struct vfsmount *erofs_pcs_mnt;
+struct kmem_cache *erofs_pcs_segsp;
 
 int erofs_pcs_init_mnt(void)
 {
@@ -25,6 +29,11 @@ int erofs_pcs_init_mnt(void)
 			return PTR_ERR(tmp);
 		erofs_pcs_mnt = tmp;
 		refcount_set(&pseudo_mnt_count, 1);
+		erofs_pcs_segsp = kmem_cache_create("erofs_pcs_segs",
+				sizeof(struct interval_tree_node), 0,
+				SLAB_RECLAIM_ACCOUNT | SLAB_ACCOUNT, NULL);
+		if (!erofs_pcs_segsp)
+			return -ENOMEM;
 	} else
 		refcount_add(1, &pseudo_mnt_count);
 	mutex_unlock(&pseudo_mnt_lock);
@@ -37,8 +46,20 @@ void erofs_pcs_free_mnt(void)
 	if (refcount_dec_and_test(&pseudo_mnt_count)) {
 		kern_unmount(erofs_pcs_mnt);
 		erofs_pcs_mnt = NULL;
+		kmem_cache_destroy(erofs_pcs_segsp);
+		erofs_pcs_segsp = NULL;
 	}
 	mutex_unlock(&pseudo_mnt_lock);
+}
+
+struct interval_tree_node *erofs_pcs_alloc_seg(void)
+{
+	return kmem_cache_alloc(erofs_pcs_segsp, GFP_KERNEL);
+}
+
+void erofs_pcs_free_seg(struct interval_tree_node *seg)
+{
+	kmem_cache_free(erofs_pcs_segsp, seg);
 }
 
 static int erofs_pcs_eq(struct inode *inode, void *data)
@@ -73,6 +94,8 @@ void erofs_pcs_fill_inode(struct inode *inode)
 		ano_inode = iget5_locked(erofs_pcs_mnt->mnt_sb, fprt_hash,
 				erofs_pcs_eq, erofs_pcs_set_fprt, fprt);
 		vi->ano_inode = ano_inode;
+		vi->segs = RB_ROOT_CACHED;
+		mutex_init(&vi->segs_mutex);
 		if (ano_inode->i_state & I_NEW) {
 			if (erofs_inode_is_data_compressed(vi->datalayout))
 				ano_inode->i_mapping->a_ops = &z_erofs_aops;
@@ -160,6 +183,50 @@ static int erofs_pcs_mmap(struct file *file, struct vm_area_struct *vma)
 	return 0;
 }
 
+static int erofs_pcs_fadvise(struct file *file, loff_t offset, loff_t len, int advice)
+{
+	struct erofs_inode *vi = EROFS_I(file_inode(file));
+	struct interval_tree_node *seg, *next_seg, *new_seg;
+	struct file *ano_file = file->private_data;
+	erofs_off_t start, end;
+	int err = 0;
+	u64 l, r;
+
+	if (advice != POSIX_FADV_DONTNEED)
+		return generic_fadvise(ano_file, offset, len, advice);
+
+	start = offset >> PAGE_SHIFT;
+	/* len = 0 means EOF */
+	end = (!len ? LLONG_MAX : offset + len) >> PAGE_SHIFT;
+
+	mutex_lock(&vi->segs_mutex);
+	seg = interval_tree_iter_first(&vi->segs, start, end);
+	while (seg) {
+		next_seg = interval_tree_iter_next(seg, start, end);
+		l = max_t(u64, seg->start | 0ULL, start);
+		r = min_t(u64, seg->last | 0ULL, end);
+		if (l > r)
+			continue;
+		(void)invalidate_mapping_pages(ano_file->f_mapping, l, r);
+		if (seg->start < l) {
+			new_seg = erofs_pcs_alloc_seg();
+			new_seg->start = seg->start;
+			new_seg->last = l;
+			interval_tree_insert(new_seg, &vi->segs);
+		}
+		if (r < seg->last) {
+			new_seg = erofs_pcs_alloc_seg();
+			new_seg->start = r;
+			new_seg->last = seg->last;
+			interval_tree_insert(new_seg, &vi->segs);
+		}
+		interval_tree_remove(seg, &vi->segs);
+		seg = next_seg;
+	}
+	mutex_unlock(&vi->segs_mutex);
+	return err;
+}
+
 const struct file_operations erofs_pcs_file_fops = {
 	.open		= erofs_pcs_file_open,
 	.llseek		= generic_file_llseek,
@@ -168,4 +235,5 @@ const struct file_operations erofs_pcs_file_fops = {
 	.release	= erofs_pcs_file_release,
 	.get_unmapped_area = thp_get_unmapped_area,
 	.splice_read	= filemap_splice_read,
+	.fadvise	= erofs_pcs_fadvise,
 };
