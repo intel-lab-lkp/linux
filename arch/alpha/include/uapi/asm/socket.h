@@ -10,7 +10,7 @@
  * Note: we only bother about making the SOL_SOCKET options
  * same as OSF/1, as that's all that "normal" programs are
  * likely to set.  We don't necessarily want to be binary
- * compatible with _everything_. 
+ * compatible with _everything_.
  */
 #define SOL_SOCKET	0xffff
 
@@ -139,6 +139,8 @@
 
 #define SO_PASSPIDFD		76
 #define SO_PEERPIDFD		77
+
+#define SCM_TS_OPT_ID		78
 
 #if !defined(__KERNEL__)
 
