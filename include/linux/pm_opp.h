@@ -53,6 +53,9 @@ typedef int (*config_regulators_t)(struct device *dev,
 typedef int (*config_clks_t)(struct device *dev, struct opp_table *opp_table,
 			struct dev_pm_opp *opp, void *data, bool scaling_down);
 
+typedef struct opp_table *(*config_required_dev_t)(struct device *dev,
+			struct device_node *opp_table_np);
+
 /**
  * struct dev_pm_opp_config - Device OPP configuration values
  * @clk_names: Clk names, NULL terminated array.
@@ -63,7 +66,7 @@ typedef int (*config_clks_t)(struct device *dev, struct opp_table *opp_table,
  * @supported_hw_count: Number of elements in the array.
  * @regulator_names: Array of pointers to the names of the regulator, NULL terminated.
  * @required_dev: Required OPP device.
- * @required_opp_table: The corresponding required OPP table for @required_dev.
+ * @config_required_dev: Custom helper to find the required OPP table for $required_dev.
  *
  * This structure contains platform specific OPP configurations for the device.
  */
@@ -77,7 +80,7 @@ struct dev_pm_opp_config {
 	unsigned int supported_hw_count;
 	const char * const *regulator_names;
 	struct device *required_dev;
-	struct opp_table *required_opp_table;
+	config_required_dev_t config_required_dev;
 };
 
 #define OPP_LEVEL_UNSET			U32_MAX

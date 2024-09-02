@@ -2874,20 +2874,21 @@ static void genpd_dev_pm_sync(struct device *dev)
 	genpd_queue_power_off_work(pd);
 }
 
-static struct opp_table *genpd_find_opp_table(struct generic_pm_domain *genpd,
-					      unsigned int depth)
+static struct opp_table *_genpd_find_opp_table(struct generic_pm_domain *genpd,
+					       struct device_node *np,
+					       unsigned int depth)
 {
-	struct opp_table *opp_table;
+	struct opp_table *opp_table = genpd->opp_table;
 	struct gpd_link *link;
 
-	if (genpd->opp_table)
-		return genpd->opp_table;
+	if (opp_table && (dev_pm_opp_table_to_of_node(opp_table) == np))
+		return opp_table;
 
 	list_for_each_entry(link, &genpd->child_links, child_node) {
 		struct generic_pm_domain *parent = link->parent;
 
 		genpd_lock_nested(parent, depth + 1);
-		opp_table = genpd_find_opp_table(parent, depth + 1);
+		opp_table = _genpd_find_opp_table(parent, np, depth + 1);
 		genpd_unlock(parent);
 
 		if (opp_table)
@@ -2897,12 +2898,27 @@ static struct opp_table *genpd_find_opp_table(struct generic_pm_domain *genpd,
 	return NULL;
 }
 
-static int genpd_set_required_opp_dev(struct device *dev,
-				      struct device *base_dev)
+static struct opp_table *genpd_find_opp_table(struct device *dev,
+					      struct device_node *np)
 {
 	struct generic_pm_domain *genpd = dev_to_genpd(dev);
 	struct opp_table *opp_table;
-	int ret = 0;
+
+	genpd_lock(genpd);
+	opp_table = _genpd_find_opp_table(genpd, np, 0);
+	genpd_unlock(genpd);
+
+	return opp_table;
+}
+
+static int genpd_set_required_opp_dev(struct device *dev,
+				      struct device *base_dev)
+{
+	struct dev_pm_opp_config config = {
+		.required_dev = dev,
+		.config_required_dev = genpd_find_opp_table,
+	};
+	int ret;
 
 	/* Limit support to non-providers for now. */
 	if (of_property_present(base_dev->of_node, "#power-domain-cells"))
@@ -2911,20 +2927,10 @@ static int genpd_set_required_opp_dev(struct device *dev,
 	if (!dev_pm_opp_of_has_required_opp(base_dev))
 		return 0;
 
-	genpd_lock(genpd);
-	opp_table = genpd_find_opp_table(genpd, 0);
-	genpd_unlock(genpd);
-
-	if (opp_table) {
-		struct dev_pm_opp_config config = {
-			.required_dev = dev,
-			.required_opp_table = opp_table,
-		};
-
-		ret = devm_pm_opp_set_config(base_dev, &config);
-		if (ret < 0)
-			dev_err(dev, "failed to set opp config %d\n", ret);
-	}
+	ret = devm_pm_opp_set_config(base_dev, &config);
+	ret = ret == -ERANGE ? 0 : ret;
+	if (ret < 0)
+		dev_err(dev, "failed to set opp config %d\n", ret);
 
 	return ret;
 }

@@ -2363,7 +2363,7 @@ static void _opp_put_config_regulators_helper(struct opp_table *opp_table)
 static int _opp_set_required_dev(struct opp_table *opp_table,
 				 struct device *dev,
 				 struct device *required_dev,
-				 struct opp_table *required_opp_table)
+				 config_required_dev_t config_required_dev)
 {
 	int i;
 
@@ -2380,6 +2380,7 @@ static int _opp_set_required_dev(struct opp_table *opp_table,
 
 	for (i = 0; i < opp_table->required_opp_count; i++) {
 		struct opp_table *table = opp_table->required_opp_tables[i];
+		struct opp_table *required_opp_table;
 
 		/*
 		 * The OPP table should be available at this point. If not, it's
@@ -2396,7 +2397,9 @@ static int _opp_set_required_dev(struct opp_table *opp_table,
 		 * We need to compare the nodes for the OPP tables, rather than
 		 * the OPP tables themselves, as we may have separate instances.
 		 */
-		if (required_opp_table->np == table->np) {
+		required_opp_table = config_required_dev(required_dev,
+							 table->np);
+		if (required_opp_table) {
 			/*
 			 * The required_opp_tables parsing is not perfect, as
 			 * the OPP core does the parsing solely based on the DT
@@ -2422,8 +2425,8 @@ static int _opp_set_required_dev(struct opp_table *opp_table,
 		}
 	}
 
-	dev_err(dev, "Missing OPP table, unable to set the required dev\n");
-	return -ENODEV;
+	/* No matching OPP table found for the required_dev. */
+	return -ERANGE;
 }
 
 static void _opp_put_required_dev(struct opp_table *opp_table,
@@ -2547,10 +2550,10 @@ int dev_pm_opp_set_config(struct device *dev, struct dev_pm_opp_config *config)
 		data->flags |= OPP_CONFIG_REGULATOR;
 	}
 
-	if (config->required_dev && config->required_opp_table) {
+	if (config->required_dev && config->config_required_dev) {
 		ret = _opp_set_required_dev(opp_table, dev,
 					    config->required_dev,
-					    config->required_opp_table);
+					    config->config_required_dev);
 		if (ret < 0)
 			goto err;
 
