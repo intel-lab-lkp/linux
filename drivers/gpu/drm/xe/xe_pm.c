@@ -392,8 +392,6 @@ int xe_pm_runtime_suspend(struct xe_device *xe)
 	xe_display_pm_runtime_suspend(xe);
 
 	if (xe->d3cold.allowed) {
-		xe_display_pm_suspend(xe, true);
-
 		err = xe_bo_evict_all(xe);
 		if (err)
 			goto out;
@@ -411,7 +409,7 @@ int xe_pm_runtime_suspend(struct xe_device *xe)
 		xe_display_pm_suspend_late(xe);
 out:
 	if (err)
-		xe_display_pm_resume(xe, true);
+		xe_display_pm_runtime_resume(xe);
 	xe_rpm_lockmap_release(xe);
 	xe_pm_write_callback_task(xe, NULL);
 	return err;
