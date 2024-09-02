@@ -2379,6 +2379,19 @@ static bool topology_span_sane(struct sched_domain_topology_level *tl,
 		mi = tl->mask(cpu);
 
 		/*
+		 * Some topology levels (e.g. PKG in default_topology[])
+		 * have a sched_domain_mask_f implementation that reuses
+		 * the same mask for several CPUs (in PKG's case, one mask
+		 * for all CPUs in the same NUMA node).
+		 *
+		 * For such topology levels, repeating cpumask_equal()
+		 * checks is wasteful. Instead, we first check that the
+		 * tl->mask(i) pointers aren't the same.
+		 */
+		if (mi == mc)
+			continue;
+
+		/*
 		 * We should 'and' all those masks with 'cpu_map' to exactly
 		 * match the topology we're about to build, but that can only
 		 * remove CPUs, which only lessens our ability to detect
