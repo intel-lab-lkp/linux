@@ -27,6 +27,7 @@
 #include <linux/input.h>
 #include <linux/interrupt.h>
 #include <linux/pm.h>
+#include <linux/property.h>
 #include <linux/slab.h>
 #include <linux/spi/spi.h>
 #include <linux/spi/ad7877.h>
@@ -667,6 +668,68 @@ static void ad7877_setup_ts_def_msg(struct spi_device *spi, struct ad7877 *ts)
 	}
 }
 
+static struct ad7877_platform_data *ad7877_parse_props(struct device *dev)
+{
+	struct ad7877_platform_data *pdata;
+	u32 value, average;
+
+	pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
+	if (!pdata)
+		return ERR_PTR(-ENOMEM);
+
+	pdata->model = (uintptr_t)device_get_match_data(dev);
+
+	device_property_read_u8(dev, "adi,stopacq-polarity",
+				&pdata->stopacq_polarity);
+	device_property_read_u8(dev, "adi,first-conv-delay",
+				&pdata->first_conversion_delay);
+	device_property_read_u8(dev, "adi,pen-down-acc-interval",
+				&pdata->pen_down_acc_interval);
+	device_property_read_u8(dev, "adi,acquisition-time",
+				&pdata->acquisition_time);
+
+	device_property_read_u16(dev, "adi,vref-delay-usecs",
+				 &pdata->vref_delay_usecs);
+
+	device_property_read_u32(dev, "touchscreen-x-plate-ohms", &value);
+	pdata->x_plate_ohms = (u16)value;
+	device_property_read_u32(dev, "touchscreen-y-plate-ohms", &value);
+	pdata->y_plate_ohms = (u16)value;
+	device_property_read_u32(dev, "touchscreen-min-x", &value);
+	pdata->x_min = (u16)value;
+	device_property_read_u32(dev, "touchscreen-min-y", &value);
+	pdata->y_min = (u16)value;
+	device_property_read_u32(dev, "touchscreen-max-x", &value);
+	pdata->x_max = (u16)value;
+	device_property_read_u32(dev, "touchscreen-max-y", &value);
+	pdata->y_max = (u16)value;
+	device_property_read_u32(dev, "touchscreen-max-pressure", &value);
+	pdata->pressure_max = (u16)value;
+	device_property_read_u32(dev, "touchscreen-min-pressure", &value);
+	pdata->pressure_min = (u16)value;
+	device_property_read_u32(dev, "touchscreen-average-samples", &average);
+	switch (average) {
+	case 1:
+		pdata->averaging = 0;
+		break;
+	case 4:
+		pdata->averaging = 1;
+		break;
+	case 8:
+		pdata->averaging = 2;
+		break;
+	case 16:
+		pdata->averaging = 3;
+		break;
+	default:
+		dev_err(dev,
+			"touchscreen-average-samples must be 1, 4, 8, or 16\n");
+		return ERR_PTR(-EINVAL);
+	}
+
+	return pdata;
+}
+
 static int ad7877_probe(struct spi_device *spi)
 {
 	struct ad7877			*ts;
@@ -681,8 +744,9 @@ static int ad7877_probe(struct spi_device *spi)
 	}
 
 	if (!pdata) {
-		dev_dbg(&spi->dev, "no platform data?\n");
-		return -ENODEV;
+		pdata = ad7877_parse_props(&spi->dev);
+		if (IS_ERR(pdata))
+			return PTR_ERR(pdata);
 	}
 
 	/* don't exceed max specified SPI CLK frequency */
