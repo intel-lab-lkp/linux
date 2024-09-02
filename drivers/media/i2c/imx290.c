@@ -499,6 +499,10 @@ static const struct imx290_clk_cfg imx290_720p_clock_config[] = {
 };
 
 /* Mode configs */
+#define WIDTH_720P	1280
+#define HEIGHT_720P	720
+#define MINIMUM_WIDTH	WIDTH_720P
+#define MINIMUM_HEIGHT	HEIGHT_720P
 static const struct imx290_mode imx290_modes_2lanes[] = {
 	{
 		.width = 1920,
@@ -512,8 +516,8 @@ static const struct imx290_mode imx290_modes_2lanes[] = {
 		.clk_cfg = imx290_1080p_clock_config,
 	},
 	{
-		.width = 1280,
-		.height = 720,
+		.width = WIDTH_720P,
+		.height = HEIGHT_720P,
 		.hmax_min = 3300,
 		.vmax_min = 750,
 		.link_freq_index = FREQ_INDEX_720P,
@@ -537,8 +541,8 @@ static const struct imx290_mode imx290_modes_4lanes[] = {
 		.clk_cfg = imx290_1080p_clock_config,
 	},
 	{
-		.width = 1280,
-		.height = 720,
+		.width = WIDTH_720P,
+		.height = HEIGHT_720P,
 		.hmax_min = 3300,
 		.vmax_min = 750,
 		.link_freq_index = FREQ_INDEX_720P,
@@ -845,6 +849,30 @@ static const char * const imx290_test_pattern_menu[] = {
 	"Gradation Pattern 2",
 	"000/555h Toggle Pattern",
 };
+
+/* absolute supported control ranges */
+#define HBLANK_MAX	(IMX290_HMAX_MAX - MINIMUM_WIDTH)
+#define VBLANK_MAX	(IMX290_VMAX_MAX - MINIMUM_HEIGHT)
+static unsigned int imx290_get_blank_min(const struct imx290 *imx290, bool v)
+{
+	const struct imx290_mode *modes = imx290_modes_ptr(imx290);
+	unsigned int min = UINT_MAX;
+	int i;
+
+	for (i = 0; i < imx290_modes_num(imx290); i++) {
+		unsigned int tmp;
+
+		if (v)
+			tmp = modes[i].hmax_min - modes[i].width;
+		else
+			tmp = modes[i].vmax_min - modes[i].height;
+
+		if (tmp < min)
+			min = tmp;
+	}
+
+	return min;
+}
 
 static void imx290_ctrl_update(struct imx290 *imx290,
 			       const struct imx290_mode *mode)
