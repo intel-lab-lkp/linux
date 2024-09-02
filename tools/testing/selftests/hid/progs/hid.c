@@ -598,3 +598,32 @@ SEC(".struct_ops.link")
 struct hid_bpf_ops test_infinite_loop_input_report = {
 	.hid_device_event = (void *)hid_test_infinite_loop_input_report,
 };
+
+SEC("?struct_ops/hid_driver_probe")
+void BPF_PROG(hid_test_driver_probe, struct hid_device *hdev, struct hid_bpf_driver *hdrv,
+				     struct hid_device_id *id)
+{
+	static const char hid_generic[] = "hid-generic";
+
+	bpf_printk("test_driver_probe, %s", hdrv->name);
+	if (!__builtin_memcmp(hdrv->name, hid_generic, sizeof(hid_generic)))
+		hdrv->force_driver = 1;
+	else
+		hdrv->ignore_driver = 1;
+}
+
+SEC("?struct_ops.s/hid_rdesc_fixup")
+int BPF_PROG(hid_rdesc_fixup_2, struct hid_bpf_ctx *hid_ctx)
+{
+	/*
+	 * We need an empty report descriptor fixup to force detach/reattach
+	 * the device when we load the BPF program.
+	 */
+	return 0;
+}
+
+SEC(".struct_ops.link")
+struct hid_bpf_ops test_driver_probe = {
+	.hid_driver_probe = (void *)hid_test_driver_probe,
+	.hid_rdesc_fixup = (void *)hid_rdesc_fixup_2,
+};

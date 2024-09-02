@@ -81,6 +81,8 @@ struct hid_bpf_ops {
 			       enum hid_report_type rtype, enum hid_class_request reqtype,
 			       u64 source);
 	int (*hid_hw_output_report)(struct hid_bpf_ctx *ctx, u64 source);
+	void (*hid_driver_probe)(struct hid_device *hdev, struct hid_bpf_driver *hdrv,
+				 struct hid_device_id *id);
 	struct hid_device *hdev;
 };
 
