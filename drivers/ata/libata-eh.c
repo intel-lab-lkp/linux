@@ -500,6 +500,8 @@ static void ata_eh_dev_disable(struct ata_device *dev)
 	ata_down_xfermask_limit(dev, ATA_DNXFER_FORCE_PIO0 | ATA_DNXFER_QUIET);
 	dev->class++;
 
+	ata_dev_cleanup_cdl_resources(dev);
+
 	/* From now till the next successful probe, ering is used to
 	 * track probe failures.  Clear accumulated device error info.
 	 */
