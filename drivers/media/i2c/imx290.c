@@ -1571,6 +1571,7 @@ static int imx290_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
 	struct imx290 *imx290;
+	u64 val;
 	int ret;
 
 	imx290 = devm_kzalloc(dev, sizeof(*imx290), GFP_KERNEL);
@@ -1630,6 +1631,17 @@ static int imx290_probe(struct i2c_client *client)
 	pm_runtime_enable(dev);
 	pm_runtime_set_autosuspend_delay(dev, 1000);
 	pm_runtime_use_autosuspend(dev);
+
+	/* Make sure the sensor is available before V4L2 subdev init. */
+	ret = cci_read(imx290->regmap, IMX290_STANDBY, &val, NULL);
+	if (ret) {
+		ret = dev_err_probe(dev, -ENODEV, "Failed to detect sensor\n");
+		goto err_pm;
+	}
+	if (val != IMX290_STANDBY_STANDBY) {
+		ret = dev_err_probe(dev, -ENODEV, "Sensor is not in standby\n");
+		goto err_pm;
+	}
 
 	/* Initialize the V4L2 subdev. */
 	ret = imx290_subdev_init(imx290);
