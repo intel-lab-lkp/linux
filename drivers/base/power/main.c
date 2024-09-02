@@ -1880,7 +1880,8 @@ int dpm_prepare(pm_message_t state)
 		mutex_lock(&dpm_list_mtx);
 
 		if (!error) {
-			dev->power.is_prepared = true;
+			if (!dev->power.no_pm_callbacks)
+				dev->power.is_prepared = true;
 			if (!list_empty(&dev->power.entry))
 				list_move_tail(&dev->power.entry, &dpm_prepared_list);
 		} else if (error == -EAGAIN) {
