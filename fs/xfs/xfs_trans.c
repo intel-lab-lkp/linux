@@ -868,17 +868,6 @@ __xfs_trans_commit(
 	if (!(tp->t_flags & XFS_TRANS_DIRTY))
 		goto out_unreserve;
 
-	/*
-	 * We must check against log shutdown here because we cannot abort log
-	 * items and leave them dirty, inconsistent and unpinned in memory while
-	 * the log is active. This leaves them open to being written back to
-	 * disk, and that will lead to on-disk corruption.
-	 */
-	if (xlog_is_shutdown(log)) {
-		error = -EIO;
-		goto out_unreserve;
-	}
-
 	ASSERT(tp->t_ticket != NULL);
 
 	/*
