@@ -1461,6 +1461,18 @@ struct device_node *dev_pm_opp_get_of_node(struct dev_pm_opp *opp)
 }
 EXPORT_SYMBOL_GPL(dev_pm_opp_get_of_node);
 
+/**
+ * dev_pm_opp_table_to_of_node() - Finds the node for an OPP table
+ * @opp_table:	The opp_table to return the node for
+ *
+ * Return: The DT node corresponding to the @opp_table.
+ */
+struct device_node *dev_pm_opp_table_to_of_node(struct opp_table *opp_table)
+{
+	return opp_table->np;
+}
+EXPORT_SYMBOL_GPL(dev_pm_opp_table_to_of_node);
+
 /*
  * Callback function provided to the Energy Model framework upon registration.
  * It provides the power used by @dev at @kHz if it is the frequency of an
