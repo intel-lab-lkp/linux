@@ -462,7 +462,7 @@ sub print_config_compare {
 
 # Pass in:
 # $phalf: half of the configs names you want to add
-# $oconfigs: The orginial configs to start with
+# $oconfigs: The original configs to start with
 # $sconfigs: The source to update $oconfigs with (from $phalf)
 # $which: The name of which half that is updating (top / bottom)
 # $type: The name of the source type (good / bad)
