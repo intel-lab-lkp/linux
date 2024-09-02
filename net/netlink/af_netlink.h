@@ -19,7 +19,7 @@ enum {
 	NETLINK_F_STRICT_CHK,
 };
 
-#define NLGRPSZ(x)	(ALIGN(x, sizeof(unsigned long) * 8) / 8)
+#define NLGRPSZ(x)	(ALIGN(x, BITS_PER_LONG) / 8)
 #define NLGRPLONGS(x)	(NLGRPSZ(x)/sizeof(unsigned long))
 
 struct netlink_sock {
