@@ -5425,7 +5425,7 @@ int set_tracer_flag(struct trace_array *tr, unsigned int mask, int enabled)
 
 	if (mask == TRACE_ITER_RECORD_TGID) {
 		if (!tgid_map) {
-			tgid_map_max = pid_max;
+			tgid_map_max = init_pid_ns.pid_max;
 			map = kvcalloc(tgid_map_max + 1, sizeof(*tgid_map),
 				       GFP_KERNEL);
 
