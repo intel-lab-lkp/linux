@@ -130,8 +130,13 @@ static void fill_pool(void)
 	gfp_t gfp = __GFP_HIGH | __GFP_NOWARN;
 	struct debug_obj *obj;
 	unsigned long flags;
+	struct debug_percpu_free *percpu_pool;
 
 	if (likely(READ_ONCE(obj_pool_free) >= debug_objects_pool_min_level))
+		return;
+
+	percpu_pool = this_cpu_ptr(&percpu_obj_pool);
+	if (likely(obj_cache) && percpu_pool->obj_free > 0)
 		return;
 
 	/*
