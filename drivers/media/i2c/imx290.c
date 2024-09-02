@@ -769,6 +769,10 @@ static int imx290_set_ctrl(struct v4l2_ctrl *ctrl)
 	if (!pm_runtime_get_if_in_use(imx290->dev))
 		return 0;
 
+	/* V4L2 controls values will be applied only when mode is known */
+	if (imx290->current_mode == &imx290_mode_off)
+		return 0;
+
 	state = v4l2_subdev_get_locked_active_state(&imx290->sd);
 	format = v4l2_subdev_state_get_format(state, 0);
 
