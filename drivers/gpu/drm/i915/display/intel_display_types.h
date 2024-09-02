@@ -1717,6 +1717,8 @@ struct intel_psr {
 	bool sink_support;
 	bool source_support;
 	bool enabled;
+	bool is_dpkgc_configured;
+	bool is_dc5_entry_possible;
 	bool paused;
 	enum pipe pipe;
 	enum transcoder transcoder;
