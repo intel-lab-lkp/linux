@@ -409,7 +409,7 @@ static int lan743x_ptpci_settime64(struct ptp_clock_info *ptpci,
 				   ts->tv_sec);
 			return -ERANGE;
 		}
-		if (ts->tv_nsec >= 1000000000L ||
+		if (ts->tv_nsec >= NSEC_PER_SEC ||
 		    ts->tv_nsec < 0) {
 			netif_warn(adapter, drv, adapter->netdev,
 				   "ts->tv_nsec out of range, %ld\n",
