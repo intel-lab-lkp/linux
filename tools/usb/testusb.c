@@ -226,7 +226,7 @@ static int testdev_ifnum(FILE *fd)
 
 	/* the FunctionFS gadget can have the source/sink interface
 	 * anywhere.  We look for an interface descriptor that match
-	 * what we expect.  We ignore configuratiens thou. */
+	 * what we expect.  We ignore configurations thou. */
 
 	if (dev.idVendor == 0x0525 && dev.idProduct == 0xa4ac
 	 && (dev.bDeviceClass == USB_CLASS_PER_INTERFACE
