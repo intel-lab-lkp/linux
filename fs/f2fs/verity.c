@@ -139,6 +139,10 @@ static int f2fs_begin_enable_verity(struct file *filp)
 	if (err)
 		return err;
 
+	err = f2fs_convert_inline_tail(inode);
+	if (err)
+		return err;
+
 	set_inode_flag(inode, FI_VERITY_IN_PROGRESS);
 	return 0;
 }
