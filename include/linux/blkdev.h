@@ -1663,6 +1663,9 @@ static inline bool bdev_can_atomic_write(struct block_device *bdev)
 	if (!limits->atomic_write_unit_min)
 		return false;
 
+	if (!IS_ALIGNED(bdev_nr_bytes(bdev), limits->atomic_write_unit_max))
+		return false;
+
 	if (bdev_is_partition(bdev)) {
 		sector_t bd_start_sect = bdev->bd_start_sect;
 		unsigned int alignment =
