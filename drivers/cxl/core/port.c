@@ -3,7 +3,7 @@
 #include <linux/platform_device.h>
 #include <linux/memregion.h>
 #include <linux/workqueue.h>
-#include <linux/einj-cxl.h>
+#include <linux/cxl/einj.h>
 #include <linux/debugfs.h>
 #include <linux/device.h>
 #include <linux/module.h>

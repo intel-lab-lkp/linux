@@ -7,7 +7,7 @@
  *
  * Author: Ben Cheatham <benjamin.cheatham@amd.com>
  */
-#include <linux/einj-cxl.h>
+#include <linux/cxl/einj.h>
 #include <linux/seq_file.h>
 #include <linux/pci.h>
 

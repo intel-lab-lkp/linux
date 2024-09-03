@@ -6,7 +6,7 @@
 #include <linux/pci.h>
 #include <linux/cdev.h>
 #include <linux/uuid.h>
-#include <linux/cxl-event.h>
+#include <linux/cxl/event.h>
 #include <linux/node.h>
 #include <linux/cxl/mailbox.h>
 #include "cxl.h"
