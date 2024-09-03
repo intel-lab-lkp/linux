@@ -870,6 +870,74 @@ static u8 psr_compute_idle_frames(struct intel_dp *intel_dp)
 	return idle_frames;
 }
 
+static bool intel_psr_check_wa_delayed_vblank(struct intel_crtc_state *crtc_state)
+{
+	struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
+
+	return (adjusted_mode->crtc_vblank_start - adjusted_mode->crtc_vdisplay) >= 6;
+}
+
+/*
+ * PKG_C_LATENCY is configured only when DISPLAY_VER >= 20 and
+ * VRR is not enabled
+ */
+static bool intel_psr_is_dpkgc_configured(struct drm_i915_private *i915)
+{
+	struct intel_crtc *intel_crtc;
+
+	if (DISPLAY_VER(i915) < 20)
+		return false;
+
+	for_each_intel_crtc(&i915->drm, intel_crtc) {
+		struct intel_crtc_state *crtc_state;
+
+		if (!intel_crtc->active)
+			continue;
+
+		crtc_state = intel_crtc->config;
+
+		if (crtc_state->vrr.enable)
+			return false;
+	}
+
+	return true;
+}
+
+/*
+ * DC5 entry is only possible if vblank interrupt is disabled
+ * and either psr1, psr2, edp 1.5 pr alpm is enabled on all
+ * enabled encoders.
+ */
+static bool
+intel_psr_is_dc5_entry_possible(struct drm_i915_private *i915,
+				struct intel_crtc_state *crtc_state)
+{
+	struct intel_crtc *intel_crtc;
+
+	if (!crtc_state->has_psr)
+		return false;
+
+	for_each_intel_crtc(&i915->drm, intel_crtc) {
+		struct drm_crtc *crtc = &intel_crtc->base;
+		struct drm_vblank_crtc *vblank;
+		struct intel_encoder *encoder;
+
+		if (!intel_crtc->active)
+			continue;
+
+		vblank = drm_crtc_vblank_crtc(crtc);
+
+		if (vblank->enabled)
+			return false;
+
+		for_each_encoder_on_crtc(&i915->drm, crtc, encoder)
+			if (encoder->type != INTEL_OUTPUT_EDP)
+				return false;
+	}
+
+	return true;
+}
+
 static void hsw_activate_psr1(struct intel_dp *intel_dp)
 {
 	struct drm_i915_private *dev_priv = dp_to_i915(intel_dp);
@@ -980,7 +1048,11 @@ static void hsw_activate_psr2(struct intel_dp *intel_dp)
 	u32 val = EDP_PSR2_ENABLE;
 	u32 psr_val = 0;
 
-	val |= EDP_PSR2_IDLE_FRAMES(psr_compute_idle_frames(intel_dp));
+	/* Wa_22019444797 */
+	if (DISPLAY_VER(dev_priv) != 20 ||
+	    !intel_dp->psr.is_dpkgc_configured ||
+	    intel_dp->psr.is_dc5_entry_possible)
+		val |= EDP_PSR2_IDLE_FRAMES(psr_compute_idle_frames(intel_dp));
 
 	if (DISPLAY_VER(dev_priv) < 14 && !IS_ALDERLAKE_P(dev_priv))
 		val |= EDP_SU_TRACK_ENABLE;
@@ -1595,6 +1667,32 @@ _panel_replay_compute_config(struct intel_dp *intel_dp,
 	return true;
 }
 
+static void wa_22019444797(struct intel_dp *intel_dp,
+			   struct intel_crtc_state *crtc_state)
+{
+	struct drm_i915_private *i915 = dp_to_i915(intel_dp);
+
+	if (DISPLAY_VER(i915) != 20)
+		return;
+
+	intel_dp->psr.is_dpkgc_configured =
+		intel_psr_is_dpkgc_configured(i915);
+	intel_dp->psr.is_dc5_entry_possible =
+		intel_psr_is_dc5_entry_possible(i915, crtc_state);
+
+	/* PSR2 not handled here. Wa not needed for Panel Replay */
+	if (crtc_state->has_sel_update || crtc_state->has_panel_replay)
+		return;
+
+	if (intel_dp->psr.is_dpkgc_configured &&
+	    !(intel_psr_check_wa_delayed_vblank(crtc_state) ||
+	      intel_dp->psr.is_dc5_entry_possible)) {
+		drm_dbg_kms(&i915->drm,
+			    "PSR1 not enabled as it doesn't meet requirements of WA: 22019444797\n");
+		crtc_state->has_psr = false;
+	}
+}
+
 void intel_psr_compute_config(struct intel_dp *intel_dp,
 			      struct intel_crtc_state *crtc_state,
 			      struct drm_connector_state *conn_state)
@@ -1641,6 +1739,7 @@ void intel_psr_compute_config(struct intel_dp *intel_dp,
 		return;
 
 	crtc_state->has_sel_update = intel_sel_update_config_valid(intel_dp, crtc_state);
+	wa_22019444797(intel_dp, crtc_state);
 }
 
 void intel_psr_get_config(struct intel_encoder *encoder,
