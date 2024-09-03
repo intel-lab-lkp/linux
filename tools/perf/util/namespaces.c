@@ -135,7 +135,8 @@ int nsinfo__init(struct nsinfo *nsi)
 			       &RC_CHK_ACCESS(nsi)->in_pidns, spath);
 
 out:
-	free(newns);
+	if (newns)
+		free(newns);
 	return rv;
 }
 
