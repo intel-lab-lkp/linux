@@ -18,6 +18,14 @@ config NET_NS_REFCNT_TRACKER
 	  Enable debugging feature to track netns references.
 	  This adds memory and cpu costs.
 
+config PAGE_POOL_DEBUG
+	bool "Enable page pool debugging"
+	depends on PAGE_POOL
+	default n
+	help
+	  Enable debugging feature in page pool to catch concurrent
+	  access for pool->alloc cache.
+
 config DEBUG_NET
 	bool "Add generic networking debug"
 	depends on DEBUG_KERNEL && NET
