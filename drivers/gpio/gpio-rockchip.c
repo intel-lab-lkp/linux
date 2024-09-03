@@ -213,13 +213,13 @@ static int rockchip_gpio_set_debounce(struct gpio_chip *gc,
 		freq = clk_get_rate(bank->db_clk);
 		if (!freq)
 			return -EINVAL;
-		div = (u64)(GENMASK(23, 0) + 1) * 2 * HZ_PER_MHZ;
+		div = (u64)(GENMASK(23, 0) + 1) * HZ_PER_MHZ;
 		max_debounce = DIV_ROUND_CLOSEST_ULL(div, freq);
 		if (debounce > max_debounce)
 			return -EINVAL;
 
 		div = (u64)debounce * freq;
-		div_reg = DIV_ROUND_CLOSEST_ULL(div, 2 * USEC_PER_SEC) - 1;
+		div_reg = DIV_ROUND_CLOSEST_ULL(div, USEC_PER_SEC) - 1;
 	}
 
 	raw_spin_lock_irqsave(&bank->slock, flags);
