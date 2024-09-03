@@ -97,12 +97,23 @@ pub struct Lock<T: ?Sized, B: Backend> {
     pub(crate) data: UnsafeCell<T>,
 }
 
-// SAFETY: `Lock` can be transferred across thread boundaries iff the data it protects can.
-unsafe impl<T: ?Sized + Send, B: Backend> Send for Lock<T, B> {}
+// SAFETY: `Lock` can be transferred across thread boundaries iff the data it protects and the
+// backend state can.
+unsafe impl<T: ?Sized, B: Backend> Send for Lock<T, B>
+where
+    T: Send,
+    B::State: Send,
+{
+}
 
 // SAFETY: `Lock` serialises the interior mutability it provides, so it is `Sync` as long as the
-// data it protects is `Send`.
-unsafe impl<T: ?Sized + Send, B: Backend> Sync for Lock<T, B> {}
+// data it protects is `Send` and the backend state can be shared.
+unsafe impl<T: ?Sized + Send, B: Backend> Sync for Lock<T, B>
+where
+    T: Send,
+    B::State: Sync,
+{
+}
 
 impl<T, B: Backend> Lock<T, B> {
     /// Constructs a new lock initialiser.
