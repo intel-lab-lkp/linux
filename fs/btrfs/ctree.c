@@ -196,7 +196,7 @@ struct btrfs_path *btrfs_alloc_path(void)
 /* this also releases the path */
 void btrfs_free_path(struct btrfs_path *p)
 {
-	if (!p)
+	if (IS_ERR_OR_NULL(p))
 		return;
 	btrfs_release_path(p);
 	kmem_cache_free(btrfs_path_cachep, p);
