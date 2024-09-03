@@ -237,10 +237,10 @@ TEST_FAIL_NTH(basic_fail_nth, basic)
 
 	self->fd = open("/dev/iommu", O_RDWR);
 	if (self->fd == -1)
-		return -1;
+		goto close;
 
 	if (_test_ioctl_ioas_alloc(self->fd, &ioas_id))
-		return -1;
+		goto close;
 
 	{
 		struct iommu_ioas_iova_ranges ranges_cmd = {
@@ -250,7 +250,7 @@ TEST_FAIL_NTH(basic_fail_nth, basic)
 			.allowed_iovas = (uintptr_t)ranges,
 		};
 		if (ioctl(self->fd, IOMMU_IOAS_IOVA_RANGES, &ranges_cmd))
-			return -1;
+			goto close;
 	}
 
 	{
@@ -264,13 +264,13 @@ TEST_FAIL_NTH(basic_fail_nth, basic)
 		ranges[0].start = 16*1024;
 		ranges[0].last = BUFFER_SIZE + 16 * 1024 * 600 - 1;
 		if (ioctl(self->fd, IOMMU_IOAS_ALLOW_IOVAS, &allow_cmd))
-			return -1;
+			goto close;
 	}
 
 	if (_test_ioctl_ioas_map(self->fd, ioas_id, buffer, BUFFER_SIZE, &iova,
 				 IOMMU_IOAS_MAP_WRITEABLE |
 					 IOMMU_IOAS_MAP_READABLE))
-		return -1;
+		goto close;
 
 	{
 		struct iommu_ioas_copy copy_cmd = {
@@ -284,15 +284,19 @@ TEST_FAIL_NTH(basic_fail_nth, basic)
 		};
 
 		if (ioctl(self->fd, IOMMU_IOAS_COPY, &copy_cmd))
-			return -1;
+			goto close;
 	}
 
 	if (_test_ioctl_ioas_unmap(self->fd, ioas_id, iova, BUFFER_SIZE,
 				   NULL))
-		return -1;
+		goto close;
 	/* Failure path of no IOVA to unmap */
 	_test_ioctl_ioas_unmap(self->fd, ioas_id, iova, BUFFER_SIZE, NULL);
 	return 0;
+
+close:
+	close(self->fd);
+	return -1;
 }
 
 /* iopt_area_fill_domains() and iopt_area_fill_domain() */
@@ -305,30 +309,33 @@ TEST_FAIL_NTH(basic_fail_nth, map_domain)
 
 	self->fd = open("/dev/iommu", O_RDWR);
 	if (self->fd == -1)
-		return -1;
+		goto close;
 
 	if (_test_ioctl_ioas_alloc(self->fd, &ioas_id))
-		return -1;
+		goto close;
 
 	if (_test_ioctl_set_temp_memory_limit(self->fd, 32))
-		return -1;
+		goto close;
 
 	fail_nth_enable();
 
 	if (_test_cmd_mock_domain(self->fd, ioas_id, &stdev_id, &hwpt_id, NULL))
-		return -1;
+		goto close;
 
 	if (_test_ioctl_ioas_map(self->fd, ioas_id, buffer, 262144, &iova,
 				 IOMMU_IOAS_MAP_WRITEABLE |
 					 IOMMU_IOAS_MAP_READABLE))
-		return -1;
+		goto close;
 
 	if (_test_ioctl_destroy(self->fd, stdev_id))
-		return -1;
+		goto close;
 
 	if (_test_cmd_mock_domain(self->fd, ioas_id, &stdev_id, &hwpt_id, NULL))
-		return -1;
+		goto close;
 	return 0;
+close:
+	close(self->fd);
+	return -1;
 }
 
 TEST_FAIL_NTH(basic_fail_nth, map_two_domains)
@@ -342,40 +349,43 @@ TEST_FAIL_NTH(basic_fail_nth, map_two_domains)
 
 	self->fd = open("/dev/iommu", O_RDWR);
 	if (self->fd == -1)
-		return -1;
+		goto close;
 
 	if (_test_ioctl_ioas_alloc(self->fd, &ioas_id))
-		return -1;
+		goto close;
 
 	if (_test_ioctl_set_temp_memory_limit(self->fd, 32))
-		return -1;
+		goto close;
 
 	if (_test_cmd_mock_domain(self->fd, ioas_id, &stdev_id, &hwpt_id, NULL))
-		return -1;
+		goto close;
 
 	fail_nth_enable();
 
 	if (_test_cmd_mock_domain(self->fd, ioas_id, &stdev_id2, &hwpt_id2,
 				  NULL))
-		return -1;
+		goto close;
 
 	if (_test_ioctl_ioas_map(self->fd, ioas_id, buffer, 262144, &iova,
 				 IOMMU_IOAS_MAP_WRITEABLE |
 					 IOMMU_IOAS_MAP_READABLE))
-		return -1;
+		goto close;
 
 	if (_test_ioctl_destroy(self->fd, stdev_id))
-		return -1;
+		goto close;
 
 	if (_test_ioctl_destroy(self->fd, stdev_id2))
-		return -1;
+		goto close;
 
 	if (_test_cmd_mock_domain(self->fd, ioas_id, &stdev_id, &hwpt_id, NULL))
-		return -1;
+		goto close;
 	if (_test_cmd_mock_domain(self->fd, ioas_id, &stdev_id2, &hwpt_id2,
 				  NULL))
-		return -1;
+		goto close;
 	return 0;
+close:
+	close(self->fd);
+	return -1;
 }
 
 TEST_FAIL_NTH(basic_fail_nth, access_rw)
@@ -387,23 +397,23 @@ TEST_FAIL_NTH(basic_fail_nth, access_rw)
 
 	self->fd = open("/dev/iommu", O_RDWR);
 	if (self->fd == -1)
-		return -1;
+		goto close;
 
 	if (_test_ioctl_ioas_alloc(self->fd, &ioas_id))
-		return -1;
+		goto close;
 
 	if (_test_ioctl_set_temp_memory_limit(self->fd, 32))
-		return -1;
+		goto close;
 
 	if (_test_ioctl_ioas_map(self->fd, ioas_id, buffer, 262144, &iova,
 				 IOMMU_IOAS_MAP_WRITEABLE |
 					 IOMMU_IOAS_MAP_READABLE))
-		return -1;
+		goto close;
 
 	fail_nth_enable();
 
 	if (_test_cmd_create_access(self->fd, ioas_id, &self->access_id, 0))
-		return -1;
+		goto close;
 
 	{
 		struct iommu_test_cmd access_cmd = {
@@ -418,22 +428,22 @@ TEST_FAIL_NTH(basic_fail_nth, access_rw)
 		// READ
 		if (ioctl(self->fd, _IOMMU_TEST_CMD(IOMMU_TEST_OP_ACCESS_RW),
 			  &access_cmd))
-			return -1;
+			goto close;
 
 		access_cmd.access_rw.flags = MOCK_ACCESS_RW_WRITE;
 		if (ioctl(self->fd, _IOMMU_TEST_CMD(IOMMU_TEST_OP_ACCESS_RW),
 			  &access_cmd))
-			return -1;
+			goto close;
 
 		access_cmd.access_rw.flags = MOCK_ACCESS_RW_SLOW_PATH;
 		if (ioctl(self->fd, _IOMMU_TEST_CMD(IOMMU_TEST_OP_ACCESS_RW),
 			  &access_cmd))
-			return -1;
+			goto close;
 		access_cmd.access_rw.flags = MOCK_ACCESS_RW_SLOW_PATH |
 					     MOCK_ACCESS_RW_WRITE;
 		if (ioctl(self->fd, _IOMMU_TEST_CMD(IOMMU_TEST_OP_ACCESS_RW),
 			  &access_cmd))
-			return -1;
+			goto close;
 	}
 
 	{
@@ -449,12 +459,15 @@ TEST_FAIL_NTH(basic_fail_nth, access_rw)
 
 		if (ioctl(self->fd, _IOMMU_TEST_CMD(IOMMU_TEST_OP_ACCESS_RW),
 			  &access_cmd))
-			return -1;
+			goto close;
 	}
 	if (_test_cmd_destroy_access(self->access_id))
 		return -1;
 	self->access_id = 0;
 	return 0;
+close:
+	close(self->fd);
+	return -1;
 }
 
 /* pages.c access functions */
@@ -466,22 +479,22 @@ TEST_FAIL_NTH(basic_fail_nth, access_pin)
 
 	self->fd = open("/dev/iommu", O_RDWR);
 	if (self->fd == -1)
-		return -1;
+		goto close;
 
 	if (_test_ioctl_ioas_alloc(self->fd, &ioas_id))
-		return -1;
+		goto close;
 
 	if (_test_ioctl_set_temp_memory_limit(self->fd, 32))
-		return -1;
+		goto close;
 
 	if (_test_ioctl_ioas_map(self->fd, ioas_id, buffer, BUFFER_SIZE, &iova,
 				 IOMMU_IOAS_MAP_WRITEABLE |
 					 IOMMU_IOAS_MAP_READABLE))
-		return -1;
+		goto close;
 
 	if (_test_cmd_create_access(self->fd, ioas_id, &self->access_id,
 				    MOCK_FLAGS_ACCESS_CREATE_NEEDS_PIN_PAGES))
-		return -1;
+		goto close;
 
 	fail_nth_enable();
 
@@ -497,18 +510,21 @@ TEST_FAIL_NTH(basic_fail_nth, access_pin)
 
 		if (ioctl(self->fd, _IOMMU_TEST_CMD(IOMMU_TEST_OP_ACCESS_RW),
 			  &access_cmd))
-			return -1;
+			goto close;
 		access_pages_id = access_cmd.access_pages.out_access_pages_id;
 	}
 
 	if (_test_cmd_destroy_access_pages(self->fd, self->access_id,
 					   access_pages_id))
-		return -1;
+		goto close;
 
 	if (_test_cmd_destroy_access(self->access_id))
 		return -1;
 	self->access_id = 0;
 	return 0;
+close:
+	close(self->fd);
+	return -1;
 }
 
 /* iopt_pages_fill_xarray() */
@@ -522,25 +538,25 @@ TEST_FAIL_NTH(basic_fail_nth, access_pin_domain)
 
 	self->fd = open("/dev/iommu", O_RDWR);
 	if (self->fd == -1)
-		return -1;
+		goto close;
 
 	if (_test_ioctl_ioas_alloc(self->fd, &ioas_id))
-		return -1;
+		goto close;
 
 	if (_test_ioctl_set_temp_memory_limit(self->fd, 32))
-		return -1;
+		goto close;
 
 	if (_test_cmd_mock_domain(self->fd, ioas_id, &stdev_id, &hwpt_id, NULL))
-		return -1;
+		goto close;
 
 	if (_test_ioctl_ioas_map(self->fd, ioas_id, buffer, BUFFER_SIZE, &iova,
 				 IOMMU_IOAS_MAP_WRITEABLE |
 					 IOMMU_IOAS_MAP_READABLE))
-		return -1;
+		goto close;
 
 	if (_test_cmd_create_access(self->fd, ioas_id, &self->access_id,
 				    MOCK_FLAGS_ACCESS_CREATE_NEEDS_PIN_PAGES))
-		return -1;
+		goto close;
 
 	fail_nth_enable();
 
@@ -556,21 +572,24 @@ TEST_FAIL_NTH(basic_fail_nth, access_pin_domain)
 
 		if (ioctl(self->fd, _IOMMU_TEST_CMD(IOMMU_TEST_OP_ACCESS_RW),
 			  &access_cmd))
-			return -1;
+			goto close;
 		access_pages_id = access_cmd.access_pages.out_access_pages_id;
 	}
 
 	if (_test_cmd_destroy_access_pages(self->fd, self->access_id,
 					   access_pages_id))
-		return -1;
+		goto close;
 
 	if (_test_cmd_destroy_access(self->access_id))
 		return -1;
 	self->access_id = 0;
 
 	if (_test_ioctl_destroy(self->fd, stdev_id))
-		return -1;
+		goto close;
 	return 0;
+close:
+	close(self->fd);
+	return -1;
 }
 
 /* device.c */
@@ -586,45 +605,49 @@ TEST_FAIL_NTH(basic_fail_nth, device)
 
 	self->fd = open("/dev/iommu", O_RDWR);
 	if (self->fd == -1)
-		return -1;
+		goto close;
 
 	if (_test_ioctl_ioas_alloc(self->fd, &ioas_id))
-		return -1;
+		goto close;
 
 	if (_test_ioctl_ioas_alloc(self->fd, &ioas_id2))
-		return -1;
+		goto close;
 
 	iova = MOCK_APERTURE_START;
 	if (_test_ioctl_ioas_map(self->fd, ioas_id, buffer, PAGE_SIZE, &iova,
 				 IOMMU_IOAS_MAP_FIXED_IOVA |
 					 IOMMU_IOAS_MAP_WRITEABLE |
 					 IOMMU_IOAS_MAP_READABLE))
-		return -1;
+		goto close;
 	if (_test_ioctl_ioas_map(self->fd, ioas_id2, buffer, PAGE_SIZE, &iova,
 				 IOMMU_IOAS_MAP_FIXED_IOVA |
 					 IOMMU_IOAS_MAP_WRITEABLE |
 					 IOMMU_IOAS_MAP_READABLE))
-		return -1;
+		goto close;
 
 	fail_nth_enable();
 
 	if (_test_cmd_mock_domain(self->fd, ioas_id, &stdev_id, NULL,
 				  &idev_id))
-		return -1;
+		goto close;
 
 	if (_test_cmd_get_hw_info(self->fd, idev_id, &info, sizeof(info), NULL))
-		return -1;
+		goto close;
 
 	if (_test_cmd_hwpt_alloc(self->fd, idev_id, ioas_id, 0, 0, &hwpt_id,
 				 IOMMU_HWPT_DATA_NONE, 0, 0))
-		return -1;
+		goto close;
 
 	if (_test_cmd_mock_domain_replace(self->fd, stdev_id, ioas_id2, NULL))
-		return -1;
+		goto close;
 
 	if (_test_cmd_mock_domain_replace(self->fd, stdev_id, hwpt_id, NULL))
-		return -1;
+		goto close;
 	return 0;
+close:
+	close(self->fd);
+	return -1;
+
 }
 
 TEST_HARNESS_MAIN
