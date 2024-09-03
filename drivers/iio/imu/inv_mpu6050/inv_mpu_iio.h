@@ -212,6 +212,7 @@ struct inv_mpu6050_state {
 	bool level_shifter;
 	u8 *data;
 	s64 it_timestamp;
+	unsigned int wom_bits;
 };
 
 /*register and associated bit definition*/

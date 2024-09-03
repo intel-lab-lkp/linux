@@ -243,25 +243,9 @@ static irqreturn_t inv_mpu6050_interrupt_handle(int irq, void *p)
 {
 	struct iio_dev *indio_dev = p;
 	struct inv_mpu6050_state *st = iio_priv(indio_dev);
-	unsigned int int_status, wom_bits;
+	unsigned int int_status;
 	u64 ev_code;
 	int result;
-
-	switch (st->chip_type) {
-	case INV_MPU6050:
-	case INV_MPU6500:
-	case INV_MPU6515:
-	case INV_MPU6880:
-	case INV_MPU6000:
-	case INV_MPU9150:
-	case INV_MPU9250:
-	case INV_MPU9255:
-		wom_bits = INV_MPU6500_BIT_WOM_INT;
-		break;
-	default:
-		wom_bits = INV_ICM20608_BIT_WOM_INT;
-		break;
-	}
 
 	scoped_guard(mutex, &st->lock) {
 		/* ack interrupt and check status */
@@ -272,7 +256,7 @@ static irqreturn_t inv_mpu6050_interrupt_handle(int irq, void *p)
 		}
 
 		/* handle WoM event */
-		if (st->chip_config.wom_en && (int_status & wom_bits)) {
+		if (st->chip_config.wom_en && (int_status & st->wom_bits)) {
 			ev_code = IIO_MOD_EVENT_CODE(IIO_ACCEL, 0, IIO_MOD_X_OR_Y_OR_Z,
 						     IIO_EV_TYPE_ROC, IIO_EV_DIR_RISING);
 			iio_push_event(indio_dev, ev_code, st->it_timestamp);

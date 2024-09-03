@@ -2076,6 +2076,22 @@ int inv_mpu_core_probe(struct regmap *regmap, int irq, const char *name,
 		return result;
 	}
 
+	switch (chip_type) {
+	case INV_MPU6050:
+	case INV_MPU6500:
+	case INV_MPU6515:
+	case INV_MPU6880:
+	case INV_MPU6000:
+	case INV_MPU9150:
+	case INV_MPU9250:
+	case INV_MPU9255:
+		st->wom_bits = INV_MPU6500_BIT_WOM_INT;
+		break;
+	default:
+		st->wom_bits = INV_ICM20608_BIT_WOM_INT;
+		break;
+	}
+
 	return 0;
 
 error_power_off:
