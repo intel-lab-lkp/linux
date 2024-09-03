@@ -16,6 +16,7 @@
 
 #include <linux/fs.h>
 #include <linux/fs_context.h>
+#include <linux/mman.h>
 #include <linux/spinlock_types.h>
 #include <uapi/linux/magic.h>
 #include <uapi/linux/msharefs.h>
@@ -155,11 +156,64 @@ msharefs_set_size(struct mm_struct *mm, struct mshare_data *m_data,
 }
 
 static long
+msharefs_create_mapping(struct mm_struct *mm, struct mshare_data *m_data,
+		        struct mshare_create *mcreate)
+{
+	unsigned long mshare_start, mshare_end;
+	unsigned long mapped_addr;
+	unsigned long populate = 0;
+	unsigned long addr = mcreate->addr;
+	unsigned long size = mcreate->size;
+	unsigned int fd = mcreate->fd;
+	int prot = mcreate->prot;
+	int flags = mcreate->flags;
+	vm_flags_t vm_flags;
+	int err = -EINVAL;
+
+	mshare_start = m_data->minfo.start;
+	mshare_end = mshare_start + m_data->minfo.size;
+
+	if ((addr < mshare_start) || (addr >= mshare_end) ||
+	    (addr + size > mshare_end))
+		goto out;
+
+	/*
+	 * XXX Keep things simple initially and only allow the mapping of
+	 * anonymous shared memory at fixed addresses without unmapping.
+	 */
+	if ((flags & (MAP_SHARED | MAP_FIXED)) != (MAP_SHARED | MAP_FIXED))
+		goto out;
+
+	if (fd != -1)
+		goto out;
+
+	flags |= MAP_FIXED_NOREPLACE;
+	vm_flags = VM_NOHUGEPAGE;
+
+	if (mmap_write_lock_killable(mm)) {
+		err = -EINTR;
+		goto out;
+	}
+
+	err = 0;
+	mapped_addr = __do_mmap(NULL, addr, size, prot, flags, vm_flags,
+				0, &populate, NULL, mm);
+
+	if (IS_ERR_VALUE(mapped_addr))
+		err = (long)mapped_addr;
+
+	mmap_write_unlock(mm);
+out:
+	return err;
+}
+
+static long
 msharefs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	struct mshare_data *m_data = filp->private_data;
 	struct mm_struct *mm = m_data->mm;
 	struct mshare_info minfo;
+	struct mshare_create mcreate;
 
 	switch (cmd) {
 	case MSHAREFS_GET_SIZE:
@@ -187,6 +241,23 @@ msharefs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		}
 
 		return msharefs_set_size(mm, m_data, &minfo);
+
+	case MSHAREFS_CREATE_MAPPING:
+		if (copy_from_user(&mcreate, (struct mshare_create __user *)arg,
+			sizeof(mcreate)))
+			return -EFAULT;
+
+		/*
+		 * validate mshare region
+		 */
+		spin_lock(&m_data->m_lock);
+		if (m_data->minfo.start == 0) {
+			spin_unlock(&m_data->m_lock);
+			return -EINVAL;
+		}
+		spin_unlock(&m_data->m_lock);
+
+		return msharefs_create_mapping(mm, m_data, &mcreate);
 
 	default:
 		return -ENOTTY;

@@ -20,10 +20,19 @@
  */
 #define MSHAREFS_GET_SIZE	_IOR('x', 0,  struct mshare_info)
 #define MSHAREFS_SET_SIZE	_IOW('x', 1,  struct mshare_info)
+#define MSHAREFS_CREATE_MAPPING	_IOW('x', 2,  struct mshare_create)
 
 struct mshare_info {
 	__u64 start;
 	__u64 size;
 };
 
+struct mshare_create {
+	__u64 addr;
+	__u64 size;
+	__u64 offset;
+	__u32 prot;
+	__u32 flags;
+	__u32 fd;
+};
 #endif
