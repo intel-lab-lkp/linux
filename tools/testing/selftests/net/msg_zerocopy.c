@@ -120,7 +120,7 @@ static uint16_t get_ip_csum(const uint16_t *start, int num_words)
 	return ~sum;
 }
 
-static int do_setcpu(int cpu)
+static void do_setcpu(int cpu)
 {
 	cpu_set_t mask;
 
@@ -131,7 +131,6 @@ static int do_setcpu(int cpu)
 	else if (cfg_verbose)
 		fprintf(stderr, "cpu: %u\n", cpu);
 
-	return 0;
 }
 
 static void do_setsockopt(int fd, int level, int optname, int val)
