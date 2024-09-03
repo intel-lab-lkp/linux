@@ -45,7 +45,7 @@ mmu-$(CONFIG_MMU)	+= process_vm_access.o
 endif
 
 ifdef CONFIG_64BIT
-mmu-$(CONFIG_MMU)	+= mseal.o
+mmu-$(CONFIG_MMU)	+= mseal.o mshare.o
 endif
 
 obj-y			:= filemap.o mempool.o oom_kill.o fadvise.o \
