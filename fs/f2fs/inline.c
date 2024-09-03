@@ -102,6 +102,7 @@ void f2fs_truncate_inline_inode(struct inode *inode,
 {
 	void *addr;
 
+	from = from & (PAGE_SIZE - 1);
 	if (from >= MAX_INLINE_DATA(inode))
 		return;
 
@@ -156,11 +157,12 @@ int f2fs_convert_inline_page(struct dnode_of_data *dn, struct page *page)
 	};
 	struct node_info ni;
 	int dirty, err;
+	pgoff_t index = page->index;
 
 	if (!f2fs_exist_data(dn->inode))
 		goto clear_out;
 
-	err = f2fs_reserve_block(dn, 0);
+	err = f2fs_reserve_block(dn, index);
 	if (err)
 		return err;
 
@@ -176,8 +178,8 @@ int f2fs_convert_inline_page(struct dnode_of_data *dn, struct page *page)
 	if (unlikely(dn->data_blkaddr != NEW_ADDR)) {
 		f2fs_put_dnode(dn);
 		set_sbi_flag(fio.sbi, SBI_NEED_FSCK);
-		f2fs_warn(fio.sbi, "%s: corrupted inline inode ino=%lx, i_addr[0]:0x%x, run fsck to fix.",
-			  __func__, dn->inode->i_ino, dn->data_blkaddr);
+		f2fs_warn(fio.sbi, "%s: corrupted inline inode ino=%lx, i_addr[%lu]:0x%x, run fsck to fix.",
+			  __func__, dn->inode->i_ino, index, dn->data_blkaddr);
 		f2fs_handle_error(fio.sbi, ERROR_INVALID_BLKADDR);
 		return -EFSCORRUPTED;
 	}
@@ -210,7 +212,30 @@ int f2fs_convert_inline_page(struct dnode_of_data *dn, struct page *page)
 clear_out:
 	stat_dec_inline_inode(dn->inode);
 	clear_inode_flag(dn->inode, FI_INLINE_DATA);
+	if (index >= COMPACT_ADDRS_PER_INODE)
+		clear_inode_flag(dn->inode, FI_INLINE_TAIL);
 	f2fs_put_dnode(dn);
+	return 0;
+}
+
+int f2fs_clear_inline_tail(struct inode *inode, bool force)
+{
+	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
+	struct page *ipage;
+	loff_t i_size = i_size_read(inode);
+	pgoff_t end_index = i_size >> PAGE_SHIFT;
+
+	ipage = f2fs_get_node_page(sbi, inode->i_ino);
+	if (IS_ERR(ipage))
+		return PTR_ERR(ipage);
+
+	f2fs_truncate_inline_inode(inode, ipage, 0);
+	clear_page_private_inline(ipage);
+
+	if (force || end_index >= COMPACT_ADDRS_PER_INODE)
+		clear_inode_flag(inode, FI_INLINE_TAIL);
+
+	f2fs_put_page(ipage, 1);
 	return 0;
 }
 
@@ -263,19 +288,18 @@ out:
 int f2fs_write_inline_data(struct inode *inode, struct page *page)
 {
 	struct dnode_of_data dn;
+	pgoff_t index = page->index;
 	int err;
 
 	set_new_dnode(&dn, inode, NULL, NULL, 0);
-	err = f2fs_get_dnode_of_data(&dn, 0, LOOKUP_NODE);
+	err = f2fs_get_dnode_of_data(&dn, index, LOOKUP_NODE);
 	if (err)
 		return err;
 
-	if (!f2fs_has_inline_data(inode)) {
+	if (!f2fs_has_inline_data(inode) && !f2fs_has_inline_tail(inode)) {
 		f2fs_put_dnode(&dn);
 		return -EAGAIN;
 	}
-
-	f2fs_bug_on(F2FS_I_SB(inode), page->index);
 
 	f2fs_wait_on_page_writeback(dn.inode_page, NODE, true, true);
 	memcpy_from_page(inline_data_addr(inode, dn.inode_page),

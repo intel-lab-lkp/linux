@@ -2776,6 +2776,7 @@ int f2fs_write_single_data_page(struct page *page, int *submitted,
 	loff_t psize = (loff_t)(page->index + 1) << PAGE_SHIFT;
 	unsigned offset = 0;
 	bool need_balance_fs = false;
+	bool need_clear_tail = false;
 	bool quota_inode = IS_NOQUOTA(inode);
 	int err = 0;
 	struct f2fs_io_info fio = {
@@ -2867,6 +2868,16 @@ write:
 			goto out;
 	}
 
+	if (f2fs_has_inline_tail(inode) && page->index == end_index) {
+		if (support_tail_inline(inode, i_size)) {
+			err = f2fs_write_inline_data(inode, page);
+			if (!err)
+				goto out;
+		} else {
+			need_clear_tail = true;
+		}
+	}
+
 	if (err == -EAGAIN) {
 		err = f2fs_do_write_data_page(&fio);
 		if (err == -EAGAIN) {
@@ -2889,6 +2900,11 @@ done:
 	if (err && err != -ENOENT)
 		goto redirty_out;
 
+	if (need_clear_tail) {
+		err = f2fs_clear_inline_tail(inode, false);
+		if (err)
+			goto redirty_out;
+	}
 out:
 	inode_dec_dirty_pages(inode);
 	if (err) {
@@ -3393,6 +3409,11 @@ static int prepare_write_begin(struct f2fs_sb_info *sbi,
 			flag = F2FS_GET_BLOCK_DEFAULT;
 		f2fs_map_lock(sbi, flag);
 		locked = true;
+	} else if (f2fs_has_inline_tail(inode)) {
+		if (!support_tail_inline(inode, pos + len)) {
+			f2fs_map_lock(sbi, flag);
+			locked = true;
+		}
 	} else if ((pos & PAGE_MASK) >= i_size_read(inode)) {
 		f2fs_map_lock(sbi, flag);
 		locked = true;
@@ -3419,6 +3440,15 @@ restart:
 		err = f2fs_convert_inline_page(&dn, page);
 		if (err || dn.data_blkaddr != NULL_ADDR)
 			goto out;
+	}
+
+	if (f2fs_has_inline_tail(inode)) {
+		if (support_tail_inline(inode, pos + len)) {
+			f2fs_do_read_inline_data(page_folio(page), ipage);
+			if (inode->i_nlink)
+				set_page_private_inline(ipage);
+			goto out;
+		}
 	}
 
 	if (!f2fs_lookup_read_extent_cache_block(inode, index,
