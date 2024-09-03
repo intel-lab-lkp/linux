@@ -771,6 +771,32 @@ static int rtsn_mii_access(struct mii_bus *bus, bool read, int phyad,
 	return ret;
 }
 
+static int rtsn_mii_access_indirect(struct mii_bus *bus, bool read, int phyad,
+				    int devnum, int regnum, u16 data)
+{
+	int ret;
+
+	ret = rtsn_mii_access(bus, false, phyad, MII_MMD_CTRL, devnum);
+	if (ret)
+		return ret;
+
+	ret = rtsn_mii_access(bus, false, phyad, MII_MMD_DATA, regnum);
+	if (ret)
+		return ret;
+
+	ret = rtsn_mii_access(bus, false, phyad, MII_MMD_CTRL,
+			      devnum | MII_MMD_CTRL_NOINCR);
+	if (ret)
+		return ret;
+
+	if (read)
+		ret = rtsn_mii_access(bus, true, phyad, MII_MMD_DATA, 0);
+	else
+		ret = rtsn_mii_access(bus, false, phyad, MII_MMD_DATA, data);
+
+	return ret;
+}
+
 static int rtsn_mii_read(struct mii_bus *bus, int addr, int regnum)
 {
 	return rtsn_mii_access(bus, true, addr, regnum, 0);
@@ -779,6 +805,18 @@ static int rtsn_mii_read(struct mii_bus *bus, int addr, int regnum)
 static int rtsn_mii_write(struct mii_bus *bus, int addr, int regnum, u16 val)
 {
 	return rtsn_mii_access(bus, false, addr, regnum, val);
+}
+
+static int rtsn_mii_read_c45(struct mii_bus *bus, int addr, int devnum,
+			     int regnum)
+{
+	return rtsn_mii_access_indirect(bus, true, addr, devnum, regnum, 0);
+}
+
+static int rtsn_mii_write_c45(struct mii_bus *bus, int addr, int devnum,
+			      int regnum, u16 val)
+{
+	return rtsn_mii_access_indirect(bus, false, addr, devnum, regnum, val);
 }
 
 static int rtsn_mdio_alloc(struct rtsn_private *priv)
@@ -818,6 +856,8 @@ static int rtsn_mdio_alloc(struct rtsn_private *priv)
 	mii->priv = priv;
 	mii->read = rtsn_mii_read;
 	mii->write = rtsn_mii_write;
+	mii->read_c45 = rtsn_mii_read_c45;
+	mii->write_c45 = rtsn_mii_write_c45;
 	mii->parent = dev;
 
 	ret = of_mdiobus_register(mii, mdio_node);
