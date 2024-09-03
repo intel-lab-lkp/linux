@@ -418,6 +418,13 @@ extern unsigned int kobjsize(const void *objp);
 #endif
 
 #ifdef CONFIG_64BIT
+#define VM_SHARED_PT_BIT	41
+#define VM_SHARED_PT		BIT(VM_SHARED_PT_BIT)
+#else
+#define VM_SHARED_PT		VM_NONE
+#endif
+
+#ifdef CONFIG_64BIT
 /* VM is sealed, in vm_flags */
 #define VM_SEALED	_BITUL(63)
 #endif

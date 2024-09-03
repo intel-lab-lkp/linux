@@ -167,8 +167,10 @@ IF_HAVE_PG_ARCH_X(arch_3)
 
 #ifdef CONFIG_64BIT
 # define IF_HAVE_VM_DROPPABLE(flag, name) {flag, name},
+# define IF_HAVE_VM_SHARED_PT(flag, name) {flag, name},
 #else
 # define IF_HAVE_VM_DROPPABLE(flag, name)
+# define IF_HAVE_VM_SHARED_PT(flag, name)
 #endif
 
 #define __def_vmaflag_names						\
@@ -204,6 +206,7 @@ IF_HAVE_VM_SOFTDIRTY(VM_SOFTDIRTY,	"softdirty"	)		\
 	{VM_HUGEPAGE,			"hugepage"	},		\
 	{VM_NOHUGEPAGE,			"nohugepage"	},		\
 IF_HAVE_VM_DROPPABLE(VM_DROPPABLE,	"droppable"	)		\
+IF_HAVE_VM_SHARED_PT(VM_SHARED_PT,	"sharedpt"	)		\
 	{VM_MERGEABLE,			"mergeable"	}		\
 
 #define show_vma_flags(flags)						\
