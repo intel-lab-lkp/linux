@@ -153,8 +153,13 @@ pub struct Guard<'a, T: ?Sized, B: Backend> {
     _not_send: PhantomData<*mut ()>,
 }
 
-// SAFETY: `Guard` is sync when the data protected by the lock is also sync.
-unsafe impl<T: Sync + ?Sized, B: Backend> Sync for Guard<'_, T, B> {}
+// SAFETY: `Guard` is sync when the data protected by the lock and the guard state is also sync.
+unsafe impl<T: ?Sized, B: Backend> Sync for Guard<'_, T, B>
+where
+    T: Sync,
+    B::GuardState: Sync,
+{
+}
 
 impl<T: ?Sized, B: Backend> Guard<'_, T, B> {
     pub(crate) fn do_unlocked<U>(&mut self, cb: impl FnOnce() -> U) -> U {
