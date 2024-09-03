@@ -10,8 +10,9 @@ struct drm_device;
 struct drm_file;
 struct drm_i915_private;
 struct drm_printer;
+struct intel_display;
 struct intel_overlay;
-struct intel_overlay_error_state;
+struct intel_overlay_snapshot;
 
 #ifdef I915
 void intel_overlay_setup(struct drm_i915_private *dev_priv);
@@ -22,10 +23,10 @@ int intel_overlay_put_image_ioctl(struct drm_device *dev, void *data,
 int intel_overlay_attrs_ioctl(struct drm_device *dev, void *data,
 			      struct drm_file *file_priv);
 void intel_overlay_reset(struct drm_i915_private *dev_priv);
-struct intel_overlay_error_state *
-intel_overlay_capture_error_state(struct drm_i915_private *dev_priv);
-void intel_overlay_print_error_state(struct drm_printer *p,
-				     struct intel_overlay_error_state *error);
+struct intel_overlay_snapshot *
+intel_overlay_snapshot_capture(struct intel_display *display);
+void intel_overlay_snapshot_print(const struct intel_overlay_snapshot *error,
+				  struct drm_printer *p);
 #else
 static inline void intel_overlay_setup(struct drm_i915_private *dev_priv)
 {
@@ -50,13 +51,13 @@ static inline int intel_overlay_attrs_ioctl(struct drm_device *dev, void *data,
 static inline void intel_overlay_reset(struct drm_i915_private *dev_priv)
 {
 }
-static inline struct intel_overlay_error_state *
-intel_overlay_capture_error_state(struct drm_i915_private *dev_priv)
+static inline struct intel_overlay_snapshot *
+intel_overlay_snapshot_capture(struct intel_display *display)
 {
 	return NULL;
 }
-static inline void intel_overlay_print_error_state(struct drm_printer *p,
-						   struct intel_overlay_error_state *error)
+static inline void intel_overlay_snapshot_print(const struct intel_overlay_snapshot *error,
+						struct drm_printer *p)
 {
 }
 #endif
