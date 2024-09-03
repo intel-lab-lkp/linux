@@ -13,8 +13,6 @@
 #include <linux/types.h>
 #include <linux/map_benchmark.h>
 
-#define NSEC_PER_MSEC	1000000L
-
 static char *directions[] = {
 	"BIDIRECTIONAL",
 	"TO_DEVICE",
