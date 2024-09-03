@@ -33,6 +33,63 @@ struct msharefs_info {
 static const struct inode_operations msharefs_dir_inode_ops;
 static const struct inode_operations msharefs_file_inode_ops;
 
+/*
+ * Disallow partial unmaps of an mshare region for now. Unmapping at
+ * boundaries aligned to the level page tables are shared at could
+ * be allowed in the future.
+ */ 
+static int mshare_vm_op_split(struct vm_area_struct *vma, unsigned long addr)
+{
+	return -EINVAL;
+}
+
+static const struct vm_operations_struct msharefs_vm_ops = {
+	.may_split = mshare_vm_op_split,
+};
+
+/*
+ * msharefs_mmap() - mmap an mshare region
+ */
+static int
+msharefs_mmap(struct file *file, struct vm_area_struct *vma)
+{
+	struct mshare_data *m_data = file->private_data;
+	unsigned long mshare_start, mshare_end;
+	int err = -EINVAL;
+
+	spin_lock(&m_data->m_lock);
+	mshare_start = m_data->minfo.start;
+	mshare_end = mshare_start + m_data->minfo.size;
+	spin_unlock(&m_data->m_lock);
+
+	/*
+	 * Make sure start and end of this mshare region has
+	 * been established already
+	 */
+	if (mshare_start == 0)
+		goto err_out;
+
+	/*
+	 * Verify alignment and size multiple
+	 */
+	if ((vma->vm_start | vma->vm_end) & (PGDIR_SIZE - 1))
+		goto err_out;
+
+	/*
+	 * Verify this mapping does not extend outside of mshare region
+	 */
+	if (vma->vm_start < mshare_start || vma->vm_end > mshare_end)
+		goto err_out;
+
+	err = 0;
+	vma->vm_private_data = m_data;
+	vm_flags_set(vma, VM_SHARED_PT);
+	vma->vm_ops = &msharefs_vm_ops;
+
+err_out:
+	return err;
+}
+
 static long
 msharefs_set_size(struct mm_struct *mm, struct mshare_data *m_data,
 			struct mshare_info *minfo)
@@ -100,6 +157,7 @@ msharefs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 static const struct file_operations msharefs_file_operations = {
 	.open		= simple_open,
+	.mmap		= msharefs_mmap,
 	.unlocked_ioctl	= msharefs_ioctl,
 	.llseek		= no_llseek,
 };
