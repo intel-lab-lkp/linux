@@ -39,10 +39,10 @@ to as long as a few weeks in slower moving parts of the kernel.
 Mailing list participation
 --------------------------
 
-Linux kernel uses mailing lists as the primary form of communication.
-Maintainers must be subscribed and follow the appropriate subsystem-wide
-mailing list. Either by subscribing to the whole list or using more
-modern, selective setup like
+The Linux kernel uses mailing lists as the primary form of communication
+between developers. Maintainers must be subscribed and follow the
+appropriate subsystem-wide mailing list. Either by subscribing to the
+whole list or using more modern, selective setup like
 `lei <https://people.kernel.org/monsieuricon/lore-lei-part-1-getting-started>`_.
 
 Maintainers must know how to communicate on the list (plain text, no invasive
