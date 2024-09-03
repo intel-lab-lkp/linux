@@ -3082,10 +3082,9 @@ static int emac_probe(struct platform_device *ofdev)
 
 	/* Map EMAC regs */
 	// TODO : platform_get_resource() and devm_ioremap_resource()
-	dev->emacp = of_iomap(np, 0);
-	if (dev->emacp == NULL) {
-		printk(KERN_ERR "%pOF: Can't map device registers!\n", np);
-		err = -ENOMEM;
+	dev->emacp = devm_of_iomap(&ofdev->dev, np, 0, NULL);
+	if (!dev->emacp) {
+		err = dev_err_probe(&ofdev->dev, -ENOMEM, "can't map device registers");
 		goto err_irq_unmap;
 	}
 
@@ -3095,7 +3094,7 @@ static int emac_probe(struct platform_device *ofdev)
 		printk(KERN_ERR
 		       "%pOF: Timeout waiting for dependent devices\n", np);
 		/*  display more info about what's missing ? */
-		goto err_reg_unmap;
+		goto err_irq_unmap;
 	}
 	dev->mal = platform_get_drvdata(dev->mal_dev);
 	if (dev->mdio_dev != NULL)
@@ -3228,8 +3227,6 @@ static int emac_probe(struct platform_device *ofdev)
 	mal_unregister_commac(dev->mal, &dev->commac);
  err_rel_deps:
 	emac_put_deps(dev);
- err_reg_unmap:
-	iounmap(dev->emacp);
  err_irq_unmap:
 	if (dev->wol_irq)
 		irq_dispose_mapping(dev->wol_irq);
@@ -3273,8 +3270,6 @@ static void emac_remove(struct platform_device *ofdev)
 
 	mal_unregister_commac(dev->mal, &dev->commac);
 	emac_put_deps(dev);
-
-	iounmap(dev->emacp);
 
 	if (dev->wol_irq)
 		irq_dispose_mapping(dev->wol_irq);
