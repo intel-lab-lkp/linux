@@ -778,15 +778,12 @@ static int dwc3_gadget_resize_tx_fifos(struct dwc3_ep *dep)
 
 	ram1_depth = DWC3_RAM1_DEPTH(dwc->hwparams.hwparams7);
 
-	if ((dep->endpoint.maxburst > 1 &&
-	     usb_endpoint_xfer_bulk(dep->endpoint.desc)) ||
-	    usb_endpoint_xfer_isoc(dep->endpoint.desc))
-		num_fifos = 3;
-
-	if (dep->endpoint.maxburst > 6 &&
-	    (usb_endpoint_xfer_bulk(dep->endpoint.desc) ||
-	     usb_endpoint_xfer_isoc(dep->endpoint.desc)) && DWC3_IP_IS(DWC31))
-		num_fifos = dwc->tx_fifo_resize_max_num;
+	if (usb_endpoint_xfer_bulk(dep->endpoint.desc))
+		num_fifos = min_t(unsigned int, dep->endpoint.maxburst + 1,
+				  dwc->tx_fifo_resize_max_num);
+	if (usb_endpoint_xfer_isoc(dep->endpoint.desc))
+		num_fifos = max_t(unsigned int, dep->endpoint.maxburst,
+				  usb_endpoint_maxp_mult(dep->endpoint.desc));
 
 	/* FIFO size for a single buffer */
 	fifo = dwc3_gadget_calc_tx_fifo_size(dwc, 1);
