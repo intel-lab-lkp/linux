@@ -13,8 +13,6 @@
 #include <urcu/uatomic.h>
 
 int nr_allocated;
-int preempt_count;
-int test_verbose;
 
 struct kmem_cache {
 	pthread_mutex_t lock;
