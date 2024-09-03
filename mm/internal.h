@@ -1578,6 +1578,7 @@ void unlink_file_vma_batch_init(struct unlink_vma_file_batch *);
 void unlink_file_vma_batch_add(struct unlink_vma_file_batch *, struct vm_area_struct *);
 void unlink_file_vma_batch_final(struct unlink_vma_file_batch *);
 
+extern vm_fault_t find_shared_vma(struct vm_area_struct **vma, unsigned long *addrp);
 static inline bool vma_is_shared(const struct vm_area_struct *vma)
 {
 	return VM_SHARED_PT && (vma->vm_flags & VM_SHARED_PT);

@@ -387,11 +387,15 @@ void free_pgtables(struct mmu_gather *tlb, struct ma_state *mas,
 			vma_start_write(vma);
 		unlink_anon_vmas(vma);
 
+		/*
+		 * There is no page table to be freed for vmas that
+		 * are mapped in mshare regions
+		 */
 		if (is_vm_hugetlb_page(vma)) {
 			unlink_file_vma(vma);
 			hugetlb_free_pgd_range(tlb, addr, vma->vm_end,
 				floor, next ? next->vm_start : ceiling);
-		} else {
+		} else if (!vma_is_shared(vma)) {
 			unlink_file_vma_batch_init(&vb);
 			unlink_file_vma_batch_add(&vb, vma);
 
@@ -399,7 +403,8 @@ void free_pgtables(struct mmu_gather *tlb, struct ma_state *mas,
 			 * Optimization: gather nearby vmas into one call down
 			 */
 			while (next && next->vm_start <= vma->vm_end + PMD_SIZE
-			       && !is_vm_hugetlb_page(next)) {
+			       && !is_vm_hugetlb_page(next)
+			       && !vma_is_shared(next)) {
 				vma = next;
 				next = mas_find(mas, ceiling - 1);
 				if (unlikely(xa_is_zero(next)))
@@ -412,7 +417,9 @@ void free_pgtables(struct mmu_gather *tlb, struct ma_state *mas,
 			unlink_file_vma_batch_final(&vb);
 			free_pgd_range(tlb, addr, vma->vm_end,
 				floor, next ? next->vm_start : ceiling);
-		}
+		} else
+			unlink_file_vma(vma);
+
 		vma = next;
 	} while (vma);
 }
@@ -1796,6 +1803,13 @@ void unmap_page_range(struct mmu_gather *tlb,
 {
 	pgd_t *pgd;
 	unsigned long next;
+
+	/*
+	 * No need to unmap vmas that share page table through
+	 * mshare region
+	 */
+	 if (vma_is_shared(vma))
+		return;
 
 	BUG_ON(addr >= end);
 	tlb_start_vma(tlb, vma);
@@ -5801,12 +5815,28 @@ vm_fault_t handle_mm_fault(struct vm_area_struct *vma, unsigned long address,
 	struct mm_struct *mm = vma->vm_mm;
 	vm_fault_t ret;
 	bool is_droppable;
+	bool shared = false;
 
 	__set_current_state(TASK_RUNNING);
 
 	ret = sanitize_fault_flags(vma, &flags);
 	if (ret)
 		goto out;
+
+	if (unlikely(vma_is_shared(vma))) {
+		/* XXX mshare does not support per-VMA locks yet so fallback to mm lock */
+		if (flags & FAULT_FLAG_VMA_LOCK) {
+			vma_end_read(vma);
+			return VM_FAULT_RETRY;
+		}
+
+		ret = find_shared_vma(&vma, &address);
+		if (ret)
+			return ret;
+		if (!vma)
+			return VM_FAULT_SIGSEGV;
+		shared = true;
+	}
 
 	if (!arch_vma_access_permitted(vma, flags & FAULT_FLAG_WRITE,
 					    flags & FAULT_FLAG_INSTRUCTION,
@@ -5842,6 +5872,32 @@ vm_fault_t handle_mm_fault(struct vm_area_struct *vma, unsigned long address,
 	/* If the mapping is droppable, then errors due to OOM aren't fatal. */
 	if (is_droppable)
 		ret &= ~VM_FAULT_OOM;
+
+	/*
+	 * Release the read lock on the shared mm of a shared VMA unless
+	 * unless the lock has already been released.
+	 * The mmap lock will already have been released if __handle_mm_fault
+	 * returns VM_FAULT_COMPLETED or if it returns VM_FAULT_RETRY and
+	 * the flags FAULT_FLAG_ALLOW_RETRY and FAULT_FLAG_RETRY_NOWAIT are
+	 * _not_ both set.
+	 * If the lock was released earlier, release the lock on the task's
+	 * mm now to keep lock state consistent.
+	 */
+	if (shared) {
+		int release_mmlock = 1;
+
+		if ((ret & (VM_FAULT_RETRY | VM_FAULT_COMPLETED)) == 0) {
+			mmap_read_unlock(vma->vm_mm);
+			release_mmlock = 0;
+		} else if ((flags & FAULT_FLAG_ALLOW_RETRY) &&
+				(flags & FAULT_FLAG_RETRY_NOWAIT)) {
+			mmap_read_unlock(vma->vm_mm);
+			release_mmlock = 0;
+		}
+
+		if (release_mmlock)
+			mmap_read_unlock(mm);
+	}
 
 	if (flags & FAULT_FLAG_USER) {
 		mem_cgroup_exit_user_fault();
