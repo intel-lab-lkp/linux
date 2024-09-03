@@ -78,13 +78,7 @@ int set_haptic(struct haptic_syscall_args *args)
 	/* whenever resolution multiplier is not 3600, we have the fixed report descriptor */
 	res = (u16 *)&haptic_data[1];
 	if (*res != 3600) {
-//		haptic_data[1] = 72; /* resolution multiplier */
-//		haptic_data[2] = 0;  /* resolution multiplier */
-//		haptic_data[3] = 0;  /* Repeat Count */
 		haptic_data[4] = 3;  /* haptic Auto Trigger */
-//		haptic_data[5] = 5;  /* Waveform Cutoff Time */
-//		haptic_data[6] = 80; /* Retrigger Period */
-//		haptic_data[7] = 0;  /* Retrigger Period */
 	} else {
 		haptic_data[4] = 0;
 	}
