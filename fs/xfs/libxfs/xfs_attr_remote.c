@@ -525,7 +525,7 @@ xfs_attr_rmtval_set_value(
 		ASSERT((map.br_startblock != DELAYSTARTBLOCK) &&
 		       (map.br_startblock != HOLESTARTBLOCK));
 
-		dblkno = XFS_FSB_TO_DADDR(mp, map.br_startblock),
+		dblkno = XFS_FSB_TO_DADDR(mp, map.br_startblock);
 		dblkcnt = XFS_FSB_TO_BB(mp, map.br_blockcount);
 
 		error = xfs_buf_get(mp->m_ddev_targp, dblkno, dblkcnt, &bp);
