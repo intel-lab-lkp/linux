@@ -30,7 +30,7 @@ void adf_dbgfs_init(struct adf_accel_dev *accel_dev)
 		 pci_name(accel_dev->accel_pci_dev.pci_dev));
 
 	ret = debugfs_create_dir(name, NULL);
-	if (IS_ERR_OR_NULL(ret))
+	if (IS_ERR(ret))
 		return;
 
 	accel_dev->debugfs_dir = ret;
