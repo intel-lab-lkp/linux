@@ -343,28 +343,21 @@ static int export_udmabuf(struct udmabuf *ubuf,
 }
 
 static int udmabuf_pin_folios(struct udmabuf *ubuf, struct file *memfd,
-			      loff_t start, loff_t size)
+			      loff_t start, loff_t size, struct folio **folios)
 {
 	pgoff_t pgoff, pgcnt;
 	pgoff_t upgcnt = ubuf->pagecount;
 	pgoff_t nr_pinned = ubuf->nr_pinned;
 	u32 cur_folio, cur_pgcnt;
-	struct folio **folios = NULL;
 	long nr_folios;
 	loff_t end;
 	int ret = 0;
 
 	pgcnt = size >> PAGE_SHIFT;
-	folios = kvmalloc_array(pgcnt, sizeof(*folios), GFP_KERNEL);
-	if (!folios)
-		return -ENOMEM;
-
 	end = start + (pgcnt << PAGE_SHIFT) - 1;
 	nr_folios = memfd_pin_folios(memfd, start, end, folios, pgcnt, &pgoff);
-	if (nr_folios <= 0) {
-		ret = nr_folios ? nr_folios : -EINVAL;
-		goto err;
-	}
+	if (nr_folios <= 0)
+		return nr_folios ? nr_folios : -EINVAL;
 
 	cur_pgcnt = 0;
 	for (cur_folio = 0; cur_folio < nr_folios; ++cur_folio) {
@@ -389,10 +382,8 @@ static int udmabuf_pin_folios(struct udmabuf *ubuf, struct file *memfd,
 		pgoff = 0;
 	}
 end:
-err:
 	ubuf->pagecount = upgcnt;
 	ubuf->nr_pinned = nr_pinned;
-	kvfree(folios);
 	return ret;
 }
 
@@ -403,6 +394,8 @@ static long udmabuf_create(struct miscdevice *device,
 	pgoff_t pgcnt = 0, pglimit;
 	long ret = -EINVAL;
 	struct udmabuf *ubuf;
+	struct folio **folios = NULL;
+	unsigned long max_nr_folios = 0;
 	u32 i, flags;
 
 	ubuf = kzalloc(sizeof(*ubuf), GFP_KERNEL);
@@ -411,14 +404,19 @@ static long udmabuf_create(struct miscdevice *device,
 
 	pglimit = (size_limit_mb * 1024 * 1024) >> PAGE_SHIFT;
 	for (i = 0; i < head->count; i++) {
+		pgoff_t subpgcnt;
+
 		if (!PAGE_ALIGNED(list[i].offset))
 			goto err_noinit;
 		if (!PAGE_ALIGNED(list[i].size))
 			goto err_noinit;
 
-		pgcnt += list[i].size >> PAGE_SHIFT;
+		subpgcnt = list[i].size >> PAGE_SHIFT;
+		pgcnt += subpgcnt;
 		if (pgcnt > pglimit)
 			goto err_noinit;
+
+		max_nr_folios = max_t(unsigned long, subpgcnt, max_nr_folios);
 	}
 
 	if (!pgcnt)
@@ -428,6 +426,12 @@ static long udmabuf_create(struct miscdevice *device,
 	if (ret)
 		goto err;
 
+	folios = kvmalloc_array(max_nr_folios, sizeof(*folios), GFP_KERNEL);
+	if (!folios) {
+		ret = -ENOMEM;
+		goto err;
+	}
+
 	for (i = 0; i < head->count; i++) {
 		struct file *memfd = fget(list[i].memfd);
 
@@ -436,7 +440,7 @@ static long udmabuf_create(struct miscdevice *device,
 			goto err;
 
 		ret = udmabuf_pin_folios(ubuf, memfd, list[i].offset,
-					 list[i].size);
+					 list[i].size, folios);
 		fput(memfd);
 		if (ret)
 			goto err;
@@ -447,12 +451,14 @@ static long udmabuf_create(struct miscdevice *device,
 	if (ret < 0)
 		goto err;
 
+	kvfree(folios);
 	return ret;
 
 err:
 	deinit_udmabuf(ubuf);
 err_noinit:
 	kfree(ubuf);
+	kvfree(folios);
 	return ret;
 }
 
