@@ -573,5 +573,13 @@ config EDAC_VERSAL
 	  Support injecting both correctable and uncorrectable errors
 	  for debugging purposes.
 
+config EDAC_LS3A5000
+	tristate "Ls3a5000 Memory Controller"
+	depends on LOONGARCH || COMPILE_TEST
+	help
+	  Support for error detection and correction on the ls3a5000 memory
+	  controller. This driver report single bit errors (CE) only.
+	  Ls3c5000l, ls3c5000, ls3d5000, ls3a6000 and ls3c6000 are compatible
+	  with ls3a5000.
 
 endif # EDAC
