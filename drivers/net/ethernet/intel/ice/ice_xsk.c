@@ -441,7 +441,24 @@ static u16 ice_fill_rx_descs(struct xsk_buff_pool *pool, struct xdp_buff **xdp,
 	u16 buffs;
 	int i;
 
+	if (unlikely(!xsk_buff_can_alloc(pool, count)))
+		return 0;
+
 	buffs = xsk_buff_alloc_batch(pool, xdp, count);
+	/* fill the remainder part that batch API did not provide for us,
+	 * this is usually the case for non-coherent systems that require DMA
+	 * syncs
+	 */
+	for (; buffs < count; buffs++) {
+		struct xdp_buff *tmp;
+
+		tmp = xsk_buff_alloc(pool);
+		if (unlikely(!tmp))
+			goto free;
+
+		xdp[buffs] = tmp;
+	}
+
 	for (i = 0; i < buffs; i++) {
 		dma = xsk_buff_xdp_get_dma(*xdp);
 		rx_desc->read.pkt_addr = cpu_to_le64(dma);
@@ -457,6 +474,13 @@ static u16 ice_fill_rx_descs(struct xsk_buff_pool *pool, struct xdp_buff **xdp,
 	}
 
 	return buffs;
+
+free:
+	for (i = 0; i < buffs; i++) {
+		xsk_buff_free(*xdp);
+		xdp++;
+	}
+	return 0;
 }
 
 /**
