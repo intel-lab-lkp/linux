@@ -18,45 +18,87 @@
 #include "coresight-priv.h"
 
 /*
- * Device registers
- * 0x000 - 0x144: CTI programming and status
- * 0xEDC - 0xEF8: CTI integration test.
- * 0xF00 - 0xFFC: Coresight management registers.
- */
-/* CTI programming registers */
-#define CTICONTROL		0x000
-#define CTIINTACK		0x010
-#define CTIAPPSET		0x014
-#define CTIAPPCLEAR		0x018
-#define CTIAPPPULSE		0x01C
-#define CTIINEN(n)		(0x020 + (4 * n))
-#define CTIOUTEN(n)		(0x0A0 + (4 * n))
-#define CTITRIGINSTATUS		0x130
-#define CTITRIGOUTSTATUS	0x134
-#define CTICHINSTATUS		0x138
-#define CTICHOUTSTATUS		0x13C
-#define CTIGATE			0x140
-#define ASICCTL			0x144
-/* Integration test registers */
-#define ITCHINACK		0xEDC /* WO CTI CSSoc 400 only*/
-#define ITTRIGINACK		0xEE0 /* WO CTI CSSoc 400 only*/
-#define ITCHOUT			0xEE4 /* WO RW-600 */
-#define ITTRIGOUT		0xEE8 /* WO RW-600 */
-#define ITCHOUTACK		0xEEC /* RO CTI CSSoc 400 only*/
-#define ITTRIGOUTACK		0xEF0 /* RO CTI CSSoc 400 only*/
-#define ITCHIN			0xEF4 /* RO */
-#define ITTRIGIN		0xEF8 /* RO */
-/* management registers */
-#define CTIDEVAFF0		0xFA8
-#define CTIDEVAFF1		0xFAC
-
-/*
  * CTI CSSoc 600 has a max of 32 trigger signals per direction.
  * CTI CSSoc 400 has 8 IO triggers - other CTIs can be impl def.
  * Max of in and out defined in the DEVID register.
  * - pick up actual number used from .dts parameters if present.
  */
-#define CTIINOUTEN_MAX		32
+#define CTIINOUTEN_MAX		128
+
+#define CTICONTROL		0x000
+
+/* management registers */
+#define CTIDEVAFF0		0xFA8
+#define CTIDEVAFF1		0xFAC
+
+static const int cti_normal_offset[] = {
+	0x010,		/* CTIINTACK */
+	0x014,		/* CTIAPPSET */
+	0x018,		/* CTIAPPCLEAR */
+	0x01C,		/* CTIAPPPULSE */
+	0x020,		/* CTIINEN */
+	0x0A0,		/* CTIOUTEN */
+	0x130,		/* CTITRIGINSTATUS */
+	0x134,		/* CTITRIGOUTSTATUS */
+	0x138,		/* CTICHINSTATUS */
+	0x13C,		/* CTICHOUTSTATUS */
+	0x140,		/* CTIGATE */
+	0x144,		/* ASICCTL */
+	0xEDC,		/* ITCHINACK */
+	0xEE0,		/* ITTRIGINACK */
+	0xEE4,		/* ITCHOUT */
+	0xEE8,		/* ITTRIGOUT */
+	0xEEC,		/* ITCHOUTACK */
+	0xEF0,		/* ITTRIGOUTACK */
+	0xEF4,		/* ITCHIN */
+	0xEF8,		/* ITTRIGIN */
+};
+
+static const int cti_extended_offset[] = {
+	0x020,		/* CTIINTACK */
+	0x004,		/* CTIAPPSET */
+	0x008,		/* CTIAPPCLEAR */
+	0x00C,		/* CTIAPPPULSE */
+	0x400,		/* CTIINEN */
+	0x800,		/* CTIOUTEN */
+	0x040,		/* CTITRIGINSTATUS */
+	0x060,		/* CTITRIGOUTSTATUS */
+	0x080,		/* CTICHINSTATUS */
+	0x084,		/* CTICHOUTSTATUS */
+	0x088,		/* CTIGATE */
+	0x08c,		/* ASICCTL */
+	0xE70,		/* ITCHINACK */
+	0xE80,		/* ITTRIGINACK */
+	0xE74,		/* ITCHOUT */
+	0xEA,		/* ITTRIGOUT */
+	0xE78,		/* ITCHOUTACK */
+	0xEC0,		/* ITTRIGOUTACK */
+	0xE7C,		/* ITCHIN */
+	0xEE0,		/* ITTRIGIN */
+};
+
+enum cti_offset_index {
+	CTIINTACK,
+	CTIAPPSET,
+	CTIAPPCLEAR,
+	CTIAPPPULSE,
+	CTIINEN,
+	CTIOUTEN,
+	CTITRIGINSTATUS,
+	CTITRIGOUTSTATUS,
+	CTICHINSTATUS,
+	CTICHOUTSTATUS,
+	CTIGATE,
+	ASICCTL,
+	ITCHINACK,
+	ITTRIGINACK,
+	ITCHOUT,
+	ITTRIGOUT,
+	ITCHOUTACK,
+	ITTRIGOUTACK,
+	ITCHIN,
+	ITTRIGIN,
+};
 
 /**
  * Group of related trigger signals
@@ -67,7 +109,7 @@
  */
 struct cti_trig_grp {
 	int nr_sigs;
-	u32 used_mask;
+	DECLARE_BITMAP(used_mask, CTIINOUTEN_MAX);
 	int sig_types[];
 };
 
@@ -146,9 +188,9 @@ struct cti_config {
 	bool hw_powered;
 
 	/* registered triggers and filtering */
-	u32 trig_in_use;
-	u32 trig_out_use;
-	u32 trig_out_filter;
+	DECLARE_BITMAP(trig_in_use, CTIINOUTEN_MAX);
+	DECLARE_BITMAP(trig_out_use, CTIINOUTEN_MAX);
+	DECLARE_BITMAP(trig_out_filter, CTIINOUTEN_MAX);
 	bool trig_filter_enable;
 	u8 xtrig_rchan_sel;
 
@@ -179,6 +221,7 @@ struct cti_drvdata {
 	struct cti_config config;
 	struct list_head node;
 	void (*csdev_release)(struct device *dev);
+	bool	is_extended_cti;
 };
 
 /*
@@ -236,6 +279,12 @@ const char *cti_plat_get_node_name(struct fwnode_handle *fwnode);
 static inline bool cti_active(struct cti_config *cfg)
 {
 	return cfg->hw_powered && cfg->hw_enabled;
+}
+
+static inline u32 cti_offset(struct cti_drvdata *drvdata, int index, int num)
+{
+	return (drvdata->is_extended_cti ? cti_extended_offset[index]
+			: cti_normal_offset[index]) + (4 * num);
 }
 
 #endif  /* _CORESIGHT_CORESIGHT_CTI_H */
