@@ -490,17 +490,13 @@ int aac_get_containers(struct aac_dev *dev)
 	if (dev->fsa_dev == NULL ||
 		dev->maximum_num_containers != maximum_num_containers) {
 
-		fsa_dev_ptr = dev->fsa_dev;
-
-		dev->fsa_dev = kcalloc(maximum_num_containers,
+		fsa_dev_ptr = kcalloc(maximum_num_containers,
 					sizeof(*fsa_dev_ptr), GFP_KERNEL);
-
-		kfree(fsa_dev_ptr);
-		fsa_dev_ptr = NULL;
-
-
-		if (!dev->fsa_dev)
+		if(!fsa_dev_ptr)
 			return -ENOMEM;
+
+		kfree(dev->fsa_dev);
+		dev->fsa_dev = fsa_dev_ptr;
 
 		dev->maximum_num_containers = maximum_num_containers;
 	}
