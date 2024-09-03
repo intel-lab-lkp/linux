@@ -59,6 +59,7 @@ struct bio *blk_alloc_discard_bio(struct block_device *bdev,
 	cond_resched();
 	return bio;
 }
+EXPORT_SYMBOL_GPL(blk_alloc_discard_bio);
 
 int __blkdev_issue_discard(struct block_device *bdev, sector_t sector,
 		sector_t nr_sects, gfp_t gfp_mask, struct bio **biop)
