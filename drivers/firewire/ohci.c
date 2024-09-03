@@ -2263,13 +2263,11 @@ static irqreturn_t irq_handler(int irq, void *data)
 		reg_read(ohci, OHCI1394_PostedWriteAddressLo);
 		reg_write(ohci, OHCI1394_IntEventClear,
 			  OHCI1394_postedWriteErr);
-		if (printk_ratelimit())
-			ohci_err(ohci, "PCI posted write error\n");
+		dev_err_ratelimited(ohci->card.device, "PCI posted write error\n");
 	}
 
 	if (unlikely(event & OHCI1394_cycleTooLong)) {
-		if (printk_ratelimit())
-			ohci_notice(ohci, "isochronous cycle too long\n");
+		dev_notice_ratelimited(ohci->card.device, "isochronous cycle too long\n");
 		reg_write(ohci, OHCI1394_LinkControlSet,
 			  OHCI1394_LinkControl_cycleMaster);
 	}
@@ -2281,8 +2279,7 @@ static irqreturn_t irq_handler(int irq, void *data)
 		 * stop active cycleMatch iso contexts now and restart
 		 * them at least two cycles later.  (FIXME?)
 		 */
-		if (printk_ratelimit())
-			ohci_notice(ohci, "isochronous cycle inconsistent\n");
+		dev_notice_ratelimited(ohci->card.device, "isochronous cycle inconsistent\n");
 	}
 
 	if (unlikely(event & OHCI1394_unrecoverableError))
