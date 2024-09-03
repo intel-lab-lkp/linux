@@ -682,6 +682,25 @@ int blk_stack_limits(struct queue_limits *t, struct queue_limits *b,
 		t->zone_write_granularity = 0;
 		t->max_zone_append_sectors = 0;
 	}
+	if (!(b->features & BLK_FEAT_ATOMIC_WRITES)) {
+		t->atomic_write_hw_max = 0;
+		t->atomic_write_hw_unit_max = 0;
+		t->atomic_write_hw_unit_min = 0;
+		t->atomic_write_hw_boundary = 0;
+		t->features &= ~BLK_FEAT_ATOMIC_WRITES;
+	} else if (t->features & BLK_FEAT_ATOMIC_WRITES) {
+		t->atomic_write_hw_max = min_not_zero(t->atomic_write_hw_max,
+						b->atomic_write_hw_max);
+		t->atomic_write_boundary_sectors =
+					min_not_zero(t->atomic_write_boundary_sectors,
+						b->atomic_write_boundary_sectors);
+		t->atomic_write_hw_unit_min = max(t->atomic_write_hw_unit_min,
+						b->atomic_write_hw_unit_min);
+		t->atomic_write_hw_unit_max =
+					min_not_zero(t->atomic_write_hw_unit_max,
+						b->atomic_write_hw_unit_max);
+	}
+
 	return ret;
 }
 EXPORT_SYMBOL(blk_stack_limits);
