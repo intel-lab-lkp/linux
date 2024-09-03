@@ -151,7 +151,7 @@ struct asymmetric_key_id *asymmetric_key_generate_id(const void *val_1,
 {
 	struct asymmetric_key_id *kid;
 
-	kid = kmalloc(sizeof(struct asymmetric_key_id) + len_1 + len_2,
+	kid = kmalloc(sizeof(*kid) + len_1 + len_2,
 		      GFP_KERNEL);
 	if (!kid)
 		return ERR_PTR(-ENOMEM);
