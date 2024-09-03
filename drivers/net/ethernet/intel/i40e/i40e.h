@@ -865,6 +865,7 @@ struct i40e_vsi {
 	int num_q_vectors;
 	int base_vector;
 	bool irqs_ready;
+	bool legacy_msi_irq_ready;
 
 	u16 seid;		/* HW index of this VSI (absolute index) */
 	u16 id;			/* VSI number */

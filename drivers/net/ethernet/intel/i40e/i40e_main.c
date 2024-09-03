@@ -4630,6 +4630,9 @@ static int i40e_vsi_request_irq(struct i40e_vsi *vsi, char *basename)
 	if (err)
 		dev_info(&pf->pdev->dev, "request_irq failed, Error %d\n", err);
 
+	if (!test_bit(I40E_FLAG_MSIX_ENA, pf->flags) && !err)
+		vsi->legacy_msi_irq_ready = true;
+
 	return err;
 }
 
@@ -5061,6 +5064,10 @@ static void i40e_vsi_free_irq(struct i40e_vsi *vsi)
 			}
 		}
 	} else {
+		if (!vsi->legacy_msi_irq_ready)
+			return;
+
+		vsi->legacy_msi_irq_ready = false;
 		free_irq(pf->pdev->irq, pf);
 
 		val = rd32(hw, I40E_PFINT_LNKLST0);
@@ -11519,6 +11526,7 @@ static int i40e_vsi_mem_alloc(struct i40e_pf *pf, enum i40e_vsi_type type)
 	vsi->work_limit = I40E_DEFAULT_IRQ_WORK;
 	hash_init(vsi->mac_filter_hash);
 	vsi->irqs_ready = false;
+	vsi->legacy_msi_irq_ready = false;
 
 	if (type == I40E_VSI_MAIN) {
 		vsi->af_xdp_zc_qps = bitmap_zalloc(pf->num_lan_qps, GFP_KERNEL);
