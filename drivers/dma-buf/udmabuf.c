@@ -43,7 +43,8 @@ static vm_fault_t udmabuf_vm_fault(struct vm_fault *vmf)
 	struct vm_area_struct *vma = vmf->vma;
 	struct udmabuf *ubuf = vma->vm_private_data;
 	pgoff_t pgoff = vmf->pgoff;
-	unsigned long pfn;
+	unsigned long addr, end, pfn;
+	vm_fault_t ret;
 
 	if (pgoff >= ubuf->pagecount)
 		return VM_FAULT_SIGBUS;
@@ -51,7 +52,37 @@ static vm_fault_t udmabuf_vm_fault(struct vm_fault *vmf)
 	pfn = folio_pfn(ubuf->folios[pgoff]);
 	pfn += ubuf->offsets[pgoff] >> PAGE_SHIFT;
 
-	return vmf_insert_pfn(vma, vmf->address, pfn);
+	ret = vmf_insert_pfn(vma, vmf->address, pfn);
+	if (ret & VM_FAULT_ERROR)
+		return ret;
+
+	/* pre fault */
+	pgoff = vma->vm_pgoff;
+	end = vma->vm_end;
+	addr = vma->vm_start;
+
+	for (; addr < end; pgoff++, addr += PAGE_SIZE) {
+		if (addr == vmf->address)
+			continue;
+
+		if (WARN_ON(pgoff >= ubuf->pagecount))
+			break;
+
+		pfn = folio_pfn(ubuf->folios[pgoff]);
+
+		pfn += ubuf->offsets[pgoff] >> PAGE_SHIFT;
+
+		/**
+		 * If something wrong, due to this vm fault success,
+		 * do not report in here, report only when true access
+		 * this addr.
+		 * So, don't update ret here, just break.
+		 */
+		if (vmf_insert_pfn(vma, addr, pfn) & VM_FAULT_ERROR)
+			break;
+	}
+
+	return ret;
 }
 
 static const struct vm_operations_struct udmabuf_vm_ops = {
