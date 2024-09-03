@@ -259,6 +259,8 @@ struct WD33C93_hostdata {
 
 static inline struct scsi_pointer *WD33C93_scsi_pointer(struct scsi_cmnd *cmd)
 {
+	WARN_ON_ONCE(!cmd);
+
 	return scsi_cmd_priv(cmd);
 }
 

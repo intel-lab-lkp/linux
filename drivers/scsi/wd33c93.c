@@ -733,7 +733,7 @@ transfer_bytes(const wd33c93_regs regs, struct scsi_cmnd *cmd,
 void
 wd33c93_intr(struct Scsi_Host *instance)
 {
-	struct scsi_pointer *scsi_pointer;
+	struct scsi_pointer *scsi_pointer = NULL;
 	struct WD33C93_hostdata *hostdata =
 	    (struct WD33C93_hostdata *) instance->hostdata;
 	const wd33c93_regs regs = hostdata->regs;
@@ -752,7 +752,9 @@ wd33c93_intr(struct Scsi_Host *instance)
 #endif
 
 	cmd = (struct scsi_cmnd *) hostdata->connected;	/* assume we're connected */
-	scsi_pointer = WD33C93_scsi_pointer(cmd);
+	/* cmd could be null */
+	if (cmd)
+		scsi_pointer = WD33C93_scsi_pointer(cmd);
 	sr = read_wd33c93(regs, WD_SCSI_STATUS);	/* clear the interrupt */
 	phs = read_wd33c93(regs, WD_COMMAND_PHASE);
 
@@ -828,8 +830,10 @@ wd33c93_intr(struct Scsi_Host *instance)
 		    (struct scsi_cmnd *) hostdata->selecting;
 		hostdata->selecting = NULL;
 
-		/* construct an IDENTIFY message with correct disconnect bit */
+		/* cmd should now be valid and we can get scsi_pointer */
+		scsi_pointer = WD33C93_scsi_pointer(cmd);
 
+		/* construct an IDENTIFY message with correct disconnect bit */
 		hostdata->outgoing_msg[0] = IDENTIFY(0, cmd->device->lun);
 		if (scsi_pointer->phase)
 			hostdata->outgoing_msg[0] |= 0x40;
