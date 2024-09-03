@@ -50,7 +50,7 @@ static irqreturn_t intel_sst_interrupt_mrfld(int irq, void *context)
 	union sst_imr_reg_mrfld imr;
 	struct ipc_post *msg = NULL;
 	unsigned int size;
-	struct intel_sst_drv *drv = (struct intel_sst_drv *) context;
+	struct intel_sst_drv *drv = (struct intel_sst_drv *)context;
 	irqreturn_t retval = IRQ_HANDLED;
 
 	/* Interrupt arrived, check src */
@@ -60,7 +60,7 @@ static irqreturn_t intel_sst_interrupt_mrfld(int irq, void *context)
 		/* Clear done bit */
 		spin_lock(&drv->ipc_spin_lock);
 		header.full = sst_shim_read64(drv->shim,
-					drv->ipc_reg.ipcx);
+					      drv->ipc_reg.ipcx);
 		header.p.header_high.part.done = 0;
 		sst_shim_write64(drv->shim, drv->ipc_reg.ipcx, header.full);
 
@@ -92,7 +92,7 @@ static irqreturn_t intel_sst_interrupt_mrfld(int irq, void *context)
 			size = header.p.header_low_payload;
 			if (sst_validate_mailbox_size(size)) {
 				memcpy_fromio(msg->mailbox_data,
-					drv->mailbox + drv->mailbox_recv_offset, size);
+					      drv->mailbox + drv->mailbox_recv_offset, size);
 			} else {
 				dev_err(drv->dev,
 					"Mailbox not copied, payload size is: %u\n", size);
@@ -114,7 +114,7 @@ static irqreturn_t intel_sst_interrupt_mrfld(int irq, void *context)
 
 static irqreturn_t intel_sst_irq_thread_mrfld(int irq, void *context)
 {
-	struct intel_sst_drv *drv = (struct intel_sst_drv *) context;
+	struct intel_sst_drv *drv = (struct intel_sst_drv *)context;
 	struct ipc_post *__msg, *msg;
 	unsigned long irq_flags;
 
@@ -146,8 +146,8 @@ static int sst_save_dsp_context_v2(struct intel_sst_drv *sst)
 	int ret = 0;
 
 	ret = sst_prepare_and_post_msg(sst, SST_TASK_ID_MEDIA, IPC_CMD,
-			IPC_PREP_D3, PIPE_RSVD, 0, NULL, NULL,
-			true, true, false, true);
+				       IPC_PREP_D3, PIPE_RSVD, 0, NULL, NULL,
+				       true, true, false, true);
 
 	if (ret < 0) {
 		dev_err(sst->dev, "not suspending FW!!, Err: %d\n", ret);
@@ -228,7 +228,7 @@ static void sst_init_locks(struct intel_sst_drv *ctx)
  * we are fine with using unsigned short as dev_id type.
  */
 int sst_alloc_drv_context(struct intel_sst_drv **ctx,
-		struct device *dev, unsigned short dev_id)
+			  struct device *dev, unsigned short dev_id)
 {
 	*ctx = devm_kzalloc(dev, sizeof(struct intel_sst_drv), GFP_KERNEL);
 	if (!(*ctx))
@@ -242,7 +242,7 @@ int sst_alloc_drv_context(struct intel_sst_drv **ctx,
 EXPORT_SYMBOL_GPL(sst_alloc_drv_context);
 
 static ssize_t firmware_version_show(struct device *dev,
-			    struct device_attribute *attr, char *buf)
+				     struct device_attribute *attr, char *buf)
 {
 	struct intel_sst_drv *ctx = dev_get_drvdata(dev);
 
@@ -302,7 +302,7 @@ int sst_context_init(struct intel_sst_drv *ctx)
 	ctx->ipc_reg.ipcd = SST_IPCD + ctx->pdata->ipc_info->ipc_offset;
 
 	dev_info(ctx->dev, "Got drv data max stream %d\n",
-				ctx->info.max_streams);
+		 ctx->info.max_streams);
 
 	for (i = 1; i <= ctx->info.max_streams; i++) {
 		struct stream_info *stream = &ctx->streams[i];
@@ -325,7 +325,7 @@ int sst_context_init(struct intel_sst_drv *ctx)
 	sst_shim_write64(ctx->shim, SST_IMRX, 0xFFFF0038);
 
 	ctx->qos = devm_kzalloc(ctx->dev,
-		sizeof(struct pm_qos_request), GFP_KERNEL);
+				sizeof(struct pm_qos_request), GFP_KERNEL);
 	if (!ctx->qos) {
 		ret = -ENOMEM;
 		goto do_free_mem;
