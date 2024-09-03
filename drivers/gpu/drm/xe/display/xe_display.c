@@ -29,13 +29,6 @@
 #include "intel_opregion.h"
 #include "xe_module.h"
 
-/* Xe device functions */
-
-static bool has_display(struct xe_device *xe)
-{
-	return HAS_DISPLAY(&xe->display);
-}
-
 /**
  * xe_display_driver_probe_defer - Detect if we need to wait for other drivers
  *				   early on
@@ -336,8 +329,7 @@ static void xe_display_from_d3cold(struct xe_device *xe)
 
 	intel_dmc_resume(xe);
 
-	if (has_display(xe))
-		drm_mode_config_reset(&xe->drm);
+	drm_mode_config_reset(&xe->drm);
 
 	intel_display_driver_init_hw(xe);
 	intel_hpd_init(xe);
@@ -388,11 +380,10 @@ void xe_display_pm_suspend(struct xe_device *xe)
 	 */
 	intel_power_domains_disable(xe);
 	intel_fbdev_set_suspend(&xe->drm, FBINFO_STATE_SUSPENDED, true);
-	if (has_display(xe)) {
-		drm_kms_helper_poll_disable(&xe->drm);
-		intel_display_driver_disable_user_access(xe);
-		intel_display_driver_suspend(xe);
-	}
+
+	drm_kms_helper_poll_disable(&xe->drm);
+	intel_display_driver_disable_user_access(xe);
+	intel_display_driver_suspend(xe);
 
 	xe_display_flush_cleanup_work(xe);
 
@@ -400,10 +391,8 @@ void xe_display_pm_suspend(struct xe_device *xe)
 
 	intel_hpd_cancel_work(xe);
 
-	if (has_display(xe)) {
-		intel_display_driver_suspend_access(xe);
-		intel_encoder_suspend_all(&xe->display);
-	}
+	intel_display_driver_suspend_access(xe);
+	intel_encoder_suspend_all(&xe->display);
 
 	intel_opregion_suspend(display, s2idle ? PCI_D1 : PCI_D3cold);
 
@@ -440,23 +429,19 @@ void xe_display_pm_resume(struct xe_device *xe)
 
 	intel_dmc_resume(xe);
 
-	if (has_display(xe))
-		drm_mode_config_reset(&xe->drm);
+	drm_mode_config_reset(&xe->drm);
 
 	intel_display_driver_init_hw(xe);
 	intel_hpd_init(xe);
 
-	if (has_display(xe))
-		intel_display_driver_resume_access(xe);
+	intel_display_driver_resume_access(xe);
 
 	/* MST sideband requires HPD interrupts enabled */
 	intel_dp_mst_resume(xe);
-	if (has_display(xe)) {
-		intel_display_driver_resume(xe);
-		drm_kms_helper_poll_enable(&xe->drm);
-		intel_display_driver_enable_user_access(xe);
-		intel_hpd_poll_disable(xe);
-	}
+	intel_display_driver_resume(xe);
+	drm_kms_helper_poll_enable(&xe->drm);
+	intel_display_driver_enable_user_access(xe);
+	intel_hpd_poll_disable(xe);
 
 	intel_opregion_resume(display);
 
@@ -485,7 +470,7 @@ int xe_display_probe(struct xe_device *xe)
 	if (err)
 		return err;
 
-	if (has_display(xe))
+	if (HAS_DISPLAY(&xe->display))
 		return 0;
 
 no_display:
