@@ -564,6 +564,13 @@ static void drm_sched_job_timedout(struct work_struct *work)
 		 * is parked at which point it's safe.
 		 */
 		list_del_init(&job->list);
+
+		/*
+		 * Inform tasks blocking in drm_sched_fini() that it's now safe to proceed.
+		 */
+		if (list_empty(&sched->pending_list))
+			wake_up(&sched->job_list_waitque);
+
 		spin_unlock(&sched->job_list_lock);
 
 		status = job->sched->ops->timedout_job(job);
@@ -582,6 +589,15 @@ static void drm_sched_job_timedout(struct work_struct *work)
 
 	if (status != DRM_GPU_SCHED_STAT_ENODEV)
 		drm_sched_start_timeout_unlocked(sched);
+}
+
+static bool drm_sched_no_jobs_pending(struct drm_gpu_scheduler *sched)
+{
+	/*
+	 * For list_empty() to work without a lock.
+	 */
+	rmb();
+	return list_empty(&sched->pending_list);
 }
 
 /**
@@ -658,6 +674,12 @@ void drm_sched_stop(struct drm_gpu_scheduler *sched, struct drm_sched_job *bad)
 				sched->free_guilty = true;
 		}
 	}
+
+	/*
+	 * Inform tasks blocking in drm_sched_fini() that it's now safe to proceed.
+	 */
+	if (drm_sched_no_jobs_pending(sched))
+		wake_up(&sched->job_list_waitque);
 
 	/*
 	 * Stop pending timer in flight as we rearm it in  drm_sched_start. This
@@ -1076,6 +1098,12 @@ drm_sched_get_finished_job(struct drm_gpu_scheduler *sched)
 		/* remove job from pending_list */
 		list_del_init(&job->list);
 
+		/*
+		 * Inform tasks blocking in drm_sched_fini() that it's now safe to proceed.
+		 */
+		if (list_empty(&sched->pending_list))
+			wake_up(&sched->job_list_waitque);
+
 		/* cancel this job's TO timer */
 		cancel_delayed_work(&sched->work_tdr);
 		/* make the scheduled timestamp more accurate */
@@ -1294,6 +1322,7 @@ int drm_sched_init(struct drm_gpu_scheduler *sched,
 	init_waitqueue_head(&sched->job_scheduled);
 	INIT_LIST_HEAD(&sched->pending_list);
 	spin_lock_init(&sched->job_list_lock);
+	init_waitqueue_head(&sched->job_list_waitque);
 	atomic_set(&sched->credit_count, 0);
 	INIT_DELAYED_WORK(&sched->work_tdr, drm_sched_job_timedout);
 	INIT_WORK(&sched->work_run_job, drm_sched_run_job_work);
@@ -1324,12 +1353,23 @@ EXPORT_SYMBOL(drm_sched_init);
  * @sched: scheduler instance
  *
  * Tears down and cleans up the scheduler.
+ *
+ * Note that this function blocks until the fences returned by
+ * backend_ops.run_job() have been signalled.
  */
 void drm_sched_fini(struct drm_gpu_scheduler *sched)
 {
 	struct drm_sched_entity *s_entity;
 	int i;
 
+	/*
+	 * Jobs that have neither been scheduled or which have timed out are
+	 * gone by now, but jobs that have been submitted through
+	 * backend_ops.run_job() and have not yet terminated are still pending.
+	 *
+	 * Wait for the pending_list to become empty to avoid leaking those jobs.
+	 */
+	wait_event(sched->job_list_waitque, drm_sched_no_jobs_pending(sched));
 	drm_sched_wqueue_stop(sched);
 
 	for (i = DRM_SCHED_PRIORITY_KERNEL; i < sched->num_rqs; i++) {
