@@ -834,7 +834,7 @@ bounce:
 	} while (ret && force_space);
 
 	/* For backward compatibility with userspace */
-	if (ret == -ENOSPC)
+	if (ret == -ENOSPC && !ctx->forward_enospc)
 		return -ENOMEM;
 
 	/*
