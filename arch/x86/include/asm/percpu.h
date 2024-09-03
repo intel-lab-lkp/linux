@@ -128,15 +128,10 @@
 #define __pcpu_cast_4(val)	((u32)(((unsigned long) val) & 0xffffffff))
 #define __pcpu_cast_8(val)	((u64)(val))
 
-#define __pcpu_op1_1(op, dst)	op "b " dst
-#define __pcpu_op1_2(op, dst)	op "w " dst
-#define __pcpu_op1_4(op, dst)	op "l " dst
-#define __pcpu_op1_8(op, dst)	op "q " dst
-
-#define __pcpu_op2_1(op, src, dst) op "b " src ", " dst
-#define __pcpu_op2_2(op, src, dst) op "w " src ", " dst
-#define __pcpu_op2_4(op, src, dst) op "l " src ", " dst
-#define __pcpu_op2_8(op, src, dst) op "q " src ", " dst
+#define __pcpu_op_1(op)		op "b "
+#define __pcpu_op_2(op)		op "w "
+#define __pcpu_op_4(op)		op "l "
+#define __pcpu_op_8(op)		op "q "
 
 #define __pcpu_reg_1(mod, x)	mod "q" (x)
 #define __pcpu_reg_2(mod, x)	mod "r" (x)
@@ -168,7 +163,7 @@ do {									\
 ({									\
 	__pcpu_type_##size pfo_val__;					\
 									\
-	asm qual (__pcpu_op2_##size("mov", __percpu_arg([var]), "%[val]") \
+	asm qual(__pcpu_op_##size("mov") __percpu_arg([var]) ", %[val]"	\
 	    : [val] __pcpu_reg_##size("=", pfo_val__)			\
 	    : [var] "m" (__my_cpu_var(_var)));				\
 									\
@@ -184,7 +179,7 @@ do {									\
 		pto_tmp__ = (_val);					\
 		(void)pto_tmp__;					\
 	}								\
-	asm qual(__pcpu_op2_##size("mov", "%[val]", __percpu_arg([var])) \
+	asm qual(__pcpu_op_##size("mov") "%[val], " __percpu_arg([var])	\
 	    : [var] "=m" (__my_cpu_var(_var))				\
 	    : [val] __pcpu_reg_imm_##size(pto_val__));			\
 } while (0)
@@ -201,7 +196,7 @@ do {									\
 ({									\
 	__pcpu_type_##size pfo_val__;					\
 									\
-	asm(__pcpu_op2_##size("mov", __force_percpu_arg(a[var]), "%[val]") \
+	asm(__pcpu_op_##size("mov") __force_percpu_arg(a[var]) ", %[val]" \
 	    : [val] __pcpu_reg_##size("=", pfo_val__)			\
 	    : [var] "i" (&(_var)));					\
 									\
@@ -210,7 +205,7 @@ do {									\
 
 #define percpu_unary_op(size, qual, op, _var)				\
 ({									\
-	asm qual (__pcpu_op1_##size(op, __percpu_arg([var]))		\
+	asm qual(__pcpu_op_##size(op) __percpu_arg([var])		\
 	    : [var] "+m" (__my_cpu_var(_var)));				\
 })
 
@@ -223,7 +218,7 @@ do {									\
 		pto_tmp__ = (_val);					\
 		(void)pto_tmp__;					\
 	}								\
-	asm qual(__pcpu_op2_##size(op, "%[val]", __percpu_arg([var]))	\
+	asm qual(__pcpu_op_##size(op) "%[val], " __percpu_arg([var])	\
 	    : [var] "+m" (__my_cpu_var(_var))				\
 	    : [val] __pcpu_reg_imm_##size(pto_val__));			\
 } while (0)
@@ -258,8 +253,7 @@ do {									\
 ({									\
 	__pcpu_type_##size paro_tmp__ = __pcpu_cast_##size(_val);	\
 									\
-	asm qual (__pcpu_op2_##size("xadd", "%[tmp]",			\
-				     __percpu_arg([var]))		\
+	asm qual (__pcpu_op_##size("xadd") "%[tmp], " __percpu_arg([var]) \
 		  : [tmp] __pcpu_reg_##size("+", paro_tmp__),		\
 		    [var] "+m" (__my_cpu_var(_var))			\
 		  : : "memory");					\
@@ -302,8 +296,8 @@ do {									\
 	__pcpu_type_##size pco_old__ = __pcpu_cast_##size(_oval);	\
 	__pcpu_type_##size pco_new__ = __pcpu_cast_##size(_nval);	\
 									\
-	asm qual (__pcpu_op2_##size("cmpxchg", "%[nval]",		\
-				    __percpu_arg([var]))		\
+	asm qual (__pcpu_op_##size("cmpxchg") "%[nval], "		\
+		  __percpu_arg([var])					\
 		  : [oval] "+a" (pco_old__),				\
 		    [var] "+m" (__my_cpu_var(_var))			\
 		  : [nval] __pcpu_reg_##size(, pco_new__)		\
@@ -319,8 +313,8 @@ do {									\
 	__pcpu_type_##size pco_old__ = *pco_oval__;			\
 	__pcpu_type_##size pco_new__ = __pcpu_cast_##size(_nval);	\
 									\
-	asm qual (__pcpu_op2_##size("cmpxchg", "%[nval]",		\
-				    __percpu_arg([var]))		\
+	asm qual (__pcpu_op_##size("cmpxchg") "%[nval] ,"		\
+		  __percpu_arg([var])					\
 		  CC_SET(z)						\
 		  : CC_OUT(z) (success),				\
 		    [oval] "+a" (pco_old__),				\
