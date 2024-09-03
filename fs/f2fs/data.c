@@ -3641,6 +3641,15 @@ static int f2fs_write_begin(struct file *file, struct address_space *mapping,
 			goto fail;
 	}
 
+	if (IS_NOQUOTA(inode)) {
+		err = f2fs_convert_inline_inode(inode);
+		if (err)
+			goto fail;
+		err = f2fs_convert_inline_tail(inode);
+		if (err)
+			goto fail;
+	}
+
 #ifdef CONFIG_F2FS_FS_COMPRESSION
 	if (f2fs_compressed_file(inode)) {
 		int ret;
