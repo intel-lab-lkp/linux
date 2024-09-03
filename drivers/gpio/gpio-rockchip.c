@@ -476,10 +476,14 @@ out:
 
 static int rockchip_irq_reqres(struct irq_data *d)
 {
+	irq_hw_number_t hwirq;
 	struct irq_chip_generic *gc = irq_data_get_irq_chip_data(d);
 	struct rockchip_pin_bank *bank = gc->private;
 
-	return gpiochip_reqres_irq(&bank->gpio_chip, d->hwirq);
+	hwirq = irqd_to_hwirq(d);
+	rockchip_gpio_direction_input(&bank->gpio_chip, hwirq);
+
+	return gpiochip_reqres_irq(&bank->gpio_chip, hwirq);
 }
 
 static void rockchip_irq_relres(struct irq_data *d)
