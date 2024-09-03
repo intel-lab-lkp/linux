@@ -15,6 +15,7 @@ properties:
     enum:
       - qcom,geni-i2c
       - qcom,geni-i2c-master-hub
+      - qcom,sa8255p-geni-i2c
 
   clocks:
     minItems: 1
@@ -69,8 +70,6 @@ properties:
 required:
   - compatible
   - interrupts
-  - clocks
-  - clock-names
   - reg
 
 allOf:
@@ -81,6 +80,10 @@ allOf:
           contains:
             const: qcom,geni-i2c-master-hub
     then:
+      required:
+        - clocks
+        - clock-names
+
       properties:
         clocks:
           minItems: 2
@@ -100,7 +103,21 @@ allOf:
           items:
             - const: qup-core
             - const: qup-config
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: qcom,sa8255p-geni-i2c
+    then:
+      required:
+        - power-domains
+
     else:
+      required:
+        - clocks
+        - clock-names
+
       properties:
         clocks:
           maxItems: 1
@@ -142,5 +159,17 @@ examples:
         interconnect-names = "qup-core", "qup-config", "qup-memory";
         power-domains = <&rpmhpd SC7180_CX>;
         required-opps = <&rpmhpd_opp_low_svs>;
+    };
+
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    i2c@a90000 {
+        compatible = "qcom,sa8255p-geni-i2c";
+        reg = <0xa90000 0x4000>;
+        interrupts = <GIC_SPI 357 IRQ_TYPE_LEVEL_HIGH>;
+        #address-cells = <1>;
+        #size-cells = <0>;
+        power-domains = <&scmi9_pd 11>;
     };
 ...
