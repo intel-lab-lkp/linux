@@ -1115,6 +1115,8 @@ static bool __dir_empty(struct dir_context *ctx, const char *name, int namlen,
 	struct ksmbd_readdir_data *buf;
 
 	buf = container_of(ctx, struct ksmbd_readdir_data, ctx);
+	if (offset == 0 && !(namlen == 1 && name[0] == '.'))
+		buf->dirent_count = 2;
 	buf->dirent_count++;
 
 	return buf->dirent_count <= 2;
