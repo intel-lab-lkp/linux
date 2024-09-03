@@ -320,7 +320,7 @@
 	ethernet_phy0_default_pins: ethernet-phy0-default-pins {
 		pinctrl-single,pins = <
 			/* reset */
-			AM64X_IOPAD(0x0154, PIN_OUTPUT, 7) /* PRG1_PRU1_GPO19.GPIO0_84 */
+			AM64X_IOPAD(0x0154, PIN_INPUT, 7) /* PRG1_PRU1_GPO19.GPIO0_84 */
 			/* reference clock */
 			AM64X_IOPAD(0x0274, PIN_OUTPUT, 5) /* EXT_REFCLK1.CLKOUT0 */
 		>;
@@ -329,7 +329,7 @@
 	ethernet_phy1_default_pins: ethernet-phy1-default-pins {
 		pinctrl-single,pins = <
 			/* reset */
-			AM64X_IOPAD(0x0150, PIN_OUTPUT, 7) /* PRG1_PRU1_GPO18.GPIO0_20 */
+			AM64X_IOPAD(0x0150, PIN_INPUT, 7) /* PRG1_PRU1_GPO18.GPIO0_20 */
 			/* led0, external pull-down on SoM */
 			AM64X_IOPAD(0x0128, PIN_INPUT, 7) /* PRG1_PRU1_GPO8.GPIO0_73 */
 			/* led1/rxer */
@@ -340,7 +340,7 @@
 	ethernet_phy2_default_pins: ethernet-phy2-default-pins {
 		pinctrl-single,pins = <
 			/* reset */
-			AM64X_IOPAD(0x00d4, PIN_OUTPUT, 7) /* PRG1_PRU0_GPO7.GPIO0_52 */
+			AM64X_IOPAD(0x00d4, PIN_INPUT, 7) /* PRG1_PRU0_GPO7.GPIO0_52 */
 			/* led0, external pull-down on SoM */
 			AM64X_IOPAD(0x00d8, PIN_INPUT, 7) /* PRG1_PRU0_GPO8.GPIO0_53 */
 			/* led1/rxer */
