@@ -99,6 +99,8 @@ int drm_sched_policy = DRM_SCHED_POLICY_FIFO;
 MODULE_PARM_DESC(sched_policy, "Specify the scheduling policy for entities on a run-queue, " __stringify(DRM_SCHED_POLICY_RR) " = Round Robin, " __stringify(DRM_SCHED_POLICY_FIFO) " = FIFO (default).");
 module_param_named(sched_policy, drm_sched_policy, int, 0444);
 
+static void __drm_sched_fini(struct kref *jobs_remaining);
+
 static u32 drm_sched_available_credits(struct drm_gpu_scheduler *sched)
 {
 	u32 credits;
@@ -540,6 +542,7 @@ static void drm_sched_job_begin(struct drm_sched_job *s_job)
 
 	spin_lock(&sched->job_list_lock);
 	list_add_tail(&s_job->list, &sched->pending_list);
+	kref_get(&sched->jobs_remaining);
 	drm_sched_start_timeout(sched);
 	spin_unlock(&sched->job_list_lock);
 }
@@ -564,6 +567,7 @@ static void drm_sched_job_timedout(struct work_struct *work)
 		 * is parked at which point it's safe.
 		 */
 		list_del_init(&job->list);
+		kref_put(&sched->jobs_remaining, __drm_sched_fini);
 		spin_unlock(&sched->job_list_lock);
 
 		status = job->sched->ops->timedout_job(job);
@@ -637,6 +641,7 @@ void drm_sched_stop(struct drm_gpu_scheduler *sched, struct drm_sched_job *bad)
 			 */
 			spin_lock(&sched->job_list_lock);
 			list_del_init(&s_job->list);
+			kref_put(&sched->jobs_remaining, __drm_sched_fini);
 			spin_unlock(&sched->job_list_lock);
 
 			/*
@@ -1075,6 +1080,7 @@ drm_sched_get_finished_job(struct drm_gpu_scheduler *sched)
 	if (job && dma_fence_is_signaled(&job->s_fence->finished)) {
 		/* remove job from pending_list */
 		list_del_init(&job->list);
+		kref_put(&sched->jobs_remaining, __drm_sched_fini);
 
 		/* cancel this job's TO timer */
 		cancel_delayed_work(&sched->work_tdr);
@@ -1294,6 +1300,7 @@ int drm_sched_init(struct drm_gpu_scheduler *sched,
 	init_waitqueue_head(&sched->job_scheduled);
 	INIT_LIST_HEAD(&sched->pending_list);
 	spin_lock_init(&sched->job_list_lock);
+	kref_init(&sched->jobs_remaining);
 	atomic_set(&sched->credit_count, 0);
 	INIT_DELAYED_WORK(&sched->work_tdr, drm_sched_job_timedout);
 	INIT_WORK(&sched->work_run_job, drm_sched_run_job_work);
@@ -1325,10 +1332,13 @@ EXPORT_SYMBOL(drm_sched_init);
  *
  * Tears down and cleans up the scheduler.
  */
-void drm_sched_fini(struct drm_gpu_scheduler *sched)
+static void __drm_sched_fini(struct kref *jobs_remaining)
 {
+	struct drm_gpu_scheduler *sched;
 	struct drm_sched_entity *s_entity;
 	int i;
+
+	sched = container_of(jobs_remaining, struct drm_gpu_scheduler, jobs_remaining);
 
 	drm_sched_wqueue_stop(sched);
 
@@ -1358,6 +1368,11 @@ void drm_sched_fini(struct drm_gpu_scheduler *sched)
 	sched->ready = false;
 	kfree(sched->sched_rq);
 	sched->sched_rq = NULL;
+}
+
+void drm_sched_fini(struct drm_gpu_scheduler *sched)
+{
+	kref_put(&sched->jobs_remaining, __drm_sched_fini);
 }
 EXPORT_SYMBOL(drm_sched_fini);
 
