@@ -3418,7 +3418,9 @@ static int prepare_write_begin(struct f2fs_sb_info *sbi,
 			block_t *blk_addr, bool *node_changed)
 {
 	struct inode *inode = page->mapping->host;
+	loff_t i_size = i_size_read(inode);
 	pgoff_t index = page->index;
+	pgoff_t end_index = i_size >> PAGE_SHIFT;
 	struct dnode_of_data dn;
 	struct page *ipage;
 	bool locked = false;
@@ -3438,12 +3440,12 @@ static int prepare_write_begin(struct f2fs_sb_info *sbi,
 			flag = F2FS_GET_BLOCK_DEFAULT;
 		f2fs_map_lock(sbi, flag);
 		locked = true;
-	} else if (f2fs_has_inline_tail(inode)) {
+	} else if (f2fs_has_inline_tail(inode) && index >= end_index) {
 		if (!support_tail_inline(inode, pos + len)) {
 			f2fs_map_lock(sbi, flag);
 			locked = true;
 		}
-	} else if ((pos & PAGE_MASK) >= i_size_read(inode)) {
+	} else if ((pos & PAGE_MASK) >= i_size) {
 		f2fs_map_lock(sbi, flag);
 		locked = true;
 	}
@@ -3471,14 +3473,28 @@ restart:
 			goto out;
 	}
 
-	if (f2fs_has_inline_tail(inode)) {
+	if (f2fs_has_inline_tail(inode) && index >= end_index) {
+		if (index > end_index && f2fs_exist_data(inode)) {
+			struct page *tail_page = f2fs_grab_cache_page(
+					inode->i_mapping, end_index, false);
+			if (!page) {
+				err = -ENOMEM;
+				goto out;
+			}
+			err = f2fs_convert_inline_page(&dn, tail_page);
+			f2fs_put_page(tail_page, 1);
+			if (err || dn.data_blkaddr != NULL_ADDR)
+				goto out;
+		}
 		if (support_tail_inline(inode, pos + len)) {
 			f2fs_do_read_inline_data(page_folio(page), ipage);
 			if (inode->i_nlink)
 				set_page_private_inline(ipage);
 			goto out;
-		} else if (f2fs_exist_data(inode))
-			f2fs_do_read_inline_data(page_folio(page), ipage);
+		}
+		err = f2fs_convert_inline_page(&dn, page);
+		if (err || dn.data_blkaddr != NULL_ADDR)
+			goto out;
 	}
 
 	if (!f2fs_lookup_read_extent_cache_block(inode, index,
