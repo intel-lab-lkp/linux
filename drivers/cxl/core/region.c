@@ -797,21 +797,26 @@ out:
 static int match_free_decoder(struct device *dev, void *data)
 {
 	struct cxl_decoder *cxld;
-	int *id = data;
+	struct cxl_decoder *target_cxld;
+	struct device **target_device = data;
 
 	if (!is_switch_decoder(dev))
 		return 0;
 
 	cxld = to_cxl_decoder(dev);
-
-	/* enforce ordered allocation */
-	if (cxld->id != *id)
+	if (cxld->region)
 		return 0;
 
-	if (!cxld->region)
-		return 1;
-
-	(*id)++;
+	if (!*target_device) {
+		*target_device = get_device(dev);
+		return 0;
+	}
+	/* enforce ordered allocation */
+	target_cxld = to_cxl_decoder(*target_device);
+	if (cxld->id < target_cxld->id) {
+		put_device(*target_device);
+		*target_device = get_device(dev);
+	}
 
 	return 0;
 }
@@ -839,8 +844,7 @@ cxl_region_find_decoder(struct cxl_port *port,
 			struct cxl_endpoint_decoder *cxled,
 			struct cxl_region *cxlr)
 {
-	struct device *dev;
-	int id = 0;
+	struct device *dev = NULL;
 
 	if (port == cxled_to_port(cxled))
 		return &cxled->cxld;
@@ -849,7 +853,8 @@ cxl_region_find_decoder(struct cxl_port *port,
 		dev = device_find_child(&port->dev, &cxlr->params,
 					match_auto_decoder);
 	else
-		dev = device_find_child(&port->dev, &id, match_free_decoder);
+		/* Need to put_device(@dev) after use */
+		device_for_each_child(&port->dev, &dev, match_free_decoder);
 	if (!dev)
 		return NULL;
 	/*
