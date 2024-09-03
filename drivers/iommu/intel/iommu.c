@@ -3935,7 +3935,7 @@ static struct iommu_device *intel_iommu_probe_device(struct device *dev)
 	 * So always enable PASID support on devices which have it, even if
 	 * we can't yet know if we're ever going to use it.
 	 */
-	if (info->pasid_supported &&
+	if (info->pasid_supported && pdev &&
 	    !pci_enable_pasid(pdev, info->pasid_supported & ~1))
 		info->pasid_enabled = 1;
 
