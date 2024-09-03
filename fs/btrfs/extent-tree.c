@@ -1301,12 +1301,26 @@ static int btrfs_issue_discard(struct block_device *bdev, u64 start, u64 len,
 	}
 
 	if (bytes_left) {
-		ret = blkdev_issue_discard(bdev, start >> SECTOR_SHIFT,
-					   bytes_left >> SECTOR_SHIFT,
-					   GFP_NOFS);
-		if (!ret)
-			*discarded_bytes += bytes_left;
+		u64 bytes_to_discard;
+		struct bio *bio = NULL;
+		sector_t sector = start >> SECTOR_SHIFT;
+		sector_t nr_sects = bytes_left >> SECTOR_SHIFT;
+
+		while ((bio = blk_alloc_discard_bio(bdev, &sector, &nr_sects,
+				GFP_NOFS))) {
+			ret = submit_bio_wait(bio);
+			bio_put(bio);
+
+			if (!ret)
+				bytes_to_discard = bio->bi_iter.bi_size;
+			else if (ret != -EOPNOTSUPP)
+				return ret;
+
+			start += bytes_to_discard;
+			bytes_left -= bytes_to_discard;
+		}
 	}
+
 	return ret;
 }
 
