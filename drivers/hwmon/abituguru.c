@@ -96,11 +96,6 @@
  */
 #define ABITUGURU_IN_NAMES_LENGTH	(11 + 2 * 9 + 2 * 15 + 2 * 22 + 10 + 14)
 /*
- * sum of strlen of: temp??_input\0, temp??_max\0, temp??_crit\0,
- * temp??_alarm\0, temp??_alarm_enable\0, temp??_beep\0, temp??_shutdown\0
- */
-#define ABITUGURU_TEMP_NAMES_LENGTH	(13 + 11 + 12 + 13 + 20 + 12 + 16)
-/*
  * sum of strlen of: fan?_input\0, fan?_min\0, fan?_alarm\0,
  * fan?_alarm_enable\0, fan?_beep\0, fan?_shutdown\0
  */
