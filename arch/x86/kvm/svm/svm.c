@@ -597,6 +597,8 @@ static void svm_emergency_disable(void)
 	kvm_rebooting = true;
 
 	kvm_cpu_svm_disable();
+
+	sev_emergency_disable();
 }
 
 static void svm_hardware_disable(void)
