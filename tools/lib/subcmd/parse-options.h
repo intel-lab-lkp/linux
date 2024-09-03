@@ -174,6 +174,16 @@ extern int parse_options(int argc, const char **argv,
                          const struct option *options,
                          const char * const usagestr[], int flags);
 
+/* parse_options_subcommand() will filter out the processed options
+ * and subcommands, leave the non-option argments in argv[].
+ * If usagestr is empty, it will build usage string based on subcommands
+ * in format of "exec_name argv[0] [<options>] {subcommand1|subcomman2|...}".
+ *
+ * NOTE: In order to avoid the caller needing to free memory,
+ * use an 128-bytes array to store the built usage string.
+ * If need to expand the array size, please modify USAGESTR_BUF_SIZE macro.
+ */
+#define USAGESTR_BUF_SIZE 128
 extern int parse_options_subcommand(int argc, const char **argv,
 				const struct option *options,
 				const char *const subcommands[],
