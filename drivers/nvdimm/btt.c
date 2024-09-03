@@ -227,7 +227,7 @@ static void arena_debugfs_init(struct arena_info *a, struct dentry *parent,
 
 	snprintf(dirname, 32, "arena%d", idx);
 	d = debugfs_create_dir(dirname, parent);
-	if (IS_ERR_OR_NULL(d))
+	if (IS_ERR(d))
 		return;
 	a->debugfs_dir = d;
 
@@ -1703,7 +1703,7 @@ static int __init nd_btt_init(void)
 	int rc = 0;
 
 	debugfs_root = debugfs_create_dir("btt", NULL);
-	if (IS_ERR_OR_NULL(debugfs_root))
+	if (IS_ERR(debugfs_root))
 		rc = -ENXIO;
 
 	return rc;
