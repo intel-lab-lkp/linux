@@ -10,15 +10,20 @@
  *
  * Copyright (C) 2024 Oracle Corp. All rights reserved.
  * Author:	Khalid Aziz <khalid@kernel.org>
+ * Author:	Matthew Wilcox <willy@infradead.org>
  *
  */
 
 #include <linux/fs.h>
 #include <linux/fs_context.h>
+#include <linux/spinlock_types.h>
 #include <uapi/linux/magic.h>
+#include <uapi/linux/msharefs.h>
 
 struct mshare_data {
 	struct mm_struct *mm;
+	spinlock_t m_lock;
+	struct mshare_info minfo;
 };
 
 struct msharefs_info {
@@ -28,8 +33,74 @@ struct msharefs_info {
 static const struct inode_operations msharefs_dir_inode_ops;
 static const struct inode_operations msharefs_file_inode_ops;
 
+static long
+msharefs_set_size(struct mm_struct *mm, struct mshare_data *m_data,
+			struct mshare_info *minfo)
+{
+	unsigned long end = minfo->start + minfo->size;
+
+	/*
+	 * Validate alignment for start address, and size
+	 */
+	if ((minfo->start | end) & (PGDIR_SIZE - 1)) {
+		spin_unlock(&m_data->m_lock);
+		return -EINVAL;
+	}
+
+	mm->mmap_base = minfo->start;
+	mm->task_size = minfo->size;
+	if (!mm->task_size)
+		mm->task_size--;
+
+	m_data->minfo.start = mm->mmap_base;
+	m_data->minfo.size = mm->task_size;
+	spin_unlock(&m_data->m_lock);
+
+	return 0;
+}
+
+static long
+msharefs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+{
+	struct mshare_data *m_data = filp->private_data;
+	struct mm_struct *mm = m_data->mm;
+	struct mshare_info minfo;
+
+	switch (cmd) {
+	case MSHAREFS_GET_SIZE:
+		spin_lock(&m_data->m_lock);
+		minfo = m_data->minfo;
+		spin_unlock(&m_data->m_lock);
+
+		if (copy_to_user((void __user *)arg, &minfo, sizeof(minfo)))
+			return -EFAULT;
+
+		return 0;
+
+	case MSHAREFS_SET_SIZE:
+		if (copy_from_user(&minfo, (struct mshare_info __user *)arg,
+			sizeof(minfo)))
+			return -EFAULT;
+
+		/*
+		 * If this mshare region has been set up once already, bail out
+		 */
+		spin_lock(&m_data->m_lock);
+		if (m_data->minfo.start != 0) {
+			spin_unlock(&m_data->m_lock);
+			return -EINVAL;
+		}
+
+		return msharefs_set_size(mm, m_data, &minfo);
+
+	default:
+		return -ENOTTY;
+	}
+}
+
 static const struct file_operations msharefs_file_operations = {
 	.open		= simple_open,
+	.unlocked_ioctl	= msharefs_ioctl,
 	.llseek		= no_llseek,
 };
 
@@ -54,6 +125,7 @@ msharefs_fill_mm(struct inode *inode)
 		goto err_free;
 	}
 	m_data->mm = mm;
+	spin_lock_init(&m_data->m_lock);
 	inode->i_private = m_data;
 
 	return 0;
