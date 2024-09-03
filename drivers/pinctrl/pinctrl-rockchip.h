@@ -318,6 +318,8 @@ struct rockchip_pin_bank {
 	struct regmap			*regmap_pull;
 	struct clk			*clk;
 	struct clk			*db_clk;
+	bool				manual_clk_release;
+	bool				manual_dbclk_release;
 	int				irq;
 	u32				saved_masks;
 	u32				pin_base;
