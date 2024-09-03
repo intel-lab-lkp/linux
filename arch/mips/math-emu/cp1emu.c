@@ -43,10 +43,10 @@
 /* Function which emulates a floating point instruction. */
 
 static int fpu_emu(struct pt_regs *, struct mips_fpu_struct *,
-	mips_instruction);
+	mips_insn);
 
 static int fpux_emu(struct pt_regs *,
-	struct mips_fpu_struct *, mips_instruction, void __user **);
+	struct mips_fpu_struct *, mips_insn, void __user **);
 
 /* Control registers */
 
@@ -846,7 +846,7 @@ do {									\
  * Emulate a CFC1 instruction.
  */
 static inline void cop1_cfc(struct pt_regs *xcp, struct mips_fpu_struct *ctx,
-			    mips_instruction ir)
+			    mips_insn ir)
 {
 	u32 fcr31 = ctx->fcr31;
 	u32 value = 0;
@@ -903,7 +903,7 @@ static inline void cop1_cfc(struct pt_regs *xcp, struct mips_fpu_struct *ctx,
  * Emulate a CTC1 instruction.
  */
 static inline void cop1_ctc(struct pt_regs *xcp, struct mips_fpu_struct *ctx,
-			    mips_instruction ir)
+			    mips_insn ir)
 {
 	u32 fcr31 = ctx->fcr31;
 	u32 value;
@@ -973,7 +973,7 @@ static int cop1Emulate(struct pt_regs *xcp, struct mips_fpu_struct *ctx,
 {
 	unsigned long contpc = xcp->cp0_epc + dec_insn.pc_inc;
 	unsigned int cond, cbit, bit0;
-	mips_instruction ir;
+	mips_insn ir;
 	int likely, pc_inc;
 	union fpureg *fpr;
 	u32 __user *wva;
@@ -1461,7 +1461,7 @@ DEF3OP(nmadd, dp, ieee754dp_mul, ieee754dp_add, ieee754dp_neg);
 DEF3OP(nmsub, dp, ieee754dp_mul, ieee754dp_sub, ieee754dp_neg);
 
 static int fpux_emu(struct pt_regs *xcp, struct mips_fpu_struct *ctx,
-	mips_instruction ir, void __user **fault_addr)
+	mips_insn ir, void __user **fault_addr)
 {
 	unsigned int rcsr = 0;	/* resulting csr */
 
@@ -1680,7 +1680,7 @@ static int fpux_emu(struct pt_regs *xcp, struct mips_fpu_struct *ctx,
  * Emulate a single COP1 arithmetic instruction.
  */
 static int fpu_emu(struct pt_regs *xcp, struct mips_fpu_struct *ctx,
-	mips_instruction ir)
+	mips_insn ir)
 {
 	int rfmt;		/* resulting format */
 	unsigned int rcsr = 0;	/* resulting csr */
@@ -2899,9 +2899,9 @@ int fpu_emulator_cop1Handler(struct pt_regs *xcp, struct mips_fpu_struct *ctx,
 			dec_insn.micro_mips_mode = 1;
 		} else {
 			if ((get_user(dec_insn.insn,
-			    (mips_instruction __user *) xcp->cp0_epc)) ||
+			    (mips_insn __user *) xcp->cp0_epc)) ||
 			    (get_user(dec_insn.next_insn,
-			    (mips_instruction __user *)(xcp->cp0_epc+4)))) {
+			    (mips_insn __user *)(xcp->cp0_epc+4)))) {
 				MIPS_FPU_EMU_INC_STATS(errors);
 				return SIGBUS;
 			}
