@@ -220,6 +220,7 @@ static int open_getadapter_fib(struct aac_dev * dev, void __user *arg)
 		if (copy_to_user(arg, &fibctx->unique,
 						sizeof(fibctx->unique))) {
 			status = -EFAULT;
+			kfree(fibctx);
 		} else {
 			status = 0;
 		}
