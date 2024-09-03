@@ -205,8 +205,11 @@ static int rockchip_gpio_set_debounce(struct gpio_chip *gc,
 	unsigned int cur_div_reg;
 	u64 div;
 
-	if (bank->gpio_type == GPIO_TYPE_V2 && !IS_ERR(bank->db_clk)) {
+	if ((bank->gpio_type == GPIO_TYPE_V2) && !IS_ERR(bank->db_clk))
 		div_debounce_support = true;
+	else
+		div_debounce_support = false;
+	if (debounce && div_debounce_support) {
 		freq = clk_get_rate(bank->db_clk);
 		if (!freq)
 			return -EINVAL;
@@ -217,8 +220,6 @@ static int rockchip_gpio_set_debounce(struct gpio_chip *gc,
 
 		div = (u64)debounce * freq;
 		div_reg = DIV_ROUND_CLOSEST_ULL(div, 2 * USEC_PER_SEC) - 1;
-	} else {
-		div_debounce_support = false;
 	}
 
 	raw_spin_lock_irqsave(&bank->slock, flags);
