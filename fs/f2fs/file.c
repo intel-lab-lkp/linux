@@ -4729,7 +4729,7 @@ static int f2fs_preallocate_blocks(struct kiocb *iocb, struct iov_iter *iter,
 
 	if (f2fs_has_inline_tail(inode) &&
 			(pos + count > MAX_INLINE_TAIL(inode))) {
-		ret = f2fs_clear_inline_tail(inode, true);
+		ret = f2fs_convert_inline_tail(inode);
 		if (ret)
 			return ret;
 	}
@@ -4842,6 +4842,7 @@ static ssize_t f2fs_dio_write_iter(struct kiocb *iocb, struct iov_iter *from,
 	if (iocb->ki_flags & IOCB_NOWAIT) {
 		/* f2fs_convert_inline_inode() and block allocation can block */
 		if (f2fs_has_inline_data(inode) ||
+		    f2fs_has_inline_tail(inode) ||
 		    !f2fs_overwrite_io(inode, pos, count)) {
 			ret = -EAGAIN;
 			goto out;
@@ -4858,6 +4859,10 @@ static ssize_t f2fs_dio_write_iter(struct kiocb *iocb, struct iov_iter *from,
 		}
 	} else {
 		ret = f2fs_convert_inline_inode(inode);
+		if (ret)
+			goto out;
+
+		ret = f2fs_convert_inline_tail(inode);
 		if (ret)
 			goto out;
 
