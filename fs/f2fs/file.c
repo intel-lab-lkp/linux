@@ -1783,6 +1783,12 @@ static int f2fs_expand_inode_data(struct inode *inode, loff_t offset,
 	if (err)
 		return err;
 
+	if (len + offset > MAX_INLINE_TAIL(inode)) {
+		err = f2fs_convert_inline_tail(inode);
+		if (err)
+			return err;
+	}
+
 	f2fs_balance_fs(sbi, true);
 
 	pg_start = ((unsigned long long)offset) >> PAGE_SHIFT;

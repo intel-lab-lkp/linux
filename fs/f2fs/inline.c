@@ -235,6 +235,49 @@ int f2fs_clear_inline_tail(struct inode *inode, bool force)
 	return 0;
 }
 
+int f2fs_convert_inline_tail(struct inode *inode)
+{
+	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
+	struct dnode_of_data dn;
+	struct page *ipage, *page;
+	loff_t i_size = i_size_read(inode);
+	pgoff_t end_index = i_size >> PAGE_SHIFT;
+	int err = 0;
+
+	if (!f2fs_has_inline_tail(inode))
+		return 0;
+
+	page = f2fs_grab_cache_page(inode->i_mapping, end_index, false);
+	if (!page)
+		return -ENOMEM;
+
+	f2fs_lock_op(sbi);
+
+	ipage = f2fs_get_node_page(sbi, inode->i_ino);
+	if (IS_ERR(ipage)) {
+		err = PTR_ERR(ipage);
+		goto out;
+	}
+
+	set_new_dnode(&dn, inode, ipage, ipage, 0);
+
+	if (f2fs_has_inline_tail(inode))
+		err = f2fs_convert_inline_page(&dn, page);
+
+	f2fs_put_dnode(&dn);
+out:
+	f2fs_unlock_op(sbi);
+
+	f2fs_put_page(page, 1);
+
+	if (!err) {
+		err = f2fs_clear_inline_tail(inode, true);
+		f2fs_balance_fs(sbi, dn.node_changed);
+	}
+
+	return err;
+}
+
 int f2fs_convert_inline_inode(struct inode *inode)
 {
 	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
