@@ -45,7 +45,11 @@ patternProperties:
       clock-latency-ns: true
       opp-hz: true
       opp-microvolt: true
-      opp-supported-hw: true
+      opp-supported-hw:
+        description: |
+          Two bitfields indicating:
+            1. Which revision of the SoC the OPP is supported by
+            2. Which eFuse bits indicate this OPP is available
       opp-suspend: true
       turbo-mode: true
 
