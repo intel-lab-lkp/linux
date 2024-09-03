@@ -765,20 +765,19 @@ static int rockchip_gpio_probe(struct platform_device *pdev)
 		}
 	}
 
-	ret = rockchip_get_bank_data(bank);
-	if (ret)
-		goto err_disabled_clk;
-
 	/*
 	 * Prevent clashes with a deferred output setting
 	 * being added right at this moment.
 	 */
-	mutex_lock(&bank->deferred_lock);
+	guard(mutex)(&bank->deferred_lock);
+	ret = rockchip_get_bank_data(bank);
+	if (ret)
+		goto err_disabled_clk;
 
 	ret = rockchip_gpiolib_register(bank);
 	if (ret) {
 		dev_err(bank->dev, "Failed to register gpio %d\n", ret);
-		goto err_unlock;
+		goto err_disabled_clk;
 	}
 
 	while (!list_empty(&bank->deferred_pins)) {
@@ -805,14 +804,11 @@ static int rockchip_gpio_probe(struct platform_device *pdev)
 		kfree(cfg);
 	}
 
-	mutex_unlock(&bank->deferred_lock);
 
 	platform_set_drvdata(pdev, bank);
 	dev_info(dev, "probed %pOF\n", np);
 
 	return 0;
-err_unlock:
-	mutex_unlock(&bank->deferred_lock);
 err_disabled_clk:
 	if (bank->manual_clk_release)
 		clk_disable_unprepare(bank->clk);
