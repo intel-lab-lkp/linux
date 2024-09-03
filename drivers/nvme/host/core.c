@@ -1975,6 +1975,7 @@ static void nvme_update_atomic_write_disk_info(struct nvme_ns *ns,
 	lim->atomic_write_hw_boundary = boundary;
 	lim->atomic_write_hw_unit_min = bs;
 	lim->atomic_write_hw_unit_max = rounddown_pow_of_two(atomic_bs);
+	lim->features |= BLK_FEAT_ATOMIC_WRITES;
 }
 
 static u32 nvme_max_drv_segments(struct nvme_ctrl *ctrl)
@@ -2025,6 +2026,8 @@ static bool nvme_update_disk_info(struct nvme_ns *ns, struct nvme_id_ns *id,
 			atomic_bs = (1 + ns->ctrl->subsys->awupf) * bs;
 
 		nvme_update_atomic_write_disk_info(ns, id, lim, bs, atomic_bs);
+	} else {
+		lim->features &= ~BLK_FEAT_ATOMIC_WRITES;
 	}
 
 	if (id->nsfeat & NVME_NS_FEAT_IO_OPT) {
