@@ -958,7 +958,8 @@ static int dmub_fw_state_show(struct seq_file *m, void *data)
 
 	state_size = fb_info->fb[DMUB_WINDOW_6_FW_STATE].size;
 
-	return seq_write(m, state_base, state_size);
+	seq_write(m, state_base, state_size);
+	return 0;
 }
 
 /* replay_capability_show() - show eDP panel replay capability
