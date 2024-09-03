@@ -310,9 +310,6 @@ static void xe_display_to_d3cold(struct xe_device *xe)
 	 * properly.
 	 */
 	intel_power_domains_disable(xe);
-	intel_fbdev_set_suspend(&xe->drm, FBINFO_STATE_SUSPENDED, true);
-
-	xe_display_flush_cleanup_work(xe);
 
 	intel_dp_mst_suspend(xe);
 
@@ -329,17 +326,14 @@ static void xe_display_from_d3cold(struct xe_device *xe)
 
 	intel_dmc_resume(xe);
 
-	drm_mode_config_reset(&xe->drm);
-
 	intel_display_driver_init_hw(xe);
+
+	intel_opregion_resume(display);
+
 	intel_hpd_init(xe);
 
 	/* MST sideband requires HPD interrupts enabled */
 	intel_dp_mst_resume(xe);
-
-	intel_opregion_resume(display);
-
-	intel_fbdev_set_suspend(&xe->drm, FBINFO_STATE_RUNNING, false);
 
 	intel_power_domains_enable(xe);
 }
