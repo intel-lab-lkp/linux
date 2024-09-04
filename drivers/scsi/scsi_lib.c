@@ -1183,8 +1183,7 @@ blk_status_t scsi_alloc_sgtables(struct scsi_cmnd *cmd)
 			goto out_free_sgtables;
 		}
 
-		count = blk_rq_map_integrity_sg(rq->q, rq->bio,
-						prot_sdb->table.sgl);
+		count = blk_rq_map_integrity_sg(rq->bio, prot_sdb->table.sgl);
 		BUG_ON(count > ivecs);
 		BUG_ON(count > queue_max_integrity_segments(rq->q));
 

@@ -25,8 +25,7 @@ static inline bool queue_limits_stack_integrity_bdev(struct queue_limits *t,
 }
 
 #ifdef CONFIG_BLK_DEV_INTEGRITY
-int blk_rq_map_integrity_sg(struct request_queue *, struct bio *,
-				   struct scatterlist *);
+int blk_rq_map_integrity_sg(struct bio *, struct scatterlist *);
 int blk_rq_count_integrity_segs(struct bio *);
 
 static inline bool
@@ -95,8 +94,7 @@ static inline int blk_rq_count_integrity_segs(struct bio *b)
 {
 	return 0;
 }
-static inline int blk_rq_map_integrity_sg(struct request_queue *q,
-					  struct bio *b,
+static inline int blk_rq_map_integrity_sg(struct bio *b,
 					  struct scatterlist *s)
 {
 	return 0;
