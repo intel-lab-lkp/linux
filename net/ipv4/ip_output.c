@@ -1332,7 +1332,7 @@ static int ip_setup_cork(struct sock *sk, struct inet_cork *cork,
 	cork->transmit_time = ipc->sockc.transmit_time;
 	cork->ts_opt_id = ipc->sockc.ts_opt_id;
 	cork->tx_flags = 0;
-	sock_tx_timestamp(sk, ipc->sockc.tsflags, &cork->tx_flags);
+	sock_tx_timestamp(sk, &ipc->sockc, &cork->tx_flags);
 	if (ipc->sockc.tsflags & SOCKCM_FLAG_TS_OPT_ID)
 		cork->flags |= IPCORK_TS_OPT_ID;
 
