@@ -3713,9 +3713,21 @@
 				maximum-speed = "high-speed";
 				usb-role-switch;
 
-				port {
-					usb2_role_switch: endpoint {
-						remote-endpoint = <&eud_ep>;
+				ports {
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					port@0 {
+						reg = <0>;
+						usb_2_dwc3_hs: endpoint {
+						};
+					};
+
+
+					port@1 {
+						usb2_role_switch: endpoint {
+							remote-endpoint = <&eud_ep>;
+						};
 					};
 				};
 			};
