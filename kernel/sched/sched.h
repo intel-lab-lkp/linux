@@ -3579,38 +3579,6 @@ static inline void switch_mm_cid(struct rq *rq,
 	 *
 	 * Should be adapted if context_switch() is modified.
 	 */
-	if (!next->mm) {                                // to kernel
-		/*
-		 * user -> kernel transition does not guarantee a barrier, but
-		 * we can use the fact that it performs an atomic operation in
-		 * mmgrab().
-		 */
-		if (prev->mm)                           // from user
-			smp_mb__after_mmgrab();
-		/*
-		 * kernel -> kernel transition does not change rq->curr->mm
-		 * state. It stays NULL.
-		 */
-	} else {                                        // to user
-		/*
-		 * kernel -> user transition does not provide a barrier
-		 * between rq->curr store and load of {prev,next}->mm->pcpu_cid[cpu].
-		 * Provide it here.
-		 */
-		if (!prev->mm) {                        // from kernel
-			smp_mb();
-		} else {				// from user
-			/*
-			 * user->user transition relies on an implicit
-			 * memory barrier in switch_mm() when
-			 * current->mm changes. If the architecture
-			 * switch_mm() does not have an implicit memory
-			 * barrier, it is emitted here.  If current->mm
-			 * is unchanged, no barrier is needed.
-			 */
-			smp_mb__after_switch_mm();
-		}
-	}
 	if (prev->mm_cid_active) {
 		mm_cid_snapshot_time(rq, prev->mm);
 		mm_cid_put_lazy(prev);
@@ -3620,8 +3588,60 @@ static inline void switch_mm_cid(struct rq *rq,
 		next->last_mm_cid = next->mm_cid = mm_cid_get(rq, next->mm);
 }
 
+static inline void switch_mm_cid_from_user_to_kernel(struct rq *rq,
+						     struct task_struct *prev,
+						     struct task_struct *next)
+
+{
+	/**
+	 * user -> kernel transition does not guarantee a barrier, but
+	 * we can use the fact that it performs an atomic operation in
+	 * mmgrab().
+	 */
+	smp_mb__after_mmgrab();
+	switch_mm_cid(rq, prev, next);
+
+}
+
+static inline void switch_mm_cid_from_kernel_to_user(struct rq *rq,
+						     struct task_struct *prev,
+						     struct task_struct *next)
+
+{
+	/*
+	 * kernel -> user transition does not provide a barrier
+	 * between rq->curr store and load of {prev,next}->mm->pcpu_cid[cpu].
+	 * Provide it here.
+	 */
+	smp_mb();
+	switch_mm_cid(rq, prev, next);
+
+}
+
+
+static inline void switch_mm_cid_from_user_to_user(struct rq *rq,
+						   struct task_struct *prev,
+						   struct task_struct *next)
+
+{
+	/*
+	 * user->user transition relies on an implicit
+	 * memory barrier in switch_mm() when
+	 * current->mm changes. If the architecture
+	 * switch_mm() does not have an implicit memory
+	 * barrier, it is emitted here.  If current->mm
+	 * is unchanged, no barrier is needed.
+	 */
+	smp_mb__after_switch_mm();
+	switch_mm_cid(rq, prev, next);
+
+}
+
 #else /* !CONFIG_SCHED_MM_CID: */
 static inline void switch_mm_cid(struct rq *rq, struct task_struct *prev, struct task_struct *next) { }
+static inline void switch_mm_cid_from_user_to_user(struct rq *rq, struct task_struct *prev, struct task_struct *next) { }
+static inline void switch_mm_cid_from_user_to_kernel(struct rq *rq, struct task_struct *prev, struct task_struct *next) { }
+static inline void switch_mm_cid_from_kernel_to_user(struct rq *rq, struct task_struct *prev, struct task_struct *next) { }
 static inline void sched_mm_cid_migrate_from(struct task_struct *t) { }
 static inline void sched_mm_cid_migrate_to(struct rq *dst_rq, struct task_struct *t) { }
 static inline void task_tick_mm_cid(struct rq *rq, struct task_struct *curr) { }

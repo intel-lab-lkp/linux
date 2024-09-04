@@ -5225,9 +5225,15 @@ context_switch(struct rq *rq, struct task_struct *prev,
 		enter_lazy_tlb(prev->active_mm, next);
 
 		next->active_mm = prev->active_mm;
-		if (prev->mm)                           // from user
+		if (prev->mm) {                           // from user
 			mmgrab_lazy_tlb(prev->active_mm);
+			switch_mm_cid_from_user_to_kernel(rq, prev, next);
+		}
 		else
+			/*
+			 * kernel -> kernel transition does not change rq->curr->mm
+			 * state. It stays NULL.
+			 */
 			prev->active_mm = NULL;
 	} else {                                        // to user
 		membarrier_switch_mm(rq, prev->active_mm, next->mm);
@@ -5246,11 +5252,10 @@ context_switch(struct rq *rq, struct task_struct *prev,
 			/* will mmdrop_lazy_tlb() in finish_task_switch(). */
 			rq->prev_mm = prev->active_mm;
 			prev->active_mm = NULL;
-		}
+			switch_mm_cid_from_kernel_to_user(rq, prev, next);
+		} else
+			switch_mm_cid_from_user_to_user(rq, prev, next);
 	}
-
-	/* switch_mm_cid() requires the memory barriers above. */
-	switch_mm_cid(rq, prev, next);
 
 	prepare_lock_switch(rq, next, rf);
 
