@@ -39,7 +39,7 @@
 };
 
 &saradc {
-	compatible = "amlogic,meson-gxlx-saradc", "amlogic,meson-saradc";
+	compatible = "amlogic,meson-saradc";
 };
 
 &usb {
