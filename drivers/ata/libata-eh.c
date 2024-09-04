@@ -1605,7 +1605,7 @@ static unsigned int ata_eh_analyze_tf(struct ata_queued_cmd *qc)
 		 */
 		if (!(qc->flags & ATA_QCFLAG_SENSE_VALID) &&
 		    (stat & ATA_SENSE) && ata_eh_request_sense(qc))
-			set_status_byte(qc->scsicmd, SAM_STAT_CHECK_CONDITION);
+			qc->scsicmd->result = SAM_STAT_CHECK_CONDITION;
 		if (err & ATA_ICRC)
 			qc->err_mask |= AC_ERR_ATA_BUS;
 		if (err & (ATA_UNC | ATA_AMNF))
