@@ -56,6 +56,8 @@ enum gpiod_flags {
 
 #ifdef CONFIG_GPIOLIB
 
+int gpio_get_property_name_length(const char *propname);
+
 /* Return the number of GPIOs associated with a device / function */
 int gpiod_count(struct device *dev, const char *con_id);
 
@@ -187,6 +189,11 @@ struct gpio_desc *devm_fwnode_gpiod_get_index(struct device *dev,
 #include <linux/kernel.h>
 
 #include <asm/bug.h>
+
+static inline int gpio_get_property_name_length(const char *propname)
+{
+	return ERR_PTR(-ENOSYS);
+}
 
 static inline int gpiod_count(struct device *dev, const char *con_id)
 {

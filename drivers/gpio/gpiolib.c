@@ -4297,6 +4297,31 @@ struct gpio_desc *fwnode_gpiod_get_index(struct fwnode_handle *fwnode,
 EXPORT_SYMBOL_GPL(fwnode_gpiod_get_index);
 
 /**
+ * gpio_get_property_name_length - Returns the GPIO name length from a property name
+ * @propname:	name of the property to check
+ *
+ * This function checks if the given property name matches the GPIO property
+ * patterns, and returns the length of the name of the GPIO. The pattern is
+ * "*-<GPIO suffix>" or just "<GPIO suffix>".
+ *
+ * Returns:
+ * The length of the string before '-<GPIO suffix>' if it matches
+ * "*-<GPIO suffix>", or 0 if no name part, just the suffix, or
+ * -EINVAL if the string doesn't match the pattern.
+ */
+int gpio_get_property_name_length(const char *propname)
+{
+	const char *dash = strrchr(propname, '-');
+
+	for (const char *const *p = gpio_suffixes; *p; p++)
+		if (!strcmp(dash ? dash + 1 : propname, *p))
+			return dash ? dash - propname : 0;
+
+	return -EINVAL;
+}
+EXPORT_SYMBOL_GPL(gpio_get_property_name_length);
+
+/**
  * gpiod_count - return the number of GPIOs associated with a device / function
  *		or -ENOENT if no GPIO has been assigned to the requested function
  * @dev:	GPIO consumer, can be NULL for system-global GPIOs
