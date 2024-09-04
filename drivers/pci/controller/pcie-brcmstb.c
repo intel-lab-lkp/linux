@@ -1030,7 +1030,8 @@ static int brcm_pcie_setup(struct brcm_pcie *pcie)
 	struct pci_host_bridge *bridge;
 	struct resource_entry *entry;
 	u32 tmp, burst, aspm_support;
-	u8 num_out_wins = 0, num_inbound_wins = 0;
+	u8 num_out_wins = 0
+	int num_inbound_wins = 0;
 	int memc, ret;
 
 	/* Reset the bridge */
