@@ -130,6 +130,10 @@ static __initdata struct lsm_info *exclusive;
 #undef LSM_HOOK
 #undef DEFINE_LSM_STATIC_CALL
 
+struct security_dynamic_hook_heads security_hook_heads;
+EXPORT_SYMBOL_GPL(security_hook_heads);
+static DEFINE_STATIC_KEY_FALSE_RO(security_dynamic_hook_key);
+
 /*
  * Initialise a table of static calls for each LSM hook.
  * DEFINE_STATIC_CALL_NULL invocation above generates a key (STATIC_CALL_KEY)
@@ -644,6 +648,32 @@ void __init security_add_hooks(struct security_hook_list *hooks, int count,
 	}
 }
 
+static int __init enable_dynamic_hooks(char *str)
+{
+	static_branch_enable(&security_dynamic_hook_key);
+	pr_info("Dynamic LSM hook enabled.\n");
+	return 1;
+}
+__setup("dynamic_lsm", enable_dynamic_hooks);
+
+int security_add_dynamic_hooks(struct security_dynamic_hook_list *hooks, int count,
+			       const struct lsm_id *lsmid)
+{
+	int i;
+
+	if (!static_key_enabled(&security_dynamic_hook_key)) {
+		pr_info("Boot with 'dynamic_lsm' kernel command line option to enable dynamic LSM hook.\n");
+		return -EINVAL;
+	}
+	pr_info("Dynamic LSM hook: adding '%s' module.\n", lsmid->name);
+	for (i = 0; i < count; i++) {
+		hooks[i].lsmid = lsmid;
+		hlist_add_tail_rcu(&hooks[i].list, hooks[i].head);
+	}
+	return 0;
+}
+EXPORT_SYMBOL_GPL(security_add_dynamic_hooks);
+
 int call_blocking_lsm_notifier(enum lsm_event event, void *data)
 {
 	return blocking_notifier_call_chain(&blocking_lsm_notifier_chain,
@@ -952,9 +982,15 @@ do {									     \
 	}								     \
 } while (0);
 
-#define call_void_hook(HOOK, ...)                                 \
-	do {                                                      \
+#define call_void_hook(HOOK, ...)					\
+	do {								\
 		LSM_LOOP_UNROLL(__CALL_STATIC_VOID, HOOK, __VA_ARGS__); \
+		if (static_key_enabled(&security_dynamic_hook_key)) { \
+			struct security_dynamic_hook_list *P;		\
+									\
+			hlist_for_each_entry(P, &security_hook_heads.HOOK, list) \
+				P->hook.HOOK(__VA_ARGS__);		\
+		}							\
 	} while (0)
 
 
@@ -973,6 +1009,15 @@ do {									     \
 	int RC = LSM_RET_DEFAULT(HOOK);					\
 									\
 	LSM_LOOP_UNROLL(__CALL_STATIC_INT, RC, HOOK, OUT, __VA_ARGS__);	\
+	if (static_key_enabled(&security_dynamic_hook_key)) {	\
+		struct security_dynamic_hook_list *P;			\
+									\
+		hlist_for_each_entry(P, &security_hook_heads.HOOK, list) { \
+			RC = P->hook.HOOK(__VA_ARGS__);			\
+			if (RC != LSM_RET_DEFAULT(HOOK))		\
+				goto OUT;				\
+		}							\
+	}								\
 OUT:									\
 	RC;								\
 })
@@ -1230,9 +1275,21 @@ int security_vm_enough_memory_mm(struct mm_struct *mm, long pages)
 		rc = scall->hl->hook.vm_enough_memory(mm, pages);
 		if (rc < 0) {
 			cap_sys_admin = 0;
-			break;
+			goto done;
 		}
 	}
+	if (static_key_enabled(&security_dynamic_hook_key)) {
+		struct security_dynamic_hook_list *hp;
+
+		hlist_for_each_entry(hp, &security_hook_heads.vm_enough_memory, list) {
+			rc = hp->hook.vm_enough_memory(mm, pages);
+			if (rc <= 0) {
+				cap_sys_admin = 0;
+				break;
+			}
+		}
+	}
+ done:
 	return __vm_enough_memory(mm, pages, cap_sys_admin);
 }
 
@@ -1384,6 +1441,18 @@ int security_fs_context_parse_param(struct fs_context *fc,
 			rc = 0;
 		else if (trc != -ENOPARAM)
 			return trc;
+	}
+	if (static_key_enabled(&security_dynamic_hook_key)) {
+		struct security_dynamic_hook_list *hp;
+
+		hlist_for_each_entry(hp, &security_hook_heads.fs_context_parse_param,
+				     list) {
+			trc = hp->hook.fs_context_parse_param(fc, param);
+			if (trc == 0)
+				rc = 0;
+			else if (trc != -ENOPARAM)
+				return trc;
+		}
 	}
 	return rc;
 }
@@ -1616,8 +1685,20 @@ int security_sb_set_mnt_opts(struct super_block *sb,
 		rc = scall->hl->hook.sb_set_mnt_opts(sb, mnt_opts, kern_flags,
 					      set_kern_flags);
 		if (rc != LSM_RET_DEFAULT(sb_set_mnt_opts))
-			break;
+			goto done;
 	}
+	if (static_key_enabled(&security_dynamic_hook_key)) {
+		struct security_dynamic_hook_list *hp;
+
+		hlist_for_each_entry(hp, &security_hook_heads.sb_set_mnt_opts,
+				     list) {
+			rc = hp->hook.sb_set_mnt_opts(sb, mnt_opts, kern_flags,
+						      set_kern_flags);
+			if (rc != LSM_RET_DEFAULT(sb_set_mnt_opts))
+				break;
+		}
+	}
+ done:
 	return rc;
 }
 EXPORT_SYMBOL(security_sb_set_mnt_opts);
@@ -1826,17 +1907,28 @@ int security_inode_init_security(struct inode *inode, struct inode *dir,
 			return -ENOMEM;
 	}
 
+	/*
+	 * As documented in lsm_hooks.h, -EOPNOTSUPP in this context
+	 * means that the LSM is not willing to provide an xattr, not
+	 * that it wants to signal an error. Thus, continue to invoke
+	 * the remaining LSMs.
+	 */
 	lsm_for_each_hook(scall, inode_init_security) {
 		ret = scall->hl->hook.inode_init_security(inode, dir, qstr, new_xattrs,
 						  &xattr_count);
 		if (ret && ret != -EOPNOTSUPP)
 			goto out;
-		/*
-		 * As documented in lsm_hooks.h, -EOPNOTSUPP in this context
-		 * means that the LSM is not willing to provide an xattr, not
-		 * that it wants to signal an error. Thus, continue to invoke
-		 * the remaining LSMs.
-		 */
+	}
+	if (static_key_enabled(&security_dynamic_hook_key)) {
+		struct security_dynamic_hook_list *hp;
+
+		hlist_for_each_entry(hp, &security_hook_heads.inode_init_security,
+				     list) {
+			ret = hp->hook.inode_init_security(inode, dir, qstr, new_xattrs,
+							   &xattr_count);
+			if (ret && ret != -EOPNOTSUPP)
+				goto out;
+		}
 	}
 
 	/* If initxattrs() is NULL, xattr_count is zero, skip the call. */
@@ -3681,9 +3773,22 @@ int security_task_prctl(int option, unsigned long arg2, unsigned long arg3,
 		if (thisrc != LSM_RET_DEFAULT(task_prctl)) {
 			rc = thisrc;
 			if (thisrc != 0)
-				break;
+				goto done;
 		}
 	}
+	if (static_key_enabled(&security_dynamic_hook_key)) {
+		struct security_dynamic_hook_list *hp;
+
+		hlist_for_each_entry(hp, &security_hook_heads.task_prctl, list) {
+			thisrc = hp->hook.task_prctl(option, arg2, arg3, arg4, arg5);
+			if (thisrc != LSM_RET_DEFAULT(task_prctl)) {
+				rc = thisrc;
+				if (thisrc != 0)
+					break;
+			}
+		}
+	}
+ done:
 	return rc;
 }
 
@@ -4144,8 +4249,38 @@ int security_getselfattr(unsigned int attr, struct lsm_ctx __user *uctx,
 		total += entrysize;
 		count += rc;
 		if (single)
-			break;
+			goto done;
 	}
+	if (static_key_enabled(&security_dynamic_hook_key)) {
+		struct security_dynamic_hook_list *hp;
+
+		hlist_for_each_entry(hp, &security_hook_heads.getselfattr, list) {
+			if (single && lctx.id != hp->lsmid->id)
+				continue;
+			entrysize = left;
+			if (base)
+				uctx = (struct lsm_ctx __user *)(base + total);
+			rc = hp->hook.getselfattr(attr, uctx, &entrysize, flags);
+			if (rc == -EOPNOTSUPP) {
+				rc = 0;
+				continue;
+			}
+			if (rc == -E2BIG) {
+				rc = 0;
+				left = 0;
+				toobig = true;
+			} else if (rc < 0)
+				return rc;
+			else
+				left -= entrysize;
+
+			total += entrysize;
+			count += rc;
+			if (single)
+				break;
+		}
+	}
+ done:
 	if (put_user(total, size))
 		return -EFAULT;
 	if (toobig)
@@ -4202,8 +4337,17 @@ int security_setselfattr(unsigned int attr, struct lsm_ctx __user *uctx,
 	lsm_for_each_hook(scall, setselfattr)
 		if ((scall->hl->lsmid->id) == lctx->id) {
 			rc = scall->hl->hook.setselfattr(attr, lctx, size, flags);
-			break;
+			goto free_out;
 		}
+	if (static_key_enabled(&security_dynamic_hook_key)) {
+		struct security_dynamic_hook_list *hp;
+
+		hlist_for_each_entry(hp, &security_hook_heads.setselfattr, list)
+			if ((hp->lsmid->id) == lctx->id) {
+				rc = hp->hook.setselfattr(attr, lctx, size, flags);
+				break;
+			}
+	}
 
 free_out:
 	kfree(lctx);
@@ -4231,6 +4375,15 @@ int security_getprocattr(struct task_struct *p, int lsmid, const char *name,
 			continue;
 		return scall->hl->hook.getprocattr(p, name, value);
 	}
+	if (static_key_enabled(&security_dynamic_hook_key)) {
+		struct security_dynamic_hook_list *hp;
+
+		hlist_for_each_entry(hp, &security_hook_heads.getprocattr, list) {
+			if (lsmid != 0 && lsmid != hp->lsmid->id)
+				continue;
+			return hp->hook.getprocattr(p, name, value);
+		}
+	}
 	return LSM_RET_DEFAULT(getprocattr);
 }
 
@@ -4254,6 +4407,15 @@ int security_setprocattr(int lsmid, const char *name, void *value, size_t size)
 		if (lsmid != 0 && lsmid != scall->hl->lsmid->id)
 			continue;
 		return scall->hl->hook.setprocattr(name, value, size);
+	}
+	if (static_key_enabled(&security_dynamic_hook_key)) {
+		struct security_dynamic_hook_list *hp;
+
+		hlist_for_each_entry(hp, &security_hook_heads.setprocattr, list) {
+			if (lsmid != 0 && lsmid != hp->lsmid->id)
+				continue;
+			return hp->hook.setprocattr(name, value, size);
+		}
 	}
 	return LSM_RET_DEFAULT(setprocattr);
 }
@@ -5399,8 +5561,18 @@ int security_xfrm_state_pol_flow_match(struct xfrm_state *x,
 	 */
 	lsm_for_each_hook(scall, xfrm_state_pol_flow_match) {
 		rc = scall->hl->hook.xfrm_state_pol_flow_match(x, xp, flic);
-		break;
+		goto out;
 	}
+	if (static_key_enabled(&security_dynamic_hook_key)) {
+		struct security_dynamic_hook_list *hp;
+
+		hlist_for_each_entry(hp, &security_hook_heads.xfrm_state_pol_flow_match,
+				     list) {
+			rc = hp->hook.xfrm_state_pol_flow_match(x, xp, flic);
+			break;
+		}
+	}
+ out:
 	return rc;
 }
 

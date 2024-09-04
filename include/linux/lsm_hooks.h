@@ -71,6 +71,12 @@ struct lsm_static_calls_table {
 	#undef LSM_HOOK
 } __packed __randomize_layout;
 
+struct security_dynamic_hook_heads {
+	#define LSM_HOOK(RET, DEFAULT, NAME, ...) struct hlist_head NAME;
+	#include "lsm_hook_defs.h"
+	#undef LSM_HOOK
+} __randomize_layout;
+
 /**
  * struct lsm_id - Identify a Linux Security Module.
  * @lsm: name of the LSM, must be approved by the LSM maintainers
@@ -96,6 +102,13 @@ struct security_hook_list {
 	struct lsm_static_call *scalls;
 	union security_list_options hook;
 	const struct lsm_id *lsmid;
+} __randomize_layout;
+
+struct security_dynamic_hook_list {
+	struct hlist_node		list;
+	struct hlist_head		*head;
+	union security_list_options	hook;
+	const struct lsm_id		*lsmid;
 } __randomize_layout;
 
 /*
@@ -130,14 +143,24 @@ struct lsm_blob_sizes {
  * care of the common case and reduces the amount of
  * text involved.
  */
+#ifndef MODULE
 #define LSM_HOOK_INIT(NAME, HOOK)			\
 	{						\
 		.scalls = static_calls_table.NAME,	\
 		.hook = { .NAME = HOOK }		\
 	}
+#else
+#define LSM_HOOK_INIT(NAME, HOOK)			\
+	{						\
+		.head = &security_hook_heads.NAME,	\
+		.hook = { .NAME = HOOK }		\
+	}
+#endif
 
 extern void security_add_hooks(struct security_hook_list *hooks, int count,
 			       const struct lsm_id *lsmid);
+extern int security_add_dynamic_hooks(struct security_dynamic_hook_list *hooks, int count,
+				      const struct lsm_id *lsmid);
 
 #define LSM_FLAG_LEGACY_MAJOR	BIT(0)
 #define LSM_FLAG_EXCLUSIVE	BIT(1)
@@ -170,6 +193,7 @@ struct lsm_info {
 /* DO NOT tamper with these variables outside of the LSM framework */
 extern char *lsm_names;
 extern struct lsm_static_calls_table static_calls_table __ro_after_init;
+extern struct security_dynamic_hook_heads security_hook_heads;
 extern struct lsm_info __start_lsm_info[], __end_lsm_info[];
 extern struct lsm_info __start_early_lsm_info[], __end_early_lsm_info[];
 
