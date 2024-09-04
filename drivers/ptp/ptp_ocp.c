@@ -1555,19 +1555,22 @@ ptp_ocp_estimate_pci_timing(struct ptp_ocp *bp)
 	ktime_t start, end;
 	ktime_t delay;
 	u32 ctrl;
+	int i;
 
-	ctrl = ioread32(&bp->reg->ctrl);
-	ctrl = OCP_CTRL_READ_TIME_REQ | OCP_CTRL_ENABLE;
+	for (i = 0; i < 3; i++) {
+		ctrl = ioread32(&bp->reg->ctrl);
+		ctrl = OCP_CTRL_READ_TIME_REQ | OCP_CTRL_ENABLE;
 
-	iowrite32(ctrl, &bp->reg->ctrl);
+		iowrite32(ctrl, &bp->reg->ctrl);
 
-	start = ktime_get_ns();
+		start = ktime_get_ns();
 
-	ctrl = ioread32(&bp->reg->ctrl);
+		ctrl = ioread32(&bp->reg->ctrl);
 
-	end = ktime_get_ns();
+		end = ktime_get_ns();
 
-	delay = end - start;
+		delay = min(delay, end - start);
+	}
 	bp->ts_window_adjust = (delay >> 5) * 3;
 }
 
