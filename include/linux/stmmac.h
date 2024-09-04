@@ -89,6 +89,51 @@ struct stmmac_mdio_bus_data {
 	bool needs_reset;
 };
 
+/* DW25GMAC Hyper-DMA Overview
+ * Hyper-DMA allows support for large number of Virtual DMA(VDMA)
+ * channels using a smaller set of physical DMA channels(PDMA).
+ * This is supported by the mapping of VDMAs to Traffic Class(TC)
+ * and PDMA to TC in each traffic direction as shown below.
+ *
+ *        VDMAs            Traffic Class      PDMA
+ *       +--------+          +------+         +-----------+
+ *       |VDMA0   |--------->| TC0  |-------->|PDMA0/TXQ0 |
+ *TX     +--------+   |----->+------+         +-----------+
+ *Host=> +--------+   |      +------+         +-----------+ => MAC
+ *SW     |VDMA1   |---+      | TC1  |    +--->|PDMA1/TXQ1 |
+ *       +--------+          +------+    |    +-----------+
+ *       +--------+          +------+----+    +-----------+
+ *       |VDMA2   |--------->| TC2  |-------->|PDMA2/TXQ1 |
+ *       +--------+          +------+         +-----------+
+ *            .                 .                 .
+ *       +--------+          +------+         +-----------+
+ *       |VDMAn-1 |--------->| TCx-1|-------->|PDMAm/TXQm |
+ *       +--------+          +------+         +-----------+
+ *
+ *       +------+          +------+         +------+
+ *       |PDMA0 |--------->| TC0  |-------->|VDMA0 |
+ *       +------+   |----->+------+         +------+
+ *MAC => +------+   |      +------+         +------+
+ *RXQs   |PDMA1 |---+      | TC1  |    +--->|VDMA1 |  => Host
+ *       +------+          +------+    |    +------+
+ *            .                 .                 .
+ */
+
+/* Hyper-DMA mapping configuration
+ * Traffic Class associated with each VDMA/PDMA mapping
+ * is stored in corresponding array entry.
+ */
+struct stmmac_hdma_cfg {
+	u32 tx_vdmas;	/* TX VDMA count */
+	u32 rx_vdmas;	/* RX VDMA count */
+	u32 tx_pdmas;	/* TX PDMA count */
+	u32 rx_pdmas;	/* RX PDMA count */
+	u8 *tvdma_tc;	/* Tx VDMA to TC mapping array */
+	u8 *rvdma_tc;	/* Rx VDMA to TC mapping array */
+	u8 *tpdma_tc;	/* Tx PDMA to TC mapping array */
+	u8 *rpdma_tc;	/* Rx PDMA to TC mapping array */
+};
+
 struct stmmac_dma_cfg {
 	int pbl;
 	int txpbl;
@@ -101,6 +146,7 @@ struct stmmac_dma_cfg {
 	bool multi_msi_en;
 	bool dche;
 	bool atds;
+	struct stmmac_hdma_cfg *hdma_cfg;
 };
 
 #define AXI_BLEN	7
@@ -303,5 +349,7 @@ struct plat_stmmacenet_data {
 	int msi_tx_base_vec;
 	const struct dwmac4_addrs *dwmac4_addrs;
 	unsigned int flags;
+	u32 snps_id;
+	u32 snps_dev_id;
 };
 #endif
