@@ -207,6 +207,10 @@ _start:
 	movec	%d0,%CACR
 	nop
 
+	movel   #0,%d0
+	movec   %d0,%rambar
+	nop
+
 #ifdef CONFIG_MMU
 	/*
 	 *	Identity mapping for the kernel region.
