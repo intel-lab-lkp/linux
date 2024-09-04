@@ -225,8 +225,8 @@ static int imx_lpcg_parse_clks_from_dt(struct platform_device *pdev,
 
 	ret = of_clk_parent_fill(np, parent_names, count);
 	if (ret != count) {
-		dev_err(&pdev->dev, "failed to get clock parent names\n");
-		return count;
+		return dev_err_probe(&pdev->dev, -EPROBE_DEFER,
+				     "failed to get all clock parent names\n");
 	}
 
 	ret = of_property_read_string_array(np, "clock-output-names",
@@ -301,6 +301,8 @@ static int imx8qxp_lpcg_clk_probe(struct platform_device *pdev)
 	ret = imx_lpcg_parse_clks_from_dt(pdev, np);
 	if (!ret)
 		return 0;
+	if (ret == -EPROBE_DEFER)
+		return ret;
 
 	ss_lpcg = of_device_get_match_data(dev);
 	if (!ss_lpcg)
