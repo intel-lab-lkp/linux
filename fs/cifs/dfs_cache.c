@@ -1194,7 +1194,6 @@ err_free_password:
 	kfree_sensitive(new->password);
 err_free_username:
 	kfree(new->username);
-	kfree(new);
 	return -ENOMEM;
 }
 
