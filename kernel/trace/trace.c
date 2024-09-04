@@ -2864,7 +2864,7 @@ trace_buffer_unlock_commit_nostack(struct trace_buffer *buffer,
 
 void
 trace_function(struct trace_array *tr, unsigned long ip, unsigned long
-	       parent_ip, unsigned int trace_ctx)
+	       parent_ip, unsigned int trace_ctx, struct ftrace_regs *regs)
 {
 	struct trace_event_call *call = &event_function;
 	struct trace_buffer *buffer = tr->array_buffer.buffer;
@@ -2878,6 +2878,12 @@ trace_function(struct trace_array *tr, unsigned long ip, unsigned long
 	entry	= ring_buffer_event_data(event);
 	entry->ip			= ip;
 	entry->parent_ip		= parent_ip;
+#ifdef CONFIG_FUNCTION_TRACE_ARGS
+	if (regs)
+		entry->regs		= *regs;
+	else
+		memset(&entry->regs, 0, sizeof(struct ftrace_regs));
+#endif
 
 	if (!call_filter_check_discard(call, entry, buffer, event)) {
 		if (static_branch_unlikely(&trace_function_exports_enabled))

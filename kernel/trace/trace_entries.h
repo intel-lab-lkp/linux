@@ -61,8 +61,11 @@ FTRACE_ENTRY_REG(function, ftrace_entry,
 	TRACE_FN,
 
 	F_STRUCT(
-		__field_fn(	unsigned long,	ip		)
-		__field_fn(	unsigned long,	parent_ip	)
+		__field_fn(	unsigned long,		ip		)
+		__field_fn(	unsigned long,		parent_ip	)
+#ifdef CONFIG_FUNCTION_TRACE_ARGS
+		__field_struct( struct ftrace_regs,	regs		)
+#endif
 	),
 
 	F_printk(" %ps <-- %ps",

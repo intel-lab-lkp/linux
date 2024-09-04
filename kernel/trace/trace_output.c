@@ -1058,9 +1058,13 @@ enum print_line_t trace_nop_print(struct trace_iterator *iter, int flags,
 }
 
 static void print_fn_trace(struct trace_seq *s, unsigned long ip,
-			   unsigned long parent_ip, int flags)
+			   unsigned long parent_ip,
+			   struct ftrace_regs *fregs,
+			   int flags)
 {
 	seq_print_ip_sym(s, ip, flags);
+	if (fregs)
+		print_function_args(s, fregs, ip);
 
 	if ((flags & TRACE_ITER_PRINT_PARENT) && parent_ip) {
 		trace_seq_puts(s, " <-");
@@ -1074,10 +1078,14 @@ static enum print_line_t trace_fn_trace(struct trace_iterator *iter, int flags,
 {
 	struct ftrace_entry *field;
 	struct trace_seq *s = &iter->seq;
+	struct ftrace_regs *fregs = NULL;
 
 	trace_assign_type(field, iter->ent);
 
-	print_fn_trace(s, field->ip, field->parent_ip, flags);
+#if IS_ENABLED(CONFIG_FUNCTION_TRACE_ARGS)
+	fregs = &field->regs;
+#endif
+	print_fn_trace(s, field->ip, field->parent_ip, fregs, flags);
 	trace_seq_putc(s, '\n');
 
 	return trace_handle_return(s);
@@ -1742,7 +1750,7 @@ trace_func_repeats_print(struct trace_iterator *iter, int flags,
 
 	trace_assign_type(field, iter->ent);
 
-	print_fn_trace(s, field->ip, field->parent_ip, flags);
+	print_fn_trace(s, field->ip, field->parent_ip, NULL, flags);
 	trace_seq_printf(s, " (repeats: %u, last_ts:", field->count);
 	trace_print_time(s, iter,
 			 iter->ts - FUNC_REPEATS_GET_DELTA_TS(field));
