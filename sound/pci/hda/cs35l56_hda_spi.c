@@ -34,14 +34,7 @@ static int cs35l56_hda_spi_probe(struct spi_device *spi)
 		return ret;
 	}
 
-	ret = cs35l56_hda_common_probe(cs35l56, id->driver_data, spi_get_chipselect(spi, 0));
-	if (ret)
-		return ret;
-	ret = cs35l56_irq_request(&cs35l56->base, spi->irq);
-	if (ret < 0)
-		cs35l56_hda_remove(cs35l56->base.dev);
-
-	return ret;
+	return cs35l56_hda_common_probe(cs35l56, id->driver_data, spi_get_chipselect(spi, 0));
 }
 
 static void cs35l56_hda_spi_remove(struct spi_device *spi)

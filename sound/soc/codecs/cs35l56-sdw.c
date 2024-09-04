@@ -266,72 +266,11 @@ static void cs35l56_sdw_init(struct sdw_slave *peripheral)
 	}
 
 	ret = cs35l56_init(cs35l56);
-	if (ret < 0) {
+	if (ret < 0)
 		regcache_cache_only(cs35l56->base.regmap, true);
-		goto out;
-	}
-
-	/*
-	 * cs35l56_init can return with !init_done if it triggered
-	 * a soft reset.
-	 */
-	if (cs35l56->base.init_done) {
-		/* Enable SoundWire interrupts */
-		sdw_write_no_pm(peripheral, CS35L56_SDW_GEN_INT_MASK_1,
-				CS35L56_SDW_INT_MASK_CODEC_IRQ);
-	}
 
 out:
 	pm_runtime_mark_last_busy(cs35l56->base.dev);
-	pm_runtime_put_autosuspend(cs35l56->base.dev);
-}
-
-static int cs35l56_sdw_interrupt(struct sdw_slave *peripheral,
-				 struct sdw_slave_intr_status *status)
-{
-	struct cs35l56_private *cs35l56 = dev_get_drvdata(&peripheral->dev);
-
-	/* SoundWire core holds our pm_runtime when calling this function. */
-
-	dev_dbg(cs35l56->base.dev, "int control_port=%#x\n", status->control_port);
-
-	if ((status->control_port & SDW_SCP_INT1_IMPL_DEF) == 0)
-		return 0;
-
-	/*
-	 * Prevent bus manager suspending and possibly issuing a
-	 * bus-reset before the queued work has run.
-	 */
-	pm_runtime_get_noresume(cs35l56->base.dev);
-
-	/*
-	 * Mask and clear until it has been handled. The read of GEN_INT_STAT_1
-	 * is required as per the SoundWire spec for interrupt status bits
-	 * to clear. GEN_INT_MASK_1 masks the _inputs_ to GEN_INT_STAT1.
-	 * None of the interrupts are time-critical so use the
-	 * power-efficient queue.
-	 */
-	sdw_write_no_pm(peripheral, CS35L56_SDW_GEN_INT_MASK_1, 0);
-	sdw_read_no_pm(peripheral, CS35L56_SDW_GEN_INT_STAT_1);
-	sdw_write_no_pm(peripheral, CS35L56_SDW_GEN_INT_STAT_1, 0xFF);
-	queue_work(system_power_efficient_wq, &cs35l56->sdw_irq_work);
-
-	return 0;
-}
-
-static void cs35l56_sdw_irq_work(struct work_struct *work)
-{
-	struct cs35l56_private *cs35l56 = container_of(work,
-						       struct cs35l56_private,
-						       sdw_irq_work);
-
-	cs35l56_irq(-1, &cs35l56->base);
-
-	/* unmask interrupts */
-	if (!cs35l56->sdw_irq_no_unmask)
-		sdw_write_no_pm(cs35l56->sdw_peripheral, CS35L56_SDW_GEN_INT_MASK_1,
-				CS35L56_SDW_INT_MASK_CODEC_IRQ);
-
 	pm_runtime_put_autosuspend(cs35l56->base.dev);
 }
 
@@ -349,7 +288,7 @@ static int cs35l56_sdw_read_prop(struct sdw_slave *peripheral)
 	prop->sink_ports = BIT(CS35L56_SDW1_PLAYBACK_PORT);
 	prop->paging_support = true;
 	prop->quirks = SDW_SLAVE_QUIRKS_INVALID_INITIAL_PARITY;
-	prop->scp_int1_mask = SDW_SCP_INT1_BUS_CLASH | SDW_SCP_INT1_PARITY | SDW_SCP_INT1_IMPL_DEF;
+	prop->scp_int1_mask = SDW_SCP_INT1_BUS_CLASH | SDW_SCP_INT1_PARITY;
 
 	/* DP1 - playback */
 	ports[0].num = CS35L56_SDW1_PLAYBACK_PORT;
@@ -406,7 +345,6 @@ static int __maybe_unused cs35l56_sdw_clk_stop(struct sdw_slave *peripheral,
 
 static const struct sdw_slave_ops cs35l56_sdw_ops = {
 	.read_prop = cs35l56_sdw_read_prop,
-	.interrupt_callback = cs35l56_sdw_interrupt,
 	.update_status = cs35l56_sdw_update_status,
 #ifdef DEBUG
 	.clk_stop = cs35l56_sdw_clk_stop,
@@ -465,10 +403,6 @@ static int __maybe_unused cs35l56_sdw_runtime_resume(struct device *dev)
 	if (ret)
 		return ret;
 
-	/* Re-enable SoundWire interrupts */
-	sdw_write_no_pm(cs35l56->sdw_peripheral, CS35L56_SDW_GEN_INT_MASK_1,
-			CS35L56_SDW_INT_MASK_CODEC_IRQ);
-
 	return 0;
 }
 
@@ -479,30 +413,7 @@ static int __maybe_unused cs35l56_sdw_system_suspend(struct device *dev)
 	if (!cs35l56->base.init_done)
 		return 0;
 
-	/*
-	 * Disable SoundWire interrupts.
-	 * Flush - don't cancel because that could leave an unbalanced pm_runtime_get.
-	 */
-	cs35l56->sdw_irq_no_unmask = true;
-	flush_work(&cs35l56->sdw_irq_work);
-
-	/* Mask interrupts and flush in case sdw_irq_work was queued again */
-	sdw_write_no_pm(cs35l56->sdw_peripheral, CS35L56_SDW_GEN_INT_MASK_1, 0);
-	sdw_read_no_pm(cs35l56->sdw_peripheral, CS35L56_SDW_GEN_INT_STAT_1);
-	sdw_write_no_pm(cs35l56->sdw_peripheral, CS35L56_SDW_GEN_INT_STAT_1, 0xFF);
-	flush_work(&cs35l56->sdw_irq_work);
-
 	return cs35l56_system_suspend(dev);
-}
-
-static int __maybe_unused cs35l56_sdw_system_resume(struct device *dev)
-{
-	struct cs35l56_private *cs35l56 = dev_get_drvdata(dev);
-
-	cs35l56->sdw_irq_no_unmask = false;
-	/* runtime_resume re-enables the interrupt */
-
-	return cs35l56_system_resume(dev);
 }
 
 static int cs35l56_sdw_probe(struct sdw_slave *peripheral, const struct sdw_device_id *id)
@@ -517,7 +428,6 @@ static int cs35l56_sdw_probe(struct sdw_slave *peripheral, const struct sdw_devi
 
 	cs35l56->base.dev = dev;
 	cs35l56->sdw_peripheral = peripheral;
-	INIT_WORK(&cs35l56->sdw_irq_work, cs35l56_sdw_irq_work);
 
 	dev_set_drvdata(dev, cs35l56);
 
@@ -542,13 +452,6 @@ static int cs35l56_sdw_remove(struct sdw_slave *peripheral)
 {
 	struct cs35l56_private *cs35l56 = dev_get_drvdata(&peripheral->dev);
 
-	/* Disable SoundWire interrupts */
-	cs35l56->sdw_irq_no_unmask = true;
-	cancel_work_sync(&cs35l56->sdw_irq_work);
-	sdw_write_no_pm(peripheral, CS35L56_SDW_GEN_INT_MASK_1, 0);
-	sdw_read_no_pm(peripheral, CS35L56_SDW_GEN_INT_STAT_1);
-	sdw_write_no_pm(peripheral, CS35L56_SDW_GEN_INT_STAT_1, 0xFF);
-
 	cs35l56_remove(cs35l56);
 
 	return 0;
@@ -556,9 +459,8 @@ static int cs35l56_sdw_remove(struct sdw_slave *peripheral)
 
 static const struct dev_pm_ops cs35l56_sdw_pm = {
 	SET_RUNTIME_PM_OPS(cs35l56_sdw_runtime_suspend, cs35l56_sdw_runtime_resume, NULL)
-	SYSTEM_SLEEP_PM_OPS(cs35l56_sdw_system_suspend, cs35l56_sdw_system_resume)
+	SYSTEM_SLEEP_PM_OPS(cs35l56_sdw_system_suspend, cs35l56_system_resume)
 	LATE_SYSTEM_SLEEP_PM_OPS(cs35l56_system_suspend_late, cs35l56_system_resume_early)
-	/* NOIRQ stage not needed, SoundWire doesn't use a hard IRQ */
 };
 
 static const struct sdw_device_id cs35l56_sdw_id[] = {

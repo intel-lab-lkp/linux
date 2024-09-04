@@ -626,8 +626,6 @@ static void cs35l56_hda_fw_load(struct cs35l56_hda *cs35l56)
 		goto err_fw_release;
 	}
 
-	mutex_lock(&cs35l56->base.irq_lock);
-
 	/*
 	 * If the firmware hasn't been patched it must be shutdown before
 	 * doing a full patch and reset afterwards. If it is already
@@ -637,14 +635,14 @@ static void cs35l56_hda_fw_load(struct cs35l56_hda *cs35l56)
 	if (firmware_missing && (wmfw_firmware || coeff_firmware)) {
 		ret = cs35l56_firmware_shutdown(&cs35l56->base);
 		if (ret)
-			goto err;
+			goto err_fw_release;
 	}
 
 	ret = cs_dsp_power_up(&cs35l56->cs_dsp, wmfw_firmware, wmfw_filename,
 			      coeff_firmware, coeff_filename, "misc");
 	if (ret) {
 		dev_dbg(cs35l56->base.dev, "%s: cs_dsp_power_up ret %d\n", __func__, ret);
-		goto err;
+		goto err_fw_release;
 	}
 
 	if (wmfw_filename)
@@ -687,8 +685,6 @@ static void cs35l56_hda_fw_load(struct cs35l56_hda *cs35l56)
 err_powered_up:
 	if (!cs35l56->base.fw_patched)
 		cs_dsp_power_down(&cs35l56->cs_dsp);
-err:
-	mutex_unlock(&cs35l56->base.irq_lock);
 err_fw_release:
 	cs35l56_hda_release_firmware_files(wmfw_firmware, wmfw_filename,
 					   coeff_firmware, coeff_filename);
@@ -778,15 +774,6 @@ static int cs35l56_hda_system_suspend(struct device *dev)
 
 	cs35l56->suspended = true;
 
-	/*
-	 * The interrupt line is normally shared, but after we start suspending
-	 * we can't check if our device is the source of an interrupt, and can't
-	 * clear it. Prevent this race by temporarily disabling the parent irq
-	 * until we reach _no_irq.
-	 */
-	if (cs35l56->base.irq)
-		disable_irq(cs35l56->base.irq);
-
 	return pm_runtime_force_suspend(dev);
 }
 
@@ -802,34 +789,6 @@ static int cs35l56_hda_system_suspend_late(struct device *dev)
 		gpiod_set_value_cansleep(cs35l56->base.reset_gpio, 0);
 		cs35l56_wait_min_reset_pulse();
 	}
-
-	return 0;
-}
-
-static int cs35l56_hda_system_suspend_no_irq(struct device *dev)
-{
-	struct cs35l56_hda *cs35l56 = dev_get_drvdata(dev);
-
-	/* Handlers are now disabled so the parent IRQ can safely be re-enabled. */
-	if (cs35l56->base.irq)
-		enable_irq(cs35l56->base.irq);
-
-	return 0;
-}
-
-static int cs35l56_hda_system_resume_no_irq(struct device *dev)
-{
-	struct cs35l56_hda *cs35l56 = dev_get_drvdata(dev);
-
-	/*
-	 * WAKE interrupts unmask if the CS35L56 hibernates, which can cause
-	 * spurious interrupts, and the interrupt line is normally shared.
-	 * We can't check if our device is the source of an interrupt, and can't
-	 * clear it, until it has fully resumed. Prevent this race by temporarily
-	 * disabling the parent irq until we complete resume().
-	 */
-	if (cs35l56->base.irq)
-		disable_irq(cs35l56->base.irq);
 
 	return 0;
 }
@@ -856,11 +815,8 @@ static int cs35l56_hda_system_resume(struct device *dev)
 	struct cs35l56_hda *cs35l56 = dev_get_drvdata(dev);
 	int ret;
 
-	/* Undo pm_runtime_force_suspend() before re-enabling the irq */
+	/* Undo pm_runtime_force_suspend() */
 	ret = pm_runtime_force_resume(dev);
-	if (cs35l56->base.irq)
-		enable_irq(cs35l56->base.irq);
-
 	if (ret)
 		return ret;
 
@@ -987,7 +943,6 @@ int cs35l56_hda_common_probe(struct cs35l56_hda *cs35l56, int hid, int id)
 {
 	int ret;
 
-	mutex_init(&cs35l56->base.irq_lock);
 	dev_set_drvdata(cs35l56->base.dev, cs35l56);
 
 	INIT_WORK(&cs35l56->dsp_work, cs35l56_hda_dsp_work);
@@ -1120,8 +1075,6 @@ const struct dev_pm_ops cs35l56_hda_pm_ops = {
 	SYSTEM_SLEEP_PM_OPS(cs35l56_hda_system_suspend, cs35l56_hda_system_resume)
 	LATE_SYSTEM_SLEEP_PM_OPS(cs35l56_hda_system_suspend_late,
 				 cs35l56_hda_system_resume_early)
-	NOIRQ_SYSTEM_SLEEP_PM_OPS(cs35l56_hda_system_suspend_no_irq,
-				  cs35l56_hda_system_resume_no_irq)
 };
 EXPORT_SYMBOL_NS_GPL(cs35l56_hda_pm_ops, SND_HDA_SCODEC_CS35L56);
 

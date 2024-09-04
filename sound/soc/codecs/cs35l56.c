@@ -12,7 +12,6 @@
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/gpio/consumer.h>
-#include <linux/interrupt.h>
 #include <linux/math.h>
 #include <linux/module.h>
 #include <linux/pm.h>
@@ -702,23 +701,9 @@ static void cs35l56_patch(struct cs35l56_private *cs35l56, bool firmware_missing
 {
 	int ret;
 
-	/*
-	 * Disable SoundWire interrupts to prevent race with IRQ work.
-	 * Setting sdw_irq_no_unmask prevents the handler re-enabling
-	 * the SoundWire interrupt.
-	 */
-	if (cs35l56->sdw_peripheral) {
-		cs35l56->sdw_irq_no_unmask = true;
-		flush_work(&cs35l56->sdw_irq_work);
-		sdw_write_no_pm(cs35l56->sdw_peripheral, CS35L56_SDW_GEN_INT_MASK_1, 0);
-		sdw_read_no_pm(cs35l56->sdw_peripheral, CS35L56_SDW_GEN_INT_STAT_1);
-		sdw_write_no_pm(cs35l56->sdw_peripheral, CS35L56_SDW_GEN_INT_STAT_1, 0xFF);
-		flush_work(&cs35l56->sdw_irq_work);
-	}
-
 	ret = cs35l56_firmware_shutdown(&cs35l56->base);
 	if (ret)
-		goto err;
+		return;
 
 	/*
 	 * Use wm_adsp to load and apply the firmware patch and coefficient files,
@@ -728,10 +713,8 @@ static void cs35l56_patch(struct cs35l56_private *cs35l56, bool firmware_missing
 	ret = wm_adsp_power_up(&cs35l56->dsp, !!firmware_missing);
 	if (ret) {
 		dev_dbg(cs35l56->base.dev, "%s: wm_adsp_power_up ret %d\n", __func__, ret);
-		goto err;
+		return;
 	}
-
-	mutex_lock(&cs35l56->base.irq_lock);
 
 	reinit_completion(&cs35l56->init_completion);
 
@@ -748,10 +731,10 @@ static void cs35l56_patch(struct cs35l56_private *cs35l56, bool firmware_missing
 						 msecs_to_jiffies(5000))) {
 			dev_err(cs35l56->base.dev, "%s: init_completion timed out (SDW)\n",
 				__func__);
-			goto err_unlock;
+		return;
 		}
 	} else if (cs35l56_init(cs35l56)) {
-		goto err_unlock;
+		return;
 	}
 
 	regmap_clear_bits(cs35l56->base.regmap, CS35L56_PROTECTION_STATUS,
@@ -760,16 +743,6 @@ static void cs35l56_patch(struct cs35l56_private *cs35l56, bool firmware_missing
 
 	if (cs35l56_write_cal(cs35l56) == 0)
 		cs35l56_mbox_send(&cs35l56->base, CS35L56_MBOX_CMD_AUDIO_REINIT);
-
-err_unlock:
-	mutex_unlock(&cs35l56->base.irq_lock);
-err:
-	/* Re-enable SoundWire interrupts */
-	if (cs35l56->sdw_peripheral) {
-		cs35l56->sdw_irq_no_unmask = false;
-		sdw_write_no_pm(cs35l56->sdw_peripheral, CS35L56_SDW_GEN_INT_MASK_1,
-				CS35L56_SDW_INT_MASK_CODEC_IRQ);
-	}
 }
 
 static void cs35l56_dsp_work(struct work_struct *work)
@@ -956,15 +929,6 @@ int cs35l56_system_suspend(struct device *dev)
 	if (cs35l56->component)
 		flush_work(&cs35l56->dsp_work);
 
-	/*
-	 * The interrupt line is normally shared, but after we start suspending
-	 * we can't check if our device is the source of an interrupt, and can't
-	 * clear it. Prevent this race by temporarily disabling the parent irq
-	 * until we reach _no_irq.
-	 */
-	if (cs35l56->base.irq)
-		disable_irq(cs35l56->base.irq);
-
 	return pm_runtime_force_suspend(dev);
 }
 EXPORT_SYMBOL_GPL(cs35l56_system_suspend);
@@ -990,40 +954,6 @@ int cs35l56_system_suspend_late(struct device *dev)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(cs35l56_system_suspend_late);
-
-int cs35l56_system_suspend_no_irq(struct device *dev)
-{
-	struct cs35l56_private *cs35l56 = dev_get_drvdata(dev);
-
-	dev_dbg(dev, "system_suspend_no_irq\n");
-
-	/* Handlers are now disabled so the parent IRQ can safely be re-enabled. */
-	if (cs35l56->base.irq)
-		enable_irq(cs35l56->base.irq);
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(cs35l56_system_suspend_no_irq);
-
-int cs35l56_system_resume_no_irq(struct device *dev)
-{
-	struct cs35l56_private *cs35l56 = dev_get_drvdata(dev);
-
-	dev_dbg(dev, "system_resume_no_irq\n");
-
-	/*
-	 * WAKE interrupts unmask if the CS35L56 hibernates, which can cause
-	 * spurious interrupts, and the interrupt line is normally shared.
-	 * We can't check if our device is the source of an interrupt, and can't
-	 * clear it, until it has fully resumed. Prevent this race by temporarily
-	 * disabling the parent irq until we complete resume().
-	 */
-	if (cs35l56->base.irq)
-		disable_irq(cs35l56->base.irq);
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(cs35l56_system_resume_no_irq);
 
 int cs35l56_system_resume_early(struct device *dev)
 {
@@ -1065,11 +995,8 @@ int cs35l56_system_resume(struct device *dev)
 	 */
 	cs35l56_wait_control_port_ready();
 
-	/* Undo pm_runtime_force_suspend() before re-enabling the irq */
+	/* Undo pm_runtime_force_suspend() */
 	ret = pm_runtime_force_resume(dev);
-	if (cs35l56->base.irq)
-		enable_irq(cs35l56->base.irq);
-
 	if (ret)
 		return ret;
 
@@ -1267,7 +1194,6 @@ int cs35l56_common_probe(struct cs35l56_private *cs35l56)
 	int ret;
 
 	init_completion(&cs35l56->init_completion);
-	mutex_init(&cs35l56->base.irq_lock);
 	cs35l56->base.cal_index = -1;
 	cs35l56->speaker_id = -ENOENT;
 
@@ -1428,13 +1354,6 @@ void cs35l56_remove(struct cs35l56_private *cs35l56)
 {
 	cs35l56->base.init_done = false;
 
-	/*
-	 * WAKE IRQs unmask if CS35L56 hibernates so free the handler to
-	 * prevent it racing with remove().
-	 */
-	if (cs35l56->base.irq)
-		devm_free_irq(cs35l56->base.dev, cs35l56->base.irq, &cs35l56->base);
-
 	flush_workqueue(cs35l56->dsp_wq);
 	destroy_workqueue(cs35l56->dsp_wq);
 
@@ -1454,7 +1373,6 @@ EXPORT_NS_GPL_DEV_PM_OPS(cs35l56_pm_ops_i2c_spi, SND_SOC_CS35L56_CORE) = {
 	SET_RUNTIME_PM_OPS(cs35l56_runtime_suspend_i2c_spi, cs35l56_runtime_resume_i2c_spi, NULL)
 	SYSTEM_SLEEP_PM_OPS(cs35l56_system_suspend, cs35l56_system_resume)
 	LATE_SYSTEM_SLEEP_PM_OPS(cs35l56_system_suspend_late, cs35l56_system_resume_early)
-	NOIRQ_SYSTEM_SLEEP_PM_OPS(cs35l56_system_suspend_no_irq, cs35l56_system_resume_no_irq)
 };
 #endif
 
