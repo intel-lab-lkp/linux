@@ -529,9 +529,6 @@ static int bperf__load(struct evsel *evsel, struct target *target)
 	/* set up reading map */
 	bpf_map__set_max_entries(evsel->follower_skel->maps.accum_readings,
 				 filter_entry_cnt);
-	/* set up follower filter based on target */
-	bpf_map__set_max_entries(evsel->follower_skel->maps.filter,
-				 filter_entry_cnt);
 	err = bperf_follower_bpf__load(evsel->follower_skel);
 	if (err) {
 		pr_err("Failed to load follower skeleton\n");
@@ -543,6 +540,7 @@ static int bperf__load(struct evsel *evsel, struct target *target)
 	for (i = 0; i < filter_entry_cnt; i++) {
 		int filter_map_fd;
 		__u32 key;
+		struct bperf_filter_value fval = { i, 0 };
 
 		if (filter_type == BPERF_FILTER_PID ||
 		    filter_type == BPERF_FILTER_TGID)
@@ -553,10 +551,11 @@ static int bperf__load(struct evsel *evsel, struct target *target)
 			break;
 
 		filter_map_fd = bpf_map__fd(evsel->follower_skel->maps.filter);
-		bpf_map_update_elem(filter_map_fd, &key, &i, BPF_ANY);
+		bpf_map_update_elem(filter_map_fd, &key, &fval, BPF_ANY);
 	}
 
 	evsel->follower_skel->bss->type = filter_type;
+	evsel->follower_skel->bss->init_filter_entries = filter_entry_cnt;
 
 	err = bperf_follower_bpf__attach(evsel->follower_skel);
 
@@ -623,7 +622,7 @@ static int bperf__read(struct evsel *evsel)
 	bperf_sync_counters(evsel);
 	reading_map_fd = bpf_map__fd(skel->maps.accum_readings);
 
-	for (i = 0; i < bpf_map__max_entries(skel->maps.accum_readings); i++) {
+	for (i = 0; i < skel->bss->init_filter_entries; i++) {
 		struct perf_cpu entry;
 		__u32 cpu;
 
