@@ -710,19 +710,25 @@ static void __meminit init_reserved_page(unsigned long pfn, int nid)
 {
 	pg_data_t *pgdat;
 	int zid;
+	struct zone *zone;
+	static int zidcache;
 
 	if (early_page_initialised(pfn, nid))
 		return;
 
 	pgdat = NODE_DATA(nid);
 
-	for (zid = 0; zid < MAX_NR_ZONES; zid++) {
-		struct zone *zone = &pgdat->node_zones[zid];
+	zone = &pgdat->node_zones[zidcache];
+	if (unlikely(zone_spans_pfn(zone, pfn)))
+		for (zid = 0; zid < MAX_NR_ZONES; zid++) {
+			zone = &pgdat->node_zones[zid];
 
-		if (zone_spans_pfn(zone, pfn))
-			break;
-	}
-	__init_single_page(pfn_to_page(pfn), pfn, zid, nid);
+			if (zone_spans_pfn(zone, pfn)) {
+				zidcache = zid;
+				break;
+			}
+		}
+	__init_single_page(pfn_to_page(pfn), pfn, zidcache, nid);
 }
 #else
 static inline void pgdat_set_deferred_range(pg_data_t *pgdat) {}
