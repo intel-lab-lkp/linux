@@ -484,7 +484,7 @@ static int pic32_uart_startup(struct uart_port *port)
 	 */
 	sport->enable_tx_irq = false;
 
-	sport->irq_fault_name = kasprintf(GFP_KERNEL, "%s%d-fault",
+	sport->irq_fault_name = devm_kasprintf(port->dev, GFP_KERNEL, "%s%d-fault",
 					  pic32_uart_type(port),
 					  sport->idx);
 	if (!sport->irq_fault_name) {
@@ -493,49 +493,49 @@ static int pic32_uart_startup(struct uart_port *port)
 		goto out_disable_clk;
 	}
 	irq_set_status_flags(sport->irq_fault, IRQ_NOAUTOEN);
-	ret = request_irq(sport->irq_fault, pic32_uart_fault_interrupt,
+	ret = devm_request_irq(port->dev, sport->irq_fault, pic32_uart_fault_interrupt,
 			  IRQF_NO_THREAD, sport->irq_fault_name, port);
 	if (ret) {
 		dev_err(port->dev, "%s: request irq(%d) err! ret:%d name:%s\n",
 			__func__, sport->irq_fault, ret,
 			pic32_uart_type(port));
-		goto out_f;
+		goto out_disable_clk;
 	}
 
-	sport->irq_rx_name = kasprintf(GFP_KERNEL, "%s%d-rx",
+	sport->irq_rx_name = devm_kasprintf(port->dev, GFP_KERNEL, "%s%d-rx",
 				       pic32_uart_type(port),
 				       sport->idx);
 	if (!sport->irq_rx_name) {
 		dev_err(port->dev, "%s: kasprintf err!", __func__);
 		ret = -ENOMEM;
-		goto out_f;
+		goto out_disable_clk;
 	}
 	irq_set_status_flags(sport->irq_rx, IRQ_NOAUTOEN);
-	ret = request_irq(sport->irq_rx, pic32_uart_rx_interrupt,
+	ret = devm_request_irq(port->dev, sport->irq_rx, pic32_uart_rx_interrupt,
 			  IRQF_NO_THREAD, sport->irq_rx_name, port);
 	if (ret) {
 		dev_err(port->dev, "%s: request irq(%d) err! ret:%d name:%s\n",
 			__func__, sport->irq_rx, ret,
 			pic32_uart_type(port));
-		goto out_r;
+		goto out_disable_clk;
 	}
 
-	sport->irq_tx_name = kasprintf(GFP_KERNEL, "%s%d-tx",
+	sport->irq_tx_name = devm_kasprintf(port->dev, GFP_KERNEL, "%s%d-tx",
 				       pic32_uart_type(port),
 				       sport->idx);
 	if (!sport->irq_tx_name) {
 		dev_err(port->dev, "%s: kasprintf err!", __func__);
 		ret = -ENOMEM;
-		goto out_r;
+		goto out_disable_clk;
 	}
 	irq_set_status_flags(sport->irq_tx, IRQ_NOAUTOEN);
-	ret = request_irq(sport->irq_tx, pic32_uart_tx_interrupt,
+	ret = devm_request_irq(port->dev, sport->irq_tx, pic32_uart_tx_interrupt,
 			  IRQF_NO_THREAD, sport->irq_tx_name, port);
 	if (ret) {
 		dev_err(port->dev, "%s: request irq(%d) err! ret:%d name:%s\n",
 			__func__, sport->irq_tx, ret,
 			pic32_uart_type(port));
-		goto out_t;
+		goto out_disable_clk;
 	}
 
 	local_irq_save(flags);
@@ -557,15 +557,6 @@ static int pic32_uart_startup(struct uart_port *port)
 
 	return 0;
 
-out_t:
-	free_irq(sport->irq_tx, port);
-	kfree(sport->irq_tx_name);
-out_r:
-	free_irq(sport->irq_rx, port);
-	kfree(sport->irq_rx_name);
-out_f:
-	free_irq(sport->irq_fault, port);
-	kfree(sport->irq_fault_name);
 out_disable_clk:
 	clk_disable_unprepare(sport->clk);
 out_done:
