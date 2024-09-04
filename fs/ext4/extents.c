@@ -4558,33 +4558,9 @@ static long ext4_zero_range(struct file *file, loff_t offset,
 			return ret;
 	}
 
-	/* Wait all existing dio workers, newcomers will block on i_rwsem */
-	inode_dio_wait(inode);
-
-	ret = file_modified(file);
+	ret = ext4_prepare_falloc(file, offset, end - 1, FALLOC_FL_ZERO_RANGE);
 	if (ret)
 		return ret;
-
-	/*
-	 * Prevent page faults from reinstantiating pages we have released
-	 * from page cache.
-	 */
-	filemap_invalidate_lock(mapping);
-
-	ret = ext4_break_layouts(inode);
-	if (ret)
-		goto out_invalidate_lock;
-
-	/*
-	 * Write data that will be zeroed to preserve them when successfully
-	 * discarding page cache below but fail to convert extents.
-	 */
-	ret = filemap_write_and_wait_range(mapping, offset, end - 1);
-	if (ret)
-		goto out_invalidate_lock;
-
-	/* Now release the pages and zero block aligned part of pages */
-	truncate_pagecache_range(inode, offset, end - 1);
 
 	flags = EXT4_GET_BLOCKS_CREATE_UNWRIT_EXT;
 	/* Preallocate the range including the unaligned edges */
@@ -4729,6 +4705,52 @@ static int ext4_fallocate_check(struct inode *inode, int mode,
 	}
 
 	return 0;
+}
+
+int ext4_prepare_falloc(struct file *file, loff_t start, loff_t end, int mode)
+{
+	struct inode *inode = file_inode(file);
+	struct address_space *mapping = inode->i_mapping;
+	int ret;
+
+	/* Wait all existing dio workers, newcomers will block on i_rwsem */
+	inode_dio_wait(inode);
+	ret = file_modified(file);
+	if (ret)
+		return ret;
+
+	/*
+	 * Prevent page faults from reinstantiating pages we have released
+	 * from page cache.
+	 */
+	filemap_invalidate_lock(mapping);
+
+	ret = ext4_break_layouts(inode);
+	if (ret)
+		goto failed;
+
+	/*
+	 * Write data that will be zeroed to preserve them when successfully
+	 * discarding page cache below but fail to convert extents.
+	 */
+	ret = filemap_write_and_wait_range(mapping, start, end);
+	if (ret)
+		goto failed;
+
+	/*
+	 * For insert range and collapse range, COWed private pages should
+	 * be removed since the file's logical offset will be changed, but
+	 * punch hole and zero range doesn't.
+	 */
+	if (mode & (FALLOC_FL_INSERT_RANGE | FALLOC_FL_COLLAPSE_RANGE))
+		truncate_pagecache(inode, start);
+	else
+		truncate_pagecache_range(inode, start, end);
+
+	return 0;
+failed:
+	filemap_invalidate_unlock(mapping);
+	return ret;
 }
 
 /*
@@ -5284,39 +5306,20 @@ static int ext4_collapse_range(struct file *file, loff_t offset, loff_t len)
 	ext4_lblk_t start_lblk, end_lblk;
 	handle_t *handle;
 	unsigned int credits;
-	loff_t start, new_size;
+	loff_t new_size;
 	int ret;
 
 	trace_ext4_collapse_range(inode, offset, len);
 	WARN_ON_ONCE(!inode_is_locked(inode));
 
-	/* Wait for existing dio to complete */
-	inode_dio_wait(inode);
-
-	ret = file_modified(file);
-	if (ret)
-		return ret;
-
-	/*
-	 * Prevent page faults from reinstantiating pages we have released from
-	 * page cache.
-	 */
-	filemap_invalidate_lock(mapping);
-
-	ret = ext4_break_layouts(inode);
-	if (ret)
-		goto out_invalidate_lock;
-
 	/*
 	 * Need to round down offset to be aligned with page size boundary
 	 * for page size > block size.
 	 */
-	start = round_down(offset, PAGE_SIZE);
-	/* Write out all dirty pages */
-	ret = filemap_write_and_wait_range(mapping, start, LLONG_MAX);
+	ret = ext4_prepare_falloc(file, round_down(offset, PAGE_SIZE),
+				  LLONG_MAX, FALLOC_FL_COLLAPSE_RANGE);
 	if (ret)
-		goto out_invalidate_lock;
-	truncate_pagecache(inode, start);
+		return ret;
 
 	credits = ext4_writepage_trans_blocks(inode);
 	handle = ext4_journal_start(inode, EXT4_HT_TRUNCATE, credits);
@@ -5386,38 +5389,18 @@ static int ext4_insert_range(struct file *file, loff_t offset, loff_t len)
 	ext4_lblk_t start_lblk, len_lblk, ee_start_lblk = 0;
 	unsigned int credits, ee_len;
 	int ret, depth, split_flag = 0;
-	loff_t start;
 
 	trace_ext4_insert_range(inode, offset, len);
 	WARN_ON_ONCE(!inode_is_locked(inode));
-
-	/* Wait for existing dio to complete */
-	inode_dio_wait(inode);
-
-	ret = file_modified(file);
-	if (ret)
-		return ret;
-
-	/*
-	 * Prevent page faults from reinstantiating pages we have released from
-	 * page cache.
-	 */
-	filemap_invalidate_lock(mapping);
-
-	ret = ext4_break_layouts(inode);
-	if (ret)
-		goto out_invalidate_lock;
 
 	/*
 	 * Need to round down to align start offset to page size boundary
 	 * for page size > block size.
 	 */
-	start = round_down(offset, PAGE_SIZE);
-	/* Write out all dirty pages */
-	ret = filemap_write_and_wait_range(mapping, start, LLONG_MAX);
+	ret = ext4_prepare_falloc(file, round_down(offset, PAGE_SIZE),
+				  LLONG_MAX, FALLOC_FL_INSERT_RANGE);
 	if (ret)
-		goto out_invalidate_lock;
-	truncate_pagecache(inode, start);
+		return ret;
 
 	credits = ext4_writepage_trans_blocks(inode);
 	handle = ext4_journal_start(inode, EXT4_HT_TRUNCATE, credits);
