@@ -46,6 +46,10 @@ static struct {
 	.lock = PTHREAD_MUTEX_INITIALIZER
 };
 
+#define VDSO_TEST_VDSO		0x1
+#define VDSO_TEST_LIBC		0x2
+#define VDSO_TEST_SYSCALL	0x4
+
 static void *vgetrandom_get_state(void)
 {
 	void *state = NULL;
@@ -173,60 +177,72 @@ static void *test_syscall_getrandom(void *ctx)
 	return NULL;
 }
 
-static void bench_single(void)
+static void bench_single(int tests)
 {
 	struct timespec start, end, diff;
 
-	clock_gettime(CLOCK_MONOTONIC, &start);
-	test_vdso_getrandom(NULL);
-	clock_gettime(CLOCK_MONOTONIC, &end);
-	timespecsub(&end, &start, &diff);
-	printf("   vdso: %u times in %lu.%09lu seconds\n", TRIALS, diff.tv_sec, diff.tv_nsec);
+	if (tests & VDSO_TEST_VDSO) {
+		clock_gettime(CLOCK_MONOTONIC, &start);
+		test_vdso_getrandom(NULL);
+		clock_gettime(CLOCK_MONOTONIC, &end);
+		timespecsub(&end, &start, &diff);
+		printf("   vdso: %u times in %lu.%09lu seconds\n", TRIALS, diff.tv_sec, diff.tv_nsec);
+	}
 
-	clock_gettime(CLOCK_MONOTONIC, &start);
-	test_libc_getrandom(NULL);
-	clock_gettime(CLOCK_MONOTONIC, &end);
-	timespecsub(&end, &start, &diff);
-	printf("   libc: %u times in %lu.%09lu seconds\n", TRIALS, diff.tv_sec, diff.tv_nsec);
+	if (tests & VDSO_TEST_LIBC) {
+		clock_gettime(CLOCK_MONOTONIC, &start);
+		test_libc_getrandom(NULL);
+		clock_gettime(CLOCK_MONOTONIC, &end);
+		timespecsub(&end, &start, &diff);
+		printf("   libc: %u times in %lu.%09lu seconds\n", TRIALS, diff.tv_sec, diff.tv_nsec);
+	}
 
-	clock_gettime(CLOCK_MONOTONIC, &start);
-	test_syscall_getrandom(NULL);
-	clock_gettime(CLOCK_MONOTONIC, &end);
-	timespecsub(&end, &start, &diff);
-	printf("syscall: %u times in %lu.%09lu seconds\n", TRIALS, diff.tv_sec, diff.tv_nsec);
+	if (tests & VDSO_TEST_SYSCALL) {
+		clock_gettime(CLOCK_MONOTONIC, &start);
+		test_syscall_getrandom(NULL);
+		clock_gettime(CLOCK_MONOTONIC, &end);
+		timespecsub(&end, &start, &diff);
+		printf("syscall: %u times in %lu.%09lu seconds\n", TRIALS, diff.tv_sec, diff.tv_nsec);
+	}
 }
 
-static void bench_multi(void)
+static void bench_multi(int tests)
 {
 	struct timespec start, end, diff;
 	pthread_t threads[THREADS];
 
-	clock_gettime(CLOCK_MONOTONIC, &start);
-	for (size_t i = 0; i < THREADS; ++i)
-		assert(pthread_create(&threads[i], NULL, test_vdso_getrandom, NULL) == 0);
-	for (size_t i = 0; i < THREADS; ++i)
-		pthread_join(threads[i], NULL);
-	clock_gettime(CLOCK_MONOTONIC, &end);
-	timespecsub(&end, &start, &diff);
-	printf("   vdso: %u x %u times in %lu.%09lu seconds\n", TRIALS, THREADS, diff.tv_sec, diff.tv_nsec);
+	if (tests & VDSO_TEST_VDSO) {
+		clock_gettime(CLOCK_MONOTONIC, &start);
+		for (size_t i = 0; i < THREADS; ++i)
+			assert(pthread_create(&threads[i], NULL, test_vdso_getrandom, NULL) == 0);
+		for (size_t i = 0; i < THREADS; ++i)
+			pthread_join(threads[i], NULL);
+		clock_gettime(CLOCK_MONOTONIC, &end);
+		timespecsub(&end, &start, &diff);
+		printf("   vdso: %u x %u times in %lu.%09lu seconds\n", TRIALS, THREADS, diff.tv_sec, diff.tv_nsec);
+	}
 
-	clock_gettime(CLOCK_MONOTONIC, &start);
-	for (size_t i = 0; i < THREADS; ++i)
-		assert(pthread_create(&threads[i], NULL, test_libc_getrandom, NULL) == 0);
-	for (size_t i = 0; i < THREADS; ++i)
-		pthread_join(threads[i], NULL);
-	clock_gettime(CLOCK_MONOTONIC, &end);
-	timespecsub(&end, &start, &diff);
-	printf("   libc: %u x %u times in %lu.%09lu seconds\n", TRIALS, THREADS, diff.tv_sec, diff.tv_nsec);
+	if (tests & VDSO_TEST_LIBC) {
+		clock_gettime(CLOCK_MONOTONIC, &start);
+		for (size_t i = 0; i < THREADS; ++i)
+			assert(pthread_create(&threads[i], NULL, test_libc_getrandom, NULL) == 0);
+		for (size_t i = 0; i < THREADS; ++i)
+			pthread_join(threads[i], NULL);
+		clock_gettime(CLOCK_MONOTONIC, &end);
+		timespecsub(&end, &start, &diff);
+		printf("   libc: %u x %u times in %lu.%09lu seconds\n", TRIALS, THREADS, diff.tv_sec, diff.tv_nsec);
+	}
 
-	clock_gettime(CLOCK_MONOTONIC, &start);
-	for (size_t i = 0; i < THREADS; ++i)
-		assert(pthread_create(&threads[i], NULL, test_syscall_getrandom, NULL) == 0);
-	for (size_t i = 0; i < THREADS; ++i)
-		pthread_join(threads[i], NULL);
-	clock_gettime(CLOCK_MONOTONIC, &end);
-	timespecsub(&end, &start, &diff);
-	printf("   syscall: %u x %u times in %lu.%09lu seconds\n", TRIALS, THREADS, diff.tv_sec, diff.tv_nsec);
+	if (tests & VDSO_TEST_SYSCALL) {
+		clock_gettime(CLOCK_MONOTONIC, &start);
+		for (size_t i = 0; i < THREADS; ++i)
+			assert(pthread_create(&threads[i], NULL, test_syscall_getrandom, NULL) == 0);
+		for (size_t i = 0; i < THREADS; ++i)
+			pthread_join(threads[i], NULL);
+		clock_gettime(CLOCK_MONOTONIC, &end);
+		timespecsub(&end, &start, &diff);
+		printf("   syscall: %u x %u times in %lu.%09lu seconds\n", TRIALS, THREADS, diff.tv_sec, diff.tv_nsec);
+	}
 }
 
 static void fill(void)
@@ -255,11 +271,13 @@ static void kselftest(void)
 
 static void usage(const char *argv0)
 {
-	fprintf(stderr, "Usage: %s [bench-single|bench-multi|fill]\n", argv0);
+	fprintf(stderr, "Usage: %s [bench-single|bench-multi|fill [vdso|libc|syscall]]\n", argv0);
 }
 
 int main(int argc, char *argv[])
 {
+	int tests = VDSO_TEST_VDSO | VDSO_TEST_LIBC | VDSO_TEST_SYSCALL;
+
 	vgetrandom_init();
 
 	if (argc == 1) {
@@ -267,14 +285,20 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
-	if (argc != 2) {
+	if (argc == 3 && !strcmp(argv[2], "vdso")) {
+		tests = VDSO_TEST_VDSO;
+	} else if (argc == 3 && !strcmp(argv[2], "libc")) {
+		tests = VDSO_TEST_LIBC;
+	} else if (argc == 3 && !strcmp(argv[2], "syscall")) {
+		tests = VDSO_TEST_SYSCALL;
+	} else if (argc != 2) {
 		usage(argv[0]);
 		return 1;
 	}
 	if (!strcmp(argv[1], "bench-single"))
-		bench_single();
+		bench_single(tests);
 	else if (!strcmp(argv[1], "bench-multi"))
-		bench_multi();
+		bench_multi(tests);
 	else if (!strcmp(argv[1], "fill"))
 		fill();
 	else {
