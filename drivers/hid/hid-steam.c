@@ -1236,17 +1236,9 @@ static int steam_probe(struct hid_device *hdev,
 	 * With the real steam controller interface, do not connect hidraw.
 	 * Instead, create the client_hid and connect that.
 	 */
-	ret = hid_hw_start(hdev, HID_CONNECT_DEFAULT & ~HID_CONNECT_HIDRAW);
+	ret = devm_hid_hw_start_and_open(hdev, HID_CONNECT_DEFAULT & ~HID_CONNECT_HIDRAW);
 	if (ret)
 		goto err_cancel_work;
-
-	ret = hid_hw_open(hdev);
-	if (ret) {
-		hid_err(hdev,
-			"%s:hid_hw_open\n",
-			__func__);
-		goto err_hw_stop;
-	}
 
 	if (steam->quirks & STEAM_QUIRK_WIRELESS) {
 		hid_info(hdev, "Steam wireless receiver connected");
@@ -1261,7 +1253,7 @@ static int steam_probe(struct hid_device *hdev,
 			hid_err(hdev,
 				"%s:steam_register failed with error %d\n",
 				__func__, ret);
-			goto err_hw_close;
+			goto err_cancel_work;
 		}
 	}
 
@@ -1283,10 +1275,6 @@ err_destroy:
 err_steam_unregister:
 	if (steam->connected)
 		steam_unregister(steam);
-err_hw_close:
-	hid_hw_close(hdev);
-err_hw_stop:
-	hid_hw_stop(hdev);
 err_cancel_work:
 	cancel_work_sync(&steam->work_connect);
 	cancel_delayed_work_sync(&steam->mode_switch);
@@ -1312,8 +1300,6 @@ static void steam_remove(struct hid_device *hdev)
 	if (steam->quirks & STEAM_QUIRK_WIRELESS) {
 		hid_info(hdev, "Steam wireless receiver disconnected");
 	}
-	hid_hw_close(hdev);
-	hid_hw_stop(hdev);
 	steam_unregister(steam);
 }
 
