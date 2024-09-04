@@ -417,4 +417,50 @@ TEST_F(protocol, rule_with_empty_access)
 	ASSERT_EQ(0, close(ruleset_fd));
 }
 
+static void add_ruleset_layer(struct __test_metadata *const _metadata,
+			      const struct landlock_socket_attr *socket_attr)
+{
+	const struct landlock_ruleset_attr ruleset_attr = {
+		.handled_access_socket = LANDLOCK_ACCESS_SOCKET_CREATE,
+	};
+	int ruleset_fd =
+		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
+	ASSERT_LE(0, ruleset_fd);
+
+	if (socket_attr) {
+		ASSERT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
+					       socket_attr, 0));
+	}
+
+	enforce_ruleset(_metadata, ruleset_fd);
+	ASSERT_EQ(0, close(ruleset_fd));
+}
+
+TEST_F(protocol, ruleset_overlap)
+{
+	const struct landlock_socket_attr create_socket_attr = {
+		.allowed_access = LANDLOCK_ACCESS_SOCKET_CREATE,
+		.family = self->prot.family,
+		.type = self->prot.type,
+	};
+
+	/* socket(2) is allowed if there are no restrictions. */
+	ASSERT_EQ(0, test_socket_variant(&self->prot));
+
+	/* Creates ruleset with socket(2) allowed. */
+	add_ruleset_layer(_metadata, &create_socket_attr);
+	EXPECT_EQ(0, test_socket_variant(&self->prot));
+
+	/* Adds ruleset layer with socket(2) restricted. */
+	add_ruleset_layer(_metadata, NULL);
+	EXPECT_EQ(EACCES, test_socket_variant(&self->prot));
+
+	/*
+	 * Adds ruleset layer with socket(2) allowed. socket(2) is restricted
+	 * by second layer of the ruleset.
+	 */
+	add_ruleset_layer(_metadata, &create_socket_attr);
+	EXPECT_EQ(EACCES, test_socket_variant(&self->prot));
+}
+
 TEST_HARNESS_MAIN
