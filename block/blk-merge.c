@@ -650,9 +650,6 @@ int ll_back_merge_fn(struct request *req, struct bio *bio, unsigned int nr_segs)
 {
 	if (req_gap_back_merge(req, bio))
 		return 0;
-	if (blk_integrity_rq(req) &&
-	    integrity_req_gap_back_merge(req, bio))
-		return 0;
 	if (!bio_crypt_ctx_back_mergeable(req, bio))
 		return 0;
 	if (blk_rq_sectors(req) + bio_sectors(bio) >
@@ -668,9 +665,6 @@ static int ll_front_merge_fn(struct request *req, struct bio *bio,
 		unsigned int nr_segs)
 {
 	if (req_gap_front_merge(req, bio))
-		return 0;
-	if (blk_integrity_rq(req) &&
-	    integrity_req_gap_front_merge(req, bio))
 		return 0;
 	if (!bio_crypt_ctx_front_mergeable(req, bio))
 		return 0;

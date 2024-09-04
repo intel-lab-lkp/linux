@@ -224,29 +224,6 @@ bool blk_integrity_merge_rq(struct request_queue *, struct request *,
 		struct request *);
 bool blk_integrity_merge_bio(struct request_queue *, struct request *,
 		struct bio *);
-
-static inline bool integrity_req_gap_back_merge(struct request *req,
-		struct bio *next)
-{
-	struct bio_integrity_payload *bip = bio_integrity(req->bio);
-	struct bio_integrity_payload *bip_next = bio_integrity(next);
-
-	return bvec_gap_to_prev(&req->q->limits,
-				&bip->bip_vec[bip->bip_vcnt - 1],
-				bip_next->bip_vec[0].bv_offset);
-}
-
-static inline bool integrity_req_gap_front_merge(struct request *req,
-		struct bio *bio)
-{
-	struct bio_integrity_payload *bip = bio_integrity(bio);
-	struct bio_integrity_payload *bip_next = bio_integrity(req->bio);
-
-	return bvec_gap_to_prev(&req->q->limits,
-				&bip->bip_vec[bip->bip_vcnt - 1],
-				bip_next->bip_vec[0].bv_offset);
-}
-
 extern const struct attribute_group blk_integrity_attr_group;
 #else /* CONFIG_BLK_DEV_INTEGRITY */
 static inline bool blk_integrity_merge_rq(struct request_queue *rq,
@@ -259,17 +236,6 @@ static inline bool blk_integrity_merge_bio(struct request_queue *rq,
 {
 	return true;
 }
-static inline bool integrity_req_gap_back_merge(struct request *req,
-		struct bio *next)
-{
-	return false;
-}
-static inline bool integrity_req_gap_front_merge(struct request *req,
-		struct bio *bio)
-{
-	return false;
-}
-
 static inline void blk_flush_integrity(void)
 {
 }

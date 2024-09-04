@@ -184,13 +184,6 @@ int bio_integrity_add_page(struct bio *bio, struct page *page,
 		if (bip->bip_vcnt >=
 		    min(bip->bip_max_vcnt, queue_max_integrity_segments(q)))
 			return 0;
-
-		/*
-		 * If the queue doesn't support SG gaps and adding this segment
-		 * would create a gap, disallow it.
-		 */
-		if (bvec_gap_to_prev(&q->limits, bv, offset))
-			return 0;
 	}
 
 	bvec_set_page(&bip->bip_vec[bip->bip_vcnt], page, len, offset);
