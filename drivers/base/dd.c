@@ -928,7 +928,11 @@ static int __device_attach_driver(struct device_driver *drv, void *_data)
 	if (ret == 0) {
 		/* no match */
 		return 0;
-	} else if (ret == -EPROBE_DEFER) {
+	} else if (unlikely(ret == -EPROBE_DEFER)) {
+		/*
+		 * Only match() of @amba_bustype may return this error
+		 * in current v6.10 tree, so also give unlikely() here.
+		 */
 		dev_dbg(dev, "Device match requests probe deferral\n");
 		dev->can_match = true;
 		driver_deferred_probe_add(dev);
@@ -937,7 +941,7 @@ static int __device_attach_driver(struct device_driver *drv, void *_data)
 		 * to match or bind with other drivers on the bus.
 		 */
 		return ret;
-	} else if (ret < 0) {
+	} else if (unlikely(ret < 0)) {
 		dev_dbg(dev, "Bus failed to match device: %d\n", ret);
 		return ret;
 	} /* ret > 0 means positive match */
@@ -1172,7 +1176,11 @@ static int __driver_attach(struct device *dev, void *data)
 	if (ret == 0) {
 		/* no match */
 		return 0;
-	} else if (ret == -EPROBE_DEFER) {
+	} else if (unlikely(ret == -EPROBE_DEFER)) {
+		/*
+		 * Only match() of @amba_bustype may return this error
+		 * in current v6.10 tree, so also give unlikely() here.
+		 */
 		dev_dbg(dev, "Device match requests probe deferral\n");
 		dev->can_match = true;
 		driver_deferred_probe_add(dev);
@@ -1181,7 +1189,7 @@ static int __driver_attach(struct device *dev, void *data)
 		 * another device on the bus.
 		 */
 		return 0;
-	} else if (ret < 0) {
+	} else if (unlikely(ret < 0)) {
 		dev_dbg(dev, "Bus failed to match device: %d\n", ret);
 		/*
 		 * Driver could not match with device, but may match with

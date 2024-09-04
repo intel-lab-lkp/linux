@@ -29,12 +29,11 @@ struct fwnode_handle;
  * @bus_groups:	Default attributes of the bus.
  * @dev_groups:	Default attributes of the devices on the bus.
  * @drv_groups: Default attributes of the device drivers on the bus.
- * @match:	Called, perhaps multiple times, whenever a new device or driver
- *		is added for this bus. It should return a positive value if the
+ * @match:	Called, perhaps multiple times, whenever a new device or
+ *		driver is added for this bus. It should return one if the
  *		given device can be handled by the given driver and zero
- *		otherwise. It may also return error code if determining that
- *		the driver supports the device is not possible. In case of
- *		-EPROBE_DEFER it will queue the device for deferred probing.
+ *		otherwise. It may also return -EPROBE_DEFER to queue the
+ *		device for deferred probing.
  * @uevent:	Called when a device is added, removed, or a few other things
  *		that generate uevents to add the environment variables.
  * @probe:	Called when a new device or driver add to this bus, and callback
