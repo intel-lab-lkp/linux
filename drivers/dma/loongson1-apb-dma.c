@@ -78,7 +78,7 @@ struct ls1x_dma_chan {
 struct ls1x_dma {
 	struct dma_device ddev;
 	unsigned int nr_chans;
-	struct ls1x_dma_chan chan[];
+	struct ls1x_dma_chan chan[] __counted_by(nr_chans);
 };
 
 static irqreturn_t ls1x_dma_irq_handler(int irq, void *data);
