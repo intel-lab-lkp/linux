@@ -551,23 +551,15 @@ static int picolcd_probe(struct hid_device *hdev,
 		goto err_cleanup_data;
 	}
 
-	error = hid_hw_start(hdev, 0);
+	error = devm_hid_hw_start_and_open(hdev, 0);
 	if (error) {
-		hid_err(hdev, "hardware start failed\n");
+		hid_err(hdev, "hardware start and open failed\n");
 		goto err_cleanup_data;
 	}
 
-	error = hid_hw_open(hdev);
-	if (error) {
-		hid_err(hdev, "failed to open input interrupt pipe for key and IR events\n");
-		goto err_cleanup_hid_hw;
-	}
-
 	error = device_create_file(&hdev->dev, &dev_attr_operation_mode_delay);
-	if (error) {
-		hid_err(hdev, "failed to create sysfs attributes\n");
-		goto err_cleanup_hid_ll;
-	}
+	if (error)
+		goto err_cleanup_data;
 
 	error = device_create_file(&hdev->dev, &dev_attr_operation_mode);
 	if (error) {
@@ -589,10 +581,6 @@ err_cleanup_sysfs2:
 	device_remove_file(&hdev->dev, &dev_attr_operation_mode);
 err_cleanup_sysfs1:
 	device_remove_file(&hdev->dev, &dev_attr_operation_mode_delay);
-err_cleanup_hid_ll:
-	hid_hw_close(hdev);
-err_cleanup_hid_hw:
-	hid_hw_stop(hdev);
 err_cleanup_data:
 	kfree(data);
 	return error;
@@ -611,8 +599,6 @@ static void picolcd_remove(struct hid_device *hdev)
 	picolcd_exit_devfs(data);
 	device_remove_file(&hdev->dev, &dev_attr_operation_mode);
 	device_remove_file(&hdev->dev, &dev_attr_operation_mode_delay);
-	hid_hw_close(hdev);
-	hid_hw_stop(hdev);
 
 	/* Shortcut potential pending reply that will never arrive */
 	spin_lock_irqsave(&data->lock, flags);
