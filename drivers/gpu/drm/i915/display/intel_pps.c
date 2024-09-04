@@ -1625,6 +1625,19 @@ void intel_pps_encoder_reset(struct intel_dp *intel_dp)
 	}
 }
 
+/* Call on all DP, not just eDP */
+void intel_pps_dp_init(struct intel_dp *intel_dp)
+{
+	struct intel_display *display = to_intel_display(intel_dp);
+	struct drm_i915_private *i915 = to_i915(display->drm);
+
+	intel_dp->pps.pps_pipe = INVALID_PIPE;
+	intel_dp->pps.active_pipe = INVALID_PIPE;
+
+	if (IS_VALLEYVIEW(i915) || IS_CHERRYVIEW(i915))
+		intel_dp->pps.active_pipe = vlv_active_pipe(intel_dp);
+}
+
 bool intel_pps_init(struct intel_dp *intel_dp)
 {
 	intel_wakeref_t wakeref;
