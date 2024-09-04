@@ -939,4 +939,75 @@ TEST_F(socket_creation, sctp_peeloff)
 	ASSERT_EQ(0, close(server_fd));
 }
 
+TEST_F(socket_creation, accept)
+{
+	int status;
+	pid_t child;
+	struct sockaddr_in addr;
+	int server_fd, client_fd;
+	char buf;
+	const struct landlock_ruleset_attr ruleset_attr = {
+		.handled_access_socket = LANDLOCK_ACCESS_SOCKET_CREATE,
+	};
+	struct landlock_socket_attr tcp_socket_create = {
+		.allowed_access = LANDLOCK_ACCESS_SOCKET_CREATE,
+		.family = AF_INET,
+		.type = SOCK_STREAM,
+	};
+
+	server_fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+	ASSERT_LE(0, server_fd);
+
+	addr.sin_family = AF_INET;
+	addr.sin_port = htons(loopback_port);
+	addr.sin_addr.s_addr = inet_addr(loopback_ipv4);
+
+	ASSERT_EQ(0, bind(server_fd, &addr, sizeof(addr)));
+	ASSERT_EQ(0, listen(server_fd, backlog));
+
+	child = fork();
+	ASSERT_LE(0, child);
+	if (child == 0) {
+		/* Closes listening socket for the child. */
+		ASSERT_EQ(0, close(server_fd));
+
+		client_fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+		ASSERT_LE(0, client_fd);
+
+		ASSERT_EQ(0, connect(client_fd, &addr, sizeof(addr)));
+		EXPECT_EQ(1, write(client_fd, ".", 1));
+
+		ASSERT_EQ(0, close(client_fd));
+		_exit(_metadata->exit_code);
+		return;
+	}
+
+	if (self->sandboxed) {
+		int ruleset_fd = landlock_create_ruleset(
+			&ruleset_attr, sizeof(ruleset_attr), 0);
+		ASSERT_LE(0, ruleset_fd);
+		if (self->allowed) {
+			ASSERT_EQ(0, landlock_add_rule(ruleset_fd,
+						       LANDLOCK_RULE_SOCKET,
+						       &tcp_socket_create, 0));
+		}
+		enforce_ruleset(_metadata, ruleset_fd);
+		ASSERT_EQ(0, close(ruleset_fd));
+	}
+
+	client_fd = accept(server_fd, NULL, 0);
+
+	/* accept(2) should not be restricted by Landlock. */
+	EXPECT_LE(0, client_fd);
+
+	EXPECT_EQ(1, read(client_fd, &buf, 1));
+	EXPECT_EQ('.', buf);
+
+	ASSERT_EQ(child, waitpid(child, &status, 0));
+	ASSERT_EQ(1, WIFEXITED(status));
+	ASSERT_EQ(EXIT_SUCCESS, WEXITSTATUS(status));
+
+	ASSERT_EQ(0, close(server_fd));
+}
+
 TEST_HARNESS_MAIN
