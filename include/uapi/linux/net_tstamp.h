@@ -39,6 +39,13 @@ enum {
 };
 
 /*
+ * The highest bit of sk_tsflags is reserved for kernel-internal
+ * SOCKCM_FLAG_TS_OPT_ID. This check is to control that SOF_TIMESTAMPING*
+ * values do not reach this reserved area
+ */
+static_assert(SOF_TIMESTAMPING_LAST != (1 << 31));
+
+/*
  * SO_TIMESTAMPING flags are either for recording a packet timestamp or for
  * reporting the timestamp to user space.
  * Recording flags can be set both via socket options and control messages.
