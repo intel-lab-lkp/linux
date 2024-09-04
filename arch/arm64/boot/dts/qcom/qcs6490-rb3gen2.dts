@@ -38,7 +38,7 @@
 		stdout-path = "serial0:115200n8";
 	};
 
-	dp-connector {
+	connector-dp {
 		compatible = "dp-connector";
 		label = "DP";
 		type = "mini";
@@ -52,7 +52,7 @@
 		};
 	};
 
-	hdmi-connector {
+	connector-hdmi {
 		compatible = "hdmi-connector";
 		type = "a";
 
@@ -196,7 +196,7 @@
 		};
 	};
 
-	vph_pwr: vph-pwr-regulator {
+	vph_pwr: regulator-vph-pwr {
 		compatible = "regulator-fixed";
 		regulator-name = "vph_pwr";
 		regulator-min-microvolt = <3700000>;
