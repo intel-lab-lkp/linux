@@ -705,6 +705,8 @@ unsigned int mon_event_config_index_get(u32 evtid);
 int resctrl_arch_assign_cntr(struct rdt_resource *r, struct rdt_mon_domain *d,
 			     enum resctrl_event_id evtid, u32 rmid, u32 closid,
 			     u32 cntr_id, bool assign);
+int rdtgroup_assign_cntr(struct rdt_resource *r, struct rdtgroup *rdtgrp,
+			 struct rdt_mon_domain *d, enum resctrl_event_id evtid);
 void rdt_staged_configs_clear(void);
 bool closid_allocated(unsigned int closid);
 int resctrl_find_cleanest_closid(void);

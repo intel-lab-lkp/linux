@@ -864,6 +864,13 @@ static int rdtgroup_rmid_show(struct kernfs_open_file *of,
 	return ret;
 }
 
+/*
+ * Get the counter index for the assignable counter
+ * 0 for evtid == QOS_L3_MBM_TOTAL_EVENT_ID
+ * 1 for evtid == QOS_L3_MBM_LOCAL_EVENT_ID
+ */
+#define MBM_EVENT_ARRAY_INDEX(_event) ((_event) - 2)
+
 static int rdtgroup_mbm_assign_mode_show(struct kernfs_open_file *of,
 					 struct seq_file *s, void *v)
 {
@@ -1894,6 +1901,45 @@ int resctrl_arch_assign_cntr(struct rdt_resource *r, struct rdt_mon_domain *d,
 	 */
 	if (arch_mbm)
 		memset(arch_mbm, 0, sizeof(struct arch_mbm_state));
+
+	return 0;
+}
+
+/*
+ * Assign a hardware counter to the group.
+ * Counter will be assigned to all the domains if rdt_mon_domain is NULL
+ * else the counter will be allocated to specific domain.
+ */
+int rdtgroup_assign_cntr(struct rdt_resource *r, struct rdtgroup *rdtgrp,
+			 struct rdt_mon_domain *d, enum resctrl_event_id evtid)
+{
+	int index = MBM_EVENT_ARRAY_INDEX(evtid);
+	int cntr_id = rdtgrp->mon.cntr_id[index];
+
+	/*
+	 * Allocate a new counter id to the group if the counter id is not
+	 * is not assigned already.
+	 */
+	if (cntr_id == MON_CNTR_UNSET) {
+		cntr_id = mbm_cntr_alloc(r);
+		if (cntr_id < 0) {
+			rdt_last_cmd_puts("Out of MBM assignable counters\n");
+			return -ENOSPC;
+		}
+		rdtgrp->mon.cntr_id[index] = cntr_id;
+	}
+
+	if (!d) {
+		list_for_each_entry(d, &r->mon_domains, hdr.list) {
+			resctrl_arch_assign_cntr(r, d, evtid, rdtgrp->mon.rmid,
+						 rdtgrp->closid, cntr_id, true);
+			set_bit(cntr_id, d->mbm_cntr_map);
+		}
+	} else {
+		resctrl_arch_assign_cntr(r, d, evtid, rdtgrp->mon.rmid,
+					 rdtgrp->closid, cntr_id, true);
+		set_bit(cntr_id, d->mbm_cntr_map);
+	}
 
 	return 0;
 }
