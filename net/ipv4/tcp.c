@@ -474,9 +474,10 @@ void tcp_init_sock(struct sock *sk)
 }
 EXPORT_SYMBOL(tcp_init_sock);
 
-static void tcp_tx_timestamp(struct sock *sk, u16 tsflags)
+static void tcp_tx_timestamp(struct sock *sk, struct sockcm_cookie *sockc)
 {
 	struct sk_buff *skb = tcp_write_queue_tail(sk);
+	u32 tsflags = sockc->tsflags;
 
 	if (tsflags && skb) {
 		struct skb_shared_info *shinfo = skb_shinfo(skb);
@@ -485,8 +486,12 @@ static void tcp_tx_timestamp(struct sock *sk, u16 tsflags)
 		sock_tx_timestamp(sk, tsflags, &shinfo->tx_flags);
 		if (tsflags & SOF_TIMESTAMPING_TX_ACK)
 			tcb->txstamp_ack = 1;
-		if (tsflags & SOF_TIMESTAMPING_TX_RECORD_MASK)
-			shinfo->tskey = TCP_SKB_CB(skb)->seq + skb->len - 1;
+		if (tsflags & SOF_TIMESTAMPING_TX_RECORD_MASK) {
+			if (tsflags & SOCKCM_FLAG_TS_OPT_ID)
+				shinfo->tskey = sockc->ts_opt_id;
+			else
+				shinfo->tskey = TCP_SKB_CB(skb)->seq + skb->len - 1;
+		}
 	}
 }
 
@@ -1318,7 +1323,7 @@ wait_for_space:
 
 out:
 	if (copied) {
-		tcp_tx_timestamp(sk, sockc.tsflags);
+		tcp_tx_timestamp(sk, &sockc);
 		tcp_push(sk, flags, mss_now, tp->nonagle, size_goal);
 	}
 out_nopush:
