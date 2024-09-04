@@ -150,6 +150,26 @@ out_free_name:
 	return ret;
 }
 
+static int str2num(const char *numstr, unsigned long long *num_dst)
+{
+	char *endptr = NULL;
+	int err = 1;
+	unsigned long long num;
+
+	errno = 0;
+	num = strtoull(numstr, &endptr, 0);
+	if (errno != 0)
+		goto out;
+
+	if (*endptr != '\0')
+		goto out;
+
+	*num_dst = num;
+	err = 0;
+out:
+	return err;
+}
+
 static int populate_ruleset_net(const char *const env_var, const int ruleset_fd,
 				const __u64 allowed_access)
 {
@@ -168,7 +188,12 @@ static int populate_ruleset_net(const char *const env_var, const int ruleset_fd,
 
 	env_port_name_next = env_port_name;
 	while ((strport = strsep(&env_port_name_next, ENV_DELIMITER))) {
-		net_port.port = atoi(strport);
+		if (str2num(strport, &net_port.port)) {
+			fprintf(stderr,
+				"Failed to convert \"%s\" into a number\n",
+				strport);
+			goto out_free_name;
+		}
 		if (landlock_add_rule(ruleset_fd, LANDLOCK_RULE_NET_PORT,
 				      &net_port, 0)) {
 			fprintf(stderr,
