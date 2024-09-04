@@ -1071,6 +1071,30 @@ void intel_pps_off(struct intel_dp *intel_dp)
 		intel_pps_off_unlocked(intel_dp);
 }
 
+enum pipe intel_pps_backlight_initial_pipe(struct intel_dp *intel_dp)
+{
+	struct intel_display *display = to_intel_display(intel_dp);
+	struct drm_i915_private *i915 = to_i915(display->drm);
+	enum pipe pipe = INVALID_PIPE;
+
+	if (IS_VALLEYVIEW(i915) || IS_CHERRYVIEW(i915)) {
+		/*
+		 * Figure out the current pipe for the initial backlight setup.
+		 * If the current pipe isn't valid, try the PPS pipe, and if that
+		 * fails just assume pipe A.
+		 */
+		pipe = vlv_active_pipe(intel_dp);
+
+		if (pipe != PIPE_A && pipe != PIPE_B)
+			pipe = intel_dp->pps.pps_pipe;
+
+		if (pipe != PIPE_A && pipe != PIPE_B)
+			pipe = PIPE_A;
+	}
+
+	return pipe;
+}
+
 /* Enable backlight in the panel power control. */
 void intel_pps_backlight_on(struct intel_dp *intel_dp)
 {
