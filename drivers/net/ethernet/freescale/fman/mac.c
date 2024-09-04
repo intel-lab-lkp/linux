@@ -247,6 +247,10 @@ static int mac_probe(struct platform_device *_of_dev)
 		dev_err(dev, "failed to read cell-index for %pOF\n", mac_node);
 		return -EINVAL;
 	}
+	if (val >= MAX_NUM_OF_MACS) {
+		dev_err(dev, "cell-index value is too big for %pOF\n", mac_node);
+		return -EINVAL;
+	}
 	priv->cell_index = (u8)val;
 
 	/* Get the MAC address */
