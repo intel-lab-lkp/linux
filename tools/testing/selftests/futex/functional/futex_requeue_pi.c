@@ -416,5 +416,8 @@ int main(int argc, char *argv[])
 	ret = unit_test(broadcast, locked, owner, timeout_ns);
 
 	print_result(test_name, ret);
+	if (strlen(test_name) > strlen(TEST_NAME))
+		free(test_name);
+
 	return ret;
 }
