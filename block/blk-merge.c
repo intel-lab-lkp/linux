@@ -639,6 +639,10 @@ static inline int ll_new_hw_segment(struct request *req, struct bio *bio,
 	 * counters.
 	 */
 	req->nr_phys_segments += nr_phys_segs;
+#if defined(CONFIG_BLK_DEV_INTEGRITY)
+	if (bio->bi_opf & REQ_INTEGRITY)
+		req->nr_integrity_segments += blk_rq_count_integrity_segs(bio);
+#endif
 	return 1;
 
 no_merge:
@@ -725,6 +729,9 @@ static int ll_merge_requests_fn(struct request_queue *q, struct request *req,
 
 	/* Merge is OK... */
 	req->nr_phys_segments = total_phys_segments;
+#if defined(CONFIG_BLK_DEV_INTEGRITY)
+	req->nr_integrity_segments += next->nr_integrity_segments;
+#endif
 	return 1;
 }
 
