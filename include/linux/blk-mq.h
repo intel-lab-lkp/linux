@@ -228,6 +228,18 @@ static inline unsigned short req_get_ioprio(struct request *req)
 	return req->ioprio;
 }
 
+#ifdef CONFIG_BLK_DEV_INTEGRITY
+static inline unsigned short blk_rq_integrity_segments(struct request *rq)
+{
+	return rq->nr_integrity_segments;
+}
+#else
+static inline unsigned short blk_rq_integrity_segments(struct request *rq)
+{
+	return 0;
+}
+#endif
+
 #define rq_data_dir(rq)		(op_is_write(req_op(rq)) ? WRITE : READ)
 
 #define rq_dma_dir(rq) \
