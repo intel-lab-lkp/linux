@@ -42,6 +42,7 @@ static_assert(sizeof(unsigned long) >= sizeof(access_mask_t));
 struct access_masks {
 	access_mask_t fs : LANDLOCK_NUM_ACCESS_FS;
 	access_mask_t net : LANDLOCK_NUM_ACCESS_NET;
+	access_mask_t socket : LANDLOCK_NUM_ACCESS_SOCKET;
 };
 
 typedef u16 layer_mask_t;
@@ -92,6 +93,12 @@ enum landlock_key_type {
 	 * node keys.
 	 */
 	LANDLOCK_KEY_NET_PORT,
+
+	/**
+	 * @LANDLOCK_KEY_SOCKET: Type of &landlock_ruleset.root_socket's
+	 * node keys.
+	 */
+	LANDLOCK_KEY_SOCKET,
 };
 
 /**
@@ -178,6 +185,15 @@ struct landlock_ruleset {
 #endif /* IS_ENABLED(CONFIG_INET) */
 
 	/**
+	 * @root_socket: Root of a red-black tree containing &struct
+	 * landlock_rule nodes with socket type, described by (family, type)
+	 * pair (see socket(2)). Once a ruleset is tied to a
+	 * process (i.e. as a domain), this tree is immutable until @usage
+	 * reaches zero.
+	 */
+	struct rb_root root_socket;
+
+	/**
 	 * @hierarchy: Enables hierarchy identification even when a parent
 	 * domain vanishes.  This is needed for the ptrace protection.
 	 */
@@ -215,8 +231,10 @@ struct landlock_ruleset {
 			 */
 			u32 num_layers;
 			/**
-			 * @access_masks: Contains the subset of filesystem and
-			 * network actions that are restricted by a ruleset.
+			 * @access_masks: Contains the subset of filesystem,
+			 * network and socket actions that are restricted by
+			 * a ruleset.
+			 *
 			 * A domain saves all layers of merged rulesets in a
 			 * stack (FAM), starting from the first layer to the
 			 * last one.  These layers are used when merging
@@ -233,7 +251,8 @@ struct landlock_ruleset {
 
 struct landlock_ruleset *
 landlock_create_ruleset(const access_mask_t access_mask_fs,
-			const access_mask_t access_mask_net);
+			const access_mask_t access_mask_net,
+			const access_mask_t access_mask_socket);
 
 void landlock_put_ruleset(struct landlock_ruleset *const ruleset);
 void landlock_put_ruleset_deferred(struct landlock_ruleset *const ruleset);
@@ -280,6 +299,19 @@ landlock_add_net_access_mask(struct landlock_ruleset *const ruleset,
 	ruleset->access_masks[layer_level].net |= net_mask;
 }
 
+static inline void
+landlock_add_socket_access_mask(struct landlock_ruleset *const ruleset,
+				const access_mask_t socket_access_mask,
+				const u16 layer_level)
+{
+	access_mask_t socket_mask = socket_access_mask &
+				    LANDLOCK_MASK_ACCESS_SOCKET;
+
+	/* Should already be checked in sys_landlock_create_ruleset(). */
+	WARN_ON_ONCE(socket_access_mask != socket_mask);
+	ruleset->access_masks[layer_level].socket |= socket_mask;
+}
+
 static inline access_mask_t
 landlock_get_raw_fs_access_mask(const struct landlock_ruleset *const ruleset,
 				const u16 layer_level)
@@ -301,6 +333,13 @@ landlock_get_net_access_mask(const struct landlock_ruleset *const ruleset,
 			     const u16 layer_level)
 {
 	return ruleset->access_masks[layer_level].net;
+}
+
+static inline access_mask_t
+landlock_get_socket_access_mask(const struct landlock_ruleset *const ruleset,
+				const u16 layer_level)
+{
+	return ruleset->access_masks[layer_level].socket;
 }
 
 bool landlock_unmask_layers(const struct landlock_rule *const rule,
