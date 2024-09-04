@@ -1600,6 +1600,22 @@ static void pps_init_registers(struct intel_dp *intel_dp, bool force_disable_vdd
 }
 
 /* Call on all DP, not just eDP */
+void intel_pps_dp_power_down(struct intel_dp *intel_dp)
+{
+	struct intel_display *display = to_intel_display(intel_dp);
+	struct drm_i915_private *i915 = to_i915(display->drm);
+
+	msleep(intel_dp->pps.panel_power_down_delay);
+
+	if (IS_VALLEYVIEW(i915) || IS_CHERRYVIEW(i915)) {
+		intel_wakeref_t wakeref;
+
+		with_intel_pps_lock(intel_dp, wakeref)
+			intel_dp->pps.active_pipe = INVALID_PIPE;
+	}
+}
+
+/* Call on all DP, not just eDP */
 void intel_pps_dp_encoder_reset(struct intel_dp *intel_dp)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
