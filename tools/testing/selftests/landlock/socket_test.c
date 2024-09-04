@@ -16,6 +16,9 @@
 
 #include "common.h"
 
+#define ACCESS_LAST LANDLOCK_ACCESS_SOCKET_CREATE
+#define ACCESS_ALL LANDLOCK_ACCESS_SOCKET_CREATE
+
 struct protocol_variant {
 	int family;
 	int type;
@@ -292,6 +295,34 @@ TEST_F(protocol, create)
 
 	/* Tries to create a socket when protocol is restricted. */
 	EXPECT_EQ(EACCES, test_socket_variant(&self->prot));
+}
+
+TEST_F(protocol, socket_access_rights)
+{
+	const struct landlock_ruleset_attr ruleset_attr = {
+		.handled_access_socket = ACCESS_ALL,
+	};
+	struct landlock_socket_attr protocol = {
+		.family = self->prot.family,
+		.type = self->prot.type,
+	};
+	int ruleset_fd;
+	__u64 access;
+
+	ruleset_fd =
+		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
+	ASSERT_LE(0, ruleset_fd);
+
+	for (access = 1; access <= ACCESS_LAST; access <<= 1) {
+		protocol.allowed_access = access;
+		EXPECT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
+					       &protocol, 0))
+		{
+			TH_LOG("Failed to add rule with access 0x%llx: %s",
+			       access, strerror(errno));
+		}
+	}
+	ASSERT_EQ(0, close(ruleset_fd));
 }
 
 TEST_HARNESS_MAIN
