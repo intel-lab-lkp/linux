@@ -57,8 +57,10 @@ __be32 nf_tproxy_laddr4(struct sk_buff *skb, __be32 user_laddr, __be32 daddr)
 		return user_laddr;
 
 	laddr = 0;
+	rcu_read_lock();
 	indev = __in_dev_get_rcu(skb->dev);
 	if (!indev)
+		rcu_read_unlock();
 		return daddr;
 
 	in_dev_for_each_ifa_rcu(ifa, indev) {
@@ -68,6 +70,7 @@ __be32 nf_tproxy_laddr4(struct sk_buff *skb, __be32 user_laddr, __be32 daddr)
 		laddr = ifa->ifa_local;
 		break;
 	}
+	rcu_read_unlock();
 
 	return laddr ? laddr : daddr;
 }
