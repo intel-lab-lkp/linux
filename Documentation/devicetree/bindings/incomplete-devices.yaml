@@ -35,22 +35,116 @@ properties:
 
       - description: Legacy compatibles used on Macintosh devices
         enum:
+          - AAPL,3500
+          - AAPL,7500
+          - AAPL,8500
+          - AAPL,9500
+          - AAPL,accelerometer_1
+          - AAPL,e411
+          - AAPL,Gossamer
+          - AAPL,PowerBook1998
+          - AAPL,ShinerESB
           - adm1030
           - bmac+
+          - burgundy
+          - cy28508
+          - daca
+          - fcu
+          - gatwick
+          - gmac
+          - heathrow
+          - heathrow-ata
           - heathrow-media-bay
+          - i2sbus
+          - i2s-modem
+          - iMac
+          - K2-GMAC
+          - k2-i2c
+          - K2-Keylargo
+          - K2-UATA
+          - kauai-ata
+          - Keylargo
+          - keylargo-ata
           - keylargo-media-bay
           - lm87cimt
           - MAC,adm1030
           - MAC,ds1775
+          - MacRISC
+          - MacRISC2
+          - MacRISC3
+          - MacRISC4
           - max6690
+          - ohare
           - ohare-media-bay
           - ohare-swim3
+          - PowerBook1,1
+          - PowerBook2,1
+          - PowerBook2,2
+          - PowerBook3,1
+          - PowerBook3,2
+          - PowerBook3,3
+          - PowerBook3,4
+          - PowerBook3,5
+          - PowerBook4,1
+          - PowerBook4,2
+          - PowerBook4,3
+          - PowerBook5,1
+          - PowerBook5,2
+          - PowerBook5,3
+          - PowerBook5,4
+          - PowerBook5,5
+          - PowerBook5,6
+          - PowerBook5,7
+          - PowerBook5,8
+          - PowerBook5,9
+          - PowerBook6,3
+          - PowerBook6,5
+          - PowerBook6,7
+          - PowerMac10,1
+          - PowerMac10,2
+          - PowerMac1,1
+          - PowerMac11,2
+          - PowerMac12,1
+          - PowerMac2,1
+          - PowerMac2,2
+          - PowerMac3,1
+          - PowerMac3,4
+          - PowerMac3,5
+          - PowerMac3,6
+          - PowerMac4,1
+          - PowerMac4,2
+          - PowerMac4,4
+          - PowerMac4,5
+          - PowerMac7,2
+          - PowerMac7,3
+          - PowerMac8,1
+          - PowerMac8,2
+          - PowerMac9,1
+          - paddington
+          - RackMac1,1
+          - RackMac1,2
+          - RackMac3,1
+          - screamer
+          - shasta-ata
+          - sms
+          - smu-rpm-fans
           - smu-sat
+          - smu-sensors
+          - snapper
           - swim3
+          - u3-agp
+          - u3-dart
+          - u3-ht
+          - u4-dart
+          - u4-pcie
+          - U4-pcie
 
       - description: Legacy compatibles used on other PowerPC devices
         enum:
           - 1682m-rng
+          - direct-mapped
+          - display
+          - hawk-pci
           - IBM,lhca
           - IBM,lhea
           - IBM,lhea-ethernet
@@ -60,6 +154,7 @@ properties:
           - ohci-be
           - ohci-bigendian
           - ohci-le
+          - soc
 
       - description: Legacy compatibles used on SPARC devices
         enum:
@@ -68,7 +163,10 @@ properties:
           - isa-m5819p
           - isa-m5823p
           - m5819
+          - qcn
           - sab82532
+          - su
+          - sun4v
           - SUNW,bbc-beep
           - SUNW,bbc-i2c
           - SUNW,CS4231
@@ -96,9 +194,12 @@ properties:
           - compat1
           - compat2
           - compat3
+          - gpio-mockup
+          - gpio-simulator
           - linux,spi-loopback-test
           - mailbox-test
           - regulator-virtual-consumer
+          - test-device
 
       - description:
           Devices on MIPS platform, without any DTS users.  These are
