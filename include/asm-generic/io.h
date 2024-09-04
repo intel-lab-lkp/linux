@@ -13,10 +13,6 @@
 #include <linux/types.h>
 #include <linux/instruction_pointer.h>
 
-#ifdef CONFIG_GENERIC_IOMAP
-#include <asm-generic/iomap.h>
-#endif
-
 #include <asm/mmiowb.h>
 #include <asm-generic/pci_iomap.h>
 
@@ -294,6 +290,10 @@ static inline void writeq(u64 value, volatile void __iomem *addr)
 }
 #endif
 #endif /* CONFIG_64BIT */
+
+#ifdef CONFIG_GENERIC_IOMAP
+#include <asm-generic/iomap.h>
+#endif
 
 /*
  * {read,write}{b,w,l,q}_relaxed() are like the regular version, but
