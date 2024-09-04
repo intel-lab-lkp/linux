@@ -17,39 +17,18 @@
 #include "blk.h"
 
 /**
- * blk_rq_count_integrity_sg - Count number of integrity scatterlist elements
- * @q:		request queue
+ * blk_rq_count_integrity_segs - Count number of integrity segments
  * @bio:	bio with integrity metadata attached
  *
  * Description: Returns the number of elements required in a
  * scatterlist corresponding to the integrity metadata in a bio.
  */
-int blk_rq_count_integrity_sg(struct request_queue *q, struct bio *bio)
+int blk_rq_count_integrity_segs(struct bio *bio)
 {
-	struct bio_vec iv, ivprv = { NULL };
 	unsigned int segments = 0;
-	unsigned int seg_size = 0;
-	struct bvec_iter iter;
-	int prev = 0;
 
-	bio_for_each_integrity_vec(iv, bio, iter) {
-
-		if (prev) {
-			if (!biovec_phys_mergeable(q, &ivprv, &iv))
-				goto new_segment;
-			if (seg_size + iv.bv_len > queue_max_segment_size(q))
-				goto new_segment;
-
-			seg_size += iv.bv_len;
-		} else {
-new_segment:
-			segments++;
-			seg_size = iv.bv_len;
-		}
-
-		prev = 1;
-		ivprv = iv;
-	}
+	for_each_bio(bio)
+		segments += bio->bi_integrity->bip_vcnt;
 
 	return segments;
 }
@@ -62,7 +41,7 @@ new_segment:
  *
  * Description: Map the integrity vectors in request into a
  * scatterlist.  The scatterlist must be big enough to hold all
- * elements.  I.e. sized using blk_rq_count_integrity_sg().
+ * elements.  I.e. sized using blk_rq_count_integrity_segs().
  */
 int blk_rq_map_integrity_sg(struct request_queue *q, struct bio *bio,
 			    struct scatterlist *sglist)
@@ -145,7 +124,7 @@ bool blk_integrity_merge_bio(struct request_queue *q, struct request *req,
 		return false;
 
 	bio->bi_next = NULL;
-	nr_integrity_segs = blk_rq_count_integrity_sg(q, bio);
+	nr_integrity_segs = blk_rq_count_integrity_segs(bio);
 	bio->bi_next = next;
 
 	if (req->nr_integrity_segments + nr_integrity_segs >
