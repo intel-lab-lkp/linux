@@ -463,4 +463,20 @@ TEST_F(protocol, ruleset_overlap)
 	EXPECT_EQ(EACCES, test_socket_variant(&self->prot));
 }
 
+TEST(ruleset_with_unknown_access)
+{
+	__u64 access_mask;
+
+	for (access_mask = 1ULL << 63; access_mask != ACCESS_LAST;
+	     access_mask >>= 1) {
+		const struct landlock_ruleset_attr ruleset_attr = {
+			.handled_access_socket = access_mask,
+		};
+
+		EXPECT_EQ(-1, landlock_create_ruleset(&ruleset_attr,
+						      sizeof(ruleset_attr), 0));
+		EXPECT_EQ(EINVAL, errno);
+	}
+}
+
 TEST_HARNESS_MAIN
