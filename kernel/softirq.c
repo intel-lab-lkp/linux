@@ -89,6 +89,36 @@ EXPORT_PER_CPU_SYMBOL_GPL(hardirq_context);
 #endif
 
 /*
+ * RT accounts for BH disabled sections in task::softirqs_disabled_cnt and
+ * also in per CPU softirq_ctrl::cnt. This is necessary to allow tasks in a
+ * softirq disabled section to be preempted.
+ *
+ * The per task counter is used for softirq_count(), in_softirq() and
+ * in_serving_softirqs() because these counts are only valid when the task
+ * holding softirq_ctrl::lock is running.
+ *
+ * The per CPU counter prevents pointless wakeups of ksoftirqd in case that
+ * the task which is in a softirq disabled section is preempted or blocks.
+ */
+struct softirq_ctrl {
+#ifdef CONFIG_PREEMPT_RT
+	local_lock_t	lock;
+#endif
+	int		cnt;
+};
+
+static DEFINE_PER_CPU_ALIGNED(struct softirq_ctrl, softirq_ctrl) = {
+#ifdef CONFIG_PREEMPT_RT
+	.lock	= INIT_LOCAL_LOCK(softirq_ctrl.lock),
+#endif
+};
+
+static inline bool should_wake_ksoftirqd(void)
+{
+	return !this_cpu_read(softirq_ctrl.cnt);
+}
+
+/*
  * SOFTIRQ_OFFSET usage:
  *
  * On !RT kernels 'count' is the preempt counter, on RT kernels this applies
@@ -104,27 +134,6 @@ EXPORT_PER_CPU_SYMBOL_GPL(hardirq_context);
  * softirq and whether we just have bh disabled.
  */
 #ifdef CONFIG_PREEMPT_RT
-
-/*
- * RT accounts for BH disabled sections in task::softirqs_disabled_cnt and
- * also in per CPU softirq_ctrl::cnt. This is necessary to allow tasks in a
- * softirq disabled section to be preempted.
- *
- * The per task counter is used for softirq_count(), in_softirq() and
- * in_serving_softirqs() because these counts are only valid when the task
- * holding softirq_ctrl::lock is running.
- *
- * The per CPU counter prevents pointless wakeups of ksoftirqd in case that
- * the task which is in a softirq disabled section is preempted or blocks.
- */
-struct softirq_ctrl {
-	local_lock_t	lock;
-	int		cnt;
-};
-
-static DEFINE_PER_CPU(struct softirq_ctrl, softirq_ctrl) = {
-	.lock	= INIT_LOCAL_LOCK(softirq_ctrl.lock),
-};
 
 /**
  * local_bh_blocked() - Check for idle whether BH processing is blocked
@@ -270,11 +279,6 @@ static inline void ksoftirqd_run_end(void)
 static inline void softirq_handle_begin(void) { }
 static inline void softirq_handle_end(void) { }
 
-static inline bool should_wake_ksoftirqd(void)
-{
-	return !this_cpu_read(softirq_ctrl.cnt);
-}
-
 static inline void invoke_softirq(void)
 {
 	if (should_wake_ksoftirqd())
@@ -417,11 +421,6 @@ static inline void ksoftirqd_run_begin(void)
 static inline void ksoftirqd_run_end(void)
 {
 	local_irq_enable();
-}
-
-static inline bool should_wake_ksoftirqd(void)
-{
-	return true;
 }
 
 static inline void invoke_softirq(void)
