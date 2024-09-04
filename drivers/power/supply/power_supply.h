@@ -15,6 +15,18 @@ struct power_supply;
 
 extern bool power_supply_has_property(struct power_supply *psy,
 				      enum power_supply_property psp);
+extern bool power_supply_ext_has_property(const struct power_supply_ext *ext,
+				          enum power_supply_property psp);
+
+struct power_supply_ext_registration {
+	struct list_head list_head;
+	const struct power_supply_ext *ext;
+	void *data;
+};
+
+#define power_supply_for_each_extension(pos, psy) \
+	list_for_each_entry(pos, &(psy)->extensions, list_head)
+
 
 #ifdef CONFIG_SYSFS
 
