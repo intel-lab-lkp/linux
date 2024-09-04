@@ -1556,13 +1556,9 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	if (ret)
 		return ret;
 
-	ret = hid_hw_start(hdev, HID_CONNECT_HIDRAW);
+	ret = devm_hid_hw_start_and_open(hdev, HID_CONNECT_HIDRAW);
 	if (ret)
 		return ret;
-
-	ret = hid_hw_open(hdev);
-	if (ret)
-		goto fail_and_stop;
 
 	switch (hdev->product) {
 	case USB_PRODUCT_ID_AQUAERO:
@@ -1577,10 +1573,8 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		 * they present. The two other devices have the type of the second element in
 		 * their respective collections set to 1, while the real device has it set to 0.
 		 */
-		if (hdev->collection[1].type != 0) {
-			ret = -ENODEV;
-			goto fail_and_close;
-		}
+		if (hdev->collection[1].type != 0)
+			return -ENODEV;
 
 		priv->kind = aquaero;
 
@@ -1740,10 +1734,8 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		 * Choose the right Leakshield device, because
 		 * the other one acts as a keyboard
 		 */
-		if (hdev->type != 2) {
-			ret = -ENODEV;
-			goto fail_and_close;
-		}
+		if (hdev->type != 2)
+			return -ENODEV;
 
 		priv->kind = leakshield;
 
@@ -1865,30 +1857,20 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	priv->name = aqc_device_names[priv->kind];
 
 	priv->buffer = devm_kzalloc(&hdev->dev, priv->buffer_size, GFP_KERNEL);
-	if (!priv->buffer) {
-		ret = -ENOMEM;
-		goto fail_and_close;
-	}
+	if (!priv->buffer)
+		return -ENOMEM;
 
 	mutex_init(&priv->mutex);
 
 	priv->hwmon_dev = hwmon_device_register_with_info(&hdev->dev, priv->name, priv,
 							  &aqc_chip_info, NULL);
 
-	if (IS_ERR(priv->hwmon_dev)) {
-		ret = PTR_ERR(priv->hwmon_dev);
-		goto fail_and_close;
-	}
+	if (IS_ERR(priv->hwmon_dev))
+		return PTR_ERR(priv->hwmon_dev);
 
 	aqc_debugfs_init(priv);
 
 	return 0;
-
-fail_and_close:
-	hid_hw_close(hdev);
-fail_and_stop:
-	hid_hw_stop(hdev);
-	return ret;
 }
 
 static void aqc_remove(struct hid_device *hdev)
@@ -1897,9 +1879,6 @@ static void aqc_remove(struct hid_device *hdev)
 
 	debugfs_remove_recursive(priv->debugfs);
 	hwmon_device_unregister(priv->hwmon_dev);
-
-	hid_hw_close(hdev);
-	hid_hw_stop(hdev);
 }
 
 static const struct hid_device_id aqc_table[] = {
