@@ -216,14 +216,14 @@ void ftrace_arch_code_modify_post_process(void)
  * in current thread info.
  */
 unsigned long prepare_ftrace_return(unsigned long ra, unsigned long sp,
-				    unsigned long ip)
+				    unsigned long ip, struct ftrace_regs *regs)
 {
 	if (unlikely(ftrace_graph_is_dead()))
 		goto out;
 	if (unlikely(atomic_read(&current->tracing_graph_pause)))
 		goto out;
 	ip -= MCOUNT_INSN_SIZE;
-	if (!function_graph_enter(ra, ip, 0, (void *) sp, NULL))
+	if (!function_graph_enter(ra, ip, 0, (void *) sp, regs))
 		ra = (unsigned long) return_to_handler;
 out:
 	return ra;

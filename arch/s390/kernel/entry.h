@@ -5,6 +5,7 @@
 #include <linux/percpu.h>
 #include <linux/types.h>
 #include <linux/signal.h>
+#include <linux/ftrace.h>
 #include <asm/extable.h>
 #include <asm/ptrace.h>
 #include <asm/idle.h>
@@ -41,7 +42,8 @@ void do_restart(void *arg);
 void __init startup_init(void);
 void die(struct pt_regs *regs, const char *str);
 int setup_profiling_timer(unsigned int multiplier);
-unsigned long prepare_ftrace_return(unsigned long parent, unsigned long sp, unsigned long ip);
+unsigned long prepare_ftrace_return(unsigned long parent, unsigned long sp, unsigned long ip,
+				    struct ftrace_regs *regs);
 
 struct s390_mmap_arg_struct;
 struct fadvise64_64_args;
