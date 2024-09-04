@@ -3856,7 +3856,7 @@ unlock_return:
 	 */
 	if (!success) {
 		debug_rcu_head_unqueue((struct rcu_head *) ptr);
-		cond_synchronize_rcu_full(&old_snap);
+		cond_synchronize_rcu_expedited_full(&old_snap);
 		kvfree(ptr);
 	}
 }
