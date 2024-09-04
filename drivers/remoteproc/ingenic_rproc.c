@@ -186,7 +186,6 @@ static int ingenic_rproc_probe(struct platform_device *pdev)
 	mem = platform_get_resource_byname(pdev, IORESOURCE_MEM, "aux");
 	vpu->aux_base = devm_ioremap_resource(dev, mem);
 	if (IS_ERR(vpu->aux_base)) {
-		dev_err(dev, "Failed to ioremap\n");
 		return PTR_ERR(vpu->aux_base);
 	}
 
@@ -197,7 +196,6 @@ static int ingenic_rproc_probe(struct platform_device *pdev)
 		vpu->mem_info[i].base = devm_ioremap_resource(dev, mem);
 		if (IS_ERR(vpu->mem_info[i].base)) {
 			ret = PTR_ERR(vpu->mem_info[i].base);
-			dev_err(dev, "Failed to ioremap\n");
 			return ret;
 		}
 

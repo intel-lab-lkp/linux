@@ -602,7 +602,6 @@ static int adsp_init_mmio(struct qcom_adsp *adsp,
 	} else {
 		adsp->lpass_efuse = devm_ioremap_resource(&pdev->dev, efuse_region);
 		if (IS_ERR(adsp->lpass_efuse)) {
-			dev_err(adsp->dev, "failed to map efuse registers\n");
 			return PTR_ERR(adsp->lpass_efuse);
 		}
 	}

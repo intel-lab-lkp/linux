@@ -312,8 +312,6 @@ static int keystone_rproc_of_get_memories(struct platform_device *pdev,
 						   mem_names[i]);
 		ksproc->mem[i].cpu_addr = devm_ioremap_resource(dev, res);
 		if (IS_ERR(ksproc->mem[i].cpu_addr)) {
-			dev_err(dev, "failed to parse and map %s memory\n",
-				mem_names[i]);
 			return PTR_ERR(ksproc->mem[i].cpu_addr);
 		}
 		ksproc->mem[i].bus_addr = res->start;

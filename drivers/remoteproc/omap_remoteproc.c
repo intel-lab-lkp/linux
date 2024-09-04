@@ -1201,8 +1201,6 @@ static int omap_rproc_of_get_internal_memories(struct platform_device *pdev,
 		}
 		oproc->mem[i].cpu_addr = devm_ioremap_resource(dev, res);
 		if (IS_ERR(oproc->mem[i].cpu_addr)) {
-			dev_err(dev, "failed to parse and map %s memory\n",
-				data->mems[i].name);
 			return PTR_ERR(oproc->mem[i].cpu_addr);
 		}
 		oproc->mem[i].bus_addr = res->start;

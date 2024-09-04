@@ -214,8 +214,6 @@ static int da8xx_rproc_get_internal_memories(struct platform_device *pdev,
 						   mem_names[i]);
 		drproc->mem[i].cpu_addr = devm_ioremap_resource(dev, res);
 		if (IS_ERR(drproc->mem[i].cpu_addr)) {
-			dev_err(dev, "failed to parse and map %s memory\n",
-				mem_names[i]);
 			return PTR_ERR(drproc->mem[i].cpu_addr);
 		}
 		drproc->mem[i].bus_addr = res->start;

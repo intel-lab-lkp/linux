@@ -186,8 +186,6 @@ static int wkup_m3_rproc_probe(struct platform_device *pdev)
 						   mem_names[i]);
 		wkupm3->mem[i].cpu_addr = devm_ioremap_resource(dev, res);
 		if (IS_ERR(wkupm3->mem[i].cpu_addr)) {
-			dev_err(&pdev->dev, "devm_ioremap_resource failed for resource %d\n",
-				i);
 			ret = PTR_ERR(wkupm3->mem[i].cpu_addr);
 			goto err_put_rproc;
 		}

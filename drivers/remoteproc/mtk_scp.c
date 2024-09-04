@@ -1126,7 +1126,6 @@ static struct mtk_scp *scp_rproc_init(struct platform_device *pdev,
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "sram");
 	scp->sram_base = devm_ioremap_resource(dev, res);
 	if (IS_ERR(scp->sram_base)) {
-		dev_err(dev, "Failed to parse and map sram memory\n");
 		return ERR_CAST(scp->sram_base);
 	}
 
