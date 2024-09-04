@@ -73,7 +73,7 @@ struct sdhci_cdns_priv {
 	void (*priv_writel)(struct sdhci_cdns_priv *priv, u32 val, void __iomem *reg);
 	struct reset_control *rst_hw;
 	unsigned int nr_phy_params;
-	struct sdhci_cdns_phy_param phy_params[];
+	struct sdhci_cdns_phy_param phy_params[] __counted_by(count);
 };
 
 struct sdhci_cdns_phy_cfg {
