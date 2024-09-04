@@ -4392,7 +4392,7 @@ static void intel_ddi_encoder_reset(struct drm_encoder *encoder)
 
 	intel_dp->reset_link_params = true;
 
-	intel_pps_encoder_reset(intel_dp);
+	intel_pps_dp_encoder_reset(intel_dp);
 
 	if (intel_encoder_is_tc(&dig_port->base))
 		intel_tc_port_init_mode(dig_port);
