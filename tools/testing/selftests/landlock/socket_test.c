@@ -479,4 +479,106 @@ TEST(ruleset_with_unknown_access)
 	}
 }
 
+FIXTURE(prot_outside_range)
+{
+	struct protocol_variant prot;
+};
+
+FIXTURE_VARIANT(prot_outside_range)
+{
+	struct protocol_variant prot;
+};
+
+FIXTURE_SETUP(prot_outside_range)
+{
+	self->prot = variant->prot;
+};
+
+FIXTURE_TEARDOWN(prot_outside_range)
+{
+}
+
+/* Cf. include/linux/net.h */
+#define SOCK_MAX (SOCK_PACKET + 1)
+#define NEGATIVE_MAX (-1)
+/* Cf. linux/net.h */
+#define SOCK_TYPE_MASK 0xf
+
+#define SOCK_STREAM_FLAG1 (SOCK_STREAM | SOCK_NONBLOCK)
+#define SOCK_STREAM_FLAG2 (SOCK_STREAM | SOCK_CLOEXEC)
+
+#define INVAL_PROTOCOL_VARIANT_ADD(family_, type_)                 \
+	FIXTURE_VARIANT_ADD(prot_outside_range, family_##_##type_) \
+	{                                                          \
+		.prot = {                                          \
+			.family = family_,                         \
+			.type = type_,                             \
+		},                                                 \
+	}
+
+INVAL_PROTOCOL_VARIANT_ADD(INT32_MIN, INT32_MIN);
+INVAL_PROTOCOL_VARIANT_ADD(INT32_MIN, NEGATIVE_MAX);
+INVAL_PROTOCOL_VARIANT_ADD(INT32_MIN, SOCK_STREAM);
+INVAL_PROTOCOL_VARIANT_ADD(INT32_MIN, SOCK_MAX);
+INVAL_PROTOCOL_VARIANT_ADD(INT32_MIN, INT32_MAX);
+
+INVAL_PROTOCOL_VARIANT_ADD(NEGATIVE_MAX, INT32_MIN);
+INVAL_PROTOCOL_VARIANT_ADD(NEGATIVE_MAX, NEGATIVE_MAX);
+INVAL_PROTOCOL_VARIANT_ADD(NEGATIVE_MAX, SOCK_STREAM);
+INVAL_PROTOCOL_VARIANT_ADD(NEGATIVE_MAX, SOCK_MAX);
+INVAL_PROTOCOL_VARIANT_ADD(NEGATIVE_MAX, INT32_MAX);
+
+INVAL_PROTOCOL_VARIANT_ADD(AF_INET, INT32_MIN);
+INVAL_PROTOCOL_VARIANT_ADD(AF_INET, NEGATIVE_MAX);
+INVAL_PROTOCOL_VARIANT_ADD(AF_INET, SOCK_MAX);
+INVAL_PROTOCOL_VARIANT_ADD(AF_INET, INT32_MAX);
+
+INVAL_PROTOCOL_VARIANT_ADD(AF_MAX, INT32_MIN);
+INVAL_PROTOCOL_VARIANT_ADD(AF_MAX, NEGATIVE_MAX);
+INVAL_PROTOCOL_VARIANT_ADD(AF_MAX, SOCK_STREAM);
+INVAL_PROTOCOL_VARIANT_ADD(AF_MAX, SOCK_MAX);
+INVAL_PROTOCOL_VARIANT_ADD(AF_MAX, INT32_MAX);
+
+INVAL_PROTOCOL_VARIANT_ADD(INT32_MAX, INT32_MIN);
+INVAL_PROTOCOL_VARIANT_ADD(INT32_MAX, NEGATIVE_MAX);
+INVAL_PROTOCOL_VARIANT_ADD(INT32_MAX, SOCK_STREAM);
+INVAL_PROTOCOL_VARIANT_ADD(INT32_MAX, SOCK_MAX);
+INVAL_PROTOCOL_VARIANT_ADD(INT32_MAX, INT32_MAX);
+
+TEST_F(prot_outside_range, add_rule)
+{
+	int family = self->prot.family;
+	int type = self->prot.type;
+	const struct landlock_ruleset_attr ruleset_attr = {
+		.handled_access_socket = LANDLOCK_ACCESS_SOCKET_CREATE,
+	};
+	struct landlock_socket_attr create_socket_overflow = {
+		.allowed_access = LANDLOCK_ACCESS_SOCKET_CREATE,
+		.family = family,
+		.type = type,
+	};
+	int ruleset_fd;
+
+	/* Checks type flags using __sys_socket_create. */
+	if ((type & ~SOCK_TYPE_MASK) & ~(SOCK_CLOEXEC | SOCK_NONBLOCK)) {
+		ASSERT_EQ(EINVAL, test_socket_variant(&self->prot));
+	}
+	/* Checks range using __sock_create. */
+	else if (family >= AF_MAX || family < 0) {
+		ASSERT_EQ(EAFNOSUPPORT, test_socket_variant(&self->prot));
+	} else {
+		ASSERT_EQ(EINVAL, test_socket_variant(&self->prot));
+	}
+
+	ruleset_fd =
+		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
+	ASSERT_LE(0, ruleset_fd);
+
+	EXPECT_EQ(-1, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
+					&create_socket_overflow, 0));
+	EXPECT_EQ(EINVAL, errno);
+
+	ASSERT_EQ(0, close(ruleset_fd));
+}
+
 TEST_HARNESS_MAIN
