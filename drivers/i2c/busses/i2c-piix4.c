@@ -1194,6 +1194,7 @@ static int piix4_add_adapter(struct pci_dev *dev, unsigned short smba,
 {
 	struct i2c_adapter *adap;
 	struct i2c_piix4_adapdata *adapdata;
+	const char *node = "PIIX4";
 	int retval;
 
 	adap = kzalloc(sizeof(*adap), GFP_KERNEL);
@@ -1213,6 +1214,7 @@ static int piix4_add_adapter(struct pci_dev *dev, unsigned short smba,
 		adap->algo = &piix4_smbus_algorithm_sb800;
 		break;
 	case SMBUS_ASF:
+		node = "ASF";
 		adap->algo = &sb800_asf_smbus_algorithm;
 		break;
 	default:
@@ -1243,7 +1245,7 @@ static int piix4_add_adapter(struct pci_dev *dev, unsigned short smba,
 	}
 
 	snprintf(adap->name, sizeof(adap->name),
-		"SMBus PIIX4 adapter%s at %04x", name, smba);
+		"SMBus %s adapter%s at %04x", node, name, smba);
 
 	i2c_set_adapdata(adap, adapdata);
 
