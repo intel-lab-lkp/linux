@@ -3789,6 +3789,7 @@ add_ptr_to_bulk_krc_lock(struct kfree_rcu_cpu **krcp,
 void kvfree_call_rcu(struct rcu_head *head, void *ptr)
 {
 	unsigned long flags;
+	struct rcu_gp_oldstate old_snap;
 	struct kfree_rcu_cpu *krcp;
 	bool success;
 
@@ -3799,8 +3800,10 @@ void kvfree_call_rcu(struct rcu_head *head, void *ptr)
 	 * only. For other places please embed an rcu_head to
 	 * your data.
 	 */
-	if (!head)
+	if (!head) {
 		might_sleep();
+		start_poll_synchronize_rcu_full(&old_snap);
+	}
 
 	// Queue the object but don't yet schedule the batch.
 	if (debug_rcu_head_queue(ptr)) {
@@ -3853,7 +3856,7 @@ unlock_return:
 	 */
 	if (!success) {
 		debug_rcu_head_unqueue((struct rcu_head *) ptr);
-		synchronize_rcu();
+		cond_synchronize_rcu_full(&old_snap);
 		kvfree(ptr);
 	}
 }
