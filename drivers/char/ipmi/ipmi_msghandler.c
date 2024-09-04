@@ -3213,7 +3213,7 @@ static int __ipmi_bmc_register(struct ipmi_smi *intf,
 
 	if (intf_num == -1)
 		intf_num = intf->intf_num;
-	intf->my_dev_name = kasprintf(GFP_KERNEL, "ipmi%d", intf_num);
+	intf->my_dev_name = devm_kasprintf(intf->si_dev, GFP_KERNEL, "ipmi%d", intf_num);
 	if (!intf->my_dev_name) {
 		rv = -ENOMEM;
 		dev_err(intf->si_dev, "Unable to allocate link from BMC: %d\n",
@@ -3226,7 +3226,7 @@ static int __ipmi_bmc_register(struct ipmi_smi *intf,
 	if (rv) {
 		dev_err(intf->si_dev, "Unable to create symlink to bmc: %d\n",
 			rv);
-		goto out_free_my_dev_name;
+		goto out_unlink1;
 	}
 
 	intf->bmc_registered = true;
@@ -3236,11 +3236,6 @@ out:
 	mutex_lock(&intf->bmc_reg_mutex);
 	intf->in_bmc_register = false;
 	return rv;
-
-
-out_free_my_dev_name:
-	kfree(intf->my_dev_name);
-	intf->my_dev_name = NULL;
 
 out_unlink1:
 	sysfs_remove_link(&intf->si_dev->kobj, "bmc");
