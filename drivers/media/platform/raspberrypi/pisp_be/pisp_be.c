@@ -1714,36 +1714,32 @@ static int pispbe_probe(struct platform_device *pdev)
 				     "Failed to get clock");
 
 	/* Hardware initialisation */
-	pm_runtime_set_autosuspend_delay(pispbe->dev, 200);
-	pm_runtime_use_autosuspend(pispbe->dev);
-	pm_runtime_enable(pispbe->dev);
-
 	ret = pispbe_runtime_resume(pispbe->dev);
 	if (ret)
-		goto pm_runtime_disable_err;
+		return ret;
 
 	pispbe->hw_busy = false;
 	spin_lock_init(&pispbe->hw_lock);
 	ret = pispbe_hw_init(pispbe);
 	if (ret)
-		goto pm_runtime_suspend_err;
+		goto runtime_suspend_err;
 
 	ret = pispbe_init_devices(pispbe);
 	if (ret)
 		goto disable_devs_err;
 
-	pm_runtime_mark_last_busy(pispbe->dev);
-	pm_runtime_put_autosuspend(pispbe->dev);
+	pm_runtime_set_autosuspend_delay(pispbe->dev, 200);
+	pm_runtime_use_autosuspend(pispbe->dev);
+	pm_runtime_set_active(pispbe->dev);
+	pm_runtime_enable(pispbe->dev);
+	pm_runtime_idle(pispbe->dev);
 
 	return 0;
 
 disable_devs_err:
 	pispbe_destroy_devices(pispbe);
-pm_runtime_suspend_err:
+runtime_suspend_err:
 	pispbe_runtime_suspend(pispbe->dev);
-pm_runtime_disable_err:
-	pm_runtime_dont_use_autosuspend(pispbe->dev);
-	pm_runtime_disable(pispbe->dev);
 
 	return ret;
 }
@@ -1754,9 +1750,11 @@ static void pispbe_remove(struct platform_device *pdev)
 
 	pispbe_destroy_devices(pispbe);
 
-	pispbe_runtime_suspend(pispbe->dev);
 	pm_runtime_dont_use_autosuspend(pispbe->dev);
 	pm_runtime_disable(pispbe->dev);
+	if (!pm_runtime_status_suspended(pispbe->dev))
+		pispbe_runtime_suspend(pispbe->dev);
+	pm_runtime_set_suspended(pispbe->dev);
 }
 
 static const struct dev_pm_ops pispbe_pm_ops = {
