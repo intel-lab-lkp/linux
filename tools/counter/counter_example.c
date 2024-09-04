@@ -55,6 +55,7 @@ int main(void)
 	for (i = 0; i < 2; i++) {
 		ret = ioctl(fd, COUNTER_ADD_WATCH_IOCTL, watches + i);
 		if (ret == -1) {
+			close(fd);
 			fprintf(stderr, "Error adding watches[%d]: %s\n", i,
 				strerror(errno));
 			return 1;
@@ -62,6 +63,7 @@ int main(void)
 	}
 	ret = ioctl(fd, COUNTER_ENABLE_EVENTS_IOCTL);
 	if (ret == -1) {
+		close(fd);
 		perror("Error enabling events");
 		return 1;
 	}
@@ -69,11 +71,13 @@ int main(void)
 	for (;;) {
 		ret = read(fd, event_data, sizeof(event_data));
 		if (ret == -1) {
+			close(fd);
 			perror("Failed to read event data");
 			return 1;
 		}
 
 		if (ret != sizeof(event_data)) {
+			close(fd);
 			fprintf(stderr, "Failed to read event data\n");
 			return -EIO;
 		}
@@ -88,5 +92,6 @@ int main(void)
 		       strerror(event_data[1].status));
 	}
 
+	close(fd);
 	return 0;
 }
