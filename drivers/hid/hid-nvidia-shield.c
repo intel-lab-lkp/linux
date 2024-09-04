@@ -1070,26 +1070,14 @@ static int shield_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 	ts = container_of(shield_dev, struct thunderstrike, base);
 
-	ret = hid_hw_start(hdev, HID_CONNECT_HIDINPUT);
+	ret = devm_hid_hw_start_and_open(hdev, HID_CONNECT_HIDINPUT);
 	if (ret) {
-		hid_err(hdev, "Failed to start HID device\n");
-		goto err_ts_create;
-	}
-
-	ret = hid_hw_open(hdev);
-	if (ret) {
-		hid_err(hdev, "Failed to open HID device\n");
-		goto err_stop;
+		thunderstrike_destroy(ts);
+		return ret;
 	}
 
 	thunderstrike_device_init_info(shield_dev);
 
-	return ret;
-
-err_stop:
-	hid_hw_stop(hdev);
-err_ts_create:
-	thunderstrike_destroy(ts);
 	return ret;
 }
 
@@ -1100,11 +1088,9 @@ static void shield_remove(struct hid_device *hdev)
 
 	ts = container_of(dev, struct thunderstrike, base);
 
-	hid_hw_close(hdev);
 	thunderstrike_destroy(ts);
 	del_timer_sync(&ts->psy_stats_timer);
 	cancel_work_sync(&ts->hostcmd_req_work);
-	hid_hw_stop(hdev);
 }
 
 static const struct hid_device_id shield_devices[] = {
