@@ -6,12 +6,14 @@
  */
 
 #include <linux/cleanup.h>
+#include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/dev_printk.h>
 #include <linux/err.h>
 #include <linux/i2c.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/regulator/consumer.h>
 #include <linux/slab.h>
 
 /*
@@ -27,10 +29,118 @@
  * address responds.
  *
  * TODO:
- * - Support handling common regulators.
  * - Support handling common GPIOs.
  * - Support I2C muxes
  */
+
+struct i2c_of_probe_data {
+	const struct i2c_of_probe_opts *opts;
+	struct regulator_bulk_data *regulators;
+	unsigned int regulators_num;
+};
+
+/* Returns number of regulator supplies found for node, or error. */
+static int i2c_of_probe_get_regulators(struct device *dev, struct device_node *node,
+				       struct i2c_of_probe_data *data)
+{
+	struct regulator_bulk_data *tmp, *new_regulators;
+	int ret;
+
+	ret = of_regulator_bulk_get_all(dev, node, &tmp);
+	if (ret < 0) {
+		return ret;
+	} else if (ret == 0) {
+		/*
+		 * It's entirely possible for a device node to not have
+		 * regulator supplies. While it doesn't make sense from
+		 * a hardware perspective, the supplies could be always
+		 * on or otherwise not modeled in the device tree, but
+		 * the device would still work.
+		 */
+		return ret;
+	}
+
+	if (!data->regulators) {
+		data->regulators = tmp;
+		data->regulators_num = ret;
+		return ret;
+	};
+
+	new_regulators = krealloc_array(data->regulators, (data->regulators_num + ret),
+					sizeof(*tmp), GFP_KERNEL);
+	if (!new_regulators) {
+		regulator_bulk_free(ret, tmp);
+		return -ENOMEM;
+	}
+
+	data->regulators = new_regulators;
+	memcpy(&data->regulators[data->regulators_num], tmp, sizeof(*tmp) * ret);
+	data->regulators_num += ret;
+
+	return ret;
+}
+
+static void i2c_of_probe_free_regulators(struct i2c_of_probe_data *data)
+{
+	regulator_bulk_free(data->regulators_num, data->regulators);
+	data->regulators_num = 0;
+	data->regulators = NULL;
+}
+
+static void i2c_of_probe_free_res(struct i2c_of_probe_data *data)
+{
+	i2c_of_probe_free_regulators(data);
+}
+
+static int i2c_of_probe_get_res(struct device *dev, struct device_node *node,
+				struct i2c_of_probe_data *data)
+{
+	struct property *prop;
+	int ret;
+
+	ret = i2c_of_probe_get_regulators(dev, node, data);
+	if (ret < 0) {
+		dev_err_probe(dev, ret, "Failed to get regulator supplies from %pOF\n", node);
+		goto err_cleanup;
+	}
+
+	return 0;
+
+err_cleanup:
+	i2c_of_probe_free_res(data);
+	return ret;
+}
+
+static int i2c_of_probe_enable_regulators(struct device *dev, struct i2c_of_probe_data *data)
+{
+	int ret;
+
+	dev_dbg(dev, "Enabling regulator supplies\n");
+
+	ret = regulator_bulk_enable(data->regulators_num, data->regulators);
+	if (ret)
+		return ret;
+
+	msleep(data->opts->post_power_on_delay_ms);
+
+	return 0;
+}
+
+static void i2c_of_probe_disable_regulators(struct i2c_of_probe_data *data)
+{
+	regulator_bulk_disable(data->regulators_num, data->regulators);
+}
+
+static int i2c_of_probe_enable_res(struct device *dev, struct i2c_of_probe_data *data)
+{
+	int ret;
+
+	ret = i2c_of_probe_enable_regulators(dev, data);
+	if (ret)
+		return ret;
+
+	return 0;
+}
 
 static struct device_node *i2c_of_probe_get_i2c_node(struct device *dev, const char *type)
 {
@@ -78,10 +188,17 @@ static int i2c_of_probe_enable_node(struct device *dev, struct device_node *node
 	return ret;
 }
 
+static const struct i2c_of_probe_opts i2c_of_probe_opts_default = {
+	/* largest post-power-on pre-reset-deassert delay seen among drivers */
+	.post_power_on_delay_ms = 500,
+};
+
 /**
  * i2c_of_probe_component() - probe for devices of "type" on the same i2c bus
  * @dev: &struct device of the caller, only used for dev_* printk messages
  * @type: a string to match the device node name prefix to probe for
+ * @opts: &struct i2c_of_probe_data containing tweakable options for the prober.
+ *	  Defaults are used if this is %NULL.
  *
  * Probe for possible I2C components of the same "type" on the same I2C bus
  * that have their status marked as "fail".
@@ -108,8 +225,9 @@ static int i2c_of_probe_enable_node(struct device *dev, struct device_node *node
  *         had multiple types of components to probe, and one of them down
  *         the list caused a deferred probe. This is expected behavior.
  */
-int i2c_of_probe_component(struct device *dev, const char *type)
+int i2c_of_probe_component(struct device *dev, const char *type, const struct i2c_of_probe_opts *opts)
 {
+	struct i2c_of_probe_data probe_data = { .opts = opts ?: &i2c_of_probe_opts_default };
 	struct i2c_adapter *i2c;
 	int ret;
 
@@ -117,9 +235,7 @@ int i2c_of_probe_component(struct device *dev, const char *type)
 	if (IS_ERR(i2c_node))
 		return PTR_ERR(i2c_node);
 
-	for_each_child_of_node_scoped(i2c_node, node) {
-		if (!of_node_name_prefix(node, type))
-			continue;
+	for_each_child_of_node_with_prefix_scoped(i2c_node, node, type) {
 		if (!of_device_is_available(node))
 			continue;
 
@@ -134,13 +250,33 @@ int i2c_of_probe_component(struct device *dev, const char *type)
 	if (!i2c)
 		return dev_err_probe(dev, -EPROBE_DEFER, "Couldn't get I2C adapter\n");
 
+	/* Grab resources */
+	for_each_child_of_node_with_prefix_scoped(i2c_node, node, type) {
+		u32 addr;
+
+		if (of_property_read_u32(node, "reg", &addr))
+			continue;
+
+		dev_dbg(dev, "Requesting resources for %pOF\n", node);
+		ret = i2c_of_probe_get_res(dev, node, &probe_data);
+		if (ret)
+			return ret;
+	}
+
+	dev_dbg(dev, "Resources: # of regulator supplies = %d\n", probe_data.regulators_num);
+
+	/* Enable resources */
+	ret = i2c_of_probe_enable_res(dev, &probe_data);
+	if (ret) {
+		i2c_of_probe_free_res(&probe_data);
+		return dev_err_probe(dev, ret, "Failed to enable resources\n");
+	}
+
 	ret = 0;
-	for_each_child_of_node_scoped(i2c_node, node) {
+	for_each_child_of_node_with_prefix_scoped(i2c_node, node, type) {
 		union i2c_smbus_data data;
 		u32 addr;
 
-		if (!of_node_name_prefix(node, type))
-			continue;
 		if (of_property_read_u32(node, "reg", &addr))
 			continue;
 		if (i2c_smbus_xfer(i2c, addr, 0, I2C_SMBUS_READ, 0, I2C_SMBUS_BYTE, &data) < 0)
@@ -151,6 +287,8 @@ int i2c_of_probe_component(struct device *dev, const char *type)
 		break;
 	}
 
+	i2c_of_probe_disable_regulators(&probe_data);
+	i2c_of_probe_free_res(&probe_data);
 	i2c_put_adapter(i2c);
 
 	return ret;

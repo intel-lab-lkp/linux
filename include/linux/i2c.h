@@ -1031,7 +1031,15 @@ int of_i2c_get_board_info(struct device *dev, struct device_node *node,
 			  struct i2c_board_info *info);
 
 #if IS_ENABLED(CONFIG_OF_DYNAMIC)
-int i2c_of_probe_component(struct device *dev, const char *type);
+/**
+ * i2c_of_probe_opts - I2C OF component prober customization options
+ * @post_power_on_delay_us: Delay in ms after regulators are powered on. Passed to msleep().
+ */
+struct i2c_of_probe_opts {
+	unsigned int post_power_on_delay_ms;
+};
+
+int i2c_of_probe_component(struct device *dev, const char *type, const struct i2c_of_probe_opts *opts);
 #endif
 
 #else
