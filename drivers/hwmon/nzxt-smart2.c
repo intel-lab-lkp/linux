@@ -750,13 +750,9 @@ static int nzxt_smart2_hid_probe(struct hid_device *hdev,
 	if (ret)
 		return ret;
 
-	ret = hid_hw_start(hdev, HID_CONNECT_HIDRAW);
+	ret = devm_hid_hw_start_and_open(hdev, HID_CONNECT_HIDRAW);
 	if (ret)
 		return ret;
-
-	ret = hid_hw_open(hdev);
-	if (ret)
-		goto out_hw_stop;
 
 	hid_device_io_start(hdev);
 
@@ -765,19 +761,10 @@ static int nzxt_smart2_hid_probe(struct hid_device *hdev,
 	drvdata->hwmon =
 		hwmon_device_register_with_info(&hdev->dev, "nzxtsmart2", drvdata,
 						&nzxt_smart2_chip_info, NULL);
-	if (IS_ERR(drvdata->hwmon)) {
-		ret = PTR_ERR(drvdata->hwmon);
-		goto out_hw_close;
-	}
+	if (IS_ERR(drvdata->hwmon))
+		return PTR_ERR(drvdata->hwmon);
 
 	return 0;
-
-out_hw_close:
-	hid_hw_close(hdev);
-
-out_hw_stop:
-	hid_hw_stop(hdev);
-	return ret;
 }
 
 static void nzxt_smart2_hid_remove(struct hid_device *hdev)
@@ -785,9 +772,6 @@ static void nzxt_smart2_hid_remove(struct hid_device *hdev)
 	struct drvdata *drvdata = hid_get_drvdata(hdev);
 
 	hwmon_device_unregister(drvdata->hwmon);
-
-	hid_hw_close(hdev);
-	hid_hw_stop(hdev);
 }
 
 static const struct hid_device_id nzxt_smart2_hid_id_table[] = {
