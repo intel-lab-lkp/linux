@@ -403,6 +403,7 @@ done:
 			err(rc, "error sending deregister cpumask\n");
 	}
 err:
+	free(logfile);
 	close(nl_sd);
 	if (fd)
 		close(fd);
