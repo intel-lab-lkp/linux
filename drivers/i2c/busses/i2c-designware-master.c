@@ -271,6 +271,23 @@ static void i2c_dw_xfer_init(struct dw_i2c_dev *dev)
 	__i2c_dw_write_intr_mask(dev, DW_IC_INTR_MASTER_MASK);
 }
 
+static int i2c_dw_check_mst_activity(struct dw_i2c_dev *dev)
+{
+	u32 status = 0;
+	int ret = 0;
+
+	regmap_read(dev->map, DW_IC_STATUS, &status);
+	if (status & DW_IC_STATUS_MASTER_ACTIVITY) {
+		ret = regmap_read_poll_timeout(dev->map, DW_IC_STATUS, status,
+				!(status & DW_IC_STATUS_MASTER_ACTIVITY),
+				1100, 20000);
+		if (ret)
+			dev_err(dev->dev, "i2c mst activity not idle %d\n", ret);
+	}
+
+	return ret;
+}
+
 static int i2c_dw_check_stopbit(struct dw_i2c_dev *dev)
 {
 	u32 val;
@@ -814,7 +831,9 @@ i2c_dw_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 	 * additional interrupts are a hardware bug or this driver doesn't
 	 * handle them correctly yet.
 	 */
-	__i2c_dw_disable_nowait(dev);
+	ret = i2c_dw_check_mst_activity(dev);
+	if (!ret)
+		__i2c_dw_disable_nowait(dev);
 
 	if (dev->msg_err) {
 		ret = dev->msg_err;
