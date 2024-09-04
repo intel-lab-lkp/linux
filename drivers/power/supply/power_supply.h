@@ -13,6 +13,9 @@ struct device;
 struct device_type;
 struct power_supply;
 
+extern bool power_supply_has_property(struct power_supply *psy,
+				      enum power_supply_property psp);
+
 #ifdef CONFIG_SYSFS
 
 extern void power_supply_init_attrs(void);
