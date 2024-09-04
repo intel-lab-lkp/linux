@@ -88,6 +88,11 @@ struct mmc_command {
  */
 #define mmc_cmd_type(cmd)	((cmd)->flags & MMC_CMD_MASK)
 
+	/* for SDUC */
+	u8 has_ext_addr;
+	u8 ext_addr;
+	u16 reserved;
+
 	unsigned int		retries;	/* max number of retries */
 	int			error;		/* command error */
 
