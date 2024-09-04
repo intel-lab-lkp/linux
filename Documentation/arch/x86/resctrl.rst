@@ -417,6 +417,16 @@ When monitoring is enabled all MON groups will also contain:
 	for the L3 cache they occupy). These are named "mon_sub_L3_YY"
 	where "YY" is the node number.
 
+	The mbm_cntr_assign mode allows users to assign a hardware counter
+	to an RMID-event pair, enabling bandwidth monitoring for as long
+	as the counter remains assigned. The hardware will continue tracking
+	the assigned RMID until the user manually unassigns it, ensuring
+	that counters are not reset during this period. With a limited number
+	of counters, the system may run out of assignable resources. In
+	mbm_cntr_assign mode, MBM event counters will return "Unassigned"
+	if the counter is not allocated to the event when read. Users must
+	manually assign a counter to read the events.
+
 "mon_hw_id":
 	Available only with debug option. The identifier used by hardware
 	for the monitor group. On x86 this is the RMID.
