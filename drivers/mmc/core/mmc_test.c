@@ -3218,6 +3218,13 @@ static int mmc_test_register_dbgfs_file(struct mmc_card *card)
 
 	mutex_lock(&mmc_test_lock);
 
+	if (mmc_card_ult_capacity(card)) {
+		pr_info("%s: mmc-test currently UNSUPPORTED for SDUC\n",
+			mmc_hostname(card->host));
+		ret = -EOPNOTSUPP;
+		goto err;
+	}
+
 	ret = __mmc_test_register_dbgfs_file(card, "test", S_IWUSR | S_IRUGO,
 		&mmc_test_fops_test);
 	if (ret)
