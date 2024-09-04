@@ -290,6 +290,8 @@ static ssize_t power_supply_show_property(struct device *dev,
 				dev_dbg_ratelimited(dev,
 					"driver has no data for `%s' property\n",
 					attr->attr.name);
+			else if (ret == -EINVAL) /* property is not supported */
+				return -ENODATA;
 			else if (ret != -ENODEV && ret != -EAGAIN)
 				dev_err_ratelimited(dev,
 					"driver failed to report `%s' property: %zd\n",
@@ -451,11 +453,7 @@ static int add_prop_uevent(const struct device *dev, struct kobj_uevent_env *env
 
 int power_supply_uevent(const struct device *dev, struct kobj_uevent_env *env)
 {
-	const struct power_supply *psy = dev_get_drvdata(dev);
-	const enum power_supply_property *battery_props =
-		power_supply_battery_info_properties;
-	unsigned long psy_drv_properties[POWER_SUPPLY_ATTR_CNT /
-					 sizeof(unsigned long) + 1] = {0};
+	struct power_supply *psy = dev_get_drvdata(dev);
 	int ret = 0, j;
 	char *prop_buf;
 
@@ -483,22 +481,8 @@ int power_supply_uevent(const struct device *dev, struct kobj_uevent_env *env)
 	if (ret)
 		goto out;
 
-	for (j = 0; j < psy->desc->num_properties; j++) {
-		set_bit(psy->desc->properties[j], psy_drv_properties);
-		ret = add_prop_uevent(dev, env, psy->desc->properties[j],
-				      prop_buf);
-		if (ret)
-			goto out;
-	}
-
-	for (j = 0; j < power_supply_battery_info_properties_size; j++) {
-		if (test_bit(battery_props[j], psy_drv_properties))
-			continue;
-		if (!power_supply_battery_info_has_prop(psy->battery_info,
-				battery_props[j]))
-			continue;
-		ret = add_prop_uevent(dev, env, battery_props[j],
-			      prop_buf);
+	for (j = 0; j < POWER_SUPPLY_ATTR_CNT; j++) {
+		ret = add_prop_uevent(dev, env, j, prop_buf);
 		if (ret)
 			goto out;
 	}
