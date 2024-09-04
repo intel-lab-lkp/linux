@@ -849,6 +849,11 @@ struct drm_xe_gem_mmap_offset {
  *    demand when accessed, and also allows per-VM overcommit of memory.
  *    The xe driver internally uses recoverable pagefaults to implement
  *    this.
+ *  - %DRM_XE_VM_CREATE_FLAG_EXTOBJ_BOOKKEEP - Insert exec IOCTL fences into
+ *    external BO's bookkeep slots rather than write slots. A bit of confusion
+ *    the dma-buf sync uAPI lead using the write slots but with a proper user
+ *    space implementation only bookkeep is required as user space will install
+ *    read / write dependecies. Flag added as an opt in to correct usage model.
  */
 struct drm_xe_vm_create {
 	/** @extensions: Pointer to the first extension struct, if any */
@@ -857,6 +862,7 @@ struct drm_xe_vm_create {
 #define DRM_XE_VM_CREATE_FLAG_SCRATCH_PAGE	(1 << 0)
 #define DRM_XE_VM_CREATE_FLAG_LR_MODE	        (1 << 1)
 #define DRM_XE_VM_CREATE_FLAG_FAULT_MODE	(1 << 2)
+#define DRM_XE_VM_CREATE_FLAG_EXTOBJ_BOOKKEEP	(1 << 3)
 	/** @flags: Flags */
 	__u32 flags;
 
