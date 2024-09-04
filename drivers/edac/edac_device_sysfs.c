@@ -212,7 +212,7 @@ static void edac_device_ctrl_master_release(struct kobject *kobj)
 }
 
 /* ktype for the main (master) kobject */
-static struct kobj_type ktype_device_ctrl = {
+static const struct kobj_type ktype_device_ctrl = {
 	.release = edac_device_ctrl_master_release,
 	.sysfs_ops = &device_ctl_info_ops,
 	.default_groups = device_ctrl_groups,
@@ -397,7 +397,7 @@ static struct attribute *device_instance_attrs[] = {
 ATTRIBUTE_GROUPS(device_instance);
 
 /* The 'ktype' for each edac_dev 'instance' */
-static struct kobj_type ktype_instance_ctrl = {
+static const struct kobj_type ktype_instance_ctrl = {
 	.release = edac_device_ctrl_instance_release,
 	.sysfs_ops = &device_instance_ops,
 	.default_groups = device_instance_groups,
@@ -480,7 +480,7 @@ static struct attribute *device_block_attrs[] = {
 ATTRIBUTE_GROUPS(device_block);
 
 /* The 'ktype' for each edac_dev 'block' */
-static struct kobj_type ktype_block_ctrl = {
+static const struct kobj_type ktype_block_ctrl = {
 	.release = edac_device_ctrl_block_release,
 	.sysfs_ops = &device_block_ops,
 	.default_groups = device_block_groups,
