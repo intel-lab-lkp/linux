@@ -1477,7 +1477,7 @@ EXPORT_SYMBOL(lan9303_remove);
 
 void lan9303_shutdown(struct lan9303 *chip)
 {
-	dsa_switch_shutdown(chip->ds);
+	lan9303_remove(chip);
 }
 EXPORT_SYMBOL(lan9303_shutdown);
 
