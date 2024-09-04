@@ -195,6 +195,8 @@ static void power_supply_remove_gen_triggers(struct power_supply *psy)
 
 void power_supply_update_leds(struct power_supply *psy)
 {
+	guard(rwsem_read)(&psy->extensions_sem);
+
 	if (psy->desc->type == POWER_SUPPLY_TYPE_BATTERY)
 		power_supply_update_bat_leds(psy);
 	else

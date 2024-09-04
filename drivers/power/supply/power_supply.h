@@ -9,6 +9,8 @@
  *  Modified: 2004, Oct     Szabolcs Gyurko
  */
 
+#include <linux/lockdep.h>
+
 struct device;
 struct device_type;
 struct power_supply;
@@ -25,6 +27,7 @@ struct power_supply_ext_registration {
 };
 
 #define power_supply_for_each_extension(pos, psy) \
+	lockdep_assert_held(&(psy)->extensions_sem); \
 	list_for_each_entry(pos, &(psy)->extensions, list_head)
 
 

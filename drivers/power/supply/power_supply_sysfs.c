@@ -371,6 +371,8 @@ static ssize_t power_supply_store_property(struct device *dev,
 
 	value.intval = ret;
 
+	guard(rwsem_read)(&psy->extensions_sem);
+
 	ret = power_supply_set_property(psy, psp, &value);
 	if (ret < 0)
 		return ret;
@@ -391,6 +393,8 @@ static umode_t power_supply_attr_is_visible(struct kobject *kobj,
 
 	if (attrno == POWER_SUPPLY_PROP_TYPE)
 		return mode;
+
+	guard(rwsem_read)(&psy->extensions_sem);
 
 	if (power_supply_has_property(psy, attrno)) {
 		if (power_supply_property_is_writeable(psy, attrno) > 0)
@@ -496,6 +500,8 @@ int power_supply_uevent(const struct device *dev, struct kobj_uevent_env *env)
 	ret = add_prop_uevent(dev, env, POWER_SUPPLY_PROP_TYPE, prop_buf);
 	if (ret)
 		goto out;
+
+	guard(rwsem_read)(&psy->extensions_sem);
 
 	for (j = 0; j < POWER_SUPPLY_ATTR_CNT; j++) {
 		ret = add_prop_uevent(dev, env, j, prop_buf);

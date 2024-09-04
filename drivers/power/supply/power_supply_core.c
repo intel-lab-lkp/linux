@@ -11,6 +11,7 @@
 
 #include <linux/module.h>
 #include <linux/types.h>
+#include <linux/cleanup.h>
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/delay.h>
@@ -80,6 +81,7 @@ static int __power_supply_changed_work(struct device *dev, void *data)
 
 static void power_supply_changed_work(struct work_struct *work)
 {
+	int ret;
 	unsigned long flags;
 	struct power_supply *psy = container_of(work, struct power_supply,
 						changed_work);
@@ -87,6 +89,16 @@ static void power_supply_changed_work(struct work_struct *work)
 	dev_dbg(&psy->dev, "%s\n", __func__);
 
 	spin_lock_irqsave(&psy->changed_lock, flags);
+
+	if (unlikely(psy->update_groups)) {
+		psy->update_groups = false;
+		spin_unlock_irqrestore(&psy->changed_lock, flags);
+		ret = sysfs_update_groups(&psy->dev.kobj, power_supply_dev_type.groups);
+		if (ret)
+			dev_warn(&psy->dev, "failed to update sysfs groups: %pe\n", ERR_PTR(ret));
+		spin_lock_irqsave(&psy->changed_lock, flags);
+	}
+
 	/*
 	 * Check 'changed' here to avoid issues due to race between
 	 * power_supply_changed() and this routine. In worst case
@@ -1218,15 +1230,24 @@ bool power_supply_ext_has_property(const struct power_supply_ext *psy_ext,
 	return found;
 }
 
+static bool psy_has_property_no_ext(struct power_supply *psy,
+				    enum power_supply_property psp)
+{
+	if (psy_desc_has_property(psy->desc, psp))
+		return true;
+
+	if (power_supply_battery_info_has_prop(psy->battery_info, psp))
+		return true;
+
+	return false;
+}
+
 bool power_supply_has_property(struct power_supply *psy,
 			       enum power_supply_property psp)
 {
 	struct power_supply_ext_registration *reg;
 
-	if (psy_desc_has_property(psy->desc, psp))
-		return true;
-
-	if (power_supply_battery_info_has_prop(psy->battery_info, psp))
+	if (psy_has_property_no_ext(psy, psp))
 		return true;
 
 	power_supply_for_each_extension(reg, psy)
@@ -1329,11 +1350,14 @@ EXPORT_SYMBOL_GPL(power_supply_powers);
 
 static int power_supply_update_groups(struct power_supply *psy)
 {
-	int ret;
+	unsigned long flags;
 
-	ret = sysfs_update_groups(&psy->dev.kobj, power_supply_dev_type.groups);
+	spin_lock_irqsave(&psy->changed_lock, flags);
+	psy->update_groups = true;
+	spin_unlock_irqrestore(&psy->changed_lock, flags);
+
 	power_supply_changed(psy);
-	return ret;
+	return 0;
 }
 
 int power_supply_register_extension(struct power_supply *psy, const struct power_supply_ext *ext,
@@ -1341,6 +1365,8 @@ int power_supply_register_extension(struct power_supply *psy, const struct power
 {
 	struct power_supply_ext_registration *reg;
 	size_t i;
+
+	guard(rwsem_write)(&psy->extensions_sem);
 
 	for (i = 0; i < ext->num_properties; i++) {
 		if (power_supply_has_property(psy, ext->properties[i]))
@@ -1361,6 +1387,8 @@ EXPORT_SYMBOL_GPL(power_supply_register_extension);
 void power_supply_unregister_extension(struct power_supply *psy, const struct power_supply_ext *ext)
 {
 	struct power_supply_ext_registration *reg;
+
+	guard(rwsem_write)(&psy->extensions_sem);
 
 	power_supply_for_each_extension(reg, psy) {
 		if (reg->ext == ext) {
@@ -1405,6 +1433,7 @@ static int power_supply_read_temp(struct thermal_zone_device *tzd,
 
 	WARN_ON(tzd == NULL);
 	psy = thermal_zone_device_priv(tzd);
+	guard(rwsem_read)(&psy->extensions_sem);
 	ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_TEMP, &val);
 	if (ret)
 		return ret;
@@ -1427,7 +1456,7 @@ static int psy_register_thermal(struct power_supply *psy)
 		return 0;
 
 	/* Register battery zone device psy reports temperature */
-	if (power_supply_has_property(psy, POWER_SUPPLY_PROP_TEMP)) {
+	if (psy_has_property_no_ext(psy, POWER_SUPPLY_PROP_TEMP)) {
 		/* Prefer our hwmon device and avoid duplicates */
 		struct thermal_zone_params tzp = {
 			.no_hwmon = IS_ENABLED(CONFIG_POWER_SUPPLY_HWMON)
@@ -1534,7 +1563,9 @@ __power_supply_register(struct device *parent,
 	}
 
 	spin_lock_init(&psy->changed_lock);
+	init_rwsem(&psy->extensions_sem);
 	INIT_LIST_HEAD(&psy->extensions);
+
 	rc = device_add(dev);
 	if (rc)
 		goto device_add_failed;
@@ -1546,6 +1577,8 @@ __power_supply_register(struct device *parent,
 	rc = psy_register_thermal(psy);
 	if (rc)
 		goto register_thermal_failed;
+
+	guard(rwsem_read)(&psy->extensions_sem);
 
 	rc = power_supply_create_triggers(psy);
 	if (rc)
