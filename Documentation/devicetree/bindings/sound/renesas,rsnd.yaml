@@ -112,6 +112,10 @@ properties:
     description: List of necessary clock names.
     # details are defined below
 
+  post-init-providers:
+    description: ignore fw_devlink dependency cycles and avoid driver probe dead-lock
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+
   # ports is below
   port:
     $ref: audio-graph-port.yaml#/definitions/port-base
