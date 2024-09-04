@@ -584,7 +584,9 @@ void flush_smp_call_function_queue(void)
 	local_irq_save(flags);
 	/* Get the already pending soft interrupts for RT enabled kernels */
 	was_pending = local_softirq_pending();
+	set_do_softirq_pending();
 	__flush_smp_call_function_queue(true);
+	clr_do_softirq_pending();
 	if (local_softirq_pending())
 		do_softirq_post_smp_call_flush(was_pending);
 

@@ -99,6 +99,10 @@ EXPORT_PER_CPU_SYMBOL_GPL(hardirq_context);
  *
  * The per CPU counter prevents pointless wakeups of ksoftirqd in case that
  * the task which is in a softirq disabled section is preempted or blocks.
+ *
+ * The bottom bits of softirq_ctrl::cnt is used to indicate an impending call
+ * to do_softirq() to prevent pointless wakeups of ksoftirqd since the CPU
+ * promises to handle softirqs soon.
  */
 struct softirq_ctrl {
 #ifdef CONFIG_PREEMPT_RT
@@ -112,6 +116,16 @@ static DEFINE_PER_CPU_ALIGNED(struct softirq_ctrl, softirq_ctrl) = {
 	.lock	= INIT_LOCAL_LOCK(softirq_ctrl.lock),
 #endif
 };
+
+inline void set_do_softirq_pending(void)
+{
+	__this_cpu_inc(softirq_ctrl.cnt);
+}
+
+inline void clr_do_softirq_pending(void)
+{
+	__this_cpu_dec(softirq_ctrl.cnt);
+}
 
 static inline bool should_wake_ksoftirqd(void)
 {
