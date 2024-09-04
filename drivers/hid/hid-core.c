@@ -2416,6 +2416,46 @@ void hid_hw_close(struct hid_device *hdev)
 }
 EXPORT_SYMBOL_GPL(hid_hw_close);
 
+static void hid_hw_close_and_stop(void *data)
+{
+	struct hid_device *hdev = data;
+
+	hid_hw_close(hdev);
+	hid_hw_stop(hdev);
+}
+
+/**
+ * devm_hid_hw_start_and_open - manage hid resources through custom action
+ *
+ * @hdev: hid device
+ * @connect_mask: which outputs to connect, see HID_CONNECT_*
+ *
+ * Bind the hid resource to the hid_device life cycle and register
+ * an action to release the hid resource. The users do not need to
+ * pay attention to the release of hid.
+ */
+
+int devm_hid_hw_start_and_open(struct hid_device *hdev, unsigned int connect_mask)
+{
+	int ret;
+
+	ret = hid_hw_start(hdev, connect_mask);
+	if (ret) {
+		hid_err(hdev, "hw start failed with %d\n", ret);
+		return ret;
+	}
+
+	ret = hid_hw_open(hdev);
+	if (ret) {
+		hid_err(hdev, "hw open failed with %d\n", ret);
+		hid_hw_stop(hdev);
+		return ret;
+	}
+
+	return devm_add_action_or_reset(&hdev->dev, hid_hw_close_and_stop, hdev);
+}
+EXPORT_SYMBOL_GPL(devm_hid_hw_start_and_open);
+
 /**
  * hid_hw_request - send report request to device
  *
