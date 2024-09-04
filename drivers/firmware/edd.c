@@ -648,7 +648,10 @@ edd_dev_is_type(struct edd_device *edev, const char *type)
 static struct pci_dev *
 edd_get_pci_dev(struct edd_device *edev)
 {
-	struct edd_info *info = edd_dev_get_info(edev);
+	struct edd_info *info;
+	if(!edev)
+		return NULL;
+	info = edd_dev_get_info(edev);
 
 	if (edd_dev_is_type(edev, "PCI") || edd_dev_is_type(edev, "XPRS")) {
 		return pci_get_domain_bus_and_slot(0,
