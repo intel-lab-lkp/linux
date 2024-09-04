@@ -25,9 +25,14 @@ void spacc_stat_process(struct spacc_device *spacc)
 	tasklet_schedule(&priv->pop_jobs);
 }
 
+static const struct of_device_id snps_spacc_id[] = {
+	{.compatible = "snps,dwc-spacc" },
+	{ /*sentinel */        }
+};
 
-int spacc_probe(struct platform_device *pdev,
-		const struct of_device_id snps_spacc_id[])
+MODULE_DEVICE_TABLE(of, snps_spacc_id);
+
+int spacc_probe(struct platform_device *pdev)
 {
 	int spacc_idx = -1;
 	struct resource *mem;
@@ -37,27 +42,12 @@ int spacc_probe(struct platform_device *pdev,
 	int spacc_priority = -1;
 	struct spacc_priv *priv;
 	int x = 0, err, oldmode, irq_num;
-	const struct of_device_id *match, *id;
 	u64 oldtimer = 100000, timer = 100000;
-
-	if (pdev->dev.of_node) {
-		id = of_match_node(snps_spacc_id, pdev->dev.of_node);
-		if (!id) {
-			dev_err(&pdev->dev, "DT node did not match\n");
-			return -EINVAL;
-		}
-	}
 
 	/* Initialize DDT DMA pools based on this device's resources */
 	if (pdu_mem_init(&pdev->dev)) {
 		dev_err(&pdev->dev, "Could not initialize DMA pools\n");
 		return -ENOMEM;
-	}
-
-	match = of_match_device(of_match_ptr(snps_spacc_id), &pdev->dev);
-	if (!match) {
-		dev_err(&pdev->dev, "SPAcc dtb missing");
-		return -ENODEV;
 	}
 
 	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -74,52 +64,52 @@ int spacc_probe(struct platform_device *pdev,
 	}
 
 	/* Read spacc priority and index and save inside priv.spacc.config */
-	if (of_property_read_u32(pdev->dev.of_node, "spacc_priority",
+	if (of_property_read_u32(pdev->dev.of_node, "spacc-priority",
 				 &spacc_priority)) {
-		dev_err(&pdev->dev, "No vspacc priority specified\n");
+		dev_err(&pdev->dev, "No virtual spacc priority specified\n");
 		err = -EINVAL;
 		goto free_ddt_mem_pool;
 	}
 
 	if (spacc_priority < 0 && spacc_priority > VSPACC_PRIORITY_MAX) {
-		dev_err(&pdev->dev, "Invalid vspacc priority\n");
+		dev_err(&pdev->dev, "Invalid virtual spacc priority\n");
 		err = -EINVAL;
 		goto free_ddt_mem_pool;
 	}
 	priv->spacc.config.priority = spacc_priority;
 
-	if (of_property_read_u32(pdev->dev.of_node, "spacc_index",
+	if (of_property_read_u32(pdev->dev.of_node, "spacc-index",
 				 &spacc_idx)) {
-		dev_err(&pdev->dev, "No vspacc index specified\n");
+		dev_err(&pdev->dev, "No virtual spacc index specified\n");
 		err = -EINVAL;
 		goto free_ddt_mem_pool;
 	}
 	priv->spacc.config.idx = spacc_idx;
 
-	if (of_property_read_u32(pdev->dev.of_node, "spacc_endian",
+	if (of_property_read_u32(pdev->dev.of_node, "spacc-endian",
 				 &spacc_endian)) {
-		dev_dbg(&pdev->dev, "No spacc_endian specified\n");
+		dev_dbg(&pdev->dev, "No spacc endian specified\n");
 		dev_dbg(&pdev->dev, "Default spacc Endianness (0==little)\n");
 		spacc_endian = 0;
 	}
 	priv->spacc.config.spacc_endian = spacc_endian;
 
-	if (of_property_read_u64(pdev->dev.of_node, "oldtimer",
+	if (of_property_read_u64(pdev->dev.of_node, "spacc-oldtimer",
 				 &oldtimer)) {
-		dev_dbg(&pdev->dev, "No oldtimer specified\n");
+		dev_dbg(&pdev->dev, "No spacc oldtimer specified\n");
 		dev_dbg(&pdev->dev, "Default oldtimer (100000)\n");
 		oldtimer = 100000;
 	}
 	priv->spacc.config.oldtimer = oldtimer;
 
-	if (of_property_read_u64(pdev->dev.of_node, "timer", &timer)) {
-		dev_dbg(&pdev->dev, "No timer specified\n");
+	if (of_property_read_u64(pdev->dev.of_node, "spacc-timer", &timer)) {
+		dev_dbg(&pdev->dev, "No spacc timer specified\n");
 		dev_dbg(&pdev->dev, "Default timer (100000)\n");
 		timer = 100000;
 	}
 	priv->spacc.config.timer = timer;
 
-	baseaddr = devm_ioremap_resource(&pdev->dev, mem);
+	baseaddr = devm_platform_get_and_ioremap_resource(pdev, 0, &mem);
 	if (IS_ERR(baseaddr)) {
 		dev_err(&pdev->dev, "unable to map iomem\n");
 		err = PTR_ERR(baseaddr);
@@ -127,12 +117,6 @@ int spacc_probe(struct platform_device *pdev,
 	}
 
 	pdu_get_version(baseaddr, &info);
-	if (pdev->dev.platform_data) {
-		struct pdu_info *parent_info = pdev->dev.platform_data;
-
-		memcpy(&info.pdu_config, &parent_info->pdu_config,
-		       sizeof(info.pdu_config));
-	}
 
 	dev_dbg(&pdev->dev, "EPN %04X : virt [%d]\n",
 				info.spacc_version.project,
@@ -273,18 +257,12 @@ static void spacc_unregister_algs(void)
 #endif
 }
 
-static const struct of_device_id snps_spacc_id[] = {
-	{.compatible = "snps-dwc-spacc" },
-	{ /*sentinel */        }
-};
-
-MODULE_DEVICE_TABLE(of, snps_spacc_id);
 
 static int spacc_crypto_probe(struct platform_device *pdev)
 {
 	int rc;
 
-	rc = spacc_probe(pdev, snps_spacc_id);
+	rc = spacc_probe(pdev);
 	if (rc < 0)
 		goto err;
 
@@ -326,7 +304,7 @@ static struct platform_driver spacc_driver = {
 	.remove = spacc_crypto_remove,
 	.driver = {
 		.name  = "spacc",
-		.of_match_table = of_match_ptr(snps_spacc_id),
+		.of_match_table = snps_spacc_id,
 		.owner = THIS_MODULE,
 	},
 };

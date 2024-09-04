@@ -224,8 +224,7 @@ int spacc_unregister_aead_algs(void);
 int probe_ciphers(struct platform_device *spacc_pdev);
 int spacc_unregister_cipher_algs(void);
 
-int spacc_probe(struct platform_device *pdev,
-		const struct of_device_id snps_spacc_id[]);
+int spacc_probe(struct platform_device *pdev);
 
 irqreturn_t spacc_irq_handler(int irq, void *dev);
 #endif

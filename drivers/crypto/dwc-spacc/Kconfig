@@ -3,7 +3,7 @@
 config CRYPTO_DEV_SPACC
 	tristate "Support for dw_spacc Security protocol accelerators"
 	depends on HAS_DMA
-	default m
+	default n
 
 	help
 	  This enables support for the HASH/CRYP/AEAD hw accelerator which can be found

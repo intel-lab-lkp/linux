@@ -401,32 +401,14 @@ static int spacc_cipher_process(struct skcipher_request *req, int enc_dec)
 			return ret;
 		}
 	}
-
 	if (salg->mode->id == CRYPTO_MODE_AES_CTR ||
 	    salg->mode->id == CRYPTO_MODE_SM4_CTR) {
 		/* copy the IV to local buffer */
 		for (i = 0; i < 16; i++)
 			ivc1[i] = req->iv[i];
 
-		/* 64-bit counter width */
-		if (readl(device_h->regmap + SPACC_REG_VERSION_EXT_3) & (0x3)) {
-
-			for (i = 8; i < 16; i++) {
-				num_iv64 <<= 8;
-				num_iv64 |= ivc1[i];
-			}
-
-			diff64 = SPACC_CTR_IV_MAX64 - num_iv64;
-
-			if (len > diff64) {
-				name = salg->calg->cra_name;
-				ret = spacc_skcipher_fallback(name,
-							      req, enc_dec);
-				return ret;
-			}
 		/* 32-bit counter width */
-		} else if (readl(device_h->regmap + SPACC_REG_VERSION_EXT_3)
-			& (0x2)) {
+		if (readl(device_h->regmap + SPACC_REG_VERSION_EXT_3) & (0x2)) {
 
 			for (i = 12; i < 16; i++) {
 				num_iv <<= 8;
@@ -436,6 +418,23 @@ static int spacc_cipher_process(struct skcipher_request *req, int enc_dec)
 			diff = SPACC_CTR_IV_MAX32 - num_iv;
 
 			if (len > diff) {
+				name = salg->calg->cra_name;
+				ret = spacc_skcipher_fallback(name,
+							      req, enc_dec);
+				return ret;
+			}
+		/* 64-bit counter width */
+		} else if (readl(device_h->regmap + SPACC_REG_VERSION_EXT_3)
+			& (0x3)) {
+
+			for (i = 8; i < 16; i++) {
+				num_iv64 <<= 8;
+				num_iv64 |= ivc1[i];
+			}
+
+			diff64 = SPACC_CTR_IV_MAX64 - num_iv64;
+
+			if (len > diff64) {
 				name = salg->calg->cra_name;
 				ret = spacc_skcipher_fallback(name,
 							      req, enc_dec);

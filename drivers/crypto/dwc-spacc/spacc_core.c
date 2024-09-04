@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0
 
-#include <linux/of_device.h>
+#include <crypto/skcipher.h>
+#include <linux/of.h>
 #include <linux/vmalloc.h>
 #include <linux/platform_device.h>
 #include <linux/interrupt.h>
+#include <linux/dma-mapping.h>
 #include "spacc_hal.h"
 #include "spacc_core.h"
 
