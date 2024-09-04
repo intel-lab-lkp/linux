@@ -358,6 +358,10 @@ static void __recv_errmsg_cmsg(struct msghdr *msg, int payload_len)
 
 	if (batch > 1)
 		fprintf(stderr, "batched %d timestamps\n", batch);
+	else if (!batch) {
+		fprintf(stderr, "Failed to parse timestamps\n");
+		test_failed = true;
+	}
 }
 
 static int recv_errmsg(int fd)
