@@ -54,6 +54,7 @@
 #define OV5645_TIMING_TC_REG21		0x3821
 #define		OV5645_SENSOR_MIRROR		BIT(1)
 #define OV5645_MIPI_CTRL00		0x4800
+#define OV5645_REG_DEBUG_MODE		0x4814
 #define OV5645_PRE_ISP_TEST_SETTING_1	0x503d
 #define		OV5645_TEST_PATTERN_MASK	0x3
 #define		OV5645_SET_TEST_PATTERN(x)	((x) & OV5645_TEST_PATTERN_MASK)
@@ -64,6 +65,8 @@
 #define OV5645_NATIVE_FORMAT	MEDIA_BUS_FMT_UYVY8_1X16
 #define OV5645_NATIVE_WIDTH	2592
 #define OV5645_NATIVE_HEIGHT	1944
+
+#define OV5645_ROUTES_MAX	4
 
 /* regulator supplies */
 static const char * const ov5645_supply_name[] = {
@@ -824,25 +827,36 @@ static const struct v4l2_ctrl_ops ov5645_ctrl_ops = {
 static int ov5645_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 				 struct v4l2_mbus_frame_desc *fd)
 {
-	const struct v4l2_mbus_framefmt *fmt;
 	struct v4l2_subdev_state *state;
+	struct v4l2_subdev_route *route;
+	unsigned int num_routes = 0;
 
 	if (pad != OV5645_PAD_SOURCE)
 		return -EINVAL;
 
 	state = v4l2_subdev_lock_and_get_active_state(sd);
-	fmt = v4l2_subdev_state_get_format(state, OV5645_PAD_SOURCE, 0);
-	v4l2_subdev_unlock_state(state);
 
+	for_each_active_route(&state->routing, route) {
+		struct v4l2_mbus_frame_desc_entry *entry;
+		const struct v4l2_mbus_framefmt *fmt;
+
+		fmt = v4l2_subdev_state_get_format(state, route->source_pad,
+						   route->source_stream);
+
+		entry = &fd->entry[num_routes];
+		entry->stream = num_routes;
+		entry->pixelcode = fmt->code;
+
+		entry->bus.csi2.vc = route->source_stream;
+		entry->bus.csi2.dt = MIPI_CSI2_DT_YUV422_8B;
+
+		num_routes++;
+	}
+
+	fd->num_entries = num_routes;
 	fd->type = V4L2_MBUS_FRAME_DESC_TYPE_CSI2;
-	fd->num_entries = 1;
 
-	memset(fd->entry, 0, sizeof(fd->entry));
-
-	fd->entry[0].pixelcode = fmt->code;
-	fd->entry[0].stream = 0;
-	fd->entry[0].bus.csi2.vc = 0;
-	fd->entry[0].bus.csi2.dt = MIPI_CSI2_DT_YUV422_8B;
+	v4l2_subdev_unlock_state(state);
 
 	return 0;
 }
@@ -914,13 +928,13 @@ static int ov5645_set_format(struct v4l2_subdev *sd,
 	format->format.quantization = V4L2_QUANTIZATION_DEFAULT;
 	format->format.xfer_func = V4L2_XFER_FUNC_DEFAULT;
 
-	__format = v4l2_subdev_state_get_format(sd_state, OV5645_PAD_IMAGE);
+	__format = v4l2_subdev_state_get_format(sd_state, OV5645_PAD_IMAGE, 0);
 	*__format = format->format;
 	__format->code = OV5645_NATIVE_FORMAT;
 	__format->width = OV5645_NATIVE_WIDTH;
 	__format->height = OV5645_NATIVE_HEIGHT;
 
-	__crop = v4l2_subdev_state_get_crop(sd_state, OV5645_PAD_IMAGE);
+	__crop = v4l2_subdev_state_get_crop(sd_state, OV5645_PAD_IMAGE, 0);
 	__crop->width = format->format.width;
 	__crop->height = format->format.height;
 
@@ -928,19 +942,19 @@ static int ov5645_set_format(struct v4l2_subdev *sd,
 	 * The compose rectangle models binning, its size is the sensor output
 	 * size.
 	 */
-	compose = v4l2_subdev_state_get_compose(sd_state, OV5645_PAD_IMAGE);
+	compose = v4l2_subdev_state_get_compose(sd_state, OV5645_PAD_IMAGE, 0);
 	compose->left = 0;
 	compose->top = 0;
 	compose->width = format->format.width;
 	compose->height = format->format.height;
 
-	__crop = v4l2_subdev_state_get_crop(sd_state, OV5645_PAD_SOURCE);
+	__crop = v4l2_subdev_state_get_crop(sd_state, OV5645_PAD_SOURCE, format->stream);
 	__crop->left = 0;
 	__crop->top = 0;
 	__crop->width = format->format.width;
 	__crop->height = format->format.height;
 
-	__format = v4l2_subdev_state_get_format(sd_state, OV5645_PAD_SOURCE);
+	__format = v4l2_subdev_state_get_format(sd_state, OV5645_PAD_SOURCE, format->stream);
 	*__format = format->format;
 
 	if (format->which == V4L2_SUBDEV_FORMAT_ACTIVE) {
@@ -961,17 +975,71 @@ static int ov5645_set_format(struct v4l2_subdev *sd,
 	return 0;
 }
 
+static int ov5645_apply_routing(struct v4l2_subdev *sd,
+				struct v4l2_subdev_state *state,
+				struct v4l2_subdev_krouting *routing)
+{
+	struct v4l2_subdev_format fmt = {
+		.which = V4L2_SUBDEV_FORMAT_TRY,
+		.pad = OV5645_PAD_SOURCE,
+		.format = {
+			.code = OV5645_NATIVE_FORMAT,
+			.width = ov5645_mode_info_data[1].width,
+			.height = ov5645_mode_info_data[1].height,
+		},
+	};
+	struct v4l2_subdev_route *route;
+	int ret;
+
+	if (routing->num_routes > 1)
+		routing->num_routes = 1;
+
+	route = &routing->routes[0];
+
+	if (route->sink_stream > 0 || route->source_stream > 3)
+		return -EINVAL;
+
+	ret = v4l2_subdev_routing_validate(sd, routing,
+					   V4L2_SUBDEV_ROUTING_ONLY_1_TO_1);
+	if (ret)
+		return ret;
+
+	ret = v4l2_subdev_set_routing(sd, state, routing);
+	if (ret)
+		return ret;
+
+	fmt.stream = route->source_stream;
+	return ov5645_set_format(sd, state, &fmt);
+}
+
 static int ov5645_init_state(struct v4l2_subdev *subdev,
 			     struct v4l2_subdev_state *sd_state)
 {
-	struct v4l2_subdev_route routes[1] = {
+	struct v4l2_subdev_route routes[OV5645_ROUTES_MAX] = {
 		{
 			.sink_pad = OV5645_PAD_IMAGE,
 			.sink_stream = 0,
 			.source_pad = OV5645_PAD_SOURCE,
 			.source_stream = 0,
-			.flags = V4L2_SUBDEV_ROUTE_FL_ACTIVE |
-				 V4L2_SUBDEV_ROUTE_FL_IMMUTABLE,
+			.flags = V4L2_SUBDEV_ROUTE_FL_ACTIVE,
+		},
+		{
+			.sink_pad = OV5645_PAD_IMAGE,
+			.sink_stream = 0,
+			.source_pad = OV5645_PAD_SOURCE,
+			.source_stream = 1,
+		},
+		{
+			.sink_pad = OV5645_PAD_IMAGE,
+			.sink_stream = 0,
+			.source_pad = OV5645_PAD_SOURCE,
+			.source_stream = 2,
+		},
+		{
+			.sink_pad = OV5645_PAD_IMAGE,
+			.sink_stream = 0,
+			.source_pad = OV5645_PAD_SOURCE,
+			.source_stream = 3,
 		},
 	};
 	struct v4l2_subdev_krouting routing = {
@@ -979,25 +1047,8 @@ static int ov5645_init_state(struct v4l2_subdev *subdev,
 		.num_routes = ARRAY_SIZE(routes),
 		.routes = routes,
 	};
-	struct v4l2_subdev_format fmt = {
-		.which = V4L2_SUBDEV_FORMAT_TRY,
-		.pad = OV5645_PAD_SOURCE,
-		.stream = 0,
-		.format = {
-			.code = OV5645_NATIVE_FORMAT,
-			.width = ov5645_mode_info_data[1].width,
-			.height = ov5645_mode_info_data[1].height,
-		},
-	};
-	int ret;
 
-	ret = v4l2_subdev_set_routing(subdev, sd_state, &routing);
-	if (ret)
-		return ret;
-
-	ov5645_set_format(subdev, sd_state, &fmt);
-
-	return 0;
+	return ov5645_apply_routing(subdev, sd_state, &routing);
 }
 
 static int ov5645_get_selection(struct v4l2_subdev *sd,
@@ -1007,20 +1058,39 @@ static int ov5645_get_selection(struct v4l2_subdev *sd,
 	if (sel->target != V4L2_SEL_TGT_CROP)
 		return -EINVAL;
 
-	sel->r = *v4l2_subdev_state_get_crop(sd_state, sel->pad);
+	sel->r = *v4l2_subdev_state_get_crop(sd_state, sel->pad, sel->stream);
 	return 0;
+}
+
+static int ov5645_set_virtual_channel(struct ov5645 *ov5645, u8 channel)
+{
+	int ret;
+	u8 val;
+
+	ret = ov5645_read_reg(ov5645, OV5645_REG_DEBUG_MODE, &val);
+	if (ret)
+		return ret;
+	val &= ~(3 << 6);
+	val |= (channel << 6);
+
+	return ov5645_write_reg(ov5645, OV5645_REG_DEBUG_MODE, val);
 }
 
 static int ov5645_enable_streams(struct v4l2_subdev *sd,
 				 struct v4l2_subdev_state *state, u32 pad,
 				 u64 streams_mask)
 {
+	struct v4l2_subdev_route *route = &state->routing.routes[0];
 	struct ov5645 *ov5645 = to_ov5645(sd);
 	int ret;
 
 	ret = pm_runtime_resume_and_get(ov5645->dev);
 	if (ret < 0)
 		return ret;
+
+	ret = ov5645_set_virtual_channel(ov5645, route->source_stream);
+	if (ret)
+		goto err_rpm_put;
 
 	ret = ov5645_set_register_array(ov5645,
 					ov5645->current_mode->data,
@@ -1074,6 +1144,14 @@ rpm_put:
 	return ret;
 }
 
+static int ov5645_set_routing(struct v4l2_subdev *sd,
+			      struct v4l2_subdev_state *state,
+			      enum v4l2_subdev_format_whence which,
+			      struct v4l2_subdev_krouting *routing)
+{
+	return ov5645_apply_routing(sd, state, routing);
+}
+
 static const struct v4l2_subdev_video_ops ov5645_video_ops = {
 	.s_stream = v4l2_subdev_s_stream_helper,
 };
@@ -1087,6 +1165,7 @@ static const struct v4l2_subdev_pad_ops ov5645_subdev_pad_ops = {
 	.get_selection = ov5645_get_selection,
 	.enable_streams = ov5645_enable_streams,
 	.disable_streams = ov5645_disable_streams,
+	.set_routing = ov5645_set_routing,
 };
 
 static const struct v4l2_subdev_core_ops ov5645_core_ops = {
