@@ -610,7 +610,7 @@ int ftrace_disable_ftrace_graph_caller(void)
  * in current thread info.
  */
 void prepare_ftrace_return(unsigned long ip, unsigned long *parent,
-			   unsigned long frame_pointer)
+			   unsigned long frame_pointer, struct ftrace_regs *fregs)
 {
 	unsigned long return_hooker = (unsigned long)&return_to_handler;
 	int bit;
@@ -637,7 +637,7 @@ void prepare_ftrace_return(unsigned long ip, unsigned long *parent,
 	if (bit < 0)
 		return;
 
-	if (!function_graph_enter(*parent, ip, frame_pointer, parent, NULL))
+	if (!function_graph_enter(*parent, ip, frame_pointer, parent, fregs))
 		*parent = return_hooker;
 
 	ftrace_test_recursion_unlock(bit);
@@ -650,7 +650,7 @@ void ftrace_graph_func(unsigned long ip, unsigned long parent_ip,
 	struct pt_regs *regs = &fregs->regs;
 	unsigned long *stack = (unsigned long *)kernel_stack_pointer(regs);
 
-	prepare_ftrace_return(ip, (unsigned long *)stack, 0);
+	prepare_ftrace_return(ip, (unsigned long *)stack, 0, fregs);
 }
 #endif
 
