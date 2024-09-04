@@ -891,6 +891,23 @@ static void *virtnet_rq_get_buf(struct receive_queue *rq, u32 *len, void **ctx)
 	return buf;
 }
 
+static void *virtnet_rq_get_buf_small(struct receive_queue *rq,
+				      u32 *len,
+				      void **ctx,
+				      unsigned int header_offset)
+{
+	void *buf;
+	unsigned int xdp_headroom;
+
+	buf = virtqueue_get_buf_ctx(rq->vq, len, ctx);
+	if (buf) {
+		xdp_headroom = (unsigned long)*ctx;
+		virtnet_rq_unmap(rq, buf + VIRTNET_RX_PAD + xdp_headroom, *len);
+	}
+
+	return buf;
+}
+
 static void virtnet_rq_init_one_sg(struct receive_queue *rq, void *buf, u32 len)
 {
 	struct virtnet_rq_dma *dma;
@@ -2692,10 +2709,20 @@ static int virtnet_receive_packets(struct virtnet_info *vi,
 	int packets = 0;
 	void *buf;
 
-	if (!vi->big_packets || vi->mergeable_rx_bufs) {
+	if (vi->mergeable_rx_bufs) {
 		void *ctx;
 		while (packets < budget &&
 		       (buf = virtnet_rq_get_buf(rq, &len, &ctx))) {
+			receive_buf(vi, rq, buf, len, ctx, xdp_xmit, stats);
+			packets++;
+		}
+	} else if (!vi->big_packets) {
+		void *ctx;
+		unsigned int xdp_headroom = virtnet_get_headroom(vi);
+		unsigned int header_offset = VIRTNET_RX_PAD + xdp_headroom;
+
+		while (packets < budget &&
+		       (buf = virtnet_rq_get_buf_small(rq, &len, &ctx, header_offset))) {
 			receive_buf(vi, rq, buf, len, ctx, xdp_xmit, stats);
 			packets++;
 		}
