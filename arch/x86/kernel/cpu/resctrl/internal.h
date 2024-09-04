@@ -709,6 +709,7 @@ int rdtgroup_assign_cntr(struct rdt_resource *r, struct rdtgroup *rdtgrp,
 			 struct rdt_mon_domain *d, enum resctrl_event_id evtid);
 int rdtgroup_unassign_cntr(struct rdt_resource *r, struct rdtgroup *rdtgrp,
 			   struct rdt_mon_domain *d, enum resctrl_event_id evtid);
+void resctrl_arch_mbm_cntr_assign_configure(struct rdt_resource *r);
 void rdt_staged_configs_clear(void);
 bool closid_allocated(unsigned int closid);
 int resctrl_find_cleanest_closid(void);
