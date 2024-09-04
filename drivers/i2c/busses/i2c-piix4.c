@@ -165,6 +165,11 @@ struct sb800_mmio_cfg {
 	bool use_mmio;
 };
 
+enum piix4_algo {
+	PIIX4_SB800,
+	PIIX4_SMBUS,
+};
+
 struct i2c_piix4_adapdata {
 	unsigned short smba;
 
@@ -173,6 +178,7 @@ struct i2c_piix4_adapdata {
 	bool notify_imc;
 	u8 port;		/* Port number, shifted */
 	struct sb800_mmio_cfg mmio_cfg;
+	u8 algo_select;
 };
 
 static int piix4_sb800_region_request(struct device *dev,
@@ -929,7 +935,7 @@ static struct i2c_adapter *piix4_aux_adapter;
 static int piix4_adapter_count;
 
 static int piix4_add_adapter(struct pci_dev *dev, unsigned short smba,
-			     bool sb800_main, u8 port, bool notify_imc,
+			     enum piix4_algo algo, u8 port, bool notify_imc,
 			     u8 hw_port_nr, const char *name,
 			     struct i2c_adapter **padap)
 {
@@ -945,8 +951,18 @@ static int piix4_add_adapter(struct pci_dev *dev, unsigned short smba,
 
 	adap->owner = THIS_MODULE;
 	adap->class = I2C_CLASS_HWMON;
-	adap->algo = sb800_main ? &piix4_smbus_algorithm_sb800
-				: &smbus_algorithm;
+
+	switch (algo) {
+	case PIIX4_SMBUS:
+		adap->algo = &smbus_algorithm;
+		break;
+	case PIIX4_SB800:
+		adap->algo = &piix4_smbus_algorithm_sb800;
+		break;
+	default:
+		dev_err(&dev->dev, "Unsupported SMBus algorithm\n");
+		return -EINVAL;
+	}
 
 	adapdata = kzalloc(sizeof(*adapdata), GFP_KERNEL);
 	if (adapdata == NULL) {
@@ -957,7 +973,7 @@ static int piix4_add_adapter(struct pci_dev *dev, unsigned short smba,
 
 	adapdata->mmio_cfg.use_mmio = piix4_sb800_use_mmio(dev);
 	adapdata->smba = smba;
-	adapdata->sb800_main = sb800_main;
+	adapdata->algo_select = algo;
 	adapdata->port = port << piix4_port_shift_sb800;
 	adapdata->notify_imc = notify_imc;
 
@@ -1013,7 +1029,7 @@ static int piix4_add_adapters_sb800(struct pci_dev *dev, unsigned short smba,
 	for (port = 0; port < piix4_adapter_count; port++) {
 		u8 hw_port_nr = port == 0 ? 0 : port + 1;
 
-		retval = piix4_add_adapter(dev, smba, true, port, notify_imc,
+		retval = piix4_add_adapter(dev, smba, PIIX4_SB800, port, notify_imc,
 					   hw_port_nr,
 					   piix4_main_port_names_sb800[port],
 					   &piix4_main_adapters[port]);
@@ -1085,7 +1101,7 @@ static int piix4_probe(struct pci_dev *dev, const struct pci_device_id *id)
 			return retval;
 
 		/* Try to register main SMBus adapter, give up if we can't */
-		retval = piix4_add_adapter(dev, retval, false, 0, false, 0,
+		retval = piix4_add_adapter(dev, retval, PIIX4_SMBUS, 0, false, 0,
 					   "", &piix4_main_adapters[0]);
 		if (retval < 0)
 			return retval;
@@ -1114,7 +1130,7 @@ static int piix4_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	if (retval > 0) {
 		/* Try to add the aux adapter if it exists,
 		 * piix4_add_adapter will clean up if this fails */
-		piix4_add_adapter(dev, retval, false, 0, false, 1,
+		piix4_add_adapter(dev, retval, PIIX4_SMBUS, 0, false, 1,
 				  is_sb800 ? piix4_aux_port_name_sb800 : "",
 				  &piix4_aux_adapter);
 	}
