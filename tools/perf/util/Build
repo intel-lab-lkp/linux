@@ -144,7 +144,6 @@ perf-util-y += help-unknown-cmd.o
 perf-util-y += dlfilter.o
 perf-util-y += mem-events.o
 perf-util-y += mem-info.o
-perf-util-y += vsprintf.o
 perf-util-y += units.o
 perf-util-y += time-utils.o
 perf-util-y += expr-flex.o
@@ -383,10 +382,6 @@ $(OUTPUT)util/libstring.o: ../lib/string.c FORCE
 	$(call if_changed_dep,cc_o_c)
 
 $(OUTPUT)util/hweight.o: ../lib/hweight.c FORCE
-	$(call rule_mkdir)
-	$(call if_changed_dep,cc_o_c)
-
-$(OUTPUT)util/vsprintf.o: ../lib/vsprintf.c FORCE
 	$(call rule_mkdir)
 	$(call if_changed_dep,cc_o_c)
 

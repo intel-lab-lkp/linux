@@ -5,3 +5,8 @@ libsubcmd-y += parse-options.o
 libsubcmd-y += run-command.o
 libsubcmd-y += sigchain.o
 libsubcmd-y += subcmd-config.o
+libsubcmd-y += vsprintf.o
+
+$(OUTPUT)vsprintf.o: ../vsprintf.c FORCE
+	$(call rule_mkdir)
+	$(call if_changed_dep,cc_o_c)
