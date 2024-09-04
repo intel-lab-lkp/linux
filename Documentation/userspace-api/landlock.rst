@@ -33,7 +33,7 @@ A Landlock rule describes an action on an object which the process intends to
 perform.  A set of rules is aggregated in a ruleset, which can then restrict
 the thread enforcing it, and its future children.
 
-The two existing types of rules are:
+The three existing types of rules are:
 
 Filesystem rules
     For these rules, the object is a file hierarchy,
@@ -44,14 +44,19 @@ Network rules (since ABI v4)
     For these rules, the object is a TCP port,
     and the related actions are defined with `network access rights`.
 
+Socket rules (since ABI v6)
+    For these rules, the object is a pair of an address family and a socket type,
+    and the related actions are defined with `socket access rights`.
+
 Defining and enforcing a security policy
 ----------------------------------------
 
 We first need to define the ruleset that will contain our rules.
 
 For this example, the ruleset will contain rules that only allow filesystem
-read actions and establish a specific TCP connection. Filesystem write
-actions and other TCP actions will be denied.
+read actions, create TCP sockets and establish a specific TCP connection.
+Filesystem write actions, creating non-TCP sockets and other TCP
+actions will be denied.
 
 The ruleset then needs to handle both these kinds of actions.  This is
 required for backward and forward compatibility (i.e. the kernel and user
@@ -81,6 +86,8 @@ to be explicit about the denied-by-default access rights.
         .handled_access_net =
             LANDLOCK_ACCESS_NET_BIND_TCP |
             LANDLOCK_ACCESS_NET_CONNECT_TCP,
+        .handled_access_socket =
+            LANDLOCK_ACCESS_SOCKET_CREATE,
     };
 
 Because we may not know on which kernel version an application will be
@@ -119,6 +126,11 @@ version, and only use the available subset of access rights:
     case 4:
         /* Removes LANDLOCK_ACCESS_FS_IOCTL_DEV for ABI < 5 */
         ruleset_attr.handled_access_fs &= ~LANDLOCK_ACCESS_FS_IOCTL_DEV;
+        __attribute__((fallthrough));
+	case 5:
+		/* Removes socket support for ABI < 6 */
+		ruleset_attr.handled_access_socket &=
+			~LANDLOCK_ACCESS_SOCKET_CREATE;
     }
 
 This enables to create an inclusive ruleset that will contain our rules.
@@ -170,6 +182,20 @@ for the ruleset creation, by filtering access rights according to the Landlock
 ABI version.  In this example, this is not required because all of the requested
 ``allowed_access`` rights are already available in ABI 1.
 
+For socket access-control, we can add a rule to allow TCP sockets creation. UNIX,
+UDP IP and other protocols will be denied by the ruleset.
+
+.. code-block:: c
+
+    struct landlock_net_port_attr tcp_socket = {
+        .allowed_access = LANDLOCK_ACCESS_SOCKET_CREATE,
+        .family = AF_INET,
+        .type = SOCK_STREAM,
+    };
+
+    err = landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
+                            &tcp_socket, 0);
+
 For network access-control, we can add a set of rules that allow to use a port
 number for a specific action: HTTPS connections.
 
@@ -186,7 +212,8 @@ number for a specific action: HTTPS connections.
 The next step is to restrict the current thread from gaining more privileges
 (e.g. through a SUID binary).  We now have a ruleset with the first rule
 allowing read access to ``/usr`` while denying all other handled accesses for
-the filesystem, and a second rule allowing HTTPS connections.
+the filesystem, a second rule allowing TCP sockets and a third rule allowing
+HTTPS connections.
 
 .. code-block:: c
 
@@ -404,7 +431,7 @@ Access rights
 -------------
 
 .. kernel-doc:: include/uapi/linux/landlock.h
-    :identifiers: fs_access net_access
+    :identifiers: fs_access net_access socket_access
 
 Creating a new ruleset
 ----------------------
@@ -423,7 +450,7 @@ Extending a ruleset
 
 .. kernel-doc:: include/uapi/linux/landlock.h
     :identifiers: landlock_rule_type landlock_path_beneath_attr
-                  landlock_net_port_attr
+                  landlock_net_port_attr landlock_socket_attr
 
 Enforcing a ruleset
 -------------------
@@ -540,6 +567,13 @@ earlier ABI.
 
 Starting with the Landlock ABI version 5, it is possible to restrict the use of
 :manpage:`ioctl(2)` using the new ``LANDLOCK_ACCESS_FS_IOCTL_DEV`` right.
+
+Socket support (ABI < 6)
+-------------------------
+
+Starting with the Landlock ABI version 6, it is now possible to restrict
+creation of user space sockets to only a set of allowed protocols thanks
+to the new ``LANDLOCK_ACCESS_SOCKET_CREATE`` access right.
 
 .. _kernel_support:
 
