@@ -290,6 +290,9 @@ with the following files:
 	than 'num_mbm_cntrs' to be created. Reading the mbm files may report 'Unavailable'
 	if there is no hardware resource assigned.
 
+"num_mbm_cntrs":
+	The number of monitoring counters available for assignment.
+
 "max_threshold_occupancy":
 		Read/write file provides the largest value (in
 		bytes) at which a previously used LLC_occupancy
