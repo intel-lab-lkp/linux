@@ -3262,6 +3262,9 @@ EXPORT_SYMBOL_GPL(iommu_device_claim_dma_owner);
 
 static void __iommu_release_dma_ownership(struct iommu_group *group)
 {
+	if (!xa_empty(&group->pasid_array))
+		xa_erase(&group->pasid_array, IOMMU_NO_PASID);
+
 	if (WARN_ON(!group->owner_cnt || !group->owner ||
 		    !xa_empty(&group->pasid_array)))
 		return;
@@ -3494,6 +3497,33 @@ iommu_attach_handle_get(struct iommu_group *group, ioasid_t pasid, unsigned int 
 	return handle;
 }
 EXPORT_SYMBOL_NS_GPL(iommu_attach_handle_get, IOMMUFD_INTERNAL);
+
+/**
+ * iommu_init_pasid_array - Initialize pasid array in the domain group
+ *
+ * Returns 0 on success. Error code on failure
+ *
+ * An IOMMU_NO_PASID element is *NOT* replaced if there is one already there.
+ */
+int iommu_init_pasid_array(struct iommu_domain *domain,
+			   struct iommu_group *group,
+			   struct iommu_attach_handle *handle)
+{
+	int ret;
+
+	if (handle)
+		handle->domain = domain;
+
+	mutex_lock(&group->mutex);
+	ret = xa_insert(&group->pasid_array, IOMMU_NO_PASID, handle, GFP_KERNEL);
+	mutex_unlock(&group->mutex);
+
+	if (ret == -EBUSY)
+		ret = 0;
+
+	return ret;
+}
+EXPORT_SYMBOL_NS_GPL(iommu_init_pasid_array, IOMMUFD_INTERNAL);
 
 /**
  * iommu_attach_group_handle - Attach an IOMMU domain to an IOMMU group
