@@ -143,6 +143,7 @@ static int move_ptes(struct vm_area_struct *vma, pmd_t *old_pmd,
 	spinlock_t *old_ptl, *new_ptl;
 	bool force_flush = false;
 	unsigned long len = old_end - old_addr;
+	pmd_t pmdval;
 	int err = 0;
 
 	/*
@@ -175,14 +176,29 @@ static int move_ptes(struct vm_area_struct *vma, pmd_t *old_pmd,
 		err = -EAGAIN;
 		goto out;
 	}
-	new_pte = pte_offset_map_nolock(mm, new_pmd, new_addr, &new_ptl);
+	/*
+	 * Since we may free the PTE page in retract_page_tables() without
+	 * holding the read lock of mmap_lock, so we still need to do a
+	 * pmd_same() check after holding the PTL.
+	 */
+	new_pte = pte_offset_map_rw_nolock(mm, new_pmd, new_addr, &pmdval,
+					   &new_ptl);
 	if (!new_pte) {
 		pte_unmap_unlock(old_pte, old_ptl);
 		err = -EAGAIN;
 		goto out;
 	}
-	if (new_ptl != old_ptl)
+	if (new_ptl != old_ptl) {
 		spin_lock_nested(new_ptl, SINGLE_DEPTH_NESTING);
+
+		if (unlikely(!pmd_same(pmdval, pmdp_get_lockless(new_pmd)))) {
+			pte_unmap_unlock(new_pte, new_ptl);
+			pte_unmap_unlock(old_pte, old_ptl);
+			err = -EAGAIN;
+			goto out;
+		}
+	}
+
 	flush_tlb_batched_pending(vma->vm_mm);
 	arch_enter_lazy_mmu_mode();
 
