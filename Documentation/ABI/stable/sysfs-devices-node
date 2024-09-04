@@ -221,3 +221,14 @@ Contact:	Jiaqi Yan <jiaqiyan@google.com>
 Description:
 		Of the raw poisoned pages on a NUMA node, how many pages are
 		recovered by memory error recovery attempt.
+
+What:		/sys/devices/system/node/nodeX/reclaim
+Date:		September 2024
+Contact:	Linux Memory Management list <linux-mm@kvack.org>
+Description:
+		This is write-only nested-keyed file which accepts the number of
+		bytes to reclaim as well as the swappiness for this particular
+		operation. Write the amount of bytes to induce memory reclaim in
+		this node. When it completes successfully, the specified amount
+		or more memory will have been reclaimed, and -EAGAIN if less
+		bytes are reclaimed than the specified amount.
