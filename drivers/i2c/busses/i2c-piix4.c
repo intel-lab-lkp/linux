@@ -50,6 +50,22 @@
 #define SMBSLVEVT	(0xA + piix4_smba)
 #define SMBSLVDAT	(0xC + piix4_smba)
 
+/* SB800 ASF register bits */
+#define SB800_ASF_SLV_LISTN	0
+#define SB800_ASF_SLV_INTR	1
+#define SB800_ASF_SLV_RST	4
+#define SB800_ASF_PEC_SP	5
+#define SB800_ASF_DATA_EN	7
+#define SB800_ASF_MSTR_EN	16
+#define SB800_ASF_CLK_EN	17
+
+/* SB800 ASF address offsets */
+#define ASFLISADDR		(9 + piix4_smba)
+#define ASFSTA			(0xA + piix4_smba)
+#define ASFSLVSTA		(0xD + piix4_smba)
+#define ASFDATABNKSEL		(0x13 + piix4_smba)
+#define ASFSLVEN		(0x15 + piix4_smba)
+
 /* count for request_region */
 #define SMBIOSIZE	9
 
@@ -101,6 +117,7 @@
 
 #define SB800_PIIX4_FCH_PM_ADDR			0xFED80300
 #define SB800_PIIX4_FCH_PM_SIZE			8
+#define SB800_ASF_BLOCK_MAX_BYTES		72
 
 /* insmod parameters */
 
@@ -168,6 +185,7 @@ struct sb800_mmio_cfg {
 enum piix4_algo {
 	PIIX4_SB800,
 	PIIX4_SMBUS,
+	SMBUS_ASF,
 };
 
 struct i2c_piix4_adapdata {
@@ -179,6 +197,7 @@ struct i2c_piix4_adapdata {
 	u8 port;		/* Port number, shifted */
 	struct sb800_mmio_cfg mmio_cfg;
 	u8 algo_select;
+	struct i2c_client *slave;
 };
 
 static int piix4_sb800_region_request(struct device *dev,
@@ -887,6 +906,168 @@ release:
 	return retval;
 }
 
+static void sb800_asf_update_bits(unsigned short piix4_smba, u8 bit, unsigned long offset, bool set)
+{
+	unsigned long reg;
+
+	reg = inb_p(offset);
+	if (set)
+		set_bit(bit, &reg);
+	else
+		clear_bit(bit, &reg);
+	outb_p(reg, offset);
+}
+
+static void sb800_asf_update_bytes(struct i2c_piix4_adapdata *adap, u8 bit, bool set)
+{
+	unsigned long reg;
+
+	reg = ioread32(adap->mmio_cfg.addr);
+	if (set)
+		set_bit(bit, &reg);
+	else
+		clear_bit(bit, &reg);
+	iowrite32(reg, adap->mmio_cfg.addr);
+}
+
+static void sb800_asf_setup_slave(struct i2c_piix4_adapdata *adap)
+{
+	unsigned short piix4_smba = adap->smba;
+
+	/* Reset both host and slave before setting up */
+	outb_p(0, SMBHSTSTS);
+	outb_p(0, ASFSLVSTA);
+	outb_p(0, ASFSTA);
+
+	/* Update slave address */
+	sb800_asf_update_bits(piix4_smba, SB800_ASF_SLV_LISTN, ASFLISADDR, true);
+	/* Enable slave and set the clock */
+	sb800_asf_update_bytes(adap, SB800_ASF_MSTR_EN, false);
+	sb800_asf_update_bytes(adap, SB800_ASF_CLK_EN, true);
+	/* Enable slave interrupt */
+	sb800_asf_update_bits(piix4_smba, SB800_ASF_SLV_INTR, ASFSLVEN, true);
+	sb800_asf_update_bits(piix4_smba, SB800_ASF_SLV_RST, ASFSLVEN, false);
+	/* Enable PEC and PEC append */
+	sb800_asf_update_bits(piix4_smba, SB800_ASF_DATA_EN, SMBHSTCNT, true);
+	sb800_asf_update_bits(piix4_smba, SB800_ASF_PEC_SP, SMBHSTCNT, true);
+}
+
+static s32 sb800_asf_access(struct i2c_adapter *adap, u16 addr, u8 command, u8 *data)
+{
+	struct i2c_piix4_adapdata *adapdata = i2c_get_adapdata(adap);
+	unsigned short piix4_smba = adapdata->smba;
+	u8 len;
+	int i;
+
+	outb_p((addr << 1), SMBHSTADD);
+	outb_p(command, SMBHSTCMD);
+	len = data[0];
+	if (len == 0 || len > SB800_ASF_BLOCK_MAX_BYTES)
+		return -EINVAL;
+
+	outb_p(len, SMBHSTDAT0);
+	inb_p(SMBHSTCNT); /* Reset SMBBLKDAT */
+	for (i = 1; i <= len; i++)
+		outb_p(data[i], SMBBLKDAT);
+
+	outb_p(PIIX4_BLOCK_DATA, SMBHSTCNT);
+	/* Enable PEC and PEC append */
+	sb800_asf_update_bits(piix4_smba, SB800_ASF_DATA_EN, SMBHSTCNT, true);
+	sb800_asf_update_bits(piix4_smba, SB800_ASF_PEC_SP, SMBHSTCNT, true);
+
+	return piix4_transaction(adap);
+}
+
+static int sb800_asf_xfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
+{
+	struct i2c_piix4_adapdata *adapdata = i2c_get_adapdata(adap);
+	unsigned short piix4_smba = adapdata->smba;
+	u8 asf_data[SB800_ASF_BLOCK_MAX_BYTES];
+	struct i2c_msg *dev_msgs = msgs;
+	u8 prev_port;
+	int ret;
+
+	if (msgs->flags & I2C_M_RD) {
+		dev_err(&adap->dev, "Read not supported\n");
+		return -EOPNOTSUPP;
+	}
+
+	/* Exclude the receive header and PEC */
+	if (msgs->len > SB800_ASF_BLOCK_MAX_BYTES - 3) {
+		dev_err(&adap->dev, "ASF max message length exceeded\n");
+		return -EOPNOTSUPP;
+	}
+
+	asf_data[0] = dev_msgs->len;
+	memcpy(asf_data + 1, dev_msgs[0].buf, dev_msgs->len);
+
+	ret = piix4_sb800_region_request(&adap->dev, &adapdata->mmio_cfg);
+	if (ret)
+		return ret;
+
+	sb800_asf_update_bits(piix4_smba, SB800_ASF_SLV_RST, ASFSLVEN, true);
+	sb800_asf_update_bits(piix4_smba, SB800_ASF_SLV_LISTN, ASFLISADDR, false);
+	/* Clear ASF slave status */
+	outb_p(0, ASFSLVSTA);
+
+	/* Enable ASF SMBus master function */
+	sb800_asf_update_bytes(adapdata, SB800_ASF_MSTR_EN, true);
+	prev_port = piix4_sb800_port_sel(adapdata->port, &adapdata->mmio_cfg);
+	ret = sb800_asf_access(adap, msgs->addr, msgs[0].buf[0], asf_data);
+	piix4_sb800_port_sel(prev_port, &adapdata->mmio_cfg);
+	sb800_asf_setup_slave(adapdata);
+	piix4_sb800_region_release(&adap->dev, &adapdata->mmio_cfg);
+	return ret;
+}
+
+static int sb800_asf_reg_slave(struct i2c_client *slave)
+{
+	struct i2c_piix4_adapdata *adapdata = i2c_get_adapdata(slave->adapter);
+	unsigned short piix4_smba = adapdata->smba;
+	int ret;
+	u8 reg;
+
+	if (adapdata->slave)
+		return -EBUSY;
+
+	ret = piix4_sb800_region_request(&slave->dev, &adapdata->mmio_cfg);
+	if (ret)
+		return ret;
+
+	reg = (slave->addr << 1) | BIT(0);
+	outb_p(reg, ASFLISADDR);
+
+	sb800_asf_setup_slave(adapdata);
+	adapdata->slave = slave;
+	sb800_asf_update_bits(piix4_smba, SB800_ASF_DATA_EN, ASFDATABNKSEL, false);
+	piix4_sb800_region_release(&slave->dev, &adapdata->mmio_cfg);
+	return 0;
+}
+
+static int sb800_asf_unreg_slave(struct i2c_client *slave)
+{
+	struct i2c_piix4_adapdata *adapdata = i2c_get_adapdata(slave->adapter);
+	unsigned short piix4_smba = adapdata->smba;
+
+	sb800_asf_update_bits(piix4_smba, SB800_ASF_SLV_INTR, ASFSLVEN, false);
+	sb800_asf_update_bits(piix4_smba, SB800_ASF_SLV_RST, ASFSLVEN, true);
+	adapdata->slave = NULL;
+	return 0;
+}
+
+static u32 sb800_asf_func(struct i2c_adapter *adapter)
+{
+	return I2C_FUNC_SMBUS_BLOCK_DATA | I2C_FUNC_SMBUS_BYTE |
+		I2C_FUNC_SLAVE | I2C_FUNC_SMBUS_WRITE_BLOCK_DATA | I2C_FUNC_SMBUS_PEC;
+}
+
+static const struct i2c_algorithm sb800_asf_smbus_algorithm = {
+	.master_xfer = sb800_asf_xfer,
+	.reg_slave = sb800_asf_reg_slave,
+	.unreg_slave = sb800_asf_unreg_slave,
+	.functionality = sb800_asf_func,
+};
+
 static u32 piix4_func(struct i2c_adapter *adapter)
 {
 	return I2C_FUNC_SMBUS_QUICK | I2C_FUNC_SMBUS_BYTE |
@@ -958,6 +1139,9 @@ static int piix4_add_adapter(struct pci_dev *dev, unsigned short smba,
 		break;
 	case PIIX4_SB800:
 		adap->algo = &piix4_smbus_algorithm_sb800;
+		break;
+	case SMBUS_ASF:
+		adap->algo = &sb800_asf_smbus_algorithm;
 		break;
 	default:
 		dev_err(&dev->dev, "Unsupported SMBus algorithm\n");
