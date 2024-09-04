@@ -1230,18 +1230,17 @@ static int ov5645_probe(struct i2c_client *client)
 		goto power_down;
 	}
 
-	pm_runtime_set_active(dev);
-	pm_runtime_get_noresume(dev);
-	pm_runtime_enable(dev);
-
 	ov5645_init_state(&ov5645->sd, NULL);
 
 	ret = v4l2_async_register_subdev(&ov5645->sd);
 	if (ret < 0) {
 		dev_err(dev, "could not register v4l2 device\n");
-		goto err_pm_runtime;
+		goto power_down;
 	}
 
+	pm_runtime_set_active(dev);
+	pm_runtime_get_noresume(dev);
+	pm_runtime_enable(dev);
 	pm_runtime_set_autosuspend_delay(dev, 1000);
 	pm_runtime_use_autosuspend(dev);
 	pm_runtime_mark_last_busy(dev);
@@ -1249,9 +1248,6 @@ static int ov5645_probe(struct i2c_client *client)
 
 	return 0;
 
-err_pm_runtime:
-	pm_runtime_disable(dev);
-	pm_runtime_put_noidle(dev);
 power_down:
 	ov5645_set_power_off(dev);
 free_entity:
