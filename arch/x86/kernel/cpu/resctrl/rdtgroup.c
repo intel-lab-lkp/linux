@@ -871,6 +871,15 @@ static int rdtgroup_rmid_show(struct kernfs_open_file *of,
  */
 #define MBM_EVENT_ARRAY_INDEX(_event) ((_event) - 2)
 
+static bool resctrl_mbm_event_assigned(struct rdtgroup *rdtg,
+				       struct rdt_mon_domain *d, u32 evtid)
+{
+	int index = MBM_EVENT_ARRAY_INDEX(evtid);
+	int cntr_id = rdtg->mon.cntr_id[index];
+
+	return  (cntr_id != MON_CNTR_UNSET && test_bit(cntr_id, d->mbm_cntr_map));
+}
+
 static int rdtgroup_mbm_assign_mode_show(struct kernfs_open_file *of,
 					 struct seq_file *s, void *v)
 {
@@ -1793,12 +1802,48 @@ static int mbm_local_bytes_config_show(struct kernfs_open_file *of,
 	return 0;
 }
 
+static int resctrl_mbm_event_update_assign(struct rdt_resource *r,
+					   struct rdt_mon_domain *d, u32 evtid)
+{
+	struct rdt_mon_domain *dom;
+	struct rdtgroup *rdtg;
+	int ret = 0;
+
+	if (!resctrl_arch_mbm_cntr_assign_enabled(r))
+		return ret;
+
+	list_for_each_entry(rdtg, &rdt_all_groups, rdtgroup_list) {
+		struct rdtgroup *crg;
+
+		list_for_each_entry(dom, &r->mon_domains, hdr.list) {
+			if (d == dom && resctrl_mbm_event_assigned(rdtg, dom, evtid)) {
+				ret = rdtgroup_assign_cntr(r, rdtg, dom, evtid);
+				if (ret)
+					goto out_done;
+			}
+		}
+
+		list_for_each_entry(crg, &rdtg->mon.crdtgrp_list, mon.crdtgrp_list) {
+			list_for_each_entry(dom, &r->mon_domains, hdr.list) {
+				if (d == dom && resctrl_mbm_event_assigned(crg, dom, evtid)) {
+					ret = rdtgroup_assign_cntr(r, crg, dom, evtid);
+					if (ret)
+						goto out_done;
+				}
+			}
+		}
+	}
+
+out_done:
+	return ret;
+}
 
 static void mbm_config_write_domain(struct rdt_resource *r,
 				    struct rdt_mon_domain *d, u32 evtid, u32 val)
 {
 	struct mon_config_info mon_info = {0};
 	u32 config_val;
+	int ret;
 
 	/*
 	 * Check the current config value first. If both are the same then
@@ -1821,6 +1866,14 @@ static void mbm_config_write_domain(struct rdt_resource *r,
 	smp_call_function_any(&d->hdr.cpu_mask,
 			      resctrl_arch_event_config_set,
 			      &mon_info, 1);
+
+	/*
+	 * Counter assignments needs to be updated to match the event
+	 * configuration.
+	 */
+	ret = resctrl_mbm_event_update_assign(r, d, evtid);
+	if (ret)
+		rdt_last_cmd_puts("Assign failed, event will be Unavailable\n");
 
 	/*
 	 * When an Event Configuration is changed, the bandwidth counters
