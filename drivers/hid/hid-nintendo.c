@@ -2673,31 +2673,23 @@ static int nintendo_hid_probe(struct hid_device *hdev,
 	 */
 	hdev->version |= 0x8000;
 
-	ret = hid_hw_start(hdev, HID_CONNECT_HIDRAW);
-	if (ret) {
-		hid_err(hdev, "HW start failed\n");
+	ret = devm_hid_hw_start_and_open(hdev, HID_CONNECT_HIDRAW);
+	if (ret)
 		goto err_wq;
-	}
-
-	ret = hid_hw_open(hdev);
-	if (ret) {
-		hid_err(hdev, "cannot start hardware I/O\n");
-		goto err_stop;
-	}
 
 	hid_device_io_start(hdev);
 
 	ret = joycon_init(hdev);
 	if (ret) {
 		hid_err(hdev, "Failed to initialize controller; ret=%d\n", ret);
-		goto err_close;
+		goto err_wq;
 	}
 
 	/* Initialize the leds */
 	ret = joycon_leds_create(ctlr);
 	if (ret) {
 		hid_err(hdev, "Failed to create leds; ret=%d\n", ret);
-		goto err_close;
+		goto err_wq;
 	}
 
 	/* Initialize the battery power supply */
@@ -2720,10 +2712,6 @@ static int nintendo_hid_probe(struct hid_device *hdev,
 
 err_ida:
 	ida_free(&nintendo_player_id_allocator, ctlr->player_id);
-err_close:
-	hid_hw_close(hdev);
-err_stop:
-	hid_hw_stop(hdev);
 err_wq:
 	destroy_workqueue(ctlr->rumble_queue);
 err:
@@ -2745,9 +2733,6 @@ static void nintendo_hid_remove(struct hid_device *hdev)
 
 	destroy_workqueue(ctlr->rumble_queue);
 	ida_free(&nintendo_player_id_allocator, ctlr->player_id);
-
-	hid_hw_close(hdev);
-	hid_hw_stop(hdev);
 }
 
 #ifdef CONFIG_PM
