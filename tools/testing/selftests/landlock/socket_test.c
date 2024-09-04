@@ -738,4 +738,105 @@ TEST_F(packet_protocol, alias_restriction)
 	EXPECT_EQ(0, test_socket_variant(&self->prot_tested));
 }
 
+static int test_socketpair(int family, int type, int protocol)
+{
+	int fds[2];
+	int err;
+
+	err = socketpair(family, type | SOCK_CLOEXEC, protocol, fds);
+	if (err)
+		return errno;
+	/*
+	 * Mixing error codes from close(2) and socketpair(2) should not lead to
+	 * any (access type) confusion for this test.
+	 */
+	if (close(fds[0]) != 0)
+		return errno;
+	if (close(fds[1]) != 0)
+		return errno;
+	return 0;
+}
+
+FIXTURE(socket_creation)
+{
+	bool sandboxed;
+	bool allowed;
+};
+
+FIXTURE_VARIANT(socket_creation)
+{
+	bool sandboxed;
+	bool allowed;
+};
+
+FIXTURE_SETUP(socket_creation)
+{
+	self->sandboxed = variant->sandboxed;
+	self->allowed = variant->allowed;
+
+	setup_loopback(_metadata);
+};
+
+FIXTURE_TEARDOWN(socket_creation)
+{
+}
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(socket_creation, no_sandbox) {
+	/* clang-format on */
+	.sandboxed = false,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(socket_creation, sandbox_allow) {
+	/* clang-format on */
+	.sandboxed = true,
+	.allowed = true,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(socket_creation, sandbox_deny) {
+	/* clang-format on */
+	.sandboxed = true,
+	.allowed = false,
+};
+
+TEST_F(socket_creation, socketpair)
+{
+	const struct landlock_ruleset_attr ruleset_attr = {
+		.handled_access_socket = LANDLOCK_ACCESS_SOCKET_CREATE,
+	};
+	struct landlock_socket_attr unix_socket_create = {
+		.allowed_access = LANDLOCK_ACCESS_SOCKET_CREATE,
+		.family = AF_UNIX,
+		.type = SOCK_STREAM,
+	};
+	int ruleset_fd;
+
+	if (self->sandboxed) {
+		ruleset_fd = landlock_create_ruleset(&ruleset_attr,
+						     sizeof(ruleset_attr), 0);
+		ASSERT_LE(0, ruleset_fd);
+
+		if (self->allowed) {
+			ASSERT_EQ(0, landlock_add_rule(ruleset_fd,
+						       LANDLOCK_RULE_SOCKET,
+						       &unix_socket_create, 0));
+		}
+		enforce_ruleset(_metadata, ruleset_fd);
+		ASSERT_EQ(0, close(ruleset_fd));
+	}
+
+	if (!self->sandboxed || self->allowed) {
+		/*
+		 * Tries to create sockets when ruleset is not established
+		 * or protocol is allowed.
+		 */
+		EXPECT_EQ(0, test_socketpair(AF_UNIX, SOCK_STREAM, 0));
+	} else {
+		/* Tries to create sockets when protocol is restricted. */
+		EXPECT_EQ(EACCES, test_socketpair(AF_UNIX, SOCK_STREAM, 0));
+	}
+}
+
 TEST_HARNESS_MAIN
