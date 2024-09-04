@@ -103,17 +103,6 @@ static int set_service(struct service_fixture *const srv,
 	return 1;
 }
 
-static void setup_loopback(struct __test_metadata *const _metadata)
-{
-	set_cap(_metadata, CAP_SYS_ADMIN);
-	ASSERT_EQ(0, unshare(CLONE_NEWNET));
-	clear_cap(_metadata, CAP_SYS_ADMIN);
-
-	set_ambient_cap(_metadata, CAP_NET_ADMIN);
-	ASSERT_EQ(0, system("ip link set dev lo up"));
-	clear_ambient_cap(_metadata, CAP_NET_ADMIN);
-}
-
 static bool is_restricted(const struct protocol_variant *const prot,
 			  const enum sandbox_type sandbox)
 {

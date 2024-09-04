@@ -16,6 +16,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <sched.h>
 
 #include "../kselftest_harness.h"
 
@@ -226,4 +227,15 @@ enforce_ruleset(struct __test_metadata *const _metadata, const int ruleset_fd)
 	{
 		TH_LOG("Failed to enforce ruleset: %s", strerror(errno));
 	}
+}
+
+static void setup_loopback(struct __test_metadata *const _metadata)
+{
+	set_cap(_metadata, CAP_SYS_ADMIN);
+	ASSERT_EQ(0, unshare(CLONE_NEWNET));
+	clear_cap(_metadata, CAP_SYS_ADMIN);
+
+	set_ambient_cap(_metadata, CAP_NET_ADMIN);
+	ASSERT_EQ(0, system("ip link set dev lo up"));
+	clear_ambient_cap(_metadata, CAP_NET_ADMIN);
 }
