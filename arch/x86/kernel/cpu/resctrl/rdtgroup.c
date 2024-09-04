@@ -1944,6 +1944,55 @@ int rdtgroup_assign_cntr(struct rdt_resource *r, struct rdtgroup *rdtgrp,
 	return 0;
 }
 
+static int rdtgroup_mbm_cntr_is_assigned(struct rdt_resource *r, u32 cntr_id)
+{
+	struct rdt_mon_domain *d;
+
+	list_for_each_entry(d, &r->mon_domains, hdr.list)
+		if (test_bit(cntr_id, d->mbm_cntr_map))
+			return 1;
+
+	return 0;
+}
+
+/*
+ * Unassign a hardware counter from the domain and the group. Global
+ * counter will be freed once it is unassigned from all the domains.
+ */
+int rdtgroup_unassign_cntr(struct rdt_resource *r, struct rdtgroup *rdtgrp,
+			   struct rdt_mon_domain *d,
+			   enum resctrl_event_id evtid)
+{
+	int index = MBM_EVENT_ARRAY_INDEX(evtid);
+	int cntr_id = rdtgrp->mon.cntr_id[index];
+
+	if (cntr_id != MON_CNTR_UNSET) {
+		if (!d) {
+			list_for_each_entry(d, &r->mon_domains, hdr.list) {
+				resctrl_arch_assign_cntr(r, d, evtid,
+							 rdtgrp->mon.rmid,
+							 rdtgrp->closid,
+							 cntr_id, false);
+				clear_bit(cntr_id, d->mbm_cntr_map);
+			}
+		} else {
+			resctrl_arch_assign_cntr(r, d, evtid,
+						 rdtgrp->mon.rmid,
+						 rdtgrp->closid,
+						 cntr_id, false);
+			clear_bit(cntr_id, d->mbm_cntr_map);
+		}
+
+		/* Update the counter bitmap */
+		if (!rdtgroup_mbm_cntr_is_assigned(r, cntr_id)) {
+			mbm_cntr_free(r, cntr_id);
+			rdtgrp->mon.cntr_id[index] = MON_CNTR_UNSET;
+		}
+	}
+
+	return 0;
+}
+
 /* rdtgroup information files for one cache resource. */
 static struct rftype res_common_files[] = {
 	{
