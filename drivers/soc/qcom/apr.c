@@ -88,7 +88,7 @@ void gpr_free_port(gpr_port_t *port)
 EXPORT_SYMBOL_GPL(gpr_free_port);
 
 gpr_port_t *gpr_alloc_port(struct apr_device *gdev, struct device *dev,
-				gpr_port_cb cb,	void *priv)
+			   gpr_port_cb cb, void *priv)
 {
 	struct packet_router *pr = dev_get_drvdata(gdev->dev.parent);
 	gpr_port_t *port;
@@ -159,7 +159,7 @@ static void apr_dev_release(struct device *dev)
 }
 
 static int apr_callback(struct rpmsg_device *rpdev, void *buf,
-				  int len, void *priv, u32 addr)
+			int len, void *priv, u32 addr)
 {
 	struct packet_router *apr = dev_get_drvdata(&rpdev->dev);
 	struct apr_rx_buf *abuf;
@@ -222,9 +222,9 @@ static int apr_do_rx_callback(struct packet_router *apr, struct apr_rx_buf *abuf
 	}
 
 	if (hdr->src_domain >= APR_DOMAIN_MAX ||
-			hdr->dest_domain >= APR_DOMAIN_MAX ||
-			hdr->src_svc >= APR_SVC_MAX ||
-			hdr->dest_svc >= APR_SVC_MAX) {
+	    hdr->dest_domain >= APR_DOMAIN_MAX ||
+	    hdr->src_svc >= APR_SVC_MAX ||
+	    hdr->dest_svc >= APR_SVC_MAX) {
 		dev_err(apr->dev, "APR: Wrong APR header\n");
 		return -EINVAL;
 	}
