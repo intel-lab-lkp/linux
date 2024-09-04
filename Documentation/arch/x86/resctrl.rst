@@ -290,6 +290,21 @@ with the following files:
 	than 'num_mbm_cntrs' to be created. Reading the mbm files may report 'Unavailable'
 	if there is no hardware resource assigned.
 
+	* To enable ABMC feature:
+	  ::
+
+	    # echo  "mbm_cntr_assign" > /sys/fs/resctrl/info/L3_MON/mbm_assign_mode
+
+	* To enable the legacy monitoring feature:
+	  ::
+
+	    # echo  "default" > /sys/fs/resctrl/info/L3_MON/mbm_assign_mode
+
+	The MBM event counters will reset when mbm_assign_mode is changed. Moving to
+	mbm_cntr_assign will require users to assign the counters to the events to
+	read the events. Otherwise, the MBM event counters will return "Unassigned"
+	when read.
+
 "num_mbm_cntrs":
 	The number of monitoring counters available for assignment.
 
