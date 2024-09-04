@@ -7,7 +7,7 @@
 
 #define _GNU_SOURCE
 
-#include "landlock.h"
+#include <linux/landlock.h>
 #include <linux/pfkeyv2.h>
 #include <linux/kcm.h>
 #include <linux/can.h>
@@ -663,6 +663,79 @@ TEST(kernel_socket)
 	 * socket.
 	 */
 	EXPECT_EQ(0, test_socket(AF_SMC, SOCK_STREAM, 0));
+}
+
+FIXTURE(packet_protocol)
+{
+	struct protocol_variant prot_allowed, prot_tested;
+};
+
+FIXTURE_VARIANT(packet_protocol)
+{
+	bool packet;
+};
+
+FIXTURE_SETUP(packet_protocol)
+{
+	self->prot_allowed.type = self->prot_tested.type = SOCK_PACKET;
+
+	self->prot_allowed.family = variant->packet ? AF_PACKET : AF_INET;
+	self->prot_tested.family = variant->packet ? AF_INET : AF_PACKET;
+
+	/* Packet protocol requires NET_RAW to be set (Cf. packet_create). */
+	set_cap(_metadata, CAP_NET_RAW);
+};
+
+FIXTURE_TEARDOWN(packet_protocol)
+{
+	clear_cap(_metadata, CAP_NET_RAW);
+}
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(packet_protocol, packet_allows_inet) {
+	/* clang-format on */
+	.packet = true,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(packet_protocol, inet_allows_packet) {
+	/* clang-format on */
+	.packet = false,
+};
+
+TEST_F(packet_protocol, alias_restriction)
+{
+	const struct landlock_ruleset_attr ruleset_attr = {
+		.handled_access_socket = LANDLOCK_ACCESS_SOCKET_CREATE,
+	};
+	struct landlock_socket_attr packet_socket_create = {
+		.allowed_access = LANDLOCK_ACCESS_SOCKET_CREATE,
+		.family = self->prot_allowed.family,
+		.type = self->prot_allowed.type,
+	};
+	int ruleset_fd;
+
+	/*
+	 * Checks that packet socket is created sucessfuly without
+	 * landlock restrictions.
+	 */
+	ASSERT_EQ(0, test_socket_variant(&self->prot_tested));
+
+	ruleset_fd =
+		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
+	ASSERT_LE(0, ruleset_fd);
+
+	ASSERT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_SOCKET,
+				       &packet_socket_create, 0));
+	enforce_ruleset(_metadata, ruleset_fd);
+	ASSERT_EQ(0, close(ruleset_fd));
+
+	/*
+	 * (AF_INET, SOCK_PACKET) is an alias for the (AF_PACKET, SOCK_PACKET)
+	 * (Cf. __sock_create). Checks that Landlock does not restrict one pair
+	 * if the other was allowed.
+	 */
+	EXPECT_EQ(0, test_socket_variant(&self->prot_tested));
 }
 
 TEST_HARNESS_MAIN
