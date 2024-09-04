@@ -1010,6 +1010,7 @@ static inline void ftrace_init(void) { }
  * to remove extra padding at the end.
  */
 struct ftrace_graph_ent {
+	struct ftrace_regs regs;
 	unsigned long func; /* Current function */
 	int depth;
 } __packed;

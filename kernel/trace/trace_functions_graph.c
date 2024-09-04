@@ -12,6 +12,8 @@
 #include <linux/interrupt.h>
 #include <linux/slab.h>
 #include <linux/fs.h>
+#include <linux/btf.h>
+#include <linux/bpf.h>
 
 #include "trace.h"
 #include "trace_output.h"
@@ -63,6 +65,9 @@ static struct tracer_opt trace_opts[] = {
 	{ TRACER_OPT(funcgraph-retval, TRACE_GRAPH_PRINT_RETVAL) },
 	/* Display function return value in hexadecimal format ? */
 	{ TRACER_OPT(funcgraph-retval-hex, TRACE_GRAPH_PRINT_RETVAL_HEX) },
+#endif
+#ifdef CONFIG_FUNCTION_TRACE_ARGS
+	{ TRACER_OPT(funcgraph-args, TRACE_GRAPH_ARGS) },
 #endif
 	/* Include sleep time (scheduled out) between entry and return */
 	{ TRACER_OPT(sleep-time, TRACE_GRAPH_SLEEP_TIME) },
@@ -653,7 +658,7 @@ print_graph_duration(struct trace_array *tr, unsigned long long duration,
 #define __TRACE_GRAPH_PRINT_RETVAL TRACE_GRAPH_PRINT_RETVAL
 
 static void print_graph_retval(struct trace_seq *s, unsigned long retval,
-				bool leaf, void *func, bool hex_format)
+			       bool hex_format)
 {
 	unsigned long err_code = 0;
 
@@ -673,28 +678,17 @@ static void print_graph_retval(struct trace_seq *s, unsigned long retval,
 		err_code = 0;
 
 done:
-	if (leaf) {
-		if (hex_format || (err_code == 0))
-			trace_seq_printf(s, "%ps(); /* = 0x%lx */\n",
-					func, retval);
-		else
-			trace_seq_printf(s, "%ps(); /* = %ld */\n",
-					func, err_code);
-	} else {
-		if (hex_format || (err_code == 0))
-			trace_seq_printf(s, "} /* %ps = 0x%lx */\n",
-					func, retval);
-		else
-			trace_seq_printf(s, "} /* %ps = %ld */\n",
-					func, err_code);
-	}
+	if (hex_format || (err_code == 0))
+		trace_seq_printf(s, " /* = 0x%lx */", retval);
+	else
+		trace_seq_printf(s, " /* = %ld */", err_code);
 }
 
 #else
 
 #define __TRACE_GRAPH_PRINT_RETVAL 0
 
-#define print_graph_retval(_seq, _retval, _leaf, _func, _format) do {} while (0)
+#define print_graph_retval(_seq, _retval, _format) do {} while (0)
 
 #endif
 
@@ -741,16 +735,20 @@ print_graph_entry_leaf(struct trace_iterator *iter,
 	/* Function */
 	for (i = 0; i < call->depth * TRACE_GRAPH_INDENT; i++)
 		trace_seq_putc(s, ' ');
+	trace_seq_printf(s, "%ps", (void *)graph_ret->func);
+	if (flags & TRACE_GRAPH_ARGS)
+		print_function_args(s, &call->regs, graph_ret->func);
+	else
+		trace_seq_puts(s, "();");
 
 	/*
 	 * Write out the function return value if the option function-retval is
 	 * enabled.
 	 */
 	if (flags & __TRACE_GRAPH_PRINT_RETVAL)
-		print_graph_retval(s, graph_ret->retval, true, (void *)call->func,
-				!!(flags & TRACE_GRAPH_PRINT_RETVAL_HEX));
-	else
-		trace_seq_printf(s, "%ps();\n", (void *)call->func);
+		print_graph_retval(s, graph_ret->retval,
+				   !!(flags & TRACE_GRAPH_PRINT_RETVAL_HEX));
+	trace_seq_printf(s, "\n");
 
 	print_graph_irq(iter, graph_ret->func, TRACE_GRAPH_RET,
 			cpu, iter->ent->pid, flags);
@@ -788,7 +786,12 @@ print_graph_entry_nested(struct trace_iterator *iter,
 	for (i = 0; i < call->depth * TRACE_GRAPH_INDENT; i++)
 		trace_seq_putc(s, ' ');
 
-	trace_seq_printf(s, "%ps() {\n", (void *)call->func);
+	trace_seq_printf(s, "%ps", (void *)call->func);
+	if (flags & TRACE_GRAPH_ARGS)
+		print_function_args(s, &call->regs, call->func);
+	else
+		trace_seq_puts(s, "()");
+	trace_seq_printf(s, " {\n");
 
 	if (trace_seq_has_overflowed(s))
 		return TRACE_TYPE_PARTIAL_LINE;
@@ -1029,26 +1032,25 @@ print_graph_return(struct ftrace_graph_ret *trace, struct trace_seq *s,
 		trace_seq_putc(s, ' ');
 
 	/*
+	 * If the return function does not have a matching entry,
+	 * then the entry was lost. Instead of just printing
+	 * the '}' and letting the user guess what function this
+	 * belongs to, write out the function name. Always do
+	 * that if the funcgraph-tail option is enabled.
+	 */
+	if (func_match && !(flags & TRACE_GRAPH_PRINT_TAIL))
+		trace_seq_puts(s, "}");
+	else
+		trace_seq_printf(s, "} /* %ps */", (void *)trace->func);
+	/*
 	 * Always write out the function name and its return value if the
 	 * function-retval option is enabled.
 	 */
 	if (flags & __TRACE_GRAPH_PRINT_RETVAL) {
-		print_graph_retval(s, trace->retval, false, (void *)trace->func,
+		print_graph_retval(s, trace->retval,
 			!!(flags & TRACE_GRAPH_PRINT_RETVAL_HEX));
-	} else {
-		/*
-		 * If the return function does not have a matching entry,
-		 * then the entry was lost. Instead of just printing
-		 * the '}' and letting the user guess what function this
-		 * belongs to, write out the function name. Always do
-		 * that if the funcgraph-tail option is enabled.
-		 */
-		if (func_match && !(flags & TRACE_GRAPH_PRINT_TAIL))
-			trace_seq_puts(s, "}\n");
-		else
-			trace_seq_printf(s, "} /* %ps */\n", (void *)trace->func);
 	}
-
+	trace_seq_printf(s, "\n");
 	/* Overrun */
 	if (flags & TRACE_GRAPH_PRINT_OVERRUN)
 		trace_seq_printf(s, " (Overruns: %u)\n",

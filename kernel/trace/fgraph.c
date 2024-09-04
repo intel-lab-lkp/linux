@@ -614,7 +614,7 @@ ftrace_push_return_trace(unsigned long ret, unsigned long func,
 /* If the caller does not use ftrace, call this function. */
 int function_graph_enter(unsigned long ret, unsigned long func,
 			 unsigned long frame_pointer, unsigned long *retp,
-			struct ftrace_regs *fregs)
+			 struct ftrace_regs *fregs)
 {
 	struct ftrace_graph_ent trace;
 	unsigned long bitmap = 0;
@@ -623,6 +623,10 @@ int function_graph_enter(unsigned long ret, unsigned long func,
 
 	trace.func = func;
 	trace.depth = ++current->curr_ret_depth;
+	if (IS_ENABLED(CONFIG_FUNCTION_TRACE_ARGS) && fregs)
+		trace.regs = *fregs;
+	else
+		memset(&trace.regs, 0, sizeof(struct ftrace_regs));
 
 	offset = ftrace_push_return_trace(ret, func, frame_pointer, retp, 0);
 	if (offset < 0)
