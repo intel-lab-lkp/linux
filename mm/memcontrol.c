@@ -575,7 +575,7 @@ static void do_flush_stats(struct mem_cgroup *memcg)
 	if (mem_cgroup_is_root(memcg))
 		WRITE_ONCE(flush_last_time, jiffies_64);
 
-	cgroup_rstat_flush(memcg->css.cgroup);
+	cgroup_rstat_flush_relaxed(memcg->css.cgroup);
 }
 
 /*

@@ -690,6 +690,7 @@ void cgroup_rstat_updated(struct cgroup *cgrp, int cpu);
 void cgroup_rstat_flush(struct cgroup *cgrp);
 void cgroup_rstat_flush_hold(struct cgroup *cgrp);
 void cgroup_rstat_flush_release(struct cgroup *cgrp);
+void cgroup_rstat_flush_relaxed(struct cgroup *cgrp);
 
 /*
  * Basic resource stats.

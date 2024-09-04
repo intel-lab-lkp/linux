@@ -11,6 +11,8 @@
 
 static DEFINE_SPINLOCK(cgroup_rstat_lock);
 static DEFINE_PER_CPU(raw_spinlock_t, cgroup_rstat_cpu_lock);
+static struct cgroup *cgrp_rstat_ongoing_flusher = NULL;
+static struct task_struct *cgrp_rstat_ongoing_flusher_ID = NULL;
 
 static void cgroup_base_stat_flush(struct cgroup *cgrp, int cpu);
 
@@ -299,6 +301,67 @@ static inline void __cgroup_rstat_unlock(struct cgroup *cgrp, int cpu_in_loop)
 	spin_unlock_irq(&cgroup_rstat_lock);
 }
 
+static inline bool cgroup_is_root(struct cgroup *cgrp)
+{
+	return cgroup_parent(cgrp) == NULL;
+}
+
+/**
+ * cgroup_rstat_trylock_flusher - Trylock that checks for on ongoing flusher
+ * @cgrp: target cgroup
+ *
+ * Function return value follow trylock semantics. Returning true when lock is
+ * obtained. Returning false when not locked and it detected flushing can be
+ * skipped as another ongoing flusher is taking care of the flush.
+ *
+ * For callers that depend on flush completing before returning a strict option
+ * is provided.
+ */
+static bool cgroup_rstat_trylock_flusher(struct cgroup *cgrp, bool strict)
+{
+	struct cgroup *ongoing;
+
+	if (strict)
+		goto lock;
+
+	/*
+	 * Check if ongoing flusher is already taking care of this.  Descendant
+	 * check is necessary due to cgroup v1 supporting multiple root's.
+	 */
+	ongoing = READ_ONCE(cgrp_rstat_ongoing_flusher);
+	if (ongoing && cgroup_is_descendant(cgrp, ongoing))
+		return false;
+
+	/* Grab right to be ongoing flusher */
+	if (!ongoing && cgroup_is_root(cgrp)) {
+		struct cgroup *old;
+
+		old = cmpxchg(&cgrp_rstat_ongoing_flusher, NULL, cgrp);
+		if (old) {
+			/* Lost race for being ongoing flusher */
+			if (cgroup_is_descendant(cgrp, old))
+				return false;
+		}
+		/* Due to lock yield combined with strict mode record ID */
+		WRITE_ONCE(cgrp_rstat_ongoing_flusher_ID, current);
+	}
+lock:
+	__cgroup_rstat_lock(cgrp, -1);
+
+	return true;
+}
+
+static void cgroup_rstat_unlock_flusher(struct cgroup *cgrp)
+{
+	if (cgrp == READ_ONCE(cgrp_rstat_ongoing_flusher) &&
+	    READ_ONCE(cgrp_rstat_ongoing_flusher_ID) == current) {
+		WRITE_ONCE(cgrp_rstat_ongoing_flusher_ID, NULL);
+		WRITE_ONCE(cgrp_rstat_ongoing_flusher, NULL);
+	}
+
+	__cgroup_rstat_unlock(cgrp, -1);
+}
+
 /* see cgroup_rstat_flush() */
 static void cgroup_rstat_flush_locked(struct cgroup *cgrp)
 	__releases(&cgroup_rstat_lock) __acquires(&cgroup_rstat_lock)
@@ -333,6 +396,17 @@ static void cgroup_rstat_flush_locked(struct cgroup *cgrp)
 	}
 }
 
+static void __cgroup_rstat_flush(struct cgroup *cgrp, bool strict)
+{
+	might_sleep();
+
+	if (!cgroup_rstat_trylock_flusher(cgrp, strict))
+		return;
+
+	cgroup_rstat_flush_locked(cgrp);
+	cgroup_rstat_unlock_flusher(cgrp);
+}
+
 /**
  * cgroup_rstat_flush - flush stats in @cgrp's subtree
  * @cgrp: target cgroup
@@ -348,11 +422,12 @@ static void cgroup_rstat_flush_locked(struct cgroup *cgrp)
  */
 __bpf_kfunc void cgroup_rstat_flush(struct cgroup *cgrp)
 {
-	might_sleep();
+	__cgroup_rstat_flush(cgrp, true);
+}
 
-	__cgroup_rstat_lock(cgrp, -1);
-	cgroup_rstat_flush_locked(cgrp);
-	__cgroup_rstat_unlock(cgrp, -1);
+void cgroup_rstat_flush_relaxed(struct cgroup *cgrp)
+{
+	__cgroup_rstat_flush(cgrp, false);
 }
 
 /**
@@ -368,8 +443,11 @@ void cgroup_rstat_flush_hold(struct cgroup *cgrp)
 	__acquires(&cgroup_rstat_lock)
 {
 	might_sleep();
-	__cgroup_rstat_lock(cgrp, -1);
-	cgroup_rstat_flush_locked(cgrp);
+
+	if (cgroup_rstat_trylock_flusher(cgrp, false))
+		cgroup_rstat_flush_locked(cgrp);
+	else
+		__cgroup_rstat_lock(cgrp, -1);
 }
 
 /**
@@ -379,7 +457,7 @@ void cgroup_rstat_flush_hold(struct cgroup *cgrp)
 void cgroup_rstat_flush_release(struct cgroup *cgrp)
 	__releases(&cgroup_rstat_lock)
 {
-	__cgroup_rstat_unlock(cgrp, -1);
+	cgroup_rstat_unlock_flusher(cgrp);
 }
 
 int cgroup_rstat_init(struct cgroup *cgrp)
