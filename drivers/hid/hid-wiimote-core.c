@@ -1780,8 +1780,6 @@ static void wiimote_destroy(struct wiimote_data *wdata)
 	wiimote_ext_unload(wdata);
 	wiimote_modules_unload(wdata);
 	cancel_work_sync(&wdata->queue.worker);
-	hid_hw_close(wdata->hdev);
-	hid_hw_stop(wdata->hdev);
 
 	kfree(wdata);
 }
@@ -1806,22 +1804,14 @@ static int wiimote_hid_probe(struct hid_device *hdev,
 		goto err;
 	}
 
-	ret = hid_hw_start(hdev, HID_CONNECT_HIDRAW);
-	if (ret) {
-		hid_err(hdev, "HW start failed\n");
+	ret = devm_hid_hw_start_and_open(hdev, HID_CONNECT_HIDRAW);
+	if (ret)
 		goto err;
-	}
-
-	ret = hid_hw_open(hdev);
-	if (ret) {
-		hid_err(hdev, "cannot start hardware I/O\n");
-		goto err_stop;
-	}
 
 	ret = device_create_file(&hdev->dev, &dev_attr_extension);
 	if (ret) {
 		hid_err(hdev, "cannot create sysfs attribute\n");
-		goto err_close;
+		goto err;
 	}
 
 	ret = device_create_file(&hdev->dev, &dev_attr_devtype);
@@ -1847,10 +1837,6 @@ err_free:
 
 err_ext:
 	device_remove_file(&wdata->hdev->dev, &dev_attr_extension);
-err_close:
-	hid_hw_close(hdev);
-err_stop:
-	hid_hw_stop(hdev);
 err:
 	input_free_device(wdata->ir);
 	input_free_device(wdata->accel);
