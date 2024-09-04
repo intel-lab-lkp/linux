@@ -131,6 +131,16 @@ static void fill_pool(void)
 	struct debug_obj *obj;
 	unsigned long flags;
 
+	/*
+	 * The upper-layer function uses only one node at a time. If there are
+	 * more than two local nodes, it means that even if nesting occurs, it
+	 * doesn't matter. The probability of nesting depth >= 2 is extremely
+	 * low, and the number of global free nodes guarded by
+	 * debug_objects_pool_min_level is adequate.
+	 */
+	if (likely(obj_cache) && this_cpu_read(percpu_obj_pool.obj_free) >= 2)
+		return;
+
 	if (likely(READ_ONCE(obj_pool_free) >= debug_objects_pool_min_level))
 		return;
 
