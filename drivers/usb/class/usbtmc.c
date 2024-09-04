@@ -759,6 +759,7 @@ static struct urb *usbtmc_create_urb(void)
 		usb_free_urb(urb);
 		return NULL;
 	}
+	memset(dmabuf, 0, bufsize);
 
 	urb->transfer_buffer = dmabuf;
 	urb->transfer_buffer_length = bufsize;
