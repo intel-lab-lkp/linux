@@ -1712,7 +1712,8 @@ find_ufence_get(struct xe_sync_entry *syncs, u32 num_syncs)
 
 #define ALL_DRM_XE_VM_CREATE_FLAGS (DRM_XE_VM_CREATE_FLAG_SCRATCH_PAGE | \
 				    DRM_XE_VM_CREATE_FLAG_LR_MODE | \
-				    DRM_XE_VM_CREATE_FLAG_FAULT_MODE)
+				    DRM_XE_VM_CREATE_FLAG_FAULT_MODE | \
+				    DRM_XE_VM_CREATE_FLAG_EXTOBJ_BOOKKEEP)
 
 int xe_vm_create_ioctl(struct drm_device *dev, void *data,
 		       struct drm_file *file)
@@ -1759,6 +1760,8 @@ int xe_vm_create_ioctl(struct drm_device *dev, void *data,
 		flags |= XE_VM_FLAG_LR_MODE;
 	if (args->flags & DRM_XE_VM_CREATE_FLAG_FAULT_MODE)
 		flags |= XE_VM_FLAG_FAULT_MODE;
+	if (args->flags & DRM_XE_VM_CREATE_FLAG_EXTOBJ_BOOKKEEP)
+		flags |= XE_VM_FLAG_EXTOBJ_BOOKKEEP;
 
 	vm = xe_vm_create(xe, flags);
 	if (IS_ERR(vm))

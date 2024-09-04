@@ -302,9 +302,16 @@ retry:
 	 * the job and let the DRM scheduler / backend clean up the job.
 	 */
 	xe_sched_job_arm(job);
-	if (!xe_vm_in_lr_mode(vm))
+	if (!xe_vm_in_lr_mode(vm)) {
+		enum dma_resv_usage extobj_resv_usage = DMA_RESV_USAGE_WRITE;
+
+		/* Override original incorrect behavior */
+		if (vm->flags & XE_VM_FLAG_EXTOBJ_BOOKKEEP)
+			extobj_resv_usage = DMA_RESV_USAGE_BOOKKEEP;
+
 		drm_gpuvm_resv_add_fence(&vm->gpuvm, exec, &job->drm.s_fence->finished,
-					 DMA_RESV_USAGE_BOOKKEEP, DMA_RESV_USAGE_WRITE);
+					 DMA_RESV_USAGE_BOOKKEEP, extobj_resv_usage);
+	}
 
 	for (i = 0; i < num_syncs; i++) {
 		xe_sync_entry_signal(&syncs[i], &job->drm.s_fence->finished);
