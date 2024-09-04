@@ -17,23 +17,19 @@
 static int __link_vmas(struct maple_tree *mt, struct vm_area_struct *vmas,
 			ssize_t nr_vmas)
 {
-	int i, ret = -ENOMEM;
+	int i;
 	MA_STATE(mas, mt, 0, 0);
 
 	if (!nr_vmas)
 		return 0;
 
-	mas_lock(&mas);
 	for (i = 0; i < nr_vmas; i++) {
 		mas_set_range(&mas, vmas[i].vm_start, vmas[i].vm_end - 1);
 		if (mas_store_gfp(&mas, &vmas[i], GFP_KERNEL))
-			goto failed;
+			return -ENOMEM;
 	}
 
-	ret = 0;
-failed:
-	mas_unlock(&mas);
-	return ret;
+	return 0;
 }
 
 /*
