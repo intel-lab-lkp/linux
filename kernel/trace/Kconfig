@@ -242,6 +242,18 @@ config FUNCTION_GRAPH_RETVAL
 	  enable it via the trace option funcgraph-retval.
 	  See Documentation/trace/ftrace.rst
 
+config FUNCTION_TRACE_ARGS
+	bool "Kernel Function Tracer Arguments"
+	depends on HAVE_FUNCTION_ARG_ACCESS_API
+	depends on DEBUG_INFO_BTF && BPF_SYSCALL
+	default n
+	help
+	  Support recording and printing of function arguments when using
+	  the function tracer or function graph tracer. This feature is off
+	  by default, and can be enabled via the trace option func-args (for
+	  the function tracer) and funcgraph-args (for the function graph
+	  tracer).
+
 config DYNAMIC_FTRACE
 	bool "enable/disable function tracing dynamically"
 	depends on FUNCTION_TRACER
