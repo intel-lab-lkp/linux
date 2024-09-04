@@ -185,6 +185,25 @@ bool closid_allocated(unsigned int closid)
 	return !test_bit(closid, &closid_free_map);
 }
 
+int mbm_cntr_alloc(struct rdt_resource *r)
+{
+	int cntr_id;
+
+	cntr_id = find_first_bit(r->mon.mbm_cntr_free_map,
+				 r->mon.num_mbm_cntrs);
+	if (cntr_id >= r->mon.num_mbm_cntrs)
+		return -ENOSPC;
+
+	__clear_bit(cntr_id, r->mon.mbm_cntr_free_map);
+
+	return cntr_id;
+}
+
+void mbm_cntr_free(struct rdt_resource *r, u32 cntr_id)
+{
+	__set_bit(cntr_id, r->mon.mbm_cntr_free_map);
+}
+
 /**
  * rdtgroup_mode_by_closid - Return mode of resource group with closid
  * @closid: closid if the resource group

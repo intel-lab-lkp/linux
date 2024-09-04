@@ -1175,6 +1175,30 @@ static __init int snc_get_config(void)
 	return ret;
 }
 
+/*
+ * Counter bitmap for tracking the available counters.
+ * 'mbm_cntr_assign' mode provides set of hardware counters for assigning
+ * RMID, event pair. Each RMID and event pair takes one hardware counter.
+ * Kernel needs to keep track of the number of available counters.
+ */
+static int mbm_cntrs_init(struct rdt_resource *r)
+{
+	if (r->mon.mbm_cntr_assignable) {
+		r->mon.mbm_cntr_free_map = bitmap_zalloc(r->mon.num_mbm_cntrs,
+							 GFP_KERNEL);
+		if (!r->mon.mbm_cntr_free_map)
+			return -ENOMEM;
+		bitmap_fill(r->mon.mbm_cntr_free_map, r->mon.num_mbm_cntrs);
+	}
+	return 0;
+}
+
+static void __exit mbm_cntrs_exit(struct rdt_resource *r)
+{
+	if (r->mon.mbm_cntr_assignable)
+		bitmap_free(r->mon.mbm_cntr_free_map);
+}
+
 int __init rdt_get_mon_l3_config(struct rdt_resource *r)
 {
 	unsigned int mbm_offset = boot_cpu_data.x86_cache_mbm_width_offset;
@@ -1240,6 +1264,10 @@ int __init rdt_get_mon_l3_config(struct rdt_resource *r)
 		}
 	}
 
+	ret = mbm_cntrs_init(r);
+	if (ret)
+		return ret;
+
 	l3_mon_evt_init(r);
 
 	r->mon_capable = true;
@@ -1247,9 +1275,10 @@ int __init rdt_get_mon_l3_config(struct rdt_resource *r)
 	return 0;
 }
 
-void __exit rdt_put_mon_l3_config(void)
+void __exit rdt_put_mon_l3_config(struct rdt_resource *r)
 {
 	dom_data_exit();
+	mbm_cntrs_exit(r);
 }
 
 void __init intel_rdt_mbm_apply_quirk(void)
