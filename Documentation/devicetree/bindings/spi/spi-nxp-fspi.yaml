@@ -20,6 +20,7 @@ properties:
           - nxp,imx8dxl-fspi
           - nxp,imx8mm-fspi
           - nxp,imx8qxp-fspi
+          - nxp,imx8ulp-fspi
           - nxp,lx2160a-fspi
       - items:
           - enum:
