@@ -60,6 +60,10 @@
 #define OV5645_SDE_SAT_U		0x5583
 #define OV5645_SDE_SAT_V		0x5584
 
+#define OV5645_NATIVE_FORMAT	MEDIA_BUS_FMT_UYVY8_1X16
+#define OV5645_NATIVE_WIDTH	2592
+#define OV5645_NATIVE_HEIGHT	1944
+
 /* regulator supplies */
 static const char * const ov5645_supply_name[] = {
 	"vdddo", /* Digital I/O (1.8V) supply */
@@ -68,6 +72,12 @@ static const char * const ov5645_supply_name[] = {
 };
 
 #define OV5645_NUM_SUPPLIES ARRAY_SIZE(ov5645_supply_name)
+
+enum ov5645_pad_ids {
+	OV5645_PAD_SOURCE,
+	OV5645_PAD_IMAGE,
+	OV5645_NUM_PADS,
+};
 
 struct reg_value {
 	u16 reg;
@@ -87,7 +97,7 @@ struct ov5645 {
 	struct i2c_client *i2c_client;
 	struct device *dev;
 	struct v4l2_subdev sd;
-	struct media_pad pad;
+	struct media_pad pads[OV5645_NUM_PADS];
 	struct v4l2_fwnode_endpoint ep;
 	struct v4l2_rect crop;
 	struct clk *xclk;
@@ -829,13 +839,23 @@ static int ov5645_enum_frame_size(struct v4l2_subdev *subdev,
 	if (fse->code != MEDIA_BUS_FMT_UYVY8_1X16)
 		return -EINVAL;
 
-	if (fse->index >= ARRAY_SIZE(ov5645_mode_info_data))
-		return -EINVAL;
+	if (fse->pad == OV5645_PAD_IMAGE) {
+		if (fse->index > 0)
+			return -EINVAL;
 
-	fse->min_width = ov5645_mode_info_data[fse->index].width;
-	fse->max_width = ov5645_mode_info_data[fse->index].width;
-	fse->min_height = ov5645_mode_info_data[fse->index].height;
-	fse->max_height = ov5645_mode_info_data[fse->index].height;
+		fse->min_width = OV5645_NATIVE_WIDTH;
+		fse->max_width = OV5645_NATIVE_WIDTH;
+		fse->min_height = OV5645_NATIVE_HEIGHT;
+		fse->max_height = OV5645_NATIVE_HEIGHT;
+	} else {
+		if (fse->index >= ARRAY_SIZE(ov5645_mode_info_data))
+			return -EINVAL;
+
+		fse->min_width = ov5645_mode_info_data[fse->index].width;
+		fse->max_width = ov5645_mode_info_data[fse->index].width;
+		fse->min_height = ov5645_mode_info_data[fse->index].height;
+		fse->max_height = ov5645_mode_info_data[fse->index].height;
+	}
 
 	return 0;
 }
@@ -846,18 +866,55 @@ static int ov5645_set_format(struct v4l2_subdev *sd,
 {
 	struct ov5645 *ov5645 = to_ov5645(sd);
 	struct v4l2_mbus_framefmt *__format;
+	struct v4l2_rect *compose;
 	struct v4l2_rect *__crop;
 	const struct ov5645_mode_info *new_mode;
 	int ret;
 
-	__crop = v4l2_subdev_state_get_crop(sd_state, 0);
+	if (format->pad != OV5645_PAD_SOURCE)
+		return v4l2_subdev_get_fmt(sd, sd_state, format);
+
 	new_mode = v4l2_find_nearest_size(ov5645_mode_info_data,
 					  ARRAY_SIZE(ov5645_mode_info_data),
 					  width, height, format->format.width,
 					  format->format.height);
+	format->format.code = MEDIA_BUS_FMT_UYVY8_1X16;
+	format->format.width = new_mode->width;
+	format->format.height = new_mode->height;
+	format->format.field = V4L2_FIELD_NONE;
+	format->format.colorspace = V4L2_COLORSPACE_SRGB;
+	format->format.ycbcr_enc = V4L2_YCBCR_ENC_DEFAULT;
+	format->format.quantization = V4L2_QUANTIZATION_DEFAULT;
+	format->format.xfer_func = V4L2_XFER_FUNC_DEFAULT;
 
-	__crop->width = new_mode->width;
-	__crop->height = new_mode->height;
+	__format = v4l2_subdev_state_get_format(sd_state, OV5645_PAD_IMAGE);
+	*__format = format->format;
+	__format->code = OV5645_NATIVE_FORMAT;
+	__format->width = OV5645_NATIVE_WIDTH;
+	__format->height = OV5645_NATIVE_HEIGHT;
+
+	__crop = v4l2_subdev_state_get_crop(sd_state, OV5645_PAD_IMAGE);
+	__crop->width = format->format.width;
+	__crop->height = format->format.height;
+
+	/*
+	 * The compose rectangle models binning, its size is the sensor output
+	 * size.
+	 */
+	compose = v4l2_subdev_state_get_compose(sd_state, OV5645_PAD_IMAGE);
+	compose->left = 0;
+	compose->top = 0;
+	compose->width = format->format.width;
+	compose->height = format->format.height;
+
+	__crop = v4l2_subdev_state_get_crop(sd_state, OV5645_PAD_SOURCE);
+	__crop->left = 0;
+	__crop->top = 0;
+	__crop->width = format->format.width;
+	__crop->height = format->format.height;
+
+	__format = v4l2_subdev_state_get_format(sd_state, OV5645_PAD_SOURCE);
+	*__format = format->format;
 
 	if (format->which == V4L2_SUBDEV_FORMAT_ACTIVE) {
 		ret = __v4l2_ctrl_s_ctrl_int64(ov5645->pixel_clock,
@@ -873,14 +930,6 @@ static int ov5645_set_format(struct v4l2_subdev *sd,
 		ov5645->current_mode = new_mode;
 	}
 
-	__format = v4l2_subdev_state_get_format(sd_state, 0);
-	__format->width = __crop->width;
-	__format->height = __crop->height;
-	__format->code = MEDIA_BUS_FMT_UYVY8_1X16;
-	__format->field = V4L2_FIELD_NONE;
-	__format->colorspace = V4L2_COLORSPACE_SRGB;
-
-	format->format = *__format;
 
 	return 0;
 }
@@ -890,9 +939,9 @@ static int ov5645_init_state(struct v4l2_subdev *subdev,
 {
 	struct v4l2_subdev_format fmt = {
 		.which = V4L2_SUBDEV_FORMAT_TRY,
-		.pad = 0,
+		.pad = OV5645_PAD_SOURCE,
 		.format = {
-			.code = MEDIA_BUS_FMT_UYVY8_1X16,
+			.code = OV5645_NATIVE_FORMAT,
 			.width = ov5645_mode_info_data[1].width,
 			.height = ov5645_mode_info_data[1].height,
 		},
@@ -910,7 +959,7 @@ static int ov5645_get_selection(struct v4l2_subdev *sd,
 	if (sel->target != V4L2_SEL_TGT_CROP)
 		return -EINVAL;
 
-	sel->r = *v4l2_subdev_state_get_crop(sd_state, 0);
+	sel->r = *v4l2_subdev_state_get_crop(sd_state, sel->pad);
 	return 0;
 }
 
@@ -1114,11 +1163,12 @@ static int ov5645_probe(struct i2c_client *client)
 	v4l2_i2c_subdev_init(&ov5645->sd, client, &ov5645_subdev_ops);
 	ov5645->sd.internal_ops = &ov5645_internal_ops;
 	ov5645->sd.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE | V4L2_SUBDEV_FL_HAS_EVENTS;
-	ov5645->pad.flags = MEDIA_PAD_FL_SOURCE;
+	ov5645->pads[OV5645_PAD_SOURCE].flags = MEDIA_PAD_FL_SOURCE;
+	ov5645->pads[OV5645_PAD_IMAGE].flags = MEDIA_PAD_FL_SINK | MEDIA_PAD_FL_INTERNAL;
 	ov5645->sd.dev = dev;
 	ov5645->sd.entity.function = MEDIA_ENT_F_CAM_SENSOR;
 
-	ret = media_entity_pads_init(&ov5645->sd.entity, 1, &ov5645->pad);
+	ret = media_entity_pads_init(&ov5645->sd.entity, ARRAY_SIZE(ov5645->pads), ov5645->pads);
 	if (ret < 0) {
 		dev_err_probe(dev, ret, "could not register media entity\n");
 		goto free_ctrl;
