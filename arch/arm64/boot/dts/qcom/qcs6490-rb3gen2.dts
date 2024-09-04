@@ -63,6 +63,28 @@
 		};
 	};
 
+	connector-usb2 {
+		compatible = "gpio-usb-b-connector";
+		vbus-gpio = <&pm7325_gpios 9 GPIO_ACTIVE_HIGH>;
+		id-gpio = <&tlmm 61 GPIO_ACTIVE_HIGH>;
+		vbus-supply = <&vbus_usb2>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&usb2_vbus_detect_pin>,
+			     <&usb2_id_detect_pin>;
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				usb2_port_connector: endpoint {
+					remote-endpoint = <&usb_2_dwc3_hs>;
+				};
+			};
+		};
+	};
+
 	lt9611_1v2: lt9611-vdd12-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "LT9611_1V2";
@@ -194,6 +216,16 @@
 				};
 			};
 		};
+	};
+
+	vbus_usb2: regulator-usb2-vbus {
+		compatible = "regulator-fixed";
+		regulator-name = "vbus_supply";
+		gpio = <&tlmm 63 GPIO_ACTIVE_HIGH>;
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+		regulator-boot-on;
+		enable-active-high;
 	};
 
 	vph_pwr: regulator-vph-pwr {
@@ -684,6 +716,16 @@
 	status = "okay";
 };
 
+&pm7325_gpios {
+	usb2_vbus_detect_pin: usb2-vbus-detect-state {
+		pins = "gpio9";
+		function = "normal";
+		bias-pull-down;
+		input-enable;
+		power-source = <0>;
+	};
+};
+
 &pmk8350_rtc {
 	status = "okay";
 };
@@ -719,6 +761,13 @@
 &tlmm {
 	gpio-reserved-ranges = <32 2>, /* ADSP */
 			       <48 4>; /* NFC */
+
+	usb2_id_detect_pin: usb2-id-detect-state {
+		pins = "gpio61";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-up;
+	};
 };
 
 &uart5 {
@@ -755,6 +804,26 @@
 	vdda-pll-supply = <&vreg_l1b_0p912>;
 
 	orientation-switch;
+
+	status = "okay";
+};
+
+&usb_2 {
+	status = "okay";
+};
+
+&usb_2_dwc3 {
+	role-switch-default-mode = "peripheral";
+};
+
+&usb_2_dwc3_hs {
+	remote-endpoint = <&usb2_port_connector>;
+};
+
+&usb_2_hsphy {
+	vdda-pll-supply = <&vreg_l10c_0p88>;
+	vdda18-supply = <&vreg_l1c_1p8>;
+	vdda33-supply = <&vreg_l2b_3p072>;
 
 	status = "okay";
 };
