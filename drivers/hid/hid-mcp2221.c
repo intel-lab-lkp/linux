@@ -932,15 +932,6 @@ static int mcp2221_raw_event(struct hid_device *hdev,
 	return 1;
 }
 
-/* Device resource managed function for HID unregistration */
-static void mcp2221_hid_unregister(void *ptr)
-{
-	struct hid_device *hdev = ptr;
-
-	hid_hw_close(hdev);
-	hid_hw_stop(hdev);
-}
-
 /* This is needed to be sure hid_hw_stop() isn't called twice by the subsystem */
 static void mcp2221_remove(struct hid_device *hdev)
 {
@@ -1141,30 +1132,17 @@ static int mcp2221_probe(struct hid_device *hdev,
 	 * This driver uses the .raw_event callback and therefore does not need any
 	 * HID_CONNECT_xxx flags.
 	 */
-	ret = hid_hw_start(hdev, 0);
-	if (ret) {
-		hid_err(hdev, "can't start hardware\n");
+	ret = devm_hid_hw_start_and_open(hdev, 0);
+	if (ret)
 		return ret;
-	}
 
 	hid_info(hdev, "USB HID v%x.%02x Device [%s] on %s\n", hdev->version >> 8,
 			hdev->version & 0xff, hdev->name, hdev->phys);
-
-	ret = hid_hw_open(hdev);
-	if (ret) {
-		hid_err(hdev, "can't open device\n");
-		hid_hw_stop(hdev);
-		return ret;
-	}
 
 	mutex_init(&mcp->lock);
 	init_completion(&mcp->wait_in_report);
 	hid_set_drvdata(hdev, mcp);
 	mcp->hdev = hdev;
-
-	ret = devm_add_action_or_reset(&hdev->dev, mcp2221_hid_unregister, hdev);
-	if (ret)
-		return ret;
 
 	hid_device_io_start(hdev);
 
