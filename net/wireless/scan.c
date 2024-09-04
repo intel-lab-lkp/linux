@@ -2008,12 +2008,14 @@ __cfg80211_bss_update(struct cfg80211_registered_device *rdev,
 	return found;
 
 free_ies:
+	rcu_read_lock();
 	ies = (void *)rcu_dereference(tmp->pub.beacon_ies);
 	if (ies)
 		kfree_rcu(ies, rcu_head);
 	ies = (void *)rcu_dereference(tmp->pub.proberesp_ies);
 	if (ies)
 		kfree_rcu(ies, rcu_head);
+	rcu_read_unlock();
 
 	return NULL;
 }
