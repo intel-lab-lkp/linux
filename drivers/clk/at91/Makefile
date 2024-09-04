@@ -25,3 +25,4 @@ obj-$(CONFIG_SOC_SAMA5D3) += sama5d3.o dt-compat.o
 obj-$(CONFIG_SOC_SAMA5D4) += sama5d4.o dt-compat.o
 obj-$(CONFIG_SOC_SAMA5D2) += sama5d2.o dt-compat.o
 obj-$(CONFIG_SOC_SAMA7G5) += sama7g5.o
+obj-$(CONFIG_SOC_SAMA7D65) += sama7d65.o
