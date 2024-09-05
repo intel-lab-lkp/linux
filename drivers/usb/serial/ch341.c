@@ -63,6 +63,7 @@
 #define CH341_REG_DIVISOR      0x13
 #define CH341_REG_LCR          0x18
 #define CH341_REG_LCR2         0x25
+#define CH341_REG_FLOW_CTL     0x27
 
 #define CH341_NBREAK_BITS      0x01
 
@@ -76,6 +77,9 @@
 #define CH341_LCR_CS7          0x02
 #define CH341_LCR_CS6          0x01
 #define CH341_LCR_CS5          0x00
+
+#define CH341_FLOW_CTL_NONE    0x000
+#define CH341_FLOW_CTL_RTSCTS  0x101
 
 #define CH341_QUIRK_LIMITED_PRESCALER	BIT(0)
 #define CH341_QUIRK_SIMULATE_BREAK	BIT(1)
@@ -478,6 +482,41 @@ err_kill_interrupt_urb:
 	return r;
 }
 
+static void ch341_set_flow_control(struct tty_struct *tty,
+				   struct usb_serial_port *port,
+				   const struct ktermios *old_termios)
+{
+	int r;
+
+	if (old_termios &&
+	    C_CRTSCTS(tty) == (old_termios->c_cflag & CRTSCTS))
+		return;
+
+	if (C_CRTSCTS(tty)) {
+		r = ch341_control_out(port->serial->dev, CH341_REQ_WRITE_REG,
+				      CH341_REG_FLOW_CTL |
+				      ((u16)CH341_REG_FLOW_CTL << 8),
+				      CH341_FLOW_CTL_RTSCTS);
+		if (r < 0) {
+			dev_err(&port->dev,
+				"%s - failed to enable flow control: %d\n",
+				__func__, r);
+			tty->termios.c_cflag &= ~CRTSCTS;
+		}
+	} else {
+		r = ch341_control_out(port->serial->dev, CH341_REQ_WRITE_REG,
+				      CH341_REG_FLOW_CTL |
+				      ((u16)CH341_REG_FLOW_CTL << 8),
+				      CH341_FLOW_CTL_NONE);
+		if (r < 0) {
+			dev_err(&port->dev,
+				"%s - failed to disable flow control: %d\n",
+				__func__, r);
+			tty->termios.c_cflag |= CRTSCTS;
+		}
+	}
+}
+
 /* Old_termios contains the original termios settings and
  * tty->termios contains the new setting to be used.
  */
@@ -546,6 +585,8 @@ static void ch341_set_termios(struct tty_struct *tty,
 	spin_unlock_irqrestore(&priv->lock, flags);
 
 	ch341_set_handshake(port->serial->dev, priv->mcr);
+
+	ch341_set_flow_control(tty, port, old_termios);
 }
 
 /*
