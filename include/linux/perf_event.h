@@ -809,6 +809,7 @@ struct perf_event {
 	u64				id;
 
 	atomic64_t			lost_samples;
+	atomic64_t			dropped_samples;
 
 	u64				(*clock)(void);
 	perf_overflow_handler_t		overflow_handler;
