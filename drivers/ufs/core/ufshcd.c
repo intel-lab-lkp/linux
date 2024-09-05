@@ -10602,7 +10602,48 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 	 */
 	ufshcd_set_ufs_dev_active(hba);
 
-	err = ufshcd_device_init(hba, /*init_dev_params=*/true);
+	err = ufshcd_activate_link(hba);
+	if (err)
+		goto out_disable;
+
+	/* Verify device initialization by sending NOP OUT UPIU. */
+	err = ufshcd_verify_dev_init(hba);
+	if (err)
+		goto out_disable;
+
+	/* Initiate UFS initialization and waiting for completion. */
+	err = ufshcd_complete_dev_init(hba);
+	if (err)
+		goto out_disable;
+
+	/*
+	 * Initialize UFS device parameters used by driver, these
+	 * parameters are associated with UFS descriptors.
+	 */
+	err = ufshcd_device_params_init(hba);
+	if (err)
+		goto out_disable;
+	if (is_mcq_supported(hba)) {
+		ufshcd_mcq_enable(hba);
+		err = ufshcd_alloc_mcq(hba);
+		if (!err) {
+			ufshcd_config_mcq(hba);
+		} else {
+			/* Continue with SDB mode */
+			ufshcd_mcq_disable(hba);
+			use_mcq_mode = false;
+			dev_err(hba->dev, "MCQ mode is disabled, err=%d\n",
+				err);
+		}
+		err = scsi_add_host(host, hba->dev);
+		if (err) {
+			dev_err(hba->dev, "scsi_add_host failed\n");
+			goto out_disable;
+		}
+		hba->scsi_host_added = true;
+	}
+
+	err = ufshcd_post_device_init(hba);
 	if (err)
 		goto out_disable;
 
