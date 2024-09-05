@@ -46,6 +46,21 @@ static void cgroup_propagate_frozen(struct cgroup *cgrp, bool frozen)
 }
 
 /*
+ * Update cgroup freezer.e_freeze
+ * e_freeze will be set to true if freeze == true or parent's e_freeze == true
+ */
+static inline void cgroup_update_efreeze(struct cgroup *cgrp)
+{
+	struct cgroup *parent = cgroup_parent(cgrp);
+	bool p_e = false;
+
+	if (parent)
+		p_e = parent->freezer.e_freeze;
+
+	cgrp->freezer.e_freeze = cgrp->freezer.freeze | p_e;
+}
+
+/*
  * Revisit the cgroup frozen state.
  * Checks if the cgroup is really frozen and perform all state transitions.
  */
@@ -262,6 +277,7 @@ void cgroup_freeze(struct cgroup *cgrp, bool freeze)
 	struct cgroup_subsys_state *css;
 	struct cgroup *dsct;
 	bool applied = false;
+	bool old_e;
 
 	lockdep_assert_held(&cgroup_mutex);
 
@@ -282,22 +298,15 @@ void cgroup_freeze(struct cgroup *cgrp, bool freeze)
 		if (cgroup_is_dead(dsct))
 			continue;
 
-		if (freeze) {
-			dsct->freezer.e_freeze++;
-			/*
-			 * Already frozen because of ancestor's settings?
-			 */
-			if (dsct->freezer.e_freeze > 1)
-				continue;
-		} else {
-			dsct->freezer.e_freeze--;
-			/*
-			 * Still frozen because of ancestor's settings?
-			 */
-			if (dsct->freezer.e_freeze > 0)
-				continue;
-
-			WARN_ON_ONCE(dsct->freezer.e_freeze < 0);
+		/*
+		 * If old e_freeze eq new e_freeze, no change, its children
+		 * will not be affected. So do nothing and skip the subtree
+		 */
+		old_e = dsct->freezer.e_freeze;
+		cgroup_update_efreeze(dsct);
+		if (dsct->freezer.e_freeze == old_e) {
+			css = css_rightmost_descendant(css);
+			continue;
 		}
 
 		/*
