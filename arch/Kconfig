@@ -377,6 +377,14 @@ config HAVE_RUST
 	  This symbol should be selected by an architecture if it
 	  supports Rust.
 
+config HAVE_GENERATE_RUST_TARGET
+	bool
+	depends on HAVE_RUST
+	help
+	  This symbol should be selected by an architecture if it
+	  needs generating Rust target.json file with
+	  scripts/generate_rust_target.rs.
+
 config HAVE_FUNCTION_ARG_ACCESS_API
 	bool
 	help
