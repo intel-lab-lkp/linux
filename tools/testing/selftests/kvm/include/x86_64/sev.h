@@ -27,6 +27,12 @@ enum sev_guest_state {
 
 #define GHCB_MSR_TERM_REQ	0x100
 
+/* Variants of the SEV launch path that do not assert the ioctl status */
+int __sev_vm_launch_start(struct kvm_vm *vm, uint32_t policy);
+int __sev_vm_launch_update(struct kvm_vm *vm, uint32_t policy);
+int __sev_vm_launch_measure(struct kvm_vm *vm, uint8_t *measurement);
+int __sev_vm_launch_finish(struct kvm_vm *vm);
+
 void sev_vm_launch(struct kvm_vm *vm, uint32_t policy);
 void sev_vm_launch_measure(struct kvm_vm *vm, uint8_t *measurement);
 void sev_vm_launch_finish(struct kvm_vm *vm);
@@ -82,15 +88,23 @@ static inline void sev_register_encrypted_memory(struct kvm_vm *vm,
 	vm_ioctl(vm, KVM_MEMORY_ENCRYPT_REG_REGION, &range);
 }
 
-static inline void sev_launch_update_data(struct kvm_vm *vm, vm_paddr_t gpa,
-					  uint64_t size)
+static inline int __sev_launch_update_data(struct kvm_vm *vm, vm_paddr_t gpa,
+					   uint64_t hva, uint64_t size)
 {
 	struct kvm_sev_launch_update_data update_data = {
-		.uaddr = (unsigned long)addr_gpa2hva(vm, gpa),
+		.uaddr = hva,
 		.len = size,
 	};
 
-	vm_sev_ioctl(vm, KVM_SEV_LAUNCH_UPDATE_DATA, &update_data);
+	return __vm_sev_ioctl(vm, KVM_SEV_LAUNCH_UPDATE_DATA, &update_data);
+}
+
+static inline void sev_launch_update_data(struct kvm_vm *vm, vm_paddr_t gpa,
+					  uint64_t hva, uint64_t size)
+{
+	int ret = __sev_launch_update_data(vm, gpa, hva, size);
+
+	TEST_ASSERT_VM_VCPU_IOCTL(!ret, KVM_SEV_LAUNCH_UPDATE_DATA, ret, vm);
 }
 
 #endif /* SELFTEST_KVM_SEV_H */
