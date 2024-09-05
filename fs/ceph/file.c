@@ -1066,7 +1066,7 @@ ssize_t __ceph_sync_read(struct inode *inode, loff_t *ki_pos,
 	if (ceph_inode_is_shutdown(inode))
 		return -EIO;
 
-	if (!len)
+	if (!len || !i_size)
 		return 0;
 	/*
 	 * flush any page cache pages in this range.  this
@@ -1153,6 +1153,9 @@ ssize_t __ceph_sync_read(struct inode *inode, loff_t *ki_pos,
 		i_size = i_size_read(inode);
 		doutc(cl, "%llu~%llu got %zd i_size %llu%s\n", off, len,
 		      ret, i_size, (more ? " MORE" : ""));
+
+		if (i_size == 0)
+			ret = 0;
 
 		/* Fix it to go to end of extent map */
 		if (sparse && ret >= 0)
