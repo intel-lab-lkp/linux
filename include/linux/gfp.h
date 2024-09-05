@@ -133,10 +133,11 @@ static inline enum zone_type gfp_zone(gfp_t flags)
 {
 	enum zone_type z;
 	int bit = (__force int) (flags & GFP_ZONEMASK);
+	VM_BUG_ON((GFP_ZONE_BAD >> bit) & 1);
 
 	z = (GFP_ZONE_TABLE >> (bit * GFP_ZONES_SHIFT)) &
 					 ((1 << GFP_ZONES_SHIFT) - 1);
-	VM_BUG_ON((GFP_ZONE_BAD >> bit) & 1);
+
 	return z;
 }
 
