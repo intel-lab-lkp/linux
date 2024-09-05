@@ -49,5 +49,4 @@ void efx_fini_napi_channel(struct efx_channel *channel);
 void efx_fini_napi(struct efx_nic *efx);
 
 void efx_channel_dummy_op_void(struct efx_channel *channel);
-
 #endif
