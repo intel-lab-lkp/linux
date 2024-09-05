@@ -1029,6 +1029,8 @@ struct intel_link_m_n {
 	u32 link_m;
 	u32 link_n;
 	u8 link_n_ext;
+	/* Wa_14021768792 for linkm/n ratio > 10 */
+	bool bypass_m_n_ratio_limit;
 };
 
 struct intel_csc_matrix {
