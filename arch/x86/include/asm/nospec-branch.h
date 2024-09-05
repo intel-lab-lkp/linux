@@ -318,12 +318,14 @@
 /*
  * Macro to execute VERW instruction that mitigate transient data sampling
  * attacks such as MDS. On affected systems a microcode update overloaded VERW
- * instruction to also clear the CPU buffers. VERW clobbers CFLAGS.ZF.
+ * instruction to also clear the CPU buffers. VERW clobbers CFLAGS.ZF. Using %ss
+ * to reference VERW operand avoids a #GP fault for an arbitrary user %ds in
+ * 32-bit mode.
  *
  * Note: Only the memory operand variant of VERW clears the CPU buffers.
  */
 .macro CLEAR_CPU_BUFFERS
-	ALTERNATIVE "", __stringify(verw _ASM_RIP(mds_verw_sel)), X86_FEATURE_CLEAR_CPU_BUF
+	ALTERNATIVE "", __stringify(verw %ss:_ASM_RIP(mds_verw_sel)), X86_FEATURE_CLEAR_CPU_BUF
 .endm
 
 #ifdef CONFIG_X86_64
