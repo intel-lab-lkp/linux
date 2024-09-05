@@ -1868,6 +1868,21 @@ static const struct dentry_operations generic_ci_dentry_ops = {
 #endif
 };
 
+/*
+ * Same as generic_ci_dentry_ops, but also set d_delete. Useful for in-memory
+ * casefold filesystems.
+ */
+const struct dentry_operations generic_ci_always_del_dentry_ops = {
+	.d_hash = generic_ci_d_hash,
+	.d_compare = generic_ci_d_compare,
+#ifdef CONFIG_FS_ENCRYPTION
+	.d_revalidate = fscrypt_d_revalidate,
+#endif
+	.d_delete = always_delete_dentry,
+};
+EXPORT_SYMBOL(generic_ci_always_del_dentry_ops);
+
+
 /**
  * generic_ci_match() - Match a name (case-insensitively) with a dirent.
  * This is a filesystem helper for comparison with directory entries.
