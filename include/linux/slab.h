@@ -547,6 +547,26 @@ void *kmem_cache_alloc_lru_noprof(struct kmem_cache *s, struct list_lru *lru,
 			    gfp_t gfpflags) __assume_slab_alignment __malloc;
 #define kmem_cache_alloc_lru(...)	alloc_hooks(kmem_cache_alloc_lru_noprof(__VA_ARGS__))
 
+/**
+ * kmem_cache_charge - memcg charge an already allocated slab memory
+ * @objp: address of the slab object to memcg charge.
+ * @gfpflags: describe the allocation context
+ *
+ * kmem_cache_charge is the normal method to charge a slab object to the current
+ * memcg. The objp should be pointer returned by the slab allocator functions
+ * like kmalloc or kmem_cache_alloc. The memcg charge behavior can be controller
+ * through gfpflags parameter.
+ *
+ * There are several cases where it will return true regardless. More
+ * specifically:
+ *
+ * 1. For !CONFIG_MEMCG or cgroup_disable=memory systems.
+ * 2. Already charged slab objects.
+ * 3. For slab objects from KMALLOC_NORMAL caches.
+ *
+ * Return: true if charge was successful otherwise false.
+ */
+bool kmem_cache_charge(void *objp, gfp_t gfpflags);
 void kmem_cache_free(struct kmem_cache *s, void *objp);
 
 kmem_buckets *kmem_buckets_create(const char *name, slab_flags_t flags,
