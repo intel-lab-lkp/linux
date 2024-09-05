@@ -3391,6 +3391,7 @@ extern int generic_ci_match(const struct inode *parent,
 			    const struct qstr *name,
 			    const struct qstr *folded_name,
 			    const u8 *de_name, u32 de_name_len);
+bool generic_ci_validate_strict_name(struct inode *dir, struct qstr *name);
 
 static inline bool sb_has_encoding(const struct super_block *sb)
 {
