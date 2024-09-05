@@ -233,7 +233,11 @@ struct efx_tx_buffer {
  * @cb_packets: Number of times the TX copybreak feature has been used
  * @notify_count: Count of notified descriptors to the NIC
  * @tx_packets: Number of packets sent since this struct was created
+ * @tx_bytes: Number of bytes sent since this struct was created.  For TSO,
+ *	counts the superframe size, not the sizes of generated frames on the
+ *	wire (i.e. the headers are only counted once)
  * @old_tx_packets: Value of @tx_packets as of last efx_init_tx_queue()
+ * @old_tx_bytes: Value of @tx_bytes as of last efx_init_tx_queue()
  * @old_tso_bursts: Value of @tso_bursts as of last efx_init_tx_queue()
  * @old_tso_packets: Value of @tso_packets as of last efx_init_tx_queue()
  * @empty_read_count: If the completion path has seen the queue as empty
@@ -285,7 +289,9 @@ struct efx_tx_queue {
 	unsigned int notify_count;
 	/* Statistics to supplement MAC stats */
 	unsigned long tx_packets;
+	unsigned long tx_bytes;
 	unsigned long old_tx_packets;
+	unsigned long old_tx_bytes;
 	unsigned int old_tso_bursts;
 	unsigned int old_tso_packets;
 
@@ -378,7 +384,9 @@ struct efx_rx_page_state {
  * @slow_fill: Timer used to defer efx_nic_generate_fill_event().
  * @grant_work: workitem used to grant credits to the MAE if @grant_credits
  * @rx_packets: Number of packets received since this struct was created
+ * @rx_bytes: Number of bytes received since this struct was created
  * @old_rx_packets: Value of @rx_packets as of last efx_init_rx_queue()
+ * @old_rx_bytes: Value of @rx_bytes as of last efx_init_rx_queue()
  * @xdp_rxq_info: XDP specific RX queue information.
  * @xdp_rxq_info_valid: Is xdp_rxq_info valid data?.
  */
@@ -415,7 +423,9 @@ struct efx_rx_queue {
 	struct work_struct grant_work;
 	/* Statistics to supplement MAC stats */
 	unsigned long rx_packets;
+	unsigned long rx_bytes;
 	unsigned long old_rx_packets;
+	unsigned long old_rx_bytes;
 	struct xdp_rxq_info xdp_rxq_info;
 	bool xdp_rxq_info_valid;
 };

@@ -493,6 +493,7 @@ int __ef100_enqueue_skb(struct efx_tx_queue *tx_queue, struct sk_buff *skb,
 	} else {
 		tx_queue->tx_packets++;
 	}
+	tx_queue->tx_bytes += skb->len;
 	return 0;
 
 err:

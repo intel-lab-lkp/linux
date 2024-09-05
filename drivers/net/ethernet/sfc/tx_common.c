@@ -87,6 +87,7 @@ void efx_init_tx_queue(struct efx_tx_queue *tx_queue)
 	tx_queue->completed_timestamp_minor = 0;
 
 	tx_queue->old_tx_packets = tx_queue->tx_packets;
+	tx_queue->old_tx_bytes = tx_queue->tx_bytes;
 	tx_queue->old_tso_bursts = tx_queue->tso_bursts;
 	tx_queue->old_tso_packets = tx_queue->tso_packets;
 

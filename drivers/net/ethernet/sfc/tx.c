@@ -394,6 +394,7 @@ netdev_tx_t __efx_enqueue_skb(struct efx_tx_queue *tx_queue, struct sk_buff *skb
 	} else {
 		tx_queue->tx_packets++;
 	}
+	tx_queue->tx_bytes += skb_len;
 
 	return NETDEV_TX_OK;
 
@@ -490,6 +491,7 @@ int efx_xdp_tx_buffers(struct efx_nic *efx, int n, struct xdp_frame **xdpfs,
 		tx_buffer->dma_offset = 0;
 		tx_buffer->unmap_len = len;
 		tx_queue->tx_packets++;
+		tx_queue->tx_bytes += len;
 	}
 
 	/* Pass mapped frames to hardware. */

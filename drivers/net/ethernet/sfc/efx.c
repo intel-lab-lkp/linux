@@ -638,6 +638,7 @@ static void efx_get_queue_stats_rx(struct net_device *net_dev, int idx,
 	rx_queue = efx_channel_get_rx_queue(channel);
 	/* Count only packets since last time datapath was started */
 	stats->packets = rx_queue->rx_packets - rx_queue->old_rx_packets;
+	stats->bytes = rx_queue->rx_bytes - rx_queue->old_rx_bytes;
 	stats->hw_drops = efx_get_queue_stat_rx_hw_drops(channel) -
 			  channel->old_n_rx_hw_drops;
 	stats->hw_drop_overruns = channel->n_rx_nodesc_trunc -
@@ -653,6 +654,7 @@ static void efx_get_queue_stats_tx(struct net_device *net_dev, int idx,
 
 	channel = efx_get_tx_channel(efx, idx);
 	stats->packets = 0;
+	stats->bytes = 0;
 	stats->hw_gso_packets = 0;
 	stats->hw_gso_wire_packets = 0;
 	/* If a TX channel has XDP TXQs, the stats for these will be counted
@@ -664,6 +666,8 @@ static void efx_get_queue_stats_tx(struct net_device *net_dev, int idx,
 		if (!tx_queue->xdp_tx) {
 			stats->packets += tx_queue->tx_packets -
 					  tx_queue->old_tx_packets;
+			stats->bytes += tx_queue->tx_bytes -
+					tx_queue->old_tx_bytes;
 			stats->hw_gso_packets += tx_queue->tso_bursts -
 						 tx_queue->old_tso_bursts;
 			stats->hw_gso_wire_packets += tx_queue->tso_packets -
@@ -681,9 +685,11 @@ static void efx_get_base_stats(struct net_device *net_dev,
 	struct efx_channel *channel;
 
 	rx->packets = 0;
+	rx->bytes = 0;
 	rx->hw_drops = 0;
 	rx->hw_drop_overruns = 0;
 	tx->packets = 0;
+	tx->bytes = 0;
 	tx->hw_gso_packets = 0;
 	tx->hw_gso_wire_packets = 0;
 
@@ -694,10 +700,12 @@ static void efx_get_base_stats(struct net_device *net_dev,
 		rx_queue = efx_channel_get_rx_queue(channel);
 		if (channel->channel >= net_dev->real_num_rx_queues) {
 			rx->packets += rx_queue->rx_packets;
+			rx->bytes += rx_queue->rx_bytes;
 			rx->hw_drops += efx_get_queue_stat_rx_hw_drops(channel);
 			rx->hw_drop_overruns += channel->n_rx_nodesc_trunc;
 		} else {
 			rx->packets += rx_queue->old_rx_packets;
+			rx->bytes += rx_queue->old_rx_bytes;
 			rx->hw_drops += channel->old_n_rx_hw_drops;
 			rx->hw_drop_overruns += channel->old_n_rx_hw_drop_overruns;
 		}
@@ -707,10 +715,12 @@ static void efx_get_base_stats(struct net_device *net_dev,
 						net_dev->real_num_tx_queues ||
 			    tx_queue->xdp_tx) {
 				tx->packets += tx_queue->tx_packets;
+				tx->bytes += tx_queue->tx_bytes;
 				tx->hw_gso_packets += tx_queue->tso_bursts;
 				tx->hw_gso_wire_packets += tx_queue->tso_packets;
 			} else {
 				tx->packets += tx_queue->old_tx_packets;
+				tx->bytes += tx_queue->old_tx_bytes;
 				tx->hw_gso_packets += tx_queue->old_tso_bursts;
 				tx->hw_gso_wire_packets += tx_queue->old_tso_packets;
 			}
