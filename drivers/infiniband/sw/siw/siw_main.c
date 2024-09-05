@@ -36,7 +36,7 @@ const bool zcopy_tx = true;
  * large packets. try_gso = true lets siw try to use local GSO,
  * if peer agrees.  Not using GSO severly limits siw maximum tx bandwidth.
  */
-const bool try_gso;
+const bool try_gso = true;
 
 /* Attach siw also with loopback devices */
 const bool loopback_enabled = true;
