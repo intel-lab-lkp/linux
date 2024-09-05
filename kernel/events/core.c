@@ -9978,18 +9978,21 @@ static void perf_swevent_event(struct perf_event *event, u64 nr,
 	perf_swevent_overflow(event, 0, data, regs);
 }
 
-static int perf_exclude_event(struct perf_event *event,
-			      struct pt_regs *regs)
+int perf_exclude_event(struct perf_event *event, struct pt_regs *regs)
 {
 	if (event->hw.state & PERF_HES_STOPPED)
 		return 1;
 
 	if (regs) {
-		if (event->attr.exclude_user && user_mode(regs))
+		if (event->attr.exclude_user && user_mode(regs)) {
+			atomic64_inc(&event->dropped_samples);
 			return 1;
+		}
 
-		if (event->attr.exclude_kernel && !user_mode(regs))
+		if (event->attr.exclude_kernel && !user_mode(regs)) {
+			atomic64_inc(&event->dropped_samples);
 			return 1;
+		}
 	}
 
 	return 0;
