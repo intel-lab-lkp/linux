@@ -640,6 +640,7 @@ static int spinand_mtd_read(struct mtd_info *mtd, loff_t from,
 	struct nand_io_iter iter;
 	bool disable_ecc = false;
 	bool ecc_failed = false;
+	u8 retry_mode = 0;
 	int ret = 0;
 
 	if (ops->mode == MTD_OPS_RAW || !spinand->eccinfo.ooblayout)
@@ -657,19 +658,44 @@ static int spinand_mtd_read(struct mtd_info *mtd, loff_t from,
 		if (ret)
 			break;
 
+read_retry:
 		ret = spinand_read_page(spinand, &iter.req);
 		if (ret < 0 && ret != -EBADMSG)
 			break;
 
-		if (ret == -EBADMSG)
+		if (ret == -EBADMSG && spinand->info->fixups) {
+			if (spinand->read_retries && ((retry_mode + 1) < spinand->read_retries)) {
+				retry_mode++;
+				ret = spinand->info->fixups->setup_read_retry(spinand, retry_mode);
+				if (ret < 0)
+					break;
+
+				/* Reset ecc_stats; retry */
+				mtd->ecc_stats = old_stats;
+				goto read_retry;
+			} else {
+				/* No more retry modes; real failure */
+				ecc_failed = true;
+			}
+		} else if (ret == -EBADMSG) {
 			ecc_failed = true;
-		else
+		} else {
 			max_bitflips = max_t(unsigned int, max_bitflips, ret);
+		}
 
 		ret = 0;
 		ops->retlen += iter.req.datalen;
 		ops->oobretlen += iter.req.ooblen;
+
+		/* Reset to retry mode 0*/
+		if (retry_mode) {
+			ret = spinand->info->fixups->setup_read_retry(spinand, 0);
+			if (ret < 0)
+				break;
+			retry_mode = 0;
+		}
 	}
+
 
 	if (ops->stats) {
 		ops->stats->uncorrectable_errors +=
@@ -1095,6 +1121,9 @@ int spinand_match_and_init(struct spinand_device *spinand,
 		spinand->flags = table[i].flags;
 		spinand->id.len = 1 + table[i].devid.len;
 		spinand->select_target = table[i].select_target;
+		spinand->info = info;
+		if (spinand->info->fixups && spinand->info->fixups->init_read_retry)
+			spinand->read_retries = spinand->info->fixups->init_read_retry(spinand);
 
 		op = spinand_select_op_variant(spinand,
 					       info->op_variants.read_cache);
