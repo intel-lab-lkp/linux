@@ -74,6 +74,17 @@ init_new_context(struct task_struct *tsk, struct mm_struct *mm)
 	return 0;
 }
 
+static inline void atomic_update_pgd_asid(unsigned long asid, unsigned long pgdl)
+{
+	__asm__ __volatile__(
+	"csrwr %[pgdl_val], %[pgdl_reg] \n\t"
+	"csrwr %[asid_val], %[asid_reg] \n\t"
+	: [asid_val] "+r" (asid), [pgdl_val] "+r" (pgdl)
+	: [asid_reg] "i" (LOONGARCH_CSR_ASID), [pgdl_reg] "i" (LOONGARCH_CSR_PGDL)
+	: "memory"
+	);
+}
+
 static inline void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 				      struct task_struct *tsk)
 {
@@ -83,12 +94,10 @@ static inline void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *
 	if (!asid_valid(next, cpu))
 		get_new_mmu_context(next, cpu);
 
-	write_csr_asid(cpu_asid(cpu, next));
-
 	if (next != &init_mm)
-		csr_write64((unsigned long)next->pgd, LOONGARCH_CSR_PGDL);
+		atomic_update_pgd_asid(cpu_asid(cpu, next), (unsigned long)next->pgd);
 	else
-		csr_write64((unsigned long)invalid_pg_dir, LOONGARCH_CSR_PGDL);
+		atomic_update_pgd_asid(cpu_asid(cpu, next), (unsigned long)invalid_pg_dir);
 
 	/*
 	 * Mark current->active_mm as not "active" anymore.
