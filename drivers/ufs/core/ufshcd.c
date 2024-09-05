@@ -8709,10 +8709,9 @@ static void ufshcd_config_mcq(struct ufs_hba *hba)
 		 hba->nutrs);
 }
 
-static int ufshcd_device_init(struct ufs_hba *hba, bool init_dev_params)
+static int ufshcd_activate_link(struct ufs_hba *hba)
 {
 	int ret;
-	struct Scsi_Host *host = hba->host;
 
 	hba->ufshcd_state = UFSHCD_STATE_RESET;
 
@@ -8728,6 +8727,18 @@ static int ufshcd_device_init(struct ufs_hba *hba, bool init_dev_params)
 
 	/* UniPro link is active now */
 	ufshcd_set_link_active(hba);
+
+	return 0;
+}
+
+static int ufshcd_device_init(struct ufs_hba *hba, bool init_dev_params)
+{
+	struct Scsi_Host *host = hba->host;
+	int ret;
+
+	ret = ufshcd_activate_link(hba);
+	if (ret)
+		return ret;
 
 	/* Reconfigure MCQ upon reset */
 	if (hba->mcq_enabled && !init_dev_params) {
