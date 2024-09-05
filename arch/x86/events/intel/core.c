@@ -3972,7 +3972,7 @@ static int intel_pmu_hw_config(struct perf_event *event)
 			x86_pmu.pebs_aliases(event);
 	}
 
-	if (needs_branch_stack(event) && is_sampling_event(event))
+	if (needs_branch_stack(event))
 		event->hw.flags  |= PERF_X86_EVENT_NEEDS_BRANCH_STACK;
 
 	if (branch_sample_counters(event)) {
