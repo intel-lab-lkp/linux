@@ -1565,7 +1565,8 @@ static int ftgmac100_open(struct net_device *netdev)
 	return 0;
 
 err_ncsi:
-	phy_stop(netdev->phydev);
+	if (netdev->phydev)
+		phy_stop(netdev->phydev);
 	napi_disable(&priv->napi);
 	netif_stop_queue(netdev);
 err_alloc:
