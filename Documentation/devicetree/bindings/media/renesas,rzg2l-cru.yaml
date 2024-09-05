@@ -13,7 +13,7 @@ maintainers:
 description:
   The CRU image processing module is a data conversion module equipped with pixel
   color space conversion, LUT, pixel format conversion, etc. An MIPI CSI-2 input and
-  parallel (including ITU-R BT.656) input are provided as the image sensor interface.
+  parallel (including ITU-R BT.656) inputs are provided as the image sensor interface.
 
 properties:
   compatible:
@@ -38,8 +38,8 @@ properties:
 
   clocks:
     items:
-      - description: CRU Main clock
-      - description: CRU Register access clock
+      - description: CRU main clock
+      - description: CRU register access clock
       - description: CRU image transfer clock
 
   clock-names:
