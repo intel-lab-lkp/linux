@@ -1258,7 +1258,7 @@ int ptrace_request(struct task_struct *child, long request,
 SYSCALL_DEFINE4(ptrace, long, request, long, pid, unsigned long, addr,
 		unsigned long, data)
 {
-	struct task_struct *child;
+	struct task_struct *child, *tracer;
 	long ret;
 
 	if (request == PTRACE_TRACEME) {
@@ -1275,6 +1275,15 @@ SYSCALL_DEFINE4(ptrace, long, request, long, pid, unsigned long, addr,
 	if (request == PTRACE_ATTACH || request == PTRACE_SEIZE) {
 		ret = ptrace_attach(child, request, addr, data);
 		goto out_put_task_struct;
+	}
+
+	if (request == PTRACE_TRACER) {
+		rcu_read_lock();
+		tracer = ptrace_parent(current);
+		ret = tracer ? task_pid_nr_ns(tracer,
+					task_active_pid_ns(current->parent)) : -ESRCH;
+		rcu_read_unlock();
+		goto out;
 	}
 
 	ret = ptrace_check_attach(child, request == PTRACE_KILL ||
