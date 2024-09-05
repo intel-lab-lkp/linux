@@ -3029,9 +3029,8 @@ static int emac_probe(struct platform_device *ofdev)
 	if (err)
 		goto err_gone;
 
-	/* Get interrupts. EMAC irq is mandatory, WOL irq is optional */
+	/* Get interrupts. EMAC irq is mandatory */
 	dev->emac_irq = irq_of_parse_and_map(np, 0);
-	dev->wol_irq = irq_of_parse_and_map(np, 1);
 	if (!dev->emac_irq) {
 		printk(KERN_ERR "%pOF: Can't map main interrupt\n", np);
 		err = -ENODEV;
@@ -3186,9 +3185,6 @@ static int emac_probe(struct platform_device *ofdev)
 	mal_unregister_commac(dev->mal, &dev->commac);
  err_rel_deps:
 	emac_put_deps(dev);
- err_irq_unmap:
-	if (dev->wol_irq)
-		irq_dispose_mapping(dev->wol_irq);
  err_gone:
 	if (blist)
 		*blist = NULL;
@@ -3215,9 +3211,6 @@ static void emac_remove(struct platform_device *ofdev)
 
 	mal_unregister_commac(dev->mal, &dev->commac);
 	emac_put_deps(dev);
-
-	if (dev->wol_irq)
-		irq_dispose_mapping(dev->wol_irq);
 }
 
 /* XXX Features in here should be replaced by properties... */
