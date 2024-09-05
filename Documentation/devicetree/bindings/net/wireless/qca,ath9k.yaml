@@ -44,6 +44,16 @@ properties:
 
   ieee80211-freq-limit: true
 
+  qca,led-active-high:
+    $ref: /schemas/types.yaml#/definitions/flag
+    description:
+      Indicates that the LED pin is active high instead of low
+
+  qca,led-pin:
+    $ref: /schemas/types.yaml#/definitions/uint8
+    description:
+      Sets the GPIO number for the LED pin instead of the default
+
   qca,no-eeprom:
     $ref: /schemas/types.yaml#/definitions/flag
     description:
@@ -75,6 +85,8 @@ examples:
         reg = <0 0 0 0 0>;
         interrupts = <3>;
         qca,no-eeprom;
+        qca,led-active-high;
+        qca,led-pin = /bits/ 8 <11>;
       };
     };
   - |
