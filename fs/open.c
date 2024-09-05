@@ -1451,15 +1451,31 @@ SYSCALL_DEFINE4(openat2, int, dfd, const char __user *, filename,
 		struct open_how __user *, how, size_t, usize)
 {
 	int err;
+	bool check_fields;
 	struct open_how tmp;
 
 	BUILD_BUG_ON(sizeof(struct open_how) < OPEN_HOW_SIZE_VER0);
 	BUILD_BUG_ON(sizeof(struct open_how) != OPEN_HOW_SIZE_LATEST);
 
+	check_fields = usize & CHECK_FIELDS;
+	usize &= ~CHECK_FIELDS;
+
 	if (unlikely(usize < OPEN_HOW_SIZE_VER0))
 		return -EINVAL;
 	if (unlikely(usize > PAGE_SIZE))
 		return -E2BIG;
+
+	if (unlikely(check_fields)) {
+		memset(&tmp, 0, sizeof(tmp));
+		tmp = (struct open_how) {
+			.flags = VALID_OPEN_FLAGS,
+			.mode = S_IALLUGO,
+			.resolve = VALID_RESOLVE_FLAGS,
+		};
+
+		err = copy_struct_to_user(how, usize, &tmp, sizeof(tmp), NULL);
+		return err ?: -EEXTSYS_NOOP;
+	}
 
 	err = copy_struct_from_user(&tmp, sizeof(tmp), how, usize);
 	if (err)

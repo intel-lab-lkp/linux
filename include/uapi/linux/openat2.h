@@ -4,6 +4,8 @@
 
 #include <linux/types.h>
 
+#define CHECK_FIELDS (1ULL << 63)
+
 /*
  * Arguments for how openat2(2) should open the target path. If only @flags and
  * @mode are non-zero, then openat2(2) operates very similarly to openat(2).
