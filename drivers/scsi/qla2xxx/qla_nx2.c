@@ -92,11 +92,13 @@ qla8044_rd_reg_indirect(scsi_qla_host_t *vha, uint32_t addr, uint32_t *data)
 	struct qla_hw_data *ha = vha->hw;
 
 	ret_val = qla8044_set_win_base(vha, addr);
-	if (!ret_val)
+	if (!ret_val) {
 		*data = qla8044_rd_reg(ha, QLA8044_WILDCARD);
-	else
+	} else {
+		*data = 0;
 		ql_log(ql_log_warn, vha, 0xb088,
 		    "%s: failed read of addr 0x%x!\n", __func__, addr);
+	}
 	return ret_val;
 }
 
