@@ -12,6 +12,8 @@ ifeq ($(LLVM),)
 endif
 
 LOCAL_HDRS += helpers.h
+# Needed for EEXTSYS_NOOP definition.
+CFLAGS += $(TOOLS_INCLUDES)
 
 include ../lib.mk
 
