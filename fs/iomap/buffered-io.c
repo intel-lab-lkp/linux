@@ -1340,6 +1340,9 @@ static loff_t iomap_unshare_iter(struct iomap_iter *iter)
 	/* don't bother with holes or unwritten extents */
 	if (srcmap->type == IOMAP_HOLE || srcmap->type == IOMAP_UNWRITTEN)
 		return length;
+	/* don't try to unshare any extents beyond EOF. */
+	if (pos > i_size_read(iter->inode))
+		return length;
 
 	do {
 		struct folio *folio;
