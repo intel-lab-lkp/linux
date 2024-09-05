@@ -41,7 +41,7 @@
 		};
 	};
 
-	backlight: backlight {
+	backlight: backlight-dsi {
 		compatible = "pwm-backlight";
 		pwms = <&pwm4 0 25000 0>;
 		brightness-levels = <20 220>;
@@ -551,7 +551,7 @@
 			};
 		};
 
-		charger {
+		rk817_charger: charger {
 			monitored-battery = <&battery>;
 			rockchip,resistor-sense-micro-ohms = <10000>;
 			rockchip,sleep-enter-current-microamp = <300000>;
@@ -564,7 +564,7 @@
 	clock-frequency = <400000>;
 	status = "okay";
 
-	touchscreen@5d {
+	touchscreen: touchscreen@5d {
 		compatible = "goodix,gt911";
 		reg = <0x5d>;
 		interrupt-parent = <&gpio0>;
@@ -583,13 +583,13 @@
 	pinctrl-0 = <&i2c2m1_xfer>;
 	status = "okay";
 
-	vcm@c {
+	vcm: vcm@c {
 		compatible = "dongwoon,dw9714";
 		reg = <0x0c>;
 		vcc-supply = <&vcc1v8_dvp>;
 	};
 
-	camera@36 {
+	camerab: camera@36 {
 		compatible = "ovti,ov5648";
 		reg = <0x36>;
 		pinctrl-names = "default";
@@ -619,7 +619,7 @@
 	clock-frequency = <400000>;
 	status = "okay";
 
-	accelerometer@18 {
+	accelerometer: accelerometer@18 {
 		compatible = "silan,sc7a20";
 		reg = <0x18>;
 		interrupt-parent = <&gpio3>;
