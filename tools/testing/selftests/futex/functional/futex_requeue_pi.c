@@ -362,6 +362,7 @@ int main(int argc, char *argv[])
 {
 	char *test_name;
 	int c, ret;
+	int need_f = 1;
 
 	while ((c = getopt(argc, argv, "bchlot:v:")) != -1) {
 		switch (c) {
@@ -404,6 +405,7 @@ int main(int argc, char *argv[])
 		       "%s broadcast=%d locked=%d owner=%d timeout=%ldns",
 		       TEST_NAME, broadcast, locked, owner, timeout_ns);
 	if (ret < 0) {
+		need_f = 0;
 		ksft_print_msg("Failed to generate test name\n");
 		test_name = TEST_NAME;
 	}
@@ -416,5 +418,7 @@ int main(int argc, char *argv[])
 	ret = unit_test(broadcast, locked, owner, timeout_ns);
 
 	print_result(test_name, ret);
+	if (need_f)
+		free(test_name);
 	return ret;
 }
