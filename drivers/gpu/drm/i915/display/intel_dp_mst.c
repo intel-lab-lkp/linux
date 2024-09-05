@@ -131,6 +131,8 @@ static int intel_dp_mst_compute_m_n(const struct intel_crtc_state *crtc_state,
 	const struct drm_display_mode *adjusted_mode =
 		&crtc_state->hw.adjusted_mode;
 	struct intel_display *display = to_intel_display(connector);
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+	enum pipe pipe = crtc->pipe;
 	int ret;
 
 	/* TODO: Check WA 14013163432 to set data M/N for full BW utilization. */
@@ -138,7 +140,8 @@ static int intel_dp_mst_compute_m_n(const struct intel_crtc_state *crtc_state,
 				     adjusted_mode->crtc_clock,
 				     crtc_state->port_clock,
 				     overhead, m_n);
-	if (ret)
+
+	if (ret && !intel_dp_bmg_bypass_m_n_limit(display, m_n, pipe))
 		return ret;
 
 	m_n->tu = DIV_ROUND_UP_ULL(mul_u32_u32(m_n->data_m, 64), m_n->data_n);

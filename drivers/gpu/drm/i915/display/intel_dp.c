@@ -2844,6 +2844,27 @@ static bool can_enable_drrs(struct intel_connector *connector,
 		intel_panel_drrs_type(connector) == DRRS_TYPE_SEAMLESS;
 }
 
+bool
+intel_dp_bmg_bypass_m_n_limit(struct intel_display *display,
+			      struct intel_link_m_n *m_n,
+			      enum pipe pipe)
+{
+	int m_n_ratio, m_n_frac;
+
+	m_n_ratio = DIV_ROUND_UP(m_n->link_m, m_n->link_n);
+
+	if (!bmg_can_bypass_m_n_limit(display, m_n_ratio, pipe))
+		return false;
+
+	m_n_frac = m_n->link_m % m_n->link_n;
+
+	m_n->link_n_ext = m_n_ratio | (m_n_ratio + (m_n_frac  > 0 ? 1 : 0)) << 4;
+
+	m_n->bypass_m_n_ratio_limit = true;
+
+	return true;
+}
+
 static int
 intel_dp_drrs_compute_config(struct intel_connector *connector,
 			     struct intel_crtc_state *pipe_config,
@@ -2853,6 +2874,8 @@ intel_dp_drrs_compute_config(struct intel_connector *connector,
 	struct intel_display *display = to_intel_display(connector);
 	const struct drm_display_mode *downclock_mode =
 		intel_panel_downclock_mode(connector, &pipe_config->hw.adjusted_mode);
+	struct intel_crtc *crtc = to_intel_crtc(pipe_config->uapi.crtc);
+	enum pipe pipe = crtc->pipe;
 	int pixel_clock;
 	int ret;
 
@@ -2882,7 +2905,8 @@ intel_dp_drrs_compute_config(struct intel_connector *connector,
 				     pipe_config->port_clock,
 				     intel_dp_bw_fec_overhead(pipe_config->fec_enable),
 				     &pipe_config->dp_m2_n2);
-	if (ret)
+
+	if (ret && !intel_dp_bmg_bypass_m_n_limit(display, &pipe_config->dp_m2_n2, pipe))
 		return ret;
 
 	/* FIXME: abstract this better */
@@ -3018,6 +3042,8 @@ intel_dp_compute_config(struct intel_encoder *encoder,
 	struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
 	const struct drm_display_mode *fixed_mode;
 	struct intel_connector *connector = intel_dp->attached_connector;
+	struct intel_crtc *crtc = to_intel_crtc(pipe_config->uapi.crtc);
+	enum pipe pipe = crtc->pipe;
 	int ret = 0, link_bpp_x16;
 
 	if (HAS_PCH_SPLIT(dev_priv) && !HAS_DDI(dev_priv) && encoder->port != PORT_A)
@@ -3100,7 +3126,8 @@ intel_dp_compute_config(struct intel_encoder *encoder,
 				     pipe_config->port_clock,
 				     intel_dp_bw_fec_overhead(pipe_config->fec_enable),
 				     &pipe_config->dp_m_n);
-	if (ret)
+
+	if (ret && !intel_dp_bmg_bypass_m_n_limit(display, &pipe_config->dp_m_n, pipe))
 		return ret;
 
 	/* FIXME: abstract this better */
