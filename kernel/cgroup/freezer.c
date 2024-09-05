@@ -13,7 +13,7 @@
  */
 static void cgroup_propagate_frozen(struct cgroup *cgrp, bool frozen)
 {
-	int desc = 1;
+	struct cgroup *child = cgrp;
 
 	/*
 	 * If the new state is frozen, some freezing ancestor cgroups may change
@@ -23,23 +23,38 @@ static void cgroup_propagate_frozen(struct cgroup *cgrp, bool frozen)
 	 */
 	while ((cgrp = cgroup_parent(cgrp))) {
 		if (frozen) {
-			cgrp->freezer.nr_frozen_descendants += desc;
+			/*
+			 * A cgroup is frozen, parent nr frozen descendants should add
+			 * nr cgroups of the entire subtree , including child itself.
+			 */
+			cgrp->freezer.nr_frozen_descendants += child->nr_descendants + 1;
+
+			/*
+			 * If there is other descendant is not frozen,
+			 * cgrp and its parent couldn't be frozen, just break
+			 */
+			if (cgrp->freezer.nr_frozen_descendants !=
+			    cgrp->nr_descendants)
+				break;
+
+			child = cgrp;
 			if (!test_bit(CGRP_FROZEN, &cgrp->flags) &&
-			    test_bit(CGRP_FREEZE, &cgrp->flags) &&
-			    cgrp->freezer.nr_frozen_descendants ==
-			    cgrp->nr_descendants) {
+			    test_bit(CGRP_FREEZE, &cgrp->flags)) {
 				set_bit(CGRP_FROZEN, &cgrp->flags);
 				cgroup_file_notify(&cgrp->events_file);
 				TRACE_CGROUP_PATH(notify_frozen, cgrp, 1);
-				desc++;
 			}
 		} else {
-			cgrp->freezer.nr_frozen_descendants -= desc;
+			cgrp->freezer.nr_frozen_descendants -= (child->nr_descendants + 1);
+
+			child = cgrp;
 			if (test_bit(CGRP_FROZEN, &cgrp->flags)) {
 				clear_bit(CGRP_FROZEN, &cgrp->flags);
 				cgroup_file_notify(&cgrp->events_file);
 				TRACE_CGROUP_PATH(notify_frozen, cgrp, 0);
-				desc++;
+			} else {
+				/* If parent is unfrozen, don't have to propagate more */
+				break;
 			}
 		}
 	}
