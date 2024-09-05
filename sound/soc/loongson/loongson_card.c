@@ -119,44 +119,81 @@ static int loongson_card_parse_acpi(struct loongson_card_data *data)
 	return 0;
 }
 
-static int loongson_card_parse_of(struct loongson_card_data *data)
+static int loongson_parse_cpu(struct device *dev, struct device_node **dai_node)
 {
-	struct snd_soc_card *card = &data->snd_card;
-	struct device_node *cpu, *codec;
-	struct device *dev = card->dev;
-	int ret, i;
+	struct device_node *cpu;
+	int ret = 0;
 
 	cpu = of_get_child_by_name(dev->of_node, "cpu");
-	if (!cpu) {
-		dev_err(dev, "platform property missing or invalid\n");
+	if (!cpu)
 		return -EINVAL;
-	}
+
+	*dai_node = of_parse_phandle(cpu, "sound-dai", 0);
+	if (!*dai_node)
+		ret = -EINVAL;
+
+	of_node_put(cpu);
+	return ret;
+}
+
+static int loongson_parse_codec(struct device *dev, struct device_node **dai_node,
+				const char **dai_name)
+{
+	struct of_phandle_args args;
+	struct device_node *codec;
+	int ret = 0;
 
 	codec = of_get_child_by_name(dev->of_node, "codec");
-	if (!codec) {
-		dev_err(dev, "audio-codec property missing or invalid\n");
+	if (!codec)
+		return -EINVAL;
+
+	ret = of_parse_phandle_with_args(codec, "sound-dai", "#sound-dai-cells", 0, &args);
+	if (ret)
+		goto free_codec;
+
+	ret = snd_soc_get_dai_name(&args, dai_name);
+	if (ret)
+		goto free_codec;
+
+	*dai_node = of_parse_phandle(codec, "sound-dai", 0);
+	if (!*dai_node)
 		ret = -EINVAL;
-		goto free_cpu;
-	}
-
-	for (i = 0; i < card->num_links; i++) {
-		ret = snd_soc_of_get_dlc(cpu, NULL, loongson_dai_links[i].cpus, 0);
-		if (ret) {
-			dev_err(dev, "getting cpu dlc error (%d)\n", ret);
-			goto free_codec;
-		}
-
-		ret = snd_soc_of_get_dlc(codec, NULL, loongson_dai_links[i].codecs, 0);
-		if (ret) {
-			dev_err(dev, "getting codec dlc error (%d)\n", ret);
-			goto free_codec;
-		}
-	}
 
 free_codec:
 	of_node_put(codec);
-free_cpu:
-	of_node_put(cpu);
+	return ret;
+}
+
+static int loongson_card_parse_of(struct loongson_card_data *data)
+{
+	struct device_node *codec_dai_node, *cpu_dai_node;
+	struct snd_soc_card *card = &data->snd_card;
+	struct device *dev = card->dev;
+	const char *codec_dai_name;
+	int ret = 0, i;
+
+	ret = loongson_parse_cpu(dev, &cpu_dai_node);
+	if (ret) {
+		dev_err(dev, "cpu property missing or invalid.\n");
+		goto out;
+	}
+
+	ret = loongson_parse_codec(dev, &codec_dai_node, &codec_dai_name);
+	if (ret) {
+		dev_err(dev, "audio-codec property missing or invalid.\n");
+		goto out;
+	}
+
+	for (i = 0; i < card->num_links; i++) {
+		loongson_dai_links[i].platforms->of_node = cpu_dai_node;
+		loongson_dai_links[i].cpus->of_node = cpu_dai_node;
+		loongson_dai_links[i].codecs->of_node = codec_dai_node;
+		loongson_dai_links[i].codecs->dai_name = codec_dai_name;
+	}
+
+out:
+	of_node_put(codec_dai_node);
+	of_node_put(cpu_dai_node);
 	return ret;
 }
 
