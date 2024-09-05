@@ -2925,11 +2925,15 @@ SYSCALL_DEFINE5(clone, unsigned long, clone_flags, unsigned long, newsp,
 }
 #endif
 
+
+#define CLONE3_VALID_FLAGS (CLONE_LEGACY_FLAGS | CLONE_CLEAR_SIGHAND | CLONE_INTO_CGROUP)
+
 noinline static int copy_clone_args_from_user(struct kernel_clone_args *kargs,
 					      struct clone_args __user *uargs,
 					      size_t usize)
 {
 	int err;
+	bool check_fields;
 	struct clone_args args;
 	pid_t *kset_tid = kargs->set_tid;
 
@@ -2941,10 +2945,33 @@ noinline static int copy_clone_args_from_user(struct kernel_clone_args *kargs,
 		     CLONE_ARGS_SIZE_VER2);
 	BUILD_BUG_ON(sizeof(struct clone_args) != CLONE_ARGS_SIZE_VER2);
 
+	check_fields = usize & CHECK_FIELDS;
+	usize &= ~CHECK_FIELDS;
+
 	if (unlikely(usize > PAGE_SIZE))
 		return -E2BIG;
 	if (unlikely(usize < CLONE_ARGS_SIZE_VER0))
 		return -EINVAL;
+
+	if (unlikely(check_fields)) {
+		memset(&args, 0, sizeof(args));
+		args = (struct clone_args) {
+			.flags = CLONE3_VALID_FLAGS,
+			.pidfd = 0xFFFFFFFFFFFFFFFF,
+			.child_tid = 0xFFFFFFFFFFFFFFFF,
+			.parent_tid = 0xFFFFFFFFFFFFFFFF,
+			.exit_signal = (u64) CSIGNAL,
+			.stack = 0xFFFFFFFFFFFFFFFF,
+			.stack_size = 0xFFFFFFFFFFFFFFFF,
+			.tls = 0xFFFFFFFFFFFFFFFF,
+			.set_tid = 0xFFFFFFFFFFFFFFFF,
+			.set_tid_size = 0xFFFFFFFFFFFFFFFF,
+			.cgroup = 0xFFFFFFFFFFFFFFFF,
+		};
+
+		err = copy_struct_to_user(uargs, usize, &args, sizeof(args), NULL);
+		return err ?: -EEXTSYS_NOOP;
+	}
 
 	err = copy_struct_from_user(&args, sizeof(args), uargs, usize);
 	if (err)
@@ -3025,8 +3052,7 @@ static inline bool clone3_stack_valid(struct kernel_clone_args *kargs)
 static bool clone3_args_valid(struct kernel_clone_args *kargs)
 {
 	/* Verify that no unknown flags are passed along. */
-	if (kargs->flags &
-	    ~(CLONE_LEGACY_FLAGS | CLONE_CLEAR_SIGHAND | CLONE_INTO_CGROUP))
+	if (kargs->flags & ~CLONE3_VALID_FLAGS)
 		return false;
 
 	/*
