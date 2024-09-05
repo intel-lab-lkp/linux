@@ -14,6 +14,7 @@
 #include <drm/drm_print.h>
 
 #include "rockchip_drm_vop2.h"
+#include "rockchip_drm_drv.h"
 
 static const uint32_t formats_cluster[] = {
 	DRM_FORMAT_XRGB2101010,
