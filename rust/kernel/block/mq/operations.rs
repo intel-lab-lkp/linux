@@ -11,7 +11,7 @@ use crate::{
     error::{from_result, Result},
     types::ARef,
 };
-use core::{marker::PhantomData, sync::atomic::AtomicU64, sync::atomic::Ordering};
+use core::{marker::PhantomData, sync::atomic::AtomicU32, sync::atomic::Ordering};
 
 /// Implement this trait to interface blk-mq as block devices.
 ///
@@ -186,7 +186,7 @@ impl<T: Operations> OperationsVTable<T> {
 
             // SAFETY: The refcount field is allocated but not initialized, so
             // it is valid for writes.
-            unsafe { RequestDataWrapper::refcount_ptr(pdu.as_ptr()).write(AtomicU64::new(0)) };
+            unsafe { RequestDataWrapper::refcount_ptr(pdu.as_ptr()).write(AtomicU32::new(0)) };
 
             Ok(0)
         })
