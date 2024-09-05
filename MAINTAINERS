@@ -3874,7 +3874,9 @@ F:	fs/befs/
 
 BFQ I/O SCHEDULER
 L:	linux-block@vger.kernel.org
-S:	Orphan
+M:	Ulf Hansson <ulf.hansson@linaro.org>
+M:	Linus Walleij <linus.walleij@linaro.org>
+S:	Odd Fixes
 F:	Documentation/block/bfq-iosched.rst
 F:	block/bfq-*
 
