@@ -2727,7 +2727,7 @@ int dup_user_cpus_ptr(struct task_struct *dst, struct task_struct *src,
 	 * do_set_cpus_allowed().
 	 */
 	raw_spin_lock_irqsave(&src->pi_lock, flags);
-	if (src->user_cpus_ptr) {
+	if (src->user_cpus_ptr && !src->sched_reset_on_fork) {
 		swap(dst->user_cpus_ptr, user_mask);
 		cpumask_copy(dst->user_cpus_ptr, src->user_cpus_ptr);
 	}
