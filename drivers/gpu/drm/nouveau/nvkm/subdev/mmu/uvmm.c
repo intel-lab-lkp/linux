@@ -37,7 +37,7 @@ nvkm_uvmm_search(struct nvkm_client *client, u64 handle)
 
 	object = nvkm_object_search(client, handle, &nvkm_uvmm);
 	if (IS_ERR(object))
-		return (void *)object;
+		return ERR_CAST(object);
 
 	return nvkm_vmm_ref(nvkm_uvmm(object)->vmm);
 }

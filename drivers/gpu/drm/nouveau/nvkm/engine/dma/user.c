@@ -38,7 +38,7 @@ nvkm_dmaobj_search(struct nvkm_client *client, u64 handle)
 
 	object = nvkm_object_search(client, handle, &nvkm_dmaobj_func);
 	if (IS_ERR(object))
-		return (void *)object;
+		return ERR_CAST(object);
 
 	return nvkm_dmaobj(object);
 }
