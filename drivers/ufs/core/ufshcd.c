@@ -298,7 +298,8 @@ static int ufshcd_reset_and_restore(struct ufs_hba *hba);
 static int ufshcd_eh_host_reset_handler(struct scsi_cmnd *cmd);
 static int ufshcd_clear_tm_cmd(struct ufs_hba *hba, int tag);
 static void ufshcd_hba_exit(struct ufs_hba *hba);
-static int ufshcd_probe_hba(struct ufs_hba *hba, bool init_dev_params);
+static int ufshcd_device_init(struct ufs_hba *hba, bool init_dev_params);
+static int ufshcd_probe_hba(struct ufs_hba *hba);
 static int ufshcd_setup_clocks(struct ufs_hba *hba, bool on);
 static inline void ufshcd_add_delay_before_dme_cmd(struct ufs_hba *hba);
 static int ufshcd_host_reset_and_restore(struct ufs_hba *hba);
@@ -7693,8 +7694,11 @@ static int ufshcd_host_reset_and_restore(struct ufs_hba *hba)
 	err = ufshcd_hba_enable(hba);
 
 	/* Establish the link again and restore the device */
-	if (!err)
-		err = ufshcd_probe_hba(hba, false);
+	if (!err) {
+		err = ufshcd_device_init(hba, /*init_dev_params=*/false);
+		if (!err)
+			err = ufshcd_probe_hba(hba);
+	}
 
 	if (err)
 		dev_err(hba->dev, "%s: Host init failed %d\n", __func__, err);
@@ -8830,21 +8834,16 @@ static int ufshcd_device_init(struct ufs_hba *hba, bool init_dev_params)
 /**
  * ufshcd_probe_hba - probe hba to detect device and initialize it
  * @hba: per-adapter instance
- * @init_dev_params: whether or not to call ufshcd_device_params_init().
  *
  * Execute link-startup and verify device initialization
  *
  * Return: 0 upon success; < 0 upon failure.
  */
-static int ufshcd_probe_hba(struct ufs_hba *hba, bool init_dev_params)
+static int ufshcd_probe_hba(struct ufs_hba *hba)
 {
 	ktime_t start = ktime_get();
 	unsigned long flags;
-	int ret;
-
-	ret = ufshcd_device_init(hba, init_dev_params);
-	if (ret)
-		goto out;
+	int ret = 0;
 
 	if (!hba->pm_op_in_progress &&
 	    (hba->quirks & UFSHCD_QUIRK_REINIT_AFTER_MAX_GEAR_SWITCH)) {
@@ -8862,7 +8861,7 @@ static int ufshcd_probe_hba(struct ufs_hba *hba, bool init_dev_params)
 		}
 
 		/* Reinit the device */
-		ret = ufshcd_device_init(hba, init_dev_params);
+		ret = ufshcd_device_init(hba, /*init_dev_params=*/false);
 		if (ret)
 			goto out;
 	}
@@ -8910,7 +8909,9 @@ static void ufshcd_async_scan(void *data, async_cookie_t cookie)
 
 	down(&hba->host_sem);
 	/* Initialize hba, detect and initialize UFS device */
-	ret = ufshcd_probe_hba(hba, true);
+	ret = ufshcd_device_init(hba, /*init_dev_params=*/true);
+	if (ret == 0)
+		ret = ufshcd_probe_hba(hba);
 	up(&hba->host_sem);
 	if (ret)
 		goto out;
