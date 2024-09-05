@@ -46,3 +46,10 @@ kms_setmode@basic
 # IGT Version: 1.28-gf13702b8e
 # Linux Version: 6.10.0-rc5
 kms_bw@connected-linear-tiling-1-displays-2560x1440p
+
+# Board Name: rk3399-gru-kevin
+# Bug Report:
+# Failure Rate: 50
+# IGT Version: 1.28-ga73311079
+# Linux Version: 6.11.0-rc2
+kms_flip@wf_vblank-ts-check

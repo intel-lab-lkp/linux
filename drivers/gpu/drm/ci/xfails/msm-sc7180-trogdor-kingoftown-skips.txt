@@ -23,3 +23,63 @@ kms_flip@2x-wf_vblank-ts-check
 
 # Hangs the machine
 kms_cursor_crc@cursor-random-max-size
+
+# Kernel panic
+kms_setmode@invalid-clone-single-crtc-stealing
+# [IGT] kms_setmode: executing
+# [IGT] kms_setmode: starting subtest invalid-clone-single-crtc-stealing
+# [IGT] kms_setmode: starting dynamic subtest pipe-A-eDP-1-DP-1
+# Unable to handle kernel NULL pointer dereference at virtual address 0000000000000178
+# Mem abort info:
+#   ESR = 0x0000000096000004
+#   EC = 0x25: DABT (current EL), IL = 32 bits
+#   SET = 0, FnV = 0
+#   EA = 0, S1PTW = 0
+#   FSC = 0x04: level 0 translation fault
+# Data abort info:
+#   ISV = 0, ISS = 0x00000004, ISS2 = 0x00000000
+#   CM = 0, WnR = 0, TnD = 0, TagAccess = 0
+#   GCS = 0, Overlay = 0, DirtyBit = 0, Xs = 0
+# user pgtable: 4k pages, 48-bit VAs, pgdp=000000024b2bb000
+# [0000000000000178] pgd=0000000000000000, p4d=0000000000000000
+# Internal error: Oops: 0000000096000004 [#1] PREEMPT SMP
+# Modules linked in:
+# CPU: 1 UID: 0 PID: 617 Comm: kms_setmode Not tainted 6.11.0-rc2-gee04e3109fb7 #1
+# Hardware name: Google Kingoftown (DT)
+# pstate: 60400009 (nZCv daif +PAN -UAO -TCO -DIT -SSBS BTYPE=--)
+# pc : drm_mode_is_420_only+0x24/0x40
+# lr : drm_mode_is_420_only+0x20/0x40
+# sp : ffff80008730b830
+# x29: ffff80008730b830 x28: 0000000000000001 x27: ffff70b8c174b8b0
+# x26: ffffb111a6a5ec60 x25: ffffb111a70ed178 x24: 0000000000000028
+# x23: ffff70b8c4350480 x22: ffffb111a8e2c000 x21: ffff70b8c36eba80
+# x20: ffffb111a7ce0e30 x19: 0000000000000178 x18: 0000000000000003
+# x17: 000000040044ffff x16: 005000f2b5503510 x15: 0000000000000000
+# x14: 0000000000040000 x13: 0000000000000000 x12: 0000000000000000
+# x11: 0000000000000078 x10: 0000000000000000 x9 : ffffb111a8a23de8
+# x8 : ffff80008730b828 x7 : 0000000000000000 x6 : 0000000000244140
+# x5 : 00000000012e1fc0 x4 : 00000000000003e8 x3 : 0000000000000005
+# x2 : 0000000000000000 x1 : 0000000000000000 x0 : 0000000000000000
+# Call trace:
+#  drm_mode_is_420_only+0x24/0x40
+#  dpu_encoder_get_drm_fmt+0x20/0x44
+#  dpu_encoder_phys_vid_enable+0x24/0x1f8
+#  dpu_encoder_virt_atomic_enable+0xd4/0x234
+#  drm_atomic_helper_commit_modeset_enables+0x188/0x26c
+#  msm_atomic_commit_tail+0x1d8/0x688
+#  commit_tail+0xa0/0x188
+#  drm_atomic_helper_commit+0x190/0x1a4
+#  drm_atomic_commit+0xb4/0xec
+#  drm_atomic_helper_set_config+0xdc/0x114
+#  drm_mode_setcrtc+0x420/0x808
+#  drm_ioctl_kernel+0xbc/0x12c
+#  drm_ioctl+0x230/0x4c0
+#  __arm64_sys_ioctl+0xac/0xf0
+#  invoke_syscall+0x48/0x110
+#  el0_svc_common.constprop.0+0x40/0xe0
+#  do_el0_svc+0x1c/0x28
+#  el0_svc+0x4c/0x120
+#  el0t_64_sync_handler+0x100/0x12c
+#  el0t_64_sync+0x190/0x194
+# Code: 91010273 aa0103e0 97ffad23 d3461c01 (f8617a61)
+# ---[ end trace 0000000000000000 ]---

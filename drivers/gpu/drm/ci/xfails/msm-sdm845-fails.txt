@@ -1,8 +1,4 @@
-device_reset@cold-reset-bound,Fail
-device_reset@reset-bound,Fail
-device_reset@unbind-cold-reset-rebind,Fail
-device_reset@unbind-reset-rebind,Fail
-dumb_buffer@invalid-bpp,Fail
+drm_read@invalid-buffer,Fail
 kms_color@ctm-0-25,Fail
 kms_color@ctm-0-50,Fail
 kms_color@ctm-0-75,Fail
@@ -11,6 +7,7 @@ kms_color@ctm-green-to-red,Fail
 kms_color@ctm-negative,Fail
 kms_color@ctm-red-to-blue,Fail
 kms_color@ctm-signed,Fail
+kms_content_protection@uevent,Crash
 kms_cursor_legacy@basic-flip-before-cursor-atomic,Fail
 kms_cursor_legacy@basic-flip-before-cursor-legacy,Fail
 kms_cursor_legacy@cursor-vs-flip-atomic,Fail

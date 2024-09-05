@@ -1,9 +1,4 @@
-device_reset@cold-reset-bound,Fail
-device_reset@reset-bound,Fail
-device_reset@unbind-cold-reset-rebind,Fail
-device_reset@unbind-reset-rebind,Fail
 dumb_buffer@create-clear,Crash
-dumb_buffer@invalid-bpp,Fail
 kms_atomic_transition@modeset-transition,Fail
 kms_atomic_transition@modeset-transition-fencing,Fail
 kms_atomic_transition@plane-toggle-modeset-transition,Fail
