@@ -6,6 +6,7 @@
 #include <linux/netdevice.h>
 #include <linux/pci.h>
 #include "hbg_common.h"
+#include "hbg_ethtool.h"
 #include "hbg_hw.h"
 #include "hbg_irq.h"
 #include "hbg_mdio.h"
@@ -241,6 +242,7 @@ static int hbg_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	netdev->min_mtu = priv->dev_specs.min_mtu;
 	hbg_change_mtu(priv, HBG_DEFAULT_MTU_SIZE);
 	hbg_net_set_mac_address(priv->netdev, &priv->dev_specs.mac_addr);
+	hbg_ethtool_set_ops(netdev);
 	ret = devm_register_netdev(dev, netdev);
 	if (ret)
 		return dev_err_probe(dev, ret, "failed to register netdev\n");
