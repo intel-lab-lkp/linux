@@ -2595,6 +2595,8 @@ intel_link_compute_m_n(u16 bits_per_pixel_x16, int nlanes,
 	compute_m_n(&m_n->link_m, &m_n->link_n,
 		    pixel_clock, link_symbol_clock,
 		    0x80000);
+
+	m_n->link_n_ext = 0;
 }
 
 void intel_panel_sanitize_ssc(struct drm_i915_private *dev_priv)
@@ -2632,6 +2634,7 @@ void intel_set_m_n(struct drm_i915_private *i915,
 		   i915_reg_t data_m_reg, i915_reg_t data_n_reg,
 		   i915_reg_t link_m_reg, i915_reg_t link_n_reg)
 {
+	u8 link_n_ext = 0;
 	intel_de_write(i915, data_m_reg, TU_SIZE(m_n->tu) | m_n->data_m);
 	intel_de_write(i915, data_n_reg, m_n->data_n);
 	intel_de_write(i915, link_m_reg, m_n->link_m);
@@ -2639,7 +2642,11 @@ void intel_set_m_n(struct drm_i915_private *i915,
 	 * On BDW+ writing LINK_N arms the double buffered update
 	 * of all the M/N registers, so it must be written last.
 	 */
-	intel_de_write(i915, link_n_reg, m_n->link_n);
+
+	if (DISPLAY_VER(i915) >= 14 && m_n->link_n_ext)
+		link_n_ext = PIPE_LINK_N1_EXTENDED(m_n->link_n_ext);
+
+	intel_de_write(i915, link_n_reg, m_n->link_n | link_n_ext);
 }
 
 bool intel_cpu_transcoder_has_m2_n2(struct drm_i915_private *dev_priv,
@@ -3346,8 +3353,17 @@ void intel_get_m_n(struct drm_i915_private *i915,
 		   i915_reg_t data_m_reg, i915_reg_t data_n_reg,
 		   i915_reg_t link_m_reg, i915_reg_t link_n_reg)
 {
+	u32 link_n;
+
 	m_n->link_m = intel_de_read(i915, link_m_reg) & DATA_LINK_M_N_MASK;
-	m_n->link_n = intel_de_read(i915, link_n_reg) & DATA_LINK_M_N_MASK;
+
+	link_n = intel_de_read(i915, link_n_reg);
+	m_n->link_n = link_n & DATA_LINK_M_N_MASK;
+	if (DISPLAY_VER(i915) >= 14)
+		m_n->link_n_ext = REG_FIELD_GET(PIPE_LINK_N1_EXTENDED_MASK, link_n);
+	else
+		m_n->link_n_ext = 0;
+
 	m_n->data_m = intel_de_read(i915, data_m_reg) & DATA_LINK_M_N_MASK;
 	m_n->data_n = intel_de_read(i915, data_n_reg) & DATA_LINK_M_N_MASK;
 	m_n->tu = REG_FIELD_GET(TU_SIZE_MASK, intel_de_read(i915, data_m_reg)) + 1;
@@ -4843,7 +4859,8 @@ intel_compare_link_m_n(const struct intel_link_m_n *m_n,
 		m_n->data_m == m2_n2->data_m &&
 		m_n->data_n == m2_n2->data_n &&
 		m_n->link_m == m2_n2->link_m &&
-		m_n->link_n == m2_n2->link_n;
+		m_n->link_n == m2_n2->link_n &&
+		m_n->link_n_ext == m2_n2->link_n_ext;
 }
 
 static bool
@@ -5133,18 +5150,20 @@ intel_pipe_config_compare(const struct intel_crtc_state *current_config,
 	if (!intel_compare_link_m_n(&current_config->name, \
 				    &pipe_config->name)) { \
 		pipe_config_mismatch(&p, fastset, crtc, __stringify(name), \
-				     "(expected tu %i data %i/%i link %i/%i, " \
-				     "found tu %i, data %i/%i link %i/%i)", \
+				     "(expected tu %i data %i/%i link %i/%i link_n_ext %i, " \
+				     "found tu %i, data %i/%i link %i/%i link_n_ext %i)", \
 				     current_config->name.tu, \
 				     current_config->name.data_m, \
 				     current_config->name.data_n, \
 				     current_config->name.link_m, \
 				     current_config->name.link_n, \
+				     current_config->name.link_n_ext, \
 				     pipe_config->name.tu, \
 				     pipe_config->name.data_m, \
 				     pipe_config->name.data_n, \
 				     pipe_config->name.link_m, \
-				     pipe_config->name.link_n); \
+				     pipe_config->name.link_n, \
+				     pipe_config->name.link_n_ext); \
 		ret = false; \
 	} \
 } while (0)

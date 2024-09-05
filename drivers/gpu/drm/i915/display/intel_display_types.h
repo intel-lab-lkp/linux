@@ -1028,6 +1028,7 @@ struct intel_link_m_n {
 	u32 data_n;
 	u32 link_m;
 	u32 link_n;
+	u8 link_n_ext;
 };
 
 struct intel_csc_matrix {
