@@ -27,6 +27,7 @@
 
 #include "vmwgfx_bo.h"
 #include "vmwgfx_drv.h"
+#include "vmwgfx_trace.h"
 
 #include <drm/ttm/ttm_bo.h>
 
@@ -141,6 +142,7 @@ struct vmw_cmdbuf_man {
  * @man: The command buffer manager.
  * @cb_header: Device command buffer header, allocated from a DMA pool.
  * @cb_context: The device command buffer context.
+ * @inline_space: Whether inline command buffer space is used.
  * @list: List head for attaching to the manager lists.
  * @node: The range manager node.
  * @handle: The DMA address of @cb_header. Handed to the device on command
@@ -148,19 +150,20 @@ struct vmw_cmdbuf_man {
  * @cmd: Pointer to the command buffer space of this buffer.
  * @size: Size of the command buffer space of this buffer.
  * @reserved: Reserved space of this buffer.
- * @inline_space: Whether inline command buffer space is used.
+ * @submit_time: When the CB was submitted to hardware in jiffies.
  */
 struct vmw_cmdbuf_header {
 	struct vmw_cmdbuf_man *man;
 	SVGACBHeader *cb_header;
 	SVGACBContext cb_context;
+	bool inline_space;
 	struct list_head list;
 	struct drm_mm_node node;
 	dma_addr_t handle;
 	u8 *cmd;
 	size_t size;
 	size_t reserved;
-	bool inline_space;
+	u64 submit_time;
 };
 
 /**
@@ -303,6 +306,7 @@ static int vmw_cmdbuf_header_submit(struct vmw_cmdbuf_header *header)
 	struct vmw_cmdbuf_man *man = header->man;
 	u32 val;
 
+	header->submit_time = get_jiffies_64();
 	val = upper_32_bits(header->handle);
 	vmw_write(man->dev_priv, SVGA_REG_COMMAND_HIGH, val);
 
@@ -391,6 +395,7 @@ static void vmw_cmdbuf_ctx_process(struct vmw_cmdbuf_man *man,
 		list_del(&entry->list);
 		wake_up_all(&man->idle_queue);
 		ctx->num_hw_submitted--;
+		trace_vmwgfx_cmdbuf_done(status, entry);
 		switch (status) {
 		case SVGA_CB_STATUS_COMPLETED:
 			__vmw_cmdbuf_header_free(entry);
