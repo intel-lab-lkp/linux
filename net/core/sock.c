@@ -908,8 +908,9 @@ int sock_set_timestamping(struct sock *sk, int optname,
 	    !(val & SOF_TIMESTAMPING_OPT_ID))
 		return -EINVAL;
 
-	if (val & SOF_TIMESTAMPING_RX_SOFTWARE &&
-	    val & SOF_TIMESTAMPING_OPT_RX_FILTER)
+	if (val & SOF_TIMESTAMPING_OPT_RX_FILTER &&
+	    (val & SOF_TIMESTAMPING_RX_SOFTWARE ||
+	     val & SOF_TIMESTAMPING_RX_HARDWARE))
 		return -EINVAL;
 
 	if (val & SOF_TIMESTAMPING_OPT_ID &&

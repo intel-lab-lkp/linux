@@ -2283,7 +2283,8 @@ void tcp_recv_timestamp(struct msghdr *msg, const struct sock *sk,
 	}
 
 	if (tss->ts[2].tv_sec || tss->ts[2].tv_nsec) {
-		if (tsflags & SOF_TIMESTAMPING_RAW_HARDWARE)
+		if (tsflags & SOF_TIMESTAMPING_RAW_HARDWARE &&
+		    !(tsflags & SOF_TIMESTAMPING_OPT_RX_FILTER))
 			has_timestamping = true;
 		else
 			tss->ts[2] = (struct timespec64) {0};
