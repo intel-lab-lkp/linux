@@ -287,7 +287,7 @@ static int __init cachesize_setup(char *str)
 __setup("cachesize=", cachesize_setup);
 
 /* Standard macro to see if a specific flag is changeable */
-static inline int flag_is_changeable_p(u32 flag)
+static inline __maybe_unused int flag_is_changeable_p(u32 flag)
 {
 	u32 f1, f2;
 
