@@ -670,6 +670,7 @@ static int ath9k_of_init(struct ath_softc *sc)
 	struct ath_common *common = ath9k_hw_common(ah);
 	enum ath_bus_type bus_type = common->bus_ops->ath_bus_type;
 	char eeprom_name[100];
+	u8 led_pin;
 	int ret;
 
 	if (!of_device_is_available(np))
@@ -690,6 +691,12 @@ static int ath9k_of_init(struct ath_softc *sc)
 		ah->ah_flags &= ~AH_USE_EEPROM;
 		ah->ah_flags |= AH_NO_EEP_SWAP;
 	}
+
+	if (!of_property_read_u8(np, "qca,led-pin", &led_pin))
+		ah->led_pin = led_pin;
+
+	ah->config.led_active_high = of_property_read_bool(np, "qca,led-active-high");
+	ah->config.tx_gain_buffalo = of_device_is_compatible(np, "buffalo,wzr-hp-g450h");
 
 	of_get_mac_address(np, common->macaddr);
 
