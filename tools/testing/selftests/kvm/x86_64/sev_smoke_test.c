@@ -224,13 +224,151 @@ static void test_sev_launch(void *guest_code, uint32_t type, uint64_t policy)
 	kvm_vm_free(vm);
 }
 
+static int __test_snp_launch_start(uint32_t type, uint64_t policy,
+				   uint8_t flags, bool assert)
+{
+	struct kvm_vm *vm;
+	int ret = 0;
+
+	vm = vm_create_type(type, 1);
+	ret = __snp_vm_launch_start(vm, policy, flags);
+	if (assert)
+		TEST_ASSERT_VM_VCPU_IOCTL(!ret, KVM_SEV_SNP_LAUNCH_START, ret, vm);
+	kvm_vm_free(vm);
+
+	return ret;
+}
+
+static void test_snp_launch_start(uint32_t type, uint64_t policy)
+{
+	uint8_t i;
+	int ret;
+
+	/* Flags must be zero for success */
+	__test_snp_launch_start(type, policy, 0, true);
+
+	for (i = 1; i < 8; i++) {
+		ret = __test_snp_launch_start(type, policy, BIT(i), false);
+		TEST_ASSERT(ret && errno == EINVAL,
+			    "KVM_SEV_SNP_LAUNCH_START should fail, invalid flag\n"
+			    "(type: %d policy: 0x%lx, flag: 0x%lx)",
+			    type, policy, BIT(i));
+	}
+
+	ret = __test_snp_launch_start(type, SNP_POLICY_SMT, 0, false);
+	TEST_ASSERT(ret && errno == EINVAL,
+		    "KVM_SEV_SNP_LAUNCH_START should fail, SNP_POLICY_RSVD_MBO policy bit not set\n"
+		    "(type: %d policy: 0x%llx, flags: 0x0)",
+		    type, SNP_POLICY_SMT);
+
+	ret = __test_snp_launch_start(type, SNP_POLICY_RSVD_MBO, 0, false);
+	if (unlikely(!is_smt_active())) {
+		TEST_ASSERT(!ret,
+			    "KVM_SEV_SNP_LAUNCH_START should succeed, SNP_POLICY_SMT not required on non-SMT systems\n"
+			    "(type: %d policy: 0x%llx, flags: 0x0)",
+			    type, SNP_POLICY_RSVD_MBO);
+	} else {
+		TEST_ASSERT(ret && errno == EINVAL,
+			    "KVM_SEV_SNP_LAUNCH_START should fail, SNP_POLICY_SMT is not set on a SMT system\n"
+			    "(type: %d policy: 0x%llx, flags: 0x0)",
+			    type, SNP_POLICY_RSVD_MBO);
+	}
+
+	ret = __test_snp_launch_start(type, SNP_POLICY |
+				      SNP_FW_VER_MAJOR(UINT8_MAX) |
+				      SNP_FW_VER_MINOR(UINT8_MAX), 0, false);
+	TEST_ASSERT(ret && errno == EIO,
+		    "KVM_SEV_SNP_LAUNCH_START should fail, invalid version\n"
+		    "expected: %d.%d got: %d.%d (type: %d policy: 0x%llx, flags: 0x0)",
+		    SNP_FW_REQ_VER_MAJOR, SNP_FW_REQ_VER_MINOR,
+		    UINT8_MAX, UINT8_MAX, type,
+		    SNP_POLICY | SNP_FW_VER_MAJOR(UINT8_MAX) | SNP_FW_VER_MINOR(UINT8_MAX));
+}
+
+static void test_snp_launch_update(uint32_t type, uint64_t policy)
+{
+	struct kvm_vm *vm;
+	int ret;
+
+	for (int pgtype = 0; pgtype <= KVM_SEV_SNP_PAGE_TYPE_CPUID + 1; pgtype++) {
+		vm = vm_create_type(type, 1);
+		snp_vm_launch_start(vm, policy);
+		ret = __snp_vm_launch_update(vm, pgtype);
+
+		switch (pgtype) {
+		case KVM_SEV_SNP_PAGE_TYPE_NORMAL:
+		case KVM_SEV_SNP_PAGE_TYPE_ZERO:
+		case KVM_SEV_SNP_PAGE_TYPE_UNMEASURED:
+		case KVM_SEV_SNP_PAGE_TYPE_SECRETS:
+			TEST_ASSERT(!ret,
+				    "KVM_SEV_SNP_LAUNCH_UPDATE should succeed, invalid Page type %d",
+				    pgtype);
+			break;
+		case KVM_SEV_SNP_PAGE_TYPE_CPUID:
+			/*
+			 * Expect failure if performed on random pages of
+			 * guest memory rather than properly formatted CPUID Page
+			 */
+			TEST_ASSERT(ret && errno == EIO,
+				    "KVM_SEV_SNP_LAUNCH_UPDATE should fail,\n"
+				    "CPUID page type only valid for CPUID pages");
+			break;
+		default:
+			TEST_ASSERT(ret && errno == EINVAL,
+				    "KVM_SEV_SNP_LAUNCH_UPDATE should fail, invalid Page type");
+		}
+
+		kvm_vm_free(vm);
+	}
+}
+
+void test_snp_launch_finish(uint32_t type, uint64_t policy)
+{
+	struct kvm_vm *vm;
+	int ret;
+
+	vm = vm_create_type(type, 1);
+	snp_vm_launch_start(vm, policy);
+	snp_vm_launch_update(vm);
+	/* Flags must be zero for success */
+	snp_vm_launch_finish(vm);
+	kvm_vm_free(vm);
+
+	for (int i = 1; i < 16; i++) {
+		vm = vm_create_type(type, 1);
+		snp_vm_launch_start(vm, policy);
+		snp_vm_launch_update(vm);
+		ret = __snp_vm_launch_finish(vm, BIT(i));
+		TEST_ASSERT(ret && errno == EINVAL,
+			    "KVM_SEV_SNP_LAUNCH_FINISH should fail, invalid flag\n"
+			    "(type: %d policy: 0x%lx, flag: 0x%lx)",
+			    type, policy, BIT(i));
+		kvm_vm_free(vm);
+	}
+}
+
+static void test_snp_ioctl(void *guest_code, uint32_t type, uint64_t policy)
+{
+	test_snp_launch_start(type, policy);
+	test_snp_launch_update(type, policy);
+	test_snp_launch_finish(type, policy);
+}
+
+static void test_sev_ioctl(void *guest_code, uint32_t type, uint64_t policy)
+{
+	test_sev_launch(guest_code, type, policy);
+}
+
 static void test_sev(void *guest_code, uint32_t type, uint64_t policy)
 {
 	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm;
 	struct ucall uc;
 
-	test_sev_launch(guest_code, type, policy);
+	if (type == KVM_X86_SNP_VM)
+		test_snp_ioctl(guest_code, type, policy);
+	else
+		test_sev_ioctl(guest_code, type, policy);
 
 	vm = vm_sev_create_with_one_vcpu(type, guest_code, &vcpu);
 

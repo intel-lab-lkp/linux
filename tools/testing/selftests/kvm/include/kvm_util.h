@@ -912,6 +912,17 @@ static inline struct kvm_vm *vm_create(uint32_t nr_runnable_vcpus)
 	return __vm_create(VM_SHAPE_DEFAULT, nr_runnable_vcpus, 0);
 }
 
+static inline struct kvm_vm *vm_create_type(unsigned long type,
+					    uint32_t nr_runnable_vcpus)
+{
+	const struct vm_shape shape = {
+		.mode = VM_MODE_DEFAULT,
+		.type = type,
+	};
+
+	return __vm_create(shape, nr_runnable_vcpus, 0);
+}
+
 struct kvm_vm *__vm_create_with_vcpus(struct vm_shape shape, uint32_t nr_vcpus,
 				      uint64_t extra_mem_pages,
 				      void *guest_code, struct kvm_vcpu *vcpus[]);
