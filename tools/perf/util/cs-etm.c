@@ -1908,60 +1908,6 @@ static int cs_etm__exception(struct cs_etm_traceid_queue *tidq)
 	return 0;
 }
 
-static int cs_etm__flush(struct cs_etm_queue *etmq,
-			 struct cs_etm_traceid_queue *tidq)
-{
-	int err = 0;
-	struct cs_etm_auxtrace *etm = etmq->etm;
-
-	/* Handle start tracing packet */
-	if (tidq->prev_packet->sample_type == CS_ETM_EMPTY)
-		goto swap_packet;
-
-	if (etmq->etm->synth_opts.last_branch &&
-	    etmq->etm->synth_opts.instructions &&
-	    tidq->prev_packet->sample_type == CS_ETM_RANGE) {
-		u64 addr;
-
-		/* Prepare last branches for instruction sample */
-		cs_etm__copy_last_branch_rb(etmq, tidq);
-
-		/*
-		 * Generate a last branch event for the branches left in the
-		 * circular buffer at the end of the trace.
-		 *
-		 * Use the address of the end of the last reported execution
-		 * range
-		 */
-		addr = cs_etm__last_executed_instr(tidq->prev_packet);
-
-		err = cs_etm__synth_instruction_sample(
-			etmq, tidq, addr,
-			tidq->period_instructions);
-		if (err)
-			return err;
-
-		tidq->period_instructions = 0;
-
-	}
-
-	if (etm->synth_opts.branches &&
-	    tidq->prev_packet->sample_type == CS_ETM_RANGE) {
-		err = cs_etm__synth_branch_sample(etmq, tidq);
-		if (err)
-			return err;
-	}
-
-swap_packet:
-	cs_etm__packet_swap(etm, tidq);
-
-	/* Reset last branches after flush the trace */
-	if (etm->synth_opts.last_branch)
-		cs_etm__reset_last_branch_rb(tidq);
-
-	return err;
-}
-
 static int cs_etm__end_block(struct cs_etm_queue *etmq,
 			     struct cs_etm_traceid_queue *tidq)
 {
@@ -2457,10 +2403,12 @@ static int cs_etm__process_traceid_queue(struct cs_etm_queue *etmq,
 			break;
 		case CS_ETM_DISCONTINUITY:
 			/*
-			 * Discontinuity in trace, flush
-			 * previous branch stack
+			 * Discontinuity in trace, generate a sample then
+			 * clear the branch stack.
 			 */
-			cs_etm__flush(etmq, tidq);
+			cs_etm__sample(etmq, tidq);
+			if (etmq->etm->synth_opts.last_branch)
+				cs_etm__reset_last_branch_rb(tidq);
 			break;
 		case CS_ETM_EMPTY:
 			/*
