@@ -21,7 +21,7 @@
 #include <asm/unaligned.h>
 #include <crypto/skcipher.h>
 #include <linux/key-type.h>
-#include <linux/random.h>
+#include <linux/prandom.h>
 #include <linux/seq_file.h>
 
 #include "fscrypt_private.h"
