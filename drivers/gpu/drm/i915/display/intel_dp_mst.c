@@ -122,23 +122,28 @@ static int intel_dp_mst_bw_overhead(const struct intel_crtc_state *crtc_state,
 	return max(overhead, intel_dp_bw_fec_overhead(crtc_state->fec_enable));
 }
 
-static void intel_dp_mst_compute_m_n(const struct intel_crtc_state *crtc_state,
-				     const struct intel_connector *connector,
-				     int overhead,
-				     int bpp_x16,
-				     struct intel_link_m_n *m_n)
+static int intel_dp_mst_compute_m_n(const struct intel_crtc_state *crtc_state,
+				    const struct intel_connector *connector,
+				    int overhead,
+				    int bpp_x16,
+				    struct intel_link_m_n *m_n)
 {
 	const struct drm_display_mode *adjusted_mode =
 		&crtc_state->hw.adjusted_mode;
+	struct intel_display *display = to_intel_display(connector);
+	int ret;
 
 	/* TODO: Check WA 14013163432 to set data M/N for full BW utilization. */
-	intel_link_compute_m_n(bpp_x16, crtc_state->lane_count,
-			       adjusted_mode->crtc_clock,
-			       crtc_state->port_clock,
-			       overhead,
-			       m_n);
+	ret = intel_link_compute_m_n(display, bpp_x16, crtc_state->lane_count,
+				     adjusted_mode->crtc_clock,
+				     crtc_state->port_clock,
+				     overhead, m_n);
+	if (ret)
+		return ret;
 
 	m_n->tu = DIV_ROUND_UP_ULL(mul_u32_u32(m_n->data_m, 64), m_n->data_n);
+
+	return ret;
 }
 
 static int intel_dp_mst_calc_pbn(int pixel_clock, int bpp_x16, int bw_overhead)
@@ -220,10 +225,11 @@ static int intel_dp_mst_find_vcpi_slots_for_bpp(struct intel_encoder *encoder,
 		remote_bw_overhead = intel_dp_mst_bw_overhead(crtc_state, connector,
 							      true, dsc, link_bpp_x16);
 
-		intel_dp_mst_compute_m_n(crtc_state, connector,
-					 local_bw_overhead,
-					 link_bpp_x16,
-					 &crtc_state->dp_m_n);
+		if (!intel_dp_mst_compute_m_n(crtc_state, connector,
+					      local_bw_overhead,
+					      link_bpp_x16,
+					      &crtc_state->dp_m_n))
+			continue;
 
 		/*
 		 * The TU size programmed to the HW determines which slots in

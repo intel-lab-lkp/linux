@@ -2569,8 +2569,15 @@ static void compute_m_n(u32 *ret_m, u32 *ret_n,
 	intel_reduce_m_n_ratio(ret_m, ret_n);
 }
 
-void
-intel_link_compute_m_n(u16 bits_per_pixel_x16, int nlanes,
+static int
+get_max_link_m_n_ratio(void)
+{
+	return 10;
+}
+
+int
+intel_link_compute_m_n(struct intel_display *display,
+		       u16 bits_per_pixel_x16, int nlanes,
 		       int pixel_clock, int link_clock,
 		       int bw_overhead,
 		       struct intel_link_m_n *m_n)
@@ -2579,6 +2586,7 @@ intel_link_compute_m_n(u16 bits_per_pixel_x16, int nlanes,
 	u32 data_m = intel_dp_effective_data_rate(pixel_clock, bits_per_pixel_x16,
 						  bw_overhead);
 	u32 data_n = drm_dp_max_dprx_data_rate(link_clock, nlanes);
+	int link_m_n_ratio, max_link_m_n_ratio;
 
 	/*
 	 * Windows/BIOS uses fixed M/N values always. Follow suit.
@@ -2597,6 +2605,23 @@ intel_link_compute_m_n(u16 bits_per_pixel_x16, int nlanes,
 		    0x80000);
 
 	m_n->link_n_ext = 0;
+
+	if (DISPLAY_VER(display) < 12)
+		return 0;
+
+	/* Check for Link M/N ratio for Display >= 12 */
+	max_link_m_n_ratio = get_max_link_m_n_ratio();
+
+	link_m_n_ratio = DIV_ROUND_UP(m_n->link_m, m_n->link_m);
+
+	if (link_m_n_ratio > max_link_m_n_ratio) {
+		drm_dbg_kms(display->drm,
+			    "Cannot support Link_m/Link_n ratio : %d > max_link_m_n_ratio\n",
+			    link_m_n_ratio);
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
 void intel_panel_sanitize_ssc(struct drm_i915_private *dev_priv)

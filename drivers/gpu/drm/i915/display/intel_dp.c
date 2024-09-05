@@ -2844,15 +2844,17 @@ static bool can_enable_drrs(struct intel_connector *connector,
 		intel_panel_drrs_type(connector) == DRRS_TYPE_SEAMLESS;
 }
 
-static void
+static int
 intel_dp_drrs_compute_config(struct intel_connector *connector,
 			     struct intel_crtc_state *pipe_config,
 			     int link_bpp_x16)
 {
 	struct drm_i915_private *i915 = to_i915(connector->base.dev);
+	struct intel_display *display = to_intel_display(connector);
 	const struct drm_display_mode *downclock_mode =
 		intel_panel_downclock_mode(connector, &pipe_config->hw.adjusted_mode);
 	int pixel_clock;
+	int ret;
 
 	/*
 	 * FIXME all joined pipes share the same transcoder.
@@ -2864,7 +2866,7 @@ intel_dp_drrs_compute_config(struct intel_connector *connector,
 	if (!can_enable_drrs(connector, pipe_config, downclock_mode)) {
 		if (intel_cpu_transcoder_has_m2_n2(i915, pipe_config->cpu_transcoder))
 			intel_zero_m_n(&pipe_config->dp_m2_n2);
-		return;
+		return 0;
 	}
 
 	if (IS_IRONLAKE(i915) || IS_SANDYBRIDGE(i915) || IS_IVYBRIDGE(i915))
@@ -2876,14 +2878,18 @@ intel_dp_drrs_compute_config(struct intel_connector *connector,
 	if (pipe_config->splitter.enable)
 		pixel_clock /= pipe_config->splitter.link_count;
 
-	intel_link_compute_m_n(link_bpp_x16, pipe_config->lane_count, pixel_clock,
-			       pipe_config->port_clock,
-			       intel_dp_bw_fec_overhead(pipe_config->fec_enable),
-			       &pipe_config->dp_m2_n2);
+	ret = intel_link_compute_m_n(display, link_bpp_x16, pipe_config->lane_count, pixel_clock,
+				     pipe_config->port_clock,
+				     intel_dp_bw_fec_overhead(pipe_config->fec_enable),
+				     &pipe_config->dp_m2_n2);
+	if (ret)
+		return ret;
 
 	/* FIXME: abstract this better */
 	if (pipe_config->splitter.enable)
 		pipe_config->dp_m2_n2.data_m *= pipe_config->splitter.link_count;
+
+	return 0;
 }
 
 static bool intel_dp_has_audio(struct intel_encoder *encoder,
@@ -3006,6 +3012,7 @@ intel_dp_compute_config(struct intel_encoder *encoder,
 			struct drm_connector_state *conn_state)
 {
 	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
+	struct intel_display *display = to_intel_display(encoder);
 	struct intel_atomic_state *state = to_intel_atomic_state(conn_state->state);
 	struct drm_display_mode *adjusted_mode = &pipe_config->hw.adjusted_mode;
 	struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
@@ -3087,12 +3094,14 @@ intel_dp_compute_config(struct intel_encoder *encoder,
 
 	intel_dp_audio_compute_config(encoder, pipe_config, conn_state);
 
-	intel_link_compute_m_n(link_bpp_x16,
-			       pipe_config->lane_count,
-			       adjusted_mode->crtc_clock,
-			       pipe_config->port_clock,
-			       intel_dp_bw_fec_overhead(pipe_config->fec_enable),
-			       &pipe_config->dp_m_n);
+	ret = intel_link_compute_m_n(display, link_bpp_x16,
+				     pipe_config->lane_count,
+				     adjusted_mode->crtc_clock,
+				     pipe_config->port_clock,
+				     intel_dp_bw_fec_overhead(pipe_config->fec_enable),
+				     &pipe_config->dp_m_n);
+	if (ret)
+		return ret;
 
 	/* FIXME: abstract this better */
 	if (pipe_config->splitter.enable)
@@ -3105,7 +3114,11 @@ intel_dp_compute_config(struct intel_encoder *encoder,
 	intel_dp_compute_as_sdp(intel_dp, pipe_config);
 	intel_psr_compute_config(intel_dp, pipe_config, conn_state);
 	intel_alpm_lobf_compute_config(intel_dp, pipe_config, conn_state);
-	intel_dp_drrs_compute_config(connector, pipe_config, link_bpp_x16);
+
+	ret = intel_dp_drrs_compute_config(connector, pipe_config, link_bpp_x16);
+	if (ret)
+		return ret;
+
 	intel_dp_compute_vsc_sdp(intel_dp, pipe_config, conn_state);
 	intel_dp_compute_hdr_metadata_infoframe_sdp(intel_dp, pipe_config, conn_state);
 
