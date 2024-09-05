@@ -71,12 +71,12 @@
 #define I_FMA_FFMT_SFT	0
 #define MIPSInst_FMA_FFMT(x) (MIPSInst(x) & 0x00000007)
 
-typedef unsigned int mips_instruction;
+typedef unsigned int mips_insn;
 
 /* microMIPS instruction decode structure. Do NOT export!!! */
 struct mm_decoded_insn {
-	mips_instruction insn;
-	mips_instruction next_insn;
+	mips_insn insn;
+	mips_insn next_insn;
 	int pc_inc;
 	int next_pc_inc;
 	int micro_mips_mode;

@@ -61,8 +61,8 @@
  *   couldn't already.
  */
 struct emuframe {
-	mips_instruction	emul;
-	mips_instruction	badinst;
+	mips_insn	emul;
+	mips_insn	badinst;
 };
 
 static const int emupage_frame_count = PAGE_SIZE / sizeof(struct emuframe);
@@ -206,11 +206,11 @@ void dsemul_mm_cleanup(struct mm_struct *mm)
 	bitmap_free(mm_ctx->bd_emupage_allocmap);
 }
 
-int mips_dsemul(struct pt_regs *regs, mips_instruction ir,
+int mips_dsemul(struct pt_regs *regs, mips_insn ir,
 		unsigned long branch_pc, unsigned long cont_pc)
 {
 	int isa16 = get_isa16_mode(regs->cp0_epc);
-	mips_instruction break_math;
+	mips_insn break_math;
 	unsigned long fr_uaddr;
 	struct emuframe fr;
 	int fr_idx, ret;
