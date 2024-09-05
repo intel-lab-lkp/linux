@@ -394,6 +394,8 @@ static inline void vm_set_memory_attributes(struct kvm_vm *vm, uint64_t gpa,
 	vm_ioctl(vm, KVM_SET_MEMORY_ATTRIBUTES, &attr);
 }
 
+void vm_mem_set_protected(struct kvm_vm *vm, uint32_t memslot,
+			  vm_paddr_t paddr, size_t num);
 
 static inline void vm_mem_set_private(struct kvm_vm *vm, uint64_t gpa,
 				      uint64_t size)

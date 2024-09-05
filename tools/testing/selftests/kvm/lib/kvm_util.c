@@ -1992,6 +1992,43 @@ const char *exit_reason_str(unsigned int exit_reason)
 }
 
 /*
+ * Set what guest GFNs need to be encrypted prior to finalizing a CoCo VM.
+ *
+ * Input Args:
+ *   vm - Virtual Machine
+ *   memslot - Memory region to allocate page from
+ *   paddr - Start of physical address to mark as encrypted
+ *   num - number of pages
+ *
+ * Output Args: None
+ *
+ * Return: None
+ *
+ * Generally __vm_phy_pages_alloc() will handle this automatically, but
+ * for cases where the test handles managing the physical allocation and
+ * mapping directly this interface should be used to mark physical pages
+ * that are intended to be encrypted as part of the initial guest state.
+ * This will also affect whether virt_map()/virt_pg_map() will map the
+ * page as encrypted or not in the initial guest page table.
+ *
+ * If the initial guest state has already been finalized, then setting
+ * it as encrypted will essentially be a noop since nothing more can be
+ * encrypted into the initial guest state at that point.
+ */
+void vm_mem_set_protected(struct kvm_vm *vm, uint32_t memslot,
+			  vm_paddr_t paddr, size_t num)
+{
+	struct userspace_mem_region *region;
+	sparsebit_idx_t pg, base;
+
+	base = paddr >> vm->page_shift;
+	region = memslot2region(vm, memslot);
+
+	for (pg = base; pg < base + num; ++pg)
+		sparsebit_set(region->protected_phy_pages, pg);
+}
+
+/*
  * Physical Contiguous Page Allocator
  *
  * Input Args:
@@ -2048,11 +2085,11 @@ vm_paddr_t __vm_phy_pages_alloc(struct kvm_vm *vm, size_t num,
 		abort();
 	}
 
-	for (pg = base; pg < base + num; ++pg) {
+	for (pg = base; pg < base + num; ++pg)
 		sparsebit_clear(region->unused_phy_pages, pg);
-		if (protected)
-			sparsebit_set(region->protected_phy_pages, pg);
-	}
+
+	if (protected)
+		vm_mem_set_protected(vm, memslot, base << vm->page_shift, num);
 
 	return base * vm->page_size;
 }
