@@ -160,6 +160,9 @@ struct ib_uverbs_file {
 	struct page *disassociate_page;
 
 	struct xarray		idr;
+
+	struct mutex disassociation_lock;
+	bool disassociated;
 };
 
 struct ib_uverbs_event {
