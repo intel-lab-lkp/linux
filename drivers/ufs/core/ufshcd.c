@@ -298,7 +298,7 @@ static int ufshcd_reset_and_restore(struct ufs_hba *hba);
 static int ufshcd_eh_host_reset_handler(struct scsi_cmnd *cmd);
 static int ufshcd_clear_tm_cmd(struct ufs_hba *hba, int tag);
 static void ufshcd_hba_exit(struct ufs_hba *hba);
-static int ufshcd_device_init(struct ufs_hba *hba, bool init_dev_params);
+static int ufshcd_device_init(struct ufs_hba *hba);
 static int ufshcd_probe_hba(struct ufs_hba *hba);
 static int ufshcd_setup_clocks(struct ufs_hba *hba, bool on);
 static inline void ufshcd_add_delay_before_dme_cmd(struct ufs_hba *hba);
@@ -7695,7 +7695,7 @@ static int ufshcd_host_reset_and_restore(struct ufs_hba *hba)
 
 	/* Establish the link again and restore the device */
 	if (!err) {
-		err = ufshcd_device_init(hba, /*init_dev_params=*/false);
+		err = ufshcd_device_init(hba);
 		if (!err)
 			err = ufshcd_probe_hba(hba);
 	}
@@ -8770,9 +8770,8 @@ static int ufshcd_post_device_init(struct ufs_hba *hba)
 	return 0;
 }
 
-static int ufshcd_device_init(struct ufs_hba *hba, bool init_dev_params)
+static int ufshcd_device_init(struct ufs_hba *hba)
 {
-	struct Scsi_Host *host = hba->host;
 	int ret;
 
 	ret = ufshcd_activate_link(hba);
@@ -8780,7 +8779,7 @@ static int ufshcd_device_init(struct ufs_hba *hba, bool init_dev_params)
 		return ret;
 
 	/* Reconfigure MCQ upon reset */
-	if (hba->mcq_enabled && !init_dev_params) {
+	if (hba->mcq_enabled) {
 		ufshcd_config_mcq(hba);
 		ufshcd_mcq_enable(hba);
 	}
@@ -8794,39 +8793,6 @@ static int ufshcd_device_init(struct ufs_hba *hba, bool init_dev_params)
 	ret = ufshcd_complete_dev_init(hba);
 	if (ret)
 		return ret;
-
-	/*
-	 * Initialize UFS device parameters used by driver, these
-	 * parameters are associated with UFS descriptors.
-	 */
-	if (init_dev_params) {
-		ret = ufshcd_device_params_init(hba);
-		if (ret)
-			return ret;
-		if (is_mcq_supported(hba) && !hba->scsi_host_added) {
-			ufshcd_mcq_enable(hba);
-			ret = ufshcd_alloc_mcq(hba);
-			if (!ret) {
-				ufshcd_config_mcq(hba);
-			} else {
-				/* Continue with SDB mode */
-				ufshcd_mcq_disable(hba);
-				use_mcq_mode = false;
-				dev_err(hba->dev, "MCQ mode is disabled, err=%d\n",
-					 ret);
-			}
-			ret = scsi_add_host(host, hba->dev);
-			if (ret) {
-				dev_err(hba->dev, "scsi_add_host failed\n");
-				return ret;
-			}
-			hba->scsi_host_added = true;
-		} else if (is_mcq_supported(hba)) {
-			/* UFSHCD_QUIRK_REINIT_AFTER_MAX_GEAR_SWITCH is set */
-			ufshcd_config_mcq(hba);
-			ufshcd_mcq_enable(hba);
-		}
-	}
 
 	return ufshcd_post_device_init(hba);
 }
@@ -8861,7 +8827,7 @@ static int ufshcd_probe_hba(struct ufs_hba *hba)
 		}
 
 		/* Reinit the device */
-		ret = ufshcd_device_init(hba, /*init_dev_params=*/false);
+		ret = ufshcd_device_init(hba);
 		if (ret)
 			goto out;
 	}
