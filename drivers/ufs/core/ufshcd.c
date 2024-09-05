@@ -8908,10 +8908,7 @@ static void ufshcd_async_scan(void *data, async_cookie_t cookie)
 	int ret;
 
 	down(&hba->host_sem);
-	/* Initialize hba, detect and initialize UFS device */
-	ret = ufshcd_device_init(hba, /*init_dev_params=*/true);
-	if (ret == 0)
-		ret = ufshcd_probe_hba(hba);
+	ret = ufshcd_probe_hba(hba);
 	up(&hba->host_sem);
 	if (ret)
 		goto out;
@@ -10604,6 +10601,10 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 	 * ufshcd_probe_hba().
 	 */
 	ufshcd_set_ufs_dev_active(hba);
+
+	err = ufshcd_device_init(hba, /*init_dev_params=*/true);
+	if (err)
+		goto out_disable;
 
 	err = ufshcd_add_scsi_host(hba);
 	if (err)
