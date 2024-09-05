@@ -75,6 +75,7 @@
 #include "intel_display_driver.h"
 #include "intel_display_power.h"
 #include "intel_display_types.h"
+#include "intel_display_wa.h"
 #include "intel_dmc.h"
 #include "intel_dp.h"
 #include "intel_dp_link_training.h"
@@ -3436,8 +3437,7 @@ int bmg_can_bypass_m_n_limit(struct intel_display *display,
 {
 	struct drm_i915_private *i915 = to_i915(display->drm);
 
-	if (DISPLAY_VER(display) != 14 || !IS_DGFX(i915) ||
-	    !IS_DISPLAY_STEP(display, STEP_C0, STEP_FOREVER))
+	if (!intel_display_needs_wa_14021768792(i915))
 		return false;
 
 	if (pipe != PIPE_A)
