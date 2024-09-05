@@ -653,15 +653,22 @@ static void efx_get_queue_stats_tx(struct net_device *net_dev, int idx,
 
 	channel = efx_get_tx_channel(efx, idx);
 	stats->packets = 0;
+	stats->hw_gso_packets = 0;
+	stats->hw_gso_wire_packets = 0;
 	/* If a TX channel has XDP TXQs, the stats for these will be counted
 	 * in base stats; however, in EFX_XDP_TX_QUEUES_BORROWED mode we use
 	 * the same TXQ as the core, and thus XDP TXes get included in these
 	 * per-queue stats.
 	 */
 	efx_for_each_channel_tx_queue(tx_queue, channel)
-		if (!tx_queue->xdp_tx)
+		if (!tx_queue->xdp_tx) {
 			stats->packets += tx_queue->tx_packets -
 					  tx_queue->old_tx_packets;
+			stats->hw_gso_packets += tx_queue->tso_bursts -
+						 tx_queue->old_tso_bursts;
+			stats->hw_gso_wire_packets += tx_queue->tso_packets -
+						      tx_queue->old_tso_packets;
+		}
 }
 
 static void efx_get_base_stats(struct net_device *net_dev,
@@ -677,6 +684,8 @@ static void efx_get_base_stats(struct net_device *net_dev,
 	rx->hw_drops = 0;
 	rx->hw_drop_overruns = 0;
 	tx->packets = 0;
+	tx->hw_gso_packets = 0;
+	tx->hw_gso_wire_packets = 0;
 
 	/* Count all packets on non-core queues, and packets before last
 	 * datapath start on core queues.
@@ -696,10 +705,15 @@ static void efx_get_base_stats(struct net_device *net_dev,
 			if (channel->channel < efx->tx_channel_offset ||
 			    channel->channel >= efx->tx_channel_offset +
 						net_dev->real_num_tx_queues ||
-			    tx_queue->xdp_tx)
+			    tx_queue->xdp_tx) {
 				tx->packets += tx_queue->tx_packets;
-			else
+				tx->hw_gso_packets += tx_queue->tso_bursts;
+				tx->hw_gso_wire_packets += tx_queue->tso_packets;
+			} else {
 				tx->packets += tx_queue->old_tx_packets;
+				tx->hw_gso_packets += tx_queue->old_tso_bursts;
+				tx->hw_gso_wire_packets += tx_queue->old_tso_packets;
+			}
 		}
 	}
 }

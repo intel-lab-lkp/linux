@@ -234,6 +234,8 @@ struct efx_tx_buffer {
  * @notify_count: Count of notified descriptors to the NIC
  * @tx_packets: Number of packets sent since this struct was created
  * @old_tx_packets: Value of @tx_packets as of last efx_init_tx_queue()
+ * @old_tso_bursts: Value of @tso_bursts as of last efx_init_tx_queue()
+ * @old_tso_packets: Value of @tso_packets as of last efx_init_tx_queue()
  * @empty_read_count: If the completion path has seen the queue as empty
  *	and the transmission path has not yet checked this, the value of
  *	@read_count bitwise-added to %EFX_EMPTY_COUNT_VALID; otherwise 0.
@@ -284,6 +286,8 @@ struct efx_tx_queue {
 	/* Statistics to supplement MAC stats */
 	unsigned long tx_packets;
 	unsigned long old_tx_packets;
+	unsigned int old_tso_bursts;
+	unsigned int old_tso_packets;
 
 	/* Members shared between paths and sometimes updated */
 	unsigned int empty_read_count ____cacheline_aligned_in_smp;
