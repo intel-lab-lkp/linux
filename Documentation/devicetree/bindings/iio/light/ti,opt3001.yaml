@@ -16,6 +16,7 @@ description: |
 properties:
   compatible:
     const: ti,opt3001
+    const: ti,opt3002
 
   reg:
     maxItems: 1
