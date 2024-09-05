@@ -13,10 +13,20 @@ config SND_SOC_LOONGSON_I2S_PCI
 	  The controller is found in loongson bridge chips or SoCs,
 	  and work as a PCI device.
 
+config SND_SOC_LOONGSON_I2S_PLATFORM
+	tristate "Loongson I2S controller as platform device"
+	select SND_SOC_GENERIC_DMAENGINE_PCM
+	help
+	  Say Y or M if you want to add support for I2S driver for
+	  Loongson I2S controller.
+
+	  The controller work as a platform device, found in loongson
+	  SoCs.
+
 config SND_SOC_LOONGSON_CARD
 	tristate "Loongson Sound Card Driver"
 	select SND_SOC_LOONGSON_I2S_PCI
-	depends on PCI
+	select SND_SOC_LOONGSON_I2S_PLATFORM
 	help
 	  Say Y or M if you want to add support for SoC audio using
 	  loongson I2S controller.
