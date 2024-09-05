@@ -267,7 +267,8 @@ static void sugov_iowait_boost(struct sugov_cpu *sg_cpu, u64 time,
 	/* Double the boost at each request */
 	if (sg_cpu->iowait_boost) {
 		sg_cpu->iowait_boost =
-			min_t(unsigned int, sg_cpu->iowait_boost << 1, SCHED_CAPACITY_SCALE);
+			min_t(unsigned int,
+			      sg_cpu->iowait_boost + IOWAIT_BOOST_MIN, SCHED_CAPACITY_SCALE);
 		return;
 	}
 
@@ -308,11 +309,9 @@ static unsigned long sugov_iowait_apply(struct sugov_cpu *sg_cpu, u64 time,
 		/*
 		 * No boost pending; reduce the boost value.
 		 */
-		sg_cpu->iowait_boost >>= 1;
-		if (sg_cpu->iowait_boost < IOWAIT_BOOST_MIN) {
-			sg_cpu->iowait_boost = 0;
+		sg_cpu->iowait_boost -= IOWAIT_BOOST_MIN;
+		if (!sg_cpu->iowait_boost)
 			return 0;
-		}
 	}
 
 	sg_cpu->iowait_boost_pending = false;
