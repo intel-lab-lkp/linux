@@ -45,7 +45,21 @@ patternProperties:
       clock-latency-ns: true
       opp-hz: true
       opp-microvolt: true
-      opp-supported-hw: true
+      opp-supported-hw:
+        description: |
+          Two bitfields indicating:
+            1. Which revision of the SoC the OPP is supported by.
+            This can be easily obtained from the datasheet of the
+            part being ordered/used. For eg. it will be 0x01 for SR1.0
+            2. Which eFuse bits indicate this OPP is available.
+            The device datasheet has a table talking about Device Speed Grades.
+            If one were to sort this table and only retain the unique elements
+            of the MAXIMUM OPERATING FREQUENCY starting from the first row
+            which tells the lowest OPP, to the highest. The corresponding bits
+            need to be set based on N elements of speed grade the device supports.
+            So, if there are 3 possible unique MAXIMUM OPERATING FREQUENCY
+            in the table, then BIT(0), (1) and (2) will be set, which means
+            the value shall be 0x7.
       opp-suspend: true
       turbo-mode: true
 
