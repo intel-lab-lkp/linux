@@ -4753,8 +4753,8 @@ mvneta_ethtool_set_ringparam(struct net_device *dev,
 	pp->rx_ring_size = ring->rx_pending < MVNETA_MAX_RXD ?
 		ring->rx_pending : MVNETA_MAX_RXD;
 
-	pp->tx_ring_size = clamp_t(u16, ring->tx_pending,
-				   MVNETA_MAX_SKB_DESCS * 2, MVNETA_MAX_TXD);
+	pp->tx_ring_size = clamp(ring->tx_pending,
+				 MVNETA_MAX_SKB_DESCS * 2, MVNETA_MAX_TXD);
 	if (pp->tx_ring_size != ring->tx_pending)
 		netdev_warn(dev, "TX queue size set to %u (requested %u)\n",
 			    pp->tx_ring_size, ring->tx_pending);
