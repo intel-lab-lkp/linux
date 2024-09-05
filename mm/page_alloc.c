@@ -7131,7 +7131,7 @@ static bool cond_accept_memory(struct zone *zone, unsigned int order)
 	return ret;
 }
 
-static inline bool has_unaccepted_memory(void)
+static inline __maybe_unused bool has_unaccepted_memory(void)
 {
 	return static_branch_unlikely(&zones_with_unaccepted_pages);
 }
@@ -7171,7 +7171,7 @@ static bool cond_accept_memory(struct zone *zone, unsigned int order)
 	return false;
 }
 
-static inline bool has_unaccepted_memory(void)
+static inline __maybe_unused bool has_unaccepted_memory(void)
 {
 	return false;
 }
