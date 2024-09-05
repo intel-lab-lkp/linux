@@ -4794,9 +4794,25 @@ intel_modeset_pipe_config_late(struct intel_atomic_state *state,
 {
 	struct intel_crtc_state *crtc_state =
 		intel_atomic_get_new_crtc_state(state, crtc);
+	struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
 	struct drm_connector_state *conn_state;
 	struct drm_connector *connector;
 	int i;
+
+	if (crtc_state->vrr.enable) {
+		/*
+		 * For XE_LPD+, we use guardband and pipeline override
+		 * is deprecated.
+		 */
+		if (DISPLAY_VER(to_i915(crtc->base.dev)) >= 13) {
+			crtc_state->vrr.guardband =
+				crtc_state->vrr.vmin + 1 - adjusted_mode->crtc_vblank_start;
+		} else {
+			crtc_state->vrr.pipeline_full =
+				min(255, crtc_state->vrr.vmin - adjusted_mode->crtc_vblank_start -
+				crtc_state->framestart_delay - 1);
+		}
+	}
 
 	for_each_new_connector_in_state(&state->base, connector,
 					conn_state, i) {
