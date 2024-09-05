@@ -908,6 +908,10 @@ int sock_set_timestamping(struct sock *sk, int optname,
 	    !(val & SOF_TIMESTAMPING_OPT_ID))
 		return -EINVAL;
 
+	if (val & SOF_TIMESTAMPING_RX_SOFTWARE &&
+	    val & SOF_TIMESTAMPING_OPT_RX_FILTER)
+		return -EINVAL;
+
 	if (val & SOF_TIMESTAMPING_OPT_ID &&
 	    !(sk->sk_tsflags & SOF_TIMESTAMPING_OPT_ID)) {
 		if (sk_is_tcp(sk)) {

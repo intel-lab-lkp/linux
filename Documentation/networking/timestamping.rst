@@ -266,6 +266,18 @@ SOF_TIMESTAMPING_OPT_TX_SWHW:
   two separate messages will be looped to the socket's error queue,
   each containing just one timestamp.
 
+SOF_TIMESTAMPING_OPT_RX_FILTER:
+  Used in the receive software timestamp. Enabling the flag along with
+  SOF_TIMESTAMPING_SOFTWARE will not report the rx timestamp to the
+  userspace so that it can filter out the case where one process starts
+  first which turns on netstamp_needed_key through setting generation
+  flags like SOF_TIMESTAMPING_RX_SOFTWARE, then another one only passing
+  SOF_TIMESTAMPING_SOFTWARE report flag could also get the rx timestamp.
+
+  SOF_TIMESTAMPING_OPT_RX_FILTER prevents the application from being
+  influenced by others and let the application choose whether to report
+  the timestamp in the receive path or not.
+
 New applications are encouraged to pass SOF_TIMESTAMPING_OPT_ID to
 disambiguate timestamps and SOF_TIMESTAMPING_OPT_TSONLY to operate
 regardless of the setting of sysctl net.core.tstamp_allow_data.
