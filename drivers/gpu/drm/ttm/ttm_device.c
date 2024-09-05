@@ -203,6 +203,7 @@ int ttm_device_init(struct ttm_device *bdev, const struct ttm_device_funcs *func
 	}
 
 	bdev->funcs = funcs;
+	bdev->propagate_enospc = flags.propagate_enospc;
 
 	ttm_sys_man_init(bdev);
 

@@ -835,7 +835,7 @@ bounce:
 
 	/* For backward compatibility with userspace */
 	if (ret == -ENOSPC)
-		return -ENOMEM;
+		return bo->bdev->propagate_enospc ? ret : -ENOMEM;
 
 	/*
 	 * We might need to add a TTM.
