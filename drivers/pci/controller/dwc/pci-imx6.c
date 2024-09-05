@@ -1024,6 +1024,10 @@ static u64 imx_pcie_cpu_addr_fixup(struct dw_pcie *pcie, u64 cpu_addr)
 		return cpu_addr;
 
 	entry = resource_list_first_type(&pp->bridge->windows, IORESOURCE_MEM);
+	if(!entry) {
+		dev_err(pcie->dev, "Unable to get memory window.");
+		return -0ULL;
+	}
 	offset = entry->offset;
 
 	return (cpu_addr - offset);
