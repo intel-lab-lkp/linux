@@ -2287,8 +2287,10 @@ static void record_and_restart(struct perf_event *event, unsigned long val,
 	 */
 	if (event->attr.exclude_kernel &&
 	    (event->attr.sample_type & PERF_SAMPLE_IP) &&
-	    is_kernel_addr(mfspr(SPRN_SIAR)))
+	    is_kernel_addr(mfspr(SPRN_SIAR))) {
+		atomic64_inc(&event->dropped_samples);
 		record = 0;
+	}
 
 	/*
 	 * Finally record data if requested.
