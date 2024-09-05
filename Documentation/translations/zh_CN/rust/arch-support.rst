@@ -21,6 +21,7 @@
 =============  ================  ==============================================
 ``arm64``      Maintained        只有小端序
 ``loongarch``  Maintained        \-
+``mips``       Maintained        \-
 ``riscv``      Maintained        只有 ``riscv64``
 ``um``         Maintained        只有 ``x86_64``
 ``x86``        Maintained        只有 ``x86_64``

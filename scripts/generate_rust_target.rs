@@ -141,6 +141,13 @@ impl KernelConfig {
         let option = "CONFIG_".to_owned() + option;
         self.0.contains_key(&option)
     }
+
+    /// Returns the value of the option in the configuration.
+    /// The argument must be passed without the `CONFIG_` prefix.
+    fn get(&self, option: &str) -> Option<&String> {
+        let option = "CONFIG_".to_owned() + option;
+        self.0.get(&option)
+    }
 }
 
 fn main() {
@@ -203,6 +210,67 @@ fn main() {
         ts.push("target-pointer-width", "32");
     } else if cfg.has("LOONGARCH") {
         panic!("loongarch uses the builtin rustc loongarch64-unknown-none-softfloat target");
+    } else if cfg.has("MIPS") {
+        let mut features = "+soft-float,+noabicalls".to_string();
+
+        if cfg.has("CPU_MICROMIPS") {
+            features += ",+micromips";
+        }
+
+        if cfg.has("64BIT") {
+            ts.push("arch", "mips64");
+            ts.push("abi", "abi64");
+            cfg.get("TARGET_ISA_REV").map(|isa_rev| {
+                let feature = match isa_rev.as_str() {
+                    "1" => ",+mips64",
+                    "2" => ",+mips64r2",
+                    "5" => ",+mips64r5",
+                    "6" => ",+mips64r6",
+                    _ => ",+mips3",
+                };
+                features += feature;
+            });
+
+            ts.push("features", features);
+            if cfg.has("CPU_BIG_ENDIAN") {
+                ts.push(
+                    "data-layout",
+                    "E-m:e-i8:8:32-i16:16:32-i64:64-n32:64-S128",
+                );
+                ts.push("llvm-target", "mips64-unknown-linux-gnuabi64");
+            } else {
+                ts.push(
+                    "data-layout",
+                    "e-m:e-i8:8:32-i16:16:32-i64:64-n32:64-S128",
+                );
+                ts.push("llvm-target", "mips64el-unknown-linux-gnuabi64");
+            }
+            ts.push("target-pointer-width", "64");
+        } else {
+            ts.push("arch", "mips");
+            cfg.get("TARGET_ISA_REV").map(|isa_rev| {
+                let feature = match isa_rev.as_str() {
+                    "1" => ",+mips32",
+                    "2" => ",+mips32r2",
+                    "5" => ",+mips32r5",
+                    "6" => ",+mips32r6",
+                    _ => ",+mips2",
+                };
+                features += feature;
+            });
+
+            ts.push("features", features);
+            if cfg.has("CPU_BIG_ENDIAN") {
+                ts.push("data-layout",
+                        "E-m:m-p:32:32-i8:8:32-i16:16:32-i64:64-n32-S64");
+                ts.push("llvm-target", "mips-unknown-linux-gnu");
+            } else {
+                ts.push("data-layout",
+                        "e-m:m-p:32:32-i8:8:32-i16:16:32-i64:64-n32-S64");
+                ts.push("llvm-target", "mipsel-unknown-linux-gnu");
+            }
+            ts.push("target-pointer-width", "32");
+        }
     } else {
         panic!("Unsupported architecture");
     }
