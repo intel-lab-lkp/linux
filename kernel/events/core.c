@@ -9808,8 +9808,10 @@ static int __perf_event_overflow(struct perf_event *event,
 
 	ret = __perf_event_account_interrupt(event, throttle);
 
-	if (event->prog && !bpf_overflow_handler(event, data, regs))
+	if (event->prog && !bpf_overflow_handler(event, data, regs)) {
+		atomic64_inc(&event->dropped_samples);
 		return ret;
+	}
 
 	/*
 	 * XXX event_limit might not quite work as expected on inherited
