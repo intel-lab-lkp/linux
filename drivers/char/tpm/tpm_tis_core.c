@@ -1133,8 +1133,10 @@ int tpm_tis_core_init(struct device *dev, struct tpm_tis_data *priv, int irq,
 	dev_set_drvdata(&chip->dev, priv);
 
 	rc = tpm_tis_read32(priv, TPM_DID_VID(0), &vendor);
-	if (rc < 0)
+	if (rc < 0) {
+		dev_err(dev, "Failed to read TPM_DID_VID register: %d\n", rc);
 		return rc;
+	}
 
 	priv->manufacturer_id = vendor;
 
@@ -1162,19 +1164,25 @@ int tpm_tis_core_init(struct device *dev, struct tpm_tis_data *priv, int irq,
 		chip->ops->clk_enable(chip, true);
 
 	if (wait_startup(chip, 0) != 0) {
+		dev_err(dev, "TPM device not accessible (0x%0x)\n",
+			vendor);
 		rc = -ENODEV;
 		goto out_err;
 	}
 
 	/* Take control of the TPM's interrupt hardware and shut it off */
 	rc = tpm_tis_read32(priv, TPM_INT_ENABLE(priv->locality), &intmask);
-	if (rc < 0)
+	if (rc < 0) {
+		dev_err(dev, "Failed to read TPM_INT_ENABLE register: %d\n", rc);
 		goto out_err;
+	}
 
 	/* Figure out the capabilities */
 	rc = tpm_tis_read32(priv, TPM_INTF_CAPS(priv->locality), &intfcaps);
-	if (rc < 0)
+	if (rc < 0) {
+		dev_err(dev, "Failed to read TPM_INTF_CAPS register: %d\n", rc);
 		goto out_err;
+	}
 
 	dev_dbg(dev, "TPM interface capabilities (0x%x):\n",
 		intfcaps);
@@ -1209,6 +1217,7 @@ int tpm_tis_core_init(struct device *dev, struct tpm_tis_data *priv, int irq,
 
 	rc = tpm_tis_request_locality(chip, 0);
 	if (rc < 0) {
+		dev_err(dev, "Failed to request locality (0x%0x)\n", vendor);
 		rc = -ENODEV;
 		goto out_err;
 	}
