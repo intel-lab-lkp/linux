@@ -85,23 +85,29 @@ GDS this can be accessed by the following sysfs file:
 
 The possible values contained in this file are:
 
- ============================== =============================================
- Not affected                   Processor not vulnerable.
- Vulnerable                     Processor vulnerable and mitigation disabled.
- Vulnerable: No microcode       Processor vulnerable and microcode is missing
-                                mitigation.
- Mitigation: AVX disabled,
- no microcode                   Processor is vulnerable and microcode is missing
-                                mitigation. AVX disabled as mitigation.
- Mitigation: Microcode          Processor is vulnerable and mitigation is in
-                                effect.
- Mitigation: Microcode (locked) Processor is vulnerable and mitigation is in
-                                effect and cannot be disabled.
- Unknown: Dependent on
- hypervisor status              Running on a virtual guest processor that is
-                                affected but with no way to know if host
-                                processor is mitigated or vulnerable.
- ============================== =============================================
+ +----------------------------+----------------------------------------------+
+ | 'Not affected'             | Processor is not vulnerable.                 |
+ +----------------------------+----------------------------------------------+
+ | 'Vulnerable'               | Processor is vulnerable and mitigation       |
+ |                            | disabled.                                    |
+ +----------------------------+----------------------------------------------+
+ | 'Vulnerable: No microcode' | Processor is vulnerable and microcode is     |
+ |                            | missing mitigation.                          |
+ +----------------------------+----------------------------------------------+
+ | 'Mitigation: AVX disabled, | Processor is vulnerable and microcode is     |
+ | no microcode'              | missing mitigation. AVX disabled as          |
+ |                            | mitigation.                                  |
+ +----------------------------+----------------------------------------------+
+ | 'Mitigation: Microcode'    | Processor is vulnerable and mitigation is in |
+ |                            | effect.                                      |
+ +----------------------------+----------------------------------------------+
+ | 'Mitigation: Microcode     | Processor is vulnerable and mitigation is in |
+ | (locked)'                  | effect and cannot be disabled.               |
+ +----------------------------+----------------------------------------------+
+ | 'Unknown: Dependent on     | Running on a virtual guest processor that is |
+ | hypervisor status'         | affected but with no way to know if host     |
+ |                            | processor is mitigated or vulnerable.        |
+ +----------------------------+----------------------------------------------+
 
 GDS Default mitigation
 ----------------------

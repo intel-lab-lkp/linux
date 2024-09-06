@@ -336,18 +336,20 @@ The sysfs file showing Spectre variant 1 mitigation status is:
 
 The possible values in this file are:
 
-  .. list-table::
-
-     * - 'Not affected'
-       - The processor is not vulnerable.
-     * - 'Vulnerable: __user pointer sanitization and usercopy barriers only; no swapgs barriers'
-       - The swapgs protections are disabled; otherwise it has
-         protection in the kernel on a case by case base with explicit
-         pointer sanitation and usercopy LFENCE barriers.
-     * - 'Mitigation: usercopy/swapgs barriers and __user pointer sanitization'
-       - Protection in the kernel on a case by case base with explicit
-         pointer sanitation, usercopy LFENCE barriers, and swapgs LFENCE
-         barriers.
+  +------------------------------+--------------------------------------------+
+  | 'Not affected'               | The processor is not vulnerable.           |
+  +------------------------------+--------------------------------------------+
+  | 'Vulnerable: __user pointer  | The swapgs protections are disabled;       |
+  | sanitization and usercopy    | otherwise it has protection in the kernel  |
+  | barriers only; no swapgs     | on a case by case basis with explicit      |
+  | barriers'                    | pointer sanitization and usercopy LFENCE   |
+  |                              | barriers.                                  |
+  +------------------------------+--------------------------------------------+
+  | 'Mitigation: usercopy/swapgs | Protection in the kernel on a case by case |
+  | barriers and __user pointer  | basis with explicit pointer sanitization,  |
+  | sanitization'                | usercopy LFENCE barriers, and swapgs       |
+  |                              | LFENCE barriers.                           |
+  +------------------------------+--------------------------------------------+
 
 However, the protections are put in place on a case by case basis,
 and there is no guarantee that all possible attack vectors for Spectre
@@ -431,20 +433,21 @@ The possible values in this file are:
 
   - Branch History Injection (BHI) protection status:
 
-.. list-table::
-
- * - BHI: Not affected
-   - System is not affected
- * - BHI: Retpoline
-   - System is protected by retpoline
- * - BHI: BHI_DIS_S
-   - System is protected by BHI_DIS_S
- * - BHI: SW loop, KVM SW loop
-   - System is protected by software clearing sequence
- * - BHI: Vulnerable
-   - System is vulnerable to BHI
- * - BHI: Vulnerable, KVM: SW loop
-   - System is vulnerable; KVM is protected by software clearing sequence
+  +---------------------+----------------------------------------------------+
+  | 'BHI: Not affected' | System is not affected.                            |
+  +---------------------+----------------------------------------------------+
+  | 'BHI: Retpoline'    | System is protected by retpoline.                  |
+  +---------------------+----------------------------------------------------+
+  | 'BHI: BHI_DIS_S'    | System is protected by BHI_DIS_S.                  |
+  +---------------------+----------------------------------------------------+
+  | 'BHI: SW loop, KVM  | System is protected by software clearing sequence. |
+  | SW loop'            |                                                    |
+  +---------------------+----------------------------------------------------+
+  | 'BHI: Vulnerable'   | System is vulnerable to BHI.                       |
+  +---------------------+----------------------------------------------------+
+  | 'BHI: Vulnerable,   | System is vulnerable; KVM is protected by software |
+  | KVM: SW loop'       | clearing sequence.                                 |
+  +---------------------+----------------------------------------------------+
 
 Full mitigation might require a microcode update from the CPU
 vendor. When the necessary microcode is not available, the kernel will

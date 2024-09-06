@@ -86,17 +86,18 @@ which mitigations are active. The relevant sysfs file is:
 
 The possible values in this file are:
 
-  .. list-table::
-
-     * - 'Not affected'
-       - The processor is not vulnerable
-     * - 'Vulnerable'
-       - The processor is vulnerable, but no mitigation enabled
-     * - 'Vulnerable: No microcode'
-       - The processor is vulnerable but microcode is not updated.
-     * - 'Mitigation: Clear Register File'
-       - The processor is vulnerable and the CPU buffer clearing mitigation is
-	 enabled.
+  +--------------------+---------------------------------------------------+
+  | 'Not affected'     | The processor is not vulnerable.                  |
+  +--------------------+---------------------------------------------------+
+  | 'Vulnerable'       | The processor is vulnerable, but no mitigation    |
+  |                    | enabled.                                          |
+  +--------------------+---------------------------------------------------+
+  | 'Vulnerable: No    | The processor is vulnerable but microcode is not  |
+  | microcode'         | updated.                                          |
+  +--------------------+---------------------------------------------------+
+  | 'Mitigation: Clear | The processor is vulnerable and the CPU buffer    |
+  | Register File'     | clearing mitigation is enabled.                   |
+  +--------------------+---------------------------------------------------+
 
 References
 ----------
