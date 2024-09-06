@@ -33,7 +33,7 @@ static __always_inline ssize_t getrandom_syscall(void *buffer, size_t len, unsig
 static __always_inline const struct vdso_rng_data *__arch_get_vdso_rng_data(void)
 {
 	if (IS_ENABLED(CONFIG_TIME_NS) && __vdso_data->clock_mode == VDSO_CLOCKMODE_TIMENS)
-		return (void *)&__vdso_rng_data + ((void *)&__timens_vdso_data - (void *)&__vdso_data);
+		return (void *)&__vdso_rng_data + (TIMENS_PAGE_OFFSET << CONFIG_PAGE_SHIFT);
 	return &__vdso_rng_data;
 }
 

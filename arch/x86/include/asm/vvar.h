@@ -19,6 +19,11 @@
 #ifndef _ASM_X86_VVAR_H
 #define _ASM_X86_VVAR_H
 
+#define VVAR_PAGE_OFFSET	0
+#define PVCLOCK_PAGE_OFFSET	1
+#define HVCLOCK_PAGE_OFFSET	2
+#define TIMENS_PAGE_OFFSET	3
+
 #ifdef EMIT_VVAR
 /*
  * EMIT_VVAR() is used by the kernel linker script to put vvars in the
