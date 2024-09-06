@@ -124,6 +124,10 @@ static void efi_retrieve_tcg2_eventlog(int version, efi_physical_addr_t log_loca
 			event_size = __calc_tpm2_event_size(header,
 						   (void *)(long)log_location,
 						   false);
+			if (!event_size) {
+				efi_err("Invalid TPM Final Event Log Entry\n");
+				break;
+			}
 			final_events_size += event_size;
 			i--;
 		}
