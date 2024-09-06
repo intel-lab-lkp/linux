@@ -240,7 +240,7 @@ void nf_send_reset(struct net *net, struct sock *sk, struct sk_buff *oldskb,
 		   int hook)
 {
 	struct sk_buff *nskb;
-	struct iphdr *niph;
+	struct iphdr *niph __maybe_unused;
 	const struct tcphdr *oth;
 	struct tcphdr _oth;
 

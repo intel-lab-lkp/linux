@@ -283,7 +283,7 @@ void nf_send_reset6(struct net *net, struct sock *sk, struct sk_buff *oldskb,
 	const struct tcphdr *otcph;
 	unsigned int otcplen, hh_len;
 	const struct ipv6hdr *oip6h = ipv6_hdr(oldskb);
-	struct ipv6hdr *ip6h;
+	struct ipv6hdr *ip6h __maybe_unused;
 	struct dst_entry *dst = NULL;
 	struct flowi6 fl6;
 
