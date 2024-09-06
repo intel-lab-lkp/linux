@@ -1513,13 +1513,6 @@ static int byt_gpio_probe(struct intel_pinctrl *vg)
 	gc->parent	= vg->dev;
 	gc->ngpio	= vg->soc->npins;
 
-#ifdef CONFIG_PM_SLEEP
-	vg->context.pads = devm_kcalloc(vg->dev, gc->ngpio, sizeof(*vg->context.pads),
-					GFP_KERNEL);
-	if (!vg->context.pads)
-		return -ENOMEM;
-#endif
-
 	/* set up interrupts  */
 	irq = platform_get_irq_optional(pdev, 0);
 	if (irq > 0) {
@@ -1582,6 +1575,16 @@ static const struct acpi_device_id byt_gpio_acpi_match[] = {
 	{ }
 };
 
+static int byt_pinctrl_pm_init(struct intel_pinctrl *vg)
+{
+	vg->context.pads = devm_kcalloc(vg->dev, vg->soc->npins,
+					sizeof(*vg->context.pads), GFP_KERNEL);
+	if (!vg->context.pads)
+		return -ENOMEM;
+
+	return 0;
+}
+
 static int byt_pinctrl_probe(struct platform_device *pdev)
 {
 	const struct intel_pinctrl_soc_data *soc_data;
@@ -1603,6 +1606,10 @@ static int byt_pinctrl_probe(struct platform_device *pdev)
 		dev_err(dev, "failed to set soc data\n");
 		return ret;
 	}
+
+	ret = intel_pinctrl_context_alloc(vg, byt_pinctrl_pm_init);
+	if (ret)
+		return ret;
 
 	vg->pctldesc		= byt_pinctrl_desc;
 	vg->pctldesc.name	= dev_name(dev);
