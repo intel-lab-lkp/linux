@@ -1309,6 +1309,7 @@ intel_dp_mode_valid(struct drm_connector *_connector,
 	u8 dsc_slice_count = 0;
 	enum drm_mode_status status;
 	bool dsc = false, joiner = false;
+	enum intel_joiner_pipe_count joined_pipes = INTEL_NONE_JOINER_PIPES;
 
 	status = intel_cpu_transcoder_mode_valid(dev_priv, mode);
 	if (status != MODE_OK)
@@ -1332,7 +1333,8 @@ intel_dp_mode_valid(struct drm_connector *_connector,
 	if (intel_dp_need_joiner(intel_dp, connector,
 				 mode->hdisplay, target_clock)) {
 		joiner = true;
-		max_dotclk *= 2;
+		joined_pipes = INTEL_BIG_JOINER_PIPES;
+		max_dotclk *= INTEL_BIG_JOINER_PIPES;
 	}
 	if (target_clock > max_dotclk)
 		return MODE_CLOCK_HIGH;
@@ -1390,7 +1392,7 @@ intel_dp_mode_valid(struct drm_connector *_connector,
 		dsc = dsc_max_compressed_bpp && dsc_slice_count;
 	}
 
-	if (intel_dp_joiner_needs_dsc(dev_priv, joiner) && !dsc)
+	if (intel_dp_joiner_needs_dsc(dev_priv, joined_pipes) && !dsc)
 		return MODE_CLOCK_HIGH;
 
 	if (mode_rate > max_rate && !dsc)
@@ -2498,14 +2500,15 @@ int intel_dp_config_required_rate(const struct intel_crtc_state *crtc_state)
 	return intel_dp_link_required(adjusted_mode->crtc_clock, bpp);
 }
 
-bool intel_dp_joiner_needs_dsc(struct drm_i915_private *i915, bool use_joiner)
+bool intel_dp_joiner_needs_dsc(struct drm_i915_private *i915,
+			       enum intel_joiner_pipe_count joined_pipes)
 {
 	/*
 	 * Pipe joiner needs compression up to display 12 due to bandwidth
 	 * limitation. DG2 onwards pipe joiner can be enabled without
 	 * compression.
 	 */
-	return DISPLAY_VER(i915) < 13 && use_joiner;
+	return DISPLAY_VER(i915) < 13 && (joined_pipes == INTEL_BIG_JOINER_PIPES);
 }
 
 static int
@@ -2523,6 +2526,7 @@ intel_dp_compute_link_config(struct intel_encoder *encoder,
 	struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
 	struct link_config_limits limits;
 	bool dsc_needed, joiner_needs_dsc;
+	enum intel_joiner_pipe_count joined_pipes;
 	int ret = 0;
 
 	if (pipe_config->fec_enable &&
@@ -2534,7 +2538,11 @@ intel_dp_compute_link_config(struct intel_encoder *encoder,
 				 adjusted_mode->crtc_clock))
 		pipe_config->joiner_pipes = GENMASK(crtc->pipe + 1, crtc->pipe);
 
-	joiner_needs_dsc = intel_dp_joiner_needs_dsc(i915, pipe_config->joiner_pipes);
+	joined_pipes = intel_joiner_num_pipes(pipe_config);
+	if (joined_pipes >= INTEL_INVALID_JOINER_PIPES)
+		drm_warn(&i915->drm, "Invalid joined pipes : %d\n", joined_pipes);
+
+	joiner_needs_dsc = intel_dp_joiner_needs_dsc(i915, joined_pipes);
 
 	dsc_needed = joiner_needs_dsc || intel_dp->force_dsc_en ||
 		     !intel_dp_compute_config_limits(intel_dp, pipe_config,

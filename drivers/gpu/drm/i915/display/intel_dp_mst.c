@@ -568,6 +568,7 @@ static int intel_dp_mst_compute_config(struct intel_encoder *encoder,
 		&pipe_config->hw.adjusted_mode;
 	struct link_config_limits limits;
 	bool dsc_needed, joiner_needs_dsc;
+	enum intel_joiner_pipe_count joined_pipes;
 	int ret = 0;
 
 	if (pipe_config->fec_enable &&
@@ -586,7 +587,11 @@ static int intel_dp_mst_compute_config(struct intel_encoder *encoder,
 	pipe_config->output_format = INTEL_OUTPUT_FORMAT_RGB;
 	pipe_config->has_pch_encoder = false;
 
-	joiner_needs_dsc = intel_dp_joiner_needs_dsc(dev_priv, pipe_config->joiner_pipes);
+	joined_pipes = intel_joiner_num_pipes(pipe_config);
+	if (joined_pipes >= INTEL_INVALID_JOINER_PIPES)
+		drm_warn(&dev_priv->drm, "Invalid joined pipes : %d\n", joined_pipes);
+
+	joiner_needs_dsc = intel_dp_joiner_needs_dsc(dev_priv, joined_pipes);
 
 	dsc_needed = joiner_needs_dsc || intel_dp->force_dsc_en ||
 		     !intel_dp_mst_compute_config_limits(intel_dp,
@@ -1426,6 +1431,7 @@ intel_dp_mst_mode_valid_ctx(struct drm_connector *connector,
 	u16 dsc_max_compressed_bpp = 0;
 	u8 dsc_slice_count = 0;
 	int target_clock = mode->clock;
+	enum intel_joiner_pipe_count joined_pipes = INTEL_NONE_JOINER_PIPES;
 
 	if (drm_connector_is_unregistered(connector)) {
 		*status = MODE_ERROR;
@@ -1468,7 +1474,8 @@ intel_dp_mst_mode_valid_ctx(struct drm_connector *connector,
 	if (intel_dp_need_joiner(intel_dp, intel_connector,
 				 mode->hdisplay, target_clock)) {
 		joiner = true;
-		max_dotclk *= 2;
+		joined_pipes = INTEL_BIG_JOINER_PIPES;
+		max_dotclk *= INTEL_BIG_JOINER_PIPES;
 	}
 
 	ret = drm_modeset_lock(&mgr->base.lock, ctx);
@@ -1508,7 +1515,7 @@ intel_dp_mst_mode_valid_ctx(struct drm_connector *connector,
 		dsc = dsc_max_compressed_bpp && dsc_slice_count;
 	}
 
-	if (intel_dp_joiner_needs_dsc(dev_priv, joiner) && !dsc) {
+	if (intel_dp_joiner_needs_dsc(dev_priv, joined_pipes) && !dsc) {
 		*status = MODE_CLOCK_HIGH;
 		return 0;
 	}
