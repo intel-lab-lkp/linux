@@ -1210,7 +1210,11 @@ bool blk_mq_complete_request_remote(struct request *rq)
 		return true;
 	}
 
-	if (rq->q->nr_hw_queues == 1) {
+	/*
+	 * To reduce the execution time in the IRQ top-half,
+	 * move non-sync request completions to softirq context.
+	 */
+	if ((rq->q->nr_hw_queues == 1) || !rq_is_sync(rq)) {
 		blk_mq_raise_softirq(rq);
 		return true;
 	}
