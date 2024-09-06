@@ -185,8 +185,10 @@ void efi_retrieve_eventlog(void)
 			get_efi_config_table(EFI_CC_FINAL_EVENTS_TABLE_GUID);
 	}
 
-	if (status != EFI_SUCCESS || !log_location)
+	if (status != EFI_SUCCESS || !log_location) {
+		efi_err("TPM unable to provide Event Log\n");
 		return;
+	}
 
 	efi_retrieve_tcg2_eventlog(version, log_location, log_last_entry,
 				   truncated, final_events_table);
