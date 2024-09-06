@@ -1090,9 +1090,10 @@ static int brcm_pcie_setup(struct brcm_pcie *pcie)
 	u32p_replace_bits(&tmp, 1, PCIE_MISC_MISC_CTRL_PCIE_RCB_64B_MODE_MASK);
 	writel(tmp, base + PCIE_MISC_MISC_CTRL);
 
-	num_inbound_wins = brcm_pcie_get_inbound_wins(pcie, inbound_wins);
-	if (num_inbound_wins < 0)
-		return num_inbound_wins;
+	ret = brcm_pcie_get_inbound_wins(pcie, inbound_wins);
+	if (ret < 0)
+		return ret;
+	num_inbound_wins = (u8)ret;
 
 	set_inbound_win_registers(pcie, inbound_wins, num_inbound_wins);
 
