@@ -107,6 +107,7 @@ VDSO_LDFLAGS += --orphan-handling=$(CONFIG_LD_ORPHAN_WARN_LEVEL)
 # $(hostprogs) with $(obj)
 munge := ../../../arm/vdso/vdsomunge
 hostprogs := $(munge)
+HOSTCFLAGS_$(munge).o = $(shell $(HOSTPKG_CONFIG) --cflags bee-headers 2> /dev/null)
 
 c-obj-vdso := note.o
 c-obj-vdso-gettimeofday := vgettimeofday.o
