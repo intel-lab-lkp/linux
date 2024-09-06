@@ -978,9 +978,19 @@
 		reg = <0x10>;
 	};
 
+	power-sensor@11 {
+		compatible = "infineon,xdp710";
+		reg = <0x11>;
+	};
+
 	power-sensor@12 {
 		compatible = "adi,adm1272";
 		reg = <0x12>;
+	};
+
+	power-sensor@13 {
+		compatible = "infineon,xdp710";
+		reg = <0x13>;
 	};
 
 	gpio@20 {
