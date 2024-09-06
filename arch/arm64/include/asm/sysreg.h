@@ -832,6 +832,7 @@
 #define SCTLR_ELx_ENDB	 (BIT(13))
 #define SCTLR_ELx_I	 (BIT(12))
 #define SCTLR_ELx_EOS	 (BIT(11))
+#define SCTLR_ELx_nAA    (BIT(6))
 #define SCTLR_ELx_SA	 (BIT(3))
 #define SCTLR_ELx_C	 (BIT(2))
 #define SCTLR_ELx_A	 (BIT(1))

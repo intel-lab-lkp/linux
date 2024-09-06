@@ -2021,6 +2021,16 @@ config ARM64_TLB_RANGE
 	  The feature introduces new assembly instructions, and they were
 	  support when binutils >= 2.30.
 
+config ARM64_LSE2_NAA
+	bool "Enable support for not-aligned access"
+	depends on AS_HAS_ARMV8_4
+	help
+	 LSE2 is an extension to the original LSE (Large System Extensions) feature,
+	 introduced in ARMv8.4.
+
+	 Enable this feature will not generate an Alignment fault if all bytes being
+	 accessed are not within a single 16-byte quantity.
+
 endmenu # "ARMv8.4 architectural features"
 
 menu "ARMv8.5 architectural features"

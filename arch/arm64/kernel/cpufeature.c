@@ -2301,6 +2301,14 @@ static void cpu_enable_mte(struct arm64_cpu_capabilities const *cap)
 }
 #endif /* CONFIG_ARM64_MTE */
 
+#ifdef CONFIG_ARM64_LSE2_NAA
+static void cpu_enable_lse2(const struct arm64_cpu_capabilities *__unused)
+{
+	sysreg_clear_set(sctlr_el2, SCTLR_ELx_nAA, SCTLR_ELx_nAA);
+	isb();
+}
+#endif
+
 static void user_feature_fixup(void)
 {
 	if (cpus_have_cap(ARM64_WORKAROUND_2658417)) {
@@ -2437,6 +2445,16 @@ static const struct arm64_cpu_capabilities arm64_features[] = {
 		ARM64_CPUID_FIELDS(ID_AA64ISAR0_EL1, ATOMIC, IMP)
 	},
 #endif /* CONFIG_ARM64_LSE_ATOMICS */
+#ifdef CONFIG_ARM64_LSE2_NAA
+	{
+		.desc = "Support for not-aligned access",
+		.capability = ARM64_HAS_LSE2,
+		.type = ARM64_CPUCAP_SYSTEM_FEATURE,
+		.matches = has_cpuid_feature,
+		.cpu_enable = cpu_enable_lse2,
+		ARM64_CPUID_FIELDS(ID_AA64MMFR2_EL1, AT, IMP)
+	},
+#endif
 	{
 		.desc = "Virtualization Host Extensions",
 		.capability = ARM64_HAS_VIRT_HOST_EXTN,
