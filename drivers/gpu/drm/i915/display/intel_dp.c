@@ -1271,7 +1271,7 @@ bool intel_dp_need_joiner(struct intel_dp *intel_dp,
 		return false;
 
 	return clock > i915->display.cdclk.max_dotclk_freq || hdisplay > 5120 ||
-	       connector->force_bigjoiner_enable;
+	       connector->force_joined_pipes == INTEL_BIG_JOINER_PIPES;
 }
 
 bool intel_dp_has_dsc(const struct intel_connector *connector)

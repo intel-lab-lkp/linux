@@ -486,6 +486,12 @@ struct intel_hdcp {
 	enum transcoder stream_transcoder;
 };
 
+enum intel_joiner_pipe_count {
+	INTEL_NONE_JOINER_PIPES = 0,
+	INTEL_BIG_JOINER_PIPES = 2,
+	INTEL_INVALID_JOINER_PIPES,
+};
+
 struct intel_connector {
 	struct drm_connector base;
 	/*
@@ -524,7 +530,7 @@ struct intel_connector {
 
 	struct intel_dp *mst_port;
 
-	bool force_bigjoiner_enable;
+	enum intel_joiner_pipe_count force_joined_pipes;
 
 	struct {
 		struct drm_dp_aux *dsc_decompression_aux;
