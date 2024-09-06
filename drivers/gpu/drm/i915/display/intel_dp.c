@@ -1308,14 +1308,6 @@ bool intel_dp_has_dsc(const struct intel_connector *connector)
 	return true;
 }
 
-static bool intel_display_can_use_ultrajoiner(struct intel_display *display)
-{
-	struct drm_i915_private *i915 = to_i915(display->drm);
-
-	return ((DISPLAY_VER(display) == 14 && IS_DGFX(i915)) ||
-		DISPLAY_VER(display) > 14);
-}
-
 bool intel_dp_need_ultrajoiner(struct intel_dp *dp, int clock)
 {
 	const struct intel_encoder *encoder = &dp_to_dig_port(dp)->base;

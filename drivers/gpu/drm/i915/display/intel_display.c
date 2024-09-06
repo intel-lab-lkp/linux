@@ -8199,12 +8199,29 @@ void intel_setup_outputs(struct drm_i915_private *dev_priv)
 	drm_helper_move_panel_connectors_to_head(&dev_priv->drm);
 }
 
+static bool intel_display_can_use_joiner(struct intel_display *display)
+{
+	/* icl+ might use joiner */
+	return (DISPLAY_VER(display) >= 11);
+}
+
+bool intel_display_can_use_ultrajoiner(struct intel_display *display)
+{
+	struct drm_i915_private *i915 = to_i915(display->drm);
+
+	return ((DISPLAY_VER(display) == 14 && IS_DGFX(i915)) ||
+		DISPLAY_VER(display) > 14);
+}
+
 static int max_dotclock(struct drm_i915_private *i915)
 {
+	struct intel_display *display = to_intel_display(&i915->drm);
 	int max_dotclock = i915->display.cdclk.max_dotclk_freq;
 
-	/* icl+ might use joiner */
-	if (DISPLAY_VER(i915) >= 11)
+	if (intel_display_can_use_joiner(display))
+		max_dotclock *= 2;
+
+	if (intel_display_can_use_ultrajoiner(display))
 		max_dotclock *= 2;
 
 	return max_dotclock;
