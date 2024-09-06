@@ -1608,6 +1608,16 @@ static acpi_status chv_pinctrl_mmio_access_handler(u32 function,
 	return AE_OK;
 }
 
+static int chv_pinctrl_pm_init(struct intel_pinctrl *pctrl)
+{
+	pctrl->context.pads = devm_kcalloc(pctrl->dev, pctrl->soc->npins,
+					   sizeof(*pctrl->context.pads), GFP_KERNEL);
+	if (!pctrl->context.pads)
+		return -ENOMEM;
+
+	return 0;
+}
+
 static int chv_pinctrl_probe(struct platform_device *pdev)
 {
 	const struct intel_pinctrl_soc_data *soc_data;
@@ -1644,13 +1654,9 @@ static int chv_pinctrl_probe(struct platform_device *pdev)
 
 	community->pad_regs = community->regs + FAMILY_PAD_REGS_OFF;
 
-#ifdef CONFIG_PM_SLEEP
-	pctrl->context.pads = devm_kcalloc(dev, pctrl->soc->npins,
-					   sizeof(*pctrl->context.pads),
-					   GFP_KERNEL);
-	if (!pctrl->context.pads)
-		return -ENOMEM;
-#endif
+	ret = intel_pinctrl_context_alloc(pctrl, chv_pinctrl_pm_init);
+	if (ret)
+		return ret;
 
 	pctrl->context.communities = devm_kcalloc(dev, pctrl->soc->ncommunities,
 						  sizeof(*pctrl->context.communities),
