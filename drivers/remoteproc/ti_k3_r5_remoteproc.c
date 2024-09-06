@@ -131,6 +131,7 @@ struct k3_r5_cluster {
  * @btcm_enable: flag to control BTCM enablement
  * @loczrama: flag to dictate which TCM is at device address 0x0
  * @released_from_reset: flag to signal when core is out of reset
+ * @unhalted: flag to signal when core is unhalted
  */
 struct k3_r5_core {
 	struct list_head elem;
@@ -148,6 +149,7 @@ struct k3_r5_core {
 	u32 btcm_enable;
 	u32 loczrama;
 	bool released_from_reset;
+	bool unhalted;
 };
 
 /**
@@ -448,12 +450,32 @@ static int k3_r5_rproc_prepare(struct rproc *rproc)
 {
 	struct k3_r5_rproc *kproc = rproc->priv;
 	struct k3_r5_cluster *cluster = kproc->cluster;
-	struct k3_r5_core *core = kproc->core;
+	struct k3_r5_core *core0, *core1, *core = kproc->core;
 	struct device *dev = kproc->dev;
 	u32 ctrl = 0, cfg = 0, stat = 0;
 	u64 boot_vec = 0;
 	bool mem_init_dis;
 	int ret;
+
+	/*
+	 * R5 cores require to be powered on sequentially, core0 should be in
+	 * higher power state than core1 in a cluster. So, wait for core0 to
+	 * power up before proceeding to core1 and put timeout of 2sec. This
+	 * waiting mechanism is necessary because rproc_auto_boot_callback() for
+	 * core1 can be called before core0 due to thread execution order.
+	 */
+	core0 = list_first_entry(&cluster->cores, struct k3_r5_core, elem);
+	core1 = list_last_entry(&cluster->cores, struct k3_r5_core, elem);
+	if (cluster->mode == CLUSTER_MODE_SPLIT && core == core1 &&
+	    core0->released_from_reset == false) {
+		ret = wait_event_interruptible_timeout(cluster->core_transition,
+						       core0->released_from_reset,
+						       msecs_to_jiffies(2000));
+		if (ret <= 0) {
+			dev_err(dev, "can not power up core1 before core0");
+			return -EPERM;
+		}
+	}
 
 	ret = ti_sci_proc_get_status(core->tsp, &boot_vec, &cfg, &ctrl, &stat);
 	if (ret < 0)
@@ -469,6 +491,12 @@ static int k3_r5_rproc_prepare(struct rproc *rproc)
 			ret);
 		return ret;
 	}
+
+	/* Notify all threads in the wait queue when core state has changed so
+	 * that threads waiting for this condition can be executed.
+	 */
+	core->released_from_reset = true;
+	wake_up_interruptible(&cluster->core_transition);
 
 	/*
 	 * Newer IP revisions like on J7200 SoCs support h/w auto-initialization
@@ -515,14 +543,46 @@ static int k3_r5_rproc_unprepare(struct rproc *rproc)
 {
 	struct k3_r5_rproc *kproc = rproc->priv;
 	struct k3_r5_cluster *cluster = kproc->cluster;
-	struct k3_r5_core *core = kproc->core;
+	struct k3_r5_core *core0, *core1, *core = kproc->core;
 	struct device *dev = kproc->dev;
 	int ret;
 
 	/* Re-use LockStep-mode reset logic for Single-CPU mode */
-	ret = (cluster->mode == CLUSTER_MODE_LOCKSTEP ||
-	       cluster->mode == CLUSTER_MODE_SINGLECPU) ?
-		k3_r5_lockstep_reset(cluster) : k3_r5_split_reset(core);
+	if (cluster->mode == CLUSTER_MODE_LOCKSTEP ||
+	    cluster->mode == CLUSTER_MODE_SINGLECPU)
+		ret = k3_r5_lockstep_reset(cluster);
+	else {
+		/*
+		 * R5 cores require to be powered off sequentially, core0 should
+		 * be in higher power state than core1 in a cluster. So, wait
+		 * for core1 to powered off before proceeding to core0 and put
+		 * timeout of 2sec. This waiting mechanism is necessary to
+		 * prevent stopping core0 before core1 from sysfs.
+		 */
+		core0 = list_first_entry(&cluster->cores, struct k3_r5_core, elem);
+		core1 = list_last_entry(&cluster->cores, struct k3_r5_core, elem);
+
+		if (core == core0 && core1->released_from_reset == true) {
+			ret = wait_event_interruptible_timeout(cluster->core_transition,
+							       !core1->released_from_reset,
+							       msecs_to_jiffies(2000));
+
+			if (ret <= 0) {
+				dev_err(dev, "can not power off core0 before core1");
+				return -EPERM;
+			}
+		}
+
+		ret = k3_r5_split_reset(core);
+
+		/* Notify all threads in the wait queue when core state has
+		 * changed so that threads waiting for this condition can be
+		 * executed.
+		 */
+		core->released_from_reset = false;
+		wake_up_interruptible(&cluster->core_transition);
+	}
+
 	if (ret)
 		dev_err(dev, "unable to disable cores, ret = %d\n", ret);
 
@@ -551,16 +611,34 @@ static int k3_r5_rproc_start(struct rproc *rproc)
 	struct k3_r5_rproc *kproc = rproc->priv;
 	struct k3_r5_cluster *cluster = kproc->cluster;
 	struct device *dev = kproc->dev;
-	struct k3_r5_core *core0, *core;
+	struct k3_r5_core *core0, *core1, *core = kproc->core;
 	u32 boot_addr;
 	int ret;
+
+	/*
+	 * R5 cores require to be powered on sequentially, core0 should be in
+	 * higher power state than core1 in a cluster. So, wait for core0 to
+	 * power up before proceeding to core1 and put timeout of 2sec. This
+	 * waiting mechanism is necessary because rproc_auto_boot_callback() for
+	 * core1 can be called before core0 due to thread execution order.
+	 */
+	core0 = list_first_entry(&cluster->cores, struct k3_r5_core, elem);
+	core1 = list_last_entry(&cluster->cores, struct k3_r5_core, elem);
+	if (cluster->mode == CLUSTER_MODE_SPLIT && core == core1 && core0->unhalted == false) {
+		ret = wait_event_interruptible_timeout(cluster->core_transition,
+						       core0->unhalted,
+						       msecs_to_jiffies(2000));
+		if (ret <= 0) {
+			dev_err(dev, "can not power up core1 before core0");
+			return -EPERM;
+		}
+	}
 
 	boot_addr = rproc->bootaddr;
 	/* TODO: add boot_addr sanity checking */
 	dev_dbg(dev, "booting R5F core using boot addr = 0x%x\n", boot_addr);
 
 	/* boot vector need not be programmed for Core1 in LockStep mode */
-	core = kproc->core;
 	ret = ti_sci_proc_set_config(core->tsp, boot_addr, 0, 0);
 	if (ret)
 		return ret;
@@ -573,20 +651,15 @@ static int k3_r5_rproc_start(struct rproc *rproc)
 				goto unroll_core_run;
 		}
 	} else {
-		/* do not allow core 1 to start before core 0 */
-		core0 = list_first_entry(&cluster->cores, struct k3_r5_core,
-					 elem);
-		if (core != core0 && core0->rproc->state == RPROC_OFFLINE) {
-			dev_err(dev, "%s: can not start core 1 before core 0\n",
-				__func__);
-			return -EPERM;
-		}
-
 		ret = k3_r5_core_run(core);
 		if (ret)
 			return ret;
 
-		core->released_from_reset = true;
+		/* Notify all threads in the wait queue when core state has
+		 * changed so that threads waiting for this condition can be
+		 * executed.
+		 */
+		core->unhalted = true;
 		wake_up_interruptible(&cluster->core_transition);
 	}
 
@@ -629,7 +702,7 @@ static int k3_r5_rproc_stop(struct rproc *rproc)
 	struct k3_r5_rproc *kproc = rproc->priv;
 	struct k3_r5_cluster *cluster = kproc->cluster;
 	struct device *dev = kproc->dev;
-	struct k3_r5_core *core1, *core = kproc->core;
+	struct k3_r5_core *core0, *core1, *core = kproc->core;
 	int ret;
 
 	/* halt all applicable cores */
@@ -642,19 +715,38 @@ static int k3_r5_rproc_stop(struct rproc *rproc)
 			}
 		}
 	} else {
-		/* do not allow core 0 to stop before core 1 */
-		core1 = list_last_entry(&cluster->cores, struct k3_r5_core,
-					elem);
-		if (core != core1 && core1->rproc->state != RPROC_OFFLINE) {
-			dev_err(dev, "%s: can not stop core 0 before core 1\n",
-				__func__);
-			ret = -EPERM;
-			goto out;
+		/*
+		 * R5 cores require to be powered off sequentially, core0 should
+		 * be in higher power state than core1 in a cluster. So, wait
+		 * for core1 to powered off before proceeding to core0 and put
+		 * timeout of 2sec. This waiting mechanism is necessary to
+		 * prevent stopping core0 before core1 from sysfs.
+		 */
+		core0 = list_first_entry(&cluster->cores, struct k3_r5_core, elem);
+		core1 = list_last_entry(&cluster->cores, struct k3_r5_core, elem);
+
+		if (core == core0 && core1->unhalted == true) {
+			ret = wait_event_interruptible_timeout(cluster->core_transition,
+							       !core1->unhalted,
+							       msecs_to_jiffies(2000));
+
+			if (ret <= 0) {
+				dev_err(dev, "can not power off core0 before core1");
+				ret = -EPERM;
+				goto out;
+			}
 		}
 
 		ret = k3_r5_core_halt(core);
 		if (ret)
 			goto out;
+
+		/* Notify all threads in the wait queue when core state has
+		 * changed so that threads waiting for this condition can be
+		 * executed.
+		 */
+		core->unhalted = false;
+		wake_up_interruptible(&cluster->core_transition);
 	}
 
 	return 0;
@@ -1145,12 +1237,6 @@ static int k3_r5_rproc_configure_mode(struct k3_r5_rproc *kproc)
 		return reset_ctrl_status;
 	}
 
-	/*
-	 * Skip the waiting mechanism for sequential power-on of cores if the
-	 * core has already been booted by another entity.
-	 */
-	core->released_from_reset = c_state;
-
 	ret = ti_sci_proc_get_status(core->tsp, &boot_vec, &cfg, &ctrl,
 				     &stat);
 	if (ret < 0) {
@@ -1296,25 +1382,6 @@ init_rmem:
 		    cluster->mode == CLUSTER_MODE_SINGLECORE)
 			break;
 
-		/*
-		 * R5 cores require to be powered on sequentially, core0
-		 * should be in higher power state than core1 in a cluster
-		 * So, wait for current core to power up before proceeding
-		 * to next core and put timeout of 2sec for each core.
-		 *
-		 * This waiting mechanism is necessary because
-		 * rproc_auto_boot_callback() for core1 can be called before
-		 * core0 due to thread execution order.
-		 */
-		ret = wait_event_interruptible_timeout(cluster->core_transition,
-						       core->released_from_reset,
-						       msecs_to_jiffies(2000));
-		if (ret <= 0) {
-			dev_err(dev,
-				"Timed out waiting for %s core to power up!\n",
-				rproc->name);
-			goto err_powerup;
-		}
 	}
 
 	return 0;
@@ -1329,7 +1396,6 @@ err_split:
 		}
 	}
 
-err_powerup:
 	rproc_del(rproc);
 err_add:
 	k3_r5_reserved_mem_exit(kproc);
