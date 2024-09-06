@@ -233,9 +233,15 @@ static void *read_file(const char *filename)
 		perror("fixdep: malloc");
 		exit(2);
 	}
-	if (read(fd, buf, st.st_size) != st.st_size) {
-		perror("fixdep: read");
-		exit(2);
+	ssize_t bytes = 0;
+	while (bytes < st.st_size) {
+               ssize_t cur = read(fd, buf + bytes, st.st_size - bytes);
+		if (cur == -1) {
+			perror("fixdep: read");
+			exit(2);
+		} else {
+			bytes += cur;
+		}
 	}
 	buf[st.st_size] = '\0';
 	close(fd);
