@@ -15,6 +15,7 @@
 void kvm_mmu_init_tdp_mmu(struct kvm *kvm)
 {
 	INIT_LIST_HEAD(&kvm->arch.tdp_mmu_roots);
+	INIT_LIST_HEAD(&kvm->arch.tdp_mmu_possible_nx_huge_pages);
 	spin_lock_init(&kvm->arch.tdp_mmu_pages_lock);
 }
 
@@ -71,6 +72,13 @@ static void tdp_mmu_free_sp_rcu_callback(struct rcu_head *head)
 					       rcu_head);
 
 	tdp_mmu_free_sp(sp);
+}
+
+void kvm_tdp_mmu_recover_nx_huge_pages(struct kvm *kvm)
+{
+	kvm_recover_nx_huge_pages(kvm,
+				  &kvm->arch.tdp_mmu_possible_nx_huge_pages,
+				  kvm->arch.tdp_mmu_nr_possible_nx_huge_pages);
 }
 
 void kvm_tdp_mmu_put_root(struct kvm *kvm, struct kvm_mmu_page *root)
@@ -318,7 +326,7 @@ static void tdp_mmu_unlink_sp(struct kvm *kvm, struct kvm_mmu_page *sp)
 
 	spin_lock(&kvm->arch.tdp_mmu_pages_lock);
 	sp->nx_huge_page_disallowed = false;
-	untrack_possible_nx_huge_page(kvm, sp);
+	untrack_possible_nx_huge_page(kvm, sp, &kvm->arch.tdp_mmu_nr_possible_nx_huge_pages);
 	spin_unlock(&kvm->arch.tdp_mmu_pages_lock);
 }
 
@@ -1162,10 +1170,13 @@ int kvm_tdp_mmu_map(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault)
 		}
 
 		if (fault->huge_page_disallowed &&
-		    fault->req_level >= iter.level) {
+		    fault->req_level >= iter.level &&
+		    sp->nx_huge_page_disallowed) {
 			spin_lock(&kvm->arch.tdp_mmu_pages_lock);
-			if (sp->nx_huge_page_disallowed)
-				track_possible_nx_huge_page(kvm, sp);
+			track_possible_nx_huge_page(kvm,
+						    sp,
+						    &kvm->arch.tdp_mmu_possible_nx_huge_pages,
+						    &kvm->arch.tdp_mmu_nr_possible_nx_huge_pages);
 			spin_unlock(&kvm->arch.tdp_mmu_pages_lock);
 		}
 	}

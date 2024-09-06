@@ -857,7 +857,8 @@ static void account_shadowed(struct kvm *kvm, struct kvm_mmu_page *sp)
 		kvm_flush_remote_tlbs_gfn(kvm, gfn, PG_LEVEL_4K);
 }
 
-void track_possible_nx_huge_page(struct kvm *kvm, struct kvm_mmu_page *sp)
+void track_possible_nx_huge_page(struct kvm *kvm, struct kvm_mmu_page *sp,
+				 struct list_head *pages, u64 *nr_pages)
 {
 	/*
 	 * If it's possible to replace the shadow page with an NX huge page,
@@ -870,9 +871,9 @@ void track_possible_nx_huge_page(struct kvm *kvm, struct kvm_mmu_page *sp)
 	if (!list_empty(&sp->possible_nx_huge_page_link))
 		return;
 
+	++(*nr_pages);
 	++kvm->stat.nx_lpage_splits;
-	list_add_tail(&sp->possible_nx_huge_page_link,
-		      &kvm->arch.possible_nx_huge_pages);
+	list_add_tail(&sp->possible_nx_huge_page_link, pages);
 }
 
 static void account_nx_huge_page(struct kvm *kvm, struct kvm_mmu_page *sp,
@@ -881,7 +882,10 @@ static void account_nx_huge_page(struct kvm *kvm, struct kvm_mmu_page *sp,
 	sp->nx_huge_page_disallowed = true;
 
 	if (nx_huge_page_possible)
-		track_possible_nx_huge_page(kvm, sp);
+		track_possible_nx_huge_page(kvm,
+					    sp,
+					    &kvm->arch.possible_nx_huge_pages,
+					    &kvm->arch.nr_possible_nx_huge_pages);
 }
 
 static void unaccount_shadowed(struct kvm *kvm, struct kvm_mmu_page *sp)
@@ -900,11 +904,13 @@ static void unaccount_shadowed(struct kvm *kvm, struct kvm_mmu_page *sp)
 	kvm_mmu_gfn_allow_lpage(slot, gfn);
 }
 
-void untrack_possible_nx_huge_page(struct kvm *kvm, struct kvm_mmu_page *sp)
+void untrack_possible_nx_huge_page(struct kvm *kvm, struct kvm_mmu_page *sp,
+				   u64 *nr_pages)
 {
 	if (list_empty(&sp->possible_nx_huge_page_link))
 		return;
 
+	--(*nr_pages);
 	--kvm->stat.nx_lpage_splits;
 	list_del_init(&sp->possible_nx_huge_page_link);
 }
@@ -913,7 +919,7 @@ static void unaccount_nx_huge_page(struct kvm *kvm, struct kvm_mmu_page *sp)
 {
 	sp->nx_huge_page_disallowed = false;
 
-	untrack_possible_nx_huge_page(kvm, sp);
+	untrack_possible_nx_huge_page(kvm, sp, &kvm->arch.nr_possible_nx_huge_pages);
 }
 
 static struct kvm_memory_slot *gfn_to_memslot_dirty_bitmap(struct kvm_vcpu *vcpu,
@@ -7311,9 +7317,9 @@ static int set_nx_huge_pages_recovery_param(const char *val, const struct kernel
 	return err;
 }
 
-static void kvm_recover_nx_huge_pages(struct kvm *kvm)
+void kvm_recover_nx_huge_pages(struct kvm *kvm, struct list_head *pages,
+			       unsigned long nr_pages)
 {
-	unsigned long nx_lpage_splits = kvm->stat.nx_lpage_splits;
 	struct kvm_memory_slot *slot;
 	int rcu_idx;
 	struct kvm_mmu_page *sp;
@@ -7333,9 +7339,9 @@ static void kvm_recover_nx_huge_pages(struct kvm *kvm)
 	rcu_read_lock();
 
 	ratio = READ_ONCE(nx_huge_pages_recovery_ratio);
-	to_zap = ratio ? DIV_ROUND_UP(nx_lpage_splits, ratio) : 0;
+	to_zap = ratio ? DIV_ROUND_UP(nr_pages, ratio) : 0;
 	for ( ; to_zap; --to_zap) {
-		if (list_empty(&kvm->arch.possible_nx_huge_pages))
+		if (list_empty(pages))
 			break;
 
 		/*
@@ -7345,7 +7351,7 @@ static void kvm_recover_nx_huge_pages(struct kvm *kvm)
 		 * the total number of shadow pages.  And because the TDP MMU
 		 * doesn't use active_mmu_pages.
 		 */
-		sp = list_first_entry(&kvm->arch.possible_nx_huge_pages,
+		sp = list_first_entry(pages,
 				      struct kvm_mmu_page,
 				      possible_nx_huge_page_link);
 		WARN_ON_ONCE(!sp->nx_huge_page_disallowed);
@@ -7417,6 +7423,12 @@ static long get_nx_huge_page_recovery_timeout(u64 start_time)
 		       : MAX_SCHEDULE_TIMEOUT;
 }
 
+static void kvm_mmu_recover_nx_huge_pages(struct kvm *kvm)
+{
+	kvm_recover_nx_huge_pages(kvm, &kvm->arch.possible_nx_huge_pages,
+				  kvm->arch.nr_possible_nx_huge_pages);
+}
+
 static int kvm_nx_huge_page_recovery_worker(struct kvm *kvm, uintptr_t data)
 {
 	u64 start_time;
@@ -7438,7 +7450,10 @@ static int kvm_nx_huge_page_recovery_worker(struct kvm *kvm, uintptr_t data)
 		if (kthread_should_stop())
 			return 0;
 
-		kvm_recover_nx_huge_pages(kvm);
+		kvm_mmu_recover_nx_huge_pages(kvm);
+		if (tdp_mmu_enabled)
+			kvm_tdp_mmu_recover_nx_huge_pages(kvm);
+
 	}
 }
 
