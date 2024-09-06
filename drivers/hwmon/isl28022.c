@@ -85,8 +85,6 @@ struct isl28022_data {
 	u32			shunt;
 	u32			gain;
 	u32			average;
-	u16			config;
-	u16			calib;
 };
 
 static int isl28022_read(struct device *dev, enum hwmon_sensor_types type,
@@ -95,20 +93,61 @@ static int isl28022_read(struct device *dev, enum hwmon_sensor_types type,
 	struct isl28022_data *data = dev_get_drvdata(dev);
 	unsigned int regval;
 	int err;
+	u16 sign_bit;
 
 	switch (type) {
 	case hwmon_in:
-		switch (attr) {
-		case hwmon_in_input:
-			err = regmap_read(data->regmap,
-					  ISL28022_REG_BUS, &regval);
-			if (err < 0)
-				return err;
-			/* driver supports only 60V mode (BRNG 11) */
-			*val = (long)(((u16)regval) & 0xFFFC);
+		switch (channel) {
+		case 0:
+			switch (attr) {
+			case hwmon_in_input:
+				err = regmap_read(data->regmap,
+						  ISL28022_REG_BUS, &regval);
+				if (err < 0)
+					return err;
+				/* driver supports only 60V mode (BRNG 11) */
+				*val = (long)(((u16)regval) & 0xFFFC);
+				break;
+			default:
+				return -EOPNOTSUPP;
+			}
+			break;
+		case 1:
+			switch (attr) {
+			case hwmon_in_input:
+				err = regmap_read(data->regmap,
+						  ISL28022_REG_SHUNT, &regval);
+				if (err < 0)
+					return err;
+			switch (data->gain) {
+			case 8:
+				sign_bit = (regval >> 15) & 0x01;
+				*val = (long)((((u16)regval) & 0x7FFF) -
+					   (sign_bit * 32768)) / 100;
+				break;
+			case 4:
+				sign_bit = (regval >> 14) & 0x01;
+				*val = (long)((((u16)regval) & 0x3FFF) -
+					   (sign_bit * 16384)) / 100;
+				break;
+			case 2:
+				sign_bit = (regval >> 13) & 0x01;
+				*val = (long)((((u16)regval) & 0x1FFF) -
+					   (sign_bit * 8192)) / 100;
+				break;
+			case 1:
+				sign_bit = (regval >> 12) & 0x01;
+				*val = (long)((((u16)regval) & 0x0FFF) -
+					   (sign_bit * 4096)) / 100;
+				break;
+			}
+			break;
+			default:
+				return -EOPNOTSUPP;
+			}
 			break;
 		default:
-			return -EINVAL;
+			return -EOPNOTSUPP;
 		}
 		break;
 	case hwmon_curr:
@@ -122,7 +161,7 @@ static int isl28022_read(struct device *dev, enum hwmon_sensor_types type,
 				(long)data->shunt;
 			break;
 		default:
-			return -EINVAL;
+			return -EOPNOTSUPP;
 		}
 		break;
 	case hwmon_power:
@@ -136,11 +175,11 @@ static int isl28022_read(struct device *dev, enum hwmon_sensor_types type,
 				(long)data->shunt) * (long)regval;
 			break;
 		default:
-			return -EINVAL;
+			return -EOPNOTSUPP;
 		}
 		break;
 	default:
-		return -EINVAL;
+		return -EOPNOTSUPP;
 	}
 
 	return 0;
@@ -182,7 +221,8 @@ static umode_t isl28022_is_visible(const void *data, enum hwmon_sensor_types typ
 
 static const struct hwmon_channel_info *isl28022_info[] = {
 	HWMON_CHANNEL_INFO(in,
-			   HWMON_I_INPUT),	/* channel 0: bus voltage (mV) */
+			   HWMON_I_INPUT,	/* channel 0: bus voltage (mV) */
+			   HWMON_I_INPUT),	/* channel 1: shunt voltage (mV) */
 	HWMON_CHANNEL_INFO(curr,
 			   HWMON_C_INPUT),	/* channel 1: current (mA) */
 	HWMON_CHANNEL_INFO(power,
@@ -368,24 +408,22 @@ shunt_invalid:
 static int isl28022_config(struct isl28022_data *data)
 {
 	int err;
+	u16 config;
+	u16 calib;
 
-	data->config = (ISL28022_MODE_CONT_SB << ISL28022_MODE_SHIFT) |
+	config = (ISL28022_MODE_CONT_SB << ISL28022_MODE_SHIFT) |
 			(ISL28022_BRNG_60 << ISL28022_BRNG_SHIFT) |
 			(__ffs(data->gain) << ISL28022_PG_SHIFT) |
 			((ISL28022_ADC_15_1 + __ffs(data->average)) << ISL28022_SADC_SHIFT) |
 			((ISL28022_ADC_15_1 + __ffs(data->average)) << ISL28022_BADC_SHIFT);
 
-	data->calib = data->shunt ? 0x8000 / data->gain : 0;
+	calib = data->shunt ? 0x8000 / data->gain : 0;
 
-	err = regmap_write(data->regmap, ISL28022_REG_CONFIG, data->config);
+	err = regmap_write(data->regmap, ISL28022_REG_CONFIG, config);
 	if (err < 0)
 		return err;
 
-	err = regmap_write(data->regmap, ISL28022_REG_CALIB, data->calib);
-	if (err < 0)
-		return err;
-
-	return 0;
+	return regmap_write(data->regmap, ISL28022_REG_CALIB, calib);
 }
 
 static int isl28022_probe(struct i2c_client *client)
@@ -396,8 +434,8 @@ static int isl28022_probe(struct i2c_client *client)
 	int err;
 
 	if (!i2c_check_functionality(client->adapter,
-				     I2C_FUNC_SMBUS_BYTE_DATA |
-				     I2C_FUNC_SMBUS_WORD_DATA))
+					 I2C_FUNC_SMBUS_BYTE_DATA |
+					 I2C_FUNC_SMBUS_WORD_DATA))
 		return -ENODEV;
 
 	data = devm_kzalloc(dev, sizeof(struct isl28022_data), GFP_KERNEL);
@@ -418,7 +456,7 @@ static int isl28022_probe(struct i2c_client *client)
 
 	isl28022_debugfs_init(client, data);
 
-	hwmon_dev = devm_hwmon_device_register_with_info(dev, "isl28022_hwmon",
+	hwmon_dev = devm_hwmon_device_register_with_info(dev, client->name,
 							 data, &isl28022_chip_info, NULL);
 	if (IS_ERR(hwmon_dev))
 		return PTR_ERR(hwmon_dev);
@@ -437,8 +475,9 @@ static struct i2c_driver isl28022_driver = {
 	.class		= I2C_CLASS_HWMON,
 	.driver = {
 		.name	= "isl28022",
+		.of_match_table = of_match_ptr(isl28022_of_match),
 	},
-	.probe_new	= isl28022_probe,
+	.probe	= isl28022_probe,
 	.id_table	= isl28022_ids,
 };
 
