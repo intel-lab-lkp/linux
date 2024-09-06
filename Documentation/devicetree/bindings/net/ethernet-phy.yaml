@@ -158,6 +158,28 @@ properties:
       Mark the corresponding energy efficient ethernet mode as
       broken and request the ethernet to stop advertising it.
 
+  forced-master:
+    $ref: /schemas/types.yaml#/definitions/flag
+    description:
+      If set, forces the PHY to operate as a master. This is used in Single Pair
+      Ethernet (1000/100/10Base-T1) where each PHY and product has a predefined
+      link role (master or slave). This property is board-specific, as the role
+      is usually configured by strap pins but can be set through the device tree
+      if needed.
+      This property is mutually exclusive with 'forced-slave'; only one of them
+      should be used.
+
+  forced-slave:
+    $ref: /schemas/types.yaml#/definitions/flag
+    description:
+      If set, forces the PHY to operate as a slave. This is used in Single Pair
+      Ethernet (1000/100/10Base-T1) where each PHY and product has a predefined
+      link role (master or slave). This property is board-specific, as the role
+      is usually configured by strap pins but can be set through the device tree
+      if needed.
+      This property is mutually exclusive with 'forced-master'; only one of them
+      should be used.
+
   pses:
     $ref: /schemas/types.yaml#/definitions/phandle-array
     maxItems: 1
