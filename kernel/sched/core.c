@@ -5811,8 +5811,19 @@ static noinline void __schedule_bug(struct task_struct *prev)
 static inline void schedule_debug(struct task_struct *prev, bool preempt)
 {
 #ifdef CONFIG_SCHED_STACK_END_CHECK
-	if (task_stack_end_corrupted(prev))
+	if (task_stack_end_corrupted(prev)) {
+		unsigned long *ptr = end_of_stack(prev);
+
+		/* Dump 16 ulong words around the corruption point */
+#ifdef CONFIG_STACK_GROWSUP
+		ptr -= 15;
+#endif
+		print_hex_dump(KERN_ERR, "Corrupted Stack: ",
+			DUMP_PREFIX_ADDRESS, 16, 1, ptr,
+			16 * sizeof(unsigned long), true);
+
 		panic("corrupted stack end detected inside scheduler\n");
+	}
 
 	if (task_scs_end_corrupted(prev))
 		panic("corrupted shadow stack detected inside scheduler\n");
