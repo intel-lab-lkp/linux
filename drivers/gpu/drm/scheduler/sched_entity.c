@@ -47,9 +47,8 @@
  *
  * Note that the &sched_list must have at least one element to schedule the entity.
  *
- * For changing @priority later on at runtime see
- * drm_sched_entity_set_priority(). For changing the set of schedulers
- * @sched_list at runtime see drm_sched_entity_modify_sched().
+ * For changing the set of schedulers @sched_list at runtime see
+ * drm_sched_entity_modify_sched().
  *
  * An entity is cleaned up by callind drm_sched_entity_fini(). See also
  * drm_sched_entity_destroy().
@@ -382,23 +381,6 @@ static void drm_sched_entity_wakeup(struct dma_fence *f,
 	drm_sched_entity_clear_dep(f, cb);
 	drm_sched_wakeup(entity->rq->sched, entity);
 }
-
-/**
- * drm_sched_entity_set_priority - Sets priority of the entity
- *
- * @entity: scheduler entity
- * @priority: scheduler priority
- *
- * Update the priority of runqueus used for the entity.
- */
-void drm_sched_entity_set_priority(struct drm_sched_entity *entity,
-				   enum drm_sched_priority priority)
-{
-	spin_lock(&entity->rq_lock);
-	entity->priority = priority;
-	spin_unlock(&entity->rq_lock);
-}
-EXPORT_SYMBOL(drm_sched_entity_set_priority);
 
 /*
  * Add a callback to the current dependency of the entity to wake up the
