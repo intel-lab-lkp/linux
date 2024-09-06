@@ -60,9 +60,12 @@
 #define SB800_ASF_CLK_EN	17
 
 /* SB800 ASF address offsets */
+#define ASFINDEX		(7 + piix4_smba)
 #define ASFLISADDR		(9 + piix4_smba)
 #define ASFSTA			(0xA + piix4_smba)
 #define ASFSLVSTA		(0xD + piix4_smba)
+#define ASFDATARWPTR		(0x11 + piix4_smba)
+#define ASFSETDATARDPTR		(0x12 + piix4_smba)
 #define ASFDATABNKSEL		(0x13 + piix4_smba)
 #define ASFSLVEN		(0x15 + piix4_smba)
 
@@ -118,6 +121,8 @@
 #define SB800_PIIX4_FCH_PM_ADDR			0xFED80300
 #define SB800_PIIX4_FCH_PM_SIZE			8
 #define SB800_ASF_BLOCK_MAX_BYTES		72
+#define SB800_ASF_ERROR_STATUS			0xE
+#define SB800_ASF_ACPI_PATH			"\\_SB.ASFC"
 
 /* insmod parameters */
 
@@ -182,6 +187,11 @@ struct sb800_mmio_cfg {
 	bool use_mmio;
 };
 
+struct sb800_asf_data {
+	unsigned short addr;
+	int irq;
+};
+
 enum piix4_algo {
 	PIIX4_SB800,
 	PIIX4_SMBUS,
@@ -194,10 +204,12 @@ struct i2c_piix4_adapdata {
 	/* SB800 */
 	bool sb800_main;
 	bool notify_imc;
+	bool is_asf;
 	u8 port;		/* Port number, shifted */
 	struct sb800_mmio_cfg mmio_cfg;
 	u8 algo_select;
 	struct i2c_client *slave;
+	struct delayed_work work_buf;
 };
 
 static int piix4_sb800_region_request(struct device *dev,
@@ -906,6 +918,67 @@ release:
 	return retval;
 }
 
+static void sb800_asf_process_slave(struct work_struct *work)
+{
+	struct i2c_piix4_adapdata *adapdata =
+		container_of(work, struct i2c_piix4_adapdata, work_buf.work);
+	unsigned short piix4_smba = adapdata->smba;
+	u8 data[SB800_ASF_BLOCK_MAX_BYTES];
+	u8 bank, reg, cmd = 0;
+	u8 len, val = 0;
+	int i;
+
+	/* Read slave status register */
+	reg = inb_p(ASFSLVSTA);
+
+	/* Check if no error bits are set in slave status register */
+	if (reg & SB800_ASF_ERROR_STATUS) {
+		/* Set bank as full */
+		reg = reg | GENMASK(3, 2);
+		outb_p(reg, ASFDATABNKSEL);
+	} else {
+		/* Read data bank */
+		reg = inb_p(ASFDATABNKSEL);
+		bank = (reg & BIT(3)) >> 3;
+
+		/* Set read data bank */
+		if (bank) {
+			reg = reg | BIT(4);
+			reg = reg & ~BIT(3);
+		} else {
+			reg = reg & ~BIT(4);
+			reg = reg & ~BIT(2);
+		}
+
+		/* Read command register */
+		outb_p(reg, ASFDATABNKSEL);
+		cmd = inb_p(ASFINDEX);
+		len = inb_p(ASFDATARWPTR);
+		for (i = 0; i < len; i++)
+			data[i] = inb_p(ASFINDEX);
+
+		/* Clear data bank status */
+		if (bank) {
+			reg = reg | BIT(3);
+			outb_p(reg, ASFDATABNKSEL);
+		} else {
+			reg = reg | BIT(2);
+			outb_p(reg, ASFDATABNKSEL);
+		}
+	}
+
+	outb_p(0, ASFSETDATARDPTR);
+	if (cmd & BIT(0))
+		return;
+
+	i2c_slave_event(adapdata->slave, I2C_SLAVE_WRITE_REQUESTED, &val);
+	for (i = 0; i < len; i++) {
+		val = data[i];
+		i2c_slave_event(adapdata->slave, I2C_SLAVE_WRITE_RECEIVED, &val);
+	}
+	i2c_slave_event(adapdata->slave, I2C_SLAVE_STOP, &val);
+}
+
 static void sb800_asf_update_bits(unsigned short piix4_smba, u8 bit, unsigned long offset, bool set)
 {
 	unsigned long reg;
@@ -1195,6 +1268,88 @@ static int piix4_add_adapter(struct pci_dev *dev, unsigned short smba,
 	return 0;
 }
 
+static irqreturn_t sb800_asf_irq_handler(int irq, void *ptr)
+{
+	struct i2c_piix4_adapdata *adapdata = ptr;
+	unsigned short piix4_smba = adapdata->smba;
+	u8 slave_int = inb_p(ASFSTA);
+
+	if (slave_int & BIT(6)) {
+		/* Slave Interrupt */
+		outb_p(slave_int | BIT(6), ASFSTA);
+		schedule_delayed_work(&adapdata->work_buf, HZ);
+	} else {
+		/* Master Interrupt */
+		sb800_asf_update_bits(piix4_smba, SB800_ASF_SLV_INTR, SMBHSTSTS, true);
+	}
+
+	return IRQ_HANDLED;
+}
+
+static int sb800_asf_add_adap(struct pci_dev *dev)
+{
+	struct i2c_piix4_adapdata *adapdata;
+	struct resource_entry *rentry;
+	struct sb800_asf_data data;
+	struct list_head res_list;
+	struct acpi_device *adev;
+	acpi_status status;
+	acpi_handle handle;
+	int ret;
+
+	status = acpi_get_handle(NULL, SB800_ASF_ACPI_PATH, &handle);
+	if (ACPI_FAILURE(status))
+		return -ENODEV;
+
+	adev = acpi_fetch_acpi_dev(handle);
+	if (!adev)
+		return -ENODEV;
+
+	INIT_LIST_HEAD(&res_list);
+	ret = acpi_dev_get_resources(adev, &res_list, NULL, NULL);
+	if (ret < 0) {
+		dev_err(&dev->dev, "Error getting ASF ACPI resource: %d\n", ret);
+		return ret;
+	}
+
+	list_for_each_entry(rentry, &res_list, node) {
+		switch (resource_type(rentry->res)) {
+		case IORESOURCE_IO:
+			data.addr = rentry->res->start;
+			break;
+		case IORESOURCE_IRQ:
+			data.irq = rentry->res->start;
+			break;
+		default:
+			dev_warn(&adev->dev, "Invalid ASF resource\n");
+			break;
+		}
+	}
+
+	acpi_dev_free_resource_list(&res_list);
+	ret = piix4_add_adapter(dev, data.addr, SMBUS_ASF, piix4_adapter_count, false, 0,
+				piix4_main_port_names_sb800[piix4_adapter_count],
+				&piix4_main_adapters[piix4_adapter_count]);
+	if (ret) {
+		dev_err(&dev->dev, "Failed to add ASF adapter: %d\n", ret);
+		return -ENODEV;
+	}
+
+	adapdata = i2c_get_adapdata(piix4_main_adapters[piix4_adapter_count]);
+	ret = devm_request_irq(&dev->dev, data.irq, sb800_asf_irq_handler, IRQF_SHARED,
+			       "sb800_smbus_asf", adapdata);
+	if (ret) {
+		dev_err(&dev->dev, "Unable to request irq: %d for use\n", data.irq);
+		return ret;
+	}
+
+	INIT_DELAYED_WORK(&adapdata->work_buf, sb800_asf_process_slave);
+	adapdata->is_asf = true;
+	/* Increment the adapter count by 1 as ASF is added to the list */
+	piix4_adapter_count++;
+	return 1;
+}
+
 static int piix4_add_adapters_sb800(struct pci_dev *dev, unsigned short smba,
 				    bool notify_imc)
 {
@@ -1243,6 +1398,7 @@ static int piix4_probe(struct pci_dev *dev, const struct pci_device_id *id)
 {
 	int retval;
 	bool is_sb800 = false;
+	bool is_asf = false;
 
 	if ((dev->vendor == PCI_VENDOR_ID_ATI &&
 	     dev->device == PCI_DEVICE_ID_ATI_SBX00_SMBUS &&
@@ -1279,6 +1435,10 @@ static int piix4_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		retval = piix4_add_adapters_sb800(dev, retval, notify_imc);
 		if (retval < 0)
 			return retval;
+
+		/* Check if ASF is enabled in SB800 */
+		if (sb800_asf_add_adap(dev))
+			is_asf = true;
 	} else {
 		retval = piix4_setup(dev, id);
 		if (retval < 0)
@@ -1308,7 +1468,9 @@ static int piix4_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	if (dev->vendor == PCI_VENDOR_ID_AMD &&
 	    (dev->device == PCI_DEVICE_ID_AMD_HUDSON2_SMBUS ||
 	     dev->device == PCI_DEVICE_ID_AMD_KERNCZ_SMBUS)) {
-		retval = piix4_setup_sb800(dev, id, 1);
+		/* Do not setup AUX port if ASF is enabled */
+		if (!is_asf)
+			retval = piix4_setup_sb800(dev, id, 1);
 	}
 
 	if (retval > 0) {
@@ -1325,6 +1487,9 @@ static int piix4_probe(struct pci_dev *dev, const struct pci_device_id *id)
 static void piix4_adap_remove(struct i2c_adapter *adap)
 {
 	struct i2c_piix4_adapdata *adapdata = i2c_get_adapdata(adap);
+
+	if (adapdata->is_asf)
+		cancel_delayed_work_sync(&adapdata->work_buf);
 
 	if (adapdata->smba) {
 		i2c_del_adapter(adap);
