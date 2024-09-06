@@ -30,11 +30,15 @@ enum pt_capabilities {
 void cpu_emergency_stop_pt(void);
 extern u32 intel_pt_validate_hw_cap(enum pt_capabilities cap);
 extern u32 intel_pt_validate_cap(u32 *caps, enum pt_capabilities cap);
+extern void intel_pt_vm_entry(bool guest_trace_enable);
+extern void intel_pt_vm_exit(bool guest_trace_enable);
 extern int is_intel_pt_event(struct perf_event *event);
 #else
 static inline void cpu_emergency_stop_pt(void) {}
 static inline u32 intel_pt_validate_hw_cap(enum pt_capabilities cap) { return 0; }
 static inline u32 intel_pt_validate_cap(u32 *caps, enum pt_capabilities capability) { return 0; }
+static inline void intel_pt_vm_entry(bool guest_trace_enable) {}
+static inline void intel_pt_vm_exit(bool guest_trace_enable) {}
 static inline int is_intel_pt_event(struct perf_event *event) { return 0; }
 #endif
 
