@@ -85,6 +85,45 @@ static void set_dte_entry(struct amd_iommu *iommu,
  *
  ****************************************************************************/
 
+static void update_dte256(struct amd_iommu *iommu, struct iommu_dev_data *dev_data,
+			  struct dev_table_entry *new)
+{
+	struct dev_table_entry *dev_table = get_dev_table(iommu);
+	struct dev_table_entry *ptr = &dev_table[dev_data->devid];
+	struct dev_table_entry old;
+	u128 tmp;
+
+	lockdep_assert_held(&dev_data->dte_lock);
+
+	old.data128[0] = ptr->data128[0];
+	old.data128[1] = ptr->data128[1];
+
+	tmp = cmpxchg128(&ptr->data128[1], old.data128[1], new->data128[1]);
+	if (tmp == old.data128[1]) {
+		if (!try_cmpxchg128(&ptr->data128[0], &old.data128[0], new->data128[0])) {
+			/* Restore hi 128-bit */
+			cmpxchg128(&ptr->data128[1], new->data128[1], tmp);
+			pr_err("%s: Failed. devid=%#x, dte=%016llx:%016llx:%016llx:%016llx\n",
+			       __func__, dev_data->devid, new->data[0], new->data[1],
+			       new->data[2], new->data[3]);
+		}
+	}
+}
+
+static void get_dte256(struct amd_iommu *iommu, struct iommu_dev_data *dev_data,
+		      struct dev_table_entry *dte)
+{
+	struct dev_table_entry *ptr;
+	struct dev_table_entry *dev_table = get_dev_table(iommu);
+
+	lockdep_assert_held(&dev_data->dte_lock);
+
+	ptr = &dev_table[dev_data->devid];
+
+	dte->data128[0] = ptr->data128[0];
+	dte->data128[1] = ptr->data128[1];
+}
+
 static inline bool pdom_is_v2_pgtbl_mode(struct protection_domain *pdom)
 {
 	return (pdom && (pdom->pd_mode == PD_MODE_V2));
@@ -205,6 +244,7 @@ static struct iommu_dev_data *alloc_dev_data(struct amd_iommu *iommu, u16 devid)
 		return NULL;
 
 	spin_lock_init(&dev_data->lock);
+	spin_lock_init(&dev_data->dte_lock);
 	dev_data->devid = devid;
 	ratelimit_default_init(&dev_data->rs);
 
@@ -232,9 +272,11 @@ static struct iommu_dev_data *search_dev_data(struct amd_iommu *iommu, u16 devid
 
 static int clone_alias(struct pci_dev *pdev, u16 alias, void *data)
 {
+	struct dev_table_entry dte;
 	struct amd_iommu *iommu;
-	struct dev_table_entry *dev_table;
+	struct iommu_dev_data *dev_data, *alias_data;
 	u16 devid = pci_dev_id(pdev);
+	int ret;
 
 	if (devid == alias)
 		return 0;
@@ -243,13 +285,28 @@ static int clone_alias(struct pci_dev *pdev, u16 alias, void *data)
 	if (!iommu)
 		return 0;
 
-	amd_iommu_set_rlookup_table(iommu, alias);
-	dev_table = get_dev_table(iommu);
-	memcpy(dev_table[alias].data,
-	       dev_table[devid].data,
-	       sizeof(dev_table[alias].data));
+	/* Get DTE for pdev */
+	dev_data = dev_iommu_priv_get(&pdev->dev);
+	if (!dev_data)
+		return -EINVAL;
 
-	return 0;
+	spin_lock(&dev_data->dte_lock);
+	get_dte256(iommu, dev_data, &dte);
+	spin_unlock(&dev_data->dte_lock);
+
+	/* Setup for alias */
+	alias_data = search_dev_data(iommu, alias);
+	if (!alias_data) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	spin_lock(&alias_data->dte_lock);
+	update_dte256(iommu, alias_data, &dte);
+	amd_iommu_set_rlookup_table(iommu, alias);
+	spin_unlock(&alias_data->dte_lock);
+out:
+	return ret;
 }
 
 static void clone_aliases(struct amd_iommu *iommu, struct device *dev)
@@ -583,10 +640,15 @@ static void amd_iommu_uninit_device(struct device *dev)
 static void dump_dte_entry(struct amd_iommu *iommu, u16 devid)
 {
 	int i;
-	struct dev_table_entry *dev_table = get_dev_table(iommu);
+	struct dev_table_entry dte;
+	struct iommu_dev_data *dev_data = find_dev_data(iommu, devid);
+
+	spin_lock(&dev_data->dte_lock);
+	get_dte256(iommu, dev_data, &dte);
+	spin_unlock(&dev_data->dte_lock);
 
 	for (i = 0; i < 4; ++i)
-		pr_err("DTE[%d]: %016llx\n", i, dev_table[devid].data[i]);
+		pr_err("DTE[%d]: %016llx\n", i, dte.data[i]);
 }
 
 static void dump_command(unsigned long phys_addr)
