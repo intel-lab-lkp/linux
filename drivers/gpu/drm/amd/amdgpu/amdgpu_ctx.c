@@ -812,10 +812,6 @@ static void amdgpu_ctx_set_entity_priority(struct amdgpu_ctx *ctx,
 	struct drm_gpu_scheduler **scheds = NULL;
 	unsigned num_scheds;
 
-	/* set sw priority */
-	drm_sched_entity_set_priority(&aentity->entity,
-				      amdgpu_ctx_to_drm_sched_prio(priority));
-
 	/* set hw priority */
 	if (hw_ip == AMDGPU_HW_IP_COMPUTE || hw_ip == AMDGPU_HW_IP_GFX) {
 		hw_prio = amdgpu_ctx_get_hw_prio(ctx, hw_ip);
