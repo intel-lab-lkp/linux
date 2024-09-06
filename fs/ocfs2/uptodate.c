@@ -471,7 +471,7 @@ void ocfs2_set_buffer_uptodate(struct ocfs2_caching_info *ci,
 
 	/* The block may very well exist in our cache already, so avoid
 	 * doing any more work in that case. */
-	if (ocfs2_buffer_cached(ci, bh))
+	if (bh == NULL || ocfs2_buffer_cached(ci, bh))
 		return;
 
 	trace_ocfs2_set_buffer_uptodate_begin(
