@@ -30,10 +30,13 @@
 #define XILINX_CPM_PCIE_REG_IDRN_MASK	0x00000E3C
 #define XILINX_CPM_PCIE_MISC_IR_STATUS	0x00000340
 #define XILINX_CPM_PCIE_MISC_IR_ENABLE	0x00000348
-#define XILINX_CPM_PCIE_MISC_IR_LOCAL	BIT(1)
+#define XILINX_CPM_PCIE0_MISC_IR_LOCAL	BIT(1)
+#define XILINX_CPM_PCIE1_MISC_IR_LOCAL	BIT(2)
 
-#define XILINX_CPM_PCIE_IR_STATUS       0x000002A0
-#define XILINX_CPM_PCIE_IR_ENABLE       0x000002A8
+#define XILINX_CPM_PCIE0_IR_STATUS       0x000002A0
+#define XILINX_CPM_PCIE1_IR_STATUS       0x000002B4
+#define XILINX_CPM_PCIE0_IR_ENABLE       0x000002A8
+#define XILINX_CPM_PCIE1_IR_ENABLE       0x000002BC
 #define XILINX_CPM_PCIE_IR_LOCAL        BIT(0)
 
 #define IMR(x) BIT(XILINX_PCIE_INTR_ ##x)
@@ -280,10 +283,17 @@ static void xilinx_cpm_pcie_event_flow(struct irq_desc *desc)
 	pcie_write(port, val, XILINX_CPM_PCIE_REG_IDR);
 
 	if (port->variant->version == CPM5) {
-		val = readl_relaxed(port->cpm_base + XILINX_CPM_PCIE_IR_STATUS);
+		val = readl_relaxed(port->cpm_base + XILINX_CPM_PCIE0_IR_STATUS);
 		if (val)
 			writel_relaxed(val, port->cpm_base +
-					    XILINX_CPM_PCIE_IR_STATUS);
+					    XILINX_CPM_PCIE0_IR_STATUS);
+	}
+
+	else if (port->variant->version == CPM5_HOST1) {
+		val = readl_relaxed(port->cpm_base + XILINX_CPM_PCIE1_IR_STATUS);
+		if (val)
+			writel_relaxed(val, port->cpm_base +
+					    XILINX_CPM_PCIE1_IR_STATUS);
 	}
 
 	/*
@@ -483,12 +493,19 @@ static void xilinx_cpm_pcie_init_port(struct xilinx_cpm_pcie *port)
 	 * XILINX_CPM_PCIE_MISC_IR_ENABLE register is mapped to
 	 * CPM SLCR block.
 	 */
-	writel(XILINX_CPM_PCIE_MISC_IR_LOCAL,
+	writel(XILINX_CPM_PCIE0_MISC_IR_LOCAL,
 	       port->cpm_base + XILINX_CPM_PCIE_MISC_IR_ENABLE);
 
 	if (port->variant->version == CPM5) {
 		writel(XILINX_CPM_PCIE_IR_LOCAL,
-		       port->cpm_base + XILINX_CPM_PCIE_IR_ENABLE);
+		       port->cpm_base + XILINX_CPM_PCIE0_IR_ENABLE);
+	}
+
+	else if (port->variant->version == CPM5_HOST1) {
+		writel(XILINX_CPM_PCIE1_MISC_IR_LOCAL,
+		       port->cpm_base + XILINX_CPM_PCIE_MISC_IR_ENABLE);
+		writel(XILINX_CPM_PCIE_IR_LOCAL,
+		       port->cpm_base + XILINX_CPM_PCIE1_IR_ENABLE);
 	}
 
 	/* Enable the Bridge enable bit */
@@ -615,6 +632,10 @@ static const struct xilinx_cpm_variant cpm5_host = {
 	.version = CPM5,
 };
 
+static const struct xilinx_cpm_variant cpm5_host = {
+	.version = CPM5_HOST1,
+};
+
 static const struct of_device_id xilinx_cpm_pcie_of_match[] = {
 	{
 		.compatible = "xlnx,versal-cpm-host-1.00",
@@ -623,6 +644,10 @@ static const struct of_device_id xilinx_cpm_pcie_of_match[] = {
 	{
 		.compatible = "xlnx,versal-cpm5-host",
 		.data = &cpm5_host,
+	},
+	{
+		.compatible = "xlnx,versal-cpm5-host1",
+		.data = &cpm5_host1,
 	},
 	{}
 };
