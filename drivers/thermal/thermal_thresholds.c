@@ -20,7 +20,7 @@ int thermal_thresholds_init(struct thermal_zone_device *tz)
 	return 0;
 }
 
-void thermal_thresholds_flush(struct thermal_zone_device *tz)
+void thermal_thresholds_flush(struct thermal_zone_device *tz, pid_t pid)
 {
 	struct list_head *thresholds = &tz->user_thresholds;
 	struct user_threshold *entry, *tmp;
@@ -32,12 +32,14 @@ void thermal_thresholds_flush(struct thermal_zone_device *tz)
 		kfree(entry);
 	}
 
+	thermal_notify_threshold_flush(tz, pid);
+
 	__thermal_zone_device_update(tz, THERMAL_TZ_FLUSH_THRESHOLDS);
 }
 
 void thermal_thresholds_exit(struct thermal_zone_device *tz)
 {
-	thermal_thresholds_flush(tz);
+	thermal_thresholds_flush(tz, 0);
 }
 
 static int __thermal_thresholds_cmp(void *data,
@@ -122,7 +124,6 @@ void thermal_thresholds_handle(struct thermal_zone_device *tz, int *low, int *hi
 
 	int temperature = tz->temperature;
 	int last_temperature = tz->last_temperature;
-	bool notify;
 
 	lockdep_assert_held(&tz->lock);
 
@@ -144,19 +145,19 @@ void thermal_thresholds_handle(struct thermal_zone_device *tz, int *low, int *hi
 	 * - increased : thresholds are crossed the way up
 	 * - decreased : thresholds are crossed the way down
 	 */
-	if (temperature > last_temperature)
-		notify = thermal_thresholds_handle_raising(thresholds, temperature,
-							   last_temperature, low, high);
-	else
-		notify = thermal_thresholds_handle_dropping(thresholds, temperature,
-							    last_temperature, low, high);
-
-	if (notify)
-		pr_debug("A threshold has been crossed the way %s, with a temperature=%d, last_temperature=%d\n",
-			 temperature > last_temperature ? "up" : "down", temperature, last_temperature);
+	if (temperature > last_temperature) {
+		if (thermal_thresholds_handle_raising(thresholds, temperature,
+						      last_temperature, low, high))
+			thermal_notify_threshold_up(tz);
+	} else {
+		if (thermal_thresholds_handle_dropping(thresholds, temperature,
+						       last_temperature, low, high))
+			thermal_notify_threshold_down(tz);
+	}
 }
 
-int thermal_thresholds_add(struct thermal_zone_device *tz, int temperature, int direction)
+int thermal_thresholds_add(struct thermal_zone_device *tz,
+			   int temperature, int direction, pid_t pid)
 {
 	struct list_head *thresholds = &tz->user_thresholds;
 	struct user_threshold *t;
@@ -182,12 +183,15 @@ int thermal_thresholds_add(struct thermal_zone_device *tz, int temperature, int 
 		list_sort(NULL, thresholds, __thermal_thresholds_cmp);
 	}
 
+	thermal_notify_threshold_add(tz, temperature, direction, pid);
+
 	__thermal_zone_device_update(tz, THERMAL_TZ_ADD_THRESHOLD);
 
 	return 0;
 }
 
-int thermal_thresholds_delete(struct thermal_zone_device *tz, int temperature, int direction)
+int thermal_thresholds_delete(struct thermal_zone_device *tz,
+			      int temperature, int direction, pid_t pid)
 {
 	struct list_head *thresholds = &tz->user_thresholds;
 	struct user_threshold *t;
@@ -205,8 +209,10 @@ int thermal_thresholds_delete(struct thermal_zone_device *tz, int temperature, i
 		t->direction &= ~direction;
 	}
 
-	__thermal_zone_device_update(tz, THERMAL_TZ_DEL_THRESHOLD);
+	thermal_notify_threshold_delete(tz, temperature, direction, pid);
 
+	__thermal_zone_device_update(tz, THERMAL_TZ_DEL_THRESHOLD);
+	
 	return 0;
 }
 

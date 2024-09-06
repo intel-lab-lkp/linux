@@ -10,10 +10,10 @@ struct user_threshold {
 
 int thermal_thresholds_init(struct thermal_zone_device *tz);
 void thermal_thresholds_exit(struct thermal_zone_device *tz);
-void thermal_thresholds_flush(struct thermal_zone_device *tz);
 void thermal_thresholds_handle(struct thermal_zone_device *tz, int *low, int *high);
-int thermal_thresholds_add(struct thermal_zone_device *tz, int temperature, int direction);
-int thermal_thresholds_delete(struct thermal_zone_device *tz, int temperature, int direction);
+void thermal_thresholds_flush(struct thermal_zone_device *tz, pid_t pid);
+int thermal_thresholds_add(struct thermal_zone_device *tz, int temperature, int direction, pid_t pid);
+int thermal_thresholds_delete(struct thermal_zone_device *tz, int temperature, int direction, pid_t pid);
 int thermal_thresholds_for_each(struct thermal_zone_device *tz,
 				int (*cb)(struct user_threshold *, void *arg), void *arg);
 #endif
