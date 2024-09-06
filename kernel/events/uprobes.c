@@ -1474,9 +1474,6 @@ static void uprobe_clear_state(const struct vm_special_mapping *sm, struct vm_ar
 	delayed_uprobe_remove(NULL, vma->vm_mm);
 	mutex_unlock(&delayed_uprobe_lock);
 
-	if (!area)
-		return;
-
 	put_page(area->pages[0]);
 	kfree(area->bitmap);
 	kfree(area);
