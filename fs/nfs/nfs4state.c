@@ -335,8 +335,8 @@ do_confirm:
 	if (!(clp->cl_exchange_flags & EXCHGID4_FLAG_CONFIRMED_R))
 		nfs4_state_start_reclaim_reboot(clp);
 	nfs41_finish_session_reset(clp);
-	nfs_mark_client_ready(clp, NFS_CS_READY);
 out:
+	nfs_mark_client_ready(clp, status == 0 ? NFS_CS_READY : status);
 	return status;
 }
 
