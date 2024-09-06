@@ -1403,6 +1403,18 @@ int phy_read_mmd(struct phy_device *phydev, int devad, u32 regnum);
 })
 
 /*
+ * mmd_phy_read - Convenience function for direct mdiobus read.
+ */
+int mmd_phy_read(struct mii_bus *bus, int phy_addr, bool is_c45, int devad,
+		 u32 regnum);
+
+/*
+ * mmd_phy_write - Convenience function for direct mdiobus write.
+ */
+int mmd_phy_write(struct mii_bus *bus, int phy_addr, bool is_c45,
+		  int devad, u32 regnum, u16 val);
+
+/*
  * __phy_read_mmd - Convenience function for reading a register
  * from an MMD on a given PHY.
  */
