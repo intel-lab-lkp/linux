@@ -770,7 +770,7 @@ static int rcar_gen3_phy_usb2_probe(struct platform_device *pdev)
 		if (IS_ERR(channel->rphys[i].phy)) {
 			dev_err(dev, "Failed to create USB2 PHY\n");
 			ret = PTR_ERR(channel->rphys[i].phy);
-			goto error;
+			goto err_control_assert;
 		}
 		channel->rphys[i].ch = channel;
 		channel->rphys[i].int_enable_bits = rcar_gen3_int_enable[i];
@@ -784,7 +784,7 @@ static int rcar_gen3_phy_usb2_probe(struct platform_device *pdev)
 	if (IS_ERR(channel->vbus)) {
 		if (PTR_ERR(channel->vbus) == -EPROBE_DEFER) {
 			ret = PTR_ERR(channel->vbus);
-			goto error;
+			goto err_control_assert;
 		}
 		channel->vbus = NULL;
 	}
@@ -793,15 +793,17 @@ static int rcar_gen3_phy_usb2_probe(struct platform_device *pdev)
 	if (IS_ERR(provider)) {
 		dev_err(dev, "Failed to register PHY provider\n");
 		ret = PTR_ERR(provider);
-		goto error;
+		goto err_control_assert;
 	} else if (channel->is_otg_channel) {
 		ret = device_create_file(dev, &dev_attr_role);
 		if (ret < 0)
-			goto error;
+			goto err_control_assert;
 	}
 
 	return 0;
 
+err_control_assert:
+	reset_control_assert(channel->rstc);
 error:
 	pm_runtime_disable(dev);
 
