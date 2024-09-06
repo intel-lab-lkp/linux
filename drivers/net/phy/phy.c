@@ -342,9 +342,12 @@ int phy_mii_ioctl(struct phy_device *phydev, struct ifreq *ifr, int cmd)
 		if (mdio_phy_id_is_c45(mii_data->phy_id)) {
 			prtad = mdio_phy_id_prtad(mii_data->phy_id);
 			devad = mdio_phy_id_devad(mii_data->phy_id);
-			ret = mdiobus_c45_read(phydev->mdio.bus, prtad, devad,
-					       mii_data->reg_num);
 
+			mutex_lock(&phydev->mdio.bus->mdio_lock);
+			ret = mmd_phy_read(phydev->mdio.bus, prtad,
+					   phydev->is_c45, devad,
+					   mii_data->reg_num);
+			mutex_unlock(&phydev->mdio.bus->mdio_lock);
 		} else {
 			ret = mdiobus_read(phydev->mdio.bus, mii_data->phy_id,
 					   mii_data->reg_num);
@@ -403,11 +406,14 @@ int phy_mii_ioctl(struct phy_device *phydev, struct ifreq *ifr, int cmd)
 			}
 		}
 
-		if (mdio_phy_id_is_c45(mii_data->phy_id))
-			mdiobus_c45_write(phydev->mdio.bus, prtad, devad,
-					  mii_data->reg_num, val);
-		else
+		if (mdio_phy_id_is_c45(mii_data->phy_id)) {
+			mutex_lock(&phydev->mdio.bus->mdio_lock);
+			mmd_phy_write(phydev->mdio.bus, prtad, phydev->is_c45,
+				      devad, mii_data->reg_num, val);
+			mutex_unlock(&phydev->mdio.bus->mdio_lock);
+		} else {
 			mdiobus_write(phydev->mdio.bus, prtad, devad, val);
+		}
 
 		if (prtad == phydev->mdio.addr &&
 		    devad == MII_BMCR &&
