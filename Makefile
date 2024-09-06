@@ -3,7 +3,7 @@ VERSION = 6
 PATCHLEVEL = 11
 SUBLEVEL = 0
 EXTRAVERSION = -rc5
-NAME = Baby Opossum Posse
+NAME = B4 rocks
 
 # *DOCUMENTATION*
 # To see a list of typical targets execute "make help"
