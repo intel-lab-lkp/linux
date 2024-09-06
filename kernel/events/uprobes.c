@@ -2081,12 +2081,63 @@ static int is_trap_at_addr(struct mm_struct *mm, unsigned long vaddr)
 	return is_trap_insn(&opcode);
 }
 
+static struct uprobe *find_active_uprobe_speculative(unsigned long bp_vaddr)
+{
+	const vm_flags_t flags = VM_HUGETLB | VM_MAYEXEC | VM_MAYSHARE;
+	struct mm_struct *mm = current->mm;
+	struct uprobe *uprobe;
+	struct vm_area_struct *vma;
+	struct file *vm_file;
+	struct inode *vm_inode;
+	unsigned long vm_pgoff, vm_start;
+	int seq;
+	loff_t offset;
+
+	if (!mmap_lock_speculation_start(mm, &seq))
+		return NULL;
+
+	rcu_read_lock();
+
+	vma = vma_lookup(mm, bp_vaddr);
+	if (!vma)
+		goto bail;
+
+	vm_file = data_race(vma->vm_file);
+	if (!vm_file || (vma->vm_flags & flags) != VM_MAYEXEC)
+		goto bail;
+
+	vm_inode = data_race(vm_file->f_inode);
+	vm_pgoff = data_race(vma->vm_pgoff);
+	vm_start = data_race(vma->vm_start);
+
+	offset = (loff_t)(vm_pgoff << PAGE_SHIFT) + (bp_vaddr - vm_start);
+	uprobe = find_uprobe_rcu(vm_inode, offset);
+	if (!uprobe)
+		goto bail;
+
+	/* now double check that nothing about MM changed */
+	if (!mmap_lock_speculation_end(mm, seq))
+		goto bail;
+
+	rcu_read_unlock();
+
+	/* happy case, we speculated successfully */
+	return uprobe;
+bail:
+	rcu_read_unlock();
+	return NULL;
+}
+
 /* assumes being inside RCU protected region */
 static struct uprobe *find_active_uprobe_rcu(unsigned long bp_vaddr, int *is_swbp)
 {
 	struct mm_struct *mm = current->mm;
 	struct uprobe *uprobe = NULL;
 	struct vm_area_struct *vma;
+
+	uprobe = find_active_uprobe_speculative(bp_vaddr);
+	if (uprobe)
+		return uprobe;
 
 	mmap_read_lock(mm);
 	vma = vma_lookup(mm, bp_vaddr);
