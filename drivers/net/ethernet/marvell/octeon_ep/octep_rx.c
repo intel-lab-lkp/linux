@@ -394,32 +394,32 @@ static int __octep_oq_process_rx(struct octep_device *oct,
 			data_offset = OCTEP_OQ_RESP_HW_SIZE;
 			rx_ol_flags = 0;
 		}
+
+		skb = build_skb((void *)resp_hw, PAGE_SIZE);
+		if (skb)
+			skb_reserve(skb, data_offset);
+		else
+			oq->stats.alloc_failures++;
 		rx_bytes += buff_info->len;
+		read_idx++;
+		desc_used++;
+		if (read_idx == oq->max_count)
+			read_idx = 0;
 
 		if (buff_info->len <= oq->max_single_buffer_size) {
-			skb = build_skb((void *)resp_hw, PAGE_SIZE);
-			skb_reserve(skb, data_offset);
-			skb_put(skb, buff_info->len);
-			read_idx++;
-			desc_used++;
-			if (read_idx == oq->max_count)
-				read_idx = 0;
+			if (skb)
+				skb_put(skb, buff_info->len);
 		} else {
 			struct skb_shared_info *shinfo;
 			u16 data_len;
 
-			skb = build_skb((void *)resp_hw, PAGE_SIZE);
-			skb_reserve(skb, data_offset);
 			/* Head fragment includes response header(s);
 			 * subsequent fragments contains only data.
 			 */
-			skb_put(skb, oq->max_single_buffer_size);
-			read_idx++;
-			desc_used++;
-			if (read_idx == oq->max_count)
-				read_idx = 0;
-
-			shinfo = skb_shinfo(skb);
+			if (skb) {
+				skb_put(skb, oq->max_single_buffer_size);
+				shinfo = skb_shinfo(skb);
+			}
 			data_len = buff_info->len - oq->max_single_buffer_size;
 			while (data_len) {
 				dma_unmap_page(oq->dev, oq->desc_ring[read_idx].buffer_ptr,
@@ -434,10 +434,11 @@ static int __octep_oq_process_rx(struct octep_device *oct,
 					data_len -= oq->buffer_size;
 				}
 
-				skb_add_rx_frag(skb, shinfo->nr_frags,
-						buff_info->page, 0,
-						buff_info->len,
-						buff_info->len);
+				if (skb)
+					skb_add_rx_frag(skb, shinfo->nr_frags,
+							buff_info->page, 0,
+							buff_info->len,
+							buff_info->len);
 				buff_info->page = NULL;
 				read_idx++;
 				desc_used++;
@@ -445,6 +446,9 @@ static int __octep_oq_process_rx(struct octep_device *oct,
 					read_idx = 0;
 			}
 		}
+
+		if (!skb)
+			continue;
 
 		skb->dev = oq->netdev;
 		skb->protocol =  eth_type_trans(skb, skb->dev);
