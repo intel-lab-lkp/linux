@@ -1088,7 +1088,7 @@
 	};
 
 	power-sensor@44 {
-		compatible = "ti,ina238";
+		compatible = "ti,ina238", "renesas,isl28022";
 		shunt-resistor = <1000>;
 		reg = <0x44>;
 	};
