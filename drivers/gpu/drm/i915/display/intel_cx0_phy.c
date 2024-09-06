@@ -2949,9 +2949,13 @@ static void intel_cx0pll_enable(struct intel_encoder *encoder,
 
 	/*
 	 * 3. Change Phy power state to Ready.
-	 * TODO: For DP alt mode use only one lane.
+	 * For DP alt mode use only one lane.
 	 */
-	intel_cx0_powerdown_change_sequence(encoder, INTEL_CX0_BOTH_LANES,
+	if (intel_tc_port_in_dp_alt_mode(dig_port))
+		intel_cx0_powerdown_change_sequence(encoder, maxpclk_lane,
+					    CX0_P2_STATE_READY);
+	else
+		intel_cx0_powerdown_change_sequence(encoder, INTEL_CX0_BOTH_LANES,
 					    CX0_P2_STATE_READY);
 
 	/*
