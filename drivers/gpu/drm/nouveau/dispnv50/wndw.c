@@ -30,11 +30,16 @@
 #include <nvhw/class/cl507e.h>
 #include <nvhw/class/clc37e.h>
 
+#include <linux/iosys-map.h>
+
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_blend.h>
-#include <drm/drm_gem_atomic_helper.h>
 #include <drm/drm_fourcc.h>
+#include <drm/drm_framebuffer.h>
+#include <drm/drm_gem_atomic_helper.h>
+#include <drm/drm_panic.h>
+#include <drm/ttm/ttm_bo.h>
 
 #include "nouveau_bo.h"
 #include "nouveau_gem.h"
@@ -577,11 +582,106 @@ nv50_wndw_prepare_fb(struct drm_plane *plane, struct drm_plane_state *state)
 	return 0;
 }
 
+#define NV_TILE_BLK_BASE_HEIGHT 8	/* In pixel */
+#define NV_TILE_GOB_SIZE 64	/* In bytes */
+#define NV_TILE_BLK_WIDTH (NV_TILE_GOB_SIZE / 4) /* For 32 bits pixel */
+
+/* get the offset in bytes inside the framebuffer, after taking tiling into account */
+static unsigned int nv50_get_tiled_offset(struct drm_scanout_buffer *sb, unsigned int blk_h,
+					  unsigned int x, unsigned int y)
+{
+	u32 blk_x, blk_y, blk_sz, blk_off, pitch;
+	u32 swizzle;
+
+	blk_sz = NV_TILE_GOB_SIZE * blk_h;
+	pitch = DIV_ROUND_UP(sb->width, NV_TILE_BLK_WIDTH);
+
+	/* block coordinate */
+	blk_x = x / NV_TILE_BLK_WIDTH;
+	blk_y = y / blk_h;
+
+	blk_off = ((blk_y * pitch) + blk_x) * blk_sz;
+
+	y = y % blk_h;
+
+	/* Inside the block, use the fast address swizzle to compute the offset
+	 * For nvidia blocklinear, bit order is yn..y3 x3 y2 x2 y1 y0 x1 x0
+	 */
+	swizzle = (x & 3) | (y & 3) << 2 | (x & 4) << 2 | (y & 4) << 3;
+	swizzle |= (x & 8) << 3 | (y >> 3) << 7;
+
+	return blk_off + swizzle * 4;
+}
+
+static void nv50_set_pixel(struct drm_scanout_buffer *sb, unsigned int x, unsigned int y, u32 color)
+{
+	struct drm_framebuffer *fb = sb->private;
+	unsigned int off;
+	/* According to DRM_FORMAT_MOD_NVIDIA_BLOCK_LINEAR_2D documentation,
+	 * the last 4 bits of the modifier is log2(blk_height / NV_TILE_BLK_BASE_HEIGHT)
+	 */
+	unsigned int blk_h = NV_TILE_BLK_BASE_HEIGHT * (1 << (fb->modifier & 0xf));
+
+	off = nv50_get_tiled_offset(sb, blk_h, x, y);
+	iosys_map_wr(&sb->map[0], off, u32, color);
+}
+
+static int
+nv50_wndw_get_scanout_buffer(struct drm_plane *plane, struct drm_scanout_buffer *sb)
+{
+	struct drm_framebuffer *fb;
+	struct nouveau_bo *nvbo;
+
+	if (!plane->state || !plane->state->fb)
+		return -EINVAL;
+
+	fb = plane->state->fb;
+	nvbo = nouveau_gem_object(fb->obj[0]);
+
+	/* Don't support compressed format, or multiplane yet. */
+	if (nvbo->comp || fb->format->num_planes != 1)
+		return -EOPNOTSUPP;
+
+	if (nouveau_bo_map(nvbo)) {
+		pr_warn("nouveau bo map failed, panic won't be displayed\n");
+		return -ENOMEM;
+	}
+
+	if (nvbo->kmap.bo_kmap_type & TTM_BO_MAP_IOMEM_MASK)
+		iosys_map_set_vaddr_iomem(&sb->map[0], nvbo->kmap.virtual);
+	else
+		iosys_map_set_vaddr(&sb->map[0], nvbo->kmap.virtual);
+
+	sb->height = fb->height;
+	sb->width = fb->width;
+	sb->pitch[0] = fb->pitches[0];
+	sb->format = fb->format;
+
+	/* If tiling is enabled, use the set_pixel() to display correctly.
+	 * Only handle 32bits format for now.
+	 */
+	if (fb->modifier & 0xf) {
+		if (fb->format->cpp[0] != 4)
+			return -EOPNOTSUPP;
+		sb->private = (void *) fb;
+		sb->set_pixel = nv50_set_pixel;
+	}
+	return 0;
+}
+
 static const struct drm_plane_helper_funcs
 nv50_wndw_helper = {
 	.prepare_fb = nv50_wndw_prepare_fb,
 	.cleanup_fb = nv50_wndw_cleanup_fb,
 	.atomic_check = nv50_wndw_atomic_check,
+};
+
+static const struct drm_plane_helper_funcs
+nv50_wndw_primary_helper = {
+	.prepare_fb = nv50_wndw_prepare_fb,
+	.cleanup_fb = nv50_wndw_cleanup_fb,
+	.atomic_check = nv50_wndw_atomic_check,
+	.get_scanout_buffer = nv50_wndw_get_scanout_buffer,
 };
 
 static void
@@ -732,7 +832,10 @@ nv50_wndw_new_(const struct nv50_wndw_func *func, struct drm_device *dev,
 		return ret;
 	}
 
-	drm_plane_helper_add(&wndw->plane, &nv50_wndw_helper);
+	if (type == DRM_PLANE_TYPE_PRIMARY)
+		drm_plane_helper_add(&wndw->plane, &nv50_wndw_primary_helper);
+	else
+		drm_plane_helper_add(&wndw->plane, &nv50_wndw_helper);
 
 	if (wndw->func->ilut) {
 		ret = nv50_lut_init(disp, mmu, &wndw->ilut);
