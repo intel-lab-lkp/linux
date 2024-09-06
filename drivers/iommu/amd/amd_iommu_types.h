@@ -429,6 +429,8 @@
 
 #define DTE_GPT_LEVEL_SHIFT	54
 
+#define DTE_SYSMGT_MASK		GENMASK_ULL(41, 40)
+
 #define GCR3_VALID		0x01ULL
 
 #define IOMMU_PAGE_MASK (((1ULL << 52) - 1) & ~0xfffULL)

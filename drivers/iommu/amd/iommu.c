@@ -2025,19 +2025,32 @@ static void set_dte_entry(struct amd_iommu *iommu,
 	}
 }
 
-static void clear_dte_entry(struct amd_iommu *iommu, u16 devid)
+static void clear_dte_entry(struct amd_iommu *iommu, struct iommu_dev_data *dev_data)
 {
-	struct dev_table_entry *dev_table = get_dev_table(iommu);
+	struct dev_table_entry new;
+	struct dev_table_entry *dte = &get_dev_table(iommu)[dev_data->devid];
+
+	/*
+	 * Need to preserve DTE[96:106] because certain fields are
+	 * programmed using value in IVRS table from early init phase.
+	 */
+	spin_lock(&dev_data->dte_lock);
+	get_dte256(iommu, dev_data, &new);
 
 	/* remove entry from the device table seen by the hardware */
-	dev_table[devid].data[0]  = DTE_FLAG_V;
+	new.data[0] = DTE_FLAG_V;
 
 	if (!amd_iommu_snp_en)
-		dev_table[devid].data[0] |= DTE_FLAG_TV;
+		new.data[0] |= DTE_FLAG_TV;
 
-	dev_table[devid].data[1] &= DTE_FLAG_MASK;
+	new.data[1] &= DTE_FLAG_MASK;
 
-	amd_iommu_apply_erratum_63(iommu, devid);
+	/* Apply erratum 63 */
+	if (FIELD_GET(DTE_SYSMGT_MASK, new.data[1]) == 0x01)
+		new.data[0] |= BIT_ULL(DEV_ENTRY_IW);
+
+	WARN_ON(!try_cmpxchg128(&dte->data128[0], &dte->data128[0], new.data128[0]));
+	spin_unlock(&dev_data->dte_lock);
 }
 
 /* Update and flush DTE for the given device */
@@ -2048,7 +2061,7 @@ void amd_iommu_dev_update_dte(struct iommu_dev_data *dev_data, bool set)
 	if (set)
 		set_dte_entry(iommu, dev_data);
 	else
-		clear_dte_entry(iommu, dev_data->devid);
+		clear_dte_entry(iommu, dev_data);
 
 	clone_aliases(iommu, dev_data->dev);
 	device_flush_dte(dev_data);
