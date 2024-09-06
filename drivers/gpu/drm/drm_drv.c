@@ -499,6 +499,26 @@ void drm_dev_unplug(struct drm_device *dev)
 }
 EXPORT_SYMBOL(drm_dev_unplug);
 
+/**
+ * drm_dev_wedged_event - generate a device wedged uevent
+ * @dev: DRM device
+ *
+ * This generates a device wedged uevent for the DRM device specified by @dev,
+ * on the basis of which, userspace may take respective action to recover the
+ * device. Currently we only set WEDGED=1 in the uevent environment, but this
+ * can be expanded in the future.
+ */
+void drm_dev_wedged_event(struct drm_device *dev)
+{
+	char *event_string = "WEDGED=1";
+	char *envp[] = { event_string, NULL };
+
+	drm_info(dev, "device wedged, generating uevent\n");
+
+	kobject_uevent_env(&dev->primary->kdev->kobj, KOBJ_CHANGE, envp);
+}
+EXPORT_SYMBOL(drm_dev_wedged_event);
+
 /*
  * DRM internal mount
  * We want to be able to allocate our own "struct address_space" to control

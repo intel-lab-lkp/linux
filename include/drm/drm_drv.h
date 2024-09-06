@@ -489,6 +489,7 @@ void drm_put_dev(struct drm_device *dev);
 bool drm_dev_enter(struct drm_device *dev, int *idx);
 void drm_dev_exit(int idx);
 void drm_dev_unplug(struct drm_device *dev);
+void drm_dev_wedged_event(struct drm_device *dev);
 
 /**
  * drm_dev_is_unplugged - is a DRM device unplugged
