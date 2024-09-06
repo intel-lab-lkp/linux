@@ -430,6 +430,8 @@ static bool hugepage_pmd_enabled(void)
 	if (test_bit(PMD_ORDER, &huge_anon_orders_inherit) &&
 	    hugepage_global_enabled())
 		return true;
+	if (shmem_hpage_pmd_enabled())
+		return true;
 	return false;
 }
 
