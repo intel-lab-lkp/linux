@@ -654,7 +654,7 @@ static inline bool emul_is_noncanonical_address(u64 la,
 						struct x86_emulate_ctxt *ctxt,
 						unsigned int flags)
 {
-	return !ctxt->ops->is_canonical_addr(ctxt, la, 0);
+	return !ctxt->ops->is_canonical_addr(ctxt, la, flags);
 }
 
 /*
