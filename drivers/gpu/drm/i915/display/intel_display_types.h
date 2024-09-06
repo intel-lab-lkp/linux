@@ -489,6 +489,7 @@ struct intel_hdcp {
 enum intel_joiner_pipe_count {
 	INTEL_NONE_JOINER_PIPES = 0,
 	INTEL_BIG_JOINER_PIPES = 2,
+	INTEL_ULTRA_JOINER_PIPES = 4,
 	INTEL_INVALID_JOINER_PIPES,
 };
 
