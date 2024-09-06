@@ -1441,7 +1441,6 @@ static int intel_pinctrl_add_padgroups_by_size(struct intel_pinctrl *pctrl,
 
 static int intel_pinctrl_pm_init(struct intel_pinctrl *pctrl)
 {
-#ifdef CONFIG_PM_SLEEP
 	const struct intel_pinctrl_soc_data *soc = pctrl->soc;
 	struct intel_community_context *communities;
 	struct intel_pad_context *pads;
@@ -1455,7 +1454,6 @@ static int intel_pinctrl_pm_init(struct intel_pinctrl *pctrl)
 				   sizeof(*communities), GFP_KERNEL);
 	if (!communities)
 		return -ENOMEM;
-
 
 	for (i = 0; i < pctrl->ncommunities; i++) {
 		struct intel_community *community = &pctrl->communities[i];
@@ -1478,7 +1476,6 @@ static int intel_pinctrl_pm_init(struct intel_pinctrl *pctrl)
 
 	pctrl->context.pads = pads;
 	pctrl->context.communities = communities;
-#endif
 
 	return 0;
 }
@@ -1600,7 +1597,7 @@ int intel_pinctrl_probe(struct platform_device *pdev,
 	if (irq < 0)
 		return irq;
 
-	ret = intel_pinctrl_pm_init(pctrl);
+	ret = intel_pinctrl_context_alloc(pctrl, intel_pinctrl_pm_init);
 	if (ret)
 		return ret;
 

@@ -256,6 +256,20 @@ struct intel_pinctrl {
 	int irq;
 };
 
+typedef int (*intel_pinctrl_context_alloc_fn)(struct intel_pinctrl *pctrl);
+
+static inline int intel_pinctrl_context_alloc(struct intel_pinctrl *pctrl,
+					      intel_pinctrl_context_alloc_fn alloc_fn)
+{
+	intel_pinctrl_context_alloc_fn fn;
+
+	fn = pm_sleep_ptr(alloc_fn);
+	if (fn)
+		return fn(pctrl);
+
+	return 0;
+}
+
 int intel_pinctrl_probe(struct platform_device *pdev,
 			const struct intel_pinctrl_soc_data *soc_data);
 
