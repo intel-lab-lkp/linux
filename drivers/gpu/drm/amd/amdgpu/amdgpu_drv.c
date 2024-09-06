@@ -3044,7 +3044,14 @@ static int __init amdgpu_init(void)
 	amdgpu_amdkfd_init();
 
 	/* let modprobe override vga console setting */
-	return pci_register_driver(&amdgpu_kms_pci_driver);
+	r = pci_register_driver(&amdgpu_kms_pci_driver);
+	if (r)
+		goto error_pci_register;
+
+	return 0;
+
+error_pci_register:
+	amdgpu_fence_slab_fini();
 
 error_fence:
 	amdgpu_sync_fini();
