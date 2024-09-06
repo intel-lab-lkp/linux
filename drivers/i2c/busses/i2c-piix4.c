@@ -188,6 +188,8 @@ struct sb800_mmio_cfg {
 };
 
 struct sb800_asf_data {
+	resource_size_t eoi_addr;
+	resource_size_t eoi_sz;
 	unsigned short addr;
 	int irq;
 };
@@ -199,6 +201,7 @@ enum piix4_algo {
 };
 
 struct i2c_piix4_adapdata {
+	void __iomem *eoi_base;
 	unsigned short smba;
 
 	/* SB800 */
@@ -1285,6 +1288,7 @@ static irqreturn_t sb800_asf_irq_handler(int irq, void *ptr)
 		sb800_asf_update_bits(piix4_smba, SB800_ASF_SLV_INTR, SMBHSTSTS, true);
 	}
 
+	iowrite32(irq, adapdata->eoi_base);
 	return IRQ_HANDLED;
 }
 
@@ -1322,6 +1326,10 @@ static int sb800_asf_add_adap(struct pci_dev *dev)
 		case IORESOURCE_IRQ:
 			data.irq = rentry->res->start;
 			break;
+		case IORESOURCE_MEM:
+			data.eoi_addr = rentry->res->start;
+			data.eoi_sz = resource_size(rentry->res);
+			break;
 		default:
 			dev_warn(&adev->dev, "Invalid ASF resource\n");
 			break;
@@ -1346,6 +1354,9 @@ static int sb800_asf_add_adap(struct pci_dev *dev)
 	}
 
 	INIT_DELAYED_WORK(&adapdata->work_buf, sb800_asf_process_slave);
+	adapdata->eoi_base = devm_ioremap(&dev->dev, data.eoi_addr, data.eoi_sz);
+	if (!adapdata->eoi_base)
+		return -ENOMEM;
 	adapdata->is_asf = true;
 	/* Increment the adapter count by 1 as ASF is added to the list */
 	piix4_adapter_count++;
