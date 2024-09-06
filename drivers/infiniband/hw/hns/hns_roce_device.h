@@ -490,9 +490,8 @@ struct hns_roce_bank {
 };
 
 struct hns_roce_idx_table {
-	u32 *spare_idx;
-	u32 head;
-	u32 tail;
+	unsigned long *qpn_bitmap;
+	unsigned long *dip_idx_bitmap;
 };
 
 struct hns_roce_qp_table {
@@ -656,6 +655,7 @@ struct hns_roce_qp {
 	enum hns_roce_cong_type	cong_type;
 	u8			tc_mode;
 	u8			priority;
+	struct hns_roce_dip *dip;
 };
 
 struct hns_roce_ib_iboe {
