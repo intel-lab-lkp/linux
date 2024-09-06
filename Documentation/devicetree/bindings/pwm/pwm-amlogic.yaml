@@ -44,6 +44,10 @@ properties:
               - amlogic,meson-axg-pwm-v2
               - amlogic,meson-g12-pwm-v2
           - const: amlogic,meson8-pwm-v2
+      - items:
+          - enum:
+              - amlogic,c3-pwm
+          - const: amlogic,meson-s4-pwm
 
   reg:
     maxItems: 1
