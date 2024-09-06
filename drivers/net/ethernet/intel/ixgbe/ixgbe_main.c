@@ -157,6 +157,11 @@ module_param(allow_unsupported_sfp, bool, 0444);
 MODULE_PARM_DESC(allow_unsupported_sfp,
 		 "Allow unsupported and untested SFP+ modules on 82599-based adapters");
 
+static bool manual_an37_for_sfi;
+module_param(manual_an37_for_sfi, bool, 0444);
+MODULE_PARM_DESC(manual_an37_for_sfi,
+		 "Manual AN-37 for troublesome link partners for X550 SFI");
+
 #define DEFAULT_MSG_ENABLE (NETIF_MSG_DRV|NETIF_MSG_PROBE|NETIF_MSG_LINK)
 static int debug = -1;
 module_param(debug, int, 0);
@@ -10976,6 +10981,9 @@ static int ixgbe_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	if (allow_unsupported_sfp)
 		hw->allow_unsupported_sfp = allow_unsupported_sfp;
+
+	if (manual_an37_for_sfi)
+		hw->manual_an37_for_sfi = manual_an37_for_sfi;
 
 	/* reset_hw fills in the perm_addr as well */
 	hw->phy.reset_if_overtemp = true;
