@@ -862,24 +862,34 @@ u32 get_max_compressed_bpp_with_joiner(struct drm_i915_private *i915,
 				       enum intel_joiner_pipe_count joined_pipes)
 {
 	u32 max_bpp_small_joiner_ram;
+	u32 max_bpp_joiner;
 
 	/* Small Joiner Check: output bpp <= joiner RAM (bits) / Horiz. width */
 	max_bpp_small_joiner_ram = small_joiner_ram_size_bits(i915) / mode_hdisplay;
+	max_bpp_joiner = max_bpp_small_joiner_ram;
 
-	if (joined_pipes == INTEL_BIG_JOINER_PIPES) {
-		int bigjoiner_interface_bits = DISPLAY_VER(i915) >= 14 ? 36 : 24;
+	/* if ultra joiner is enabled, we have 2 bigjoiners enabled */
+	if (joined_pipes == INTEL_BIG_JOINER_PIPES ||
+	    joined_pipes == INTEL_ULTRA_JOINER_PIPES) {
+		int joiner_interface_bits = DISPLAY_VER(i915) >= 14 ? 36 : 24;
 		/* With bigjoiner multiple dsc engines are used in parallel so PPC is 2 */
 		int ppc = 2;
-		u32 max_bpp_bigjoiner =
-			i915->display.cdclk.max_cdclk_freq * ppc * bigjoiner_interface_bits /
+		max_bpp_joiner =
+			i915->display.cdclk.max_cdclk_freq * ppc * joiner_interface_bits /
 			intel_dp_mode_to_fec_clock(mode_clock);
 
 		max_bpp_small_joiner_ram *= 2;
 
-		return min(max_bpp_small_joiner_ram, max_bpp_bigjoiner);
+	}
+	if (joined_pipes == INTEL_ULTRA_JOINER_PIPES) {
+		/* TODO: Check for ultrajoiner ram constraints */
+
+		/* both get multiplied by 2, because ram bits/ppc now doubled */
+		max_bpp_small_joiner_ram *= 2;
+		max_bpp_joiner *= 2;
 	}
 
-	return max_bpp_small_joiner_ram;
+	return min(max_bpp_small_joiner_ram, max_bpp_joiner);
 }
 
 u16 intel_dp_dsc_get_max_compressed_bpp(struct drm_i915_private *i915,
@@ -983,6 +993,10 @@ u8 intel_dp_dsc_get_slice_count(const struct intel_connector *connector,
 
 		/* big joiner needs small joiner to be enabled */
 		if (joined_pipes == INTEL_BIG_JOINER_PIPES && test_slice_count < 4)
+			continue;
+
+		/* ultrajoiner needs 2 bigjoiners to be enabled */
+		if (joined_pipes == INTEL_ULTRA_JOINER_PIPES && test_slice_count < 8)
 			continue;
 
 		if (min_slice_count <= test_slice_count)
@@ -1261,9 +1275,9 @@ intel_dp_mode_valid_downstream(struct intel_connector *connector,
 	return MODE_OK;
 }
 
-bool intel_dp_need_joiner(struct intel_dp *intel_dp,
-			  struct intel_connector *connector,
-			  int hdisplay, int clock)
+bool intel_dp_need_bigjoiner(struct intel_dp *intel_dp,
+			     struct intel_connector *connector,
+			     int hdisplay, int clock)
 {
 	struct drm_i915_private *i915 = dp_to_i915(intel_dp);
 
@@ -1292,6 +1306,26 @@ bool intel_dp_has_dsc(const struct intel_connector *connector)
 		return false;
 
 	return true;
+}
+
+static bool intel_display_can_use_ultrajoiner(struct intel_display *display)
+{
+	struct drm_i915_private *i915 = to_i915(display->drm);
+
+	return ((DISPLAY_VER(display) == 14 && IS_DGFX(i915)) ||
+		DISPLAY_VER(display) > 14);
+}
+
+bool intel_dp_need_ultrajoiner(struct intel_dp *dp, int clock)
+{
+	const struct intel_encoder *encoder = &dp_to_dig_port(dp)->base;
+	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
+	struct intel_display *display = to_intel_display(encoder);
+
+	if (!intel_display_can_use_ultrajoiner(display))
+		return false;
+
+	return clock > (i915->display.cdclk.max_dotclk_freq * 2);
 }
 
 static enum drm_mode_status
@@ -1330,11 +1364,15 @@ intel_dp_mode_valid(struct drm_connector *_connector,
 		target_clock = fixed_mode->clock;
 	}
 
-	if (intel_dp_need_joiner(intel_dp, connector,
-				 mode->hdisplay, target_clock)) {
+	if (intel_dp_need_ultrajoiner(intel_dp, target_clock)) {
+		joined_pipes = INTEL_ULTRA_JOINER_PIPES;
+		max_dotclk *= INTEL_ULTRA_JOINER_PIPES;
+	} else if (intel_dp_need_bigjoiner(intel_dp, connector,
+					   mode->hdisplay, target_clock)) {
 		joined_pipes = INTEL_BIG_JOINER_PIPES;
 		max_dotclk *= INTEL_BIG_JOINER_PIPES;
 	}
+
 	if (target_clock > max_dotclk)
 		return MODE_CLOCK_HIGH;
 
@@ -2508,8 +2546,10 @@ bool intel_dp_joiner_needs_dsc(struct drm_i915_private *i915,
 	 * Pipe joiner needs compression up to display 12 due to bandwidth
 	 * limitation. DG2 onwards pipe joiner can be enabled without
 	 * compression.
+	 * Ultrajoiner always needs compression.
 	 */
-	return DISPLAY_VER(i915) < 13 && (joined_pipes == INTEL_BIG_JOINER_PIPES);
+	return (DISPLAY_VER(i915) < 13 && (joined_pipes == INTEL_BIG_JOINER_PIPES)) ||
+		joined_pipes == INTEL_ULTRA_JOINER_PIPES;
 }
 
 static int
@@ -2534,9 +2574,11 @@ intel_dp_compute_link_config(struct intel_encoder *encoder,
 	    !intel_dp_supports_fec(intel_dp, connector, pipe_config))
 		return -EINVAL;
 
-	if (intel_dp_need_joiner(intel_dp, connector,
-				 adjusted_mode->crtc_hdisplay,
-				 adjusted_mode->crtc_clock))
+	if (intel_dp_need_ultrajoiner(intel_dp, adjusted_mode->crtc_clock))
+		pipe_config->joiner_pipes = GENMASK(crtc->pipe + 3, crtc->pipe);
+	else if (intel_dp_need_bigjoiner(intel_dp, connector,
+					 adjusted_mode->crtc_hdisplay,
+					 adjusted_mode->crtc_clock))
 		pipe_config->joiner_pipes = GENMASK(crtc->pipe + 1, crtc->pipe);
 
 	joined_pipes = intel_joiner_num_pipes(pipe_config);
