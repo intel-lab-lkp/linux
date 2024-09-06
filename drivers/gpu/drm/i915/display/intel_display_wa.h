@@ -14,8 +14,10 @@ void intel_display_wa_apply(struct drm_i915_private *i915);
 
 #ifdef I915
 static inline bool intel_display_needs_wa_16023588340(struct drm_i915_private *i915) { return false; }
+static inline bool intel_display_needs_wa_16023981245(struct drm_i915_private *i915) { return false; }
 #else
 bool intel_display_needs_wa_16023588340(struct drm_i915_private *i915);
+bool intel_display_needs_wa_16023981245(struct drm_i915_private *i915);
 #endif
 
 #endif

@@ -47,10 +47,12 @@
 #include "intel_display_rps.h"
 #include "intel_display_trace.h"
 #include "intel_display_types.h"
+#include "intel_display_wa.h"
 #include "intel_fb.h"
 #include "intel_fb_pin.h"
 #include "skl_scaler.h"
 #include "skl_watermark.h"
+
 
 static void intel_plane_state_reset(struct intel_plane_state *plane_state,
 				    struct intel_plane *plane)
@@ -1029,8 +1031,18 @@ int intel_plane_check_src_coordinates(struct intel_plane_state *plane_state)
 		 * This allows NV12 and P0xx formats to have odd size and/or odd
 		 * source coordinates on DISPLAY_VER(i915) >= 20
 		 */
-		hsub = 1;
-		vsub = 1;
+
+		/*
+		 * Wa_16023981245 for display version 20.
+		 * Do not support odd x-panning for NV12.
+		 */
+		if (intel_display_needs_wa_16023981245(i915) &&
+		    fb->format->format == DRM_FORMAT_NV12) {
+			vsub = 1;
+		} else {
+			hsub = 1;
+			vsub = 1;
+		}
 	} else {
 		hsub = fb->format->hsub;
 		vsub = fb->format->vsub;

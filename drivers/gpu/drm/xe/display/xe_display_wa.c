@@ -14,3 +14,8 @@ bool intel_display_needs_wa_16023588340(struct drm_i915_private *i915)
 {
 	return XE_WA(xe_root_mmio_gt(i915), 16023588340);
 }
+
+bool intel_display_needs_wa_16023981245(struct drm_i915_private *i915)
+{
+	return XE_WA(xe_root_mmio_gt(i915), 22019338487_display);
+}
