@@ -355,7 +355,7 @@ void track_possible_nx_huge_page(struct kvm *kvm, struct kvm_mmu_page *sp,
 				 struct list_head *pages, u64 *nr_pages);
 void untrack_possible_nx_huge_page(struct kvm *kvm, struct kvm_mmu_page *sp,
 				   u64 *nr_pages);
-void kvm_recover_nx_huge_pages(struct kvm *kvm, struct list_head *pages,
-			       unsigned long nr_pages);
+void kvm_recover_nx_huge_pages(struct kvm *kvm, bool shared,
+			       struct list_head *pages, unsigned long nr_pages);
 
 #endif /* __KVM_X86_MMU_INTERNAL_H */
