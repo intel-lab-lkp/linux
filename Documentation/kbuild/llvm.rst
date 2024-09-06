@@ -186,6 +186,84 @@ yet. Bug reports are always welcome at the issue tracker below!
      - Supported
      - ``LLVM=1``
 
+Experimental Build in macOS
+---------------------------
+
+Building on macOS with LLVM is experimental. This section provides steps to
+install dependencies via Homebrew, set up the environment, and start the build
+process.
+
+1. **Create a Case-Sensitive Volume**
+
+   For fetching and building the project, you need a case-sensitive volume. Use the following
+   command to create one:
+
+   .. code-block:: shell
+
+      diskutil apfs addVolume /dev/disk<N> "Case-sensitive APFS" linux
+
+   Replace `/dev/disk<N>` with the appropriate disk identifier.
+
+2. **Install Build Dependencies**
+
+Use Homebrew to install the required build dependencies.
+
+- **Core Utilities**: `coreutils`, `findutils`, `gnu-sed`, `gnu-tar`, `grep`,
+  `llvm`, `make`, and `pkg-config`.
+
+   .. code-block:: shell
+
+      brew install coreutils findutils gnu-sed gnu-tar grep llvm make pkg-config
+
+- **Bee Headers**: Install byteswap, elf and endian headers using the
+  `Bee Headers Project <https://github.com/bee-headers/headers>`_.
+
+   .. code-block:: shell
+
+      brew tap bee-headers/bee-headers
+      brew install bee-headers/bee-headers/bee-headers
+
+   After installation, verify the `CFLAGS` with `pkg-config`:
+
+   .. code-block:: shell
+
+      pkg-config --cflags bee-headers
+      -I/opt/homebrew/Cellar/bee-headers/0.1/include
+
+3. **Configure the PATH**
+
+   Include all the required GNU tools and LLVM in your `PATH`. This ensures that
+   the necessary tools are available during the build process.
+
+   .. code-block:: shell
+
+      PATH="/opt/homebrew/opt/coreutils/libexec/gnubin:$PATH"
+      PATH="/opt/homebrew/opt/findutils/libexec/gnubin:$PATH"
+      PATH="/opt/homebrew/opt/gnu-sed/libexec/gnubin:$PATH"
+      PATH="/opt/homebrew/opt/gnu-tar/libexec/gnubin:$PATH"
+      PATH="/opt/homebrew/opt/grep/libexec/gnubin:$PATH"
+      PATH="/opt/homebrew/opt/make/libexec/gnubin:$PATH"
+      PATH="/opt/homebrew/opt/llvm/bin:$PATH"
+
+Building the Project
+--------------------
+
+Once the environment is set up, you can start the build process using LLVM. Run
+the following commands to initiate the build:
+
+.. code-block:: shell
+
+   make LLVM=1 allyesconfig
+   make LLVM=1 -j$(nproc)
+
+Supported in macOS
+~~~~~~~~~~~~~~~~~~
+
+At the moment, only arm64 is supported and tested with `allyesconfig` Makefile
+configuration target. Other Kconfig options not included in `allyesconfig`
+target and architectures may be supported as well as support in macOS is based
+on LLVM effort and maintenance.
+
 Getting Help
 ------------
 
