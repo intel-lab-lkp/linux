@@ -293,6 +293,8 @@ int htc_connect_service(struct htc_target *target,
 			service_connreq->service_id);
 		return -ETIMEDOUT;
 	}
+	if (target->conn_rsp_epid < 0 || target->conn_rsp_epid >= ENDPOINT_MAX) 
+		return -EINVAL;
 
 	*conn_rsp_epid = target->conn_rsp_epid;
 	return 0;
