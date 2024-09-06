@@ -100,6 +100,16 @@ static int ptp_clock_settime(struct posix_clock *pc, const struct timespec64 *tp
 		return -EBUSY;
 	}
 
+	if (!tp) {
+		pr_warn("ptp: tp == NULL\n");
+		return -EINVAL;
+	}
+
+	if (!timespec64_valid(tp)) {
+		pr_warn("ptp: tv_sec or tv_usec out of range\n");
+		return -ERANGE;
+	}
+
 	return  ptp->info->settime64(ptp->info, tp);
 }
 
