@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <string.h>
+#include <stdbool.h>
 #include "atomic.h"
 #include "futextest.h"
 #include "logging.h"
@@ -362,6 +363,7 @@ int main(int argc, char *argv[])
 {
 	char *test_name;
 	int c, ret;
+	bool is_static = false;
 
 	while ((c = getopt(argc, argv, "bchlot:v:")) != -1) {
 		switch (c) {
@@ -404,6 +406,7 @@ int main(int argc, char *argv[])
 		       "%s broadcast=%d locked=%d owner=%d timeout=%ldns",
 		       TEST_NAME, broadcast, locked, owner, timeout_ns);
 	if (ret < 0) {
+		is_static = true;
 		ksft_print_msg("Failed to generate test name\n");
 		test_name = TEST_NAME;
 	}
@@ -416,5 +419,7 @@ int main(int argc, char *argv[])
 	ret = unit_test(broadcast, locked, owner, timeout_ns);
 
 	print_result(test_name, ret);
+	if (!is_static)
+		free(test_name);
 	return ret;
 }
