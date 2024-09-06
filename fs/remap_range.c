@@ -46,7 +46,7 @@ static int generic_remap_checks(struct file *file_in, loff_t pos_in,
 
 	/* Ensure offsets don't wrap. */
 	if (pos_in + count < pos_in || pos_out + count < pos_out)
-		return -EINVAL;
+		return -EOVERFLOW;
 
 	size_in = i_size_read(inode_in);
 	size_out = i_size_read(inode_out);
