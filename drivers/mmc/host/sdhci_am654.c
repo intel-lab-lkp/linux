@@ -155,6 +155,7 @@ struct sdhci_am654_data {
 	u32 tuning_loop;
 
 #define SDHCI_AM654_QUIRK_FORCE_CDTEST BIT(0)
+#define SDHCI_AM654_QUIRK_SET_V1P8_ENA BIT(1)
 };
 
 struct window {
@@ -354,6 +355,79 @@ static void sdhci_j721e_4bit_set_clock(struct sdhci_host *host,
 			   sdhci_am654->clkbuf_sel);
 
 	sdhci_set_clock(host, clock);
+}
+
+int sdhci_am654_start_signal_voltage_switch(struct mmc_host *mmc,
+					    struct mmc_ios *ios)
+{
+	struct sdhci_host *host = mmc_priv(mmc);
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_am654_data *sdhci_am654 = sdhci_pltfm_priv(pltfm_host);
+	u16 ctrl;
+	int ret;
+
+	if (host->version < SDHCI_SPEC_300)
+		return 0;
+
+	switch (ios->signal_voltage) {
+	case MMC_SIGNAL_VOLTAGE_330:
+		if (!(host->flags & SDHCI_SIGNALING_330))
+			return -EINVAL;
+
+		ctrl &= ~SDHCI_CTRL_VDD_180;
+		sdhci_writew(host, ctrl, SDHCI_HOST_CONTROL2);
+
+		if (!IS_ERR(mmc->supply.vqmmc)) {
+			ret = mmc_regulator_set_vqmmc(mmc, ios);
+			if (ret < 0) {
+				pr_warn("%s: Switching to 3.3V signalling voltage failed\n",
+					mmc_hostname(mmc));
+				return -EIO;
+			}
+		}
+
+		usleep_range(5000, 5500);
+
+		ctrl = sdhci_readw(host, SDHCI_HOST_CONTROL2);
+		if (!(ctrl & SDHCI_CTRL_VDD_180))
+			return 0;
+
+		pr_warn("%s: 3.3V regulator output did not become stable\n",
+			mmc_hostname(mmc));
+
+		return -EAGAIN;
+
+	case MMC_SIGNAL_VOLTAGE_180:
+		if (!(host->flags & SDHCI_SIGNALING_180))
+			return -EINVAL;
+
+		if (!IS_ERR(mmc->supply.vqmmc)) {
+			ret = mmc_regulator_set_vqmmc(mmc, ios);
+			if (ret < 0) {
+				pr_warn("%s: Switching to 1.8V signalling voltage failed\n",
+					mmc_hostname(mmc));
+				return -EIO;
+			}
+		}
+
+		if (sdhci_am654->quirks & SDHCI_AM654_QUIRK_SET_V1P8_ENA) {
+			ctrl |= SDHCI_CTRL_VDD_180;
+			sdhci_writew(host, ctrl, SDHCI_HOST_CONTROL2);
+
+			ctrl = sdhci_readw(host, SDHCI_HOST_CONTROL2);
+			if (ctrl & SDHCI_CTRL_VDD_180)
+				return 0;
+
+			pr_warn("%s: 1.8V regulator output did not become stable\n",
+				mmc_hostname(mmc));
+
+			return -EAGAIN;
+		}
+		return 0;
+
+	default:
+		return 0;
+	}
 }
 
 static u8 sdhci_am654_write_power_on(struct sdhci_host *host, u8 val, int reg)
@@ -801,6 +875,8 @@ static int sdhci_am654_get_of_property(struct platform_device *pdev,
 					struct sdhci_am654_data *sdhci_am654)
 {
 	struct device *dev = &pdev->dev;
+	struct device_node *np = dev->of_node;
+	struct device_node *node;
 	int drv_strength;
 	int ret;
 
@@ -843,6 +919,15 @@ static int sdhci_am654_get_of_property(struct platform_device *pdev,
 
 	if (device_property_read_bool(dev, "ti,fails-without-test-cd"))
 		sdhci_am654->quirks |= SDHCI_AM654_QUIRK_FORCE_CDTEST;
+
+	node = of_parse_phandle(np, "vmmc-supply", 0);
+
+	if (node) {
+		node = of_parse_phandle(np, "vqmmc-supply", 0);
+
+		if (!node)
+			sdhci_am654->quirks |= SDHCI_AM654_QUIRK_SET_V1P8_ENA;
+	}
 
 	sdhci_get_of_property(pdev);
 
@@ -940,6 +1025,7 @@ static int sdhci_am654_probe(struct platform_device *pdev)
 		goto err_pltfm_free;
 	}
 
+	host->mmc_host_ops.start_signal_voltage_switch = sdhci_am654_start_signal_voltage_switch;
 	host->mmc_host_ops.execute_tuning = sdhci_am654_execute_tuning;
 
 	pm_runtime_get_noresume(dev);
