@@ -73,18 +73,50 @@ void unregister_user_step_hook(struct step_hook *hook);
 void register_kernel_step_hook(struct step_hook *hook);
 void unregister_kernel_step_hook(struct step_hook *hook);
 
-struct break_hook {
-	struct list_head node;
-	int (*fn)(struct pt_regs *regs, unsigned long esr);
-	u16 imm;
-	u16 mask; /* These bits are ignored when comparing with imm */
-};
+#ifdef CONFIG_KPROBES
+int kprobe_breakpoint_handler(struct pt_regs *regs, unsigned long esr);
+int kprobe_breakpoint_ss_handler(struct pt_regs *regs, unsigned long esr);
+int kretprobe_breakpoint_handler(struct pt_regs *regs, unsigned long esr);
+#else
+#define kprobe_breakpoint_handler(regs, esr) 		(DBG_HOOK_ERROR)
+#define kprobe_breakpoint_ss_handler(regs, esr) 	(DBG_HOOK_ERROR)
+#define kretprobe_breakpoint_handler(regs, esr) 	(DBG_HOOK_ERROR)
+#endif
 
-void register_user_break_hook(struct break_hook *hook);
-void unregister_user_break_hook(struct break_hook *hook);
+#ifdef CONFIG_UPROBES
+int uprobe_breakpoint_handler(struct pt_regs *regs, unsigned long esr);
+#else
+#define uprobe_breakpoint_handler(regs, esr)		(DBG_HOOK_ERROR)
+#endif
 
-void register_kernel_break_hook(struct break_hook *hook);
-void unregister_kernel_break_hook(struct break_hook *hook);
+#ifdef CONFIG_KGDB
+int kgdb_brk_fn(struct pt_regs *regs, unsigned long esr);
+int kgdb_compiled_brk_fn(struct pt_regs *regs, unsigned long esr);
+#else
+#define kgdb_brk_fn(regs, esr)				(DBG_HOOK_ERROR)
+#define kgdb_compiled_brk_fn(regs, esr) 		(DBG_HOOK_ERROR)
+#endif
+
+#ifdef CONFIG_KASAN_SW_TAGS
+int kasan_handler(struct pt_regs *regs, unsigned long esr);
+#else
+#define kasan_handler(regs, esr)			(DBG_HOOK_ERROR)
+#endif
+
+#ifdef CONFIG_UBSAN_TRAP
+int ubsan_handler(struct pt_regs *regs, unsigned long esr);
+#else
+#define ubsan_handler(regs, esr)			(DBG_HOOK_ERROR)
+#endif
+
+#ifdef CONFIG_CFI_CLANG
+int cfi_handler(struct pt_regs *regs, unsigned long esr);
+#else
+#define cfi_handler(regs, esr)				(DBG_HOOK_ERROR)
+#endif
+
+int bug_handler(struct pt_regs *regs, unsigned long esr);
+int reserved_fault_handler(struct pt_regs *regs, unsigned long esr);
 
 u8 debug_monitors_arch(void);
 

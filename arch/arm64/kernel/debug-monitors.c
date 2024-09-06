@@ -276,64 +276,88 @@ static int single_step_handler(unsigned long unused, unsigned long esr,
 }
 NOKPROBE_SYMBOL(single_step_handler);
 
-static LIST_HEAD(user_break_hook);
-static LIST_HEAD(kernel_break_hook);
-
-void register_user_break_hook(struct break_hook *hook)
+static int __handle_el1_brk(struct pt_regs *regs, unsigned long esr)
 {
-	register_debug_hook(&hook->node, &user_break_hook);
-}
+	unsigned long imm = esr_brk_comment(esr);
 
-void unregister_user_break_hook(struct break_hook *hook)
-{
-	unregister_debug_hook(&hook->node);
-}
+	switch (imm) {
+	case KPROBES_BRK_IMM:
+		return kprobe_breakpoint_handler(regs, esr);
 
-void register_kernel_break_hook(struct break_hook *hook)
-{
-	register_debug_hook(&hook->node, &kernel_break_hook);
-}
+	case KPROBES_BRK_SS_IMM:
+		return kprobe_breakpoint_ss_handler(regs, esr);
 
-void unregister_kernel_break_hook(struct break_hook *hook)
-{
-	unregister_debug_hook(&hook->node);
-}
+	case KRETPROBES_BRK_IMM:
+		return kretprobe_breakpoint_handler(regs, esr);
 
-static int call_break_hook(struct pt_regs *regs, unsigned long esr)
-{
-	struct break_hook *hook;
-	struct list_head *list;
-	int (*fn)(struct pt_regs *regs, unsigned long esr) = NULL;
+	case FAULT_BRK_IMM:
+		return reserved_fault_handler(regs, esr);
 
-	list = user_mode(regs) ? &user_break_hook : &kernel_break_hook;
+	case KGDB_DYN_DBG_BRK_IMM:
+		return kgdb_brk_fn(regs, esr);
 
-	/*
-	 * Since brk exception disables interrupt, this function is
-	 * entirely not preemptible, and we can use rcu list safely here.
-	 */
-	list_for_each_entry_rcu(hook, list, node) {
-		if ((esr_brk_comment(esr) & ~hook->mask) == hook->imm)
-			fn = hook->fn;
+	case KGDB_COMPILED_DBG_BRK_IMM:
+		return kgdb_compiled_brk_fn(regs, esr);
+
+	case BUG_BRK_IMM:
+		return bug_handler(regs, esr);
+
+	case KASAN_BRK_IMM ... (KASAN_BRK_IMM | KASAN_BRK_MASK):
+		return kasan_handler(regs, esr);
+
+	case UBSAN_BRK_IMM ... (UBSAN_BRK_IMM | UBSAN_BRK_MASK):
+		return ubsan_handler(regs, esr);
+
+	case CFI_BRK_IMM_BASE ... (CFI_BRK_IMM_BASE | CFI_BRK_IMM_MASK):
+		return cfi_handler(regs, esr);
+
+	default:
+		return DBG_HOOK_ERROR;
 	}
-
-	return fn ? fn(regs, esr) : DBG_HOOK_ERROR;
 }
-NOKPROBE_SYMBOL(call_break_hook);
+NOKPROBE_SYMBOL(__handle_el1_brk);
 
-static int brk_handler(unsigned long unused, unsigned long esr,
-		       struct pt_regs *regs)
+static int __handle_el0_brk(struct pt_regs *regs, unsigned long esr)
 {
-	if (call_break_hook(regs, esr) == DBG_HOOK_HANDLED)
-		return 0;
+	unsigned long imm = esr_brk_comment(esr);
 
-	if (user_mode(regs)) {
-		send_user_sigtrap(TRAP_BRKPT);
-	} else {
+	switch (imm) {
+	case UPROBES_BRK_IMM:
+		return uprobe_breakpoint_handler(regs, esr);
+
+	default:
+		return DBG_HOOK_ERROR;
+	}
+}
+NOKPROBE_SYMBOL(__handle_el0_brk);
+
+static int handle_el1_brk(struct pt_regs *regs, unsigned long esr)
+{
+	if (__handle_el1_brk(regs, esr) != DBG_HOOK_HANDLED) {
 		pr_warn("Unexpected kernel BRK exception at EL1\n");
 		return -EFAULT;
 	}
 
 	return 0;
+}
+NOKPROBE_SYMBOL(handle_el1_brk);
+
+static int handle_el0_brk(struct pt_regs *regs, unsigned long esr)
+{
+	if (__handle_el0_brk(regs, esr) != DBG_HOOK_HANDLED)
+		send_user_sigtrap(TRAP_BRKPT);
+
+	return 0;
+}
+NOKPROBE_SYMBOL(handle_el0_brk);
+
+static int brk_handler(unsigned long unused, unsigned long esr,
+		       struct pt_regs *regs)
+{
+	if (user_mode(regs))
+		return handle_el0_brk(regs, esr);
+	else
+		return handle_el1_brk(regs, esr);
 }
 NOKPROBE_SYMBOL(brk_handler);
 

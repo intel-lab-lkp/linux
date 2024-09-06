@@ -101,6 +101,9 @@ struct dbg_reg_def_t dbg_reg_def[DBG_MAX_REG_NUM] = {
 	{ "fpcr", 4, -1 },
 };
 
+static refcount_t kgdb_brk_ref = REFCOUNT_INIT(0);
+static DECLARE_WAIT_QUEUE_HEAD(kgdb_brk_wq);
+
 char *dbg_get_reg(int regno, void *mem, struct pt_regs *regs)
 {
 	if (regno >= DBG_MAX_REG_NUM || regno < 0)
@@ -234,17 +237,50 @@ int kgdb_arch_handle_exception(int exception_vector, int signo,
 	return err;
 }
 
-static int kgdb_brk_fn(struct pt_regs *regs, unsigned long esr)
+static int kgdb_brk_start(void)
 {
+	return refcount_inc_not_zero(&kgdb_brk_ref);
+}
+
+static void kgdb_brk_complete(void)
+{
+	refcount_dec(&kgdb_brk_ref);
+	if (waitqueue_active(&kgdb_brk_wq))
+		wake_up(&kgdb_brk_wq);
+}
+
+static void kgdb_brk_exit(void)
+{
+	if (!refcount_dec_if_one(&kgdb_brk_ref))
+		wait_event(kgdb_brk_wq, refcount_dec_if_one(&kgdb_brk_ref));
+}
+
+static void kgdb_brk_init(void)
+{
+	WARN_ON(refcount_read(&kgdb_brk_ref) != 0);
+	refcount_set(&kgdb_brk_ref, 1);
+}
+
+int kgdb_brk_fn(struct pt_regs *regs, unsigned long esr)
+{
+	if (!kgdb_brk_start())
+		return DBG_HOOK_ERROR;
+
 	kgdb_handle_exception(1, SIGTRAP, 0, regs);
+	kgdb_brk_complete();
+
 	return DBG_HOOK_HANDLED;
 }
 NOKPROBE_SYMBOL(kgdb_brk_fn)
 
-static int kgdb_compiled_brk_fn(struct pt_regs *regs, unsigned long esr)
+int kgdb_compiled_brk_fn(struct pt_regs *regs, unsigned long esr)
 {
+	if (!kgdb_brk_start())
+		return DBG_HOOK_ERROR;
+
 	compiled_break = 1;
 	kgdb_handle_exception(1, SIGTRAP, 0, regs);
+	kgdb_brk_complete();
 
 	return DBG_HOOK_HANDLED;
 }
@@ -259,16 +295,6 @@ static int kgdb_step_brk_fn(struct pt_regs *regs, unsigned long esr)
 	return DBG_HOOK_HANDLED;
 }
 NOKPROBE_SYMBOL(kgdb_step_brk_fn);
-
-static struct break_hook kgdb_brkpt_hook = {
-	.fn		= kgdb_brk_fn,
-	.imm		= KGDB_DYN_DBG_BRK_IMM,
-};
-
-static struct break_hook kgdb_compiled_brkpt_hook = {
-	.fn		= kgdb_compiled_brk_fn,
-	.imm		= KGDB_COMPILED_DBG_BRK_IMM,
-};
 
 static struct step_hook kgdb_step_hook = {
 	.fn		= kgdb_step_brk_fn
@@ -316,8 +342,7 @@ int kgdb_arch_init(void)
 	if (ret != 0)
 		return ret;
 
-	register_kernel_break_hook(&kgdb_brkpt_hook);
-	register_kernel_break_hook(&kgdb_compiled_brkpt_hook);
+	kgdb_brk_init();
 	register_kernel_step_hook(&kgdb_step_hook);
 	return 0;
 }
@@ -329,8 +354,7 @@ int kgdb_arch_init(void)
  */
 void kgdb_arch_exit(void)
 {
-	unregister_kernel_break_hook(&kgdb_brkpt_hook);
-	unregister_kernel_break_hook(&kgdb_compiled_brkpt_hook);
+	kgdb_brk_exit();
 	unregister_kernel_step_hook(&kgdb_step_hook);
 	unregister_die_notifier(&kgdb_notifier);
 }
