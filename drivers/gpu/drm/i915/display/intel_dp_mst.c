@@ -580,7 +580,8 @@ static int intel_dp_mst_compute_config(struct intel_encoder *encoder,
 	if (adjusted_mode->flags & DRM_MODE_FLAG_DBLSCAN)
 		return -EINVAL;
 
-	if (intel_dp_need_ultrajoiner(intel_dp, adjusted_mode->crtc_clock))
+	if (intel_dp_need_ultrajoiner(intel_dp, connector,
+				      adjusted_mode->crtc_clock))
 		pipe_config->joiner_pipes = GENMASK(crtc->pipe + 3, crtc->pipe);
 	else if (intel_dp_need_bigjoiner(intel_dp, connector,
 					 adjusted_mode->crtc_hdisplay,
@@ -1479,7 +1480,8 @@ intel_dp_mst_mode_valid_ctx(struct drm_connector *connector,
 	 *   corresponding link capabilities of the sink) in case the
 	 *   stream is uncompressed for it by the last branch device.
 	 */
-	if (intel_dp_need_ultrajoiner(intel_dp, target_clock)) {
+	if (intel_dp_need_ultrajoiner(intel_dp, intel_connector,
+				      target_clock)) {
 		joined_pipes = INTEL_BIG_JOINER_PIPES;
 		max_dotclk *= INTEL_BIG_JOINER_PIPES;
 	} else if (intel_dp_need_bigjoiner(intel_dp, intel_connector,

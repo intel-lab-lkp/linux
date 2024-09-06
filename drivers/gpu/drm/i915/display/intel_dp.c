@@ -1308,7 +1308,9 @@ bool intel_dp_has_dsc(const struct intel_connector *connector)
 	return true;
 }
 
-bool intel_dp_need_ultrajoiner(struct intel_dp *dp, int clock)
+bool intel_dp_need_ultrajoiner(struct intel_dp *dp,
+			       struct intel_connector *connector,
+			       int clock)
 {
 	const struct intel_encoder *encoder = &dp_to_dig_port(dp)->base;
 	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
@@ -1317,7 +1319,8 @@ bool intel_dp_need_ultrajoiner(struct intel_dp *dp, int clock)
 	if (!intel_display_can_use_ultrajoiner(display))
 		return false;
 
-	return clock > (i915->display.cdclk.max_dotclk_freq * 2);
+	return clock > (i915->display.cdclk.max_dotclk_freq * 2) ||
+	       connector->force_joined_pipes == INTEL_ULTRA_JOINER_PIPES;
 }
 
 static enum drm_mode_status
@@ -1356,7 +1359,7 @@ intel_dp_mode_valid(struct drm_connector *_connector,
 		target_clock = fixed_mode->clock;
 	}
 
-	if (intel_dp_need_ultrajoiner(intel_dp, target_clock)) {
+	if (intel_dp_need_ultrajoiner(intel_dp, connector, target_clock)) {
 		joined_pipes = INTEL_ULTRA_JOINER_PIPES;
 		max_dotclk *= INTEL_ULTRA_JOINER_PIPES;
 	} else if (intel_dp_need_bigjoiner(intel_dp, connector,
@@ -2566,7 +2569,7 @@ intel_dp_compute_link_config(struct intel_encoder *encoder,
 	    !intel_dp_supports_fec(intel_dp, connector, pipe_config))
 		return -EINVAL;
 
-	if (intel_dp_need_ultrajoiner(intel_dp, adjusted_mode->crtc_clock))
+	if (intel_dp_need_ultrajoiner(intel_dp, connector, adjusted_mode->crtc_clock))
 		pipe_config->joiner_pipes = GENMASK(crtc->pipe + 3, crtc->pipe);
 	else if (intel_dp_need_bigjoiner(intel_dp, connector,
 					 adjusted_mode->crtc_hdisplay,
