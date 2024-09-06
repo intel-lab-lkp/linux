@@ -3037,7 +3037,7 @@ static struct ib_mr *irdma_reg_user_mr(struct ib_pd *pd, u64 start, u64 len,
 	if (IS_ERR(region)) {
 		ibdev_dbg(&iwdev->ibdev,
 			  "VERBS: Failed to create ib_umem region\n");
-		return (struct ib_mr *)region;
+		return ERR_CAST(region);
 	}
 
 	if (ib_copy_from_udata(&req, udata, min(sizeof(req), udata->inlen))) {
@@ -3048,7 +3048,7 @@ static struct ib_mr *irdma_reg_user_mr(struct ib_pd *pd, u64 start, u64 len,
 	iwmr = irdma_alloc_iwmr(region, pd, virt, req.reg_type);
 	if (IS_ERR(iwmr)) {
 		ib_umem_release(region);
-		return (struct ib_mr *)iwmr;
+		return ERR_CAST(iwmr);
 	}
 
 	switch (req.reg_type) {
