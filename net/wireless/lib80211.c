@@ -227,7 +227,7 @@ EXPORT_SYMBOL(lib80211_get_crypto_ops);
 
 static void *lib80211_crypt_null_init(int keyidx)
 {
-	return (void *)1;
+	return ERR_CAST(1);
 }
 
 static void lib80211_crypt_null_deinit(void *priv)
