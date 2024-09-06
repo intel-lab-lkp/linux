@@ -486,6 +486,9 @@ struct thread_struct {
 	unsigned long		iopl_emul;
 
 	unsigned int		iopl_warn:1;
+#ifdef CONFIG_INTEL_TDX_GUEST
+	unsigned int		in_mmio_emul:1;
+#endif
 
 	/*
 	 * Protection Keys Register for Userspace.  Loaded immediately on
