@@ -9,6 +9,11 @@ modpost-objs	:= modpost.o file2alias.o sumversion.o symsearch.o
 devicetable-offsets-file := devicetable-offsets.h
 
 HOSTCFLAGS_file2alias.o += -D_UUID_T -D__GETHOSTUUID_H
+HOSTCFLAGS_modpost.o = $(shell $(HOSTPKG_CONFIG) --cflags bee-headers 2> /dev/null)
+HOSTCFLAGS_file2alias.o = $(shell $(HOSTPKG_CONFIG) --cflags bee-headers 2> /dev/null)
+HOSTCFLAGS_sumversion.o = $(shell $(HOSTPKG_CONFIG) --cflags bee-headers 2> /dev/null)
+HOSTCFLAGS_symsearch.o = $(shell $(HOSTPKG_CONFIG) --cflags bee-headers 2> /dev/null)
+HOSTCFLAGS_mk_elfconfig.o = $(shell $(HOSTPKG_CONFIG) --cflags bee-headers 2> /dev/null)
 
 $(obj)/$(devicetable-offsets-file): $(obj)/devicetable-offsets.s FORCE
 	$(call filechk,offsets,__DEVICETABLE_OFFSETS_H__)
