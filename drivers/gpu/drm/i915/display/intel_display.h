@@ -31,6 +31,7 @@
 #include "intel_display_limits.h"
 
 enum drm_scaling_filter;
+enum intel_joiner_pipe_count;
 struct dpll;
 struct drm_atomic_state;
 struct drm_connector;
@@ -415,7 +416,7 @@ u32 intel_plane_fb_max_stride(struct drm_i915_private *dev_priv,
 enum drm_mode_status
 intel_mode_valid_max_plane_size(struct drm_i915_private *dev_priv,
 				const struct drm_display_mode *mode,
-				bool joiner);
+				enum intel_joiner_pipe_count joined_pipes);
 enum drm_mode_status
 intel_cpu_transcoder_mode_valid(struct drm_i915_private *i915,
 				const struct drm_display_mode *mode);
