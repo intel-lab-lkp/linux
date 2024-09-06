@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define HEADER \
@@ -30,6 +31,9 @@
 
 static void print_usage(FILE *f)
 {
+#ifdef __APPLE__
+	const char *program_invocation_short_name = getprogname();
+#endif
 	fprintf(f, "usage: %s <input-rule-file> <generated-c-source-file> <generated-c-header-file>\n",
 		program_invocation_short_name);
 }
