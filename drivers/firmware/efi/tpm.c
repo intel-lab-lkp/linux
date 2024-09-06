@@ -60,6 +60,15 @@ int __init efi_tpm_eventlog_init(void)
 		return -ENOMEM;
 	}
 
+	if (!log_tbl->version ||
+	    log_tbl->version > EFI_TCG2_EVENT_LOG_FORMAT_TCG_2) {
+		pr_err(FW_BUG "TPM Events table version invalid (%x)\n",
+		       log_tbl->version);
+		early_memunmap(log_tbl, sizeof(*log_tbl));
+		efi.tpm_log = EFI_INVALID_TABLE_ADDR;
+		return -EINVAL;
+	}
+
 	tbl_size = sizeof(*log_tbl) + log_tbl->size;
 	if (memblock_reserve(efi.tpm_log, tbl_size)) {
 		pr_err("TPM Event Log memblock reserve fails (0x%lx, 0x%x)\n",
