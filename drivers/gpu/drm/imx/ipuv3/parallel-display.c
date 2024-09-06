@@ -350,7 +350,15 @@ static int imx_pd_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, imxpd);
 
-	return component_add(dev, &imx_pd_ops);
+	ret = component_add(dev, &imx_pd_ops);
+	if (ret)
+		goto free_edid;
+
+	return 0;
+
+free_edid:
+	drm_edid_free(imxpd->drm_edid);
+	return ret;
 }
 
 static void imx_pd_remove(struct platform_device *pdev)
