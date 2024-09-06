@@ -266,6 +266,33 @@ SOF_TIMESTAMPING_OPT_TX_SWHW:
   two separate messages will be looped to the socket's error queue,
   each containing just one timestamp.
 
+SOF_TIMESTAMPING_OPT_RX_FILTER:
+  Used to filter out software/hardware receive timestamps. Existing
+  applications can 1) set SOF_TIMESTAMPING_SOFTWARE only, or 2) set
+  SOF_TIMESTAMPING_RAW_HARDWARE only because they implicitly came to
+  depend on another (usually daemon) process to enable receive
+  timestamps systemwide. Enabling the flag along with
+  SOF_TIMESTAMPING_SOFTWARE or SOF_TIMESTAMPING_RAW_HARDWARE will not
+  report the software or hardware receive timestamp to the userspace
+  so that it can filter out the cases where 1) one process starts
+  first which turns on netstamp_needed_key through setting generation
+  flags like SOF_TIMESTAMPING_RX_SOFTWARE, or 2) similarly one process
+  enables generating the hardware timestamp first like setting
+  SOF_TIMESTAMPING_RX_HARDWARE, then another one only passing report
+  flag could also get the receive timestamp.
+
+  If the new applications 1) enable the flag along with
+  SOF_TIMESTAMPING_SOFTWARE and SOF_TIMESTAMPING_TX_SOFTWARE, or
+  2) enable it with SOF_TIMESTAMPING_RAW_HARDWARE and
+  SOF_TIMESTAMPING_TX_HARDWARE, they will only receive software or
+  hardware transmit timestamp respectively.
+
+  If the new applications 1) enable the flag along with
+  SOF_TIMESTAMPING_SOFTWARE and SOF_TIMESTAMPING_RX_SOFTWARE, or
+  2) enable it with SOF_TIMESTAMPING_RAW_HARDWARE and
+  SOF_TIMESTAMPING_RX_HARDWARE, they will still receive software or
+  hardware receive timestamp respectively.
+
 New applications are encouraged to pass SOF_TIMESTAMPING_OPT_ID to
 disambiguate timestamps and SOF_TIMESTAMPING_OPT_TSONLY to operate
 regardless of the setting of sysctl net.core.tstamp_allow_data.
