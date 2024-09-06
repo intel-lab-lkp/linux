@@ -621,7 +621,7 @@ int seq_release_private(struct inode *inode, struct file *file)
 {
 	struct seq_file *seq = file->private_data;
 
-	kfree(seq->private);
+	kvfree(seq->private);
 	seq->private = NULL;
 	return seq_release(inode, file);
 }
@@ -634,7 +634,7 @@ void *__seq_open_private(struct file *f, const struct seq_operations *ops,
 	void *private;
 	struct seq_file *seq;
 
-	private = kzalloc(psize, GFP_KERNEL_ACCOUNT);
+	private = kvzalloc(psize, GFP_KERNEL_ACCOUNT);
 	if (private == NULL)
 		goto out;
 
@@ -647,7 +647,7 @@ void *__seq_open_private(struct file *f, const struct seq_operations *ops,
 	return private;
 
 out_free:
-	kfree(private);
+	kvfree(private);
 out:
 	return NULL;
 }
