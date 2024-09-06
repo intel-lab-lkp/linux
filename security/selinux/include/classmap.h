@@ -1,8 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 
-#include <linux/capability.h>
-#include <linux/socket.h>
-
 #define COMMON_FILE_SOCK_PERMS                                            \
 	"ioctl", "read", "write", "create", "getattr", "setattr", "lock", \
 		"relabelfrom", "relabelto", "append", "map"
@@ -35,10 +32,6 @@
 #define COMMON_CAP2_PERMS                                                     \
 	"mac_override", "mac_admin", "syslog", "wake_alarm", "block_suspend", \
 		"audit_read", "perfmon", "bpf", "checkpoint_restore"
-
-#if CAP_LAST_CAP > CAP_CHECKPOINT_RESTORE
-#error New capability defined, please update COMMON_CAP2_PERMS.
-#endif
 
 /*
  * Note: The name for any socket class should be suffixed by "socket",
@@ -181,6 +174,18 @@ const struct security_class_mapping secclass_map[] = {
 	{ NULL }
 };
 
+#ifdef __KERNEL__ /* avoid this check when building host programs */
+
+#include <linux/capability.h>
+
+#if CAP_LAST_CAP > CAP_CHECKPOINT_RESTORE
+#error New capability defined, please update COMMON_CAP2_PERMS.
+#endif
+
+#include <linux/socket.h>
+
 #if PF_MAX > 46
 #error New address family defined, please update secclass_map.
 #endif
+
+#endif /* __KERNEL__ */
