@@ -3835,11 +3835,14 @@ int usb_port_resume(struct usb_device *udev, pm_message_t msg)
 
 int usb_remote_wakeup(struct usb_device *udev)
 {
+	struct usb_hcd  *hcd = bus_to_hcd(udev->bus);
 	int	status = 0;
 
 	usb_lock_device(udev);
 	if (udev->state == USB_STATE_SUSPENDED) {
 		dev_dbg(&udev->dev, "usb %sresume\n", "wakeup-");
+		if (hcd->state == HC_STATE_SUSPENDED)
+			set_bit(HCD_FLAG_WAKEUP_PENDING, &hcd->flags);
 		status = usb_autoresume_device(udev);
 		if (status == 0) {
 			/* Let the drivers do their thing, then... */
