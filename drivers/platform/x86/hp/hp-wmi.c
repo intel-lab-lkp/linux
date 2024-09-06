@@ -30,6 +30,8 @@
 #include <linux/rfkill.h>
 #include <linux/string.h>
 #include <linux/dmi.h>
+#include <linux/delay.h>
+#include <linux/pci.h>
 
 MODULE_AUTHOR("Matthew Garrett <mjg59@srcf.ucam.org>");
 MODULE_DESCRIPTION("HP laptop WMI driver");
@@ -1708,6 +1710,14 @@ static void __exit hp_wmi_bios_remove(struct platform_device *device)
 		platform_profile_remove();
 }
 
+static int hp_wmi_suspend_handler(struct device *device)
+{
+	/* Let the xhci have time to handle disconnect event */
+	msleep(200);
+
+	return 0;
+}
+
 static int hp_wmi_resume_handler(struct device *device)
 {
 	/*
@@ -1745,7 +1755,7 @@ static int hp_wmi_resume_handler(struct device *device)
 	return 0;
 }
 
-static const struct dev_pm_ops hp_wmi_pm_ops = {
+static struct dev_pm_ops hp_wmi_pm_ops = {
 	.resume  = hp_wmi_resume_handler,
 	.restore  = hp_wmi_resume_handler,
 };
@@ -1871,6 +1881,51 @@ static int hp_wmi_hwmon_init(void)
 	return 0;
 }
 
+static int lg_usb_touchscreen_quirk(const struct dmi_system_id *id)
+{
+	struct pci_dev *vga, *xhci;
+	struct device_link *vga_link, *xhci_link;
+
+	vga = pci_get_class(PCI_CLASS_DISPLAY_VGA << 8, NULL);
+
+	xhci = pci_get_class(PCI_CLASS_SERIAL_USB_XHCI, NULL);
+
+	if (vga && xhci) {
+		xhci_link = device_link_add(&hp_wmi_platform_dev->dev, &xhci->dev,
+				      DL_FLAG_STATELESS);
+		if (xhci_link)
+			dev_dbg(&hp_wmi_platform_dev->dev, "Suspend before %s\n",
+				 pci_name(xhci));
+		else
+			return 1;
+
+		vga_link = device_link_add(&vga->dev, &hp_wmi_platform_dev->dev,
+					   DL_FLAG_STATELESS);
+		if (vga_link)
+			dev_dbg(&hp_wmi_platform_dev->dev, "Suspend after %s\n",
+				 pci_name(vga));
+		else {
+			device_link_del(xhci_link);
+			return 1;
+		}
+	}
+
+	hp_wmi_pm_ops.suspend = hp_wmi_suspend_handler;
+
+	return 1;
+}
+
+static const struct dmi_system_id hp_wmi_quirk_table[] = {
+	{
+		.callback = lg_usb_touchscreen_quirk,
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "HP"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "HP ProOne 440 23.8 inch G9 All-in-One Desktop PC"),
+		},
+	},
+	{}
+};
+
 static int __init hp_wmi_init(void)
 {
 	int event_capable = wmi_has_guid(HPWMI_EVENT_GUID);
@@ -1908,6 +1963,8 @@ static int __init hp_wmi_init(void)
 		if (err)
 			goto err_unregister_device;
 	}
+
+	dmi_check_system(hp_wmi_quirk_table);
 
 	return 0;
 
