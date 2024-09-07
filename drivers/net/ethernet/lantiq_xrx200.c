@@ -589,8 +589,8 @@ static int xrx200_probe(struct platform_device *pdev)
 	if (priv->chan_tx.dma.irq < 0)
 		return -ENOENT;
 
-	/* get the clock */
-	priv->clk = devm_clk_get(dev, NULL);
+	/* get the clock and enable clock gate */
+	priv->clk = devm_clk_get_enabled(dev, NULL);
 	if (IS_ERR(priv->clk)) {
 		dev_err(dev, "failed to get clock\n");
 		return PTR_ERR(priv->clk);
@@ -604,11 +604,6 @@ static int xrx200_probe(struct platform_device *pdev)
 	err = xrx200_dma_init(priv);
 	if (err)
 		return err;
-
-	/* enable clock gate */
-	err = clk_prepare_enable(priv->clk);
-	if (err)
-		goto err_uninit_dma;
 
 	/* set IPG to 12 */
 	xrx200_pmac_mask(priv, PMAC_RX_IPG_MASK, 0xb, PMAC_RX_IPG);
@@ -628,12 +623,9 @@ static int xrx200_probe(struct platform_device *pdev)
 
 	err = register_netdev(net_dev);
 	if (err)
-		goto err_unprepare_clk;
+		goto err_uninit_dma;
 
 	return 0;
-
-err_unprepare_clk:
-	clk_disable_unprepare(priv->clk);
 
 err_uninit_dma:
 	xrx200_hw_cleanup(priv);
@@ -653,9 +645,6 @@ static void xrx200_remove(struct platform_device *pdev)
 
 	/* remove the actual device */
 	unregister_netdev(net_dev);
-
-	/* release the clock */
-	clk_disable_unprepare(priv->clk);
 
 	/* shut down hardware */
 	xrx200_hw_cleanup(priv);
