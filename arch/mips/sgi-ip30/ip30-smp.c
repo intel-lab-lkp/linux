@@ -43,15 +43,17 @@ struct mpconf {
 	u32 idleflag;
 };
 
-static void ip30_smp_send_ipi_single(int cpu, u32 action)
+static void ip30_smp_send_ipi_single(int cpu, enum ipi_message_type op)
 {
 	int irq;
 
-	switch (action) {
-	case SMP_RESCHEDULE_YOURSELF:
+	BUILD_BUG_ON(IPI_MAX > 2);
+
+	switch (op) {
+	case IPI_RESCHEDULE:
 		irq = HEART_L2_INT_RESCHED_CPU_0;
 		break;
-	case SMP_CALL_FUNCTION:
+	case IPI_CALL_FUNC:
 		irq = HEART_L2_INT_CALL_CPU_0;
 		break;
 	default:
@@ -64,12 +66,13 @@ static void ip30_smp_send_ipi_single(int cpu, u32 action)
 	heart_write(BIT_ULL(irq), &heart_regs->set_isr);
 }
 
-static void ip30_smp_send_ipi_mask(const struct cpumask *mask, u32 action)
+static void ip30_smp_send_ipi_mask(const struct cpumask *mask,
+				   enum ipi_message_type op)
 {
 	u32 i;
 
 	for_each_cpu(i, mask)
-		ip30_smp_send_ipi_single(i, action);
+		ip30_smp_send_ipi_single(i, op);
 }
 
 static void __init ip30_smp_setup(void)

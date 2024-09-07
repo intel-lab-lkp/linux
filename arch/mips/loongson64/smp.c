@@ -13,8 +13,8 @@
 #include <linux/smp.h>
 #include <linux/cpufreq.h>
 #include <linux/kexec.h>
+#include <asm/ipi.h>
 #include <asm/processor.h>
-#include <asm/smp.h>
 #include <asm/time.h>
 #include <asm/tlbflush.h>
 #include <asm/cacheflush.h>
@@ -367,35 +367,29 @@ static void ipi_mailbox_buf_init(void)
 /*
  * Simple enough, just poke the appropriate ipi register
  */
-static void loongson3_send_ipi_single(int cpu, unsigned int action)
+static void loongson3_send_ipi_single(int cpu, enum ipi_message_type op)
 {
-	ipi_write_action(cpu_logical_map(cpu), (u32)action);
+	ipi_write_action(cpu_logical_map(cpu), BIT(op));
 }
 
 static void
-loongson3_send_ipi_mask(const struct cpumask *mask, unsigned int action)
+loongson3_send_ipi_mask(const struct cpumask *mask, enum ipi_message_type op)
 {
 	unsigned int i;
 
 	for_each_cpu(i, mask)
-		ipi_write_action(cpu_logical_map(i), (u32)action);
+		ipi_write_action(cpu_logical_map(i), BIT(op));
 }
 
 static irqreturn_t loongson3_ipi_interrupt(int irq, void *dev_id)
 {
-	int cpu = smp_processor_id();
-	unsigned int action;
+	int op, cpu = smp_processor_id();
+	unsigned long action;
 
 	action = ipi_read_clear(cpu);
 
-	if (action & SMP_RESCHEDULE_YOURSELF)
-		scheduler_ipi();
-
-	if (action & SMP_CALL_FUNCTION) {
-		irq_enter();
-		generic_smp_call_function_interrupt();
-		irq_exit();
-	}
+	for_each_set_bit(op, &action, IPI_MAX)
+		ipi_handlers[op](0, NULL);
 
 	return IRQ_HANDLED;
 }
