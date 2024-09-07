@@ -2977,7 +2977,7 @@ static int kvm_vz_hardware_enable(void)
 #ifdef CONFIG_CPU_LOONGSON64
 	/* Control guest CCA attribute */
 	if (cpu_has_csr())
-		csr_writel(csr_readl(0xffffffec) | 0x1, 0xffffffec);
+		csr_write32(csr_read32(0xffffffec) | 0x1, 0xffffffec);
 #endif
 
 	return 0;

@@ -10,8 +10,11 @@
 #include <linux/bits.h>
 #include <linux/types.h>
 
-#ifdef CONFIG_LOONGARCH
+#if defined(CONFIG_LOONGARCH)
 #include <asm/loongarch.h>
+#endif
+#if defined(CONFIG_MIPS) && defined(CONFIG_MACH_LOONGSON64)
+#include <loongson_regs.h>
 #endif
 
 #define LOONGSON_IOCSR_FEATURES	0x8
