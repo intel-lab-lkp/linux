@@ -966,6 +966,7 @@ struct efx_cxl;
  * @dl_port: devlink port associated with the PF
  * @cxl: details of related cxl objects
  * @efx_cxl_pio_initialised: clx initialization outcome.
+ * @efx_cxl_pio_in_use: PIO using CXL mapping
  * @mem_bar: The BAR that is mapped into membase.
  * @reg_base: Offset from the start of the bar to the function control window.
  * @monitor_work: Hardware monitor workitem
@@ -1154,6 +1155,7 @@ struct efx_nic {
 	struct devlink_port *dl_port;
 	struct efx_cxl *cxl;
 	bool efx_cxl_pio_initialised;
+	bool efx_cxl_pio_in_use;
 	unsigned int mem_bar;
 	u32 reg_base;
 
