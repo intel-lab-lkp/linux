@@ -23,6 +23,7 @@ int efx_cxl_init(struct efx_nic *efx)
 	struct pci_dev *pci_dev = efx->pci_dev;
 	struct efx_cxl *cxl;
 	struct resource res;
+	resource_size_t max;
 	u16 dvsec;
 	int rc;
 
@@ -90,7 +91,38 @@ int efx_cxl_init(struct efx_nic *efx)
 		goto err;
 	}
 
+	cxl->endpoint = cxl_acquire_endpoint(cxl->cxlmd);
+	if (IS_ERR(cxl->endpoint)) {
+		rc = PTR_ERR(cxl->endpoint);
+		if (rc != -EPROBE_DEFER) {
+			pci_err(pci_dev, "CXL accel acquire endpoint failed");
+			goto err;
+		}
+	}
+
+	cxl->cxlrd = cxl_get_hpa_freespace(cxl->endpoint,
+					   CXL_DECODER_F_RAM | CXL_DECODER_F_TYPE2,
+					   &max);
+
+	if (IS_ERR(cxl->cxlrd)) {
+		pci_err(pci_dev, "cxl_get_hpa_freespace failed\n");
+		rc = PTR_ERR(cxl->cxlrd);
+		goto err_release;
+	}
+
+	if (max < EFX_CTPIO_BUFFER_SIZE) {
+		pci_err(pci_dev, "%s: no enough free HPA space %llu < %u\n",
+			__func__, max, EFX_CTPIO_BUFFER_SIZE);
+		rc = -ENOSPC;
+		goto err;
+	}
+
+	cxl_release_endpoint(cxl->cxlmd, cxl->endpoint);
+
 	return 0;
+
+err_release:
+	cxl_release_endpoint(cxl->cxlmd, cxl->endpoint);
 err:
 	kfree(cxl->cxlds);
 	kfree(cxl);

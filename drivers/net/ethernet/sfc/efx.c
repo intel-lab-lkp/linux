@@ -1117,10 +1117,16 @@ static int efx_pci_probe(struct pci_dev *pci_dev,
 	 * used for PIO buffers. If there is no CXL support, or initialization
 	 * fails, efx_cxl_pio_initialised wll be false and legacy PIO buffers
 	 * defined at specific PCI BAR regions will be used.
+	 *
+	 * The only error to handle is -EPROBE_DEFER happening if the root port
+	 * is not there yet.
 	 */
 	rc = efx_cxl_init(efx);
-	if (rc)
+	if (rc) {
+		if (rc == -EPROBE_DEFER)
+			goto fail2;
 		pci_err(pci_dev, "CXL initialization failed with error %d\n", rc);
+	}
 
 	rc = efx_pci_probe_post_io(efx);
 	if (rc) {
