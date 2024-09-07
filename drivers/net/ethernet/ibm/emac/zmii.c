@@ -230,34 +230,33 @@ void *zmii_dump_regs(struct platform_device *ofdev, void *buf)
 	return regs + 1;
 }
 
-static int zmii_probe(struct platform_device *ofdev)
+static int zmii_probe(struct platform_device *pdev)
 {
-	struct device_node *np = ofdev->dev.of_node;
+	struct device_node *np = pdev->dev.of_node;
 	struct zmii_instance *dev;
 	struct resource regs;
 	int rc;
 
-	rc = -ENOMEM;
-	dev = kzalloc(sizeof(struct zmii_instance), GFP_KERNEL);
-	if (dev == NULL)
-		goto err_gone;
+	dev = devm_kzalloc(&pdev->dev, sizeof(struct zmii_instance),
+			   GFP_KERNEL);
+	if (!dev)
+		return -ENOMEM;
 
 	mutex_init(&dev->lock);
-	dev->ofdev = ofdev;
+	dev->ofdev = pdev;
 	dev->mode = PHY_INTERFACE_MODE_NA;
 
-	rc = -ENXIO;
-	if (of_address_to_resource(np, 0, &regs)) {
-		printk(KERN_ERR "%pOF: Can't get registers address\n", np);
-		goto err_free;
+	rc = of_address_to_resource(np, 0, &regs);
+	if (rc) {
+		dev_err(&pdev->dev, "can't get registers address");
+		return rc;
 	}
 
-	rc = -ENOMEM;
-	dev->base = (struct zmii_regs __iomem *)ioremap(regs.start,
-						sizeof(struct zmii_regs));
-	if (dev->base == NULL) {
-		printk(KERN_ERR "%pOF: Can't map device registers!\n", np);
-		goto err_free;
+	dev->base =
+		devm_ioremap(&pdev->dev, regs.start, sizeof(struct zmii_regs));
+	if (!dev->base) {
+		dev_err(&pdev->dev, "can't map device registers");
+		return -ENOMEM;
 	}
 
 	/* We may need FER value for autodetection later */
@@ -266,26 +265,11 @@ static int zmii_probe(struct platform_device *ofdev)
 	/* Disable all inputs by default */
 	out_be32(&dev->base->fer, 0);
 
-	printk(KERN_INFO "ZMII %pOF initialized\n", ofdev->dev.of_node);
+	dev_info(&pdev->dev, "initialized");
 	wmb();
-	platform_set_drvdata(ofdev, dev);
+	platform_set_drvdata(pdev, dev);
 
-	return 0;
-
- err_free:
-	kfree(dev);
- err_gone:
 	return rc;
-}
-
-static void zmii_remove(struct platform_device *ofdev)
-{
-	struct zmii_instance *dev = platform_get_drvdata(ofdev);
-
-	WARN_ON(dev->users != 0);
-
-	iounmap(dev->base);
-	kfree(dev);
 }
 
 static const struct of_device_id zmii_match[] =
@@ -306,7 +290,6 @@ static struct platform_driver zmii_driver = {
 		.of_match_table = zmii_match,
 	},
 	.probe = zmii_probe,
-	.remove_new = zmii_remove,
 };
 
 int __init zmii_init(void)
