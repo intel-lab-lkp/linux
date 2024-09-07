@@ -192,14 +192,6 @@ static int qcom_edp_phy_init(struct phy *phy)
 	int ret;
 	u8 cfg8;
 
-	ret = regulator_bulk_enable(ARRAY_SIZE(edp->supplies), edp->supplies);
-	if (ret)
-		return ret;
-
-	ret = clk_bulk_prepare_enable(ARRAY_SIZE(edp->clks), edp->clks);
-	if (ret)
-		goto out_disable_supplies;
-
 	writel(DP_PHY_PD_CTL_PWRDN | DP_PHY_PD_CTL_AUX_PWRDN |
 	       DP_PHY_PD_CTL_PLL_PWRDN | DP_PHY_PD_CTL_DP_CLAMP_EN,
 	       edp->edp + DP_PHY_PD_CTL);
@@ -246,11 +238,6 @@ static int qcom_edp_phy_init(struct phy *phy)
 	msleep(20);
 
 	return 0;
-
-out_disable_supplies:
-	regulator_bulk_disable(ARRAY_SIZE(edp->supplies), edp->supplies);
-
-	return ret;
 }
 
 static int qcom_edp_set_voltages(struct qcom_edp *edp, const struct phy_configure_opts_dp *dp_opts)
@@ -721,6 +708,8 @@ static int qcom_edp_phy_power_on(struct phy *phy)
 	u32 val;
 	u8 cfg1;
 
+	pm_runtime_get_sync(&phy->dev);
+
 	ret = edp->cfg->ver_ops->com_power_on(edp);
 	if (ret)
 		return ret;
@@ -841,6 +830,8 @@ static int qcom_edp_phy_power_off(struct phy *phy)
 
 	writel(DP_PHY_PD_CTL_PSR_PWRDN, edp->edp + DP_PHY_PD_CTL);
 
+	pm_runtime_put(&phy->dev);
+
 	return 0;
 }
 
@@ -856,23 +847,12 @@ static int qcom_edp_phy_set_mode(struct phy *phy, enum phy_mode mode, int submod
 	return 0;
 }
 
-static int qcom_edp_phy_exit(struct phy *phy)
-{
-	struct qcom_edp *edp = phy_get_drvdata(phy);
-
-	clk_bulk_disable_unprepare(ARRAY_SIZE(edp->clks), edp->clks);
-	regulator_bulk_disable(ARRAY_SIZE(edp->supplies), edp->supplies);
-
-	return 0;
-}
-
 static const struct phy_ops qcom_edp_ops = {
 	.init		= qcom_edp_phy_init,
 	.configure	= qcom_edp_phy_configure,
 	.power_on	= qcom_edp_phy_power_on,
 	.power_off	= qcom_edp_phy_power_off,
 	.set_mode	= qcom_edp_phy_set_mode,
-	.exit		= qcom_edp_phy_exit,
 	.owner		= THIS_MODULE,
 };
 
@@ -1036,6 +1016,32 @@ static int qcom_edp_clks_register(struct qcom_edp *edp, struct device_node *np)
 	return devm_of_clk_add_hw_provider(edp->dev, of_clk_hw_onecell_get, data);
 }
 
+static int __maybe_unused qcom_edp_runtime_suspend(struct device *dev)
+{
+	struct qcom_edp *edp = dev_get_drvdata(dev);
+
+	dev_err(dev, "Suspending DP phy\n");
+
+	clk_bulk_disable_unprepare(ARRAY_SIZE(edp->clks), edp->clks);
+	regulator_bulk_disable(ARRAY_SIZE(edp->supplies), edp->supplies);
+
+	return 0;
+}
+
+static int __maybe_unused qcom_edp_runtime_resume(struct device *dev)
+{
+	struct qcom_edp *edp = dev_get_drvdata(dev);
+	int ret;
+
+	dev_err(dev, "Resuming DP phy\n");
+
+	ret = regulator_bulk_enable(ARRAY_SIZE(edp->supplies), edp->supplies);
+	if (ret)
+		return ret;
+
+	return clk_bulk_prepare_enable(ARRAY_SIZE(edp->clks), edp->clks);
+}
+
 static int qcom_edp_phy_probe(struct platform_device *pdev)
 {
 	struct phy_provider *phy_provider;
@@ -1091,20 +1097,57 @@ static int qcom_edp_phy_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	ret = qcom_edp_clks_register(edp, pdev->dev.of_node);
-	if (ret)
+	ret = regulator_bulk_enable(ARRAY_SIZE(edp->supplies), edp->supplies);
+	if (ret) {
+		dev_err(dev, "failed to enable regulators, err=%d\n", ret);
 		return ret;
+	}
+
+	ret = clk_bulk_prepare_enable(ARRAY_SIZE(edp->clks), edp->clks);
+	if (ret) {
+		dev_err(dev, "failed to enable clocks, err=%d\n", ret);
+		goto err_disable_regulators;
+	}
+
+	ret = qcom_edp_clks_register(edp, pdev->dev.of_node);
+	if (ret) {
+		dev_err(dev, "failed to register PHY clocks, err=%d\n", ret);
+		goto err_disable_clocks;
+	}
 
 	edp->phy = devm_phy_create(dev, pdev->dev.of_node, &qcom_edp_ops);
 	if (IS_ERR(edp->phy)) {
 		dev_err(dev, "failed to register phy\n");
-		return PTR_ERR(edp->phy);
+		ret = PTR_ERR(edp->phy);
+		goto err_disable_clocks;
 	}
 
+	pm_runtime_set_active(dev);
+	ret = devm_pm_runtime_enable(dev);
+	if (ret)
+		goto err_disable_clocks;
+	/*
+	 * Prevent runtime pm from being ON by default. Users can enable
+	 * it using power/control in sysfs.
+	 */
+	pm_runtime_forbid(dev);
+
+	dev_set_drvdata(dev, edp);
 	phy_set_drvdata(edp->phy, edp);
 
 	phy_provider = devm_of_phy_provider_register(dev, of_phy_simple_xlate);
-	return PTR_ERR_OR_ZERO(phy_provider);
+	if (IS_ERR(phy_provider))
+		goto err_disable_clocks;
+
+	return 0;
+
+err_disable_clocks:
+	clk_bulk_disable_unprepare(ARRAY_SIZE(edp->clks), edp->clks);
+
+err_disable_regulators:
+	regulator_bulk_disable(ARRAY_SIZE(edp->supplies), edp->supplies);
+
+	return ret;
 }
 
 static const struct of_device_id qcom_edp_phy_match_table[] = {
@@ -1117,10 +1160,16 @@ static const struct of_device_id qcom_edp_phy_match_table[] = {
 };
 MODULE_DEVICE_TABLE(of, qcom_edp_phy_match_table);
 
+static const struct dev_pm_ops qcom_edp_pm_ops = {
+	SET_RUNTIME_PM_OPS(qcom_edp_runtime_suspend,
+			   qcom_edp_runtime_resume, NULL)
+};
+
 static struct platform_driver qcom_edp_phy_driver = {
 	.probe		= qcom_edp_phy_probe,
 	.driver = {
 		.name	= "qcom-edp-phy",
+		.pm	= &qcom_edp_pm_ops,
 		.of_match_table = qcom_edp_phy_match_table,
 	},
 };
