@@ -66,6 +66,12 @@ int efx_cxl_init(struct efx_nic *efx)
 		goto err;
 	}
 
+	rc = cxl_pci_accel_setup_regs(pci_dev, cxl->cxlds);
+	if (rc) {
+		pci_err(pci_dev, "CXL accel setup regs failed");
+		goto err;
+	}
+
 	return 0;
 err:
 	kfree(cxl->cxlds);

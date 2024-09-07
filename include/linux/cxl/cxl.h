@@ -5,6 +5,7 @@
 #define __CXL_H
 
 #include <linux/device.h>
+#include <linux/pci.h>
 
 enum cxl_resource {
 	CXL_ACCEL_RES_DPA,
@@ -50,4 +51,5 @@ int cxl_set_resource(struct cxl_dev_state *cxlds, struct resource res,
 		     enum cxl_resource);
 bool cxl_pci_check_caps(struct cxl_dev_state *cxlds, u32 expected_caps,
 			u32 *current_caps);
+int cxl_pci_accel_setup_regs(struct pci_dev *pdev, struct cxl_dev_state *cxlds);
 #endif

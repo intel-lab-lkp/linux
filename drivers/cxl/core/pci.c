@@ -1140,6 +1140,36 @@ int cxl_pci_setup_regs(struct pci_dev *pdev, enum cxl_regloc_type type,
 }
 EXPORT_SYMBOL_NS_GPL(cxl_pci_setup_regs, CXL);
 
+int cxl_pci_accel_setup_regs(struct pci_dev *pdev, struct cxl_dev_state *cxlds)
+{
+	struct cxl_register_map map;
+	int rc;
+
+	rc = cxl_pci_setup_regs(pdev, CXL_REGLOC_RBI_MEMDEV, &map,
+				&cxlds->capabilities);
+	if (!rc) {
+		rc = cxl_map_device_regs(&map, &cxlds->regs.device_regs);
+		if (rc)
+			return rc;
+	}
+
+	rc = cxl_pci_setup_regs(pdev, CXL_REGLOC_RBI_COMPONENT,
+				&cxlds->reg_map, &cxlds->capabilities);
+	if (rc)
+		dev_warn(&pdev->dev, "No component registers (%d)\n", rc);
+
+	if (cxlds->capabilities & BIT(CXL_CM_CAP_CAP_ID_RAS)) {
+		rc = cxl_map_component_regs(&cxlds->reg_map,
+					    &cxlds->regs.component,
+					    BIT(CXL_CM_CAP_CAP_ID_RAS));
+		if (rc)
+			dev_dbg(&pdev->dev, "Failed to map RAS capability.\n");
+	}
+
+	return rc;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_pci_accel_setup_regs, CXL);
+
 bool cxl_pci_check_caps(struct cxl_dev_state *cxlds, u32 expected_caps,
 			u32 *current_caps)
 {
