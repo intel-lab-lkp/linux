@@ -72,6 +72,12 @@ int efx_cxl_init(struct efx_nic *efx)
 		goto err;
 	}
 
+	rc = cxl_request_resource(cxl->cxlds, CXL_ACCEL_RES_RAM);
+	if (rc) {
+		pci_err(pci_dev, "CXL request resource failed");
+		goto err;
+	}
+
 	return 0;
 err:
 	kfree(cxl->cxlds);
@@ -84,6 +90,7 @@ err:
 void efx_cxl_exit(struct efx_nic *efx)
 {
 	if (efx->cxl) {
+		cxl_release_resource(efx->cxl->cxlds, CXL_ACCEL_RES_RAM);
 		kfree(efx->cxl->cxlds);
 		kfree(efx->cxl);
 	}
