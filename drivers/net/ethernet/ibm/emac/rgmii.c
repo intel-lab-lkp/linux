@@ -77,17 +77,16 @@ static inline u32 rgmii_mode_mask(int mode, int input)
 	}
 }
 
-int rgmii_attach(struct platform_device *ofdev, int input, int mode)
+int rgmii_attach(struct platform_device *pdev, int input, int mode)
 {
-	struct rgmii_instance *dev = platform_get_drvdata(ofdev);
+	struct rgmii_instance *dev = platform_get_drvdata(pdev);
 	struct rgmii_regs __iomem *p = dev->base;
 
 	RGMII_DBG(dev, "attach(%d)" NL, input);
 
 	/* Check if we need to attach to a RGMII */
 	if (input < 0 || !rgmii_valid_mode(mode)) {
-		printk(KERN_ERR "%pOF: unsupported settings !\n",
-		       ofdev->dev.of_node);
+		dev_err(&pdev->dev, "unsupported settings");
 		return -ENODEV;
 	}
 
@@ -96,8 +95,7 @@ int rgmii_attach(struct platform_device *ofdev, int input, int mode)
 	/* Enable this input */
 	out_be32(&p->fer, in_be32(&p->fer) | rgmii_mode_mask(mode, input));
 
-	printk(KERN_NOTICE "%pOF: input %d in %s mode\n",
-	       ofdev->dev.of_node, input, phy_modes(mode));
+	dev_info(&pdev->dev, "input %d in %s mode", input, phy_modes(mode));
 
 	++dev->users;
 
@@ -213,74 +211,55 @@ void *rgmii_dump_regs(struct platform_device *ofdev, void *buf)
 	return regs + 1;
 }
 
-
-static int rgmii_probe(struct platform_device *ofdev)
+static int rgmii_probe(struct platform_device *pdev)
 {
-	struct device_node *np = ofdev->dev.of_node;
+	struct device_node *np = pdev->dev.of_node;
 	struct rgmii_instance *dev;
 	struct resource regs;
 	int rc;
 
-	rc = -ENOMEM;
-	dev = kzalloc(sizeof(struct rgmii_instance), GFP_KERNEL);
-	if (dev == NULL)
-		goto err_gone;
+	dev = devm_kzalloc(&pdev->dev, sizeof(struct rgmii_instance),
+			   GFP_KERNEL);
+	if (!dev)
+		return -ENOMEM;
 
 	mutex_init(&dev->lock);
-	dev->ofdev = ofdev;
+	dev->ofdev = pdev;
 
-	rc = -ENXIO;
-	if (of_address_to_resource(np, 0, &regs)) {
-		printk(KERN_ERR "%pOF: Can't get registers address\n", np);
-		goto err_free;
+	rc = of_address_to_resource(np, 0, &regs);
+	if (rc) {
+		dev_err(&pdev->dev, "can't get registers address");
+		return rc;
 	}
 
-	rc = -ENOMEM;
-	dev->base = (struct rgmii_regs __iomem *)ioremap(regs.start,
-						 sizeof(struct rgmii_regs));
-	if (dev->base == NULL) {
-		printk(KERN_ERR "%pOF: Can't map device registers!\n", np);
-		goto err_free;
+	dev->base =
+		devm_ioremap(&pdev->dev, regs.start, sizeof(struct rgmii_regs));
+	if (!dev->base) {
+		dev_err(&pdev->dev, "can't map device registers");
+		return -ENOMEM;
 	}
 
 	/* Check for RGMII flags */
-	if (of_property_read_bool(ofdev->dev.of_node, "has-mdio"))
+	if (of_property_read_bool(pdev->dev.of_node, "has-mdio"))
 		dev->flags |= EMAC_RGMII_FLAG_HAS_MDIO;
 
 	/* CAB lacks the right properties, fix this up */
-	if (of_device_is_compatible(ofdev->dev.of_node, "ibm,rgmii-axon"))
+	if (of_device_is_compatible(pdev->dev.of_node, "ibm,rgmii-axon"))
 		dev->flags |= EMAC_RGMII_FLAG_HAS_MDIO;
 
-	DBG2(dev, " Boot FER = 0x%08x, SSR = 0x%08x\n",
-	     in_be32(&dev->base->fer), in_be32(&dev->base->ssr));
+	dev_dbg(&pdev->dev, "Boot FER = 0x%08x, SSR = 0x%08x",
+		in_be32(&dev->base->fer), in_be32(&dev->base->ssr));
 
 	/* Disable all inputs by default */
 	out_be32(&dev->base->fer, 0);
 
-	printk(KERN_INFO
-	       "RGMII %pOF initialized with%s MDIO support\n",
-	       ofdev->dev.of_node,
-	       (dev->flags & EMAC_RGMII_FLAG_HAS_MDIO) ? "" : "out");
+	dev_info(&pdev->dev, "initialized with%s MDIO support",
+		 (dev->flags & EMAC_RGMII_FLAG_HAS_MDIO) ? "" : "out");
 
 	wmb();
-	platform_set_drvdata(ofdev, dev);
+	platform_set_drvdata(pdev, dev);
 
-	return 0;
-
- err_free:
-	kfree(dev);
- err_gone:
 	return rc;
-}
-
-static void rgmii_remove(struct platform_device *ofdev)
-{
-	struct rgmii_instance *dev = platform_get_drvdata(ofdev);
-
-	WARN_ON(dev->users != 0);
-
-	iounmap(dev->base);
-	kfree(dev);
 }
 
 static const struct of_device_id rgmii_match[] =
@@ -300,7 +279,6 @@ static struct platform_driver rgmii_driver = {
 		.of_match_table = rgmii_match,
 	},
 	.probe = rgmii_probe,
-	.remove_new = rgmii_remove,
 };
 
 int __init rgmii_init(void)
