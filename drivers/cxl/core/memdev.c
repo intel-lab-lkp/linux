@@ -5,6 +5,7 @@
 #include <linux/io-64-nonatomic-lo-hi.h>
 #include <linux/firmware.h>
 #include <linux/device.h>
+#include <linux/delay.h>
 #include <linux/slab.h>
 #include <linux/idr.h>
 #include <linux/pci.h>
@@ -22,6 +23,8 @@ static DECLARE_RWSEM(cxl_memdev_rwsem);
 
 static int cxl_mem_major;
 static DEFINE_IDA(cxl_memdev_ida);
+
+static unsigned short endpoint_ready_timeout = HZ;
 
 static void cxl_memdev_release(struct device *dev)
 {
@@ -1162,6 +1165,70 @@ err:
 	return ERR_PTR(rc);
 }
 EXPORT_SYMBOL_NS_GPL(devm_cxl_add_memdev, CXL);
+
+/*
+ * Try to get a locked reference on a memdev's CXL port topology
+ * connection. Be careful to observe when cxl_mem_probe() has deposited
+ * a probe deferral awaiting the arrival of the CXL root driver.
+ */
+struct cxl_port *cxl_acquire_endpoint(struct cxl_memdev *cxlmd)
+{
+	struct cxl_port *endpoint;
+	unsigned long timeout;
+	int rc = -ENXIO;
+
+	/*
+	 * A memdev creation triggers ports creation through the kernel
+	 * device object model. An endpoint port could not be created yet
+	 * but coming. Wait here for a gentle space of time for ensuring
+	 * and endpoint port not there is due to some error and not because
+	 * the race described.
+	 *
+	 * Note this is a similar case this function is implemented for, but
+	 * instead of the race with the root port, this is against its own
+	 * endpoint port.
+	 */
+	timeout = jiffies + endpoint_ready_timeout;
+	do {
+		device_lock(&cxlmd->dev);
+		endpoint = cxlmd->endpoint;
+		if (endpoint)
+			break;
+		device_unlock(&cxlmd->dev);
+		if (msleep_interruptible(100)) {
+			device_lock(&cxlmd->dev);
+			break;
+		}
+	} while (!time_after(jiffies, timeout));
+
+	if (!endpoint)
+		goto err;
+
+	if (IS_ERR(endpoint)) {
+		rc = PTR_ERR(endpoint);
+		goto err;
+	}
+
+	device_lock(&endpoint->dev);
+	if (!endpoint->dev.driver)
+		goto err_endpoint;
+
+	return endpoint;
+
+err_endpoint:
+	device_unlock(&endpoint->dev);
+err:
+	device_unlock(&cxlmd->dev);
+	return ERR_PTR(rc);
+}
+EXPORT_SYMBOL_NS(cxl_acquire_endpoint, CXL);
+
+void cxl_release_endpoint(struct cxl_memdev *cxlmd, struct cxl_port *endpoint)
+{
+	device_unlock(&endpoint->dev);
+	device_unlock(&cxlmd->dev);
+}
+EXPORT_SYMBOL_NS(cxl_release_endpoint, CXL);
 
 static void sanitize_teardown_notifier(void *data)
 {
