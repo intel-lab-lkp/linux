@@ -867,4 +867,6 @@ void cxl_dpa_debug(struct seq_file *file, struct cxl_dev_state *cxlds);
 struct cxl_root_decoder *cxl_get_hpa_freespace(struct cxl_port *endpoint,
 					       unsigned long flags,
 					       resource_size_t *max);
+struct cxl_region *cxl_create_region(struct cxl_root_decoder *cxlrd,
+				     struct cxl_endpoint_decoder *cxled);
 #endif /* __CXL_MEM_H__ */

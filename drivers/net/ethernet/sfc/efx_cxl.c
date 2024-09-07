@@ -125,10 +125,19 @@ int efx_cxl_init(struct efx_nic *efx)
 		goto err_release;
 	}
 
+	cxl->efx_region = cxl_create_region(cxl->cxlrd, cxl->cxled);
+	if (!cxl->efx_region) {
+		pci_err(pci_dev, "CXL accel create region failed");
+		rc = PTR_ERR(cxl->efx_region);
+		goto err_region;
+	}
+
 	cxl_release_endpoint(cxl->cxlmd, cxl->endpoint);
 
 	return 0;
 
+err_region:
+	cxl_dpa_free(efx->cxl->cxled);
 err_release:
 	cxl_release_endpoint(cxl->cxlmd, cxl->endpoint);
 err:
@@ -142,6 +151,7 @@ err:
 void efx_cxl_exit(struct efx_nic *efx)
 {
 	if (efx->cxl) {
+		cxl_region_detach(efx->cxl->cxled);
 		cxl_dpa_free(efx->cxl->cxled);
 		cxl_release_resource(efx->cxl->cxlds, CXL_ACCEL_RES_RAM);
 		kfree(efx->cxl->cxlds);
