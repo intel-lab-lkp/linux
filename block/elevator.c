@@ -676,6 +676,13 @@ void elevator_disable(struct request_queue *q)
 	blk_mq_unfreeze_queue(q);
 }
 
+static bool disk_is_claimed(struct gendisk *disk)
+{
+	if (disk->part0->bd_holder)
+		return true;
+	return false;
+}
+
 /*
  * Switch this queue to the given IO scheduler.
  */
@@ -699,6 +706,13 @@ static int elevator_change(struct request_queue *q, const char *elevator_name)
 
 	e = elevator_find_get(q, elevator_name);
 	if (!e) {
+		/*
+		 * Try to avoid to load iosched module from FS behind our
+		 * disk, otherwise deadlock may be triggered
+		 */
+		if (disk_is_claimed(q->disk))
+			return -EDEADLK;
+
 		request_module("%s-iosched", elevator_name);
 		e = elevator_find_get(q, elevator_name);
 		if (!e)
