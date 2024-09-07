@@ -117,6 +117,14 @@ int efx_cxl_init(struct efx_nic *efx)
 		goto err;
 	}
 
+	cxl->cxled = cxl_request_dpa(cxl->endpoint, true, EFX_CTPIO_BUFFER_SIZE,
+				     EFX_CTPIO_BUFFER_SIZE);
+	if (IS_ERR(cxl->cxled)) {
+		pci_err(pci_dev, "CXL accel request DPA failed");
+		rc = PTR_ERR(cxl->cxlrd);
+		goto err_release;
+	}
+
 	cxl_release_endpoint(cxl->cxlmd, cxl->endpoint);
 
 	return 0;
@@ -134,6 +142,7 @@ err:
 void efx_cxl_exit(struct efx_nic *efx)
 {
 	if (efx->cxl) {
+		cxl_dpa_free(efx->cxl->cxled);
 		cxl_release_resource(efx->cxl->cxlds, CXL_ACCEL_RES_RAM);
 		kfree(efx->cxl->cxlds);
 		kfree(efx->cxl);

@@ -67,4 +67,9 @@ void cxl_release_endpoint(struct cxl_memdev *cxlmd, struct cxl_port *endpoint);
 struct cxl_root_decoder *cxl_get_hpa_freespace(struct cxl_port *endpoint,
 					       unsigned long flags,
 					       resource_size_t *max);
+struct cxl_endpoint_decoder *cxl_request_dpa(struct cxl_port *endpoint,
+					     bool is_ram,
+					     resource_size_t min,
+					     resource_size_t max);
+int cxl_dpa_free(struct cxl_endpoint_decoder *cxled);
 #endif
