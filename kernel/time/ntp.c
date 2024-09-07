@@ -752,6 +752,9 @@ static inline void process_adjtimex_modes(const struct __kernel_timex *txc,
 
 	if (txc->modes & (ADJ_TICK|ADJ_FREQUENCY|ADJ_OFFSET))
 		ntp_update_frequency();
+
+	if (txc->modes & ADJ_SETOFFSET)
+		hrtimer_cancel(&sync_hrtimer);
 }
 
 
