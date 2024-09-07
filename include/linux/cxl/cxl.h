@@ -7,6 +7,10 @@
 #include <linux/device.h>
 #include <linux/pci.h>
 
+#define CXL_DECODER_F_RAM   BIT(0)
+#define CXL_DECODER_F_PMEM  BIT(1)
+#define CXL_DECODER_F_TYPE2 BIT(2)
+
 enum cxl_resource {
 	CXL_ACCEL_RES_DPA,
 	CXL_ACCEL_RES_RAM,
@@ -59,4 +63,8 @@ struct cxl_memdev *devm_cxl_add_memdev(struct device *host,
 				       struct cxl_dev_state *cxlds);
 struct cxl_port *cxl_acquire_endpoint(struct cxl_memdev *cxlmd);
 void cxl_release_endpoint(struct cxl_memdev *cxlmd, struct cxl_port *endpoint);
+
+struct cxl_root_decoder *cxl_get_hpa_freespace(struct cxl_port *endpoint,
+					       unsigned long flags,
+					       resource_size_t *max);
 #endif
