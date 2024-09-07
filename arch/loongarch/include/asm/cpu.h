@@ -86,7 +86,7 @@ enum cpu_type_enum {
 #define CPU_FEATURE_LBT_ARM		11	/* CPU has ARM Binary Translation */
 #define CPU_FEATURE_LBT_MIPS		12	/* CPU has MIPS Binary Translation */
 #define CPU_FEATURE_TLB			13	/* CPU has TLB */
-#define CPU_FEATURE_CSR			14	/* CPU has CSR */
+#define CPU_FEATURE_IOCSR		14	/* CPU has IOCSR */
 #define CPU_FEATURE_WATCH		15	/* CPU has watchpoint registers */
 #define CPU_FEATURE_VINT		16	/* CPU has vectored interrupts */
 #define CPU_FEATURE_CSRIPI		17	/* CPU has CSR-IPI */
