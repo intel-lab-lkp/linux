@@ -78,6 +78,11 @@ int efx_cxl_init(struct efx_nic *efx)
 		goto err;
 	}
 
+	/* We do not have the register about media status. Hardware design
+	 * implies it is ready.
+	 */
+	cxl_set_media_ready(cxl->cxlds);
+
 	return 0;
 err:
 	kfree(cxl->cxlds);
