@@ -14,6 +14,7 @@
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/irq_work.h>
+#include <linux/loongson/iocsr.h>
 #include <linux/profile.h>
 #include <linux/seq_file.h>
 #include <linux/smp.h>
@@ -164,14 +165,14 @@ static void csr_mail_send(uint64_t data, int cpu, int mailbox)
 	val |= (IOCSR_MBUF_SEND_BOX_HI(mailbox) << IOCSR_MBUF_SEND_BOX_SHIFT);
 	val |= (cpu << IOCSR_MBUF_SEND_CPU_SHIFT);
 	val |= (data & IOCSR_MBUF_SEND_H32_MASK);
-	iocsr_write64(val, LOONGARCH_IOCSR_MBUF_SEND);
+	iocsr_write64(val, LOONGSON_IOCSR_MBUF_SEND);
 
 	/* Send low 32 bits */
 	val = IOCSR_MBUF_SEND_BLOCKING;
 	val |= (IOCSR_MBUF_SEND_BOX_LO(mailbox) << IOCSR_MBUF_SEND_BOX_SHIFT);
 	val |= (cpu << IOCSR_MBUF_SEND_CPU_SHIFT);
 	val |= (data << IOCSR_MBUF_SEND_BUF_SHIFT);
-	iocsr_write64(val, LOONGARCH_IOCSR_MBUF_SEND);
+	iocsr_write64(val, LOONGSON_IOCSR_MBUF_SEND);
 };
 
 static u32 ipi_read_clear(int cpu)
@@ -179,9 +180,9 @@ static u32 ipi_read_clear(int cpu)
 	u32 action;
 
 	/* Load the ipi register to figure out what we're supposed to do */
-	action = iocsr_read32(LOONGARCH_IOCSR_IPI_STATUS);
+	action = iocsr_read32(LOONGSON_IOCSR_IPI_STATUS);
 	/* Clear the ipi register to clear the interrupt */
-	iocsr_write32(action, LOONGARCH_IOCSR_IPI_CLEAR);
+	iocsr_write32(action, LOONGSON_IOCSR_IPI_CLEAR);
 	wbflush();
 
 	return action;
@@ -193,7 +194,7 @@ static void ipi_write_action(int cpu, u32 action)
 
 	val = IOCSR_IPI_SEND_BLOCKING | action;
 	val |= (cpu << IOCSR_IPI_SEND_CPU_SHIFT);
-	iocsr_write32(val, LOONGARCH_IOCSR_IPI_SEND);
+	iocsr_write32(val, LOONGSON_IOCSR_IPI_SEND);
 }
 
 static void loongson_send_ipi_single(int cpu, unsigned int action)
@@ -322,7 +323,7 @@ void __init loongson_smp_setup(void)
 	cpu_data[0].package = cpu_logical_map(0) / loongson_sysconf.cores_per_package;
 
 	pv_ipi_init();
-	iocsr_write32(0xffffffff, LOONGARCH_IOCSR_IPI_EN);
+	iocsr_write32(0xffffffff, LOONGSON_IOCSR_IPI_EN);
 	pr_info("Detected %i available CPU(s)\n", loongson_sysconf.nr_cpus);
 }
 
@@ -370,7 +371,7 @@ void loongson_init_secondary(void)
 
 	change_csr_ecfg(ECFG0_IM, imask);
 
-	iocsr_write32(0xffffffff, LOONGARCH_IOCSR_IPI_EN);
+	iocsr_write32(0xffffffff, LOONGSON_IOCSR_IPI_EN);
 
 #ifdef CONFIG_NUMA
 	numa_add_cpu(cpu);
@@ -385,7 +386,7 @@ void loongson_init_secondary(void)
 void loongson_smp_finish(void)
 {
 	local_irq_enable();
-	iocsr_write64(0, LOONGARCH_IOCSR_MBUF0);
+	iocsr_write64(0, LOONGSON_IOCSR_MBUF0);
 	pr_info("CPU#%d finished\n", smp_processor_id());
 }
 
@@ -435,12 +436,12 @@ void __noreturn arch_cpu_idle_dead(void)
 	__smp_mb();
 	do {
 		__asm__ __volatile__("idle 0\n\t");
-		addr = iocsr_read64(LOONGARCH_IOCSR_MBUF0);
+		addr = iocsr_read64(LOONGSON_IOCSR_MBUF0);
 	} while (addr == 0);
 
 	local_irq_disable();
 	init_fn = (void *)TO_CACHE(addr);
-	iocsr_write32(0xffffffff, LOONGARCH_IOCSR_IPI_CLEAR);
+	iocsr_write32(0xffffffff, LOONGSON_IOCSR_IPI_CLEAR);
 
 	init_fn();
 	BUG();
@@ -460,7 +461,7 @@ static int loongson_ipi_suspend(void)
 
 static void loongson_ipi_resume(void)
 {
-	iocsr_write32(0xffffffff, LOONGARCH_IOCSR_IPI_EN);
+	iocsr_write32(0xffffffff, LOONGSON_IOCSR_IPI_EN);
 }
 
 static struct syscore_ops loongson_ipi_syscore_ops = {

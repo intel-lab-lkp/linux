@@ -13,6 +13,7 @@
 #include <linux/irqchip.h>
 #include <linux/irqdomain.h>
 #include <linux/irqchip/chained_irq.h>
+#include <linux/loongson/iocsr.h>
 #include <linux/kernel.h>
 #include <linux/syscore_ops.h>
 #include <asm/numa.h>
@@ -52,9 +53,9 @@ static void eiointc_enable(void)
 {
 	uint64_t misc;
 
-	misc = iocsr_read64(LOONGARCH_IOCSR_MISC_FUNC);
+	misc = iocsr_read64(LOONGSON_IOCSR_MISC_FUNC);
 	misc |= IOCSR_MISC_FUNC_EXT_IOI_EN;
-	iocsr_write64(misc, LOONGARCH_IOCSR_MISC_FUNC);
+	iocsr_write64(misc, LOONGSON_IOCSR_MISC_FUNC);
 }
 
 static int cpu_to_eio_node(int cpu)
