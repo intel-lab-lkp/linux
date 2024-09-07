@@ -50,7 +50,7 @@
 #define cpu_has_lbt_arm		cpu_opt(LOONGARCH_CPU_LBT_ARM)
 #define cpu_has_lbt_mips	cpu_opt(LOONGARCH_CPU_LBT_MIPS)
 #define cpu_has_lbt		(cpu_has_lbt_x86|cpu_has_lbt_arm|cpu_has_lbt_mips)
-#define cpu_has_csr		cpu_opt(LOONGARCH_CPU_CSR)
+#define cpu_has_iocsr		cpu_opt(LOONGARCH_CPU_IOCSR)
 #define cpu_has_tlb		cpu_opt(LOONGARCH_CPU_TLB)
 #define cpu_has_watch		cpu_opt(LOONGARCH_CPU_WATCH)
 #define cpu_has_vint		cpu_opt(LOONGARCH_CPU_VINT)

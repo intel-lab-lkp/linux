@@ -91,7 +91,7 @@ static void cpu_probe_common(struct cpuinfo_loongarch *c)
 	unsigned int config;
 	unsigned long asid_mask;
 
-	c->options = LOONGARCH_CPU_CPUCFG | LOONGARCH_CPU_CSR |
+	c->options = LOONGARCH_CPU_CPUCFG | LOONGARCH_CPU_IOCSR |
 		     LOONGARCH_CPU_TLB | LOONGARCH_CPU_VINT | LOONGARCH_CPU_WATCH;
 
 	elf_hwcap = HWCAP_LOONGARCH_CPUCFG;
