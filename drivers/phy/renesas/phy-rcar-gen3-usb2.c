@@ -803,6 +803,7 @@ static int rcar_gen3_phy_usb2_probe(struct platform_device *pdev)
 	return 0;
 
 error:
+	reset_control_assert(channel->rstc);
 	pm_runtime_disable(dev);
 
 	return ret;
