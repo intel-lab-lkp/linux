@@ -361,11 +361,7 @@ static int tda9950_devm_glue_init(struct device *dev, struct tda9950_glue *glue)
 			return ret;
 	}
 
-	ret = devm_add_action(dev, tda9950_devm_glue_exit, glue);
-	if (ret)
-		tda9950_devm_glue_exit(glue);
-
-	return ret;
+	return devm_add_action_or_reset(dev, tda9950_devm_glue_exit, glue);
 }
 
 static void tda9950_cec_del(void *data)
@@ -425,11 +421,9 @@ static int tda9950_probe(struct i2c_client *client)
 	if (IS_ERR(priv->adap))
 		return PTR_ERR(priv->adap);
 
-	ret = devm_add_action(dev, tda9950_cec_del, priv);
-	if (ret) {
-		cec_delete_adapter(priv->adap);
+	ret = devm_add_action_or_reset(dev, tda9950_cec_del, priv);
+	if (ret)
 		return ret;
-	}
 
 	ret = tda9950_devm_glue_init(dev, glue);
 	if (ret)
