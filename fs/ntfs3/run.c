@@ -1057,11 +1057,14 @@ int run_unpack_ex(struct runs_tree *run, struct ntfs_sb_info *sbi, CLST ino,
 	bool ok;
 	struct wnd_bitmap *wnd;
 
+	if (!sbi->used.bitmap.sb)
+		return -EINVAL;
+
 	ret = run_unpack(run, sbi, ino, svcn, evcn, vcn, run_buf, run_buf_size);
 	if (ret <= 0)
 		return ret;
 
-	if (!sbi->used.bitmap.sb || !run || run == RUN_DEALLOCATE)
+	if (!run || run == RUN_DEALLOCATE)
 		return ret;
 
 	if (ino == MFT_REC_BADCLUST)
