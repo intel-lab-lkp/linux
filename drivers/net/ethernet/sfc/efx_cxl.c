@@ -83,6 +83,13 @@ int efx_cxl_init(struct efx_nic *efx)
 	 */
 	cxl_set_media_ready(cxl->cxlds);
 
+	cxl->cxlmd = devm_cxl_add_memdev(&pci_dev->dev, cxl->cxlds);
+	if (IS_ERR(cxl->cxlmd)) {
+		pci_err(pci_dev, "CXL accel memdev creation failed");
+		rc = PTR_ERR(cxl->cxlmd);
+		goto err;
+	}
+
 	return 0;
 err:
 	kfree(cxl->cxlds);
