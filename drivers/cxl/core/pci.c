@@ -7,6 +7,7 @@
 #include <linux/pci.h>
 #include <linux/pci-doe.h>
 #include <linux/aer.h>
+#include <linux/cxl/cxl.h>
 #include <linux/cxl/pci.h>
 #include <cxlpci.h>
 #include <cxlmem.h>
@@ -1075,3 +1076,19 @@ bool cxl_endpoint_decoder_reset_detected(struct cxl_port *port)
 				     __cxl_endpoint_decoder_reset_detected);
 }
 EXPORT_SYMBOL_NS_GPL(cxl_endpoint_decoder_reset_detected, CXL);
+
+bool cxl_pci_check_caps(struct cxl_dev_state *cxlds, u32 expected_caps,
+			u32 *current_caps)
+{
+	if (current_caps)
+		*current_caps = cxlds->capabilities;
+
+	dev_dbg(cxlds->dev, "Checking cxlds caps 0x%08x vs expected caps 0x%08x\n",
+		cxlds->capabilities, expected_caps);
+
+	if ((cxlds->capabilities & expected_caps) != expected_caps)
+		return false;
+
+	return true;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_pci_check_caps, CXL);

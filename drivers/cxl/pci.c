@@ -796,6 +796,7 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	struct cxl_register_map map;
 	struct cxl_memdev *cxlmd;
 	int i, rc, pmu_count;
+	u32 expected, found;
 	bool irq_avail;
 	u16 dvsec;
 
@@ -851,6 +852,17 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 				    BIT(CXL_CM_CAP_CAP_ID_RAS));
 	if (rc)
 		dev_dbg(&pdev->dev, "Failed to map RAS capability.\n");
+
+	/* These are the mandatory capabilities for a Type3 device */
+	expected = BIT(CXL_DEV_CAP_HDM) | BIT(CXL_DEV_CAP_DEV_STATUS) |
+		   BIT(CXL_DEV_CAP_MAILBOX_PRIMARY) | BIT(CXL_DEV_CAP_MEMDEV);
+
+	if (!cxl_pci_check_caps(cxlds, expected, &found)) {
+		dev_err(&pdev->dev,
+			"Expected capabilities not matching with found capabilities: (%08x - %08x)\n",
+			expected, found);
+		return -ENXIO;
+	}
 
 	rc = cxl_await_media_ready(cxlds);
 	if (rc == 0)
