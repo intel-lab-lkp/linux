@@ -473,7 +473,7 @@ static int gud_probe(struct usb_interface *intf, const struct usb_device_id *id)
 	INIT_WORK(&gdrm->work, gud_flush_work);
 	gud_clear_damage(gdrm);
 
-	ret = devm_add_action(dev, gud_free_buffers_and_mutex, gdrm);
+	ret = devm_add_action_or_reset(dev, gud_free_buffers_and_mutex, gdrm);
 	if (ret)
 		return ret;
 
