@@ -139,7 +139,7 @@ bool drm_master_internal_acquire(struct drm_device *dev);
 void drm_master_internal_release(struct drm_device *dev);
 
 /* drm_sysfs.c */
-extern struct class *drm_class;
+extern const struct class drm_class;
 
 int drm_sysfs_init(void);
 void drm_sysfs_destroy(void);
