@@ -329,7 +329,7 @@ EXPORT_SYMBOL(drm_memcpy_from_wc);
 /*
  * drm_memcpy_init_early - One time initialization of the WC memcpy code
  */
-void drm_memcpy_init_early(void)
+void __init drm_memcpy_init_early(void)
 {
 	/*
 	 * Some hypervisors (e.g. KVM) don't support VEX-prefix instructions

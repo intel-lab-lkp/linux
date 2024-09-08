@@ -87,7 +87,7 @@ static struct acpi_bus_type drm_connector_acpi_bus = {
 	.find_companion = drm_connector_acpi_find_companion,
 };
 
-static void drm_sysfs_acpi_register(void)
+static void __init drm_sysfs_acpi_register(void)
 {
 	register_acpi_bus_type(&drm_connector_acpi_bus);
 }
@@ -139,7 +139,7 @@ static const struct component_ops typec_connector_ops = {
  *
  * Return: 0 on success, negative error code on failure.
  */
-int drm_sysfs_init(void)
+int __init drm_sysfs_init(void)
 {
 	int ret = class_register(&drm_class);
 

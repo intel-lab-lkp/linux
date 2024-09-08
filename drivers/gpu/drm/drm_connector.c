@@ -112,7 +112,7 @@ static struct drm_conn_prop_enum_list drm_connector_enum_list[] = {
 	{ DRM_MODE_CONNECTOR_USB, "USB" },
 };
 
-void drm_connector_ida_init(void)
+void __init drm_connector_ida_init(void)
 {
 	int i;
 
