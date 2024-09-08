@@ -126,8 +126,6 @@ static const struct component_ops typec_connector_ops = {
 	.unbind = typec_connector_unbind,
 };
 
-static CLASS_ATTR_STRING(version, S_IRUGO, "drm 1.1.0 20060810");
-
 /**
  * drm_sysfs_init - initialize sysfs helpers
  *
@@ -140,18 +138,9 @@ static CLASS_ATTR_STRING(version, S_IRUGO, "drm 1.1.0 20060810");
  */
 int drm_sysfs_init(void)
 {
-	int err;
-
 	drm_class = class_create("drm");
 	if (IS_ERR(drm_class))
 		return PTR_ERR(drm_class);
-
-	err = class_create_file(drm_class, &class_attr_version.attr);
-	if (err) {
-		class_destroy(drm_class);
-		drm_class = NULL;
-		return err;
-	}
 
 	drm_class->devnode = drm_devnode;
 
@@ -169,7 +158,6 @@ void drm_sysfs_destroy(void)
 	if (IS_ERR_OR_NULL(drm_class))
 		return;
 	drm_sysfs_acpi_unregister();
-	class_remove_file(drm_class, &class_attr_version.attr);
 	class_destroy(drm_class);
 	drm_class = NULL;
 }
