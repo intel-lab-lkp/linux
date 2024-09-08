@@ -560,6 +560,9 @@ int amba_device_add(struct amba_device *dev, struct resource *parent)
 
 	/* If primecell ID isn't hard-coded, figure it out */
 	if (!dev->periphid) {
+		dev_warn(&dev->dev,
+			 "Periphid of AMBA device '%s' is not configured, please fix it\n",
+			 dev_name(&dev->dev));
 		/*
 		 * AMBA device uevents require reading its pid and cid
 		 * registers.  To do this, the device must be on, clocked and
