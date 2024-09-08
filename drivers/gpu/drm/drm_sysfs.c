@@ -50,11 +50,7 @@
  * drm_connector_unregister().
  */
 
-static struct device_type drm_sysfs_device_minor = {
-	.name = "drm_minor"
-};
-
-static struct device_type drm_sysfs_device_connector = {
+static const struct device_type drm_sysfs_device_connector = {
 	.name = "drm_connector",
 };
 
@@ -517,7 +513,6 @@ struct device *drm_sysfs_minor_alloc(struct drm_minor *minor)
 
 		kdev->devt = MKDEV(DRM_MAJOR, minor->index);
 		kdev->class = &drm_class;
-		kdev->type = &drm_sysfs_device_minor;
 	}
 
 	kdev->parent = minor->dev->dev;
