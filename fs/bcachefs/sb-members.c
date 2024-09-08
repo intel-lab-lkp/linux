@@ -163,6 +163,12 @@ static int validate_member(struct printbuf *err,
 		return -BCH_ERR_invalid_sb_members;
 	}
 
+	if (m.btree_bitmap_shift >= 64) {
+		prt_printf(err, "device %u: too many big bitmap shift (got %u, max 64)",
+			   i, m.btree_bitmap_shift);
+		return -BCH_ERR_invalid_sb_members;
+	}
+
 	return 0;
 }
 
@@ -246,8 +252,7 @@ static void member_to_text(struct printbuf *out,
 		prt_printf(out, "(none)");
 	prt_newline(out);
 
-	prt_printf(out, "Btree allocated bitmap blocksize:\t");
-	prt_units_u64(out, 1ULL << m.btree_bitmap_shift);
+	prt_printf(out, "Btree allocated bitmap shift: %d\t", m.btree_bitmap_shift);
 	prt_newline(out);
 
 	prt_printf(out, "Btree allocated bitmap:\t");
