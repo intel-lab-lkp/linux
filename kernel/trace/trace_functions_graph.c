@@ -63,6 +63,8 @@ static struct tracer_opt trace_opts[] = {
 	{ TRACER_OPT(funcgraph-retval, TRACE_GRAPH_PRINT_RETVAL) },
 	/* Display function return value in hexadecimal format ? */
 	{ TRACER_OPT(funcgraph-retval-hex, TRACE_GRAPH_PRINT_RETVAL_HEX) },
+	/* Display function return address ? */
+	{ TRACER_OPT(funcgraph-retaddr, TRACE_GRAPH_PRINT_RETADDR) },
 #endif
 	/* Include sleep time (scheduled out) between entry and return */
 	{ TRACER_OPT(sleep-time, TRACE_GRAPH_SLEEP_TIME) },
@@ -651,50 +653,86 @@ print_graph_duration(struct trace_array *tr, unsigned long long duration,
 #ifdef CONFIG_FUNCTION_GRAPH_RETVAL
 
 #define __TRACE_GRAPH_PRINT_RETVAL TRACE_GRAPH_PRINT_RETVAL
+#define __TRACE_GRAPH_PRINT_RETADDR TRACE_GRAPH_PRINT_RETADDR
 
-static void print_graph_retval(struct trace_seq *s, unsigned long retval,
-				bool leaf, void *func, bool hex_format)
+static bool print_graph_retaddr(struct trace_seq *s, struct ftrace_graph_ent *graph_ent,
+				u32 trace_flags, bool comment)
+{
+	if (unlikely(graph_ent->retaddr ==
+		 (unsigned long)dereference_kernel_function_descriptor(return_to_handler)))
+		return false;
+
+	if (comment)
+		trace_seq_puts(s, " /*");
+
+	trace_seq_puts(s, " A=");
+	seq_print_ip_sym(s, graph_ent->retaddr, trace_flags | TRACE_ITER_SYM_OFFSET);
+
+	if (comment)
+		trace_seq_puts(s, " */");
+
+	return true;
+}
+
+static void print_graph_retval(struct trace_seq *s, struct ftrace_graph_ent *graph_ent,
+				struct ftrace_graph_ret *graph_ret,
+				u32 opt_flags, u32 trace_flags)
 {
 	unsigned long err_code = 0;
+	unsigned long retval = graph_ret->retval;
+	bool hex_format = !!(opt_flags & TRACE_GRAPH_PRINT_RETVAL_HEX);
+	bool print_retaddr = !!(opt_flags & TRACE_GRAPH_PRINT_RETADDR);
+	bool print_retval = !!(opt_flags & TRACE_GRAPH_PRINT_RETVAL);
+	void *func = (void *)graph_ret->func;
 
-	if (retval == 0 || hex_format)
-		goto done;
+	if (print_retval && retval && !hex_format) {
+		/* Check if the return value matches the negative format */
+		if (IS_ENABLED(CONFIG_64BIT) && (retval & BIT(31)) &&
+			(((u64)retval) >> 32) == 0) {
+			err_code = sign_extend64(retval, 31);
+		} else {
+			err_code = retval;
+		}
 
-	/* Check if the return value matches the negative format */
-	if (IS_ENABLED(CONFIG_64BIT) && (retval & BIT(31)) &&
-		(((u64)retval) >> 32) == 0) {
-		/* sign extension */
-		err_code = (unsigned long)(s32)retval;
-	} else {
-		err_code = retval;
+		if (!IS_ERR_VALUE(err_code))
+			err_code = 0;
 	}
 
-	if (!IS_ERR_VALUE(err_code))
-		err_code = 0;
+	if (print_retaddr && graph_ent && unlikely(graph_ent->retaddr ==
+		 (unsigned long)dereference_kernel_function_descriptor(return_to_handler)))
+		print_retaddr = false;
 
-done:
-	if (leaf) {
-		if (hex_format || (err_code == 0))
-			trace_seq_printf(s, "%ps(); /* = 0x%lx */\n",
-					func, retval);
+	if (graph_ent) {
+		trace_seq_printf(s, "%ps();", func);
+		if (print_retval || print_retaddr)
+			trace_seq_puts(s, " /*");
 		else
-			trace_seq_printf(s, "%ps(); /* = %ld */\n",
-					func, err_code);
+			trace_seq_putc(s, '\n');
 	} else {
-		if (hex_format || (err_code == 0))
-			trace_seq_printf(s, "} /* %ps = 0x%lx */\n",
-					func, retval);
-		else
-			trace_seq_printf(s, "} /* %ps = %ld */\n",
-					func, err_code);
+		print_retaddr = false;
+		trace_seq_printf(s, "} /* %ps", func);
 	}
+
+	if (print_retval) {
+		if (hex_format || (err_code == 0))
+			trace_seq_printf(s, " V=0x%lx", retval);
+		else
+			trace_seq_printf(s, " V=%ld", err_code);
+	}
+
+	if (print_retaddr)
+		print_graph_retaddr(s, graph_ent, trace_flags, false);
+
+	if (!graph_ent || print_retval || print_retaddr)
+		trace_seq_puts(s, " */\n");
 }
 
 #else
 
 #define __TRACE_GRAPH_PRINT_RETVAL 0
+#define __TRACE_GRAPH_PRINT_RETADDR 0
 
-#define print_graph_retval(_seq, _retval, _leaf, _func, _format) do {} while (0)
+#define print_graph_retval(_seq, _ent, _ret, _opt_flags, _trace_flags) do {} while (0)
 
 #endif
 
@@ -746,9 +784,8 @@ print_graph_entry_leaf(struct trace_iterator *iter,
 	 * Write out the function return value if the option function-retval is
 	 * enabled.
 	 */
-	if (flags & __TRACE_GRAPH_PRINT_RETVAL)
-		print_graph_retval(s, graph_ret->retval, true, (void *)call->func,
-				!!(flags & TRACE_GRAPH_PRINT_RETVAL_HEX));
+	if (flags & (__TRACE_GRAPH_PRINT_RETVAL | __TRACE_GRAPH_PRINT_RETADDR))
+		print_graph_retval(s, call, graph_ret, flags, tr->trace_flags);
 	else
 		trace_seq_printf(s, "%ps();\n", (void *)call->func);
 
@@ -788,7 +825,10 @@ print_graph_entry_nested(struct trace_iterator *iter,
 	for (i = 0; i < call->depth * TRACE_GRAPH_INDENT; i++)
 		trace_seq_putc(s, ' ');
 
-	trace_seq_printf(s, "%ps() {\n", (void *)call->func);
+	trace_seq_printf(s, "%ps() {", (void *)call->func);
+	if (flags & __TRACE_GRAPH_PRINT_RETADDR)
+		print_graph_retaddr(s, call, tr->trace_flags, true);
+	trace_seq_putc(s, '\n');
 
 	if (trace_seq_has_overflowed(s))
 		return TRACE_TYPE_PARTIAL_LINE;
@@ -1032,9 +1072,8 @@ print_graph_return(struct ftrace_graph_ret *trace, struct trace_seq *s,
 	 * Always write out the function name and its return value if the
 	 * function-retval option is enabled.
 	 */
-	if (flags & __TRACE_GRAPH_PRINT_RETVAL) {
-		print_graph_retval(s, trace->retval, false, (void *)trace->func,
-			!!(flags & TRACE_GRAPH_PRINT_RETVAL_HEX));
+	if (flags & (__TRACE_GRAPH_PRINT_RETVAL | __TRACE_GRAPH_PRINT_RETADDR)) {
+		print_graph_retval(s, NULL, trace, flags, tr->trace_flags);
 	} else {
 		/*
 		 * If the return function does not have a matching entry,

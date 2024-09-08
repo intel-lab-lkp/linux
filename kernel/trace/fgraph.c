@@ -622,6 +622,7 @@ int function_graph_enter(unsigned long ret, unsigned long func,
 
 	trace.func = func;
 	trace.depth = ++current->curr_ret_depth;
+	trace.retaddr = ret;
 
 	offset = ftrace_push_return_trace(ret, func, frame_pointer, retp, 0);
 	if (offset < 0)

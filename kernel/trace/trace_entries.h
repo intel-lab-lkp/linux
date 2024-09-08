@@ -71,6 +71,7 @@ FTRACE_ENTRY_REG(function, ftrace_entry,
 	perf_ftrace_event_register
 );
 
+#ifdef CONFIG_FUNCTION_GRAPH_RETVAL
 /* Function call entry */
 FTRACE_ENTRY_PACKED(funcgraph_entry, ftrace_graph_ent_entry,
 
@@ -79,6 +80,7 @@ FTRACE_ENTRY_PACKED(funcgraph_entry, ftrace_graph_ent_entry,
 	F_STRUCT(
 		__field_struct(	struct ftrace_graph_ent,	graph_ent	)
 		__field_packed(	unsigned long,	graph_ent,	func		)
+		__field_packed(	unsigned long,	graph_ent,	retaddr		)
 		__field_packed(	int,		graph_ent,	depth		)
 	),
 
@@ -86,8 +88,6 @@ FTRACE_ENTRY_PACKED(funcgraph_entry, ftrace_graph_ent_entry,
 );
 
 /* Function return entry */
-#ifdef CONFIG_FUNCTION_GRAPH_RETVAL
-
 FTRACE_ENTRY_PACKED(funcgraph_exit, ftrace_graph_ret_entry,
 
 	TRACE_GRAPH_RET,
@@ -110,6 +110,21 @@ FTRACE_ENTRY_PACKED(funcgraph_exit, ftrace_graph_ret_entry,
 
 #else
 
+/* Function call entry */
+FTRACE_ENTRY_PACKED(funcgraph_entry, ftrace_graph_ent_entry,
+
+	TRACE_GRAPH_ENT,
+
+	F_STRUCT(
+		__field_struct(	struct ftrace_graph_ent,	graph_ent	)
+		__field_packed(	unsigned long,	graph_ent,	func		)
+		__field_packed(	int,		graph_ent,	depth		)
+	),
+
+	F_printk("--> %ps (%d)", (void *)__entry->func, __entry->depth)
+);
+
+/* Function return entry */
 FTRACE_ENTRY_PACKED(funcgraph_exit, ftrace_graph_ret_entry,
 
 	TRACE_GRAPH_RET,

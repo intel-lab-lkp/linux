@@ -1011,6 +1011,7 @@ static inline void ftrace_init(void) { }
  */
 struct ftrace_graph_ent {
 	unsigned long func; /* Current function */
+	unsigned long retaddr;  /* Return address */
 	int depth;
 } __packed;
 
