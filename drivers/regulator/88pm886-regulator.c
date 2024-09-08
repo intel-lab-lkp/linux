@@ -56,7 +56,7 @@ static const struct linear_range pm886_buck_volt_ranges2[] = {
 	REGULATOR_LINEAR_RANGE(1600000, 80, 114, 50000),
 };
 
-static struct regulator_desc pm886_regulators[] = {
+static const struct regulator_desc pm886_regulators[] = {
 	{
 		.name = "LDO1",
 		.regulators_node = "regulators",
@@ -340,9 +340,9 @@ static struct regulator_desc pm886_regulators[] = {
 static int pm886_regulator_probe(struct platform_device *pdev)
 {
 	struct pm886_chip *chip = dev_get_drvdata(pdev->dev.parent);
+	const struct regulator_desc *rdesc;
 	struct regulator_config rcfg = { };
 	struct device *dev = &pdev->dev;
-	struct regulator_desc *rdesc;
 	struct regulator_dev *rdev;
 	struct i2c_client *page;
 	struct regmap *regmap;
