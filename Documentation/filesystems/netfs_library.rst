@@ -111,12 +111,12 @@ The following services are provided:
  * Allow the netfs to expand a readahead request in both directions to meet its
    needs.
 
- * Allow the netfs to partially fulfil a read, which will then be resubmitted.
+ * Allow the netfs to partially fulfill a read, which will then be resubmitted.
 
  * Handle local caching, allowing cached data and server-read data to be
    interleaved for a single request.
 
- * Handle clearing of bufferage that aren't on the server.
+ * Handle clearing of bufferages that aren't on the server.
 
  * Handle retrying of reads that failed, switching reads from the cache to the
    server as necessary.
