@@ -38,6 +38,8 @@ properties:
 
   ti,x-plate-ohms:
     description: resistance of the touchscreen's X plates in ohm (defaults to 280)
+    $ref: /schemas/types.yaml#/definitions/uint32
+
 
   ti,esd-recovery-timeout-ms:
     description: |
