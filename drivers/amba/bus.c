@@ -205,6 +205,42 @@ err_out:
 	return ret;
 }
 
+static int amba_proxy_probe(struct amba_device *adev,
+			    const struct amba_id *id)
+{
+	WARN(1, "Stub driver should never match any device.\n");
+	return -ENODEV;
+}
+
+static const struct amba_id amba_stub_drv_ids[] = {
+	{ 0, 0 },
+};
+
+static struct amba_driver amba_proxy_drv = {
+	.drv = {
+		.name = "amba-proxy",
+	},
+	.probe = amba_proxy_probe,
+	.id_table = amba_stub_drv_ids,
+};
+
+static int __init amba_stub_drv_init(void)
+{
+	if (!IS_ENABLED(CONFIG_MODULES))
+		return 0;
+
+	/*
+	 * The amba_match() function will get called only if there is at least
+	 * one amba driver registered. If all amba drivers are modules and are
+	 * only loaded based on uevents, then we'll hit a chicken-and-egg
+	 * situation where amba_match() is waiting on drivers and drivers are
+	 * waiting on amba_match(). So, register a stub driver to make sure
+	 * amba_match() is called even if no amba driver has been registered.
+	 */
+	return __amba_driver_register(&amba_proxy_drv, NULL);
+}
+late_initcall_sync(amba_stub_drv_init);
+
 static int amba_match(struct device *dev, const struct device_driver *drv)
 {
 	struct amba_device *pcdev = to_amba_device(dev);
@@ -455,42 +491,6 @@ static int __init amba_init(void)
 }
 
 postcore_initcall(amba_init);
-
-static int amba_proxy_probe(struct amba_device *adev,
-			    const struct amba_id *id)
-{
-	WARN(1, "Stub driver should never match any device.\n");
-	return -ENODEV;
-}
-
-static const struct amba_id amba_stub_drv_ids[] = {
-	{ 0, 0 },
-};
-
-static struct amba_driver amba_proxy_drv = {
-	.drv = {
-		.name = "amba-proxy",
-	},
-	.probe = amba_proxy_probe,
-	.id_table = amba_stub_drv_ids,
-};
-
-static int __init amba_stub_drv_init(void)
-{
-	if (!IS_ENABLED(CONFIG_MODULES))
-		return 0;
-
-	/*
-	 * The amba_match() function will get called only if there is at least
-	 * one amba driver registered. If all amba drivers are modules and are
-	 * only loaded based on uevents, then we'll hit a chicken-and-egg
-	 * situation where amba_match() is waiting on drivers and drivers are
-	 * waiting on amba_match(). So, register a stub driver to make sure
-	 * amba_match() is called even if no amba driver has been registered.
-	 */
-	return __amba_driver_register(&amba_proxy_drv, NULL);
-}
-late_initcall_sync(amba_stub_drv_init);
 
 /**
  *	__amba_driver_register - register an AMBA device driver
