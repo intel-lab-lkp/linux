@@ -149,13 +149,6 @@ enum max77826_regulators {
 		.owner = THIS_MODULE,					\
 	}
 
-
-
-struct max77826_regulator_info {
-	struct regmap *regmap;
-	const struct regulator_desc *rdesc;
-};
-
 static const struct regmap_config max77826_regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 8,
@@ -235,30 +228,19 @@ static int max77826_read_device_id(struct regmap *regmap, struct device *dev)
 static int max77826_i2c_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
-	struct max77826_regulator_info *info;
 	struct regulator_config config = {};
 	struct regulator_dev *rdev;
 	struct regmap *regmap;
 	int i;
 
-	info = devm_kzalloc(dev, sizeof(struct max77826_regulator_info),
-				GFP_KERNEL);
-	if (!info)
-		return -ENOMEM;
-
-	info->rdesc = max77826_regulators_desc;
 	regmap = devm_regmap_init_i2c(client, &max77826_regmap_config);
 	if (IS_ERR(regmap)) {
 		dev_err(dev, "Failed to allocate regmap!\n");
 		return PTR_ERR(regmap);
 	}
 
-	info->regmap = regmap;
-	i2c_set_clientdata(client, info);
-
 	config.dev = dev;
 	config.regmap = regmap;
-	config.driver_data = info;
 
 	for (i = 0; i < MAX77826_MAX_REGULATORS; i++) {
 		rdev = devm_regulator_register(dev,
