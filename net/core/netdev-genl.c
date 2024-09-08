@@ -304,6 +304,58 @@ int netdev_nl_napi_get_dumpit(struct sk_buff *skb, struct netlink_callback *cb)
 }
 
 static int
+netdev_nl_napi_set_config(struct napi_storage *napi_storage, struct genl_info *info)
+{
+	u64 gro_flush_timeout = 0;
+	int defer = 0;
+
+	if (info->attrs[NETDEV_A_NAPI_DEFER_HARD_IRQS]) {
+		defer = nla_get_s32(info->attrs[NETDEV_A_NAPI_DEFER_HARD_IRQS]);
+		WRITE_ONCE(napi_storage->defer_hard_irqs, defer);
+	}
+
+	if (info->attrs[NETDEV_A_NAPI_GRO_FLUSH_TIMEOUT]) {
+		gro_flush_timeout = nla_get_uint(info->attrs[NETDEV_A_NAPI_GRO_FLUSH_TIMEOUT]);
+		WRITE_ONCE(napi_storage->gro_flush_timeout, gro_flush_timeout);
+	}
+
+	return 0;
+}
+
+int netdev_nl_napi_set_doit(struct sk_buff *skb, struct genl_info *info)
+{
+	struct napi_storage *napi_storage;
+	struct net_device *netdev;
+	u32 ifindex;
+	u32 index;
+	int err;
+
+	if (GENL_REQ_ATTR_CHECK(info, NETDEV_A_NAPI_IFINDEX))
+		return -EINVAL;
+
+	if (GENL_REQ_ATTR_CHECK(info, NETDEV_A_NAPI_INDEX))
+		return -EINVAL;
+
+	ifindex = nla_get_u32(info->attrs[NETDEV_A_NAPI_IFINDEX]);
+	index = nla_get_u32(info->attrs[NETDEV_A_NAPI_INDEX]);
+
+	rtnl_lock();
+
+	netdev = __dev_get_by_index(genl_info_net(info), ifindex);
+	if (netdev) {
+		napi_storage = &netdev->napi_storage[index];
+		err = netdev_nl_napi_set_config(napi_storage, info);
+	} else {
+		NL_SET_BAD_ATTR(info->extack, info->attrs[NETDEV_A_NAPI_IFINDEX]);
+		err = -ENODEV;
+	}
+
+	rtnl_unlock();
+
+	return err;
+}
+
+static int
 netdev_nl_queue_fill_one(struct sk_buff *rsp, struct net_device *netdev,
 			 u32 q_idx, u32 q_type, const struct genl_info *info)
 {
