@@ -252,6 +252,13 @@ attribute-sets:
         checks:
           min: 0
           max: s32-max
+      -
+        name: defer-hard-irqs
+        doc: The number of consecutive empty polls before IRQ deferral ends
+             and hardware IRQs are re-enabled.
+        type: u32
+        checks:
+          max: s32-max
   -
     name: queue
     attributes:
@@ -602,6 +609,7 @@ operations:
             - irq
             - pid
             - index
+            - defer-hard-irqs
       dump:
         request:
           attributes:
