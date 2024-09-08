@@ -16,6 +16,7 @@
 #include <linux/irq.h>
 
 #include <asm/bcache.h>
+#include <asm/ipi.h>
 #include <asm/mips-cps.h>
 #include <asm/mips_mt.h>
 #include <asm/mipsregs.h>
