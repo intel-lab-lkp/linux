@@ -9,6 +9,7 @@
 #include <linux/module.h>
 #include <linux/cleanup.h>
 #include <linux/configfs.h>
+#include <linux/ctype.h>
 #include <crypto/hash_info.h>
 #include <crypto/hash.h>
 
@@ -481,12 +482,14 @@ EXPORT_SYMBOL_GPL(tsm_unregister);
 
 enum _rtmr_bin_attr_index {
 	_RTMR_BATTR_DIGEST,
+	_RTMR_BATTR_LOG,
 	_RTMR_BATTR__COUNT,
 };
 
 struct _rtmr {
 	struct kobject kobj;
 	struct bin_attribute battrs[_RTMR_BATTR__COUNT];
+	bool log_in_sync;
 };
 
 struct _mr_provider {
@@ -505,8 +508,40 @@ _rtmr_mr(const struct _rtmr *rtmr)
 		.private;
 }
 
+static inline char *_rtmr_log(const struct _rtmr *rtmr)
+{
+	return (char *)rtmr->battrs[_RTMR_BATTR_LOG].private;
+}
+
+static inline size_t _rtmr_log_size(const struct _rtmr *rtmr)
+{
+	return rtmr->battrs[_RTMR_BATTR_LOG].size;
+}
+
+static inline void _rtmr_log_set_buf(struct _rtmr *rtmr, char *log)
+{
+	rtmr->battrs[_RTMR_BATTR_LOG].private = log;
+}
+
+static inline void _rtmr_log_inc_size(struct _rtmr *rtmr, size_t size)
+{
+	rtmr->battrs[_RTMR_BATTR_LOG].size += size;
+}
+
+static inline int _rtmr_log_update_attribute(struct _rtmr *rtmr)
+{
+	struct bin_attribute *attrs_to_update[] = {
+		&rtmr->battrs[_RTMR_BATTR_LOG],
+		NULL,
+	};
+	struct attribute_group agrp = {
+		.bin_attrs = attrs_to_update,
+	};
+	return sysfs_update_group(&rtmr->kobj, &agrp);
+}
+
 static inline struct _mr_provider *
-_mr_to_group(const struct tsm_measurement_register *mr, struct kobject *kobj)
+_mr_to_provider(const struct tsm_measurement_register *mr, struct kobject *kobj)
 {
 	if (!(mr->mr_flags & TSM_MR_F_X))
 		return container_of(kobj, struct _mr_provider, kset.kobj);
@@ -561,7 +596,7 @@ static ssize_t _mr_read(struct file *filp, struct kobject *kobj,
 	mr = (typeof(mr))attr->private;
 	BUG_ON(mr->mr_size != attr->size);
 
-	pvd = _mr_to_group(mr, kobj);
+	pvd = _mr_to_provider(mr, kobj);
 	rc = down_read_interruptible(&pvd->rwsem);
 	if (rc)
 		return rc;
@@ -591,9 +626,66 @@ static ssize_t _mr_read(struct file *filp, struct kobject *kobj,
 	return rc ?: count;
 }
 
-static inline size_t snprint_hex(char *sbuf, size_t size, const u8 *data,
+#define _EVENTLOG_GRANULARITY HPAGE_SIZE
+
+static ssize_t _log_extend_line(struct _rtmr *rtmr, const char *line,
+				const char *end, int newlines,
+				struct crypto_shash *tfm)
+{
+	struct _mr_provider *pvd;
+	pvd = container_of(rtmr->kobj.kset, typeof(*pvd), kset);
+	lockdep_assert_held_write(&pvd->rwsem);
+
+	BUG_ON(line > end);
+
+	while (line < end && isspace(line[0]))
+		++line;
+	while (line < end && isspace(end[-1]))
+		--end;
+	if (line == end)
+		return 0;
+
+	ssize_t count = end - line;
+	char *log = _rtmr_log(rtmr);
+	size_t needed = _rtmr_log_size(rtmr) + count + newlines;
+	if (ksize(log) < needed) {
+		log = krealloc(log,
+			       ALIGN(needed + _EVENTLOG_GRANULARITY / 2,
+				     _EVENTLOG_GRANULARITY),
+			       GFP_KERNEL);
+		if (!log)
+			return -ENOMEM;
+
+		_rtmr_log_set_buf(rtmr, log);
+	}
+
+	log += _rtmr_log_size(rtmr);
+	for (int i = 0; i < newlines; ++i)
+		*log++ = '\n';
+
+	if (*line != '#') {
+		u8 digest[SHA512_DIGEST_SIZE];
+		BUG_ON(tfm == NULL);
+		BUG_ON(sizeof(digest) < crypto_shash_digestsize(tfm));
+
+		int rc = crypto_shash_tfm_digest(tfm, line, count, digest);
+		if (!rc)
+			rc = _call_extend(pvd, _rtmr_mr(rtmr), digest);
+		if (rc)
+			return rc;
+	}
+
+	memcpy(log, line, count);
+	log[count] = '\n';
+	_rtmr_log_inc_size(rtmr, count += newlines + 1);
+
+	return _rtmr_log_update_attribute(rtmr) ?: count;
+}
+
+static inline size_t snprint_hex(char *sbuf, ssize_t size, const u8 *data,
 				 size_t len)
 {
+	BUG_ON(size < len * 2);
 	size_t ret = 0;
 	for (size_t i = 0; i < len; ++i)
 		ret += snprintf(sbuf + ret, size - ret, "%02x", data[i]);
@@ -614,15 +706,26 @@ static ssize_t _mr_write(struct file *filp, struct kobject *kobj,
 	mr = (typeof(mr))attr->private;
 	BUG_ON(mr->mr_size != attr->size);
 
-	pvd = _mr_to_group(mr, kobj);
+	pvd = _mr_to_provider(mr, kobj);
 	rc = down_write_killable(&pvd->rwsem);
 	if (rc)
 		return rc;
 
-	if (mr->mr_flags & TSM_MR_F_X)
-		rc = pvd->provider->extend(pvd->provider, mr, (u8 *)page);
-	else {
-		BUG_ON(!(mr->mr_flags & TSM_MR_F_W));
+	if (mr->mr_flags & TSM_MR_F_X) {
+		struct _rtmr *rtmr;
+		rtmr = container_of(kobj, typeof(*rtmr), kobj);
+
+		char ext_line[0x100] = "# .EXTEND ";
+		size_t len = strnlen(ext_line, sizeof(ext_line));
+		len += snprint_hex(ext_line + len, sizeof(ext_line) - len, page,
+				   count);
+		rc = _log_extend_line(rtmr, ext_line, ext_line + len,
+				      rtmr->log_in_sync, NULL);
+		if (!IS_ERR_VALUE(rc))
+			rc = _call_extend(pvd, mr, page);
+		if (!rc)
+			rtmr->log_in_sync = false;
+	} else {
 		memcpy(mr->mr_value, page, count);
 	}
 
@@ -636,11 +739,110 @@ static ssize_t _mr_write(struct file *filp, struct kobject *kobj,
 	return rc ?: count;
 }
 
+static ssize_t _log_read(struct file *filp, struct kobject *kobj,
+			 struct bin_attribute *attr, char *page, loff_t off,
+			 size_t count)
+{
+	struct _mr_provider *pvd;
+	int rc;
+
+	if (unlikely(off < 0))
+		return -EINVAL;
+
+	if (unlikely(off > attr->size))
+		return 0;
+
+	count = min(count, attr->size - off);
+	if (likely(count > 0)) {
+		pvd = container_of(kobj->kset, typeof(*pvd), kset);
+		rc = down_read_interruptible(&pvd->rwsem);
+		if (rc)
+			return rc;
+
+		memcpy(page, (char *)attr->private + off, count);
+
+		up_read(&pvd->rwsem);
+	}
+
+	return count;
+}
+
+static ssize_t _log_extend(struct _rtmr *rtmr, const char *page, size_t count,
+			   struct crypto_shash *tfm)
+{
+	ssize_t rc = 0, sz = 0;
+	for (size_t i = 0; i < count && !IS_ERR_VALUE(rc);) {
+		size_t j;
+		for (j = i; j < count && (page[j] != '\n' && page[j] != '\r');)
+			++j;
+
+		rc = _log_extend_line(rtmr, &page[i], &page[j], sz == 0, tfm);
+		sz += rc;
+
+		for (i = j; i < count && (page[i] == '\n' || page[i] == '\r');)
+			++i;
+	}
+
+	return IS_ERR_VALUE(rc) ? rc : sz;
+}
+
+DEFINE_FREE(shash, struct crypto_shash *,
+	    if (!IS_ERR(_T)) crypto_free_shash(_T));
+
+static ssize_t append_event_store(struct kobject *kobj,
+				  struct kobj_attribute *attr, const char *page,
+				  size_t count)
+{
+	struct _rtmr *rtmr;
+	rtmr = container_of(kobj, typeof(*rtmr), kobj);
+
+	const struct tsm_measurement_register *mr;
+	mr = _rtmr_mr(rtmr);
+
+	struct crypto_shash *tfm __free(shash) =
+		crypto_alloc_shash(hash_algo_name[mr->mr_hash], 0, 0);
+	if (IS_ERR(tfm))
+		return PTR_ERR(tfm);
+
+	struct _mr_provider *pvd;
+	pvd = container_of(kobj->kset, typeof(*pvd), kset);
+
+	ssize_t rc = down_write_killable(&pvd->rwsem);
+	if (rc)
+		return rc;
+
+	if (!rtmr->log_in_sync) {
+		if (mr->mr_flags & TSM_MR_F_L)
+			rc = _call_refresh(pvd, mr);
+
+		if (!IS_ERR_VALUE(rc)) {
+			char sync[0x100] = "SYNC ";
+			strncat(sync, hash_algo_name[mr->mr_hash],
+				sizeof(sync));
+			size_t len = strnlen(sync, sizeof(sync));
+			sync[len++] = '/';
+			len += snprint_hex(sync + len, sizeof(sync) - len,
+					   mr->mr_value, mr->mr_size);
+			rc = _log_extend_line(rtmr, sync, sync + len,
+					      _rtmr_log_size(rtmr) > 0, tfm);
+		}
+	}
+
+	if (!IS_ERR_VALUE(rc)) {
+		rtmr->log_in_sync = true;
+		rc = _log_extend(rtmr, page, count, tfm);
+	}
+
+	up_write(&pvd->rwsem);
+	return IS_ERR_VALUE(rc) ? rc : count;
+}
+
 static void _rtmr_release(struct kobject *kobj)
 {
 	struct _rtmr *rtmr;
 	rtmr = container_of(kobj, typeof(*rtmr), kobj);
 	pr_debug("%s(%s)\n", __func__, kobject_name(kobj));
+	kfree(_rtmr_log(rtmr));
 	kfree(rtmr);
 }
 
@@ -663,7 +865,7 @@ static struct _rtmr *_rtmr_create(const struct tsm_measurement_register *mr,
 	sysfs_bin_attr_init(&rtmr->battrs[_RTMR_BATTR_DIGEST]);
 	rtmr->battrs[_RTMR_BATTR_DIGEST].attr.name = "digest";
 	if (mr->mr_flags & TSM_MR_F_W)
-	rtmr->battrs[_RTMR_BATTR_DIGEST].attr.mode |= S_IWUSR;
+		rtmr->battrs[_RTMR_BATTR_DIGEST].attr.mode |= S_IWUSR;
 	if (mr->mr_flags & TSM_MR_F_R)
 		rtmr->battrs[_RTMR_BATTR_DIGEST].attr.mode |= S_IRUGO;
 
@@ -671,6 +873,11 @@ static struct _rtmr *_rtmr_create(const struct tsm_measurement_register *mr,
 	rtmr->battrs[_RTMR_BATTR_DIGEST].read = _mr_read;
 	rtmr->battrs[_RTMR_BATTR_DIGEST].write = _mr_write;
 	rtmr->battrs[_RTMR_BATTR_DIGEST].private = (void *)mr;
+
+	sysfs_bin_attr_init(&rtmr->battrs[_RTMR_BATTR_LOG]);
+	rtmr->battrs[_RTMR_BATTR_LOG].attr.name = "event_log";
+	rtmr->battrs[_RTMR_BATTR_LOG].attr.mode = S_IRUGO;
+	rtmr->battrs[_RTMR_BATTR_LOG].read = _log_read;
 
 	rtmr->kobj.kset = &pvd->kset;
 	rc = kobject_init_and_add(&rtmr->kobj, &_rtmr_ktype, NULL, "%s",
@@ -734,6 +941,7 @@ DEFINE_FREE(_unregister_measurement_provider, struct _mr_provider *,
 int tsm_register_measurement_provider(struct tsm_measurement_provider *tpvd)
 {
 	static struct kobj_attribute _attr_hash = __ATTR_RO(hash_algo);
+	static struct kobj_attribute _attr_append = __ATTR_WO(append_event);
 
 	struct _mr_provider *pvd __free(_unregister_measurement_provider);
 	int rc, nr;
@@ -754,11 +962,11 @@ int tsm_register_measurement_provider(struct tsm_measurement_provider *tpvd)
 			return PTR_ERR(rtmr);
 
 		struct attribute *attrs[] = {
+			&_attr_append.attr,
 			&_attr_hash.attr,
 			NULL,
 		};
-		struct bin_attribute
-			*battrs[_RTMR_BATTR__COUNT + 1] = {};
+		struct bin_attribute *battrs[_RTMR_BATTR__COUNT + 1] = {};
 		for (int j = 0; j < _RTMR_BATTR__COUNT; ++j)
 			battrs[j] = &rtmr->battrs[j];
 		struct attribute_group agrp = {
