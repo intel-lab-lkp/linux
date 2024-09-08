@@ -122,25 +122,32 @@ SRBDS System Information
 ------------------------
 The Linux kernel provides vulnerability status information through sysfs.  For
 SRBDS this can be accessed by the following sysfs file:
-/sys/devices/system/cpu/vulnerabilities/srbds
+
+  /sys/devices/system/cpu/vulnerabilities/srbds
 
 The possible values contained in this file are:
 
- ============================== =============================================
- Not affected                   Processor not vulnerable
- Vulnerable                     Processor vulnerable and mitigation disabled
- Vulnerable: No microcode       Processor vulnerable and microcode is missing
-                                mitigation
- Mitigation: Microcode          Processor is vulnerable and mitigation is in
-                                effect.
- Mitigation: TSX disabled       Processor is only vulnerable when TSX is
-                                enabled while this system was booted with TSX
-                                disabled.
- Unknown: Dependent on
- hypervisor status              Running on virtual guest processor that is
-                                affected but with no way to know if host
-                                processor is mitigated or vulnerable.
- ============================== =============================================
+.. list-table::
+
+  * - 'Not affected'
+    - Processor not vulnerable.
+
+  * - 'Vulnerable'
+    - Processor vulnerable and mitigation disabled.
+
+  * - 'Vulnerable: No microcode'
+    - Processor vulnerable and microcode is missing mitigation.
+
+  * - 'Mitigation: Microcode'
+    - Processor is vulnerable and mitigation is in effect.
+
+  * - 'Mitigation: TSX disabled'
+    - Processor is only vulnerable when TSX is enabled while this system was
+      booted with TSX disabled.
+
+  * - 'Unknown: Dependent on hypervisor status'
+    - Running on virtual guest processor that is affected but with no way to
+      know if host processor is mitigated or vulnerable.
 
 SRBDS Default mitigation
 ------------------------

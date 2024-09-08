@@ -123,34 +123,43 @@ The Linux kernel provides a sysfs interface to enumerate the current L1TF
 status of the system: whether the system is vulnerable, and which
 mitigations are active. The relevant sysfs file is:
 
-/sys/devices/system/cpu/vulnerabilities/l1tf
+  /sys/devices/system/cpu/vulnerabilities/l1tf
 
 The possible values in this file are:
 
-  ===========================   ===============================
-  'Not affected'		The processor is not vulnerable
-  'Mitigation: PTE Inversion'	The host protection is active
-  ===========================   ===============================
+.. list-table::
+
+  * - 'Not affected'
+    - The processor is not vulnerable.
+
+  * - 'Mitigation: PTE Inversion'
+    - The host protection is active.
 
 If KVM/VMX is enabled and the processor is vulnerable then the following
 information is appended to the 'Mitigation: PTE Inversion' part:
 
   - SMT status:
 
-    =====================  ================
-    'VMX: SMT vulnerable'  SMT is enabled
-    'VMX: SMT disabled'    SMT is disabled
-    =====================  ================
+    .. list-table::
+
+      * - 'VMX: SMT vulnerable'
+        - SMT is enabled.
+
+      * - 'VMX: SMT disabled'
+        - SMT is disabled.
 
   - L1D Flush mode:
 
-    ================================  ====================================
-    'L1D vulnerable'		      L1D flushing is disabled
+    .. list-table::
 
-    'L1D conditional cache flushes'   L1D flush is conditionally enabled
+      * - 'L1D vulnerable'
+        - L1D flushing is disabled.
 
-    'L1D cache flushes'		      L1D flush is unconditionally enabled
-    ================================  ====================================
+      * - 'L1D conditional cache flushes'
+        - L1D flush is conditionally enabled.
+
+      * - 'L1D cache flushes'
+        - L1D flush is unconditionally enabled.
 
 The resulting grade of protection is discussed in the following sections.
 

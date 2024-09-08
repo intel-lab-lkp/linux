@@ -82,21 +82,24 @@ The Linux kernel provides a sysfs interface to enumerate the current
 vulnerability status of the system: whether the system is vulnerable, and
 which mitigations are active. The relevant sysfs file is:
 
-	/sys/devices/system/cpu/vulnerabilities/reg_file_data_sampling
+  /sys/devices/system/cpu/vulnerabilities/reg_file_data_sampling
 
 The possible values in this file are:
 
-  .. list-table::
+.. list-table::
 
-     * - 'Not affected'
-       - The processor is not vulnerable
-     * - 'Vulnerable'
-       - The processor is vulnerable, but no mitigation enabled
-     * - 'Vulnerable: No microcode'
-       - The processor is vulnerable but microcode is not updated.
-     * - 'Mitigation: Clear Register File'
-       - The processor is vulnerable and the CPU buffer clearing mitigation is
-	 enabled.
+  * - 'Not affected'
+    - The processor is not vulnerable.
+
+  * - 'Vulnerable'
+    - The processor is vulnerable, but no mitigation enabled.
+
+  * - 'Vulnerable: No microcode'
+    - The processor is vulnerable but microcode is not updated.
+
+  * - 'Mitigation: Clear Register File'
+    - The processor is vulnerable and the CPU buffer clearing mitigation is
+      enabled.
 
 References
 ----------
