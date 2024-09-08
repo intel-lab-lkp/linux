@@ -833,7 +833,7 @@ msm_gpu_create_private_address_space(struct msm_gpu *gpu, struct task_struct *ta
 	 */
 	if (gpu->funcs->create_private_address_space) {
 		aspace = gpu->funcs->create_private_address_space(gpu);
-		if (!IS_ERR(aspace))
+		if (!IS_ERR_OR_NULL(aspace))
 			aspace->pid = get_pid(task_pid(task));
 	}
 
