@@ -1348,14 +1348,15 @@ void ocfs2_refresh_inode(struct inode *inode,
 		inode->i_blocks = 0;
 	else
 		inode->i_blocks = ocfs2_inode_sector_count(inode);
+
+	spin_unlock(&OCFS2_I(inode)->ip_lock);
+
 	inode_set_atime(inode, le64_to_cpu(fe->i_atime),
 			le32_to_cpu(fe->i_atime_nsec));
 	inode_set_mtime(inode, le64_to_cpu(fe->i_mtime),
 			le32_to_cpu(fe->i_mtime_nsec));
 	inode_set_ctime(inode, le64_to_cpu(fe->i_ctime),
 			le32_to_cpu(fe->i_ctime_nsec));
-
-	spin_unlock(&OCFS2_I(inode)->ip_lock);
 }
 
 int ocfs2_validate_inode_block(struct super_block *sb,
