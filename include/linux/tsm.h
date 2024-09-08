@@ -5,6 +5,7 @@
 #include <linux/sizes.h>
 #include <linux/types.h>
 #include <linux/uuid.h>
+#include <uapi/linux/hash_info.h>
 
 #define TSM_INBLOB_MAX 64
 #define TSM_OUTBLOB_MAX SZ_32K
@@ -109,4 +110,65 @@ struct tsm_ops {
 
 int tsm_register(const struct tsm_ops *ops, void *priv);
 int tsm_unregister(const struct tsm_ops *ops);
+
+/**
+ * struct tsm_measurement_register - describes an architectural measurement
+ *                                   register (MR)
+ * @mr_name: name of the MR
+ * @mr_value: buffer containing the current value of the MR
+ * @mr_size: size of the MR - typically the digest size of @mr_hash
+ * @mr_flags: bitwise OR of flags defined in enum tsm_measurement_register_flag
+ * @mr_hash: optional hash identifier defined in include/uapi/linux/hash_info.h
+ */
+struct tsm_measurement_register {
+	const char *mr_name;
+	void *mr_value;
+	u32 mr_size;
+	u32 mr_flags;
+	enum hash_algo mr_hash;
+};
+
+/**
+ * enum tsm_measurement_register_flag - properties of an MR
+ * @TSM_MR_F_X: this MR is extensible, should be set for RTMRs
+ * @TSM_MR_F_W: this MR is writable, should be set if direct extension to an
+ *              RTMR is allowed
+ * @TSM_MR_F_R: this MR is readable. All MRs should have this flag set
+ * @TSM_MR_F_L: this MR is live - writes to other MRs may change this MR
+ * @TSM_MR_F_LIVE: shorthand for L (live) and R (readable)
+ * @TSM_MR_F_RTMR: shorthand for LIVE and X (extensible)
+ */
+enum tsm_measurement_register_flag {
+	TSM_MR_F_X = 1,
+	TSM_MR_F_W = 2,
+	TSM_MR_F_R = 4,
+	TSM_MR_F_L = 8,
+	TSM_MR_F_LIVE = TSM_MR_F_L | TSM_MR_F_R,
+	TSM_MR_F_RTMR = TSM_MR_F_LIVE | TSM_MR_F_X,
+};
+
+#define TSM_MR_(h, f) .mr_size = h##_DIGEST_SIZE, .mr_flags = (f)
+#define TSM_MR(h) TSM_MR_(h, TSM_MR_F_R)
+#define TSM_RTMR(h) TSM_MR_(h, TSM_MR_F_RTMR), .mr_hash = HASH_ALGO_##h
+
+/**
+ * struct tsm_measurement_provider - define CC specific MRs and methods for
+ *                                   updating them
+ * @name: name of the measurement provider
+ * @mrs: array of MR definitions ending with mr_name set to %NULL
+ * @refresh: invoked to update the specified MR
+ * @extend: invoked to extend the specified MR with mr_size bytes
+ */
+struct tsm_measurement_provider {
+	const char *name;
+	const struct tsm_measurement_register *mrs;
+	int (*refresh)(struct tsm_measurement_provider *,
+		       const struct tsm_measurement_register *);
+	int (*extend)(struct tsm_measurement_provider *,
+		      const struct tsm_measurement_register *, const u8 *);
+};
+
+int tsm_register_measurement_provider(struct tsm_measurement_provider *);
+int tsm_unregister_measurement_provider(struct tsm_measurement_provider *);
+
 #endif /* __TSM_H */

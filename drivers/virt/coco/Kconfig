@@ -5,7 +5,9 @@
 
 config TSM_REPORTS
 	select CONFIGFS_FS
-	tristate
+	select SYSFS
+	select CRYPTO_HASH_INFO
+	tristate "Trusted Security Module (TSM) sysfs/configfs support"
 
 source "drivers/virt/coco/efi_secret/Kconfig"
 

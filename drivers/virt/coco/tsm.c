@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright(c) 2023 Intel Corporation. All rights reserved. */
 
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-
 #include <linux/tsm.h>
 #include <linux/err.h>
 #include <linux/slab.h>
@@ -11,6 +9,8 @@
 #include <linux/module.h>
 #include <linux/cleanup.h>
 #include <linux/configfs.h>
+#include <crypto/hash_info.h>
+#include <crypto/hash.h>
 
 static struct tsm_provider {
 	const struct tsm_ops *ops;
@@ -166,8 +166,9 @@ static ssize_t tsm_report_service_guid_store(struct config_item *cfg,
 }
 CONFIGFS_ATTR_WO(tsm_report_, service_guid);
 
-static ssize_t tsm_report_service_manifest_version_store(struct config_item *cfg,
-							 const char *buf, size_t len)
+static ssize_t
+tsm_report_service_manifest_version_store(struct config_item *cfg,
+					  const char *buf, size_t len)
 {
 	struct tsm_report *report = to_tsm_report(cfg);
 	unsigned int val;
@@ -187,8 +188,8 @@ static ssize_t tsm_report_service_manifest_version_store(struct config_item *cfg
 }
 CONFIGFS_ATTR_WO(tsm_report_, service_manifest_version);
 
-static ssize_t tsm_report_inblob_write(struct config_item *cfg,
-				       const void *buf, size_t count)
+static ssize_t tsm_report_inblob_write(struct config_item *cfg, const void *buf,
+				       size_t count)
 {
 	struct tsm_report *report = to_tsm_report(cfg);
 	int rc;
@@ -341,7 +342,8 @@ static struct configfs_attribute *tsm_report_attrs[] = {
 	[TSM_REPORT_PRIVLEVEL_FLOOR] = &tsm_report_attr_privlevel_floor,
 	[TSM_REPORT_SERVICE_PROVIDER] = &tsm_report_attr_service_provider,
 	[TSM_REPORT_SERVICE_GUID] = &tsm_report_attr_service_guid,
-	[TSM_REPORT_SERVICE_MANIFEST_VER] = &tsm_report_attr_service_manifest_version,
+	[TSM_REPORT_SERVICE_MANIFEST_VER] =
+		&tsm_report_attr_service_manifest_version,
 	NULL,
 };
 
@@ -383,7 +385,8 @@ static bool tsm_report_is_visible(struct config_item *item,
 }
 
 static bool tsm_report_is_bin_visible(struct config_item *item,
-				      struct configfs_bin_attribute *attr, int n)
+				      struct configfs_bin_attribute *attr,
+				      int n)
 {
 	guard(rwsem_read)(&tsm_rwsem);
 	if (!provider.ops)
@@ -476,7 +479,370 @@ int tsm_unregister(const struct tsm_ops *ops)
 }
 EXPORT_SYMBOL_GPL(tsm_unregister);
 
+enum _rtmr_bin_attr_index {
+	_RTMR_BATTR_DIGEST,
+	_RTMR_BATTR__COUNT,
+};
+
+struct _rtmr {
+	struct kobject kobj;
+	struct bin_attribute battrs[_RTMR_BATTR__COUNT];
+};
+
+struct _mr_provider {
+	struct kset kset;
+	struct rw_semaphore rwsem;
+	struct bin_attribute *static_mrs;
+	struct tsm_measurement_provider *provider;
+	bool in_sync;
+};
+
+static inline const struct tsm_measurement_register *
+_rtmr_mr(const struct _rtmr *rtmr)
+{
+	return (struct tsm_measurement_register *)rtmr
+		->battrs[_RTMR_BATTR_DIGEST]
+		.private;
+}
+
+static inline struct _mr_provider *
+_mr_to_group(const struct tsm_measurement_register *mr, struct kobject *kobj)
+{
+	if (!(mr->mr_flags & TSM_MR_F_X))
+		return container_of(kobj, struct _mr_provider, kset.kobj);
+	else
+		return container_of(kobj->kset, struct _mr_provider, kset);
+}
+
+static inline int _call_refresh(struct _mr_provider *pvd,
+				const struct tsm_measurement_register *mr)
+{
+	int rc = pvd->provider->refresh(pvd->provider, mr);
+	if (rc)
+		pr_warn(KBUILD_MODNAME ": %s.extend(%s) failed %d\n",
+			kobject_name(&pvd->kset.kobj), mr->mr_name, rc);
+	return rc;
+}
+
+static inline int _call_extend(struct _mr_provider *pvd,
+			       const struct tsm_measurement_register *mr,
+			       const u8 *data)
+{
+	int rc = pvd->provider->extend(pvd->provider, mr, data);
+	if (rc)
+		pr_warn(KBUILD_MODNAME ": %s.extend(%s) failed %d\n",
+			kobject_name(&pvd->kset.kobj), mr->mr_name, rc);
+	return rc;
+}
+
+static ssize_t hash_algo_show(struct kobject *kobj, struct kobj_attribute *attr,
+			      char *page)
+{
+	struct _rtmr *rtmr;
+	rtmr = container_of(kobj, typeof(*rtmr), kobj);
+	return sysfs_emit(page, "%s", hash_algo_name[_rtmr_mr(rtmr)->mr_hash]);
+}
+
+static ssize_t _mr_read(struct file *filp, struct kobject *kobj,
+			struct bin_attribute *attr, char *page, loff_t off,
+			size_t count)
+{
+	const struct tsm_measurement_register *mr;
+	struct _mr_provider *pvd;
+	int rc;
+
+	if (off < 0 || off > attr->size)
+		return -EINVAL;
+
+	count = min(count, attr->size - (size_t)off);
+	if (!count)
+		return count;
+
+	mr = (typeof(mr))attr->private;
+	BUG_ON(mr->mr_size != attr->size);
+
+	pvd = _mr_to_group(mr, kobj);
+	rc = down_read_interruptible(&pvd->rwsem);
+	if (rc)
+		return rc;
+
+	if ((mr->mr_flags & TSM_MR_F_L) && !pvd->in_sync) {
+		up_read(&pvd->rwsem);
+
+		rc = down_write_killable(&pvd->rwsem);
+		if (rc)
+			return rc;
+
+		if (!pvd->in_sync) {
+			rc = _call_refresh(pvd, mr);
+			pvd->in_sync = !rc;
+		}
+
+		downgrade_write(&pvd->rwsem);
+	}
+
+	if (!rc)
+		memcpy(page, mr->mr_value + off, count);
+	else
+		pr_debug(KBUILD_MODNAME ": refresh(%s,%s)=%d\n",
+			 kobject_name(&pvd->kset.kobj), mr->mr_name, rc);
+
+	up_read(&pvd->rwsem);
+	return rc ?: count;
+}
+
+static inline size_t snprint_hex(char *sbuf, size_t size, const u8 *data,
+				 size_t len)
+{
+	size_t ret = 0;
+	for (size_t i = 0; i < len; ++i)
+		ret += snprintf(sbuf + ret, size - ret, "%02x", data[i]);
+	return ret;
+}
+
+static ssize_t _mr_write(struct file *filp, struct kobject *kobj,
+			 struct bin_attribute *attr, char *page, loff_t off,
+			 size_t count)
+{
+	const struct tsm_measurement_register *mr;
+	struct _mr_provider *pvd;
+	ssize_t rc;
+
+	if (off != 0 || count != attr->size)
+		return -EINVAL;
+
+	mr = (typeof(mr))attr->private;
+	BUG_ON(mr->mr_size != attr->size);
+
+	pvd = _mr_to_group(mr, kobj);
+	rc = down_write_killable(&pvd->rwsem);
+	if (rc)
+		return rc;
+
+	if (mr->mr_flags & TSM_MR_F_X)
+		rc = pvd->provider->extend(pvd->provider, mr, (u8 *)page);
+	else {
+		BUG_ON(!(mr->mr_flags & TSM_MR_F_W));
+		memcpy(mr->mr_value, page, count);
+	}
+
+	if (!rc)
+		pvd->in_sync = false;
+	else
+		pr_warn(KBUILD_MODNAME ": extending %s/%s failed with %ld\n",
+			kobject_name(&pvd->kset.kobj), mr->mr_name, rc);
+
+	up_write(&pvd->rwsem);
+	return rc ?: count;
+}
+
+static void _rtmr_release(struct kobject *kobj)
+{
+	struct _rtmr *rtmr;
+	rtmr = container_of(kobj, typeof(*rtmr), kobj);
+	pr_debug("%s(%s)\n", __func__, kobject_name(kobj));
+	kfree(rtmr);
+}
+
+static struct kobj_type _rtmr_ktype = {
+	.release = _rtmr_release,
+	.sysfs_ops = &kobj_sysfs_ops,
+};
+
+static struct _rtmr *_rtmr_create(const struct tsm_measurement_register *mr,
+				  struct _mr_provider *pvd)
+{
+	struct _rtmr *rtmr __free(kfree);
+	int rc;
+
+	BUG_ON(!(mr->mr_flags & TSM_MR_F_X));
+	rtmr = kzalloc(sizeof(*rtmr), GFP_KERNEL);
+	if (!rtmr)
+		return ERR_PTR(-ENOMEM);
+
+	sysfs_bin_attr_init(&rtmr->battrs[_RTMR_BATTR_DIGEST]);
+	rtmr->battrs[_RTMR_BATTR_DIGEST].attr.name = "digest";
+	if (mr->mr_flags & TSM_MR_F_W)
+	rtmr->battrs[_RTMR_BATTR_DIGEST].attr.mode |= S_IWUSR;
+	if (mr->mr_flags & TSM_MR_F_R)
+		rtmr->battrs[_RTMR_BATTR_DIGEST].attr.mode |= S_IRUGO;
+
+	rtmr->battrs[_RTMR_BATTR_DIGEST].size = mr->mr_size;
+	rtmr->battrs[_RTMR_BATTR_DIGEST].read = _mr_read;
+	rtmr->battrs[_RTMR_BATTR_DIGEST].write = _mr_write;
+	rtmr->battrs[_RTMR_BATTR_DIGEST].private = (void *)mr;
+
+	rtmr->kobj.kset = &pvd->kset;
+	rc = kobject_init_and_add(&rtmr->kobj, &_rtmr_ktype, NULL, "%s",
+				  mr->mr_name);
+	if (rc)
+		return ERR_PTR(rc);
+
+	return_ptr(rtmr);
+}
+
+static void _mr_provider_release(struct kobject *kobj)
+{
+	struct _mr_provider *pvd;
+	pvd = container_of(kobj, typeof(*pvd), kset.kobj);
+	pr_debug("%s(%s)\n", __func__, kobject_name(kobj));
+	BUG_ON(!list_empty(&pvd->kset.list));
+	kfree(pvd->static_mrs);
+	kfree(pvd);
+}
+
+static struct kobj_type _mr_provider_ktype = {
+	.release = _mr_provider_release,
+	.sysfs_ops = &kobj_sysfs_ops,
+};
+
 static struct config_group *tsm_report_group;
+static struct kset *_sysfs_tsm;
+
+static struct _mr_provider *
+_mr_provider_create(struct tsm_measurement_provider *tpvd)
+{
+	struct _mr_provider *pvd __free(kfree);
+	int rc;
+
+	pvd = kzalloc(sizeof(*pvd), GFP_KERNEL);
+	if (!pvd)
+		return ERR_PTR(-ENOMEM);
+
+	if (!tpvd->name || !tpvd->mrs || !tpvd->refresh || !tpvd->extend)
+		return ERR_PTR(-EINVAL);
+
+	rc = kobject_set_name(&pvd->kset.kobj, "%s", tpvd->name);
+	if (rc)
+		return ERR_PTR(rc);
+
+	pvd->kset.kobj.kset = _sysfs_tsm;
+	pvd->kset.kobj.ktype = &_mr_provider_ktype;
+	pvd->provider = tpvd;
+
+	rc = kset_register(&pvd->kset);
+	if (rc)
+		return ERR_PTR(rc);
+
+	return_ptr(pvd);
+}
+
+DEFINE_FREE(_unregister_measurement_provider, struct _mr_provider *,
+	    if (!IS_ERR_OR_NULL(_T))
+		    tsm_unregister_measurement_provider(_T->provider));
+
+int tsm_register_measurement_provider(struct tsm_measurement_provider *tpvd)
+{
+	static struct kobj_attribute _attr_hash = __ATTR_RO(hash_algo);
+
+	struct _mr_provider *pvd __free(_unregister_measurement_provider);
+	int rc, nr;
+
+	pvd = _mr_provider_create(tpvd);
+	if (IS_ERR(pvd))
+		return PTR_ERR(pvd);
+
+	nr = 0;
+	for (int i = 0; tpvd->mrs[i].mr_name; ++i) {
+		if (!(tpvd->mrs[i].mr_flags & TSM_MR_F_X)) {
+			++nr;
+			continue;
+		}
+
+		struct _rtmr *rtmr = _rtmr_create(&tpvd->mrs[i], pvd);
+		if (IS_ERR(rtmr))
+			return PTR_ERR(rtmr);
+
+		struct attribute *attrs[] = {
+			&_attr_hash.attr,
+			NULL,
+		};
+		struct bin_attribute
+			*battrs[_RTMR_BATTR__COUNT + 1] = {};
+		for (int j = 0; j < _RTMR_BATTR__COUNT; ++j)
+			battrs[j] = &rtmr->battrs[j];
+		struct attribute_group agrp = {
+			.attrs = attrs,
+			.bin_attrs = battrs,
+		};
+		rc = sysfs_create_group(&rtmr->kobj, &agrp);
+		if (rc)
+			return rc;
+	}
+
+	if (nr > 0) {
+		struct bin_attribute *static_mrs __free(kfree);
+		struct bin_attribute **battrs __free(kfree);
+
+		static_mrs = kcalloc(sizeof(*static_mrs), nr, GFP_KERNEL);
+		battrs = kcalloc(sizeof(*battrs), nr + 1, GFP_KERNEL);
+		if (!battrs || !static_mrs)
+			return -ENOMEM;
+
+		for (int i = 0, j = 0; tpvd->mrs[i].mr_name; ++i) {
+			if (tpvd->mrs[i].mr_flags & TSM_MR_F_X)
+				continue;
+
+			static_mrs[j].attr.name = tpvd->mrs[i].mr_name;
+			if (tpvd->mrs[i].mr_flags & TSM_MR_F_R) {
+				static_mrs[j].attr.mode |= S_IRUGO;
+				static_mrs[j].read = _mr_read;
+			}
+			if (tpvd->mrs[i].mr_flags & TSM_MR_F_W) {
+				static_mrs[j].attr.mode |= S_IWUSR;
+				static_mrs[j].write = _mr_write;
+			}
+			static_mrs[j].size = tpvd->mrs[i].mr_size;
+			static_mrs[j].private = (void *)&tpvd->mrs[i];
+
+			battrs[j] = &static_mrs[j];
+			++j;
+
+			BUG_ON(j > nr);
+		}
+
+		struct attribute_group agrp = {
+			.bin_attrs = battrs,
+		};
+		rc = sysfs_create_group(&pvd->kset.kobj, &agrp);
+		if (rc)
+			return rc;
+
+		pvd->static_mrs = no_free_ptr(static_mrs);
+	}
+
+	pvd = NULL;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(tsm_register_measurement_provider);
+
+static void _kset_put_children(struct kset *kset)
+{
+	struct kobject *p, *n;
+	spin_lock(&kset->list_lock);
+	list_for_each_entry_safe(p, n, &kset->list, entry) {
+		spin_unlock(&kset->list_lock);
+		kobject_put(p);
+		spin_lock(&kset->list_lock);
+	}
+	spin_unlock(&kset->list_lock);
+}
+
+int tsm_unregister_measurement_provider(struct tsm_measurement_provider *tpvd)
+{
+	struct kobject *kobj = kset_find_obj(_sysfs_tsm, tpvd->name);
+	if (!kobj)
+		return -ENOENT;
+
+	struct _mr_provider *pvd = container_of(kobj, typeof(*pvd), kset.kobj);
+	BUG_ON(pvd->provider != tpvd);
+
+	_kset_put_children(&pvd->kset);
+	kset_unregister(&pvd->kset);
+	kobject_put(kobj);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(tsm_unregister_measurement_provider);
 
 static int __init tsm_init(void)
 {
@@ -497,16 +863,22 @@ static int __init tsm_init(void)
 	}
 	tsm_report_group = tsm;
 
+	_sysfs_tsm = kset_create_and_add("tsm", NULL, kernel_kobj);
+	if (!_sysfs_tsm)
+		return -ENOMEM;
+
 	return 0;
 }
 module_init(tsm_init);
 
 static void __exit tsm_exit(void)
 {
+	kset_unregister(_sysfs_tsm);
 	configfs_unregister_default_group(tsm_report_group);
 	configfs_unregister_subsystem(&tsm_configfs);
 }
 module_exit(tsm_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Provide Trusted Security Module attestation reports via configfs");
+MODULE_DESCRIPTION(
+	"Provide Trusted Security Module attestation reports via configfs");
