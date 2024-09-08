@@ -259,6 +259,11 @@ attribute-sets:
         type: u32
         checks:
           max: s32-max
+      -
+        name: gro-flush-timeout
+        doc: The timeout, in nanoseconds, of when to trigger the NAPI
+             watchdog timer and schedule NAPI processing.
+        type: uint
   -
     name: queue
     attributes:
@@ -610,6 +615,7 @@ operations:
             - pid
             - index
             - defer-hard-irqs
+            - gro-flush-timeout
       dump:
         request:
           attributes:
