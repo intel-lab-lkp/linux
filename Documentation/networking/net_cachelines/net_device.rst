@@ -106,6 +106,7 @@ rx_handler_func_t*                  rx_handler              read_mostly         
 void*                               rx_handler_data         read_mostly         -                   
 struct_netdev_queue*                ingress_queue           read_mostly         -                   
 struct_bpf_mprog_entry              tcx_ingress             -                   read_mostly         sch_handle_ingress
+struct napi_storage*                napi_storage            -                   read_mostly         napi_complete_done
 struct_nf_hook_entries*             nf_hooks_ingress                                                
 unsigned_char                       broadcast[32]                                                   
 struct_cpu_rmap*                    rx_cpu_rmap                                                     

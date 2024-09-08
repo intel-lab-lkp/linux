@@ -343,6 +343,14 @@ struct gro_list {
 #define GRO_HASH_BUCKETS	8
 
 /*
+ * Structure for per-NAPI storage
+ */
+struct napi_storage {
+	u64 gro_flush_timeout;
+	u32 defer_hard_irqs;
+};
+
+/*
  * Structure for NAPI scheduling similar to tasklet but with weighting
  */
 struct napi_struct {
@@ -377,6 +385,8 @@ struct napi_struct {
 	struct list_head	dev_list;
 	struct hlist_node	napi_hash_node;
 	int			irq;
+	int			index;
+	struct napi_storage	*napi_storage;
 };
 
 enum {
@@ -2009,6 +2019,9 @@ enum netdev_reg_state {
  *	@dpll_pin: Pointer to the SyncE source pin of a DPLL subsystem,
  *		   where the clock is recovered.
  *
+ *	@napi_storage: An array of napi_storage structures containing per-NAPI
+ *		       settings.
+ *
  *	FIXME: cleanup struct net_device such that network protocol info
  *	moves out.
  */
@@ -2087,6 +2100,7 @@ struct net_device {
 #ifdef CONFIG_NET_XGRESS
 	struct bpf_mprog_entry __rcu *tcx_ingress;
 #endif
+	struct napi_storage	*napi_storage;
 	__cacheline_group_end(net_device_read_rx);
 
 	char			name[IFNAMSIZ];
@@ -2649,6 +2663,24 @@ netif_napi_add_tx_weight(struct net_device *dev,
 }
 
 /**
+ * netif_napi_add_storage - initialize a NAPI context and set storage area
+ * @dev: network device
+ * @napi: NAPI context
+ * @poll: polling function
+ * @weight: the poll weight of this NAPI
+ * @index: the NAPI index
+ */
+static inline void
+netif_napi_add_storage(struct net_device *dev, struct napi_struct *napi,
+		       int (*poll)(struct napi_struct *, int), int weight,
+		       int index)
+{
+	napi->index = index;
+	napi->napi_storage = &dev->napi_storage[index];
+	netif_napi_add_weight(dev, napi, poll, weight);
+}
+
+/**
  * netif_napi_add_tx() - initialize a NAPI context to be used for Tx only
  * @dev:  network device
  * @napi: NAPI context
@@ -2683,6 +2715,8 @@ void __netif_napi_del(struct napi_struct *napi);
  */
 static inline void netif_napi_del(struct napi_struct *napi)
 {
+	napi->napi_storage = NULL;
+	napi->index = -1;
 	__netif_napi_del(napi);
 	synchronize_net();
 }
