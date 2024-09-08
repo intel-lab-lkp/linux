@@ -89,12 +89,12 @@ int arch_prepare_kprobe(struct kprobe *p)
 		goto out;
 	}
 
-	if (copy_from_kernel_nofault(&prev_insn, p->addr - 1,
-			sizeof(mips_instruction)) == 0 &&
-	    insn_has_delayslot(prev_insn)) {
-		pr_notice("Kprobes for branch delayslot are not supported\n");
-		ret = -EINVAL;
-		goto out;
+	if (!copy_from_kernel_nofault(&prev_insn, p->addr - 1, sizeof(union mips_instruction))) {
+		if (insn_has_delayslot(prev_insn)) {
+			pr_notice("Kprobes for branch delayslot are not supported\n");
+			ret = -EINVAL;
+			goto out;
+		}
 	}
 
 	if (__insn_is_compact_branch(insn)) {
