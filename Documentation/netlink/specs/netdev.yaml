@@ -244,6 +244,14 @@ attribute-sets:
              threaded mode. If NAPI is not in threaded mode (i.e. uses normal
              softirq context), the attribute will be absent.
         type: u32
+      -
+        name: index
+        doc: The index of the NAPI instance. Refers to persistent storage for
+             any NAPI with the same index.
+        type: u32
+        checks:
+          min: 0
+          max: s32-max
   -
     name: queue
     attributes:
@@ -593,6 +601,7 @@ operations:
             - ifindex
             - irq
             - pid
+            - index
       dump:
         request:
           attributes:
