@@ -1062,7 +1062,7 @@ static const struct file_operations drm_stub_fops = {
 	.llseek = noop_llseek,
 };
 
-static void drm_core_exit(void)
+static void __exit drm_core_exit(void)
 {
 	drm_privacy_screen_lookup_exit();
 	drm_panic_exit();
@@ -1084,18 +1084,18 @@ static int __init drm_core_init(void)
 	ret = drm_sysfs_init();
 	if (ret < 0) {
 		DRM_ERROR("Cannot create DRM class: %d\n", ret);
-		goto error;
+		goto err_ida;
 	}
 
 	drm_debugfs_root = debugfs_create_dir("dri", NULL);
 
 	ret = register_chrdev(DRM_MAJOR, "drm", &drm_stub_fops);
 	if (ret < 0)
-		goto error;
+		goto err_debugfs;
 
 	ret = accel_core_init();
 	if (ret < 0)
-		goto error;
+		goto err_chrdev;
 
 	drm_panic_init();
 
@@ -1106,8 +1106,14 @@ static int __init drm_core_init(void)
 	DRM_DEBUG("Initialized\n");
 	return 0;
 
-error:
-	drm_core_exit();
+err_chrdev:
+	unregister_chrdev(DRM_MAJOR, "drm");
+err_debugfs:
+	debugfs_remove(drm_debugfs_root);
+	drm_sysfs_destroy();
+err_ida:
+	WARN_ON(!xa_empty(&drm_minors_xa));
+	drm_connector_ida_destroy();
 	return ret;
 }
 

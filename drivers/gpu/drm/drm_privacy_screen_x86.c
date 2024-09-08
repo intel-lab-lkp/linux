@@ -98,7 +98,7 @@ void __init drm_privacy_screen_lookup_init(void)
 	}
 }
 
-void drm_privacy_screen_lookup_exit(void)
+void __exit drm_privacy_screen_lookup_exit(void)
 {
 	if (arch_lookup.provider)
 		drm_privacy_screen_lookup_remove(&arch_lookup);

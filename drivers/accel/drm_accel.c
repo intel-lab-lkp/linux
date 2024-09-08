@@ -191,7 +191,7 @@ static const struct file_operations accel_stub_fops = {
 	.llseek = noop_llseek,
 };
 
-void accel_core_exit(void)
+void __exit accel_core_exit(void)
 {
 	unregister_chrdev(ACCEL_MAJOR, "accel");
 	debugfs_remove(accel_debugfs_root);

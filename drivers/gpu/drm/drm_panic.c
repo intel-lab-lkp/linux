@@ -679,7 +679,7 @@ static void __init drm_panic_qr_init(void)
 				   GFP_KERNEL);
 }
 
-static void drm_panic_qr_exit(void)
+static void __exit drm_panic_qr_exit(void)
 {
 	kfree(qrbuf1);
 	qrbuf1 = NULL;
@@ -1058,7 +1058,7 @@ void __init drm_panic_init(void)
 /**
  * drm_panic_exit() - Free the resources taken by drm_panic_exit()
  */
-void drm_panic_exit(void)
+void __exit drm_panic_exit(void)
 {
 	drm_panic_qr_exit();
 }

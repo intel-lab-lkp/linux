@@ -155,8 +155,6 @@ int drm_sysfs_init(void)
  */
 void drm_sysfs_destroy(void)
 {
-	if (IS_ERR_OR_NULL(drm_class))
-		return;
 	drm_sysfs_acpi_unregister();
 	class_destroy(drm_class);
 	drm_class = NULL;
