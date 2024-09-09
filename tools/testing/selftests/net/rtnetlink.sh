@@ -1306,12 +1306,9 @@ if [ "$(id -u)" -ne 0 ];then
 	exit $ksft_skip
 fi
 
-for x in ip tc;do
-	$x -Version 2>/dev/null >/dev/null
-	if [ $? -ne 0 ];then
-		end_test "SKIP: Could not run test without the $x tool"
-		exit $ksft_skip
-	fi
+#check for dependencies
+for x in ip tc ethtool;do
+	require_command $x
 done
 
 while getopts t:hvpP o; do
