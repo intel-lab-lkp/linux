@@ -347,7 +347,7 @@ static int chnl_net_init(struct net_device *dev)
 	struct chnl_net *priv;
 	ASSERT_RTNL();
 	priv = netdev_priv(dev);
-	strncpy(priv->name, dev->name, sizeof(priv->name));
+	strscpy_pad(priv->name, dev->name);
 	INIT_LIST_HEAD(&priv->list_field);
 	return 0;
 }
