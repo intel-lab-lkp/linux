@@ -413,6 +413,35 @@ void of_set_phy_eee_broken(struct phy_device *phydev)
 }
 
 /**
+ * of_set_phy_master_slave - Set the master/slave mode of the PHY
+ *
+ * @phydev: The phy_device struct
+ *
+ * Set master/slave configuration of the PHY based on the device tree.
+ */
+void of_set_phy_master_slave(struct phy_device *phydev)
+{
+	struct device_node *node = phydev->mdio.dev.of_node;
+	const char *master;
+
+	if (!IS_ENABLED(CONFIG_OF_MDIO))
+		return;
+
+	if (!node)
+		return;
+
+	if (of_property_read_string(node, "master-slave", &master))
+		return;
+
+	if (strcmp(master, "forced-master") == 0)
+		phydev->master_slave_set = MASTER_SLAVE_CFG_MASTER_FORCE;
+	else if (strcmp(master, "forced-slave") == 0)
+		phydev->master_slave_set = MASTER_SLAVE_CFG_SLAVE_FORCE;
+	else
+		phydev_warn(phydev, "Unknown master-slave mode %s\n", master);
+}
+
+/**
  * phy_resolve_aneg_pause - Determine pause autoneg results
  *
  * @phydev: The phy_device struct
