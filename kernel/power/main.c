@@ -559,6 +559,8 @@ late_initcall(pm_debugfs_init);
 
 #endif /* CONFIG_PM_SLEEP */
 
+static suspend_state_t pm_state = PM_SUSPEND_ON;
+
 #ifdef CONFIG_PM_SLEEP_DEBUG
 /*
  * pm_print_times: print time taken by devices to suspend and resume.
@@ -613,7 +615,9 @@ bool pm_debug_messages_on __read_mostly;
 
 bool pm_debug_messages_should_print(void)
 {
-	return pm_debug_messages_on && pm_suspend_target_state != PM_SUSPEND_ON;
+	return pm_debug_messages_on &&
+	       (pm_suspend_target_state != PM_SUSPEND_ON ||
+		pm_state != PM_SUSPEND_ON);
 }
 EXPORT_SYMBOL_GPL(pm_debug_messages_should_print);
 
@@ -715,7 +719,6 @@ static suspend_state_t decode_state(const char *buf, size_t n)
 static ssize_t state_store(struct kobject *kobj, struct kobj_attribute *attr,
 			   const char *buf, size_t n)
 {
-	suspend_state_t state;
 	int error;
 
 	error = pm_autosleep_lock();
@@ -727,17 +730,19 @@ static ssize_t state_store(struct kobject *kobj, struct kobj_attribute *attr,
 		goto out;
 	}
 
-	state = decode_state(buf, n);
-	if (state < PM_SUSPEND_MAX) {
-		if (state == PM_SUSPEND_MEM)
-			state = mem_sleep_current;
+	pm_state = decode_state(buf, n);
+	if (pm_state < PM_SUSPEND_MAX) {
+		if (pm_state == PM_SUSPEND_MEM)
+			pm_state = mem_sleep_current;
 
-		error = pm_suspend(state);
-	} else if (state == PM_SUSPEND_MAX) {
+		error = pm_suspend(pm_state);
+	} else if (pm_state == PM_SUSPEND_MAX) {
 		error = hibernate();
 	} else {
 		error = -EINVAL;
 	}
+
+	pm_state = PM_SUSPEND_ON;
 
  out:
 	pm_autosleep_unlock();
