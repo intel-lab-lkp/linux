@@ -1125,6 +1125,8 @@ int __must_check hid_hw_start(struct hid_device *hdev,
 void hid_hw_stop(struct hid_device *hdev);
 int __must_check hid_hw_open(struct hid_device *hdev);
 void hid_hw_close(struct hid_device *hdev);
+int __must_check devm_hid_hw_start_and_open(struct hid_device *hdev,
+					    unsigned int connect_mask);
 void hid_hw_request(struct hid_device *hdev,
 		    struct hid_report *report, enum hid_class_request reqtype);
 int __hid_hw_raw_request(struct hid_device *hdev,
