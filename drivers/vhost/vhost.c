@@ -2340,12 +2340,26 @@ long vhost_dev_ioctl(struct vhost_dev *d, unsigned int ioctl, void __user *argp)
 {
 	struct eventfd_ctx *ctx;
 	u64 p;
-	long r;
+	long r = 0;
 	int i, fd;
+	bool enforce_task;
 
 	/* If you are not the owner, you can become one */
 	if (ioctl == VHOST_SET_OWNER) {
 		r = vhost_dev_set_owner(d);
+		goto done;
+	}
+	if (ioctl == VHOST_SET_ENFORCE_TASK) {
+		/* Is there an owner already? */
+		if (vhost_dev_has_owner(d)) {
+			r = -EBUSY;
+			goto done;
+		}
+		if (copy_from_user(&enforce_task, argp, sizeof(enforce_task))) {
+			r = -EFAULT;
+			goto done;
+		}
+		enforce_kthread = !enforce_task;
 		goto done;
 	}
 
