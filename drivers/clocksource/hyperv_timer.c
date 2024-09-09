@@ -27,7 +27,10 @@
 #include <asm/mshyperv.h>
 
 static struct clock_event_device __percpu *hv_clock_event;
-static u64 hv_sched_clock_offset __ro_after_init;
+
+/* Can have negative values, after resume from hibernation, so keep them s64 */
+static s64 hv_sched_clock_offset __read_mostly;
+static s64 hv_sched_clock_offset_saved;
 
 /*
  * If false, we're using the old mechanism for stimer0 interrupts
@@ -50,6 +53,9 @@ static bool direct_mode_enabled;
 static int stimer0_irq = -1;
 static int stimer0_message_sint;
 static __maybe_unused DEFINE_PER_CPU(long, stimer0_evt);
+
+static void (*old_save_sched_clock_state)(void);
+static void (*old_restore_sched_clock_state)(void);
 
 /*
  * Common code for stimer0 interrupts coming via Direct Mode or
@@ -434,6 +440,39 @@ static u64 noinstr read_hv_sched_clock_tsc(void)
 		(NSEC_PER_SEC / HV_CLOCK_HZ);
 }
 
+/*
+ * Hyper-V clock counter resets during hibernation. Save and restore clock
+ * offset during suspend/resume, while also considering the time passed
+ * before suspend. This is to make sure that sched_clock using hv tsc page
+ * based clocksource, proceeds from where it left off during suspend and
+ * it shows correct time for the timestamps of kernel messages after resume.
+ */
+static void save_hv_clock_tsc_state(void)
+{
+	hv_sched_clock_offset_saved = hv_read_reference_counter();
+}
+
+static void restore_hv_clock_tsc_state(void)
+{
+	/*
+	 * Time passed before suspend = hv_sched_clock_offset_saved
+	 *                            - hv_sched_clock_offset (old)
+	 *
+	 * After Hyper-V clock counter resets, hv_sched_clock_offset needs a correction.
+	 *
+	 * New time = hv_read_reference_counter() (future) - hv_sched_clock_offset (new)
+	 * New time = Time passed before suspend + hv_read_reference_counter() (future)
+	 *                                       - hv_read_reference_counter() (now)
+	 *
+	 * Solving the above two equations gives:
+	 *
+	 * hv_sched_clock_offset (new) = hv_sched_clock_offset (old)
+	 *                             - hv_sched_clock_offset_saved
+	 *                             + hv_read_reference_counter() (now))
+	 */
+	hv_sched_clock_offset -= hv_sched_clock_offset_saved - hv_read_reference_counter();
+}
+
 static void suspend_hv_clock_tsc(struct clocksource *arg)
 {
 	union hv_reference_tsc_msr tsc_msr;
@@ -454,6 +493,24 @@ static void resume_hv_clock_tsc(struct clocksource *arg)
 	tsc_msr.enable = 1;
 	tsc_msr.pfn = tsc_pfn;
 	hv_set_msr(HV_MSR_REFERENCE_TSC, tsc_msr.as_uint64);
+}
+
+/*
+ * Functions to override save_sched_clock_state and restore_sched_clock_state
+ * functions of x86_platform. The Hyper-V clock counter is reset during
+ * suspend-resume and the offset used to measure time needs to be
+ * corrected, post resume.
+ */
+static void hv_save_sched_clock_state(void)
+{
+	save_hv_clock_tsc_state();
+	old_save_sched_clock_state();
+}
+
+static void hv_restore_sched_clock_state(void)
+{
+	restore_hv_clock_tsc_state();
+	old_restore_sched_clock_state();
 }
 
 #ifdef HAVE_VDSO_CLOCKMODE_HVCLOCK
@@ -538,6 +595,11 @@ static void __init hv_init_tsc_clocksource(void)
 		return;
 
 	hv_read_reference_counter = read_hv_clock_tsc;
+
+	old_save_sched_clock_state = x86_platform.save_sched_clock_state;
+	x86_platform.save_sched_clock_state = hv_save_sched_clock_state;
+	old_restore_sched_clock_state = x86_platform.restore_sched_clock_state;
+	x86_platform.restore_sched_clock_state = hv_restore_sched_clock_state;
 
 	/*
 	 * TSC page mapping works differently in root compared to guest.
