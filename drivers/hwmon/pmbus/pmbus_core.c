@@ -108,6 +108,8 @@ struct pmbus_data {
 
 	int vout_low[PMBUS_PAGES];	/* voltage low margin */
 	int vout_high[PMBUS_PAGES];	/* voltage high margin */
+
+	u8 revision;	/* The PMBus revision the device is compliant with */
 };
 
 struct pmbus_debugfs_entry {
@@ -1095,7 +1097,11 @@ static int pmbus_get_boolean(struct i2c_client *client, struct pmbus_boolean *b,
 
 	regval = status & mask;
 	if (regval) {
-		ret = _pmbus_write_byte_data(client, page, reg, regval);
+		if (data->revision >= PMBUS_REV_12)
+			ret = _pmbus_write_byte_data(client, page, reg, regval);
+		else
+			pmbus_clear_fault_page(client, page);
+
 		if (ret)
 			goto unlock;
 	}
@@ -2652,6 +2658,10 @@ static int pmbus_init_common(struct i2c_client *client, struct pmbus_data *data,
 			return ret;
 		}
 	}
+
+	ret = i2c_smbus_read_byte_data(client, PMBUS_REVISION);
+	if (ret > 0)
+		data->revision = ret;
 
 	if (info->pages <= 0 || info->pages > PMBUS_PAGES) {
 		dev_err(dev, "Bad number of PMBus pages: %d\n", info->pages);
