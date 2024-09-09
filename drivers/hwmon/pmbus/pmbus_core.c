@@ -1769,6 +1769,12 @@ static const struct pmbus_limit_attr vout_limit_attrs[] = {
 		.alarm = "crit_alarm",
 		.sbit = PB_VOLTAGE_OV_FAULT,
 	}, {
+		.reg = PMBUS_POWER_GOOD_ON,
+		.attr = "good_on",
+	}, {
+		.reg = PMBUS_POWER_GOOD_OFF,
+		.attr = "good_off",
+	}, {
 		.reg = PMBUS_VIRT_READ_VOUT_AVG,
 		.update = true,
 		.attr = "average",
