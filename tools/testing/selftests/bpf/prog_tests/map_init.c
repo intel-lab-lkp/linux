@@ -6,6 +6,7 @@
 
 #define TEST_VALUE 0x1234
 #define FILL_VALUE 0xdeadbeef
+#define PCPU_MIN_UNIT_SIZE 32768
 
 static int nr_cpus;
 static int duration;
@@ -118,6 +119,35 @@ static int check_values_one_cpu(pcpu_map_value_t *value, map_value_t expected)
 
 	return 0;
 }
+/*
+ * percpu map value size is bound by PCPU_MIN_UNIT_SIZE
+ * check the errno when the value exceed PCPU_MIN_UNIT_SIZE
+ */
+static void test_pcpu_map_value_size(void)
+{
+	struct test_map_init *skel;
+	int err;
+	int value_sz = PCPU_MIN_UNIT_SIZE + 1;
+	enum bpf_map_type map_types[] = { BPF_MAP_TYPE_PERCPU_ARRAY,
+					  BPF_MAP_TYPE_PERCPU_HASH,
+					  BPF_MAP_TYPE_LRU_PERCPU_HASH };
+	for (int i = 0; i < ARRAY_SIZE(map_types); i++) {
+		skel = test_map_init__open();
+		if (!ASSERT_OK_PTR(skel, "skel_open"))
+			return;
+		err = bpf_map__set_type(skel->maps.hashmap2, map_types[i]);
+		if (!ASSERT_OK(err, "bpf_map__set_type"))
+			goto error;
+		err = bpf_map__set_value_size(skel->maps.hashmap2, value_sz);
+		if (!ASSERT_OK(err, "bpf_map__set_value_size"))
+			goto error;
+
+		err = test_map_init__load(skel);
+		ASSERT_EQ(err, -E2BIG, "skel_load");
+error:
+		test_map_init__destroy(skel);
+	}
+}
 
 /* Add key=1 elem with values set for all CPUs
  * Delete elem key=1
@@ -211,4 +241,6 @@ void test_map_init(void)
 		test_pcpu_map_init();
 	if (test__start_subtest("pcpu_lru_map_init"))
 		test_pcpu_lru_map_init();
+	if (test__start_subtest("pcpu map value size"))
+		test_pcpu_map_value_size();
 }
