@@ -1404,6 +1404,7 @@ static int rswitch_phy_device_init(struct rswitch_device *rdev)
 		goto out;
 	__set_bit(rdev->etha->phy_interface, phydev->host_interfaces);
 	phydev->mac_managed_pm = true;
+	phy_device_free(phydev);
 
 	phydev = of_phy_connect(rdev->ndev, phy, rswitch_adjust_link, 0,
 				rdev->etha->phy_interface);
