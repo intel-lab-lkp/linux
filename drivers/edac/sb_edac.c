@@ -1797,7 +1797,7 @@ static void get_memory_layout(const struct mem_ctl_info *mci)
 	 * Step 2) Get SAD range and SAD Interleave list
 	 * TAD registers contain the interleave wayness. However, it
 	 * seems simpler to just discover it indirectly, with the
-	 * algorithm bellow.
+	 * algorithm below.
 	 */
 	prv = 0;
 	for (n_sads = 0; n_sads < pvt->info.max_sad; n_sads++) {
@@ -2055,7 +2055,7 @@ static int get_memory_error_data(struct mem_ctl_info *mci,
 
 	/*
 	 * Step 0) Check if the address is at special memory ranges
-	 * The check bellow is probably enough to fill all cases where
+	 * The check below is probably enough to fill all cases where
 	 * the error is not inside a memory, except for the legacy
 	 * range (e. g. VGA addresses). It is unlikely, however, that the
 	 * memory controller would generate an error on that range.
