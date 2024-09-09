@@ -130,6 +130,42 @@ struct pldmfw {
 	struct device *dev;
 };
 
+/* pldmfw_priv structure used to store details about the PLDM image file as it is
+ * being validated and processed.
+ */
+struct pldmfw_priv {
+	struct pldmfw *context;
+	const struct firmware *fw;
+
+	/* current offset of firmware image */
+	size_t offset;
+
+	struct list_head records;
+	struct list_head components;
+
+	/* PLDM Firmware Package Header */
+	const struct __pldm_header *header;
+	u16 total_header_size;
+
+	/* length of the component bitmap */
+	u16 component_bitmap_len;
+	u16 bitmap_size;
+
+	/* Start of the component image information */
+	u16 component_count;
+	const u8 *component_start;
+
+	/* Start pf the firmware device id records */
+	const u8 *record_start;
+	u8 record_count;
+
+	/* The CRC at the end of the package header */
+	u32 header_crc;
+
+	struct pldmfw_record *matching_record;
+};
+
+
 bool pldmfw_op_pci_match_record(struct pldmfw *context, struct pldmfw_record *record);
 
 /* Operations invoked by the generic PLDM firmware update engine. Used to
@@ -160,6 +196,8 @@ struct pldmfw_ops {
 	int (*finalize_update)(struct pldmfw *context);
 };
 
+int pldm_parse_image(struct pldmfw_priv *data);
+void pldmfw_free_priv(struct pldmfw_priv *data);
 int pldmfw_flash_image(struct pldmfw *context, const struct firmware *fw);
 
 #endif
