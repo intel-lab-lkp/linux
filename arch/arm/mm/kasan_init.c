@@ -215,7 +215,7 @@ void __init kasan_init(void)
 	/*
 	 * We are going to perform proper setup of shadow memory.
 	 *
-	 * At first we should unmap early shadow (clear_pgds() call bellow).
+	 * At first we should unmap early shadow (clear_pgds() call below).
 	 * However, instrumented code can't execute without shadow memory.
 	 *
 	 * To keep the early shadow memory MMU tables around while setting up

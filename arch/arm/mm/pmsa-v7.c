@@ -434,7 +434,7 @@ void __init pmsav7_setup(void)
 		/*
                  * In case we overwrite RAM region we set earlier in
                  * head-nommu.S (which is cachable) all subsequent
-                 * data access till we setup RAM bellow would be done
+                 * data access till we setup RAM below would be done
                  * with BG region (which is uncachable), thus we need
                  * to clean and invalidate cache.
 		 */
