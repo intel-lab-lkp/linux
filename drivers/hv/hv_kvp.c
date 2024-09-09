@@ -662,6 +662,9 @@ void hv_kvp_onchannelcallback(void *context)
 	if (kvp_transaction.state > HVUTIL_READY)
 		return;
 
+	if (channel->state != CHANNEL_OPENED_STATE)
+		return;
+
 	if (vmbus_recvpacket(channel, recv_buffer, HV_HYP_PAGE_SIZE * 4, &recvlen, &requestid)) {
 		pr_err_ratelimited("KVP request received. Could not read into recv buf\n");
 		return;

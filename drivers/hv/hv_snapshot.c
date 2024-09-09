@@ -301,6 +301,9 @@ void hv_vss_onchannelcallback(void *context)
 	if (vss_transaction.state > HVUTIL_READY)
 		return;
 
+	if (channel->state != CHANNEL_OPENED_STATE)
+		return;
+
 	if (vmbus_recvpacket(channel, recv_buffer, VSS_MAX_PKT_SIZE, &recvlen, &requestid)) {
 		pr_err_ratelimited("VSS request received. Could not read into recv buf\n");
 		return;

@@ -657,6 +657,14 @@ static int __vmbus_open(struct vmbus_channel *newchannel,
 			return -ENOMEM;
 	}
 
+	/*
+	 * The channel callbacks of KVP/VSS may run before __vmbus_open()
+	 * finishes (see kvp_register_done() -> ... -> kvp_poll_wrapper()), so
+	 * they check newchannel->state to tell the ringbuffer has been fully
+	 * initialized or not. Disable and enable the tasklet to avoid the race.
+	 */
+	tasklet_disable(&newchannel->callback_event);
+
 	newchannel->state = CHANNEL_OPENING_STATE;
 	newchannel->onchannel_callback = onchannelcallback;
 	newchannel->channel_callback_context = context;
@@ -750,6 +758,8 @@ static int __vmbus_open(struct vmbus_channel *newchannel,
 	}
 
 	newchannel->state = CHANNEL_OPENED_STATE;
+	tasklet_enable(&newchannel->callback_event);
+
 	kfree(open_info);
 	return 0;
 
@@ -766,6 +776,7 @@ error_clean_ring:
 	hv_ringbuffer_cleanup(&newchannel->inbound);
 	vmbus_free_requestor(&newchannel->requestor);
 	newchannel->state = CHANNEL_OPEN_STATE;
+	tasklet_enable(&newchannel->callback_event);
 	return err;
 }
 
