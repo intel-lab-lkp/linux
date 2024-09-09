@@ -852,6 +852,8 @@ static void ufs_qcom_advertise_quirks(struct ufs_hba *hba)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 
+	hba->quirks |= UFSHCD_QUIRK_DISABLE_UIC_INTR_FOR_PWR_CMDS;
+
 	if (host->hw_ver.major == 0x2)
 		hba->quirks |= UFSHCD_QUIRK_BROKEN_UFS_HCI_VERSION;
 

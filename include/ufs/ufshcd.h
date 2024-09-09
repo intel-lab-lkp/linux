@@ -676,6 +676,12 @@ enum ufshcd_quirks {
 	 * the standard best practice for managing keys).
 	 */
 	UFSHCD_QUIRK_KEYS_IN_PRDT			= 1 << 24,
+
+	/*
+	 * Disable the UIC interrupt before submitting any power mode change
+	 * commands.
+	 */
+	UFSHCD_QUIRK_DISABLE_UIC_INTR_FOR_PWR_CMDS	= 1 << 25,
 };
 
 enum ufshcd_caps {

@@ -4257,7 +4257,8 @@ static int ufshcd_uic_pwr_ctrl(struct ufs_hba *hba, struct uic_command *cmd)
 		goto out_unlock;
 	}
 	hba->uic_async_done = &uic_async_done;
-	if (ufshcd_readl(hba, REG_INTERRUPT_ENABLE) & UIC_COMMAND_COMPL) {
+	if (hba->quirks & UFSHCD_QUIRK_DISABLE_UIC_INTR_FOR_PWR_CMDS &&
+	    ufshcd_readl(hba, REG_INTERRUPT_ENABLE) & UIC_COMMAND_COMPL) {
 		ufshcd_disable_intr(hba, UIC_COMMAND_COMPL);
 		/*
 		 * Make sure UIC command completion interrupt is disabled before
@@ -4275,6 +4276,7 @@ static int ufshcd_uic_pwr_ctrl(struct ufs_hba *hba, struct uic_command *cmd)
 		goto out;
 	}
 
+	/* Wait for power mode change interrupt. */
 	if (!wait_for_completion_timeout(hba->uic_async_done,
 					 msecs_to_jiffies(uic_cmd_timeout))) {
 		dev_err(hba->dev,
@@ -4289,6 +4291,17 @@ static int ufshcd_uic_pwr_ctrl(struct ufs_hba *hba, struct uic_command *cmd)
 
 		ret = -ETIMEDOUT;
 		goto out;
+	}
+
+	if (!reenable_intr) {
+		/* Wait for UIC completion interrupt. */
+		ret = wait_for_completion_timeout(&cmd->done,
+					  msecs_to_jiffies(uic_cmd_timeout));
+		WARN_ON_ONCE(ret < 0);
+		if (ret == 0)
+			dev_err(hba->dev, "UIC command %#x timed out\n",
+				cmd->command);
+		ret = 0;
 	}
 
 check_upmcrs:
