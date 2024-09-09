@@ -22,14 +22,13 @@ use core::{
 ///
 /// There are four states for a request that the Rust bindings care about:
 ///
-/// A) Request is owned by block layer (refcount 0)
+/// A) Request is owned by block layer (refcount 0)\
 /// B) Request is owned by driver but with zero `ARef`s in existence
-///    (refcount 1)
+///    (refcount 1)\
 /// C) Request is owned by driver with exactly one `ARef` in existence
-///    (refcount 2)
+///    (refcount 2)\
 /// D) Request is owned by driver with more than one `ARef` in existence
 ///    (refcount > 2)
-///
 ///
 /// We need to track A and B to ensure we fail tag to request conversions for
 /// requests that are not owned by the driver.
