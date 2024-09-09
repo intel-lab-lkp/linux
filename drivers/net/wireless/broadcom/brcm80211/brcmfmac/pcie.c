@@ -42,6 +42,7 @@
 #include "chip.h"
 #include "core.h"
 #include "common.h"
+#include "trxhdr.h"
 
 
 enum brcmf_pcie_state {
@@ -1684,6 +1685,8 @@ static int brcmf_pcie_download_fw_nvram(struct brcmf_pciedev_info *devinfo,
 					u32 nvram_len)
 {
 	struct brcmf_bus *bus = dev_get_drvdata(&devinfo->pdev->dev);
+	struct trx_header_le *trx = (struct trx_header_le *)fw->data;
+	u32 fw_size;
 	u32 sharedram_addr;
 	u32 sharedram_addr_written;
 	u32 loop_counter;
@@ -1697,8 +1700,13 @@ static int brcmf_pcie_download_fw_nvram(struct brcmf_pciedev_info *devinfo,
 		return err;
 
 	brcmf_dbg(PCIE, "Download FW %s\n", devinfo->fw_name);
-	memcpy_toio(devinfo->tcm + devinfo->ci->rambase,
-		    (void *)fw->data, fw->size);
+	address = devinfo->ci->rambase;
+	fw_size = fw->size;
+	if (trx->magic == cpu_to_le32(TRX_MAGIC)) {
+		address -= sizeof(struct trx_header_le);
+		fw_size = le32_to_cpu(trx->len);
+	}
+	memcpy_toio(devinfo->tcm + address, (void *)fw->data, fw_size);
 
 	resetintr = get_unaligned_le32(fw->data);
 	release_firmware(fw);
