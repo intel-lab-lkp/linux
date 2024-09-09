@@ -723,7 +723,7 @@ static size_t ZSTD_compressBlock_fast_extDict_generic(
     U32 offcode;
     const BYTE* match0;
     size_t mLength;
-    const BYTE* matchEnd = 0; /* initialize to avoid warning, assert != 0 later */
+    const BYTE* matchEnd = NULL; /* initialize to avoid warning, assert != NULL later */
 
     size_t step;
     const BYTE* nextStep;
@@ -895,7 +895,7 @@ _offset: /* Requires: ip0, idx, idxBase */
 _match: /* Requires: ip0, match0, offcode, matchEnd */
 
     /* Count the forward length. */
-    assert(matchEnd != 0);
+    assert(matchEnd != NULL);
     mLength += ZSTD_count_2segments(ip0 + mLength, match0 + mLength, iend, matchEnd, prefixStart);
 
     ZSTD_storeSeq(seqStore, (size_t)(ip0 - anchor), anchor, iend, offcode, mLength);
