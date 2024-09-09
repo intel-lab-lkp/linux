@@ -192,6 +192,7 @@ static int qce_crypto_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct qce_device *qce;
+	struct resource *res;
 	int ret;
 
 	qce = devm_kzalloc(dev, sizeof(*qce), GFP_KERNEL);
@@ -201,7 +202,7 @@ static int qce_crypto_probe(struct platform_device *pdev)
 	qce->dev = dev;
 	platform_set_drvdata(pdev, qce);
 
-	qce->base = devm_platform_ioremap_resource(pdev, 0);
+	qce->base = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
 	if (IS_ERR(qce->base))
 		return PTR_ERR(qce->base);
 
@@ -261,7 +262,12 @@ static int qce_crypto_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_dma;
 
-	return 0;
+	qce->base_dma = dma_map_resource(dev, res->start,
+					 resource_size(res),
+					 DMA_BIDIRECTIONAL, 0);
+	ret = dma_mapping_error(dev, qce->base_dma);
+	if (!ret)
+		return 0;
 
 err_dma:
 	qce_dma_release(&qce->dma);
@@ -280,6 +286,7 @@ err_mem_path_disable:
 static void qce_crypto_remove(struct platform_device *pdev)
 {
 	struct qce_device *qce = platform_get_drvdata(pdev);
+	struct resource *res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 
 	tasklet_kill(&qce->done_tasklet);
 	qce_unregister_algs(qce);
@@ -287,6 +294,9 @@ static void qce_crypto_remove(struct platform_device *pdev)
 	clk_disable_unprepare(qce->bus);
 	clk_disable_unprepare(qce->iface);
 	clk_disable_unprepare(qce->core);
+
+	dma_unmap_resource(&pdev->dev, qce->base_dma, resource_size(res),
+			   DMA_BIDIRECTIONAL, 0);
 }
 
 static const struct of_device_id qce_crypto_of_match[] = {
