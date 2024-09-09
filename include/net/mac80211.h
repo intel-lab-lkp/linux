@@ -1321,6 +1321,7 @@ struct ieee80211_rate_status {
  * @info: Basic tx status information
  * @skb: Packet skb (can be NULL if not provided by the driver)
  * @rates: Mrr stages that were used when sending the packet
+ * @link_sta: link that attempted to transmit the skb
  * @n_rates: Number of mrr stages (count of instances for @rates)
  * @free_list: list where processed skbs are stored to be free'd by the driver
  * @ack_hwtstamp: Hardware timestamp of the received ack in nanoseconds
@@ -1332,6 +1333,7 @@ struct ieee80211_tx_status {
 	struct ieee80211_tx_info *info;
 	struct sk_buff *skb;
 	struct ieee80211_rate_status *rates;
+	struct link_sta_info *link_sta;
 	ktime_t ack_hwtstamp;
 	u8 n_rates;
 
