@@ -632,8 +632,10 @@ err_tx:
 	return ret;
 }
 
-static void spi_geni_release_dma_chan(struct spi_geni_master *mas)
+static void spi_geni_release_dma_chan(void *data)
 {
+	struct spi_geni_master *mas = data;
+
 	if (mas->rx) {
 		dma_release_channel(mas->rx);
 		mas->rx = NULL;
@@ -1132,6 +1134,12 @@ static int spi_geni_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
+	ret = devm_add_action_or_reset(dev, spi_geni_release_dma_chan, mas);
+	if (ret) {
+		dev_err(dev, "Unable to add action.\n");
+		return ret;
+	}
+
 	/*
 	 * check the mode supported and set_cs for fifo mode only
 	 * for dma (gsi) mode, the gsi will set cs based on params passed in
@@ -1146,33 +1154,15 @@ static int spi_geni_probe(struct platform_device *pdev)
 	if (mas->cur_xfer_mode == GENI_GPI_DMA)
 		spi->flags = SPI_CONTROLLER_MUST_TX;
 
-	ret = request_irq(mas->irq, geni_spi_isr, 0, dev_name(dev), spi);
+	ret = devm_request_irq(dev, mas->irq, geni_spi_isr, 0, dev_name(dev), spi);
 	if (ret)
-		goto spi_geni_release_dma;
+		return ret;
 
-	ret = spi_register_controller(spi);
+	ret = devm_spi_register_controller(dev, spi);
 	if (ret)
-		goto spi_geni_probe_free_irq;
+		return ret;
 
 	return 0;
-spi_geni_probe_free_irq:
-	free_irq(mas->irq, spi);
-spi_geni_release_dma:
-	spi_geni_release_dma_chan(mas);
-	return ret;
-}
-
-static void spi_geni_remove(struct platform_device *pdev)
-{
-	struct spi_controller *spi = platform_get_drvdata(pdev);
-	struct spi_geni_master *mas = spi_controller_get_devdata(spi);
-
-	/* Unregister _before_ disabling pm_runtime() so we stop transfers */
-	spi_unregister_controller(spi);
-
-	free_irq(mas->irq, spi);
-
-	spi_geni_release_dma_chan(mas);
 }
 
 static int __maybe_unused spi_geni_runtime_suspend(struct device *dev)
@@ -1254,7 +1244,6 @@ MODULE_DEVICE_TABLE(of, spi_geni_dt_match);
 
 static struct platform_driver spi_geni_driver = {
 	.probe  = spi_geni_probe,
-	.remove_new = spi_geni_remove,
 	.driver = {
 		.name = "geni_spi",
 		.pm = &spi_geni_pm_ops,
