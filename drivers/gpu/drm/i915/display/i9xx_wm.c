@@ -8,6 +8,7 @@
 #include "i9xx_wm.h"
 #include "intel_atomic.h"
 #include "intel_display.h"
+#include "intel_display_regs.h"
 #include "intel_display_trace.h"
 #include "intel_fb.h"
 #include "intel_mchbar_regs.h"

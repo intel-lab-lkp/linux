@@ -27,12 +27,12 @@
  *      Jesse Barnes <jesse.barnes@intel.com>
  */
 
-#include <acpi/button.h>
 #include <linux/acpi.h>
 #include <linux/dmi.h>
 #include <linux/i2c.h>
 #include <linux/slab.h>
 #include <linux/vga_switcheroo.h>
+#include <acpi/button.h>
 
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_crtc.h>
@@ -45,6 +45,7 @@
 #include "intel_backlight.h"
 #include "intel_connector.h"
 #include "intel_de.h"
+#include "intel_display_regs.h"
 #include "intel_display_types.h"
 #include "intel_dpll.h"
 #include "intel_fdi.h"

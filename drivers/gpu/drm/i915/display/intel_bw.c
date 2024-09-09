@@ -12,10 +12,11 @@
 #include "intel_bw.h"
 #include "intel_cdclk.h"
 #include "intel_display_core.h"
+#include "intel_display_regs.h"
 #include "intel_display_types.h"
-#include "skl_watermark.h"
 #include "intel_mchbar_regs.h"
 #include "intel_pcode.h"
+#include "skl_watermark.h"
 
 /* Parameters for Qclk Geyserville (QGV) */
 struct intel_qgv_point {

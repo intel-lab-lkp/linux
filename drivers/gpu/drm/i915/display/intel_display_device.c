@@ -3,9 +3,10 @@
  * Copyright © 2023 Intel Corporation
  */
 
-#include <drm/intel/i915_pciids.h>
-#include <drm/drm_color_mgmt.h>
 #include <linux/pci.h>
+
+#include <drm/drm_color_mgmt.h>
+#include <drm/intel/i915_pciids.h>
 
 #include "i915_drv.h"
 #include "i915_reg.h"
@@ -15,6 +16,7 @@
 #include "intel_display_params.h"
 #include "intel_display_power.h"
 #include "intel_display_reg_defs.h"
+#include "intel_display_regs.h"
 #include "intel_fbc.h"
 #include "intel_step.h"
 
