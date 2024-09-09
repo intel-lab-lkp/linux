@@ -59,6 +59,10 @@
 #define CY_435X_F2_WATERMARK	0x40
 #define CY_435X_F1_MESBUSYCTRL	(CY_435X_F2_WATERMARK | \
 				 SBSDIO_MESBUSYCTRL_ENAB)
+#define CYW55572_F2_WATERMARK	0x40
+#define CYW55572_MES_WATERMARK	0x40
+#define CYW55572_F1_MESBUSYCTRL	(CYW55572_MES_WATERMARK | \
+				 SBSDIO_MESBUSYCTRL_ENAB)
 
 #ifdef DEBUG
 
@@ -626,6 +630,7 @@ BRCMF_FW_DEF(4359, "brcmfmac4359-sdio");
 BRCMF_FW_CLM_DEF(4373, "brcmfmac4373-sdio");
 BRCMF_FW_CLM_DEF(43012, "brcmfmac43012-sdio");
 BRCMF_FW_CLM_DEF(43752, "brcmfmac43752-sdio");
+CY_FW_TRXSE_DEF(55572, "cyfmac55572-sdio");
 
 /* firmware config files */
 MODULE_FIRMWARE(BRCMF_FW_DEFAULT_PATH "brcmfmac*-sdio.*.txt");
@@ -658,7 +663,8 @@ static const struct brcmf_firmware_mapping brcmf_sdio_fwnames[] = {
 	BRCMF_FW_ENTRY(CY_CC_4373_CHIP_ID, 0xFFFFFFFF, 4373),
 	BRCMF_FW_ENTRY(CY_CC_43012_CHIP_ID, 0xFFFFFFFF, 43012),
 	BRCMF_FW_ENTRY(CY_CC_43439_CHIP_ID, 0xFFFFFFFF, 43439),
-	BRCMF_FW_ENTRY(CY_CC_43752_CHIP_ID, 0xFFFFFFFF, 43752)
+	BRCMF_FW_ENTRY(CY_CC_43752_CHIP_ID, 0xFFFFFFFF, 43752),
+	BRCMF_FW_ENTRY(CY_CC_55572_CHIP_ID, 0xFFFFFFFF, 55572)
 };
 
 #define TXCTL_CREDITS	2
@@ -719,7 +725,8 @@ brcmf_sdio_kso_control(struct brcmf_sdio *bus, bool on)
 	 * fail. Thereby just bailing out immediately after clearing KSO
 	 * bit, to avoid polling of KSO bit.
 	 */
-	if (!on && bus->ci->chip == CY_CC_43012_CHIP_ID)
+	if (!on && (bus->ci->chip == CY_CC_43012_CHIP_ID ||
+		    bus->ci->chip == CY_CC_55572_CHIP_ID))
 		return err;
 
 	if (on) {
@@ -3435,7 +3442,8 @@ err:
 static bool brcmf_sdio_aos_no_decode(struct brcmf_sdio *bus)
 {
 	if (bus->ci->chip == CY_CC_43012_CHIP_ID ||
-	    bus->ci->chip == CY_CC_43752_CHIP_ID)
+	    bus->ci->chip == CY_CC_43752_CHIP_ID ||
+	    bus->ci->chip == CY_CC_55572_CHIP_ID)
 		return true;
 	else
 		return false;
@@ -4351,6 +4359,19 @@ static void brcmf_sdio_firmware_callback(struct device *dev, int err,
 					   &err);
 			brcmf_sdiod_writeb(sdiod, SBSDIO_FUNC1_MESBUSYCTRL,
 					   CY_435X_F1_MESBUSYCTRL, &err);
+			break;
+		case SDIO_DEVICE_ID_CYPRESS_55572:
+			brcmf_dbg(INFO, "set F2 watermark to 0x%x*4 bytes\n",
+				  CYW55572_F2_WATERMARK);
+			brcmf_sdiod_writeb(sdiod, SBSDIO_WATERMARK,
+					   CYW55572_F2_WATERMARK, &err);
+			devctl = brcmf_sdiod_readb(sdiod, SBSDIO_DEVICE_CTL,
+						   &err);
+			devctl |= SBSDIO_DEVCTL_F2WM_ENAB;
+			brcmf_sdiod_writeb(sdiod, SBSDIO_DEVICE_CTL, devctl,
+					   &err);
+			brcmf_sdiod_writeb(sdiod, SBSDIO_FUNC1_MESBUSYCTRL,
+					   CYW55572_F1_MESBUSYCTRL, &err);
 			break;
 		default:
 			brcmf_sdiod_writeb(sdiod, SBSDIO_WATERMARK,
