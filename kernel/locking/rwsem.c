@@ -184,7 +184,7 @@ static inline void rwsem_set_reader_owned(struct rw_semaphore *sem)
 /*
  * Return true if the rwsem is owned by a reader.
  */
-static inline bool is_rwsem_reader_owned(struct rw_semaphore *sem)
+static inline __maybe_unused bool is_rwsem_reader_owned(struct rw_semaphore *sem)
 {
 #ifdef CONFIG_DEBUG_RWSEMS
 	/*
@@ -268,7 +268,7 @@ static inline bool rwsem_write_trylock(struct rw_semaphore *sem)
 /*
  * Return just the real task structure pointer of the owner
  */
-static inline struct task_struct *rwsem_owner(struct rw_semaphore *sem)
+static inline __maybe_unused struct task_struct *rwsem_owner(struct rw_semaphore *sem)
 {
 	return (struct task_struct *)
 		(atomic_long_read(&sem->owner) & ~RWSEM_OWNER_FLAGS_MASK);
@@ -1508,7 +1508,7 @@ static inline void __rwsem_set_reader_owned(struct rw_semaphore *sem,
 {
 }
 
-static inline bool is_rwsem_reader_owned(struct rw_semaphore *sem)
+static inline __maybe_unused bool is_rwsem_reader_owned(struct rw_semaphore *sem)
 {
 	int count = atomic_read(&sem->rwbase.readers);
 
