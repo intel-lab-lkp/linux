@@ -165,7 +165,7 @@ static inline void drm_sched_rq_remove_fifo_locked(struct drm_sched_entity *enti
 
 void drm_sched_rq_update_fifo_locked(struct drm_sched_entity *entity, ktime_t ts)
 {
-	lockdep_assert_held(&entity->rq_lock);
+	lockdep_assert_held(&entity->lock);
 
 	spin_lock(&entity->rq->lock);
 
@@ -186,9 +186,9 @@ void drm_sched_rq_update_fifo(struct drm_sched_entity *entity, ktime_t ts)
 	 * for entity from within concurrent drm_sched_entity_select_rq and the
 	 * other to update the rb tree structure.
 	 */
-	spin_lock(&entity->rq_lock);
+	spin_lock(&entity->lock);
 	drm_sched_rq_update_fifo_locked(entity, ts);
-	spin_unlock(&entity->rq_lock);
+	spin_unlock(&entity->lock);
 }
 
 /**

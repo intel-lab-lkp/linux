@@ -97,6 +97,14 @@ struct drm_sched_entity {
 	struct list_head		list;
 
 	/**
+	 * @lock:
+	 *
+	 * Lock protecting the run-queue (@rq) to which this entity belongs,
+	 * @priority and the list of schedulers (@sched_list, @num_sched_list).
+	 */
+	spinlock_t			lock;
+
+	/**
 	 * @rq:
 	 *
 	 * Runqueue on which this entity is currently scheduled.
@@ -139,13 +147,6 @@ struct drm_sched_entity {
 	 * drm_sched_entity_set_priority(). Protected by &rq_lock.
 	 */
 	enum drm_sched_priority         priority;
-
-	/**
-	 * @rq_lock:
-	 *
-	 * Lock to modify the runqueue to which this entity belongs.
-	 */
-	spinlock_t			rq_lock;
 
 	/**
 	 * @job_queue: the list of jobs of this entity.
