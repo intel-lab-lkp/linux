@@ -14,41 +14,6 @@
 
 #include "pldmfw_private.h"
 
-/* Internal structure used to store details about the PLDM image file as it is
- * being validated and processed.
- */
-struct pldmfw_priv {
-	struct pldmfw *context;
-	const struct firmware *fw;
-
-	/* current offset of firmware image */
-	size_t offset;
-
-	struct list_head records;
-	struct list_head components;
-
-	/* PLDM Firmware Package Header */
-	const struct __pldm_header *header;
-	u16 total_header_size;
-
-	/* length of the component bitmap */
-	u16 component_bitmap_len;
-	u16 bitmap_size;
-
-	/* Start of the component image information */
-	u16 component_count;
-	const u8 *component_start;
-
-	/* Start pf the firmware device id records */
-	const u8 *record_start;
-	u8 record_count;
-
-	/* The CRC at the end of the package header */
-	u32 header_crc;
-
-	struct pldmfw_record *matching_record;
-};
-
 /**
  * pldm_check_fw_space - Verify that the firmware image has space left
  * @data: pointer to private data
@@ -341,6 +306,7 @@ pldm_parse_one_record(struct pldmfw_priv *data,
 		return err;
 
 	record_len = get_unaligned_le16(&__record->record_len);
+	record->device_update_flags = get_unaligned_le32(&__record->device_update_flags);
 	record->package_data_len = get_unaligned_le16(&__record->package_data_len);
 	record->version_len = __record->version_len;
 	record->version_type = __record->version_type;
@@ -540,7 +506,7 @@ static int pldm_verify_header_crc(struct pldmfw_priv *data)
  * Loops through and clears all allocated memory associated with each
  * allocated descriptor, record, and component.
  */
-static void pldmfw_free_priv(struct pldmfw_priv *data)
+void pldmfw_free_priv(struct pldmfw_priv *data)
 {
 	struct pldmfw_component *component, *c_safe;
 	struct pldmfw_record *record, *r_safe;
@@ -566,7 +532,7 @@ static void pldmfw_free_priv(struct pldmfw_priv *data)
 		kfree(record);
 	}
 }
-
+EXPORT_SYMBOL(pldmfw_free_priv);
 /**
  * pldm_parse_image - parse and extract details from PLDM image
  * @data: pointer to private data
@@ -581,7 +547,7 @@ static void pldmfw_free_priv(struct pldmfw_priv *data)
  *
  * Returns: zero on success, or a negative error code on failure.
  */
-static int pldm_parse_image(struct pldmfw_priv *data)
+int pldm_parse_image(struct pldmfw_priv *data)
 {
 	int err;
 
@@ -602,6 +568,7 @@ static int pldm_parse_image(struct pldmfw_priv *data)
 
 	return pldm_verify_header_crc(data);
 }
+EXPORT_SYMBOL(pldm_parse_image);
 
 /* these are u32 so that we can store PCI_ANY_ID */
 struct pldm_pci_record_id {
