@@ -1763,12 +1763,13 @@ static int m_can_close(struct net_device *dev)
 
 	netif_stop_queue(dev);
 
-	if (!cdev->is_peripheral)
-		napi_disable(&cdev->napi);
-
 	m_can_stop(dev);
 	m_can_clk_stop(cdev);
 	free_irq(dev->irq, dev);
+
+	/* disable NAPI after disabling interrupts */
+	if (!cdev->is_peripheral)
+		napi_disable(&cdev->napi);
 
 	m_can_clean(dev);
 
@@ -2031,6 +2032,10 @@ static int m_can_open(struct net_device *dev)
 	if (cdev->is_peripheral)
 		can_rx_offload_enable(&cdev->offload);
 
+	/* enable NAPI before enabling interrupts */
+	if (!cdev->is_peripheral)
+		napi_enable(&cdev->napi);
+
 	/* register interrupt handler */
 	if (cdev->is_peripheral) {
 		cdev->tx_wq = alloc_ordered_workqueue("mcan_wq",
@@ -2063,9 +2068,6 @@ static int m_can_open(struct net_device *dev)
 	if (err)
 		goto exit_start_fail;
 
-	if (!cdev->is_peripheral)
-		napi_enable(&cdev->napi);
-
 	netif_start_queue(dev);
 
 	return 0;
@@ -2077,6 +2079,8 @@ exit_irq_fail:
 	if (cdev->is_peripheral)
 		destroy_workqueue(cdev->tx_wq);
 out_wq_fail:
+	if (!cdev->is_peripheral)
+		napi_disable(&cdev->napi);
 	if (cdev->is_peripheral)
 		can_rx_offload_disable(&cdev->offload);
 	close_candev(dev);
