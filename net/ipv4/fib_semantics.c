@@ -153,6 +153,8 @@ static void rt_fibinfo_free(struct rtable __rcu **rtp)
 
 	if (!rt)
 		return;
+	if (!&rt->dst)
+		return;
 
 	/* Not even needed : RCU_INIT_POINTER(*rtp, NULL);
 	 * because we waited an RCU grace period before calling
@@ -202,10 +204,13 @@ static void rt_fibinfo_free_cpus(struct rtable __rcu * __percpu *rtp)
 		struct rtable *rt;
 
 		rt = rcu_dereference_protected(*per_cpu_ptr(rtp, cpu), 1);
-		if (rt) {
-			dst_dev_put(&rt->dst);
-			dst_release_immediate(&rt->dst);
-		}
+		if (!rt)
+			continue;
+		if (!&rt->dst)
+			continue;
+
+		dst_dev_put(&rt->dst);
+		dst_release_immediate(&rt->dst);
 	}
 	free_percpu(rtp);
 }
