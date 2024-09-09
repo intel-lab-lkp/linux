@@ -288,7 +288,6 @@ EXPORT_SYMBOL(nr_online_nodes);
 static bool page_contains_unaccepted(struct page *page, unsigned int order);
 static void accept_page(struct page *page, unsigned int order);
 static bool cond_accept_memory(struct zone *zone, unsigned int order);
-static inline bool has_unaccepted_memory(void);
 static bool __free_unaccepted(struct page *page);
 
 int page_group_by_mobility_disabled __read_mostly;
@@ -6975,7 +6974,7 @@ static bool cond_accept_memory(struct zone *zone, unsigned int order)
 	long to_accept;
 	bool ret = false;
 
-	if (!has_unaccepted_memory())
+	if (!static_branch_unlikely(&zones_with_unaccepted_pages))
 		return false;
 
 	if (list_empty(&zone->unaccepted_pages))
@@ -6995,11 +6994,6 @@ static bool cond_accept_memory(struct zone *zone, unsigned int order)
 	}
 
 	return ret;
-}
-
-static inline bool has_unaccepted_memory(void)
-{
-	return static_branch_unlikely(&zones_with_unaccepted_pages);
 }
 
 static bool __free_unaccepted(struct page *page)
@@ -7036,11 +7030,6 @@ static void accept_page(struct page *page, unsigned int order)
 }
 
 static bool cond_accept_memory(struct zone *zone, unsigned int order)
-{
-	return false;
-}
-
-static inline bool has_unaccepted_memory(void)
 {
 	return false;
 }
