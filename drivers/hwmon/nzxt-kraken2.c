@@ -29,7 +29,6 @@ static const char *const kraken2_fan_label[] = {
 
 struct kraken2_priv_data {
 	struct hid_device *hid_dev;
-	struct device *hwmon_dev;
 	s32 temp_input[1];
 	u16 fan_input[2];
 	unsigned long updated; /* jiffies */
@@ -133,6 +132,7 @@ static int kraken2_probe(struct hid_device *hdev,
 			 const struct hid_device_id *id)
 {
 	struct kraken2_priv_data *priv;
+	struct device *hwmon_dev;
 	int ret;
 
 	priv = devm_kzalloc(&hdev->dev, sizeof(*priv), GFP_KERNEL);
@@ -158,44 +158,14 @@ static int kraken2_probe(struct hid_device *hdev,
 	/*
 	 * Enable hidraw so existing user-space tools can continue to work.
 	 */
-	ret = hid_hw_start(hdev, HID_CONNECT_HIDRAW);
-	if (ret) {
-		hid_err(hdev, "hid hw start failed with %d\n", ret);
+	ret = devm_hid_hw_start_and_open(hdev, HID_CONNECT_HIDRAW);
+	if (ret)
 		return ret;
-	}
 
-	ret = hid_hw_open(hdev);
-	if (ret) {
-		hid_err(hdev, "hid hw open failed with %d\n", ret);
-		goto fail_and_stop;
-	}
-
-	priv->hwmon_dev = hwmon_device_register_with_info(&hdev->dev, "kraken2",
-							  priv, &kraken2_chip_info,
-							  NULL);
-	if (IS_ERR(priv->hwmon_dev)) {
-		ret = PTR_ERR(priv->hwmon_dev);
-		hid_err(hdev, "hwmon registration failed with %d\n", ret);
-		goto fail_and_close;
-	}
-
-	return 0;
-
-fail_and_close:
-	hid_hw_close(hdev);
-fail_and_stop:
-	hid_hw_stop(hdev);
-	return ret;
-}
-
-static void kraken2_remove(struct hid_device *hdev)
-{
-	struct kraken2_priv_data *priv = hid_get_drvdata(hdev);
-
-	hwmon_device_unregister(priv->hwmon_dev);
-
-	hid_hw_close(hdev);
-	hid_hw_stop(hdev);
+	hwmon_dev = devm_hwmon_device_register_with_info(&hdev->dev, "kraken2",
+							 priv, &kraken2_chip_info,
+							 NULL);
+	return PTR_ERR_OR_ZERO(hwmon_dev);
 }
 
 static const struct hid_device_id kraken2_table[] = {
@@ -209,7 +179,6 @@ static struct hid_driver kraken2_driver = {
 	.name = "nzxt-kraken2",
 	.id_table = kraken2_table,
 	.probe = kraken2_probe,
-	.remove = kraken2_remove,
 	.raw_event = kraken2_raw_event,
 };
 
