@@ -783,6 +783,10 @@ static struct uvc_entity *uvc_alloc_entity(struct uvc_device *dev, u16 type,
 	unsigned int size;
 	unsigned int i;
 
+	/* Per UVC 1.5 spec, the ID should be non-zero */
+	if (id == 0)
+		return NULL;
+
 	/* Per UVC 1.5 spec, the ID is unique */
 	if (uvc_entity_by_id(dev, id))
 		return NULL;
