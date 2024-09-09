@@ -11,6 +11,8 @@
 enum pipe;
 struct drm_i915_private;
 struct drm_printer;
+struct intel_display;
+struct intel_dmc_snapshot;
 
 void intel_dmc_init(struct drm_i915_private *i915);
 void intel_dmc_load_program(struct drm_i915_private *i915);
@@ -22,8 +24,9 @@ void intel_dmc_suspend(struct drm_i915_private *i915);
 void intel_dmc_resume(struct drm_i915_private *i915);
 bool intel_dmc_has_payload(struct drm_i915_private *i915);
 void intel_dmc_debugfs_register(struct drm_i915_private *i915);
-void intel_dmc_print_error_state(struct drm_printer *p,
-				 struct drm_i915_private *i915);
+
+struct intel_dmc_snapshot *intel_dmc_snapshot_capture(struct intel_display *display);
+void intel_dmc_snapshot_print(const struct intel_dmc_snapshot *snapshot, struct drm_printer *p);
 
 void assert_dmc_loaded(struct drm_i915_private *i915);
 
