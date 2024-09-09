@@ -158,6 +158,20 @@ properties:
       Mark the corresponding energy efficient ethernet mode as
       broken and request the ethernet to stop advertising it.
 
+  master-slave:
+    $ref: /schemas/types.yaml#/definitions/string
+    enum:
+      - forced-master
+      - forced-slave
+    description: |
+      Specifies the predefined link role for the PHY in Single Pair Ethernet
+      (1000/100/10Base-T1).  This property is required for setups where the link
+      role must be assigned by the device tree due to limitations in using
+      hardware strap pins.
+
+      - 'forced-master': The PHY is forced to operate as a master.
+      - 'forced-slave': The PHY is forced to operate as a slave.
+
   pses:
     $ref: /schemas/types.yaml#/definitions/phandle-array
     maxItems: 1
