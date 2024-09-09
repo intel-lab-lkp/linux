@@ -952,6 +952,12 @@ enum sock_flags {
 };
 
 #define SK_FLAGS_TIMESTAMP ((1UL << SOCK_TIMESTAMP) | (1UL << SOCK_TIMESTAMPING_RX_SOFTWARE))
+#define SOCKCM_FLAG_TS_OPT_ID	BIT(31)
+/*
+ * The highest bit of sk_tsflags is reserved for kernel-internal
+ * SOCKCM_FLAG_TS_OPT_ID. This check is to control that SOF_TIMESTAMPING*
+ * values do not reach this reserved area
+ */
 
 static inline void sock_copy_flags(struct sock *nsk, const struct sock *osk)
 {
@@ -1794,6 +1800,7 @@ struct sockcm_cookie {
 	u64 transmit_time;
 	u32 mark;
 	u32 tsflags;
+	u32 ts_opt_id;
 };
 
 static inline void sockcm_init(struct sockcm_cookie *sockc,
