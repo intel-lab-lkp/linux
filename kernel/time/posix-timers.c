@@ -1137,6 +1137,9 @@ SYSCALL_DEFINE2(clock_settime, const clockid_t, which_clock,
 	if (get_timespec64(&new_tp, tp))
 		return -EFAULT;
 
+	if (!timespec64_valid(&new_tp))
+		return -ERANGE;
+
 	/*
 	 * Permission checks have to be done inside the clock specific
 	 * setter callback.
