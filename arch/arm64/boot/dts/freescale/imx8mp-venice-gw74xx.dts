@@ -666,6 +666,10 @@
 	status = "okay";
 };
 
+&npu {
+	status = "okay";
+};
+
 &pcie_phy {
 	fsl,refclk-pad-mode = <IMX8_PCIE_REFCLK_PAD_INPUT>;
 	fsl,clkreq-unsupported;

@@ -393,6 +393,10 @@
 	status = "okay";
 };
 
+&npu {
+	status = "okay";
+};
+
 /* off-board header */
 &uart1 {
 	pinctrl-names = "default";
