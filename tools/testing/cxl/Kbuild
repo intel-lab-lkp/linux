@@ -66,6 +66,12 @@ cxl_core-y += config_check.o
 cxl_core-y += cxl_core_test.o
 cxl_core-y += cxl_core_exports.o
 
+obj-m += cxl_region.o
+
+cxl_region-y += $(CXL_CORE_SRC)/region.o
+cxl_region-y += config_check.o
+cxl_region-y += cxl_region_test.o
+
 KBUILD_CFLAGS := $(filter-out -Wmissing-prototypes -Wmissing-declarations, $(KBUILD_CFLAGS))
 
 obj-m += test/
