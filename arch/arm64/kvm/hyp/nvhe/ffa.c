@@ -426,7 +426,7 @@ out:
 	return;
 }
 
-static __always_inline void do_ffa_mem_xfer(const u64 func_id,
+static void do_ffa_mem_xfer(const u64 func_id,
 					    struct arm_smccc_res *res,
 					    struct kvm_cpu_context *ctxt)
 {
@@ -458,6 +458,11 @@ static __always_inline void do_ffa_mem_xfer(const u64 func_id,
 	hyp_spin_lock(&host_buffers.lock);
 	if (!host_buffers.tx) {
 		ret = FFA_RET_INVALID_PARAMETERS;
+		goto out_unlock;
+	}
+
+	if (len > ffa_desc_buf.len) {
+		ret = FFA_RET_NO_MEMORY;
 		goto out_unlock;
 	}
 
