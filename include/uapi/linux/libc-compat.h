@@ -194,6 +194,14 @@
 #define __UAPI_DEF_IF_NET_DEVICE_FLAGS_LOWER_UP_DORMANT_ECHO 1
 #endif
 
+/* Definitions for if_arp.h */
+#ifndef __UAPI_DEF_IF_ARP_ARPREQ
+#define __UAPI_DEF_IF_ARP_ARPREQ	1
+#endif
+#ifndef __UAPI_DEF_IF_ARP_ARPHDR
+#define __UAPI_DEF_IF_ARP_ARPHDR	1
+#endif
+
 /* Definitions for in.h */
 #ifndef __UAPI_DEF_IN_ADDR
 #define __UAPI_DEF_IN_ADDR		1
