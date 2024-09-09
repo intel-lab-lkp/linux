@@ -1179,6 +1179,14 @@ config X86_MCE_INTEL
 	  Additional support for intel specific MCE features such as
 	  the thermal monitor.
 
+config X86_MCE_ZHAOXIN
+	def_bool y
+	prompt "Zhaoxin MCE features"
+	depends on X86_MCE_INTEL
+	help
+	  Additional support for zhaoxin specific MCE features such as
+	  the corrected machine check interrupt.
+
 config X86_MCE_AMD
 	def_bool y
 	prompt "AMD MCE features"
