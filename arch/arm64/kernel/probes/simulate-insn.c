@@ -200,3 +200,14 @@ simulate_ldrsw_literal(u32 opcode, long addr, struct pt_regs *regs)
 
 	instruction_pointer_set(regs, instruction_pointer(regs) + 4);
 }
+
+void __kprobes
+simulate_nop(u32 opcode, long addr, struct pt_regs *regs)
+{
+	/*
+	 * Compared to instruction_pointer_set(), it offers better
+	 * compatibility with single-stepping and execution in target
+	 * guarded memory.
+	 */
+	arm64_skip_faulting_instruction(regs, AARCH64_INSN_SIZE);
+}
