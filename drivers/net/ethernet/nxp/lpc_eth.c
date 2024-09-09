@@ -768,6 +768,9 @@ static int lpc_mii_probe(struct net_device *ndev)
 		return -ENODEV;
 	}
 
+	if (pldat->phy_node)
+		phy_device_free(phydev);
+
 	phydev = phy_connect(ndev, phydev_name(phydev),
 			     &lpc_handle_link_change,
 			     lpc_phy_interface_mode(&pldat->pdev->dev));
