@@ -75,6 +75,8 @@ static const struct {
 };
 static int init_progress;
 
+MODULE_SOFTDEP("pre: mei_gsc_proxy mei_gsc");
+
 static int __init i915_init(void)
 {
 	int err, i;

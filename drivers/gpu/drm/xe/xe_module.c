@@ -127,6 +127,8 @@ static void xe_call_exit_func(unsigned int i)
 	init_funcs[i].exit();
 }
 
+MODULE_SOFTDEP("pre: mei_gsc_proxy mei_gsc");
+
 static int __init xe_init(void)
 {
 	int err, i;
