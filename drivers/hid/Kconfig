@@ -221,6 +221,16 @@ config HID_CORSAIR
 	- Vengeance K90
 	- Scimitar PRO RGB
 
+config HID_CORSAIR_VOID
+	tristate "Corsair Void headsets"
+	depends on USB_HID
+	select POWER_SUPPLY
+	help
+	Support for Corsair Void headsets.
+
+	Supported devices:
+	- Corsair Void headsets
+
 config HID_COUGAR
 	tristate "Cougar devices"
 	help
