@@ -459,6 +459,7 @@ static void etm_event_start(struct perf_event *event, int flags)
 	struct perf_output_handle *handle = &ctxt->handle;
 	struct coresight_device *sink, *csdev = per_cpu(csdev_src, cpu);
 	struct list_head *path;
+	struct cs_sink_data *sink_data = NULL;
 	u64 hw_id;
 	u8 trace_id;
 
@@ -498,9 +499,20 @@ static void etm_event_start(struct perf_event *event, int flags)
 	if (WARN_ON_ONCE(!sink))
 		goto fail_end_stop;
 
-	/* Nothing will happen without a path */
-	if (coresight_enable_path(path, CS_MODE_PERF, handle))
+	sink_data = kzalloc(sizeof(*sink_data), GFP_KERNEL);
+	if (!sink_data)
 		goto fail_end_stop;
+
+	sink_data->sink = sink;
+	sink_data->traceid = coresight_read_traceid(path, CS_MODE_PERF,
+						    &sink->perf_sink_id_map);
+	sink_data->handle = handle;
+
+	/* Nothing will happen without a path */
+	if (coresight_enable_path(path, CS_MODE_PERF, sink_data)) {
+		kfree(sink_data);
+		goto fail_end_stop;
+	}
 
 	/* Finally enable the tracer */
 	if (source_ops(csdev)->enable(csdev, event, CS_MODE_PERF,
@@ -526,6 +538,7 @@ static void etm_event_start(struct perf_event *event, int flags)
 		perf_report_aux_output_id(event, hw_id);
 	}
 
+	kfree(sink_data);
 out:
 	/* Tell the perf core the event is alive */
 	event->hw.state = 0;
@@ -534,7 +547,8 @@ out:
 	return;
 
 fail_disable_path:
-	coresight_disable_path(path);
+	coresight_disable_path(path, sink_data);
+	kfree(sink_data);
 fail_end_stop:
 	/*
 	 * Check if the handle is still associated with the event,
@@ -559,6 +573,7 @@ static void etm_event_stop(struct perf_event *event, int mode)
 	struct perf_output_handle *handle = &ctxt->handle;
 	struct etm_event_data *event_data;
 	struct list_head *path;
+	struct cs_sink_data *sink_data = NULL;
 
 	/*
 	 * If we still have access to the event_data via handle,
@@ -603,6 +618,10 @@ static void etm_event_stop(struct perf_event *event, int mode)
 	if (!sink)
 		return;
 
+	sink_data = kzalloc(sizeof(*sink_data), GFP_KERNEL);
+	if (!sink_data)
+		return;
+
 	/* stop tracer */
 	coresight_disable_source(csdev, event);
 
@@ -616,12 +635,16 @@ static void etm_event_stop(struct perf_event *event, int mode)
 	 * have to do anything here.
 	 */
 	if (handle->event && (mode & PERF_EF_UPDATE)) {
-		if (WARN_ON_ONCE(handle->event != event))
+		if (WARN_ON_ONCE(handle->event != event)) {
+			kfree(sink_data);
 			return;
+		}
 
 		/* update trace information */
-		if (!sink_ops(sink)->update_buffer)
+		if (!sink_ops(sink)->update_buffer) {
+			kfree(sink_data);
 			return;
+		}
 
 		size = sink_ops(sink)->update_buffer(sink, handle,
 					      event_data->snk_config);
@@ -642,8 +665,12 @@ static void etm_event_stop(struct perf_event *event, int mode)
 			WARN_ON(size);
 	}
 
+	sink_data->sink = sink;
+	sink_data->traceid = coresight_read_traceid(path, CS_MODE_PERF,
+						    &sink->perf_sink_id_map);
 	/* Disabling the path make its elements available to other sessions */
-	coresight_disable_path(path);
+	coresight_disable_path(path, sink_data);
+	kfree(sink_data);
 }
 
 static int etm_event_add(struct perf_event *event, int mode)

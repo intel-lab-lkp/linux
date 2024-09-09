@@ -232,9 +232,29 @@ static void tpda_disable(struct coresight_device *csdev,
 	dev_dbg(drvdata->dev, "TPDA inport %d disabled\n", in->dest_port);
 }
 
+static int tpda_trace_id(struct coresight_device *csdev)
+{
+	int trace_id;
+	struct tpda_drvdata *drvdata;
+
+	if (csdev == NULL)
+		return -EINVAL;
+
+	drvdata = dev_get_drvdata(csdev->dev.parent);
+	trace_id = drvdata->atid;
+	if (!IS_VALID_CS_TRACE_ID(trace_id)) {
+		trace_id = coresight_trace_id_get_system_id();
+		if (IS_VALID_CS_TRACE_ID(trace_id))
+			drvdata->atid = (u8)trace_id;
+	}
+
+	return trace_id;
+}
+
 static const struct coresight_ops_link tpda_link_ops = {
 	.enable		= tpda_enable,
 	.disable	= tpda_disable,
+	.trace_id	= tpda_trace_id,
 };
 
 static const struct coresight_ops tpda_cs_ops = {

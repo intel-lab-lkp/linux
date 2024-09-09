@@ -23,6 +23,7 @@
 #include "coresight-etm-perf.h"
 #include "coresight-priv.h"
 #include "coresight-syscfg.h"
+#include "coresight-trace-id.h"
 
 /*
  * Mutex used to lock all sysfs enable and disable actions and loading and
@@ -297,12 +298,12 @@ static int coresight_enable_helper(struct coresight_device *csdev,
 	return helper_ops(csdev)->enable(csdev, mode, data);
 }
 
-static void coresight_disable_helper(struct coresight_device *csdev)
+static void coresight_disable_helper(struct coresight_device *csdev, void *data)
 {
-	helper_ops(csdev)->disable(csdev, NULL);
+	helper_ops(csdev)->disable(csdev, data);
 }
 
-static void coresight_disable_helpers(struct coresight_device *csdev)
+static void coresight_disable_helpers(struct coresight_device *csdev, void *data)
 {
 	int i;
 	struct coresight_device *helper;
@@ -310,7 +311,7 @@ static void coresight_disable_helpers(struct coresight_device *csdev)
 	for (i = 0; i < csdev->pdata->nr_outconns; ++i) {
 		helper = csdev->pdata->out_conns[i]->dest_dev;
 		if (helper && coresight_is_helper(helper))
-			coresight_disable_helper(helper);
+			coresight_disable_helper(helper, data);
 	}
 }
 
@@ -327,7 +328,7 @@ static void coresight_disable_helpers(struct coresight_device *csdev)
 void coresight_disable_source(struct coresight_device *csdev, void *data)
 {
 	source_ops(csdev)->disable(csdev, data);
-	coresight_disable_helpers(csdev);
+	coresight_disable_helpers(csdev, NULL);
 }
 EXPORT_SYMBOL_GPL(coresight_disable_source);
 
@@ -337,7 +338,8 @@ EXPORT_SYMBOL_GPL(coresight_disable_source);
  * disabled.
  */
 static void coresight_disable_path_from(struct list_head *path,
-					struct coresight_node *nd)
+					struct coresight_node *nd,
+					void *sink_data)
 {
 	u32 type;
 	struct coresight_device *csdev, *parent, *child;
@@ -382,13 +384,13 @@ static void coresight_disable_path_from(struct list_head *path,
 		}
 
 		/* Disable all helpers adjacent along the path last */
-		coresight_disable_helpers(csdev);
+		coresight_disable_helpers(csdev, sink_data);
 	}
 }
 
-void coresight_disable_path(struct list_head *path)
+void coresight_disable_path(struct list_head *path, void *sink_data)
 {
-	coresight_disable_path_from(path, NULL);
+	coresight_disable_path_from(path, NULL, sink_data);
 }
 EXPORT_SYMBOL_GPL(coresight_disable_path);
 
@@ -468,8 +470,45 @@ int coresight_enable_path(struct list_head *path, enum cs_mode mode,
 out:
 	return ret;
 err:
-	coresight_disable_path_from(path, nd);
+	coresight_disable_path_from(path, nd, sink_data);
 	goto out;
+}
+
+int coresight_read_traceid(struct list_head *path, enum cs_mode mode,
+			   struct coresight_trace_id_map *id_map)
+{
+	int trace_id, type;
+	struct coresight_device *csdev;
+	struct coresight_node *nd;
+
+	list_for_each_entry(nd, path, link) {
+		csdev = nd->csdev;
+		type = csdev->type;
+
+		switch (type) {
+		case CORESIGHT_DEV_TYPE_SOURCE:
+			if (source_ops(csdev)->trace_id != NULL) {
+				trace_id = source_ops(csdev)->trace_id(csdev,
+								       mode,
+								       id_map);
+				if (IS_VALID_CS_TRACE_ID(trace_id))
+					goto out;
+			}
+			break;
+		case CORESIGHT_DEV_TYPE_LINK:
+			if (link_ops(csdev)->trace_id != NULL) {
+				trace_id = link_ops(csdev)->trace_id(csdev);
+				if (IS_VALID_CS_TRACE_ID(trace_id))
+					goto out;
+			}
+			break;
+		default:
+			break;
+		}
+	}
+	return -EINVAL;
+out:
+	return trace_id;
 }
 
 struct coresight_device *coresight_get_sink(struct list_head *path)
