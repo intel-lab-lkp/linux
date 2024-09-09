@@ -109,11 +109,10 @@
 #define XAXIDMA_BD_CTRL_TXEOF_MASK	0x04000000 /* Last tx packet */
 #define XAXIDMA_BD_CTRL_ALL_MASK	0x0C000000 /* All control bits */
 
-#define XAXIDMA_DELAY_MASK		0xFF000000 /* Delay timeout counter */
-#define XAXIDMA_COALESCE_MASK		0x00FF0000 /* Coalesce counter */
+#define XAXIDMA_DELAY_MASK		((u32)0xFF000000) /* Delay timeout counter */
+#define XAXIDMA_COALESCE_MASK		((u32)0x00FF0000) /* Coalesce counter */
 
 #define XAXIDMA_DELAY_SHIFT		24
-#define XAXIDMA_COALESCE_SHIFT		16
 
 #define XAXIDMA_IRQ_IOC_MASK		0x00001000 /* Completion intr */
 #define XAXIDMA_IRQ_DELAY_MASK		0x00002000 /* Delay interrupt */
