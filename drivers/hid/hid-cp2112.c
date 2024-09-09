@@ -1215,22 +1215,14 @@ static int cp2112_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		return ret;
 	}
 
-	ret = hid_hw_start(hdev, HID_CONNECT_HIDRAW);
-	if (ret) {
-		hid_err(hdev, "hw start failed\n");
+	ret = devm_hid_hw_start_and_open(hdev, HID_CONNECT_HIDRAW);
+	if (ret)
 		return ret;
-	}
-
-	ret = hid_hw_open(hdev);
-	if (ret) {
-		hid_err(hdev, "hw open failed\n");
-		goto err_hid_stop;
-	}
 
 	ret = hid_hw_power(hdev, PM_HINT_FULLON);
 	if (ret < 0) {
 		hid_err(hdev, "power management error: %d\n", ret);
-		goto err_hid_close;
+		return ret;
 	}
 
 	ret = cp2112_hid_get(hdev, CP2112_GET_VERSION_INFO, buf, sizeof(buf),
@@ -1334,10 +1326,6 @@ err_free_i2c:
 	i2c_del_adapter(&dev->adap);
 err_power_normal:
 	hid_hw_power(hdev, PM_HINT_NORMAL);
-err_hid_close:
-	hid_hw_close(hdev);
-err_hid_stop:
-	hid_hw_stop(hdev);
 	return ret;
 }
 
@@ -1354,14 +1342,6 @@ static void cp2112_remove(struct hid_device *hdev)
 	}
 
 	gpiochip_remove(&dev->gc);
-	/* i2c_del_adapter has finished removing all i2c devices from our
-	 * adapter. Well behaved devices should no longer call our cp2112_xfer
-	 * and should have waited for any pending calls to finish. It has also
-	 * waited for device_unregister(&adap->dev) to complete. Therefore we
-	 * can safely free our struct cp2112_device.
-	 */
-	hid_hw_close(hdev);
-	hid_hw_stop(hdev);
 }
 
 static int cp2112_raw_event(struct hid_device *hdev, struct hid_report *report,
