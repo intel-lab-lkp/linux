@@ -28,7 +28,16 @@
 /* Basic Control Register Map register offsets (BCRM) */
 #define REG_BCRM_MINOR_VERSION_R			CCI_REG16(0x0000)
 #define REG_BCRM_MAJOR_VERSION_R			CCI_REG16(0x0002)
+#define REG_CCI_DEV_CAP_RW				CCI_REG64(0x0008)
 #define REG_BCRM_REG_ADDR_R				CCI_REG16(0x0014)
+#define REG_CCI_DEVICE_GUID_R				CCI_REG64_LE(0x0018)
+#define REG_CCI_MANUFACTURER_NAME_R			CCI_REG64_LE(0x0058)
+#define REG_CCI_DEVICE_MODEL_NAME_R			CCI_REG64_LE(0x0098)
+#define REG_CCI_DEVICE_FAMILY_NAME_R			CCI_REG64_LE(0x00d8)
+#define REG_CCI_DEVICE_VERSION_R			CCI_REG64_LE(0x0118)
+#define REG_CCI_MANUFACTURER_INFO_R			CCI_REG64_LE(0x0158)
+#define REG_CCI_DEVICE_SERIAL_NUMBER_R			CCI_REG64_LE(0x0198)
+#define REG_CCI_USER_DEFINED_NAME_R			CCI_REG64_LE(0x01d8)
 
 #define REG_BCRM_FEATURE_INQUIRY_R			REG_BCRM_V4L2_64BIT(0x0008)
 #define REG_BCRM_DEVICE_FW				REG_BCRM_V4L2_64BIT(0x0010)
@@ -210,6 +219,19 @@
 #define BCRM_DEVICE_FW_PATCH_SHIFT			32
 #define BCRM_DEVICE_FW_SPEC_MASK			GENMASK_ULL(7, 0)
 #define BCRM_DEVICE_FW_SPEC_SHIFT			0
+
+enum alvium_fw_ops {
+	ALVIUM_GENIO_WRITE,
+	ALVIUM_GENIO_READ,
+	ALVIUM_GENIO_NUM_OPS
+};
+
+struct alvium_genio_proto {
+	u16 reg;
+	u16 count;
+	u8 op;
+	u8 reserved[3];
+};
 
 enum alvium_bcrm_mode {
 	ALVIUM_BCM_MODE,
@@ -461,6 +483,9 @@ struct alvium_dev {
 
 	u8 streaming;
 	u8 apply_fiv;
+
+	u8 genio_op;
+	struct alvium_genio_proto req_data;
 };
 
 static inline struct alvium_dev *sd_to_alvium(struct v4l2_subdev *sd)
