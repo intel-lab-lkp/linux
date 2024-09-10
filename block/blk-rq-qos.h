@@ -58,11 +58,14 @@ struct rq_depth {
 	unsigned int default_depth;
 };
 
+#define for_each_rqos(rqos, q)	\
+	for (rqos = q->rq_qos; rqos; rqos = rqos->next)
+
 static inline struct rq_qos *rq_qos_id(struct request_queue *q,
 				       enum rq_qos_id id)
 {
 	struct rq_qos *rqos;
-	for (rqos = q->rq_qos; rqos; rqos = rqos->next) {
+	for_each_rqos(rqos, q) {
 		if (rqos->id == id)
 			break;
 	}
@@ -100,38 +103,36 @@ bool rq_depth_scale_up(struct rq_depth *rqd);
 bool rq_depth_scale_down(struct rq_depth *rqd, bool hard_throttle);
 bool rq_depth_calc_max_depth(struct rq_depth *rqd);
 
-void __rq_qos_cleanup(struct rq_qos *rqos, struct bio *bio);
-void __rq_qos_done(struct rq_qos *rqos, struct request *rq);
-void __rq_qos_issue(struct rq_qos *rqos, struct request *rq);
-void __rq_qos_requeue(struct rq_qos *rqos, struct request *rq);
-void __rq_qos_throttle(struct rq_qos *rqos, struct bio *bio);
-void __rq_qos_track(struct rq_qos *rqos, struct request *rq, struct bio *bio);
-void __rq_qos_merge(struct rq_qos *rqos, struct request *rq, struct bio *bio);
-void __rq_qos_done_bio(struct rq_qos *rqos, struct bio *bio);
-void __rq_qos_queue_depth_changed(struct rq_qos *rqos);
+#define RQ_QOS_FN(q, fn, ...)	\
+	do {	\
+		struct rq_qos *rqos;	\
+		for_each_rqos(rqos, q)	\
+			if (rqos->ops->fn)	\
+				rqos->ops->fn(rqos, ##__VA_ARGS__);	\
+	} while (0)
 
 static inline void rq_qos_cleanup(struct request_queue *q, struct bio *bio)
 {
 	if (q->rq_qos)
-		__rq_qos_cleanup(q->rq_qos, bio);
+		RQ_QOS_FN(q, cleanup, bio);
 }
 
 static inline void rq_qos_done(struct request_queue *q, struct request *rq)
 {
 	if (q->rq_qos && !blk_rq_is_passthrough(rq))
-		__rq_qos_done(q->rq_qos, rq);
+		RQ_QOS_FN(q, done, rq);
 }
 
 static inline void rq_qos_issue(struct request_queue *q, struct request *rq)
 {
 	if (q->rq_qos)
-		__rq_qos_issue(q->rq_qos, rq);
+		RQ_QOS_FN(q, issue, rq);
 }
 
 static inline void rq_qos_requeue(struct request_queue *q, struct request *rq)
 {
 	if (q->rq_qos)
-		__rq_qos_requeue(q->rq_qos, rq);
+		RQ_QOS_FN(q, requeue, rq);
 }
 
 static inline void rq_qos_done_bio(struct bio *bio)
@@ -140,7 +141,7 @@ static inline void rq_qos_done_bio(struct bio *bio)
 			     bio_flagged(bio, BIO_QOS_MERGED))) {
 		struct request_queue *q = bdev_get_queue(bio->bi_bdev);
 		if (q->rq_qos)
-			__rq_qos_done_bio(q->rq_qos, bio);
+			RQ_QOS_FN(q, done_bio, bio);
 	}
 }
 
@@ -148,7 +149,7 @@ static inline void rq_qos_throttle(struct request_queue *q, struct bio *bio)
 {
 	if (q->rq_qos) {
 		bio_set_flag(bio, BIO_QOS_THROTTLED);
-		__rq_qos_throttle(q->rq_qos, bio);
+		RQ_QOS_FN(q, throttle, bio);
 	}
 }
 
@@ -156,7 +157,7 @@ static inline void rq_qos_track(struct request_queue *q, struct request *rq,
 				struct bio *bio)
 {
 	if (q->rq_qos)
-		__rq_qos_track(q->rq_qos, rq, bio);
+		RQ_QOS_FN(q, track, rq, bio);
 }
 
 static inline void rq_qos_merge(struct request_queue *q, struct request *rq,
@@ -164,14 +165,14 @@ static inline void rq_qos_merge(struct request_queue *q, struct request *rq,
 {
 	if (q->rq_qos) {
 		bio_set_flag(bio, BIO_QOS_MERGED);
-		__rq_qos_merge(q->rq_qos, rq, bio);
+		RQ_QOS_FN(q, merge, rq, bio);
 	}
 }
 
 static inline void rq_qos_queue_depth_changed(struct request_queue *q)
 {
 	if (q->rq_qos)
-		__rq_qos_queue_depth_changed(q->rq_qos);
+		RQ_QOS_FN(q, queue_depth_changed);
 }
 
 void rq_qos_exit(struct request_queue *);

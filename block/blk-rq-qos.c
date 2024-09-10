@@ -23,87 +23,6 @@ bool rq_wait_inc_below(struct rq_wait *rq_wait, unsigned int limit)
 	return atomic_inc_below(&rq_wait->inflight, limit);
 }
 
-void __rq_qos_cleanup(struct rq_qos *rqos, struct bio *bio)
-{
-	do {
-		if (rqos->ops->cleanup)
-			rqos->ops->cleanup(rqos, bio);
-		rqos = rqos->next;
-	} while (rqos);
-}
-
-void __rq_qos_done(struct rq_qos *rqos, struct request *rq)
-{
-	do {
-		if (rqos->ops->done)
-			rqos->ops->done(rqos, rq);
-		rqos = rqos->next;
-	} while (rqos);
-}
-
-void __rq_qos_issue(struct rq_qos *rqos, struct request *rq)
-{
-	do {
-		if (rqos->ops->issue)
-			rqos->ops->issue(rqos, rq);
-		rqos = rqos->next;
-	} while (rqos);
-}
-
-void __rq_qos_requeue(struct rq_qos *rqos, struct request *rq)
-{
-	do {
-		if (rqos->ops->requeue)
-			rqos->ops->requeue(rqos, rq);
-		rqos = rqos->next;
-	} while (rqos);
-}
-
-void __rq_qos_throttle(struct rq_qos *rqos, struct bio *bio)
-{
-	do {
-		if (rqos->ops->throttle)
-			rqos->ops->throttle(rqos, bio);
-		rqos = rqos->next;
-	} while (rqos);
-}
-
-void __rq_qos_track(struct rq_qos *rqos, struct request *rq, struct bio *bio)
-{
-	do {
-		if (rqos->ops->track)
-			rqos->ops->track(rqos, rq, bio);
-		rqos = rqos->next;
-	} while (rqos);
-}
-
-void __rq_qos_merge(struct rq_qos *rqos, struct request *rq, struct bio *bio)
-{
-	do {
-		if (rqos->ops->merge)
-			rqos->ops->merge(rqos, rq, bio);
-		rqos = rqos->next;
-	} while (rqos);
-}
-
-void __rq_qos_done_bio(struct rq_qos *rqos, struct bio *bio)
-{
-	do {
-		if (rqos->ops->done_bio)
-			rqos->ops->done_bio(rqos, bio);
-		rqos = rqos->next;
-	} while (rqos);
-}
-
-void __rq_qos_queue_depth_changed(struct rq_qos *rqos)
-{
-	do {
-		if (rqos->ops->queue_depth_changed)
-			rqos->ops->queue_depth_changed(rqos);
-		rqos = rqos->next;
-	} while (rqos);
-}
-
 /*
  * Return true, if we can't increase the depth further by scaling
  */
@@ -288,12 +207,11 @@ void rq_qos_wait(struct rq_wait *rqw, void *private_data,
 
 void rq_qos_exit(struct request_queue *q)
 {
+	struct rq_qos *rqos;
+
 	mutex_lock(&q->rq_qos_mutex);
-	while (q->rq_qos) {
-		struct rq_qos *rqos = q->rq_qos;
-		q->rq_qos = rqos->next;
+	for_each_rqos(rqos, q)
 		rqos->ops->exit(rqos);
-	}
 	mutex_unlock(&q->rq_qos_mutex);
 }
 
