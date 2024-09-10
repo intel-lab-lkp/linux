@@ -1533,8 +1533,7 @@ static void destroy_compound_hugetlb_folio_for_demote(struct folio *folio,
 }
 
 #ifdef CONFIG_ARCH_HAS_GIGANTIC_PAGE
-static void destroy_compound_gigantic_folio(struct folio *folio,
-					unsigned int order)
+void destroy_compound_gigantic_folio(struct folio *folio, unsigned int order)
 {
 	__destroy_compound_gigantic_folio(folio, order, false);
 }
@@ -1608,8 +1607,6 @@ static struct folio *alloc_gigantic_folio(struct hstate *h, gfp_t gfp_mask,
 	return NULL;
 }
 static inline void free_gigantic_folio(struct folio *folio,
-						unsigned int order) { }
-static inline void destroy_compound_gigantic_folio(struct folio *folio,
 						unsigned int order) { }
 #endif
 
@@ -2120,8 +2117,7 @@ out_error:
 	return false;
 }
 
-static bool prep_compound_gigantic_folio(struct folio *folio,
-							unsigned int order)
+bool prep_compound_gigantic_folio(struct folio *folio, unsigned int order)
 {
 	return __prep_compound_gigantic_folio(folio, order, false);
 }

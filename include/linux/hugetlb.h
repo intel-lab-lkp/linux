@@ -298,6 +298,21 @@ static inline void hugetlb_vmemmap_optimize_folio(const struct hstate *h, struct
 }
 #endif
 
+#ifdef CONFIG_ARCH_HAS_GIGANTIC_PAGE
+bool prep_compound_gigantic_folio(struct folio *folio, unsigned int order);
+void destroy_compound_gigantic_folio(struct folio *folio, unsigned int order);
+#else
+bool prep_compound_gigantic_folio(struct folio *folio, unsigned int order)
+{
+	return false;
+}
+
+static inline void destroy_compound_gigantic_folio(struct folio *folio,
+						   unsigned int order)
+{
+}
+#endif
+
 #else /* !CONFIG_HUGETLB_PAGE */
 
 static inline void hugetlb_dup_vma_private(struct vm_area_struct *vma)
