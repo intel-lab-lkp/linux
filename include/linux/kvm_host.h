@@ -840,6 +840,7 @@ struct kvm {
 #ifdef CONFIG_KVM_GENERIC_MEMORY_ATTRIBUTES
 	/* Protected by slots_locks (for writes) and RCU (for reads) */
 	struct xarray mem_attr_array;
+	bool attribute_change_in_progress;
 #endif
 	char stats_id[KVM_STATS_NAME_SIZE];
 };

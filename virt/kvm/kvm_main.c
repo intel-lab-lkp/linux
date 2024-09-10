@@ -2533,6 +2533,7 @@ static int kvm_vm_set_mem_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 
 	mutex_lock(&kvm->slots_lock);
 
+
 	/* Nothing to do if the entire range as the desired attributes. */
 	if (kvm_range_has_memory_attributes(kvm, start, end, attributes))
 		goto out_unlock;
@@ -2547,6 +2548,9 @@ static int kvm_vm_set_mem_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 			goto out_unlock;
 	}
 
+	kvm->attribute_change_in_progress = true;
+	gfn_to_pfn_cache_invalidate_gfns_start(kvm, start, end);
+
 	kvm_handle_gfn_range(kvm, &pre_set_range);
 
 	for (i = start; i < end; i++) {
@@ -2558,6 +2562,7 @@ static int kvm_vm_set_mem_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 	kvm_handle_gfn_range(kvm, &post_set_range);
 
 out_unlock:
+	kvm->attribute_change_in_progress = false;
 	mutex_unlock(&kvm->slots_lock);
 
 	return r;

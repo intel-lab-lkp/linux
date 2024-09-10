@@ -57,6 +57,43 @@ void gfn_to_pfn_cache_invalidate_start(struct kvm *kvm, unsigned long start,
 	spin_unlock(&kvm->gpc_lock);
 }
 
+/*
+ * Identical to `gfn_to_pfn_cache_invalidate_start`, except based on gfns
+ * instead of uhvas.
+ */
+void gfn_to_pfn_cache_invalidate_gfns_start(struct kvm *kvm, gfn_t start, gfn_t end)
+{
+	struct gfn_to_pfn_cache *gpc;
+
+	spin_lock(&kvm->gpc_lock);
+	list_for_each_entry(gpc, &kvm->gpc_list, list) {
+		read_lock_irq(&gpc->lock);
+
+		/*
+		 * uhva based gpcs must not be used with gmem enabled memslots
+		 */
+		if (kvm_is_error_gpa(gpc->gpa)) {
+			read_unlock_irq(&gpc->lock);
+			continue;
+		}
+
+		if (gpc->valid && !is_error_noslot_pfn(gpc->pfn) &&
+		    gpa_to_gfn(gpc->gpa) >= start && gpa_to_gfn(gpc->gpa) < end) {
+			read_unlock_irq(&gpc->lock);
+
+			write_lock_irq(&gpc->lock);
+			if (gpc->valid && !is_error_noslot_pfn(gpc->pfn) &&
+			    gpa_to_gfn(gpc->gpa) >= start && gpa_to_gfn(gpc->gpa) < end)
+				gpc->valid = false;
+			write_unlock_irq(&gpc->lock);
+			continue;
+		}
+
+		read_unlock_irq(&gpc->lock);
+	}
+	spin_unlock(&kvm->gpc_lock);
+}
+
 static bool kvm_gpc_is_valid_len(gpa_t gpa, unsigned long uhva,
 				 unsigned long len)
 {
@@ -141,6 +178,14 @@ static inline bool mmu_notifier_retry_cache(struct kvm *kvm, unsigned long mmu_s
 	if (kvm->mn_active_invalidate_count)
 		return true;
 
+	/*
+	 * Similarly to the above, attribute_change_in_progress is set
+	 * before gfn_to_pfn_cache_invalidate_start is called in
+	 * kvm_vm_set_mem_attributes, and isn't cleared until after
+	 * mmu_invalidate_seq is updated.
+	 */
+	if (kvm->attribute_change_in_progress)
+		return true;
 	/*
 	 * Ensure mn_active_invalidate_count is read before
 	 * mmu_invalidate_seq.  This pairs with the smp_wmb() in

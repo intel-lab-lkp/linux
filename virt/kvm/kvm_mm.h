@@ -27,10 +27,20 @@ kvm_pfn_t hva_to_pfn(unsigned long addr, bool atomic, bool interruptible,
 void gfn_to_pfn_cache_invalidate_start(struct kvm *kvm,
 				       unsigned long start,
 				       unsigned long end);
+
+void gfn_to_pfn_cache_invalidate_gfns_start(struct kvm *kvm,
+					    gfn_t start,
+					    gfn_t end);
 #else
 static inline void gfn_to_pfn_cache_invalidate_start(struct kvm *kvm,
 						     unsigned long start,
 						     unsigned long end)
+{
+}
+
+static inline void gfn_to_pfn_cache_invalidate_gfns_start(struct kvm *kvm,
+							  gfn_t start,
+							  gfn_t end)
 {
 }
 #endif /* HAVE_KVM_PFNCACHE */
