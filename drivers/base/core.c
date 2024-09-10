@@ -2181,6 +2181,15 @@ static int fw_devlink_create_devlink(struct device *con,
 			goto out;
 		}
 
+		/*
+		 * SYNC_STATE_ONLY links are useless once a consumer device has probed.
+		 * So, only create it if the consumer hasn't probed yet.
+		 */
+		if (flags & DL_FLAG_SYNC_STATE_ONLY &&
+		    con->links.status != DL_DEV_NO_DRIVER &&
+		    con->links.status != DL_DEV_PROBING)
+			goto out;
+
 		if (con != sup_dev && !device_link_add(con, sup_dev, flags)) {
 			dev_err(con, "Failed to create device link (0x%x) with %s\n",
 				flags, dev_name(sup_dev));
