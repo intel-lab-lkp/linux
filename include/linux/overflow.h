@@ -5,6 +5,7 @@
 #include <linux/compiler.h>
 #include <linux/limits.h>
 #include <linux/const.h>
+#include <linux/minmax.h>
 
 /*
  * We need to compute the minimum and maximum values representable in a given
@@ -369,8 +370,12 @@ static inline size_t __must_check size_sub(size_t minuend, size_t subtrahend)
  */
 #define struct_size(p, member, count)					\
 	__builtin_choose_expr(__is_constexpr(count),			\
-		sizeof(*(p)) + flex_array_size(p, member, count),	\
-		size_add(sizeof(*(p)), flex_array_size(p, member, count)))
+		MAX(sizeof(*(p)),					\
+		    offsetof(typeof(*(p)), member) +			\
+			flex_array_size(p, member, count)),		\
+		max(sizeof(*(p)),					\
+		    size_add(offsetof(typeof(*(p)), member),		\
+			     flex_array_size(p, member, count))))
 
 /**
  * struct_size_t() - Calculate size of structure with trailing flexible array
