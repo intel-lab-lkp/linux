@@ -5306,6 +5306,7 @@ M:	Łukasz Bartosik <ukaszb@chromium.org>
 L:	chrome-platform@lists.linux.dev
 S:	Maintained
 F:	drivers/usb/typec/ucsi/cros_ec_ucsi.c
+F:	drivers/usb/typec/ucsi/cros_ec_ucsi_trace.h
 
 CHRONTEL CH7322 CEC DRIVER
 M:	Joe Tessler <jrt@google.com>

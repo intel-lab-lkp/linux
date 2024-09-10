@@ -16,7 +16,9 @@
 #include <linux/slab.h>
 #include <linux/wait.h>
 
+#define CREATE_TRACE_POINTS
 #include "ucsi.h"
+#include "cros_ec_ucsi_trace.h"
 
 /*
  * Maximum size in bytes of a UCSI message between AP and EC
@@ -62,6 +64,8 @@ static int cros_ucsi_read(struct ucsi *ucsi, unsigned int offset, void *val,
 		dev_warn(udata->dev, "Failed to send EC message UCSI_PPM_GET: error=%d", ret);
 		return ret;
 	}
+
+	trace_cros_ec_opm_to_ppm_rd(offset, val, val_len);
 	return 0;
 }
 
@@ -96,6 +100,8 @@ static int cros_ucsi_async_control(struct ucsi *ucsi, u64 cmd)
 		dev_warn(udata->dev, "Failed to send EC message UCSI_PPM_SET: error=%d", ret);
 		return ret;
 	}
+
+	trace_cros_ec_opm_to_ppm_wr(req->offset, &cmd, sizeof(cmd));
 	return 0;
 }
 
@@ -137,6 +143,8 @@ static void cros_ucsi_work(struct work_struct *work)
 {
 	struct cros_ucsi_data *udata = container_of(work, struct cros_ucsi_data, work);
 	u32 cci;
+
+	trace_cros_ec_ppm_to_opm(0);
 
 	if (cros_ucsi_read_cci(udata->ucsi, &cci))
 		return;
