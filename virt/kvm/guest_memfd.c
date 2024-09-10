@@ -1592,4 +1592,211 @@ put_folio_and_exit:
 	return ret && !i ? ret : i;
 }
 EXPORT_SYMBOL_GPL(kvm_gmem_populate);
+
+/**
+ * Returns true if pages in range [@start, @end) in inode @inode have no
+ * userspace mappings.
+ */
+static bool kvm_gmem_no_mappings_range(struct inode *inode, pgoff_t start, pgoff_t end)
+{
+	pgoff_t index;
+	bool checked_indices_unmapped;
+
+	filemap_invalidate_lock_shared(inode->i_mapping);
+
+	/* TODO: replace iteration with filemap_get_folios() for efficiency. */
+	checked_indices_unmapped = true;
+	for (index = start; checked_indices_unmapped && index < end;) {
+		struct folio *folio;
+
+		/* Don't use kvm_gmem_get_folio to avoid allocating */
+		folio = filemap_lock_folio(inode->i_mapping, index);
+		if (IS_ERR(folio)) {
+			++index;
+			continue;
+		}
+
+		if (folio_mapped(folio) || folio_maybe_dma_pinned(folio))
+			checked_indices_unmapped = false;
+		else
+			index = folio_next_index(folio);
+
+		folio_unlock(folio);
+		folio_put(folio);
+	}
+
+	filemap_invalidate_unlock_shared(inode->i_mapping);
+	return checked_indices_unmapped;
+}
+
+/**
+ * Returns true if pages in range [@start, @end) in memslot @slot have no
+ * userspace mappings.
+ */
+static bool kvm_gmem_no_mappings_slot(struct kvm_memory_slot *slot,
+				      gfn_t start, gfn_t end)
+{
+	pgoff_t offset_start;
+	pgoff_t offset_end;
+	struct file *file;
+	bool ret;
+
+	offset_start = start - slot->base_gfn + slot->gmem.pgoff;
+	offset_end = end - slot->base_gfn + slot->gmem.pgoff;
+
+	file = kvm_gmem_get_file(slot);
+	if (!file)
+		return false;
+
+	ret = kvm_gmem_no_mappings_range(file_inode(file), offset_start, offset_end);
+
+	fput(file);
+
+	return ret;
+}
+
+/**
+ * Returns true if pages in range [@start, @end) have no host userspace mappings.
+ */
+static bool kvm_gmem_no_mappings(struct kvm *kvm, gfn_t start, gfn_t end)
+{
+	int i;
+
+	lockdep_assert_held(&kvm->slots_lock);
+
+	for (i = 0; i < kvm_arch_nr_memslot_as_ids(kvm); i++) {
+		struct kvm_memslot_iter iter;
+		struct kvm_memslots *slots;
+
+		slots = __kvm_memslots(kvm, i);
+		kvm_for_each_memslot_in_gfn_range(&iter, slots, start, end) {
+			struct kvm_memory_slot *slot;
+			gfn_t gfn_start;
+			gfn_t gfn_end;
+
+			slot = iter.slot;
+			gfn_start = max(start, slot->base_gfn);
+			gfn_end = min(end, slot->base_gfn + slot->npages);
+
+			if (iter.slot->flags & KVM_MEM_GUEST_MEMFD &&
+			    !kvm_gmem_no_mappings_slot(iter.slot, gfn_start, gfn_end))
+				return false;
+		}
+	}
+
+	return true;
+}
+
+/**
+ * Set faultability of given range of gfns [@start, @end) in memslot @slot to
+ * @faultable.
+ */
+static void kvm_gmem_set_faultable_slot(struct kvm_memory_slot *slot, gfn_t start,
+					gfn_t end, bool faultable)
+{
+	pgoff_t start_offset;
+	pgoff_t end_offset;
+	struct file *file;
+
+	file = kvm_gmem_get_file(slot);
+	if (!file)
+		return;
+
+	start_offset = start - slot->base_gfn + slot->gmem.pgoff;
+	end_offset = end - slot->base_gfn + slot->gmem.pgoff;
+
+	WARN_ON(kvm_gmem_set_faultable(file_inode(file), start_offset, end_offset,
+				       faultable));
+
+	fput(file);
+}
+
+/**
+ * Set faultability of given range of gfns [@start, @end) in memslot @slot to
+ * @faultable.
+ */
+static void kvm_gmem_set_faultable_vm(struct kvm *kvm, gfn_t start, gfn_t end,
+				      bool faultable)
+{
+	int i;
+
+	lockdep_assert_held(&kvm->slots_lock);
+
+	for (i = 0; i < kvm_arch_nr_memslot_as_ids(kvm); i++) {
+		struct kvm_memslot_iter iter;
+		struct kvm_memslots *slots;
+
+		slots = __kvm_memslots(kvm, i);
+		kvm_for_each_memslot_in_gfn_range(&iter, slots, start, end) {
+			struct kvm_memory_slot *slot;
+			gfn_t gfn_start;
+			gfn_t gfn_end;
+
+			slot = iter.slot;
+			gfn_start = max(start, slot->base_gfn);
+			gfn_end = min(end, slot->base_gfn + slot->npages);
+
+			if (iter.slot->flags & KVM_MEM_GUEST_MEMFD) {
+				kvm_gmem_set_faultable_slot(slot, gfn_start,
+							    gfn_end, faultable);
+			}
+		}
+	}
+}
+
+/**
+ * Returns true if guest_memfd permits setting range [@start, @end) to PRIVATE.
+ *
+ * If memory is faulted in to host userspace and a request was made to set the
+ * memory to PRIVATE, the faulted in pages must not be pinned for the request to
+ * be permitted.
+ */
+static int kvm_gmem_should_set_attributes_private(struct kvm *kvm, gfn_t start,
+						  gfn_t end)
+{
+	kvm_gmem_set_faultable_vm(kvm, start, end, false);
+
+	if (kvm_gmem_no_mappings(kvm, start, end))
+		return 0;
+
+	kvm_gmem_set_faultable_vm(kvm, start, end, true);
+	return -EINVAL;
+}
+
+/**
+ * Returns true if guest_memfd permits setting range [@start, @end) to SHARED.
+ *
+ * Because this allows pages to be faulted in to userspace, this must only be
+ * called after the pages have been invalidated from guest page tables.
+ */
+static int kvm_gmem_should_set_attributes_shared(struct kvm *kvm, gfn_t start,
+						 gfn_t end)
+{
+	/* Always okay to set shared, hence set range faultable here. */
+	kvm_gmem_set_faultable_vm(kvm, start, end, true);
+
+	return 0;
+}
+
+/**
+ * Returns 0 if guest_memfd permits setting attributes @attrs for range [@start,
+ * @end) or negative error otherwise.
+ *
+ * If memory is faulted in to host userspace and a request was made to set the
+ * memory to PRIVATE, the faulted in pages must not be pinned for the request to
+ * be permitted.
+ *
+ * Because this may allow pages to be faulted in to userspace when requested to
+ * set attributes to shared, this must only be called after the pages have been
+ * invalidated from guest page tables.
+ */
+int kvm_gmem_should_set_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
+				   unsigned long attrs)
+{
+	if (attrs & KVM_MEMORY_ATTRIBUTE_PRIVATE)
+		return kvm_gmem_should_set_attributes_private(kvm, start, end);
+	else
+		return kvm_gmem_should_set_attributes_shared(kvm, start, end);
+}
+
 #endif

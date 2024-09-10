@@ -41,6 +41,8 @@ int kvm_gmem_create(struct kvm *kvm, struct kvm_create_guest_memfd *args);
 int kvm_gmem_bind(struct kvm *kvm, struct kvm_memory_slot *slot,
 		  unsigned int fd, loff_t offset);
 void kvm_gmem_unbind(struct kvm_memory_slot *slot);
+int kvm_gmem_should_set_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
+				   unsigned long attrs);
 #else
 static inline void kvm_gmem_init(struct module *module)
 {
@@ -59,6 +61,13 @@ static inline void kvm_gmem_unbind(struct kvm_memory_slot *slot)
 {
 	WARN_ON_ONCE(1);
 }
+
+static inline int kvm_gmem_should_set_attributes(struct kvm *kvm, gfn_t start,
+						 gfn_t end, unsigned long attrs)
+{
+	return 0;
+}
+
 #endif /* CONFIG_KVM_PRIVATE_MEM */
 
 #endif /* __KVM_MM_H__ */

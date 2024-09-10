@@ -2523,6 +2523,13 @@ static int kvm_vm_set_mem_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 		.on_lock = kvm_mmu_invalidate_end,
 		.may_block = true,
 	};
+	struct kvm_mmu_notifier_range error_set_range = {
+		.start = start,
+		.end = end,
+		.handler = (void *)kvm_null_fn,
+		.on_lock = kvm_mmu_invalidate_end,
+		.may_block = true,
+	};
 	unsigned long i;
 	void *entry;
 	int r = 0;
@@ -2547,6 +2554,10 @@ static int kvm_vm_set_mem_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 
 	kvm_handle_gfn_range(kvm, &pre_set_range);
 
+	r = kvm_gmem_should_set_attributes(kvm, start, end, attributes);
+	if (r)
+		goto err;
+
 	for (i = start; i < end; i++) {
 		r = xa_err(xa_store(&kvm->mem_attr_array, i, entry,
 				    GFP_KERNEL_ACCOUNT));
@@ -2559,6 +2570,10 @@ out_unlock:
 	mutex_unlock(&kvm->slots_lock);
 
 	return r;
+
+err:
+	kvm_handle_gfn_range(kvm, &error_set_range);
+	goto out_unlock;
 }
 static int kvm_vm_ioctl_set_mem_attributes(struct kvm *kvm,
 					   struct kvm_memory_attributes *attrs)
