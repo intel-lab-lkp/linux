@@ -976,6 +976,8 @@ out_disconnect:
 /* Since the dsa/tagging sysfs device attribute is per conduit, the assumption
  * is that all DSA switches within a tree share the same tagger, otherwise
  * they would have formed disjoint trees (different "dsa,member" values).
+ *
+ * Must be called with RTNL lock held.
  */
 int dsa_tree_change_tag_proto(struct dsa_switch_tree *dst,
 			      const struct dsa_device_ops *tag_ops,
@@ -985,8 +987,7 @@ int dsa_tree_change_tag_proto(struct dsa_switch_tree *dst,
 	struct dsa_port *dp;
 	int err = -EBUSY;
 
-	if (!rtnl_trylock())
-		return restart_syscall();
+	ASSERT_RTNL();
 
 	/* At the moment we don't allow changing the tag protocol under
 	 * traffic. The rtnl_mutex also happens to serialize concurrent
@@ -1011,15 +1012,12 @@ int dsa_tree_change_tag_proto(struct dsa_switch_tree *dst,
 	if (err)
 		goto out_unwind_tagger;
 
-	rtnl_unlock();
-
 	return 0;
 
 out_unwind_tagger:
 	info.tag_ops = old_tag_ops;
 	dsa_tree_notify(dst, DSA_NOTIFIER_TAG_PROTO, &info);
 out_unlock:
-	rtnl_unlock();
 	return err;
 }
 
@@ -1027,7 +1025,7 @@ static void dsa_tree_conduit_state_change(struct dsa_switch_tree *dst,
 					  struct net_device *conduit)
 {
 	struct dsa_notifier_conduit_state_info info;
-	struct dsa_port *cpu_dp = conduit->dsa_ptr;
+	struct dsa_port *cpu_dp = rtnl_dereference(conduit->dsa_ptr);
 
 	info.conduit = conduit;
 	info.operational = dsa_port_conduit_is_operational(cpu_dp);
@@ -1039,7 +1037,7 @@ void dsa_tree_conduit_admin_state_change(struct dsa_switch_tree *dst,
 					 struct net_device *conduit,
 					 bool up)
 {
-	struct dsa_port *cpu_dp = conduit->dsa_ptr;
+	struct dsa_port *cpu_dp = rtnl_dereference(conduit->dsa_ptr);
 	bool notify = false;
 
 	/* Don't keep track of admin state on LAG DSA conduits,
@@ -1062,7 +1060,7 @@ void dsa_tree_conduit_oper_state_change(struct dsa_switch_tree *dst,
 					struct net_device *conduit,
 					bool up)
 {
-	struct dsa_port *cpu_dp = conduit->dsa_ptr;
+	struct dsa_port *cpu_dp = rtnl_dereference(conduit->dsa_ptr);
 	bool notify = false;
 
 	/* Don't keep track of oper state on LAG DSA conduits,
@@ -1594,10 +1592,11 @@ void dsa_switch_shutdown(struct dsa_switch *ds)
 	}
 
 	/* Disconnect from further netdevice notifiers on the conduit,
-	 * since netdev_uses_dsa() will now return false.
+	 * from now on, netdev_uses_dsa_currently() will return false.
 	 */
 	dsa_switch_for_each_cpu_port(dp, ds)
-		dp->conduit->dsa_ptr = NULL;
+		rcu_assign_pointer(dp->conduit->dsa_ptr, NULL);
+	synchronize_rcu();
 
 	rtnl_unlock();
 out:

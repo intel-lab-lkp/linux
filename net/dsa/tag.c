@@ -10,6 +10,7 @@
 #include <linux/netdevice.h>
 #include <linux/ptp_classify.h>
 #include <linux/skbuff.h>
+#include <linux/rcupdate.h>
 #include <net/dsa.h>
 #include <net/dst_metadata.h>
 
@@ -55,7 +56,7 @@ static int dsa_switch_rcv(struct sk_buff *skb, struct net_device *dev,
 			  struct packet_type *pt, struct net_device *unused)
 {
 	struct metadata_dst *md_dst = skb_metadata_dst(skb);
-	struct dsa_port *cpu_dp = dev->dsa_ptr;
+	struct dsa_port *cpu_dp = rcu_dereference(dev->dsa_ptr);
 	struct sk_buff *nskb = NULL;
 	struct dsa_user_priv *p;
 

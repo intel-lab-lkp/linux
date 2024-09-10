@@ -5,6 +5,7 @@
 
 #include <linux/if_vlan.h>
 #include <linux/list.h>
+#include <linux/rcupdate.h>
 #include <linux/types.h>
 #include <net/dsa.h>
 
@@ -32,11 +33,14 @@ static inline int dsa_tag_protocol_overhead(const struct dsa_device_ops *ops)
 static inline struct net_device *dsa_conduit_find_user(struct net_device *dev,
 						       int device, int port)
 {
-	struct dsa_port *cpu_dp = dev->dsa_ptr;
-	struct dsa_switch_tree *dst = cpu_dp->dst;
+	struct dsa_port *cpu_dp;
 	struct dsa_port *dp;
 
-	list_for_each_entry(dp, &dst->ports, list)
+	cpu_dp = rcu_dereference(dev->dsa_ptr);
+	if (!cpu_dp)
+		return NULL;
+
+	list_for_each_entry(dp, &cpu_dp->dst->ports, list)
 		if (dp->ds->index == device && dp->index == port &&
 		    dp->type == DSA_PORT_TYPE_USER)
 			return dp->user;
@@ -184,14 +188,17 @@ static inline struct sk_buff *dsa_software_vlan_untag(struct sk_buff *skb)
 static inline struct net_device *
 dsa_find_designated_bridge_port_by_vid(struct net_device *conduit, u16 vid)
 {
-	struct dsa_port *cpu_dp = conduit->dsa_ptr;
-	struct dsa_switch_tree *dst = cpu_dp->dst;
+	struct dsa_port *cpu_dp;
 	struct bridge_vlan_info vinfo;
 	struct net_device *user;
 	struct dsa_port *dp;
 	int err;
 
-	list_for_each_entry(dp, &dst->ports, list) {
+	cpu_dp = rcu_dereference(conduit->dsa_ptr);
+	if (!cpu_dp)
+		return NULL;
+
+	list_for_each_entry(dp, &cpu_dp->dst->ports, list) {
 		if (dp->type != DSA_PORT_TYPE_USER)
 			continue;
 

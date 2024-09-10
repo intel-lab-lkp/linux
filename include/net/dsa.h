@@ -19,6 +19,7 @@
 #include <linux/phy.h>
 #include <linux/platform_data/dsa.h>
 #include <linux/phylink.h>
+#include <linux/rcupdate.h>
 #include <net/devlink.h>
 #include <net/switchdev.h>
 
@@ -92,8 +93,9 @@ struct dsa_switch;
 struct dsa_device_ops {
 	struct sk_buff *(*xmit)(struct sk_buff *skb, struct net_device *dev);
 	struct sk_buff *(*rcv)(struct sk_buff *skb, struct net_device *dev);
-	void (*flow_dissect)(const struct sk_buff *skb, __be16 *proto,
-			     int *offset);
+	void (*flow_dissect)(const struct sk_buff *skb,
+			     const struct dsa_port *dp,
+			     __be16 *proto, int *offset);
 	int (*connect)(struct dsa_switch *ds);
 	void (*disconnect)(struct dsa_switch *ds);
 	unsigned int needed_headroom;
@@ -1334,12 +1336,27 @@ bool dsa_mdb_present_in_other_db(struct dsa_switch *ds, int port,
 				 struct dsa_db db);
 
 /* Keep inline for faster access in hot path */
-static inline bool netdev_uses_dsa(const struct net_device *dev)
+
+/* Must be called under RCU or RTNL lock */
+static inline bool __netdev_uses_dsa_currently(const struct net_device *dev)
 {
 #if IS_ENABLED(CONFIG_NET_DSA)
-	return dev->dsa_ptr && dev->dsa_ptr->rcv;
+	struct dsa_port *dp = rcu_dereference_rtnl(dev->dsa_ptr);
+
+	return dp && dp->rcv;
 #endif
 	return false;
+}
+
+static inline bool netdev_uses_dsa_currently(const struct net_device *dev)
+{
+	bool ret = false;
+#if IS_ENABLED(CONFIG_NET_DSA)
+	rcu_read_lock();
+	ret = __netdev_uses_dsa_currently(dev);
+	rcu_read_unlock();
+#endif
+	return ret;
 }
 
 /* All DSA tags that push the EtherType to the right (basically all except tail
@@ -1355,17 +1372,20 @@ static inline bool netdev_uses_dsa(const struct net_device *dev)
  *    that, in __be16 shorts).
  *
  *  - proto: the value of the real EtherType.
+ *
+ * Must be called under RCU read lock (because of dp).
  */
 static inline void dsa_tag_generic_flow_dissect(const struct sk_buff *skb,
+						const struct dsa_port *dp,
 						__be16 *proto, int *offset)
 {
-#if IS_ENABLED(CONFIG_NET_DSA)
-	const struct dsa_device_ops *ops = skb->dev->dsa_ptr->tag_ops;
-	int tag_len = ops->needed_headroom;
+	int tag_len;
 
+	RCU_LOCKDEP_WARN(!rcu_read_lock_any_held(), "no rcu lock held");
+
+	tag_len = dp->tag_ops->needed_headroom;
 	*offset = tag_len;
 	*proto = ((__be16 *)skb->data)[(tag_len / 2) - 1];
-#endif
 }
 
 void dsa_unregister_switch(struct dsa_switch *ds);

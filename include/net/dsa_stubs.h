@@ -22,9 +22,6 @@ static inline int dsa_conduit_hwtstamp_validate(struct net_device *dev,
 						const struct kernel_hwtstamp_config *config,
 						struct netlink_ext_ack *extack)
 {
-	if (!netdev_uses_dsa(dev))
-		return 0;
-
 	/* rtnl_lock() is a sufficient guarantee, because as long as
 	 * netdev_uses_dsa() returns true, the dsa_core module is still
 	 * registered, and so, dsa_unregister_stubs() couldn't have run.
@@ -32,6 +29,9 @@ static inline int dsa_conduit_hwtstamp_validate(struct net_device *dev,
 	 * dsa_conduit_teardown() has executed, which requires rtnl_lock().
 	 */
 	ASSERT_RTNL();
+
+	if (!__netdev_uses_dsa_currently(dev))
+		return 0;
 
 	return dsa_stubs->conduit_hwtstamp_validate(dev, config, extack);
 }

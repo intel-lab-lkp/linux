@@ -21,6 +21,7 @@
 #include <linux/if_hsr.h>
 #include <net/dcbnl.h>
 #include <linux/netpoll.h>
+#include <linux/rcupdate.h>
 #include <linux/string.h>
 
 #include "conduit.h"
@@ -2839,7 +2840,7 @@ int dsa_user_change_conduit(struct net_device *dev, struct net_device *conduit,
 		return -EOPNOTSUPP;
 	}
 
-	if (!netdev_uses_dsa(conduit)) {
+	if (!__netdev_uses_dsa_currently(conduit)) {
 		NL_SET_ERR_MSG_MOD(extack,
 				   "Interface not eligible as DSA conduit");
 		return -EOPNOTSUPP;
@@ -3141,8 +3142,8 @@ static int dsa_lag_conduit_validate(struct net_device *lag_dev,
 
 	netdev_for_each_lower_dev(lag_dev, lower1, iter1) {
 		netdev_for_each_lower_dev(lag_dev, lower2, iter2) {
-			if (!netdev_uses_dsa(lower1) ||
-			    !netdev_uses_dsa(lower2)) {
+			if (!__netdev_uses_dsa_currently(lower1) ||
+			    !__netdev_uses_dsa_currently(lower2)) {
 				NL_SET_ERR_MSG_MOD(extack,
 						   "All LAG ports must be eligible as DSA conduits");
 				return notifier_from_errno(-EINVAL);
@@ -3151,8 +3152,8 @@ static int dsa_lag_conduit_validate(struct net_device *lag_dev,
 			if (lower1 == lower2)
 				continue;
 
-			if (!dsa_port_tree_same(lower1->dsa_ptr,
-						lower2->dsa_ptr)) {
+			if (!dsa_port_tree_same(rtnl_dereference(lower1->dsa_ptr),
+						rtnl_dereference(lower2->dsa_ptr))) {
 				NL_SET_ERR_MSG_MOD(extack,
 						   "LAG contains DSA conduits of disjoint switch trees");
 				return notifier_from_errno(-EINVAL);
@@ -3169,7 +3170,7 @@ dsa_conduit_prechangeupper_sanity_check(struct net_device *conduit,
 {
 	struct netlink_ext_ack *extack = netdev_notifier_info_to_extack(&info->info);
 
-	if (!netdev_uses_dsa(conduit))
+	if (!__netdev_uses_dsa_currently(conduit))
 		return NOTIFY_DONE;
 
 	if (!info->linking)
@@ -3205,20 +3206,22 @@ dsa_lag_conduit_prechangelower_sanity_check(struct net_device *dev,
 	struct net_device *lower;
 	struct list_head *iter;
 
-	if (!netdev_uses_dsa(lag_dev) || !netif_is_lag_master(lag_dev))
+	if (!__netdev_uses_dsa_currently(lag_dev) ||
+	    !netif_is_lag_master(lag_dev))
 		return NOTIFY_DONE;
 
 	if (!info->linking)
 		return NOTIFY_DONE;
 
-	if (!netdev_uses_dsa(dev)) {
+	if (!__netdev_uses_dsa_currently(dev)) {
 		NL_SET_ERR_MSG(extack,
 			       "Only DSA conduits can join a LAG DSA conduit");
 		return notifier_from_errno(-EINVAL);
 	}
 
 	netdev_for_each_lower_dev(lag_dev, lower, iter) {
-		if (!dsa_port_tree_same(dev->dsa_ptr, lower->dsa_ptr)) {
+		if (!dsa_port_tree_same(rtnl_dereference(dev->dsa_ptr),
+					rtnl_dereference(lower->dsa_ptr))) {
 			NL_SET_ERR_MSG(extack,
 				       "Interface is DSA conduit for a different switch tree than this LAG");
 			return notifier_from_errno(-EINVAL);
@@ -3257,7 +3260,8 @@ dsa_bridge_prechangelower_sanity_check(struct net_device *new_lower,
 	extack = netdev_notifier_info_to_extack(&info->info);
 
 	netdev_for_each_lower_dev(br, lower, iter) {
-		if (!netdev_uses_dsa(new_lower) && !netdev_uses_dsa(lower))
+		if (!__netdev_uses_dsa_currently(new_lower) &&
+		    !__netdev_uses_dsa_currently(lower))
 			continue;
 
 		if (!netdev_port_same_parent_id(lower, new_lower)) {
@@ -3295,7 +3299,7 @@ static int dsa_conduit_lag_join(struct net_device *conduit,
 				struct netdev_lag_upper_info *uinfo,
 				struct netlink_ext_ack *extack)
 {
-	struct dsa_port *cpu_dp = conduit->dsa_ptr;
+	struct dsa_port *cpu_dp = rtnl_dereference(conduit->dsa_ptr);
 	struct dsa_switch_tree *dst = cpu_dp->dst;
 	struct dsa_port *dp;
 	int err;
@@ -3328,7 +3332,7 @@ restore:
 		}
 	}
 
-	dsa_conduit_lag_teardown(lag_dev, conduit->dsa_ptr);
+	dsa_conduit_lag_teardown(lag_dev, rtnl_dereference(conduit->dsa_ptr));
 
 	return err;
 }
@@ -3336,17 +3340,16 @@ restore:
 static void dsa_conduit_lag_leave(struct net_device *conduit,
 				  struct net_device *lag_dev)
 {
-	struct dsa_port *dp, *cpu_dp = lag_dev->dsa_ptr;
+	struct dsa_port *dp, *cpu_dp = rtnl_dereference(lag_dev->dsa_ptr);
 	struct dsa_switch_tree *dst = cpu_dp->dst;
 	struct dsa_port *new_cpu_dp = NULL;
 	struct net_device *lower;
 	struct list_head *iter;
 
 	netdev_for_each_lower_dev(lag_dev, lower, iter) {
-		if (netdev_uses_dsa(lower)) {
-			new_cpu_dp = lower->dsa_ptr;
+		new_cpu_dp = rtnl_dereference(lower->dsa_ptr);
+		if (new_cpu_dp)
 			break;
-		}
 	}
 
 	if (new_cpu_dp) {
@@ -3360,8 +3363,11 @@ static void dsa_conduit_lag_leave(struct net_device *conduit,
 		/* Update the index of the virtual CPU port to match the lowest
 		 * physical CPU port
 		 */
-		lag_dev->dsa_ptr = new_cpu_dp;
-		wmb();
+		rcu_assign_pointer(lag_dev->dsa_ptr, new_cpu_dp);
+		/*
+		 * No need to synchronize_rcu() here because dsa_ptr in not
+		 * going away before it will be zeroed
+		 */
 	} else {
 		/* If the LAG DSA conduit has no ports left, migrate back all
 		 * user ports to the first physical CPU port
@@ -3372,7 +3378,7 @@ static void dsa_conduit_lag_leave(struct net_device *conduit,
 	/* This DSA conduit has left its LAG in any case, so let
 	 * the CPU port leave the hardware LAG as well
 	 */
-	dsa_conduit_lag_teardown(lag_dev, conduit->dsa_ptr);
+	dsa_conduit_lag_teardown(lag_dev, rtnl_dereference(conduit->dsa_ptr));
 }
 
 static int dsa_conduit_changeupper(struct net_device *dev,
@@ -3381,7 +3387,7 @@ static int dsa_conduit_changeupper(struct net_device *dev,
 	struct netlink_ext_ack *extack;
 	int err = NOTIFY_DONE;
 
-	if (!netdev_uses_dsa(dev))
+	if (!__netdev_uses_dsa_currently(dev))
 		return err;
 
 	extack = netdev_notifier_info_to_extack(&info->info);
@@ -3464,14 +3470,14 @@ static int dsa_user_netdevice_event(struct notifier_block *nb,
 			err = dsa_port_lag_change(dp, info->lower_state_info);
 		}
 
+		dp = rtnl_dereference(dev->dsa_ptr);
+		if (!dp)
+			return NOTIFY_OK;
+
 		/* Mirror LAG port events on DSA conduits that are in
 		 * a LAG towards their respective switch CPU ports
 		 */
-		if (netdev_uses_dsa(dev)) {
-			dp = dev->dsa_ptr;
-
-			err = dsa_port_lag_change(dp, info->lower_state_info);
-		}
+		err = dsa_port_lag_change(dp, info->lower_state_info);
 
 		return notifier_from_errno(err);
 	}
@@ -3481,39 +3487,41 @@ static int dsa_user_netdevice_event(struct notifier_block *nb,
 		 * DSA driver may require the conduit port (and indirectly
 		 * the tagger) to be available for some special operation.
 		 */
-		if (netdev_uses_dsa(dev)) {
-			struct dsa_port *cpu_dp = dev->dsa_ptr;
-			struct dsa_switch_tree *dst = cpu_dp->ds->dst;
+		struct dsa_port *cpu_dp = rtnl_dereference(dev->dsa_ptr);
+		struct dsa_switch_tree *dst;
 
-			/* Track when the conduit port is UP */
-			dsa_tree_conduit_oper_state_change(dst, dev,
-							   netif_oper_up(dev));
+		if (!cpu_dp)
+			return NOTIFY_DONE;
 
-			/* Track when the conduit port is ready and can accept
-			 * packet.
-			 * NETDEV_UP event is not enough to flag a port as ready.
-			 * We also have to wait for linkwatch_do_dev to dev_activate
-			 * and emit a NETDEV_CHANGE event.
-			 * We check if a conduit port is ready by checking if the dev
-			 * have a qdisc assigned and is not noop.
-			 */
-			dsa_tree_conduit_admin_state_change(dst, dev,
-							    !qdisc_tx_is_noop(dev));
+		dst = cpu_dp->ds->dst;
 
-			return NOTIFY_OK;
-		}
+		/* Track when the conduit port is UP */
+		dsa_tree_conduit_oper_state_change(dst, dev,
+						   netif_oper_up(dev));
 
-		return NOTIFY_DONE;
+		/* Track when the conduit port is ready and can accept
+		 * packet.
+		 * NETDEV_UP event is not enough to flag a port as ready.
+		 * We also have to wait for linkwatch_do_dev to dev_activate
+		 * and emit a NETDEV_CHANGE event.
+		 * We check if a conduit port is ready by checking if the dev
+		 * have a qdisc assigned and is not noop.
+		 */
+		dsa_tree_conduit_admin_state_change(dst, dev,
+						    !qdisc_tx_is_noop(dev));
+
+		return NOTIFY_OK;
+
 	}
 	case NETDEV_GOING_DOWN: {
 		struct dsa_port *dp, *cpu_dp;
 		struct dsa_switch_tree *dst;
 		LIST_HEAD(close_list);
 
-		if (!netdev_uses_dsa(dev))
+		cpu_dp = rtnl_dereference(dev->dsa_ptr);
+		if (!cpu_dp)
 			return NOTIFY_DONE;
 
-		cpu_dp = dev->dsa_ptr;
 		dst = cpu_dp->ds->dst;
 
 		dsa_tree_conduit_admin_state_change(dst, dev, false);

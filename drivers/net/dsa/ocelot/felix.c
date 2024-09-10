@@ -21,6 +21,7 @@
 #include <linux/of_net.h>
 #include <linux/pci.h>
 #include <linux/of.h>
+#include <linux/rtnetlink.h>
 #include <net/pkt_sched.h>
 #include <net/dsa.h>
 #include "felix.h"
@@ -57,7 +58,7 @@ static int felix_cpu_port_for_conduit(struct dsa_switch *ds,
 		return lag;
 	}
 
-	cpu_dp = conduit->dsa_ptr;
+	cpu_dp = rtnl_dereference(conduit->dsa_ptr);
 	return cpu_dp->index;
 }
 

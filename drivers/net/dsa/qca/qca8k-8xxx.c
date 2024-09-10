@@ -20,6 +20,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/etherdevice.h>
 #include <linux/dsa/tag_qca.h>
+#include <linux/rtnetlink.h>
 
 #include "qca8k.h"
 #include "qca8k_leds.h"
@@ -1754,7 +1755,7 @@ static void
 qca8k_conduit_change(struct dsa_switch *ds, const struct net_device *conduit,
 		     bool operational)
 {
-	struct dsa_port *dp = conduit->dsa_ptr;
+	struct dsa_port *dp = rtnl_dereference(conduit->dsa_ptr);
 	struct qca8k_priv *priv = ds->priv;
 
 	/* Ethernet MIB/MDIO is only supported for CPU port 0 */

@@ -2255,7 +2255,7 @@ static int airoha_dev_open(struct net_device *dev)
 	if (err)
 		return err;
 
-	if (netdev_uses_dsa(dev))
+	if (__netdev_uses_dsa_currently(dev))
 		airoha_fe_set(eth, REG_GDM_INGRESS_CFG(port->id),
 			      GDM_STAG_EN_MASK);
 	else

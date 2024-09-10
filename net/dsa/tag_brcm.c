@@ -269,7 +269,7 @@ static struct sk_buff *brcm_leg_tag_rcv(struct sk_buff *skb,
 		return NULL;
 
 	/* VLAN tag is added by BCM63xx internal switch */
-	if (netdev_uses_dsa(skb->dev))
+	if (__netdev_uses_dsa_currently(skb->dev))
 		len += VLAN_HLEN;
 
 	/* Remove Broadcom tag and update checksum */

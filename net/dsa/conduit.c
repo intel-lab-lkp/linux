@@ -9,6 +9,7 @@
 #include <linux/ethtool.h>
 #include <linux/netdevice.h>
 #include <linux/netlink.h>
+#include <linux/rcupdate.h>
 #include <net/dsa.h>
 
 #include "conduit.h"
@@ -18,7 +19,7 @@
 
 static int dsa_conduit_get_regs_len(struct net_device *dev)
 {
-	struct dsa_port *cpu_dp = dev->dsa_ptr;
+	struct dsa_port *cpu_dp = rtnl_dereference(dev->dsa_ptr);
 	const struct ethtool_ops *ops = cpu_dp->orig_ethtool_ops;
 	struct dsa_switch *ds = cpu_dp->ds;
 	int port = cpu_dp->index;
@@ -48,7 +49,7 @@ static int dsa_conduit_get_regs_len(struct net_device *dev)
 static void dsa_conduit_get_regs(struct net_device *dev,
 				 struct ethtool_regs *regs, void *data)
 {
-	struct dsa_port *cpu_dp = dev->dsa_ptr;
+	struct dsa_port *cpu_dp = rtnl_dereference(dev->dsa_ptr);
 	const struct ethtool_ops *ops = cpu_dp->orig_ethtool_ops;
 	struct dsa_switch *ds = cpu_dp->ds;
 	struct ethtool_drvinfo *cpu_info;
@@ -84,7 +85,7 @@ static void dsa_conduit_get_ethtool_stats(struct net_device *dev,
 					  struct ethtool_stats *stats,
 					  uint64_t *data)
 {
-	struct dsa_port *cpu_dp = dev->dsa_ptr;
+	struct dsa_port *cpu_dp = rtnl_dereference(dev->dsa_ptr);
 	const struct ethtool_ops *ops = cpu_dp->orig_ethtool_ops;
 	struct dsa_switch *ds = cpu_dp->ds;
 	int port = cpu_dp->index;
@@ -103,7 +104,7 @@ static void dsa_conduit_get_ethtool_phy_stats(struct net_device *dev,
 					      struct ethtool_stats *stats,
 					      uint64_t *data)
 {
-	struct dsa_port *cpu_dp = dev->dsa_ptr;
+	struct dsa_port *cpu_dp = rtnl_dereference(dev->dsa_ptr);
 	const struct ethtool_ops *ops = cpu_dp->orig_ethtool_ops;
 	struct dsa_switch *ds = cpu_dp->ds;
 	int port = cpu_dp->index;
@@ -127,7 +128,7 @@ static void dsa_conduit_get_ethtool_phy_stats(struct net_device *dev,
 
 static int dsa_conduit_get_sset_count(struct net_device *dev, int sset)
 {
-	struct dsa_port *cpu_dp = dev->dsa_ptr;
+	struct dsa_port *cpu_dp = rtnl_dereference(dev->dsa_ptr);
 	const struct ethtool_ops *ops = cpu_dp->orig_ethtool_ops;
 	struct dsa_switch *ds = cpu_dp->ds;
 	int count = 0;
@@ -150,7 +151,7 @@ static int dsa_conduit_get_sset_count(struct net_device *dev, int sset)
 static void dsa_conduit_get_strings(struct net_device *dev, uint32_t stringset,
 				    uint8_t *data)
 {
-	struct dsa_port *cpu_dp = dev->dsa_ptr;
+	struct dsa_port *cpu_dp = rtnl_dereference(dev->dsa_ptr);
 	const struct ethtool_ops *ops = cpu_dp->orig_ethtool_ops;
 	struct dsa_switch *ds = cpu_dp->ds;
 	int port = cpu_dp->index;
@@ -202,7 +203,7 @@ int __dsa_conduit_hwtstamp_validate(struct net_device *dev,
 				    const struct kernel_hwtstamp_config *config,
 				    struct netlink_ext_ack *extack)
 {
-	struct dsa_port *cpu_dp = dev->dsa_ptr;
+	struct dsa_port *cpu_dp = rtnl_dereference(dev->dsa_ptr);
 	struct dsa_switch *ds = cpu_dp->ds;
 	struct dsa_switch_tree *dst;
 	struct dsa_port *dp;
@@ -222,7 +223,7 @@ int __dsa_conduit_hwtstamp_validate(struct net_device *dev,
 
 static int dsa_conduit_ethtool_setup(struct net_device *dev)
 {
-	struct dsa_port *cpu_dp = dev->dsa_ptr;
+	struct dsa_port *cpu_dp = rtnl_dereference(dev->dsa_ptr);
 	struct dsa_switch *ds = cpu_dp->ds;
 	struct ethtool_ops *ops;
 
@@ -251,7 +252,7 @@ static int dsa_conduit_ethtool_setup(struct net_device *dev)
 
 static void dsa_conduit_ethtool_teardown(struct net_device *dev)
 {
-	struct dsa_port *cpu_dp = dev->dsa_ptr;
+	struct dsa_port *cpu_dp = rtnl_dereference(dev->dsa_ptr);
 
 	if (netif_is_lag_master(dev))
 		return;
@@ -267,12 +268,13 @@ static void dsa_conduit_ethtool_teardown(struct net_device *dev)
  */
 static void dsa_conduit_set_promiscuity(struct net_device *dev, int inc)
 {
-	const struct dsa_device_ops *ops = dev->dsa_ptr->tag_ops;
+	const struct dsa_device_ops *ops;
+
+	ASSERT_RTNL();
+	ops = rtnl_dereference(dev->dsa_ptr)->tag_ops;
 
 	if ((dev->priv_flags & IFF_UNICAST_FLT) && !ops->promisc_on_conduit)
 		return;
-
-	ASSERT_RTNL();
 
 	dev_set_promiscuity(dev, inc);
 }
@@ -281,10 +283,17 @@ static ssize_t tagging_show(struct device *d, struct device_attribute *attr,
 			    char *buf)
 {
 	struct net_device *dev = to_net_dev(d);
-	struct dsa_port *cpu_dp = dev->dsa_ptr;
+	struct dsa_port *cpu_dp;
+	int ret = 0;
 
-	return sysfs_emit(buf, "%s\n",
-		       dsa_tag_protocol_to_str(cpu_dp->tag_ops));
+	rcu_read_lock();
+	cpu_dp = rcu_dereference(dev->dsa_ptr);
+	if (cpu_dp)
+		ret = sysfs_emit(buf, "%s\n",
+				 dsa_tag_protocol_to_str(cpu_dp->tag_ops));
+	rcu_read_unlock();
+
+	return ret;
 }
 
 static ssize_t tagging_store(struct device *d, struct device_attribute *attr,
@@ -293,7 +302,7 @@ static ssize_t tagging_store(struct device *d, struct device_attribute *attr,
 	const struct dsa_device_ops *new_tag_ops, *old_tag_ops;
 	const char *end = strchrnul(buf, '\n'), *name;
 	struct net_device *dev = to_net_dev(d);
-	struct dsa_port *cpu_dp = dev->dsa_ptr;
+	struct dsa_port *cpu_dp;
 	size_t len = end - buf;
 	int err;
 
@@ -305,13 +314,17 @@ static ssize_t tagging_store(struct device *d, struct device_attribute *attr,
 	if (!name)
 		return -ENOMEM;
 
-	old_tag_ops = cpu_dp->tag_ops;
 	new_tag_ops = dsa_tag_driver_get_by_name(name);
 	kfree(name);
 	/* Bad tagger name? */
 	if (IS_ERR(new_tag_ops))
 		return PTR_ERR(new_tag_ops);
 
+	if (!rtnl_trylock())
+		return restart_syscall();
+
+	cpu_dp = rtnl_dereference(dev->dsa_ptr);
+	old_tag_ops = cpu_dp->tag_ops;
 	if (new_tag_ops == old_tag_ops)
 		/* Drop the temporarily held duplicate reference, since
 		 * the DSA switch tree uses this tagger.
@@ -321,6 +334,7 @@ static ssize_t tagging_store(struct device *d, struct device_attribute *attr,
 	err = dsa_tree_change_tag_proto(cpu_dp->ds->dst, new_tag_ops,
 					old_tag_ops);
 	if (err) {
+		rtnl_unlock();
 		/* On failure the old tagger is restored, so we don't need the
 		 * driver for the new one.
 		 */
@@ -331,6 +345,7 @@ static ssize_t tagging_store(struct device *d, struct device_attribute *attr,
 	/* On success we no longer need the module for the old tagging protocol
 	 */
 out:
+	rtnl_unlock();
 	dsa_tag_driver_put(old_tag_ops);
 	return count;
 }
@@ -384,13 +399,11 @@ int dsa_conduit_setup(struct net_device *dev, struct dsa_port *cpu_dp)
 		netdev_warn(dev, "error %d setting MTU to %d to include DSA overhead\n",
 			    ret, mtu);
 
-	/* If we use a tagging format that doesn't have an ethertype
-	 * field, make sure that all packets from this point on get
-	 * sent to the tag format's receive function.
+	rcu_assign_pointer(dev->dsa_ptr, cpu_dp);
+	/*
+	 * No need to synchronize_rcu() here because dsa_ptr in not going away
+	 * before it will be zeroed
 	 */
-	wmb();
-
-	dev->dsa_ptr = cpu_dp;
 
 	dsa_conduit_set_promiscuity(dev, 1);
 
@@ -418,13 +431,12 @@ void dsa_conduit_teardown(struct net_device *dev)
 	dsa_conduit_reset_mtu(dev);
 	dsa_conduit_set_promiscuity(dev, -1);
 
-	dev->dsa_ptr = NULL;
-
 	/* If we used a tagging format that doesn't have an ethertype
 	 * field, make sure that all packets from this point get sent
 	 * without the tag and go through the regular receive path.
 	 */
-	wmb();
+	rcu_assign_pointer(dev->dsa_ptr, NULL);
+	synchronize_rcu();
 }
 
 int dsa_conduit_lag_setup(struct net_device *lag_dev, struct dsa_port *cpu_dp,
@@ -434,7 +446,7 @@ int dsa_conduit_lag_setup(struct net_device *lag_dev, struct dsa_port *cpu_dp,
 	bool conduit_setup = false;
 	int err;
 
-	if (!netdev_uses_dsa(lag_dev)) {
+	if (!__netdev_uses_dsa_currently(lag_dev)) {
 		err = dsa_conduit_setup(lag_dev, cpu_dp);
 		if (err)
 			return err;

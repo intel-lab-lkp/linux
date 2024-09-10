@@ -5,6 +5,7 @@
  * primitives for taggers that rely on 802.1Q VLAN tags to use.
  */
 #include <linux/if_vlan.h>
+#include <linux/rcupdate.h>
 #include <linux/dsa/8021q.h>
 
 #include "port.h"
@@ -474,14 +475,17 @@ EXPORT_SYMBOL_GPL(dsa_8021q_xmit);
 static struct net_device *
 dsa_tag_8021q_find_port_by_vbid(struct net_device *conduit, int vbid)
 {
-	struct dsa_port *cpu_dp = conduit->dsa_ptr;
-	struct dsa_switch_tree *dst = cpu_dp->dst;
+	struct dsa_port *cpu_dp;
 	struct dsa_port *dp;
 
 	if (WARN_ON(!vbid))
 		return NULL;
 
-	dsa_tree_for_each_user_port(dp, dst) {
+	cpu_dp = rcu_dereference(conduit->dsa_ptr);
+	if (!cpu_dp)
+		return NULL;
+
+	dsa_tree_for_each_user_port(dp, cpu_dp->dst) {
 		if (!dp->bridge)
 			continue;
 

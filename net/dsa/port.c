@@ -11,6 +11,7 @@
 #include <linux/notifier.h>
 #include <linux/of_mdio.h>
 #include <linux/of_net.h>
+#include <linux/rtnetlink.h>
 
 #include "dsa.h"
 #include "port.h"
@@ -1414,7 +1415,7 @@ static int dsa_port_assign_conduit(struct dsa_port *dp,
 	if (err && fail_on_err)
 		return err;
 
-	dp->cpu_dp = conduit->dsa_ptr;
+	dp->cpu_dp = rtnl_dereference(conduit->dsa_ptr);
 	dp->cpu_port_in_lag = netif_is_lag_master(conduit);
 
 	return 0;

@@ -5,6 +5,7 @@
 
 #include <linux/etherdevice.h>
 #include <linux/bitfield.h>
+#include <linux/rcupdate.h>
 #include <net/dsa.h>
 #include <linux/dsa/tag_qca.h>
 
@@ -36,14 +37,19 @@ static struct sk_buff *qca_tag_xmit(struct sk_buff *skb, struct net_device *dev)
 static struct sk_buff *qca_tag_rcv(struct sk_buff *skb, struct net_device *dev)
 {
 	struct qca_tagger_data *tagger_data;
-	struct dsa_port *dp = dev->dsa_ptr;
-	struct dsa_switch *ds = dp->ds;
+	struct dsa_port *dp;
+	struct dsa_switch *ds;
 	u8 ver, pk_type;
 	__be16 *phdr;
 	int port;
 	u16 hdr;
 
 	BUILD_BUG_ON(sizeof(struct qca_mgmt_ethhdr) != QCA_HDR_MGMT_HEADER_LEN + QCA_HDR_LEN);
+
+	dp = rcu_dereference(dev->dsa_ptr);
+	if (!dp)
+		return NULL;
+	ds = dp->ds;
 
 	tagger_data = ds->tagger_data;
 

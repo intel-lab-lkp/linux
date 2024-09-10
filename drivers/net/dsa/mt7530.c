@@ -20,6 +20,7 @@
 #include <linux/reset.h>
 #include <linux/gpio/consumer.h>
 #include <linux/gpio/driver.h>
+#include <linux/rtnetlink.h>
 #include <net/dsa.h>
 
 #include "mt7530.h"
@@ -3092,7 +3093,7 @@ mt753x_conduit_state_change(struct dsa_switch *ds,
 			    const struct net_device *conduit,
 			    bool operational)
 {
-	struct dsa_port *cpu_dp = conduit->dsa_ptr;
+	struct dsa_port *cpu_dp = rtnl_dereference(conduit->dsa_ptr);
 	struct mt7530_priv *priv = ds->priv;
 	int val = 0;
 	u8 mask;

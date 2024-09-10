@@ -5568,7 +5568,8 @@ skip_classify:
 		}
 	}
 
-	if (unlikely(skb_vlan_tag_present(skb)) && !netdev_uses_dsa(skb->dev)) {
+	if (unlikely(skb_vlan_tag_present(skb)) &&
+	    !__netdev_uses_dsa_currently(skb->dev)) {
 check_vlan_id:
 		if (skb_vlan_tag_get_id(skb)) {
 			/* Vlan id is non 0 and vlan_do_receive() above couldn't

@@ -48,6 +48,7 @@
 #include <linux/dsa/mv88e6xxx.h>
 #include <linux/etherdevice.h>
 #include <linux/list.h>
+#include <linux/rcupdate.h>
 #include <linux/slab.h>
 
 #include "tag.h"
@@ -257,14 +258,15 @@ static struct sk_buff *dsa_rcv_ll(struct sk_buff *skb, struct net_device *dev,
 	source_port = (dsa_header[1] >> 3) & 0x1f;
 
 	if (trunk) {
-		struct dsa_port *cpu_dp = dev->dsa_ptr;
-		struct dsa_lag *lag;
+		struct dsa_port *cpu_dp = rcu_dereference(dev->dsa_ptr);
+		struct dsa_lag *lag = NULL;
 
 		/* The exact source port is not available in the tag,
 		 * so we inject the frame directly on the upper
 		 * team/bond.
 		 */
-		lag = dsa_lag_by_id(cpu_dp->dst, source_port + 1);
+		if (cpu_dp)
+			lag = dsa_lag_by_id(cpu_dp->dst, source_port + 1);
 		skb->dev = lag ? lag->dev : NULL;
 	} else {
 		skb->dev = dsa_conduit_find_user(dev, source_device,

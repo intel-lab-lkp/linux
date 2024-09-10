@@ -443,7 +443,7 @@ static rx_handler_result_t br_handle_frame_dummy(struct sk_buff **pskb)
 
 rx_handler_func_t *br_get_rx_handler(const struct net_device *dev)
 {
-	if (netdev_uses_dsa(dev))
+	if (__netdev_uses_dsa_currently(dev))
 		return br_handle_frame_dummy;
 
 	return br_handle_frame;

@@ -8,6 +8,7 @@
 #include <linux/platform_device.h>
 #include <linux/if_ether.h>
 #include <linux/if_vlan.h>
+#include <linux/rcupdate.h>
 #include <net/dst_metadata.h>
 #include <net/dsa.h>
 #include "mtk_eth_soc.h"
@@ -785,9 +786,17 @@ void __mtk_ppe_check_skb(struct mtk_ppe *ppe, struct sk_buff *skb, u16 hash)
 	switch (skb->protocol) {
 #if IS_ENABLED(CONFIG_NET_DSA)
 	case htons(ETH_P_XDSA):
-		if (!netdev_uses_dsa(skb->dev) ||
-		    skb->dev->dsa_ptr->tag_ops->proto != DSA_TAG_PROTO_MTK)
-			goto out;
+		{
+			struct dsa_port *dp;
+			bool proto_mtk;
+
+			rcu_read_lock();
+			dp = rcu_dereference(skb->dev->dsa_ptr);
+			proto_mtk = dp && dp->tag_ops->proto == DSA_TAG_PROTO_MTK;
+			rcu_read_unlock();
+			if (!proto_mtk)
+				goto out;
+		}
 
 		if (!skb_metadata_dst(skb))
 			tag += 4;

@@ -5,6 +5,7 @@
 #include <linux/dsa/sja1105.h>
 #include <linux/dsa/8021q.h>
 #include <linux/packing.h>
+#include <linux/rcupdate.h>
 
 #include "tag.h"
 #include "tag_8021q.h"
@@ -530,12 +531,13 @@ static struct sk_buff *sja1110_rcv_meta(struct sk_buff *skb, u16 rx_header)
 	int n_ts = SJA1110_RX_HEADER_N_TS(rx_header);
 	struct sja1105_tagger_data *tagger_data;
 	struct net_device *conduit = skb->dev;
+	struct dsa_switch *ds = NULL;
 	struct dsa_port *cpu_dp;
-	struct dsa_switch *ds;
 	int i;
 
-	cpu_dp = conduit->dsa_ptr;
-	ds = dsa_switch_find(cpu_dp->dst->index, switch_id);
+	cpu_dp = rcu_dereference(conduit->dsa_ptr);
+	if (cpu_dp)
+		ds = dsa_switch_find(cpu_dp->dst->index, switch_id);
 	if (!ds) {
 		net_err_ratelimited("%s: cannot find switch id %d\n",
 				    conduit->name, switch_id);
@@ -662,24 +664,26 @@ static struct sk_buff *sja1110_rcv(struct sk_buff *skb,
 	return skb;
 }
 
-static void sja1105_flow_dissect(const struct sk_buff *skb, __be16 *proto,
-				 int *offset)
+static void sja1105_flow_dissect(const struct sk_buff *skb,
+				 const struct dsa_port *dp,
+				 __be16 *proto, int *offset)
 {
 	/* No tag added for management frames, all ok */
 	if (unlikely(sja1105_is_link_local(skb)))
 		return;
 
-	dsa_tag_generic_flow_dissect(skb, proto, offset);
+	dsa_tag_generic_flow_dissect(skb, dp, proto, offset);
 }
 
-static void sja1110_flow_dissect(const struct sk_buff *skb, __be16 *proto,
-				 int *offset)
+static void sja1110_flow_dissect(const struct sk_buff *skb,
+				 const struct dsa_port *dp,
+				 __be16 *proto, int *offset)
 {
 	/* Management frames have 2 DSA tags on RX, so the needed_headroom we
 	 * declared is fine for the generic dissector adjustment procedure.
 	 */
 	if (unlikely(sja1105_is_link_local(skb)))
-		return dsa_tag_generic_flow_dissect(skb, proto, offset);
+		return dsa_tag_generic_flow_dissect(skb, dp, proto, offset);
 
 	/* For the rest, there is a single DSA tag, the tag_8021q one */
 	*offset = VLAN_HLEN;

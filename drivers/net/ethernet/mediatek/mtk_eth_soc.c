@@ -24,6 +24,7 @@
 #include <linux/pcs/pcs-mtk-lynxi.h>
 #include <linux/jhash.h>
 #include <linux/bitfield.h>
+#include <linux/rcupdate.h>
 #include <net/dsa.h>
 #include <net/dst_metadata.h>
 #include <net/page_pool/helpers.h>
@@ -1375,7 +1376,8 @@ static void mtk_tx_set_dma_desc_v2(struct net_device *dev, void *txd,
 		/* tx checksum offload */
 		if (info->csum)
 			data |= TX_DMA_CHKSUM_V2;
-		if (mtk_is_netsys_v3_or_greater(eth) && netdev_uses_dsa(dev))
+		if (mtk_is_netsys_v3_or_greater(eth) &&
+		    __netdev_uses_dsa_currently(dev))
 			data |= TX_DMA_SPTAG_V3;
 	}
 	WRITE_ONCE(desc->txd5, data);
@@ -2183,7 +2185,7 @@ static int mtk_poll_rx(struct napi_struct *napi, int budget,
 		 * hardware treats the MTK special tag as a VLAN and untags it.
 		 */
 		if (mtk_is_netsys_v1(eth) && (trxd.rxd2 & RX_DMA_VTAG) &&
-		    netdev_uses_dsa(netdev)) {
+		    __netdev_uses_dsa_currently(netdev)) {
 			unsigned int port = RX_DMA_VPID(trxd.rxd3) & GENMASK(2, 0);
 
 			if (port < ARRAY_SIZE(eth->dsa_meta) &&
@@ -3304,7 +3306,7 @@ static void mtk_gdm_config(struct mtk_eth *eth, u32 id, u32 config)
 
 	val |= config;
 
-	if (eth->netdev[id] && netdev_uses_dsa(eth->netdev[id]))
+	if (eth->netdev[id] && __netdev_uses_dsa_currently(eth->netdev[id]))
 		val |= MTK_GDMA_SPECIAL_TAG;
 
 	mtk_w32(eth, val, MTK_GDMA_FWD_CFG(id));
@@ -3313,12 +3315,16 @@ static void mtk_gdm_config(struct mtk_eth *eth, u32 id, u32 config)
 
 static bool mtk_uses_dsa(struct net_device *dev)
 {
+	bool ret = false;
 #if IS_ENABLED(CONFIG_NET_DSA)
-	return netdev_uses_dsa(dev) &&
-	       dev->dsa_ptr->tag_ops->proto == DSA_TAG_PROTO_MTK;
-#else
-	return false;
+	struct dsa_port *dp;
+
+	rcu_read_lock();
+	dp = rcu_dereference(dev->dsa_ptr);
+	ret = dp && dp->tag_ops->proto == DSA_TAG_PROTO_MTK;
+	rcu_read_unlock();
 #endif
+	return ret;
 }
 
 static int mtk_device_event(struct notifier_block *n, unsigned long event, void *ptr)
@@ -4482,7 +4488,7 @@ static u16 mtk_select_queue(struct net_device *dev, struct sk_buff *skb,
 	struct mtk_mac *mac = netdev_priv(dev);
 	unsigned int queue = 0;
 
-	if (netdev_uses_dsa(dev))
+	if (__netdev_uses_dsa_currently(dev))
 		queue = skb_get_queue_mapping(skb) + 3;
 	else
 		queue = mac->id;
