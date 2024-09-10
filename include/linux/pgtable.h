@@ -1064,12 +1064,6 @@ static inline int pgd_same(pgd_t pgd_a, pgd_t pgd_b)
  * same value. Otherwise, use the typical "set" helpers and flush the
  * TLB.
  */
-#define set_pte_safe(ptep, pte) \
-({ \
-	WARN_ON_ONCE(pte_present(*ptep) && !pte_same(*ptep, pte)); \
-	set_pte(ptep, pte); \
-})
-
 #define set_pmd_safe(pmdp, pmd) \
 ({ \
 	WARN_ON_ONCE(pmd_present(*pmdp) && !pmd_same(*pmdp, pmd)); \
