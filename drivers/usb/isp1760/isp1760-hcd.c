@@ -2572,18 +2572,18 @@ int isp1760_hcd_register(struct isp1760_hcd *priv, struct resource *mem,
 
 	priv->hcd = hcd;
 
-	priv->atl_slots = kcalloc(mem_layout->slot_num,
+	priv->atl_slots = devm_kcalloc(dev, mem_layout->slot_num,
 				  sizeof(struct isp1760_slotinfo), GFP_KERNEL);
 	if (!priv->atl_slots) {
 		ret = -ENOMEM;
 		goto put_hcd;
 	}
 
-	priv->int_slots = kcalloc(mem_layout->slot_num,
+	priv->int_slots = devm_kcalloc(dev, mem_layout->slot_num,
 				  sizeof(struct isp1760_slotinfo), GFP_KERNEL);
 	if (!priv->int_slots) {
 		ret = -ENOMEM;
-		goto free_atl_slots;
+		goto put_hcd;
 	}
 
 	init_memory(priv);
@@ -2597,16 +2597,12 @@ int isp1760_hcd_register(struct isp1760_hcd *priv, struct resource *mem,
 
 	ret = usb_add_hcd(hcd, irq, irqflags);
 	if (ret)
-		goto free_int_slots;
+		goto put_hcd;
 
 	device_wakeup_enable(hcd->self.controller);
 
 	return 0;
 
-free_int_slots:
-	kfree(priv->int_slots);
-free_atl_slots:
-	kfree(priv->atl_slots);
 put_hcd:
 	usb_put_hcd(hcd);
 	return ret;
@@ -2619,6 +2615,4 @@ void isp1760_hcd_unregister(struct isp1760_hcd *priv)
 
 	usb_remove_hcd(priv->hcd);
 	usb_put_hcd(priv->hcd);
-	kfree(priv->atl_slots);
-	kfree(priv->int_slots);
 }
