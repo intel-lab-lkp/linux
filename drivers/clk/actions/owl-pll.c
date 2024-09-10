@@ -104,7 +104,7 @@ static unsigned long owl_pll_recalc_rate(struct clk_hw *hw,
 	val = val >> pll_hw->shift;
 	val &= mul_mask(pll_hw);
 
-	return pll_hw->bfreq * val;
+	return (unsigned long)pll_hw->bfreq * val;
 }
 
 static int owl_pll_is_enabled(struct clk_hw *hw)
