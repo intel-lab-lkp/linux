@@ -2671,9 +2671,7 @@ of_node_put:
 
 static void am65_cpsw_pcpu_stats_free(void *data)
 {
-	struct am65_cpsw_ndev_stats __percpu *stats = data;
-
-	free_percpu(stats);
+	free_percpu((void __percpu *)data);
 }
 
 static void am65_cpsw_nuss_phylink_cleanup(struct am65_cpsw_common *common)
@@ -2794,7 +2792,7 @@ am65_cpsw_nuss_init_port_ndev(struct am65_cpsw_common *common, u32 port_idx)
 		return -ENOMEM;
 
 	ret = devm_add_action_or_reset(dev, am65_cpsw_pcpu_stats_free,
-				       ndev_priv->stats);
+				       (__force void *)ndev_priv->stats);
 	if (ret)
 		dev_err(dev, "failed to add percpu stat free action %d\n", ret);
 
