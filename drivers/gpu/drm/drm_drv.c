@@ -49,6 +49,7 @@
 #include <drm/drm_privacy_screen_machine.h>
 
 #include "drm_crtc_internal.h"
+#include "drm_log.h"
 #include "drm_internal.h"
 
 MODULE_AUTHOR("Gareth Hughes, Leif Delgass, José Fonseca, Jon Smirl");
@@ -944,6 +945,7 @@ int drm_dev_register(struct drm_device *dev, unsigned long flags)
 			goto err_unload;
 	}
 	drm_panic_register(dev);
+	drm_log_register(dev);
 
 	DRM_INFO("Initialized %s %d.%d.%d for %s on minor %d\n",
 		 driver->name, driver->major, driver->minor,
