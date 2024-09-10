@@ -1256,6 +1256,23 @@ static struct file *kvm_gmem_inode_create_getfile(void *priv, loff_t size,
 	return file;
 }
 
+static void kvm_gmem_set_default_faultability_by_vm_type(struct inode *inode,
+							 u8 vm_type,
+							 loff_t start, loff_t end)
+{
+	bool faultable;
+
+	switch (vm_type) {
+	case KVM_X86_SW_PROTECTED_VM:
+		faultable = true;
+		break;
+	default:
+		faultable = false;
+	}
+
+	WARN_ON(kvm_gmem_set_faultable(inode, start, end, faultable));
+}
+
 static int __kvm_gmem_create(struct kvm *kvm, loff_t size, u64 flags)
 {
 	struct kvm_gmem *gmem;
@@ -1378,6 +1395,11 @@ int kvm_gmem_bind(struct kvm *kvm, struct kvm_memory_slot *slot,
 	slot->gmem.pgoff = start;
 
 	xa_store_range(&gmem->bindings, start, end - 1, slot, GFP_KERNEL);
+
+	kvm_gmem_set_default_faultability_by_vm_type(file_inode(file),
+						     kvm->arch.vm_type,
+						     start, end);
+
 	filemap_invalidate_unlock(inode->i_mapping);
 
 	/*
