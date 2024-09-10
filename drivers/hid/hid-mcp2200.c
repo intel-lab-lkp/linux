@@ -329,21 +329,12 @@ static int mcp2200_probe(struct hid_device *hdev, const struct hid_device_id *id
 		return ret;
 	}
 
-	ret = hid_hw_start(hdev, 0);
-	if (ret) {
-		hid_err(hdev, "can't start hardware\n");
+	ret = devm_hid_hw_start_and_open(hdev, 0);
+	if (ret)
 		return ret;
-	}
 
 	hid_info(hdev, "USB HID v%x.%02x Device [%s] on %s\n", hdev->version >> 8,
 			hdev->version & 0xff, hdev->name, hdev->phys);
-
-	ret = hid_hw_open(hdev);
-	if (ret) {
-		hid_err(hdev, "can't open device\n");
-		hid_hw_stop(hdev);
-		return ret;
-	}
 
 	mutex_init(&mcp->lock);
 	init_completion(&mcp->wait_in_report);
@@ -356,18 +347,10 @@ static int mcp2200_probe(struct hid_device *hdev, const struct hid_device_id *id
 	ret = devm_gpiochip_add_data(&hdev->dev, &mcp->gc, mcp);
 	if (ret < 0) {
 		hid_err(hdev, "Unable to register gpiochip\n");
-		hid_hw_close(hdev);
-		hid_hw_stop(hdev);
 		return ret;
 	}
 
 	return 0;
-}
-
-static void mcp2200_remove(struct hid_device *hdev)
-{
-	hid_hw_close(hdev);
-	hid_hw_stop(hdev);
 }
 
 static const struct hid_device_id mcp2200_devices[] = {
@@ -380,7 +363,6 @@ static struct hid_driver mcp2200_driver = {
 	.name		= "mcp2200",
 	.id_table	= mcp2200_devices,
 	.probe		= mcp2200_probe,
-	.remove		= mcp2200_remove,
 	.raw_event	= mcp2200_raw_event,
 };
 
