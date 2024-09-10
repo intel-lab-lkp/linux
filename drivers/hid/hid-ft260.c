@@ -976,23 +976,15 @@ static int ft260_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		return ret;
 	}
 
-	ret = hid_hw_start(hdev, 0);
-	if (ret) {
-		hid_err(hdev, "failed to start HID HW\n");
+	ret = devm_hid_hw_start_and_open(hdev, 0);
+	if (ret)
 		return ret;
-	}
-
-	ret = hid_hw_open(hdev);
-	if (ret) {
-		hid_err(hdev, "failed to open HID HW\n");
-		goto err_hid_stop;
-	}
 
 	ret = ft260_hid_feature_report_get(hdev, FT260_CHIP_VERSION,
 					   (u8 *)&version, sizeof(version));
 	if (ret < 0) {
 		hid_err(hdev, "failed to retrieve chip version\n");
-		goto err_hid_close;
+		return ret;
 	}
 
 	hid_info(hdev, "chip code: %02x%02x %02x%02x\n",
@@ -1001,7 +993,7 @@ static int ft260_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 	ret = ft260_is_interface_enabled(hdev);
 	if (ret <= 0)
-		goto err_hid_close;
+		return ret;
 
 	hid_info(hdev, "USB HID v%x.%02x Device [%s] on %s\n",
 		hdev->version >> 8, hdev->version & 0xff, hdev->name,
@@ -1028,24 +1020,17 @@ static int ft260_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	ret = i2c_add_adapter(&dev->adap);
 	if (ret) {
 		hid_err(hdev, "failed to add i2c adapter\n");
-		goto err_hid_close;
+		return ret;
 	}
 
 	ret = sysfs_create_group(&hdev->dev.kobj, &ft260_attr_group);
 	if (ret < 0) {
 		hid_err(hdev, "failed to create sysfs attrs\n");
-		goto err_i2c_free;
+		i2c_del_adapter(&dev->adap);
+		return ret;
 	}
 
 	return 0;
-
-err_i2c_free:
-	i2c_del_adapter(&dev->adap);
-err_hid_close:
-	hid_hw_close(hdev);
-err_hid_stop:
-	hid_hw_stop(hdev);
-	return ret;
 }
 
 static void ft260_remove(struct hid_device *hdev)
@@ -1057,9 +1042,6 @@ static void ft260_remove(struct hid_device *hdev)
 
 	sysfs_remove_group(&hdev->dev.kobj, &ft260_attr_group);
 	i2c_del_adapter(&dev->adap);
-
-	hid_hw_close(hdev);
-	hid_hw_stop(hdev);
 }
 
 static int ft260_raw_event(struct hid_device *hdev, struct hid_report *report,
