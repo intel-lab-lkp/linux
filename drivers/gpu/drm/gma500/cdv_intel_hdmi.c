@@ -135,16 +135,16 @@ static enum drm_connector_status cdv_hdmi_detect(
 
 	hdmi_priv->has_hdmi_sink = false;
 	hdmi_priv->has_hdmi_audio = false;
-	if (edid) {
-		if (edid->input & DRM_EDID_INPUT_DIGITAL) {
-			status = connector_status_connected;
-			hdmi_priv->has_hdmi_sink =
-						drm_detect_hdmi_monitor(edid);
-			hdmi_priv->has_hdmi_audio =
-						drm_detect_monitor_audio(edid);
-		}
-		kfree(edid);
+	if (!edid)
+		return status;
+
+	if (edid->input & DRM_EDID_INPUT_DIGITAL) {
+		status = connector_status_connected;
+		hdmi_priv->has_hdmi_sink = connector->display_info.is_hdmi;
+		hdmi_priv->has_hdmi_audio = drm_detect_monitor_audio(edid);
 	}
+	kfree(edid);
+
 	return status;
 }
 
