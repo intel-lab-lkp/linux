@@ -200,10 +200,8 @@ static __always_inline long lz77_copy(u8 *dst, const u8 *src, size_t count)
 
 static __always_inline unsigned int __count_common_bytes(const unsigned long diff)
 {
-#ifdef __has_builtin
-#  if __has_builtin(__builtin_ctzll)
+#if defined(__has_builtin) && __has_builtin(__builtin_ctzll)
 	return (unsigned int)__builtin_ctzll(diff) >> 3;
-#  endif
 #else
 	/* count trailing zeroes */
 	unsigned long bits = 0, i, z = 0;
