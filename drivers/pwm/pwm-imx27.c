@@ -26,6 +26,7 @@
 #define MX3_PWMSR			0x04    /* PWM Status Register */
 #define MX3_PWMSAR			0x0C    /* PWM Sample Register */
 #define MX3_PWMPR			0x10    /* PWM Period Register */
+#define MX3_PWMCNR			0x14    /* PWM Counter Register */
 
 #define MX3_PWMCR_FWM			GENMASK(27, 26)
 #define MX3_PWMCR_STOPEN		BIT(25)
@@ -223,6 +224,8 @@ static int pwm_imx27_apply(struct pwm_chip *chip, struct pwm_device *pwm,
 	struct pwm_imx27_chip *imx = to_pwm_imx27_chip(chip);
 	unsigned long long c;
 	unsigned long long clkrate;
+	unsigned long flags;
+	int val;
 	int ret;
 	u32 cr;
 
@@ -263,7 +266,69 @@ static int pwm_imx27_apply(struct pwm_chip *chip, struct pwm_device *pwm,
 		pwm_imx27_sw_reset(chip);
 	}
 
-	writel(duty_cycles, imx->mmio_base + MX3_PWMSAR);
+	/*
+	 * This is a limited workaround. When the SAR FIFO is empty, the new
+	 * write value will be directly applied to SAR even the current period
+	 * is not over.
+	 *
+	 *           ─────────────────────┐
+	 * PWM OUTPUT                     │
+	 *                                └─────────────────────────
+	 *
+	 *           ┌──────────────────────────────────────────────┐
+	 * Counter   │       XXXXXXXXXXXXXX                         │
+	 *           └──────────────────────────────────────────────┘
+	 *                   ▲            ▲
+	 *                   │            │
+	 *                 New SAR      Old SAR
+	 *
+	 *           XXXX  Errata happen window
+	 *
+	 * If the new SAR value is less than the old one, and the counter is
+	 * greater than the new SAR value (see above diagram XXXX), the current
+	 * period will not flip the level. This will result in a pulse with a
+	 * duty cycle of 100%.
+	 *
+	 * Check new sar less than old sar and current counter is in errata
+	 * windows, write extra old sar into FIFO and new sar will effect at
+	 * next period.
+	 *
+	 * Sometime period is quite long, such as over 1 second. If add old sar
+	 * into FIFO unconditional, new sar have to wait for next period. It
+	 * may be too long.
+	 *
+	 * Turn off the interrupt to ensure that not irq and schedule happen
+	 * during above operations. If any irq and schedule happen, counter
+	 * in PWM will be out of data and take wrong action.
+	 *
+	 * Add a safety margin 1.5us because it needs some time to complete
+	 * IO write.
+	 *
+	 * Use __raw_writel() to minimize the interval between two writes to
+	 * the SAR register to increase the fastest pwm frequency supported.
+	 *
+	 * When the PWM period is longer than 2us(or <500KHz), this workaround
+	 * can solve this problem. No software workaround is available if PWM
+	 * period is shorter than IO write.
+	 */
+	c = clkrate * 1500;
+	do_div(c, NSEC_PER_SEC);
+
+	local_irq_save(flags);
+	val = FIELD_GET(MX3_PWMSR_FIFOAV, readl_relaxed(imx->mmio_base + MX3_PWMSR));
+	if (duty_cycles < imx->duty_cycle && val < MX3_PWMSR_FIFOAV_2WORDS) {
+		val = readl_relaxed(imx->mmio_base + MX3_PWMCNR);
+		if ((val + c >= duty_cycles && val < imx->duty_cycle) ||
+		    /*
+		     * If counter is close to period, controller may roll over
+		     * when next IO write.
+		     */
+		    val + c >= period_cycles)
+			writel_relaxed(imx->duty_cycle, imx->mmio_base + MX3_PWMSAR);
+	}
+	writel_relaxed(duty_cycles, imx->mmio_base + MX3_PWMSAR);
+	local_irq_restore(flags);
+
 	writel(period_cycles, imx->mmio_base + MX3_PWMPR);
 
 	/*
