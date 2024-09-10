@@ -781,7 +781,8 @@ static long kvm_gmem_punch_hole(struct inode *inode, loff_t offset, loff_t len)
 {
 	struct list_head *gmem_list = &inode->i_mapping->i_private_list;
 	pgoff_t start = offset >> PAGE_SHIFT;
-	pgoff_t end = (offset + len) >> PAGE_SHIFT;
+	pgoff_t nr = len >> PAGE_SHIFT;
+	pgoff_t end = start + nr;
 	struct kvm_gmem *gmem;
 
 	/*
@@ -789,6 +790,9 @@ static long kvm_gmem_punch_hole(struct inode *inode, loff_t offset, loff_t len)
 	 * are balanced.
 	 */
 	filemap_invalidate_lock(inode->i_mapping);
+
+	/* TODO: Check if even_cows should be 0 or 1 */
+	unmap_mapping_range(inode->i_mapping, start, len, 0);
 
 	list_for_each_entry(gmem, gmem_list, entry)
 		kvm_gmem_invalidate_begin(gmem, start, end);
@@ -946,6 +950,9 @@ static void kvm_gmem_hugetlb_teardown(struct inode *inode)
 {
 	struct kvm_gmem_hugetlb *hgmem;
 
+	/* TODO: Check if even_cows should be 0 or 1 */
+	unmap_mapping_range(inode->i_mapping, 0, LLONG_MAX, 0);
+
 	truncate_inode_pages_final_prepare(inode->i_mapping);
 	kvm_gmem_hugetlb_truncate_folios_range(inode, 0, LLONG_MAX);
 
@@ -1003,11 +1010,46 @@ static void kvm_gmem_init_mount(void)
 	kvm_gmem_mnt = kern_mount(&kvm_gmem_fs);
 	BUG_ON(IS_ERR(kvm_gmem_mnt));
 
-	/* For giggles. Userspace can never map this anyways. */
 	kvm_gmem_mnt->mnt_flags |= MNT_NOEXEC;
 }
 
+static vm_fault_t kvm_gmem_fault(struct vm_fault *vmf)
+{
+	struct inode *inode;
+	struct folio *folio;
+
+	inode = file_inode(vmf->vma->vm_file);
+	if (!kvm_gmem_is_faultable(inode, vmf->pgoff))
+		return VM_FAULT_SIGBUS;
+
+	folio = kvm_gmem_get_folio(inode, vmf->pgoff);
+	if (!folio)
+		return VM_FAULT_SIGBUS;
+
+	vmf->page = folio_file_page(folio, vmf->pgoff);
+	return VM_FAULT_LOCKED;
+}
+
+static const struct vm_operations_struct kvm_gmem_vm_ops = {
+	.fault = kvm_gmem_fault,
+};
+
+static int kvm_gmem_mmap(struct file *file, struct vm_area_struct *vma)
+{
+	if ((vma->vm_flags & (VM_SHARED | VM_MAYSHARE)) !=
+	    (VM_SHARED | VM_MAYSHARE)) {
+		return -EINVAL;
+	}
+
+	file_accessed(file);
+	vm_flags_set(vma, VM_DONTDUMP);
+	vma->vm_ops = &kvm_gmem_vm_ops;
+
+	return 0;
+}
+
 static struct file_operations kvm_gmem_fops = {
+	.mmap		= kvm_gmem_mmap,
 	.open		= generic_file_open,
 	.release	= kvm_gmem_release,
 	.fallocate	= kvm_gmem_fallocate,
