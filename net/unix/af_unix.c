@@ -2185,6 +2185,11 @@ out:
 	return err;
 }
 
+static unsigned int unix_skb_len(const struct sk_buff *skb)
+{
+	return skb->len - UNIXCB(skb).consumed;
+}
+
 /* We use paged skbs for stream sockets, and limit occupancy to 32768
  * bytes, and a minimum of a full page.
  */
@@ -2195,7 +2200,7 @@ static int queue_oob(struct socket *sock, struct msghdr *msg, struct sock *other
 		     struct scm_cookie *scm, bool fds_sent)
 {
 	struct unix_sock *ousk = unix_sk(other);
-	struct sk_buff *skb;
+	struct sk_buff *skb, *tail_skb;
 	int err = 0;
 
 	skb = sock_alloc_send_skb(sock->sk, 1, msg->msg_flags & MSG_DONTWAIT, &err);
@@ -2231,8 +2236,17 @@ static int queue_oob(struct socket *sock, struct msghdr *msg, struct sock *other
 	scm_stat_add(other, skb);
 
 	spin_lock(&other->sk_receive_queue.lock);
+
 	if (ousk->oob_skb)
 		consume_skb(ousk->oob_skb);
+
+	tail_skb = skb_peek_tail(&other->sk_receive_queue);
+	if (tail_skb && !unix_skb_len((const struct sk_buff *)tail_skb)) {
+		/* Remove the zero length skb of the previous OOB */
+		__skb_unlink(tail_skb, &other->sk_receive_queue);
+		consume_skb(tail_skb);
+	}
+
 	WRITE_ONCE(ousk->oob_skb, skb);
 	__skb_queue_tail(&other->sk_receive_queue, skb);
 	spin_unlock(&other->sk_receive_queue.lock);
@@ -2600,11 +2614,6 @@ static long unix_stream_data_wait(struct sock *sk, long timeo,
 	return timeo;
 }
 
-static unsigned int unix_skb_len(const struct sk_buff *skb)
-{
-	return skb->len - UNIXCB(skb).consumed;
-}
-
 struct unix_stream_read_state {
 	int (*recv_actor)(struct sk_buff *, int, int,
 			  struct unix_stream_read_state *);
@@ -2667,6 +2676,7 @@ static struct sk_buff *manage_oob(struct sk_buff *skb, struct sock *sk,
 {
 	struct unix_sock *u = unix_sk(sk);
 
+scan_again:
 	if (!unix_skb_len(skb)) {
 		struct sk_buff *unlinked_skb = NULL;
 
@@ -2685,6 +2695,8 @@ static struct sk_buff *manage_oob(struct sk_buff *skb, struct sock *sk,
 		spin_unlock(&sk->sk_receive_queue.lock);
 
 		consume_skb(unlinked_skb);
+		if (skb)
+			goto scan_again;
 	} else {
 		struct sk_buff *unlinked_skb = NULL;
 
