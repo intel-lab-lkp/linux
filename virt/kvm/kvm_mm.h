@@ -30,7 +30,8 @@ void gfn_to_pfn_cache_invalidate_start(struct kvm *kvm,
 
 void gfn_to_pfn_cache_invalidate_gfns_start(struct kvm *kvm,
 					    gfn_t start,
-					    gfn_t end);
+					    gfn_t end,
+					    bool needs_unmap);
 #else
 static inline void gfn_to_pfn_cache_invalidate_start(struct kvm *kvm,
 						     unsigned long start,
@@ -40,7 +41,8 @@ static inline void gfn_to_pfn_cache_invalidate_start(struct kvm *kvm,
 
 static inline void gfn_to_pfn_cache_invalidate_gfns_start(struct kvm *kvm,
 							  gfn_t start,
-							  gfn_t end)
+							  gfn_t end,
+							  bool needs_unmap)
 {
 }
 #endif /* HAVE_KVM_PFNCACHE */

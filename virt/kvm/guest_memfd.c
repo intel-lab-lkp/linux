@@ -231,6 +231,15 @@ static void kvm_gmem_invalidate_begin(struct kvm_gmem *gmem, pgoff_t start,
 	struct kvm *kvm = gmem->kvm;
 	unsigned long index;
 
+	atomic_inc(&kvm->gmem_active_invalidate_count);
+
+	xa_for_each_range(&gmem->bindings, index, slot, start, end - 1) {
+		pgoff_t pgoff = slot->gmem.pgoff;
+
+		gfn_to_pfn_cache_invalidate_gfns_start(kvm, slot->base_gfn + start - pgoff,
+						       slot->base_gfn + end - pgoff, true);
+	}
+
 	xa_for_each_range(&gmem->bindings, index, slot, start, end - 1) {
 		pgoff_t pgoff = slot->gmem.pgoff;
 
@@ -268,6 +277,8 @@ static void kvm_gmem_invalidate_end(struct kvm_gmem *gmem, pgoff_t start,
 		kvm_mmu_invalidate_end(kvm);
 		KVM_MMU_UNLOCK(kvm);
 	}
+
+	atomic_dec(&kvm->gmem_active_invalidate_count);
 }
 
 static long kvm_gmem_punch_hole(struct inode *inode, loff_t offset, loff_t len)
@@ -478,7 +489,13 @@ static void kvm_gmem_invalidate_folio(struct folio *folio, size_t start, size_t 
 	if (start == 0 && end == folio_size(folio)) {
 		refcount_t *sharing_count = folio_get_private(folio);
 
-		kvm_gmem_folio_clear_private(folio);
+		/*
+		 * gfn_to_pfn_caches do not decrement the refcount if they
+		 * get invalidated due to the gmem pfn going away (fallocate,
+		 * or error_remove_folio)
+		 */
+		if (refcount_read(sharing_count) == 1)
+			kvm_gmem_folio_clear_private(folio);
 		kfree(sharing_count);
 	}
 }

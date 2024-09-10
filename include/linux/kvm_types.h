@@ -71,6 +71,7 @@ struct gfn_to_pfn_cache {
 	bool active;
 	bool valid;
 	bool private;
+	bool needs_unmap;
 };
 
 #ifdef KVM_ARCH_NR_OBJS_PER_MEMORY_CACHE

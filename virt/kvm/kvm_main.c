@@ -1161,6 +1161,9 @@ static struct kvm *kvm_create_vm(unsigned long type, const char *fdname)
 #ifdef CONFIG_KVM_GENERIC_MEMORY_ATTRIBUTES
 	xa_init(&kvm->mem_attr_array);
 #endif
+#ifdef CONFIG_KVM_PRIVATE_MEM
+	atomic_set(&kvm->gmem_active_invalidate_count, 0);
+#endif
 
 	INIT_LIST_HEAD(&kvm->gpc_list);
 	spin_lock_init(&kvm->gpc_lock);
@@ -2549,7 +2552,7 @@ static int kvm_vm_set_mem_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 	}
 
 	kvm->attribute_change_in_progress = true;
-	gfn_to_pfn_cache_invalidate_gfns_start(kvm, start, end);
+	gfn_to_pfn_cache_invalidate_gfns_start(kvm, start, end, false);
 
 	kvm_handle_gfn_range(kvm, &pre_set_range);
 

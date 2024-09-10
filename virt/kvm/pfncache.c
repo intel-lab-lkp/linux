@@ -61,8 +61,15 @@ void gfn_to_pfn_cache_invalidate_start(struct kvm *kvm, unsigned long start,
 /*
  * Identical to `gfn_to_pfn_cache_invalidate_start`, except based on gfns
  * instead of uhvas.
+ *
+ * needs_unmap indicates whether this invalidation is because a gmem range went
+ * away (fallocate(FALLOC_FL_PUNCH_HOLE), error_remove_folio), in which case
+ * we must not call kvm_gmem_put_shared_pfn for it, or because of a memory
+ * attribute change, in which case the gmem pfn still exists, but simply
+ * is no longer mapped into the guest.
  */
-void gfn_to_pfn_cache_invalidate_gfns_start(struct kvm *kvm, gfn_t start, gfn_t end)
+void gfn_to_pfn_cache_invalidate_gfns_start(struct kvm *kvm, gfn_t start, gfn_t end,
+					    bool needs_unmap)
 {
 	struct gfn_to_pfn_cache *gpc;
 
@@ -78,14 +85,16 @@ void gfn_to_pfn_cache_invalidate_gfns_start(struct kvm *kvm, gfn_t start, gfn_t 
 			continue;
 		}
 
-		if (gpc->valid && !is_error_noslot_pfn(gpc->pfn) &&
+		if (!is_error_noslot_pfn(gpc->pfn) &&
 		    gpa_to_gfn(gpc->gpa) >= start && gpa_to_gfn(gpc->gpa) < end) {
 			read_unlock_irq(&gpc->lock);
 
 			write_lock_irq(&gpc->lock);
-			if (gpc->valid && !is_error_noslot_pfn(gpc->pfn) &&
-			    gpa_to_gfn(gpc->gpa) >= start && gpa_to_gfn(gpc->gpa) < end)
+			if (!is_error_noslot_pfn(gpc->pfn) &&
+			    gpa_to_gfn(gpc->gpa) >= start && gpa_to_gfn(gpc->gpa) < end) {
 				gpc->valid = false;
+				gpc->needs_unmap = needs_unmap && gpc->private;
+			}
 			write_unlock_irq(&gpc->lock);
 			continue;
 		}
@@ -193,6 +202,9 @@ static inline bool mmu_notifier_retry_cache(struct kvm *kvm, unsigned long mmu_s
 	 * mmu_invalidate_seq is updated.
 	 */
 	if (kvm->attribute_change_in_progress)
+		return true;
+
+	if (atomic_read_acquire(&kvm->gmem_active_invalidate_count))
 		return true;
 	/*
 	 * Ensure mn_active_invalidate_count is read before
@@ -425,20 +437,28 @@ static int __kvm_gpc_refresh(struct gfn_to_pfn_cache *gpc, gpa_t gpa, unsigned l
 	 * Some/all of the uhva, gpa, and memslot generation info may still be
 	 * valid, leave it as is.
 	 */
+	unmap_old = gpc->needs_unmap;
 	if (ret) {
 		gpc->valid = false;
 		gpc->pfn = KVM_PFN_ERR_FAULT;
 		gpc->khva = NULL;
+		gpc->needs_unmap = false;
+	} else {
+		gpc->needs_unmap = true;
 	}
 
 	/* Detect a pfn change before dropping the lock! */
-	unmap_old = (old_pfn != gpc->pfn);
+	unmap_old &= (old_pfn != gpc->pfn);
 
 out_unlock:
+	if (unmap_old)
+		folio_get(pfn_folio(old_pfn));
 	write_unlock_irq(&gpc->lock);
 
-	if (unmap_old)
+	if (unmap_old) {
 		gpc_unmap(old_pfn, old_khva, old_private);
+		folio_put(pfn_folio(old_pfn));
+	}
 
 	return ret;
 }
@@ -530,6 +550,7 @@ void kvm_gpc_deactivate(struct gfn_to_pfn_cache *gpc)
 	kvm_pfn_t old_pfn;
 	void *old_khva;
 	bool old_private;
+	bool old_needs_unmap;
 
 	guard(mutex)(&gpc->refresh_lock);
 
@@ -555,14 +576,25 @@ void kvm_gpc_deactivate(struct gfn_to_pfn_cache *gpc)
 		old_private = gpc->private;
 		gpc->private = false;
 
+		old_needs_unmap = gpc->needs_unmap;
+		gpc->needs_unmap = false;
+
 		old_pfn = gpc->pfn;
 		gpc->pfn = KVM_PFN_ERR_FAULT;
+
+		if (old_needs_unmap && old_private)
+			folio_get(pfn_folio(old_pfn));
+
 		write_unlock_irq(&gpc->lock);
 
 		spin_lock(&kvm->gpc_lock);
 		list_del(&gpc->list);
 		spin_unlock(&kvm->gpc_lock);
 
-		gpc_unmap(old_pfn, old_khva, old_private);
+		if (old_needs_unmap) {
+			gpc_unmap(old_pfn, old_khva, old_private);
+			if (old_private)
+				folio_put(pfn_folio(old_pfn));
+		}
 	}
 }

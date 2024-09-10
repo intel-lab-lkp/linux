@@ -843,6 +843,9 @@ struct kvm {
 	bool attribute_change_in_progress;
 #endif
 	char stats_id[KVM_STATS_NAME_SIZE];
+#ifdef CONFIG_KVM_PRIVATE_MEM
+	atomic_t gmem_active_invalidate_count;
+#endif
 };
 
 #define kvm_err(fmt, ...) \
