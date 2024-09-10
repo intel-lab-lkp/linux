@@ -6,6 +6,7 @@
  */
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <errno.h>
 #include <stdio.h>
@@ -35,12 +36,192 @@ static void test_file_read_write(int fd)
 		    "pwrite on a guest_mem fd should fail");
 }
 
-static void test_mmap(int fd, size_t page_size)
+static void test_mmap_should_map_pages_into_userspace(int fd, size_t page_size)
 {
 	char *mem;
 
 	mem = mmap(NULL, page_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-	TEST_ASSERT_EQ(mem, MAP_FAILED);
+	TEST_ASSERT(mem != MAP_FAILED, "mmap should return valid address");
+
+	TEST_ASSERT_EQ(munmap(mem, page_size), 0);
+}
+
+static void test_madvise_no_error_when_pages_not_faulted(int fd, size_t page_size)
+{
+	char *mem;
+
+	mem = mmap(NULL, page_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	TEST_ASSERT(mem != MAP_FAILED, "mmap should return valid address");
+
+	TEST_ASSERT_EQ(madvise(mem, page_size, MADV_DONTNEED), 0);
+
+	TEST_ASSERT_EQ(munmap(mem, page_size), 0);
+}
+
+static void assert_not_faultable(char *address)
+{
+	pid_t child_pid;
+
+	child_pid = fork();
+	TEST_ASSERT(child_pid != -1, "fork failed");
+
+	if (child_pid == 0) {
+		*address = 'A';
+	} else {
+		int status;
+		waitpid(child_pid, &status, 0);
+
+		TEST_ASSERT(WIFSIGNALED(status),
+			    "Child should have exited with a signal");
+		TEST_ASSERT_EQ(WTERMSIG(status), SIGBUS);
+	}
+}
+
+/*
+ * Pages should not be faultable before association with memslot because pages
+ * (in a KVM_X86_SW_PROTECTED_VM) only default to faultable at memslot
+ * association time.
+ */
+static void test_pages_not_faultable_if_not_associated_with_memslot(int fd,
+								    size_t page_size)
+{
+	char *mem = mmap(NULL, page_size, PROT_READ | PROT_WRITE,
+			 MAP_SHARED, fd, 0);
+	TEST_ASSERT(mem != MAP_FAILED, "mmap should return valid address");
+
+	assert_not_faultable(mem);
+
+	TEST_ASSERT_EQ(munmap(mem, page_size), 0);
+}
+
+static void test_pages_faultable_if_marked_faultable(struct kvm_vm *vm, int fd,
+						     size_t page_size)
+{
+	char *mem;
+	uint64_t gpa = 0;
+	uint64_t guest_memfd_offset = 0;
+
+	/*
+	 * This test uses KVM_X86_SW_PROTECTED_VM is required to set
+	 * arch.has_private_mem, to add a memslot with guest_memfd to a VM.
+	 */
+	if (!(kvm_check_cap(KVM_CAP_VM_TYPES) & BIT(KVM_X86_SW_PROTECTED_VM))) {
+		printf("Faultability test skipped since KVM_X86_SW_PROTECTED_VM is not supported.");
+		return;
+	}
+
+	mem = mmap(NULL, page_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd,
+		   guest_memfd_offset);
+	TEST_ASSERT(mem != MAP_FAILED, "mmap should return valid address");
+
+	/*
+	 * Setting up this memslot with a KVM_X86_SW_PROTECTED_VM marks all
+	 * offsets in the file as shared, allowing pages to be faulted in.
+	 */
+	vm_set_user_memory_region2(vm, 0, KVM_MEM_GUEST_MEMFD, gpa, page_size,
+				   mem, fd, guest_memfd_offset);
+
+	*mem = 'A';
+	TEST_ASSERT_EQ(*mem, 'A');
+
+	/* Should fail since the page is still faulted in. */
+	TEST_ASSERT_EQ(__vm_set_memory_attributes(vm, gpa, page_size,
+						  KVM_MEMORY_ATTRIBUTE_PRIVATE),
+		       -1);
+	TEST_ASSERT_EQ(errno, EINVAL);
+
+	/*
+	 * Use madvise() to remove the pages from userspace page tables, then
+	 * test that the page is still faultable, and that page contents remain
+	 * the same.
+	 */
+	madvise(mem, page_size, MADV_DONTNEED);
+	TEST_ASSERT_EQ(*mem, 'A');
+
+	/* Tell kernel to unmap the page from userspace. */
+	madvise(mem, page_size, MADV_DONTNEED);
+
+	/* Now kernel can set this page to private. */
+	vm_mem_set_private(vm, gpa, page_size);
+	assert_not_faultable(mem);
+
+	/*
+	 * Should be able to fault again after setting this back to shared, and
+	 * memory contents should be cleared since pages must be re-prepared for
+	 * SHARED use.
+	 */
+	vm_mem_set_shared(vm, gpa, page_size);
+	TEST_ASSERT_EQ(*mem, 0);
+
+	/* Cleanup */
+	vm_set_user_memory_region2(vm, 0, KVM_MEM_GUEST_MEMFD, gpa, 0, mem, fd,
+				   guest_memfd_offset);
+
+	TEST_ASSERT_EQ(munmap(mem, page_size), 0);
+}
+
+static void test_madvise_remove_releases_pages(struct kvm_vm *vm, int fd,
+					       size_t page_size)
+{
+	char *mem;
+	uint64_t gpa = 0;
+	uint64_t guest_memfd_offset = 0;
+
+	/*
+	 * This test uses KVM_X86_SW_PROTECTED_VM is required to set
+	 * arch.has_private_mem, to add a memslot with guest_memfd to a VM.
+	 */
+	if (!(kvm_check_cap(KVM_CAP_VM_TYPES) & BIT(KVM_X86_SW_PROTECTED_VM))) {
+		printf("madvise test skipped since KVM_X86_SW_PROTECTED_VM is not supported.");
+		return;
+	}
+
+	mem = mmap(NULL, page_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	TEST_ASSERT(mem != MAP_FAILED, "mmap should return valid address");
+
+	/*
+	 * Setting up this memslot with a KVM_X86_SW_PROTECTED_VM marks all
+	 * offsets in the file as shared, allowing pages to be faulted in.
+	 */
+	vm_set_user_memory_region2(vm, 0, KVM_MEM_GUEST_MEMFD, gpa, page_size,
+				   mem, fd, guest_memfd_offset);
+
+	*mem = 'A';
+	TEST_ASSERT_EQ(*mem, 'A');
+
+	/*
+	 * MADV_DONTNEED causes pages to be removed from userspace page tables
+	 * but should not release pages, hence page contents are kept.
+	 */
+	TEST_ASSERT_EQ(madvise(mem, page_size, MADV_DONTNEED), 0);
+	TEST_ASSERT_EQ(*mem, 'A');
+
+	/*
+	 * MADV_REMOVE causes pages to be released. Pages are then zeroed when
+	 * prepared for shared use, hence 0 is expected on next fault.
+	 */
+	TEST_ASSERT_EQ(madvise(mem, page_size, MADV_REMOVE), 0);
+	TEST_ASSERT_EQ(*mem, 0);
+
+	TEST_ASSERT_EQ(munmap(mem, page_size), 0);
+
+	/* Cleanup */
+	vm_set_user_memory_region2(vm, 0, KVM_MEM_GUEST_MEMFD, gpa, 0, mem, fd,
+				   guest_memfd_offset);
+}
+
+static void test_using_memory_directly_from_userspace(struct kvm_vm *vm,
+						      int fd, size_t page_size)
+{
+	test_mmap_should_map_pages_into_userspace(fd, page_size);
+
+	test_madvise_no_error_when_pages_not_faulted(fd, page_size);
+
+	test_pages_not_faultable_if_not_associated_with_memslot(fd, page_size);
+
+	test_pages_faultable_if_marked_faultable(vm, fd, page_size);
+
+	test_madvise_remove_releases_pages(vm, fd, page_size);
 }
 
 static void test_file_size(int fd, size_t page_size, size_t total_size)
@@ -180,17 +361,16 @@ static void test_guest_memfd(struct kvm_vm *vm, uint32_t flags, size_t page_size
 	size_t total_size;
 	int fd;
 
-	TEST_REQUIRE(kvm_has_cap(KVM_CAP_GUEST_MEMFD));
-
 	total_size = page_size * 4;
 
 	fd = vm_create_guest_memfd(vm, total_size, flags);
 
 	test_file_read_write(fd);
-	test_mmap(fd, page_size);
 	test_file_size(fd, page_size, total_size);
 	test_fallocate(fd, page_size, total_size);
 	test_invalid_punch_hole(fd, page_size, total_size);
+
+	test_using_memory_directly_from_userspace(vm, fd, page_size);
 
 	close(fd);
 }
@@ -201,7 +381,10 @@ int main(int argc, char *argv[])
 
 	TEST_REQUIRE(kvm_has_cap(KVM_CAP_GUEST_MEMFD));
 
-	vm = vm_create_barebones();
+	if ((kvm_check_cap(KVM_CAP_VM_TYPES) & BIT(KVM_X86_SW_PROTECTED_VM)))
+		vm = vm_create_barebones_type(KVM_X86_SW_PROTECTED_VM);
+	else
+		vm = vm_create_barebones();
 
 	test_create_guest_memfd_invalid(vm);
 	test_create_guest_memfd_multiple(vm);
