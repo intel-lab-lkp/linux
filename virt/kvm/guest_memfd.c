@@ -8,6 +8,8 @@
 #include <linux/pseudo_fs.h>
 #include <linux/pagemap.h>
 #include <linux/anon_inodes.h>
+#include <linux/memcontrol.h>
+#include <linux/mempolicy.h>
 
 #include "kvm_mm.h"
 
@@ -27,6 +29,13 @@ struct kvm_gmem_hugetlb {
 static struct kvm_gmem_hugetlb *kvm_gmem_hgmem(struct inode *inode)
 {
 	return inode->i_mapping->i_private_data;
+}
+
+static bool is_kvm_gmem_hugetlb(struct inode *inode)
+{
+	u64 flags = (u64)inode->i_private;
+
+	return flags & KVM_GUEST_MEMFD_HUGETLB;
 }
 
 /**
@@ -58,6 +67,9 @@ static int __kvm_gmem_prepare_folio(struct kvm *kvm, struct kvm_memory_slot *slo
 	return 0;
 }
 
+/**
+ * Use the uptodate flag to indicate that the folio is prepared for KVM's usage.
+ */
 static inline void kvm_gmem_mark_prepared(struct folio *folio)
 {
 	folio_mark_uptodate(folio);
@@ -72,13 +84,18 @@ static inline void kvm_gmem_mark_prepared(struct folio *folio)
 static int kvm_gmem_prepare_folio(struct kvm *kvm, struct kvm_memory_slot *slot,
 				  gfn_t gfn, struct folio *folio)
 {
-	unsigned long nr_pages, i;
 	pgoff_t index;
 	int r;
 
-	nr_pages = folio_nr_pages(folio);
-	for (i = 0; i < nr_pages; i++)
-		clear_highpage(folio_page(folio, i));
+	if (folio_test_hugetlb(folio)) {
+		folio_zero_user(folio, folio->index << PAGE_SHIFT);
+	} else {
+		unsigned long nr_pages, i;
+
+		nr_pages = folio_nr_pages(folio);
+		for (i = 0; i < nr_pages; i++)
+			clear_highpage(folio_page(folio, i));
+	}
 
 	/*
 	 * Preparing huge folios should always be safe, since it should
@@ -103,6 +120,174 @@ static int kvm_gmem_prepare_folio(struct kvm *kvm, struct kvm_memory_slot *slot,
 	return r;
 }
 
+static int kvm_gmem_get_mpol_node_nodemask(gfp_t gfp_mask,
+					   struct mempolicy **mpol,
+					   nodemask_t **nodemask)
+{
+	/*
+	 * TODO: mempolicy would probably have to be stored on the inode, use
+	 * task policy for now.
+	 */
+	*mpol = get_task_policy(current);
+
+	/* TODO: ignore interleaving (set ilx to 0) for now. */
+	return policy_node_nodemask(*mpol, gfp_mask, 0, nodemask);
+}
+
+static struct folio *kvm_gmem_hugetlb_alloc_folio(struct hstate *h,
+						  struct hugepage_subpool *spool)
+{
+	bool memcg_charge_was_prepared;
+	struct mem_cgroup *memcg;
+	struct mempolicy *mpol;
+	nodemask_t *nodemask;
+	struct folio *folio;
+	gfp_t gfp_mask;
+	int ret;
+	int nid;
+
+	gfp_mask = htlb_alloc_mask(h);
+
+	memcg = get_mem_cgroup_from_current();
+	ret = mem_cgroup_hugetlb_try_charge(memcg,
+					    gfp_mask | __GFP_RETRY_MAYFAIL,
+					    pages_per_huge_page(h));
+	if (ret == -ENOMEM)
+		goto err;
+
+	memcg_charge_was_prepared = ret != -EOPNOTSUPP;
+
+	/* Pages are only to be taken from guest_memfd subpool and nowhere else. */
+	if (hugepage_subpool_get_pages(spool, 1))
+		goto err_cancel_charge;
+
+	nid = kvm_gmem_get_mpol_node_nodemask(htlb_alloc_mask(h), &mpol,
+					      &nodemask);
+	/*
+	 * charge_cgroup_reservation is false because we didn't make any cgroup
+	 * reservations when creating the guest_memfd subpool.
+	 *
+	 * use_hstate_resv is true because we reserved from global hstate when
+	 * creating the guest_memfd subpool.
+	 */
+	folio = hugetlb_alloc_folio(h, mpol, nid, nodemask, false, true);
+	mpol_cond_put(mpol);
+
+	if (!folio)
+		goto err_put_pages;
+
+	hugetlb_set_folio_subpool(folio, spool);
+
+	if (memcg_charge_was_prepared)
+		mem_cgroup_commit_charge(folio, memcg);
+
+out:
+	mem_cgroup_put(memcg);
+
+	return folio;
+
+err_put_pages:
+	hugepage_subpool_put_pages(spool, 1);
+
+err_cancel_charge:
+	if (memcg_charge_was_prepared)
+		mem_cgroup_cancel_charge(memcg, pages_per_huge_page(h));
+
+err:
+	folio = ERR_PTR(-ENOMEM);
+	goto out;
+}
+
+static int kvm_gmem_hugetlb_filemap_add_folio(struct address_space *mapping,
+					      struct folio *folio, pgoff_t index,
+					      gfp_t gfp)
+{
+	int ret;
+
+	__folio_set_locked(folio);
+	ret = __filemap_add_folio(mapping, folio, index, gfp, NULL);
+	if (unlikely(ret)) {
+		__folio_clear_locked(folio);
+		return ret;
+	}
+
+	/*
+	 * In hugetlb_add_to_page_cache(), there is a call to
+	 * folio_clear_hugetlb_restore_reserve(). This is handled when the pages
+	 * are removed from the page cache in unmap_hugepage_range() ->
+	 * __unmap_hugepage_range() by conditionally calling
+	 * folio_set_hugetlb_restore_reserve(). In kvm_gmem_hugetlb's usage of
+	 * hugetlb, there are no VMAs involved, and pages are never taken from
+	 * the surplus, so when pages are freed, the hstate reserve must be
+	 * restored. Hence, this function makes no call to
+	 * folio_clear_hugetlb_restore_reserve().
+	 */
+
+	/* mark folio dirty so that it will not be removed from cache/inode */
+	folio_mark_dirty(folio);
+
+	return 0;
+}
+
+static struct folio *kvm_gmem_hugetlb_alloc_and_cache_folio(struct inode *inode,
+							    pgoff_t index)
+{
+	struct kvm_gmem_hugetlb *hgmem;
+	struct folio *folio;
+	int ret;
+
+	hgmem = kvm_gmem_hgmem(inode);
+	folio = kvm_gmem_hugetlb_alloc_folio(hgmem->h, hgmem->spool);
+	if (IS_ERR(folio))
+		return folio;
+
+	/* TODO: Fix index here to be aligned to huge page size. */
+	ret = kvm_gmem_hugetlb_filemap_add_folio(
+		inode->i_mapping, folio, index, htlb_alloc_mask(hgmem->h));
+	if (ret) {
+		folio_put(folio);
+		return ERR_PTR(ret);
+	}
+
+	spin_lock(&inode->i_lock);
+	inode->i_blocks += blocks_per_huge_page(hgmem->h);
+	spin_unlock(&inode->i_lock);
+
+	return folio;
+}
+
+static struct folio *kvm_gmem_get_hugetlb_folio(struct inode *inode,
+						pgoff_t index)
+{
+	struct address_space *mapping;
+	struct folio *folio;
+	struct hstate *h;
+	pgoff_t hindex;
+	u32 hash;
+
+	h = kvm_gmem_hgmem(inode)->h;
+	hindex = index >> huge_page_order(h);
+	mapping = inode->i_mapping;
+
+	/* To lock, we calculate the hash using the hindex and not index. */
+	hash = hugetlb_fault_mutex_hash(mapping, hindex);
+	mutex_lock(&hugetlb_fault_mutex_table[hash]);
+
+	/*
+	 * The filemap is indexed with index and not hindex. Taking lock on
+	 * folio to align with kvm_gmem_get_regular_folio()
+	 */
+	folio = filemap_lock_folio(mapping, index);
+	if (!IS_ERR(folio))
+		goto out;
+
+	folio = kvm_gmem_hugetlb_alloc_and_cache_folio(inode, index);
+out:
+	mutex_unlock(&hugetlb_fault_mutex_table[hash]);
+
+	return folio;
+}
+
 /*
  * Returns a locked folio on success.  The caller is responsible for
  * setting the up-to-date flag before the memory is mapped into the guest.
@@ -114,8 +299,10 @@ static int kvm_gmem_prepare_folio(struct kvm *kvm, struct kvm_memory_slot *slot,
  */
 static struct folio *kvm_gmem_get_folio(struct inode *inode, pgoff_t index)
 {
-	/* TODO: Support huge pages. */
-	return filemap_grab_folio(inode->i_mapping, index);
+	if (is_kvm_gmem_hugetlb(inode))
+		return kvm_gmem_get_hugetlb_folio(inode, index);
+	else
+		return filemap_grab_folio(inode->i_mapping, index);
 }
 
 static void kvm_gmem_invalidate_begin(struct kvm_gmem *gmem, pgoff_t start,
@@ -240,6 +427,35 @@ static void kvm_gmem_hugetlb_truncate_folios_range(struct inode *inode,
 	spin_unlock(&inode->i_lock);
 }
 
+static void kvm_gmem_hugetlb_truncate_range(struct inode *inode, loff_t lstart,
+					    loff_t lend)
+{
+	loff_t full_hpage_start;
+	loff_t full_hpage_end;
+	unsigned long hsize;
+	struct hstate *h;
+
+	h = kvm_gmem_hgmem(inode)->h;
+	hsize = huge_page_size(h);
+
+	full_hpage_start = round_up(lstart, hsize);
+	full_hpage_end = round_down(lend, hsize);
+
+	if (lstart < full_hpage_start) {
+		hugetlb_zero_partial_page(h, inode->i_mapping, lstart,
+					  full_hpage_start);
+	}
+
+	if (full_hpage_end > full_hpage_start) {
+		kvm_gmem_hugetlb_truncate_folios_range(inode, full_hpage_start,
+						       full_hpage_end);
+	}
+
+	if (lend > full_hpage_end) {
+		hugetlb_zero_partial_page(h, inode->i_mapping, full_hpage_end,
+					  lend);
+	}
+}
 
 static long kvm_gmem_punch_hole(struct inode *inode, loff_t offset, loff_t len)
 {
@@ -257,7 +473,12 @@ static long kvm_gmem_punch_hole(struct inode *inode, loff_t offset, loff_t len)
 	list_for_each_entry(gmem, gmem_list, entry)
 		kvm_gmem_invalidate_begin(gmem, start, end);
 
-	truncate_inode_pages_range(inode->i_mapping, offset, offset + len - 1);
+	if (is_kvm_gmem_hugetlb(inode)) {
+		kvm_gmem_hugetlb_truncate_range(inode, offset, offset + len);
+	} else {
+		truncate_inode_pages_range(inode->i_mapping, offset,
+					   offset + len - 1);
+	}
 
 	list_for_each_entry(gmem, gmem_list, entry)
 		kvm_gmem_invalidate_end(gmem, start, end);
@@ -279,8 +500,15 @@ static long kvm_gmem_allocate(struct inode *inode, loff_t offset, loff_t len)
 
 	filemap_invalidate_lock_shared(mapping);
 
-	start = offset >> PAGE_SHIFT;
-	end = (offset + len) >> PAGE_SHIFT;
+	if (is_kvm_gmem_hugetlb(inode)) {
+		unsigned long hsize = huge_page_size(kvm_gmem_hgmem(inode)->h);
+
+		start = round_down(offset, hsize) >> PAGE_SHIFT;
+		end = round_down(offset + len, hsize) >> PAGE_SHIFT;
+	} else {
+		start = offset >> PAGE_SHIFT;
+		end = (offset + len) >> PAGE_SHIFT;
+	}
 
 	r = 0;
 	for (index = start; index < end; ) {
@@ -408,9 +636,7 @@ static void kvm_gmem_hugetlb_teardown(struct inode *inode)
 
 static void kvm_gmem_evict_inode(struct inode *inode)
 {
-	u64 flags = (u64)inode->i_private;
-
-	if (flags & KVM_GUEST_MEMFD_HUGETLB)
+	if (is_kvm_gmem_hugetlb(inode))
 		kvm_gmem_hugetlb_teardown(inode);
 	else
 		truncate_inode_pages_final(inode->i_mapping);
@@ -827,7 +1053,7 @@ __kvm_gmem_get_pfn(struct file *file, struct kvm_memory_slot *slot,
 
 	*pfn = folio_file_pfn(folio, index);
 	if (max_order)
-		*max_order = 0;
+		*max_order = folio_order(folio);
 
 	*is_prepared = folio_test_uptodate(folio);
 	return folio;
