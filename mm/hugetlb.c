@@ -1402,44 +1402,33 @@ static unsigned long available_huge_pages(struct hstate *h)
 	return h->free_huge_pages - h->resv_huge_pages;
 }
 
-static struct folio *dequeue_hugetlb_folio_vma(struct hstate *h,
-				struct vm_area_struct *vma,
-				unsigned long address, bool use_hstate_resv)
+static struct folio *dequeue_hugetlb_folio(struct hstate *h,
+					   struct mempolicy *mpol, int nid,
+					   nodemask_t *nodemask,
+					   bool use_hstate_resv)
 {
 	struct folio *folio = NULL;
-	struct mempolicy *mpol;
 	gfp_t gfp_mask;
-	nodemask_t *nodemask;
-	int nid;
 
 	if (!use_hstate_resv && !available_huge_pages(h))
-		goto err;
+		return NULL;
 
 	gfp_mask = htlb_alloc_mask(h);
-	nid = huge_node(vma, address, gfp_mask, &mpol, &nodemask);
 
-	if (mpol_is_preferred_many(mpol)) {
-		folio = dequeue_hugetlb_folio_nodemask(h, gfp_mask,
-							nid, nodemask);
+	if (mpol_is_preferred_many(mpol))
+		folio = dequeue_hugetlb_folio_nodemask(h, gfp_mask, nid, nodemask);
 
-		/* Fallback to all nodes if page==NULL */
-		nodemask = NULL;
+	if (!folio) {
+		/* Fallback to all nodes if earlier allocation failed */
+		folio = dequeue_hugetlb_folio_nodemask(h, gfp_mask, nid, NULL);
 	}
-
-	if (!folio)
-		folio = dequeue_hugetlb_folio_nodemask(h, gfp_mask,
-							nid, nodemask);
 
 	if (folio && use_hstate_resv) {
 		folio_set_hugetlb_restore_reserve(folio);
 		h->resv_huge_pages--;
 	}
 
-	mpol_cond_put(mpol);
 	return folio;
-
-err:
-	return NULL;
 }
 
 /*
@@ -3131,6 +3120,10 @@ struct folio *alloc_hugetlb_folio(struct vm_area_struct *vma,
 	bool deferred_reserve;
 	gfp_t gfp = htlb_alloc_mask(h) | __GFP_RETRY_MAYFAIL;
 	bool use_hstate_resv;
+	struct mempolicy *mpol;
+	nodemask_t *nodemask;
+	pgoff_t ilx;
+	int nid;
 
 	memcg = get_mem_cgroup_from_current();
 	memcg_charge_ret = mem_cgroup_hugetlb_try_charge(memcg, gfp, nr_pages);
@@ -3184,22 +3177,19 @@ struct folio *alloc_hugetlb_folio(struct vm_area_struct *vma,
 	use_hstate_resv = should_use_hstate_resv(vma, gbl_chg, avoid_reserve);
 
 	spin_lock_irq(&hugetlb_lock);
-	folio = dequeue_hugetlb_folio_vma(h, vma, addr, use_hstate_resv);
-	if (!folio) {
-		struct mempolicy *mpol;
-		nodemask_t *nodemask;
-		pgoff_t ilx;
-		int nid;
 
+	mpol = get_vma_policy(vma, addr, hstate_vma(vma)->order, &ilx);
+	nid = policy_node_nodemask(mpol, htlb_alloc_mask(h), ilx, &nodemask);
+	folio = dequeue_hugetlb_folio(h, mpol, nid, nodemask, use_hstate_resv);
+	if (!folio) {
 		spin_unlock_irq(&hugetlb_lock);
 
-		mpol = get_vma_policy(vma, addr, hstate_vma(vma)->order, &ilx);
-		nid = policy_node_nodemask(mpol, htlb_alloc_mask(h), ilx, &nodemask);
 		folio = alloc_buddy_hugetlb_folio_from_node(h, mpol, nid, nodemask);
-		mpol_cond_put(mpol);
-
-		if (!folio)
+		if (!folio) {
+			mpol_cond_put(mpol);
 			goto out_uncharge_cgroup;
+		}
+
 		spin_lock_irq(&hugetlb_lock);
 		if (use_hstate_resv) {
 			folio_set_hugetlb_restore_reserve(folio);
@@ -3209,6 +3199,7 @@ struct folio *alloc_hugetlb_folio(struct vm_area_struct *vma,
 		folio_ref_unfreeze(folio, 1);
 		/* Fall through */
 	}
+	mpol_cond_put(mpol);
 
 	hugetlb_cgroup_commit_charge(idx, pages_per_huge_page(h), h_cg, folio);
 	/* If allocation is not consuming a reservation, also store the
