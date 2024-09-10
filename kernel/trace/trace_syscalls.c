@@ -559,12 +559,15 @@ static int perf_call_bpf_enter(struct trace_event_call *call, struct pt_regs *re
 		int syscall_nr;
 		unsigned long args[SYSCALL_DEFINE_MAXARGS];
 	} __aligned(8) param;
+	struct pt_regs fake_regs;
 	int i;
 
 	BUILD_BUG_ON(sizeof(param.ent) < sizeof(void *));
 
 	/* bpf prog requires 'regs' to be the first member in the ctx (a.k.a. &param) */
-	*(struct pt_regs **)&param = regs;
+	memset(&fake_regs, 0, sizeof(fake_regs));
+	perf_fetch_caller_regs(&fake_regs);
+	*(struct pt_regs **)&param = &fake_regs;
 	param.syscall_nr = rec->nr;
 	for (i = 0; i < sys_data->nb_args; i++)
 		param.args[i] = rec->args[i];
