@@ -1245,9 +1245,19 @@ void clear_vma_resv_huge_pages(struct vm_area_struct *vma)
 	hugetlb_dup_vma_private(vma);
 }
 
-/* Returns true if the VMA has associated reserve pages */
-static bool vma_has_reserves(struct vm_area_struct *vma, long chg)
+/*
+ * Returns true if this allocation should use (debit) hstate reservations, based on
+ *
+ * @vma: VMA config
+ * @chg: Whether the page requirement can be satisfied using subpool reservations
+ * @avoid_reserve: Whether allocation was requested to avoid using reservations
+ */
+static bool should_use_hstate_resv(struct vm_area_struct *vma, long chg,
+				   bool avoid_reserve)
 {
+	if (avoid_reserve)
+		return false;
+
 	if (vma->vm_flags & VM_NORESERVE) {
 		/*
 		 * This address is already reserved by other process(chg == 0),
@@ -3182,7 +3192,7 @@ struct folio *alloc_hugetlb_folio(struct vm_area_struct *vma,
 	if (ret)
 		goto out_uncharge_cgroup_reservation;
 
-	use_hstate_resv = !avoid_reserve && vma_has_reserves(vma, gbl_chg);
+	use_hstate_resv = should_use_hstate_resv(vma, gbl_chg, avoid_reserve);
 
 	spin_lock_irq(&hugetlb_lock);
 	folio = dequeue_hugetlb_folio_vma(h, vma, addr, use_hstate_resv);
