@@ -13,6 +13,7 @@
 
 #include <linux/bitmap.h>
 #include <linux/falloc.h>
+#include <linux/kvm.h>
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -122,6 +123,7 @@ static void test_invalid_punch_hole(int fd, size_t page_size, size_t total_size)
 
 static void test_create_guest_memfd_invalid(struct kvm_vm *vm)
 {
+	uint64_t valid_flags = KVM_GUEST_MEMFD_HUGETLB;
 	size_t page_size = getpagesize();
 	uint64_t flag;
 	size_t size;
@@ -135,6 +137,9 @@ static void test_create_guest_memfd_invalid(struct kvm_vm *vm)
 	}
 
 	for (flag = 0; flag; flag <<= 1) {
+		if (flag & valid_flags)
+			continue;
+
 		fd = __vm_create_guest_memfd(vm, page_size, flag);
 		TEST_ASSERT(fd == -1 && errno == EINVAL,
 			    "guest_memfd() with flag '0x%lx' should fail with EINVAL",
@@ -170,24 +175,16 @@ static void test_create_guest_memfd_multiple(struct kvm_vm *vm)
 	close(fd1);
 }
 
-int main(int argc, char *argv[])
+static void test_guest_memfd(struct kvm_vm *vm, uint32_t flags, size_t page_size)
 {
-	size_t page_size;
 	size_t total_size;
 	int fd;
-	struct kvm_vm *vm;
 
 	TEST_REQUIRE(kvm_has_cap(KVM_CAP_GUEST_MEMFD));
 
-	page_size = getpagesize();
 	total_size = page_size * 4;
 
-	vm = vm_create_barebones();
-
-	test_create_guest_memfd_invalid(vm);
-	test_create_guest_memfd_multiple(vm);
-
-	fd = vm_create_guest_memfd(vm, total_size, 0);
+	fd = vm_create_guest_memfd(vm, total_size, flags);
 
 	test_file_read_write(fd);
 	test_mmap(fd, page_size);
@@ -196,4 +193,32 @@ int main(int argc, char *argv[])
 	test_invalid_punch_hole(fd, page_size, total_size);
 
 	close(fd);
+}
+
+int main(int argc, char *argv[])
+{
+	struct kvm_vm *vm;
+
+	TEST_REQUIRE(kvm_has_cap(KVM_CAP_GUEST_MEMFD));
+
+	vm = vm_create_barebones();
+
+	test_create_guest_memfd_invalid(vm);
+	test_create_guest_memfd_multiple(vm);
+
+	printf("Test guest_memfd with 4K pages\n");
+	test_guest_memfd(vm, 0, getpagesize());
+	printf("\tPASSED\n");
+
+	printf("Test guest_memfd with 2M pages\n");
+	test_guest_memfd(vm, KVM_GUEST_MEMFD_HUGETLB | KVM_GUEST_MEMFD_HUGE_2MB,
+			 2UL << 20);
+	printf("\tPASSED\n");
+
+	printf("Test guest_memfd with 1G pages\n");
+	test_guest_memfd(vm, KVM_GUEST_MEMFD_HUGETLB | KVM_GUEST_MEMFD_HUGE_1GB,
+			 1UL << 30);
+	printf("\tPASSED\n");
+
+	return 0;
 }
