@@ -4,6 +4,7 @@
 #include <linux/kvm_host.h>
 #include <linux/pagemap.h>
 #include <linux/anon_inodes.h>
+#include <linux/set_memory.h>
 
 #include "kvm_mm.h"
 
@@ -49,8 +50,69 @@ static int kvm_gmem_prepare_folio(struct inode *inode, pgoff_t index, struct fol
 	return 0;
 }
 
+static bool kvm_gmem_test_no_direct_map(struct inode *inode)
+{
+	return ((unsigned long)inode->i_private & KVM_GMEM_NO_DIRECT_MAP) == KVM_GMEM_NO_DIRECT_MAP;
+}
+
+static int kvm_gmem_folio_set_private(struct folio *folio)
+{
+	unsigned long start, npages, i;
+	int r;
+
+	start = (unsigned long) folio_address(folio);
+	npages = folio_nr_pages(folio);
+
+	for (i = 0; i < npages; ++i) {
+		r = set_direct_map_invalid_noflush(folio_page(folio, i));
+		if (r)
+			goto out_remap;
+	}
+	flush_tlb_kernel_range(start, start + folio_size(folio));
+	folio_set_private(folio);
+	return 0;
+out_remap:
+	for (; i > 0; i--) {
+		struct page *page = folio_page(folio, i - 1);
+
+		if (WARN_ON_ONCE(set_direct_map_default_noflush(page))) {
+			/*
+			 * Random holes in the direct map are bad, let's mark
+			 * these pages as corrupted memory so that the kernel
+			 * avoids ever touching them again.
+			 */
+			folio_set_hwpoison(folio);
+			r = -EHWPOISON;
+		}
+	}
+	return r;
+}
+
+static int kvm_gmem_folio_clear_private(struct folio *folio)
+{
+	unsigned long npages, i;
+	int r = 0;
+
+	npages = folio_nr_pages(folio);
+
+	for (i = 0; i < npages; ++i) {
+		struct page *page = folio_page(folio, i);
+
+		if (WARN_ON_ONCE(set_direct_map_default_noflush(page))) {
+			folio_set_hwpoison(folio);
+			r = -EHWPOISON;
+		}
+	}
+	/*
+	 * no TLB flush here: pages without direct map entries should
+	 * never be in the TLB in the first place.
+	 */
+	return r;
+}
+
 static struct folio *kvm_gmem_get_folio(struct inode *inode, pgoff_t index, bool prepare)
 {
+	int r;
 	struct folio *folio;
 
 	/* TODO: Support huge pages. */
@@ -78,19 +140,31 @@ static struct folio *kvm_gmem_get_folio(struct inode *inode, pgoff_t index, bool
 	}
 
 	if (prepare) {
-		int r =	kvm_gmem_prepare_folio(inode, index, folio);
-		if (r < 0) {
-			folio_unlock(folio);
-			folio_put(folio);
-			return ERR_PTR(r);
-		}
+		r = kvm_gmem_prepare_folio(inode, index, folio);
+		if (r < 0)
+			goto out_err;
 	}
 
+	if (!kvm_gmem_test_no_direct_map(inode))
+		goto out;
+
+	if (!folio_test_private(folio)) {
+		r = kvm_gmem_folio_set_private(folio);
+		if (r)
+			goto out_err;
+	}
+
+out:
 	/*
 	 * Ignore accessed, referenced, and dirty flags.  The memory is
 	 * unevictable and there is no storage to write back to.
 	 */
 	return folio;
+
+out_err:
+	folio_unlock(folio);
+	folio_put(folio);
+	return ERR_PTR(r);
 }
 
 static void kvm_gmem_invalidate_begin(struct kvm_gmem *gmem, pgoff_t start,
@@ -343,6 +417,13 @@ static int kvm_gmem_error_folio(struct address_space *mapping, struct folio *fol
 	return MF_DELAYED;
 }
 
+static void kvm_gmem_invalidate_folio(struct folio *folio, size_t start, size_t end)
+{
+	if (start == 0 && end == folio_size(folio)) {
+		kvm_gmem_folio_clear_private(folio);
+	}
+}
+
 #ifdef CONFIG_HAVE_KVM_GMEM_INVALIDATE
 static void kvm_gmem_free_folio(struct folio *folio)
 {
@@ -358,6 +439,7 @@ static const struct address_space_operations kvm_gmem_aops = {
 	.dirty_folio = noop_dirty_folio,
 	.migrate_folio	= kvm_gmem_migrate_folio,
 	.error_remove_folio = kvm_gmem_error_folio,
+	.invalidate_folio = kvm_gmem_invalidate_folio,
 #ifdef CONFIG_HAVE_KVM_GMEM_INVALIDATE
 	.free_folio = kvm_gmem_free_folio,
 #endif
@@ -442,7 +524,7 @@ int kvm_gmem_create(struct kvm *kvm, struct kvm_create_guest_memfd *args)
 {
 	loff_t size = args->size;
 	u64 flags = args->flags;
-	u64 valid_flags = 0;
+	u64 valid_flags = KVM_GMEM_NO_DIRECT_MAP;
 
 	if (flags & ~valid_flags)
 		return -EINVAL;
