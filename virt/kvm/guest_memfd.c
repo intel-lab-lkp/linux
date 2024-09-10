@@ -26,9 +26,19 @@ struct kvm_gmem_hugetlb {
 	struct hugepage_subpool *spool;
 };
 
-static struct kvm_gmem_hugetlb *kvm_gmem_hgmem(struct inode *inode)
+struct kvm_gmem_inode_private {
+	struct xarray faultability;
+	struct kvm_gmem_hugetlb *hgmem;
+};
+
+static struct kvm_gmem_inode_private *kvm_gmem_private(struct inode *inode)
 {
 	return inode->i_mapping->i_private_data;
+}
+
+static struct kvm_gmem_hugetlb *kvm_gmem_hgmem(struct inode *inode)
+{
+	return kvm_gmem_private(inode)->hgmem;
 }
 
 static bool is_kvm_gmem_hugetlb(struct inode *inode)
@@ -36,6 +46,57 @@ static bool is_kvm_gmem_hugetlb(struct inode *inode)
 	u64 flags = (u64)inode->i_private;
 
 	return flags & KVM_GUEST_MEMFD_HUGETLB;
+}
+
+#define KVM_GMEM_FAULTABILITY_VALUE 0x4641554c54  /* FAULT */
+
+/**
+ * Set faultability of given range of inode indices [@start, @end) to
+ * @faultable. Return 0 if attributes were successfully updated or negative
+ * errno on error.
+ */
+static int kvm_gmem_set_faultable(struct inode *inode, pgoff_t start, pgoff_t end,
+				  bool faultable)
+{
+	struct xarray *faultability;
+	void *val;
+	pgoff_t i;
+
+	/*
+	 * The expectation is that fewer pages are faultable, hence save memory
+	 * entries are created for faultable pages as opposed to creating
+	 * entries for non-faultable pages.
+	 */
+	val = faultable ? xa_mk_value(KVM_GMEM_FAULTABILITY_VALUE) : NULL;
+	faultability = &kvm_gmem_private(inode)->faultability;
+
+	/*
+	 * TODO replace this with something else (maybe interval
+	 * tree?). store_range doesn't quite do what we expect if overlapping
+	 * ranges are specified: if we store_range(5, 10, val) and then
+	 * store_range(7, 12, NULL), the entire range [5, 12] will be NULL.  For
+	 * now, use the slower xa_store() to store individual entries on indices
+	 * to avoid this.
+	 */
+	for (i = start; i < end; i++) {
+		int r;
+
+		r = xa_err(xa_store(faultability, i, val, GFP_KERNEL_ACCOUNT));
+		if (r)
+			return r;
+	}
+
+	return 0;
+}
+
+/**
+ * Return true if the page at @index is allowed to be faulted in.
+ */
+static bool kvm_gmem_is_faultable(struct inode *inode, pgoff_t index)
+{
+	struct xarray *faultability = &kvm_gmem_private(inode)->faultability;
+
+	return xa_to_value(xa_load(faultability, index)) == KVM_GMEM_FAULTABILITY_VALUE;
 }
 
 /**
@@ -895,11 +956,21 @@ static void kvm_gmem_hugetlb_teardown(struct inode *inode)
 
 static void kvm_gmem_evict_inode(struct inode *inode)
 {
+	struct kvm_gmem_inode_private *private = kvm_gmem_private(inode);
+
+	/*
+	 * .evict_inode can be called before faultability is set up if there are
+	 * issues during inode creation.
+	 */
+	if (private)
+		xa_destroy(&private->faultability);
+
 	if (is_kvm_gmem_hugetlb(inode))
 		kvm_gmem_hugetlb_teardown(inode);
 	else
 		truncate_inode_pages_final(inode->i_mapping);
 
+	kfree(private);
 	clear_inode(inode);
 }
 
@@ -1028,13 +1099,19 @@ static const struct inode_operations kvm_gmem_iops = {
 	.setattr	= kvm_gmem_setattr,
 };
 
-static int kvm_gmem_hugetlb_setup(struct inode *inode, loff_t size, u64 flags)
+static int kvm_gmem_hugetlb_setup(struct inode *inode,
+				  struct kvm_gmem_inode_private *private,
+				  loff_t size, u64 flags)
 {
 	struct kvm_gmem_hugetlb *hgmem;
 	struct hugepage_subpool *spool;
 	int page_size_log;
 	struct hstate *h;
 	long hpages;
+
+	hgmem = kzalloc(sizeof(*hgmem), GFP_KERNEL);
+	if (!hgmem)
+		return -ENOMEM;
 
 	page_size_log = (flags >> KVM_GUEST_MEMFD_HUGE_SHIFT) & KVM_GUEST_MEMFD_HUGE_MASK;
 	h = hstate_sizelog(page_size_log);
@@ -1046,21 +1123,16 @@ static int kvm_gmem_hugetlb_setup(struct inode *inode, loff_t size, u64 flags)
 	if (!spool)
 		goto err;
 
-	hgmem = kzalloc(sizeof(*hgmem), GFP_KERNEL);
-	if (!hgmem)
-		goto err_subpool;
-
 	inode->i_blkbits = huge_page_shift(h);
 
 	hgmem->h = h;
 	hgmem->spool = spool;
-	inode->i_mapping->i_private_data = hgmem;
 
+	private->hgmem = hgmem;
 	return 0;
 
-err_subpool:
-	kfree(spool);
 err:
+	kfree(hgmem);
 	return -ENOMEM;
 }
 
@@ -1068,6 +1140,7 @@ static struct inode *kvm_gmem_inode_make_secure_inode(const char *name,
 						      loff_t size, u64 flags)
 {
 	const struct qstr qname = QSTR_INIT(name, strlen(name));
+	struct kvm_gmem_inode_private *private;
 	struct inode *inode;
 	int err;
 
@@ -1079,11 +1152,19 @@ static struct inode *kvm_gmem_inode_make_secure_inode(const char *name,
 	if (err)
 		goto out;
 
+	err = -ENOMEM;
+	private = kzalloc(sizeof(*private), GFP_KERNEL);
+	if (!private)
+		goto out;
+
 	if (flags & KVM_GUEST_MEMFD_HUGETLB) {
-		err = kvm_gmem_hugetlb_setup(inode, size, flags);
+		err = kvm_gmem_hugetlb_setup(inode, private, size, flags);
 		if (err)
-			goto out;
+			goto free_private;
 	}
+
+	xa_init(&private->faultability);
+	inode->i_mapping->i_private_data = private;
 
 	inode->i_private = (void *)(unsigned long)flags;
 	inode->i_op = &kvm_gmem_iops;
@@ -1097,6 +1178,8 @@ static struct inode *kvm_gmem_inode_make_secure_inode(const char *name,
 
 	return inode;
 
+free_private:
+	kfree(private);
 out:
 	iput(inode);
 
