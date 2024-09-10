@@ -2963,6 +2963,8 @@ static const struct bdb_header *get_bdb_header(const struct vbt_header *vbt)
 	return _vbt + vbt->bdb_offset;
 }
 
+static const char vbt_signature[4] = "$VBT";
+
 /**
  * intel_bios_is_valid_vbt - does the given buffer contain a valid VBT
  * @display:	display device
@@ -2985,7 +2987,7 @@ bool intel_bios_is_valid_vbt(struct intel_display *display,
 		return false;
 	}
 
-	if (memcmp(vbt->signature, "$VBT", 4)) {
+	if (memcmp(vbt->signature, vbt_signature, sizeof(vbt_signature))) {
 		drm_dbg_kms(display->drm, "VBT invalid signature\n");
 		return false;
 	}
@@ -3081,9 +3083,11 @@ static struct vbt_header *spi_oprom_get_vbt(struct intel_display *display,
 	oprom_offset = intel_uncore_read(&i915->uncore, OROM_OFFSET);
 	oprom_offset &= OROM_OFFSET_MASK;
 
+	BUILD_BUG_ON(sizeof(vbt_signature) != sizeof(u32));
+
 	for (count = 0; count < oprom_size; count += 4) {
 		data = intel_spi_read32(&i915->uncore, oprom_offset + count);
-		if (data == *((const u32 *)"$VBT")) {
+		if (data == *((const u32 *)vbt_signature)) {
 			found = oprom_offset + count;
 			break;
 		}
@@ -3143,9 +3147,11 @@ static struct vbt_header *oprom_get_vbt(struct intel_display *display,
 	if (!oprom)
 		return NULL;
 
+	BUILD_BUG_ON(sizeof(vbt_signature) != sizeof(u32));
+
 	/* Scour memory looking for the VBT signature. */
 	for (i = 0; i + 4 < size; i += 4) {
-		if (ioread32(oprom + i) != *((const u32 *)"$VBT"))
+		if (ioread32(oprom + i) != *((const u32 *)vbt_signature))
 			continue;
 
 		p = oprom + i;
