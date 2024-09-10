@@ -2433,6 +2433,7 @@ static inline bool kvm_mem_is_private(struct kvm *kvm, gfn_t gfn)
 #endif /* CONFIG_KVM_GENERIC_MEMORY_ATTRIBUTES */
 
 #define KVM_GMEM_GET_PFN_SHARED         BIT(0)
+#define KVM_GMEM_GET_PFN_LOCKED         BIT(1)
 #define KVM_GMEM_GET_PFN_PREPARE        BIT(31)  /* internal */
 
 #ifdef CONFIG_KVM_PRIVATE_MEM

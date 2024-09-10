@@ -670,7 +670,8 @@ static int __kvm_gmem_get_pfn(struct file *file, struct kvm_memory_slot *slot,
 
 	r = 0;
 
-	folio_unlock(folio);
+	if (!(flags & KVM_GMEM_GET_PFN_LOCKED))
+		folio_unlock(folio);
 
 	return r;
 }
@@ -680,7 +681,7 @@ int kvm_gmem_get_pfn(struct kvm *kvm, struct kvm_memory_slot *slot,
 {
 	struct file *file = kvm_gmem_get_file(slot);
 	int r;
-	int valid_flags = KVM_GMEM_GET_PFN_SHARED;
+	int valid_flags = KVM_GMEM_GET_PFN_SHARED | KVM_GMEM_GET_PFN_LOCKED;
 
 	if ((flags & valid_flags) != flags)
 		return -EINVAL;
