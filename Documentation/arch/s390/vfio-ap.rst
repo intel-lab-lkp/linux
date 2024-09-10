@@ -999,6 +999,40 @@ the vfio_ap mediated device to which it is assigned as long as each new APQN
 resulting from plugging it in references a queue device bound to the vfio_ap
 device driver.
 
+Driver Features
+===============
+The vfio_ap driver exposes a sysfs file containing supported features.
+This exists so third party tools (like Libvirt and mdevctl) can query the
+availability of specific features.
+
+The features list can be found here: /sys/bus/matrix/devices/matrix/features
+
+Entries are \n delimited. Each entry contains a key value pair. The key is made
+up of a combination of alphanumeric and underscore characters. The separator
+consists of a space, a colon and then another space. The value consists of
+alphanumeric, space, and underscore characters.
+
+Example:
+cat /sys/bus/matrix/devices/matrix/features
+flags : guest_matrix dyn ap_config
+
+Presently only a single field named flags is defined. It is meant to advertise a
+list of features the driver provides. The flags fields advertises the following
+features:
+
+---------------+---------------------------------------------------------------+
+| Flag         | Description                                                   |
++==============+===============================================================+
+| guest_matrix | guest_matrix attribute exists. It reports the matrix of       |
+|              | adapters and domains that are or will be passed through to a  |
+|              | guest when the mdev is attached to it.                        |
++--------------+---------------------------------------------------------------+
+| hotplug      | Indicates hot plug/unplug of AP adapters, domains and control |
+|              | domains for a guest to which the mdev is attached.            |
++------------+-----------------------------------------------------------------+
+| ap_config    | ap_config interface for one-shot modifications to mdev config |
++--------------+---------------------------------------------------------------+
+
 Limitations
 ===========
 Live guest migration is not supported for guests using AP devices without
