@@ -3979,10 +3979,23 @@ static void nvme_validate_ns(struct nvme_ns *ns, struct nvme_ns_info *info)
 	int ret = NVME_SC_INVALID_NS | NVME_STATUS_DNR;
 
 	if (!nvme_ns_ids_equal(&ns->head->ids, &info->ids)) {
-		dev_err(ns->ctrl->device,
-			"identifiers changed for nsid %d\n", ns->head->ns_id);
-		goto out;
+		/*
+		 * Don't skip ns info updates if the NID is bogus as it
+		 * changes everytime the in-use controller is reattached
+		 * to the bus and thus the namespace is recognized as
+		 * another one.
+		 */
+		if (ns->ctrl->quirks & NVME_QUIRK_BOGUS_NID) {
+			dev_info(ns->ctrl->device,
+				 "Ignoring nsid change for bogus ns\n");
+		} else {
+			dev_err(ns->ctrl->device,
+				"identifiers changed for nsid %d\n",
+				ns->head->ns_id);
+			goto out;
+		}
 	}
+
 
 	ret = nvme_update_ns_info(ns, info);
 out:
